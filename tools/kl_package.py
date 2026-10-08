@@ -18,7 +18,7 @@ from kl_port_check import find, workdir, DM_GUESSES, DD_GUESSES, DM_EXE, DD_EXE
 WORK = workdir()
 
 DM_BASE = {'M01_FA_A': 'M01FAA', 'M02_FA_A': 'M02FAA', 'M03_FA_A': 'M03FAA', 'M06_FA_A': 'M06FAA'}
-COPY_AS_IS = ['zgf', 'sup', 'HVK', 'ANM', 'sgp', 'sgd', 'hrd']
+COPY_AS_IS = ['zgf', 'sup', 'HVK', 'sgp', 'sgd', 'hrd']
 LANGS = ['English', 'German', 'French', 'Spanish', 'Italian', 'Dutch', 'Russian', 'Polish', 'Japanese']
 BACKUP = 'KL_PortBackup'
 
@@ -50,6 +50,11 @@ def build(dm_level, slot, dm=None, dd=None):
             z.writestr(name, data)
         for ext in COPY_AS_IS:
             put(pre + '.' + ext, s.read(sn[ext]))
+        # Animations: Dead Men's .ANM cannot be read by Dog Days (clip headers are 0x50 bytes, Dog
+        # Days' 0x68, and two offset fields differ; the load crashes in an event-name lookup at 79 %).
+        # STOPGAP until it is converted: the slot's own .ANM. Only the clips both games name alike
+        # exist in it, so Dead Men-only animations (the van, some civilians) are missing.
+        put(pre + '.ANM', o.read([n for n in o.namelist() if n.endswith('.ANM')][0]))
         import struct, kl_gms, kl_oct, kl_rooms, kl_rtp
         dmc, ddc = kl_rtp.Schema.load('dm'), kl_rtp.Schema.load('dd')
         src_gms = kl_gms.unpack(s.read(sn['gms']))
