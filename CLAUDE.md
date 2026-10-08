@@ -164,6 +164,12 @@ replacement - testing in the F01 slot is temporary. In order:
 4. Online, once the above is solid. Then: choose your police character for after you die.
 5. Much later: assets from Payday 2.
 Do not start a later stage before the owner says the earlier one works.
+Owner's wish list for stage 1: Retomoto Tower as a Fragile Alliance map, with its music. Dead Men
+never shipped an FA version (the DLC maps are not on PC), so it has to be made from the campaign
+level: M09_A (11,926 entities: tower offices and roof) and M09_B (16,646: lobby, elevators,
+'Retomoto_Squad'). Music: 15 clips under Music/InHouse/Japan plus LevelSetup/Level/M09_A in
+PC_Def.str. The graft supplies the map; the FA layer (spawn points, loot, escape, AI squads,
+level bounds) does not exist for it and must be authored. After M01 plays.
 
 ## Roadmap for a rewrite (only after the port works)
 Ghidra project of kl2.exe + kaneandlynch.exe, shared symbol/type database (classes, vtables,
