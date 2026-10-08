@@ -105,16 +105,39 @@ Verified on real files unless marked. Crash risks first.
 4. Crash → `<DD>\KLHook.log` + `KLHook_N.dmp` (from `klhook/`, installed as `<DD>\dinput8.dll`)
    and the game's own `kl2_490_crash_*.mdmp` → `debug/triage.sh`, `debug/dump.py`, `debug/locate.py`.
 
+## Direction (owner, 2026-10-08): graft, not whole-level conversion
+A compiled level holds the map AND the game systems (HUD, menus, cameras, weapons, players,
+effects). Converting all of Dead Men's makes Dog Days' code run Dead Men's HUD / weapons / players:
+every crash from 73 % on was one of those (last: ZOnScreenDisplay2 expects 200 fixed widgets, Dead
+Men's HUD has 107). The owner wants: Dead Men MAPS, voice lines and player models; Dog Days guns
+and sounds reused; delivered like DLC (own folder, not overwriting a stock map).
+
+Top-level subtrees (objects / with models):
+- Dead Men M01_FA_A: `Locations/` 3894/2707 = the map; `CloneGroup_Locations` 205; gameplay markers
+  (SpawnPoint!, Triggers!, LevelBounds!, NoCover!, Player_Cover!, DropMoney!, Escape!, Settings!,
+  EscCameraSetup!, CivilFleePoints!) ~420; AI_Enemies! / Civilians! / CivilianCars! ~290; Heroes! 32;
+  systems to DROP: `gamemenu.zip` 1154, `AllLevels/mainsceneincludes.zip` 915, CloneGroup_Effects 3730.
+- Stock Dog Days F01: systems to KEEP: `AllLevels/mainsceneincludes_multiplayer.zip` 3417,
+  CloneGroup_Effects 5087, Heroes! 32; its map (`Locations/` 5749, Gameplay! 774, Animation/ escape
+  vehicles 549, FASpecials!, Specials!) is what the Dead Men map replaces.
+- Cross-references to renumber when joining two levels: .gms record +0x0c = chunk index in the
+  .prm; texture ids (both games pack them from 128 up, ~1270 each, Dog Days allows 4096); material
+  ids; .buf offsets (names, raw data, gates, lists); REF ids (follow the cluster table; stored in
+  .oct trees, .rmi/.rmc, gates, lists); .oct collision records are referenced from .prm chunks.
+
 ## Open work
-- Test the exact-schema build (installed 2026-10-08 ~19:40). The previous room→group build asserted at
-  kl2+4c1625 (end-of-object '}' check): ZROOM-shaped objects typed as ZGROUP; the exact path fixes that.
-- Continue the crash loop until M01 FA loads and plays.
-- Sound banks (SND/WHD/WAV): convert DM banks, rewrite streamed offsets via PC_Def.str.map.json,
-  expand to DD's 7 language records.
-- Restore removed FA controllers (OnlineVehicleOnSpline, OnlineTriggerBox) using exe layouts.
-- Settings preamble 32→33 entries (SSAO_Blur, SSAO_Strength).
-- Package M02/M03/M06 FA into other F slots; FA game-rule glue (loot, escape, betrayal) checks.
-- Character suits/masks: DM character templates → DD multiplayer character list.
+1. Graft tool: Dog Days systems + Dead Men map in one level. Milestone A (no Dead Men data): put
+   stock F02's map under stock F01's systems and get it to load - proves the join. Milestone B:
+   Dead Men M01's map. Test in the F01 slot.
+2. Own folder + slot redirect: KLHook rewrites one of the nine FA slot names at
+   [0x168f750]+0x16+idx*0x40 (or `-o MPMap=`); menu name/picture via Patch01.zip. Nine entries
+   is a hard limit, so a Dead Men map takes one over while active. Untested live.
+3. Voice lines: Dead Men clips are already in the merged PC_Def.str; wire them to events.
+4. Player models: Dead Men characters into Dog Days' multiplayer character list.
+5. Real .ANM converter (clip header 0x50 -> 0x68; fields +0x10 / +0x2C unknown), M03 nav array 7,
+   .prm lit descriptors (M02/M03), check the 46 "assumed" field pairings against level values.
+State of the F01 slot: whole-level M01 build, crashes at 79 % in the HUD. Restore with
+`tools/RESTORE Dog Days originals.bat`.
 
 ## Roadmap for a rewrite (only after the port works)
 Ghidra project of kl2.exe + kaneandlynch.exe, shared symbol/type database (classes, vtables,
