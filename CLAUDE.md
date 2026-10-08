@@ -97,6 +97,20 @@ Verified on real files unless marked. Crash risks first.
 - Input is DirectInput8 only; scripted input is best injected inside the dinput8 proxy (KLHook).
 - Crash triage: `python debug/triage.py --keep`; pre-flight a build with `python debug/check.py`.
 
+## Unattended loop (owner's standing instruction, 2026-10-09)
+The owner does not want work to wait for them. Dog Days' Steam launch options are
+`-dx10 -o DefaultScene=Locations/F01/F01_Main.gms -o AutoExit=120`, so a launch goes straight into
+the F01 slot and quits after 120 s (the '-o' overrides are now CONFIRMED live).
+- Test without a human: `python tools/kl_autotest.py` -> one `RESULT:` line (crash address,
+  assert, clean exit, or hung). A crash is triaged with `python debug/triage.py --keep`.
+- Loop: integrate finished agent work (check it yourself first) -> build -> verify -> install into
+  F01 -> autotest -> triage -> fix -> commit with what crashed and why -> push `rtp-schemas`.
+- Keep background agents supplied with the next useful job; do not end a turn with nothing running
+  while there is work that does not need the owner.
+- Never: touch `KL_PortBackup` or stock files outside the F01 test slot, change the launch
+  options, force-push, push to `main`, start later stages' game changes (research is fine).
+- Leave a short dated note of what happened overnight at the end of "Open work".
+
 ## Pipeline
 1. `tools/verify_levels.py` (run from KL_PortTools): converts M01/M02/M03/M06 FA prp and checks every
    object vs DD (layout, enums, lists, array sizes, duplicate items). Must report `problems: 0`.
