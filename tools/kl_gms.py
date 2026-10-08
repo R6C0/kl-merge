@@ -30,8 +30,9 @@ RETYPE = {
     0x100486: 0x100001,     # ZIngameMapGroup -> ZGROUP (as a ZROOM its record has no portal data and Dog Days' room linking crashes)
     # classes Dog Days still has but never saves in a level (layout unknown). Targets keep
     # the "group" bit (0x100000) so the cluster table keeps the same number of blocks.
-    0x100021: 0x100001,     # ZROOM -> ZGROUP: Dead Men room portal data doesn't fit Dog Days' room linking
-                            # (crash in the post-load room fix-up); rooms only drive visibility culling
+    # ZROOM stays ZROOM: each room (and ROOT) owns one section of the level's .oct octree, same
+    # format in both games. Retyping rooms left their sections unread and Dog Days' octree walk
+    # (ZEngineDataBase 0x689d90) ran off the end - the 69% crash on 2026-10-08.
     0x100490: 0x100001,     # ZFFItemTemplateMultistage -> ZGROUP
     0x200110: 0x200002,     # ZSHADOWMESHOBJ  -> ZSTDOBJ
     0x2000fd: 0x200002,     # ZPlant          -> ZSTDOBJ
