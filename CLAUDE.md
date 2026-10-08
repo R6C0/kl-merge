@@ -36,6 +36,16 @@ Must run easily. Long-term option: a clean-room reimplementation (hl2-rs style) 
 - 0x7f779e duplicate slot registration (InventoryBinding by item enum value).
 - 0x8ad7c0 entity loader: 128-byte slots from pool[category + 8*prio] of the parent group's block.
 
+## Exact schemas (done 2026-10-08, from HHCHunter/hbm-editor's RTP recovery)
+- `tools/kl_rtti.py` + `tools/kl_schema.py`: every class's property list straight from the exe
+  (GetProperties = vtable slot 11 -> ZPropertyInfo chain; records = load fn + ZEnumInfo).
+- `tools/kl_schema_infer.py dd|dm <game root>` maps load fn -> .prp token letter from the levels
+  and writes `re/schemas_<game>.json` (classes, controllers, enums). Zero conflicts in both games.
+- `tools/kl_relayout.py` + `kl_convert.relayout_exact`: field-by-field DM->DD conversion using
+  those schemas; the old statistical path is only the fallback (M01: 0 entities, ~59 controllers).
+- Still statistical: controllers whose class the factory table doesn't resolve (7 DD, 26 DM),
+  and the 4 DM controllers with a length mismatch between schema and level data.
+
 ## Pipeline
 1. `tools/verify_levels.py` (run from KL_PortTools): converts M01/M02/M03/M06 FA prp and checks every
    object vs DD (layout, enums, lists, array sizes, duplicate items). Must report `problems: 0`.
@@ -45,7 +55,9 @@ Must run easily. Long-term option: a clean-room reimplementation (hl2-rs style) 
    and the game's own `kl2_490_crash_*.mdmp` → `debug/triage.sh`, `debug/dump.py`, `debug/locate.py`.
 
 ## Open work
-- Test the room→group build; continue crash loop until M01 FA loads and plays.
+- Test the exact-schema build (installed 2026-10-08 ~19:40). The previous room→group build asserted at
+  kl2+4c1625 (end-of-object '}' check): ZROOM-shaped objects typed as ZGROUP; the exact path fixes that.
+- Continue the crash loop until M01 FA loads and plays.
 - Sound banks (SND/WHD/WAV): convert DM banks, rewrite streamed offsets via PC_Def.str.map.json,
   expand to DD's 7 language records.
 - Restore removed FA controllers (OnlineVehicleOnSpline, OnlineTriggerBox) using exe layouts.
