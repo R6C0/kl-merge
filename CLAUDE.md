@@ -24,7 +24,8 @@ Must run easily. Long-term option: a clean-room reimplementation (hl2-rs style) 
   - Some arrays have a fixed length the reader asserts on (e.g. 200).
   - Enum value tables are in kl2.exe as {value, name*, next*} triples → `tools/dd_enums.json`.
 - `.gms`: entity table, record +0x14 type id, cluster/pool table (rebuilt by `kl_gms.rebuild_clusters`),
-  +0x34 sound-occlusion block (DM format crashes DD → set 0), +0x38 = -1, header[15] = object count.
+  +0x34 = the PF4 pathfinder's navigation mesh (NOT sound occlusion; converted by `tools/kl_pf4.py`),
+  +0x38 = -1, header[15] = REF slot count.
 - DD item enum (InventoryBinding): each item may be bound once per level (except NoItem) — dup = assert.
 - Rooms: DD's post-load room fix-up (kl2 0x48e910, called from loader 0x8adf48) resolves 0x74-byte
   portal records. DM rooms crash it; currently DM ZROOM/ZIngameMapGroup are retyped to ZGROUP.
@@ -60,7 +61,14 @@ Must run easily. Long-term option: a clean-room reimplementation (hl2-rs style) 
 Verified on real files unless marked. Crash risks first.
 - `.oct`: 16-byte header, then FIVE trees per ZROOM-derived entity in scene order (root first),
   then collision records up to -1, then a tail. A room retyped to a group must lose its trees
-  (`tools/kl_oct.py`). The collision part crashes Dog Days at 0x719884 with Dead Men data: OPEN.
+  (`tools/kl_oct.py`). The records after the trees are the same format in both games.
+- `.rmi`/`.rmc` (room index): boxes name rooms by REF id; 0x54 bytes in Dead Men, 0x58 in Dog Days
+  (`tools/kl_rooms.py`). REF ids follow the cluster table, so it must come out as Dead Men had it,
+  and the entity must still be a room (crash at kl2 0x719884 otherwise).
+- Navigation mesh: block at gms +0x34 -> PF4::ZData at database+0xc (kl2 0x538bc0). Without it the
+  cover list crashes at 0x5503da (73 %). 16-bit -> 32-bit widening in `tools/kl_pf4.py`; most field
+  pairings there are ASSUMED; M03 has an array-7 record with no known Dog Days form (refused).
+- `.sgp` goes to the SOUND system (kl2 0x718180), not the pathfinder. Copied unchanged, unchecked.
 - Rooms: gate (portal) records live in the `.buf`, addressed by two ZROOM properties. A record is
   0x38 bytes in Dead Men, 0x74 in Dog Days (walked by kl2 0x48e910): that stride mismatch is the
   old room fix-up crash. The extra 0x3c bytes (centre, half extents, 3x3 frame) are computable from

@@ -3,9 +3,8 @@
 
 File: u32 uncompressed size, u32 file size, u8 0, raw deflate stream.
 Header of the uncompressed data (16 x u32) is the same in both games except:
-  +0x34  offset of the sound-occlusion geometry list. Dog Days reads each block as a
-         13-count header + arrays; Dead Men uses an older layout, which crashes Dog Days.
-         0 = "none" (the loader skips it).
+  +0x34  offset of the pathfinder's navigation mesh (u32 size + data, see kl_pf4.py). Dead Men's
+         layout crashes Dog Days and a level without a mesh crashes it too, so it is converted.
   +0x38  optional offset; Dog Days levels use -1 here.
 """
 import struct, zlib
@@ -133,7 +132,13 @@ def convert(f):
     for old, new in RETYPE.items():
         retype(raw, old, new)
     rebuild_clusters(raw)
-    struct.pack_into('<I', raw, 0x34, 0)
+    nav = struct.unpack_from('<I', raw, 0x34)[0]
+    if nav:
+        import kl_pf4
+        mesh = kl_pf4.convert(bytes(raw[nav + 4:nav + 4 + struct.unpack_from('<I', raw, nav)[0]]))
+        raw += bytes(-len(raw) % 16)                   # the mesh grows: put it at the end
+        struct.pack_into('<I', raw, 0x34, len(raw))
+        raw += struct.pack('<I', len(mesh)) + mesh
     struct.pack_into('<I', raw, 0x38, 0xffffffff)
     out = pack(bytes(raw))
     if unpack(out) != bytes(raw):
