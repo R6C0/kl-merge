@@ -36,15 +36,25 @@ Must run easily. Long-term option: a clean-room reimplementation (hl2-rs style) 
 - 0x7f779e duplicate slot registration (InventoryBinding by item enum value).
 - 0x8ad7c0 entity loader: 128-byte slots from pool[category + 8*prio] of the parent group's block.
 
-## Exact schemas (done 2026-10-08, from HHCHunter/hbm-editor's RTP recovery)
-- `tools/kl_rtti.py` + `tools/kl_schema.py`: every class's property list straight from the exe
-  (GetProperties = vtable slot 11 -> ZPropertyInfo chain; records = load fn + ZEnumInfo).
-- `tools/kl_schema_infer.py dd|dm <game root>` maps load fn -> .prp token letter from the levels
-  and writes `re/schemas_<game>.json` (classes, controllers, enums). Zero conflicts in both games.
-- `tools/kl_relayout.py` + `kl_convert.relayout_exact`: field-by-field DM->DD conversion using
-  those schemas; the old statistical path is only the fallback (M01: 0 entities, ~59 controllers).
-- Still statistical: controllers whose class the factory table doesn't resolve (7 DD, 26 DM),
-  and the 4 DM controllers with a length mismatch between schema and level data.
+## Exact schemas (2026-10-08, method from HHCHunter/hbm-editor's RTP recovery)
+- `tools/kl_exe.py` (PE by address, RTTI, exports) + `tools/kl_rtp.py`: every class's serialized
+  field list straight from the exe. GetProperties = vtable slot 11 -> ZPropertyInfo chain (base
+  first); a record is {next, name, filter, type handler}; filter bit 0 = stored in level files.
+  Controllers resolve through the exported `?<Owner>_<Name>_ClassInfo@@3VZROUTCLASSINFO@@A`
+  globals -> factory entry -> Create -> the vtable it stamps. The owner class is NOT enforced.
+- `python tools/kl_rtp.py` rebuilds `re/kaneandlynch.json` and `re/kl2.json` (needs capstone) and
+  proves them: every node and controller of every stock level must fit its class. Currently
+  DM 338,983 + 47,238 and DD 520,438 + 121,289 objects, 0 misfits, 316 / 405 controllers resolved.
+  Only `PhysicsTest` is used by levels but registered by neither exe (the engine skips it).
+- `tools/kl_convert.py` is schema-driven only (no statistical fallback): fields are paired per
+  class level by type + enum; Dog Days-only fields take Dog Days' most common value.
+- The exes hold no property names. Where a level gained a field next to same-typed ones the
+  pairing is an ASSUMPTION; the converter prints those levels ("assumed"). Worst: ZParticleEmitter,
+  ZOnlineFragileAllianceSettings (188 -> 340 strings), ZFFActor, ZItemTemplateWeapon.
+- Dog Days' exe still has every Dead Men geometry class except ZIngameMapGroup (so ZROOM, ZPlant,
+  ZHavokCar, ZSHADOWMESHOBJ ... have exact layouts); kl_gms.RETYPE still flattens them, pending
+  pool categories and room/portal data.
+- Outputs and build inputs live in the work folder (`kl_port_check.workdir()` = `<DM>\KL_PortTools`).
 
 ## Pipeline
 1. `tools/verify_levels.py` (run from KL_PortTools): converts M01/M02/M03/M06 FA prp and checks every
