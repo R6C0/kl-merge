@@ -18,7 +18,7 @@ from kl_port_check import find, workdir, DM_GUESSES, DD_GUESSES, DM_EXE, DD_EXE
 WORK = workdir()
 
 DM_BASE = {'M01_FA_A': 'M01FAA', 'M02_FA_A': 'M02FAA', 'M03_FA_A': 'M03FAA', 'M06_FA_A': 'M06FAA'}
-COPY_AS_IS = ['zgf', 'sup', 'HVK', 'ANM', 'buf', 'oct', 'sgp', 'rmc', 'rmi', 'sgd', 'hrd']
+COPY_AS_IS = ['zgf', 'sup', 'HVK', 'ANM', 'buf', 'sgp', 'rmc', 'rmi', 'sgd', 'hrd']
 LANGS = ['English', 'German', 'French', 'Spanish', 'Italian', 'Dutch', 'Russian', 'Polish', 'Japanese']
 BACKUP = 'KL_PortBackup'
 
@@ -36,6 +36,9 @@ def build(dm_level, slot, dm=None, dd=None):
     base = DM_BASE[dm_level]
     src_zip = os.path.join(dm, 'Scenes', 'Locations', dm_level, base + '_Main.zip')
     dd_zip = os.path.join(dd, 'Scenes', 'Locations', slot, slot + '_Main.zip')
+    bak = os.path.join(dd, BACKUP, 'Scenes', 'Locations', slot, slot + '_Main.zip')
+    if os.path.isfile(bak):
+        dd_zip = bak                               # the slot may already hold one of our builds
     out_zip = os.path.join(WORK, 'build', 'install', 'Scenes', 'Locations', slot, slot + '_Main.zip')
     os.makedirs(os.path.dirname(out_zip), exist_ok=True)
     pre = 'Scenes/Locations/%s/%s_Main' % (slot, slot)
@@ -49,6 +52,14 @@ def build(dm_level, slot, dm=None, dd=None):
             put(pre + '.' + ext, s.read(sn[ext]))
         import kl_gms
         put(pre + '.gms', kl_gms.convert(s.read(sn['gms'])))
+        # rooms that are retyped to groups must lose their trees in the .oct (see kl_oct.py)
+        import kl_oct, kl_rtp
+        dmc, ddc = kl_rtp.Schema.load('dm'), kl_rtp.Schema.load('dd')
+        tids = [e[1] for e in kl_gms.entities(kl_gms.unpack(s.read(sn['gms'])))]
+        keep = [True] + ['ZROOM' in ddc.bases(ddc.geoms.get(kl_gms.RETYPE.get(t, t), ''))
+                         for t in tids if 'ZROOM' in dmc.bases(dmc.geoms[t])]
+        put(pre + '.oct', kl_oct.convert(s.read(sn['oct']), keep))
+        print('rooms kept as rooms: %d of %d' % (sum(keep), len(keep)))
         put(pre + '.prp', open(os.path.join(WORK, 'converted', dm_level, base + '_Main.prp'), 'rb').read())
         for ext in ('TEX', 'prm', 'MAT'):
             put(pre + '.' + ext, open(os.path.join(conv, base + '_Main.' + ext), 'rb').read())
