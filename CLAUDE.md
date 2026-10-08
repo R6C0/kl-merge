@@ -125,6 +125,22 @@ Top-level subtrees (objects / with models):
   ids; .buf offsets (names, raw data, gates, lists); REF ids (follow the cluster table; stored in
   .oct trees, .rmi/.rmc, gates, lists); .oct collision records are referenced from .prm chunks.
 
+## .gms layout as far as known (needed by the graft; both games alike unless noted)
+File order: 0x40 header | 0x40..0x90 shared identity matrix / zero vector | record area | cluster
+table (hdr +0x14) | list pool (+0x18, first dword = its size) | room/environment pairs (+0x28) |
+entity table (+0x00) | navigation mesh (+0x34) | dynamic list (+0x24: {type id, count} pairs) |
++0x20 block (two {fourcc, ...} entries: 'ITEM', 'ZCOB') | type table (+0x10).
+- Record = 0x40 bytes, followed inline by its translation (16 bytes) and/or rotation (48) when
+  not shared: spans of 64 / 80 / 112 / 128 bytes. +0x00 name (.buf offset), +0x04 rotation and
+  +0x08 translation (offsets in the .gms), +0x0c model (chunk index in the .prm), +0x14 type id,
+  +0x1c flags, +0x20 raw data (.buf offset), +0x28 aux count, +0x30 REF id (unique, 1-based),
+  +0x35 pool group. +0x10/+0x18/+0x24/+0x2c/+0x38/+0x3c are always 0 in the file.
+- REF ids go beyond the entity count (F01: 15871 entities, 16744 slots): the rest belong to
+  objects created at run time (dynamic list).
+- NOT decoded yet: header +0x1c (points into the middle of the record area), the second dword
+  of each entity-table entry (even numbers 4, 6, 8 ... on about a quarter of the entities), the
+  list pool's contents, the aux count. The graft needs all four.
+
 ## Open work
 1. Graft tool: Dog Days systems + Dead Men map in one level. Milestone A (no Dead Men data): put
    stock F02's map under stock F01's systems and get it to load - proves the join. Milestone B:
