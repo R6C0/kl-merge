@@ -175,6 +175,15 @@ The owner wants BOTH parts in ONE Fragile Alliance map (2026-10-09). That is a t
 level (L10) has 42,915 entities; A + B have 28,572 before their own menus/HUD/effects are dropped,
 and 1086 + 1332 textures against a 4096 limit (many shared). Open: how the two parts sit relative
 to each other in world space (they are separate levels in the campaign), and the join between them.
+Owner's design for it (2026-10-09), to be followed as given:
+- Start: the heisters are ALREADY rappelled down at the main window, with the explosion sound
+  playing as the round begins (the way stock Subway opens in the middle of the job). No rappel
+  sequence. Straight into action as the main window blows.
+- Part 1 (tower): fight through; loot comes from the STATUES, and from the MAIN ROOM once everyone
+  in it is dead.
+- Part 2 (lobby/street): out through the front entrance, down the road to a VAN, and escape.
+  Mood reference: the street shoot-out in the film Heat.
+- I am to design how the two parts join. Its level music plays.
 
 ## Roadmap for a rewrite (only after the port works)
 Ghidra project of kl2.exe + kaneandlynch.exe, shared symbol/type database (classes, vtables,
