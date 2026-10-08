@@ -22,6 +22,41 @@ COPY_AS_IS = ['zgf', 'sup', 'HVK', 'sgp', 'sgd', 'hrd']
 LANGS = ['English', 'German', 'French', 'Spanish', 'Italian', 'Dutch', 'Russian', 'Polish', 'Japanese']
 BACKUP = 'KL_PortBackup'
 
+# Animation sets Dead Men objects name -> the set of the slot's .ANM that stands in for it, while
+# the slot's own .ANM is shipped (see build()). A set the .ANM does not have leaves the object
+# without animations: a ZFFPlayer on 'PlayerCharacter' crashes in its cover-movement setup
+# (kl2 0x493d95, 79 % load). EVERY PAIRING HERE IS A GUESS by role and weapon class; weapons
+# follow kl_convert.ITEM_RENAME where it has an entry.
+ANIM_SETS = {
+    'PlayerCharacter': 'Lynch', 'Mercenary_04': 'Lynch_NPC', 'Police_USA': 'Police',
+    'Female': 'Civilian', 'Generic': 'Civilian',
+    'Pistol': 'HG_SigSauer226', 'M4': 'FN_SCAR', 'SIG_552': 'Type95', 'RugerMini14': 'Zastavam',
+    'SMG_MP5': 'Type05', 'P90': 'SMG_UMP', 'SMG_TMP': 'SMG_MPI69', 'Rem_870': 'Shotgun_Remington_870',
+    'Rem_700': 'Type88', 'MG_PKMSN2': 'MG_GP_Type88',
+    'Van': None,                # the escape van: Dog Days has no vehicle set to stand in; left as it is
+}
+ANMCOL = 'anmcol:animationdatabase#'
+
+
+def anim_sets(prp, anm):
+    """Point the level's animation-set names at sets the shipped .ANM has. Returns (prp bytes,
+    {old: new}, [names still missing])."""
+    import re
+    from kl_prp import Prp
+    have = set(m.group().decode('latin1') for m in re.finditer(rb'anmcol:[\w#/]+', anm))
+    p = Prp(prp)
+    done, missing = {}, []
+    for i, k in enumerate(p.keys):
+        if k.startswith(ANMCOL) and k not in have:
+            new = ANMCOL + (ANIM_SETS.get(k[len(ANMCOL):]) or '')
+            if new in have:
+                done[k] = new
+                p.keys[i] = new
+            else:
+                missing.append(k)
+    p.keyblob = b''.join(k.encode('latin1') + b'\0' for k in p.keys)
+    return p.serialize(), done, missing
+
 
 def games():
     dm, dd = find(DM_GUESSES, DM_EXE), find(DD_GUESSES, DD_EXE)
@@ -54,7 +89,8 @@ def build(dm_level, slot, dm=None, dd=None):
         # Days' 0x68, and two offset fields differ; the load crashes in an event-name lookup at 79 %).
         # STOPGAP until it is converted: the slot's own .ANM. Only the clips both games name alike
         # exist in it, so Dead Men-only animations (the van, some civilians) are missing.
-        put(pre + '.ANM', o.read([n for n in o.namelist() if n.endswith('.ANM')][0]))
+        anm = o.read([n for n in o.namelist() if n.endswith('.ANM')][0])
+        put(pre + '.ANM', anm)
         import struct, kl_gms, kl_oct, kl_rooms, kl_rtp
         dmc, ddc = kl_rtp.Schema.load('dm'), kl_rtp.Schema.load('dd')
         src_gms = kl_gms.unpack(s.read(sn['gms']))
@@ -77,6 +113,14 @@ def build(dm_level, slot, dm=None, dd=None):
             put(pre + '.' + ext, kl_rooms.convert_index(s.read(sn[ext])))
         prp = open(os.path.join(WORK, 'converted', dm_level, base + '_Main.prp'), 'rb').read()
         prp, buf, ngates = kl_rooms.convert_gates(prp, dd_cls, ddc, s.read(sn['buf']))
+        prp, renamed, missing = anim_sets(prp, anm)
+        print('animation sets renamed: %s' % {k[len(ANMCOL):]: v[len(ANMCOL):] for k, v in renamed.items()})
+        left = [k for k in missing if k[len(ANMCOL):] in ANIM_SETS]
+        missing = [k for k in missing if k not in left]
+        if left:
+            print('WARNING animation sets with no stand-in, objects using them will not animate: %s' % left)
+        if missing:
+            raise SystemExit('animation sets the .ANM does not have: %s (add them to ANIM_SETS)' % missing)
         put(pre + '.prp', prp)
         put(pre + '.buf', buf)
         print('rooms: %d, gates converted: %d' % (len(keep), ngates))
