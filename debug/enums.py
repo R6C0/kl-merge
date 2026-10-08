@@ -1,5 +1,9 @@
-import pefile,struct,json,sys
+"""enums.py [exe] [out.json]   enum value tables in an exe: runs of {value, name*, next*} with values counting up from 0 or 1.
+Defaults: kl2.exe -> <temp>/kl_triage/dd_enums.json (tools/dd_enums.json is this output)."""
+import json,os,struct,sys
+import kl
 def extract(path):
+    import pefile
     pe=pefile.PE(path,fast_load=True); d=open(path,'rb').read(); B=pe.OPTIONAL_HEADER.ImageBase
     secs=[(B+s.VirtualAddress,B+s.VirtualAddress+s.Misc_VirtualSize,s.PointerToRawData,s.SizeOfRawData) for s in pe.sections]
     def off(v):
@@ -29,5 +33,8 @@ def extract(path):
                 tables.append(run); i=j
             else: i+=4
     return tables
-t=extract(sys.argv[1]); print(len(t))
-json.dump(t,open(sys.argv[2],'w'))
+if __name__=='__main__':
+    exe=sys.argv[1] if len(sys.argv)>1 else os.path.join(kl.DD,kl.DD_EXE)
+    out=sys.argv[2] if len(sys.argv)>2 else os.path.join(kl.TMP,'dd_enums.json')
+    t=extract(exe); print(len(t),'tables ->',out)
+    json.dump(t,open(out,'w'))

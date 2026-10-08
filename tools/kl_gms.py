@@ -84,12 +84,21 @@ def entities(raw):
     return out
 
 
-def rebuild_clusters(raw, categories):
-    """Recompute the cluster table the way Dog Days' entity loader consumes it: one block of
-    24 pool counts per group-type entity (plus ROOT's block 0); each entity takes a 128-byte
-    slot from pool [category + 8 * priority] of its parent group's block. A pool with count 0
-    gets no memory, so for classes whose category is ambiguous a slot is reserved in every
-    candidate pool."""
+def category(tid):
+    """Pool category of a class, as kl2 0x829b10 computes it from the class's bases (the same rule
+    in Dead Men, 0x42a2c0): ZGROUP family 0; ZSTDOBJ and ZSHAPE families 1, except ZBOUND and
+    ZSNDOBJ 3; lights 2; everything else 3. It reproduces every cell of the cluster table of
+    every stock level of both games."""
+    if tid in (0x200012, 0x20001c):                 # ZBOUND, ZSNDOBJ
+        return 3
+    return {0x100000: 0, 0x800000: 2, 0x200000: 1, 0x4000000: 1}.get(tid & 0x7ff00000, 3)
+
+
+def rebuild_clusters(raw):
+    """Recompute the cluster table the way Dog Days' entity loader (kl2 0x8ad7c0) consumes it: one
+    block of 24 pool counts per group-type entity (plus ROOT's block 0); each entity takes a
+    128-byte slot from pool [category + 8 * pool group] of its parent group's block. A pool
+    with count 0 gets no memory and the loader dereferences it (crash at 0x8adbba)."""
     ents = entities(raw)
     ctab = struct.unpack_from('<I', raw, 0x14)[0]
     nblocks = struct.unpack_from('<I', raw, ctab)[0]
@@ -101,12 +110,8 @@ def rebuild_clusters(raw, categories):
         if pending is not None:
             stack.append(pending); pending = None
         if prio > 2:
-            raise ValueError('entity priority %d out of range' % prio)
-        cats = categories.get(tid)
-        if not cats:
-            raise ValueError('no Dog Days category known for class %#x' % tid)
-        for c in cats:
-            blocks[stack[-1]][c + 8 * prio] += 1
+            raise ValueError('entity pool group %d out of range' % prio)
+        blocks[stack[-1]][category(tid) + 8 * prio] += 1
         blk = None
         if tid & GROUP:
             blk = nxt; nxt += 1
@@ -121,17 +126,11 @@ def rebuild_clusters(raw, categories):
     return nblocks
 
 
-def load_categories():
-    import json, os
-    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dd_categories.json')
-    return {int(k, 16): v for k, v in json.load(open(p)).items()}
-
-
-def convert(f, categories=None):
+def convert(f):
     raw = bytearray(unpack(f))
     for old, new in RETYPE.items():
         retype(raw, old, new)
-    rebuild_clusters(raw, categories or load_categories())
+    rebuild_clusters(raw)
     struct.pack_into('<I', raw, 0x34, 0)
     struct.pack_into('<I', raw, 0x38, 0xffffffff)
     out = pack(bytes(raw))

@@ -300,7 +300,12 @@ class Converter:
 
     def default(self, p, f, who):
         v = self.typical.get(f.key)
-        if v is None:
+        if v is not None and any(isinstance(pl, tuple) and any(s.startswith('ROOT') for s in pl[1:]) for _op, pl in v):
+            # Dog Days' usual value is a path to an object of ITS levels (a muzzle flash, an exit
+            # vehicle): here it would dangle. Every scene path in a stock level resolves.
+            self.report['default was a Dog Days scene path: left empty'][who + ' ' + f.owner] += 1
+            v = self.blank(f)
+        elif v is None:
             self.report['blank default (Dog Days levels never store this field)'][who + ' ' + f.owner] += 1
             v = self.blank(f)
         return _materialize(p, v)

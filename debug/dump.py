@@ -1,56 +1,30 @@
-import struct,sys,re,pefile,capstone
-dmp=sys.argv[1]; exe='/mnt/user-data/uploads/Kane & Lynch 2 - Dog Days/kl2.exe'
-d=open(dmp,'rb').read()
-ns,dirrva=struct.unpack_from('<II',d,8); streams={}
-for i in range(ns):
-    t,sz,rva=struct.unpack_from('<III',d,dirrva+12*i); streams[t]=(sz,rva)
-sz,rva=streams[6]
-code,flags,rec,addr,np=struct.unpack_from('<IIQQI',d,rva+8)
-info=struct.unpack_from('<2Q',d,rva+8+24+4+4)  # approx
-ctx_sz,ctx_rva=struct.unpack_from('<II',d,rva+8+152); c=d[ctx_rva:ctx_rva+ctx_sz]
-off=156; edi,esi,ebx,edx,ecx,eax=struct.unpack_from('<6I',c,off); ebp,eip,cs,efl,esp,ss=struct.unpack_from('<6I',c,off+24)
-mem=[]
-sz,rva2=streams[5]; n=struct.unpack_from('<I',d,rva2)[0]
-for i in range(n):
-    start,dsz,drva=struct.unpack_from('<QII',d,rva2+4+16*i); mem.append((start,dsz,drva))
-def read(a,n):
-    for s,sz_,r in mem:
-        if s<=a and a+n<=s+sz_: return d[r+a-s:r+a-s+n]
-sz,rva=streams[4]; n=struct.unpack_from('<I',d,rva)[0]; mods=[]
-for i in range(n):
-    base,size=struct.unpack_from('<QI',d,rva+4+108*i); nr=struct.unpack_from('<I',d,rva+4+108*i+20)[0]
-    L=struct.unpack_from('<I',d,nr)[0]; mods.append((base,base+size,d[nr+4:nr+4+L].decode('utf-16le').split('\\')[-1]))
-def which(a):
-    for b,e,nm in mods:
-        if b<=a<e: return '%s+0x%x'%(nm,a-b)
-print('code',hex(code),'at',hex(addr),which(addr))
-print(dict(eip=hex(eip),esp=hex(esp),ebp=hex(ebp),eax=hex(eax),ebx=hex(ebx),ecx=hex(ecx),edx=hex(edx),esi=hex(esi),edi=hex(edi)))
-pe=pefile.PE(exe,fast_load=True); x=open(exe,'rb').read(); B=pe.OPTIONAL_HEADER.ImageBase
-md=capstone.Cs(capstone.CS_ARCH_X86,capstone.CS_MODE_32)
-def cs(v):
-    try:
-        o=pe.get_offset_from_rva(v-B); e=x.find(b'\0',o,o+100); t=x[o:e]
-        return t.decode() if e>o and all(32<=q<127 for q in t) else ''
-    except: return ''
-if which(addr) and 'kl2.exe' in which(addr):
-    o=pe.get_offset_from_rva(addr-B)
-    for i in md.disasm(x[o-0x40:o+0x10],addr-0x40): print('   ',hex(i.address),i.mnemonic,i.op_str,'<==' if i.address==addr else '')
-st=read(esp,0x1000) or read(esp,0x800) or b''
-print('stack',len(st))
-frames=[]
-for i in range(0,len(st)-3,4):
-    v=struct.unpack_from('<I',st,i)[0]; w=which(v)
-    if w and 'kl2.exe' in w:
-        # validate it's a return address (preceded by call)
-        try:
-            o=pe.get_offset_from_rva(v-B)
-            if x[o-5]==0xe8 or x[o-2]==0xff or x[o-3]==0xff or x[o-6]==0xff: frames.append(v)
-        except: pass
-for v in frames[:14]:
-    o=pe.get_offset_from_rva(v-B); win=x[o-0x400:o]
-    strs=[]
-    for i in md.disasm(win,v-0x400):
-        for m in re.findall(r'0x([0-9a-f]{6,8})',i.op_str):
-            t=cs(int(m,16))
-            if len(t)>3: strs.append(t)
-    print(hex(v),which(v),strs[-6:])
+"""dump.py <dump>   what faulted, registers, code before the fault, kl2.exe return addresses on the stack."""
+import re,struct,sys
+import kl
+def summary(D,E):
+    r=D.reg; at=D.addr; w=D.which(at) or '?'
+    acc=' (%s address %#x)'%('writing' if D.info[0] else 'reading',D.info[1]) if D.code==0xc0000005 and len(D.info)>1 else ''
+    print('code %#x at %#x %s%s'%(D.code,at,w,acc))
+    print(' '.join('%s=%08x'%(k,r[k]) for k in 'eip esp ebp eax ebx ecx edx esi edi'.split()))
+    if kl.SITES.get(at): print('site:',kl.explain(at,r,D))
+    n=D.u32(0xe0ff14)                                   # node loader 0x46fe20 counts the nodes it enters here; entity total at 0xe0ff18
+    if n: print('node loader counter: %d of %d nodes entered -> node index %d if a level load is in progress'%(n,D.u32(0xe0ff18)+1,n-1))
+def frames(D,E,depth=0x2000):
+    """kl2.exe return addresses on the stack: each must follow a call (rel32 into .text, or through a register/memory)."""
+    st=D.read(D.reg['esp'],min(depth,D.have(D.reg['esp']))//4*4) or b''; out=[]; i=E.img
+    for v, in struct.iter_unpack('<I',st):
+        if E.code(v):
+            o=v-E.B
+            if (i[o-5]==0xe8 and E.code(v+struct.unpack_from('<i',i,o-4)[0])) or any(i[o-n]==0xff and (i[o-n+1]>>3)&7==2 for n in (2,3,6,7)): out.append(v)
+    return out
+def chain(fr): return ' < '.join('%#x%s'%(c,' ('+kl.CALLERS[c]+')' if c in kl.CALLERS else '') for c in fr)
+if __name__=='__main__':
+    D=kl.Dump(kl.path(sys.argv[1])); E=kl.Exe(); summary(D,E); at=D.addr
+    if E.code(at):
+        f=E.func(at); a=max(f,at-0x60) if f else at-0x40
+        if f: print('function %#x'%f)
+        for i in E.dis(a,at-a+0x10): print('   %#x %s %s%s%s'%(i.address,i.mnemonic,i.op_str,E.note(i.op_str),'   <==' if i.address==at else ''))
+    fr=frames(D,E); print('stack: %d kl2.exe return addresses'%len(fr))
+    for v in fr[:14]:
+        strs=[t for i in E.dis(v-0x400,0x400) for m in re.findall(r'0x[0-9a-f]{6,8}',i.op_str) for t in [E.cstr(int(m,16))] if t]
+        print('  %#x in %#x %s %s'%(v,E.func(v) or 0,kl.CALLERS.get(v,''),strs[-4:]))

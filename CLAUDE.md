@@ -56,6 +56,39 @@ Must run easily. Long-term option: a clean-room reimplementation (hl2-rs style) 
   pool categories and room/portal data.
 - Outputs and build inputs live in the work folder (`kl_port_check.workdir()` = `<DM>\KL_PortTools`).
 
+## Research results (2026-10-08, agents' full reports: `<DM>\KL_PortTools\research\*.json`)
+Verified on real files unless marked. Crash risks first.
+- `.oct`: 16-byte header, then FIVE trees per ZROOM-derived entity in scene order (root first),
+  then collision records up to -1, then a tail. A room retyped to a group must lose its trees
+  (`tools/kl_oct.py`). The collision part crashes Dog Days at 0x719884 with Dead Men data: OPEN.
+- Rooms: gate (portal) records live in the `.buf`, addressed by two ZROOM properties. A record is
+  0x38 bytes in Dead Men, 0x74 in Dog Days (walked by kl2 0x48e910): that stride mismatch is the
+  old room fix-up crash. The extra 0x3c bytes (centre, half extents, 3x3 frame) are computable from
+  the four corners. Convert the gate table and rooms can stay ZROOM.
+- `.ANM` must not be copied: per-clip header is 0x50 bytes in Dead Men, 0x68 in Dog Days.
+- `.prm`: `kl_prm.find_descriptors` misses descriptors with baked lighting (1375 in M02, 2250 in
+  M03; none in M01/M06) - walk the model graph instead and clear drawMode bit 0x01000000. Dog Days
+  descriptor dword 5 = Dead Men dword 2 (kl_prm writes 0). Scatter objects (lType 9) are 256 bytes
+  in Dead Men, 144 in Dog Days, unrelated content (M01 has 4, M06 145).
+- `.MAT`: Dead Men class definitions name techniques no Dog Days effect has; entry +0x18 surface
+  type, +0x08 bit 0x10 (bump) and +0x0C render group are numbered differently.
+- `.sgd`: strip section HavokShatterGlassConnectivity (M02/M03); M06 lacks ExplodableOctree.
+- `.buf` tail (gms header +0x30): surface-material / impact table, Dead Men's shape. Unverified risk.
+- `.LOC`: same format, but Dead Men's has 766 of the 5798 strings the Dog Days slot expects and
+  its sound ids index the Dead Men .SND. Use the slot's own .LOC as base.
+- Pool category is exact: `kl_gms.category()` (kl2 0x829b10). Unknown controller names are skipped
+  cleanly by the engine (0x4f9800); an unregistered type id crashes at 0x46fe87 / 0x8add12; an
+  empty pool at 0x8adbba. 0xa8e3cb (write to 0) is Steam's anti-debug probe, not a crash.
+- Scene property block is read by name: the "32 -> 33 entries" item is NOT a load requirement.
+- Boot (static reading, NOT yet tried live): kl2.exe reads no ini, but takes `-o <Key=Value>` on the
+  command line (Steam launch options), e.g. `-o DefaultScene=Locations/F01/F01_Main.gms
+  -o AutoExit=120 -o DisableSplashScreens`. Also MPMap, DisableAudio. This could make load tests
+  click-free. No console, no assert text exists in retail (asserts are bare int3).
+- Patch01.zip is mounted first and overrides same-named members of every archive; the FA level list
+  is hard-coded (9 slots) but a slot string could be rewritten by KLHook, or MPMap used.
+- Input is DirectInput8 only; scripted input is best injected inside the dinput8 proxy (KLHook).
+- Crash triage: `python debug/triage.py --keep`; pre-flight a build with `python debug/check.py`.
+
 ## Pipeline
 1. `tools/verify_levels.py` (run from KL_PortTools): converts M01/M02/M03/M06 FA prp and checks every
    object vs DD (layout, enums, lists, array sizes, duplicate items). Must report `problems: 0`.
