@@ -170,6 +170,11 @@ level: M09_A (11,926 entities: tower offices and roof) and M09_B (16,646: lobby,
 'Retomoto_Squad'). Music: 15 clips under Music/InHouse/Japan plus LevelSetup/Level/M09_A in
 PC_Def.str. The graft supplies the map; the FA layer (spawn points, loot, escape, AI squads,
 level bounds) does not exist for it and must be authored. After M01 plays.
+The owner wants BOTH parts in ONE Fragile Alliance map (2026-10-09). That is a three-source graft
+(Dog Days systems + M09_A map + M09_B map). Size is not the obstacle: the largest stock Dog Days
+level (L10) has 42,915 entities; A + B have 28,572 before their own menus/HUD/effects are dropped,
+and 1086 + 1332 textures against a 4096 limit (many shared). Open: how the two parts sit relative
+to each other in world space (they are separate levels in the campaign), and the join between them.
 
 ## Roadmap for a rewrite (only after the port works)
 Ghidra project of kl2.exe + kaneandlynch.exe, shared symbol/type database (classes, vtables,
