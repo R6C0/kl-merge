@@ -27,7 +27,8 @@ def pack(raw):
 
 # Dead Men classes Dog Days doesn't register -> Dog Days class with the same layout
 RETYPE = {
-    0x100486: 0x100001,     # ZIngameMapGroup -> ZGROUP (as a ZROOM its record has no portal data and Dog Days' room linking crashes)
+    0x100486: 0x100021,     # ZIngameMapGroup -> ZROOM, its base: it adds no properties, has no gates, and the
+                            # .oct / .rmi name it by REF id as a room
     # classes Dog Days still has but never saves in a level (layout unknown). Targets keep
     # the "group" bit (0x100000) so the cluster table keeps the same number of blocks.
     # ZROOM stays ZROOM: each room (and ROOT) owns one section of the level's .oct octree, same
@@ -38,7 +39,8 @@ RETYPE = {
     0x2000fd: 0x200002,     # ZPlant          -> ZSTDOBJ
     0x20010f: 0x200002,     # ZEnvSampler     -> ZSTDOBJ
     0x2000d4: 0x200002,     # ZHavokCar       -> ZSTDOBJ (static car)
-    0x800011e: 0x200002,    # ZAMBIENTOCCLUSION -> ZSTDOBJ
+    # ZAMBIENTOCCLUSION is NOT retyped: Dog Days has the class, and a ZSTDOBJ takes its slot from
+    # another pool, which would renumber every REF id the .oct / .rmi / .buf store
 }
 GROUP = 0x100000
 

@@ -18,7 +18,7 @@ from kl_port_check import find, workdir, DM_GUESSES, DD_GUESSES, DM_EXE, DD_EXE
 WORK = workdir()
 
 DM_BASE = {'M01_FA_A': 'M01FAA', 'M02_FA_A': 'M02FAA', 'M03_FA_A': 'M03FAA', 'M06_FA_A': 'M06FAA'}
-COPY_AS_IS = ['zgf', 'sup', 'HVK', 'ANM', 'buf', 'sgp', 'rmc', 'rmi', 'sgd', 'hrd']
+COPY_AS_IS = ['zgf', 'sup', 'HVK', 'ANM', 'sgp', 'sgd', 'hrd']
 LANGS = ['English', 'German', 'French', 'Spanish', 'Italian', 'Dutch', 'Russian', 'Polish', 'Japanese']
 BACKUP = 'KL_PortBackup'
 
@@ -50,17 +50,31 @@ def build(dm_level, slot, dm=None, dd=None):
             z.writestr(name, data)
         for ext in COPY_AS_IS:
             put(pre + '.' + ext, s.read(sn[ext]))
-        import kl_gms
-        put(pre + '.gms', kl_gms.convert(s.read(sn['gms'])))
-        # rooms that are retyped to groups must lose their trees in the .oct (see kl_oct.py)
-        import kl_oct, kl_rtp
+        import struct, kl_gms, kl_oct, kl_rooms, kl_rtp
         dmc, ddc = kl_rtp.Schema.load('dm'), kl_rtp.Schema.load('dd')
-        tids = [e[1] for e in kl_gms.entities(kl_gms.unpack(s.read(sn['gms'])))]
-        keep = [True] + ['ZROOM' in ddc.bases(ddc.geoms.get(kl_gms.RETYPE.get(t, t), ''))
-                         for t in tids if 'ZROOM' in dmc.bases(dmc.geoms[t])]
+        src_gms = kl_gms.unpack(s.read(sn['gms']))
+        gms = kl_gms.convert(s.read(sn['gms']))
+        put(pre + '.gms', gms)
+        # The .oct, .rmi, .rmc and the gates in the .buf name entities by REF id, and ids follow
+        # the cluster table: it has to come out as Dead Men had it.
+        ct = struct.unpack_from('<I', src_gms, 0x14)[0]
+        end = ct + 4 + 96 * struct.unpack_from('<I', src_gms, ct)[0]
+        if kl_gms.unpack(gms)[ct:end] != src_gms[ct:end]:
+            raise SystemExit('a retype in kl_gms.RETYPE moves entities to another pool: REF ids would be stale')
+        tids = [e[1] for e in kl_gms.entities(src_gms)]
+        dd_cls = ['ZROOM'] + [ddc.geoms[kl_gms.RETYPE.get(t, t)] for t in tids]
+        # rooms that are retyped to groups must lose their trees in the .oct (see kl_oct.py)
+        keep = [True] + ['ZROOM' in ddc.bases(c) for t, c in zip(tids, dd_cls[1:]) if 'ZROOM' in dmc.bases(dmc.geoms[t])]
         put(pre + '.oct', kl_oct.convert(s.read(sn['oct']), keep))
-        print('rooms kept as rooms: %d of %d' % (sum(keep), len(keep)))
-        put(pre + '.prp', open(os.path.join(WORK, 'converted', dm_level, base + '_Main.prp'), 'rb').read())
+        if not all(keep):
+            raise SystemExit('a Dead Men room is no longer a room: its .rmi/.rmc boxes would name a non-room')
+        for ext in ('rmi', 'rmc'):
+            put(pre + '.' + ext, kl_rooms.convert_index(s.read(sn[ext])))
+        prp = open(os.path.join(WORK, 'converted', dm_level, base + '_Main.prp'), 'rb').read()
+        prp, buf, ngates = kl_rooms.convert_gates(prp, dd_cls, ddc, s.read(sn['buf']))
+        put(pre + '.prp', prp)
+        put(pre + '.buf', buf)
+        print('rooms: %d, gates converted: %d' % (len(keep), ngates))
         for ext in ('TEX', 'prm', 'MAT'):
             put(pre + '.' + ext, open(os.path.join(conv, base + '_Main.' + ext), 'rb').read())
         put(pre + '.fxc', open(os.path.join(WORK, 'build', 'shared', 'union.fxc'), 'rb').read())
