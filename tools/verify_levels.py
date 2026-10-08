@@ -8,8 +8,8 @@ lvls=sys.argv[1:] or ['M01_FA_A','M02_FA_A','M03_FA_A','M06_FA_A']
 for lv in lvls:
     base=lv.replace('_','')
     zf=zipfile.ZipFile(DM+'/Scenes/Locations/%s/%s_Main.zip'%(lv,base)); n='Scenes/Locations/%s/%s_Main.prp'%(lv,base)
-    types=K.node_types(zf,n); log=collections.defaultdict(collections.Counter)
-    out,st=K.convert_level(zf.read(n),ref,log,types)
+    types=K.node_types(zf,n); raw=K.node_types_raw(zf,n); log=collections.defaultdict(collections.Counter)
+    out,st=K.convert_level(zf.read(n),ref,log,types,raw)
     open('converted/%s/%s_Main.prp'%(lv,base),'wb').write(out)
     p=Prp(out); bad=collections.Counter(); prob=collections.Counter()
     def check(key,o,known):

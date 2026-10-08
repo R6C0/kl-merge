@@ -88,6 +88,7 @@ def base_fix(props):
 
 
 from kl_gms import RETYPE
+import kl_relayout as RL
 
 # Dead Men weapon/item enum -> Dog Days item enum (exe table; each Dog Days item may be bound
 # once per level, except eFF2ItemNoItem). Items Dog Days has no equivalent for become NoItem.
@@ -175,6 +176,22 @@ def node_types(zf, prp_name):
         decl = struct.unpack_from('<I', raw, t + 4 + 8 * i)[0]
         tid = struct.unpack_from('<I', raw, 4 * (decl & 0xffffff) + 0x14)[0]
         out.append(RETYPE.get(tid, tid))
+    return out
+
+
+def node_types_raw(zf, prp_name):
+    """Like node_types but with the Dead Men class ids as stored (no RETYPE)."""
+    import kl_gms
+    gms = prp_name[:-4] + '.gms'
+    if gms not in zf.namelist():
+        return None
+    raw = kl_gms.unpack(zf.read(gms))
+    t = struct.unpack_from('<I', raw, 0)[0]
+    n = struct.unpack_from('<I', raw, t)[0]
+    out = [0x100021]
+    for i in range(n):
+        decl = struct.unpack_from('<I', raw, t + 4 + 8 * i)[0]
+        out.append(struct.unpack_from('<I', raw, 4 * (decl & 0xffffff) + 0x14)[0])
     return out
 
 
@@ -275,6 +292,9 @@ class DDReference:
                         f = self._find(other); break
             return 'e:%r' % (f,) if f is not None else 'e?' + str(text)
         return unit_sig(u)
+
+    def samples_keys(self, key):
+        return {sg for (k, sg) in self.samples if k == key}
 
     def default_unit(self, name, sig, idx):
         c = collections.Counter(tuple(s[idx]) for s in self.samples[(name, sig)] if idx < len(s))
@@ -399,6 +419,49 @@ def squad_script(p, obj):
 SPECIAL = {'ZSquadScript': squad_script}
 
 
+def relayout_exact(p, ref, key, dm_cls, dd_cls, obj):
+    """Field-by-field relayout from the exes' property schemas. None when a schema is missing."""
+    dmf, ddf = RL.fields('dm', dm_cls), RL.fields('dd', dd_cls)
+    if not dmf or not ddf:
+        return None
+    src = units(body(obj))
+    pairs = RL.align(dmf, ddf, src)
+    if pairs is None:
+        return None
+    target = '{' + RL.letters(ddf) + '}'
+    if target not in ref.samples_keys(key):
+        target = None                         # Dog Days never saved this class: defaults unknown
+    out, approx = [], False
+    for i, (f, u) in enumerate(pairs):
+        if u is not None:
+            out.append(list(u)); continue
+        d = ref.default_unit(key, target, i) if target else None
+        if d is None:
+            d = zero_unit(f[1], p); approx = True
+            if d is None:
+                return None
+        else:
+            d = _materialize(p, d)
+        out.append(d)
+    new = wrap([t for u in out for t in u])
+    if csig(new) != '{' + RL.letters(ddf) + '}':
+        return None
+    return new, ('approx' if approx else 'converted')
+
+
+def zero_unit(letter, p):
+    z = {'i': (0x04, b'\0' * 4), 'b': (0x06, b'\0'), 'B': (0x07, b'\0'), 'h': (0x08, b'\0\0'),
+         'I': (0x09, b'\0' * 4), 'f': (0x0a, b'\0' * 4), 'd': (0x0b, b'\0' * 8), 'c': (0x05, b'\0'),
+         's': (0x0c, struct.pack('<I', p.key_index(''))), 'k': (0x0f, b'\0' * 4)}
+    if letter in z:
+        return [z[letter]]
+    if letter == '[f*]':
+        return [(0x01, struct.pack('<I', 3))] + [(0x0a, b'\0' * 4)] * 3 + [(0x7c, b'')]
+    if letter == '[I*]':
+        return [(0x01, struct.pack('<I', 0)), (0x7c, b'')]
+    return None
+
+
 def relayout(p, ref, name, obj):
     """Controller -> (new_obj or None, how)."""
     known = ref.ctrl.get(name)
@@ -406,8 +469,16 @@ def relayout(p, ref, name, obj):
         return None, 'unknown'
     if name in SPECIAL:
         obj = SPECIAL[name](p, obj)
+    ex = None
+    if csig(obj) not in known:
+        dm_cls, dd_cls = RL.controller_class('dm', name), RL.controller_class('dd', name)
+        if dm_cls and dd_cls:
+            ex = relayout_exact(p, ref, name, dm_cls, dd_cls, obj)
     if csig(obj) in known:
         new, how = obj, 'same'
+    elif ex is not None:
+        new, how = ex
+        how = 'exact' if how == 'converted' else 'exact-approx'
     else:
         new, approx = _apply(p, ref, name, known.most_common(1)[0][0], units(body(obj)))
         if new is None:
@@ -417,7 +488,7 @@ def relayout(p, ref, name, obj):
     return new, how
 
 
-def relayout_entity_cls(p, ref, props, tid):
+def relayout_entity_cls(p, ref, props, tid, dm_tid=None):
     """Entity of known class -> Dog Days layout of that same class."""
     known = ref.cls.get(tid)
     if not known:
@@ -426,6 +497,12 @@ def relayout_entity_cls(p, ref, props, tid):
     sig = csig(props)
     if sig in known:
         return fix_values(p, ref, key, props)[0], 'same'
+    dm_cls, dd_cls = RL.class_name('dm', dm_tid if dm_tid is not None else tid), RL.class_name('dd', tid)
+    if dm_cls and dd_cls:
+        ex = relayout_exact(p, ref, key, dm_cls, dd_cls, props)
+        if ex is not None:
+            new, how = ex
+            return fix_values(p, ref, key, new)[0], 'exact' if how == 'converted' else 'exact-approx'
     src = units(body(props))
     src_lab = _labels(p, ref, src)
     best, score = None, -1.0
@@ -468,7 +545,7 @@ def relayout_entity(p, ref, props):
     return new, 'approx' if approx else 'converted'
 
 
-def convert_level(data, ref, log, types=None):
+def convert_level(data, ref, log, types=None, raw_types=None):
     p = Prp(data)
     st = collections.Counter()
     st['items_renamed'] = rename_keys(p, ITEM_RENAME)
@@ -476,10 +553,21 @@ def convert_level(data, ref, log, types=None):
     if types is not None and len(types) != len(nodes):
         raise ValueError('scene file and property file disagree on entity count')
     for k, node in enumerate(nodes):
-        node['props'], fixed = base_fix(node['props'])
         st['entities'] += 1
-        st['base_fixed'] += fixed
-        r = relayout_entity_cls(p, ref, node['props'], types[k]) if types else None
+        r = None
+        if types and raw_types:
+            # exact schema path first, on the untouched Dead Men layout
+            key = ('<class>', types[k])
+            dm_cls, dd_cls = RL.class_name('dm', raw_types[k]), RL.class_name('dd', types[k])
+            if dm_cls and dd_cls and types[k] in ref.cls:
+                ex = relayout_exact(p, ref, key, dm_cls, dd_cls, node['props'])
+                if ex is not None:
+                    new, how = ex
+                    r = (fix_values(p, ref, key, new)[0], 'exact' if how == 'converted' else 'exact-approx')
+        if r is None:
+            node['props'], fixed = base_fix(node['props'])
+            st['base_fixed'] += fixed
+            r = relayout_entity_cls(p, ref, node['props'], types[k]) if types else None
         if r is None:
             r = relayout_entity(p, ref, node['props'])
             st['class_unknown_in_dd'] += 1
