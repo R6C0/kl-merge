@@ -155,6 +155,16 @@ entity table (+0x00) | navigation mesh (+0x34) | dynamic list (+0x24: {type id, 
 State of the F01 slot: whole-level M01 build, crashes at 79 % in the HUD. Restore with
 `tools/RESTORE Dog Days originals.bat`.
 
+## Owner's end goal (2026-10-09)
+An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
+replacement - testing in the F01 slot is temporary. In order:
+1. Dead Men maps playable in Fragile Alliance / Arcade (graft), each in its own folder.
+2. Dead Men voice lines and player models; Dog Days guns and sounds are reused.
+3. Character / heister select, with each character usable once per match.
+4. Online, once the above is solid. Then: choose your police character for after you die.
+5. Much later: assets from Payday 2.
+Do not start a later stage before the owner says the earlier one works.
+
 ## Roadmap for a rewrite (only after the port works)
 Ghidra project of kl2.exe + kaneandlynch.exe, shared symbol/type database (classes, vtables,
 property schemas dumped at runtime by KLHook), then an owned-asset engine reading original files
