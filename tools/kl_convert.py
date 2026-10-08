@@ -110,6 +110,17 @@ LEVEL_MAPS = {
 }
 
 
+# Controllers Dog Days registers but that cannot work on converted data yet. They are removed and
+# reported; each entry says what is missing.
+UNSUPPORTED = {
+    # Its two shorts index a table of physics-animation sets (0x5c bytes each, at [0xdd2598]+0x10)
+    # that is empty for a converted level, so its init reads through null (kl2 0x5dafdd, 73 % load).
+    # The table presumably comes from the level's Havok file, copied from Dead Men as it is - not
+    # established. Without it the hanging lamps of M01 do not swing.
+    'PhysicsBasedAnimated': 'needs the physics-animation table',
+}
+
+
 def rename_keys(p, table):
     """Rename strings in the .prp key table (every token using them follows)."""
     changed = 0
@@ -380,6 +391,10 @@ def convert_level(data, conv, tids):
         for name, obj in node['ctrls']:
             nm = p.key(name)
             simpl, dimpl = dm.controller(nm, src), dd.controller(nm, dst)
+            if nm in UNSUPPORTED:
+                conv.report['controller removed'][nm + ' (' + UNSUPPORTED[nm] + ')'] += 1
+                st['ctrl_removed'] += 1
+                continue
             new = conv.object(p, simpl, dimpl, obj, 'controller ' + nm) if simpl and dimpl else None
             if new is None:
                 # not registered by Dog Days (the engine could not create it), or not convertible
