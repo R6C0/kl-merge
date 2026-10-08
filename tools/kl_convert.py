@@ -103,6 +103,14 @@ ITEM_RENAME = {
 # the executables: treat it as a carried-over assumption.
 SQUAD_LISTS = [0, 1, 2, 4, 6, 7, 8, 9, 10, 11, 12, 13]
 LEVEL_MAPS = {
+    # The HUD. Dead Men: CharObj, fonts Text / Header / DebugText, ...; Dog Days: CharObj, fonts
+    # H1 / H2 / H3 / DebugText, ... (seen in the values of both games' levels). Pairing by type
+    # alone put the new font first and left CharObj empty: ZCheckpointDisplay then resolves REF 0
+    # (kl2 0x742d6a). H3 has no Dead Men font: it reuses Header, which is a GUESS.
+    'ZOnScreenDisplay2': {
+        'map': {0: 0, 1: 1, 2: 2, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7, 9: 8},
+        'values': {},
+    },
     'ZSquadScript': {
         'map': dict([(0, 0), (2, 1), (3, 2), (19, 15), (20, 16)] + [(4 + d, 3 + k) for k, d in enumerate(SQUAD_LISTS)]),
         'values': {1: [(0x0e, ('KEY', 'eAllTypes'))]},
