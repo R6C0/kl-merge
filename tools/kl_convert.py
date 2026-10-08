@@ -2,17 +2,25 @@
 """
 Convert Dead Men level property files (.prp) to the Dog Days layout.
 
-What it does to each Dead Men level:
-  1. Base-class fix: inserts the extra bool Dog Days added after the first int of
-     every entity's shared base properties (value false, as in all Dog Days levels).
-  2. Controllers Dog Days doesn't have are removed (listed in the log).
-  3. Controllers whose saved layout changed are re-laid-out: fields are matched
-     against the layout Dog Days' own levels use, matching fields are kept, new
-     fields get the value Dog Days uses most often, removed fields are dropped.
-  4. Everything is checked against Dog Days: each entity and controller is
-     marked "known layout" if Dog Days levels use exactly that layout.
+An object in a .prp is the serialized properties of its class, in the order the engine's
+reflection tables give and without names. kl_rtp.py reads those tables from both executables
+(re/kaneandlynch.json, re/kl2.json), so each Dead Men object is rebuilt field by field into
+exactly what Dog Days reads for that class:
 
-Nothing in either game folder is changed. Output goes to ./converted/<level>/.
+  1. A field both games have keeps its value. Arrays whose length changed are padded with zeros
+     or cut; enum values Dog Days lacks are replaced (listed in the log).
+  2. A field only Dog Days has gets the value Dog Days' own levels store there most often, or
+     zero/empty if its levels never store that class.
+  3. A field only Dead Men has is dropped.
+  4. Controllers Dog Days does not register are removed (listed in the log).
+
+Fields are paired per class level (ZGEOM, ZSTDOBJ, ...) by type and enum, in order. The
+executables hold no property names, so when a level gained a field next to others of the same
+type, WHICH of them is the new one is an assumption (the pairing keeps the earlier ones); the log
+lists those levels under "assumed". Nothing here is taken from level statistics except the
+default values of rule 2.
+
+Nothing in either game folder is changed. Output goes to <work folder>/converted/<level>/.
 
     python kl_convert.py                 (Fragile Alliance maps, auto-finds games)
     python kl_convert.py --all           (every Dead Men level)
@@ -21,11 +29,15 @@ Nothing in either game folder is changed. Output goes to ./converted/<level>/.
 import collections, difflib, json, os, struct, sys, time, zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from kl_prp import Prp, signature, units
-from kl_port_check import find, DM_GUESSES, DD_GUESSES, DM_EXE, DD_EXE
+from kl_prp import Prp, signature, units, kind
+from kl_port_check import find, level_zips, workdir, DM_GUESSES, DD_GUESSES, DM_EXE, DD_EXE
+import kl_gms, kl_rtp
+from kl_gms import RETYPE
 
 FA_LEVELS = ['M01_FA_A', 'M02_FA_A', 'M03_FA_A', 'M06_FA_A']
-FALSE = (0x06, b'\x00')
+ROOT = kl_rtp.ROOT_TYPE
+SCALAR = {'c': (0x05, 1), 'b': (0x06, 1), 'B': (0x07, 1), 'h': (0x08, 2), 'I': (0x09, 4),
+          'f': (0x0a, 4), 'd': (0x0b, 8)}
 
 
 def unit_sig(u):
@@ -34,11 +46,8 @@ def unit_sig(u):
         return 'i'                      # plain int or reference list
     return signature(u)
 
-def is_list(u):
-    return u[0][0] == 0x04 and len(u) > 1
-
 def csig(obj):
-    """Layout of an object with reference lists collapsed (what the reader actually expects)."""
+    """Layout of an object with reference lists collapsed."""
     return '{' + ''.join(unit_sig(u) for u in units(body(obj))) + '}'
 
 def body(obj):           # strip outer { }
@@ -47,19 +56,6 @@ def body(obj):           # strip outer { }
 def wrap(inner):
     return [(0x02, b'')] + inner + [(0x7e, b'')]
 
-
-def base_fix(props):
-    """props: tokens incl. braces. Insert bool after e [..] [..] b I if not already there."""
-    u = units(body(props))
-    s = [unit_sig(x) for x in u]
-    if len(s) >= 5 and s[0] == 'e' and s[1].startswith('[') and s[2].startswith('[') and s[3] == 'b' and s[4] == 'I':
-        u.insert(5, [FALSE])
-        return wrap([t for x in u for t in x]), True
-    return props, False
-
-
-from kl_gms import RETYPE
-import kl_relayout as RL
 
 # Dead Men weapon/item enum -> Dog Days item enum (exe table; each Dog Days item may be bound
 # once per level, except eFF2ItemNoItem). Items Dog Days has no equivalent for become NoItem.
@@ -98,28 +94,20 @@ ITEM_RENAME = {
     'eFF2ItemNotInUse': 'eFF2ItemNoItem',
 }
 
-
-def _load_enums():
-    import json
-    try:
-        t = json.load(open(os.path.join(HERE, 'dd_enums.json')))
-    except OSError:
-        return {}
-    out = {}
-    for run in t:
-        names = frozenset(s for _, s in run)
-        for s in names:
-            out[s] = out.get(s, frozenset()) | names
-    return out
-
-DD_ENUMS = _load_enums()         # value name -> every name of its Dog Days enum (from kl2.exe)
-
-
-def enum_ok(value, seen):
-    """value is valid where Dog Days levels used `seen`: either seen, or in the same exe enum."""
-    if value in seen:
-        return True
-    return any(value in DD_ENUMS.get(v, ()) for v in seen)
+# Pairings the executables cannot give. Key: the class level; value: Dog Days field index within
+# that level -> Dead Men field index, plus fixed values for Dog Days fields that have no source.
+#
+# ZSquadScript: Dead Men has attitude, alertness, bool, 12 message lists, bool, uint. Dog Days
+# added a game-type enum after attitude and 3 message lists. Which Dog Days list each Dead Men
+# list became (SQUAD_LISTS) comes from the earlier comparison of both games' levels, not from
+# the executables: treat it as a carried-over assumption.
+SQUAD_LISTS = [0, 1, 2, 4, 6, 7, 8, 9, 10, 11, 12, 13]
+LEVEL_MAPS = {
+    'ZSquadScript': {
+        'map': dict([(0, 0), (2, 1), (3, 2), (19, 15), (20, 16)] + [(4 + d, 3 + k) for k, d in enumerate(SQUAD_LISTS)]),
+        'values': {1: [(0x0e, ('KEY', 'eAllTypes'))]},
+    },
+}
 
 
 def rename_keys(p, table):
@@ -134,150 +122,23 @@ def rename_keys(p, table):
 
 
 def node_types(zf, prp_name):
-    """Class id of every .prp node: ROOT (ZROOM) first, then the .gms entity table in order."""
-    import kl_gms
+    """Class id of every .prp node as the level's .gms stores it: ROOT (a ZROOM) first, then the
+    entity table in order. None if the archive has no matching .gms."""
     gms = prp_name[:-4] + '.gms'
     if gms not in zf.namelist():
         return None
-    raw = kl_gms.unpack(zf.read(gms))
-    t = struct.unpack_from('<I', raw, 0)[0]
-    n = struct.unpack_from('<I', raw, t)[0]
-    out = [0x100021]
-    for i in range(n):
-        decl = struct.unpack_from('<I', raw, t + 4 + 8 * i)[0]
-        tid = struct.unpack_from('<I', raw, 4 * (decl & 0xffffff) + 0x14)[0]
-        out.append(RETYPE.get(tid, tid))
-    return out
-
-
-def node_types_raw(zf, prp_name):
-    """Like node_types but with the Dead Men class ids as stored (no RETYPE)."""
-    import kl_gms
-    gms = prp_name[:-4] + '.gms'
-    if gms not in zf.namelist():
-        return None
-    raw = kl_gms.unpack(zf.read(gms))
-    t = struct.unpack_from('<I', raw, 0)[0]
-    n = struct.unpack_from('<I', raw, t)[0]
-    out = [0x100021]
-    for i in range(n):
-        decl = struct.unpack_from('<I', raw, t + 4 + 8 * i)[0]
-        out.append(struct.unpack_from('<I', raw, 4 * (decl & 0xffffff) + 0x14)[0])
-    return out
-
-
-class DDReference:
-    """Layouts and typical values from every Dog Days level."""
-    def __init__(self, dd):
-        self.node_sigs = collections.Counter()
-        self.ctrl = collections.defaultdict(collections.Counter)       # name -> csig -> count
-        self.samples = collections.defaultdict(list)                    # (key,csig) -> few unit lists
-        self.cls = collections.defaultdict(collections.Counter)        # class id -> csig -> count
-        self.enums = collections.defaultdict(set)                      # (key,csig,idx) -> enum values
-        self.lists = collections.defaultdict(lambda: [0, 0])           # (key,csig,idx) -> [list seen, nonzero int seen]
-        self.alen = collections.defaultdict(set)                       # (key,csig,idx) -> array lengths seen
-        self.fam = {}                                                  # enum value -> family (union-find)
-        zips = []
-        for dp, _, fs in os.walk(os.path.join(dd, 'Scenes')):
-            for f in fs:
-                if f.lower().endswith('.zip'):
-                    z = os.path.join(dp, f)
-                    # a converted map installed into a Dog Days slot is not a Dog Days reference:
-                    # read the backed-up original instead
-                    bak = os.path.join(dd, 'KL_PortBackup', os.path.relpath(z, dd))
-                    zips.append(bak if os.path.isfile(bak) else z)
-        for k, z in enumerate(sorted(zips), 1):
-            print('\r  learning Dog Days layouts %d/%d' % (k, len(zips)), end='', flush=True)
-            with zipfile.ZipFile(z) as zf:
-                for n in zf.namelist():
-                    if not n.lower().endswith('.prp'):
-                        continue
-                    p = Prp(zf.read(n))
-                    nodes = p.nodes()
-                    types = node_types(zf, n)
-                    if types is not None and len(types) != len(nodes):
-                        types = None
-                    for k, node in enumerate(nodes):
-                        us = units(body(node['props']))
-                        sg = csig(node['props'])
-                        self.node_sigs[sg] += 1
-                        if types:
-                            key = ('<class>', types[k])
-                            self.cls[types[k]][sg] += 1
-                            self._learn(p, key, sg, us, 100)
-                        self._learn(p, '<entity>', sg, us, 200)
-                        for name, obj in node['ctrls']:
-                            nm, sg = p.key(name), csig(obj)
-                            self.ctrl[nm][sg] += 1
-                            self._learn(p, nm, sg, units(body(obj)), 400)
-        # values of one exe enum are one family even if levels use them in different places
-        for names in set(DD_ENUMS.values()):
-            known = [v for v in names if v in self.fam]
-            for v in known[1:]:
-                a, b = self._find(known[0]), self._find(v)
-                if a != b:
-                    self.fam[b] = a
-        print()
-
-    def _learn(self, p, key, sg, us, cap):
-        sm = self.samples[(key, sg)]
-        if len(sm) < cap:
-            sm.append([_resolve(p, x) for x in us])
-        prev = None
-        for i, u in enumerate(us):
-            op = u[0][0]
-            if op == 0x0e and len(u) == 1:
-                v = p.key(u[0])
-                self.enums[(key, sg, i)].add(v)
-                self._union(v, (key, sg, i))
-            elif op == 0x01:
-                self.alen[(key, sg, i)].add(struct.unpack('<I', u[0][1])[0])
-            elif op == 0x04:
-                if len(u) > 1:
-                    self.lists[(key, sg, i)][0] = 1
-                elif u[0][1] != b'\0\0\0\0':
-                    self.lists[(key, sg, i)][1] = 1
-
-    def _find(self, v):
-        while self.fam.get(v, v) != v:
-            v = self.fam[v]
-        return v
-
-    def _union(self, v, pos):
-        a, b = self._find(v), self._find(pos)
-        if a != b:
-            self.fam[a] = b
-
-    def label(self, unit, text=None):
-        """Alignment label of a unit: enums carry their value family so that fields of different
-        enum types never line up with each other."""
-        u = list(unit)
-        if u[0][0] == 0x0e and len(u) == 1:
-            if text is None:
-                pl = u[0][1]
-                text = pl[1] if isinstance(pl, tuple) else None
-            f = self._find(text) if text in self.fam else None
-            if f is None:                       # unused in levels but listed in the exe enum
-                for other in sorted(DD_ENUMS.get(text, ())):
-                    if other in self.fam:
-                        f = self._find(other); break
-            return 'e:%r' % (f,) if f is not None else 'e?' + str(text)
-        return unit_sig(u)
-
-    def samples_keys(self, key):
-        return {sg for (k, sg) in self.samples if k == key}
-
-    def default_unit(self, name, sig, idx):
-        c = collections.Counter(tuple(s[idx]) for s in self.samples[(name, sig)] if idx < len(s))
-        return list(c.most_common(1)[0][0]) if c else None
+    return [ROOT] + [e[1] for e in kl_gms.entities(kl_gms.unpack(zf.read(gms)))]
 
 
 def _resolve(p, unit):
-    """Turn key-index payloads into ('KEY', text) so values can move between files."""
+    """Turn key-index payloads into text so values can move between files."""
     out = []
     for op, pl in unit:
         if op in (0x0c, 0x0e):
             out.append((op, ('KEY', p.key((op, pl)))))
+        elif op == 0x0f:
+            n = struct.unpack_from('<I', pl)[0]
+            out.append((op, ('KEYS',) + tuple(p.keys[i] for i in struct.unpack_from('<%dI' % n, pl, 4))))
         else:
             out.append((op, pl))
     return tuple(out)
@@ -285,274 +146,242 @@ def _resolve(p, unit):
 def _materialize(p, unit):
     out = []
     for op, pl in unit:
-        if isinstance(pl, tuple) and pl and pl[0] == 'KEY':
+        if isinstance(pl, tuple) and pl[0] == 'KEY':
             out.append((op, struct.pack('<I', p.key_index(pl[1]))))
+        elif isinstance(pl, tuple) and pl[0] == 'KEYS':
+            out.append((op, struct.pack('<%dI' % len(pl), len(pl) - 1, *[p.key_index(s) for s in pl[1:]])))
         else:
             out.append((op, pl))
     return out
 
 
-def _labels(p, ref, us):
-    return [ref.label(u, p.key(u[0]) if (u[0][0] == 0x0e and len(u) == 1) else None) for u in us]
+def label(schema, f):
+    """What must agree for a Dead Men field and a Dog Days field to be the same property."""
+    if f.kind in ('e', 'k'):
+        return f.kind + ':' + (schema.enums[f.enum]['name'] if f.enum else '?')
+    if f.kind and '*' in f.kind:
+        return f.kind.split('*')[0] + '*'            # the length may differ: resized
+    if f.kind in ('refs', 'raw', 'cont'):
+        return 'list'
+    return f.kind or '?'
 
 
-def _apply(p, ref, key, target, src):
-    """Lay src units out as Dog Days layout `target`. Returns (obj or None, approximate?)."""
-    tgt = ref.samples[(key, target)][0]
-    tgt_lab = [ref.label(u) for u in tgt]
-    src_lab = _labels(p, ref, src)
-    sm = difflib.SequenceMatcher(a=src_lab, b=tgt_lab, autojunk=False)
-    out, approx = [], False
-    for tag, a0, a1, b0, b1 in sm.get_opcodes():
-        if tag == 'equal':
-            out += src[a0:a1]
-            continue
-        if tag != 'insert':
-            approx = True            # a Dead Men field had no clean Dog Days match
-        for bi in range(b0, b1):     # new / changed fields take Dog Days' typical value
-            d = ref.default_unit(key, target, bi)
-            if d is None:
-                return None, approx
-            out.append(_materialize(p, d))
-    new = wrap([t for u in out for t in u])
-    return (new, approx) if csig(new) == target else (None, approx)
+def _levels(fields):
+    """[(owner, [field indices])] in order."""
+    out = []
+    for i, f in enumerate(fields):
+        if not out or out[-1][0] != f.owner:
+            out.append((f.owner, []))
+        out[-1][1].append(i)
+    return out
 
 
-def fix_values(p, ref, key, obj):
-    """Enum values Dog Days never uses at that field, and ints sitting where Dog Days expects a
-    reference list (or the reverse), are replaced with Dog Days' typical value."""
-    sg = csig(obj)
-    us = units(body(obj))
-    n = 0
-    for i, u in enumerate(us):
-        op = u[0][0]
-        bad = False
-        if op == 0x0e and len(u) == 1:
-            vals = ref.enums.get((key, sg, i))
-            bad = vals is not None and not enum_ok(p.key(u[0]), vals)
-        elif op == 0x04:
-            seen_list, seen_int = ref.lists.get((key, sg, i), (0, 0))
-            if is_list(u) and not seen_list:
-                bad = True
-            elif not is_list(u) and u[0][1] != b'\0\0\0\0' and not seen_int:
-                bad = True       # a count Dog Days never uses here: its reader would expect items
-        if op == 0x01:
-            fixed = resize_array(u, ref.alen.get((key, sg, i)))
-            if fixed is not None:
-                us[i] = fixed; n += 1
-            continue
-        if bad:
-            d = ref.default_unit(key, sg, i)
-            if d is not None:
-                us[i] = _materialize(p, d); n += 1
-    return (wrap([t for u in us for t in u]) if n else obj), n
+class Converter:
+    """Dead Men object -> Dog Days object, by the two games' class schemas."""
+
+    def __init__(self, dm, dd):
+        self.dm, self.dd = dm, dd
+        self.options = {k: set(n for n, _v in e['options']) for k, e in dd.enums.items()}
+        self.typical = {}                            # Dog Days field key -> its usual value
+        self._plans = {}
+        self.assumed = {}                            # class level -> why its pairing is an assumption
+        self.report = collections.defaultdict(collections.Counter)
+
+    def plan(self, src_cls, dst_cls):
+        """For each Dog Days field of dst_cls: the Dead Men field index it takes its value from,
+        a fixed value, or None (use the default). None for the whole plan if either game lacks
+        the class or Dog Days has a field whose shape is unknown."""
+        key = (src_cls, dst_cls)
+        if key in self._plans:
+            return self._plans[key]
+        src, dst = self.dm.fields(src_cls), self.dd.fields(dst_cls)
+        plan = None
+        if src is not None and dst is not None and all(f.kind for f in dst):
+            plan = [None] * len(dst)
+            mine = dict(_levels(src))
+            for owner, didx in _levels(dst):
+                sidx = mine.get(owner)
+                if sidx is None:
+                    continue                         # a class level Dead Men does not have
+                if owner in LEVEL_MAPS:
+                    m = LEVEL_MAPS[owner]
+                    for j, i in m['map'].items():
+                        plan[didx[j]] = sidx[i]
+                    for j, value in m['values'].items():
+                        plan[didx[j]] = value
+                    continue
+                a = [label(self.dm, src[i]) for i in sidx]
+                b = [label(self.dd, dst[j]) for j in didx]
+                for tag, a0, a1, b0, b1 in difflib.SequenceMatcher(a=a, b=b, autojunk=False).get_opcodes():
+                    if tag == 'equal':
+                        for k in range(a1 - a0):
+                            plan[didx[b0 + k]] = sidx[a0 + k]
+                        continue
+                    # a change next to a field of the same type could sit one place further along
+                    near = set(a[max(0, a0 - 1):a0] + a[a1:a1 + 1] + b[max(0, b0 - 1):b0] + b[b1:b1 + 1])
+                    if tag == 'replace' or near & (set(a[a0:a1]) | set(b[b0:b1])):
+                        self.assumed[owner] = 'Dead Men %s -> Dog Days %s' % (','.join(a), ','.join(b))
+        self._plans[key] = plan
+        return plan
+
+    def wanted(self):
+        """Dog Days field keys whose usual value may be needed: fields Dead Men lacks, and enums
+        (a Dead Men value Dog Days does not have is replaced by the usual one)."""
+        keys = set()
+        pairs = [(c, self.dd.geoms.get(RETYPE.get(t, t))) for t, c in self.dm.geoms.items()]
+        pairs += [(e[1], d[1]) for n, es in self.dm.controllers.items() for e in es
+                  for d in self.dd.controllers.get(n, [])]
+        for s, d in pairs:
+            plan = self.plan(s, d) if d else None
+            if plan:
+                keys.update(f.key for f, src in zip(self.dd.fields(d), plan) if src is None or f.kind == 'e')
+        return keys
+
+    def learn_typical(self, game, cache=None):
+        """Count, over Dog Days' own levels, the value each wanted field holds."""
+        want = self.wanted()
+        stamp = self.dd.data['exe']['timestamp']
+        if cache and os.path.isfile(cache):
+            c = json.load(open(cache))
+            if c.get('exe') == stamp and want <= set(c['seen']):
+                self.typical = {k: tuple((op, tuple(pl) if isinstance(pl, list) else bytes.fromhex(pl)) for op, pl in v)
+                                for k, v in c['values'].items()}
+                return
+        counts = {k: collections.Counter() for k in want}
+        picks = {}
+        def count(p, cls, obj):
+            if cls not in picks:
+                picks[cls] = [(i, f.key) for i, f in enumerate(self.dd.fields(cls) or []) if f.key in counts]
+            if picks[cls]:
+                us = units(body(obj))
+                for i, k in picks[cls]:
+                    counts[k][_resolve(p, us[i])] += 1
+        zips = sorted(level_zips(game))
+        for n, z in enumerate(zips, 1):
+            print('\r  reading Dog Days default values %d/%d' % (n, len(zips)), end='', flush=True)
+            with zipfile.ZipFile(z) as zf:
+                for name in zf.namelist():
+                    tids = node_types(zf, name) if name.lower().endswith('.prp') else None
+                    if not tids:
+                        continue
+                    p = Prp(zf.read(name))
+                    nodes = p.nodes()
+                    if len(nodes) != len(tids):
+                        continue
+                    for tid, node in zip(tids, nodes):
+                        cls = self.dd.geoms[tid]
+                        count(p, cls, node['props'])
+                        for nm, obj in node['ctrls']:
+                            impl = self.dd.controller(p.key(nm), cls)
+                            if impl:
+                                count(p, impl, obj)
+        print()
+        self.typical = {k: c.most_common(1)[0][0] for k, c in counts.items() if c}
+        if cache:
+            json.dump({'exe': stamp, 'seen': sorted(want),
+                       'values': {k: [(op, list(pl) if isinstance(pl, tuple) else pl.hex()) for op, pl in v]
+                                  for k, v in self.typical.items()}}, open(cache, 'w'))
+
+    def blank(self, f):
+        """Zero / empty value of a field, for classes Dog Days' levels never store."""
+        k = f.kind
+        if k in SCALAR:
+            return [(SCALAR[k][0], b'\0' * SCALAR[k][1])]
+        if k == 's':
+            return [(0x0c, ('KEY', ''))]
+        if k == 'e':
+            return [(0x0e, ('KEY', self.dd.enums[f.enum]['options'][0][0]))]
+        if k == 'k':
+            return [(0x0f, ('KEYS',))]
+        if '*' in k:
+            el, n = k.split('*')
+            return [(0x01, struct.pack('<I', int(n)))] + [(SCALAR[el][0], b'\0' * SCALAR[el][1])] * int(n) + [(0x7c, b'')]
+        return [(0x04, b'\0\0\0\0')]                 # refs / raw / cont
+
+    def default(self, p, f, who):
+        v = self.typical.get(f.key)
+        if v is None:
+            self.report['blank default (Dog Days levels never store this field)'][who + ' ' + f.owner] += 1
+            v = self.blank(f)
+        return _materialize(p, v)
+
+    def value(self, p, u, sf, df, who):
+        """A Dead Men value in the shape and range of the Dog Days field it was paired with."""
+        u = list(u)
+        if df.kind == 'e':
+            name = p.key(u[0])
+            if name not in self.options[df.enum]:
+                self.report['enum value replaced'][name + ' (' + self.dd.enums[df.enum]['name'] + ')'] += 1
+                return self.default(p, df, who)
+        elif df.kind == 'k':
+            names = _resolve(p, u)[0][1][1:]
+            keep = tuple(n for n in names if n in self.options[df.enum])
+            if len(keep) != len(names):
+                self.report['flag dropped'][','.join(set(names) - set(keep))] += 1
+                return _materialize(p, [(0x0f, ('KEYS',) + keep)])
+        elif df.kind != sf.kind and '*' in df.kind:
+            el, n = df.kind.split('*')
+            inner = (u[1:-1] + [(SCALAR[el][0], b'\0' * SCALAR[el][1])] * int(n))[:int(n)]
+            self.report['array resized'][who + ' ' + sf.kind + ' -> ' + df.kind] += 1
+            return [(0x01, struct.pack('<I', int(n)))] + inner + [u[-1]]
+        elif df.kind != sf.kind and kind(u) not in ('cont', df.kind):
+            # refs / raw / cont: Dog Days stores another list type here, or never stores anything
+            self.report['list data dropped'][who + ' ' + kind(u) + ' -> ' + df.kind] += 1
+            return [(0x04, b'\0\0\0\0')]
+        return u
+
+    def object(self, p, src_cls, dst_cls, obj, who):
+        """Rebuild one object. None when it cannot be converted (the report says why)."""
+        plan = self.plan(src_cls, dst_cls)
+        if plan is None:
+            self.report['not convertible (class missing or a field of unknown shape)'][who] += 1
+            return None
+        src, dst = self.dm.fields(src_cls), self.dd.fields(dst_cls)
+        us = units(body(obj))
+        if len(us) != len(src):
+            raise ValueError('%s: %d fields in the level, Dead Men class %s has %d' % (who, len(us), src_cls, len(src)))
+        out = []
+        for f, s in zip(dst, plan):
+            if s is None:
+                out += self.default(p, f, who)
+            elif isinstance(s, list):
+                out += _materialize(p, s)
+            else:
+                out += self.value(p, us[s], src[s], f, who)
+        if any(f.owner in self.assumed for f in dst):
+            self.report['assumed pairing'][who] += 1
+        return wrap(out)
 
 
-def resize_array(u, lengths):
-    """Dog Days readers of some arrays expect a fixed element count. If every Dog Days level uses
-    one length here and ours differs, pad with zero-valued elements (or trim)."""
-    if not lengths or len(lengths) != 1:
-        return None
-    want = next(iter(lengths))
-    u = list(u)
-    have = struct.unpack('<I', u[0][1])[0]
-    inner = u[1:-1]
-    if have == want or len(inner) != have or any(op in (0x01, 0x02, 0x0d, 0x0f) for op, _ in inner):
-        return None                               # only flat scalar arrays
-    if want < have:
-        inner = inner[:want]
-    else:
-        op = inner[-1][0] if inner else 0x09
-        size = {0x04: 4, 0x05: 1, 0x06: 1, 0x07: 1, 0x08: 2, 0x09: 4, 0x0a: 4, 0x0b: 8, 0x0c: 4, 0x0e: 4}[op]
-        zero = (op, b'\0' * size)
-        if op in (0x0c, 0x0e) and inner:
-            zero = inner[-1]                      # keep key references valid
-        inner = inner + [zero] * (want - have)
-    return [(0x01, struct.pack('<I', want))] + inner + [u[-1]]
-
-
-# Dead Men ZSquadScript: attitude, alertness, bool, 12 message lists, bool, uint.
-# Dog Days added a mode enum after attitude and 3 message lists. Dead Men list k -> Dog Days list:
-SQUAD_LISTS = [0, 1, 2, 4, 6, 7, 8, 9, 10, 11, 12, 13]
-
-def squad_script(p, obj):
-    us = units(body(obj))
-    if [unit_sig(u) for u in us] != list('eeb') + ['i'] * 12 + list('bI'):
-        return obj
-    lists = [[(0x04, b'\0\0\0\0')] for _ in range(15)]
-    for k, d in enumerate(SQUAD_LISTS):
-        lists[d] = us[3 + k]
-    mode = [(0x0e, struct.pack('<I', p.key_index('eAllTypes')))]
-    new = [us[0], mode, us[1], us[2]] + lists + us[15:]
-    return wrap([t for u in new for t in u])
-
-
-SPECIAL = {'ZSquadScript': squad_script}
-
-
-def relayout_exact(p, ref, key, dm_cls, dd_cls, obj):
-    """Field-by-field relayout from the exes' property schemas. None when a schema is missing."""
-    dmf, ddf = RL.fields('dm', dm_cls), RL.fields('dd', dd_cls)
-    if not dmf or not ddf:
-        return None
-    src = units(body(obj))
-    pairs = RL.align(dmf, ddf, src)
-    if pairs is None:
-        return None
-    target = '{' + RL.letters(ddf) + '}'
-    if target not in ref.samples_keys(key):
-        target = None                         # Dog Days never saved this class: defaults unknown
-    out, approx = [], False
-    for i, (f, u) in enumerate(pairs):
-        if u is not None:
-            out.append(list(u)); continue
-        d = ref.default_unit(key, target, i) if target else None
-        if d is None:
-            d = zero_unit(f[1], p); approx = True
-            if d is None:
-                return None
-        else:
-            d = _materialize(p, d)
-        out.append(d)
-    new = wrap([t for u in out for t in u])
-    if csig(new) != '{' + RL.letters(ddf) + '}':
-        return None
-    return new, ('approx' if approx else 'converted')
-
-
-def zero_unit(letter, p):
-    z = {'i': (0x04, b'\0' * 4), 'b': (0x06, b'\0'), 'B': (0x07, b'\0'), 'h': (0x08, b'\0\0'),
-         'I': (0x09, b'\0' * 4), 'f': (0x0a, b'\0' * 4), 'd': (0x0b, b'\0' * 8), 'c': (0x05, b'\0'),
-         's': (0x0c, struct.pack('<I', p.key_index(''))), 'k': (0x0f, b'\0' * 4)}
-    if letter in z:
-        return [z[letter]]
-    if letter == '[f*]':
-        return [(0x01, struct.pack('<I', 3))] + [(0x0a, b'\0' * 4)] * 3 + [(0x7c, b'')]
-    if letter == '[I*]':
-        return [(0x01, struct.pack('<I', 0)), (0x7c, b'')]
-    return None
-
-
-def relayout(p, ref, name, obj):
-    """Controller -> (new_obj or None, how)."""
-    known = ref.ctrl.get(name)
-    if not known:
-        return None, 'unknown'
-    if name in SPECIAL:
-        obj = SPECIAL[name](p, obj)
-    ex = None
-    if csig(obj) not in known:
-        dm_cls, dd_cls = RL.controller_class('dm', name), RL.controller_class('dd', name)
-        if dm_cls and dd_cls:
-            ex = relayout_exact(p, ref, name, dm_cls, dd_cls, obj)
-    if csig(obj) in known:
-        new, how = obj, 'same'
-    elif ex is not None:
-        new, how = ex
-        how = 'exact' if how == 'converted' else 'exact-approx'
-    else:
-        new, approx = _apply(p, ref, name, known.most_common(1)[0][0], units(body(obj)))
-        if new is None:
-            return None, 'failed'
-        how = 'approx' if approx else 'converted'
-    new, nfix = fix_values(p, ref, name, new)
-    return new, how
-
-
-def relayout_entity_cls(p, ref, props, tid, dm_tid=None):
-    """Entity of known class -> Dog Days layout of that same class."""
-    known = ref.cls.get(tid)
-    if not known:
-        return None
-    key = ('<class>', tid)
-    sig = csig(props)
-    if sig in known:
-        return fix_values(p, ref, key, props)[0], 'same'
-    dm_cls, dd_cls = RL.class_name('dm', dm_tid if dm_tid is not None else tid), RL.class_name('dd', tid)
-    if dm_cls and dd_cls:
-        ex = relayout_exact(p, ref, key, dm_cls, dd_cls, props)
-        if ex is not None:
-            new, how = ex
-            return fix_values(p, ref, key, new)[0], 'exact' if how == 'converted' else 'exact-approx'
-    src = units(body(props))
-    src_lab = _labels(p, ref, src)
-    best, score = None, -1.0
-    for cand in known:
-        cu = [ref.label(u) for u in ref.samples[(key, cand)][0]]
-        r = difflib.SequenceMatcher(a=src_lab, b=cu, autojunk=False).ratio()
-        if r > score:
-            best, score = cand, r
-    new, approx = _apply(p, ref, key, best, src)
-    if new is None:
-        return props, 'unmatched'
-    return fix_values(p, ref, key, new)[0], 'approx' if approx else 'converted'
-
-
-_node_target = {}
-def relayout_entity(p, ref, props):
-    """Entity properties -> (new_props, how). Class isn't known, so pick the closest
-    Dog Days layout that shares the base-class fields."""
-    sig = csig(props)
-    if sig in ref.node_sigs:
-        return props, 'same'
-    src = units(body(props))
-    src_sig = [unit_sig(u) for u in src]
-    if sig not in _node_target:
-        best, score = None, 0.0
-        for cand in ref.node_sigs:
-            cu = [unit_sig(u) for u in ref.samples[('<entity>', cand)][0]]
-            if cu[:6] != src_sig[:6]:
-                continue
-            r = difflib.SequenceMatcher(a=src_sig, b=cu, autojunk=False).ratio()
-            if r > score:
-                best, score = cand, r
-        _node_target[sig] = best if score >= 0.75 else None
-    target = _node_target[sig]
-    if target is None:
-        return props, 'unmatched'
-    new, approx = _apply(p, ref, '<entity>', target, src)
-    if new is None:
-        return props, 'unmatched'
-    return new, 'approx' if approx else 'converted'
-
-
-def convert_level(data, ref, log, types=None, raw_types=None):
+def convert_level(data, conv, tids):
+    """Dead Men .prp bytes + its node class ids -> (Dog Days .prp bytes, counters)."""
     p = Prp(data)
     st = collections.Counter()
     st['items_renamed'] = rename_keys(p, ITEM_RENAME)
     nodes = p.nodes()
-    if types is not None and len(types) != len(nodes):
+    if len(tids) != len(nodes):
         raise ValueError('scene file and property file disagree on entity count')
-    for k, node in enumerate(nodes):
+    dm, dd = conv.dm, conv.dd
+    for k, (tid, node) in enumerate(zip(tids, nodes)):
+        src = dm.geoms[tid]
+        dst = dd.geoms.get(tid if k == 0 else RETYPE.get(tid, tid))       # node 0 is ROOT, not in the .gms
+        new = conv.object(p, src, dst, node['props'], 'node ' + src) if dst else None
+        if new is None:
+            raise ValueError('no Dog Days class for Dead Men %s (%#x): add it to kl_gms.RETYPE' % (src, tid))
+        node['props'] = new
         st['entities'] += 1
-        r = None
-        if types and raw_types:
-            # exact schema path first, on the untouched Dead Men layout
-            key = ('<class>', types[k])
-            dm_cls, dd_cls = RL.class_name('dm', raw_types[k]), RL.class_name('dd', types[k])
-            if dm_cls and dd_cls and types[k] in ref.cls:
-                ex = relayout_exact(p, ref, key, dm_cls, dd_cls, node['props'])
-                if ex is not None:
-                    new, how = ex
-                    r = (fix_values(p, ref, key, new)[0], 'exact' if how == 'converted' else 'exact-approx')
-        if r is None:
-            node['props'], fixed = base_fix(node['props'])
-            st['base_fixed'] += fixed
-            r = relayout_entity_cls(p, ref, node['props'], types[k]) if types else None
-        if r is None:
-            r = relayout_entity(p, ref, node['props'])
-            st['class_unknown_in_dd'] += 1
-        node['props'], how = r
-        st['entity_' + how] += 1
+        st['entities_retyped'] += src != dst
         keep = []
         for name, obj in node['ctrls']:
             nm = p.key(name)
-            new, how = relayout(p, ref, nm, obj)
-            log[nm][how] += 1
+            simpl, dimpl = dm.controller(nm, src), dd.controller(nm, dst)
+            new = conv.object(p, simpl, dimpl, obj, 'controller ' + nm) if simpl and dimpl else None
             if new is None:
+                # not registered by Dog Days (the engine could not create it), or not convertible
+                conv.report['controller removed'][nm + ('' if dimpl else ' (not in Dog Days)')] += 1
                 st['ctrl_removed'] += 1
                 continue
-            st['ctrl_' + how] += 1
+            st['ctrl_kept'] += 1
             keep.append((name, new))
         node['ctrls'] = keep
     out = p.serialize()
@@ -560,10 +389,17 @@ def convert_level(data, ref, log, types=None, raw_types=None):
     return out, st
 
 
+def converter(dd_dir, work=None):
+    """A Converter with Dog Days' default values loaded (cached in the work folder)."""
+    conv = Converter(kl_rtp.Schema.load('dm'), kl_rtp.Schema.load('dd'))
+    conv.learn_typical(dd_dir, os.path.join(work or workdir(), 'dd_typical.json'))
+    return conv
+
+
 def main():
     args = sys.argv[1:]
     dm = find(DM_GUESSES, DM_EXE); dd = find(DD_GUESSES, DD_EXE)
-    paths = [a for a in args if not a.startswith('--')]
+    paths = [a for a in args if not a.startswith('--') and os.path.isdir(a)]
     if len(paths) >= 2: dm, dd = paths[:2]
     while not dm or not os.path.isfile(os.path.join(dm, DM_EXE)):
         dm = input('Path to Kane & Lynch: Dead Men folder: ').strip().strip('"')
@@ -577,8 +413,9 @@ def main():
     else:
         levels = FA_LEVELS
     t0 = time.time()
-    ref = DDReference(dd)
-    outroot = os.path.join(HERE, 'converted')
+    work = workdir()
+    conv = converter(dd, work)
+    outroot = os.path.join(work, 'converted')
     summary = {}
     for lv in levels:
         for zname in sorted(os.listdir(os.path.join(loc, lv))):
@@ -586,21 +423,20 @@ def main():
                 continue
             with zipfile.ZipFile(os.path.join(loc, lv, zname)) as zf:
                 for n in zf.namelist():
-                    if not n.lower().endswith('.prp'):
+                    tids = node_types(zf, n) if n.lower().endswith('.prp') else None
+                    if not tids:
                         continue
-                    log = collections.defaultdict(collections.Counter)
-                    out, st = convert_level(zf.read(n), ref, log, node_types(zf, n))
+                    out, st = convert_level(zf.read(n), conv, tids)
                     od = os.path.join(outroot, lv); os.makedirs(od, exist_ok=True)
                     open(os.path.join(od, os.path.basename(n)), 'wb').write(out)
-                    summary[lv + '/' + os.path.basename(n)] = {'stats': dict(st), 'controllers': {k: dict(v) for k, v in sorted(log.items())}}
-                    e = st['entities']
-                    print('%s\n  entities    %6d: already matching %d, converted %d, approximate %d, unmatched %d (class not used by Dog Days: %d)'
-                          % (lv + '/' + os.path.basename(n), e, st['entity_same'], st['entity_converted'], st['entity_approx'], st['entity_unmatched'], st['class_unknown_in_dd']))
-                    print('  controllers %6d: already matching %d, converted %d, approximate %d, removed %d'
-                          % (sum(st[k] for k in ('ctrl_same', 'ctrl_converted', 'ctrl_approx', 'ctrl_removed')),
-                             st['ctrl_same'], st['ctrl_converted'], st['ctrl_approx'], st['ctrl_removed']))
+                    summary[lv + '/' + os.path.basename(n)] = dict(st)
+                    print('%s: %s' % (lv + '/' + os.path.basename(n), dict(st)))
+    for what, c in sorted(conv.report.items()):
+        print('  %s: %s' % (what, c.most_common(40)))
+    print('  assumed (new field next to same-typed ones; position not provable): %s' % sorted(conv.assumed))
     os.makedirs(outroot, exist_ok=True)
-    json.dump(summary, open(os.path.join(outroot, 'conversion_log.json'), 'w'), indent=1)
+    json.dump({'levels': summary, 'report': {k: dict(v) for k, v in conv.report.items()}, 'assumed': conv.assumed},
+              open(os.path.join(outroot, 'conversion_log.json'), 'w'), indent=1)
     print('done in %.0fs -> %s' % (time.time() - t0, outroot))
 
 

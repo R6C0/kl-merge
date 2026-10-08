@@ -196,6 +196,13 @@ def find(guesses, exe):
             return g
     return None
 
+def workdir():
+    """Where converted levels and build files live: the KL_PortTools folder inside Dead Men when
+    it exists (it holds the converted textures, models and merged audio), else next to the scripts."""
+    dm = find(DM_GUESSES, DM_EXE)
+    w = os.path.join(dm, 'KL_PortTools') if dm else None
+    return w if w and os.path.isdir(w) else HERE
+
 def main():
     a = sys.argv[1:]
     dm = a[0] if len(a) > 0 else find(DM_GUESSES, DM_EXE)

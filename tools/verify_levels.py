@@ -1,44 +1,89 @@
-import sys,os,zipfile,collections,time,pickle
-sys.path.insert(0,'.')
+#!/usr/bin/env python3
+"""
+Convert the Fragile Alliance maps and check every converted object against Dog Days.
+
+    python verify_levels.py [M01_FA_A ...]
+
+For each level this writes <work folder>/converted/<level>/<base>_Main.prp and then checks, with
+the class schemas read from kl2.exe (re/kl2.json):
+  * every node and controller has exactly the fields Dog Days reads for its class (the class a
+    node gets is the one kl_gms.convert gives its .gms record)
+  * every enum value and flag exists in Dog Days' enum for that field
+  * every controller is one Dog Days registers
+  * no item is bound twice (the engine asserts on a second InventoryBinding of an item)
+The last line per level must say "problems: 0" before a build is installed.
+"""
+import collections, os, sys, zipfile
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 import kl_convert as K
-from kl_prp import Prp
-DM=os.path.expanduser('~/mnt/Kane and Lynch Dead Men'); DD=os.path.expanduser('~/mnt/Kane & Lynch 2 - Dog Days')
-t=time.time(); ref=K.DDReference(DD); print('reference %.0fs'%(time.time()-t))
-lvls=sys.argv[1:] or ['M01_FA_A','M02_FA_A','M03_FA_A','M06_FA_A']
-for lv in lvls:
-    base=lv.replace('_','')
-    zf=zipfile.ZipFile(DM+'/Scenes/Locations/%s/%s_Main.zip'%(lv,base)); n='Scenes/Locations/%s/%s_Main.prp'%(lv,base)
-    types=K.node_types(zf,n); raw=K.node_types_raw(zf,n); log=collections.defaultdict(collections.Counter)
-    out,st=K.convert_level(zf.read(n),ref,log,types,raw)
-    open('converted/%s/%s_Main.prp'%(lv,base),'wb').write(out)
-    p=Prp(out); bad=collections.Counter(); prob=collections.Counter()
-    def check(key,o,known):
-        sg=K.csig(o)
-        if sg not in known: prob['layout '+str(key)[:40]]+=1; return
-        for i,u in enumerate(K.units(K.body(o))):
-            if u[0][0]==0x0e and len(u)==1:
-                v=ref.enums.get((key,sg,i))
-                if v is not None and not K.enum_ok(p.key(u[0]),v): prob['enum '+str(key)[:40]]+=1
-            elif u[0][0]==0x01:
-                L=ref.alen.get((key,sg,i))
-                import struct as S
-                if L and len(L)==1 and S.unpack('<I',u[0][1])[0] not in L: prob['array-length '+str(key)[:40]]+=1
-            elif u[0][0]==0x04:
-                sl,si=ref.lists.get((key,sg,i),(0,0))
-                if K.is_list(u) and not sl: prob['list-where-int '+str(key)[:40]]+=1
-                if not K.is_list(u) and u[0][1]!=b'\0\0\0\0' and not si: prob['int-where-list '+str(key)[:40]]+=1
-    for tid,nd in zip(types,p.nodes()):
-        if tid in ref.cls: check(('<class>',tid),nd['props'],ref.cls[tid])
-        for nm,o in nd['ctrls']:
-            check(p.key(nm),o,ref.ctrl.get(p.key(nm),{}))
-    items=collections.Counter()
-    for nd in p.nodes():
-        for nm,o in nd['ctrls']:
-            if p.key(nm)=='InventoryBinding':
-                e=[p.key(t) for t in o if t[0]==0x0e][0]
-                if e!='eFF2ItemNoItem': items[e]+=1
-    dup={k:v for k,v in items.items() if v>1}
-    if dup: prob['duplicate item bindings '+str(dup)]+=1
-    unk=[k for k in items if k not in K.DD_ENUMS]
-    if unk: prob['items not in Dog Days '+str(unk)]+=1
-    print(lv,dict(st)); print('  problems:',sum(prob.values()),prob.most_common(12),'| %.0fs'%(time.time()-t))
+from kl_prp import Prp, units
+from kl_port_check import find, workdir, DM_GUESSES, DD_GUESSES, DM_EXE, DD_EXE
+
+
+def problems(conv, data, tids):
+    """Counter of what is wrong with a converted .prp, given the Dead Men class ids of its nodes."""
+    dd, prob = conv.dd, collections.Counter()
+    p = Prp(data)
+    def check(cls, obj, who):
+        why = dd.misfit(cls, obj)
+        if why:
+            prob['%s: %s' % (who, why)] += 1
+            return
+        for f, u in zip(dd.fields(cls), units(K.body(obj))):
+            if f.kind in ('e', 'k'):
+                names = [p.key(u[0])] if f.kind == 'e' else K._resolve(p, u)[0][1][1:]
+                for n in names:
+                    if n not in conv.options[f.enum]:
+                        prob['%s: %s is not in enum %s' % (who, n, dd.enums[f.enum]['name'])] += 1
+    items = collections.Counter()
+    for k, (tid, node) in enumerate(zip(tids, p.nodes())):
+        cls = dd.geoms.get(tid if k == 0 else K.RETYPE.get(tid, tid))
+        if cls is None:
+            prob['node type %#x is not a Dog Days class' % tid] += 1
+            continue
+        check(cls, node['props'], 'node ' + cls)
+        for name, obj in node['ctrls']:
+            nm = p.key(name)
+            impl = dd.controller(nm, cls)
+            if impl is None:
+                prob['controller %s is not registered by Dog Days' % nm] += 1
+                continue
+            check(impl, obj, 'controller ' + nm)
+            if nm == 'InventoryBinding':
+                item = [p.key(t) for t in obj if t[0] == 0x0e][0]
+                items[item] += item != 'eFF2ItemNoItem'
+    dup = {k: v for k, v in items.items() if v > 1}
+    if dup:
+        prob['items bound more than once: %s' % dup] += 1
+    return prob
+
+
+def main():
+    dm, dd = find(DM_GUESSES, DM_EXE), find(DD_GUESSES, DD_EXE)
+    if not dm or not dd:
+        raise SystemExit('Could not find both games; edit DM_GUESSES / DD_GUESSES in kl_port_check.py')
+    work = workdir()
+    conv = K.converter(dd, work)
+    total = 0
+    for lv in sys.argv[1:] or K.FA_LEVELS:
+        base = lv.replace('_', '')
+        n = 'Scenes/Locations/%s/%s_Main.prp' % (lv, base)
+        with zipfile.ZipFile(os.path.join(dm, 'Scenes', 'Locations', lv, base + '_Main.zip')) as zf:
+            tids = K.node_types(zf, n)
+            out, st = K.convert_level(zf.read(n), conv, tids)
+        od = os.path.join(work, 'converted', lv)
+        os.makedirs(od, exist_ok=True)
+        open(os.path.join(od, base + '_Main.prp'), 'wb').write(out)
+        prob = problems(conv, out, tids)
+        total += sum(prob.values())
+        print(lv, dict(st))
+        print('  problems:', sum(prob.values()), prob.most_common(12))
+    for what, c in sorted(conv.report.items()):
+        print('%s: %s' % (what, c.most_common(60)))
+    print('assumed pairings (a new field next to same-typed ones): %s' % sorted(conv.assumed))
+    return total
+
+
+if __name__ == '__main__':
+    sys.exit(1 if main() else 0)
