@@ -161,6 +161,26 @@ TWO ID SPACES - do not mix them (tested directly on six levels, `.wf/idspace2.py
 Not decoded: record +0x28 aux, what the heap budget counts, most of the .buf head, which
 entities are listed in room trees (copy membership from the source level).
 
+## Research results, third set (2026-10-09; specs in `re/`, reports in the work folder's `research/track_*.json`)
+Static reading and file statistics unless marked; none of it was tried in the running game.
+- `re/havok.md` + `tools/kl_hvk.py`: .HVK is the same layout in both games (Havok 4.6.1 in both);
+  placements carry REF labels; static shapes are grouped 510 per list shape, one MOPP code each.
+  `kl_hvk.join(maps, systems)` joins files given {old REF: new REF} maps. All 21 stock files
+  round-trip byte-identical. A map cannot be moved in world space (MOPP codes are world-space).
+- `tools/kl_members.py`: .sgd (explodable octree, glass), .sgp (room sound graph), .hrd, .sup,
+  .zgf, the surface table and the FDX block: read, write, join (self-test on 41 levels).
+  Dead Men surface ids 25..31 are past Dog Days' table: `MATERIAL_ALIAS` (chosen by meaning).
+- `re/pairings.md`: 20 classes' field pairings worked out from values and code, now in
+  `kl_convert.LEVEL_MAPS` (assumed list 46 -> 26 classes; verify_levels still `problems: 0`).
+- `re/characters.md`: a character is one object (`Heroes!Hero_0N\Ground`, ZFFPlayer / ZFFActor);
+  the look is all in its .prm model. ZLNKOBJ / ZLNKWHANDS integers are offsets into the level's
+  .SND: a Dead Men value must be re-pointed or zeroed, never copied.
+- `re/menus.md`: menus are XML (`menu/frontend.xml` in Patch01.zip); a heister picker is XML plus
+  one KLHook patch at 0x835837 (the random hero index 0..7). Nine entries per level toggler: hard.
+- `re/netcode.md`: Steam lobbies + P2P; peers address objects by 16-bit scene references and no
+  level hash check was found, so every player needs the identical build of a grafted map.
+  Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
+
 ## Open work
 1. Graft tool: Dog Days systems + Dead Men map in one level. Milestone A (no Dead Men data): put
    stock F02's map under stock F01's systems and get it to load - proves the join. Milestone B:

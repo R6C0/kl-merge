@@ -16,7 +16,7 @@ exactly what Dog Days reads for that class:
 
 Fields are paired per class level (ZGEOM, ZSTDOBJ, ...) by type and enum, in order. The
 executables hold no property names, so when a level gained a field next to others of the same
-type, WHICH of them is the new one is an assumption (the pairing keeps the earlier ones); the log
+type, WHICH of them is the new one is an assumption (difflib decides, with no rule behind it); the log
 lists those levels under "assumed". Nothing here is taken from level statistics except the
 default values of rule 2.
 
@@ -116,6 +116,82 @@ LEVEL_MAPS = {
         'values': {1: [(0x0e, ('KEY', 'eAllTypes'))]},
     },
 }
+
+# Pairings worked out per class from both games' levels and code (re/pairings.md, 2026-10-09):
+# table A there gives the evidence and confidence of each; the ones marked GUESS / ASSUMPTION
+# below rest on value distributions only. None was tried in the running game yet.
+F = lambda v: [(0x0a, struct.pack('<f', v))]          # a float token
+
+def _run(*blocks):
+    """(first Dog Days index, first Dead Men index, count) blocks -> {Dog Days index: Dead Men index}"""
+    return {dd + k: dm + k for dd, dm, n in blocks for k in range(n)}
+
+LEVEL_MAPS.update({
+    # velocity vector DM7 moved to DD21, DM9 (always 0) dropped; 190 of 194 same-named emitters
+    'ZParticleEmitter': {
+        'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 8, 8: 10, 9: 11, 10: 12, 11: 13, 12: 14, 13: 15,
+                15: 17, 16: 18, 17: 19, 18: 20, 19: 21, 20: 16, 21: 7, 23: 22, 24: 23, 25: 24, 26: 25, 27: 26,
+                28: 27, 29: 28, 30: 29, 31: 30, 32: 31, 34: 32},
+        'values': {},
+    },
+    # the new float is DD7 (0 in every Dog Days object), not DD3: by values only
+    'ZHavokRigidBody': {
+        'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 8: 7, 9: 8, 10: 9, 11: 10, 12: 11, 13: 12, 14: 13,
+                15: 14, 16: 15, 17: 16, 18: 17},
+        'values': {},
+    },
+    # DD2 (a second maximum) takes DM1 too: ASSUMPTION, DD2 == DD1 in 538 of 692 Dog Days objects
+    'ZInventoryBinding': {'map': {0: 0, 1: 1, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5}, 'values': {}},
+    # 10 legacy weapons; DM15 (muzzle flash string, a list in Dog Days) and DM18 are dropped
+    'ZItemTemplateWeapon': {
+        'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 7: 6, 9: 7, 10: 8, 11: 9, 12: 10, 13: 11, 14: 12, 15: 13,
+                16: 14, 18: 16, 19: 17},
+        'values': {6: F(-1.0), 8: F(-1.0), 20: F(1.0)},
+    },
+    # 13 legacy ammo templates
+    'ZItemTemplateAmmo': {
+        'map': {0: 0, 1: 1, 3: 2, 5: 3, 6: 4, 7: 5, 8: 6, 9: 7, 10: 8, 11: 9},
+        'values': {2: F(-1.0), 4: F(-1.0)},
+    },
+    # DD0..2 one slot per LOD, DD5 the slot every character fills (DM1): by values
+    'ZLNKWHANDS': {'map': {0: 0, 5: 1, 6: 2}, 'values': {}},
+    # DM7 is a handle (type 46) = DD17; DM8 = DD19 by values (GUESS between DD18 and DD19); DM6 dropped
+    'ZFFActor': {'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 17: 7, 19: 8}, 'values': {}},
+    # by values only. DM12 dropped; DD16/DD17 = 800 is what Dog Days stores next to DD15 = 5000: GUESS
+    'ZSoldierRout': {
+        'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 13: 9, 14: 10, 15: 11, 18: 14, 19: 15, 20: 16},
+        'values': {9: F(1.0), 10: F(1.0), 11: F(1.0), 12: F(1.0), 16: F(800.0), 17: F(800.0)},
+    },
+    # by constants; DM3 -> DD3 (not DD4) and DM14 -> DD21 (not DD20) are GUESSES
+    'ZVehicleEffects': {'map': _run((0, 0, 4), (10, 4, 10), (21, 14, 21)), 'values': {}},
+    # 3 legacy projectiles
+    'CExplode': {'map': {0: 0, 1: 1, 3: 2, 4: 3, **_run((6, 4, 11))}, 'values': {}},
+    # the new bool is DD7 (update function, kl2 0x42afd0 against Dead Men 0x69fff0)
+    'ZTriggerBox': {
+        'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 8: 7, 9: 8, 10: 9, 12: 10, 13: 11, 14: 12, 17: 13},
+        'values': {},
+    },
+    # behaviour base: Dead Men's bool is the one at Dog Days +0x3e, the new one is at +0x3f
+    'ZMiniCutsceneRout': {'map': {0: 0, 1: 1, 2: 2, 4: 3, 5: 4, 6: 5, 7: 6}, 'values': {}},
+    'ZWarnBehaviourRout': {'map': {0: 0, 1: 1, 3: 2, 4: 3}, 'values': {}},
+    'ZKillBox': {'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 10: 6}, 'values': {}},
+    'ZPlayerAction': {
+        'map': {0: 0, 1: 1, 2: 2, 3: 3, 6: 4, 7: 5, 8: 6, 9: 7, 10: 8, 11: 9, 12: 10, 13: 11, 14: 12, 15: 13,
+                16: 14, 19: 15},
+        'values': {},
+    },
+    # the three Dead Men bools (DM3..5) are not paired: not established which Dog Days field each became
+    'ZHeliFlyBehaviourRout': {'map': {0: 0, 1: 1, 2: 2, 6: 6, 8: 7, 14: 8, 15: 9}, 'values': {}},
+    'ZOnlineExitLevelTrigger': {'map': {2: 0}, 'values': {}},
+    'ZOnlineEscCamTrigger': {'map': {1: 0}, 'values': {}},
+    # the list moved to the end; the five floats stay where difflib put them (not established)
+    'ZBarrelEffects': {'map': {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 0}, 'values': {}},
+    # dialogue lines by event name; tutorial lines (DM165..175) and the four floats are not paired
+    'ZOnlineFragileAllianceSettings': {
+        'map': _run((0, 0, 12), (17, 12, 7), (27, 19, 146), (331, 180, 2), (333, 182, 6)),
+        'values': {},
+    },
+})
 
 
 # Controllers Dog Days registers but that cannot work on converted data yet. They are removed and
