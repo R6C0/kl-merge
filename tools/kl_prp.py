@@ -156,6 +156,58 @@ class Prp:
         return bytes(out)
 
 
+def units(tokens):
+    """Split an object's inner tokens into field units. Arrays/sub-objects are one unit, and so is
+    a reference list: an int count n followed by n strings (both games write entity-reference
+    lists that way, without array markers)."""
+    out, i, n = [], 0, len(tokens)
+    while i < n:
+        op = tokens[i][0]
+        if op in (0x01, 0x02):
+            close = 0x7c if op == 0x01 else 0x7e
+            j, depth = i + 1, 1
+            while depth:
+                o = tokens[j][0]
+                if o == op: depth += 1
+                elif o == close: depth -= 1
+                j += 1
+            out.append(tokens[i:j]); i = j
+        elif op == 0x04:
+            c = struct.unpack('<I', tokens[i][1])[0]
+            j = i + 1 + c
+            if 0 < c and j <= n and all(tokens[k][0] == 0x0c for k in range(i + 1, j)):
+                out.append(tokens[i:j]); i = j
+            elif 0 < c and i + 1 < n and tokens[i + 1][0] == 0x0d and len(tokens[i + 1][1]) == 4 + c:
+                out.append(tokens[i:i + 2]); i += 2          # byte count + raw block
+            else:
+                out.append(tokens[i:i + 1]); i += 1
+        else:
+            out.append(tokens[i:i + 1]); i += 1
+    return out
+
+
+def kind(unit):
+    """What one field unit is on disk, in the notation the schemas use (kl_rtp.py):
+    a scalar's LETTER; 'f*9' an array of 9 floats; 'refs' a count and that many strings;
+    'raw' a byte count and a raw block; 'cont' a zero count (an empty 'refs' or 'raw')."""
+    unit = list(unit)
+    op = unit[0][0]
+    if op == 0x01:
+        inner = unit[1:-1]
+        ops = set(o for o, _ in inner)
+        n = struct.unpack('<I', unit[0][1])[0]
+        if len(ops) == 1 and len(inner) == n and next(iter(ops)) in LETTER:
+            return '%s*%d' % (LETTER[next(iter(ops))], n)
+        return 'array'                      # empty, mixed or nested: not a property the schemas know
+    if op == 0x02:
+        return 'object'
+    if op == 0x04:
+        if len(unit) == 1:
+            return 'cont' if unit[0][1] == b'\0\0\0\0' else 'count'
+        return 'raw' if unit[1][0] == 0x0d else 'refs'
+    return LETTER.get(op, '?')
+
+
 def signature(tokens):
     """Field-layout signature of an object's tokens. Array lengths are collapsed, but every
     distinct element layout is kept, so arrays of sub-objects are compared in full."""
