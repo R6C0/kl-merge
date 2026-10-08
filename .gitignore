@@ -1,0 +1,18 @@
+# never commit game data or build output
+*.zip
+*.prp
+*.gms
+*.TEX
+*.prm
+*.MAT
+*.fxc
+*.str
+*.mdmp
+*.dmp
+*.exe
+*.dll
+__pycache__/
+tools/build/
+tools/converted/
+tools/audio/
+tools/report/
