@@ -2,7 +2,7 @@
 """
 Run one unattended load test of the level installed in a Dog Days slot.
 
-    python kl_autotest.py [seconds to wait, default 200]
+    python kl_autotest.py [seconds to wait, default 420]
 
 Needs the Steam launch options of Dog Days to boot straight into the level and quit by itself:
     -o DefaultScene=Locations/F01/F01_Main.gms -o AutoExit=120
@@ -50,7 +50,7 @@ def last_session(log):
 
 
 def main():
-    wait = int(sys.argv[1]) if len(sys.argv) > 1 else 200
+    wait = int(sys.argv[1]) if len(sys.argv) > 1 else 420
     dd = find(DD_GUESSES, DD_EXE)
     if not dd:
         raise SystemExit('Dog Days not found')

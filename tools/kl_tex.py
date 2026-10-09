@@ -1,170 +1,199 @@
 """
 Kane & Lynch .TEX texture library converter (Dead Men -> Dog Days).
 
-Both games store each texture the same way:
-  u32 entry size, fourcc, fourcc, u32 id, u16 w, u16 h, u32 mips, u32, u32, f32, u32,
-  name\\0, then per mip: u32 size + pixel data      (DXT1/3/5, ABGR, V8U8, I8)
-Only the container differs:
-  Dead Men : data from 0x10; header = [table1 ofs][table2 ofs][0][4]; tables (2048 x u32) at the end
-  Dog Days : header = [0x20][0x4020][0][0]; table1 (4096 x u32) at 0x20, table2 at 0x4020,
-             data from 0xc020
-table1 maps texture id -> entry, table2 maps id -> animated-texture list (u32 n + n ids).
+The file model and both containers are in kl_texmat.py (read_tex / write_tex, byte-identical on
+every stock archive of both games); this module turns a Dead Men file into a Dog Days one and
+checks a Dog Days file the way the game's loader walks it.
+
+A texture record is the same in both games:
+  u32 size, fourcc, fourcc, u32 id, u16 height, u16 width, u32 mips, u32 flags, f32 scale,
+  u32 (+0x20), name\\0, then per mip: u32 size + pixel data
+What differs is the container and how a record names other textures:
+  Dead Men  header [table 1 ofs][table 2 ofs][0][4]; records from 0x10; two 2048-entry tables at
+            the end: record offset, and offset of an id list (u32 n + n ids).
+            cube map (flag 0x400): 6-id list, first id = the owner, the faces are textures of
+            their own.   animated (flag 0x100): frame list, first id = the owner.
+  Dog Days  header [0x20][0x4020][0 x6]; three 4096-entry tables at 0x20 / 0x4020 / 0x8020;
+            records from 0xc020.   table 0: record offset.   table 1: frame COUNT of an animated
+            texture; its list (u32 n + n ids) follows the record inline.   table 2: a word the
+            loader copies into the texture object (zero in every Fragile Alliance level).
+            cube map: record with id field 0, a 32-byte block [id, 5 x face present, 0, 0], then
+            the faces inline (id field 0, flag 0x400).
+
+Dog Days' loader (kl2 0x5d2113..0x5d27c4, read in the disassembly):
+  - reads the three tables in one go from header[0]; header[1] is not used;
+  - walks slots 0..4095 and, for each non-zero table-0 entry, reads the NEXT record in the
+    file (0x505970: u32 size, int3 above 0x2000000; position += size rounded up to 16). The
+    table-0 value itself is only tested for non-zero;
+  - 0x70e4f0 switches on the fourcc at +4: DXT1 DXT3 DXT5 RGBA I8 U8V8 A8 16A0 16A1 16A4 PALN
+    PALO; anything else is an int3;
+  - flag 0x400: reads 0x18 bytes [id, 5 x present], position += 0x20, the id becomes the
+    texture's id (vtable +0x54), then one record per present face;
+  - the texture is stored at this + 4 + id * 0x44 (0x5d26e5), id taken from the record;
+  - flag 0x100: n = table 1 [id]; copies 4 + 4 n bytes and skips them rounded up to 16
+    (0x5d2711..0x5d2756). A flagged record without a list would make it eat the next record.
+
+What the conversion keeps and loses:
+  - every texture keeps its id, so nothing that names a texture needs rewriting;
+  - animated textures stay animated (stock Dog Days has 7, all in story levels). A frame may be
+    animated itself in both games (nested lists are kept as they are);
+  - cube maps get their five faces inline. The face textures also stay as textures of their own
+    (Dead Men materials name a few of them directly): 31-45 ids per map that Dog Days would not
+    have spent;
+  - Dead Men lists that are in no table (a second list for an owner that already has one,
+    1-8 per map) cannot be reached by either game and are dropped.
+NOT established: the meaning of flags 0x2, 0x40, 0x1000, 0x4000 and of the dword at +0x20 (copied
+with the record; every flag value a Dead Men map carries also occurs in stock Dog Days files).
 """
-import struct
+import os, struct, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 DD_SLOTS = 4096
-DD_T1, DD_T2, DD_DATA = 0x20, 0x4020, 0xc020
-
-
-def read_dm(data):
-    t1, t2, _z, _v = struct.unpack_from('<IIII', data, 0)
-    n = (t2 - t1) // 4
-    entries, anims = {}, {}
-    for slot, o in enumerate(struct.unpack_from('<%dI' % n, data, t1)):
-        if o:
-            size = struct.unpack_from('<I', data, o)[0]
-            entries[slot] = data[o:o + size]
-    n2 = (len(data) - t2) // 4
-    for slot, o in enumerate(struct.unpack_from('<%dI' % n2, data, t2)):
-        if o:
-            cnt = struct.unpack_from('<I', data, o)[0]
-            anims[slot] = data[o:o + 4 + 4 * cnt]
-    return entries, anims
-
-
-def read_dd(data):
-    t1, t2 = struct.unpack_from('<II', data, 0)
-    entries, anims = {}, {}
-    for slot, o in enumerate(struct.unpack_from('<%dI' % DD_SLOTS, data, t1)):
-        if o:
-            entries[slot] = data[o:o + struct.unpack_from('<I', data, o)[0]]   # face 0 only for cubes
-    for slot, o in enumerate(struct.unpack_from('<%dI' % DD_SLOTS, data, t2)):
-        if o:
-            cnt = struct.unpack_from('<I', data, o)[0]
-            anims[slot] = data[o:o + 4 + 4 * cnt]
-    return entries, anims
+DD_T1, DD_T2, DD_T3, DD_DATA = 0x20, 0x4020, 0x8020, 0xc020
+CUBE, ANIMATED = 0x400, 0x100
+MAX_RECORD = 0x2000000                           # kl2 0x5059c0
+FORMATS = (b'DXT1', b'DXT3', b'DXT5', b'RGBA', b'I8  ', b'U8V8', b'A8  ', b'16A0', b'16A1', b'16A4',
+           b'PALN', b'PALO')                     # kl2 0x70e4f0 (stored reversed in the file)
 
 
 def check_entry(e):
-    """Walk an entry's mips; returns (fourcc, w, h, mips, name) or raises."""
-    size, f1, _f2, _id, w, h, mips = struct.unpack_from('<I4s4sIHHI', e, 0)
+    """Walk a record's mips; returns (fourcc, width, height, mips, name) or raises."""
+    size, f1, _f2, _id, h, w, mips = struct.unpack_from('<I4s4sIHHI', e, 0)
     end = e.index(b'\0', 36)
     p = end + 1
     for _ in range(mips):
         p += 4 + struct.unpack_from('<I', e, p)[0]
     if p != size or size != len(e):
         raise ValueError('texture entry size mismatch')
-    return f1, w, h, mips, e[36:end].decode('latin1')
+    return f1[::-1], w, h, mips, e[36:end].decode('latin1')
 
 
-def write_dd(entries, anims):
-    t1 = [0] * DD_SLOTS
-    t2 = [0] * DD_SLOTS
-    body = bytearray()
-    def pad():                                   # Dog Days keeps entries 16-byte aligned
-        body.extend(b'\0' * ((-len(body)) % 16))
-    for slot in sorted(entries):
-        t1[slot] = DD_DATA + len(body); body += entries[slot]; pad()
-    for slot in sorted(anims):
-        t2[slot] = DD_DATA + len(body); body += anims[slot]; pad()
-    head = struct.pack('<IIII', DD_T1, DD_T2, 0, 0).ljust(DD_T1, b'\0')
-    out = head + struct.pack('<%dI' % DD_SLOTS, *t1) + struct.pack('<%dI' % DD_SLOTS, *t2)
-    out = out.ljust(DD_DATA, b'\0')
-    return bytes(out) + bytes(body)
-
-
-CUBE = 0x400
-ANIMATED = 0x100
-
-
-def dd_cube(main, faces):
-    """Dog Days cube map: face 0 entry, 32-byte block [slot id, 1 x5, 0, 0], faces 1-5 inline
-    (each with id 0 and the cube flag), all 16-byte aligned."""
-    def pad(b):
-        return b + b'\0' * ((-len(b)) % 16)
-    slot = struct.unpack_from('<I', main, 12)[0]
-    out = pad(main) + struct.pack('<8I', slot, 1, 1, 1, 1, 1, 0, 0)
-    for i, f in enumerate(faces):
-        f = bytearray(f)
-        struct.pack_into('<I', f, 12, 0)
-        struct.pack_into('<I', f, 24, struct.unpack_from('<I', f, 24)[0] | CUBE)
-        out += bytes(f) if i == len(faces) - 1 else pad(bytes(f))
-    return out
+def _with(entry, ident=None, set_flags=0, clear_flags=0):
+    e = bytearray(entry)
+    if ident is not None:
+        struct.pack_into('<I', e, 12, ident)
+    struct.pack_into('<I', e, 24, (struct.unpack_from('<I', e, 24)[0] | set_flags) & ~clear_flags)
+    return bytes(e)
 
 
 def convert(dm_data):
-    """Dead Men keeps cube maps as 6 separate textures plus a face list in table 2;
-    Dog Days stores the faces inline after the first one (see dd_cube)."""
-    entries, lists = read_dm(dm_data)
-    data_flags = dict(entries)
-    if max(list(entries) + list(lists) + [0]) >= DD_SLOTS:
-        raise ValueError('texture id out of range for Dog Days')
-    for e in entries.values():
-        check_entry(e)
-    out_entries = {}
-    for slot, e in entries.items():                 # drop the animation flag everywhere
-        f = struct.unpack_from('<I', e, 24)[0]
-        if f & ANIMATED:
-            e = bytearray(e); struct.pack_into('<I', e, 24, f & ~ANIMATED); e = bytes(e)
-        out_entries[slot] = e
-    entries = dict(out_entries)
-    cubes = 0
-    animated = 0
-    for slot, blob in lists.items():
-        n = struct.unpack_from('<I', blob, 0)[0]
-        ids = struct.unpack_from('<%dI' % n, blob, 4)
-        flags = struct.unpack_from('<I', data_flags[slot], 24)[0]
-        if flags & ANIMATED and not flags & CUBE:
-            # animated texture (frame list): Dog Days stores these differently, so keep the
-            # first frame as a static texture
-            animated += 1
-            continue
-        if n != 6 or ids[0] != slot or not (struct.unpack_from('<I', entries[slot], 24)[0] & CUBE):
-            raise ValueError('unexpected cube map layout at slot %d' % slot)
-        out_entries[slot] = dd_cube(entries[slot], [entries[i] for i in ids[1:]])
-        cubes += 1
-    # any other texture carrying the cube flag would make Dog Days expect inline faces
-    for slot, e in entries.items():
-        if slot not in lists and struct.unpack_from('<I', e, 24)[0] & CUBE:
-            raise ValueError('cube-flagged texture %d without faces' % slot)
-    out = write_dd(out_entries, {})
-    e2, a2 = read_dd(out)
-    if any(e2[k] != out_entries[k][:len(e2[k])] for k in entries) or a2:
-        raise ValueError('texture round-trip mismatch')
-    simulate_dd_loader(out)
-    return out, len(entries), cubes
+    """Dead Men .TEX -> Dog Days .TEX. Returns (bytes, counts); counts: textures, cubes,
+    animated, frames (ids named by frame lists), dropped_lists (lists in no table),
+    unflagged (animation flags cleared because the texture had no list)."""
+    import kl_texmat as TM
+    src = TM.read_tex(dm_data)
+    if src.game != 'dm':
+        raise ValueError('not a Dead Men .TEX')
+    out = TM.Tex('dd')
+    n = dict(textures=len(src.tex), cubes=0, animated=0, frames=0, unflagged=0,
+             dropped_lists=sum(1 for _at, owner, _ids in src.lists if owner is None))
+    for i, x in sorted(src.tex.items()):
+        fmt = check_entry(x.entry)[0]
+        if fmt not in FORMATS:
+            raise ValueError('texture %d: format %r is not one Dog Days reads' % (i, fmt))
+        if struct.unpack_from('<I', x.entry, 12)[0] != i:
+            raise ValueError('texture %d carries id %d' % (i, struct.unpack_from('<I', x.entry, 12)[0]))
+        f, ids = x.flags, x.frames
+        if ids is not None and (ids[0] != i or any(j not in src.tex for j in ids)):
+            raise ValueError('texture %d: unexpected id list %r' % (i, ids))
+        if f & CUBE:
+            if f & ANIMATED or ids is None or len(ids) != 6:
+                raise ValueError('cube map %d without a 6-face list' % i)
+            if any(src.tex[j].flags & (CUBE | ANIMATED) for j in ids[1:]):
+                raise ValueError('cube map %d: a face is a cube or animated itself' % i)
+            # stock: record id 0 (the block carries the id), faces id 0 and flagged 0x400
+            out.tex[i] = TM.Texture(_with(x.entry, 0), [_with(src.tex[j].entry, 0, CUBE) for j in ids[1:]],
+                                    (1, 1, 1, 1, 1, 0, 0))
+            n['cubes'] += 1
+        elif f & ANIMATED:
+            if ids is None:
+                # the loader would read a count of 0 and still skip 16 bytes: clear the flag
+                out.tex[i] = TM.Texture(_with(x.entry, clear_flags=ANIMATED)); n['unflagged'] += 1
+            else:
+                out.tex[i] = TM.Texture(x.entry, frames=tuple(ids))
+                n['animated'] += 1; n['frames'] += len(ids)
+        elif ids is not None:
+            raise ValueError('texture %d has an id list but neither the cube nor the animation flag' % i)
+        else:
+            out.tex[i] = TM.Texture(x.entry)
+    data = TM.write_tex(out)
+    got = simulate_dd_loader(data)
+    back = TM.read_tex(data)
+    if got != (n['textures'], n['cubes'], n['animated']) or sorted(back.tex) != sorted(src.tex) or \
+            any(back.tex[i].frames != out.tex[i].frames or back.tex[i].entry != out.tex[i].entry for i in out.tex):
+        raise ValueError('converted .TEX does not read back as written')
+    return data, n
 
 
-def simulate_dd_loader(data):
-    """Walk a .TEX exactly the way Dog Days' loader does (sequential, slot order, inline
-    cube faces). Returns (textures, cubes) or raises with the first problem found."""
+def simulate_dd_loader(data, strict=True):
+    """Walk a .TEX the way Dog Days' loader does (see the docstring). Returns (textures, cubes,
+    animated) or raises with the first problem. Everything the loader would trip over is
+    checked always; with `strict` also what every stock file satisfies but the loader does not
+    test: table-0 values are the real record offsets, a texture's id is its slot, a frame list's
+    own count equals table 1, frame ids exist, table entries only for present textures, and the
+    walk ends at the end of the file."""
+    if len(data) < DD_DATA:
+        raise ValueError('file shorter than the three tables')
     t1off = struct.unpack_from('<I', data, 0)[0]
-    t1 = struct.unpack_from('<%dI' % DD_SLOTS, data, t1off)
-    pos = DD_DATA
-    n = cubes = 0
-    for slot in range(DD_SLOTS):
-        if not t1[slot]:
-            continue
-        if pos != t1[slot]:
-            raise ValueError('slot %d: loader at %#x but table says %#x' % (slot, pos, t1[slot]))
+    T = [struct.unpack_from('<%dI' % DD_SLOTS, data, t1off + 4 * DD_SLOTS * k) for k in range(3)]
+    pos = t1off + 12 * DD_SLOTS
+    seen, lists = {}, []
+    n = cubes = anims = 0
+
+    def record(what):
+        nonlocal pos
+        if pos + 36 > len(data):
+            raise ValueError('%s: record at %#x is past the end of the file' % (what, pos))
         size = struct.unpack_from('<I', data, pos)[0]
-        if size > 0x2000000 or pos + size > len(data):
-            raise ValueError('slot %d: bad entry size %d' % (slot, size))
-        check_entry(data[pos:pos + size])
-        flags = struct.unpack_from('<I', data, pos + 24)[0]
+        if size > MAX_RECORD or pos + size > len(data):
+            raise ValueError('%s: bad record size %d at %#x' % (what, size, pos))
+        e = data[pos:pos + size]
+        if check_entry(e)[0] not in FORMATS:
+            raise ValueError('%s: format %r is an int3 in the loader' % (what, e[4:8][::-1]))
         pos += (size + 15) & ~15
-        n += 1
+        return e
+
+    for slot in range(DD_SLOTS):
+        if not T[0][slot]:
+            if strict and (T[1][slot] or T[2][slot]):
+                raise ValueError('slot %d: table entry for a missing texture' % slot)
+            continue
+        if strict and pos != T[0][slot]:
+            raise ValueError('slot %d: loader at %#x but table says %#x' % (slot, pos, T[0][slot]))
+        e = record('slot %d' % slot)
+        ident, flags = struct.unpack_from('<I', e, 12)[0], struct.unpack_from('<I', e, 24)[0]
         if flags & CUBE:
             blk = struct.unpack_from('<6I', data, pos)
-            if blk[0] != slot:
-                raise ValueError('slot %d: cube block names slot %d' % (slot, blk[0]))
             pos += 0x20
-            for f in blk[1:]:
-                if f:
-                    fs = struct.unpack_from('<I', data, pos)[0]
-                    if fs > 0x2000000:
-                        raise ValueError('slot %d: bad cube face size' % slot)
-                    check_entry(data[pos:pos + fs])
-                    pos += (fs + 15) & ~15
+            ident = blk[0]
+            for k, present in enumerate(blk[1:]):
+                if present:
+                    record('slot %d face %d' % (slot, k + 1))
             cubes += 1
-    return n, cubes
+        if ident >= DD_SLOTS:
+            raise ValueError('slot %d: texture id %d is outside the loader\'s table' % (slot, ident))
+        if ident in seen:
+            raise ValueError('slot %d: texture id %d is already used by slot %d' % (slot, ident, seen[ident]))
+        if strict and ident != slot:
+            raise ValueError('slot %d: record carries id %d' % (slot, ident))
+        seen[ident] = slot
+        n += 1
+        if flags & ANIMATED:
+            cnt = T[1][ident]
+            if pos + 4 + 4 * cnt > len(data):
+                raise ValueError('slot %d: frame list runs past the end of the file' % slot)
+            own = struct.unpack_from('<I', data, pos)[0]
+            if strict and (own != cnt or not cnt):
+                raise ValueError('slot %d: frame list says %d frames, table 1 says %d' % (slot, own, cnt))
+            lists.append((slot, struct.unpack_from('<%dI' % cnt, data, pos + 4)))
+            pos += (4 + 4 * cnt + 15) & ~15
+            anims += 1
+        elif strict and T[1][ident]:
+            raise ValueError('slot %d: frame count without the animation flag' % slot)
+    if strict:
+        for slot, ids in lists:
+            if any(i not in seen for i in ids):
+                raise ValueError('slot %d: a frame names a texture the file does not have' % slot)
+        if pos != len(data):
+            raise ValueError('loader ends at %#x, file is %#x bytes' % (pos, len(data)))
+    return n, cubes, anims
