@@ -188,6 +188,14 @@ already running, and puts the owner's Retomoto build + SHIP hook back after ever
 run (install of KLGfx d3d9.dll) was REFUSED by the permission classifier: the owner can run the two
 .bat files themselves; the GPU self-test ran (4 PASS, 2 FAIL: zero model changes the picture by 8,
 limit 3; network 8.6 ms at 1080p, 13.7 ms at 1440p on the RTX 4070 Ti).
+INSTALLED FOR THE OWNER 2026-10-09 21:50 (supersedes the 21:25 entry below): F01 slot =
+<work>/build/x_chunks/retomoto_wardrobe (play3s + the FULL wardrobe in dead chunk indices: 65,119
+table entries, .prm 77.8 MB; KLJoin.ini + KLWardrobe.ini); hook = <work>/build/klhook/ship_mem
+(SHIP + klchar.c + klmem.c, sha1 dfd3399f); overlay and KLHook.ini as before. Live before the
+hand-over (TEST sibling test_mem, run RW): Kane (model 9236, a reused index) drawn on the balcony
+at GO, round PASS. Owner's 21:39 crash = the .prm allocation failing on the SECOND level load of a
+session; klmem.c is the answer, its release path not yet seen firing. Outfit 3 on Kane showed no
+visible armour from behind in the one picture looked at: not checked further.
 INSTALLED FOR THE OWNER 2026-10-09 21:25: F01 slot = <work>/build/play3s = Retomoto with every fix
 since their last round (execute crash, kl_arms weapons, police far-detail shader, voice repairs
 VOICE on, Subway-style blast layer, bone ids) and 'kl_graft.py lighten' (.TEX 405.6 -> 234 MB, zip
