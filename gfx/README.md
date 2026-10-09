@@ -106,3 +106,22 @@ A run with KLGfx installed is not a clean graft run: remove it before crash tria
 - KLGfx 0.3 + klnr.exe 0.1: built, tested as above (an independent review of 0.2 found the issues fixed in 0.3:
   shader scan past the end of the code, dangling pointers in the capture, wrapper lifetimes, lost device,
   late results racing the next frame, session restart), staged on the PC, not installed.
+- klnr.exe 0.2 (2026-10-09): a review of the network path, which has never run (no machine here has the
+  extensions), against OpenDLSS-NR's demo found what a real NVIDIA GPU would show and lavapipe hid:
+  - the frame was read back from the first HOST_VISIBLE | HOST_COHERENT memory type, which on NVIDIA is
+    write-combined (CPU reads an order of magnitude slower: 8-15 MB per frame would have blown the 100 ms timeout);
+    now a HOST_CACHED type (a warning in the log if there is none);
+  - the chained PTX launches' watchdog word was never read or cleared: one stuck wait would have made every later
+    frame wrong without a word in the log. Checked after the warm-up and every frame as the demo does; on a timeout
+    the frame passes unchanged and the network is rebuilt with a barrier after every launch;
+  - the no-model device reset query pools from the host without `hostQueryReset`, and ran a SPIR-V 1.6 composite
+    on Vulkan 1.2 (now SPIR-V 1.5);
+  - started by the game, klnr.exe inherited Steam's environment, which switches on the Steam overlay's and
+    Fossilize's implicit Vulkan layers: implicit layers are now off in klnr.exe (`KLNR_LAYERS=1` keeps them);
+  - the kernels' split-K scratch is sized at the first frame size: made again for a larger frame (1080p -> 4K
+    would have thrown); a resize sets the state to STARTING, so KLGfx shows frames untouched meanwhile instead of
+    counting them as missed (30 in a row switched the bridge off);
+  - the self-test prints a verdict per step (`RESULT PASS|FAIL ...`), the TEST script writes `KLNR\selftest.log`
+    fresh and lists the verdicts; INSTALL / REMOVE no longer break their messages on the `&` in the Dog Days path.
+  Wine run of `test_wine.sh` and the self-tests (none, test pattern) passed again; staged on the PC
+  (`<DM>\KL_PortTools\KLGfx`), not installed.

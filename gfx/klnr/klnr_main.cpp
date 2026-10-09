@@ -106,15 +106,45 @@ void copyText(char* dst, size_t n, const std::string& s) {
   dst[n - 1] = 0;
 }
 
+void logNotes(KlNrPass& pass) {
+  for (const std::string& note : pass.takeNotes()) logf("%s", note.c_str());
+}
+
+void logReady(KlNrPass& pass, ULONGLONG startedAt) {
+  logf("ready on %s in %llu ms (blend scale %g)", pass.deviceName().c_str(), (unsigned long long)(GetTickCount64() - startedAt),
+       pass.blendScale());
+  if (!pass.readbackCached())
+    logf("WARNING: no cached host memory for the frame readback: reading results back is slow on this GPU");
+  logNotes(pass);
+}
+
+// klnr.exe is started by the game, so it inherits Steam's environment, which switches on the Steam overlay's and
+// Fossilize's implicit Vulkan layers (ENABLE_VK_LAYER_VALVE_*). Other programs install implicit layers too (capture
+// and overlay tools). They would sit between klnr.exe and the NVIDIA-only extensions the network uses, and a compute
+// helper with no window needs none of them: implicit layers are off unless KLNR_LAYERS=1 is set. Explicit layers
+// (VK_INSTANCE_LAYERS, e.g. the validation layer) are not affected. Read by the Vulkan loader at vkCreateInstance.
+void disableImplicitLayers() {
+  char keep[8] = "";
+  if (GetEnvironmentVariableA("KLNR_LAYERS", keep, sizeof keep) && keep[0] == '1') {
+    logf("implicit Vulkan layers kept (KLNR_LAYERS=1)");
+    return;
+  }
+  SetEnvironmentVariableA("VK_LOADER_LAYERS_DISABLE", "~implicit~");    // Vulkan loader 1.3.234 and later
+  SetEnvironmentVariableA("DISABLE_VK_LAYER_VALVE_steam_overlay_1", "1");   // older loaders: Steam's own switches
+  SetEnvironmentVariableA("DISABLE_VK_LAYER_VALVE_steam_fossilize_1", "1");
+}
+
 // ------------------------------------------------------------------------------------------------ --info
 int runInfo() {
   try {
     vk::Context context;
     logf("device: %s, %u SMs, subgroup timestamps ok; the NR kernels' extensions are present", context.deviceName().c_str(),
          context.smCount());
+    logf("RESULT PASS info: %s can run the network", context.deviceName().c_str());
     return 0;
   } catch (const std::exception& e) {
     logf("this GPU / driver cannot run the network: %s", e.what());
+    logf("RESULT FAIL info: this GPU / driver cannot run the network (%s); the bridge still works without a model", e.what());
     return 1;
   }
 }
@@ -127,13 +157,13 @@ int runSelftest(const Args& args, const std::string& base) {
   std::unique_ptr<KlNrPass> pass;
   try {
     std::string model = resolveModel(args.model, base, kind);
-    logf("selftest %ux%u, %u frames, %s", w, h, args.frames, modelName(kind));
+    logf("selftest %ux%u, %u frames, %s%s", w, h, args.frames, modelName(kind), args.test ? ", test pattern" : "");
     auto t0 = GetTickCount64();
     pass = std::make_unique<KlNrPass>(model, base, w, h);
-    logf("ready on %s in %llu ms (blend scale %g)", pass->deviceName().c_str(), (unsigned long long)(GetTickCount64() - t0),
-         pass->blendScale());
+    logReady(*pass, t0);
   } catch (const std::exception& e) {
     logf("FAILED to start: %s", e.what());
+    logf("RESULT FAIL selftest %ux%u %s: did not start", w, h, modelName(kind));
     return 2;
   }
   const uint32_t pitch = w * 4 + 64;   // a pitch wider than the row, as D3D9 surfaces have
@@ -143,8 +173,9 @@ int runSelftest(const Args& args, const std::string& base) {
   controls.test = args.test;
   controls.split = args.split;
   std::vector<double> host, gpu, network;
-  int worst = 0;
+  int worst = 0, worstLeft = 0;
   double sumDiff = 0;
+  uint32_t greyRight = 0, rightPixels = 0, discarded = 0;
   for (uint32_t f = 0; f < args.frames; ++f) {
     for (uint32_t y = 0; y < h; ++y)
       for (uint32_t x = 0; x < w; ++x) {
@@ -161,23 +192,49 @@ int runSelftest(const Args& args, const std::string& base) {
       pass->process(frame.data(), pitch, controls, t);
     } catch (const std::exception& e) {
       logf("FAILED at frame %u: %s", f, e.what());
+      logf("RESULT FAIL selftest %ux%u %s: frame %u failed", w, h, modelName(kind), f);
       return 3;
     }
+    logNotes(*pass);
+    discarded += t.discarded;
     host.push_back(t.hostMs); gpu.push_back(t.gpuMs); network.push_back(t.networkMs);
     if (f + 1 == args.frames) {
       for (uint32_t y = 0; y < h; ++y)
-        for (uint32_t x = 0; x < w; ++x)
-          for (int c = 0; c < 3; ++c) {
-            int d = std::abs((int)frame[(size_t)y * pitch + x * 4 + c] - (int)input[(size_t)y * pitch + x * 4 + c]);
-            worst = std::max(worst, d);
-            sumDiff += d;
-          }
+        for (uint32_t x = 0; x < w; ++x) {
+          const uint8_t* o = &frame[(size_t)y * pitch + x * 4];
+          const uint8_t* i = &input[(size_t)y * pitch + x * 4];
+          int d = 0;
+          for (int c = 0; c < 3; ++c) d = std::max(d, std::abs((int)o[c] - (int)i[c]));
+          worst = std::max(worst, d);
+          if (x + 1 < w / 2) worstLeft = std::max(worstLeft, d);   // the test pattern greys x > w/2
+          if (x > w / 2 + 1) { rightPixels++; greyRight += o[0] == o[1] && o[1] == o[2]; }
+          for (int c = 0; c < 3; ++c) sumDiff += std::abs((int)o[c] - (int)i[c]);
+        }
     }
   }
   auto median = [](std::vector<double> v) { std::sort(v.begin(), v.end()); return v.empty() ? 0.0 : v[v.size() / 2]; };
   logf("per frame (median): host %.2f ms, GPU %.2f ms, of which network %.2f ms", median(host), median(gpu), median(network));
-  logf("last frame vs input: largest channel difference %d, mean %.4f (a round trip without a model should be 0-1)",
-       worst, sumDiff / ((double)w * h * 3));
+  logf("last frame vs input: largest channel difference %d, mean %.4f%s", worst, sumDiff / ((double)w * h * 3),
+       args.test ? " (the test pattern greys the right half)" : kind == KLNR_MODEL_NONE ? " (a round trip without a model: 0-1)" : "");
+  // The verdict. none: the frame must come back as it went (sRGB round trip, at most 1 code value). Test pattern: the
+  // right half grey, the left half unchanged. Synthetic zero model: "no change" through the whole composite, which
+  // rounds through half floats and the tone path: a few code values (GUESS: 3 until seen on a real GPU). A real model
+  // changes the frame by design: no verdict on the difference.
+  bool ok = discarded == 0;
+  std::string why = discarded ? std::to_string(discarded) + " frame(s) discarded by the watchdog" : "";
+  if (args.test) {
+    const bool grey = greyRight == rightPixels && rightPixels > 0;
+    ok = ok && grey && worstLeft <= 1;
+    if (!grey) why += (why.empty() ? "" : "; ") + std::to_string(rightPixels - greyRight) + " right-half pixels not grey";
+    if (worstLeft > 1) why += (why.empty() ? "" : "; ") + std::string("left half changed by ") + std::to_string(worstLeft);
+  } else if (kind != KLNR_MODEL_DIR) {
+    const int limit = kind == KLNR_MODEL_NONE ? 1 : 3;
+    ok = ok && worst <= limit;
+    if (worst > limit) why += (why.empty() ? "" : "; ") + std::string("changed by ") + std::to_string(worst) + " (limit " + std::to_string(limit) + ")";
+  }
+  logf("RESULT %s selftest %ux%u %s%s: host %.2f ms, GPU %.2f ms (network %.2f ms) per frame%s%s", ok ? "PASS" : "FAIL", w, h,
+       modelName(kind), args.test ? ", test pattern" : "", median(host), median(gpu), median(network), why.empty() ? "" : "; ",
+       why.c_str());
   std::string out = args.out.empty() ? base + "\\selftest.ppm" : args.out;
   if (FILE* f = fopen(out.c_str(), "wb")) {
     fprintf(f, "P6\n%u %u\n255\n", w, h);
@@ -192,7 +249,7 @@ int runSelftest(const Args& args, const std::string& base) {
     fclose(f);
     logf("last output written to %s", out.c_str());
   }
-  return 0;
+  return ok ? 0 : 5;
 }
 
 // ---------------------------------------------------------------------------------------------- --session
@@ -258,7 +315,7 @@ int runSession(const Args& args, const std::string& base) {
     ctl->model = kind;
     copyText(ctl->device, sizeof ctl->device, pass->deviceName());
     copyText(ctl->message, sizeof ctl->message, std::string("ready: ") + modelName(kind) + " on " + pass->deviceName());
-    logf("ready on %s in %llu ms", pass->deviceName().c_str(), (unsigned long long)(GetTickCount64() - t0));
+    logReady(*pass, t0);
   } catch (const std::exception& e) {
     copyText(ctl->message, sizeof ctl->message, e.what());
     MemoryBarrier();
@@ -300,10 +357,20 @@ int runSession(const Args& args, const std::string& base) {
     KlTimings t;
     try {
       if (w != pass->width() || h != pass->height()) {
+        // A new size rebuilds the network's resources and runs it once (up to seconds, not a frame time): while the
+        // state says STARTING, KLGfx shows its frames untouched without counting them as missed, as at the start.
+        ctl->state = KLNR_STARTING;
+        MemoryBarrier();
         logf("resize to %ux%u", w, h);
+        const ULONGLONG r0 = GetTickCount64();
         pass->resize(w, h);
+        logf("resized in %llu ms", (unsigned long long)(GetTickCount64() - r0));
+        logNotes(*pass);
+        MemoryBarrier();
+        ctl->state = KLNR_READY;   // this frame follows within a frame time
       }
       pass->process(s.frame, pitch, c, t);
+      logNotes(*pass);
     } catch (const std::exception& e) {
       copyText(ctl->message, sizeof ctl->message, e.what());
       MemoryBarrier();
@@ -317,7 +384,7 @@ int runSession(const Args& args, const std::string& base) {
     ctl->ms_download = (float)t.downloadMs; ctl->ms_total = (float)t.hostMs;
     ctl->frames++;
     MemoryBarrier();
-    ctl->done = request;
+    ctl->done = request;   // a discarded result left the buffer as the frame came: shown unchanged
     SetEvent(s.done);
     sumHost += t.hostMs; sumGpu += t.gpuMs; sumNet += t.networkMs; ++count;
     if (GetTickCount64() - lastReport >= 10000 && count) {
@@ -339,7 +406,8 @@ int main(int argc, char** argv) {
   const std::string base = exeDir();
   std::string logPath = args.log.empty() ? base + "\\klnr.log" : args.log;
   g_log = fopen(logPath.c_str(), "a");
-  logf("==== klnr 0.1 (OpenDLSS-NR network, MIT; no NVIDIA software or weights included) %s", GetCommandLineA());
+  logf("==== klnr 0.2 (OpenDLSS-NR network, MIT; no NVIDIA software or weights included) %s", GetCommandLineA());
+  disableImplicitLayers();
   int rc;
   if (args.info) rc = runInfo();
   else if (args.selftest) rc = runSelftest(args, base);

@@ -35,8 +35,9 @@ for f in "$NR"/shaders/*.comp; do
   "$GLSLANG" -V --target-env vulkan1.3 -I"$NR/shaders" "$f" -o "$OUT/spv/$(basename "$f" .comp).spv" >/dev/null 2>&1 || { echo "glslang failed: $f"; exit 1; }
 done
 sh "$HERE/klnr/gen_ptx.sh" "$NR" "$OUT/ptx"
-"$GLSLANG" -V --target-env vulkan1.3 -I"$NR/demo/shaders" "$NR/demo/shaders/nr_preprocess.comp" -o "$OUT/shaders/nr_preprocess.spv" >/dev/null 2>&1
-"$GLSLANG" -V --target-env vulkan1.3 -I"$NR/demo/shaders" "$HERE/klnr/shaders/kl_composite.comp" -o "$OUT/shaders/kl_composite.spv" >/dev/null 2>&1
+"$GLSLANG" -V --target-env vulkan1.3 -I"$NR/demo/shaders" "$NR/demo/shaders/nr_preprocess.comp" -o "$OUT/shaders/nr_preprocess.spv" >/dev/null 2>&1 || { echo "glslang failed: nr_preprocess.comp"; exit 1; }
+# the composite also runs on the plain Vulkan 1.2 device of the no-model mode: SPIR-V 1.5
+"$GLSLANG" -V --target-env vulkan1.2 -I"$NR/demo/shaders" "$HERE/klnr/shaders/kl_composite.comp" -o "$OUT/shaders/kl_composite.spv" || { echo "glslang failed: kl_composite.comp"; exit 1; }
 
 CXX=x86_64-w64-mingw32-g++
 FLAGS="-O2 -DNOMINMAX -DWIN32_LEAN_AND_MEAN -DVK_ENABLE_BETA_EXTENSIONS -I$DEPS/vulkan-headers/include -I$DEPS/volk -I$BUILD/src -I$HERE/klnr"

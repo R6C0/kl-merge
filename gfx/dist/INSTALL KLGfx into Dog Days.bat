@@ -11,12 +11,12 @@ set "DD=C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days"
 set "PRESET=%~1"
 if "%PRESET%"=="" set "PRESET=nrtest"
 if not exist "%~dp0KLGfx.%PRESET%.ini" ( echo unknown preset %PRESET% & exit /b 1 )
-if not exist "%DD%\kl2.exe" ( echo Dog Days not found at %DD% & exit /b 1 )
+if not exist "%DD%\kl2.exe" ( echo Dog Days not found at "%DD%" & exit /b 1 )
 tasklist /fi "imagename eq kl2.exe" | find /i "kl2.exe" >nul && ( echo kl2.exe is running: close the game first & exit /b 1 )
 if exist "%DD%\d3d9.dll.klgfx" del "%DD%\d3d9.dll.klgfx"
 copy /y "%~dp0d3d9.dll" "%DD%\d3d9.dll" >nul || exit /b 1
 copy /y "%~dp0KLGfx.%PRESET%.ini" "%DD%\KLGfx.ini" >nul || exit /b 1
 xcopy /e /i /y /q "%~dp0KLNR" "%DD%\KLNR" >nul || exit /b 1
 if exist "%DD%\KLNR\klnr.log" del "%DD%\KLNR\klnr.log"
-echo KLGfx installed in %DD% with preset %PRESET%. Logs: KLGfx.log and KLNR\klnr.log there.
+echo KLGfx installed in "%DD%" with preset %PRESET%. Logs: KLGfx.log and KLNR\klnr.log there.
 endlocal

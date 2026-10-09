@@ -7,7 +7,7 @@ D=$HERE/out/KLGfx_dist
 rm -rf "$D" && mkdir -p "$D"
 cp "$HERE/out/d3d9.dll" "$D/"
 cp -r "$HERE/out/KLNR" "$D/KLNR"
-rm -f "$D/KLNR/klnr.log" "$D"/KLNR/*.ppm
+rm -f "$D/KLNR/klnr.log" "$D/KLNR/selftest.log" "$D"/KLNR/selftest_*.txt "$D"/KLNR/*.ppm
 cp "$HERE"/dist/* "$D/"
 (cd "$HERE/out" && tar czf KLGfx_dist.tar.gz KLGfx_dist)
 echo "packaged $D ($(du -sh "$D" | cut -f1)), out/KLGfx_dist.tar.gz"

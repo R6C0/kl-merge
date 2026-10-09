@@ -7,6 +7,7 @@
 #pragma once
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "kernels.h"
 #include "nr_graph.h"
@@ -27,6 +28,7 @@ struct KlControls {
 
 struct KlTimings {
   double uploadMs = 0, preprocessMs = 0, networkMs = 0, compositeMs = 0, downloadMs = 0, gpuMs = 0, hostMs = 0;
+  bool discarded = false;   // the network's result was not usable (takeNotes() says why): the frame is left as it came
 };
 
 class KlNrPass {
@@ -46,6 +48,10 @@ class KlNrPass {
   uint32_t width() const { return width_; }
   uint32_t height() const { return height_; }
   float blendScale() const { return blendScale_; }
+  // Where the CPU reads results from: cached host memory (fast) or not (an order of magnitude slower on NVIDIA).
+  bool readbackCached() const { return readbackCached_; }
+  // What happened since the last call that deserves a log line (watchdog timeouts, rebuilds); empties the list.
+  std::vector<std::string> takeNotes() { std::vector<std::string> notes; notes.swap(notes_); return notes; }
 
  private:
   struct Image {
@@ -60,10 +66,14 @@ class KlNrPass {
   void imageBarrier(VkCommandBuffer commands, VkImage image, VkImageLayout from, VkImageLayout to, VkPipelineStageFlags srcStage,
                     VkAccessFlags srcAccess, VkPipelineStageFlags dstStage, VkAccessFlags dstAccess);
   VkPipeline computePipeline(const std::string& spv);
+  vk::Buffer createReadback(VkDeviceSize size);
   void createSized(uint32_t width, uint32_t height);
   void destroySized();
   void updateComputeSets();
   void buildComputeCommands();
+  void createKernels(uint64_t pixels);
+  // The network's chained-wait watchdog (see nr::Kernels::chainTimeouts): true = the last submission was wrong.
+  bool chainTimedOut(const char* when);
 
   std::string base_;
   ModelKind kind_ = kNone;
@@ -93,4 +103,7 @@ class KlNrPass {
   VkFence fence_ = VK_NULL_HANDLE;
   VkQueryPool queries_[2]{};
   uint32_t frames_ = 0, framesSinceReset_ = 0;
+  bool readbackCached_ = false, readbackCoherent_ = true;
+  uint64_t kernelPixels_ = 0;   // the frame size the kernels' split-K scratch was sized for (it never grows)
+  std::vector<std::string> notes_;
 };

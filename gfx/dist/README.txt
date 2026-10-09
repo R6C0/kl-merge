@@ -8,7 +8,8 @@ which you would need the rights to use. Put a model directory (manifest.json + m
 Without it the helper runs with "none" (the frame only makes the round trip) or "zero" (synthetic zero weights: the
 whole network runs at its real cost, the picture does not change).
 
-1. TEST klnr helper (no game).bat   - checks the GPU and measures the network without touching the game
+1. TEST klnr helper (no game).bat   - checks the GPU and measures the network without touching the game;
+                                      verdicts (RESULT lines) at the end, log in KLNR\selftest.log
 2. INSTALL KLGfx into Dog Days.bat  - nrtest (default) / nrzero / capture / off; close the game first
 3. REMOVE KLGfx from Dog Days.bat   - takes d3d9.dll out again
 

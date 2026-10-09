@@ -48,6 +48,9 @@ void createPlainDevice(VkInstance& instance, VkPhysicalDevice& physical, VkDevic
     vkGetPhysicalDeviceProperties(candidate, &props);
     if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) { physical = candidate; break; }
   }
+  VkPhysicalDeviceProperties props;
+  vkGetPhysicalDeviceProperties(physical, &props);
+  if (props.apiVersion < VK_API_VERSION_1_2) throw std::runtime_error(std::string(props.deviceName) + " has no Vulkan 1.2");
   uint32_t familyCount = 0;
   vkGetPhysicalDeviceQueueFamilyProperties(physical, &familyCount, nullptr);
   std::vector<VkQueueFamilyProperties> families(familyCount);
@@ -59,8 +62,14 @@ void createPlainDevice(VkInstance& instance, VkPhysicalDevice& physical, VkDevic
   float priority = 1.0f;
   VkDeviceQueueCreateInfo queueInfo{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
   queueInfo.queueFamilyIndex = family; queueInfo.queueCount = 1; queueInfo.pQueuePriorities = &priority;
+  VkPhysicalDeviceVulkan12Features has12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+  VkPhysicalDeviceFeatures2 has{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+  has.pNext = &has12;
+  vkGetPhysicalDeviceFeatures2(physical, &has);
+  if (!has12.bufferDeviceAddress) throw std::runtime_error(std::string(props.deviceName) + " has no buffer device addresses");
   VkPhysicalDeviceVulkan12Features f12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
   f12.bufferDeviceAddress = VK_TRUE;   // vk::Context makes every buffer with a device address
+  f12.hostQueryReset = has12.hostQueryReset;   // vk::Context::createTimestampPool resets its pools from the host
   VkPhysicalDeviceFeatures2 features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
   features.pNext = &f12;
   VkDeviceCreateInfo deviceInfo{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
@@ -89,8 +98,7 @@ KlNrPass::KlNrPass(const std::string& model, const std::string& baseDir, uint32_
   device_ = context_->device();
   if (kind_ != kNone) {
     model_ = std::make_unique<nr::Model>(*context_, kind_ == kZero ? std::string(nr::Model::kZeroModel) : model, false);
-    kernels_ = std::make_unique<nr::Kernels>(*context_, base_ + "/spv");   // PTX from spv/../ptx
-    kernels_->setSiluTable(ref::siluTable());
+    createKernels((uint64_t)width * height);
     const nr::Tensor& blend = model_->tensor(70, 0, "blend_scale");
     blendScale_ = blend.byteLength >= 2 ? num::f16ToF32((uint16_t)(blend.bytes[0] | (blend.bytes[1] << 8))) : 1.0f;
   }
@@ -213,6 +221,74 @@ void KlNrPass::imageBarrier(VkCommandBuffer commands, VkImage image, VkImageLayo
   vkCmdPipelineBarrier(commands, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 }
 
+void KlNrPass::createKernels(uint64_t pixels) {
+  kernels_.reset();
+  kernels_ = std::make_unique<nr::Kernels>(*context_, base_ + "/spv");   // PTX from spv/../ptx
+  kernels_->setSiluTable(ref::siluTable());
+  kernelPixels_ = pixels;
+}
+
+// The CPU reads every result back from this buffer, so it comes from cached host memory. vk::Context::createBuffer
+// takes the first HOST_VISIBLE | HOST_COHERENT type, which on NVIDIA is write-combined system memory: right for the
+// upload (the CPU only writes it), an order of magnitude slower for CPU reads (lavapipe, where this was tested first,
+// has only cached memory).
+vk::Buffer KlNrPass::createReadback(VkDeviceSize size) {
+  vk::Buffer result;
+  result.size = size;
+  result.hostVisible = true;
+  result.label = "frame readback";
+  VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+  info.size = size;
+  info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  VK_CHECK(vkCreateBuffer(device_, &info, nullptr, &result.buffer));
+  VkMemoryRequirements req;
+  vkGetBufferMemoryRequirements(device_, result.buffer, &req);
+  VkPhysicalDeviceMemoryProperties props;
+  vkGetPhysicalDeviceMemoryProperties(context_->physical(), &props);
+  const VkMemoryPropertyFlags visible = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, coherent = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                              cached = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+  const VkMemoryPropertyFlags wanted[] = {visible | cached | coherent, visible | cached, visible | coherent, visible};
+  uint32_t type = UINT32_MAX;
+  // system memory first: a device-local host-visible type (the PCIe BAR) is even slower to read
+  for (int pass = 0; pass < 2 && type == UINT32_MAX; ++pass)
+    for (VkMemoryPropertyFlags flags : wanted) {
+      for (uint32_t i = 0; i < props.memoryTypeCount && type == UINT32_MAX; ++i) {
+        const VkMemoryPropertyFlags has = props.memoryTypes[i].propertyFlags;
+        if ((req.memoryTypeBits & (1u << i)) && (has & flags) == flags && (pass == 1 || !(has & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)))
+          type = i;
+      }
+      if (type != UINT32_MAX) break;
+    }
+  if (type == UINT32_MAX) throw std::runtime_error("no host-visible memory for the frame readback");
+  readbackCached_ = (props.memoryTypes[type].propertyFlags & cached) != 0;
+  readbackCoherent_ = (props.memoryTypes[type].propertyFlags & coherent) != 0;
+  VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+  alloc.allocationSize = req.size;
+  alloc.memoryTypeIndex = type;
+  VK_CHECK(vkAllocateMemory(device_, &alloc, nullptr, &result.memory));
+  VK_CHECK(vkBindBufferMemory(device_, result.buffer, result.memory, 0));
+  VK_CHECK(vkMapMemory(device_, result.memory, 0, VK_WHOLE_SIZE, 0, &result.mapped));
+  return result;
+}
+
+// The PTX kernels chain without barriers: a launch spin-waits on counters its producer increments, with a watchdog
+// that gives a wait up after about a second and records it in a host-visible word. After one timeout that frame is
+// wrong, and the word stays set (so every later chained wait gives up at once: wrong frames from then on) until it is
+// cleared. The demo (NrPass::fallBackToBarriers) and the dlss5vk tool check it after every frame; so does this.
+bool KlNrPass::chainTimedOut(const char* when) {
+  if (!kernels_) return false;
+  const nr::Kernels::ChainTimeouts timeouts = kernels_->chainTimeouts();
+  if (!timeouts.waits) return false;
+  const bool chained = nr::Kernels::chainEnabled();
+  notes_.push_back(std::to_string(timeouts.waits) + " chained wait(s) of the network timed out in " + when + " (the first on " +
+                   (timeouts.counter.empty() ? std::string("?") : timeouts.counter) + "): its result is wrong and is not used; " +
+                   (chained ? "the network is rebuilt with a barrier after every launch" : "it already runs with barriers"));
+  nr::Kernels::setChainEnabled(false);
+  kernels_->resetChainTimeouts();
+  return true;
+}
+
 VkPipeline KlNrPass::computePipeline(const std::string& spv) {
   VkShaderModule module = context_->loadShaderModule(spv);   // owned by the Context
   VkComputePipelineCreateInfo info{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
@@ -227,14 +303,20 @@ void KlNrPass::createSized(uint32_t width, uint32_t height) {
   width_ = width; height_ = height;
   geometry_ = nr::Geometry::fromValid(width, height);
   if (model_) {
-    graph_ = std::make_unique<nr::Graph>(*context_, *model_, *kernels_, geometry_, nr::Graph::Options{});
-    features_ = graph_->allocate("input features", geometry_.fullWidth * geometry_.fullHeight, 16, nr::Format::F32);
-    // warm-up: the graph allocates its activations at the first record, and the driver loads every pipeline and
-    // CUDA module now instead of on the first game frame
-    context_->fillZero(features_->buffer);
-    VkCommandBuffer commands = context_->beginCommands();
-    graph_->record(commands, *features_);
-    context_->endAndSubmit(commands, true);
+    for (int attempt = 0;; ++attempt) {
+      graph_ = std::make_unique<nr::Graph>(*context_, *model_, *kernels_, geometry_, nr::Graph::Options{});
+      features_ = graph_->allocate("input features", geometry_.fullWidth * geometry_.fullHeight, 16, nr::Format::F32);
+      // warm-up: the graph allocates its activations at the first record, and the driver loads every pipeline and
+      // CUDA module now instead of on the first game frame
+      context_->fillZero(features_->buffer);
+      VkCommandBuffer commands = context_->beginCommands();
+      graph_->record(commands, *features_);
+      context_->endAndSubmit(commands, true);
+      const bool wasChained = nr::Kernels::chainEnabled();
+      if (!chainTimedOut("the warm-up") || !wasChained || attempt > 0) break;
+      features_ = nullptr;   // again, now with barriers (chainTimedOut switched chaining off)
+      graph_.reset();
+    }
   }
   const VkImageUsageFlags storage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
   color_ = createImage(width, height, VK_FORMAT_B8G8R8A8_SRGB, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
@@ -242,7 +324,7 @@ void KlNrPass::createSized(uint32_t width, uint32_t height) {
   for (Image& h : history_) h = createImage(width, height, VK_FORMAT_R16G16B16A16_SFLOAT, storage);
   output_ = createImage(width, height, VK_FORMAT_R8G8B8A8_UNORM, storage | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
   upload_ = context_->createBuffer((VkDeviceSize)width * height * 4, true, "frame upload");
-  readback_ = context_->createBuffer((VkDeviceSize)width * height * 4, true, "frame readback");
+  readback_ = createReadback((VkDeviceSize)width * height * 4);
   {
     VkCommandBuffer commands = context_->beginCommands();
     VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
@@ -286,6 +368,12 @@ void KlNrPass::destroySized() {
 void KlNrPass::resize(uint32_t width, uint32_t height) {
   if (width == width_ && height == height_) return;
   destroySized();
+  // The kernels' split-K scratch is sized once, at the first frame size (recorded launches hold its address), and a
+  // larger frame can need more (1080p -> 4K does): new kernels for a frame larger than they were made for.
+  if (kernels_ && (uint64_t)width * height > kernelPixels_) {
+    createKernels((uint64_t)width * height);
+    notes_.push_back("network kernels made again for the larger frame");
+  }
   createSized(width, height);
 }
 
@@ -434,6 +522,20 @@ void KlNrPass::process(uint8_t* bgra, uint32_t pitch, const KlControls& c, KlTim
     t.compositeMs = span(kNetworkEnd, kCompositeEnd);
     t.downloadMs = span(kCompositeEnd, kDownloadEnd);
     t.gpuMs = span(kStart, kDownloadEnd);
+  }
+  if (network && chainTimedOut("a frame")) {
+    // as the demo does: rebuilt with barriers (chaining is off now), history gone; this frame stays as it came
+    destroySized();
+    createSized(width_, height_);
+    t.discarded = true;
+    ++frames_;
+    t.hostMs = msSince(t0);
+    return;
+  }
+  if (!readbackCoherent_) {
+    VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
+    range.memory = readback_.memory; range.offset = 0; range.size = VK_WHOLE_SIZE;
+    VK_CHECK(vkInvalidateMappedMemoryRanges(device_, 1, &range));
   }
   const uint8_t* down = (const uint8_t*)readback_.mapped;
   for (uint32_t y = 0; y < height_; ++y) memcpy(bgra + (size_t)y * pitch, down + (size_t)y * row, row);
