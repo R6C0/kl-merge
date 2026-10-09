@@ -19,15 +19,34 @@ written: kl_graft.out_dir is replaced for the length of a build. Spec and result
     python kl_maps.py clash M09_A M09_B                   top-level names two maps share
     python kl_maps.py navtest                             the rules nav_join rests on, on every
                                                           stock mesh, and three trial joins
+    python kl_maps.py first M02_FA_A                      classes / controllers of a Dead Men map that
+                                                          no map which ran live has (PROVEN)
+    python kl_maps.py preflight <out>/F07+M02_FA_A        every offline check on a KEPT build and the
+                                                          predicted risks (re/maps.md section 9);
+                                                          exit code 1 on a CRASH finding
+    python kl_maps.py deliver <out> [-j N]                the kept builds for the first live runs of
+                                                          M02_FA_A and M06_FA_A + their preflight
+    python kl_maps.py stage <out>/F07+M02_FA_A            LIVE SIDE ONLY: copy a kept build into
+                                                          <work>/build/install (then kl_graft.py install)
   options of 'one':  --keep        leave the archive and the files beside it (default: measured,
                                    then deleted - a build is 0.3 .. 0.4 GB)
                      --campaign    the campaign pre-pass (campaign_drop) for a story level
                      --heroes      S's Heroes! groups at the level's HERO_AT markers
+                     --flat ZEnvSampler   load that Dead Men class as its base class (FLAT)
                      kl_graft's own: --silent --no-loc --no-fa --stock-anm --light X
                      --m-drop A,B  --m-add A,B
 
 Each build runs in a process of its own (a failure is a row of the table, not the end of the
 run). <out>/<S>+<M>/result.json holds the numbers, log.txt what kl_graft printed.
+
+BEFORE A FIRST LIVE RUN (preflight; re/maps.md sections 9 and 10)
+  On a kept build: kl_fa.check, kl_light.check / missing_shaders, torn stream groups, and the
+  crashes the diner and the bank hit looked for by their cause - events that delete themselves at
+  init (OnlineSpeakTrigger, OnlineMoneyContainer, PhysicsLinkage), KEYS chunks keys_tracks does
+  not find, controllers on a node outside their class - then what the map has that no map in
+  PROVEN has (first_timers), with the checks read off kl2.exe for those: ZEnvSampler slots,
+  SoundSpline's sound, squad behaviours under a squad, filter sets inside S's palette, the .sgd
+  sections every stock level has. Nothing is changed; the fix that is a pre-pass is --flat.
 
 WHAT IS MEASURED (from the written files, not from kl_graft's log)
   archive MB, beside MB (.WHD .WAV .hti and the _LS bank), entities (.gms), textures of 4096 and
@@ -60,9 +79,11 @@ LIMITS = {'textures': 4096, 'materials': 2048}
 DM_FA = ['M01_FA_A', 'M02_FA_A', 'M03_FA_A', 'M06_FA_A']
 DD_FA = ['F01', 'F02', 'F03', 'F04', 'F05', 'F06', 'F07', 'F08', 'F09']
 SLOT = 'F01'
-# Dead Men's own names (AllLevels/Menu/Online/Scenarios/TitleNN + BriefingNN of its .LOC; the
-# order is the order of the level folders - Briefing03 speaks of the Japanese Gardens and a
-# chopper, and M06_FA_A is the one map with ZHeli escape vehicles and 299 'DopeBag' loot objects)
+# Dead Men's own names (AllLevels/Menu/Online/Scenarios/TitleNN + BriefingNN of its .LOC). The
+# order is the exe's: kaneandlynch.exe 0x6415a3 builds the array M01_FA_A, M02_FA_A, M03_FA_A,
+# M06_FA_A and the titles are fetched as 'Title%02d' (re/maps.md section 2); content agrees -
+# Briefing03 speaks of the Japanese Gardens and a chopper, and M06_FA_A is the one map with ZHeli
+# escape vehicles and 299 'DopeBag' loot objects
 TITLES = {'M01_FA_A': ('Title00', 'Briefing00'), 'M02_FA_A': ('Title01', 'Briefing01'),
           'M03_FA_A': ('Title02', 'Briefing02'), 'M06_FA_A': ('Title03', 'Briefing03')}
 # controllers that only mark a place (cover, bounds): a campaign subtree made of them stays
@@ -74,6 +95,19 @@ PASSIVE = {'PlayerCoverCollision', 'NoCoverBox', 'LevelBound'}
 HERO_AT = {'M09_A': {'Markup!CP_02_PosP1': 'Heroes!Hero_01', 'Markup!CP_02_PosP2': 'Heroes!Hero_02'},
            'M09_B': {'Checkpoints!CP_01_PosP1': 'Heroes!Hero_01', 'Checkpoints!CP_01_PosP2': 'Heroes!Hero_02'}}
 PSEUDO = {}                             # level name -> folder with <name>_Main.zip and the files beside it
+# Dead Men maps that have run live under F07 (kl_graft's run log: B-4 / M01c, and F1 .. RN6 with a
+# whole Arcade round). What a map has beyond these the game meets for the first time: first_timers.
+PROVEN = ('M01_FA_A', 'M03_FA_A')
+# the largest of each in a Dead Men build that ran live (F07 + M03_FA_A; the mesh is M03's)
+LIVE = {'entities': 19827, 'rooms': 20, 'sounds': 4918, 'waves': 4782, 'nav_bytes': 186672}
+SQUADS = ('ZSquadScript', 'ZMercSquad', 'ZFusionSquad', 'ZProxySquad')    # what kl2 0x4aff50 looks for on the parent
+# owner mismatches whose init was read: ZGatePath (kl2 0x449120) asks its PARENT for a 'GateGroup'
+# controller and its own node only for a list; nothing treats the node as a ZGROUP there
+OWNER_READ = ('GatePath (registered for ZGROUP) on ZBoxPrimitive',)
+# --flat: Dead Men classes loaded as their base for one build (an entry of kl_gms.RETYPE for the
+# length of the build, the bisect its comment describes). ZEnvSampler -> ZSTDOBJ keeps the game
+# from building ZRenderEntryEnvSamplerD3D objects, which no stock Dog Days level has (re/maps.md 9.3).
+FLAT = {'ZEnvSampler': (0x20010f, 0x200002)}
 
 
 # ------------------------------------------------------------------ story levels
@@ -285,9 +319,9 @@ def measure(folder, slot=SLOT):
     return out
 
 
-def one(out, s_name, m_name, keep=False, campaign=False, heroes=False, slot=SLOT, tag='', nav_base=None, **opt):
+def one(out, s_name, m_name, keep=False, campaign=False, heroes=False, slot=SLOT, tag='', nav_base=None, flat=(), **opt):
     """Build S + M into <out>/<S>+<M><tag>/ and write result.json. -> the result dict."""
-    import kl_graft, kl_prpjoin as J
+    import kl_graft, kl_gms, kl_prpjoin as J
     redirect()
     folder = os.path.join(out, '%s+%s%s' % (s_name, m_name, tag))
     os.makedirs(folder, exist_ok=True)
@@ -295,7 +329,7 @@ def one(out, s_name, m_name, keep=False, campaign=False, heroes=False, slot=SLOT
     def log(s=''):
         lines.append(str(s)); print(s, flush=True)
     res = {'S': s_name, 'M': m_name, 'ok': False, 'options': {k: (list(v) if isinstance(v, tuple) else v) for k, v in opt.items()},
-           'campaign': campaign, 'heroes': heroes, 'tag': tag}
+           'campaign': campaign, 'heroes': heroes, 'tag': tag, 'flat': list(flat)}
     real_out, real_verify, real_dm = kl_graft.out_dir, kl_graft.verify, kl_graft.DeadMen
     kl_graft.out_dir = lambda _slot: folder             # never <work>/build/install
 
@@ -359,6 +393,9 @@ def one(out, s_name, m_name, keep=False, campaign=False, heroes=False, slot=SLOT
 
     kl_graft.verify, kl_graft.DeadMen, kl_snd.merge = verify, Story, merge
     try:
+        for c in flat:                                  # pre-pass: these Dead Men classes load as their base
+            kl_gms.RETYPE[FLAT[c][0]] = FLAT[c][1]
+            log('kl_maps: --flat %s: %#x is loaded as %#x in this build' % (c, *FLAT[c]))
         m_drop = tuple(opt.pop('m_drop', ()))
         if campaign:
             names, gone, stay = campaign_drop(m_name)
@@ -376,7 +413,12 @@ def one(out, s_name, m_name, keep=False, campaign=False, heroes=False, slot=SLOT
                    where=['%s:%d %s' % (os.path.basename(f.filename), f.lineno, f.name) for f in frames[-4:]])
     finally:
         kl_graft.out_dir, kl_graft.verify, kl_graft.DeadMen, kl_snd.merge = real_out, real_verify, real_dm, real_merge
+        for c in flat:
+            kl_gms.RETYPE.pop(FLAT[c][0], None)
     res['seconds'] = round(time.time() - t0)
+    if flat and res['ok']:
+        with open(os.path.join(folder, 'graft.txt'), 'a') as f:
+            f.write('kl_maps pre-pass: --flat %s (loaded as the base class)\n' % ','.join(flat))
     if not keep:
         for f in os.listdir(folder):
             if f.startswith(slot + '_Main'):
@@ -402,6 +444,370 @@ def chain(out, s_name, m1, m2, campaign=True, heroes=False, keep=False, **opt):
     with open(os.path.join(out, 'R09+%s%s' % (m2, tag), 'result.json'), 'w') as f:
         json.dump(r2, f, indent=1)
     return r2
+
+
+# ------------------------------------------------------------------ before a map's first live run
+def map_side(sc):
+    """kl_prpjoin.sides as kl_graft.DeadMen corrects it (Dead Men's CoverList counts as map)."""
+    import kl_prpjoin as J
+    side = J.sides(sc)
+    if sc.game == 'dm':
+        for k in range(1, len(sc.nodes)):
+            if sc.names[sc.top[k]] == 'CoverList':
+                side[k] = 'map'
+    return side
+
+
+def census(level, game=None):
+    """What a stock level's map side stores: ({class: n}, {controller: n}, {(controller, class): n})."""
+    import kl_prpjoin as J
+    sc = J.Scene.load(level, game or ('dm' if level.startswith('M') else 'dd'))
+    side = map_side(sc)
+    cls, ctrl, pair = collections.Counter(), collections.Counter(), collections.Counter()
+    for k in range(1, len(sc.nodes)):
+        if side[k] == 'map':
+            cls[sc.cls(k)] += 1
+            for nm, _b in sc.nodes[k]['ctrls']:
+                ctrl[sc.p.key(nm)] += 1; pair[sc.p.key(nm), sc.cls(k)] += 1
+    return cls, ctrl, pair
+
+
+def stock_use():
+    """{'c:<class>' | 'k:<controller>': [objects, [levels]]} over the whole of every stock Dog Days
+    level (systems included). Cached in the temp folder: the stock levels do not change."""
+    import tempfile
+    import kl_prpjoin as J
+    cache = os.path.join(tempfile.gettempdir(), 'kl_maps_stock_use.json')
+    if os.path.isfile(cache):
+        return json.load(open(cache))
+    out = {}
+    for lv in DD_FA + ['L%02d' % i for i in range(12)]:
+        try:
+            sc = J.Scene.load(lv)
+        except FileNotFoundError:
+            continue
+        seen = collections.Counter()
+        for k in range(1, len(sc.nodes)):
+            seen['c:%s' % sc.cls(k)] += 1
+            for nm, _b in sc.nodes[k]['ctrls']:
+                seen['k:' + sc.p.key(nm)] += 1
+        for name, n in seen.items():
+            e = out.setdefault(name, [0, []])
+            e[0] += n; e[1].append(lv)
+    with open(cache, 'w') as f:
+        json.dump(out, f)
+    return out
+
+
+def first_timers(level, log=None):
+    """Classes and controllers on a Dead Men map's map side that no map in PROVEN has: what the
+    game meets for the first time when this map loads. -> [(kind 'c' | 'k', name, count, on
+    classes, Dog Days class or [registrations], stock Dog Days objects, stock levels)]."""
+    import kl_prpjoin as J, kl_gms
+    dm, dd, use = J.schema('dm'), J.schema('dd'), stock_use()
+    base_c, base_k = set(), set()
+    for p in PROVEN:
+        c, k, _p = census(p)
+        base_c |= set(c); base_k |= set(k)
+    cls, ctrl, pair = census(level)
+    rows = []
+    for c, n in cls.most_common():
+        if c not in base_c:
+            tid = next(t for t, x in dm.geoms.items() if x == c)
+            d = dd.geoms.get(kl_gms.RETYPE.get(tid, tid))
+            rows.append(('c', c, n, [], d, *use.get('c:%s' % d, [0, []])))
+    for c, n in ctrl.most_common():
+        if c not in base_k:
+            rows.append(('k', c, n, sorted(x for (kk, x) in pair if kk == c), dd.controllers.get(c), *use.get('k:' + c, [0, []])))
+    if log:
+        log('%s: on its map side and on that of none of %s' % (level, ', '.join(PROVEN)))
+        for kind, name, n, on, d, objs, lvs in rows:
+            what = ('class -> Dog Days %s' % d) if kind == 'c' else (
+                'controller on %s -> %s' % (', '.join(on), d[0][1] if d else 'NOT REGISTERED (the converter drops it)'))
+            log('  %-24s %4d  %-58s stock Dog Days: %d in %s' % (name, n, what, objs, ' '.join(lvs) if lvs else 'NO LEVEL'))
+    return rows
+
+
+def stock_values(classes):
+    """{class: {field index: {value text}}} of the switch-like fields (bool, enum, flags) of every
+    object of `classes` (implementing classes) in the stock Dog Days levels that have one."""
+    import kl_graft, kl_prpjoin as J
+    from kl_prp import units
+    sch, use, out = J.schema('dd'), stock_use(), {c: collections.defaultdict(set) for c in classes}
+    names = {c: ['c:' + c] + ['k:' + n for n, es in sch.controllers.items() if any(e[1] == c for e in es)] for c in classes}
+    levels = sorted({lv for c in classes for n in names[c] for lv in use.get(n, [0, []])[1]})
+    for lv in levels:
+        sc = J.Scene.load(lv)
+        for k in range(1, len(sc.nodes)):
+            for cls, holder, key in kl_graft.objects(sc, k):
+                if cls in out:
+                    for i, (f, u) in enumerate(zip(sch.fields(cls), units(kl_graft.get_obj(holder, key)[1:-1]))):
+                        if f.kind in ('b', 'e', 'k'):
+                            out[cls][i].add(repr(J.text(sc, u)))
+    return out
+
+
+def preflight(folder, slot=SLOT, log=print):
+    """Every offline check there is on a KEPT build (<folder> = <out>/<S>+<M>...; result.json says
+    which levels), and the predictions of re/maps.md section 9: what the crashes M01_FA_A and
+    M03_FA_A hit would look like here, and what this map has that no map which ran live had.
+    -> [(severity, code, text)]; severity CRASH (do not install), RISK (a path of the game no
+    live run has taken: the first place to look when it faults), NOTE, ok. Written to
+    <folder>/preflight.json."""
+    import kl_graft, kl_prpjoin as J, kl_fa, kl_gms, kl_scene, kl_texmat as T, kl_light, kl_snd, kl_prmgraph as G
+    import kl_pf4, kl_members as MB, kl_dmassets
+    from kl_prp import units
+    res = json.load(open(os.path.join(folder, 'result.json')))
+    s_name, m_name = res['S'], res['M']
+    zp = os.path.join(folder, slot + '_Main.zip')
+    out = []
+    def say(sev, code, text):
+        out.append((sev, code, text)); log('%-5s %-12s %s' % (sev, code, text))
+    sc, snd, loc = kl_fa.load(zp)
+    with zipfile.ZipFile(zp) as z:
+        m = {n.rsplit('_Main', 1)[1]: n for n in z.namelist() if '_Main' in n}
+        f = {e: z.read(m[e]) for e in ('.gms', '.buf', '.prp', '.prm', '.MAT', '.fxc', '.sgd')}
+    scene = kl_scene.Scene(kl_gms.unpack(f['.gms']), f['.buf'])
+    ents, sch = list(scene.entities()), J.schema('dd')
+    game = 'dm' if m_name.startswith('M') else 'dd'
+    src = J.Scene.load(m_name, game)
+    side = map_side(src)
+    m_tops = {src.names[t] for t in src.tops() if side[t] == 'map'}
+    mine = [k for k in range(1, len(sc.nodes)) if sc.names[sc.top[k]] in m_tops]      # the nodes that came from M
+    ctrls = lambda k: [sc.p.key(nm) for nm, _b in sc.nodes[k]['ctrls']]
+    notes = res.get('notes', [])
+    log('%s: %s systems + %s map%s; %d nodes, %d of them the map\'s; build problems: %d' % (
+        zp, s_name, m_name, ' (flat: %s)' % ','.join(res['flat']) if res.get('flat') else '', len(sc.nodes) - 1, len(mine), len(res.get('problems', []))))
+    if res.get('problems'):
+        say('CRASH', 'verify', 'kl_graft.verify reported %d problems (result.json)' % len(res['problems']))
+
+    # -- crash 1 of M01: an event that deletes itself after it was entered in the save-state table
+    mute = [sc.path[k] for k in range(1, len(sc.nodes)) for c in sc.nodes[k]['ctrls'] if kl_graft.mute_speech(sc, c, snd)]
+    if mute:
+        say('CRASH', 'self-delete', '%d OnlineSpeakTrigger without their line in the .SND (kl2 0x4eae60), e.g. %s' % (len(mute), mute[0]))
+    first = next(i for i, x in enumerate(sch.fields('ZOnlineMoneyContainer')) if x.owner == 'ZOnlineMoneyContainer')
+    cont = bad = 0
+    for k in range(1, len(sc.nodes)):
+        for nm, body in sc.nodes[k]['ctrls']:
+            if sc.p.key(nm) == 'OnlineMoneyContainer':
+                refs = J.strings(sc, units(body[1:-1])[first])
+                cont += 1
+                if not refs or not sc.resolve(refs[0]):
+                    bad += 1
+                    say('CRASH', 'self-delete', '%s: OnlineMoneyContainer whose first reference names nothing deletes itself '
+                        '(kl2 0x837000 -> [vtbl+0x78])' % sc.path[k])
+    # ZPhysicsLinkage init (slot 14, kl2 0x80bd20 -> 0x78cd90): its first reference must resolve to a
+    # ZLNKOBJ (class id [0x15355a0]), else it deletes itself. Whether it is in the save-state table
+    # by then was NOT read; stock levels always pass (L01's lamps: a ZLNKOBJ and a bone name).
+    link = unlinked = 0
+    for k in range(1, len(sc.nodes)):
+        for nm, body in sc.nodes[k]['ctrls']:
+            if sc.p.key(nm) == 'PhysicsLinkage':
+                refs = J.strings(sc, units(body[1:-1])[next(i for i, x in enumerate(sch.fields('ZPhysicsLinkage')) if x.owner == 'ZPhysicsLinkage')])
+                link += 1
+                if not refs or not any('ZLNKOBJ' in sch.bases(sc.cls(x)) for x in sc.resolve(refs[0])):
+                    unlinked += 1
+                    say('CRASH', 'self-delete', '%s: PhysicsLinkage whose target is no ZLNKOBJ deletes itself (kl2 0x80bd20 -> [vtbl+0x78])' % sc.path[k])
+    say('ok', 'self-delete', 'speech triggers cut by the build: %s; %d OnlineMoneyContainer, the first reference of %d resolves; '
+        '%d PhysicsLinkage, the target of %d is a ZLNKOBJ' % (
+            '; '.join(n.split(': ', 1)[1] for n in notes if 'OnlineSpeakTrigger' in n) or 'none', cont, cont - bad, link, link - unlinked))
+
+    # -- crash 2 of M01: KEYS chunks in raw data blocks
+    tags = found = stray = 0
+    for e in ents:
+        if e.raw is not None:
+            ks = kl_graft.keys_tracks(e.raw)
+            tags += e.raw.count(b'SYEK'); found += len(ks)
+            stray += sum(not 16 <= v < len(scene.head) for _p, ko in ks for v in ko)
+    other = collections.Counter(e.raw[p:p + 4] for e in ents if e.raw is not None for p in range(0, len(e.raw) - 3, 4)
+                                if e.raw[p:p + 4].isalpha() and e.raw[p:p + 4].isupper() and e.raw[p:p + 4] != b'SYEK')
+    if tags != found or stray:
+        say('CRASH', 'KEYS', '%d \'SYEK\' tags in raw data blocks, kl_graft.keys_tracks finds %d; %d track offsets outside the .buf head' % (tags, found, stray))
+    else:
+        say('ok', 'KEYS', '%d KEYS chunks, every one found by keys_tracks, every offset inside the head; other four-letter tags in raw blocks: %s' % (
+            found, {k.decode(): v for k, v in other.items()} or 'none'))
+
+    # -- crash 3 of M01 / M03: a controller on a node that is no longer (or never was) its class
+    odd, geoms = collections.Counter(), set(sch.geoms.values())
+    for k in mine:
+        chain = sch.bases(sc.cls(k))
+        for c in ctrls(k):
+            owners = {e[0] for e in sch.controllers.get(c, [])}
+            if owners and owners <= geoms and not owners & set(chain):   # an owner that is no entity class binds nothing
+                odd['%s (registered for %s) on %s' % (c, '/'.join(sorted(owners)), sc.cls(k))] += 1
+    retyped = [k for k in range(1, len(src.nodes)) if side[k] == 'map' and src.tids[k] in kl_gms.RETYPE] if game == 'dm' else []
+    unread = [o for o in odd if o not in OWNER_READ]
+    say('RISK' if unread else 'NOTE' if odd else 'ok', 'owner', 'controllers on a node outside the class they are registered for: %s%s; '
+        '%d map nodes retyped by kl_gms.RETYPE (%s)' % (dict(odd) or 'none', ' - init read, does not use the node as that class' if odd and not unread else '',
+                                                       len(retyped), dict(collections.Counter(src.cls(k) for k in retyped)) or 'none'))
+
+    # -- the sound-thread fault of the bank: interleaved stream groups
+    whd = open(os.path.join(folder, slot + '_Main.WHD'), 'rb').read()
+    torn = set(kl_graft.broken_groups(whd))
+    named = sum(off in torn for _w, _i, off in kl_snd.Snd('dd', snd).walk().waves())
+    if named:
+        say('CRASH', 'streams', '%d wave references name a record of a torn interleaved stream group (divide fault kl2 0x44668b)' % named)
+    else:
+        say('ok', 'streams', '%d torn records left in the .WHD, none named by a wave' % len(torn))
+    if res.get('stream_clips_missing'):
+        say('NOTE', 'streams', '%d stream clips are not in the merged PC_Def.str: silent' % len(res['stream_clips_missing']))
+
+    # -- the other offline checks that exist
+    for x in kl_fa.check(sc, snd, loc):
+        say('CRASH' if x.sev == kl_fa.CRASH else 'RISK' if x.sev == kl_fa.BROKEN else 'NOTE', 'fa:' + x.code, x.text)
+    prm = G.read(f['.prm'], 'dd')
+    lights = kl_light.check(sc, scene, prm, nodes=set(mine)) if game == 'dm' else []
+    for x in lights:
+        say('RISK', 'lights', x)
+    if not lights:
+        say('ok', 'lights', 'kl_light.check: nothing')
+    logf = os.path.join(folder, 'log.txt')
+    for line in open(logf, encoding='utf-8', errors='replace') if os.path.isfile(logf) else ():
+        if 'environments in no stock form: ' in line and not line.rstrip().endswith('none'):
+            say('NOTE', 'lights', 'environments in no stock form (a matter of look, re/lighting.md): ' + line.rsplit('stock form: ', 1)[1].strip())
+    mat = T.read_mat(f['.MAT'])
+    lack = kl_light.missing_shaders(mat, f['.fxc'])
+    say('NOTE' if lack else 'ok', 'shaders', '%d of %d materials have no compiled shader in the level\'s .fxc: their meshes are not drawn '
+        '(the bank ran live with 35 such: no fault)%s' % (len(lack), len(mat.insts), ''.join('\n' + ' ' * 19 + n for n in notes if 'compiled shader' in n)))
+    for n in notes:
+        if n.startswith('.ANM') or 'dynamic lists' in n or '.hrd' in n:
+            say('NOTE', 'build', n)
+
+    # -- what this map has that no map which ran live had
+    if game == 'dm':
+        rows = first_timers(m_name)
+        have_c, have_k = collections.Counter(sc.cls(k) for k in mine), collections.Counter(c for k in mine for c in ctrls(k))
+        for kind, name, n, on, d, objs, lvs in rows:
+            now = have_c.get(d, 0) if kind == 'c' else have_k.get(name, 0)
+            if kind == 'k' and not d:
+                say('NOTE', 'first', 'controller %s x%d: Dog Days does not register it, the converter drops it (in the build: %d)' % (name, n, now))
+            else:
+                say('RISK' if not objs and now else 'NOTE', 'first', '%s %s x%d (in the build: %d)%s; stock Dog Days: %d in %s' % (
+                    'class' if kind == 'c' else 'controller', name, n, now, '' if kind == 'c' else ' on ' + ', '.join(on),
+                    objs, ' '.join(lvs) if lvs else 'NO LEVEL - code no stock level runs'))
+        # values of those objects that Dog Days' own levels never store in the field
+        impl = {d for kind, name, n, on, d, objs, lvs in rows if kind == 'c' and d} | \
+               {e[1] for kind, name, n, on, d, objs, lvs in rows if kind == 'k' and d for e in d}
+        stock = stock_values(impl)
+        unseen = collections.Counter()
+        for k in mine:
+            for cls, holder, key in kl_graft.objects(sc, k):
+                if cls in impl:
+                    fs = sch.fields(cls)
+                    for i, (fl, u) in enumerate(zip(fs, units(kl_graft.get_obj(holder, key)[1:-1]))):
+                        own = i - next(j for j, x in enumerate(fs) if x.owner == fl.owner)
+                        if stock[cls].get(i) and repr(J.text(sc, u)) not in stock[cls][i] and fl.owner not in ('ZGEOM', 'ZSTDOBJ', 'ZEventBase'):
+                            unseen['%s: %s[%d] (%s) = %s; stock has only %s' % (cls, fl.owner, own, fl.kind, J.text(sc, u), sorted(stock[cls][i])[:4])] += 1
+        for t, n in unseen.most_common(12):
+            say('RISK', 'value', 'x%d %s' % (n, t))
+
+    # -- ZEnvSampler: a render entry of its own, built for no stock Dog Days level
+    slots = collections.Counter()
+    for k in mine:
+        if sc.cls(k) == 'ZEnvSampler':
+            lab = kl_graft.labels('ZEnvSampler')
+            slots[kl_graft.u32(units(sc.nodes[k]['props'][1:-1])[lab.index('ZEnvSampler[0]')][0])] += 1
+    if any(s > 3 for s in slots):
+        say('CRASH', 'envsampler', 'ZEnvSampler slot %d: ZRenderEntryEnvSamplerD3D (kl2 0x7ee5ba) indexes a table of 4 x 16 at 0x138c718 without a test' % max(slots))
+    elif slots:
+        say('RISK', 'envsampler', '%d ZEnvSampler (slots %s): each gets a ZRenderEntryEnvSamplerD3D (kl2 0x718f20 -> 0x7ee4b0) whose render function '
+            '0x61b5a0 no stock Dog Days level ever reaches. --flat ZEnvSampler loads them as plain ZSTDOBJ' % (sum(slots.values()), dict(sorted(slots.items()))))
+    else:
+        say('ok', 'envsampler', 'no ZEnvSampler in the build')
+
+    # -- ZSoundSpline (kl2 slot 15 0x61e690, slot 16 0x544e60) uses the sound instance of its node
+    # (0x6c6ab0 -> 0x659370, by the node's handle) without a null test; its spline reference may
+    # be empty or name anything (three tests in slot 16). ASSUMPTION: a ZSNDOBJ with a sound has one.
+    mute_spline = [sc.path[k] for k in mine if 'SoundSpline' in ctrls(k) and not any(
+        fl.type in kl_graft.SOUND_TYPES and fl.kind == 'I' and kl_graft.u32(u[0])
+        for fl, u in zip(sch.fields(sc.cls(k)), units(sc.nodes[k]['props'][1:-1])))]
+    nsp = sum('SoundSpline' in ctrls(k) for k in mine)
+    if mute_spline:
+        say('RISK', 'soundspline', '%d of %d SoundSpline sit on a node without a sound (kl2 0x61e733 / 0x544ea1 use its sound instance untested), e.g. %s' % (
+            len(mute_spline), nsp, mute_spline[0]))
+    elif nsp:
+        say('ok', 'soundspline', '%d SoundSpline, each on a node with a sound of the merged bank' % nsp)
+
+    # -- squad behaviours: PatrolBehaviourRout with its start flag set calls into the squad at init
+    lone = [sc.path[k] for k in mine for c in ctrls(k) if (c.endswith('BehaviourRout') or c in ('SquadModifierBehaviour', 'IdleWalkPathRout'))
+            and not set(ctrls(sc.parent[k])) & set(SQUADS)]
+    nb = sum(c.endswith('BehaviourRout') for k in mine for c in ctrls(k))
+    if lone:
+        say('CRASH', 'behaviour', '%d squad behaviours whose parent has no squad controller (kl2 0x4aff50 leaves the squad 0; 0x59a0e0 calls through it), e.g. %s' % (len(lone), lone[0]))
+    else:
+        say('ok', 'behaviour', '%d squad behaviours, each under a node with one of %s' % (nb, ' / '.join(SQUADS)))
+
+    # -- post filter: M's sets index S's palette
+    kinds, _a = G.walk(prm, kl_dmassets.prm_roots(f['.gms'], f['.prp'], 'dd'))
+    pal = [i for i, k in kinds.items() if k == 'pfpal']
+    sets = [i for i, k in kinds.items() if k == 'pf']
+    if len(pal) == 1:
+        n = len(kl_light.palette_entries(prm.chunks[pal[0]]))
+        over = [i for i in sets if any(c != kl_light.PF_NONE and c >= n for c in kl_light.set_curves(prm.chunks[i]))]
+        boxes = sum('PostFilterBox' in c for k in mine for c in ctrls(k))
+        say('RISK' if over else 'ok', 'postfilter', '%d filter sets, palette of %d curves (%s\'s); %d sets name a curve past the palette; '
+            '%d PostFilterBox controllers of the map; scene block has PostFilterBoxes: %s' % (
+                len(sets), n, s_name, len(over), boxes, 'PostFilterBoxes' in dict(J.block(sc))))
+    else:
+        say('RISK', 'postfilter', '%d palettes reachable in the .prm' % len(pal))
+
+    # -- shapes: rooms, gates, navigation mesh, .sgd, FDX, sizes
+    rooms = [k for k in range(1, len(sc.nodes)) if kl_graft.is_room(sc.tids[k])]
+    lab, own = kl_graft.labels('ZROOM'), set(mine)
+    ng = [kl_graft.u32(units(sc.nodes[k]['props'][1:-1])[lab.index('ZROOM[0]')][0]) for k in rooms]
+    nl = [units(sc.nodes[k]['props'][1:-1])[lab.index('ZROOM[1]')][0][1][0] for k in rooms]
+    say('ok', 'rooms', '%d rooms (%d the map\'s), %d gates (most in one room: %d), %d neighbour lists; verify() followed every gate, list, tree and box' % (
+        len(rooms), sum(k in own for k in rooms), sum(ng), max(ng or [0]), sum(nl)))
+    if scene.nav is None:
+        say('CRASH', 'nav', 'no navigation mesh (kl2 0x5503da)')
+    else:
+        kl_pf4.check(scene.nav)
+        n, rep = kl_pf4.counts(scene.nav, True), {}
+        if game == 'dm':
+            with zipfile.ZipFile(J.level_zip(m_name, 'dm')) as z:
+                g = [x for x in z.namelist() if x.endswith('_Main.gms')][0]
+                kl_pf4.convert(kl_scene.Scene(kl_gms.unpack(z.read(g)), z.read(g[:-4] + '.buf')).nav, report=rep)
+        say('NOTE' if rep.get('dropped') else 'ok', 'nav', 'kl_pf4.check passes: %d areas, %d polygons, %d waypoints, %d links; '
+            'Dead Men links dropped by kind: %s' % (n[4], n[3], n[5], n[7], rep.get('dropped') or 'none'))
+    secs = dict(MB.sgd_read(f['.sgd']))
+    lacks = [x for x in ('HavokShatterOctree', 'ExplodableOctree') if x not in secs]      # 21 of 21 stock levels have both
+    say('NOTE' if lacks else 'ok', 'sgd', 'sections: %s%s' % (', '.join('%s %d B' % (name, len(p)) for name, p in secs.items()),
+        '; NO %s, which every stock Dog Days level has (ExplodableOctree: the loader kl2 0x5e38c0 skips a missing section and both '
+        'users of game data +0x814, 0x60b426 and 0x82e5a9, test it for 0)' % ' / '.join(lacks) if lacks else ''))
+    if scene.fdx is not None:
+        recs = MB.fdx_read(f['.buf'], scene.fdx)[1]
+        say('ok', 'FDX', '%d records (%d with bones), %d instances' % (len(recs), sum(r['kind'] == 0 for r in recs), sum(r['instances'] for r in recs)))
+    else:
+        say('ok', 'FDX', 'no block')
+    over = ['%s %d (ran live: %d)' % (k, res.get(k, 0), v) for k, v in LIVE.items() if res.get(k, 0) > v]
+    say('NOTE' if over else 'ok', 'size', 'larger than any Dead Men build that ran live: %s' % (', '.join(over) or 'nothing'))
+    count = collections.Counter(s for s, _c, _t in out)
+    log('preflight: CRASH %d, RISK %d, NOTE %d' % (count['CRASH'], count['RISK'], count['NOTE']))
+    with open(os.path.join(folder, 'preflight.json'), 'w') as fh:
+        json.dump({'S': s_name, 'M': m_name, 'findings': out}, fh, indent=1)
+    return out
+
+
+def stage(folder, slot=SLOT, log=print):
+    """FOR THE LIVE SIDE: copy a kept build into kl_graft's own output folder
+    (<work>/build/install/Scenes/Locations/<slot>), so that 'python kl_graft.py install' and
+    kl_autotest.py take it. Whatever build was there is replaced. Refuses a build with problems."""
+    import shutil
+    import kl_graft
+    res = json.load(open(os.path.join(folder, 'result.json')))
+    if not res.get('ok') or res.get('problems'):
+        raise SystemExit('%s: not a build with 0 problems' % folder)
+    files = sorted(x for x in os.listdir(folder) if x.startswith(slot + '_Main'))
+    if slot + '_Main.zip' not in files:
+        raise SystemExit('%s holds no %s_Main.zip (built without --keep?)' % (folder, slot))
+    d = kl_graft.out_dir(slot)
+    for x in os.listdir(d):
+        if x.startswith(slot + '_Main') or x == 'graft.txt':
+            os.remove(os.path.join(d, x))
+    for x in files + ['graft.txt']:
+        shutil.copyfile(os.path.join(folder, x), os.path.join(d, x))
+    log('staged %s systems + %s map (%d files%s) in %s' % (res['S'], res['M'], len(files) + 1,
+                                                          ', flat ' + ','.join(res['flat']) if res.get('flat') else '', d))
 
 
 # ------------------------------------------------------------------ many builds, the table
@@ -588,11 +994,14 @@ def main():
         if flag('--no-fa'): opt['fa'] = False
         if flag('--stock-anm'): opt['anim'] = False
         if flag('--geometry'): opt['geometry'] = True
+        if '--flat' in a:
+            i = a.index('--flat'); opt['flat'] = tuple(a[i + 1].split(',')); del a[i:i + 2]
         keep, campaign, heroes = flag('--keep'), flag('--campaign'), flag('--heroes')
         if a[0] == 'chain':
             r = chain(a[1], a[2], a[3], a[4], heroes=heroes, keep=keep, **opt)
         else:
-            r = one(a[1], a[2], a[3], keep=keep, campaign=campaign, heroes=heroes, tag=' campaign' if campaign else '', **opt)
+            r = one(a[1], a[2], a[3], keep=keep, campaign=campaign, heroes=heroes,
+                    tag=(' campaign' if campaign else '') + (' flat' if opt.get('flat') else ''), **opt)
         sys.exit(0 if r['ok'] and not r['problems'] else 1)
     elif len(a) >= 2 and a[0] == 'maps':
         run_many(a[1], [('F07', m, []) for m in DM_FA], par)
@@ -601,6 +1010,23 @@ def main():
         run_many(a[1], [(s, m, []) for s in DD_FA], par)
     elif len(a) >= 2 and a[0] == 'm09':
         run_many(a[1], [('F07', m, o) for m in ('M09_A', 'M09_B') for o in ([], ['--campaign', '--heroes'])], par)
+    elif len(a) >= 2 and a[0] == 'first':
+        first_timers(a[1], print)
+    elif len(a) >= 2 and a[0] == 'preflight':
+        sys.exit(1 if any(x[0] == 'CRASH' for x in preflight(a[1], *a[2:3])) else 0)
+    elif len(a) >= 2 and a[0] == 'stage':
+        stage(a[1], *a[2:3])
+    elif len(a) >= 2 and a[0] == 'deliver':
+        # the builds for a first live run, kept, each with its preflight (re/maps.md section 10)
+        jobs = [('F07', 'M02_FA_A', ['--keep', '--flat', 'ZEnvSampler']), ('F07', 'M02_FA_A', ['--keep']),
+                ('F07', 'M06_FA_A', ['--keep']), ('F08', 'M06_FA_A', ['--keep'])]
+        run_many(a[1], jobs, par)
+        bad = 0
+        for s_, m_, o in jobs:
+            d = os.path.join(a[1], '%s+%s%s' % (s_, m_, ' flat' if '--flat' in o else ''))
+            with open(os.path.join(d, 'preflight.txt'), 'w') as fh:
+                bad += any(x[0] == 'CRASH' for x in preflight(d, log=lambda t: (print(t, flush=True), fh.write(str(t) + '\n'))))
+        sys.exit(1 if bad else 0)
     elif a and a[0] == 'navtest':
         sys.exit(1 if navtest() else 0)
     elif len(a) >= 2 and a[0] == 'table':

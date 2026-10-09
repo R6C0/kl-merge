@@ -86,6 +86,40 @@ names an entry past its palette. So two levels' palettes can be joined by append
 Exact insertion points: end of the `tools/kl_light.py` docstring. Take step 3 only after 2 (it
 darkens; Dead Men's grade was made for the darkened scene), and start with `strength=0.5`.
 
+### Outcome of the live runs (2026-10-09, agent f-live; direct boot, F07 + M03_FA_A in the F01 slot)
+
+Steps 2 and 3 are wired into `kl_graft.build` as `postfilter=` and `ao=` (command line
+`--no-postfilter`, `--ao <strength>`), one build per switch, each `verify: problems: 0`. All three
+runs used the same scripted walk (klauto `goto`, ini `<work>\build\klhook\live\LK.ini`): start
+position, 9 s in the bank hall at (148, 800, -8594) heading -36, 9 s on the plaza at
+(-507, 700, -11028) heading -127. Pictures `<work>\research\shots\LK<n>_<s>s.png`.
+
+| run | build | RESULT | hall (same view) | plaza (same view) |
+|---|---|---|---|---|
+| LK0 | as before (step 1 only) | clean exit after 216 s | `LK0_116s`: flat grey, floor and ceiling one tone | `LK0_134s` |
+| LK1 | + `--postfilter` (step 2) | clean exit after 227 s | `LK1_131s`: a little brighter and warmer, windows no longer pure white | `LK1_146s`: slightly more contrast, sky lighter |
+| LK2 | + `--ao 0.5` (steps 2 + 3) | clean exit after 225 s | `LK2_128s`: ceilings under the gallery and the floor at the column bases darken, the hall gets depth | `LK2_143s`: the arcade under the shop front a shade darker, open paving unchanged |
+
+- Step 2 works: 3 filter sets of the map, palette 39 -> 53 curves, no fault, and the grade changes at
+  the bank door as in Dead Men. Its effect is small. It needed one fix in `kl_graft.build`: a
+  scene-block root is `('scene', name)`, two values, and the loop over `proots` unpacked three
+  (never met before because no grafted map had brought `PostFilterBoxes`).
+- Step 3 at strength 0.5 does what the table above predicted (mean factor 0.79, 2,250 meshes) and
+  nothing looks wrong: no black faces, no banding seen. Whether the ambient term is multiplied as
+  well as the sun (the open ASSUMPTION of `bake_ao`): the ceiling under the gallery, which no sun
+  reaches, does darken, which fits 'yes'; one picture pair, not a proof.
+- **Kept: both, as the defaults of `kl_graft.build`** (`postfilter=True, ao=0.5`). Strength 1.0
+  was not tried.
+- Palm trunks: lit and textured wherever the sun reaches them (`RN8_240s`, `RN8_280s`, `LK2_143s`);
+  black only when the camera looks into the light from the bank door (`LK0_122s`, where the fronds
+  and the whole far side of the plaza are silhouettes too). Not a material fault. That view is the
+  one that still looks wrong: the sky is a flat grey-pink and everything against it is black -
+  the 'Inside' filter set applied to an outdoor view through the door, or the missing sky dome;
+  not looked into.
+- Still open in the pictures: the tall windows of the hall are plain white rectangles from inside
+  (`RN7_190s`: the whole counter side blown out when looking toward them at round start) - there
+  is nothing behind the glass to see, and the bloom of Dog Days' camera does the rest.
+
 ### Tests (`python tools/kl_light.py render-test`, `problems: 0`)
 
 - 21 stock Dog Days levels: 13,528 needed effects all present; `fit_shaders` changes no byte.

@@ -401,3 +401,87 @@ to a crawl by our dump of each one.
   records of 104 groups, 1,144 wave references moved); `broken_groups` is the check. Its proper
   home is `kl_snd.merge` / `kl_whd.Writer` (not r-live's files). RN6 on the rebuilt level: no
   fault. Whether the pairs now SOUND right nobody has heard.
+
+**Since moved (f-live, same day):** the group handling is in `kl_whd.Writer.add_group` +
+`kl_snd.merge` now (a clip of a group brings its whole group, records back to back),
+`kl_whd.torn_groups` is the check (in `kl_snd.test_merge` and `kl_graft.build`), and the post-pass
+is gone. Same 104 groups on M03; `test_merge` 0 problems on F09, M01_FA_A, M03_FA_A; real rounds
+on the rebuilt level without the divide fault (RN11, RN12).
+
+## 6. The rest of a round (2026-10-09, agent f-live; runs PX1 - PX3, GT1, RN7 - RN12, EX1 - EX4)
+
+All run in the game. Logs / inis / driver output per run: `<work>\build\klhook\live\<run>.*`,
+pictures `<work>\research\shots\<run>_<s>s.png`, helper scripts
+`<work>\research\agent_scripts\{f-live_nav,probe,mkini,fa_pos}.py`. Hook: klauto with `Hooks=0`,
+no `[Engine]` in every round.
+
+### 6.1 Steering by position
+
+- A ZFFPlayer is found by its vtable (0xbb45f4) in the heap; `+0x460` = world position of the
+  feet, `+0xc14` = unit vector pointing back (heading). Found by sampling the process from outside
+  (`probe.py`, OpenProcess read-only) while a script walked; a read-only look from outside did
+  not disturb a run (PX2, PX3). The local player is the one that moves.
+- klauto got a scripted mouse (through the mouse's GetDeviceState; 0.17 degrees a count), `pos`,
+  `goto x z [radius] [timeout] [sprint] [keep]`, `onwin <window> <label>` and `[Auto] PosLogMs`
+  (top comment of `klhook\klauto.c`). A `goto` holds W and turns by the bearing error; it took
+  the player from the start into the hall in 9 s on the first try (GT1).
+- Way points come from the level's own navigation mesh (`f-live_nav.py`: polygons, neighbours over
+  edges, areas joined where two waypoints share a place - that joining rule is an ASSUMPTION that
+  the walks bore out; a vertex is (x, z, y) and its height is the feet's y). The mesh of the bank
+  has two parts that nothing joins: A = plaza, bank, garage, yard, staircase (490 polygons),
+  B = the streets behind (159). See 6.4.
+- Keys, from kl2.exe's default binding text: E = use / pick up / heal, C = cover and 'Get Up',
+  LSHIFT sprint. `DebugAlways={KillEnemies=tap(kb,n)}` is in the text too; N did nothing seen.
+
+### 6.2 What works in a round on the bank (F07 systems + M03_FA_A)
+
+| feature | state | evidence |
+|---|---|---|
+| start, HUD, lives, clock | works | every run; the start place is one of Dead Men's eight (differs per run) |
+| loot from a cash drawer | **works** | E held 3.5 - 5 s behind the counter at (-905, 800, -8386): 'Total score: $100,000' (RN7_190s, RN10_210s; RN11 and RN12 used the same hold but no picture of theirs was looked at). 1.5 s was not enough (RN8, RN9: $0). In front of the counter the '$' marker shows but the drawer is 3 units out of reach (GT1_140s) |
+| loot from the garage's money boxes | **does not work as scripted** | E held 2 x 3 s at box 11 (612, 230, -6281) and box 10 (476, 233, -6277): score unchanged (RN10). The boxes are `OnlineMoneyContainer` with trigger 'Open' at 80 units and the money inside; the script stood about 100 away in the plane. Not established whether it is reach or the container |
+| guards, damage, death | works | the player is down within 10 - 25 s of entering (hall or garage): 'ROUND OVER - All the criminals died - You lose a life' |
+| round ends by the clock | **works** | RN10 (test build without `AI_Enemies!*`): clock at 00:10 in RN10_520s, score page in RN10_530s |
+| score page, Ready, round 2 | **works** | RETURN on `HeistStatusLeaderboard` = Ready: `FAWaitForPlayers` for an instant, then the next round on the same loaded level - start place, HUD, walking, two skulls left (RN8_240s / 280s; by the log also RN10, RN12). The HUD still says 'Round: 1' in the second round |
+| loot kept | as the game rules | the $100,000 is in 'Total score' during the round and the score page says $0 (no escape) |
+| escape vehicle | **not reached** | 6.4 |
+| level bounds | ASSUMPTION | walking out of the plaza at z -13311 threw the player back and turned him round (PX3, position log only) |
+| sound | not heard by anyone | - |
+
+### 6.3 Faults
+
+- **Crash on the score page, once in six times it came up** (RN11; not in RN6, RN7, RN8, RN10,
+  RN12 - RN12 is RN11 repeated on the same build and script): read of address 0 at kl2
+  0x838922, 0.55 s after the page opened, then a stack overflow because the game's filter resumes
+  the fault for ever. 0x8388e0 is `ZLeaderBoardServiceSteam` slot 6, called from
+  `ZMercsShowInfoFA` slot 8 (0x5b65b1): it walks `[this+0x31fc]` rows of 0x70 bytes at `this+0x18`
+  and calls each row's vtable slot 0; a row's vtable pointer was 0. Cause not established. It is
+  the first run on the build with the new sound merge, post filter and baked light, and the same
+  build passed the repeat, so the build is not cleared and not convicted.
+- **The anti-tamper exit also fires on a direct boot** (PX1): the DLL of the last round
+  (`<work>\build\klhook\round2`) with `Hooks=1` on the direct boot ended 2 frames after the load
+  with `ExitProcess` from 0x794ed8. The same DLL with `Hooks=0` ran to the end (PX2). Earlier
+  direct boots with the detours alone never did; what `Hooks=1` adds since RN4 is the wrappers on
+  five import slots. One run each, and PX1 also had the outside probe attached (as PX2 had) - for
+  f-tamper.
+
+### 6.4 The escape: where it stands
+
+- `Triggers!ExitTrigger_01` is a box at (408, 396, 460), size 4000 x 400 x 1000 (x, y, z) - whether
+  full or half extents, it begins at z >= -540. The boarding trigger of the van is at
+  (3252, 133, -20). Both lie in part B of the navigation mesh.
+- Everything the player could reach from the bank is part A. The yard behind the garage
+  (y 220) is closed: a wall along its whole north side from x -3560 to 2264 (EX1, EX2: seven
+  places tried; pictures RN9_230s, RN10_270s), a wall at x 2264 on the east, the staircase corner
+  closed at z -2955 on the west (EX3), the garage's east end a wall at x 1734 (EX4_144s).
+- Standing in the yard for 4.5 minutes with $100,000 called nothing (RN10): no message, no van.
+- What probably opens the way in Dead Men (GUESS): three animated fences
+  (`SO0301_USA_animFence_02_FA_*`, `MatPosAnim`, at (2386, 303, -3590), (2386, 399, -4980),
+  (2410, 633, -8815)) and the sounds `Doors!MetalGate_Open / _Close`; RN10_270s shows a chain-link
+  gate with a ramp behind it. No controller of the built level names those fences by path, so
+  what plays them was not found.
+  **Next step:** find in Dead Men's M03_FA_A what starts those `MatPosAnim` (an animation event,
+  a proxy, a trigger message), and whether the converter or the graft drops it; then the route is
+  yard -> gate -> street -> exit box -> van, and the van's spline car is the next unknown.
+- A test build without the map's guards: `kl_graft.py build F07 M03_FA_A --m-drop "AI_Enemies!*"`
+  (references into the dropped squads are pruned; `verify: problems: 0`). Used for RN9, RN10.

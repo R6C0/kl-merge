@@ -15,6 +15,11 @@ archive in a slot. Milestone A = two stock Dog Days levels (no Dead Men data): p
                        ... --light stock|m01|keep|off   kl_light.normalise mode (default stock)
                        ... --stock-anm         one stock .ANM and renamed sets instead of the join
                        ... --no-fa             no kl_fa repairs, none of S's FA plumbing kept
+                       ... --no-postfilter     Dead Men map: WITHOUT its PostFilterBoxes and filter sets (default:
+                                               taken, its colour curves appended to S's palette,
+                                               kl_light.graft_postfilter)
+                       ... --ao 0.5            Dead Men map: strength of its ambient-occlusion light map baked
+                                               into the vertex colours (kl_light.bake_ao; default 0.5, 0 = off)
     python kl_graft.py install [F01]           put the last build into Dog Days (each stock file
                                                is MOVED to KL_PortBackup once, never overwritten)
     python kl_graft.py pairs                   which S / M pairs need the least guessing
@@ -78,11 +83,14 @@ WHO OWNS WHAT (S = systems level, M = map level; top-level subtrees by kl_prpjoi
   .hti       S's; kl2.exe holds no ".hti" string, so nothing reads it.
   lights     Dead Men map: kl_light.normalise (re/lighting.md) - a sun paired with rooms gets
              bit 0x8000 like F09's street suns; dead ZLIGHT[2] references removed.
+  look       Dead Men map (re/lighting.md, second pass): its PostFilterBoxes and filter sets come along and
+             its colour curves are appended to S's palette (kl_light.graft_postfilter); its ambient-occlusion
+             light map is baked into the vertex colours at strength 0.5 (kl_light.bake_ao). Both seen live.
   FA layer   S's position-free plumbing is kept (kl_fa.host_keep: escape-vehicle monitor,
              AIMonitor, briefing trigger and timer, three speakers) and kl_fa.repair runs on the
              joined scene (re/fa_round.md). Needed for a real round only; a direct boot has none.
 NOT JOINED YET: light<->geometry lists between systems and map (dropped by remove/graft), S's
-unused map models/textures (kept), Dead Men's PostFilterBoxes.
+unused map models/textures (kept).
 
 CHOICE OF S AND M FOR MILESTONE A: S = F07, M = F09 (python kl_graft.py pairs). S must be one of
 F04..F09 (their systems hold the particle templates: no dangling path, kl_prpjoin). Of those
@@ -210,6 +218,36 @@ kept with the log and result in <work>/build/klhook/live/<run>.*; slot = F01.
       = THE BUILD IN THE F01 SLOT.
   DB1 the same build, ORIGINAL hook DLL and KLHook.ini back in place, direct boot.
       RESULT: clean exit after 223 s (the direct-boot test still works).
+LIVE RUNS 2026-10-09, fifth set (f-live): THE REST OF A ROUND AND THE LOOK (re/fa_round.md 6, re/lighting.md).
+Hook = klauto, Hooks=0, the run's ini in <work>/build/klhook/live/<run>.ini; slot = F01; map M03_FA_A unless said.
+  PX1 direct boot, last round's DLL with Hooks=1, a read-only probe from outside. RESULT: clean exit after
+      105 s - the process ended 2 frames after the load, ExitProcess from 0x794ed8: the anti-tamper exit
+      on a DIRECT BOOT (detours + import wrappers).
+  PX2 the same with Hooks=0. RESULT: clean exit after 235 s. Player position found at ZFFPlayer +0x460.
+  PX3 + scripted mouse (new). RESULT: clean exit after 227 s. Heading at +0xc14, 0.17 degrees a count.
+  GT1 'goto' steering from the start into the hall. RESULT: clean exit after 229 s; 9 s to the hall.
+  RN7 real round, route by way points from the navigation mesh, E at cash drawer 06. RESULT: clean exit
+      after 251 s (ended by hand). LOOT WORKS: 'Total score: $100,000'. Shot dead 10 s later.
+  RN8 + 'onwin' (score page -> label), RETURN = Ready. RESULT: clean exit after 316 s, KLHook.result PASS.
+      ROUND 2 STARTS on the same level. E for 1.5 s took no money.
+  LK0 direct boot, three fixed views, the build as before. RESULT: clean exit after 216 s.
+  LK1 the same views, built with the post filter (now the default). RESULT: clean exit after 227 s.
+  LK2 the same, + --ao 0.5 (now the default). RESULT: clean exit after 225 s. Kept: both.
+  RN9 test build --m-drop "AI_Enemies!*" (no guards). RESULT: clean exit after 318 s (ended by hand): through
+      hall and garage into the yard; the yard's north wall stops the way to the exit box.
+  EX1 EX2 EX3 EX4 direct boots on that build, the yard's edges tried by 'goto' (EX4 twice: the first script
+      was wrong). RESULT: clean exit after 225 / 228 / 224 / 226 + 223 s. Closed on every side tried.
+  RN10 the same build: loot, then 4.5 min in the yard. RESULT: clean exit after 628 s, PASS. $100,000 from
+      the drawer, nothing from the garage boxes, no van, THE CLOCK ENDS THE ROUND, score page, round 2.
+  RN11 the final build (post filter, AO 0.5, interleave groups in kl_snd.merge). RESULT: crash
+      kl2.exe+0x438922 after 209 s: ZLeaderBoardServiceSteam slot 6 reads a null row 0.5 s after the
+      score page opened (the sixth time that page came up). Cause not established.
+  RN12 RN11 repeated, nothing changed (the reason: does the crash repeat). RESULT: clean exit after 319 s,
+      PASS: death, score page, Ready, round 2.
+  M01D F07 + M01_FA_A built with the final tool (verify: problems: 0), direct boot, a short walk. RESULT:
+      clean exit after 195 s; the diner street with its own post filter (shots/M01D_130s.png).
+  DB2 F07 + M03_FA_A final build, ORIGINAL hook DLL and ini, direct boot. RESULT: clean exit after 260 s.
+      = THE BUILD IN THE F01 SLOT.
 BISECT (not needed in the end, but it works): build ... --geometry [--m-add A,B] [--m-drop ..]
   [--s-keep ..] [--s-drop ..], see Select. '--geometry --s-drop *' = M's geometry and no game-mode
   layer at all verifies with 0 problems; plain '--geometry' leaves S's game-mode layer with scene
@@ -234,7 +272,8 @@ LANGS = kl_package.LANGS
 
 # ------------------------------------------------------------------ files in and out
 def out_dir(slot):
-    d = os.path.join(workdir(), 'build', 'install', 'Scenes', 'Locations', slot)
+    # KL_GRAFT_OUT: another build folder (a variant to compare; 'install' then installs that one)
+    d = os.path.join(os.environ.get('KL_GRAFT_OUT') or os.path.join(workdir(), 'build', 'install'), 'Scenes', 'Locations', slot)
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -335,7 +374,7 @@ class DeadMen(Level):
     Dead Men's 'CoverList' (a top-level list with FFCoverList) is counted as map: Dog Days keeps
     its own under Specials!CoverPoints!, which leaves with S's map."""
 
-    def __init__(self, name, log=print):
+    def __init__(self, name, log=print, ao=0.0):
         import kl_convert as K, kl_pf4, kl_rooms, kl_prm, kl_mat, kl_tex
         self.name, self.dm = name, True
         with zipfile.ZipFile(J.level_zip(name, 'dm')) as z:
@@ -397,7 +436,11 @@ class DeadMen(Level):
                     ngates += n
             edit(node, 'props', fn)
         roots = [c for c in G.gms_roots(raw) if c] + [(c, k) if k else c for _w, c, k in G.prp_roots(src.p, src.tids, J.schema('dm'), 'dm')]
-        self.files[self.ext['.prm']], rep = kl_prm.convert(self['.prm'], roots)
+        dm_prm = self['.prm']
+        self.files[self.ext['.prm']], rep = kl_prm.convert(dm_prm, roots)
+        if ao:                                          # re/lighting.md second pass, step 3 (reads Dead Men's .TEX)
+            self.files[self.ext['.prm']], arep = kl_light.bake_ao(dm_prm, self['.prm'], roots, self['.TEX'], strength=ao, log=log)
+            log('%s: light map baked at strength %g: %s' % (name, ao, {k: v for k, v in arep.items() if not isinstance(v, (list, dict))}))
         # as kl_dmassets.convert_level: the .MAT's use counts and surface numbers follow the
         # CONVERTED .prm and Dog Days' surface table (the graft keeps S's .buf tail)
         tex_ids = set(T.read_tex(self['.TEX']).tex)
@@ -575,96 +618,6 @@ def mute_speech(sc, ctrl, snd):
 ANIM_FALLBACK = {'Police': 'Swat_02', 'Army': 'Swat_02'}
 
 
-def broken_groups(whd):
-    """Records of a Dog Days .WHD that belong to an interleaved stream group the engine cannot walk.
-    kl2 0x763a70 (called by the stream set-up 0x4465f0 for a record with fmt bit 0x00800000): the top
-    byte of fmt is the group: 0x80 | n on the first of n clips, i on the i-th follower; a follower's
-    first record is found at record - i * 0x48, and the n records are read at a stride of 0x48
-    (4 zero bytes + 0x44). The lowest sample rate of the group then divides (0x44668b): a group
-    that does not stand like that reads a rate of 0 = divide fault on the sound thread, on every
-    attempt to play the clip (live run RN5, the bank's briefing line at round start).
-    Stock Dog Days level files have no grouped record at all; Dead Men's have thousands
-    (X.wav 0x82 + X_R.wav 0x01, stride 0x3c there). -> [record offset as a wave names it]"""
-    import kl_whd as W
-    by = {o - 4: v for k, o, v in W.parse('dd', whd)[0] if k == 'rec'}
-    bad = []
-    for o, v in by.items():
-        top = v[1] >> 24
-        if not top:
-            continue
-        base = o if top & 0x80 else o - top * 0x48
-        n = (by[base][1] >> 24) & 0x7f if base in by and by[base][1] >> 24 & 0x80 else 0
-        ok = n and (top & 0x80 or top < n) and all(base + i * 0x48 in by and by[base + i * 0x48][2] and
-                                                  by[base + i * 0x48][1] >> 24 == (i or 0x80 | n) for i in range(n))
-        if not ok:
-            bad.append(o)
-    return bad
-
-
-def stream_groups(audio, m_name, log=print):
-    """Dead Men's interleaved stream clips in the merged bank: kl_snd.merge carries each record a wave
-    names on its own (Writer.add: name, record, padding), which tears the groups apart (see
-    broken_groups). Here every group one of whose clips was carried is written again at the end of
-    the .WHD - its names, then its records back to back - and the wave objects of the merged .SND
-    are pointed at the new records. The torn records stay behind, named by nothing.
-    (The proper home of this is kl_snd.merge / kl_whd.Writer; done here because those are not
-    this module's files.)"""
-    import kl_whd as W
-    mg = kl_snd.game_of(m_name)
-    whd, snd = audio.beside['.WHD'], bytearray(audio.members['.SND'])
-    bad = broken_groups(whd)
-    if not bad or mg != 'dm':
-        return len(bad)
-    by = {o - 4: v for k, o, v in W.parse('dd', whd)[0] if k == 'rec'}
-    src = kl_snd.read(kl_snd.beside(m_name, '.WHD', mg))
-    strmap = kl_snd.stream_map()
-    R = W.REC[mg] + 4
-    srec = {o - 4: dict(zip(W.FIELDS[mg], v)) for k, o, v in W.parse(mg, src)[0] if k == 'rec'}
-    groups = {}                                         # clip offset in the merged stream file -> [source fields]
-    for o, f in srec.items():
-        if f['fmt'] >> 24 & 0x80 and f['fmt'] & W.STREAMED and not f['fmt'] & W.LANGFILE and f['off'] in strmap:
-            n = f['fmt'] >> 24 & 0x7f
-            ms = [srec.get(o + i * R) for i in range(n)]
-            if all(m and m['fmt'] >> 24 == (i or 0x80 | n) and m['off'] == f['off'] for i, m in enumerate(ms)):
-                groups[strmap[f['off']]] = ms
-    cs = lambda b, q: bytes(b[q:b.index(b'\0', q)])
-    out, T, new, miss = bytearray(whd[:struct.unpack_from('<I', whd, 0)[0]]), None, {}, 0
-    for o in sorted(bad):
-        v = by[o]
-        ms = groups.get(v[7] | v[8] << 32)              # off, offhi
-        if ms is None:
-            miss += 1; continue
-        key = (v[7] | v[8] << 32)
-        if key not in new:
-            names = []
-            for m in ms:
-                out += bytes(-len(out) % 16); names.append(len(out)); out += cs(src, m['name']) + b'\0'
-            out += bytes(-len(out) % 16)
-            at = []
-            for m, nm in zip(ms, names):
-                g = W.to_dd(m, mg)
-                g['name'], g['fmt'], g['off'], g['offhi'] = nm, m['fmt'], key & 0xffffffff, key >> 32
-                at.append(len(out)); out += bytes(4) + struct.pack('<17I', *(g[k] for k in W.DD_F))
-            out += bytes(8)
-            new[key] = at
-    out += bytes(-len(out) % 16)
-    T = len(out); out += bytes(16); struct.pack_into('<4I', out, 0, T, len(out), 3, 4)
-    moved = 0
-    bank = kl_snd.Snd('dd', bytes(snd)).walk()
-    for w, i, off in bank.waves():
-        v = by.get(off)
-        if v is not None and v[1] >> 24 and (v[7] | v[8] << 32) in new and off in set(bad):
-            top = v[1] >> 24
-            struct.pack_into('<I', snd, w + 0x14 + 0x1c * i, new[v[7] | v[8] << 32][0 if top & 0x80 else top]); moved += 1
-    audio.beside['.WHD'], audio.members['.SND'] = bytes(out), bytes(snd)
-    left = [o for o in broken_groups(bytes(out)) if any(off == o for _w, _i, off in kl_snd.Snd('dd', bytes(snd)).walk().waves())]
-    log('  stream groups: %d torn records of %d groups written again back to back, %d wave references moved, %d without a source group, %d still named by a wave' % (
-        len(bad), len(new), moved, miss, len(left)))
-    if left or miss:
-        audio.problems.append('%d wave references name a record of a torn interleaved stream group (divide fault at kl2 0x44668b)' % (len(left) or miss))
-    return len(left)
-
-
 def dm_rename(Jn, S, log=print, anim=True):
     """{string: string} for a Dead Men map under Dog Days systems: scene paths into Dead Men's
     systems subtree get Dog Days' top-level name; a weapon template Dog Days does not have is
@@ -704,7 +657,8 @@ def dm_rename(Jn, S, log=print, anim=True):
 
 
 # ------------------------------------------------------------------ the graft
-def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True, light='stock', anim=True, fa=True):
+def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True, light='stock', anim=True, fa=True,
+          postfilter=True, ao=0.5):
     """Systems of S + map of M -> (path of the archive, problems found by verify()).
     sound: merge what M's map names of M's bank into S's (kl_snd.graft_audio); False = the map's
     sound references are set to 0 (the silent builds of milestones A and B). loc: also graft the
@@ -713,12 +667,15 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
     anim: the .ANM is S's + the sets and slots the level names of M's (kl_anmjoin, re/anmjoin.md);
     False = one stock file and renamed sets, as before. fa: keep S's position-free Fragile Alliance
     plumbing (escape-vehicle monitor, AIMonitor, briefing trigger, speakers) and repair the joined
-    scene for a real round (kl_fa, re/fa_round.md)."""
+    scene for a real round (kl_fa, re/fa_round.md). postfilter: a Dead Men map keeps its
+    PostFilterBoxes and its filter sets get their curves (kl_light.graft_postfilter). ao: strength
+    0..1 of Dead Men's light map baked into the vertex colours (kl_light.bake_ao); 0 = not baked.
+    Both are on by default since the live runs LK0 - LK2 (re/lighting.md, second pass, outcome)."""
     sch = J.schema('dd')
     for t, load in SOUND_TYPES.items():
         if sch.types[t]['load'] != load:
             raise ValueError('re/kl2.json was rebuilt: type handler %d is no longer the sound reference' % t)
-    S, M = Level(s_name), (DeadMen(m_name, log) if m_name.startswith('M') else Level(m_name))
+    S, M = Level(s_name), (DeadMen(m_name, log, ao) if m_name.startswith('M') else Level(m_name))
     notes = []
     note = lambda s: (notes.append(s), log('  note: ' + s))
 
@@ -790,7 +747,7 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
     base_settings = S.prp.p.settings
     mblock, sblock = dict(J.block(M.prp)), dict(J.block(S.prp))
     take = {n: M.prp for n in TAKE if n in mblock}
-    if 'PostFilterBoxes' in mblock and not M.dm:        # Dead Men's sets index Dead Men's palette: left out
+    if 'PostFilterBoxes' in mblock and (not M.dm or postfilter):   # Dead Men's sets index Dead Men's palette: only with graft_postfilter
         take['PostFilterBoxes'] = M.prp
     elif 'PostFilterBoxes' in sblock:                   # S's boxes lie in S's world: none
         ent = [(n, t) for n, t in J.block(S.prp) if n != 'PostFilterBoxes']
@@ -805,6 +762,8 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
         S.prp.p.settings = base_settings
     if fa:                                              # before anything goes by controller index
         kl_fa.repair(Jn, kept, log)
+        if sel.m_drop:                                  # a test build without some of M's subtrees (e.g. AI_Enemies!*):
+            kl_fa.prune(Jn, [M.prp.names[t] for t in m_tops], log)     # what named them names nothing now
     if Jn.names[1:] != [e.name.decode('latin1') for e in final]:
         raise ValueError('joined .prp and joined .gms list different entities')
     at = {(id(sc), k): j for j, (sc, k) in enumerate(Jn.origin)}      # source node -> joined node
@@ -863,6 +822,13 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
     prm, cmap2 = G.append(prm_s, prm_m, roots, mmap, {unref(a): unref(b) for a, b in refs_b.items()}, tmap)
     if cmap2 != cmap:
         raise ValueError('kl_prmgraph.append numbers chunks differently than assumed here')
+    if postfilter and M.dm and 'PostFilterPalettes' in mblock and 'PostFilterPalettes' in sblock:
+        # M's filter sets (named by its PostFilterBoxes chunk) get their own colour curves: appended to
+        # S's palette, the sets' 37 entry numbers rewritten (re/lighting.md second pass, step 2)
+        blk = lambda b: u32([t for t in b['PostFilterPalettes'] if t[0] == 9][-1])
+        prep = kl_light.graft_postfilter(prm, blk(sblock), prm_m.chunks[blk(mblock)],
+                                         [cmap[i] for i, k in kinds.items() if k == 'pf'], log=log)
+        log('  post filter: %s' % {k: v for k, v in prep.items() if not isinstance(v, (list, dict))})
     moved = 0
     for i in range(1, len(prm_s.chunks)):               # S's model roots: (.oct record offset + 4) | 1 at +0x1c
         c = prm.chunks[i]
@@ -887,7 +853,8 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
     for e, c in copy.items():
         if e.model:
             c.model = cmap[e.model]
-    for (node, ctrl, f), chunk, _kind in proots:
+    for where, chunk, _kind in proots:
+        node, ctrl, f = (tuple(where) + (None,))[:3]    # a scene-block root is ('scene', name)
         if node == 'scene':
             s = Jn.p.settings
             k = next(i for i, t in enumerate(s) if t[0] == 0x0c and Jn.p.key(t) == ctrl)
@@ -940,8 +907,13 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
 
     # ---- sound: S's bank + what M's map nodes name of M's bank; the fields are rewritten in place
     audio = kl_snd.graft_audio(s_name, m_name, Jn, [mj[k] for k in sorted(m_nodes)], log, loc=loc) if sound else None
-    if audio:
-        stream_groups(audio, m_name, log)               # Dead Men's interleaved stream clips, back to back
+    if audio:                                           # interleaved stream groups: kl_snd.merge carries them whole; checked here
+        import kl_whd
+        torn = set(kl_whd.torn_groups('dd', audio.beside['.WHD']))
+        named = sum(off in torn for _w, _i, off in kl_snd.Snd('dd', audio.members['.SND']).walk().waves())
+        log('  stream groups: %d records of the .WHD stand outside a walkable group, %d of them named by a wave' % (len(torn), named))
+        if named:
+            audio.problems.append('%d wave references name a record of a torn interleaved stream group (divide fault at kl2 0x44668b)' % named)
     snd = audio.members['.SND'] if audio else S['.SND']
 
     # Heroes!: S's nodes at M's places
@@ -1068,7 +1040,8 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
     with open(os.path.join(out_dir(slot), 'graft.txt'), 'w') as f:
         f.write('%s systems + %s map (%s; %s)\nproblems: %d\n%s\n' % (
             s_name, m_name, sel, ', '.join(['silent map' if not sound else 'merged bank' + ' + voice lines' * loc, 'lights %s' % light,
-                                         'joined .ANM' if anim else 'stock .ANM', 'FA repairs' if fa else 'no FA repairs']),
+                                         'joined .ANM' if anim else 'stock .ANM', 'FA repairs' if fa else 'no FA repairs',
+                                         'post filter of M' if postfilter else 'no post filter boxes', 'light map baked at %g' % ao if ao else 'no baked light']),
             len(problems), '\n'.join(problems + notes)))
     return path, problems
 
@@ -1313,11 +1286,14 @@ if __name__ == '__main__':
         light = 'stock'
         if '--light' in a:
             i = a.index('--light'); light = None if a[i + 1] == 'off' else a[i + 1]; del a[i:i + 2]
-        flags = ('--geometry', '--silent', '--no-loc', '--stock-anm', '--no-fa')
-        g, quiet, noloc, noanm, nofa = (f in a for f in flags)
+        ao = 0.5
+        if '--ao' in a:
+            i = a.index('--ao'); ao = float(a[i + 1]); del a[i:i + 2]
+        flags = ('--geometry', '--silent', '--no-loc', '--stock-anm', '--no-fa', '--no-postfilter')
+        g, quiet, noloc, noanm, nofa, pf = (f in a for f in flags)
         a = [x for x in a if x not in flags]
         sys.exit(1 if build(a[1], a[2], *a[3:4], sel=Select(g, **opt), sound=not quiet, loc=not noloc, light=light,
-                            anim=not noanm, fa=not nofa)[1] else 0)
+                            anim=not noanm, fa=not nofa, postfilter=not pf, ao=ao)[1] else 0)
     elif a and a[0] == 'install':
         install(*a[1:2])
     elif a and a[0] == 'pairs':

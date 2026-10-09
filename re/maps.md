@@ -42,6 +42,15 @@ without that mark was run and seen.
    materials of 2048, 4,801 sounds / 4,635 waves, 314 MB, both navigation meshes in one (603,332
    bytes, `nav_join`, an EXPERIMENT that passes `kl_pf4.check`), A's FDX block, 0 dangling scene paths.
    Same problems as the single parts and nothing else. Missing: section 6.
+6. **Third pass (sections 9, 10): M02_FA_A and M06_FA_A are ready for their first live run.** Every
+   build of this file was made again with kl_graft as committed in 6238e30 and gives the same
+   problem counts. `kl_maps.py preflight` runs every offline check on a kept build and looks for the
+   crashes the diner and the bank hit: CRASH 0 on all four delivered builds. What these two maps have
+   that no map which ran live had is listed with the Dog Days code behind it (9.3); the one with a
+   pre-pass is M02's seven `ZEnvSampler` (a renderer path no stock Dog Days level enters): the first
+   M02 build loads them as ZSTDOBJ (`--flat ZEnvSampler`).
+7. **The map names are now from the exe, not from content:** Dead Men's own table (kaneandlynch.exe
+   0x641570) lists the four scenes in the order of `Title00..03` (section 2).
 
 ---------------------------------------------------------------------------------------------------
 
@@ -106,7 +115,33 @@ run time is NOT ESTABLISHED; M01 and M03 ran clean live with it).
 
 `python tools/kl_maps.py what <level>`. The titles are in every Dead Men level's English .LOC
 (`AllLevels/Menu/Online/Scenarios/Title00..03`, `Briefing00..03`, the same four as
-`.../CreateGame/Scenario1..4`). The pairing title <-> level folder goes by content, not by a table:
+`.../CreateGame/Scenario1..4`). The pairing title <-> level folder was first made by content (the
+table below); the third pass found the table itself:
+
+    kaneandlynch.exe 0x641570 (a menu message handler; image base 0x400000):
+      0x6415a3  mov [esp+0x28], 0x970f30   "Locations/M01_FA_A/M01FAA_Main"
+      0x6415ab  mov [esp+0x2c], 0x970f10   "Locations/M02_FA_A/M02FAA_Main"
+      0x6415b3  mov [esp+0x30], 0x970ef0   "Locations/M03_FA_A/M03FAA_Main"
+      0x6415bb  mov [esp+0x34], 0x970ed0   "Locations/M06_FA_A/M06FAA_Main"
+    and the titles are fetched as "/Menu/Online/Scenarios/Title%02d" (0x64f87d) / "...Title%02i" (0x64d65d)
+
+a local array of four scene names in the order M01, M02, M03, M06, and four titles numbered 00..03
+(the exe has no other reference to an FA scene name but one to M03's at 0x75eae6). Where the handler
+indexes the array was not followed to the load call: the ORDER is read, the use is an ASSUMPTION that
+content confirms four times over.
+
+| Dead Men Fragile Alliance map | level folder | campaign chapter of the same place |
+|---|---|---|
+| Hot Coffee (`Title00`, `Scenario1`) | M01_FA_A | M01 'Impact' is another place; the diner is FA-only |
+| **Late Night Opening** (`Title01`, `Scenario2`) | **M02_FA_A** | none (campaign M02 is 'Trial'); textures `Metal_WatchStoreSign_01_M02_FA`, `Glass_Jewels_01_M02_FA`, `Glass_Window_Mallsigns_01_M02_FA`, 22 borrowed from `Locations/M03` |
+| Withdrawal (`Title02`, `Scenario3`) | M03_FA_A | M03A 'Withdrawal' (the bank) |
+| **A Walk in the Park** (`Title03`, `Scenario4`) | **M06_FA_A** | Tokyo: textures `Locations/M06` 237 and `Locations/_JPN` 27 (`Paper_Rice_Lantern_01_JPN`, `Metal_Sign_Escape_01_M06`) |
+
+'The Mizuki' is the campaign chapter M05A (`AllLevels/Menu/Play/M05A_ChapterTitle`), 'Retomoto Tower'
+M09A; neither is a Fragile Alliance map. No string 'Late Hours' exists in Dead Men's .LOC: the map is
+'Late Night Opening'. The .LOC also holds placeholder titles for ten maps that never shipped on PC
+(`TitleDL01..10`, briefings 'Bank Vault', 'Construction Site', 'Prison', 'Tokyo', 'Mansion', 'Jungle',
+'Havana', 'Las Vegas', 'Whitehouse', 'Subway').
 
 | level | title | briefing (shortened) | what the level's own data shows |
 |---|---|---|---|
@@ -181,7 +216,7 @@ Van are converted from Dead Men under every S. `kl_anmjoin.STAND_IN`, guesses.)
 | M01_FA_A | F07 (as now) | ran live; map names `Civilian Female Generic Mercenary_04 Police_USA Van` |
 | M02_FA_A | F07 or F08 | same six sets as M03; under F08 Police is native |
 | M03_FA_A | F07 (as now); F08 if the bank size ever bites | F08: no donor set, 4,800 / 4,641 (under the stock maxima), 287 MB |
-| M06_FA_A | **F08** (or F06) | helicopter level like the map; verified 0 problems under F06, F07 and F08; F08 gives the smallest bank (4,680 / 4,520, below the stock maxima) and archive (278 MB). The map names only `Female_Fighter` and `Mercenary_04` (stand-ins under every S) |
+| M06_FA_A | **F08** (or F06) - but **F07 for the FIRST live run** (section 10: the only S that has run under a Dead Men map) | helicopter level like the map; verified 0 problems under F06, F07 and F08; F08 gives the smallest bank (4,680 / 4,520, below the stock maxima) and archive (278 MB). The map names only `Female_Fighter` and `Mercenary_04` (stand-ins under every S) |
 | M09_A / M09_B | F07 (used here) | nothing in the map needs a particular S: no animation set at all comes from the map once the campaign is dropped (".ANM joined: clips +0") |
 
 ASSUMPTION in the M06 suggestion: that a helicopter host is the safer company for a helicopter map. The
@@ -544,4 +579,227 @@ count / first vertex; array 10 is per area (section 5.5). `kl_pf4.check` could t
   counts 0).
 - `kl_graft.DeadMen` is subclassed for `--heroes` and for the chain's navigation mesh.
 - `redirect()` (chain only) patches five lookups and `kl_prpjoin.sides` for the name `R09`.
-All of it is undone when the build returns; nothing is written outside `<out>`.
+- `--flat <class>` adds one entry to `kl_gms.RETYPE` for the length of the build (third pass).
+All of it is undone when the build returns; nothing is written outside `<out>`, with two exceptions
+added in the third pass: `stock_use()` caches a census of the stock Dog Days levels as
+`kl_maps_stock_use.json` in the system temp folder, and `kl_maps.py stage <folder>` - a command for
+the live side, never run by the offline work - copies a kept build into `<work>/build/install`.
+
+---------------------------------------------------------------------------------------------------
+
+## 9. Before the first live run of M02_FA_A and M06_FA_A (third pass, 2026-10-09, agent f-maps)
+
+Offline only, as everything in this file: nothing was installed, the game was not started. What is
+new against sections 0 - 8: `tools/kl_graft.py` as committed in 6238e30 (it now calls
+`kl_light.fit_shaders` and `stream_groups` and runs `kl_fa`), three new commands of `kl_maps.py`
+(`first`, `preflight`, `deliver`) and the pre-pass `--flat`, and the reading of kl2.exe behind each
+prediction. "read" = read off the disassembly at the address given.
+
+### 9.1 Every build again, with the current kl_graft
+
+| build | problems | against the table of section 1 |
+|---|---:|---|
+| F07 + M02_FA_A | 0 | same row; new notes: 11 materials fitted, **6 without any compiled shader** (not drawn) |
+| F07 + M02_FA_A `--flat ZEnvSampler` | 0 | same counts; the 7 samplers are ZSTDOBJ |
+| F08 + M06_FA_A (section 3.3's S) | 0 | same row; 13 materials fitted, 6 without a shader |
+| F07 + M06_FA_A | 0 | same row |
+| F07 + M09_A, pre-pass, `--heroes` | 11 | same 11 (FA layer + 6 stream clips); 10 materials fitted, 0 left |
+| F07 + M09_B, pre-pass, `--heroes` | 12 | same 12 |
+| chain F07 + M09_B + M09_A | 12 | same 12; 24,165 entities, 22 rooms, 2,141 textures, 1,399 materials (was 1,397), 4,801 / 4,635, 314 MB, nav 603,332 bytes, FDX kept |
+
+Materials without a compiled shader (kl_graft's notes; `fit_shaders` found no permutation):
+M02: `Plastic_Basic_01a_LampMexi_M02_FA`; both maps: `Effect_Glow_Turkis_Round_01a_M06`,
+`Glow_Flare_01a_M07`, `Glow_Headlights_01b_M07`, `Glow_Beam_01a_M07`, `_Basic/Colour_White_Glow`;
+M06: `Paper_Rice_Lantern_01a_JPN` (the paper lanterns will be invisible - and they are what the
+garden is lit by at night). Not a crash: the bank ran live with 35 such materials.
+
+The offline checks that exist, all run on the kept builds by `python tools/kl_maps.py preflight <folder>`:
+
+| check | M02 (F07, flat) | M06 (F07) | M06 (F08) |
+|---|---|---|---|
+| `kl_graft.verify` | 0 problems | 0 | 0 |
+| `kl_fa.check` | 0 CRASH, 0 BROKEN, 4 DEGRADED, 2 NOTE | 0 / 0 / 3 / 2 | 0 / 0 / 3 / 2 |
+| `kl_light.check` on the map's nodes | nothing; 3 environments "in no stock form" (`AmbientDirectional` x2, `AmbientOut`: ('main', 3, True, True, 3, 3)) - a matter of look | nothing, 0 unknown | nothing |
+| `kl_light.missing_shaders` on the written .MAT / .fxc | 6 of 1,076 | 6 of 995 | 6 of 914 |
+| `kl_snd.verify` (inside `graft_audio`) + `broken_groups` on the written .WHD | no problem; 128 torn records left, none named by a wave | 123, none named | 123, none named |
+| `kl_anmjoin.verify` | no problem; `Van`, `Police_USA` converted from Dead Men; stand-ins Female <- Civilian, Police <- F03's, Army <- Swat_02 | stand-ins `Female_Fighter` <- F03's Thug, `Mercenary_04` <- Lynch_NPC; 103 clips added | the same |
+| `kl_pf4.check` on the written mesh | 55 areas, 908 polygons, 106 waypoints, 0 links | 14 areas, 954 polygons, 18 waypoints, 0 links | the same |
+
+### 9.2 The crashes the diner and the bank hit, looked for here
+
+| crash (run) | what it was | cheap offline check (in `preflight`) | M02 | M06 |
+|---|---|---|---|---|
+| jump into ZFFGameData+0x3e3c at 99 % (B-2) | an event that deletes itself after it was entered in the save-state table: `OnlineSpeakTrigger` without its line | `kl_graft.mute_speech` on the written .prp / .SND; and the other self-deleting inits: `OnlineMoneyContainer` (kl2 0x837000: first reference must resolve), `PhysicsLinkage` (0x80bd20 -> 0x78cd90: first reference must resolve to a ZLNKOBJ, class id [0x15355a0]) | 2 triggers cut by the build, 0 left; 26 containers, 26 resolve; no linkage | no trigger cut; no container; **8 linkages (new on a Dead Men map), all 8 name a ZLNKOBJ + a bone** (the paper lanterns; stock L01's lamps have the same form) |
+| 0x81e714, key index outside the .buf (B-3) | a KEYS chunk at the end of a long raw block, offsets not shifted | every 'SYEK' tag in every raw block is found by `keys_tracks`, every offset lies in the head; other four-letter tags in raw blocks | 112 chunks, all found; no other tag | 93, all found; no other tag |
+| 0x58a7fc (B1), assert 0x531708 (M03) | a vehicle controller on a car that RETYPE had made a ZSTDOBJ | controllers whose registered owner is an entity class the node is not; nodes retyped | `GatePath` (owner ZGROUP) on a ZBoxPrimitive x2 - init read (0x449120: asks the PARENT for `GateGroup`, never uses its node as a group); nothing retyped but ZIngameMapGroup in Dead Men's systems | none |
+| divide fault 0x44668b on the sound thread (RN5) | an interleaved stream group torn apart | `broken_groups` on the written .WHD against the waves of the written .SND | 0 named | 0 named |
+
+A fifth trap of the same family was read for this pass and is NOT one: `ZHeliFlyBehaviourRout`
+init (slot 14, 0x815aa0), listed in re/crash_gamedata.md section 4 as "deletes itself when: not
+read". The `[vtbl+0x78]` call in it is on a child iterator, not on itself. It looks for the ZHeli
+under its group and that heli's `HeliScript` controller and returns quietly when there is none.
+`ZOnlineSpeakPlayer` init (0x8cb6e0, M06 has one) frees its buffer when a line is missing and
+stays alive: no self-delete either.
+
+### 9.3 What these maps have that the diner and the bank do not (`python tools/kl_maps.py first <map>`)
+
+Map side only, as kl_graft takes it. "stock" = objects in the 21 stock Dog Days levels.
+
+**M02_FA_A**
+
+| class / controller | n | stock Dog Days | Dog Days init | what it dereferences (read) | risk |
+|---|---:|---|---|---|---|
+| `ZEnvSampler` (entity) | 7, slots 0,0,0,1,2,2,3 | **0 - no level** | object: bounding box only (re/cars.md). But 0x718f20 gives every ZEnvSampler a `ZRenderEntryEnvSamplerD3D` (ctor 0x7ee4b0, vtable 0xb99f58) | ctor: slot = [sampler+0x14], entered in a table of 4 x 16 at 0x138c718 (counts 0x138c844; the count is tested against 16, **the slot is not tested**); render function 0x61b5a0 (frame of 0x1e4b4 bytes): each frame picks the nearest sampler per slot and renders through it | **highest of M02**: a renderer path no stock level ever enters, and the launch is `-dx10`. Slots are 0..3 here, in range. `--flat ZEnvSampler` takes the path away |
+| `SoundSpline` on ZSNDOBJ | 2 | **0 - no level** | slot 15 0x61e690, slot 16 0x544e60, update slot 25 0x48a240 | the node's sound instance (0x6c6ab0 -> 0x659370 by handle) **without a null test** at 0x61e733 / 0x544ea1; the spline reference is tested three times (empty, unresolved, wrong class all skipped); the update does not touch the reference | medium: code alive in both exes, never run by a Dog Days level. Check: the node has a sound of the merged bank (2 of 2) |
+| `PatrolBehaviourRout` on ZGROUP | 3 | 17 (F03 F04 L06 L08) | slot 13 0x4aff50, slot 14 0x536e00 | slot 13: the PARENT's `ZSquadScript` / `ZMercSquad` / `ZFusionSquad` / `ZProxySquad` controller -> squad at +0x38; slot 14: when the start flag (+0x50, field [2]) is set it calls 0x59a0e0, which calls through the squad untested | low: flag = 1 in all five Dead Men uses, 0 in the FA levels but 1 in stock L06; every one hangs under a `ZSquadScript` (check `behaviour`). Pairing is an ASSUMPTION (9.4) |
+| `GatePath` on ZBoxPrimitive, `GateGroup` | 2, 1 | 1,242 / 700 | 0x449120 / none | parent's `GateGroup` controller (may be 0) | low |
+
+**M06_FA_A**
+
+| class / controller | n | stock Dog Days | Dog Days init | what it dereferences (read) | risk |
+|---|---:|---|---|---|---|
+| `SoundSpline` on ZSNDOBJ | 4 (one with an EMPTY spline list: `...highway_SoundSpline_03!Highway_03`) | **0** | as above | as above; the empty list is skipped at 0x544ee8 | medium |
+| `SoundVolumetricRandom` on ZSNDOBJ | 4 (water drips) | **0** | slot 13 0x651260, update slot 25 0x63de00 | init: the node's box (0x857110) into +0x30 / +0x54; update tests the sound instance for 0 (0x63de25) | low / medium: never run by a Dog Days level |
+| `ZHeli` (entity) | 2 (`EscapeSetup!EscapeChopper\Escape_Chopper\V_Coli_Shot_01`, `BossChopper!...\Jpn_Boss_Chopper\V_Coli_Shot_01`) | 21 (F02 F03 F06 F08 L04 L08 L09 L10) | slots 16 0x8269d0, 17 0x802660, 18 0x57ae30 - not read | - | medium: the subtree has the same shape as stock F08's (group with `OnlineEscHavokCar` + `OnlineEscVehicleController` + `VehicleEffects`, ZHeli child with `HeliWeapon` + `HeliScriptRout`, sibling groups with `HeliFlyBehaviourRout`, a `HeliNetSync` box), but the DATA is Dead Men's: 10 of ZHeli's 24 own fields are Dog Days defaults (9.4), and its model, bones and .HVK shapes are Dead Men's |
+| `HeliFlyBehaviourRout` x4, `HeliScriptRout` x2, `HeliNetSync` x2, `HeliWeapon` x1, `MsgForward` x3 | | 165 / 19 / 21 / 17 / 46 | 0x815aa0 (9.2), 0x8c51f0, 0x8988d0, 0x5f5340 (not read), 0x63ef80 | HeliScriptRout: allocates 0xa0 and registers with [[0xdd265c]+0x15ac]; HeliNetSync: only acts when its node IS a ZHeli (class id [0x168ce48]); here it sits on a ZBoxPrimitive, as one of stock F08's does: returns; MsgForward: parent's object | low |
+| `PhysicsLinkage` on ZCloth / ZSTDOBJ | 8 | 274 (story levels only) | slot 14 0x80bd20 | 9.2: deletes itself unless its first reference is a ZLNKOBJ | low after the check |
+| `ZFFItemWeapon` + `Action` | 4 (`BossChopper!Items!Minime_01`, `RPG7_01` ...) | 101 (story levels only) | 0x4c7560 / 0x44b700 | Action: its node and the node's parent flags | low / medium: weapons lying in an FA map do not occur in stock FA levels; their templates are `dm_rename` guesses (`Mg_Minimi_SPW_01` -> `Mg_Minimi_SPW_L10_Heli`, `Smg_MP5-A3_01` -> `SMG_UMP_SBR`, `Rifle_SG552_01` -> `Rifle_Type95_L09_NPC`) |
+| `SquadModifierBehaviour`, `PatrolBehaviourRout` x2, `OnlineSpeakPlayer` | 1, 2, 1 | 1,200 / 17 / 6 | 0x681210, 0x536e00, 0x8cb6e0 | see M02 / 9.2 | low |
+| `ShowPipCam` | 1 | not registered by kl2.exe | - | the converter drops it | none (the picture-in-picture camera of the incoming chopper is lost) |
+
+Also only in these maps, from the conversion logs: M02's .prm has one `prop2` record (stripped by
+kl_prm; none in M01 / M03 / M06); M06 has 145 scatter objects (each becomes an empty mesh, 436 chunks
+added; M01 had 4 and ran) - the garden's grass and bushes are not drawn.
+
+### 9.4 Pairings by assumption that these maps use
+
+`Converter.assumed` holds 26 class levels today (re/pairings.md settled the rest). Of those, on the
+map side of M02 / M06 and of neither M01 nor M03:
+
+| class level | objects | the pairing | values that matter |
+|---|---|---|---|
+| `ZPatrolBehaviourRout` | M02 3, M06 2 | Dead Men `e path, list, b, e moveset, list, b` -> Dog Days `e, list, b, e, b*, f*, b*, f*, list, b, b*` (* = new, Dog Days' usual value: 1, 50.0, 1, 200.0, 0) | [2] b = 1 (start flag, read at 0x536e90); the two lists keep their order. The second Dead Men list is empty in all five |
+| `ZHeli` | M06 2 | the 14 Dead Men fields in place, 10 new ones behind them (an I, six f, two b, `EHeliTeam`) = Dog Days' usual values | own field [7] (a sound reference, type handler 70) is 0 in every stock ZHeli read (18 of 18 in F02 F03 F04 F06 F08 L04 L08 L09); here it names a sound, rewritten into the merged bank like any other |
+| `ZSquadModifierBehaviour` | M06 1 | twelve enums, each of its own type, so the pairing is by type | `eAM_Deactivate`, everything else `NotSet` |
+
+Classes with an assumed pairing that the proven maps also have, with values those maps never had
+(ZHavokShatter's floats and its three .buf-like integers [9] [11], ZParticleTemplate [25], ZTrafficFlow
+[3], ZDefendBehaviourRout `eDMS_Sprint`): same code paths as in the runs that passed.
+`preflight` prints, for the first-timer classes, every bool / enum / flag value that no stock Dog Days
+level stores in that field: none in either map.
+
+### 9.5 Shapes
+
+| | M01 (ran) | M03 (ran) | M02 | M06 |
+|---|---|---|---|---|
+| rooms of the map / gates / neighbour lists | 11 / 48 / - | 19 / 73 / - | 31 / 78 (most in one room 12) / 67 | 6 / 8 / 8 |
+| .rmi / .rmc boxes | 20 / 11 | 60 / 18 | 44 / 30 | 10 / 6 |
+| .oct room sets, map records | 13, 818 | 21, 2,198 | 33, 2,004 | 8, 694 |
+| REF cells in gates / lists | 231 | 688 | 732 | 124 (one id names no entity in stock M06: sent to a free id, as before) |
+| .buf head of the map | 0x40b0 | 0x4cb0 | 0x4540 | 0x1e20 |
+| fields that look like .buf offsets (scan of every integer field: 4-aligned, inside the head, distinct) | ZROOM[9], [10] | the same | the same, no other | ZROOM[10] only, no other |
+| navigation mesh (Dog Days form) | 101,492 B | 186,672 B | 238,188 B, 0 links | 258,640 B, 0 links (the largest of the four) |
+| Dead Men links dropped by kind | - | 1 (kind 6) | none | none |
+| FDX block | yes | no | 1 record, 5 instances | 2 records, 6 instances (the lanterns `PhysicsLinkage` hangs things on) |
+| .sgd | both octrees | both; glass section stripped | both; **HavokShatterGlassConnectivity (25,412 B) stripped**, as on the bank | **no ExplodableOctree at all** (stock M06 has none; 21 of 21 stock Dog Days levels have one) |
+| PostFilterBox controllers of the map (the box table is left out for a Dead Men map) | not counted | not counted | 14 | 1 |
+| filter sets against S's palette | | | 12 sets, 39 curves, none past the palette | the same |
+| lit descriptors / scatter | 0 / 4 | 2,250 / 0 | 1,375 / 0 | 0 / 145 |
+
+The missing ExplodableOctree was read: the loader (ZGameData slot 3 -> 0x5e38c0) skips a section it
+does not find and leaves game data +0x814 as it was; the two users (0x60b426, 0x82e5a9) and the
+destructor (0x86c243) test it for 0. ASSUMPTION: it is 0 at that point (what clears it before a level load was not followed; a direct
+boot starts from a fresh object). `kl_members.sgd_join` could write
+an empty section instead (9.7, patch C) - not needed if the reading is right.
+
+### 9.6 Predictions, most likely first (where to look when a run faults)
+
+M02_FA_A
+1. `ZRenderEntryEnvSamplerD3D` (0x61b5a0 and what it calls) on the first frame that draws, unless
+   the build is `--flat ZEnvSampler`. A fault there has kl2 0x61b5a0..0x61c0dc or 0x7ee4b0 on the stack.
+2. `ZSoundSpline` 0x61e733 / 0x544ea1 (read of [sound instance + 0x84] / +0xa8) at level start if
+   0x659370 returns 0 for the node. Fix then: drop the two controllers (`MultiPlayerSounds_Only!
+   Nearest_Lane_Traffic_Sound`, `...Furthermost_Lane_Traffic_Sound`).
+3. Size: 21,934 entities, 32 rooms and a 238 KB mesh are each more than any Dead Men build that ran
+   (19,827 / 20 / 187 KB); stock L10 has 42,915 entities. No fixed limit is known to be near.
+4. In a round: the escape car is a ZHavokCar on a spline (as in M01 / M03: `kl_fa` 'vehicle', never
+   driven live yet), 303 jewel bags + 26 money containers, 3 patrols.
+
+M06_FA_A
+1. The two helicopters: `ZHeli` with Dead Men's model and mostly default fields, `HeliWeapon`
+   (0x5f5340, 123 instructions, not read) on the escape chopper. A direct boot only loads them; the
+   boss chopper flies when its squad is alerted, the escape chopper when the exit trigger fires.
+2. `ZSoundSpline` x4 (as M02) and `ZSoundVolumetricRandom` x4.
+3. No ExplodableOctree (9.5): if the reading is wrong the fault is at 0x60b4a7 or 0x82e62a
+   (a call through [game data + 0x814]) the first time something explodes.
+4. Look, not crash: no grass (scatter), no paper lanterns (shader), no picture-in-picture camera.
+
+Both: the things every Dead Men map has had so far and that ran (dynamic list kept from S, three
+`kl_fa` DEGRADED findings, music fields 157 / 158).
+
+### 9.7 Patches for kl_graft.py (not mine; none is needed for the builds of section 10)
+
+**A. verify() - the two other self-deleting inits** (after the `mute` test, about line 1117):
+
+    first = lambda cls: next(i for i, f in enumerate(sch.fields(cls)) if f.owner == cls)
+    for k in range(1, len(Jn.nodes)):
+        for nm, obj in Jn.nodes[k]['ctrls']:
+            name = Jn.p.key(nm)
+            if name in ('OnlineMoneyContainer', 'PhysicsLinkage'):
+                refs = J.strings(Jn, units(obj[1:-1])[first('Z' + name)])
+                hit = Jn.resolve(refs[0]) if refs else []
+                if not hit or (name == 'PhysicsLinkage' and not any('ZLNKOBJ' in sch.bases(Jn.cls(x)) for x in hit)):
+                    bad.append('%s: %s deletes itself at init (kl2 0x837000 / 0x80bd20)' % (Jn.path[k], name))
+
+**B. build() - Dead Men classes as their base, per build.** `kl_maps --flat` does it from outside by
+adding `0x20010f: 0x200002` to `kl_gms.RETYPE` for the length of a build (the bisect that table's
+comment describes). As a build option: `build(..., flat=())` with the same two lines around
+`DeadMen(m_name, log)`, and `--flat ZEnvSampler` in the CLI.
+
+**C. kl_members.sgd_join - always write both octree sections** (only if 9.5's reading fails live):
+replace `if body:` by `if body or name == 'ExplodableOctree':` and give `Octree.join` of nothing the
+serialisation of an empty tree (take the 880-byte section of stock L00 as the pattern; what the
+smallest legal tree is was not worked out).
+
+**D. install from a folder.** `kl_maps.py stage <folder>` copies a kept build into
+`<work>/build/install/Scenes/Locations/<slot>`; `kl_graft.install(slot, src=None)` with
+`d = src or out_dir(slot)` would make the copy unnecessary.
+
+**E. re/crash_gamedata.md section 4** (not mine): ZHeliFlyBehaviourRout does not delete itself;
+ZPhysicsLinkage (0x80bd20) does and is missing from the table (whether it is in the save-state table
+at that point: not read).
+
+---------------------------------------------------------------------------------------------------
+
+## 10. The builds for the first live runs, and the commands
+
+Built by `python tools/kl_maps.py deliver <out>`; each folder holds the slot's archive, the files
+beside it (.WHD .WAV .hti and the `_LS` bank), `graft.txt`, `log.txt`, `result.json`,
+`preflight.txt` / `.json`. All four: `verify: problems: 0`, preflight `CRASH 0`.
+
+| folder under `<out>` | what | preflight |
+|---|---|---|
+| `F07+M02_FA_A flat` | **first M02 run**: Late Night Opening under F07, the 7 ZEnvSampler loaded as ZSTDOBJ | RISK 1 (SoundSpline) |
+| `F07+M02_FA_A` | second M02 run: the samplers alive (the difference between the two runs IS the sampler) | RISK 3 |
+| `F07+M06_FA_A` | **first M06 run**: A Walk in the Park under F07 | RISK 2 (SoundSpline, SoundVolumetricRandom) |
+| `F08+M06_FA_A` | second M06 run: the helicopter host | RISK 2 |
+
+Why F07 first for M06, against section 3.3: F07 is the only S that has run live under a Dead Men map
+(every run of the log, a whole Arcade round included), and its kept escape-vehicle monitor is the one
+that round ran with. Under F08 `kl_fa` has to add an empty monitor to the map's own exit trigger
+(`Triggers!Call_ExitChpooer_Trigger`) - a path no run has taken. F08's advantages (smaller bank and
+archive, a helicopter level) are worth a second run, not the first.
+
+For the live side, one line each (run from the repo; `<out>` = the folder named in the agent's result):
+
+    python tools\kl_maps.py preflight "<out>\F07+M02_FA_A flat"          (again, if in doubt: exit code 1 = do not install)
+    python tools\kl_maps.py stage "<out>\F07+M02_FA_A flat"              copy the build into <work>\build\install (replaces the build there)
+    python tools\kl_graft.py install F01                                 into the test slot
+    python tools\kl_autotest.py 420 --shots 100-200:10 --tag M02a        direct boot; a healthy level leaves after 205 .. 325 s
+    python debug\triage.py --keep                                        on a crash; then section 9.6
+
+and the same with `F07+M02_FA_A` (tag M02b), `F07+M06_FA_A` (M06a), `F08+M06_FA_A` (M06b). To rebuild
+one: `python tools\kl_maps.py one <out> F07 M02_FA_A --keep --flat ZEnvSampler`, or all four:
+`python tools\kl_maps.py deliver <out>`. A round through the menu: as run RN6 (klhook\KLHook.round.ini),
+wait 1000. `stage` and `install` write to the work folder and the game folder: the live side's step,
+not done here.

@@ -605,6 +605,16 @@ def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, l
     # ---- 2. wave headers and wave data
     recs = W.records(src.game, src_whd)
     writer, whdmap = W.Writer(base_whd, base_wav), {}
+    def stream_rec(f):
+        """(name, Dog Days fields) of a streamed source record, None if its clip is not in the
+        merged stream file."""
+        g = W.to_dd(f, src.game)
+        if not same:
+            if f['fmt'] & W.LANGFILE or f['off'] not in strmap:           # only PC_Def.str was merged
+                return None
+            off = strmap[f['off']]
+            g['fmt'], g['off'], g['offhi'] = f['fmt'], off & 0xffffffff, off >> 32
+        return cs(src_whd, f['name']), g
     def whd_rec(old):
         if old not in whdmap:
             f = recs.get(old)
@@ -612,13 +622,25 @@ def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, l
                 st['waves that name no .WHD record'] += 1
                 whdmap[old] = None; return None
             name, g, data = cs(src_whd, f['name']), W.to_dd(f, src.game), None
+            if f['fmt'] & W.STREAMED and f['fmt'] >> 24:
+                # a clip of an interleaved stream group (Dead Men: X.wav 0x82 + X_R.wav 0x01, thousands a
+                # level; stock Dog Days level files have none): the whole group comes along, records
+                # back to back, or none of it (kl_whd.Writer.add_group has the reason)
+                members = W.group_of(src.game, recs, old)
+                clips = [stream_rec(recs[m]) for m in members] if members else None
+                if not clips or None in clips:
+                    st['stream clips of a group that is torn in the source or not in the merged stream file'] += 1
+                    whdmap[old] = None; return None
+                for m, at in zip(members, writer.add_group(clips)):
+                    whdmap[m] = at
+                st['stream records added'] += len(members); st['interleaved stream groups added'] += 1
+                return whdmap[old]
             if f['fmt'] & W.STREAMED:
-                if not same:
-                    if f['fmt'] & W.LANGFILE or f['off'] not in strmap:   # only PC_Def.str was merged
-                        st['stream clips not in the merged stream file'] += 1
-                        whdmap[old] = None; return None
-                    off = strmap[f['off']]
-                    g['fmt'], g['off'], g['offhi'] = f['fmt'], off & 0xffffffff, off >> 32
+                sr = stream_rec(f)
+                if sr is None:
+                    st['stream clips not in the merged stream file'] += 1
+                    whdmap[old] = None; return None
+                g = sr[1]
                 st['stream records added'] += 1
             else:
                 off = f['off'] | (f.get('offhi', 0) << 32)
@@ -1018,6 +1040,10 @@ def test_merge(s_name, m_name, log=print, out=None):
     after = roots(sc, ks)
     if not after <= set(m.kind):
         bad.append('rewritten references that are no object')
+    torn = set(W.torn_groups('dd', a.beside['.WHD']))   # an interleaved stream group must come along whole (Writer.add_group)
+    named = sum(off in torn for _w, _i, off in m.waves())
+    if named:
+        bad.append('%d wave references name a record of a torn interleaved stream group (divide fault at kl2 0x44668b)' % named)
     log('%s systems + %s map: %d map nodes, %d distinct references' % (s_name, m_name, len(ks), len(before)))
     log('  counts:  %s' % ', '.join('%s %d' % kv for kv in sorted(c.items())))
     log('  merged .SND %d bytes (stock %d): %s; stock bytes below %#x unchanged: %s' % (

@@ -100,6 +100,37 @@
  *                                        NEVER arm it while the frontend runs: Steam's probe at 0xa8e3cb
  *                                        (raised before each scene load) jumps to 0 when a debug register is
  *                                        set (run RN2). Armed during the load it survived (run RN3).
+ *   17=mouse 400 0 2000                  scripted mouse: counts per second in x and y for that many ms (through
+ *                                        the mouse's GetDeviceState; the real mouse is dropped while a script runs).
+ *                                        Run PX3: -400 counts/s for 4 s turned the player by -272 degrees = 0.17
+ *                                        degrees a count at the default sensitivity (no profile is loaded).
+ *      mdown 0 / mup 0                   mouse button 0..7 held / released (0 = fire)
+ *   18=pos label                         log the moving player's position and heading (see PLAYERS below)
+ *   19=goto 291 -9400 100 15000 sprint keep
+ *                                        steer the player to world (x, z): W held, the mouse turned in proportion to
+ *                                        the bearing error (5 / s, at most 1800 counts/s); done within <radius>
+ *                                        (default 120). No path finding: give way points (the level's navigation
+ *                                        mesh has them, re\fa_round.md 6). Not on for 1.5 s: side step A / D for
+ *                                        0.7 s, every third time a tap on C ('Get Up' when the player is down).
+ *                                        A timeout (default 20000 ms) is LOGGED and the script goes on. 'sprint'
+ *                                        holds LSHIFT, 'keep' leaves the keys down for a following goto.
+ *      face 300 -8300 5 3000             turn until the heading is within <degrees>; only works while walking
+ *                                        (the heading at +0xc14 does not follow the camera of a standing player)
+ *   20=onwin HeistStatusLeaderboard score   from now on: when that window comes up, let go of every key and go
+ *      label score                          on at the label (a round can end while the script still walks)
+ *   [Auto] PosLogMs=2000 logs 'pos tick' that often once a level runs; PosOff / DirOff / TurnDeg override the
+ *   offsets and the mouse gain below. A script may have 640 lines.
+ *
+ * PLAYERS (read only; found by sampling the process from outside while a script walked, runs PX2 / PX3)
+ *   A ZFFPlayer (vtable 0xbb45f4) is 16 objects a level, found by scanning the heap for the vtable (0.1 s).
+ *   +0x460 three floats: world position of the feet (x, y up, z), the navigation mesh's own heights.
+ *   +0xc14 three floats: unit vector pointing BACK; heading = atan2(-x, -z), within 1 degree of the direction
+ *   of travel on every straight stretch. The entity slot (+4) of a player holds an identity matrix: no use.
+ *   Which of the 16 is the local one is not read anywhere: it is the one that moves (the other heroes stand
+ *   at their start places in Arcade). kl2.exe's data holds no pointer to it that was found.
+ *   Keys (kl2.exe's default binding text, 'GameplayInput={...}'): W A S D, LSHIFT / SPACE sprint, E use /
+ *   pick up / heal, C cover and 'Get Up', R reload, Q weapon, mouse left fire, right aim, TAB scores.
+ *
  *   Keys: A-Z 0-9 F1-F12 RETURN ESCAPE SPACE TAB BACK UP DOWN LEFT RIGHT LSHIFT LCONTROL LMENU INSERT
  *   DELETE HOME END PRIOR NEXT NUMPADENTER, or a DIK code as 0x1C. RSHIFT cannot be scripted: the game
  *   ignores DIK 0x36 from DirectInput and asks GetAsyncKeyState(0xA1) (kl2 0x6c8c2f, 0x6c8c91).
@@ -294,6 +325,7 @@
 #include <signal.h>
 #include <tlhelp32.h>
 #include <intrin.h>
+#include <math.h>
 
 #ifndef KLAUTO_FROM_KLHOOK
 #define DirectInput8Create klhook_DirectInput8Create
@@ -910,12 +942,99 @@ static int kla_install(void)
 
 /* ---------------------------------------------------------------- script */
 
-typedef struct { char op; BYTE key; DWORD n, n2; char text[80]; } KCMD;
-enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH };
-static KCMD kla_cmd[256]; static int kla_ncmd, kla_pc; static DWORD kla_cmd_t, kla_cmd_f, kla_seq;
+typedef struct { char op; BYTE key; DWORD n, n2; char text[80]; float f[4]; } KCMD;
+enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH, C_MOUSE, C_MDOWN, C_MUP, C_POS, C_GOTO, C_FACE, C_ONWIN, C_LABEL };
+static KCMD kla_cmd[640]; static int kla_ncmd, kla_pc; static DWORD kla_cmd_t, kla_cmd_f, kla_seq;
 static BYTE kla_held[256]; static DWORD kla_rel_t[256], kla_rel_f[256]; static int kla_taps, kla_started;
 
 static int kla_script_pc(void) { return kla_ncmd ? kla_pc + 1 : 0; }
+
+/* ---- scripted mouse: relative counts per second, fed through the mouse's GetDeviceState (DIMOUSESTATE2:
+   lX +0, lY +4, lZ +8, buttons +12..; the game reads 0x14 bytes once a frame, kl2 0x650840) */
+static float kla_m_rate[2], kla_m_acc[2]; static BYTE kla_m_btn[8]; static DWORD kla_m_last;
+static int kla_trap = -1;                         /* line of the armed 'onwin' command */
+
+/* ---- the players, read only. A ZFFPlayer is found by its vtable (0xbb45f4, RTTI) in the heap: 16 per level
+   (Heroes!Hero_01..08\Ground, Heroes!RespawnPolice#01..08\Ground), all at 16-byte aligned addresses in the
+   two runs looked at (PX1, PX2). Fields are in kla_pl_* below; they were found by sampling the process from
+   outside while a script walked (runs PX2, PX3). No game function is called and nothing is written. */
+#define KLA_VT_FFPLAYER 0xbb45f4u
+static DWORD kla_pl[32]; static int kla_npl, kla_me = -1; static DWORD kla_pl_scan_t;
+static DWORD kla_pos_off = 0x460;                 /* [Auto] PosOff: three floats x, y (up), z */
+static DWORD kla_dir_off = 0xc14;                 /* [Auto] DirOff: three floats, the unit vector pointing BACK */
+static float kla_turn_deg = 0.17f;                /* [Auto] TurnDeg: degrees of heading per mouse count (run PX3:
+                                                     -1600 counts in 4 s turned the player by -272 degrees) */
+static DWORD kla_poslog_ms, kla_poslog_t;         /* [Auto] PosLogMs: log the moving player's position that often */
+/* goto state */
+static DWORD kla_go_t, kla_go_stuck_t, kla_go_side_t; static float kla_go_from[3]; static int kla_go_w, kla_go_side, kla_go_shift, kla_go_n, kla_go_fin;
+static float kla_pl_first[32][3]; static float kla_pl_path[32], kla_pl_prev[32][3];
+
+static int kla_player_pos(int i, float *v)
+{
+    if (i < 0 || i >= kla_npl || !kla_rd(kla_pl[i] + kla_pos_off, v, 12)) return 0;
+    return v[0] == v[0] && v[1] == v[1] && v[2] == v[2] && (v[0] != 0 || v[2] != 0);
+}
+
+static int kla_find_players(void)
+{   /* scan the committed private read-write memory; 0.2 - 1 s, so only on demand and at most every 5 s */
+    MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; static BYTE buf[0x10000]; DWORD t0 = GetTickCount(); int i;
+    if (kla_npl >= 16 && kla_rd32(kla_pl[0]) == KLA_VT_FFPLAYER) return kla_npl;
+    if (kla_pl_scan_t && t0 - kla_pl_scan_t < 5000) return kla_npl;
+    kla_npl = 0; kla_me = -1;
+    while ((DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
+        if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
+            SIZE_T o, k;
+            for (o = 0; o < mbi.RegionSize; o += sizeof buf) {
+                SIZE_T n = mbi.RegionSize - o < sizeof buf ? mbi.RegionSize - o : sizeof buf;
+                if (!kla_rd((DWORD_PTR)mbi.BaseAddress + o, buf, n)) continue;
+                for (k = 0; k + 4 <= n; k += 16)
+                    if (*(DWORD *)(buf + k) == KLA_VT_FFPLAYER && kla_npl < 32) kla_pl[kla_npl++] = (DWORD)((DWORD_PTR)mbi.BaseAddress + o + k);
+            }
+        }
+        a = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
+    }
+    kla_pl_scan_t = GetTickCount();
+    for (i = 0; i < kla_npl; i++) { kla_pl_path[i] = 0; if (!kla_player_pos(i, kla_pl_first[i])) memset(kla_pl_first[i], 0, 12); memcpy(kla_pl_prev[i], kla_pl_first[i], 12); }
+    kla_out(1, "players: %d ZFFPlayer object(s) found in %lu ms", kla_npl, kla_pl_scan_t - t0);
+    return kla_npl;
+}
+
+static int kla_local_player(void)
+{   /* the player the script moves: the one whose position has travelled furthest since the scan (the other
+       fifteen stand still while nobody else plays). -1 until one has moved 30 units. */
+    int i, best = -1; float v[3];
+    kla_find_players();
+    for (i = 0; i < kla_npl; i++) {
+        if (!kla_player_pos(i, v)) continue;
+        if (kla_pl_prev[i][0] != 0 || kla_pl_prev[i][2] != 0) {
+            float dx = v[0] - kla_pl_prev[i][0], dz = v[2] - kla_pl_prev[i][2], d = dx * dx + dz * dz;
+            if (d < 250000.0f) kla_pl_path[i] += (float)sqrt(d);         /* a respawn is not walking */
+        }
+        memcpy(kla_pl_prev[i], v, 12);
+        if (kla_pl_path[i] > 30.0f && (best < 0 || kla_pl_path[i] > kla_pl_path[best])) best = i;
+    }
+    if (best >= 0 && best != kla_me) { kla_me = best; kla_out(1, "players: the moving one is #%d at %08lx", best, kla_pl[best]); }
+    return kla_me;
+}
+
+static int kla_player_dir(int i, float *deg)
+{   /* heading in degrees, atan2(x, z) of the way the player faces: minus the vector at +0xc14. In run PX3 it
+       equals the direction of travel to within 1 degree on every straight stretch (walking and sprinting)
+       and keeps its value while the player stands. */
+    float v[3];
+    if (i < 0 || i >= kla_npl || !kla_rd(kla_pl[i] + kla_dir_off, v, 12) || (v[0] == 0 && v[2] == 0)) return 0;
+    *deg = (float)(atan2(-v[0], -v[2]) * 57.29577951);
+    return 1;
+}
+
+static void kla_log_pos(const char *label)
+{
+    int i, me = kla_local_player(); float v[3]; char line[900]; int n = 0;
+    if (me >= 0 && kla_player_pos(me, v)) { float h = 0; kla_player_dir(me, &h); kla_out(1, "pos %s: me #%d (%.0f, %.0f, %.0f) heading %.0f", label, me, v[0], v[1], v[2], h); return; }
+    n = snprintf(line, sizeof line, "pos %s: nobody has moved yet;", label);
+    for (i = 0; i < kla_npl && n < 800; i++) if (kla_player_pos(i, v)) n += snprintf(line + n, sizeof line - n, " #%d (%.0f, %.0f, %.0f)", i, v[0], v[1], v[2]);
+    kla_out(1, "%s", line);
+}
 static int kla_script_active(void) { return kla_pc < kla_ncmd; }
 
 static int kla_key(const char *s)
@@ -942,7 +1061,7 @@ static int kla_key(const char *s)
 static void kla_script_load(void)
 {
     char line[200], key[8], op[32], a[100]; int i;
-    for (i = 1; i <= 256; i++) {
+    for (i = 1; i <= 640; i++) {
         KCMD *c = &kla_cmd[kla_ncmd]; char *rest;
         snprintf(key, sizeof key, "%d", i);
         if (!GetPrivateProfileStringA("Script", key, "", line, sizeof line, kla_ini)) break;
@@ -987,6 +1106,23 @@ static void kla_script_load(void)
             sscanf(rest + strlen(a), "%lu %47s", &c->n2, lab);
             snprintf(c->text, sizeof c->text, "%s%s%s", plus ? plus + 1 : "0", " ", lab);
         }
+        else if (!_stricmp(op, "mouse")) {              /* mouse <counts/s x> <counts/s y> <ms> */
+            c->op = C_MOUSE; sscanf(rest, "%f %f %lu", &c->f[0], &c->f[1], &c->n);
+        }
+        else if (!_stricmp(op, "mdown") || !_stricmp(op, "mup")) { c->op = (char)(!_stricmp(op, "mdown") ? C_MDOWN : C_MUP); c->n = strtoul(a, 0, 10) & 7; }
+        else if (!_stricmp(op, "goto") || !_stricmp(op, "face")) {      /* goto <x> <z> [radius 120] [timeout ms 20000] [sprint] [keep] */
+            char w1[16], w2[16]; w1[0] = w2[0] = 0;
+            c->op = (char)(!_stricmp(op, "goto") ? C_GOTO : C_FACE); c->f[2] = c->op == C_GOTO ? 120.0f : 4.0f; c->n = c->op == C_GOTO ? 20000 : 4000;
+            if (sscanf(rest, "%f %f %f %lu %15s %15s", &c->f[0], &c->f[1], &c->f[2], &c->n, w1, w2) < 2) { kla_out(1, "script line %d: %s needs <x> <z> - script not loaded", i, op); kla_ncmd = 0; return; }
+            c->key = (BYTE)((!_stricmp(w1, "sprint") || !_stricmp(w2, "sprint") ? 1 : 0) | (!_stricmp(w1, "keep") || !_stricmp(w2, "keep") ? 2 : 0));
+        }
+        else if (!_stricmp(op, "label")) { c->op = C_LABEL; snprintf(c->text, sizeof c->text, "%s", a); }
+        else if (!_stricmp(op, "onwin")) {              /* onwin <window> <label>: text = window, NUL, label */
+            char m[40]; m[0] = 0; sscanf(rest + strlen(a), "%39s", m);
+            if (!a[0] || !m[0] || strlen(a) + strlen(m) + 2 > sizeof c->text) { kla_out(1, "script line %d: onwin needs <window> <label> - script not loaded", i); kla_ncmd = 0; return; }
+            c->op = C_ONWIN; strcpy(c->text, a); strcpy(c->text + strlen(a) + 1, m);
+        }
+        else if (!_stricmp(op, "pos")) { c->op = C_POS; snprintf(c->text, sizeof c->text, "%s", rest); }
         else if (!_stricmp(op, "peek")) {
             char *plus = strchr(a, '+');
             c->op = C_PEEK; c->n = strtoul(a, 0, 16); c->key = (BYTE)(plus != 0); c->n2 = plus ? strtoul(plus + 1, 0, 16) : 0;
@@ -1034,6 +1170,17 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
     for (k = 0; kla_taps && k < 256; k++)
         if (kla_rel_f[k] && (int)(now - kla_rel_t[k]) >= 0 && (int)(kla_frames - kla_rel_f[k]) >= 0) { kla_event(rg, count, cap, k, 0); kla_rel_f[k] = 0; kla_taps--; return; }
     if (kla_taps) return;                               /* the next command waits until every tap is released */
+    if (kla_trap >= 0 && kla_trap < kla_ncmd && !_stricmp(kla_top, kla_cmd[kla_trap].text)) {
+        /* 'onwin': the window came up (a round ended while the script was still walking): every held key and
+           the mouse are let go, one event per poll, and the script goes on at the label */
+        const char *lab = kla_cmd[kla_trap].text + strlen(kla_cmd[kla_trap].text) + 1; int j;
+        kla_m_rate[0] = kla_m_rate[1] = 0; memset(kla_m_btn, 0, sizeof kla_m_btn);
+        for (k = 0; k < 256; k++) if (kla_held[k]) { kla_event(rg, count, cap, k, 0); return; }
+        kla_go_w = kla_go_shift = kla_go_side = kla_go_fin = kla_go_n = 0;
+        for (j = 0; j < kla_ncmd; j++) if (kla_cmd[j].op == C_LABEL && !_stricmp(kla_cmd[j].text, lab)) break;
+        kla_out(1, "script: window '%s' is up at line %d: going on at label '%s' (line %d)", kla_top, kla_pc + 1, lab, j + 1);
+        kla_trap = -1; kla_pc = j; kla_cmd_t = now; kla_cmd_f = kla_frames;
+    }
     while (kla_pc < kla_ncmd && guard++ < 16) {
         KCMD *c = &kla_cmd[kla_pc]; int next = 0;
         switch (c->op) {
@@ -1096,6 +1243,69 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
             kla_sel_n++; kla_sel_t = now;
             kla_out(1, "script %d: tap key 0x%02x (focus was on %s)", kla_pc + 1, c->key, d);
             return; }
+        case C_MOUSE:
+            if (now - kla_cmd_t >= c->n) { kla_m_rate[0] = kla_m_rate[1] = 0; next = 1; }
+            else { kla_m_rate[0] = c->f[0]; kla_m_rate[1] = c->f[1]; }
+            break;
+        case C_MDOWN: case C_MUP: kla_m_btn[c->n] = (BYTE)(c->op == C_MDOWN ? 0x80 : 0); kla_out(1, "script %d: mouse button %lu %s", kla_pc + 1, c->n, c->op == C_MDOWN ? "down" : "up"); next = 1; break;
+        case C_POS: kla_log_pos(c->text); next = 1; break;
+        case C_LABEL: next = 1; break;
+        case C_ONWIN: kla_trap = kla_pc; kla_out(1, "script %d: when window '%s' comes up, go to label '%s'", kla_pc + 1, c->text, c->text + strlen(c->text) + 1); next = 1; break;
+        case C_GOTO: case C_FACE: {
+            /* steer the moving player to (x, z): W held, the mouse turned in proportion to the bearing error.
+               No path finding: the script gives way points (taken from the level's navigation mesh). A player
+               that does not get on for 1.5 s side-steps (A or D in turn) for 0.7 s. A timeout is logged and
+               the script goes on: the pictures and the position log say what happened. */
+            int me = kla_local_player(), walk = c->op == C_GOTO; float v[3], h, dx, dz, dist, err, rate;
+            if (kla_go_fin) {                           /* one key event per poll: let go of what this step held */
+                kla_m_rate[0] = kla_m_rate[1] = 0;
+                if (kla_go_side) { kla_event(rg, count, cap, kla_go_side, 0); kla_go_side = 0; return; }
+                if (kla_go_shift && !(c->key & 2)) { kla_event(rg, count, cap, 0x2a, 0); kla_go_shift = 0; return; }
+                if (kla_go_w && !(c->key & 2)) { kla_event(rg, count, cap, 0x11, 0); kla_go_w = 0; return; }
+                kla_go_fin = 0; kla_go_n = 0; next = 1; break;
+            }
+            if (walk && !(c->key & 1) && kla_go_shift) { kla_event(rg, count, cap, 0x2a, 0); kla_go_shift = 0; return; }
+            if (kla_go_n != kla_pc + 1) { kla_go_n = kla_pc + 1; kla_go_t = now; kla_go_stuck_t = now; kla_go_side_t = 0; memset(kla_go_from, 0, 12); }
+            if (walk && !kla_go_w) { kla_event(rg, count, cap, 0x11, 1); kla_go_w = 1; return; }
+            if (walk && (c->key & 1) && !kla_go_shift) { kla_event(rg, count, cap, 0x2a, 1); kla_go_shift = 1; return; }
+            if (me < 0 || !kla_player_pos(me, v) || !kla_player_dir(me, &h)) {
+                if (now - kla_go_t > 6000) { kla_out(1, "script %d: no moving player found (%d ZFFPlayer objects) - step skipped", kla_pc + 1, kla_npl); goto go_done; }
+                return;
+            }
+            dx = c->f[0] - v[0]; dz = c->f[1] - v[2]; dist = (float)sqrt(dx * dx + dz * dz);
+            err = (float)(atan2(dx, dz) * 57.29577951) - h; while (err > 180) err -= 360; while (err < -180) err += 360;
+            if (walk ? dist <= c->f[2] : (err < c->f[2] && err > -c->f[2])) {
+                kla_out(1, "script %d: %s (%.0f, %.0f) reached in %lu ms: at (%.0f, %.0f, %.0f) heading %.0f", kla_pc + 1, walk ? "goto" : "face", c->f[0], c->f[1], now - kla_go_t, v[0], v[1], v[2], h);
+                goto go_done;
+            }
+            if (now - kla_go_t >= c->n) {
+                kla_out(1, "script %d: %s (%.0f, %.0f) NOT reached in %lu ms: at (%.0f, %.0f, %.0f) heading %.0f, %.0f away, bearing error %.0f", kla_pc + 1, walk ? "goto" : "face", c->f[0], c->f[1], c->n, v[0], v[1], v[2], h, dist, err);
+                goto go_done;
+            }
+            rate = err / kla_turn_deg * 5.0f; if (rate > 1800) rate = 1800; if (rate < -1800) rate = -1800;
+            kla_m_rate[0] = rate; kla_m_rate[1] = 0;
+            if (walk) {
+                if (kla_go_side && now - kla_go_side_t > 700) { kla_event(rg, count, cap, kla_go_side, 0); kla_go_side = 0; kla_go_stuck_t = now; memcpy(kla_go_from, v, 12); return; }
+                if (kla_go_from[0] == 0 && kla_go_from[2] == 0) memcpy(kla_go_from, v, 12);
+                if (now - kla_go_stuck_t > 1500) {
+                    float mx = v[0] - kla_go_from[0], mz = v[2] - kla_go_from[2];
+                    if (mx * mx + mz * mz < 40.0f * 40.0f && !kla_go_side) {
+                        static int flip;
+                        if (++flip % 3 == 0) {                  /* every third time: C = 'Get Up' when the player is down (Arcade) */
+                            kla_out(1, "script %d: goto is stuck at (%.0f, %.0f, %.0f), %.0f away: tap C (get up)", kla_pc + 1, v[0], v[1], v[2], dist);
+                            kla_event(rg, count, cap, 0x2e, 1); kla_rel_t[0x2e] = now + 120; kla_rel_f[0x2e] = (kla_frames + 2) | 1; kla_taps++;
+                            kla_go_stuck_t = now; return;
+                        }
+                        kla_go_side = (flip & 1) ? 0x1e : 0x20; kla_go_side_t = now;
+                        kla_out(1, "script %d: goto is stuck at (%.0f, %.0f, %.0f) heading %.0f, %.0f away: side step %s", kla_pc + 1, v[0], v[1], v[2], h, dist, kla_go_side == 0x1e ? "A" : "D");
+                        kla_event(rg, count, cap, kla_go_side, 1); return;
+                    }
+                    kla_go_stuck_t = now; memcpy(kla_go_from, v, 12);
+                }
+            }
+            return;
+        go_done:
+            kla_go_fin = 1; return; }
         case C_PEEK: { DWORD v = 0, at = (DWORD)(DWORD_PTR)VA(c->n); int ok = kla_rd(at, &v, 4);
             if (ok && c->key) { at = v + c->n2; v = 0; ok = kla_rd(at, &v, 4); }
             kla_out(1, "script %d: peek %08lx%s = %s%08lx %s", kla_pc + 1, c->n, c->key ? "+" : "", ok ? "" : "unreadable ", v, c->text); next = 1; break; }
@@ -1145,7 +1355,7 @@ KF4(kd, 26) KF4(kd, 27) KF4(kd, 28) KF3(kd, 29) KF3(kd, 30) KF1(kd, 31)
 static HRESULT WINAPI kd_acquire(KPX *p)
 {
     HRESULT hr = ((HRESULT (WINAPI *)(void *))KRV(p, 7))(p->real);
-    if (FAILED(hr) && p->kind == 2 && kla_unfocused && kla_script_active()) return 0;   /* the game then polls us (0x8fa0a0) */
+    if (FAILED(hr) && (p->kind == 2 || p->kind == 3) && kla_unfocused && kla_script_active()) return 0;   /* the game then polls us (0x8fa0a0) */
     return hr;
 }
 
@@ -1162,7 +1372,19 @@ static HRESULT WINAPI kd_getstate(KPX *p, DWORD cb, BYTE *data)
     HRESULT hr = ((HRESULT (WINAPI *)(void *, DWORD, BYTE *))KRV(p, 9))(p->real, cb, data);
     int k;
     if (!data || !kla_script_active()) return hr;
-    if (p->kind == 3) { if (SUCCEEDED(hr) && kla_block) memset(data, 0, cb); return hr; }
+    if (p->kind == 3) {                                 /* the scripted mouse; the real one is dropped while a script runs */
+        DWORD now = GetTickCount(); float dt = kla_m_last ? (now - kla_m_last) / 1000.0f : 0; int i;
+        if (FAILED(hr)) { if (!kla_unfocused) return hr; memset(data, 0, cb); hr = 0; }
+        else if (kla_block) memset(data, 0, cb);
+        kla_m_last = now; if (dt > 0.1f) dt = 0.1f;
+        for (i = 0; i < 2 && cb >= 8; i++) {
+            LONG whole;
+            kla_m_acc[i] += kla_m_rate[i] * dt; whole = (LONG)kla_m_acc[i]; kla_m_acc[i] -= (float)whole;
+            *(LONG *)(data + 4 * i) += whole;
+        }
+        for (i = 0; i < 8 && 12 + i < (int)cb; i++) if (kla_m_btn[i]) data[12 + i] = 0x80;
+        return hr;
+    }
     if (p->kind != 2) return hr;
     if (FAILED(hr)) { if (!kla_unfocused) return hr; memset(data, 0, cb); hr = 0; }
     else if (kla_block) memset(data, 0, cb);
@@ -1194,6 +1416,7 @@ static HRESULT WINAPI kd_getdata(KPX *p, DWORD cb, DWORD *rg, DWORD *count, DWOR
     if (!told) { char s[128]; DWORD sys = kla_sysif(); float ax = 0; told = 1; kla_scene(s, sizeof s); if (sys) kla_rd(sys + 0x68, &ax, 4);
                  kla_out(1, "input: first keyboard poll (result %08lx); scene='%s' AutoExit=%g", (DWORD)hr, s, ax); }
     if (kla_exe_ok && !kb.loading) kla_windows(0);
+    if (kla_poslog_ms && kb.level_tick && !kb.loading && GetTickCount() - kla_poslog_t >= kla_poslog_ms && GetTickCount() - kb.level_tick > 8000) { kla_poslog_t = GetTickCount(); kla_log_pos("tick"); }
     if (!kla_script_active() || !rg || !count || cb != 20 || (flags & 1)) return hr;      /* 1 = DIGDD_PEEK */
     n = *count;
     if (FAILED(hr)) { if (!kla_unfocused) return hr; n = 0; }
@@ -1441,6 +1664,10 @@ static void kla_init(HINSTANCE inst)
     kla_unfocused = GetPrivateProfileIntA("Auto", "Unfocused", 1, kla_ini);
     kla_block = GetPrivateProfileIntA("Auto", "BlockReal", 1, kla_ini);
     kla_firstchance = GetPrivateProfileIntA("Auto", "FirstChance", 1, kla_ini);
+    { char t[32]; GetPrivateProfileStringA("Auto", "PosOff", "0x460", t, sizeof t, kla_ini); kla_pos_off = strtoul(t, 0, 16);
+      GetPrivateProfileStringA("Auto", "DirOff", "0xc14", t, sizeof t, kla_ini); kla_dir_off = strtoul(t, 0, 16);
+      GetPrivateProfileStringA("Auto", "TurnDeg", "0.17", t, sizeof t, kla_ini); kla_turn_deg = (float)atof(t); if (kla_turn_deg == 0) kla_turn_deg = 0.17f;
+      kla_poslog_ms = GetPrivateProfileIntA("Auto", "PosLogMs", 0, kla_ini); }
     kla_t0 = kla_beat = GetTickCount();
     kla_exe_ok = img_lo == 0x400000 && nt->FileHeader.TimeDateStamp == KL2_TIMESTAMP && nt->OptionalHeader.SizeOfImage == KL2_IMAGESIZE;
     kla_out(1, "klauto: enabled; exe %s; command line: %s", kla_exe_ok ? "is kl2.exe build 0490" : "is NOT the known kl2.exe - no code is patched", GetCommandLineA());

@@ -93,6 +93,32 @@ def build(game, items, T_zero=False, tail=16):
     return bytes(out)
 
 
+def group_of(game, recs, off):
+    """The interleaved stream group the record at `off` (as a wave names it) belongs to:
+    -> [offsets of its n records, first to last], [] for a record of no group, None when the
+    group does not stand as the engine needs it (a member missing or out of order)."""
+    f, R = recs.get(off), REC[game] + 4
+    if f is None or not f['fmt'] >> 24:
+        return []
+    top = f['fmt'] >> 24
+    base = off if top & 0x80 else off - top * R
+    first = recs.get(base)
+    if first is None or not first['fmt'] >> 24 & 0x80:
+        return None
+    n = first['fmt'] >> 24 & 0x7f
+    members = [base + i * R for i in range(n)]
+    if off not in members or any(m not in recs or recs[m]['fmt'] >> 24 != (i or 0x80 | n) for i, m in enumerate(members)):
+        return None
+    return members
+
+
+def torn_groups(game, b):
+    """Records of a .WHD that carry a group byte but do not stand in a group the engine can walk
+    (group_of). Stock level files of both games have none. -> [offset as a wave names it]"""
+    recs = records(game, b)
+    return [o for o in recs if group_of(game, recs, o) is None]
+
+
 def to_dd(f, game):
     """Fields of a record of `game` in Dog Days' form (name and off are the caller's to set).
     ASSUMPTION: the two dwords Dog Days added get the most common stock values (0 and 0x10 for a
@@ -132,6 +158,29 @@ class Writer:
         at = len(self.whd)
         self.whd += bytes(4) + struct.pack('<17I', *(f[k] for k in DD_F)) + bytes(8)
         self.added += 1
+        return at
+
+    def add_group(self, clips):
+        """An interleaved stream group (top byte of fmt 0x80 | n on the first of n clips, i on the
+        i-th follower): clips = [(name, Dog Days fields)] in group order. The engine finds a
+        follower's first record at record - i * 0x48 and reads the n records at a stride of 0x48
+        (kl2 0x763a70, called by the stream set-up 0x4465f0), so the names go first and the records
+        stand back to back; add() one by one tears the group apart and the lowest sample rate read
+        is then 0: divide fault at kl2 0x44668b on the sound thread (live run RN5).
+        -> [the offset a wave object stores, per clip]"""
+        names = []
+        for name, _f in clips:
+            self.whd += bytes(-len(self.whd) % 16)
+            names.append(len(self.whd))
+            self.whd += name + NUL
+        self.whd += bytes(-len(self.whd) % 16)
+        at = []
+        for (_name, f), nm in zip(clips, names):
+            f = dict(f, name=nm)
+            at.append(len(self.whd))
+            self.whd += bytes(4) + struct.pack('<17I', *(f[k] for k in DD_F))
+        self.whd += bytes(8)
+        self.added += len(clips)
         return at
 
     def finish(self):
