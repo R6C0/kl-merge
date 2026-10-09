@@ -182,6 +182,12 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+LIVE RUNS ARE PAUSED (owner, 2026-10-09 17:15): the owner is playing. Test runs take the game
+(one kl2.exe, one F01 slot, a hook that blocks the real keyboard and mouse), so NO agent launches
+the game, swaps the hook or installs into the slot until the owner says to resume. Offline work
+only. The F01 slot holds the full Retomoto build (<work>uild\i_rt\..., start inside the
+boardroom; original hook, so no tower -> lobby join and no Steam guard). The scheduled wake-up
+prompt's "install / autotest" steps do not apply while this note stands.
 State 2026-10-09 16:30. `python tools/kl_graft.py build F07 <M>` (verify must say problems: 0),
 `python tools/kl_graft.py install`, `python tools/kl_autotest.py --shots 100,130,160 --tag X`.
 Dead Men FA map names: M01_FA_A = diner / Sunny Hill Plaza, M02_FA_A = 'Late Night Opening',
