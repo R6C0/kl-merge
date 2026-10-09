@@ -183,11 +183,22 @@ Static reading and file statistics unless marked; none of it was tried in the ru
 
 ## Open work
 LIVE RUNS ARE PAUSED (owner, 2026-10-09 17:15): the owner is playing. Test runs take the game
-(one kl2.exe, one F01 slot, a hook that blocks the real keyboard and mouse), so NO agent launches
-the game, swaps the hook or installs into the slot until the owner says to resume. Offline work
-only. The F01 slot holds the full Retomoto build (<work>uild\i_rt\..., start inside the
-boardroom; original hook, so no tower -> lobby join and no Steam guard). The scheduled wake-up
-prompt's "install / autotest" steps do not apply while this note stands.
+(one kl2.exe, one F01 slot, a test hook that blocks the real keyboard and mouse), so NO agent
+launches the game, swaps the hook or installs into the slot until the owner says to resume.
+Offline work only. The scheduled wake-up prompt's "install / autotest" steps do not apply while
+this note stands.
+INSTALLED FOR THE OWNER (2026-10-09 17:20, at their request "both parts and also the music"):
+- F01 slot = Retomoto, <work>\build\play_rt\... (committed tools at 250a610, `kl_fa_author.py
+  test --keep --guards-wait --blast-delay 9`; start still inside the boardroom), zip sha1 92e07f51.
+- Hook = SHIP build <work>\build\klhook\ship (sha1 3f3f4f00; Steam guard on, real input NOT
+  blocked) + its KLHook.ini; Scenes\Locations\F01\KLJoin.ini = klhook\KLJoin.retomoto.ini.
+  The original hook pair is in <work>\build\klhook\direct_boot\.
+- <DD>\PC_Def.str = kl_str's EXTENDED merge (1,684,486,009 bytes; old offsets kept, Retomoto's
+  music / blast / ambience appended); <work>\build\PC_Def.str + map are the same pair, the
+  previous pair is PC_Def.kl_audio.str(.map.json). KL_PortBackup's original untouched.
+- One run (PLAY1, the owner at the controls): clean exit after 333 s; log shows the guard
+  ('NOT stock', one SetAchievement BLOCKED), the join box resolved to entry 5 '06_Exit'; a
+  picture at a samurai case. Music / sound: not confirmed by anyone yet.
 State 2026-10-09 16:30. `python tools/kl_graft.py build F07 <M>` (verify must say problems: 0),
 `python tools/kl_graft.py install`, `python tools/kl_autotest.py --shots 100,130,160 --tag X`.
 Dead Men FA map names: M01_FA_A = diner / Sunny Hill Plaza, M02_FA_A = 'Late Night Opening',
