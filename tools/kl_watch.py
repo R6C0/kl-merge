@@ -19,6 +19,10 @@ sys.path.insert(0, HERE)
 from kl_port_check import find, workdir, DD_GUESSES, DD_EXE
 
 user32 = ctypes.windll.user32
+HWND = ctypes.c_void_p                # 64-bit Python: a window handle does not fit the default int
+user32.IsWindowVisible.argtypes = [HWND]
+user32.GetWindowThreadProcessId.argtypes = [HWND, ctypes.POINTER(ctypes.c_ulong)]
+user32.GetWindowTextW.argtypes = [HWND, ctypes.c_wchar_p, ctypes.c_int]
 SMALL = 12000                         # bytes: a 1280-wide JPEG of a black frame is smaller
 
 
