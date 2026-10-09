@@ -182,49 +182,47 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
-State 2026-10-09 09:10. `python tools/kl_graft.py build F07 <M>` (verify must say problems: 0),
+State 2026-10-09 11:10. `python tools/kl_graft.py build F07 <M>` (verify must say problems: 0),
 `python tools/kl_graft.py install`, `python tools/kl_autotest.py --shots 100,130,160 --tag X`.
-Dead Men FA map names (re/maps.md section 10 has the evidence): M01_FA_A = diner / Sunny Hill
-Plaza, M02_FA_A = 'Late Night Opening', M03_FA_A = the BANK 'Withdrawal' (owner's priority),
-M06_FA_A = 'A Walk in the Park'.
-DONE, seen live on the bank (F07 systems + M03_FA_A in the F01 slot = final build):
-- Real Fragile Alliance Arcade rounds from the menu, driven by the hook (klhook/KLHook.round.ini,
-  position-steered): start, HUD, lives, clock; loot from a cash drawer (E held 3.5-5 s: $100,000);
-  guards kill; round over by death and by the clock; score page; Ready -> round 2 on the same
-  level. Passed: RN8, RN10, RN12. re/fa_round.md section 6 has the feature table.
-- Look: post-filter graft and baked light at 0.5 are on by default (re/lighting.md 'Outcome').
-- Sound: interleaved stream groups carried whole by kl_snd.merge / kl_whd.Writer.
-- F07 + M01_FA_A re-ran clean on the final tool (direct boot).
-OPEN on the bank:
-- THE ESCAPE: the exit box and the van are in a part of the map the player cannot reach (yard
-  walled; nav mesh has two unconnected parts). Something opens the way in Dead Men (three
-  MatPosAnim fences SO0301_USA_animFence_02_FA_*, MetalGate sounds); what starts them and
-  whether the converter / graft drops it is not known. No van was called in 4.5 min with loot.
-- Garage money boxes (OnlineMoneyContainer) gave nothing to the scripted E.
-- One crash kl2+0x438922 (stack overflow) on the score page in RN11; the identical RN12 passed.
-- HUD says 'Round: 1' in round 2.
-- Sound has never been HEARD by anyone: the owner has to listen.
-ANTI-TAMPER (re/antitamper.md): it is Valve CEG's code-integrity check, inlined at several
-hundred places; it hashes ranges of kl2.exe's code. A map of the hashed ranges exists
-(`<work>/research/agent_scripts/f-tamper/ceg_ranges.py <addr>:<len>` says whether a patch site is
-hashed). Predictions, NOT yet confirmed live (experiments X1-X9 there): import-table wrappers and
-data writes are outside the check; detours in hashed code, the vtable entry 0xb8fa24 and the
-[Engine] operand patch are inside. One observation that disagrees with 'a direct boot never
-trips it': PX1 exited on a direct boot with Hooks=1. Design rule until confirmed: no patch in
-kl2.exe code; use data writes on heap objects, private vtables, import wrappers.
+Dead Men FA map names: M01_FA_A = diner / Sunny Hill Plaza, M02_FA_A = 'Late Night Opening',
+M03_FA_A = the BANK 'Withdrawal' (owner's priority), M06_FA_A = 'A Walk in the Park'.
+DONE, seen live:
+- All four Dead Men FA maps load under F07. Real Arcade rounds from the menu (hook-driven) ran
+  on M03, M02 and M06 (start, HUD, clock, score page, Ready, round 2). M01: direct boot only.
+- Bank, complete round on a NO-GUARDS build (run ESC3): loot from a cash drawer and the garage
+  boxes, out of the yard, van called on entering the exit box, 'You jumped into the getaway car',
+  'All surviving criminals escaped', $723,625, round 2. On the full build the scripted player is
+  shot in the garage (RN13, RN14): the escape WITH guards needs a person playing.
+  How: Dead Men players CLIMB the yard's 2 m wall (ZFFPlayerMovementClimb; Dog Days has no such
+  class), so tools/kl_escape.py sinks one wall piece and cuts its collision (re/escape.md).
+- Every Dead Men map: .HVK surface indices are surface-table rows in Dead Men's numbering; a
+  bullet hitting row 30 read past Dog Days' 24 rows (crash kl2+0xe5068, M02). kl_hvk.resurface.
+- Anti-tamper experiments X1-X3 PASS in a real session: import-slot wrappers, data writes
+  ([0x168f750]+0x16, 0xd35420) and five detours outside hashed ranges. X4-X6 controls not run.
+- OWN FOLDER works live: stock F01 in the slot + klslot [Redirect] F01=DM03 loads the bank from
+  <DD>\KLExpansion\Maps\DM03 when 'Subway' is chosen (X2, X3). That folder (360 MB) was left
+  in the game folder; inert with the original hook.
+- Score-page crash (RN11) explained (re/crash_scorepage.md): an uninitialised count in kl2.exe's
+  own Steam leaderboard service, not level data; klauto writes it once ([Auto] LbFix). The
+  shipped klhook.c does not yet. 'Round: 1' in round 2 is stock Arcade behaviour.
+OPEN / DECISIONS FOR THE OWNER:
+- LEADERBOARD: whether an Arcade round on a grafted map uploads its score to the PUBLIC Steam
+  board (KL2_Heist0_TotalMoney) was not read. ESC3 ended a real escape on the 'Subway' entry.
+  Until this is settled: no more scripted rounds that end with money; direct boots are fine.
+- Sound has never been HEARD by anyone. Streams: Dog Days ships no streamed ADPCM clip; the six
+  maps need 205 ADPCM blocks - whether its stream player decodes them is unknown.
+- Zombie kl2.exe entries (0 threads) pile up and keep the hook DLL mapped; a Steam restart
+  clears them. scratchpad\glive\locked_0.dll is the original dinput8.dll moved aside by one.
 BUILT OFFLINE, never loaded by the game:
-- M02_FA_A and M06_FA_A: verify 0, preflight CRASH 0 (tools/kl_maps.py, re/maps.md 9).
-- Retomoto Tower: F07 + M09_B + M09_A with an authored FA layer (tools/kl_fa_author.py,
-  re/retomoto_fa.md): spawn in the boardroom at the window, blast at round start, loot on the
-  samurai cases, main-room loot gated on its 7 guards, a trigger in the tower's escape elevator
-  that jumps the player to the lobby car, street police, exit box and vans. Every position not
-  copied is a GUESS. Its music and 14 clips are not in the merged PC_Def.str yet.
-- Own folder: klhook/klslot.c [Redirect] (import wrappers); its [Slots] mode patches hashed code
-  and must be replaced by a data write.
+- Retomoto Tower: F07 + M09_B + M09_A with the authored FA layer (tools/kl_fa_author.py,
+  re/retomoto_fa.md section 8 = live test order).
+- tools/kl_str.py: reproducible stream-file merge for the six maps incl. Retomoto's music
+  (re/retomoto_audio.md). Installing it replaces <DD>\PC_Def.str: NOT done, needs the owner's
+  go-ahead (a stock file outside the F01 slot).
 Then, in order:
-1. Bank: the escape; the RN11 crash rate. M02 / M06 first live runs.
-2. Anti-tamper experiments X1-X3, then own folder live.
-3. Retomoto live (re/retomoto_fa.md section 8), player models, heister select.
+1. Leaderboard question. Retomoto direct boots. M01 menu round. klhook.c: LbFix, klslot data mode.
+2. Owner plays the bank on the full build and listens.
+3. Player models, heister select (data write of [rules+0x33d], re/antitamper.md), menu entries.
 Restore stock with `tools/RESTORE Dog Days originals.bat`.
 
 ## Owner's end goal (2026-10-09)

@@ -18,10 +18,12 @@ archive in a slot. Milestone A = two stock Dog Days levels (no Dead Men data): p
                        ... --no-postfilter     Dead Men map: WITHOUT its PostFilterBoxes and filter sets (default:
                                                taken, its colour curves appended to S's palette,
                                                kl_light.graft_postfilter)
+                       ... --no-escape         Dead Men map: WITHOUT kl_escape's repairs (default: the wall its players
+                                               climb is opened, money-container reach 125; re/escape.md)
                        ... --ao 0.5            Dead Men map: strength of its ambient-occlusion light map baked
                                                into the vertex colours (kl_light.bake_ao; default 0.5, 0 = off)
-    python kl_graft.py install [F01]           put the last build into Dog Days (each stock file
-                                               is MOVED to KL_PortBackup once, never overwritten)
+    python kl_graft.py install [F01] [--from <folder>]   put the last build (or a kept one) into Dog Days
+                                               (each stock file is MOVED to KL_PortBackup once, never overwritten)
     python kl_graft.py pairs                   which S / M pairs need the least guessing
 
 Outputs: <work folder>/build/install/Scenes/Locations/<slot>/ (kl_port_check.workdir()).
@@ -248,6 +250,36 @@ Hook = klauto, Hooks=0, the run's ini in <work>/build/klhook/live/<run>.ini; slo
       clean exit after 195 s; the diner street with its own post filter (shots/M01D_130s.png).
   DB2 F07 + M03_FA_A final build, ORIGINAL hook DLL and ini, direct boot. RESULT: clean exit after 260 s.
       = THE BUILD IN THE F01 SLOT.
+LIVE RUNS 2026-10-09, sixth set (g-live): M02 / M06, ANTI-TAMPER, OWN FOLDER, THE ESCAPE (re/maps.md 11, re/fa_round.md 7).
+Rounds: klauto + klslot DLL (<work>/build/klhook/round5), Hooks=0, ini per run in <work>/build/klhook/live.
+  M02a F07 + M02_FA_A, ZEnvSampler loaded as ZSTDOBJ (kl_maps --flat), direct boot. RESULT: clean exit after 271 s.
+      The mall, lit and textured; the player is shot down at the start.
+  M02b the same with the samplers alive. RESULT: crash kl2.exe+0xe5068 after 192 s: a bullet on car glass. The
+      .HVK sub-parts name rows of the surface table; Dead Men's 25..31 lie past F07's 24 rows (0x4e5040 has no
+      bounds test). Fix: kl_hvk.resurface in DeadMen + a verify test. EVERY Dead Men map had this.
+  M02c rebuilt with the fix. RESULT: clean exit after 284 s. The seven env samplers are harmless.
+  M06a F07 + M06_FA_A, direct boot. RESULT: clean exit after 231 s. The Japanese garden at night, lanterns lit.
+  M06r a real Arcade round on it from the menu (walk, look round, wait). RESULT: clean exit after 617 s, PASS:
+      HUD, clock, nobody attacks, the clock ends the round, score page, Ready, round 2.
+  M02r the same on F07 + M02_FA_A. RESULT: clean exit after 647 s, PASS.
+  X1  bank; + ten import-slot wrappers (klslot's five file ones with [Redirect] F01=DM03, klauto's five exit
+      ones). RESULT: clean exit after 243 s, PASS: the round runs. The import table is not checked.
+  X2  + data writes (slot name table, a netcode global, written back unchanged); STOCK F01 in the slot, the
+      bank only in <DD>/KLExpansion/Maps/DM03. RESULT: clean exit after 238 s, PASS: 'Subway' loads the bank
+      from its own folder. THE OWN FOLDER WORKS.
+  X3  + only the five detours in unhashed pages. RESULT: clean exit after 240 s, PASS.
+  ESC1 bank without guards, with kl_escape's repairs (now in build(): the wall Dead Men's players climb is
+      opened). RESULT: crash kl2.exe+0x2a8902 after 332 s. Seen before it: $650,000 (the garage boxes pay),
+      through the wall into the exit box, THE VAN IS CALLED AND COMES. The crash: a dropped wallet's
+      TriggerBox2 hands the van (ZHavokCar) to the game rules as an actor. Fix: kl_fa.money_people.
+  ESC2 + that fix. RESULT: clean exit after 436 s, PASS, but E at the van does nothing: Dead Men's boarding
+      action is 'eONLY_KANE'. Fix: kl_fa.boarding (stock form).
+  ESC3 + that fix. RESULT: clean exit after 386 s, PASS. A WHOLE ROUND WITH THE ESCAPE: 'You jumped into the
+      getaway car', 'All surviving criminals escaped', $723,625 (Escape 50,000 + Loot 650,000 + Time bonus),
+      Ready, 'Round: 2'.
+  RN13 the FULL build (guards), same script. RESULT: clean exit after 329 s, PASS: shot dead in the garage.
+  RN14 the full build, no stops for loot. RESULT: clean exit after 317 s, PASS: dead in the garage again. The
+      escape is seen on the no-guards build only; the script cannot fight. = THE BUILD IN THE F01 SLOT (full).
 BISECT (not needed in the end, but it works): build ... --geometry [--m-add A,B] [--m-drop ..]
   [--s-keep ..] [--s-drop ..], see Select. '--geometry --s-drop *' = M's geometry and no game-mode
   layer at all verifies with 0 problems; plain '--geometry' leaves S's game-mode layer with scene
@@ -332,10 +364,14 @@ def plain(level, slot='F01', log=print):
     return write_level(slot, members, beside_of(level), log)
 
 
-def install(slot='F01', log=print):
+def install(slot='F01', log=print, src=None):
     """Copy the built archive and the files beside it into Dog Days' slot. Each stock file is
-    moved to KL_PortBackup the first time (kl_package._backup_then_copy), never overwritten."""
-    dd, d = find(DD_GUESSES, DD_EXE), out_dir(slot)
+    moved to KL_PortBackup the first time (kl_package._backup_then_copy), never overwritten.
+    src: a folder holding a kept build (<slot>_Main.zip and the files beside it, e.g. one of
+    kl_maps.py deliver) instead of the last build."""
+    dd, d = find(DD_GUESSES, DD_EXE), src or out_dir(slot)
+    if not os.path.isfile(os.path.join(d, slot + '_Main.zip')):
+        raise FileNotFoundError(os.path.join(d, slot + '_Main.zip'))
     for f in sorted(f for f in os.listdir(d) if f.startswith(slot + '_Main')):      # archive, BESIDE, _LS bank
         kl_package._backup_then_copy(dd, os.path.join('Scenes', 'Locations', slot, f), os.path.join(d, f))
 
@@ -370,7 +406,7 @@ class DeadMen(Level):
     .prm / .TEX / .MAT kl_prm / kl_tex / kl_mat. Chunk indices, REF ids, slot ids, .buf offsets
     and texture / material ids are still Dead Men's own: build() renumbers them like any M.
     NOT converted (copied, ASSUMPTION that Dog Days reads them alike): entity flags and raw data
-    blocks (KEYS, light curves), .HVK surface indices, .sgd octrees, .sgp, .hrd, FDX block.
+    blocks (KEYS, light curves), .sgd octrees, .sgp, .hrd, FDX block.
     Dead Men's 'CoverList' (a top-level list with FFCoverList) is counted as map: Dog Days keeps
     its own under Specials!CoverPoints!, which leaves with S's map."""
 
@@ -447,7 +483,11 @@ class DeadMen(Level):
         self.files[self.ext['.TEX']] = kl_tex.convert(self['.TEX'])[0]
         self.files[self.ext['.MAT']] = kl_mat.convert_mat_full(self['.MAT'], prm=self['.prm'], surface='dd',
                                                                texture_ids=tex_ids)[0]
-        log('%s converted: %s; %d gates; .prm %s' % (name, dict(st), ngates, {k: v for k, v in rep.items() if v and not isinstance(v, list)}))
+        # .HVK sub-parts name rows of the surface table too (kl_hvk.resurface): the same map as the
+        # .MAT's, 14 of its rows GUESSES by meaning (kl_mat.SURFACE_GUESS: CarGlass -> Glass ...)
+        self.files[self.ext['.HVK']], srep = kl_hvk.resurface(self['.HVK'], {k: v[0] for k, v in kl_mat.surface_map().items()})
+        log('%s converted: %s; %d gates; .prm %s; .HVK surfaces %s' % (name, dict(st), ngates, {k: v for k, v in rep.items() if v and not isinstance(v, list)},
+                                                                      {'%d>%d' % k: v for k, v in sorted(srep.items())}))
 
 
 GEOMETRY = ('Locations/*', 'CloneGroup_Locations')      # + anything with 'Backdrop' in its name
@@ -658,7 +698,7 @@ def dm_rename(Jn, S, log=print, anim=True):
 
 # ------------------------------------------------------------------ the graft
 def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True, light='stock', anim=True, fa=True,
-          postfilter=True, ao=0.5):
+          postfilter=True, ao=0.5, escape=True):
     """Systems of S + map of M -> (path of the archive, problems found by verify()).
     sound: merge what M's map names of M's bank into S's (kl_snd.graft_audio); False = the map's
     sound references are set to 0 (the silent builds of milestones A and B). loc: also graft the
@@ -670,7 +710,8 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
     scene for a real round (kl_fa, re/fa_round.md). postfilter: a Dead Men map keeps its
     PostFilterBoxes and its filter sets get their curves (kl_light.graft_postfilter). ao: strength
     0..1 of Dead Men's light map baked into the vertex colours (kl_light.bake_ao); 0 = not baked.
-    Both are on by default since the live runs LK0 - LK2 (re/lighting.md, second pass, outcome)."""
+    Both are on by default since the live runs LK0 - LK2 (re/lighting.md, second pass, outcome).
+    escape: kl_escape's repairs of a Dead Men map's way to the escape vehicle (re/escape.md; needs fa)."""
     sch = J.schema('dd')
     for t, load in SOUND_TYPES.items():
         if sch.types[t]['load'] != load:
@@ -760,8 +801,12 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
             Jn = J.join(S.prp, picks, label, rename=lambda s: rename.get(s, s), take=take)
     finally:
         S.prp.p.settings = base_settings
+    esc = None
     if fa:                                              # before anything goes by controller index
         kl_fa.repair(Jn, kept, log)
+        if escape and M.dm:                             # re/escape.md: the wall Dead Men's players climb is opened,
+            import kl_escape                            # container reach 80 -> 125 (values of existing objects only)
+            esc = kl_escape.repair(Jn, log)
         if sel.m_drop:                                  # a test build without some of M's subtrees (e.g. AI_Enemies!*):
             kl_fa.prune(Jn, [M.prp.names[t] for t in m_tops], log)     # what named them names nothing now
     if Jn.names[1:] != [e.name.decode('latin1') for e in final]:
@@ -963,11 +1008,13 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
         note('surface table: %d effects were in %s\'s map and are cleared' % (len(gone), s_name))
         table.remap({e.ref: e.ref for e in final}, missing=MB.NONE)
         A.tail = table.serialize()
+    cut = kl_escape.place_entities(Jn, list(A.entities()), esc, log) if esc else ()     # the sunk wall in the .gms too
     gms, buf = A.write()
 
     # ---- the members no id space module covers
     refs_s = {e.ref: e.ref for e in s_kept}
-    hvk = kl_hvk.join([(kl_hvk.Hvk(M['.HVK']), refs_m)], (kl_hvk.Hvk(S['.HVK']), refs_s)).serialize()
+    hvk = kl_hvk.join([(kl_hvk.Hvk(M['.HVK']), refs_m)], (kl_hvk.Hvk(S['.HVK']), refs_s))
+    hvk = (kl_escape.cut_collision(hvk, cut, log) if cut else hvk).serialize()           # ... and its collision gone
     sgd = MB.sgd_join([(M['.sgd'], refs_m), (S['.sgd'], refs_s)])
     s_names = {S.prp.names[t] for t in s_tops}
     m_names = {M.prp.names[t] for t in m_tops}
@@ -1215,6 +1262,9 @@ def verify(out, Jn, S, M, copy, s_kept, mj, shift, log=print, audio=None, light=
     table = MB.SurfaceTable(sc.tail)
     if table.refs() - set(by_ref):
         bad.append('surface table names %d entities that are gone' % len(table.refs() - set(by_ref)))
+    past = sum(1 for s in h.shapes for su, _f, _n in s.sub if su > len(table.materials))    # run M02b: read past the rows at kl2 0x4e5068
+    if past:
+        bad.append('.HVK: %d sub-parts name a surface row past the %d of the table' % (past, len(table.materials)))
     if sc.fdx is not None:
         for r in MB.fdx_read(out['.buf'], sc.fdx)[1]:
             if kinds.get(r['model']) != 'root':
@@ -1289,13 +1339,16 @@ if __name__ == '__main__':
         ao = 0.5
         if '--ao' in a:
             i = a.index('--ao'); ao = float(a[i + 1]); del a[i:i + 2]
-        flags = ('--geometry', '--silent', '--no-loc', '--stock-anm', '--no-fa', '--no-postfilter')
-        g, quiet, noloc, noanm, nofa, pf = (f in a for f in flags)
+        flags = ('--geometry', '--silent', '--no-loc', '--stock-anm', '--no-fa', '--no-postfilter', '--no-escape')
+        g, quiet, noloc, noanm, nofa, pf, noesc = (f in a for f in flags)
         a = [x for x in a if x not in flags]
         sys.exit(1 if build(a[1], a[2], *a[3:4], sel=Select(g, **opt), sound=not quiet, loc=not noloc, light=light,
-                            anim=not noanm, fa=not nofa, postfilter=not pf, ao=ao)[1] else 0)
+                            anim=not noanm, fa=not nofa, postfilter=not pf, ao=ao, escape=not noesc)[1] else 0)
     elif a and a[0] == 'install':
-        install(*a[1:2])
+        src = None
+        if '--from' in a:
+            i = a.index('--from'); src = a[i + 1]; del a[i:i + 2]
+        install(*a[1:2], src=src)
     elif a and a[0] == 'pairs':
         pairs()
     else:

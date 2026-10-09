@@ -349,8 +349,8 @@ def one(out, s_name, m_name, keep=False, campaign=False, heroes=False, slot=SLOT
         """The level's HERO_AT markers under the names (and class) of S's Heroes! groups: picks_of
         then puts S's group in the marker's place and build() gives it the marker's rotation and
         position, exactly as it does for a Fragile Alliance map's own Heroes! groups."""
-        def __init__(self, name, log=print):
-            super().__init__(name, log)
+        def __init__(self, name, log=print, *a, **k):   # *a: kl_graft.DeadMen's later arguments (ao)
+            super().__init__(name, log, *a, **k)
             from kl_prp import units
             group = next(t for t, c in J.schema('dd').geoms.items() if c == 'ZGROUP')
             lab = kl_graft.labels('ZGROUP')
@@ -643,7 +643,8 @@ def preflight(folder, slot=SLOT, log=print):
 
     # -- the sound-thread fault of the bank: interleaved stream groups
     whd = open(os.path.join(folder, slot + '_Main.WHD'), 'rb').read()
-    torn = set(kl_graft.broken_groups(whd))
+    import kl_whd                                       # (kl_graft.broken_groups moved there)
+    torn = set(kl_whd.torn_groups("dd", whd))
     named = sum(off in torn for _w, _i, off in kl_snd.Snd('dd', snd).walk().waves())
     if named:
         say('CRASH', 'streams', '%d wave references name a record of a torn interleaved stream group (divide fault kl2 0x44668b)' % named)

@@ -803,3 +803,57 @@ one: `python tools\kl_maps.py one <out> F07 M02_FA_A --keep --flat ZEnvSampler`,
 `python tools\kl_maps.py deliver <out>`. A round through the menu: as run RN6 (klhook\KLHook.round.ini),
 wait 1000. `stage` and `install` write to the work folder and the game folder: the live side's step,
 not done here.
+
+---------------------------------------------------------------------------------------------------
+
+## 11. First live runs of M02_FA_A and M06_FA_A (2026-10-09, agent g-live)
+
+Run in the game, F01 slot, `python tools/kl_autotest.py`; pictures `<work>\research\shots\<run>_<s>s.png`,
+logs of the scripted rounds `<work>\build\klhook\live\<run>.*`. The builds are the four of section 10,
+rebuilt with the current tools (`python tools/kl_maps.py deliver <work>\build\v_maps`, all four
+`problems: 0`, preflight `CRASH 0`) - `kl_maps.one` and `preflight` had fallen behind kl_graft
+(`DeadMen(ao=)`, `broken_groups` moved to `kl_whd.torn_groups`); both fixed.
+
+| run | build | how | RESULT | what was seen |
+|---|---|---|---|---|
+| M02a | F07 + M02_FA_A, `--flat ZEnvSampler` | direct boot | clean exit after 271 s | the mall: tiled floor, shop fronts, lit perfume posters ('Rose Lily', 'Directory'); the player is shot down at the start ('C Get Up', 'You died') - M02a_150s / 160s / 200s |
+| M02b | F07 + M02_FA_A, samplers alive | direct boot | **crash kl2.exe+0xe5068 after 192 s** | not the samplers: see below |
+| M02c | the same, rebuilt with the fix | direct boot | clean exit after 284 s | as M02a (M02c_170s) |
+| M06a | F07 + M06_FA_A | direct boot | clean exit after 231 s | the Japanese garden at night under the motorway: gravel, rocks, stone lanterns that are lit, office towers behind (M06a_150s, M06a_190s) |
+| M06r | the same | real Arcade round from the menu (klauto `Hooks=0`, the route of KLHook.round.ini, then: walk 3 x, look round, wait) | clean exit after 617 s, KLHook.result PASS | HUD, three lives, clock from 05:40; nobody attacked in the 5.5 minutes; the clock ended the round, score page, RETURN = Ready, round 2 with two lives (M06r_300s, _420s, _600s) |
+| M02r | F07 + M02_FA_A (samplers alive) | the same script | clean exit after 647 s, PASS | start in a closed shop ('MIDASEC - Opening Soon'), the player stands behind a column for the whole round (M02r_290s, _450s), clock, score page, round 2 |
+
+So: **all four Dead Men Fragile Alliance maps now load and run a real Arcade round under F07.** `--flat
+ZEnvSampler` is not needed (prediction 1 of 9.6 for M02 did not come true: the seven samplers ran for
+two direct boots and a whole round). The SoundSpline / SoundVolumetricRandom controllers, the missing
+ExplodableOctree of M06 and the two ZHeli did not fault while loaded and idle. NOT exercised: the
+helicopters flying (nobody was alerted, the exit was not reached), an explosion on M06, loot and escape
+on either map, the F08 + M06_FA_A build (not run: F07 worked, and each run costs four minutes).
+
+### 11.1 The one crash: a bullet on car glass (M02b), a tool fault of every Dead Men map
+
+`0x4e5068` is in `0x4e5040(row, column, n)`: `rows + (row - 1) * row size + column offset` of the
+level's surface table (`[0xea2878]`: the `.buf` tail, here F07's, 24 rows of 0x480 bytes), called from a
+projectile's impact (`ZProjectileBase` slot 36, 0x512ed7) with the surface the bullet hit. No bounds
+test. The fault read row 30.
+
+The `.HVK` sub-parts carry that number (`re/havok.md`: 'surface index, 0..30 in Dead Men, 0..24 in Dog
+Days'), and it is the row id of the surface table, 1-based, 0 = none: Dead Men's 27 sits on the car
+bodies and 30 on their glass (`CarGlass`), Dog Days' 2 = `Car`, 23 = `Glass`. kl_mat already renumbers
+the `.MAT`'s surface types to Dog Days' table (`kl_mat.surface_map`, 14 rows by GUESS); the `.HVK` was
+copied with Dead Men's numbers. Rows 25..31 lie past F07's table: Paper, Gravel, Car, Glass, CarGlass
+- every car and every window of every Dead Men map. The diner and the bank ran with the same fault
+unnoticed (a read past the table that happened to hit mapped memory, and the wrong impact effect).
+
+Fix: `kl_hvk.resurface` (called from `kl_graft.DeadMen`), the same map as the `.MAT`'s; `kl_graft.verify`
+now fails a build with a sub-part past the table. M03: 807 sub-parts renumbered, M02 468, M06 160.
+The bank was rebuilt with it.
+
+### 11.2 For the tables above
+
+- 9.6, M02 prediction 1 (env sampler render entry): did not happen. Prediction 3 (size): no limit hit.
+- 9.6, M06 predictions 1 - 3: nothing while idle; none of them was provoked.
+- New address for the table: `0x4e5068` / caller `0x512edc` = a surface row past the table (fixed).
+- 9.7 patch D (`install` from a folder) is in: `python tools/kl_graft.py install F01 --from <folder>`.
+  Patch A (the two other self-deleting inits in verify) and B (`build(flat=)`) are not; `--flat` stays
+  in kl_maps.

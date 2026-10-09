@@ -79,6 +79,26 @@ class Hvk:
         return sum(len(s.inst) for s in self.shapes if s.type == STATIC)
 
 
+def resurface(data, smap):
+    """A .HVK with every sub-part's surface index sent through smap {old: new}; 0 (none) stays.
+    The index is the row id of the level's surface table (.buf tail, 1-based; census of both
+    games: Dead Men 27 = 'Car' on the car bodies, 30 = 'CarGlass', Dog Days 2 = 'Car', 23 = 'Glass').
+    A projectile hit takes its impact row by it: kl2 0x512ed7 -> 0x4e5040 computes
+    rows + (index - 1) * row size WITHOUT a bounds test. Dead Men's table has 31 rows, Dog Days'
+    24: run M02b (2026-10-09) faulted at 0x4e5068 with index 30 when a bullet hit car glass.
+    -> (bytes, {(old, new): sub-parts}). An index outside smap raises."""
+    import collections
+    h, n = Hvk(data), collections.Counter()
+    for s in h.shapes:
+        for k, (su, fl, pc) in enumerate(s.sub):
+            if su:
+                if su not in smap:
+                    raise ValueError('.HVK surface index %d is not a row of the source table' % su)
+                n[su, smap[su]] += 1
+                s.sub[k] = (smap[su], fl, pc)
+    return h.serialize(), dict(n)
+
+
 def ref(inst):
     return struct.unpack_from('<I', inst, 0x30)[0]
 

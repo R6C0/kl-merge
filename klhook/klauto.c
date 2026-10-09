@@ -24,6 +24,14 @@
  *   [Auto]
  *   Enable=1          master switch (0 = this file does nothing at all)
  *   Hooks=1           patch the breadcrumb sites into kl2.exe's code (in memory, bytes verified first)
+ *   Detours=          with Hooks=0: install ONLY these detours (names of the site table, comma separated:
+ *                     NODE,CTRL,PROG,GEOMS,SCNBLK,REFFIX,ROOM,GBUF,REFEND,POST,GINIT,CLIST,CINIT,OPENWIN,ELFOCUS,
+ *                     FOCUS,INPUT). For the anti-tamper experiments X3 / X5 of rentitamper.md section 8.
+ *   VtLoad=1          with Hooks=0: install ONLY the scene-load vtable entry 0xb8fa24 (experiment X4)
+ *   LbFix=1           (default 1) once per process: the row count of ZLeaderBoardServiceSteam, which its constructor
+ *                     never writes, is set to 0 while no row is held (kla_lbfix; the RN11 score-page crash,
+ *                     re\crash_scorepage.md). A heap write, no code byte. 0 = only log the value found.
+ *   EndHooks=1        with Hooks=0: wrap the five exit import slots anyway (the 'integrity exit' tripwire, X1)
  *   Nodes=1           0 remember the last entity only, 1 log every entity, 2 also every controller
  *                     (40,000 entities with a controller each = 4.2 MB of log, 0.1 s; measured off-game)
  *   StallMs=60000     no hook hit and no input frame for this long -> FAIL stall (0 = off)
@@ -118,6 +126,8 @@
  *                                        (the heading at +0xc14 does not follow the camera of a standing player)
  *   20=onwin HeistStatusLeaderboard score   from now on: when that window comes up, let go of every key and go
  *      label score                          on at the label (a round can end while the script still walks)
+ *   21=rewrite 0x168f750+0x16 64 slot-name   DATA WRITE test (experiment X2): read <n> bytes (at most 64) at an
+ *      rewrite 0xd35420 4 netcode-global       address, or at [address] + offset, and write the same bytes back
  *   [Auto] PosLogMs=2000 logs 'pos tick' that often once a level runs; PosOff / DirOff / TurnDeg override the
  *   offsets and the mouse gain below. A script may have 640 lines.
  *
@@ -171,6 +181,10 @@
  *   Which of the patches trips it was not separated. RULE: a run that starts a session uses Hooks=0,
  *   no [Engine], CmdAdd for engine keys; breadcrumbs are for direct-boot runs.
  *   With Hooks=0 a load is noticed as a pause of the keyboard polls followed by a new scene name.
+ *   SINCE (re\antitamper.md: it is Valve CEG's code-integrity check over hashed ranges of the image; runs X1 - X3,
+ *   re\fa_round.md 7.1): import-slot wrappers (EndHooks=1, klslot's [Expansion]), data writes ('rewrite') and the
+ *   five detours in unhashed pages (Detours=NODE,CTRL,SCNBLK,REFFIX,GINIT) each survived a real session. The other
+ *   eight detours, the vtable entry and [Engine] are inside hashed ranges (not separated live).
  *
  * RESULT FILE <game>\KLHook.result
  *   state=RUNNING | PASS | EXIT | FAIL      (EXIT = the process ended by itself and nothing was wrong)
@@ -334,6 +348,7 @@
 #undef DirectInput8Create
 #undef DllMain
 #endif
+#include "klslot.c"                              /* [Expansion] / [Redirect]: file redirect by import wrappers (re\slot_redirect.md) */
 
 #define KL2_TIMESTAMP 0x4c80f728u
 #define KL2_IMAGESIZE 0x134e000u
@@ -922,28 +937,31 @@ static void kla_end_hooks(void)
     kla_out(1, "end hooks: %d of 5 import slots wrapped", n);
 }
 
+static DWORD kla_only = 0xffffffff;              /* bit i: detour i is installed; bit 31: the vtable entry ([Auto] Detours / VtLoad) */
 static int kla_install(void)
 {
-    int i, ok = 0; BYTE *p, jmp[10]; DWORD v, old = 0x820300, mine;
+    int i, ok = 0, want = 0; BYTE *p, jmp[10]; DWORD v, old = 0x820300, mine;
     kla_stubs = (BYTE *)VirtualAlloc(0, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     if (!kla_stubs) return 0;
     for (i = 0, p = kla_stubs; i < H_COUNT; i++, p += 64) {
         BYTE *at = VA(kla_sites[i].va); int len = kla_sites[i].len;
+        if (!(kla_only >> i & 1)) continue;
+        want++;
         kla_emit(p, i, kla_sites[i].bytes, len, at + len);
         memset(jmp, 0x90, sizeof jmp); jmp[0] = 0xe9; v = (DWORD)(p - (at + 5)); memcpy(jmp + 1, &v, 4);
         if (kla_poke(at, kla_sites[i].bytes, jmp, len)) ok++;
         else kla_out(0, "hook %08lx (%s) NOT installed: bytes differ", kla_sites[i].va, kla_sites[i].what);
     }
     kla_real_load = (KLA_LOAD)(DWORD_PTR)(old + kla_delta); mine = (DWORD)(DWORD_PTR)kla_scene_load;
-    i = kla_poke(VA(0xb8fa24), (BYTE *)&old, (BYTE *)&mine, 4);
-    kla_out(1, "hooks: %d of %d detours installed, scene-load wrapper %s", ok, H_COUNT, i ? "installed (vtable entry 0xb8fa24)" : "NOT installed");
+    i = kla_only >> 31 ? kla_poke(VA(0xb8fa24), (BYTE *)&old, (BYTE *)&mine, 4) : 0;
+    kla_out(1, "hooks: %d of %d detours installed (mask %08lx), scene-load wrapper %s", ok, want, kla_only, i ? "installed (vtable entry 0xb8fa24)" : "NOT installed");
     return ok + i;
 }
 
 /* ---------------------------------------------------------------- script */
 
 typedef struct { char op; BYTE key; DWORD n, n2; char text[80]; float f[4]; } KCMD;
-enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH, C_MOUSE, C_MDOWN, C_MUP, C_POS, C_GOTO, C_FACE, C_ONWIN, C_LABEL };
+enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH, C_MOUSE, C_MDOWN, C_MUP, C_POS, C_GOTO, C_FACE, C_ONWIN, C_LABEL, C_REWRITE };
 static KCMD kla_cmd[640]; static int kla_ncmd, kla_pc; static DWORD kla_cmd_t, kla_cmd_f, kla_seq;
 static BYTE kla_held[256]; static DWORD kla_rel_t[256], kla_rel_f[256]; static int kla_taps, kla_started;
 
@@ -1128,6 +1146,11 @@ static void kla_script_load(void)
             c->op = C_PEEK; c->n = strtoul(a, 0, 16); c->key = (BYTE)(plus != 0); c->n2 = plus ? strtoul(plus + 1, 0, 16) : 0;
             snprintf(c->text, sizeof c->text, "%s", rest + strlen(a));
         }
+        else if (!_stricmp(op, "rewrite")) {           /* rewrite <addr>[+off] <bytes> <label> */
+            char *plus = strchr(a, '+'); char m[60]; m[0] = 0;
+            c->op = C_REWRITE; c->n = strtoul(a, 0, 16); c->key = (BYTE)(plus != 0); c->n2 = plus ? strtoul(plus + 1, 0, 16) : 0;
+            c->f[0] = 4; sscanf(rest + strlen(a), "%f %59s", &c->f[0], m); snprintf(c->text, sizeof c->text, "%s", m);
+        }
         else { kla_out(1, "script line %d: unknown command '%s' - script not loaded", i, op); kla_ncmd = 0; return; }
         kla_ncmd++;
     }
@@ -1161,6 +1184,27 @@ static int kla_msg(const char *elem, const char *msg)
     kla_out(1, "msg: '%s' -> %s '%s' at %p (slot 20 = %08lx)", msg, cls, elem, e, fn);
     ((KLA_SEND)(DWORD_PTR)fn)(e, 0, &msg);
     return 1;
+}
+
+/* The score-page crash of run RN11 (kl2 0x838922), diagnosed by g-crash (re\crash_scorepage.md): the row count
+   ZLeaderBoardServiceSteam+0x31fc is written by no constructor, only by a leaderboard download that returns rows;
+   the score page walks that many rows of the 114 the object holds. lb = [[[0x168e598]+0x17c]+0x198], valid while
+   [0x168e598] is a ZSessionManagerMultiplayer (vtable 0xbd1ebc) and lb's vtable is 0xbd5cc4. While no row is held
+   (first index +0x10 == past-last +0x14) and no request runs (+0x31f8 == 0) the count is set to 0: the value the
+   constructor should have stored. Heap data only. Called at every keyboard poll until done once. */
+static int kla_lbfix_on = 1, kla_lbfix_done;
+static void kla_lbfix(void)
+{
+    DWORD sm = kla_rd32((DWORD_PTR)VA(0x168e598)), svc, lb, first = 0, last = 0, req = 0, count = 0;
+    if (!sm || kla_rd32(sm) != 0xbd1ebc) return;
+    svc = kla_rd32(sm + 0x17c); if (!svc) return;
+    lb = kla_rd32(svc + 0x198); if (!lb || kla_rd32(lb) != 0xbd5cc4) return;
+    if (!kla_rd(lb + 0x10, &first, 4) || !kla_rd(lb + 0x14, &last, 4) || !kla_rd(lb + 0x31f8, &req, 4) || !kla_rd(lb + 0x31fc, &count, 4)) return;
+    kla_lbfix_done = 1;
+    if (first == last && !req && count && kla_lbfix_on) *(volatile DWORD *)(DWORD_PTR)(lb + 0x31fc) = 0;
+    kla_out(1, "leaderboard service %08lx: first %ld, past-last %ld, request %08lx, row count %ld (%08lx)%s", lb, (long)first, (long)last, req, (long)count, count,
+            first != last || req ? " - rows held or a request running: left alone" : !count ? " - already 0" : !kla_lbfix_on ? " - LbFix=0: left as found" :
+            (long)count > 114 ? " -> set to 0 (WOULD HAVE CRASHED the score page: more than the 114 rows held)" : " -> set to 0 (harmless value)");
 }
 
 static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
@@ -1309,6 +1353,17 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
         case C_PEEK: { DWORD v = 0, at = (DWORD)(DWORD_PTR)VA(c->n); int ok = kla_rd(at, &v, 4);
             if (ok && c->key) { at = v + c->n2; v = 0; ok = kla_rd(at, &v, 4); }
             kla_out(1, "script %d: peek %08lx%s = %s%08lx %s", kla_pc + 1, c->n, c->key ? "+" : "", ok ? "" : "unreadable ", v, c->text); next = 1; break; }
+        case C_REWRITE: {                               /* the same bytes written back: a data write that changes nothing */
+            BYTE b[64]; DWORD v = 0, at = (DWORD)(DWORD_PTR)VA(c->n); int n = (int)c->f[0], ok = 1, j; char hex[3 * 16 + 1], txt[17];
+            MEMORY_BASIC_INFORMATION mbi;
+            if (n < 1 || n > 64) n = 4;
+            if (c->key) { ok = kla_rd(at, &v, 4) && v; at = v + c->n2; }
+            ok = ok && kla_rd(at, b, n) && VirtualQuery((void *)(DWORD_PTR)at, &mbi, sizeof mbi) && (mbi.Protect & (PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READWRITE));
+            if (ok) memcpy((void *)(DWORD_PTR)at, b, n);
+            for (j = 0; j < n && j < 16; j++) { sprintf(hex + 3 * j, "%02x ", b[j]); txt[j] = (char)(b[j] >= 32 && b[j] < 127 ? b[j] : '.'); }
+            hex[3 * j] = 0; txt[j] = 0;
+            kla_out(1, "script %d: rewrite %08lx%s -> %08lx, %d byte(s) %s: %s'%s' %s", kla_pc + 1, c->n, c->key ? "+" : "", at, n,
+                    ok ? "written back" : "NOT WRITTEN (unreadable, null pointer or not writable)", ok ? hex : "", ok ? txt : "", c->text); next = 1; break; }
         }
         if (!next) return;
         kla_pc++; kla_cmd_t = now; kla_cmd_f = kla_frames;
@@ -1416,6 +1471,7 @@ static HRESULT WINAPI kd_getdata(KPX *p, DWORD cb, DWORD *rg, DWORD *count, DWOR
     if (!told) { char s[128]; DWORD sys = kla_sysif(); float ax = 0; told = 1; kla_scene(s, sizeof s); if (sys) kla_rd(sys + 0x68, &ax, 4);
                  kla_out(1, "input: first keyboard poll (result %08lx); scene='%s' AutoExit=%g", (DWORD)hr, s, ax); }
     if (kla_exe_ok && !kb.loading) kla_windows(0);
+    if (kla_exe_ok && !kla_lbfix_done && !(kla_frames & 15)) kla_lbfix();
     if (kla_poslog_ms && kb.level_tick && !kb.loading && GetTickCount() - kla_poslog_t >= kla_poslog_ms && GetTickCount() - kb.level_tick > 8000) { kla_poslog_t = GetTickCount(); kla_log_pos("tick"); }
     if (!kla_script_active() || !rg || !count || cb != 20 || (flags & 1)) return hr;      /* 1 = DIGDD_PEEK */
     n = *count;
@@ -1534,10 +1590,11 @@ static LONG CALLBACK kla_veh(EXCEPTION_POINTERS *ep)
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
-static LONG WINAPI kla_uef(EXCEPTION_POINTERS *ep)
-{   /* nothing handled it: this is the verdict */
-    char r[200]; static DWORD_PTR seen_at; static LONG seen_n;
-    if (kla_done) return EXCEPTION_CONTINUE_SEARCH;
+static LONG WINAPI kla_uef(EXCEPTION_POINTERS *ep);
+static LONG kla_uef2(EXCEPTION_POINTERS *ep, char *r, DWORD_PTR *seen_at_p, LONG *seen_n_p)
+{
+#define seen_at (*seen_at_p)
+#define seen_n (*seen_n_p)
     /* The game's own filter does not always end the process: a fault on its sound thread (run RN5, divide
        fault at 0x44668b) came back through here every 0.35 s while the round went on. Only the first one
        of an address is logged and dumped (a 47 MB dump each time slowed the game to a crawl). */
@@ -1555,9 +1612,24 @@ static LONG WINAPI kla_uef(EXCEPTION_POINTERS *ep)
     TlsSetValue(kla_tls, 0);
     InterlockedIncrement(&kla_faults);
     if (kla_prev_uef && kla_prev_uef != kla_uef) kla_prev_uef(ep);        /* the game's own Steam minidump (0x90b780); may not return */
-    snprintf(r, sizeof r, "unhandled exception %s", kla_last_fault);
+    snprintf(r, 200, "unhandled exception %s", kla_last_fault);
     kla_finish("FAIL", r, KLA_CRASH);
     return EXCEPTION_EXECUTE_HANDLER;
+#undef seen_at
+#undef seen_n
+}
+
+static LONG WINAPI kla_uef(EXCEPTION_POINTERS *ep)
+{   /* nothing handled it: this is the verdict */
+    char r[200]; static DWORD_PTR seen_at; static LONG seen_n; static volatile LONG depth; LONG res;
+    if (kla_done) return EXCEPTION_CONTINUE_SEARCH;
+    /* wrap_oal.dll installs a filter that chains to the one it replaced (ours); our re-arm then takes ITS as
+       'previous': each calls the other until the stack is gone (run RN11: 18,003 nested rounds, read by g-crash,
+       re\crash_scorepage.md 3). Entered again while a call of ours is under way = that loop: stop it here. */
+    if (InterlockedIncrement(&depth) > 1) { InterlockedDecrement(&depth); return EXCEPTION_CONTINUE_SEARCH; }
+    res = kla_uef2(ep, r, &seen_at, &seen_n);
+    InterlockedDecrement(&depth);
+    return res;
 }
 
 static void kla_crt_fatal(const char *what)
@@ -1664,6 +1736,7 @@ static void kla_init(HINSTANCE inst)
     kla_unfocused = GetPrivateProfileIntA("Auto", "Unfocused", 1, kla_ini);
     kla_block = GetPrivateProfileIntA("Auto", "BlockReal", 1, kla_ini);
     kla_firstchance = GetPrivateProfileIntA("Auto", "FirstChance", 1, kla_ini);
+    kla_lbfix_on = GetPrivateProfileIntA("Auto", "LbFix", 1, kla_ini);
     { char t[32]; GetPrivateProfileStringA("Auto", "PosOff", "0x460", t, sizeof t, kla_ini); kla_pos_off = strtoul(t, 0, 16);
       GetPrivateProfileStringA("Auto", "DirOff", "0xc14", t, sizeof t, kla_ini); kla_dir_off = strtoul(t, 0, 16);
       GetPrivateProfileStringA("Auto", "TurnDeg", "0.17", t, sizeof t, kla_ini); kla_turn_deg = (float)atof(t); if (kla_turn_deg == 0) kla_turn_deg = 0.17f;
@@ -1671,7 +1744,23 @@ static void kla_init(HINSTANCE inst)
     kla_t0 = kla_beat = GetTickCount();
     kla_exe_ok = img_lo == 0x400000 && nt->FileHeader.TimeDateStamp == KL2_TIMESTAMP && nt->OptionalHeader.SizeOfImage == KL2_IMAGESIZE;
     kla_out(1, "klauto: enabled; exe %s; command line: %s", kla_exe_ok ? "is kl2.exe build 0490" : "is NOT the known kl2.exe - no code is patched", GetCommandLineA());
-    if (kla_exe_ok) { kla_cmd_drop(); kla_engine_ini(); if (kla_hooks_on) { kla_install(); kla_end_hooks(); } }
+    if (kla_exe_ok) {
+        kla_cmd_drop(); kla_engine_ini();
+        if (kla_hooks_on) { kla_install(); kla_end_hooks(); }
+        else {                                          /* one kind of patch at a time (rentitamper.md section 8) */
+            static const char *nm[H_COUNT] = { "NODE", "CTRL", "PROG", "GEOMS", "SCNBLK", "REFFIX", "ROOM", "GBUF", "REFEND", "POST", "GINIT", "CLIST", "CINIT",
+                                               "OPENWIN", "ELFOCUS", "FOCUS", "INPUT" };
+            char d[200], *t; int i;
+            kla_only = GetPrivateProfileIntA("Auto", "VtLoad", 0, kla_ini) ? 0x80000000u : 0;
+            GetPrivateProfileStringA("Auto", "Detours", "", d, sizeof d, kla_ini);
+            for (t = strtok(d, ", "); t; t = strtok(0, ", ")) {
+                for (i = 0; i < H_COUNT && _stricmp(t, nm[i]); i++) ;
+                if (i < H_COUNT) kla_only |= 1u << i; else kla_out(1, "Detours: unknown name '%s'", t);
+            }
+            if (kla_only) kla_install();
+            if (GetPrivateProfileIntA("Auto", "EndHooks", 0, kla_ini)) kla_end_hooks();
+        }
+    }
     kla_script_load();
     kla_tls = TlsAlloc();
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
@@ -1694,7 +1783,7 @@ HRESULT WINAPI DirectInput8Create(HINSTANCE h, DWORD v, REFIID r, LPVOID *o, LPU
 BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
 {
     BOOL ok = klhook_DllMain(inst, reason, res);
-    if (reason == DLL_PROCESS_ATTACH) kla_init(inst);
+    if (reason == DLL_PROCESS_ATTACH) { kls_init(inst); kla_init(inst); }
     return ok;
 }
 #endif

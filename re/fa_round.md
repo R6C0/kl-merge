@@ -467,6 +467,8 @@ no `[Engine]` in every round.
 
 ### 6.4 The escape: where it stands
 
+(Solved since: section 7.3. Nothing opens a gate - the wall is climbed in Dead Men, re/escape.md.)
+
 - `Triggers!ExitTrigger_01` is a box at (408, 396, 460), size 4000 x 400 x 1000 (x, y, z) - whether
   full or half extents, it begins at z >= -540. The boarding trigger of the van is at
   (3252, 133, -20). Both lie in part B of the navigation mesh.
@@ -485,3 +487,117 @@ no `[Engine]` in every round.
   yard -> gate -> street -> exit box -> van, and the van's spline car is the next unknown.
 - A test build without the map's guards: `kl_graft.py build F07 M03_FA_A --m-drop "AI_Enemies!*"`
   (references into the dropped squads are pruned; `verify: problems: 0`). Used for RN9, RN10.
+
+## 7. The escape, the anti-tamper experiments, the own folder (2026-10-09, agent g-live; runs X1 - X3, ESC1 - ESC3, RN13, RN14)
+
+All run in the game, F01 slot. Logs / inis / driver output: `<work>\build\klhook\live\<run>.*`, pictures
+`<work>\research\shots\<run>_<s>s.png`, hook DLL `<work>\build\klhook\round5\dinput8.dll` (klauto +
+klslot, built by `klhook\build_auto.bat`). First live runs of M02_FA_A / M06_FA_A: re/maps.md section 11.
+
+### 7.1 Anti-tamper experiments of re/antitamper.md section 8 (that file is f-tamper's; outcomes here)
+
+Base of all three: the RN6 configuration (klauto `Hooks=0`, no `[Engine]`, CmdAdd, menu route into an
+Arcade round on F07 + M03_FA_A), then 20 s in the round, `pass`. New ini keys of klauto for this:
+`EndHooks=1` (the five exit import wrappers without the detours), `Detours=<names>` (only these
+detours), `VtLoad=1` (only the vtable entry), script command `rewrite <addr>[+off] <n>` (read n bytes
+and write the same bytes back).
+
+| run | the one change | predicted | outcome |
+|---|---|---|---|
+| X1 | klslot's five file-import wrappers (`[Expansion] Enable=1`, `[Redirect] F01=DM03`, no `[Slots]`, no MountFirst) + klauto's five exit-import wrappers | round starts | **round starts**: `expansion: 5 import(s) of the exe wrapped`, `end hooks: 5 of 5 import slots wrapped`, session game mode 4, HUD and clock (X1_240s), RESULT PASS, no `END ExitProcess`. The import table is not checked |
+| X2 | + data writes: the F01 entry of the slot table `[0x168f750]+0x16` (64 bytes, 'Locations/F01/F01_Main') and the netcode global `0xd35420` (0x7d0) written back with their own bytes - in the menu before StartGame, 15 s after the load, and 35 s after it | round starts | **round starts**, RESULT PASS. Data writes are not checked |
+| X3 | + ONLY the five detours in unhashed pages (`Detours=NODE,CTRL,SCNBLK,REFFIX,GINIT`; `hooks: 5 of 5 detours installed (mask 00000433)`) | round starts | **round starts**, RESULT PASS; the detours fired (KLHook.result: node=19828 of 19827, last entity named). The page map holds for these five |
+| X4 - X9 | controls and later designs | - | not run (each costs four minutes; X1 - X3 were the ones the redirect needs) |
+
+So the 'allowed' half of re/antitamper.md's rule is confirmed live: import wrappers, data writes and
+(so far) detours in the unhashed pages survive a real session. The 'forbidden' half (X4 - X6: vtable
+entry, hashed `.text`, operand patch) is still only RN1 - RN4, unseparated.
+PX1 (the exit on a DIRECT boot with `Hooks=1`) is not explained by the import wrappers: X1 carries all
+ten of them through a session. X2 and X3 kept X1's wrappers (the tripwire and the redirect), so each
+adds its one change on top of a configuration that had just passed.
+
+### 7.2 The own folder works (live checks 1 and 2 of re/slot_redirect.md section 8)
+
+X2 and X3 were run with **stock F01 copied back into the slot** (from `KL_PortBackup`; sha1 of the
+archive a22341b1... equal on both sides, the backup itself untouched) and the bank build only in
+`<DD>\KLExpansion\Maps\DM03\` (19 files, a copy of `<work>\build\install\...\F01\F01_Main*`); X2 with `Log=2`:
+
+- the Arcade entry 'Subway' loaded the BANK (X2_220s: plaza, bank front, Dog Days' HUD): the engine
+  believes it loads `Locations/F01/F01_Main`, every file comes from the map folder;
+- order and API of the opens (read off the log): `CreateFileA Patch01.zip` at boot, before the frontend;
+  at the level load `CreateFileA ...\F01\F01_Main.zip`, `FindFirstFileA F01_Main_LS_Default.WHD`,
+  `..._LS_Default.WAV`, `F01_Main_LS.SND`, `FindFirstFileA Loader_Sequence.zip` (not in the map folder:
+  the stock file is used, as designed), 9 s later `CreateFileA F01_Main.WHD` and `F01_Main.WAV`. Paths are
+  absolute with upper-case `SCENES\`. `PC_Def.str` and `PC_Eng.str` are opened once at boot;
+- the watcher's slot lines: slots 4 / 7 / 8 (F05, F08, F09) `available=0` at first, all nine
+  `available=1` half a second later, after the game itself had opened `F05_Main.zip`, `F08_Main.zip`
+  and `F09_Main.zip` - the game's own test, nothing of ours;
+- X1 before it had the same redirect with the build ALSO in the slot (same RESULT).
+
+Not done: live checks 3 - 6 (Overlay\Patch01.zip, MountFirst, `[Slots]`, the page option).
+`<DD>\KLExpansion\Maps\DM03\` is left in place (360 MB; refreshed to the final build at the end of the session): it
+does nothing without `[Expansion] Enable=1` in KLHook.ini and a klslot DLL.
+
+### 7.3 The escape on the bank: reached, called, boarded, round won (ESC3)
+
+g-escape's diagnosis (re/escape.md: Dead Men's players climb the yard wall, Dog Days has no climb) and
+repairs are wired into `kl_graft.build` (`escape=True`, CLI `--no-escape`): the wall piece
+`SO0101_M03_Wall_Low_8m_05` sunk, its collision cut, reach of the garage boxes 80 -> 125. Two more
+faults showed on the way; both are fixed in `kl_fa.repair`:
+
+| run | build | what happened | fix |
+|---|---|---|---|
+| ESC1 | no guards (`--m-drop "AI_Enemies!*"`), escape repairs | **Garage boxes pay**: 'Total score: $650,000' (drawer 06 + boxes 11 and 10 from the standing places of re/escape.md 6, E held 4 s each). **The wall is open**: yard (y 220) -> (-1580, 150, -535) -> the street. **The van is called** the moment the player is inside `ExitTrigger_01`: Dog Days' own escape HUD comes up (vehicle icon and countdown under the clock, a marker over the van: ESC1_300s, _310s) and the round clock drops to about a minute. Then **crash kl2.exe+0x2a8902**, 18 s after the player stood on the van's stop | `kl_fa.money_people` |
+| ESC2 | + money triggers people-only | no crash, loot as before; the van comes, stands beside the player (ESC2_340s), leaves, comes again; **E in the boarding box does nothing**, no prompt; the clock ends the round, score page all $0 (ESC2_385s) | `kl_fa.boarding` |
+| ESC3 | + boarding action in stock form | **'You jumped into the getaway car'** (ESC3_315s, with 'Share 50/50 with the pilot' / 'Hold Escape Vehicle' and the van's red countdown), **'ROUND OVER - All surviving criminals escaped. - Lives left: 3 - Round score: $723,625'** (ESC3_325s), score page: Escape $50,000, Loot $650,000, Time bonus 00:45 $23,625 (ESC3_335s), Ready, **'Round: 2'** with the total kept and three lives (ESC3_380s). RESULT clean exit after 386 s, PASS | - |
+| RN13 | the FULL build (guards), ESC3's script | the player loots drawer and both boxes and is shot dead in the garage 40 s after entering the bank; score page, Ready, round 2. RESULT clean exit after 329 s, PASS | - |
+| RN14 | the full build, the same route without any stop for loot | dead in the garage again, 25 s after entering. RESULT clean exit after 317 s, PASS | - |
+
+**The escape is proven on the no-guards build only.** The scripted player never shoots and never takes
+cover; with the map's guards he does not get out of the garage alive (RN13, RN14 and every earlier
+round). The full build differs from ESC3's only by `AI_Enemies!*`; that the van, the money triggers and
+the boarding behave the same with police around the van is NOT seen. A person has to play that round.
+
+The ESC1 crash (read from the dump, kept as `<work>\build\klhook\live\ESC1_KLHook_3.dmp`): the stack
+holds `ZTriggerBox2` -> `ZOnlineMoneyCtrl` (slot 26, 0x6cdb40) -> `ZGameRulesHeist` slot 201 (0x56f6e0)
+with the activator a **ZHavokCar** (vtable 0xbcb00c): the van. The trigger was a dropped wallet's
+(radius 90, $20,000) at (3003, 0, 40); the van's stop is (2970, 25, 41). ZTriggerBox2's update (0x626ec0)
+takes whatever the entity tracker returns within reach unless its byte +0x44 is set; the rules take an
+activator that is not a player for an actor and read `[activator+0x2940]` (0x6a88fc). `money_people` sets
+TriggerBox2 field [3] = 1 on the 362 money triggers of the level. ASSUMPTION that field [3] is byte
++0x44: one object in the dump, and stock's pooled drop stacks store 1 there. Loot still pays after it
+(ESC2, ESC3: $650,000) and no fault came in two more van visits. `kl_fa.check` reports the unrepaired
+state as CRASH 'money-trigger' (0 on the nine stock levels).
+
+The boarding: Dead Men's `PlayerAction 'EnterVehicle'` converts to `eONLY_KANE` and bools [10..13] =
+0,0,0,0. Of the 31 'EnterVehicle' actions of stock F01..F08 none has eONLY_KANE (24 `eBOTH_PLAYERS`,
+7 `eONLY_LYNCH`) and all have [12] = 1. `kl_fa.boarding` writes the most common stock form
+(`eBOTH_PLAYERS`, [12] = 1). Both changed in one run: which of the two it was is not separated (kept as
+a pair, GUESS). The script tapped E and then held it for 2 s; which of the two boards is not separated either.
+
+What the van does (pictures only; its position is not read): called on entering the exit box; a yellow
+icon with a countdown (arriving), a red one (leaving), a marker over it in the world and an arrow at the
+screen edge when it is behind the camera; in ESC2 it came and left at least twice in 100 s. So Dead
+Men's spline car (`ZHavokCar` + `OnlineVehicleOnSpline`) DRIVES in Dog Days: the item `kl_fa.check`
+lists as DEGRADED 'vehicle ... untested' has now been seen.
+
+Route of the steering script (`klhook\KLHook.round.ini` = run ESC3; from the yard on the way points are
+re/escape.md's): plaza -> hall -> drawer 06 -> garage -> box 11 at (690, -6190) -> box 10 at
+(390, -6130) -> west door -> yard -> (-1590, -790) -> (-1590, -550) the step -> (-1590, -330) in the exit
+box -> east along the street -> (3080, -230): inside the boarding box but SOUTH of the van's stop (ESC1
+stood on the stop itself).
+
+### 7.4 The score-page crash of RN11 (g-crash's diagnosis, re/crash_scorepage.md) and the feature table
+
+- klauto now does what that file asks, once per boot (`LbFix=1`, default): the row count
+  `ZLeaderBoardServiceSteam+0x31fc` is set to 0 while no row is held, and the value found is logged.
+  Found in the eight boots of this session: 0, 0, **0x90000003**, **0xffffffff**, 0, 0, 0, 0. So the
+  field does hold boot leftovers (g-crash's first reading); both non-zero ones were negative, i.e.
+  harmless. No value above 114 came up, so the crash itself was not reproduced; the score page came up
+  six times in this session without a fault (M06r, M02r without the fix; ESC2, ESC3, RN13, RN14 with it).
+  The shipped hook (klhook.c, not mine) needs the same write.
+- klauto's unhandled-exception filter no longer calls wrap_oal's filter from inside itself (the
+  'stack overflow' of RN11 was that loop).
+- Feature table of 6.2, changed rows: loot from the garage's money boxes **works** ($550,000 from boxes 11 and 10 together, reach 125); escape vehicle **works** (no-guards build); 'Round: 1' in round 2
+  was right - it becomes 'Round: 2' after an escape (ESC3_380s), as re/crash_scorepage.md 5 read.
+- Still not heard by anyone: any sound.

@@ -386,10 +386,56 @@ def check(sc, snd=None, loc=None):
         if mute:
             add(CRASH, 'speak-trigger', '%d OnlineSpeakTrigger name a line the .SND lacks: they delete themselves in Init (0x4eae60) '
                 'and the first checkpoint calls into freed memory (kl_graft.mute_speech), e.g. %s' % (len(mute), mute[0]))
+    wide = money_triggers(sc)
+    if wide and any(sc.cls(k) == 'ZHavokCar' for k in range(1, len(sc.nodes))):
+        add(CRASH, 'money-trigger', '%d money triggers (TriggerBox2 beside OnlineMoneyCtrl / OnlineMoneyContainer) fire for anything '
+            'tracked, and the level has a ZHavokCar: a car within reach of loot is handed to ZGameRulesHeist slot 201 as an actor '
+            '(kl2 0x6a8902, run ESC1), e.g. %s' % (len(wide), sc.path[wide[0][0]]), 'money_people')
     return sorted(out, key=lambda f: f.sev)
 
 
 # ------------------------------------------------------------------ repairs (values only, no new entity)
+MONEY = ('OnlineMoneyCtrl', 'OnlineMoneyContainer')
+
+
+def money_triggers(sc):
+    """[(node, controller index)] of every TriggerBox2 on a node with a money controller whose
+    field [3] is 0."""
+    out = []
+    for k in range(1, len(sc.nodes)):
+        if any(has(sc, k, m) for m in MONEY):
+            for i, (nm, body) in enumerate(sc.nodes[k]['ctrls']):
+                if sc.p.key(nm) == 'TriggerBox2':
+                    v = [value(sc, u) for u in units(body[1:-1])]
+                    if len(v) == 7 and v[3] == 0:
+                        out.append((k, i))
+    return out
+
+
+def money_people(sc, log=print):
+    """TriggerBox2 field [3] = 1 on every money trigger: only people set it off.
+    WHY (run ESC1, 2026-10-09: the first time Dead Men's escape van drove in Dog Days): the van
+    stopped 40 units from a dropped wallet and the process faulted at kl2 0x6a8902. Read:
+    ZTriggerBox2's update (slot 25, 0x626ec0) asks the entity tracker for everything within reach;
+    when byte +0x44 is set (0x626fbd) it skips whatever is not of class [0x1548c7c] and not a
+    player; otherwise the object is the activator of the message. ZOnlineMoneyCtrl slot 26
+    (0x6cdb40) passes the activator to ZGameRulesHeist slot 201 (0x56f6e0), which takes anything
+    that is not a player for an actor and reads [activator + 0x2940] (0x6a88fc): on a ZHavokCar
+    (vtable 0xbcb00c, on the stack of the dump) that is not a pointer. No stock Fragile Alliance
+    level has a ZHavokCar, so stock never gets there.
+    Field [3] <-> byte +0x44 is an ASSUMPTION from one object in the dump (fields list, 1, 90.0,
+    0, 0, message, 0 against bytes +0x3c: 00 01 00 00 / 90.0 / 00 00 / message / 0) and from stock:
+    the pooled drop stacks (FASpecials!DropMoney!TeamModeDropMoney) store 1 there.
+    -> the number of triggers changed."""
+    hit = money_triggers(sc)
+    for k, i in hit:
+        def fn(us):
+            us[3] = [(us[3][0][0], bytes([1]) + us[3][0][1][1:])]
+        edit(sc, k, i, fn)
+    if hit:
+        log('  kl_fa: %d money triggers answer to people only now (TriggerBox2 field 3; a car as activator faults at kl2 0x6a8902)' % len(hit))
+    return len(hit)
+
 def exit_trigger(sc, log=print):
     """Dead Men's vehicle (one string) belongs in Dog Days field 2, with field 0 false: fields
     2..5 are the random pick, field 1 is used once and only while field 0 is set (kl2 0x6c3f64)."""
@@ -543,12 +589,35 @@ def prune(sc, names, log=print):
     return n
 
 
+def boarding(sc, log=print):
+    """A PlayerAction 'EnterVehicle' in the form of stock Dog Days' Fragile Alliance levels.
+    WHY (run ESC2, 2026-10-09): Dead Men's van came, stood beside the player for its whole wait and
+    left; E held inside its boarding box did nothing and no prompt showed. Dead Men's action
+    converts to field [16] = 'eONLY_KANE' and bools [10..13] = 0, 0, 0, 0. No 'EnterVehicle' action
+    of stock F01..F08 (31 of them) has eONLY_KANE: 24 have 'eBOTH_PLAYERS', 7 'eONLY_LYNCH', and
+    all 31 have [12] = 1. GUESS that these two are what the boarding needs (the most common stock
+    form: [12] = 1, [16] = 'eBOTH_PLAYERS'); what [12] means was not read. -> actions changed."""
+    n = 0
+    for k, i, v in controllers(sc, 'PlayerAction'):
+        if len(v) == 21 and v[7] == 'EnterVehicle' and (v[16] == 'eONLY_KANE' or v[12] == 0):
+            def fn(us):
+                us[12] = [(us[12][0][0], bytes([1]) + us[12][0][1][1:])]
+                us[16] = [(us[16][0][0], struct.pack('<I', sc.p.key_index('eBOTH_PLAYERS')))]
+            edit(sc, k, i, fn)
+            n += 1
+    if n:
+        log('  kl_fa: %d boarding actions (PlayerAction EnterVehicle) set to stock form: field 12 = 1, eBOTH_PLAYERS (GUESS)' % n)
+    return n
+
+
 def repair(sc, kept=(), log=print):
     """Everything above that is safe to do without asking: the exit trigger's field, the escape
     camera's field, a monitor if there is none, settings 331 / 332, and prune(kept).
     -> {repair: count}. Run check() afterwards: what is left needs authoring (re/fa_round.md)."""
     done = {'prune': prune(sc, kept, log) if kept else 0, 'exit_trigger': exit_trigger(sc, log), 'cam_trigger': cam_trigger(sc, log),
-            'monitor': monitor(sc, log), 'settings_lists': settings_lists(sc, log)}
+            'monitor': monitor(sc, log), 'settings_lists': settings_lists(sc, log),
+            'boarding': boarding(sc, log),
+            'money_people': money_people(sc, log) if any(sc.cls(k) == 'ZHavokCar' for k in range(1, len(sc.nodes))) else 0}
     return {k: v for k, v in done.items() if v}
 
 
