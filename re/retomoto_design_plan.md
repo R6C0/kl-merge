@@ -75,6 +75,27 @@ lines and a siren (`re/retomoto.md` 6). Street police respawn: move the 7 AFTER_
 square once the elevator trigger has fired (an `OnlineSpawnpointTrigger` only moves TEAM stages; for
 Arcade / FA the points are fixed - 2 of 7 are on the square already).
 
+## 2c. Sketch of the staged tower fight (numbers from `re/retomoto.md` 1.3 and 5; boxes GUESS)
+
+Today all 23 kept A squads start at the blast. Staged instead, one MERCONLY box per descent step, each
+starting the squads of the NEXT area so the heisters always walk into a defended room:
+
+| step | box centre / half (GUESS) | starts (campaign area, actors kept) | room |
+|---|---|---|---|
+| blast | - (`AIMonitor` list 2 -> blast timer, exists) | `020_Office` (boardroom, 7 kept) + `030_Reception` (12) | Office_301, floor y 20996 |
+| T1 boardroom door | (3430 21200 -100) / (60 250 300) (= `SpawnpointTrigger_010_B`) | `040_Atrium_3rd` (15) | Reception_301 -> Atrium_301 |
+| T2 top stairs | (-1200 21200 -1600) / (1000 300 500) at StairsTop_A (-2210..-259, z -2582..-631) | `050_Atrium_2nd` (7) | Atrium_301 |
+| T3 2nd floor | (-1200 20500 1300) / (1000 300 500) at Stairs_D foot (z 731..1956) | `060_Atrium_1st` (8) | Atrium_201 |
+| T4 1st floor | (-1200 19800 -1600) / (1000 300 500) at Stairs_A foot | `070_Elevators` (11, minus the arriving ones) | Atrium_101 |
+| T5 elevator lobby | (2200 19800 -100) / (1000 250 1700) (= `SpawnpointTrigger_020_C`) | nothing new; the car's doors are already open | Elevators_101 |
+
+Implementation: F07's stage triggers `SpawnpointTrigger_010_B/020_C` are `OnlineSpawnpointTrigger`
+objects, not `TriggerBox`es - the wave boxes need stock F07 `TriggerBox` objects with a spare role
+(the reader lists them; `tbExitFinancialAlley` is the pattern: field 14 ECPS_FA_MERCONLY, field 17 the
+routs). The blast timer's field 4 then keeps only the two boardroom-side areas. Floors: 3rd y 21000,
+2nd 20300, 1st 19600; stairs A/B join 1st-2nd, C/D 2nd-3rd (x -2163..-259). Police AFTER_DEATH points
+(5 in the tower) are already in the elevator lobby and at the atrium lift.
+
 ## 2b. Done in this session (code)
 - `tools/kl_audio.py`: `MERGE_FILTER = FA_FILTER + RETOMOTO_FILTER` is the default of `merge()`: music,
   explosion, ambience and Japanese voice prefixes. UNTESTED; check the prefixes with
