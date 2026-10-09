@@ -364,13 +364,16 @@ def picks_of(S, M, sel=None):
     for t in S.prp.tops():
         if S.side[t] == 'systems':
             mine.setdefault(S.prp.names[t], []).append(t)
-    out, dropped = [], []
+    out, dropped, seen = [], [], set()
     for t in M.prp.tops():
         if mine.get(M.prp.names[t]):
             out.append((S.prp, mine[M.prp.names[t]].pop(0)))
             if M.side[t] == 'map':
                 dropped.append(M.prp.names[t])
-        elif M.side[t] == 'map' and sel.m(owner(M, t)):
+        elif M.side[t] == 'map' and sel.m(owner(M, t)) and M.prp.names[t] not in seen:
+            # a name M itself brings twice (Dead Men M03: one car-explosion clone group) is taken
+            # once: paths to the second could not be told apart from paths to the first anyway
+            seen.add(M.prp.names[t])
             out.append((M.prp, t))
         else:
             dropped.append(M.prp.names[t])
@@ -468,6 +471,9 @@ def mute_speech(sc, ctrl, snd):
     return ('audio:dialog/%s#sound' % line.lower()).encode('latin1') not in snd.lower()
 
 
+ANIM_FALLBACK = {'Police': 'Swat_02', 'Army': 'Swat_02'}
+
+
 def dm_rename(Jn, S, log=print):
     """{string: string} for a Dead Men map under Dog Days systems: scene paths into Dead Men's
     systems subtree get Dog Days' top-level name; a weapon template Dog Days does not have is
@@ -488,9 +494,20 @@ def dm_rename(Jn, S, log=print):
                 t = guessed[s.rsplit('\\', 1)[1]] = next((w for w in weapons if w.rsplit('\\', 1)[1].lower().startswith(fam)), weapons[0])
             out[s] = t
         elif s.startswith(kl_anm.PREFIX) and s not in have:
-            t = kl_anm.PREFIX + (kl_package.ANIM_SETS.get(s[len(kl_anm.PREFIX):]) or '')
-            if t in have:
-                out[s] = t
+            name = s[len(kl_anm.PREFIX):]
+            # ANIM_FALLBACK: GUESSES for sets neither the table nor S's .ANM has (F07 has no
+            # 'Police'; Dead Men's 'Army' has no Dog Days namesake): the armed-NPC set every
+            # Fragile Alliance level ships
+            for cand in (kl_package.ANIM_SETS.get(name), name, ANIM_FALLBACK.get(kl_package.ANIM_SETS.get(name) or name)):
+                if cand and kl_anm.PREFIX + cand in have:
+                    out[s] = kl_anm.PREFIX + cand
+                    break
+            else:
+                if name in kl_package.ANIM_SETS and kl_package.ANIM_SETS[name] is None:
+                    # a vehicle set Dog Days has nothing for ('Van'): emptied. ASSUMPTION
+                    # (re/cars.md): a ZHavokCar with no set is as harmless as the stock
+                    # helicopters, which all have none; its passengers' door clips are missing
+                    out[s] = ''
     log('  Dead Men paths re-pointed: %d; weapons replaced: %s' % (len(out), {k: v.rsplit('\\', 1)[1] for k, v in guessed.items()}))
     return out
 

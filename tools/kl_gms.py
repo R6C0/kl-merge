@@ -37,7 +37,10 @@ RETYPE = {
     0x200110: 0x200002,     # ZSHADOWMESHOBJ  -> ZSTDOBJ
     0x2000fd: 0x200002,     # ZPlant          -> ZSTDOBJ
     0x20010f: 0x200002,     # ZEnvSampler     -> ZSTDOBJ
-    0x2000d4: 0x200002,     # ZHavokCar       -> ZSTDOBJ (static car)
+    # ZHavokCar (0x2000d4) is NOT retyped any more (2026-10-09): Dog Days registers it with an exact
+    # layout (re/cars.md), and as a ZSTDOBJ it broke everything that expects a vehicle:
+    # HavokCarScriptRout (kl2 0x58a7fc) and ZVehicleEnterBehaviourRout init (assert 0x531708, M03).
+    # The other four can stay their class too (tools/kl_retype.py); not yet tried in the game.
     # ZAMBIENTOCCLUSION is NOT retyped: Dog Days has the class, and a ZSTDOBJ takes its slot from
     # another pool, which would renumber every REF id the .oct / .rmi / .buf store
 }

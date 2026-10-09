@@ -200,6 +200,13 @@ State 2026-10-09 01:30. `tools/kl_graft.py build <S> <M>` + `install` + `python 
   Plaza map, M03_FA_A = the BANK ('Withdrawal': 326 'bank', 214 'vault' names), M02_FA_A = streets,
   M06_FA_A not identified. Earlier notes calling M01 'the bank' were wrong.
 - OWNER PRIORITY (2026-10-09, on seeing M01 load): the bank, Withdrawal = M03_FA_A, next.
+- Milestone B DONE (01:44): F07 systems + Dead Men M01_FA_A loads and runs to AutoExit.
+- The BANK loads too (05:02): `kl_graft.py build F07 M03_FA_A`, clean exit after 223 s, picture
+  research/graft_F07sys_M03map_100s.png: player on the plaza (escalators, cafe), HUD and shotgun.
+  It is dark and the player is a silhouette: M03's 2250 baked-light meshes lost their lighting in
+  the conversion and F07's lights are not where this map is. NEXT for the look: lighting.
+  The F01 slot holds this build. ZHavokCar is no longer retyped (it asserted at 0x531708 in
+  ZVehicleEnterBehaviourRout init); M01 was NOT re-run live with cars kept.
 Then, in order:
 1. Make M01 play as a Fragile Alliance round (re/fa_gamemode.md), going through the lobby
    (klhook/klauto.c can script the menu; untested live).
