@@ -4,7 +4,115 @@
 Evidence levels used below: **[code]** read in the exe at the address given, **[data]** counted
 over the stock levels (21 Dog Days, 20 Dead Men), **[inference]**, **[not established]**.
 
-## Answer in short
+## Second pass (2026-10-09, later): the renderer read
+
+Offline again. Read this time: the compiled effects in the `.fxc` (disassembled with
+`d3dcompiler_47`, 5,176 shaders of the 242 distinct stock effects), Dead Men's shader SOURCE
+(`Shaders/PC/FX/*.fx`, shipped inside every Dead Men level archive), and kl2.exe at the addresses
+given. Live state before this pass: `normalise('stock')` lit the player (run L1); palm trunks
+black, the bank grey and flat.
+
+### What was found
+
+1. **Materials without a compiled shader are not drawn** [code]. A material instance reaches its
+   effects by name: kl2 `0x50bac0` (layer loader) -> `0x7113f0` builds the defines (mesh kind +
+   the upper-cased name of every true BOOL except the six at `[0xcda50c]`: StdCulling,
+   RimLightingEnabled, IlluminationEnabled, SubsurfaceEnabled, DiffuseIsSpecularMask,
+   SpecMaskIsReflMask) -> `0x8b8fd0` walks the loaded cache and **returns 0 on a miss**; the
+   loader then leaves the pass slot empty (`0x50c2ff`). Nothing is compiled at run time. The
+   model reproduces stock exactly: 13,528 of 13,528 effects the materials of the 21 levels ask
+   for are in the level's own `.fxc` [data]. Dead Men materials ask for combinations no Dog Days
+   level ever used: **the installed bank build (run F1) has 35 such materials on 920 objects** -
+   `Stone_Pillar_06a_M03` x468, `Stone_Pillar_04a_M03` x193, `Stone_Stucco_06a`, `Concrete_Wall_10a`,
+   `Plaster_Tiles_01a` (all bump + specular + PARALLAX, a combination Dog Days only has with
+   more switches), every Dead Men car body (weighted mesh + bump + specular + reflection), glasses,
+   two civilians. Whole `M03_FA_A`: 52 of 671 materials, 1,024 uses; `M01_FA_A`: 31 of 778, 165.
+   This is missing geometry, not darkness; it has been in every graft screenshot so far.
+2. **Dead Men's baked lighting is an ambient-occlusion light map** [source + data]. Stream
+   (descriptor [4]) = `vLightMapVertexColor` (COLOR6, D3DCOLOR; rgb ff ff ff on all 151,519
+   vertices of the bank, alpha 0..255) + `vLightMapVertexCoords` (TEXCOORD2, 2 x u16). Record
+   (descriptor [5]) = `.TEX` id of the light map + `v4LightMapColor`. The bank has six DXT1
+   atlases (`M03FAA_OutsideFAA_01A` 1024 x 1024, `..._InsideFAA_Bank_Main` ...). Shader
+   (`Common.fx`): `AO = lerp(v4LightMapColor.rgb, c.rgb, tex2D(samplerLightmap, uv).g * c.a)`;
+   `Standard20/30.fx` and `Glow20.fx` multiply the diffuse texel and the reflection by it, for
+   `MESH_STANDARD` only. Evaluated per vertex its mean on the bank is 0.59: Dead Men's bank was
+   considerably DARKER in corners and under roofs than the graft shows it, and its post filter
+   was tuned on top of that.
+   **Dog Days cannot consume it** [code]: kl2.exe still has the vertex declarations with COLOR6 /
+   TEXCOORD2 (`0xb98568`, `0xb985f8`, `0xb98658`; constructor `0x61ca80`) and the effects still
+   declare `mapLightmap` / `v4LightMapColor`, but none of the 5,176 compiled shaders reads
+   COLOR6, TEXCOORD2 or `samplerLightmap`, and there is no run-time compile.
+   The `ZSHADOWMESHOBJ` '..._Additive_Light_Tex0' meshes are a different thing (projected
+   static shadow / light textures, classes StaticShadow*; their four effects ARE in the union
+   cache and resolve for every instance).
+3. **Trunks** [data]. `Plant_PalmStem_01a_USA` (44 objects): Standard/Standard, bump + parallax,
+   diffuse / normal / parallax textures all present, render group 0, surface Wood 13 -> 11; its
+   permutation exists. Stock `Wood_F07_Tree_01a`: the same class and group, bump + specular.
+   Vertex format is the same 40 bytes in both games (declaration `0xb98408` / Dead Men
+   `0x93ffb8`). Mean vertex colour of the trunk meshes 210 / 255 (level mean 234; F07 225). So
+   class, technique, textures and vertex format are NOT the cause. In WK1_142s the trunks are
+   textured grey where the sun hits them; in L1 the camera looks into the sun and sees their
+   unlit side. What is left is the unlit side itself: ambient only (see 4) under a neutral
+   grade. **Not proven**; the picture after step 2 decides.
+4. **The grey, flat look** [data]. What `M03_FA_A` has in Dead Men and the graft ships:
+   - fog / far plane / background colour (`CameraFar` 50000, fog 0.1 .. 1.2, colour 0x505050):
+     shipped (TAKE list). SSAO: Dead Men has none, F07's values (blur 2, strength 0.8) stay.
+   - **post filter: not shipped.** The map has 13 `PostFilterBox` boxes (`Locations/M03_FA_A/
+     M03FAA_Postfilter.zip`: Outside_LookAt x5, Outside_Dark x5, Inside x3) naming three filter
+     sets; the first two carry their own colour curves (palette entries 0x2b..0x31). The box
+     entities come along but the scene's `PostFilterBoxes` chunk is dropped, so the bank runs on
+     the camera's neutral set. Stock F02 / F05 / F01 use the very same mechanism.
+   - the AO light map (2): dropped by the converter.
+   - sun and ambient: `Environment_env` c8bf99 x 1.3, ambient 505764 x 1.3 - the same order as
+     F09's suns (ffe79f x 1.55, 283a34 x 1.55). Shipped.
+
+### The palette and the sets [code + data]
+
+`PostFilterPalettes` = one `.prm` chunk: u16 offsets (count = first / 2, kl2 `0x442779`), then
+run-length coded 256-byte curves; the engine decodes the 37 curves of the active set into
+37 x 256 bytes at `0x1536278` and keeps one byte per entry in a 0x8000-byte table, so the count
+has no small limit. Entries 0..26 are byte-identical in all 41 levels of both games. A filter set
+(176 bytes) = 25 floats + 37 u16 entry numbers at +0x64 (0xffff none) + one 0; no set of the 558
+names an entry past its palette. So two levels' palettes can be joined by appending.
+
+### Steps (each optional and separate; order = expected gain)
+
+| # | step | call | what it changes on F07 + M03_FA_A | picture to take |
+|---|---|---|---|---|
+| 1 | `fit_shaders` | `kl_light.fit_shaders(mat, fxc, log=log)` before the archive members are made | 35 materials get a permutation the cache has: PARALLAX off x15, REFLECTION off x16, SPECULAR x2, ALPHAFADE x3 ... (920 objects appear) | the plaza from the spawn, as L1_125s / WK1_142s: walls and pillars that were holes; a parked Dead Men car (M01: the car park, M01c_130s view) |
+| 2 | `graft_postfilter` | `kl_light.graft_postfilter(prm, S palette chunk, M palette bytes, M's set chunks, log=log)` + take `PostFilterBoxes` of a Dead Men M | palette 39 -> 53 curves, 15 sets, 4 renumbered; the three box sets work | same two views, and one indoors (the box changes at the bank door) |
+| 3 | `bake_ao` | `kl_light.bake_ao(dm_prm, dd_prm, roots, dm_tex, strength=0.5, log=log)` in `kl_graft.DeadMen` | 2,250 meshes, 151,519 vertex colours x mean 0.59 (at strength 1), 2,009 vertex chunks cloned, +5.1 MB | under the escalators / the shop fronts of WK1_166s: corners and undersides should darken, open floor not |
+
+Exact insertion points: end of the `tools/kl_light.py` docstring. Take step 3 only after 2 (it
+darkens; Dead Men's grade was made for the darkened scene), and start with `strength=0.5`.
+
+### Tests (`python tools/kl_light.py render-test`, `problems: 0`)
+
+- 21 stock Dog Days levels: 13,528 needed effects all present; `fit_shaders` changes no byte.
+- 41 stock levels: 2,149 curves pack back byte for byte; 558 sets in range.
+- `M01_FA_A`, `M03_FA_A` converted, against F07's `.fxc` + `union.fxc`: after `fit_shaders` only
+  the reported unresolved remain (`Items_Dynamic/MobilePhone_Front_01a`: Glow, rigid, opaque -
+  the cache only has the blended form; `Glass_Grid_01b_M01`: no common subset of Glass.fx and
+  Standard30.fx; 3 objects in all, they would need a switch turned ON), `.MAT` passes
+  `kl_mat.check`; filter sets of S and of M see the same curves before and after the graft;
+  `bake_ao` output passes `kl_prm.check`, changes nothing but bytes 16..18 of lit vertices,
+  raises no colour, leaves unlit meshes alone, strength 0 = no change.
+- The installed F1 build (`build\install\...\F01_Main.zip`): 35 materials / 920 uses without an
+  effect -> 0 after `fit_shaders`, `kl_mat.check` passes.
+- `python tools/kl_light.py test` still ends with `problems: 0`.
+
+### ASSUMPTIONS / not established
+
+- That a pass slot left empty simply draws nothing (the loader was read, the draw loop not; 13
+  clean runs with such materials say it does not crash).
+- `bake_ao`: that the CPU-side vertex lighting multiplies the AMBIENT term by the vertex colour
+  as well (the shader takes ambient from stream 1, COLOR2, filled on the CPU; that code was not
+  found). The dynamic-light pass does multiply by COLOR3 in the shader (`Lighting` vertex
+  shader: `mul o0.xyz, c16, v2`). uv = u16 / 65536. Record colour = `v4LightMapColor`.
+- `SWITCH_COST` (which feature to give up first) is my ranking.
+- Why the unlit side of the trunks is black (3).
+
+## Answer in short (first pass)
 
 - The grafted bank (`F07` systems + `M03_FA_A`) is **not dark because of the dropped baked
   lighting**. The baked data is per-vertex ambient occlusion [inference]: it only darkened.
@@ -110,6 +218,10 @@ whether the bake matters. The bank is the first Dead Men map through the graft t
 Indoors both maps pair their rooms with type 3 lights (`*_characters`, bits 1101), a stock form.
 
 ## Dead Men's baked lighting
+
+(First-pass notes. Superseded where they say "inference" or "not read": the shader source was
+read in the second pass, see the top of this file. The stream is colour + light-map uv, the
+record is a `.TEX` id + fade colour; the "colour that is mostly 0" below is the uv pair.)
 
 - Mesh descriptor (32 bytes) `[4]` = stream of 8 bytes per vertex, `[5]` = shared 16-byte record;
   the mesh has draw-mode bit `0x01000000` (kl_prm / kl_prmgraph).

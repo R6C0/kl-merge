@@ -8,6 +8,21 @@ every stock Dog Days level, and the normalisation the graft applies. Full accoun
                                                  has that combination
     python kl_light.py catalogue                 recompute STOCK from the 21 stock Dog Days levels
     python kl_light.py test [maps]               the offline tests (see test()); 'problems: 0'
+    python kl_light.py render-test [maps]        tests of the three steps below (test_render())
+
+THREE MORE STEPS (2026-10-09, second pass; the renderer was read this time: compiled effects of
+the .fxc, Dead Men's shipped .fx sources, kl2.exe). Each is optional and separate; the reasons are
+in the comment above each function and in re/lighting.md, the calls for kl_graft at the end of
+this text.
+  fit_shaders       materials that ask for a shader permutation no cache entry has are NOT DRAWN
+                    (kl2 0x8b8fd0 returns 0, 0x50c2ff skips the layer). The installed bank build
+                    has 35 such materials on 920 objects (walls 'Stone_Pillar_06a_M03' x468, all
+                    Dead Men cars). The cheapest feature switches are turned off until an entry fits.
+  graft_postfilter  Dead Men grades each area through PostFilterBoxes (the bank: outside look-at,
+                    outside dark, inside); the graft left them out because their sets index Dead
+                    Men's palette. The palettes are one format: M's curves are appended to S's.
+  bake_ao           Dead Men's baked lighting is an ambient-occlusion light map. No Dog Days shader
+                    can read it; it is baked into the vertex colours instead (ASSUMPTIONS there).
 
 WHAT IS IN THE FILES (both games alike unless said; addresses kl2.exe / kaneandlynch.exe)
   light record   the .prm chunk a light entity names (.gms record +0x0c = ZGEOM[4]), lType 12:
@@ -40,7 +55,9 @@ WHAT IS IN THE FILES (both games alike unless said; addresses kl2.exe / kaneandl
                  +0x24. An environment that has either bit never searches.
   room pairs     .gms header +0x28 (kl_scene): one environment per room. 797 pairs.
   list pool      light <-> geometry lists (kl_scene); none belongs to an environment (0 of 763).
-  baked light    Dead Men only: a 'lit' vertex stream (8 bytes per vertex: ff ff ff AA, then a
+  baked light    (first-pass notes; the shader source has since been read: see the comment above
+                 bake_ao() - the stream is colour + light-map uv, the record a .TEX id + colour.)
+                 Dead Men only: a 'lit' vertex stream (8 bytes per vertex: ff ff ff AA, then a
                  colour that is mostly 0) and a shared 16-byte record {number, colour}. A level
                  has as many distinct records as ZAMBIENTOCCLUSION objects (M02_FA_A 6 / 6,
                  M03_FA_A 6 / 6, M09_A 4 / 4, M09_B 5 / 5; M01_FA_A has neither), and each such
@@ -99,6 +116,27 @@ and in verify(), on the re-read files (sc = the kl_scene.Scene, prm = the .prm r
     bad += kl_light.check(Jn, sc, prm, nodes=set(mj.values()))
 Jn = joined kl_prpjoin.Scene, A = joined kl_scene.Scene (entity k - 1 of A.entities() is node k),
 prm = joined kl_prmgraph.Prm (only read). It edits Jn's tokens, entity flags and A.pairs.
+
+CALLS FOR THE THREE STEPS (kl_graft names; none is wired in yet)
+  1 fit_shaders - in build(), just before "out = {'.gms': ...": the 'fxc = T.merge_fxc(...)' line
+    has to stand above it, then
+        kl_light.fit_shaders(mat, fxc, log=log)         # mat = the merged kl_texmat.Mat
+    and in verify(), on the re-read members:
+        bad += ['shaders: %s lacks %s' % (m.insts[s].name, l[0][0]) for s, l in kl_light.missing_shaders(m, fxc).items()]
+    (a systems-only material that needs a switch turned ON stays unresolved and is reported;
+    none is in the F07 + M03_FA_A build.)
+  2 graft_postfilter - (a) take Dead Men's boxes: drop 'and not M.dm' from
+        if 'PostFilterBoxes' in mblock and not M.dm:
+    (b) after 'prm, cmap2 = G.append(...)' and before 'prm_bytes = G.write(prm)':
+        blk = lambda lv, n: u32([t for t in dict(J.block(lv.prp))[n] if t[0] == 9][-1])
+        kl_light.graft_postfilter(prm, blk(S, 'PostFilterPalettes'), prm_m.chunks[blk(M, 'PostFilterPalettes')],
+                                  [cmap[i] for i, k in kinds.items() if k == 'pf'], log=log)
+    It is right for a Dog Days M as well (today a Dog Days map's sets silently index S's palette).
+  3 bake_ao - in DeadMen.__init__, around the kl_prm.convert line:
+        dm_prm = self['.prm']
+        self.files[self.ext['.prm']], rep = kl_prm.convert(dm_prm, roots)
+        self.files[self.ext['.prm']], arep = kl_light.bake_ao(dm_prm, self['.prm'], roots, self['.TEX'], strength=0.5, log=log)
+    BEFORE the .TEX is converted (it reads Dead Men's .TEX) and before kl_mat.convert_mat_full.
 """
 import collections, fnmatch, os, struct, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -331,6 +369,309 @@ def check(sc, scene, prm, nodes=None, strict=False):
     return bad
 
 
+# ------------------------------------------------------------------ shader permutations
+# A material draws through compiled effects only. kl2 0x50bac0 (class layer loader) asks 0x7113f0
+# for the effect of each LAYE: defines = the mesh kind ('MESH_STANDARD' ...) + the upper-cased name
+# of every BOOL of the instance that is true and not one of the six run-time switches at
+# [0xcda50c] (EXCLUDED); effect file = LAYE PATH as it is when it holds '.fx', else PATH + '30.fx'.
+# 0x8b8fd0 then walks the loaded cache (.fxc) and returns 0 when no entry has that file and those
+# defines: nothing is compiled at run time (Dog Days ships no .fx source), and the layer loader
+# skips the layer (0x50c2ff). A material none of whose layers resolves is not drawn at all.
+# The model below reproduces every stock instance: 13,528 of 13,528 needed effects are in the
+# level's own .fxc (test()).
+EXCLUDED = ('STDCULLING', 'RIMLIGHTINGENABLED', 'ILLUMINATIONENABLED', 'SUBSURFACEENABLED', 'DIFFUSEISSPECULARMASK',
+            'SPECMASKISREFLMASK')
+MESH_KIND = {0: 'Standard', 1: 'Tweened', 2: 'Rigid', 3: 'Weighted'}       # .MAT entry +0x14 = SUBC STYP
+# What switching a feature off costs the picture; fit_shaders() takes the cheapest set. GUESSES of
+# mine, "least visible first"; anything not listed costs 3.
+SWITCH_COST = {'PARALLAXENABLED': 1, 'BUMPDETAILENABLED': 1, 'USEDEFAULTREFLECTIONMAP': 1, 'ALPHAFADEENABLED': 2,
+               'SCROLLENABLED': 2, 'REFRACTION2DENABLED': 3, 'REFLECTIONENABLED': 4, 'SPECULARENABLED': 5, 'BUMPENABLED': 6}
+
+
+def _kid(node, tag):
+    return next((c for c in node[3] if c[0] == tag), None)
+
+
+def _bools(entry):
+    """{upper-cased BOOL name: (node, true)} of a material instance. True = ENAB and VALU, as
+    kl_mat.feature_flags reads it (VALU alone fits the stock files equally well)."""
+    out = {}
+    for n in _kid(entry.root, 'BIND')[3]:
+        if n[0] == 'BOOL':
+            e, v = _kid(n, 'ENAB'), _kid(n, 'VALU')
+            out[_kid(n, 'NAME')[3].decode('latin1').upper()] = (n, bool(e and e[3] and v and v[3]))
+    return out
+
+
+def shader_needs(mat, entry, off=()):
+    """The effects a material instance asks the cache for: {(effect file in lower case, mesh
+    define, frozenset of the other defines)}. off: defines treated as switched off."""
+    cls = mat.classes[entry.f[1]]
+    kind = MESH_KIND.get(entry.f[5])
+    if cls.cls == b'Sprites' or kind is None:           # sprites: one effect, no instance defines
+        return set()
+    bools = {k: v for k, (_n, v) in _bools(entry).items()}
+    defs = {k for k, v in bools.items() if v and k not in EXCLUDED and k not in off}
+    for n in _kid(entry.root, 'BIND')[3]:
+        if n[0] == 'RSTA' and _kid(n, 'BENA') and _kid(n, 'BENA')[3]:
+            defs.add('BLENDENABLED')
+    out = set()
+    for sub in cls.root[3]:
+        if sub[0] != 'SUBC' or _kid(sub, 'STYP')[3].decode('latin1') != kind:
+            continue
+        cond = _kid(sub, 'VALI')
+        if cond is not None and cond[1] == 3 and bool(bools.get(_kid(cond, 'BIND')[3].decode('latin1').upper())) != bool(_kid(cond, 'VALU')[3]):
+            continue
+        for lay in sub[3]:
+            if lay[0] == 'LAYE':
+                path = _kid(lay, 'PATH')[3].decode('latin1')
+                out.add(((path if '.fx' in path else path + '30.fx').lower(), 'MESH_' + kind.upper(), frozenset(defs)))
+    return out
+
+
+def shader_cache(fxc):
+    """{(effect file in lower case, mesh define, frozenset of the other defines)} of a .fxc."""
+    import kl_mat, kl_texmat
+    out = set()
+    for head, _blob in kl_mat.read_fxc(fxc)[1]:
+        d = [n for n, _v in kl_texmat.fxc_defines(head)]
+        out.add((head[0x810:0x850].split(b'\0')[0].decode('latin1').lower(), d[0], frozenset(d[1:])))
+    return out
+
+
+def missing_shaders(mat, fxc, slots=None):
+    """{instance slot: [needed effects the cache lacks]} (slots: which instances; default all).
+    fxc: bytes of a .fxc, or the set shader_cache() made of one."""
+    have = fxc if isinstance(fxc, (set, frozenset)) else shader_cache(fxc)
+    out = {}
+    for s in sorted(mat.insts if slots is None else slots):
+        lack = sorted((x for x in shader_needs(mat, mat.insts[s]) if x not in have), key=str)
+        if lack:
+            out[s] = lack
+    return out
+
+
+def fit_shaders(mat, fxc, slots=None, log=print):
+    """Give every material instance (kl_texmat.Mat, edited in place) a shader permutation the
+    cache `fxc` (bytes of the .fxc the level ships) holds: where an instance asks for an effect
+    no entry has, the cheapest set of its feature switches (SWITCH_COST) is turned off (BOOL
+    VALU = 0) so that every effect it then asks for exists; entry +0x08 follows (kl_mat rule).
+    Nothing is ever switched on, blending is never touched. Stock Dog Days levels need nothing.
+    Returns dict(fixed={slot: (name, [switches turned off])}, unresolved={slot: (name, lacking)},
+    lost={switch: instances})."""
+    import itertools, kl_mat
+    have = shader_cache(fxc)
+    rep = dict(fixed={}, unresolved={}, lost=collections.Counter())
+    for s, lack in missing_shaders(mat, have, slots).items():
+        e = mat.insts[s]
+        on = sorted(k for k, (_n, v) in _bools(e).items() if v and k not in EXCLUDED)
+        best = None
+        for r in range(1, len(on) + 1):
+            for off in itertools.combinations(on, r):
+                if all(x in have for x in shader_needs(mat, e, off)):
+                    cost = (sum(SWITCH_COST.get(k, 3) for k in off), r, off)
+                    if best is None or cost < best:
+                        best = cost
+        if best is None:
+            rep['unresolved'][s] = (e.name, lack); continue
+        nodes = _bools(e)
+        for k in best[2]:
+            _kid(nodes[k][0], 'VALU')[3] = 0
+            rep['lost'][k] += 1
+        e.f[2] = kl_mat.feature_flags(e)
+        rep['fixed'][s] = (e.name, list(best[2]))
+    log('  shaders: %d materials asked for an effect no cache entry has; switched off %s; unresolved: %s' % (
+        len(rep['fixed']) + len(rep['unresolved']), dict(rep['lost']) or 'nothing',
+        [v[0] for v in rep['unresolved'].values()] or 'none'))
+    return rep
+
+
+# ------------------------------------------------------------------ post filter
+# Scene property PostFilterPalettes names one .prm chunk: u16 offsets (count = first offset / 2,
+# kl2 0x442779: movzx word [chunk] / shr 1), then the entries, each a run-length coded 256-byte
+# curve (the engine decodes the 37 curves of the active set into 37 x 256 bytes at 0x1536278 and
+# keeps one byte per entry in a 0x8000-byte table: no small limit on the count). Entries 0..26
+# are byte-identical in all 41 stock levels of both games (0 = the zero curve, 1 = identity).
+# A filter set ('pf', 176 bytes) = 25 floats, then 37 u16 at +0x64: palette entry numbers
+# (0xffff = none; never >= the level's count: 558 sets of the 41 levels), then one 0.
+# PostFilterBoxes names a chunk of 88-byte records, one per PostFilterBox controller, +0x30 = its set.
+PF_SET, PF_INDEX, PF_COUNT, PF_NONE = 176, 0x64, 37, 0xffff
+
+
+def palette_entries(chunk):
+    """The curves of a PostFilterPalettes chunk (the last one keeps the chunk's zero padding)."""
+    n = struct.unpack_from('<H', chunk, 0)[0] // 2
+    offs = list(struct.unpack_from('<%dH' % n, chunk, 0)) + [len(chunk)]
+    if not n or offs[0] != 2 * n or any(a >= b for a, b in zip(offs, offs[1:])):
+        raise ValueError('not a post-filter palette')
+    return [chunk[a:b] for a, b in zip(offs, offs[1:])]
+
+
+def palette_pack(entries):
+    out, o = [], 2 * len(entries)
+    for e in entries:
+        out.append(o); o += len(e)
+    if o > 0xffff:
+        raise ValueError('post-filter palette over 64 KB: offsets are 16 bit')
+    b = struct.pack('<%dH' % len(entries), *out) + b''.join(entries)
+    return b + bytes(-len(b) % 16)
+
+
+def set_curves(chunk):
+    """The 37 palette entry numbers of a 176-byte filter set (0xffff = none)."""
+    if len(chunk) != PF_SET or struct.unpack_from('<H', chunk, PF_INDEX + 2 * PF_COUNT)[0]:
+        raise ValueError('not a post-filter set')
+    return struct.unpack_from('<%dH' % PF_COUNT, chunk, PF_INDEX)
+
+
+def graft_postfilter(prm, pal_chunk, m_palette, m_sets, log=print):
+    """Let M's post-filter sets work on the joined level's palette. prm: joined kl_prmgraph.Prm
+    (edited in place); pal_chunk: index of the palette chunk the joined scene block names (S's);
+    m_palette: bytes of M's palette chunk; m_sets: chunk indices, in prm, of M's 176-byte sets
+    (those its PostFilterBoxes chunk and its map's post-filter events name). M's curves that
+    S's palette lacks are appended, and the 37 entry numbers of each set are rewritten.
+    Returns dict(entries (before, after), added, sets, renumbered)."""
+    # Two entries are the same curve when they agree up to their trailing zeros: a curve ends
+    # with 1 to 3 zero bytes (2,108 entries of the 41 levels) and a chunk's last entry has the
+    # chunk's padding behind it, so its true length is not known. Entries are stored as found.
+    key = lambda e: e.rstrip(b'\0')
+    ents = palette_entries(prm.chunks[pal_chunk])
+    have = {}
+    for i, e in enumerate(ents):
+        have.setdefault(key(e), i)
+    n0, imap = len(ents), {}
+    for i, e in enumerate(palette_entries(m_palette)):
+        if key(e) not in have:
+            have[key(e)] = len(ents)
+            ents.append(e)
+        imap[i] = have[key(e)]
+    prm.chunks[pal_chunk] = palette_pack(ents)
+    changed = 0
+    for s in sorted(set(m_sets)):
+        idx = set_curves(prm.chunks[s])
+        if any(v != PF_NONE and v not in imap for v in idx):
+            raise ValueError('post-filter set %d names a curve its palette does not have' % s)
+        new = tuple(v if v == PF_NONE else imap[v] for v in idx)
+        changed += new != idx
+        c = prm.chunks[s]
+        prm.chunks[s] = c[:PF_INDEX] + struct.pack('<%dH' % PF_COUNT, *new) + c[PF_INDEX + 2 * PF_COUNT:]
+    rep = dict(entries=(n0, len(ents)), added=len(ents) - n0, sets=len(set(m_sets)), renumbered=changed)
+    log('  post filter: palette %d -> %d curves, %d sets of the map, %d renumbered' % (n0, len(ents), rep['sets'], changed))
+    return rep
+
+
+# ------------------------------------------------------------------ baked ambient occlusion
+# Dead Men's 'lit' data is an AMBIENT-OCCLUSION LIGHT MAP (shader source, shipped in every Dead
+# Men archive: Shaders/PC/FX/Common.fx, StandardCommon.fx, Standard20/30.fx, Glow20.fx):
+#   mesh descriptor [4] -> stream, 8 bytes per vertex: D3DCOLOR vLightMapVertexColor (COLOR6;
+#                          rgb is ff ff ff in all 151,519 vertices of M03_FA_A, alpha 0..255) and
+#                          2 x u16 vLightMapVertexCoords (TEXCOORD2)
+#   mesh descriptor [5] -> record {u32 .TEX id of the light map (DXT1 atlas, 1024 x 1024 ...),
+#                          colour 0x00RRGGBB = v4LightMapColor, 0, 0}
+#   float3 AmbientOcclusion(uv, c) { return lerp(v4LightMapColor.rgb, c.rgb, tex2D(samplerLightmap, uv).g * c.a); }
+#   and the pixel shader multiplies the diffuse texel (and the reflection) by it, MESH_STANDARD only.
+# So it only darkens, and it darkens ambient and direct light alike.
+# Dog Days: kl2.exe still declares COLOR6 / TEXCOORD2 in its static-mesh vertex declarations
+# (0xb98568, 0xb985f8, 0xb98658, set up at 0x61ca80) and its effects still declare mapLightmap /
+# v4LightMapColor, but NOT ONE of the 5,176 compiled shaders of the 242 distinct stock effects
+# reads COLOR6, TEXCOORD2 or samplerLightmap, and effects cannot be compiled at run time. The
+# data cannot be consumed as it is.
+# Nearest equivalent, bake_ao(): the factor is evaluated per vertex and multiplied into the vertex
+# colour (vertex +0x10, COLOR3). Dog Days multiplies that into dynamic light in the shader
+# (Standard30 'Lighting': mul o0.xyz, lightcolour * diffusecolour, COLOR3) and, by the shader
+# source's own input comment ('COLOR0: Light color * vertex color'), into the CPU-lit sun term.
+# ASSUMPTIONS: (1) the CPU also multiplies the ambient term (COLOR2) by the vertex colour - not
+# read; if it does not, the bake darkens lit surfaces only. (2) uv = u16 / 65536. (3) per vertex
+# is enough: the light map's texel detail (soft contact shadows inside a triangle) is lost.
+def dxt1_green(data, w, h):
+    """Green channel (0..255, row major) of a DXT1 picture."""
+    out, o = bytearray(w * h), 0
+    for by in range(0, h, 4):
+        for bx in range(0, w, 4):
+            c0, c1, bits = struct.unpack_from('<HHI', data, o); o += 8
+            g0, g1 = (c0 >> 5 & 63) * 255 // 63, (c1 >> 5 & 63) * 255 // 63
+            pal = (g0, g1, (2 * g0 + g1) // 3, (g0 + 2 * g1) // 3) if c0 > c1 else (g0, g1, (g0 + g1) // 2, 0)
+            for py in range(4):
+                row = (by + py) * w + bx
+                for px in range(4):
+                    out[row + px] = pal[bits & 3]; bits >>= 2
+    return out
+
+
+def light_map(tex_entry):
+    """(width, height, green channel) of a Dead Men .TEX record that is a DXT1 light map."""
+    if tex_entry[4:8] != b'1TXD':
+        raise ValueError('light map is not DXT1')
+    h, w = struct.unpack_from('<HH', tex_entry, 16)
+    o = tex_entry.index(b'\0', 36) + 1
+    n = struct.unpack_from('<I', tex_entry, o)[0]
+    if n != w * h // 2:
+        raise ValueError('light map: first mip is %d bytes, %d x %d DXT1 needs %d' % (n, w, h, w * h // 2))
+    return w, h, dxt1_green(tex_entry[o + 4:o + 4 + n], w, h)
+
+
+def bake_ao(dm_prm, dd_prm, roots, dm_tex, strength=1.0, log=print):
+    """Dead Men's ambient-occlusion light map baked into the vertex colours of the converted
+    file. dm_prm: the level's .prm as Dead Men has it; dd_prm: what kl_prm.convert made of it
+    (same chunk numbers); roots: as for kl_prm.convert; dm_tex: Dead Men's .TEX (bytes).
+    strength 0..1 scales the darkening. A vertex chunk shared by descriptors with different
+    streams (or with none) is cloned per stream and the descriptors are repointed. Returns
+    (bytes, report: meshes, vertices, cloned chunks, added bytes, mean factor, maps)."""
+    import kl_prmgraph as G, kl_texmat
+    src, out = G.read(dm_prm, 'dm'), G.read(dd_prm, 'dd')
+    if len(src.chunks) > len(out.chunks):
+        raise ValueError('the converted .prm has fewer chunks than its source')
+    kinds, _a = G.walk(src, roots)
+    tex = kl_texmat.read_tex(dm_tex)
+    maps, users, jobs = {}, collections.defaultdict(set), {}
+    for i, k in kinds.items():
+        if k != 'desc':
+            continue
+        nv, vtx, _n, _idx, lit, lit5 = struct.unpack_from('<6I', src.chunks[i], 0)
+        if not vtx:
+            continue
+        users[vtx].add((lit, lit5) if lit else None)
+        if lit:
+            if len(src.chunks[vtx]) != (40 * nv + 15 & ~15) or len(src.chunks[lit]) < 8 * nv:
+                raise ValueError('lit descriptor %d: not a 40-byte-vertex mesh with an 8-byte stream' % i)
+            jobs.setdefault((vtx, lit, lit5), []).append((i, nv))
+    rep = dict(meshes=0, vertices=0, cloned=0, added=0, mean=1.0, maps={})
+    total = 0.0
+    for (vtx, lit, lit5), descs in sorted(jobs.items()):
+        tid, fade = struct.unpack_from('<II', src.chunks[lit5], 0)
+        if tid not in maps:
+            maps[tid] = light_map(tex.tex[tid].entry); rep['maps'][tid] = tex.tex[tid].name
+        w, h, green = maps[tid]
+        fb, fg, fr = fade & 255, fade >> 8 & 255, fade >> 16 & 255
+        nv = max(n for _d, n in descs)
+        v, s = bytearray(out.chunks[vtx]), src.chunks[lit]
+        if bytes(v) != src.chunks[vtx]:
+            raise ValueError('vertex chunk %d was changed by the conversion' % vtx)
+        for j in range(nv):
+            cb, cg, cr, ca, tu, tv = struct.unpack_from('<4B2H', s, 8 * j)
+            t = green[min(tv * h >> 16, h - 1) * w + min(tu * w >> 16, w - 1)] * ca / 65025.0
+            o = 40 * j + 16
+            for c, (f, col) in enumerate(((fb, cb), (fg, cg), (fr, cr))):
+                k = 1.0 - strength * (1.0 - (f + (col - f) * t) / 255.0)       # lerp(fade, colour, t), then strength
+                v[o + c] = min(255, int(v[o + c] * k + 0.5))
+                total += k
+        rep['vertices'] += nv; rep['meshes'] += len(descs)
+        if users[vtx] == {(lit, lit5)}:
+            out.chunks[vtx] = bytes(v)                  # every user wants this very stream
+        else:
+            out.chunks.append(bytes(v)); out.refs.append(1)
+            rep['cloned'] += 1; rep['added'] += len(v)
+            for d, _n in descs:
+                c = out.chunks[d]
+                if len(c) != 48 or struct.unpack_from('<I', c, 4)[0] != vtx:
+                    raise ValueError('descriptor %d of the converted file does not name vertex chunk %d' % (d, vtx))
+                out.chunks[d] = c[:4] + struct.pack('<I', len(out.chunks) - 1) + c[8:]
+    rep['mean'] = round(total / (3 * rep['vertices']), 4) if rep['vertices'] else 1.0
+    log('  baked AO: %d meshes, %d vertices, mean factor %.3f, %d vertex chunks cloned (+%d bytes), light maps %s' % (
+        rep['meshes'], rep['vertices'], rep['mean'], rep['cloned'], rep['added'], sorted(rep['maps'].values())))
+    return G.write(out), rep
+
+
 # ------------------------------------------------------------------ stock levels
 def load(level, game=None):
     """(kl_prpjoin.Scene, kl_scene.Scene, kl_prmgraph.Prm) of a stock level of either game, as
@@ -415,6 +756,132 @@ def test(maps=('M01_FA_A', 'M03_FA_A'), log=print):
     return bad
 
 
+def _members(level, exts):
+    import zipfile
+    game = 'dm' if level.startswith('M') else 'dd'
+    with zipfile.ZipFile(J.level_zip(level, game)) as z:
+        return {n.rsplit('.', 1)[1].lower(): z.read(n) for n in z.namelist()
+                if '_main.' in n.lower() and n.rsplit('.', 1)[1].lower() in exts}
+
+
+def _postfilter(level):
+    """(Prm, palette chunk index, [filter set chunk indices]) of a stock level of either game."""
+    import kl_dmassets, kl_prmgraph as G
+    game = 'dm' if level.startswith('M') else 'dd'
+    f = _members(level, ('prm', 'gms', 'prp'))
+    p = G.read(f['prm'], game)
+    kinds, _a = G.walk(p, kl_dmassets.prm_roots(f['gms'], f['prp'], game))
+    return p, next(i for i, k in kinds.items() if k == 'pfpal'), sorted(i for i, k in kinds.items() if k == 'pf')
+
+
+def test_render(maps=('M01_FA_A', 'M03_FA_A'), systems='F07', log=print):
+    """Offline tests of fit_shaders, graft_postfilter and bake_ao.
+    1. Every stock Dog Days level: each effect its materials ask for is in its own .fxc, and
+       fit_shaders changes nothing. 2. Every stock level of both games: the palette packs back
+       byte for byte and no filter set names a curve past it. 3. Each Dead Men map, converted:
+       fit_shaders against the cache the graft ships (systems' .fxc + build/shared/union.fxc)
+       leaves only what it reports as unresolved and the .MAT still passes kl_mat.check; its filter sets grafted
+       onto the systems level's palette see the curves they saw before, and so do the systems'
+       own; bake_ao output passes kl_prm.check, moves nothing but vertex colours, never raises
+       one, and leaves unlit meshes alone. Returns the number of problems."""
+    import copy, kl_mat, kl_texmat as TM, kl_prm, kl_dmassets, kl_prmgraph as G, kl_port_check
+    quiet = lambda *_a: None
+    bad = 0
+    need = 0
+    for lv in DD_LEVELS:
+        f = _members(lv, ('mat', 'fxc'))
+        mat = TM.read_mat(f['mat'])
+        need += sum(len(shader_needs(mat, e)) for e in mat.insts.values())
+        lack = missing_shaders(mat, f['fxc'])
+        rep = fit_shaders(mat, f['fxc'], log=quiet)
+        same = TM.write_mat(mat) == f['mat']
+        bad += len(lack) + (not same) + len(rep['fixed'])
+        if lack or not same:
+            log('PROBLEM: %s: %d instances lack an effect of the level\'s own cache; unchanged by fit_shaders: %s' % (lv, len(lack), same))
+    log('stock Dog Days: %d effects asked for by the materials of %d levels, all in the level\'s own .fxc: %s' % (need, len(DD_LEVELS), not bad))
+    dms = sorted(d for d in os.listdir(os.path.dirname(os.path.dirname(J.level_zip(maps[0], 'dm')))) if d.startswith('M') and '.' not in d)
+    nset = npal = 0
+    for lv in DD_LEVELS + dms:
+        p, pal, sets = _postfilter(lv)
+        ents = palette_entries(p.chunks[pal])
+        npal += len(ents); nset += len(sets)
+        if palette_pack(ents) != p.chunks[pal]:
+            bad += 1; log('PROBLEM: %s: palette does not pack back' % lv)
+        for s in sets:
+            if any(v != PF_NONE and v >= len(ents) for v in set_curves(p.chunks[s])):
+                bad += 1; log('PROBLEM: %s: set %d names a curve past the palette' % (lv, s))
+    log('post filter: %d levels, %d curves, %d sets: palettes pack back and every set index is in range' % (len(DD_LEVELS) + len(dms), npal, nset))
+    union = os.path.join(kl_port_check.workdir(), 'build', 'shared', 'union.fxc')
+    cache = TM.merge_fxc(_members(systems, ('fxc',))['fxc'], open(union, 'rb').read())
+    ps, pal_s, sets_s = _postfilter(systems)
+    seen = lambda p, pal, sets: [[None if v == PF_NONE else palette_entries(p.chunks[pal])[v].rstrip(b'\0') for v in set_curves(p.chunks[s])] for s in sets]
+    for name in maps:
+        src = kl_dmassets.dm_level(name)
+        roots = kl_dmassets.prm_roots(src['gms'], src['prp'], 'dm')
+        conv, _r, _s = kl_dmassets.convert_level(name, src=src)
+        probs = []
+        # shaders
+        mat = TM.read_mat(conv['MAT'])
+        lack = missing_shaders(mat, cache)
+        rep = fit_shaders(mat, cache, log=quiet)
+        if set(missing_shaders(mat, cache)) != set(rep['unresolved']):
+            probs.append('fit_shaders left materials without an effect that it did not report')
+        try:
+            kl_mat.check(TM.write_mat(mat))
+        except ValueError as e:
+            probs.append('fitted .MAT: %s' % e)
+        log('%s: %d of %d materials lacked an effect (%d uses); switched off %s; unresolved (need a switch turned ON): %s' % (
+            name, len(lack), len(mat.insts), sum(mat.refs[s] for s in lack), dict(rep['lost']),
+            ['%s x%d' % (n, mat.refs[s]) for s, (n, _l) in rep['unresolved'].items()] or 'none'))
+        # post filter: M's sets appended to the systems level's chunks, as the join does
+        pm, pal_m, sets_m = _postfilter(name)
+        j = G.Prm('dd', list(ps.chunks), list(ps.refs))
+        new = []
+        for s in sets_m:
+            j.chunks.append(pm.chunks[s]); j.refs.append(1); new.append(len(j.chunks) - 1)
+        prep = graft_postfilter(j, pal_s, pm.chunks[pal_m], new, log=quiet)
+        if seen(j, pal_s, sets_s) != seen(ps, pal_s, sets_s) or seen(j, pal_s, new) != seen(pm, pal_m, sets_m):
+            probs.append('a filter set sees other curves after the graft')
+        G.read(G.write(j), 'dd')
+        log('%s: post filter onto %s: %s' % (name, systems, prep))
+        # baked AO
+        out, arep = bake_ao(src['prm'], conv['prm'], roots, src['tex'], log=quiet)
+        try:
+            kl_prm.check(out, roots)
+        except ValueError as e:
+            probs.append('baked .prm: %s' % e)
+        a, b, s0 = G.read(conv['prm'], 'dd'), G.read(out, 'dd'), G.read(src['prm'], 'dm')
+        ka, _a = G.walk(a, roots)
+        kb, _a = G.walk(b, roots)
+        other = sum(1 for i in range(1, len(a.chunks)) if a.chunks[i] != b.chunks[i] and ka.get(i) not in ('vtx', 'desc'))
+        moved = up = 0
+        for i, k in kb.items():
+            if k != 'desc' or i >= len(a.chunks):
+                continue
+            nv, vtx = struct.unpack_from('<II', b.chunks[i], 0)
+            x, y = a.chunks[struct.unpack_from('<I', a.chunks[i], 4)[0]] if nv else b'', b.chunks[vtx] if nv else b''
+            if i >= len(s0.chunks) or not struct.unpack_from('<I', s0.chunks[i], 16)[0]:     # unlit, or added by kl_prm
+                moved += x != y
+                continue
+            for v in range(nv):
+                q, r = x[40 * v:40 * v + 40], y[40 * v:40 * v + 40]
+                moved += q[:16] != r[:16] or q[19:] != r[19:]
+                up += any(r[16 + c] > q[16 + c] for c in range(3))
+        if other or moved or up:
+            probs.append('bake_ao: %d other chunks changed, %d vertices moved outside the colour or unlit meshes touched, %d colours raised' % (other, moved, up))
+        zero, _z = bake_ao(src['prm'], conv['prm'], roots, src['tex'], strength=0.0, log=quiet)
+        z = G.read(zero, 'dd')
+        if any(z.chunks[struct.unpack_from('<I', z.chunks[i], 4)[0]] != a.chunks[struct.unpack_from('<I', a.chunks[i], 4)[0]]
+               for i, k in ka.items() if k == 'desc' and struct.unpack_from('<I', a.chunks[i], 0)[0]):
+            probs.append('bake_ao with strength 0 changes a vertex')
+        log('%s: baked AO: %s' % (name, {k: v for k, v in arep.items() if k != 'maps'}))
+        bad += len(probs)
+        for p in probs:
+            log('  PROBLEM: ' + p)
+    log('problems: %d' % bad)
+    return bad
+
+
 if __name__ == '__main__':
     a = sys.argv[1:]
     if a and a[0] == 'survey':
@@ -425,5 +892,7 @@ if __name__ == '__main__':
             print('    %r: %d,' % (k, v))
     elif a and a[0] == 'test':
         sys.exit(1 if test(*([tuple(a[1:])] if a[1:] else [])) else 0)
+    elif a and a[0] == 'render-test':
+        sys.exit(1 if test_render(*([tuple(a[1:])] if a[1:] else [])) else 0)
     else:
         print(__doc__)

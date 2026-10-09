@@ -2,7 +2,7 @@
 """
 Run one unattended load test of the level installed in a Dog Days slot.
 
-    python kl_autotest.py [seconds to wait, default 420] [--shots 70,100,150] [--tag name]
+    python kl_autotest.py [seconds to wait, default 420] [--shots 70,100,150,200-400:10] [--tag name]
         --shots: at these seconds after the start, save a picture of the game's own window
         (only its rectangle) as <work folder>/research/shots/<tag>_<seconds>s.png
 
@@ -66,35 +66,48 @@ def window_of(pids):
 
 
 def shot(pids, path):
-    """Copy the screen under the game's own window (nothing else of the desktop) to a PNG."""
+    """Copy the screen under the game's own window (nothing else of the desktop) to a PNG.
+    -> False (no window), True, or 'black' when every try came back all black.
+    The game runs full screen: a BitBlt of the screen now and then returns a black frame although
+    the game is drawing (run RN6: black and good pictures alternate while the round timer runs).
+    So a black frame is taken again, up to 8 times 0.2 s apart, then once through PrintWindow
+    (PW_RENDERFULLCONTENT). A picture that is still black is most likely what the game shows
+    (the fade at a load, AutoExit)."""
     import ctypes, struct, zlib
     ctypes.windll.user32.SetProcessDPIAware()
     w = window_of(pids)
     if not w or w[3] < 320 or w[4] < 200:               # a splash or helper window, not the game's
         return False
-    _h, x, y, cx, cy = w
+    h, x, y, cx, cy = w
     u, g = ctypes.windll.user32, ctypes.windll.gdi32
-    scr = u.GetDC(0)
-    mem = g.CreateCompatibleDC(scr)
-    bmp = g.CreateCompatibleBitmap(scr, cx, cy)
-    g.SelectObject(mem, bmp)
-    g.BitBlt(mem, 0, 0, cx, cy, scr, x, y, 0x00CC0020)
     info = struct.pack('<IiiHHIIiiII', 40, cx, -cy, 1, 32, 0, 0, 0, 0, 0, 0)
     buf = ctypes.create_string_buffer(cx * cy * 4)
-    g.GetDIBits(mem, bmp, 0, cy, buf, info, 0)
-    g.DeleteObject(bmp); g.DeleteDC(mem); u.ReleaseDC(0, scr)
-    raw = bytearray()
-    for r in range(cy):
-        row = bytearray(buf.raw[r * cx * 4:(r + 1) * cx * 4])
-        row[0::4], row[2::4] = row[2::4], row[0::4]             # BGRX -> RGBX
-        del row[3::4]
-        raw += bytes(1) + row
+    black = True
+    for attempt in range(9):
+        scr = u.GetDC(0)
+        mem = g.CreateCompatibleDC(scr)
+        bmp = g.CreateCompatibleBitmap(scr, cx, cy)
+        g.SelectObject(mem, bmp)
+        if attempt < 8:
+            g.BitBlt(mem, 0, 0, cx, cy, scr, x, y, 0x00CC0020)
+        else:
+            u.PrintWindow(ctypes.c_void_p(h), ctypes.c_void_p(mem), 2)
+        g.GetDIBits(mem, bmp, 0, cy, buf, info, 0)
+        g.DeleteObject(bmp); g.DeleteDC(mem); u.ReleaseDC(0, scr)
+        px = bytearray(buf.raw)                                 # whole-image slices: 0.3 s instead of 8 s a picture
+        del px[3::4]                                            # BGRX -> BGR
+        black = px.count(0) == len(px)
+        if not black:
+            break
+        time.sleep(0.2)
+    px[0::3], px[2::3] = px[2::3], px[0::3]                     # BGR -> RGB
+    raw = b''.join(bytes(1) + px[r * cx * 3:(r + 1) * cx * 3] for r in range(cy))
     chunk = lambda t, d: struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d))
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'wb') as f:
         f.write(bytes([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10]) + chunk(b'IHDR', struct.pack('>IIBBBBB', cx, cy, 8, 2, 0, 0, 0))
-                + chunk(b'IDAT', zlib.compress(bytes(raw), 6)) + chunk(b'IEND', b''))
-    return True
+                + chunk(b'IDAT', zlib.compress(raw, 1)) + chunk(b'IEND', b''))
+    return 'black' if black else True
 
 
 def last_session(log):
@@ -111,7 +124,14 @@ def main():
     a = sys.argv[1:]
     shots, tag = [], time.strftime('%H%M%S')
     if '--shots' in a:
-        i = a.index('--shots'); shots = sorted(int(x) for x in a[i + 1].split(',')); del a[i:i + 2]
+        i = a.index('--shots')
+        for x in a[i + 1].split(','):                       # 70 | 30-90:5 (from-to:step)
+            if '-' in x:
+                r, _, st = x.partition(':'); lo, hi = r.split('-')
+                shots += range(int(lo), int(hi) + 1, int(st or 5))
+            else:
+                shots.append(int(x))
+        shots = sorted(set(shots)); del a[i:i + 2]
     if '--tag' in a:
         i = a.index('--tag'); tag = a[i + 1]; del a[i:i + 2]
     wait = int(a[0]) if a else 420
@@ -137,7 +157,8 @@ def main():
             if shots and time.time() - t0 >= shots[0]:
                 from kl_port_check import workdir
                 path = os.path.join(workdir(), 'research', 'shots', '%s_%ds.png' % (tag, shots.pop(0)))
-                print('  shot | %s' % (path if shot(live, path) else 'no window'), flush=True)
+                r = shot(live, path)
+                print('  shot | %s%s' % (path if r else 'no window', ' (black after 9 tries)' if r == 'black' else ''), flush=True)
         elif started or time.time() - t0 > 60:
             break
     took = time.time() - t0

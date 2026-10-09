@@ -46,7 +46,13 @@
  *                     run): _acmdln is GetCommandLineA()'s buffer, as in the CRT's sources. The read-
  *                     back is the "input: DirectInput8Create wrapped; scene='...' AutoExit=..." line:
  *                     it must name the frontend scene and the [Engine] AutoExit.
- *   [Engine]          lines appended to the exe's baked ini text (same effect as "-o <line>")
+ *   CmdAdd=           text written into the stretch CmdDrop blanked, e.g. "-o DisableSplashScreens -o AutoExit=900".
+ *                     The way to give engine keys without touching kl2.exe's code (see ANTI-TAMPER below).
+ *   Forbid=           comma-separated texts; a scene whose name contains one is never loaded: the run ends
+ *                     as FAIL just before (needs Hooks=1). "Forbid=Locations\L" keeps a wrong menu key from
+ *                     starting the story.
+ *   [Engine]          lines appended to the exe's baked ini text (same effect as "-o <line>"). PATCHES CODE:
+ *                     not for a run that starts a real session (ANTI-TAMPER)
  *   1=AutoExit=180
  *   2=DisableSplashScreens
  *   [Script]          one command per numbered key, read until the first missing number
@@ -80,12 +86,60 @@
  *                                        Needed because the page opens on the profile's last map
  *                                        (0x459eb7: 0x85f510 on the profile 0x1686e60).
  *   11=expect 0xceceec 0                 fail the script (exit 27) unless the dword has that value
+ *   12=waitwin MainMenu 8000             wait until the top window of the menu stack has that name; a timeout
+ *                                        fails the script (exit 26) with the stack in the reason. Works with
+ *                                        Hooks=0 (reads the window system, calls each window's name getter).
+ *   13=windows                           log the window stack and the focused element now
+ *   14=focus Button_Heist DOWN 6         tap the key (at most 6 times, 0.7 s apart) until the description of
+ *                                        the focused element contains the text; fails otherwise. Needs Hooks=1.
+ *   15=open HeistPlayMenu                open a window by name, as the game's own code does
+ *                                        (system->0x6bee50(name, 1, 0, 1)). Compiled, NOT RUN.
+ *   16=watch 0xdd2640+0x6d 1 load:quit   hardware write watch (DR0) on 1 / 2 / 4 bytes at an address, or at
+ *                                        [address] + offset; every write is logged with its callers. A label
+ *                                        that starts with "load:" is armed when the next level load begins.
+ *                                        NEVER arm it while the frontend runs: Steam's probe at 0xa8e3cb
+ *                                        (raised before each scene load) jumps to 0 when a debug register is
+ *                                        set (run RN2). Armed during the load it survived (run RN3).
  *   Keys: A-Z 0-9 F1-F12 RETURN ESCAPE SPACE TAB BACK UP DOWN LEFT RIGHT LSHIFT LCONTROL LMENU INSERT
  *   DELETE HOME END PRIOR NEXT NUMPADENTER, or a DIK code as 0x1C. RSHIFT cannot be scripted: the game
  *   ignores DIK 0x36 from DirectInput and asks GetAsyncKeyState(0xA1) (kl2 0x6c8c2f, 0x6c8c91).
- *   The menu key sequence for Arcade Mode -> Subway -> Accept is NOT ESTABLISHED here: record it once
- *   by hand (the menu block binds ZW_SELECT to RETURN, ZW_CANCEL to ESC, arrows to move: string at
- *   kl2 0xb15148) and put it in [Script].
+ *   The menu route into an Arcade round is in KLHook.round.ini (run live, 2026-10-09).
+ *
+ * MENU STATE (read off the disassembly, then seen live in runs OB1, RN1-RN6)
+ *   - window system (ZXMLGUISystem, vtable 0xbaf2fc) = [[[0xdd265c]+0x824]+4]; open window by name =
+ *     0x6bee50 (thiscall: name, bool, bool, bool; byte +0x4bc set = busy, the request is queued);
+ *     window stack: count at +0x328, windows at +0x32c + 4*i for i = 1..count, the top one last
+ *     (0x6bef1c, 0x6bef5d); a window's name = its vtable slot 3 (0x410930).
+ *   - focus lives in the scene, not in the XML layer: ZWINDOWS (vtable 0xbab94c) slot 161 (0x7f09f0)
+ *     SetFocus(window object), slot 162 (0x4ec1b0) returns [ZWINDOWS+0x58]. An element asks for it
+ *     through 0x581c70 (its window object is element+0x88); arrow keys move it inside ZWINDOWS without
+ *     asking any element, and the newly focused element is then sent input code 0x7b. Window objects
+ *     are shared between pages ('Button#04'), so the owner of the focus is taken from the request that
+ *     led to it or from that code 0x7b, never from a table.
+ *   - element input = vtable slot 10 (code, ?, ?); base 0x4c0680. Codes seen: 0x7f ZW_SELECT (RETURN),
+ *     0x86 ZW_CANCEL (ESC), 0x7b 'you have the focus', 0x83 Start, 0x7d / 0x7e left / right.
+ *   - an element's Name is [element+4]; its other strings (Window of an OpenWindow at +0x104, text key
+ *     at +0x9c, FocusGraphic at +0x64, Option at +0xe4) are logged as "+offset=text".
+ *   - WHAT THE FRONTEND OPENS: with the ini key DisableSplashScreens the start-up code 0x7b0370 takes its
+ *     'back from a game' branch (0x7b0422 -> 0x7b05ed): MainMenu, then CampaignMenu on top (HeistModeMenu
+ *     when the option CoopNetMode is 4). No splash, no AttractMode, no press-start, no disclaimer. On
+ *     CampaignMenu RETURN = Button_ResumeGame -> DifficultyScreen, RETURN there = QuickstartCampaign
+ *     (0x4789d0) -> load of L00: that is why the first scripts (RD1-RD3) started the story.
+ *     The frontend does not read the keyboard for about 22 s after its load (a frozen 'Buffering 100%').
+ *   - NOTHING IS SAVED on this route: ZPressStart (0x418d10) is what sets byte 0x156b742, and the save
+ *     reader 0x47c5f0 and writer 0x6587c0 (CreateFileA, CREATE_ALWAYS) both return at once without it.
+ *
+ * ANTI-TAMPER (established by runs RN1-RN4 against RN5; the check itself was not found)
+ *   With the breadcrumb detours, the scene-load vtable entry, the import wrappers or the [Engine] push
+ *   operand in place, a level started as a REAL session (Arcade StartGame) loads completely and the
+ *   process then ends itself about 30 ms after the load: ExitProcess(0x8000dead), called through an
+ *   XOR-ed pointer from 0x794ed6 in a routine (0x794e80) that first zeroes its stack and has no caller
+ *   in the image. The quit byte sysif+0x6d is never written (hardware watch, RN3). The same DLL with
+ *   Hooks=0 and no [Engine] (run RN5: only the DirectInput proxy, memory reads and calls of game
+ *   functions) starts the round. A direct boot (DefaultScene) never ran into it with all hooks on.
+ *   Which of the patches trips it was not separated. RULE: a run that starts a session uses Hooks=0,
+ *   no [Engine], CmdAdd for engine keys; breadcrumbs are for direct-boot runs.
+ *   With Hooks=0 a load is noticed as a pause of the keyboard polls followed by a new scene name.
  *
  * RESULT FILE <game>\KLHook.result
  *   state=RUNNING | PASS | EXIT | FAIL      (EXIT = the process ended by itself and nothing was wrong)
@@ -214,7 +268,9 @@
  *     process end, and Enable=0 leaving no trace.
  *  None of this shows that the hooks fire inside the game or that the game accepts the input.
  *
- *  NEEDS A LIVE RUN (nothing below was observed in the game)
+ *  LIVE STATUS 2026-10-09: a - e below were all exercised since (kl_graft.py run log): "-o" lines arrive,
+ *  the detours fire and survive a direct boot, the keyboard is polled without focus, StallMs 180 s is safe.
+ *  NEEDS A LIVE RUN (as written before the first run; kept for the reasoning)
  *   a. that "-o" lines arrive (first experiment, no new build needed): Steam > Dog Days > Properties >
  *      Launch options:  -o AutoExit=30 -o DisableSplashScreens   then Play and touch nothing. Confirmed
  *      if the splash screens are skipped and the game closes by itself (30 s of ENGINE time after
@@ -236,6 +292,8 @@
 #include <stdarg.h>
 #include <string.h>
 #include <signal.h>
+#include <tlhelp32.h>
+#include <intrin.h>
 
 #ifndef KLAUTO_FROM_KLHOOK
 #define DirectInput8Create klhook_DirectInput8Create
@@ -430,10 +488,54 @@ static void kla_pass(const char *why)
     kla_finish("PASS", why, KLA_PASS);
 }
 
+/* Write watch: one hardware breakpoint (DR0) on up to 4 bytes, armed on every thread of the process by the
+   watchdog thread (a thread cannot set its own debug registers reliably). The vectored handler logs who
+   wrote (the instruction AFTER the write, the new value, the kl2.exe callers on the stack) and resumes. */
+static volatile DWORD kla_watch_addr, kla_watch_len, kla_watch_arm, kla_watch_hits, kla_watch_defer;
+static char kla_top[64];                             /* name of the top menu window (kla_windows) */
+static char kla_watch_label[48];
+
+static void kla_watch_apply(void)
+{
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0); THREADENTRY32 te; int n = 0, ok = 0;
+    DWORD me = GetCurrentThreadId(), pid = GetCurrentProcessId(), len = kla_watch_len == 4 ? 3 : kla_watch_len == 2 ? 1 : 0;
+    if (snap == INVALID_HANDLE_VALUE) return;
+    te.dwSize = sizeof te;
+    if (Thread32First(snap, &te)) do {
+        HANDLE t; CONTEXT c;
+        if (te.th32OwnerProcessID != pid || te.th32ThreadID == me) continue;
+        t = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_SET_CONTEXT, FALSE, te.th32ThreadID);
+        if (!t) continue;
+        n++;
+        if (SuspendThread(t) != (DWORD)-1) {
+            memset(&c, 0, sizeof c); c.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+            if (GetThreadContext(t, &c)) {
+                c.Dr0 = kla_watch_addr; c.Dr6 = 0;
+                c.Dr7 = kla_watch_addr ? (c.Dr7 & ~0x000f0003u) | 1 | (1u << 16) | (len << 18) : c.Dr7 & ~0x000f0003u;   /* L0, RW0 = write, LEN0 */
+                c.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+                if (SetThreadContext(t, &c)) ok++;
+            }
+            ResumeThread(t);
+        }
+        CloseHandle(t);
+    } while (Thread32Next(snap, &te));
+    CloseHandle(snap);
+    kla_out(1, "watch: %s %08lx (%lu byte(s), '%s') on %d of %d threads", kla_watch_addr ? "armed on" : "cleared", kla_watch_addr, kla_watch_len, kla_watch_label, ok, n);
+}
+
 static void kla_atexit(void)
 {   /* ExitProcess / exit() of the game itself, e.g. AutoExit or the menu's Quit */
     if (!kla_on || InterlockedExchange(&kla_done, 1)) return;
     kla_out(1, "process exit, asserts %ld, faults %ld, loads %lu", kla_asserts, kla_faults, kb.loads);
+    {   /* who ended it: the engine's own state and the kl2.exe callers of exit() on this stack */
+        CONTEXT c; DWORD sys = kla_sysif(); float ax = 0;
+        if (sys) kla_rd(sys + 0x68, &ax, 4);
+        kla_flush();
+        klog("  exit: thread %lu (main %lu), sysif quit byte %lu, ticks %lu, AutoExit %g, top window '%s'", GetCurrentThreadId(), kla_main_tid,
+             sys ? kla_rd32(sys + 0x6c) >> 8 & 0xff : 0, sys ? kla_rd32(sys + 0x38) : 0, ax, kla_top);
+        memset(&c, 0, sizeof c); c.Esp = (DWORD)(DWORD_PTR)&c;
+        log_context(&c);
+    }
     if (kla_asserts || kla_faults) kla_result("FAIL", "the game ended by itself, asserts or faults were logged", KLA_PROBLEMS);
     else kla_result("EXIT", "the game ended by itself", 0);
 }
@@ -441,7 +543,8 @@ static void kla_atexit(void)
 /* ---------------------------------------------------------------- code detours */
 
 typedef struct { DWORD edi, esi, ebp, esp, ebx, edx, ecx, eax, efl; } KREGS;   /* pushad order, then pushfd */
-enum { H_NODE, H_CTRL, H_PROG, H_GEOMS, H_SCNBLK, H_REFFIX, H_ROOM, H_GBUF, H_REFEND, H_POST, H_GINIT, H_CLIST, H_CINIT, H_COUNT };
+enum { H_NODE, H_CTRL, H_PROG, H_GEOMS, H_SCNBLK, H_REFFIX, H_ROOM, H_GBUF, H_REFEND, H_POST, H_GINIT, H_CLIST, H_CINIT,
+       H_OPENWIN, H_ELFOCUS, H_FOCUS, H_INPUT, H_COUNT };
 static const struct { DWORD va; BYTE len; BYTE bytes[10]; const char *what; } kla_sites[H_COUNT] = {
     { 0x46fe96, 6,  { 0x8b, 0x74, 0x24, 0x20, 0x8b, 0x16 }, "node properties (0x46fe20)" },
     { 0x46ffbf, 5,  { 0x8b, 0x4d, 0x60, 0x8b, 0x01 }, "controller" },
@@ -456,7 +559,86 @@ static const struct { DWORD va; BYTE len; BYTE bytes[10]; const char *what; } kl
     { 0x7f3b80, 10, { 0x53, 0x56, 0x8b, 0xf1, 0x8b, 0x0d, 0x90, 0xff, 0xe0, 0x00 }, "geom staged init" },
     { 0x80d800, 6,  { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x10 }, "object init list" },
     { 0x4eec50, 6,  { 0xff, 0x05, 0x40, 0x36, 0x50, 0x01 }, "object init stepper" },
+    /* menu observation (2026-10-09, read off the disassembly; see MENU STATE in the top comment) */
+    { 0x6bee50, 7,  { 0x6a, 0xff, 0x68, 0xe8, 0x30, 0xad, 0x00 }, "open window by name (0x6bee50)" },
+    { 0x581c70, 5,  { 0x56, 0x8b, 0x74, 0x24, 0x08 }, "element asks for focus (0x581c70)" },
+    { 0x7f09f0, 5,  { 0x53, 0x55, 0x56, 0x8b, 0xf1 }, "ZWINDOWS set focus (0x7f09f0)" },
+    { 0x4c0680, 6,  { 0x8b, 0x81, 0x84, 0x00, 0x00, 0x00 }, "element input, base class (0x4c0680)" },
 };
+
+/* ---------------------------------------------------------------- menu state (windows, focus) */
+
+static DWORD kla_zw;                                  /* the ZWINDOWS object, learnt from its SetFocus */
+static DWORD kla_ask_geom, kla_ask_elem, kla_focus_elem;   /* last focus request of an element; owner of the focused window object */
+static char kla_stack[400];
+static DWORD kla_stack_sig, kla_input_lines;
+
+static DWORD kla_wsys(void)
+{   /* the window system (ZXMLGUISystem): [[[0xdd265c]+0x824]+4], as 0x478b5c-0x478b74 reaches it */
+    DWORD gui, mgr;
+    if (!kla_exe_ok || !(gui = G32(0xdd265c)) || !(mgr = kla_rd32(gui + 0x824))) return 0;
+    return kla_rd32(mgr + 4);
+}
+
+static void kla_win_name(DWORD win, char *out, int cap)
+{   /* a window's name: its vtable slot 3 (0x410930 for ZBaseWindow), called the way 0x606eba does */
+    DWORD vt = kla_rd32(win), fn = vt ? kla_rd32(vt + 0xc) : 0;
+    out[0] = 0;
+    if (vt < img_lo || vt >= img_hi || fn < img_lo || fn >= img_hi) return;
+    kla_rdstr((DWORD_PTR)((const char *(__fastcall *)(void *, void *))(DWORD_PTR)fn)((void *)(DWORD_PTR)win, 0), out, cap);
+}
+
+static int kla_windows(int force)
+{   /* the window stack: count at system+0x328, windows at system+0x32c+4*i, i = 1..count, top last
+       (0x6bef1c-0x6bef22, 0x6bef5d-0x6bef67). Logged when it changes. Game thread only. -> count */
+    DWORD w = kla_wsys(), n, i, sig = 0; char nm[64]; int len = 0;
+    if (!w) { kla_top[0] = 0; return 0; }
+    n = kla_rd32(w + 0x328); if (n > 24) n = 24;
+    for (i = 1; i <= n; i++) sig = sig * 31 + kla_rd32(w + 0x32c + 4 * i);
+    sig += n;
+    if (sig == kla_stack_sig && !force) return (int)n;
+    kla_stack_sig = sig; kla_stack[0] = 0; kla_top[0] = 0;
+    for (i = 1; i <= n; i++) {
+        kla_win_name(kla_rd32(w + 0x32c + 4 * i), nm, sizeof nm);
+        len += snprintf(kla_stack + len, sizeof kla_stack - len, "%s%s", i > 1 ? " > " : "", nm);
+        if (len > (int)sizeof kla_stack - 70) break;
+        if (i == n) snprintf(kla_top, sizeof kla_top, "%s", nm);
+    }
+    kla_out(1, "windows: %lu [%s]", n, kla_stack);
+    return (int)n;
+}
+
+static void kla_elem_desc(DWORD elem, char *out, int cap)
+{   /* class, Name (ZNameBase, elem+4: 0x962850) and every string member up to +0x130 (ZString = one char*):
+       the Window an OpenWindow leads to, the Receiver / Message of a SendMessage, the option name ... */
+    char cls[64], s[48]; int len, off, k; DWORD seen[24]; int ns = 0;
+    kla_rtti(elem, cls, sizeof cls);
+    kla_rdstr(kla_rd32(elem + 4), s, sizeof s);
+    len = snprintf(out, cap, "%s '%s'", cls[0] ? cls : "?", s);
+    for (off = 0x60; off < 0x130 && len < cap - 60; off += 4) {
+        DWORD p = kla_rd32(elem + off); int ok = 1, dup = 0;
+        if (p < 0x10000 || (p & 0x80000000)) continue;
+        for (k = 0; k < ns; k++) if (seen[k] == p) dup = 1;
+        if (dup) continue;
+        kla_rdstr(p, s, sizeof s);
+        if (strlen(s) < 3 || strlen(s) > 40) continue;
+        for (k = 0; s[k]; k++) if (!(s[k] == '_' || s[k] == '/' || s[k] == '#' || s[k] == ' ' || (s[k] >= '0' && s[k] <= '9') || ((s[k] | 32) >= 'a' && (s[k] | 32) <= 'z'))) ok = 0;
+        if (!ok || !(((s[0] | 32) >= 'a' && (s[0] | 32) <= 'z') || s[0] == '/')) continue;
+        if (ns < 24) seen[ns++] = p;
+        len += snprintf(out + len, cap - len, " +%x=%s", off, s);
+    }
+}
+
+static void kla_focus_desc(char *out, int cap)
+{   /* the focused element: ZWINDOWS+0x58 is the focused window object (0x4ec1b0 returns it, 0x7f0a68
+       stores it); the element that owns it is known from the element's own focus request (0x581c70) */
+    DWORD g = kla_zw ? kla_rd32(kla_zw + 0x58) : 0; char nm[64];
+    out[0] = 0;
+    if (!g) { snprintf(out, cap, "%s", kla_zw ? "(nothing focused)" : "(ZWINDOWS not seen yet)"); return; }
+    if (kla_focus_elem && kla_rd32(kla_focus_elem + 0x88) == g) { kla_elem_desc(kla_focus_elem, out, cap); return; }
+    kla_geom_name(g, nm, sizeof nm);
+    snprintf(out, cap, "(window object '%s', owner element not seen)", nm);
+}
 
 static void kla_phase(const char *p)
 {
@@ -509,6 +691,39 @@ static void __cdecl kla_dispatch(int id, KREGS *r)
     case H_CINIT:
         kb.obj = sp[1]; kb.otarget = sp[2]; kb.ocount++;
         break;
+    case H_OPENWIN: {                                   /* thiscall (name, bool, bool, bool); +0x4bc = busy: queued */
+        char nm[64]; kla_rdstr(sp[1], nm, sizeof nm);
+        kla_out(1, "window: open '%s' (%lu %lu %lu)%s", nm, sp[2] & 0xff, sp[3] & 0xff, sp[4] & 0xff, kla_rd32(r->ecx + 0x4bc) & 0xff ? " queued" : "");
+        break; }
+    case H_ELFOCUS: {                                   /* ecx = element+0xa8 for a ZNavigator (0x5af5d0); (window object, bool) */
+        DWORD e = 0, g = sp[1]; int i; char cls[64];
+        static const int offs[] = { 0xa8, 0xb0, 0xac, 0xa4, 0xb8, 0xc0, 0x98, 0x9c, 0xa0, 0xb4, 0xbc };
+        if (!g) break;
+        for (i = 0; i < (int)(sizeof offs / sizeof offs[0]) && !e; i++) {
+            kla_rtti(r->ecx - offs[i], cls, sizeof cls);
+            if (cls[0] && kla_rd32(r->ecx - offs[i] + 0x88) == g) e = r->ecx - offs[i];
+        }
+        kla_ask_geom = g; kla_ask_elem = e;
+        break; }
+    case H_FOCUS: {                                     /* window objects are shared between pages ('Button#04'), so the
+                                                           owner is only known from the request that led here, or from
+                                                           the code 0x7b the newly focused element is sent (H_INPUT) */
+        char d[400]; DWORD g = sp[1];
+        kla_zw = r->ecx;
+        if (kla_rd32(r->ecx + 0x58) == g) break;
+        kla_focus_elem = g == kla_ask_geom ? kla_ask_elem : 0; kla_ask_geom = 0;
+        if (kla_focus_elem) kla_elem_desc(kla_focus_elem, d, sizeof d);
+        else { char nm[64]; kla_geom_name(g, nm, sizeof nm); snprintf(d, sizeof d, "(window object %08lx '%s')", g, nm); }
+        kla_out(1, "focus: %s", d);
+        break; }
+    case H_INPUT: {                                     /* (key code, ?, ?): every element that passes input to its base */
+        static DWORD last_e, last_k, last_t; DWORD now = GetTickCount(); char cls[64], nm[48];
+        if (sp[1] == 0x7b) kla_focus_elem = r->ecx;     /* 0x7b = "you have the focus" (0x606f2f sends it too) */
+        if ((r->ecx == last_e && sp[1] == last_k && now - last_t < 1000) || kla_input_lines > 1500) break;
+        last_e = r->ecx; last_k = sp[1]; last_t = now; kla_input_lines++;
+        kla_rtti(r->ecx, cls, sizeof cls); kla_rdstr(kla_rd32(r->ecx + 4), nm, sizeof nm);
+        kla_out(0, "input: code 0x%lx -> %s '%s'", sp[1], cls, nm);
+        break; }
     }
 }
 
@@ -553,7 +768,14 @@ static void *__fastcall kla_scene_load(void *self, void *edx, void *arg)
     kb.loading = 1; kb.load_t0 = t; kb.phase = "scene files"; kb.stage = 0; kb.percent = 0; kb.node = kb.total = kb.nodes_seen = kb.rooms = 0;
     kb.gstage = kb.gcount = kb.cstage = kb.ocount = 0; kb.ent[0] = kb.ctrl[0] = 0;
     kla_out(1, "LOAD start scene='%s' (argument %p)", kb.scene, arg);
+    {   /* [Auto] Forbid: a scene this run must never load (the story, when the menu route goes wrong) */
+        char f[128], *k, *ctx = 0;
+        GetPrivateProfileStringA("Auto", "Forbid", "", f, sizeof f, kla_ini);
+        for (k = strtok_s(f, ",", &ctx); k; k = strtok_s(0, ",", &ctx))
+            if (*k && kla_contains(kb.scene, k)) { char rr[200]; snprintf(rr, sizeof rr, "forbidden scene '%s' was about to load ([Auto] Forbid=%s): stopped before it", kb.scene, k); kla_finish("FAIL", rr, KLA_SCRIPTFAIL); }
+    }
     kla_result("RUNNING", "loading", -1);
+    if (kla_watch_defer && !kla_frontend(kb.scene)) { kla_watch_defer = 0; kla_watch_arm = 1; SetEvent(kla_wake); }
     ret = kla_real_load(self, edx, arg);
     kb.loading = 0; kb.loads++; kb.phase = "running";
     snprintf(kb.done_scene, sizeof kb.done_scene, "%s", kb.scene);
@@ -615,7 +837,57 @@ static void kla_cmd_drop(void)
             kla_out(1, "CmdDrop: MSVCR90._acmdln is a separate buffer: %d pair(s) blanked there", kla_cmd_drop_in(*ac, keys2));
     }
     n = kla_cmd_drop_in(cmd, keys);
+    {   /* [Auto] CmdAdd=<text>: written into the blanked stretch (it must fit there). The way to give engine
+           keys WITHOUT touching kl2.exe's code: [Engine] patches a push operand in .text, and a real Arcade
+           session ends in the exe's anti-tamper exit (ExitProcess(0x8000dead) from 0x794ed6) when .text or
+           the import table was changed (runs RN1-RN4 against RN5). */
+        char add[256], *p, *q; size_t need;
+        if (GetPrivateProfileStringA("Auto", "CmdAdd", "", add, sizeof add, kla_ini)) {
+            need = strlen(add) + 2;
+            for (p = cmd; *p; p = q) {
+                for (q = p; *q == ' '; q++) ;
+                if ((size_t)(q - p) >= need) { memcpy(p + 1, add, need - 2); break; }
+                if (q == p) q++;
+            }
+            if (!*p) kla_out(1, "CmdAdd: no room for '%s' (needs %u blanked characters)", add, (unsigned)need);
+        }
+    }
     kla_out(1, "CmdDrop: %d '-o' pair(s) blanked; command line now: %s", n, cmd);
+}
+
+/* Who ends the process: kl2.exe's import slots of the calls that end it (or its window) are pointed at
+   wrappers that log the return address and the kl2.exe callers on the stack, then call the real one.
+   Slots read off the import table: ExitProcess 0xb1018c, exit 0xb103d0, _exit 0xb104b0, PostQuitMessage
+   0xb105a8, DestroyWindow 0xb10640. */
+static FARPROC kla_real_end[5];
+static void kla_end_log(const char *what, DWORD arg, void *ra)
+{
+    CONTEXT c;
+    if (kla_done) return;
+    kla_flush();
+    klog("END %s(%lu) called from kl2 %08lx, thread %lu (main %lu)", what, arg, (DWORD)(DWORD_PTR)ra, GetCurrentThreadId(), kla_main_tid);
+    memset(&c, 0, sizeof c); c.Esp = (DWORD)(DWORD_PTR)&c;
+    log_context(&c);
+    kla_where();
+}
+static void WINAPI kla_w_exitprocess(UINT code) { kla_end_log("ExitProcess", code, _ReturnAddress()); ((void (WINAPI *)(UINT))kla_real_end[0])(code); }
+static void __cdecl kla_w_exit(int code) { kla_end_log("exit", (DWORD)code, _ReturnAddress()); ((void (__cdecl *)(int))kla_real_end[1])(code); }
+static void __cdecl kla_w__exit(int code) { kla_end_log("_exit", (DWORD)code, _ReturnAddress()); ((void (__cdecl *)(int))kla_real_end[2])(code); }
+static void WINAPI kla_w_postquit(int code) { kla_end_log("PostQuitMessage", (DWORD)code, _ReturnAddress()); ((void (WINAPI *)(int))kla_real_end[3])(code); }
+static BOOL WINAPI kla_w_destroy(HWND h) { kla_end_log("DestroyWindow", (DWORD)(DWORD_PTR)h, _ReturnAddress()); return ((BOOL (WINAPI *)(HWND))kla_real_end[4])(h); }
+
+static void kla_end_hooks(void)
+{
+    static const DWORD slot[5] = { 0xb1018c, 0xb103d0, 0xb104b0, 0xb105a8, 0xb10640 };
+    void *w[5]; int i, n = 0;
+    w[0] = (void *)kla_w_exitprocess; w[1] = (void *)kla_w_exit; w[2] = (void *)kla_w__exit; w[3] = (void *)kla_w_postquit; w[4] = (void *)kla_w_destroy;
+    for (i = 0; i < 5; i++) {
+        DWORD cur = kla_rd32((DWORD_PTR)VA(slot[i])), mine = (DWORD)(DWORD_PTR)w[i];
+        if (!cur || (cur >= img_lo && cur < img_hi)) continue;                    /* not bound to a DLL: leave it */
+        kla_real_end[i] = (FARPROC)(DWORD_PTR)cur;
+        n += kla_poke(VA(slot[i]), (BYTE *)&cur, (BYTE *)&mine, 4);
+    }
+    kla_out(1, "end hooks: %d of 5 import slots wrapped", n);
 }
 
 static int kla_install(void)
@@ -639,7 +911,7 @@ static int kla_install(void)
 /* ---------------------------------------------------------------- script */
 
 typedef struct { char op; BYTE key; DWORD n, n2; char text[80]; } KCMD;
-enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT };
+enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH };
 static KCMD kla_cmd[256]; static int kla_ncmd, kla_pc; static DWORD kla_cmd_t, kla_cmd_f, kla_seq;
 static BYTE kla_held[256]; static DWORD kla_rel_t[256], kla_rel_f[256]; static int kla_taps, kla_started;
 
@@ -701,6 +973,20 @@ static void kla_script_load(void)
             if (!a[0] || !c->n) { kla_out(1, "script line %d: sel needs <element> <hex address> <value> - script not loaded", i); kla_ncmd = 0; return; }
         }
         else if (!_stricmp(op, "expect")) { c->op = C_EXPECT; c->n = strtoul(a, 0, 16); c->n2 = 0; sscanf(rest + strlen(a), "%lu", &c->n2); }
+        else if (!_stricmp(op, "waitwin")) { c->op = C_WAITWIN; snprintf(c->text, sizeof c->text, "%s", a); c->n = 15000; sscanf(rest + strlen(a), "%lu", &c->n); }
+        else if (!_stricmp(op, "open")) { c->op = C_OPEN; snprintf(c->text, sizeof c->text, "%s", a); }
+        else if (!_stricmp(op, "windows")) c->op = C_WINDOWS;
+        else if (!_stricmp(op, "focus")) {              /* focus <text> <key> [max taps, default 8] */
+            char kn[32]; kn[0] = 0; c->n = 8; sscanf(rest + strlen(a), "%31s %lu", kn, &c->n);
+            c->op = C_FOCUS; c->key = (BYTE)kla_key(kn); snprintf(c->text, sizeof c->text, "%s", a);
+            if (!a[0] || !c->key) { kla_out(1, "script line %d: focus needs <text> <key> [max] - script not loaded", i); kla_ncmd = 0; return; }
+        }
+        else if (!_stricmp(op, "watch")) {              /* watch <hex address>[+<hex offset>] <1|2|4> <label>; address 0 = off */
+            char *plus = strchr(a, '+'); char lab[48]; lab[0] = 0; c->n2 = 1;
+            c->op = C_WATCH; c->n = strtoul(a, 0, 16); c->key = (BYTE)(plus != 0);
+            sscanf(rest + strlen(a), "%lu %47s", &c->n2, lab);
+            snprintf(c->text, sizeof c->text, "%s%s%s", plus ? plus + 1 : "0", " ", lab);
+        }
         else if (!_stricmp(op, "peek")) {
             char *plus = strchr(a, '+');
             c->op = C_PEEK; c->n = strtoul(a, 0, 16); c->key = (BYTE)(plus != 0); c->n2 = plus ? strtoul(plus + 1, 0, 16) : 0;
@@ -780,6 +1066,36 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
         case C_EXPECT: { DWORD v = 0xffffffff; kla_rd((DWORD_PTR)VA(c->n), &v, 4);
             if (v == c->n2) { kla_out(1, "script %d: %08lx = %lu as expected", kla_pc + 1, c->n, v); next = 1; break; }
             { char r[160]; snprintf(r, sizeof r, "script line %d: %08lx is %lu, expected %lu", kla_pc + 1, c->n, v, c->n2); kla_where(); kla_finish("FAIL", r, KLA_SCRIPTFAIL); } return; }
+        case C_WATCH: { DWORD at = c->n ? (DWORD)(DWORD_PTR)VA(c->n) : 0, off = strtoul(c->text, 0, 16); char *lab = strchr(c->text, ' ');
+            if (at && c->key) at = kla_rd32(at) + off;
+            kla_watch_addr = at; kla_watch_len = c->n2 == 2 || c->n2 == 4 ? c->n2 : 1; kla_watch_hits = 0;
+            snprintf(kla_watch_label, sizeof kla_watch_label, "%s", lab ? lab + 1 : "");
+            /* Steam's anti-debug probe (0xa8e3cb, raised once before every scene load) ends the process with a
+               jump to 0 when it finds a debug register set (run RN2), so a label that starts with "load:" is
+               armed only when the next level load has begun, after the probe */
+            if (!strncmp(kla_watch_label, "load:", 5)) kla_watch_defer = 1; else { kla_watch_arm = 1; SetEvent(kla_wake); }
+            kla_out(1, "script %d: watch %08lx requested%s", kla_pc + 1, at, kla_watch_defer ? " (armed at the next level load)" : ""); next = 2; break; }
+        case C_WAITWIN:
+            kla_windows(0);
+            if (!_stricmp(kla_top, c->text)) { char d[400]; kla_focus_desc(d, sizeof d); kla_out(1, "script %d: window '%s' is on top; focus: %s", kla_pc + 1, kla_top, d); next = 1; }
+            else if (now - kla_cmd_t >= c->n) { char r[300]; snprintf(r, sizeof r, "script line %d: window '%s' did not come up within %lu ms (stack: %.150s)", kla_pc + 1, c->text, c->n, kla_stack); kla_where(); kla_finish("FAIL", r, KLA_SCRIPT); }
+            break;
+        case C_OPEN: {                                  /* what 0x478b6b-0x478b74 does: system->0x6bee50(name, 1, 0, 1) */
+            DWORD w = kla_wsys();
+            if (!w) { kla_where(); kla_finish("FAIL", "open: no window system", KLA_SCRIPT); }
+            kla_out(1, "script %d: open window '%s'", kla_pc + 1, c->text);
+            ((void (__fastcall *)(void *, void *, const char *, int, int, int))VA(0x6bee50))((void *)(DWORD_PTR)w, 0, c->text, 1, 0, 1);
+            next = 2; break; }
+        case C_WINDOWS: { char d[400]; kla_windows(1); kla_focus_desc(d, sizeof d); kla_out(1, "script %d: focus: %s", kla_pc + 1, d); next = 1; break; }
+        case C_FOCUS: { char d[400];
+            if (now - kla_sel_t < 700) return;          /* let the last tap act */
+            kla_focus_desc(d, sizeof d);
+            if (kla_contains(d, c->text)) { kla_out(1, "script %d: focus is on %s after %d tap(s)", kla_pc + 1, d, kla_sel_n); kla_sel_n = 0; next = 1; break; }
+            if ((DWORD)kla_sel_n >= c->n) { char r[400]; snprintf(r, sizeof r, "script line %d: focus did not reach '%s' after %d tap(s); it is on %.200s", kla_pc + 1, c->text, kla_sel_n, d); kla_sel_n = 0; kla_where(); kla_finish("FAIL", r, KLA_SCRIPT); return; }
+            kla_event(rg, count, cap, c->key, 1); kla_rel_t[c->key] = now + 80; kla_rel_f[c->key] = (kla_frames + 2) | 1; kla_taps++;
+            kla_sel_n++; kla_sel_t = now;
+            kla_out(1, "script %d: tap key 0x%02x (focus was on %s)", kla_pc + 1, c->key, d);
+            return; }
         case C_PEEK: { DWORD v = 0, at = (DWORD)(DWORD_PTR)VA(c->n); int ok = kla_rd(at, &v, 4);
             if (ok && c->key) { at = v + c->n2; v = 0; ok = kla_rd(at, &v, 4); }
             kla_out(1, "script %d: peek %08lx%s = %s%08lx %s", kla_pc + 1, c->n, c->key ? "+" : "", ok ? "" : "unreadable ", v, c->text); next = 1; break; }
@@ -860,9 +1176,24 @@ static HRESULT WINAPI kd_getdata(KPX *p, DWORD cb, DWORD *rg, DWORD *count, DWOR
     HRESULT hr = ((HRESULT (WINAPI *)(void *, DWORD, DWORD *, DWORD *, DWORD))KRV(p, 10))(p->real, cb, rg, count, flags);
     static int told;
     if (p->kind != 2) return hr;
+    if (!kla_hooks_on || !kla_exe_ok) {                 /* no scene-load wrapper: a load shows as a pause in the polls
+                                                           (the keyboard is not read while a scene loads) and a new name */
+        static DWORD last; DWORD now = GetTickCount(); char sc[128];
+        if (!last || now - last > 3000) {
+            kla_scene(sc, sizeof sc);
+            if (sc[0] && _stricmp(sc, kb.done_scene)) {
+                snprintf(kb.scene, sizeof kb.scene, "%s", sc); snprintf(kb.done_scene, sizeof kb.done_scene, "%s", sc); kb.loads++; kb.phase = "running";
+                if (!kla_frontend(sc)) { kb.level_tick = now | 1; kb.level_frames = kla_frames; }
+                kla_out(1, "LOAD end scene='%s' (no hooks: seen at the first keyboard poll after a pause of %lu ms)", sc, last ? now - last : 0);
+                kla_result("RUNNING", "loaded", -1);
+            }
+        }
+        last = now;
+    }
     kla_frames++; kla_beat = GetTickCount(); kla_main_tid = GetCurrentThreadId();
     if (!told) { char s[128]; DWORD sys = kla_sysif(); float ax = 0; told = 1; kla_scene(s, sizeof s); if (sys) kla_rd(sys + 0x68, &ax, 4);
                  kla_out(1, "input: first keyboard poll (result %08lx); scene='%s' AutoExit=%g", (DWORD)hr, s, ax); }
+    if (kla_exe_ok && !kb.loading) kla_windows(0);
     if (!kla_script_active() || !rg || !count || cb != 20 || (flags & 1)) return hr;      /* 1 = DIGDD_PEEK */
     n = *count;
     if (FAILED(hr)) { if (!kla_unfocused) return hr; n = 0; }
@@ -942,6 +1273,19 @@ static LONG CALLBACK kla_veh(EXCEPTION_POINTERS *ep)
     static DWORD_PTR at_seen[64]; static int at_n; static LONG total;
     DWORD code = ep->ExceptionRecord->ExceptionCode; DWORD_PTR at = (DWORD_PTR)ep->ExceptionRecord->ExceptionAddress;
     int i, first = 1, inside = at >= img_lo && at < img_hi;
+    if (code == 0x80000004 && kla_watch_addr && (ep->ContextRecord->Dr6 & 1)) {            /* our write watch (DR0) */
+        ep->ContextRecord->Dr6 = 0;
+        if (kla_done || TlsGetValue(kla_tls)) return EXCEPTION_CONTINUE_EXECUTION;
+        if (InterlockedIncrement((LONG *)&kla_watch_hits) <= 60) {
+            DWORD v = 0; kla_rd(kla_watch_addr, &v, kla_watch_len);
+            TlsSetValue(kla_tls, (void *)1);
+            kla_flush();
+            klog("WATCH '%s' %08lx written: now %0*lx, by the instruction before kl2 %08lx, thread %lu", kla_watch_label, kla_watch_addr, (int)kla_watch_len * 2, v, (DWORD)at, GetCurrentThreadId());
+            log_context(ep->ContextRecord);
+            TlsSetValue(kla_tls, 0);
+        }
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
     if (kla_done || TlsGetValue(kla_tls)) return EXCEPTION_CONTINUE_SEARCH;    /* e.g. IsBadReadPtr probing inside log_context */
     if (code == 0xc00000fd) {                           /* stack overflow: no room to log on this thread */
         kla_so_ep = ep; SetEvent(kla_wake); Sleep(10000);
@@ -969,13 +1313,25 @@ static LONG CALLBACK kla_veh(EXCEPTION_POINTERS *ep)
 
 static LONG WINAPI kla_uef(EXCEPTION_POINTERS *ep)
 {   /* nothing handled it: this is the verdict */
-    char r[200];
+    char r[200]; static DWORD_PTR seen_at; static LONG seen_n;
     if (kla_done) return EXCEPTION_CONTINUE_SEARCH;
+    /* The game's own filter does not always end the process: a fault on its sound thread (run RN5, divide
+       fault at 0x44668b) came back through here every 0.35 s while the round went on. Only the first one
+       of an address is logged and dumped (a 47 MB dump each time slowed the game to a crawl). */
+    if ((DWORD_PTR)ep->ExceptionRecord->ExceptionAddress == seen_at) {
+        LONG n = InterlockedIncrement(&seen_n);
+        if (n == 10 || n == 100 || n == 1000) kla_out(1, "unhandled exception at %08lx came back %ld times (the game's filter resumes it)", (DWORD)seen_at, n);
+        if (kla_prev_uef && kla_prev_uef != kla_uef) return kla_prev_uef(ep);
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+    seen_at = (DWORD_PTR)ep->ExceptionRecord->ExceptionAddress; seen_n = 1;
     TlsSetValue(kla_tls, (void *)1);
     kla_log_fault(ep, "FATAL unhandled exception");
     dumps = dumps < max_dumps ? dumps : max_dumps - 1;
     write_dump(ep, "unhandled");
-    if (kla_prev_uef && kla_prev_uef != kla_uef) kla_prev_uef(ep);        /* the game's own Steam minidump (0x90b780) */
+    TlsSetValue(kla_tls, 0);
+    InterlockedIncrement(&kla_faults);
+    if (kla_prev_uef && kla_prev_uef != kla_uef) kla_prev_uef(ep);        /* the game's own Steam minidump (0x90b780); may not return */
     snprintf(r, sizeof r, "unhandled exception %s", kla_last_fault);
     kla_finish("FAIL", r, KLA_CRASH);
     return EXCEPTION_EXECUTE_HANDLER;
@@ -1041,6 +1397,7 @@ static DWORD WINAPI kla_watch(LPVOID unused)
         LPTOP_LEVEL_EXCEPTION_FILTER prev;
         WaitForSingleObject(kla_wake, 250);
         if (kla_done) return 0;
+        if (kla_watch_arm) { kla_watch_arm = 0; kla_watch_apply(); }
         if (kla_so_ep) { TlsSetValue(kla_tls, (void *)1); kla_log_fault(kla_so_ep, "FATAL stack overflow"); kla_dump_now(0, "KLHook_stackoverflow.dmp"); kla_finish("FAIL", "stack overflow", KLA_CRASH); }
         kla_flush();
         prev = SetUnhandledExceptionFilter(kla_uef);    /* the game sets its own at 0x58ffca after we load */
@@ -1087,7 +1444,7 @@ static void kla_init(HINSTANCE inst)
     kla_t0 = kla_beat = GetTickCount();
     kla_exe_ok = img_lo == 0x400000 && nt->FileHeader.TimeDateStamp == KL2_TIMESTAMP && nt->OptionalHeader.SizeOfImage == KL2_IMAGESIZE;
     kla_out(1, "klauto: enabled; exe %s; command line: %s", kla_exe_ok ? "is kl2.exe build 0490" : "is NOT the known kl2.exe - no code is patched", GetCommandLineA());
-    if (kla_exe_ok) { kla_cmd_drop(); kla_engine_ini(); if (kla_hooks_on) kla_install(); }
+    if (kla_exe_ok) { kla_cmd_drop(); kla_engine_ini(); if (kla_hooks_on) { kla_install(); kla_end_hooks(); } }
     kla_script_load();
     kla_tls = TlsAlloc();
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);

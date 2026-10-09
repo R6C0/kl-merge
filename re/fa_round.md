@@ -1,5 +1,9 @@
 # A grafted map as a real Fragile Alliance round
 
+**LIVE STATUS 2026-10-09 (agent r-live): a real Arcade round runs on the Dead Men bank.** Sections
+0 - 4 below were written offline before any run and are kept as written; where a run corrected
+them it says so in section 5, which is the part to read first.
+
 Written 2026-10-09 (agent p-round). Offline only: nothing here was run in the game, nothing was
 installed. Tools: `tools/kl_fa.py` (the check and the repairs), `klhook/klauto.c` +
 `klhook/build_auto.bat` + `klhook/KLHook.round.ini` (the way into a round without a human).
@@ -253,3 +257,147 @@ Start: Arcade Mode -> first map (it will say Subway and show Subway's picture) -
 9. **Sound**: map ambience and Dead Men's lines audible; **music** during the round (Dead Men's
    level music may or may not play - note which).
 10. Leaving the map area: a warning and a kill outside Dead Men's level bounds.
+
+## 5. Live results (2026-10-09, agent r-live; runs OB1, RN1 - RN6, DB1 in `tools/kl_graft.py`)
+
+Everything here was run in the game. Logs, inis and results of every run:
+`<work>\build\klhook\live\<run>.{ini,txt,log,result}`; pictures `<work>\research\shots\<run>_<s>s.png`.
+
+### 5.1 What was wrong with the route of section 3
+
+- The script's first page was never the press-start page. With the ini key `DisableSplashScreens`
+  the frontend's start-up code (0x7b0370) takes its 'back from a game' branch (0x7b0422 ->
+  0x7b05ed) and opens **MainMenu, then CampaignMenu on top** - no splash, no AttractMode, no
+  press-start, no disclaimer. Seen in every run as `windows: 2 [MainMenu > CampaignMenu]`.
+- On CampaignMenu the focus is on `ZResumeCheckpoint 'Button_ResumeGame'`. RETURN there opens
+  `DifficultyScreen` (0x8f79d2), RETURN on that is `QuickstartCampaign` (0x4789d0: opens
+  `QuickStartCampaignWait`, sets the start-pending byte 0x156b73a) = the load of L00. That is the
+  whole explanation of RD1 - RD3 ("RETURN, RETURN starts the story").
+- The frontend does not read the keyboard for about 22 s after its load ends; the screen is a
+  frozen 'Buffering 100%' meanwhile (three byte-identical pictures in OB1). Keys sent then are not
+  lost, the script simply does not run (it is stepped from the keyboard poll).
+- The screen pictures were not black because of the capture: each took 8 s to encode (a Python
+  loop per row), so few were taken and the black ones are the fades at a load. Fixed in
+  `kl_autotest.shot` (0.3 s a picture). During a round a full-screen BitBlt does return black now
+  and then while the game draws (RN6: 200 - 220 s black, 230 s good, round timer running); `shot`
+  now takes a black frame again up to 8 times and then tries PrintWindow. First main-menu picture:
+  `shots\OB1_36s.png`.
+
+### 5.2 The route that works (klhook\KLHook.round.ini)
+
+| step | key / command | proof in the log |
+|---|---|---|
+| frontend up | - | `windows: 2 [MainMenu > CampaignMenu]` |
+| back to the main menu | ESC (input code 0x86 -> `ZCloseWindow`) | `windows: 1 [MainMenu]`, focus `ZOpenWindow 'Button_Play' ... +104=CampaignMenu` |
+| Story -> Arcade Mode | DOWN | `input: code 0x7b -> ZOpenWindow 'Button_Heist'`, focus `... +9c=Button_HeistMode ... +104=HeistModeMenu` |
+| open it | RETURN (code 0x7f) | `window: open 'HeistModeMenu'`, focus on the unnamed `ZOpenWindow ... +9c=Button_StartHeist +104=HeistPlayMenu` |
+| Start | RETURN | `windows: 3 [MainMenu > HeistModeMenu > HeistPlayMenu]` |
+| map | `sel HeistLevel 0xceceec 0` | `HeistLevel is at 0 after 0 step(s)` (the page opened on Subway) |
+| Accept | `msg HeistLevel StartGame` | `msg: 'StartGame' -> ZMercsLevelSelectorHeist 'HeistLevel'`, 0.5 s later the load of `SCENES\Locations\F01\F01_Main.gms` |
+
+One key per step, each followed by `waitwin <window>`; a wrong page ends the run with exit 26
+before anything is started. The main-menu order is Story Mode, Arcade Mode, Multiplayer Modes,
+Achievements, Options, Quit Game (DOWN cycles through all six and wraps, run OB1).
+
+`msg HeistLevel StartGame` works as section 2 predicted. The storage dialog of 0x502c25 (profile
+not loaded, `[0x1686e71]` = 0) did not stop the start.
+
+**Nothing is saved on this route**, by construction: `ZPressStart` (0x418d10) is what sets byte
+0x156b742, and the save reader 0x47c5f0 and the save writer 0x6587c0 (`CreateFileA`,
+`CREATE_ALWAYS`) both return at once while it is 0. The round's score never reaches the owner's
+profile. (It also means the round runs on default options and an empty Arcade high-score list.)
+
+### 5.3 The anti-tamper exit: no code patches in a real session
+
+Runs RN1 - RN4 (klauto with its detours) reached the level through the menu, the level loaded
+completely (19,828 nodes, 0 asserts), and the process ended itself 30 - 90 ms after the load:
+
+- `END ExitProcess(2147540653) called from kl2 00794ed8` = `ExitProcess(0x8000dead)`. The call is
+  `call ecx` at 0x794ed6 with `ecx = [[0xb46648] + 0xb42c1c]` and the code
+  `[0xb42c1c] ^ [0xb685e0]`; the routine (0x794e80) first zeroes 0x800 bytes of its own stack and
+  everything above up to the page end, and no call, jump or pointer in the image names it.
+- The engine's quit byte (sysif+0x6d, eight writers in the image) was never written: hardware
+  write watch in RN3, no hit.
+- RN5: the same DLL with `Hooks=0` and no `[Engine]` section (so: no detour, no vtable entry, no
+  import slot, no push operand changed; only the DirectInput proxy, memory reads and calls of game
+  functions) -> the round starts.
+- A direct boot (`-o DefaultScene=...`) with all 13 + 4 detours never ended that way (runs WK1,
+  S1 ... F1): the check belongs to the start of a real session.
+
+Not established: where the check is and which of the four kinds of patch it sees (they were
+removed together). RULE for every hook we ship (KLHook's slot redirect, the character select
+read at 0x835837 / 0x8f5ebd of re/menus.md 7.4): **a patch of kl2.exe's code or import table
+kills a real Fragile Alliance / Arcade round** until that check is found. Data the hook may write
+(the slot name table at `[0x168f750]+0x16`, option values) was not tested either way.
+
+Also found on the way: Steam's probe at 0xa8e3cb (the 'CRASH c0000005 ... writing address
+00000000' line before every scene load) jumps to address 0 when a debug register is set (RN2) -
+a hardware breakpoint may only be armed after it, during the load (RN3 survived that).
+
+### 5.4 The round (RN5, RN6: F07 systems + M03_FA_A, klauto with Hooks=0)
+
+Proof of a real session, read 15 s after the load in both runs:
+
+| peek | value |
+|---|---|
+| `[0x168e598]+0x5c` session game mode | 4 |
+| `0x168e59c` FA sub-mode | 0 |
+| `0x168c630` settings singleton | set (0x2f2cab00 / 0x6b12d1f0) |
+| `0x168cc00` escape-vehicle monitor | set (the host's monitor kept by `kl_fa.host_keep`) |
+| `0x168a254` AIMonitor count | 1 |
+| `0x168a200` AIMonitor events | 00010000 at 15 s (round-start event 2), 00010001 at 2 min (event 0 too) |
+
+What the pictures show, in order (RN6 unless marked; times are the round clock):
+
+1. **Intro**: 'FRAGILE ALLIANCE ARCADE - ROUND 1', 'Lives left' with three skulls, 'HEIST STARTS IN
+   1 SEC!', the player's name and a 'Round score' table (RN5_190s).
+2. **Start**: the player stands on the plaza of Dead Men's bank map with Dog Days' HUD: name and
+   three lives, 'Total score: $0', 'Round: 1', the round clock counting down from 05:40, an
+   assault rifle with 300 rounds and a pistol with 150 (RN5_220s, RN6_190s). The hero differs
+   between the two runs (the Arcade body is random, re/menus.md 5) and so does the start place.
+3. **Inside**: walking forward for 12 s took the player from the steps into the bank hall.
+   'Looting has started. Trust no-one.' comes up at 04:19 (RN6_270s) - Dog Days' own message,
+   raised by Dead Men's trigger boxes.
+4. **AI**: guards in the hall draw and shoot (a pistol muzzle flash at the right edge of
+   RN6_290s, two more figures in the hall), civilians kneel or stand at the counters (RN6_300s).
+   The player is hit (red screen from 04:10), goes down at 03:59 with the prompt 'C Get Up' and
+   a '$' marker in the middle of the screen.
+5. **Death and round end**: 'ROUND 1 - ROUND OVER - All the criminals died - Lives left (two
+   skulls) - You didn't escape. You lose a life. - Round score $0 - Continue in: 2' (RN6_300s),
+   then the page `HeistStatusLeaderboard`: 'Subway  Round 1', Bonus (Escape, Escaped allies, Loot,
+   Time bonus, Kills) / Penalty (Yellow cards, Traitor, Civilian kills), 'Buy Weapons' and
+   'Ready' (RN6_310s). The script pressed nothing; the page stayed for the remaining 4.5 minutes.
+6. RN6 as a whole: `RESULT PASS`, asserts 0, faults 0, 121,176 input frames.
+
+Against the list of section 4: 1 yes (alone, no briefing text seen in a picture), 2 yes, 3 yes
+(they shoot and hit), 4 not tried (no key for it in the script; the '$' marker shows the HUD knows
+of loot), 5 a '$' marker did appear, 6 not reached, 7 death and death text yes, respawn as police
+not seen (Arcade ends the round when the only criminal dies), 8 yes, 9 not listened to, 10 not tried.
+
+Not seen yet, in the order worth doing: picking up loot (walk to a money box, the pick-up key),
+the escape vehicle (the least certain part, section 0 item 6), round 2 after 'Ready', a round
+that ends by the clock.
+
+### 5.5 The one fault of the round, and its fix
+
+RN5 (build F1): from the first frame of the round a divide fault at kl2 0x44668b on the sound
+thread, again every 0.35 s (the game's own filter resumes the thread). The round went on, slowed
+to a crawl by our dump of each one.
+
+- 0x4465f0 sets up a streamed clip; for a record with fmt bit 0x00800000 it calls 0x763a70, which
+  takes the top byte of fmt as an interleave group (0x80 | n on the first of n clips, i on the
+  i-th follower), steps back `i * 0x48` to the first record and reads the n records' sample rates
+  at a stride of 0x48; the lowest then divides.
+- Stock Dog Days level `.WHD` files hold no grouped record at all (F07: 21,982 records, 0;
+  stock F01: 22,527, 0). Dead Men's hold thousands (M03_FA_A: 5,093 pairs `X.wav` 0x82 +
+  `X_R.wav` 0x01 and one triple, stride 0x3c).
+- `kl_snd.merge` copied each record a wave names on its own, with fmt unchanged: the merged file
+  had 128 grouped records (31 firsts, 97 followers), none standing next to its partner. The first
+  to be played is the bank's briefing line (`FA_MissionBriefingBank_02_R.wav`), asked for by the
+  kept `FAMissionBriefingTrigger` half a second into the round - which is why no direct boot ever
+  showed it.
+- Fix: `kl_graft.stream_groups` writes every group one of whose clips was carried again at the
+  end of the `.WHD`, records back to back, and points the wave objects at them (M03: 128 torn
+  records of 104 groups, 1,144 wave references moved); `broken_groups` is the check. Its proper
+  home is `kl_snd.merge` / `kl_whd.Writer` (not r-live's files). RN6 on the rebuilt level: no
+  fault. Whether the pairs now SOUND right nobody has heard.

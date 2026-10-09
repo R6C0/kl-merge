@@ -181,6 +181,35 @@ AutoExit of a direct boot unless said; NOBODY HAS LISTENED: a sound fault may sh
       RESULT: clean exit after 225 s, asserts 0, faults 0. The player crosses M03's plaza
       (shots/WK1_118s .. 172s.png): ground collision holds, escalators / shop fronts / parasols
       drawn from every side seen; interiors not reached.
+LIVE RUNS 2026-10-09, fourth set (r-live): THE MENU ROUTE AND A REAL ARCADE ROUND (re/fa_round.md 5).
+Driver: kl_autotest.py <wait> --shots ... --tag <run>; hook = klauto DLL + the run's ini, both
+kept with the log and result in <work>/build/klhook/live/<run>.*; slot = F01.
+  OB1 build F1; klauto Hooks=1 (now with window / focus / input logging), [Engine]
+      DisableSplashScreens, script ESC + 'focus Button_Heist DOWN'. RESULT: clean exit after 61 s,
+      KLHook.result FAIL script line 9 (my focus tracking was wrong, not the game). FOUND: the
+      frontend opens MainMenu > CampaignMenu, no press-start page; RETURN there is Story Mode.
+      First picture of the main menu (shots/OB1_36s.png).
+  RN1 the same DLL with focus tracking by input code 0x7b; route ESC, DOWN, RETURN, RETURN, sel,
+      msg StartGame. Every window came up as named; F01 loaded in 99 s (19,828 nodes, 0 asserts).
+      RESULT: clean exit after 151 s, KLHook.result EXIT - the process ended 84 ms after the load.
+  RN2 + hardware write watch on the quit byte, armed in the menu. RESULT: clean exit after 63 s,
+      KLHook.result FAIL stack overflow: Steam's probe 0xa8e3cb jumps to 0 with a debug register set.
+  RN3 watch armed at the level load instead. RESULT: clean exit after 157 s, EXIT again 30 ms
+      after the load; the quit byte was never written.
+  RN4 + wrappers on the import slots of ExitProcess / exit / PostQuitMessage. RESULT: clean exit
+      after 170 s; 'END ExitProcess(0x8000dead) called from kl2 00794ed8': the exe's anti-tamper exit.
+  RN5 Hooks=0, no [Engine]; engine keys through the command line in memory (CmdAdd); route by
+      waitwin only. RESULT: crash kl2.exe+0x4668b after 389 s (ended by hand). THE ROUND STARTED: session game mode
+      4, 'FRAGILE ALLIANCE ARCADE - ROUND 1' (shots/RN5_190s.png, RN5_220s.png). One fault, again
+      every 0.35 s: divide at kl2 0x44668b on the sound thread = a torn interleaved stream group
+      of Dead Men's in the merged .WHD (the briefing line). Fix: stream_groups().
+  RN6 the level rebuilt with stream_groups (verify: problems: 0), same hook. RESULT: clean exit
+      after 585 s, KLHook.result PASS, asserts 0, faults 0. A WHOLE ROUND: start on the plaza,
+      into the bank, 'Looting has started. Trust no-one.', guards shoot, the player dies, 'ROUND
+      OVER - All the criminals died', the score page with Buy Weapons / Ready (shots/RN6_*.png).
+      = THE BUILD IN THE F01 SLOT.
+  DB1 the same build, ORIGINAL hook DLL and KLHook.ini back in place, direct boot.
+      RESULT: clean exit after 223 s (the direct-boot test still works).
 BISECT (not needed in the end, but it works): build ... --geometry [--m-add A,B] [--m-drop ..]
   [--s-keep ..] [--s-drop ..], see Select. '--geometry --s-drop *' = M's geometry and no game-mode
   layer at all verifies with 0 problems; plain '--geometry' leaves S's game-mode layer with scene
@@ -546,6 +575,96 @@ def mute_speech(sc, ctrl, snd):
 ANIM_FALLBACK = {'Police': 'Swat_02', 'Army': 'Swat_02'}
 
 
+def broken_groups(whd):
+    """Records of a Dog Days .WHD that belong to an interleaved stream group the engine cannot walk.
+    kl2 0x763a70 (called by the stream set-up 0x4465f0 for a record with fmt bit 0x00800000): the top
+    byte of fmt is the group: 0x80 | n on the first of n clips, i on the i-th follower; a follower's
+    first record is found at record - i * 0x48, and the n records are read at a stride of 0x48
+    (4 zero bytes + 0x44). The lowest sample rate of the group then divides (0x44668b): a group
+    that does not stand like that reads a rate of 0 = divide fault on the sound thread, on every
+    attempt to play the clip (live run RN5, the bank's briefing line at round start).
+    Stock Dog Days level files have no grouped record at all; Dead Men's have thousands
+    (X.wav 0x82 + X_R.wav 0x01, stride 0x3c there). -> [record offset as a wave names it]"""
+    import kl_whd as W
+    by = {o - 4: v for k, o, v in W.parse('dd', whd)[0] if k == 'rec'}
+    bad = []
+    for o, v in by.items():
+        top = v[1] >> 24
+        if not top:
+            continue
+        base = o if top & 0x80 else o - top * 0x48
+        n = (by[base][1] >> 24) & 0x7f if base in by and by[base][1] >> 24 & 0x80 else 0
+        ok = n and (top & 0x80 or top < n) and all(base + i * 0x48 in by and by[base + i * 0x48][2] and
+                                                  by[base + i * 0x48][1] >> 24 == (i or 0x80 | n) for i in range(n))
+        if not ok:
+            bad.append(o)
+    return bad
+
+
+def stream_groups(audio, m_name, log=print):
+    """Dead Men's interleaved stream clips in the merged bank: kl_snd.merge carries each record a wave
+    names on its own (Writer.add: name, record, padding), which tears the groups apart (see
+    broken_groups). Here every group one of whose clips was carried is written again at the end of
+    the .WHD - its names, then its records back to back - and the wave objects of the merged .SND
+    are pointed at the new records. The torn records stay behind, named by nothing.
+    (The proper home of this is kl_snd.merge / kl_whd.Writer; done here because those are not
+    this module's files.)"""
+    import kl_whd as W
+    mg = kl_snd.game_of(m_name)
+    whd, snd = audio.beside['.WHD'], bytearray(audio.members['.SND'])
+    bad = broken_groups(whd)
+    if not bad or mg != 'dm':
+        return len(bad)
+    by = {o - 4: v for k, o, v in W.parse('dd', whd)[0] if k == 'rec'}
+    src = kl_snd.read(kl_snd.beside(m_name, '.WHD', mg))
+    strmap = kl_snd.stream_map()
+    R = W.REC[mg] + 4
+    srec = {o - 4: dict(zip(W.FIELDS[mg], v)) for k, o, v in W.parse(mg, src)[0] if k == 'rec'}
+    groups = {}                                         # clip offset in the merged stream file -> [source fields]
+    for o, f in srec.items():
+        if f['fmt'] >> 24 & 0x80 and f['fmt'] & W.STREAMED and not f['fmt'] & W.LANGFILE and f['off'] in strmap:
+            n = f['fmt'] >> 24 & 0x7f
+            ms = [srec.get(o + i * R) for i in range(n)]
+            if all(m and m['fmt'] >> 24 == (i or 0x80 | n) and m['off'] == f['off'] for i, m in enumerate(ms)):
+                groups[strmap[f['off']]] = ms
+    cs = lambda b, q: bytes(b[q:b.index(b'\0', q)])
+    out, T, new, miss = bytearray(whd[:struct.unpack_from('<I', whd, 0)[0]]), None, {}, 0
+    for o in sorted(bad):
+        v = by[o]
+        ms = groups.get(v[7] | v[8] << 32)              # off, offhi
+        if ms is None:
+            miss += 1; continue
+        key = (v[7] | v[8] << 32)
+        if key not in new:
+            names = []
+            for m in ms:
+                out += bytes(-len(out) % 16); names.append(len(out)); out += cs(src, m['name']) + b'\0'
+            out += bytes(-len(out) % 16)
+            at = []
+            for m, nm in zip(ms, names):
+                g = W.to_dd(m, mg)
+                g['name'], g['fmt'], g['off'], g['offhi'] = nm, m['fmt'], key & 0xffffffff, key >> 32
+                at.append(len(out)); out += bytes(4) + struct.pack('<17I', *(g[k] for k in W.DD_F))
+            out += bytes(8)
+            new[key] = at
+    out += bytes(-len(out) % 16)
+    T = len(out); out += bytes(16); struct.pack_into('<4I', out, 0, T, len(out), 3, 4)
+    moved = 0
+    bank = kl_snd.Snd('dd', bytes(snd)).walk()
+    for w, i, off in bank.waves():
+        v = by.get(off)
+        if v is not None and v[1] >> 24 and (v[7] | v[8] << 32) in new and off in set(bad):
+            top = v[1] >> 24
+            struct.pack_into('<I', snd, w + 0x14 + 0x1c * i, new[v[7] | v[8] << 32][0 if top & 0x80 else top]); moved += 1
+    audio.beside['.WHD'], audio.members['.SND'] = bytes(out), bytes(snd)
+    left = [o for o in broken_groups(bytes(out)) if any(off == o for _w, _i, off in kl_snd.Snd('dd', bytes(snd)).walk().waves())]
+    log('  stream groups: %d torn records of %d groups written again back to back, %d wave references moved, %d without a source group, %d still named by a wave' % (
+        len(bad), len(new), moved, miss, len(left)))
+    if left or miss:
+        audio.problems.append('%d wave references name a record of a torn interleaved stream group (divide fault at kl2 0x44668b)' % (len(left) or miss))
+    return len(left)
+
+
 def dm_rename(Jn, S, log=print, anim=True):
     """{string: string} for a Dead Men map under Dog Days systems: scene paths into Dead Men's
     systems subtree get Dog Days' top-level name; a weapon template Dog Days does not have is
@@ -821,6 +940,8 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
 
     # ---- sound: S's bank + what M's map nodes name of M's bank; the fields are rewritten in place
     audio = kl_snd.graft_audio(s_name, m_name, Jn, [mj[k] for k in sorted(m_nodes)], log, loc=loc) if sound else None
+    if audio:
+        stream_groups(audio, m_name, log)               # Dead Men's interleaved stream clips, back to back
     snd = audio.members['.SND'] if audio else S['.SND']
 
     # Heroes!: S's nodes at M's places
