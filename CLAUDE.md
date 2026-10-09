@@ -214,14 +214,14 @@ LOADING (re/loading.md): slow loads (100-200 s) follow the game window being in 
 (11-15 s) it being in the background; hook fix proposed (GetForegroundWindow slot 0xb10594), not
 written. VOICE (re/voice.md): repairs built, kl_snd.VOICE = None (off) until heard.
 kl_graft now syncs bone ids (the guard crash); builds made before 346c37e need kl_impact.py fix.
-READY FOR THE OWNER, NOT INSTALLED (the game was running): <work>/build/play2 = Retomoto with the
-start on the balcony outside the window (the ledge exists in M09_A: re/retomoto_fa.md 11), the
-bomb fuse, staged tower fight, the Heat street layer (tools/kl_fa_street.py; all positions
-GUESSES) and the bone-id fix (kl_impact: 0 problems; ledge walk test ok). Never run in the game.
-Install when the owner says the game is closed: `python tools/kl_graft.py install F01 --from
-<work>/build/play2`, then copy klhook/KLJoin.retomoto.ini to <DD>/Scenes/Locations/F01/KLJoin.ini.
-STILL TO WIRE (m-load is editing kl_graft.py): kl_impact.sync_bone_ids / bone_faults in
-kl_graft.build / verify; the three kl_fa_street lines in kl_fa_author.py (re/retomoto_street.md).
+INSTALLED FOR THE OWNER 2026-10-09 18:10 (they said the game was closed): F01 slot =
+<work>/build/play2 (zip sha1 514c4689): Retomoto with the start on the balcony outside the window,
+the bomb fuse, staged tower fight, the Heat street layer (tools/kl_fa_street.py; positions are
+GUESSES) and the bone-id fix (kl_impact: 0 problems). KLJoin.ini = klhook/KLJoin.retomoto.ini (the
+front box). Hook SHIP 3f3f4f00, extended PC_Def.str as before. NEVER RUN IN THE GAME before this.
+The previous build is <work>/build/play_rt (bone-fixed copy: build/n_crash/play_rt_boneids).
+STILL TO WIRE: the three kl_fa_street lines in kl_fa_author.py (re/retomoto_street.md); until then
+only `kl_fa_street.py test` builds with the street.
 INSTALLED FOR THE OWNER (2026-10-09 17:20, at their request "both parts and also the music"):
 - F01 slot = Retomoto, <work>\build\play_rt\... (committed tools at 250a610, `kl_fa_author.py
   test --keep --guards-wait --blast-delay 9`; start still inside the boardroom), zip sha1 92e07f51.
