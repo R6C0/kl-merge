@@ -27,19 +27,50 @@
  *  2. Menu pages: more than one expansion map without a tenth entry (the selector, two index tables and the
  *     level list are nine entries wide in code - re\menus.md 8.1). The overlay frontend.xml gets one more
  *     button on the Arcade page ("Dead Men maps") that opens a copy of the stock map page with other titles
- *     and pictures. The stock button sets the spare menu option 'Dummy' to 1, the new one to 2 (a third page 3,
- *     ...): ZMercsOptionsInterface (vtable 0xbb7dec) at [0x154d5f4], 'Dummy' at +0xd4, written by nothing else
- *     in the exe (re\menus.md 3.1). The hook only READS it:
+ *     and pictures:
  *       [Redirect.2] F01=DM03   as [Redirect], but only while the page is 2
- *     The page is LATCHED per slot when the slot's own archive (<slot>_Main.zip) is opened - the first level
+ *     WHICH PAGE: read off the menu's WINDOW STACK, nothing else (kls_menu_watch, every tick, reads only).
+ *       - window system = [[[0xdd265c]+0x824]+4] (ZMercsMenuElements 0xbb7dc8 -> ZXMLGUISystem 0xbaf2fc), open
+ *         windows = count at +0x328, pointers at +0x32c + 4*i, i = 1..count (0x6bef1c, 0x6bef5d; klauto has
+ *         logged this stack in every menu run). A window's name: its vtable slot 3 is the thunk 0x410930 `mov
+ *         eax,[ecx+8] ; mov edx,[eax+0xc] ; add ecx,8 ; jmp edx` into the ZGUIGroup that the window holds at +8
+ *         (constructor 0x888aab), whose slot 3 is 0x962850 `mov eax,[ecx+4] ; ret`: the name is the char * at
+ *         window+0xc. The hook compares the code bytes of both functions and then READS that pointer - it calls
+ *         nothing (klauto calls the getter; a SHIP build must not run game code from a thread of its own).
+ *       - a window 'HeistPlayMenu<N>' (N = 2..9) anywhere in the stack latches page N; the stock 'HeistPlayMenu'
+ *         latches page 1. The latch is KEPT while there is no menu at all (a level load: the frontend's menu
+ *         manager is destroyed), in a level (its own menu has no map page), and through the session.
+ *       - it is DROPPED (page 0) when the FRONTEND shows a window stack without a map page for 1 s - the Arcade
+ *         page again (after an Arcade session the game itself opens 'HeistModeMenu', 0x7b0885), the main menu,
+ *         the online pages - and in the last 10 s neither a start was seen pending (byte [0x156b73a]: StartGame
+ *         accepted, 0x502cb6; cleared one frame later by 0x7e01be when the load is requested) nor the session
+ *         state ([0x168e598]+0x70) changed (run MP1: 0x0 -> 0x12 half a second after StartGame, 15 ms before
+ *         the archive open). So a drop cannot fall between StartGame and the load, however slowly the frontend
+ *         goes away; the price is that the page lives up to 10 s too long after such an event, which only
+ *         matters if a level load could start in that time without a map page having been opened.
+ *     WHY NOT THE OPTION 'Dummy' (the first design; run MP1, 2026-10-09): the buttons do store it - the log said
+ *     'menu page option is 2' with HeistPlayMenu2 open - but the options object ZMercsOptionsInterface (vtable
+ *     0xbb7dec, [0x154d5f4], 'Dummy' at +0xd4) does not live through the start of a level: it is created lazily
+ *     by ZMercsMenuElements slot 5 (0x5b20f0, constructor 0x800f90 zeroes +0xd4), DELETED in that manager's
+ *     destructor (0x673340: `mov ecx,[0x154d5f4] ; call [vtbl]`, then the global = 0), and the global is zeroed
+ *     again in the manager's constructor (0x617701). The game data object [0xdd265c] (0x4d60 bytes, factory
+ *     0x4837a0) builds two managers (0x553d06, 0x553d38) - a new scene has new ones. So at the archive open the
+ *     option read 0 and the slot's own level was loaded. StartGame itself never reads 'Dummy': 0x502b40 takes the
+ *     selector's value ([vtbl+0x90]: the option Heist_SelectedLevel, a .data byte that survives), 0x746570 turns
+ *     it into the slot, and 0x7e01a0 gives the session manager the slot's scene name. The buttons still set
+ *     'Dummy' (harmless, and the planned heister row needs it non-zero); the hook logs it at Log=2 only.
+ *     ASSUMPTION (read, not watched): that the game data object is rebuilt for every scene - what was SEEN is
+ *     only that the option read 2 in the page and 0 at the archive open 5 s later.
+ *     The page is TAKEN per slot when the slot's own archive (<slot>_Main.zip) is opened - the first level
  *     file of every load (X2: CreateFileA F01_Main.zip, then the _LS files, Loader_Sequence, and 9 s later the
  *     .WHD / .WAV) - so one load never mixes two tables, and the streamed sound that is opened seconds later
  *     comes from the same map. A slot with no line for the page falls back to [Redirect], then to the stock
  *     level. Entry k of a page loads slot {F01,F02,F03,F04,F06,F07,F05,F08,F09}[k] (the engine's own menu
  *     order, 0x746570), so nine maps a page. A direct boot (-o DefaultScene=) has no menu: page 0, i.e.
  *     [Redirect]; [Expansion] Page=N forces a page for such a test.
- *     NOT RUN LIVE: the page option. To be seen first: that the button's OptionValue is stored before the
- *     load (assumed from the stock main menu, whose buttons set MP_MultiPlayerMenu the same way).
+ *     RUN LIVE: the page opens and the option is set (MP1). NOT RUN LIVE: the window-stack latch (check MP2,
+ *     re\hook_live.md) - in particular that the stack is not seen without the map page for a whole second
+ *     before the frontend's menu manager is gone.
  *     KNOWN LIMITS: the engine treats a redirected map as the stock map of its slot - title in the lobby,
  *     briefing, and the LEADERBOARD (0x80c9f0(current slot)): an Arcade score on an expansion map is reported
  *     to the stock map's Steam board - klsteam.c stops that (a proxy ISteamUserStats behind the import slot
@@ -69,7 +100,7 @@
  *   Fallback=1            a file missing from Maps\<map> : 1 = the stock file is used (logged),
  *                         0 = the open fails as if the file did not exist
  *   Log=1                 0 nothing, 1 every redirect once, 2 also every other open once and the slot table
- *   Page=-1               -1 = the page comes from the menu option; 0..9 = forced (direct-boot tests)
+ *   Page=-1               -1 = the page comes from the menu (the window stack); 0..9 = forced (direct-boot tests)
  *   MountFirst=           see 4.
  *   [Redirect]            <folder under Scenes\Locations> = <folder under Root\Maps>; every page
  *   F01=DM03
@@ -97,7 +128,9 @@
  *    filled by then (the code checks: an entry that does not point into a loaded image is left alone).
  *  TESTED OFF-GAME (scratch harness; sources not in the repo, results in the agent's report): the five
  *  wrappers on a made-up game folder, page latching, the MountFirst alias, the [Slots] tick against made-up
- *  objects reached through a mapped copy of kl2.exe, and that the copy's image is byte-identical afterwards.
+ *  objects reached through a mapped copy of kl2.exe, and that the copy's image is byte-identical afterwards;
+ *  mode 'menu': made-up windows (the real vtables and getter code of the mapped copy) through the sequence of
+ *  run MP1 - page open, StartGame, stack gone, level, frontend again - and the archive opened at each step.
  */
 #ifndef KLSLOT_C
 #define KLSLOT_C
@@ -106,6 +139,10 @@
 #define KLS_DLCMGR_VT 0x00bd5494
 #define KLS_OPTIONS   0x0154d5f4              /* ZMercsOptionsInterface * (0 until the menu system exists) */
 #define KLS_OPTIONS_VT 0x00bb7dec
+#define KLS_MENUMGR_VT 0x00bb7dc8             /* ZMercsMenuElements: [[0xdd265c]+0x824] */
+#define KLS_WSYS_VT   0x00baf2fc              /* ZXMLGUISystem: [manager+4]; open windows: count +0x328, pointers +0x32c + 4*i (i from 1) */
+#define KLS_STARTPEND 0x0156b73a              /* byte: StartGame was accepted (0x502cb6); 0 again when the load is requested (0x7e01be) */
+#define KLS_MAPPAGE   "HeistPlayMenu"         /* the stock map page; mkoverlay.py's copies are HeistPlayMenu2 .. HeistPlayMenu9 */
 #define KLS_SESSION   0x0168e598              /* the session manager; +8 = map name, 0x40 bytes */
 #define KLS_FA        9
 #define KLS_NAME      0x40
@@ -114,6 +151,9 @@
 #define KLS_PAGES     10
 
 static int kls_on, kls_log = 1, kls_fallback = 1, kls_overlay_on, kls_nrules, kls_nslots, kls_page_force = -1;
+static int kls_npaged;                        /* redirect rules that belong to a menu page: without one the window stack is not watched */
+static volatile LONG kls_menu_page;           /* the page latched from the window stack: 0 none, 1 the stock map page, 2..9 an expansion page */
+static int kls_drop_ms = 1000, kls_quiet_ms = 10000;      /* see kls_menu_watch */
 static char kls_game_low[MAX_PATH], kls_root[MAX_PATH], kls_root_low[MAX_PATH], kls_overlay[MAX_PATH];
 static char kls_patch_low[MAX_PATH], kls_patch_alias[MAX_PATH];      /* "<game>\patch01.zip" and what MountFirst answers it with */
 static int kls_game_len, kls_root_len;
@@ -152,14 +192,43 @@ static void kls_note(const char *api, const char *what, const char *from, const 
 
 /* ---------------------------------------------------------------- the menu page */
 
-static int kls_page_now(void)
-{   /* the spare option 'Dummy' of the menu's option object; 0 while there is no menu (direct boot) */
+static int kls_option_now(void)
+{   /* the spare option 'Dummy' of the menu's option object; 0 while there is none. Information only (Log=2): the
+       object is deleted when a level load starts, so it cannot carry the page into the load (top comment) */
     DWORD obj, v;
-    if (kls_page_force >= 0) return kls_page_force;
     if (!klh_exe_ok) return 0;
     obj = klh_rd32((DWORD_PTR)KLH_VA(KLS_OPTIONS));
     if (!obj || klh_rd32(obj) != KLS_OPTIONS_VT || !klh_rd(obj + 0xd4, &v, 4)) return 0;
     return v < KLS_PAGES ? (int)v : 0;
+}
+
+static int kls_page_now(void)
+{   /* the page a load that starts now belongs to */
+    return kls_page_force >= 0 ? kls_page_force : (int)kls_menu_page;
+}
+
+static int kls_in_image(DWORD va) { return va >= KL2_BASE && va < KL2_BASE + KL2_IMAGESIZE - 16; }
+
+static int kls_win_name(DWORD win, char *out, int cap)
+{   /* the name of a menu window WITHOUT calling into the game: both getters are compared byte for byte, then the
+       pointer they would return is read. -> length, 0 = not a window this build knows */
+    static const BYTE thunk[11] = { 0x8b, 0x41, 0x08, 0x8b, 0x50, 0x0c, 0x83, 0xc1, 0x08, 0xff, 0xe2 };     /* 0x410930 */
+    static const BYTE getter[4] = { 0x8b, 0x41, 0x04, 0xc3 };                                             /* 0x962850 */
+    BYTE c[11]; DWORD vt, fn;
+    out[0] = 0;
+    if (!kls_in_image(vt = klh_rd32(win)) || !kls_in_image(fn = klh_rd32((DWORD_PTR)KLH_VA(vt + 0xc))) ||
+        !klh_rd((DWORD_PTR)KLH_VA(fn), c, sizeof thunk) || memcmp(c, thunk, sizeof thunk)) return 0;
+    if (!kls_in_image(vt = klh_rd32(win + 8)) || !kls_in_image(fn = klh_rd32((DWORD_PTR)KLH_VA(vt + 0xc))) ||
+        !klh_rd((DWORD_PTR)KLH_VA(fn), c, sizeof getter) || memcmp(c, getter, sizeof getter)) return 0;
+    return klh_rdstr(klh_rd32(win + 0xc), out, cap);
+}
+
+static int kls_map_page_of(const char *name)
+{   /* 'HeistPlayMenu' -> 1, 'HeistPlayMenu<N>' -> N (2..9), anything else -> 0 */
+    size_t l = sizeof KLS_MAPPAGE - 1;
+    if (strncmp(name, KLS_MAPPAGE, l)) return 0;
+    if (!name[l]) return 1;
+    return name[l] >= '2' && name[l] <= '9' && !name[l + 1] ? name[l] - '0' : 0;
 }
 
 /* ---------------------------------------------------------------- path mapping */
@@ -282,6 +351,62 @@ static void *__cdecl kls_fopen(const char *name, const char *mode)
     return kls_real_fopen(name, mode);
 }
 
+/* ---------------------------------------------------------------- the menu page, from the window stack
+
+   Every tick: which map page does the menu show? Reads only; safe from the fallback thread (a half-written stack
+   gives a name that matches nothing, and a drop needs the same reading for a whole second). */
+static void kls_menu_watch(void)
+{
+    static DWORD sig0, since, state0 = 0xffffffff, stateat; static int found0, have0, stateseen; static char stack0[240]; static LONG told;
+    DWORD gd, mgr, w, n, win[24], sig, sm, st = 0, now = GetTickCount(), i; int found = 0, len = 0; char nm[64], scene[160], key[64]; BYTE pend = 0;
+    if (kls_page_force >= 0 || !kls_npaged || !klh_exe_ok) return;
+    if ((sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) != 0 && klh_rd(sm + 0x70, &st, 4) && st != state0) {
+        if (state0 != 0xffffffff) { stateat = now; stateseen = 1; }
+        state0 = st;
+    }
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !(mgr = klh_rd32(gd + 0x824)) || klh_rd32(mgr) != KLS_MENUMGR_VT || !(w = klh_rd32(mgr + 4))) { have0 = 0; return; }   /* no menu: a load. The latch stays */
+    if (klh_rd32(w) != KLS_WSYS_VT) {
+        if (!InterlockedExchange(&told, 1)) klog("expansion: the menu's window system at %08lx has vtable %08lx, not %08lx: the menu page cannot be read - every load uses [Redirect] only", w, klh_rd32(w), (DWORD)KLS_WSYS_VT);
+        have0 = 0; return;
+    }
+    n = klh_rd32(w + 0x328);
+    if (!n || n > 24 || !klh_rd(w + 0x330, win, 4 * n)) { have0 = 0; return; }      /* no window open (between two scenes): the latch stays */
+    for (sig = n, i = 0; i < n; i++) sig = sig * 31 + win[i];
+    if (!have0 || sig != sig0) {                      /* the stack changed: read the names once */
+        stack0[0] = 0;
+        for (i = 0; i < n; i++) {
+            int p;
+            kls_win_name(win[i], nm, sizeof nm);
+            if ((p = kls_map_page_of(nm)) != 0) found = p;      /* the topmost map page counts */
+            if (len < (int)sizeof stack0 - 70) len += snprintf(stack0 + len, sizeof stack0 - len, "%s%s", i ? " > " : "", nm[0] ? nm : "?");
+        }
+        have0 = 1; sig0 = sig; found0 = found; since = now;
+        if (kls_log >= 2) klog("expansion: menu windows [%s]%s", stack0, found ? "" : " - no map page");
+    }
+    /* StartGame: the byte is set for one frame only (0x502cb6 sets it, the selector's next update 0x459ef3 -> 0x7e01be
+       clears it; the tick comes once a frame in between). Seeing it counts like a change of the session state. */
+    if ((found0 || kls_menu_page) && klh_rd((DWORD_PTR)KLH_VA(KLS_STARTPEND), &pend, 1) && pend) { stateat = now; stateseen = 1; since = now; }
+    if (found0) {
+        if (InterlockedExchange(&kls_menu_page, found0) != found0) {
+            int r, nr = 0, ml = 0; char maps[200] = "";
+            for (r = 0; r < kls_nrules; r++) if (kls_rule[r].page == found0 && ml < (int)sizeof maps - 90) ml += snprintf(maps + ml, sizeof maps - ml, "%s%s=%s", nr++ ? ", " : "", kls_slot[kls_rule[r].slot].name, kls_rule[r].map);
+            if (found0 == 1) klog("expansion: menu page 1 latched: window '%s' is open (the stock map page: [Redirect] only)", KLS_MAPPAGE);
+            else if (nr) klog("expansion: menu page %d latched: window '%s%d' is open ([Redirect.%d] %s)", found0, KLS_MAPPAGE, found0, found0, maps);
+            else klog("expansion: menu page %d latched: window '%s%d' is open (no [Redirect.%d] line: every entry loads what [Redirect] or the stock game gives it)", found0, KLS_MAPPAGE, found0, found0);
+        }
+        return;
+    }
+    if (!kls_menu_page) return;
+    /* a live window stack without a map page. Only the frontend may drop the latch, and not while a level is being
+       started: the page must outlive the frontend's last frames (MP1: StartGame at :49.634, state 0x12 at :50.136,
+       archive open at :50.151). */
+    if (!klh_scene(scene, sizeof scene) || klh_level_key(scene, key, sizeof key)) { since = now; return; }       /* in a level: its menu never drops the page */
+    if (pend) return;
+    if (stateseen && (LONG)(now - stateat) < kls_quiet_ms) return;
+    if ((LONG)(now - since) < kls_drop_ms) return;
+    klog("expansion: menu page %ld dropped: the frontend shows [%s] - from now on a load uses [Redirect] only", InterlockedExchange(&kls_menu_page, 0), stack0);
+}
+
 /* ---------------------------------------------------------------- [Slots]: names by data write, from the tick */
 
 static const char *const kls_stock[KLS_FA] = { "Locations/F01/F01_Main", "Locations/F02/F02_Main", "Locations/F03/F03_Main", "Locations/F04/F04_Main",
@@ -306,12 +431,15 @@ static void kls_slots_read(void)
 
 static void kls_tick(void)
 {   /* from klhook.c's tick: reads, and guarded data writes for renamed slots */
-    static BYTE last[18 + KLS_FA * KLS_NAME]; static int lastpage = -2; static DWORD calls;
-    BYTE now[sizeof last], m[0x260]; DWORD mgr; int i, page;
-    if (!kls_on || !klh_exe_ok || (calls++ & 7)) return;
-    if ((page = kls_page_now()) != lastpage) {
-        if (lastpage != -2 || page) klog("expansion: menu page option is %d%s", page, kls_page_force >= 0 ? " (forced by [Expansion] Page)" : "");
-        lastpage = page;
+    static BYTE last[18 + KLS_FA * KLS_NAME]; static int lastopt = -2, toldforce; static DWORD calls;
+    BYTE now[sizeof last], m[0x260]; DWORD mgr; int i, opt;
+    if (!kls_on || !klh_exe_ok) return;
+    kls_menu_watch();                             /* every tick: a page may be open for a few frames only */
+    if (calls++ & 7) return;
+    if (kls_page_force >= 0 && !toldforce) { toldforce = 1; klog("expansion: menu page %d forced by [Expansion] Page: the menu is not looked at", kls_page_force); }
+    if (kls_log >= 2 && (opt = kls_option_now()) != lastopt) {
+        if (lastopt != -2 || opt) klog("expansion: menu option 'Dummy' reads %d (information only: the page is taken from the window stack)", opt);
+        lastopt = opt;
     }
     if (!kls_nset && kls_log < 2) return;
     mgr = klh_rd32((DWORD_PTR)KLH_VA(KLS_DLCMGR));
@@ -395,6 +523,7 @@ static void kls_rules(int page)
         }
         if (kls_find_rule(s, page) >= 0) { klog("expansion: [%s] %s=%s ignored: the slot already has a line in this section", sec, k, val); continue; }
         kls_rule[r].tolen = (int)strlen(kls_rule[r].to); kls_rule[r].slot = s; kls_rule[r].page = page;
+        if (page) kls_npaged++;
         snprintf(kls_rule[r].map, sizeof kls_rule[r].map, "%s", val);
         kls_nrules++;
         klog("expansion: [%s] Scenes\\Locations\\%s\\ -> %s", sec, k, kls_rule[r].to);
@@ -462,6 +591,14 @@ static void kls_init(HINSTANCE inst)
 /* Test harness entry points (never built into the game's DLL). */
 __declspec(dllexport) int kls_test_map(const char *in, char *out) { return kls_map(in, out, "test"); }
 __declspec(dllexport) void kls_test_page(int page) { kls_page_force = page; }
+__declspec(dllexport) int kls_test_menu(void *mapped, int drop_ms, int quiet_ms)
+{   /* one look at the made-up window stack; -> the latched page */
+    klh_delta = (LONG_PTR)((DWORD_PTR)mapped - KL2_BASE); klh_exe_ok = 1;
+    if (drop_ms >= 0) kls_drop_ms = drop_ms;
+    if (quiet_ms >= 0) kls_quiet_ms = quiet_ms;
+    kls_menu_watch();
+    return (int)kls_menu_page;
+}
 __declspec(dllexport) int kls_test_tick(void *mapped, int times)
 {   /* run the tick against a copy of kl2.exe mapped anywhere (its .data holds the harness's made-up pointers); -> names written */
     int i, n = 0;

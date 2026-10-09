@@ -19,7 +19,8 @@ KINDS=[                                                 # (kind, pattern on the 
  ('RESULT',re.compile(r'RESULT (\w+) \((.*)\) exit code (-?\d+)')),
  ('STEAM', re.compile(r'steam: (NOT GUARDED|BLOCKED |passed on |level .|at exit|Patch01\.zip .* not a menu file)')),      # klsteam.c
  ('SESSION',re.compile(r'session: .*SESSION END')),
- ('JOIN',  re.compile(r'join: (player \d+ |box \d+ NOT usable)')),                                                    # kljoin.c
+ ('JOIN',  re.compile(r'join: (player \d+ |box \d+ NOT usable|level .* jump list is EMPTY)')),                              # kljoin.c
+ ('PAGE',  re.compile(r'expansion: (menu page \d+ (latched|dropped|forced)|slot \w+: menu page \d+ from now on|the menu.s window system)')),   # klslot.c: which map page a load belongs to
 ]
 def events(path,every=False):
     """-> (session header, [event dict]) of the last '==== KLHook loaded' session; every=True -> [(header, events)] of all.

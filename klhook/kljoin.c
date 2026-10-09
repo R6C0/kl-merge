@@ -35,7 +35,10 @@
  *     Name=06_Exit       the entry's name must contain this text; without Entry= the entry is found by it
  *     Target=6272 563 -6305   the entry's position must be within Tolerance (default 8) of this; without Entry=
  *                        and Name= the entry is found by it (survives a re-ordering of the JumpPoints)
- *   A box whose checks fail does not fire and says why, once.
+ *   A box whose checks fail does not fire and says why, once. A level whose jump list stays EMPTY (no ZJumpPoint
+ *   at all: a KLJoin.ini left beside another level's archive - run J3s, the bank with Retomoto's file) is said
+ *   too, once a local player exists and the list has stood still: 'join: box 9 NOT usable on this level: the
+ *   jump list is empty'. (Until 2026-10-09 an empty list was never described, so that run showed nothing.)
  *   MULTIPLAYER (from the code above, not run): the request is local in both halves. The hook looks only at the
  *   feet of this machine's local players, and 0x8f3fa0 moves only this machine's local players - BOTH of them
  *   when one enters the box (split screen; Arcade and online have one). A remote player is moved by his own
@@ -193,13 +196,13 @@ static int klj_resolve(int b, DWORD lo, int count, char *why, char name[64], flo
 
 static void klj_tick(void)
 {
-    static char last[160]; static int lastcount = -1, toldlist; static DWORD countat;
+    static char last[160]; static int lastcount = -1, toldlist, toldempty; static DWORD countat;
     char scene[160], key[64], why[160], name[64]; float feet[3], pos[3]; BYTE sel[2];
     DWORD gd, lo = 0, hi = 0, req = 0, pl, now = GetTickCount(); int pend = 0, count, b, i, k, act = 0, newscene, e;
     if (!klj_any || !klj_tick_on || !klh_exe_ok) return;
     if (!klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) { last[0] = 0; lastcount = -1; return; }       /* frontend: nothing is active */
     newscene = strcmp(scene, last) != 0;
-    if (newscene) { snprintf(last, sizeof last, "%s", scene); lastcount = -1; toldlist = 0; }
+    if (newscene) { snprintf(last, sizeof last, "%s", scene); lastcount = -1; toldlist = 0; toldempty = 0; }
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x8c4, &lo, 4) || !klh_rd(gd + 0x8c8, &hi, 4) || !klh_rd(gd + 0x898, sel, 2)) return;
     count = lo && hi > lo ? (int)((hi - lo) >> 5) : 0;
     if (count > KLJ_MAXLIST) return;
@@ -218,6 +221,15 @@ static void klj_tick(void)
     if (k && toldlist != count) {
         toldlist = count;
         klog("join: level '%s': %d box(es) active; jump list has %d entries", scene, act, count);
+    }
+    /* An empty list is only called empty when the level runs - a local player exists - and the length has stood
+       still: the ZJumpPoints enter themselves during the load, before there is a player (ASSUMPTION on that order;
+       a list that fills later is described by the lines above all the same). */
+    if (act && !count && !toldempty && now - countat >= (DWORD)klj_settle_ms && sel[0] != 0xff && sel[0] < 28 && klh_rd32(gd + 0x828 + 4 * sel[0])) {
+        toldempty = 1;
+        klog("join: level '%s': %d box(es) active but the jump list is EMPTY - the level has no ZJumpPoint", scene, act);
+        for (b = 0; b < KLJ_NBOX; b++) if (klj_box[b].wasactive)
+            klog("join: box %d NOT usable on this level: the jump list is empty (a KLJoin.ini of another level beside this archive?)", b + 1);
     }
     if (k) for (b = 0; b < KLJ_NBOX; b++) if (klj_box[b].wasactive && klj_box[b].said != count) {       /* once per list length */
         klj_box[b].said = count;

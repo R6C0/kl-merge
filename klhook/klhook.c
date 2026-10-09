@@ -22,6 +22,8 @@
  *   kljoin.c       x     x    jump boxes: a two-part level joined by the game's own jump request ([Join], KLJoin.ini)
  *   klauto.c             x    scripted input, breadcrumb detours, [Auto] options, result file, watchdog
  *   mkoverlay.py              builds KLExpansion\Overlay\Patch01.zip (the menu page of the expansion maps)
+ *   build.bat build_auto.bat  SHIP / TEST; with --work into <work>\build\klhook\ship | test (DLL, sha1, ini): the
+ *                             fixed place tools and live runs take a build from (workdir.py asks for <work>)
  *   A SHIP build does not contain klauto.c at all: no [Auto] key can switch a detour on in it.
  *
  * WHAT A HOOK MAY PATCH (re\antitamper.md): kl2.exe carries Valve CEG's code-integrity checks. Several hundred
@@ -90,7 +92,11 @@
  *   GONE since 2026-10-09 (klslot's code patches, replaced by the data writes above and by the file redirect):
  *   0x836016.. nine `push <slot name>` (8 checks each), 0x69981e session default (11 checks), 0x8468ea..f5 DLC
  *   lock bytes (0 checks, luck), 0x7f5610 MountFirst detour (0 checks, luck).
- *   READ ONLY, no write: [0x154d5f4]+0xd4 (menu option 'Dummy' = the page of the expansion menu), [0xdd2640]
+ *   READ ONLY, no write: the menu's window stack [[[0xdd265c]+0x824]+4] (+0x328 count, +0x32c.. windows; a window's
+ *   name at +0xc) = the page of the expansion menu (klslot.c kls_menu_watch; it also compares 11 + 4 code bytes at
+ *   0x410930 / 0x962850 and reads two vtable slots - checker: 10 / 8 / 8 checks, i.e. hashed, which is why they are
+ *   only read), the byte [0x156b73a] 'start pending' (0 checks), [0x154d5f4]+0xd4 (menu option 'Dummy', logged at
+ *   [Expansion] Log=2 only), [0xdd2640]
  *   (+0x2b0 scene name: klsteam, kljoin), [0xdd265c] (+0x828 / +0x898 local players, +0x8c4 jump list: kljoin),
  *   0x58ffc3 (11 bytes of start-up code compared to find the game's own fatal-fault filter 0x90b780; a read),
  *   [0x168e598]+0x70 / +0x5c (session state and game mode: klsteam's 'session:' line; 0 checks), the window and

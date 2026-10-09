@@ -75,6 +75,14 @@
  *     - A level whose archive was never seen being opened, or could not be read, is blocked too (fail closed), but
  *       does not leave the 'until restart' mark below: the hook being blind must not cost a whole evening's stats.
  *     - Leaderboard upload: blocked while the current level (or, in the frontend, the last one) is not stock.
+ *     - PESSIMISTIC UNTIL JUDGED: between the open of a level archive that is not stock and the moment the engine's
+ *       scene name is that level (or has changed to another level), every write is blocked too ("was opened and is not the stock one; its scene
+ *       is not up yet"). From the menu the archive is opened while the scene name is still the frontend's, and
+ *       there the last level's verdict would otherwise decide. On a direct boot it is the other way round - the
+ *       name comes first (run X1j: level line at :13.079, archive at :13.559) and the level counts as 'not seen
+ *       being opened', blocked for both kinds. So there is no window in which a write of a level that is not
+ *       stock passes; what run X1j showed ('stats and achievements allowed' for half a second) was the LOG line,
+ *       which looked at the 'until restart' mark instead of asking the policy. It asks now.
  *     - Stats and achievements: blocked from the moment a non-stock level runs UNTIL THE PROCESS ENDS. The stats
  *       block in memory is cumulative (SetStat writes totals), so a later stock session would carry the expansion
  *       rounds out with it. At the next start the game reads the block back from Steam (0x46f5a0), clean.
@@ -158,6 +166,7 @@ static int klx_narch;
 static char klx_patch_extra[80];              /* a member of the opened Patch01.zip that is not a menu file */
 static char klx_taint[200];                   /* why stats stay blocked for the rest of this process */
 static int klx_last_verdict; static char klx_last_why[200];      /* the last level scene seen: 1 stock, 2 not */
+static char klx_pend[64], klx_pend_scene[160];      /* a level archive that is not stock was opened (and the scene name at that moment); its own scene has not come up yet */
 static LONG klx_nblocked[3], klx_npassed[3];
 static DWORD klx_said[160]; static int klx_nsaid;
 
@@ -247,6 +256,8 @@ static void klh_level_open(const char *asked, const char *opened)
     klx_arch[i].verdict = v; klx_arch[i].size = size; klx_arch[i].hash = hash; klx_arch[i].ft = ft;
     snprintf(klx_arch[i].path, MAX_PATH, "%s", opened);
     snprintf(klx_arch[i].why, sizeof klx_arch[i].why, v == 1 ? "stock" : v == 3 ? "its archive %s %s" : "its archive %s is not the stock one: %s", key, line);
+    if (v >= 2) { snprintf(klx_pend, sizeof klx_pend, "%s", key); klh_scene(klx_pend_scene, sizeof klx_pend_scene); }      /* pessimistic until the scene it belongs to has been judged */
+    else if (!strcmp(klx_pend, key)) klx_pend[0] = 0;                    /* the same archive, opened again as the stock one */
     LeaveCriticalSection(&klx_cs);
     if (fresh) klog("steam: level archive %s opened from %s: %s (%s)", key, opened, v == 1 ? "STOCK" : v == 3 ? "NOT KNOWN" : "NOT stock", line);
     klj_level_open(key, opened, v);
@@ -291,7 +302,12 @@ static int klx_ship_blocked(int kind, char *why)
         EnterCriticalSection(&klx_cs); snprintf(klx_taint, sizeof klx_taint, "'%.80s' ran in this process and was not the stock level of its slot", scene); LeaveCriticalSection(&klx_cs);
     }
     if (v) { klx_last_verdict = v; snprintf(klx_last_why, sizeof klx_last_why, "%s", w); }
+    if (v && klx_pend[0]) {                                   /* the archive's own scene is up (judged on its own from here), or another level came up since */
+        char key[64];
+        if ((klh_level_key(scene, key, sizeof key - 4) && (strcat(key, ".zip"), !strcmp(key, klx_pend))) || strcmp(scene, klx_pend_scene)) klx_pend[0] = 0;
+    }
     if (kind == KLX_STATS && klx_taint[0]) { snprintf(why, 200, "%s: stats stay blocked until the game is restarted", klx_taint); return 1; }
+    if (klx_pend[0]) { snprintf(why, 200, "the level archive %s was opened and is not the stock one; its scene is not up yet", klx_pend); return 1; }
     if (v >= 2 || (!v && klx_last_verdict >= 2)) { snprintf(why, 200, "%s", v ? w : klx_last_why); return 1; }
     strcpy(why, v ? "stock level" : klx_last_verdict ? "frontend, after a stock level" : "no level loaded yet in this process");
     return 0;
@@ -461,7 +477,7 @@ static void *__cdecl klx_SteamUserStats(void)
 static void klx_tick(void)
 {
     static char last[160]; static DWORD calls; static int lastv = -1;
-    char scene[160], why[200]; int v;
+    char scene[160], why[200], w2[200]; int v, vs;
     if (!klx_on || !klh_exe_ok) return;
     klx_state();
     if (calls++ & 7) return;
@@ -474,14 +490,16 @@ static void klx_tick(void)
     if (strcmp(scene, last)) { EnterCriticalSection(&klx_cs); klx_nsaid = 0; LeaveCriticalSection(&klx_cs); }      /* a new level: every call is said once again */
     snprintf(last, sizeof last, "%s", scene); lastv = v;
     if (!v) { klog("steam: scene '%s' is no level; so far %ld write(s) blocked, %ld passed on", scene, klx_nblocked[0] + klx_nblocked[1], klx_npassed[0] + klx_npassed[1]); return; }
-    klx_blocked(KLX_STATS, why, 0);                           /* sets the 'ran in this process' mark for a level that is not stock */
+    /* Both halves of the line are what the policy answers NOW (until 2026-10-09 the stats half looked at the 'until
+       restart' mark only and said 'allowed' for a level whose archive had not been seen yet, although such a level
+       is blocked for both kinds - run X1j). */
+    vs = klx_blocked(KLX_STATS, w2, 0);                       /* also sets the 'ran in this process' mark for a level that is not stock */
     v = klx_blocked(KLX_BOARD, why, 0);
-    klog("steam: level '%s': %s - leaderboard upload %s, stats and achievements %s", scene, why, v ? "BLOCKED" : "allowed",
-         klx_always || klx_taint[0] ? "BLOCKED" : "allowed");
+    klog("steam: level '%s': %s - leaderboard upload %s, stats and achievements %s", scene, why, v ? "BLOCKED" : "allowed", vs ? "BLOCKED" : "allowed");
     if (klx_always) {                                         /* what a SHIP build would decide here (checks S3 / S4 without a SHIP run) */
-        v = klx_ship_blocked(KLX_BOARD, why);
+        v = klx_ship_blocked(KLX_BOARD, why); vs = klx_ship_blocked(KLX_STATS, w2);
         klog("steam: level '%s' under the SHIP policy: %s - leaderboard upload would be %s, stats and achievements would be %s", scene, why,
-             v ? "BLOCKED" : "allowed", klx_taint[0] ? "BLOCKED" : "allowed");
+             v ? "BLOCKED" : "allowed", vs ? "BLOCKED" : "allowed");
     }
 }
 
@@ -550,6 +568,6 @@ static void klx_init(void)
 __declspec(dllexport) void klx_test_always(int on) { klx_always = on; }
 __declspec(dllexport) int klx_test_blocked(void *mapped, int kind, char *why) { klh_delta = (LONG_PTR)((DWORD_PTR)mapped - KL2_BASE); klh_exe_ok = 1; return klx_blocked(kind, why, 0); }
 __declspec(dllexport) void klx_test_rows(int on) { klx_stock_rows = on; }
-__declspec(dllexport) void klx_test_reset(void) { klx_taint[0] = 0; klx_last_verdict = 0; klx_narch = 0; klx_patch_extra[0] = 0; klx_nsaid = 0; }
+__declspec(dllexport) void klx_test_reset(void) { klx_taint[0] = 0; klx_last_verdict = 0; klx_narch = 0; klx_patch_extra[0] = 0; klx_nsaid = 0; klx_pend[0] = 0; }
 #endif
 #endif /* KLSTEAM_C */
