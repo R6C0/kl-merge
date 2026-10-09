@@ -105,9 +105,9 @@ in the lobby car (6272 563 -6305) at once, doors of both cars opened at the blas
    is the reward for the boardroom, and nobody can leave the tower with only statue money before the
    fight - GUESS on pacing; `GATE_MAIN_ROOM = False` keeps today's behaviour.
 2. The car's trigger fires `ECPS_BOTH` so police follow; the campaign's `EndElevatorSounds`
-   (`PlayAudio`, elevator clip) could ride the same list for a sound of the doors (its stream clip is
-   now in `RETOMOTO_FILTER`'s `LevelSetup/Level/M09_A/` prefix - NOT: that prefix is `Music/`; add
-   `LevelSetup/Level/M09_A/Cuts/` if wanted).
+   (`PlayAudio`, elevator clip `LevelSetup/Level/M09_A/Cuts/M09A_Enter_Elevator/...`) could ride the
+   same list for a sound of the doors; its prefix is in `RETOMOTO_FILTER`, and the object must be added
+   to `CAMPAIGN_KEEP[PART_A]` (node 6591, `EndElevatorSounds`).
 3. No fade exists in `JumpPoint`; a `TriggerDelay2` between the box and the jump (1.5 s, GUESS) is
    stock wiring and lets the doors read as closing. The arrival faces the lobby door (x 6112).
 4. Online case (`re/retomoto_fa.md` 3.3) is LIVE; if only the host moves, fall back to spawn-side
