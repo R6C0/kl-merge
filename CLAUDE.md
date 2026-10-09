@@ -365,6 +365,9 @@ Owner's design for it (2026-10-09), to be followed as given:
 - Part 2 (lobby/street): out through the front entrance, down the road to a VAN, and escape.
   Mood reference: the street shoot-out in the film Heat.
 - I am to design how the two parts join. Its level music plays.
+- OWNER, 2026-10-09 18:40, after playing the balcony start: the blast must be more VOLATILE,
+  'like the subway one in the original game when u start in': it does the explosion but there is
+  no smoke and no camera shake. Wanted: smoke / dust, debris, shake (agent t-blast).
 - OWNER, 2026-10-09 17:00, after SEEING the tower in the game (supersedes the start options A / C
   and the spawn row inside the boardroom): the heisters start OUTSIDE, on the ledge just before
   the glass of the main window, and THEN the blow-up sequence happens and they go in.
