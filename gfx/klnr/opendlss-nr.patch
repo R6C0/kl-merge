@@ -1,0 +1,130 @@
+diff -ru a/src/kernels.h b/src/kernels.h
+--- a/src/kernels.h
++++ b/src/kernels.h
+@@ -63,6 +63,13 @@
+   uint32_t rows = 0, K = 0, N = 0;
+ };
+ 
++struct KernelChain {
++  VkDeviceAddress waitRows = 0; uint32_t waitExpected = 0, waitShiftY = 0;   // window-row counters (attention output)
++  VkDeviceAddress waitBands = 0; uint32_t waitMul = 1, waitGroupRows = 64;   // row-band counters (FFN / projection output), signals per row group, the producer's rows per workgroup
++  VkDeviceAddress signal = 0;                                                // counters to increment
++  bool chained = false;                                                      // no barrier after this launch
++};
++
+ class Kernels {
+  public:
+   Kernels(vk::Context& context, const std::string& shaderDirectory);
+@@ -181,12 +188,7 @@
+   struct ChainTimeouts { uint32_t waits = 0; std::string counter; };   // counter: where the first stuck wait was
+   ChainTimeouts chainTimeouts() const;
+   void resetChainTimeouts();
+-  struct Chain {
+-    VkDeviceAddress waitRows = 0; uint32_t waitExpected = 0, waitShiftY = 0;   // window-row counters (attention output)
+-    VkDeviceAddress waitBands = 0; uint32_t waitMul = 1, waitGroupRows = 64;   // row-band counters (FFN / projection output), signals per row group, the producer's rows per workgroup
+-    VkDeviceAddress signal = 0;                                                // counters to increment
+-    bool chained = false;                                                      // no barrier after this launch
+-  };
++  using Chain = KernelChain;   // klnr patch: defined at namespace scope (GCC: default-argument NSDMI rule)
+   struct ExpertFfnArgs {
+     const Activation* input = nullptr;     // block state, E4 [rows][channels]; also the skip
+     const vk::Buffer* w1 = nullptr;        // tile-major [expert][channels/32][128][32]
+diff -ru a/src/nr_graph.cpp b/src/nr_graph.cpp
+--- a/src/nr_graph.cpp
++++ b/src/nr_graph.cpp
+@@ -683,7 +683,7 @@
+   kernels_.setStageLabel("pre");
+   const Tensor& preTensor = model_.tensor(0);
+   FusedLayout preLayout = preFusedLayout();
+-  if (preTensor.byteLength != preLayout.endWithoutPadding + 16) throw std::runtime_error("unexpected block0 layout");
++  if (!model_.synthetic() && preTensor.byteLength != preLayout.endWithoutPadding + 16) throw std::runtime_error("unexpected block0 layout");
+   const bool fusePre = routes_.fusePre, fusePool = routes_.fusePool;
+   Activation* adapter = allocate("retained full block0", fullRows, 32, Format::E4);
+   Activation* resized = allocate("block0 downsample", g.levels[0].width * g.levels[0].height, 32, Format::E4);
+@@ -885,7 +885,7 @@
+     const Tensor& transition = model_.tensor(stage.first);
+     kernels_.setStageLabel("transition ->" + std::to_string(stage.first));
+     FusedLayout layout = upsampleFusedLayout(stage.channels * 2, stage.channels);
+-    if (transition.byteLength != layout.endWithoutPadding + 16)
++    if (!model_.synthetic() && transition.byteLength != layout.endWithoutPadding + 16)
+       throw std::runtime_error("unexpected upsample layout for block " + std::to_string(stage.first));
+     Activation* projection = allocate(label + " projection", lowRows, stage.channels, Format::F16);
+     GemmFp8Args p;
+@@ -951,7 +951,7 @@
+     const Tensor& tensor = model_.tensor(70);
+     kernels_.setStageLabel("post");
+     FusedLayout layout = postFusedLayout();
+-    if (tensor.byteLength != layout.endWithoutPadding) throw std::runtime_error("unexpected block70 layout");
++    if (!model_.synthetic() && tensor.byteLength != layout.endWithoutPadding) throw std::runtime_error("unexpected block70 layout");
+     head_ = allocate("RGBA neural head", fullRows, 4, Format::F32);
+     if (options_.fusedBlocks && !options_.captureIntermediates && routes_.fusePost) {
+       // The post blend (2x upsample of block 69 + block 0, learned scales) feeds block 70 in registers and the
+diff -ru a/src/nr_model.cpp b/src/nr_model.cpp
+--- a/src/nr_model.cpp
++++ b/src/nr_model.cpp
+@@ -73,6 +73,15 @@
+ }  // namespace
+ 
+ Model::Model(vk::Context& context, const std::string& directory, bool verifyHashes) : context_(context) {
++  if (directory == kZeroModel) {   // klnr patch: see nr_model.h
++    synthetic_ = true;
++    blockCount_ = 71;
++    const size_t bytes = 64u << 20;   // larger than any single layer record (the biggest are a few MiB)
++    zeroBytes_.assign(bytes, 0);
++    zeroRaw_ = context_.createBuffer(bytes, false, "zero tensor raw");
++    context_.fillZero(zeroRaw_);
++    return;
++  }
+   json::Value manifest = json::parse(readText(directory + "/manifest.json"));
+   blockCount_ = (uint32_t)manifest["totals"]["blockCount"].integer();
+   for (const json::Value& stage : manifest["stages"].array) {
+@@ -118,12 +127,22 @@
+ 
+ Model::~Model() {
+   for (auto& [name, buffer] : matrices_) context_.destroyBuffer(buffer);
+-  for (auto& [name, tensor] : tensors_) context_.destroyBuffer(tensor.raw);
++  if (synthetic_) context_.destroyBuffer(zeroRaw_);   // klnr patch: one shared raw buffer
++  else
++    for (auto& [name, tensor] : tensors_) context_.destroyBuffer(tensor.raw);
+ }
+ 
+ const Tensor& Model::tensor(int block, int layer, const std::string& parameter) const {
+   std::string name = "block" + std::to_string(block) + ".layer" + std::to_string(layer) + "." + parameter;
+   auto it = tensors_.find(name);
++  if (it == tensors_.end() && synthetic_) {   // klnr patch: every tensor of the synthetic model is zero
++    Tensor tensor;
++    tensor.name = name; tensor.block = block; tensor.layer = layer; tensor.parameter = parameter; tensor.stage = "zero";
++    tensor.byteLength = (uint32_t)zeroBytes_.size();
++    tensor.bytes = zeroBytes_.data();
++    tensor.raw = zeroRaw_;
++    it = tensors_.emplace(name, tensor).first;
++  }
+   if (it == tensors_.end()) throw std::runtime_error("missing tensor " + name);
+   return it->second;
+ }
+diff -ru a/src/nr_model.h b/src/nr_model.h
+--- a/src/nr_model.h
++++ b/src/nr_model.h
+@@ -30,6 +30,10 @@
+ 
+ class Model {
+  public:
++  // klnr patch: directory ":zero" builds a synthetic model whose every weight is zero (no NVIDIA data): the whole
++  // network runs at full cost and its head is non-finite or zero, which the caller treats as "no change".
++  static constexpr const char* kZeroModel = ":zero";
++  bool synthetic() const { return synthetic_; }
+   Model(vk::Context& context, const std::string& directory, bool verifyHashes = true);
+   ~Model();
+ 
+@@ -65,7 +69,10 @@
+   };
+   vk::Context& context_;
+   std::vector<Stage> stages_;
+-  std::map<std::string, Tensor> tensors_;
++  mutable std::map<std::string, Tensor> tensors_;   // klnr patch: mutable (synthetic tensors are made on demand)
++  bool synthetic_ = false;
++  std::vector<uint8_t> zeroBytes_;
++  vk::Buffer zeroRaw_;
+   std::map<std::string, vk::Buffer> matrices_;
+   size_t nanWeights_ = 0;
+   uint32_t blockCount_ = 0;

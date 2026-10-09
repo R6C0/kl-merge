@@ -7,10 +7,13 @@ or kl2.exe code. Branch `gfx`.
 
 | path | what |
 | --- | --- |
-| `klgfx/klgfx.cpp` | `d3d9.dll` proxy for kl2.exe (32-bit). Mode 0 pass-through, 1 wrap (perf/memory log, frame capture), 2 wrap on D3D9On12 |
+| `klgfx/klgfx.cpp` | `d3d9.dll` proxy for kl2.exe (32-bit). Mode 0 pass-through, 1 wrap (perf/memory log, frame capture, NR bridge), 2 wrap on D3D9On12 |
 | `klgfx/gen_wrappers.py` | generates `d3d9_wrap.inl` (forwarding methods) from MinGW's `d3d9.h` |
-| `klgfx/KLGfx.ini` | settings, installed next to `kl2.exe` |
-| `build_gfx.sh` | MinGW i686 build -> `out/d3d9.dll` (out/ is not committed) |
+| `klnr/` | KLNR: the neural rendering bridge. `klnr_protocol.h` (shared memory layout), `klnr_client.*` (game side, compiled into the proxy), `klnr_main.cpp` + `klnr_pass.*` (klnr.exe, 64-bit, OpenDLSS-NR's network), `shaders/kl_composite.comp`, `opendlss-nr.patch` (GCC fix + synthetic zero model), `gen_ptx.sh` |
+| `klnr/klnr_harness.cpp`, `klnr/klgfx_testapp.cpp` | stand-ins for the game: 32/64-bit bridge client, and a 32-bit D3D9 program that loads the proxy like kl2.exe |
+| `build_gfx.sh`, `build_klnr.sh` | MinGW builds (Linux) -> `out/d3d9.dll`, `out/KLNR/` (out/ and deps/ are not committed) |
+| `test_wine.sh` | end-to-end test without the game or an NVIDIA GPU: Wine + Xvfb + Mesa (llvmpipe / lavapipe) |
+| `dist/`, `package_dist.sh` | what goes to the PC: test / install / remove scripts, KLGfx.ini presets -> `out/KLGfx_dist` |
 | `tools/frame_report.py` | turns a frame capture (`KLGfx/frame_*/calls.txt`) into a pass list |
 
 ## Facts that shape the design
@@ -40,30 +43,57 @@ or kl2.exe code. Branch `gfx`.
   - **ships no weights**: the user supplies a model directory (`manifest.json` + 11 E4M3 stage files,
     141 MiB) and is responsible for the rights to it. Nothing in this repository extracts or ships them.
 
-## The bridge (being built)
+## The bridge (KLNR)
 
 ```
 kl2.exe (32-bit, D3D9)                         klnr.exe (64-bit, Vulkan, OpenDLSS-NR code)
-  KLGfx d3d9.dll                                  NrPass: preprocess -> 71-block network -> composite
-   at the insertion point (before the HUD):
-   StretchRect -> GetRenderTargetData ---- shared memory (BGRA8 frame + header) ---->  upload
-                                       <--- shared memory (BGRA8 result) ----------  readback
-   UpdateSurface -> StretchRect back
+  KLGfx d3d9.dll, at Present:                     KlNrPass: upload -> preprocess -> 71-block network
+   GetRenderTargetData(back buffer) -> system          -> temporal composite -> readback
+   surface -> shared memory  ---- Local\KLNR_<pid>_f<gen>, _req event ---->
+   <--------------------------------------------- result in place, _done event
+   UpdateSurface back into the back buffer, Present
 ```
 
-- v0 transport is CPU shared memory (works on native D3D9, a few tens of MB of address space at 1080p).
-  A zero-copy route (D3D9On12 shared D3D12 resources imported into Vulkan) is possible later but costs the
-  game process the D3D12 runtime and driver, which the 2 GB budget may not allow.
-- Without a model directory the helper runs in pass-through (input copied to output through the whole path),
-  which tests the bridge and its cost without NVIDIA's data.
-- Insertion point: first version at Present (the HUD is then processed too); the frame capture identifies
-  the HUD's first draw so the pass can run just before it.
-- Motion: K&L2 has no velocity buffer. First version: zero motion (the network's own blend logit rejects
-  bad history); later camera reprojection from depth and the view-projection constants (named in the
-  shaders' constant tables, which the capture prints).
+- Transport v0 is CPU shared memory (works on native D3D9; at 1920x1080 it costs the game process about 16 MB of
+  address space: one system-memory surface and the shared frame). Synchronous: the frame waits for the helper
+  (TimeoutMs, default 100; MaxMisses frames in a row without a result switch it off for the session).
+- klnr.exe without a model ("none") makes a plain Vulkan device and only does the round trip + composite, so the
+  bridge works and can be tested on any GPU. "zero" builds a synthetic all-zero model in OpenDLSS-NR's layout (no
+  NVIDIA data): the whole network runs at its real cost and its non-finite head is treated as "no change".
+  A model directory (manifest.json + model\) must be supplied by the user in `KLNR\model`.
+- Composite for a game frame (`kl_composite.comp`): the frame arrives as an sRGB image (sampled linear, paper
+  white 1), leaves as the same encoding (no ACES display transform), B,G,R,A for D3D9; split view; test pattern.
+- Motion: none yet (Dog Days renders no velocity buffer): the motion image says "history at the same pixel". GUESS
+  that is fine for a still camera; in motion only the network's own blend weight rejects stale history. Next:
+  camera reprojection from depth and the view-projection constants (named in the capture's constant tables).
+- Insertion point: Present, so the HUD goes through the network too. Next: a capture (`dist` preset `capture`)
+  to find the HUD's first draw and run the bridge just before it.
+- Reference counts: the proxy counts references on its own wrapper; when the game lets go of it, the bridge's
+  surfaces are released first (each holds a device reference), so the device is destroyed as without the proxy.
+- Thread safety: the game's device is D3DCREATE_MULTITHREADED; the shader table and capture state are locked
+  (0.1 had a data race there).
+
+## Tested (2026-10-09, cloud, Wine 9.0 + Xvfb + Mesa llvmpipe/lavapipe; `test_wine.sh`)
+
+- klnr.exe --selftest, no model, 640x480: round trip exact (largest channel difference 0); test pattern right.
+- 64-bit and 32-bit stand-in games through klnr.exe: exact round trip, frame growth (new frame section +
+  helper resize), test pattern.
+- 32-bit D3D9 program with KLGfx 0.2 as its d3d9.dll (like kl2.exe): frames come back processed, Reset to a new
+  size, a second thread creating ~550,000 shaders/textures while frames are captured, device released cleanly.
+- Failure paths: helper missing (NR off, program goes on), helper killed mid-run (noticed, goes on), NR off,
+  mode 0.
+- NOT tested here: the network itself (needs an NVIDIA Ada GPU), and anything in kl2.exe. On the PC:
+  `dist/TEST klnr helper (no game).bat` first (no game), then a game run with the `nrtest` preset.
+
+## For the graft loop (VS Code agent)
+
+Nothing of this is installed in the game folder. The package is in `<DM>\KL_PortTools\KLGfx\`.
+`INSTALL KLGfx into Dog Days.bat [nrtest|nrzero|capture|off]` puts d3d9.dll + KLGfx.ini + KLNR\ into Dog Days
+(no stock file is replaced: Dog Days has no d3d9.dll); `REMOVE KLGfx from Dog Days.bat` moves d3d9.dll out.
+A run with KLGfx installed is not a clean graft run: remove it before crash triage of the graft.
 
 ## Status
 
-- KLGfx 0.1 built (MinGW), ran once in the game on 2026-10-09 11:07 (mode 1): device made, then the run hit
-  the out-of-address-space fault above. Disabled since (renamed to `d3d9.dll.klgfx`).
-- Not installed in the game folder. Install only in a run agreed with the graft loop.
+- KLGfx 0.1 ran once in the game (2026-10-09 11:07, mode 1): device made, then that run hit the
+  out-of-address-space fault above. Disabled since (renamed to `d3d9.dll.klgfx`; INSTALL deletes that file).
+- KLGfx 0.2 + klnr.exe 0.1: built, tested as above, staged on the PC, not installed.
