@@ -182,34 +182,43 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
-State 2026-10-09 06:30. `python tools/kl_graft.py build F07 <M>` (verify must say problems: 0),
+State 2026-10-09 07:20. `python tools/kl_graft.py build F07 <M>` (verify must say problems: 0),
 `python tools/kl_graft.py install`, `python tools/kl_autotest.py --shots 100,130,160 --tag X`.
 Which map is which (names inside the levels): M01_FA_A = diner / Sunny Hill Plaza, M03_FA_A = the
-BANK ('Withdrawal', the owner's priority), M02_FA_A = streets, M06_FA_A not identified.
-DONE, each seen live as a clean exit (direct boot):
-- F07 systems + F09 map (two stock levels); F07 + M01_FA_A; F07 + M03_FA_A.
-- The F01 slot holds F07 + M03_FA_A built with the full tool: merged sound bank incl. Dead Men
-  voice lines (kl_snd / kl_whd / kl_loc), all Dead Men classes kept except ZIngameMapGroup,
-  kl_light.normalise('stock') (the player is lit now; palm trunks still black, scene grey),
-  joined .ANM (kl_anmjoin; Van and Police_USA converted from Dead Men), kl_fa repairs.
-  A scripted walk across the bank's plaza works (ground holds). 0 asserts, 0 faults.
+BANK ('Withdrawal', the owner's priority), M02_FA_A = streets, M06_FA_A: see re/maps.md.
+DONE, seen live:
+- A REAL Fragile Alliance Arcade round on the bank (F07 systems + M03_FA_A in the F01 slot),
+  started from the menu by the hook (run RN6: PASS, 0 asserts, 0 faults): round intro, HUD with
+  lives / score / clock, walk into the bank hall, 'Looting has started', guards shoot, player
+  down, ROUND OVER, score page. Pictures: research/round_bank_hall_RN6_270s.png, shots/RN6_*.
+- The slot build has: merged sound bank + Dead Men voice lines (stream groups kept together),
+  Dead Men classes kept, kl_light.normalise, joined .ANM, kl_fa repairs, and since SH1
+  kl_light.fit_shaders (35 materials on 920 objects had no compiled shader and were not drawn;
+  now they are: research/bank_plaza_shaders_SH1_130s.png). Direct boot: clean exit.
+- Menu route (re/fa_round.md section 5, klhook/KLHook.round.ini, DLL from build_auto.bat): ESC,
+  DOWN, RETURN, RETURN, select level, StartGame; windows are waited for by name.
+RULES LEARNT:
+- ANTI-TAMPER: with any kl2.exe code / import-table patch in place (klauto Hooks=1, [Engine]
+  operand patch, import wrappers), a level started as a real session loads and the process then
+  calls ExitProcess(0x8000dead) from 0x794ed6. Hooks=0 and no [Engine] works. A direct boot never
+  trips it. The check itself is NOT found. Until it is, no hook that patches code or imports may
+  be used in a real round: that blocks klhook/klslot.c (wraps five imports), the heister-select
+  patch at 0x835837 and netcode tuning. Whether DATA writes (slot table) are safe: untested.
+- With DisableSplashScreens the frontend opens MainMenu with CampaignMenu on top; RETURN there
+  starts the story.
+- Swap the hook DLL by renaming the loaded file aside; put the original DLL and ini back after.
 NOT KNOWN / OPEN:
-- Sound was never heard by anyone: the owner has to listen (ambience, voice lines).
-- Interiors (the bank itself), AI, cars, collision beyond the plaza: not seen.
-- A REAL ROUND was never played. klhook/klauto.c (build_auto.bat, KLHook.round.ini) can drop the
-  DefaultScene override and boot the frontend, and scripted keys arrive, but the key sequence is
-  wrong: RETURN, RETURN and RETURN, DOWN, RETURN both start the STORY (L00). No main menu was ever
-  captured (screenshots there are black). Needed: the exact keys press-start -> Arcade Mode ->
-  Subway -> Accept on this profile (the owner can tell in one line), or read the menu state from
-  memory. Until then kl_fa's repairs (exit trigger / escape-vehicle monitor) are untested.
-- F07 + F09 and F07 + M01_FA_A were not re-run with the full tool (lights / .ANM / FA).
-- Lighting: which of kl_light's two rules fixed the player is not settled ('keep' / 'm01' runs not
-  made); baked lighting of 2250 meshes is dropped; PostFilterBoxes left out.
-- Exited kl2.exe processes linger and keep dinput8.dll mapped: swap the DLL by renaming it aside.
+- Sound was never heard by anyone: the owner has to listen (ambience, briefing, voice lines).
+- In a round, not seen: loot pick-up, escape vehicle, round 2, a round ending by the clock.
+- M02_FA_A, M06_FA_A, M09_A, M09_B and the two-part Retomoto level build and verify offline
+  (tools/kl_maps.py, re/maps.md) but none was loaded by the game.
+- Lighting steps 2 and 3 of re/lighting.md (graft_postfilter, bake_ao) are written, not wired.
+- Own folder (klhook/klslot.c, re/slot_redirect.md): written, never run; see ANTI-TAMPER.
 Then, in order:
-1. A real Fragile Alliance round on the bank through the menu (re/fa_round.md).
-2. M02 / M06, then own folder + slot redirect (re/fa_slots.md; nine entries is a hard limit).
-3. Player models (re/characters.md), heister select (re/menus.md), Retomoto Tower (re/retomoto.md).
+1. Finish the round on the bank (loot, escape, round 2); the look (post-filter, baked light).
+2. M02 / M06 live; own folder + slot redirect once the anti-tamper check is understood.
+3. Player models (re/characters.md), heister select (re/menus.md), Retomoto Tower (re/maps.md,
+   re/retomoto.md: needs its FA layer authored and a mover between tower and street).
 Restore stock with `tools/RESTORE Dog Days originals.bat`.
 
 ## Owner's end goal (2026-10-09)

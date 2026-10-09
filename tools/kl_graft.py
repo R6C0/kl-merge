@@ -1035,6 +1035,14 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
 
     union = os.path.join(workdir(), 'build', 'shared', 'union.fxc')    # Dead Men has no cache of its own
     fxc = T.merge_fxc(S['.fxc'], M['.fxc'] if '.fxc' in M.ext else open(union, 'rb').read())
+    if M.dm:
+        # converted Dead Men materials can ask for a shader permutation no Dog Days cache holds;
+        # the object is then not drawn at all (35 materials on 920 objects of M03: re/lighting.md,
+        # second pass). kl_light.fit_shaders switches features off until a compiled one fits.
+        fit = kl_light.fit_shaders(mat, fxc, log=log)
+        log('  shaders: %d materials fitted, %d without any compiled shader' % (len(fit['fixed']), len(fit['unresolved'])))
+        for slot_, (nm, lack) in sorted(fit['unresolved'].items())[:10]:
+            note('material %s has no compiled shader (not drawn)' % nm)
     out = {'.gms': kl_gms.pack(gms), '.buf': buf, '.prp': Jn.p.serialize(), '.prm': prm_bytes,
            '.TEX': T.write_tex(tex), '.MAT': T.write_mat(mat), '.fxc': fxc,
            '.oct': octj.pack(), '.rmi': index['.rmi'], '.rmc': index['.rmc'], '.HVK': hvk, '.sgd': sgd,
