@@ -182,17 +182,27 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
-1. Graft tool: Dog Days systems + Dead Men map in one level. Milestone A (no Dead Men data): put
-   stock F02's map under stock F01's systems and get it to load - proves the join. Milestone B:
-   Dead Men M01's map. Test in the F01 slot.
-2. Own folder + slot redirect: KLHook rewrites one of the nine FA slot names at
-   [0x168f750]+0x16+idx*0x40 (or `-o MPMap=`); menu name/picture via Patch01.zip. Nine entries
-   is a hard limit, so a Dead Men map takes one over while active. Untested live.
-3. Voice lines: Dead Men clips are already in the merged PC_Def.str; wire them to events.
-4. Player models: Dead Men characters into Dog Days' multiplayer character list.
-5. Real .ANM converter (clip header 0x50 -> 0x68; fields +0x10 / +0x2C unknown), M03 nav array 7,
-   .prm lit descriptors (M02/M03), check the 46 "assumed" field pairings against level values.
-State of the F01 slot: whole-level M01 build, crashes at 79 % in the HUD. Restore with
+State 2026-10-09 01:30. `tools/kl_graft.py build <S> <M>` + `install` + `python tools/kl_autotest.py`.
+- Milestone A DONE: F07 systems + F09 map (two stock Dog Days levels) loads, runs to AutoExit, the
+  player stands in F09's map with HUD and weapon. A healthy level exits after 205-324 s.
+  A direct boot (`-o DefaultScene`) has no session: default player, no round; that is expected.
+- Milestone B OPEN: F07 systems + Dead Men M01_FA_A map verifies with 0 problems, loads all 14,993
+  nodes, then at Buffering 99 % (78-80 s) jumps into data: eip = the object ZFFGameData keeps at
+  +0x48ac, reached from its update 0x4bca90 at 0x4bccd5 -> thunk 0x8af460 -> resolver 0x45d600 ->
+  jmp eax. Cause not established. Bisect with `--geometry` (map geometry only, S keeps its game-mode
+  layer); that needs kl_hvk.join to accept static collision from S's kept layer.
+  Fixed on the way: HavokCarScriptRout on cars retyped to ZSTDOBJ (kl2+0x18a7fc).
+- The Dead Men asset converters were rewritten (kl_prm / kl_mat / kl_tex / kl_pf4, driver
+  `kl_dmassets.py test` -> problems 0) but have not been in a tested build in that state.
+- Not joined yet: map sounds (zeroed; needs the bank merge of re/audio.md as tools), animations
+  (one side's .ANM), ZHavokCar (flattened to ZSTDOBJ), the FA game-mode layer for a Dead Men map.
+Then, in order:
+1. Make M01 play as a Fragile Alliance round (re/fa_gamemode.md), going through the lobby
+   (klhook/klauto.c can script the menu; untested live).
+2. Own folder + slot redirect (re/fa_slots.md): nine entries is a hard limit. Untested live.
+3. Voice lines and music (re/audio.md), player models (re/characters.md), heister select
+   (re/menus.md). M02 / M03 / M06, then Retomoto Tower (re/retomoto.md).
+The F01 slot holds the working F07 + F09 graft. Restore stock with
 `tools/RESTORE Dog Days originals.bat`.
 
 ## Owner's end goal (2026-10-09)
