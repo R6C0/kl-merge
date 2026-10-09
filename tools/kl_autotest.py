@@ -3,8 +3,14 @@
 Run one unattended load test of the level installed in a Dog Days slot.
 
     python kl_autotest.py [seconds to wait, default 420] [--shots 70,100,150,200-400:10] [--tag name]
+                          [--hook <dinput8.dll or its folder>] [--ini <KLHook.ini>]
         --shots: at these seconds after the start, save a picture of the game's own window
         (only its rectangle) as <work folder>/research/shots/<tag>_<seconds>s.png
+        --hook / --ini: put this hook DLL and / or this KLHook.ini into the game folder for the
+        run, keep the ini, the hook's KLHook.result and this tool's output as
+        <work folder>/build/klhook/live/<tag>.{ini,result,txt}, and afterwards put the ORIGINAL
+        pair back from <work folder>/build/klhook/direct_boot (sha1 printed).
+    With --tag the run's part of KLHook.log is kept as <work folder>/build/klhook/live/<tag>.log.
 
 Needs the Steam launch options of Dog Days to boot straight into the level and quit by itself:
     -o DefaultScene=Locations/F01/F01_Main.gms -o AutoExit=120
@@ -12,35 +18,123 @@ Needs the Steam launch options of Dog Days to boot straight into the level and q
 
 Starts the game through Steam, waits until kl2.exe has gone or the time is up (then ends it),
 and reports what the run left behind: the events our dinput8.dll proxy wrote to KLHook.log, and
-any crash dump the game wrote itself (those catch faults in other modules, which the proxy does
-not log). Prints one line starting with RESULT:
+any crash dump the game wrote itself (those catch faults in other modules, which the old proxy
+did not log). Prints one line starting with RESULT:
     RESULT: crash kl2.exe+0x2a1ff7 ...     a fault inside kl2.exe (address as in the log)
-    RESULT: crash <module>+0x...           a fault elsewhere, from the game's own dump
+    RESULT: crash <module>+0x...           a fault elsewhere (the hook's FATAL line, or the game's dump)
     RESULT: assert ...                     the engine hit one of its int3 checks first
+    RESULT: integrity exit ...             the game's code-integrity check ended it (re/antitamper.md)
     RESULT: clean exit after N s           no fault recorded: the level loaded and AutoExit fired
     RESULT: hung                           still running at the deadline and nothing was logged
-Exit code 0 for a clean exit, 1 otherwise. Nothing in the game folder is changed, except that
-the hook's own KLHook.result of an earlier scripted run (klhook/klauto.c) is deleted before the
-start; the new one is printed. A scripted run through the menu needs a longer wait (1200).
+Exit code 0 for a clean exit, 1 otherwise. Nothing in the game folder is changed (without
+--hook / --ini), except that the hook's own KLHook.result of an earlier scripted run
+(klhook/klauto.c) is deleted before the start; the new one is printed. A scripted run through the
+menu needs a longer wait (1200).
+
+LINGERING ENTRIES (debug/zombies.py): a game run that ends in a Windows error report leaves a
+'kl2.exe' entry with no thread, which cannot be opened or ended and keeps the run's dinput8.dll
+mapped. So: a process counts as running only while it has a thread (never by its memory size,
+and a thread-less entry is never given to taskkill); the number of such entries is printed before
+and after the run (one more = this run ended in a Windows error report: the hook did not end the
+process itself); and a hook DLL that cannot be overwritten is renamed aside (`put`).
 """
-import glob, os, re, subprocess, sys, time
+import glob, hashlib, os, re, shutil, subprocess, sys, tempfile, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from kl_port_check import find, DD_GUESSES, DD_EXE
 
-PROBE = 0xa8e3cb                      # Steam DRM's deliberate write to 0: logged as CRASH, harmless
+PROBE = 0xa8e3cb                      # Steam DRM's deliberate write to 0: the old hook logged it as CRASH, harmless
 APP = 28000
+ORIGINAL = {'dinput8.dll': '7e806e6c1f8669779d7a5481b1a5300defcaec96',      # the pair the owner plays with:
+            'KLHook.ini': '2ced8e5f2b2399ad3c151557ef636004f93d2e81'}       # <work>/build/klhook/direct_boot
+
+try:                                  # the repo's debug/ folder; the work-folder copy of tools/ has none
+    sys.path.insert(1, os.path.join(os.path.dirname(HERE), 'debug'))
+    import zombies
+except Exception:                     # ImportError, or no ntdll (not Windows)
+    zombies = None
+
+
+def processes(name='kl2.exe'):
+    """-> (pids with at least one thread, pids with none) of that image name.
+    Without debug/zombies.py: tasklist, and the old guess that a thread-less entry is one under
+    5000 K of working set (true of every entry seen; a starting game is briefly below it too)."""
+    live, dead = [], []
+    if zombies:
+        for pid, v in zombies.procs().items():
+            if v[0].lower() == name.lower():
+                (live if v[1] else dead).append(pid)
+        return live, dead
+    out = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq ' + name, '/FO', 'CSV', '/NH'],
+                         capture_output=True, text=True).stdout
+    for line in out.splitlines():
+        m = re.match(r'"[^"]+","(\d+)","[^"]*","[^"]*","([\d,\.]+) K"', line)
+        if m:
+            (live if int(re.sub(r'\D', '', m.group(2))) > 5000 else dead).append(int(m.group(1)))
+    return live, dead
 
 
 def running():
-    out = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq kl2.exe', '/FO', 'CSV', '/NH'],
-                         capture_output=True, text=True).stdout
-    live = []
-    for line in out.splitlines():
-        m = re.match(r'"kl2\.exe","(\d+)","[^"]*","[^"]*","([\d,\.]+) K"', line)
-        if m and int(re.sub(r'\D', '', m.group(2))) > 5000:      # exited shells linger at ~100 K
-            live.append(int(m.group(1)))
-    return live
+    """pids of kl2.exe processes that have a thread: a game that runs (lingering entries excluded)."""
+    return processes()[0]
+
+
+def lingering():
+    """number of thread-less kl2.exe entries (see the docstring)."""
+    return len(processes()[1])
+
+
+def sha1(path):
+    return hashlib.sha1(open(path, 'rb').read()).hexdigest()
+
+
+def put(src, dst):
+    """Copy src over dst. A DLL that a lingering entry keeps mapped cannot be written or deleted,
+    but it can be renamed: it is moved aside (same volume: the temp folder if that is on the
+    game's drive, else beside it as <name>.aside_N) and a fresh file takes its place.
+    -> '' or a note saying where the locked file went. Files moved aside earlier are deleted
+    when that has become possible (after a reboot)."""
+    folder, name = os.path.split(os.path.abspath(dst))
+    aside = os.path.join(tempfile.gettempdir(), 'kl_autotest_aside')
+    if os.path.splitdrive(aside)[0].lower() != os.path.splitdrive(folder)[0].lower():
+        aside = folder
+    for old in glob.glob(os.path.join(glob.escape(aside), glob.escape(name) + '.aside_*')):
+        try:
+            os.remove(old)
+        except OSError:
+            pass
+    try:
+        shutil.copyfile(src, dst)
+        return ''
+    except PermissionError:
+        os.makedirs(aside, exist_ok=True)
+        k = 0
+        while os.path.exists(os.path.join(aside, '%s.aside_%d' % (name, k))):
+            k += 1
+        os.replace(dst, os.path.join(aside, '%s.aside_%d' % (name, k)))
+        shutil.copyfile(src, dst)
+        return '%s was locked (mapped by a lingering entry): moved to %s' % (name, os.path.join(aside, '%s.aside_%d' % (name, k)))
+
+
+def restore_original(dd, say=print):
+    """Put the owner's dinput8.dll and KLHook.ini back; -> True when both sha1 sums are right."""
+    from kl_port_check import workdir
+    ok = True
+    for name, want in ORIGINAL.items():
+        src = os.path.join(workdir(), 'build', 'klhook', 'direct_boot', name)
+        if not os.path.isfile(src) or sha1(src) != want:
+            say('  restore | reference %s is missing or not the original' % src)
+            ok = False
+            continue
+        dst = os.path.join(dd, name)
+        if not os.path.isfile(dst) or sha1(dst) != want:
+            note = put(src, dst)
+            if note:
+                say('  restore | ' + note)
+        good = sha1(dst) == want
+        say('  restore | %s %s' % (name, 'original (sha1 ok)' if good else 'WRONG ' + sha1(dst)))
+        ok &= good
+    return ok
 
 
 def window_of(pids):
@@ -110,42 +204,118 @@ def shot(pids, path):
     return 'black' if black else True
 
 
-def last_session(log):
-    """Lines of the newest KLHook session, or [] if the log has none."""
+def last_session(log, size0=0):
+    """Lines of the newest KLHook session, or [] if the log has none; size0: only what was
+    written after the log had that size."""
     try:
-        lines = open(log, errors='replace').read().splitlines()
+        with open(log, 'rb') as f:
+            f.seek(size0)
+            lines = f.read().decode('latin-1').splitlines()
     except OSError:
         return []
     starts = [i for i, l in enumerate(lines) if 'KLHook loaded' in l]
     return lines[starts[-1]:] if starts else []
 
 
+EVENTS = [      # (kind, pattern); the hook's lines are those of klhook/klhook.c, as debug/log.py reads them
+    ('assert', re.compile(r'ASSERT at (kl2\.exe)\+(\w+) \((\w+)\)')),
+    ('crash', re.compile(r'CRASH \w+ at (kl2\.exe)\+(\w+) \((\w+)\)')),
+    # the rewritten hook (2026-10-09): a fatal fault in ANY module, which the hook then ends itself
+    ('crash', re.compile(r'FATAL (?:unhandled exception|stack overflow) \w+ at (.+?)\+0x(\w+) \((\w+)\)')),
+]
+NOTES = ('WATCHDOG:', 'process ended here', 'left to Windows', 'exit: ExitProcess', 'patch REFUSED', 'process exit',
+         "Steam's probe")
+
+
+def read_events(lines):
+    """-> ([(kind, where, line)], [other lines worth showing]) of one session's lines.
+    The Steam probe is no event: the old hook wrote a CRASH line for it, the rewritten one writes
+    a single 'Steam's probe ... not dumped' line. A repeated assert ('(again)') counts once."""
+    events, notes = [], []
+    for l in lines:
+        for kind, pat in EVENTS:
+            m = pat.search(l)
+            if m:
+                mod = 'kl2.exe' if m.group(1).lower() == 'kl2.exe' else m.group(1)
+                where = '%s+0x%s' % (mod, m.group(2).lstrip('0'))
+                if int(m.group(3), 16) != PROBE and '(again)' not in l and not (
+                        'FATAL' in l and events and events[-1][1] == where):     # CRASH (first chance) + FATAL = one fault
+                    events.append((kind, where, l.strip()))
+                break
+        else:
+            if 'FATAL C runtime' in l:
+                events.append(('crash', 'the C runtime', l.strip()))
+            elif 'INTEGRITY EXIT' in l:
+                events.append(('integrity exit', '(ExitProcess 0x8000dead)', l.strip()))
+            elif any(n in l for n in NOTES):
+                notes.append(l.strip())
+    return events, notes
+
+
 def main():
     a = sys.argv[1:]
-    shots, tag = [], time.strftime('%H%M%S')
+    shots, opt = [], {}
     if '--shots' in a:
         i = a.index('--shots')
         for x in a[i + 1].split(','):                       # 70 | 30-90:5 (from-to:step)
             if '-' in x:
                 r, _, st = x.partition(':'); lo, hi = r.split('-')
                 shots += range(int(lo), int(hi) + 1, int(st or 5))
-            else:
+            elif x:
                 shots.append(int(x))
         shots = sorted(set(shots)); del a[i:i + 2]
-    if '--tag' in a:
-        i = a.index('--tag'); tag = a[i + 1]; del a[i:i + 2]
+    for key in ('--tag', '--hook', '--ini'):
+        if key in a:
+            i = a.index(key); opt[key] = a[i + 1]; del a[i:i + 2]
+    tag = opt.get('--tag', time.strftime('%H%M%S'))
     wait = int(a[0]) if a else 420
     dd = find(DD_GUESSES, DD_EXE)
     if not dd:
         raise SystemExit('Dog Days not found')
     if running():
         raise SystemExit('RESULT: not started - kl2.exe is already running')
+    out = []
+
+    def say(text):
+        print(text, flush=True)
+        out.append(text)
+    swap = '--hook' in opt or '--ini' in opt
+    code = 1
+    try:
+        if '--hook' in opt:
+            src = opt['--hook']
+            src = os.path.join(src, 'dinput8.dll') if os.path.isdir(src) else src
+            note = put(src, os.path.join(dd, 'dinput8.dll'))
+            say('  hook | %s (sha1 %s)%s' % (src, sha1(src)[:8], ' - ' + note if note else ''))
+        if '--ini' in opt:
+            put(opt['--ini'], os.path.join(dd, 'KLHook.ini'))
+            say('  ini  | %s' % opt['--ini'])
+        code = run(dd, wait, shots, tag, say, keep_log='--tag' in opt or swap)
+    finally:
+        if swap:
+            from kl_port_check import workdir
+            live = os.path.join(workdir(), 'build', 'klhook', 'live')
+            os.makedirs(live, exist_ok=True)
+            if '--ini' in opt:
+                shutil.copyfile(opt['--ini'], os.path.join(live, tag + '.ini'))
+            if os.path.isfile(os.path.join(dd, 'KLHook.result')):
+                shutil.copyfile(os.path.join(dd, 'KLHook.result'), os.path.join(live, tag + '.result'))
+            if not restore_original(dd, say):
+                code = code or 1
+            open(os.path.join(live, tag + '.txt'), 'w').write('\n'.join(out) + '\n')
+    return code
+
+
+def run(dd, wait, shots, tag, say=print, keep_log=False):
+    """One start through Steam; -> exit code (0 = clean exit). See the module docstring."""
+    from kl_port_check import workdir
     log = os.path.join(dd, 'KLHook.log')
     size0 = os.path.getsize(log) if os.path.isfile(log) else 0
     dumps0 = set(glob.glob(os.path.join(glob.escape(dd), 'kl2_*crash*.mdmp')))
     result = os.path.join(dd, 'KLHook.result')          # written by a dinput8.dll built from klhook/klauto.c
     if os.path.isfile(result):
         os.remove(result)
+    linger0 = lingering()
     t0 = time.time()
     os.startfile('steam://rungameid/%d' % APP)
     started = False
@@ -155,41 +325,58 @@ def main():
         if live:
             started = True
             if shots and time.time() - t0 >= shots[0]:
-                from kl_port_check import workdir
                 path = os.path.join(workdir(), 'research', 'shots', '%s_%ds.png' % (tag, shots.pop(0)))
                 r = shot(live, path)
-                print('  shot | %s%s' % (path if r else 'no window', ' (black after 9 tries)' if r == 'black' else ''), flush=True)
+                say('  shot | %s%s' % (path if r else 'no window', ' (black after 9 tries)' if r == 'black' else ''))
         elif started or time.time() - t0 > 60:
             break
     took = time.time() - t0
-    left = running()
+    left = running()                                    # only processes with a thread: a lingering entry cannot be ended
     for pid in left:
         subprocess.run(['taskkill', '/F', '/PID', str(pid)], capture_output=True)
+    for _ in range(10):                                 # Windows makes its error-report entry within a second or two
+        if not running():
+            break
+        time.sleep(1)
+    time.sleep(2)
+    linger1 = lingering()
+    say('  lingering kl2.exe entries (no thread): %d before, %d after%s' % (
+        linger0, linger1, ' - THIS RUN ENDED IN A WINDOWS ERROR REPORT (the hook did not end the process itself)' if linger1 > linger0 else ''))
     if not started:
-        print('RESULT: not started - no kl2.exe within 60 s (is Steam running?)')
+        say('RESULT: not started - no kl2.exe within 60 s (is Steam running?)')
         return 1
     grew = os.path.isfile(log) and os.path.getsize(log) > size0
-    events = []
-    for l in (last_session(log) if grew else []):
-        m = re.search(r'(CRASH \w+|ASSERT) at kl2\.exe\+(\w+) \((\w+)\)', l)
-        if m and int(m.group(3), 16) != PROBE:
-            events.append((m.group(1).split()[0].lower(), 'kl2.exe+0x' + m.group(2).lstrip('0'), l.strip()))
+    session = last_session(log, size0) if grew else []
+    if grew and keep_log:
+        keep = os.path.join(workdir(), 'build', 'klhook', 'live')
+        os.makedirs(keep, exist_ok=True)
+        with open(log, 'rb') as f:
+            f.seek(size0)
+            open(os.path.join(keep, tag + '.log'), 'wb').write(f.read())
+    events, notes = read_events(session)
     new = sorted(set(glob.glob(os.path.join(glob.escape(dd), 'kl2_*crash*.mdmp'))) - dumps0, key=os.path.getmtime)
-    for l in (last_session(log) if grew else [])[-14:]:
-        print('  log |', l[:200])
+    for l in session[-14:]:
+        say('  log | ' + l[:200])
+    for l in notes[:8]:
+        if l not in [x.strip() for x in session[-14:]]:
+            say('  log | ' + l[:200])
     if new:
-        print('  game dump:', os.path.basename(new[-1]))
+        say('  game dump: ' + os.path.basename(new[-1]))
     if os.path.isfile(result):                          # a scripted run (re/fa_round.md): state=PASS / FAIL / EXIT / RUNNING
-        print('  KLHook.result | ' + ' '.join(open(result, errors='replace').read().split()))
+        say('  KLHook.result | ' + ' '.join(open(result, errors='replace').read().split()))
     if events:
         kind, where, line = events[0]
-        print('RESULT: %s %s after %.0f s (%d events)' % (kind, where, took, len(events)))
+        fatal = [e for e in events[1:] if 'FATAL' in e[2] and e[1] != where]
+        say('RESULT: %s %s after %.0f s (%d events)%s' % (kind, where, took, len(events),
+                                                          '; fatal fault at ' + fatal[0][1] if fatal else ''))
     elif new:
-        print('RESULT: crash outside kl2.exe after %.0f s - decode with: python debug/dump.py "%s"' % (took, new[-1]))
+        say('RESULT: crash outside kl2.exe after %.0f s - decode with: python debug/dump.py "%s"' % (took, new[-1]))
+    elif linger1 > linger0:
+        say('RESULT: crash - ended in a Windows error report after %.0f s, nothing logged' % took)
     elif left:
-        print('RESULT: hung - still running after %.0f s, nothing logged' % took)
+        say('RESULT: hung - still running after %.0f s, nothing logged' % took)
     else:
-        print('RESULT: clean exit after %.0f s' % took)
+        say('RESULT: clean exit after %.0f s' % took)
         return 0
     return 1
 

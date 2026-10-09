@@ -42,8 +42,10 @@
  *     load (assumed from the stock main menu, whose buttons set MP_MultiPlayerMenu the same way).
  *     KNOWN LIMITS: the engine treats a redirected map as the stock map of its slot - title in the lobby,
  *     briefing, and the LEADERBOARD (0x80c9f0(current slot)): an Arcade score on an expansion map is reported
- *     to the stock map's Steam board. Play expansion maps with Steam offline until a guard exists (the import
- *     slot of steam_api SteamUserStats, 0xb107c8, is where one can sit). Online play needs the same ini and
+ *     to the stock map's Steam board - klsteam.c stops that (a proxy ISteamUserStats behind the import slot
+ *     0xb107c8 fails the upload, the stats and the achievements on every level that is not the stock level of
+ *     its slot; the two CreateFile wrappers below tell it which archive was opened, klh_level_open, and are
+ *     therefore installed even when [Expansion] is off). Online play needs the same ini and
  *     folders on every peer and the page is not replicated: stage 4.
  *  3. [Slots] F09=Locations/F0M03/F0M03_Main  - name mode (re\fa_slots.md 5): the engine itself loads another
  *     scene name, so a level may live under a folder of its own name (supplied through the Overlay:
@@ -240,16 +242,21 @@ static void *(__cdecl *kls_real_fopen)(const char *, const char *);
 
 static HANDLE WINAPI kls_CreateFileA(LPCSTR name, DWORD acc, DWORD share, LPSECURITY_ATTRIBUTES sa, DWORD disp, DWORD flags, HANDLE tmpl)
 {
-    char to[MAX_PATH];
-    if (KLS_READONLY(acc, disp) && kls_map(name, to, "CreateFileA")) name = to;
+    char to[MAX_PATH]; LPCSTR asked = name;
+    if (KLS_READONLY(acc, disp)) {
+        if (kls_map(name, to, "CreateFileA")) name = to;
+        klh_level_open(asked, name);                  /* klsteam.c: which level archive is this, and is it the stock one */
+    }
     return kls_real_CreateFileA(name, acc, share, sa, disp, flags, tmpl);
 }
 
 static HANDLE WINAPI kls_CreateFileW(LPCWSTR name, DWORD acc, DWORD share, LPSECURITY_ATTRIBUTES sa, DWORD disp, DWORD flags, HANDLE tmpl)
 {
     char a[MAX_PATH], to[MAX_PATH]; WCHAR w[MAX_PATH]; BOOL lossy = FALSE; DWORD err = GetLastError();
-    if (name && KLS_READONLY(acc, disp) && WideCharToMultiByte(CP_ACP, 0, name, -1, a, MAX_PATH, 0, &lossy) && !lossy &&
-        kls_map(a, to, "CreateFileW") && MultiByteToWideChar(CP_ACP, 0, to, -1, w, MAX_PATH)) name = w;
+    if (name && KLS_READONLY(acc, disp) && WideCharToMultiByte(CP_ACP, 0, name, -1, a, MAX_PATH, 0, &lossy) && !lossy) {
+        if (kls_map(a, to, "CreateFileW") && MultiByteToWideChar(CP_ACP, 0, to, -1, w, MAX_PATH)) { name = w; klh_level_open(a, to); }
+        else klh_level_open(a, a);
+    }
     SetLastError(err);
     return kls_real_CreateFileW(name, acc, share, sa, disp, flags, tmpl);
 }
@@ -399,8 +406,16 @@ static void kls_init(HINSTANCE inst)
 {   /* from DllMain, after klhook.c's own set-up; no game code has run yet */
     char root[64], mf[128]; DWORD a; int n, p;
     (void)inst;
-    if (!GetPrivateProfileIntA("Expansion", "Enable", 0, klh_ini)) return;
     InitializeCriticalSection(&kls_cs);
+    if (!GetPrivateProfileIntA("Expansion", "Enable", 0, klh_ini)) {
+        /* the expansion is off, but klsteam.c still has to see which level archive the game opens: these two
+           wrappers then pass every call on unchanged (kls_map answers 0 while kls_on is 0) */
+        if (!klx_on) return;
+        n  = klh_iat("KERNEL32.dll", "CreateFileA", (void *)kls_CreateFileA, (void **)&kls_real_CreateFileA);
+        n += klh_iat("KERNEL32.dll", "CreateFileW", (void *)kls_CreateFileW, (void **)&kls_real_CreateFileW);
+        klog("steam: CreateFileA %s, CreateFileW %s wrapped to see which level archive is opened (no redirect: [Expansion] is off)", kls_real_CreateFileA ? "yes" : "NO", kls_real_CreateFileW ? "yes" : "NO");
+        return;
+    }
     kls_log = GetPrivateProfileIntA("Expansion", "Log", 1, klh_ini);
     kls_fallback = GetPrivateProfileIntA("Expansion", "Fallback", 1, klh_ini);
     kls_page_force = (int)GetPrivateProfileIntA("Expansion", "Page", -1, klh_ini);

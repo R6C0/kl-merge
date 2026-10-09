@@ -4,7 +4,7 @@ The Fragile Alliance layer of Retomoto Tower (Dead Men M09_A + M09_B under Dog D
 authored from stock objects, offline. Spec, evidence and the list of what only a live run can
 settle: re/retomoto_fa.md. Nothing here installs anything or starts the game.
 
-    python kl_fa_author.py test <out> [--keep] [--no-ai]
+    python kl_fa_author.py test <out> [--keep] [--no-ai] [--guards-wait] [--blast-delay 9]
                                                  build F07 + M09_B + M09_A with the layer into
                                                  <out> (kl_maps.chain), verify, kl_fa.check, print
                                                  the inventory with world coordinates; exit 1 if a
@@ -107,7 +107,11 @@ CAR_B = (6272.0, 563.0, -6305.0)        # lobby car ..._Int_A_00, same model and
 ROAD_X, ROAD_HALF, ROAD_Y = -3000.0, 2400.0, -40.0   # carriageway x -5700..-300 (re/retomoto.md 3.4); y: the player's feet
                                         # on the road, z -1500..9300 (run RT4; the first guess, 5, was the static cars' origin)
 # for the hook (data write, re/retomoto_fa.md 3.4): feet inside JOIN_BOX -> jump-list entry JOIN_ENTRY
-JOIN_BOX = ((2802.0, 3142.0), (19560.0, 19860.0), (789.0, 1029.0))     # the join box below: centre CAR_A, half (170, 130, 120), from the floor
+# The box is IN FRONT of the car, not inside it: the car's doors are shut and stop the player at x 2727
+# (run J1, 2026-10-09: 15 s of pushing at (2727, 19601, 807..932), the inside box x 2802..3142 was never
+# reached). This box fired from outside in RT4 and from the hook in J1b, both at (2719, 19601, 1100).
+# The level's own 'join box' below (the speak trigger) is still the car's inside and is never entered.
+JOIN_BOX = ((2550.0, 2790.0), (19500.0, 19800.0), (800.0, 1100.0))
 JOIN_ENTRY = 5                          # Specials!JumpPoints!06_Exit: the sixth JumpPoint in scene order (entries 0..5 read in run RT4)
 VAN_STOP_Z = (9300.0, 8500.0, 7700.0)   # GUESS: north of the first road block (z 3602..3911), south of the SWAT truck (z 10886)
 PARK = (0.0, -60000.0, 0.0)             # where a host object without a use is put
@@ -194,6 +198,17 @@ SQUADS = {PART_A: ('AI_Players!Enemies!020_Office!', 'AI_Players!Enemies!030_Rec
                    'AI_Players!Enemies!050_Atrium_2nd!', 'AI_Players!Enemies!060_Atrium_1st!', 'AI_Players!Enemies!070_Elevators!'),
           PART_B: ('Enemies!010_RetoBldFront!', 'Enemies!020_Street!')}
 ROOM_SQUADS = 'AI_Players!Enemies!020_Office!'      # 'everyone in the main room'
+# OPTION for the start problem (the heisters stand in sight of the seven boardroom guards, who hit them
+# during the countdown: run S2, red screen at 'HEIST STARTS IN 1 SEC'). ZSquadScript field 3 is 1 on
+# exactly three squads of the level - the two boardroom squads and one street squad - and 0 on the
+# other 28, which do nothing until a behaviour rout of theirs is named (the tower's: by the blast
+# timer). The campaign needs the 1 for the guards' sitting mini-cutscene, which the layer strips.
+# True = the two room squads get 0 and so wait for the blast like the rest of the tower: their
+# flanking routs are in the blast timer's list already. ASSUMPTION that field 3 is 'active from the
+# start' (no name in the exe; 14 of 30 squads of stock F01 have 0: the ones that arrive later).
+# Default False = the level as the owner has seen it; 'test ... --guards-wait' builds the option.
+ROOM_WAITS = False
+SQUAD_ACTIVE = 3
 # scripted arrivals (elevators, cars) and the guard the campaign kills with the blast
 NOT_SQUADS = ('Arriving', 'TakingElevator', 'VSquad', 'Guards_Inside_01')
 BEHAVE = {'DefendBehaviourRout', 'FlankingBehaviourRout', 'HuntBehaviourRout', 'PatrolBehaviourRout', 'RunToCoverBehaviourRout'}
@@ -495,6 +510,10 @@ def wire(sc, log=print):
     for n in room:
         k = node(n)
         kl_fa.edit(sc, k, ctrl_of(sc, k, 'ZSquadScript'), lambda us: setv(sc, us, SQUAD_DEAD, [R + ROLE['counter']]))
+        if ROOM_WAITS:
+            kl_fa.edit(sc, k, ctrl_of(sc, k, 'ZSquadScript'), lambda us: setv(sc, us, SQUAD_ACTIVE, 0))
+    if ROOM_WAITS:
+        log('  kl_fa_author: OPTION guards-wait: %d room squads start at the blast (ZSquadScript[3] = 0)' % len(room))
     hidden = [R + sc.names[t] for t in sc.tops() if sc.names[t].startswith('FASpecials!DropMoney!') and kl_fa.node_values(sc, t)[3]
               and any(v[2] == 'ZMONEYCTRL_TYPE_NORMAL' for kk, _i, v in kl_fa.controllers(sc, 'OnlineMoneyCtrl') if kk == t)]
     lists('counter', 'TriggerCounter', f0=max(len(room), 1), f4=[R + ROLE['loot on']])
@@ -659,8 +678,11 @@ def test(out, keep=False, log=print):
 def main():
     a = sys.argv[1:]
     if len(a) >= 2 and a[0] == 'test':
-        global NO_AI
+        global NO_AI, ROOM_WAITS, BLAST_DELAY
         NO_AI = '--no-ai' in a
+        ROOM_WAITS = '--guards-wait' in a
+        if '--blast-delay' in a:                        # OPTION, seconds after the round-start event (default BLAST_DELAY)
+            BLAST_DELAY = float(a[a.index('--blast-delay') + 1])
         sys.exit(test(a[1], '--keep' in a))
     elif a == ['plan']:
         for lv in (PART_A, PART_B):

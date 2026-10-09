@@ -22,6 +22,8 @@ archive in a slot. Milestone A = two stock Dog Days levels (no Dead Men data): p
                                                climb is opened, money-container reach 125; re/escape.md)
                        ... --ao 0.5            Dead Men map: strength of its ambient-occlusion light map baked
                                                into the vertex colours (kl_light.bake_ao; default 0.5, 0 = off)
+                       ... --no-bones          WITHOUT renumbering the skeletons of M's models to the joined level
+                                               (default: bone ids and animation bone numbers rewritten, kl_chars)
                        ... --author            the authored FA layer of kl_fa_author.py (Retomoto Tower; the
                                                two-part level is built by 'kl_maps.py chain ... --author')
     python kl_graft.py install [F01] [--from <folder>]   put the last build (or a kept one) into Dog Days
@@ -734,7 +736,7 @@ def dm_rename(Jn, S, log=print, anim=True):
 
 # ------------------------------------------------------------------ the graft
 def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True, light='stock', anim=True, fa=True,
-          postfilter=True, ao=0.5, escape=True, author=False):
+          postfilter=True, ao=0.5, escape=True, author=False, bones=True):
     """Systems of S + map of M -> (path of the archive, problems found by verify()).
     sound: merge what M's map names of M's bank into S's (kl_snd.graft_audio); False = the map's
     sound references are set to 0 (the silent builds of milestones A and B). loc: also graft the
@@ -750,7 +752,9 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
     escape: kl_escape's repairs of a Dead Men map's way to the escape vehicle (re/escape.md; needs fa).
     author: the authored Fragile Alliance layer of kl_fa_author (Retomoto Tower, re/retomoto_fa.md):
     host F07's own FA layer is re-placed before the graft and kept, the campaign squads that stay lose
-    their mini-cutscene controllers, and once both parts are in the scene the layer is wired."""
+    their mini-cutscene controllers, and once both parts are in the scene the layer is wired.
+    bones: the skeletons that came with M's models are renumbered to the joined level (kl_chars.reid /
+    rebind, re/characters_graft.md); False = left as M had them (the builds up to 2026-10-09 12:40)."""
     sch = J.schema('dd')
     for t, load in SOUND_TYPES.items():
         if sch.types[t]['load'] != load:
@@ -1122,6 +1126,48 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
             anm = S
             note('no single .ANM has every animation set; %s\'s is used' % s_name)
         anm_bytes = anm['.ANM']
+    # ---- skeletons of M's models. A skeleton is baked against ITS level: table [5] maps the level's
+    # bone ids to bones and tables [8] [9] [10] map bones to the index of their name in the level's own
+    # .ANM bone table (kl_chars docstring; 2,247 stock skeletons, no exception). M's models came with
+    # M's numbers, but the level now has S's ids and the joined .ANM table (S's names first, M's car
+    # bones appended), so above the 61 names all levels share a clip drove the wrong bone: faces,
+    # fingers, car doors and wheels. Rewritten here; the new tables are new chunks at the END of the
+    # .prm, so no index moves. S's skeletons need nothing: S's ids and S's part of the table are kept.
+    if bones:
+        import kl_chars
+        sks = sorted(cmap[i] for i, k in kinds.items() if k == 'skel')
+        # a bone no clip of the joined file moves (M01's 'bone01'..'bone04') has no entry in its bone
+        # table; it gets one at the end, as kl_chars.put does, so that every bone has a number of its
+        # own (in its own level it had one too). ASSUMPTION: a name without tracks is harmless there.
+        table = kl_anm.Anm(anm_bytes, 'dd')
+        number, lack = kl_chars.anm_number(table.bones), []
+        for sk in sks:
+            for nm in kl_chars.bone_names(prm, sk):
+                if nm.lower() not in number:
+                    table.bones.append(nm); lack.append(nm)
+                    number[nm.lower()] = len(table.bones) - 1
+        if lack:
+            anm_bytes = table.save()
+            log('  .ANM bone table: +%d names that only skeletons of %s have (%s)' % (len(lack), m_name, ', '.join(lack[:6])))
+        try:
+            ids = kl_chars.level_ids(prm_s)
+        except ValueError as x:                         # S is a build made before this step existed
+            ids = None
+            note('bone ids of %s are not one numbering (%s): the ids of the skeletons of %s are left as they were' % (s_name, x, m_name))
+        done = collections.Counter()
+        for sk in sks:
+            try:
+                if ids is not None:
+                    done['bone ids'] += kl_chars.reid(prm, sk, ids)
+                done['animation numbers'] += kl_chars.rebind(prm, sk, number)
+                done['skeletons'] += 1
+            except (KeyError, ValueError, StopIteration) as x:
+                note('skeleton %d of %s not renumbered: %r' % (sk, m_name, x))
+        if done:
+            prm_bytes = G.write(prm)
+            mat.refs = T.material_refs(prm_bytes)
+        log('  skeletons of %s: %d of %d renumbered to the joined level: %d bone ids, %d animation numbers changed' % (
+            m_name, done['skeletons'], len(sks), done['bone ids'], done['animation numbers']))
 
     union = os.path.join(workdir(), 'build', 'shared', 'union.fxc')    # Dead Men has no cache of its own
     fxc = T.merge_fxc(S['.fxc'], M['.fxc'] if '.fxc' in M.ext else open(union, 'rb').read())
@@ -1146,7 +1192,7 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
         if data is not None:
             members.append((member_name(n, s_name, slot), data))
     problems = verify(dict(out, snd=snd), Jn, S, M, copy, s_kept, mj, shift, log, audio,
-                      light=light in ('stock', 'm01') and M.dm, fa=fa)
+                      light=light in ('stock', 'm01') and M.dm, fa=fa, bones=bones)
     problems += [n for n in notes if n.startswith('.ANM: ')]
     for p in problems:
         log('  PROBLEM: ' + p)
@@ -1165,7 +1211,7 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
 
 
 # ------------------------------------------------------------------ verification
-def verify(out, Jn, S, M, copy, s_kept, mj, shift, log=print, audio=None, light=False, fa=False):
+def verify(out, Jn, S, M, copy, s_kept, mj, shift, log=print, audio=None, light=False, fa=False, bones=False):
     """Re-read every written member with its module and follow every cross-reference this file
     knows. Returns the problems ([] = install)."""
     sch, bad = J.schema('dd'), []
@@ -1242,6 +1288,10 @@ def verify(out, Jn, S, M, copy, s_kept, mj, shift, log=print, audio=None, light=
     bad += ['.prm names %d missing %ss' % (v, k) for k, v in miss.items() if v]
     if any(v > 1 for v in seen.values()):
         bad.append('.oct record named by two live model roots')
+    if bones:                                           # every skeleton against the level's own .ANM (kl_chars; [] on stock levels)
+        import kl_chars
+        cb = kl_chars.check_bones(prm, kl_anm.Anm(out['.ANM'], 'dd').bones)
+        bad += cb[:6] + (['... %d more skeleton problems' % (len(cb) - 6)] if len(cb) > 6 else [])
     if mat.refs != T.material_refs(out['.prm']):
         bad.append('.MAT ref table is not the .prm\'s')
     lost = T.used_textures(mat) - set(tex.tex)
@@ -1413,13 +1463,14 @@ if __name__ == '__main__':
         ao = 0.5
         if '--ao' in a:
             i = a.index('--ao'); ao = float(a[i + 1]); del a[i:i + 2]
-        flags = ('--geometry', '--silent', '--no-loc', '--stock-anm', '--no-fa', '--no-postfilter', '--no-escape')
-        g, quiet, noloc, noanm, nofa, pf, noesc = (f in a for f in flags)
+        flags = ('--geometry', '--silent', '--no-loc', '--stock-anm', '--no-fa', '--no-postfilter', '--no-escape', '--no-bones')
+        g, quiet, noloc, noanm, nofa, pf, noesc, nobones = (f in a for f in flags)
         author = '--author' in a
         a = [x for x in a if x != '--author']
         a = [x for x in a if x not in flags]
         sys.exit(1 if build(a[1], a[2], *a[3:4], sel=Select(g, **opt), sound=not quiet, loc=not noloc, light=light,
-                            anim=not noanm, fa=not nofa, postfilter=not pf, ao=ao, escape=not noesc, author=author)[1] else 0)
+                            anim=not noanm, fa=not nofa, postfilter=not pf, ao=ao, escape=not noesc, author=author,
+                            bones=not nobones)[1] else 0)
     elif a and a[0] == 'install':
         src = None
         if '--from' in a:

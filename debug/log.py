@@ -1,6 +1,9 @@
 """log.py [KLHook.log] [--all]   the last session of the hook's log: every assert, fault, watchdog and end-of-run line with
 the known sites and node-loader callers spelled out. Lines it does not know are skipped, never an error (the log also holds
-script, position and expansion lines). --all prints every session's one-line summary first."""
+script, position and expansion lines). --all prints every session's one-line summary first.
+Also shown: what the Steam write guard did ('steam:' - blocked and passed writes, the level's verdict, NOT GUARDED), the end
+of a session ('session: ... SESSION END', the moment the game uploads) and every jump box that fired or failed ('join:');
+a run of more than four 'steam:' lines is folded."""
 import datetime,os,re,sys
 import kl
 HEAD=re.compile(r'(\d\d:\d\d:\d\d\.\d+) (.*)')
@@ -14,6 +17,9 @@ KINDS=[                                                 # (kind, pattern on the 
  ('EXIT',  re.compile(r'(process exit|INTEGRITY EXIT|exit: ExitProcess)(.*)')),
  ('REFUSED',re.compile(r'patch REFUSED (\w+) (.*)')),          # the hook's patch guard said no (klhook.c)
  ('RESULT',re.compile(r'RESULT (\w+) \((.*)\) exit code (-?\d+)')),
+ ('STEAM', re.compile(r'steam: (NOT GUARDED|BLOCKED |passed on |level .|at exit|Patch01\.zip .* not a menu file)')),      # klsteam.c
+ ('SESSION',re.compile(r'session: .*SESSION END')),
+ ('JOIN',  re.compile(r'join: (player \d+ |box \d+ NOT usable)')),                                                    # kljoin.c
 ]
 def events(path,every=False):
     """-> (session header, [event dict]) of the last '==== KLHook loaded' session; every=True -> [(header, events)] of all.
@@ -66,7 +72,15 @@ def report(path=None,every=False):
             print(h[:60],' '.join('%s %d'%x for x in sorted(c.items())),'|',next((e['text'] for e in reversed(ev) if e['kind']=='RESULT'),''))
         print()
     head,ev=events(path); print(head)
-    for e in ev:
+    for i,e in enumerate(ev):
+        if e['kind']=='STEAM':                          # fold a run: the first two, a count, the last
+            j=i
+            while j>0 and ev[j-1]['kind']=='STEAM': j-=1
+            k=i
+            while k+1<len(ev) and ev[k+1]['kind']=='STEAM': k+=1
+            if k-j+1>4 and j+1<i<k:
+                if i==j+2: print('%s ... %d more steam: lines'%(e['time'],k-j-2))
+                continue
         print(line(e)+(' ['+', '.join(e['dumps'])+']' if e['dumps'] else ''))
         if e['at'] is not None and e['module']=='kl2.exe':
             t=kl.explain(e['at'],e['reg']) if e['reg'] else kl.SITES.get(e['at'],'')

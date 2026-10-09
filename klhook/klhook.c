@@ -15,6 +15,11 @@
  *   klfix.c        x     x    repairs of faults in kl2.exe itself, by data writes (the leaderboard row count)
  *   klslot.c       x     x    the expansion: maps in their own folder ([Redirect], menu pages), overlay files,
  *                             slot names by data write ([Slots])
+ *   klsteam.c      x     x    Steam write guard: a proxy ISteamUserStats behind one import slot; no leaderboard
+ *                             upload, stat or achievement from a level that is not the stock level of its slot,
+ *                             and none at all from a TEST build; the 'session: state' line
+ *   klstock.h      x     x    GENERATED (mkstock.py): size and directory hash of the 22 stock level archives
+ *   kljoin.c       x     x    jump boxes: a two-part level joined by the game's own jump request ([Join], KLJoin.ini)
  *   klauto.c             x    scripted input, breadcrumb detours, [Auto] options, result file, watchdog
  *   mkoverlay.py              builds KLExpansion\Overlay\Patch01.zip (the menu page of the expansion maps)
  *   A SHIP build does not contain klauto.c at all: no [Auto] key can switch a detour on in it.
@@ -50,6 +55,9 @@
  *   0xb10430                  MSVCR90 fopen         (klslot wrapper)      ST  import      0 checks      yes  X1 live
  *   0xb1018c                  ExitProcess           (exit tripwire)       ST  import      0 checks      yes  X1 live
  *   0xb107bc                  steam_api SteamAPI_RunCallbacks (the tick)  ST  import      0 checks      yes  NOT RUN
+ *   0xb107c8                  steam_api SteamUserStats (klsteam proxy)    ST  import      0 checks      yes  NOT RUN
+ *   [0xdd265c]+0x8d4          jump-list entry to go to   (kljoin)         ST  heap        outside       yes  RT4 live (written from outside the process)
+ *   0x156b358                 debug jump request = 1     (kljoin)         ST  .data       0 checks      yes  RT4 live (the same)
  *   [[[0x168e598]+0x17c]+0x198]+0x31fc   leaderboard row count (klfix)    ST  heap        outside       yes  live (klauto, 6 score pages)
  *   [0x168f750]+0x16+i*0x40   FA slot name          ([Slots])             ST  heap        outside       yes  X2 live (same bytes written back)
  *   [0x168f750]+4+i           FA slot available     (renamed slots only)  ST  heap        outside       yes  NOT RUN
@@ -81,8 +89,10 @@
  *   GONE since 2026-10-09 (klslot's code patches, replaced by the data writes above and by the file redirect):
  *   0x836016.. nine `push <slot name>` (8 checks each), 0x69981e session default (11 checks), 0x8468ea..f5 DLC
  *   lock bytes (0 checks, luck), 0x7f5610 MountFirst detour (0 checks, luck).
- *   READ ONLY, no write: [0x154d5f4]+0xd4 (menu option 'Dummy' = the page of the expansion menu), [0xdd2640],
- *   [0xdd265c], the window and player objects klauto looks at. kl2.exe never reads another module's code and
+ *   READ ONLY, no write: [0x154d5f4]+0xd4 (menu option 'Dummy' = the page of the expansion menu), [0xdd2640]
+ *   (+0x2b0 scene name: klsteam, kljoin), [0xdd265c] (+0x828 / +0x898 local players, +0x8c4 jump list: kljoin),
+ *   [0x168e598]+0x70 / +0x5c (session state and game mode: klsteam's 'session:' line; 0 checks), the window and
+ *   player objects klauto looks at. The real ISteamUserStats table is read, never written. kl2.exe never reads another module's code and
  *   hashes nothing outside its own image (re\antitamper.md 2.1), so this DLL being loaded is not seen.
  *   The vectored exception handler passes Steam's probe (kl2 0xa8e3cb, a deliberate write to 0 before every
  *   scene load) on untouched and no longer dumps it (three 35 - 48 MB dumps a run for nothing: MaxDumps was
@@ -107,6 +117,9 @@
  *    fallback thread ticks every 100 ms whenever the slot has been silent for 500 ms, so the fixes do not depend
  *    on it.
  *  - Exit tripwire: ExitProcess is logged; code 0x8000dead is spelled out as INTEGRITY EXIT.
+ *  - Steam write guard (klsteam.c) and jump boxes (kljoin.c); the CreateFileA / CreateFileW import wrappers of
+ *    klslot.c are installed even with [Expansion] Enable=0, because the guard has to see which level archive the
+ *    game opens (they change nothing then).
  *
  * KLHook.ini
  *   [KLHook]
@@ -116,7 +129,10 @@
  *   Tick=1              wrap SteamAPI_RunCallbacks; 0 = the fallback thread alone drives the tick
  *   LbFix=1             klfix.c; 0 = only log the value found
  *   SessionSafe=1       TEST only (SHIP is always 'ship'): 0 = policy 'direct'
+ *   Join=1              0 = no jump box fires (kljoin.c)
  *   [Expansion] [Redirect] [Redirect.N] [Page.N] [Slots]    klslot.c
+ *   [Steam]                                                 klsteam.c (Block, Log, State)
+ *   [Join] [Join.2] .. [Join.8]                             kljoin.c (also KLJoin.ini beside a level archive)
  *   [Auto] [Engine] [Script]                                klauto.c (TEST)
  *
  * BUILD: cl 19.4x x86, /O2 /LD /W3, export DirectInput8Create=_DirectInput8Create@20 (build.bat, build_auto.bat).
@@ -130,11 +146,14 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <math.h>
 
 #define KL2_BASE      0x400000u
 #define KL2_TIMESTAMP 0x4c80f728u
 #define KL2_IMAGESIZE 0x134e000u
 #define KL2_PROBE     0xa8e3cbu                   /* Steam's anti-debug probe: a write to 0 its own SEH handler resumes */
+#define KL2_SYSIF     0xdd2640u                   /* ZSysInterface *; +0x2b0 = char * name of the scene (klauto.c, 0x53aca1) */
+#define KL2_GAMEDATA  0xdd265cu                   /* ZFFGameData * */
 
 typedef HRESULT (WINAPI *DI8Create)(HINSTANCE, DWORD, REFIID, LPVOID *, LPUNKNOWN);
 static DI8Create real_create;
@@ -163,6 +182,44 @@ static int klh_rd(DWORD_PTR p, void *out, SIZE_T n)
     return p > 0xffff && ReadProcessMemory(GetCurrentProcess(), (void *)p, out, n, &got) && got == n;
 }
 static DWORD klh_rd32(DWORD_PTR p) { DWORD v = 0; klh_rd(p, &v, 4); return v; }
+
+static int klh_rdstr(DWORD_PTR p, char *out, int cap)
+{   /* a NUL-terminated text of the game, at most cap-1 characters; never faults. -> length, 0 = none / not text */
+    int n = 0, i;
+    out[0] = 0;
+    while (n < cap - 1) {                             /* page by page: the text may end just before unmapped memory */
+        int k = (int)(0x1000 - ((p + n) & 0xfff)); if (k > cap - 1 - n) k = cap - 1 - n;
+        if (!klh_rd(p + n, out + n, (SIZE_T)k)) break;
+        for (i = 0; i < k; i++) {
+            if (!out[n + i]) return n + i;
+            if ((BYTE)out[n + i] < 0x20) { out[0] = 0; return 0; }
+        }
+        n += k;
+    }
+    out[n] = 0;
+    return n;
+}
+
+static int klh_scene(char *out, int cap)
+{   /* the engine's scene name, e.g. 'SCENES\Locations\F01\F01_Main.gms'; 0 = none yet or not the known exe */
+    DWORD sys;
+    out[0] = 0;
+    if (!klh_exe_ok || !(sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF)))) return 0;
+    return klh_rdstr(klh_rd32(sys + 0x2b0), out, cap);
+}
+
+static int klh_level_key(const char *scene, char *key, int cap)
+{   /* 'SCENES\Locations\F01\F01_Main.gms' (or a path, either slash) -> "f01\f01_main" (lower case, no extension);
+       0 = not under Locations */
+    char low[200], *p, *q; int i;
+    for (i = 0; scene[i] && i < (int)sizeof low - 1; i++) low[i] = (char)(scene[i] >= 'A' && scene[i] <= 'Z' ? scene[i] + 32 : scene[i] == '/' ? 0x5c : scene[i]);      /* 0x5c = backslash */
+    low[i] = 0;
+    for (p = 0, q = low; (q = strstr(q, "locations\\")) != 0; q += 10) if (q == low || q[-1] == 0x5c) p = q + 10;
+    if (!p || !*p || (int)strlen(p) >= cap) return 0;
+    strcpy(key, p);
+    if ((q = strrchr(key, '.')) != 0 && !strchr(q, 0x5c)) *q = 0;
+    return key[0] != 0;
+}
 
 /* ---------------------------------------------------------------- the patch guard */
 
@@ -433,12 +490,14 @@ static void klh_uef_arm(void)
 /* ---------------------------------------------------------------- exit tripwire (import slot of ExitProcess) */
 
 static void (WINAPI *klh_real_exitprocess)(UINT);
+static void klx_exit_line(void);
 static void WINAPI klh_w_exitprocess(UINT code)
 {
     if (code == 0x8000dead)
         klog("INTEGRITY EXIT: ExitProcess(0x8000dead) - kl2.exe's code-integrity check found a changed byte of its image (re\\antitamper.md). "
              "Patches refused this run: %ld; hashed bytes patched under policy 'direct': %ld", klh_refused, klh_hashed_in);
     else klog("exit: ExitProcess(%lu)", (DWORD)code);
+    klx_exit_line();
     klh_real_exitprocess(code);
 }
 
@@ -446,6 +505,8 @@ static void WINAPI klh_w_exitprocess(UINT code)
 
 static void klh_tick(int game_thread);
 #include "klfix.c"
+#include "kljoin.c"
+#include "klsteam.c"
 #include "klslot.c"
 #ifdef KLHOOK_TEST
 #include "klauto.c"
@@ -474,6 +535,8 @@ static void klh_tick(int game_thread)
     if (now - armed >= 1000) { armed = now; klh_uef_arm(); }
     klf_tick();
     kls_tick();
+    klx_tick();
+    klj_tick();
     InterlockedExchange(&klh_tick_busy, 0);
 }
 
@@ -539,6 +602,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     if (GetPrivateProfileIntA("KLHook", "Tick", 1, klh_ini)) n += klh_iat("steam_api.dll", "SteamAPI_RunCallbacks", (void *)klh_w_runcallbacks, (void **)&klh_real_runcallbacks);
     klog("core: %d import slot(s) wrapped (ExitProcess %s, SteamAPI_RunCallbacks %s); EndOnFatal=%d", n, klh_real_exitprocess ? "yes" : "no", klh_real_runcallbacks ? "yes" : "no", klh_end_on_fatal);
     klf_init();
+    klj_init();
+    klx_init();
     kls_init(inst);
 #ifdef KLHOOK_TEST
     kla_init(inst);
@@ -562,6 +627,12 @@ __declspec(dllexport) int klh_test_may(void *mapped, void *at, int len, int poli
     (void)policy;
 #endif
     return klh_may_write(at, (DWORD)len, "harness");
+}
+/* the tick's parts against a copy of kl2.exe mapped at <mapped> (its .data holds the harness's made-up pointers) */
+__declspec(dllexport) void klh_test_tick(void *mapped, int times)
+{
+    klh_delta = (LONG_PTR)((DWORD_PTR)mapped - KL2_BASE); klh_exe_ok = 1;
+    while (times-- > 0) { klx_tick(); klj_tick(); }
 }
 #endif
 #endif /* KLHOOK_C */
