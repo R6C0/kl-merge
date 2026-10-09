@@ -252,7 +252,7 @@ HOOK, state 16:30 (re/hook_live.md, re/fa_round.md section 8; DLLs in scratch ih
   made-up folder only. Live checks L0-L9 of re/expansion.md not run.
 - PLAYER MODELS + HEISTER PAGE (owner released stage 2 and asked for a character / mask screen, 2026-10-09
   evening; re/wardrobe.md). Built OFFLINE, nothing run live: `kl_chars.py wardrobe` (Dead Men heroes as extra
-  models, 16 bodies x 8 masks as variants, KLWardrobe.ini; kept builds <work>uild\chars\wardrobe_F01 and
+  models, 16 bodies x 8 masks as variants, KLWardrobe.ini; kept builds <work>\build\chars\wardrobe_F01 and
   wardrobe_bank, problems: 0), klhook\klchar.c (menu options KLChar / KLMask / KLOutfit by a private vtable;
   body through the game's own swap routine 0x8f5e90, look through 0x88c810; Arcade only), mkoverlay.py (button
   'Heister' + window KLHeister), tools/kl_view.py (software renderer: models can be LOOKED AT offline).
