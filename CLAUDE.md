@@ -187,6 +187,22 @@ LIVE RUNS ARE PAUSED (owner, 2026-10-09 17:15): the owner is playing. Test runs 
 launches the game, swaps the hook or installs into the slot until the owner says to resume.
 Offline work only. The scheduled wake-up prompt's "install / autotest" steps do not apply while
 this note stands.
+OWNER'S TWO CRASHES ON RETOMOTO, 17:37 and 17:41 (re/crash_owner_1009.md, tools/kl_impact.py):
+- 0x4c34b3 (bullet mark on a person, 0x88c840): a shot hit a Dead Men GUARD in a bone whose id
+  byte (bone definition +0x3e) still had Dead Men's number while kl_chars.reid had renumbered
+  only the skeleton's id table [5]; table[old id] = 0xff was used as a matrix index. OUR
+  regression, in every Dead Men map built since the skeleton rebind and in every kl_chars model.
+  Fix: kl_impact.sync_bone_ids after reid / rebind in kl_graft.build (and in kl_chars.put),
+  kl_impact.bone_faults in verify. NOT YET WIRED into kl_graft (m-load is editing it).
+  Repaired copy of the played build: <work>uild
+_crash\play_rt_boneids (kl_impact: 0
+  problems; never run live) - install it when the owner has closed the game.
+- 0x8e5bbd at load: the 60.7 MB .prm block failed to allocate in a 2 GB process (kl2.exe is not
+  large-address-aware) with 1828 MB of address space in use (NVIDIA driver 190 MB, 104 threads'
+  stacks, overlays: Medal, NVIDIA capture, Steam). Intermittent; stock levels can hit it too.
+  Keep .TEX near the stock 290 MB and .prm small on every map (the four DM maps' .prm are
+  75-87 MB: larger than any stock level). Hook idea (not written): reserve ~96 MB at start and
+  release it when a large HeapAlloc fails.
 INSTALLED FOR THE OWNER (2026-10-09 17:20, at their request "both parts and also the music"):
 - F01 slot = Retomoto, <work>\build\play_rt\... (committed tools at 250a610, `kl_fa_author.py
   test --keep --guards-wait --blast-delay 9`; start still inside the boardroom), zip sha1 92e07f51.
@@ -203,7 +219,8 @@ INSTALLED FOR THE OWNER (2026-10-09 17:20, at their request "both parts and also
   character VOICE LINES ('normally when you play idle too - it feels too quiet from the
   characters'), FASTER LOADING (game is on an SSD), and to be watched while playing: 
   `python tools/kl_watch.py` takes pictures of the game's own window with ffmpeg (passive: no
-  input, no camera, no microphone) into <work>esearch\watch\<run>\ with the hook's log.
+  input, no camera, no microphone) into <work>
+esearch\watch\<run>\ with the hook's log.
 State 2026-10-09 16:30. `python tools/kl_graft.py build F07 <M>` (verify must say problems: 0),
 `python tools/kl_graft.py install`, `python tools/kl_autotest.py --shots 100,130,160 --tag X`.
 Dead Men FA map names: M01_FA_A = diner / Sunny Hill Plaza, M02_FA_A = 'Late Night Opening',
