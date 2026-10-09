@@ -8,8 +8,9 @@ Run one unattended load test of the level installed in a Dog Days slot.
         (only its rectangle) as <work folder>/research/shots/<tag>_<seconds>s.png
         --hook / --ini: put this hook DLL and / or this KLHook.ini into the game folder for the
         run, keep the ini, the hook's KLHook.result and this tool's output as
-        <work folder>/build/klhook/live/<tag>.{ini,result,txt}, and afterwards put the ORIGINAL
-        pair back from <work folder>/build/klhook/direct_boot (sha1 printed).
+        <work folder>/build/klhook/live/<tag>.{ini,result,txt}, and afterwards put back the pair
+        that WAS in the game folder before the run (kept in live/_before, sha1 printed; a KLHook.ini
+        the hook rewrote during the run is kept as <tag>.after.ini).
     With --tag the run's part of KLHook.log is kept as <work folder>/build/klhook/live/<tag>.log.
 
 Needs the Steam launch options of Dog Days to boot straight into the level and quit by itself:
@@ -116,23 +117,49 @@ def put(src, dst):
         return '%s was locked (mapped by a lingering entry): moved to %s' % (name, os.path.join(aside, '%s.aside_%d' % (name, k)))
 
 
-def restore_original(dd, say=print):
-    """Put the owner's dinput8.dll and KLHook.ini back; -> True when both sha1 sums are right."""
+def snapshot(dd, say=print):
+    """Keep the hook pair that is in the game folder NOW (the owner's: since 2026-10-09 17:20 the SHIP build
+    and its ini, not the old direct_boot pair) as <work>/build/klhook/live/_before/<name>; -> {name: sha1}.
+    A run with --hook / --ini puts exactly these bytes back afterwards, whatever they are."""
+    from kl_port_check import workdir
+    keep = os.path.join(workdir(), 'build', 'klhook', 'live', '_before')
+    os.makedirs(keep, exist_ok=True)
+    was = {}
+    for name in ORIGINAL:
+        src = os.path.join(dd, name)
+        if os.path.isfile(src):
+            shutil.copyfile(src, os.path.join(keep, name))
+            was[name] = sha1(src)
+            say('  before | %s sha1 %s%s' % (name, was[name], ' (the old direct_boot original)' if was[name] == ORIGINAL[name] else ''))
+        else:
+            was[name] = None
+            say('  before | no %s in the game folder' % name)
+    return was
+
+
+def restore_original(dd, say=print, was=None):
+    """Put back the dinput8.dll and KLHook.ini that `snapshot` kept (was = its result); without one, the
+    old direct_boot pair. -> True when both sha1 sums are right."""
     from kl_port_check import workdir
     ok = True
-    for name, want in ORIGINAL.items():
-        src = os.path.join(workdir(), 'build', 'klhook', 'direct_boot', name)
+    for name, want in (was or ORIGINAL).items():
+        src = os.path.join(workdir(), 'build', 'klhook', 'live', '_before' if was else os.path.join('..', 'direct_boot'), name)
+        dst = os.path.join(dd, name)
+        if want is None:                                    # there was none: take ours away again
+            if os.path.isfile(dst):
+                os.remove(dst)
+            say('  restore | %s removed (there was none before the run)' % name)
+            continue
         if not os.path.isfile(src) or sha1(src) != want:
-            say('  restore | reference %s is missing or not the original' % src)
+            say('  restore | reference %s is missing or not what was in the game folder' % src)
             ok = False
             continue
-        dst = os.path.join(dd, name)
         if not os.path.isfile(dst) or sha1(dst) != want:
             note = put(src, dst)
             if note:
                 say('  restore | ' + note)
         good = sha1(dst) == want
-        say('  restore | %s %s' % (name, 'original (sha1 ok)' if good else 'WRONG ' + sha1(dst)))
+        say('  restore | %s %s' % (name, 'as before the run (sha1 %s)' % want[:8] if good else 'WRONG ' + sha1(dst)))
         ok &= good
     return ok
 
@@ -284,6 +311,7 @@ def main():
         out.append(text)
     swap = '--hook' in opt or '--ini' in opt
     code = 1
+    was = snapshot(dd, say) if swap else None
     try:
         if '--hook' in opt:
             src = opt['--hook']
@@ -303,7 +331,11 @@ def main():
                 shutil.copyfile(opt['--ini'], os.path.join(live, tag + '.ini'))
             if os.path.isfile(os.path.join(dd, 'KLHook.result')):
                 shutil.copyfile(os.path.join(dd, 'KLHook.result'), os.path.join(live, tag + '.result'))
-            if not restore_original(dd, say):
+            ini = os.path.join(dd, 'KLHook.ini')               # the hook writes [Character] back into its ini
+            if '--ini' in opt and os.path.isfile(ini) and sha1(ini) != sha1(opt['--ini']):
+                shutil.copyfile(ini, os.path.join(live, tag + '.after.ini'))
+                say('  ini  | the run changed KLHook.ini: kept as %s.after.ini' % tag)
+            if not restore_original(dd, say, was):
                 code = code or 1
             open(os.path.join(live, tag + '.txt'), 'w').write('\n'.join(out) + '\n')
     return code
@@ -320,6 +352,7 @@ def run(dd, wait, shots, tag, say=print, keep_log=False):
         os.remove(result)
     linger0 = lingering()
     t0 = time.time()
+    say('  start | %s (a picture <tag>_<n>s.png was taken n seconds after this; KLHook.log has wall-clock times)' % time.strftime('%H:%M:%S'))
     os.startfile('steam://rungameid/%d' % APP)
     started = False
     while time.time() - t0 < wait:

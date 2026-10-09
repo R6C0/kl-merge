@@ -59,6 +59,8 @@
  *                     back is the "input: DirectInput8Create wrapped; scene='...' AutoExit=..." line:
  *                     it must name the frontend scene and the [Engine] AutoExit.
  *   CmdAdd=           text written into the stretch CmdDrop blanked, e.g. "-o DisableSplashScreens -o AutoExit=900".
+ *                     Without such a stretch (launch options that have no pair to drop) the text is appended in a
+ *                     buffer of the hook's own and GetCommandLineA / MSVCR90._acmdln are pointed at it (kla_cmd_append).
  *                     The way to give engine keys without touching kl2.exe's code (see ANTI-TAMPER below).
  *   Forbid=           comma-separated texts; a scene whose name contains one is never loaded: the run ends
  *                     as FAIL just before (needs Hooks=1). "Forbid=Locations\L" keeps a wrong menu key from
@@ -872,6 +874,33 @@ static int kla_cmd_drop_in(char *cmd, char *keys)
     return n;
 }
 
+static char kla_cmd_new[2048];
+static int kla_cmd_append(char *cmd, const char *add)
+{   /* [Auto] CmdAdd when the launch options leave no stretch to reuse (2026-10-09: the owner's are '-dx10' alone now):
+       the old text + ' ' + add in a buffer of our own, handed out in the two places the exe's start-up can take
+       its command line from. Both are DATA of other modules, kl2.exe is not written:
+         - KernelBase's pointer behind GetCommandLineA, when that function is the plain 'mov eax, [p]; ret'
+           (a1 xx xx xx xx c3; anything else is left alone) - MSVCR90 copies that pointer into _acmdln when IT
+           starts, should that be after us;
+         - MSVCR90._acmdln, when it already points at the old text.
+       -> the number of places changed (0 = the keys were not given: the script's first waitwin then fails).
+       ASSUMPTION: nothing frees or re-reads the old buffer (GetCommandLineW is untouched). */
+    BYTE *f = (BYTE *)GetProcAddress(GetModuleHandleA("KernelBase.dll"), "GetCommandLineA"), c[6]; int n = 0; DWORD old;
+    HMODULE crt = GetModuleHandleA("MSVCR90.dll"); char **ac = crt ? (char **)GetProcAddress(crt, "_acmdln") : 0, **g;
+    if (strlen(cmd) + strlen(add) + 2 > sizeof kla_cmd_new) return 0;
+    snprintf(kla_cmd_new, sizeof kla_cmd_new, "%s %s", cmd, add);
+    if (f && klh_rd((DWORD_PTR)f, c, 6) && c[0] == 0xa1 && c[5] == 0xc3) {
+        memcpy(&g, c + 1, 4);
+        if (klh_rd((DWORD_PTR)g, &old, 4) && (char *)(DWORD_PTR)old == cmd && VirtualProtect(g, 4, PAGE_READWRITE, &old)) {
+            *g = kla_cmd_new; VirtualProtect(g, 4, old, &old); n++;
+        }
+    }
+    if (ac && *ac == cmd) { *ac = kla_cmd_new; n++; }
+    kla_out(1, "CmdAdd: GetCommandLineA %s, MSVCR90._acmdln %s", GetCommandLineA() == kla_cmd_new ? "answers the new buffer" : "NOT changed",
+            !ac ? "not found" : *ac == kla_cmd_new ? "points at the new buffer" : !*ac ? "not set yet (MSVCR90 has not started)" : "left alone");
+    return n;
+}
+
 static void kla_cmd_drop(void)
 {   /* [Auto] CmdDrop=Key,Key on the process command line, in place (see the top comment) */
     char keys[256], *cmd = GetCommandLineA(); DWORD old; MEMORY_BASIC_INFORMATION mbi; int n;
@@ -898,10 +927,10 @@ static void kla_cmd_drop(void)
                 if ((size_t)(q - p) >= need) { memcpy(p + 1, add, need - 2); break; }
                 if (q == p) q++;
             }
-            if (!*p) kla_out(1, "CmdAdd: no room for '%s' (needs %u blanked characters)", add, (unsigned)need);
+            if (!*p) kla_out(1, "CmdAdd: no blanked stretch of %u characters for '%s': %s", (unsigned)need, add, kla_cmd_append(cmd, add) ? "given through a new command-line buffer" : "NOT given");
         }
     }
-    kla_out(1, "CmdDrop: %d '-o' pair(s) blanked; command line now: %s", n, cmd);
+    kla_out(1, "CmdDrop: %d '-o' pair(s) blanked; command line now: %s", n, GetCommandLineA());
 }
 
 /* Who ends the process: kl2.exe's import slots of the calls that end it (or its window) are pointed at
@@ -1788,6 +1817,7 @@ __declspec(dllexport) int kla_test_install(void *mapped, void *fake_loader)
 }
 __declspec(dllexport) void *kla_test_stubs(void) { return kla_stubs; }
 __declspec(dllexport) int kla_test_cmd_drop(char *cmd, char *keys) { return kla_cmd_drop_in(cmd, keys); }
+__declspec(dllexport) int kla_test_cmd_append(const char *add) { return kla_cmd_append(GetCommandLineA(), add); }
 __declspec(dllexport) const char *kla_test_engine_text(void) { return kla_engine_text; }
 __declspec(dllexport) void kla_test_dispatch(int id, KREGS *r) { kla_dispatch(id, r); }
 __declspec(dllexport) void *kla_test_load(void *self, void *arg) { return kla_scene_load(self, 0, arg); }
