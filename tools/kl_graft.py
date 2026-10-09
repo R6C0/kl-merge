@@ -24,6 +24,8 @@ archive in a slot. Milestone A = two stock Dog Days levels (no Dead Men data): p
                                                into the vertex colours (kl_light.bake_ao; default 0.5, 0 = off)
                        ... --no-bones          WITHOUT renumbering the skeletons of M's models to the joined level
                                                (default: bone ids and animation bone numbers rewritten, kl_chars)
+                       ... --no-arms           Dead Men map: its characters' weapons by dm_rename's old guess ('one of
+                                               S's whose name starts alike') instead of kl_arms' table (re/combat.md)
                        ... --author            the authored FA layer of kl_fa_author.py (Retomoto Tower; the
                                                two-part level is built by 'kl_maps.py chain ... --author')
                        ... --load trim,slim    packing / weight options (load_options(); also the environment
@@ -99,6 +101,10 @@ WHO OWNS WHAT (S = systems level, M = map level; top-level subtrees by kl_prpjoi
   look       Dead Men map (re/lighting.md, second pass): its PostFilterBoxes and filter sets come along and
              its colour curves are appended to S's palette (kl_light.graft_postfilter); its ambient-occlusion
              light map is baked into the vertex colours at strength 0.5 (kl_light.bake_ao). Both seen live.
+  weapons    Dead Men map: every character of M gets Dog Days weapons from kl_arms' table (class, depth, seed;
+             re/combat.md) - never a human-shield / helicopter / player-only template, which the old guess by
+             name handed out. A clone template that sets a define after its pooled copies is renamed
+             (kl_fa.define_master: the human-shield execution crash at kl2 0x4098a1, the owner's round of 18:20).
   FA layer   S's position-free plumbing is kept (kl_fa.host_keep: escape-vehicle monitor,
              AIMonitor, briefing trigger and timer, three speakers) and kl_fa.repair runs on the
              joined scene (re/fa_round.md). Needed for a real round only; a direct boot has none.
@@ -967,12 +973,16 @@ def mute_speech(sc, ctrl, snd):
 ANIM_FALLBACK = {'Police': 'Swat_02', 'Army': 'Swat_02'}
 
 
-def dm_rename(Jn, S, log=print, anim=True):
+def dm_rename(Jn, S, log=print, anim=True, arms=True):
     """{string: string} for a Dead Men map under Dog Days systems: scene paths into Dead Men's
-    systems subtree get Dog Days' top-level name; a weapon template Dog Days does not have is
-    replaced by one of S's whose name starts alike (ASSUMPTION: a guess by family, any weapon is
-    safer than a path that names nothing); animation sets the .ANM lacks take the stand-ins of
-    kl_package.ANIM_SETS (guesses, see there)."""
+    systems subtree get Dog Days' top-level name; animation sets the .ANM lacks take the stand-ins of
+    kl_package.ANIM_SETS (guesses, see there).
+    Weapons: arms=True (default) leaves a Dead Men weapon's path as it is under the new top-level name -
+    kl_arms.arm() gives every actor its weapon afterwards (re/combat.md). arms=False is the old rule:
+    a template Dog Days does not have is replaced by one of S's whose name starts alike. That rule
+    handed 57 characters of Retomoto the pistol a PLAYER holds behind a human shield (the tree is in
+    file order and HG_M9Beretta_Human_Shield is its first 'HG_'), SMG_UMP_SBR and a helicopter gun:
+    templates no stock level gives an NPC."""
     old, new = 'ROOT\\AllLevels/mainsceneincludes.zip', 'ROOT\\AllLevels/mainsceneincludes_multiplayer.zip'
     weapons = [S.prp.path[k] for k in range(1, len(S.prp.nodes))
                if S.prp.path[k].lower().startswith((new + '\\AllLevels/equipment.zip\\Weapon\\').lower())
@@ -982,7 +992,7 @@ def dm_rename(Jn, S, log=print, anim=True):
     for s in Jn.p.keys:
         if s.lower().startswith(old.lower() + '\\'):
             t = new + s[len(old):]
-            if not S.prp.resolve(t) and '\\Weapon\\' in t and weapons:
+            if not arms and not S.prp.resolve(t) and '\\Weapon\\' in t and weapons:
                 fam = t.rsplit('\\', 1)[1].split('_')[0].lower()
                 t = guessed[s.rsplit('\\', 1)[1]] = next((w for w in weapons if w.rsplit('\\', 1)[1].lower().startswith(fam)), weapons[0])
             out[s] = t
@@ -1001,13 +1011,14 @@ def dm_rename(Jn, S, log=print, anim=True):
                     # (re/cars.md): a ZHavokCar with no set is as harmless as the stock
                     # helicopters, which all have none; its passengers' door clips are missing
                     out[s] = ''
-    log('  Dead Men paths re-pointed: %d; weapons replaced: %s' % (len(out), {k: v.rsplit('\\', 1)[1] for k, v in guessed.items()}))
+    log('  Dead Men paths re-pointed: %d; weapons replaced: %s' % (
+        len(out), 'by kl_arms, below' if arms else {k: v.rsplit('\\', 1)[1] for k, v in guessed.items()}))
     return out
 
 
 # ------------------------------------------------------------------ the graft
 def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True, light='stock', anim=True, fa=True,
-          postfilter=True, ao=0.5, escape=True, author=False, bones=True, load=None):
+          postfilter=True, ao=0.5, escape=True, author=False, bones=True, load=None, arms=True, arms_seed=None):
     """Systems of S + map of M -> (path of the archive, problems found by verify()).
     sound: merge what M's map names of M's bank into S's (kl_snd.graft_audio); False = the map's
     sound references are set to 0 (the silent builds of milestones A and B). loc: also graft the
@@ -1026,6 +1037,8 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
     their mini-cutscene controllers, and once both parts are in the scene the layer is wired.
     bones: the skeletons that came with M's models are renumbered to the joined level (kl_chars.reid /
     rebind, re/characters_graft.md); False = left as M had them (the builds up to 2026-10-09 12:40).
+    arms: a Dead Men map's characters get their weapons from kl_arms' table by class, depth and seed
+    (arms_seed, default kl_arms.SEED; re/combat.md); False = dm_rename's old guess by name.
     load: the packing / weight options, see load_options() ('trim,slim,level=6'; None = the environment
     variable KL_GRAFT_LOAD, and without it the archive is packed as before, with a fixed time stamp)."""
     lopt = load_options(load)
@@ -1123,8 +1136,12 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
         label = '%s systems + %s map' % (s_name, m_name)
         Jn = J.join(S.prp, picks, label, take=take)
         if M.dm:
-            rename = dm_rename(Jn, S, log, anim)
+            rename = dm_rename(Jn, S, log, anim, arms)
             Jn = J.join(S.prp, picks, label, rename=lambda s: rename.get(s, s), take=take)
+            if arms:                                    # before anything goes by controller index; values only
+                import kl_arms
+                kl_arms.arm(Jn, S['.ANM'], m_name, nodes={j for j, (sc_, _k) in enumerate(Jn.origin) if sc_ is M.prp},
+                            seed=kl_arms.SEED if arms_seed is None else arms_seed, log=log)
     finally:
         S.prp.p.settings = base_settings
     esc = None
@@ -1697,7 +1714,7 @@ def verify(out, Jn, S, M, copy, s_kept, mj, shift, log=print, audio=None, light=
     if light:
         bad += ['lights: ' + x for x in kl_light.check(Jn, sc, prm, nodes=set(mj.values()))]
     if fa:                                              # what a real Fragile Alliance round would crash or break on
-        bad += ['FA: ' + str(f) for f in kl_fa.check(Jn, out['snd'], out.get('English.LOC', S['English.LOC'])) if f.sev <= kl_fa.BROKEN]
+        bad += ['FA: ' + str(f) for f in kl_fa.check(Jn, out['snd'], out.get('English.LOC', S['English.LOC']), out['.ANM']) if f.sev <= kl_fa.BROKEN]
     ncov = sum(Jn.p.key(nm) == 'FFCoverList' for k in range(1, len(Jn.nodes)) for nm, _b in Jn.nodes[k]['ctrls'])
     if ncov > 1:                                        # run RT2: assert kl2 0x6682c5 in the second one's init
         bad.append('%d cover lists (FFCoverList): the game data takes one' % ncov)
@@ -1749,8 +1766,8 @@ if __name__ == '__main__':
         ao = 0.5
         if '--ao' in a:
             i = a.index('--ao'); ao = float(a[i + 1]); del a[i:i + 2]
-        flags = ('--geometry', '--silent', '--no-loc', '--stock-anm', '--no-fa', '--no-postfilter', '--no-escape', '--no-bones')
-        g, quiet, noloc, noanm, nofa, pf, noesc, nobones = (f in a for f in flags)
+        flags = ('--geometry', '--silent', '--no-loc', '--stock-anm', '--no-fa', '--no-postfilter', '--no-escape', '--no-bones', '--no-arms')
+        g, quiet, noloc, noanm, nofa, pf, noesc, nobones, noarms = (f in a for f in flags)
         author = '--author' in a
         a = [x for x in a if x != '--author']
         load = None
@@ -1759,7 +1776,7 @@ if __name__ == '__main__':
         a = [x for x in a if x not in flags]
         sys.exit(1 if build(a[1], a[2], *a[3:4], sel=Select(g, **opt), sound=not quiet, loc=not noloc, light=light,
                             anim=not noanm, fa=not nofa, postfilter=not pf, ao=ao, escape=not noesc, author=author,
-                            bones=not nobones, load=load)[1] else 0)
+                            bones=not nobones, load=load, arms=not noarms)[1] else 0)
     elif a and a[0] == 'install':
         src = None
         if '--from' in a:

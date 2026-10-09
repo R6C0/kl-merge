@@ -11,6 +11,11 @@ Dead Men character MODELS on Dog Days characters (stage 2 groundwork; nothing he
     python kl_chars.py put <base> <out folder> "<target path>=<map>:<source path>[:v,v]" ...
                                                 the general form (base: stock level name or a build folder)
     python kl_chars.py check <folder>           re-read a build under every checker
+    python kl_chars.py invisible <folder | level> [--all] [--at x0,x1,z0,z1]
+                                                every person of a built (or stock) level who would NOT BE
+                                                DRAWN, and why (undrawn(); re/invisible.md): model, variant,
+                                                detail levels, materials without a compiled shader, emptied
+                                                mesh data, skeleton, room. --all: the table of everybody
     python kl_chars.py wardrobe <base> <out folder> [--level=M01_FA_A] [--slot=F01]
                                                 THE WARDROBE (re/wardrobe.md): the eight Dead Men heroes as extra
                                                 models, every body with every heister's mask as variants, and
@@ -987,6 +992,173 @@ def check(lv, stock=None, roots=None, log=print, extra=()):
     return bad
 
 
+# ------------------------------------------------------------------ who would not be drawn
+# re/invisible.md. A person is one entity whose record names a model root; the engine draws the
+# objects of that root whose variant byte (+0x0f) equals ZLNKOBJ[0] and whose detail mask (+0x0e)
+# has the bit of the current detail level (01 near, 02 middle, 7c far on every human of both games;
+# the dog 01 / 02 / fc). Each object is drawn with its material's passes; a pass whose effect
+# permutation is not in the level's .fxc stays empty (kl2 0x50c2ff, re/lighting.md 1). So a person
+# can be missing for five reasons a level's files show, and undrawn() tests each:
+#   no model / the .gms and .prp disagree; no object of the asked variant; a detail level with no
+#   object; objects on a material without its compiled shader; vertex or index data that is an
+#   emptied stub (kl_graft's PRM_LIMIT trim) - plus a skeleton the level's .ANM does not fit.
+DETAIL_BITS = 7                                  # detail levels 0..6: what the masks 01 + 02 + 7c of a person cover
+HALF = 0.5                                       # UNDRAWN when at least this share of a level's vertices has no shader
+
+
+def _files_scene(files):
+    """(kl_prpjoin.Scene, unpacked .gms) of anything that answers ['.gms'] ['.buf'] ['.prp'] (an Lv, or the
+    members kl_graft.verify() is given)."""
+    raw = kl_gms.unpack(files['.gms'])
+    names, tids, buf = ['ROOT'], [kl_rtp.ROOT_TYPE], files['.buf']
+    for decl, tid, _prio in kl_gms.entities(raw):
+        o = struct.unpack_from('<I', raw, 4 * (decl & 0xffffff))[0]
+        names.append(buf[o:buf.index(b'\0', o)].decode('latin1')); tids.append(tid)
+    return J.Scene(Prp(files['.prp']), names, tids, 'dd', 'level'), raw
+
+
+def _levels(bits):
+    """'0-1, 4' for a set of detail levels."""
+    out, bits = [], sorted(bits)
+    while bits:
+        a = b = bits.pop(0)
+        while bits and bits[0] == b + 1:
+            b = bits.pop(0)
+        out.append('%d' % a if a == b else '%d-%d' % (a, b))
+    return ', '.join(out)
+
+
+def people(files, rooms=True):
+    """Every ZFFPlayer / ZFFActor of a level (files: an Lv or {'.gms': bytes ...}) -> [dict]:
+    path, cls, model (.prp ZGEOM[4]), gms_model, variant, anim, pos (world), bones, chunks, variants
+    {variant: [(detail mask, material slot, material name, vertices)]}, rooms ([names of the .rmi boxes the
+    position is in]; None when rooms=False), faults [(severity, text)] with severity
+      UNDRAWN  nothing (or less than half) of the body is drawn at some detail level, or at all
+      PART     a smaller part is missing at some detail level (glasses, a visor)
+      BONES    the skeleton does not fit the level's .ANM / its id tables disagree: drawn, but wrong or a crash
+      NOTE     stands in no room box (3 of 43 actors of stock F07 do, and are drawn: not a fault by itself)"""
+    import kl_light, kl_scene, kl_impact
+    sc, raw = _files_scene(files)
+    prm = G.read(files['.prm'], 'dd')
+    mat = T.read_mat(files['.MAT'])
+    miss = kl_light.missing_shaders(mat, files['.fxc'])
+    gms = gms_models(raw)
+    scene = kl_scene.Scene(raw, files['.buf'])
+    ents = list(scene.entities())
+    import kl_maps
+    pos = kl_maps.world(scene)
+    boxes = []
+    if rooms:
+        by_slot = {v + 2: e for e, v in scene.slots().items()}
+        for b in O.RoomIndex.parse(files['.rmi']).boxes:
+            boxes.append((struct.unpack_from('<I', b.raw, 0)[0], struct.unpack_from('<9f', b.raw, 4), struct.unpack_from('<3f', b.raw, 0x28),
+                          struct.unpack_from('<3f', b.raw, 0x40), by_slot[b.room].name.decode('latin1') if b.room in by_slot else '?'))
+    anm = kl_anm.Anm(files['.ANM'], 'dd').bones
+    seen, out = {}, []
+    for k in range(1, len(sc.nodes)):
+        cls = sc.cls(k)
+        if cls not in PEOPLE:
+            continue
+        model, variant, anim = person(sc, k)
+        e = ents[k - 1]
+        r = dict(path=sc.path[k], cls=cls, model=model, gms_model=gms[k - 1][1], variant=variant, anim=anim, pos=pos[e],
+                 bones=0, chunks=0, variants={}, rooms=None, faults=[])
+        out.append(r)
+        f = r['faults']
+        if rooms:
+            r['rooms'] = []
+            for aa, m, c, h, name in boxes:
+                d = [pos[e][i] - c[i] for i in range(3)]
+                if not aa:                               # ASSUMPTION: the matrix rows are the box's axes (40 of 43 stock F07 actors fall in a box this way)
+                    d = [sum(m[3 * j + i] * d[i] for i in range(3)) for j in range(3)]
+                if all(abs(d[i]) <= h[i] for i in range(3)):
+                    r['rooms'].append(name)
+            if boxes and not r['rooms']:
+                f.append(('NOTE', 'stands in no room box of the .rmi'))
+        if model != r['gms_model']:
+            f.append(('UNDRAWN', '.prp names model %d, the .gms record %d' % (model, r['gms_model'])))
+        if not (0 < model < len(prm.chunks)) or len(prm.chunks[model]) != 64 or prm.u16(model, 2) != 7:
+            f.append(('UNDRAWN', 'no model: chunk %d is not a model root' % model)); continue
+        if model not in seen:
+            kinds = G.walk(prm, [model])[0]
+            # kl_graft's trim leaves bytes(16); a real two-triangle index chunk is 16 bytes too, but never all zero
+            empty = {i for i, kd in kinds.items() if kd in ('vtx', 'idx') and prm.chunks[i] == bytes(len(prm.chunks[i]))}
+            look = {}
+            for o in objects(prm, model):
+                c = prm.chunks[o]
+                d = prm.u32(prm.u32(o, 0x28), 0)
+                dead = [prm.u32(d, off) for off in (4, 0x18) if prm.u32(d, off) in empty and prm.u32(d, 0)]
+                look.setdefault(c[0x0f], []).append((c[0x0e], prm.u16(o, 0x12), prm.u32(d, 0), dead))
+            sk = skeleton(prm, model)
+            bf = (check_bones(prm, anm, [model]) + kl_impact.bone_faults(prm, [sk])) if sk else ['no skeleton']
+            seen[model] = (len(kinds), look, prm.u32(sk, 0) if sk else 0, bf)
+        r['chunks'], look, r['bones'], bf = seen[model]
+        name = lambda m_: mat.insts[m_].name if m_ in mat.insts else 'material %d (not in the .MAT)' % m_
+        r['variants'] = {v: [(mk, m_, name(m_), n) for mk, m_, n, _d in objs] for v, objs in look.items()}
+        f += [('BONES', x) for x in bf]
+        if variant not in look:
+            f.append(('UNDRAWN', 'asks for variant %d; the model has %s' % (variant, sorted(look)))); continue
+        objs = look[variant]
+        gone = sum(1 for _mk, _m, _n, dead in objs if dead)
+        if gone:
+            f.append(('UNDRAWN', '%d of %d objects have emptied vertex / index data (chunks %s ...)' % (
+                gone, len(objs), [c for _mk, _m, _n, dead in objs for c in dead][:4])))
+        groups = collections.OrderedDict()
+        for bit in range(DETAIL_BITS):
+            here = [(m_, n) for mk, m_, n, _d in objs if mk >> bit & 1]
+            lost = collections.Counter()
+            for m_, n in here:
+                if m_ in miss or m_ not in mat.insts:
+                    lost[m_] += n
+            groups.setdefault((sum(n for _m, n in here), tuple(sorted(lost.items()))), []).append(bit)
+        for (total, lost), bits in groups.items():
+            if not total:
+                f.append(('UNDRAWN', 'detail level %s: no object' % _levels(bits)))
+            elif lost:
+                n = sum(v for _m, v in lost)
+                f.append(('UNDRAWN' if n >= HALF * total else 'PART', 'detail level %s: %d of %d vertices on %s without a compiled shader (lacks %s)' % (
+                    _levels(bits), n, total, ', '.join(name(m_) for m_, _v in lost),
+                    ', '.join(sorted({x[0] for m_, _v in lost for x in miss.get(m_, ())})) or 'the material')))
+    return out
+
+
+def undrawn(files, notes=False):
+    """The people of a level who would not be drawn as they should -> ['<SEVERITY> <path>: <reason>'];
+    [] on every stock Dog Days level (`python kl_chars.py invisible F07`). files: an Lv, or the members
+    kl_graft.verify() gets ({'.gms': ..., '.prp': ..., '.buf', '.prm', '.MAT', '.fxc', '.rmi', '.ANM'}).
+    For kl_graft.verify:    bad += ['people: ' + x for x in kl_chars.undrawn(out)[:8]]"""
+    return ['%s %s: %s' % (sev, r['path'], text) for r in people(files) for sev, text in r['faults'] if notes or sev != 'NOTE']
+
+
+def invisible(src, everybody=False, box=None, log=print):
+    """Print the people of a built or stock level and their faults; -> undrawn(). box: (x0, x1, z0, z1)
+    to list only who stands there."""
+    if src.lower().endswith('.zip'):
+        src = os.path.dirname(os.path.abspath(src))
+    rows = people(Lv(src))
+    inside = lambda r: box is None or (box[0] <= r['pos'][0] <= box[1] and box[2] <= r['pos'][2] <= box[3])
+    rows = [r for r in rows if inside(r)]
+    count = collections.Counter()
+    for r in rows:
+        worst = next((sv for sv in ('UNDRAWN', 'BONES', 'PART') if any(f[0] == sv for f in r['faults'])), 'ok')
+        count[worst] += 1
+        if everybody or worst != 'ok':
+            log('%-8s %s' % (worst, r['path'][5:]))
+            log('         %s model %d (%d chunks, %d bones) variant %d set %s at (%d %d %d) rooms %s' % (
+                r['cls'], r['model'], r['chunks'], r['bones'], r['variant'], r['anim'], r['pos'][0], r['pos'][1], r['pos'][2],
+                ', '.join(r['rooms'] or ()) or '-'))
+            if everybody and r['variant'] in r['variants']:
+                by = collections.OrderedDict()
+                for mk, _m, nm, n in sorted(r['variants'][r['variant']]):
+                    by.setdefault(mk, []).append('%s %d' % (nm.split('/')[-1], n))
+                log('         ' + '; '.join('mask %02x: %s' % (mk, ', '.join(v)) for mk, v in by.items()))
+            for sv, text in r['faults']:
+                log('         %s: %s' % (sv, text))
+    log('%d people%s: %s' % (len(rows), '' if box is None else ' in x %d..%d z %d..%d' % tuple(box),
+                             ', '.join('%d %s' % (count[k], k) for k in ('ok', 'UNDRAWN', 'PART', 'BONES') if count[k]) or 'none'))
+    return ['%s %s: %s' % (sv, r['path'], text) for r in rows for sv, text in r['faults'] if sv != 'NOTE']
+
+
 # ------------------------------------------------------------------ surveys
 def survey(maps=FA_MAPS, log=print):
     """Every character model of the maps. Returns {map: [dict]}."""
@@ -1198,5 +1370,9 @@ if __name__ == '__main__':
         sys.exit(1 if bad else 0)
     elif a[:1] == ['check'] and len(a) > 1:
         sys.exit(1 if check(Lv(a[1])) else 0)
+    elif a[:1] == ['invisible'] and len(a) > 1:
+        at = next((sys.argv[i + 1] for i, x in enumerate(sys.argv) if x == '--at'), None)
+        bad = invisible(a[1], '--all' in sys.argv, [float(v) for v in at.split(',')] if at else None)
+        sys.exit(1 if bad else 0)
     else:
         print(__doc__); sys.exit(1)

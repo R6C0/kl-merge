@@ -678,6 +678,18 @@ def report(archive, log=print):
             marks.append((None, p[2] if h[0] > h[2] else p[2] + h[2], '<- bound %s, x %d..%d%s' % (
                 sc.names[k].split('!')[-2][-26:], p[0] - h[0], p[0] + h[0], '' if h[0] > h[2] else ', z %d..%d' % (p[2] - h[2], p[2] + h[2]))))
     sketch(sc, at, nav, reach, marks, log)
+    # ---- who of the street would not be drawn (kl_chars.people; re/invisible.md). The owner's first round
+    # here had 12 campaign policemen without a body beyond close range: one material without a compiled shader.
+    import kl_chars
+    rows = [r for r in kl_chars.people(kl_chars.Lv(os.path.dirname(os.path.abspath(archive))))
+            if r['cls'] == 'ZFFActor' and r['pos'][1] < 5000]
+    lost = [(r, sv, text) for r in rows for sv, text in r['faults'] if sv != 'NOTE']
+    log('PEOPLE OF THE STREET: %d actors below y 5000 (%d of the host\'s squads, %d of the campaign\'s), %d with a drawing fault' % (
+        len(rows), sum(r['path'].startswith(R + 'Gameplay!') for r in rows), sum(not r['path'].startswith(R + 'Gameplay!') for r in rows),
+        len({r['path'] for r, _s, _t in lost})))
+    for r, sv, text in lost:
+        log('  %s %s (model %d, variant %d): %s' % (sv, r['path'][5:], r['model'], r['variant'], text))
+        bad.append('%s %s: %s' % (sv, r['path'][5:], text))
     return bad
 
 

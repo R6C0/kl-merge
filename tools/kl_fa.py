@@ -11,6 +11,7 @@ route into a round) on top of re/fa_gamemode.md (what a round needs).
     python kl_fa.py repair <archive> <out.prp>        apply repair() to a built level's .prp
                                                       (a scratch copy: for looking, not for install)
     python kl_fa.py keep F07                          the host level's subtrees worth keeping
+    python kl_fa.py defines <archive> <out.prp>       only define_master() (the execution crash) on a built level
 
 A level is read from its archive (.prp + .gms + .buf, the English .LOC and the .SND if present),
 so check() works on a finished build as well as on kl_graft's joined scene before it is written.
@@ -181,8 +182,9 @@ def blank(sc, cls, floats=0.0):
 
 
 # ------------------------------------------------------------------ the check
-def check(sc, snd=None, loc=None):
-    """Findings about the Fragile Alliance layer of a Dog Days-form scene, most severe first."""
+def check(sc, snd=None, loc=None, anm=None):
+    """Findings about the Fragile Alliance layer of a Dog Days-form scene, most severe first.
+    anm: the level's .ANM (bytes), for kl_arms' test of NPC weapons against the animation sets."""
     sch, out = J.schema('dd'), []
     add = lambda sev, code, text, fix=None: out.append(Finding(sev, code, text, fix))
     ctrl, cls = census(sc)
@@ -245,6 +247,14 @@ def check(sc, snd=None, loc=None):
     d = [0] * defines['IsMultiplayerLevel']
     if len(d) != 1:
         add(BROKEN if not d else NOTE, 'define', '%d ZSetZDefine \'IsMultiplayerLevel\' (stock: exactly 1; read at kl2 0x55d900, 0x602f90, 0x8859c0)' % len(d))
+    for name, late, copies in define_order(sc):
+        add(CRASH, 'define-order', 'ZSetZDefine %r: the last of its %d setters in scene order is the clone TEMPLATE %s, not one of its '
+            '%d pooled copies (all 21 stock levels: a copy is last). The define then names an object whose clone master [+0x58] is '
+            '0; for ExecutionBloodSpatter kl2 0x4098a1 calls through it when a human shield is executed (the owner\'s crash of '
+            '2026-10-09 18:20, re/combat.md)' % (name, len(late) + len(copies), sc.path[late[-1][0]], len(copies)), 'define_master()')
+    import kl_arms
+    for sev, code, text in kl_arms.check(sc, anm):
+        add(sev, code, text, 'kl_arms.arm()' if sev == BROKEN else None)
 
     # --- escape: exit trigger -> monitor -> vehicle
     ex, mon = controllers(sc, EXIT), controllers(sc, MONITOR)
@@ -446,6 +456,49 @@ def money_people(sc, log=print):
         log('  kl_fa: %d money triggers answer to people only now (TriggerBox2 field 3; a car as activator faults at kl2 0x6a8902)' % len(hit))
     return len(hit)
 
+def define_order(sc):
+    """[(define name, [(node, controller index)] of setters that come AFTER the last pooled copy, the copies)] for
+    every ZSetZDefine name set both by nodes inside a 'CloneGroup_' subtree and by nodes outside of it.
+    ZSetZDefine's Init (kl2 0x5c9b20, vtable 0xba8c3c slot 13) stores name -> this entity in the scene's define
+    table ([[0xdd2640]+0xac]+0x116c, slot +0x54); the LAST Init wins (not read in the table's code: in the dump
+    of the crash the define held the template, which is the last setter of that build and the first of every
+    stock level). Order of Init = scene order is the ASSUMPTION behind 'last'."""
+    sets = collections.OrderedDict()
+    for k, i, v in controllers(sc, 'ZSetZDefine'):
+        if len(v) == 2:
+            sets.setdefault(v[1] or sc.names[k], []).append((k, i))
+    out = []
+    for name, l in sets.items():
+        copies = [x for x in l if sc.names[sc.top[x[0]]].startswith('CloneGroup_')]
+        late = [x for x in l if copies and x not in copies and x[0] > copies[-1][0]]
+        if late:
+            out.append((name, late, copies))
+    return out
+
+
+def define_master(sc, log=print):
+    """A clone template that sets a define AFTER its pooled copies gets a define name of its own, so that the
+    last setter of the real name is a copy again, as in every stock level.
+    WHY (the owner's crash of 2026-10-09 18:20, kl2 0x4098a1, re/combat.md): the template of the blood spatter
+    (ZAllocMany ...Effects/BulletImpacts.zip / Bullet / Blood_02) and each of its eight copies in
+    CloneGroup_Effects/BulletImpacts.zip/Bullet/Blood_02 carry ZSetZDefine 'ExecutionBloodSpatter'. Stock: the
+    systems subtree comes before the clone groups, a copy is last. A graft onto a Dead Men map takes the map's
+    top-level order, where the clone groups come first: the template is last. ZFFActionShootHumanShield slot 11
+    (0x4097c0, the execution shot) takes the define, reads its clone master at +0x58 - set on a COPY by the
+    template's own slot 84 (0x48e1f3), 0 on the template - and calls through it.
+    The new name '<name>_Template' is read by nothing (GUESS that one more name in the table is harmless: stock
+    levels have 22..27 names). Only a string value changes. -> the number of controllers renamed."""
+    n = 0
+    for name, late, _copies in define_order(sc):
+        for k, i in late:
+            def fn(us, name=name):
+                us[1] = [_str(sc, name + '_Template')]
+            edit(sc, k, i, fn); n += 1
+        log('  kl_fa: ZSetZDefine %r: %d clone template(s) set it after the pooled copies - renamed to %r, a copy is the last '
+            'setter again (the human-shield execution crash at kl2 0x4098a1)' % (name, len(late), name + '_Template'))
+    return n
+
+
 def exit_trigger(sc, log=print):
     """Dead Men's vehicle (one string) belongs in Dog Days field 2, with field 0 false: fields
     2..5 are the random pick, field 1 is used once and only while field 0 is set (kl2 0x6c3f64)."""
@@ -626,7 +679,7 @@ def repair(sc, kept=(), log=print):
     -> {repair: count}. Run check() afterwards: what is left needs authoring (re/fa_round.md)."""
     done = {'prune': prune(sc, kept, log) if kept else 0, 'exit_trigger': exit_trigger(sc, log), 'cam_trigger': cam_trigger(sc, log),
             'monitor': monitor(sc, log), 'settings_lists': settings_lists(sc, log),
-            'boarding': boarding(sc, log),
+            'boarding': boarding(sc, log), 'define_master': define_master(sc, log),
             'money_people': money_people(sc, log) if any(sc.cls(k) == 'ZHavokCar' for k in range(1, len(sc.nodes))) else 0}
     return {k: v for k, v in done.items() if v}
 
@@ -634,7 +687,8 @@ def repair(sc, kept=(), log=print):
 # ------------------------------------------------------------------ command line
 def report(src, log=print):
     sc, snd, loc = load(src)
-    fs = check(sc, snd, loc)
+    import kl_arms
+    fs = check(sc, snd, loc, kl_arms.read_anm(src))
     ctrl, _cls = census(sc)
     log('%s: %d nodes; %s' % (src, len(sc.nodes), ', '.join('%s %d' % (c, ctrl[c]) for c in
         (SETTINGS, EXIT, MONITOR, 'OnlineEscHavokCar', 'OnlineEscAnimatedVehicle', 'AIMonitor', 'OnlineMoneyCtrl', 'ZSquadScript'))))
@@ -661,6 +715,12 @@ def main():
         print('written %s; objects that do not fit: %d; dead scene paths: %d' % (a[2], len(bad), len(paths)))
         for f in check(sc, snd, loc):
             print('  ' + str(f))
+    elif len(a) == 3 and a[0] == 'defines':
+        sc, snd, loc = load(a[1])
+        n = define_master(sc)
+        data, bad, _paths, _n = J.check(sc, log=lambda *_a: None)
+        open(a[2], 'wb').write(data)
+        print('written %s: %d define(s) renamed; objects that do not fit: %d; define-order faults left: %d' % (a[2], n, len(bad), len(define_order(sc))))
     elif len(a) == 2 and a[0] == 'keep':
         for n in host_keep(load(a[1])[0]):
             print(n)

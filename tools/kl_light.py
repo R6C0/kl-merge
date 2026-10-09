@@ -9,6 +9,8 @@ every stock Dog Days level, and the normalisation the graft applies. Full accoun
     python kl_light.py catalogue                 recompute STOCK from the 21 stock Dog Days levels
     python kl_light.py test [maps]               the offline tests (see test()); 'problems: 0'
     python kl_light.py render-test [maps]        tests of the three steps below (test_render())
+    python kl_light.py refit <build> <out>       a kept build with fit_shaders() run again on its .MAT
+                                                 (scratch folders only; nothing is installed)
 
 THREE MORE STEPS (2026-10-09, second pass; the renderer was read this time: compiled effects of
 the .fxc, Dead Men's shipped .fx sources, kl2.exe). Each is optional and separate; the reasons are
@@ -18,6 +20,13 @@ this text.
                     (kl2 0x8b8fd0 returns 0, 0x50c2ff skips the layer). The installed bank build
                     has 35 such materials on 920 objects (walls 'Stone_Pillar_06a_M03' x468, all
                     Dead Men cars). The cheapest feature switches are turned off until an entry fits.
+                    Where no set of switches fits (the class has no permutation that plain: Dead
+                    Men's far-detail police uniform 'Characters/_JPN/JPN_Police_LOD3' is SkinCloth
+                    with neither bump nor specular, and Dog Days compiled Cloth / Skin only with
+                    specular) the instance is rebuilt as a Standard/Standard material: plain_twin().
+                    That one material made 13 policemen of the Retomoto street vanish beyond close
+                    range (re/invisible.md). 'python kl_light.py refit <build> <out>' applies the
+                    whole step to a build that exists (only the .MAT member changes).
   graft_postfilter  Dead Men grades each area through PostFilterBoxes (the bank: outside look-at,
                     outside dark, inside); the graft left them out because their sets index Dead
                     Men's palette. The palettes are one format: M's curves are appended to S's.
@@ -457,11 +466,12 @@ def fit_shaders(mat, fxc, slots=None, log=print):
     no entry has, the cheapest set of its feature switches (SWITCH_COST) is turned off (BOOL
     VALU = 0) so that every effect it then asks for exists; entry +0x08 follows (kl_mat rule).
     Nothing is ever switched on, blending is never touched. Stock Dog Days levels need nothing.
+    An instance no set of switches helps is rebuilt as a Standard/Standard material (plain_twin()).
     Returns dict(fixed={slot: (name, [switches turned off])}, unresolved={slot: (name, lacking)},
-    lost={switch: instances})."""
+    lost={switch: instances}, reclassed={slot: (name, class it had)})."""
     import itertools, kl_mat
     have = shader_cache(fxc)
-    rep = dict(fixed={}, unresolved={}, lost=collections.Counter())
+    rep = dict(fixed={}, unresolved={}, lost=collections.Counter(), reclassed={})
     for s, lack in missing_shaders(mat, have, slots).items():
         e = mat.insts[s]
         on = sorted(k for k, (_n, v) in _bools(e).items() if v and k not in EXCLUDED)
@@ -473,7 +483,16 @@ def fit_shaders(mat, fxc, slots=None, log=print):
                     if best is None or cost < best:
                         best = cost
         if best is None:
-            rep['unresolved'][s] = (e.name, lack); continue
+            twin = plain_twin(mat, e, have)
+            if twin is None:
+                rep['unresolved'][s] = (e.name, lack); continue
+            was = '%s/%s' % kl_mat.class_key(mat, e)
+            mat.insts[s], off = twin
+            for k in off:
+                rep['lost'][k] += 1
+            rep['fixed'][s] = (e.name, ['class %s -> %s/%s' % ((was,) + PLAIN)] + list(off))
+            rep['reclassed'][s] = (e.name, was)
+            continue
         nodes = _bools(e)
         for k in best[2]:
             _kid(nodes[k][0], 'VALU')[3] = 0
@@ -483,7 +502,90 @@ def fit_shaders(mat, fxc, slots=None, log=print):
     log('  shaders: %d materials asked for an effect no cache entry has; switched off %s; unresolved: %s' % (
         len(rep['fixed']) + len(rep['unresolved']), dict(rep['lost']) or 'nothing',
         [v[0] for v in rep['unresolved'].values()] or 'none'))
+    if rep['reclassed']:
+        log('  shaders: rebuilt as %s/%s (no permutation of their own class is compiled): %s' % (
+            PLAIN + (', '.join('%s (was %s)' % v for v in rep['reclassed'].values()),)))
     return rep
+
+
+PLAIN = ('Standard', 'Standard')            # the class every mesh kind has compiled permutations of (kl_mat.FALLBACK)
+# Classes whose instances plain_twin() may rebuild. SkinCloth only: a body in the plain shader still looks like
+# a body. NOT Standard/Glow (Retomoto's 'Weapons/BombWindow_02', the lamps and beams of M02 / M06, re/maps.md 9):
+# a glow drawn as a lit surface may look worse than a glow that is missing - add it here to try (GUESS either way).
+TWIN_CLASSES = (('Standard', 'SkinCloth'),)
+
+
+def plain_twin(mat, entry, have, ref=None):
+    """A material instance that fit_shaders() cannot fit, rebuilt as an instance of Standard/Standard
+    the way kl_mat.convert_mat_full builds one: the properties of that class in Dog Days' order, the
+    instance's own node where it has a property of that name, Dog Days' most common node for one every
+    stock instance has; its other properties (rim light, translucency, glow ...) are dropped. Texture,
+    colour, blend state, render group, surface type and mesh kind stay. Then the cheapest switches
+    go off, as in fit_shaders(). -> (kl_texmat.Entry, [switches turned off]) or None when the instance's
+    class is not in TWIN_CLASSES, the level has no Standard/Standard class, the mesh kind never occurs
+    with it, or nothing fits either.
+    ASSUMPTION: a property two classes both name means the same in both (mapDiffuse, v4DiffuseColor,
+    RenderState, BumpEnabled, SpecularEnabled ... do in every stock tree read), and a far-detail body
+    drawn with the plain shader is close enough to the cloth one - it is what Dead Men's own
+    'JPN_Swat_LOD3' and 'JPN_Police_female_LOD3' of the same level already are. NOT SEEN LIVE."""
+    import itertools, kl_mat, kl_texmat as TM
+    slot = next((s for s, c in sorted(mat.classes.items()) if kl_mat.class_key(mat, c) == PLAIN), None)
+    if slot is None or entry.f[1] == slot or kl_mat.class_key(mat, entry) not in TWIN_CLASSES:
+        return None
+    ref = ref or kl_mat.dd_reference()
+    if entry.f[5] not in ref.subtypes[PLAIN]:
+        return None
+    own = dict(kl_mat._keys(kl_mat._bind(entry)))
+    bind = []
+    for key in ref.order[PLAIN]:
+        if key in own:
+            bind.append(kl_mat._thaw(kl_mat._freeze(own[key])))
+        elif key in ref.always[PLAIN]:
+            n = kl_mat._thaw(ref.always[PLAIN][key])
+            if n[0] == 'BOOL' and _kid(n, 'NAME')[3].lower().endswith(b'enabled') and _kid(n, 'VALU'):
+                _kid(n, 'VALU')[3] = 0                  # nothing is switched ON: stock's most common BumpEnabled /
+            bind.append(n)                              # SpecularEnabled are 1, and this material has no maps for them
+    f = list(entry.f)
+    f[1] = slot
+    twin = TM.Entry(PLAIN[0].encode('latin1'), f, [entry.root[0], entry.root[1], 2, [
+        kl_mat._thaw(kl_mat._freeze(_kid(entry.root, 'NAME'))), ['BIND', TM.LIST, len(bind), bind]]])
+    on = sorted(k for k, (_n, v) in _bools(twin).items() if v and k not in EXCLUDED)
+    best = None
+    for r in range(0, len(on) + 1):
+        for off in itertools.combinations(on, r):
+            if all(x in have for x in shader_needs(mat, twin, off)):
+                cost = (sum(SWITCH_COST.get(k, 3) for k in off), r, off)
+                if best is None or cost < best:
+                    best = cost
+        if best is not None:
+            break
+    if best is None or not shader_needs(mat, twin, best[2]):
+        return None
+    nodes = _bools(twin)
+    for k in best[2]:
+        _kid(nodes[k][0], 'VALU')[3] = 0
+    twin.f[2] = kl_mat.feature_flags(twin)
+    return twin, list(best[2])
+
+
+def refit(src, dst, log=print):
+    """A built level (a folder with <slot>_Main.zip and the files beside it) written to folder `dst`
+    with fit_shaders() run again on its .MAT against its own .fxc; no other member changes.
+    -> (fit_shaders report, materials still without a compiled shader)."""
+    import kl_chars, kl_mat, kl_texmat as TM
+    lv = kl_chars.Lv(src)
+    mat = TM.read_mat(lv['.MAT'])
+    rep = fit_shaders(mat, lv['.fxc'], log=log)
+    data = TM.write_mat(mat)
+    kl_mat.check(data)                                  # still nothing a stock Dog Days .MAT could not hold
+    if TM.read_mat(data).refs != TM.read_mat(lv['.MAT']).refs:
+        raise ValueError('refit changed the material use counts')
+    lv['.MAT'] = data
+    path = lv.write(dst, lv.name)
+    left = missing_shaders(TM.read_mat(data), lv['.fxc'])
+    log('  refit: %s written (%.0f MB); %d materials fitted, %d still without a compiled shader' % (
+        path, os.path.getsize(path) / 1e6, len(rep['fixed']), len(left)))
+    return rep, left
 
 
 # ------------------------------------------------------------------ post filter
@@ -894,5 +996,8 @@ if __name__ == '__main__':
         sys.exit(1 if test(*([tuple(a[1:])] if a[1:] else [])) else 0)
     elif a and a[0] == 'render-test':
         sys.exit(1 if test_render(*([tuple(a[1:])] if a[1:] else [])) else 0)
+    elif len(a) == 3 and a[0] == 'refit':
+        _rep, left = refit(a[1], a[2])
+        sys.exit(1 if left else 0)
     else:
         print(__doc__)

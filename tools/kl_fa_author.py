@@ -1019,6 +1019,12 @@ def test(out, keep=False, log=print):
     for f in r['fa_findings']:
         log('  ' + f[:230])
     log('level: %d entities, %d rooms, %.0f MB; first step %s' % (r['entities'], r['rooms'], r['archive_mb'], r.get('first')))
+    import kl_chars                                     # who would not be drawn, and why (re/invisible.md)
+    unseen = kl_chars.undrawn(kl_chars.Lv(folder))
+    log('kl_chars.undrawn: %d' % len(unseen))
+    for u in unseen:
+        log('  ' + u[:260])
+    off = off or unseen
     if not keep:
         for d in (folder, os.path.join(out, 'chain', '%s+%s' % (HOST, PART_B))):
             for f in os.listdir(d):

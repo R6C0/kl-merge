@@ -453,3 +453,14 @@ needs the hook and `KLJoin.ini` as in re/retomoto_fa.md 10.1). Route up to the r
   police carry each; if Arcade spawns only one kind the waves are half as large.
 - The vans' baked drives pass through static cars and the far road block (re/retomoto_fa.md 4):
   untouched here.
+
+## 10. After the owner's first round on the street (2026-10-09): invisible police
+
+"Some of the police outside are invisible": 12 of the street's 47 actors - the campaign's own
+`JPN_Police` model, never one of F07's moved squads - lose their body beyond close range, because
+their far-detail material `Characters/_JPN/JPN_Police_LOD3` asks for a Cloth / Skin shader
+permutation Dog Days never compiled. Cause, every other reason tested and cleared, the fix
+(`kl_light.plain_twin` inside `fit_shaders`), and the repaired copy of the played build
+(`<work>\build\s_visible`, not installed): `re/invisible.md`.
+`kl_fa_street.py report` now ends with PEOPLE OF THE STREET (`kl_chars.people`) and counts a
+person who would not be drawn as a fault: 12 on the played build, 0 on the repaired one.
