@@ -198,7 +198,12 @@ INSTALLED FOR THE OWNER (2026-10-09 17:20, at their request "both parts and also
   previous pair is PC_Def.kl_audio.str(.map.json). KL_PortBackup's original untouched.
 - One run (PLAY1, the owner at the controls): clean exit after 333 s; log shows the guard
   ('NOT stock', one SetAchievement BLOCKED), the join box resolved to entry 5 '06_Exit'; a
-  picture at a samurai case. Music / sound: not confirmed by anyone yet.
+  picture at a samurai case.
+- OWNER, 17:35, BY EAR: the Retomoto MUSIC plays (first sound confirmed by anyone). Asked for: more
+  character VOICE LINES ('normally when you play idle too - it feels too quiet from the
+  characters'), FASTER LOADING (game is on an SSD), and to be watched while playing: 
+  `python tools/kl_watch.py` takes pictures of the game's own window with ffmpeg (passive: no
+  input, no camera, no microphone) into <work>esearch\watch\<run>\ with the hook's log.
 State 2026-10-09 16:30. `python tools/kl_graft.py build F07 <M>` (verify must say problems: 0),
 `python tools/kl_graft.py install`, `python tools/kl_autotest.py --shots 100,130,160 --tag X`.
 Dead Men FA map names: M01_FA_A = diner / Sunny Hill Plaza, M02_FA_A = 'Late Night Opening',
