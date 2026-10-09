@@ -3,6 +3,8 @@
 2026-10-09, agent f-retomoto. Sections 0 - 8 were written **offline** (nothing installed, the game not
 started). **Section 9 is the live outcome** (agent h-live, same day): the level loads, a round starts on
 it, and it corrects sections 2 - 4 where they were wrong (facing, the join, road height, the cover list).
+**Section 11 (offline again) is the owner's new start: outside on the balcony, then the blast.** It replaces
+the START row, the blast timing, the one-wave tower and the door timing of sections 1 - 6.
 Tool: `tools/kl_fa_author.py`. Builds on `re/retomoto.md` (the survey), `re/maps.md` (the two-part
 build), `re/fa_gamemode.md` / `re/fa_round.md` (what a round needs), `re/havok.md`, `re/netcode.md`.
 
@@ -465,3 +467,322 @@ blast is at GO. It costs two table values and nothing else. It is NOT the defaul
 False`, `BLAST_DELAY = 1.0` in kl_fa_author.py; `kl_fa_author.py test <out> --guards-wait
 --blast-delay 9` builds it. Whether the blast itself is seen and heard at GO is not established
 in any option. The owner decides between A and C.
+(Superseded the same day: the owner moved the start outside. Section 11.)
+
+## 11. The start on the ledge, the sequence, the staged tower fight, the join as a beat (2026-10-09 17:00, agent k-tower; OFFLINE)
+
+The owner, after seeing the tower in the game: the heisters start OUTSIDE, on the ledge before the glass
+of the main window, THEN the blow-up sequence happens and they go in. This replaces the START row in the
+boardroom (section 1, row 1) and the start options A / C of 10.3. Nothing below was run in the game: the
+owner was playing. Everything is read from the level files and kl2.exe, built, and tested by tools.
+
+    python tools/kl_fa_author.py test <out> --keep      the build with this section's layer (defaults below)
+    python tools/kl_fa_author.py ledge <archive>        the ledge test alone, 7 s
+
+### 11.0 Result
+
+Build `<work>\build\k_rt\R09+M09_A (R09 = F07+M09_B)\F01_Main.zip` (312,377,815 bytes, sha1 d97f3e63...),
+log `<work>\build\k_rt\test.log`: **RESULT: PASS**. 25,529 entities (40 more than section 9: the campaign
+objects of 11.3 / 11.4 and one more squad), 22 rooms.
+- `kl_graft.verify`: 1 problem, known ("39 particle template names do not resolve (stock M09_A: 36)"). The
+  second known one (stream clips) did not come up in this build.
+- `kl_fa.check`: 0 CRASH, 0 BROKEN, 1 DEGRADED (no bot squads), as before.
+- ledge test: ok (11.1, 11.2). Inventory read back from the archive: every list of 11.2 - 11.4 resolves,
+  no 'NOT IN THE LEVEL'.
+- Not installed anywhere. Nothing was written into the Dog Days folder.
+
+### 11.1 The ledge exists: M09_A has a balcony outside the main window
+
+It is where the campaign's Kane lands from the rope and plants the bomb (`Pos_PlaceBomb` (5910, 21017, -80),
+`Markup!Jump_02` (5947, 21015, 79)). Nothing had to be authored, cloned or added to the .HVK.
+All boxes are world boxes of the static (type 1) collision of the built level's .HVK, in units (x 100 of the
+file's metres); `ledge` prints them.
+
+| what | object (room `M09_A_Out_CityScapeFront` unless marked) | box / faces | collision flags |
+|---|---|---|---|
+| **slab** | `SO0200_M09_FrontTopWindows_01` (one mesh of 38 triangles, has a model: it is drawn) | top face **y 21011, x 5826..6164, z -1087..898**; slanted underside down to y 20742; outer face x 6164 | 0x72 |
+| canopy and side walls | the same object | underside y 21695 over x 5826..6007; walls z -1012 and z 818 for x 5826..5926 | 0x72 |
+| **glass, intact** | `...Office_301\SI0200_M09_Window_Glass_A_02!SI0200_M09_Window_Glass_Geom_Pre_00` | two walls x 5840 and x 5860, **y 21020..21660, z -990..790** (4 triangles) | 0x72 |
+| half pillars | `S00200_M09_Balkon_HalfPillar_A_01..04` | x 5850..5895, y 21010..21694; z -558..-466, -1046..-953, 265..358, 753..845 | 0x72 |
+| **rail**, invisible | `ColiObj_Plane01` (10 triangles, no model) | y 21004..21204: outer wall **x 6151**, z -1070..872; end walls z -1070 and z 872, x 5891..6151; two inner returns x 5888 for z -1070..-547 and z 346..872 | 0x108 |
+| room side | `SI0200_M09_Office_Wooden_*` (deck, top y 21010, x 5704..5842), `..._Office_Floor_25x20_A_01` (y 20990, to x 5887) | the way in is level: slab 21011 -> deck 21010 -> floor 20990 | 0x72 |
+| camera only | `ColiObj_Obj_Camera_Blocker_01 / _02` | x 5802..5885 | 0x40 |
+
+- **Usable standing area**: x 5895..6151 (pillar fronts to the rail) = 2.56 m deep, z -1070..872 = 19.4 m wide.
+  The way to the glass is the middle only, z -547..346 (between the inner returns and pillars 2 / 3).
+- **Navigation mesh**: two of M09_A's own areas lie out there (joined mesh of the level, area boxes):
+  (5894 20920 -975)-(6102 21120 780), 2 polygons = the balcony; (5871 20920 -432)-(5896 21125 232),
+  1 polygon = through the window. `LEDGE` in the tool is the first one: every criminal point stands in it.
+- **The rail is a player's wall in Dog Days by its flags**: 76 static placements of stock F01 / F07 / L03
+  have 0x108 as their whole flag word; all 76 are named `ColiObj_*`, 73 of them hero / block / hack / fix
+  (`ColiObj_HERO_HACK` 14, `ColiObj_BlockHouse` 11, `ColiObj_HeroBlocker` 5, `ColiObj_InvisibleWallToSmallCY`,
+  `ColiObj_player_fix` ...; scratch `inv7.py`), and 367 more sub-parts carry it inside other objects.
+  (Dead Men's own `ColiObj_Hero`, 97 shapes with flags 0x20, has no Dog Days namesake with that word; those
+  are the pillars' inner faces here, not the rail.) The rail is 1.93 m high above the slab.
+- **Walk test** (`kl_escape.Walk` on the built .HVK, shapes with a player's bits 0x20 / 0x08 only, hidden
+  entities left out), from START point (6000, 21011, -930):
+  - as the level loads: **1,205 cells of 20 x 20, x 5870..6130, z -1050..850, floor y 21010 only**. Bounded by
+    the rail, the four pillars, the intact glass and the slab's own walls. The glass keeps the walk out,
+    the rail keeps it on.
+  - after the blast (intact window off, blown window and first cracked pane on): 12,977 cells, x 3450..6130:
+    the whole boardroom down to its door.
+
+Top view (x to the right = away from the tower, z up; one column about 26 units, one row about 100):
+
+```
+   z                       glass        slab top y 21011                 rail   slab
+                           5840-60      (FrontTopWindows_01)             6151   edge 6164
+  898 . . . . . . . . . . . + - - - - - - - - - - - - - - - - - - - - - - - - - +
+  872   room wall x 5829 -> | ===================== rail z 872 =============+  |
+  845                       |##|                                            :  |
+  753                       |##| pillar 4      R4 (6000, 770)   T (6070,730)  :  |     bound: warning from
+        cracked glass after |  :               R3 (6000, 690)                 :  |     x 6180, bound from
+  550   the blast (state A) |  : inner         R2 (6000, 610)   T (6070,570)  :  |     x 6230 to 7350,
+        z 350..790          |  : return        R1 (6000, 530)                 :  |     y 11900..23300
+  358                       |##| x 5888                                       :  |
+  265                       |##| pillar 3                                     :  |
+                            |                                                 :  |
+        THE WAY IN          |        way through, nav area                    :  |
+        z -547..346    <====|        x 5871..5896, z -432..232                :  |
+        (no glass after     * bomb (5867, 21094, -66)                         :  |
+        the blast)          |                      nav area of the balcony    :  |
+                            |                      x 5894..6102, z -975..780  :  |
+ -466                       |##|                                            :  |
+ -558                       |##| pillar 2                                     :  |
+        cracked glass after |  : inner         L4 (6000, -690)                :  |
+        the blast           |  : return        L3 (6000, -770)  T (6070,-730) :  |
+        z -990..-550        |  : x 5888        L2 (6000, -850)                :  |
+ -953                       |##|               L1 (6000, -930)  T (6070,-890) :  |
+-1046                       |##| pillar 1                                     :  |
+-1070                       | ===================== rail z -1070 ===========+  |
+-1087 . . . . . . . . . . . + - - - - - - - - - - - - - - - - - - - - - - - - - +
+                         5826  5895                 6000        6102      6151 6164
+   inside: wooden deck x 5704..5842 (y 21010), then the boardroom floor (y 20990), guard 'Inside_01' at (5770, -347),
+   InvisiBomb at (5685, 20997, -394)                            L / R = the two START stacks, T = TRAITOR points
+```
+
+**Falling.** What holds a player on the balcony is the rail, and only the rail - as in the campaign: M09_A
+and M09_B have no `KillBox` at all. The layer's tower bound (`Specials!LevelBound!040_LevelBound_AlleyTop`)
+now begins OUTSIDE the rail (warning from x 6180, bound x 6230..7350, y 11900..23300, z -2500..2300); before
+this section its warning began at x 5880 and would have covered the heisters' start.
+What `ZLevelBound` does, read (vtable 0xbc57d4, update slot 25 = 0x62e1b0): it collects the players inside its
+box (0x5891f0), speaks 'AllLevels/Oneliners/LevelBounds/%s_Warnings%s/...' with '1st' / '2nd' (the two warning
+boxes) and keeps a per-player count at player + 0x2760 that 0x907930 releases. **No call that kills was
+identified in it**: whether a bound kills, turns the player round or only warns is not established. A real kill
+needs a `KillBox` ('FA_DieFromSelf'), and none can be kept under the rules of this layer: F07's one free
+kill box is a CHILD of its map's top node (`Locations/F07/F07_Locations.zip\KillBox`), the other three ride
+in the vans. **For the lead (kl_graft, not my file):** a way to keep one child node of a dropped subtree
+(or `kl_scene.graft` of that single node) would give the kill slab: x 5900..7300, y 12000..20900, z -2500..2300.
+Kl2 also has a `ZSafetyNetPhantom` in the Havok world (re/havok.md); what it does with a falling player was
+not read.
+
+**How a new static collision placement could be added (asked; not needed here).** Established on the stock
+files (19 levels of both games, `<work>\research\agent_scripts\k-tower\inv6.py`): of 23,012 pairs of static
+placements of ONE shape with the same rotation, 15,862 have byte-identical MOPP code and a code offset that
+differs by exactly the placements' distance; in none is the code the same with any other offset (the other
+7,150 have other code bytes - the builder's rounding - and, in the six printed, the same offset rule). So a static placement's code is
+relative to its record's offset: **a copy of a static placement moved by a pure translation is valid with
+the same code bytes and the offset moved by the same vector** (not with another rotation or scale). What
+is NOT available is the second half: the list code of its 510-block has to return the new child for the
+new volume, and list codes cannot be written without interpreting MOPP (the smallest last list of those 19
+levels has 13 children, L05; the builder in kl2 is stripped of its save step, re/havok.md). A new standing
+surface would therefore be a KEY-FRAMED (type 4) shape, which has no code in the file and follows the
+entity its REF names - and that needs an entity, i.e. a clone, which this layer does not make.
+
+### 11.2 The sequence
+
+Seconds from the round-start event (= the moment the 8 s countdown begins: seen live, GW1 / GW2):
+
+| t | what | by |
+|---|---|---|
+| 0 | the heisters stand in two stacks of four on the balcony, left (z -930..-690) and right (z 530..770) of the bay that blows, x 6000, facing the glass. The window is intact: nobody sees in or out | START points (`rot9`), player groups (`look9`), as seen live in section 9.2 |
+| 0.5 | briefing voice (F07's) | host |
+| 8 | 'GO!' | game |
+| **9** | the bomb gets 'Activate': its warm-up | `AIMonitor` list 2 -> arm timer (`TriggerDelay2`, `BLAST_DELAY` 9.0) -> `AIDWrapper` -> `WindowBlowup!BombWindow03` |
+| **13** | the bomb goes off by itself (its fuse, 4.0): particle group `Particles_M09_BigWindow`, explosion sound | the bomb's `Explode` |
+| 13 | glass: the intact window off, the blown window `..._Geom_Post_00` and the cracked side panes `SI0200_M09_GlassWindow_00_A` on, `Glass_Break_Big` | blast timer (`TriggerDelay2`, 9.0 + 4.0) -> `AIDWrapper` 'ForceTriggerShotActivate' -> the window's own `ShotActivate` |
+| 13 | chairs thrown, the boardroom door broken open, the level's music | blast timer -> the campaign's four geometry swaps, `Music!PlayMusic_TokyoAction` |
+| 13 | the guard standing at the glass dies | blast timer -> `WindowBlowup!Activator_KillGuyNearWindow` -> `WindowBlowup!InvisiBomb` (the campaign's own beat; both kept now) |
+| 13 | the three room squads wake (7 + 2 guards; one of the 2 is the dead one) | blast timer -> their flanking routs; `ZSquadScript` field 3 = 0 until then |
+| 13+ | the heisters walk in through z -547..346; 5 s after the first one crosses the window a pillar comes down | `WindowBlowup!TriggerBox_FallingDebris` (armed by the blast timer) -> `WindowBlowup!Timer` -> `Activator_FallingDebris` (campaign's, kept) |
+
+Read, and what each step rests on:
+- **The fuse.** Dog Days `Explode` field 9 (Dead Men 7) is 4.0 on `BombWindow03` and 0.0 on the campaign's two
+  instant bombs and on all 14 `Explode` of stock F01 and F07 (rockets, gas tanks, car explosions). In the
+  campaign the plant animation hands the bomb over (`MiniCutItemProxy`) and at the same moment starts
+  `Squad_Guards_Inside_01\Timer_ExplosionDelay_Kane`, a `TriggerDelay` of 4 that fires everything else of the
+  blast (chairs, music, InvisiBomb, debris box). ASSUMPTION that field 9 is the fuse and that the first of
+  the bomb's two sounds (`Bomb_WarmUp`) fills it. **The layer before this section fired the glass, the
+  swaps and the squads together with 'Activate' - by this reading 4 s before the explosion.** `--fuse S`
+  writes another value into field 9 and moves the blast timer with it.
+- **The glass before the blast.** The intact window is a double wall with flags 0x72, the flags of every
+  wall of the level; it starts 9 units above the slab. The blown window, the three glass states A / B / C
+  and the bomb's model are hidden at load (ZGEOM[3] = 1, .gms 0x400).
+- **What the forced `ShotActivate` does** (the window's own lists, Dog Days field 3 on / 4 off): on =
+  `..._Geom_Post_00`, `SI0200_M09_GlassWindow_00_A`, `Window_Shatter_Sound`; off = the intact window. State A
+  has collision only at z -990..-550 and z 350..790 (flags 0x62): the two side bays keep cracked glass, **the
+  middle bay z -550..350 has none from the first moment**. A breaks to B (`Window_Crackle_Sound`), B to C
+  (no collision) when shot or damaged (their own `ShotActivate`, thresholds 500 / 520 and 700 / 0).
+- **Is the blown window passable on foot?** Yes by its collision (173 vertices): 34 flat triangles at y 20993
+  (glass on the floor, 3 above it), and ten thin frame stubs at x 5811..5855: four hang from the top
+  (y 21373..21658), two stand on the sill at z -301..-286 and z 72..101, 87 high and 10 wide. The walk test
+  crosses it (11.1).
+- **Hidden geometry has no collision: ASSUMPTION**, the one this whole swap rests on in the campaign too.
+  Support from stock: F07 has a static plane `BlockVisionPlane` whose only flag bit is 0x10, and removes it 23 s
+  into the round with a `DeactivateGeom` (`Gameplay!010_FirstFight!RivalMercs!DisableVisionBlocker!*`) - a
+  static placement that stops acting when its entity is switched off is stock Fragile Alliance. Live step 3.
+- **AI sight and glass.** By that same object bit 0x10 is what blocks AI sight: it is F07's vision blocker's
+  only bit, every wall and floor has it (0x72), and glass does not (stock F01 / F07 / L03, static sub-parts
+  of objects named glass / window: 0x66 on 227, 0x62 on 11, and 0x72 on 275 - frames and solid ones like
+  this window; this window's states A and B: 0x62). So Dog Days' AI sees THROUGH glass
+  panes, but **not through this window while it is intact**: its collision is a wall (0x72), not glass.
+  ASSUMPTION on the bit; the consumer in kl2 was not read.
+- **Guards unaware until the blast.** The three boardroom squads get `ZSquadScript` field 3 = 0 (`ROOM_WAITS`,
+  the default now) and are started by the blast timer; seen live with two of them in run GW2 (they sat
+  through the countdown with the player in the room). `--guards-awake` leaves the campaign's 1.
+  `Squad_Guards_Inside_01` stays now (it was left out because its guard stood where the heisters spawned):
+  one man at the glass, (5770, 21012, -347), 98 from the InvisiBomb; one at the table.
+- **The heisters and the two bombs.** By placement: the nearest START point is 616 from the bomb (its first
+  radius is 600) and 432 from the InvisiBomb (300); `ledge_facts()` tests every criminal point of every mode.
+  By radius as well (`BLAST_HARMLESS`, default, GUESS that fields 0 / 1 are the bomb's reach; stock values:
+  rocket 500 / 150, gas tank 600 / 400): the bomb's two radii are 1, so that a heister who walks to the
+  middle during the warm-up is not killed either. `--blast-real` leaves 600 / 400. The InvisiBomb keeps its
+  values: it has to kill the guard.
+- **During the 5 s between GO and the blast** the heisters can move along the balcony and shoot. Whether
+  bullets break the intact window early (its `ShotActivate` thresholds are 350 / 320) is LIVE; if they do,
+  the guards still sleep until the timer.
+
+### 11.3 The staged tower fight
+
+The campaign already has the stages, as trigger boxes its designers placed; they were dropped with the
+campaign scripting. Twelve of them are kept now as they are (`STEPS`, single top-level nodes, their own
+positions and lists; what a list names of the dropped campaign is cut by `kl_fa.repair`), and made
+`ECPS_FA_MERCONLY` - the idiom of stock F01's `tbPlatform#01_MercOnly`. Three squads no campaign box starts
+(the campaign started them from a cutscene) get one of two F07 boxes in the boardroom. Read back from
+the built level:
+
+| step | box (centre) half | who | starts |
+|---|---|---|---|
+| blast | - | blast timer | `020_Office!Squad_Guards_Inside_01 / _02 / _03` (9 actors) |
+| 1 past the table | F07 `tb_LEFT_TheySpotYou` (4200 21200 -100) half (60 250 1200). GUESS: x of `Markup!Jump_03` | authored | `030_Reception!Squad_Hallway`, `Squad_Hallway#01`, `Squad_ShootBeforeStorm` (5): they come to the door the heisters are fighting towards |
+| 2 boardroom door | F07 `tb_RIGHT_TheySpotYou` (3430 21200 -100) half (60 250 300) | authored | `040_Atrium_3rd!Squad_AtrTop_Reception` (2) |
+| 3 reception -> atrium, 3rd floor | `040_Atrium_3rd!TriggerBox_EnterAtrium` (1535 21176 -94) half (100 250 1200) | campaign | three `Atrium_3rd_Recep*Charge` squads' modifiers, `Timer_CoverDefense` (3 s -> the two `RecepSneakup` squads), `050_Atrium_2nd!...LeftCharge` |
+| 3b | `040_Atrium_3rd!TriggerBox_EnterAtriumFurther` (673 21236 -94) half (100 250 1600) | campaign | `050_Atrium_2nd!...RightCharge` |
+| 3c gallery sides | `Trigger_RecepLeftGoRight` (265 21243 1174), `Trigger_RecepRightGoLeft` (304 21242 -1351), half (450 250 50) | campaign | the charge squads change side |
+| 4 top stairs | `050_Atrium_2nd!Trigger_2ndFloorStairs` (-928 21218 -94) half (50 300 2000) | campaign | `...RecepRCharge_Squad_01#01` goes downstairs, the two `BehindStairs` squads |
+| 4b 2nd floor sides | `Trigger_2ndLeftGoRight` (-1005 20454 1408), `Trigger_2ndRightGoLeft` (-981 20435 -1683) | campaign | the `BehindStairs` squads change side |
+| 5 2nd floor, foot of stairs C / D | `050_Atrium_2nd!Trigger_2ndFloorStairEnd` (-1899 20581 -121) half (200 300 2000) | campaign | four `060_Atrium_1st` squads (7) |
+| 6 1st floor, foot of stairs A / B | `050_Atrium_2nd!Trigger_1stFloorStairEnd` (-1730 19884 -121) half (200 300 2000) | campaign | `070_Elevators!010_Squad_Elevators` (3) |
+| 6b across the atrium floor | `070_Elevators!TriggerBox_PreLastTrigger` (164 19742 -169) half (200 150 2000) | campaign | `060_Atrium_1st!Squad_MG-Guy`, `070_Elevators!010_Squad_Elevators_GuardingElevator` |
+| 7 elevator lobby | `070_Elevators!TriggerBox_OpenExitElevator` (2049 19741 -110) half (100 150 1400) | campaign + added | 11.4, and `070_Elevators!020_Squad_Elevators_Last_Stand_02` (2) |
+
+24 squads / 45 actors in the tower (one squad, two actors more than before). `--one-wave` builds the old
+behaviour (everything at the blast, the boxes emptied except the lobby's doors). Loot is as it was: 15
+stacks at the samurai cases, 6 on the table once the room's squads are dead - the counter now counts 3.
+Two boxes inside `Squad_Guards_Inside_01` whose targets were only its stripped cutscene groups are emptied
+(`QUIET`; one of them stands on the balcony).
+
+### 11.4 The join as a beat
+
+The mechanism stays the hook's box on the floor in front of the tower car (`JOIN_BOX`, 9.4 / 10.1). What the
+player gets around it, from level objects only:
+
+1. **The car is closed while the tower is fought.** The two door proxies are no longer fired at the blast.
+2. **Entering the elevator lobby opens it**, as in the campaign: the campaign's own box across the lobby's
+   entrance (x 2049, 7 m before the car) fires `AnimProxy_OpenEscapeElevator` (frames 0..75 on the tower car's
+   `Ext_A_03` / `Int_A_03`) and the campaign's `ElevatorDing` and `ElevatorOpen` sounds
+   (`Audiotriggers!GeomActivator_*`, kept; their sound objects are part of the map). Added to its list: the
+   lobby car's doors in part B (`Mercenaries!VideoProxy!MatPosAnimProxy`), so the arrival finds them open,
+   and the lobby's last squad. A criminal only (MERCONLY): three police points stand in that lobby.
+3. **The wait.** With `JOIN_BOX` in front of the car the jump comes while the doors are still opening
+   (7 m at a run is under 2 s; the doors take 75 frames). A wait that is real needs the box INSIDE the car,
+   `JOIN_BOX_CAR` = x 2802..3142, y 19560..19860, z 789..1029 (the first box of section 9.4, unreachable then
+   because the doors were shut). **For the hook's ini (not my file): switch `KLJoin.retomoto.ini` to
+   `JOIN_BOX_CAR` once a live run has seen the doors open** (live step 8); until then the front box works.
+   No level object can delay or fade the jump: the hook makes it.
+4. **Arrival**: lobby car at (6272, 563, -6305), doors (opened at step 2) at x 6112, facing out.
+5. **Police.** The 7 AFTER_DEATH points are fixed objects: 3 in the elevator lobby, 2 at the atrium lift, 2
+   on the square. Nothing stock moves them in plain Fragile Alliance (`OnlineSpawnpointTrigger` holds a spawn
+   type and a team, 'eMerc' on all 5 of F01 / F07: the team modes' criminal stages). How the game picks
+   among the 7 was not read. A policeman who comes back in the tower after the heisters have left rides the
+   same car (the hook's box is for any local player). OPTION `--police-follow` (default off, nothing stock
+   does it): the street's entrance box also fires a `DeactivateGeom` on the five tower points, GUESS that
+   the spawn choice skips a switched-off point.
+
+### 11.5 For the lead and for k-street
+
+- Nothing outside `tools/kl_fa_author.py` and this file was changed. `kl_graft.build(author=True)` /
+  `kl_maps.py chain --author` build the same level (the options are globals of the module, set by `test`).
+- `kl_fa_author.KEEP` is now served by a module `__getattr__` (it adds k-street's names); inside the module
+  the tuple is `_KEEP`.
+- **Interface for part B** (`tools/kl_fa_street.py` did not exist while this was written): if that module
+  has a dict `HOOKS`, its keys are used - `'keep'` (more F07 top-level names), `'campaign_keep'`
+  ({level: single campaign nodes}), `'prepare_host'` (fn(S, log), after mine: it may re-place anything of
+  part B), `'wire'` (fn(sc, log), after mine, on the joined scene). Without it part B is sections 2 - 4.
+  F07 objects this file takes: the fourteen in `ROLE`. Free F07 trigger boxes: `Gameplay!020_Loot!tbExitLoot`,
+  `...FollowPlayers!tbCountPlayers`, `Gameplay!040_Escape!tbEscapeAI`, `Gameplay!RunToEscape!tbRunToEscape`,
+  `...!tbRunToEscape1Player`. The campaign's own trigger boxes of M09_B can be kept the way `STEPS` keeps A's.
+- Wanted from kl_graft (11.1): keeping one child node of a dropped subtree, for a `KillBox` under the balcony.
+- Wanted from the hook's ini (11.4): `JOIN_BOX_CAR` after live step 8.
+- CLAUDE.md "Owner's end goal": 'whether any walkable geometry / collision exists there is NOT known' is
+  answered - the balcony, 11.1.
+
+### 11.6 Every GUESS and ASSUMPTION of this section
+
+| what | value | kind |
+|---|---|---|
+| the two START stacks | x 6000, z -930 -850 -770 -690 / 530 610 690 770 (80 apart; F07's own row was not measured against) | GUESS (the area is measured) |
+| TRAITOR points, the other modes' criminal points | x 6070 / 5950 / 5940, same z | GUESS |
+| warm-up a beat after GO | `BLAST_DELAY` 9.0 = countdown 8 + 1 | GUESS |
+| Explode field 9 = fuse, warm-up sound fills it | 4.0 | ASSUMPTION |
+| Explode fields 0 / 1 = reach | set to 1 | GUESS (was there before) |
+| hidden static geometry does not collide or block sight | - | ASSUMPTION (stock F07 does the same) |
+| collision bit 0x10 = blocks AI sight; 0x20 / 0x08 = a player's | - | ASSUMPTION (names and census; code not read) |
+| `ZSquadScript` field 3 = active from the start | 0 on the room squads | ASSUMPTION, seen once (GW2) |
+| a `TriggerBox` with field 0 = 0 waits to be named | F07's two boxes set to 1; `TriggerBox_FallingDebris` left 0 | ASSUMPTION (re/fa_gamemode.md 4) |
+| step 1 box | x 4200 | GUESS |
+| tower bound | warning from x 6180, bound from 6230, 110 m down | GUESS; what a bound does to a player is not established |
+| spawn camera A | (6500, 21300, 500) looking at (5950, 21080, -100) | GUESS |
+| 'ENTERS_BANK' plane | x 5700, 1.5 m inside the glass | GUESS |
+| `--police-follow` | off | GUESS |
+
+### 11.7 What could not be done offline
+
+- Seeing any of it: the blast, the fuse, the glass swap, whether the rail holds a Dog Days player, whether
+  the guards stay asleep with eight heisters 2 m outside the glass.
+- A kill box under the balcony (no keepable one; 11.1). What a level bound does to a player in the air.
+- A new standing surface would have needed an entity; it was not needed.
+- A wait at the car that the level enforces (11.4, 3): the hook's box decides.
+- How the game chooses among the police points.
+- Team modes: the criminal points of Cops & Robbers / Undercover Cop stand on the balcony too; their
+  stage triggers B / C / D are where they were.
+
+### 11.8 Live order (one variable per run; each needs the one before)
+
+Build once (`test <out> --keep`), install into the F01 slot with its `KLJoin.ini` as in section 10.
+
+1. **Direct boot, no round**: the player stands on the balcony at (6000, 21011, -930) facing the glass
+   (shots). Push -x for 5 s: stopped at x about 5890 by the glass. Push +x for 5 s: stopped at about 6120 by
+   the rail. Walk z -930 -> 770 along x 6000: nothing in the way. FAIL at the rail (falls): the level must
+   not ship before a kill box or a real rail exists - tell the lead (11.5). FAIL at the glass (walks in):
+   the hidden / intact assumption is wrong, read which entity collides.
+2. **Arcade round, stand still**: countdown clean (no red), guards do not react. Shots at 8, 9, 13, 14 s
+   after the round state begins: at 9 a sound (warm-up), at 13 particles + explosion + glass gone in the
+   middle bay, cracked panes at the sides, chairs thrown. Not hurt. If the glass goes at 13 but the
+   explosion came at 9: field 9 is not a fuse -> `--fuse 0 --blast-delay 13`.
+3. **Walk in** at z -100 after the blast: over the deck onto the floor; a dead guard at (5770, -347); the
+   others fire; 5 s later the pillar falls. Stuck at the sill: read the stubs (11.2).
+4. **`--blast-real`** (only after 2): the stacks survive the full bomb at 616.
+5. **Step 1 / 2**: cross x 4200 -> reception squads come through the door; cross the door -> the two of
+   `AtrTop_Reception`. Compare with `--one-wave` if the tower feels empty or late.
+6. **Steps 3 - 6**: each campaign box in turn (EnterAtrium, 2ndFloorStairs, 2ndFloorStairEnd,
+   1stFloorStairEnd, PreLast): squads appear as the table of 11.3 says.
+7. Statue loot and the table's six stacks after the 9 of the room are dead (section 8, steps 6 / 7; the
+   counter is 3 now).
+8. **Elevator lobby**: crossing x 2049 - ding, the car's doors open (shots of the car from x 2300). Then the
+   jump as before, and the lobby car's doors are open on arrival. Doors seen open -> the ini gets
+   `JOIN_BOX_CAR` and this step is run again.
+9. The tower bound: not reachable if the rail holds; with a debug jump to (6300, 21100, 0) see what the
+   bound does (warn, kill, nothing).
+10. `--police-follow` with a second player, after everything else.
+Part B from the lobby on: k-street's file.

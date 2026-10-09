@@ -4,12 +4,26 @@ The Fragile Alliance layer of Retomoto Tower (Dead Men M09_A + M09_B under Dog D
 authored from stock objects, offline. Spec, evidence and the list of what only a live run can
 settle: re/retomoto_fa.md. Nothing here installs anything or starts the game.
 
-    python kl_fa_author.py test <out> [--keep] [--no-ai] [--guards-wait] [--blast-delay 9]
+    python kl_fa_author.py test <out> [--keep] [--no-ai] [options]
                                                  build F07 + M09_B + M09_A with the layer into
-                                                 <out> (kl_maps.chain), verify, kl_fa.check, print
-                                                 the inventory with world coordinates; exit 1 if a
-                                                 problem is left that is not in KNOWN. --no-ai: a
-                                                 test build without the campaign's squads
+                                                 <out> (kl_maps.chain), verify, kl_fa.check, the
+                                                 ledge test, print the inventory with world
+                                                 coordinates; exit 1 if a problem is left that is
+                                                 not in KNOWN. --no-ai: a test build without the
+                                                 campaign's squads. Options (one variable each for
+                                                 the live runs, re/retomoto_fa.md 11.8):
+                                                 --blast-delay S  seconds from the round-start event
+                                                                  to the bomb's warm-up (default 9)
+                                                 --fuse S         the bomb's own fuse (default 4)
+                                                 --blast-real     the bomb keeps its radii
+                                                 --guards-awake   the room squads as the campaign
+                                                                  has them (active from the start)
+                                                 --one-wave       every tower squad at the blast
+                                                 --police-follow  tower police points off once a
+                                                                  criminal is at the front entrance
+    python kl_fa_author.py ledge <archive>       the ledge test alone on a built level: what
+                                                 stands outside the main window, the glass before
+                                                 and after the blast, the rail
     python kl_fa_author.py plan                  the campaign squads that stay, per part, and why
     python kl_fa_author.py vans                  the three baked van paths fitted to the road
     python kl_fa_author.py inventory <archive>   the inventory of a built level
@@ -24,8 +38,11 @@ HOW (no new entity, no new controller - every object is a stock one, re-placed a
   1. prepare_host(S) - on the stock Level before the graft: positions (.prp ZGEOM[1] / [2] and
      the .gms record, as kl_graft does for Heroes!), box half extents, values. Tables below.
   2. the campaign levels keep, besides what kl_maps.campaign_drop keeps, the squads squad_plan()
-     calls self-contained and a few single-node helpers of the campaign itself (CAMPAIGN_KEEP):
-     the window bomb, the chair / door swaps, the two elevator door proxies.
+     calls self-contained and single-node helpers of the campaign itself (CAMPAIGN_KEEP): the
+     window bomb and its invisible second bomb, the chair / door swaps, the campaign's own trigger
+     boxes of the tower (STEPS: the staged fight), the two elevator door proxies and their sounds.
+  The start (owner, 2026-10-09 17:00): the heisters stand OUTSIDE, on the balcony M09_A has in front
+  of the main window (LEDGE), and go in when the bomb has blown it (re/retomoto_fa.md 11).
   3. wire(Jn) - on the final joined scene, where both parts exist: every reference list that
      names a map node. It only edits values of existing controllers (kl_fa.repair's rule).
   kl_graft.build(author=True) calls 1 and 3 itself, strip() on each Dead Men part and keeps KEEP;
@@ -62,10 +79,30 @@ KNOWN = ('stream clips are not in the merged stream file', 'particle template na
 # ------------------------------------------------------------------ the tower (M09_A), measured
 FLOOR3 = 20996.0                        # boardroom floor: campaign actors stand at y 20991..20997
 IN = (-1.0, 0.0)                        # into the room from the main window (x 5850, faces +x)
-# 8 heisters in a row 2 m inside the main window (z -990..790). GUESS: the row; the campaign
-# proves the floor there (a guard at (5770, 21012, -347), its 'InvisiBomb' at (5685, 20997, -394))
-START = [(5650.0, FLOOR3, z) for z in (-700, -500, -300, -100, 100, 300, 500, 700)]
-TRAITOR = [(5700.0, FLOOR3, z) for z in (-600, -200, 200, 600)]                      # GUESS
+# THE LEDGE (owner, 2026-10-09 17:00: the heisters start OUTSIDE, on the ledge before the glass).
+# It exists - M09_A has a balcony outside the main window, where the campaign's Kane lands from the
+# rope and plants the bomb. All read from the level's .HVK / .gms (re/retomoto_fa.md 11.1):
+#   slab     SO0200_M09_FrontTopWindows_01, its top face y 21011, x 5826..6164, z -1087..898,
+#            collision flags 0x72 (as every floor); a canopy of the same object at y 21695
+#   glass    ..._Window_Glass_Geom_Pre_00: two walls x 5840 / 5860, y 21020..21660, z -990..790, 0x72
+#   pillars  S00200_M09_Balkon_HalfPillar_A_01..04, x 5850..5895, z -1046..-953 / -558..-466 /
+#            265..358 / 753..845
+#   rail     ColiObj_Plane01, invisible, flags 0x108 (the flags of Dog Days' own hero blockers),
+#            y 21004..21204: x 6151 for z -1070..872, the two ends z -1070 and z 872, and two inner
+#            returns at x 5888 for z -1070..-547 and z 346..872 - the way in is z -547..346
+#   nav      two areas of the level's own navigation mesh: x 5894..6102, z -975..780 (the balcony)
+#            and x 5871..5896, z -432..232 (the way through the window)
+LEDGE_Y = 21011.0
+LEDGE = ((5894.0, 6102.0), (-975.0, 780.0))             # the nav area on the balcony: where a point may stand
+LEDGE_RAIL = ((5891.0, 6151.0), (-1070.0, 872.0))       # inside ColiObj_Plane01
+BOMB = (5867.0, 21094.0, -66.0)                         # WindowBlowup!BombWindow03
+INVISIBOMB = (5685.0, 20997.0, -394.0)                  # WindowBlowup!InvisiBomb, radii 300 / 100
+# 8 heisters in two stacks of four on the balcony, left and right of the bay that blows (the charge
+# sits on the centre glass, z -66). GUESS: the stacks. Placement keeps them out of the bomb's own
+# first radius (600) whether BLAST_HARMLESS holds or not: nearest points 624 and 611 from the bomb,
+# 432 from the InvisiBomb (ledge_facts() tests both)
+START = [(6000.0, LEDGE_Y, z) for z in (-930, -850, -770, -690, 530, 610, 690, 770)]
+TRAITOR = [(6070.0, LEDGE_Y, z) for z in (-890, -730, 570, 730)]                     # GUESS: behind the stacks
 # police who come back: the elevator lobby (campaign 'SquadArrivingElevator', which is not
 # kept), the atrium lift, and the square in front of the lobby (campaign 'Squad_InFront')
 POLICE = [(1904.0, 19601.0, 818.0), (1800.0, 19601.0, 812.0), (1987.0, 19601.0, 973.0),
@@ -78,11 +115,12 @@ STAGE_D = [(3076.0, 162.0, -6354.0), (3100.0, 162.0, -6594.0), (3300.0, 162.0, -
 SPAWN = {'eSPAWN_TYPE_FRAGILE_ALLIANCE_START': (START, (0, 0, 0), IN),
          'eSPAWN_TYPE_FRAGILE_ALLIANCE_TRAITOR': (TRAITOR, (0, 0, 0), IN),
          'eSPAWN_TYPE_FRAGILE_ALLIANCE_AFTER_DEATH': (POLICE, (0, 0, 0), (1.0, 0.0)),
-         'eSPAWN_TYPE_FRAGILE_ALLIANCE_UCC': (START, (-150, 0, 50), IN),
-         'eSPAWN_TYPE_FRAGILE_ALLIANCE_UCC_MERC': (START, (-150, 0, 50), IN),
-         'eSPAWN_TYPE_FRAGILE_ALLIANCE_UCC_TRAITOR': (TRAITOR, (-150, 0, 50), IN),
+         # the other modes' criminals stand on the balcony too, inside LEDGE (x 5894..6102)
+         'eSPAWN_TYPE_FRAGILE_ALLIANCE_UCC': (START, (70, 0, 0), IN),
+         'eSPAWN_TYPE_FRAGILE_ALLIANCE_UCC_MERC': (START, (70, 0, 0), IN),
+         'eSPAWN_TYPE_FRAGILE_ALLIANCE_UCC_TRAITOR': (TRAITOR, (-120, 0, 0), IN),
          'eSPAWN_TYPE_FRAGILE_ALLIANCE_UCC_POLICE': (POLICE, (0, 0, 80), (1.0, 0.0)),
-         'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_MERC': (START, (-300, 0, 0), IN),
+         'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_MERC': (START, (-60, 0, 0), IN),
          'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_MERC1': (STAGE_B, (0, 0, 0), (-1.0, 0.0)),
          'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_MERC2': (STAGE_C, (0, 0, 0), (1.0, 0.0)),
          'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_MERC3': (STAGE_D, (0, 0, 0), (-1.0, 0.0)),
@@ -98,8 +136,20 @@ STATUES = [(-2163, 20400, 523), (-73, 20400, 1362), (-109, 20400, -1578), (724, 
 MAIN_ROOM = [(x, FLOOR3 + 80.0, z) for x in (4750.0, 5000.0, 5250.0) for z in (-120.0, 20.0)]
 STATUE_VALUE, ROOM_VALUE = 150000, 300000   # GUESS: 15 x 150,000 + 6 x 300,000 = 4.05 M (F07's loot: 5 x 800,000)
 GATE_MAIN_ROOM = True                   # False: the boardroom loot lies there from the start
-BLAST_HARMLESS = True                   # the bomb's two radii set to 1 (the heisters stand at it)
-BLAST_DELAY = 1.0                       # GUESS: seconds from the round-start event to the blast
+BLAST_HARMLESS = True                   # the bomb's two radii set to 1 (GUESS that they are its reach; 'test --blast-real' leaves them)
+# THE SEQUENCE. The round-start event (AIMonitor list 2) comes when the 8 s countdown BEGINS, not at
+# 'GO!' (SEEN LIVE, runs GW1 / GW2). The campaign's bomb has a fuse: Explode field 9 (Dead Men 7) is
+# 4.0 on BombWindow03 and 0.0 on both of the campaign's instant bombs and on all 14 Explode of stock
+# F01 / F07, and the campaign fires everything else of the blast from a 4 s TriggerDelay started
+# with the bomb ('Timer_ExplosionDelay_Kane'). ASSUMPTION that field 9 is that fuse and that the
+# first sound (Bomb_WarmUp) plays through it. So: event -> BLAST_DELAY -> the bomb gets 'Activate'
+# (warm-up) -> BOMB_FUSE -> the bomb goes off by itself, and a second timer set to BLAST_DELAY +
+# BOMB_FUSE swaps the glass, the chairs and the door, fires the InvisiBomb and starts the room's guards.
+BLAST_DELAY = 9.0                       # countdown 8 s + GUESS 1 s: the warm-up starts a beat after GO
+BOMB_FUSE = 4.0                         # the bomb's own value; another value is written into its field 9
+EXPLODE_FUSE = 9                        # Dog Days Explode field (Dead Men 7)
+ONE_WAVE = False                        # True: every tower squad starts at the blast (the layer before 2026-10-09 17:00)
+POLICE_FOLLOW = False                   # OPTION, see wire(): tower police points switched off from the street
 
 # ------------------------------------------------------------------ the join and the street (M09_B)
 CAR_A = (2972.0, 19730.0, 909.0)        # tower escape car SI0101_JPN_Elevator_Int_A_03: box (2756 19600 756)-(3189 19873 1062)
@@ -112,6 +162,11 @@ ROAD_X, ROAD_HALF, ROAD_Y = -3000.0, 2400.0, -40.0   # carriageway x -5700..-300
 # reached). This box fired from outside in RT4 and from the hook in J1b, both at (2719, 19601, 1100).
 # The level's own 'join box' below (the speak trigger) is still the car's inside and is never entered.
 JOIN_BOX = ((2550.0, 2790.0), (19500.0, 19800.0), (800.0, 1100.0))
+# THE JOIN AS A BEAT, for the hook's author (klhook\KLJoin.retomoto.ini; not used by this file): once
+# a live run has SEEN the car's doors open (they are opened by the campaign's own box at the lobby's
+# entrance now, wire()), the box that makes the wait real is the car's inside - the player has to
+# walk in through doors that take 75 frames to open. Until then JOIN_BOX above stays the one in use.
+JOIN_BOX_CAR = ((2802.0, 3142.0), (19560.0, 19860.0), (789.0, 1029.0))
 JOIN_ENTRY = 5                          # Specials!JumpPoints!06_Exit: the sixth JumpPoint in scene order (entries 0..5 read in run RT4)
 VAN_STOP_Z = (9300.0, 8500.0, 7700.0)   # GUESS: north of the first road block (z 3602..3911), south of the SWAT truck (z 10886)
 PARK = (0.0, -60000.0, 0.0)             # where a host object without a use is put
@@ -119,13 +174,16 @@ PARK = (0.0, -60000.0, 0.0)             # where a host object without a use is p
 # host object -> (position, facing or None, half extents or None, source of the numbers)
 PLACE = {
     # round start
-    'FASpecials!POI!Trigger_POI_TheLootArea': ((5600, 21100, -100), None, (300, 150, 1000), 'GUESS: box round the START row (F07: round its start)'),
+    'FASpecials!POI!Trigger_POI_TheLootArea': ((6020, 21110, -100), None, (140, 150, 1000), 'GUESS: box round the START stacks on the balcony (F07: round its start)'),
     'FASpecials!POI!POI_TheLootArea': ((4600, 21060, -100), None, None, 'GUESS: boardroom centre'),
-    'FASpecials!PIP!EnterLootArea': ((5350, 21100, -100), None, (50, 200, 1250), 'GUESS: a plane 3 m in front of the START row'),
+    'FASpecials!PIP!EnterLootArea': ((5700, 21100, -100), None, (50, 200, 1250), 'GUESS: a plane 1.5 m inside the glass, the inner edge of the wooden deck (x 5704)'),
     'FASpecials!PIP!ExitLootArea': ((5600, 600, -6500), None, (100, 500, 1650), 'GUESS: across the lobby below the elevator landing'),
     # spawn cameras (camera, look-at)
-    'FASpecials!SpawnPoint!TeamMode!SpawnCam_000_A!Camera_000_A': ((5000, 21500, 600), None, None, 'GUESS'),
-    'FASpecials!SpawnPoint!TeamMode!SpawnCam_000_A!CameraLookAt_000_A': ((5650, 21050, -100), None, None, 'GUESS'),
+    'FASpecials!SpawnPoint!TeamMode!SpawnCam_000_A!Camera_000_A': ((6500, 21300, 500), None, None, 'GUESS: in the air off the balcony'),
+    'FASpecials!SpawnPoint!TeamMode!SpawnCam_000_A!CameraLookAt_000_A': ((5950, 21080, -100), None, None, 'GUESS: the centre bay'),
+    # the staged tower fight: the two steps the campaign has no trigger box for (wire())
+    'Gameplay!010_FirstFight!tb_LEFT_TheySpotYou': ((4200, 21200, -100), None, (60, 250, 1200), 'GUESS: across the boardroom at M09_A Markup!Jump_03 (x 4202): past the table'),
+    'Gameplay!010_FirstFight!tb_RIGHT_TheySpotYou': ((3430, 21200, -100), None, (60, 250, 300), 'the boardroom door (SI0200_M09_Office_DDoor_01_01, x 3430)'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_010_B!Camera_010_B': ((2700, 21300, 0), None, None, 'GUESS'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_010_B!CameraLookAt_010_B': ((3300, 21050, -100), None, None, 'GUESS'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_020_C!Camera_020_C': ((2600, 19950, -1200), None, None, 'GUESS'),
@@ -145,7 +203,7 @@ PLACE = {
     'Specials!LevelSpeak!OnlineSpeakTrigger_01': (CAR_A, None, None, 'with its trigger box'),
     'Specials!JumpPoints!06_Exit': (CAR_B, (-1.0, 0.0), None, 'the campaign\'s arrival car; faces its door (x 6112)'),
     # jump points (developer aids in stock levels): the campaign's own
-    'Specials!JumpPoints!01_Start': ((5650, FLOOR3, 0), IN, None, 'the START row'),
+    'Specials!JumpPoints!01_Start': ((6000, LEDGE_Y, -100), IN, None, 'the balcony, between the START stacks'),
     'Specials!JumpPoints!02_MarketMain': ((4202, 21006, -129), IN, None, 'M09_A Markup!Jump_03'),
     'Specials!JumpPoints!03_MarketOrange': ((3037, 21006, -1048), IN, None, 'M09_A Markup!Jump_04'),
     'Specials!JumpPoints!04_LootWarehouse': ((102, 19649, -369), (1.0, 0.0), None, 'M09_A Markup!Jump_05'),
@@ -157,9 +215,13 @@ PLACE = {
     'FASpecials!POI!Trigger_POI_TheEscapeAreaFA_RespawnOnly': ((4300, 600, -6500), None, (1750, 600, 1650), 'as above'),
     # level bounds. Tower: the only way out is the blown window. Street: the campaign's own
     # north / south / lobby-back bounds stay (kl_maps.campaign_drop); the west side is open
-    'Specials!LevelBound!040_LevelBound_AlleyTop!Bound': ((6650, 20500, -100), None, (650, 2600, 2200), 'GUESS: a slab outside the window, x 6000..7300, 26 m down'),
-    'Specials!LevelBound!040_LevelBound_AlleyTop!Warn01': ((6590, 20500, -100), None, (710, 2600, 2200), 'GUESS: from x 5880 (window plane 5850)'),
-    'Specials!LevelBound!040_LevelBound_AlleyTop!Warn02': ((6590, 20500, -100), None, (710, 2600, 2200), 'as Warn01'),
+    # The balcony's own rail stands at x 6151 and z -1070 / 872. The bound is the answer for whoever
+    # gets past it: a slab that begins outside the rail and reaches 110 m down (the tower hangs
+    # 190 m over part B's square; nothing of B's play space lies at x > 6170, z -2500..2300). It
+    # must NOT cover the balcony: the heisters start there (the layer before had the warning from x 5880)
+    'Specials!LevelBound!040_LevelBound_AlleyTop!Bound': ((6790, 17600, -100), None, (560, 5700, 2400), 'GUESS: outside the rail, x 6230..7350, y 11900..23300'),
+    'Specials!LevelBound!040_LevelBound_AlleyTop!Warn01': ((6765, 17600, -100), None, (585, 5700, 2400), 'GUESS: from x 6180 (rail 6151 + a body)'),
+    'Specials!LevelBound!040_LevelBound_AlleyTop!Warn02': ((6765, 17600, -100), None, (585, 5700, 2400), 'as Warn01'),
     'Specials!LevelBound!030_LevelBound_StreetLeft!Bound': ((-7400, 500, 3000), None, (400, 1500, 5000), 'GUESS: west of the road towards the overpass / bus terminal'),
     'Specials!LevelBound!030_LevelBound_StreetLeft!Warn01': ((-7000, 500, 3000), None, (800, 1500, 5000), 'GUESS'),
     'Specials!LevelBound!030_LevelBound_StreetLeft!Warn02': ((-7000, 500, 3000), None, (800, 1500, 5000), 'GUESS'),
@@ -168,15 +230,46 @@ PARKED = ['Specials!LevelBound!%s!%s' % (g, b) for g in ('020_LevelBound_AlleyRi
                                                          '030_LevelBound_StreetRight') for b in ('Bound', 'Warn01', 'Warn02')]
 # host objects that get a new job in wire(): role -> name (each a single top-level node)
 ROLE = {'monitor': 'Gameplay!AIMonitor',
-        'blast timer': 'Gameplay!010_FirstFight!RivalMercVan!Timer',                 # TriggerDelay2
+        'arm timer': 'Gameplay!010_FirstFight!RivalMercVan!TimerVanGo',              # TriggerDelay2: the bomb's warm-up
+        'blast timer': 'Gameplay!010_FirstFight!RivalMercVan!Timer',                 # TriggerDelay2: the moment it goes off
         'bomb': 'Gameplay!010_FirstFight!RivalMercVan!Activator_VanSound',           # AIDWrapper 'Activate'
         'glass': 'Gameplay!010_FirstFight!RivalMercVan!Activator_OLD_VanGo',         # AIDWrapper
+        'step room': 'Gameplay!010_FirstFight!tb_LEFT_TheySpotYou',                  # TriggerBox, tower step 1
+        'step door': 'Gameplay!010_FirstFight!tb_RIGHT_TheySpotYou',                 # TriggerBox, tower step 2
         'street': 'Gameplay!030_AfterLoot!tbExitFinancialAlley',                     # TriggerBox ECPS_FA_MERCONLY
         'counter': 'Gameplay!020_Loot!FollowPlayers!TriggerCounter',
         'loot on': 'Gameplay!010_FirstFight!Shutters!GeomActivator_TearGas_LEFT',    # ActivateGeom
+        'police off': 'Gameplay!010_FirstFight!RivalMercVan!GeomDeactivator_DriveInVan',   # DeactivateGeom (POLICE_FOLLOW)
         'join box': 'Specials!LevelSpeak!TriggerBox', 'join': 'Specials!JumpPoints!06_Exit', 'exit': 'Gameplay!EscapeSetup!otrExitLevel'}
 VANS = ['Animation/F07/F07_Escape_Vehicle_0%d.zip' % i for i in (1, 2, 3)]
-KEEP = ('FASpecials!', 'Specials!', 'Gameplay!EscapeSetup!*') + tuple(VANS) + tuple(v for k, v in ROLE.items() if v.startswith('Gameplay!0'))
+# FOR k-street (tools/kl_fa_street.py, part B: lobby, street, vans, street bounds). The F07 objects
+# in ROLE are taken. Free top-level trigger boxes of F07 this file does not touch: Gameplay!020_Loot!
+# tbExitLoot, Gameplay!020_Loot!FollowPlayers!tbCountPlayers, Gameplay!040_Escape!tbEscapeAI,
+# Gameplay!RunToEscape!tbRunToEscape, ...!tbRunToEscape1Player; timers: every other TriggerDelay2
+# under Gameplay!010_FirstFight!. The street module is found by name and asked for a dict HOOKS,
+# every key optional (street() below):
+#   'keep'           more top-level names / patterns of F07 that stay (Select(s_keep))
+#   'campaign_keep'  {level: names} of single campaign nodes that stay, as CAMPAIGN_KEEP
+#   'prepare_host'   fn(S, log), called at the end of prepare_host(): it may re-place anything of
+#                    part B this file placed (ROLE 'street' / 'exit', the vans, the street bounds)
+#   'wire'           fn(sc, log), called at the end of wire() on the joined scene
+# Without that module, or without HOOKS in it, part B is what this file built before (section 2 - 4).
+_KEEP = ('FASpecials!', 'Specials!', 'Gameplay!EscapeSetup!*') + tuple(VANS) + tuple(v for k, v in ROLE.items() if v.startswith('Gameplay!0'))
+
+
+def street():
+    """HOOKS of k-street's module, {} without it. Imported late: that module may import this one."""
+    try:
+        import kl_fa_street
+    except ImportError:
+        return {}
+    return getattr(kl_fa_street, 'HOOKS', None) or {}
+
+
+def __getattr__(name):
+    if name == 'KEEP':                  # kl_graft.build reads kl_fa_author.KEEP
+        return _KEEP + tuple(x for x in street().get('keep', ()) if x not in _KEEP)
+    raise AttributeError(name)
 
 # ... but not F07's cover list: a Dead Men map brings its own top-level 'CoverList', and a second
 # FFCoverList is an assert in its init (kl2 0x6682c5 from CFFCoverList slot 13, 0x6d6a80: the game
@@ -184,15 +277,47 @@ KEEP = ('FASpecials!', 'Specials!', 'Gameplay!EscapeSetup!*') + tuple(VANS) + tu
 DROP = ('Specials!CoverPoints!*',)
 
 # ------------------------------------------------------------------ the campaign's own objects that stay
+# what the blast timer fires besides the glass wrapper and the room's guards (all take 'AITrigger').
+# The last three are the campaign's own beat at this moment (its 'Timer_ExplosionDelay_Kane' names
+# them): the invisible second bomb that kills the guard standing at the glass, and the box that
+# lets a pillar come down 5 s after somebody walks in through the window
+BLAST = ('AI_Players!Enemies!020_Office!GeomActivator_ChairPost', 'AI_Players!Enemies!020_Office!GeomDeactivator_ChairsPre',
+         'AI_Players!Enemies!020_Office!GeomActivator_BrokenDoors', 'AI_Players!Enemies!020_Office!GeomDeactivator_Doors',
+         'Music!PlayMusic_TokyoAction',                                             # the level's action theme, two layers
+         'WindowBlowup!Activator_KillGuyNearWindow',                                # AIDWrapper 'Activate' -> WindowBlowup!InvisiBomb
+         'WindowBlowup!TriggerBox_FallingDebris')                                   # field 0 = 0 until named, -> Timer 5 s -> the pillar
+# THE STAGED TOWER FIGHT: the campaign's OWN trigger boxes, where its designers put them, with their
+# own lists (what they name of the dropped campaign is cut by kl_fa.repair). wire() makes them
+# ECPS_FA_MERCONLY - the idiom of stock F01's tbPlatform#01_MercOnly (re/fa_gamemode.md 2).
+STEPS = ('AI_Players!Enemies!040_Atrium_3rd!TriggerBox_EnterAtrium',                # (1535 21176 -94) half (100 250 1200): reception -> atrium, 3rd floor
+         'AI_Players!Enemies!040_Atrium_3rd!Timer_CoverDefense',                    # TriggerDelay 3, named by the box above
+         'AI_Players!Enemies!040_Atrium_3rd!TriggerBox_EnterAtriumFurther',         # (673 21236 -94) half (100 250 1600)
+         'AI_Players!Enemies!040_Atrium_3rd!Trigger_RecepLeftGoRight',              # (265 21243 1174) half (450 250 50): gallery, north side
+         'AI_Players!Enemies!040_Atrium_3rd!Trigger_RecepRightGoLeft',              # (304 21242 -1351) half (450 250 50): gallery, south side
+         'AI_Players!Enemies!050_Atrium_2nd!Trigger_2ndFloorStairs',                # (-928 21218 -94) half (50 300 2000): towards the top stairs
+         'AI_Players!Enemies!050_Atrium_2nd!Trigger_2ndLeftGoRight',                # (-1005 20454 1408) half (450 250 50): 2nd floor
+         'AI_Players!Enemies!050_Atrium_2nd!Trigger_2ndRightGoLeft',                # (-981 20435 -1683) half (450 250 50)
+         'AI_Players!Enemies!050_Atrium_2nd!Trigger_2ndFloorStairEnd',              # (-1899 20581 -121) half (200 300 2000): foot of stairs C / D
+         'AI_Players!Enemies!050_Atrium_2nd!Trigger_1stFloorStairEnd',              # (-1730 19884 -121) half (200 300 2000): foot of stairs A / B
+         'AI_Players!Enemies!070_Elevators!TriggerBox_PreLastTrigger',              # (164 19742 -169) half (200 150 2000): across the atrium floor
+         'AI_Players!Enemies!070_Elevators!TriggerBox_OpenExitElevator')            # (2049 19741 -110) half (100 150 1400): into the elevator lobby
+STEP_LOBBY = STEPS[-1]                  # THE JOIN AS A BEAT hangs on this one (wire())
 CAMPAIGN_KEEP = {
     PART_A: ('WindowBlowup!BombWindow03',                                           # Explode: particles + the two sounds
-             'AI_Players!Enemies!020_Office!GeomActivator_ChairPost', 'AI_Players!Enemies!020_Office!GeomDeactivator_ChairsPre',
-             'AI_Players!Enemies!020_Office!GeomActivator_BrokenDoors', 'AI_Players!Enemies!020_Office!GeomDeactivator_Doors',
+             'WindowBlowup!InvisiBomb', 'WindowBlowup!Timer', 'WindowBlowup!Activator_FallingDebris',
              'AI_Players!Enemies!070_Elevators!AnimProxy_OpenEscapeElevator',       # MatPosAnimProxy 0..75 on Ext_A_03 / Int_A_03
-             'Music!PlayMusic_TokyoAction'),                                        # the level's action theme, two layers
+             'Audiotriggers!GeomActivator_ElevatorDing', 'Audiotriggers!GeomActivator_ElevatorOpen') + BLAST + STEPS,
     PART_B: ('Mercenaries!VideoProxy!MatPosAnimProxy',)}                            # the lobby car's doors, 0..75
-# what the blast timer fires besides the two wrappers (all take 'AITrigger')
-AT_BLAST = [R + n for n in CAMPAIGN_KEEP[PART_A][1:] + CAMPAIGN_KEEP[PART_B]]
+AT_BLAST = [R + n for n in BLAST]
+# a tower squad no campaign trigger box starts (the campaign started it from a cutscene or left
+# it standing) gets the step whose area it belongs to; anything else is started at the blast
+STEP_AREA = (('step room', ('AI_Players!Enemies!030_Reception!',)),
+             ('step door', ('AI_Players!Enemies!040_Atrium_3rd!', 'AI_Players!Enemies!050_Atrium_2nd!')),
+             ('lobby', ('AI_Players!Enemies!060_Atrium_1st!', 'AI_Players!Enemies!070_Elevators!')))
+# campaign boxes inside a kept squad whose only targets are that squad's stripped mini-cutscene
+# groups: their lists are emptied (the box on the balcony would send 'AITrigger' to a bare group)
+QUIET = ('AI_Players!Enemies!020_Office!Squad_Guards_Inside_01\\TriggerBox_TurnaroundGuard',
+         'AI_Players!Enemies!020_Office!Squad_Guards_Inside_01\\Timer_ExplosionDelay_Kane')
 WINDOW_PRE = R + A_MAP + 'M09_A_Ins_Office_301\\SI0200_M09_Window_Glass_A_02!SI0200_M09_Window_Glass_Geom_Pre_00'
 SQUADS = {PART_A: ('AI_Players!Enemies!020_Office!', 'AI_Players!Enemies!030_Reception!', 'AI_Players!Enemies!040_Atrium_3rd!',
                    'AI_Players!Enemies!050_Atrium_2nd!', 'AI_Players!Enemies!060_Atrium_1st!', 'AI_Players!Enemies!070_Elevators!'),
@@ -206,11 +331,15 @@ ROOM_SQUADS = 'AI_Players!Enemies!020_Office!'      # 'everyone in the main room
 # True = the two room squads get 0 and so wait for the blast like the rest of the tower: their
 # flanking routs are in the blast timer's list already. ASSUMPTION that field 3 is 'active from the
 # start' (no name in the exe; 14 of 30 squads of stock F01 have 0: the ones that arrive later).
-# Default False = the level as the owner has seen it; 'test ... --guards-wait' builds the option.
-ROOM_WAITS = False
+# SEEN LIVE with it (run GW2): the guards sit through the countdown and react when their rout is named.
+# Default True since the owner's 2026-10-09 17:00 design (guards unaware until the blast);
+# 'test ... --guards-awake' builds the level as the campaign has the field.
+ROOM_WAITS = True
 SQUAD_ACTIVE = 3
-# scripted arrivals (elevators, cars) and the guard the campaign kills with the blast
-NOT_SQUADS = ('Arriving', 'TakingElevator', 'VSquad', 'Guards_Inside_01')
+# scripted arrivals (elevators, cars). 'Squad_Guards_Inside_01' is no longer here: with the heisters
+# outside, the guard at the glass ((5770, 21012, -347)) is the campaign's own first casualty again
+# (the InvisiBomb, 98 from him); his partner stands at the table
+NOT_SQUADS = ('Arriving', 'TakingElevator', 'VSquad')
 BEHAVE = {'DefendBehaviourRout', 'FlankingBehaviourRout', 'HuntBehaviourRout', 'PatrolBehaviourRout', 'RunToCoverBehaviourRout'}
 PLAIN = BEHAVE | {'ZSquadScript', 'ZSoldier', 'RunToCoverPosInfoRout', 'SquadModifierBehaviour', 'TriggerDelay', 'TriggerCounter', 'TriggerBox'}
 # in-game scripted animation of the campaign: removed from a squad that stays (before the join)
@@ -417,6 +546,8 @@ def prepare_host(S, log=print):
         fit[0] = R + vans[0][0] + '\\EscapeVehicle_Animation_F07'       # kl2 0x6c3f90 loops until one field is set
     kl_fa.edit(sc, k, ctrl_of(sc, k, kl_fa.EXIT), lambda us: [setv(sc, us, 2 + j, s) for j, s in enumerate(fit)])
     S.authored = {'loot': loot, 'vans': vans}
+    if street().get('prepare_host'):                    # part B: k-street's module may re-place what stands there
+        street()['prepare_host'](S, log)
     return S.authored
 
 
@@ -465,10 +596,22 @@ def plan(level):
 
 
 def campaign_names(level):
-    return tuple(CAMPAIGN_KEEP.get(level, ())) + tuple(plan(level)[0]) if level in SQUADS else ()
+    more = tuple(street().get('campaign_keep', {}).get(level, ()))
+    return tuple(CAMPAIGN_KEEP.get(level, ())) + more + tuple(plan(level)[0]) if level in SQUADS else ()
 
 
 # ------------------------------------------------------------------ 3. the joined scene
+def named(sc, k):
+    """Every path the controllers of node k hold in a reference list."""
+    out = []
+    for _nm, body in sc.nodes[k]['ctrls']:
+        for u in units(body[1:-1]):
+            v = kl_fa.value(sc, u)
+            if isinstance(v, list) and v and isinstance(v[0], str):
+                out += v
+    return out
+
+
 def wire(sc, log=print):
     """Every reference of the layer that names a node of the map. sc: the joined scene with both
     parts (kl_prpjoin.Scene). Values and reference lists only."""
@@ -478,25 +621,104 @@ def wire(sc, log=print):
         if gone:
             log('  kl_fa_author: NOT IN THE LEVEL: %s' % gone)
         return [p for p in paths if sc.resolve(p)]
-    def lists(role, name, **fields):
-        k = node(ROLE[role])
+    def put(k, name, **fields):
         kl_fa.edit(sc, k, ctrl_of(sc, k, name), lambda us: [setv(sc, us, int(f[1:]), v) for f, v in fields.items()])
+    def lists(role, name, **fields):
+        put(node(ROLE[role]), name, **fields)
+    def values(k, name):
+        return [kl_fa.value(sc, u) for u in units(sc.nodes[k]['ctrls'][ctrl_of(sc, k, name)][1][1:-1])]
     squads = {lv: plan(lv)[0] for lv in (PART_A, PART_B)}
     start = {lv: must([p for p, _n, _s in squads[lv].values()]) for lv in squads}
-    # round start: AIMonitor list 2 (event 2, kl2 0x8b5f60) -> the blast timer -> everything else
+    first = {n: p for n, (p, _a, _s) in squads[PART_A].items() if sc.resolve(p)}
+    room = [n for n in squads[PART_A] if n.startswith(ROOM_SQUADS) and sc.resolve(R + n)]
+
+    # ---- the staged tower fight. The campaign's own trigger boxes (STEPS) stay where they are and
+    # keep their lists; a squad one of them names (directly, or through the one kept timer) is
+    # theirs. The room's guards start at the blast; what is left gets its area's step (STEP_AREA):
+    # the two F07 boxes in the boardroom and the campaign's own box at the elevator lobby.
+    boxes = [node(n) for n in STEPS if sc.resolve(R + n)]
+    covered, todo, seen = {}, list(boxes), set()
+    while todo:
+        k = todo.pop()
+        if k in seen:
+            continue
+        seen.add(k)
+        for s in named(sc, k):
+            for j in sc.resolve(s):
+                top = sc.names[sc.top[j]]
+                if top in squads[PART_A]:
+                    covered.setdefault(top, sc.names[k])
+                elif top in STEPS:
+                    todo.append(sc.top[j])
+    at_blast, step = [first[n] for n in room if n in first], {r: [] for r, _p in STEP_AREA}
+    for n in sorted(first):
+        if n in room:
+            continue
+        role = next((r for r, pre in STEP_AREA if n.startswith(pre)), None)
+        if ONE_WAVE or (n not in covered and role is None):
+            at_blast.append(first[n])
+        elif n not in covered:
+            step[role].append(first[n])
+    for k in boxes:
+        if any(sc.p.key(nm) == 'TriggerBox' for nm, _b in sc.nodes[k]['ctrls']):
+            v = values(k, 'TriggerBox')
+            if len(v) != 18 or not str(v[14]).startswith('ECPS_'):
+                raise ValueError('%s: not the Dog Days TriggerBox layout (%d fields)' % (sc.names[k], len(v)))
+            # MERCONLY: a criminal's advance starts the wave, a policeman walking back does not.
+            # ONE_WAVE: the squads were started already, the boxes name nothing but the lobby's doors
+            put(k, 'TriggerBox', f14='ECPS_FA_MERCONLY', **({'f17': []} if ONE_WAVE and sc.names[k] != STEP_LOBBY else {}))
+    lists('step room', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', f17=step['step room'])      # field 0 is 0 in F07 (a box that
+    lists('step door', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', f17=step['step door'])      # waits to be switched on): 1 as every plain box
+    # THE JOIN AS A BEAT: the campaign's own box across the way into the elevator lobby (x 2049)
+    # opens the escape car with its ding and door sound, as in the campaign. Added: the lobby
+    # car's doors in part B (so the arrival finds them open) and the lobby's last squad. The
+    # doors are no longer opened at the blast: the open car is what the heisters fight towards.
+    if sc.resolve(R + STEP_LOBBY):
+        k = node(STEP_LOBBY)
+        have = [s for s in values(k, 'TriggerBox')[17] if sc.resolve(s)]
+        put(k, 'TriggerBox', f17=have + [s for s in must([R + n for n in CAMPAIGN_KEEP[PART_B]]) + step['lobby'] if s not in have])
+    else:
+        at_blast += step['lobby']
+    for path in QUIET:
+        for k in sc.resolve(R + path):
+            for i in range(len(sc.nodes[k]['ctrls'])):
+                kl_fa.edit(sc, k, i, lambda us: [us.__setitem__(j, kl_fa._refs(sc, [])) for j, u in enumerate(us)
+                                                 if u[0][0] == 0x04 and not (len(u) > 1 and u[1][0] == 0x0d)])
+
+    # ---- round start: AIMonitor list 2 (event 2, kl2 0x8b5f60; it comes when the countdown begins)
+    # -> arm timer -> the bomb's warm-up; -> blast timer (the same delay + the bomb's fuse) -> the rest
     k = node(ROLE['monitor'])                           # the host's; M09_B's map has an AIMonitor of its own
+    timers = [R + ROLE['arm timer'], R + ROLE['blast timer']]
     have = [s for s in next(v for kk, _i, v in kl_fa.controllers(sc, 'AIMonitor') if kk == k)[2] if sc.resolve(s)]
-    lists('monitor', 'AIMonitor', f2=have + [R + ROLE['blast timer']] * (R + ROLE['blast timer'] not in have))
-    lists('blast timer', 'TriggerDelay2', f0=BLAST_DELAY, f4=must([R + ROLE['bomb'], R + ROLE['glass']] + AT_BLAST) + start[PART_A])
+    lists('monitor', 'AIMonitor', f2=have + [t for t in timers if t not in have])
+    lists('arm timer', 'TriggerDelay2', f0=BLAST_DELAY, f4=must([R + ROLE['bomb']]))
+    lists('blast timer', 'TriggerDelay2', f0=BLAST_DELAY + BOMB_FUSE, f4=must([R + ROLE['glass']] + AT_BLAST) + at_blast)
     lists('bomb', 'AIDWrapper', f0=must([R + 'WindowBlowup!BombWindow03']), f1='Activate')                 # the Explode's own message
     lists('glass', 'AIDWrapper', f0=must([WINDOW_PRE]), f1='ForceTriggerShotActivate')                     # the window's ShotActivate, field 10
-    if BLAST_HARMLESS and sc.resolve(R + 'WindowBlowup!BombWindow03'):
-        # GUESS: CExplode fields 0 / 1 (600, 400) are its damage radii (the campaign's 'kill the
-        # player at the bomb' box has 80, 80). The heisters stand 2 m from this one.
+    if sc.resolve(R + 'WindowBlowup!BombWindow03'):
         b = node('WindowBlowup!BombWindow03')
-        kl_fa.edit(sc, b, ctrl_of(sc, b, 'Explode'), lambda us: [setv(sc, us, j, 1.0) for j in (0, 1)])
+        v = values(b, 'Explode')
+        if len(v) != 18 or not isinstance(v[EXPLODE_FUSE], float) or abs(v[EXPLODE_FUSE] - 4.0) > 1e-3:
+            raise ValueError('BombWindow03: Explode field %d is not the 4.0 the sequence is timed by: %s' % (EXPLODE_FUSE, v))
+        if BOMB_FUSE != v[EXPLODE_FUSE]:
+            put(b, 'Explode', **{'f%d' % EXPLODE_FUSE: BOMB_FUSE})
+        if BLAST_HARMLESS:
+            # GUESS: Explode fields 0 / 1 (600, 400) are its reach (stock: a rocket 500 / 150, a gas
+            # tank 600 / 400; the campaign's unused 'kill the player at the bomb' has 80 / 80).
+            # The START stacks stand outside the 600 as well (ledge_facts)
+            put(b, 'Explode', f0=1.0, f1=1.0)
     # the street: its police start when a criminal reaches the front entrance
-    lists('street', 'TriggerBox', f14='ECPS_FA_MERCONLY', f17=start[PART_B])
+    street_list = list(start[PART_B])
+    # OPTION (POLICE_FOLLOW; nothing stock does this, default off): once a criminal is at the front
+    # entrance the five police points of the tower are switched off by a DeactivateGeom, so that a
+    # dead criminal comes back at the square. GUESS that the spawn choice skips a switched-off point.
+    if POLICE_FOLLOW:
+        up = [R + sc.names[t] for t in sc.tops() if sc.cls(t) == 'ZSpawnPoint' and kl_fa.node_values(sc, t)[2][1] > 10000
+              and kl_fa.node_values(sc, t)[8] == 'eSPAWN_TYPE_FRAGILE_ALLIANCE_AFTER_DEATH']
+        lists('police off', 'DeactivateGeom', f0='AITrigger', f1=up)
+        street_list.append(R + ROLE['police off'])
+        log('  kl_fa_author: OPTION police-follow: %d tower police points go off at the front entrance' % len(up))
+    lists('street', 'TriggerBox', f14='ECPS_FA_MERCONLY', f17=street_list)
     # the join. NOT by a message to the JumpPoint: that path (kl2 0x491e20 -> 0x57e110 with flag 1)
     # also walks the player's crew, and a Fragile Alliance player has none - read of 0xa4 at kl2
     # 0x8f40c9 the moment the scripted player stepped into the tower car (run RT3). The box keeps
@@ -506,21 +728,27 @@ def wire(sc, log=print):
     # frame. The hook has to make that write (re/retomoto_fa.md 3.4): JOIN_BOX / JOIN_ENTRY.
     lists('join box', 'TriggerBox', f14='ECPS_BOTH', f17=[R + 'Specials!LevelSpeak!OnlineSpeakTrigger_01'])
     # the main room: its squads' 'wiped out' lists -> counter -> ActivateGeom -> the hidden loot
-    room = [n for n in squads[PART_A] if n.startswith(ROOM_SQUADS) and sc.resolve(R + n)]
     for n in room:
         k = node(n)
-        kl_fa.edit(sc, k, ctrl_of(sc, k, 'ZSquadScript'), lambda us: setv(sc, us, SQUAD_DEAD, [R + ROLE['counter']]))
+        put(k, 'ZSquadScript', **{'f%d' % SQUAD_DEAD: [R + ROLE['counter']]})
         if ROOM_WAITS:
-            kl_fa.edit(sc, k, ctrl_of(sc, k, 'ZSquadScript'), lambda us: setv(sc, us, SQUAD_ACTIVE, 0))
-    if ROOM_WAITS:
-        log('  kl_fa_author: OPTION guards-wait: %d room squads start at the blast (ZSquadScript[3] = 0)' % len(room))
+            put(k, 'ZSquadScript', **{'f%d' % SQUAD_ACTIVE: 0})
     hidden = [R + sc.names[t] for t in sc.tops() if sc.names[t].startswith('FASpecials!DropMoney!') and kl_fa.node_values(sc, t)[3]
               and any(v[2] == 'ZMONEYCTRL_TYPE_NORMAL' for kk, _i, v in kl_fa.controllers(sc, 'OnlineMoneyCtrl') if kk == t)]
     lists('counter', 'TriggerCounter', f0=max(len(room), 1), f4=[R + ROLE['loot on']])
     lists('loot on', 'ActivateGeom', f0='AITrigger', f1=hidden)
-    log('  kl_fa_author: wired: %d + %d squads started (tower at the blast, street at the entrance), %d room squads -> counter -> %d hidden stacks' % (
-        len(start[PART_A]), len(start[PART_B]), len(room), len(hidden)))
-    return {'squads': squads, 'room': room, 'hidden': hidden}
+    by_box = collections.Counter(covered.values())
+    log('  kl_fa_author: sequence: round-start event -> %.1f s -> bomb warm-up -> %.1f s -> blast (glass, chairs, door, InvisiBomb, %d room squads%s)' % (
+        BLAST_DELAY, BOMB_FUSE, len(room), ', waiting until then' if ROOM_WAITS else ', ACTIVE FROM THE START'))
+    log('  kl_fa_author: tower steps: at the blast %d squads; F07 boxes: room %d, door %d; campaign boxes %d of %d in the level: %s; lobby box + %d' % (
+        len(at_blast), len(step['step room']), len(step['step door']), len(boxes), len(STEPS),
+        ', '.join('%s %d' % (n.split('!')[-1], c) for n, c in sorted(by_box.items())) or '-', len(step['lobby'])))
+    log('  kl_fa_author: wired: %d tower + %d street squads, %d room squads -> counter -> %d hidden stacks' % (
+        len(first), len(start[PART_B]), len(room), len(hidden)))
+    out = {'squads': squads, 'room': room, 'hidden': hidden, 'at_blast': at_blast, 'step': step, 'covered': covered}
+    if street().get('wire'):                            # part B: k-street's module, after everything of this one
+        street()['wire'](sc, log)
+    return out
 
 
 # ------------------------------------------------------------------ what kl_graft.build(author=True) calls
@@ -543,12 +771,133 @@ def layer_names(sc):
     """Top-level names of the layer in a joined scene: what kl_fa.repair's prune may cut dead
     references from (the host's map is gone; the second part is not there yet in the first step)."""
     camp = set(campaign_names(PART_A)) | set(campaign_names(PART_B))
-    return tuple(sc.names[t] for t in sc.tops() if kl_graft.Select.match(sc.names[t], KEEP) or sc.names[t] in camp)
+    keep = __getattr__('KEEP')
+    return tuple(sc.names[t] for t in sc.tops() if kl_graft.Select.match(sc.names[t], keep) or sc.names[t] in camp)
 
 
 def complete(sc):
     """True once both parts of the map are in the scene: wire() names nodes of both."""
     return bool(sc.resolve(R + A_MAP[:-1]) and sc.resolve(R + B_MAP[:-1]))
+
+
+# ------------------------------------------------------------------ the ledge
+HERO_BITS = 0x28        # collision flags that stop a player: 0x20 (in 0x72, every wall and floor) and 0x08 (in 0x108,
+                        # the whole flag word of 76 static placements of stock F01 / F07 / L03, all named ColiObj_*,
+                        # 73 of them hero / block / hack / fix). ASSUMPTION by those names. Not a player's: 0x40
+                        # alone (camera blockers), 0x10 alone (F07's BlockVisionPlane: AI sight only)
+SIGHT_BIT = 0x10        # blocks AI sight: the only bit of stock F07's 'BlockVisionPlane', which F07 itself removes
+                        # with a DeactivateGeom 23 s into the round; glass has 0x66 / 0x62 (no 0x10), a wall 0x72
+
+
+def ledge_facts():
+    """The tables against the measured balcony -> [what is wrong]. No file is read."""
+    bad = []
+    crooks = [k for k in SPAWN if SPAWN[k][0] in (START, TRAITOR)]
+    for kind in crooks:
+        pts, d, _face = SPAWN[kind]
+        for p in pts:
+            q = (p[0] + d[0], p[1] + d[1], p[2] + d[2])
+            if not (LEDGE[0][0] <= q[0] <= LEDGE[0][1] and LEDGE[1][0] <= q[2] <= LEDGE[1][1] and q[1] == LEDGE_Y):
+                bad.append('%s point %s is not on the balcony\'s nav area' % (kind[28:], q))
+            if math.dist(q, BOMB) <= 600.0:
+                bad.append('%s point %s is %d from the bomb (its first radius is 600)' % (kind[28:], q, math.dist(q, BOMB)))
+            if math.dist(q, INVISIBOMB) <= 300.0:
+                bad.append('%s point %s is %d from the InvisiBomb (radius 300)' % (kind[28:], q, math.dist(q, INVISIBOMB)))
+    for name in ('Bound', 'Warn01', 'Warn02'):
+        (c, _f, h, _w) = PLACE['Specials!LevelBound!040_LevelBound_AlleyTop!' + name]
+        if c[0] - h[0] <= LEDGE_RAIL[0][1]:
+            bad.append('the tower\'s level bound %s begins at x %d, inside the rail (%d)' % (name, c[0] - h[0], LEDGE_RAIL[0][1]))
+    return bad
+
+
+def ledge(archive, log=print):
+    """The ledge test on a built level, from its .HVK / .gms / .prp alone -> number of failures.
+    1. what the level has outside the main window (the slab, the rail, the glass, by name);
+    2. a walk test (kl_escape.Walk: floors within 45 degrees of level, steps of 45 up / 60 down,
+       blocked by anything 55..165 above the floor; only shapes with a player's collision bits)
+       from a START point, with the level as it loads (hidden entities have no collision:
+       ASSUMPTION, the rule stock F07's BlockVisionPlane and Dead Men's own window rest on): the
+       walk must stay on the balcony - the glass keeps the heisters out, the rail keeps them on;
+    3. the same after the blast (the intact window off, the blown window and the first cracked
+       pane on - what the forced ShotActivate of the window does): the boardroom must be reached;
+    4. every criminal spawn point and player group of the level stands on a reached cell."""
+    import kl_escape, kl_hvk
+    with zipfile.ZipFile(archive) as z:
+        m = {n.rsplit('_Main', 1)[1].lower(): n for n in z.namelist() if '_Main' in n}
+        scene = kl_scene.Scene(kl_gms.unpack(z.read(m['.gms'])), z.read(m['.buf']))
+        hvk = kl_hvk.Hvk(z.read(m['.hvk']))
+    sc, _snd, _loc = kl_fa.load(archive)
+    ents = list(scene.entities())
+    name = {e.ref: e.name.decode('latin1') for e in ents}
+    hidden = {e.ref for e in ents if e.flags & HIDDEN}
+    bad = 0
+    def fail(s):
+        nonlocal bad
+        bad += 1
+        log('  FAIL: ' + s)
+    def box(s, inst):
+        vs = [struct.unpack_from('<3f', s.verts, i * s.vstride) for i in range(len(s.verts) // s.vstride)]
+        p, r = struct.unpack_from('<3f', inst, 0), struct.unpack_from('<9f', inst, 12)
+        w = [[100 * (p[a] + r[3 * a] * v[0] + r[3 * a + 1] * v[1] + r[3 * a + 2] * v[2]) for a in range(3)] for v in vs]
+        return [min(v[a] for v in w) for a in range(3)], [max(v[a] for v in w) for a in range(3)]
+    log('THE LEDGE: collision outside the main window (x 5860..6400, y 20900..21300, z -1200..1000)')
+    soft, facts = set(), {}
+    for s in hvk.shapes:
+        fl = 0
+        for _su, f, _n in s.sub:
+            fl |= f
+        for inst in s.inst:
+            r = kl_hvk.ref(inst)
+            if not fl & HERO_BITS:
+                soft.add(r)
+            if s.type != kl_hvk.STATIC or s.convex:
+                continue
+            lo, hi = box(s, inst)
+            if hi[0] > 5860 and lo[0] < 6400 and hi[1] > 20900 and lo[1] < 21300 and hi[2] > -1200 and lo[2] < 1000:
+                nm = name.get(r, '?')
+                facts[nm.split('!')[-1]] = (lo, hi, fl)
+                log('  %-58s (%d %d %d)-(%d %d %d) flags %#x%s%s%s' % (nm[-58:], *lo, *hi, fl, '' if fl & HERO_BITS else ' (no player collision)',
+                                                                   ' blocks AI sight' if fl & SIGHT_BIT else '', ' HIDDEN at load' if r in hidden else ''))
+    for want in ('SO0200_M09_FrontTopWindows_01', 'ColiObj_Plane01', 'SI0200_M09_Window_Glass_Geom_Pre_00'):
+        if want not in facts:
+            fail('%s has no static collision at the window' % want)
+    pre = facts.get('SI0200_M09_Window_Glass_Geom_Pre_00')
+    if pre and not pre[2] & SIGHT_BIT:
+        fail('the intact window does not block AI sight (flags %#x)' % pre[2])
+    for s in ledge_facts():
+        fail(s)
+    ref_of = lambda end: {r for r, nm in name.items() if nm.endswith(end)}
+    on, off = ref_of('SI0200_M09_Window_Glass_Geom_Post_00') | ref_of('SI0200_M09_GlassWindow_00_A'), ref_of('SI0200_M09_Window_Glass_Geom_Pre_00')
+    if not on <= hidden or off & hidden:
+        fail('the window is not in its intact state at load (blown / cracked hidden: %s, intact hidden: %s)' % (on <= hidden, bool(off & hidden)))
+    area = (3300.0, 6500.0, -1500.0, 1300.0)
+    at = (START[0][0], LEDGE_Y, START[0][2])
+    (x0, x1), (z0, z1) = LEDGE_RAIL
+    for title, skip in (('as the level loads', soft | hidden), ('after the blast', (soft | hidden | off) - on)):
+        w = kl_escape.Walk(hvk, area, skip=skip)
+        seen, _par, block = w.flood(at)
+        xs, zs = [w.centre(c)[0] for c in seen], [w.centre(c)[1] for c in seen]
+        log('walk test from %s, %s: %d cells of 20 x 20, x %d..%d, z %d..%d, floor y %d..%d' % (
+            tuple(int(v) for v in at), title, len(seen), min(xs), max(xs), min(zs), max(zs), min(seen.values()), max(seen.values())))
+        out = [w.centre(c) for c in seen if w.centre(c)[0] > x0 and not (w.centre(c)[0] < x1 and z0 < w.centre(c)[1] < z1)]
+        if out:
+            fail('the walk leaves the balcony\'s rail (x %d, z %d..%d) at %d cells, e.g. (%d, %d)' % (x1, z0, z1, len(out), *out[0]))
+        if title.startswith('as'):
+            if min(xs) < 5860:
+                fail('the intact glass does not keep the walk out (x %d reached)' % min(xs))
+            stop = collections.Counter(name.get(r, '?').split('!')[-1] for r in block)
+            log('  what bounds it: %s' % ', '.join(sorted(stop)))
+            for k in range(1, len(sc.nodes)):
+                if sc.cls(k) == 'ZSpawnPoint' and SPAWN.get(kl_fa.node_values(sc, k)[8], (None,))[0] in (START, TRAITOR) or \
+                        sc.parent[k] == 0 and sc.names[k].startswith('Heroes!Hero_0'):
+                    p = kl_fa.node_values(sc, k)[2]
+                    c = w.cell(p[0], p[2])
+                    if c not in seen or abs(seen[c] - p[1]) > 5:
+                        fail('%s at (%d, %d, %d) does not stand on the balcony\'s floor' % (sc.names[k], *p))
+        elif min(xs) > 5600:
+            fail('the blown window is not passable on foot (the walk ends at x %d)' % min(xs))
+    log('ledge test: %s' % ('ok' if not bad else '%d failures' % bad))
+    return bad
 
 
 # ------------------------------------------------------------------ the inventory
@@ -607,7 +956,10 @@ def inventory(archive, log=print):
     for lv in (PART_A, PART_B):
         for name in CAMPAIGN_KEEP[lv]:
             if sc.resolve(R + name):
-                row(node_of(sc, name), '(%s)' % lv)
+                k = node_of(sc, name)
+                row(k, '(%s)%s' % (lv, ' = tower step' if name in STEPS else ''))
+                for s in named(sc, k)[:16]:
+                    log('        -> %s%s' % (s[5:][-110:], '' if sc.resolve(s) else '   NOT IN THE LEVEL'))
     log('LEVEL BOUNDS')
     for k, _i, _v in kl_fa.controllers(sc, 'LevelBound'):
         row(k)
@@ -657,6 +1009,7 @@ def test(out, keep=False, log=print):
     folder = os.path.join(out, 'R09+%s%s' % (PART_A, r['tag']))
     archive = os.path.join(folder, kl_maps.SLOT + '_Main.zip')
     inventory(archive, log)
+    off = ledge(archive, log)
     mine = [p for p in r['problems'] if not any(k in p for k in KNOWN)]
     fa = [f for f in r['fa_findings'] if f.startswith(('CRASH', 'BROKEN'))]
     log('\nkl_graft.verify: %d problems, %d of them not KNOWN' % (len(r['problems']), len(mine)))
@@ -671,19 +1024,26 @@ def test(out, keep=False, log=print):
             for f in os.listdir(d):
                 if '_Main' in f:
                     os.remove(os.path.join(d, f))
-    log('RESULT: %s' % ('PASS' if not mine and not fa else 'FAIL'))
-    return 1 if mine or fa else 0
+    log('RESULT: %s' % ('PASS' if not mine and not fa and not off else 'FAIL'))
+    return 1 if mine or fa or off else 0
 
 
 def main():
     a = sys.argv[1:]
     if len(a) >= 2 and a[0] == 'test':
-        global NO_AI, ROOM_WAITS, BLAST_DELAY
+        global NO_AI, ROOM_WAITS, BLAST_DELAY, BOMB_FUSE, BLAST_HARMLESS, ONE_WAVE, POLICE_FOLLOW
         NO_AI = '--no-ai' in a
-        ROOM_WAITS = '--guards-wait' in a
-        if '--blast-delay' in a:                        # OPTION, seconds after the round-start event (default BLAST_DELAY)
+        ROOM_WAITS = '--guards-awake' not in a          # ('--guards-wait' of the builds before is the default now)
+        BLAST_HARMLESS = '--blast-real' not in a
+        ONE_WAVE = '--one-wave' in a
+        POLICE_FOLLOW = '--police-follow' in a
+        if '--blast-delay' in a:                        # OPTION, seconds from the round-start event to the warm-up
             BLAST_DELAY = float(a[a.index('--blast-delay') + 1])
+        if '--fuse' in a:                               # OPTION, the bomb's fuse (its own value: 4)
+            BOMB_FUSE = float(a[a.index('--fuse') + 1])
         sys.exit(test(a[1], '--keep' in a))
+    elif len(a) == 2 and a[0] == 'ledge':
+        sys.exit(1 if ledge(a[1]) else 0)
     elif a == ['plan']:
         for lv in (PART_A, PART_B):
             keep, left = plan(lv)
