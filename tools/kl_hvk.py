@@ -121,22 +121,30 @@ def first_static(shapes, refs=None):
 def join(maps, systems, box=None):
     """maps: [(Hvk, refs)], systems: (Hvk, refs) or None; refs = {old REF id: new REF id} of the
     entities that survive. Every map keeps its static placements in file order and its own list
-    codes; each map but the last is padded to a multiple of CHUNK static placements with copies of
-    one of its own, which no list code refers to. The systems level must not contribute static
-    placements (none does in stock levels)."""
+    codes; each part but the last is padded to a multiple of CHUNK static placements with copies of
+    one of its own, which no list code refers to.
+    The systems level's own systems never own static collision (re/havok.md), but a graft that
+    keeps part of its MAP layer may (F07's escape vehicles: 2 static placements each). Then its
+    whole static part is carried as one more part behind the maps: every static placement keeps
+    its position (a dropped one is replaced by a copy of a kept one, as in remap) and its list
+    codes are appended. ASSUMPTION as for two maps: a list code addresses the placements of its
+    own 510 only, by position."""
     out = Hvk.__new__(Hvk); out.shapes, out.lists, out.tail = [], [], maps[0][0].tail
-    for n, (h, refs) in enumerate(maps):
-        fill = first_static(h.shapes, refs)
+    parts = [(h, refs, first_static(h.shapes, refs)) for h, refs in maps]
+    extra = []
+    if systems:
+        fill = first_static(systems[0].shapes, systems[1])
+        if fill:
+            parts.append((systems[0], systems[1], fill))
+        else:
+            extra = remap(*systems)                 # no filler: its static placements all go
+    for n, (h, refs, fill) in enumerate(parts):
         out.shapes += remap(h, refs, fill)
-        pad = -h.static_count() % CHUNK if n < len(maps) - 1 else 0
+        pad = -h.static_count() % CHUNK if n < len(parts) - 1 else 0
         if pad:
             out.shapes.append(fill[0].clone([fill[1]] * pad, [fill[2]] * pad))
         out.lists += h.lists
-    if systems:
-        extra = remap(*systems)
-        if any(s.type == STATIC for s in extra):
-            raise ValueError('systems level contributes static collision')
-        out.shapes += extra
+    out.shapes += extra
     lo = [min(h.box[k] for h, _ in maps) for k in range(3)]
     hi = [max(h.box[k] for h, _ in maps) for k in range(3, 6)]
     out.box = tuple(box or lo + hi)

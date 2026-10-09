@@ -8,6 +8,8 @@ archive in a slot. Milestone A = two stock Dog Days levels (no Dead Men data): p
                                                verified; exit code 1 if a check fails
     python kl_graft.py build F07 M01_FA_A      the same with a Dead Men map (converted on the fly)
                        ... --geometry          experiment: only M's geometry, S's game-mode layer
+                       ... --m-add / --m-drop / --s-keep / --s-drop A,B   bisect by top-level
+                                               subtree name or family (class Select)
     python kl_graft.py install [F01]           put the last build into Dog Days (each stock file
                                                is MOVED to KL_PortBackup once, never overwritten)
     python kl_graft.py pairs                   which S / M pairs need the least guessing
@@ -102,7 +104,33 @@ healthy level needs 205 s or more to its AutoExit and is then reported as 'hung'
                                          AutoExit counts engine ticks, not seconds: the same
                                          level left after 205 s and after 324 s. Run 6 was most
                                          likely the slow clock again (not proven). USE A WAIT OF
-                                         420 s OR MORE. This build is what the F01 slot holds.
+                                         420 s OR MORE.
+LIVE RUNS 2026-10-09, second set (python kl_autotest.py --shots ... ; F07 systems + M01_FA_A map)
+  B-1 rebuilt with the current converters RESULT: crash outside kl2.exe after 87 s: the same jump
+      (kl_mat now gets the converted .prm)   into ZFFGameData+0x3e3c as run 5.
+  B-2 the same build, tables watched      RESULT: crash outside kl2.exe after 61 s. A read-only
+      from outside (ReadProcessMemory)       watch of the save-state tables 0xe0de38 / 0xe09e38
+                                             (re/crash_gamedata.md) showed 9 of 1228 entries turn
+                                             from ZOnlineSpeakTrigger (vtable 0xbc98fc) into
+                                             ZSerializable and then freed memory within a second.
+                                             Cause: mute_speech(). Fix: those controllers go.
+  B-3 without the 9 speech triggers       RESULT: crash kl2.exe+0x41e714 after 92 s. The level
+                                             started (checkpoint taken at 88 s). A ZMatPosAnim
+                                             read a bit-packed key index far outside the .buf:
+                                             the KEYS chunk of M01's AnimatedRumbleCamera sits at
+                                             +0xaa0 of a 2804-byte raw block and its six offsets
+                                             were not shifted. Fix: keys_tracks().
+  B-4 with every KEYS chunk shifted       RESULT: clean exit after 219 s. At 130 s the player
+                                             runs along the street of Dead Men's M01 (Sunny Hill
+                                             Plaza), textured, lit, with Dog Days' HUD and pistol,
+                                             Dead Men's agents and cars in the car park
+                                             (<work>/research/graft_B_F07sys_M01map_130s.png).
+                                             Black at 100 s and 160 s, as the baseline is at times.
+                                             MILESTONE B. This build is what the F01 slot holds.
+BISECT (not needed in the end, but it works): build ... --geometry [--m-add A,B] [--m-drop ..]
+  [--s-keep ..] [--s-drop ..], see Select. '--geometry --s-drop *' = M's geometry and no game-mode
+  layer at all verifies with 0 problems; plain '--geometry' leaves S's game-mode layer with scene
+  paths into S's map that is gone (verify reports them).
 """
 import collections, os, shutil, struct, sys, zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -114,7 +142,7 @@ from kl_port_check import find, workdir, DD_GUESSES, DD_EXE
 
 BESIDE = ('.WHD', '.WAV', '.hti')      # files next to the archive that belong to its members
 SOUND_TYPES = {70: '0x5f7640', 46: '0x6c4230'}   # re/kl2.json type handler index -> its load function
-KEYS = 0x4b455953                      # 'SYEK' at +0x10 of a 64-byte raw data block
+KEYS = 0x4b455953                      # 'SYEK': a key-frame track chunk in a raw data block (keys_tracks)
 TAKE = ('CameraFar', 'CameraFogBegin', 'CameraFogFull', 'CameraFogMin', 'CameraBackgroundColor',
         'SSAO_Blur', 'SSAO_Strength')  # scene properties that describe the map
 LANGS = kl_package.LANGS
@@ -269,8 +297,12 @@ class DeadMen(Level):
             edit(node, 'props', fn)
         roots = [c for c in G.gms_roots(raw) if c] + [(c, k) if k else c for _w, c, k in G.prp_roots(src.p, src.tids, J.schema('dm'), 'dm')]
         self.files[self.ext['.prm']], rep = kl_prm.convert(self['.prm'], roots)
+        # as kl_dmassets.convert_level: the .MAT's use counts and surface numbers follow the
+        # CONVERTED .prm and Dog Days' surface table (the graft keeps S's .buf tail)
+        tex_ids = set(T.read_tex(self['.TEX']).tex)
         self.files[self.ext['.TEX']] = kl_tex.convert(self['.TEX'])[0]
-        self.files[self.ext['.MAT']] = kl_mat.convert_mat_full(self['.MAT'])[0]
+        self.files[self.ext['.MAT']] = kl_mat.convert_mat_full(self['.MAT'], prm=self['.prm'], surface='dd',
+                                                               texture_ids=tex_ids)[0]
         log('%s converted: %s; %d gates; .prm %s' % (name, dict(st), ngates, {k: v for k, v in rep.items() if v and not isinstance(v, list)}))
 
 
@@ -281,17 +313,53 @@ def geometry(name):
     return J.family(name) in GEOMETRY or 'backdrop' in name.lower()
 
 
-def picks_of(S, M, geometry_only=False):
+class Select:
+    """Which top-level MAP subtrees go into the graft (systems subtrees are always S's).
+    Default: all of M's, none of S's. geometry: of M only the geometry, and S keeps its own
+    game-mode layer (FASpecials!, Gameplay!, Specials!, Animation/...), which then stands in M's
+    geometry at S's coordinates. The four pattern lists then adjust that, one bisect step per
+    command; a pattern is matched (fnmatch, case-insensitive) against the subtree's name and its
+    kl_prpjoin.family ('Settings!', 'Locations/*', 'CloneGroup_Effects' ...):
+      m_add   M's subtrees taken although geometry-only would leave them out
+      m_drop  M's subtrees left out
+      s_keep  S's map subtrees kept
+      s_drop  S's map subtrees left out although geometry-only would keep them"""
+
+    def __init__(self, geometry=False, m_add=(), m_drop=(), s_keep=(), s_drop=()):
+        self.geometry, self.m_add, self.m_drop, self.s_keep, self.s_drop = geometry, m_add, m_drop, s_keep, s_drop
+
+    @staticmethod
+    def match(name, pats):
+        import fnmatch
+        return any(fnmatch.fnmatch(x.lower(), p.lower()) for p in pats for x in (name, J.family(name)))
+
+    def m(self, name):
+        return (not self.geometry or geometry(name) or self.match(name, self.m_add)) and not self.match(name, self.m_drop)
+
+    def s(self, name):
+        return ((self.geometry and not geometry(name)) or self.match(name, self.s_keep)) and not self.match(name, self.s_drop)
+
+    def __str__(self):
+        return ' '.join(['--geometry'] * self.geometry + ['--%s %s' % (k.replace('_', '-'), ','.join(v)) for k, v in
+                        (('m_add', self.m_add), ('m_drop', self.m_drop), ('s_keep', self.s_keep), ('s_drop', self.s_drop)) if v]) or 'whole map'
+
+
+def picks_of(S, M, sel=None):
     """kl_prpjoin.graft_picks with each level's own sides: M's top-level order, its map subtrees
     kept, each systems subtree replaced by S's of the same name; S's other systems subtrees go in
     before the closing systems objects. A MAP subtree of M with the name of a systems subtree of
     S also gives way to S's (Dead Men M01 keeps bullet-impact effects, and so their clone groups,
     inside the map: two top-level subtrees of one name would make every path to them ambiguous;
     no pair of Dog Days levels has such a name). -> (picks, names of M left out).
-    geometry_only (an experiment to tell the map from its game-mode layer): of M only the
-    Locations subtree, its clone groups and backdrops; S keeps its own game-mode layer
-    (FASpecials!, Gameplay!, Specials!, Animation/...), which then stands in M's geometry at
-    S's coordinates."""
+    sel (Select) narrows M's map subtrees and keeps map subtrees of S: the bisect of a crash."""
+    sel = sel or Select()
+    def owner(lv, t):
+        """The name the selection goes by: a clone group follows the subtree of its template
+        (M01's Locations hold ZAllocMany templates whose groups are CloneGroup_Effects/...)."""
+        if lv not in tpl:
+            tpl[lv] = J.templates(lv.prp)
+        return lv.prp.names[lv.prp.top[tpl[lv][t]]] if t in tpl[lv] else lv.prp.names[t]
+    tpl = {}
     mine = {}
     for t in S.prp.tops():
         if S.side[t] == 'systems':
@@ -302,12 +370,12 @@ def picks_of(S, M, geometry_only=False):
             out.append((S.prp, mine[M.prp.names[t]].pop(0)))
             if M.side[t] == 'map':
                 dropped.append(M.prp.names[t])
-        elif M.side[t] == 'map' and (geometry(M.prp.names[t]) or not geometry_only):
+        elif M.side[t] == 'map' and sel.m(owner(M, t)):
             out.append((M.prp, t))
         else:
             dropped.append(M.prp.names[t])
-    if geometry_only:
-        out += [(S.prp, t) for t in S.prp.tops() if S.side[t] == 'map' and not geometry(S.prp.names[t])]
+    taken = {M.prp.names[t] for sc, t in out if sc is M.prp}
+    out += [(S.prp, t) for t in S.prp.tops() if S.side[t] == 'map' and sel.s(owner(S, t)) and S.prp.names[t] not in taken]
     rest = sorted(t for ts in mine.values() for t in ts)
     at = next((i for i, (sc, t) in enumerate(out) if sc is S.prp and S.prp.names[t] in ('TrackLinkObjects', 'ZParticleController')), len(out))
     return out[:at] + [(S.prp, t) for t in rest] + out[at:], dropped
@@ -366,11 +434,38 @@ def rooms_of(scene):
     return ents, [None if i < 0 else ents[i] for i in order]
 
 
-def keys_offsets(raw):
-    """The six .buf offsets of a KEYS raw data block, or None."""
-    if raw is None or len(raw) != 64 or struct.unpack_from('<I', raw, 0x10)[0] != KEYS:
-        return None
-    return struct.unpack_from('<6I', raw, 0x28)
+def keys_tracks(raw):
+    """[(position in the raw data block, the six .buf offsets)] of every KEYS chunk in it.
+    A chunk is 'SYEK', its size 0x30, key count, 0, count - 1, 1 and six .buf offsets at +0x18
+    (reader kl2 0x422c50: [chunk + 0x18 + 0x10 .. 0x24] + .buf base). Mostly it is the whole of a
+    64-byte block (chunk at +0x10), but a camera or a light with several animated parameters
+    carries it at the end of a longer block: M01's AnimatedRumbleCamera (2804 bytes, chunk at
+    +0xaa0), stock F01's too, lights in L02 / L04 / L05. Missing those left the track offsets
+    unshifted: crash kl2 0x81e714 (bit-packed key index read far outside the .buf)."""
+    out = []
+    if raw is not None:
+        for p in range(0, len(raw) - 0x2c, 4):
+            if struct.unpack_from('<II', raw, p) == (KEYS, 0x30):
+                out.append((p + 0x18, struct.unpack_from('<6I', raw, p + 0x18)))
+    return out
+
+
+def mute_speech(sc, ctrl, snd):
+    """True for an OnlineSpeakTrigger controller whose line the level's .SND does not hold.
+    ZOnlineSpeakTrigger's init (kl2 0x4eae60, vtable 0xbc98fc slot 13) looks its line up by name
+    (0x828fa0; the bank lists it as 'audio:dialog/<name, lower case>#sound') and, when that
+    fails, deletes itself through slot 30 - but it has already been entered in the save-state
+    table at 0xe09e38, which has no 'unregister'. The level-start checkpoint (0x65a4d0) then
+    calls slot 21 of the freed object: nine such triggers of M01_FA_A (AI_Enemies!, Civilians!)
+    were the jump into ZFFGameData+0x3e3c at Buffering 99 % (seen live 2026-10-09: the nine
+    table entries go ZOnlineSpeakTrigger -> ZSerializable -> freed within a second).
+    The line is the object's first string (F06's only stock trigger: Multiplayer/F06/
+    Chopper_response_R, and its bank has audio:dialog/multiplayer/f06/chopper_response_r#sound)."""
+    nm, body = ctrl
+    if sc.p.key(nm) != 'OnlineSpeakTrigger':
+        return False
+    line = next((sc.p.key(t) for t in body if t[0] == 0x0c), '')
+    return ('audio:dialog/%s#sound' % line.lower()).encode('latin1') not in snd.lower()
 
 
 def dm_rename(Jn, S, log=print):
@@ -401,7 +496,7 @@ def dm_rename(Jn, S, log=print):
 
 
 # ------------------------------------------------------------------ the graft
-def build(s_name, m_name, slot='F01', log=print, geometry_only=False):
+def build(s_name, m_name, slot='F01', log=print, sel=None):
     """Systems of S + map of M -> (path of the archive, problems found by verify())."""
     sch = J.schema('dd')
     for t, load in SOUND_TYPES.items():
@@ -412,7 +507,8 @@ def build(s_name, m_name, slot='F01', log=print, geometry_only=False):
     note = lambda s: (notes.append(s), log('  note: ' + s))
 
     # ---- which subtrees
-    picks, dropped = picks_of(S, M, geometry_only)
+    sel = sel or Select()
+    picks, dropped = picks_of(S, M, sel)
     s_tops = {t for sc, t in picks if sc is S.prp}
     m_tops = [t for sc, t in picks if sc is M.prp]
     m_nodes = {k for t in m_tops for k in range(t, M.prp.end[t])}
@@ -453,12 +549,14 @@ def build(s_name, m_name, slot='F01', log=print, geometry_only=False):
     # KEYS tracks of grafted entities live in M's head, now at + shift
     nkeys = 0
     for e, c in copy.items():
-        ko = keys_offsets(e.raw)
-        if ko:
+        r = e.raw
+        for p, ko in keys_tracks(e.raw):
             if any(not 16 <= v < len(B.head) for v in ko):
                 raise ValueError('%r: KEYS offset outside the .buf head' % e)
-            c.raw = e.raw[:0x28] + struct.pack('<6I', *(v + shift for v in ko))
+            r = r[:p] + struct.pack('<6I', *(v + shift for v in ko)) + r[p + 24:]
             nkeys += 1
+        if r is not e.raw:
+            c.raw = r
     A.nav = B.nav
     A.budget += B.budget                                # ASSUMPTION, see kl_scene
     if A.dyn is not None and B.dyn is not None:
@@ -637,6 +735,15 @@ def build(s_name, m_name, slot='F01', log=print, geometry_only=False):
             placed += 1
     log('  Heroes! groups placed where %s has them: %d' % (m_name, placed))
 
+    # ---- speech triggers without their line (after every edit that goes by controller index)
+    cut = collections.Counter()
+    for k in range(1, len(Jn.nodes)):
+        keep = [c for c in Jn.nodes[k]['ctrls'] if not mute_speech(Jn, c, S['.SND'])]
+        cut['M' if Jn.origin[k][0] is M.prp else 'S'] += len(Jn.nodes[k]['ctrls']) - len(keep)
+        Jn.nodes[k]['ctrls'] = keep
+    if sum(cut.values()):
+        note('OnlineSpeakTrigger controllers removed, their line is not in the .SND of %s: %s' % (s_name, dict(cut)))
+
     # ---- FDX (bone dynamics of the map's hanging objects)
     A.fdx = None
     if B.fdx is not None:
@@ -699,7 +806,7 @@ def build(s_name, m_name, slot='F01', log=print, geometry_only=False):
     log('verify: problems: %d' % len(problems))
     path = write_level(slot, members, {e: stock_beside(s_name, e) for e in BESIDE}, log)
     with open(os.path.join(out_dir(slot), 'graft.txt'), 'w') as f:
-        f.write('%s systems + %s map\nproblems: %d\n%s\n' % (s_name, m_name, len(problems), '\n'.join(problems + notes)))
+        f.write('%s systems + %s map (%s)\nproblems: %d\n%s\n' % (s_name, m_name, sel, len(problems), '\n'.join(problems + notes)))
     return path, problems
 
 
@@ -744,6 +851,9 @@ def verify(out, Jn, S, M, copy, s_kept, mj, shift, log=print):
                 item = [Jn.p.key(t) for t in obj if t[0] == 0x0e][0]
                 items[item] += item != 'eFF2ItemNoItem'
     bad += ['item %s is bound %d times' % (k, v) for k, v in items.items() if v > 1]
+    mute = sum(mute_speech(Jn, c, out['snd']) for k in range(len(Jn.nodes)) for c in Jn.nodes[k]['ctrls'])
+    if mute:
+        bad.append('%d OnlineSpeakTrigger name a line the .SND lacks (they delete themselves; crash at the first checkpoint)' % mute)
     # .prm, with the roots of the joined level
     prm = G.read(out['.prm'], 'dd')
     if G.write(prm) != out['.prm']:
@@ -842,8 +952,7 @@ def verify(out, Jn, S, M, copy, s_kept, mj, shift, log=print):
                 if v not in (0, 0xffffffff) and not 16 <= v < head:
                     bad.append('%s: %s outside the .buf head' % (Jn.path[k], l))
     for e in ents:
-        ko = keys_offsets(e.raw)
-        if ko and any(not 16 <= v < head for v in ko):
+        if any(not 16 <= v < head for _p, ko in keys_tracks(e.raw) for v in ko):
             bad.append('%r: KEYS offset outside the .buf head' % e)
     # grafted KEYS tracks and room data still read the bytes M had
     mh = len(M.scene.head)
@@ -924,9 +1033,15 @@ if __name__ == '__main__':
     if len(a) >= 2 and a[0] == 'plain':
         plain(a[1], *a[2:3])
     elif len(a) >= 3 and a[0] == 'build':
+        opt = {}
+        for o in ('--m-add', '--m-drop', '--s-keep', '--s-drop'):
+            while o in a:
+                i = a.index(o)
+                opt.setdefault(o[2:].replace('-', '_'), []).extend(a[i + 1].split(','))
+                del a[i:i + 2]
         g = '--geometry' in a
         a = [x for x in a if x != '--geometry']
-        sys.exit(1 if build(a[1], a[2], *a[3:4], geometry_only=g)[1] else 0)
+        sys.exit(1 if build(a[1], a[2], *a[3:4], sel=Select(g, **opt))[1] else 0)
     elif a and a[0] == 'install':
         install(*a[1:2])
     elif a and a[0] == 'pairs':

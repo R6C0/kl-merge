@@ -2,7 +2,9 @@
 """
 Run one unattended load test of the level installed in a Dog Days slot.
 
-    python kl_autotest.py [seconds to wait, default 420]
+    python kl_autotest.py [seconds to wait, default 420] [--shots 70,100,150] [--tag name]
+        --shots: at these seconds after the start, save a picture of the game's own window
+        (only its rectangle) as <work folder>/research/shots/<tag>_<seconds>s.png
 
 Needs the Steam launch options of Dog Days to boot straight into the level and quit by itself:
     -o DefaultScene=Locations/F01/F01_Main.gms -o AutoExit=120
@@ -39,6 +41,60 @@ def running():
     return live
 
 
+def window_of(pids):
+    """(handle, x, y, width, height) of the largest visible top-level window of the processes."""
+    import ctypes
+    from ctypes import wintypes
+    u, best = ctypes.windll.user32, [None, 0]
+    u.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    u.IsWindowVisible.argtypes = [wintypes.HWND]
+    u.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+
+    def each(h, _l):
+        pid, r = wintypes.DWORD(), wintypes.RECT()
+        u.GetWindowThreadProcessId(h, ctypes.byref(pid))
+        if pid.value in pids and u.IsWindowVisible(h):
+            u.GetWindowRect(h, ctypes.byref(r))
+            area = (r.right - r.left) * (r.bottom - r.top)
+            if area > best[1]:
+                best[:] = [(h, r.left, r.top, r.right - r.left, r.bottom - r.top), area]
+        return True
+    u.EnumWindows(ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(each), 0)
+    return best[0]
+
+
+def shot(pids, path):
+    """Copy the screen under the game's own window (nothing else of the desktop) to a PNG."""
+    import ctypes, struct, zlib
+    ctypes.windll.user32.SetProcessDPIAware()
+    w = window_of(pids)
+    if not w or w[3] < 320 or w[4] < 200:               # a splash or helper window, not the game's
+        return False
+    _h, x, y, cx, cy = w
+    u, g = ctypes.windll.user32, ctypes.windll.gdi32
+    scr = u.GetDC(0)
+    mem = g.CreateCompatibleDC(scr)
+    bmp = g.CreateCompatibleBitmap(scr, cx, cy)
+    g.SelectObject(mem, bmp)
+    g.BitBlt(mem, 0, 0, cx, cy, scr, x, y, 0x00CC0020)
+    info = struct.pack('<IiiHHIIiiII', 40, cx, -cy, 1, 32, 0, 0, 0, 0, 0, 0)
+    buf = ctypes.create_string_buffer(cx * cy * 4)
+    g.GetDIBits(mem, bmp, 0, cy, buf, info, 0)
+    g.DeleteObject(bmp); g.DeleteDC(mem); u.ReleaseDC(0, scr)
+    raw = bytearray()
+    for r in range(cy):
+        row = bytearray(buf.raw[r * cx * 4:(r + 1) * cx * 4])
+        row[0::4], row[2::4] = row[2::4], row[0::4]             # BGRX -> RGBX
+        del row[3::4]
+        raw += bytes(1) + row
+    chunk = lambda t, d: struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'wb') as f:
+        f.write(bytes([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10]) + chunk(b'IHDR', struct.pack('>IIBBBBB', cx, cy, 8, 2, 0, 0, 0))
+                + chunk(b'IDAT', zlib.compress(bytes(raw), 6)) + chunk(b'IEND', b''))
+    return True
+
+
 def last_session(log):
     """Lines of the newest KLHook session, or [] if the log has none."""
     try:
@@ -50,7 +106,13 @@ def last_session(log):
 
 
 def main():
-    wait = int(sys.argv[1]) if len(sys.argv) > 1 else 420
+    a = sys.argv[1:]
+    shots, tag = [], time.strftime('%H%M%S')
+    if '--shots' in a:
+        i = a.index('--shots'); shots = sorted(int(x) for x in a[i + 1].split(',')); del a[i:i + 2]
+    if '--tag' in a:
+        i = a.index('--tag'); tag = a[i + 1]; del a[i:i + 2]
+    wait = int(a[0]) if a else 420
     dd = find(DD_GUESSES, DD_EXE)
     if not dd:
         raise SystemExit('Dog Days not found')
@@ -64,8 +126,13 @@ def main():
     started = False
     while time.time() - t0 < wait:
         time.sleep(2)
-        if running():
+        live = running()
+        if live:
             started = True
+            if shots and time.time() - t0 >= shots[0]:
+                from kl_port_check import workdir
+                path = os.path.join(workdir(), 'research', 'shots', '%s_%ds.png' % (tag, shots.pop(0)))
+                print('  shot | %s' % (path if shot(live, path) else 'no window'), flush=True)
         elif started or time.time() - t0 > 60:
             break
     took = time.time() - t0
