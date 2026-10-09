@@ -11,12 +11,16 @@ Dead Men character MODELS on Dog Days characters (stage 2 groundwork; nothing he
     python kl_chars.py put <base> <out folder> "<target path>=<map>:<source path>[:v,v]" ...
                                                 the general form (base: stock level name or a build folder)
     python kl_chars.py check <folder>           re-read a build under every checker
+    python kl_chars.py compact <folder> <out folder>
+                                                the build with its .prm renumbered and the dead chunks dropped
+                                                (compact_level; KLWardrobe.ini rewritten). NOT LOADED LIVE: it moves
+                                                live chunks of the systems level - only when the count needs it
     python kl_chars.py invisible <folder | level> [--all] [--at x0,x1,z0,z1]
                                                 every person of a built (or stock) level who would NOT BE
                                                 DRAWN, and why (undrawn(); re/invisible.md): model, variant,
                                                 detail levels, materials without a compiled shader, emptied
                                                 mesh data, skeleton, room. --all: the table of everybody
-    python kl_chars.py wardrobe <base> <out folder> [--level=M01_FA_A] [--slot=F01] [--armour=0,1,2,3] [--fix-bones]
+    python kl_chars.py wardrobe <base> <out folder> [--level=M01_FA_A] [--slot=F01] [--armour=0,1,2,3] [--fix-bones] [--no-reuse]
                                                 THE WARDROBE (re/wardrobe.md): the eight Dead Men heroes as extra
                                                 models with all 24 Fragile Alliance looks, every body with every
                                                 heister's mask as variants, and KLWardrobe.ini for klhook/klchar.c;
@@ -30,7 +34,12 @@ Dead Men character MODELS on Dog Days characters (stage 2 groundwork; nothing he
 WHAT A BUILD CHANGES (put(); everything else of the base level is byte for byte the base's)
   .prm   the base's file + the model sub-graph of each chosen Dead Men character (kl_prmgraph.append of
          a converted extract): a NEW root per pick (its own object table), meshes, descriptors (48 bytes),
-         vertex / index data, skeleton. Nothing of the base moves.
+         vertex / index data, skeleton. Nothing of the base that is LIVE moves or changes.
+         THE NUMBER OF CHUNKS IS LIMITED (73,728 table slots in kl2.exe, shared with run-time chunks;
+         re/prm_limit.md - the full wardrobe on Retomoto had 80,628 and crashed 16 s into the load), so the
+         new chunks are written INTO the indices of the base's dead chunks (what no .gms record, .prp field
+         or wardrobe root reaches: in a grafted level S's removed map, 27,000 indices) and those that are
+         not needed become 16-byte stubs: dead_indices(). --no-reuse: the old way, everything at the end.
   .MAT .TEX  the materials those objects name and their textures, renumbered (kl_texmat.merge_*); the
          .MAT use counts recomputed from the joined .prm; kl_light.fit_shaders on the NEW slots only.
   .fxc   the base's + <work>/build/shared/union.fxc when that exists (as kl_graft does for a Dead Men map).
@@ -232,8 +241,7 @@ def reid(p, sk, ids):
 
 
 def _new(p, data):
-    p.chunks.append(bytes(data)); p.refs.append(1)
-    return len(p.chunks) - 1
+    return G.new_chunk(p, data)                       # a free index first (G.reuse), else one more at the end
 
 
 def rebind(p, sk, number):
@@ -526,14 +534,104 @@ A pick WITHOUT targets only adds the model to the level's .prm (nobody is given 
 then the Dog Days model root whose free bone it gets, and variants names every variant it keeps."""
 
 
-def put(base, picks, free='add', union=True, log=print):
-    """base: Lv (edited in place). Returns a report dict; see the module docstring for what changes."""
+def wardrobe_roots(src):
+    """The model roots a build's KLWardrobe.ini lists (Root= of every [Character.n]): models NO entity
+    names, so every walk for 'what is live' has to be told (G.level_roots extra; kl_graft lighten).
+    src: an Lv, a build folder, or the ini's path. [] when there is no such file."""
+    path = src.side.get('KLWardrobe.ini') if isinstance(src, Lv) else os.path.join(src, 'KLWardrobe.ini') if os.path.isdir(src) else src
+    if not path or not os.path.isfile(path):
+        return []
+    return [int(l.split('=')[1]) for l in open(path) if l.startswith('Root=')]
+
+
+def dead_indices(p, sc, raw, oct_s, extra=(), log=print):
+    """G.reuse() on a level's .prm: the indices of every chunk the level's own files do not reach are
+    handed to the chunks that come next. Live = G.level_roots (the .gms records, the .prp fields, the scene
+    block) + `extra` (roots no entity names: an earlier wardrobe's, or this run's Dead Men heroes). Kept as
+    they are although dead: the 64-byte meshes the .oct tail pairs name (kl_graft keeps S's removed map's
+    collision records). -> (free indices, bytes saved by the stubs)."""
+    live = G.level_roots(sc.p, sc.tids, raw, extra)
+    n, saved = G.reuse(p, live, {c for _f, c in oct_s.tail})
+    log('  .prm: %d of %d chunks are dead (no root of the level reaches them): their indices are free for the new chunks%s' % (
+        n, len(p.chunks) - 1, '; stubs save %.1f MB' % (saved / 1e6) if saved else ''))
+    return n, saved
+
+
+def compact_level(lv, log=print):
+    """THE LEVEL'S .prm RENUMBERED WITHOUT ITS DEAD CHUNKS (G.compact), every holder of a chunk index this
+    project knows rewritten. lv: Lv, edited in place. -> report; rep['roots'] = {old wardrobe root: new}.
+    NOT LOADED LIVE, and unlike put() / wardrobe() it MOVES S's live chunks (HUD, fonts, effects, heroes),
+    which no build has done before (the graft appends M's chunks and never moves S's). Rewritten here:
+      .gms record +0x0c; the .prp fields and scene-block entries of G.prp_roots; the .oct - only the records
+      a live model root owns stay (kl_octree.select_records: record offsets change, so every live root's
+      +0x1c is rewritten, as kl_graft does for S's records), their tail pairs renumbered; the caller rewrites
+      KLWardrobe.ini / chars.json (compact command below).
+    ASSUMPTION: nothing else holds a chunk index. G.PRP_FIELDS was found statistically (integer fields whose
+    non-zero values are ALL chunks of one kind over the 41 stock levels): a field that holds an index only
+    now and then, or one inside a raw blob (.buf, .sgd, .HVK, a KEYS track), would not be in it. Evidence
+    for: those roots reach 99.991 % of Dog Days' chunks. Use it when the chunk count needs it, not before."""
+    sc, raw = lv.scene()
+    raw = bytearray(raw)
+    p, oc = G.read(lv['.prm'], 'dd'), O.Oct.parse(lv['.oct'])
+    wr = wardrobe_roots(lv)
+    kinds, _args = G.walk(p, G.level_roots(sc.p, sc.tids, raw, wr))
+    q, cmap = G.compact(p, G.level_roots(sc.p, sc.tids, raw, wr))
+    rec = {v: k for k, v in enumerate(oc.record_refs())}
+    owners = [i for i in sorted(kinds) if kinds[i] == 'root' and p.u32(i, 0x1c)]
+    keep = sorted({rec[p.u32(i, 0x1c)] for i in owners})
+    oc2, refs = O.select_records(oc, keep, cmap)        # KeyError = a live record's pair on a dead mesh: never seen
+    for i in owners:
+        q.chunks[cmap[i]] = _put(q.chunks[cmap[i]], 0x1c, '<I', refs[p.u32(i, 0x1c)])
+    n_gms = 0
+    for off, was in gms_models(raw):
+        if was:
+            struct.pack_into('<I', raw, off, cmap[was]); n_gms += 1
+    n_prp = 0
+    for where, c, _kind in G.prp_roots(sc.p, sc.tids, J.schema('dd'), 'dd'):
+        new = struct.pack('<I', cmap[c])
+        if where[0] == 'scene':
+            s = sc.p.settings
+            k = next(k for k, tok in enumerate(s) if tok[0] == 0x0c and sc.p.key(tok) == where[1])
+            s[k + 4] = (s[k + 4][0], new)
+        else:
+            node, ctrl, k = where
+            toks = sc.nodes[node]['props'] if ctrl is None else sc.nodes[node]['ctrls'][ctrl][1]
+            us = [list(u) for u in units(toks[1:-1])]
+            us[k][0] = (us[k][0][0], new)
+            toks = [toks[0]] + [t for u in us for t in u] + [toks[-1]]
+            if ctrl is None:
+                sc.nodes[node]['props'] = toks
+            else:
+                sc.nodes[node]['ctrls'][ctrl] = (sc.nodes[node]['ctrls'][ctrl][0], toks)
+        n_prp += 1
+    prm_bytes = G.write(q)
+    mat = T.read_mat(lv['.MAT'])
+    mat.refs = T.material_refs(prm_bytes)
+    rep = dict(entries=(len(p.chunks), len(q.chunks)), prm_bytes=(len(lv['.prm']), len(prm_bytes)), gms_fields=n_gms, prp_fields=n_prp,
+               oct_records=(len(oc.records), len(oc2.records)), oct_pairs=(len(oc.tail), len(oc2.tail)), roots={r: cmap[r] for r in wr})
+    lv['.prm'], lv['.MAT'], lv['.oct'] = prm_bytes, T.write_mat(mat), oc2.pack()
+    lv['.gms'], lv['.prp'] = kl_gms.pack(bytes(raw)), sc.p.serialize()
+    # proof: the rewritten files reach a graph of the same shape, chunk for chunk
+    sc2, raw2 = lv.scene()
+    k2 = G.walk(q, G.level_roots(sc2.p, sc2.tids, raw2, sorted(rep['roots'].values())))[0]
+    if len(k2) != len(q.chunks) - 1 or {cmap[i]: k for i, k in kinds.items()} != k2:
+        raise ValueError('compact: the renumbered level does not reach its own file as before')
+    log('  compact: %d -> %d chunk-table entries, .prm %.1f -> %.1f MB; %d .gms and %d .prp references, %d of %d .oct records and %d of %d pairs kept' % (
+        rep['entries'] + tuple(x / 1e6 for x in rep['prm_bytes']) + (n_gms, n_prp, len(oc2.records), len(oc.records), len(oc2.tail), len(oc.tail))))
+    return rep
+
+
+def put(base, picks, free='add', union=True, log=print, reuse=True):
+    """base: Lv (edited in place). Returns a report dict; see the module docstring for what changes.
+    reuse: the new chunks go INTO the indices of the base's dead chunks before the file grows
+    (dead_indices(); re/prm_limit.md). False = everything at the end, as before 2026-10-09 21:30."""
     sc, raw = base.scene()
     raw = bytearray(raw)
     models = gms_models(raw)
     prm_s = G.read(base['.prm'], 'dd')
     anm = kl_anm.Anm(base['.ANM'], 'dd')
     oct_s = O.Oct.parse(base['.oct'])
+    freed = dead_indices(prm_s, sc, raw, oct_s, wardrobe_roots(base), log) if reuse else (0, 0)
     tex, mat = T.read_tex(base['.TEX']), T.read_mat(base['.MAT'])
     n_mat, n_tex, n_chunks = len(mat.insts), len(tex.tex), len(prm_s.chunks) - 1
     rep = dict(picks=[], anm_added=[])
@@ -615,7 +713,6 @@ def put(base, picks, free='add', union=True, log=print):
         for w in work:
             r = cmap2[w[3]]
             ex.chunks[r] = _put(ex.chunks[r], 0x1c, '<I', next(new_refs) if w[9] is not None else 0)
-        first = len(prm_s.chunks)
         prm_s, cmap3 = G.append(prm_s, ex, [cmap2[r] for r in roots], mmap, None, tmap)
         for pk, nodes, ppl, root, vmap, nobj, sk, fb, moved, rec in work:
             new = cmap3[cmap2[root]]
@@ -643,6 +740,7 @@ def put(base, picks, free='add', union=True, log=print):
     import kl_light
     fit = kl_light.fit_shaders(mat, fxc, slots=sorted(new_slots), log=log)
     rep.update(chunks=(n_chunks, len(prm_s.chunks) - 1), materials=(n_mat, len(mat.insts)), textures=(n_tex, len(tex.tex)),
+               free_indices=(freed[0], len(prm_s.free)), stub_bytes_saved=freed[1],
                prm_bytes=(len(base['.prm']), len(prm_bytes)), new_material_slots=sorted(new_slots),
                shaders_fitted={mat.insts[s].name: v[1] for s, v in fit['fixed'].items()},
                shaders_missing=[v[0] for v in fit['unresolved'].values()])
@@ -853,14 +951,17 @@ def _set_objects(p, root, objs):
     p.chunks[root] = _put(p.chunks[root], 0x14, '<II', len(objs), _new(p, _pad(struct.pack('<%dI' % len(objs), *objs))))
 
 
-def wardrobe(base, level='M01_FA_A', free='add', log=print, armour=(0, 1, 2, 3), fix_bones=False):
+def wardrobe(base, level='M01_FA_A', free='add', log=print, armour=(0, 1, 2, 3), fix_bones=False, reuse=True):
     """base: Lv of a Dog Days level with the eight stock heisters (edited in place). Returns the report:
     report['characters'] = 16 dicts (name, root, slot, outfits), report['roots'] = the sixteen model roots.
     armour: the Dead Men armour levels whose body meshes join the file (each costs 2.9 - 4.9 MB of .prm over the
     eight heroes, `python kl_chars.py wardrobe` prints it). A level left out keeps its variant numbers and is drawn
     with the nearest lower level that is in, so every outfit the menu offers shows a body in every build.
     fix_bones: also repair the bone-id bytes of the BASE's own skeletons (kl_impact.sync_bone_ids on the whole
-    file - what `kl_impact.py fix` does; a base grafted before 2026-10-09 18:00 needs it)."""
+    file - what `kl_impact.py fix` does; a base grafted before 2026-10-09 18:00 needs it).
+    reuse: the models and the 15,500 object copies take the indices of the base's dead chunks (put()); the
+    file only grows when they run out. Lighten the base FIRST (kl_graft lighten): after this no dead root
+    is left for trim / slim to find, and a later trim must be told the Dead Men roots (wardrobe_roots)."""
     armour = sorted(set(armour))
     if not armour or armour[0] != 0 or armour[-1] > 3:
         raise ValueError('armour levels: 0 (the suit) must be in, 3 is the highest')
@@ -871,7 +972,8 @@ def wardrobe(base, level='M01_FA_A', free='add', log=print, armour=(0, 1, 2, 3),
         raise ValueError('%s: the eight heisters do not have eight models (%r) - already a wardrobe build?' % (base.name, old))
     # 1. the eight Dead Men heroes join the file with their own skeletons, as nobody's model yet
     size0 = len(base['.prm'])
-    rep = put(base, [Pick((), level, HERO % n, {v: stand_in(v) for v in range(1, DM_LOOKS + 1)}, old[n - 1]) for n in range(1, 9)], free=free, log=log)
+    rep = put(base, [Pick((), level, HERO % n, {v: stand_in(v) for v in range(1, DM_LOOKS + 1)}, old[n - 1]) for n in range(1, 9)],
+              free=free, log=log, reuse=reuse)
     size1 = len(base['.prm'])
     dm = [r['new_model'] for r in rep['picks']]
     sc, raw = base.scene(); raw = bytearray(raw)
@@ -882,6 +984,8 @@ def wardrobe(base, level='M01_FA_A', free='add', log=print, armour=(0, 1, 2, 3),
     if len(tints) != len(TINT):
         raise ValueError('the shirt / balaclava materials were not all found (%r): are these Dead Men\'s FA heroes?' % sorted(tints))
     oct_s = O.Oct.parse(base['.oct'])
+    if reuse:                                         # what put() left free (the Dead Men roots are nobody's model yet)
+        dead_indices(p, sc, raw, oct_s, dm + wardrobe_roots(base), log=lambda *_a: None)
     mname = lambda o: mat.insts[p.u16(o, 0x12)].name.split('/')[-1].lower()
     # 2. the parts. Dog Days: variant 1 is the face look; variant 2 is mask + masked body (+ the bag)
     face, body, mask, bag = {}, {}, {}, {}
@@ -978,6 +1082,7 @@ def wardrobe(base, level='M01_FA_A', free='add', log=print, armour=(0, 1, 2, 3),
     rep.update(characters=chars, roots=[c['root'] for c in chars], stock_roots=old, retargeted=moved, level=level,
                bones_folded_for_low_detail=note['low'], bones_on_an_ancestor=note['inexact'], largest_rest_distance=round(note['rest'], 3),
                chunks=(rep['chunks'][0], len(p.chunks) - 1), prm_bytes=(rep['prm_bytes'][0], len(prm_bytes)),
+               free_indices=(rep['free_indices'][0], len(p.free)),
                armour=armour, base_bone_ids_repaired=fixed, tints={k: list(v) for k, v in tints.items()}, textures=(rep['textures'][0], len(tex.tex)),
                cost=dict(dead_men_models=size1 - size0, looks=len(prm_bytes) - size1, total=len(prm_bytes) - size0,
                          objects=sum(c['objects'] for c in chars)))
@@ -1537,7 +1642,7 @@ if __name__ == '__main__':
         sys.exit(1 if n else 0)
     elif a[:1] == ['put'] and len(a) > 3:
         lv, stock = Lv(a[1]), Lv(a[1])
-        rep = put(lv, [parse_pick(s) for s in a[3:]], free=free)
+        rep = put(lv, [parse_pick(s) for s in a[3:]], free=free, reuse='--no-reuse' not in sys.argv)
         bad = check(lv, stock, [r['new_model'] for r in rep['picks']])
         print('built', lv.write(a[2]), 'problems: %d' % len(bad))
         sys.exit(1 if bad else 0)
@@ -1549,7 +1654,8 @@ if __name__ == '__main__':
         import kl_impact
         # what the base has wrong before anything is added (an old graft's map skeletons): told apart from the new
         before = set(kl_impact.bone_faults(G.read(stock['.prm'], 'dd'))) | {'people: ' + x for x in undrawn(stock)}
-        rep = wardrobe(lv, level, free=free, armour=[int(x) for x in arm.split(',')], fix_bones='--fix-bones' in sys.argv)
+        rep = wardrobe(lv, level, free=free, armour=[int(x) for x in arm.split(',')], fix_bones='--fix-bones' in sys.argv,
+                       reuse='--no-reuse' not in sys.argv)
         for c in rep['characters']:
             print('  %-16s slot %d  model %5d  %3d bones  %4d objects  %2d outfit(s)' % (c['name'], c['slot'] + 1, c['root'], c['bones'], c['objects'], c['outfits']))
         print('  .prm %d -> %d chunks, %.1f -> %.1f MB; %d heisters / bots re-pointed; bones folded for low detail %d, on an ancestor %d, largest rest distance %.3f' % (
@@ -1558,7 +1664,10 @@ if __name__ == '__main__':
             rep['armour'], DM_LOOKS, rep['cost']['dead_men_models'] / 1e6, rep['cost']['looks'] / 1e6, rep['cost']['objects']))
         if rep['base_bone_ids_repaired']:
             print('  --fix-bones: %d bone-id bytes of the base\'s own skeletons repaired' % rep['base_bone_ids_repaired'])
-        bad = check_wardrobe(lv, rep)
+        print('  chunk table: %d entries (%d of the base\'s %d dead indices taken, %d still free; limit %d of the game\'s %d: re/prm_limit.md)' % (
+            rep['chunks'][1] + 1, rep['free_indices'][0] - rep['free_indices'][1], rep['free_indices'][0], rep['free_indices'][1],
+            kl_impact.CHUNK_SAFE, kl_impact.CHUNK_TABLE))
+        bad = check_wardrobe(lv, rep) + kl_impact.chunk_limit(lv['.prm'])
         for b in bad[:20]:
             print('  PROBLEM: ' + b)
         quiet = lambda *x: None
@@ -1580,8 +1689,24 @@ if __name__ == '__main__':
             json.dump(dict(base=a[1], slot=slot, free=free, problems=bad, base_problems=old, **rep), fh, indent=1, default=str)
         print('built %s (%.0f MB) + KLWardrobe.ini, problems: %d' % (path, os.path.getsize(path) / 1e6, len(bad)))
         sys.exit(1 if bad else 0)
+    elif a[:1] == ['compact'] and len(a) > 2:
+        import kl_impact, re
+        lv = Lv(a[1])
+        rep = compact_level(lv)
+        bad = check(lv, None, None, extra=sorted(rep['roots'].values())) + ['people: ' + x for x in undrawn(lv)] + kl_impact.chunk_limit(lv['.prm'])
+        path = lv.write(a[2], lv.name)
+        ini = os.path.join(a[2], 'KLWardrobe.ini')
+        if os.path.isfile(ini):                           # the roots klhook\klchar.c reads
+            text = re.sub(r'(?m)^Root=(\d+)', lambda m: 'Root=%d' % rep['roots'][int(m.group(1))], open(ini, newline='').read())
+            open(ini, 'w', newline='').write(text)
+        for f in ('chars.json',):                         # notes of the build this was made from: its chunk numbers are the old ones
+            if os.path.isfile(os.path.join(a[2], f)):
+                os.remove(os.path.join(a[2], f))
+        print('built %s, problems: %d (the base\'s own included)' % (path, len(bad)))
+        sys.exit(1 if bad else 0)
     elif a[:1] == ['check'] and len(a) > 1:
-        sys.exit(1 if check(Lv(a[1])) else 0)
+        lv = Lv(a[1])
+        sys.exit(1 if check(lv, extra=wardrobe_roots(lv)) else 0)
     elif a[:1] == ['invisible'] and len(a) > 1:
         at = next((sys.argv[i + 1] for i, x in enumerate(sys.argv) if x == '--at'), None)
         bad = invisible(a[1], '--all' in sys.argv, [float(v) for v in at.split(',')] if at else None)

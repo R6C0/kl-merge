@@ -663,7 +663,11 @@ def open_built(path):
         o = struct.unpack_from('<I', raw, 4 * (decl & 0xffffff))[0]
         names.append(buf[o:buf.index(b'\0', o)].decode('latin1')); tids.append(tid)
     sc = J.Scene(Prp(files[ext['.prp']]), names, tids, 'dd', os.path.basename(path))
-    return order, files, ext, sc, live_roots(sc, G.gms_roots(raw)), hud_textures(sc)
+    # a wardrobe's Dead Men roots are named by no entity (KLWardrobe.ini lists them): without this
+    # 'lighten' would empty them as dead (re/prm_limit.md)
+    import kl_chars
+    extra = [(r, 'root') for r in kl_chars.wardrobe_roots(os.path.join(os.path.dirname(path), 'KLWardrobe.ini'))]
+    return order, files, ext, sc, live_roots(sc, G.gms_roots(raw)) + extra, hud_textures(sc)
 
 
 def relight(src, dst, opt=None, log=print):
@@ -1594,6 +1598,7 @@ def verify(out, Jn, S, M, copy, s_kept, mj, shift, log=print, audio=None, light=
         bad += cb[:6] + (['... %d more skeleton problems' % (len(cb) - 6)] if len(cb) > 6 else [])
         import kl_impact
         bf = kl_impact.bone_faults(prm)
+        bad += kl_impact.chunk_limit(out['.prm'])       # the game's chunk table has 73,728 slots (re/prm_limit.md)
         bad += bf[:6] + (['... %d more bone id faults' % (len(bf) - 6)] if len(bf) > 6 else [])
     if mat.refs != T.material_refs(out['.prm']):
         bad.append('.MAT ref table is not the .prm\'s')

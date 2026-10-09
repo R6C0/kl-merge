@@ -39,12 +39,26 @@ LEFT_FORETWIST1, id 0x68 in M09_A, 0x4f after reid; table[0x68] = 0xff.
 For kl_graft (after the reid / rebind loop, before `prm_bytes = G.write(prm)`):
     done['bone id bytes'] += kl_impact.sync_bone_ids(prm, sks)
 and in verify():  bad += kl_impact.bone_faults(G.read(out['.prm'], 'dd'))
+                  bad += kl_impact.chunk_limit(out['.prm'])        (the chunk table: see CHUNK_TABLE below)
 For kl_chars.put (after `renamed = reid(ex, sk, ids)`):  kl_impact.sync_bone_ids(ex, [sk])
 """
 import os, struct, sys, zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import kl_prmgraph as G
+
+# THE CHUNK TABLE (re/prm_limit.md). kl2.exe keeps one pointer per .prm chunk index in a fixed table at
+# 0xeac7b0: 0x12000 slots of 4 bytes (the loaders 0x496d80 / 0x8007f0 clear 0x48000 bytes, then write slot i
+# for every table entry i with a non-zero refcount - no test against the size). The same table takes the
+# chunks the game makes while it runs (ZPrimControl slot 10, 0x509970): upwards from the file's count
+# (0xeac7a8) and downwards from slot 0x11fff (0xcda384), an int3 when the two meet.
+CHUNK_TABLE = 0x12000        # 73,728 slots, index 0 included (the file's own header entry)
+# Slots left for run-time chunks. MEASURED, not derived: the 14 crash dumps of grafted levels kept so far
+# hold 429..437 chunks above the file's and 125..276 below the top (713 together at most, in rounds of a
+# few minutes). ASSUMPTION: 4096 is enough for a full round - who allocates the 20-byte ones from the top,
+# and whether their number is bounded, was not found. Stock never comes near (largest: L10, 36,778 entries).
+CHUNK_RUNTIME = 0x1000
+CHUNK_SAFE = CHUNK_TABLE - CHUNK_RUNTIME      # 69,632 table entries = highest chunk index 69,631
 
 BONE = 64            # bytes per bone definition (skeleton slot 1)
 ID_AT = 0x3e         # the bone's id; +0x3f is its body part (1 trunk, 2 head, 4 / 5 left arm, 7 / 8 right arm, 6 / 9 legs: read off M09_A's guard, not decoded further)
@@ -86,7 +100,7 @@ def bone_faults(p, sks=None, limit=4):
 def sync_bone_ids(p, sks=None):
     """Bone definition +0x3e of every bone set to the id table [5] gives it, table [5] being what
     kl_chars.reid() wrote. A bone that already carries one of its ids keeps it (alias_free_bone gives
-    GROUND a second id, 33). The definitions become a NEW chunk at the end (a data chunk can serve two
+    GROUND a second id, 33). The definitions become a NEW chunk (a data chunk can serve two
     skeletons, and no index moves). Returns the number of bones changed. Raises for a bone table [5]
     does not name at all: there is no id to write (never in a stock level, never after reid)."""
     changed = 0
@@ -105,11 +119,26 @@ def sync_bone_ids(p, sks=None):
                 raise ValueError('skeleton %d: bone %d (%s) has no id in table [5]' % (sk, b, _name(d, b)))
             d[BONE * b + ID_AT] = ids[b]; k += 1
         if k:
-            p.chunks.append(bytes(d)); p.refs.append(1)
-            h[1] = len(p.chunks) - 1
+            h[1] = G.new_chunk(p, d)                    # a free index first (kl_prmgraph.reuse), else the end
             p.chunks[sk] = struct.pack('<20I', *h)
             changed += k
     return changed
+
+
+def chunk_limit(prm):
+    """[] or the problem: the .prm (bytes or kl_prmgraph.Prm) has more chunk-table entries than the game's
+    pointer table can take beside its run-time chunks. Past CHUNK_TABLE the loader writes over the globals
+    behind the table (entry 73,932 is the loading-progress object 0xef4ae0: run P4, crash at 0x607280);
+    between CHUNK_SAFE and CHUNK_TABLE the level loads and the first run-time chunks hit the int3 at
+    0x50999f sooner or later."""
+    n = len(prm.chunks) if hasattr(prm, 'chunks') else struct.unpack_from('<I', prm, 4)[0]
+    if n > CHUNK_TABLE:
+        return ['.prm: %d chunk-table entries, the game\'s table has %d: the loader writes %d pointers over the globals behind it '
+                '(kl2 0xeac7b0 + 0x48000; re/prm_limit.md)' % (n, CHUNK_TABLE, n - CHUNK_TABLE)]
+    if n > CHUNK_SAFE:
+        return ['.prm: %d chunk-table entries leave %d of the table\'s %d slots for the chunks the game makes while it runs; '
+                '%d are kept free (kl_impact.CHUNK_RUNTIME; re/prm_limit.md)' % (n, CHUNK_TABLE - n, CHUNK_TABLE, CHUNK_RUNTIME)]
+    return []
 
 
 def surface_faults(gms, buf, hvk):
@@ -149,6 +178,8 @@ def check(src, game=None, surface=True):
     path, g, files = _open(src)
     game = game or g
     bad = bone_faults(G.read(files['.prm'], game))
+    if game == 'dd':
+        bad += chunk_limit(files['.prm'])
     if surface and game == 'dd':                        # Dead Men's .gms / .HVK are not what kl_scene / kl_hvk were proven on here
         bad += surface_faults(files['.gms'], files['.buf'], files['.HVK'])
     return bad

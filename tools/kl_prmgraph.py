@@ -84,6 +84,20 @@ DEAD MEN vs DOG DAYS: desc 32 vs 48 bytes (Dog Days [5] = Dead Men [2]); Dead Me
 it finds all 91,960, kl_prm.find_descriptors 65,255; scatter 256 vs 144 bytes with unrelated
 content; font glyphs 20 vs 32 bytes and texture bias 2048 vs 4096; prop slot 2 and water
 objects only in Dead Men. append() refuses to mix the games: convert first.
+
+THE NUMBER OF CHUNKS IS LIMITED (re/prm_limit.md; kl_impact.chunk_limit): the pointer table at kl2
+0xeac7b0 has 0x12000 = 73,728 four-byte slots, shared with the chunks the game makes while it
+runs, and no loader tests the count. So a joined level must not simply grow at the end:
+  reuse(p, live, keep)   every chunk no live root reaches (S's removed map: 27,000 of 65,000 in a
+                         grafted level) becomes a 16-byte stub and its INDEX is handed out again by
+                         new_chunk() / append() before any index is added at the end. Nothing that
+                         is live moves, so no reference outside the new sub-graphs changes.
+  compact(p, live)       the file renumbered with the dead chunks dropped (= extract of the live
+                         closure): every holder of a chunk index must then be rewritten - see
+                         kl_chars.compact_level, which does it for the holders this file knows.
+"live" is what the level's own files name: level_roots() (the same set as kl_graft.live_roots,
+without kl_graft's build machinery) plus the model roots NO entity names - the wardrobe's, listed
+in KLWardrobe.ini beside the archive (kl_chars.wardrobe_roots).
 """
 import struct
 
@@ -111,6 +125,7 @@ class Prm:
 
     def __init__(self, game, chunks, refs):
         self.game, self.chunks, self.refs = game, chunks, refs
+        self.free = []                                # indices new_chunk() may fill: set by reuse()
 
     def u32(self, i, o):
         return struct.unpack_from('<I', self.chunks[i], o)[0]
@@ -353,16 +368,85 @@ def extract(p, roots, order=None):
 
 def append(a, b, b_roots, material_map=None, oct_offset_map=None, texture_map=None):
     """a + the closure of b_roots in b (original order), every chunk index of the appended part
-    shifted and its materials / textures / .oct offsets sent through the maps. Returns
+    renumbered and its materials / textures / .oct offsets sent through the maps. Returns
     (Prm, {index in b: index in the result}); look the old roots up in it. Nothing is merged
-    with equal chunks of a. Both files must be of the same game."""
+    with equal chunks of a. Both files must be of the same game.
+    The new chunks take a's free indices first (a.free, see reuse(); lowest first, in b's order)
+    and only then new indices at the end; a chunk glued to its neighbour (GLUE) always goes to
+    the end, with it. Nothing of a moves. The result carries the free indices left over."""
     if a.game != b.game:
         raise ValueError('cannot append a %s file to a %s file: convert it first' % (b.game, a.game))
     kinds, args = walk(b, b_roots)
     order = sorted(kinds)
-    cmap = {old: len(a.chunks) + k for k, old in enumerate(order)}
+    glued = {j for i, k in kinds.items() if GLUE.get((b.game, k)) for j in (i, i + 1)}
+    free, cmap, end = list(a.free), {}, len(a.chunks)
+    for old in order:
+        if free and old not in glued:
+            cmap[old] = free.pop()
+        else:
+            cmap[old] = end; end += 1
     new = remap(b, kinds, args, cmap, material_map, oct_offset_map, texture_map)
-    return Prm(a.game, a.chunks + [new[i] for i in order], a.refs + [b.refs[i] for i in order]), cmap
+    chunks, refs = a.chunks + [None] * (end - len(a.chunks)), a.refs + [0] * (end - len(a.chunks))
+    for old in order:
+        chunks[cmap[old]], refs[cmap[old]] = new[old], b.refs[old]
+    out = Prm(a.game, chunks, refs)
+    out.free = free
+    return out, cmap
+
+
+def new_chunk(p, data, ref=1):
+    """Index of a new chunk holding `data`: the lowest free index (reuse()) when there is one,
+    else a new one at the end. Every writer of a new chunk goes through here (kl_chars, kl_impact)."""
+    data = bytes(data)
+    if len(data) % 16:
+        raise ValueError('chunk size %d is not a multiple of 16' % len(data))
+    if p.free:
+        i = p.free.pop()
+        p.chunks[i], p.refs[i] = data, ref
+        return i
+    p.chunks.append(data); p.refs.append(ref)
+    return len(p.chunks) - 1
+
+
+def reuse(p, live, keep=()):
+    """Make the indices of the dead chunks available: every chunk that no root of `live` reaches
+    and `keep` does not hold becomes a 16-byte stub (its refcount stays), and p.free lists them for
+    new_chunk() / append(), lowest first. keep: indices something else names - the chunks of the
+    .oct tail pairs (kl_graft keeps the removed map's collision records, and its verify() wants
+    every pair on a 64-byte mesh). A kept dead mesh then points at stubs or at re-used chunks:
+    nothing reads it (kl2 has no loop over the chunk table: its count 0xeac7a4 is read only by
+    the loaders, by 0x638c90 'is this a file chunk' and by 0x45f260; every other use is an index
+    taken from a live holder). A chunk a dead root reaches and a live root also reaches is live.
+    Returns (number of free indices, bytes the stubs saved). Run trim / slim (kl_graft lighten)
+    BEFORE this: afterwards no dead root is left for it to find the dead materials by."""
+    reached = closure(p, live)
+    keep = set(keep)
+    free = [i for i in range(1, len(p.chunks)) if i not in reached and i not in keep]
+    saved = 0
+    for i in free:
+        saved += len(p.chunks[i]) - 16
+        p.chunks[i] = bytes(16)
+    p.free = free[::-1]                                # pop() gives the lowest
+    return len(free), saved
+
+
+def compact(p, live):
+    """The file with only what the live roots reach, renumbered in the old order (extract()).
+    -> (Prm, {old index: new index}). EVERY holder of a chunk index has to be rewritten with the
+    map: .gms record +0x0c, the .prp fields of prp_roots(), the .oct tail pairs (a pair on a
+    dropped chunk has to go, with its record), KLWardrobe.ini. kl_chars.compact_level does that."""
+    return extract(p, live)
+
+
+def level_roots(prp, tids, raw, extra=(), game='dd', schema=None):
+    """Every chunk the level's own files name, as walk() takes it: the .prp fields and scene
+    block (prp_roots) and the .gms records (unpacked .gms `raw`), plus `extra` - model roots no
+    entity names (the wardrobe's: kl_chars.wardrobe_roots). The same set as kl_graft.live_roots."""
+    if schema is None:
+        import kl_prpjoin
+        schema = kl_prpjoin.schema(game)
+    return ([(c, k) if k else c for _w, c, k in prp_roots(prp, tids, schema, game)] +
+            [m for m in gms_roots(raw) if m] + [(r, 'root') for r in extra])
 
 
 def gms_roots(raw):

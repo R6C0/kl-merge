@@ -329,3 +329,24 @@ back, in the test pose), `bank_lynch_looks.png` (the bank build: Lynch variants 
 
 Not done: names in the HUD (still the slot's C1..C8), Dead Men bodies or outfits for the AI heisters, voice sets,
 online, the police / respawn looks (later stage), other languages for the labels.
+
+## 8. Chunk limit (2026-10-09 21:30; `re/prm_limit.md`)
+
+The full wardrobe adds 15,500 chunks (11,818 of them 64-byte mesh-object copies). kl2.exe's chunk
+pointer table has 73,728 slots, shared with the chunks the game makes while it runs, and nothing
+tests the count: Retomoto + wardrobe at 80,628 entries wrote over the globals behind the table
+(run P4, crash at 0x607280). `kl_chars.put` / `wardrobe` now write every new chunk INTO the index
+of a dead chunk of the base (S's removed map: 23,000 - 24,000 free indices in a grafted level) and
+only grow the file when those run out; nothing live moves. `--no-reuse` gives the old behaviour.
+
+- Lighten the base first (`kl_graft.py lighten`), then the wardrobe: the wardrobe turns the unused
+  dead chunks into stubs, after which trim / slim find nothing to work from.
+- The Dead Men roots are named by no entity. Anything that decides "live" from the level's files
+  must add `kl_chars.wardrobe_roots(<folder>)` (KLWardrobe.ini), or it treats the eight heroes as
+  dead: `kl_graft lighten` on a wardrobe build would empty 15.8 MB of them (lines in prm_limit.md).
+- The wardrobe command prints the chunk-table line and fails the build past `kl_impact.CHUNK_SAFE`
+  (69,632 entries).
+- Builds: `<work>\build\x_chunks\retomoto_wardrobe` (65,119 entries, .prm 77.8 MB) and
+  `bank_wardrobe` (62,657, 60.5 MB; `bank_wardrobe_noslim` on a trim-only base). Model roots are
+  different numbers from the earlier builds (now 9,000 - 10,300): KLWardrobe.ini beside each archive
+  has them, and must be installed with its own archive as before.
