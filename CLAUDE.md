@@ -290,6 +290,14 @@ Owner's design for it (2026-10-09), to be followed as given:
 - Part 2 (lobby/street): out through the front entrance, down the road to a VAN, and escape.
   Mood reference: the street shoot-out in the film Heat.
 - I am to design how the two parts join. Its level music plays.
+- OWNER, 2026-10-09 17:00, after SEEING the tower in the game (supersedes the start options A / C
+  and the spawn row inside the boardroom): the heisters start OUTSIDE, on the ledge just before
+  the glass of the main window, and THEN the blow-up sequence happens and they go in.
+  To build: a standing surface outside the window (x > 5850, boardroom floor y ~20996; in the
+  campaign the players hang there on ropes - whether any walkable geometry / collision exists
+  there is NOT known: check, else author an invisible ledge), the intact glass keeping them out
+  until the blast, START row outside facing -x into the room, guards unaware until the blast,
+  a kill / bounds answer for stepping off the ledge.
 
 ## Roadmap for a rewrite (only after the port works)
 Ghidra project of kl2.exe + kaneandlynch.exe, shared symbol/type database (classes, vtables,
