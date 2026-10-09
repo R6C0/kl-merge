@@ -42,6 +42,44 @@ This file is what the next session needs to continue without re-deriving anythin
    atrium void, the roof (rappel-only in the campaign), the open west side of the street (overpass, bus
    terminal). All GUESS slabs today.
 
+## 2a. Sketch of the Heat street (for the designer; every number below is from `re/retomoto.md` 1.4 / 3.4
+unless marked GUESS; nothing is built)
+
+Geometry: the front door is at x 2600, z -7300..-5700 (centre z -6490), the forecourt runs x -50..2650,
+the road is straight along z at x -5700..-300 (centre x -3000), 54 m wide, from the south bound
+(z -11400..-12700) to the north bound at z 13418: 250 m of street. Cover on it today: static police cars
+`V_JPN_Police_RetoFront01/02` at (38 21 -7382) / (147 21 -6408) right at the forecourt, the SWAT van
+`V_JPN_SWAT_Van_South` (-2208 0 -12506), the first road block (3 cars, z 3602..3911, x -4090..-1901),
+the SWAT truck `V_JPN_SWAT_North` (-3588 2 10886), the far block (4 cars, z 13131..14404). Vans stop at
+z 9300 / 8500 / 7700 (GUESS, `kl_fa_author.VAN_STOP_Z`).
+
+Zones, south to north (each a MERCONLY trigger box the criminals cross; the police side gets the same
+routs from a RESPAWNONLY twin, the F01 idiom):
+
+| zone | box centre / half (GUESS) | what starts | from where |
+|---|---|---|---|
+| Z0 door | (2900 400 -6500) / (300 400 800) - exists: `tbExitFinancialAlley` | the campaign's `Enemies!010_RetoBldFront!` (18 police) | forecourt, the two police cars |
+| Z1 forecourt -> road | (-300 300 -6500) / (300 400 2500) | `Enemies!020_Street!` south half | the SWAT van (-2208 0 -12506), south end |
+| Z2 road, z -3000 | (-3000 300 -3000) / (2700 400 400) | `Enemies!020_Street!` north half + the first F07 squads moved to the first road block (z 3602..3911) | behind the three cars, defend boxes on the car line |
+| Z3 road, z 2000 | (-3000 300 2000) / (2700 400 400) | F07's remaining police squads at the SWAT truck (z 10886) and the far block | long sight line down the road: the Heat moment |
+| exit | (-3000 500 7800) / (2700 900 3500) - exists: `otrExitLevel` | the van | stops 150-165 m from the door |
+
+F07's squads: `re/retomoto_fa.md` 5 says 14 police squads tied to its alleys and the bot crew
+`merc_bot_squad` (8 x 99 nodes). Keep them with `KEEP` (pattern `Gameplay!020_Loot!*` / whatever the
+reader finds their names are), move each squad's top node with `place()` (rigid: its defend `Pos#nn`
+boxes and actor groups are children), put the actors on the campaign's static-car line. What must be
+checked first (LIVE or by reading the stock .prp on the PC): that F07's squads are top-level nodes whose
+parents are identity at the origin (place() precondition), and that their routs reference nothing of
+F07's map (kl_fa.repair's prune would cut it). Sirens: B's map ambience already has police megaphone
+lines and a siren (`re/retomoto.md` 6). Street police respawn: move the 7 AFTER_DEATH points to the
+square once the elevator trigger has fired (an `OnlineSpawnpointTrigger` only moves TEAM stages; for
+Arcade / FA the points are fixed - 2 of 7 are on the square already).
+
+## 2b. Done in this session (code)
+- `tools/kl_audio.py`: `MERGE_FILTER = FA_FILTER + RETOMOTO_FILTER` is the default of `merge()`: music,
+  explosion, ambience and Japanese voice prefixes. UNTESTED; check the prefixes with
+  `python kl_audio.py list <DM PC_Def.str> Japan` on the PC, rebuild `PC_Def.str`, reinstall it.
+
 ## 3. How to continue: the saved workflow
 
 `.claude/workflows/retomoto-level-design.js` is the whole plan as a Workflow script (run with
