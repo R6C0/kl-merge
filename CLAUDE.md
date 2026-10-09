@@ -220,6 +220,14 @@ the bomb fuse, staged tower fight, the Heat street layer (tools/kl_fa_street.py;
 GUESSES) and the bone-id fix (kl_impact: 0 problems). KLJoin.ini = klhook/KLJoin.retomoto.ini (the
 front box). Hook SHIP 3f3f4f00, extended PC_Def.str as before. NEVER RUN IN THE GAME before this.
 The previous build is <work>/build/play_rt (bone-fixed copy: build/n_crash/play_rt_boneids).
+OWNER PLAYED play2 (18:09-18:20, two rounds; pictures <work>/research/watch/20261009_180847): the
+BALCONY START WORKS ('Heist starts in 9 sec' outside the glass, then in), loot to $2,080,000, the
+join, the street. Their report: (1) CRASH 'when i went to execute': kl2+0x98a1 in
+ZFFActionShootHumanShield slot 11, null read (dumps: research/owner_round_1009_1820); (2) ran out
+of ammo clearing everyone solo; (3) 'some of the police outside are invisible'; (4) enemies all
+carry the same pistol - wants weapon variety (lead: kl_graft.dm_rename hands Dead Men pistol
+carriers Dog Days' HUMAN SHIELD pistol template); (5) gunfire sound outside 'is sick' (good).
+Agents s-combat and s-visible are on (1)-(4), q-repeat on the repeated guard lines. All offline.
 STILL TO WIRE: the three kl_fa_street lines in kl_fa_author.py (re/retomoto_street.md); until then
 only `kl_fa_street.py test` builds with the street.
 INSTALLED FOR THE OWNER (2026-10-09 17:20, at their request "both parts and also the music"):
