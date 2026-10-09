@@ -182,6 +182,17 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+GUN LOOKS (owner asked 2026-10-09 late: Dead Men gun models, Dog Days sounds, buyable, switchable; BUILT OFFLINE, NOT RUN IN THE GAME):
+tools/kl_guns.py (docstring = the spec). New guns are NOT possible: 64 weapon items compiled in (eFF2ItemCount), the shop's 36 entries are a
+table in hashed .rdata (0xbd1f70: price, rank, tier, DLC, item, ammo). Gun models are the same format in both games (rigid parts on
+w_bone_* bones, same grip place), so a Dead Men gun is added as hidden PARTS of a Dog Days gun's model (variant 100 + n) and klhook/klgun.c
+shows one group by writing variant bytes in the loaded .prm (KLGuns.ini beside the archive). Looks: MP5 and AK-74 on the starting Zastava,
+SG 552 on the FN SCAR, M4A1 on the AK-47, P90 on the UMP, Steyr TMP on the MAC-10, USP on the M9 Beretta. Menu: button 'Guns' + window
+KLGuns (mkoverlay.py; options KLGunStart / KLGunSet through klchar.c's private vtable). Kept build <work>/build/guns/guns_F01 (stock F01,
+problems: 0; pictures: `kl_guns.py sheet`). LIVE CHECKS OWED: G1 the build with the old hook plays as stock; G2 Start=1 shows the MP5 in
+the hands (is a part's variant read every frame, or cached per gun instance?); G3 reload / drop / pickup; G4 the Guns page. NOT DONE: the
+shop's name and picture of a switched gun; Mini-14 and Taurus (in no Dead Men level's equipment tree); the wardrobe and the guns in ONE
+build (run kl_guns on a wardrobe build folder: not tried).
 HEISTER PAGE PICTURES (owner asked 2026-10-09 22:35; BUILT, NOT SEEN IN THE GAME): tools/kl_portraits.py renders the 16 characters and 8 masks
 (kl_view; <work>/build/portraits/*.png, sheet.png) and adds them to a COPY of the menu scene as picture entities KLPic_* (texture -> sprite chunk ->
 picture chunk -> ZWINGROUP + ZWINPIC; layout in its docstring; check: 0 problems) = <work>/build/portraits/out/Overlay/Scenes/kaneandlynch.zip;

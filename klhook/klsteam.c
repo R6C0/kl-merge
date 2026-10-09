@@ -262,6 +262,7 @@ static void klh_level_open(const char *asked, const char *opened)
     if (fresh) klog("steam: level archive %s opened from %s: %s (%s)", key, opened, v == 1 ? "STOCK" : v == 3 ? "NOT KNOWN" : "NOT stock", line);
     klj_level_open(key, opened, v);
     klc_level_open(key, opened);
+    klg_level_open(key, opened);
     SetLastError(err);
 }
 

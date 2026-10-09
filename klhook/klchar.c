@@ -132,6 +132,7 @@ static int __fastcall klc_get(void *self, void *edx, const char *name, int playe
 {
     int i = klc_which(name); (void)edx;
     if (i >= 0) return (int)*klc_value[i];
+    if ((i = klg_which(name)) >= 0) return klg_get(i);      /* klgun.c: KLGunStart, KLGunSet */
     return ((int (__fastcall *)(void *, void *, const char *, int))(DWORD_PTR)KLH_VA(0x504b40))(self, 0, name, player);
 }
 
@@ -148,13 +149,14 @@ static void __fastcall klc_set(void *self, void *edx, const char *name, int valu
         }
         return;
     }
+    if ((i = klg_which(name)) >= 0) { klg_put(i, value); return; }
     ((void (__fastcall *)(void *, void *, const char *, int, int))(DWORD_PTR)KLH_VA(0x472450))(self, 0, name, value, player);
 }
 
 static int __fastcall klc_enabled(void *self, void *edx, const char *name, int player)
 {   /* the stock function returns a bool in al; the caller tests al only */
     (void)edx;
-    if (klc_which(name) >= 0) return 1;
+    if (klc_which(name) >= 0 || klg_which(name) >= 0) return 1;
     return ((int (__fastcall *)(void *, void *, const char *, int))(DWORD_PTR)KLH_VA(0x4b4560))(self, 0, name, player);
 }
 
