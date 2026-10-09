@@ -196,6 +196,10 @@ State 2026-10-09 01:30. `tools/kl_graft.py build <S> <M>` + `install` + `python 
   `kl_dmassets.py test` -> problems 0) but have not been in a tested build in that state.
 - Not joined yet: map sounds (zeroed; needs the bank merge of re/audio.md as tools), animations
   (one side's .ANM), ZHavokCar (flattened to ZSTDOBJ), the FA game-mode layer for a Dead Men map.
+- Which map is which (by the names inside each level, 2026-10-09): M01_FA_A = the diner / Sunny Hill
+  Plaza map, M03_FA_A = the BANK ('Withdrawal': 326 'bank', 214 'vault' names), M02_FA_A = streets,
+  M06_FA_A not identified. Earlier notes calling M01 'the bank' were wrong.
+- OWNER PRIORITY (2026-10-09, on seeing M01 load): the bank, Withdrawal = M03_FA_A, next.
 Then, in order:
 1. Make M01 play as a Fragile Alliance round (re/fa_gamemode.md), going through the lobby
    (klhook/klauto.c can script the menu; untested live).
