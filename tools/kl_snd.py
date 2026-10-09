@@ -517,7 +517,25 @@ def _signatures(s):
     return sig
 
 
-def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, log=print, stats=None, defs=None):
+class Pool:
+    """A set merge() makes itself, for a slot of a definition (the `defs` hook returns it in place
+    of a source offset): name = the new set's name (bytes), members = source offsets (sounds or
+    sets), pad = how many times a silent sound follows them. The set is written in mode 2
+    (kl2 0x4ddb10: no member again until all had their turn, 32 members at most), so `pad`
+    silent members make each real clip come round once in len(members) + pad calls.
+    kl_voice.planner builds them (re/voice.md 7)."""
+
+    def __init__(self, name, members, pad=0):
+        self.name, self.members, self.pad = name, tuple(members), pad
+
+
+SILENCE = b'audio:dialog/kl_merge/silence#sound'
+SILENCE_WAV = b'Dialog/kl_merge/silence.wav'
+SET_BAG, BAG_MAX = 2, 32                           # set +0x20 = 2: shuffle bag; above 32 members the engine plays at random
+
+
+def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, log=print, stats=None, defs=None,
+          inmem=None):
     """Append what `roots` need of bank `src` to the Dog Days bank `base`.
     base, src: walked Snd (src of either game); *_whd, *_wav: their .WHD / .WAV bytes;
     roots: offsets in src's .SND (the map nodes' sound fields, .LOC sound ids);
@@ -528,8 +546,14 @@ def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, l
     effect, a wave whose clip is not in the stream file). A root that is no object of src gets
     no entry. stats (a Counter) receives the counts that are logged.
     defs: None, or f(name of a definition of src, its slots as src offsets) -> the slots the
-    copy gets (src offsets, 0 = empty, any length; None = as they are): kl_voice.def_slots puts
-    a Dead Men character definition into Dog Days' slot order."""
+    copy gets (src offsets, 0 = empty, a Pool = a set made here; any length; None = as they
+    are): kl_voice.def_slots / planner put a Dead Men character definition into Dog Days' slot
+    order and widen its thin sets.
+    inmem: None, or f(source .WHD record fields, clip name) -> the clip's bytes or None. Asked
+    for every streamed IMA ADPCM clip that stands alone (no interleaved group, PC_Def.str); with
+    bytes the clip becomes a record IN MEMORY (the level's .WAV) - the form 643 of F07's 729
+    in-memory records have - and no longer depends on Dog Days' stream player decoding ADPCM,
+    which no stock clip exercises (kl_voice.stream_clip, re/voice.md 6.2)."""
     if base.game != 'dd':
         raise ValueError('the base bank must be Dog Days\'')
     bad = base.clean()
@@ -603,7 +627,10 @@ def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, l
                 if u32(d, q) == 0x12 and u32(d, q + 4): out.append(u32(d, q + 4))
                 if u32(d, q) == 0x13 and u32(d, q + 0x1c): out.append(u32(d, q + 0x1c))
         if t == 1 and c and c < src.T: out.append(c)
-        elif t in (2, 5) and c: out += [x for x in slots(o) if x]
+        elif t in (2, 5) and c:
+            for x in slots(o):
+                if isinstance(x, Pool): out += [m for m in x.members if m]
+                elif x: out.append(x)
         elif t == 3 and c: out += [u32(d, c + 12 * i + 8) for i in range(n) if u32(d, c + 12 * i) in (2, 4, 5, 6) and u32(d, c + 12 * i + 8)]
         return out
     while stack:
@@ -623,7 +650,7 @@ def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, l
 
     # ---- 2. wave headers and wave data
     recs = W.records(src.game, src_whd)
-    writer, whdmap = W.Writer(base_whd, base_wav), {}
+    writer, whdmap, held = W.Writer(base_whd, base_wav), {}, {}
     def stream_rec(f):
         """(name, Dog Days fields) of a streamed source record, None if its clip is not in the
         merged stream file."""
@@ -634,6 +661,22 @@ def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, l
             off = strmap[f['off']]
             g['fmt'], g['off'], g['offhi'] = f['fmt'], off & 0xffffffff, off >> 32
         return cs(src_whd, f['name']), g
+    def mem_rec(old):
+        """A streamed ADPCM clip as a record in memory (inmem), None if it stays a stream record."""
+        if old not in held:
+            f, held[old] = recs.get(old), None
+            if inmem and f and f['fmt'] & W.STREAMED and not f['fmt'] >> 24 and not f['fmt'] & W.LANGFILE and f['fmt'] & 0xffff == 0x11:
+                name = cs(src_whd, f['name'])
+                data = inmem(f, name)
+                if data is None:
+                    st['streamed ADPCM clips left streamed (not readable)'] += 1
+                else:
+                    # the record of a clip in memory: no stream flag, no lip-sync word (the LIP block
+                    # stays in the stream file), the fill Dog Days' in-memory records end with
+                    g = dict(W.to_dd(f, src.game), fmt=0x11, lip=0, x3c=0xcdcdcd00, x40=0xcdcdcdcd)
+                    held[old] = writer.add(name, g, data)
+                    st['streamed ADPCM clips moved into the .WAV'] += 1; st['streamed ADPCM bytes moved into the .WAV'] += len(data)
+        return held[old]
     def whd_rec(old):
         if old not in whdmap:
             f = recs.get(old)
@@ -684,19 +727,27 @@ def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, l
         return ('s', p)
     tg = lambda x: target.get(x, ('abs', 0))               # a pointer to no object of the source: 0
     newtab, newpar = collections.defaultdict(list), collections.defaultdict(list)
+    pools, made = {}, {}                                    # id -> Pool; copied sound -> (its Dog Days record, its parameter keys)
     nl_src, nl_dst = GAME[src.game]['streams'] - 1, GAME['dd']['streams'] - 1
     for o in order:
         t = kind[o]
         if t == 4:
             if u32(d, o) == 4:                              # one record
-                r = whd_rec(u32(d, o + 0x14))
+                r, flags = mem_rec(u32(d, o + 0x14)), b'\0\0\xcd\xcd' + bytes(4)    # +0xc as 785 of F07's 801 in-memory waves
+                if r is None:
+                    r, flags = whd_rec(u32(d, o + 0x14)), d[o + 0xc:o + 0x14]
                 if r is None:
                     target[o] = ('abs', 0); continue
-                put(('o', o), d[o:o + 4] + b'\xcd' * 4 + d[o + 8:o + 0x14] + struct.pack('<I', r) + d[o + 0x18:o + 0x20],
+                put(('o', o), d[o:o + 4] + b'\xcd' * 4 + d[o + 8:o + 0xc] + flags + struct.pack('<I', r) + d[o + 0x18:o + 0x20],
                     [(8, string(u32(d, o + 8)))])
             else:
                 n = src.langs(o)
                 rs = [list(struct.unpack_from('<6I', d, o + 8 + 0x1c * i)) for i in range(n)]    # name flags 0 whd seconds 0
+                m = mem_rec(rs[0][3]) if not same and rs[0][0] else None
+                if m is not None:                           # its English clip is held in memory now: a one-record wave
+                    put(('o', o), struct.pack('<I', 4) + b'\xcd' * 4 + bytes(4) + b'\0\0\xcd\xcd' + bytes(4) +
+                        struct.pack('<2I', m, rs[0][4]) + bytes(4), [(8, string(rs[0][0]))])
+                    newtab[4].append(('o', o)); continue
                 for r in (rs if same else rs[:1]):           # Dead Men: only the English clip is carried
                     if r[0]:
                         r[3] = whd_rec(r[3])
@@ -723,8 +774,8 @@ def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, l
             body = body[:0x1c] + struct.pack('<f', NEW_FLOAT) + body[0x1c:0x2d] + b'\0\0\xcd'
         refs = [(8, string(u32(d, o + 8)))]
         np_, pl, n, c = u16(d, o + 0xc), u32(d, o + 0x10), u16(d, o + 0x18), u32(d, o + 0x14)
+        keep = []
         if pl:
-            keep = []
             for q in struct.unpack_from('<%dI' % np_, d, pl):
                 pt = u32(d, q)
                 if not same and pt in DROP_PARAMS:
@@ -748,13 +799,52 @@ def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, l
         elif t in (2, 5) and c:
             lst = slots(o)                                  # a definition's list may have another length now
             struct.pack_into('<2H', body, 0x18, len(lst), len(lst))
-            put(('cl', o), bytes(4 * len(lst)), [(4 * i, tg(x)) for i, x in enumerate(lst) if x])
+            for x in lst:
+                if isinstance(x, Pool) and id(x) not in pools:
+                    pools[id(x)] = x
+            put(('cl', o), bytes(4 * len(lst)), [(4 * i, ('pool', id(x)) if isinstance(x, Pool) else tg(x)) for i, x in enumerate(lst) if x])
             refs.append((0x14, ('cl', o)))
         elif t == 3 and c:
             put(('ev', o), d[c:c + 12 * n], [(12 * i + 8, tg(u32(d, c + 12 * i + 8))) for i in range(n)
                                              if u32(d, c + 12 * i) in (2, 4, 5, 6) and u32(d, c + 12 * i + 8)])
             refs.append((0x14, ('ev', o)))
         put(('o', o), bytes(body), refs); newtab[t].append(('o', o))
+        if t == 1:
+            made[o] = (bytes(body), keep)
+    # ---- 3b. the sets made here (Pool) and the silent sound their padding names
+    sil = by_name.get((1, SILENCE))                         # the base has it already (second step of a chained build)
+    for pid, P in pools.items():
+        mem = [m for m in P.members if m and target.get(m, ('abs', 0)) != ('abs', 0)]
+        like = next((m for m in mem if m in made), None)    # a sound copied in this merge: the silent one is tuned like it
+        pad = min(P.pad, BAG_MAX - len(mem)) if (sil or like is not None) and len(mem) < BAG_MAX else 0
+        if pad and not sil and ('o', 'silence') not in new:
+            # one block of IMA ADPCM zeros (predictor 0, index 0, every nibble 0 = 2041 samples of
+            # silence, 0.064 s at 32 kHz mono), held in memory like the clips beside it
+            at = writer.add(SILENCE_WAV, dict(name=0, fmt=0x11, rate=32000, bits=4, pcm=2 * 2041, size=1024, ch=1, off=0, offhi=0,
+                                              samples=2041, block=1024, spb=2041, lip=0, x34=0xcdcdcdcd, x38=0xcdcdcdcd,
+                                              x3c=0xcdcdcd00, x40=0xcdcdcdcd), bytes(1024))
+            put(('s', 'silence.wav'), SILENCE_WAV + NUL)
+            put(('o', 'silwave'), struct.pack('<I', 4) + b'\xcd' * 4 + bytes(4) + b'\0\0\xcd\xcd' + bytes(4) +
+                struct.pack('<If', at, 2041 / 32000) + bytes(4), [(8, ('s', 'silence.wav'))])
+            newtab[4].append(('o', 'silwave'))
+            body, keep = made[like]
+            put(('s', 'silence'), SILENCE + NUL)
+            refs = [(8, ('s', 'silence')), (0x14, ('o', 'silwave'))] + ([(0x10, ('pl', like))] if keep else [])
+            put(('o', 'silence'), body, refs); newtab[1].append(('o', 'silence'))
+            for k in keep:                                  # the parameter tables hold one entry per use
+                newpar[u32(out, new[k])].append(k)
+            st['silent sound added (padding of the widened sets)'] += 1
+        keys = [tg(m) for m in mem] + [('abs', sil) if sil else ('o', 'silence')] * pad
+        if not keys:
+            continue
+        put(('s', 'pool', pid), P.name + NUL)
+        put(('pcl', pid), bytes(4 * len(keys)), [(4 * i, k) for i, k in enumerate(keys)])
+        # a set: +0x18 count, +0x1a capacity, +0x1c the picker's state (0), +0x20 mode; no parameters
+        put(('pool', pid), struct.pack('<I', 2) + b'\xcd' * 4 + bytes(4) + b'\0\0\xcd\xcd' + bytes(8) +
+            struct.pack('<2H2I', len(keys), len(keys), 0, SET_BAG if len(keys) > 1 else 0) + bytes(12),
+            [(8, ('s', 'pool', pid)), (0x14, ('pcl', pid))])
+        newtab[2].append(('pool', pid))
+        st['sets widened or padded (kl_voice.planner)'] += 1; st['silent members in those sets'] += pad
     value = lambda key: key[1] if key[0] == 'abs' else new.get(key, 0)
     for pos, key in fix:
         key = target.get(key[1], key) if key[0] == 'o' else key       # a wave that was dropped after it was named
@@ -984,7 +1074,9 @@ def graft_audio(s_name, m_name, sc, ks, log=print, more_roots=(), loc=True, voic
     definitions in Dog Days' slot order, a voice set for the map's characters that have none,
     the settings' empty or unknown line keys from S, K_C1..K_C9 leaves for Dead Men lines in
     the fields Dog Days reads per character, and (option 'heroes') the story voice sets on the
-    eight heisters."""
+    eight heisters; since the owner's first round ('the soldiers replay the same thing too many
+    times') also: thin voice sets widened and padded so no line comes again before `cycle`
+    calls of its event, and streamed ADPCM clips moved into the level's .WAV (re/voice.md 6-7)."""
     a, st = Audio(), collections.Counter()
     voice = VOICE if voice is None else voice
     V = vo = None
@@ -1011,7 +1103,8 @@ def graft_audio(s_name, m_name, sc, ks, log=print, more_roots=(), loc=True, voic
     st['roots'] = len(rs)
     snd, whd, wav, omap = merge(base, src, read(beside(s_name, '.WHD')), read(beside(s_name, '.WAV')),
                                 read(beside(m_name, '.WHD', mg)), read(beside(m_name, '.WAV', mg)), rs, log=log, stats=st,
-                                defs=V.def_slots if V and vo['defs'] and mg == 'dm' else None)
+                                defs=V.planner(src, vo) if V and mg == 'dm' else None,
+                                inmem=V.stream_clip if V and vo['inmem'] and mg == 'dm' else None)
     st.update(rewrite(sc, ks, omap))
     if V and vo['npc']:
         st.update(V.give_voices(sc, ks, s_name, snd, log, prefer=vo['prefer']))

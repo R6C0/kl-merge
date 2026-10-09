@@ -10,6 +10,10 @@ repairs. Spec with the evidence: re/voice.md. OFFLINE: nothing here has been hea
                                              (default <work>/build/voice), census of each, the
                                              before / after table. Nothing is installed.
     python kl_voice.py defs <level>          the character definitions of a stock bank, slot by slot
+    python kl_voice.py variety <level|zip>   per voice set and slot: distinct clips, silent members, mode
+    python kl_voice.py build2 [<out>]        the bank and Retomoto without / with the repairs into
+                                             <out> (default <work>/build/voice2), per-slot clip counts
+                                             before / after, file sizes. Nothing is installed.
 
 HOW A CHARACTER SPEAKS IN DOG DAYS (EXE = read in kl2.exe, MEASURED = counted on the stock files)
   1 Barks. A character (class ZLNKWHANDS and below: ZFFActor, ZFFPlayer) holds six sound
@@ -49,7 +53,33 @@ HOW A CHARACTER SPEAKS IN DOG DAYS (EXE = read in kl2.exe, MEASURED = counted on
     PCM (0x7a04e0). So the stream player does have an ADPCM decoder path, although Dog Days
     ships no streamed ADPCM clip. Nothing is re-encoded. Whether it SOUNDS right is for ears.
 
+  6 Repetition (the owner's first round on Retomoto: 'the soldiers replay the same thing too
+    many times'). EXE: a set picks its member in 0x4ddb10 by set +0x20: 0 = in order, 1 = at
+    random, 2 = a bag - a 32-bit mask at set +0x1c of the members that had their turn, a random
+    one of the others is taken, the mask is cleared when one is left (a set of 1 is played as
+    mode 0, above 32 members as mode 1). Dead Men has the same routine (0x5d3d30) and the merge
+    copies the set record whole, so NOTHING IS LOST IN THE MERGE: the played bank holds the 73
+    / 63 clips Dead Men's own bank holds, in mode 2. The state lives in the set, so it is shared
+    by every character with that voice. The cause is the content: Dead Men's Japanese voice
+    has 1 clip for 'enemy close' and 'heavy fire', 2 for 'suppress response' and 'man down',
+    none for 'enemy spotted' (Dog Days' police_01: 4, 2, 10, 12, 12), the same 6 police
+    warnings serve 'first contact' (3) AND slot 28, which Dog Days fires as 'advance' - and
+    every soldier of a Dead Men level has the one set (Dog Days gives each three: fields 0..2).
+    The only gate on a bark is per character (0x763200: not before its own last clip ended, by
+    the wave's seconds at wave +0x18). No field of a set or sound is a cooldown. planner()
+    therefore widens the thin slots from the neighbouring Dead Men sets and the second Japanese
+    voice (guard_japanese_male_01, in both M09 banks), without a clip in two of those slots,
+    and pads every speech set to `cycle` members with a silent sound: no line comes again
+    before `cycle` calls of its event.
+  7 Streamed ADPCM (all the Japanese shouted lines). The buffer fill has the path (5), but no
+    stock Dog Days clip is one, so it has never been proven to play. stream_clip() takes the
+    clip's blocks out of Dead Men's PC_Def.str and merge() stores them in the level's .WAV as
+    an in-memory ADPCM record - same codec, same 0x400 blocks, the form of 643 of F07's 729
+    in-memory records. Nothing is decoded or re-encoded.
+
 WHAT IS A GUESS (each marked ASSUMPTION where the code makes it)
+  - planner(): which Dead Men sets may fill which Dog Days event (NPC_POOL, by set names), and
+    that a silent turn is better than the same line again (`cycle`).
   - def_slots(): which Dead Men slot feeds Dog Days' 27, 28, 29, 34 (by the names of the sets
     the stock definitions hold in those slots, not read in code).
   - give_voices(): a mute soldier gets the voice set most of its kind have on the same map.
@@ -91,7 +121,29 @@ NPC_DM, NPC_DD = 31, 35                     # slots of an NPC voice definition
 NPC_FROM = {27: (28, 18), 28: (18, 17), 29: (17, 18), 34: (3, 5, 4)}
 NPC_CLEAR = (26, 27, 28, 30)                # Dead Men's own use of slots Dog Days gives another meaning (or none)
 HERO_DEFS = {'Kane': b'/kane_default#def', 'Lynch': b'/lynch_default#def'}     # animation set -> story voice set
+# Dog Days slot <- where its clips come from, in order: ('own', Dead Men slot of the same definition)
+# or ('alt', part of a set name in the second voice of that language, ALT). The first source is the
+# slot's own; a clip that another slot of this table already has is left out of the later ones, so
+# no line serves two events - unless the slot would stay empty (then its first source that holds
+# anything is taken whole).
+# ASSUMPTION, by set names only: Dog Days 3 first contact, 4 enemy close, 5 enemy spotted, 7 suppress
+# response, 8 suppress, 13 heavy fire, 18 / 28 / 29 advance, 25 man down, 27 battle cries, 34 alert;
+# Dead Men 9 / 11 cover responses, 10 / 12 cover talk, 15 team disruption + retreat, 16 panic, 17
+# advance response + police orders, 28 police warning, 30 'no access' (a guard sending you away);
+# second Japanese voice: attacks, 'fight breakout', 'break down door' (the shouted ones; its hurt /
+# panic / begging sets are not used).
+NPC_POOL = {3: (('own', 3),), 4: (('own', 4), ('alt', 'attack')), 5: (('own', 5), ('own', 10), ('own', 12)),
+            7: (('own', 7), ('own', 9), ('own', 11)), 8: (('own', 8),), 13: (('own', 13), ('own', 15)), 18: (('own', 18),),
+            25: (('own', 25), ('own', 16)), 27: (('alt', 'fightbreakout'), ('own', 28), ('own', 18)),
+            28: (('own', 17), ('own', 18)), 29: (('alt', 'breakdowndoor'), ('own', 17), ('own', 18)),
+            34: (('own', 30), ('own', 3), ('own', 5), ('own', 4))}
+ALT = {'/jpn_': 'guard_japanese_male_01#def'}                # part of a definition's name -> the second voice in its bank
+SPEECH_FROM = 2                             # slots 0 pain and 1 die are left as they are
+INMEM_MAX = 1 << 20                         # a streamed ADPCM clip above this stays streamed (none on the six maps)
 OPTIONS = dict(defs=True,                   # Dead Men character definitions in Dog Days' slot order
+               variety=True,                # ... with the thin slots widened (NPC_POOL) instead of the plain def_slots
+               cycle=8,                     # every speech set padded with silence to this many members (0 = no padding)
+               inmem=True,                  # streamed ADPCM clips into the level's .WAV
                npc=True, prefer='map',      # a voice set for mute soldiers / civilians: the map's own first, or 'host'
                lines=True,                  # empty / unknown line keys of the map's settings from S
                aliases=True,                # K_C1..K_C9 leaves for Dead Men keys in per-character fields
@@ -125,6 +177,172 @@ def def_slots(name, slots):
     for dst, srcs in NPC_FROM.items():
         out[dst] = next((slots[s] for s in srcs if slots[s]), 0)
     return out
+
+
+def clip_key(S, o):
+    """What tells two sounds with the same recording apart from two recordings: the wave's file name."""
+    w = u32(S.b, o + 0x14)
+    return kl_snd.cs(S.b, u32(S.b, w + 8)).lower() if w and w < S.T and u32(S.b, w + 8) else S.name(o).lower()
+
+
+def planner(src, opt=None):
+    """-> kl_snd.merge's `defs` hook for source bank src (walked), or None when the options ask
+    for nothing. A 31-slot Dead Men voice definition comes out with Dog Days' 35 slots:
+    variety off = def_slots() (whole Dead Men sets moved); on = the slots of NPC_POOL are sets
+    made here (kl_snd.Pool) from the clips of several Dead Men sets, no clip in two of them.
+    cycle = n: every speech set of the definition with fewer than n clips is padded with a
+    silent sound to n members, so the bag (mode 2, kl2 0x4ddb10) gives each line once in n
+    calls. A slot whose set needs neither keeps Dead Men's own set object."""
+    o_ = options(opt if opt is not None else True)
+    if not o_['defs']:
+        return None
+    cycle = min(int(o_['cycle'] or 0), kl_snd.BAG_MAX)
+    if not o_['variety'] and not cycle:
+        return def_slots
+    by_tail = {name.rsplit('/', 1)[-1]: slots for name, slots in definitions(src).values()}
+    made = {}                               # (clips, pad) -> Pool: the same pool is one set (jpn_guard_01 and jpn_bouncer_01)
+
+    def clips(x):
+        """The sounds below set x, a recording once; None if a sequence is among them (left alone)."""
+        if not x or src.kind.get(x) != 2:
+            return None if x else []
+        out, seen = [], set()
+        for s in sounds_below(src, x):
+            if clip_key(src, s) not in seen:
+                seen.add(clip_key(src, s)); out.append(s)
+        return out
+
+    def alt_sets(name):
+        tail = next((v for k, v in ALT.items() if k in name), None)
+        found = {}
+        for x in by_tail.get(tail, ()) if tail else ():
+            stack = [x]
+            while stack:
+                y = stack.pop()
+                if y and src.kind.get(y) == 2 and y not in found:
+                    found[y] = src.name(y).decode('latin1').rsplit('/', 1)[-1]
+                    n, c = u16(src.b, y + 0x18), u32(src.b, y + 0x14)
+                    stack += [k for k in (struct.unpack_from('<%dI' % n, src.b, c) if c else ()) if src.kind.get(k) == 2]
+        return found
+
+    def pool(name, i, mem, own):
+        """own: the Dead Men set this slot had (0 = none). -> what the slot gets."""
+        pad = max(0, cycle - len(mem)) if mem else 0
+        if not mem:
+            return 0
+        if not pad and own and clips(own) == mem:
+            return own
+        key = (tuple(mem), pad)
+        if key not in made:
+            made[key] = kl_snd.Pool(b'audio:dialog/kl_merge/' + name.rsplit('/', 1)[-1].split('#')[0].encode('latin1') + b'_slot%02d#set' % i, mem, pad)
+        return made[key]
+
+    def plan(name, slots):
+        if len(slots) != NPC_DM:
+            return None
+        name = name.decode('latin1') if isinstance(name, bytes) else name
+        base = def_slots(name, slots)
+        if any(clips(x) is None for x in slots):            # ASSUMPTION: a voice set built on sequences is not to be re-cut (none on the six maps)
+            return base
+        out = list(base)
+        if o_['variety']:
+            alts = alt_sets(name)
+            def source(kind, what):
+                if kind == 'own':
+                    return clips(slots[what]) or []
+                got, seen = [], set()
+                for y, nm in sorted(alts.items(), key=lambda kv: kv[1]):
+                    if what in nm:
+                        for s in clips(y) or []:
+                            if clip_key(src, s) not in seen:
+                                seen.add(clip_key(src, s)); got.append(s)
+                return got
+            used, mem, lent = set(), {}, {}
+            for i, srcs in NPC_POOL.items():                # first every slot's own source ...
+                mem[i] = [s for s in source(*srcs[0]) if clip_key(src, s) not in used]
+                used.update(clip_key(src, s) for s in mem[i])
+            for i, srcs in NPC_POOL.items():                # ... then what the others left
+                for kw in srcs[1:]:
+                    add = [s for s in source(*kw) if clip_key(src, s) not in used]
+                    mem[i] += add; used.update(clip_key(src, s) for s in add)
+                    if add and kw[0] == 'own' and kw[1] not in NPC_POOL:
+                        lent[kw[1]] = i                     # that Dead Men slot's event now draws from the same bag
+            for i, srcs in NPC_POOL.items():
+                if mem[i]:
+                    out[i] = pool(name, i, mem[i][:kl_snd.BAG_MAX], slots[i] if srcs[0] == ('own', i) else 0)
+            for j, i in lent.items():
+                out[j] = out[i]
+            for i in range(SPEECH_FROM, len(out)):          # the slots the table does not name: Dead Men's set, padded
+                if out[i] and not isinstance(out[i], kl_snd.Pool) and i not in NPC_POOL:
+                    out[i] = pool(name, i, clips(out[i]), out[i])
+            for i, srcs in NPC_POOL.items():                # nothing left for it: the set of the first source that has one, shared
+                if not mem[i]:
+                    kw = next((kw for kw in srcs if source(*kw)), None)
+                    out[i] = 0 if kw is None else out[kw[1]] if kw[0] == 'own' else pool(name, i, source(*kw)[:kl_snd.BAG_MAX], 0)
+        for i in range(SPEECH_FROM, len(out)):              # variety off: every speech set as it is, padded
+            if out[i] and not isinstance(out[i], kl_snd.Pool):
+                out[i] = pool(name, i, clips(out[i]), out[i])
+        return out
+    return plan
+
+
+_dm_str = {}
+
+def stream_clip(f, name=None):
+    """kl_snd.merge's `inmem` hook: the bytes of the streamed mono IMA ADPCM clip with Dead Men
+    .WHD record f, read from Dead Men's PC_Def.str (the block at the record's offset, behind its
+    0x1000-byte LIP block if it has one), or None when they do not look like 0x400-byte ADPCM
+    blocks (predictor, step index <= 88, a zero byte). The same bytes an in-memory ADPCM record
+    holds (block 0x400, 0x7f9 samples a block), so nothing is re-encoded."""
+    import kl_str
+    if f['ch'] != 1 or f['block'] != 0x400 or f['size'] % 0x400 or not 0 < f['size'] <= INMEM_MAX:
+        return None
+    if 'f' not in _dm_str:
+        _dm_str['f'] = open(kl_str.paths()['dm'], 'rb')
+    fh = _dm_str['f']
+    fh.seek(f['off'])
+    if fh.read(4) != b'LIP ':
+        fh.seek(f['off'])
+    else:
+        fh.seek(f['off'] + kl_str.LIP)
+    data = fh.read(f['size'])
+    if len(data) != f['size'] or any(data[b + 2] > 88 or data[b + 3] for b in range(0, len(data), 0x400)):
+        return None
+    return data
+
+
+def variety(src, log=None):
+    """Per voice definition the characters of a level use (a built archive or a stock Dog Days
+    level): {name: {slot: (distinct clips, silent members, mode, by format)}}."""
+    sc, S, recs, _leaves = load(src)
+    defs, used = definitions(S), collections.Counter()
+    for _k, _kind, slots, _a in characters(sc):
+        used.update(v for v in slots if v in defs)
+    out = collections.OrderedDict()
+    for o, n in used.most_common():
+        name, slots = defs[o]
+        if len(slots) not in (NPC_DM, NPC_DD):
+            continue
+        row, every = {}, set()
+        for i, x in enumerate(slots):
+            if not x:
+                continue
+            ss = sounds_below(S, x)
+            real = [s for s in ss if S.name(s) != kl_snd.SILENCE]
+            every.update(clip_key(S, s) for s in real)
+            row[i] = (len({clip_key(S, s) for s in real}), sum(1 for s in _members(S, x) if S.kind.get(s) == 1 and S.name(s) == kl_snd.SILENCE),
+                      u32(S.b, x + 0x20) if S.kind.get(x) == 2 else -1, dict(collections.Counter(codec(S, recs, s) for s in set(real))))
+        out['%s (%d characters, %d distinct clips)' % (name.split('/')[-1], n, len(every))] = row
+    if log:
+        for name, row in out.items():
+            log('  %s; slot:clips+silent members' % name)
+            log('      ' + '  '.join('%d:%d%s' % (i, v[0], '+%ds' % v[1] if v[1] else '') for i, v in sorted(row.items())))
+    return out
+
+
+def _members(S, x):
+    n, c = u16(S.b, x + 0x18), u32(S.b, x + 0x14)
+    return struct.unpack_from('<%dI' % n, S.b, c) if c and S.kind.get(x) == 2 else ()
 
 
 def definitions(S):
@@ -508,9 +726,48 @@ def build(out=None, log=print):
     return cens
 
 
+def build2(out=None, log=print, maps=('bank', 'retomoto')):
+    """The bank and Retomoto without and with the repairs into <out>/<before|after>/ (default
+    <work>/build/voice2), then per voice set and slot the distinct clips before / after and the
+    sizes of the files a level loads. Nothing is installed. -> {name: (result, archive)}"""
+    import kl_maps
+    from kl_port_check import workdir
+    out = out or os.path.join(workdir(), 'build', 'voice2')
+    res = {}
+    for tag, voice in (('before', None), ('after', True)):
+        kl_snd.VOICE = voice
+        try:
+            folder = os.path.join(out, tag)
+            if 'bank' in maps:
+                r = kl_maps.one(folder, 'F07', 'M03_FA_A', keep=True)
+                res['bank ' + tag] = (r, os.path.join(folder, 'F07+M03_FA_A', kl_maps.SLOT + '_Main.zip'))
+            if 'retomoto' in maps:
+                kl_maps.PSEUDO.pop('R09', None)
+                r = kl_maps.chain(folder, 'F07', 'M09_B', 'M09_A', keep=True, author=True)
+                res['retomoto ' + tag] = (r, os.path.join(folder, 'R09+M09_A (R09 = F07+M09_B)', kl_maps.SLOT + '_Main.zip'))
+        finally:
+            kl_snd.VOICE = None
+            kl_maps.PSEUDO.pop('R09', None)
+    for name, (r, path) in res.items():
+        log('\n===== %s: %s, %s s, problems %s' % (name, 'built' if r.get('ok') else 'FAILED ' + str(r.get('error')), r.get('seconds'), r.get('problems')))
+        if r.get('ok') and os.path.isfile(path):
+            log('  ' + path)
+            c = census(path)
+            log('  characters: %s' % c['characters'])
+            log('  bank: %s' % c['bank'])
+            log('  clips by format: %s' % c['clips by format'])
+            variety(path, log)
+            log('  sizes: %s' % ', '.join('%s %d' % (e, os.path.getsize(path[:-4] + e)) for e in ('.zip', '.WHD', '.WAV')))
+    return res
+
+
 def main(a):
     if a[:1] == ['test']:
         return test()
+    if a[:1] == ['variety'] and len(a) > 1:
+        variety(a[1], print); return 0
+    if a[:1] == ['build2']:
+        build2(a[1] if len(a) > 1 else None); return 0
     if a[:1] == ['census'] and len(a) > 1:
         census(a[1], print); return 0
     if a[:1] == ['build']:

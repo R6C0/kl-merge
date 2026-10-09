@@ -12,8 +12,13 @@ files; **ASSUMPTION** = fits the evidence, not proven; **LIVE** = only a run wit
     python tools/kl_voice.py build [<out>]        bank + Retomoto, without / with the repairs / with the
                                                   heisters' experiment -> <work>\build\voice (6 builds, 6 min)
     python tools/kl_voice.py defs <level>         a stock bank's definitions slot by slot
+    python tools/kl_voice.py variety <level|zip>  per voice set and slot: distinct clips, silent members
+    python tools/kl_voice.py build2 [<out>]       bank + Retomoto without / with the repairs -> <work>\build\voice2
 
 ## 0. Result
+
+**After the owner's first round (2026-10-09): 'the soldiers replay the same thing too many times'
+- cause, engine facts and repair are section 7; what to listen for now is 7.5.**
 
 The owner hears music and too little from the characters. Three separate causes were found, and
 one thing that is not a fault of the graft:
@@ -83,6 +88,7 @@ differs: `kl_fa_author.py` changed since).
   Civilians: Dog Days 6 slots (0 pain, 1 die, 4 scream, 5 panic), Dead Men 5 (1 die, 4 scream).
   Players: `kane_default` 63 slots (0 pain, 1 die, 4 / 5 enemy spotted, 16 panic, 23 sniper, 31
   adrenalin, 58 ammo low, 59 ammo out, 60 reload, 61 / 62 cover), `lynch_default` 42 slots.
+- The set picker and the one gate found on a bark: section 7.2.
 - Which of fields 0..2 an actor speaks with (stock police have three: police_01 / 02 / 03) was
   **not traced**. Who decides *when* (the AI's soldier / squad code calling the event) was not traced
   either: the slot numbers above are the whole interface a level file has to it.
@@ -244,3 +250,175 @@ Build with `VOICE = True` first; add `heroes` in a second build so a fault can b
   `civilian_female` / `civilian_female_02` (MEASURED); appending one the way `hero_voices` appends
   Kane's is the obvious next step (not done).
 - M01 / M02 / M06 were not built here; the code is the same and their settings have the same shape.
+
+## 7. Repetition: 'the soldiers replay the same thing too many times' (2026-10-09, agent q-repeat)
+
+The owner played a full round on Retomoto (build `<work>\build\play_rt`, repairs off) and heard the
+Dead Men guards say the same lines over and over. **Offline only** again: nothing was started,
+installed or written into the Dog Days folder. Builds: `<work>\build\voice2\{before,after}`.
+
+    python tools/kl_voice.py variety <level|zip>   per voice set and slot: distinct clips + silent members
+    python tools/kl_voice.py build2 [<out>]        bank + Retomoto without / with the repairs (2.5 min)
+
+### 7.1 Causes
+
+| | | status |
+|---|---|---|
+| A | **Dead Men's Japanese voice is thin exactly where Dog Days' own voice is richest.** Clips per event, Dog Days `police_01` vs `jpn_guard_01`: enemy spotted 12 / **0**, enemy close 4 / **1**, suppress response 10 / **2**, suppress 12 / 4, heavy fire 2 / **1**, advance 13 / 6, man down 12 / **2** | MEASURED |
+| B | **The same six 'police warning' clips serve two events** in the played build: Dead Men slot 3 (first contact: 1 clip + those 6) and Dead Men slot 28, which Dog Days' definitions use for 'advance'. (`def_slots`, had it been on, would have added them to 27 and 34 as well: it moved whole sets.) | MEASURED |
+| C | **All 44 tower guards have one voice set**, the 18 street police another that shares 61 of its 63 clips with it. A set's play state lives in the set (7.2), so the whole tower is one speaker with 73 clips. Dog Days gives every policeman three sets (fields 0..2 = `police_01`, `_02`, `_03`: 145 of 145 police in F02, F07, L04; 92 + 89 + 100 clips) | MEASURED |
+| D | The graft did **not** collapse voices: Dead Men's own M09_A has `jpn_guard_01` on its guards (73 references in the .prp, 4 `jpn_bouncer_01`, 1 `guard_japanese_male_01`), M09_B `jpn_police_01` (80; 9 `guard_japanese_male_01`) | MEASURED (raw dword count in the .prp) |
+| E | **Nothing was lost in the merge.** The played bank offers per slot exactly what Dead Men's bank does (73 / 63 / 73 clips, table in 7.4), in the same mode | MEASURED |
+| F | Streamed ADPCM not playing would leave only the 15 grunts. That is not what the owner describes ('the same thing' = lines), and static reading says it decodes (7.3) - but it cannot be proven offline, so the dependence is removed | EXE + ASSUMPTION |
+
+Which of A, B, C the owner's ear caught cannot be told apart offline; the repair addresses all three.
+
+### 7.2 How a set picks, and what gates a bark (EXE)
+
+- **Set, +0x20 = mode** (kl2 0x4ddb10; Dead Men has the same routine at 0x5d3d30): **0** = in order
+  (+0x1c is the next index), **1** = at random (`rand * n`, generator 0x41aa70), **2** = a bag: +0x1c
+  is a 32-bit mask of the members that had their turn, one of the others is drawn, and when a single
+  one is left the mask is cleared before its bit is set (so the last of a round can not open the
+  next). Mode 2 with one member is rewritten to 0, with more than 32 members to 1. Stock use: Dog
+  Days 5,446 sets mode 2, 212 mode 1, 10 mode 0; Dead Men 4,532 / 55 / 3,518. The Japanese speech
+  sets are all mode 2 (pain: 0). The record is 0x30 bytes in both games and `merge` copies it whole.
+- The state is **in the bank image**: one bag per set object for everybody who uses it.
+- 0x8401f0 resolves an object to a sound: sound -> itself, set -> the picker, again for a set in a
+  set; a null member plays nothing (no stock set has one: 0 of 5,668 + 8,105).
+- **Sound** (0x7a1200 copies it to the voice): +0x18 f32 (handed to 0x867da0), DD +0x1c f32 (new),
+  +0x20.. the cone, +0x2c byte, +0x2d volume 0..100, +0x2e bit 0, +0x2f byte (Dog Days police lines
+  0x14 / 0x1e, Dead Men 0; read beside the distance math in 0x78b080), +0x30, DD +0x31 / +0x32 two
+  flags (new). None is a repeat count or a time. **So what Dog Days added to the sound is a float
+  at +0x1c and two flag bytes, not a history or cooldown field**; the merge writes 0.6 and 0, 0
+  (stock police lines have 0.3: ASSUMPTION what it is).
+- **The one gate found on a bark** (0x763200, 'say slot n of this definition'; 0x8b1f00 is its
+  twin): the 16-byte definition field of the character is `{def, flag, f32 time}`; with the flag
+  set nothing starts before `time` = start + the wave's seconds (wave +0x18, x 1024 ticks). A
+  character does not talk over itself - there is **no squad or global cooldown in it**.
+- Dropped parameter types 3, 6, 7: nearly absent from the voice path. Of M09_A's 257 police /
+  guard sounds 3 carry a type 3 (value 0), the rest types 0x12 and 0x1f only; the merge drops 2 + 3
+  parameters on all of Retomoto. What types 3, 6, 7 mean was not read. Dog Days' police
+  sounds add type 0x21 (value 1) and its sets type 8 (-100, 100: ASSUMPTION a pitch spread); what
+  they do was not read. A mixer group limiter exists (0x5c8270, group +0x2c / +0x4b): seen, not decoded.
+- Not traced: which of voice fields 0..2 a character uses (C rests on the stock levels), who calls
+  the slots and how often. Slots pushed as constants around the actor's speak routine 0x7f16f0:
+  0 1 2 6 7 9 10 13 14 15 16 17 19 27.
+
+### 7.3 Streamed ADPCM (EXE)
+
+The buffer fill 0x79ff50 takes the codec from the **.WHD record** (`[buffer+0x60]` = record - 4: +8
+format word, +0x1c channels, +0x28 samples, +0x2c block, +0x30 samples per block), not from the
+stream file's own format table. For 0x11 in a streamed buffer (0x7a00c1) it overwrites the block
+size with channels * 0x400 and calls the decoder 0x6d2020 that the in-memory path calls. Dead Men's
+records (mono, 0x400, 0x7f9) fit. What is not provable offline is the feeding side (the stream object
+at buffer +0x48, three modes at +0x24), which no stock Dog Days clip ever sends ADPCM through.
+`stream_clip` therefore moves these clips into the level's .WAV as in-memory ADPCM: the same bytes
+(every block checked: step index <= 88, zero byte), the form of 643 of F07's 729 in-memory records
+(32 kHz mono, 0x400 / 0x7f9; 16 and 22.05 kHz occur in stock too). Four moved clips decoded with
+`kl_audio.ima_to_pcm` look like speech (peaks about 32,000, mean step 1,400 - 3,000). A localized
+(nine-record) wave whose clip moves becomes a one-record wave. The 8 single PCM stream clips
+(Dog Days ships 42 such) and the music sets stay streamed.
+
+### 7.4 The repair (`kl_voice.planner`, options `variety`, `cycle`, `inmem`; all on with `VOICE = True`)
+
+1. **Wider slots, no line in two of them** (`NPC_POOL`, ASSUMPTION by set names). The clips of
+   neighbouring Dead Men sets and of Dead Men's second Japanese voice (`guard_japanese_male_01`, in
+   both M09 banks: attacks 4, 'fight breakout' 7, 'break down door' 5; its hurt / panic / begging
+   sets are not used) are dealt out: 4 enemy close <- 4 + attacks; 5 enemy spotted <- 5 + cover talk
+   10, 12; 7 suppress response <- 7 + cover responses 9, 11; 13 heavy fire <- 13 + team disruption
+   15; 25 man down <- 25 + panic 16; 27 battle cry <- 'fight breakout'; 28 advance <- advance
+   response 17; 29 advance <- 'break down door'; 34 alert <- 'no access' 30 (the guard sending you
+   away); 3, 8, 18 keep their own. A Dead Men slot that lent its clips (9 10 11 12 15 16 17) names
+   the **same new set**, so related events draw from one bag - the way stock `police_01` has one
+   'advance' set in slots 18, 28 and 29. The begging lines (Dead Men 27) and 'I've been shot' (26)
+   are no longer in any slot.
+2. **No line again before 8 calls of its event** (`cycle=8`): every speech set with fewer than 8
+   clips is filled to 8 members with a silent sound (`audio:dialog/kl_merge/silence#sound`, one
+   in-memory ADPCM block of zeros, 0.064 s, tuned like the clips beside it). Mode 2 then gives each
+   line once per 8 calls and the other calls are quiet: a slot with 4 lines speaks every second
+   time. This is the data-only throttle - no cooldown field was found. `cycle=0` turns it off
+   (a 1-clip slot then repeats as before); 32 is the most a bag holds.
+3. **Every clip in a form Dog Days ships** (`inmem`, 7.3).
+4. Not done, with reasons: **a second / third voice per character** (fields 1, 2) - Dead Men has
+   no second full Japanese set (the other one has no pain slot and 16 shouted clips, which are in
+   the pools instead) and how the engine chooses among the fields is not traced; **a Dog Days voice
+   for variety** - stock sets by language: all English (`police_01..03`, `goon_01..02`, `squad`,
+   `squad_02`, the four civilian sets; `dog_01`), **no Japanese-speaking set in any of the 21
+   banks**, so none is mixed in; **one-shot slots** - no such mode exists (nearest: `cycle=32`).
+
+Distinct clips per slot, played build -> `voice2\after` (`+ns` = silent members):
+
+| slot (Dog Days event) | police_01 (stock) | jpn_guard_01 | jpn_police_01 | usa_swat_01 (bank) |
+|---|---:|---|---|---|
+| 0 pain / 1 die | 6 / 4 | 9 / 6 unchanged | 9 / 6 unchanged | 3 / 5 unchanged |
+| 3 first contact | 8 | 7 -> 7+1s | 7 -> 7+1s | 0 |
+| 4 enemy close | 4 | 1 -> 5+3s | 1 -> 5+3s | 1 -> 1+7s |
+| 5 enemy spotted | 12 | 0 -> 4+4s | 2 -> 6+2s | 2 -> 3+5s |
+| 7 suppress response | 10 | 2 -> 5+3s | 2 -> 5+3s | 2 -> 4+4s |
+| 8 suppress | 12 | 4 -> 4+4s | 4 -> 4+4s | 1 -> 1+7s |
+| 13 heavy fire | 2 | 1 -> 4+4s | 1 -> 4+4s | 1 -> 2+6s |
+| 18 advance | 13 | 6 -> 6+2s | 6 -> 6+2s | 3 -> 3+5s |
+| 25 man down | 12 | 2 -> 5+3s | 2 -> 5+3s | 0 |
+| 27 battle cry | 6 | 5 (begging) -> 7+1s | 0 -> 7+1s | 0 -> 3+5s (the advance set) |
+| 28 / 29 advance | 13 / 13 | 6 (warnings) / 0 -> 4+4s / 5+3s | 6 / 0 -> 4+4s / 5+3s | 0 -> 3+5s (the advance set) |
+| 34 alert | 3 | 0 -> 5+3s | 0 -> 7+1s | 0 -> 3+5s (enemy spotted) |
+| all slots | 92 | 73 -> 82 | 63 -> 79 | 22 -> 22 |
+
+| | bank before | after | Retomoto before (= played) | after |
+|---|---|---|---|---|
+| streamed ADPCM clips | 14 | **0** (14 moved, 248,832 bytes) | 107 | **0** (65 + 67 moved, 4,116,480 bytes) |
+| .WAV | 22,466,896 | 22,716,752 | 23,041,360 | 27,158,864 (+4.1 MB) |
+| .WHD | 2,118,848 | 2,118,960 | 2,109,808 | 2,114,304 |
+| archive | 321,126,272 | 321,178,763 | 312,397,329 | 312,397,986 |
+| sounds / waves | 4,918 / 4,782 | 4,919 / 4,783 | 4,941 / 4,790 | 4,967 / 4,816 |
+| sets made / silent members | - | 6 / 34 | - | 27 / 85 |
+| soldiers with a voice | 9 of 15 | 15 | 63 of 65 | 65 |
+| `kl_graft.verify` | 0 problems | 0 | the 1 known (particle names) | the same 1 |
+
+MEASURED by `build2` (2026-10-09). Checks on the two `after` builds, from the files: the bank walks
+clean (0 unclaimed, 0 overlap, 0 stray), every wave reference hits a record, every in-memory record
+(1,012 / 1,164) has its data, no added stream record outside the merged stream file, no reference
+into a torn group, `_LS.SND` names the new trailer, no made set over 32 members or with a null
+member. `kl_snd.py test quick`: failures 0. `kl_voice.py test`: problems 0.
+**With the repairs off nothing changed**: `voice2\before` Retomoto is byte-identical to the played
+`build\play_rt` in `.SND .WHD .WAV _LS.SND` and all nine `.LOC`; the bank likewise to `build\voice\before`.
+
+### 7.5 What the owner should now hear (a build with `VOICE = True`; nothing of it has been heard yet)
+
+- Tower guards and street police still shout in Japanese, but **the same line does not come back
+  until seven other calls of that kind of shout have passed**. Some of those calls are now silent,
+  so there is also less shouting overall.
+- **New lines** in the mix: the yakuza guards' attack shouts, 'fight breakout' shouts as battle
+  cries, 'break down the door' shouts when they advance, the 'you can't come in here' lines when
+  they are alerted.
+- The six police warnings are heard on first contact only, no longer on 'advance' as well.
+- **Gone** as combat shouts: the wounded man begging ('I'm a good man...') and 'I've been shot'.
+- Pain grunts and death screams are as before (9 and 6 clips).
+- If the guards are now **silent except for grunts**, the in-memory move is at fault: build with
+  `VOICE = {'inmem': False}` to tell. If they still repeat, raise the cycle: `VOICE = {'cycle': 16}`.
+- The bank's SWAT have 22 clips in all (Dead Men's `usa_swat_01`): they will mostly be quiet with a
+  line now and then - the price of not repeating with so few recordings.
+
+### 7.6 Risks, guesses, not established
+
+- ASSUMPTION: `NPC_POOL` (which Dead Men lines fit which Dog Days event) - the clips are Japanese
+  and were sorted by their set names only; and that a silent call is better than a repeat.
+- The silent sound is a real sound: 0.064 s of zeros through the guards' mixer group, holding the
+  speaker's own gate that long. A null member would be cheaper but no stock set has one.
+- Pools: Retomoto `after` has 4,967 sounds / 4,816 waves, 26 above the build that ran live
+  (4,941 / 4,790; largest stock bank 4,806 / 4,568). `VOICE = {'variety': False}` keeps the padding
+  without the second voice's clips. The .WAV grows 4.1 MB (each chain step copies its own level's
+  clips, so the Japanese lines both parts share are in it twice); the owner once had a 60.7 MB
+  allocation fail at load, and whether this file is loaded in one piece was not checked.
+- A made set is named after the first definition that asked for it (`..._bouncer_01_slot04` also
+  serves the guards); tower and street have their own bags over largely the same clips.
+- Not read: the code that fires barks and its rate, voice fields 1 and 2, parameter types 8 and
+  0x21, the group limiter, what sound +0x1c and +0x2f do.
+
+### 7.7 Call lines (files I do not own)
+
+Nothing has to change in `kl_graft.py`, `kl_fa_author.py`, `kl_fa_street.py`: `kl_snd.VOICE = True`
+(or a dict of `kl_voice.OPTIONS`: `{'cycle': 16}`, `{'variety': False}`, `{'inmem': False}`,
+`{'heroes': True}`) switches everything on for every build; section 4's optional `voice=` build
+argument still applies. New in `kl_snd.merge`: `defs` may return `kl_snd.Pool` objects, and `inmem=`.
+A layer that authors squads from the map's own actors keeps their voice fields and so their sets.
