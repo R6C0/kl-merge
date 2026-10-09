@@ -182,6 +182,15 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+STATE 2026-10-09 23:50 - INSTALLED FOR THE OWNER: F01 slot = <work>/build/y_loot/retomoto_loot (Retomoto + wardrobe + the loot
+props: briefcases on the boardroom table, table stacks moved to the rims, armour as statue loot; NOT run in the game); hook = SHIP
+<work>/build/klhook/ship_mem2 (sha1 6d0784ca: klnudge + klchar + the REWRITTEN klmem), KLHook.ini written fresh (copy of the pair:
+<work>/build/klhook/owner_now), overlay Patch01.zip in <DD>/KLExpansion/Overlay (the Heister page WITHOUT pictures).
+The owner's other session had left the TEST hook and a test script installed (input blocked): put right at 23:20.
+klmem rewrite, live (TEST sibling test_mem2, runs M3-M5): the 74.5 MB .prm block is served from the reserve and 'was freed by the
+game' on return to the menu, three times of three. A SECOND load in one process is still unseen: the scripted runs crawl in the
+frontend when the owner is using the PC (the game does not poll its keyboard unfocused).
+Only ONE session may run the game or change the game folder; kl-merge-88 (Payday 2 masks, offline) has agreed to ask first.
 GUN LOOKS (owner asked 2026-10-09 late: Dead Men gun models, Dog Days sounds, buyable, switchable; BUILT OFFLINE, NOT RUN IN THE GAME):
 tools/kl_guns.py (docstring = the spec). New guns are NOT possible: 64 weapon items compiled in (eFF2ItemCount), the shop's 36 entries are a
 table in hashed .rdata (0xbd1f70: price, rank, tier, DLC, item, ammo). Gun models are the same format in both games (rigid parts on
@@ -458,10 +467,17 @@ Later wishes: play as a Cloaker, Payday 2's original maps, its characters, a fir
 DECIDED for now: only the Payday 2 MASKS ("the most iconic"), as further entries of the wardrobe's
 Mask row (a mask is a rigid whole-head piece: tools/kl_chars.py wardrobe, klhook/klchar.c,
 re/wardrobe.md). Bodies, first person, Cloaker and maps are not started.
-State: Payday 2 is NOT installed on this PC (G:\SteamLibrary\steamapps\common\PAYDAY 2 holds two
-2021 crash dumps only). Nothing can be read or tested until the owner installs it. Then: a
-reader for its bundle / model / texture formats (new work, source-neutral so maps can use it
-later), one mask as the feasibility test, then the set. Same rule as for both Kane & Lynch games:
+State (2026-10-09 23:30): Payday 2 IS INSTALLED: `C:\Steam\steamapps\common\PAYDAY 2` (64-bit,
+Steam build 25506656, 34.65 GB; the G:\SteamLibrary folder of that name is a stale remnant with two
+2021 crash dumps). Its store is the NEW crate format, not the `all_N.bundle` / `bundle_db.blb` the
+public tools read: `assets\*.crate` (98 files; header 'YAOI', u32 1, u64 n, then n x 48 bytes = ext
+idstring, path idstring, u64 offset, u64 raw size, u64 stored size (0 = raw, else zlib), u64 ?;
+data from offset 1,000,000; sorted by (ext, path)), a shipped text `hashlist` (186,212 paths
+without extension), `crates.shipping_manifest`, `crates.properties`. idstring = Jenkins lookup8
+hash64, level 0 (confirmed). 307 mask folders under `units/payday2/masks/` (the four crew masks:
+msk_dallas, msk_chains, msk_wolf, msk_hoxton, each with `_df` / `_nm` textures). Owner: WOLF FIRST.
+Readers: `tools/pd2_crate.py`, `tools/pd2_model.py` (in progress; research notes `re/pd2_*.md`);
+extracted data lives in `<work>\pd2\` only. Same rule as for both Kane & Lynch games:
 assets stay on the owner's machine, never committed, never shared.
 
 ## Roadmap for a rewrite (only after the port works)
