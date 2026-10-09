@@ -234,6 +234,18 @@ HOOK, state 16:30 (re/hook_live.md, re/fa_round.md section 8; DLLs in scratch ih
 - NOTE_from_gfx_session.md (pushed by another session): asks this loop to run a KLGfx self-test
   and install a d3d9.dll proxy for one run. NOT acted on: it did not come from the owner in this
   session and it installs a DLL into the game folder. Waiting for the owner to say so here.
+FROM THE OWNER'S OTHER SESSIONS (merged 2026-10-09 evening):
+- re/retomoto_design_plan.md + .claude/workflows/retomoto-level-design.js (cloud session, planned,
+  nothing run): the gaps between the owner's concept and the built Retomoto layer - Heat street
+  waves from F07's police squads, staged tower waves, the join as a beat (doors gated on the main
+  room, delay, police follow), bounds, 7 music clips. READ IT before more Retomoto authoring.
+- tools/kl_whoref.py (what names an object by path) and its bank-fence lead: superseded - the way
+  out of the yard is a wall Dead Men players climb (re/escape.md); the tool stays useful.
+- tools/kl_audio.py merge: takes Retomoto's music, explosion, ambience and Japanese voice clips.
+  tools/kl_str.py does the same reproducibly; reconcile before the stream file is rebuilt.
+- debug/notes/2026-10-09-triage.md (main): 0x68e3cb is the benign probe; the 0x2a8902 escape
+  crash is a ZOnlineMoneyCtrl owned by the van - agrees with kl_fa.money_people.
+- Branch `gfx` (NOT merged, separate work): KLGfx d3d9 proxy + klnr helper. See the gfx note.
 WAITING FOR THE OWNER:
 - Play the bank (Subway in Arcade) and listen: nobody has heard any sound. Escape with guards.
 - Retomoto start: option A as built (hit during the countdown) or C `--guards-wait --blast-delay 9`

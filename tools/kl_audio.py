@@ -22,6 +22,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DM_STR = [r"G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men\PC_Def.str",
           os.path.join(os.path.dirname(HERE), 'PC_Def.str')]
 FA_FILTER = ('Multiplayer/', 'Fragile_Alliance')
+# Retomoto Tower (M09_A + M09_B as a Fragile Alliance map, re/retomoto.md 6, re/retomoto_fa.md 6): the
+# level's music (7 clips, two layers each), its window explosion and bomb warm-up, A's ambience beds and
+# the Japanese guard / police lines. None is matched by FA_FILTER, so the authored layer was silent.
+# Prefixes are the clip names as kl_audio.py list prints them. Rebuild with 'python kl_audio.py merge'.
+RETOMOTO_FILTER = ('Music/InHouse/Japan/M09_A/', 'LevelSetup/Level/M09_A/Music/', 'SFX/Explosions/Bomb/',
+                   'SFX/Ambiences/M09_A/', 'SFX/Ambiences/M09_B/', 'LevelSetup/Level/M09_A/Cuts/',
+                   'Dialog/AllLevels/Oneliners/Japanese/')
+MERGE_FILTER = FA_FILTER + RETOMOTO_FILTER      # what merge() takes by default
 LIP_BLOCK = 0x1000
 
 
@@ -154,7 +162,7 @@ def name_key(name):
     return h
 
 
-def merge(dd_path, dm_path, out_path, want=lambda n: any(f in n for f in FA_FILTER), log=print):
+def merge(dd_path, dm_path, out_path, want=lambda n: any(f in n for f in MERGE_FILTER), log=print):
     """Write a copy of Dog Days' stream file with Dead Men clips added.
     Dog Days' own clips and bytes are untouched; new clips, formats and names are appended
     and a new index (sorted by name key) is written at the end. Clips keep their original
@@ -266,7 +274,7 @@ def main():
         dd_path, out_path = a[2], a[3]
         extra = set(open(a[4]).read().split('\n')) if len(a) > 4 else set()
         added = merge(dd_path, path, out_path,
-                      want=lambda n: n in extra or any(f in n for f in FA_FILTER))
+                      want=lambda n: n in extra or any(f in n for f in MERGE_FILTER))
         total, bad = verify_merge(out_path, dd_path, path, added)
         print('verify: %d clips in merged file, %d problems' % (total, bad))
         return
