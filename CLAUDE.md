@@ -182,6 +182,15 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+HEISTER PAGE PICTURES (owner asked 2026-10-09 22:35; BUILT, NOT SEEN IN THE GAME): tools/kl_portraits.py renders the 16 characters and 8 masks
+(kl_view; <work>/build/portraits/*.png, sheet.png) and adds them to a COPY of the menu scene as picture entities KLPic_* (texture -> sprite chunk ->
+picture chunk -> ZWINGROUP + ZWINPIC; layout in its docstring; check: 0 problems) = <work>/build/portraits/out/Overlay/Scenes/kaneandlynch.zip;
+klhook/mkoverlay.py --pictures puts two ToggleImages on the page. Both files must be installed TOGETHER under <DD>/KLExpansion/Overlay. Nothing of
+it is installed. Live run PV1 (scratchpad pv/runpv.py, menu only) did not start: Steam was at its sign-in window after the owner's reboot.
+Owner's plan: pictures first, then a preview of the model with mask and outfit together (not started).
+OWNER'S FREEZE 22:23 (reboot 22:30): after an escaped round on Retomoto + wardrobe, second session of the process, the main loop stopped while
+leaving the session (state 0x20 -> 0x2e, never 0x0); no dump; Windows logged display watchdog reports at 22:28. Free address space was 140 MB
+(largest piece 35.8 MB) after that load. Cause not established.
 LIVE RUNS: RESUMED IN PART (owner, 2026-10-09 18:45: 'crack on' with the wardrobe, re/wardrobe.md, and
 the gfx note). One live agent (u-live) runs between the owner's sessions, never while kl2.exe is
 already running, and puts the owner's Retomoto build + SHIP hook back after every run. The gfx test

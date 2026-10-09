@@ -62,6 +62,17 @@ dead). The rows are the story map page's 'Difficulty' row three times (window Pl
 option rows, values written as they are changed - no Accept / Cancel cache as on the options pages), with focus bars
 FocusBar_long#04..#06 and names of their own (KLH_...). Texts are literal ('%...'), English only.
 With the Heister button there is room for pages 2..4 only (the Arcade page has four free separator lines).
+PICTURES ON THE HEISTER PAGE (--pictures as a fourth argument; NOT SEEN IN THE GAME YET). A picture of the chosen
+character (256 x 304) and of the chosen mask (256 x 256) where the map pages show the map picture: one Graphic
+element per entry of the two rows (entities KLPic_Char01..16, KLPic_Mask1..8 and three blanks KLPic_None1..3 for
+'Game default', 'Game option' and 'No mask') and a ToggleImages per row, which the row's ToggleText names in
+ToggleReceivers - the way the map pages' selector drives HeistLevelImageToggler. The ToggleImages also carries the
+row's Option so that it starts on the stored value (as LobbyImageToggler does with MP_SelectedLevel).
+ASSUMPTIONS: a plain ToggleText passes its steps on to ToggleReceivers as the level selectors do (the attribute is
+ZToggle's, re\menus.md 2.3); the two widgets on one option stay in step.
+THE ENTITIES ARE NOT IN THE STOCK MENU SCENE: tools\kl_portraits.py 'menu' builds Overlay\Scenes\kaneandlynch.zip
+with them. An overlay Patch01.zip built with --pictures must only be installed together with that archive (what a
+Graphic= that names no entity does was not tried).
 
 KLHook.ini (the same file the hook reads):
     [Redirect.2]            slot = map folder under KLExpansion\Maps (klslot.c)
@@ -178,10 +189,13 @@ OUTFIT_SHIRT = ['', 'black shirt']
 OUTFIT_HEAD = ['', 'dark balaclava', 'black balaclava']
 OUTFITS = [', '.join(x for x in (a, sh, hd) if x) for hd in OUTFIT_HEAD for sh in OUTFIT_SHIRT for a in OUTFIT_ARMOUR]      # KLOutfit 0..23
 HEISTER_ROWS = (('KLH_Char', 'Character', 'KLChar', CHARACTERS), ('KLH_Mask', 'Mask', 'KLMask', MASKS), ('KLH_Outfit', 'Outfit', 'KLOutfit', OUTFITS))
+# picture rows: (row name, option, entity of entry k or a blank, X, Y) - tools\kl_portraits.py NAMES
+HEISTER_PICS = (('KLH_Char', 'KLChar', ['KLPic_None1'] + ['KLPic_Char%02d' % n for n in range(1, 17)], -117, 60),
+                ('KLH_Mask', 'KLMask', ['KLPic_None2', 'KLPic_None3'] + ['KLPic_Mask%d' % n for n in range(1, 9)], 157, 84))
 HEISTER_NOTE = 'Arcade Mode. Dead Men bodies, their outfits and the masks of other heisters need a map built with the wardrobe. Outfits are for Dead Men bodies; the balaclava shades show on the six masked men.'
 
 
-def heister_window(nl):
+def heister_window(nl, pictures=False):
     """The window KLHeister: three option rows in the layout of the story map page's rows (PlayMenu)."""
     L = ['  <!-- KLExpansion: the heister page (mkoverlay.py; options answered by klchar.c) -->',
          '  <Window Name="%s" LocaleBasePath="AllLevels/Menu/Heist" Template="WindowDefault">' % HEISTER,
@@ -195,6 +209,18 @@ def heister_window(nl):
          '      <GuiElement Template="ChapterBackgroundTemplate"/>',
          '      <GuiElement Type="TextBlock" Name="KLH_Note" Text="%%%s" Font="Text" LineSpace="26" FadeInDelay="0.10" FadeInTime="0.2" AlphaMax="192" X="450" Y="64" AlignH="Left" TextWidth="430" W="300" H="400" />' % esc(HEISTER_NOTE),
          '      <GuiElement Type="GUIGroup" ShowDebug="True" Name="KLH_CenterBox" AlignH="Right" X="-100" Y="-80" W="384" H="576">']
+    if pictures:                                      # before the rows: a <Graphic> child is looked up by name when it is added
+        L = L[:-1]
+        for name, opt, ents, x, y in HEISTER_PICS:
+            if len(ents) != len(dict((r[0], r[3]) for r in HEISTER_ROWS)[name]):
+                raise SystemExit('%s: %d pictures for %d entries' % (name, len(ents), len(dict((r[0], r[3]) for r in HEISTER_ROWS)[name])))
+            L.append('      <GuiElement Type="GUIGroup" Template="LevelPictureGroup_T">')
+            L += ['        <GuiElement Type="Graphic" Name="%sPic%02d" Template="LevelPicture_T" X="%d" Y="%d" Graphic="%s" />' % (name, k, x, y, e) for k, e in enumerate(ents)]
+            L.append('      </GuiElement>')
+            L.append('      <GuiElement Type="ToggleImages" Text="" Name="%sPics" Option="%s" ActivateButtonUp="NoActivation" ActivateButtonDown="NoActivation" X="0" Y="0" ShowDebug="True" Link="False">' % (name, opt))
+            L += ['        <Graphic Graphic="%sPic%02d" />' % (name, k) for k in range(len(ents))]
+            L.append('      </GuiElement>')
+        L.append('      <GuiElement Type="GUIGroup" ShowDebug="True" Name="KLH_CenterBox" AlignH="Right" X="-100" Y="-80" W="384" H="576">')
     ys = (358, 392, 425)                              # PlayMenu's two rows are at 392 and 425
     for k, (name, label, opt, vals) in enumerate(HEISTER_ROWS):
         L.append('        <GuiElement Type="TextBlock" FadeInDelay="%.2f" FadeInTime="0.2" Text="" Name="%s_Data" Y="%d" AlignH="Center" />' % (0.05 + 0.05 * k, name, ys[k] + 80 + (1 if k == 2 else 0)))
@@ -208,7 +234,7 @@ def heister_window(nl):
         L.append('      <GuiElement Name="KLHfb#%02d" Graphic="FocusBar_long#%02d" Y="%d" X="-122" AlignH="Left" Template="FocusBar" />' % (k + 1, k + 4, 349 + ROW * k))
     for k, (name, label, opt, vals) in enumerate(HEISTER_ROWS):
         L += ['      <GuiElement Type="ToggleText" Text="%%%s" X="-100" Y="%d" Option="%s" FocusGraphic="KLHfb#%02d"' % (esc(label), ys[k], opt, k + 1),
-              '          TextReceiver="%s_Data" UseTextReceiverAsFocus="True"' % name,
+              '          TextReceiver="%s_Data" UseTextReceiverAsFocus="True"%s' % (name, ' ToggleReceivers="%sPics"' % name if pictures and name in [r[0] for r in HEISTER_PICS] else ''),
               '          RecCSFocus="OnFocus" RecCSDefault="Default" FadeInDelay="%.2f" FadeInTime="0.2" Name="%s"' % (0.05 + 0.05 * k, name),
               '          Template="TextIndentX" AlignV="Left" HelpText="/Menu/Generic/UseLRToSelect" HelpTextBlock="HelpPlay" >']
         L += ['        <Text Text="%%%s" />' % esc(v) for v in vals]
@@ -230,7 +256,7 @@ def heister_window(nl):
     return nl.join(L) + nl
 
 
-def build(xml, pgs, heister=True):
+def build(xml, pgs, heister=True, pictures=False):
     nl = '\r\n' if '\r\n' in xml else '\n'
     # the stock map page, whole
     w = one(r'[ \t]*<Window Name="HeistPlayMenu" [^>]*>.*?</Window>[ \t]*\r?\n', xml, 'the window HeistPlayMenu', re.S)
@@ -277,7 +303,7 @@ def build(xml, pgs, heister=True):
     if heister:
         if HEISTER in taken or any(x.startswith('KLH') for x in taken):
             raise SystemExit('names already in frontend.xml: KLH...')
-        new += nl + heister_window(nl)
+        new += nl + heister_window(nl, pictures)
     xml = xml[:w.end()] + new + xml[w.end():]          # the window stands behind the template in the file
     xml = xml[:gt.end()] + tpl + xml[gt.end():]
     # the Arcade page: option on the stock button; per page a button, focus bar, icon and line; all rows moved up
@@ -371,9 +397,10 @@ def check(stock, res, pgs, heister=True):
 
 
 def main():
-    if len(sys.argv) != 4:
+    pictures = '--pictures' in sys.argv[1:]
+    if len(sys.argv) - pictures != 4:
         raise SystemExit(__doc__)
-    ini, stock, out = sys.argv[1:]
+    ini, stock, out = [a for a in sys.argv[1:] if a != '--pictures']
     pgs = pages(ini)
     cp = configparser.RawConfigParser(strict=False, delimiters=('=',), comment_prefixes=(';', '#'), interpolation=None)
     cp.read(ini)
@@ -385,7 +412,7 @@ def main():
     if MEMBER not in names:
         raise SystemExit('%s has no %s' % (stock, MEMBER))
     raw = z.read(names[MEMBER]); xml = raw.decode('latin-1')
-    new = build(xml, pgs, heister)
+    new = build(xml, pgs, heister, pictures)
     bad = check(xml, new, pgs, heister)
     if bad:
         raise SystemExit('the result breaks its own rules, nothing written:\n  ' + '\n  '.join(bad))
@@ -407,6 +434,8 @@ def main():
     print('%s: %d members, %s %d -> %d bytes (stock sha1 %s)' % (path, len(c.namelist()), MEMBER, len(raw), len(res), hashlib.sha1(raw).hexdigest()[:12]))
     h = 1 if heister else 0
     if heister:
+        if pictures:
+            print(r'  heister page: WITH PICTURES - needs Overlay\Scenes\kaneandlynch.zip of tools\kl_portraits.py beside it (%s)' % ', '.join('%d for %s' % (len(r[2]), r[1]) for r in HEISTER_PICS))
         print('  heister page: Arcade button 6 (icon %s) -> window %s; rows %s' % (ICONS[0], HEISTER, ', '.join('%s (%s, %d entries)' % (r[1], r[2], len(r[3])) for r in HEISTER_ROWS)))
     for k, (n, title, ent, pg) in enumerate(pgs):
         mode = pg.get('Pictures', 'story').strip().lower()
