@@ -536,6 +536,7 @@ static void __cdecl klh_w__exit(int code) { klog("exit: _exit(%d)", code); klx_e
 static void klh_tick(int game_thread);
 #include "klfix.c"
 #include "kljoin.c"
+#include "klchar.c"
 #include "klsteam.c"
 #include "klslot.c"
 #ifdef KLHOOK_TEST
@@ -567,6 +568,7 @@ static void klh_tick(int game_thread)
     kls_tick();
     klx_tick();
     klj_tick();
+    klc_tick(game_thread);
     InterlockedExchange(&klh_tick_busy, 0);
 }
 
@@ -641,6 +643,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klog("core: %d import slot(s) wrapped (ExitProcess %s, SteamAPI_RunCallbacks %s); EndOnFatal=%d", n, klh_real_exitprocess ? "yes" : "no", klh_real_runcallbacks ? "yes" : "no", klh_end_on_fatal);
     klf_init();
     klj_init();
+    klc_init();
     klx_init();
     kls_init(inst);
 #ifdef KLHOOK_TEST

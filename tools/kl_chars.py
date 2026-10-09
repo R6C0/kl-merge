@@ -11,6 +11,10 @@ Dead Men character MODELS on Dog Days characters (stage 2 groundwork; nothing he
     python kl_chars.py put <base> <out folder> "<target path>=<map>:<source path>[:v,v]" ...
                                                 the general form (base: stock level name or a build folder)
     python kl_chars.py check <folder>           re-read a build under every checker
+    python kl_chars.py wardrobe <base> <out folder> [--level=M01_FA_A] [--slot=F01]
+                                                THE WARDROBE (re/wardrobe.md): the eight Dead Men heroes as extra
+                                                models, every body with every heister's mask as variants, and
+                                                KLWardrobe.ini for klhook\klchar.c; pictures: kl_view.py
     install (a later LIVE agent, not this tool): python kl_graft.py install F01 --from <folder>
 
 WHAT A BUILD CHANGES (put(); everything else of the base level is byte for byte the base's)
@@ -497,10 +501,12 @@ def with_variants(p, root, vmap):
 
 
 # ------------------------------------------------------------------ put
-Pick = collections.namedtuple('Pick', 'targets level source variants')
+Pick = collections.namedtuple('Pick', 'targets level source variants donor', defaults=(None,))
 Pick.__doc__ = """targets: scene paths (no ROOT) of the Dog Days people that take the model (they must
 share one model today or the pick says which to take the free bone from: the first); level, source: the
-Dead Men map and the character's scene path or root chunk; variants: {} or {Dog Days variant: Dead Men variant}."""
+Dead Men map and the character's scene path or root chunk; variants: {} or {Dog Days variant: Dead Men variant}.
+A pick WITHOUT targets only adds the model to the level's .prm (nobody is given it: wardrobe()); donor is
+then the Dog Days model root whose free bone it gets, and variants names every variant it keeps."""
 
 
 def put(base, picks, free='add', union=True, log=print):
@@ -533,7 +539,7 @@ def put(base, picks, free='add', union=True, log=print):
             ppl = [person(sc, k) for k in nodes]
             r0 = cmap[src.root(pk.source)]
             have = sorted({ex.chunks[o][0x0f] for o in objects(ex, r0)})
-            vmap = {v: (v if v in have else have[0]) for v in {1, 2} | {v for _m, v, _s in ppl}}
+            vmap = {v: (v if v in have else have[0]) for v in {1, 2} | {v for _m, v, _s in ppl}} if nodes else {}
             vmap.update(pk.variants or {})
             root, nobj = with_variants(ex, r0, vmap)
             sk = skeleton(ex, root)
@@ -542,7 +548,8 @@ def put(base, picks, free='add', union=True, log=print):
             # the free bone, with the rest values of the Dog Days model the first target has today
             fb, free_here = None, free
             if FREE_NAME not in bone_names(ex, sk):
-                donor = free_bone(prm_s, skeleton(prm_s, ppl[0][0])) if skeleton(prm_s, ppl[0][0]) else None
+                droot = ppl[0][0] if ppl else pk.donor
+                donor = free_bone(prm_s, skeleton(prm_s, droot)) if droot and skeleton(prm_s, droot) else None
                 if free == 'add' and donor:
                     fb = 'added as bone %d' % add_free_bone(ex, sk, donor)
                 elif free == 'add':                     # no Dog Days model to take the rest values from
@@ -625,8 +632,251 @@ def put(base, picks, free='add', union=True, log=print):
     return rep
 
 
+# ------------------------------------------------------------------ the wardrobe
+# Every heister body with every mask, as VARIANTS of one model per character (module docstring, WARDROBE).
+MASKS = 8
+V_FACE, V_OWN = 1, 2                             # the two variants stock Dog Days sets (masks off / on)
+OUTFIT_STEP = 10                                 # variant = 10 * outfit + (1 face | 2 own mask | 2 + m mask m)
+DM_OUTFITS = ((1, 'standard'), (4, 'armoured'))  # Dead Men variant of each outfit: equipment level 0 and 3
+DM_HEAD = ('head', 'hair', 'eyelash', 'eye_', 'headset', 'glass')    # Dead Men materials a mask replaces
+DM_NAMES = ('Kane', 'Lynch', 'Dead Men crew 1', 'Dead Men crew 2', 'Dead Men crew 3', 'Dead Men crew 4',
+            'Dead Men crew 5', 'Dead Men crew 6')
+DD_NAMES = ('J.C.', 'Tommy', 'Pierre', 'Liam', 'Jean', 'Elwood', 'Bud', 'Mitchel')    # .LOC FACharacters C1..C8
+HERO = 'Heroes!Hero_%02d\\Ground'
+MAX_REST = 0.3                                   # a bone of two skeletons is 'the same' when its rest matrices agree to this
+
+
+def variant_of(outfit, mask):
+    """mask: 0 = the character's own face, 1..8 = that heister's mask, -1 = 'own' (the stock toggle's 2)."""
+    return OUTFIT_STEP * outfit + (V_FACE if mask == 0 else V_OWN if mask < 0 else V_OWN + mask)
+
+
+def _palette(p, o):
+    """Bone indices of a weighted mesh object in the order its vertices number them (the runs, expanded)."""
+    nr, bc = p.u32(o, 0x38), p.chunks[p.u32(o, 0x3c)]
+    if len(bc) not in (8 * nr, 8 * nr + 8) or p.chunks[o][0x0c] != 3 or len(p.chunks[o]) != 64:
+        raise ValueError('object %d is not a weighted mesh with %d bone runs' % (o, nr))
+    runs = struct.unpack_from('<%dI' % (2 * nr), bc)
+    return [b for k in range(nr) for b in range(runs[2 * k + 1] // 12, (runs[2 * k + 1] + runs[2 * k]) // 12)]
+
+
+def _runs(bones):
+    """The runs chunk for a palette: {12 * count, 12 * first bone} per stretch of consecutive bones."""
+    out = []
+    for b in bones:
+        if out and out[-1][1] + out[-1][0] == b:
+            out[-1][0] += 1
+        else:
+            out.append([1, b])
+    return len(out), _pad(b''.join(struct.pack('<II', 12 * n, 12 * b) for n, b in out))
+
+
+def _rest(p, sk):
+    h = struct.unpack('<20I', p.chunks[sk])
+    return [struct.unpack_from('<12f', p.chunks[h[2]], 48 * b) for b in range(h[0])]
+
+
+class _Fit:
+    """Bones of skeleton `src` as bones of skeleton `dst` of the same file, by name. A bone `dst` lacks, or
+    has somewhere else at rest (more than MAX_REST away: the face bones sit where each head has its mouth and
+    brows, up to 3 units apart between two heisters; the body bones agree to 0.2), is its nearest ancestor that
+    fits: the vertices then move rigidly with that bone - a borrowed mask follows the head but not the jaw."""
+
+    def __init__(self, p, src, dst):
+        sn, par = bone_names(p, src), bone_parents(p, src)
+        dn = {s.lower(): i for i, s in enumerate(bone_names(p, dst))}
+        self.same, self.names = src == dst, sn
+        self.map, self.exact = [], []
+        rs, rd = _rest(p, src), _rest(p, dst)
+        far = lambda a: max(abs(x - y) for x, y in zip(rs[a], rd[dn[sn[a].lower()]]))
+        for b in range(len(sn)):
+            a = b
+            while a >= 0 and (sn[a].lower() not in dn or (not self.same and far(a) > MAX_REST)):
+                a = par[a]
+            if a < 0:
+                raise ValueError('skeleton %d: bone %s has no ancestor in skeleton %d' % (src, sn[b], dst))
+            self.map.append(dn[sn[a].lower()]); self.exact.append(a == b)
+        self.dpar = bone_parents(p, dst)
+        self.low = min(struct.unpack_from('<8H', p.chunks[dst], 0x38)[1:6])     # bones kept at low detail
+        self.rest = [max(abs(x - y) for x, y in zip(rs[b], rd[self.map[b]])) if self.exact[b] else 0.0 for b in range(len(sn))]
+
+
+def _moved(p, o, fit, variant, note):
+    """A copy of mesh object `o` (64 bytes; the geometry below it stays shared) with the variant byte given
+    and, when it comes from another skeleton, its bone runs rewritten for the destination's bone order."""
+    c = p.chunks[o]
+    c = c[:0x0f] + bytes([variant]) + c[0x10:]
+    if not fit.same:
+        bones = _palette(p, o)
+        new = [fit.map[b] for b in bones]
+        if c[0x0e] & 0xfc:                            # drawn at low detail: only the leading bones are updated there
+            for k, b in enumerate(new):
+                while b >= fit.low:
+                    b = fit.dpar[b]; note['low'] += 1
+                new[k] = b
+        note['inexact'] += sum(1 for b in bones if not fit.exact[b])
+        for b in bones:
+            if fit.rest[b] > note['rest']:
+                note['rest'], note['worst'] = fit.rest[b], '%s of object %d' % (fit.names[b], o)
+            note['by_bone'][fit.names[b]] = max(note['by_bone'].get(fit.names[b], 0.0), fit.rest[b])
+        nr, chunk = _runs(new)
+        c = _put(c, 0x38, '<II', nr, _new(p, chunk))
+    i = _new(p, c); p.refs[i] = p.refs[o]
+    return i
+
+
+def _set_objects(p, root, objs):
+    """Give a model root a new object table (the root chunk is rewritten in place)."""
+    p.chunks[root] = _put(p.chunks[root], 0x14, '<II', len(objs), _new(p, _pad(struct.pack('<%dI' % len(objs), *objs))))
+
+
+def wardrobe(base, level='M01_FA_A', free='add', log=print):
+    """base: Lv of a Dog Days level with the eight stock heisters (edited in place). Returns the report:
+    report['characters'] = 16 dicts (name, root, slot, outfits), report['roots'] = the sixteen model roots."""
+    sc, raw = base.scene()
+    old = [person(sc, find_node(sc, HERO % n))[0] for n in range(1, 9)]
+    if len(set(old)) != 8:
+        raise ValueError('%s: the eight heisters do not have eight models (%r) - already a wardrobe build?' % (base.name, old))
+    # 1. the eight Dead Men heroes join the file with their own skeletons, as nobody's model yet
+    rep = put(base, [Pick((), level, HERO % n, {k + 1: v for k, (v, _n) in enumerate(DM_OUTFITS)}, old[n - 1]) for n in range(1, 9)], free=free, log=log)
+    dm = [r['new_model'] for r in rep['picks']]
+    sc, raw = base.scene(); raw = bytearray(raw)
+    models = gms_models(raw)
+    p, mat = G.read(base['.prm'], 'dd'), T.read_mat(base['.MAT'])
+    oct_s = O.Oct.parse(base['.oct'])
+    mname = lambda o: mat.insts[p.u16(o, 0x12)].name.split('/')[-1].lower()
+    # 2. the parts. Dog Days: variant 1 is the face look; variant 2 is mask + masked body (+ the bag)
+    face, body, mask, bag = {}, {}, {}, {}
+    for n in range(8):
+        objs = objects(p, old[n])
+        if {p.chunks[o][0x0f] for o in objs} != {V_FACE, V_OWN}:
+            raise ValueError('heister %d: model %d has variants %r, not 1 and 2' % (n + 1, old[n], sorted({p.chunks[o][0x0f] for o in objs})))
+        face[n] = [o for o in objs if p.chunks[o][0x0f] == V_FACE]
+        two = [o for o in objs if p.chunks[o][0x0f] == V_OWN]
+        mask[n] = [o for o in two if 'mask' in mname(o)]
+        bag[n] = [o for o in two if 'moneybag' in mname(o)]
+        body[n] = [o for o in two if o not in mask[n]]            # the bag stays with the body
+        if {p.chunks[o][0x0e] for o in mask[n]} != {1, 2, 0x7c} or not bag[n]:
+            raise ValueError('heister %d: mask or bag objects are not what this tool knows' % (n + 1))
+    dbody, dhead = {}, {}
+    for n in range(8):
+        for k in range(len(DM_OUTFITS)):
+            objs = [o for o in objects(p, dm[n]) if p.chunks[o][0x0f] == k + 1]
+            dhead[n, k] = [o for o in objs if any(s in mname(o) for s in DM_HEAD)]
+            dbody[n, k] = [o for o in objs if o not in dhead[n, k]]
+            if {p.chunks[o][0x0e] for o in dbody[n, k]} != {1, 2, 0x7c}:
+                raise ValueError('Dead Men hero %d outfit %d: no body at every level of detail' % (n + 1, k))
+    skel_dd, skel_dm = [skeleton(p, r) for r in old], [skeleton(p, r) for r in dm]
+    # 3. the new models
+    chars, note = [], dict(low=0, inexact=0, rest=0.0, worst='', by_bone={})
+    refs0 = oct_s.record_refs(); rec_of = {v: k for k, v in enumerate(refs0)}
+    new_dd = []
+    for n in range(8):                                # Dog Days heister n: stock objects + every other mask
+        same = _Fit(p, skel_dd[n], skel_dd[n])
+        objs = list(objects(p, old[n]))
+        for m in range(8):
+            fit = _Fit(p, skel_dd[m], skel_dd[n])
+            objs += [_moved(p, o, same, variant_of(0, m + 1), note) for o in body[n]]
+            objs += [_moved(p, o, fit, variant_of(0, m + 1), note) for o in mask[m]]
+        root = _new(p, p.chunks[old[n]]); p.refs[root] = 1
+        _set_objects(p, root, objs)
+        r = oct_s.records[rec_of[p.u32(old[n], 0x1c)]]
+        if r.tree.items:
+            raise ValueError('heister %d: its .oct record is not an empty tree' % (n + 1))
+        oct_s.records.append(O.Record(r.vtable, r.pointer, O.Tree(r.tree.origin, r.tree.scale, [list(x) for x in r.tree.nodes], [], r.tree.fill)))
+        new_dd.append(root)
+        chars.append(dict(name=DD_NAMES[n], game='dd', slot=n, root=root, outfits=1, objects=len(objs), bones=p.u32(skel_dd[n], 0)))
+    refs1 = oct_s.record_refs()
+    if refs1[:len(refs0)] != refs0:
+        raise ValueError('appending .oct records moved the base level\'s records')
+    for root, ref in zip(new_dd, refs1[len(refs0):]):
+        p.chunks[root] = _put(p.chunks[root], 0x1c, '<I', ref)
+    for n in range(8):                                # Dead Men hero n on its own skeleton: face, masks, the bag
+        own = _Fit(p, skel_dm[n], skel_dm[n])
+        fbag = _Fit(p, skel_dd[n], skel_dm[n])
+        objs = []
+        for k in range(len(DM_OUTFITS)):
+            carry = [o for o in bag[n]]
+            objs += [_moved(p, o, own, variant_of(k, 0), note) for o in dbody[n, k] + dhead[n, k]]
+            objs += [_moved(p, o, fbag, variant_of(k, 0), note) for o in carry]
+            for m in [-1] + list(range(8)):           # 'own' (what the stock mask toggle asks for) = mask n
+                v = variant_of(k, m + 1 if m >= 0 else -1)
+                fit = _Fit(p, skel_dd[n if m < 0 else m], skel_dm[n])
+                objs += [_moved(p, o, own, v, note) for o in dbody[n, k]]
+                objs += [_moved(p, o, fit, v, note) for o in mask[n if m < 0 else m]]
+                objs += [_moved(p, o, fbag, v, note) for o in carry]
+        _set_objects(p, dm[n], objs)
+        chars.append(dict(name=DM_NAMES[n], game='dm', slot=n, root=dm[n], outfits=len(DM_OUTFITS), objects=len(objs), bones=p.u32(skel_dm[n], 0)))
+    if note['rest'] > MAX_REST:
+        raise ValueError('a moved object\'s bone rests %.2f units from where it did (limit %.1f): %s; per bone %r' % (
+            note['rest'], MAX_REST, note['worst'], sorted(((round(v, 2), k) for k, v in note['by_bone'].items() if v > 0.3), reverse=True)))
+    # 4. the heisters (and the bots that share their models) take the new Dog Days models
+    moved = []
+    for k in range(1, len(sc.nodes)):
+        if sc.cls(k) in PEOPLE and person(sc, k)[0] in old:
+            new = new_dd[old.index(person(sc, k)[0])]
+            off, was = models[k - 1]
+            struct.pack_into('<I', raw, off, new)
+            lab = J.labels('dd', sc.cls(k)); node = sc.nodes[k]
+            us = [list(u) for u in units(node['props'][1:-1])]
+            us[lab.index('ZGEOM[4]')] = [(us[lab.index('ZGEOM[4]')][0][0], struct.pack('<I', new))]
+            node['props'] = [node['props'][0]] + [t for u in us for t in u] + [node['props'][-1]]
+            moved.append((sc.path[k][5:], was, new))
+    prm_bytes = G.write(p)
+    mat.refs = T.material_refs(prm_bytes)
+    base['.prm'], base['.MAT'], base['.oct'] = prm_bytes, T.write_mat(mat), oct_s.pack()
+    base['.gms'], base['.prp'] = kl_gms.pack(bytes(raw)), sc.p.serialize()
+    rep.update(characters=chars, roots=[c['root'] for c in chars], stock_roots=old, retargeted=moved, level=level,
+               bones_folded_for_low_detail=note['low'], bones_on_an_ancestor=note['inexact'], largest_rest_distance=round(note['rest'], 3),
+               chunks=(rep['chunks'][0], len(p.chunks) - 1), prm_bytes=(rep['prm_bytes'][0], len(prm_bytes)))
+    return rep
+
+
+def wardrobe_ini(rep, path):
+    """KLWardrobe.ini beside the level archive: what klhook\\klchar.c needs to dress the player on THIS build
+    (the model roots are chunk numbers of this build's .prm)."""
+    with open(path, 'w', newline='\r\n') as f:
+        f.write('; written by tools/kl_chars.py wardrobe - belongs to the level archive beside it (klhook\\klchar.c)\n')
+        f.write('; variant of a look = %d * outfit + (1 own face | 2 own mask | 2 + m mask of heister m)\n' % OUTFIT_STEP)
+        f.write('[Wardrobe]\nVersion=1\nCharacters=%d\nMasks=%d\nOutfitStep=%d\n' % (len(rep['characters']), MASKS, OUTFIT_STEP))
+        for i, c in enumerate(rep['characters'], 1):
+            f.write('[Character.%d]\nName=%s\nRoot=%d\nSlot=%d\nOutfits=%d\nStock=%d\n' % (i, c['name'], c['root'], c['slot'], c['outfits'], c['game'] == 'dd'))
+
+
+def check_wardrobe(lv, rep):
+    """What must hold for the sixteen models whatever the game does with them. -> problems."""
+    bad = []
+    p = G.read(lv['.prm'], 'dd')
+    for c in rep['characters']:
+        r, sk = c['root'], skeleton(p, c['root'])
+        low, n = min(struct.unpack_from('<8H', p.chunks[sk], 0x38)[1:6]), p.u32(sk, 0)
+        have = collections.defaultdict(set)
+        for o in objects(p, r):
+            ch = p.chunks[o]
+            have[ch[0x0f]].add(ch[0x0e])
+            try:
+                bones = _palette(p, o)
+            except ValueError as e:
+                bad.append('%s: %s' % (c['name'], e)); continue
+            if max(bones) >= n or (ch[0x0e] & 0xfc and max(bones) >= low):
+                bad.append('%s: object %d (detail %02x) uses bone %d of %d (%d kept at low detail)' % (c['name'], o, ch[0x0e], max(bones), n, low))
+            d = p.u32(p.u32(o, 0x28), 0); v = p.chunks[p.u32(d, 4)]
+            top = max(v[52 * k + 24 + j] for k in range(p.u32(d, 0)) for j in range(4))
+            if top // 3 >= len(bones):
+                bad.append('%s: object %d: a vertex names palette entry %d of %d' % (c['name'], o, top // 3, len(bones)))
+        want = {variant_of(k, m) for k in range(c['outfits']) for m in range(-1, MASKS + 1)}
+        if set(have) != want:
+            bad.append('%s: variants %r, expected %r' % (c['name'], sorted(have), sorted(want)))
+        for v, lods in sorted(have.items()):
+            if not {1, 2, 0x7c} <= lods:
+                bad.append('%s: variant %d is not drawn at every level of detail (%r)' % (c['name'], v, sorted(lods)))
+    if len(set(rep['roots'])) != len(rep['roots']):
+        bad.append('two characters share a model root')
+    return bad
+
+
 # ------------------------------------------------------------------ checks
-def check(lv, stock=None, roots=None, log=print):
+def check(lv, stock=None, roots=None, log=print, extra=()):
     """Re-read a level under every checker there is. stock: the Lv it was made from (then: everything of the
     stock level is still there, unchanged). roots: the new model roots (their skeletons must be bound to
     this level's .ANM; with None every skeleton of the file is tested, which a stock level passes).
@@ -649,7 +899,7 @@ def check(lv, stock=None, roots=None, log=print):
                 bad.append('%s: .prp model %d, .gms model %d' % (sc.path[k], v, models[k - 1][1]))
         people += cls in PEOPLE
     # .prm under Dog Days' rules, every root reachable
-    proots = D.prm_roots(lv['.gms'], lv['.prp'], 'dd')
+    proots = D.prm_roots(lv['.gms'], lv['.prp'], 'dd') + [r for r in extra]      # extra: models no entity names (wardrobe)
     try:
         counts = kl_prm.check(lv['.prm'], proots)
     except ValueError as e:
@@ -925,6 +1175,26 @@ if __name__ == '__main__':
         rep = put(lv, [parse_pick(s) for s in a[3:]], free=free)
         bad = check(lv, stock, [r['new_model'] for r in rep['picks']])
         print('built', lv.write(a[2]), 'problems: %d' % len(bad))
+        sys.exit(1 if bad else 0)
+    elif a[:1] == ['wardrobe'] and len(a) > 2:
+        level = next((x.split('=')[1] for x in sys.argv[1:] if x.startswith('--level=')), 'M01_FA_A')
+        lv, stock = Lv(a[1]), Lv(a[1])
+        slot = next((x.split('=')[1] for x in sys.argv[1:] if x.startswith('--slot=')), lv.name)
+        rep = wardrobe(lv, level, free=free)
+        for c in rep['characters']:
+            print('  %-16s slot %d  model %5d  %3d bones  %3d objects  %d outfit(s)' % (c['name'], c['slot'] + 1, c['root'], c['bones'], c['objects'], c['outfits']))
+        print('  .prm %d -> %d chunks, %.1f -> %.1f MB; %d heisters / bots re-pointed; bones folded for low detail %d, on an ancestor %d, largest rest distance %.3f' % (
+            rep['chunks'] + tuple(x / 1e6 for x in rep['prm_bytes']) + (len(rep['retargeted']), rep['bones_folded_for_low_detail'], rep['bones_on_an_ancestor'], rep['largest_rest_distance'])))
+        bad = check_wardrobe(lv, rep)
+        for b in bad[:20]:
+            print('  PROBLEM: ' + b)
+        bad += check(lv, None, rep['roots'], extra=rep['roots'])
+        path = lv.write(a[2], slot)
+        wardrobe_ini(rep, os.path.join(a[2], 'KLWardrobe.ini'))
+        import json
+        with open(os.path.join(a[2], 'chars.json'), 'w') as fh:
+            json.dump(dict(base=a[1], slot=slot, free=free, problems=bad, **rep), fh, indent=1, default=str)
+        print('built %s (%.0f MB) + KLWardrobe.ini, problems: %d' % (path, os.path.getsize(path) / 1e6, len(bad)))
         sys.exit(1 if bad else 0)
     elif a[:1] == ['check'] and len(a) > 1:
         sys.exit(1 if check(Lv(a[1])) else 0)

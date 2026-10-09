@@ -54,6 +54,15 @@ off the window stack - the window name HeistPlayMenu<N> IS the page - and uses [
 moment that slot's archive is opened. Entry k of a page is the engine's slot {F01,F02,F03,F04,F06,F07,F05,F08,F09}[k];
 a slot without a map on the page keeps its stock title and loads what [Redirect] or the stock game gives it.
 
+THE HEISTER PAGE (2026-10-09; NOT SEEN IN THE GAME YET). Unless [Character] Enable=0 or Menu=0, the Arcade page gets
+one more button, 'Heister', ABOVE the expansion pages' buttons, and a window KLHeister with three rows: Character,
+Mask, Outfit. Each row is a stock ToggleText bound to an option the hook answers (klchar.c: KLChar, KLMask, KLOutfit -
+names kl2.exe does not know; without the hook's DLL they read 0 and a change is dropped, so the page is harmless but
+dead). The rows are the story map page's 'Difficulty' row three times (window PlayMenu: a plain page with two
+option rows, values written as they are changed - no Accept / Cancel cache as on the options pages), with focus bars
+FocusBar_long#04..#06 and names of their own (KLH_...). Texts are literal ('%...'), English only.
+With the Heister button there is room for pages 2..4 only (the Arcade page has four free separator lines).
+
 KLHook.ini (the same file the hook reads):
     [Redirect.2]            slot = map folder under KLExpansion\Maps (klslot.c)
     F01=DM03
@@ -149,7 +158,65 @@ def rename(text, names, suffix):
     return re.sub(r'<Graphic Graphic="([^"]+)"', child, text)
 
 
-def build(xml, pgs):
+HEISTER = 'KLHeister'
+CHARACTERS = ['Game default', 'J.C.', 'Tommy', 'Pierre', 'Liam', 'Jean', 'Elwood', 'Bud', 'Mitchel',
+              'Kane', 'Lynch', 'Dead Men crew 1', 'Dead Men crew 2', 'Dead Men crew 3', 'Dead Men crew 4', 'Dead Men crew 5', 'Dead Men crew 6']      # klchar.c KLChar 0..16
+MASKS = ['Game option', 'No mask'] + ['Mask of %s' % c for c in CHARACTERS[1:9]]              # KLMask 0..9
+OUTFITS = ['Standard', 'Armoured (Dead Men only)']                                           # KLOutfit 0..1
+HEISTER_ROWS = (('KLH_Char', 'Character', 'KLChar', CHARACTERS), ('KLH_Mask', 'Mask', 'KLMask', MASKS), ('KLH_Outfit', 'Outfit', 'KLOutfit', OUTFITS))
+HEISTER_NOTE = 'Arcade Mode. Dead Men bodies and the masks of other heisters need a map built with the wardrobe.'
+
+
+def heister_window(nl):
+    """The window KLHeister: three option rows in the layout of the story map page's rows (PlayMenu)."""
+    L = ['  <!-- KLExpansion: the heister page (mkoverlay.py; options answered by klchar.c) -->',
+         '  <Window Name="%s" LocaleBasePath="AllLevels/Menu/Heist" Template="WindowDefault">' % HEISTER,
+         '    <GuiElement Template="BackgroundTemplate"/>',
+         '    <GuiElement Type="GUIGroup" Template="ScreenBaseSize">',
+         '      <GuiElement Template="HeadlineIcon" Graphic="Icon_Heist"/>',
+         '      <GuiElement Template="HeadlineText" Text="%Heister"/>',
+         '      <GuiElement Template="LongLineTop" />',
+         '    </GuiElement>',
+         '    <GuiElement Type="GUIGroup" Template="ScreenBaseSize">',
+         '      <GuiElement Template="ChapterBackgroundTemplate"/>',
+         '      <GuiElement Type="TextBlock" Name="KLH_Note" Text="%%%s" Font="Text" LineSpace="26" FadeInDelay="0.10" FadeInTime="0.2" AlphaMax="192" X="450" Y="64" AlignH="Left" TextWidth="430" W="300" H="400" />' % esc(HEISTER_NOTE),
+         '      <GuiElement Type="GUIGroup" ShowDebug="True" Name="KLH_CenterBox" AlignH="Right" X="-100" Y="-80" W="384" H="576">']
+    ys = (358, 392, 425)                              # PlayMenu's two rows are at 392 and 425
+    for k, (name, label, opt, vals) in enumerate(HEISTER_ROWS):
+        L.append('        <GuiElement Type="TextBlock" FadeInDelay="%.2f" FadeInTime="0.2" Text="" Name="%s_Data" Y="%d" AlignH="Center" />' % (0.05 + 0.05 * k, name, ys[k] + 80 + (1 if k == 2 else 0)))
+    L += ['      </GuiElement>',
+          '      <GuiElement Type="GUIGroup" ShowDebug="True" Name="KLH_CenterBoxArrows" X="484" Y="-80" W="384" H="576" GeomSpace="2">']
+    for msg, tpl in (('Decrease', 'OptionsArrowL_T'), ('Increase', 'OptionsArrowR_T')):
+        for k, (name, label, opt, vals) in enumerate(HEISTER_ROWS):
+            L.append('        <GuiElement Template="%s" X="0" Message="%s" FocusParent="%s" Receiver="%s" Y="%d"/>' % (tpl, msg, name, name, 430 + ROW * k))
+    L.append('      </GuiElement>')
+    for k, (name, label, opt, vals) in enumerate(HEISTER_ROWS):
+        L.append('      <GuiElement Name="KLHfb#%02d" Graphic="FocusBar_long#%02d" Y="%d" X="-122" AlignH="Left" Template="FocusBar" />' % (k + 1, k + 4, 349 + ROW * k))
+    for k, (name, label, opt, vals) in enumerate(HEISTER_ROWS):
+        L += ['      <GuiElement Type="ToggleText" Text="%%%s" X="-100" Y="%d" Option="%s" FocusGraphic="KLHfb#%02d"' % (esc(label), ys[k], opt, k + 1),
+              '          TextReceiver="%s_Data" UseTextReceiverAsFocus="True"' % name,
+              '          RecCSFocus="OnFocus" RecCSDefault="Default" FadeInDelay="%.2f" FadeInTime="0.2" Name="%s"' % (0.05 + 0.05 * k, name),
+              '          Template="TextIndentX" AlignV="Left" HelpText="/Menu/Generic/UseLRToSelect" HelpTextBlock="HelpPlay" >']
+        L += ['        <Text Text="%%%s" />' % esc(v) for v in vals]
+        L.append('      </GuiElement>')
+    L += ['    </GuiElement>',
+          '    <GuiElement Type="GUIGroup" Template="ScreenBaseSize">',
+          '      <GuiElement Template="LongLineBottom"/>',
+          '      <GuiElement Type="GUIGroup" Navigation="Horizontal" ReverseNavigation="True" Template="BottomFramePosSize" ShowDebug="True">',
+          '        <Platform PC_KEYBOARD="True">',
+          '          <GuiElement ReceiveAllInput="False" Template="ButtonBack_INV_GT" />',
+          '          <GuiElement AlignH="Left" Template="BackButtonNoXPos_PC" HelpTextBlock="HelpPlay" HelpText=" " />',
+          '        </Platform>',
+          '        <Platform PC_GC="True">',
+          '          <GuiElement Template="BottomFrameMenuBackButton"/>',
+          '        </Platform>',
+          '      </GuiElement>',
+          '    </GuiElement>',
+          '  </Window>']
+    return nl.join(L) + nl
+
+
+def build(xml, pgs, heister=True):
     nl = '\r\n' if '\r\n' in xml else '\n'
     # the stock map page, whole
     w = one(r'[ \t]*<Window Name="HeistPlayMenu" [^>]*>.*?</Window>[ \t]*\r?\n', xml, 'the window HeistPlayMenu', re.S)
@@ -193,6 +260,10 @@ def build(xml, pgs):
         taken |= {x + suffix for x in set(names) | set(tnames)}
         new += nl + '  <!-- KLExpansion page %d: a copy of HeistPlayMenu with names of its own (mkoverlay.py) -->' % n + nl + p
         tpl += nl + '\t<!-- KLExpansion page %d: the gamepad bottom frame of HeistPlayMenu%d (mkoverlay.py) -->' % (n, n) + nl + t
+    if heister:
+        if HEISTER in taken or any(x.startswith('KLH') for x in taken):
+            raise SystemExit('names already in frontend.xml: KLH...')
+        new += nl + heister_window(nl)
     xml = xml[:w.end()] + new + xml[w.end():]          # the window stands behind the template in the file
     xml = xml[:gt.end()] + tpl + xml[gt.end():]
     # the Arcade page: option on the stock button; per page a button, focus bar, icon and line; all rows moved up
@@ -201,16 +272,19 @@ def build(xml, pgs):
     s = one(r'(<GuiElement Type="OpenWindow" Template="HM_Button" Window="HeistPlayMenu" Text="Button_StartHeist"\s+FocusGraphic="HMfbl#01" FadeInDelay="0\.15" Y="220")(/>)', arc, 'the Start button')
     arc = arc[:s.start()] + s.group(1) + ' Option="Dummy" OptionValue="1"' + s.group(2) + arc[s.end():]
     g = one(r'(<GuiElement Type="GUIGroup" Template="ScreenBaseSize" X="130" Y=)"110"(>)', arc, 'the group of the rows')
-    arc = arc[:g.start()] + g.group(1) + '"%d"' % (110 - ROW * len(pgs)) + g.group(2) + arc[g.end():]
+    rows = ([(HEISTER, 'Heister', None, None)] if heister else []) + [('HeistPlayMenu%d' % n, title, pg.get('Icon'), n) for n, title, ent, pg in pgs]
+    if len(rows) > len(ICONS):
+        raise SystemExit('%d added buttons: the Arcade page has room for %d (with the Heister button: pages 2..4)' % (len(rows), len(ICONS)))
+    arc = arc[:g.start()] + g.group(1) + '"%d"' % (110 - ROW * len(rows)) + g.group(2) + arc[g.end():]
     f1 = one(r'([ \t]*)<GuiElement Name="HMfbl#01" Y="211" [^>]*/>', arc, 'the first focus bar')
     f5 = one(r'[ \t]*<GuiElement Name="HMfbl#05" Y="347" [^>]*/>[ \t]*\r?\n', arc, 'the fifth focus bar')
     i5 = one(r'([ \t]*)<GuiElement Type="Graphic" Graphic="Icon_Xbox_Live" Y="347" X="250" ([^>]*)/>[ \t]*\r?\n', arc, 'the fifth icon')
     l5 = one(r'([ \t]*)<GuiElement AnimX="811" Template="Line" Graphic="Line_Short_01#06" AnimY="380" />[ \t]*\r?\n', arc, 'the fifth line')
     ind = f1.group(1); btn = bars = icons = lines = ''
-    for i, (n, title, ent, pg) in enumerate(pgs):
-        k = 6 + i; y = 390 + ROW * i; icon = pg.get('Icon', ICONS[i]).strip()
-        btn += (ind + '<GuiElement Type="OpenWindow" Template="HM_Button" Window="HeistPlayMenu%d" Text="%%%s"' % (n, esc(title)) + nl +
-                ind + '            FocusGraphic="HMfbl#%02d" FadeInDelay="0.15" Y="%d" Option="Dummy" OptionValue="%d"/>' % (k, y, n) + nl + nl)
+    for i, (win, title, icon, n) in enumerate(rows):
+        k = 6 + i; y = 390 + ROW * i; icon = (icon or ICONS[i]).strip()
+        btn += (ind + '<GuiElement Type="OpenWindow" Template="HM_Button" Window="%s" Text="%%%s"' % (win, esc(title)) + nl +
+                ind + '            FocusGraphic="HMfbl#%02d" FadeInDelay="0.15" Y="%d"%s/>' % (k, y, ' Option="Dummy" OptionValue="%d"' % n if n else '') + nl + nl)
         bars += ind + '<GuiElement Name="HMfbl#%02d" Y="%d" Graphic="FocusBar_short#%02d" Template="HM_FocusBar" MouseFocusW="239" />' % (k, y - 9, k) + nl
         icons += i5.group(1) + '<GuiElement Type="Graphic" Graphic="%s" Y="%d" X="250" %s/>' % (esc(icon), y - 9, i5.group(2)) + nl
         lines += l5.group(1) + '<GuiElement AnimX="811" Template="Line" Graphic="Line_Short_01#%02d" AnimY="%d" />' % (k + 1, y + 24) + nl
@@ -222,7 +296,7 @@ def build(xml, pgs):
     return xml[:a.start()] + arc + xml[a.end():]
 
 
-def check(stock, res, pgs):
+def check(stock, res, pgs, heister=True):
     """What must hold for the result, whatever the game does with it. -> list of faults."""
     bad = []
     plain = re.sub(r'<!--.*?-->', '', res, flags=re.S)
@@ -248,8 +322,29 @@ def check(stock, res, pgs):
     if wins.get('HeistPlayMenu') != {m.group(1): m.group(0) for m in re.finditer(r'<Window Name="([^"]+)"[^>]*>.*?</Window>', re.sub(r'<!--.*?-->', '', stock, flags=re.S), re.S)}.get('HeistPlayMenu'):
         bad.append('the stock map page changed')
     arc = wins['HeistModeMenu']
+    nrows = len(pgs) + (1 if heister else 0)
+    if heister:
+        w = wins.get(HEISTER)
+        if not w:
+            bad.append('window %s is missing' % HEISTER)
+        else:
+            own = defined(w)
+            for nm in own:
+                if first[nm] != HEISTER or own.count(nm) != 1:
+                    bad.append('%s: the name %s is defined twice or found in window %s first' % (HEISTER, nm, first[nm]))
+            refs = [v.strip() for a in REFS for x in re.findall(r'\b%s="([^"]*)"' % a, w) for v in x.split(',') if v.strip()]
+            for r in sorted(set(refs)):
+                if r not in own and r != 'HelpPlay':         # HelpPlay: named by the stock pages too, defined by none
+                    bad.append('%s refers to %s, which the page does not define' % (HEISTER, r))
+            for name, label, opt, vals in HEISTER_ROWS:
+                t = re.search(r'<GuiElement Type="ToggleText"[^>]*Option="%s"[^>]*>(.*?)</GuiElement>' % opt, w, re.S)
+                if not t or len(re.findall(r'<Text Text=', t.group(1))) != len(vals):
+                    bad.append('%s: the row of option %s does not have %d entries' % (HEISTER, opt, len(vals)))
+            tpl = set(re.findall(r'\bTemplate="([^"]+)"', w)) - set(re.findall(r'<Template Name="([^"]+)"', plain))
+            if tpl:
+                bad.append('%s uses templates frontend.xml does not define: %s' % (HEISTER, sorted(tpl)))
     ys = re.findall(r'Template="HM_Button"[^>]*?\bY="(\d+)"', arc, re.S)     # stock has several per row (<Platform> alternatives)
-    if len(set(ys)) != 5 + len(pgs) or any(ys.count(str(390 + ROW * i)) != 1 for i in range(len(pgs))):
+    if len(set(ys)) != 5 + nrows or any(ys.count(str(390 + ROW * i)) != 1 for i in range(nrows)):
         bad.append('HeistModeMenu: buttons at Y %s' % ys)
     used = re.findall(r'Type="Graphic" Graphic="([^"]+)"', arc) + re.findall(r'Template="HeadlineIcon" Graphic="([^"]+)"', arc)
     if len(set(used)) != len(used):
@@ -266,15 +361,18 @@ def main():
         raise SystemExit(__doc__)
     ini, stock, out = sys.argv[1:]
     pgs = pages(ini)
-    if not pgs:
-        raise SystemExit('no [Redirect.2] .. [Redirect.5] section with F01..F09 lines in %s: nothing to build' % ini)
+    cp = configparser.RawConfigParser(strict=False, delimiters=('=',), comment_prefixes=(';', '#'), interpolation=None)
+    cp.read(ini)
+    heister = not cp.has_section('Character') or (cp.get('Character', 'Enable', fallback='1').strip() != '0' and cp.get('Character', 'Menu', fallback='1').strip() != '0')
+    if not pgs and not heister:
+        raise SystemExit('no [Redirect.2] .. [Redirect.5] section with F01..F09 lines in %s and the heister page is off: nothing to build' % ini)
     z = zipfile.ZipFile(stock)
     names = {i.filename.lower(): i for i in z.infolist()}
     if MEMBER not in names:
         raise SystemExit('%s has no %s' % (stock, MEMBER))
     raw = z.read(names[MEMBER]); xml = raw.decode('latin-1')
-    new = build(xml, pgs)
-    bad = check(xml, new, pgs)
+    new = build(xml, pgs, heister)
+    bad = check(xml, new, pgs, heister)
     if bad:
         raise SystemExit('the result breaks its own rules, nothing written:\n  ' + '\n  '.join(bad))
     res = new.encode('latin-1')
@@ -293,14 +391,17 @@ def main():
     c = zipfile.ZipFile(path); back = c.read(names[MEMBER].filename)
     assert back == res and all(c.read(i.filename) == z.read(i.filename) for i in z.infolist() if i.filename.lower() != MEMBER)
     print('%s: %d members, %s %d -> %d bytes (stock sha1 %s)' % (path, len(c.namelist()), MEMBER, len(raw), len(res), hashlib.sha1(raw).hexdigest()[:12]))
+    h = 1 if heister else 0
+    if heister:
+        print('  heister page: Arcade button 6 (icon %s) -> window %s; rows %s' % (ICONS[0], HEISTER, ', '.join('%s (%s, %d entries)' % (r[1], r[2], len(r[3])) for r in HEISTER_ROWS)))
     for k, (n, title, ent, pg) in enumerate(pgs):
         mode = pg.get('Pictures', 'story').strip().lower()
-        print('  page %d "%s": Arcade button %d (icon %s) -> window HeistPlayMenu%d; selector HeistLevel_P%d; Dummy = %d' % (n, title, 6 + k, pg.get('Icon', ICONS[k]).strip(), n, n, n))
+        print('  page %d "%s": Arcade button %d (icon %s) -> window HeistPlayMenu%d; selector HeistLevel_P%d; Dummy = %d' % (n, title, 6 + h + k, pg.get('Icon', ICONS[h + k]).strip(), n, n, n))
         for e, slot in enumerate(ORDER):
             if slot in ent:
                 pic = ent[slot][2] or ('LevelPicture_L%02d' % slot if mode == 'story' else 'LevelPicture_H%02d' % slot)
                 print('     entry %d = slot F%02d: "%s" from Maps\\%s, picture %s' % (e, slot, ent[slot][1], ent[slot][0], pic))
-    print('  Arcade page: rows moved up by %d (group Y %d)' % (ROW * len(pgs), 110 - ROW * len(pgs)))
+    print('  Arcade page: rows moved up by %d (group Y %d)' % (ROW * (len(pgs) + h), 110 - ROW * (len(pgs) + h)))
     print('  windows %d -> %d, elements <GuiElement %d -> %d' % (xml.count('<Window '), res.count(b'<Window '), xml.count('<GuiElement'), res.count(b'<GuiElement')))
 
 

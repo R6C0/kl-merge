@@ -250,7 +250,14 @@ HOOK, state 16:30 (re/hook_live.md, re/fa_round.md section 8; DLLs in scratch ih
   difference could be shown; nothing worse).
 - tools/kl_expansion.py: tree of all five maps builds (3.40 GB); install / uninstall tested on a
   made-up folder only. Live checks L0-L9 of re/expansion.md not run.
-- tools/kl_chars.py player models: offline only. Stage 2 NOT released by the owner.
+- PLAYER MODELS + HEISTER PAGE (owner released stage 2 and asked for a character / mask screen, 2026-10-09
+  evening; re/wardrobe.md). Built OFFLINE, nothing run live: `kl_chars.py wardrobe` (Dead Men heroes as extra
+  models, 16 bodies x 8 masks as variants, KLWardrobe.ini; kept builds <work>uild\chars\wardrobe_F01 and
+  wardrobe_bank, problems: 0), klhook\klchar.c (menu options KLChar / KLMask / KLOutfit by a private vtable;
+  body through the game's own swap routine 0x8f5e90, look through 0x88c810; Arcade only), mkoverlay.py (button
+  'Heister' + window KLHeister), tools/kl_view.py (software renderer: models can be LOOKED AT offline).
+  Live checks W1..W6 of re/wardrobe.md are the next live work for this; the largest unknown is whether a model
+  no entity names is drawn (W5). The bank's .prm becomes 96.5 MB with the wardrobe (over kl_graft's 90 MB).
 - tools/kl_str.py stream merge (Retomoto music): installing replaces <DD>\PC_Def.str - needs the
   owner's go-ahead.
 - NOTE_from_gfx_session.md (pushed by another session): asks this loop to run a KLGfx self-test
@@ -274,7 +281,9 @@ WAITING FOR THE OWNER:
   (countdown clean, first hit at GO)? A played round is needed for blast, loot, gate, vans.
 - Install the guarded SHIP hook for the owner's own play? Until then: do not lose the last life
   or Quit inside a session on a grafted map (it writes the stock Subway board and stats).
-- Go-ahead for PC_Def.str; release of stage 2 (player models); <DD>\KLExpansion (360 MB) keep?
+- Go-ahead for PC_Def.str; <DD>\KLExpansion (360 MB) keep?
+- Wardrobe / heister page: say when live runs may resume (checks W1..W6); they need the new hook DLL, the
+  overlay Patch01.zip and a wardrobe build in the test slot - none of that is installed.
 - ~21 lingering kl2.exe entries (0 threads) need a reboot (or restart of rsEngineSvc).
 Then, in order: hook live checks + stats blocking + join write; kl_chars rebind on the maps;
 M01 menu round; menu page for expansion maps; heister select.
