@@ -34,6 +34,18 @@
  *                     not acquired (window not in the foreground)
  *   BlockReal=1       while a script runs, drop the real keyboard's events and zero the mouse
  *   FirstChance=1     log first-chance faults raised in modules other than kl2.exe
+ *   CmdDrop=          comma-separated engine keys whose "-o <Key>=<value>" pair is blanked out of the
+ *                     process command line (in memory, before any game code runs). WHY: "-o" lines are
+ *                     parsed AFTER the baked text and a later key replaces an earlier one, so [Engine]
+ *                     cannot override a key the Steam launch options give. The owner's options force
+ *                     DefaultScene=Locations/F01/F01_Main.gms and AutoExit=120; a run that must start in
+ *                     the menu uses CmdDrop=DefaultScene,AutoExit and gives AutoExit under [Engine].
+ *                     Steam's settings are not touched; with Enable=0 the options act as before.
+ *                     Verified by disassembly: the exe's startup passes *MSVCR90._acmdln to WinMain
+ *                     (0xa8daaa -> 0x58ff90) and has no GetCommandLineA of its own. ASSUMPTION (not
+ *                     run): _acmdln is GetCommandLineA()'s buffer, as in the CRT's sources. The read-
+ *                     back is the "input: DirectInput8Create wrapped; scene='...' AutoExit=..." line:
+ *                     it must name the frontend scene and the [Engine] AutoExit.
  *   [Engine]          lines appended to the exe's baked ini text (same effect as "-o <line>")
  *   1=AutoExit=180
  *   2=DisableSplashScreens
@@ -46,6 +58,28 @@
  *   6=log reached the level              text into KLHook.log
  *   7=pass 5000                          wait, then end: PASS if no assert / fault was seen
  *     also: fail <text>, quit <exit code>
+ *   8=msg HeistLevel StartGame           send a menu message to a named GUI element of the open page,
+ *                                        the way a <GuiElement Type="SendMessage" Receiver= Message=>
+ *                                        does (ZSendMessage slot 10, kl2 0x869ac2-0x869aea: element =
+ *                                        0x83faf0(name) on the menu manager [[0xdd265c]+0x824], then
+ *                                        element->vtbl+0x50(&text)). 'HeistLevel' + 'StartGame' is what
+ *                                        the gamepad layout's Accept sends on the Arcade map page
+ *                                        (frontend.xml template BottomFrameHeistBackStartGameButtons);
+ *                                        ZMercsLevelSelectorHeist slot 20 (0x49f4e0) then runs 0x502b40.
+ *                                        Called on the game's thread from the keyboard poll, i.e. a
+ *                                        little earlier in the frame than the menu would. Never run.
+ *                                        An unknown element fails the script (exit 26).
+ *   9=peek 0xceceec arcade-position      log the dword at an address (kl2.exe image or heap);
+ *     peek 0x168e598+0x5c game-mode      with '+': the dword at [address] + offset (one pointer followed)
+ *   10=sel HeistLevel 0xceceec 0         step a toggle element until the dword at the address has the
+ *                                        value: sends 'Decrease' / 'Increase' (ZToggle slot 20,
+ *                                        0x90b170 -> vtbl+0xa8 / +0xa4) every 250 ms, at most 24
+ *                                        times, and waits up to 10 s for the element to exist.
+ *                                        [0xceceec] is the Arcade selector's position, copied there
+ *                                        every frame by its slot 8 (0x459eec); 0 = Subway (F01).
+ *                                        Needed because the page opens on the profile's last map
+ *                                        (0x459eb7: 0x85f510 on the profile 0x1686e60).
+ *   11=expect 0xceceec 0                 fail the script (exit 27) unless the dword has that value
  *   Keys: A-Z 0-9 F1-F12 RETURN ESCAPE SPACE TAB BACK UP DOWN LEFT RIGHT LSHIFT LCONTROL LMENU INSERT
  *   DELETE HOME END PRIOR NEXT NUMPADENTER, or a DIK code as 0x1C. RSHIFT cannot be scripted: the game
  *   ignores DIK 0x36 from DirectInput and asks GetAsyncKeyState(0xA1) (kl2 0x6c8c2f, 0x6c8c91).
@@ -547,6 +581,43 @@ static void kla_engine_ini(void)
     kla_out(1, "engine ini: %d line(s) %s", i - 1, kla_poke(VA(0x5987af), exp, rep, 5) ? "installed (operand of the push at 0x5987af)" : "NOT installed: bytes at 0x5987af differ");
 }
 
+static int kla_cmd_drop_in(char *cmd, char *keys)
+{   /* blank every "-o <Key>=..." / "-o <Key>" pair of the listed keys; -> pairs blanked */
+    char *p, *k, *ctx = 0; int n = 0;
+    for (k = strtok_s(keys, ", ", &ctx); k; k = strtok_s(0, ", ", &ctx)) {
+        size_t kl = strlen(k);
+        for (p = cmd; (p = strstr(p, "-o")) != 0; p += 2) {
+            char *v = p + 2, *e;
+            if (p != cmd && p[-1] != ' ' && p[-1] != '\t') continue;          /* "-o" must be a token of its own */
+            if (*v != ' ' && *v != '\t') continue;
+            while (*v == ' ' || *v == '\t') v++;
+            e = v; if (*e == '"') e++;
+            if (_strnicmp(e, k, kl) || (e[kl] != '=' && e[kl] != ' ' && e[kl] != '"' && e[kl])) continue;
+            if (*v == '"') { e = strchr(v + 1, '"'); e = e ? e + 1 : v + strlen(v); }
+            else for (e = v; *e && *e != ' ' && *e != '\t'; e++) ;
+            memset(p, ' ', e - p); n++;
+        }
+    }
+    return n;
+}
+
+static void kla_cmd_drop(void)
+{   /* [Auto] CmdDrop=Key,Key on the process command line, in place (see the top comment) */
+    char keys[256], *cmd = GetCommandLineA(); DWORD old; MEMORY_BASIC_INFORMATION mbi; int n;
+    if (!GetPrivateProfileStringA("Auto", "CmdDrop", "", keys, sizeof keys, kla_ini) || !cmd) return;
+    if (!VirtualQuery(cmd, &mbi, sizeof mbi)) return;
+    if (!(mbi.Protect & (PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READWRITE)) && !VirtualProtect(cmd, strlen(cmd) + 1, PAGE_READWRITE, &old)) { kla_out(1, "CmdDrop: the command line is not writable"); return; }
+    {   /* kl2.exe's startup hands WinMain *MSVCR90._acmdln (0xa8daaa). MSVCR90 sets it to GetCommandLineA()'s
+           buffer; should it ever hold a copy of its own, that copy is treated too */
+        char keys2[256]; HMODULE crt = GetModuleHandleA("MSVCR90.dll"); char **ac = crt ? (char **)GetProcAddress(crt, "_acmdln") : 0;
+        GetPrivateProfileStringA("Auto", "CmdDrop", "", keys2, sizeof keys2, kla_ini);
+        if (ac && *ac && *ac != cmd && VirtualQuery(*ac, &mbi, sizeof mbi) && (mbi.Protect & (PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READWRITE)))
+            kla_out(1, "CmdDrop: MSVCR90._acmdln is a separate buffer: %d pair(s) blanked there", kla_cmd_drop_in(*ac, keys2));
+    }
+    n = kla_cmd_drop_in(cmd, keys);
+    kla_out(1, "CmdDrop: %d '-o' pair(s) blanked; command line now: %s", n, cmd);
+}
+
 static int kla_install(void)
 {
     int i, ok = 0; BYTE *p, jmp[10]; DWORD v, old = 0x820300, mine;
@@ -568,7 +639,7 @@ static int kla_install(void)
 /* ---------------------------------------------------------------- script */
 
 typedef struct { char op; BYTE key; DWORD n, n2; char text[80]; } KCMD;
-enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT };
+enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT };
 static KCMD kla_cmd[256]; static int kla_ncmd, kla_pc; static DWORD kla_cmd_t, kla_cmd_f, kla_seq;
 static BYTE kla_held[256]; static DWORD kla_rel_t[256], kla_rel_f[256]; static int kla_taps, kla_started;
 
@@ -619,6 +690,22 @@ static void kla_script_load(void)
         else if (!_stricmp(op, "pass")) { c->op = C_PASS; c->n = strtoul(a, 0, 10); }
         else if (!_stricmp(op, "fail")) { c->op = C_FAIL; snprintf(c->text, sizeof c->text, "%s", rest); }
         else if (!_stricmp(op, "quit")) { c->op = C_QUIT; c->n = strtoul(a, 0, 10); }
+        else if (!_stricmp(op, "msg")) {                /* text = element name, NUL, message */
+            char m[64]; m[0] = 0; sscanf(rest + strlen(a), "%63s", m);
+            if (!a[0] || !m[0] || strlen(a) + strlen(m) + 2 > sizeof c->text) { kla_out(1, "script line %d: msg needs <element> <message> - script not loaded", i); kla_ncmd = 0; return; }
+            c->op = C_MSG; strcpy(c->text, a); strcpy(c->text + strlen(a) + 1, m);
+        }
+        else if (!_stricmp(op, "sel")) {
+            char ad[32]; ad[0] = 0; c->n2 = 0; sscanf(rest + strlen(a), "%31s %lu", ad, &c->n2);
+            c->op = C_SEL; c->n = strtoul(ad, 0, 16); snprintf(c->text, sizeof c->text, "%s", a);
+            if (!a[0] || !c->n) { kla_out(1, "script line %d: sel needs <element> <hex address> <value> - script not loaded", i); kla_ncmd = 0; return; }
+        }
+        else if (!_stricmp(op, "expect")) { c->op = C_EXPECT; c->n = strtoul(a, 0, 16); c->n2 = 0; sscanf(rest + strlen(a), "%lu", &c->n2); }
+        else if (!_stricmp(op, "peek")) {
+            char *plus = strchr(a, '+');
+            c->op = C_PEEK; c->n = strtoul(a, 0, 16); c->key = (BYTE)(plus != 0); c->n2 = plus ? strtoul(plus + 1, 0, 16) : 0;
+            snprintf(c->text, sizeof c->text, "%s", rest + strlen(a));
+        }
         else { kla_out(1, "script line %d: unknown command '%s' - script not loaded", i, op); kla_ncmd = 0; return; }
         kla_ncmd++;
     }
@@ -632,6 +719,26 @@ static void kla_event(DWORD *rg, DWORD *count, DWORD cap, int key, int down)
     if (*count >= cap) return;
     e = rg + 5 * *count; (*count)++;
     e[0] = (DWORD)key; e[1] = down ? 0x80 : 0; e[2] = GetTickCount(); e[3] = ++kla_seq; e[4] = 0;
+}
+
+typedef void *(__fastcall *KLA_FIND)(void *mgr, void *edx, const char *name);       /* 0x83faf0, thiscall, ret 4 */
+typedef void (__fastcall *KLA_SEND)(void *elem, void *edx, const char **text);      /* vtbl+0x50, thiscall, ret 4 */
+
+static DWORD kla_sel_t; static int kla_sel_n;
+
+static int kla_msg(const char *elem, const char *msg)
+{   /* what ZSendMessage does when activated (kl2 0x869ac2): find the element by name, call its slot 20
+       with a pointer to a string object, which is one char* (0x83e2e0 builds it, 0x49f4ee reads [arg]).
+       -> 1 sent, 0 no menu manager / no such element / not a kl2.exe vtable. */
+    DWORD gui, mgr, vt, fn; void *e; char cls[64];
+    if (!kla_exe_ok || !(gui = G32(0xdd265c)) || !(mgr = kla_rd32(gui + 0x824))) { kla_out(1, "msg: no menu manager yet"); return 0; }
+    e = ((KLA_FIND)VA(0x83faf0))((void *)(DWORD_PTR)mgr, 0, elem);
+    if (!e) { kla_out(1, "msg: no GUI element named '%s' in the open pages", elem); return 0; }
+    vt = kla_rd32((DWORD_PTR)e); fn = kla_rd32(vt + 0x50); kla_rtti((DWORD_PTR)e, cls, sizeof cls);
+    if (fn < img_lo || fn >= img_hi) { kla_out(1, "msg: element '%s' at %p has no usable vtable (%08lx)", elem, e, vt); return 0; }
+    kla_out(1, "msg: '%s' -> %s '%s' at %p (slot 20 = %08lx)", msg, cls, elem, e, fn);
+    ((KLA_SEND)(DWORD_PTR)fn)(e, 0, &msg);
+    return 1;
 }
 
 static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
@@ -657,6 +764,25 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
         case C_PASS: if (now - kla_cmd_t >= c->n) kla_pass("script reached pass"); break;
         case C_FAIL: kla_where(); kla_finish("FAIL", c->text, KLA_SCRIPTFAIL); break;
         case C_QUIT: kla_finish(c->n ? "FAIL" : "PASS", "script quit", (int)c->n); break;
+        case C_MSG:
+            if (kla_msg(c->text, c->text + strlen(c->text) + 1)) next = 2;
+            else { char r[160]; snprintf(r, sizeof r, "script line %d: msg to '%s' could not be sent", kla_pc + 1, c->text); kla_where(); kla_finish("FAIL", r, KLA_SCRIPT); }
+            break;
+        case C_SEL: {
+            DWORD v = 0xffffffff; kla_rd(VA(c->n) ? (DWORD_PTR)VA(c->n) : 0, &v, 4);
+            if (v == c->n2) { kla_out(1, "script %d: %s is at %lu after %d step(s)", kla_pc + 1, c->text, v, kla_sel_n); kla_sel_n = 0; next = 1; break; }
+            if (now - kla_sel_t < 250) return;
+            kla_sel_t = now;
+            if (now - kla_cmd_t > 10000 + 250u * 24 || kla_sel_n >= 24) { char r[160]; snprintf(r, sizeof r, "script line %d: %s did not reach %lu (value %lu after %d steps)", kla_pc + 1, c->text, c->n2, v, kla_sel_n); kla_where(); kla_finish("FAIL", r, KLA_SCRIPT); return; }
+            if (v > 64) return;                         /* not a position yet: the page is not up */
+            if (kla_msg(c->text, v > c->n2 ? "Decrease" : "Increase")) kla_sel_n++;
+            return; }
+        case C_EXPECT: { DWORD v = 0xffffffff; kla_rd((DWORD_PTR)VA(c->n), &v, 4);
+            if (v == c->n2) { kla_out(1, "script %d: %08lx = %lu as expected", kla_pc + 1, c->n, v); next = 1; break; }
+            { char r[160]; snprintf(r, sizeof r, "script line %d: %08lx is %lu, expected %lu", kla_pc + 1, c->n, v, c->n2); kla_where(); kla_finish("FAIL", r, KLA_SCRIPTFAIL); } return; }
+        case C_PEEK: { DWORD v = 0, at = (DWORD)(DWORD_PTR)VA(c->n); int ok = kla_rd(at, &v, 4);
+            if (ok && c->key) { at = v + c->n2; v = 0; ok = kla_rd(at, &v, 4); }
+            kla_out(1, "script %d: peek %08lx%s = %s%08lx %s", kla_pc + 1, c->n, c->key ? "+" : "", ok ? "" : "unreadable ", v, c->text); next = 1; break; }
         }
         if (!next) return;
         kla_pc++; kla_cmd_t = now; kla_cmd_f = kla_frames;
@@ -961,7 +1087,7 @@ static void kla_init(HINSTANCE inst)
     kla_t0 = kla_beat = GetTickCount();
     kla_exe_ok = img_lo == 0x400000 && nt->FileHeader.TimeDateStamp == KL2_TIMESTAMP && nt->OptionalHeader.SizeOfImage == KL2_IMAGESIZE;
     kla_out(1, "klauto: enabled; exe %s; command line: %s", kla_exe_ok ? "is kl2.exe build 0490" : "is NOT the known kl2.exe - no code is patched", GetCommandLineA());
-    if (kla_exe_ok) { kla_engine_ini(); if (kla_hooks_on) kla_install(); }
+    if (kla_exe_ok) { kla_cmd_drop(); kla_engine_ini(); if (kla_hooks_on) kla_install(); }
     kla_script_load();
     kla_tls = TlsAlloc();
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
@@ -1001,6 +1127,7 @@ __declspec(dllexport) int kla_test_install(void *mapped, void *fake_loader)
     return n;
 }
 __declspec(dllexport) void *kla_test_stubs(void) { return kla_stubs; }
+__declspec(dllexport) int kla_test_cmd_drop(char *cmd, char *keys) { return kla_cmd_drop_in(cmd, keys); }
 __declspec(dllexport) const char *kla_test_engine_text(void) { return kla_engine_text; }
 __declspec(dllexport) void kla_test_dispatch(int id, KREGS *r) { kla_dispatch(id, r); }
 __declspec(dllexport) void *kla_test_load(void *self, void *arg) { return kla_scene_load(self, 0, arg); }

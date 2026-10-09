@@ -19,6 +19,10 @@ below is from data (every rule holds on all 909 collections / 41 files), their m
 
   type 5  collection clip list: {5, 0x80000000|extent, +8 name offset, 1} + child chunk
           {type = n, extent = 8+4n, n clip indices (sorted, unique)} + name 'anmcol:animationdatabase#X'.
+          The lists PARTITION the clips (data, 909 collections / 41 files, no exception): a collection
+          lists exactly the clips its type 6 pool names that no EARLIER collection of the file lists
+          (so the first collection holds the bulk, 'Generic' / 'SIG_552' may list none). relist()
+          writes that rule; audit() checks it.
   type 6  collection: name, then K = number of used slots, a pool of (condition flags, clip index)
           pairs, one 0 dword, S, and S slot entries: -1 or the byte offset (from K) of the slot's first
           pair. A slot's list runs to the first pair with flags 0 (the default). S <= slot count.
@@ -338,10 +342,21 @@ def merge(dd, dm, wanted, reuse=True):
         for s, first in enumerate(col.table):
             if first >= 0:
                 table[index(slot, out.slots, dm.slots[s])] = first
-        out.cols.append(Collection(new, sorted({clipmap[c] for c in col.clips}),
-                                   [(f, clipmap[c]) for f, c in col.pool],
+        out.cols.append(Collection(new, [], [(f, clipmap[c]) for f, c in col.pool],
                                    [table.get(s, -1) for s in range(max(table) + 1 if table else 0)]))
+    relist(out)                                         # was: the source's list mapped, which listed reused stock clips twice
     return out
+
+
+def relist(a):
+    """Rewrite every type 5 clip list by the rule of the stock files (see FILE, type 5): the clips of
+    the collection's pool that no earlier collection lists. On a stock file this changes nothing."""
+    seen = set()
+    for c in a.cols:
+        mine = {clip for _f, clip in c.pool}
+        c.clips = sorted(mine - seen)
+        seen |= mine
+    return a
 
 
 # ---- checks -------------------------------------------------------------------------------------
@@ -376,6 +391,16 @@ def audit(a):
             bad.append('%s: more slots than slot names' % c.short)
         if c.clips != sorted(set(c.clips)) or c.clips and c.clips[-1] >= len(a.clips):
             bad.append('%s: clip list not sorted / out of range' % c.short)
+    seen = set()
+    for c in a.cols:                                    # type 5 lists: the partition rule
+        mine = {clip for _f, clip in c.pool}
+        if c.clips != sorted(mine - seen):
+            bad.append('%s: clip list is not its pool clips that no earlier collection lists' % c.short)
+        seen |= mine
+    if len(seen) != len(a.clips):
+        bad.append('%d clips that no collection plays' % (len(a.clips) - len(seen)))
+    if len(set(c.name for c in a.cols)) != len(a.cols):
+        bad.append('duplicate collection names')
     if len(set(a.slots)) != len(a.slots):
         bad.append('duplicate slot names')
     own = owners(a)

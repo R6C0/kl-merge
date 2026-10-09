@@ -354,8 +354,6 @@ def test(levels, log=print):
             if hit:
                 log('%s (kept classes): %s' % (what, hit))
         log('assumed pairings on kept classes: %s' % (sorted(o for c in KEEP.values() for o, _ in K._levels(conv.dd.fields(c)) if o in conv.assumed) or 'none'))
-    if kl_gms.RETYPE == RETYPE:
-        raise AssertionError('kl_gms.RETYPE was not restored')
     log('problems: %d' % total)
     return total
 

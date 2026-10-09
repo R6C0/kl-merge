@@ -193,6 +193,13 @@ LEVEL_MAPS.update({
     },
 })
 
+# ZCloth (base of ZPlant, kept its own class since 2026-10-09; tools/kl_retype.py LEVEL_MAPS):
+# Dead Men stores 15 fields, Dog Days 16; the new one is the float[3] at Dog Days index 12, the
+# only array, so the pairing is exact. ASSUMPTION (re/cars.md): (0, 0, 0) reproduces Dead Men's
+# cloth - Dog Days' init (kl2 0x552ff0) only sets a flag when the vector is long.
+LEVEL_MAPS['ZCloth'] = {'map': {**{i: i for i in range(12)}, 13: 12, 14: 13, 15: 14},
+                        'values': {12: [(0x01, struct.pack('<I', 3))] + [(0x0a, bytes(4))] * 3 + [(0x7c, b'')]}}
+
 
 # Controllers Dog Days registers but that cannot work on converted data yet. They are removed and
 # reported; each entry says what is missing.

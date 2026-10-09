@@ -10,6 +10,11 @@ archive in a slot. Milestone A = two stock Dog Days levels (no Dead Men data): p
                        ... --geometry          experiment: only M's geometry, S's game-mode layer
                        ... --m-add / --m-drop / --s-keep / --s-drop A,B   bisect by top-level
                                                subtree name or family (class Select)
+                       ... --silent            the map's sound references set to 0 (no bank merge)
+                       ... --no-loc            bank merge without Dead Men's voice lines / .LOC keys
+                       ... --light stock|m01|keep|off   kl_light.normalise mode (default stock)
+                       ... --stock-anm         one stock .ANM and renamed sets instead of the join
+                       ... --no-fa             no kl_fa repairs, none of S's FA plumbing kept
     python kl_graft.py install [F01]           put the last build into Dog Days (each stock file
                                                is MOVED to KL_PortBackup once, never overwritten)
     python kl_graft.py pairs                   which S / M pairs need the least guessing
@@ -34,7 +39,7 @@ WHO OWNS WHAT (S = systems level, M = map level; top-level subtrees by kl_prpjoi
              ZParticleEmitter[10] / [11] + shift (ASSUMPTION that they are .buf offsets: all 56
              non-zero values of F01..F09 lie in the head, the rest are 0 or -1);
              sound references (type handlers 70 and 46 = offsets into the level's .SND, re/audio.md)
-             set to 0, because the bank is S's: THE MAP IS SILENT until the banks are merged.
+             rewritten into the merged bank by kl_snd.graft_audio (see .SND below).
              Heroes! are S's (systems) but take rotation / position from M's group of that name.
              Scene block: camera far plane, fog, background, SSAO from M; PostFilterBoxes from M
              (world-space boxes) or none; PostFilterPalettes stays S's, so M's post-filter sets
@@ -59,13 +64,25 @@ WHO OWNS WHAT (S = systems level, M = map level; top-level subtrees by kl_prpjoi
   .sgd       both sides' shatter / explodable octrees with REFs renumbered (kl_members.sgd_join).
   .sgp       sound portals of M's rooms + S's systems rooms (kl_members.Sgp.join).
   .hrd       M's if all its rigid bodies come along (kl_members.hrd_join), else none.
-  .ANM       ONE file: the level whose file has every animation set the joined .prp names; M's
-             when both do (it also holds the map's own clips: escape vehicles, doors). Not joined.
-  .SND .LOC .WHD .WAV, the .xml members, .sup .zgf: S's. The .SND is the weapons', voices' and
-             HUD's bank and the .LOC keys index it. Map sounds need the bank merge of re/audio.md.
+  .ANM       S's file + the sets and slot names the joined level names of M's (kl_anmjoin.join,
+             re/anmjoin.md): Dead Men car sets converted, Dead Men character sets are stand-ins
+             (GUESSES, kl_anmjoin.STAND_IN). --stock-anm: one stock file and renamed sets.
+  .SND .WHD .WAV  S's bank with what M's map nodes name of M's bank appended (kl_snd.graft_audio);
+             nothing of S moves. Dead Men: records converted, streamed clips through the merged
+             PC_Def.str (must be the one installed in Dog Days), room effects -> 0.
+  .LOC       S's + the keys M's map names and S lacks, with their clips (Dead Men's voice lines).
+             With them in the bank the map's OnlineSpeakTrigger controllers stay (mute_speech).
+  _LS files  S's loading-sound bank beside the archive, _LS.SND with the merged bank's trailer
+             offset. install() moves the slot's stock _LS files to KL_PortBackup the first time.
+  the .xml members, .sup .zgf: S's.
   .hti       S's; kl2.exe holds no ".hti" string, so nothing reads it.
-NOT JOINED YET: sounds of the map (zeroed), animations (one side's file), light<->geometry lists
-between systems and map (dropped by remove/graft), S's unused map models/textures (kept).
+  lights     Dead Men map: kl_light.normalise (re/lighting.md) - a sun paired with rooms gets
+             bit 0x8000 like F09's street suns; dead ZLIGHT[2] references removed.
+  FA layer   S's position-free plumbing is kept (kl_fa.host_keep: escape-vehicle monitor,
+             AIMonitor, briefing trigger and timer, three speakers) and kl_fa.repair runs on the
+             joined scene (re/fa_round.md). Needed for a real round only; a direct boot has none.
+NOT JOINED YET: light<->geometry lists between systems and map (dropped by remove/graft), S's
+unused map models/textures (kept), Dead Men's PostFilterBoxes.
 
 CHOICE OF S AND M FOR MILESTONE A: S = F07, M = F09 (python kl_graft.py pairs). S must be one of
 F04..F09 (their systems hold the particle templates: no dangling path, kl_prpjoin). Of those
@@ -127,6 +144,43 @@ LIVE RUNS 2026-10-09, second set (python kl_autotest.py --shots ... ; F07 system
                                              (<work>/research/graft_B_F07sys_M01map_130s.png).
                                              Black at 100 s and 160 s, as the baseline is at times.
                                              MILESTONE B. This build is what the F01 slot holds.
+LIVE RUNS 2026-10-09, third set (kl_autotest.py --shots; each run changes one thing; all end in
+AutoExit of a direct boot unless said; NOBODY HAS LISTENED: a sound fault may show only as silence)
+  S1  F07 + F09, merged bank             RESULT: clean exit after 213 s. In F09's map at 100 /
+      (first merged .SND/.WHD/.WAV ever     130 s. 72 sounds, 69 waves, 7 room effects added;
+      loaded, S's _LS files installed)      457 references rewritten.
+  S2  F07 + M03_FA_A, --no-loc           RESULT: clean exit after 219 s. Dead Men records in the
+                                            bank: 216 sounds, 215 waves, 192 in-memory + 23
+                                            stream records; 1169 references rewritten. 4649 waves
+                                            (stock maximum 4568): no fixed pool hit.
+  S3  the same with voice lines          RESULT: clean exit after 230 s. 135 .LOC keys per
+                                            language, 4914 sounds / 4778 waves (stock maxima 4806
+                                            / 4568). The 7 OnlineSpeakTrigger stay; the level-
+                                            start checkpoint that crashed on them (run B-2) passes.
+  R1  + ZPlant, ZSHADOWMESHOBJ,          RESULT: clean exit after 225 s. kl_gms.RETYPE is down to
+      ZEnvSampler, Multistage kept          ZIngameMapGroup; 44 HavokDeformation stay on the plants.
+  M01c F07 + M01_FA_A, tool as in R1     RESULT: clean exit after 201 s (cars kept, bank + voices;
+                                            one speech trigger's line has no sound and is cut).
+  L1  M03 + kl_light 'stock'             RESULT: clean exit after 221 s. THE PLAYER IS LIT NOW
+      (--stock-anm --no-fa)                 (was a black silhouette in R1); palm trunks still
+                                            black, the scene still grey. shots/L1_125s.png
+  A1  + joined .ANM (--no-fa)            RESULT: clean exit after 217 s. 22.2 MB file, 69 clips
+                                            and 13 bones added, Van / Police_USA converted from
+                                            Dead Men. First re-serialised .ANM the game loaded.
+  F1  + kl_fa (the full tool)            RESULT: clean exit after 217 s. 7 entities of F07's FA
+                                            plumbing kept. = THE BUILD IN THE F01 SLOT.
+  RD1-RD3  the same build, klauto DLL and klhook/KLHook.round.ini (menu route, re/fa_round.md):
+      NO ROUND REACHED. CmdDrop works (boots into KaneAndLynch.gms), scripted keys arrive, 'sel'
+      fails safely. But after the press-start page the keys RETURN, RETURN (RD1, RD3) and RETURN,
+      DOWN, RETURN (RD2) all start a load of L00 - the story's intro - 0.5 s after the second
+      RETURN, and a RETURN in L00 loads L01. No main menu was seen: the menu key sequence is still
+      unknown (screen shots of that phase are black). RD1: crash kl2 0x8e5bbd (write to 0) while
+      L01 loaded at 47 %, not looked into; RD3 loaded L01 in 155 s without a fault. The save
+      file 0.kls was not written (same time stamp as before).
+  WK1 the F1 build, direct boot, klauto with only a walk script (W 7 s, D 3, W 8, A 5, W 10, S 6)
+      RESULT: clean exit after 225 s, asserts 0, faults 0. The player crosses M03's plaza
+      (shots/WK1_118s .. 172s.png): ground collision holds, escalators / shop fronts / parasols
+      drawn from every side seen; interiors not reached.
 BISECT (not needed in the end, but it works): build ... --geometry [--m-add A,B] [--m-drop ..]
   [--s-keep ..] [--s-drop ..], see Select. '--geometry --s-drop *' = M's geometry and no game-mode
   layer at all verifies with 0 problems; plain '--geometry' leaves S's game-mode layer with scene
@@ -135,12 +189,13 @@ BISECT (not needed in the end, but it works): build ... --geometry [--m-add A,B]
 import collections, os, shutil, struct, sys, zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import kl_package, kl_gms, kl_scene, kl_prmgraph as G, kl_texmat as T, kl_octree as O, kl_members as MB, kl_hvk, kl_anm
+import kl_package, kl_gms, kl_scene, kl_prmgraph as G, kl_texmat as T, kl_octree as O, kl_members as MB, kl_hvk, kl_anm, kl_snd
+import kl_light, kl_anmjoin, kl_fa
 import kl_prpjoin as J
 from kl_prp import Prp, units
 from kl_port_check import find, workdir, DD_GUESSES, DD_EXE
 
-BESIDE = ('.WHD', '.WAV', '.hti')      # files next to the archive that belong to its members
+BESIDE = ('.WHD', '.WAV', '.hti')      # files next to the archive that belong to its members (+ the _LS bank)
 SOUND_TYPES = {70: '0x5f7640', 46: '0x6c4230'}   # re/kl2.json type handler index -> its load function
 KEYS = 0x4b455953                      # 'SYEK': a key-frame track chunk in a raw data block (keys_tracks)
 TAKE = ('CameraFar', 'CameraFogBegin', 'CameraFogFull', 'CameraFogMin', 'CameraBackgroundColor',
@@ -170,15 +225,32 @@ def member_name(name, level, slot):
     return name.replace('Locations/%s/%s_Main' % (level, level), 'Locations/%s/%s_Main' % (slot, slot))
 
 
+def beside_of(level):
+    """{suffix: path} of the stock files next to a level's archive: BESIDE and its loading-sound
+    bank (_LS.SND, _LS_<Language>.WHD / .WAV). The _LS objects point into the level's own .SND,
+    so a slot that runs S's bank needs S's _LS files, not the slot's."""
+    out = {e: stock_beside(level, e) for e in BESIDE}
+    out.update(kl_snd.ls_files(level))
+    return out
+
+
 def write_level(slot, members, beside, log=print):
-    """members: [(member name, bytes)] in archive order; beside: {extension: source path}."""
+    """members: [(member name, bytes)] in archive order; beside: {suffix: source path or bytes},
+    written as <slot>_Main<suffix> (kl_snd.Audio.beside has that form)."""
     d = out_dir(slot)
     path = os.path.join(d, slot + '_Main.zip')
     with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED, compresslevel=1) as z:
         for name, data in members:
             z.writestr(name, data)
-    for ext in BESIDE:
-        shutil.copyfile(beside[ext], os.path.join(d, slot + '_Main' + ext))
+    for f in os.listdir(d):                             # nothing of an earlier build stays
+        if f.startswith(slot + '_Main') and f != slot + '_Main.zip':
+            os.remove(os.path.join(d, f))
+    for suffix, v in beside.items():
+        if isinstance(v, bytes):
+            with open(os.path.join(d, slot + '_Main' + suffix), 'wb') as f:
+                f.write(v)
+        else:
+            shutil.copyfile(v, os.path.join(d, slot + '_Main' + suffix))
     log('built %s, %.0f MB, %d members' % (path, os.path.getsize(path) / 1e6, len(members)))
     return path
 
@@ -189,14 +261,14 @@ def plain(level, slot='F01', log=print):
     of F02 or F04 holds its own file name (searched 2026-10-09)."""
     with zipfile.ZipFile(J.level_zip(level)) as z:
         members = [(member_name(n, level, slot), z.read(n)) for n in z.namelist()]
-    return write_level(slot, members, {e: stock_beside(level, e) for e in BESIDE}, log)
+    return write_level(slot, members, beside_of(level), log)
 
 
 def install(slot='F01', log=print):
     """Copy the built archive and the files beside it into Dog Days' slot. Each stock file is
     moved to KL_PortBackup the first time (kl_package._backup_then_copy), never overwritten."""
     dd, d = find(DD_GUESSES, DD_EXE), out_dir(slot)
-    for f in [slot + '_Main.zip'] + [slot + '_Main' + e for e in BESIDE]:
+    for f in sorted(f for f in os.listdir(d) if f.startswith(slot + '_Main')):      # archive, BESIDE, _LS bank
         kl_package._backup_then_copy(dd, os.path.join('Scenes', 'Locations', slot, f), os.path.join(d, f))
 
 
@@ -474,7 +546,7 @@ def mute_speech(sc, ctrl, snd):
 ANIM_FALLBACK = {'Police': 'Swat_02', 'Army': 'Swat_02'}
 
 
-def dm_rename(Jn, S, log=print):
+def dm_rename(Jn, S, log=print, anim=True):
     """{string: string} for a Dead Men map under Dog Days systems: scene paths into Dead Men's
     systems subtree get Dog Days' top-level name; a weapon template Dog Days does not have is
     replaced by one of S's whose name starts alike (ASSUMPTION: a guess by family, any weapon is
@@ -493,7 +565,7 @@ def dm_rename(Jn, S, log=print):
                 fam = t.rsplit('\\', 1)[1].split('_')[0].lower()
                 t = guessed[s.rsplit('\\', 1)[1]] = next((w for w in weapons if w.rsplit('\\', 1)[1].lower().startswith(fam)), weapons[0])
             out[s] = t
-        elif s.startswith(kl_anm.PREFIX) and s not in have:
+        elif s.startswith(kl_anm.PREFIX) and s not in have and not anim:   # anim: kl_anmjoin supplies the set
             name = s[len(kl_anm.PREFIX):]
             # ANIM_FALLBACK: GUESSES for sets neither the table nor S's .ANM has (F07 has no
             # 'Police'; Dead Men's 'Army' has no Dog Days namesake): the armed-NPC set every
@@ -513,8 +585,16 @@ def dm_rename(Jn, S, log=print):
 
 
 # ------------------------------------------------------------------ the graft
-def build(s_name, m_name, slot='F01', log=print, sel=None):
-    """Systems of S + map of M -> (path of the archive, problems found by verify())."""
+def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True, light='stock', anim=True, fa=True):
+    """Systems of S + map of M -> (path of the archive, problems found by verify()).
+    sound: merge what M's map names of M's bank into S's (kl_snd.graft_audio); False = the map's
+    sound references are set to 0 (the silent builds of milestones A and B). loc: also graft the
+    .LOC keys M's map names and S lacks, with their voice clips (only a Dead Men map has any).
+    light: kl_light.normalise mode for a Dead Men map ('stock', 'm01', 'keep') or None (re/lighting.md).
+    anim: the .ANM is S's + the sets and slots the level names of M's (kl_anmjoin, re/anmjoin.md);
+    False = one stock file and renamed sets, as before. fa: keep S's position-free Fragile Alliance
+    plumbing (escape-vehicle monitor, AIMonitor, briefing trigger, speakers) and repair the joined
+    scene for a real round (kl_fa, re/fa_round.md)."""
     sch = J.schema('dd')
     for t, load in SOUND_TYPES.items():
         if sch.types[t]['load'] != load:
@@ -525,6 +605,9 @@ def build(s_name, m_name, slot='F01', log=print, sel=None):
 
     # ---- which subtrees
     sel = sel or Select()
+    kept = kl_fa.host_keep(S.prp) if fa else ()
+    if kept:
+        sel = Select(sel.geometry, sel.m_add, sel.m_drop, tuple(sel.s_keep) + tuple(kept), sel.s_drop)
     picks, dropped = picks_of(S, M, sel)
     s_tops = {t for sc, t in picks if sc is S.prp}
     m_tops = [t for sc, t in picks if sc is M.prp]
@@ -597,10 +680,12 @@ def build(s_name, m_name, slot='F01', log=print, sel=None):
         label = '%s systems + %s map' % (s_name, m_name)
         Jn = J.join(S.prp, picks, label, take=take)
         if M.dm:
-            rename = dm_rename(Jn, S, log)
+            rename = dm_rename(Jn, S, log, anim)
             Jn = J.join(S.prp, picks, label, rename=lambda s: rename.get(s, s), take=take)
     finally:
         S.prp.p.settings = base_settings
+    if fa:                                              # before anything goes by controller index
+        kl_fa.repair(Jn, kept, log)
     if Jn.names[1:] != [e.name.decode('latin1') for e in final]:
         raise ValueError('joined .prp and joined .gms list different entities')
     at = {(id(sc), k): j for j, (sc, k) in enumerate(Jn.origin)}      # source node -> joined node
@@ -702,7 +787,7 @@ def build(s_name, m_name, slot='F01', log=print, sel=None):
     for k in sorted(m_nodes):
         for cls, holder, key in objects(Jn, mj[k]):
             fs, lab = sch.fields(cls), labels(cls)
-            hot = [i for i, f in enumerate(fs) if f.type in SOUND_TYPES and f.kind == 'I']
+            hot = [] if sound else [i for i, f in enumerate(fs) if f.type in SOUND_TYPES and f.kind == 'I']
             pos = {l: i for i, l in enumerate(lab) if l in ('ZROOM[0]', 'ZROOM[1]', 'ZROOM[9]', 'ZROOM[10]',
                                                            'ZParticleEmitter[10]', 'ZParticleEmitter[11]')}
             if not hot and not pos:
@@ -734,6 +819,10 @@ def build(s_name, m_name, slot='F01', log=print, sel=None):
     A.head = kl_scene.remap_refs(A.head, sorted(room_cells), refs_m, missing=A.ref_slots)
     log('  M nodes: %s; %d KEYS blocks moved by %#x; %d REF cells in gates / lists' % (dict(count), nkeys, shift, len(room_cells)))
 
+    # ---- sound: S's bank + what M's map nodes name of M's bank; the fields are rewritten in place
+    audio = kl_snd.graft_audio(s_name, m_name, Jn, [mj[k] for k in sorted(m_nodes)], log, loc=loc) if sound else None
+    snd = audio.members['.SND'] if audio else S['.SND']
+
     # Heroes!: S's nodes at M's places
     placed = 0
     m_top = {M.prp.names[t]: t for t in M.prp.tops()}
@@ -752,14 +841,19 @@ def build(s_name, m_name, slot='F01', log=print, sel=None):
             placed += 1
     log('  Heroes! groups placed where %s has them: %d' % (m_name, placed))
 
+    # ---- lights of a Dead Men map in forms stock Dog Days has (re/lighting.md)
+    if light and M.dm:
+        lrep = kl_light.normalise(Jn, A, prm, nodes=set(mj.values()), links=light, log=log)
+        log('  lights (%s): %s' % (light, {k: (len(v) if isinstance(v, list) else v) for k, v in lrep.items()}))
+
     # ---- speech triggers without their line (after every edit that goes by controller index)
     cut = collections.Counter()
     for k in range(1, len(Jn.nodes)):
-        keep = [c for c in Jn.nodes[k]['ctrls'] if not mute_speech(Jn, c, S['.SND'])]
+        keep = [c for c in Jn.nodes[k]['ctrls'] if not mute_speech(Jn, c, snd)]
         cut['M' if Jn.origin[k][0] is M.prp else 'S'] += len(Jn.nodes[k]['ctrls']) - len(keep)
         Jn.nodes[k]['ctrls'] = keep
     if sum(cut.values()):
-        note('OnlineSpeakTrigger controllers removed, their line is not in the .SND of %s: %s' % (s_name, dict(cut)))
+        note('OnlineSpeakTrigger controllers removed, their line is not in the level\'s .SND: %s' % dict(cut))
 
     # ---- FDX (bone dynamics of the map's hanging objects)
     A.fdx = None
@@ -795,40 +889,63 @@ def build(s_name, m_name, slot='F01', log=print, sel=None):
         note('.hrd left out: the rigid bodies do not all come from one level')
     # animations: one file that has every set the joined .prp names
     used = {s for s in Jn.p.keys if s.startswith(kl_anm.PREFIX)}
-    anm = None
-    for lv in ((S,) if M.dm else (M, S)):                # Dead Men's .ANM has another clip header
-        have = {c.name for c in kl_anm.Anm(lv['.ANM'], 'dd').cols}
-        if anm is None and used <= have:
-            anm = lv
-        log('  .ANM of %s lacks %s' % (lv.name, sorted(x[len(kl_anm.PREFIX):] for x in used - have) or 'nothing the level names'))
-    if anm is None:
-        anm = S
-        note('no single .ANM has every animation set; %s\'s is used' % s_name)
+    if anim:
+        # S's file is the base (nothing of it moves); sets and slot names the joined level names
+        # come from M's file (Dead Men clips converted 0x50 -> 0x68), character sets Dog Days has
+        # no namesake for are stand-ins (GUESSES, kl_anmjoin.STAND_IN); donor F03 has Police,
+        # Thug, Civilian and Dog
+        aj, arep = kl_anmjoin.join(S['.ANM'], M['.ANM'], Jn.p.keys, donors=[kl_anmjoin.stock_anm('F03')], log=log)
+        for b in kl_anmjoin.verify(aj, arep):
+            note('.ANM: ' + b)
+        anm_bytes = aj.save()
+        log('  .ANM joined: %d -> %d bytes; %s; guesses: %s; missing: %s' % (
+            len(S['.ANM']), len(anm_bytes), dict(arep['stats']), arep['guesses'], arep['missing']))
+    else:
+        anm = None
+        for lv in ((S,) if M.dm else (M, S)):            # Dead Men's .ANM has another clip header
+            have = {c.name for c in kl_anm.Anm(lv['.ANM'], 'dd').cols}
+            if anm is None and used <= have:
+                anm = lv
+            log('  .ANM of %s lacks %s' % (lv.name, sorted(x[len(kl_anm.PREFIX):] for x in used - have) or 'nothing the level names'))
+        if anm is None:
+            anm = S
+            note('no single .ANM has every animation set; %s\'s is used' % s_name)
+        anm_bytes = anm['.ANM']
 
     union = os.path.join(workdir(), 'build', 'shared', 'union.fxc')    # Dead Men has no cache of its own
     fxc = T.merge_fxc(S['.fxc'], M['.fxc'] if '.fxc' in M.ext else open(union, 'rb').read())
     out = {'.gms': kl_gms.pack(gms), '.buf': buf, '.prp': Jn.p.serialize(), '.prm': prm_bytes,
            '.TEX': T.write_tex(tex), '.MAT': T.write_mat(mat), '.fxc': fxc,
            '.oct': octj.pack(), '.rmi': index['.rmi'], '.rmc': index['.rmc'], '.HVK': hvk, '.sgd': sgd,
-           '.sgp': sgp, '.hrd': hrd, '.ANM': anm['.ANM']}
+           '.sgp': sgp, '.hrd': hrd, '.ANM': anm_bytes}
+    if audio:
+        out.update(audio.members)                       # '.SND', and '<Language>.LOC' when keys were grafted
     members = []
     for n in S.order:                                   # S's archive order; everything else is S's
         ext = n.rsplit('_Main', 1)[1] if '_Main' in n else None
         data = out.get(ext, S.files[n]) if ext else S.files[n]
         if data is not None:
             members.append((member_name(n, s_name, slot), data))
-    problems = verify(dict(out, snd=S['.SND']), Jn, S, M, copy, s_kept, mj, shift, log)
+    problems = verify(dict(out, snd=snd), Jn, S, M, copy, s_kept, mj, shift, log, audio,
+                      light=light in ('stock', 'm01') and M.dm, fa=fa)
+    problems += [n for n in notes if n.startswith('.ANM: ')]
     for p in problems:
         log('  PROBLEM: ' + p)
     log('verify: problems: %d' % len(problems))
-    path = write_level(slot, members, {e: stock_beside(s_name, e) for e in BESIDE}, log)
+    beside = beside_of(s_name)
+    if audio:
+        beside.update(audio.beside)                     # merged .WHD / .WAV, _LS.SND with the new trailer offset
+    path = write_level(slot, members, beside, log)
     with open(os.path.join(out_dir(slot), 'graft.txt'), 'w') as f:
-        f.write('%s systems + %s map (%s)\nproblems: %d\n%s\n' % (s_name, m_name, sel, len(problems), '\n'.join(problems + notes)))
+        f.write('%s systems + %s map (%s; %s)\nproblems: %d\n%s\n' % (
+            s_name, m_name, sel, ', '.join(['silent map' if not sound else 'merged bank' + ' + voice lines' * loc, 'lights %s' % light,
+                                         'joined .ANM' if anim else 'stock .ANM', 'FA repairs' if fa else 'no FA repairs']),
+            len(problems), '\n'.join(problems + notes)))
     return path, problems
 
 
 # ------------------------------------------------------------------ verification
-def verify(out, Jn, S, M, copy, s_kept, mj, shift, log=print):
+def verify(out, Jn, S, M, copy, s_kept, mj, shift, log=print, audio=None, light=False, fa=False):
     """Re-read every written member with its module and follow every cross-reference this file
     knows. Returns the problems ([] = install)."""
     sch, bad = J.schema('dd'), []
@@ -1000,20 +1117,28 @@ def verify(out, Jn, S, M, copy, s_kept, mj, shift, log=print):
         for r in MB.fdx_read(out['.buf'], sc.fdx)[1]:
             if kinds.get(r['model']) != 'root':
                 bad.append('FDX record names chunk %d, not a model' % r['model'])
-    # sound references: S's stay inside S's bank, M's are 0
-    size = len(out['snd'])
-    left = 0
+    # sound references: every one is an object of the level's bank (S's, or the merged one), or
+    # 0xffffffff = the sound of the _LS bank; without the merge M's must all be 0
+    objs = kl_snd.Snd('dd', out['snd']).kind
+    left = stray = 0
     for k in range(1, len(Jn.nodes)):
         from_m = Jn.origin[k][0] is M.prp
         for cls, holder, key in objects(Jn, k):
             fs = sch.fields(cls)
             for f, u in zip(fs, units(get_obj(holder, key)[1:-1])):
                 if f.type in SOUND_TYPES and f.kind == 'I' and u32(u[0]):
-                    left += from_m
-                    if u32(u[0]) >= size:
-                        bad.append('%s: sound reference beyond the .SND' % Jn.path[k])
+                    left += from_m and audio is None
+                    stray += u32(u[0]) not in objs and u32(u[0]) != kl_snd.LS_SOUND
+    if stray:
+        bad.append('%d sound references name no object of the .SND' % stray)
     if left:
         bad.append('%d sound references of the map still point into another bank' % left)
+    if audio:
+        bad += ['sound: ' + x for x in audio.problems]
+    if light:
+        bad += ['lights: ' + x for x in kl_light.check(Jn, sc, prm, nodes=set(mj.values()))]
+    if fa:                                              # what a real Fragile Alliance round would crash or break on
+        bad += ['FA: ' + str(f) for f in kl_fa.check(Jn, out['snd'], out.get('English.LOC', S['English.LOC'])) if f.sev <= kl_fa.BROKEN]
     a = kl_anm.Anm(out['.ANM'], 'dd')
     lack = {s for s in p.keys if s.startswith(kl_anm.PREFIX)} - {c.name for c in a.cols}
     if lack:
@@ -1056,9 +1181,14 @@ if __name__ == '__main__':
                 i = a.index(o)
                 opt.setdefault(o[2:].replace('-', '_'), []).extend(a[i + 1].split(','))
                 del a[i:i + 2]
-        g = '--geometry' in a
-        a = [x for x in a if x != '--geometry']
-        sys.exit(1 if build(a[1], a[2], *a[3:4], sel=Select(g, **opt))[1] else 0)
+        light = 'stock'
+        if '--light' in a:
+            i = a.index('--light'); light = None if a[i + 1] == 'off' else a[i + 1]; del a[i:i + 2]
+        flags = ('--geometry', '--silent', '--no-loc', '--stock-anm', '--no-fa')
+        g, quiet, noloc, noanm, nofa = (f in a for f in flags)
+        a = [x for x in a if x not in flags]
+        sys.exit(1 if build(a[1], a[2], *a[3:4], sel=Select(g, **opt), sound=not quiet, loc=not noloc, light=light,
+                            anim=not noanm, fa=not nofa)[1] else 0)
     elif a and a[0] == 'install':
         install(*a[1:2])
     elif a and a[0] == 'pairs':

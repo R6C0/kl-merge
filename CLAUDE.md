@@ -182,39 +182,35 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
-State 2026-10-09 01:30. `tools/kl_graft.py build <S> <M>` + `install` + `python tools/kl_autotest.py`.
-- Milestone A DONE: F07 systems + F09 map (two stock Dog Days levels) loads, runs to AutoExit, the
-  player stands in F09's map with HUD and weapon. A healthy level exits after 205-324 s.
-  A direct boot (`-o DefaultScene`) has no session: default player, no round; that is expected.
-- Milestone B OPEN: F07 systems + Dead Men M01_FA_A map verifies with 0 problems, loads all 14,993
-  nodes, then at Buffering 99 % (78-80 s) jumps into data: eip = the object ZFFGameData keeps at
-  +0x48ac, reached from its update 0x4bca90 at 0x4bccd5 -> thunk 0x8af460 -> resolver 0x45d600 ->
-  jmp eax. Cause not established. Bisect with `--geometry` (map geometry only, S keeps its game-mode
-  layer); that needs kl_hvk.join to accept static collision from S's kept layer.
-  Fixed on the way: HavokCarScriptRout on cars retyped to ZSTDOBJ (kl2+0x18a7fc).
-- The Dead Men asset converters were rewritten (kl_prm / kl_mat / kl_tex / kl_pf4, driver
-  `kl_dmassets.py test` -> problems 0) but have not been in a tested build in that state.
-- Not joined yet: map sounds (zeroed; needs the bank merge of re/audio.md as tools), animations
-  (one side's .ANM), ZHavokCar (flattened to ZSTDOBJ), the FA game-mode layer for a Dead Men map.
-- Which map is which (by the names inside each level, 2026-10-09): M01_FA_A = the diner / Sunny Hill
-  Plaza map, M03_FA_A = the BANK ('Withdrawal': 326 'bank', 214 'vault' names), M02_FA_A = streets,
-  M06_FA_A not identified. Earlier notes calling M01 'the bank' were wrong.
-- OWNER PRIORITY (2026-10-09, on seeing M01 load): the bank, Withdrawal = M03_FA_A, next.
-- Milestone B DONE (01:44): F07 systems + Dead Men M01_FA_A loads and runs to AutoExit.
-- The BANK loads too (05:02): `kl_graft.py build F07 M03_FA_A`, clean exit after 223 s, picture
-  research/graft_F07sys_M03map_100s.png: player on the plaza (escalators, cafe), HUD and shotgun.
-  It is dark and the player is a silhouette: M03's 2250 baked-light meshes lost their lighting in
-  the conversion and F07's lights are not where this map is. NEXT for the look: lighting.
-  The F01 slot holds this build. ZHavokCar is no longer retyped (it asserted at 0x531708 in
-  ZVehicleEnterBehaviourRout init); M01 was NOT re-run live with cars kept.
+State 2026-10-09 06:30. `python tools/kl_graft.py build F07 <M>` (verify must say problems: 0),
+`python tools/kl_graft.py install`, `python tools/kl_autotest.py --shots 100,130,160 --tag X`.
+Which map is which (names inside the levels): M01_FA_A = diner / Sunny Hill Plaza, M03_FA_A = the
+BANK ('Withdrawal', the owner's priority), M02_FA_A = streets, M06_FA_A not identified.
+DONE, each seen live as a clean exit (direct boot):
+- F07 systems + F09 map (two stock levels); F07 + M01_FA_A; F07 + M03_FA_A.
+- The F01 slot holds F07 + M03_FA_A built with the full tool: merged sound bank incl. Dead Men
+  voice lines (kl_snd / kl_whd / kl_loc), all Dead Men classes kept except ZIngameMapGroup,
+  kl_light.normalise('stock') (the player is lit now; palm trunks still black, scene grey),
+  joined .ANM (kl_anmjoin; Van and Police_USA converted from Dead Men), kl_fa repairs.
+  A scripted walk across the bank's plaza works (ground holds). 0 asserts, 0 faults.
+NOT KNOWN / OPEN:
+- Sound was never heard by anyone: the owner has to listen (ambience, voice lines).
+- Interiors (the bank itself), AI, cars, collision beyond the plaza: not seen.
+- A REAL ROUND was never played. klhook/klauto.c (build_auto.bat, KLHook.round.ini) can drop the
+  DefaultScene override and boot the frontend, and scripted keys arrive, but the key sequence is
+  wrong: RETURN, RETURN and RETURN, DOWN, RETURN both start the STORY (L00). No main menu was ever
+  captured (screenshots there are black). Needed: the exact keys press-start -> Arcade Mode ->
+  Subway -> Accept on this profile (the owner can tell in one line), or read the menu state from
+  memory. Until then kl_fa's repairs (exit trigger / escape-vehicle monitor) are untested.
+- F07 + F09 and F07 + M01_FA_A were not re-run with the full tool (lights / .ANM / FA).
+- Lighting: which of kl_light's two rules fixed the player is not settled ('keep' / 'm01' runs not
+  made); baked lighting of 2250 meshes is dropped; PostFilterBoxes left out.
+- Exited kl2.exe processes linger and keep dinput8.dll mapped: swap the DLL by renaming it aside.
 Then, in order:
-1. Make M01 play as a Fragile Alliance round (re/fa_gamemode.md), going through the lobby
-   (klhook/klauto.c can script the menu; untested live).
-2. Own folder + slot redirect (re/fa_slots.md): nine entries is a hard limit. Untested live.
-3. Voice lines and music (re/audio.md), player models (re/characters.md), heister select
-   (re/menus.md). M02 / M03 / M06, then Retomoto Tower (re/retomoto.md).
-The F01 slot holds the working F07 + F09 graft. Restore stock with
-`tools/RESTORE Dog Days originals.bat`.
+1. A real Fragile Alliance round on the bank through the menu (re/fa_round.md).
+2. M02 / M06, then own folder + slot redirect (re/fa_slots.md; nine entries is a hard limit).
+3. Player models (re/characters.md), heister select (re/menus.md), Retomoto Tower (re/retomoto.md).
+Restore stock with `tools/RESTORE Dog Days originals.bat`.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

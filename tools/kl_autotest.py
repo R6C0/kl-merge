@@ -19,7 +19,9 @@ not log). Prints one line starting with RESULT:
     RESULT: assert ...                     the engine hit one of its int3 checks first
     RESULT: clean exit after N s           no fault recorded: the level loaded and AutoExit fired
     RESULT: hung                           still running at the deadline and nothing was logged
-Exit code 0 for a clean exit, 1 otherwise. Nothing in the game folder is changed.
+Exit code 0 for a clean exit, 1 otherwise. Nothing in the game folder is changed, except that
+the hook's own KLHook.result of an earlier scripted run (klhook/klauto.c) is deleted before the
+start; the new one is printed. A scripted run through the menu needs a longer wait (1200).
 """
 import glob, os, re, subprocess, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -121,6 +123,9 @@ def main():
     log = os.path.join(dd, 'KLHook.log')
     size0 = os.path.getsize(log) if os.path.isfile(log) else 0
     dumps0 = set(glob.glob(os.path.join(glob.escape(dd), 'kl2_*crash*.mdmp')))
+    result = os.path.join(dd, 'KLHook.result')          # written by a dinput8.dll built from klhook/klauto.c
+    if os.path.isfile(result):
+        os.remove(result)
     t0 = time.time()
     os.startfile('steam://rungameid/%d' % APP)
     started = False
@@ -153,6 +158,8 @@ def main():
         print('  log |', l[:200])
     if new:
         print('  game dump:', os.path.basename(new[-1]))
+    if os.path.isfile(result):                          # a scripted run (re/fa_round.md): state=PASS / FAIL / EXIT / RUNNING
+        print('  KLHook.result | ' + ' '.join(open(result, errors='replace').read().split()))
     if events:
         kind, where, line = events[0]
         print('RESULT: %s %s after %.0f s (%d events)' % (kind, where, took, len(events)))

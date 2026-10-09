@@ -27,20 +27,17 @@ def pack(raw):
 # Dead Men classes Dog Days doesn't register -> Dog Days class with the same layout
 RETYPE = {
     0x100486: 0x100021,     # ZIngameMapGroup -> ZROOM, its base: it adds no properties, has no gates, and the
-                            # .oct / .rmi name it by REF id as a room
-    # classes Dog Days still has but never saves in a level (layout unknown). Targets keep
-    # the "group" bit (0x100000) so the cluster table keeps the same number of blocks.
+                            # .oct / .rmi name it by REF id as a room. The only Dead Men geometry class
+                            # kl2.exe does not register.
+    # NOT retyped any more (2026-10-09): ZHavokCar 0x2000d4, ZPlant 0x2000fd, ZSHADOWMESHOBJ 0x200110,
+    # ZEnvSampler 0x20010f, ZFFItemTemplateMultistage 0x100490. Dog Days registers all five with
+    # an exact layout (re/cars.md, tools/kl_retype.py) and the same pool category as the old
+    # targets. As a ZSTDOBJ a car broke everything that expects a vehicle: HavokCarScriptRout
+    # (kl2 0x58a7fc) and ZVehicleEnterBehaviourRout init (assert 0x531708, M03). Bisect of a crash
+    # in one of them: put that one line back (0x2000fd: 0x200002 etc.; Multistage -> 0x100001).
     # ZROOM stays ZROOM: each room (and ROOT) owns one section of the level's .oct octree, same
     # format in both games. Retyping rooms left their sections unread and Dog Days' octree walk
     # (ZEngineDataBase 0x689d90) ran off the end - the 69% crash on 2026-10-08.
-    0x100490: 0x100001,     # ZFFItemTemplateMultistage -> ZGROUP
-    0x200110: 0x200002,     # ZSHADOWMESHOBJ  -> ZSTDOBJ
-    0x2000fd: 0x200002,     # ZPlant          -> ZSTDOBJ
-    0x20010f: 0x200002,     # ZEnvSampler     -> ZSTDOBJ
-    # ZHavokCar (0x2000d4) is NOT retyped any more (2026-10-09): Dog Days registers it with an exact
-    # layout (re/cars.md), and as a ZSTDOBJ it broke everything that expects a vehicle:
-    # HavokCarScriptRout (kl2 0x58a7fc) and ZVehicleEnterBehaviourRout init (assert 0x531708, M03).
-    # The other four can stay their class too (tools/kl_retype.py); not yet tried in the game.
     # ZAMBIENTOCCLUSION is NOT retyped: Dog Days has the class, and a ZSTDOBJ takes its slot from
     # another pool, which would renumber every REF id the .oct / .rmi / .buf store
 }
