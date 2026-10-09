@@ -203,6 +203,14 @@ _crash\play_rt_boneids (kl_impact: 0
   Keep .TEX near the stock 290 MB and .prm small on every map (the four DM maps' .prm are
   75-87 MB: larger than any stock level). Hook idea (not written): reserve ~96 MB at start and
   release it when a large HeapAlloc fails.
+READY FOR THE OWNER, NOT INSTALLED (the game was running): <work>/build/play2 = Retomoto with the
+start on the balcony outside the window (the ledge exists in M09_A: re/retomoto_fa.md 11), the
+bomb fuse, staged tower fight, the Heat street layer (tools/kl_fa_street.py; all positions
+GUESSES) and the bone-id fix (kl_impact: 0 problems; ledge walk test ok). Never run in the game.
+Install when the owner says the game is closed: `python tools/kl_graft.py install F01 --from
+<work>/build/play2`, then copy klhook/KLJoin.retomoto.ini to <DD>/Scenes/Locations/F01/KLJoin.ini.
+STILL TO WIRE (m-load is editing kl_graft.py): kl_impact.sync_bone_ids / bone_faults in
+kl_graft.build / verify; the three kl_fa_street lines in kl_fa_author.py (re/retomoto_street.md).
 INSTALLED FOR THE OWNER (2026-10-09 17:20, at their request "both parts and also the music"):
 - F01 slot = Retomoto, <work>\build\play_rt\... (committed tools at 250a610, `kl_fa_author.py
   test --keep --guards-wait --blast-delay 9`; start still inside the boardroom), zip sha1 92e07f51.
