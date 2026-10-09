@@ -188,6 +188,14 @@ already running, and puts the owner's Retomoto build + SHIP hook back after ever
 run (install of KLGfx d3d9.dll) was REFUSED by the permission classifier: the owner can run the two
 .bat files themselves; the GPU self-test ran (4 PASS, 2 FAIL: zero model changes the picture by 8,
 limit 3; network 8.6 ms at 1080p, 13.7 ms at 1440p on the RTX 4070 Ti).
+LOADING SOLVED (2026-10-09 22:10, experiment E1 of re/loading.md, klhook/klnudge.c from the owner's other
+session): Retomoto + wardrobe, game window in front, TEST hook from f50df89, same slot, same script.
+[Load] NudgeMs=1000: menu -> level in 2.7 s (22:03:57.6 -> 22:04:00.3), 'level loaded' 4.4 s after
+the start. Control (NudgeMs=0, Count=1): 124 s to the same session state and 211 s to 'level loaded'.
+The game's GetForegroundWindow / cursor nudge costs about 1 ms per call: the control never exceeds
+~1,100 calls a second, also in play, the test reaches 22,456 a second in the level. So it is paid
+per FRAME too. Installed for the owner: SHIP build with klnudge.c (<work>/build/klhook/ship_nudge)
+and [Load] NudgeMs=1000 in KLHook.ini. Not yet watched for mouse side effects in real play.
 INSTALLED FOR THE OWNER 2026-10-09 21:50 (supersedes the 21:25 entry below): F01 slot =
 <work>/build/x_chunks/retomoto_wardrobe (play3s + the FULL wardrobe in dead chunk indices: 65,119
 table entries, .prm 77.8 MB; KLJoin.ini + KLWardrobe.ini); hook = <work>/build/klhook/ship_mem
