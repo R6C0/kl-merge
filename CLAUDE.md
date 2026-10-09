@@ -182,14 +182,23 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+PAYDAY 2 MASKS (session kl-merge-88, 2026-10-09 23:50; owner away, 20-minute check-up loop running): PD2 is installed and its
+crate store decoded (Payday 2 section). Two research workflows run in the background, offline: (1) pd2-masks-dig = tools/pd2_crate.py
+(reader + extraction of msk_wolf / dallas / chains / hoxton, Lua, a criminal body), tools/pd2_model.py (Diesel .model / .texture),
+re/pd2_attach.md (how PD2 links a mask to the Head object, the crew masks' textures), re/pd2_klside.md (52-byte skinned vertex,
+head-bone frames of the 16 skeletons, the stock mask box, variant-byte signed or not = whether 12 masks fit, the 8 -> 12 constants);
+(2) firstperson research (re/firstperson_camera.md, re/firstperson_assets.md; research only, owner asked). Next, in order:
+tools/kl_pd2mask.py (WOLF first) -> kl_chars wardrobe with 12 masks -> klchar.c / mkoverlay.py / kl_portraits.py constants -> build
+with problems: 0 -> kl_view pictures of each mask on J.C. and Kane. NOTHING of this is installed; no live run without kl-merge-74's hand-over.
 STATE 2026-10-09 23:50 - INSTALLED FOR THE OWNER: F01 slot = <work>/build/y_loot/retomoto_loot (Retomoto + wardrobe + the loot
 props: briefcases on the boardroom table, table stacks moved to the rims, armour as statue loot; NOT run in the game); hook = SHIP
 <work>/build/klhook/ship_mem2 (sha1 6d0784ca: klnudge + klchar + the REWRITTEN klmem), KLHook.ini written fresh (copy of the pair:
 <work>/build/klhook/owner_now), overlay Patch01.zip in <DD>/KLExpansion/Overlay (the Heister page WITHOUT pictures).
 The owner's other session had left the TEST hook and a test script installed (input blocked): put right at 23:20.
 klmem rewrite, live (TEST sibling test_mem2, runs M3-M5): the 74.5 MB .prm block is served from the reserve and 'was freed by the
-game' on return to the menu, three times of three. A SECOND load in one process is still unseen: the scripted runs crawl in the
-frontend when the owner is using the PC (the game does not poll its keyboard unfocused).
+game' on return to the menu, three times of three. SECOND LOAD SEEN (run M7, 23:53): after a quit to the menu the same process loaded the level again; largest free piece 46.6 MB,
+74.6 MB asked, 'the block ... is in the reserve (use 2)', level loaded, PASS. Without the reserve that is the 0x8e5bbd crash.
+(Runs M3-M6 ended on test-script faults: a stray ESCAPE, then a waitscene for a scene that was already loaded.)
 Only ONE session may run the game or change the game folder; kl-merge-88 (Payday 2 masks, offline) has agreed to ask first.
 GUN LOOKS (owner asked 2026-10-09 late: Dead Men gun models, Dog Days sounds, buyable, switchable; BUILT OFFLINE, NOT RUN IN THE GAME):
 tools/kl_guns.py (docstring = the spec). New guns are NOT possible: 64 weapon items compiled in (eFF2ItemCount), the shop's 36 entries are a
