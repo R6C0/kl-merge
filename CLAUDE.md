@@ -228,6 +228,12 @@ Then, in order:
    from the code: picks_of replaces Dead Men's own TrackLinkObjects / ZParticleController /
    OnlineWeaponPacks / Heroes! with F07's (same names), drops gamemenu, mainsceneincludes and
    CoverList, and keeps only the first of two same-named subtrees. Prime suspect: TrackLinkObjects.
+   RAN 2026-10-09 11:07 on the real M03 (converted, F07 graft view): NO field anywhere in the level
+   names a fence by path, so picks_of drops nothing that does; the TrackLinkObjects lead is NOT
+   supported. Fences: _FA_01 (TWO nodes of that name) and _FA_02 carry MatPosAnim waiting for
+   'Activate'; _FA_03 has no MatPosAnim. Next: `--raw` (did the converter's 26 removed controllers
+   name them?), then who sends 'Activate' to their parent group or by bare name.
+   Output: <DM>\KL_PortTools\whoref_M03_FA_A_animFence.txt
 2. Anti-tamper experiments X1-X3, then own folder live.
 3. Retomoto live (re/retomoto_fa.md section 8), player models, heister select.
 Restore stock with `tools/RESTORE Dog Days originals.bat`.
