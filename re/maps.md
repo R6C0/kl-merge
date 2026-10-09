@@ -875,3 +875,56 @@ Full account: re/retomoto_fa.md section 9. For this file:
 - M01_FA_A on the final tool: verify 0 problems, kl_fa 0 CRASH / BROKEN, direct boot with a walk clean
   (M01W; the walker is shot twice by the police on the way to the diner).
 - Load time: the two-part level needs 200 s to its first frame on a direct boot (the bank 100 s).
+
+## 13. M01's first menu round; the skeleton rebind on the maps (2026-10-09, agent i-live; runs M01R, BN0 - BR1, CH0 - CH1d)
+
+### 13.1 M01_FA_A (the diner / Sunny Hill Plaza): first Arcade round - run M01R
+
+Build `<work>\build\i_m01` (`kl_graft.py build F07 M01_FA_A`, verify problems: 0, zip 336,379,622
+bytes, sha1 6d5577bd; built with the rebind of 13.2). TEST hook `scratch\ihook\test`, the menu route
+of re/fa_round.md 3 and the walk of run M01W; `RESULT: clean exit after 335 s`, PASS.
+- Session game mode 4, `FRAGILE ALLIANCE ARCADE - ROUND 1`, three lives, the clock runs.
+- The player starts at (1757, 0, 30864) on the street (Amigo's Market, the plaza signs), walks to
+  the diner ('ARNIE DINER' sign and window: M01R_216s.png), to the cash register at
+  (6458, 0, 23173), out by exit 2 (5938, 0, 20412) and exit 1 (1682, 0, 20988) - 63 s, every way
+  point reached. He is shot at from the moment he enters the diner (red screen, a guard's arm and
+  pistol close up in M01R_234s.png) and is still alive 2.5 minutes into the round at (5389, 0,
+  19282), where a police car has pulled up (M01R_324s.png).
+- The last way point (9563, 15090), the escape car of the walk, was NOT reached: 5.8 km away after
+  12 s, then the player stood for a minute. The run was ended by `pass` in the round: no round
+  end, no score page, no loot taken (the scripted player does not press E here).
+- No assert, no fault, no `INTEGRITY EXIT`; `MissionFailedReload` did not come up (in the direct
+  boot M01W it did twice).
+Not established for M01: loot, the escape, a round end, sound. It needs the walk extended the way
+re/fa_round.md 6 - 7 did for the bank, or a person playing it.
+
+### 13.2 kl_chars reid / rebind after the .ANM join (kl_graft.build), and what the pictures can say
+
+The change of research\h_player-models.json 'blocked_on' is in `kl_graft.build`: after the .ANM
+join every appended skeleton gets `kl_chars.reid` (bone ids of the destination level) and
+`kl_chars.rebind` (animation numbers of the joined bone table); a bone no clip of the joined file
+moves (M01's 'bone01'..'bone04') gets an entry at the end of the table; `kl_chars.check_bones` is
+part of verify. Bank build log: `skeletons of M03_FA_A: 23 of 23 renumbered to the joined level:
+649 bone ids, 361 animation numbers changed`, verify problems: 0. The only member that differs from
+the build before is `F01_Main.prm` (`<work>\build\i_bank_before`, sha1 91ee4ba4, against
+`<work>\build\install` = `i_bank`, 791dbd15 / 20aa9d7c, same members by CRC).
+
+Live, before / after, same walk, direct boot (runs BN0 / BN1, CH0c, CH0d / CH1d; the walk goes to
+the plaza civilian, the delivery truck, through the bank door past the clerk to the guards):
+- Both builds load, walk identically (positions equal to a few units) and show the same plaza,
+  bank hall and people. Nothing is worse with the rebind: no fault, no assert, no missing or
+  exploded model in the pictures looked at (about 30 of the 400 taken). Round BR1 (menu route, the rebind build): PASS, round 2 started.
+- **A difference could NOT be shown either.** The pictures are 640 x 480 from behind the player
+  with the game's noise filter; people are 20 - 40 pixels tall except when they shoot the player
+  point blank through a red screen. What can be read: before the rebind a guard's forearm, glove
+  and wrist watch around a rifle are well formed (CH0c_78s.png), the delivery truck stands whole
+  with doors shut (BN0_176s.png); after it the guards and the hero look the same at the same
+  distance (CH1d_70s..82s.png). No frame shows a face or a car door in a state that would differ.
+  The truck is a `ZHavokCar` that is not at its spot in every run (seen parked in BN0 and at the
+  plaza edge in CH0d_90s.png, not seen in CH0c / CH1d).
+- Kept, by the task's rule (not worse) and on the static evidence: `kl_chars.check_bones` is 0 on
+  the rebind build, and h-chars' negative test (rebind off) reports bones that carry another level's
+  animation number.
+What would settle it: a person standing in front of a Dead Men guard's face and of a car whose
+door is opened by a script (the escape van's sliding door, a police car arriving in a round), or
+larger pictures - the game's window is 640 x 480 in these runs.

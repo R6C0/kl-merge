@@ -601,3 +601,127 @@ stood on the stop itself).
 - Feature table of 6.2, changed rows: loot from the garage's money boxes **works** ($550,000 from boxes 11 and 10 together, reach 125); escape vehicle **works** (no-guards build); 'Round: 1' in round 2
   was right - it becomes 'Round: 2' after an escape (ESC3_380s), as re/crash_scorepage.md 5 read.
 - Still not heard by anyone: any sound.
+
+
+## 8. The rewritten hook live, the Steam write guard, the join, M01 (2026-10-09, agent i-live; runs BN0 - J3)
+
+Every run: `python tools/kl_autotest.py <wait> --shots ... --tag <T> --hook <dll folder> --ini <ini>`
+(new: the tool swaps the hook and the ini in, keeps `<work>/build/klhook/live/<T>.{log,ini,result,txt}`
+and puts the ORIGINAL pair back, sha1 checked). Lingering kl2.exe entries: 21 before and 21 after
+every run of this section - no run ended in a Windows error report. Hook DLLs: h-hook's
+`scratch/hhook/ship` (sha1 37db3ad5), i-hook's `scratch/ihook/test` (b14bbd93) and `ihook/ship` (884a9133).
+The inis and helper scripts are in `<work>/research/agent_scripts/i-live/`.
+
+### 8.1 Checks of research/h_shipped-hook.json 'next' and re/hook_live.md
+
+| check | run | build in the slot | outcome |
+|---|---|---|---|
+| 1 SHIP DLL, three-line ini, direct boot | HK1 | bank | `RESULT: clean exit after 337 s` as with the old hook. Seen: `build: SHIP`, `core: 2 import slot(s) wrapped (ExitProcess yes, SteamAPI_RunCallbacks yes)`, one `Steam's probe ... not dumped` line and no dump, `tick: driven by the game's main loop`, the leaderboard row-count line. **Not as predicted:** (a) the filter lines name `CSERHelper.dll+0x12571` and `wrap_oal.dll+0x491ba` as the previous filter, never `KL2.exe+0x50b780` - the hook's "game's own filter, called after ours" branch was not taken on this boot; (b) there is no `exit: ExitProcess(n)` line: the AutoExit end of a direct boot does not go through the wrapped import; (c) the tick flips between 'fallback thread' and 'main loop' four times in the first two seconds, then stays on the main loop. |
+| S0 new TEST DLL, direct boot | S0 | bank | PASS, the same walk as BN1. `steam: import SteamUserStats wrapped ... 9 writes gated`, `CreateFileA yes, CreateFileW yes`, `level archive f01/f01_main.zip ... NOT stock (321104553 bytes ...)`. The `proxy handed out` line does NOT come on a direct boot (the game does not ask for the interface there); it comes at the first score page. `CmdAdd: no room for '-o AutoExit=900'`: with CmdDrop=AutoExit alone the value is 0 and the game never quits by itself - end such scripts with `pass`. |
+| 2 / S1 TEST DLL, klhook/KLHook.round.ini, one round | S1 | bank | PASS. Round starts, player dies in the garage, score page, Ready, round 2. `session: state` lines (0x12 0x15 0x16 0x18 0x19 = round runs, 0x1f, 0x20 = score page, 0x23..0x26, 0x16 ...), `steam: the game asked for ISteamUserStats: ... proxy handed out` at the first 0x20, no `INTEGRITY EXIT`, no `patch REFUSED`. **The import slot 0xb107c8 is session-safe.** |
+| 3 the same with Hooks=1 | HK3 | Retomoto (guards-wait) | 13 `patch REFUSED` lines, `hooks: 5 of 17 detours installed`, `end hooks: 5 of 5 import slots wrapped`; the round starts and ends at the score page, no integrity exit. |
+| S2 the session ENDS (three lost rounds, $0) | S2 | Retomoto | see 8.2. |
+| J1 the join, direct boot | J1, J1b | Retomoto --no-ai | see 8.3. |
+| J2 the join in a session | J2, J3 | Retomoto --no-ai | see 8.3. |
+| 4 SHIP on a faulting build; 5 - 8 overlay / menu page; S3, S4, J3 (stale file) | 8.4 | - | not run in the first pass; see 8.4 (second pass, the 15:16 build). |
+
+### 8.2 The Steam write guard, confirmed (run S2)
+
+Retomoto from the menu, standing still, three rounds lost with $0 (dead 21 - 26 s after each round
+began). A watcher (scratch `ilive/watch.py`) would have ended the process at the first round end
+had the log lacked the wrapper line or the proxy line; both were there. At the third round end:
+
+```
+13:32:48.045 steam: BLOCKED SetStat('NumRoundsPlayed', 1) - TEST build: nothing is written to Steam
+... 28 more SetStat lines (NumKilled, TotalLootMoney, HeistTotalPoints_0..8, ExperiencePoints_FA, ...), all with value 0
+13:32:48.047 steam: BLOCKED StoreStats() - TEST build: nothing is written to Steam
+13:32:48.074 steam: BLOCKED UploadLeaderboardScore(board 'KL2_Heist0_TotalMoney', keep best, score 0) - ...
+13:32:48.074 session: state 0x1f -> 0x28 (game mode 4) = SESSION END: ... Steam writes: BLOCKED
+13:32:48.365 windows: 1 [HeistStatusLeaderboard_EndGame]
+```
+
+No `passed on` line, no fault; the end page shows the totals and a single 'Quit' button (S2_400s.png).
+`C:/Steam/appcache/stats/UserGameStats_1165402018_28000.bin`: still 2026-03-13 11:23:16, sha1
+00b95332 before and after.
+- **What an unguarded session end would have done:** the game sets all 29 stats to ABSOLUTE values
+  taken from the profile in memory, and on the klauto route (DisableSplashScreens) no profile is
+  loaded: everything but NumRoundsPlayed was 0. Unblocked, the owner's Steam totals would have been
+  overwritten with zeros, not just raised. The old rule (never let a session end) was therefore
+  more important than re/leaderboard.md thought; with a TEST build of the hook it is now covered.
+- The rule for live runs from here: a TEST build whose log shows `steam: import SteamUserStats
+  wrapped` may let a session end. The ORIGINAL dinput8.dll (the owner's) has no guard: the owner
+  playing through the real menu with a loaded profile is the normal game path on the stock board
+  (re/leaderboard.md 4); the SHIP build's policy for that (S3 / S4) is not tested live.
+
+### 8.3 The Retomoto join by the hook (J1, J1b, J2, J3)
+
+- **J1** (box = kl_fa_author.JOIN_BOX as it was, the inside of the tower car): no jump. The car's
+  doors are shut; the player pushes at x 2727 for 15 s and never reaches x 2802. The inside box was
+  never tested before (RT3's box and RT4's were in front of the car). The run then hung in the
+  walk's time-outs until the tool ended it (`RESULT: hung`, 901 s).
+- **J1b** (box x 2550..2790, y 19500..19800, z 800..1100 = RT4's): `join: player 0 entered box 9 at
+  (2719, 19601, 1100): jump to entry 5 'Specials!JumpPoints!06_Exit' requested`, the next position is
+  the lobby car (6207, 570, -6221), then lobby, entrance, square, road, both van stops as in RT4;
+  PASS after 349 s. `kl_fa_author.JOIN_BOX` is now this box; the hook's sample file
+  `klhook/KLJoin.retomoto.ini` has it too since i-hook's 15:16 pass.
+- **J2** (the same through the menu, a real Arcade round): the jump works in a session, `join:
+  player 0 is at (6411, 570, -6221) 500 ms after the request`, and the process lived 4.5 minutes
+  more with no `INTEGRITY EXIT`. 'Escape area' marker in the lobby (J2_335s.png), the street with
+  traffic and a red van (J2_440s.png). On the road the walker lost two minutes at z 2400..3100
+  (way points 'NOT reached' ten times; on the direct boot J1b the same way points were passed in
+  seconds: something stands there in a round - not identified).
+- Two notes for i-hook: the line `join: box 9 NOT usable on this level: entry 5 is past the end of
+  the jump list (1 entries ...)` is printed in every run, during the load, when the list has its
+  first entry - the box works all the same because it is resolved again on entry; and in J1b the
+  '500 ms after the request' line came in the same millisecond as the request with the old position.
+
+### 8.4 Second pass, i-hook's 15:16 build (`scratch/jhook`: SHIP 1972cc1f, TEST 60e345a4; runs X1j - MP1)
+
+The first pass (8.1 - 8.3) was cut off before it could report; the table row "NOT RUN" above is
+replaced by these. Lingering entries 21 before and after every run; no `INTEGRITY EXIT` in any.
+
+| check (re/hook_live.md 5) | run | slot | outcome |
+|---|---|---|---|
+| X1 SHIP build, direct boot, AutoExit | X1j | bank | `RESULT: clean exit after 156 s`. All lines of hook_live.md 4, `fatal-fault filter: the game's own is kl2.exe+0x50b780`, later `installed over 0090B780 (KL2.exe+0x50b780): the game's own`, two `tick: driven by` lines at boot and one at the end, and **`exit: exit(0)`** - AutoExit leaves through MSVCR90 `exit`. S3 on a real SHIP build: `level '...F01_Main.gms': its archive f01\f01_main.zip is not the stock one: 321104553 bytes ... - leaderboard upload BLOCKED, stats and achievements BLOCKED`. One thing for i-hook: the FIRST level line of a direct boot (archive not opened yet) reads `... was not seen being opened - leaderboard upload BLOCKED, stats and achievements allowed`; 0.5 s later the full verdict follows. |
+| HK4 SHIP build on a fault | HK4j | bank | The fault was made from outside, 60 s after the game appeared: `CreateRemoteThread` at address 1 (scratch `ilive2/fault.py`; no game memory is written). `FATAL unhandled exception c0000005 at <no module>+0x1`, `dump written: KLHook_1.dmp (unhandled)`, the game's own `kl2_490_crash_2026_10_9T14_30_21C0.mdmp` (210,840 bytes) written, `process ended here with exit code c0000005 (no Windows error report)`, 0 'Application Error' / WER events for kl2 in the event log, lingering 21 -> 21. kl_autotest: `RESULT: crash <no module>+0x1 after 67 s`. A fault on the game's own main thread was not tried (no kept build faults on a direct boot). |
+| S4t SHIP policy on a stock level, seen through TEST | S4tb | stock F02 from the menu (entry 1, 'Bridge') | `level archive f02\f02_main.zip ... STOCK (196125170 bytes, directory hash c30281d3)`, `... under the SHIP policy: stock level - leaderboard upload would be allowed, stats and achievements would be allowed`. Round started (state 0x19, game mode 4); ended by `pass` 13 s in. (Run S4t before it hung 10 minutes in the menu: my script lacked the StartGame line - no result.) |
+| S5 `[Steam] StockRows=0` | S5 | bank | `steam: BLOCKED FindOrCreateLeaderboard('KL2_Heist0_TotalMoney') ([Steam] StockRows=0 ...)` at the first score page; the page comes up with the round's numbers and NO rows under 'Pos. Name Total Money' (S5_110s.png); RETURN = Ready works, round 2 starts, no fault. Safe to make the default for expansion maps. |
+| N0 the new DLL on J2's round | N0, N0b | Retomoto `--no-ai` + KLJoin.ini | `join: level ...: 1 box(es) active; jump list has 6 entries`, `box 9 -> entry 5 'Specials!JumpPoints!06_Exit' at (6272, 563, -6305)`, `player 0 entered box 9 at (2720, 19601, 1099)`, `player 0 is at (6408, 570, -6221) 500 ms after the request` - half a second later, as fixed. No `NOT usable` line. The round: see re/retomoto_fa.md 10. |
+| J3 a stale file | J3s | bank + Retomoto's KLJoin.ini | No jump. But also NO `join: box 9 NOT usable` line: only the three `reading / box 9 / 1 box(es)` lines. The bank's jump list never gets an entry, so the 1.5 s 'list complete' test never fires. For i-hook: say it once when the level runs with an empty list. |
+| 6 + 7 the expansion's menu page | MP1 | bank; `[Expansion] Enable=1`, `[Redirect.2] F01=DM03`, `[Page.2]`, overlay from `klhook/mkoverlay.py` in `<DD>\KLExpansion\Overlay` (removed after the run) | **Half works.** `expansion: CreateFileA overlay: ...\Patch01.zip -> ...\KLExpansion\Overlay\Patch01.zip`; the Arcade page shows a sixth button 'Dead Men maps' (no icon, it touches the 'Back' button: MP1_36s.png); RETURN on it opens `HeistPlayMenu2` with the headline 'Dead Men maps' and the Subway picture, `expansion: menu page option is 2`. Faults: (a) the 'Location:' row is empty - no 'Withdrawal' text, only the two arrows (MP1_45s.png); (b) **the redirect is lost at the start**: `msg HeistLevel StartGame` -> `expansion: slot F01: menu page 0 from now on -> the stock level`, `expansion: menu page option is 0`, and the archive is opened from `SCENES\Locations\F01` (the slot's 321,104,553-byte bank), not from `Maps\DM03` (321,100,626). The option 'Dummy' is 2 while the page is open and 0 when the slot's archive is opened 5 s later. The hook has to latch the page when `HeistPlayMenu<N>` opens (it logs the 2 there), not read the option at the archive open. Check 5 (byte-copy overlay) and 8 (stock button afterwards) not run. |
+
+Net: SHIP and TEST builds of 15:16 behave as hook_live.md says, except the menu page's latch and
+the two log remarks. The leaderboard / stats guard is confirmed in both policies (S2, X1j, S4tb, S5).
+
+### 8.5 kl_autotest.py after this section
+
+`running()` counts only processes with a thread (debug/zombies.py), the lingering count is printed
+before and after, a thread-less entry is never given to taskkill, `put()` renames a mapped DLL aside,
+`--hook / --ini` swap a hook in and put the owner's pair back (sha1 checked) - all used in every run
+above. New here: the notes shown under a result also include `exit: `, `steam: NOT GUARDED`,
+`SESSION END`, `join: player`, `NOT usable on this level`. Offline check: scratch
+`agent_scripts/i-live/t_autotest.py` (kept logs RT1c .. M02r, made-up lines of the new hook, `put()`
+on a DLL mapped by the test itself: 'moved to ...aside_0', new contents in place).
+Two things a run can trip over, both seen:
+- **The level cache.** The first boot of a build takes 80 - 200 s to the first frame, the next ones
+  10 - 25 s (Windows' file cache). Shot times copied from an earlier run then miss everything (N0:
+  no picture at all). Take shots from 20 s on every 2 - 3 s and map them by the log's `pos` lines;
+  the time of the first shot file gives the tool's start (shot N is written N s after it).
+- **Focus.** Run CH0: the level loaded, 4 frames, then the main thread sat in the window message
+  wait for 400 s and every shot said 'no window' (KLHook_stall.dmp: 0x87a984 in the main loop).
+  Windows' last-input time showed someone or something had used the machine 40 s after the load.
+  The same build ran at once afterwards (CH0b). A stalled run with 'no window' shots is not a
+  finding about the build.
+- klauto's `face` turns the player only while he is moving, and the camera does not follow a
+  standing player's heading: stop points have to be approached along the line of sight.
+
+### 8.6 Run list of this section
+
+BN0 BN1 BR1 HK1 S0 S1 J1 J1b S2 M01R GW1 HK3 GW2 J2 J3 (first pass, 12:30 - 14:20); CH0 CH0b
+CH0c CH0d CH1d X1j HK4j S4t S4tb S5 N0 N0b J3s MP1 DB4 (second pass, 15:04 - 16:02). Logs, inis and
+results: `<work>/build/klhook/live/<run>.*`; pictures `<work>/research/shots/<run>_<s>s.png`; inis
+and helper scripts `<work>/research/agent_scripts/i-live/` and `i-live2/`.
+End state (DB4, the owner's hook, `RESULT: clean exit after 156 s`, the plaza on screen at 100 s):
+F01 slot = `<work>/build/install` (F07 + M03_FA_A with the skeleton rebind, zip sha1 791dbd15),
+no KLJoin.ini, dinput8.dll 7e806e6c, KLHook.ini 2ced8e5f, Patch01.zip d367b303 (stock), no
+`KLExpansion\Overlay`. Steam's stats cache: 2026-03-13 11:23:16, sha1 00b95332, as before.

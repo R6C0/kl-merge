@@ -64,13 +64,18 @@
  * LOG
  *   join: 1 box(es) from <file> for level f01\f01_main
  *   join: box 1: (2802, 19560, 789) - (3142, 19860, 1029) -> entry 5, name '06_Exit', target (6272, 563, -6305)
- *   join: level 'SCENES\Locations\F01\F01_Main.gms': 1 box(es) active; jump list has 6 entries
+ *   join: level 'SCENES\Locations\F01\F01_Main.gms': 1 box(es) active; jump list has 6 entries    (1.5 s after the list stopped growing)
  *   join: box 1 -> entry 5 '06_Exit' at (6272, 563, -6305)
  *   join: player 0 entered box 1 at (2950, 19601, 900): jump to entry 5 '06_Exit' requested ([gamedata+0x8d4] = 5, [0x156b358] = 1)
  *   join: player 0 is at (6272, 563, -6305) 500 ms after the request
  *
- * TESTED OFF-GAME (scratch harness `ihook`): made-up game data, jump list and players reached through a mapped
- * copy of kl2.exe. NOT RUN LIVE from inside the process (RT4's writes came from outside).
+ * TESTED OFF-GAME (scratch harness `jhook`): made-up game data, jump list and players reached through a mapped
+ * copy of kl2.exe.
+ * RUN LIVE (2026-10-09, agent i-live, the 12:49 build): J1b direct boot and J2 / J3 in real Arcade sessions, box
+ * x 2550..2790 in front of the tower car - `join: player 0 entered box 9 at (2709, 19601, 1099): jump to entry 5
+ * 'Specials!JumpPoints!06_Exit' requested`, next position the lobby car (6411, 570, -6221); the process lived on
+ * for minutes with no INTEGRITY EXIT. J1's box INSIDE the car never fired: its doors are shut, the player stops at
+ * x 2727. Two defects seen there are fixed here (the list judged while still filling; the '500 ms' line at once).
  */
 #ifndef KLJOIN_C
 #define KLJOIN_C
@@ -88,7 +93,8 @@ static struct {
 static int klj_any, klj_tick_on = 1;
 static char klj_map_key[64], klj_map_file[MAX_PATH]; static FILETIME klj_map_ft;
 static CRITICAL_SECTION klj_cs;
-static struct { DWORD at; int player; } klj_after;
+static struct { DWORD at; int player, armed; } klj_after;
+static int klj_settle_ms = 1500;              /* the jump list is filled entry by entry while the level loads: it is judged once its length has stood still this long */
 
 static int klj_vec(const char *sec, const char *key, const char *file, float v[3])
 {
@@ -187,29 +193,39 @@ static int klj_resolve(int b, DWORD lo, int count, char *why, char name[64], flo
 
 static void klj_tick(void)
 {
-    static char last[160]; char scene[160], key[64], why[160], name[64]; float feet[3], pos[3]; BYTE sel[2];
-    DWORD gd, lo = 0, hi = 0, req = 0, pl; int pend = 0, count, b, i, k, act = 0, newscene, e;
+    static char last[160]; static int lastcount = -1, toldlist; static DWORD countat;
+    char scene[160], key[64], why[160], name[64]; float feet[3], pos[3]; BYTE sel[2];
+    DWORD gd, lo = 0, hi = 0, req = 0, pl, now = GetTickCount(); int pend = 0, count, b, i, k, act = 0, newscene, e;
     if (!klj_any || !klj_tick_on || !klh_exe_ok) return;
-    if (!klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) { last[0] = 0; return; }       /* frontend: nothing is active */
+    if (!klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) { last[0] = 0; lastcount = -1; return; }       /* frontend: nothing is active */
     newscene = strcmp(scene, last) != 0;
-    if (newscene) snprintf(last, sizeof last, "%s", scene);
+    if (newscene) { snprintf(last, sizeof last, "%s", scene); lastcount = -1; toldlist = 0; }
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x8c4, &lo, 4) || !klh_rd(gd + 0x8c8, &hi, 4) || !klh_rd(gd + 0x898, sel, 2)) return;
     count = lo && hi > lo ? (int)((hi - lo) >> 5) : 0;
     if (count > KLJ_MAXLIST) return;
+    /* Seen live (runs J1b, J2): the scene name changes before the level's ZJumpPoints have entered themselves, and
+       they do so one by one - a box judged at once was called 'NOT usable ... (1 entries' in every run although it
+       worked. So the list is described, and the boxes are checked against it for the log, only when its length
+       has not changed for klj_settle_ms. A player entering a box is resolved against the list as it is then. */
+    if (count != lastcount) { lastcount = count; countat = now; }
     EnterCriticalSection(&klj_cs);
     for (b = 0; b < KLJ_NBOX; b++) {
         int a = klj_box[b].on && (b >= 8 ? !strcmp(key, klj_map_key) : !klj_box[b].scene[0] || klj_contains(scene, klj_box[b].scene));
-        if (newscene || !a) { klj_box[b].inside[0] = klj_box[b].inside[1] = 0; klj_box[b].said = 0; }
+        if (newscene || !a) { klj_box[b].inside[0] = klj_box[b].inside[1] = 0; klj_box[b].said = -1; }
         klj_box[b].wasactive = a; act += a;
     }
-    if (newscene && act) klog("join: level '%s': %d box(es) active; jump list has %d entries", scene, act, count);
-    if (act && count) for (b = 0; b < KLJ_NBOX; b++) if (klj_box[b].wasactive && !klj_box[b].said) {      /* said once the list exists */
-        klj_box[b].said = 1;
+    k = act && count && now - countat >= (DWORD)klj_settle_ms;                      /* the list has stood still */
+    if (k && toldlist != count) {
+        toldlist = count;
+        klog("join: level '%s': %d box(es) active; jump list has %d entries", scene, act, count);
+    }
+    if (k) for (b = 0; b < KLJ_NBOX; b++) if (klj_box[b].wasactive && klj_box[b].said != count) {       /* once per list length */
+        klj_box[b].said = count;
         if ((e = klj_resolve(b, lo, count, why, name, pos)) >= 0) klog("join: box %d -> entry %d '%s' at (%g, %g, %g)", b + 1, e, name, pos[0], pos[1], pos[2]);
         else klog("join: box %d NOT usable on this level: %s", b + 1, why);
     }
-    if (klj_after.at && GetTickCount() - klj_after.at >= 500) {
-        klj_after.at = 0;
+    if (klj_after.armed && now - klj_after.at >= 500) {       /* (was `at = tick | 1` and `tick - at >= 500`: true at once on an even tick - run J1b) */
+        klj_after.armed = 0;
         if (sel[klj_after.player] != 0xff && sel[klj_after.player] < 28 && (pl = klh_rd32(gd + 0x828 + 4 * sel[klj_after.player])) != 0 && klh_rd(pl + 0x460, feet, 12))
             klog("join: player %d is at (%.0f, %.0f, %.0f) 500 ms after the request", klj_after.player, feet[0], feet[1], feet[2]);
     }
@@ -227,7 +243,7 @@ static void klj_tick(void)
             req = 1;
             if (klh_data((void *)(DWORD_PTR)(gd + 0x8d4), &e, 4, "jump-list entry") && klh_data(KLH_VA(KLJ_REQUEST), &req, 4, "debug jump request")) {
                 klog("join: player %d entered box %d at (%.0f, %.0f, %.0f): jump to entry %d '%s' requested ([gamedata+0x8d4] = %d, [0x156b358] = 1)", i, b + 1, feet[0], feet[1], feet[2], e, name, e);
-                klj_after.at = GetTickCount() | 1; klj_after.player = i;
+                klj_after.at = now; klj_after.player = i; klj_after.armed = 1;
             } else klog("join: player %d entered box %d but the request could NOT be written", i, b + 1);
         }
     }
@@ -242,4 +258,7 @@ static void klj_init(void)
     n = klj_read(klh_ini, 0, 0); klj_count();
     if (n) klog("join: %d box(es) from KLHook.ini%s", n, klj_tick_on ? "" : " - but [KLHook] Join=0: nothing fires");
 }
+#ifdef KLHOOK_HARNESS
+__declspec(dllexport) void klj_test_settle(int ms) { klj_settle_ms = ms; }
+#endif
 #endif /* KLJOIN_C */

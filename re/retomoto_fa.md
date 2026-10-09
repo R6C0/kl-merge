@@ -394,3 +394,74 @@ anyway), the music, loot at the cases, the main-room gate, the vans. These need 
 1. The hook's join write (9.4). 2. A played round: blast, cases, table stacks, the car, the street
 police, the exit box and the vans (their height is now the road's). 3. The start under fire (9.2).
 4. The stream clips (music) - needs the merged PC_Def.str installed, the owner's decision.
+
+## 10. The join by the hook, a round through both parts, and the start problem (2026-10-09, agent i-live; runs J1 - J3, S2, GW1, GW2, N0, N0b)
+
+Builds: `<work>\build\i_rt` (full), `i_rt_noai` (`--no-ai`, zip sha1 ac047766), `i_rt_gw`
+(`--guards-wait`), `i_rt_gw9` (`--guards-wait --blast-delay 9`); all with the tools as committed,
+`kl_fa_author.py test` RESULT as in section 9 (the two known verify problems). Hook: i-hook's TEST
+builds (every Steam write blocked; re/fa_round.md 8).
+
+### 10.1 The join
+
+- `JOIN_BOX` is now the floor IN FRONT of the tower car: x 2550..2790, y 19500..19800, z 800..1100.
+  The box inside the car (x 2802..3142, section 9.4) is never reached: the car's doors are shut and
+  stop the player at x 2727 (run J1, 15 s of pushing). `klhook\KLJoin.retomoto.ini` holds the same
+  box; it goes beside the level archive as `KLJoin.ini` (`kl_graft.py install` copies one from the
+  build's folder and REMOVES the slot's when the build has none).
+- The hook's write works from inside the process, on a direct boot (J1b) and in a real Arcade
+  session (J2, J3, N0, N0b): `join: player 0 entered box 9 at (2718..2720, 19601, 1099): jump to
+  entry 5 'Specials!JumpPoints!06_Exit' requested`, `player 0 is at (6408..6411, 570, -6221) 500 ms
+  after the request`. Five times out of five; no integrity exit in up to 4.5 minutes afterwards.
+- In the lobby car the walker pushes at (6208, 570, -6221) for 15 s (the script's first way point
+  after the jump is one of the tower's), then walks out: the lobby car's doors do not hold him.
+
+### 10.2 One Arcade round through both parts (N0b, the `--no-ai` build; pictures N0b_<s>s.png)
+
+Round 1 starts at 15:52:31; times below are seconds after that.
+- 0 - 10: countdown in the boardroom, a lit glass case with a statue beside the player (shot 71).
+- 13 - 44: boardroom door, reception, atrium stairs down to y 19601, the lift lobby (74, 80).
+- 45: the jump (107, 110: inside the lobby car). 46 - 79: landing, lobby floor, entrance
+  (2364, 51, -6590) (137, 140).
+- 84 - 92: the square and the road: 'BOSHIN' shop fronts, traffic, a police car driving (146, 170).
+- 128: van stop 1 (-1616, -40, 9214). 138: van stop 3 (-4078, -40, 7744), where a red van
+  stands (191, 203, 215). The script taps and holds E at both stops, six times each. The HUD clock
+  is red at 00:07 in shot 248.
+- 196: **`ROUND OVER - Time ran out. You didn't escape. You lose a life.`** Round score $0, two
+  lives left (N0b_257s.png); score page 'Subway Round 1', Ready (269).
+So: the whole route is walkable in a session and the escape area is reached, but **the van was not
+boarded** and the clock ended the round 3 min 16 s after it began - although the HUD clock starts
+at 06:00. In J2 (two minutes lost on the road) the round ended after 5:12, in J3 after 4:29, in N0
+and N0b after 3:16: the end follows the arrival at the escape area, not the round clock. Read: the
+van's leaving time (kl_fa_author's van timer) runs out because nobody boards. NOT established:
+where the boarding box is relative to the red van (the bank needed the SOUTH side of the box,
+re/fa_round.md 7), and whether E does anything there. This is the next thing to script or play.
+- In J2 the walker lost two minutes on the road at z 2400..3100 (ten way points 'NOT reached');
+  in J1b, J3, N0 and N0b the same points were passed in seconds. Traffic, not the map.
+- Nothing was heard or seen of: the window blast (the countdown pictures show the room, not the
+  window), the statues' loot (no E at a case), the main-room gate, street police.
+
+### 10.3 The start: seven guards fire during the countdown - what was tried
+
+Seen (S2, standing still, full build): red screen at 'HEIST STARTS IN 1 SEC', dead 21 - 26 s
+after the round state begins, three times.
+What the campaign does: the boardroom guards sit in a mini-cutscene until the window blows; the FA
+layer strips that cutscene, so nothing holds them. In the level, `ZSquadScript` field 3 is 1 on
+exactly three squads (the two boardroom squads and one street squad) and 0 on the other 28, which
+do nothing until one of their behaviour routs is named - the tower's by the blast timer.
+ASSUMPTION that field 3 means 'active from the start' (no name in the exe; 14 of stock F01's 30
+squads have 0, the ones that arrive later).
+
+| option | build | run | seen |
+|---|---|---|---|
+| A. as built (the owner has seen this) | `i_rt` | S2 | hit during the countdown, dead 21 - 26 s after the round state begins |
+| B. `--guards-wait`: the two room squads get field 3 = 0 and start at the blast like the rest of the tower (their flanking routs are in the blast timer's list already) | `i_rt_gw` | GW1 | NO better: red screen from the middle of the countdown (GW1_274s.png). The blast timer (`BLAST_DELAY` 1.0 s) counts from the round-start EVENT, which comes when the countdown begins, not at 'GO!' - so the blast, and with it the guards, come 1 s into the countdown |
+| C. B plus `--blast-delay 9`: the blast at 'GO!' (the countdown is 8 s) | `i_rt_gw9` | GW2 | **Countdown clean** (GW2_268s, _272s: no red, the guards sit); the first hit at 'GO!' (GW2_276s); the round is over about 20 s after GO - 30 s after the round state begins, against 21 - 26 in A (one run each, and the walker moves in GW1 / GW2 but stood still in S2: the times are not a measure) |
+| D. move the START row out of sight of the room | - | not built | changes the owner's design ('already at the main window') - listed only for completeness |
+
+C is the owner's own description - 'the explosion as the round begins ... straight into action as
+the main window blows' - made true for the guards as well: nobody fires before the blast, and the
+blast is at GO. It costs two table values and nothing else. It is NOT the default: `ROOM_WAITS =
+False`, `BLAST_DELAY = 1.0` in kl_fa_author.py; `kl_fa_author.py test <out> --guards-wait
+--blast-delay 9` builds it. Whether the blast itself is seen and heard at GO is not established
+in any option. The owner decides between A and C.

@@ -4,12 +4,14 @@ The expansion as a thing somebody installs: every Dead Men map in a folder of it
 for them, a manifest, and install / uninstall. Spec, layout, what is proven and the live checks: re/expansion.md.
 
     python kl_expansion.py build [--out <folder>] [--maps DM01,DM03] [-j 2] [--reuse] [--hook <dinput8.dll>]
-                                 [--no-stream] [--no-share] [--no-pictures] [--bones]
+                                 [--no-hook-build] [--no-stream] [--no-share] [--no-pictures] [--no-bones]
             builds <out>\KLExpansion (default <work>\build\expansion): each map through the graft with the options
             that ran live (MAPS), for the stock slot its menu entry loads; the menu overlay (klhook\mkoverlay.py);
             the merged stream file; manifest.json. Exit code 1 when a map has a problem that is not in its 'known'
             list, a Fragile Alliance finding CRASH / BROKEN, or the menu page fails a rule. --reuse keeps a map
-            that is already built in <out>. Nothing outside <out> is written; the game is not started.
+            that is already built in <out>. Without --hook the SHIP hook is compiled from klhook\ (build.bat, into
+            <out>\_stage\hook) when the tree has none or one made from other sources. Nothing outside <out> is
+            written; the game is not started.
     python kl_expansion.py check [<tree>]                    every file of the tree against manifest.json (sha1)
     python kl_expansion.py menu [<tree>]                     the rules of re\menus.md on the tree's Overlay\Patch01.zip
     python kl_expansion.py share [<tree>]                    what the maps have in common with their systems level
@@ -69,6 +71,7 @@ ORDER = [1, 2, 3, 4, 6, 7, 5, 8, 9]            # menu entry k -> slot number (kl
 DLC = (5, 8, 9)                                # slots the game unlocks by ownership (re\fa_slots.md 1): never redirected here
 PAGE = 2                                       # the stock page sets the option 'Dummy' to 1, ours to 2 (klslot.c)
 PAGE_TITLE = 'Dead Men maps'
+JOIN_NAME = '06_Exit'                          # Retomoto: the jump point the join box sends to (kl_fa_author: Specials!JumpPoints!06_Exit)
 SYSTEMS = 'F07'                                # the only systems level a Dead Men map has run under (re\maps.md 3, 10)
 BEGIN, END = '; >>> KLExpansion (kl_expansion.py install) - do not edit between these lines', '; <<< KLExpansion'
 OURS = re.compile(r'(?i)^(expansion|redirect(\.\d+)?|page\.\d+|slots)$')     # the ini sections that belong to klslot.c
@@ -81,26 +84,33 @@ HOOK_MARKS = (b'expansion: enabled', b'Redirect.%d', b'menu page option')     # 
 # extra: files of the repo that go beside the archive under another name (read by the hook from the map's folder).
 # live: what has run in the game - always as an F01-named build under F07 (kl_graft's run log); the slot names F02,
 # F03, F04, F06 are new with this packaging and differ from those builds in member and file names only.
-# OPTIONS: what kl_graft.build is given on top of its defaults, so that a build here is the build that ran. bones:
-# the skeleton renumbering kl_graft gained on 2026-10-09 12:40 (kl_chars) has not run in the game, and its own check
-# then fails every map (car, helicopter and 'boneNN' skeletons it cannot place): off until the lead says otherwise
-# ('build --bones' turns it on). An option kl_graft.build does not have (an older tool) is left out.
-OPTIONS = {'bones': False}
+# OPTIONS: what kl_graft.build is given on top of its defaults; empty = the defaults, which are what the last live
+# runs of the diner, the bank and the tower were built with (2026-10-09 12:43 - 14:20: BR1, M01R, S2, J1b - J3). The
+# one option that is a choice is `bones` (kl_graft's skeleton renumbering, kl_chars): on by default there since
+# 12:40; the first form of it failed its own check on four maps, the committed form (names without tracks are added
+# to the .ANM bone table) passes on all five. 'build --no-bones' gives the builds of before (the ones M02r / M06r
+# ran). `bones_live` below says per map whether a build WITH the step has run in the game.
+# An option kl_graft.build does not have (an older tool) is left out.
+OPTIONS = {}
 MAPS = [
-    dict(id='DM01', slot='F01', title='Hot Coffee', build='one', sources=['M01_FA_A'], known=(), picture='LevelPicture_FA01',
-         live='direct boot and a scripted walk clean (B-4, M01c, M01W); no round from the menu yet'),
-    dict(id='DM02', slot='F02', title='Late Night Opening', build='one', sources=['M02_FA_A'], known=(), picture='LevelPicture_FA02',
-         live='direct boots clean, one Arcade round to the score page and round 2 (M02c, M02r); loot and escape not played'),
-    dict(id='DM03', slot='F03', title='Withdrawal', build='one', sources=['M03_FA_A'], known=(), picture='LevelPicture_FA03',
-         live='Arcade rounds with loot, clock and score page (RN5 - RN14); a complete round with the escape only on the build '
-              'without the map\'s guards (ESC3); loaded from Maps\\DM03 through the redirect (X2, X3)'),
-    dict(id='DM06', slot='F04', title='A Walk in the Park', build='one', sources=['M06_FA_A'], known=(), picture='LevelPicture_FA06',
-         live='direct boot clean, one Arcade round to the score page and round 2 (M06a, M06r); helicopters, loot and escape not played'),
-    dict(id='DM09', slot='F06', title='Retomoto Tower', build='chain', sources=['M09_B', 'M09_A'], picture='LevelPicture_M09A',
-         extra={'KLJoin.ini': 'klhook/KLJoin.retomoto.ini'},     # the jump box between tower and lobby (klhook\kljoin.c reads it beside the archive)
+    dict(id='DM01', slot='F01', title='Hot Coffee', build='one', sources=['M01_FA_A'], known=(), picture='LevelPicture_FA01', bones_live=True,
+         live='direct boot and a scripted walk clean (B-4, M01c, M01W); one Arcade round from the menu, in the round for 150 s, '
+              'ended by the script (M01R, a build with the skeleton step); loot and escape not played'),
+    dict(id='DM02', slot='F02', title='Late Night Opening', build='one', sources=['M02_FA_A'], known=(), picture='LevelPicture_FA02', bones_live=False,
+         live='direct boots clean, one Arcade round to the score page and round 2 (M02c, M02r; builds WITHOUT the skeleton step); '
+              'loot and escape not played'),
+    dict(id='DM03', slot='F03', title='Withdrawal', build='one', sources=['M03_FA_A'], known=(), picture='LevelPicture_FA03', bones_live=True,
+         live='Arcade rounds with loot, clock and score page (RN5 - RN14; BR1 and S1 with the skeleton step); a complete round with '
+              'the escape only on the build without the map\'s guards (ESC3); loaded from Maps\\DM03 through the redirect (X2, X3)'),
+    dict(id='DM06', slot='F04', title='A Walk in the Park', build='one', sources=['M06_FA_A'], known=(), picture='LevelPicture_FA06', bones_live=False,
+         live='direct boot clean, one Arcade round to the score page and round 2 (M06a, M06r; builds WITHOUT the skeleton step); '
+              'helicopters, loot and escape not played'),
+    dict(id='DM09', slot='F06', title='Retomoto Tower', build='chain', sources=['M09_B', 'M09_A'], picture='LevelPicture_M09A', bones_live=True,
+         join=True,                                 # Maps\DM09\KLJoin.ini, written by join_ini() from kl_fa_author's numbers
          known=('stream clips are not in the merged stream file', 'particle template names do not resolve'),
-         live='loads, both parts walked, two Arcade rounds start and reach the score page (RT2b - RT6); the way from the tower '
-              'to the lobby needs a data write the hook does not make yet (re\\retomoto_fa.md 9.4): TEST ONLY'),
+         live='loads, both parts walked, Arcade rounds start and reach the score page (RT2b - RT6); three lost rounds to the '
+              'session end with every Steam write blocked (S2); the way from the tower to the lobby by the hook\'s jump box, '
+              'on a direct boot and in an Arcade round (J1b, J2, J3; the builds without the map\'s guards); no round with loot and escape'),
 ]
 
 
@@ -187,6 +197,56 @@ def build_id(folder, slot):
     return h.hexdigest()
 
 
+def join_ini(log=print):
+    r"""KLJoin.ini of Retomoto Tower (klhook\kljoin.c reads it beside the level archive): the jump box between the
+    tower and the lobby. Written from kl_fa_author's numbers, which are the ones that ran (JOIN_BOX: runs RT4, J1b,
+    J2; the box INSIDE the car that klhook\KLJoin.retomoto.ini named first is never reached - run J1), so the file
+    cannot fall behind the level it belongs to. -> text."""
+    import kl_fa_author as A
+    (x0, x1), (y0, y1), (z0, z1) = A.JOIN_BOX
+    L = ['; KLJoin.ini of Retomoto Tower: the way from the tower (M09_A) to the lobby (M09_B). Written by tools\\kl_expansion.py',
+         '; from kl_fa_author.JOIN_BOX / JOIN_ENTRY / CAR_B (live: runs RT4, J1b, J2). Read by KLHook (kljoin.c) when the',
+         '; archive beside it is opened; used only while that level runs and only when the jump list fits Name and Target.',
+         '[Join]', 'Min=%g %g %g' % (x0, y0, z0), 'Max=%g %g %g' % (x1, y1, z1), 'Entry=%d' % A.JOIN_ENTRY, 'Name=' + JOIN_NAME,
+         'Target=%g %g %g' % A.CAR_B, 'Tolerance=8']
+    text = '\n'.join(L) + '\n'
+    sample = os.path.join(REPO, 'klhook', 'KLJoin.retomoto.ini')
+    if os.path.isfile(sample):
+        keys = lambda t: sorted(l.strip() for l in t.splitlines() if '=' in l and not l.lstrip().startswith(';'))
+        old = keys(open(sample).read())
+        if old != keys(text):
+            log('NOTE: klhook\\KLJoin.retomoto.ini does not hold kl_fa_author\'s box (it has %s); the tree gets kl_fa_author\'s' % (
+                ', '.join(k for k in old if k not in keys(text))))
+    return text
+
+
+def hook_sources():
+    r"""-> (sha1 over the sources of the SHIP hook, their names). klauto.c is the test rig and is not part of it."""
+    d = os.path.join(REPO, 'klhook')
+    names = sorted(f for f in os.listdir(d) if f.lower().endswith(('.c', '.h')) and f.lower() != 'klauto.c')
+    h = hashlib.sha1()
+    for f in names:
+        h.update(('%s %s\n' % (f, sha1(os.path.join(d, f)))).encode())
+    return h.hexdigest(), names
+
+
+def hook_build(folder, log=print):
+    r"""SHIP hook from the repo's sources by klhook\build.bat into `folder` (Visual Studio's x86 compiler).
+    -> path of dinput8.dll, or None with the reason logged."""
+    bat = os.path.join(REPO, 'klhook', 'build.bat')
+    shutil.rmtree(folder, ignore_errors=True); os.makedirs(folder)
+    try:
+        r = subprocess.run(['cmd', '/c', bat, folder], capture_output=True, text=True, timeout=300)
+    except Exception as x:
+        log('hook: build.bat did not run: %s' % x)
+        return None
+    dll = os.path.join(folder, 'dinput8.dll')
+    if r.returncode or not os.path.isfile(dll):
+        log('hook: build.bat failed (exit %d): %s' % (r.returncode, (r.stdout + r.stderr).strip()[-400:]))
+        return None
+    return dll
+
+
 # ------------------------------------------------------------------ build: one map (a process of its own)
 def build_map(mid, stage):
     r"""Runs in a child process: the map `mid` into <stage> through kl_maps (which never writes kl_graft's own
@@ -195,7 +255,9 @@ def build_map(mid, stage):
     import kl_maps as K, kl_graft
     m = next(m for m in MAPS if m['id'] == mid)
     known = inspect.signature(kl_graft.build).parameters
-    opt = {k: v for k, v in OPTIONS.items() if k in known and not (k == 'bones' and os.environ.get('KL_EXPANSION_BONES'))}
+    opt = {k: v for k, v in OPTIONS.items() if k in known}
+    if os.environ.get('KL_EXPANSION_NO_BONES') and 'bones' in known:
+        opt['bones'] = False
     print('kl_expansion: options on top of kl_graft.build\'s defaults: %s' % opt)
     if m['build'] == 'one':
         r = K.one(stage, SYSTEMS, m['sources'][0], keep=True, slot=m['slot'], **opt)
@@ -231,6 +293,19 @@ def build_map(mid, stage):
     return folder
 
 
+def skeleton_step(m, info):
+    """Whether this build has kl_graft's skeleton renumbering (read from the build's own log, not from an option:
+    the line 'skeletons of <M>: n of n renumbered' is printed by the step), and whether such a build of this map
+    has run in the game (MAPS)."""
+    try:
+        text = open(os.path.join(info, 'stdout.txt'), errors='replace').read()
+    except OSError:
+        text = ''
+    done = re.findall(r'skeletons of (\S+): (\d+) of (\d+) renumbered', text)
+    return {'in_this_build': bool(done), 'renumbered': {a: '%s of %s' % (b, c) for a, b, c in done},
+            'ran_live_in_this_form': m['bones_live'] if done else True}
+
+
 def verdict(m, res):
     """-> list of reasons the build of map m must not be shipped (empty = accepted)."""
     if not res.get('ok'):
@@ -240,12 +315,12 @@ def verdict(m, res):
     return bad
 
 
-def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share_too=True, pictures_too=True, bones=False, log=print):
+def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share_too=True, pictures_too=True, bones=True, hook_make=True, log=print):
     out = os.path.abspath(out or default_out())
     if bones:
-        os.environ['KL_EXPANSION_BONES'] = '1'          # read by the child processes (build_map)
+        os.environ.pop('KL_EXPANSION_NO_BONES', None)
     else:
-        os.environ.pop('KL_EXPANSION_BONES', None)
+        os.environ['KL_EXPANSION_NO_BONES'] = '1'       # read by the child processes (build_map)
     tree, stage = os.path.join(out, ROOT), os.path.join(out, '_stage')
     dd = dog_days()
     if not dd:
@@ -295,11 +370,9 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
             continue
         res = json.load(open(os.path.join(info, 'result.json')))
         why = verdict(m, res)
-        for name, src in m.get('extra', {}).items():
-            if os.path.isfile(os.path.join(REPO, src)):
-                shutil.copyfile(os.path.join(REPO, src), os.path.join(d, name))
-            else:
-                log('%s: %s is not in the repo: the map is built without its %s' % (m['id'], src, name))
+        if m.get('join'):
+            with open(os.path.join(d, 'KLJoin.ini'), 'w', newline='\r\n') as f:
+                f.write(join_ini(log))
         if why:
             bad[m['id']] = why
         pre = os.path.join(info, 'preflight.json')
@@ -312,7 +385,8 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
             'build_id': build_id(d, m['slot']), 'accepted': not why, 'not_accepted_because': why,
             'problems': res.get('problems', []), 'known_problems': list(m['known']), 'fa_check': res.get('fa', {}),
             'fa_findings': res.get('fa_findings', []), 'preflight': dict(pf) if pf else None, 'live': m['live'],
-            'extra_files': sorted(n for n in m.get('extra', {}) if os.path.isfile(os.path.join(d, n))),
+            'skeleton_step': skeleton_step(m, info),
+            'extra_files': ['KLJoin.ini'] if m.get('join') else [],
             'numbers': {k: res.get(k) for k in ('archive_mb', 'beside_mb', 'entities', 'rooms', 'textures', 'materials', 'prm_chunks', 'sounds', 'waves', 'nav_bytes')},
             'bytes': sum(os.path.getsize(os.path.join(d, f)) for f in os.listdir(d))})
         log('%s %-20s slot %s: %s; %d problems (%d known), FA %s, %.0f MB' % (
@@ -347,16 +421,32 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
         log('NOTE: no merged PC_Def.str in the work folder: the maps\' streamed clips (music) need one')
     hook_info = None
     hdst = os.path.join(tree, 'Hook', 'dinput8.dll')
+    src_id, src_names = hook_sources()
+    stamp = os.path.join(out, 'hook.json')              # which sources the DLL in the tree was compiled from (beside the tree)
+    made = json.load(open(stamp)) if os.path.isfile(stamp) else {}
+    if hook:
+        made = {'sources': None, 'dll': sha1(hook), 'by': '--hook (sources not known)'}
+    elif hook_make and not (os.path.isfile(hdst) and made.get('dll') == sha1(hdst) and made.get('sources') == src_id):
+        hook = hook_build(os.path.join(stage, 'hook'), log)
+        if hook:
+            made = {'sources': src_id, 'dll': sha1(hook), 'by': 'klhook\\build.bat'}
+            log('hook: SHIP build from klhook\\ (%d source files, %s...): %d bytes' % (len(src_names), src_id[:10], os.path.getsize(hook)))
     if hook:
         b = open(hook, 'rb').read()
         if not all(k in b for k in HOOK_MARKS):
             raise SystemExit('%s is not a klslot build with menu pages (texts %s not all found)' % (hook, HOOK_MARKS))
         copy_checked(hook, hdst)
+        with open(stamp, 'w') as f:
+            json.dump(made, f, indent=1)
     if os.path.isfile(hdst):
         b = open(hdst, 'rb').read()
         hook_info = {'file': 'Hook/dinput8.dll', 'sha1': hashlib.sha1(b).hexdigest(), 'bytes': len(b),
                      'test_build': b'waitwin' in b,     # a klauto script command: the TEST build must not be shipped
-                     'steam_write_guard': b'SteamUserStats' in b}
+                     'steam_write_guard': b'SteamUserStats' in b,
+                     'sources_sha1': src_id, 'source_files': src_names,
+                     'built_from_these_sources': made.get('dll') == hashlib.sha1(b).hexdigest() and made.get('sources') == src_id}
+        if not hook_info['built_from_these_sources']:
+            log('NOTE: the hook in the tree was not compiled from the klhook\\ sources as they are now')
     # ---- pictures and the sharing measurement (reports beside the tree, not part of it)
     pics = pictures(out, log) if pictures_too else None
     if pics is None and os.path.isfile(os.path.join(out, 'pictures', 'pictures.json')):     # --no-pictures: what an earlier build made
@@ -754,11 +844,27 @@ def level_parts(zp):
         grow = bool(more); texs |= more
     return {'prm_bytes': sum(len(c) for c in prm.chunks if c), 'prm_dead_vertex_bytes': dead,
             'tex_bytes': sum(tex_size(x) for x in tex.tex.values()), 'tex_unnamed_bytes': sum(tex_size(x) for t, x in tex.tex.items() if t not in texs),
-            'textures': len(tex.tex), 'textures_unnamed': sum(t not in texs for t in tex.tex), '_tex': tex, '_prm': prm, '_named': texs}
+            'textures': len(tex.tex), 'textures_unnamed': sum(t not in texs for t in tex.tex), '_tex': tex, '_prm': prm, '_named': texs, '_live': live}
 
 
 def tex_size(x):
     return len(x.entry) + sum(len(f) for f in x.faces or ())
+
+
+def packed(parts):
+    """Bytes these pieces take in the archive: deflate level 1, as kl_graft writes its members, each piece by itself
+    (a texture or a chunk compressed alone comes out a little larger than inside its member: the window is 32 KB
+    and a piece is seldom smaller, so the sum over a whole member is within a few percent of the member's packed
+    size - share() prints both so the error can be read off)."""
+    n = 0
+    for b in parts:
+        c = zlib.compressobj(1, zlib.DEFLATED, -15)
+        n += len(c.compress(b)) + len(c.flush())
+    return n
+
+
+def tex_bytes(x):
+    return [bytes(x.entry)] + [bytes(f) for f in x.faces or ()]
 
 
 def share(tree, log=print):
@@ -772,8 +878,9 @@ def share(tree, log=print):
     with zipfile.ZipFile(szip) as z:
         base = {n.replace('Locations/%s/%s_Main' % (SYSTEMS, SYSTEMS), '@'): z.getinfo(n).CRC for n in z.namelist()}
     st = level_parts(szip)
-    s_tex, s_prm = st.pop('_tex'), st.pop('_prm'); st.pop('_named')
+    s_tex, s_prm, s_named = st.pop('_tex'), st.pop('_prm'), st.pop('_named'); st.pop('_live')
     skeys = {x.key() for x in s_tex.tex.values()} - {None}
+    floor = {x.key() for t, x in s_tex.tex.items() if t not in s_named} - {None}     # unnamed in the stock level itself: NOT dead
     out = {'systems_level': SYSTEMS, 'systems_archive_bytes': os.path.getsize(szip), 'systems_level_parts': st, 'maps': {}, 'beside': {}}
     log('share: stock %s: archive %.0f MB; .TEX %.0f MB, of it %.0f MB (%d textures) named by nothing this method knows; .prm %.0f MB, %.1f MB unreached vertex data' % (
         SYSTEMS, os.path.getsize(szip) / 1e6, st['tex_bytes'] / 1e6, st['tex_unnamed_bytes'] / 1e6, st['textures_unnamed'], st['prm_bytes'] / 1e6, st['prm_dead_vertex_bytes'] / 1e6))
@@ -791,6 +898,7 @@ def share(tree, log=print):
             if not f.endswith('.zip'):
                 by_hash[(f[len(m['slot']):], sha1(os.path.join(d, f)))].append((m['id'], os.path.getsize(os.path.join(d, f))))
         try:
+            import kl_prmgraph as G
             r = level_parts(zp)
             tex, prm, named = r.pop('_tex'), r.pop('_prm'), r.pop('_named')
             mine = {t for t, x in tex.tex.items() if x.key() in skeys}
@@ -804,6 +912,24 @@ def share(tree, log=print):
             # packed size goes with unpacked size per member (the archive is deflate level 1): an estimate
             ratio = lambda e: next(v['packed'] / max(v['bytes'], 1) for k, v in rows.items() if k.endswith('@' + e))
             r['could_go_packed_estimate'] = int((r['tex_systems_unnamed_bytes'] - st['tex_unnamed_bytes']) * ratio('.TEX') + r['prm_dead_vertex_bytes'] * ratio('.prm'))
+            # the same MEASURED: every texture and every chunk deflated by itself at the archive's level (packed())
+            pk = lambda ts: packed(b for t in ts for b in tex_bytes(tex.tex[t]))
+            gone = {t for t in mine if t not in named and tex.tex[t].key() not in floor}
+            kinds, _a = G.walk(prm, r.pop('_live'))
+            deadc = [i for i, k in G.orphans(prm, kinds).items() if k in ('dead:vtx', 'dead:idx') and len(prm.chunks[i]) > 16]
+            deads = set(deadc)
+            r['packed'] = {
+                'tex_member': next(v['packed'] for k, v in rows.items() if k.endswith('@.TEX')), 'tex_sum_of_pieces': pk(tex.tex),
+                'tex_systems_dead': pk(gone), 'tex_systems_live': pk(mine - gone), 'tex_map': pk(set(tex.tex) - mine),
+                'prm_member': next(v['packed'] for k, v in rows.items() if k.endswith('@.prm')), 'prm_sum_of_pieces': packed(c for c in prm.chunks if c),
+                'prm_systems_dead': packed(prm.chunks[i] for i in deadc if i < n),
+                'prm_systems_live': packed(c for i, c in enumerate(prm.chunks[:n]) if c and i not in deads),
+                'prm_map': packed(c for c in prm.chunks[n:] if c),
+                'other_members': sum(v['packed'] for k, v in rows.items() if not k.endswith(('@.TEX', '@.prm'))),
+                'other_members_systems': sum(v['packed'] for k, v in rows.items() if k.endswith(('@.ANM', '@.fxc')))}
+            q = r['packed']
+            r['could_go_packed'] = q['tex_systems_dead'] + q['prm_systems_dead']
+            r['systems_live_packed'] = q['tex_systems_live'] + q['prm_systems_live'] + q['other_members_systems']
         except Exception as x:                          # a report; a level the walk refuses is said so
             r = {'error': '%s: %s' % (type(x).__name__, x)}
         out['maps'][m['id']] = {'archive_bytes': os.path.getsize(zp), 'unpacked_bytes': sum(v['bytes'] for v in rows.values()),
@@ -811,6 +937,12 @@ def share(tree, log=print):
         if 'error' in r:
             log('share %s: %s' % (m['id'], r['error']))
             continue
+        q = r['packed']
+        log('share %s packed (measured, piece by piece; members are %.0f + %.0f MB, the pieces sum to %.0f + %.0f): %s\'s dead map %.0f MB '
+            '(.TEX %.0f, .prm %.0f), %s\'s live systems %.0f MB (.TEX %.0f, .prm %.0f, .ANM + .fxc %.0f), the Dead Men map %.0f MB (.TEX %.0f, .prm %.0f)' % (
+                m['id'], q['tex_member'] / 1e6, q['prm_member'] / 1e6, q['tex_sum_of_pieces'] / 1e6, q['prm_sum_of_pieces'] / 1e6, SYSTEMS, r['could_go_packed'] / 1e6,
+                q['tex_systems_dead'] / 1e6, q['prm_systems_dead'] / 1e6, SYSTEMS, r['systems_live_packed'] / 1e6, q['tex_systems_live'] / 1e6, q['prm_systems_live'] / 1e6,
+                q['other_members_systems'] / 1e6, (q['tex_map'] + q['prm_map']) / 1e6, q['tex_map'] / 1e6, q['prm_map'] / 1e6))
         log('share %s: archive %.0f MB. .TEX %.0f MB = %s\'s %.0f (unnamed %.0f) + the map\'s %.0f; .prm %.0f MB = %s\'s %.0f (unreached vertex data %.0f, emptied %.0f) + the map\'s %.0f; '
             'about %.0f MB of the archive is %s\'s own map' % (
                 m['id'], os.path.getsize(zp) / 1e6, r['tex_bytes'] / 1e6, SYSTEMS, r['tex_systems_bytes'] / 1e6, r['tex_systems_unnamed_bytes'] / 1e6, r['tex_map_bytes'] / 1e6,
@@ -823,6 +955,10 @@ def share(tree, log=print):
             dup += who[0][1] * (len(who) - 1)
     out['beside_saved_by_linking'] = dup
     out['could_go_packed_estimate'] = sum(v['parts'].get('could_go_packed_estimate', 0) for v in out['maps'].values())
+    out['could_go_packed'] = sum(v['parts'].get('could_go_packed', 0) for v in out['maps'].values())
+    out['systems_live_packed'] = sum(v['parts'].get('systems_live_packed', 0) for v in out['maps'].values())
+    log('share: MEASURED packed: %s\'s dead map %.0f MB over the maps; %s\'s live systems %.0f MB over the maps (one copy would do if a level could be read from two archives)' % (
+        SYSTEMS, out['could_go_packed'] / 1e6, SYSTEMS, out['systems_live_packed'] / 1e6))
     log('share: files beside the archives equal in two or more maps: %d kinds, %.0f MB saved by hard links (install --link)' % (len(out['beside']), dup / 1e6))
     log('share: %s\'s own map in the five archives: about %.0f MB packed (an estimate; nothing was removed)' % (SYSTEMS, out['could_go_packed_estimate'] / 1e6))
     return out
@@ -1312,9 +1448,9 @@ def main():
         sys.exit(0 if folder else 1)
     cmd = a.pop(0) if a else ''
     game, out, only, par, hook = opt('--game'), opt('--out'), opt('--maps'), int(opt('-j', 2)), opt('--hook')
-    f = {k: flag('--' + k) for k in ('reuse', 'no-stream', 'no-share', 'no-pictures', 'keep-slot', 'no-hook', 'link', 'replace', 'restore-all', 'bones')}
+    f = {k: flag('--' + k) for k in ('reuse', 'no-stream', 'no-share', 'no-pictures', 'keep-slot', 'no-hook', 'link', 'replace', 'restore-all', 'bones', 'no-bones', 'no-hook-build')}
     if cmd == 'build':
-        sys.exit(build(out, only.split(',') if only else None, par, f['reuse'], hook, not f['no-stream'], not f['no-share'], not f['no-pictures'], f['bones']))
+        sys.exit(build(out, only.split(',') if only else None, par, f['reuse'], hook, not f['no-stream'], not f['no-share'], not f['no-pictures'], not f['no-bones'], not f['no-hook-build']))
     tree = os.path.join(default_out(), ROOT) if not a else a[0]
     if cmd == 'check':
         check(tree)

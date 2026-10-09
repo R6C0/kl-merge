@@ -54,15 +54,16 @@
  *   0xb1006c                  FindFirstFileA        (klslot wrapper)      ST  import      0 checks      yes  X1 live
  *   0xb10430                  MSVCR90 fopen         (klslot wrapper)      ST  import      0 checks      yes  X1 live
  *   0xb1018c                  ExitProcess           (exit tripwire)       ST  import      0 checks      yes  X1 live
- *   0xb107bc                  steam_api SteamAPI_RunCallbacks (the tick)  ST  import      0 checks      yes  NOT RUN
- *   0xb107c8                  steam_api SteamUserStats (klsteam proxy)    ST  import      0 checks      yes  NOT RUN
- *   [0xdd265c]+0x8d4          jump-list entry to go to   (kljoin)         ST  heap        outside       yes  RT4 live (written from outside the process)
- *   0x156b358                 debug jump request = 1     (kljoin)         ST  .data       0 checks      yes  RT4 live (the same)
+ *   0xb103d0 0xb104b0         MSVCR90 exit, _exit   (the exit line)       ST  import      0 checks      yes  X1 live (as klauto's)
+ *   0xb107bc                  steam_api SteamAPI_RunCallbacks (the tick)  ST  import      0 checks      yes  S1 live (+ S2 HK3 J2 J3)
+ *   0xb107c8                  steam_api SteamUserStats (klsteam proxy)    ST  import      0 checks      yes  S1 live (+ S2 HK3 J2 J3)
+ *   [0xdd265c]+0x8d4          jump-list entry to go to   (kljoin)         ST  heap        outside       yes  J2 live (J1b direct boot)
+ *   0x156b358                 debug jump request = 1     (kljoin)         ST  .data       0 checks      yes  J2 live (J1b direct boot)
  *   [[[0x168e598]+0x17c]+0x198]+0x31fc   leaderboard row count (klfix)    ST  heap        outside       yes  live (klauto, 6 score pages)
  *   [0x168f750]+0x16+i*0x40   FA slot name          ([Slots])             ST  heap        outside       yes  X2 live (same bytes written back)
  *   [0x168f750]+4+i           FA slot available     (renamed slots only)  ST  heap        outside       yes  NOT RUN
  *   [0x168e598]+8             session default map name ([Slots] F01)      ST  heap        outside       yes  NOT RUN
- *   0xb103d0 0xb104b0         MSVCR90 exit, _exit   (klauto END lines)     T  import      0 checks      yes  X1 live
+ *   0xb103d0 0xb104b0         the same two slots again (klauto END lines)  T  import      0 checks      yes  X1 live
  *   0xb105a8 0xb10640         PostQuitMessage, DestroyWindow (klauto)      T  import      0 checks      yes  X1 live
  *   0x46fe96 +6               NODE    detour, node loader                  T  .text       0 checks      luck X3 live
  *   0x46ffbf +5               CTRL    detour, controller                   T  .text       0 checks      luck X3 live
@@ -91,6 +92,7 @@
  *   lock bytes (0 checks, luck), 0x7f5610 MountFirst detour (0 checks, luck).
  *   READ ONLY, no write: [0x154d5f4]+0xd4 (menu option 'Dummy' = the page of the expansion menu), [0xdd2640]
  *   (+0x2b0 scene name: klsteam, kljoin), [0xdd265c] (+0x828 / +0x898 local players, +0x8c4 jump list: kljoin),
+ *   0x58ffc3 (11 bytes of start-up code compared to find the game's own fatal-fault filter 0x90b780; a read),
  *   [0x168e598]+0x70 / +0x5c (session state and game mode: klsteam's 'session:' line; 0 checks), the window and
  *   player objects klauto looks at. The real ISteamUserStats table is read, never written. kl2.exe never reads another module's code and
  *   hashes nothing outside its own image (re\antitamper.md 2.1), so this DLL being loaded is not seen.
@@ -113,10 +115,11 @@
  *  - The leaderboard row count fix (klfix.c) and the expansion (klslot.c), both driven by the per-frame tick:
  *    kl2.exe's main loop 0x87a930 calls SteamAPI_RunCallbacks once a frame (call at 0x87aa7c; that return
  *    address is on every main-thread stack in the logs), so its import slot gives a call on the game's own
- *    thread with no code patch. ASSUMPTION (not run): that call keeps coming in the menu and in a round; a
- *    fallback thread ticks every 100 ms whenever the slot has been silent for 500 ms, so the fixes do not depend
- *    on it.
- *  - Exit tripwire: ExitProcess is logged; code 0x8000dead is spelled out as INTEGRITY EXIT.
+ *    thread with no code patch. Seen live (HK1, S1, S2, J2): the call comes in the menu and in a round; while a
+ *    level loads the main loop stands still, so a fallback thread ticks every 100 ms whenever the slot has been
+ *    silent for 500 ms (the 'tick: driven by' line flips a few times at every boot and load; said six times).
+ *  - Exit tripwire: ExitProcess is logged; code 0x8000dead is spelled out as INTEGRITY EXIT. exit / _exit of the
+ *    C runtime are logged too (an AutoExit end left no ExitProcess line in run HK1).
  *  - Steam write guard (klsteam.c) and jump boxes (kljoin.c); the CreateFileA / CreateFileW import wrappers of
  *    klslot.c are installed even with [Expansion] Enable=0, because the guard has to see which level archive the
  *    game opens (they change nothing then).
@@ -125,7 +128,7 @@
  *   [KLHook]
  *   ContinueAsserts=1   MaxAsserts=200   MaxDumps=4
  *   EndOnFatal=1        end the process ourselves after a fatal fault was logged (see above)
- *   ExitLog=1           wrap ExitProcess (the tripwire)
+ *   ExitLog=1           wrap ExitProcess and MSVCR90 exit / _exit (the tripwire and the exit line)
  *   Tick=1              wrap SteamAPI_RunCallbacks; 0 = the fallback thread alone drives the tick
  *   LbFix=1             klfix.c; 0 = only log the value found
  *   SessionSafe=1       TEST only (SHIP is always 'ship'): 0 = policy 'direct'
@@ -480,11 +483,23 @@ static void klh_uef_arm(void)
 {
     static int told; LPTOP_LEVEL_EXCEPTION_FILTER prev;
     if (!klh_uef_on) return;
+    /* Run HK1 (SHIP, live): the filters found under ours were none, CSERHelper.dll+0x12571 (Steam's) and
+       wrap_oal.dll+0x491ba - never the game's. kl2.exe sets its own at start-up (0x58ffc3 `push 0x90b780 ; call
+       SetUnhandledExceptionFilter`) and SteamAPI_Init puts Steam's over it within the same 100 ms, between two of
+       our looks. So the game's filter is taken from the instruction that installs it, not from what
+       SetUnhandledExceptionFilter hands back. Read only. */
+    if (!klh_game_uef && klh_exe_ok && !klh_delta) {
+        BYTE ins[11];
+        if (klh_rd(0x58ffc3, ins, sizeof ins) && ins[0] == 0x68 && *(DWORD *)(ins + 1) == 0x90b780 && ins[5] == 0xff && ins[6] == 0x15 && *(DWORD *)(ins + 7) == 0xb10250) {
+            klh_game_uef = (LPTOP_LEVEL_EXCEPTION_FILTER)(DWORD_PTR)0x90b780;
+            klog("fatal-fault filter: the game's own is kl2.exe+0x50b780 (read from its start-up code); it is called after ours has logged");
+        }
+    }
     prev = SetUnhandledExceptionFilter(klh_uef);
     if (prev == klh_uef) return;
-    if ((DWORD_PTR)prev >= img_lo && (DWORD_PTR)prev < img_hi) klh_game_uef = prev;
+    if (!klh_game_uef && (DWORD_PTR)prev >= img_lo && (DWORD_PTR)prev < img_hi) klh_game_uef = prev;
     if (told++ < 6) { char mod[80]; DWORD off; klh_module((DWORD_PTR)prev, mod, sizeof mod, &off);
-        klog("fatal-fault filter installed over %p (%s+0x%lx)%s", (void *)(DWORD_PTR)prev, prev ? mod : "none", prev ? off : 0, klh_game_uef == prev && prev ? ": the game's own, called after ours has logged" : ""); }
+        klog("fatal-fault filter installed over %p (%s+0x%lx)%s", (void *)(DWORD_PTR)prev, prev ? mod : "none", prev ? off : 0, klh_game_uef == prev && prev ? ": the game's own" : ""); }
 }
 
 /* ---------------------------------------------------------------- exit tripwire (import slot of ExitProcess) */
@@ -500,6 +515,15 @@ static void WINAPI klh_w_exitprocess(UINT code)
     klx_exit_line();
     klh_real_exitprocess(code);
 }
+
+/* The C runtime's exit / _exit (kl2.exe's imports from MSVCR90.dll, 8 + 5 call sites). Run HK1 (SHIP, direct boot
+   ended by AutoExit) left NO 'exit:' line: that end does not come through kl2.exe's ExitProcess import (two call
+   sites, 0x7e8a6c and 0x8f8793). ASSUMPTION, not seen: it leaves through exit() - WinMain returning into the C
+   start-up code - whose ExitProcess call is MSVCR90's own import. klauto wraps the same two slots on top of
+   these when [Auto] is on (its END lines); both chain. */
+static void (__cdecl *klh_real_exit)(int), (__cdecl *klh_real__exit)(int);
+static void __cdecl klh_w_exit(int code) { klog("exit: exit(%d)", code); klx_exit_line(); klh_real_exit(code); }
+static void __cdecl klh_w__exit(int code) { klog("exit: _exit(%d)", code); klx_exit_line(); klh_real__exit(code); }
 
 /* ---------------------------------------------------------------- the parts */
 
@@ -518,14 +542,14 @@ static void klh_tick(int game_thread);
    at kl2 0x87aa7c), else every 100 ms from our own thread. Everything in it is a read or a guarded data
    write and must be cheap. */
 static void (__cdecl *klh_real_runcallbacks)(void);
-static volatile DWORD klh_tick_last, klh_ticks; static volatile LONG klh_tick_busy;
+static volatile DWORD klh_tick_last, klh_ticks; static volatile LONG klh_tick_busy, klh_tick_seen;
 static int klh_tick_source = -1;
 
 static void klh_tick(int game_thread)
 {
     DWORD now = GetTickCount(); static DWORD armed;
     if (InterlockedExchange(&klh_tick_busy, 1)) return;
-    if (game_thread) klh_tick_last = now | 1;
+    if (game_thread) { klh_tick_last = now; klh_tick_seen = 1; }
     if (klh_tick_source != game_thread) {             /* changes at every scene load (the main loop stands still): said six times */
         static int told;
         klh_tick_source = game_thread;
@@ -547,7 +571,10 @@ static DWORD WINAPI klh_ticker(LPVOID unused)
     (void)unused;
     for (;;) {
         Sleep(100);
-        if (!klh_tick_last || GetTickCount() - klh_tick_last > 500) klh_tick(0);
+        /* signed: the main loop may have ticked between the two reads. (Until 2026-10-09 this was `last = now | 1`
+           and an unsigned compare: on an even tick count the difference wrapped and the fallback fired although the
+           main loop was ticking - the 'driven by' line flipping within milliseconds in run HK1.) */
+        if (!klh_tick_seen || (LONG)(GetTickCount() - klh_tick_last) > 500) klh_tick(0);
     }
 }
 
@@ -598,7 +625,12 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
          "SHIP",
 #endif
          __DATE__, __TIME__, klh_exe_ok ? "is kl2.exe build 0490" : "is NOT the known kl2.exe: data fixes and [Slots] are off, only import slots are wrapped", klh_policy_name[klh_policy]);
-    if (GetPrivateProfileIntA("KLHook", "ExitLog", 1, klh_ini)) n += klh_iat("KERNEL32.dll", "ExitProcess", (void *)klh_w_exitprocess, (void **)&klh_real_exitprocess);
+    if (GetPrivateProfileIntA("KLHook", "ExitLog", 1, klh_ini)) {
+        int m;
+        n += klh_iat("KERNEL32.dll", "ExitProcess", (void *)klh_w_exitprocess, (void **)&klh_real_exitprocess);
+        m = klh_iat("MSVCR90.dll", "exit", (void *)klh_w_exit, (void **)&klh_real_exit) + klh_iat("MSVCR90.dll", "_exit", (void *)klh_w__exit, (void **)&klh_real__exit);
+        if (m) klog("core: %d more import slot(s) wrapped for the exit line (MSVCR90 exit %s, _exit %s)", m, klh_real_exit ? "yes" : "no", klh_real__exit ? "yes" : "no");
+    }
     if (GetPrivateProfileIntA("KLHook", "Tick", 1, klh_ini)) n += klh_iat("steam_api.dll", "SteamAPI_RunCallbacks", (void *)klh_w_runcallbacks, (void **)&klh_real_runcallbacks);
     klog("core: %d import slot(s) wrapped (ExitProcess %s, SteamAPI_RunCallbacks %s); EndOnFatal=%d", n, klh_real_exitprocess ? "yes" : "no", klh_real_runcallbacks ? "yes" : "no", klh_end_on_fatal);
     klf_init();

@@ -1,36 +1,42 @@
 # The expansion as a package: layout, build, install, menu, sizes
 
-Written 2026-10-09 (agent i-pack). **Offline only: the game was not started and nothing was written to
-the Dog Days folder.** Tool: `tools/kl_expansion.py`. Everything it builds lives in the work folder
+Written 2026-10-09 (agent i-pack), second pass the same day 15:00 - 15:40 (rebuilt on commit 42ec5c6, after the
+live runs S0 - S2, J1 - J3, M01R of agent i-live). **Offline only: the game was not started and nothing was
+written to the Dog Days folder.** Tool: `tools/kl_expansion.py`. Everything it builds lives in the work folder
 (`<work>\build\expansion\`); no game data is in the repo.
 
-Words: **built / measured / tested** = done here, with the command; **live** = seen in the game by an
-earlier agent (run names are those of `tools/kl_graft.py`'s log); **NOT LIVE** = nobody has run it;
-ASSUMPTION = not established by anyone.
+Words: **built / measured / tested** = done here, with the command; **live** = seen in the game by another
+agent (run names are those of `tools/kl_graft.py`'s log and of `<work>\build\klhook\live\<run>.*`); **NOT
+LIVE** = nobody has run it; ASSUMPTION = not established by anyone.
 
 ## 0. Short answers
 
 1. `python tools\kl_expansion.py build` makes one relocatable folder `KLExpansion` with all five maps,
-   the menu page, the merged stream file, the hook and a manifest. Last run: 5 maps accepted, 128
-   files, 3.40 GB, `RESULT: PASS` (section 2).
+   the menu page, the merged stream file, the hook (compiled from `klhook\` by the build) and a manifest.
+   Last run (15:07): 5 maps accepted, 128 files, 3.40 GB, `RESULT: PASS` in 289 s (section 2).
 2. Each map is built **for the stock slot its menu entry loads** (F01 F02 F03 F04 F06) and lives in
    `Maps\<id>\`; the hook answers the opens of that slot from there while menu page 2 is chosen.
-   Nothing stock is replaced. The bank's build here is, member for member, the one that ran live from
-   `Maps\DM03` (same build id); the diner's and Retomoto's equal their kept live builds too.
-3. `install` / `uninstall` are written and tested against a made-up game folder (31 checks) and once
-   with the real 3.4 GB tree in a made-up folder. Both refuse while a `kl2.exe` with a thread exists.
-   `KL_PortBackup` is only read.
+   Nothing stock is replaced. Three of the five builds are, member for member, builds that ran in the
+   game today: the diner (run M01R), the bank (S0, S1) and Retomoto Tower (S2) - same archive size to the
+   byte as the hook logged in those runs. The other two (M02, M06) differ from their live builds by the
+   skeleton step (section 2).
+3. `install` / `uninstall` are written and tested against a made-up game folder (31 checks), once with
+   the real 3.4 GB tree in a made-up folder, and once for real against a running game: while the live
+   agent's kl2.exe (95 threads) was up both commands refused and changed nothing. `KL_PortBackup` is only
+   read.
 4. Menu: page 'Dead Men maps' with the five titles is generated and passes the rules of
    `re/menus.md`. **Dead Men does ship a menu picture for every one of these maps**; they are converted
    to Dog Days' picture form (six DXT5 tiles), but not yet shown: a new picture needs an entity in the
    frontend scene (section 4.2). Until then the page shows the stock picture of each slot.
-5. Sizes: a map is 356 - 383 MB. **About 150 MB of each archive is F07's own map, which the joined
-   level never references** (measured, section 5) - 719 MB of the 1.83 GB of maps. That is where space
-   is; sharing the live systems part between maps would save a further ~320 MB at most and needs the
-   hook to serve virtual files. Not implemented, by instruction.
+5. Sizes: a map is 356 - 383 MB. **161 MB of each archive (133 MB of Retomoto's) is F07's own map, which
+   the joined level never references** (measured piece by piece at the archive's own compression,
+   section 5) - 778 MB of the 1.83 GB of maps. F07's live systems are 77 - 86 MB per archive (395 MB over
+   the five): keeping them once would save about 310 MB more and needs the hook to serve virtual files.
+   Not implemented, by instruction.
 6. Still test-only: everything about the page (never opened in the game), builds under the slot names
-   F02 F03 F04 F06, the stream file through the overlay, the hook build in the tree, Retomoto's join.
-   Section 6 has the list, section 7 the live checks in order.
+   F02 F03 F04 F06, the stream file through the overlay, the SHIP hook's policy, the skeleton step on M02
+   and M06, Retomoto's join read from `Maps\DM09`. Section 6 has the list, section 7 the live checks in
+   order.
 
 ## 1. Layout
 
@@ -45,7 +51,7 @@ ASSUMPTION = not established by anyone.
     Maps\DM02\  F02_Main.*                                                                     Late Night Opening
     Maps\DM03\  F03_Main.*                                                                     Withdrawal
     Maps\DM06\  F04_Main.*                                                                     A Walk in the Park
-    Maps\DM09\  F06_Main.*  KLJoin.ini                                                         Retomoto Tower
+    Maps\DM09\  F06_Main.*  KLJoin.ini (written by the build from kl_fa_author's numbers)        Retomoto Tower
     Overlay\Patch01.zip             the stock patch archive + the page (menu/frontend.xml)
     Overlay\PC_Def.str              the merged stream file (Dog Days' + Dead Men's streamed clips)
     BuildInfo\<id>\                 graft.txt, result.json, log.txt, stdout.txt, preflight.json/.txt
@@ -100,76 +106,108 @@ used (live for F01 in run X2).
 ### manifest.json
 
 `format, name, built, root, page {number, title, option}`; `tools {commit, branch,
-changed_since_commit {file: sha1}}` (the tree of 2026-10-09 was built from commit 57fb690 plus 12
-uncommitted files of three agents - the manifest names them); `needs {kl2.exe sha1, systems level
-archive sha1, stream_file {sha1, bytes, in_tree}, hook {sha1, bytes, test_build, steam_write_guard}}`;
+changed_since_commit {file: sha1}}` (the tree of 15:07 was built from commit 42ec5c6 plus four
+uncommitted files: this tool and i-hook's `klhook.c`, `kljoin.c`, `klsteam.c` as they were at that
+minute - the manifest names them with their sha1); `needs {kl2.exe sha1, systems level
+archive sha1, stream_file {sha1, bytes, in_tree}, hook {sha1, bytes, test_build, steam_write_guard,
+sources_sha1, source_files, built_from_these_sources}}`;
 `maps[]`: `id, name, slot, menu_entry, folder, scene, systems_level, source_levels, build, options,
-build_id, accepted, problems, known_problems, fa_check, fa_findings, preflight, live, numbers
+build_id, accepted, problems, known_problems, fa_check, fa_findings, preflight, live, skeleton_step
+{in_this_build, renumbered, ran_live_in_this_form}, numbers
 (archive / beside MB, entities, rooms, textures, materials, chunks, sounds, waves, nav bytes), bytes,
 extra_files`; `menu` (the rule check); `pictures`; `steam` (one sentence: guarded or not); `files
 {relative path: {sha1, bytes}}`; `total_bytes`, `bytes_by_part`. No absolute path is in it.
 
 **build_id** = sha1 over the archive's members (name without the slot, CRC, size - not the zip's bytes,
 which hold the build time) and the sha1 of every file beside it except the `.hti` (name without the
-slot). The same content built for another slot has the same id: the F03 build here and the F01-named
-copy in `<DD>\KLExpansion\Maps\DM03` both give `2274a15ee3e2...` (measured). This is the number two
-peers must compare before an online session (`re/netcode.md` 5: the game's own check does not know
-our files); nothing compares it yet.
+slot). The same content built for another slot has the same id (measured in the first pass: an F03 build
+and the F01-named copy of the same content in `<DD>\KLExpansion\Maps\DM03` both gave `2274a15ee3e2...`).
+Ids of the 15:07 tree: DM01 `13cccebcc6c5`, DM02 `e8bd1875da03`, DM03 `f9b6f7c29ab1`, DM06
+`714f2e574894`, DM09 `282fafcb8297` (the hook's per-map file `KLJoin.ini` counts: peers must have the same
+jump box). This is the number two peers must compare before an online session (`re/netcode.md` 5: the
+game's own check does not know our files); nothing compares it yet.
 
 ## 2. Building
 
-    python tools\kl_expansion.py build [--out <folder>] [--maps DM01,DM03] [-j 2] [--reuse]
-                                       [--hook <dinput8.dll>] [--no-stream] [--no-share] [--no-pictures] [--bones]
+    python tools\kl_expansion.py build [--out <folder>] [--maps DM01,DM03] [-j 2] [--reuse] [--hook <dinput8.dll>]
+                                       [--no-hook-build] [--no-stream] [--no-share] [--no-pictures] [--no-bones]
     python tools\kl_expansion.py check | menu | share | pictures
 
 What it does: each map in a process of its own through `kl_maps.one` (which never writes
-`<work>\build\install`), two at a time; verdict per map; the ini block; `klhook\mkoverlay.py` on the
-stock `Patch01.zip` (read only) and the rule check of section 4; copy of `<work>\build\PC_Def.str`;
-the hook given with `--hook` (refused unless it holds klslot's page texts); pictures; the sharing
-measurement; the manifest. Exit code 1 when a map has a `verify()` problem outside its known list, a
-`kl_fa.check` finding CRASH / BROKEN, or the page breaks a rule. Five maps take 4.5 minutes;
-`--reuse` (everything but the graft) 1.5.
+`<work>\build\install`), two at a time; verdict per map; `Maps\DM09\KLJoin.ini`; the ini block;
+`klhook\mkoverlay.py` on the stock `Patch01.zip` (read only) and the rule check of section 4; copy of
+`<work>\build\PC_Def.str`; the hook; pictures; the sharing measurement; the manifest. Exit code 1 when
+a map has a `verify()` problem outside its known list, a `kl_fa.check` finding CRASH / BROKEN, or the
+page breaks a rule. Five maps take under five minutes; `--reuse` (everything but the graft) 1.5.
 
-Options: kl_graft's defaults, i.e. the builds that ran live, **plus `bones=False`**. kl_graft gained a
-skeleton-renumbering step (`bones=True` by default, another agent's change of 2026-10-09 12:40) while
-this was being built. With it on, its own new check fails every map but the bank (first build of this
-session: DM01 1, DM02 1, DM06 5, DM09 10 'skeleton N: bones [...] are not in the .ANM bone table'), and
-it has not run live. `--bones` turns it on once the lead accepts it.
+**The hook** is compiled by the build itself: `klhook\build.bat <out>\_stage\hook` (the SHIP build, no
+klauto) whenever the tree has no DLL or one made from other sources; `<out>\hook.json` remembers which
+sources (sha1 over `klfix.c klhook.c kljoin.c klranges.h klslot.c klsteam.c klstock.h`) the DLL in the
+tree came from, and the manifest says `built_from_these_sources`. `--hook <dll>` takes a given DLL
+instead (refused unless it holds klslot's page texts), `--no-hook-build` keeps what the tree has. The
+hook of the tree as restamped at 15:15 (`build --reuse --no-share --no-pictures`, 27 s, RESULT: PASS):
+189,440 bytes, sha1 d63a1144..., sources b564b73a... (at 15:06 it was f292f50b... from 728858a5...:
+i-hook was editing `klhook.c / kljoin.c / klsteam.c` during this pass). Run `build --reuse` once more
+when those are committed; `check` prints the manifest's time and how many tool files differ from the commit.
 
-Result of the last full build (`build -j 2`, then `build --reuse --hook <ihook SHIP>`):
+**`KLJoin.ini` of Retomoto** is written from `kl_fa_author.JOIN_BOX / JOIN_ENTRY / CAR_B`, not copied
+from `klhook\KLJoin.retomoto.ini`: at commit 42ec5c6 that sample still named the box inside the car
+(x 2802..3142), which run J1 showed is never reached; the box that fired in J1b, J2, J3 is the one in
+front of it (x 2550..2790, y 19500..19800, z 800..1100). The build prints a NOTE when the sample and
+kl_fa_author disagree (they agree again since i-hook's edit after 15:00).
 
-| id | problems | kl_fa.check | preflight | archive MB | beside MB | entities | rooms | textures /4096 | materials /2048 |
-|---|---|---|---|---:|---:|---:|---:|---:|---:|
-| DM01 | 0 | 4 DEGRADED, 2 NOTE | CRASH 0, RISK 0 | 336.4 | 46.8 | 14,999 | 12 | 1,999 | 1,354 |
-| DM02 | 0 | 4 DEGRADED, 2 NOTE | CRASH 0, RISK 3 | 310.3 | 47.5 | 21,934 | 32 | 1,697 | 1,076 |
-| DM03 | 0 | 5 DEGRADED, 2 NOTE | CRASH 0, RISK 0 | 321.1 | 47.7 | 19,827 | 20 | 1,864 | 1,193 |
-| DM06 | 0 | 3 DEGRADED, 2 NOTE | CRASH 0, RISK 2 | 310.1 | 46.2 | 15,599 | 7 | 1,576 | 995 |
-| DM09 | 2, both known | 1 DEGRADED | not run (kl_maps.preflight takes one S and one M) | 312.4 | 48.3 | 25,489 | 22 | 2,195 | 1,429 |
+Options: **kl_graft's defaults, nothing on top.** The one choice is the skeleton step (`bones`,
+kl_chars: the skeletons that came with the Dead Men models are renumbered to the joined level's bone
+ids and `.ANM` bone table; without it faces, fingers, car doors and wheels are driven by the wrong
+tracks). History: its first form (12:40) failed its own check on four maps, which is why the first pass
+of this packaging built without it; the committed form (names without tracks are added to the bone
+table) passes on all five, and the diner, the bank and the tower have since run with it (M01R, BR1 / S0
+/ S1, S2 / J1b - J3 / HK3). M02 and M06 have NOT run with it: their live rounds (M02r, M06r) were the
+09:23 builds. `build --no-bones` gives those builds back; the manifest's `skeleton_step` says per map
+what the build has (read from the build's own log line 'skeletons of <M>: n of n renumbered') and
+whether that form ran.
+
+Result of the full build of 15:02 - 15:07 (`build --out <work>\build\expansion_next -j 2`, then moved
+to `<work>\build\expansion`; log in scratch `ipack\build3.log`):
+
+| id | problems | kl_fa.check | preflight | archive MB | beside MB | entities | rooms | textures /4096 | materials /2048 | skeletons renumbered |
+|---|---|---|---|---:|---:|---:|---:|---:|---:|---|
+| DM01 | 0 | 4 DEGRADED, 2 NOTE | CRASH 0, RISK 0 | 336.4 | 46.8 | 14,999 | 12 | 1,999 | 1,354 | 22 of 22 |
+| DM02 | 0 | 4 DEGRADED, 2 NOTE | CRASH 0, RISK 3 | 310.3 | 47.5 | 21,934 | 32 | 1,697 | 1,076 | 16 of 16 |
+| DM03 | 0 | 5 DEGRADED, 2 NOTE | CRASH 0, RISK 0 | 321.1 | 47.7 | 19,827 | 20 | 1,864 | 1,193 | 23 of 23 |
+| DM06 | 0 | 3 DEGRADED, 2 NOTE | CRASH 0, RISK 2 | 310.1 | 46.2 | 15,599 | 7 | 1,576 | 995 | 17 of 17 |
+| DM09 | 2, both known | 1 DEGRADED | not run (kl_maps.preflight takes one S and one M) | 312.4 | 48.3 | 25,489 | 22 | 2,195 | 1,429 | 16 of 16 (M09_B), 4 of 4 (M09_A) |
 
 DM09's two known problems are `kl_fa_author.KNOWN`: '39 particle template names do not resolve (stock
 M09_A: 36)' and '13 stream clips are not in the merged stream file' (its music among them,
 `re/retomoto_audio.md`). The RISK lines are the first-time classes of `re/maps.md` 9.3 (ZEnvSampler,
 SoundSpline, SoundVolumetricRandom); those maps ran live with them (M02c, M02r, M06a, M06r).
 
-Against the kept builds that ran live (members by CRC and size, files beside by sha1; measured):
+Against the kept builds that ran live (members by CRC and size; scratch `ipack\same2.py`), and against
+the archive size the hook logged in the run (`steam: level archive f01\f01_main.zip opened from ...: NOT
+stock (<bytes> bytes ...)`):
 
-| id | kept live build | differs in |
-|---|---|---|
-| DM01 | `<work>\build\h_m01` (11:57; run M01W) | nothing |
-| DM02 | `<work>\build\v_maps\F07+M02_FA_A` (09:23; runs M02c, M02r) | `.prp` only - kl_graft changed after 09:23; which fields was not looked at |
-| DM03 | `<DD>\KLExpansion\Maps\DM03` (10:57; the final bank build) | nothing |
-| DM06 | `<work>\build\v_maps\F07+M06_FA_A` (09:23; M06a, M06r) | `.prp` only, as DM02 |
-| DM09 | `<work>\build\h_rt\R09+M09_A ...` (12:06; run RT6) | nothing |
+| id | kept live build | members that differ | archive bytes here = bytes logged in the run |
+|---|---|---|---|
+| DM01 | `<work>\build\i_m01` (12:51) | 0 of 31 | 336,379,622 = M01R |
+| DM02 | none with the skeleton step; vs the first-pass build (= M02r's but for `.prp`) | `.ANM`, `.prm` (the step) | - |
+| DM03 | `<work>\build\i_bank` (12:50) and `<work>\build\install` (12:52) | 0 of 31 | 321,104,553 = S0, S1 |
+| DM06 | none with the skeleton step; vs the first-pass build (= M06r's but for `.prp`) | `.ANM`, `.prm` (the step) | - |
+| DM09 | `<work>\build\i_rt\R09+M09_A ...` (12:56) | 0 of 30 | 312,376,563 = S2 |
 
-(The F01 slot and `<work>\build\install` held a newer bank build at 12:34 whose `.prm` differs from
-all of these: the skeleton step, somebody else's test.)
+(The join runs J1b / J2 / J3 used the no-guards build `i_rt_noai`, 295,929,966 bytes, and HK3 / GW1 / GW2
+the guards-wait option, 312,376,644 bytes: neither is what the tree holds. The tree's Retomoto is the
+level as `kl_fa_author.test` builds it without options - the one of S2, where the player dies 21 - 26 s
+into each round in sight of the boardroom guards: an owner decision, `re/retomoto_fa.md` 9.6.)
 
 ## 3. Install and remove
 
 ### 3.1 For a player
 
 1. Both games installed (the maps are built on the player's machine from the player's own files;
-   nothing of either game is distributed). `python tools\kl_expansion.py build`.
+   nothing of either game is distributed). `python tools\kl_expansion.py build` (about five minutes;
+   needs Python with pefile and capstone, the merged stream file of `kl_audio.merge` in the work
+   folder, and Visual Studio's C++ tools for the hook - or `--hook <dinput8.dll>` with a built one).
 2. Close the game. `python tools\kl_expansion.py install` (add `--link` to save 92 MB).
 3. In the game: Arcade Mode -> **Dead Men maps** (the sixth button) -> left / right -> Accept.
    The stock button and its nine maps are unchanged.
@@ -210,29 +248,47 @@ removed by any command.
 An install over an install is an update: files the new tree lacks are removed, what the FIRST install
 replaced stays what uninstall puts back.
 
-### 3.3 The owner's folder as it is now (`status`, read only, 2026-10-09)
+### 3.3 The owner's folder as it is now (`status`, read only, 2026-10-09 15:09)
 
-`KLExpansion\Maps\DM03` (not ours), `dinput8.dll` 7e806e6c... (no pages), `KLHook.ini` with `[KLHook]`
-only; replaced stock files: the F01 slot (19 files) and **`PC_Def.str`** - the merged stream file
-(1,575,448,788 bytes, sha1 62349cb6...) stands where the stock one (1,217,890,070 bytes) was since
-2026-10-08. The merged file is not the stock file plus a tail (the first 1.2 GB hash differently), so
-it is a replaced stock file like any other. The tree therefore carries it as `Overlay\PC_Def.str`;
-once check L4 below has shown that the game takes it from there, `uninstall --restore-all` puts the
-stock one back and nothing stock is replaced any more. Until then leave it: the maps' streamed clips
-index the merged file.
+`KLExpansion\Maps\DM03` (not ours; the live tests' F01-named bank), `KLHook.ini` with `[KLHook]` only;
+`dinput8.dll` is whatever the live agent's run swapped in (b14bbd93..., i-hook's TEST build, while a
+run was up at 15:09; 7e806e6c... without pages between runs). Replaced stock files: the F01 slot (19
+files) and **`PC_Def.str`** - the merged stream file (1,575,448,788 bytes, sha1 62349cb6...) stands
+where the stock one (1,217,890,070 bytes) was since 2026-10-08. The merged file is not the stock file
+plus a tail (the first 1.2 GB hash differently), so it is a replaced stock file like any other. The
+tree therefore carries it as `Overlay\PC_Def.str`; once check L4 below has shown that the game takes
+it from there, `uninstall --restore-all` puts the stock one back and nothing stock is replaced any
+more. Until then leave it: the maps' streamed clips index the merged file.
+
+A file that is in the F01 slot but not in `KL_PortBackup` (a `KLJoin.ini` left from a Retomoto test)
+is not touched by the slot restore: kljoin.c ignores it beside a stock archive, delete it by hand.
 
 ### 3.4 Tested
 
 - `python tools\kl_expansion.py selftest <scratch>`: a made-up game folder (dummy `kl2.exe`, a test
   build in the F01 slot with its stock files in `KL_PortBackup`, an old hook, an ini with `[Auto]` and
   stale `[Expansion]` / `[Redirect]` sections, a foreign `KLExpansion`) and a made-up tree. 31 checks,
-  `RESULT: PASS`: both commands refuse while the game runs and nothing changes; foreign folder, missing
-  exe and tampered tree are refused; install copies, links, merges the ini, swaps the hook, restores the
-  slot; `KL_PortBackup` and every stock file outside the slot are byte-identical afterwards; update;
-  uninstall returns the folder to its start but for the slot; clean folder; edited ini; `--restore-all`.
-- The real tree into a made-up folder in scratch: `install --game <fake> --link` copied 126 files
-  (3.40 GB, 32 as hard links) in 11 s; `status` 'all as built'; `uninstall`; a sha1 list of the folder
-  before and after differs in one line, the F01 archive (stock again).
+  `RESULT: PASS` (again at 15:08 with the tool as it is now): both commands refuse while the game runs
+  and nothing changes; foreign folder, missing exe and tampered tree are refused; install copies, links,
+  merges the ini, swaps the hook, restores the slot; `KL_PortBackup` and every stock file outside the
+  slot are byte-identical afterwards; update; uninstall returns the folder to its start but for the
+  slot; clean folder; edited ini; `--restore-all`. (In the selftest 'the game runs' is a substituted
+  process list.)
+- **The refusal with a real running game** (15:09; the live agent's kl2.exe, pid 48620, 95 threads, and
+  21 thread-less entries beside it): `install <selftest tree> --game <made-up folder>` and `uninstall
+  --game <made-up folder>` both answered `kl2.exe is running (pid 48620): close the game first. Nothing
+  was changed.`, exit 1; a sha1 list of the made-up folder before and after is identical. `status`
+  on the real folder said `kl2.exe RUNNING`.
+- The real tree into a made-up folder (`<work>\build\_fake_game_ipack`: dummy exe, a test build in the
+  F01 slot, `KL_PortBackup` with 'stock' files, an old hook, an ini with `[KLHook] [Redirect] [Auto]`, a
+  foreign `KLExpansion\Maps\DM03`): `install --game <fake>
+  --replace --link` at 15:13 copied 127 files (3.40 GB, 32 as hard links; install, `status`, `uninstall`
+  and two sha1 listings took 55 s together), moved the foreign folder aside, put the tree's hook in,
+  merged the ini (`[KLHook]` and `[Auto]` kept, the stale `[Redirect]` replaced by the block) and made
+  the slot stock; `status`: '128 files, all as built', 'hook with expansion pages'; `uninstall` put ini
+  and hook back, removed the folder and moved the foreign one back. A sha1 list of the folder before and
+  after differs in four lines: the F01 slot's files, now equal to their `KL_PortBackup` copies; the five
+  `KL_PortBackup` hashes are the same before, between and after (scratch `ipackake_run.log`).
 - NOT tested: the real game folder (by instruction), a hook DLL that is really locked.
 
 ## 4. The menu
@@ -307,12 +363,12 @@ Measured on the built tree (`python tools\kl_expansion.py share`, `<out>\share.j
 
 | part | bytes |
 |---|---:|
-| five maps | 1,826,614,802 (356 - 383 MB each: archive 310 - 336, beside 46 - 48) |
+| five maps | 1,826,631,783 (356 - 383 MB each: archive 310 - 336, beside 46 - 48) |
 | `Overlay\PC_Def.str` | 1,575,448,788 |
 | `Overlay\Patch01.zip`, hook, ini, BuildInfo | 0.4 MB |
-| total | 3,402,481,864 |
+| total | 3,402,504,250 |
 
-Inside an archive (unpacked; packed is deflate level 1, as kl_graft writes it):
+Inside an archive, UNPACKED:
 
 | | .TEX | of it F07's | F07's that nothing in the joined level names | the map's | .prm | F07's | F07's vertex data no root reaches | the map's |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -326,42 +382,58 @@ Inside an archive (unpacked; packed is deflate level 1, as kl_graft writes it):
 How: textures of the built `.TEX` are matched to stock F07's by content; 'named' = reached from the
 level's roots (`.gms` models, `.prp` chunk fields) through `kl_prmgraph.walk` to materials, sprites,
 fonts, plus the HUD's 200 picture ids and animation frames. On stock F07 itself that leaves 8 textures
-unnamed, so the method is tight. `.TEX` (244 - 269 MB packed), `.prm` (30 - 43), `.ANM` (17), `.fxc`
-(4) are all but 4 MB of an archive; no large member is a stock member byte for byte (0.09 MB of small
-ones are; 1.4 MB in DM09).
+unnamed, so the method is tight; those 8 are counted as live below. `.TEX`, `.prm`, `.ANM` (17 MB),
+`.fxc` (4) are all but 4 MB of an archive; no large member is a stock member byte for byte.
 
-So of each ~320 MB archive:
-- **about 150 MB packed (117 for DM09) is F07's own map** - 201 MB of textures and 42 MB of vertex
-  data of the map that was removed from the scene. 719 MB over the five maps.
-- about 80 MB packed is F07's live systems (80 MB of textures and 21 MB of models unpacked, most of the
-  17 MB `.ANM`, the 4 MB of shaders): the same in every map. An estimate from the member ratios.
-- the rest is the Dead Men map.
+The same PACKED, i.e. what it costs in the archive - measured, not estimated: every texture and every
+`.prm` chunk deflated by itself at level 1, which is how kl_graft packs (the pieces of a `.TEX` sum to
+within 0.1 % of the member's packed size, those of a `.prm` to within 7 %):
 
-**Is a 300 - 400 MB archive per map unavoidable? No - but the saving is in trimming, not sharing.**
+| MB packed | archive | F07's dead map (.TEX + .prm) | F07's live systems (.TEX + .prm + .ANM/.fxc) | the Dead Men map (.TEX + .prm) | archive without the dead part |
+|---|---:|---:|---:|---:|---:|
+| DM01 | 336 | 161 (140 + 21) | 77 (43 + 13 + 21) | 96 (86 + 10) | 175 |
+| DM02 | 310 | 161 | 77 | 70 (61 + 9) | 149 |
+| DM03 | 321 | 161 | 77 | 81 (69 + 12) | 160 |
+| DM06 | 310 | 161 | 77 | 69 (62 + 7) | 149 |
+| DM09 | 312 | 133 (133 + 0: its `.prm` is already emptied) | 86 (51 + 14 + 21) | 90 (72 + 18) | 180 |
+| five maps | 1,590 | **778** | **395** | 406 | 812 |
+
+(The first pass estimated the dead part from member ratios as 719 MB; the measurement is 778.)
+
+**Is a 300 - 400 MB archive per map unavoidable? No - half of it is dead weight, and the saving is in
+trimming and packing, not in sharing.**
 
 1. *Trim F07's dead map at build time* (kl_graft's owner; safe in kind, NOT LIVE in this extent):
    `PRM_LIMIT` already empties unreached vertex / index chunks above 90 MB and Retomoto runs that way
-   (RT2b - RT6); doing it always saves 42 MB unpacked per map. The same idea for textures - a
-   texture no reference reaches becomes a 4 x 4 stub with its id kept - saves about 200 MB unpacked.
+   (RT2b - RT6, S2, J2); doing it always saves 21 MB packed per map. The same idea for textures - a
+   texture no reference reaches becomes a 4 x 4 stub with its id kept - saves 140 MB packed per map.
    Risk to measure first: the 8 unnamed textures of stock F07 show that some referrer is unknown; keep
-   every texture that stock F07's own systems side names or that is in that floor set. Expected
-   result: archives of about 160 - 190 MB, the five maps about 1.1 GB instead of 1.83 (an estimate:
-   packed size taken as proportional to unpacked size per member; nothing was removed to try it).
-2. *Hard links for equal files beside the archives* (implemented, `install --link`, tested): the 14
+   every texture that stock F07's own systems side names or that is in that floor set (the table above
+   already does). Result: archives of 149 - 180 MB, the five maps 0.81 GB of archives + 0.24 GB beside
+   = 1.05 GB instead of 1.83.
+2. *Pack harder* (kl_graft's owner, one argument of `write_level`; the stock archives are plain
+   deflate, so nothing new for the game): measured on DM03's five large members, level 1 (now) 316.7
+   MB, level 6 268.0 MB (10 s more build time), level 9 262.9 MB (29 s). 15 % of every archive, about
+   240 MB over the five as they are, about 120 MB after 1. Stock F07 itself is packed to 51.6 %.
+3. *Hard links for equal files beside the archives* (implemented, `install --link`, tested): the 14
    `_LS_<Language>` files and the `.hti` are byte-equal in all five maps (they are F07's): 92 MB.
    Invisible to the game (read-only opens).
-3. *The systems part once on disk* would need the game to read one member from two places. It cannot:
-   a level is ONE archive (the loader mounts `Patch01.zip` and the scene's own zip, kl2 0x7f5610 /
-   0x7f5827), every member is one file with one id space (`.TEX` table of 4096, `.prm` chunk table,
-   `.MAT` slots), and member names carry the slot. The only way is the hook serving a virtual
-   `<slot>_Main.zip` (stored members, a shared segment + a map segment) by wrapping `ReadFile`,
-   `SetFilePointer`, `GetFileSize` and the async reader for those handles. That is new code on the
-   hot path of every load, for about 80 MB x 4 = 320 MB. Not recommended before 1 is done.
+4. *The systems part once on disk* (77 - 86 MB per archive; one copy instead of five saves about 310
+   MB) would need the game to read one member from two places. It cannot: a level is ONE archive (the
+   loader mounts `Patch01.zip` and the scene's own zip, kl2 0x7f5610 / 0x7f5827), every member is one
+   file with one id space (`.TEX` table of 4096, `.prm` chunk table, `.MAT` slots), and member names
+   carry the slot. What the game would need: (a) the hook serving a virtual `<slot>_Main.zip` (stored
+   members, a shared segment + a map segment) by wrapping `ReadFile`, `SetFilePointer`, `GetFileSize`
+   and the async reader for those handles - new code on the hot path of every load; and (b) builds whose
+   systems part is byte-identical between maps, which it is not today: a joined `.TEX` / `.prm` is one
+   stream in which S's records come first (so a shared PREFIX is possible in kind), but `.MAT`, `.ANM`,
+   `.fxc`, `.SND` are merged files. Not recommended before 1 and 2 are done: after them the systems part
+   is the largest piece left, and still only ~65 MB a map.
    (One `.TEX` for all maps does not work either: every map would load every texture - the loader
    takes the `.prm` as one heap block and 100.9 MB was already refused once, run RT1.)
-4. *Distribution* is not a size problem: nothing is shipped but tools; `build` runs on the player's
+5. *Distribution* is not a size problem: nothing is shipped but tools; `build` runs on the player's
    machine against both installed games.
-5. `Overlay\PC_Def.str` is 46 % of the tree. It is Dog Days' own 1.22 GB plus Dead Men's clips, rewritten;
+6. `Overlay\PC_Def.str` is 46 % of the tree. It is Dog Days' own 1.22 GB plus Dead Men's clips, rewritten;
    an append-only merge (stock bytes untouched, new clips behind them) was not what `kl_audio.merge`
    produced. Whether the stream format allows one was not looked at.
 
@@ -374,10 +446,12 @@ So of each ~320 MB archive:
 | the page: sixth button, `Dummy` stored before the load, `[Redirect.2]` latched at the archive open | NOT LIVE (klslot.c says so) |
 | `Overlay\Patch01.zip` taken instead of the stock one | NOT LIVE (the open through `CreateFileA` at boot is live, X2) |
 | `Overlay\PC_Def.str` taken instead of the game's | NOT LIVE. X2 logged the open of `PC_Def.str` at boot through a wrapped import, so the overlay rule sees it; a 1.5 GB stream read through the redirected handle has not been tried |
-| the hook in the tree | SHIP build of i-hook, sha1 884a9133... (klsteam + kljoin + klslot): built and off-game tested by its author, NOT LIVE (`re/hook_live.md`). Rebuild and restamp: `build --reuse --hook <dll>` |
-| Steam writes | with that hook: uploads, stats, achievements of a level that is not the stock level of its slot are failed (klsteam.c) - NOT LIVE. The local high-score list of the slot (profile) is NOT guarded (`re/leaderboard.md` 4.3). With an older hook: never end an Arcade session on these maps |
-| Retomoto Tower | loads and runs rounds (RT5, RT6); the way from tower to lobby is `Maps\DM09\KLJoin.ini` + kljoin.c - NOT LIVE from inside the process; the start in sight of seven guards is an owner decision (`re/retomoto_fa.md` 9.6); music silent (13 clips not in the stream file) |
+| the hook in the tree | SHIP build compiled by `build` from `klhook\` as it was at 15:15 (sha1 d63a1144...). Live of this code line: the TEST build of 12:49 in direct boots and Arcade sessions (S0, S1, S2, J1b - J3: import slot 0xb107c8 is session-safe, no integrity exit); a SHIP build only as the 12:49 one on a direct boot (HK1). **This exact DLL: NOT LIVE.** Restamp after a hook change: `build --reuse` |
+| Steam writes | TEST policy (block always) LIVE: run S2 ended a session on Retomoto - 29 `SetStat`, `StoreStats` and `UploadLeaderboardScore` all BLOCKED, Steam's stats file unchanged. The SHIP policy (block when the level is not the stock archive of its slot, klstock.h) is NOT LIVE (S3, S4 of `re/hook_live.md`) - and it is the one a player gets. The local high-score list of the slot (profile) is NOT guarded (`re/leaderboard.md` 4.3). S2 also showed what an unguarded end does on the scripted route: every stat is SET to the in-memory profile's value (zeros without a loaded profile) |
+| the skeleton step on DM02 and DM06 | NOT LIVE on these two maps (verify 0; the diner, the bank and the tower ran with it). `build --maps DM02,DM06 --no-bones` gives the form that ran (M02r, M06r) |
+| Retomoto Tower | loads and runs rounds (RT5, RT6, S2); the jump box works from inside the process on a direct boot and in an Arcade round (J1b, J2, J3) - with `KLJoin.ini` beside the archive in the F01 slot and on the no-guards build. Read from `Maps\DM09` beside an F06-named archive: NOT LIVE. The start in sight of seven guards is an owner decision (`re/retomoto_fa.md` 9.6; option `--guards-wait` ran as GW1, GW2, HK3 and is not in the tree); music silent (13 clips not in the stream file) |
 | a whole round with loot and escape | bank only, and only on the build without the map's guards (ESC3); `kl_fa.check` DEGRADED on every map: no bot squads, no HUD markers, no spawn points of the Dog Days-only modes |
+| the diner from the menu | one Arcade round, 150 s in the round, ended by the script (M01R); loot and escape not played |
 | the Fragile Alliance LOBBY (online / LAN) | not part of this: the page is an Arcade page; a lobby client maps the slot index through its own files (`re/slot_redirect.md` 5) |
 | pictures | converted, not shown (4.2) |
 | loading screen and briefing of an expansion map | the stock slot's |
@@ -385,8 +459,10 @@ So of each ~320 MB archive:
 
 ## 7. Live checks, in order (one variable each; `python debug\zombies.py --count` before and after)
 
-Before L1: finish `re/hook_live.md` S0, S1 (the new hook in a session). All runs: klauto TEST DLL
-unless said, end by `pass` at the score page, never let a session end.
+`re/hook_live.md` S0, S1, S2 are done (the hook's code line runs in a session and the TEST build blocks
+every Steam write), so L0 can start. All runs: klauto TEST DLL unless said (build it from the same
+sources as the tree's SHIP DLL: `klhook\build_auto.bat`), and check the log for `steam: import
+SteamUserStats wrapped` before a script may let a session end.
 
 - **L0 - install, by the tool, on the real folder.** `python tools\kl_expansion.py status`, then
   `install --replace --keep-slot --no-hook` (the live agent keeps its own DLL, ini head and slot build;
@@ -418,37 +494,57 @@ unless said, end by `pass` at the score page, never let a session end.
   0xdd265c+0x824+0x9f48 elements` (= `[[[0xdd265c]+0x824]+0x9f48]`, `re/menus.md` 2.5) with and without
   the overlay (two boots). Record both numbers in `re/menus.md` 2.5: it turns 'headroom not
   established' into a number.
-- **L6 - the other maps from the page, one run each**: entry 0 (DM01, slot F01 - also the first menu
-  round of the diner), entry 1 (DM02, F02), entry 3 (DM06, F04), entry 4 (DM09, F06; with J1 / J2 of
-  `re/hook_live.md` for the join - `KLJoin.ini` is already in `Maps\DM09`). Expect the map of the
-  title, `slot F0n: menu page 2 from now on -> DM0n`, and per map what its F01 build showed (run names
-  in the manifest's `live`). These are the first loads of builds named for F02, F04, F06.
+- **L6a - M02 and M06 with the skeleton step, the old way** (one variable: the step). Before they are
+  loaded under a new slot name: M02_FA_A, then M06_FA_A, built the usual way into the F01
+  slot (kl_graft's defaults = the tree's content), direct boot + the walk of M02c / M06a. Expect what
+  those runs showed, and car doors / wheels / faces no worse than before. A fault here and not with
+  `--no-bones`: rebuild the tree with `build --maps DM02,DM06 --no-bones --reuse` and tell kl_chars' owner.
+- **L6 - the other maps from the page, one run each**: entry 0 (DM01, slot F01), entry 1 (DM02, F02),
+  entry 3 (DM06, F04), entry 4 (DM09, F06). Expect the map of the title, `slot F0n: menu page 2 from
+  now on -> DM0n`, and per map what its F01 build showed (run names in the manifest's `live`). These
+  are the first loads of builds named for F02, F04, F06. For DM09 also the join read from the map's
+  folder: `join: reading ...\KLExpansion\Maps\DM09\KLJoin.ini for level f06\f06_main`, `join: box 9:
+  (2550, 19500, 800) - (2790, 19800, 1100) -> entry 5, name '06_Exit', target (6272, 563, -6305)`, `join:
+  level '...F06_Main.gms': 1 box(es) active`. The jump itself needs J2's walk, which ran on the
+  no-guards build; the tree's Retomoto has its guards and the walker dies before the car (S2) - so here
+  the three lines are the check, and the jump stays as shown in J2 until a round reaches the car.
 - **L7 - a slot is the stock map again after the page was used.** Two boots are the plain form: L3,
   then a boot through the stock button and entry 2 - expect `menu page option is 1`, `slot F03: menu
   page 1 from now on -> the stock level`, and Airport. The stronger form is both in ONE process (the
   latch is per archive open): it needs a way from a running round back to the frontend that does not
   end the session, which is not known - if there is none, say so and keep the two-boot form.
-- **L8 - SHIP hook** (`Hook\dinput8.dll` of the tree, the plain block, no `[Auto]`): the owner plays
-  one round on a Dead Men map from the page; `re/hook_live.md` S3 / S4 lines.
+- **L8 - SHIP hook** (`Hook\dinput8.dll` of the tree, the plain block, no `[Auto]`). First S3 of
+  `re/hook_live.md` as a direct boot with `Page=2` under `[Expansion]` (expect `steam: level archive
+  f01\f01_main.zip opened from ...\Maps\DM01\...: NOT stock` and `... BLOCKED`); only then the owner
+  plays one round on a Dead Men map from the page with a loaded profile. Until S3 has shown the SHIP
+  policy's lines, nobody ends an Arcade session on an expansion map with the SHIP DLL.
 - **L9 - uninstall**: `uninstall` (and `--restore-all` once L4 has passed). Expect `status`: no
   KLExpansion (or the old folder moved back), the earlier hook and ini, 'stock files replaced: none';
   then a stock boot is a stock boot.
 
 ## 8. For other owners
 
-- **kl_graft.py**: (a) `bones=True` as default fails every map but the bank on its own check; this
-  tool passes `bones=False` (the builds that ran). (b) Section 5.1: empty unreached vertex data always
-  and stub unnamed textures of S - about 150 MB packed per map. (c) `write_level` stamps the build time
-  into the zip, so two builds of the same content differ as files; `build_id` works around it.
+- **kl_graft.py**: (a) section 5.1: empty unreached vertex data always and stub unnamed textures of S -
+  161 MB packed per map, measured. (b) Section 5.2: `write_level` packs at deflate level 1; level 6
+  saves 15 % (49 MB on the bank) for 10 s. (c) `write_level` stamps the build time into the zip, so two
+  builds of the same content differ as files; `build_id` works around it. (d) `bones=True` now passes
+  on all five maps; M02 and M06 have not run with it (L6a).
 - **kl_maps.py**: `chain()` has no `slot` argument (its second step is always F01); this tool repeats
   its six lines with one. `preflight()` cannot take a chained build.
-- **klhook (i-hook)**: the tree installs `KLJoin.ini` as `Maps\DM09\KLJoin.ini` and the ini block
-  above; `install` leaves `[Steam]` / `[Join]` sections of an existing `KLHook.ini` alone. A SHIP DLL
-  should live at a fixed place in the work folder (e.g. `<work>\build\klhook\ship\dinput8.dll`) so
-  `build` can take it without `--hook`.
+- **klhook (i-hook)**: `build` compiles the SHIP DLL itself with `klhook\build.bat <folder>` and
+  records the sources' sha1; it writes `Maps\DM09\KLJoin.ini` from kl_fa_author's numbers and prints
+  a NOTE when `klhook\KLJoin.retomoto.ini` disagrees (it did at commit 42ec5c6: the inside box).
+  `install` leaves `[Steam]` / `[Join]` / `[KLHook]` / `[Auto]` sections of an existing `KLHook.ini`
+  alone. i-live's two notes on kljoin.c (the 'NOT usable ... 1 entries' line during every load, the
+  '500 ms after' line printed at once) are in `<work>\research\agent_scripts\i-live\` / scratch
+  `ilive\add_fa_round.md` 8.3.
 - **mkoverlay.py**: unused entries of a page keep the stock title and load the stock map (entry 5 =
   'Financial' on our page); hiding them needs the level list's 'available' answered per page. Its
   output passes the checks as it is.
+- **kl_fa_author.py**: the tree holds the level without options (guards active from the start). If the
+  owner picks `--guards-wait` or a blast delay, the packaging needs a way to pass it: say so and
+  `MAPS` gets an option field.
 - **CLAUDE.md** (lead): the merged `PC_Def.str` is a replaced stock file outside the F01 slot; `tools/`
-  gained `kl_expansion.py`; the titles are Hot Coffee / Late Night Opening / Withdrawal / A Walk in the
-  Park.
+  has `kl_expansion.py`; the titles are Hot Coffee / Late Night Opening / Withdrawal / A Walk in the
+  Park; `<work>\build\_fake_game_ipack` is a made-up game folder of this tool's test (dummy files,
+  can be deleted).

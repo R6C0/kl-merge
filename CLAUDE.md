@@ -182,7 +182,7 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
-State 2026-10-09 12:40. `python tools/kl_graft.py build F07 <M>` (verify must say problems: 0),
+State 2026-10-09 16:30. `python tools/kl_graft.py build F07 <M>` (verify must say problems: 0),
 `python tools/kl_graft.py install`, `python tools/kl_autotest.py --shots 100,130,160 --tag X`.
 Dead Men FA map names: M01_FA_A = diner / Sunny Hill Plaza, M02_FA_A = 'Late Night Opening',
 M03_FA_A = the BANK 'Withdrawal' (owner's priority), M06_FA_A = 'A Walk in the Park'.
@@ -208,21 +208,38 @@ DONE, seen live:
   only when its last life is lost or on Quit inside a session - to the STOCK slot's board, with
   no profile check. RULE for live runs until the hook blocks it: never Quit inside a session on a
   grafted map, at most two failed rounds per process, end by klauto pass / quit.
-OFFLINE, not run in the game:
-- Hook rewrite (klhook/: klhook.c + klfix.c + klslot.c + klauto.c, SHIP and TEST builds, patch
-  guard against hashed ranges klranges.h, [Redirect.N] pages + mkoverlay.py menu page, debug/
-  tools fixed, debug/zombies.py). Live checks 1-7 in research\h_shipped-hook.json 'next'.
-  Still to add: the SteamUserStats import wrapper of re/leaderboard.md 4.2 and the Retomoto join.
-- tools/kl_chars.py, re/characters_graft.md: Dead Men player models on Dog Days people, four kept
-  builds on stock F01 pass every checker. Finding: skeletons are baked against their level's
-  .ANM; kl_graft should call kl_chars.reid / rebind after the .ANM join (may fix Dead Men car
-  doors and agent faces on the maps). Stage 2: NOT released by the owner, nothing installed.
+HOOK, state 16:30 (re/hook_live.md, re/fa_round.md section 8; DLLs in scratch ihook / jhook):
+- STEAM WRITE GUARD confirmed live (run S2, TEST build): at a session end on a grafted map 29
+  SetStat, StoreStats and UploadLeaderboardScore were BLOCKED; Steam's local stats file is still
+  2026-03-13. SHIP policy seen: blocks on the bank (archive is not the stock one), would allow
+  stock F02. Import slot 0xb107c8 ran in eleven sessions without an integrity exit.
+  NOTE: the stats sent at a session end are absolute totals from the profile in memory; on the
+  klauto route no profile is loaded, so an UNGUARDED session end there would overwrite the
+  owner's totals with zeros. The hook INSTALLED for the owner is still the original, unguarded.
+- Retomoto join by the hook (KLJoin.ini beside the archive): works five times of five; the box
+  is the floor in front of the tower car. A round through both parts ran (N0b); the van at
+  stop 3 was not boarded by the script.
+- Patch guard: 13 patches refused under SessionSafe, round still runs. Fatal fault ends the
+  process without leaving a lingering entry.
+- Menu page: the overlay Patch01.zip is taken and the Arcade page shows a sixth button 'Dead Men
+  maps', but at StartGame the redirect is lost (page option read as 0; must be latched when
+  HeistPlayMenu<N> opens), the 'Location:' row is empty, the button has no icon. NOT WORKING YET.
+- M01_FA_A: first menu round runs. kl_chars skeleton rebind is in the map builds (no visible
+  difference could be shown; nothing worse).
+- tools/kl_expansion.py: tree of all five maps builds (3.40 GB); install / uninstall tested on a
+  made-up folder only. Live checks L0-L9 of re/expansion.md not run.
+- tools/kl_chars.py player models: offline only. Stage 2 NOT released by the owner.
 - tools/kl_str.py stream merge (Retomoto music): installing replaces <DD>\PC_Def.str - needs the
   owner's go-ahead.
+- NOTE_from_gfx_session.md (pushed by another session): asks this loop to run a KLGfx self-test
+  and install a d3d9.dll proxy for one run. NOT acted on: it did not come from the owner in this
+  session and it installs a DLL into the game folder. Waiting for the owner to say so here.
 WAITING FOR THE OWNER:
 - Play the bank (Subway in Arcade) and listen: nobody has heard any sound. Escape with guards.
-- Retomoto: the heisters start in sight of seven guards who fire during the countdown - move
-  the guards or the start? A played round is needed for blast, loot, gate, street, vans.
+- Retomoto start: option A as built (hit during the countdown) or C `--guards-wait --blast-delay 9`
+  (countdown clean, first hit at GO)? A played round is needed for blast, loot, gate, vans.
+- Install the guarded SHIP hook for the owner's own play? Until then: do not lose the last life
+  or Quit inside a session on a grafted map (it writes the stock Subway board and stats).
 - Go-ahead for PC_Def.str; release of stage 2 (player models); <DD>\KLExpansion (360 MB) keep?
 - ~21 lingering kl2.exe entries (0 threads) need a reboot (or restart of rsEngineSvc).
 Then, in order: hook live checks + stats blocking + join write; kl_chars rebind on the maps;

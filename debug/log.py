@@ -14,7 +14,7 @@ KINDS=[                                                 # (kind, pattern on the 
  ('FATAL', re.compile(r'FATAL (C runtime: .*)')),
  ('WATCHDOG',re.compile(r'WATCHDOG: (.*)')),
  ('END',   re.compile(r'END (\w+\(\d+\)) called from kl2 (\w+)')),
- ('EXIT',  re.compile(r'(process exit|INTEGRITY EXIT|exit: ExitProcess)(.*)')),
+ ('EXIT',  re.compile(r'(process exit|INTEGRITY EXIT|exit: ExitProcess|exit: _?exit)(.*)')),
  ('REFUSED',re.compile(r'patch REFUSED (\w+) (.*)')),          # the hook's patch guard said no (klhook.c)
  ('RESULT',re.compile(r'RESULT (\w+) \((.*)\) exit code (-?\d+)')),
  ('STEAM', re.compile(r'steam: (NOT GUARDED|BLOCKED |passed on |level .|at exit|Patch01\.zip .* not a menu file)')),      # klsteam.c

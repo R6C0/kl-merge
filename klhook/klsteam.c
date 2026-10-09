@@ -54,8 +54,12 @@
  *   slot 5, 8, 13, 19 UpdateAvgRateStat, ClearAchievement, IndicateAchievementProgress, ResetAllStats -> false
  *     (the game never calls them; they are writes all the same)
  *   Everything else forwards: RequestCurrentStats, GetStat, GetAchievement, the leaderboard find / download calls.
- *   FindOrCreateLeaderboard is forwarded too (the stock boards exist, so it creates nothing); on an expansion map
- *   the score page therefore still shows the stock map's friends rows (re\leaderboard.md 4.3 - not done here).
+ *   slot 20 FindOrCreateLeaderboard -> forwarded by default (the stock boards exist, so it creates nothing): on an
+ *     expansion map the score page then shows the stock map's friends rows. [Steam] StockRows=0 fails it (handle
+ *     0) whenever the upload is blocked: both call sites have a branch of their own for that - 0x5ebe5b `or
+ *     ecx,edx ; je 0x5ebe77` (upload task, status 3: UploadLeaderboardScore is then never reached) and 0x78973e ->
+ *     0x789763 (download task, status 3: no rows). re\leaderboard.md 4.3 wants this for the shipped expansion; it
+ *     is OFF by default because the score page with a failed download has NOT RUN LIVE (check S5, re\hook_live.md).
  *
  * WHEN (the policy)
  *   TEST build: always, every write. No key turns it off.
@@ -88,6 +92,11 @@
  *     - a game update: klstock.h then calls every level 'not stock' (safe side) until mkstock.py is re-run;
  *     - a peer without the hook in an online session writes its own stats (stage 4).
  *   Reads always work. Steam offline mode is not needed and not relied on.
+ *   A TEST BUILD SAYS WHAT A SHIP BUILD WOULD DO: it blocks everything, but works the SHIP policy out all the same
+ *   and logs it - `steam: level '...' under the SHIP policy: ...` at each level and ` | SHIP policy: would BLOCK /
+ *   PASS ON - <why>` behind each BLOCKED line. So the SHIP decisions (stock / not stock / stats until restart) can
+ *   be checked in scripted TEST runs through the menu, where nothing can reach Steam; a SHIP build cannot be
+ *   scripted (it has no klauto).
  *
  * LOG (KLHook.log)
  *   steam: import SteamUserStats wrapped ...                  at start
@@ -96,17 +105,32 @@
  *   steam: BLOCKED UploadLeaderboardScore(board 'KL2_Heist0_TotalMoney', keep best, score 12345) - <why>
  *   steam: BLOCKED SetStat('NumRoundsPlayed', 12) - <why>     each method + name once per level
  *   steam: passed on StoreStats() - stock level               what went out, once per level
- *   session: state 0x20 -> 0x28 ... SESSION END               the moment the game uploads (re\leaderboard.md 2.2)
+ *   session: state 0x1f -> 0x28 ... SESSION END               the moment the game uploads (re\leaderboard.md 2.2);
+ *                                                             looked for at every write call too, so that it
+ *                                                             stands BEFORE the BLOCKED lines it explains
  *
  * KLHook.ini
  *   [Steam]
  *   Block=1     SHIP: 1 = the policy above, 2 = block every write always. (0 is read as 1: there is no off.)
  *   Log=1       2 = log every blocked / passed write, not only the first per level
  *   State=1     0 = no 'session:' lines
+ *   StockRows=1 0 = fail FindOrCreateLeaderboard while the upload is blocked (no stock rows on the score page)
  *
- * TESTED OFF-GAME (scratch harness `ihook`, sources not in the repo): a stub steam_api.dll whose ISteamUserStats
+ * TESTED OFF-GAME (scratch harness `jhook`, sources not in the repo): a stub steam_api.dll whose ISteamUserStats
  * records every call; all 30 slots called through the proxy with marker arguments (stack balance, return values,
- * forwarding), the policy against made-up scenes and archives, the session line. NOT RUN LIVE.
+ * forwarding), the policy against made-up scenes and archives, the session line.
+ * RUN LIVE (2026-10-09, agent i-live, the TEST build of 12:49; logs <work>\build\klhook\live\S0 S1 S2 HK3 J2 J3):
+ *   - the wrapped slot 0xb107c8 survived six real Arcade sessions (no INTEGRITY EXIT);
+ *   - on the klauto route (DisableSplashScreens) the game first asks for the interface at the first score page
+ *     (session state 0x20), not at boot: `proxy handed out` comes there;
+ *   - S2, a session that ENDED (three lost rounds, $0): 29 `BLOCKED SetStat('<name>', n)` with sensible stat names
+ *     and integer values, `BLOCKED StoreStats()`, `BLOCKED UploadLeaderboardScore(board 'KL2_Heist0_TotalMoney',
+ *     keep best, score 0)`, then the end page; Steam's cache file kept its date and hash. That is slots 4, 10, 22
+ *     (the board's name) and 28 confirmed by what came through them.
+ *   - WHAT WOULD HAVE GONE OUT: every stat but NumRoundsPlayed was 0. SetStat writes ABSOLUTE totals from the
+ *     profile block in memory, and the klauto route loads no profile - an unguarded test session end overwrites
+ *     the owner's Steam totals with zeros. Hence: a TEST build blocks always, and no key turns that off.
+ *   NOT RUN LIVE: a SHIP build's own decisions (S3, S4 - now also visible in a TEST run, see above), StockRows=0.
  */
 #ifndef KLSTEAM_C
 #define KLSTEAM_C
@@ -116,12 +140,12 @@
 #define KLX_SESSION  0x0168e598               /* the session manager; +0x70 state, +0x5c game mode (4 = Arcade) */
 #define KLX_NARCH    48
 
-enum { KLX_BOARD, KLX_STATS };
+enum { KLX_BOARD, KLX_STATS, KLX_FIND };      /* KLX_FIND: FindOrCreateLeaderboard under StockRows=0, judged like the upload */
 static void *(__cdecl *klx_real_accessor)(void);
 static void **klx_real;                       /* the real ISteamUserStats (points at its vtable pointer); set at each accessor call */
 static void *klx_vt[KLX_NSLOT];
 static struct { void **vt; } klx_proxy = { klx_vt };
-static int klx_on, klx_log = 1, klx_state_on = 1;
+static int klx_on, klx_log = 1, klx_state_on = 1, klx_stock_rows = 1;
 #ifdef KLHOOK_TEST
 static int klx_always = 1;                    /* a TEST build never writes to Steam; not read from the ini */
 #else
@@ -134,7 +158,7 @@ static int klx_narch;
 static char klx_patch_extra[80];              /* a member of the opened Patch01.zip that is not a menu file */
 static char klx_taint[200];                   /* why stats stay blocked for the rest of this process */
 static int klx_last_verdict; static char klx_last_why[200];      /* the last level scene seen: 1 stock, 2 not */
-static LONG klx_nblocked[2], klx_npassed[2];
+static LONG klx_nblocked[3], klx_npassed[3];
 static DWORD klx_said[160]; static int klx_nsaid;
 
 /* ---------------------------------------------------------------- the stock test */
@@ -249,18 +273,11 @@ static int klx_level_verdict(const char *scene, char *why)
     return v;
 }
 
-/* Is a write of this kind blocked right now? why[200] is filled either way. */
-static int klx_blocked(int kind, char *why)
+/* The SHIP policy: is a write of this kind blocked on the level that runs now? why[200] is filled either way.
+   It also keeps the 'ran in this process' mark and the last level's verdict, so it is asked in every build. */
+static int klx_ship_blocked(int kind, char *why)
 {
     char scene[160], w[200]; int v, any = 0, i;
-    if (klx_always) {
-#ifdef KLHOOK_TEST
-        strcpy(why, "TEST build: nothing is written to Steam");
-#else
-        strcpy(why, "[Steam] Block=2");
-#endif
-        return 1;
-    }
     if (!klh_exe_ok) {                                        /* no scene name on an unknown exe: go by the archives alone */
         EnterCriticalSection(&klx_cs);
         for (i = 0; i < klx_narch; i++) if (klx_arch[i].verdict >= 2 && !any) { any = 1; snprintf(why, 200, "unknown kl2.exe, and a level archive that is not stock was opened (%s)", klx_arch[i].key); }
@@ -280,17 +297,57 @@ static int klx_blocked(int kind, char *why)
     return 0;
 }
 
+/* Is a write of this kind blocked right now? why[200] is filled either way. ship (char[260], may be 0) receives,
+   in a build that blocks always, what the SHIP policy alone would have done: " | SHIP policy: would ...". */
+static int klx_blocked(int kind, char *why, char *ship)
+{
+    char w[200]; int v;
+    if (ship) ship[0] = 0;
+    if (!klx_always) return klx_ship_blocked(kind, why);
+    v = klx_ship_blocked(kind, w);
+    if (ship) snprintf(ship, 260, " | SHIP policy: would %s - %s", v ? "BLOCK" : "PASS ON", w);
+#ifdef KLHOOK_TEST
+    strcpy(why, "TEST build: nothing is written to Steam");
+#else
+    strcpy(why, "[Steam] Block=2");
+#endif
+    return 1;
+}
+
+/* The session state ([0x168e598]+0x70). State 0x28 = the session ends: the handler that uploads and commits runs
+   in the same frame, before the next tick (run S2: the BLOCKED lines came 29 ms before the line of the tick), so
+   this is called from the tick and from every write call - whichever sees the change first says it. */
+static void klx_state(void)
+{
+    static DWORD laststate = 0xffffffff; static int nstate; static LONG busy;
+    char why[200], ship[260]; DWORD sm, st = 0, mode = 0; int v;
+    if (!klx_on || !klx_state_on || !klh_exe_ok || InterlockedExchange(&busy, 1)) return;
+    if ((sm = klh_rd32((DWORD_PTR)KLH_VA(KLX_SESSION))) != 0 && klh_rd(sm + 0x70, &st, 4) && st != laststate) {
+        klh_rd(sm + 0x5c, &mode, 4);
+        if (st == 0x28) {
+            v = klx_blocked(KLX_BOARD, why, ship);
+            klog("session: state 0x%lx -> 0x28 (game mode %lu) = SESSION END: the game now uploads the session total and commits stats and achievements; Steam writes: %s - %s%s",
+                 laststate, mode, v ? "BLOCKED" : "NOT blocked", why, ship);
+        } else if (laststate != 0xffffffff && nstate++ < 400) klog("session: state 0x%lx -> 0x%lx (game mode %lu)", laststate, st, mode);
+        laststate = st;
+    }
+    InterlockedExchange(&busy, 0);
+}
+
 /* One write call: -> 1 = fail it. key = method + name (said once per level), text = the call as the log shows it. */
 static int klx_gate(int kind, const char *key, const char *text)
 {
-    char why[200]; int b = klx_blocked(kind, why), i, dup = 0; DWORD h = klx_fnv((const BYTE *)key, (DWORD)strlen(key), 2166136261u) ^ (DWORD)b;
+    char why[200], ship[260]; int b, i, dup = 0; DWORD h;
+    klx_state();                                              /* a session end is said before the writes it causes */
+    b = klx_blocked(kind == KLX_STATS ? KLX_STATS : KLX_BOARD, why, ship);
+    h = klx_fnv((const BYTE *)key, (DWORD)strlen(key), 2166136261u) ^ (DWORD)b;
     InterlockedIncrement(b ? &klx_nblocked[kind] : &klx_npassed[kind]);
     if (!klx_log) return b;
     EnterCriticalSection(&klx_cs);
     for (i = 0; i < klx_nsaid; i++) if (klx_said[i] == h) dup = 1;
     if (!dup && klx_nsaid < 160) klx_said[klx_nsaid++] = h;
     LeaveCriticalSection(&klx_cs);
-    if (!dup || klx_log >= 2) klog("steam: %s %s - %s", b ? "BLOCKED" : "passed on", text, why);
+    if (!dup || klx_log >= 2) klog("steam: %s %s - %s%s", b ? "BLOCKED" : "passed on", text, why, ship);
     return b;
 }
 
@@ -300,7 +357,7 @@ static int klx_gate(int kind, const char *key, const char *text)
 #define KLX_REAL(n) ((*(void ***)klx_real)[n])
 #define KLX_FWD(n) static __declspec(naked) void klx_fwd##n(void) { __asm mov ecx, dword ptr [klx_real] __asm mov eax, dword ptr [ecx] __asm jmp dword ptr [eax + 4 * n] }
 KLX_FWD(0) KLX_FWD(1) KLX_FWD(2) KLX_FWD(6) KLX_FWD(9) KLX_FWD(11) KLX_FWD(12) KLX_FWD(14) KLX_FWD(15) KLX_FWD(16) KLX_FWD(17) KLX_FWD(18)
-KLX_FWD(20) KLX_FWD(21) KLX_FWD(22) KLX_FWD(23) KLX_FWD(24) KLX_FWD(25) KLX_FWD(26) KLX_FWD(27) KLX_FWD(29)
+KLX_FWD(21) KLX_FWD(22) KLX_FWD(23) KLX_FWD(24) KLX_FWD(25) KLX_FWD(26) KLX_FWD(27) KLX_FWD(29)
 
 static void klx_name(const char *p, char out[64]) { if (!klh_rdstr((DWORD_PTR)p, out, 64)) strcpy(out, "?"); }
 
@@ -362,6 +419,19 @@ static unsigned __int64 __fastcall klx_UploadLeaderboardScore(void *self, void *
         ((unsigned __int64 (__fastcall *)(void *, void *, unsigned __int64, int, int, const int *, int))KLX_REAL(28))(klx_real, 0, board, method, score, details, ndetails);
 }
 
+static unsigned __int64 __fastcall klx_FindOrCreateLeaderboard(void *self, void *edx, const char *name, int sort, int display)
+{   /* slot 20, 12 bytes (the game: name, 2 = descending, 1 = numeric). A read unless the board does not exist - the
+       stock ones do. With [Steam] StockRows=0 it fails (handle 0) while the upload is blocked: the game's own
+       branches 0x5ebe77 / 0x789763 then set the task's status to 3, as for any failed call. */
+    char nm[64], key[96], text[200]; (void)self; (void)edx;
+    if (!klx_stock_rows) {
+        klx_name(name, nm); snprintf(key, sizeof key, "FindOrCreateLeaderboard %s", nm);
+        snprintf(text, sizeof text, "FindOrCreateLeaderboard('%s') ([Steam] StockRows=0: no rows of that board, and no upload can follow)", nm);
+        if (klx_gate(KLX_FIND, key, text)) return 0;
+    }
+    return ((unsigned __int64 (__fastcall *)(void *, void *, const char *, int, int))KLX_REAL(20))(klx_real, 0, name, sort, display);
+}
+
 static const struct { int slot; void *fn; } klx_writes[9] = {
     { 3, (void *)klx_SetStatF }, { 4, (void *)klx_SetStatI }, { 5, (void *)klx_UpdateAvgRateStat }, { 7, (void *)klx_SetAchievement }, { 8, (void *)klx_ClearAchievement },
     { 10, (void *)klx_StoreStats }, { 13, (void *)klx_IndicateAchievementProgress }, { 19, (void *)klx_ResetAllStats }, { 28, (void *)klx_UploadLeaderboardScore } };
@@ -390,34 +460,37 @@ static void *__cdecl klx_SteamUserStats(void)
 
 static void klx_tick(void)
 {
-    static char last[160]; static DWORD calls, laststate = 0xffffffff; static int nstate;
-    char scene[160], why[200]; DWORD sm, st = 0, mode = 0; int v;
+    static char last[160]; static DWORD calls; static int lastv = -1;
+    char scene[160], why[200]; int v;
     if (!klx_on || !klh_exe_ok) return;
-    if (klx_state_on && (sm = klh_rd32((DWORD_PTR)KLH_VA(KLX_SESSION))) != 0 && klh_rd(sm + 0x70, &st, 4) && st != laststate) {
-        klh_rd(sm + 0x5c, &mode, 4);
-        if (st == 0x28) {
-            v = klx_blocked(KLX_BOARD, why);
-            klog("session: state 0x%lx -> 0x28 (game mode %lu) = SESSION END: the game now uploads the session total and commits stats and achievements; Steam writes: %s - %s",
-                 laststate, mode, v ? "BLOCKED" : "NOT blocked", why);
-        } else if (laststate != 0xffffffff && nstate++ < 400) klog("session: state 0x%lx -> 0x%lx (game mode %lu)", laststate, st, mode);
-        laststate = st;
-    }
+    klx_state();
     if (calls++ & 7) return;
-    if (!klh_scene(scene, sizeof scene) || !strcmp(scene, last)) return;
-    snprintf(last, sizeof last, "%s", scene);
-    EnterCriticalSection(&klx_cs); klx_nsaid = 0; LeaveCriticalSection(&klx_cs);      /* a new level: every call is said once again */
+    if (!klh_scene(scene, sizeof scene)) return;
     v = klx_level_verdict(scene, why);
+    /* Said per scene, and again when the verdict of the same scene changes: on a direct boot the scene name is set
+       two seconds before its archive is opened (live log of 15:14: level line at :24.104, archive at :26.452), so the
+       first line says 'not seen being opened' and the second one what the archive is. */
+    if (!strcmp(scene, last) && v == lastv) return;
+    if (strcmp(scene, last)) { EnterCriticalSection(&klx_cs); klx_nsaid = 0; LeaveCriticalSection(&klx_cs); }      /* a new level: every call is said once again */
+    snprintf(last, sizeof last, "%s", scene); lastv = v;
     if (!v) { klog("steam: scene '%s' is no level; so far %ld write(s) blocked, %ld passed on", scene, klx_nblocked[0] + klx_nblocked[1], klx_npassed[0] + klx_npassed[1]); return; }
-    klx_blocked(KLX_STATS, why);                              /* sets the 'ran in this process' mark for a level that is not stock */
-    v = klx_blocked(KLX_BOARD, why);
+    klx_blocked(KLX_STATS, why, 0);                           /* sets the 'ran in this process' mark for a level that is not stock */
+    v = klx_blocked(KLX_BOARD, why, 0);
     klog("steam: level '%s': %s - leaderboard upload %s, stats and achievements %s", scene, why, v ? "BLOCKED" : "allowed",
          klx_always || klx_taint[0] ? "BLOCKED" : "allowed");
+    if (klx_always) {                                         /* what a SHIP build would decide here (checks S3 / S4 without a SHIP run) */
+        v = klx_ship_blocked(KLX_BOARD, why);
+        klog("steam: level '%s' under the SHIP policy: %s - leaderboard upload would be %s, stats and achievements would be %s", scene, why,
+             v ? "BLOCKED" : "allowed", klx_taint[0] ? "BLOCKED" : "allowed");
+    }
 }
 
 static void klx_exit_line(void)
 {
-    if (klx_on && (klx_nblocked[0] + klx_nblocked[1] + klx_npassed[0] + klx_npassed[1]))
-        klog("steam: at exit: %ld leaderboard upload(s) and %ld stat / achievement write(s) blocked; %ld and %ld passed on", klx_nblocked[0], klx_nblocked[1], klx_npassed[0], klx_npassed[1]);
+    static LONG once;
+    if (klx_on && (klx_nblocked[0] + klx_nblocked[1] + klx_nblocked[2] + klx_npassed[0] + klx_npassed[1]) && !InterlockedExchange(&once, 1))
+        klog("steam: at exit: %ld leaderboard upload(s) and %ld stat / achievement write(s) blocked; %ld and %ld passed on%s", klx_nblocked[0], klx_nblocked[1], klx_npassed[0], klx_npassed[1],
+             klx_nblocked[2] ? "; FindOrCreateLeaderboard failed too (StockRows=0)" : "");
 }
 
 /* ---------------------------------------------------------------- set-up */
@@ -442,13 +515,14 @@ static void klx_init(void)
     for (p = dir, i = 0; (klx_game_low[i] = (char)(*p >= 'A' && *p <= 'Z' ? *p + 32 : *p)) != 0; p++, i++) ;
     klx_log = GetPrivateProfileIntA("Steam", "Log", 1, klh_ini);
     klx_state_on = GetPrivateProfileIntA("Steam", "State", 1, klh_ini);
+    klx_stock_rows = GetPrivateProfileIntA("Steam", "StockRows", 1, klh_ini);
 #ifndef KLHOOK_TEST
     klx_always = GetPrivateProfileIntA("Steam", "Block", 1, klh_ini) >= 2;
 #endif
     for (i = 0; i < KLX_NSLOT; i++) klx_vt[i] = 0;
     klx_vt[0] = (void *)klx_fwd0; klx_vt[1] = (void *)klx_fwd1; klx_vt[2] = (void *)klx_fwd2; klx_vt[6] = (void *)klx_fwd6; klx_vt[9] = (void *)klx_fwd9;
     klx_vt[11] = (void *)klx_fwd11; klx_vt[12] = (void *)klx_fwd12; klx_vt[14] = (void *)klx_fwd14; klx_vt[15] = (void *)klx_fwd15; klx_vt[16] = (void *)klx_fwd16;
-    klx_vt[17] = (void *)klx_fwd17; klx_vt[18] = (void *)klx_fwd18; klx_vt[20] = (void *)klx_fwd20; klx_vt[21] = (void *)klx_fwd21; klx_vt[22] = (void *)klx_fwd22;
+    klx_vt[17] = (void *)klx_fwd17; klx_vt[18] = (void *)klx_fwd18; klx_vt[20] = (void *)klx_FindOrCreateLeaderboard; klx_vt[21] = (void *)klx_fwd21; klx_vt[22] = (void *)klx_fwd22;
     klx_vt[23] = (void *)klx_fwd23; klx_vt[24] = (void *)klx_fwd24; klx_vt[25] = (void *)klx_fwd25; klx_vt[26] = (void *)klx_fwd26; klx_vt[27] = (void *)klx_fwd27;
     klx_vt[29] = (void *)klx_fwd29;
     for (i = 0; i < 9; i++) klx_vt[klx_writes[i].slot] = klx_writes[i].fn;
@@ -461,20 +535,21 @@ static void klx_init(void)
     n = klh_iat("steam_api.dll", "SteamUserStats", (void *)klx_SteamUserStats, (void **)&klx_real_accessor);
     if (!n) { klog("steam: NOT GUARDED - the import steam_api.SteamUserStats was not found or not changed"); return; }
     klx_on = 1;
-    klog("steam: import SteamUserStats wrapped (%d slot): ISteamUserStats 007 proxy, 30 slots, 9 writes gated; policy: %s", n,
+    klog("steam: import SteamUserStats wrapped (%d slot): ISteamUserStats 007 proxy, 30 slots, 9 writes gated; policy: %s%s", n,
 #ifdef KLHOOK_TEST
          "TEST build - every leaderboard upload, stat and achievement write is BLOCKED, on every level"
 #else
          klx_always ? "[Steam] Block=2 - every write is BLOCKED, on every level" :
          "writes are BLOCKED on a level that is not the stock level of its slot (klstock.h); stats stay blocked until restart once such a level ran"
 #endif
-         );
+         , klx_stock_rows ? "" : "; StockRows=0: FindOrCreateLeaderboard fails too while the upload is blocked");
 }
 
 #ifdef KLHOOK_HARNESS
 /* off-game: lift the TEST build's 'always' so that the policy itself can be exercised in both builds */
 __declspec(dllexport) void klx_test_always(int on) { klx_always = on; }
-__declspec(dllexport) int klx_test_blocked(void *mapped, int kind, char *why) { klh_delta = (LONG_PTR)((DWORD_PTR)mapped - KL2_BASE); klh_exe_ok = 1; return klx_blocked(kind, why); }
+__declspec(dllexport) int klx_test_blocked(void *mapped, int kind, char *why) { klh_delta = (LONG_PTR)((DWORD_PTR)mapped - KL2_BASE); klh_exe_ok = 1; return klx_blocked(kind, why, 0); }
+__declspec(dllexport) void klx_test_rows(int on) { klx_stock_rows = on; }
 __declspec(dllexport) void klx_test_reset(void) { klx_taint[0] = 0; klx_last_verdict = 0; klx_narch = 0; klx_patch_extra[0] = 0; klx_nsaid = 0; }
 #endif
 #endif /* KLSTEAM_C */

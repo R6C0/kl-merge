@@ -317,6 +317,23 @@ Slot F01; direct boots unless said; walks = klauto (round5 DLL, Hooks=0) with 'g
        shot dead 25 s after GO, score page $0. The window's blast was not seen (behind the player).
   DB3  final F07 + M03_FA_A (content equal to the build of RN13 / RN14: all 31 members CRC-equal), ORIGINAL hook.
        RESULT: clean exit after 275 s; the plaza at 150 s (shots/DB3_150s.png). = THE BUILD IN THE F01 SLOT.
+LIVE RUNS 2026-10-09, eighth set (i-live, two passes; every run with its outcome: re/fa_round.md 8, re/maps.md 13,
+re/retomoto_fa.md 10). Hooks: i-hook's SHIP / TEST builds; a TEST build blocks every Steam write (seen: S2).
+  BN0 / BN1, CH0c, CH0d / CH1d  F07 + M03_FA_A before / after the skeleton rebind (kl_chars.reid / rebind after the .ANM
+       join), same walk. RESULT: clean exit, PASS, every time: nothing worse, no visible difference at 640 x 480. Kept.
+  CH0  the same build. RESULT: clean exit after 494 s, FAIL stall: the window lost focus after 4 frames (no build fault).
+  BR1, S1, S5  bank rounds from the menu on the rebind build: PASS, score page, round 2.
+  M01R F07 + M01_FA_A, FIRST ARCADE ROUND: PASS after 335 s; street, diner, register, both exits, alive after 2.5 min.
+  S2   Retomoto, three lost rounds: the session ENDS, 29 SetStat + StoreStats + UploadLeaderboardScore all BLOCKED.
+  J1   Retomoto --no-ai, the hook's jump box inside the tower car. RESULT: hung (901 s): the car's doors are shut.
+  J1b, J2, J3, N0, N0b  the box in front of the car (kl_fa_author.JOIN_BOX now): the hook moves the player to the lobby
+       car, direct boot and Arcade round; lobby -> entrance -> square -> road -> both van stops. The round ends with
+       'Time ran out - You didn't escape' 3 - 5 min in: the van is not boarded by the script's E.
+  GW1 / GW2  --guards-wait, and with --blast-delay 9: only the second keeps the countdown free of fire.
+  X1j, HK4j, S4tb, J3s, MP1  hook checks (SHIP exit line, fatal fault ended by the hook, stock level allowed, stale
+       KLJoin.ini, the expansion's menu page: opens, but the redirect is lost at StartGame).
+  DB4  F07 + M03_FA_A with the rebind (build/install, zip sha1 791dbd15), ORIGINAL hook. RESULT: clean exit after
+       156 s; the plaza at 100 s (shots/DB4_100s.png). = THE BUILD IN THE F01 SLOT.
 BISECT (not needed in the end, but it works): build ... --geometry [--m-add A,B] [--m-drop ..]
   [--s-keep ..] [--s-drop ..], see Select. '--geometry --s-drop *' = M's geometry and no game-mode
   layer at all verifies with 0 problems; plain '--geometry' leaves S's game-mode layer with scene
@@ -406,12 +423,23 @@ def install(slot='F01', log=print, src=None):
     """Copy the built archive and the files beside it into Dog Days' slot. Each stock file is
     moved to KL_PortBackup the first time (kl_package._backup_then_copy), never overwritten.
     src: a folder holding a kept build (<slot>_Main.zip and the files beside it, e.g. one of
-    kl_maps.py deliver) instead of the last build."""
+    kl_maps.py deliver) instead of the last build.
+    KLJoin.ini (the hook's jump boxes of a two-part map, klhook/kljoin.c reads it beside the
+    archive) is ours, never a stock file: it is copied when the build's folder has one and
+    REMOVED from the slot when it has none, so that Retomoto's file does not stay beside the bank
+    (the hook refuses a stale box by its Name / Target, but the file is clutter)."""
     dd, d = find(DD_GUESSES, DD_EXE), src or out_dir(slot)
     if not os.path.isfile(os.path.join(d, slot + '_Main.zip')):
         raise FileNotFoundError(os.path.join(d, slot + '_Main.zip'))
     for f in sorted(f for f in os.listdir(d) if f.startswith(slot + '_Main')):      # archive, BESIDE, _LS bank
         kl_package._backup_then_copy(dd, os.path.join('Scenes', 'Locations', slot, f), os.path.join(d, f))
+    join = os.path.join(dd, 'Scenes', 'Locations', slot, 'KLJoin.ini')
+    if os.path.isfile(os.path.join(d, 'KLJoin.ini')):
+        shutil.copyfile(os.path.join(d, 'KLJoin.ini'), join)
+        log('installed %s' % os.path.relpath(join, dd))
+    elif os.path.isfile(join):
+        os.remove(join)
+        log('removed %s (this build has no jump box)' % os.path.relpath(join, dd))
 
 
 class Level:

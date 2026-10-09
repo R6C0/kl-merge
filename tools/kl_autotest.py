@@ -223,8 +223,11 @@ EVENTS = [      # (kind, pattern); the hook's lines are those of klhook/klhook.c
     # the rewritten hook (2026-10-09): a fatal fault in ANY module, which the hook then ends itself
     ('crash', re.compile(r'FATAL (?:unhandled exception|stack overflow) \w+ at (.+?)\+0x(\w+) \((\w+)\)')),
 ]
-NOTES = ('WATCHDOG:', 'process ended here', 'left to Windows', 'exit: ExitProcess', 'patch REFUSED', 'process exit',
-         "Steam's probe")
+NOTES = ('WATCHDOG:', 'process ended here', 'left to Windows', 'exit: ', 'patch REFUSED', 'process exit',
+         "Steam's probe",
+         # klsteam.c / kljoin.c (re/hook_live.md): the guard is absent (then no scripted session may end), a session
+         # ended (the game uploads and commits stats there), a jump box moved a player, a box that cannot work
+         'steam: NOT GUARDED', 'SESSION END', 'join: player', 'NOT usable on this level')
 
 
 def read_events(lines):
