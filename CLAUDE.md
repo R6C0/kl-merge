@@ -425,6 +425,17 @@ Owner's design for it (2026-10-09), to be followed as given:
   until the blast, START row outside facing -x into the room, guards unaware until the blast,
   a kill / bounds answer for stepping off the ledge.
 
+## Payday 2 (owner, 2026-10-09)
+Later wishes: play as a Cloaker, Payday 2's original maps, its characters, a first-person view.
+DECIDED for now: only the Payday 2 MASKS ("the most iconic"), as further entries of the wardrobe's
+Mask row (a mask is a rigid whole-head piece: tools/kl_chars.py wardrobe, klhook/klchar.c,
+re/wardrobe.md). Bodies, first person, Cloaker and maps are not started.
+State: Payday 2 is NOT installed on this PC (G:\SteamLibrary\steamapps\common\PAYDAY 2 holds two
+2021 crash dumps only). Nothing can be read or tested until the owner installs it. Then: a
+reader for its bundle / model / texture formats (new work, source-neutral so maps can use it
+later), one mask as the feasibility test, then the set. Same rule as for both Kane & Lynch games:
+assets stay on the owner's machine, never committed, never shared.
+
 ## Roadmap for a rewrite (only after the port works)
 Ghidra project of kl2.exe + kaneandlynch.exe, shared symbol/type database (classes, vtables,
 property schemas dumped at runtime by KLHook), then an owned-asset engine reading original files
