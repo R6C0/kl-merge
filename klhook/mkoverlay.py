@@ -159,12 +159,26 @@ def rename(text, names, suffix):
 
 
 HEISTER = 'KLHeister'
+# THE ENTRY COUNTS ARE THE RANGES of the three options (re\wardrobe.md 5a: a ToggleText shows child [value] and has
+# no value above its last child): klchar.c's KLC_NCHAR + 1, KLC_MASKS + 2 and KLC_OUTFITS must be these lengths.
+# Dog Days names: the game's own (.LOC FACharacters C1..C8). Dead Men names: its eight Fragile Alliance ranks
+# (.LOC Menu/Online/Profile/FragileAllianceRank_01..08; that rank n is the model Hero_0n is an ASSUMPTION for 3..8,
+# tools\kl_chars.py DM_NAMES).
 CHARACTERS = ['Game default', 'J.C.', 'Tommy', 'Pierre', 'Liam', 'Jean', 'Elwood', 'Bud', 'Mitchel',
-              'Kane', 'Lynch', 'Dead Men crew 1', 'Dead Men crew 2', 'Dead Men crew 3', 'Dead Men crew 4', 'Dead Men crew 5', 'Dead Men crew 6']      # klchar.c KLChar 0..16
-MASKS = ['Game option', 'No mask'] + ['Mask of %s' % c for c in CHARACTERS[1:9]]              # KLMask 0..9
-OUTFITS = ['Standard', 'Armoured (Dead Men only)']                                           # KLOutfit 0..1
+              'Kane', 'Lynch', 'Ashkanan (Dead Men)', 'Meldal (Dead Men)', 'Red (Dead Men)', 'Parker (Dead Men)',
+              'Standen (Dead Men)', 'Hutchison (Dead Men)']                                   # klchar.c KLChar 0..16
+# The masks have no names in the game (one material, Merc_Masks, one shared picture): named here by what
+# tools\kl_view.py masks shows (research\v_wardrobe\masks.png), with the heister who wears each in the stock game.
+MASK_LOOKS = ['Moustache', 'Black beard', 'Red opera', 'Orange face', 'Skull', 'Porcelain doll', 'Red and white opera', 'Blue opera']
+MASKS = ['Game option', 'No mask'] + ['%s - %s' % (m, c) for m, c in zip(MASK_LOOKS, CHARACTERS[1:9])]      # KLMask 0..9
+# The 24 looks of a Dead Men Fragile Alliance hero: armour (0..3) + 4 * shirt (0..1) + 8 * head (0..2), in the order
+# of tools\kl_chars.py outfit_name (the same words). A Dog Days body has one outfit and ignores the row.
+OUTFIT_ARMOUR = ['Plain clothes', 'Light vest', 'Tactical vest', 'Heavy armour']
+OUTFIT_SHIRT = ['', 'black shirt']
+OUTFIT_HEAD = ['', 'dark balaclava', 'black balaclava']
+OUTFITS = [', '.join(x for x in (a, sh, hd) if x) for hd in OUTFIT_HEAD for sh in OUTFIT_SHIRT for a in OUTFIT_ARMOUR]      # KLOutfit 0..23
 HEISTER_ROWS = (('KLH_Char', 'Character', 'KLChar', CHARACTERS), ('KLH_Mask', 'Mask', 'KLMask', MASKS), ('KLH_Outfit', 'Outfit', 'KLOutfit', OUTFITS))
-HEISTER_NOTE = 'Arcade Mode. Dead Men bodies and the masks of other heisters need a map built with the wardrobe.'
+HEISTER_NOTE = 'Arcade Mode. Dead Men bodies, their outfits and the masks of other heisters need a map built with the wardrobe. Outfits are for Dead Men bodies; the balaclava shades show on the six masked men.'
 
 
 def heister_window(nl):

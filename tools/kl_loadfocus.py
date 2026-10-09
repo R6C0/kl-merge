@@ -17,7 +17,7 @@ left alone. Passive otherwise: no input to the game, nothing written to the game
 ASSUMPTION: the game keeps loading and drawing while it is not the foreground window (the kept
 background runs did). If the game misbehaves, end this script: nothing else depends on it.
 """
-import ctypes, os, sys, time
+import ctypes, os, subprocess, sys, time
 import ctypes.wintypes as wt
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -33,6 +33,10 @@ u.GetWindowTextW.argtypes = [HWND, ctypes.c_wchar_p, ctypes.c_int]
 u.GetWindowThreadProcessId.argtypes = [HWND, ctypes.POINTER(wt.DWORD)]
 u.GetWindowThreadProcessId.restype = wt.DWORD
 u.AttachThreadInput.argtypes = [wt.DWORD, wt.DWORD, wt.BOOL]
+
+
+COVER = ("import tkinter as t; r = t.Tk(); r.title('KL load helper - closes by itself'); r.geometry('360x60+40+40'); "
+         "t.Label(r, text='Kane & Lynch is loading faster in the background...').pack(expand=True); r.after(600000, r.destroy); r.mainloop()")
 
 
 def game_window():
@@ -70,7 +74,7 @@ def main():
     until = time.time() + 3600 * (float(sys.argv[1]) if len(sys.argv) > 1 else 8.0)
     log = os.path.join(find(DD_GUESSES, DD_EXE), 'KLHook.log')
     at = os.path.getsize(log) if os.path.isfile(log) else 0
-    loading, t0 = False, 0.0
+    loading, t0, cover = False, 0.0, None
     while time.time() < until:
         time.sleep(0.25)
         try:
@@ -80,6 +84,8 @@ def main():
             if size == at:
                 if loading and time.time() - t0 > 420:        # never leave the game in the background for good
                     loading = False
+                    if cover:
+                        cover.terminate(); cover = None
                     print('%s no end of load after 420 s: game to the front: %s' % (time.strftime('%H:%M:%S'), to_front(game_window())), flush=True)
                 continue
             with open(log, 'rb') as f:
@@ -91,9 +97,19 @@ def main():
         for line in new.splitlines():
             if 'session: state 0x0 -> 0x12' in line and not loading:
                 loading, t0 = True, time.time()
-                print('%s load starts: shell to the front: %s' % (time.strftime('%H:%M:%S'), to_front(u.GetShellWindow())), flush=True)
+                ok = to_front(u.GetShellWindow())
+                if not ok or u.GetForegroundWindow() == game_window():
+                    # Windows refuses SetForegroundWindow from a background process (seen 2026-10-09:
+                    # False on every load). A window of a process started NOW does get the foreground:
+                    # a small helper window is opened for the time of the load and closed afterwards.
+                    cover = cover or subprocess.Popen([sys.executable.replace('python.exe', 'pythonw.exe'), '-c', COVER])
+                    ok = 'cover window'
+                print('%s load starts: game out of the foreground: %s' % (time.strftime('%H:%M:%S'), ok), flush=True)
             elif loading and ('session: state 0x12 -> 0x15' in line or 'KLHook loaded' in line or 'process ended' in line or 'exit:' in line):
                 loading = False
+                if cover:
+                    cover.terminate(); cover = None
+                    time.sleep(0.3)
                 print('%s load over after %.0f s: game to the front: %s' % (time.strftime('%H:%M:%S'), time.time() - t0, to_front(game_window())), flush=True)
 
 

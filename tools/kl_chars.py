@@ -16,10 +16,15 @@ Dead Men character MODELS on Dog Days characters (stage 2 groundwork; nothing he
                                                 DRAWN, and why (undrawn(); re/invisible.md): model, variant,
                                                 detail levels, materials without a compiled shader, emptied
                                                 mesh data, skeleton, room. --all: the table of everybody
-    python kl_chars.py wardrobe <base> <out folder> [--level=M01_FA_A] [--slot=F01]
+    python kl_chars.py wardrobe <base> <out folder> [--level=M01_FA_A] [--slot=F01] [--armour=0,1,2,3] [--fix-bones]
                                                 THE WARDROBE (re/wardrobe.md): the eight Dead Men heroes as extra
-                                                models, every body with every heister's mask as variants, and
-                                                KLWardrobe.ini for klhook\klchar.c; pictures: kl_view.py
+                                                models with all 24 Fragile Alliance looks, every body with every
+                                                heister's mask as variants, and KLWardrobe.ini for klhook/klchar.c;
+                                                <base> = a stock level or a FINISHED BUILD FOLDER (its side files -
+                                                KLJoin.ini ... - go along); --armour=0,3 leaves two body meshes
+                                                out (about 6.5 MB of .prm less); pictures: kl_view.py
+    python kl_chars.py looks [M01_FA_A ...]     the 24 variants of each Dead Men hero, part by part, and whether
+                                                the eight models are the same in every map
     install (a later LIVE agent, not this tool): python kl_graft.py install F01 --from <folder>
 
 WHAT A BUILD CHANGES (put(); everything else of the base level is byte for byte the base's)
@@ -354,10 +359,14 @@ class Lv:
             path, self.name = os.path.join(src, zips[0]), zips[0][:-9]
             self.beside = {f[len(self.name) + 5:]: os.path.join(src, f) for f in sorted(os.listdir(src))
                            if f.startswith(self.name + '_Main') and f != zips[0]}
+            # what else lies beside the archive (KLJoin.ini, graft.txt ...): carried along by write()
+            self.side = {f: os.path.join(src, f) for f in sorted(os.listdir(src))
+                         if not f.startswith(self.name + '_Main') and os.path.isfile(os.path.join(src, f))}
         else:
             import kl_graft
             path, self.name = J.level_zip(src, 'dd'), src
             self.beside = kl_graft.beside_of(src)
+            self.side = {}
         with zipfile.ZipFile(path) as z:
             self.order = z.namelist()
             self.files = {n: z.read(n) for n in self.order}
@@ -394,6 +403,9 @@ class Lv:
                 z.writestr(ren(n), self.files[n])
         for suffix, v in self.beside.items():
             shutil.copyfile(v, os.path.join(folder, slot + '_Main' + suffix))
+        for f, v in self.side.items():                  # KLJoin.ini and the like; a build's own notes are rewritten by the caller
+            if os.path.abspath(v) != os.path.abspath(os.path.join(folder, f)):
+                shutil.copyfile(v, os.path.join(folder, f))
         return path
 
 
@@ -562,6 +574,10 @@ def put(base, picks, free='add', union=True, log=print):
             renamed = reid(ex, sk, ids)
             if fb is None and free_here == 'alias' and FREE_NAME not in bone_names(ex, sk):
                 fb = 'bone id 33 -> GROUND' if alias_free_bone(ex, sk) else None
+            # the id each bone carries itself (definition +0x3e) must lead back to it through table [5]:
+            # a bullet mark looks the bone up that way (kl_impact; the builds made before needed its 'fix')
+            import kl_impact
+            kl_impact.sync_bone_ids(ex, [sk])
             # animation numbers of the destination; a name its table lacks is appended to the table
             number = anm_number(anm.bones)
             for s in bone_names(ex, sk):
@@ -641,19 +657,118 @@ def put(base, picks, free='add', union=True, log=print):
 # Every heister body with every mask, as VARIANTS of one model per character (module docstring, WARDROBE).
 MASKS = 8
 V_FACE, V_OWN = 1, 2                             # the two variants stock Dog Days sets (masks off / on)
-OUTFIT_STEP = 10                                 # variant = 10 * outfit + (1 face | 2 own mask | 2 + m mask m)
-DM_OUTFITS = ((1, 'standard'), (4, 'armoured'))  # Dead Men variant of each outfit: equipment level 0 and 3
+OUTFIT_STEP = 10                                 # variant = 10 * body + (1 face | 2 own mask | 2 + m mask m)
+# EVERY LOOK A DEAD MEN FRAGILE ALLIANCE HERO HAS (measured on the four FA maps, whose eight hero models are the
+# same objects in each: `python kl_chars.py looks`). A hero carries 24 variants,
+#       Dead Men variant = 1 + armour + 4 * shirt + 8 * head
+#   armour 0..3  the body mesh (Merc_Rank3_8): four meshes of growing vertex count. The game's own loading tip 13:
+#                'The better weapon pack you buy, the better tactical armour you get'.
+#   shirt  0..1  material playstyle_01a / playstyle_04 on the same mesh. Tip 4: 'Traitors spawn with a black shirt
+#                in the next round'. (Hero_06 has no such part: his two shirts are one look.)
+#   head   0..2  material multiplayer_headset01_Rank_01 / 02 / 03: on Kane and Lynch a 12-vertex earpiece, on the
+#                six others THE BALACLAVA (the whole head). Tip 10: 'Balaclavas show who is leading: the darker
+#                it is, the higher ...'.
+# An OUTFIT of the wardrobe is one of them: outfit = Dead Men variant - 1 (0..23); body = outfit % 8 (armour and
+# shirt), head = outfit // 8. A mask replaces the head, so the head choice only shows with the hero's own face:
+#       face, head 0       variant = 10 * body + 1                       1, 11 .. 71
+#       own mask / mask m  variant = 10 * body + 2 / + 2 + m             2..10, 12..20 .. 72..80
+#       face, head 1 / 2   variant = HEAD_BASE + 8 * (head - 1) + body   81..96
+# 96 variants, all below 128 (the variant is a byte in the mesh object; whether the engine reads it signed was
+# not looked up, so the numbering stays where the sign cannot matter). KLWardrobe.ini Version 2; klchar.c holds
+# the same formula.
+DM_ARMOUR = ('Plain clothes', 'Light vest', 'Tactical vest', 'Heavy armour')     # names: by the look in kl_view (re/wardrobe.md)
+DM_SHIRT = ('', 'black shirt')
+DM_HEADS = ('', 'dark balaclava', 'black balaclava')
+# THE SHIRT AND HEAD CHOICES ARE NOT IN DEAD MEN'S FILES AS PICTURES: playstyle_01a and playstyle_04 are the same
+# material instance but for the name, and so are multiplayer_headset01_Rank_01 / 02 / 03 (02 / 03 differ from 01
+# in the cull mode only) - same textures, same constants (compared node by node on M01_FA_A). Dead Men's code
+# must colour them at run time by which material it is (the loading tips say what the player saw); Dog Days'
+# exe has no such code, so all 24 variants would be drawn as 4. TINT makes the difference real the only way a
+# level file can: the material gets a DARKENED COPY of its diffuse texture (one texture each, in the .TEX; the
+# .prm does not grow). ASSUMPTION: the shades - Dead Men's own values are not in its level files.
+TINT = (('playstyle_04', 0.16), ('multiplayer_headset02', 0.50), ('multiplayer_headset03', 0.22))
+DM_BODIES = len(DM_ARMOUR) * len(DM_SHIRT)       # 8
+DM_LOOKS = DM_BODIES * len(DM_HEADS)             # 24 = the Dead Men variants 1..24
+HEAD_BASE = OUTFIT_STEP * DM_BODIES + 1          # 81
 DM_HEAD = ('head', 'hair', 'eyelash', 'eye_', 'headset', 'glass')    # Dead Men materials a mask replaces
-DM_NAMES = ('Kane', 'Lynch', 'Dead Men crew 1', 'Dead Men crew 2', 'Dead Men crew 3', 'Dead Men crew 4',
-            'Dead Men crew 5', 'Dead Men crew 6')
+# The names of Dead Men's eight Fragile Alliance ranks, from its own .LOC (AllLevels/Menu/Online/Profile/
+# FragileAllianceRank_01..08: 'Kane, no1 of The7', 'Lynch, Psycho7', 'Ashkanan, no2 of The7' ... 'Hutchison, no7
+# of The7'). ASSUMPTION: rank n is the model Hero_0n - true for 01 and 02 by their head materials (Hero = Kane,
+# Little = Lynch); nothing in the level files ties 03..08 to a name.
+DM_NAMES = ('Kane', 'Lynch', 'Ashkanan', 'Meldal', 'Red', 'Parker', 'Standen', 'Hutchison')
 DD_NAMES = ('J.C.', 'Tommy', 'Pierre', 'Liam', 'Jean', 'Elwood', 'Bud', 'Mitchel')    # .LOC FACharacters C1..C8
 HERO = 'Heroes!Hero_%02d\\Ground'
 MAX_REST = 0.3                                   # a bone of two skeletons is 'the same' when its rest matrices agree to this
 
 
+def _darker(entry, k, ident):
+    """A copy of a texture record (kl_tex docstring) with every colour multiplied by k and the id `ident`.
+    DXT1 / DXT3 / DXT5 only: the two 565 end colours of each block are scaled; where that reverses their order
+    (which selects the block's mode in DXT1) they are swapped and the indices with them. The name keeps its
+    length (the last character becomes '~': nothing is known to look a texture up by name, but two records with
+    one name need not exist either)."""
+    size, f1 = struct.unpack_from('<I4s', entry, 0)
+    if f1 not in (b'1TXD', b'3TXD', b'5TXD'):
+        raise ValueError('texture %d is %r: only DXT1 / DXT3 / DXT5 can be darkened' % (struct.unpack_from('<I', entry, 12)[0], f1))
+    mips = struct.unpack_from('<I', entry, 20)[0]
+    e = bytearray(entry)
+    struct.pack_into('<I', e, 12, ident)
+    q = e.index(b'\0', 36)
+    e[q - 1] = ord('~')
+    q += 1
+    step, off = (8, 0) if f1 == b'1TXD' else (16, 8)
+    sc = lambda c: (int((c >> 11) * k + 0.5) << 11) | (int(((c >> 5) & 63) * k + 0.5) << 5) | int((c & 31) * k + 0.5)
+    for _m in range(mips):
+        n = struct.unpack_from('<I', e, q)[0]
+        for o in range(q + 4 + off, q + 4 + n - 7, step):
+            c0, c1, bits = struct.unpack_from('<HHI', e, o)
+            d0, d1 = sc(c0), sc(c1)
+            four = c0 > c1 or step == 16
+            if four and d0 == d1 and step == 8:
+                bits = 0                                 # one colour left: every pixel takes it (index 3 would turn transparent)
+            elif (d0 > d1) != (c0 > c1) and d0 != d1:
+                d0, d1 = d1, d0                          # order reversed: swap the ends, and 0 <-> 1 (2 <-> 3 in four-colour mode)
+                bits = sum(((x ^ 1) if (four or x < 2) else x) << (2 * i) for i in range(16) for x in [(bits >> (2 * i)) & 3])
+            struct.pack_into('<HHI', e, o, d0, d1, bits)
+        q += 4 + n
+    return bytes(e)
+
+
+def tint(mat, tex, slots, log=print):
+    """TINT on the material slots given: each named material gets a darkened copy of its diffuse texture under a
+    new texture id. Returns {material name: (old texture, new texture, factor)}."""
+    out = {}
+    for s in sorted(slots):
+        nm = mat.insts[s].name.split('/')[-1]
+        k = dict(TINT).get(nm)
+        if k is None:
+            continue
+        for path, node in T.walk(mat.insts[s].root):
+            if node[0] == 'TEXT' and any(c[0] == 'NAME' and c[3].rstrip(b'\0') == b'mapDiffuse' for c in node[3]):
+                txid = next(c for c in node[3] if c[0] == 'TXID')
+                old = txid[3]
+                if old not in tex.tex or tex.tex[old].frames is not None or tex.tex[old].faces:
+                    raise ValueError('material %s: its diffuse texture %d is not a plain picture' % (nm, old))
+                new = next(i for i in range(128, tex.slots) if i not in tex.tex)
+                tex.tex[new] = T.Texture(_darker(tex.tex[old].entry, k, new), group=tex.tex[old].group)
+                txid[3] = new
+                out[nm] = (old, new, k)
+    return out
+
+
 def variant_of(outfit, mask):
-    """mask: 0 = the character's own face, 1..8 = that heister's mask, -1 = 'own' (the stock toggle's 2)."""
-    return OUTFIT_STEP * outfit + (V_FACE if mask == 0 else V_OWN if mask < 0 else V_OWN + mask)
+    """outfit: 0..23 (0 on a Dog Days body); mask: 0 = the character's own face, 1..8 = that heister's mask,
+    -1 = 'own' (the stock toggle's 2)."""
+    body, head = outfit % DM_BODIES, outfit // DM_BODIES
+    if mask == 0 and head:
+        return HEAD_BASE + DM_BODIES * (head - 1) + body
+    return OUTFIT_STEP * body + (V_FACE if mask == 0 else V_OWN if mask < 0 else V_OWN + mask)
+
+
+def outfit_name(outfit):
+    """The label of a Dead Men outfit (mkoverlay.py's Outfit row prints the same list)."""
+    a, sh, hd = outfit % 4, outfit // 4 % 2, outfit // DM_BODIES
+    return ', '.join(x for x in (DM_ARMOUR[a], DM_SHIRT[sh], DM_HEADS[hd]) if x)
 
 
 def _palette(p, o):
@@ -725,7 +840,10 @@ def _moved(p, o, fit, variant, note):
                 note['rest'], note['worst'] = fit.rest[b], '%s of object %d' % (fit.names[b], o)
             note['by_bone'][fit.names[b]] = max(note['by_bone'].get(fit.names[b], 0.0), fit.rest[b])
         nr, chunk = _runs(new)
-        c = _put(c, 0x38, '<II', nr, _new(p, chunk))
+        cache = note.setdefault('runs', {})            # one chunk per distinct palette: a mask is copied 9 x 8 times a body
+        if chunk not in cache:
+            cache[chunk] = _new(p, chunk)
+        c = _put(c, 0x38, '<II', nr, cache[chunk])
     i = _new(p, c); p.refs[i] = p.refs[o]
     return i
 
@@ -735,19 +853,34 @@ def _set_objects(p, root, objs):
     p.chunks[root] = _put(p.chunks[root], 0x14, '<II', len(objs), _new(p, _pad(struct.pack('<%dI' % len(objs), *objs))))
 
 
-def wardrobe(base, level='M01_FA_A', free='add', log=print):
+def wardrobe(base, level='M01_FA_A', free='add', log=print, armour=(0, 1, 2, 3), fix_bones=False):
     """base: Lv of a Dog Days level with the eight stock heisters (edited in place). Returns the report:
-    report['characters'] = 16 dicts (name, root, slot, outfits), report['roots'] = the sixteen model roots."""
+    report['characters'] = 16 dicts (name, root, slot, outfits), report['roots'] = the sixteen model roots.
+    armour: the Dead Men armour levels whose body meshes join the file (each costs 2.9 - 4.9 MB of .prm over the
+    eight heroes, `python kl_chars.py wardrobe` prints it). A level left out keeps its variant numbers and is drawn
+    with the nearest lower level that is in, so every outfit the menu offers shows a body in every build.
+    fix_bones: also repair the bone-id bytes of the BASE's own skeletons (kl_impact.sync_bone_ids on the whole
+    file - what `kl_impact.py fix` does; a base grafted before 2026-10-09 18:00 needs it)."""
+    armour = sorted(set(armour))
+    if not armour or armour[0] != 0 or armour[-1] > 3:
+        raise ValueError('armour levels: 0 (the suit) must be in, 3 is the highest')
+    stand_in = lambda v: 1 + max(a for a in armour if a <= (v - 1) % 4) + 4 * ((v - 1) // 4)     # Dead Men variant drawn for variant v
     sc, raw = base.scene()
     old = [person(sc, find_node(sc, HERO % n))[0] for n in range(1, 9)]
     if len(set(old)) != 8:
         raise ValueError('%s: the eight heisters do not have eight models (%r) - already a wardrobe build?' % (base.name, old))
     # 1. the eight Dead Men heroes join the file with their own skeletons, as nobody's model yet
-    rep = put(base, [Pick((), level, HERO % n, {k + 1: v for k, (v, _n) in enumerate(DM_OUTFITS)}, old[n - 1]) for n in range(1, 9)], free=free, log=log)
+    size0 = len(base['.prm'])
+    rep = put(base, [Pick((), level, HERO % n, {v: stand_in(v) for v in range(1, DM_LOOKS + 1)}, old[n - 1]) for n in range(1, 9)], free=free, log=log)
+    size1 = len(base['.prm'])
     dm = [r['new_model'] for r in rep['picks']]
     sc, raw = base.scene(); raw = bytearray(raw)
     models = gms_models(raw)
     p, mat = G.read(base['.prm'], 'dd'), T.read_mat(base['.MAT'])
+    tex = T.read_tex(base['.TEX'])
+    tints = tint(mat, tex, rep['new_material_slots'], log)
+    if len(tints) != len(TINT):
+        raise ValueError('the shirt / balaclava materials were not all found (%r): are these Dead Men\'s FA heroes?' % sorted(tints))
     oct_s = O.Oct.parse(base['.oct'])
     mname = lambda o: mat.insts[p.u16(o, 0x12)].name.split('/')[-1].lower()
     # 2. the parts. Dog Days: variant 1 is the face look; variant 2 is mask + masked body (+ the bag)
@@ -764,13 +897,17 @@ def wardrobe(base, level='M01_FA_A', free='add', log=print):
         if {p.chunks[o][0x0e] for o in mask[n]} != {1, 2, 0x7c} or not bag[n]:
             raise ValueError('heister %d: mask or bag objects are not what this tool knows' % (n + 1))
     dbody, dhead = {}, {}
+    part = lambda o: (p.chunks[o][0x0e], p.u16(o, 0x12), p.u32(o, 0x28))        # what an object draws: detail, material, geometry
     for n in range(8):
-        for k in range(len(DM_OUTFITS)):
+        for k in range(DM_LOOKS):
             objs = [o for o in objects(p, dm[n]) if p.chunks[o][0x0f] == k + 1]
             dhead[n, k] = [o for o in objs if any(s in mname(o) for s in DM_HEAD)]
             dbody[n, k] = [o for o in objs if o not in dhead[n, k]]
             if {p.chunks[o][0x0e] for o in dbody[n, k]} != {1, 2, 0x7c}:
                 raise ValueError('Dead Men hero %d outfit %d: no body at every level of detail' % (n + 1, k))
+            # the numbering this tool relies on: the body is the same whatever the head choice
+            if sorted(map(part, dbody[n, k])) != sorted(map(part, dbody[n, k % DM_BODIES])):
+                raise ValueError('Dead Men hero %d: the body of variant %d is not that of variant %d' % (n + 1, k + 1, k % DM_BODIES + 1))
     skel_dd, skel_dm = [skeleton(p, r) for r in old], [skeleton(p, r) for r in dm]
     # 3. the new models
     chars, note = [], dict(low=0, inexact=0, rest=0.0, worst='', by_bone={})
@@ -790,7 +927,7 @@ def wardrobe(base, level='M01_FA_A', free='add', log=print):
             raise ValueError('heister %d: its .oct record is not an empty tree' % (n + 1))
         oct_s.records.append(O.Record(r.vtable, r.pointer, O.Tree(r.tree.origin, r.tree.scale, [list(x) for x in r.tree.nodes], [], r.tree.fill)))
         new_dd.append(root)
-        chars.append(dict(name=DD_NAMES[n], game='dd', slot=n, root=root, outfits=1, objects=len(objs), bones=p.u32(skel_dd[n], 0)))
+        chars.append(dict(name=DD_NAMES[n], game='dd', slot=n, root=root, outfits=1, bodies=1, heads=1, objects=len(objs), bones=p.u32(skel_dd[n], 0)))
     refs1 = oct_s.record_refs()
     if refs1[:len(refs0)] != refs0:
         raise ValueError('appending .oct records moved the base level\'s records')
@@ -800,18 +937,20 @@ def wardrobe(base, level='M01_FA_A', free='add', log=print):
         own = _Fit(p, skel_dm[n], skel_dm[n])
         fbag = _Fit(p, skel_dd[n], skel_dm[n])
         objs = []
-        for k in range(len(DM_OUTFITS)):
-            carry = [o for o in bag[n]]
+        carry = [o for o in bag[n]]
+        fits = {m: _Fit(p, skel_dd[m], skel_dm[n]) for m in range(8)}
+        for k in range(DM_LOOKS):                     # own face: every armour, shirt and head
             objs += [_moved(p, o, own, variant_of(k, 0), note) for o in dbody[n, k] + dhead[n, k]]
             objs += [_moved(p, o, fbag, variant_of(k, 0), note) for o in carry]
+        for k in range(DM_BODIES):                    # masked: every armour and shirt (the mask is the head)
             for m in [-1] + list(range(8)):           # 'own' (what the stock mask toggle asks for) = mask n
                 v = variant_of(k, m + 1 if m >= 0 else -1)
-                fit = _Fit(p, skel_dd[n if m < 0 else m], skel_dm[n])
                 objs += [_moved(p, o, own, v, note) for o in dbody[n, k]]
-                objs += [_moved(p, o, fit, v, note) for o in mask[n if m < 0 else m]]
+                objs += [_moved(p, o, fits[n if m < 0 else m], v, note) for o in mask[n if m < 0 else m]]
                 objs += [_moved(p, o, fbag, v, note) for o in carry]
         _set_objects(p, dm[n], objs)
-        chars.append(dict(name=DM_NAMES[n], game='dm', slot=n, root=dm[n], outfits=len(DM_OUTFITS), objects=len(objs), bones=p.u32(skel_dm[n], 0)))
+        chars.append(dict(name=DM_NAMES[n], game='dm', slot=n, root=dm[n], outfits=DM_LOOKS, bodies=DM_BODIES, heads=len(DM_HEADS),
+                          objects=len(objs), bones=p.u32(skel_dm[n], 0)))
     if note['rest'] > MAX_REST:
         raise ValueError('a moved object\'s bone rests %.2f units from where it did (limit %.1f): %s; per bone %r' % (
             note['rest'], MAX_REST, note['worst'], sorted(((round(v, 2), k) for k, v in note['by_bone'].items() if v > 0.3), reverse=True)))
@@ -827,13 +966,21 @@ def wardrobe(base, level='M01_FA_A', free='add', log=print):
             us[lab.index('ZGEOM[4]')] = [(us[lab.index('ZGEOM[4]')][0][0], struct.pack('<I', new))]
             node['props'] = [node['props'][0]] + [t for u in us for t in u] + [node['props'][-1]]
             moved.append((sc.path[k][5:], was, new))
+    fixed = 0
+    if fix_bones:
+        import kl_impact
+        fixed = kl_impact.sync_bone_ids(p)
     prm_bytes = G.write(p)
     mat.refs = T.material_refs(prm_bytes)
     base['.prm'], base['.MAT'], base['.oct'] = prm_bytes, T.write_mat(mat), oct_s.pack()
+    base['.TEX'] = T.write_tex(tex)
     base['.gms'], base['.prp'] = kl_gms.pack(bytes(raw)), sc.p.serialize()
     rep.update(characters=chars, roots=[c['root'] for c in chars], stock_roots=old, retargeted=moved, level=level,
                bones_folded_for_low_detail=note['low'], bones_on_an_ancestor=note['inexact'], largest_rest_distance=round(note['rest'], 3),
-               chunks=(rep['chunks'][0], len(p.chunks) - 1), prm_bytes=(rep['prm_bytes'][0], len(prm_bytes)))
+               chunks=(rep['chunks'][0], len(p.chunks) - 1), prm_bytes=(rep['prm_bytes'][0], len(prm_bytes)),
+               armour=armour, base_bone_ids_repaired=fixed, tints={k: list(v) for k, v in tints.items()}, textures=(rep['textures'][0], len(tex.tex)),
+               cost=dict(dead_men_models=size1 - size0, looks=len(prm_bytes) - size1, total=len(prm_bytes) - size0,
+                         objects=sum(c['objects'] for c in chars)))
     return rep
 
 
@@ -842,10 +989,13 @@ def wardrobe_ini(rep, path):
     (the model roots are chunk numbers of this build's .prm)."""
     with open(path, 'w', newline='\r\n') as f:
         f.write('; written by tools/kl_chars.py wardrobe - belongs to the level archive beside it (klhook\\klchar.c)\n')
-        f.write('; variant of a look = %d * outfit + (1 own face | 2 own mask | 2 + m mask of heister m)\n' % OUTFIT_STEP)
-        f.write('[Wardrobe]\nVersion=1\nCharacters=%d\nMasks=%d\nOutfitStep=%d\n' % (len(rep['characters']), MASKS, OUTFIT_STEP))
+        f.write('; outfit = body + Bodies * head (a Dead Men body: body = armour 0..3 + 4 * shirt 0..1, head 0..2)\n')
+        f.write('; variant of a look = %d * body + (1 own face | 2 own mask | 2 + m mask of heister m);\n' % OUTFIT_STEP)
+        f.write(';                     own face with head 1.. = HeadBase + Bodies * (head - 1) + body\n')
+        f.write('[Wardrobe]\nVersion=2\nCharacters=%d\nMasks=%d\nOutfitStep=%d\nHeadBase=%d\n' % (len(rep['characters']), MASKS, OUTFIT_STEP, HEAD_BASE))
         for i, c in enumerate(rep['characters'], 1):
-            f.write('[Character.%d]\nName=%s\nRoot=%d\nSlot=%d\nOutfits=%d\nStock=%d\n' % (i, c['name'], c['root'], c['slot'], c['outfits'], c['game'] == 'dd'))
+            f.write('[Character.%d]\nName=%s\nRoot=%d\nSlot=%d\nOutfits=%d\nBodies=%d\nHeads=%d\nStock=%d\n' % (
+                i, c['name'], c['root'], c['slot'], c['outfits'], c['bodies'], c['heads'], c['game'] == 'dd'))
 
 
 def check_wardrobe(lv, rep):
@@ -869,7 +1019,9 @@ def check_wardrobe(lv, rep):
             top = max(v[52 * k + 24 + j] for k in range(p.u32(d, 0)) for j in range(4))
             if top // 3 >= len(bones):
                 bad.append('%s: object %d: a vertex names palette entry %d of %d' % (c['name'], o, top // 3, len(bones)))
-        want = {variant_of(k, m) for k in range(c['outfits']) for m in range(-1, MASKS + 1)}
+        want = {variant_of(k, 0) for k in range(c['outfits'])} | {variant_of(k, m) for k in range(c['bodies']) for m in range(-1, MASKS + 1)}
+        if max(want) > 127:
+            bad.append('%s: variant %d does not fit below 128' % (c['name'], max(want)))
         if set(have) != want:
             bad.append('%s: variants %r, expected %r' % (c['name'], sorted(have), sorted(want)))
         for v, lods in sorted(have.items()):
@@ -955,6 +1107,8 @@ def check(lv, stock=None, roots=None, log=print, extra=()):
     # skeletons against the .ANM
     anm = kl_anm.Anm(lv['.ANM'], 'dd')
     bad += check_bones(p, anm.bones, roots)
+    import kl_impact                                  # the two bone-id tables of every skeleton agree (bullet marks)
+    bad += kl_impact.bone_faults(p)
     # variants: a person must have something to draw under its own variant, a heister also under 1 and 2
     lab = J.labels('dd', 'ZFFPlayer')
     for k in range(1, len(sc.nodes)):
@@ -1198,6 +1352,43 @@ def survey(maps=FA_MAPS, log=print):
     return out
 
 
+def looks(maps=FA_MAPS, log=print):
+    """The variants of the eight Dead Men heroes, part by part (nearest detail level), and a digest of each model
+    per map: the same digest in every map = no per-map difference. Returns {map: [digest per hero]}."""
+    import hashlib
+    out = {}
+    for lvn in maps:
+        sc = J.Scene.load(lvn, 'dm')
+        with zipfile.ZipFile(J.level_zip(lvn, 'dm')) as z:
+            nm = {n.rsplit('.', 1)[-1].lower(): n for n in z.namelist() if '_main.' in n.lower()}
+            p, mat = G.read(z.read(nm['prm']), 'dm'), T.read_mat(z.read(nm['mat']))
+        out[lvn] = []
+        for n in range(1, 9):
+            root = person(sc, find_node(sc, HERO % n))[0]
+            per, h = collections.OrderedDict(), hashlib.md5()
+            for o in objects(p, root):
+                c = p.chunks[o]
+                d = p.u32(p.u32(o, 0x28), 0)
+                h.update(bytes([c[0x0e], c[0x0f]]) + mat.insts[p.u16(o, 0x12)].name.encode() + struct.pack('<I', p.u32(d, 0)) + (p.chunks[p.u32(d, 4)] or b''))    # the vertex data
+                if c[0x0e] == 1:
+                    per.setdefault(c[0x0f], []).append((mat.insts[p.u16(o, 0x12)].name.split('/')[-1], p.u32(d, 4), p.u32(d, 0)))
+            out[lvn].append(h.hexdigest()[:12])
+            if lvn != maps[0]:
+                continue
+            parts = {}
+            for v in sorted(per):
+                for x in per[v]:
+                    parts.setdefault(x, chr(ord('a') + len(parts)))
+            log('Hero_%02d (%s), root %d of %s: parts at the nearest detail level' % (n, DM_NAMES[n - 1], root, lvn))
+            for x, k in parts.items():
+                log('    %s = %-30s %5d vertices' % (k, x[0], x[2]))
+            for v in sorted(per):
+                log('    variant %2d = outfit %2d (%-34s): %s' % (v, v - 1, outfit_name(v - 1), ' '.join(sorted(parts[x] for x in per[v]))))
+    for lvn in maps:
+        log('%s: model digests %s%s' % (lvn, ' '.join(out[lvn]), '' if out[lvn] == out[maps[0]] else '   <- DIFFERS from ' + maps[0]))
+    return out
+
+
 def _span(v):
     return '%d..%d' % (v[0], v[-1]) if len(v) > 2 and v == list(range(v[0], v[-1] + 1)) else ','.join(map(str, v))
 
@@ -1332,6 +1523,8 @@ if __name__ == '__main__':
     a = [x for x in a if not x.startswith('--')]
     if a[:1] == ['survey']:
         survey(a[1:] or FA_MAPS)
+    elif a[:1] == ['looks']:
+        looks(a[1:] or FA_MAPS)
     elif a[:1] == ['bones']:
         sys.exit(1 if bones_proof() else 0)
     elif a[:1] == ['pose']:
@@ -1352,20 +1545,39 @@ if __name__ == '__main__':
         level = next((x.split('=')[1] for x in sys.argv[1:] if x.startswith('--level=')), 'M01_FA_A')
         lv, stock = Lv(a[1]), Lv(a[1])
         slot = next((x.split('=')[1] for x in sys.argv[1:] if x.startswith('--slot=')), lv.name)
-        rep = wardrobe(lv, level, free=free)
+        arm = next((x.split('=')[1] for x in sys.argv[1:] if x.startswith('--armour=')), '0,1,2,3')
+        import kl_impact
+        # what the base has wrong before anything is added (an old graft's map skeletons): told apart from the new
+        before = set(kl_impact.bone_faults(G.read(stock['.prm'], 'dd'))) | {'people: ' + x for x in undrawn(stock)}
+        rep = wardrobe(lv, level, free=free, armour=[int(x) for x in arm.split(',')], fix_bones='--fix-bones' in sys.argv)
         for c in rep['characters']:
-            print('  %-16s slot %d  model %5d  %3d bones  %3d objects  %d outfit(s)' % (c['name'], c['slot'] + 1, c['root'], c['bones'], c['objects'], c['outfits']))
+            print('  %-16s slot %d  model %5d  %3d bones  %4d objects  %2d outfit(s)' % (c['name'], c['slot'] + 1, c['root'], c['bones'], c['objects'], c['outfits']))
         print('  .prm %d -> %d chunks, %.1f -> %.1f MB; %d heisters / bots re-pointed; bones folded for low detail %d, on an ancestor %d, largest rest distance %.3f' % (
             rep['chunks'] + tuple(x / 1e6 for x in rep['prm_bytes']) + (len(rep['retargeted']), rep['bones_folded_for_low_detail'], rep['bones_on_an_ancestor'], rep['largest_rest_distance'])))
+        print('  cost in the .prm: the eight Dead Men models (armour levels %s of 0..3; all %d looks numbered) %.2f MB, the mask / outfit variants of all sixteen %.2f MB (%d mesh objects)' % (
+            rep['armour'], DM_LOOKS, rep['cost']['dead_men_models'] / 1e6, rep['cost']['looks'] / 1e6, rep['cost']['objects']))
+        if rep['base_bone_ids_repaired']:
+            print('  --fix-bones: %d bone-id bytes of the base\'s own skeletons repaired' % rep['base_bone_ids_repaired'])
         bad = check_wardrobe(lv, rep)
         for b in bad[:20]:
             print('  PROBLEM: ' + b)
-        bad += check(lv, None, rep['roots'], extra=rep['roots'])
+        quiet = lambda *x: None
+        rest = check(lv, None, rep['roots'], log=lambda t: print(t) if 'PROBLEM' not in t else None, extra=rep['roots'])
+        rest += ['people: ' + x for x in undrawn(lv)]     # everybody an entity names (the heisters on their new roots too)
+        old = [b for b in rest if b in before]
+        new = [b for b in rest if b not in before]
+        for b in new[:20]:
+            print('  PROBLEM: ' + b)
+        if old:
+            print('  the BASE had %d of these faults before the wardrobe (not counted; --fix-bones repairs bone ids), e.g. %s' % (len(old), old[0][:150]))
+        bad += new
+        if os.path.isdir(a[1]) and os.path.abspath(a[1]) == os.path.abspath(a[2]):
+            raise SystemExit('the out folder is the build folder: give another one (the build is not written over)')
         path = lv.write(a[2], slot)
         wardrobe_ini(rep, os.path.join(a[2], 'KLWardrobe.ini'))
         import json
         with open(os.path.join(a[2], 'chars.json'), 'w') as fh:
-            json.dump(dict(base=a[1], slot=slot, free=free, problems=bad, **rep), fh, indent=1, default=str)
+            json.dump(dict(base=a[1], slot=slot, free=free, problems=bad, base_problems=old, **rep), fh, indent=1, default=str)
         print('built %s (%.0f MB) + KLWardrobe.ini, problems: %d' % (path, os.path.getsize(path) / 1e6, len(bad)))
         sys.exit(1 if bad else 0)
     elif a[:1] == ['check'] and len(a) > 1:
