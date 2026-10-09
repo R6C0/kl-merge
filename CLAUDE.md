@@ -409,6 +409,10 @@ Owner's design for it (2026-10-09), to be followed as given:
 - Part 2 (lobby/street): out through the front entrance, down the road to a VAN, and escape.
   Mood reference: the street shoot-out in the film Heat.
 - I am to design how the two parts join. Its level music plays.
+- OWNER, 2026-10-09 22:00, after playing the wardrobe build: guards good, blast and shake 'amazing',
+  police show up, the armour shows. LOOT PROPS: briefcases (not bags) in the start room; the stacks
+  on the left side from spawn cannot be picked up - move them closer to the outer ring; the statue
+  loot gets a fitting prop instead of a bag (agent y-loot). Execute not tried yet.
 - OWNER, 2026-10-09 18:40, after playing the balcony start: the blast must be more VOLATILE,
   'like the subway one in the original game when u start in': it does the explosion but there is
   no smoke and no camera shake. Wanted: smoke / dust, debris, shake (agent t-blast).
