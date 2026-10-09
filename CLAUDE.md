@@ -182,7 +182,13 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
-LIVE RUNS ARE PAUSED (owner, 2026-10-09 17:15): the owner is playing. Test runs take the game
+LIVE RUNS: RESUMED IN PART (owner, 2026-10-09 18:45: 'crack on' with the wardrobe, re/wardrobe.md, and
+the gfx note). One live agent (u-live) runs between the owner's sessions, never while kl2.exe is
+already running, and puts the owner's Retomoto build + SHIP hook back after every run. The gfx test
+run (install of KLGfx d3d9.dll) was REFUSED by the permission classifier: the owner can run the two
+.bat files themselves; the GPU self-test ran (4 PASS, 2 FAIL: zero model changes the picture by 8,
+limit 3; network 8.6 ms at 1080p, 13.7 ms at 1440p on the RTX 4070 Ti).
+EARLIER NOTE - LIVE RUNS WERE PAUSED (owner, 2026-10-09 17:15): the owner is playing. Test runs take the game
 (one kl2.exe, one F01 slot, a test hook that blocks the real keyboard and mouse), so NO agent
 launches the game, swaps the hook or installs into the slot until the owner says to resume.
 Offline work only. The scheduled wake-up prompt's "install / autotest" steps do not apply while
