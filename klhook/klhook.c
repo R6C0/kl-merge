@@ -535,6 +535,7 @@ static void __cdecl klh_w__exit(int code) { klog("exit: _exit(%d)", code); klx_e
 
 static void klh_tick(int game_thread);
 #include "klmem.c"
+#include "klnudge.c"
 #include "klfix.c"
 #include "kljoin.c"
 #include "klchar.c"
@@ -644,6 +645,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     if (GetPrivateProfileIntA("KLHook", "Tick", 1, klh_ini)) n += klh_iat("steam_api.dll", "SteamAPI_RunCallbacks", (void *)klh_w_runcallbacks, (void **)&klh_real_runcallbacks);
     klog("core: %d import slot(s) wrapped (ExitProcess %s, SteamAPI_RunCallbacks %s); EndOnFatal=%d", n, klh_real_exitprocess ? "yes" : "no", klh_real_runcallbacks ? "yes" : "no", klh_end_on_fatal);
     klm_init();
+    kln_init();
     klf_init();
     klj_init();
     klc_init();
