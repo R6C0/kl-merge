@@ -70,15 +70,22 @@ kl2.exe (32-bit, D3D9)                         klnr.exe (64-bit, Vulkan, OpenDLS
   to find the HUD's first draw and run the bridge just before it.
 - Reference counts: the proxy counts references on its own wrapper; when the game lets go of it, the bridge's
   surfaces are released first (each holds a device reference), so the device is destroyed as without the proxy.
-- Thread safety: the game's device is D3DCREATE_MULTITHREADED; the shader table and capture state are locked
-  (0.1 had a data race there).
+- Thread safety: the game's device is D3DCREATE_MULTITHREADED. Nothing keeps pointers to the game's objects
+  between calls: the capture asks the device for its bindings and reads shader bytecode with GetFunction, under
+  one lock (0.1 kept a shader table without a lock and scanned every token of every shader at creation, which
+  could run past the end of the code).
+- Address space: the shared frame view is mapped at the top of the address space (MapViewOfFileEx), away from
+  the bottom-up region the game's large scene-file blocks come from; F9 off and any switch-off give both the view
+  and the system-memory surface back. Until the bridge has been seen on a grafted map, test it on stock levels.
+- Device lost (alt-tab from full screen): frames are skipped until the Reset, the bridge stays on. A result that
+  arrives after the timeout is never mixed into the next frame (the client waits for it to finish first).
 
 ## Tested (2026-10-09, cloud, Wine 9.0 + Xvfb + Mesa llvmpipe/lavapipe; `test_wine.sh`)
 
 - klnr.exe --selftest, no model, 640x480: round trip exact (largest channel difference 0); test pattern right.
 - 64-bit and 32-bit stand-in games through klnr.exe: exact round trip, frame growth (new frame section +
   helper resize), test pattern.
-- 32-bit D3D9 program with KLGfx 0.2 as its d3d9.dll (like kl2.exe): frames come back processed, Reset to a new
+- 32-bit D3D9 program with KLGfx 0.3 as its d3d9.dll (like kl2.exe): frames come back processed, Reset to a new
   size, a second thread creating ~550,000 shaders/textures while frames are captured, device released cleanly.
 - Failure paths: helper missing (NR off, program goes on), helper killed mid-run (noticed, goes on), NR off,
   mode 0.
@@ -96,4 +103,6 @@ A run with KLGfx installed is not a clean graft run: remove it before crash tria
 
 - KLGfx 0.1 ran once in the game (2026-10-09 11:07, mode 1): device made, then that run hit the
   out-of-address-space fault above. Disabled since (renamed to `d3d9.dll.klgfx`; INSTALL deletes that file).
-- KLGfx 0.2 + klnr.exe 0.1: built, tested as above, staged on the PC, not installed.
+- KLGfx 0.3 + klnr.exe 0.1: built, tested as above (an independent review of 0.2 found the issues fixed in 0.3:
+  shader scan past the end of the code, dangling pointers in the capture, wrapper lifetimes, lost device,
+  late results racing the next frame, session restart), staged on the PC, not installed.

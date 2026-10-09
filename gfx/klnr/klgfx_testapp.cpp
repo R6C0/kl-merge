@@ -16,9 +16,11 @@ static IDirect3DDevice9 *g_dev;
 
 // vs_2_0: dcl_position v0; mov oPos, v0
 static const DWORD kVs[] = {0xFFFE0200, 0x0200001F, 0x80000000, 0x900F0000, 0x02000001, 0xC00F0000, 0x90E40000, 0x0000FFFF};
-// ps_2_0: def c0, 1, 0, 0, 1; mov oC0, c0
-static const DWORD kPs[] = {0xFFFF0200, 0x05000051, 0xA00F0000, 0x3F800000, 0x00000000, 0x00000000, 0x3F800000,
+// ps_2_0: def c0, 0.9999999, 0, 0, 1; mov oC0, c0. The red value's bits (0x3F7FFFFE) look like a comment token,
+// which made KLGfx 0.1's shader scan run past the end of the code: bound during the capture, it must be parsed safely.
+static const DWORD kPs[] = {0xFFFF0200, 0x05000051, 0xA00F0000, 0x3F7FFFFE, 0x00000000, 0x00000000, 0x3F800000,
                             0x02000001, 0x800F0800, 0xA0E40000, 0x0000FFFF};
+static IDirect3DPixelShader9 *g_ps;
 
 static DWORD WINAPI churn(void *)
 {
@@ -124,8 +126,20 @@ int main(int argc, char **argv)
         float w = (float)pp.BackBufferWidth, h = (float)pp.BackBufferHeight, s = (float)(frames % 100) / 100.0f;
         quad(g_dev, 0, 0, w, h, D3DCOLOR_XRGB(200, 60, 30), D3DCOLOR_XRGB(30, 160, 220));
         quad(g_dev, w * 0.1f + s * w * 0.3f, h * 0.3f, w * 0.4f + s * w * 0.3f, h * 0.7f, D3DCOLOR_XRGB(250, 250, 40), D3DCOLOR_XRGB(40, 220, 60));
+        if (!g_ps) g_dev->CreatePixelShader(kPs, &g_ps);
+        g_dev->SetPixelShader(g_ps);   // a red bar drawn with the pixel shader above
+        quad(g_dev, w * 0.05f, h * 0.8f, w * 0.45f, h * 0.9f, 0, 0);
+        g_dev->SetPixelShader(nullptr);
         g_dev->EndScene();
-        g_dev->Present(nullptr, nullptr, nullptr, nullptr);
+        if (frames & 1) {   // odd frames through swap chain 0's Present (kl2.exe may use either path)
+            IDirect3DSwapChain9 *sc = nullptr;
+            if (SUCCEEDED(g_dev->GetSwapChain(0, &sc)) && sc) {
+                sc->Present(nullptr, nullptr, nullptr, nullptr, 0);
+                sc->Release();
+            }
+        } else {
+            g_dev->Present(nullptr, nullptr, nullptr, nullptr);
+        }
         frames++;
         if (frames % 20 == 0) {
             int r = check_processed(g_dev, pp.BackBufferWidth, pp.BackBufferHeight);
@@ -137,6 +151,7 @@ int main(int argc, char **argv)
     int last = check_processed(g_dev, pp.BackBufferWidth, pp.BackBufferHeight);
     printf("%u frames in %.1f s; %u of %u checked frames came back processed; last frame %s; resets %u\n", frames, seconds, processed,
            checked, last == 1 ? "processed" : "NOT processed", resets);
+    if (g_ps) g_ps->Release();
     g_dev->Release();
     d3d->Release();
     bool pass = last == 1 && resets == 1;

@@ -7,21 +7,25 @@
  *
  * KLGfx.ini [KLGfx] Mode=
  *   0  pass-through: Windows' d3d9 is used exactly as without this DLL (the default)
- *   1  wrap the device on native Direct3D 9: performance/memory lines, frame capture
- *   2  as 1, but the device runs on Direct3D 12 through Windows' D3D9On12 layer (a possible zero-copy route
- *      for the helper later, see gfx/README.md); mode 2 on its own only proves the game runs on it.
+ *   1  wrap the device on native Direct3D 9: performance/memory lines, frame capture, the NR bridge
+ *   2  as 1, but the device runs on Direct3D 12 through Windows' D3D9On12 layer (experimental; a possible
+ *      zero-copy route for the helper later, see gfx/README.md)
  *
- * [NR] Enable=1 (modes 1 and 2): each frame goes through klnr.exe, the 64-bit helper that runs OpenDLSS-NR's network
- * (gfx/klnr): GetRenderTargetData -> shared memory -> klnr.exe -> UpdateSurface, at Present for now. F9 switches
- * it on and off in game, F8 the split view. Without a model the frame only makes the round trip.
+ * [NR] Enable=1: each frame goes through klnr.exe, the 64-bit helper that runs OpenDLSS-NR's network (gfx/klnr):
+ * GetRenderTargetData -> shared memory -> klnr.exe -> UpdateSurface, at Present for now. F9 switches it on and off
+ * in game (off also gives its memory back), F8 the split view. Without a model the frame only makes the round trip.
  *
  * Frame capture (modes 1 and 2): F10 in game, or CaptureAt=<seconds since the device was made,...>.
- * Writes <game>\KLGfx\frame_<n>\calls.txt (every render target switch, clear, copy, draw with its
- * shaders and states, shader constants with their names from the shaders' constant tables) and
+ * Writes <game>\KLGfx\frame_<n>\calls.txt (every render target switch, clear, copy, draw with its shaders and
+ * states as the device reports them, shader constants with their names from the shaders' constant tables) and
  * rt_<seq>.png/.dds: each render target as it is left, plus the back buffer at Present.
  * gfx/tools/frame_report.py turns calls.txt into a pass list.
  *
- * Built by gfx/build_gfx.sh (MinGW) or gfx/build_gfx.bat (Visual Studio, x86).
+ * Threads: kl2.exe makes its device with D3DCREATE_MULTITHREADED and creates shaders and textures on a loader thread
+ * while the render thread draws. Nothing here keeps pointers to the game's objects between calls; the capture asks
+ * the device for its bindings and is under g_lock.
+ *
+ * Built by gfx/build_gfx.sh (MinGW).
  */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -37,7 +41,7 @@
 #include "d3d9on12_decl.h"
 #include "../klnr/klnr_client.h"
 
-#define KLGFX_VERSION "0.2"
+#define KLGFX_VERSION "0.3"
 
 // ------------------------------------------------------------------------------------------ config
 static char g_dir[MAX_PATH];
@@ -50,9 +54,7 @@ static int g_max_dumps = 80;
 static int g_const_regs = 32;            // registers of a constant upload to print per call
 
 static CRITICAL_SECTION g_cs;     // the log file
-// The device is made with D3DCREATE_MULTITHREADED and the game uses it from more than one thread (it creates shaders
-// and textures while another thread draws): everything this file keeps (the shader table, the capture) is under g_lock.
-static CRITICAL_SECTION g_lock;
+static CRITICAL_SECTION g_lock;   // the capture and the swap chain wrapper
 struct Locked {
     Locked() { EnterCriticalSection(&g_lock); }
     ~Locked() { LeaveCriticalSection(&g_lock); }
@@ -68,6 +70,17 @@ struct NrConfig {
     KlnrClientConfig client;
 };
 static NrConfig g_nr;
+
+// Time as integer QueryPerformanceCounter ticks. D3D9 puts the render thread's FPU in single precision (kl2.exe does
+// not pass D3DCREATE_FPU_PRESERVE), so only small differences are ever turned into floating point.
+static int64_t g_qpf = 1;
+static int64_t ticks()
+{
+    LARGE_INTEGER c;
+    QueryPerformanceCounter(&c);
+    return c.QuadPart;
+}
+static double ms_between(int64_t a, int64_t b) { return (double)(b - a) * 1000.0 / (double)g_qpf; }
 
 static void klog(const char *fmt, ...)
 {
@@ -125,7 +138,8 @@ static void read_ini()
     g_nr.client.timeout_ms = GetPrivateProfileIntA("NR", "TimeoutMs", 100, ini);
     g_nr.client.max_misses = GetPrivateProfileIntA("NR", "MaxMisses", 30, ini);
     GetPrivateProfileStringA("NR", "Helper", "KLNR\\klnr.exe", buf, sizeof buf, ini);
-    g_nr.client.helper = (buf[0] && buf[1] == ':') ? std::string(buf) : std::string(g_dir) + "\\" + buf;
+    bool absolute = (buf[0] && buf[1] == ':') || (buf[0] == '\\' && buf[1] == '\\');
+    g_nr.client.helper = absolute ? std::string(buf) : std::string(g_dir) + "\\" + buf;
     GetPrivateProfileStringA("NR", "Model", "", buf, sizeof buf, ini);
     g_nr.client.model = buf;
     if (g_nr.enable && g_mode <= 0)
@@ -229,16 +243,6 @@ static const char *fmt_name(D3DFORMAT f)
     return b;
 }
 
-static double now_s()
-{
-    static LARGE_INTEGER f;
-    LARGE_INTEGER c;
-    if (!f.QuadPart)
-        QueryPerformanceFrequency(&f);
-    QueryPerformanceCounter(&c);
-    return (double)c.QuadPart / (double)f.QuadPart;
-}
-
 static uint32_t fnv1a(const void *p, size_t n)
 {
     const uint8_t *b = (const uint8_t *)p;
@@ -255,67 +259,48 @@ struct CtabConst {
     int index, count;
 };
 struct ShaderInfo {
-    uint32_t hash = 0, id = 0, version = 0, dwords = 0;
+    unsigned id = 0;
+    uint32_t hash = 0, version = 0, dwords = 0;
     std::vector<CtabConst> consts;
 };
-static std::unordered_map<void *, ShaderInfo> g_shaders;   // real shader object -> info
-static uint32_t g_next_shader_id = 1;
 
-static ShaderInfo parse_shader(const DWORD *code)
+// `code` is the whole bytecode (n DWORDs, from GetFunction). The constant table is a comment block at the start of the
+// shader (the D3DX compiler writes it right after the version token), so only the leading comment blocks are read and
+// no instruction is decoded: a constant's raw bits can look like a comment token, which is how 0.1's scan of every
+// token could run past the end of the code.
+static ShaderInfo parse_shader(const DWORD *code, size_t n)
 {
     ShaderInfo s;
-    if (!code)
+    if (!code || n < 2)
         return s;
     s.version = code[0];
+    s.dwords = (uint32_t)n;
+    s.hash = fnv1a(code, n * 4);
     size_t i = 1;
-    for (; i < 1 << 20; i++) {
-        DWORD t = code[i];
-        if (t == 0x0000FFFF) { i++; break; }                    // end token
-        if ((t & 0xFFFF) == 0xFFFE) {                            // comment block
-            DWORD len = (t >> 16) & 0x7FFF;
-            if (len >= 8 && code[i + 1] == 0x42415443) {         // 'CTAB'
-                const uint8_t *base = (const uint8_t *)&code[i + 2];
-                DWORD bytes = (len - 1) * 4;
-                const DWORD *hdr = (const DWORD *)base;          // Size Creator Version Constants ConstantInfo
-                DWORD n = hdr[3], off = hdr[4];
-                for (DWORD c = 0; c < n && off + 20 * (c + 1) <= bytes; c++) {
-                    const uint8_t *ci = base + off + 20 * c;
-                    DWORD name_off = *(const DWORD *)ci;
-                    CtabConst k;
-                    k.set = *(const WORD *)(ci + 4);
-                    k.index = *(const WORD *)(ci + 6);
-                    k.count = *(const WORD *)(ci + 8);
-                    if (name_off < bytes)
-                        k.name.assign((const char *)base + name_off, strnlen((const char *)base + name_off, bytes - name_off));
-                    s.consts.push_back(k);
-                }
+    while (i < n && (code[i] & 0xFFFF) == 0xFFFE) {
+        size_t len = (code[i] >> 16) & 0x7FFF;
+        if (i + 1 + len > n)
+            break;
+        if (len >= 8 && code[i + 1] == 0x42415443) {   // 'CTAB': Size Creator Version Constants ConstantInfo ...
+            const uint8_t *base = (const uint8_t *)&code[i + 2];
+            size_t bytes = (len - 1) * 4;
+            const DWORD *hdr = (const DWORD *)base;
+            DWORD count = hdr[3], off = hdr[4];
+            for (DWORD c = 0; c < count && c < 4096 && (size_t)off + 20 * (c + 1) <= bytes; c++) {
+                const uint8_t *ci = base + off + 20 * c;
+                DWORD name_off = *(const DWORD *)ci;
+                CtabConst k;
+                k.set = *(const WORD *)(ci + 4);
+                k.index = *(const WORD *)(ci + 6);
+                k.count = *(const WORD *)(ci + 8);
+                if (name_off < bytes)
+                    k.name.assign((const char *)base + name_off, strnlen((const char *)base + name_off, bytes - name_off));
+                s.consts.push_back(k);
             }
-            i += len;
-            continue;
         }
+        i += 1 + len;
     }
-    s.dwords = (uint32_t)i;
-    s.hash = fnv1a(code, i * 4);
     return s;
-}
-
-static std::string const_names(void *shader, UINT start, UINT count)
-{
-    Locked lock;
-    std::string out;
-    auto it = g_shaders.find(shader);
-    if (it == g_shaders.end())
-        return out;
-    for (auto &c : it->second.consts) {
-        if (c.set != 2)
-            continue;
-        if ((UINT)c.index < start + count && (UINT)(c.index + c.count) > start) {
-            char b[160];
-            snprintf(b, sizeof b, "%s%s@c%d+%d", out.empty() ? "" : " ", c.name.c_str(), c.index, c.count);
-            out += b;
-        }
-    }
-    return out;
 }
 
 // ------------------------------------------------------------------------- memory / perf lines
@@ -352,13 +337,16 @@ static void memory_line(char *out, size_t n)
 // ------------------------------------------------------------------------------- frame capture
 typedef HRESULT(WINAPI *PFN_SaveSurface)(LPCSTR, DWORD, IDirect3DSurface9 *, const PALETTEENTRY *, const RECT *);
 
+// Everything here lives for one frame; the keys are objects the device reported bound during that frame.
 struct Capture {
     bool on = false;
     int frame = 0, seq = 0, dumps = 0;
     FILE *f = nullptr;
     char folder[MAX_PATH] = {};
     std::unordered_map<void *, int> ids;
+    std::unordered_map<void *, ShaderInfo> shaders;
     int next_id = 1;
+    unsigned next_shader = 1;
     PFN_SaveSurface save = nullptr;
 };
 static Capture g_cap;
@@ -378,8 +366,6 @@ static void cap(const char *fmt, ...)
     va_end(a);
     fputc('\n', g_cap.f);
 }
-
-static int surface_id(IDirect3DSurface9 *s);
 
 static int texture_id(IDirect3DBaseTexture9 *t)
 {
@@ -432,10 +418,57 @@ static int surface_id(IDirect3DSurface9 *s)
     return id;
 }
 
+// A shader the device reported bound: its bytecode from GetFunction, parsed and listed once per capture.
+template <class S> static const ShaderInfo *shader_info(S *s, const char *kind)
+{
+    if (!s)
+        return nullptr;
+    Locked lock;
+    auto it = g_cap.shaders.find(s);
+    if (it != g_cap.shaders.end())
+        return &it->second;
+    UINT bytes = 0;
+    std::vector<DWORD> code;
+    if (SUCCEEDED(s->GetFunction(nullptr, &bytes)) && bytes >= 8 && bytes < (16u << 20)) {
+        code.resize(bytes / 4);
+        if (FAILED(s->GetFunction(code.data(), &bytes)))
+            code.clear();
+    }
+    ShaderInfo &si = g_cap.shaders[s];
+    si = parse_shader(code.data(), code.size());
+    si.id = g_cap.next_shader++;
+    std::string names;
+    for (auto &c : si.consts) {
+        char b[160];
+        snprintf(b, sizeof b, " %s:%c%d+%d", c.name.c_str(), "bifs"[c.set & 3], c.index, c.count);
+        names += b;
+    }
+    cap("SHADER\t%s\t%u\thash=%08x\tver=%08lx\tdwords=%u\tconsts:%s", kind, si.id, si.hash, si.version, si.dwords, names.c_str());
+    return &si;
+}
+
+static std::string const_names(const ShaderInfo *si, UINT start, UINT count)
+{
+    std::string out;
+    if (!si)
+        return out;
+    for (auto &c : si->consts) {
+        if (c.set != 2)
+            continue;
+        if ((UINT)c.index < start + count && (UINT)(c.index + c.count) > start) {
+            char b[160];
+            snprintf(b, sizeof b, "%s%s@c%d+%d", out.empty() ? "" : " ", c.name.c_str(), c.index, c.count);
+            out += b;
+        }
+    }
+    return out;
+}
+
 static void dump_surface(IDirect3DSurface9 *s, const char *why)
 {
     if (!g_cap.on || !g_dump_targets || !s || g_cap.dumps >= g_max_dumps)
         return;
+    Locked lock;
     if (!g_cap.save) {
         HMODULE x = GetModuleHandleA("d3dx9_42.dll");
         if (!x)
@@ -457,43 +490,37 @@ static void dump_surface(IDirect3DSurface9 *s, const char *why)
 
 // ----------------------------------------------------------------------------------- the device
 class KLDirect3D9;
+class KLSwapChain9;
 
 class KLDevice9 : public IDirect3DDevice9 {
 public:
     IDirect3DDevice9 *real;
     KLDirect3D9 *owner;
     D3DPRESENT_PARAMETERS pp;
-    double t0, last_present = 0, stats_t0 = 0, ft_min = 1e9, ft_max = 0;
+    volatile LONG wrapper_refs = 1;   // references to this wrapper object (the game's, D3DX's, the swap chain wrapper's)
+    int64_t t0, last_present = 0, stats_t0 = 0;
+    double ft_min = 1e9, ft_max = 0;
     unsigned frames = 0, stats_frames = 0;
     size_t next_capture = 0;
-    bool key_down = false, want_capture = false;
-    // state shadow (for draw lines and, later, for finding the DLSS insertion point)
-    IDirect3DSurface9 *rt[4] = {};
-    IDirect3DSurface9 *ds = nullptr;
-    IDirect3DBaseTexture9 *tex[16] = {};
-    void *vs = nullptr, *ps = nullptr;
-    DWORD rs_zenable = 1, rs_zwrite = 1, rs_ablend = 0, rs_src = 2, rs_dst = 1, rs_cw = 15, rs_srgbw = 0;
-    D3DVIEWPORT9 vp = {};
+    bool key_down = false, want_capture = false, last_still_drawing = false;
     unsigned draws_on_rt = 0;
+    KLSwapChain9 *swap0 = nullptr;   // the wrapper handed out for swap chain 0 (while the game holds it)
+
     // neural rendering bridge (gfx/klnr)
     KlnrClient nr;
-    bool nr_on = true, nr_tried = false, nr_said_off = false, nr_split = false, nr_reset_history = true;
+    bool nr_on = true, nr_tried = false, nr_dead = false, nr_split = false, nr_reset_history = true;
     bool nr_direct_update = true, nr_toggle_down = false, nr_split_down = false;
-    IDirect3DSurface9 *nr_sys = nullptr, *nr_gpu = nullptr;   // system-memory copy; video-memory fallback target
+    IDirect3DSurface9 *nr_sys = nullptr;   // system-memory copy of the back buffer (survives Reset)
     UINT nr_w = 0, nr_h = 0;
     D3DFORMAT nr_fmt = D3DFMT_UNKNOWN;
-    unsigned nr_frames = 0, nr_missed = 0;
-    ULONG nr_refs = 0;               // the bridge's own surfaces (each holds a device reference)
-    volatile LONG wrapper_refs = 1;  // references to this wrapper object (the game's and D3DX's)
+    ULONG nr_refs = 0;                     // device references held by the bridge's own surfaces
+    unsigned nr_frames = 0, nr_missed = 0, nr_skipped = 0;
     double nr_read_ms = 0, nr_wait_ms = 0, nr_write_ms = 0, nr_helper_ms = 0, nr_network_ms = 0;
 
     KLDevice9(IDirect3DDevice9 *r, KLDirect3D9 *o, const D3DPRESENT_PARAMETERS &p) : real(r), owner(o), pp(p)
     {
-        t0 = stats_t0 = now_s();
+        t0 = stats_t0 = ticks();
         nr_split = g_nr.split;
-        IDirect3DSurface9 *s = nullptr;
-        if (SUCCEEDED(real->GetRenderTarget(0, &s)) && s) { rt[0] = s; s->Release(); }
-        if (SUCCEEDED(real->GetDepthStencilSurface(&s)) && s) { ds = s; s->Release(); }
     }
 
 #define KLG_WRAP_DEVICE
@@ -510,8 +537,9 @@ public:
         }
         return real->QueryInterface(riid, o);
     }
-    // References are counted on the wrapper itself: when nobody holds it any more, the bridge's own surfaces go first
-    // (each holds a device reference), then the game's last reference. The counts returned leave those surfaces out.
+    // The counts returned leave out the bridge's own surfaces. When nobody holds the wrapper any more, those surfaces
+    // and the helper go first, then the game's last reference; if the game's own resources still keep the device
+    // alive, the wrapper stays too (a late call through it then still reaches the device, as without the proxy).
     ULONG STDMETHODCALLTYPE AddRef() override
     {
         InterlockedIncrement(&wrapper_refs);
@@ -521,49 +549,78 @@ public:
     ULONG STDMETHODCALLTYPE Release() override
     {
         if (InterlockedDecrement(&wrapper_refs) == 0) {
-            if (nr_gpu) nr_gpu->Release();
-            if (nr_sys) nr_sys->Release();
-            nr_sys = nr_gpu = nullptr;
-            nr_refs = 0;
+            nr_free();
             nr.stop();
             ULONG n = real->Release();
-            klog("device released after %u frames%s", frames, n ? " (resources of the game still hold it)" : "");
-            delete this;
+            if (n == 0) {
+                klog("device released after %u frames", frames);
+                delete this;
+            } else {
+                klog("the game let go of the device after %u frames; its own resources still hold it (%lu)", frames, n);
+            }
             return n;
         }
         ULONG n = real->Release();
         return n > nr_refs ? n - nr_refs : n;
     }
-    void nr_release(IDirect3DSurface9 *&s)
-    {
-        if (s) {
-            s->Release();
-            s = nullptr;
-            nr_refs--;
-        }
-    }
-
     HRESULT STDMETHODCALLTYPE GetDirect3D(IDirect3D9 **pp9) override;
+    HRESULT STDMETHODCALLTYPE GetSwapChain(UINT i, IDirect3DSwapChain9 **out) override;
 
     HRESULT STDMETHODCALLTYPE Reset(D3DPRESENT_PARAMETERS *p) override
     {
-        nr_release(nr_gpu);   // D3DPOOL_DEFAULT: Reset fails while it exists (the system-memory copy may stay)
+        // the bridge holds no D3DPOOL_DEFAULT resource between frames, so it cannot make Reset fail
         nr_reset_history = true;
         HRESULT hr = real->Reset(p);
-        klog("Reset %ux%u %s windowed=%d -> %#lx", p->BackBufferWidth, p->BackBufferHeight,
-             fmt_name(p->BackBufferFormat), p->Windowed, hr);
-        if (SUCCEEDED(hr)) {
+        klog("Reset %ux%u %s windowed=%d -> %#lx", p->BackBufferWidth, p->BackBufferHeight, fmt_name(p->BackBufferFormat),
+             p->Windowed, hr);
+        if (SUCCEEDED(hr))
             pp = *p;
-            IDirect3DSurface9 *s = nullptr;
-            memset(rt, 0, sizeof rt);
-            if (SUCCEEDED(real->GetRenderTarget(0, &s)) && s) { rt[0] = s; s->Release(); }
-            ds = nullptr;
-            if (SUCCEEDED(real->GetDepthStencilSurface(&s)) && s) { ds = s; s->Release(); }
-        }
         return hr;
     }
 
-    // ---- frame boundary
+    // ---- frame capture (the bindings are asked from the device: no pointer of the game's is kept)
+    int cur_rt(DWORD i)
+    {
+        IDirect3DSurface9 *s = nullptr;
+        if (FAILED(real->GetRenderTarget(i, &s)) || !s)
+            return 0;
+        int id = surface_id(s);
+        s->Release();
+        return id;
+    }
+    int cur_ds()
+    {
+        IDirect3DSurface9 *s = nullptr;
+        if (FAILED(real->GetDepthStencilSurface(&s)) || !s)
+            return 0;
+        int id = surface_id(s);
+        s->Release();
+        return id;
+    }
+    const ShaderInfo *cur_vs()
+    {
+        IDirect3DVertexShader9 *s = nullptr;
+        if (FAILED(real->GetVertexShader(&s)) || !s)
+            return nullptr;
+        const ShaderInfo *si = shader_info(s, "vs");
+        s->Release();
+        return si;
+    }
+    const ShaderInfo *cur_ps()
+    {
+        IDirect3DPixelShader9 *s = nullptr;
+        if (FAILED(real->GetPixelShader(&s)) || !s)
+            return nullptr;
+        const ShaderInfo *si = shader_info(s, "ps");
+        s->Release();
+        return si;
+    }
+    DWORD rs(D3DRENDERSTATETYPE t)
+    {
+        DWORD v = 0;
+        real->GetRenderState(t, &v);
+        return v;
+    }
     void begin_capture()
     {
         Locked lock;
@@ -577,9 +634,9 @@ public:
         snprintf(p, sizeof p, "%s\\calls.txt", g_cap.folder);
         g_cap.f = fopen(p, "w");
         g_cap.on = g_cap.f != nullptr;
-        cap("FRAME\t%u\t%.2f s after device creation\tbackbuffer %ux%u %s", frames, now_s() - t0,
+        cap("FRAME\t%u\t%.2f s after device creation\tbackbuffer %ux%u %s", frames, ms_between(t0, ticks()) / 1000.0,
             pp.BackBufferWidth, pp.BackBufferHeight, fmt_name(pp.BackBufferFormat));
-        cap("STATE\trt0=%d\tds=%d", surface_id(rt[0]), surface_id(ds));
+        cap("STATE\trt0=%d\tds=%d", cur_rt(0), cur_ds());
         klog("capture started: %s", g_cap.folder);
     }
     void end_capture()
@@ -594,6 +651,8 @@ public:
         fclose(g_cap.f);
         g_cap.f = nullptr;
         g_cap.on = false;
+        g_cap.ids.clear();
+        g_cap.shaders.clear();
         klog("capture written (%d calls, %d images)", g_cap.seq, g_cap.dumps);
     }
 
@@ -607,90 +666,127 @@ public:
         was_down = down;
         return edge;
     }
+    // gives the address space back: the system-memory copy and the shared frame view
+    void nr_free()
+    {
+        if (nr_sys) {
+            nr_sys->Release();
+            nr_sys = nullptr;
+            nr_refs--;
+        }
+        nr.release_frame();
+    }
     void nr_off(const char *why)
     {
-        if (!nr_said_off)
+        if (!nr_dead)
             klog("NR off for this session: %s", why);
-        nr_said_off = true;
+        nr_dead = true;
+        nr_free();
+        nr.stop();
     }
     void nr_frame()
     {
-        if (!g_nr.enable)
+        if (!g_nr.enable || nr_dead)
             return;
         if (key_edge(g_nr.toggle_key, nr_toggle_down)) {
             nr_on = !nr_on;
             nr_reset_history = true;
+            if (!nr_on)
+                nr_free();
             klog("NR %s (key)", nr_on ? "on" : "off");
         }
         if (key_edge(g_nr.split_key, nr_split_down)) {
             nr_split = !nr_split;
             klog("NR split view %s (key)", nr_split ? "on" : "off");
         }
-        if (!nr_on || nr_said_off)
+        if (!nr_on)
             return;
+        if (real->TestCooperativeLevel() != D3D_OK) {   // lost (alt-tab from full screen): wait for the Reset
+            nr_reset_history = true;
+            return;
+        }
         IDirect3DSurface9 *bb = nullptr;
         if (FAILED(real->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &bb)) || !bb)
             return;
         D3DSURFACE_DESC bd;
         bb->GetDesc(&bd);
+        const char *unusable = (bd.Format != D3DFMT_A8R8G8B8 && bd.Format != D3DFMT_X8R8G8B8)
+                                   ? "the back buffer is not A8R8G8B8 / X8R8G8B8"
+                                   : bd.MultiSampleType != D3DMULTISAMPLE_NONE ? "the back buffer is multisampled" : nullptr;
+        if (unusable) {
+            bb->Release();
+            nr_off(unusable);
+            return;
+        }
         if (!nr_tried) {
             nr_tried = true;
-            if (nr.start(g_nr.client, bd.Width, bd.Height))
-                klog("NR: started %s (model '%s'), %ux%u", g_nr.client.helper.c_str(), g_nr.client.model.c_str(), bd.Width, bd.Height);
-            else
+            if (!nr.start(g_nr.client, bd.Width, bd.Height)) {
+                bb->Release();
                 nr_off(nr.error().c_str());
+                return;
+            }
+            klog("NR: started %s (model '%s'), %ux%u", g_nr.client.helper.c_str(), g_nr.client.model.c_str(), bd.Width, bd.Height);
         }
-        if (!nr.ready()) {
+        if (!nr.ready()) {   // still starting (or ended)
+            bb->Release();
             if (nr.given_up())
                 nr_off(nr.error().c_str());
-            bb->Release();
-            return;
-        }
-        if (bd.Format != D3DFMT_A8R8G8B8 && bd.Format != D3DFMT_X8R8G8B8) {
-            nr_off("the back buffer is not A8R8G8B8 / X8R8G8B8");
-            bb->Release();
-            return;
-        }
-        if (bd.MultiSampleType != D3DMULTISAMPLE_NONE) {
-            nr_off("the back buffer is multisampled");
-            bb->Release();
             return;
         }
         if (!nr_sys || nr_w != bd.Width || nr_h != bd.Height || nr_fmt != bd.Format) {
-            nr_release(nr_sys);
-            nr_release(nr_gpu);
+            if (nr_sys) {
+                nr_sys->Release();
+                nr_sys = nullptr;
+                nr_refs--;
+            }
             HRESULT hr = real->CreateOffscreenPlainSurface(bd.Width, bd.Height, bd.Format, D3DPOOL_SYSTEMMEM, &nr_sys, nullptr);
-            if (SUCCEEDED(hr))
-                nr_refs++;
             if (FAILED(hr)) {
+                bb->Release();
                 klog("NR: system-memory surface %ux%u failed (%#lx)", bd.Width, bd.Height, hr);
                 nr_off("no system-memory surface");
-                bb->Release();
                 return;
             }
+            nr_refs++;
             nr_w = bd.Width;
             nr_h = bd.Height;
             nr_fmt = bd.Format;
             nr_reset_history = true;
         }
-        double ta = now_s();
+        if (nr.skip_if_busy()) {   // a late result of an earlier frame is still being written: this one passes
+            bb->Release();
+            nr_skipped++;
+            if (nr.given_up())
+                nr_off(nr.error().c_str());
+            return;
+        }
+        int64_t ta = ticks();
         HRESULT hr = real->GetRenderTargetData(bb, nr_sys);
+        if (FAILED(hr)) {
+            bb->Release();
+            nr_reset_history = true;
+            if (hr != D3DERR_DEVICELOST && hr != D3DERR_DRIVERINTERNALERROR) {
+                klog("NR: GetRenderTargetData failed (%#lx)", hr);
+                nr_off("cannot read the back buffer");
+            }
+            return;
+        }
         D3DLOCKED_RECT lr;
         uint8_t *buf = nullptr;
-        if (SUCCEEDED(hr) && SUCCEEDED(nr_sys->LockRect(&lr, nullptr, D3DLOCK_READONLY))) {
+        if (SUCCEEDED(nr_sys->LockRect(&lr, nullptr, D3DLOCK_READONLY))) {
+            // nullptr while a late result of an earlier frame is still being written: this frame passes untouched
             buf = nr.frame(nr_w, nr_h, (uint32_t)lr.Pitch);
             if (buf)
                 memcpy(buf, lr.pBits, (size_t)lr.Pitch * nr_h);
             nr_sys->UnlockRect();
-        } else if (FAILED(hr)) {
-            klog("NR: GetRenderTargetData failed (%#lx)", hr);
-            nr_off("cannot read the back buffer");
         }
         if (!buf) {
             bb->Release();
+            nr_skipped++;
+            if (nr.given_up())
+                nr_off(nr.error().c_str());
             return;
         }
-        double tb = now_s();
+        int64_t tb = ticks();
         KlnrParams p;
         p.flags = KLNR_F_ENABLED | (g_nr.temporal ? KLNR_F_TEMPORAL : 0) | (nr_reset_history ? KLNR_F_RESET_HISTORY : 0) |
                   (nr_split ? KLNR_F_SPLIT : 0) | (g_nr.test ? KLNR_F_TEST : 0);
@@ -702,7 +798,7 @@ public:
         p.color_strength = g_nr.color_strength;
         p.style = g_nr.style;
         bool ok = nr.process(p);
-        double tc = now_s();
+        int64_t tc = ticks();
         if (ok) {
             nr_reset_history = false;
             if (SUCCEEDED(nr_sys->LockRect(&lr, nullptr, 0))) {
@@ -711,61 +807,82 @@ public:
             }
             if (nr_direct_update) {
                 hr = real->UpdateSurface(nr_sys, nullptr, bb, nullptr);
-                if (FAILED(hr)) {
-                    klog("NR: UpdateSurface into the back buffer failed (%#lx): through a video-memory surface from now on", hr);
+                if (hr == D3DERR_INVALIDCALL) {
+                    klog("NR: UpdateSurface into the back buffer refused: through a video-memory surface from now on");
                     nr_direct_update = false;
                 }
             }
             if (!nr_direct_update) {
-                if (!nr_gpu && SUCCEEDED(real->CreateOffscreenPlainSurface(nr_w, nr_h, nr_fmt, D3DPOOL_DEFAULT, &nr_gpu, nullptr)))
-                    nr_refs++;
-                if (!nr_gpu || FAILED(real->UpdateSurface(nr_sys, nullptr, nr_gpu, nullptr)) ||
-                    FAILED(real->StretchRect(nr_gpu, nullptr, bb, nullptr, D3DTEXF_NONE)))
+                // a video-memory surface made for this frame only: held across frames it would make a Reset that
+                // reaches the real device without this wrapper fail
+                IDirect3DSurface9 *gpu = nullptr;
+                hr = real->CreateOffscreenPlainSurface(nr_w, nr_h, nr_fmt, D3DPOOL_DEFAULT, &gpu, nullptr);
+                if (SUCCEEDED(hr))
+                    hr = real->UpdateSurface(nr_sys, nullptr, gpu, nullptr);
+                if (SUCCEEDED(hr))
+                    hr = real->StretchRect(gpu, nullptr, bb, nullptr, D3DTEXF_NONE);
+                if (gpu)
+                    gpu->Release();
+                if (hr == D3DERR_INVALIDCALL) {
+                    bb->Release();
                     nr_off("cannot write the result back");
+                    return;
+                }
             }
             nr_frames++;
             nr_helper_ms += nr.control()->ms_total;
             nr_network_ms += nr.control()->ms_network;
         } else {
             nr_missed++;
-            if (nr.given_up())
+            if (nr.given_up()) {
+                bb->Release();
                 nr_off(nr.error().c_str());
+                return;
+            }
         }
-        double td = now_s();
-        nr_read_ms += (tb - ta) * 1000;
-        nr_wait_ms += (tc - tb) * 1000;
-        nr_write_ms += (td - tc) * 1000;
+        int64_t td = ticks();
+        nr_read_ms += ms_between(ta, tb);
+        nr_wait_ms += ms_between(tb, tc);
+        nr_write_ms += ms_between(tc, td);
         bb->Release();
     }
 
-    HRESULT STDMETHODCALLTYPE Present(const RECT *a, const RECT *b, HWND w, const RGNDATA *d) override
+    // ---- around every Present, the device's own or a swap chain's (kl2.exe may use either)
+    // retry: a swap chain Present repeated after D3DERR_WASSTILLDRAWING (D3DPRESENT_DONOTWAIT); the frame is done
+    void before_present(bool retry)
     {
+        if (retry)
+            return;
         nr_frame();
         if (g_cap.on) {
             cap("PRESENT");
             end_capture();
         }
-        HRESULT hr = real->Present(a, b, w, d);
-        double t = now_s();
-        if (last_present > 0) {
-            double ft = t - last_present;
+    }
+    void after_present(HRESULT result)
+    {
+        if (result == D3DERR_WASSTILLDRAWING)
+            return;
+        int64_t t = ticks();
+        if (last_present) {
+            double ft = ms_between(last_present, t);
             if (ft < ft_min) ft_min = ft;
             if (ft > ft_max) ft_max = ft;
         }
         last_present = t;
         frames++;
         stats_frames++;
-        if (g_stats_every > 0 && t - stats_t0 >= g_stats_every) {
+        double since_stats = ms_between(stats_t0, t) / 1000.0;
+        if (g_stats_every > 0 && since_stats >= g_stats_every) {
             char mem[160];
             memory_line(mem, sizeof mem);
-            klog("frames %u: %.1f fps, frame time %.2f-%.2f ms; %s", frames, stats_frames / (t - stats_t0),
-                 ft_min * 1000, ft_max * 1000, mem);
-            if (nr_frames || nr_missed) {
+            klog("frames %u: %.1f fps, frame time %.2f-%.2f ms; %s", frames, stats_frames / since_stats, ft_min, ft_max, mem);
+            if (nr_frames || nr_missed || nr_skipped) {
                 double n = nr_frames ? nr_frames : 1;
-                klog("NR: %u frames through klnr, %u without a result; per frame: read %.2f ms, wait %.2f ms (klnr %.2f, "
-                     "network %.2f), write %.2f ms", nr_frames, nr_missed, nr_read_ms / n, nr_wait_ms / n, nr_helper_ms / n,
-                     nr_network_ms / n, nr_write_ms / n);
-                nr_frames = nr_missed = 0;
+                klog("NR: %u frames through klnr, %u without a result, %u skipped; per frame: read %.2f ms, wait %.2f ms "
+                     "(klnr %.2f, network %.2f), write %.2f ms", nr_frames, nr_missed, nr_skipped, nr_read_ms / n,
+                     nr_wait_ms / n, nr_helper_ms / n, nr_network_ms / n, nr_write_ms / n);
+                nr_frames = nr_missed = nr_skipped = 0;
                 nr_read_ms = nr_wait_ms = nr_write_ms = nr_helper_ms = nr_network_ms = 0;
             }
             stats_t0 = t;
@@ -780,7 +897,7 @@ public:
         if (down && !key_down && pid == GetCurrentProcessId())
             want_capture = true;
         key_down = down;
-        if (next_capture < g_capture_at.size() && t - t0 >= g_capture_at[next_capture]) {
+        if (next_capture < g_capture_at.size() && ms_between(t0, t) / 1000.0 >= g_capture_at[next_capture]) {
             next_capture++;
             want_capture = true;
         }
@@ -788,6 +905,12 @@ public:
             want_capture = false;
             begin_capture();
         }
+    }
+    HRESULT STDMETHODCALLTYPE Present(const RECT *a, const RECT *b, HWND w, const RGNDATA *d) override
+    {
+        before_present(false);
+        HRESULT hr = real->Present(a, b, w, d);
+        after_present(hr);
         return hr;
     }
     HRESULT STDMETHODCALLTYPE BeginScene() override { cap("BEGINSCENE"); return real->BeginScene(); }
@@ -797,38 +920,31 @@ public:
     HRESULT STDMETHODCALLTYPE SetRenderTarget(DWORD i, IDirect3DSurface9 *s) override
     {
         if (g_cap.on) {
-            if (i == 0 && rt[0] && rt[0] != s && draws_on_rt)
-                dump_surface(rt[0], "left");
+            Locked lock;
+            if (i == 0 && draws_on_rt) {
+                IDirect3DSurface9 *cur = nullptr;
+                if (SUCCEEDED(real->GetRenderTarget(0, &cur)) && cur) {
+                    if (cur != s)
+                        dump_surface(cur, "left");
+                    cur->Release();
+                }
+            }
             cap("RT\t%lu\t%d", i, surface_id(s));
         }
         if (i == 0)
             draws_on_rt = 0;
-        HRESULT hr = real->SetRenderTarget(i, s);
-        if (SUCCEEDED(hr) && i < 4) {
-            rt[i] = s;
-            if (i == 0) {                     // D3D9 resets the viewport to the whole new target
-                D3DSURFACE_DESC sd;
-                if (s && SUCCEEDED(s->GetDesc(&sd))) {
-                    vp.X = vp.Y = 0;
-                    vp.Width = sd.Width;
-                    vp.Height = sd.Height;
-                    vp.MinZ = 0;
-                    vp.MaxZ = 1;
-                }
-            }
-        }
-        return hr;
+        return real->SetRenderTarget(i, s);
     }
     HRESULT STDMETHODCALLTYPE SetDepthStencilSurface(IDirect3DSurface9 *s) override
     {
-        cap("DS\t%d", g_cap.on ? surface_id(s) : 0);
-        ds = s;
+        if (g_cap.on)
+            cap("DS\t%d", surface_id(s));
         return real->SetDepthStencilSurface(s);
     }
     HRESULT STDMETHODCALLTYPE Clear(DWORD n, const D3DRECT *r, DWORD flags, D3DCOLOR c, float z, DWORD st) override
     {
-        cap("CLEAR\tflags=%#lx\tcolor=%08lx\tz=%g\tstencil=%lu\trects=%lu\trt0=%d\tds=%d", flags, c, z, st, n,
-            g_cap.on ? surface_id(rt[0]) : 0, g_cap.on ? surface_id(ds) : 0);
+        if (g_cap.on)
+            cap("CLEAR\tflags=%#lx\tcolor=%08lx\tz=%g\tstencil=%lu\trects=%lu\trt0=%d\tds=%d", flags, c, z, st, n, cur_rt(0), cur_ds());
         return real->Clear(n, r, flags, c, z, st);
     }
     HRESULT STDMETHODCALLTYPE StretchRect(IDirect3DSurface9 *s, const RECT *sr, IDirect3DSurface9 *d,
@@ -842,59 +958,46 @@ public:
     }
     HRESULT STDMETHODCALLTYPE ColorFill(IDirect3DSurface9 *s, const RECT *r, D3DCOLOR c) override
     {
-        cap("FILL\t%d\t%08lx", g_cap.on ? surface_id(s) : 0, c);
+        if (g_cap.on)
+            cap("FILL\t%d\t%08lx", surface_id(s), c);
         return real->ColorFill(s, r, c);
     }
     HRESULT STDMETHODCALLTYPE UpdateSurface(IDirect3DSurface9 *s, const RECT *r, IDirect3DSurface9 *d, const POINT *p) override
     {
-        if (g_cap.on) cap("UPDATESURF\t%d\t%d", surface_id(s), surface_id(d));
+        if (g_cap.on)
+            cap("UPDATESURF\t%d\t%d", surface_id(s), surface_id(d));
         return real->UpdateSurface(s, r, d, p);
     }
     HRESULT STDMETHODCALLTYPE UpdateTexture(IDirect3DBaseTexture9 *s, IDirect3DBaseTexture9 *d) override
     {
-        if (g_cap.on) cap("UPDATETEX\t%d\t%d", texture_id(s), texture_id(d));
+        if (g_cap.on)
+            cap("UPDATETEX\t%d\t%d", texture_id(s), texture_id(d));
         return real->UpdateTexture(s, d);
     }
     HRESULT STDMETHODCALLTYPE GetRenderTargetData(IDirect3DSurface9 *s, IDirect3DSurface9 *d) override
     {
-        if (g_cap.on) cap("READBACK\t%d\t%d", surface_id(s), surface_id(d));
+        if (g_cap.on)
+            cap("READBACK\t%d\t%d", surface_id(s), surface_id(d));
         return real->GetRenderTargetData(s, d);
     }
     HRESULT STDMETHODCALLTYPE SetViewport(const D3DVIEWPORT9 *v) override
     {
-        if (v) vp = *v;
-        if (v) cap("VIEWPORT\t%lu,%lu %lux%lu z=%g..%g", v->X, v->Y, v->Width, v->Height, v->MinZ, v->MaxZ);
+        if (g_cap.on && v)
+            cap("VIEWPORT\t%lu,%lu %lux%lu z=%g..%g", v->X, v->Y, v->Width, v->Height, v->MinZ, v->MaxZ);
         return real->SetViewport(v);
     }
 
     // ---- states and resources
-    HRESULT STDMETHODCALLTYPE SetRenderState(D3DRENDERSTATETYPE s, DWORD v) override
-    {
-        switch (s) {
-        case D3DRS_ZENABLE: rs_zenable = v; break;
-        case D3DRS_ZWRITEENABLE: rs_zwrite = v; break;
-        case D3DRS_ALPHABLENDENABLE: rs_ablend = v; break;
-        case D3DRS_SRCBLEND: rs_src = v; break;
-        case D3DRS_DESTBLEND: rs_dst = v; break;
-        case D3DRS_COLORWRITEENABLE: rs_cw = v; break;
-        case D3DRS_SRGBWRITEENABLE: rs_srgbw = v; break;
-        default: break;
-        }
-        return real->SetRenderState(s, v);
-    }
-    HRESULT STDMETHODCALLTYPE SetTexture(DWORD st, IDirect3DBaseTexture9 *t) override
-    {
-        if (st < 16)
-            tex[st] = t;
-        return real->SetTexture(st, t);
-    }
+    HRESULT STDMETHODCALLTYPE SetRenderState(D3DRENDERSTATETYPE s, DWORD v) override { return real->SetRenderState(s, v); }
+    HRESULT STDMETHODCALLTYPE SetTexture(DWORD st, IDirect3DBaseTexture9 *t) override { return real->SetTexture(st, t); }
     HRESULT STDMETHODCALLTYPE CreateTexture(UINT w, UINT h, UINT l, DWORD u, D3DFORMAT f, D3DPOOL p,
                                             IDirect3DTexture9 **t, HANDLE *sh) override
     {
         HRESULT hr = real->CreateTexture(w, h, l, u, f, p, t, sh);
         if (u & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL))
             klog("CreateTexture %ux%u %s levels=%u usage=%#lx -> %#lx", w, h, fmt_name(f), l, u, hr);
-        if (g_cap.on) cap("NEWTEX\t%ux%u\t%s\tusage=%#lx\tpool=%d", w, h, fmt_name(f), u, p);
+        if (g_cap.on)
+            cap("NEWTEX\t%ux%u\t%s\tusage=%#lx\tpool=%d", w, h, fmt_name(f), u, p);
         return hr;
     }
     HRESULT STDMETHODCALLTYPE CreateRenderTarget(UINT w, UINT h, D3DFORMAT f, D3DMULTISAMPLE_TYPE m, DWORD q, BOOL l,
@@ -912,74 +1015,29 @@ public:
         return hr;
     }
 
-    // ---- shaders and constants
+    // ---- shaders and constants (described during a capture only, from the device's own copy of the bytecode)
     HRESULT STDMETHODCALLTYPE CreateVertexShader(const DWORD *code, IDirect3DVertexShader9 **s) override
     {
-        HRESULT hr = real->CreateVertexShader(code, s);
-        if (SUCCEEDED(hr) && s && *s) {
-            ShaderInfo si = parse_shader(code);
-            Locked lock;
-            si.id = g_next_shader_id++;
-            g_shaders[*s] = si;
-        }
-        return hr;
+        return real->CreateVertexShader(code, s);
     }
     HRESULT STDMETHODCALLTYPE CreatePixelShader(const DWORD *code, IDirect3DPixelShader9 **s) override
     {
-        HRESULT hr = real->CreatePixelShader(code, s);
-        if (SUCCEEDED(hr) && s && *s) {
-            ShaderInfo si = parse_shader(code);
-            Locked lock;
-            si.id = g_next_shader_id++;
-            g_shaders[*s] = si;
-        }
-        return hr;
-    }
-    void describe_shader(void *s, const char *kind)
-    {
-        if (!g_cap.on || !s)
-            return;
-        Locked lock;
-        if (!g_cap.on || g_cap.ids.count(s))
-            return;
-        g_cap.ids[s] = 0;
-        auto it = g_shaders.find(s);
-        if (it == g_shaders.end()) {
-            cap("SHADER\t%s\t?", kind);
-            return;
-        }
-        std::string names;
-        for (auto &c : it->second.consts) {
-            char b[160];
-            snprintf(b, sizeof b, " %s:%c%d+%d", c.name.c_str(), "bifs"[c.set & 3], c.index, c.count);
-            names += b;
-        }
-        cap("SHADER\t%s\t%u\thash=%08x\tver=%08lx\tdwords=%u\tconsts:%s", kind, it->second.id, it->second.hash,
-            it->second.version, it->second.dwords, names.c_str());
-    }
-    static unsigned shader_id(void *s)
-    {
-        Locked lock;
-        auto it = g_shaders.find(s);
-        return it == g_shaders.end() ? 0 : it->second.id;
+        return real->CreatePixelShader(code, s);
     }
     HRESULT STDMETHODCALLTYPE SetVertexShader(IDirect3DVertexShader9 *s) override
     {
-        vs = s;
-        describe_shader(s, "vs");
+        if (g_cap.on)
+            shader_info(s, "vs");
         return real->SetVertexShader(s);
     }
     HRESULT STDMETHODCALLTYPE SetPixelShader(IDirect3DPixelShader9 *s) override
     {
-        ps = s;
-        describe_shader(s, "ps");
+        if (g_cap.on)
+            shader_info(s, "ps");
         return real->SetPixelShader(s);
     }
-    void log_consts(const char *kind, void *shader, UINT r, const float *d, UINT n)
+    void log_consts(const char *kind, const ShaderInfo *si, UINT r, const float *d, UINT n)
     {
-        if (!g_cap.on || !d)
-            return;
-        Locked lock;
         std::string v;
         UINT shown = n < (UINT)g_const_regs ? n : (UINT)g_const_regs;
         for (UINT i = 0; i < shown; i++) {
@@ -987,16 +1045,22 @@ public:
             snprintf(b, sizeof b, "%s%.6g,%.6g,%.6g,%.6g", i ? " | " : "", d[4 * i], d[4 * i + 1], d[4 * i + 2], d[4 * i + 3]);
             v += b;
         }
-        cap("%s\tc%u+%u\tshader=%u\t[%s]\t%s", kind, r, n, shader_id(shader), const_names(shader, r, n).c_str(), v.c_str());
+        cap("%s\tc%u+%u\tshader=%u\t[%s]\t%s", kind, r, n, si ? si->id : 0, const_names(si, r, n).c_str(), v.c_str());
     }
     HRESULT STDMETHODCALLTYPE SetVertexShaderConstantF(UINT r, const float *d, UINT n) override
     {
-        log_consts("VSC", vs, r, d, n);
+        if (g_cap.on && d) {
+            Locked lock;
+            log_consts("VSC", cur_vs(), r, d, n);
+        }
         return real->SetVertexShaderConstantF(r, d, n);
     }
     HRESULT STDMETHODCALLTYPE SetPixelShaderConstantF(UINT r, const float *d, UINT n) override
     {
-        log_consts("PSC", ps, r, d, n);
+        if (g_cap.on && d) {
+            Locked lock;
+            log_consts("PSC", cur_ps(), r, d, n);
+        }
         return real->SetPixelShaderConstantF(r, d, n);
     }
 
@@ -1008,17 +1072,23 @@ public:
             return;
         Locked lock;
         std::string texs;
-        for (int s = 0; s < 16; s++)
-            if (tex[s]) {
+        for (DWORD s = 0; s < 16; s++) {
+            IDirect3DBaseTexture9 *tx = nullptr;
+            if (SUCCEEDED(real->GetTexture(s, &tx)) && tx) {
                 char b[24];
-                snprintf(b, sizeof b, "%s%d:%d", texs.empty() ? "" : ",", s, texture_id(tex[s]));
+                snprintf(b, sizeof b, "%s%lu:%d", texs.empty() ? "" : ",", s, texture_id(tx));
                 texs += b;
+                tx->Release();
             }
+        }
+        D3DVIEWPORT9 vp = {};
+        real->GetViewport(&vp);
+        const ShaderInfo *vs = cur_vs(), *ps = cur_ps();
         cap("%s\tprim=%d\tcount=%u\trt=%d,%d,%d,%d\tds=%d\tvs=%u\tps=%u\tz=%lu/%lu\tblend=%lu:%lu/%lu\tcw=%#lx\tsrgbw=%lu"
             "\tvp=%lu,%lu,%lux%lu\ttex=%s",
-            kind, t, count, surface_id(rt[0]), surface_id(rt[1]), surface_id(rt[2]), surface_id(rt[3]), surface_id(ds),
-            shader_id(vs), shader_id(ps), rs_zenable, rs_zwrite, rs_ablend, rs_src, rs_dst, rs_cw, rs_srgbw, vp.X, vp.Y,
-            vp.Width, vp.Height, texs.c_str());
+            kind, t, count, cur_rt(0), cur_rt(1), cur_rt(2), cur_rt(3), cur_ds(), vs ? vs->id : 0, ps ? ps->id : 0,
+            rs(D3DRS_ZENABLE), rs(D3DRS_ZWRITEENABLE), rs(D3DRS_ALPHABLENDENABLE), rs(D3DRS_SRCBLEND), rs(D3DRS_DESTBLEND),
+            rs(D3DRS_COLORWRITEENABLE), rs(D3DRS_SRGBWRITEENABLE), vp.X, vp.Y, vp.Width, vp.Height, texs.c_str());
     }
     HRESULT STDMETHODCALLTYPE DrawPrimitive(D3DPRIMITIVETYPE t, UINT sv, UINT n) override
     {
@@ -1042,6 +1112,93 @@ public:
         return real->DrawIndexedPrimitiveUP(t, mi, nv, n, id, f, d, st);
     }
 };
+
+// ----------------------------------------------------------------------------- swap chain 0
+// Its Present goes through the same hooks as the device's: the bridge, the capture end, the stats. It holds a
+// reference on the device wrapper for its whole life.
+class KLSwapChain9 : public IDirect3DSwapChain9 {
+public:
+    IDirect3DSwapChain9 *real;
+    KLDevice9 *dev;
+    volatile LONG refs = 1;
+    KLSwapChain9(IDirect3DSwapChain9 *r, KLDevice9 *d) : real(r), dev(d) { dev->AddRef(); }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **o) override
+    {
+        if (riid == IID_IUnknown || riid == IID_IDirect3DSwapChain9) {
+            AddRef();
+            *o = this;
+            return S_OK;
+        }
+        return real->QueryInterface(riid, o);
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override
+    {
+        InterlockedIncrement(&refs);
+        return real->AddRef();
+    }
+    ULONG STDMETHODCALLTYPE Release() override
+    {
+        ULONG n;
+        bool gone;
+        {
+            Locked lock;   // KLDevice9::GetSwapChain hands this wrapper out again under the same lock
+            n = real->Release();
+            gone = InterlockedDecrement(&refs) == 0;
+            if (gone && dev->swap0 == this)
+                dev->swap0 = nullptr;
+        }
+        if (gone) {
+            KLDevice9 *d = dev;
+            delete this;
+            d->Release();
+        }
+        return n;
+    }
+    HRESULT STDMETHODCALLTYPE Present(const RECT *a, const RECT *b, HWND w, const RGNDATA *d, DWORD f) override
+    {
+        dev->before_present(dev->last_still_drawing);
+        HRESULT hr = real->Present(a, b, w, d, f);
+        dev->last_still_drawing = hr == D3DERR_WASSTILLDRAWING;
+        dev->after_present(hr);
+        return hr;
+    }
+    HRESULT STDMETHODCALLTYPE GetFrontBufferData(IDirect3DSurface9 *s) override { return real->GetFrontBufferData(s); }
+    HRESULT STDMETHODCALLTYPE GetBackBuffer(UINT i, D3DBACKBUFFER_TYPE t, IDirect3DSurface9 **s) override
+    {
+        return real->GetBackBuffer(i, t, s);
+    }
+    HRESULT STDMETHODCALLTYPE GetRasterStatus(D3DRASTER_STATUS *r) override { return real->GetRasterStatus(r); }
+    HRESULT STDMETHODCALLTYPE GetDisplayMode(D3DDISPLAYMODE *m) override { return real->GetDisplayMode(m); }
+    HRESULT STDMETHODCALLTYPE GetDevice(IDirect3DDevice9 **d) override
+    {
+        if (!d)
+            return D3DERR_INVALIDCALL;
+        dev->AddRef();
+        *d = dev;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetPresentParameters(D3DPRESENT_PARAMETERS *p) override { return real->GetPresentParameters(p); }
+};
+
+HRESULT STDMETHODCALLTYPE KLDevice9::GetSwapChain(UINT i, IDirect3DSwapChain9 **out)
+{
+    HRESULT hr = real->GetSwapChain(i, out);
+    if (FAILED(hr) || !out || !*out || i != 0)
+        return hr;
+    Locked lock;
+    if (swap0 && swap0->real == *out) {   // the game holds the wrapper already: one more reference to it
+        InterlockedIncrement(&swap0->refs);
+    } else {
+        static bool said;
+        if (!said) {
+            said = true;
+            klog("the game asked for swap chain 0: its Present is wrapped too");
+        }
+        swap0 = new KLSwapChain9(*out, this);
+    }
+    *out = swap0;
+    return hr;
+}
 
 // --------------------------------------------------------------------------------- IDirect3D9
 class KLDirect3D9 : public IDirect3D9 {
@@ -1093,7 +1250,7 @@ public:
         if (on12) {
             KLG_IDirect3DDevice9On12 *d12 = nullptr;
             if (SUCCEEDED(dev->QueryInterface(KLG_IID_IDirect3DDevice9On12, (void **)&d12)) && d12) {
-                klog("IDirect3DDevice9On12 available: Direct3D 12 resources can be shared with the DLSS helper");
+                klog("IDirect3DDevice9On12 available: Direct3D 12 resources could be shared with the helper");
                 d12->Release();
             } else {
                 klog("device does not expose IDirect3DDevice9On12");
@@ -1152,6 +1309,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
         DisableThreadLibraryCalls(inst);
         InitializeCriticalSection(&g_cs);
         InitializeCriticalSection(&g_lock);
+        LARGE_INTEGER f;
+        QueryPerformanceFrequency(&f);
+        g_qpf = f.QuadPart ? f.QuadPart : 1;
         GetModuleFileNameA(inst, g_dir, MAX_PATH);
         char *s = strrchr(g_dir, '\\');
         if (s)

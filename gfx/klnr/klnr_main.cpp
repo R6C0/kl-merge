@@ -210,18 +210,23 @@ struct Session {
     for (HANDLE h : {controlMap, request, done, game})
       if (h) CloseHandle(h);
   }
+  // The section of the current generation; its size is taken from the view itself, not from the control block
+  // (which may already describe a newer generation).
   bool mapFrame(const std::string& session) {
-    if (frame && generation == ctl->generation) return true;
+    const uint32_t gen = ctl->generation;
+    if (frame && generation == gen) return true;
     if (frame) UnmapViewOfFile(frame);
     if (frameMap) CloseHandle(frameMap);
-    frame = nullptr; frameMap = nullptr;
-    std::string name = "Local\\" + session + "_f" + std::to_string(ctl->generation);
+    frame = nullptr; frameMap = nullptr; capacity = 0;
+    std::string name = "Local\\" + session + "_f" + std::to_string(gen);
     frameMap = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, name.c_str());
     if (!frameMap) { logf("cannot open %s (error %lu)", name.c_str(), GetLastError()); return false; }
     frame = (uint8_t*)MapViewOfFile(frameMap, FILE_MAP_ALL_ACCESS, 0, 0, 0);
     if (!frame) { logf("cannot map %s (error %lu)", name.c_str(), GetLastError()); return false; }
-    generation = ctl->generation;
-    capacity = ctl->capacity;
+    MEMORY_BASIC_INFORMATION mbi;
+    if (!VirtualQuery(frame, &mbi, sizeof mbi)) { logf("cannot size %s", name.c_str()); return false; }
+    generation = gen;
+    capacity = (uint32_t)std::min<SIZE_T>(mbi.RegionSize, 0xffffffffu);
     logf("frame buffer %s: %u bytes", name.c_str(), capacity);
     return true;
   }
@@ -277,8 +282,10 @@ int runSession(const Args& args, const std::string& base) {
     MemoryBarrier();
     const uint32_t w = ctl->width, h = ctl->height, pitch = ctl->pitch;
     if (!s.mapFrame(args.session) || w < 16 || h < 16 || (uint64_t)pitch * h > s.capacity || pitch < w * 4) {
-      logf("frame %u skipped: %ux%u pitch %u, buffer %u bytes", request, w, h, pitch, s.capacity);
-      SetEvent(s.done);   // done stays behind request: KLGfx keeps its own frame
+      logf("frame %u passed through: %ux%u pitch %u, buffer %u bytes", request, w, h, pitch, s.capacity);
+      MemoryBarrier();
+      ctl->done = request;   // the buffer still holds the frame as it came: KLGfx shows it unchanged
+      SetEvent(s.done);
       continue;
     }
     KlControls c;

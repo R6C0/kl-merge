@@ -5,7 +5,7 @@ vtable order, from MinGW's d3d9.h (identical method order to the Windows SDK hea
 
     python gen_wrappers.py [path to d3d9.h]      (default /usr/share/mingw-w64/include/d3d9.h)
 
-Methods listed in HAND are left out; klgfx.cpp writes those itself (logging, capture, DLSS).
+Methods listed in HAND are left out; klgfx.cpp writes those itself (logging, capture, the NR bridge).
 The output is committed, so building does not need this script or MinGW's headers.
 """
 import re, sys, os
@@ -23,7 +23,7 @@ HAND = {
         'CreateVertexShader', 'CreatePixelShader', 'SetVertexShader', 'SetPixelShader',
         'SetVertexShaderConstantF', 'SetPixelShaderConstantF',
         'CreateTexture', 'CreateRenderTarget', 'CreateDepthStencilSurface', 'ColorFill',
-        'UpdateSurface', 'UpdateTexture', 'GetRenderTargetData',
+        'UpdateSurface', 'UpdateTexture', 'GetRenderTargetData', 'GetSwapChain',
     },
 }
 

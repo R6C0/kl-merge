@@ -26,7 +26,6 @@ HRESULT STDMETHODCALLTYPE SetCursorProperties(UINT XHotSpot, UINT YHotSpot, IDir
 void STDMETHODCALLTYPE SetCursorPosition(int X, int Y, DWORD Flags) override { real->SetCursorPosition(X, Y, Flags); }
 BOOL STDMETHODCALLTYPE ShowCursor(BOOL bShow) override { return real->ShowCursor(bShow); }
 HRESULT STDMETHODCALLTYPE CreateAdditionalSwapChain(D3DPRESENT_PARAMETERS* pPresentationParameters, IDirect3DSwapChain9** pSwapChain) override { return real->CreateAdditionalSwapChain(pPresentationParameters, pSwapChain); }
-HRESULT STDMETHODCALLTYPE GetSwapChain(UINT iSwapChain, IDirect3DSwapChain9** pSwapChain) override { return real->GetSwapChain(iSwapChain, pSwapChain); }
 UINT STDMETHODCALLTYPE GetNumberOfSwapChains() override { return real->GetNumberOfSwapChains(); }
 HRESULT STDMETHODCALLTYPE GetBackBuffer(UINT iSwapChain, UINT iBackBuffer, D3DBACKBUFFER_TYPE Type, IDirect3DSurface9** ppBackBuffer) override { return real->GetBackBuffer(iSwapChain, iBackBuffer, Type, ppBackBuffer); }
 HRESULT STDMETHODCALLTYPE GetRasterStatus(UINT iSwapChain, D3DRASTER_STATUS* pRasterStatus) override { return real->GetRasterStatus(iSwapChain, pRasterStatus); }
