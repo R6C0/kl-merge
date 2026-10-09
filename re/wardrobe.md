@@ -127,3 +127,20 @@ Also open: the HUD name stays the slot's (C1..C8); AI heisters cannot be given D
 voice sets (Dead Men's are not in the level .SND); online (the body follows a session number at 0x74ee10 and a
 look would have to be replicated - `m_iUseMask` is a bool); the masks have no names because nobody has seen
 their textures (kl_view draws shapes only).
+
+### Live outcome (2026-10-09 18:41-19:11; TEST hook build/klhook/test_char, klauto menu route, Hooks=0)
+
+All on the bone-repaired builds `<work>/build/u_live/wardrobe_F01` and `wardrobe_bank` (`kl_impact.py fix`;
+before the repair kl_impact reported 8 and 47 problems). Every run: PASS, 0 asserts, 0 faults.
+
+| run | what | result |
+|---|---|---|
+| W1 | stock Subway + wardrobe models, no choice | round starts, heisters look as stock |
+| W5 | Char=9 (Kane), no mask | **a model no entity names IS drawn**: log `heister table entry 0: model 26141 -> 25831 (Kane)`, `body: ... the player now has 25831`; Kane in his suit with the nose bandage, bag on his back, rifle in hand, walks and turns (research/wardrobe_W5_225s.png) |
+| W3L | Char=10 (Lynch), Mask=5 | `look: variant 1 -> 6`; Lynch's suit with a borrowed Dog Days mask (wardrobe_W3L_208s.png). W3 and W5 in one run |
+| W2 | overlay + Heister page | sixth Arcade button opens window KLHeister; `character: menu set KLChar = 1, 2`, `KLMask = 1..3`, `KLOutfit = 1`, values kept on re-opening the page. DEFECT: the value text between the arrows is EMPTY on all three rows (wardrobe_W2_60s.png) although the option changes; stock togglers with literal '%' texts exist (VOAspect) and the XML matches the stock PlayMenu rows - cause not found |
+| W6 | wardrobe_bank (Dead Men bank, 96.5 MB .prm), Char=10, Outfit=1 | loads; `look: variant 1 -> 11`; Lynch on the bank's plaza at GO (wardrobe_W6_258s.png) |
+
+Not run: W4 as its own run (a Dog Days body by the swap: the same routine as W5 with a model that is
+already in the table), ragdoll / cover / death with a Dead Men body, the choice surviving a game restart
+(the ini is rewritten by each test run), the SHIP build of this hook (test_char only), a second round.

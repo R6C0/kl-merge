@@ -188,6 +188,13 @@ already running, and puts the owner's Retomoto build + SHIP hook back after ever
 run (install of KLGfx d3d9.dll) was REFUSED by the permission classifier: the owner can run the two
 .bat files themselves; the GPU self-test ran (4 PASS, 2 FAIL: zero model changes the picture by 8,
 limit 3; network 8.6 ms at 1080p, 13.7 ms at 1440p on the RTX 4070 Ti).
+WARDROBE LIVE (19:11, re/wardrobe.md 'Live outcome'): Dead Men player models WORK in the game. Kane and
+Lynch are drawn and playable as the local heister on stock Subway and on the grafted bank (a model
+no entity names is drawn; body swap through the game's own routine), a borrowed mask works on a
+Dead Men body, the armoured outfit variant is set, the 96.5 MB bank .prm loads, the Heister page
+opens and sets the three options. DEFECT: the page's value texts are blank. Not run: the SHIP
+build of the hook with klchar.c, ragdoll / cover, a restart. Nothing of it is installed for the
+owner; the slot is back on Retomoto play2.
 GFX NOTE DONE (owner said 'you can do it', 18:50): KLGfx 0.3 nrtest ran once in the game (run GFX2,
 installed by hand because the .bat counts the 21 lingering dead kl2.exe entries as a running game;
 d3d9.dll moved to <DD>\KLGfx_removed afterwards). <DD>\KLGfx.log: 'KLGfx 0.3, mode 1 ... NR bridge
