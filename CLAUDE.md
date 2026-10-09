@@ -225,8 +225,9 @@ Then, in order:
 1. Bank: the escape; the RN11 crash rate. M02 / M06 first live runs.
    Escape, first step (cloud, 2026-10-09, UNTESTED): `python tools/kl_whoref.py M03_FA_A "*animFence*"`
    lists what names the yard fences and whether kl_graft.picks_of KEEPS or DROPS its subtree. Lead
-   from the code: picks_of silently drops a Dead Men top-level subtree whose name equals one of S's
-   systems subtrees, and the second of two same-named subtrees.
+   from the code: picks_of replaces Dead Men's own TrackLinkObjects / ZParticleController /
+   OnlineWeaponPacks / Heroes! with F07's (same names), drops gamemenu, mainsceneincludes and
+   CoverList, and keeps only the first of two same-named subtrees. Prime suspect: TrackLinkObjects.
 2. Anti-tamper experiments X1-X3, then own folder live.
 3. Retomoto live (re/retomoto_fa.md section 8), player models, heister select.
 Restore stock with `tools/RESTORE Dog Days originals.bat`.

@@ -17,11 +17,14 @@ SO0301_USA_animFence_02_FA_* in Dead Men's M03_FA_A, and does the graft keep it?
     python kl_whoref.py M03_FA_A "*MetalGate*" --s F07       another pattern / systems level
 
 LEAD (read of the code, 2026-10-09, not tried): kl_graft.picks_of drops a Dead Men top-level
-subtree silently in two cases besides the --m-drop / systems ones:
-  1. its NAME equals one of S's systems subtrees -> S's copy is taken, M's is dropped even when
-     M's is on the map side (a Dead Men 'Doors!' / 'Triggers!'-like group holding the gate logic
-     would vanish this way);
-  2. M has two top-level subtrees of the same name -> only the first is taken (written for M03's
+subtree without a word in these cases:
+  1. its NAME equals one of S's systems subtrees -> S's copy is taken instead. Systems names are
+     kl_prpjoin.SYSTEMS + Heroes!*, so this hits Dead Men's own TrackLinkObjects,
+     ZParticleController, AllLevels/OnlineWeaponPacks.zip and Heroes!*. PRIME SUSPECT:
+     TrackLinkObjects - by its name the animation-track links (what it holds is NOT checked);
+     if the fences' MatPosAnim tracks are linked from there, F07's copy has nothing for them;
+  2. it is on the systems side (gamemenu.zip, AllLevels/mainsceneincludes.zip, CoverList);
+  3. M has two top-level subtrees of the same name -> only the first is taken (written for M03's
      duplicate car-explosion clone group, but it applies to every name).
 The build log line 'left out of M03_FA_A: ...' counts dropped subtrees by family only; this
 tool names them per referrer.
@@ -34,6 +37,7 @@ import argparse, fnmatch, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import kl_graft as K
 import kl_fa
+import kl_prpjoin as J
 from kl_prp import units
 
 
@@ -73,15 +77,24 @@ def scan(sc, pattern, label, status=None, log=print):
     index = tops_index(sc)
     log('== %s: referrers of %s' % (label, pattern))
     found = 0
-    for k in range(1, len(sc.nodes)):
-        for who, body in bodies(sc, k):
-            for s in strings(sc, body):
-                if isinstance(s, str) and s[:5].upper() == 'ROOT\\' and fnmatch.fnmatch(s.lower(), pat):
-                    t = top_of(index, k)
-                    found += 1
-                    log('  %-48s %-28s -> %s%s   [top: %s%s]' % (
-                        sc.names[k], who, s, '' if sc.resolve(s) else '  (UNRESOLVED)',
-                        sc.names[t] if t is not None else '?', (' ' + status(t)) if status else ''))
+    try:
+        # the codebase's own walker: every field of every node AND the scene property block
+        # (holder -1), path strings resolved through the scene's index
+        hits = list(J.references(sc))
+    except Exception as e:
+        log('  (kl_prpjoin.references failed: %s: %s - falling back to ROOT\\ strings on nodes)' % (type(e).__name__, e))
+        hits = [(k, who, '?', s, sc.resolve(s)) for k in range(1, len(sc.nodes)) for who, body in bodies(sc, k)
+                for s in strings(sc, body) if isinstance(s, str) and s[:5].upper() == 'ROOT\\']
+    for k, holder, field, s, hit in hits:
+        tg = list(hit) if isinstance(hit, (list, tuple, set)) else ([hit] if hit else [])
+        if not (fnmatch.fnmatch(s.lower(), pat) or any(fnmatch.fnmatch(sc.names[x].lower(), pat) for x in tg
+                                                        if isinstance(x, int) and 0 <= x < len(sc.names))):
+            continue
+        t = top_of(index, k) if k >= 0 else None
+        found += 1
+        log('  %-48s %-28s field %-5s -> %s%s   [top: %s%s]' % (
+            sc.names[k] if k >= 0 else '(scene property block)', holder, field, s, '' if tg else '  (UNRESOLVED)',
+            sc.names[t] if t is not None else '-', (' ' + status(t)) if status and t is not None else ''))
     log('  %d references' % found)
     log('== %s: nodes named like %s, their controllers and strings' % (label, pattern))
     for k in range(1, len(sc.nodes)):
