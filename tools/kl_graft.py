@@ -1438,6 +1438,12 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
             except (KeyError, ValueError, StopIteration) as x:
                 note('skeleton %d of %s not renumbered: %r' % (sk, m_name, x))
         if done:
+            # reid() renumbers the skeleton's id table only; each bone definition carries its id a
+            # second time (+0x3e), which the bullet-mark code 0x88c840 looks up: a stale one gave
+            # table[old id] = 0xff as a matrix index (crash kl2 0x4c34b3 when the owner shot a
+            # guard on Retomoto, 2026-10-09; re/crash_owner_1009.md)
+            import kl_impact
+            done['bone id bytes'] += kl_impact.sync_bone_ids(prm, sks)
             prm_bytes = G.write(prm)
             mat.refs = T.material_refs(prm_bytes)
         log('  skeletons of %s: %d of %d renumbered to the joined level: %d bone ids, %d animation numbers changed' % (
@@ -1569,6 +1575,9 @@ def verify(out, Jn, S, M, copy, s_kept, mj, shift, log=print, audio=None, light=
         import kl_chars
         cb = kl_chars.check_bones(prm, kl_anm.Anm(out['.ANM'], 'dd').bones)
         bad += cb[:6] + (['... %d more skeleton problems' % (len(cb) - 6)] if len(cb) > 6 else [])
+        import kl_impact
+        bf = kl_impact.bone_faults(prm)
+        bad += bf[:6] + (['... %d more bone id faults' % (len(bf) - 6)] if len(bf) > 6 else [])
     if mat.refs != T.material_refs(out['.prm']):
         bad.append('.MAT ref table is not the .prm\'s')
     lost = T.used_textures(mat) - set(tex.tex)
