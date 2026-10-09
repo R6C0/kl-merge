@@ -226,6 +226,13 @@ Then, in order:
 2. Anti-tamper experiments X1-X3, then own folder live.
 3. Retomoto live (re/retomoto_fa.md section 8), player models, heister select.
 Restore stock with `tools/RESTORE Dog Days originals.bat`.
+Cloud session 2026-10-09 (no game files): the Retomoto level-design job was planned as a workflow
+(`.claude/workflows/retomoto-level-design.js`) and stopped before any result at the owner's request.
+`re/retomoto_design_plan.md` is the blueprint: the gaps between the owner's concept and the built layer
+(Heat street waves from F07's police squads, staged tower waves, the 7 music clips not in PC_Def.str, the
+join as a beat, bounds), the phases to run, and the decisions already taken. Next session: run the
+workflow (or its phases by hand), then `kl_fa_author.py test` on the PC and the live order of
+`re/retomoto_fa.md` section 8.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
