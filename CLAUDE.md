@@ -188,6 +188,21 @@ already running, and puts the owner's Retomoto build + SHIP hook back after ever
 run (install of KLGfx d3d9.dll) was REFUSED by the permission classifier: the owner can run the two
 .bat files themselves; the GPU self-test ran (4 PASS, 2 FAIL: zero model changes the picture by 8,
 limit 3; network 8.6 ms at 1080p, 13.7 ms at 1440p on the RTX 4070 Ti).
+INSTALLED FOR THE OWNER 2026-10-09 21:25: F01 slot = <work>/build/play3s = Retomoto with every fix
+since their last round (execute crash, kl_arms weapons, police far-detail shader, voice repairs
+VOICE on, Subway-style blast layer, bone ids) and 'kl_graft.py lighten' (.TEX 405.6 -> 234 MB, zip
+188 MB), KLJoin.ini; hook = <work>/build/klhook/ship_char (SHIP + klchar.c, sha1 ac7e1569) with
+KLHook.ini [Expansion] Enable=1 and [Character] Enable=1; <DD>/KLExpansion/Overlay/Patch01.zip =
+the Heister page. The previous hook pair is in <work>/build/klhook/owner_prev. Live before the
+hand-over: play3s round PASS (run P3s: balcony, glass goes at the blast, the standing scripted
+player is shot dead ~20 s after GO); Heister page labels now SHOW (run W2L: 'Tommy', 'Moustache -
+J.C.', 'Plain clothes'); the SHIP_char build starts and loads all its parts (run SHIPC).
+NO WARDROBE on Retomoto yet - HARD LIMIT FOUND: the .prm chunk table at 0xeac7b0 is fixed-size;
+Retomoto + full wardrobe has 80,627 chunks and its entry for chunk 73,932 lands on the loading
+progress object (crash kl2+0x207280, run P4). Retomoto alone has 65,119. Agent x-chunks is
+establishing the exact limit and making the wardrobe reuse dead chunk indices (re/prm_limit.md).
+LOADING: with the game out of the foreground (kl_loadfocus cover window) Retomoto still took
+198 s to load: the foreground explanation of re/loading.md is NOT confirmed by this run.
 WARDROBE LIVE (19:11, re/wardrobe.md 'Live outcome'): Dead Men player models WORK in the game. Kane and
 Lynch are drawn and playable as the local heister on stock Subway and on the grafted bank (a model
 no entity names is drawn; body swap through the game's own routine), a borrowed mask works on a
