@@ -203,6 +203,17 @@ _crash\play_rt_boneids (kl_impact: 0
   Keep .TEX near the stock 290 MB and .prm small on every map (the four DM maps' .prm are
   75-87 MB: larger than any stock level). Hook idea (not written): reserve ~96 MB at start and
   release it when a large HeapAlloc fails.
+OWNER PLAYED A WHOLE ARCADE ROUND ON RETOMOTO (17:44-17:55, build play_rt, SHIP hook; seen through
+tools/kl_watch.py: 82 pictures in <work>/research/watch/20261009_174356): boardroom, loot
+($1,285,000), stairs, the join by the hook (tower -> lobby in 0.5 s), lobby, street, 'You jumped
+into the getaway car', ROUND OVER, Buy weapons. Then FATAL in DiscordHook.dll+0x1f7fd as round 2
+started (second time in that DLL; dumps in research/owner_round_1009_1755; cause not looked at).
+OWNER BY EAR: music plays; 'the yakuza / retomoto soldiers all replay the same thing too many
+times - make it play once or make sure theyre unique each time' (agent q-repeat is on it).
+LOADING (re/loading.md): slow loads (100-200 s) follow the game window being in FRONT, fast ones
+(11-15 s) it being in the background; hook fix proposed (GetForegroundWindow slot 0xb10594), not
+written. VOICE (re/voice.md): repairs built, kl_snd.VOICE = None (off) until heard.
+kl_graft now syncs bone ids (the guard crash); builds made before 346c37e need kl_impact.py fix.
 READY FOR THE OWNER, NOT INSTALLED (the game was running): <work>/build/play2 = Retomoto with the
 start on the balcony outside the window (the ledge exists in M09_A: re/retomoto_fa.md 11), the
 bomb fuse, staged tower fight, the Heat street layer (tools/kl_fa_street.py; all positions
