@@ -188,6 +188,14 @@ already running, and puts the owner's Retomoto build + SHIP hook back after ever
 run (install of KLGfx d3d9.dll) was REFUSED by the permission classifier: the owner can run the two
 .bat files themselves; the GPU self-test ran (4 PASS, 2 FAIL: zero model changes the picture by 8,
 limit 3; network 8.6 ms at 1080p, 13.7 ms at 1440p on the RTX 4070 Ti).
+GFX NOTE DONE (owner said 'you can do it', 18:50): KLGfx 0.3 nrtest ran once in the game (run GFX2,
+installed by hand because the .bat counts the 21 lingering dead kl2.exe entries as a running game;
+d3d9.dll moved to <DD>\KLGfx_removed afterwards). <DD>\KLGfx.log: 'KLGfx 0.3, mode 1 ... NR bridge
+on', 'NR: started ...klnr.exe (model none), 2560x1440'; klnr.log: 'ready on RTX 4070 Ti in 1094 ms',
+'the game has ended', exit 0. NO 'N frames through klnr' line (the run was ended by kl_autotest's
+kill at 110 s, in the menu). NO PICTURE: neither kl_autotest's shots nor kl_watch got a frame with
+the proxy in (both work without it, run GFX1), so whether the right half was grey - or whether
+the game drew at all - was not seen. Self-test: 4 PASS, 2 FAIL (above). The note file is removed.
 EARLIER NOTE - LIVE RUNS WERE PAUSED (owner, 2026-10-09 17:15): the owner is playing. Test runs take the game
 (one kl2.exe, one F01 slot, a test hook that blocks the real keyboard and mouse), so NO agent
 launches the game, swaps the hook or installs into the slot until the owner says to resume.
