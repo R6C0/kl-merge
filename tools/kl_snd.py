@@ -118,6 +118,10 @@ GROUP = {'Master': 'Master', 'Dialog': 'Dialog', 'DialogUser': 'Dialog_user', 'M
          'Vehicles': 'SFX_Vehicles', 'Chopper': 'SFX_Vehicles', 'Plane': 'SFX_Vehicles', 'Environment': 'SFX',
          'FlashBacks': 'SFX_CutScene'}
 DEFAULT_SURFACE = b'audio:materials/surface/default#surfaceproperty'
+# graft_audio's speech repairs (tools/kl_voice.py, re/voice.md) when the caller does not say:
+# None = off (builds as before), True or a dict of kl_voice.OPTIONS = on. Off until a build with
+# them has been heard in the game (the lead's switch; kl_voice.py build turns it on for itself).
+VOICE = None
 NUL = bytes(1)
 u32 = lambda b, o: struct.unpack_from('<I', b, o)[0]
 u16 = lambda b, o: struct.unpack_from('<H', b, o)[0]
@@ -513,7 +517,7 @@ def _signatures(s):
     return sig
 
 
-def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, log=print, stats=None):
+def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, log=print, stats=None, defs=None):
     """Append what `roots` need of bank `src` to the Dog Days bank `base`.
     base, src: walked Snd (src of either game); *_whd, *_wav: their .WHD / .WAV bytes;
     roots: offsets in src's .SND (the map nodes' sound fields, .LOC sound ids);
@@ -522,7 +526,10 @@ def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, l
     -> (new .SND, new .WHD, new .WAV, {src offset: new offset}). Every byte of base below its
     first type table keeps its place. A map value of 0 = no Dog Days form (a Dead Men room
     effect, a wave whose clip is not in the stream file). A root that is no object of src gets
-    no entry. stats (a Counter) receives the counts that are logged."""
+    no entry. stats (a Counter) receives the counts that are logged.
+    defs: None, or f(name of a definition of src, its slots as src offsets) -> the slots the
+    copy gets (src offsets, 0 = empty, any length; None = as they are): kl_voice.def_slots puts
+    a Dead Men character definition into Dog Days' slot order."""
     if base.game != 'dd':
         raise ValueError('the base bank must be Dog Days\'')
     bad = base.clean()
@@ -574,6 +581,18 @@ def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, l
 
     # ---- 1. what is needed
     order, target, stack = [], {}, list(roots)
+    relaid = {}                                             # definition -> its slots after defs()
+    def slots(o):
+        """The child list of set / definition o as src offsets, a definition's through defs()."""
+        if o not in relaid:
+            n, c = u16(d, o + 0x18), u32(d, o + 0x14)
+            lst = list(struct.unpack_from('<%dI' % n, d, c)) if c else []
+            new_ = defs(src.name(o), list(lst)) if defs and kind[o] == 5 and lst else None
+            if new_ is not None and list(new_) != lst:
+                st['definitions put into Dog Days slot order'] += 1
+                lst = list(new_)
+            relaid[o] = lst
+        return relaid[o]
     def kids(o):
         t, out = kind[o], []
         if t == 4:
@@ -584,7 +603,7 @@ def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, l
                 if u32(d, q) == 0x12 and u32(d, q + 4): out.append(u32(d, q + 4))
                 if u32(d, q) == 0x13 and u32(d, q + 0x1c): out.append(u32(d, q + 0x1c))
         if t == 1 and c and c < src.T: out.append(c)
-        elif t in (2, 5) and c: out += [x for x in struct.unpack_from('<%dI' % n, d, c) if x]
+        elif t in (2, 5) and c: out += [x for x in slots(o) if x]
         elif t == 3 and c: out += [u32(d, c + 12 * i + 8) for i in range(n) if u32(d, c + 12 * i) in (2, 4, 5, 6) and u32(d, c + 12 * i + 8)]
         return out
     while stack:
@@ -727,7 +746,9 @@ def merge(base, src, base_whd, base_wav, src_whd, src_wav, roots, strmap=None, l
             else:                                           # its wave is in the source's _LS bank: not carried
                 struct.pack_into('<I', body, 0x14, 0); st['sounds of the source\'s _LS bank: no wave'] += 1
         elif t in (2, 5) and c:
-            put(('cl', o), bytes(4 * n), [(4 * i, tg(x)) for i, x in enumerate(struct.unpack_from('<%dI' % n, d, c)) if x])
+            lst = slots(o)                                  # a definition's list may have another length now
+            struct.pack_into('<2H', body, 0x18, len(lst), len(lst))
+            put(('cl', o), bytes(4 * len(lst)), [(4 * i, tg(x)) for i, x in enumerate(lst) if x])
             refs.append((0x14, ('cl', o)))
         elif t == 3 and c:
             put(('ev', o), d[c:c + 12 * n], [(12 * i + 8, tg(u32(d, c + 12 * i + 8))) for i in range(n)
@@ -941,7 +962,7 @@ class Audio:
                 shutil.copyfile(v, p)
 
 
-def graft_audio(s_name, m_name, sc, ks, log=print, more_roots=(), loc=True):
+def graft_audio(s_name, m_name, sc, ks, log=print, more_roots=(), loc=True, voice=None):
     """The sound side of a graft of map level m_name (either game) under the Dog Days systems
     level s_name. sc: the JOINED property tree (kl_prpjoin.Scene, Dog Days form); ks: the indices
     in sc of the nodes that came from the map level. sc is edited in place: every sound
@@ -956,8 +977,20 @@ def graft_audio(s_name, m_name, sc, ks, log=print, more_roots=(), loc=True):
     .LOC: a key that a string of the map's nodes names, that the map level's .LOC has and S's
     does not, is grafted into S's files with its sound (Dead Men's voice lines on the map's
     OnlineSpeakTrigger / settings fields). Between two Dog Days FA levels nothing is added (all
-    nine share their 2,328 Multiplayer/ keys)."""
+    nine share their 2,328 Multiplayer/ keys).
+
+    voice: None = as before (VOICE, the module default, is used). True or a dict of
+    kl_voice.OPTIONS = the speech repairs of kl_voice.py (re/voice.md): Dead Men character
+    definitions in Dog Days' slot order, a voice set for the map's characters that have none,
+    the settings' empty or unknown line keys from S, K_C1..K_C9 leaves for Dead Men lines in
+    the fields Dog Days reads per character, and (option 'heroes') the story voice sets on the
+    eight heisters."""
     a, st = Audio(), collections.Counter()
+    voice = VOICE if voice is None else voice
+    V = vo = None
+    if voice:
+        import kl_voice as V
+        vo = V.options(voice)
     mg = game_of(m_name)
     base, src = bank(s_name), bank(m_name, mg)
     want, sids = set(), {}
@@ -967,7 +1000,9 @@ def graft_audio(s_name, m_name, sc, ks, log=print, more_roots=(), loc=True):
         with zipfile.ZipFile(level_zip(m_name, mg)) as zf:
             m_loc = {lang: zf.read(n) for lang, n in kl_loc.members(zf).items()}
         have = {p.lower() for p, _k in kl_loc.leaves(kl_loc.parse(s_loc['English']))}
-        named = {s.lower().replace('\\', '/') for s in strings_of(sc, ks)}
+        if V and vo['lines']:                               # before the keys are collected: a key of S needs no leaf
+            st.update(V.fill_lines(sc, ks, s_name, have | {p.lower() for p, _k in kl_loc.leaves(kl_loc.parse(m_loc['English']))}, log))
+        named ={s.lower().replace('\\', '/') for s in strings_of(sc, ks)}
         for p, k in kl_loc.leaves(kl_loc.parse(m_loc['English'])):
             if p.lower() in named and p.lower() not in have:
                 want.add(p); sids[p] = kl_loc.fields(k)[2] or 0
@@ -975,8 +1010,14 @@ def graft_audio(s_name, m_name, sc, ks, log=print, more_roots=(), loc=True):
     rs = roots(sc, ks) | set(more_roots) | {v for v in sids.values() if v}
     st['roots'] = len(rs)
     snd, whd, wav, omap = merge(base, src, read(beside(s_name, '.WHD')), read(beside(s_name, '.WAV')),
-                                read(beside(m_name, '.WHD', mg)), read(beside(m_name, '.WAV', mg)), rs, log=log, stats=st)
+                                read(beside(m_name, '.WHD', mg)), read(beside(m_name, '.WAV', mg)), rs, log=log, stats=st,
+                                defs=V.def_slots if V and vo['defs'] and mg == 'dm' else None)
     st.update(rewrite(sc, ks, omap))
+    if V and vo['npc']:
+        st.update(V.give_voices(sc, ks, s_name, snd, log, prefer=vo['prefer']))
+    if V and vo['heroes']:                                  # a second append: Dog Days' own story voice sets
+        snd, whd, wav, n = V.hero_voices(sc, snd, whd, wav, base.ls, log, source=vo['hero_source'])
+        st.update(n)
     a.map, a.members['.SND'] = omap, snd
     a.beside['.WHD'], a.beside['.WAV'] = whd, wav
     ls = None
@@ -988,6 +1029,8 @@ def graft_audio(s_name, m_name, sc, ks, log=print, more_roots=(), loc=True):
     if want:
         files, n = kl_loc.graft_level(s_loc, m_loc, lambda p: p in want, omap, log)
         st['.LOC leaves added per language'] = n
+        if V and vo['aliases']:
+            files, st['.LOC K_C1..K_C9 leaves added per language'] = V.loc_aliases(files, sc, ks, want)
         st['.LOC leaves added without a sound'] = sum(1 for p in want if not omap.get(sids[p]))
         a.members.update({lang + '.LOC': d for lang, d in files.items()})
     a.problems, n = verify(base, snd, whd, wav, ls, omap)

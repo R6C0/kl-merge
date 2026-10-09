@@ -26,6 +26,13 @@ archive in a slot. Milestone A = two stock Dog Days levels (no Dead Men data): p
                                                (default: bone ids and animation bone numbers rewritten, kl_chars)
                        ... --author            the authored FA layer of kl_fa_author.py (Retomoto Tower; the
                                                two-part level is built by 'kl_maps.py chain ... --author')
+                       ... --load trim,slim    packing / weight options (load_options(); also the environment
+                                               variable KL_GRAFT_LOAD, for builds made through kl_maps): trim = S's
+                                               dead vertex data emptied always, slim = S's dead map textures down to
+                                               4 x 4, stored, level=N, stamp=now. re/loading.md says what each saves.
+    python kl_graft.py lighten <build folder> <out folder> [--load trim,slim,level=6]
+                                               an existing build repacked with those options (default trim,slim);
+                                               nothing is renumbered. Install it with 'install --from <out folder>'
     python kl_graft.py install [F01] [--from <folder>]   put the last build (or a kept one) into Dog Days
                                                (each stock file is MOVED to KL_PortBackup once, never overwritten)
     python kl_graft.py pairs                   which S / M pairs need the least guessing
@@ -96,7 +103,8 @@ WHO OWNS WHAT (S = systems level, M = map level; top-level subtrees by kl_prpjoi
              AIMonitor, briefing trigger and timer, three speakers) and kl_fa.repair runs on the
              joined scene (re/fa_round.md). Needed for a real round only; a direct boot has none.
 NOT JOINED YET: light<->geometry lists between systems and map (dropped by remove/graft), S's
-unused map models/textures (kept).
+unused map models/textures (kept; '--load trim,slim' empties them in place, ids unchanged: re/loading.md).
+  archive    deflate level 1, members in S's order, one fixed time stamp (STAMP): equal members = equal file.
 
 CHOICE OF S AND M FOR MILESTONE A: S = F07, M = F09 (python kl_graft.py pairs). S must be one of
 F04..F09 (their systems hold the particle templates: no dangling path, kl_prpjoin). Of those
@@ -339,7 +347,7 @@ BISECT (not needed in the end, but it works): build ... --geometry [--m-add A,B]
   layer at all verifies with 0 problems; plain '--geometry' leaves S's game-mode layer with scene
   paths into S's map that is gone (verify reports them).
 """
-import collections, os, shutil, struct, sys, zipfile
+import collections, os, shutil, struct, sys, time, zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import kl_package, kl_gms, kl_scene, kl_prmgraph as G, kl_texmat as T, kl_octree as O, kl_members as MB, kl_hvk, kl_anm, kl_snd
@@ -355,6 +363,8 @@ TAKE = ('CameraFar', 'CameraFogBegin', 'CameraFogFull', 'CameraFogMin', 'CameraB
         'SSAO_Blur', 'SSAO_Strength')  # scene properties that describe the map
 LANGS = kl_package.LANGS
 PRM_LIMIT = 90000000                   # a joined .prm larger than this loses S's dead vertex data (build(); run RT1)
+STAMP = (2010, 8, 17, 12, 0, 0)        # time stamp of every archive member (write_zip): a constant, any valid date
+LOAD = {'stamp': True, 'level': 1, 'stored': False, 'trim': False, 'slim': False}   # load_options() defaults
 
 
 # ------------------------------------------------------------------ files in and out
@@ -389,14 +399,32 @@ def beside_of(level):
     return out
 
 
-def write_level(slot, members, beside, log=print):
-    """members: [(member name, bytes)] in archive order; beside: {suffix: source path or bytes},
-    written as <slot>_Main<suffix> (kl_snd.Audio.beside has that form)."""
-    d = out_dir(slot)
-    path = os.path.join(d, slot + '_Main.zip')
-    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED, compresslevel=1) as z:
+def write_zip(path, members, opt=None):
+    """members: [(member name, bytes)] in archive order -> the archive, packed as load_options() says.
+    Every member carries the same fixed time stamp (STAMP), so two builds with equal members are equal
+    files (before 2026-10-09 18:00 the build time was stamped in; 'stamp=now' gives that back).
+    Method and order are what stock has: deflate, the directory in physical order. 'stored' writes
+    members without compression. ASSUMPTION for 'stored': the game's reader takes method 0 for a
+    member of any size - the 45 stock archives use it only for members of up to 32 bytes
+    (re/loading.md 4), so it is NOT the default and has not been loaded by the game."""
+    opt = opt or load_options()
+    stamp = STAMP if opt['stamp'] else time.localtime()[:6]
+    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED, compresslevel=opt['level']) as z:
         for name, data in members:
-            z.writestr(name, data)
+            zi = zipfile.ZipInfo(name, stamp)
+            zi.external_attr = 0o600 << 16              # what writestr(name, data) put there
+            if opt['stored']:
+                z.writestr(zi, data, zipfile.ZIP_STORED)
+            else:
+                z.writestr(zi, data, zipfile.ZIP_DEFLATED, opt['level'])
+    return path
+
+
+def write_level(slot, members, beside, log=print, opt=None):
+    """members: [(member name, bytes)] in archive order; beside: {suffix: source path or bytes},
+    written as <slot>_Main<suffix> (kl_snd.Audio.beside has that form). opt: load_options()."""
+    d = out_dir(slot)
+    path = write_zip(os.path.join(d, slot + '_Main.zip'), members, opt)
     for f in os.listdir(d):                             # nothing of an earlier build stays
         if f.startswith(slot + '_Main') and f != slot + '_Main.zip':
             os.remove(os.path.join(d, f))
@@ -440,6 +468,221 @@ def install(slot='F01', log=print, src=None):
     elif os.path.isfile(join):
         os.remove(join)
         log('removed %s (this build has no jump box)' % os.path.relpath(join, dd))
+
+
+# ------------------------------------------------------------------ loading weight (re/loading.md)
+def load_options(spec=None):
+    """The packing / weight options of a build as a dict (defaults: LOAD). spec: 'trim,slim,level=6',
+    a dict, or None = the environment variable KL_GRAFT_LOAD (so that kl_maps / kl_fa_author builds
+    take them without a new argument). Names:
+      trim       the .prm's vertex and index data that no root of the joined level reaches -> 16-byte
+                 stubs, ALWAYS (without it only past PRM_LIMIT). Chunk indices stay. Loaded live in
+                 every Retomoto build (the PRM_LIMIT path); the bank never ran with it.
+      slim       the .TEX's pictures that only S's dead map models show -> their smallest mip levels
+                 (4 x 4 and below). Ids, names, formats and the material file stay. NOT LOADED LIVE.
+      stored     archive members uncompressed (write_zip: an ASSUMPTION about the reader).
+      level=N    deflate level 1..9 (1 = what the builds had so far).
+      stamp=now  the build time as the members' time stamp (default: the constant STAMP)."""
+    opt = dict(LOAD)
+    if spec is None:
+        spec = os.environ.get('KL_GRAFT_LOAD', '')
+    if isinstance(spec, dict):
+        spec = ','.join('%s=%s' % kv for kv in spec.items())
+    for w in filter(None, (x.strip() for x in spec.replace(' ', ',').split(','))):
+        k, _eq, v = w.partition('=')
+        if k not in opt:
+            raise ValueError('unknown load option %r (known: %s)' % (k, ', '.join(sorted(opt))))
+        if k == 'level':
+            opt[k] = int(v)
+            if not 1 <= opt[k] <= 9:
+                raise ValueError('deflate level %s' % v)
+        elif k == 'stamp':
+            opt[k] = v.lower() not in ('now', '0', 'false', 'off', 'no')
+        else:
+            opt[k] = v.lower() not in ('0', 'false', 'off', 'no')
+    return opt
+
+
+def live_roots(sc, gms_models):
+    """Every .prm chunk the level's own files name: sc = the level's kl_prpjoin.Scene (ZGEOM[4],
+    ZWINPIC[2], fonts, cloth, the scene block), gms_models = the .gms records' chunk indices."""
+    return ([(c, k) if k else c for _w, c, k in G.prp_roots(sc.p, sc.tids, J.schema('dd'), 'dd')] +
+            [m for m in gms_models if m])
+
+
+def hud_textures(sc):
+    """.TEX ids the HUD names directly: ZOnScreenDisplay2[7], 200 ids per object (kl_texmat docstring).
+    No material stands between them and the .TEX, so dead_assets() has to be told."""
+    out = set()
+    for k in range(1, len(sc.nodes)):
+        cls = sc.cls(k)
+        if cls and 'ZOnScreenDisplay2[7]' in labels(cls):
+            unit = units(sc.nodes[k]['props'][1:-1])[labels(cls).index('ZOnScreenDisplay2[7]')]
+            out.update(v for v in (u32(t) for t in unit if len(t[1]) == 4) if 0 < v < G.SLOTS['dd'])
+    return out
+
+
+def dead_assets(prm, mat, tex, live, hud=()):
+    """What of a joined level only S's removed map still holds.
+    prm: kl_prmgraph.Prm, mat / tex: kl_texmat models, live: live_roots(), hud: hud_textures().
+    -> {'reached': {chunk: kind} from the live roots,
+        'data': chunks of vertex / index data that only dead model roots reach (kl_prmgraph.orphans:
+                a dead root is found by its shape),
+        'slots': material slots that a dead mesh uses and no live one,
+        'tex': texture ids whose EVERY known user is dead}.
+    A texture is in 'tex' only if a dead material or a dead sprite names it AND nothing else does:
+    every material that is not in 'slots' counts as a user (also those no mesh names at all - the
+    effect system and the HUD reach materials in ways this file does not follow), so do the live
+    chunks' own texture fields, the HUD list, and the frame lists of what stays. The about 24 UI /
+    font textures per level without a known user (kl_texmat) are therefore never in it.
+    ASSUMPTION: no code path picks a material BY SLOT that the level's files name only on S's map
+    meshes (e.g. a decal shared with a map prop). If one does, the picture is a 4 x 4 blur, not a
+    crash: the texture still exists under its id."""
+    obj = ('mesh', 'scatter', 'water')
+
+    def named(kinds, args):
+        slots, ids = set(), set()
+        for i, k in kinds.items():
+            if k in obj:
+                slots.add(prm.u16(i, 0x12))
+            for off, typ, _k in G.fields(prm, i, k, args.get(i, 0)):
+                if typ in ('t', 'T') and prm.u32(i, off):
+                    ids.add(prm.u32(i, off) % G.SLOTS['dd'])
+        return slots, ids
+
+    reached, args = G.walk(prm, live)
+    roots = [i for i, l in G.orphans(prm, reached).items() if l == 'dead root']
+    try:
+        dk, da = G.walk(prm, [(i, 'root') for i in roots])
+    except ValueError:                                  # a dead root that does not walk: nothing is called dead
+        dk, da = {}, {}
+    dk = {i: k for i, k in dk.items() if i not in reached}
+    live_slots, live_ids = named(reached, args)
+    dead_slots, dead_ids = named(dk, da)
+    dead_slots = {s for s in dead_slots - live_slots if s in mat.insts}
+    keep = T.used_textures(mat, [s for s in mat.insts if s not in dead_slots]) | live_ids | set(hud)
+    keep = T.texture_closure(tex, [i for i in keep if i in tex.tex])
+    cand = T.texture_closure(tex, [i for i in T.used_textures(mat, dead_slots) | dead_ids if i in tex.tex])
+    return {'reached': reached, 'roots': roots,
+            'data': sorted(i for i, k in dk.items() if k in ('vtx', 'idx') and len(prm.chunks[i]) > 16),
+            'slots': dead_slots, 'tex': sorted(cand - keep)}
+
+
+def mip_levels(entry):
+    """[(offset of the level's u32 size, size)] of a .TEX record, or None when the record is not
+    header + name + <mips> x (u32 n, n bytes) to its last byte (then it is left alone)."""
+    mips = struct.unpack_from('<I', entry, 20)[0]
+    p, out = entry.index(b'\0', 36) + 1, []
+    for _k in range(mips):
+        if p + 4 > len(entry):
+            return None
+        n = struct.unpack_from('<I', entry, p)[0]
+        out.append((p, n)); p += 4 + n
+    return out if out and p == len(entry) else None
+
+
+def small_texture(x, least=4):
+    """The texture with only its mip levels of `least` pixels and less on the shorter side - the
+    tail of its own chain, so format, name, id, flags and the bytes of those levels are the file's
+    own. `least` = 4: a block-compressed top level smaller than one 4 x 4 block is something no
+    stock texture was checked for. None = not shrunk (cube map, animated, one level, already small,
+    or a record mip_levels() does not read)."""
+    if x.faces is not None or x.frames is not None or x.flags & (T.CUBE | T.ANIMATED):
+        return None
+    e = x.entry
+    h, w = struct.unpack_from('<HH', e, 16)
+    lv = mip_levels(e)
+    if not lv or len(lv) < 2:
+        return None
+    k = max((j for j in range(len(lv)) if min(max(1, w >> j), max(1, h >> j)) >= least), default=0)
+    if k == 0:
+        return None
+    body = e[4:lv[0][0]] + e[lv[k][0]:]
+    out = bytearray(struct.pack('<I', 4 + len(body)) + body)
+    struct.pack_into('<HHI', out, 16, max(1, h >> k), max(1, w >> k), len(lv) - k)
+    return T.Texture(bytes(out), None, None, None, x.group)
+
+
+def lighten(prm_bytes, tex_bytes, mat_bytes, live, hud, opt, log=print):
+    """Apply 'trim' and 'slim' (load_options) to the written members -> (.prm, .TEX, report).
+    Nothing is renumbered and nothing the live roots reach changes: that is checked here (every
+    reached chunk byte-equal, the .MAT ref table the .prm implies unchanged, the .TEX re-read)."""
+    prm, tex, mat = G.read(prm_bytes, 'dd'), T.read_tex(tex_bytes), T.read_mat(mat_bytes)
+    d = dead_assets(prm, mat, tex, live, hud)
+    rep = {'prm before': len(prm_bytes), 'tex before': len(tex_bytes), 'dead roots': len(d['roots']),
+           'dead data chunks': len(d['data']), 'dead data bytes': sum(len(prm.chunks[i]) for i in d['data']),
+           'dead materials': len(d['slots']), 'dead textures': len(d['tex']),
+           'dead texture bytes': sum(len(tex.tex[i].entry) for i in d['tex']), 'textures': len(tex.tex)}
+    new_prm, new_tex = prm_bytes, tex_bytes
+    if opt['trim'] and d['data']:
+        before = {i: prm.chunks[i] for i in d['reached']}
+        for i in d['data']:
+            prm.chunks[i] = bytes(16)
+        new_prm = G.write(prm)
+        if any(prm.chunks[i] != c for i, c in before.items()) or G.walk(G.read(new_prm, 'dd'), live)[0] != d['reached']:
+            raise ValueError('trim changed something the level reaches')
+        if T.material_refs(new_prm) != T.material_refs(prm_bytes):
+            raise ValueError('trim changed the material reference counts')
+    if opt['slim'] and d['tex']:
+        shrunk = 0
+        for i in d['tex']:
+            s = small_texture(tex.tex[i])
+            if s is not None:
+                tex.tex[i] = s; shrunk += 1
+        new_tex = T.write_tex(tex)
+        back = T.read_tex(new_tex)
+        if set(back.tex) != set(T.read_tex(tex_bytes).tex) or T.write_tex(back) != new_tex:
+            raise ValueError('slim changed the texture ids or the .TEX does not round-trip')
+        rep['textures shrunk'] = shrunk
+    rep['prm after'], rep['tex after'] = len(new_prm), len(new_tex)
+    log('  load weight: %d dead model roots; .prm %.1f -> %.1f MB (%d dead vertex / index chunks, %s); '
+        '.TEX %.1f -> %.1f MB (%d of %d textures only dead materials name, %.1f MB, %s)' % (
+            rep['dead roots'], len(prm_bytes) / 1e6, len(new_prm) / 1e6, len(d['data']), 'emptied' if opt['trim'] else 'kept: no trim',
+            len(tex_bytes) / 1e6, len(new_tex) / 1e6, len(d['tex']), len(tex.tex), rep['dead texture bytes'] / 1e6,
+            '%d shrunk to 4 x 4' % rep.get('textures shrunk', 0) if opt['slim'] else 'kept: no slim'))
+    return new_prm, new_tex, rep
+
+
+def open_built(path):
+    """A built (or stock) Dog Days level archive read for lighten() / kl_loadtime: (member names in
+    order, {name: bytes}, {'.prm': name ...}, kl_prpjoin.Scene, live_roots, hud_textures)."""
+    with zipfile.ZipFile(path) as z:
+        order = z.namelist()
+        files = {n: z.read(n) for n in order}
+    ext = {n.rsplit('_Main', 1)[1]: n for n in order if '_Main' in n}
+    raw, buf = kl_gms.unpack(files[ext['.gms']]), files[ext['.buf']]
+    import kl_rtp
+    names, tids = ['ROOT'], [kl_rtp.ROOT_TYPE]
+    for decl, tid, _prio in kl_gms.entities(raw):       # as kl_prpjoin.Scene.load
+        o = struct.unpack_from('<I', raw, 4 * (decl & 0xffffff))[0]
+        names.append(buf[o:buf.index(b'\0', o)].decode('latin1')); tids.append(tid)
+    sc = J.Scene(Prp(files[ext['.prp']]), names, tids, 'dd', os.path.basename(path))
+    return order, files, ext, sc, live_roots(sc, G.gms_roots(raw)), hud_textures(sc)
+
+
+def relight(src, dst, opt=None, log=print):
+    """A built level (folder with <slot>_Main.zip, or the archive) repacked into folder `dst` with
+    the load options applied - the way to weigh an option on a build that exists, and to make a
+    lighter copy of a delivered one ('install --from <dst>'). Files beside the archive are copied.
+    -> (path, report)."""
+    opt = opt or load_options()
+    zp = src if src.lower().endswith('.zip') else next(os.path.join(src, f) for f in sorted(os.listdir(src)) if f.lower().endswith('_main.zip'))
+    order, files, ext, _sc, live, hud = open_built(zp)
+    rep = {}
+    if opt['trim'] or opt['slim']:
+        files[ext['.prm']], files[ext['.TEX']], rep = lighten(files[ext['.prm']], files[ext['.TEX']], files[ext['.MAT']], live, hud, opt, log)
+    os.makedirs(dst, exist_ok=True)
+    if os.path.abspath(dst) == os.path.abspath(os.path.dirname(zp)):
+        raise ValueError('relight: the output folder is the build\'s own')
+    out = write_zip(os.path.join(dst, os.path.basename(zp)), [(n, files[n]) for n in order], opt)
+    for f in os.listdir(os.path.dirname(zp)):
+        p = os.path.join(os.path.dirname(zp), f)
+        if os.path.isfile(p) and p != zp:
+            shutil.copyfile(p, os.path.join(dst, f))
+    rep.update({'zip before': os.path.getsize(zp), 'zip after': os.path.getsize(out)})
+    log('repacked %s: %.1f -> %.1f MB (%s)' % (out, rep['zip before'] / 1e6, rep['zip after'] / 1e6,
+                                             ', '.join('%s=%s' % kv for kv in sorted(opt.items()))))
+    return out, rep
 
 
 class Level:
@@ -764,7 +1007,7 @@ def dm_rename(Jn, S, log=print, anim=True):
 
 # ------------------------------------------------------------------ the graft
 def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True, light='stock', anim=True, fa=True,
-          postfilter=True, ao=0.5, escape=True, author=False, bones=True):
+          postfilter=True, ao=0.5, escape=True, author=False, bones=True, load=None):
     """Systems of S + map of M -> (path of the archive, problems found by verify()).
     sound: merge what M's map names of M's bank into S's (kl_snd.graft_audio); False = the map's
     sound references are set to 0 (the silent builds of milestones A and B). loc: also graft the
@@ -782,7 +1025,10 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
     host F07's own FA layer is re-placed before the graft and kept, the campaign squads that stay lose
     their mini-cutscene controllers, and once both parts are in the scene the layer is wired.
     bones: the skeletons that came with M's models are renumbered to the joined level (kl_chars.reid /
-    rebind, re/characters_graft.md); False = left as M had them (the builds up to 2026-10-09 12:40)."""
+    rebind, re/characters_graft.md); False = left as M had them (the builds up to 2026-10-09 12:40).
+    load: the packing / weight options, see load_options() ('trim,slim,level=6'; None = the environment
+    variable KL_GRAFT_LOAD, and without it the archive is packed as before, with a fixed time stamp)."""
+    lopt = load_options(load)
     sch = J.schema('dd')
     for t, load in SOUND_TYPES.items():
         if sch.types[t]['load'] != load:
@@ -1213,6 +1459,9 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
            '.sgp': sgp, '.hrd': hrd, '.ANM': anm_bytes}
     if audio:
         out.update(audio.members)                       # '.SND', and '<Language>.LOC' when keys were grafted
+    if lopt['trim'] or lopt['slim']:                    # re/loading.md: what only S's removed map holds; ids all stay
+        out['.prm'], out['.TEX'], _lrep = lighten(out['.prm'], out['.TEX'], out['.MAT'],
+                                                  live_roots(Jn, [e.model for e in final]), hud_textures(Jn), lopt, log)
     members = []
     for n in S.order:                                   # S's archive order; everything else is S's
         ext = n.rsplit('_Main', 1)[1] if '_Main' in n else None
@@ -1228,7 +1477,7 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
     beside = beside_of(s_name)
     if audio:
         beside.update(audio.beside)                     # merged .WHD / .WAV, _LS.SND with the new trailer offset
-    path = write_level(slot, members, beside, log)
+    path = write_level(slot, members, beside, log, lopt)
     with open(os.path.join(out_dir(slot), 'graft.txt'), 'w') as f:
         f.write('%s systems + %s map (%s; %s)\nproblems: %d\n%s\n' % (
             s_name, m_name, sel, ', '.join(['silent map' if not sound else 'merged bank' + ' + voice lines' * loc, 'lights %s' % light,
@@ -1495,10 +1744,13 @@ if __name__ == '__main__':
         g, quiet, noloc, noanm, nofa, pf, noesc, nobones = (f in a for f in flags)
         author = '--author' in a
         a = [x for x in a if x != '--author']
+        load = None
+        if '--load' in a:
+            i = a.index('--load'); load = a[i + 1]; del a[i:i + 2]
         a = [x for x in a if x not in flags]
         sys.exit(1 if build(a[1], a[2], *a[3:4], sel=Select(g, **opt), sound=not quiet, loc=not noloc, light=light,
                             anim=not noanm, fa=not nofa, postfilter=not pf, ao=ao, escape=not noesc, author=author,
-                            bones=not nobones)[1] else 0)
+                            bones=not nobones, load=load)[1] else 0)
     elif a and a[0] == 'install':
         src = None
         if '--from' in a:
@@ -1506,5 +1758,7 @@ if __name__ == '__main__':
         install(*a[1:2], src=src)
     elif a and a[0] == 'pairs':
         pairs()
+    elif len(a) >= 3 and a[0] == 'lighten':
+        relight(a[1], a[2], load_options(a[a.index('--load') + 1] if '--load' in a else 'trim,slim'))
     else:
         print(__doc__)

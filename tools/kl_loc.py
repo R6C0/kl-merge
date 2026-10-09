@@ -17,9 +17,10 @@ text\\0 + u32 if flag 0x01, then u32 sound id if flag 0x20. Flag 0x08 is set on 
   how the engine searches a table is NOT ESTABLISHED. graft() keeps a table's own order and
   puts each new child before the first one that sorts after it (ASSUMPTION).
 - A file of 9 bytes or less is a stub (Dutch in all 21 Dog Days levels): left as it is.
-- Dog Days looks a key K up as K_C1 .. K_C9 (character voices) and then K (kl2 0x6b879d); Dead
-  Men keys have no such variants. ASSUMPTION that the plain key is spoken; aliases() makes the
-  nine variants if it is not.
+- A Fragile Alliance line key K is looked up EITHER as K (flag 0) OR as K_C1 .. K_C9 and K_R_C9
+  (flag 1: one recording per heister), never both (kl2 0x6b8710; the flag per settings field is
+  kl_voice.LINES, proven on the nine stock levels). Dead Men keys have no such variants, so in
+  a flag-1 field they are silent: aliases() makes the nine variants (kl_voice.loc_aliases).
 """
 import collections, os, struct, sys, zipfile
 
