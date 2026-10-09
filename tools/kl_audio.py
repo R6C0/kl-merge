@@ -27,7 +27,8 @@ FA_FILTER = ('Multiplayer/', 'Fragile_Alliance')
 # the Japanese guard / police lines. None is matched by FA_FILTER, so the authored layer was silent.
 # Prefixes are the clip names as kl_audio.py list prints them. Rebuild with 'python kl_audio.py merge'.
 RETOMOTO_FILTER = ('Music/InHouse/Japan/M09_A/', 'LevelSetup/Level/M09_A/Music/', 'SFX/Explosions/Bomb/',
-                   'SFX/Ambiences/M09_A/', 'SFX/Ambiences/M09_B/', 'Dialog/AllLevels/Oneliners/Japanese/')
+                   'SFX/Ambiences/M09_A/', 'SFX/Ambiences/M09_B/', 'LevelSetup/Level/M09_A/Cuts/',
+                   'Dialog/AllLevels/Oneliners/Japanese/')
 MERGE_FILTER = FA_FILTER + RETOMOTO_FILTER      # what merge() takes by default
 LIP_BLOCK = 0x1000
 

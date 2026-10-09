@@ -96,6 +96,30 @@ routs). The blast timer's field 4 then keeps only the two boardroom-side areas. 
 2nd 20300, 1st 19600; stairs A/B join 1st-2nd, C/D 2nd-3rd (x -2163..-259). Police AFTER_DEATH points
 (5 in the tower) are already in the elevator lobby and at the atrium lift.
 
+## 2d. Sketch of the join as a beat, and of the bounds (design; mechanisms per `re/retomoto_fa.md` 3)
+
+The join today: anybody entering the tower car (2972 19730 909, half 170/130/120) fires `JumpPoint 06_Exit`
+in the lobby car (6272 563 -6305) at once, doors of both cars opened at the blast. As a beat:
+1. Doors stay CLOSED until the main room is cleared (move the two `MatPosAnimProxy` of
+   `CAMPAIGN_KEEP` from the blast timer's list to the room counter's `ActivateGeom` chain): the elevator
+   is the reward for the boardroom, and nobody can leave the tower with only statue money before the
+   fight - GUESS on pacing; `GATE_MAIN_ROOM = False` keeps today's behaviour.
+2. The car's trigger fires `ECPS_BOTH` so police follow; the campaign's `EndElevatorSounds`
+   (`PlayAudio`, elevator clip) could ride the same list for a sound of the doors (its stream clip is
+   now in `RETOMOTO_FILTER`'s `LevelSetup/Level/M09_A/` prefix - NOT: that prefix is `Music/`; add
+   `LevelSetup/Level/M09_A/Cuts/` if wanted).
+3. No fade exists in `JumpPoint`; a `TriggerDelay2` between the box and the jump (1.5 s, GUESS) is
+   stock wiring and lets the doors read as closing. The arrival faces the lobby door (x 6112).
+4. Online case (`re/retomoto_fa.md` 3.3) is LIVE; if only the host moves, fall back to spawn-side
+   hand-over (AFTER_DEATH on the square) and accept that living heisters must all take the car.
+Bounds and kill (today: GUESS slabs): the window drop - the tower hangs at y 19,600 over B's square
+bound (top y 10,373): a `KillBox` (F01 has `FA_DieFromSelf`; F07's, if any, by name) as a slab
+x 5900..7300, y 12000..20900 under the window is safer than the bound's push-back, which may leave a
+player on no floor; the atrium void (x -2800..1400) is railed by geometry in the campaign - check for a
+fall to y 19600 only; the roof is unreachable without the rappel (no stair from TopOffices); the street
+west side (overpass z 6509..20701, bus terminal) needs the `030_LevelBound_StreetLeft` slab at
+x -7800..-7000 to run z -2000..20700, not 8000, or the overpass is open.
+
 ## 2b. Done in this session (code)
 - `tools/kl_audio.py`: `MERGE_FILTER = FA_FILTER + RETOMOTO_FILTER` is the default of `merge()`: music,
   explosion, ambience and Japanese voice prefixes. UNTESTED; check the prefixes with
