@@ -857,3 +857,21 @@ The bank was rebuilt with it.
 - 9.7 patch D (`install` from a folder) is in: `python tools/kl_graft.py install F01 --from <folder>`.
   Patch A (the two other self-deleting inits in verify) and B (`build(flat=)`) are not; `--flat` stays
   in kl_maps.
+
+## 12. Retomoto Tower loads (2026-10-09, agent h-live; runs RT1 - RT6, M01W)
+
+Full account: re/retomoto_fa.md section 9. For this file:
+- **The chain is proven live** (section 6 item 3): three static Havok parts, `nav_join`, 17 shared clone
+  groups and no .hrd load and play. Two tool faults were in the way and are fixed: the joined .prm was too
+  large for the loader's single heap block (kl_graft `PRM_LIMIT`, 99.5 -> 60.3 MB) and `nav_join` moved
+  tree 1's children, which are relative to their polygon's root (rule added to `navtest`).
+- A second `FFCoverList` asserts (kl2 0x6682c5): a Dead Men map brings `CoverList`, so S's
+  `Specials!CoverPoints!*` must never be kept beside it. `kl_graft.verify` counts them now.
+- The mover between the parts (section 6 item 2): a `JumpPoint` fired by a level object crashes for a
+  Fragile Alliance player (kl2 0x8f40c9); the game's debug jump request, a two-dword data write, moves
+  him in one frame. That write belongs in the hook.
+- `python tools/kl_maps.py chain <out> F07 M09_B M09_A --author` builds the level with the FA layer;
+  `kl_fa_author.py hero <build> <out> x y z` makes a copy whose direct boot starts somewhere else.
+- M01_FA_A on the final tool: verify 0 problems, kl_fa 0 CRASH / BROKEN, direct boot with a walk clean
+  (M01W; the walker is shot twice by the police on the way to the diner).
+- Load time: the two-part level needs 200 s to its first frame on a direct boot (the bank 100 s).

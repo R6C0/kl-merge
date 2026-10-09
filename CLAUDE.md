@@ -182,48 +182,55 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
-State 2026-10-09 11:10. `python tools/kl_graft.py build F07 <M>` (verify must say problems: 0),
+State 2026-10-09 12:40. `python tools/kl_graft.py build F07 <M>` (verify must say problems: 0),
 `python tools/kl_graft.py install`, `python tools/kl_autotest.py --shots 100,130,160 --tag X`.
 Dead Men FA map names: M01_FA_A = diner / Sunny Hill Plaza, M02_FA_A = 'Late Night Opening',
 M03_FA_A = the BANK 'Withdrawal' (owner's priority), M06_FA_A = 'A Walk in the Park'.
+The F01 slot holds the full F07 + M03_FA_A bank build; original dinput8.dll + KLHook.ini in place
+(reference copies: <work>\build\klhook\direct_boot\; the repo's klhook\KLHook.ini is the new one).
 DONE, seen live:
-- All four Dead Men FA maps load under F07. Real Arcade rounds from the menu (hook-driven) ran
-  on M03, M02 and M06 (start, HUD, clock, score page, Ready, round 2). M01: direct boot only.
-- Bank, complete round on a NO-GUARDS build (run ESC3): loot from a cash drawer and the garage
-  boxes, out of the yard, van called on entering the exit box, 'You jumped into the getaway car',
-  'All surviving criminals escaped', $723,625, round 2. On the full build the scripted player is
-  shot in the garage (RN13, RN14): the escape WITH guards needs a person playing.
-  How: Dead Men players CLIMB the yard's 2 m wall (ZFFPlayerMovementClimb; Dog Days has no such
-  class), so tools/kl_escape.py sinks one wall piece and cuts its collision (re/escape.md).
-- Every Dead Men map: .HVK surface indices are surface-table rows in Dead Men's numbering; a
-  bullet hitting row 30 read past Dog Days' 24 rows (crash kl2+0xe5068, M02). kl_hvk.resurface.
-- Anti-tamper experiments X1-X3 PASS in a real session: import-slot wrappers, data writes
-  ([0x168f750]+0x16, 0xd35420) and five detours outside hashed ranges. X4-X6 controls not run.
-- OWN FOLDER works live: stock F01 in the slot + klslot [Redirect] F01=DM03 loads the bank from
-  <DD>\KLExpansion\Maps\DM03 when 'Subway' is chosen (X2, X3). That folder (360 MB) was left
-  in the game folder; inert with the original hook.
-- Score-page crash (RN11) explained (re/crash_scorepage.md): an uninitialised count in kl2.exe's
-  own Steam leaderboard service, not level data; klauto writes it once ([Auto] LbFix). The
-  shipped klhook.c does not yet. 'Round: 1' in round 2 is stock Arcade behaviour.
-OPEN / DECISIONS FOR THE OWNER:
-- LEADERBOARD: whether an Arcade round on a grafted map uploads its score to the PUBLIC Steam
-  board (KL2_Heist0_TotalMoney) was not read. ESC3 ended a real escape on the 'Subway' entry.
-  Until this is settled: no more scripted rounds that end with money; direct boots are fine.
-- Sound has never been HEARD by anyone. Streams: Dog Days ships no streamed ADPCM clip; the six
-  maps need 205 ADPCM blocks - whether its stream player decodes them is unknown.
-- Zombie kl2.exe entries (0 threads) pile up and keep the hook DLL mapped; a Steam restart
-  clears them. scratchpad\glive\locked_0.dll is the original dinput8.dll moved aside by one.
-BUILT OFFLINE, never loaded by the game:
-- Retomoto Tower: F07 + M09_B + M09_A with the authored FA layer (tools/kl_fa_author.py,
-  re/retomoto_fa.md section 8 = live test order).
-- tools/kl_str.py: reproducible stream-file merge for the six maps incl. Retomoto's music
-  (re/retomoto_audio.md). Installing it replaces <DD>\PC_Def.str: NOT done, needs the owner's
-  go-ahead (a stock file outside the F01 slot).
-Then, in order:
-1. Leaderboard question. Retomoto direct boots. M01 menu round. klhook.c: LbFix, klslot data mode.
-2. Owner plays the bank on the full build and listens.
-3. Player models, heister select (data write of [rules+0x33d], re/antitamper.md), menu entries.
+- All four Dead Men FA maps load; real Arcade rounds ran on M03, M02, M06. Bank: complete round
+  with escape on a no-guards build (ESC3). Own folder by klslot [Redirect] (X2, X3).
+- RETOMOTO TOWER (F07 + M09_B + M09_A + authored FA layer, `kl_graft build --author`, final build
+  <work>\build\h_rt\...): loads (first frame after ~200 s), player in the boardroom at the
+  window, lit and textured; scripted walk through the tower (193 m) and, after the jump, lobby ->
+  entrance -> square -> road -> both van stops (~300 m); two Arcade rounds start, show the HUD
+  and end at the score page (player shot by the seven boardroom guards). re/retomoto_fa.md 9.
+  Faults fixed: .prm over the size the game allocates (crash 0x8e5bbd = failed 28.9 MB HeapAlloc;
+  kl_graft trims unreachable chunks above 90 MB), nav_join shifted tree-1 children (hang at 69 %),
+  F07's cover list (assert 0x6682c5).
+  THE JOIN: a JumpPoint fired by a level object crashes for a Fragile Alliance player (0x8f3fa0
+  reads the story crew, 0x8f40c9). The game's debug jump request works: gamedata+0x8d4 = 5 and
+  [0x156b358] = 1 (gamedata = [0xdd265c]) when the player stands in kl_fa_author.JOIN_BOX. The
+  HOOK has to write it; not in the hook yet.
+- LEADERBOARD (re/leaderboard.md): the test rounds did NOT upload and changed no stats or
+  achievements (Steam's local stats cache unchanged since 2026-03-13). An Arcade session uploads
+  only when its last life is lost or on Quit inside a session - to the STOCK slot's board, with
+  no profile check. RULE for live runs until the hook blocks it: never Quit inside a session on a
+  grafted map, at most two failed rounds per process, end by klauto pass / quit.
+OFFLINE, not run in the game:
+- Hook rewrite (klhook/: klhook.c + klfix.c + klslot.c + klauto.c, SHIP and TEST builds, patch
+  guard against hashed ranges klranges.h, [Redirect.N] pages + mkoverlay.py menu page, debug/
+  tools fixed, debug/zombies.py). Live checks 1-7 in research\h_shipped-hook.json 'next'.
+  Still to add: the SteamUserStats import wrapper of re/leaderboard.md 4.2 and the Retomoto join.
+- tools/kl_chars.py, re/characters_graft.md: Dead Men player models on Dog Days people, four kept
+  builds on stock F01 pass every checker. Finding: skeletons are baked against their level's
+  .ANM; kl_graft should call kl_chars.reid / rebind after the .ANM join (may fix Dead Men car
+  doors and agent faces on the maps). Stage 2: NOT released by the owner, nothing installed.
+- tools/kl_str.py stream merge (Retomoto music): installing replaces <DD>\PC_Def.str - needs the
+  owner's go-ahead.
+WAITING FOR THE OWNER:
+- Play the bank (Subway in Arcade) and listen: nobody has heard any sound. Escape with guards.
+- Retomoto: the heisters start in sight of seven guards who fire during the countdown - move
+  the guards or the start? A played round is needed for blast, loot, gate, street, vans.
+- Go-ahead for PC_Def.str; release of stage 2 (player models); <DD>\KLExpansion (360 MB) keep?
+- ~21 lingering kl2.exe entries (0 threads) need a reboot (or restart of rsEngineSvc).
+Then, in order: hook live checks + stats blocking + join write; kl_chars rebind on the maps;
+M01 menu round; menu page for expansion maps; heister select.
 Restore stock with `tools/RESTORE Dog Days originals.bat`.
+Overnight note 2026-10-08/09: from the 79 % whole-level crash to four Dead Men maps and Retomoto
+Tower loading and playing rounds, in 14 commits on rtp-schemas; every crash and its cause is in
+the commit messages and the kl_graft.py run log.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

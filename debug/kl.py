@@ -11,8 +11,18 @@ def path(a):
     """A dump argument: a file, or a name inside the Dog Days folder (KLHook_3.dmp)."""
     return a if os.path.isfile(a) else os.path.join(DD,a)
 def dumps():
-    """The hook's dumps in the game folder, in the order they were numbered."""
-    return sorted(glob.glob(os.path.join(glob.escape(DD),'KLHook_*.dmp')),key=lambda p:int(re.findall(r'_(\d+)\.dmp$',p)[0]))
+    """The hook's dumps in the game folder: the numbered ones in order, then the named ones (KLHook_stall.dmp,
+    KLHook_stackoverflow.dmp, KLHook_crt.dmp) by age."""
+    def key(p):
+        m=re.search(r'_(\d+)\.dmp$',p)
+        return (0,int(m.group(1))) if m else (1,os.path.getmtime(p))
+    return sorted(glob.glob(os.path.join(glob.escape(DD),'KLHook_*.dmp')),key=key)
+def game_dumps(since=None):
+    """The game's own Steam minidumps (kl2_<build>_crash_<date>.mdmp), oldest first; since = a time stamp or datetime:
+    only those written at or after it. They hold the fault record of ANY module (the ship hook's log has it for kl2.exe
+    only) but no memory besides the stacks."""
+    t=since.timestamp() if hasattr(since,'timestamp') else since
+    return [p for p in sorted(glob.glob(os.path.join(glob.escape(DD),'kl2_*crash*.mdmp')),key=os.path.getmtime) if t is None or os.path.getmtime(p)>=t-2]
 
 class Dump:
     """Minidump: exception record, x86 context of the faulting thread, modules, captured memory."""
@@ -40,11 +50,18 @@ class Dump:
             for i in range(struct.unpack_from('<I',d,st[4])[0]):
                 o=st[4]+4+108*i; base,size=struct.unpack_from('<QI',d,o); nr=struct.unpack_from('<I',d,o+20)[0]
                 L=struct.unpack_from('<I',d,nr)[0]; s.mods.append((base,base+size,d[nr+4:nr+4+L].decode('utf-16le').split('\\')[-1]))
-        s.code=s.addr=None; s.info=(); s.reg={}
+        s.code=s.addr=s.tid=None; s.info=(); s.reg={}; s.threads=[]
+        ctx=lambda crva: dict(zip('edi esi ebx edx ecx eax ebp eip cs efl esp ss'.split(),struct.unpack_from('<12I',d,crva+156)))
+        if 3 in st:                                     # ThreadListStream: (thread id, registers) in the dump's order
+            for i in range(struct.unpack_from('<I',d,st[3])[0]):
+                o=st[3]+4+48*i; tid=struct.unpack_from('<I',d,o)[0]; csz,crva=struct.unpack_from('<II',d,o+40)
+                if csz>=204: s.threads.append((tid,ctx(crva)))
         if 6 in st:
             s.tid,_,s.code,_,_,s.addr,n,_=struct.unpack_from('<IIIIQQII',d,st[6]); s.info=struct.unpack_from('<15Q',d,st[6]+40)[:n]
             crva=struct.unpack_from('<I',d,st[6]+164)[0]
-            s.reg=dict(zip('edi esi ebx edx ecx eax ebp eip cs efl esp ss'.split(),struct.unpack_from('<12I',d,crva+156)))
+            s.reg=ctx(crva)
+        elif s.threads:                                 # no exception record (the hook's watchdog dumps: stall, stack overflow,
+            s.tid,s.reg=s.threads[0]                    # C runtime): the first thread listed is the process's first = the main thread
     def read(s,a,n):
         """n bytes at address a, or None if any of them is missing from the dump."""
         out=b''

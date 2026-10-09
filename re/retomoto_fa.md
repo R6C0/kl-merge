@@ -1,6 +1,8 @@
 # Retomoto Tower: the Fragile Alliance layer
 
-2026-10-09, agent f-retomoto. **Offline only**: nothing was installed, the game was not started.
+2026-10-09, agent f-retomoto. Sections 0 - 8 were written **offline** (nothing installed, the game not
+started). **Section 9 is the live outcome** (agent h-live, same day): the level loads, a round starts on
+it, and it corrects sections 2 - 4 where they were wrong (facing, the join, road height, the cover list).
 Tool: `tools/kl_fa_author.py`. Builds on `re/retomoto.md` (the survey), `re/maps.md` (the two-part
 build), `re/fa_gamemode.md` / `re/fa_round.md` (what a round needs), `re/havok.md`, `re/netcode.md`.
 
@@ -268,6 +270,8 @@ take the `STRIP` controllers off the squads `kl_fa_author.plan(level)[0]` names.
 
 ## 8. What only a live run can settle, in the order to test
 
+(Outcome of steps 1, 2, 4 (start only), 5, 8, 9 (walk only): section 9.)
+
 Each step needs the one before. A direct boot (`-o DefaultScene`) shows 1 - 3; the rest needs a
 round from the menu (klhook\KLHook.round.ini).
 
@@ -300,3 +304,93 @@ round from the menu (klhook\KLHook.round.ini).
     death (re/fa_round.md 5.4), so this needs a second player or the team modes.
 12. **Round end and score page**; then Cops & Robbers / Undercover Cop spawn sets, spawn cameras
     (all GUESS positions), 12 team-mode drop stacks instead of 25.
+
+## 9. Live outcome (2026-10-09, agent h-live; runs RT1 - RT6 in `tools/kl_graft.py`'s run log)
+
+Build: `python tools/kl_fa_author.py test <out> --keep` (now native: `kl_graft.build(author=True)`,
+`kl_maps.py chain ... --author`; the monkey-patching of section 7 is gone). `--no-ai` builds the level
+without the campaign squads for scripted walks. Verify: the same **2 known problems** remain
+("39 particle template names do not resolve (stock M09_A: 36)", "13 stream clips are not in the merged
+stream file"); nothing else. Final build: 25,489 entities, .prm 60.3 MB.
+Pictures: `<work>\research\shots\RT*.png`; logs / inis: `<work>\build\klhook\live\RT*.*`.
+
+### 9.1 What it took to load (three tool faults, all fixed in the tools)
+
+| run | seen | cause | fix |
+|---|---|---|---|
+| RT1 | crash kl2 0x8e5bbd 15 s into the load (write to 0) | the loader reads the whole .prm into one heap block (0x82049b: size + 0x60000 through 0x89e850 -> `ZWin32Allocator` 0x7bb2c0 -> HeapAlloc); 100.9 MB was refused. Stock maximum 69 MB; the bank's 86.5 MB loads | `kl_graft.PRM_LIMIT`: past 90 MB the vertex / index chunks of S's map models that no root reaches become 16-byte stubs (indices stay): 99.5 -> 60.3 MB |
+| RT1b / RT1c | 'Buffering 69 %' for ever; main thread in 0x55f5a0 from `ZActor` slot 82 | `kl_maps.nav_join` shifted the children of tree 1. That tree is one small tree PER POLYGON and a child is relative to the polygon's root (0x55f5c7 `add edx, edi`); read absolute, 340 of F07's 940 trees overlap | children left alone, leaves (array-2 records) shifted; new rule in `nav_facts`, held by all 21 stock meshes and the three trial joins |
+| RT2 | assert kl2 0x6682c5, then no frame | two `FFCoverList`: Dead Men's top-level `CoverList` and F07's `Specials!CoverPoints!CoverControl`, which the layer's `Specials!` kept (`CFFCoverList` slot 13 finds the game data's list at +0x15a0 set) | `kl_fa_author.DROP`; `kl_graft.verify` counts cover lists |
+
+Then (RT2b) **the chain loads**: three static Havok parts in one .HVK, the joined navigation mesh, no
+.hrd - none of them a fault. The load takes 200 s to the first frame (the bank: about 100 s).
+
+### 9.2 Where the player stands, what the boardroom looks like (section 8 steps 1, 2)
+
+- Direct boot: the player stands at **(5650, 20996, -700)**, the table's value. With the table's facing
+  he looked OUT of the main window at the skyline (RT2b_204s.png): **a player group (`Heroes!*`) looks
+  along local -Z** (`look9`). **A `ZSpawnPoint` looks along local +Z** (`rot9`): with `look9` on the START
+  points the round's player faced the window too (RT5), with `rot9` he faces the room (RT6_277s.png).
+  A jump-list entry holds -Z as its direction (read from memory, RT4): `look9`.
+- At load the window is intact (frame, blinds), chairs stand at the table, glass cases and the red
+  pillars are drawn, lit and textured (RT2b_236s.png, RT4_206s.png, RT4_212s.png).
+- **The boardroom door does not stop the player on a direct boot** (x 3690 -> 3422 in 0.5 s, RT3 / RT4):
+  whether it is drawn closed was not looked at; the walk needs no round start to leave the room.
+- The 7 boardroom guards attack at once, round or not: a standing player is dead in 10 - 15 s (RT2b: a
+  reload every 10 s; RT5 / RT6: hit during the 8 s countdown, 'Killed by: The police' 15 s after GO).
+  **The heisters start in sight of them and cannot move during the countdown** - for the owner to judge;
+  moving `Squad_Guards_Inside_02 / _03` behind the door, or the START row, would change it.
+
+### 9.3 The walk (`--no-ai` build, RT3 / RT4; way points = the joined navigation mesh)
+
+Start -> round the table -> door (3420, -101) -> reception (3132, 20996, -1063) -> the atrium's two
+flights of stairs (y 21000 -> 20300 -> 19600) -> elevator lobby (2497, 19601, 1063): 193 m in 33 s, every
+way point reached, nothing in the way. Atrium, rock garden, maple trees and the samurai cases on the
+gallery are drawn (RT3_220s.png, RT3_227s.png). The money stacks at the cases were not looked for.
+After the jump (9.4): out of the lobby car (its door does not stop the player either), along the
+landing (y 570), down to the lobby floor (y 160), front entrance (2376, 51, -6590), square
+(439, **-50**, -7861), road (y **-47 .. -40**), north to van stop 1 (-1629, -40, 9231) and van stop 3
+(-4082, -40, 7741): 300 m in 70 s, every way point reached (RT4_248s .. RT4_356s.png: lobby, street,
+police cars, 'Escape area' marker on the HUD, a red van at stop 3).
+Corrected in `kl_fa_author`: `ROAD_Y` 5 -> -40, the two police points on the square y 26 -> -50.
+Not looked at: whether the vans drive (a direct boot calls none), the level bounds, the invisible
+obstacle at (-450, 0, 0) (the walk did not pass it).
+
+### 9.4 The join: NOT by a message, by the game's debug request (section 3 corrected)
+
+- The trigger box works: the moment the player stepped into the tower car the `JumpPoint` got its
+  'AITrigger' - and the game crashed, **kl2 0x8f40c9 reading 0xa4** (RT3). 0x57e110 passes flag 1 when
+  the request came by message (`[0x156b35c]`), and 0x8f3fa0 then walks the player's crew,
+  `[player + 0xcd0] + 0xa4`. `ZFFPlayer` slot 82 (0x89ca94) creates that crew object only for player
+  types 0 and 1 (`[player + 0x273c] <= 1`: the story's two); a Fragile Alliance player has none.
+  0x8f3fa0 has one caller. **So no level object can fire a JumpPoint in Fragile Alliance.**
+  `kl_fa.check` now reports any object that names a JumpPoint as CRASH 'jump-point'.
+- The debug request is the same code with flag 0: `gamedata + 0x8d4 = entry`, `[0x156b358] = 1`
+  (gamedata = `[0xdd265c]`; entries of 32 bytes from `[gamedata + 0x8c4]`: name, position, -Z direction,
+  object). Written from OUTSIDE the process in RT4 (scratch `jt.py`, WriteProcessMemory, when the feet
+  were in a box in front of the car): **(2721, 19601, 1100) -> (6400, 570, -6254) within 0.25 s**, in the
+  lobby car, no fault, the walk went on. Entry 5 = `Specials!JumpPoints!06_Exit` (entries 0..4 = the
+  five other jump points, in scene order). The player landed 128 off the entry's x: he was running.
+- **For the hook (h-hook; two data writes, no code byte):** while the level is Retomoto, when a local
+  player's feet (`[gamedata + 0x828 + 4 * byte[gamedata + 0x898 + i]] + 0x460`) are inside
+  `kl_fa_author.JOIN_BOX` = x 2802..3142, y 19560..19860, z 789..1029, write `JOIN_ENTRY` (5) and the
+  request. The level keeps the box (it only plays F07's line now) and the jump point.
+  Online: each machine moves its own local players, which is the right behaviour (section 3.3).
+- Without the hook the two parts are not connected: the round can be played in the tower only.
+
+### 9.5 A round (RT5, RT6: one Arcade round each from the menu, standing still, ended by `pass`)
+
+'FRAGILE ALLIANCE ARCADE - ROUND 1', three lives, 'HEIST STARTS IN 8 SEC', 'GO!', HUD with score,
+round and a clock from 06:00, the 'Loot area' marker; the player spawns at a START point (z 300 in
+RT5, 700 in RT6), is shot by the guards, 'ROUND OVER - All the criminals died', score page $0, two
+lives left. No assert, no fault. The process was ended at the score page, so the session never ended
+(re/leaderboard.md 4.1): nothing was uploaded.
+**Not established:** whether the window blows 1 s after GO (the player faced the room in RT6 and the
+window in RT5, where the view already had no blinds before GO), the blast's damage (he was being shot
+anyway), the music, loot at the cases, the main-room gate, the vans. These need a player who survives.
+
+### 9.6 Still open, in order
+
+1. The hook's join write (9.4). 2. A played round: blast, cases, table stacks, the car, the street
+police, the exit box and the vans (their height is now the road's). 3. The start under fire (9.2).
+4. The stream clips (music) - needs the merged PC_Def.str installed, the owner's decision.

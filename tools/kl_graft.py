@@ -22,6 +22,8 @@ archive in a slot. Milestone A = two stock Dog Days levels (no Dead Men data): p
                                                climb is opened, money-container reach 125; re/escape.md)
                        ... --ao 0.5            Dead Men map: strength of its ambient-occlusion light map baked
                                                into the vertex colours (kl_light.bake_ao; default 0.5, 0 = off)
+                       ... --author            the authored FA layer of kl_fa_author.py (Retomoto Tower; the
+                                               two-part level is built by 'kl_maps.py chain ... --author')
     python kl_graft.py install [F01] [--from <folder>]   put the last build (or a kept one) into Dog Days
                                                (each stock file is MOVED to KL_PortBackup once, never overwritten)
     python kl_graft.py pairs                   which S / M pairs need the least guessing
@@ -280,6 +282,39 @@ Rounds: klauto + klslot DLL (<work>/build/klhook/round5), Hooks=0, ini per run i
   RN13 the FULL build (guards), same script. RESULT: clean exit after 329 s, PASS: shot dead in the garage.
   RN14 the full build, no stops for loot. RESULT: clean exit after 317 s, PASS: dead in the garage again. The
       escape is seen on the no-guards build only; the script cannot fight. = THE BUILD IN THE F01 SLOT (full).
+LIVE RUNS 2026-10-09, seventh set (h-live): RETOMOTO TOWER (F07 + M09_B + M09_A with kl_fa_author's layer; re/retomoto_fa.md 9).
+Slot F01; direct boots unless said; walks = klauto (round5 DLL, Hooks=0) with 'goto' along the level's own navigation mesh.
+  RT1  first build, original hook. RESULT: crash kl2.exe+0x4e5bbd after 22 s: the .prm is read into ONE heap block and
+       100.9 MB was refused (HeapAlloc null, header written to 0). Fix: PRM_LIMIT - dead vertex data of S emptied (60.3 MB).
+  RT1b rebuilt. RESULT: hung - still running after 421 s, 'Buffering 69 %' from 130 s on.
+  RT1c the same with breadcrumbs (Hooks=1) and the stall watchdog. RESULT: clean exit after 179 s, FAIL stall: main thread
+       in 0x55f5a0 from ZActor slot 82, first actor's init. nav_join had shifted the children of tree 1, which are
+       relative to their polygon's root. Fix in kl_maps.nav_join + a rule in nav_facts (21 stock meshes hold it).
+  RT2  rebuilt. RESULT: assert kl2.exe+0x2682c5 after 185 s (and no frame after it): a SECOND FFCoverList - F07's
+       Specials!CoverPoints!CoverControl, kept by the layer's 'Specials!'. Fix: kl_fa_author.DROP; verify counts them.
+  RT2b rebuilt. RESULT: clean exit after 327 s. THE CHAIN LOADS (200 s to the first frame): the player stands at
+       (5650, 20996, -700) at the intact main window - looking OUT (a player group looks along local -Z: look9) - and
+       is shot by the boardroom guards every 10 s.
+  RT3  test build without the campaign squads (--no-ai), walk start -> boardroom door -> reception -> atrium stairs ->
+       elevator lobby -> into the tower car. RESULT: crash kl2.exe+0x4f40c9 after 239 s: the join's JumpPoint got its
+       message and 0x8f3fa0 walked the crew of a player that has none. The walk itself: 193 m in 33 s, nothing in the way
+       (the boardroom door does not stop the player on a direct boot).
+  RT4  the same build and walk, stopping in front of the car; the game's DEBUG jump request written from outside
+       (scratch jt.py: gamedata + 0x8d4 = 5, [0x156b358] = 1). RESULT: clean exit after 362 s (ended by hand).
+       THE JOIN WORKS THAT WAY: (2721, 19601, 1100) -> (6400, 570, -6254) in the lobby car within 0.25 s; then out of
+       the car, down the lobby, through the front entrance, across the square, 150 m up the road to both van stops,
+       every way point reached. Road and square are at y -40 / -50 (the tables said 5 / 26).
+  RT5  full build, ONE Arcade round from the menu, standing still, ended by 'pass' (no money, the session does not end:
+       re/leaderboard.md 4.1). RESULT: clean exit after 307 s, PASS: 'FRAGILE ALLIANCE ARCADE - ROUND 1', countdown, GO,
+       HUD, 'Loot area' marker, shot by the guards from the countdown on, 'Killed by: The police', score page $0.
+       The START points looked out of the window: a ZSpawnPoint looks along local +Z (rot9), unlike a player group.
+  M01W F07 + M01_FA_A built with this tool (verify: problems: 0; kl_fa: 0 CRASH / BROKEN), a walk towards the diner.
+       RESULT: clean exit after 252 s; shot twice on the way (MissionFailedReload), no fault.
+  RT6  Retomoto final build (spawn points turned, join box without the jump point, road height), one round as RT5.
+       RESULT: clean exit after 317 s, PASS: the START point now faces the room (guards in sight during the countdown),
+       shot dead 25 s after GO, score page $0. The window's blast was not seen (behind the player).
+  DB3  final F07 + M03_FA_A (content equal to the build of RN13 / RN14: all 31 members CRC-equal), ORIGINAL hook.
+       RESULT: clean exit after 275 s; the plaza at 150 s (shots/DB3_150s.png). = THE BUILD IN THE F01 SLOT.
 BISECT (not needed in the end, but it works): build ... --geometry [--m-add A,B] [--m-drop ..]
   [--s-keep ..] [--s-drop ..], see Select. '--geometry --s-drop *' = M's geometry and no game-mode
   layer at all verifies with 0 problems; plain '--geometry' leaves S's game-mode layer with scene
@@ -300,6 +335,7 @@ KEYS = 0x4b455953                      # 'SYEK': a key-frame track chunk in a ra
 TAKE = ('CameraFar', 'CameraFogBegin', 'CameraFogFull', 'CameraFogMin', 'CameraBackgroundColor',
         'SSAO_Blur', 'SSAO_Strength')  # scene properties that describe the map
 LANGS = kl_package.LANGS
+PRM_LIMIT = 90000000                   # a joined .prm larger than this loses S's dead vertex data (build(); run RT1)
 
 
 # ------------------------------------------------------------------ files in and out
@@ -698,7 +734,7 @@ def dm_rename(Jn, S, log=print, anim=True):
 
 # ------------------------------------------------------------------ the graft
 def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True, light='stock', anim=True, fa=True,
-          postfilter=True, ao=0.5, escape=True):
+          postfilter=True, ao=0.5, escape=True, author=False):
     """Systems of S + map of M -> (path of the archive, problems found by verify()).
     sound: merge what M's map names of M's bank into S's (kl_snd.graft_audio); False = the map's
     sound references are set to 0 (the silent builds of milestones A and B). loc: also graft the
@@ -711,20 +747,32 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
     PostFilterBoxes and its filter sets get their curves (kl_light.graft_postfilter). ao: strength
     0..1 of Dead Men's light map baked into the vertex colours (kl_light.bake_ao); 0 = not baked.
     Both are on by default since the live runs LK0 - LK2 (re/lighting.md, second pass, outcome).
-    escape: kl_escape's repairs of a Dead Men map's way to the escape vehicle (re/escape.md; needs fa)."""
+    escape: kl_escape's repairs of a Dead Men map's way to the escape vehicle (re/escape.md; needs fa).
+    author: the authored Fragile Alliance layer of kl_fa_author (Retomoto Tower, re/retomoto_fa.md):
+    host F07's own FA layer is re-placed before the graft and kept, the campaign squads that stay lose
+    their mini-cutscene controllers, and once both parts are in the scene the layer is wired."""
     sch = J.schema('dd')
     for t, load in SOUND_TYPES.items():
         if sch.types[t]['load'] != load:
             raise ValueError('re/kl2.json was rebuilt: type handler %d is no longer the sound reference' % t)
     S, M = Level(s_name), (DeadMen(m_name, log, ao) if m_name.startswith('M') else Level(m_name))
+    au = None
+    if author:                                          # imported here: kl_fa_author imports this file
+        import kl_fa_author as au
+        if s_name == au.HOST:
+            au.prepare_host(S, log)                     # before picks_of: positions and values on the stock Level
+        if M.dm:
+            au.strip(M, log)
     notes = []
     note = lambda s: (notes.append(s), log('  note: ' + s))
 
     # ---- which subtrees
     sel = sel or Select()
     kept = kl_fa.host_keep(S.prp) if fa else ()
-    if kept:
-        sel = Select(sel.geometry, sel.m_add, sel.m_drop, tuple(sel.s_keep) + tuple(kept), sel.s_drop)
+    if kept or au:
+        sel = Select(sel.geometry, sel.m_add, sel.m_drop, tuple(sel.s_keep) + tuple(kept) +
+                     tuple(x for x in (au.KEEP if au else ()) if x not in sel.s_keep),
+                     tuple(sel.s_drop) + (au.DROP if au else ()))
     picks, dropped = picks_of(S, M, sel)
     s_tops = {t for sc, t in picks if sc is S.prp}
     m_tops = [t for sc, t in picks if sc is M.prp]
@@ -803,7 +851,9 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
         S.prp.p.settings = base_settings
     esc = None
     if fa:                                              # before anything goes by controller index
-        kl_fa.repair(Jn, kept, log)
+        kl_fa.repair(Jn, tuple(kept) + (au.layer_names(Jn) if au else ()), log)
+        if au and au.complete(Jn):                      # both parts are in: every list that names a map node
+            au.wire(Jn, log)
         if escape and M.dm:                             # re/escape.md: the wall Dead Men's players climb is opened,
             import kl_escape                            # container reach 80 -> 125 (values of existing objects only)
             esc = kl_escape.repair(Jn, log)
@@ -946,6 +996,27 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
                             v = 0xffffffff - shift; count['emitter fields cleared'] += 1
                         us[pos[l]][0] = (us[pos[l]][0][0], struct.pack('<I', v + shift)); count['emitter offsets'] += 1
             edit(holder, key, fn)
+    # ---- S's dead map models. The loader reads the whole .prm into ONE heap block (kl2 0x82049b:
+    # HeapAlloc of file size + 0x60000 through 0x89e850); the block of the first Retomoto build
+    # (100.6 MB) was refused and the header write at 0x8e5bbd went to address 0 (run RT1). Vertex and
+    # index data of S's map models that no root of the joined level reaches (F07: 42 MB of 64) become
+    # 16-byte stubs; their chunk INDICES stay, so nothing is renumbered. Only when the file is past
+    # PRM_LIMIT: smaller files loaded as they were (the bank's 86.5 MB ran live many times).
+    # ASSUMPTION: nothing but the model graph reads a vtx / idx chunk (the dead roots, object tables,
+    # meshes and descriptors stay as they are, so a walk over the .oct tail still finds them).
+    size = sum(len(c) for c in prm.chunks if c)
+    if size > PRM_LIMIT:
+        live = [(c, k) if k else c for _w, c, k in G.prp_roots(Jn.p, Jn.tids, sch, 'dd')] + [e.model for e in final if e.model]
+        reached = G.walk(prm, live)[0]
+        # what the unreached chunks are: G.orphans walks from every unreached chunk shaped like a model
+        # root (in a chained build the dead models are those of the FIRST step's S: no level file names them)
+        dead = [i for i, k in G.orphans(prm, reached).items() if k in ('dead:vtx', 'dead:idx') and len(prm.chunks[i]) > 16]
+        for i in dead:
+            prm.chunks[i] = bytes(16)
+        prm_bytes = G.write(prm)
+        mat.refs = T.material_refs(prm_bytes)
+        log('  .prm: %.1f MB is past %d MB: %d vertex / index chunks that nothing reaches emptied -> %.1f MB' % (
+            size / 1e6, PRM_LIMIT // 1000000, len(dead), len(prm_bytes) / 1e6))
     # REF ids in M's gates and neighbour lists; an id no entity has (stock has them) goes to a free one
     A.head = kl_scene.remap_refs(A.head, sorted(room_cells), refs_m, missing=A.ref_slots)
     log('  M nodes: %s; %d KEYS blocks moved by %#x; %d REF cells in gates / lists' % (dict(count), nkeys, shift, len(room_cells)))
@@ -1291,6 +1362,9 @@ def verify(out, Jn, S, M, copy, s_kept, mj, shift, log=print, audio=None, light=
         bad += ['lights: ' + x for x in kl_light.check(Jn, sc, prm, nodes=set(mj.values()))]
     if fa:                                              # what a real Fragile Alliance round would crash or break on
         bad += ['FA: ' + str(f) for f in kl_fa.check(Jn, out['snd'], out.get('English.LOC', S['English.LOC'])) if f.sev <= kl_fa.BROKEN]
+    ncov = sum(Jn.p.key(nm) == 'FFCoverList' for k in range(1, len(Jn.nodes)) for nm, _b in Jn.nodes[k]['ctrls'])
+    if ncov > 1:                                        # run RT2: assert kl2 0x6682c5 in the second one's init
+        bad.append('%d cover lists (FFCoverList): the game data takes one' % ncov)
     a = kl_anm.Anm(out['.ANM'], 'dd')
     lack = {s for s in p.keys if s.startswith(kl_anm.PREFIX)} - {c.name for c in a.cols}
     if lack:
@@ -1341,9 +1415,11 @@ if __name__ == '__main__':
             i = a.index('--ao'); ao = float(a[i + 1]); del a[i:i + 2]
         flags = ('--geometry', '--silent', '--no-loc', '--stock-anm', '--no-fa', '--no-postfilter', '--no-escape')
         g, quiet, noloc, noanm, nofa, pf, noesc = (f in a for f in flags)
+        author = '--author' in a
+        a = [x for x in a if x != '--author']
         a = [x for x in a if x not in flags]
         sys.exit(1 if build(a[1], a[2], *a[3:4], sel=Select(g, **opt), sound=not quiet, loc=not noloc, light=light,
-                            anim=not noanm, fa=not nofa, postfilter=not pf, ao=ao, escape=not noesc)[1] else 0)
+                            anim=not noanm, fa=not nofa, postfilter=not pf, ao=ao, escape=not noesc, author=author)[1] else 0)
     elif a and a[0] == 'install':
         src = None
         if '--from' in a:

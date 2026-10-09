@@ -11,6 +11,7 @@ written: kl_graft.out_dir is replaced for the length of a build. Spec and result
     python kl_maps.py m09  <out> [-j N]                   F07 + M09_A, F07 + M09_B, raw and with the
                                                           campaign pre-pass (story levels)
     python kl_maps.py chain <out> F07 M09_B M09_A         THREE sources: S + M1, then that + M2
+                                                          (--author: with kl_fa_author's FA layer = Retomoto Tower)
     python kl_maps.py table <out>                         the table of everything built in <out>
     python kl_maps.py what M06_FA_A                       what a level is: title, rooms, extent, names
     python kl_maps.py sides M09_A                         how kl_graft splits a level's subtrees and
@@ -171,7 +172,8 @@ def nav_facts(block):
     NEW against kl_pf4's notes: tree 0 is one BSP PER AREA (root = area[9], its nodes run to
     the next area's root; leaf -1 = nothing, leaf c <= -2 = polygon -2 - c, a polygon of that
     area); area[1] / area[6] = count / first record of the area's vertices in array 6; array 10
-    is a permutation inside each area's own waypoint range. So no array spans two areas."""
+    is a permutation inside each area's own waypoint range. So no array spans two areas.
+    Tree 1 (20-byte nodes) is one tree per polygon (root = polygon[8]) with RELATIVE children."""
     import kl_pf4
     n, A = kl_pf4.split(block, True)
     areas = [struct.unpack('<12I', r[:48]) for r in A[4]]
@@ -197,6 +199,19 @@ def nav_facts(block):
         for p in polys[a[7]:a[7] + a[2]]:
             rule('polygon: its edges name vertices of its area', all(a[6] <= e[1] < a[6] + a[1] for e in edges[p[5]:p[5] + p[0]]))
             rule('polygon: tree-1 node not above area[10]', p[8] <= a[10])
+    # tree 1: one tree per polygon, children relative to its root; the trees share no node and
+    # cover the array (F07 940 trees / 1624 nodes; read absolute, 340 of them overlap or leave it)
+    cover, clean = set(), True
+    for root in sorted({p[8] for p in polys}):
+        seen, todo = set(), [0]
+        while todo and clean:
+            i = todo.pop() + root
+            clean = i not in seen and i not in cover and 0 <= i < n[1]
+            if clean:
+                seen.add(i)
+                todo += [ch for ch in t1[i] if ch >= 0]
+        cover |= seen
+    rule('tree 1: per polygon, children relative to its root, no node shared, all covered', clean and len(cover) == n[1])
     rule('areas: vertex counts add up to array 6', sum(a[1] for a in areas) == n[6])
     rule('tree 1: -1 - c of the leaves covers array 2 to its last record',
          max([-1 - ch for r in t1 for ch in r if ch < 0] or [-1]) == n[2] - 1)
@@ -221,7 +236,12 @@ def nav_join(a, b):
         return P('<ii', mv(c1), mv(c2)) + r[8:]
     out = [list(x) for x in A]
     out[0] += [tree(r, na[0], na[3], (-1,)) for r in B[0]]          # leaf -2 - c = polygon, -1 = nothing
-    out[1] += [tree(r, na[1], na[2], ()) for r in B[1]]             # leaf -1 - c = array-2 record
+    # tree 1 is one small tree PER POLYGON and a child >= 0 is RELATIVE to the polygon's root
+    # (polygon[8]): kl2 0x55f5c7 'add edx, edi' with edi = [polygon + 0x18]. Only the leaves
+    # (-1 - c = array-2 record, absolute) move. The first join shifted the children too and the
+    # height lookup of the first actor never came back (run RT1b / RT1c: stuck at Buffering 69 %,
+    # main thread in 0x55f5a0 from ZActor slot 82).
+    out[1] += [tree(r, 0, na[2], ()) for r in B[1]]
     out[2] += B[2]
     for r in B[3]:
         v = list(struct.unpack('<BBHIIIIIII', r))
@@ -399,6 +419,10 @@ def one(out, s_name, m_name, keep=False, campaign=False, heroes=False, slot=SLOT
         m_drop = tuple(opt.pop('m_drop', ()))
         if campaign:
             names, gone, stay = campaign_drop(m_name)
+            if opt.get('author'):                       # the authored layer keeps squads and helpers of the campaign
+                import glob, kl_fa_author
+                leave = {glob.escape(n) for n in kl_fa_author.campaign_names(m_name)}
+                names = [n for n in names if n not in leave]
             m_drop += tuple(names)
             res['campaign_dropped'], res['campaign_kept'] = gone, stay
             log('campaign pre-pass: %d subtrees dropped %s; kept %s' % (len(names), gone, stay))
@@ -995,6 +1019,7 @@ def main():
         if flag('--no-fa'): opt['fa'] = False
         if flag('--stock-anm'): opt['anim'] = False
         if flag('--geometry'): opt['geometry'] = True
+        if flag('--author'): opt['author'] = True
         if '--flat' in a:
             i = a.index('--flat'); opt['flat'] = tuple(a[i + 1].split(',')); del a[i:i + 2]
         keep, campaign, heroes = flag('--keep'), flag('--campaign'), flag('--heroes')

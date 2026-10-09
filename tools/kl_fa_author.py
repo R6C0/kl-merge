@@ -4,13 +4,18 @@ The Fragile Alliance layer of Retomoto Tower (Dead Men M09_A + M09_B under Dog D
 authored from stock objects, offline. Spec, evidence and the list of what only a live run can
 settle: re/retomoto_fa.md. Nothing here installs anything or starts the game.
 
-    python kl_fa_author.py test <out> [--keep]   build F07 + M09_B + M09_A with the layer into
+    python kl_fa_author.py test <out> [--keep] [--no-ai]
+                                                 build F07 + M09_B + M09_A with the layer into
                                                  <out> (kl_maps.chain), verify, kl_fa.check, print
                                                  the inventory with world coordinates; exit 1 if a
-                                                 problem is left that is not in KNOWN
+                                                 problem is left that is not in KNOWN. --no-ai: a
+                                                 test build without the campaign's squads
     python kl_fa_author.py plan                  the campaign squads that stay, per part, and why
     python kl_fa_author.py vans                  the three baked van paths fitted to the road
     python kl_fa_author.py inventory <archive>   the inventory of a built level
+    python kl_fa_author.py hero <kept build folder> <out folder> x y z [dx dz]
+                                                 test aid: a copy of a kept build whose Heroes!Hero_01
+                                                 (where a direct boot starts) stands at x y z
 
 HOW (no new entity, no new controller - every object is a stock one, re-placed and re-wired)
   Host F07 has its whole Fragile Alliance layer as top-level subtrees: 234 FASpecials!, 32
@@ -23,22 +28,23 @@ HOW (no new entity, no new controller - every object is a stock one, re-placed a
      the window bomb, the chair / door swaps, the two elevator door proxies.
   3. wire(Jn) - on the final joined scene, where both parts exist: every reference list that
      names a map node. It only edits values of existing controllers (kl_fa.repair's rule).
-  For kl_graft: authoring(log) patches the four entry points from outside (kl_maps does the
-  same); the three lines that would make it native are in re/retomoto_fa.md.
+  kl_graft.build(author=True) calls 1 and 3 itself, strip() on each Dead Men part and keeps KEEP;
+  kl_maps.one(author=True) leaves campaign_names() out of the campaign pre-pass (2).
 
 GUESS = a value that is not copied from a stock object or measured in the levels. Every table
 entry carries its source; what is marked GUESS has to be looked at in the game.
 Facts the tables rest on (all read from the files, scripts in re/retomoto_fa.md):
-  rotation  ZGEOM[1] = [third column, second column, first column] of the local matrix; a node
-            that faces (dx, dz) holds [dx 0 dz, 0 1 0, dz 0 -dx]. Facing = local +Z: ASSUMPTION
-            (F07's START points are identity = +z, the way to its loot; M09_A's Jump_02 outside
-            the window holds (-1, 0), into the room).
+  rotation  ZGEOM[1] = [third column, second column, first column] of the local matrix; a player
+            group (Heroes!*) that faces (dx, dz) holds [-dx 0 -dz, 0 1 0, -dz 0 dx] (look9: local
+            -Z; SEEN LIVE, runs RT2b / RT4). A ZSpawnPoint looks along local +Z (rot9; SEEN LIVE the
+            other way round in run RT5). A JumpPoint's list entry holds -Z as its direction (read
+            from memory in run RT4): look9. Cameras: not looked at.
   boxes     ZBoxPrimitive[0..2] are HALF extents (F07 AlleyTop: bound centre + half and warn
             centre + half end on the same plane, 26154.06 / 26153.9).
   hidden    ZGEOM[3] = 1 together with .gms flag 0x400 (F02's eight late money bags, M09_A's
             blown window, broken door and thrown chairs).
 """
-import collections, contextlib, glob, math, os, struct, sys, zipfile
+import collections, math, os, struct, sys, zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import kl_graft, kl_fa, kl_maps, kl_gms, kl_scene
@@ -63,7 +69,8 @@ TRAITOR = [(5700.0, FLOOR3, z) for z in (-600, -200, 200, 600)]                 
 # police who come back: the elevator lobby (campaign 'SquadArrivingElevator', which is not
 # kept), the atrium lift, and the square in front of the lobby (campaign 'Squad_InFront')
 POLICE = [(1904.0, 19601.0, 818.0), (1800.0, 19601.0, 812.0), (1987.0, 19601.0, 973.0),
-          (-1764.0, 19613.0, -61.0), (-1508.0, 19613.0, -147.0), (447.0, 26.0, -7956.0), (-367.0, 26.0, -7594.0)]
+          (-1764.0, 19613.0, -61.0), (-1508.0, 19613.0, -147.0), (447.0, -50.0, -7956.0), (-367.0, -50.0, -7594.0)]
+# (the square's ground is y -50: the player's feet at (439, -50, -7861) in run RT4; the campaign actors' own y there is 26)
 STAGE_B = [(3110.0, 21005.0, -1138.0), (2961.0, 21005.0, -990.0), (3033.0, 21004.0, -8.0), (2917.0, 21004.0, -190.0)]   # reception (campaign actors)
 STAGE_C = [(2340.0, 19606.0, 1238.0), (2534.0, 19605.0, 883.0), (2604.0, 19605.0, -1063.0), (2485.0, 19605.0, -1555.0)]  # elevator lobby (campaign actors)
 STAGE_D = [(3076.0, 162.0, -6354.0), (3100.0, 162.0, -6594.0), (3300.0, 162.0, -6354.0), (3300.0, 162.0, -6594.0)]       # lobby: CP_01 + GUESS
@@ -97,7 +104,11 @@ BLAST_DELAY = 1.0                       # GUESS: seconds from the round-start ev
 # ------------------------------------------------------------------ the join and the street (M09_B)
 CAR_A = (2972.0, 19730.0, 909.0)        # tower escape car SI0101_JPN_Elevator_Int_A_03: box (2756 19600 756)-(3189 19873 1062)
 CAR_B = (6272.0, 563.0, -6305.0)        # lobby car ..._Int_A_00, same model and rotation (B - A = 3298, -19040, -7214)
-ROAD_X, ROAD_HALF, ROAD_Y = -3000.0, 2400.0, 5.0   # carriageway x -5700..-300 (re/retomoto.md 3.4); y of the static cars
+ROAD_X, ROAD_HALF, ROAD_Y = -3000.0, 2400.0, -40.0   # carriageway x -5700..-300 (re/retomoto.md 3.4); y: the player's feet
+                                        # on the road, z -1500..9300 (run RT4; the first guess, 5, was the static cars' origin)
+# for the hook (data write, re/retomoto_fa.md 3.4): feet inside JOIN_BOX -> jump-list entry JOIN_ENTRY
+JOIN_BOX = ((2802.0, 3142.0), (19560.0, 19860.0), (789.0, 1029.0))     # the join box below: centre CAR_A, half (170, 130, 120), from the floor
+JOIN_ENTRY = 5                          # Specials!JumpPoints!06_Exit: the sixth JumpPoint in scene order (entries 0..5 read in run RT4)
 VAN_STOP_Z = (9300.0, 8500.0, 7700.0)   # GUESS: north of the first road block (z 3602..3911), south of the SWAT truck (z 10886)
 PARK = (0.0, -60000.0, 0.0)             # where a host object without a use is put
 
@@ -163,6 +174,11 @@ ROLE = {'monitor': 'Gameplay!AIMonitor',
 VANS = ['Animation/F07/F07_Escape_Vehicle_0%d.zip' % i for i in (1, 2, 3)]
 KEEP = ('FASpecials!', 'Specials!', 'Gameplay!EscapeSetup!*') + tuple(VANS) + tuple(v for k, v in ROLE.items() if v.startswith('Gameplay!0'))
 
+# ... but not F07's cover list: a Dead Men map brings its own top-level 'CoverList', and a second
+# FFCoverList is an assert in its init (kl2 0x6682c5 from CFFCoverList slot 13, 0x6d6a80: the game
+# data's cover list at +0x15a0 is already set; run RT2, after which the load never finished)
+DROP = ('Specials!CoverPoints!*',)
+
 # ------------------------------------------------------------------ the campaign's own objects that stay
 CAMPAIGN_KEEP = {
     PART_A: ('WindowBlowup!BombWindow03',                                           # Explode: particles + the two sounds
@@ -188,11 +204,19 @@ SQUAD_DEAD = 8                          # ZSquadScript field 8: the list sent wh
 
 
 # ------------------------------------------------------------------ small tools
-def rot9(face):
-    dx, dz = face
+def rot9(turn):
+    """ZGEOM[1] of the turn about Y that takes local +Z to (dx, dz): [third, second, first column]."""
+    dx, dz = turn
     n = math.hypot(dx, dz)
     dx, dz = dx / n, dz / n
     return [dx, 0.0, dz, 0.0, 1.0, 0.0, dz, 0.0, -dx]
+
+
+def look9(face):
+    """ZGEOM[1] of a node that FACES (dx, dz): the turn that takes local -Z there. SEEN LIVE (run
+    RT2b): Hero_01 holding rot9((-1, 0)) stood at the main window looking OUT at the skyline,
+    heading +x - a player looks along local -Z."""
+    return rot9((-face[0], -face[1]))
 
 
 def node_of(sc, name):
@@ -228,16 +252,18 @@ def ctrl_of(sc, k, name):
     raise KeyError('%s has no %s' % (sc.path[k], name))
 
 
-def place(S, name, pos=None, face=None, half=None, hidden=None):
+def place(S, name, pos=None, face=None, half=None, hidden=None, turn=None):
     """Put a node of the Level S somewhere: .prp ZGEOM[1] / [2] and the .gms record (the Dog Days
     loader reads the .prp's; both are kept equal as in stock). Top-level nodes and nodes whose
-    parents are identity at the origin only: the values are world values."""
+    parents are identity at the origin only: the values are world values. face: the way the
+    node looks (look9); turn: a plain rotation instead (rot9: the vans' baked drives)."""
     sc = S.prp
+    m9 = look9(face) if face is not None else rot9(turn) if turn is not None else None
     k = name if isinstance(name, int) else node_of(sc, name)
     lab, e = J.labels('dd', sc.cls(k)), S.ents[k - 1]
     def fn(us):
-        if face is not None:
-            setv(sc, us, lab.index('ZGEOM[1]'), rot9(face))
+        if m9 is not None:
+            setv(sc, us, lab.index('ZGEOM[1]'), m9)
         if pos is not None:
             setv(sc, us, lab.index('ZGEOM[2]'), [float(x) for x in pos])
         for i, v in enumerate(half or ()):
@@ -245,8 +271,8 @@ def place(S, name, pos=None, face=None, half=None, hidden=None):
         if hidden is not None:
             setv(sc, us, lab.index('ZGEOM[3]'), int(hidden))
     kl_graft.edit(sc.nodes[k], 'props', fn)
-    if face is not None:
-        e.rot = struct.pack('<9f', *rot9(face)) + bytes(12)
+    if m9 is not None:
+        e.rot = struct.pack('<9f', *m9) + bytes(12)
     if pos is not None:
         e.trans = struct.pack('<3f', *pos) + bytes(4)
     if hidden is not None:
@@ -307,7 +333,7 @@ def place_vans(S, log=print):
         (dx, dz), x, width, z0, z1 = van_fit(main, s)
         t = (x - (dz * s[0] + dx * s[2]), ROAD_Y - s[1], VAN_STOP_Z[i] - (-dx * s[0] + dz * s[2]))
         grp = next(k for k in range(top, sc.end[top]) if sc.names[k] == 'EscapeVehicle_Animation_F07')
-        place(S, grp, t, (dx, dz))
+        place(S, grp, t, turn=(dx, dz))
         fits = width <= 2 * ROAD_HALF
         out.append((name, (x, ROAD_Y, VAN_STOP_Z[i]), fits))
         log('  kl_fa_author: %s stops at (%d, %d, %d); drive %d wide (road %d), z %d..%d%s' % (
@@ -330,7 +356,9 @@ def prepare_host(S, log=print):
             kind = kl_fa.node_values(sc, t)[8]
             pts, d, face = SPAWN[kind]
             p = pts[seen[kind] % len(pts)]
-            place(S, t, (p[0] + d[0], p[1] + d[1], p[2] + d[2]), face)
+            # a spawn point looks along local +Z (rot9), a player group along -Z (look9): SEEN LIVE both
+            # ways - with look9 on the START points the round's player stood facing the window (run RT5)
+            place(S, t, (p[0] + d[0], p[1] + d[1], p[2] + d[2]), turn=face)
             seen[kind] += 1
         elif sc.names[t].startswith('Heroes!'):
             crook = sc.names[t].startswith('Heroes!Hero_0')
@@ -412,10 +440,12 @@ def squad_plan(level):
 
 
 _plans = {}
+NO_AI = False                           # test builds ('test ... --no-ai'): no campaign squad stays. A scripted
+                                        # walk on a direct boot is shot dead within 10 s otherwise (run RT2b)
 
 def plan(level):
     if level not in _plans:
-        _plans[level] = squad_plan(level)
+        _plans[level] = ({}, {'*': 'test build without AI'}) if NO_AI else squad_plan(level)
     return _plans[level]
 
 
@@ -452,8 +482,14 @@ def wire(sc, log=print):
         kl_fa.edit(sc, b, ctrl_of(sc, b, 'Explode'), lambda us: [setv(sc, us, j, 1.0) for j in (0, 1)])
     # the street: its police start when a criminal reaches the front entrance
     lists('street', 'TriggerBox', f14='ECPS_FA_MERCONLY', f17=start[PART_B])
-    # the join: anybody in the tower car -> JumpPoint in the lobby car ('AITrigger', kl2 0x491e20)
-    lists('join box', 'TriggerBox', f14='ECPS_BOTH', f17=[R + ROLE['join'], R + 'Specials!LevelSpeak!OnlineSpeakTrigger_01'])
+    # the join. NOT by a message to the JumpPoint: that path (kl2 0x491e20 -> 0x57e110 with flag 1)
+    # also walks the player's crew, and a Fragile Alliance player has none - read of 0xa4 at kl2
+    # 0x8f40c9 the moment the scripted player stepped into the tower car (run RT3). The box keeps
+    # F07's 'exit heist' line only; the jump point stays in the lobby car as entry 5 of the game
+    # data's jump list, for the game's own DEBUG request (gamedata + 0x8d4 = 5, [0x156b358] = 1:
+    # flag 0, no crew). Written from outside in run RT4 it put the player into the lobby car in one
+    # frame. The hook has to make that write (re/retomoto_fa.md 3.4): JOIN_BOX / JOIN_ENTRY.
+    lists('join box', 'TriggerBox', f14='ECPS_BOTH', f17=[R + 'Specials!LevelSpeak!OnlineSpeakTrigger_01'])
     # the main room: its squads' 'wiped out' lists -> counter -> ActivateGeom -> the hidden loot
     room = [n for n in squads[PART_A] if n.startswith(ROOM_SQUADS) and sc.resolve(R + n)]
     for n in room:
@@ -468,57 +504,32 @@ def wire(sc, log=print):
     return {'squads': squads, 'room': room, 'hidden': hidden}
 
 
-# ------------------------------------------------------------------ from outside kl_graft
-@contextlib.contextmanager
-def authoring(log=print):
-    """kl_graft.build with the layer, without editing kl_graft: Level('F07') comes prepared, the
-    Dead Men parts with their kept squads stripped of mini-cutscene controllers, every Select
-    keeps KEEP, kl_maps.campaign_drop leaves CAMPAIGN_KEEP and the squads, and kl_fa.repair also
-    prunes the kept subtrees and, once both parts are in the scene, runs wire()."""
-    real = kl_graft.Level, kl_graft.DeadMen, kl_graft.Select, kl_fa.repair, kl_maps.campaign_drop
-    state = {}
+# ------------------------------------------------------------------ what kl_graft.build(author=True) calls
+def strip(M, log=print):
+    """Take the campaign's mini-cutscene controllers (STRIP) off the squads of a converted Dead Men
+    level (kl_graft.DeadMen) that stay. Before the join: nothing goes by controller index yet."""
+    n = 0
+    for t in M.prp.tops():
+        if M.prp.names[t] in plan(M.name)[0]:
+            for k in range(t, M.prp.end[t]):
+                nd = M.prp.nodes[k]
+                keep = [c for c in nd['ctrls'] if M.prp.p.key(c[0]) not in STRIP]
+                n += len(nd['ctrls']) - len(keep)
+                nd['ctrls'] = keep
+    log('  kl_fa_author: %s: %d squads stay, %d mini-cutscene controllers taken off them' % (M.name, len(plan(M.name)[0]), n))
+    return n
 
-    class Host(real[0]):
-        def __init__(self, name):
-            super().__init__(name)
-            if name == HOST:
-                state['host'] = prepare_host(self, log)
 
-    class Part(real[1]):
-        def __init__(self, name, log=print):
-            super().__init__(name, log)
-            n = 0
-            for t in self.prp.tops():
-                if self.prp.names[t] in plan(name)[0]:
-                    for k in range(t, self.prp.end[t]):
-                        nd = self.prp.nodes[k]
-                        keep = [c for c in nd['ctrls'] if self.prp.p.key(c[0]) not in STRIP]
-                        n += len(nd['ctrls']) - len(keep)
-                        nd['ctrls'] = keep
-            log('  kl_fa_author: %s: %d squads stay, %d mini-cutscene controllers taken off them' % (name, len(plan(name)[0]), n))
+def layer_names(sc):
+    """Top-level names of the layer in a joined scene: what kl_fa.repair's prune may cut dead
+    references from (the host's map is gone; the second part is not there yet in the first step)."""
+    camp = set(campaign_names(PART_A)) | set(campaign_names(PART_B))
+    return tuple(sc.names[t] for t in sc.tops() if kl_graft.Select.match(sc.names[t], KEEP) or sc.names[t] in camp)
 
-    class Select(real[2]):
-        def __init__(self, geometry=False, m_add=(), m_drop=(), s_keep=(), s_drop=()):
-            super().__init__(geometry, m_add, m_drop, tuple(s_keep) + tuple(x for x in KEEP if x not in s_keep), s_drop)
 
-    def repair(sc, kept=(), log=log):
-        mine = [n for n in sc.names if sc.resolve(R + n) and sc.parent[sc.resolve(R + n)[0]] == 0 and
-                (kl_graft.Select.match(n, KEEP) or n in campaign_names(PART_A) or n in campaign_names(PART_B))]
-        r = real[3](sc, tuple(kept) + tuple(mine), log)
-        if sc.resolve(R + A_MAP[:-1]) and sc.resolve(R + B_MAP[:-1]):
-            state['wired'] = wire(sc, log)
-        return r
-
-    def campaign_drop(level):
-        names, gone, stay = real[4](level)
-        keep = {glob.escape(n) for n in campaign_names(level)}
-        return [n for n in names if n not in keep], gone, stay
-
-    kl_graft.Level, kl_graft.DeadMen, kl_graft.Select, kl_fa.repair, kl_maps.campaign_drop = Host, Part, Select, repair, campaign_drop
-    try:
-        yield state
-    finally:
-        kl_graft.Level, kl_graft.DeadMen, kl_graft.Select, kl_fa.repair, kl_maps.campaign_drop = real
+def complete(sc):
+    """True once both parts of the map are in the scene: wire() names nodes of both."""
+    return bool(sc.resolve(R + A_MAP[:-1]) and sc.resolve(R + B_MAP[:-1]))
 
 
 # ------------------------------------------------------------------ the inventory
@@ -591,10 +602,36 @@ def inventory(archive, log=print):
     log('  %s' % dict(n))
 
 
+def move_hero(folder, out, pos, face=None, name='Heroes!Hero_01', slot=kl_maps.SLOT, log=print):
+    """TEST AID for direct boots: a copy of a kept build in <out> in which one player group stands
+    somewhere else (a direct boot puts the player at Heroes!Hero_01; the tower's boardroom is closed
+    until the round-start blast, so the escape car, the lobby and the street are reached this way).
+    Only the group's ZGEOM[1] / [2] in the .prp and its .gms record change."""
+    import shutil
+    os.makedirs(out, exist_ok=True)
+    src = os.path.join(folder, slot + '_Main.zip')
+    sc, _snd, _loc = kl_fa.load(src)
+    with zipfile.ZipFile(src) as z:
+        names = z.namelist()
+        files = {n: z.read(n) for n in names}
+    m = {n.rsplit('_Main', 1)[1]: n for n in names if '_Main' in n}
+    scene = kl_scene.Scene(kl_gms.unpack(files[m['.gms']]), files[m['.buf']])
+    lv = type('Built', (), {'prp': sc, 'ents': list(scene.entities())})
+    k = place(lv, name, pos, face)
+    gms, buf = scene.write()
+    files[m['.gms']], files[m['.buf']], files[m['.prp']] = kl_gms.pack(gms), buf, sc.p.serialize()
+    with zipfile.ZipFile(os.path.join(out, slot + '_Main.zip'), 'w', zipfile.ZIP_DEFLATED, compresslevel=1) as z:
+        for n in names:
+            z.writestr(n, files[n])
+    for f in os.listdir(folder):
+        if f.startswith(slot + '_Main') and f != slot + '_Main.zip':
+            shutil.copyfile(os.path.join(folder, f), os.path.join(out, f))
+    log('%s: %s (node %d) stands at %s%s' % (out, name, k, tuple(pos), ' facing %s' % (tuple(face),) if face else ''))
+
+
 def test(out, keep=False, log=print):
     """Build the two-part level with the layer into <out>, verify, check, print the inventory."""
-    with authoring(log) as state:
-        r = kl_maps.chain(out, HOST, PART_B, PART_A, campaign=True, heroes=False, keep=True)
+    r = kl_maps.chain(out, HOST, PART_B, PART_A, campaign=True, heroes=False, keep=True, author=True)
     if not r.get('ok'):
         log('BUILD FAILED: %s at %s' % (r.get('error'), r.get('where')))
         return 1
@@ -622,6 +659,8 @@ def test(out, keep=False, log=print):
 def main():
     a = sys.argv[1:]
     if len(a) >= 2 and a[0] == 'test':
+        global NO_AI
+        NO_AI = '--no-ai' in a
         sys.exit(test(a[1], '--keep' in a))
     elif a == ['plan']:
         for lv in (PART_A, PART_B):
@@ -640,9 +679,12 @@ def main():
                 name, len(every), len(main_), sum(math.dist(p, q) for p, q in zip(main_, main_[1:])) / 100, *s, dx, dz, width, -z0, z1))
     elif len(a) == 2 and a[0] == 'inventory':
         inventory(a[1])
+    elif len(a) in (6, 8) and a[0] == 'hero':
+        move_hero(a[1], a[2], [float(x) for x in a[3:6]], [float(x) for x in a[6:8]] or None)
     else:
         print(__doc__)
 
 
 if __name__ == '__main__':
-    main()
+    import kl_fa_author                 # kl_graft imports this file by name: one module, one NO_AI
+    kl_fa_author.main()

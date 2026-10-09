@@ -12,13 +12,18 @@
  *  4. KLHook.result (key=value, rewritten atomically) and a process exit code for a driving script.
  *  5. Engine ini lines without a command line: the baked ini text the exe parses is extended in memory.
  *
- * BUILD (no edit of klhook.c needed): compile THIS file instead of klhook.c; it includes klhook.c with
- * its DllMain / DirectInput8Create renamed and supplies the real ones. In klhook\build.bat replace
- * "%~dp0klhook.c" by "%~dp0klauto.c"; the /EXPORT stays the same. Built with cl 19.40 x86, /O2 /LD:
- * no warning at /W3; at /W4 only klhook.c's own C4100. To merge instead: define KLAUTO_FROM_KLHOOK,
- * #include "klauto.c" in klhook.c above its DirectInput8Create, call kla_init(inst) at the end of
- * DllMain and kla_di8(o) after a successful real_create() (that route was compiled too). It uses
- * klhook.c's dir, klog, write_dump, log_context, img_lo, img_hi, dumps, max_dumps, MDWD, MEI.
+ * BUILD: this file is the TEST half of KLHook. klhook.c includes it when KLHOOK_TEST is defined
+ * (build_auto.bat: cl /DKLHOOK_TEST klhook.c); a SHIP build (build.bat) does not contain it. Compiling THIS
+ * file on its own still gives the TEST build (it defines KLHOOK_TEST and includes klhook.c, which includes it
+ * back). klhook.c owns DllMain and DirectInput8Create and calls kla_init(inst) / kla_di8(o); klfix.c and
+ * klslot.c are there in both builds. It uses klhook.c's dir, klog, write_dump, log_context, img_lo, img_hi,
+ * dumps, max_dumps, MDWD, MEI, and - for EVERY write into the game - the patch guard (klh_poke / klh_data):
+ *   [KLHook] SessionSafe=1 (default)   a detour, the vtable entry or the [Engine] operand that lies inside a
+ *                     range kl2.exe's integrity checks hash is REFUSED (logged 'patch REFUSED'): of the
+ *                     seventeen detours only NODE, CTRL, SCNBLK, REFFIX and GINIT go in, and there is no
+ *                     'LOAD start / end' wrapper. This is what a run that starts a session may use.
+ *   [KLHook] SessionSafe=0             everything goes in, as before: for direct-boot runs (DefaultScene) only.
+ *   The table of all sites with the range checker's verdict is in klhook.c's top comment.
  *
  * KLHook.ini
  *   [Auto]
@@ -26,11 +31,10 @@
  *   Hooks=1           patch the breadcrumb sites into kl2.exe's code (in memory, bytes verified first)
  *   Detours=          with Hooks=0: install ONLY these detours (names of the site table, comma separated:
  *                     NODE,CTRL,PROG,GEOMS,SCNBLK,REFFIX,ROOM,GBUF,REFEND,POST,GINIT,CLIST,CINIT,OPENWIN,ELFOCUS,
- *                     FOCUS,INPUT). For the anti-tamper experiments X3 / X5 of rentitamper.md section 8.
+ *                     FOCUS,INPUT). For the anti-tamper experiments X3 / X5 of re\antitamper.md section 8.
  *   VtLoad=1          with Hooks=0: install ONLY the scene-load vtable entry 0xb8fa24 (experiment X4)
- *   LbFix=1           (default 1) once per process: the row count of ZLeaderBoardServiceSteam, which its constructor
- *                     never writes, is set to 0 while no row is held (kla_lbfix; the RN11 score-page crash,
- *                     re\crash_scorepage.md). A heap write, no code byte. 0 = only log the value found.
+ *   LbFix=1           (default 1) the leaderboard row count fix; now klfix.c, in SHIP and TEST ([KLHook] LbFix).
+ *                     0 = only log the value found.
  *   EndHooks=1        with Hooks=0: wrap the five exit import slots anyway (the 'integrity exit' tripwire, X1)
  *   Nodes=1           0 remember the last entity only, 1 log every entity, 2 also every controller
  *                     (40,000 entities with a controller each = 4.2 MB of log, 0.1 s; measured off-game)
@@ -85,6 +89,9 @@
  *                                        An unknown element fails the script (exit 26).
  *   9=peek 0xceceec arcade-position      log the dword at an address (kl2.exe image or heap);
  *     peek 0x168e598+0x5c game-mode      with '+': the dword at [address] + offset (one pointer followed)
+ *     peek 0x168e598+0x17c+0x198+0x31fc lb-count     a chain, up to six '+': [[[address]+a]+b]+c (each '+'
+ *                                        follows one pointer, then adds). This one is the leaderboard row
+ *                                        count of re\crash_scorepage.md 4; +0x10 / +0x14 = first / past-last.
  *   10=sel HeistLevel 0xceceec 0         step a toggle element until the dword at the address has the
  *                                        value: sends 'Decrease' / 'Increase' (ZToggle slot 20,
  *                                        0x90b170 -> vtbl+0xa8 / +0xa4) every 250 ms, at most 24
@@ -331,35 +338,31 @@
  *   d. what DefaultScene=Locations/F02/F02_Main.zip does when booted directly (no session is created).
  *   e. that StallMs never fires during a legitimate pause (Steam start-up, movies): start high.
  */
-#include <windows.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdarg.h>
-#include <string.h>
-#include <signal.h>
+#ifndef KLHOOK_C                                 /* compiled on its own: the TEST build, through klhook.c */
+#ifndef KLHOOK_TEST
+#define KLHOOK_TEST
+#endif
+#include "klhook.c"
+#else
+#ifndef KLAUTO_C
+#define KLAUTO_C
+
 #include <tlhelp32.h>
 #include <intrin.h>
 #include <math.h>
-
-#ifndef KLAUTO_FROM_KLHOOK
-#define DirectInput8Create klhook_DirectInput8Create
-#define DllMain klhook_DllMain
-#include "klhook.c"
-#undef DirectInput8Create
-#undef DllMain
-#endif
-#include "klslot.c"                              /* [Expansion] / [Redirect]: file redirect by import wrappers (re\slot_redirect.md) */
+#include <signal.h>
 
 #define KL2_TIMESTAMP 0x4c80f728u
 #define KL2_IMAGESIZE 0x134e000u
 enum { KLA_PASS = 0, KLA_PROBLEMS = 21, KLA_CRASH = 22, KLA_CRT = 23, KLA_STALL = 24, KLA_MAXRUN = 25,
        KLA_SCRIPT = 26, KLA_SCRIPTFAIL = 27 };
 
-static LONG_PTR kla_delta;                       /* 0 in the game; the test harness maps a copy elsewhere */
+#define kla_delta klh_delta                      /* 0 in the game; the test harness maps a copy elsewhere */
+#define kla_exe_ok klh_exe_ok
 #define VA(x) ((BYTE *)((DWORD_PTR)(x) + kla_delta))
 #define G32(x) (*(volatile DWORD *)VA(x))
 
-static int kla_on, kla_hooks_on, kla_nodes, kla_unfocused, kla_block, kla_firstchance, kla_exe_ok;
+static int kla_on, kla_hooks_on, kla_nodes, kla_unfocused, kla_block, kla_firstchance;
 static DWORD kla_stall_ms, kla_maxrun_ms, kla_loaded_ms, kla_t0;
 static volatile DWORD kla_beat, kla_frames, kla_main_tid;
 static volatile LONG kla_done, kla_asserts, kla_faults, kla_foreign;
@@ -794,14 +797,11 @@ static BYTE *kla_emit(BYTE *p, int id, const BYTE *orig, int len, BYTE *back)
     return p;
 }
 
+static const char *kla_what = "klauto";            /* what the next kla_poke is, for the guard's log line */
 static int kla_poke(BYTE *at, const BYTE *expect, const BYTE *bytes, int len)
-{   /* replace len bytes, only if they are exactly the expected ones */
-    BYTE cur[16]; DWORD old;
-    if (!kla_rd((DWORD_PTR)at, cur, len) || memcmp(cur, expect, len)) return 0;
-    if (!VirtualProtect(at, len, PAGE_EXECUTE_READWRITE, &old)) return 0;
-    memcpy(at, bytes, len);
-    VirtualProtect(at, len, old, &old); FlushInstructionCache(GetCurrentProcess(), at, len);
-    return 1;
+{   /* replace len bytes, only if they are exactly the expected ones AND klhook.c's patch guard allows a write
+       there under the run's policy ([KLHook] SessionSafe): a site inside a hashed range is refused */
+    return klh_poke(at, expect, len, bytes, len, kla_what);
 }
 
 typedef void *(__fastcall *KLA_LOAD)(void *self, void *edx, void *arg);
@@ -847,7 +847,9 @@ static void kla_engine_ini(void)
     }
     if (i == 1) return;
     mine = (DWORD)(DWORD_PTR)kla_engine_text; rep[0] = 0x68; memcpy(rep + 1, &mine, 4);
-    kla_out(1, "engine ini: %d line(s) %s", i - 1, kla_poke(VA(0x5987af), exp, rep, 5) ? "installed (operand of the push at 0x5987af)" : "NOT installed: bytes at 0x5987af differ");
+    kla_what = "[Engine] push operand";
+    kla_out(1, "engine ini: %d line(s) %s", i - 1, kla_poke(VA(0x5987af), exp, rep, 5) ? "installed (operand of the push at 0x5987af)" : "NOT installed: refused by the patch guard (use [Auto] CmdAdd in a session run), or bytes at 0x5987af differ");
+    kla_what = "klauto";
 }
 
 static int kla_cmd_drop_in(char *cmd, char *keys)
@@ -932,7 +934,9 @@ static void kla_end_hooks(void)
         DWORD cur = kla_rd32((DWORD_PTR)VA(slot[i])), mine = (DWORD)(DWORD_PTR)w[i];
         if (!cur || (cur >= img_lo && cur < img_hi)) continue;                    /* not bound to a DLL: leave it */
         kla_real_end[i] = (FARPROC)(DWORD_PTR)cur;
+        kla_what = "exit import slot";
         n += kla_poke(VA(slot[i]), (BYTE *)&cur, (BYTE *)&mine, 4);
+        kla_what = "klauto";
     }
     kla_out(1, "end hooks: %d of 5 import slots wrapped", n);
 }
@@ -949,18 +953,23 @@ static int kla_install(void)
         want++;
         kla_emit(p, i, kla_sites[i].bytes, len, at + len);
         memset(jmp, 0x90, sizeof jmp); jmp[0] = 0xe9; v = (DWORD)(p - (at + 5)); memcpy(jmp + 1, &v, 4);
+        kla_what = kla_sites[i].what;
         if (kla_poke(at, kla_sites[i].bytes, jmp, len)) ok++;
-        else kla_out(0, "hook %08lx (%s) NOT installed: bytes differ", kla_sites[i].va, kla_sites[i].what);
+        else kla_out(0, "hook %08lx (%s) NOT installed: refused by the patch guard, or bytes differ", kla_sites[i].va, kla_sites[i].what);
     }
     kla_real_load = (KLA_LOAD)(DWORD_PTR)(old + kla_delta); mine = (DWORD)(DWORD_PTR)kla_scene_load;
+    kla_what = "scene-load vtable entry";
     i = kla_only >> 31 ? kla_poke(VA(0xb8fa24), (BYTE *)&old, (BYTE *)&mine, 4) : 0;
-    kla_out(1, "hooks: %d of %d detours installed (mask %08lx), scene-load wrapper %s", ok, want, kla_only, i ? "installed (vtable entry 0xb8fa24)" : "NOT installed");
+    kla_what = "klauto";
+    kla_out(1, "hooks: %d of %d detours installed (mask %08lx), scene-load wrapper %s; patch policy: %s", ok, want, kla_only, i ? "installed (vtable entry 0xb8fa24)" : "NOT installed",
+            klh_policy_name[klh_policy]);
+    if (!i) kla_hooks_on = 0;                       /* no LOAD start / end wrapper: loads are then noticed at the keyboard poll (kd_getdata) */
     return ok + i;
 }
 
 /* ---------------------------------------------------------------- script */
 
-typedef struct { char op; BYTE key; DWORD n, n2; char text[80]; float f[4]; } KCMD;
+typedef struct { char op; BYTE key; DWORD n, n2; char text[80]; float f[4]; DWORD off[6]; BYTE noff; } KCMD;
 enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH, C_MOUSE, C_MDOWN, C_MUP, C_POS, C_GOTO, C_FACE, C_ONWIN, C_LABEL, C_REWRITE };
 static KCMD kla_cmd[640]; static int kla_ncmd, kla_pc; static DWORD kla_cmd_t, kla_cmd_f, kla_seq;
 static BYTE kla_held[256]; static DWORD kla_rel_t[256], kla_rel_f[256]; static int kla_taps, kla_started;
@@ -1142,8 +1151,10 @@ static void kla_script_load(void)
         }
         else if (!_stricmp(op, "pos")) { c->op = C_POS; snprintf(c->text, sizeof c->text, "%s", rest); }
         else if (!_stricmp(op, "peek")) {
-            char *plus = strchr(a, '+');
+            char *plus = strchr(a, '+');                 /* <addr>[+off[+off...]]: every '+' follows one pointer, then adds */
             c->op = C_PEEK; c->n = strtoul(a, 0, 16); c->key = (BYTE)(plus != 0); c->n2 = plus ? strtoul(plus + 1, 0, 16) : 0;
+            for (; plus && c->noff < 6; plus = strchr(plus + 1, '+')) c->off[c->noff++] = strtoul(plus + 1, 0, 16);
+            if (plus) { kla_out(1, "script line %d: peek follows at most six pointers - script not loaded", i); kla_ncmd = 0; return; }
             snprintf(c->text, sizeof c->text, "%s", rest + strlen(a));
         }
         else if (!_stricmp(op, "rewrite")) {           /* rewrite <addr>[+off] <bytes> <label> */
@@ -1186,26 +1197,7 @@ static int kla_msg(const char *elem, const char *msg)
     return 1;
 }
 
-/* The score-page crash of run RN11 (kl2 0x838922), diagnosed by g-crash (re\crash_scorepage.md): the row count
-   ZLeaderBoardServiceSteam+0x31fc is written by no constructor, only by a leaderboard download that returns rows;
-   the score page walks that many rows of the 114 the object holds. lb = [[[0x168e598]+0x17c]+0x198], valid while
-   [0x168e598] is a ZSessionManagerMultiplayer (vtable 0xbd1ebc) and lb's vtable is 0xbd5cc4. While no row is held
-   (first index +0x10 == past-last +0x14) and no request runs (+0x31f8 == 0) the count is set to 0: the value the
-   constructor should have stored. Heap data only. Called at every keyboard poll until done once. */
-static int kla_lbfix_on = 1, kla_lbfix_done;
-static void kla_lbfix(void)
-{
-    DWORD sm = kla_rd32((DWORD_PTR)VA(0x168e598)), svc, lb, first = 0, last = 0, req = 0, count = 0;
-    if (!sm || kla_rd32(sm) != 0xbd1ebc) return;
-    svc = kla_rd32(sm + 0x17c); if (!svc) return;
-    lb = kla_rd32(svc + 0x198); if (!lb || kla_rd32(lb) != 0xbd5cc4) return;
-    if (!kla_rd(lb + 0x10, &first, 4) || !kla_rd(lb + 0x14, &last, 4) || !kla_rd(lb + 0x31f8, &req, 4) || !kla_rd(lb + 0x31fc, &count, 4)) return;
-    kla_lbfix_done = 1;
-    if (first == last && !req && count && kla_lbfix_on) *(volatile DWORD *)(DWORD_PTR)(lb + 0x31fc) = 0;
-    kla_out(1, "leaderboard service %08lx: first %ld, past-last %ld, request %08lx, row count %ld (%08lx)%s", lb, (long)first, (long)last, req, (long)count, count,
-            first != last || req ? " - rows held or a request running: left alone" : !count ? " - already 0" : !kla_lbfix_on ? " - LbFix=0: left as found" :
-            (long)count > 114 ? " -> set to 0 (WOULD HAVE CRASHED the score page: more than the 114 rows held)" : " -> set to 0 (harmless value)");
-}
+/* The leaderboard row count fix (the score-page crash of run RN11) lives in klfix.c now: SHIP needs it too. */
 
 static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
 {   /* called once per keyboard poll, on the game's thread */
@@ -1350,9 +1342,13 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
             return;
         go_done:
             kla_go_fin = 1; return; }
-        case C_PEEK: { DWORD v = 0, at = (DWORD)(DWORD_PTR)VA(c->n); int ok = kla_rd(at, &v, 4);
-            if (ok && c->key) { at = v + c->n2; v = 0; ok = kla_rd(at, &v, 4); }
-            kla_out(1, "script %d: peek %08lx%s = %s%08lx %s", kla_pc + 1, c->n, c->key ? "+" : "", ok ? "" : "unreadable ", v, c->text); next = 1; break; }
+        case C_PEEK: { DWORD v = 0, at = (DWORD)(DWORD_PTR)VA(c->n); int ok = kla_rd(at, &v, 4), j, n; char ch[80];
+            n = snprintf(ch, sizeof ch, "%08lx", c->n);
+            for (j = 0; j < c->noff; j++) {
+                n += snprintf(ch + n, sizeof ch - n, "+%lx", c->off[j]);
+                if (ok) { ok = v > 0xffff; at = v + c->off[j]; v = 0; ok = ok && kla_rd(at, &v, 4); }
+            }
+            kla_out(1, "script %d: peek %s = %s%08lx%s (at %08lx) %s", kla_pc + 1, ch, ok ? "" : "unreadable ", v, ok ? "" : " (a null or bad pointer on the way)", at, c->text); next = 1; break; }
         case C_REWRITE: {                               /* the same bytes written back: a data write that changes nothing */
             BYTE b[64]; DWORD v = 0, at = (DWORD)(DWORD_PTR)VA(c->n); int n = (int)c->f[0], ok = 1, j; char hex[3 * 16 + 1], txt[17];
             MEMORY_BASIC_INFORMATION mbi;
@@ -1471,7 +1467,7 @@ static HRESULT WINAPI kd_getdata(KPX *p, DWORD cb, DWORD *rg, DWORD *count, DWOR
     if (!told) { char s[128]; DWORD sys = kla_sysif(); float ax = 0; told = 1; kla_scene(s, sizeof s); if (sys) kla_rd(sys + 0x68, &ax, 4);
                  kla_out(1, "input: first keyboard poll (result %08lx); scene='%s' AutoExit=%g", (DWORD)hr, s, ax); }
     if (kla_exe_ok && !kb.loading) kla_windows(0);
-    if (kla_exe_ok && !kla_lbfix_done && !(kla_frames & 15)) kla_lbfix();
+    klh_tick(1);                                        /* klfix.c / klslot.c: also driven from here, in case the SteamAPI_RunCallbacks slot is silent */
     if (kla_poslog_ms && kb.level_tick && !kb.loading && GetTickCount() - kla_poslog_t >= kla_poslog_ms && GetTickCount() - kb.level_tick > 8000) { kla_poslog_t = GetTickCount(); kla_log_pos("tick"); }
     if (!kla_script_active() || !rg || !count || cb != 20 || (flags & 1)) return hr;      /* 1 = DIGDD_PEEK */
     n = *count;
@@ -1601,8 +1597,7 @@ static LONG kla_uef2(EXCEPTION_POINTERS *ep, char *r, DWORD_PTR *seen_at_p, LONG
     if ((DWORD_PTR)ep->ExceptionRecord->ExceptionAddress == seen_at) {
         LONG n = InterlockedIncrement(&seen_n);
         if (n == 10 || n == 100 || n == 1000) kla_out(1, "unhandled exception at %08lx came back %ld times (the game's filter resumes it)", (DWORD)seen_at, n);
-        if (kla_prev_uef && kla_prev_uef != kla_uef) return kla_prev_uef(ep);
-        return EXCEPTION_CONTINUE_SEARCH;
+        return EXCEPTION_CONTINUE_SEARCH;               /* not handed on a second time: the first round's hand-on already wrote the game's dump */
     }
     seen_at = (DWORD_PTR)ep->ExceptionRecord->ExceptionAddress; seen_n = 1;
     TlsSetValue(kla_tls, (void *)1);
@@ -1696,7 +1691,15 @@ static DWORD WINAPI kla_watch(LPVOID unused)
         if (kla_so_ep) { TlsSetValue(kla_tls, (void *)1); kla_log_fault(kla_so_ep, "FATAL stack overflow"); kla_dump_now(0, "KLHook_stackoverflow.dmp"); kla_finish("FAIL", "stack overflow", KLA_CRASH); }
         kla_flush();
         prev = SetUnhandledExceptionFilter(kla_uef);    /* the game sets its own at 0x58ffca after we load */
-        if (prev != kla_uef) { kla_prev_uef = prev; if (rearmed++ < 5) kla_out(1, "unhandled-exception filter re-installed over %p", (void *)(DWORD_PTR)prev); }
+        if (prev != kla_uef) {
+            /* Only a filter INSIDE kl2.exe (the game's own, 0x90b780: Steam minidump, returns 0) is kept as the one
+               to hand on to. Another DLL's is never called: wrap_oal.dll's calls UnhandledExceptionFilter again
+               from inside itself, which came straight back here (run RN11: 18,003 nested rounds, 'stack
+               overflow'; re\crash_scorepage.md 3). The depth counter in kla_uef stays as a second guard. */
+            int game = (DWORD_PTR)prev >= img_lo && (DWORD_PTR)prev < img_hi;
+            if (game) kla_prev_uef = prev;
+            if (rearmed++ < 5) kla_out(1, "unhandled-exception filter re-installed over %p (%s)", (void *)(DWORD_PTR)prev, game ? "the game's own: handed on to after ours" : "another module's: not chained to");
+        }
         if (!crt && (kla_frames || kb.loads || kb.loading)) crt = kla_crt_hooks();
         now = GetTickCount(); idle = now - kla_beat;
         if (kla_stall_ms && (int)idle > 0 && idle > kla_stall_ms) {
@@ -1736,7 +1739,6 @@ static void kla_init(HINSTANCE inst)
     kla_unfocused = GetPrivateProfileIntA("Auto", "Unfocused", 1, kla_ini);
     kla_block = GetPrivateProfileIntA("Auto", "BlockReal", 1, kla_ini);
     kla_firstchance = GetPrivateProfileIntA("Auto", "FirstChance", 1, kla_ini);
-    kla_lbfix_on = GetPrivateProfileIntA("Auto", "LbFix", 1, kla_ini);
     { char t[32]; GetPrivateProfileStringA("Auto", "PosOff", "0x460", t, sizeof t, kla_ini); kla_pos_off = strtoul(t, 0, 16);
       GetPrivateProfileStringA("Auto", "DirOff", "0xc14", t, sizeof t, kla_ini); kla_dir_off = strtoul(t, 0, 16);
       GetPrivateProfileStringA("Auto", "TurnDeg", "0.17", t, sizeof t, kla_ini); kla_turn_deg = (float)atof(t); if (kla_turn_deg == 0) kla_turn_deg = 0.17f;
@@ -1747,7 +1749,7 @@ static void kla_init(HINSTANCE inst)
     if (kla_exe_ok) {
         kla_cmd_drop(); kla_engine_ini();
         if (kla_hooks_on) { kla_install(); kla_end_hooks(); }
-        else {                                          /* one kind of patch at a time (rentitamper.md section 8) */
+        else {                                          /* one kind of patch at a time (re\antitamper.md section 8) */
             static const char *nm[H_COUNT] = { "NODE", "CTRL", "PROG", "GEOMS", "SCNBLK", "REFFIX", "ROOM", "GBUF", "REFEND", "POST", "GINIT", "CLIST", "CINIT",
                                                "OPENWIN", "ELFOCUS", "FOCUS", "INPUT" };
             char d[200], *t; int i;
@@ -1765,28 +1767,12 @@ static void kla_init(HINSTANCE inst)
     kla_tls = TlsAlloc();
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
     AddVectoredExceptionHandler(1, kla_veh);
-    kla_prev_uef = SetUnhandledExceptionFilter(kla_uef);
+    SetUnhandledExceptionFilter(kla_uef);               /* whatever was there before the game set its own is not chained to (kla_watch) */
     kla_wake = CreateEventA(0, FALSE, FALSE, 0);
     CloseHandle(CreateThread(0, 0, kla_watch, 0, 0, 0));
     atexit(kla_atexit);
     kla_result("RUNNING", "started", -1);
 }
-
-#ifndef KLAUTO_FROM_KLHOOK
-HRESULT WINAPI DirectInput8Create(HINSTANCE h, DWORD v, REFIID r, LPVOID *o, LPUNKNOWN u)
-{
-    HRESULT hr = klhook_DirectInput8Create(h, v, r, o, u);
-    if (SUCCEEDED(hr)) kla_di8(o);
-    return hr;
-}
-
-BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
-{
-    BOOL ok = klhook_DllMain(inst, reason, res);
-    if (reason == DLL_PROCESS_ATTACH) { kls_init(inst); kla_init(inst); }
-    return ok;
-}
-#endif
 
 #ifdef KLAUTO_TEST
 /* Test harness entry points (never built into the game's DLL): the harness maps a copy of kl2.exe at
@@ -1795,6 +1781,7 @@ __declspec(dllexport) int kla_test_install(void *mapped, void *fake_loader)
 {
     int n;
     kla_delta = (LONG_PTR)((DWORD_PTR)mapped - 0x400000); kla_exe_ok = 1;
+    klh_policy = KLH_DIRECT;                            /* this entry tests the patcher itself: every site goes in */
     kla_engine_ini(); n = kla_install();
     if (fake_loader) kla_real_load = (KLA_LOAD)fake_loader;
     return n;
@@ -1817,3 +1804,5 @@ __declspec(dllexport) int kla_test_stub_runs(void)
     return r == 1234 && kb.ocount == before + 1 && kb.obj == 1000 && kb.otarget == 234;
 }
 #endif
+#endif /* KLAUTO_C */
+#endif /* KLHOOK_C */

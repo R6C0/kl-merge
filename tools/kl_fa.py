@@ -391,6 +391,16 @@ def check(sc, snd=None, loc=None):
         add(CRASH, 'money-trigger', '%d money triggers (TriggerBox2 beside OnlineMoneyCtrl / OnlineMoneyContainer) fire for anything '
             'tracked, and the level has a ZHavokCar: a car within reach of loot is handed to ZGameRulesHeist slot 201 as an actor '
             '(kl2 0x6a8902, run ESC1), e.g. %s' % (len(wide), sc.path[wide[0][0]]), 'money_people')
+    # a JumpPoint that gets a message: its handler (kl2 0x491e20) sets the request [0x156b35c], and
+    # 0x8f3fa0 then also moves the player's CREW ([player + 0xcd0] -> +0xa4). ZFFPlayer slot 82
+    # (0x89ca94) creates a crew only for player types 0 and 1 (the story's two); a Fragile Alliance
+    # player has none: read of address 0xa4 at kl2 0x8f40c9 (run RT3, Retomoto's first join).
+    # Stock: no object of any of the 21 levels names a JumpPoint.
+    jumps = {k for k, _i, _v in controllers(sc, 'JumpPoint')}
+    named = sorted({sc.path[k] for k, _h, _f, _s, hit in J.references(sc) if k >= 0 and jumps & set(hit)}) if jumps and ctrl[SETTINGS] else []
+    if named:
+        add(CRASH, 'jump-point', '%d objects send a message to a JumpPoint: the jump then walks the crew of a player that has none '
+            '(kl2 0x8f40c9), e.g. %s' % (len(named), named[0]))
     return sorted(out, key=lambda f: f.sev)
 
 
