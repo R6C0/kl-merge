@@ -786,3 +786,19 @@ Build once (`test <out> --keep`), install into the F01 slot with its `KLJoin.ini
    bound does (warn, kill, nothing).
 10. `--police-follow` with a second player, after everything else.
 Part B from the lobby on: k-street's file.
+
+## 12. The loot's props and reach (2026-10-09 22:00, agent y-loot; OFFLINE) -> re/retomoto_loot.md
+
+Owner after playing: bags everywhere, briefcases wanted in the start room, the left row on the table cannot
+be taken, a fitting prop for the statue loot. `tools/kl_fa_loot.py` works on the WRITTEN level, through
+`kl_fa_author.FINISH` (run by `kl_fa_author.test` and `kl_fa_blast.test`; `--loot-bags` = as before):
+- the table's row at z -120 (LEFT from the balcony: facing -x, left is -z) was 190 from the nearest place
+  to stand with reach 120 (the pick-up test read at kl2 0x783e60: horizontal distance <= radius + 40). All
+  six now lie 33 in from the table top's two long rims, radius 125, and show Dead Men's Fragile Alliance
+  briefcase (M01_FA_A, 18 chunks in dead indices);
+- the 15 at the samurai cases show the case's own armour (a new root over the case model's two armour
+  meshes; the case keeps frame and glass): taken = the case is empty;
+- `MAIN_ROOM` / `STATUES` here are where the loot STARTS; the 'GUESS: the table top is 80 above the floor'
+  and 'GUESS: that a stack inside the glass can be reached' of section 2 are measured now (top y 21070;
+  every case has a place to stand 91..98 away, reach 190).
+Section 8's steps 6 / 7 (statue loot, the table's six) are to be looked at with re/retomoto_loot.md 6.

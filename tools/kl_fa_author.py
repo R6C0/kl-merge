@@ -21,6 +21,11 @@ settle: re/retomoto_fa.md. Nothing here installs anything or starts the game.
                                                  --one-wave       every tower squad at the blast
                                                  --police-follow  tower police points off once a
                                                                   criminal is at the front entrance
+                                                 --loot-bags      the loot keeps its money bags and its
+                                                                  places (without it kl_fa_loot dresses the
+                                                                  written level: briefcases on the boardroom
+                                                                  table, in reach; the armour as the cases'
+                                                                  loot - re/retomoto_loot.md)
     python kl_fa_author.py ledge <archive>       the ledge test alone on a built level: what
                                                  stands outside the main window, the glass before
                                                  and after the blast, the rail
@@ -127,12 +132,19 @@ SPAWN = {'eSPAWN_TYPE_FRAGILE_ALLIANCE_START': (START, (0, 0, 0), IN),
          'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_MERC4': (STAGE_D, (120, 0, 0), (-1.0, 0.0)),
          'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_POLICE': (POLICE, (0, 0, -80), (1.0, 0.0))}
 # the 15 samurai-armour cases (re/retomoto.md 3.2: the '_Whole' glass of each); the loot stands
-# at the case's own origin, i.e. inside the glass. GUESS: that a stack there can be reached
+# at the case's own origin, i.e. inside the glass. That a stack there can be reached is no longer a
+# guess: the pick-up test was read (kl2 0x783e60: horizontal distance <= radius + 40, no wall or glass in
+# it) and every case has a place to stand 91..98 away with reach 190 (kl_fa_loot.py survey).
+# kl_fa_loot.dress() gives these 15 the armour itself as their model (STATUE = 'suit').
 STATUES = [(-2163, 20400, 523), (-73, 20400, 1362), (-109, 20400, -1578), (724, 20400, -808), (-2173, 20400, -705),
            (726, 20400, 606), (726, 21100, 607), (724, 21100, -807), (-110, 21100, -1578), (-2162, 21100, 522),
            (-73, 21100, 1362), (-2172, 21100, -705), (725, 19700, 606), (723, 19700, -808), (-2293, 19700, -131)]
 # main room = the boardroom M09_A_Ins_Office_301. Six stacks on the table (chairs stand round
 # x 4600..5450, z -290..180). GUESS: the table top is 80 above the floor
+# MEASURED since (kl_fa_loot.table()): the top is y 21070 (the table stands on y 20990, not on FLOOR3), z -257..29
+# in the middle. The row at z -120 lies 134 in from the rim and CANNOT BE TAKEN (reach 120, nearest place to stand
+# 190 away; the owner, 2026-10-09 22:00: 'the ones on the left side from spawn'). kl_fa_loot.dress() re-places all
+# six along the rims on the written level, with radius 125 and a briefcase each; this table is where they start.
 MAIN_ROOM = [(x, FLOOR3 + 80.0, z) for x in (4750.0, 5000.0, 5250.0) for z in (-120.0, 20.0)]
 STATUE_VALUE, ROOM_VALUE = 150000, 300000   # GUESS: 15 x 150,000 + 6 x 300,000 = 4.05 M (F07's loot: 5 x 800,000)
 GATE_MAIN_ROOM = True                   # False: the boardroom loot lies there from the start
@@ -255,6 +267,13 @@ VANS = ['Animation/F07/F07_Escape_Vehicle_0%d.zip' % i for i in (1, 2, 3)]
 #   'wire'           fn(sc, log), called at the end of wire() on the joined scene
 # Without that module, or without HOOKS in it, part B is what this file built before (section 2 - 4).
 _KEEP = ('FASpecials!', 'Specials!', 'Gameplay!EscapeSetup!*') + tuple(VANS) + tuple(v for k, v in ROLE.items() if v.startswith('Gameplay!0'))
+
+
+# What works on the WRITTEN level (models: chunk numbers exist only then): fn(folder, log) -> [problems], called
+# by test() here and by kl_fa_blast.test() once the archive is in `folder`. kl_fa_loot.hook() adds its finish().
+# FOR kl_graft / kl_maps (not my files): `for fn in kl_fa_author.FINISH: fn(<folder of the written level>, log)`
+# after the last step of a chain is written gives 'kl_maps.py chain ... --author' the same level.
+FINISH = []
 
 
 def street():
@@ -1008,8 +1027,9 @@ def test(out, keep=False, log=print):
         return 1
     folder = os.path.join(out, 'R09+%s%s' % (PART_A, r['tag']))
     archive = os.path.join(folder, kl_maps.SLOT + '_Main.zip')
+    late = [p for fn in FINISH for p in fn(folder, log)]            # kl_fa_loot: the loot's props, on the written level
     inventory(archive, log)
-    off = ledge(archive, log)
+    off = ledge(archive, log) or late
     mine = [p for p in r['problems'] if not any(k in p for k in KNOWN)]
     fa = [f for f in r['fa_findings'] if f.startswith(('CRASH', 'BROKEN'))]
     log('\nkl_graft.verify: %d problems, %d of them not KNOWN' % (len(r['problems']), len(mine)))
@@ -1043,6 +1063,9 @@ def main():
         BLAST_HARMLESS = '--blast-real' not in a
         ONE_WAVE = '--one-wave' in a
         POLICE_FOLLOW = '--police-follow' in a
+        if '--loot-bags' not in a:                      # the loot's props and places (kl_fa_loot, on the written level)
+            import kl_fa_loot
+            kl_fa_loot.hook()
         if '--blast-delay' in a:                        # OPTION, seconds from the round-start event to the warm-up
             BLAST_DELAY = float(a[a.index('--blast-delay') + 1])
         if '--fuse' in a:                               # OPTION, the bomb's fuse (its own value: 4)

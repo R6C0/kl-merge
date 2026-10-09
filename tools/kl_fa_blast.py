@@ -21,6 +21,10 @@ its objects on the blast timer kl_fa_author already has, and edits nothing of th
                                      --blast-bomb-native  TEST: the bomb itself spawns a Dog Days cluster instead of
                                                       Dead Men's glass burst (does the hidden bomb spawn anything?)
                                      --blast-real     kl_fa_author's: the bomb keeps its two radii (it can kill)
+                                     --loot-bags      the loot as before kl_fa_loot: money bags, the old places.
+                                                      Without it the written level is dressed (kl_fa_loot.finish
+                                                      through kl_fa_author.FINISH; its options --case dm|dd|bag,
+                                                      --case-scale X, --statue suit|bag, --room-reach R go through)
     python kl_fa_blast.py report <archive>   the same read-back of a built level
     python kl_fa_blast.py subway             how stock F01 (Subway) opens: every object of its breach
     python kl_fa_blast.py selftest           the three controllers this file writes, token for token
@@ -704,7 +708,8 @@ def test(out, keep=False, log=print):
         return 1
     folder = os.path.join(out, 'R09+%s%s' % (au.PART_A, r['tag']))
     archive = os.path.join(folder, kl_maps.SLOT + '_Main.zip')
-    bad = report(archive, log)
+    late = [p for fn in au.FINISH for p in fn(folder, log)]         # kl_fa_loot: the loot's props, on the written level
+    bad = report(archive, log) + ['kl_fa_loot: ' + p for p in late]
     street = st.report(archive, lambda *_a: None)       # the street layer must read back as without this file
     known = au.KNOWN + (('no ZSquadScript: no police',) if au.NO_AI and not st.POLICE else ())
     mine = [p for p in r['problems'] if not any(k in p for k in known)]
@@ -750,6 +755,10 @@ def main():
     BOMB_GROUP = 'spray' if '--blast-bomb-native' in a else None
     au.BLAST_HARMLESS = '--blast-real' not in a
     au.NO_AI = '--no-ai' in a
+    if '--loot-bags' not in a and a[:1] == ['test']:    # the loot's props and places (re/retomoto_loot.md)
+        import kl_fa_loot
+        a = kl_fa_loot.options(a)
+        kl_fa_loot.hook()
     a = [x for x in a if not x.startswith('--') or x == '--keep']
     if len(a) >= 2 and a[0] == 'test':
         sys.exit(test(a[1], '--keep' in a))
