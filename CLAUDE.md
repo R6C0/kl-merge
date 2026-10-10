@@ -182,6 +182,25 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+STATE 2026-10-10 11:40 - INSTALLED FOR THE OWNER AND SEEN LIVE (owner: 'continue', and through kl-merge-db 'yes retomoto mask'):
+F01 slot = <work>/build/rt_masks/retomoto_masks (Retomoto + wardrobe + loot props + the four Payday 2 masks; sha1 a8e01b56) with its
+KLJoin.ini and KLWardrobe.ini; hook = SHIP <work>/build/klhook/ship_stall (c120880a) + the owner's own KLHook.ini (Expansion on,
+[Load] NudgeMs=1000, Char=10 Mask=1; pair kept in <work>/build/klhook/owner_now); overlay = BOTH files of
+<work>/build/pd2/overlay/Overlay (Patch01.zip af59ca57 + Scenes/kaneandlynch.zip 30e0fd90). What was found in the game folder
+before (the 09:40 mask-test state) is kept in <work>/build/klhook/found_1010_1115.
+- Run PV1b (menu only, TEST hook test_stall): PASS. The Heister page shows the character and the mask picture above the rows,
+  colours right, labels and pictures agree ('Tommy' / 'Black beard - Tommy'); Arcade page: ... Online Leaderboards, Heister, Guns.
+  Pictures <work>/research/shots/PV1b_*.png.
+- Run RTM (menu -> Arcade -> Subway slot, Char=9 Mask=10): PASS. 'wardrobe (version 2): 16 characters, 12 masks', 'body: slot 0,
+  model 9482 -> 9256 ... the player now has 9256', 'look: variant 1 -> 11'; level in 2.3 s; the 76.0 MB .prm in the reserve; round
+  reached GO. Picture <work>/research/shots/RTM_78s.png: Kane on the balcony with the WOLF plate on his face, drawn and textured.
+- STALL WATCH, first live lines: 'the main thread is back after 21.9 s without a frame or a loader step' at every start - the
+  intro movie (the main loop does not run while a movie plays; the script's 'wait 1500' took 22 s). So a movie is a healthy
+  silence: StallEndMs MUST STAY OFF (a campaign cutscene can be minutes long); StallMs 30 s only writes a dump.
+- NEXT for the game holder: finish kl-merge-b6's dynamic AI + van build (entry below) into a play build: `kl_graft.py lighten`
+  (trim,slim), `kl_chars.py wardrobe <light> <out> --plates=wolf,dallas,chains,hoxton`, KLJoin.ini = klhook/KLJoin.retomoto.ini;
+  then its checks D1..D6. Not started. Still unseen live: fxc_slim (F1), the four z_maps maps, the loot props (the owner's eyes),
+  AI heisters for the Dead Men maps (job parked for usage).
 RETOMOTO DYNAMIC AI + STRAIGHT VAN (owner asked 2026-10-09 late; BUILT OFFLINE 2026-10-10, NOT RUN IN THE GAME, NOT INSTALLED): re/retomoto_ai.md.
 Tower: the boardroom guards run from the window at the blast, the pistol squad is unleashed 6 s later (kl_fa_author ROOM_*, --room-classic).
 Street: police start when the crew leaves the lobby elevator (campaign box Mercenaries!TriggerBox_1_LeaveElevator), from out of sight; squads fall
