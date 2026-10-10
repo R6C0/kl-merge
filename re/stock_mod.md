@@ -56,3 +56,21 @@ Nine folders take 2.5 GB.
 - Everything live: no folder of the nine was loaded (F01's wardrobe + plates alone was).
 - Whether `kl_maps.audit` could be taught a stock level as its own base (it compares the sound bank with a grafted
   map's systems level and reports ten sound findings on a stock level; left out with `--no-audit`).
+
+## Looked at and NOT built: a generic "police push when their neighbours fall" layer (2026-10-10 15:00)
+
+Survey of stock squads (ZSquadScript; AI heisters left out):
+
+| level | squads with soldiers | already use the "wiped out" list (field 8) | have an Unleash modifier |
+|---|---:|---:|---:|
+| F01 | 14 | 9 | 6 |
+| F03 | 17 | 8 | 6 |
+| F07 | 20 | 0 | 6 |
+
+- Field 8 is in real use in stock (F01: 9 squads, F03: 8). That is evidence for the ASSUMPTION Retomoto's fall-back
+  chains rest on (re/retomoto_ai.md 5): stock's own designers hang follow-ups on it.
+- A generic rule ("a squad wiped out names the nearest squad's Unleash modifier") would reach only the six squads a
+  level that have such a modifier, and stock already fires those from its own rout chains. On squads that are not in
+  the world yet it would bring them in early. That changes each level's designed pacing by a rule that knows nothing
+  about the level: a guess per map. Not built. Police changes on a stock map are an authoring job per map, one first.
+- The gun data files of the nine builds already carry `Entries=` (the new hook's requirement): checked on F06.
