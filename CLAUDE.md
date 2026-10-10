@@ -182,6 +182,14 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+STATE 2026-10-10 16:50. INSTALLED TREE = <work>/build/w_tab2/KLExpansion: the tab's four maps are now <work>/build/u_maps/M01,
+M02, M03, M06 (gun looks + escape camera + tougher enemies + seven AI heisters; KLGuns.ini carried), Retomoto = rt_guns3 (no
+bots yet), map pictures on the page. Hook ship_bot1. LIVE on each u_maps build (runs U_M02, U_M01, U_M06, U_M03, bot log on): all
+load and reach GO, no fault. Diner: the vehicle is called ~70 s after GO, all seven bots aboard and escaped by 2:50, the idle
+player left behind (still early - '--loot-seconds' / the tuning's wait are the knobs). Park: same at 3:00. Late Night Opening:
+bots loot (up to $150,000) and stay at stage 1 for the 3.5 min watched. Bank: bots loot up to $840,000, stage 2, stay in the yard
+(the two mesh parts are not joined). The unknown hook of 14:24 was the owner's Copilot ('done nothing useful', owner): its
+klhook.c lines were reverted; tools/kl_add_plates.py and the 'plates' command in kl_chars.py stay uncommitted scrap.
 STATE 2026-10-10 16:20. INSTALLED: the EXPANSION TREE <work>/build/w_tab/KLExpansion (python tools/kl_expansion.py install ...
 --replace --no-stream --no-hook; the old KLExpansion is KLExpansion.before-0): Arcade -> 'Dead Men maps' = Hot Coffee (F01),
 Late Night Opening (F02), Withdrawal (F03), A Walk in the Park (F04), Retomoto Tower (F06 = rt_guns3 build); SUBWAY IS STOCK
