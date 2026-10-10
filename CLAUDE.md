@@ -182,6 +182,11 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+STATE 2026-10-10 11:51 - SLOT NOW = LATE NIGHT OPENING on the owner's word: <work>/build/z_maps/M02 (8 masks: no Payday 2 plates on
+the four map builds yet; no KLJoin.ini). Load check LNO: PASS - the first live load of a lightened + wardrobe Dead Men map build:
+level in 2 s, .prm 52.5 MB in the reserve, Kane's body taken, round reached GO, no fault. To see by playing: the 26 jewel
+containers, three floors, the MOVED boarding action at the car park (-426, 136, -8627). Retomoto to put back on request:
+`python debug/slot.py put "<work>/build/rt_ai/retomoto_ai" F01`.
 STATE 2026-10-10 11:45 - SWAPPED on the owner's word: F01 slot = <work>/build/rt_ai/retomoto_ai (dynamic AI + straight van + wardrobe +
 masks; sha1 b8d430d0), hook ship_stall + the owner's ini, overlay as before. Load check RTA: PASS (level in 2.3 s, Kane + Wolf,
 round reached GO, no fault). The AI / street / van behaviour (D1..D6, re/retomoto_ai.md 9) is for the owner to see by playing; the
