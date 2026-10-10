@@ -182,6 +182,12 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+OWNER ASKED 2026-10-10 ~13:45 (verbatim in .wf/round_prompts8.txt): AI heisters drawn at RANDOM from Dead Men and Dog Days bodies /
+outfits; bots that backstab, stay by you, try to leave you behind; BOTS ON RETOMOTO; an EASTER EGG - a Kane in the round speaks the
+campaign's countdown to the blast; a Kane - Lynch EXCHANGE when both are in (Retomoto, maybe the other maps); more of the games'
+own voice lines; BAIN (Payday 2) as the announcer. RUNNING: workflow crew-talk-bain (.wf/crew.js): klhook/klcrew.c, tools/
+kl_fa_bots_rt.py, kl_fa_talk.py, kl_bain.py -> <work>/build/v_rtbots, v_talk, v_bain; review re/crew_talk_review.md.
+'Help you up' is NOT possible in Arcade (kl2 0x5fe270: the downed state exists only in session mode 2) - told the owner.
 SLOT 2026-10-10 13:37 = <work>/build/rt_guns3/retomoto_ai3_guns: Retomoto v3 (kl-merge-b6 b7934cd: rifle guards eCustom 75 = really
 sharper) + wardrobe + plates + gun looks REFITTED (turned 10 degrees into Dog Days' hold, Zastava-as-MP5 sounds like smg_type79,
 P90 on the Type 05). Load check RT3 PASS. Hook still ship_stall (klgun Version 1: the Guns page does nothing yet).
