@@ -182,6 +182,14 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+OWNER PLAYED THE TAB'S MAPS WITH BOTS (2026-10-10 ~18:00): 'the issue on late night is they dont shoot open the casing stuff bc its
+glass and u need to shoot it to loot, the van is such a damn problem and they dont loot the warehouse people on diner not sure about
+park, the bank they gotta vault on the garbage then over the wall, one thing i can definitely say is they dont have much health
+when i shoot them but when they shoot me i have a llot of health not proportional and the coppers dont seem too intimidating it
+should be all the same kinda risk and how the traitors could be'. RUNNING: workflow owner-play-fixes wf_06722b28-02d: p-balance
+(klhook/klbalance.c + kl_map_ai: player vs cop vs heister on one scale, MEASURED first), p-loot (kl_fa_bots: glass cases, the
+diner's warehouse people without calling the vehicle early, a way over the bank wall), p-van (kl_map_escape: replace Dead Men's
+ZHavokCar-on-a-spline by F07's key-framed van as on Retomoto), review re/play_fixes_review.md. Builds: <work>/build/y_bal, y_loot2, y_van.
 COME BACK AS A FED (2026-10-10 17:45; re/fed_respawn.md, re/fed.md, re/fed_review.md; klhook/klfed.c + tools/kl_fa_fed.py written,
 NOT wired, NOT run): the Arcade rules still hold the whole multiplayer 'dead criminal returns as police' path; Arcade skips it
 because the round-over gate 0x67f480 says 'over' with one human - unless dword [0x168ea60] (zero .data, two readers, no writer,
