@@ -182,6 +182,13 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+2026-10-10 13:20. GUN LOOKS SEEN LIVE by the owner (told to kl-merge-b6): 'it holds the mp5 weird and if i try for the ak 74 starter
+game goes grey feels like it crashed weird but it didnt because i could back out then equip the mp5 i dont like how it uses the ak
+sound too' = the HIDE BIT WORKS (the MP5 look is drawn alone); the hold (rifle hand places), the fire sound and the grey round
+(cause not established; the hook did nothing for that choice) are open. AI HEISTERS BUILT OFFLINE (commit fa75ad9): <work>/build/
+b_bots/M01, M02, M06, M03 - load order and risks in re/bots_review.md; NOT loaded yet. RUNNING: workflow wf_b110f0e0-155
+(.wf/hook.js): klhook/klbot.c (crew log, traitor tuning, pay the driver, van), klgun.c Version 2 (Guns page switches by hide bit),
+kl_map_guns.py fit / sound / grey screen -> <work>/build/rt_guns2, t_guns2; then a reviewer. Also still running: map-tune.
 SLOT 2026-10-10 12:46 = <work>/build/rt_guns/retomoto_ai2_guns (Retomoto v2 + baked gun looks) on the owner's word; load check RTG
 PASS (GO, no fault; 'guns: on; starting rifle look 0' and no level line = the hook leaves the Version 2 KLGuns.ini alone). The
 pictures do NOT show the gun (camera behind the head): G1 is for the owner's eyes. debug/slot.py does not copy KLGuns.ini -
