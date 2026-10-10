@@ -28,6 +28,8 @@
  *   kltalk.c       x     x    Kane / Lynch scenes and chatter ([Talk], KLTalk.ini; calls 0x828fa0, 0x421c70; no data, no
  *                             code). OFF by default
  *   klbot.c        x     x    the AI crew's log and the backstab / bribe / leave / van rules ([Bots]). OFF by default
+ *   klescort.c     x     x    one or two AI heisters stay near the human ([Bots] Escort; calls 0x760e50, the soldier's own
+ *                             'defend this place' order; no data, no code). OFF by default
  *   klmem.c klnudge.c x  x    address space reserve ([Memory]); the loader's cursor nudge ([Load])
  *   klauto.c             x    scripted input, breadcrumb detours, [Auto] options, result file, watchdog
  *   mkoverlay.py              builds KLExpansion\Overlay\Patch01.zip (the menu page of the expansion maps)
@@ -559,6 +561,7 @@ static void klh_tick(int game_thread);
 #include "klcrew.c"
 #include "kltalk.c"
 #include "klbot.c"
+#include "klescort.c"
 #include "klbalance.c"
 #include "klshoulder.c"
 #include "klfed.c"
@@ -602,6 +605,7 @@ static void klh_tick(int game_thread)
     klw_tick(game_thread);                            /* after klc_tick: the player's own body goes first */
     klk_tick(game_thread);                            /* after klw_tick: it reads who wears whom */
     klb_tick(game_thread);
+    kle_tick(game_thread);                            /* klescort.c: after klb_tick; one game call per order, game thread only */
     klr_tick(game_thread);                            /* klbalance.c: one damage scale for player, police and crew */
     klo_tick(game_thread);                            /* klshoulder.c: log only */
     klp_tick(game_thread);                            /* klfed.c: come back as a fed (data writes only) */
@@ -769,6 +773,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klw_init();
     klk_init();
     klb_init();
+    kle_init();
     klr_init();
     klo_init();
     klp_init();
