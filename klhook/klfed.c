@@ -452,6 +452,7 @@ static void klp_tick(int game_thread)
     if (s.rules != klp_r.rules || (s.state == KLP_ROUND && klp_r.state != KLP_ROUND)) {      /* a new round */
         int n = klp_r.round + 1, ours = klp_r.ours, tf = klp_r.told_foreign, tt = klp_r.told_thread; const char *w = klp_r.why;
         memset(&klp_r, 0, sizeof klp_r); klp_r.rules = s.rules; klp_r.round = n; klp_r.ours = ours; klp_r.told_foreign = tf; klp_r.told_thread = tt; klp_r.why = w;
+        memset(klp_b, 0, sizeof klp_b);              /* review: a script pointer of the last round must not be written through (squads may be rebuilt) */
         if (s.state == KLP_ROUND && klp.log) klp_round_line(&s);
     }
     klp_r.state = s.state;

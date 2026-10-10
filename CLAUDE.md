@@ -182,6 +182,15 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+2026-10-10 18:40. HOOK INSTALLED FOR THE OWNER = SHIP <work>/build/klhook/ship_all1 (fa1b1eb6): + klcrew.c, klcrew_rt.c, kltalk.c,
+klfed.c, all OFF unless enabled; the tick now runs ONLY from the main loop's two SteamAPI_RunCallbacks sites on the main thread
+(the wrapper used to pass all twelve call sites as 'game thread'). The owner's KLHook.ini got [Crew] Random=1.
+LIVE with the TEST sibling test_all1: C0 menu control clean (no new line); C1 RANDOM CREW WORKS on Late Night Opening - 'round
+draw 1 (session state 16 ...)', bots became Liam, Pierre, Lynch, Tommy, Kane, Parker, Red through the game's own model routine,
+variants and voice bytes set, no fault; F0 / F0b fed log: 8 police bodies, 7 free (one is taken at the session start), the squad-
+script chain holds on all seven bots ('MUTED'). NOT YET LIVE: a bot's death releasing a fed, [Fed] Player=1, the Retomoto join
+for bots ([CrewJoin]), the talk ([Talk] LogOnly=1 first). The 14:24 crash was the Copilot package's menu XML (element 5000 of
+the frontend table was a plain Window; kl2 0x861720 has no 'no element' test), not klcrew.c - re/hook_review_talk.md.
 OWNER PLAYED THE TAB'S MAPS WITH BOTS (2026-10-10 ~18:00): 'the issue on late night is they dont shoot open the casing stuff bc its
 glass and u need to shoot it to loot, the van is such a damn problem and they dont loot the warehouse people on diner not sure about
 park, the bank they gotta vault on the garbage then over the wall, one thing i can definitely say is they dont have much health

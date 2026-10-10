@@ -20,6 +20,15 @@
  *                             and none at all from a TEST build; the 'session: state' line
  *   klstock.h      x     x    GENERATED (mkstock.py): size and directory hash of the 22 stock level archives
  *   kljoin.c       x     x    jump boxes: a two-part level joined by the game's own jump request ([Join], KLJoin.ini)
+ *   klcrew_rt.c    x     x    the AI crew follows that jump ([CrewJoin]; calls 0x62a900, 0x72e0f0; no data, no code). OFF by default
+ *   klchar.c       x     x    the heister the player chose: body, mask, outfit ([Character], KLWardrobe.ini)
+ *   klgun.c        x     x    switchable gun looks ([Guns], KLGuns.ini)
+ *   klcrew.c       x     x    random AI heisters ([Crew]; calls 0x783fb0, 0x88c810, with Names 0x83e2e0, 0x469250; eight heap
+ *                             bytes) and 'who wears whom' for kltalk.c (read only). OFF by default
+ *   kltalk.c       x     x    Kane / Lynch scenes and chatter ([Talk], KLTalk.ini; calls 0x828fa0, 0x421c70; no data, no
+ *                             code). OFF by default
+ *   klbot.c        x     x    the AI crew's log and the backstab / bribe / leave / van rules ([Bots]). OFF by default
+ *   klmem.c klnudge.c x  x    address space reserve ([Memory]); the loader's cursor nudge ([Load])
  *   klauto.c             x    scripted input, breadcrumb detours, [Auto] options, result file, watchdog
  *   mkoverlay.py              builds KLExpansion\Overlay\Patch01.zip (the menu page of the expansion maps)
  *   build.bat build_auto.bat  SHIP / TEST; with --work into <work>\build\klhook\ship | test (DLL, sha1, ini): the
@@ -142,6 +151,7 @@
  *   [Expansion] [Redirect] [Redirect.N] [Page.N] [Slots]    klslot.c
  *   [Steam]                                                 klsteam.c (Block, Log, State)
  *   [Join] [Join.2] .. [Join.8]                             kljoin.c (also KLJoin.ini beside a level archive)
+ *   [CrewJoin] [Crew] [Talk]                                klcrew_rt.c, klcrew.c, kltalk.c - each OFF unless its key is set
  *   [Auto] [Engine] [Script]                                klauto.c (TEST)
  *
  * BUILD: cl 19.4x x86, /O2 /LD /W3, export DirectInput8Create=_DirectInput8Create@20 (build.bat, build_auto.bat).
@@ -156,6 +166,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <math.h>
+#include <intrin.h>
 
 #define KL2_BASE      0x400000u
 #define KL2_TIMESTAMP 0x4c80f728u
@@ -542,9 +553,13 @@ static void klh_tick(int game_thread);
 #include "klnudge.c"
 #include "klfix.c"
 #include "kljoin.c"
+#include "klcrew_rt.c"
 #include "klgun.c"
 #include "klchar.c"
+#include "klcrew.c"
+#include "kltalk.c"
 #include "klbot.c"
+#include "klfed.c"
 #include "klsteam.c"
 #include "klslot.c"
 #ifdef KLHOOK_TEST
@@ -580,14 +595,28 @@ static void klh_tick(int game_thread)
     kls_tick();
     klx_tick();
     klj_tick();
+    klt_tick(game_thread);                            /* DIRECTLY after klj_tick: it must see kljoin.c's request while it is pending (klcrew_rt.c, EARLY) */
     klc_tick(game_thread);
+    klw_tick(game_thread);                            /* after klc_tick: the player's own body goes first */
+    klk_tick(game_thread);                            /* after klw_tick: it reads who wears whom */
     klb_tick(game_thread);
+    klp_tick(game_thread);                            /* klfed.c: come back as a fed (data writes only) */
     klg_tick();
     klm_tick();
     InterlockedExchange(&klh_tick_busy, 0);
 }
 
-static void __cdecl klh_w_runcallbacks(void) { klh_real_runcallbacks(); klh_tick(1); }
+/* SteamAPI_RunCallbacks has TWELVE call sites in kl2.exe (re/hook_review_talk.md): two in the main loop 0x87a930
+   (0x87a9e6, 0x87aa7c), the others in the loader's pump, the lobby update, the network send / receive and five
+   getters. 'The game's own thread, between two frames' - what every part that CALLS a game routine relies on - is
+   only the main loop's two: the return address must lie inside that function, on the thread that first did so. */
+static void __cdecl klh_w_runcallbacks(void)
+{
+    DWORD_PTR ra = (DWORD_PTR)_ReturnAddress(); int loop = ra >= (DWORD_PTR)KLH_VA(0x87a930) && ra < (DWORD_PTR)KLH_VA(0x87ab40);
+    klh_real_runcallbacks();
+    if (loop && klh_main_tid && klh_main_tid != GetCurrentThreadId()) loop = 0;
+    if (loop) klh_tick(1);
+}
 
 /* ---------------------------------------------------------------- the stall watch (SHIP and TEST)
 
@@ -731,8 +760,12 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kln_init();
     klf_init();
     klj_init();
+    klt_init();
     klc_init();
+    klw_init();
+    klk_init();
     klb_init();
+    klp_init();
     klg_init();
     klx_init();
     kls_init(inst);

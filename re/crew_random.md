@@ -129,10 +129,17 @@ Keys `[Crew]` (all in the file's top comment): `Random=0|1`, `Seed` (0 = new eac
   slot 119 of the actor vtable = 0x417a60 (else nothing is changed, said once), 15 / 12 bytes of the two name
   routines (else the names stay). Calls only on the game's thread (the SteamAPI_RunCallbacks tick).
 - **Policy** (klhook.c top comment): heap data and calls of game functions from the game's thread; no import
-  slot, no code byte. Looks, voices and names only - no rule of the round changes - so, like klchar.c, it is
-  not tied to klsteam.c's level verdict.
-- **For the other hook parts** (Kane / Lynch dialogue, the Retomoto countdown): `klw_crew_char(record index)`
-  and `klw_player_char()` give the character number (1..16 as KLChar, 0 = not known) after a draw;
+  slot, no code byte. **The level gate** (changed 2026-10-10 after re/crew_talk_review.md 1.3 a - this text
+  said 'not tied to klsteam.c's level verdict' while the code was): the draw and every call and write happen
+  only on a level that is NOT the stock one of its slot (`klx_level_verdict == 2`, as klbot.c's gameplay
+  parts): not at the menu, not on a stock level, not on a level whose archive was not seen, not with the Steam
+  write guard off. On a stock / unseen level one line per scene: `crew: level '...' is the STOCK one of its
+  slot (...): the AI crew is left as it is`.
+- **For the other hook parts** (kltalk.c): who wears whom is read from the MODELS, not from the draw:
+  `klw_who_now(&who)` (every crew record in use with its character), `klw_crew_char(record index)` and
+  `klw_player_char()` compare `[node+0x68]` of the member with the roots of the level's KLWardrobe.ini
+  (1..16 as KLChar, 0 = no body of the list, e.g. the player as a policeman). Read only; valid with
+  `Random=0`, without an AI crew and on any level. `klw_drawn_char(record)` is the draw's own book-keeping.
   `Include=9,10` makes 'Kane and Lynch in the same match' certain when the player is neither or one of them.
 
 **The lead's lines in `klhook/klhook.c`** (compiled that way, section 6):
@@ -232,7 +239,9 @@ this file requires too). Steam write guard on; do not Quit inside a session.
 | C7 | `Names=1` | `crew: bot N is now called '<name>' (was '<name>')` | line-up and score page: do they show the new names? If they show the old ones the string is not the one read: leave `Names=0` |
 | C8 | a second round in the same session | `crew: round draw 2 (...)` with other bodies | new crew; and after quit to the menu and a second load: `round draw` again, no fault |
 
-Stock Subway (no wardrobe) can stand in for C1: `NO wardrobe, the stock bodies of f01\f01_main`.
+Stock Subway can NOT stand in for C1 (the level gate, section 3 'Policy'): there the only line is `crew: level
+'...' is the STOCK one of its slot`. A map that is not stock and has no wardrobe gives `NO wardrobe, the stock
+bodies of <key>` (off-game test T12, which runs on such a level).
 
 ## 8. ASSUMPTIONS and what is not established
 

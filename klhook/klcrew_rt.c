@@ -55,8 +55,15 @@
  *    the late teleport (the game's own routine on the entry's own ZJumpPoint; a step that is already running is
  *    started again by slot 26 unless its byte 0x42 is set - which property that byte is, is not established).
  *    NOT moved: a record that is aboard or dead, an actor whose vtable is not ZFFActor's, whose node has flag bit
- *    10 (the test 0x8f3fcf makes for a player) or whose two pointers of the int3 are both zero, and a bot that is
- *    already within Near of Target in the plan and 1000 in height.
+ *    10 (the test 0x8f3fcf makes for a player) or whose two pointers of the int3 are both zero (the same test guards
+ *    the second int3, 0x62aa43), and a bot that is already within Near of Target in the plan and 1000 in height.
+ *    Since the review (re\crew_talk_review.md 2.2 a) also an actor whose [actor+0x7c0] is null or not writable data
+ *    (0x62a998 `mov edx,[esi+0x7c0]` / `mov [edx],0`, no test in the game) or whose [actor+0x50c] is null or has no
+ *    vtable of the game with a code address at +0xac (0x62a9e8 calls it, no test in the game), or whose non-zero
+ *    pointer of the int3 pair cannot be read at +0xec (0x62a9d2). The game's own callers hand over actors a script
+ *    owns; the hook reaches the actor from a crew record, so it tests what they take for granted.
+ *    The EARLY form needs kljoin.c ON ([KLHook] Join=1, the default): the places and the entry come from the file
+ *    kljoin.c read, and the request is kljoin.c's. With Join=0 this part is inert and says so at start.
  *    ARCADE ONLY (session mode 4), where there is one machine. Online the actors belong to the host and every
  *    player jumps on his own machine at his own time (kljoin.c, MULTIPLAYER): when the crew should move there, and
  *    which test says 'this machine is the host', is NOT worked out.
@@ -167,6 +174,18 @@ static int klt_entry(DWORD gd, DWORD *jp, char name[64])
     return -1;
 }
 
+/* the two pointers 0x62a900 uses without a test of its own (re\crew_talk_review.md 2.2 a): what must hold of them */
+static int klt_writable(DWORD p, DWORD n)
+{   /* committed, writable data that reaches n bytes: `mov dword [edx], 0` at 0x62a99e must not fault */
+    MEMORY_BASIC_INFORMATION mbi;
+    return p > 0xffff && VirtualQuery((void *)(DWORD_PTR)p, &mbi, sizeof mbi) && mbi.State == MEM_COMMIT && !(mbi.Protect & PAGE_GUARD) &&
+           (mbi.Protect & (PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READWRITE)) && (BYTE *)(DWORD_PTR)p + n <= (BYTE *)mbi.BaseAddress + mbi.RegionSize;
+}
+static int klt_code(DWORD va)
+{   /* an address inside kl2.exe's image (a vtable entry of the game: every one points into .text) */
+    return va >= KL2_BASE + 0x1000 && va < KL2_BASE + KL2_IMAGESIZE;
+}
+
 /* Game thread only. Every AI crew record in play to its place -> how many were moved. */
 static int klt_move(DWORD rules)
 {
@@ -175,7 +194,7 @@ static int klt_move(DWORD rules)
     if (cap < 1 || !recs || !inuse) return 0;
     if (cap > KLT_NREC) cap = KLT_NREC;
     for (i = 0; i < cap; i++) {
-        DWORD at = recs + (DWORD)i * 0x7c, actor, node, fl3c = 0, body[2] = { 0, 0 }; BYTE u = 1, fl = 0, status = 0xff; float was[3] = { 0, 0, 0 }, is[3] = { 0, 0, 0 }, pos[3]; const char *why = 0;
+        DWORD at = recs + (DWORD)i * 0x7c, actor, node, fl3c = 0, body[2] = { 0, 0 }, p7c0 = 0, p50c = 0, vt = 0, tmp = 0; BYTE u = 1, fl = 0, status = 0xff; float was[3] = { 0, 0, 0 }, is[3] = { 0, 0, 0 }, pos[3]; const char *why = 0;
         if (!klh_rd(inuse + i, &u, 1) || u || !klh_rd(at + 0x79, &fl, 1) || !(fl & 1) || !(actor = klh_rd32(at + 4))) continue;
         if (!klh_rd(at + 0x10, &status, 1) || status) continue;                 /* aboard, dead: not in play, takes no place */
         if (n >= klt_lv.nplace) { if (klt.log) klog("crewjoin: bot %d NOT moved: the level has %d places", i, klt_lv.nplace); continue; }
@@ -184,6 +203,9 @@ static int klt_move(DWORD rules)
         if (klh_rd32(actor) != KLT_ACTOR_VT) why = "its actor is not a ZFFActor";
         else if (!(node = klh_rd32(actor + 4)) || !klh_rd(node + 0x3c, &fl3c, 4) || (fl3c >> 10 & 1)) why = "its node is off (flag bit 10)";
         else if (!klh_rd(actor + 0x77c, body, 8) || (!body[0] && !body[1])) why = "both pointers the game's routine asserts on are zero";
+        else if (!klh_rd((body[0] ? body[0] : body[1]) + 0xec, &tmp, 4)) why = "the pointer at +0x77c / +0x780 cannot be read at +0xec (0x62a9d2)";
+        else if (!klh_rd(actor + 0x7c0, &p7c0, 4) || !p7c0 || !klt_writable(p7c0, 4)) why = "[actor+0x7c0], which the game's routine writes through (0x62a99e), is null or not writable";
+        else if (!klh_rd(actor + 0x50c, &p50c, 4) || !p50c || !klh_rd(p50c, &vt, 4) || !klt_code(klh_rd32((DWORD_PTR)KLH_VA(vt + 0xac)))) why = "[actor+0x50c], which the game's routine calls through (0x62a9e8, vtable +0xac), is null or no object of the game";
         else if (fabs(was[0] - klt_lv.target[0]) < klt_lv.near_ && fabs(was[2] - klt_lv.target[2]) < klt_lv.near_ && fabs(was[1] - klt_lv.target[1]) < 1000) why = "it is at the entry already";
         if (why) { if (klt.log) klog("crewjoin: bot %d (actor %08lx) NOT moved: %s", i, actor, why); continue; }
         ((void (__fastcall *)(void *, void *, const float *, const float *, int, int))(DWORD_PTR)KLH_VA(KLT_TELEPORT))((void *)(DWORD_PTR)actor, 0, rot, pos, 1, 1);
@@ -247,7 +269,8 @@ static void klt_init(void)
     klt.on = GetPrivateProfileIntA("CrewJoin", "Enable", 0, klh_ini) != 0;
     klt.retrigger = GetPrivateProfileIntA("CrewJoin", "Retrigger", 0, klh_ini) != 0;
     klt.log = (int)GetPrivateProfileIntA("CrewJoin", "Log", 1, klh_ini);
-    if (klt.on) klog("crewjoin: on; the AI crew follows the player's jump on a level whose KLJoin.ini has [CrewJoin]; Retrigger=%d", klt.retrigger);
+    if (klt.on) klog("crewjoin: on; the AI crew follows the player's jump on a level whose KLJoin.ini has [CrewJoin]; Retrigger=%d%s", klt.retrigger,
+                     klj_tick_on ? "" : " - but [KLHook] Join=0: no jump is requested, so nothing is moved");
 }
 
 #endif /* KLCREW_RT_C */

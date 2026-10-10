@@ -91,13 +91,25 @@
  *    known ones, and slot 119 of the actor's vtable with 0x417a60; a record whose actor is not a ZFFActor is left
  *    alone and said once. Nothing is done off the game's thread but the voice bytes.
  *    A bot that is aboard (4) or dead (7) is not touched: its actor may be gone.
- *    This changes looks, voices and names only - no rule of the round - so it is not tied to klsteam.c's verdict
- *    (klchar.c is not either).
+ *    THE LEVEL GATE (re\crew_talk_review.md 1.3 a; the hook's policy, klhook.c): the draw and every call and write
+ *    above happen only while the level that runs is NOT the stock level of its slot - klsteam.c's klx_level_verdict
+ *    == 2, as for klbot.c's gameplay parts. Not at the menu (no level), not on a stock level (1), not on a level
+ *    whose archive was not seen (3), and not at all when the Steam write guard is not installed (no archive is
+ *    judged then). On verdict 1 / 3 one line per scene says so. (Until 2026-10-10 16:50 this comment and
+ *    re\crew_random.md said 'not tied to the verdict' while the code was tied: the code stands, the texts follow.)
  *
- * FOR OTHER PARTS OF THE HOOK (the Kane / Lynch dialogue, the Retomoto countdown): after a draw
- *      klw_crew_char(record index)   the character (1..16 as KLChar; 0 = not known) of that crew record
- *      klw_player_char()             the character whose model the player wears (0 = not a wardrobe model)
- *    9 = Kane, 10 = Lynch. Include=9,10 puts both in every crew they are free for.
+ * FOR OTHER PARTS OF THE HOOK (kltalk.c: the Kane / Lynch dialogue, the Retomoto countdown) - WHO WEARS WHOM, read
+ * from the MODELS at the moment of the call, not from the draw (re\crew_talk_review.md 1.3 b, 3.3 b):
+ *      klw_who_now(&who)             every crew record in use: record index, AI or human, status, and the character
+ *                                    (1..16 as KLChar) whose root in the level's KLWardrobe.ini equals the model
+ *                                    [node+0x68] the member wears now; without a wardrobe the eight heister-table
+ *                                    models (1..8). 0 = no body of the list (a policeman after the player's death,
+ *                                    an actor of another class, a record without an actor).
+ *      klw_crew_char(record index)   the same for one record        klw_player_char()   for the human's record
+ *    These three only READ. They work with Random=0, without an AI crew, on any level and off the game's thread;
+ *    the level gate above is not theirs. 9 = Kane, 10 = Lynch on the builds of 2026-10-10 (kltalk.c takes the
+ *    numbers from KLTalk.ini). Include=9,10 puts both in every crew they are free for.
+ *      klw_drawn_char(record index)  what the round's DRAW gave that record (0 = none): the draw's own book-keeping
  *
  * KLHook.ini
  *   [Crew]
@@ -116,6 +128,7 @@
  *
  * LOG (the live checks C1..C7 of re\crew_random.md go by these lines)
  *   crew: on; ...                                              at start
+ *   crew: level '...' is the STOCK one of its slot (...): the AI crew is left as it is      once per scene (verdict 1 / 3)
  *   crew: round draw N (session state 16, rules ..., 7 AI members, wardrobe of f01\f01_main: 16 characters, 12 masks; the player is Kane)
  *   crew: bot 3 is Lynch, outfit 11, mask 5 (record 3, model 9270, variant 67)
  *   crew: bot 3 (actor ...): model 9709 -> 9270 through the game's own routine (try 1): it now has 9270
@@ -164,9 +177,8 @@ static DWORD klw_rnd(DWORD n)
     return n ? (x >> 8) % n : 0;
 }
 
-/* for the other parts of the hook (dialogue, the Retomoto countdown): who is who after the round's draw */
-static int klw_crew_char(int rec) { return rec >= 0 && rec < KLW_NREC && klw_r.b[rec].used ? klw_r.b[rec].ch : 0; }
-static int klw_player_char(void) { return klw_r.player_ch; }
+/* what the round's draw gave a record (0 = nothing: not drawn, kept his body, aboard or dead at the draw) */
+static int klw_drawn_char(int rec) { return rec >= 0 && rec < KLW_NREC && klw_r.b[rec].used ? klw_r.b[rec].ch : 0; }
 
 /* The characters this level can show: its KLWardrobe.ini (klchar.c's copy), else the eight models of the heister table. */
 static void klw_source(struct klw_src *s, const DWORD hero[8], const char *key)
@@ -194,6 +206,63 @@ static int klw_char_of(const struct klw_src *s, DWORD model)
     int i;
     for (i = 0; i < s->n; i++) if (s->c[i].root == model) return i + 1;
     return 0;
+}
+
+/* ---------------------------------------------------------------- who wears whom, from the models (read only)
+
+   Valid with Random=0, without an AI crew, on a stock level and off the game's thread: nothing here depends on the
+   draw or on the level gate. ch = the character whose root is the model the member wears NOW (0 = none of the list). */
+struct klw_who {
+    DWORD rules, state; int n, human, wardrobe, nchar; char key[64];
+    struct { int rec, ai, ch; BYTE status; DWORD at, actor, model; } m[KLW_NREC];      /* at = the crew record */
+};
+
+static int klw_who_now(struct klw_who *w)
+{
+    struct klw_src src; DWORD sm, gs, gd, recs, inuse, hero[8], player = 0, pnode = 0; BYTE sel = 0xff, type = 0; int cap, i; char scene[160], key[64];
+    memset(w, 0, sizeof *w); w->human = -1;
+    if (!klh_exe_ok || !(sm = klh_rd32((DWORD_PTR)KLH_VA(KLW_SESSION))) || klh_rd32(sm + 0x5c) != 4) return 0;        /* Arcade only */
+    if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLW_SETTINGS))) || !(w->rules = klh_rd32(gs + 0x54)) || klh_rd32(w->rules) != KLW_RULES_VT) return 0;
+    if (!klh_rd(sm + 0x70, &w->state, 4) || !klh_rd(w->rules + 0x208, hero, sizeof hero)) return 0;
+    if (!klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) return 0;
+    cap = (int)klh_rd32(w->rules + 0x354); recs = klh_rd32(w->rules + 0x348); inuse = klh_rd32(w->rules + 0x34c);
+    if (cap < 1 || !recs || !inuse) return 0;
+    if (cap > KLW_NREC) cap = KLW_NREC;
+    klw_source(&src, hero, key);
+    w->wardrobe = src.wardrobe; w->nchar = src.n; snprintf(w->key, sizeof w->key, "%s", key);
+    if ((gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) != 0 && klh_rd(gd + 0x898, &sel, 1) && sel <= 3 && (player = klh_rd32(gd + 0x828 + 4 * sel)) != 0) {
+        pnode = klh_rd32(player + 4);
+        if (!klh_rd(player + 0x273c, &type, 1)) type = 0;
+    }
+    for (i = 0; i < cap; i++) {
+        DWORD at = recs + (DWORD)i * 0x7c, node; BYTE u = 1, fl = 0, st = 0xff; int k = w->n, c;
+        if (!klh_rd(inuse + i, &u, 1) || u || !klh_rd(at + 0x79, &fl, 1) || !klh_rd(at + 0x10, &st, 1)) continue;
+        w->m[k].rec = i; w->m[k].at = at; w->m[k].ai = fl & 1; w->m[k].status = st;
+        if (fl & 1) {                                                            /* an AI member: a ZFFActor, or nobody we know */
+            w->m[k].actor = klh_rd32(at + 4);
+            if (w->m[k].actor && klh_rd32(w->m[k].actor) == KLW_ACTOR_VT && (node = klh_rd32(w->m[k].actor + 4)) != 0) klh_rd(node + 0x68, &w->m[k].model, 4);
+        } else {                                                                 /* the human (klbot.c: the first record without mask 1; index 0 in Arcade) */
+            if (w->human < 0) w->human = k;
+            if (w->human == k && type == 2 && pnode) { w->m[k].actor = player; klh_rd(pnode + 0x68, &w->m[k].model, 4); }      /* type 3 = he plays a policeman now: no body of the list */
+        }
+        if (w->m[k].model) for (c = 0; c < src.n; c++) if (src.c[c].root == w->m[k].model) { w->m[k].ch = c + 1; break; }
+        w->n++;
+    }
+    return 1;
+}
+
+static int klw_crew_char(int rec)
+{
+    struct klw_who w; int i;
+    if (!klw_who_now(&w)) return 0;
+    for (i = 0; i < w.n; i++) if (w.m[i].rec == rec) return w.m[i].ch;
+    return 0;
+}
+
+static int klw_player_char(void)
+{
+    struct klw_who w;
+    return klw_who_now(&w) && w.human >= 0 ? w.m[w.human].ch : 0;
 }
 
 /* one character nobody has: weighted, 0 = none left */
@@ -317,14 +386,24 @@ static void klw_level_tick(int game_thread)
     static const BYTE variant_code[10] = { 0x8b, 0x44, 0x24, 0x04, 0x56, 0x8b, 0xf1, 0x89, 0x46, 0x50 };                               /* 0x88c810 .. mov [esi+0x50],eax */
     static const BYTE string_code[15] = { 0x56, 0x8b, 0xf1, 0x8b, 0x4c, 0x24, 0x08, 0x8d, 0x44, 0x24, 0x08, 0x50, 0x51, 0x8b, 0xce };    /* 0x83e2e0 */
     static const BYTE rename_code[12] = { 0x6a, 0xff, 0x68, 0x98, 0xbe, 0xad, 0x00, 0x64, 0xa1, 0x00, 0x00, 0x00 };                    /* 0x469250 */
-    static int toldmode, toldcode, toldthread, toldactor, toldnames;
+    static int toldmode, toldcode, toldthread, toldactor, toldnames; static char toldscene[160];
     struct klw_seen seen[KLW_NREC]; struct klw_src src; int want[KLW_NREC];
     DWORD sm, gs, rules, state, gd, player, pnode, pmodel = 0, hero[8], recs, inuse, sig, now = GetTickCount(); BYTE b = 0xff, type = 0, tab[8];
     int n = 0, cap, i, j, names_ok, redraw;
     char key[64], scene[160], why[200];
 
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLW_SESSION))) || klh_rd32(sm + 0x5c) != 4) return;                      /* Arcade only */
-    if (!klx_on || !klh_scene(scene, sizeof scene) || klx_level_verdict(scene, why) != 2) return;
+    /* THE LEVEL GATE (top comment, section 4): only a level whose archive was seen and is not the stock one */
+    if (!klx_on || !klh_scene(scene, sizeof scene)) return;
+    if ((i = klx_level_verdict(scene, why)) != 2) {
+        static int toldverdict;
+        if (i && (strcmp(scene, toldscene) || i != toldverdict)) {               /* 1 stock, 3 not seen: said once per scene and verdict; 0 = the menu, silent */
+            snprintf(toldscene, sizeof toldscene, "%s", scene); toldverdict = i;
+            if (klw.log) klog("crew: level '%s' %s (%.150s): the AI crew is left as it is", scene, i == 1 ? "is the STOCK one of its slot" : "is not known", why);
+        }
+        return;
+    }
+    toldscene[0] = 0;
     if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLW_SETTINGS))) || !(rules = klh_rd32(gs + 0x54))) return;
     if (klh_rd32(rules) != KLW_RULES_VT) {
         if (!toldmode++) klog("crew: the rules object %08lx has vtable %08lx, not ZGameRulesHeist: nothing is changed", rules, klh_rd32(rules));
