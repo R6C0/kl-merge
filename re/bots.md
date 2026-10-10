@@ -9,6 +9,10 @@ Owner, 2026-10-10: *'continue the ai heisters ... make sure the voicelines for t
 have better interactions because in the current game they arent the best, want them to be able to backstab you and
 also pay the driver and leave without you or blow the van up or help you up'*.
 
+**2026-10-10 evening: section 12 supersedes parts of sections 0, 3, 6.2 and 11** (the owner played the four maps
+with the bots: the cases on Late Night Opening, the warehouse people on the diner, the bank's wall, the park). The
+builds to load are `<work>\build\y_loot2\M01 M02 M03 M06`; sections 0 - 11 describe `b_bots` / `u_maps`.
+
 ## 0. Short answers
 
 1. **Four builds with a squad of seven AI heisters each, all checks passed**: `<work>\build\b_bots\M01`, `M02`,
@@ -526,3 +530,328 @@ way out (stock squads have 16 .. 71 s of them, re/bots_review.md D1): not built.
 
 The squad on the TUNED maps: `<work>\build\u_maps\M01 M02 M03 M06` = `kl_fa_bots.py build` on
 `<work>\build\t_maps2\<map>` (guns + camera + enemies, re/map_tune.md 7); checks and sizes there.
+
+## 12. After the owner's round with the bots (2026-10-10 evening, agent p-loot): loot stops, cases, the wall
+
+Owner, after playing `u_maps\M01 M02 M03 M06`: *'the issue on late night is they dont shoot open the casing stuff bc
+its glass and u need to shoot it to loot, the van is such a damn problem and they dont loot the warehouse people on
+diner not sure about park, the bank they gotta vault on the garbage then over the wall'*.
+
+**OFFLINE: nothing here ran in the game, nothing was installed, nothing was written into the Dog Days folder.**
+Words: **read** = disassembled at the address given, **measured** = counted on the files, **ASSUMPTION**, **GUESS**.
+Builds: `<work>\build\y_loot2\M01 M02 M03 M06`, made from `<work>\build\t_maps2\<map>` (complete builds: t_maps2 +
+the squad) by `python tools\kl_fa_bots.py owner <work>\build\t_maps2 <work>\build\y_loot2` (log: `y_loot2\run.log`).
+
+### 12.0 Short answers
+
+| the owner said | what was found | what the build does now |
+|---|---|---|
+| Late Night: they do not shoot the cases open | 23 of the map's 26 money containers (1,940,000 of loot) open ONLY when their glass is shot; no AI code shoots at an object, and no stock level has such a case (12.1) | a route step breaks the glass (`'Activate'`, the routine a bullet ends in) and opens the container, case by case as the bots reach the store; then the watch shop as a second stop |
+| diner: they do not loot the warehouse people | the Senator (1,250,000) and his man (400,000) stand INSIDE the two level exit boxes, and a crew member in such a box calls the car - bot or human, nothing in the exe gates it and no stock level gates it by data (12.2) | the two boxes are cut back to the car's end of the lot; the bots loot the diner, go out by the back door, fight and loot at the Senator, THEN walk on into the box (the car is called there) |
+| not sure about park | the route named one of four people with money; the other three stand beside it (12.4) | four stops in path order: US boss 800,000, the woman on the island 500,000, the guard 250,000, Retomoto 1,800,000 |
+| bank: vault on the garbage, over the wall | Dog Days' AI can cross by a mesh link; only the DROP kind has an animation in Dog Days' files - a climb UP has the code but no clip (12.3). The wall piece is already sunk for the player | one drop link at the sunk piece: the bots hop down the 70 into the street and run to the van; a gather place in front of it in an AllyEscapeBox is the fall-back |
+| the van is such a damn problem | (the vehicle itself is another job's.) Measured: on the builds played, **all seven bots of Late Night Opening waited 7 .. 237 from the car's route - five of them within 120, in the road at the car's stop**; on the diner four of seven within 250 (12.5) | every place of the way out is at least 250 from the car's routes and on one side of the road |
+
+Nothing was added to the four large blocks (12.6). All of it is level data; no hook part.
+
+### 12.1 Late Night Opening: how a case works, and why a bot could not loot it
+
+Measured on `t_maps2\M02` (the same objects as Dead Men's level):
+
+- 26 `OnlineMoneyContainer`. Three are cash drawers of the stock form (the container has its own `TriggerBox2`
+  {itself, 125, 'Open'}: somebody within reach opens it). **23 have no opener but their glass**: 11 in the jewel
+  store (`SI0401_M02_FA_ShatterBox_3m_01 / _03 / _04`, `_10m_01`, `PC0402_M02_FA_ShatterBoxA..D_0n`), 12 in the watch
+  store (`PC0406_M02_FA_WatchStore_Wallmontre_Glass_01..06`, `Glassmontre_Large / Small_Group_0n`).
+- Such a case is three siblings in the room: `<case>!Whole_01` [ZSTDOBJ] + `HavokShatterGlass` + `RelayMessage`
+  {'HavokShattered' -> 'Open', -> `<case>!MoneyContainer`}; `<case>!MoneyContainer` [ZBoxPrimitive 10 x 10 x 10] +
+  `OnlineMoneyContainer` {0: the jewels, 1: 0, 4: 10, 5: [], 6: 'Activate'}; the jewels (`PC0402_M02_FA_Jewels*`,
+  `PC0406_M02_FA_Watches_*`): ZSTDOBJ + `OnlineMoneyCtrl` type `ZMONEYCTRL_TYPE_CONTAINER` + its own `TriggerBox2`
+  {itself, 45 .. 175, 'AI_TRIGGER_WITH_ACTIVATOR'}.
+
+Read, kl2.exe (message ids are the dword at +8 of the static name objects built by 0x6fb080):
+
+| object | slot 26 (messages) | what it does |
+|---|---|---|
+| `ZHavokShatterGlass` 0x471410 | 'ProjectileHit' -> 0x53f6d0 -> 0x4b9740; **'Activate' -> 0x8d1b60**; 'CanPenetrate' | both ways end in the same two routines, 0x67e6a0 and 0x79bd10 (the shatter), unless the glass is already broken (byte +0x30 bit 0). The shattered glass sends 'HavokShattered' to its own node (0x707c10) |
+| `ZRelayMessage` 0x8f1680 | its in-message | sends its out-message to its target |
+| `ZOnlineMoneyContainer` 0x419f80 | 'ProjectileHit' (only when its byte +0x38 is set; which field that is was not established), **'Open'** | 'Open' -> 0x766e50 unless the sender is a player in one particular state; no other test, a null sender is taken. It clears byte +0x4c (a second 'Open' returns at 0x419fb4), sends field 6 to field 5's nodes and starts a countdown of field 4 (10 in all 117 stock containers too; its unit was not established); at its end 0x868fb0 makes every object of field 0 ACTIVE (0x4fb580: byte +0x74) |
+| `ZOnlineMoneyCtrl` 0x6cdb40 | 'AI_TRIGGER_WITH_ACTIVATOR' (the take) | ignored while byte +0x74 is clear (0x6cdb8f) - **an object in a shut container cannot be taken, by a player or by a bot** |
+| `ZTriggerDelay2` 0x71e250, `ZRelayMessageList` 0x6e3cb0 | 'AITrigger' / its in-message | the timer arms; the list sends its out-message to every target (at once when its delay is 0) |
+
+How stock Dog Days handles loot in containers (measured, F01 .. F09): **no stock level has a `HavokShatterGlass`
+at all** (0 in 21 levels; `ShootAtTrigger` is a trigger that fires when shot, one use in L05; `FakeTarget` is what
+makes the POLICE shoot the vans). All 117 stock containers (F01 58, F03 12, F08 47) open by a `TriggerBox2` 'Open' of
+125 .. 150 when somebody stands there, and F01's squad opens its vault's cases by script: `KickDoorMonitor` ->
+`RelayMessageList` {'AITrigger' -> 'DoorOpened', 8 / 10 cases}. Stock bots shoot at nothing; a case is told to open.
+
+Built (`--cases glass`; per bot, clones of stock forms):
+
+    ...\012_DefendBehaviour_to_loot  (the ENTERS_BANK place)  -> 018_Timer_at_cases
+    018_Timer_at_cases   TriggerDelay2 {1.0 s} -> [013_DefendBehaviour_to_loot, 018_Relay_break_glass, 018_Relay_open_cases]
+    018_Relay_break_glass  ZBoxPrimitive + RelayMessageList {'AITrigger' -> 'Activate', the glass of this bot's cases, 0.0}
+    018_Relay_open_cases   ZBoxPrimitive + RelayMessageList {'AITrigger' -> 'Open', their MoneyContainers, 0.0}
+    013_DefendBehaviour_to_loot  (the bot's place at 'its' jewel)  -> 020_Timer_done_looting {21 objects, 45 s}
+
+- Transitions: `DefendBehaviourRout` -> `TriggerDelay2` 329 and `TriggerDelay2` -> `DefendBehaviourRout` 119 times
+  in the nine stock squads; a `TriggerDelay2` naming a `RelayMessageList` is stock F02's (2); the relay node is a
+  clone of F01's `Gameplay!merc_bot_squad!KickdoorMonitor!KickDoor_RelayList_Door08`. A timer with several targets
+  is stock (`Timer_start_bots` has seven; sizes up to 18).
+- Each case is named by the three bots whose loot places are nearest to it (`CASE_BOTS`; 2 .. 8 cases a bot in the
+  jewel store, 3 .. 9 in the watch store): the glass goes as those bots come in, and two of the three may be dead.
+  Glass and container are both told: if 'Activate' does not break the glass in the game, the case is open all the
+  same (the jewels can then be taken through the intact pane - check L1 shows which).
+- Loot wait 45 s a store (GUESS; it ends earlier when the store is empty). Second stop: the watch shop across the
+  mall (18 objects, 535,000: 13 watches behind 12 panes, the drawer, the clerk).
+- Checked on the files by a script that uses none of the tool's own logic (`verify.py`): 23 of 23 glass-only
+  containers are named by an 'Open' relay and all their panes by an 'Activate' relay; every relay target is a node
+  with `HavokShatterGlass` + `RelayMessage`, or with `OnlineMoneyContainer`; 684 references of the 288 new nodes,
+  each `ROOT\`-prefixed and naming exactly one node.
+- `kl_fa_bots.py check` now FAILs a loot wait that names loot in a glass-only case no step opens: the build the
+  owner played, `u_maps\M02`, fails it seven times (11 cases) - the owner's finding, found by the checker.
+- For the human nothing changes until a bot is in the store: an untouched case still has to be shot.
+
+Not chosen: making a bot really fire at the glass. The exe has no behaviour for it; a `FakeTarget` of team Enemy
+on the pane might draw the bots' fire (the police shoot the vans that way) but nothing would take it away once the
+glass is gone. Not tried.
+
+### 12.2 The diner: the warehouse people and the car
+
+Measured (`t_maps2\M01`; a trigger box's three sizes are half extents - the fit of runs BOT1 / BOT2, section 11):
+
+| | place | in |
+|---|---|---|
+| `Triggers!CallExitVehicle_01` | centre (1592, 160, 20978), half (1600, 200, 880): x -8 .. 3192, z 20098 .. 21858 | - |
+| `Triggers!CallExitVehicle_02` | centre (5996, 160, 20490), half (2800, 200, 1400): x 3196 .. 8796, z 19090 .. 21890 | - |
+| `AI_Enemies!TheBoss\The_Senator` 1,250,000 | (3384, 3, 19893) | box 02, 188 inside its west edge |
+| `AI_Enemies!BossFlank_01\FBI-Agents_01` 400,000 | (3007, 2, 20222) | box 01 |
+| `BossFlank_02`, `BossFlank_03` (his other two men) | (2791, 13, 20578), (3290, 4, 20240) | 01, 02 |
+| back doors `LeavingHeist_01 / _02 / _03` (EXITS_BANK) | (4121, .., 21883), (2918, .., 21883), (1882, .., 22138) | 02 (7 inside its edge); 25 beyond box 01's edge; outside |
+| boarding action `Triggers!BoardingTrigger_Car` | (5884, 181, 20448) | 02 |
+
+- Read, 0x6c3d50 -> 0x6cd8e0 (`ZGameRulesHeist` slot 44): Arcade, the rules' byte +0xe8a clear, the activator a
+  player or an actor with a crew record whose status is 0 (a human also: not in one particular state), the vehicle
+  state `[rules+0x1dc]` 0 -> 0x8154f0. **No test of the heist stage, of money, of loot left.** The box test itself
+  is the tick 0x65dd10 (shared with `ZOnlineBaseGamePlayTrigger`): no flag of the node is read there.
+- Measured, stock F01 .. F09: nine `OnlineExitLevelTrigger`, every box shown (flags 0, `ZGEOM[3]` 0) and named by
+  NOTHING. **No stock level gates its exit; the premise 'as stock levels gate their exits' does not hold.** So a
+  human avoids calling the car only by not walking into the box - and on this map he cannot rob the Senator
+  without walking into it. That is Dead Men's own design (the boxes and the people are where Dead Men put them; its
+  exe was not read for a gate).
+- Hiding the box until the loot is taken (flag 0x400 + an `ActivateGeom`) was NOT built: no stock level does it to
+  this class, and whether a hidden node's tick is skipped was not read (the money object tests its own hide bit
+  explicitly, 0x6cdb6e; this tick does not).
+
+Built (`--exit-boxes cut`, table `EXIT_CUT`): two fields of each box - `ZGEOM[2].x` with the `.gms` place, and
+`ZBoxPrimitive[0]`:
+
+| | was | is |
+|---|---|---|
+| `CallExitVehicle_01` | x -8 .. 3192 (centre 1592, half 1600) | x -8 .. 2400 (centre 1196, half 1204) |
+| `CallExitVehicle_02` | x 3196 .. 8796 (centre 5996, half 2800) | x 4600 .. 8796 (centre 6698, half 2098) |
+
+Read back from the written files: no loot object and none of the three back doors is in a box; the boarding
+action is in box 02. What it means for the HUMAN too: stepping out of the diner's back door or going for the
+Senator no longer calls the car; walking on toward the car's stop (east of x 4600) or west along the lot (west of
+x 2400) does. `--exit-boxes keep` builds the route without the cut (the warehouse is then left to the bots' own
+loot tactic, as in `u_maps`).
+
+The route now (Squad#02; `bots.json` has the other six, 110 apart):
+
+| # | step | place | what |
+|---|---|---|---|
+| 1 - 5 | `010`, `011` | (810, 0, 28971) (1317, 0, 27432) (2725, 0, 26394) (3583, 0, 25130) (4771, 0, 23910) | from the START row to the diner |
+| 6 | `012` | (6101, 0, 23060) | `EnterHeist_01`: stage 1 |
+| 7 | `012` | (6532, 0, 22970) | stop 1, the diner: register 100,000, two gang members 80,000 + 60,000, the waitress 40,000 |
+| | `020_Timer_done_looting` | | until the four are taken, at most 30 s |
+| 8, 9 | `030` | (5642, 0, 22187), (4096, 0, 21883) | to the back door `LeavingHeist_01`: stage 2 (no box there any more) |
+| 10 | `030` | (3384, 0, 19894) | stop 2: the Senator and `BossFlank_01` (1,650,000); the seven stand round them, 92 .. 224 from a wall |
+| | `040_Timer_done_looting` | | until both are taken, at most 30 s |
+| 11 | `050` (sprint) | (4444, 0, 20347) | east along the lot, outside the box |
+| 12 | `050` | (5738, 0, 20020) | inside `CallExitVehicle_02`: stage 3, **the car is called here** - after 205 .. 216 m of path |
+| 13 | `050` | (5844, 0, 20288) | the wait for the car, 303 .. 515 from its route, 150 .. 400 from the boarding action |
+
+Not established: that the bots win the fight at the Senator inside 30 s (the tuned enemies are tougher,
+re/map_tune.md); what a bot does there when the time is up and he lives (it runs on; the money stays).
+
+### 12.3 The bank: over the wall
+
+What Dog Days' AI can do at such a place - read:
+
+- The navigation mesh has LINKS (array 7) between WAYPOINTS (array 5). The path search 0x5cdd70 treats a waypoint
+  as a node of its own: at 0x5ce01a it walks the waypoint's link range, takes the target waypoint
+  `area[5] + number`, skips a link whose switch is blocked, adds the link's cost and puts the link's kind into
+  the path node.
+- The mover is `ZFFSpecialLink@Locomotion` (vtable 0xb78dd4, slot 1 = 0x4a5160): it starts within 20 of the
+  link's start (40 for the other kinds) and picks a clip from the table at 0x15489e8, filled at 0x579920:
+
+  | kind | clip | chosen by |
+  |---|---|---|
+  | 1 | `/Movement/Climb/Up/Low`, `/Medium`, `/High` | the height to climb: up to 120, up to 170, more |
+  | 2 | `/Movement/Fall/Fall_1m`, `/Fall_2m` | the height to drop: up to 160, more |
+  | 3 | `/Movement/Leap/Forward` | - |
+
+- Measured: stock Dog Days has 192 links in 12 levels (F02 9, F04 40, F05 5, F06 55, F07 26, seven campaign
+  levels), **all of kind 2, all one way: the target is 44 .. 523 LOWER in 182, level in 10, never higher**; up to
+  228 across; cost 0.58 .. 1.01 of the distance; each link has two waypoints of its own, on the border edges of
+  their polygons. So stock bots hop down ledges, and that is all the links do in Dog Days.
+- Measured, the `.ANM` of the builds and of stock F07: `Fall_1m` and `Fall_2m` are slots of `Kane_NPC` and
+  `Lynch_NPC` (and Thug, Swat_02, Civilian, Police ...); **`/Movement/Climb/Up/*` and `/Movement/Leap/Forward` are
+  no slots at all**. The climb code is in the exe, the clips are not in the game. A real vault UP onto the
+  dumpster is therefore not available by data (it would need Dead Men's three climb clips joined into the
+  Kane_NPC / Lynch_NPC sets - a growth of the `.ANM`, not tried; and the Dog Days PLAYER could still not follow).
+- The place: `kl_escape.open_wall` sank `SO0101_M03_Wall_Low_8m_05` (x -1900 .. -1100) to yard height, which is
+  how the human gets out (re/escape.md). The yard's mesh ends on the edge (-3645, 220, -693) .. (-704, 220, -802)
+  of polygon 527; the street's on z -535 from x -2559 to x -1487 (polygon 687, y 150). Neither polygon had a
+  waypoint. The dumpster stands on the street side of the piece's east third (x -1454 .. -1200).
+
+Built (`--drop`, table `DROPS`; `add_drop()` in the tool): ONE link of kind 2 and its two waypoints.
+
+    waypoint 83  x -1704.3  y 220.0  z -765.6   polygon 527 (area 38)   link 0: cost 242, kind 2, switch -1
+    waypoint 94  x -1700.0  y 150.0  z -533.5   polygon 687 (area 48)   232 across, 70 down -> Fall_1m
+
+- Renumbered with it: 'waypoints before' of the later polygons, the two areas' waypoint counts and the later
+  areas' first waypoint, array 10, every waypoint's link range. Trees, polygons, vertices, edges and area boxes
+  are byte for byte (`diff`). `kl_pf4.check` and `kl_maps.nav_facts` (every rule the 21 stock meshes obey) hold.
+- My own flood over the written mesh (edges + the link, one way): from the START row's polygon 649 polygons are
+  reached, the boarding action's polygon among them; from the boarding action back to the START row: no. The mesh
+  is 8 parts now (was 9); the bots' part has 649 polygons (490 + 159).
+- 232 across is at the stock maximum (228): the mesh is drawn in from the wall on both sides. ASSUMPTION that the
+  mover carries a bot 2.3 m forward during a 1 m fall clip as it does for stock's widest links.
+- In front of the link the seven gather round (-1706, 220, -899), a step ends there, inside an `AllyEscapeBox`
+  (350 x 416 x 350 round (-1706, 420, -899)). If the AI does not take the link they stand there and are taken
+  aboard from there once the car waits (the behaviour of `u_maps\M03`, 16 m further west); if it does, they call
+  the car themselves in the street and board through the tactic. A bot that reaches the box while the car
+  already waits is taken from the box and does not cross.
+- No kind-1 link was written (no clip). No dumpster is climbed: the bots cross where the player crosses.
+
+The route now (Squad#02):
+
+| # | step | place | what |
+|---|---|---|---|
+| 1 - 6 | `010`, `011` | (-406, 700, -10896) (291, 800, -9452) (-138, 800, -7808) (-664, 800, -6319) (-420, 401, -5927) (-734, 240, -7000) | plaza, `EnterBankTrigger_01` (stage 1), hall, stairs, garage |
+| 7 | `012` | (424, 225, -6154) | the loot: the garage's money boxes (11 objects, 2,120,000), at most 20 s |
+| 8 - 11 | `030`, `031` (sprint) | (-345, 240, -4930) (-1231, 231, -4751) (-1476, 220, -3091) (-1237, 220, -1504) | west door `ExitBankTrigger_02` (stage 2), the yard |
+| 12 | `031` | (-1729, 220, -922) | **in front of the drop** (the fall-back box) |
+| | | (-1704, 220, -766) -> (-1700, 150, -534) | the link: 70 down into the street = inside `ExitTrigger_01` (z from -540): stage 3, **the car is called** - after 216 .. 234 m of path |
+| 13 - 15 | `032` | (-1651, 150, -130) (-81, 109, -171) (854, 71, -155) | east along the street on its SOUTH side (the car comes from behind along z 22 .. 130) |
+| 16 | `033` | (3092, 0, -220) | the wait, 252 .. 412 from the car's route; boarding action at (3252, 133, -20) |
+
+For the lead, if check L3 shows that the AI does not take the link: the honest alternative is the teleport
+`klcrew_rt.c` already has (`0x62a900(actor, rot[9], pos[3], 1, 1)` from the game's thread, with its assert guard):
+a `[CrewDrop]` section in a `KLJoin.ini` beside the archive with From = the gather box round (-1706, 220, -899),
+radius 350, To = seven places round (-1651, 150, -130), done once per bot that stands in the box with the vehicle
+state 0. Not written: the link is the game's own means and has to be seen failing first.
+
+### 12.4 The park
+
+Measured: four people carry money - `AI_Enemies!US_Boss\US_Boss` 800,000 at (867, 158, 6410),
+`US_DrugSquad_Secure_Boss\Drug_Faction_2_Female_01` 500,000 at (625, 626, 2441),
+`JPN_DrugSquad_Secure_Chopper_01\Secure_JPN_Guards_01` 250,000 at (511, 434, -397), `JPN_Boss\Retomoto` 1,800,000 at
+(210, 170, -2275). None is in the level exit box; all four lie along the old route, which waited at Retomoto only.
+Now (`--stops 4`): `Enter_BridgeHouse_01` (796, 303, 5808) first (a bot loots from stage 1 on only), then
+
+| stop | place of Squad#02 | wait |
+|---|---|---|
+| US boss | (828, 234, 6410) | 20 s or taken |
+| the woman on the island | (800, 498, 4648) -> (625, 635, 2401) | 20 s |
+| the guard | (801, 564, 673) -> (511, 430, -397) | 20 s |
+| Retomoto | (210, 220, -2276) | 20 s |
+
+then (-548, 220, -3783), (-953, 220, -5192), the level exit box at (-1656, 220, -6634) (the helicopter is called),
+the AllyEscapeBox at the helicopter (-1709, 220, -6564). No case, no box cut, no link on this map.
+
+### 12.5 The car's road (found while placing the way out; the vehicle itself is not this job's)
+
+Measured with a script of its own (`lanes.py`: the two `ZEditorSpline` routes of `OnlineEscHavokCar` and the
+stretch from where the car stops to where its drive away begins), distance in the plan from each bot's LAST place
+- where it stands and waits for the car - to that road:
+
+| build | M01 | M02 | M03 |
+|---|---|---|---|
+| `u_maps` (played) | 42, 69, 184, 218, 307, 333, 360 | **7, 44, 64, 74, 119, 226, 237** | 1122 .. 1308 (never left the yard) |
+| `y_loot2` | 303 .. 515 | 256 .. 449 | 252 .. 412 |
+| way-out places nearer than 250, old -> new | 10 of 28 -> 0 of 21 | 12 of 70 -> 0 of 63 | 0 -> 0 of 63 |
+
+The car is a Havok physics car, 2 m wide. On Late Night Opening five of the seven bots stood within 1.2 m of the
+line it drives, at its stop. **ASSUMPTION that this is part of 'the van is weird / a damn problem'** - it is the
+one thing in the files that differs between a round with bots and one without; it was not seen. Built
+(`--lane`): on the way out every place keeps `LANE_CLEAR` = 250 (GUESS) from the routes and stays on the side
+the bots come from; the stage place uses the whole exit box instead of its middle (the middle is the road).
+A baked van (another job is laying F07's key-framed van on these maps) has no spline: `lanes()` then finds no
+route and the places are chosen as before - tell this job, or give `lanes()` the van's keys.
+
+### 12.6 The builds, the budget, the checks
+
+Bytes; before = `t_maps2\<map>`, after = `y_loot2\<map>`:
+
+| | .prm | .ANM | .fxc | F01_Main.WAV | chunk-table entries (limit 69,632) | entities | archive sha1 |
+|---|---|---|---|---|---|---|---|
+| M01 | 55,917,968 = | 22,061,764 = | 17,760,648 = | 21,722,704 = | 50,254 = | 14,999 -> 15,168 (+169) | `915e24d5f24c` |
+| M02 | 55,449,184 = | 22,202,472 = | 17,760,648 = | 22,527,568 = | 58,583 = | 21,934 -> 22,222 (+288) | `c8060a6a0729` |
+| M03 | 61,299,008 = | 22,202,616 = | 17,760,648 = | 22,716,752 = | 62,892 = | 19,827 -> 20,025 (+198) | `e4bc7bdb19a6` |
+| M06 | 50,415,712 = | 21,642,576 = | 17,760,648 = | 21,775,744 = | 47,114 = | 15,599 -> 15,804 (+205) | `042c10e62cf5` |
+
+(`=`: the same size before and after. The `.prm` differs in content only as before: 4 bytes in each model root
+that names an `.oct` record. `u_maps` had +148 / +211 / +163 / +163 entities.)
+
+| check, on each of the four | result |
+|---|---|
+| `kl_fa_bots.py check` | PASS: 0 FAIL; NOTEs 0 / 1 / 1 / 1 (a controller the host level F07 does not use: `RelayMessageList` - stock F01 F02 F03 F05 run it; `AllyEscapeBox` - F02 F06 F08) |
+| `kl_fa_bots.py diff t_maps2 y_loot2` | only the squad was added (+ M01: 2 level exit boxes cut, x and first size; + M03: 1 drop link in the mesh) |
+| `kl_maps.py audit` | PASS (1 / 6 / 0 / 6 known, as the source builds) |
+| `kl_map_guns.py check` | problems: 0 |
+| `kl_impact.py` | problems: 0 |
+| `kl_map_escape.py check` | 0 faults |
+| `kl_maps.py preflight` | CRASH 0; RISK 0 / 3 / 0 / 2 (the source builds' own lines) |
+| `debug\check.py` | 0 records with a layout Dog Days never stores |
+| `verify.py` (own reading, 12.1 - 12.3) | 196 / 684 / 259 / 217 references of the new nodes, all `ROOT\` + exactly one node; `.gms` and `.prp` agree on the cut boxes |
+
+- **Nothing of before changed by default**: `kl_fa_bots.py build <t_maps2\M01> <x>` without the new options writes
+  an archive with the sha1 of `u_maps\M01` (`4ea0322d59cf`), and `kl_fa_bots_rt.py`'s plan of Retomoto is equal
+  with the module of this morning and with this one (JSON and log compared).
+- `KLGuns.ini`: `kl_map_guns.py check` and klgun.c want a line `Entries=<chunk count of the .prm>` since this
+  afternoon; `t_maps2` was built before that and FAILS the gun check for that alone. `build()` adds the line to
+  the copy in its output folder (50254 / 58583 / 62892 / 47114); nothing else of the file changes.
+- `kl_map_tune.py check` on these folders still has gap G1 of re/u_maps_review.md (it does not know the bot
+  step); not this job's file.
+
+### 12.7 Live checks, in this order (the lead's)
+
+| # | run | what proves it |
+|---|---|---|
+| L0 | `y_loot2\M02`, the 90 s load, then a round start | loads; seven bots at the START row as on `u_maps\M02` |
+| L1 | Late Night: follow the bots into the jewel store, do NOT shoot a case | about 1 s after a bot passes the store's door (1488, 500, 1879) the panes of its cases burst (sound, shards) and the jewels can be picked up; klbot's log: the bots' money rises. If the jewels can be taken but the glass stands: 'Activate' did nothing, 'Open' did (rebuild with `--cases all` is no help; tell this job). If neither: a pane you shoot yourself still opens its case? |
+| L2 | same round | after at most 45 s they cross the mall to the watch shop (-1892, 500, 2593) and its panes go; then the way out; at the car they stand BESIDE its road, round (-506, 0, -8467) - picture when the car arrives: does it stop where it stopped without bots |
+| L3 | `y_loot2\M03` | the bots run to the sunk wall piece, gather at (-1706, 220, -899), then hop down into the street one after another (a fall animation, about 2 m forward) and run east on the south side. FAIL = they stand at the gather place: then walk past them into the street - they must vanish when the car waits (the fall-back box). klbot: stage 3 for the bots only if they crossed |
+| L4 | `y_loot2\M01` | after the diner (at most 30 s) the bots leave by the back door and go for the Senator at (3384, 0, 19894); **the car's countdown does NOT start when they or you step out of the back door**; it starts when the first of you passes x 4600 toward the car. klbot: money of the bots that stood at the Senator |
+| L5 | `y_loot2\M06` | they stop at each of the four (US boss first, right after the bridge house trigger) and move on after at most 20 s each |
+| L6 | every map | does a bot that is still at a loot place when the car waits get aboard (ZLootTactic stops at stage 3 + car there; a bot with stage 1 or 2 keeps looting) |
+
+### 12.8 ASSUMPTIONS and guesses of this section
+
+- That 'Activate' on a `HavokShatterGlass` looks like a shot pane (read: the same two routines; not seen), and
+  that a relay's message from a `ZBoxPrimitive` of the squad reaches a ZSTDOBJ in a room (F01's relay reaches
+  ZGROUP cases the same way).
+- The unit of the container's countdown (field 4 = 10): if it is seconds, the first jewel can be taken 10 s after
+  the glass - inside the 45 s.
+- That a drop link of 232 across works as stock's widest (228); that a link written by hand needs nothing but the
+  arrays the two parsers read (0x63e750) - the 21 stock meshes' rules hold, the game has not loaded it.
+- That an AI actor triggers the level exit box as BOT1 / BOT2 showed on M01 - now relied on for M03's street too.
+- GUESS values: `STOP_SHARE` 10 %, `STOP_MAX` 4, `CASE_BOTS` 3, `CASE_DELAY` 1.0 s, loot waits 30 / 45 / 20 / 20 s,
+  `LANE_CLEAR` 250, `GATE_BACK` 140, the cut lines x 2400 / 4600.
+- That fewer than seven bots at a stop do not matter to the others: every squad has its own chain and waits.
+
+### 12.9 Changes in `tools/kl_fa_bots.py`
+
+`Nav(links=)` (walks links one way), `border_points`, `add_drop`, `prepare` (the two edits of existing data, made
+before the plan), `lanes` / `lane_dist`, `plan` (stops, the order of the stops and of EXITS_BANK among them, cases,
+the gather place, the road), `make` (one chain for any number of stops), `check` (the last loot wait counts for
+the early call; relays; the shut-case rule; `links`), `diff` (allows exactly the plan's cut boxes and drop link),
+`guns_entries`, `owner`, options `--stops --cases --exit-boxes --drop --lane`. `EXIT_CUT`, `DROPS`, `RECIPE` are
+the three tables a map is described by. No other file of the repository was changed.
+
+Scripts of this section (`<work>\research\agent_scripts\p-loot\`; they read, they write nothing but their own
+logs): `verify.py` (the builds read anew: references, chains, cases, exit boxes, the mesh and a flood over it),
+`lanes.py` (12.5), `links*.py` / `wp.py` (the stock links and waypoints), `anm1.py` (the clips), `st*.py` (stock
+containers, glass, exit triggers, timers, relays, squad transitions), `msgtab.py` (message names of kl2.exe),
+`rt_compat.py` (Retomoto's plan with the old and the new module).

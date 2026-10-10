@@ -362,3 +362,32 @@ hall guards + the six on foot coming to the fight.
 
 `map_ai.json` now has `plan` = an id of the map's plan (`kl_map_ai.plan_id`); `kl_map_tune` compares a tuned
 map with the ai step alone only when both were made with the same plan.
+
+## 13. What a hit costs (2026-10-10, agent p-balance; the whole of it is `re/balance.md`)
+
+OFFLINE as everything above. The owner after playing the four maps with AI heisters: "they dont have much health
+when i shoot them but when they shoot me i have a llot of health not proportional and the coppers dont seem too
+intimidating it should be all the same kinda risk". Read in kl2.exe for that; three lines of section 1 are
+answered and one is corrected:
+
+| section 1 said | now |
+|---|---|
+| field 7: 'a range of the tuning table ... its numbers were not read ... health 175 is 1.75 times the health 100 buys, not a number of bullets' | the range is 0..100 (tuning +0x364 / +0x368, from the constructor 0x524050): **field 7 IS hit points**, times the difficulty row's factor |
+| 'a team factor (0x831f00)' and '`[0x156b5f0]` = 0..3 (ASSUMPTION: the difficulty)' | it is the option 'Difficulty' (0x472d50). 0x831f00 picks a row of nine floats: Arcade is not 'online', so it takes the STORY rows: NPC health x **0.5 / 0.9 / 1.15 / 1.3**; the 9 / 6 / 3 / 1.5 of the other column are for the campaign's buddy (`[gamedata+0x4cf0]`) only |
+| field 8: 'a second pair for the actor; not read further' | **regeneration**: seconds before health comes back and seconds until it is whole, both 15 .. 1 at field 8 per cent (tuning +0x3c8..+0x3d4, 0x8fbbff -> 0x8f9bf0); -1 = none. SWAT and the AI heisters have 50 = 8 s / 8 s |
+| the soldier rows decide how hard a map is | in Arcade they are the smaller half. Every hit is also multiplied by one of six numbers by who shoots whom, per ARCADE LEVEL (= 1 + the rounds escaped in this session): on level 1 police -> you 0.1, you -> police 2.0, police -> AI heister 0.01, AI heister -> police 3.0 |
+
+So on level 1 - every test round so far - a policeman of these maps needs about 90 body hits to kill the player
+(550 health that comes back within 8 s) and the player 2 for him; stock Subway is the same 91 / 2. Accuracy 100
+did not make the Dead Men guards dangerous because their bullets are worth a tenth.
+
+`python tools\kl_map_ai.py balance <build folder | stock level> [--dist=10] [--diff=1]` prints the hits to kill
+between the player, the police and the AI heisters on five stock Arcade levels and under the three rows of
+`klhook/klbalance.c`'s dial (`[Balance] Risk=1..3`, a hook part, OFF by default, not wired). The tool's tables
+`ARCADE` / `RISK` mirror that file's `klr_code` / `klr_dial`.
+
+**No change to the level step.** `apply()`, the plans and the builds (`t_ai2`, `t_maps2`, `u_maps`) are as they
+were: the lopsidedness is run-time data, and health 100..175 by weapon class is right for a table of 1.0 (2..3
+rifle hits a man). The one level-side number the dial may make too hard is accuracy 100 on M01 / M02 / M03's
+PISTOL carriers (an NPC pistol bullet is 125..295 at 10 m, a rifle's 47..80): if live check B6 of re/balance.md
+says so, `strength()` needs a cap for the pistol class (stock's guard row is 55), not a floor.

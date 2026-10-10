@@ -13,6 +13,18 @@ camera goes under the map when ur in it'.
     python kl_map_escape.py all <folder of builds> <out root> [M01 M02 ...]    'fix' on each
     --level     (fix / all) also put down the route points that float more than HIGH over the ground
 
+  THE KEY-FRAMED VAN in place of Dead Men's spline car (owner, 2026-10-10: 'the van is such a damn problem';
+  re/map_escape.md 8 - 13; the long comment before van_plan() below is the spec):
+    python kl_map_escape.py van <folder of finished builds> <out root> [M01 M02 M03]
+                                   each map BUILT AGAIN with stock F07's first escape van on the road Dead Men's
+                                   designers drew for their car: plan on <builds>/<map>, kl_maps.ready_one with the
+                                   van kept and Dead Men's car left out -> <out>/_graft/<map>, kl_map_tune.build ->
+                                   <out>/<map> (+ van.json, van.txt)
+    python kl_map_escape.py van-plan <finished build>     only the plan: waiting place, stop, end, lane, camera
+    python kl_map_escape.py van-check <folder>            the van of a built level from its files; exit 1 on a FAULT
+                                                          ('check' runs it too when the level has ONE animated van)
+    python kl_map_escape.py van-keys                      stock F07's key tables, decoded (the evidence)
+
 WHAT IS WRONG (re/map_escape.md 1; read in both executables and measured on the four builds)
   THE CAMERA. A Dead Men map has  EscCameraSetup!CameraTrigger01 @OnlineEscCamTrigger -> EscCamera01
   @CCameraBox(mode eFMM_LookFromPosFA, field 9 -> EscCameraSetup!CamPos01).  The box EscCamera01 itself
@@ -444,7 +456,7 @@ def check(L, log=print, title='check'):
     G = L.G if hasattr(L, 'G') else Ground(L)
     L.G = G
     bounds = level_bounds(L)
-    rep = {'vehicles': [], 'cameras': [], 'faults': []}
+    rep = {'vehicles': [], 'cameras': [], 'cameras_no_eye': [], 'faults': []}
     stops = []
     log('%s: %s' % (title, L.zip))
     for v in vehicles(L):
@@ -505,8 +517,10 @@ def check(L, log=print, title='check'):
         if c['fault']:
             log('    FAULT ' + c['fault'])
             rep['faults'].append('camera %s: %s' % (c['name'], c['fault']))
-        rep['cameras'].append({k: c.get(k) for k in ('name', 'trigger', 'mode', 'own', 'target', 'target_name', 'eye', 'ground',
-                                                      'over', 'ground_name', 'sight', 'fault')})
+        # a camera without a place of its own for the eye (eFMM_LookAtPos: the eye rides with the player - the key-framed
+        # van's inside camera) is listed apart: kl_map_tune prints every camera of 'cameras' by its eye
+        rep['cameras' if c['eye'] else 'cameras_no_eye'].append({k: c.get(k) for k in (
+            'name', 'trigger', 'mode', 'own', 'target', 'target_name', 'eye', 'ground', 'over', 'ground_name', 'sight', 'fault')})
     log('  %d fault(s)' % len(rep['faults']))
     return rep
 
@@ -640,11 +654,855 @@ def repair(src, dst, level=False, log=print):
     return rep
 
 
+# ====================================================================================================
+# THE KEY-FRAMED VAN IN PLACE OF DEAD MEN'S SPLINE CAR (2026-10-10, re/map_escape.md sections 8 - 13)
+# ====================================================================================================
+# Owner, after rounds on the four maps: 'the van is such a damn problem'; on Retomoto, where the escape is stock
+# F07's key-framed van on a rewritten drive (kl_fa_van), 'almost perfect'. So the three car maps get THAT van:
+#   plan      on a finished build that still has Dead Men's car: its two routes (the road the designers drew) joined
+#             into one smooth curve, the stop, the waiting place, the end, the lane checked every LANE_STEP units
+#   graft     kl_maps.ready_one with four things patched in from outside for the length of the build (as
+#             kl_escape.applied does): F07's first escape van is KEPT (kl_fa.host_keep), its baked keys and the
+#             things that stand beside its drive are rewritten on the stock Level before the graft, Dead Men's car,
+#             its boarding action and its escape cameras are LEFT OUT (Select m_drop), the level's exit triggers
+#             name the van (after kl_fa.repair), the van's collision placements are put right (after kl_hvk.join)
+#   tune      kl_map_tune.build on the result, as every delivered map has had
+# WHAT A VAN'S KEYS ARE (read on stock F07, `van-keys`): the KEYS chunk of V_Van_00 has six tables in the .buf head.
+#   5 = positions (3 floats a key), 2 = rotations (4 x int16 / 32767 = a quaternion x y z w; the yaw of local +Z
+#   computed from it follows the tangent of the positions within 8 degrees on the whole drive), 3 and 0 = for every
+#   FRAME the index of its position / rotation key, bit-packed (first byte = bits a value, then the values, most
+#   significant bit first), 4 and 1 = for every key its frame, packed the same way. 796 frames at 25 a second:
+#   0..49 waiting, 50..230 the drive in (7.2 s), 230..273 standing, 273..485 the drive away (8.48 s), then the four
+#   crash pieces (500.., 600.., 650.., 750..). So a key's place AND heading can be anything: the drive is NOT limited
+#   to straight legs. What stays fixed without rewriting tables 0 / 1 / 3 / 4 (not done) is the timing: which
+#   fraction of each leg the van has covered at each frame (its baked ease in and out).
+VAN_HOST = 'F07'
+VAN_TOP = 'Animation/F07/F07_Escape_Vehicle_01.zip'
+VAN_GROUP = VAN_TOP + '\\EscapeVehicle_Animation_F07'
+VAN_KEEP = (VAN_TOP, 'Gameplay!EscapeSetup!RelayDestroyedEsc_01')   # the relay the kept monitor's list 3 names for this van
+VAN_TAGS = ('M01', 'M02', 'M03')
+VAN_UP = 2.0                    # the van's origin over the road: F07's keys are at y -198 on its road at -200
+VAN_HALF = 110.0                # half width of the lane that is tested (kl_fa_van tests the same five rays)
+VAN_BODY = (25.0, 220.0)        # collision this far over the road is in the van's way
+VAN_NOSE = 600.0                # ... and the lane is tested this far beyond the last key (kl_fa_van: 6 m)
+VAN_TAIL = 350.0                # ... and behind the first
+LANE_STEP = 20.0
+LIMIT_IN = 6000.0               # GUESS: the drive in is at most 60 m (7.2 s: 30 km/h on average; F07's own is 51 m)
+LIMIT_OUT = 8000.0              # GUESS: the drive away at most 80 m (8.48 s; F07's own is 70 m with a top speed of 13 m/s, Retomoto's
+                                # 102 m on a straight road; these roads bend - M02's at 50 m - and at 100 m the van took that at 19 m/s)
+MIN_IN, MIN_OUT = 2000.0, 3000.0
+GAP = 900.0                     # the drive ends this far before a thing in the lane (a gate, a wall)
+BOARD_BACK = 337.0              # the van's BoardingTrigger: 337 behind its origin (read on F07; tested in van_prepare)
+SIDE = 120.0                    # a crash piece may leave the drive this far to either side (the lane's half width + 10)
+AXLES = 140.0                   # the van's heading = the chord of the drive from its rear axle to its front one (wheels at -138 / +137)
+REL_MAX = 6.0                   # van_check: degrees the nose may differ from that chord on the drive (stock F07: up to 9, its own
+                                # baked lead and lag in ITS bends - not carried over: on another bend it is a slide)
+PARK = (0.0, -60000.0, 0.0)     # where F07 pieces without a use go (kl_fa_author.PARK)
+ST = {}                         # the state of one van build in this process (van_build)
+
+
+def _wrap(a):
+    return (a + 180.0) % 360.0 - 180.0
+
+
+def _heading(t):
+    return math.degrees(math.atan2(t[0], t[1]))
+
+
+class Poly:
+    """A polyline of (x, y, z) with its length in the ground plane; at / tan extrapolate past the ends."""
+    def __init__(self, pts):
+        self.p, self.cum = [tuple(p) for p in pts], [0.0]
+        for a, b in zip(self.p, self.p[1:]):
+            self.cum.append(self.cum[-1] + math.hypot(b[0] - a[0], b[2] - a[2]))
+        self.len = self.cum[-1]
+
+    def at(self, s):
+        import bisect
+        c = self.cum
+        i = min(max(bisect.bisect_right(c, s) - 1, 0), len(c) - 2)
+        while i < len(c) - 2 and c[i + 1] - c[i] < 1e-6:
+            i += 1
+        while i > 0 and c[i + 1] - c[i] < 1e-6:
+            i -= 1
+        ln = c[i + 1] - c[i]
+        t = (s - c[i]) / ln if ln > 1e-6 else 0.0
+        a, b = self.p[i], self.p[i + 1]
+        return tuple(a[j] + (b[j] - a[j]) * t for j in range(3))
+
+    def tan(self, s, h=80.0):
+        a, b = self.at(max(0.0, s - h)), self.at(min(self.len, s + h))
+        n = math.hypot(b[0] - a[0], b[2] - a[2])
+        return ((b[0] - a[0]) / n, (b[2] - a[2]) / n) if n > 1e-6 else (0.0, 1.0)
+
+    def project(self, q):
+        """(distance along, signed offset to the side) of q: the nearest place on the line; side > 0 = towards
+        (tangent z, -tangent x), the +x side of a drive that heads +z (kl_fa_van.project's sign)."""
+        best = None
+        for i in range(len(self.p) - 1):
+            a, b = self.p[i], self.p[i + 1]
+            dx, dz = b[0] - a[0], b[2] - a[2]
+            l2 = dx * dx + dz * dz
+            if l2 < 1e-6:
+                continue
+            t = max(0.0, min(1.0, ((q[0] - a[0]) * dx + (q[2] - a[2]) * dz) / l2))
+            d2 = (q[0] - a[0] - t * dx) ** 2 + (q[2] - a[2] - t * dz) ** 2
+            if best is None or d2 < best[0]:
+                ln = math.sqrt(l2)
+                best = (d2, self.cum[i] + t * ln, ((q[0] - a[0]) * dz - (q[2] - a[2]) * dx) / ln)
+        return best[1], best[2]
+
+    def off(self, s, d, y=None):
+        """The place d to the side of the line at s."""
+        p, t = self.at(s), self.tan(s)
+        return (p[0] + d * t[1], p[1] if y is None else y, p[2] - d * t[0])
+
+
+def curve(pts, step=LANE_STEP):
+    """A centripetal Catmull-Rom curve through the points (x, y, z) in the ground plane (y runs linearly between
+    two points), sampled about every `step` units -> ([(x, y, z)], index in it of every given point).
+    ASSUMPTION: it is not the curve Dead Men's engine laid through a route's points (that one was not read);
+    it passes through every point, and the lane check walks THIS curve, which is the one the van's keys are put on."""
+    pts = [p for i, p in enumerate(pts) if i == 0 or math.hypot(p[0] - pts[i - 1][0], p[2] - pts[i - 1][2]) > 1.0]
+    q = [(2 * pts[0][0] - pts[1][0], 0.0, 2 * pts[0][2] - pts[1][2])] + pts + [(2 * pts[-1][0] - pts[-2][0], 0.0, 2 * pts[-1][2] - pts[-2][2])]
+    out, marks = [], []
+    for i in range(1, len(q) - 2):
+        p0, p1, p2, p3 = q[i - 1], q[i], q[i + 1], q[i + 2]
+        tj = lambda t, a, b: t + max(math.hypot(b[0] - a[0], b[2] - a[2]), 1e-6) ** 0.5
+        t0 = 0.0; t1 = tj(t0, p0, p1); t2 = tj(t1, p1, p2); t3 = tj(t2, p2, p3)
+        n = max(1, int(math.hypot(p2[0] - p1[0], p2[2] - p1[2]) / step))
+        marks.append(len(out))
+        for k in range(n):
+            t = t1 + (t2 - t1) * k / n
+            lerp = lambda a, b, ta, tb: (a[0] + (b[0] - a[0]) * (t - ta) / (tb - ta), a[1] + (b[1] - a[1]) * (t - ta) / (tb - ta))
+            a1, a2, a3 = lerp((p0[0], p0[2]), (p1[0], p1[2]), t0, t1), lerp((p1[0], p1[2]), (p2[0], p2[2]), t1, t2), lerp((p2[0], p2[2]), (p3[0], p3[2]), t2, t3)
+            b1, b2 = lerp(a1, a2, t0, t2), lerp(a2, a3, t1, t3)
+            c = lerp(b1, b2, t1, t2)
+            out.append((c[0], p1[1] + (p2[1] - p1[1]) * k / n, c[1]))
+    marks.append(len(out))
+    out.append(pts[-1])
+    return out, marks
+
+
+def lane(L, G, path, s0, s1, skip=(), half=VAN_HALF):
+    """The lane of a van on `path` (a Poly whose y is the road) from s0 to s1, every LANE_STEP units, five rays across
+    `half`: -> [(s, what, name)] for collision of the map VAN_BODY over the road, a place with no road under a
+    wheel, and a convex body (prop, parked car, key-framed piece) in the lane. skip: REF ids left out."""
+    out, s = [], s0
+    while s <= s1 + 1e-6:
+        p, t = path.at(s), path.tan(s)
+        for off in (-half, -half / 2, 0.0, half / 2, half):
+            x, z = p[0] + off * t[1], p[2] - off * t[0]
+            hs = [h for h in G.hits(x, z) if h[2] not in skip]
+            if not any(h[1] > FLOOR and abs(h[0] - p[1]) <= VAN_BODY[0] for h in hs):
+                out.append((round(s), 'no road within %d of the drive\'s height %.0f at %+d across' % (VAN_BODY[0], p[1], off), ''))
+            for y, _up, r in hs:
+                if p[1] + VAN_BODY[0] < y < p[1] + VAN_BODY[1]:
+                    out.append((round(s), 'collision %d over the road at %+d across' % (y - p[1], off), L.name(r)))
+        for ty, r, lo, hi in G.boxes:
+            if r not in skip and lo[0] - half < p[0] < hi[0] + half and lo[2] - half < p[2] < hi[2] + half and \
+                    lo[1] < p[1] + VAN_BODY[1] and hi[1] > p[1] + 10:
+                out.append((round(s), '%s body in the lane' % {2: 'rigid', 3: 'vehicle', 4: 'key-framed', 5: 'weapon'}.get(ty, ty), L.name(r)))
+        s += LANE_STEP
+    return out
+
+
+def _first(obst):
+    """obstructions -> {name or what: (first s, last s, count)} in order of the first."""
+    d = collections.OrderedDict()
+    for s, what, nm in sorted(obst):
+        e = d.setdefault(nm or what, [s, s, 0, what])
+        e[1], e[2] = s, e[2] + 1
+    return d
+
+
+def _crossings(bounds, pts, dist):
+    """[(level bound, from, to)]: every stretch of the points (their distance in `dist`) that is inside a LevelBound
+    box, tested 100 over the point (a person's chest)."""
+    out = []
+    for nm, inside in bounds:
+        run = None
+        for p, d in zip(pts, dist):
+            if inside((p[0], p[1] + 100.0, p[2])):
+                run = [nm, round(d), round(d)] if run is None else run[:2] + [round(d)]
+            elif run:
+                out.append(run); run = None
+        if run:
+            out.append(run)
+    return out
+
+
+def van_plan(src, log=print):
+    """A finished build that still has Dead Men's escape car -> the van's drive on that map (JSON form):
+    'path' = [[x, road y, z]] every LANE_STEP units from the waiting place to the end, 'lin' / 'lout' = the lengths
+    of the drive in and away along it, 'wait' / 'stop' / 'end' = the van's origin there, 'board' = where its
+    boarding box stands at the stop, 'cam' = the escape camera's place, 'drop' = Dead Men's top-level objects the
+    van replaces, 'faults' = why no van can be laid (then nothing is built)."""
+    L = Level(src)
+    G = Ground(L)
+    sc = L.sc
+    P = collections.OrderedDict(src=os.path.abspath(src), faults=[], notes=[])
+    cars = [v for v in vehicles(L) if v['kind'] == 'car' and len(v['routes']) == 2]
+    if len(cars) != 1:
+        P['faults'].append('%d escape cars with two spline routes (one is wanted)' % len(cars))
+        return P
+    v = cars[0]
+    top = sc.top[v['node']]
+    own = {L.ents[j - 1].ref for j in range(top, sc.end[top])}
+    pin, pout = spline(L, v['routes']['incoming'])[0], spline(L, v['routes']['escaping'])[0]
+    car_stop = pin[-1]
+    ahead = [p for p in pout if math.hypot(p[0] - car_stop[0], p[2] - car_stop[2]) > 150.0]
+    dense, marks = curve(pin + ahead)
+    C = Poly(dense)
+    s_car = C.cum[marks[len(pin) - 1]]
+    s_stop = s_car + BOARD_BACK                         # the van's REAR box stands where Dead Men's car stopped
+    # the road under the curve, smoothed over +-100 (a kerb must not make the van hop)
+    raw = []
+    for p in dense:
+        g = G.under(p[0], p[1], p[2])
+        raw.append(g[0] if g else None)
+    if any(r is None for r in raw):
+        i = next(i for i, r in enumerate(raw) if r is None)
+        P['notes'].append('no ground under the routes\' curve at %d along it (%d, %d): the last ground is kept' % (C.cum[i], dense[i][0], dense[i][2]))
+        last = next(r for r in raw if r is not None)
+        for i, r in enumerate(raw):
+            last = raw[i] = last if r is None else r
+    w = max(1, int(100.0 / LANE_STEP))
+    road = [sum(raw[max(0, i - w):i + w + 1]) / len(raw[max(0, i - w):i + w + 1]) for i in range(len(raw))]
+    R = Poly([(p[0], y, p[2]) for p, y in zip(dense, road)])
+    P['rough'] = round(max(abs(a - b) for a, b in zip(raw, road)), 1)
+    # how far each way
+    s_wait, s_end = max(0.0, s_stop - LIMIT_IN), min(R.len - VAN_NOSE, s_stop + LIMIT_OUT)
+    # things Dead Men's car switched on its way (M01: the fence gate it opened) are closed for a van
+    for k in range(top, sc.end[top]):
+        for i, (nm, _b) in enumerate(sc.nodes[k]['ctrls']):
+            name = sc.p.key(nm)
+            if name not in ('ActivateGeom', 'DeactivateGeom', 'AIDWrapper', 'OnlineTriggerBox'):
+                continue
+            vals = L.ctrl(k, name)[0][1]
+            tg = [j for x in vals for s in (x if isinstance(x, list) else [x]) if isinstance(s, str) and s.startswith('ROOT\\') for j in sc.resolve(s)]
+            for j in ([k] if name == 'OnlineTriggerBox' else tg):
+                if top <= j < sc.end[top] and name != 'OnlineTriggerBox':
+                    continue
+                at = L.place(j)
+                s, d = R.project(at)
+                if abs(d) < 600.0 and max(abs(x) for x in at) > 1.0 and s > s_stop and s - GAP < s_end:
+                    P['notes'].append('%s of Dead Men\'s car (%s) at (%d, %d, %d), %d along the drive away: the car switched it on its way, '
+                                      'a van does not - the drive ends %d before it' % (name, sc.path[j][5:][-60:], *at, s - s_stop, GAP))
+                    s_end = s - GAP
+    ob = lane(L, G, R, s_wait - VAN_TAIL, s_end + VAN_NOSE, own)
+    P['lane_first_pass'] = {k: e for k, e in _first(ob).items()}
+    after = [s for s, _w, _n in ob if s > s_stop + 200]
+    before = [s for s, _w, _n in ob if s < s_stop - 200]
+    at_stop = [(s, w_, n) for s, w_, n in ob if abs(s - s_stop) <= 200]
+    if after and min(after) - GAP - VAN_NOSE < s_end:
+        nm = next(n or w_ for s, w_, n in sorted(ob) if s == min(after))
+        P['notes'].append('the drive away is cut %d before \'%s\' (in the lane %d along it)' % (GAP, nm, min(after) - s_stop))
+        s_end = min(after) - GAP - VAN_NOSE
+    if before and max(before) + GAP + VAN_TAIL > s_wait:
+        nm = next(n or w_ for s, w_, n in sorted(ob) if s == max(before))
+        P['notes'].append('the drive in starts %d after \'%s\' (in the lane %d before the stop)' % (GAP, nm, s_stop - max(before)))
+        s_wait = max(before) + GAP + VAN_TAIL
+    for s, w_, n in at_stop:
+        P['faults'].append('at the stop: %s %s' % (w_, n))
+    if s_stop - s_wait < MIN_IN:
+        P['faults'].append('only %d of clear lane before the stop (least %d)' % (s_stop - s_wait, MIN_IN))
+    if s_end - s_stop < MIN_OUT:
+        P['faults'].append('only %d of clear lane after the stop (least %d)' % (s_end - s_stop, MIN_OUT))
+    n = int((s_end - s_wait) / LANE_STEP)
+    path = [R.at(s_wait + (s_end - s_wait) * i / n) for i in range(n + 1)]
+    V = Poly(path)
+    lin = s_stop - s_wait
+    P.update(car=v['name'], car_stop=[round(x, 1) for x in car_stop], lin=round(lin, 1), lout=round(V.len - lin, 1),
+             path=[[round(x, 2) for x in p] for p in path])
+    up = lambda p: [round(p[0], 1), round(p[1] + VAN_UP, 1), round(p[2], 1)]
+    P['wait'], P['stop'], P['end'] = up(V.at(0.0)), up(V.at(lin)), up(V.at(V.len))
+    P['heading'] = {k: round(_heading(V.tan(s, AXLES)), 1) for k, s in (('wait', 0.0), ('stop', lin), ('end', V.len))}
+    t = V.tan(lin, AXLES)                               # the box rides 337 behind the origin of the STANDING van
+    P['board'] = [round(P['stop'][0] - BOARD_BACK * t[0], 1), round(P['stop'][1] - VAN_UP, 1), round(P['stop'][2] - BOARD_BACK * t[1], 1)]
+    P['lane'] = _first(lane(L, G, V, -VAN_TAIL, V.len + VAN_NOSE, own))
+    for nm, (a, b_, cnt, what) in P['lane'].items():
+        P['faults'].append('in the lane after the cut: %s (%s) at %d..%d' % (nm, what, a, b_))
+    # the level bounds the drive passes, the other cars that use the road (said, not repaired: Dead Men's own design)
+    bounds = level_bounds(L)
+    P['bounds'] = _crossings(bounds, path, [c - lin for c in V.cum])
+    P['other_cars'] = ['%s %s' % (c, w_) for c, _which, w_ in other_cars(L, v, {'the van\'s drive': path})]
+    # the camera: the designers' place nearest the stop, and what the car's objects are called
+    cams = [c for c in cameras(L, G, [tuple(P['stop'])]) if c['target']]
+    drop = [sc.names[top]]
+    if cams:
+        c = min(cams, key=lambda c: math.dist(c['target'], P['stop']))
+        P['cam'] = [round(x, 1) for x in c['target']]
+        P['cam_from'] = c['target_name'][5:]
+        P['cam_sight'] = {'stop': [L.name(r) for _t, r in G.between(tuple(P['cam']), (P['stop'][0], P['stop'][1] + 100.0, P['stop'][2]))][:3],
+                          'end': [L.name(r) for _t, r in G.between(tuple(P['cam']), (P['end'][0], P['end'][1] + 100.0, P['end'][2]))][:3]}
+        for c in cams:
+            for k in (c['node'], sc.resolve(c['target_name'])[0], sc.resolve('ROOT\\' + c['trigger'])[0]):
+                drop.append(sc.names[k])
+    else:
+        P['faults'].append('no escape camera with a place of its own in the build')
+    for k, _i, vals in kl_fa.controllers(sc, 'PlayerAction'):
+        if 'EnterVehicle' in vals:
+            drop.append(sc.names[k])
+            drop += [sc.names[j] for x in vals if isinstance(x, list) for s in x for j in sc.resolve(s) if kl_fa.has(sc, j, 'OnlineGamePlayTrigger')]
+    for nm in drop:
+        k = sc.resolve('ROOT\\' + nm)
+        if len(k) != 1 or sc.parent[k[0]] != 0 or any(ch in nm for ch in '*?['):
+            P['faults'].append('%s is not one top-level object: it cannot be left out by name' % nm)
+    P['drop'] = list(collections.OrderedDict.fromkeys(drop))
+    P['exits'] = [sc.path[k][5:] for k, _i, _v in kl_fa.controllers(sc, kl_fa.EXIT)]
+    log('van plan for %s: Dead Men\'s %s stops at (%d, %d, %d)' % (src, v['name'], *car_stop))
+    log('  waits (%d, %d, %d) heading %.0f -> %.0f m in 7.2 s -> stops (%d, %d, %d) heading %.0f (rear box at (%d, %d, %d)) -> %.0f m in '
+        '8.48 s -> ends (%d, %d, %d) heading %.0f' % (*P['wait'], P['heading']['wait'], lin / 100, *P['stop'], P['heading']['stop'], *P['board'],
+                                                  (V.len - lin) / 100, *P['end'], P['heading']['end']))
+    log('  road under the drive y %.1f .. %.1f (raw against smoothed: at most %.1f apart); camera at (%d, %d, %d) (%s); sight to the stop: %s, to the end: %s' % (
+        min(p[1] for p in path), max(p[1] for p in path), P['rough'], *P.get('cam', (0, 0, 0)), P.get('cam_from', '-'),
+        ', '.join(P.get('cam_sight', {}).get('stop', [])) or 'clear', ', '.join(P.get('cam_sight', {}).get('end', [])) or 'clear'))
+    for e in P['bounds']:
+        log('  passes the level bound %s from %d to %d (0 = the stop)' % tuple(e))
+    for x in P['other_cars']:
+        log('  other car: ' + x[:230])
+    for x in P['notes']:
+        log('  note: ' + x)
+    log('  left out of Dead Men\'s map: ' + ', '.join(P['drop']))
+    for x in P['faults']:
+        log('  FAULT ' + x)
+    return P
+
+
+# ---- the van's keys
+class VanKeys:
+    """The six tables of a KEYS chunk (module comment above). head: the .buf head; raw: the entity's data block;
+    ends: every table offset of the level + the head's length (a table ends where the next one begins)."""
+    def __init__(self, head, raw, ends, keys_tracks):
+        (p, self.offs), = keys_tracks(raw)
+        self.frames = struct.unpack_from('<I', raw, p - 0x10)[0]
+        self.head = head
+        size = lambda o: next(x for x in ends if x > o) - o
+        self.f2p, self.f2r = self.bits(self.offs[3], self.frames), self.bits(self.offs[0], self.frames)
+        self.npos, self.nrot = max(self.f2p) + 1, max(self.f2r) + 1
+        if self.npos * 12 > size(self.offs[5]) or self.nrot * 8 > size(self.offs[2]):
+            raise ValueError('KEYS: the frame tables name keys beyond the key tables')
+        self.pos = [struct.unpack_from('<3f', head, self.offs[5] + 12 * i) for i in range(self.npos)]
+        self.rot = [struct.unpack_from('<4h', head, self.offs[2] + 8 * i) for i in range(self.nrot)]
+
+    def bits(self, o, n):
+        w, out = self.head[o], []
+        for i in range(n):
+            v = 0
+            for j in range(i * w, i * w + w):
+                v = (v << 1) | ((self.head[o + 1 + j // 8] >> (7 - j % 8)) & 1)
+            out.append(v)
+        return out
+
+    @staticmethod
+    def yaw(q):
+        """Heading (degrees, atan2(x, z)) of local +Z turned by the quaternion."""
+        x, y, z, w = [c / 32767.0 for c in q]
+        return math.degrees(math.atan2(2 * (x * z + w * y), 1 - 2 * (x * x + y * y)))
+
+    @staticmethod
+    def turned(q, deg):
+        """The quaternion turned by `deg` about the world's Y (the body's own sway is kept)."""
+        h = math.radians(deg) / 2
+        a = (0.0, math.sin(h), 0.0, math.cos(h))
+        b = [c / 32767.0 for c in q]
+        r = (a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1], a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+             a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2])
+        n = math.sqrt(sum(c * c for c in r)) or 1.0
+        return tuple(max(-32767, min(32767, int(round(c / n * 32767)))) for c in r)
+
+    def drive(self):
+        """Number of keys of the main drive (wait -> stop -> away): the keys up to the first jump of over 400."""
+        return next((i for i in range(1, self.npos) if math.dist(self.pos[i], self.pos[i - 1]) > 400), self.npos)
+
+
+def _van_nodes(sc, top):
+    name = lambda n: next(k for k in range(top, sc.end[top]) if sc.names[k] == n and 'Reflection' not in sc.path[k])
+    d = {n: name(n) for n in ('EscapeVehicle_Animation_F07', 'V_Van_00', 'BoardingTrigger', 'PathBlockerVan', 'TriggerBox_RearDoors_Open',
+                              'CameraTrigger01', 'CameraTrigger_InVan', 'CamPos01', 'CamPos_InVan_FocusPoint', 'F07_Escape_Vehicle_01')}
+    d['EscCamera01'] = next(k for k in range(top, sc.end[top]) if sc.names[k].startswith('EscCamera01_'))
+    d['strays'] = [k for k in range(top + 1, sc.end[top]) if sc.parent[k] == top and k != d['EscapeVehicle_Animation_F07']]
+    return d
+
+
+def _leg_frames(sc, k):
+    """{message: (first frame, last frame)} of the MatPosAnimProxy controllers on node k."""
+    out = {}
+    for nm, body in sc.nodes[k]['ctrls']:
+        if sc.p.key(nm) == 'MatPosAnimProxy':
+            v = [kl_fa.value(sc, u) for u in units(body[1:-1])]
+            out[v[6]] = (v[1], v[2])
+    return out
+
+
+def van_prepare(S, P, log=print):
+    """Stock F07 (kl_graft.Level, unedited) -> its first escape van laid on the plan P: the position and rotation
+    keys rewritten in place (no key added, dropped or re-timed), everything that stands beside the drive moved, the
+    pieces that lie loose at F07's origin put away. -> report (also ST['van'])."""
+    import kl_graft
+    import kl_fa_author as au
+    sc = S.prp
+    top = au.node_of(sc, VAN_TOP)
+    N = _van_nodes(sc, top)
+    van, grp = N['V_Van_00'], N['EscapeVehicle_Animation_F07']
+    for k in (grp, N['F07_Escape_Vehicle_01'], sc.parent[N['CameraTrigger01']], top):
+        if any(abs(x) > 1e-3 for x in struct.unpack('<3f', S.ents[k - 1].trans[:12])):
+            raise ValueError('kl_map_escape: %s does not stand at the origin: its children\'s places are not world places' % sc.path[k])
+    bz = struct.unpack('<3f', S.ents[N['BoardingTrigger'] - 1].trans[:12])[2]
+    if abs(-bz - BOARD_BACK) > 5.0:
+        raise ValueError('kl_map_escape: the van\'s boarding box is %.0f behind its origin, BOARD_BACK says %.0f' % (-bz, BOARD_BACK))
+    ends = sorted({o for e in S.ents for _p, oo in kl_graft.keys_tracks(e.raw) for o in oo} | {len(S.scene.head)})
+    K = VanKeys(S.scene.head, S.ents[van - 1].raw, ends, kl_graft.keys_tracks)
+    legs = _leg_frames(sc, N['F07_Escape_Vehicle_01'])
+    cut = K.drive()
+    old = Poly(K.pos[:cut])
+    k_stop = K.f2p[legs['Activate_Enter'][1]]
+    s_stop, y0 = old.cum[k_stop], K.pos[0][1]
+    new = Poly([tuple(p) for p in P['path']])
+    lin, lout = P['lin'], new.len - P['lin']
+    to = lambda s: lin * s / s_stop if s <= s_stop else lin + lout * (s - s_stop) / (old.len - s_stop)
+    # positions
+    where = []                                          # per position key: (distance on the old drive, new distance, side)
+    for i, p in enumerate(K.pos):
+        s, d = (old.cum[i], 0.0) if i < cut else old.project(p)
+        where.append((s, to(s), max(-SIDE, min(SIDE, d))))
+    pos = []
+    for (s, s2, d), p in zip(where, K.pos):
+        q = new.off(s2, d)
+        pos.append((q[0], q[1] + VAN_UP + p[1] - y0, q[2]))
+    # rotations: the nose keeps its angle to the drive (clamped on the drive itself), the sway stays
+    rot, worst = [], 0.0
+    first = {}
+    for f in range(K.frames - 1, -1, -1):
+        first[K.f2r[f]] = f
+    for r, q in enumerate(K.rot):
+        kp = K.f2p[first[r]]
+        s, s2, _d = where[kp]
+        rel = 0.0 if kp < cut else _wrap(K.yaw(q) - _heading(old.tan(s, AXLES)))    # a crash piece keeps its spin against the drive
+        want = _heading(new.tan(s2, AXLES)) + rel
+        q2 = K.turned(q, want - K.yaw(q))
+        worst = max(worst, abs(_wrap(K.yaw(q2) - want)))
+        rot.append(q2)
+    if worst > 1.0:
+        raise ValueError('kl_map_escape: a rewritten rotation key is %.1f degrees off its heading' % worst)
+    head = bytearray(S.scene.head)
+    for i, p in enumerate(pos):
+        struct.pack_into('<3f', head, K.offs[5] + 12 * i, *p)
+    for i, q in enumerate(rot):
+        struct.pack_into('<4h', head, K.offs[2] + 8 * i, *q)
+    S.scene.head = bytes(head)                          # the same bytes in both places the tools read the .buf from
+    buf = S.files[S.ext['.buf']]
+    S.files[S.ext['.buf']] = S.scene.head + buf[len(head):]
+    # what stands beside the drive
+    road0 = y0 - VAN_UP
+    yaw_stop_old, yaw_stop_new = K.yaw(K.rot[K.f2r[legs['Activate_Enter'][1]]]), _heading(new.tan(lin, AXLES))
+    stop_old, stop_new = old.at(s_stop), new.at(lin)
+    moved = []
+    def box_turn(k, by):
+        m = kl_fa.node_values(sc, k)[1]
+        if abs(m[4] - 1.0) > 1e-3:
+            raise ValueError('%s is not turned about Y only' % sc.path[k])
+        h = math.radians(math.degrees(math.atan2(m[0], m[2])) + by)
+        return (math.sin(h), math.cos(h))
+    def put(k, p, turn=None):
+        t = struct.unpack('<3f', S.ents[k - 1].trans[:12])
+        au.place(S, k, p, turn=turn)
+        moved.append((sc.names[k], tuple(round(x) for x in t), tuple(round(x) for x in p)))
+    for n in ('PathBlockerVan', 'CameraTrigger_InVan', 'CamPos_InVan_FocusPoint'):      # rigid with the STOPPED van
+        k = N[n]
+        t = struct.unpack('<3f', S.ents[k - 1].trans[:12])
+        a = math.radians(yaw_stop_new - yaw_stop_old)
+        dx, dz = t[0] - stop_old[0], t[2] - stop_old[2]
+        p = (stop_new[0] + dx * math.cos(a) + dz * math.sin(a), t[1] - road0 + stop_new[1], stop_new[2] - dx * math.sin(a) + dz * math.cos(a))
+        put(k, p, box_turn(k, yaw_stop_new - yaw_stop_old))
+    for n in ('TriggerBox_RearDoors_Open', 'CameraTrigger01'):                          # ON the drive, the same distance from the stop
+        k = N[n]
+        t = struct.unpack('<3f', S.ents[k - 1].trans[:12])
+        s, _d = old.project(t)
+        s2 = lin + (s - s_stop)
+        q = new.at(s2)
+        put(k, (q[0], t[1] - road0 + q[1], q[2]), box_turn(k, _heading(new.tan(s2)) - _heading(old.tan(s))))
+    cam = tuple(P['cam'])
+    t0, t1 = [struct.unpack('<3f', S.ents[N[n] - 1].trans[:12]) for n in ('CamPos01', 'EscCamera01')]
+    put(N['CamPos01'], cam)
+    put(N['EscCamera01'], tuple(cam[i] + t1[i] - t0[i] for i in range(3)))
+    h0 = math.radians(K.yaw(rot[K.f2r[0]]))
+    old_pose = (K.pos[K.f2p[0]], K.yaw(K.rot[K.f2r[0]]))
+    put(van, pos[K.f2p[0]], (math.sin(h0), math.cos(h0)))       # the node's own place = the key of frame 0
+    for k in N['strays']:                                       # the reflection template, the light smears, the shadow casters
+        t = struct.unpack('<3f', S.ents[k - 1].trans[:12])
+        put(k, tuple(PARK[i] + t[i] for i in range(3)))
+    refs = lambda k: {S.ents[j - 1].ref for j in range(k, sc.end[k])}
+    rep = collections.OrderedDict(
+        keys=[K.npos, K.nrot, K.frames], drive_keys=cut, stop_key=k_stop, legs={k: list(v) for k, v in legs.items()},
+        old=dict(wait=[round(x) for x in K.pos[0]], stop=[round(x) for x in stop_old], length_in=round(s_stop), length_out=round(old.len - s_stop)),
+        scale=[round(lin / s_stop, 2), round(lout / (old.len - s_stop), 2)],
+        crash_side=[round(min(d for _s, _s2, d in where[cut:])), round(max(d for _s, _s2, d in where[cut:]))], moved=moved,
+        hvk=dict(static=sorted(refs(top)), van=sorted(refs(van)), old=[list(old_pose[0]), old_pose[1]],
+                 new=[list(pos[K.f2p[0]]), K.yaw(rot[K.f2r[0]])]))
+    log('  kl_map_escape: %s: %d position and %d rotation keys rewritten in place (%d of them the drive, stop at key %d); drive in %d -> %d '
+        '(x %.2f), away %d -> %d (x %.2f); crash pieces %d..%d to the side; %d objects moved: %s' % (
+            VAN_TOP, K.npos, K.nrot, cut, k_stop, s_stop, lin, lin / s_stop, old.len - s_stop, lout, lout / (old.len - s_stop),
+            *rep['crash_side'], len(moved), ', '.join(n for n, _a, _b in moved)))
+    ST['van'] = rep
+    return rep
+
+
+def van_wire(sc, P, log=print):
+    """On the JOINED scene, after kl_fa.repair: every level exit trigger calls the van (Dog Days fields 2..5 are the
+    random pick, kl2 0x6c3f64; field 0 false, field 1 empty). Dead Men's car is not in the scene any more."""
+    want = 'ROOT\\' + VAN_GROUP
+    if len(sc.resolve(want)) != 1 or not kl_fa.has(sc, sc.resolve(want)[0], 'OnlineEscAnimatedVehicle'):
+        raise ValueError('kl_map_escape: the joined scene has no %s with OnlineEscAnimatedVehicle' % VAN_GROUP)
+    n = 0
+    for k, i, v in kl_fa.controllers(sc, kl_fa.EXIT):
+        if len(v) != 6:
+            raise ValueError('%s: OnlineExitLevelTrigger with %d fields' % (sc.path[k], len(v)))
+        def fn(us):
+            us[0] = [(us[0][0][0], b'\0')]
+            us[1] = [kl_fa._str(sc, '')]
+            us[2] = [kl_fa._str(sc, want)]
+            for j in (3, 4, 5):
+                us[j] = [kl_fa._str(sc, '')]
+        kl_fa.edit(sc, k, i, fn)
+        n += 1
+        log('  kl_map_escape: exit trigger %s calls %s' % (sc.path[k][5:], VAN_GROUP))
+    if not n:
+        raise ValueError('kl_map_escape: no OnlineExitLevelTrigger in the joined scene')
+    left = [sc.path[k] for k, _i, _v in kl_fa.controllers(sc, 'OnlineEscHavokCar') if any(sc.cls(j) == 'ZHavokCar' for j in range(k, sc.end[k]))]
+    if left:
+        raise ValueError('kl_map_escape: Dead Men\'s escape car is still in the scene: %s' % left)
+    ST['wired'] = n
+    return n
+
+
+def van_hvk(hvk, rep, log=print):
+    """On the joined kl_hvk.Hvk: (1) the STATIC placements of the van's subtree go (kl_escape.cut_collision): F07 has
+    nine small ones of the 'V_Van_Reflection' template at its world origin (-450, 6, 3), which in F07 is outside the
+    map and in M02_FA_A is the floor of the mall's atrium; (2) the key-framed placements of the van's own parts
+    are put at the waiting place. ASSUMPTION for (2): the game moves a key-framed body with its entity (Retomoto's
+    van was left at F07's place in the file and collided where it drove); written so that the file is right
+    either way."""
+    import kl_hvk, kl_escape
+    h = rep['hvk']
+    st = {kl_hvk.ref(i) for s in hvk.shapes if s.type == kl_hvk.STATIC for i in s.inst} & set(h['static'])
+    if st:
+        kl_escape.cut_collision(hvk, st, log)
+    (p0, y0), (p1, y1) = h['old'], h['new']
+    a = math.radians(y1 - y0)
+    c, s_ = math.cos(a), math.sin(a)
+    R = ((c, 0.0, s_), (0.0, 1.0, 0.0), (-s_, 0.0, c))
+    n, van = 0, set(h['van'])
+    for s in hvk.shapes:
+        if s.type == kl_hvk.STATIC:
+            continue
+        for j, inst in enumerate(s.inst):
+            if kl_hvk.ref(inst) not in van:
+                continue
+            p, m = struct.unpack_from('<3f', inst, 0), struct.unpack_from('<9f', inst, 12)
+            d = [100.0 * p[i] - p0[i] for i in range(3)]
+            q = [(p1[i] + sum(R[i][b] * d[b] for b in range(3))) / 100.0 for i in range(3)]
+            m2 = [sum(R[i][k] * m[3 * k + b] for k in range(3)) for i in range(3) for b in range(3)]
+            s.inst[j] = struct.pack('<3f9f', *q, *m2) + inst[48:]
+            n += 1
+    log('  kl_map_escape: .HVK: %d static placements of the van\'s subtree cut, %d key-framed placements of the van put at its waiting place' % (len(st), n))
+    ST['hvk'] = (len(st), n)
+    return hvk
+
+
+def van_build(tag, src_root, out_root, log=print):
+    """One map: plan on <src_root>/<tag> (a finished build with Dead Men's car), then the map built again as
+    kl_maps.ready_one builds it, with the van (module comment), into <out_root>/_graft/<tag>, then kl_map_tune.build
+    -> <out_root>/<tag>. -> report (also <out_root>/<tag>/van.json, van.txt)."""
+    import kl_graft, kl_hvk, kl_map_tune
+    lines = []
+    def say(s=''):
+        lines.append(str(s)); log(s)
+    src, graft, out = os.path.join(src_root, tag), os.path.join(out_root, '_graft'), os.path.join(out_root, tag)
+    if 'kl_portbackup' in os.path.abspath(out).lower() or 'dog days' in os.path.abspath(out).lower():
+        raise ValueError('kl_map_escape writes build folders only, never the game\'s')
+    P = van_plan(src, say)
+    if P['faults']:
+        raise ValueError('%s: no van: %s' % (tag, '; '.join(P['faults'])))
+    entry = next(r for r in kl_maps.READY if r[0] == tag)
+    saved = (kl_graft.Level, kl_fa.host_keep, kl_fa.repair, kl_hvk.join, dict(entry[3]))
+    ST.clear()
+
+    class VanLevel(saved[0]):
+        def __init__(self, name):
+            super().__init__(name)
+            if name == VAN_HOST and 'van' not in ST:
+                van_prepare(self, P, say)
+    def keep(S):
+        return list(saved[1](S)) + [n for n in VAN_KEEP if n not in saved[1](S)]
+    def repair(sc, kept=(), log=say):
+        r = saved[2](sc, kept, log)
+        van_wire(sc, P, say)
+        return r
+    def join(*a, **kw):
+        return van_hvk(saved[3](*a, **kw), ST['van'], say)
+    kl_graft.Level, kl_fa.host_keep, kl_fa.repair, kl_hvk.join = VanLevel, keep, repair, join
+    entry[3]['m_drop'] = tuple(entry[3].get('m_drop', ())) + tuple(P['drop'])
+    try:
+        a = kl_maps.ready_one(graft, tag, log=say)
+    finally:
+        kl_graft.Level, kl_fa.host_keep, kl_fa.repair, kl_hvk.join = saved[:4]
+        entry[3].clear(); entry[3].update(saved[4])
+    rep = collections.OrderedDict(tag=tag, plan=P, van=ST.get('van'), wired=ST.get('wired'), hvk=ST.get('hvk'), ready_bad=a.get('bad'))
+    if a.get('bad') or a.get('error') or not all(k in ST for k in ('van', 'wired', 'hvk')):
+        raise ValueError('%s: the build with the van is not ready: %s' % (tag, a.get('error') or a.get('bad') or 'a step of the van did not run: %s' % sorted(ST)))
+    t = kl_map_tune.build(os.path.join(graft, tag), out, kl_map_tune.options(()), say)
+    rep['tune_ok'], rep['tune_failed'] = t['ok'], t.get('failed')
+    L = Level(out)
+    L.G = Ground(L)
+    rep['check'] = van_check(L, say, P)
+    with open(os.path.join(out, 'van.json'), 'w', encoding='utf-8') as f:
+        json.dump(rep, f, indent=1, default=str)
+    with open(os.path.join(out, 'van.txt'), 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines) + '\n')
+    say('RESULT %s: van %s; kl_map_tune %s; van check: %d fault(s)' % (tag, 'built', 'PASS' if t['ok'] else 'NOT PASS (%s)' % t.get('failed'), len(rep['check']['faults'])))
+    return rep
+
+
+def van_check(L, log=print, P=None):
+    """The key-framed van of a built level, from the written files alone -> {'faults': [...], ...}. Only for a level
+    with ONE OnlineEscAnimatedVehicle (this module's builds; Retomoto's three are kl_fa_van.check's)."""
+    import kl_graft
+    sc, G = L.sc, (L.G if hasattr(L, 'G') else Ground(L))
+    L.G = G
+    out = collections.OrderedDict(faults=[], notes=[])
+    bad = out['faults'].append
+    vans = kl_fa.controllers(sc, 'OnlineEscAnimatedVehicle')
+    if len(vans) != 1:
+        out['notes'].append('%d OnlineEscAnimatedVehicle: not a build of this module, nothing tested' % len(vans))
+        return out
+    grp = vans[0][0]
+    top = sc.top[grp]
+    log('van check: %s' % L.zip)
+    N = _van_nodes(sc, top)
+    van = N['V_Van_00']
+    # 1. who is called, and what of Dead Men's is left
+    for k, _i, v in kl_fa.controllers(sc, kl_fa.EXIT):
+        named = [x for x in v[1:6] if x]
+        if v[0] or named != [sc.path[grp]]:
+            bad('exit trigger %s names %s (field 0 = %s): not the van alone' % (sc.path[k][5:], named, v[0]))
+    for k, _i, _v in kl_fa.controllers(sc, 'OnlineEscHavokCar'):
+        if any(sc.cls(j) == 'ZHavokCar' for j in range(k, sc.end[k])):
+            bad('Dead Men\'s escape car %s is still in the level' % sc.path[k][5:])
+    acts = [k for k, _i, v in kl_fa.controllers(sc, 'PlayerAction') if 'EnterVehicle' in v]
+    if acts != [N['BoardingTrigger']]:
+        bad('boarding actions: %s (the van\'s own is wanted, alone)' % [sc.path[k][5:] for k in acts])
+    if vans[0][2][0] != sc.path[N['BoardingTrigger']] or vans[0][2][12] != sc.path[van]:
+        bad('OnlineEscAnimatedVehicle does not name its own boarding box and van')
+    cams = [k for k, _i, v in kl_fa.controllers(sc, 'OnlineEscCamTrigger') if not (top <= k < sc.end[top])]
+    if cams:
+        bad('escape camera triggers outside the van: %s' % [sc.path[k][5:] for k in cams])
+    if not any('FAEscCameraLAST' in str(v) for _k, _i, v in kl_fa.controllers(sc, 'ZSetZDefine')):
+        out['notes'].append('no define FAEscCameraLAST in the level (the box that releases the escape camera)')
+    # 2. the keys
+    ends = sorted({o for e in L.ents for _p, oo in kl_graft.keys_tracks(e.raw) for o in oo} | {len(L.scene.head)})
+    K = VanKeys(L.scene.head, L.ents[van - 1].raw, ends, kl_graft.keys_tracks)
+    for k in (grp, N['F07_Escape_Vehicle_01'], top):
+        if max(abs(x) for x in L.place(k)) > 1e-3:
+            bad('%s does not stand at the origin: the keys are not world places' % sc.path[k][5:])
+    legs = _leg_frames(sc, N['F07_Escape_Vehicle_01'])
+    cut = K.drive()
+    D = Poly(K.pos[:cut])
+    k_stop = K.f2p[legs['Activate_Enter'][1]]
+    lin = D.cum[k_stop]
+    own = {L.ents[j - 1].ref for j in range(top, sc.end[top])}
+    worst_y, steps, back = 0.0, 0.0, 0
+    for i, p in enumerate(K.pos[:cut]):
+        g = G.under(p[0], p[1] + 20.0, p[2])
+        if g is None:
+            bad('drive key %d at (%d, %d, %d): no ground under it' % (i, *p))
+            continue
+        worst_y = max(worst_y, abs(p[1] - VAN_UP - g[0]))
+        if i:
+            steps = max(steps, math.dist(p, K.pos[i - 1]))
+    if worst_y > 6.0:
+        bad('a drive key is %.1f off the height of the van on the ground (%.0f over it is wanted)' % (worst_y, VAN_UP))
+    road = Poly([(p[0], p[1] - VAN_UP, p[2]) for p in K.pos[:cut]])
+    ob = _first(lane(L, G, road, -VAN_TAIL, road.len + VAN_NOSE, own))
+    for nm, (a, b, cnt, what) in ob.items():
+        bad('in the van\'s lane: %s (%s) %d..%d along the drive' % (nm, what, a, b))
+    # the nose against the chord of the drive, frame by frame. A rotation key serves several frames where F07's own
+    # drive was straight (19 keys of the drive are held 3..6 frames); between two keys the heading is taken to run
+    # linearly (ASSUMPTION, from stock F07: in its bends a held key and its successor both sit on the tangent at
+    # their OWN frames, and the tangent of the frames between them is the straight run from one to the other -
+    # `van-keys` prints the table). 'held' = the same measure if the engine did not interpolate.
+    firstf = {}
+    for f in range(K.frames - 1, -1, -1):
+        firstf[K.f2r[f]] = f
+    yaw_off = yaw_held = 0.0
+    for f in range(K.frames):
+        kp, r = K.f2p[f], K.f2r[f]
+        if kp < cut and 2.0 < D.cum[kp] < D.len - 2.0:
+            want, y = _heading(D.tan(D.cum[kp], AXLES)), K.yaw(K.rot[r])
+            yaw_held = max(yaw_held, abs(_wrap(y - want)))
+            f1 = firstf.get(r + 1)
+            if f1 is not None and f1 > f > firstf[r]:
+                y += _wrap(K.yaw(K.rot[r + 1]) - y) * (f - firstf[r]) / (f1 - firstf[r])
+            yaw_off = max(yaw_off, abs(_wrap(y - want)))
+    out['nose_held'] = round(yaw_held, 1)
+    if yaw_off > REL_MAX:
+        bad('the van\'s nose is up to %.0f degrees off the drive\'s tangent' % yaw_off)
+    crash = [K.pos[i] for i in range(cut, K.npos)]
+    side = max((abs(D.project(p)[1]) for p in crash), default=0.0)
+    if side > SIDE + 15.0:
+        bad('a crash piece leaves the drive by %.0f' % side)
+    low = [p for p in crash if (G.under(p[0], p[1] + 40.0, p[2]) or (p[1],))[0] > p[1] + 25.0]
+    if low:
+        bad('%d crash keys are more than 25 under the ground' % len(low))
+    wait, stop, end = K.pos[K.f2p[0]], K.pos[k_stop], K.pos[cut - 1]
+    out.update(keys=[K.npos, K.nrot, K.frames], drive_keys=cut, wait=[round(x) for x in wait], stop=[round(x) for x in stop], end=[round(x) for x in end],
+               length_in=round(lin), length_out=round(D.len - lin), largest_step=round(steps), height_off=round(worst_y, 1), nose_off=round(yaw_off, 1),
+               crash_side=round(side), seconds=[round((legs['Activate_Enter'][1] - legs['Activate_Enter'][0]) / 25.0, 2),
+                                                round((legs['Activate_Exit'][1] - legs['Activate_Exit'][0]) / 25.0, 2)])
+    if math.dist(L.place(van), wait) > 1.0:
+        bad('the van\'s node stands at (%d, %d, %d), its first key is (%d, %d, %d)' % (*L.place(van), *wait))
+    # 3. what stands at the stop
+    hs = math.radians(K.yaw(K.rot[K.f2r[legs['Activate_Enter'][1]]]))
+    board = (stop[0] - BOARD_BACK * math.sin(hs), stop[1], stop[2] - BOARD_BACK * math.cos(hs))
+    out['board'] = [round(x) for x in board]
+    def inside(k, p):
+        v, (R, T) = L.values(k), L.frame(k)
+        return all(abs(sum(R[a][b] * (p[a] - T[a]) for a in range(3))) <= v['ZBoxPrimitive[%d]' % b] for b in range(3))
+    if math.hypot(L.place(N['PathBlockerVan'])[0] - stop[0], L.place(N['PathBlockerVan'])[2] - stop[2]) > 30.0:
+        bad('PathBlockerVan is %d from the stop' % math.dist(L.place(N['PathBlockerVan']), stop))
+    if not inside(N['CameraTrigger_InVan'], stop):
+        bad('the stop is not inside CameraTrigger_InVan')
+    after = D.at(lin + 850.0)
+    if not inside(N['CameraTrigger01'], after):
+        bad('the drive 8.5 m after the stop is not inside CameraTrigger01')
+    doors = L.place(N['TriggerBox_RearDoors_Open'])
+    if abs(D.project(doors)[1]) > 30.0 or not 0 < D.project(doors)[0] < lin:
+        bad('TriggerBox_RearDoors_Open is not on the drive in')
+    # 4. the camera
+    for c in cameras(L, G, [tuple(stop)]):
+        if c['fault']:
+            bad('camera %s: %s' % (c['name'], c['fault']))
+        if c['eye']:
+            out['camera'] = dict(eye=[round(x) for x in c['eye']], over=round(c['over']) if c.get('over') is not None else None,
+                                 far=round(c.get('far', 0)), sight=c.get('sight'))
+    # 5. the collision file
+    stat = sum(1 for s in L.hvk.shapes if s.type == kl_hvk.STATIC for i in s.inst if kl_hvk.ref(i) in own)
+    if stat:
+        bad('%d static collision placements belong to the van\'s subtree (they lie at F07\'s places)' % stat)
+    node = {e.ref: i + 1 for i, e in enumerate(L.ents)}
+    far, nk = 0.0, 0
+    for s in L.hvk.shapes:
+        if s.type != kl_hvk.STATIC:
+            for i in s.inst:
+                if kl_hvk.ref(i) in own:
+                    p = struct.unpack_from('<3f', i, 0)
+                    far = max(far, math.dist([100 * x for x in p], L.place(node[kl_hvk.ref(i)])))
+                    nk += 1
+    out['keyframed'] = [nk, round(far, 1)]
+    if far > 30.0:
+        bad('a key-framed collision placement of the van is %.0f from its entity' % far)
+    # 6. the loose pieces
+    loose = [sc.names[k] for k in N['strays'] if L.place(k)[1] > PARK[1] / 2]
+    if loose:
+        bad('pieces of the van\'s archive lie loose in the map: %s' % loose)
+    bounds = level_bounds(L)
+    out['bounds'] = _crossings(bounds, K.pos[:cut], [c - lin for c in D.cum])
+    if P is not None:
+        for k in ('wait', 'stop', 'end'):
+            if math.dist(P[k], {'wait': wait, 'stop': stop, 'end': end}[k]) > 25.0:
+                bad('the %s place (%d, %d, %d) is not the plan\'s (%d, %d, %d)' % (k, *{'wait': wait, 'stop': stop, 'end': end}[k], *P[k]))
+    log('  van %s: %d position / %d rotation keys, %d frames; waits (%d, %d, %d) -> %.0f m in %.2f s -> stops (%d, %d, %d) -> %.0f m in %.2f s '
+        '-> (%d, %d, %d)' % (sc.path[grp][5:], K.npos, K.nrot, K.frames, *wait, lin / 100, out['seconds'][0], *stop, (D.len - lin) / 100,
+                            out['seconds'][1], *end))
+    log('  keys %.1f off the road height at most, largest step %d, nose up to %.1f degrees off the tangent (%.1f if a key is held, not '
+        'interpolated), crash pieces up to %d to the side; lane (5 rays, every %d, %d before and %d beyond): %s' % (
+            worst_y, steps, yaw_off, yaw_held, side, LANE_STEP, VAN_TAIL, VAN_NOSE, 'clear' if not ob else 'NOT CLEAR'))
+    log('  boarding box at the stop: (%d, %d, %d); key-framed placements %d, at most %.1f from their entities; camera: %s' % (
+        *board, nk, far, out.get('camera')))
+    for e in out['bounds']:
+        log('  the drive passes the level bound %s from %d to %d (0 = the stop)' % tuple(e))
+    for x in out['notes']:
+        log('  note: ' + x)
+    for x in out['faults']:
+        log('  FAULT ' + x)
+    log('  %d fault(s)' % len(out['faults']))
+    return out
+
+
+def van_keys(level='F07', log=print):
+    """The evidence for the module comment: the key tables of stock F07's first van."""
+    import kl_graft
+    import kl_fa_author as au
+    S = kl_graft.Level(level)
+    sc = S.prp
+    N = _van_nodes(sc, au.node_of(sc, VAN_TOP))
+    ends = sorted({o for e in S.ents for _p, oo in kl_graft.keys_tracks(e.raw) for o in oo} | {len(S.scene.head)})
+    K = VanKeys(S.scene.head, S.ents[N['V_Van_00'] - 1].raw, ends, kl_graft.keys_tracks)
+    cut = K.drive()
+    D = Poly(K.pos[:cut])
+    legs = _leg_frames(sc, N['F07_Escape_Vehicle_01'])
+    log('%s %s: %d frames, %d position keys (%d the drive), %d rotation keys; table offsets %s; legs %s' % (
+        level, VAN_TOP, K.frames, K.npos, cut, K.nrot, list(K.offs), legs))
+    k2f, r2f = K.bits(K.offs[4], 40), K.bits(K.offs[1], 40)
+    log('  table 4 (position key -> frame) begins %s; table 1 (rotation key -> frame) begins %s' % (k2f[:12], r2f[:12]))
+    for f in (0, 49, 50, 100, 150, 200, 230, 250, 273, 300, 400, 485, 500, 562, 600, 632, 650, 709, 750, 795):
+        kp, kr = K.f2p[f], K.f2r[f]
+        tn = '%6.1f' % _heading(D.tan(D.cum[kp])) if kp < cut else '     -'
+        log('  frame %3d: position key %3d (%6d %5d %6d)  rotation key %3d %-28s yaw %6.1f  tangent of the drive %s' % (
+            f, kp, *K.pos[kp], kr, K.rot[kr], K.yaw(K.rot[kr]), tn))
+    firstf = {}
+    for f in range(K.frames - 1, -1, -1):
+        firstf[K.f2r[f]] = f
+    log('  rotation keys of the drive that serve 3 frames or more: key, first frame, frames; its yaw -> the next key\'s; the drive\'s tangent at '
+        'its first frame, the middle one, the next key\'s frame; the straight run from key to key at the middle frame')
+    worst = 0.0
+    for r in range(1, K.nrot - 1):
+        f0, f1 = firstf.get(r), firstf.get(r + 1)
+        if f0 is None or f1 is None or f1 - f0 < 3 or not (legs['Activate_Enter'][0] <= f0 < legs['Activate_Enter'][1] - 2 or
+                                                         legs['Activate_Exit'][0] <= f0 < legs['Activate_Exit'][1]):
+            continue
+        fm = (f0 + f1) // 2
+        tn = [_heading(D.tan(D.cum[K.f2p[f]], AXLES)) for f in (f0, fm, f1)]
+        y0, y1 = K.yaw(K.rot[r]), K.yaw(K.rot[r + 1])
+        mid = y0 + _wrap(y1 - y0) * (fm - f0) / (f1 - f0)
+        lag = (_wrap(y0 - tn[0]) + _wrap(y1 - tn[2])) / 2
+        worst = max(worst, abs(_wrap(mid - tn[1] - lag)))
+        log('    key %3d frame %3d x%d  yaw %6.1f -> %6.1f   tangent %6.1f %6.1f %6.1f   run at the middle %6.1f (tangent + the two keys\' own lag %+.1f = %6.1f)' % (
+            r, f0, f1 - f0, y0, y1, *tn, mid, lag, tn[1] + lag))
+    log('  -> the straight run between two keys is the tangent of the frames between them within %.1f degrees' % worst)
+    ks = K.f2p[legs['Activate_Enter'][1]]
+    log('  the drive in: %d units to key %d; away: %d; non-yaw parts of the rotation keys up to %d / %d of 32767' % (
+        D.cum[ks], ks, D.len - D.cum[ks], max(abs(q[0]) for q in K.rot), max(abs(q[2]) for q in K.rot)))
+
+
 def main():
     a = [x for x in sys.argv[1:] if not x.startswith('--')]
     heights = '--level' in sys.argv
+    if len(a) == 2 and a[0] == 'van-plan':
+        P = van_plan(a[1])
+        sys.exit(1 if P['faults'] else 0)
+    elif a[:1] == ['van-keys']:
+        van_keys(*a[1:2])
+        return
+    elif len(a) == 2 and a[0] == 'van-check':
+        sys.exit(1 if van_check(Level(a[1]))['faults'] else 0)
+    elif len(a) >= 3 and a[0] == 'van':
+        bad = 0
+        for tag in a[3:] or VAN_TAGS:
+            print('=' * 20 + ' ' + tag, flush=True)
+            try:
+                r = van_build(tag, a[1], a[2])
+                bad += bool(r['check']['faults']) or not r['tune_ok']
+            except Exception:
+                import traceback
+                traceback.print_exc()
+                bad += 1
+        sys.exit(1 if bad else 0)
     if len(a) == 2 and a[0] == 'check':
-        rep = check(Level(a[1]))
+        L = Level(a[1])
+        rep = check(L)
+        rep['faults'] += van_check(L)['faults']
         sys.exit(1 if rep['faults'] else 0)
     elif len(a) == 3 and a[0] == 'fix':
         rep = repair(a[1], a[2], heights)

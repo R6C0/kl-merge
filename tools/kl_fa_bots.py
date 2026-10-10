@@ -14,6 +14,27 @@ driver, van, help up), re/bots_voice.md (the heisters' lines). OFFLINE: nothing 
     python kl_fa_bots.py stock [F01 ...]                                the control: the stock squads through this
                                                                         module's reading of mesh and trigger boxes
     python kl_fa_bots.py sizes <folder> [<folder> ...]                  the four large blocks (.prm .ANM .fxc .WAV)
+    python kl_fa_bots.py owner <root of builds> <out root> [M01 ...]    every map folder of the root with its RECIPE =
+                                                                        the squad as the owner asked for it on 2026-10-10
+                                                                        (re/bots.md 12): loot stops, cases, the diner's
+                                                                        exit boxes, the bank's drop, the car's road
+    options of 2026-10-10 evening (all OFF by default: without them a build is byte for byte what it was; RECIPE sets them)
+      --stops N                up to N loot stops, each with a wait of its own: every loot area that holds at least
+                               STOP_SHARE of the richest one, the nearest next from the ENTERS_BANK place on (default 1)
+      --cases off|glass|all    a loot object of type CONTAINER cannot be taken before its OnlineMoneyContainer is opened;
+                               Dead Men's jewel and watch cases open only when their GLASS IS SHOT, and no AI shoots at
+                               an object. glass: a timer 1 s after the step before the loot place sends 'Activate' to
+                               the glass (kl2 0x8d1b60: it shatters as if shot) and 'Open' to the container (0x766e50),
+                               per bot for the CASE_BOTS nearest bots of each case. all: 'Open' to every container of
+                               the stop, also those somebody near them opens (stock form). check() FAILs a loot wait
+                               that names loot in a glass-only case nobody opens
+      --exit-boxes keep|cut    cut: the level exit boxes of EXIT_CUT are cut back so that the loot that stood in them
+                               is outside (M01: the Senator and his flank; a crew member in such a box calls the car)
+      --drop                   DROPS: one link of kind 2 (a drop, the only kind stock Dog Days has) in the navigation
+                               mesh where a Dog Days player walks down and the mesh has a gap (M03: the sunk wall
+                               piece), a gather place in front of it inside an AllyEscapeBox as the fall-back
+      --lane                   the places of the way out keep LANE_CLEAR from the escape car's spline routes and stay on
+                               the side the bots come from (the builds of the afternoon had bots waiting IN the road)
     options
       --ally-box auto|on|off   an AllyEscapeBox at the boarding place with every bot's last place inside it (the form of
                                stock F02 F06 F08). auto (default): on when the vehicle is a helicopter or when the
@@ -113,12 +134,54 @@ INSIDE = 0.45           # a place is put within this share of a trigger box's si
 PARK = (150.0, 400.0)   # re/bots_squad.md 8.3: the last place 150..400 from the boarding action (tactic form)
 ALLY_SIZE = (350.0, 416.0, 350.0)       # stock F02 / F06: BoardingTrigger_Heli0n_incoming_X
 ALLY_UP = 200.0         # GUESS: the box's middle above the floor (its y size covers the floor either way)
+GATE_BACK = 140.0       # GUESS: the gather place in front of a drop link lies this far back from the take-off
+LANE_CLEAR = 250.0      # GUESS (option lane): a place on the way out is at least this far from the escape car's route
+                        # in the plan (the van's wheels stand 98 to either side, tools/kl_map_escape.py; a man is 30)
+LANE_REACH = 500.0      # ... and is looked for within this of the shortest path
 LOOT_LINK = 900.0       # loot objects nearer than this to one another are one loot area
 LOOT_SNAP = 400.0       # a loot object farther than this from the START row's mesh part is not a bot's business
 LOOT_MAX = 38           # most objects a stock TriggerLootDepleted names (F08)
 GUARD_NEAR = 2500.0     # --wait-guards: Enemy actor groups within this of the loot place
 
 SYSTEM_LEVELS = ('F01', 'F02', 'F03', 'F04', 'F05', 'F06', 'F07', 'F08', 'F09')
+
+# ---- the owner's round on the four maps, 2026-10-10 (re/bots.md 12): several loot stops, cases opened, a way over
+STOP_SHARE = 0.10       # GUESS: a loot area is a stop of its own when it holds at least this share of the richest one
+STOP_MAX = 4            # GUESS: at most this many stops (M06 has four people with money along one path)
+CASE_BOTS = 3           # each case is opened by the three bots whose loot places are nearest to it (two may die)
+CASE_DELAY = 1.0        # GUESS, seconds: the cases go this long after the bot finished the step BEFORE its loot place
+DROP_COST = 1.0         # link cost = the distance x this (stock: 0.58 .. 1.01 of the distance, re/bots.md 12.3)
+DROP_IN = 1.0           # a new waypoint lies this far inside its polygon from the border edge (stock: on the edge)
+DROP_MAX = (240.0, 160.0)   # widest and highest drop this module writes: stock links reach 228 across; up to 160
+                            # down the AI plays /Movement/Fall/Fall_1m, beyond it Fall_2m (kl2 0x4a52f6)
+
+# The level exit boxes a map's rich loot stands in, cut back so that the loot is outside them and the boarding
+# action still inside one. {map: {top-level node: (x from, x to)}}: the box keeps y, z and its other two sizes.
+# M01 (measured, re/bots.md 12.2): CallExitVehicle_01 is x -8..3192 and holds FBI-Agents_01 (400,000) at x 3007 and
+# BossFlank_02 at x 2791; CallExitVehicle_02 is x 3196..8796 and holds The_Senator (1,250,000) at x 3384, BossFlank_03
+# at x 3290 and the diner's back door (LeavingHeist_01, x 4121). Nothing in kl2.exe gates the call (0x6cd8e0: any
+# living crew member, bot or human, vehicle state 0) and no stock level gates the trigger by data (nine of nine: the
+# box is shown, nobody names it) - so the only gate a level file has is the box itself. After the cut the yard
+# between x 2400 and x 4600 (the Senator and his three men, both back doors) calls nothing; the car is called by
+# whoever walks on toward its stop (boarding action at x 5884) or west along the back lot.
+EXIT_CUT = {'M01_FA_A': {'Triggers!CallExitVehicle_01': (-8.0, 2400.0), 'Triggers!CallExitVehicle_02': (4600.0, 8796.0)}}
+
+# A drop for the AI where a Dog Days player walks down but the navigation mesh has a gap. {map: [dict]}:
+# at = a point between the two mesh borders (x, z); needs = (node name, 'its y is below this') - the object that
+# must be out of the way, else nothing is written. The two waypoints are put on the border edges nearest to `at`,
+# on the START row's part and on the part of the boarding action.
+# M03 (re/escape.md, re/bots.md 12.3): kl_escape.open_wall sank SO0101_M03_Wall_Low_8m_05 (x -1900..-1100) to yard
+# height; a dumpster stands on the street side of its east third (x -1454..-1200), x -1900..-1457 is free. The
+# yard's mesh ends on the edge (-3645, 220, -693)..(-704, 220, -802) of polygon 527, the street's on z -535 between
+# x -2559 and x -1487 (polygon 687, y 150): 70 down, about 230 across at x -1700.
+DROPS = {'M03_FA_A': [{'at': (-1700.0, -650.0), 'needs': ('SO0101_M03_Wall_Low_8m_05', -100.0)}]}
+
+# What the four maps are built with for the owner (python kl_fa_bots.py owner ...; re/bots.md 12). Every key is
+# an option of build; the defaults (DEFAULTS) are the squad as it was before 2026-10-10 evening.
+RECIPE = {'M01_FA_A': {'stops': STOP_MAX, 'cases': 'glass', 'exit_boxes': 'cut', 'loot_seconds': 30, 'lane': True},
+          'M02_FA_A': {'stops': STOP_MAX, 'cases': 'glass', 'loot_seconds': 45, 'lane': True},
+          'M03_FA_A': {'stops': STOP_MAX, 'cases': 'glass', 'drop': True, 'lane': True},
+          'M06_FA_A': {'stops': STOP_MAX, 'cases': 'glass'}}
 
 
 # ------------------------------------------------------------------ small things
@@ -222,12 +285,25 @@ class Nav:
     walked like any other, as kl_maps.NavParts does. Links (array 7: ladders, vaults) are not walked: the four maps
     have none after kl_pf4's conversion."""
 
-    def __init__(self, block):
+    def __init__(self, block, links=False):
         _n, A = kl_pf4.split(block, True)
         polys = [struct.unpack('<BBHIIIIIII', r) for r in A[3]]
         edges = [struct.unpack('<iII', r) for r in A[9]]
         verts = [struct.unpack('<5f', r) for r in A[6]]
         self.links = len(A[7])
+        # links=True: the array-7 links are walked too, ONE WAY, from their waypoint to the target waypoint (stock
+        # Dog Days: 192 links in 12 levels, all of kind 2 = a drop: the target is 44..523 lower in 182, level in 10,
+        # never higher; no link has a reverse). self.drops[polygon] = [(target polygon, from, to, kind)].
+        # Off by default: Retomoto's mesh keeps five of Dead Men's kind-2 links and its plans were made without them.
+        self.drops = collections.defaultdict(list)
+        if links:
+            ways = [struct.unpack('<3fIIIHH', r) for r in A[5]]
+            ars = [struct.unpack('<12I', r[:48]) for r in A[4]]
+            for w in ways:
+                for li in range(w[3], w[4]):
+                    _cost, _junk, num, area, kind, _head, _switch = struct.unpack('<hHiiBBH', A[7][li])
+                    t = ways[ars[area][5] + num]
+                    self.drops[w[5]].append((t[5], (w[0], w[2], w[1]), (t[0], t[2], t[1]), kind))
         self.pv, self.en = [], []
         for p in polys:
             es = range(p[5], p[5] + p[0])
@@ -247,13 +323,18 @@ class Nav:
             for j in self.en[i]:
                 if j >= 0 and j != i:
                     self.nb[i].add(j); self.nb[j].add(i)
+        # connected parts. A link joins two parts for this labelling (a drop is one way: path() knows that)
+        both = [set(x) for x in self.nb]
+        for i, ds in self.drops.items():
+            for j, _a, _b, _k in ds:
+                both[i].add(j); both[j].add(i)
         self.part, k = [-1] * n, 0
         for s in range(n):
             if self.part[s] >= 0:
                 continue
             self.part[s], st = k, [s]
             while st:
-                for j in self.nb[st.pop()]:
+                for j in both[st.pop()]:
                     if self.part[j] < 0:
                         self.part[j] = k; st.append(j)
             k += 1
@@ -354,6 +435,13 @@ class Nav:
                 if nd < dist.get(j, 1e30):
                     dist[j], prev[j], at[j] = nd, (i, q), q
                     heapq.heappush(pq, (nd, j))
+            for j, pa, pb, _kind in self.drops.get(i, ()):          # a link: walk to its waypoint, land on the target's
+                if j in ban:
+                    continue
+                nd = d + math.dist(at[i], pa) + math.dist(pa, pb)
+                if nd < dist.get(j, 1e30):
+                    dist[j], prev[j], at[j] = nd, (i, pb, pa), pb
+                    heapq.heappush(pq, (nd, j))
         return dist, prev, at
 
     def portal(self, i, j):
@@ -373,8 +461,9 @@ class Nav:
             return None
         pts, i = [b[:3]], b[3]
         while i != a[3]:
-            i, q = prev[i]
-            pts.append(q)
+            step = prev[i]
+            i = step[0]
+            pts += step[1:]                             # (portal,) or, for a link, (landing point, take-off point)
         pts.append(a[:3]); pts.reverse()
         return pts, sum(math.dist(pts[k], pts[k + 1]) for k in range(len(pts) - 1))
 
@@ -407,6 +496,231 @@ class Nav:
                 if hit:
                     out.append((x, hit[1], z, hit[0]))
         return out
+
+
+# ------------------------------------------------------------------ a link in the mesh (the bank's yard wall)
+def border_points(nav, x, z, reach=600.0):
+    """The border edges (no neighbour) within `reach` of (x, z) in the plan -> [(distance, part, polygon, point on
+    the edge nearest to (x, z), the same point moved DROP_IN into the polygon)], nearest first, one per part."""
+    best = {}
+    for i, vs in enumerate(nav.pv):
+        if not nav.ok[i]:
+            continue
+        for e, j in enumerate(nav.en[i]):
+            if j >= 0:
+                continue
+            a, b = vs[e], vs[(e + 1) % len(vs)]
+            dx, dz = b[0] - a[0], b[2] - a[2]
+            L = dx * dx + dz * dz
+            t = 0.0 if L < 1e-9 else max(0.02, min(0.98, ((x - a[0]) * dx + (z - a[2]) * dz) / L))
+            p = (a[0] + t * dx, a[1] + t * (b[1] - a[1]), a[2] + t * dz)
+            d = math.hypot(p[0] - x, p[2] - z)
+            if d > reach or (nav.part[i] in best and best[nav.part[i]][0] <= d):
+                continue
+            m = nav.mid[i]                              # inward = toward the polygon's middle, across the edge
+            nx, nz = -dz, dx
+            if (m[0] - p[0]) * nx + (m[2] - p[2]) * nz < 0:
+                nx, nz = -nx, -nz
+            n = math.hypot(nx, nz) or 1.0
+            q = (p[0] + nx / n * DROP_IN, p[1], p[2] + nz / n * DROP_IN)
+            if not nav.inside(i, q[0], q[2]):
+                q = p
+            best[nav.part[i]] = (d, nav.part[i], i, p, (q[0], nav.height(i, q[0], q[2]), q[2]))
+    return sorted(best.values())
+
+
+def add_drop(block, frm, to, kind=2):
+    """A Dog Days mesh block with ONE more link: two new waypoints, frm = (x, y, z, polygon) -> to, and one array-7
+    record of `kind` (2 = the only kind stock Dog Days levels have: a drop). Everything that numbers waypoints is
+    renumbered: 'waypoints before' of the later polygons, the area's count and the later areas' first waypoint,
+    array 10, the link ranges of every waypoint, the targets of existing links. kl_pf4.check and kl_maps.nav_facts
+    (the rules all 21 stock meshes obey) must hold on the result, else ValueError.
+    Read, kl2 0x5cdd70 (the path search): a waypoint is a search node; its links lead to waypoint
+    area[5] + number of the link's area at the link's cost (s16), unless the link's switch (u16, -1 = none) is
+    blocked; the kind goes into the path node. 0x4a5160 (ZFFSpecialLink@Locomotion, the mover): kind 2 starts
+    within 20 of the link's start and plays /Movement/Fall/Fall_1m, or Fall_2m when the two ends differ by more
+    than 160 in height (table 0x15489e8, filled at 0x579920; both clips are in Kane_NPC / Lynch_NPC of every
+    build). Kind 1 would be a climb UP (/Movement/Climb/Up/Low, Medium, High at 120 / 170) - Dog Days' animation
+    files have no such clip, which is why this module writes drops only.
+    A new waypoint may only go onto a polygon that has none: array 10 orders the waypoints of one polygon by a
+    rule that was not established."""
+    n, A = kl_pf4.split(block, True)
+    A = [list(a) for a in A]
+    polys = [list(struct.unpack('<BBHIIIIIII', r)) for r in A[3]]
+    areas = [list(struct.unpack('<12I', r[:48])) for r in A[4]]
+    ways = [list(struct.unpack('<3fIIIHH', r)) for r in A[5]]
+    links = [list(struct.unpack('<hHiiBBH', r)) for r in A[7]]
+    perm = [struct.unpack('<I', r)[0] for r in A[10]]
+    tgt = [areas[l[3]][5] + l[2] for l in links]
+    own = [wi for wi, w in enumerate(ways) for _ in range(w[3], w[4])]
+    if len(own) != len(links):
+        raise ValueError('the waypoints own %d links, array 7 has %d' % (len(own), len(links)))
+
+    def put(p):
+        poly = p[3]
+        if any(w[5] == poly for w in ways):
+            raise ValueError('polygon %d already has a waypoint: where a second one goes in array 10 is not established' % poly)
+        i = polys[poly][6]
+        ways.insert(i, [p[0], p[2], p[1], 0, 0, poly, 0, 0])            # stored x, z, y (as array 6)
+        perm[:] = [v + (v >= i) for v in perm]
+        perm.insert(i, i)
+        tgt[:] = [v + (v >= i) for v in tgt]
+        own[:] = [v + (v >= i) for v in own]
+        for q in polys[poly + 1:]:
+            q[6] += 1
+        a = polys[poly][4]
+        areas[a][0] += 1
+        for b in areas[a + 1:]:
+            b[5] += 1
+        return i
+
+    ia = put(frm)
+    ib = put(to)
+    if ib <= ia:
+        ia += 1
+    cost = max(1, min(32767, int(round(math.dist(frm[:3], to[:3]) * DROP_COST))))
+    links.append([cost, 0, 0, 0, kind, 0, 0xffff])                      # heading byte 0: 48 of the 192 stock links; no reader found
+    tgt.append(ib); own.append(ia)
+    order = sorted(range(len(links)), key=lambda k: (own[k], k))
+    at, out7 = 0, []
+    for wi, w in enumerate(ways):
+        mine = [k for k in order if own[k] == wi]
+        w[3] = at
+        for k in mine:
+            l = links[k]
+            ta = polys[ways[tgt[k]][5]][4]
+            out7.append(struct.pack('<hHiiBBH', l[0], l[1], tgt[k] - areas[ta][5], ta, l[4], l[5], l[6]))
+        at += len(mine)
+        w[4] = at
+    A[3] = [struct.pack('<BBHIIIIIII', *p) for p in polys]
+    A[4] = [struct.pack('<12I', *a) + r[48:] for a, r in zip(areas, A[4])]
+    A[5] = [struct.pack('<3fIIIHH', *w) for w in ways]
+    A[7] = out7
+    A[10] = [struct.pack('<I', v) for v in perm]
+    data = kl_pf4.join(A)
+    kl_pf4.check(data, kl_pf4.DD_LINK_KINDS)
+    import kl_maps
+    bad = {k: v for k, v in kl_maps.nav_facts(data).items() if v[0] != v[1]}
+    if bad:
+        raise ValueError('the mesh with the link breaks %s' % bad)
+    return data, {'from_waypoint': ia, 'to_waypoint': ib, 'cost': cost, 'kind': kind}
+
+
+def _roundtrip(B):
+    """The build must come back byte for byte through the writers before anything of it is changed."""
+    g0, b0 = B.scene.write()
+    if kl_gms.pack(g0) != B['.gms'] or b0 != B['.buf']:
+        raise ValueError('kl_scene does not reproduce the build\'s .gms / .buf')
+    octx, rmi, rmc = O.Oct.parse(B['.oct']), O.RoomIndex.parse(B['.rmi']), O.RoomIndex.parse(B['.rmc'])
+    if octx.pack() != B['.oct'] or rmi.pack() != B['.rmi'] or rmc.pack() != B['.rmc']:
+        raise ValueError('kl_octree does not reproduce the build\'s .oct / .rmi / .rmc')
+    B.verified = True
+
+
+def prepare(B, opt=None, log=print):
+    """The edits of EXISTING level data a recipe asks for, made on the loaded build B (in memory) BEFORE the plan,
+    so that the plan walks the level as it will be: the cut level exit boxes (EXIT_CUT, option exit_boxes = 'cut')
+    and the drop link in the navigation mesh (DROPS, option drop). -> {'boxes': {...}, 'drops': [...]} for
+    bots.json; diff() allows exactly these. Nothing is added or removed here: two fields of a trigger box
+    (ZGEOM[2].x, ZBoxPrimitive[0]) with its .gms place, and three arrays of the mesh block."""
+    opt = dict(DEFAULTS, **(opt or {}))
+    out = collections.OrderedDict(boxes=collections.OrderedDict(), drops=[])
+    if not getattr(B, 'verified', False):
+        _roundtrip(B)
+    sc, level = B.sc, B.result.get('M')
+    if opt['exit_boxes'] == 'cut':
+        for nm, (lo, hi) in EXIT_CUT.get(level, {}).items():
+            hit = sc.resolve(R_ + nm)
+            if len(hit) != 1 or sc.parent[hit[0]] != 0 or not kl_fa.has(sc, hit[0], 'OnlineExitLevelTrigger') or sc.cls(hit[0]) != 'ZBoxPrimitive':
+                raise ValueError('%s: no top-level ZBoxPrimitive with an OnlineExitLevelTrigger' % nm)
+            k = hit[0]
+            Rm, T = B.fr[B.ents[k - 1]]
+            s = B.box(k)
+            if abs(abs(Rm[0][0]) - 1.0) > 0.01:
+                raise ValueError('%s: its first size does not run along x' % nm)
+            old = (T[0] - s[0], T[0] + s[0])
+            if lo < old[0] - 1.0 or hi > old[1] + 1.0:
+                raise ValueError('%s: %s is not inside the box as it is (%d..%d): a cut only' % (nm, (lo, hi), *old))
+            lab = J.labels('dd', sc.cls(k))
+            new_x, new_h = (lo + hi) / 2.0, (hi - lo) / 2.0
+            def fn(us, new_x=new_x, new_h=new_h):
+                i = lab.index('ZGEOM[2]')
+                _x, y, z = (struct.unpack('<f', t[1])[0] for t in us[i][1:-1])
+                us[i] = [us[i][0]] + [(0x0a, struct.pack('<f', v)) for v in (new_x, y, z)] + [us[i][-1]]
+                us[lab.index('ZBoxPrimitive[0]')] = [(0x0a, struct.pack('<f', new_h))]
+            kl_fa.edit(sc, k, None, fn)
+            e = B.ents[k - 1]
+            _x, y, z = struct.unpack_from('<3f', e.trans, 0)
+            e.trans = struct.pack('<3f', new_x, y, z) + e.trans[12:]
+            out['boxes'][nm] = {'x_was': [round(v) for v in old], 'x_is': [lo, hi]}
+            log('level exit box %s: x %d..%d -> %d..%d (EXIT_CUT: the loot that stood in it is outside it now)' % (nm, *old, lo, hi))
+        B.fr = frames(B.scene)
+    if opt['drop']:
+        for d in DROPS.get(level, []):
+            nm, below = d['needs']
+            hit = [k for k in range(1, len(sc.nodes)) if sc.names[k] == nm]
+            if len(hit) != 1 or B.at(hit[0])[1] > below:
+                log('  NOTE drop at %s NOT written: %s is not out of the way (kl_escape.open_wall sinks it)' % (d['at'], nm))
+                continue
+            nav = Nav(B.scene.nav)
+            ends = border_points(nav, *d['at'])
+            if len(ends) < 2:
+                raise ValueError('drop at %s: the mesh has no two parts within reach' % (d['at'],))
+            a, b = ends[0], ends[1]
+            if a[4][1] < b[4][1]:
+                a, b = b, a                                             # from the higher border to the lower one
+            frm, to = a[4] + (a[2],), b[4] + (b[2],)
+            across, down = math.hypot(frm[0] - to[0], frm[2] - to[2]), frm[1] - to[1]
+            if across > DROP_MAX[0] or not 0.0 <= down <= DROP_MAX[1]:
+                raise ValueError('drop at %s: %d across and %d down (stock links: up to 228 across; limits %s)' % (d['at'], across, down, DROP_MAX))
+            B.scene.nav, info = add_drop(B.scene.nav, frm, to)
+            info.update(at=list(d['at']), frm=[round(v, 1) for v in frm[:3]], to=[round(v, 1) for v in to[:3]], polygons=[frm[3], to[3]],
+                        across=round(across), down=round(down), parts_joined=[nav.part_size[a[1]], nav.part_size[b[1]]],
+                        clip='/Movement/Fall/Fall_1m' if down <= 160.0 else '/Movement/Fall/Fall_2m')
+            out['drops'].append(info)
+            log('navigation mesh: a drop link (kind 2) from (%d, %d, %d) on polygon %d to (%d, %d, %d) on polygon %d: %d across, %d down, cost %d; '
+                'it joins the parts of %d and %d polygons, one way' % (*frm[:3], frm[3], *to[:3], to[3], across, down, info['cost'],
+                                                                         nav.part_size[a[1]], nav.part_size[b[1]]))
+    return out
+
+
+def lanes(B):
+    """The routes of the map's escape CAR in world space -> [[(x, y, z), ...]] (incoming, escaping): the
+    ZEditorSpline below each of OnlineEscHavokCar's fields 0 and 1 (12 bytes of header, then 24 bytes a point: x, y, z
+    in the spline node's frame, an angle, 10.0, four unset bytes - tools/kl_map_escape.spline). A helicopter's
+    routes are left out (nobody stands in its way), and so is a vehicle whose route is not a spline (a baked van)."""
+    sc, out = B.sc, []
+    for k, _i, v in kl_fa.controllers(sc, 'OnlineEscHavokCar'):
+        if not any(sc.cls(j) == 'ZHavokCar' for j in range(k, sc.end[k])):
+            continue
+        mine = []
+        for s in v[:2]:
+            for h in (sc.resolve(s) if isinstance(s, str) and s else []):
+                for j in range(h, sc.end[h]):
+                    if sc.cls(j) != 'ZEditorSpline':
+                        continue
+                    raw = B.values(j)['ZEditorSpline[0]']
+                    n = struct.unpack_from('<I', raw, 4)[0]
+                    if 12 + 24 * n <= len(raw) and n > 1:
+                        mine.append([B.world(j, struct.unpack_from('<3f', raw, 12 + 24 * i)) for i in range(n)])
+        if len(mine) == 2:                              # from where it stops to where the drive away begins: its road too
+            mine.append([mine[0][-1], mine[1][0]])
+        out += mine
+    return out
+
+
+def lane_dist(lane, p, dy=400.0):
+    """Least distance in the plan from p to the routes `lane` (segments within dy of p's height)."""
+    best = 1e9
+    for pts in lane:
+        for a, b in zip(pts, pts[1:]):
+            if min(abs(a[1] - p[1]), abs(b[1] - p[1])) > dy:
+                continue
+            dx, dz = b[0] - a[0], b[2] - a[2]
+            L = dx * dx + dz * dz
+            t = 0.0 if L < 1e-9 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[2] - a[2]) * dz) / L))
+            best = min(best, math.hypot(p[0] - a[0] - t * dx, p[2] - a[2] - t * dz))
+    return best
 
 
 # ------------------------------------------------------------------ what the map offers
@@ -529,7 +843,7 @@ def plan(B, opt=None, log=print):
     plan['loot'] / ['guards'] = scene paths for the waits; plan['ally_at'] = None or the AllyEscapeBox's place;
     plan['notes'] = what is not as stock."""
     opt = dict(DEFAULTS, **(opt or {}))
-    nav = Nav(B.scene.nav)
+    nav = Nav(B.scene.nav, links=bool(opt['drop']))
     S = stations(B, nav)
     sc, home, notes = B.sc, None, []
     home = S['home']
@@ -635,12 +949,21 @@ def plan(B, opt=None, log=print):
             left = [x for x in left if x not in grow]
         areas.append(area)
     areas.sort(key=lambda a: (-sum(x[2] for x in a), -len(a)))
-    d0, _prev, _at = nav.dist_map(a0[3], a0[:3])
+    worth = lambda a: sum(x[2] for x in a)
+    # ---- the loot STOPS (option stops; 1 = the richest area only, as every build before 2026-10-10 evening):
+    # every area with at least STOP_SHARE of the richest one, each with a wait of its own. A stop = the area's
+    # objects, the richest first; its place = the mesh place at that object.
+    stops = []
     if areas:
-        area = sorted(areas[0], key=lambda x: (-x[2], x[0]))
-        la = area[0][3]
+        more = [a for a in areas[1:] if worth(a) >= STOP_SHARE * worth(areas[0])][:max(0, int(opt['stops']) - 1)]
+        stops = [sorted(a, key=lambda x: (-x[2], x[0])) for a in areas[:1] + more]
+        area, la = stops[0], stops[0][0][3]
         log('loot: %d objects (not DROP), %d within %d of the START row\'s mesh part, in %d areas; the richest: %d objects, %d (field 1 added up) round (%d, %d, %d)'
             % (len(S['loot']), len(loot), LOOT_SNAP, len(areas), len(area), sum(x[2] for x in area), *la[:3]))
+        if int(opt['stops']) > 1:
+            for a in areas[1:]:
+                log('      another area: %d objects, %d, round (%d, %d, %d): %s' % (len(a), worth(a), *a[0][3][:3],
+                    'a stop' if any(a[0] in s for s in stops) else 'no stop (under %d %% of the richest, or more than %d stops)' % (100 * STOP_SHARE, int(opt['stops']))))
     else:
         area = []
         notes.append('NO LOOT OBJECT within %d of the START row\'s mesh part: the loot wait is a plain TriggerDelay2 and the route turns '
@@ -672,15 +995,32 @@ def plan(B, opt=None, log=print):
         if not enter:
             notes.append('NO ENTERS_BANK trigger on the route: the bots get no stage 1 and ZLootTactic never runs (kl2 0x451920 needs stage >= 1)')
     e_item = enter and ('enter', 'ENTERS_BANK %s (stage 1)' % name(enter[0]), enter[2], enter[0], enter[1])
-    l_item = ('loot', 'the loot (%d objects)' % len(area), la, None, None) if area else None
+    head = [('start', 'the START row', a0, None, None)] + ([e_item] if e_item else [])
+    if len(stops) > 1:
+        # the order of the stops: the nearest next, from the ENTERS_BANK place on (a bot loots from stage 1 on only)
+        cur, rest, order = head[-1][2], list(stops), []
+        while rest:
+            def far(s, cur=cur):
+                got = nav.path(cur, s[0][3], ban)
+                return got[1] if got else 1e30
+            nxt_ = min(rest, key=far)
+            rest.remove(nxt_); order.append(nxt_); cur = nxt_[0][3]
+        stops = order
+        area, la = stops[0], stops[0][0][3]
+    one = len(stops) == 1
+    l_items = [('loot', 'the loot (%d objects)' % len(a) if one else 'loot stop %d: %d objects, %d (%s)' % (
+                    n + 1, len(a), worth(a), ', '.join(name(x[0]).split('\\')[-1] for x in a[:3]) + (' ..' if len(a) > 3 else '')),
+                a[0][3], None, None) for n, a in enumerate(stops)]
+    last = (l_items or head)[-1][2]                     # where the way out begins
 
-    def tail(after, lootlast):
-        """(exit, level) stations for a route whose stretch before them ends at `after`; lootlast: the loot comes
-        between the way out and the level exit (a map whose loot lies beyond its EXITS_BANK doors: M01's senator)."""
+    def tail(pos):
+        """The EXITS_BANK station put after `pos` of the stops (0 = before the first: a map whose loot lies beyond
+        its doors, M01's senator) and the level exit station -> (exit item or None, level item or None, notes)."""
         mute = len(notes)
-        frm = la if lootlast else after
-        lev = best_box(S['exits'], frm, park0, 'level exit') or best_box(S['triggers'].get('BOARDS', []), frm, park0, 'BOARDS')
-        out_ = best_box(S['triggers'].get('EXITS', []), after, la if lootlast else (lev[2] if lev else park0), 'EXITS_BANK')
+        lev = best_box(S['exits'], last, park0, 'level exit') or best_box(S['triggers'].get('BOARDS', []), last, park0, 'BOARDS')
+        after = (l_items[pos - 1] if pos else head[-1])[2]
+        to = l_items[pos][2] if pos < len(l_items) else (lev[2] if lev else park0)
+        out_ = best_box(S['triggers'].get('EXITS', []), after, to, 'EXITS_BANK')
         said = notes[mute:]
         del notes[mute:]
         x = out_ and ('exit', 'EXITS_BANK %s (stage 2)' % name(out_[0]), out_[2], out_[0], out_[1])
@@ -698,26 +1038,24 @@ def plan(B, opt=None, log=print):
             n += got[1]
         return n
 
-    head = [('start', 'the START row', a0, None, None)] + ([e_item] if e_item else [])
     park = ('park', '', park0, None, None)
 
     def pre_ok(q):
-        """Do the stations of q up to and including the loot lie outside the level exit boxes, with a way between
-        them that stays outside? (No loot station: there is nothing to wait for, any order is as good.)"""
-        idx = next((i for i, it in enumerate(q) if it[0] == 'loot'), None)
+        """Do the stations of q up to and including the LAST loot stop lie outside the level exit boxes, with a way
+        between them that stays outside? (No loot station: there is nothing to wait for, any order is as good.)"""
+        idx = max([i for i, it in enumerate(q) if it[0] == 'loot'], default=None)
         if not ban or idx is None:
             return True
         return all(okp(b[2]) and nav.path(a[2], b[2], ban) is not None for a, b in zip(q[:idx], q[1:idx + 1]))
 
     if opt['no_stage']:
-        seq = head + ([l_item] if l_item else [])
+        seq = head + l_items
     else:
-        x1, v1, said1 = tail((l_item or head[-1])[2], False)
-        seqs = [(head + [i for i in (l_item, x1, v1) if i], said1)]
-        if l_item:
-            x2, v2, said2 = tail(head[-1][2], True)
-            if x2:
-                seqs.append((head + [i for i in (x2, l_item, v2) if i], said2))
+        seqs = []
+        for pos in range(len(l_items), -1, -1):         # the way out after the last stop first: it wins a tie
+            x, v, said = tail(pos)
+            if x or pos == len(l_items):
+                seqs.append((head + l_items[:pos] + ([x] if x else []) + l_items[pos:] + ([v] if v else []), said))
         lens = [length(q + [park]) for q, _s in seqs]
         good = [i for i, (q, _s) in enumerate(seqs) if pre_ok(q)]
         if not good:
@@ -726,10 +1064,16 @@ def plan(B, opt=None, log=print):
             ban = set()
         pick = min(good or range(len(seqs)), key=lambda i: lens[i])
         seq, said = seqs[pick]
-        if len(seqs) > 1:
+        if len(seqs) > 1 and one:
             log('route order: loot before the way out = %d of path, the way out before the loot = %d: %s' % (
                 *(round(x) for x in lens), 'the shorter is taken' if lens[pick] == min(lens) else
                 'the LONGER is taken - on the shorter one the bots walk into a level exit box before the loot'))
+        elif len(seqs) > 1:
+            log('route order: the way out (EXITS_BANK) after stop %s = %s of path: %s' % (
+                ' / '.join(str(sum(1 for it in q[:[i[0] for i in q].index('exit')] if it[0] == 'loot') if any(i[0] == 'exit' for i in q) else '-')
+                           for q, _s in seqs), ' / '.join('%d' % round(x) for x in lens),
+                'the shortest is taken' if lens[pick] == min(lens) else
+                'a LONGER one is taken - on the shortest the bots walk into a level exit box before their last loot stop'))
         notes += list(dict.fromkeys(said))
         if not any(i[0] == 'exit' for i in seq):
             notes.append('no EXITS_BANK trigger on the route (stage 2 is skipped; stage 3 does not need it: 0x5dd890 only raises)')
@@ -741,10 +1085,16 @@ def plan(B, opt=None, log=print):
     seq.append(('park', 'the boarding place%s' % (' (inside the AllyEscapeBox)' if ally else ' (%d..%d from the boarding action)' % PARK), park0, None, None))
 
     # ---- the anchors' path, the stations between them, seven places per station
-    route, total = [], 0.0
-    i_loot = next((i for i, it in enumerate(seq) if it[0] == 'loot'), None)
+    route, total, gates = [], 0.0, []
+    # option lane: on the way out (after the last loot wait) nobody is sent to stand in the escape car's road
+    lane = lanes(B) if opt['lane'] else []
+    off = lambda c: lane_dist(lane, c) >= LANE_CLEAR
+    if lane:
+        log('escape car: %d route(s), %d points; the places of the way out keep %d from them where the mesh allows' % (len(lane), sum(len(x) for x in lane), LANE_CLEAR))
+    hops = {(tuple(pa), tuple(pb)) for ds in nav.drops.values() for _j, pa, pb, _k in ds}
+    i_loot = max([i for i, it in enumerate(seq) if it[0] == 'loot'], default=None)
     for leg, ((ka, _wa, a, _na, _ca), (kb, wb, b, nb_, cb)) in enumerate(zip(seq, seq[1:])):
-        pre = bool(ban) and i_loot is not None and leg < i_loot          # this leg ends at or before the loot
+        pre = bool(ban) and i_loot is not None and leg < i_loot          # this leg ends at or before the last loot stop
         got = nav.path(a, b, ban if pre else ())
         if got is None:
             raise ValueError('no path on the mesh from %s to %s' % (ka, kb))
@@ -753,6 +1103,19 @@ def plan(B, opt=None, log=print):
         run, nxt = 0.0, SPACING
         for p, q in zip(pts, pts[1:]):
             d = math.dist(p, q)
+            if (tuple(p), tuple(q)) in hops:
+                # the way goes over a link here: the seven gather in front of it first (a step ends there, see
+                # chunks), GATE_BACK inside their side of the mesh - inside an AllyEscapeBox, so that a bot the
+                # link does not carry is still taken aboard from there, as on every build before the link
+                u = math.dist(p, q) or 1.0
+                g = snap(tuple(p[i] + (p[i] - q[i]) / u * GATE_BACK for i in range(3)), 260.0)
+                if g:
+                    route.append(('gate', 'in front of the drop at (%d, %d, %d): %d across, %d down' % (
+                        *p, math.hypot(p[0] - q[0], p[2] - q[2]), p[1] - q[1]), g, None, None, length, pre))
+                    gates.append(g)
+                run += d
+                nxt = max(nxt, run + 300.0)             # the next way place not nearer than 3 m beyond the landing
+                continue
             while d > 0 and run + d >= nxt and length - nxt > SPACING * 0.5:
                 t = (nxt - run) / d
                 m = tuple(p[i] + (q[i] - p[i]) * t for i in range(3))
@@ -760,6 +1123,12 @@ def plan(B, opt=None, log=print):
                 if pre:                             # a place beside the path, but not one in a level exit box
                     c = [x for x in nav.around(m, 260.0, home, dy=260.0) if okp(x)]
                     s = (nav.spots(c, 1, 0.0, ref=m) or [None])[0]
+                elif lane and i_loot is not None and leg >= i_loot and not off(m):
+                    # beside the road, and on the side they come from: a place across the road costs the way back
+                    c = [x for x in nav.around(m, LANE_REACH, home, dy=260.0) if off(x)]
+                    back = route[-1][2] if route else a
+                    c.sort(key=lambda x: math.dist(x[:3], m) + 0.5 * math.dist(x[:3], back[:3]))
+                    s = (nav.spots(c[:60], 1, 0.0, ref=c[0]) or [None])[0] if c else None
                 s = s or snap(m, 260.0)
                 if s:
                     route.append(('way', 'on the way to %s' % kb, s, None, None, length, pre))
@@ -767,18 +1136,41 @@ def plan(B, opt=None, log=print):
             run += d
         route.append((kb, wb, b, nb_, cb, length, pre))
     P['path_length'] = round(total)
-    places = []                                     # per station: (kind, what, [7 places])
+    places, stop_no = [], 0                         # per station: (kind, what, [7 places])
+    after_loot = not stops                          # the stations behind the last loot stop
+    came = a0
+    def near(c, anchor):
+        """The place of c to gather round: the anchor - or, beside the car's road, the one of c that is nearest
+        to the anchor without crossing over from where the bots come (`came`)."""
+        if not (lane and after_loot) or not c:
+            return anchor
+        return min(c, key=lambda x: math.dist(x[:3], anchor[:3]) + 0.5 * math.dist(x[:3], came[:3]))
     for kind, what, anchor, node, cands, _len, pre in route:
         keep = (lambda c: [x for x in c if okp(x)] or c) if pre else (lambda c: c)
+        if lane and after_loot and not pre:             # the way out: beside the car's road
+            keep = lambda c: [x for x in c if off(x)] or c
+            if kind == 'level' and node is not None:
+                # the whole box counts here, not its middle INSIDE share: the three size values ARE half extents
+                # (run BOT1 / BOT2: M01's bots called the car at a door 7 inside the box's edge, re/bots.md 11),
+                # and the middle of a level exit box is the car's road
+                cands = box_places(B, nav, node, home, share=0.9) or cands
         if cands:
             cands = keep(cands)
         if kind == 'loot':
             got, used = [], []
+            area = stops[stop_no]; stop_no += 1
+            after_loot = stop_no >= len(stops)
             for b in range(7):                      # each bot beside 'its' loot object, the richest first
                 k, p, _amount, s = area[b % len(area)]
                 c = nav.spots(keep(nav.around(p, LOOT_SNAP, home, dy=260.0)), 1 + len(used), SEP, ref=s)
                 c = [x for x in c if all(math.hypot(x[0] - u[0], x[2] - u[2]) >= SEP for u in used)] or c
                 used.append(c[0]); got.append(c[0])
+        elif kind == 'gate':
+            c = box_places(B, nav, None, home, size=ALLY_SIZE, centre=(anchor[0], anchor[1] + ALLY_UP, anchor[2]))
+            c = [x for x in c if abs(x[1] - anchor[1]) <= 30.0]             # their side of the drop only
+            got = nav.spots(c, 7, 90.0, ref=anchor) or [anchor]
+            if len(got) < 7:
+                got = nav.spots(c, 7, 60.0, ref=anchor) or got
         elif kind == 'park':
             if ally:
                 c = box_places(B, nav, None, home, size=ALLY_SIZE, centre=(anchor[0], anchor[1] + ALLY_UP, anchor[2]))
@@ -787,15 +1179,20 @@ def plan(B, opt=None, log=print):
                     got = nav.spots(c, 7, 60.0, ref=anchor) or got
             else:
                 c = [x for x in nav.around(anchor, PARK[1], home, dy=260.0) if PARK[0] <= math.hypot(x[0] - ap[0], x[2] - ap[2]) <= PARK[1]]
-                got = nav.spots(c, 7, SEP, ref=anchor)
+                if lane and len([x for x in c if off(x)]) >= 7:
+                    c = [x for x in c if off(x)]        # beside the road, not in it: the car comes through here
+                elif lane:
+                    notes.append('the boarding place: fewer than 7 places %d from the car\'s route within %d..%d of the boarding action; the bots wait in the road' % ((LANE_CLEAR,) + PARK))
+                got = nav.spots(c, 7, SEP, ref=near(c, anchor))
                 if not got:
                     raise ValueError('no place %d..%d from the boarding action on the mesh' % PARK)
         elif cands:
-            got = nav.spots(cands, 7, SEP, ref=anchor) or [anchor]
+            got = nav.spots(cands, 7, SEP, ref=near(cands, anchor)) or [anchor]
             if len(got) < 7:                        # a doorway: closer together rather than all on one spot
-                got = nav.spots(cands, 7, 50.0, ref=anchor) or got
+                got = nav.spots(cands, 7, 50.0, ref=near(cands, anchor)) or got
         else:
             got = nav.spots(keep(nav.around(anchor, 260.0, home)), 7, SEP, ref=anchor) or [anchor]
+        came = got[0]
         places.append((kind, what, node, [got[b % len(got)] for b in range(7)], len(got)))
         log('  %-5s %-78s round (%6d %5d %6d): %d distinct places, clearance %d..%d' % (
             kind, what[:78], *anchor[:3], len(got), min(nav.clearance(*g[:3]) for g in got), max(nav.clearance(*g[:3]) for g in got)))
@@ -808,21 +1205,89 @@ def plan(B, opt=None, log=print):
             notes.append('the AllyEscapeBox stands at (%d, %d, %d), %d from the boarding action: bots inside it board (kl2 0x907a50: no stage and no '
                          'path test) when the vehicle is in state 3 / 4 - they vanish there, they do not walk to the vehicle'
                          % (*ally_at, math.hypot(ally_at[0] - ap[0], ally_at[2] - ap[2])))
+    if gates and not ally and opt['ally_box'] != 'off':
+        ally_at = (gates[0][0], gates[0][1] + ALLY_UP, gates[0][2])
+        notes.append('an AllyEscapeBox stands at the drop, round (%d, %d, %d): the fall-back if the AI does not take the link (kl2 0x907a50 boards a '
+                     'bot inside it when the vehicle is in state 3 / 4); a bot that takes the link boards at the vehicle through the tactic' % ally_at)
+    P['gates'] = [[round(v, 1) for v in g[:3]] for g in gates]
     P['ally_at'] = ally_at and [round(v, 1) for v in ally_at]
+    # ---- the cases (option cases). A loot object of type CONTAINER cannot be taken before its OnlineMoneyContainer
+    # was opened (kl2 0x766e50 -> after the container's own delay 0x868fb0 makes each object of its field 0 active;
+    # an object that is not active ignores the take message, 0x6cdb8f). Stock containers are opened by their own
+    # TriggerBox2 'Open' when somebody stands within 125..150 (117 of 117, F01 F03 F08); Dead Men's jewel and watch
+    # cases have no such trigger: their glass (HavokShatterGlass + RelayMessage HavokShattered -> 'Open') has to be
+    # SHOT, and no AI code shoots at an object. So a route step tells the case: 'Activate' to the glass (kl2
+    # 0x471443 -> 0x8d1b60: the same two routines a bullet ends in, 0x67e6a0 + 0x79bd10) and 'Open' to the container
+    # (0x41a01d: no activator needed; a second 'Open' is ignored, byte +0x4c).
+    box_of, glass_of = collections.defaultdict(list), collections.defaultdict(list)
+    for k, _i, v in kl_fa.controllers(sc, 'OnlineMoneyContainer'):
+        for s in (v[0] if v and isinstance(v[0], list) else []):
+            for j in sc.resolve(s):
+                box_of[j].append(k)
+    for k, _i, v in kl_fa.controllers(sc, 'RelayMessage'):
+        if len(v) > 2 and v[0] == 'HavokShattered' and v[1] == 'Open' and kl_fa.has(sc, k, 'HavokShatterGlass'):
+            for j in sc.resolve(v[2]):
+                if kl_fa.has(sc, j, 'OnlineMoneyContainer'):
+                    glass_of[j].append(k)
+    loot_at = [i for i, x in enumerate(places) if x[0] == 'loot']
+    waits = []
+    for n, a in enumerate(stops):
+        base = 10 + 20 * n
+        w = collections.OrderedDict(name='%03d_Timer_done_looting' % (base + 10), stop=n, seconds=int(opt['loot_seconds']),
+                                    loot=[R_ + name(x[0]) for x in a[:LOOT_MAX]], worth=worth(a), timer='%03d_Timer_at_cases' % (base + 8),
+                                    relays=['%03d_Relay_break_glass' % (base + 8), '%03d_Relay_open_cases' % (base + 8)],
+                                    cases=collections.OrderedDict())
+        cs = list(dict.fromkeys(c for x in a[:LOOT_MAX] for c in box_of.get(x[0], [])))
+        if opt['cases'] == 'glass':
+            cs = [c for c in cs if glass_of.get(c)]
+        elif opt['cases'] != 'all':
+            cs = []
+        if cs:
+            spot = places[loot_at[n]][3]
+            for c in cs:
+                p = B.at(c)
+                for b in sorted(range(7), key=lambda b: math.hypot(spot[b][0] - p[0], spot[b][2] - p[2]))[:CASE_BOTS]:
+                    d = w['cases'].setdefault(BOTS[b], {'glass': [], 'open': []})
+                    d['open'].append(R_ + name(c))
+                    d['glass'] += [R_ + name(g) for g in glass_of.get(c, [])]
+            w['containers'] = len(cs)
+            w['glass'] = sum(len(glass_of.get(c, [])) for c in cs)
+            log('  cases of stop %d: %d containers (%d behind glass, %d panes); each is opened by %d bots, %d .. %d containers a bot'
+                % (n + 1, len(cs), sum(1 for c in cs if glass_of.get(c)), w['glass'], CASE_BOTS,
+                   min([len(d['open']) for d in w['cases'].values()] + [0] * (7 - len(w['cases']))), max(len(d['open']) for d in w['cases'].values())))
+        waits.append(w)
+    if not waits:                                       # no loot in reach: one plain timer, as before
+        waits.append(collections.OrderedDict(name='020_Timer_done_looting', stop=0, seconds=int(opt['loot_seconds']), loot=[], worth=0,
+                                             timer='018_Timer_at_cases', relays=[], cases={}))
+    P['waits'] = waits
     # ---- per bot
     # ---- steps: up to STEP_MAX places each; a step does not END in a doorway all seven share (they would hold there)
-    cut = next((i for i, x in enumerate(places) if x[0] == 'loot'), next((i for i, x in enumerate(places) if x[0] == 'enter'), 0))
-    steps = []
-    for leg, idx, base, word in (('in', list(range(cut + 1)), 10, 'to_loot'), ('out', list(range(cut + 1, len(places))), 30, 'out')):
-        chunk, n = [], 0
+    def chunks(idx):
+        out, chunk = [], []
         for i in idx:
             chunk.append(i)
             keep = []
             if len(chunk) == STEP_MAX and places[i][4] < 7 and i != idx[-1]:
                 keep = [chunk.pop()]                    # the doorway opens the next step instead
-            if i == idx[-1] or len(chunk) >= STEP_MAX or keep:
-                steps.append({'name': '%03d_DefendBehaviour_%s' % (base + n, word), 'leg': leg, 'stations': chunk})
-                chunk, n = keep, n + 1
+            if i == idx[-1] or len(chunk) >= STEP_MAX or keep or places[i][0] == 'gate':
+                out.append(chunk)
+                chunk = keep
+        return out
+    bounds = loot_at or [next((i for i, x in enumerate(places) if x[0] == 'enter'), 0)]
+    steps, start = [], 0
+    for n, i in enumerate(bounds + [len(places) - 1]):
+        out_leg = n == len(bounds)
+        idx = list(range(start, i + 1))
+        start = i + 1
+        if not idx:
+            continue
+        if not out_leg and n < len(waits) and waits[n]['cases'] and len(idx) > 1:
+            parts = chunks(idx[:-1]) + [[idx[-1]]]      # the loot place is a step of its own: the cases go before it
+        else:
+            parts = chunks(idx)
+        for m, chunk in enumerate(parts):
+            steps.append({'name': '%03d_DefendBehaviour_%s' % (10 + 20 * n + m, 'out' if out_leg else 'to_loot'),
+                          'leg': 'out' if out_leg else 'in', 'stop': None if out_leg else n, 'stations': chunk})
     P['steps'] = steps
     P['bots'] = collections.OrderedDict()
     for b, N in enumerate(BOTS):
@@ -832,7 +1297,7 @@ def plan(B, opt=None, log=print):
                         'places': [[round(v, 1) for v in x[3][b][:3]] for x in places],
                         'model': S['heroes'][N][0], 'snd': list(S['heroes'][N][1:])}
     # ---- where each bot first is inside a level exit box (= where it calls the vehicle), walked as the check walks it
-    i_wait = next((i for i, x in enumerate(places) if x[0] == 'loot'), None)
+    i_wait = max([i for i, x in enumerate(places) if x[0] == 'loot'], default=None)
     P['vehicle_call'] = collections.OrderedDict()
     early = []
     for b, N in enumerate(BOTS):
@@ -851,7 +1316,7 @@ def plan(B, opt=None, log=print):
     if early and not opt['early_call'] and not any(n.startswith('CALLS EARLY') for n in notes):
         notes.append('CALLS EARLY: bots %s cross a level exit box before the loot wait although the stations avoid it' % early)
     P['start_above_feet'] = [round(p[1] - fy) for p, _f in S['starts']]
-    P['loot'] = [R_ + name(x[0]) for x in area[:LOOT_MAX]]
+    P['loot'] = list(waits[0]['loot'])                  # (the first stop's; every stop's list is in P['waits'])
     P['guards'] = []
     if opt['wait_guards'] and area:
         P['guards'] = sorted({R_ + name(k) for k, p in S['guards'] if math.dist(p, la[:3]) <= GUARD_NEAR})
@@ -869,7 +1334,8 @@ def plan(B, opt=None, log=print):
 
 
 DEFAULTS = {'ally_box': 'auto', 'wait_guards': False, 'loot_seconds': 20, 'start_delay': 10.0, 'heal': False, 'no_stage': False,
-            'tree': True, 'park': None, 'early_call': False}
+            'tree': True, 'park': None, 'early_call': False,
+            'stops': 1, 'cases': 'off', 'exit_boxes': 'keep', 'drop': False, 'lane': False}    # 2026-10-10 evening; RECIPE turns them on per map
 
 
 # ------------------------------------------------------------------ node forms from the stock levels
@@ -1020,15 +1486,43 @@ def make(B, P, log=print):
             M.set(act, 'ZSoldier', {2: 'eSometimes'})
         # ---- the route
         steps = [(st['name'], [b['places'][i] for i in st['stations']], st['leg'] == 'out', st['leg']) for st in P['steps']]
-        waits = []
-        if P['guards']:
-            waits.append(('015_TriggerActorsDead_Lootarea', 'TriggerActorsDead', {0: P['guards'], 1: 0}, 2))
-        if P['loot']:
-            waits.append(('020_Timer_done_looting', 'TriggerLootDepleted', {0: P['loot'], 1: int(opt['loot_seconds']), 2: 0, 3: 0}, 4))
-        else:
-            waits.append(('020_Timer_done_looting', 'TriggerDelay2', {0: float(opt['loot_seconds']), 1: 0.0, 2: -1.0, 3: 0}, 4))
-        chain = [s[0] for s in steps if s[3] == 'in'] + [w[0] for w in waits] + [s[0] for s in steps if s[3] == 'out'] + ['040_SquadModifier_tight_defense_van']
+        # the chain: per loot stop its steps, [the cases timer before the stop's last step], [the guards' wait], the
+        # loot wait; then the way out and the last modifier. One stop without cases = the chain as it always was
+        # (010.. -> 020_Timer_done_looting -> 030.. -> 040_SquadModifier_tight_defense_van).
+        plan_waits = P.get('waits') or [{'name': '020_Timer_done_looting', 'stop': 0, 'seconds': int(opt['loot_seconds']), 'loot': P['loot'], 'cases': {}}]
+        waits, chain, fan = [], [], {}
+        for w in plan_waits:
+            names = [st['name'] for st in P['steps'] if st['leg'] == 'in' and st.get('stop', 0) == w['stop']]
+            cs = w['cases'].get(N) or w['cases'].get(str(N))
+            if cs and (cs['glass'] or cs['open']):
+                # DefendBehaviourRout -> TriggerDelay2 -> DefendBehaviourRout are stock transitions (329 and 119 in
+                # the nine stock squads); TriggerDelay2 -> a RelayMessageList is stock F02's (2). The timer stands
+                # BEFORE the step that walks to the loot place, so that step ends in the loot wait as it always did.
+                names.insert(max(0, len(names) - 1), w['timer'])
+                relays = [(w['relays'][0], 'Activate', list(dict.fromkeys(cs['glass']))), (w['relays'][1], 'Open', list(dict.fromkeys(cs['open'])))]
+                fan[w['timer']] = [r for r in relays if r[2]]
+                waits.append((w['timer'], 'TriggerDelay2', {0: float(CASE_DELAY), 1: 0.0, 2: -1.0, 3: 0}, 4))
+            if P['guards'] and w['stop'] == 0:
+                names.append('015_TriggerActorsDead_Lootarea')
+                waits.append(('015_TriggerActorsDead_Lootarea', 'TriggerActorsDead', {0: P['guards'], 1: 0}, 2))
+            names.append(w['name'])
+            if w['loot']:
+                waits.append((w['name'], 'TriggerLootDepleted', {0: w['loot'], 1: int(w['seconds']), 2: 0, 3: 0}, 4))
+            else:
+                waits.append((w['name'], 'TriggerDelay2', {0: float(w['seconds']), 1: 0.0, 2: -1.0, 3: 0}, 4))
+            chain += names
+        last = '%03d_SquadModifier_tight_defense_van' % (20 + 20 * len(plan_waits))
+        chain += [s[0] for s in steps if s[3] == 'out'] + [last]
         nxt = {a: [sq(N, '\\' + c)] for a, c in zip(chain, chain[1:])}
+        for timer, relays in fan.items():               # the next link of the chain first (check() follows the first)
+            nxt[timer] = nxt[timer] + [sq(N, '\\' + r[0]) for r in relays]
+            for rname, msg, targets in relays:
+                # stock F01's form: Gameplay!merc_bot_squad!KickdoorMonitor!KickDoor_RelayList_Door0n = ZBoxPrimitive +
+                # RelayMessageList {'AITrigger' -> 'DoorOpened', 8 / 10 money cases, 0.0}; here the message is the
+                # glass's 'Activate' or the container's 'Open'
+                r = top.add(M.clone('F01', R_ + SQUAD + 'KickdoorMonitor!KickDoor_RelayList_Door08', rname))
+                M.place(r, (0.0, 0.0, 0.0))
+                M.set(r, 'RelayMessageList', {0: 'AITrigger', 1: msg, 2: targets, 3: 0.0})
         for nm, pl, sprint, _leg in steps:
             g = top.add(M.clone(Sx, sq(2, '\\020_DefendBehaviour_rout_merc_fight_left'), nm))
             M.place(g, (0.0, 0.0, 0.0))
@@ -1108,12 +1602,9 @@ def apply(B, P, dst, log=print, more=None):
     same = J.join(sc, [(sc, t) for t in sc.tops()], 'same')
     if J.fingerprints(same)[0] != J.fingerprints(sc)[0] or J.text(same, same.p.settings) != J.text(sc, sc.p.settings):
         raise ValueError('kl_prpjoin.join does not reproduce the build\'s .prp')
-    g0, b0 = B.scene.write()
-    if kl_gms.pack(g0) != B['.gms'] or b0 != B['.buf']:
-        raise ValueError('kl_scene does not reproduce the build\'s .gms / .buf')
+    if not getattr(B, 'verified', False):               # (prepare() has done it when it edited the build in memory)
+        _roundtrip(B)
     octx, rmi, rmc = O.Oct.parse(B['.oct']), O.RoomIndex.parse(B['.rmi']), O.RoomIndex.parse(B['.rmc'])
-    if octx.pack() != B['.oct'] or rmi.pack() != B['.rmi'] or rmc.pack() != B['.rmc']:
-        raise ValueError('kl_octree does not reproduce the build\'s .oct / .rmi / .rmc')
     pre = room_sets_check(B.scene, octx, rmi, rmc)
 
     M, tops = make(B, P, log)
@@ -1252,15 +1743,19 @@ def apply(B, P, dst, log=print, more=None):
 
 
 # ------------------------------------------------------------------ the check
-def check(folder, log=print, slot=SLOT, early_ok=None):
+def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
     """Every check on a finished folder -> (list of (severity, text), facts). Severities: FAIL (must be none before
     an install), NOTE (differs from stock, said aloud). early_ok: a bot that enters a level exit box before its
-    loot wait is a NOTE, not a FAIL (None: what the folder's bots.json says the build was made with)."""
+    loot wait is a NOTE, not a FAIL (None: what the folder's bots.json says the build was made with). links: walk the
+    mesh's links too (None: when bots.json says the build has a drop link of this module)."""
     B = Built(folder, slot)
+    bj = os.path.join(B.folder, 'bots.json')
+    popt = json.load(open(bj)).get('plan', {}).get('options', {}) if os.path.isfile(bj) else {}
     if early_ok is None:
-        bj = os.path.join(B.folder, 'bots.json')
-        early_ok = bool(os.path.isfile(bj) and json.load(open(bj)).get('plan', {}).get('options', {}).get('early_call'))
-    sc, nav, out = B.sc, Nav(B.scene.nav), []
+        early_ok = bool(popt.get('early_call'))
+    if links is None:                                   # a build with a drop link written by this module (option drop)
+        links = bool(popt.get('drop'))
+    sc, nav, out = B.sc, Nav(B.scene.nav, links=links), []
     fail = lambda s: out.append(('FAIL', s))
     note = lambda s: out.append(('NOTE', s))
     S = stations(B, nav)
@@ -1340,6 +1835,24 @@ def check(folder, log=print, slot=SLOT, early_ok=None):
                 ctrl_of[k] = (cn, v)
     ally_boxes = [k for k, _i, _v in kl_fa.controllers(sc, 'AllyEscapeBox')]
     facts['ally_boxes'] = [name(k) for k in ally_boxes]
+    # the cases: which container holds which loot object, which glass opens which container, which opens by itself
+    box_of, glass_of, self_open = collections.defaultdict(list), collections.defaultdict(list), set()
+    for k, _i, v in kl_fa.controllers(sc, 'OnlineMoneyContainer'):
+        for s in (v[0] if v and isinstance(v[0], list) else []):
+            for j in res(s):
+                box_of[j].append(k)
+    for k, _i, v in kl_fa.controllers(sc, 'TriggerBox2'):
+        if 'Open' in v:                                 # the stock form: somebody within reach opens the container
+            self_open.update(j for s in (v[0] if v and isinstance(v[0], list) else []) for j in res(s) if kl_fa.has(sc, j, 'OnlineMoneyContainer'))
+    for k, _i, v in kl_fa.controllers(sc, 'RelayMessage'):
+        if len(v) > 2 and v[0] == 'HavokShattered' and v[1] == 'Open' and kl_fa.has(sc, k, 'HavokShatterGlass'):
+            for j in res(v[2]):
+                glass_of[j].append(k)
+    relay_of = {k: v for k, _i, v in kl_fa.controllers(sc, 'RelayMessageList') if k in mine}
+    # a case is opened for everybody by whichever squad's relay names it (each case is named by CASE_BOTS squads)
+    opened_all = {t for rv in relay_of.values() if rv[1] == 'Open' for s in rv[2] for t in res(s)}
+    broken_all = {t for rv in relay_of.values() if rv[1] == 'Activate' for s in rv[2] for t in res(s)}
+    used_relays = set()
     # 3. per squad: the walk of its chain
     enters, lev = S['triggers'].get('ENTERS', []), S['exits'] + S['triggers'].get('BOARDS', [])
     act = S['action']
@@ -1349,6 +1862,7 @@ def check(folder, log=print, slot=SLOT, early_ok=None):
     for top, actor in sorted(squads.items(), key=lambda kv: sc.names[kv[0]]):
         first = [j for s in firsts for j in res(s) if sc.top[j] == top]
         places, seen, k, tight, waits, n_in = [], set(), first[0] if first else None, False, [], None
+        opened, broken, relays = set(), set(), 0
         while k is not None and k not in seen:
             seen.add(k)
             cn, v = ctrl_of.get(k, (None, None))
@@ -1362,10 +1876,28 @@ def check(folder, log=print, slot=SLOT, early_ok=None):
             elif cn == 'SquadModifierBehaviour':
                 tight = v[9] == 'eDM_Tight'
             else:
-                if n_in is None:
-                    n_in = len(places)                  # the places walked before the first wait (the loot wait)
+                # the places walked before the LAST loot wait: up to there a bot must stay out of the level exit
+                # boxes. (A timer that only fans out to the cases' relays is no loot wait.)
+                if cn != 'TriggerDelay2' or 'done_looting' in sc.names[k]:
+                    n_in = len(places)
                 waits.append((cn, v))
             nx = [j for s in v[NEXT[cn]] for j in res(s)]
+            # a timer may name the cases' relays beside the next link of the chain (this module's 0n8_Timer_at_cases)
+            for j in nx:
+                if j in relay_of:
+                    rv = relay_of[j]
+                    relays += 1
+                    used_relays.add(j)
+                    tg = [t for s in rv[2] for t in res(s)]
+                    if rv[0] != 'AITrigger' or len(tg) != len(rv[2]) or not tg:
+                        fail('%s: RelayMessageList %s: in-message %r, %d of %d targets resolve' % (sc.names[top], name(j), rv[0], len(tg), len(rv[2])))
+                    if rv[1] == 'Activate' and all(kl_fa.has(sc, t, 'HavokShatterGlass') for t in tg):
+                        broken.update(tg)
+                    elif rv[1] == 'Open' and all(kl_fa.has(sc, t, 'OnlineMoneyContainer') for t in tg):
+                        opened.update(tg)
+                    else:
+                        fail('%s: RelayMessageList %s sends %r to something that is no glass / no money container' % (sc.names[top], name(j), rv[1]))
+            nx = [j for j in nx if j in ctrl_of] or [j for j in nx if j not in relay_of]
             k = nx[0] if nx else None
         if not places:
             fail('%s: no route place' % sc.names[top]); continue
@@ -1420,12 +1952,23 @@ def check(folder, log=print, slot=SLOT, early_ok=None):
                 note('%s: the last place is %d from the boarding action' % (sc.names[top], d))
         if not tight:
             note('%s: the chain does not end in a tight-defense SquadModifierBehaviour (F01 F03 F04 F07 do)' % sc.names[top])
+        shut = set()
         for cn, v in waits:
             if cn == 'TriggerLootDepleted':
                 bad = [s for s in v[0] if not any(kl_fa.has(sc, j, 'OnlineMoneyCtrl') or kl_fa.has(sc, j, 'OnlineMoneyContainer') or
                                                   any(kl_fa.has(sc, c, 'OnlineMoneyCtrl') for c in range(j, sc.end[j])) for j in res(s))]
                 if bad or not v[0]:
                     fail('%s: TriggerLootDepleted names %d objects, %d of them no money object (an empty list fires at once: 0x811fb0)' % (sc.names[top], len(v[0]), len(bad)))
+                # a loot object in a container that only its glass opens: somebody has to open it for the bot
+                for s in v[0]:
+                    for j in res(s):
+                        for c in box_of.get(j, []):
+                            if c not in self_open and c not in opened_all and not (set(glass_of.get(c, [])) & broken_all):
+                                shut.add(c)
+        if shut:
+            fail('%s: its loot wait names loot in %d case(s) that open only when their glass is SHOT, and no step of any squad opens them '
+                 '(an object in a shut container cannot be taken, kl2 0x6cdb8f; no AI shoots at glass): e.g. %s'
+                 % (sc.names[top], len(shut), name(sorted(shut)[0]).split(chr(92))[-1]))
             if cn == 'TriggerActorsDead':
                 bad = [s for s in v[0] if not any(sc.cls(c) == 'ZFFActor' for j in res(s) for c in range(j, sc.end[j]))]
                 if bad or not v[0]:
@@ -1434,8 +1977,13 @@ def check(folder, log=print, slot=SLOT, early_ok=None):
                                  'least_clearance': round(low), 'stage_1': st1, 'stage_3': st3, 'ends_in_ally_box': inbox,
                                  'places_before_the_loot_wait': n_in,
                                  'first_inside_a_level_exit_box': call and {'path': round(call[0]), 'place': call[1], 'box': name(call[2])},
-                                 'waits': [(cn, len(v[0]) if isinstance(v[0], list) else v[0], v[1]) for cn, v in waits]}
+                                 'waits': [(cn, len(v[0]) if isinstance(v[0], list) else v[0], v[1]) for cn, v in waits],
+                                 'cases': {'relays': relays, 'glass_broken': len(broken), 'containers_opened': len(opened)}}
     facts['routes'] = routes
+    for j in sorted(set(relay_of) - used_relays):
+        fail('%s: a RelayMessageList no walked chain names' % name(j))
+    facts['cases'] = {'glass_broken_by_a_step': len(broken_all), 'containers_opened_by_a_step': len(opened_all),
+                      'containers_that_need_a_shot': sum(1 for k, _i, _v in kl_fa.controllers(sc, 'OnlineMoneyContainer') if k not in self_open)}
     # 4. where the seven stand
     if feet:
         near = [min(math.hypot(f[0] - p[0], f[2] - p[2]) for p, _f in S['starts']) for f in feet]
@@ -1509,6 +2057,37 @@ def check(folder, log=print, slot=SLOT, early_ok=None):
     return out, facts
 
 
+def guns_entries(folder, log=print, slot=SLOT):
+    """KLGuns.ini of a build made before 2026-10-10 evening has no 'Entries=' (the chunk count of the .prm beside
+    it); klgun.c refuses such a file since then and kl_map_guns.py check says so, with the line to add. The squad
+    step does not change the chunk count, so the line is added to the COPY in the output folder - nothing else of
+    the file changes. -> the count written, or None when there was nothing to do."""
+    ini = os.path.join(folder, 'KLGuns.ini')
+    if not os.path.isfile(ini):
+        return None
+    raw = open(ini, 'rb').read()
+    text = raw.decode('latin1')
+    nl = '\r\n' if '\r\n' in text else '\n'
+    lines = text.split(nl)
+    try:
+        a = next(i for i, l in enumerate(lines) if l.strip() == '[Guns]')
+    except StopIteration:
+        return None
+    b = next((i for i in range(a + 1, len(lines)) if lines[i].strip().startswith('[')), len(lines))
+    if any(l.split('=')[0].strip() == 'Entries' for l in lines[a + 1:b]):
+        return None
+    with zipfile.ZipFile(os.path.join(folder, slot + '_Main.zip')) as z:
+        prm = z.read(next(n for n in z.namelist() if n.endswith('_Main.prm')))
+    n = struct.unpack_from('<I', prm, 4)[0]
+    while b > a + 1 and not lines[b - 1].strip():
+        b -= 1
+    lines.insert(b, 'Entries=%d' % n)
+    with open(ini, 'wb') as f:
+        f.write(nl.join(lines).encode('latin1'))
+    log('KLGuns.ini: the line Entries=%d added under [Guns] (the .prm\'s chunk count; klgun.c and kl_map_guns.py check want it since 2026-10-10)' % n)
+    return n
+
+
 def build(src, dst, opt=None, log=print):
     """plan + apply + check on the written folder; bots.txt / bots.json in it -> (findings, report)."""
     lines = []
@@ -1516,9 +2095,12 @@ def build(src, dst, opt=None, log=print):
         lines.append(str(s)); log(s)
     B = Built(src)
     say('kl_fa_bots build %s -> %s' % (src, dst))
+    edits = prepare(B, opt, say)
     P = plan(B, opt, say)
+    P['edits'] = edits
     rep = apply(B, P, dst, say)
-    out, facts = check(dst, say, early_ok=bool(P['options'].get('early_call')))
+    rep['guns_ini_entries'] = guns_entries(dst, say)
+    out, facts = check(dst, say, early_ok=bool(P['options'].get('early_call')), links=bool(P['options'].get('drop')))
     rep.update(plan=P, check=[list(x) for x in out], facts=facts)
     with open(os.path.join(dst, 'bots.json'), 'w') as f:
         json.dump(rep, f, indent=1, default=str)
@@ -1537,6 +2119,10 @@ def diff(src, dst, log=print, also=()):
     A, B = Built(src), Built(dst)
     bad = []
     n = len(A.ents)
+    bj = os.path.join(B.folder, 'bots.json')
+    edits = (json.load(open(bj)).get('plan', {}).get('edits') or {}) if os.path.isfile(bj) else {}
+    cut, drops = set(edits.get('boxes') or {}), edits.get('drops') or []
+    also = tuple(also) + tuple(cut)
     new = B.ents[n:]
     if any(e.parent is not None and e.parent not in set(new) for e in new) or len(B.ents) < n:
         bad.append('the new entities are not whole top-level subtrees at the end of the scene')
@@ -1544,15 +2130,31 @@ def diff(src, dst, log=print, also=()):
     key = lambda e, ix: (e.name, e.tid, e.flags, e.group, e.model, e.rot, e.trans, e.raw, e.aux, e.ref,
                          None if e.parent is None else ix[e.parent], None if e.links is None else [(None if t is None else ix[t], b) for t, b in e.links])
     same = sum(key(a, ia) == key(b, ib) for a, b in zip(A.ents, B.ents))
-    if same != n:
-        bad.append('%d of %d entities of the build differ in the .gms' % (n - same, n))
+    moved = [a for a, b in zip(A.ents, B.ents) if key(a, ia) != key(b, ib) and a.parent is None and a.name.decode('latin1') in cut
+             and key(a, ia)[:6] + key(a, ia)[7:] == key(b, ib)[:6] + key(b, ib)[7:]]         # only the place differs
+    if same + len(moved) != n or len(moved) != len(cut):
+        bad.append('%d of %d entities of the build differ in the .gms (%d of them the %d cut level exit boxes)' % (n - same, n, len(moved), len(cut)))
+    same += len(moved)
     if [(None if a is None else ia[a], ia[b]) for a, b in A.scene.pairs] != [(None if a is None else ib[a], ib[b]) for a, b in B.scene.pairs]:
         bad.append('room pairs differ')
-    if (A.scene.head, A.scene.tail, A.scene.nav, A.scene.dyn, A.scene.tags, A.scene.budget, A.scene.fdx) != \
-            (B.scene.head, B.scene.tail, B.scene.nav, B.scene.dyn, B.scene.tags, B.scene.budget, B.scene.fdx):
-        bad.append('.buf head / tail, navigation mesh, dynamic list, tags, heap budget or FDX differ')
+    if (A.scene.head, A.scene.tail, A.scene.dyn, A.scene.tags, A.scene.budget, A.scene.fdx) != \
+            (B.scene.head, B.scene.tail, B.scene.dyn, B.scene.tags, B.scene.budget, B.scene.fdx):
+        bad.append('.buf head / tail, dynamic list, tags, heap budget or FDX differ')
+    if A.scene.nav != B.scene.nav:
+        # a drop link: two more waypoints, one more link; trees, polygons' shape, vertices and edges as they were
+        na, Aa = kl_pf4.split(A.scene.nav, True)
+        nb, Ab = kl_pf4.split(B.scene.nav, True)
+        shape = lambda X: [r[:16] + r[20:] for r in X[3]]            # a polygon without its 'waypoints before'
+        ok = (len(drops) > 0 and all(Aa[k] == Ab[k] for k in (0, 1, 2, 6, 8, 9, 11, 12)) and shape(Aa) == shape(Ab)
+              and nb[5] == na[5] + 2 * len(drops) and nb[7] == na[7] + len(drops) and nb[4] == na[4]
+              and [r[48:] for r in Aa[4]] == [r[48:] for r in Ab[4]])
+        if not ok:
+            bad.append('the navigation mesh differs in more than the %d drop link(s) of the plan' % len(drops))
+        else:
+            log('navigation mesh: %d waypoints -> %d, %d links -> %d (the plan\'s drop); trees, polygons, vertices, edges, area boxes equal'
+                % (na[5], nb[5], na[7], nb[7]))
     log('.gms / .buf: %d entities as they were (record, parent, light lists by entity), %d new (REF %d..%d; REF slots %d -> %d); head, surface '
-        'table, navigation mesh, dynamic list, heap budget equal' % (same, len(new), min(e.ref for e in new) if new else 0, max(e.ref for e in new) if new else 0,
+        'table, dynamic list, heap budget equal' % (same, len(new), min(e.ref for e in new) if new else 0, max(e.ref for e in new) if new else 0,
                                                                    A.scene.ref_slots, B.scene.ref_slots))
     # .prp: every old node with its strings spelled out; the one edit
     ta, tb = J.fingerprints(A.sc), J.fingerprints(B.sc)
@@ -1561,6 +2163,14 @@ def diff(src, dst, log=print, also=()):
     differ = [t for t in differ if A.sc.names[t] not in also]
     if len(B.sc.tops()) < len(A.sc.tops()) or any(not any(A.sc.p.key(nm) == 'AIMonitor' for nm, _b in A.sc.nodes[t]['ctrls']) for t in differ) or len(differ) > 1:
         bad.append('.prp: top-level subtrees other than the AIMonitor differ: %s' % mon[:5])
+    for nm in cut:                                      # a cut box: its x and its first size, nothing else
+        ka, kb = A.sc.resolve(R_ + nm), B.sc.resolve(R_ + nm)
+        va, vb = A.values(ka[0]), B.values(kb[0])
+        cv = lambda X, k: [(X.sc.p.key(nm), [kl_fa.value(X.sc, u) for u in units(b[1:-1])]) for nm, b in X.sc.nodes[k[0]]['ctrls']]
+        d = [f for f in va if va[f] != vb[f]]
+        if sorted(d) != ['ZBoxPrimitive[0]', 'ZGEOM[2]'] or va['ZGEOM[2]'][1:] != vb['ZGEOM[2]'][1:] or \
+                cv(A, ka) != cv(B, kb):
+            bad.append('.prp: %s differs in more than its x and its first size: %s' % (nm, d))
     if J.text(A.sc, A.sc.p.settings) != J.text(B.sc, B.sc.p.settings):
         bad.append('.prp: the scene property block differs')
     log('.prp: %d of %d top-level subtrees equal, changed: %s; %d new subtrees; scene property block equal' % (
@@ -1624,7 +2234,8 @@ def diff(src, dst, log=print, also=()):
     log('the other %d members and the %d files beside the archive (KLWardrobe.ini too): byte for byte' % (len(A.ext) - 7, len(side)))
     for x in bad:
         log('UNEXPECTED: ' + x)
-    log('RESULT: %s' % ('only the squad was added' if not bad else '%d unexpected differences' % len(bad)))
+    extra = ''.join([', %d level exit boxes cut (x and first size)' % len(cut) if cut else '', ', %d drop link(s) in the navigation mesh' % len(drops) if drops else ''])
+    log('RESULT: %s' % ('only the squad was added' + extra if not bad else '%d unexpected differences' % len(bad)))
     return bad
 
 
@@ -1673,7 +2284,11 @@ def options(a):
             a.remove(flag); opt[key] = True
     if '--no-tree' in a:
         a.remove('--no-tree'); opt['tree'] = False
-    for name, key, conv in (('--ally-box', 'ally_box', str), ('--loot-seconds', 'loot_seconds', int), ('--start-delay', 'start_delay', float)):
+    for flag in ('--drop', '--lane'):
+        if flag in a:
+            a.remove(flag); opt[flag[2:]] = True
+    for name, key, conv in (('--ally-box', 'ally_box', str), ('--loot-seconds', 'loot_seconds', int), ('--start-delay', 'start_delay', float),
+                            ('--stops', 'stops', int), ('--cases', 'cases', str), ('--exit-boxes', 'exit_boxes', str)):
         v = take(name, conv)
         if v is not None:
             opt[key] = v
@@ -1684,7 +2299,27 @@ def options(a):
             raise SystemExit('--park x,y,z')
     if opt.get('ally_box', 'auto') not in ('auto', 'on', 'off'):
         raise SystemExit('--ally-box auto|on|off')
+    if opt.get('cases', 'off') not in ('off', 'glass', 'all') or opt.get('exit_boxes', 'keep') not in ('keep', 'cut') or not 1 <= opt.get('stops', 1) <= 8:
+        raise SystemExit('--cases off|glass|all   --exit-boxes keep|cut   --stops 1..8')
     return opt
+
+
+def owner(src_root, dst_root, maps=None, more=None, log=print):
+    """The four maps as the owner asked for them on 2026-10-10 (RECIPE; re/bots.md 12): build <src_root>/<Mxx> into
+    <dst_root>/<Mxx> for every map folder that has a recipe -> {map folder: (findings, report)}."""
+    out = {}
+    for d in sorted(os.listdir(src_root)):
+        src = os.path.join(src_root, d)
+        if not os.path.isfile(os.path.join(src, SLOT + '_Main.zip')) or (maps and d not in maps):
+            continue
+        rj = os.path.join(src, 'result.json')
+        level = json.load(open(rj)).get('M') if os.path.isfile(rj) else None
+        if level not in RECIPE:
+            log('%s: no recipe for %s' % (d, level)); continue
+        opt = dict(RECIPE[level], **(more or {}))
+        log('==== %s (%s): %s' % (d, level, json.dumps(opt, sort_keys=True)))
+        out[d] = build(src, os.path.join(dst_root, d), opt, log)
+    return out
 
 
 def main():
@@ -1696,8 +2331,15 @@ def main():
     elif len(a) == 2 and a[0] == 'check':
         out, _f = check(a[1])
         sys.exit(1 if any(s == 'FAIL' for s, _t in out) else 0)
+    elif len(a) >= 3 and a[0] == 'owner':
+        res = owner(a[1], a[2], a[3:] or None, opt)
+        for d, (out, _rep) in res.items():
+            print('%s: %s' % (d, 'PASS' if not any(s == 'FAIL' for s, _t in out) else 'FAIL'))
+        sys.exit(1 if not res or any(s == 'FAIL' for out, _r in res.values() for s, _t in out) else 0)
     elif len(a) == 2 and a[0] == 'plan':
-        P = plan(Built(a[1]), opt)
+        B = Built(a[1])
+        prepare(B, opt)
+        P = plan(B, opt)
         for N, b in P['bots'].items():
             print('Squad#0%d: stands at %s; places %s' % (N, tuple(b['start']), b['places']))
         print('steps: %s' % [(st['name'], st['stations']) for st in P['steps']])

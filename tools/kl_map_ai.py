@@ -9,6 +9,11 @@ Spec, the measurements and every table: re/map_ai.md.
                                                                        (accuracy, health), weapons, what starts it
     python kl_map_ai.py stock                                           the nine stock Fragile Alliance levels in one
                                                                        table (people, hit points, accuracy, waves)
+    python kl_map_ai.py balance <build folder | stock level> ... [--dist=10] [--diff=1]
+                                                                       what a bullet costs whom: hits to kill
+                                                                       between the player, the police and the AI
+                                                                       heisters, per Arcade level and under
+                                                                       klhook/klbalance.c's Risk dial (re/balance.md)
     python kl_map_ai.py apply <build folder> <out folder> [options]     the step: a FINISHED build (kl_maps ready)
                                                                        -> a copy with the AI changes. Only the .prp
                                                                        member of the archive changes
@@ -41,8 +46,13 @@ WHAT THE SOLDIER ROW IS (read in kl2.exe, 2026-10-10; property = ZSoldier field,
     7  HEALTH        0x8fbac0: skipped with the 'GodActors' option or when <= 0 (invulnerable); else a range of
                      the tuning table at field 7 per cent, times a team factor, times field 9..12 chosen by the
                      difficulty [0x156b5f0] (0..3), handed to the actor (virtual +0x674 / +0x670)
-    8                a second pair for the actor (virtual +0x67c), -1 = none; not read further
+                     (2026-10-10, re/balance.md: the range is 0..100, so field 7 IS hit points; the 'team factor'
+                     is the difficulty row's NPC health 0.5 / 0.9 / 1.15 / 1.3 - Arcade takes the story rows)
+    8  REGENERATION  virtual +0x67c -> 0x8f9bf0: seconds before health comes back and seconds until it is whole,
+                     both 15 .. 1 at field 8 per cent; -1 = none (SWAT and the AI heisters: 50 = 8 s / 8 s)
     9..12            health factor per difficulty (new in Dog Days; 1.0 everywhere)
+  In ARCADE a hit is also multiplied by one of six numbers by who shoots whom, per Arcade level (level 1: police ->
+  you 0.1, you -> police 2.0, police -> AI heister 0.01): `balance` below, re/balance.md, klhook/klbalance.c.
     13, 14           two more tuning ranges (0x784330); lower 13 / higher 14 = more skilled by the preset table
     15               a number 0x7842f0 returns times a factor of the squad object (+0x5c8). ASSUMPTION: the sight
                      range (stock 5000, these maps 6000..10000) - but the AI heisters have 1.0 there
@@ -984,6 +994,132 @@ def run_all(src, dst, parts, presets=False, log=print, car_exit=False, tags=None
     return res
 
 
+# ------------------------------------------------------------------ what a bullet costs whom (re/balance.md)
+# Read in kl2.exe 2026-10-10 (section 13 of re/map_ai.md has the short form). klhook/klbalance.c writes the same
+# numbers at run time: keep ARCADE and RISK in step with its klr_code / klr_dial.
+FACTORS = ('police->crew', 'crew->police', 'police->you', 'you->police', 'crew->you', 'you->crew')
+ARCADE = {                                          # Arcade level: the six floats at R+0x00..+0x14 (0x524050)
+    1: (0.01, 3.0, 0.1, 2.0, 0.1, 0.25), 2: (0.05, 2.6, 0.2, 1.75, 0.2, 0.5), 3: (0.1, 2.2, 0.4, 1.5, 0.4, 1.0),
+    4: (0.15, 1.9, 0.8, 1.25, 0.8, 0.9), 5: (0.2, 1.6, 1.0, 1.0, 1.0, 0.8), 6: (0.25, 1.3, 1.3, 0.9, 1.1, 0.7),
+    7: (0.3, 1.0, 1.6, 0.8, 1.2, 0.6), 8: (0.35, 0.8, 1.9, 0.7, 1.3, 0.5), 9: (0.4, 0.4, 2.2, 0.6, 1.4, 0.4),
+    10: (0.45, 0.2, 2.6, 0.5, 1.5, 0.3), 11: (0.5, 0.1, 3.0, 0.3, 1.7, 0.1)}
+RAMP = (1, -1, 1, -1, 1, 0)                         # klbalance.c Ramp=1: at least stock / at most stock / as given
+RISK = {                                            # [Balance] Risk: the six factors, the player's health factor, his
+    1: ((0.5, 1.5, 0.5, 1.5, 0.5, 1.0), 1.0, None),         # regeneration (s before it starts, s to be whole; None = stock)
+    2: ((1.0,) * 6, 0.73, (8.0, 8.0)),
+    3: ((1.0,) * 6, 0.51, (8.0, 8.0))}
+DIFF_HEALTH = (0.5, 0.9, 1.15, 1.3)                 # NPC health by the campaign difficulty option (tuning +0x434 .. : 0x831f00)
+PLAYER_HEALTH, PLAYER_REGEN = 550.0, (4.0, 4.0)     # Arcade: tuning +0x614, +0x60c, +0x610 (0x4206f0, 0x410781, 0x6ef3e9)
+BODY_NPC = {'head': 10.0, 'body': 1.0, 'types 4, 7': 0.5, 'types 6, 9': 0.2}       # 0x572f60, floats at 0xcdefe4..
+BODY_PLAYER = {k: 1.0 + (min(v, 4.0) - 1.0) * 0.25 for k, v in BODY_NPC.items()}   # 0x4db7ff: head 1.75
+# ZFFItemTemplateWeapon / ZFFItemTemplateAmmo fields, by the object offsets 0x46ef60 reads (offset = record + 4)
+W_AMMO, W_RANGE, W_MULT, W_RPM, W_NPC, W_MP, W_BAND = 18, (21, 22, 23, 24), 25, 27, 37, 38, (39, 40, 41, 42)
+A_DAMAGE = (17, 18, 19, 20)
+
+
+def factors(level, risk=0, ramp=True):
+    """The six factors of an Arcade level as the game has them (risk 0) or as klbalance.c writes them."""
+    stock = ARCADE[min(max(level, 1), 11)]
+    if not risk:
+        return stock
+    return tuple(s if ramp and ((k > 0 and s > d) or (k < 0 and s < d)) else d for d, s, k in zip(RISK[risk][0], stock, RAMP))
+
+
+def guns(sc):
+    """{weapon template: {'r' 4 ranges, 'd' the ammo's 4 damages, 'mult', 'npc', 'mp', 'band' 4, 'rpm'}} of a level."""
+    out = {}
+    for name, t in kl_arms.equipment(sc).items():
+        k = next(iter(sc.resolve(t['path'])), None)
+        v = kl_fa.node_values(sc, k) if k else None
+        if not v or len(v) <= W_BAND[-1] or not v[W_AMMO]:
+            continue
+        a = sc.resolve(full(v[W_AMMO][0]))
+        if len(a) != 1:
+            continue
+        av = kl_fa.node_values(sc, a[0])
+        out[t['name']] = {'r': [v[i] for i in W_RANGE], 'd': [av[i] for i in A_DAMAGE], 'mult': v[W_MULT], 'npc': v[W_NPC],
+                          'mp': v[W_MP], 'band': [v[i] for i in W_BAND], 'rpm': v[W_RPM]}
+    return out
+
+
+def bullet(g, dist, npc):
+    """Damage of one bullet in an Arcade round before the who-shoots-whom factor and the body part (0x46ef60), or
+    None for a weapon that is not a bullet gun (a range or damage of -1: grenades, launchers, the sniper rifle)."""
+    r, d = g['r'], g['d']
+    if min(r) <= 0 or min(d) < 0:
+        return None
+
+    def join(i):
+        return d[i] if r[i + 1] <= r[i] else d[i] + (d[i + 1] - d[i]) * (dist - r[i]) / (r[i + 1] - r[i])
+    if dist <= r[0]:
+        dmg, band = d[0], 0
+    elif dist <= r[1]:
+        dmg, band = join(0), 0
+    elif dist <= r[2]:
+        dmg, band = join(1), 1
+    elif dist <= r[3]:
+        dmg, band = join(2), 2
+    else:
+        dmg, band = d[3], 3
+    return dmg * g['mult'] * (g['npc'] if npc else g['mp']) * g['band'][band]
+
+
+def crowd(sc):
+    """-> {team: [(weapon template, health, ZSoldier field 8)]} of every ZFFActor with a ZSoldier."""
+    lab, f = J.labels('dd', 'ZFFActor'), kl_arms.fields()
+    team, out = lab.index('ZFFActor[0]'), collections.defaultdict(list)
+    for k in range(1, len(sc.nodes)):
+        if sc.cls(k) != 'ZFFActor':
+            continue
+        sol = next((v for _i, n, v in ctrls(sc, k) if n == 'ZSoldier'), None)
+        if sol is not None:
+            nv = kl_fa.node_values(sc, k)
+            out[nv[team]].append((nv[f[0]].rsplit('\\', 1)[-1], sol[HEALTH], sol[F8]))
+    return out
+
+
+def _span(v):
+    v = sorted(v)
+    if not v:
+        return '-'
+    m = v[len(v) // 2]
+    return '%d' % m if v[0] == v[-1] else '%d (%d-%d)' % (m, v[0], v[-1])
+
+
+def balance(src, dist=10.0, diff=1, gun='Rifle_zastavam85', log=print):
+    """Hits to kill, body shots at <dist> metres, no regeneration: for every armed enemy of the level against the
+    player and an AI heister and back, on five stock Arcade levels and under klbalance.c's three Risk rows.
+    Shotguns are left out of the counts (a shell is several pellets; their number was not read). -> the rows."""
+    sc = kl_fa.load(archive_of(src))[0]
+    G, C = guns(sc), crowd(sc)
+    hits = lambda hp, dmg: int(math.ceil(hp / dmg - 1e-6)) if dmg > 0 else 10 ** 6
+    cops = [(w, h) for t in ('Enemy', 'Enemy2') for w, h, _r in C.get(t, ()) if w in G and weapon_class(w) != 'shotgun' and bullet(G[w], dist, True)]
+    crew = [(w, h) for w, h, _r in C.get('Ally', ()) if w in G and bullet(G[w], dist, True)]
+    mine = bullet(G[gun], dist, False)
+    log('%s: %d armed police / guards counted (%d shotguns left out), %d AI heisters; body shots at %.0f m; NPC health x %.2f (difficulty option %d); the player shoots a %s (%.1f a bullet)' % (
+        os.path.basename(os.path.dirname(archive_of(src))) or src, len(cops), sum(weapon_class(w) == 'shotgun' for t in ('Enemy', 'Enemy2') for w, _h, _r in C.get(t, ())),
+        len(crew), dist, DIFF_HEALTH[diff], diff, gun, mine))
+    log('  a bullet at %.0f m, from an NPC / from the player: %s' % (dist, ', '.join('%s %.0f / %.0f' % (w, bullet(G[w], dist, True), bullet(G[w], dist, False))
+                                                                           for w in sorted({w for w, _h in cops + crew}))))
+    log('  %-22s %6s  %-14s %-14s %-14s %-14s %-12s %-12s' % ('', 'you', 'police kill', 'you kill a', 'police kill', 'a heister', 'a heister', 'you kill a'))
+    log('  %-22s %6s  %-14s %-14s %-14s %-14s %-12s %-12s' % ('hits to kill', 'health', 'you', 'policeman', 'a heister', 'kills police', 'kills you', 'heister'))
+    rows = []
+    for name, lvl, risk in [('stock, Arcade level %d' % L, L, 0) for L in (1, 3, 5, 8, 11)] + [('Risk=%d (level %d)' % (r, L), L, r) for r in (1, 2, 3) for L in (1, 11)]:
+        a, b, c, d, e, f = factors(lvl, risk)
+        php = PLAYER_HEALTH * (RISK[risk][1] if risk else 1.0)
+        k = DIFF_HEALTH[diff]
+        row = (name, php,
+               _span([hits(php, bullet(G[w], dist, True) * c) for w, _h in cops]),
+               _span([hits(h * k, mine * d) for _w, h in cops]),
+               _span([hits(bh * k, bullet(G[w], dist, True) * a) for w, _h in cops for _bw, bh in crew[:1]]),
+               _span([hits(h * k, bullet(G[bw], dist, True) * b) for _w, h in cops for bw, _bh in crew[:1]]),
+               _span([hits(php, bullet(G[bw], dist, True) * e) for bw, _bh in crew[:1]]),
+               _span([hits(bh * k, mine * f) for _bw, bh in crew[:1]]))
+        rows.append(row)
+        log('  %-22s %6.0f  %-14s %-14s %-14s %-14s %-12s %-12s' % row)
+    return rows
+
+
 def main():
     global HEALTH_SCALE
     a = [x for x in sys.argv[1:] if not x.startswith('--')]
@@ -995,6 +1131,10 @@ def main():
         show(measure(a[1]), routs='--short' not in o)
     elif a == ['stock']:
         stock()
+    elif len(a) >= 2 and a[0] == 'balance':
+        for src in a[1:]:
+            balance(src, dist=next((float(x.split('=')[1]) for x in o if x.startswith('--dist=')), 10.0),
+                    diff=next((int(x.split('=')[1]) for x in o if x.startswith('--diff=')), 1))
     elif len(a) == 3 and a[0] == 'apply':
         apply(a[1], a[2], parts, '--presets' in o, car_exit=car)
     elif len(a) == 3 and a[0] == 'check':

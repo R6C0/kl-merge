@@ -559,6 +559,7 @@ static void klh_tick(int game_thread);
 #include "klcrew.c"
 #include "kltalk.c"
 #include "klbot.c"
+#include "klbalance.c"
 #include "klfed.c"
 #include "klsteam.c"
 #include "klslot.c"
@@ -600,6 +601,7 @@ static void klh_tick(int game_thread)
     klw_tick(game_thread);                            /* after klc_tick: the player's own body goes first */
     klk_tick(game_thread);                            /* after klw_tick: it reads who wears whom */
     klb_tick(game_thread);
+    klr_tick(game_thread);                            /* klbalance.c: one damage scale for player, police and crew */
     klp_tick(game_thread);                            /* klfed.c: come back as a fed (data writes only) */
     klg_tick();
     klm_tick();
@@ -765,6 +767,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klw_init();
     klk_init();
     klb_init();
+    klr_init();
     klp_init();
     klg_init();
     klx_init();
