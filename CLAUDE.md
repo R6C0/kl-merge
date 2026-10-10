@@ -182,6 +182,14 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+2026-10-10 17:00. BOTS ON RETOMOTO SEEN LIVE (run RB1, <work>/build/v_rtbots/retomoto_bots_tower, bot log): seven bots on the balcony,
+all at heist stage 1 within 16 s of GO (in after the blast), loot $255,000-$820,000, three killed by the guards; no fault. The full
+build (tower -> hook teleport at the join -> street -> van: retomoto_bots + klhook/klcrew_rt.c) waits for the hook. crew-talk-bain
+RESULTS (re/crew_talk_review.md): klcrew.c random looks (not live), tools/kl_fa_bots_rt.py, tools/kl_fa_talk.py (Kane's countdown,
+Kane / Lynch scenes, chatter: DATA only, the hook part kltalk.c is being written), tools/kl_bain.py (Bain for the driver and
+briefing lines, 27 lines; needs a new PC_Def.str: <work>/build/v_bain). RUNNING: wf_1b137346-3c1 (kltalk.c + crew review fixes +
+wiring + the 14:24 crash), wf_c2559c04-0b1 (come back as a fed). The 4 GB flag (kl-merge-39 prepared <work>/build/laa/kl2.exe) is
+NOT to be run: the engine marks direct pointers by the top bit (klmem.c), and kl2.exe is a stock file - told kl-merge-39.
 STATE 2026-10-10 16:50. INSTALLED TREE = <work>/build/w_tab2/KLExpansion: the tab's four maps are now <work>/build/u_maps/M01,
 M02, M03, M06 (gun looks + escape camera + tougher enemies + seven AI heisters; KLGuns.ini carried), Retomoto = rt_guns3 (no
 bots yet), map pictures on the page. Hook ship_bot1. LIVE on each u_maps build (runs U_M02, U_M01, U_M06, U_M03, bot log on): all

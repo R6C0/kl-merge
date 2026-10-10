@@ -8,7 +8,13 @@ and from level files (stock F07, the builds `<work>\build\b_bots\M01`, `b_bots\M
 Status words: **EXE** = read in the disassembly, address given. **FILE** = measured in level files.
 **ASSUMPTION** = inferred, said why. **not established** = looked for, no answer.
 Scratch tools (disassembler with vtable owners, cross-reference search, level surveys): session scratchpad
-`fed\x.py`, `scan.py`, `vts.py`, `lv2.py`, `sp.py`.
+`fed\x.py`, `scan.py`, `vts.py`, `lv2.py`, `sp.py`, and of the second pass `nb.py`, `ctx.py`, `lv3.py`, `lv4.py`.
+
+**Second pass, 2026-10-10 evening** (the first writer stopped on a usage limit). Every EXE statement the
+ranking rests on was disassembled again and holds; the list is in section 9. What the second pass CHANGED
+or ADDED is marked **[2]**: the police-object budget (2.3), the 30 seconds of `TriggerActorsDead` (5.3), a
+data-only way from a bot to its squad object and with it a deaths-only release (5.3, 5.4), the round's own
+600 s limit (3), the status values klbot.c lists as 'not read'.
 
 ## 0. Short answers
 
@@ -33,13 +39,21 @@ Scratch tools (disassembler with vtable owners, cross-reference search, level su
    one-man police squad that is not in the world at load, named in the heister squad's own 'everybody dead'
    list. That list is real: `ZSquadScript` field 8 is sent by 0x87ebf0 when the squad's count of living men
    reaches 0 (no longer an assumption). One catch found in the code: a heister who BOARDS the vehicle also
-   counts as 'not living' there, so the list fires for an escape as well (section 5.3).
+   counts as 'not living' there, so the list fires for an escape as well (section 5.3). **[2]** The catch
+   can be closed by the hook with two data writes per bot, because the squad object is reachable from the
+   crew record by pointers alone (record -> actor -> soldier -> squad -> squad script, section 5.3).
+   `TriggerActorsDead` is no alternative: it fires by itself 30 seconds after it is started.
 5. **The fed's look exists already.** Dead Men's own police-respawn body is an FBI agent in a black suit
    with sunglasses and a headset (M01_FA_A `Heroes!Henchmen_01..08`, one model, 0.59 MB); every build
    already carries Dog Days' police player model (number 1919 in the F07-hosted builds), and the M01 build
    has `FBI-Agents_01..04` (10 actors, one model with 8 variants).
 6. **Impossible**: an AI heister driving a police PLAYER object; a dead actor standing up again as police;
    the crew record of a bot going through the player's respawn routine (section 6).
+7. **[2] A hard number**: a level holds 8 police player objects and Arcade never gives one back (the
+   routines that release one exist only in the multiplayer session handler; the single-player handler has
+   empty stubs in those slots). One is taken per fed respawn, possibly one more when the session is joined.
+   The game stops on an `int3` (0x4b2984) when none is free, so the hook must count them and stand down.
+   In practice a session's lives run out first (one respawn per round at most, and it costs the life).
 
 ## 1. How 'come back as a cop' works in Fragile Alliance multiplayer (EXE)
 
@@ -144,6 +158,39 @@ asks 0x7f6850 (Arcade?) and 0x7bb2a0 (the Heist rules) itself. At 0: **0x4b28d0(
 | 0x4b2a2c | once per client: if 0x67f480 says 'not over', 0x4ea400(client) (camera / HUD of the local client back to play) |
 | 0x4b2a3c | flags 0x4000 and 0x800 cleared, 0x80000 set, `+0x74 = 10.0` |
 
+Order of the arguments at the switch (0x4b29e3 .. 0x4b2a09): `0x4d2ef0(session, client index, old local
+player index from 0x748540, new = record +0x14, 1)`; 0x4d2ef0 forwards to handler slot 53 unless the session
+state is 0x2e. In 0x42deb0 the third argument is what goes to 0x537700; only `new == 0xff` skips it.
+
+### 2.3a [2] The police objects are a budget: eight per level load, never given back (EXE)
+
+- The table: `T = [handler + 8]` (handler = `[session + 4]`, `ZSessionHandlerSP` slot 17 = 0x6e2650 returns
+  it): `[T]` entries of 12 bytes, `[T+4]` one 'slot in use' byte per entry (0 = in use), `[T+0xc]` the count.
+  An entry: `+0` owner, `+4` the `ZFFPlayer`, `+8` a state byte, **`+9` used**.
+- An entry is made when a player object registers with the session (`ZSessionHandlerSP` slot 54 = 0x50a1c0,
+  index = `ZFFPlayer+0x91d`; constructor 0x458740 zeroes it). In Arcade that routine also hands the type
+  byte, `+0x2740` and the model number `[[player+4]+0x68]` to rules slot 135 (0x5684f0).
+- The used byte is set by the pick 0x54cab0 (0x54cb1a) and by NOTHING ELSE in single player. The two routines
+  that clear it are `ZSessionHandlerMP` slots 57 (0x741930) and 59 (0x56f360) - there with calls that reset
+  the player object (0x5797c0, the player's own slot 221, 0x694a90, 0x747ea0). `ZSessionHandlerSP` has the
+  empty stubs 0x8bf680 / 0x66b570 in slots 55..59. So Arcade has no 'give the police body back'.
+- Three callers of the pick: the respawn (twice, above), rules slot 9 (0x6a20c0) and **rules slot 197 =
+  0x42bc80, the routine that sets up the local client's record: it already picks a police object (type 3)
+  and writes it to record `+0x14`** (0x42bdc9). The round start then puts `+0x14` back to 0xff (0x817e10)
+  without freeing the object. Whether the table is filled at that moment (the level's players registered
+  before the client is set up) is not established: if it is, one of the eight is gone before the first
+  round, and seven are left.
+- The round start also clears all twelve flag dwords (0x8c7ad2), so every round's first respawn takes the
+  'no flag 0x100, `+0x14` is 0xff -> pick' branch: one new object per round with a respawn.
+- Rounds of a session run on the same loaded level (re\fa_round.md, live). So: **at most 8 (or 7) fed
+  respawns per level load, then `int3`**. Against that: one respawn per round at most (a second death is
+  final), each costs the life at the round end, and a session has only a few lives - the budget is not
+  reached by play as long as the level is loaded again for the next session. The hook still has to count
+  (pre-check in section 3) because nothing else stands between the ninth respawn and the `int3`.
+- Reusing a body by data (clear the used byte at a round start, or write the same index to `+0x14` every
+  time) is possible to write but leaves the object as the last round left it - a dead policeman. What a
+  dead police player object does when it is made the local player again: not established, not proposed.
+
 ### 2.4 What the rest of the game does with a police human in Arcade (EXE)
 
 - **AI**: `ZSoldier` slot 111 (0x882470, how much a soldier wants a player as target), 0x8824e7: a POLICE
@@ -164,9 +211,21 @@ asks 0x7f6850 (Arcade?) and 0x7bb2a0 (the Heist rules) itself. At 0: **0x4b28d0(
   a fed does not save the life** - it is what happens between the death and the round end. The Arcade level
   only advances when record 0 has status 6 (0x74bce4).
 
-Not read: where the police player gets his weapons (the item list has `eFF2ItemHG_Revolver_Police` = 3 and
-`eFF2ItemShotgun_Hawk_Police` = 13; the object in the level names none), what the fed's kills pay, and
-whether the session's 'used' byte of a police object is cleared between rounds.
+- **[2] Next round**: `ZSessionHandlerSP` slot 11 (0x466b30, state 0x18) makes the local player the hero
+  again: `0x537700(gamedata, byte [hero+0x91d], 0)` with hero = `[rules+0x5fc]` (stored by slot 197 at
+  0x42bcb2), places him at a START point (slot 199, type 1) and calls rules slot 34 (0x4b5b20) and slot 137
+  for him. Slot 34 returns at once for a type-3 object (0x4b5b4f): masks and looks are never applied to
+  the police body by the game.
+
+Not established: where the police player gets his weapons. The item list has `eFF2ItemHG_Revolver_Police`
+= 3 and `eFF2ItemShotgun_Hawk_Police` = 13; neither the police nor the hero object in the level names any
+item (FILE: both have 23 properties, no controllers, no children - the hero's weapons are not level data
+either). **[2]** Looked for and not found: none of the 91 places that read the police byte and none of the
+places that read the type byte gives an item, and neither respawn routine (Arcade 0x4b28d0, server
+0x6bb910 + client 0x63a0a0) gives one. ASSUMPTION: the weapons come with the player object itself, the same
+in both modes, since the Arcade routine does every step the multiplayer pair does (object, AFTER_DEATH
+point, police byte, local player). An unarmed fed is the first thing live check F1 has to rule out.
+Also not read: what the fed's kills pay.
 
 ## 3. The player in Arcade: three ways, ranked
 
@@ -184,7 +243,8 @@ armed =  Arcade ([session+0x5c] == 4, [session+0x54] not 2 / 3) and state [sessi
         or record 0 status == 1 )                                            -- dead, waiting: keep it on until he stands
      and at least MinCrew AI records (flags +0x79 mask 1) with status 0      -- somebody left to hunt
      and at least one free police object: T = [[session+4]+8], entries [T], count [T+0xc], 12 bytes each,
-         ZFFPlayer at +4 (+0x273c == 3), used byte +9 == 0                   -- else 0x4b2984 is an int3
+         slot byte [[T+4]+i] == 0, ZFFPlayer at +4 (+0x273c == 3), used byte +9 == 0
+                                                                             -- else 0x4b2984 is an int3 (2.3a)
 [0x168ea60] = armed ? 1 : 0          (and 0 on unload / outside a round, always)
 ```
 
@@ -200,6 +260,10 @@ What the hook must add, all data:
   When record 0 is police and no record has status 0 besides his, and the vehicle state `[rules+0x1dc]` is
   0 or 7: write once what the game writes in its own 'over' branch: `[rules+0x4c] = [rules+0x200] =
   [score+0x40] = 3.0` (slots 42 and 193). Slot 192 then ends the round by itself.
+  **[2]** Slot 192 (0x5dff40) reads only `[rules+0x200]`: it subtracts the frame time and ends the round
+  when that reaches 0 and the vehicle state is 0 or at least 7. The round reset writes 600.0 there
+  (0x8c7a8b, float 0xb206d0). So without the hook's write the round does not hang: it ends by that timer,
+  ten minutes after its start at the latest (ASSUMPTION that nothing refills it; slot 42 only lowers it).
 - Optional, 'choose your police character' (re\netcode.md D): write record 0 `+0x14` = the wanted free
   police index and its used byte = 1 before the countdown ends; 0x4b28f8 then skips the pick.
 
@@ -209,7 +273,7 @@ What breaks or is not known:
 |---|---|
 | lives | lost as now (section 2.4). Giving it back would be a write of `[score+0x6c]` / `+0x44`: a rule change, not proposed |
 | second death | final; the stock 'over' branch then cuts the clock to 3 s even if the crew still plays. Holding the switch through it instead leaves the human on the death camera until the hook's own round end. Coming back again = the hook writing status 1, `+0x08 = 5.0`, `+0x11 = 0`, flag 0x4000 set and 4 cleared (what 0x70482d does); 0x4b28f8 then takes a NEW police object each time (8 exist). Not proposed for the first version |
-| no free police object | crash at 0x4b2984: the pre-check above. Whether the used byte survives into the next round is not established - the hook should log the table (index, type, used) at every round start |
+| no free police object | crash at 0x4b2984: the pre-check above. **[2]** The used byte DOES survive: nothing in single player clears it (2.3a). Eight respawns per level load, perhaps seven. The hook logs the table (index, type, used) at every round start and says so in the log when it stands down for want of a body |
 | no AFTER_DEATH point | the fed stands where `Heroes!Henchmen_0N` was placed (outside the map). FILE: 7 points in every build looked at (M01: Dead Men's own seven; Retomoto: five in the tower at y 19601..19613, two in the street at y -50) |
 | Retomoto | the two parts are joined by the hook's jump only: a fed spawned in the wrong part has to use the join himself. Either hide the wrong part's points (a hidden point is skipped, 0x561557) or accept |
 | klchar.c | sees a new local player. Its body swap (slot 137) is refused by the game for a policeman, but its look call 0x88c810 is not: klchar must stand down while `[player+0x2723] != 0` (lead: one line; I did not edit the file) |
@@ -280,9 +344,31 @@ How squads fire lists (EXE, `ZSquadScript` slot 25 = 0x47e440, its update; membe
 - **the catch**: the boarding rule sets `actor+0x8f0 = 1` (0x684253) - a heister who boards is 'not living'
   for his squad, so field 8 fires for an escape too.
 
-`TriggerActorsDead` is NOT the tool for this (EXE, 0x8def80 / 0x4afb80): it must first be started by a
-message, and from then it fires when all its actors are dead **or after 0x7800 game ticks**, whichever
-comes first, once. (Its 'dead' test 0x5f4470 is `actor+0x576 == 0` and does not look at `+0x8f0`.)
+`TriggerActorsDead` is NOT the tool for this (EXE, slots 25 / 26 = 0x8def80 / 0x4afb80): it must first be
+started by a message, and from then it fires when all its actors are dead **or after 0x7800 game ticks**,
+whichever comes first, once. **[2]** A tick is 1/1024 s (the game converts the same counter with the double
+0.0009765625 at 0xb5c498, e.g. 0x685427), so that is **30 seconds**: started at the round start it would
+release the fed half a minute in, whatever the heister does. (Its 'dead' test 0x5f4470 is
+`actor+0x576 == 0` and does not look at `+0x8f0`, so it would have been the deaths-only test - the timer
+rules it out.)
+
+**[2] From the crew record to the squad script by pointers alone** (EXE; every step has a vtable to check):
+
+```
+actor   = [record + 4]                 ZFFActor            vtable 0xbb3bac
+soldier = [actor + 0x77c]              the actor's ZSoldier (0x7b390a)
+squad   = [soldier + 0x4f4]            ZSquad@CPPScript    vtable 0xbccdac   (set by 0x7b3966; put to 0 when
+                                                                               the soldier leaves, 0x523138)
+script  = [squad + 0x164] - 0xe8       ZSquadScript        vtable 0xbcce3c   (check: [script + 0x3c] == squad,
+                                                                               [squad + 0x168] == script + 0x104)
+```
+
+The last step: `ZSquadScript` slot 13 (0x6316b0) builds the squad object with pointers to ten of its own
+lists (`script+0xe8`, `+0x104`, ... `+0x1e4`), and the constructor 0x7696f0 keeps them at `squad+0x164` ..
+(0x7697f1). The pointer chain must be walked while the bot is alive (round start) and the script kept.
+The script's count and latch fields are private to it: `+0x40`, `+0x48`, `+0x208` .. `+0x20d` are touched
+only by its constructor 0x455c60, its member list (slot 14), its update (slot 25), its save / load (slots
+21, 22) and 0x87ebf0. The 'fired' latch `+0x20b` is never cleared after the constructor.
 
 The build (per heister `Squad#0N`, N = 2..8; stock objects only, re\bots_squad.md 3 and re\map_ai.md 2):
 
@@ -301,22 +387,49 @@ human is himself a fed the police AI ignores him (2.4).
 
 About the catch: without anything more, a heister who escapes also releases his fed (from the police spawn,
 while the vehicle waits at most 8 s). Three answers, cheapest first:
-1. accept it for the first live run and look;
+1. accept it for the first live run and look (an escaped heister 'sends' one more policeman after the
+   rest of the crew - not far from what the mode does to those left behind anyway);
 2. level data: route field 8 through a gate that the vehicle's arrival closes (the monitor's 'vehicle n was
    called' lists are empty in stock and free, re\map_ai.md 2). ASSUMPTION: `GatePath` blocks a message when
    closed - not read;
-3. hook, data only: klbot.c already sees stage 3 (at the vehicle) per record; writing the heister squad's
-   `+0x20b = 1` then would mute field 8 for a boarding. Needs the way from a bot's actor to its
-   `ZSquadScript` object, which was not read.
+3. **[2]** the hook, data only, section 5.4 - the one that is exact.
 
 Cost: 7 squads x about 5 entities; no model, no texture when the police player's model is used.
 
-### 5.4 The hook way for bots - not recommended
+Between rounds: the heister squads' latches and the released feds are level state. How Arcade puts the
+level's AI back for the next round on the same loaded level was not read (the bots do play again, so their
+squads are reset somehow; `+0x20b` has no writer that clears it besides the constructor and the load slot
+22). ASSUMPTION: the squads are built anew or loaded from a saved state, as stock's own field-8 chains
+(F01: 9 squads) would otherwise work in the first round only. Live check F5 has to show a fed in round 2.
 
-The hook knows the death exactly (record status 7, not 4) but has no data switch to release a squad: a
-squad is released by a message to one of its routs. Sending one is a game call on an object the hook would
-first have to find by name (klauto.c does that for menu elements only). Possible, more code than 5.3 and
-nothing gained except the boarding catch, which 5.3 answer 3 solves with one byte.
+### 5.4 [2] The hook's part for bots: deaths only, two data writes (no game call)
+
+The hook cannot release a squad by itself (that is a message to a rout), but with the pointer chain of 5.3
+it can decide WHEN the heister squad's own field 8 fires. From the update (0x47e440): the lists are only
+looked at when `living < [script+0x40]`; field 8 then fires when `living == 0` and `[script+0x20b] == 0`.
+
+```
+round start, per AI record (flags +0x79 mask 1, status 0):
+    walk the chain, keep script; require [script+0x48] == 1 (a one-man squad) and its vtable
+    byte [script+0x20b] = 1                       -- muted: boarding and death both fire nothing
+record status becomes 7 (dead; never for 4 / 5 / 6):
+    byte [script+0x20b] = 0 ; dword [script+0x40] = 1
+    -- next update: living 0 < 1 -> field 8 fires once (0x47e509 .. 0x47e518) and latches again
+```
+
+What else the second write re-runs: the per-man list (field 5, `+0x78`) once more; fields 4, 6, 7 are
+latched by `+0x208`, `+0x20a`, `+0x209` from the real death. FILE: the heister squads' fields 4..18 are all
+empty (stock: re\bots_squad.md; build `u_maps\M01`: `Gameplay!merc_bot_squad!Squad#02..08` read again,
+one man each), so only field 8 - the fed - is sent. The Retomoto build `rt_guns3\retomoto_ai3_guns` showed
+no squad under that name in the same survey: where its AI heisters' squads are was not followed up.
+ASSUMPTION it rests on: the script's update still runs after its only man has died. If live check F5 shows
+it does not, the variant without that need: leave the squad un-muted and write `[script+0x20b] = 1` when
+the record reaches heist stage 3 (at the vehicle, record `+0x78`, klbot.c 1) - a heister who dies beside
+the vehicle then has no fed, everything else is exact.
+Not usable in Arcade: the script's pending-event mask `+0x20e` (bit 0x10 = 'fire field 8') is only read
+when `[session+0x54] == 3` (0x4b0a40, a network client).
+
+A message sent by the hook (a game call on a rout found by name) stays possible and stays pointless.
 
 ## 6. Ranking, and what is impossible
 
@@ -328,38 +441,79 @@ nothing gained except the boarding catch, which 5.3 answer 3 solves with one byt
 
 **(b) The AI heisters**
 1. **Level data**: one parked police squad per heister on the heister squad's field 8 (0x87ebf0). No hook.
-   Catch: fires for a boarding too.
-2. The same plus the mute byte (`+0x20b`) or a gate, to make it deaths only.
-3. A message sent by the hook. More code, same effect.
+   Catch: fires for a boarding too. Build this first; it is also the base of 2.
+2. **[2] The same plus the hook's mute / re-fire** (5.4: `[script+0x20b]`, `[script+0x40]`, script found
+   through `record+4 -> +0x77c -> +0x4f4 -> [+0x164] - 0xe8`): deaths only. Data writes, behind its own key.
+3. The same plus a level-data gate instead of the hook (`GatePath` not read).
+4. A message sent by the hook. More code, same effect as 1.
+Not a way: `TriggerActorsDead` (fires after 30 s by itself).
 
 **Impossible, or not supported by anything in the exe**
 - A bot's crew record through 0x4b28d0 (takes the human's controls, 5.1).
 - An AI heister as a police PLAYER object, or a dead actor revived as police (5.2).
 - A setting, tuning value or game-mode field that enables the player's respawn (section 3).
-- More than eight fed bodies for players (8 police objects; one is used up per respawn).
+- More than eight fed respawns per level load (8 police objects, one used up per respawn, none ever
+  released in single player, 2.3a) - short of the hook calling the multiplayer handler's release steps on
+  a player object, which nothing here proposes.
+- `TriggerActorsDead` as the bots' death test (its own 30 s timer, 5.3).
 - Keeping the life: the rules take it for 'did not escape', and a policeman cannot board.
 
 ## 7. Live checks for the lead, in order (all on a map that is not stock, Steam guard on)
 
 - **F0** (log only): at a round start print the player table (index, type byte, used byte, model) and
-  record 0's `+0x14`. Expect eight entries of type 3, used 0, `+0x14` = ff.
+  record 0's `+0x14`. Expect eight entries of type 3 and `+0x14` = ff; **used 0 on all eight, or 1 on the
+  first** if slot 197 found the table filled when the session was joined (2.3a) - that settles 8 or 7.
+  Also per AI record the chain of 5.3 (actor, soldier, squad, script, `+0x40`, `+0x48`, `+0x20b`).
 - **F1** `[Fed] Player=1`, bots present, die: record 0 status 7 -> 1 in the same frame, 'You respawn as
   police' after 1 s, at 5 s the local player index changes to a type-3 object, flag 8, the picture shows the
   police body at an AFTER_DEATH point. Then: do the heisters shoot you, do the police ignore you, weapons?
 - **F2** kill the last heister / let them escape: the hook's round end (3 s), score page, one life less,
   next round starts on the hero again and plays.
 - **F3** die as a fed: round over in 3 s (stock branch).
-- **F4** a second round with a death: the used bytes of F0 again (is object 1 free again?).
+- **F4** a second round with a death: the used bytes of F0 again. Expected by the code: object 1 is still
+  used and the second respawn takes object 2.
 - **F5** bots: an M01 build with `Fed#02..08`: kill one heister -> its fed appears and hunts; let one board
-  -> does a fed appear (the catch)?
+  -> does a fed appear (the catch)? Then a second round: do the feds of round 1 leave, and does a heister's
+  death release a fed again (the latch `+0x20b` after the level's reset)?
+- **F5b** the hook's mute / re-fire (5.4): boarding releases nobody; a death releases the fed within a
+  frame or two of the log's 'dead' line. If nothing comes: the script's update has stopped - use the
+  stage-3 variant.
 - **F6** Retomoto: where the fed spawns relative to the crew.
 
 ## 8. Not established
 
-- The police player's weapons and what his kills pay in Arcade.
-- Whether the used byte of a police object and the hero object recover at the next round (F2, F4).
+- The police player's weapons (looked for twice, 2.4) and what his kills pay in Arcade.
+- Whether slot 197 already uses up one police object when the session is joined (F0), and whether the hero
+  object is whole again at the next round after another body was played (F2). The used byte itself is
+  settled: it does not recover (2.3a).
 - What flag 0x80 and the player byte `+0x2729` are (both must be 0 for the path; they are in Arcade as far
   as read - `+0x2729` is tested together with rules slot 188 in the AI code).
-- `GatePath` as a message gate; the way from an actor to its `ZSquadScript`.
-- Whether a bot squad's field 8 is ever used by stock (the code path is common to all squads).
+- `GatePath` as a message gate.
+- How the level's AI (squads, their latches, released men) is put back between two Arcade rounds on the
+  same loaded level, and whether a squad script's update still runs once all its men are dead (5.3, 5.4).
+- Field 8 in stock: settled since - F01 uses it on 9 squads, F03 on 8 (re\stock_mod.md); no stock AI-heister
+  squad uses it (their fields 4..18 are empty).
 - Dead Men's exe was not read for this note.
+
+## 9. [2] What the second pass read again, and found as written
+
+Disassembled again from the exe, statement by statement: 0x67f480 whole (the gate, its table in 2.2, the
+`cmp dword [0x168ea60], 0` head) and its twin 0x86f520; the references to 0x168ea60 (two, both compares;
+0x168ea64 .. 0x168ea9c likewise only compared or loaded, the two words before it belong to static objects
+with their own exit routines at 0xb03040 / 0xb03060); the three callers of the gate; the kill rule
+0x704610 whole (it returns early for status 1 and 3, not for 7); the respawn 0x4b28d0 whole, the pick
+0x54cab0, 0x748540, 0x4d2ef0, 0x42deb0, 0x7622f0, 0x43e270; the handler's round start 0x466b30; the round
+reset 0x8c7a80 / 0x817d20; slots 42, 192, 193; the soldier's target test 0x882470; the boarding rule
+0x6840a0 (police refused at 0x68414e, `actor+0x8f0 = 1` at 0x684253, which the round reset clears at
+0x817e7c); the squad script's update 0x47e440, its count 0x71adc0, 0x87ebf0, its member list 0x7b3790;
+`TriggerActorsDead` 0x8def80 / 0x4afb80 / 0x5f4470. Vtables by RTTI: 0xbd3514 `ZGameRulesHeist`, 0xbd1be4
+`ZSessionHandlerSP`, 0xbb3bac `ZFFActor`, 0xbcce3c `ZSquadScript`, 0xbccdac `ZSquad@CPPScript`.
+FILE again on the current builds `<work>\build\u_maps\M01, M02, M03, M06`: 16 `ZFFPlayer` each, 8 of type
+`MULTIPLAYER_POLICEMAN` (`Heroes!Henchmen_01..08`, rank NONE, animation set Lynch); AFTER_DEATH points
+7 / 7 / 7 / 5, START 8 each.
+Not read again (taken from the first pass): the death camera display 0x728580, the friend list 0x5706a0,
+`ZSoldier` slot 96, 0x805120 / 0x894450, the bot kill rule 0x485740 beyond its status write (0x48581d), the
+model table of section 4.
+Corrections to other notes: klbot.c 1 says of the record status '1 and 3 exist, not read' - they are 1 =
+dead and waiting to return as police, 3 = a timed state before spectating (2, top); `kl2.exe` has no
+single-player release of a police object, which no earlier note says.

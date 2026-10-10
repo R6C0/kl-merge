@@ -157,6 +157,9 @@ literal, English: 17 characters, 10 masks, 24 outfits (the lists at the top of t
 words are `kl_chars.outfit_name`'s, compared by script). **The entry counts are the options' ranges** (5a), so
 they must stay equal to klchar.c's KLC_NCHAR + 1, KLC_MASKS + 2, KLC_OUTFITS. Checked by script: names unique
 and defined, templates exist, entry counts. Without the hook DLL the rows read 0 and drop changes.
+For an already transformed wardrobe build, use `python tools/kl_chars.py plates <build> <out>`
+(implemented by `tools/kl_add_plates.py`) rather than rerunning `kl_chars.py wardrobe`; the latter
+intentionally rejects non-stock model variant sets.
 NOT SEEN: whether the longest value text (43 characters, 'Heavy armour, black shirt, black balaclava') fits
 between the arrows - the stock Difficulty row has short words only.
 

@@ -1,6 +1,7 @@
 # Bain (Payday 2) as the Fragile Alliance announcer
 
-2026-10-10, agent v-bain. **Offline only**: the game was not started, nothing was installed, nothing was
+2026-10-10, agent v-bain (second pass 16:40: generic lines through the sound bank, the radio clicks, the
+build over the talk stream file). **Offline only**: the game was not started, nothing was installed, nothing was
 written into the Dog Days folder. Tool: `tools/kl_bain.py` (its docstring is the short form of this note).
 Builds on `re/audio.md`, `re/bots_voice.md`, `re/pd2_audio.md`, `re/pd2_crates.md`.
 
@@ -24,9 +25,17 @@ The owner (2026-10-10): *'maybe add banes voice from payday 2 as the announcer t
 3. **Bain's lines are easy to find by meaning**: 8,841 of his streams carry their subtitle key inside the
    file, 8,710 with an English text - all PTADPCM, which `pd2_audio` decodes, 8,512 of them mono 32 kHz (Dog
    Days' own dialogue rate: nothing is resampled). His *generic* one-liners ('Van's here!', 'One minute.',
-   'The police are here!') are **not** among them (section 2.3).
-4. **Budget: the four blocks do not grow.** The clips are streamed: +4.16 MB in the stream file, **+0 bytes
+   'The police are here!') carry no key; they are found through the sound bank `regular_vox.bnk` instead
+   (section 2.3): 140 more events are usable, 49 of them exactly.
+4. **Budget: the four blocks do not grow.** The clips are streamed: +4.41 MB in the stream file, **+0 bytes
    in the .WAV**. The bank gains 26 sounds and 26 waves.
+5. **Bain's radio.** In Payday 2 every line of his is a sequence of three sounds: a 0.154 s radio opening,
+   the line, a 0.116 s closing (MEASURED in the banks, 2.4). The clips are written that way (`--radio 0`
+   leaves the clicks out).
+6. **TWO STREAM FILES FROM ONE BASE.** `kl_fa_talk.py` (the Kane / Lynch exchange) also appends to
+   `<work>\build\PC_Def.str`, into the same place. A Bain build and a talk build made each from the base
+   cannot be installed together. `<work>\build\v_bain\over_talk\` is Bain built ON the talk stream file and
+   the talk build: that pair carries both (section 4, 5).
 
 | build | .prm | .ANM | .fxc | .WAV |
 |---|---:|---:|---:|---:|
@@ -146,6 +155,10 @@ them an event needs a trigger that does not exist yet.
 - Banks his labelled lines sit in: the heist banks (`job_g_kenaz` 397, `job_b_dah_stage1` 391,
   `job_crojob_stage_2` 354, `job_b_csbank` 306 ...), `briefings` 152, `regular_vox` 47 (the escape set
   `pln_esc_*`: 'The van leaves in one minute', 'Alright the van is there. Move!').
+- Sound banks: `soundbanks/*.bnk` (496; Wwise BKHD version 145 but `core`). `kl_bain.pd2_events` reads
+  their HIRC section: event (id = FNV-1 of the lower-case `play_...` name) -> play action -> container ->
+  sounds -> **source id = the stream's name** under `soundbanks/streamed/<bank>/`. Record layouts in the
+  function's docstring. 3,380 of Bain's 3,553 event names of the dialogue lists resolve to streams.
 
 ### 2.2 Format
 
@@ -155,15 +168,41 @@ decodes them (decoder verified in `re/pd2_audio.md`). The 26 clips used here are
 4.9 s. Loudness: louder than Dog Days' lines - RMS 7,050 - 12,776 of 32,767 on five decoded, against 2,466 /
 4,348 / 5,335 on three Dog Days lines (decoded through ffmpeg): hence the gain step (section 4).
 
-### 2.3 What is not there
+### 2.3 The generic lines: no label, found through the bank (MEASURED, `python tools/kl_bain.py events`)
 
-- **Bain's generic lines carry no label**: no streamed file has a `pln_gen_*` or `ban_b*` / `ban_q*` label,
-  although `subtitles.strings` has their texts ('Van's here! Saying again, escape van's here!', 'Thirty
-  seconds!', 'One minute.', 'The police are here! Stand 'em down.', 'Go go go!', 'That's all of them, let's
-  get out of here!'). ASSUMPTION: they are held inside a `.bnk` (not read) or among the unlabelled
-  `regular_vox` streams, where only ears - or a decode of the bank's event -> source table - can tell them
-  apart. They would be the best-fitting set; getting them is the next step on the Payday 2 side.
+No streamed file has a `pln_gen_*` or `ban_b*` / `ban_q*` label, although `subtitles.strings` has their
+texts. They are unlabelled streams of `regular_vox`, named by the bank's event table:
+
+| Bain's events in the banks | count |
+|---|---:|
+| with labelled streams (2.1) | 3,077 |
+| unlabelled, every line stream PTADPCM mono 32 kHz: **usable** | 140 |
+| unlabelled, Wwise Vorbis (tag 0xffff; 48 / 44.1 kHz, some stereo) or no stream: not decoded here | 163 |
+
+- Of the 140, **49 have one line stream**: text = subtitle `<event>_01`, exact. Among them 'Thirty
+  seconds!' (`pln_gen_bfr_02`), 'One minute.' (`_03`), 'Two minutes.' (`_04`), 'I'm sending the loot van.'
+  (`_05`), 'It's getting pretty unpleasant out there. You guys sure you wanna stick around?' (`_07`), 'That
+  was close. Good job.' (`_13`), 'That's all of them, let's get out of here!' (`pln_gen_count_09`), 'Think
+  we're about to be outgunned!' (`pln_gen_pol_03`), the counts 'That's one.' .. 'That's eight.'.
+- The other 91 have several line streams and as many texts, e.g. `pln_gen_pol_01` (15: 'The police are here!
+  Stand 'em down.', 'Here come the cops!' ...), `pln_gen_urg_01` (13: 'Go go go!' ...), `pln_vih_01` (6:
+  'Escape's here! Saying again, escape's here!' ...), `pln_gen_bfr_01` (3: 'Van's here! ...'). The EVENT is
+  exact, **which stream speaks which text is not**: on the labelled events with two or more lines the
+  playlist order is the subtitle number in 3,702 of 4,980 (74 %). The tool takes `<event>_<nn>` as the nn-th
+  playlist entry and marks it `~` (ASSUMPTION); `TABLE` uses none of them. One listen per event would settle
+  each (`kl_bain.py wav pln_gen_pol_01_01 x.wav`).
+- The 163 others are the older `ban_*` set (Payday: The Heist's recordings) and need a Wwise Vorbis decoder
+  (codebook-stripped Vorbis; neither `pd2_audio` nor ffmpeg reads it).
 - No subtitle text: 131 of his labels. Other languages: Payday 2 has subtitles in 14, one recording.
+
+### 2.4 The radio clicks (MEASURED)
+
+Every event of Bain is a sequence container of three sounds: `regular_vox/111416` (4,928 samples, 0.154 s),
+the line (or a random container of line variants), `regular_vox/229541` (3,712 samples, 0.116 s). Both
+clicks are mono 32 kHz PTADPCM. 3,220 of his 3,380 events hold both, 3,200 as first and last sound of the
+playlist; outside `pln_*` / `ban_*` 12 events of other speakers do (a scan of all 7,378 dialogue events). That is what makes him
+sound like a voice in the ear in Payday 2; a clip here is click + line + click, the clicks at the line's
+gain (ASSUMPTION: the container's volume fields were not read).
 
 ## 3. The mapping (ASSUMPTION throughout: by the two texts; `kl_bain.TABLE`)
 
@@ -172,11 +211,11 @@ decodes them (decoder verified in `re/pd2_audio.md`). The 26 clips used here are
 | field | Dog Days line | Bain label | Bain's line | s |
 |---|---|---|---|---:|
 | 87 | Ah! Calm down, I'm on my way. Ayah. | pln_esc_fixed_van | Alright, guys! A van is coming in to get you out! | 2.2 |
-| 88 | Easy... I'm almost there! Keep your shirt on. | pln_at1_gen_11_01 | Great job! I'm sending the van, keep looting! | 2.6 |
+| 88 | Easy... I'm almost there! Keep your shirt on. | pln_gen_bfr_05_01 (by the bank, exact) | I'm sending the loot van. | 1.1 |
 | 89 | Ah! I'll be there soon. Jeez. | pln_fost_en_03_03 | You got enough. I'll get our man on the way. | 2.2 |
 | 108 | Get in now! | pln_esc_arrival_van | Alright the van is there. Move! | 1.6 |
 | 109 | Hurry up! Hurry up! | pln_cr2_90_02 | Van's ready and waiting, gang. Move it! | 1.9 |
-| 112 | I'll be there in a second. But this is your last chance! | pln_cs1_102_02 | They've really opened the valve. The van can't wait forever. You need to book it, now! | 4.8 |
+| 112 | I'll be there in a second. But this is your last chance! | pln_branchbank_stage1_30_any_01 | Getting pretty unpleasant out there. You guys sure you wanna stick around? | 3.2 |
 | 113 | ... Better be ready or I'll leave you behind. ... | pln_ko1_17_02 | I'm shutting this down. Make sure you're with the driver when he bails, or it's a long walk home. | 4.9 |
 | 114 | You got 2 seconds! I ain't hanging around ... | pln_ko1_17_01 | The driver's gonna bail! Make sure you're with him. | 2.0 |
 | 161 | Hurry up, we only got one minute left... C'mon! | pln_esc_01_to_departure_van | The van leaves in one minute. Wrap it up! | 2.1 |
@@ -190,7 +229,10 @@ decodes them (decoder verified in `re/pd2_audio.md`). The 26 clips used here are
 | 189 | (inside) Too slow! Find another ride! | pln_dah_55_01 | OK, that's it. Time to go. | 1.7 |
 | 190 | (inside) C'mon eh! I'm getting out now! | pln_chw_14_02 | Time to go! Come on! | 1.2 |
 
-Weak rows: 88 ('keep looting' answers a call for help), 89 ('You got enough'), 112 ('opened the valve' is a
+Seconds are the line's; a clip is 0.27 s longer with the radio clicks.
+Weak rows: 88 ('loot van': in Payday 2 that is not the escape; before the second pass this row was 'Great
+job! I'm sending the van, keep looting!', `pln_at1_gen_11_01`), 89 ('You got enough'), 112 (a question where
+the driver gives an ultimatum; it replaced `pln_cs1_102_02`, whose 'They've really opened the valve' is a
 bank's vault talk), 185 - 187 ('He'll be back' is wrong after the LAST vehicle; the game has one line group
 for every vehicle). 161 - 163 assume the clock the driver warns about is the escape's.
 
@@ -222,6 +264,8 @@ is heard. Price: the crew no longer speaks these lines itself.
 
 | Bain has (examples, all mono 32 kHz with text) | Dog Days event |
 |---|---|
+| police arriving, generic (2.3): `pln_gen_pol_01` 15 variants ('The police are here! Stand 'em down.'), `pln_gen_pol_03` 'Think we're about to be outgunned!' (exact), `pln_polin_01..04` 'Police are closing in. They are here in 20 / 30 / 40 / 60 seconds.' | none - the same missing trigger |
+| hurry: `pln_gen_urg_01` 13 variants ('Go go go!'), `pln_gen_bfr_10` 'Clock's ticking, people!' | 109 could take one once a variant has been listened to |
 | police arriving: `pln_at1_gen_01_01` 'Cops on the way! Let's go!', `pln_branchbank_stage1_19_any_01` 'More cops on the way.', `pln_cr2_104_02` 'This is it, gang. They're throwing everything they have in to this. Get out of there!' | none: an `OnlineSpeakTrigger` on the police squads' spawn (Retomoto's street layer) could play one - authoring, not done |
 | the van called / arriving with a time: `pln_esc_30secs_to_arrival_van`, `pln_esc_01_to_arrival_van` | no event with a known time to arrival |
 | 30 / 10 seconds to departure: `pln_esc_30secs_to_departure_van` '30 seconds left. Get in the van or you'll be left behind.', `pln_esc_10secs_to_departure` | none (Dog Days warns at 3 / 2 / 1 minutes only) |
@@ -246,12 +290,13 @@ Steps (all on a copy; the source build is not changed):
 
 1. **Clips.** Each chosen stream is decoded and scaled so that its RMS equals that of the first Dog Days
    line it replaces (measured through ffmpeg from the stock Ogg clip; never amplified, never below 0.2;
-   `TARGET_RMS` 4000 when ffmpeg is missing - ASSUMPTION). Gains in this build: 0.23 - 1.00.
+   `TARGET_RMS` 4000 when ffmpeg is missing - ASSUMPTION). Gains in this build: 0.23 - 1.00. With `--radio 1`
+   (default) the two clicks of 2.4 are put before and behind the line, at the line's gain.
 2. **Stream file** (`stream_add`; `kl_str` has no entry for an outside clip, so it is done here with
    `kl_str`'s reader and record writer): the base's bytes up to its tables (0x644d3000) are copied
    unchanged, the 26 clips follow on multiples of 0x100, then one fresh format table, name table and sorted
-   index. Names `Dialog/kl_merge/Bain/<label>.wav`. 1,684,486,009 -> **1,688,650,829 bytes** (+3.97 MB;
-   4,159,232 bytes of audio). The base's `.map.json` is copied beside it (no Dead Men block moved);
+   index. Names `Dialog/kl_merge/Bain/<label>.wav`. 1,684,486,009 -> **1,688,896,606 bytes** (+4.21 MB;
+   4,405,376 bytes of audio). The base's `.map.json` is copied beside it (no Dead Men block moved);
    `PC_Def.str.bain.json` lists the new clips. A second run finds the clips there and keeps the file.
 3. **Bank** (`bank_add`): per clip one sound - a copy of the 0x34 bytes of the sound it replaces (cone,
    flags, the same parameter list: mixer group `dialog`, parameter types 0x1f and 0x21), new name
@@ -265,7 +310,7 @@ Steps (all on a copy; the source build is not changed):
    groups, 18 for `driver`). The settings, the `.prp` and all other members are byte for byte the source's.
 
 MEASURED on the result (`check`, run by `build`): the bank walks clean and passes `kl_snd.verify`; sounds
-4,967 -> 4,993, waves 4,816 -> 4,842; `.SND` 2,514,560 -> 2,520,336, `.WHD` 2,114,304 -> 2,117,696; all
+4,967 -> 4,993, waves 4,816 -> 4,842; `.SND` 2,514,560 -> 2,520,384, `.WHD` 2,114,304 -> 2,117,712; all
 21,227 streamed records of the `.WHD` are blocks of the new stream file, 0 missing; each of the 26 Bain
 sounds resolves to a PCM clip of exactly its record's offset, size, rate and channels, and is named by a
 leaf in 8 of 8 `.LOC` files; each `.LOC` rebuilds to itself; `kl_voice.heisters`: plain keys 108 Vorbis + 18
@@ -277,16 +322,31 @@ Kept builds (work folder, nothing installed):
 
 | folder | from | groups | archive sha1 |
 |---|---|---|---|
-| `build\v_bain\retomoto_bain` | `rt_ai3\retomoto_ai3` | driver, brief | fee6401f |
-| `build\v_bain\retomoto_bain_guns` | `rt_guns3\retomoto_ai3_guns` (the owner's installed build) | driver, brief | fccdc077 |
-| `build\v_bain\retomoto_bain_driver` | `rt_ai3\retomoto_ai3` | driver | - |
-| `build\v_bain\PC_Def.str` (+ `.map.json`, `.bain.json`) | `build\PC_Def.str` | all 26 clips | 1920fb63 |
+| `build\v_bain\retomoto_bain` | `rt_ai3\retomoto_ai3` | driver, brief | cb6cd7d6 |
+| `build\v_bain\retomoto_bain_guns` | `rt_guns3\retomoto_ai3_guns` | driver, brief | bcf31965 |
+| `build\v_bain\retomoto_bain_driver` | `rt_ai3\retomoto_ai3` | driver | 2dad2a6d |
+| `build\v_bain\PC_Def.str` (+ `.map.json`, `.bain.json`) | `build\PC_Def.str` | all 26 clips | 319c32cf |
+| `build\v_bain\over_talk\retomoto_talk_bain` | `v_talk\retomoto_talk` (Kane / Lynch exchange, `KLTalk.ini`) | driver, brief | 43b65811 |
+| `build\v_bain\over_talk\PC_Def.str` (1,694,610,488 bytes) | `v_talk\str\PC_Def.str` (1,690,199,891) | talk clips + 26 Bain clips | b0cb8bcd |
+
+All five were rebuilt in the second pass (radio clicks on, the two new rows); 0 problems each, `kl_fa.check`
+the same finding before and after. The three under `v_bain\` need `v_bain\PC_Def.str`; `over_talk`'s build
+needs `over_talk\PC_Def.str`, which also serves every other build here EXCEPT the three above (their Bain
+records point where `over_talk`'s file holds talk clips). On `over_talk`: bank 4,993 -> 5,019 sounds, 4,842 ->
+4,868 waves; `.WAV` 27,802,960 -> 27,802,960 (the +0.64 MB against `rt_ai3` is the talk tool's, not Bain's).
 
 Each folder has `bain.json` (the mapping with both texts, gains, offsets) and `bain.txt` (the log).
-One decoded line to listen to outside the game: `<work>\pd2\audio\bain\pln_esc_arrival_van.wav`
-(`python tools/kl_bain.py wav <label> <out.wav>` writes any other).
+Two decoded lines to listen to outside the game, with the clicks: `<work>\pd2\audio\bain\pln_esc_arrival_van.wav`
+and `pln_gen_bfr_05_01.wav` (`python tools/kl_bain.py wav <label> <out.wav> [--radio 0]` writes any other).
 
 ## 5. What the lead has to install (described, not done)
+
+**First decide which stream file.** Bain alone: steps 1 - 3 with `v_bain\PC_Def.str`. Bain together with the
+Kane / Lynch exchange of `kl_fa_talk.py`: the same steps with `v_bain\over_talk\PC_Def.str` and
+`over_talk\retomoto_talk_bain` (it has no gun looks: for those, run `kl_guns` / `kl_bain` on the wanted
+build with `--stream <work>\build\v_talk\str\PC_Def.str` and a new `<dst>` folder under `over_talk\`).
+Whatever is chosen, later tools must append to THAT file: a build made against another descendant of the
+base points into the wrong clips (heard as the wrong line or noise, not a crash - ASSUMPTION).
 
 1. **`<work>\build\v_bain\PC_Def.str` -> `<DD>\PC_Def.str`.** This REPLACES the owner's extended stream file
    (1,684,486,009 bytes, the 2026-10-09 17:19 merge; the installed file equals `<work>\build\PC_Def.str` in
@@ -317,7 +377,7 @@ One decoded line to listen to outside the game: `<work>\pd2\audio\bain\pln_esc_a
 | B5 | let the clock run | time warnings | 'The escape vehicle is leaving in three minutes.' ... 'The van leaves in one minute. Wrap it up!' - and whether the times are true |
 | B6 | stay out when boarding ends | boarding end | 'The van had to leave. He'll be back soon at another location.' |
 | B7 | escape with everybody | the end line | 'Well done gentlemen! Some hard-earned cash!' |
-| B8 | throughout | loudness and tone | Bain against the crew's lines and the gunfire: too quiet -> raise `TARGET_RMS` / drop the gain step; no radio effect on him (Payday 2's files are clean studio voice): does it sit with Dog Days' `_R` radio lines? |
+| B8 | throughout | loudness and tone | Bain against the crew's lines and the gunfire: too quiet -> raise `TARGET_RMS` / drop the gain step; each line opens and closes with a short radio click (2.4): too much -> rebuild with `--radio 0`. The voice itself is clean studio sound: does it sit with Dog Days' `_R` radio lines? |
 
 If B2 is **silent** (the level loads, the subtitle shows, no voice): the stream player does not take this
 record form. Fallback, not built: the same clips as IMA ADPCM **in memory** - the form of 643 of F07's 729
@@ -334,7 +394,9 @@ the stream file in the game folder is the old one (step 5.1).
 - Where a driver line is heard from (the `ZSpeakerDriver` object or the listener).
 - Which `K_C<n>` a briefing takes in Arcade does not matter here (all nine name the clip); that the
   briefing plays at all on Retomoto is `re/bots_voice.md` 8.1, still open.
-- Bain's unlabelled generic lines (2.3); the 200 stereo and 129 44.1 kHz labelled lines are refused by
-  the tool (nothing here mixes down or resamples).
+- Which text each stream of a many-variant generic event speaks (2.3; 74 % by playlist order); the 163
+  Wwise Vorbis events; the 200 stereo and 129 44.1 kHz labelled lines are refused by the tool (nothing
+  here mixes down or resamples). The clicks' volume relative to the line in Payday 2 (2.4).
+- What the engine does with two builds' records in one stream file region (section 5): not tried, avoid.
 - The other languages: Bain's English text is written into all eight `.LOC` files.
 - The mapping itself (section 3) is a reading of two lists of subtitles.
