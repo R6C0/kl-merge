@@ -209,18 +209,19 @@ RoomMB=128 (all five blocks in the reserve from the second load on; klmem.c's co
 at 00:25 (same callers as 17:55). Sessions now: kl-merge-01 = this one, holds the game; kl-merge-39 = Payday 2 masks + Heister
 pictures (offline; rebuilt pair <work>/build/portraits/out2/Overlay waits for live run PV1b); kl-merge-b6 = Retomoto AI / street /
 van (offline; re/retomoto_ai.md, builds in G:\kl_scratch\ai_*; owns kl_fa_street.py, kl_fa_author.py, kl_arms.py, kl_fa_van.py).
-PAYDAY 2 MASKS (session kl-merge-88, 2026-10-10 01:25; owner away, 20-minute check-up loop running): PD2 is installed and its
-crate store decoded (Payday 2 section). First research run died on the usage limit at 00:10 (partial files kept: tools/pd2_crate.py,
-<work>/pd2/extract 413 files, <work>/pd2/kl scripts); relaunched 01:20. Heister pictures: run PV1 (kl-merge-74) showed them LIVE;
-fixed red/blue swap (kl_portraits BGRA=False) and the character picture 24 units higher (mkoverlay HEISTER_PICS Y 36); labels and
-pictures agree (shot PV1_70s: 'Orange face - Liam' = Liam's mask); rebuilt pair <work>/build/portraits/out2/Overlay (check 0 problems),
-not installed. Two research workflows run in the background, offline: (1) pd2-masks-dig = tools/pd2_crate.py
-(reader + extraction of msk_wolf / dallas / chains / hoxton, Lua, a criminal body), tools/pd2_model.py (Diesel .model / .texture),
-re/pd2_attach.md (how PD2 links a mask to the Head object, the crew masks' textures), re/pd2_klside.md (52-byte skinned vertex,
-head-bone frames of the 16 skeletons, the stock mask box, variant-byte signed or not = whether 12 masks fit, the 8 -> 12 constants);
-(2) firstperson research (re/firstperson_camera.md, re/firstperson_assets.md; research only, owner asked). Next, in order:
-tools/kl_pd2mask.py (WOLF first) -> kl_chars wardrobe with 12 masks -> klchar.c / mkoverlay.py / kl_portraits.py constants -> build
-with problems: 0 -> kl_view pictures of each mask on J.C. and Kane. NOTHING of this is installed; no live run without kl-merge-74's hand-over.
+PAYDAY 2 MASKS (session kl-merge-39 (was 88), 2026-10-10 06:35; owner away, 20-minute check-up loop; subagent usage limits cut the
+research twice, 00:10 and ~01:40, resets at 06:10 - restart workflows at once after a reset). DONE, committed: tools/pd2_crate.py
+(crate reader + extraction + Diesel XML; re/pd2_crates.md), re/pd2_klside.md (THE K&L SIDE: 52-byte skinned vertex fully decoded,
+HEAD = bone 7 of all 16 skeletons with X = up, Y = back (face -Y), Z = right; stock whole-head mask box in HEAD space
+(-14.7,-17.0,-10.2)..(20.9,10.8,10.4), eyes ~(6.5,-11.5,+-3.3); the variant byte is compared UNSIGNED at 0x67cf8e / 0x57ee77, so
+12 masks fit: step 14, head block 113..128 - kl_chars.check_wardrobe's '> 127' test must change; Merc_Masks clone recipe; bounds
+live in the model root +0x20 only), re/firstperson_assets.md + re/firstperson_camera.md (research for the owner's first-person
+question: tier (a) camera-at-head + hidden-body variant is feasible as a hook feature; no fps remnant in kl2.exe; PD2 has one fps
+arm unit, 361 fps weapon units, 3,710 fps clips; .ANM key format undecoded blocks new clips). RUNNING (workflow pd2-masks-dig-2,
+06:30): tools/pd2_model.py (Diesel .model / .texture; partial file exists), re/pd2_attach.md, verifiers, critic. Heister pictures
+fixed (5a85831), pair <work>/build/portraits/out2 queued for a live re-run by kl-merge-01 (holds the game). Next: tools/kl_pd2mask.py
+(WOLF first) -> wardrobe with 12 masks -> constants in klchar.c / mkoverlay.py / kl_portraits.py -> build problems: 0 -> kl_view
+pictures. NOTHING of this is installed.
 STATE 2026-10-09 23:50 - INSTALLED FOR THE OWNER: F01 slot = <work>/build/y_loot/retomoto_loot (Retomoto + wardrobe + the loot
 props: briefcases on the boardroom table, table stacks moved to the rims, armour as statue loot; NOT run in the game); hook = SHIP
 <work>/build/klhook/ship_mem2 (sha1 6d0784ca: klnudge + klchar + the REWRITTEN klmem), KLHook.ini written fresh (copy of the pair:
