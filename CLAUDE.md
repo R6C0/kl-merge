@@ -182,6 +182,10 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+SLOT 2026-10-10 12:46 = <work>/build/rt_guns/retomoto_ai2_guns (Retomoto v2 + baked gun looks) on the owner's word; load check RTG
+PASS (GO, no fault; 'guns: on; starting rifle look 0' and no level line = the hook leaves the Version 2 KLGuns.ini alone). The
+pictures do NOT show the gun (camera behind the head): G1 is for the owner's eyes. debug/slot.py does not copy KLGuns.ini -
+copied by hand into the slot; TEACH slot.py that side file. TO WRITE (lead): klgun.c Version 2 + hide bit (re/map_guns.md 5).
 GUN LOOKS, checked 2026-10-10 13:00 (agent t-guns; tools/kl_map_guns.py, re/map_guns.md; NOT RUN IN THE GAME): kl_guns' own way
 (variant byte 100 + n) CANNOT work - a gun entity has variant 0 and kl2 0x67cf84 then takes every object, so stock gun and all
 looks would be drawn in one another; what hides a part is bit 0x00800000 of the mesh object's dword +0x1c (0x67cf77). kl_map_guns
