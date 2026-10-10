@@ -235,24 +235,19 @@ RoomMB=128 (all five blocks in the reserve from the second load on; klmem.c's co
 at 00:25 (same callers as 17:55). Sessions now: kl-merge-01 = this one, holds the game; kl-merge-39 = Payday 2 masks + Heister
 pictures (offline; rebuilt pair <work>/build/portraits/out2/Overlay waits for live run PV1b); kl-merge-b6 = Retomoto AI / street /
 van (offline; re/retomoto_ai.md, builds in G:\kl_scratch\ai_*; owns kl_fa_street.py, kl_fa_author.py, kl_arms.py, kl_fa_van.py).
-PAYDAY 2 MASKS (session kl-merge-39, 2026-10-10 07:25; owner away, 20-minute check-up loop; subagent usage limits reset 06:10,
-restart workflows at once after a reset). BUILT OFFLINE, NOTHING RUN IN THE GAME, NOTHING INSTALLED - a live package waits for
-kl-merge-01 (holds the game): F01 slot <work>/build/pd2/pd2_F01 (stock F01 + wardrobe + Wolf, Dallas, Chains, Hoxton as masks 9..12;
-.prm 85.7 MB, 45,831 chunks, problems: 0, kl_impact 0, invisible 65/65; KLWardrobe.ini Masks=12), hook <work>/build/klhook/pd2_ship
-(SHIP from HEAD 2dbcc77 = klmem rewrite + klchar KLC_MASKS 12, sha1 b4f1dc8b) + KLHook.ini, overlay <work>/build/pd2/overlay/Overlay
-(Patch01.zip with 14 Mask entries + Scenes/kaneandlynch.zip with 31 pictures incl. the four plates; install TOGETHER). Live checks
-owed: PD1 the Heister page shows 'Wolf (Payday 2)' .. with pictures (red/blue fixed, figure above the bar); PD2 KLMask=10 on J.C. and
-on Kane (Char=9): the wolf plate on the face in the level; PD3 a round: plate follows the head, no crash at the bullet marks; PD4 an
-8-mask build with the 12-mask hook (fallback 'no mask', log line). Tools: tools/pd2_crate.py (crate store), tools/pd2_model.py
-(Diesel .model/.texture), tools/kl_pd2mask.py (plates -> wardrobe; `kl_chars.py wardrobe <base> <out> --plates=wolf,dallas,chains,
-hoxton`); notes re/pd2_crates.md, re/pd2_model.md, re/pd2_attach.md, re/pd2_klside.md. Fit = (X,Y,Z) = (y,-z,-x) + (-1.6,+0.7,0),
-scale 1: kl_view pictures (<work>/build/pd2/pd2_F01_masks.png, _kane.png) show the eyes in the holes; ASSUMPTION until seen live.
-07:20: the critic found the plates INSIDE-OUT in model space (the stored HEAD 3x3 is a reflection, det -1; kl_view does not
-cull so its pictures could not show it): fixed in kl_pd2mask (_keep_sense, outward_share check), pd2_F01 REBUILT, plates read back
-from the file face outward 1.000 on J.C. and Kane, problems: 0 (cc20daf). Normal maps: same channel layout in both games (x in
-alpha, y in green). Not done: msk_backside (the PD2 back shell) is not carried - the character's own hair shows behind the plate (by design for now);
-normal map taken as DXT5 0x40 like Merc_Masks' (swizzle unverified); more masks = add to kl_pd2mask.PD2_MASKS and the lists.
-First-person research: re/firstperson_camera.md + re/firstperson_assets.md (tier (a) camera-at-head + hidden-body variant feasible).
+PAYDAY 2 MASKS - WORK IN THE GAME (2026-10-10 09:40-09:52, runs pd2-wolf / dallas / chains / hoxton / dallas-long; owner, relayed
+by kl-merge-db: 'the payday 2 masks all work'). Log: 'wardrobe (version 2): 16 characters, 12 masks', 'body: ... the player now has
+28509' (Kane), 'look: variant 1 -> 11' (wolf; 12 dallas); picture research/shots/pd2-wolf_60s.png: Kane at GO on Subway with the
+plate on his face (drawn, not culled - the winding fix held). Build <work>/build/pd2/pd2_F01 (stock F01 + wardrobe + masks 9..12),
+overlay <work>/build/pd2/overlay/Overlay (14 Mask entries + 31 pictures); the owner's SHIP hook already reads 1..12 masks.
+Tools: tools/pd2_crate.py, pd2_model.py, kl_pd2mask.py, `kl_chars.py wardrobe <base> <out> --plates=wolf,dallas,chains,hoxton`;
+notes re/pd2_crates.md, pd2_model.md, pd2_attach.md, pd2_klside.md. NOT DONE: the plates on the owner's Retomoto build (rebuild
+the wardrobe step with --plates on the lightened base: the game holder's call); msk_backside (PD2's back shell) not carried; more
+masks = kl_pd2mask.PD2_MASKS + mkoverlay PD2_MASKS + kl_chars.PD2_MASKS (room for 4 at step 14; more needs a larger step).
+SIDE RESEARCH (offline, 2026-10-10): re/pd2_guns.md (39 single-piece wpn_npc_* guns, 254-441 triangles: the easy input for
+kl_guns looks; unverified), re/pd2_audio.md + tools/pd2_audio.py (streams are Wwise PTADPCM, decoder verified; jukebox tracks
+mapped; kl_str needs an external-clip entry point), re/firstperson_camera.md + re/firstperson_assets.md (camera-at-head +
+hidden-body variant is feasible as a hook feature; animated PD2 first person is blocked by the undecoded .ANM key format).
 STATE 2026-10-09 23:50 - INSTALLED FOR THE OWNER: F01 slot = <work>/build/y_loot/retomoto_loot (Retomoto + wardrobe + the loot
 props: briefcases on the boardroom table, table stacks moved to the rims, armour as statue loot; NOT run in the game); hook = SHIP
 <work>/build/klhook/ship_mem2 (sha1 6d0784ca: klnudge + klchar + the REWRITTEN klmem), KLHook.ini written fresh (copy of the pair:
