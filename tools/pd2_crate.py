@@ -350,7 +350,10 @@ class Index:
         with open(out, 'wb') as f:
             f.write(d)
         if xml and d and self.ext_name(ent.ext) in XML_DOC_EXTS:
-            write_xml(d, out)
+            try:
+                write_xml(d, out)
+            except ValueError as e:                     # a few genuine files are not well-formed: the raw file is still written
+                print('  %s: no .xml (%s)' % (out, e))
         return out, d
 
     def masks(self):
@@ -602,13 +605,14 @@ XML_DOC_EXTS = ('unit', 'object', 'material_config', 'sequence_manager')
 
 
 def is_text_xml(data):
-    return data.lstrip()[:1] == b'<'
+    d = data.lstrip()
+    return d[:1] == b'<' or (b'<' in d[:4] and b'\0' not in d[:64])    # 6 genuine files carry 1-2 stray bytes before '<'
 
 
 def text_documents(data):
     """The XML documents of a text blob: one, or the two branches of the ` ELSE {` form."""
     t = data.decode('utf-8', 'replace')
-    m = re.search(r'\n ELSE \{\n', t)
+    m = re.search(r'\r?\n ELSE \{\r?\n', t)                  # 8 of the 606 pairs are CRLF (verifier, 2026-10-10)
     if not m:
         return [t]
     a, b = t[:m.start() + 1], t[m.end():]
