@@ -182,6 +182,29 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+STATE 2026-10-10 07:15 (kl-merge-01; owner away since 01:00, STEAM STILL AT ITS SIGN-IN WINDOW: no live run since 00:55).
+INSTALLED FOR THE OWNER: slot = <work>/build/y_loot/retomoto_loot (unchanged); hook = SHIP <work>/build/klhook/ship_stall (sha1
+c120880a = ship_mem3's several-block reserve and map files + the STALL WATCH + klchar that accepts 1..12 masks); their KLHook.ini
+untouched; overlay Patch01.zip (90,729 bytes) untouched. None of the hook's new parts has run in the game.
+- STALL WATCH (klhook.c, [KLHook] StallMs / StallSayMs / StallEndMs): no frame and no loader step for 30 s -> a line with where the
+  main thread stands + KLHook_freeze.dmp; silences over 3 s are logged when they end; StallEndMs (off) would end the process.
+  Read the 'stall watch:' lines of the owner's next sessions before ever switching StallEndMs on.
+- FOUR DEAD MEN MAPS REBUILT (agent z-maps, audits re-run: PASS x4), offline, NOT LOADED: <work>/build/z_maps/M01, M02, M03, M06
+  (F07 systems, all fixes, lighten, wardrobe; .prm 50-61 MB, archives 178-197 MB). Install one: `python debug/slot.py put
+  "<work>/build/z_maps/M03" F01`. Expansion tree of five maps: <work>/build/z_maps/expansion/KLExpansion (2.88 GB). re/maps.md 14.
+  M02's boarding box had the bank's coordinates (kl_escape.board_box moves it; not run). No AI heisters on any (re/maps.md 14).
+- DIAGNOSIS (agent z-freeze, re/freeze_1009.md) - CORRECTIONS to older entries below: the game is DIRECT3D 9 (imports d3d9.dll
+  only; '-dx10' in the launch options changes nothing found); the 22:23 FREEZE had the reserve still held and no display driver
+  fault (the 22:28 'watchdog' was the owner's Win+Ctrl+Shift+B): Quit from the score page, state 0x20 -> 0x2e, main thread never
+  seen again, cause NOT established. DiscordHook.dll+0x1f7fd THREE times (17:08, 17:55, 00:25): the render thread inside Present,
+  Discord's own pointer NULL, twice just after the window lost the foreground -> tell the owner to switch Discord's overlay off
+  for this game. With the window not in front the main loop only pumps messages (Arcade pauses; scripted runs stand still).
+- kl_watch.py took ONE picture of the Alt+Tab switcher over other windows (<work>/research/watch/20261009_174356/0081_661s.jpg;
+  the owner has been told, the file is theirs to delete); grab() now also checks the window under the game's middle, twice.
+- LIVE QUEUE, needs the owner's word once Steam is signed in (scratchpad now/QUEUE.txt; TEST hook <work>/build/klhook/test_stall):
+  M8 six loads (klmem) -> M8b ReserveMB=176 RoomMB=128 -> PV1b Heister pictures with kl-merge-39's <work>/build/pd2/overlay/Overlay
+  -> F1 <work>/build/fxc_slim/retomoto_loot -> PD2a/PD2b/PD3 Payday 2 masks (<work>/build/pd2/pd2_F01, scratchpad pd/PD2a.ini,
+  PD2b.ini; rebuilt with the winding fix, cleared by kl-merge-39 at ~07:00) -> a z_maps map (M03 first) -> kl-merge-b6's Retomoto AI.
 STATE 2026-10-10 01:35 - OWNER'S CRASHES 00:41, 00:44, 00:47 (all 0x8e5bbd, third / fourth level load of one process; dumps in
 <work>/research/owner_crash_1010_0047) AND THE FIX, INSTALLED, NOT RUN IN THE GAME: the reserve held one block (the 74.6 MB .prm);
 a level asks for five large blocks (32.0 scratch, 16.9 = .fxc, 74.6 = .prm, 20.6 = .ANM, 25.9 = no archive member) and the largest

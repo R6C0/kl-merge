@@ -559,9 +559,13 @@ static void (__cdecl *klh_real_runcallbacks)(void);
 static volatile DWORD klh_tick_last, klh_ticks; static volatile LONG klh_tick_busy, klh_tick_seen;
 static int klh_tick_source = -1;
 
+static volatile LONG klh_game_ticks;                  /* frames of the main loop: half of the stall watch's heartbeat */
+static DWORD klh_main_tid;                            /* the main loop's thread (its first SteamAPI_RunCallbacks call) */
+
 static void klh_tick(int game_thread)
 {
     DWORD now = GetTickCount(); static DWORD armed;
+    if (game_thread) { InterlockedIncrement(&klh_game_ticks); if (!klh_main_tid) klh_main_tid = GetCurrentThreadId(); }
     if (InterlockedExchange(&klh_tick_busy, 1)) return;
     if (game_thread) { klh_tick_last = now; klh_tick_seen = 1; }
     if (klh_tick_source != game_thread) {             /* changes at every scene load (the main loop stands still): said six times */
@@ -583,11 +587,78 @@ static void klh_tick(int game_thread)
 
 static void __cdecl klh_w_runcallbacks(void) { klh_real_runcallbacks(); klh_tick(1); }
 
+/* ---------------------------------------------------------------- the stall watch (SHIP and TEST)
+
+   WHY (re\freeze_1009.md). 2026-10-09 22:23: the owner quit from the score page, the session went 0x20 -> 0x2e and
+   the game stood still, full screen, for 6.5 minutes until the PC was reset. The hook wrote nothing after the state
+   line: no fault happened, so no dump, and what the main thread waited for is not known.
+   WHAT. The ticker thread counts its own 100 ms steps in which the main thread gave no sign of life. A sign is a
+   frame (the SteamAPI_RunCallbacks wrapper) or a step of the loader's message pump (klnudge.c's GetForegroundWindow
+   wrapper, when [Load] has it in: a level load makes no frames). Steps are counted, not clock time, so a PC that
+   slept does not look like a stall.
+     StallSayMs   a silence longer than this is logged with its length when it ends (the healthy ones: 8.6 s on
+                  Alt+Tab and 10.7 s in a frontend load are the longest in the logs up to 2026-10-10)
+     StallMs      silent this long: one line with where the main thread stands, and KLHook_freeze.dmp (all threads,
+                  region list; twice per process at most). Nothing else is done.
+     StallEndMs   0 = never. Else the process is ENDED after that much silence, which gives the desktop back.
+                  OFF by default: which silences a healthy game can have is not measured widely enough (a level
+                  load without the GetForegroundWindow wrapper is silent for its whole length - 200 s were seen).
+   NOT RUN IN THE GAME. */
+static int klh_stall_say_ms = 3000, klh_stall_ms = 30000, klh_stall_end_ms;
+
+static void klh_freeze_dump(void)
+{
+    HMODULE h = LoadLibraryA("dbghelp.dll"); MDWD w = h ? (MDWD)GetProcAddress(h, "MiniDumpWriteDump") : 0; char path[MAX_PATH]; HANDLE f;
+    if (!w) return;
+    snprintf(path, sizeof path, "%s\\KLHook_freeze.dmp", dir);
+    f = CreateFileA(path, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
+    if (f == INVALID_HANDLE_VALUE) return;
+    if (!w(GetCurrentProcess(), GetCurrentProcessId(), f, 0x1 | 0x40 | 0x1000 | 0x800, 0, 0, 0)) {    /* as write_dump */
+        SetFilePointer(f, 0, 0, FILE_BEGIN); SetEndOfFile(f);
+        w(GetCurrentProcess(), GetCurrentProcessId(), f, 0x1 | 0x40 | 0x1000, 0, 0, 0);
+    }
+    CloseHandle(f);
+    klog("  dump written: KLHook_freeze.dmp (every thread; `python debug\\dump.py` says where the main and the render thread stand)");
+}
+
+static void klh_stall_watch(void)
+{   /* every 100 ms on the ticker thread */
+    static LONG last; static DWORD quiet; static int told, dumps;
+    LONG beat = klh_game_ticks + kln_calls;
+    if (!klh_tick_seen) return;                       /* before the main loop's first frame: start-up, movies */
+    if (beat != last) {
+        if (quiet * 100 >= (DWORD)klh_stall_say_ms && klh_stall_say_ms)
+            klog("stall watch: the main thread is back after %.1f s without a frame or a loader step", quiet / 10.0);
+        last = beat; quiet = 0; told = 0;
+        return;
+    }
+    quiet++;
+    if (klh_stall_ms && !told && quiet * 100 >= (DWORD)klh_stall_ms) {
+        HANDLE t = klh_main_tid ? OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, FALSE, klh_main_tid) : 0;
+        CONTEXT c; char mod[80]; DWORD off; int got = 0;
+        told = 1;
+        klog("STALL: the main thread has given no frame and no loader step for %.0f s%s", quiet / 10.0,
+             kln_real ? "" : " (the GetForegroundWindow wrapper is not in: a level load looks the same)");
+        if (t) {
+            memset(&c, 0, sizeof c); c.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
+            if (SuspendThread(t) != (DWORD)-1) { got = GetThreadContext(t, &c); ResumeThread(t); }   /* resumed before any logging: it may hold a lock the log needs */
+            CloseHandle(t);
+            if (got) { klh_module(c.Eip, mod, sizeof mod, &off); klog("  main thread %lu at %s+0x%lx (%08lx)", klh_main_tid, mod, off, c.Eip); log_context(&c); }
+        }
+        if (dumps++ < 2) klh_freeze_dump();
+    }
+    if (klh_stall_end_ms && quiet * 100 >= (DWORD)klh_stall_end_ms) {
+        klog("STALL: %.0f s of silence reached StallEndMs=%d: the process is ended here", quiet / 10.0, klh_stall_end_ms);
+        TerminateProcess(GetCurrentProcess(), 0x57a11);
+    }
+}
+
 static DWORD WINAPI klh_ticker(LPVOID unused)
 {
     (void)unused;
     for (;;) {
         Sleep(100);
+        klh_stall_watch();
         /* signed: the main loop may have ticked between the two reads. (Until 2026-10-09 this was `last = now | 1`
            and an unsigned compare: on an even tick count the difference wrapped and the fallback fired although the
            main loop was ticking - the 'driven by' line flipping within milliseconds in run HK1.) */
@@ -626,6 +697,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     max_dumps = GetPrivateProfileIntA("KLHook", "MaxDumps", 4, klh_ini);
     max_asserts = GetPrivateProfileIntA("KLHook", "MaxAsserts", 200, klh_ini);
     klh_end_on_fatal = GetPrivateProfileIntA("KLHook", "EndOnFatal", 1, klh_ini);
+    klh_stall_say_ms = GetPrivateProfileIntA("KLHook", "StallSayMs", 3000, klh_ini);
+    klh_stall_ms = GetPrivateProfileIntA("KLHook", "StallMs", 30000, klh_ini);
+    klh_stall_end_ms = GetPrivateProfileIntA("KLHook", "StallEndMs", 0, klh_ini);
+    if (klh_stall_end_ms && klh_stall_end_ms < 60000) klh_stall_end_ms = 60000;     /* never a short fuse */
 #ifdef KLHOOK_TEST
     klh_policy = GetPrivateProfileIntA("KLHook", "SessionSafe", 1, klh_ini) ? KLH_SESSION : KLH_DIRECT;
 #endif
