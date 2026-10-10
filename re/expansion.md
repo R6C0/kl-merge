@@ -630,3 +630,186 @@ tree of 2026-10-09 in `<work>\build\expansion\` left as it is.
   name, and none of the four Fragile Alliance builds has run at all in this form (re/maps.md 14.6).
 - The wardrobe through the redirect: klchar.c reads `KLWardrobe.ini` beside the archive that is
   opened, so from `Maps\<id>` - read in the source, NOT seen in a run.
+
+## 10. The 'Dead Men maps' tab from the current builds (2026-10-10, agent w-tab)
+
+OFFLINE: the game was not started, nothing was written to the Dog Days folder. Built into
+`<work>\build\w_tab\`. The owner, 2026-10-10: 'still want the kane and lynch dead men maps to have its own tab'.
+
+### 10.1 What was wrong, and what is left of it
+
+The brief's HOOK entry ('at StartGame the redirect is lost, the Location row is empty, the button has no icon')
+describes run MP1 (2026-10-09 15:59). All three were fixed in commit 0ad48d2 and **seen in the game the same
+evening** (runs MP2b, MP2c, 17:07 / 17:10; `<work>\build\klhook\live\MP2c.log`, pictures
+`<work>\research\shots\MP2c_68s.png`, `MP2c_77s.png`) - the brief was never updated:
+
+| fault of MP1 | cause | fix | seen |
+|---|---|---|---|
+| page read as 0 at StartGame | the page was carried in the menu option `Dummy`, a field of ZMercsOptionsInterface (`[0x154d5f4]+0xd4`); that object is deleted in the menu manager's destructor (kl2 0x673340) and the global zeroed in its constructor (0x617701) - a level load builds new managers. StartGame never reads it (0x502b40 -> 0x746570 -> 0x7e01a0) | `klslot.c` kls_menu_watch: the page is read off the WINDOW STACK (`HeistPlayMenu<N>` open = page N), kept through the load, the level and the session | MP2c.log 110-122: `menu page 2 latched: window 'HeistPlayMenu2' is open`, `session: state 0x0 -> 0x12`, 12 ms later `slot F01: menu page 2 from now on -> DM03`, archive, `_LS`, `.WHD`, `.WAV` all from `Maps\DM03`; round PASS |
+| empty 'Location:' row | elements are found by NAME over the whole menu, first in the file wins (0x83faf0 -> 0x4fa730): the copied page wrote into the stock page's elements | `mkoverlay.py`: every element of the copy gets the suffix `_P<N>` | MP2c_77s.png: focus bar, 'Location:', arrows, 'Withdrawal' |
+| no icon, button on 'Back' | only button + focus bar had been added | icon, line, the rows moved up 34 per added button | MP2c_68s.png: six rows, the sixth with an icon, clear of 'Back' |
+
+So no code of `klslot.c` or `mkoverlay.py` had to change for the latch, the row or the icon (klslot.c: its
+comment now names the runs; mkoverlay.py: not touched). What was NOT there, and is new today:
+
+1. **A tree from the current builds, with the installed Heister / Guns pages kept.** `kl_expansion.py build`
+   called `mkoverlay.py` without `--pictures` and carried no menu scene: installing its overlay would have
+   replaced the owner's Heister page with pictures by one without, and dropped `Overlay\Scenes\kaneandlynch.zip`.
+   New `--overlay-from <folder>` (kl_expansion.py `overlay_kept`, and the block after the mkoverlay call in
+   `build`): mkoverlay is run the way the reference archive was made, everything under its `Overlay\Scenes` is
+   carried, and the build fails unless the windows `KLHeister` and `KLGuns` are the reference's character for
+   character and only `HeistModeMenu`, `HeistPlayMenu2` and its gamepad template differ.
+   Checked first: `mkoverlay.py` as committed, with no `[Redirect.N]` and `--pictures`, reproduces the installed
+   `menu/frontend.xml` byte for byte (685,053 bytes; the zip differs by its time stamp only).
+2. **`KLGuns.ini` is a per-map file** (`SIDE`): adopted into `Maps\<id>`, and set aside with the other two when
+   the F01 slot goes back to stock (`restore_stock`; selftest 32 checks, 0 failed).
+3. **Dead Men's own pictures on the page** - section 4.2's 'NOT DONE - the entity' - as a separate VARIANT of the
+   overlay (`kl_expansion.py mappics`, 10.4). Not in the tree: it changes the menu scene, which nobody has seen
+   load in that form.
+4. `menu_check`'s note 'pictures of the page' read `None` since the elements carry `_P2`: fixed.
+
+### 10.2 The tree
+
+    python tools\kl_expansion.py build --out <work>\build\w_tab --ready <work>\build\z_maps
+           --prebuilt DM09=<work>\build\rt_guns3\retomoto_ai3_guns --overlay-from <work>\build\pd2\overlay
+           --hook <SHIP dinput8.dll> --no-stream --no-share
+
+`RESULT: PASS`, 5 maps accepted, 162 files, 1,232,801,550 bytes; `check`: all files as in the manifest.
+
+| id | title | slot / entry | from | per-map files | archive MB |
+|---|---|---|---|---|---:|
+| DM01 | Hot Coffee | F01 / 0 | `z_maps\M01` | KLWardrobe.ini | 196.9 |
+| DM02 | Late Night Opening | F02 / 1 | `z_maps\M02` | KLWardrobe.ini | 177.8 |
+| DM03 | Withdrawal | F03 / 2 | `z_maps\M03` | KLWardrobe.ini | 188.5 |
+| DM06 | A Walk in the Park | F04 / 3 | `z_maps\M06` | KLWardrobe.ini | 177.6 |
+| DM09 | Retomoto Tower | F06 / 4 | `rt_guns3\retomoto_ai3_guns` | KLJoin.ini, KLWardrobe.ini, KLGuns.ini | 218.9 |
+
+- `Overlay\Patch01.zip` (sha1 2b7c87ef...): frontend.xml 666,602 -> 693,673 bytes; Arcade page with eight rows:
+  the five stock ones, 'Heister' (6), 'Guns' (7), 'Dead Men maps' (8, icon `Icon_System_Link`), group Y 8.
+  `Overlay\Scenes\kaneandlynch.zip` = the installed one (sha1 30e0fd90...).
+- No `Overlay\PC_Def.str` (`--no-stream`): `<DD>\PC_Def.str` already IS the merged file (1,684,486,009 bytes,
+  the size of `<work>\build\PC_Def.str`; not hashed); install with `--no-stream`.
+- `Hook\dinput8.dll` = the SHIP build of 13:46 (sha1 a6b58a51..., 237,056 bytes, `klhook\build.bat`), compiled from
+  the working tree as it stood - INCLUDING the other agent's uncommitted klhook.c / klgun.c / klbot.c. The TEST
+  build of the same minute: `<work>\build\w_tab\hook_test\dinput8.dll` (sha1 e46b69c8...). Both compiled without
+  an error. `klcrew.c` appeared in `klhook\` after that; rebuild when that work lands (`build --reuse
+  --overlay-from ...` without `--hook` compiles the SHIP build itself).
+- Entries 5..8 of the page (F07 and the three DLC slots) keep their stock titles and load the stock maps.
+- The page opens on the entry the profile played last (`Heist_SelectedLevel` is shared with the stock page).
+
+### 10.3 Install (the lead; game closed)
+
+    python tools\kl_expansion.py status
+    python tools\kl_expansion.py install "<work>\build\w_tab\KLExpansion" --replace --no-stream [--no-hook]
+
+- `--replace`: `<DD>\KLExpansion` is not an install of the tool (it holds the old test `Maps\DM03` and the
+  overlay): it is MOVED to `<DD>\KLExpansion.before-0`, and moved back by `uninstall`.
+- Copies `Maps\DM01 DM02 DM03 DM06 DM09`, `Overlay\Patch01.zip`, `Overlay\Scenes\kaneandlynch.zip`, `BuildInfo`,
+  `manifest.json`, `KLHook.expansion.ini` to `<DD>\KLExpansion\`.
+- `KLHook.ini`: `[Expansion] [Redirect] [Slots]` of the file are replaced by the block below between two marker
+  lines; `[KLHook] [Steam] [Character] [Load] [Memory] [Guns]` stay as they are.
+- Hook: without `--no-hook` the tree's SHIP DLL replaces `<DD>\dinput8.dll` (the old one is kept in
+  `KLExpansion\_installed`). With `--no-hook` the installed one stays - any build since 0ad48d2 has the latch.
+- **The F01 slot goes back to stock Subway by copy from `KL_PortBackup`** (which is only read), and the test
+  build's `KLWardrobe.ini`, `KLJoin.ini`, `KLGuns.ini` beside it are renamed `<name>.of-test-build-N` (klchar.c and
+  klgun.c read them beside ANY archive). `--keep-slot` leaves the slot alone. NOT `tools\RESTORE Dog Days
+  originals.bat` for this: it puts EVERY backup file back, `PC_Def.str` included, and the maps' streamed clips
+  index the merged file. `debug\slot.py` puts a BUILD into the slot; it has no 'stock' command.
+
+```ini
+[Expansion]
+Enable=1
+Root=KLExpansion
+Overlay=1
+Fallback=1
+Log=1
+[Redirect.2]
+F01=DM01
+F02=DM02
+F03=DM03
+F04=DM06
+F06=DM09
+[Page.2]
+Title=Dead Men maps
+F01=Hot Coffee
+F02=Late Night Opening
+F03=Withdrawal
+F04=A Walk in the Park
+F06=Retomoto Tower
+```
+
+No `[Redirect]` section: the stock page and a direct boot (`-o DefaultScene=Locations/F01/F01_Main.gms`, the
+unattended loop) load the STOCK level. For a direct-boot test of a map add `Page=2` under `[Expansion]` (F01 is
+then the diner; another slot needs klauto's `CmdDrop=DefaultScene` / `CmdAdd=-o DefaultScene=...`).
+
+Steam on stock maps afterwards (klsteam.c, SHIP policy): stock Subway is judged by size and directory hash
+(`steam: level archive f01\f01_main.zip opened from ...: STOCK (217471616 bytes, directory hash 94c9f794)`) and
+everything is passed on - upload, stats, achievements. Once a Dead Men map has RUN in a process, stats and
+achievements stay blocked until the game is restarted (the stats block in memory is cumulative), the leaderboard
+upload only while the current level is not stock. So: for scores that count, start the game and play stock maps
+only. The SHIP policy on a stock level has not run live (checks S3 / S4 of `re/hook_live.md`).
+
+### 10.4 The variant with Dead Men's pictures (NOT SEEN IN THE GAME)
+
+    python tools\kl_expansion.py mappics <work>\build\w_tab\KLExpansion <work>\build\w_tab\with_map_pictures
+
+`with_map_pictures\Overlay\Scenes\kaneandlynch.zip` (sha1 5be87b0d...) = the tree's menu scene + five picture
+entities `LevelPicture_DM01 DM02 DM03 DM06 DM09` (540 x 304, one 'ABGR' tile each: the form of the Heister
+pictures, kl_portraits' helpers; 6283 -> 6293 entities, 1025 textures; kl_portraits' check: 5 of 5 and 31 of 31
+pictures, 0 problems); `with_map_pictures\Overlay\Patch01.zip` (sha1 2aad3e85...) = the tree's overlay with those
+as the page's pictures - only the window `HeistPlayMenu2` differs. Without it the page shows the story picture
+`LevelPicture_L0<slot>` (for F01: a Shanghai market street, MP2c_77s.png). To try: after TAB_PAGE has passed with
+the tree, copy the TWO files over `<DD>\KLExpansion\Overlay\` (together), run TAB_PAGE again and look at the five
+pictures; the tree's two files put it back. Risk: the menu scene is 10 entities and 10 MB of textures larger than
+the one that ran; its heap budget (header +0x1c) was not raised.
+
+### 10.5 Live checks (TEST hook; scripts `<work>\research\agent_scripts\w-tab\`, made by `mk_tab_inis.py`)
+
+    python tools\kl_autotest.py 1200 --tag TAB_PAGE --hook <work>\build\w_tab\hook_test\dinput8.dll
+           --ini <work>\research\agent_scripts\w-tab\TAB_PAGE.ini --shots 50-110:3
+
+`TAB_PAGE.ini`: main menu -> Arcade -> seven times DOWN -> RETURN -> `HeistPlayMenu2`, steps the selector
+`HeistLevel_P2` through entries 0..5 (3 s each), Back, waits 12 s. Then one run per map, `TAB_DM01 DM02 DM03
+DM06 DM09.ini`: the same way in, `sel HeistLevel_P2 0xceceec <entry>`, `msg HeistLevel_P2 StartGame`, 40 s in
+the level, `pass`. One process per map: no way back to the frontend without ending the session is known.
+A wrong row count shows as `waitwin HeistPlayMenu2` failing with the stack in the reason (`... > KLGuns`).
+
+Lines that prove it (here for DM09, entry 4; DM02 = F02 / entry 1, DM03 = F03 / 2, DM06 = F04 / 3, DM01 = F01 / 0):
+
+```
+expansion: [Redirect.2] Scenes\Locations\F06\ -> ...\KLExpansion\Maps\DM09\           (five such, each with its 'has ...' list)
+expansion: menu page 2 is 'Dead Men maps'
+expansion: CreateFileA overlay: ...\Patch01.zip -> ...\KLExpansion\Overlay\Patch01.zip
+expansion: menu windows [MainMenu > HeistModeMenu > HeistPlayMenu2]
+expansion: menu page 2 latched: window 'HeistPlayMenu2' is open ([Redirect.2] F01=DM01, F02=DM02, F03=DM03, F04=DM06, F06=DM09)
+(the script's `expect 0xceceec 4` passes; exit 27 = the selector did not move)
+session: state 0x0 -> 0x12 (game mode 4)
+expansion: slot F06: menu page 2 from now on -> DM09
+expansion: CreateFileA redirect: ...\SCENES\Locations\F06\F06_Main.zip -> ...\KLExpansion\Maps\DM09\F06_Main.zip
+steam: level archive f06\f06_main.zip opened from ...\KLExpansion\Maps\DM09\F06_Main.zip: NOT stock (218912514 bytes, ...; the stock archive has 209504173 bytes, e035f328)
+join: reading ...\KLExpansion\Maps\DM09\KLJoin.ini for level f06\f06_main            (DM09 only)
+character: level f06\f06_main has a wardrobe (version 2): 16 characters, 12 masks (...\KLExpansion\Maps\DM09\KLWardrobe.ini)
+guns: level f06\f06_main has 6 guns ...                                              (DM09 only)
+expansion: CreateFileA redirect: ...\F06_Main.WHD -> ...\Maps\DM09\F06_Main.WHD      (and .WAV, seconds later)
+steam: level 'SCENES\Locations\F06\F06_Main.gms' under the SHIP policy: its archive f06\f06_main.zip is not the stock one ... would be BLOCKED
+```
+
+Must NOT appear between `latched` and `slot F0n:`: `menu page 2 dropped`, `slot F0n: menu page 0`. In TAB_PAGE,
+after Back: `expansion: menu page 2 dropped: the frontend shows [MainMenu > HeistModeMenu]` after about 1 s
+(no start was seen), and no level archive open at all.
+
+NOT KNOWN until these run: a level under the names F02, F03, F04, F06 (member names only differ; the engine's level
+code, loading screen, briefing and score board are the stock slot's); `0xceceec` following the page's own selector
+for a value other than 0 (MP2c only asked for 0); the eight-row Arcade page (its rows stand 68 units higher than
+in MP2c; the installed overlay has seven rows); the four z_maps builds at all (re\maps.md 14.6).
+
+### 10.6 What the owner will see
+
+Arcade Mode has eight rows: Start Arcade Game, Arcade Rules, Arcade Stats, Arcade Highscores, Online
+Leaderboards, Heister, Guns, **Dead Men maps**. That row opens a page headed 'Dead Men maps' that looks like the
+stock map page (picture left, 'Your Criminal name' right, a 'Location:' row with arrows, Back / Accept); left /
+right steps through Hot Coffee, Late Night Opening, Withdrawal, A Walk in the Park, Retomoto Tower - and then
+four more entries that are stock maps under their stock names (slot F07 and the three DLC slots). No briefing
+text. The picture is a story-mode picture, not the map's (10.4). Accept loads the map; the loading screen and the
+lobby / score titles are those of the stock map whose slot it uses. 'Start Arcade Game' is the stock page with
+the nine stock maps, Subway being Subway again. Heister and Guns are as installed.

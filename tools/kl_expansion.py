@@ -17,13 +17,23 @@ for them, a manifest, and install / uninstall. Spec, layout, what is proven and 
             <folder>\M01 M02 M03 M06 of 'kl_maps.py ready' (re\maps.md 14: voices, lightened, wardrobe); --prebuilt: any
             map from a finished folder (the owner's Retomoto build). Such a folder holds an archive built for the F01
             test slot: adopt() writes it under the map's own slot name (member and file names only) and takes the
-            hook's per-map files KLWardrobe.ini / KLJoin.ini along into Maps\<id>.
+            hook's per-map files KLWardrobe.ini / KLJoin.ini / KLGuns.ini along into Maps\<id>.
+                                 [--overlay-from <folder>]
+            <folder> holds an overlay that is in use (Overlay\Patch01.zip, and Overlay\Scenes\kaneandlynch.zip when
+            its Heister page has pictures): the tree's overlay is then that one PLUS the map page - mkoverlay.py is
+            run the way that archive was made (--pictures when it has the picture rows), every file under its
+            Overlay\Scenes is carried, and the build FAILS unless the windows KLHeister and KLGuns of the result are
+            the reference's character for character and nothing but the Arcade page, the map page and its gamepad
+            template differs (overlay_kept()).
     python kl_expansion.py check [<tree>]                    every file of the tree against manifest.json (sha1)
     python kl_expansion.py menu [<tree>]                     the rules of re\menus.md on the tree's Overlay\Patch01.zip
     python kl_expansion.py share [<tree>]                    what the maps have in common with their systems level
                                                              and with each other (measured; nothing is changed)
     python kl_expansion.py pictures [<out>]                  Dead Men's own menu pictures of the five maps as Dog Days
                                                              level-picture tiles + a PNG each (<out>\pictures)
+    python kl_expansion.py mappics <tree> <folder>           a VARIANT of the tree's overlay whose map page shows Dead Men's
+                                                             own picture of each map: <folder>\Overlay\Patch01.zip +
+                                                             Overlay\Scenes\kaneandlynch.zip (map_pictures(); not seen live)
     python kl_expansion.py install [<tree>] [--game <Dog Days>] [--keep-slot] [--no-hook] [--no-stream] [--link]
                                    [--replace]
     python kl_expansion.py uninstall [--game <Dog Days>] [--restore-all]
@@ -38,7 +48,8 @@ LAYOUT (what klhook\klslot.c reads; <DD> = the folder of kl2.exe)
     <DD>\KLExpansion\Maps\<id>\          <slot>_Main.zip (members Scenes/Locations/<slot>/<slot>_Main.*), .WHD .WAV .hti,
                                          <slot>_Main_LS.SND, <slot>_Main_LS_<Language>.WHD / .WAV; Retomoto Tower also
                                          KLJoin.ini (klhook\kljoin.c: the jump box between its two parts); a map with
-                                         the wardrobe also KLWardrobe.ini (klhook\klchar.c: its model numbers)
+                                         the wardrobe also KLWardrobe.ini (klhook\klchar.c: its model numbers); a map
+                                         with gun looks also KLGuns.ini (klhook\klgun.c: its part numbers)
     <DD>\KLExpansion\Overlay\Patch01.zip the stock patch archive + the page 'Dead Men maps' in menu/frontend.xml
     <DD>\KLExpansion\Overlay\PC_Def.str  the merged stream file (Dog Days' + Dead Men's streamed clips)
     <DD>\KLExpansion\BuildInfo\<id>\     graft.txt, result.json, log.txt, preflight.json of the build
@@ -80,7 +91,7 @@ PAGE = 2                                       # the stock page sets the option 
 PAGE_TITLE = 'Dead Men maps'
 JOIN_NAME = '06_Exit'                          # Retomoto: the jump point the join box sends to (kl_fa_author: Specials!JumpPoints!06_Exit)
 SYSTEMS = 'F07'                                # the only systems level a Dead Men map has run under (re\maps.md 3, 10)
-SIDE = ('KLJoin.ini', 'KLWardrobe.ini')        # the hook's per-map files: read beside the archive that is opened (kljoin.c, klchar.c)
+SIDE = ('KLJoin.ini', 'KLWardrobe.ini', 'KLGuns.ini')      # the hook's per-map files: read beside the archive that is opened (kljoin.c, klchar.c, klgun.c)
 READY = {'DM01': 'M01', 'DM02': 'M02', 'DM03': 'M03', 'DM06': 'M06'}   # map id -> folder of 'kl_maps.py ready' (kl_maps.READY)
 BEGIN, END = '; >>> KLExpansion (kl_expansion.py install) - do not edit between these lines', '; <<< KLExpansion'
 OURS = re.compile(r'(?i)^(expansion|redirect(\.\d+)?|page\.\d+|slots)$')     # the ini sections that belong to klslot.c
@@ -371,8 +382,35 @@ def verdict(m, res):
     return bad
 
 
+def overlay_kept(ref_patch, new_patch):
+    r"""The overlay the tree gets against one that is in use (--overlay-from): -> (findings, notes). Holds when every
+    window but the Arcade page (one more button) and the new map page is the reference's character for character -
+    so the Heister and the Guns page are exactly what was installed - and the rest of the file differs only by the
+    map page's gamepad template."""
+    a = zipfile.ZipFile(ref_patch).read('menu/frontend.xml').decode('latin-1')
+    b = zipfile.ZipFile(new_patch).read('menu/frontend.xml').decode('latin-1')
+    wa, wb = windows(a), windows(b)
+    name, bad = 'HeistPlayMenu%d' % PAGE, []
+    if name in wa:
+        return [], ['the reference overlay already has the map page: nothing to compare']
+    for k in MENU_EXTRA:
+        if k in wa and wa[k] != wb.get(k):
+            bad.append('window %s is not the one of %s' % (k, ref_patch))
+    diff = sorted(k for k in set(wa) | set(wb) if wa.get(k) != wb.get(k))
+    if diff != sorted(['HeistModeMenu', name]):
+        bad.append('windows that differ from the reference overlay: %s (only HeistModeMenu and %s may)' % (diff, name))
+    strip = lambda t: re.sub(r'<Window Name="[^"]+"[^>]*>.*?</Window>', '', t, flags=re.S)
+    norm = lambda t: re.sub(r'\s+', ' ', re.sub(r'<!--.*?-->', '', t, flags=re.S))
+    ra, rb = norm(strip(a)), norm(strip(b))
+    rb2 = re.sub(r'<Template Name="BottomFrameHeistBackStartGameButtons_P%d">.*?</Template> ?' % PAGE, '', rb, flags=re.S)
+    if rb2 == rb or ra != rb2:
+        bad.append('outside the windows more than the map page\'s gamepad template differs from the reference overlay')
+    return bad, ['overlay kept from %s: %s as there; changed: HeistModeMenu (one more button); new: %s and its gamepad template' % (
+        ref_patch, ', '.join(k for k in MENU_EXTRA if k in wa) or 'no extra window', name)]
+
+
 def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share_too=True, pictures_too=True, bones=True, hook_make=True, log=print,
-          prebuilt=None):
+          prebuilt=None, overlay_from=None):
     """prebuilt: {map id: finished build folder} - those maps are taken as they are (adopt()), not built."""
     out = os.path.abspath(out or default_out())
     prebuilt = dict(prebuilt or {})
@@ -483,9 +521,35 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
     with open(ini, 'w', newline='\r\n') as f:
         f.write(ini_block(entries))
     stock_patch = stock_file(dd, 'Patch01.zip')
-    r = subprocess.run([sys.executable, os.path.join(REPO, 'klhook', 'mkoverlay.py'), ini, stock_patch, tree], capture_output=True, text=True)
+    ref = ref_patch = None
+    if overlay_from:                                    # an overlay that is in use: keep its Heister / Guns pages and its scene files
+        ref = os.path.join(overlay_from, 'Overlay') if os.path.isdir(os.path.join(overlay_from, 'Overlay')) else overlay_from
+        ref_patch = os.path.join(ref, 'Patch01.zip')
+        if not os.path.isfile(ref_patch):
+            raise SystemExit('--overlay-from %s: no Overlay\\Patch01.zip there' % overlay_from)
+        if inside(ref, tree):
+            raise SystemExit('--overlay-from must not be the tree itself')
+    with_pics = bool(ref_patch) and b'KLH_CharPics' in zipfile.ZipFile(ref_patch).read('menu/frontend.xml')
+    r = subprocess.run([sys.executable, os.path.join(REPO, 'klhook', 'mkoverlay.py'), ini, stock_patch, tree] + (['--pictures'] if with_pics else []),
+                       capture_output=True, text=True)
     log(r.stdout.rstrip() or r.stderr.rstrip())
     menu = {'ok': False, 'findings': ['mkoverlay.py failed: ' + (r.stderr or r.stdout).strip()[-300:]]} if r.returncode else menu_check(tree, stock_patch, entries, dd, log)
+    if ref_patch and not r.returncode:
+        kb, kn = overlay_kept(ref_patch, os.path.join(tree, 'Overlay', 'Patch01.zip'))
+        carried = []
+        for rel in files_under(ref):                    # Scenes\kaneandlynch.zip: the picture entities the Heister page names
+            if rel.lower() in ('patch01.zip', 'pc_def.str'):
+                continue
+            copy_checked(os.path.join(ref, rel), os.path.join(tree, 'Overlay', rel)); carried.append(rel)
+        if with_pics and not any(c.lower() == 'scenes/kaneandlynch.zip' for c in carried):
+            kb.append('the reference overlay has the Heister pictures but no Scenes\\kaneandlynch.zip beside it')
+        menu['ok'] = menu['ok'] and not kb
+        menu['findings'] += kb
+        menu['kept_from'] = {'folder': os.path.abspath(ref), 'Patch01.zip': sha1(ref_patch), 'pictures': with_pics, 'carried': carried}
+        for x in kn + ['carried into Overlay: ' + (', '.join(carried) or 'nothing')]:
+            log('   ' + x)
+        for x in kb:
+            log('   MENU: ' + x)
     menu['built_from'] = {'Patch01.zip': sha1(stock_patch)}
     merged = os.path.join(os.path.dirname(out), 'PC_Def.str') if os.path.isfile(os.path.join(os.path.dirname(out), 'PC_Def.str')) else None
     if merged is None:
@@ -675,7 +739,8 @@ def menu_check(tree, stock_patch, entries, dd, log=print):
             if dup:
                 bad.append('%s: element names used twice: %s' % (name, dup))
             pics = {e.get('Name'): e.get('Graphic') for e in w.iter('GuiElement') if e.get('Type') == 'Graphic' and e.get('Template') == 'LevelPicture_T'}
-            note.append('pictures of the page: ' + ', '.join('F%02d %s' % (s, pics.get('H%02d_LevelPicture' % s)) for s in ORDER if s in want))
+            note.append('pictures of the page: ' + ', '.join('F%02d %s' % (s, pics.get('H%02d_LevelPicture_P%d' % (s, PAGE), pics.get('H%02d_LevelPicture' % s)))
+                                                             for s in ORDER if s in want))
     if 'HeistModeMenu' in wb:
         try:
             w = ET.fromstring(wb['HeistModeMenu'][0])
@@ -715,6 +780,151 @@ def menu_check(tree, stock_patch, entries, dd, log=print):
     for x in note:
         log('   ' + x)
     return out
+
+
+# ------------------------------------------------------------------ Dead Men's own pictures ON the map page
+MAP_PIC = 'LevelPicture_%s'                   # entity name of a map's picture in the menu scene: LevelPicture_DM01 ...
+
+
+def map_pictures(tree, dest, log=print):
+    r"""A VARIANT of the tree's overlay in which the map page shows Dead Men's own picture of each map
+    (re\expansion.md 4.2 'NOT DONE - the entity', done here; NOT SEEN IN THE GAME):
+        <dest>\Overlay\Scenes\kaneandlynch.zip   the tree's menu scene (the one with the Heister pictures; without one
+                                                 the stock scene) + one picture entity LevelPicture_<id> per map
+        <dest>\Overlay\Patch01.zip               the tree's overlay with those entities as the page's pictures
+        <dest>\KLHook.expansion.ini              the tree's block + '<slot>.Picture=' lines (what mkoverlay.py was given)
+    The tree is only read. Both Overlay files belong together and replace the tree's two (a Graphic= that names no
+    entity has never been tried). The pictures are <tree>\..\pictures\<id>.png of `pictures` (540 x 304).
+    HOW: exactly what tools\kl_portraits.py does for the Heister pictures, with its helpers - an 'ABGR' texture of
+    1024 x 512 holding the picture in its top left corner, one sprite chunk, one picture chunk of one tile, and a
+    copy of the entity pair LevelPicture_H01 (ZWINGROUP + ZWINPIC) under ROOT\LocalResources\Graphic whose ZWINPIC
+    names the chunk. That form was seen in the game for the Heister pictures (run PV1); these five were not.
+    -> list of problems ([] = none)."""
+    import kl_portraits as P, kl_scene, kl_prp, kl_gms, kl_texmat as T, kl_prmgraph as G, kl_octree as O
+    tree, dest = os.path.abspath(tree), os.path.abspath(dest)
+    if inside(dest, tree) or inside(dest, dog_days() or '?'):
+        raise SystemExit('the variant must not be written into the tree or the game folder')
+    man = json.load(open(os.path.join(tree, 'manifest.json')))
+    dd = dog_days()
+    src = os.path.join(tree, 'Overlay', 'Scenes', 'kaneandlynch.zip')
+    if not os.path.isfile(src):
+        src = stock_file(dd, os.path.join('Scenes', 'kaneandlynch.zip'))
+    pdir = os.path.join(os.path.dirname(tree), 'pictures')
+    pics = []
+    for e in man['maps']:
+        path = os.path.join(pdir, e['id'] + '.png')
+        if not os.path.isfile(path):
+            raise SystemExit('no %s: run "pictures" (or a build without --no-pictures) first' % path)
+        w, h, px = P.png_read(path)
+        if (w, h) != (540, 304):
+            raise SystemExit('%s is %d x %d, the page wants 540 x 304' % (path, w, h))
+        pics.append((MAP_PIC % e['id'], e, (w, h, px)))
+    z = zipfile.ZipFile(src)
+    names = {i.filename.lower(): i for i in z.infolist()}
+    stem = 'scenes/kaneandlynch'
+    rd = lambda ext: z.read(names[stem + ext.lower()])
+    sc = kl_scene.read(z, 'Scenes/kaneandlynch')
+    prp = kl_prp.Prp(rd('.prp'))
+    ents = list(sc.entities()); nodes = prp.nodes()
+    if len(nodes) != len(ents) + 1:
+        raise SystemExit('.prp nodes and .gms entities do not line up')
+    have = {e.name.decode('latin1') for e in ents}
+    if any(n in have for n, _e, _p in pics):
+        raise SystemExit('%s already holds map pictures' % src)
+    node_of = {id(e): nodes[i + 1] for i, e in enumerate(ents)}
+    slot0 = sc.slots()
+    parent = P._find(sc.roots, P.PARENT); model = P._find(sc.roots, P.PARENT + (P.MODEL,))
+    if [k.tid for k in model.walk()] != [P.ZWINGROUP, P.ZWINPIC]:
+        raise SystemExit('%s is not a ZWINGROUP with one ZWINPIC' % P.MODEL)
+    mnode = node_of[id(model)]
+    if mnode['ctrls'] or mnode['children'][0]['ctrls']:
+        raise SystemExit('%s has controllers: not copied' % P.MODEL)
+    box_ints = [k for k, (op, _pl) in enumerate(mnode['children'][0]['props']) if op in (4, 9)]
+    if [struct.unpack('<I', mnode['children'][0]['props'][k][1])[0] for k in box_ints[-3:]][:2] != [540, 304]:
+        raise SystemExit('the ZWINPIC of %s does not end in width 540, height 304, chunk' % P.MODEL)
+    tex = T.read_tex(rd('.TEX')); prm = G.read(rd('.prm'), 'dd')
+    tid = max(tex.tex) + 1
+    pnode = node_of[id(parent)]
+    for name, _e, (w, h, px) in pics:
+        rec, tw, th = P.tex_record(tid, w, h, px)
+        tex.tex[tid] = T.Texture(rec)
+        sp = G.new_chunk(prm, P.sprite_chunk(tid)); pc = G.new_chunk(prm, P.pic_chunk(sp, w, h, tw, th))
+        top = sc.graft(sc, model, parent, models=True)['top']
+        top.name = name.encode('latin1')
+        box = dict(mnode['children'][0], props=list(mnode['children'][0]['props']), ctrls=[], children=[])
+        for k, v in zip(box_ints[-3:], (w, h, pc)):
+            box['props'][k] = (box['props'][k][0], struct.pack('<I', v))
+        pnode['children'].append({'props': list(mnode['props']), 'ctrls': [], 'children': [box]})
+        tid += 1
+    slot1 = sc.slots()
+    ids = {slot0[e] + 2: slot1[e] + 2 for e in ents}; ids[1] = 1
+    new = {'.gms': None, '.buf': None, '.prp': prp.serialize(), '.TEX': T.write_tex(tex), '.prm': G.write(prm),
+           '.oct': O.remap_ids(O.Oct.parse(rd('.oct')), ids).pack(), '.rmc': O.remap_ids(O.RoomIndex.parse(rd('.rmc')), ids).pack()}
+    if len(rd('.rmi')) != 32:
+        new['.rmi'] = O.remap_ids(O.RoomIndex.parse(rd('.rmi')), ids).pack()
+    gms, buf = sc.write()
+    new['.gms'], new['.buf'] = kl_gms.pack(gms) if P._packed(rd('.gms')) else gms, buf
+    odir = os.path.join(dest, 'Overlay', 'Scenes'); os.makedirs(odir, exist_ok=True)
+    path = os.path.join(odir, 'kaneandlynch.zip')
+    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as o:
+        for i in z.infolist():                          # same members, same order, same names
+            ext = os.path.splitext(i.filename)[1]
+            data = new[ext] if i.filename.lower() == stem + ext.lower() and ext in new else z.read(i)
+            n = zipfile.ZipInfo(i.filename, i.date_time); n.compress_type = i.compress_type; n.external_attr = i.external_attr
+            o.writestr(n, data)
+    log('%s: %d map pictures added to %s (%d entities -> %d, textures -> %d, chunks -> %d); %d slot ids renumbered' % (
+        path, len(pics), src, len(ents), len(ents) + 2 * len(pics), len(tex.tex), len(prm.chunks) - 1, sum(1 for a, b in ids.items() if a != b)))
+    # ---- read back with kl_portraits' own check: first OUR entities against the source scene (nothing of it moved, every
+    # picture resolves to a texture), then the Heister pictures as before
+    keep = P.NAMES
+    try:
+        P.NAMES = [n for n, _e, _p in pics]
+        bad = ['map pictures: ' + x for x in P.check(path, src, log)]
+        P.NAMES = keep
+        if any(n in have for n in keep):
+            bad += ['heister pictures: ' + x for x in P.check(path, None, log)]
+    finally:
+        P.NAMES = keep
+    # ---- the page: the tree's ini block with the pictures named, through mkoverlay.py exactly as the tree's was made
+    ini = os.path.join(dest, 'KLHook.expansion.ini')
+    text = open(os.path.join(tree, 'KLHook.expansion.ini')).read().rstrip('\n') + '\n' + ''.join('%s.Picture=%s\n' % (e['slot'], n) for n, e, _p in pics)
+    with open(ini, 'w', newline='\r\n') as f:
+        f.write(text)
+    tpatch = os.path.join(tree, 'Overlay', 'Patch01.zip')
+    with_pics = b'KLH_CharPics' in zipfile.ZipFile(tpatch).read('menu/frontend.xml')
+    r = subprocess.run([sys.executable, os.path.join(REPO, 'klhook', 'mkoverlay.py'), ini, stock_file(dd, 'Patch01.zip'), dest] + (['--pictures'] if with_pics else []),
+                       capture_output=True, text=True)
+    if r.returncode:
+        return bad + ['mkoverlay.py failed: ' + (r.stderr or r.stdout).strip()[-300:]]
+    a = zipfile.ZipFile(tpatch).read('menu/frontend.xml').decode('latin-1')
+    b = zipfile.ZipFile(os.path.join(dest, 'Overlay', 'Patch01.zip')).read('menu/frontend.xml').decode('latin-1')
+    wa, wb = windows(a), windows(b)
+    page = 'HeistPlayMenu%d' % PAGE
+    diff = sorted(k for k in set(wa) | set(wb) if wa.get(k) != wb.get(k))
+    if diff != [page]:
+        bad.append('windows that differ from the tree\'s overlay: %s (only %s may)' % (diff, page))
+    strip = lambda t: re.sub(r'<Window Name="[^"]+"[^>]*>.*?</Window>', '', t, flags=re.S)
+    if strip(a) != strip(b):
+        bad.append('the overlay differs from the tree\'s outside the windows')
+    now = {e.name.decode('latin1') for e in kl_scene.read(zipfile.ZipFile(path), 'Scenes/kaneandlynch').entities()}
+    used = re.findall(r'Template="LevelPicture_T" Graphic="([^"]+)"', wb[page][0])
+    for n, e, _p in pics:
+        if used.count(n) != 1:
+            bad.append('%s is used %d times on the page' % (n, used.count(n)))
+    pic = r'<GuiElement\b[^>]*Template="LevelPicture_T"[^>]*\bGraphic="([^"]+)"'       # the picture elements; a <Graphic Graphic=> child names an ELEMENT
+    for g in sorted(set(re.findall(pic, wb[page][0]) + re.findall(pic, wb.get('KLHeister', [''])[0]))):
+        if g not in now:
+            bad.append('Graphic="%s" is no entity of the variant\'s menu scene' % g)
+    with open(os.path.join(dest, 'variant.json'), 'w') as f:
+        json.dump({'of_tree_built': man['built'], 'scene_from': os.path.abspath(src), 'scene_from_sha1': sha1(src),
+                   'pictures': {n: e['id'] for n, e, _p in pics}, 'problems': bad,
+                   'files': {rel: {'sha1': sha1(os.path.join(dest, rel)), 'bytes': os.path.getsize(os.path.join(dest, rel))}
+                             for rel in files_under(dest) if rel != 'variant.json'}}, f, indent=1)
+    log('map page pictures: %s' % ', '.join('%s %s' % (e['slot'], n) for n, e, _p in pics))
+    log('RESULT: %s' % ('PASS' if not bad else 'FAIL'))
+    for x in bad:
+        log('   ' + x)
+    return bad
 
 
 # ------------------------------------------------------------------ Dead Men's menu pictures as Dog Days tiles
@@ -1429,7 +1639,7 @@ def selftest(scratch=None, log=print):
     for f, stock in (('F01_Main.zip', b'STOCK F01 archive'), ('F01_Main.WAV', b'STOCK wav'), ('F01_Main_LS.SND', b'STOCK ls')):
         put(game, 'Scenes/Locations/F01/' + f, b'TEST BUILD ' + f.encode()); put(game, BACKUP + '/Scenes/Locations/F01/' + f, stock)
     put(game, 'Scenes/Locations/F01/Loader_Sequence.zip', b'stock loader (never replaced)')
-    put(game, 'Scenes/Locations/F01/KLWardrobe.ini', b'[Wardrobe] of the test build'); put(game, 'Scenes/Locations/F01/KLJoin.ini', b'[Join] of the test build')
+    put(game, 'Scenes/Locations/F01/KLWardrobe.ini', b'[Wardrobe] of the test build'); put(game, 'Scenes/Locations/F01/KLJoin.ini', b'[Join] of the test build'); put(game, 'Scenes/Locations/F01/KLGuns.ini', b'[Guns] of the test build')
     put(game, 'Scenes/Locations/F01/F01_Main.WHD', b'stock whd, equal to its backup'); put(game, BACKUP + '/Scenes/Locations/F01/F01_Main.WHD', b'stock whd, equal to its backup')
     put(game, BACKUP + '/PC_Def.str', b'STOCK stream file')
     ini0 = '[KLHook]\r\nContinueAsserts=1\r\nMaxDumps=4\r\n[Expansion]\r\nEnable=1\r\nLog=2\r\n[Redirect]\r\nF01=DM03\r\n[Auto]\r\nEnable=0\r\n; a comment\r\n'
@@ -1480,7 +1690,8 @@ def selftest(scratch=None, log=print):
     ok('the F01 slot is stock again, by copy', f01('F01_Main.zip') == b'STOCK F01 archive' and f01('F01_Main.WAV') == b'STOCK wav' and f01('Loader_Sequence.zip') == b'stock loader (never replaced)' and sorted(state['slot']) == ['Scenes/Locations/F01/F01_Main.WAV', 'Scenes/Locations/F01/F01_Main.zip', 'Scenes/Locations/F01/F01_Main_LS.SND'])
     ok('the test build\'s KLWardrobe.ini / KLJoin.ini no longer stand beside the stock archive, and are kept under another name',
        not any(os.path.exists(os.path.join(game, 'Scenes/Locations/F01', f)) for f in SIDE)
-       and f01('KLWardrobe.ini.of-test-build-0') == b'[Wardrobe] of the test build' and f01('KLJoin.ini.of-test-build-0') == b'[Join] of the test build')
+       and f01('KLWardrobe.ini.of-test-build-0') == b'[Wardrobe] of the test build' and f01('KLJoin.ini.of-test-build-0') == b'[Join] of the test build'
+       and f01('KLGuns.ini.of-test-build-0') == b'[Guns] of the test build')
     ok('KL_PortBackup is untouched', snap(os.path.join(game, BACKUP)) == backup0)
     ok('PC_Def.str of the game folder is left alone', open(os.path.join(game, 'PC_Def.str'), 'rb').read() == b'MERGED stream file')
     ok('stock files outside the slot are untouched', all(snap(game)[r] == before[r] for r in ('kl2.exe', 'Patch01.zip', 'Scenes/Locations/F07/F07_Main.zip')))
@@ -1505,7 +1716,7 @@ def selftest(scratch=None, log=print):
     ok('the folder moved aside is still there when ours could not be removed', os.path.isdir(os.path.join(game, ROOT + '.before-0')))
     os.rename(os.path.join(game, ROOT + '.before-0'), dst)
     diff = sorted(r for r in set(before) | set(snap(game)) if before.get(r) != snap(game).get(r))
-    ok('the game folder differs from the start only by the F01 slot being stock and its two hook files set aside: %s' % diff,
+    ok('the game folder differs from the start only by the F01 slot being stock and its per-map hook files set aside: %s' % diff,
        diff == sorted(['Scenes/Locations/F01/F01_Main.WAV', 'Scenes/Locations/F01/F01_Main.zip', 'Scenes/Locations/F01/F01_Main_LS.SND']
                       + ['Scenes/Locations/F01/' + f + x for f in SIDE for x in ('', '.of-test-build-0')]))
     ok('KL_PortBackup is untouched', snap(os.path.join(game, BACKUP)) == backup0)
@@ -1557,7 +1768,7 @@ def main():
         sys.exit(0 if folder else 1)
     cmd = a.pop(0) if a else ''
     game, out, only, par, hook = opt('--game'), opt('--out'), opt('--maps'), int(opt('-j', 2)), opt('--hook')
-    pre, ready_dir = {}, opt('--ready')
+    pre, ready_dir, overlay_from = {}, opt('--ready'), opt('--overlay-from')
     if ready_dir:
         pre.update({i: os.path.join(ready_dir, t) for i, t in READY.items()})
     while '--prebuilt' in a:
@@ -1567,7 +1778,7 @@ def main():
     f = {k: flag('--' + k) for k in ('reuse', 'no-stream', 'no-share', 'no-pictures', 'keep-slot', 'no-hook', 'link', 'replace', 'restore-all', 'bones', 'no-bones', 'no-hook-build')}
     if cmd == 'build':
         sys.exit(build(out, only.split(',') if only else None, par, f['reuse'], hook, not f['no-stream'], not f['no-share'], not f['no-pictures'], not f['no-bones'],
-                       not f['no-hook-build'], prebuilt=pre))
+                       not f['no-hook-build'], prebuilt=pre, overlay_from=overlay_from))
     tree = os.path.join(default_out(), ROOT) if not a else a[0]
     if cmd == 'check':
         check(tree)
@@ -1580,6 +1791,10 @@ def main():
             json.dump(r, f, indent=1)
     elif cmd == 'pictures':
         pictures(a[0] if a else None)
+    elif cmd == 'mappics':
+        if len(a) != 2:
+            raise SystemExit('mappics <tree> <folder for the variant>')
+        sys.exit(1 if map_pictures(a[0], a[1]) else 0)
     elif cmd == 'install':
         install(tree, game, f['keep-slot'], not f['no-hook'], not f['no-stream'], f['link'], f['replace'])
     elif cmd == 'uninstall':

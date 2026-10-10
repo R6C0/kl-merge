@@ -68,9 +68,16 @@
  *     level. Entry k of a page loads slot {F01,F02,F03,F04,F06,F07,F05,F08,F09}[k] (the engine's own menu
  *     order, 0x746570), so nine maps a page. A direct boot (-o DefaultScene=) has no menu: page 0, i.e.
  *     [Redirect]; [Expansion] Page=N forces a page for such a test.
- *     RUN LIVE: the page opens and the option is set (MP1). NOT RUN LIVE: the window-stack latch (check MP2,
- *     re\hook_live.md) - in particular that the stack is not seen without the map page for a whole second
- *     before the frontend's menu manager is gone.
+ *     RUN LIVE: the page opens and the option is set (MP1). THE LATCH, runs MP2b and MP2c (2026-10-09 17:07 /
+ *     17:10, TEST build, [Redirect.2] F01=DM03, logs <work>\build\klhook\live\MP2c.log): 'menu page 2 latched:
+ *     window HeistPlayMenu2 is open' in the frame the page opened, StartGame 5 s later, 'session: state 0x0 ->
+ *     0x12', and 12 ms after that 'slot F01: menu page 2 from now on -> DM03' with the archive, the _LS files
+ *     and (10 s later) the .WHD / .WAV all from Maps\DM03; 'Dummy' read 2 in the page and 0 right after the
+ *     archive open, as MP1 had it. No 'dropped' line came between StartGame and the archive. MP2c went on into
+ *     the round and ended PASS.
+ *     NOT RUN LIVE: a slot other than F01 from a page (the five-map page of tools\kl_expansion.py: F02 F03 F04
+ *     F06 - scripts <work>\research\agent_scripts\w-tab\TAB_*.ini, re\expansion.md 10); the stock page after
+ *     an expansion page in one process (page 1 must then be latched: check MP3); the drop after a session.
  *     KNOWN LIMITS: the engine treats a redirected map as the stock map of its slot - title in the lobby,
  *     briefing, and the LEADERBOARD (0x80c9f0(current slot)): an Arcade score on an expansion map is reported
  *     to the stock map's Steam board - klsteam.c stops that (a proxy ISteamUserStats behind the import slot

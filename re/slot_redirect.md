@@ -9,6 +9,14 @@ and not re-read; ASSUMPTION = not established by anyone.
 
 Code: `klhook/klslot.c` (new, not yet part of any build - section 7).
 
+**State 2026-10-10** (this document is the design of 2026-10-09 morning: read it for the evidence, not for the
+state). klslot.c is part of every hook build; mode C ran live (X2, X3); the menu-selected version of section 5 is
+built and ran live for slot F01 (MP2b, MP2c) - but the page is NOT taken from the option `Dummy` (step 2 of
+section 5): the options object is deleted when a level starts (run MP1), so the hook reads the open window
+`HeistPlayMenu<N>` off the menu's window stack (klslot.c kls_menu_watch). `[Slots]` and `MountFirst` no longer
+patch code (klslot.c top comment). The five-map page, its tree, install steps and live checks:
+`re/expansion.md` section 10.
+
 ## 0. Result in short
 
 1. Every file name of a level is derived from ONE string (the scene path), and every one of the
