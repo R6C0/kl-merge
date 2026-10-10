@@ -556,3 +556,141 @@ sibling does, `--ways 2` (about a third fewer new entities) and `--no-routes` ar
 - For the live look (watch-only), beside section 8: with `[Bots] Log=1` the stage lines of a bot should come at
   different times from round to round; by eye, do the seven fan out on M01's car park and use both staircases of
   the bank; does anybody stand still at a fork (it should be impossible: a RandomTrigger has no wait).
+
+## 12. Cover where the map has none (`tools/kl_fa_cover.py`; 2026-10-10 late; OFFLINE, nothing ran in the game, nothing installed)
+
+The owner: "the ai heisters ... die so quick ... make them utilise cover". Section 4 said: no box was made, what
+limits the holds is where the boxes ARE. This step makes boxes - **only on solid things that are there** - and
+runs BEFORE the dynamic step, on the finished non-dynamic bots build:
+
+    python tools\kl_fa_cover.py all <work>\build [M01 ...]     z_gate\M01, z_final\M02 M03 M06, rt_full6\retomoto_full
+                                                               -> z_cover\_pre\<map> (the boxes) -> kl_fa_bots_dyn.build
+                                                               (random routes) -> z_cover\<map>           (7 min, all five)
+    python tools\kl_fa_cover.py plan | build | check | diff    one build; --models b = the careful form only (12.2)
+
+### 12.1 What it does
+
+1. It runs the dynamic step's own plan and takes the route places that ASKED for a hold and got none
+   (`kl_fa_bots_dyn.find_holds` now notes them when `ctx.misses` is a list - four lines, nothing else changed there).
+2. Round each such place (6 m) it cuts the `.HVK`'s STATIC shapes (key-framed and rigid ones move: left out) with
+   horizontal planes 45 / 75 / 110 / 140 / 175 / 205 over the collision's own floor (not the mesh's height:
+   Retomoto's street mesh lies 40 under the road). What one entity has in the 75 plane, joined up, is an object;
+   the smallest rectangle round it is its size. It counts when it is 40..700 long, at least 10 thick, there at 45
+   too (no table top), and not named glass / window / fence / rail / wire / bush / hedge / leaves / door / gate /
+   stair / lamp / bicycle / metal barrier / Collapse_ / Remains / camera / Coli* / HeroOnly (collision that is not
+   the thing one sees). HIGH when it is in the 175 plane over 60 % of its outline, else LOW. All thresholds: GUESS.
+3. No box when: a cover box of the map is at the object already; it is inside a `NoCoverBox`, in a level exit
+   box, within 250 of the escape vehicle's road (Retomoto: in the van's lane); `kl_fa_bots_dyn.hold_ok` finds no
+   place on the mesh 70..230 from it that the bot can walk to; an object over 4 m whose end is joined to more
+   collision (a wall in a row has no corner).
+4. The box is a clone of one of the build's OWN cover boxes: same class (ZSTDOBJ), properties, flags, pool group
+   and MODEL number; only place and rotation are its own. Named `CoverBoxH_KL_nn` / `CoverBoxM_KL_nn`, children of
+   one new top-level ZGROUP `KL_Cover!` (form: the build's plain top-level group `Locations/<map>/..._Audio.zip`;
+   listed in the root's group tree as that one is). It lies inside the object's rectangle at the end / side
+   NEAREST THE PLACE THAT ASKED = facing back along the bot's way. **Where enemies come from is not known to the
+   step: that side is a GUESS** (the engine picks the side of a box itself; an object as small as its box has no
+   choice to make).
+5. Plan again with the boxes (in memory), add again, at most 4 rounds; then write, check, diff.
+
+Nothing else needs a count: `FFCoverList` has no fields and an empty list in every stock level; the game makes
+its cover list at the load from the names (at most 5,000; the builds have 147 .. 482 now).
+
+### 12.2 The two forms a box can have (measured on the nine stock levels and the five builds, `scratchpad\cover\i2.py i3.py i7.py i8.py`)
+
+Every cover box of every level has an UNSCALED matrix: **a box's size is its model's box** (root chunk + 0x20;
+ASSUMPTION that 0x603830's "object's box" is that one). No model is added, so a new box has one of the sizes the
+build's own boxes have.
+
+| form | flags | model root + 0x1c | room tree | stock | our builds |
+|---|---|---|---|---|---|
+| **b** | 0x200 | 0 (no collision record) | in none | F05 203, F08 147, F09 13, F06 13, F01 3 (+ every car box) | M01 21, M02 33, M03 90, M06 87, Retomoto 215 |
+| **a** | 0x302 | a record of the `.oct` | tree 0 of its ZROOM | most boxes | M01 118, ... |
+
+- A **b** clone is exact: same record, in no tree. M03, M06 and Retomoto have small plain boxes (63 x 162 x 45,
+  70 x 200 x 70, 100 x 100 x 100 ...); M01's and M02's plain boxes are car-sized.
+- An **a** clone gets the same flags and model and is listed in tree 0 of the ROOT's room set with its box in the
+  world - where every level lists the 134+ objects with a collision record that have no room above them (flags
+  0x102 / 0x182; the item box = the model's box in the world, measured). **ASSUMPTION: a cover box may be listed
+  there**; no stock cover box is (stock's 30 cover boxes with a record and no listing hang in dynamic groups:
+  F01's glass-door dividers, F07's vans). `--models b` builds without them. A plain model is taken whenever it
+  covers at least 60 % of what the best a-model would (GUESS).
+
+### 12.3 Result (`z_cover\<map>\cover.txt`, `cover.json`; `dyn_map*.png`: a magenta frame = a new box)
+
+Holds found / asked are the dynamic plan's own tally WITH random routes (so not section 4's 33 / 58 ..., which
+were without): the same plan, before and after the boxes.
+
+| map | new boxes (low / high) | of them form a | holds found / asked, before -> after | boxes a hold of the final plan names | places still without |
+|---|---|---:|---|---:|---:|
+| M01 | 8 (1 / 7) | 8 | 53 / 151 -> 60 / 149 | 7 | 88 |
+| M02 | 9 (8 / 1) | 2 | 87 / 217 -> 93 / 207 | 9 | 108 |
+| M03 | 20 (3 / 17) | 0 | 50 / 189 -> 69 / 179 | 20 | 105 |
+| M06 | 15 (12 / 3) | 4 | 61 / 159 -> 69 / 147 | 15 | 80 |
+| Retomoto | 2 (1 / 1) | 1 | 91 / 180 -> 95 / 179 | 2 | 86 |
+
+What they stand on: M01 - the palm by the start, four pillars and a telephone pole of the shop fronts, a metal
+bin, a phone booth. M02 - the sweeper machine, seven watch show cases of the jewel store ('Montre'), a jewel wall
+panel. M03 - nine pilasters of the banking hall, three blocks 'NonDestructables', a garage pillar, a base block,
+a locker end, three palms and three long plant pots of the forecourt. M06 - seven rocks, the tea house, bridge
+parapets of the pavilion, two flower tubs. Retomoto - a walk-bridge support in the street, the lobby desk.
+
+**The gaps that stay (nothing solid there: no box was invented).** Places are world x, y, z of the middle of a
+group of asking places.
+- **M01, the car park**: round (1288, 0, 27160) 24 places, (2751, 0, 26448) 12, (776, 0, 29003) 10,
+  (4576, 0, 26578) 7 - 46 of those 53 have NOTHING solid within 6 m (open tarmac; the one dumpster has its box
+  and one bot). The cars there are driving ones (not static).
+- **M02**: (879, 494, 1277), the middle floor's gallery, 44 places: glass, railings, table tops, thin posts.
+  (-55, 0, -7720), the car park, 24: lamp posts and 61 x 60 / 43 x 24 pillars that no model of the build fits.
+- **M03**: beyond the wall drop, (236, 91, -264), 24 places: long walls only (and the level exit box). The
+  forecourt (-2051, 220, -2808), 28: the plant pots and palms have their boxes now, the rest is open.
+  Inside (53 places over two floors): panes, stairs, the players' blockers.
+- **M06, the lawns** round (2926, 260, 6361): 64 places; 17 with nothing solid at all, the others: long garden
+  walls, lamps, low ledges; the rocks that fit a model have boxes.
+- **Retomoto street** (-1187, -40, 2594) 35 places: bicycles, crowd barriers, glass; (-981, -40, 6850) 14: the bus
+  shelters, pillars and switch boxes there HAVE Dead Men's boxes (one bot each). The tower's way down has no holds
+  by design (section 3), so no asks.
+- Everywhere: **walls**. A wall or building over 7 m is not handled ("long"): a corner of one is real cover, but
+  finding corners in a triangle soup was not written. This is the largest class left.
+
+### 12.4 Checks (all on `z_cover\<map>`; logs `scratchpad\cover\gates\`, `gates_all.txt`)
+
+`kl_fa_cover.py check`: every box a ZSTDOBJ below `KL_Cover!`, record and properties (but place / rotation) equal
+to the box it is a clone of, unscaled and upright, `.prp` and `.gms` agree, where `cover.json` planned it (this
+also proves the rotation: the model box's middle through `kl_fa_bots.frames` lands on the planned middle), form b
+in no tree / form a once in the root's tree 0, a low model 95..150 high / a high one 150+, not in a NoCoverBox,
+not in a level exit box, 250 from the vehicle's road, 150 from every other cover box, **static collision inside
+its footprint 75 over its foot** (not in thin air), slot ids of the room trees as in the source, at most 5,000
+boxes, the four large blocks. `kl_fa_cover.py diff <source> <_pre>`: the old top-level subtrees and entities as
+they were (record, order, REF id), one more subtree at the end, the root's trees 0 / 3 gained only the new
+entities, collision records and tail equal, `.prm` only record offsets, every other member and every file beside
+the archive byte for byte.
+
+| | cover diff | cover check | dyn check | dyn diff (_pre -> final) | kl_impact | kl_maps audit | kl_map_guns | van-check |
+|---|---|---|---|---|---|---|---|---|
+| M01 | only the cover group was added | PASS (0 FAIL, 1 NOTE) | PASS (0 FAIL, 2 NOTE) | only the squad's steps | problems: 0 | PASS (0, 1 known) | problems: 0 | 0 fault(s) |
+| M02 | same | PASS (0, 1) | PASS (0, 5) | same | problems: 0 | PASS (0, 6 known) | problems: 0 | 0 fault(s) |
+| M03 | same | PASS (0, 0) | PASS (0, 1) | same | problems: 0 | PASS (0, 0 known) | problems: 0 | 0 fault(s) |
+| M06 | same | PASS (0, 1) | PASS (0, 3) | same | problems: 0 | PASS (0, 6 known) | problems: 0 | (no van) |
+| Retomoto | same | PASS (0, 1) | PASS (0, 4); kl_fa_bots_rt PASS (0, 6) | same | problems: 0 | (not a kl_maps map) | problems: 0 | (kl_fa_van's) |
+
+(The cover check's NOTE is "n of the boxes are form a".) `.prm` / `.ANM` / `.fxc` / `.WAV` equal to the source
+builds to the byte. Entities: M01 15,927, M02 23,330, M03 20,893, M06 16,499, Retomoto 27,011.
+
+### 12.5 Assumptions, and what is not done
+
+- NOT RUN. Whether Dead Men's cover boxes become covers in the game at all is still open (section 9); these are
+  clones of them, so they stand and fall with them. Whether the PLAYER can take cover at a form b box is not known
+  either (it has no collision record; the player's cover uses the same list).
+- Form a boxes in the root's tree 0 (12.2). If a `z_cover` build does not load where its `z_route` sibling does:
+  `kl_fa_cover.py build <bots build> <out> --models b` (M01 then has no box at all - its only plain boxes are car-sized - and the step refuses to write: use `z_route\M01`), then `kl_fa_bots_dyn.py build`.
+- "Solid" = static collision. What a bullet goes through (thin metal, wood) is not looked at; names stand in for
+  that. A HeroOnly / Coli* blocker is left out even where a real thing stands inside it and has no collision of
+  its own.
+- The box of an object bigger than every model covers a part of it (the part nearest the asking place).
+- Not done: wall corners; boxes beside key-framed or rigid things (parked Havok cars have Dead Men's own); a
+  second box on a long object for a second bot unless another place asked from its other end; the check was not
+  tried against spoiled builds (the dynamic step's was, section 11.5).
+- `kl_fa_bots_dyn.py map` draws a magenta frame round every box of this step. M01 and M06 were LOOKED at: M01's
+  eight frames are the palm west of the start and the pillars along the shop fronts, the car park north of them is
+  empty but for Dead Men's two boxes; M06's are the rocks of the east lawn, the bridge parts on the middle path
+  and the tubs in the south.

@@ -457,6 +457,10 @@ def find_holds(ctx, part, e, prev, nxt, pers, taken, spots_taken, want, post, ta
             tally['box: ' + why[0]] += 1
     if tally is not None and cands and not out:
         tally['every box in reach refused'] += 1
+    miss = getattr(ctx, 'misses', None)                 # (kl_fa_cover.py sets ctx.misses = [] to learn WHERE no hold was found)
+    if miss is not None and tally is not None and not out:
+        miss.append({'at': [round(v, 1) for v in e[:3]], 'dir': [round(d[0], 3), round(d[1], 3)], 'part': part, 'post': bool(post),
+                     'why': 'every box in reach refused' if cands else 'no free cover box in reach', 'role': pers.role})
     return out
 
 
@@ -2429,6 +2433,11 @@ def draw(folder, out, size=1800, log=print):
                     for dy in range(-3, 4):
                         if not c['hidden'] or abs(dx) == 3 or abs(dy) == 3:
                             px(cx + dx, cy + dy, (250, 250, 250) if c['kind'] != 'low' else (170, 170, 170))
+                if '_kl_' in sc.names[c['node']].lower():       # a box kl_fa_cover.py added: a magenta frame round it
+                    for dx in range(-7, 8):
+                        for dy in range(-7, 8):
+                            if max(abs(dx), abs(dy)) >= 6:
+                                px(cx + dx, cy + dy, (255, 0, 220))
         # the further branch sets first, in the bot's full colour (the OTHER ways of its forks); then set 0 = the
         # build's way at every fork, dimmer, over them: where a bright line leaves the dim one the way forks
         for N, walked, holds, st, vi in sorted(rs, key=lambda r: -r[4]):
