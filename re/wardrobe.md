@@ -23,7 +23,7 @@ Arcade page -> new button **Heister** -> three rows:
 | row | option | values |
 |---|---|---|
 | Character | KLChar 0..16 | Game default; J.C., Tommy, Pierre, Liam, Jean, Elwood, Bud, Mitchel (Dog Days); Kane, Lynch, Ashkanan, Meldal, Red, Parker, Standen, Hutchison (Dead Men) |
-| Mask | KLMask 0..9 | Game option (the stock 'Criminal Masks' switch); No mask; Moustache - J.C.; Black beard - Tommy; Red opera - Pierre; Orange face - Liam; Skull - Jean; Porcelain doll - Elwood; Red and white opera - Bud; Blue opera - Mitchel |
+| Mask | KLMask 0..13 | Game option (the stock 'Criminal Masks' switch); No mask; Moustache - J.C.; Black beard - Tommy; Red opera - Pierre; Orange face - Liam; Skull - Jean; Porcelain doll - Elwood; Red and white opera - Bud; Blue opera - Mitchel; **Wolf, Dallas, Chains, Hoxton (Payday 2)** - face plates over the character's own head, 2026-10-10, tools/kl_pd2mask.py, re/pd2_*.md; variant step 14, HEAD_BASE 113, top variant 128 (the byte is compared unsigned) |
 | Outfit | KLOutfit 0..23 | Plain clothes / Light vest / Tactical vest / Heavy armour, each also with ', black shirt', and each of those eight with ', dark balaclava' and ', black balaclava' (Dead Men bodies; a Dog Days body has one outfit) |
 
 Any of the 16 bodies with any of the 8 masks or its own face, a Dead Men body in any of its 24 looks. The choice
