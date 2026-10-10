@@ -189,9 +189,13 @@ free piece of address space shrinks from load to load (242 -> 32 -> 26 -> 14 MB;
 25.9 MB block found no place while the reserve was 'in use'. klmem.c: the reserve is now an arena of several blocks; the .prm always,
 plus any request of 1 MB or more the heap refuses (same as before in every case that worked). Proof so far: klhook/klmem_test.c
 only (replays the requests in a cut-up 32-bit address space: PASS). Hook installed: SHIP <work>/build/klhook/ship_mem3 (sha1
-d638209b); TEST sibling test_mem3; the previous one is ship_mem2. It also logs one 'memory: at the level's largest block: free
-pieces ... in use ...' line per level load, and its dumps carry the region list (`python debug/vmmap.py <dump>`): the ROOT CAUSE -
-what stays behind after a level and cuts the space - is NOT known; read those lines after the owner's next session.
+bceda981); TEST sibling test_mem3; the previous one is ship_mem2. It also logs one 'memory: at the level's largest block: free
+pieces ... in use ...' line per level load, writes the whole address space to <DD>/KLHook_map_0..7.txt at that moment (and
+KLHook_map_refused_0/1.txt at a refused request), and its dumps carry the region list. THE ROOT CAUSE - what stays behind after a
+level and cuts the space - is NOT known. What the old log shows: it follows PLAY TIME, not the number of loads (after 6-7 minutes
+of play the largest piece before the next load is 26-32 MB; after 15 s sessions 96-207 MB). AFTER THE OWNER'S NEXT SESSIONS:
+`python debug/vmmap.py <DD>/KLHook_map_0.txt <DD>/KLHook_map_1.txt` lists the allocations that came in between two loads by
+size and kind and which free pieces they cut (copy the map files aside first: the next process overwrites them).
 BUDGET for the builders: the five blocks are 32.0 scratch, .fxc + 0x60000, .prm + 0x60000, .ANM + 0x60000 and the WHOLE
 <level>.WAV beside the archive. Stock F01: .fxc 5.9, .prm 63.5, .ANM 19.8, .WAV 14.7 MB; Retomoto: 16.9, 74.2, 20.6, 25.9 MB =
 34 MB more than stock in large blocks. .fxc DONE OFFLINE, NOT LOADED LIVE: `kl_graft.py lighten <build> <out> --load fxc`

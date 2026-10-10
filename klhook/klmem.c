@@ -69,12 +69,14 @@
  *   RoomMB=0         0 = never (only when the heap fails). 128 needs ReserveMB=176 for Retomoto: see above
  *   StackMB=0        0 = leave the game's threads their 4 MB; 1 or 2 = reserve that much for its new threads
  *   Log=1
+ *   Maps=1           KLHook_map_0..7.txt beside the log: the whole address space at each level's largest block
+ *                    (and KLHook_map_refused_0/1.txt at the first two refused requests after it)
  */
 #ifndef KLMEM_C
 #define KLMEM_C
 
 #define KLM_BLOCKS 64
-static int klm_on = 1, klm_log = 1, klm_reserve_mb = 128, klm_big_mb = 48, klm_mid_mb = 16, klm_room_mb, klm_stack_mb;
+static int klm_on = 1, klm_log = 1, klm_reserve_mb = 128, klm_big_mb = 48, klm_mid_mb = 16, klm_room_mb, klm_stack_mb, klm_maps = 1;
 static void *klm_reserve;                               /* set once in klm_init, never released */
 static volatile LONG klm_served, klm_threads;
 static struct { SIZE_T off, len, asked; } klm_blk[KLM_BLOCKS];   /* the blocks in the reserve, by offset; len = asked rounded up to 64 KB */
@@ -97,7 +99,37 @@ static void klm_free_space(SIZE_T *largest, SIZE_T *total)
     }
 }
 
-static void klm_map_line(const char *when)
+static void klm_map_file(const char *when, int refused)
+{   /* every region of the user half, one line each, into KLHook_map_<n>.txt beside the log (n = 0..7: the last eight level loads
+       are kept; the first two refused requests after each go into KLHook_map_refused_0 / _1.txt). The line above says how much; two of these files, taken at the same point of two level loads, say
+       WHICH allocations came in between and where they sit: `python debug/vmmap.py <map A> <map B>`.
+       Columns: base, allocation base, size (hex), state F/C/R, type I/M/P, protection (hex), module of an image. */
+    static LONG no, left = 2; static char buf[0x10000];
+    char path[MAX_PATH], name[MAX_PATH], *leaf; MEMORY_BASIC_INFORMATION mbi; BYTE *p = (BYTE *)0x10000; HANDLE f; DWORD w, at = 0; SYSTEMTIME t; LONG n;
+    if (!klm_maps) return;
+    if (refused) { if (left <= 0) return; left--; n = no; snprintf(path, sizeof path, "%s\\KLHook_map_refused_%ld.txt", dir, 1 - left); }
+    else { left = 2; n = InterlockedIncrement(&no) - 1; snprintf(path, sizeof path, "%s\\KLHook_map_%ld.txt", dir, n & 7); }
+    f = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, 0, CREATE_ALWAYS, 0, 0);
+    if (f == INVALID_HANDLE_VALUE) return;
+    GetLocalTime(&t);
+    at = (DWORD)snprintf(buf, sizeof buf, "# map %ld%s of process %lu, %02d:%02d:%02d, %s; the reserve is %p + %d MB and holds %d block(s)\r\n",
+                         refused ? n : n + 1, refused ? " (a refused request after it)" : "", GetCurrentProcessId(), t.wHour, t.wMinute, t.wSecond, when, klm_reserve, klm_reserve ? klm_reserve_mb : 0, klm_n);
+    while (p < (BYTE *)0x7ffe0000 && VirtualQuery(p, &mbi, sizeof mbi)) {
+        name[0] = 0; leaf = name;
+        if (mbi.State != MEM_FREE && mbi.Type == MEM_IMAGE && mbi.AllocationBase == mbi.BaseAddress && GetModuleFileNameA((HMODULE)mbi.AllocationBase, name, sizeof name))
+            { leaf = strrchr(name, '\\'); leaf = leaf ? leaf + 1 : name; }
+        if (at > sizeof buf - 400) { WriteFile(f, buf, at, &w, 0); at = 0; }
+        at += (DWORD)snprintf(buf + at, 400, "%08lx %08lx %08lx %c %c %04lx %s\r\n", (unsigned long)(uintptr_t)mbi.BaseAddress,
+                              (unsigned long)(uintptr_t)(mbi.State == MEM_FREE ? 0 : mbi.AllocationBase), (unsigned long)mbi.RegionSize,
+                              mbi.State == MEM_FREE ? 'F' : mbi.State == MEM_COMMIT ? 'C' : 'R',
+                              mbi.State == MEM_FREE ? '-' : mbi.Type == MEM_IMAGE ? 'I' : mbi.Type == MEM_MAPPED ? 'M' : 'P', (unsigned long)(mbi.State == MEM_COMMIT ? mbi.Protect : 0), leaf);
+        p = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
+    }
+    if (at) WriteFile(f, buf, at, &w, 0);
+    CloseHandle(f);
+}
+
+static void klm_map_line(const char *when, int refused)
 {   /* who holds the address space, in one line: written at every level's .prm request and at a failure, so that the
        loads of one process can be compared (what stays behind, and in pieces of what size). The reserve itself
        counts under 'reserved only'; so do the unused parts of thread stacks and of heap segments. */
@@ -116,6 +148,7 @@ static void klm_map_line(const char *when)
     klog("memory: %s: free pieces of 64 MB+ %d (%.0f MB), 16-64 MB %d (%.0f), 4-16 MB %d (%.0f), 1-4 MB %d (%.0f), under 1 MB %d (%.0f); in use: modules %.0f MB, mapped files %.0f, private committed %.0f, private reserved only %.0f; %d regions",
          when, nf[0], fr[0] / 1048576.0, nf[1], fr[1] / 1048576.0, nf[2], fr[2] / 1048576.0, nf[3], fr[3] / 1048576.0, nf[4], fr[4] / 1048576.0,
          image / 1048576.0, mapped / 1048576.0, commit / 1048576.0, reserved / 1048576.0, regions);
+    klm_map_file(when, refused);
     SetLastError(err);
 }
 
@@ -153,7 +186,7 @@ static LPVOID WINAPI klm_HeapAlloc(HANDLE heap, DWORD flags, SIZE_T size)
         if (klm_log) klog("memory: a block of %.1f MB is asked for; free address space %.0f MB, largest piece %.1f MB (the reserve holds %d block(s), %.1f of %d MB)",
                           size / 1048576.0, total / 1048576.0, largest / 1048576.0, klm_n, klm_used / 1048576.0, klm_reserve ? klm_reserve_mb : 0);
         first = size >= ((SIZE_T)klm_big_mb << 20) || (size >= ((SIZE_T)klm_mid_mb << 20) && largest < ((SIZE_T)klm_room_mb << 20));
-        if (klm_log && size >= ((SIZE_T)klm_big_mb << 20)) klm_map_line("at the level's largest block");
+        if (klm_log && size >= ((SIZE_T)klm_big_mb << 20)) klm_map_line("at the level's largest block", 0);
     }
     if (first && (p = klm_from_reserve(size)) != 0) {
         if (klm_log) klog("memory: the block of %.1f MB is in the reserve (%p, use %ld)", size / 1048576.0, p, klm_served);
@@ -167,7 +200,7 @@ static LPVOID WINAPI klm_HeapAlloc(HANDLE heap, DWORD flags, SIZE_T size)
          p ? "the block is in the reserve instead" : !klm_reserve ? "there is no reserve - the game will fault (0x8e5bbd for a level's .prm)" :
          "the reserve has no room for it either - the game will fault (0x8e5bbd for a level's large blocks)");
     if (!p && klm_reserve) klog("memory: the reserve holds %d block(s), %.1f of %d MB", klm_n, klm_used / 1048576.0, klm_reserve_mb);
-    klm_map_line(p ? "at the refused request" : "at the fault");
+    klm_map_line(p ? "at the refused request" : "at the fault", 1);
     return p;
 }
 
@@ -226,6 +259,7 @@ static void klm_init(void)
     klm_on = GetPrivateProfileIntA("Memory", "Enable", 1, klh_ini);
     if (!klm_on) return;
     klm_log = GetPrivateProfileIntA("Memory", "Log", 1, klh_ini);
+    klm_maps = GetPrivateProfileIntA("Memory", "Maps", 1, klh_ini);
     klm_reserve_mb = (int)GetPrivateProfileIntA("Memory", "ReserveMB", 128, klh_ini); if (klm_reserve_mb < 0 || klm_reserve_mb > 512) klm_reserve_mb = 128;
     klm_stack_mb = (int)GetPrivateProfileIntA("Memory", "StackMB", 0, klh_ini); if (klm_stack_mb < 0 || klm_stack_mb > 3) klm_stack_mb = 0;
     klm_big_mb = (int)GetPrivateProfileIntA("Memory", "BigMB", 48, klh_ini); if (klm_big_mb < 1 || klm_big_mb > 512) klm_big_mb = 48;
