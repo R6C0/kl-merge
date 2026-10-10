@@ -245,9 +245,9 @@ if __name__ == '__main__':
         elif a[0] == 'masks':                            # row 1 front, row 2 from the side: mask 1..8
             r = rep['characters'][0]['root']
             panels = [(axis, HEADBOX if axis == 'front' else (-22, 22, 148, 186), posed(p, mat, r, C.variant_of(0, m), REST, textures=tx))
-                      for axis in ('front', 'side') for m in range(1, 9)]
-            sheet(a[2], panels, 220, 190, cols=8)
-            print('%s: masks 1..8 (of %s), front and side' % (a[2], ', '.join(C.DD_NAMES)))
+                      for axis in ('front', 'side') for m in range(1, rep.get('masks', 8) + 1)]
+            sheet(a[2], panels, 220, 190, cols=rep.get('masks', 8))
+            print('%s: masks 1..%d (of %s + Payday 2), front and side' % (a[2], rep.get('masks', 8), ', '.join(C.DD_NAMES)))
         elif a[0] == 'outfits':                          # per character one row: armour 0..3, shirt 1, heads 1 and 2; then the backs
             who = [int(x) for x in a[3:]] or [i + 1 for i, c in enumerate(rep['characters']) if c['outfits'] > 1]
             cols = [0, 1, 2, 3, 4, 7, 8, 16, 11, 19]

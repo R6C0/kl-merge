@@ -227,6 +227,156 @@ def clone_material(mat, name, diffuse, normal=None, specular=None):
     return slot
 
 
+# ------------------------------------------------------------------ HEAD space <-> model space
+def head_frame(p, sk):
+    """(M, t) of HEAD's rest: model = M . h + t (M rows = the 3x3 as stored; its columns are HEAD's axes)."""
+    import kl_chars as C
+    r = C._rest(p, sk)[HEAD_BONE]
+    return ((r[0], r[1], r[2]), (r[3], r[4], r[5]), (r[6], r[7], r[8])), (r[9], r[10], r[11])
+
+
+def to_model(plate, frame):
+    M, t = frame
+    mv = lambda v: tuple(M[k][0] * v[0] + M[k][1] * v[1] + M[k][2] * v[2] for k in range(3))
+    pos = [tuple(a + b for a, b in zip(mv(h), t)) for h in plate.pos]
+    return Plate(pos, [_norm(mv(n)) for n in plate.nrm], plate.uv, plate.tris, plate.name)
+
+
+def to_head(plate, frame):
+    M, t = frame
+    inv = lambda v: tuple(M[0][k] * v[0] + M[1][k] * v[1] + M[2][k] * v[2] for k in range(3))   # M^T
+    return Plate([inv(_sub(q, t)) for q in plate.pos], [_norm(inv(n)) for n in plate.nrm], plate.uv, plate.tris, plate.name)
+
+
+class PlateSpec:
+    """One Payday 2 mask for the wardrobe: `plate` in HEAD space (tris counter-clockwise from outside), the DDS
+    bytes of its diffuse and normal map (None = keep Merc_Masks' own textures), a short name for the material."""
+
+    def __init__(self, name, plate, diffuse=None, normal=None, label=None):
+        self.name, self.plate, self.diffuse, self.normal, self.label = name, plate, diffuse, normal, label or name
+
+
+def _is_face_glasses(p, mat, o):
+    """A glasses object on the face (dropped under a plate; Tommy's hip glasses stay): re/pd2_klside.md 4."""
+    nm = mat.insts[p.u16(o, 0x12)].name.split('/')[-1].lower()
+    if 'glass' not in nm:
+        return False
+    d = p.u32(p.u32(o, 0x28), 0); v = p.chunks[p.u32(d, 4)]
+    return min(struct.unpack_from('<f', v, 52 * k + 4)[0] for k in range(p.u32(d, 0))) > 140.0
+
+
+def add_plates(p, mat, tex, chars, specs, log=print):
+    """Inside kl_chars.wardrobe, after the sixteen models exist: for every character and body, the look
+    'mask STOCK_MASKS + i' = the face look's objects (head on, face glasses off) + plate i on HEAD, at the three
+    levels of detail. One material per plate, one geometry set per plate and HEAD rest frame. -> report list."""
+    import kl_chars as C
+    out = []
+    merc = next(s for s, e in mat.insts.items() if e.name and e.name.endswith('/' + MERC_MASKS))
+    for i, spec in enumerate(specs):
+        m = C.STOCK_MASKS + 1 + i                                   # the mask number of variant_of
+        df = add_texture(tex, 'tex:Characters/_Multiplayer/_All_Levels/PD2_%s#Diffuse_a' % spec.name, spec.diffuse) if spec.diffuse else None
+        nm = add_texture(tex, 'tex:Characters/_Multiplayer/_All_Levels/PD2_%s#Normal_a' % spec.name, spec.normal, normal_map=True) if spec.normal else None
+        if df is None:                                              # no picture of its own: Merc_Masks' (the stock test)
+            df = next(n[3] for s, n in T.texture_stages(mat.insts[merc]) if s == 'mapDiffuse')
+        slot = clone_material(mat, 'Characters/_MultiPlayer/_All_Levels/PD2_Mask_%s' % spec.name, diffuse=df, normal=nm)
+        tpl, _slot = stock_mask_template(p, mat)
+        geoms, n_obj, boxes = {}, 0, []
+        for c in chars:
+            root = c['root']; sk = C.skeleton(p, root)
+            frame = head_frame(p, sk)
+            key = tuple(round(x, 3) for row in frame[0] for x in row) + tuple(round(x, 3) for x in frame[1])
+            if key not in geoms:
+                geoms[key] = Geometry(p, to_model(spec.plate, frame), tpl)
+            g = geoms[key]
+            widen_root(p, root, g.plate.box()); boxes.append(g.plate.box())
+            objs = list(C.objects(p, root))
+            new = []
+            for k in range(c['bodies']):
+                face, v = C.variant_of(k, 0), C.variant_of(k, m)
+                for o in objs:
+                    if p.chunks[o][0x0f] == face and not _is_face_glasses(p, mat, o):
+                        ch = p.chunks[o]
+                        new.append(G.new_chunk(p, ch[:0x0f] + bytes([v]) + ch[0x10:], p.refs[o]))
+                new += [g.object(lod, v, slot) for lod in (1, 2, 0x7c)]
+            C._set_objects(p, root, objs + new); n_obj += len(new)
+            c['objects'] = len(objs) + len(new)
+        lo = tuple(min(b[0][k] for b in boxes) for k in range(3)); hi = tuple(max(b[1][k] for b in boxes) for k in range(3))
+        log('  plate %d %s: mask %d, material slot %d, textures %s / %s, %d geometry sets, %d objects, model box %s .. %s' % (
+            i + 1, spec.name, m, slot, df, nm, len(geoms), n_obj, tuple(round(x, 1) for x in lo), tuple(round(x, 1) for x in hi)))
+        out.append(dict(name=spec.name, label=spec.label, mask=m, material=slot, diffuse=df, normal=nm, geometry_sets=len(geoms), objects=n_obj,
+                        box=[list(lo), list(hi)], vertices=len(spec.plate.pos), triangles=len(spec.plate.tris)))
+    return out
+
+
+def stock_test_plate(lv):
+    """J.C.'s own stock mask as a 'plate' in HEAD space (eyes and all): proves the pipeline without Payday 2."""
+    import kl_chars as C
+    p, mat = G.read(lv['.prm'], 'dd'), T.read_mat(lv['.MAT'])
+    tpl, slot = stock_mask_template(p, mat)
+    o = next(i for i, c in enumerate(p.chunks) if c == tpl)
+    plate, _v, _ix, _d = _stock_plate(p, o)
+    plate = Plate(plate.pos, plate.nrm, plate.uv, [(a, c, b) for a, b, c in plate.tris], 'stocktest')     # file order -> ccw
+    root = next(r for roots in C.skeletons(p).values() for r in roots if o in C.objects(p, r))
+    return PlateSpec('StockTest', to_head(plate, head_frame(p, C.skeleton(p, root))), label='Stock test (J.C. mask)')
+
+
+def plate_specs(arg, lv):
+    """The --plates= argument of kl_chars.py wardrobe: 'stocktest' or Payday 2 mask names (wolf,dallas,...)."""
+    specs = []
+    for name in arg.split(','):
+        if name == 'stocktest':
+            specs.append(stock_test_plate(lv))
+        else:
+            specs.append(pd2_plate(name))
+    return specs
+
+
+# ------------------------------------------------------------------ the Payday 2 half
+# Payday 2 Head frame (re/pd2_model.md 2, 5): x = the character's LEFT, y = up, z = forward; a mask's root space
+# IS that frame and the game attaches the mask at Head with identity (re/pd2_attach.md: unit:link(Head), no
+# scale; wolf / chains / hoxton have no offset). K&L HEAD: X = up, Y = back, Z = right. So
+#     (X, Y, Z) = (y, -z, -x)      a proper rotation (det +1): the triangles keep their sense.
+# Payday 2 stores its triangles counter-clockwise from outside (verification note in re/pd2_model.md) = the
+# Plate convention; vertex_chunk / index_chunk flip them into the file's clockwise order.
+# Payday 2's v counts from the BOTTOM (0 .. -1): the DDS row from the top = 1 + v = K&L's v (down from the top).
+# Translation: the eye-hole centres onto the K&L eye line - a common (-1.6, +0.7, 0) is within 0.5 cm of all
+# four crew masks (re/pd2_model.md 5); scale 1.0 (head heights agree, the K&L heads are wider). ASSUMPTION
+# until a kl_view picture on J.C. and Kane confirms the fit (nose / cheek poke-through).
+PD2_SHIFT = (-1.6, 0.7, 0.0)
+PD2_MASKS = {                                   # name -> (unit folder, mesh object, label on the Heister page)
+    'wolf': ('units/payday2/masks/msk_wolf', 'g_wolf', 'Wolf (Payday 2)'),
+    'dallas': ('units/payday2/masks/msk_dallas', 'g_dallas', 'Dallas (Payday 2)'),
+    'chains': ('units/payday2/masks/msk_chains', 'g_chains', 'Chains (Payday 2)'),
+    'hoxton': ('units/payday2/masks/msk_hoxton', 'g_hoxton', 'Hoxton (Payday 2)'),
+}
+
+
+def pd2_extract_dir():
+    import kl_port_check
+    return os.path.join(kl_port_check.workdir(), 'pd2', 'extract')
+
+
+def pd2_plate(name, shift=PD2_SHIFT, scale=1.0):
+    """PlateSpec of a Payday 2 crew mask from the extracted files (tools/pd2_crate.py extract-prefix)."""
+    import pd2_model
+    folder, mesh_name, label = PD2_MASKS[name]
+    base = os.path.join(pd2_extract_dir(), folder.replace('/', os.sep))
+    stem = folder.split('/')[-1]
+    model = pd2_model.Model(os.path.join(base, stem + '.model'))
+    obj = next((o for o in model.mesh_objects() if o.name == mesh_name), None)
+    if obj is None:
+        raise ValueError('%s: no mesh object %s (have %s)' % (stem, mesh_name, [o.name for o in model.mesh_objects()]))
+    m = model.world_mesh(obj)
+    kl = lambda v: ((v[1]) * scale + shift[0], (-v[2]) * scale + shift[1], (-v[0]) * scale + shift[2])
+    pos = [kl(q) for q in m['pos']]
+    nrm = [_norm((n[1], -n[2], -n[0])) for n in m['nrm']]
+    uv = [(u, 1.0 + v) for u, v in m['uv']]
+    plate = Plate(pos, nrm, uv, [tuple(t) for t in m['tris']], name)
+    short = stem.split('_', 1)[1]                                     # wolf_df.texture beside msk_wolf.model
+    rd = lambda suffix: open(os.path.join(base, '%s_%s.texture' % (short, suffix)), 'rb').read()
+    return PlateSpec(name.capitalize(), plate, diffuse=rd('df'), normal=rd('nm'), label=label)
+
+
 # ------------------------------------------------------------------ self test
 def _stock_plate(p, o):
     """J.C.'s stock mask object read back as a Plate (positions, normals, uvs; triangles in the FILE order)."""

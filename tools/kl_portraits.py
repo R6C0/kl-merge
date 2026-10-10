@@ -49,7 +49,7 @@ sys.path.insert(0, HERE)
 
 CHAR_SIZE = (256, 304)            # width, height on the page (the stock map picture is 540 x 304)
 MASK_SIZE = (256, 256)
-NCHAR, NMASK = 16, 8
+NCHAR, NMASK = 16, 12             # 8 heister masks + 4 Payday 2 plates (kl_chars.MASKS); a build with fewer masks renders what it has
 BLANKS = ['KLPic_None1', 'KLPic_None2', 'KLPic_None3']      # one per use: an entity is one thing on the page
 NAMES = BLANKS + ['KLPic_Char%02d' % n for n in range(1, NCHAR + 1)] + ['KLPic_Mask%d' % n for n in range(1, NMASK + 1)]
 PARENT = ('LocalResources', 'Graphic')

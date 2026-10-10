@@ -181,7 +181,8 @@ CHARACTERS = ['Game default', 'J.C.', 'Tommy', 'Pierre', 'Liam', 'Jean', 'Elwood
 # The masks have no names in the game (one material, Merc_Masks, one shared picture): named here by what
 # tools\kl_view.py masks shows (research\v_wardrobe\masks.png), with the heister who wears each in the stock game.
 MASK_LOOKS = ['Moustache', 'Black beard', 'Red opera', 'Orange face', 'Skull', 'Porcelain doll', 'Red and white opera', 'Blue opera']
-MASKS = ['Game option', 'No mask'] + ['%s - %s' % (m, c) for m, c in zip(MASK_LOOKS, CHARACTERS[1:9])]      # KLMask 0..9
+PD2_MASKS = ['Wolf (Payday 2)', 'Dallas (Payday 2)', 'Chains (Payday 2)', 'Hoxton (Payday 2)']       # masks 9..12: tools\kl_pd2mask.py PD2_MASKS order
+MASKS = ['Game option', 'No mask'] + ['%s - %s' % (m, c) for m, c in zip(MASK_LOOKS, CHARACTERS[1:9])] + PD2_MASKS      # KLMask 0..13
 # The 24 looks of a Dead Men Fragile Alliance hero: armour (0..3) + 4 * shirt (0..1) + 8 * head (0..2), in the order
 # of tools\kl_chars.py outfit_name (the same words). A Dog Days body has one outfit and ignores the row.
 OUTFIT_ARMOUR = ['Plain clothes', 'Light vest', 'Tactical vest', 'Heavy armour']
@@ -193,7 +194,7 @@ HEISTER_ROWS = (('KLH_Char', 'Character', 'KLChar', CHARACTERS), ('KLH_Mask', 'M
 # Y: the character picture (304 high) ends level with the mask picture (84 + 256 = 340); at Y=60 its legs ran ~16 units into the
 # Character focus bar (run PV1, 2026-10-09 23:55, picture research\shots\PV1_62s.png).
 HEISTER_PICS = (('KLH_Char', 'KLChar', ['KLPic_None1'] + ['KLPic_Char%02d' % n for n in range(1, 17)], -117, 36),
-                ('KLH_Mask', 'KLMask', ['KLPic_None2', 'KLPic_None3'] + ['KLPic_Mask%d' % n for n in range(1, 9)], 157, 84))
+                ('KLH_Mask', 'KLMask', ['KLPic_None2', 'KLPic_None3'] + ['KLPic_Mask%d' % n for n in range(1, len(MASKS) - 1)], 157, 84))
 HEISTER_NOTE = 'Arcade Mode. Dead Men bodies, their outfits and the masks of other heisters need a map built with the wardrobe. Outfits are for Dead Men bodies; the balaclava shades show on the six masked men.'
 
 

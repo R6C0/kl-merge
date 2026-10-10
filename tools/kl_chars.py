@@ -753,9 +753,11 @@ def put(base, picks, free='add', union=True, log=print, reuse=True):
 
 # ------------------------------------------------------------------ the wardrobe
 # Every heister body with every mask, as VARIANTS of one model per character (module docstring, WARDROBE).
-MASKS = 8
+STOCK_MASKS = 8                                  # the Dog Days heisters' own masks
+PD2_MASKS = 4                                    # Payday 2 face plates, tools/kl_pd2mask.py (Wolf, Dallas, Chains, Hoxton)
+MASKS = STOCK_MASKS + PD2_MASKS                  # 12: the Mask row's masks (KLMask 2 .. MASKS + 1)
 V_FACE, V_OWN = 1, 2                             # the two variants stock Dog Days sets (masks off / on)
-OUTFIT_STEP = 10                                 # variant = 10 * body + (1 face | 2 own mask | 2 + m mask m)
+OUTFIT_STEP = MASKS + 2                          # 14: variant = 14 * body + (1 face | 2 own mask | 2 + m mask m)
 # EVERY LOOK A DEAD MEN FRAGILE ALLIANCE HERO HAS (measured on the four FA maps, whose eight hero models are the
 # same objects in each: `python kl_chars.py looks`). A hero carries 24 variants,
 #       Dead Men variant = 1 + armour + 4 * shirt + 8 * head
@@ -787,7 +789,7 @@ DM_HEADS = ('', 'dark balaclava', 'black balaclava')
 TINT = (('playstyle_04', 0.16), ('multiplayer_headset02', 0.50), ('multiplayer_headset03', 0.22))
 DM_BODIES = len(DM_ARMOUR) * len(DM_SHIRT)       # 8
 DM_LOOKS = DM_BODIES * len(DM_HEADS)             # 24 = the Dead Men variants 1..24
-HEAD_BASE = OUTFIT_STEP * DM_BODIES + 1          # 81
+HEAD_BASE = OUTFIT_STEP * DM_BODIES + 1          # 113 (the variant byte is compared unsigned, re/pd2_klside.md 5: up to 255)
 DM_HEAD = ('head', 'hair', 'eyelash', 'eye_', 'headset', 'glass')    # Dead Men materials a mask replaces
 # The names of Dead Men's eight Fragile Alliance ranks, from its own .LOC (AllLevels/Menu/Online/Profile/
 # FragileAllianceRank_01..08: 'Kane, no1 of The7', 'Lynch, Psycho7', 'Ashkanan, no2 of The7' ... 'Hutchison, no7
@@ -855,7 +857,7 @@ def tint(mat, tex, slots, log=print):
 
 
 def variant_of(outfit, mask):
-    """outfit: 0..23 (0 on a Dog Days body); mask: 0 = the character's own face, 1..8 = that heister's mask,
+    """outfit: 0..23 (0 on a Dog Days body); mask: 0 = the character's own face, 1..8 = that heister's mask, 9..12 = a Payday 2 plate,
     -1 = 'own' (the stock toggle's 2)."""
     body, head = outfit % DM_BODIES, outfit // DM_BODIES
     if mask == 0 and head:
@@ -951,7 +953,7 @@ def _set_objects(p, root, objs):
     p.chunks[root] = _put(p.chunks[root], 0x14, '<II', len(objs), _new(p, _pad(struct.pack('<%dI' % len(objs), *objs))))
 
 
-def wardrobe(base, level='M01_FA_A', free='add', log=print, armour=(0, 1, 2, 3), fix_bones=False, reuse=True):
+def wardrobe(base, level='M01_FA_A', free='add', log=print, armour=(0, 1, 2, 3), fix_bones=False, reuse=True, plates=()):
     """base: Lv of a Dog Days level with the eight stock heisters (edited in place). Returns the report:
     report['characters'] = 16 dicts (name, root, slot, outfits), report['roots'] = the sixteen model roots.
     armour: the Dead Men armour levels whose body meshes join the file (each costs 2.9 - 4.9 MB of .prm over the
@@ -961,7 +963,9 @@ def wardrobe(base, level='M01_FA_A', free='add', log=print, armour=(0, 1, 2, 3),
     file - what `kl_impact.py fix` does; a base grafted before 2026-10-09 18:00 needs it).
     reuse: the models and the 15,500 object copies take the indices of the base's dead chunks (put()); the
     file only grows when they run out. Lighten the base FIRST (kl_graft lighten): after this no dead root
-    is left for trim / slim to find, and a later trim must be told the Dead Men roots (wardrobe_roots)."""
+    is left for trim / slim to find, and a later trim must be told the Dead Men roots (wardrobe_roots).
+    plates: kl_pd2mask.PlateSpec list = the Payday 2 face plates (masks STOCK_MASKS + 1 ..), at most PD2_MASKS;
+    the build then has STOCK_MASKS + len(plates) masks (rep['masks'], KLWardrobe.ini Masks=)."""
     armour = sorted(set(armour))
     if not armour or armour[0] != 0 or armour[-1] > 3:
         raise ValueError('armour levels: 0 (the suit) must be in, 3 is the highest')
@@ -1020,7 +1024,7 @@ def wardrobe(base, level='M01_FA_A', free='add', log=print, armour=(0, 1, 2, 3),
     for n in range(8):                                # Dog Days heister n: stock objects + every other mask
         same = _Fit(p, skel_dd[n], skel_dd[n])
         objs = list(objects(p, old[n]))
-        for m in range(8):
+        for m in range(STOCK_MASKS):
             fit = _Fit(p, skel_dd[m], skel_dd[n])
             objs += [_moved(p, o, same, variant_of(0, m + 1), note) for o in body[n]]
             objs += [_moved(p, o, fit, variant_of(0, m + 1), note) for o in mask[m]]
@@ -1042,12 +1046,12 @@ def wardrobe(base, level='M01_FA_A', free='add', log=print, armour=(0, 1, 2, 3),
         fbag = _Fit(p, skel_dd[n], skel_dm[n])
         objs = []
         carry = [o for o in bag[n]]
-        fits = {m: _Fit(p, skel_dd[m], skel_dm[n]) for m in range(8)}
+        fits = {m: _Fit(p, skel_dd[m], skel_dm[n]) for m in range(STOCK_MASKS)}
         for k in range(DM_LOOKS):                     # own face: every armour, shirt and head
             objs += [_moved(p, o, own, variant_of(k, 0), note) for o in dbody[n, k] + dhead[n, k]]
             objs += [_moved(p, o, fbag, variant_of(k, 0), note) for o in carry]
         for k in range(DM_BODIES):                    # masked: every armour and shirt (the mask is the head)
-            for m in [-1] + list(range(8)):           # 'own' (what the stock mask toggle asks for) = mask n
+            for m in [-1] + list(range(STOCK_MASKS)):  # 'own' (what the stock mask toggle asks for) = mask n
                 v = variant_of(k, m + 1 if m >= 0 else -1)
                 objs += [_moved(p, o, own, v, note) for o in dbody[n, k]]
                 objs += [_moved(p, o, fits[n if m < 0 else m], v, note) for o in mask[n if m < 0 else m]]
@@ -1055,6 +1059,13 @@ def wardrobe(base, level='M01_FA_A', free='add', log=print, armour=(0, 1, 2, 3),
         _set_objects(p, dm[n], objs)
         chars.append(dict(name=DM_NAMES[n], game='dm', slot=n, root=dm[n], outfits=DM_LOOKS, bodies=DM_BODIES, heads=len(DM_HEADS),
                           objects=len(objs), bones=p.u32(skel_dm[n], 0)))
+    if plates:                                        # the Payday 2 face plates: tools/kl_pd2mask.py
+        import kl_pd2mask
+        if len(plates) > PD2_MASKS:
+            raise ValueError('%d plates, the numbering has room for %d' % (len(plates), PD2_MASKS))
+        plate_rep = kl_pd2mask.add_plates(p, mat, tex, chars, plates, log=log)
+    else:
+        plate_rep = []
     if note['rest'] > MAX_REST:
         raise ValueError('a moved object\'s bone rests %.2f units from where it did (limit %.1f): %s; per bone %r' % (
             note['rest'], MAX_REST, note['worst'], sorted(((round(v, 2), k) for k, v in note['by_bone'].items() if v > 0.3), reverse=True)))
@@ -1080,6 +1091,7 @@ def wardrobe(base, level='M01_FA_A', free='add', log=print, armour=(0, 1, 2, 3),
     base['.TEX'] = T.write_tex(tex)
     base['.gms'], base['.prp'] = kl_gms.pack(bytes(raw)), sc.p.serialize()
     rep.update(characters=chars, roots=[c['root'] for c in chars], stock_roots=old, retargeted=moved, level=level,
+               masks=STOCK_MASKS + len(plates), plates=plate_rep,
                bones_folded_for_low_detail=note['low'], bones_on_an_ancestor=note['inexact'], largest_rest_distance=round(note['rest'], 3),
                chunks=(rep['chunks'][0], len(p.chunks) - 1), prm_bytes=(rep['prm_bytes'][0], len(prm_bytes)),
                free_indices=(rep['free_indices'][0], len(p.free)),
@@ -1097,7 +1109,7 @@ def wardrobe_ini(rep, path):
         f.write('; outfit = body + Bodies * head (a Dead Men body: body = armour 0..3 + 4 * shirt 0..1, head 0..2)\n')
         f.write('; variant of a look = %d * body + (1 own face | 2 own mask | 2 + m mask of heister m);\n' % OUTFIT_STEP)
         f.write(';                     own face with head 1.. = HeadBase + Bodies * (head - 1) + body\n')
-        f.write('[Wardrobe]\nVersion=2\nCharacters=%d\nMasks=%d\nOutfitStep=%d\nHeadBase=%d\n' % (len(rep['characters']), MASKS, OUTFIT_STEP, HEAD_BASE))
+        f.write('[Wardrobe]\nVersion=2\nCharacters=%d\nMasks=%d\nOutfitStep=%d\nHeadBase=%d\n' % (len(rep['characters']), rep.get('masks', STOCK_MASKS), OUTFIT_STEP, HEAD_BASE))
         for i, c in enumerate(rep['characters'], 1):
             f.write('[Character.%d]\nName=%s\nRoot=%d\nSlot=%d\nOutfits=%d\nBodies=%d\nHeads=%d\nStock=%d\n' % (
                 i, c['name'], c['root'], c['slot'], c['outfits'], c['bodies'], c['heads'], c['game'] == 'dd'))
@@ -1124,9 +1136,9 @@ def check_wardrobe(lv, rep):
             top = max(v[52 * k + 24 + j] for k in range(p.u32(d, 0)) for j in range(4))
             if top // 3 >= len(bones):
                 bad.append('%s: object %d: a vertex names palette entry %d of %d' % (c['name'], o, top // 3, len(bones)))
-        want = {variant_of(k, 0) for k in range(c['outfits'])} | {variant_of(k, m) for k in range(c['bodies']) for m in range(-1, MASKS + 1)}
-        if max(want) > 127:
-            bad.append('%s: variant %d does not fit below 128' % (c['name'], max(want)))
+        want = {variant_of(k, 0) for k in range(c['outfits'])} | {variant_of(k, m) for k in range(c['bodies']) for m in range(-1, rep.get('masks', STOCK_MASKS) + 1)}
+        if max(want) > 255:
+            bad.append('%s: variant %d is not a byte' % (c['name'], max(want)))
         if set(have) != want:
             bad.append('%s: variants %r, expected %r' % (c['name'], sorted(have), sorted(want)))
         for v, lods in sorted(have.items()):
@@ -1654,8 +1666,12 @@ if __name__ == '__main__':
         import kl_impact
         # what the base has wrong before anything is added (an old graft's map skeletons): told apart from the new
         before = set(kl_impact.bone_faults(G.read(stock['.prm'], 'dd'))) | {'people: ' + x for x in undrawn(stock)}
+        plates = next((x.split('=')[1] for x in sys.argv[1:] if x.startswith('--plates=')), '')
+        if plates:
+            import kl_pd2mask
+            plates = kl_pd2mask.plate_specs(plates, lv)
         rep = wardrobe(lv, level, free=free, armour=[int(x) for x in arm.split(',')], fix_bones='--fix-bones' in sys.argv,
-                       reuse='--no-reuse' not in sys.argv)
+                       reuse='--no-reuse' not in sys.argv, plates=plates or ())
         for c in rep['characters']:
             print('  %-16s slot %d  model %5d  %3d bones  %4d objects  %2d outfit(s)' % (c['name'], c['slot'] + 1, c['root'], c['bones'], c['objects'], c['outfits']))
         print('  .prm %d -> %d chunks, %.1f -> %.1f MB; %d heisters / bots re-pointed; bones folded for low detail %d, on an ancestor %d, largest rest distance %.3f' % (

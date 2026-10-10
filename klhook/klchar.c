@@ -70,7 +70,8 @@
  *        variant = 10 * body + (1 own face | 2 own mask | 2 + m the mask of heister m, m = 1..8)
  *        variant = HeadBase + Bodies * (head - 1) + body      own face with head 1.. (a mask replaces the head, so
  *                                                             the head choice exists with the own face only)
- *    1..96, below 128 (the variant is a byte of the mesh object). A Version 1 file (two outfits: Dead Men variants
+ *    with 12 masks: step 14, 1..128 (the variant byte is compared unsigned by the renderer, re\pd2_klside.md 5; masks
+ *    9..12 are Payday 2 face plates drawn over the character's own head). A Version 1 file (two outfits: Dead Men variants
  *    1 and 4) is still read: armour 3 selects its second outfit, everything else its first.
  *    Each tick the hook compares [player+0x50] with what the choice asks for and calls 0x88c810(player, variant)
  *    when it differs (game thread only). KLMask=0 leaves the game's 1 / 2 alone (and only adds the outfit).
@@ -102,7 +103,7 @@
 #define KLC_ATTACH      0x008f5e90            /* its slot 137 */
 #define KLC_SETVARIANT  0x0088c810
 #define KLC_NCHAR       16
-#define KLC_MASKS       8
+#define KLC_MASKS       12                    /* 8 Dog Days heisters' masks + 4 Payday 2 plates (tools\kl_pd2mask.py); a build may have fewer (Masks=) */
 #define KLC_OUTFITS     24                    /* KLOutfit 0..23; mkoverlay.py's Outfit row has as many entries */
 
 static int klc_on = 1, klc_log = 1, klc_settle = 300, klc_tries = 3;
@@ -203,7 +204,7 @@ static void klc_level_open(const char *key, const char *opened)
         klc_w.step = (int)GetPrivateProfileIntA("Wardrobe", "OutfitStep", 10, file);
         klc_w.masks = (int)GetPrivateProfileIntA("Wardrobe", "Masks", KLC_MASKS, file);
         klc_w.headbase = (int)GetPrivateProfileIntA("Wardrobe", "HeadBase", 0, file);
-        ok = klc_w.masks == KLC_MASKS && klc_w.step >= KLC_MASKS + 2;
+        ok = klc_w.masks >= 1 && klc_w.masks <= KLC_MASKS && klc_w.step >= klc_w.masks + 2;    /* an 8-mask build still works: its last four choices fall back */
         for (i = 0; i < n; i++) {
             int top;
             snprintf(sec, sizeof sec, "Character.%d", i + 1);
@@ -314,6 +315,10 @@ static void klc_level_tick(int game_thread)
         for (i = 0; i < klc_w.n && klc_w.c[i].root != model; i++) ;       /* whose model does the player wear now? */
         if (i == klc_w.n) return;                             /* not a wardrobe model (a policeman's, another build's): leave it */
         if (!klh_rd(player + 0x50, &cur, 4)) return;
+        if (mask >= 2 && mask - 1 > klc_w.masks) {               /* a mask this build does not have (an 8-mask build, KLMask 10..13): no mask */
+            static int toldmask; if (!toldmask++) klog("character: KLMask=%d asks for mask %d and level %s has %d: no mask instead", mask, mask - 1, key, klc_w.masks);
+            mask = 1;
+        }
         v = klc_variant(klc_w.version, klc_w.step, klc_w.headbase, klc_w.c[i].bodies, klc_w.c[i].heads, outfit, mask, cur);
     }
     if (!klh_rd(player + 0x50, &cur, 4) || cur == (DWORD)v) return;

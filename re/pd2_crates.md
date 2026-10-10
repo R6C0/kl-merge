@@ -133,3 +133,50 @@ fps_temp_dallas msk_alienware msk_anonymous msk_baby_angry msk_baby_cry msk_baby
 
 The earlier "307 mask folders" figure (CLAUDE.md) matches none of the counts measured here
 (70 / 578 / 804); the DLC masks live under `units/pd2_dlc_*/masks/`, `units/pd2_crimefest_*/...`.
+
+## Verification (2026-10-10, independent re-run against the 98 crates)
+
+Re-run by a verifier session with its own scripts; nothing in `tools/pd2_crate.py` was changed.
+
+Holds (measured):
+- `verify` on init_03_0 (1,977 entries, 305 raw / 1,672 zlib), default_07_0 (5,283, 45 empty),
+  init_11_1 (1,523, 332 empty), movies_02_0 (14, all raw), scripts, engine, assets_00_1: 0 size /
+  inflate / layout / padding faults, every one ends at the tail; the numbers in the table above
+  are reproduced exactly.
+- Index: 278,678 entries, 278,511 keys, 77 extensions all named, 3 unnamed keys (unit 196 B,
+  unit 242 B, texture 1,398,256 B), 20,260 raw == 0 entries all cooked_physics with offset 0,
+  properties single-bit only with the per-extension counts given above, hash64('lua') =
+  ab2664bf82e6460c, tables sorted by (ext, path) as unsigned u64 (4 crates checked), shard !=
+  path hash mod 16 (18,783 of 20,000 differ).
+- 10 random non-empty entries of 10 extensions read back with len == raw and the expected magic
+  (DDS, DOBD, 1b4c4a02, RIFF, BKHD, BIK for movies, '<unit' for units).
+- Signature tables: scripts 1,646 x 512 bytes (all lua, every key in the table), engine 2
+  (security_settings, game_config); the blocks run to the file end. The PEM is at path
+  `crate_public_key` (no `core/`), 814 bytes, a 4096-bit RSA public key header.
+- Hashlist: all 336 lines under `units/payday2/masks/` resolve to a path hash in the index;
+  70 folders + shared_textures, 578 / 804 as stated. Manifest: 278,605 records, flag 1 on 105,
+  94 of them in no table; every table key is in the manifest.
+- 20 random documents from other folders (5 each of unit, object, material_config,
+  sequence_manager) convert and pass `xml_ok`; ALL 3,865 sequence_manager files are binary
+  scriptdata and all pass the proof counters (tables, strings, floats, open/close, trailing 4).
+
+Corrections:
+- ELSE pairs: 606 is right, but 8 of them use `\r\n ELSE {\r\n`; `text_documents()` matches only
+  the LF form, so those 8 (e.g. pd2_dlc_bbq/masks/msk_gasmask, pd2_dlc_casino/masks/
+  msk_croupier_hat) come back as ONE document with the second branch inside it, and `xml_ok`
+  reports 'junk after document element'. 598 split correctly. Not one of the four crew masks.
+- "1 binary in the first 3,000 objects": there are no binary objects or units. 5 objects and 1
+  unit (e.g. off_prop_officehigh_whiteboard_wall.object, rvd_ext_jewelry_store_window_02.unit)
+  are text XML with one or two stray bytes before `<` ('2', 'f', ' w'); `is_text_xml` rejects them,
+  `xml_text` then tries the scriptdata reader and raises ValueError, so `extract --xml` and
+  `extract-prefix --xml` abort on such a file. material_config: 0 binary, as stated.
+- Strict well-formedness is not a property of the game's text documents: a sample (every 25th
+  unit / object plus all ELSE material_configs) found duplicate attributes, mismatched tags and
+  invalid tokens in genuine files (3 units, 4 objects, 16 material_configs). `xml_ok` False on a
+  text document means minidom refused it, not that the extraction is wrong.
+- The docstring says the hashlist names 278,490 keys (line "IDSTRING = ..."); the measured and
+  otherwise stated figure is 278,508.
+- "167 duplicate keys": 16 keys are duplicated (10 x 15 languages, 3 x 5, 3 x 6) = 167 extra
+  entries.
+- `Index.names` hashes hashlist lines as raw bytes, not lower-cased as `hash64(str)` does; the one
+  line with upper case (`soundbanks/TRAI_H`) is also present lower-cased, so nothing is lost today.
