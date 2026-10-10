@@ -23,6 +23,7 @@ into it and edits nothing of it.
                                        --no-chains    dynamic street without the 'wiped out -> neighbours fall
                                                       back' lists (ZSquadScript field 8: an ASSUMPTION)
                                        --van-bent     F07's drive as kl_fa_author fits it (kl_fa_van off)
+                                       --no-cover     the six buses and the car of COVER_PLACE stay in the bus terminal
                                        --no-police    F07's squads and their boxes are not kept at all
                                                       (with --no-ai: an empty street, for the escape)
     python kl_fa_street.py report <archive>   the same read-back of a built level
@@ -233,6 +234,53 @@ GUARD = (G4 + '040_EscapeEntranceLeft\\30_smUnleash', G4 + '040_EscapeEntranceRi
 # stock sends every squad to the van 44 s + 18 s after the 'run' boxes (32 + 18 with three criminals). Shorter:
 RUN_CLOCK = {'Gameplay!RunToEscape!Timer1Player': 20.0, 'Gameplay!RunToEscape!Timer3Player': 14.0, 'Gameplay!RunToEscape!Timer': 8.0}   # GUESS
 VAN_CLEAR = 350.0                       # nobody is given a place this near the van's lane (its nose carries a KillBox)
+
+# MORE COVER ON THE STREET (owner, 2026-10-10 evening, after Retomoto with bots: 'maybe add more cars and cover to the 2nd
+# half?'). The level's parked vehicles are NOT static collision: each is a group with a place of its own (parts local to
+# it) directly under the map's 'outside' group (identity at the origin, not a room), and its collision is key-framed
+# (.HVK type 4, convex: V_Coli_Shot_01, doors, wheels, windows), which follows the entity. Each brings three CoverBox
+# children. So a vehicle moves as one thing by moving its group - no new entity, no new model, nothing in the .prm.
+# 17 buses and a car stand in the bus terminal (y -980, x < -15000), which Fragile Alliance never reaches (the west
+# bound): six buses and the car are brought up to the road. Where: the east side had NOTHING between z -1500 and
+# 3900 (54 m) and nothing east of the median from z 7900 to the van's stop. vehicle -> (x, z, (dx, dz) its nose, what).
+# y = the carriageway's floor 0 + the height the same model has on this road (bus 14.6, car 1.5), + 20 on the raised
+# strip. Measured free: no static collision in any footprint (kl_escape.Walk). GUESSES: every place.
+# NOT KNOWN: the navigation mesh has no hole under them - police and AI heisters will find them in their way.
+COVER = True                            # False ('--no-cover'): the terminal's vehicles stay in the terminal
+_VS = r'Locations/M09_B/M09B_Locations.zip\Locations/M09_B/M09B_LOC_Outside.zip\Vehicles_static!'
+BUS, CAR = (135.0, 570.0, 14.6), (105.0, 240.0, 1.5)      # half width, half length, height of the origin over the floor
+COVER_PLACE = collections.OrderedDict([
+    (_VS + 'Static_Busses!V_Bus_Japan_Static_01_00#18', (-1700, -640, (0, 1), BUS, 0, 'east lane, the start of the empty stretch (clear of the start places of wave 1)')),
+    (_VS + 'V_JPN_Civilian_B_00#26',      (-2450, 700, (0, -1), CAR, 0, 'beside the median')),
+    (_VS + 'Static_Busses!V_Bus_Japan_Static_01_00#14', (-2200, 2000, (1, 0), BUS, 0, 'ACROSS the east carriageway: a barricade, gaps at both ends')),
+    (_VS + 'Static_Busses!V_Bus_Japan_Static_01_00#15', (-1700, 3000, (0, 1), BUS, 0, 'east lane, 9 m before the road block')),
+    (_VS + 'Static_Busses!V_Bus_Japan_Static_01_00#07', (-2600, 7500, (0, -1), BUS, 0, 'beside the median, before the van\'s waiting place')),
+    (_VS + 'Static_Busses!V_Bus_Japan_Static_01_00#19', (-2450, 9700, (0, 1), BUS, 0, 'west of the van\'s lane (3 m clear), between the SWAT truck and the stop')),
+    (_VS + 'Static_Busses!V_Bus_Japan_Static_01_00#10', (-1250, 9500, (0, -1), BUS, 20, 'on the raised strip east of the lane (4 m clear)'))])
+
+
+def place_cover(M, log=print):
+    """Move the vehicles of COVER_PLACE in the converted M09_B (kl_graft.DeadMen), before the join."""
+    n = 0
+    for path, (x, z, turn, (_hw, _hl, up), floor, _what) in COVER_PLACE.items():
+        hit = M.prp.resolve(R + path)
+        if len(hit) != 1:
+            log('  kl_fa_street: cover: %d nodes named %s - left out' % (len(hit), path.split('!')[-1]))
+            continue
+        au.place(M, hit[0], (float(x), float(floor) + up, float(z)), turn=turn)
+        n += 1
+    log('  kl_fa_street: cover: %d of %d parked vehicles brought from the bus terminal to the street' % (n, len(COVER_PLACE)))
+    return n
+
+
+def footprints():
+    """[(name, x0, x1, z0, z1)] of the moved vehicles on the road."""
+    out = []
+    for path, (x, z, turn, (hw, hl, _up), _floor, _what) in COVER_PLACE.items():
+        hx, hz = (hl, hw) if abs(turn[0]) > abs(turn[1]) else (hw, hl)
+        out.append((path.split('!')[-1], x - hx, x + hx, z - hz, z + hz))
+    return out
+
 
 # the campaign's own squads of the street (kl_fa_author keeps 10 and starts them all at the front
 # entrance): which wave starts which. A name that is in no line stays at the entrance.
@@ -753,6 +801,8 @@ def hook():
             if M.name == au.PART_B:
                 put_world(M, DYN_PLACE, log)
                 kl_fa_van.clear_props(M, log)
+                if COVER:
+                    place_cover(M, log)
             return r
         au.strip = strip2
     prep, wir = au.prepare_host, au.wire
@@ -917,6 +967,22 @@ def report(archive, log=print):
         if p[0] + h[0] > -7500 and p[0] - h[0] < 3300:
             marks.append((None, p[2] if h[0] > h[2] else p[2] + h[2], '<- bound %s, x %d..%d%s' % (
                 sc.names[k].split('!')[-2][-26:], p[0] - h[0], p[0] + h[0], '' if h[0] > h[2] else ', z %d..%d' % (p[2] - h[2], p[2] + h[2]))))
+    if COVER and DYNAMIC:
+        log('COVER (parked vehicles brought to the street; footprint on the road)')
+        lane = kl_fa_van.LANE_X if kl_fa_van.STRAIGHT else None
+        for name, x0, x1, z0, z1 in footprints():
+            k = next((j for j in range(1, len(sc.nodes)) if sc.names[j].endswith('!' + name) and 'Vehicles_static!' in sc.names[j]), None)
+            if k is None:
+                bad.append('cover: %s is not in the level' % name); continue
+            p = at(k)
+            log('  %-34s at %s  x %d..%d  z %d..%d' % (name, r3(p), x0, x1, z0, z1))
+            if not (x0 < p[0] < x1 and z0 < p[2] < z1):
+                bad.append('cover: %s stands at %s, not where the table puts it' % (name, r3(p)))
+            on = [(round(x), round(z), ch) for x, z, ch in marks if x is not None and ch not in 'Vw' and x0 - 40 < x < x1 + 40 and z0 - 40 < z < z1 + 40]
+            if on:
+                bad.append('cover: %s stands on %d places of the squads, e.g. %s' % (name, len(on), on[0]))
+            if lane is not None and z1 > kl_fa_van.WAIT_Z - 450 and x0 - 160 < lane < x1 + 160:
+                bad.append('cover: %s is in the van\'s lane' % name)
     sketch(sc, at, nav, reach, marks, log)
     # ---- who of the street would not be drawn (kl_chars.people; re/invisible.md). The owner's first round
     # here had 12 campaign policemen without a body beyond close range: one material without a compiled shader.
@@ -1061,7 +1127,7 @@ def test(out, keep=False, log=print):
 
 
 def main():
-    global WHO, ONE_VAN, PARK_OTHERS, RIGID, WAVES, POLICE, DYNAMIC, CHAINS
+    global WHO, ONE_VAN, PARK_OTHERS, RIGID, WAVES, POLICE, DYNAMIC, CHAINS, COVER
     a = sys.argv[1:]
     if '--merc-only' in a: WHO = 'ECPS_FA_MERCONLY'
     if '--three-vans' in a: ONE_VAN = False
@@ -1071,6 +1137,7 @@ def main():
     if '--no-police' in a: POLICE = False
     if '--street-classic' in a: DYNAMIC = False
     if '--no-chains' in a: CHAINS = False
+    if '--no-cover' in a: COVER = False
     if '--van-bent' in a: kl_fa_van.STRAIGHT = False
     au.NO_AI = '--no-ai' in a
     a = [x for x in a if not x.startswith('--') or x == '--keep']

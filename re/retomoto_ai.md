@@ -470,3 +470,34 @@ So:
 `python tools/kl_fa_loot.py test G:\kl_scratch\ai_dyn3`: RESULT PASS, every check 0, van lane clear, voice
 repairs on (.WAV 27,158,864). Folder `G:/kl_scratch/ai_dyn3/retomoto_loot` (plain wardrobe; the Payday 2 plates
 and the gun looks are kl-merge-01's finishing steps). Not run in the game.
+
+## 13. More cover on the street (2026-10-10 evening; offline)
+
+Owner, after Retomoto with AI heisters: "maybe add more cars and cover to the 2nd half?" (two bots died on the open
+road within 30 s; the owner plays with [Balance] Risk=2).
+
+FOUND: the level's parked vehicles are not static collision. Each is a group with a place and turn of its own
+directly under the map's outside group (identity at the origin, not a room); its collision is key-framed (.HVK
+type 4, convex, on V_Coli_Shot_01 / doors / wheels / windows) and follows the entity; each carries three CoverBox
+children. So a vehicle moves as one thing by moving its group: no new entity, no model, no byte more in the .prm.
+17 buses and one car stand in the bus terminal (x < -15000, y -980), which Fragile Alliance never reaches.
+
+BUILT (`kl_fa_street.COVER_PLACE`, `--no-cover` = off): six buses and the car on the road. A bus is 11.4 x 2.7 m, 3 m high.
+
+| vehicle | at (x, z) | how | why there |
+|---|---|---|---|
+| bus #18 | (-1700, -640) | along the east lane | the east side had nothing from z -1500 to 3900 (54 m) |
+| car B_00#26 | (-2450, 700) | along, by the median | |
+| bus #14 | (-2200, 2000) | ACROSS the east carriageway | a barricade, gaps at both ends |
+| bus #15 | (-1700, 3000) | along the east lane | 9 m before the road block |
+| bus #07 | (-2600, 7500) | along, by the median | before the van's waiting place |
+| bus #19 | (-2450, 9700) | along, west of the van's lane | 3 m clear of the lane; between the SWAT truck and the stop |
+| bus #10 | (-1250, 9500) | along, on the raised strip | 4 m east of the lane |
+
+Checked: no static collision in any footprint and floor 0 (20 on the strip) under each (kl_escape.Walk); in the
+built level each stands where the table says, none on a squad's start or cover place (the first try put bus #18 on
+a wave 1 policeman: caught), none in the van's lane; the van check still passes.
+NOT KNOWN: (1) the navigation mesh has no hole under them: police and AI heisters may walk into one; (2) that the
+key-framed collision follows a group moved 150 m (the same ASSUMPTION the moved F07 van rests on, which is solid
+live); (3) whether the AI uses their CoverBoxes at the new place. GUESSES: every place.
+`python tools/kl_fa_loot.py test G:/kl_scratch/ai_dyn6`: RESULT PASS; street report 0 faults. BLAST_DELAY 12.5 as v5.
