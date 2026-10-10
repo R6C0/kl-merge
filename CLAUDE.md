@@ -182,6 +182,15 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+SLOT 2026-10-10 13:37 = <work>/build/rt_guns3/retomoto_ai3_guns: Retomoto v3 (kl-merge-b6 b7934cd: rifle guards eCustom 75 = really
+sharper) + wardrobe + plates + gun looks REFITTED (turned 10 degrees into Dog Days' hold, Zastava-as-MP5 sounds like smg_type79,
+P90 on the Type 05). Load check RT3 PASS. Hook still ship_stall (klgun Version 1: the Guns page does nothing yet).
+LIVE TODAY: bots on Late Night Opening (BOT_M02: seven with money in the shop, round NOT ended in 3.5 min) and the park (BOT_M06:
+round ended 189 s after GO); control BOT0 (diner, no bots): round does not end by itself -> on the diner and the park the BOTS end
+the round early. HOOK PARTS WRITTEN, NOT INSTALLED: klhook/klbot.c ([Bots]: crew log, traitor tuning, backstab, bribe as data,
+leave without you, van; help-up is impossible in Arcade - the exe only allows it in mode 2) and klgun.c Version 2 (hide bit);
+review re/hook_review_1010.md (B1-B4, G1) being applied by workflow wf_490b2524-d5b; then live K0, K1, K2, H1. Also running:
+wf_d5735753-e22 (map AI defects F1-F3 + bots on top -> <work>/build/u_maps).
 2026-10-10 13:25 (the owner: 'carry on with everything you can have the whole pc to yourself' - live runs are free until they
 say otherwise). AI HEISTERS SEEN LIVE on the diner (runs BOT1, BOT2: <work>/build/b_bots/M01 and M01_slow): seven bots with name
 tags and money walk to the diner, loot and gather at the escape; no fault. The round ended 152-156 s after GO in BOTH runs (escape
