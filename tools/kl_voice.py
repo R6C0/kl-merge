@@ -14,6 +14,10 @@ repairs. Spec with the evidence: re/voice.md. OFFLINE: nothing here has been hea
     python kl_voice.py build2 [<out>]        the bank and Retomoto without / with the repairs into
                                              <out> (default <work>/build/voice2), per-slot clip counts
                                              before / after, file sizes. Nothing is installed.
+    python kl_voice.py heisters <level|zip> [merged|dd]
+                                             CHECK: the heisters' lines as kl2.exe looks them up, per
+                                             heister, clip formats, stream file, AI heisters' character
+                                             index (re/bots_voice.md). Exit code = CRASH findings.
 
 HOW A CHARACTER SPEAKS IN DOG DAYS (EXE = read in kl2.exe, MEASURED = counted on the stock files)
   1 Barks. A character (class ZLNKWHANDS and below: ZFFActor, ZFFPlayer) holds six sound
@@ -644,6 +648,135 @@ def show(c, log=print):
             log('  %s: %s' % (k, v))
 
 
+# ------------------------------------------------------------------ the heisters' lines (re/bots_voice.md)
+# How a line gets its voice (EXE, kl2 0x421c70, the Arcade branch): a per-character line (flag 1) holds ten entries
+# K_C1..K_C9, K_R_C9 (0x6b8710); the one spoken is entry [rules + 0x33e + speaker's player slot] (0x6ae750), and
+# entry 0 (K_C1) when that one is empty. An AI heister's table byte is name[0x12] - '1' of its group
+# ('Glazer_Bodyguard_0N', 0x588980); speaker -6 takes entry 8 (K_C9, Glazer); the list accessor 0x51ab20 asserts
+# (int3) on an index outside 0..9. OnlineSpeakPlayer looks its key up PLAIN, once (0x8cb6e0).
+BOT_DIGIT = 0x12                            # index of the character digit in an AI heister's group name
+HEISTERS = 8                                # K_C1 .. K_C8; K_C9 is Glazer's
+
+
+def _clip(S, recs, leaves, name, clips):
+    """-> (state, recording) of .LOC leaf `name`: state = the clip's format (codec()), or why the
+    exe finds nothing; recording = clip_key (tells one voice aliased eight times from eight)."""
+    if name not in leaves:
+        return 'no leaf', None
+    sid = leaves[name]
+    if not sid or S.kind.get(sid) != 1:
+        return 'leaf without a sound in the bank', None
+    c, w = codec(S, recs, sid), u32(S.b, sid + 0x14)
+    f = recs.get(u32(S.b, w + 0x14)) if w and w < S.T else None
+    if f is None:
+        return c, None
+    off = f['off'] | (f['offhi'] << 32)
+    if f['fmt'] & W.STREAMED and not f['fmt'] & W.LANGFILE and clips is not None and off not in clips:
+        return c + ', NOT IN THE STREAM FILE', None
+    return c, clip_key(S, sid)
+
+
+def heisters(src, log=None, stream='merged'):
+    """CHECK (re/bots_voice.md): what the heisters - the player's character and the AI heisters -
+    can say on a built level archive or a stock level. Counts every line key of the settings the
+    way kl2.exe looks it up, per heister, with the clip's format and whether a streamed clip is a
+    clip of the stream file (`stream`: 'merged' = the work folder's PC_Def.str, 'dd' = the game's,
+    None = not checked). -> dict; ['findings'] = [(severity, text)], severity CRASH / SILENT / NOTE.
+    Proven on stock F07 (0 CRASH, the one SILENT stock has itself) and the five builds of 2026-10-10."""
+    sc, S, recs, leaves = load(src)
+    try:
+        clips = kl_snd.stream_index(kl_snd.stream_file(stream))[1] if stream else None
+    except (OSError, ValueError):
+        clips = None
+    out, find = collections.OrderedDict(), []
+    st = settings(sc)
+    out['settings objects'] = len(st)
+    per, c9, plain, recn, own = collections.Counter(), collections.Counter(), collections.Counter(), collections.Counter(), collections.Counter()
+    host_keys = collections.Counter()
+    for _k, _i, v in st:
+        for f, (flag, _prio) in sorted(line_fields().items()):
+            if not v[f]:
+                continue
+            k = v[f].strip('/').lower()
+            part = k.split('/')
+            if len(part) > 2 and part[0] == 'multiplayer' and len(part[1]) == 3 and part[1][0] == 'f' and part[1][1:].isdigit():
+                host_keys[part[1].upper()] += 1
+            if not flag:
+                s, _c = _clip(S, recs, leaves, k, clips)
+                plain[s] += 1
+                if not s.startswith(('stream', 'memory')) or 'NOT IN' in s:
+                    find.append(('SILENT', 'field %d %s: %s' % (f, v[f], s)))
+                continue
+            ss = [_clip(S, recs, leaves, '%s_c%d' % (k, i), clips) for i in range(1, VARIANTS + 1)]
+            for s, _c in ss[:HEISTERS]:
+                per[s] += 1
+            c9[ss[HEISTERS][0]] += 1
+            n = len({c for _s, c in ss[:HEISTERS] if c})
+            recn[n] += 1
+            own['eight voices (Dog Days)' if n == HEISTERS else 'one voice for all eight (a Dead Men line)' if n == 1 else
+                'none' if n == 0 else '%d voices' % n] += 1
+            bad = [i + 1 for i, (s, _c) in enumerate(ss[:HEISTERS]) if not s.startswith(('stream', 'memory')) or 'NOT IN' in s]
+            if bad and ss[0][1] is None:
+                find.append(('SILENT', 'field %d %s: no clip for heister 1, the fallback of all (K_C1): %s' % (f, v[f], ss[0][0])))
+            elif bad:
+                find.append(('NOTE', 'field %d %s: heisters %s have no clip of their own and speak with heister 1\'s' % (f, v[f], bad)))
+    out['per-character keys (flag 1)'] = sum(recn.values())
+    out['  key x heister pairs by clip'] = dict(per)
+    out['  keys by who recorded them'] = dict(own)
+    out['  Glazer (K_C9) by clip'] = dict(c9)
+    out['plain keys (flag 0) by clip'] = dict(plain)
+    if host_keys:
+        out['keys of a stock level\'s own folder'] = dict(host_keys)
+    # speech controllers: OnlineSpeakPlayer = one plain lookup per key (0x8cb6e0)
+    for _k, _i, v in kl_fa.controllers(sc, 'OnlineSpeakPlayer'):
+        for key in [x for x in v[1:3] if isinstance(x, str) and x]:
+            s, _c = _clip(S, recs, leaves, key.strip('/').lower(), clips)
+            out.setdefault('OnlineSpeakPlayer keys', collections.Counter())[s] += 1
+            if not s.startswith(('stream', 'memory')):
+                find.append(('SILENT', 'OnlineSpeakPlayer %s: %s (looked up plain; %s)' % (
+                    key, s, 'it exists as _C1.. only, as in stock' if key.strip('/').lower() + '_c1' in leaves else 'no such key')))
+    if 'OnlineSpeakPlayer keys' in out:
+        out['OnlineSpeakPlayer keys'] = dict(out['OnlineSpeakPlayer keys'])
+    # the people: voice sets of heisters / AI heisters, and the AI heisters' character digit
+    who, digits = collections.defaultdict(collections.Counter), collections.Counter()
+    defs = definitions(S)
+    for k, kind, slots, _anim in characters(sc):
+        if kind in ('heister', 'bot', 'police player'):
+            who[kind]['with a voice set' if any(v in defs for v in slots) else 'no voice set (as stock)'] += 1
+        if kind == 'bot':
+            name = sc.names[sc.parent[k]] if sc.parent[k] > 0 else ''
+            d = ord(name[BOT_DIGIT]) - ord('1') if len(name) > BOT_DIGIT else None
+            digits[d] += 1
+            if d is None or not 0 <= d < VARIANTS + 1:
+                find.append(('CRASH', 'AI heister %s (group \'%s\'): character index %s from name[0x12] - \'1\'%s: outside the ten '
+                                      'entries of a line, int3 at kl2 0x51ab2d when it first speaks' % (
+                                          sc.path[k], name, d, '' if d is not None else ' (the name is shorter: the byte read lies behind it)')))
+            elif d >= HEISTERS:
+                find.append(('NOTE', 'AI heister %s speaks entry %d (Glazer\'s or the radio one), empty for most keys: heister 1\'s voice instead' % (sc.path[k], d)))
+    for d, n in digits.items():
+        if d is not None and n > 1:
+            find.append(('NOTE', '%d AI heisters share character index %s: the same voice' % (n, d)))
+    out['people'] = {kind: dict(c) for kind, c in sorted(who.items())}
+    out['AI heisters by character index'] = {('none' if d is None else d): n for d, n in sorted(digits.items(), key=lambda x: (x[0] is None, x[0] or 0))}
+    # Dead Men soldier definitions left in Dead Men's slot order = the voice repairs were off at the build
+    old = sorted({defs[v][0].split('/')[-1] for _k, kind, slots, _a in characters(sc) if kind == 'soldier' for v in slots
+                  if v in defs and len(defs[v][1]) == NPC_DM})
+    if old:
+        find.append(('NOTE', 'soldier voice sets still in Dead Men\'s 31-slot order (built with kl_snd.VOICE off: no battle cry / '
+                             'advance / alert, thin slots repeat - re/voice.md 7): %s' % ', '.join(old)))
+    out['findings'] = find
+    if log:
+        log('heisters\' lines of %s' % src)
+        for k, v in out.items():
+            if k != 'findings':
+                log('  %s: %s' % (k, v))
+        sev = collections.Counter(s for s, _t in find)
+        log('  findings: %s' % (dict(sev) or 'none'))
+        for s, t in find:
+            log('    %-6s %s' % (s, t))
+    return out
+
+
 # ------------------------------------------------------------------ tests
 def test(log=print):
     """The facts the module rests on, re-measured on the stock files. -> number of failures"""
@@ -770,6 +903,9 @@ def main(a):
         build2(a[1] if len(a) > 1 else None); return 0
     if a[:1] == ['census'] and len(a) > 1:
         census(a[1], print); return 0
+    if a[:1] == ['heisters'] and len(a) > 1:
+        r = heisters(a[1], print, stream=a[2] if len(a) > 2 else 'merged')
+        return sum(1 for s, _t in r['findings'] if s == 'CRASH')
     if a[:1] == ['build']:
         build(a[1] if len(a) > 1 else None); return 0
     if a[:1] == ['defs'] and len(a) > 1:
