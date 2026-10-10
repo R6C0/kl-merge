@@ -182,6 +182,16 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+COME BACK AS A FED (2026-10-10 17:45; re/fed_respawn.md, re/fed.md, re/fed_review.md; klhook/klfed.c + tools/kl_fa_fed.py written,
+NOT wired, NOT run): the Arcade rules still hold the whole multiplayer 'dead criminal returns as police' path; Arcade skips it
+because the round-over gate 0x67f480 says 'over' with one human - unless dword [0x168ea60] (zero .data, two readers, no writer,
+unhashed) is not 0. klfed.c [Fed] Player=1 holds it at 1 while the human is alive or waiting: the game's own path gives the death
+camera, a police body at an AFTER_DEATH point and the player switch. LIMITS: the life is still lost at the round end, a second
+death is final, 8 police bodies per level load (the hook counts and stands down before the game's int3 at 0x4b2984), the fed's
+WEAPONS are not established. BOTS: a parked one-man police squad per heister (kl_fa_fed.py; <work>/build/x_fed/M02), released by
+the heister squad's 'wiped out' list; boarding also counts as wiped out, so [Fed] Bots=1 mutes the latch and re-fires it at a
+real death. REVIEW: wire in switched off; fix klp_b[] not cleared at a new round before any second round with Bots=1; the stock
+precedent for 'a squad list starts a hunt rout' is refuted (may still work). Live order F0, F0b, F1 (on the bank), F5b.
 2026-10-10 17:00. BOTS ON RETOMOTO SEEN LIVE (run RB1, <work>/build/v_rtbots/retomoto_bots_tower, bot log): seven bots on the balcony,
 all at heist stage 1 within 16 s of GO (in after the blast), loot $255,000-$820,000, three killed by the guards; no fault. The full
 build (tower -> hook teleport at the join -> street -> van: retomoto_bots + klhook/klcrew_rt.c) waits for the hook. crew-talk-bain
