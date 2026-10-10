@@ -160,10 +160,11 @@ BLAST_HARMLESS = True                   # the bomb's two radii set to 1 (GUESS t
 # first sound (Bomb_WarmUp) plays through it. So: event -> BLAST_DELAY -> the bomb gets 'Activate'
 # (warm-up) -> BOMB_FUSE -> the bomb goes off by itself, and a second timer set to BLAST_DELAY +
 # BOMB_FUSE swaps the glass, the chairs and the door, fires the InvisiBomb and starts the room's guards.
-BLAST_DELAY = 15.0                      # owner, 2026-10-10 18:10: the explosion comes AFTER Kane has finished his countdown
-                                        # (klhook kltalk: six clips from GO + 0.3 s, 9.94 s long; the round-start event is 8.4 - 8.8 s
-                                        # before GO, measured by kl-merge-01): warm-up at 15.0, bang at 19.0 = ~0.4 s after his last
-                                        # word, ~10.3 s after GO. Was 9.0 (bang 5 s after GO). The heisters wait 6 s longer on the balcony
+BLAST_DELAY = 12.5                      # owner, 2026-10-10 evening, after hearing 19.0 ('comes too late now'): the bang lands on
+                                        # Kane's 'NOW!' and 'Let's get them all!' is spoken over it, as in the campaign. kltalk's
+                                        # countdown starts 0.30 s after GO, 'NOW!' at GO + 7.51 (0.71 s long); the round-start event
+                                        # is 8.4 - 8.8 s before GO (kl-merge-01's two clock readings; NOT measured otherwise):
+                                        # warm-up 12.5, bang 16.5 after the event. History: 9.0 (bang before he spoke), 15.0 (too late)
 BOMB_FUSE = 4.0                         # the bomb's own value; another value is written into its field 9
 EXPLODE_FUSE = 9                        # Dog Days Explode field (Dead Men 7)
 ONE_WAVE = False                        # True: every tower squad starts at the blast (the layer before 2026-10-09 17:00)
