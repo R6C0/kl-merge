@@ -190,7 +190,9 @@ OUTFIT_HEAD = ['', 'dark balaclava', 'black balaclava']
 OUTFITS = [', '.join(x for x in (a, sh, hd) if x) for hd in OUTFIT_HEAD for sh in OUTFIT_SHIRT for a in OUTFIT_ARMOUR]      # KLOutfit 0..23
 HEISTER_ROWS = (('KLH_Char', 'Character', 'KLChar', CHARACTERS), ('KLH_Mask', 'Mask', 'KLMask', MASKS), ('KLH_Outfit', 'Outfit', 'KLOutfit', OUTFITS))
 # picture rows: (row name, option, entity of entry k or a blank, X, Y) - tools\kl_portraits.py NAMES
-HEISTER_PICS = (('KLH_Char', 'KLChar', ['KLPic_None1'] + ['KLPic_Char%02d' % n for n in range(1, 17)], -117, 60),
+# Y: the character picture (304 high) ends level with the mask picture (84 + 256 = 340); at Y=60 its legs ran ~16 units into the
+# Character focus bar (run PV1, 2026-10-09 23:55, picture research\shots\PV1_62s.png).
+HEISTER_PICS = (('KLH_Char', 'KLChar', ['KLPic_None1'] + ['KLPic_Char%02d' % n for n in range(1, 17)], -117, 36),
                 ('KLH_Mask', 'KLMask', ['KLPic_None2', 'KLPic_None3'] + ['KLPic_Mask%d' % n for n in range(1, 9)], 157, 84))
 HEISTER_NOTE = 'Arcade Mode. Dead Men bodies, their outfits and the masks of other heisters need a map built with the wardrobe. Outfits are for Dead Men bodies; the balaclava shades show on the six masked men.'
 

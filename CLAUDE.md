@@ -182,8 +182,12 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
-PAYDAY 2 MASKS (session kl-merge-88, 2026-10-09 23:50; owner away, 20-minute check-up loop running): PD2 is installed and its
-crate store decoded (Payday 2 section). Two research workflows run in the background, offline: (1) pd2-masks-dig = tools/pd2_crate.py
+PAYDAY 2 MASKS (session kl-merge-88, 2026-10-10 01:25; owner away, 20-minute check-up loop running): PD2 is installed and its
+crate store decoded (Payday 2 section). First research run died on the usage limit at 00:10 (partial files kept: tools/pd2_crate.py,
+<work>/pd2/extract 413 files, <work>/pd2/kl scripts); relaunched 01:20. Heister pictures: run PV1 (kl-merge-74) showed them LIVE;
+fixed red/blue swap (kl_portraits BGRA=False) and the character picture 24 units higher (mkoverlay HEISTER_PICS Y 36); labels and
+pictures agree (shot PV1_70s: 'Orange face - Liam' = Liam's mask); rebuilt pair <work>/build/portraits/out2/Overlay (check 0 problems),
+not installed. Two research workflows run in the background, offline: (1) pd2-masks-dig = tools/pd2_crate.py
 (reader + extraction of msk_wolf / dallas / chains / hoxton, Lua, a criminal body), tools/pd2_model.py (Diesel .model / .texture),
 re/pd2_attach.md (how PD2 links a mask to the Head object, the crew masks' textures), re/pd2_klside.md (52-byte skinned vertex,
 head-bone frames of the 16 skeletons, the stock mask box, variant-byte signed or not = whether 12 masks fit, the 8 -> 12 constants);
