@@ -189,7 +189,7 @@ back when a neighbour is wiped out (ZSquadScript field 8: ASSUMPTION, --no-chain
 before the van, run-to-van clock 62 -> 28 s (kl_fa_street DYNAMIC, --street-classic). Van: tools/kl_fa_van.py rewrites its baked position and
 rotation keys in place: straight up the east carriageway x -1850 at y 2 (the road is y 0 there; it drove at y -40, under it), waits z 8700, stops
 z 10800, leaves to z 14900; one barricade hidden (--van-bent). kl_arms: FORCE + skill by weapon class on Retomoto only. Build that PASSES every
-offline check: G:\kl_scratchi_dyn1 (no wardrobe, no KLJoin.ini yet; no member grew). Live order D1..D6 in re/retomoto_ai.md 9.
+offline check: G:/kl_scratch/ai_dyn1 (no wardrobe, no KLJoin.ini yet; no member grew). Live order D1..D6 in re/retomoto_ai.md 9.
 STATE 2026-10-10 11:30 (kl-merge-01). THE SEVERAL-BLOCK RESERVE WORKS LIVE: the owner's own session 09:04-09:32 (hook ship_stall,
 log + maps kept in <work>/research/owner_1010_0904): one process, SEVEN level loads (Retomoto x3, stock x4), no crash; four
 requests the heap refused were served from the reserve - three 32 MB scratch blocks and, at 09:19:50, a 13.9 MB block with the

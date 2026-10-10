@@ -357,14 +357,14 @@ F07 brings are stock and untouched.
 
 ## 10. Offline result (2026-10-10 11:50)
 
-`python tools/kl_fa_blast.py test G:\kl_scratchi_dyn1 --keep` (the command behind the builds the owner plays;
+`python tools/kl_fa_blast.py test G:/kl_scratch/ai_dyn1 --keep` (the command behind the builds the owner plays;
 street + blast + loot layers): **RESULT: PASS**. kl_graft.verify 1 problem, known (particle template names);
 kl_fa.check DEGRADED 1 (no bot squads, as before); kl_fa_blast 0 faults; kl_fa_loot problems 0;
 `kl_fa_street.py report` 0 faults: elevator box -> 2 squads / 5 actors, wave 1 9 / 21, wave 2 11 / 18,
 wave 3 2 / 3; 13 fall-back lists, every entry resolves; van: 391 drive keys at x -1850.0, y 2.0, z 8700..14900,
 rotation keys all identity, floor 2 below the origin at every sampled key, no static vehicle in the lane.
 25,735 entities, 313 MB. Members: .prm 58.1 MB, .ANM 20.6, .fxc 16.9, .TEX 223.3, F01_Main.WAV 23.0 - no
-member grew (no model, sound or entity was added). Folder: `G:\kl_scratchi_dyn1\R09+M09_A (R09 = F07+M09_B)`.
+member grew (no model, sound or entity was added). Folder: `G:/kl_scratch/ai_dyn1\R09+M09_A (R09 = F07+M09_B)`.
 This build has NO wardrobe and no KLJoin.ini beside it: for the owner it has to go through the same finishing
 steps as `<work>uild\y_lootetomoto_loot` (re/retomoto_loot.md 6). NOT INSTALLED, NOT RUN IN THE GAME.
 Three faults the checks caught on the way: a campaign squad group turned by 90 degrees (points landed 100 m
