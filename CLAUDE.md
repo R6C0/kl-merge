@@ -182,6 +182,11 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+OWNER PLAYED THE RETOMOTO AI + VAN BUILD (2026-10-10 ~12:30): 'i dont get why i survive from being shot so much maybe because im by
+myself? the van is almost perfect its just when it finally leaves like before the end game result it goes into a car just make sure it
+drives off down the road the whole time'. Passed to kl-merge-b6 (its files): the van's leave leg, enemy damage / accuracy against
+the player (to be MEASURED against stock F07, not guessed), and the build was made with the voice repairs off (re/bots_voice.md 6).
+The lead finishes the next build (lighten, wardrobe + plates, KLJoin.ini) and swaps it in. Same damage question for kl_map_ai.py.
 SLOT 2026-10-10 12:10: Retomoto again on the owner's word = <work>/build/rt_ai/retomoto_ai (b8d430d0); hook ship_stall, the owner's ini. One thread-less kl2.exe entry (44 K) lingers.
 OWNER PLAYED LATE NIGHT OPENING (2026-10-10 ~12:00, build z_maps/M02): 'dead men guns dont show up', 'the late night van sometimes is a
 bit weird? camera goes under the map when ur in it', 'the ai a bit too easy so just probably take some logic from retomoto and put it
