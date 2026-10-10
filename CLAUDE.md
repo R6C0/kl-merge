@@ -182,6 +182,17 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+2026-10-10 13:25 (the owner: 'carry on with everything you can have the whole pc to yourself' - live runs are free until they
+say otherwise). AI HEISTERS SEEN LIVE on the diner (runs BOT1, BOT2: <work>/build/b_bots/M01 and M01_slow): seven bots with name
+tags and money walk to the diner, loot and gather at the escape; no fault. The round ended 152-156 s after GO in BOTH runs (escape
+countdown on the HUD) - not the squad's loot wait; control run BOT0 without bots under way. MAP-TUNE RESULTS (commit below):
+ESCAPE CAMERA FOUND - Dead Men's eFMM_LookFromPosFA means something else in Dog Days (eye at the box's own node = the origin,
+under the map): kl_map_escape.py sets eFMM_LookFromPos on the five cameras; no route point is under ground, the car's 'weird' is
+not explained (ZHavokCar on a spline runs code no stock level uses). ENEMIES (kl_map_ai.py, re/map_ai.md): the maps have a third
+of stock's soldiers, all present from the load; ZSoldier field 4 = accuracy %, 7 = health, a skill name other than eCustom
+OVERWRITES the numbers (so kl_arms' 'sharp' row is not sharper than 'swat' - told kl-merge-b6); every car squad loses its
+VehicleExitBehaviourRout in conversion. Review (re/map_tune_review.md): F1 reference lists written without ROOT\, F2 / F3 plan
+faults on M02 / M03 - being fixed by workflow wf_d5735753-e22 -> <work>/build/t_maps2, then + bots -> <work>/build/u_maps.
 2026-10-10 13:20. GUN LOOKS SEEN LIVE by the owner (told to kl-merge-b6): 'it holds the mp5 weird and if i try for the ak 74 starter
 game goes grey feels like it crashed weird but it didnt because i could back out then equip the mp5 i dont like how it uses the ak
 sound too' = the HIDE BIT WORKS (the MP5 look is drawn alone); the hold (rifle hand places), the fire sound and the grey round

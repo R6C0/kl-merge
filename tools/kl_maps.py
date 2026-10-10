@@ -1334,6 +1334,8 @@ def audit(folder, slot=SLOT, log=print):
             'the verified build\'s, byte for byte%s' % (
                 ' '.join(st['lighten']) or 'nothing', ' '.join(st['wardrobe']) or 'nothing', len(st['same']), st['members'],
                 st['beside_same'], st['beside'], '' if now == st.get('final') else ' - BUT THE FOLDER IS NO LONGER THE ONE THAT WAS MEASURED'))
+        if st.get('bots'):                              # kl_fa_bots.apply: one more step after the verify
+            say('  then the AI heister squad (kl_fa_bots) changed %s' % ' '.join(st['bots']))
         if now != st.get('final'):
             bad.append('steps: the archive or a file beside it changed after the steps were recorded')
     # -- Fragile Alliance
