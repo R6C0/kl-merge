@@ -182,6 +182,7 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+SLOT 2026-10-10 12:10: Retomoto again on the owner's word = <work>/build/rt_ai/retomoto_ai (b8d430d0); hook ship_stall, the owner's ini. One thread-less kl2.exe entry (44 K) lingers.
 OWNER PLAYED LATE NIGHT OPENING (2026-10-10 ~12:00, build z_maps/M02): 'dead men guns dont show up', 'the late night van sometimes is a
 bit weird? camera goes under the map when ur in it', 'the ai a bit too easy so just probably take some logic from retomoto and put it
 in there and do the same fixes for the other maps'; the park's helicopter 'shouldnt be as bad'. (The round and the escape evidently
