@@ -18,6 +18,11 @@ into it and edits nothing of it.
                                        --vans-stay    the two vans that are not called stay on the road
                                        --rigid        actors keep F07's distance to their cover points
                                        --no-waves     F07's squads are kept but nothing starts them
+                                       --street-classic  the street as before 2026-10-10: police start at the front
+                                                      door, no fall-back chains, stock run-to-escape clock
+                                       --no-chains    dynamic street without the 'wiped out -> neighbours fall
+                                                      back' lists (ZSquadScript field 8: an ASSUMPTION)
+                                       --van-bent     F07's drive as kl_fa_author fits it (kl_fa_van off)
                                        --no-police    F07's squads and their boxes are not kept at all
                                                       (with --no-ai: an empty street, for the escape)
     python kl_fa_street.py report <archive>   the same read-back of a built level
@@ -63,6 +68,7 @@ sys.path.insert(0, HERE)
 import kl_graft, kl_fa, kl_maps, kl_gms, kl_scene, kl_pf4
 import kl_prpjoin as J
 import kl_fa_author as au
+import kl_fa_van
 
 R = 'ROOT\\'
 IDENT = (0.0, 1.0)                      # au.rot9(IDENT) = the identity (third, second, first column)
@@ -149,7 +155,84 @@ BOXES = collections.OrderedDict([
 # what else of F07 has to stay for the chains above (single nodes, and the gate's group)
 CHAIN = (G2 + 'Timer', 'Gameplay!RunToEscape!Timer', 'Gameplay!RunToEscape!Timer1Player', 'Gameplay!RunToEscape!Timer3Player',
          'Gameplay!RunToEscape!tcRunToEscape', 'Gameplay!RunToEscape!RunToEscapeGate')
-KEEP = tuple(SQUADS) + tuple(v[0] for v in BOXES.values() if '\\' not in v[0]) + CHAIN
+KEEP = tuple(SQUADS) + tuple(v[0] for v in BOXES.values() if '\\' not in v[0]) + CHAIN + ('Gameplay!020_Loot!FollowPlayers!tbCountPlayers',)
+
+# ------------------------------------------------------------------ THE DYNAMIC STREET (owner, 2026-10-09 late)
+# 'they spawn in once you go down the elevator ... they are all like outside ish but they retreat to some
+# of their spots to hold you off and the more you shoot the more they run away but the closer you get to
+# the vehicle the more they try to shoot it'. Design, evidence and every GUESS: re/retomoto_ai.md 4 - 6.
+# All of it is values, lists and places of objects the level already has.
+DYNAMIC = True                          # False ('--street-classic'): the layer as the owner played it on 2026-10-09
+CHAINS = True                           # False ('--no-chains'): no fall-back lists in ZSquadScript field 8
+SQUAD_DEAD = au.SQUAD_DEAD              # field 8: the list sent when a squad is wiped out (ASSUMPTION, as kl_fa_author's)
+E1, E2 = 'Enemies!010_RetoBldFront!', 'Enemies!020_Street!'
+ELEVATOR = 'Mercenaries!TriggerBox_1_LeaveElevator'     # campaign box (5902, 709, -6488) half (100, 150, 1400): across
+                                        # the lobby car's doors, where the hook's join puts the crew (read: M09_B)
+ELEV_TIMER = E2 + 'Timer'               # campaign TriggerDelay, top-level, its own value 5 s
+ELEV_DELAY = 5                          # s after the elevator box: the second pair runs in from out of sight (GUESS)
+CAMPAIGN_KEEP_B = (ELEVATOR, ELEV_TIMER)
+# campaign squad -> (what starts it, its rout that is named). Not listed: as kl_fa_author / CAMPAIGN_WAVE.
+# The lobby's front is glass: what stands on the forecourt between z -8900 and -4000 is seen from the
+# elevator landing. Squad_InFront is there from the load (ZSquadScript field 3 = 1): the picture the
+# campaign had. Everybody else comes from where the lobby cannot see.
+DYN_START = {
+    E1 + 'Squad_InFront': ('elevator', 'Regroup'),              # 3 on the forecourt: run to the police car, hold
+    E1 + 'Squad_Teargasguys': ('timer', 'FlankingBehaviour'),   # 2 from the south end of the forecourt, 5 s later
+    E2 + 'Squad_RoadBlock_South': ('wave 1', '01_DefendBehaviour'),     # 3 at the rear of the static SWAT van (south)
+    E2 + 'Squad_RoadBlock_South#02': ('wave 1', '01_SquadModifier'),    # 2: unleashed (kl_fa_author's pick was
+                                        # '04_Retreat' -> Deactivate: they ran off and vanished at the door)
+    E2 + 'Squad_SWAT_From_Behind_South': ('wave 1', 'FlankingBehaviour')}   # 3 at the static police car (south)
+# campaign nodes re-placed, WORLD positions (x, y, z). y: 25 on the forecourt's paving, 22 on the raised
+# strip east of the carriageway (x > -1500), 5 on the carriageway - the heights the campaign's own actors
+# have there. Every (x, z) was put against M09_B's navigation mesh (Nav.floor) by the design pass. GUESSES.
+DYN_PLACE = {
+    E1 + 'Squad_InFront\\Regroup\\Pos#01': (-200, 25, -6600),                   # behind police car RetoFront02 (147, -6408)
+    E1 + 'Squad_InFront\\FlankingBehaviour\\LeftFlank#1': (-2800, 5, -7800),    # their fall-back: across the road
+    E1 + 'Squad_InFront\\FlankingBehaviour\\RightFlank#1': (-2800, 5, -5200),
+    E1 + 'Squad_Teargasguys\\JPN_Teargas_Police_01#02': (-800, 22, -10800),    # start: south of the facade's end (z -8837)
+    E1 + 'Squad_Teargasguys\\JPN_Teargas_Police_01#01': (-1300, 22, -10600),
+    E1 + 'Squad_Teargasguys\\FlankingBehaviour\\LeftFlank#1': (-400, 25, -7700),    # behind police car RetoFront01 (38, -7382)
+    E1 + 'Squad_Teargasguys\\FlankingBehaviour\\RightFlank#1': (-200, 25, -7200),
+    E2 + 'Squad_RoadBlock_South\\01_DefendBehaviour\\Pos#01': (-1000, 22, -7000),   # the road at the forecourt, behind the crew
+    E2 + 'Squad_RoadBlock_South\\03_Retreat\\Pos#01': (-4500, 5, -7000),            # west kerb, then 'Deactivate' (campaign's own)
+    E2 + 'Squad_RoadBlock_South#02\\04_Retreat\\Pos#01': (-4500, 5, -7000),
+    E2 + 'Squad_SWAT_From_Behind_South\\SWAT_Beam01': (-900, 22, -12800),      # start: the static police car south (-1189, -12382)
+    E2 + 'Squad_SWAT_From_Behind_South\\SWAT_Beam02': (-1300, 22, -12800),
+    E2 + 'Squad_SWAT_From_Behind_South\\SWAT_Beam03': (-1100, 22, -13000),
+    E2 + 'Squad_SWAT_From_Behind_South\\FlankingBehaviour\\LeftFlank#1': (-1500, 22, -8500),
+    E2 + 'Squad_SWAT_From_Behind_South\\FlankingBehaviour\\RightFlank#1': (-1500, 22, -4500)}
+# 'the more you shoot the more they run away': a squad wiped out sends its neighbours one line back; a
+# second loss on that side sends them to the van, or (forecourt) off the map. squad -> routs its field 8 names
+FALL = collections.OrderedDict([
+    (E1 + 'Squad_Teargasguys', (E1 + 'Squad_InFront\\FlankingBehaviour',)),
+    (E1 + 'Squad_InFront', (E2 + 'Squad_RoadBlock_South\\03_Retreat', E2 + 'Squad_RoadBlock_South#02\\04_Retreat')),
+    (G2 + '020_FinancialAlley_LeftParking', (G2 + '020_FinancialAlley_RunForDumpster\\20_RunToCover', G2 + '020_FinancialAlley_RightGround\\20_RunToCover')),
+    (G2 + '020_FinancialAlley_LeftFurther', (G2 + '020_FinancialAlley_RightPlatform\\20_RunToCover', G2 + '020_FinancialAlley_RightGround\\20_RunToCover')),
+    (G2 + '020_FinancialAlley_RightGround', (G2 + '020_FinancialAlley_RunForDumpster\\20_RunToCover', G2 + '020_FinancialAlley_RightPlatform\\20_RunToCover')),
+    (G2 + '020_FinancialAlley_RunForDumpster', (G2 + '020_FinancialAlley_RightPlatform\\40_RunToEscape',)),
+    (G2 + '020_FinancialAlley_RightPlatform', (G2 + '020_FinancialAlley_RunForDumpster\\40_RunToEscape',)),
+    (G3 + '030_FinancialAlleyExitSkywalk', (G3 + '030_FinancialAlleyExitStreet_Left\\10_Defend', G3 + '030_FinancialAlleyExit_Left\\10_Defend')),
+    (G3 + '030_FinancialAlleyExitSkywalkNoCover', (G3 + '030_FinancialAlleyExitStreet_Right\\10_Defend', G3 + '030_FinancialAlleyExit_Right\\10_Defend')),
+    (G3 + '030_FinancialAlleyExit_Left', (G3 + '030_FinancialAlleyExitStreet_Left\\40_RunToEscape',)),
+    (G3 + '030_FinancialAlleyExitStreet_Left', (G3 + '030_FinancialAlleyExit_Left\\40_RunToEscape',)),
+    (G3 + '030_FinancialAlleyExit_Right', (G3 + '030_FinancialAlleyExitStreet_Right\\40_RunToEscape',)),
+    (G3 + '030_FinancialAlleyExitStreet_Right', (G3 + '030_FinancialAlleyExit_Right\\40_RunToEscape',))])
+BACK_1 = 2400.0                         # GUESS: wave 1's second line ('20_RunToCover') lies this far north of its first
+# the road block's fall-back ('10_Defend', which nothing names in this layer): offsets from the van's stop.
+# 20 m south of it, with the stop in view; the van carries a FakeTarget 'Mercenary' on its body (stock, all
+# 15 vans), so police who see it shoot it - 'the closer you get to the vehicle the more they try to shoot it'
+BACK_2 = {G3 + '030_FinancialAlleyExit_Left': (-2650, -2200), G3 + '030_FinancialAlleyExitStreet_Left': (-1850, -2000),
+          G3 + '030_FinancialAlleyExitStreet_Right': (-750, -2200), G3 + '030_FinancialAlleyExit_Right': (-550, -1800)}
+# wave 3 comes out of the static SWAT truck V_JPN_SWAT_North (-3588, 10886; its rear doors at z 10519 face
+# south): squad -> where its actors start (owner: 'maybe use swat vans for some of the police spawning')
+TRUCK = {G4 + '040_EscapeEntranceLeft': [(-3600, 10300)], G4 + '040_EscapeEntranceRight': [(-3800, 10300), (-3400, 10300)]}
+# ... and is unleashed when the crew is this far before the stop: F07's spare box, across the road
+GUARD_BOX = 'Gameplay!020_Loot!FollowPlayers!tbCountPlayers'
+GUARD_BEFORE = 1300.0                   # GUESS
+GUARD = (G4 + '040_EscapeEntranceLeft\\30_smUnleash', G4 + '040_EscapeEntranceRight\\30_smUnleash')
+# stock sends every squad to the van 44 s + 18 s after the 'run' boxes (32 + 18 with three criminals). Shorter:
+RUN_CLOCK = {'Gameplay!RunToEscape!Timer1Player': 20.0, 'Gameplay!RunToEscape!Timer3Player': 14.0, 'Gameplay!RunToEscape!Timer': 8.0}   # GUESS
+VAN_CLEAR = 350.0                       # nobody is given a place this near the van's lane (its nose carries a KillBox)
 
 # the campaign's own squads of the street (kl_fa_author keeps 10 and starts them all at the front
 # entrance): which wave starts which. A name that is in no line stays at the entrance.
@@ -352,7 +435,7 @@ def centre(pts):
     return (sum(p[0] for p in pts) / len(pts), sum(p[2] for p in pts) / len(pts))
 
 
-def relay(S, name, nav, ring=None, log=print):
+def relay(S, name, nav, ring=None, log=print, stop=None):
     """Move one squad (see the docstring). -> a row for the table."""
     sc = S.prp
     _wave, ax, az, face, _what = SQUADS[name]
@@ -371,11 +454,22 @@ def relay(S, name, nav, ring=None, log=print):
         return min(max(x, LANE[0]), LANE[1]), z
     pull = 1.0 if RIGID or back <= MAX_BACK else MAX_BACK / back
     new, moved = {}, 0.0
+    truck = list(TRUCK.get(name, ())) if DYNAMIC else []
     for kind in ('cover', 'actors', 'boxes'):
         for k, w in lay[kind]:
             x, z = to(w, pull if kind == 'actors' else 1.0)
-            new[k], d = nav.put(x, z, anchor)
-            moved = max(moved, d)
+            aim, rout = anchor, sc.names[sc.parent[k]]
+            if DYNAMIC and kind == 'cover' and _wave == 1 and rout.startswith('20_'):
+                z += BACK_1                             # wave 1's second line: where FALL sends it
+                aim = nav.nearest(anchor[0], anchor[1] + BACK_1)
+            elif DYNAMIC and kind == 'cover' and rout == '10_Defend' and name in BACK_2 and stop is not None:
+                x, z = stop[0] + BACK_2[name][0], stop[2] + BACK_2[name][1]     # the road block's fall-back, at the van
+                aim = nav.nearest(x, z)
+            elif kind == 'actors' and truck:
+                x, z = truck.pop(0)                     # out of the static SWAT truck
+                aim = nav.nearest(x, z)
+            new[k], d = nav.put(x, z, aim)
+            moved = max(moved, d) if aim is anchor else moved
     for k, _w in lay['escape']:
         new[k], d = nav.put(ring[0][0], ring[0][1], ring[1])
     origin = (anchor[0], au.ROAD_Y, anchor[1])
@@ -452,14 +546,21 @@ def prepare_host(S, log=print):
     clash = sorted(mine & (set(au.ROLE.values()) | set(au.PLACE) | set(au.PARKED)))
     if clash:
         raise ValueError('kl_fa_author uses objects this layer needs: %s' % clash)
+    if kl_fa_van.STRAIGHT:
+        kl_fa_van.VAN = VAN
+        kl_fa_van.straighten(S, log)                    # before anything here reads the van
     nav, start = nav_b(), starters(S)
     rows, n = [], 0
+    stop0 = van_pose(S, VAN)[0]
     for name in SQUADS:
         ring = None
         if SQUADS[name][0] and name != G2 + '021_FinancialAlley_Dog':
-            stop = van_pose(S, VAN)[0]
-            ring = ((stop[0] + RING[n][0], stop[2] + RING[n][1]), nav.nearest(stop[0], stop[2])); n += 1
-        rows.append(relay(S, name, nav, ring, log))
+            stop = stop0
+            rx = stop[0] + RING[n][0]
+            if DYNAMIC and abs(rx - stop[0]) < VAN_CLEAR:   # not in the van's lane
+                rx = stop[0] - VAN_CLEAR - 50.0
+            ring = ((rx, stop[2] + RING[n][1]), nav.nearest(stop[0] - VAN_CLEAR - 50.0 if DYNAMIC else stop[0], stop[2])); n += 1
+        rows.append(relay(S, name, nav, ring, log, stop0))
     by = collections.defaultdict(list)
     for name, row in zip(SQUADS, rows):
         by[SQUADS[name][0]] += start[row['top']]
@@ -477,12 +578,23 @@ def prepare_host(S, log=print):
             have = kl_fa.controllers(sc, 'TriggerBox')
             cur = next(v for kk, _i, v in have if kk == k)[17]
             want = cur if w != 2 else by[2]
+            if DYNAMIC and w == 1:                      # each squad's first line by name: stock's RandomTriggers pick
+                want = [R + n2 + '\\10_RunToCover' for n2, v2 in SQUADS.items() if v2[0] == 1]   # '10_' or '20_', and '20_' is the fall-back now
             if not WAVES:
                 want = []
             kl_fa.edit(sc, k, i, lambda us: (au.setv(sc, us, 14, WHO), au.setv(sc, us, 17, want)))
         elif not WAVES:
             kl_fa.edit(sc, k, i, lambda us: au.setv(sc, us, 17, []))
     esc = place_escape(S, log)
+    if DYNAMIC:
+        # the box before the van: wave 3 is unleashed (F07's spare 'count the players' box; field 15 = 1 there
+        # and on tbRunToEscape, the two boxes that feed counters - GUESS that 0 = fire once, as every plain box)
+        g = au.place(S, GUARD_BOX, (au.ROAD_X, 300.0, esc['stop'][2] - GUARD_BEFORE), None, (2700.0, 400.0, 300.0), turn=IDENT)
+        kl_fa.edit(sc, g, au.ctrl_of(sc, g, 'TriggerBox'), lambda us: (au.setv(sc, us, 14, 'ECPS_FA_MERCONLY'), au.setv(sc, us, 15, 0),
+                                                                au.setv(sc, us, 17, [R + x for x in GUARD] if WAVES else [])))
+        for name, sec in RUN_CLOCK.items():
+            t = au.node_of(sc, name)
+            kl_fa.edit(sc, t, au.ctrl_of(sc, t, 'TriggerDelay2'), lambda us, sec=sec: au.setv(sc, us, 0, sec))
     for name, (pos, half, _why) in BOUNDS.items():
         au.place(S, name, pos, None, half, turn=IDENT)
     S.street = {'rows': rows, 'escape': esc}
@@ -501,6 +613,7 @@ def wire(sc, log=print):
     at the front entrance, are shared out over the waves (CAMPAIGN_WAVE); money triggers answer
     to people only. Reference lists and values of existing controllers."""
     box = lambda name: (au.node_of(sc, name), au.ctrl_of(sc, au.node_of(sc, name), 'TriggerBox'))
+    dyn = dyn_pre(sc, log) if DYNAMIC else None
     lists = {k: v[17] for k, _i, v in kl_fa.controllers(sc, 'TriggerBox')}
     door, di = box(au.ROLE['street'])
     stay, go = [], collections.defaultdict(list)
@@ -516,10 +629,114 @@ def wire(sc, log=print):
     # its activator hands it to the game rules as an actor (kl2 0x6a8902, run ESC1). kl_fa.repair does
     # this only when the level has a ZHavokCar; the escape here is an animated van whose body parts
     # are tracked the same way (ASSUMPTION), and loot is carried right up to it
+    if DYNAMIC:
+        dyn_post(sc, dyn, log)
     n = kl_fa.money_people(sc, log)
     log('  kl_fa_street: wired: entrance box starts %d campaign squads, %s; %d money triggers set to people only' % (
         len(stay), ', '.join('%s +%d' % (w, len(v)) for w, v in sorted(go.items())) or 'no campaign squad moved to a wave', n))
     return {'entrance': stay, 'waves': dict(go), 'money': n}
+
+
+# ------------------------------------------------------------------ the dynamic street: campaign side
+def put_world(M, places, log=print):
+    """Give nodes of a converted Dead Men level M (kl_graft.DeadMen) WORLD positions: {path: (x, y, z)}.
+    A campaign squad's group has a place and often a turn of its own (Squad_RoadBlock_South: 90 degrees) and
+    its children are local to it: the local value is the world one in the parent's frame. Read back afterwards."""
+    sc, n = M.prp, 0
+    def frame(k):
+        """World rotation and position of node k, composed down the tree exactly as kl_maps.world does."""
+        chain = []
+        while k > 0:
+            chain.append(k); k = sc.parent[k]
+        Rm, T = [[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]], (0.0, 0.0, 0.0)
+        for k in reversed(chain):
+            e = M.ents[k - 1]
+            r, t = struct.unpack('<9f', e.rot[:36]), struct.unpack('<3f', e.trans[:12])
+            m = [r[6:9], r[3:6], r[0:3]]
+            m = [[m[j][i] for j in range(3)] for i in range(3)]
+            T = tuple(T[i] + sum(Rm[i][j] * t[j] for j in range(3)) for i in range(3))
+            Rm = [[sum(Rm[i][x] * m[x][j] for x in range(3)) for j in range(3)] for i in range(3)]
+        return Rm, T
+    done = {}
+    for path, w in places.items():
+        hit = sc.resolve(R + path)
+        if not hit:
+            continue                                    # a squad that does not stay ('--no-ai')
+        k = hit[0]
+        Rm, T = frame(sc.parent[k])
+        d = [float(w[i]) - T[i] for i in range(3)]
+        au.place(M, k, tuple(sum(Rm[j][i] * d[j] for j in range(3)) for i in range(3)))    # the parent's turn undone (transpose)
+        done[k] = w
+        n += 1
+    pos = kl_maps.world(M.scene)
+    for k, w in done.items():
+        if math.dist(pos[M.ents[k - 1]], w) > 1.0:
+            raise ValueError('%s: placed at %s, stands at %s' % (sc.path[k], w, pos[M.ents[k - 1]]))
+    log('  kl_fa_street: %s: %d campaign nodes re-placed for the dynamic street' % (M.name, n))
+    return n
+
+
+def dyn_pre(sc, log=print):
+    """Before the campaign squads are shared out over the waves: the squads of DYN_START leave the front
+    door's list for the elevator box, its timer or the wave 1 box, each started by the rout named there."""
+    has = lambda n: bool(sc.resolve(R + n))
+    def put(name, ctrl, **f):
+        k = au.node_of(sc, name)
+        kl_fa.edit(sc, k, au.ctrl_of(sc, k, ctrl), lambda us: [au.setv(sc, us, int(a[1:]), v) for a, v in f.items()])
+    tb = {k: v[17] for k, _i, v in kl_fa.controllers(sc, 'TriggerBox')}
+    door = au.node_of(sc, au.ROLE['street'])
+    squad_of = lambda p: sc.names[sc.top[sc.resolve(p)[0]]] if sc.resolve(p) else None
+    stay = [p for p in tb[door] if squad_of(p) not in DYN_START]
+    to = collections.defaultdict(list)
+    for squad, (role, rout) in DYN_START.items():
+        if has(squad + '\\' + rout):
+            to[role].append(R + squad + '\\' + rout)
+    wave1 = BOXES['wave 1'][0]
+    if not (has(wave1) and POLICE and WAVES):           # no wave boxes in this build: with the second pair
+        to['timer'] += to.pop('wave 1', [])
+    if has(ELEVATOR) and has(ELEV_TIMER):
+        v = next(v for k, _i, v in kl_fa.controllers(sc, 'TriggerBox') if k == au.node_of(sc, ELEVATOR))
+        if len(v) != 18:
+            raise ValueError('%s: not the Dog Days TriggerBox layout (%d fields)' % (ELEVATOR, len(v)))
+        put(ELEVATOR, 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', f17=to['elevator'] + [R + ELEV_TIMER])
+        put(ELEV_TIMER, 'TriggerDelay', f0=ELEV_DELAY, f4=to['timer'])
+    else:                                               # the campaign's box is not in the level: the door, as before
+        log('  kl_fa_street: NOT IN THE LEVEL: %s - the forecourt police start at the front door' % ELEVATOR)
+        stay += to['elevator'] + to['timer']
+    put(au.ROLE['street'], 'TriggerBox', f17=stay)
+    if to.get('wave 1'):
+        put(wave1, 'TriggerBox', f17=tb[au.node_of(sc, wave1)] + to['wave 1'])
+    return to
+
+
+def dyn_post(sc, to, log=print):
+    """After the waves: what holds, what falls back, who fires on the van."""
+    has = lambda n: bool(sc.resolve(R + n))
+    def put(name, ctrl, **f):
+        k = au.node_of(sc, name)
+        kl_fa.edit(sc, k, au.ctrl_of(sc, k, ctrl), lambda us: [au.setv(sc, us, int(a[1:]), v) for a, v in f.items()])
+    n = collections.Counter()
+    front = E1 + 'Squad_InFront'
+    if has(front + '\\SquadModifier'):
+        # out of the front door: the forecourt police hold tight instead of flanking (their flank rout is
+        # now their fall-back, FALL). GUESS: eDM_Tight
+        put(front + '\\SquadModifier', 'SquadModifierBehaviour', f9='eDM_Tight', f26=[])
+        put(front + '\\Regroup', 'DefendBehaviourRout', f4='eDMS_Run')         # GUESS: they RUN to the car
+        door = au.node_of(sc, au.ROLE['street'])
+        cur = next(v for k, _i, v in kl_fa.controllers(sc, 'TriggerBox') if k == door)[17]
+        put(au.ROLE['street'], 'TriggerBox', f17=cur + [R + front + '\\SquadModifier'])
+    south = E2 + 'Squad_SWAT_From_Behind_South'
+    if has(south + '\\FlankingBehaviour') and has(south + '\\SquadModifier'):
+        put(south + '\\FlankingBehaviour', 'FlankingBehaviourRout', f2=[R + south + '\\SquadModifier'])    # unleashed once in place (GUESS)
+    if CHAINS:
+        for squad, routs in FALL.items():
+            if has(squad):
+                put(squad, 'ZSquadScript', **{'f%d' % SQUAD_DEAD: [R + r for r in routs if has(r)]})
+                n['chains'] += 1
+    log('  kl_fa_street: dynamic street: elevator box starts %d routs, its %d s timer %d, wave 1 + %d campaign; '
+        '%d squads send their neighbours back when wiped out%s' % (
+            len(to.get('elevator', ())), ELEV_DELAY, len(to.get('timer', ())), len(to.get('wave 1', ())), n['chains'],
+            '' if CHAINS else ' (chains off)'))
 
 
 def hook():
@@ -528,6 +745,16 @@ def hook():
         return
     au._street = True
     au.KEEP = tuple(au.KEEP) + tuple(k for k in (KEEP if POLICE else ()) if k not in au.KEEP)
+    if DYNAMIC:                                         # the campaign's elevator box and its timer stay; its squads' points move
+        au.CAMPAIGN_KEEP[au.PART_B] = tuple(au.CAMPAIGN_KEEP[au.PART_B]) + tuple(x for x in CAMPAIGN_KEEP_B if x not in au.CAMPAIGN_KEEP[au.PART_B])
+        strip0 = au.strip
+        def strip2(M, log=print):
+            r = strip0(M, log)
+            if M.name == au.PART_B:
+                put_world(M, DYN_PLACE, log)
+                kl_fa_van.clear_props(M, log)
+            return r
+        au.strip = strip2
     prep, wir = au.prepare_host, au.wire
     def prepare2(S, log=print):
         r = prep(S, log)
@@ -569,6 +796,8 @@ def report(archive, log=print):
         return nav.floor(p[0], p[2]) is not None
     log('WAVES (trigger boxes south to north; extents are world extents; field 14 = who fires the box)')
     order = [('entrance', au.ROLE['street'])] + [(r, v[0]) for r, v in BOXES.items()]
+    if DYNAMIC:
+        order = [('elevator', ELEVATOR)] + order + [('van', GUARD_BOX)]
     squad_of = {au.node_of(sc, n): n for n in SQUADS if sc.resolve(R + n)}
     if not squad_of:
         log('  no squad of F07 is in the level (a --no-police build): the entrance box only')
@@ -631,11 +860,22 @@ def report(archive, log=print):
         ch = {'entrance': 'e', 'wave 1': '1', 'wave 2': '2', 'wave 3': '3'}.get(role, '?')
         marks += [(at(k)[0], at(k)[2], ch if mine else ch if ch == 'e' else {'1': 'a', '2': 'b', '3': 'c'}.get(ch, '?')) for k in acts]
         marks += [(at(k)[0], at(k)[2], '+') for k in pts if mine] + [(at(k)[0], at(k)[2], 'o') for k in esc]
-    for role, _n in order[:4]:
-        log('  %-8s %2d squads, %2d actors' % (role, n['squads', role], n['actors', role]))
+    for role, _n in order:
+        if n['squads', role]:
+            log('  %-8s %2d squads, %2d actors' % (role, n['squads', role], n['actors', role]))
+    if DYNAMIC and CHAINS:
+        log('FALL-BACK (ZSquadScript field %d of a squad: what is sent when it is wiped out - ASSUMPTION)' % SQUAD_DEAD)
+        for k, _i, v in kl_fa.controllers(sc, 'ZSquadScript'):
+            if sc.names[k] in FALL:
+                gone = [s for s in v[SQUAD_DEAD] if not sc.resolve(s)]
+                log('  %-52s -> %s' % (sc.names[k][-52:], ', '.join(s[5:].split('!')[-1] for s in v[SQUAD_DEAD]) or 'NOTHING'))
+                if gone or not v[SQUAD_DEAD]:
+                    bad.append('%s: its fall-back list names %s' % (sc.names[k], gone[0] if gone else 'nothing'))
     log('  after \'run\': %d squads go to their place round the van (stock timers: 44 s + 18 s after the first criminal, 32 s + 18 s after the third)' % len(seen_run))
     # ---- escape
     log('ESCAPE')
+    if kl_fa_van.STRAIGHT:
+        bad += ['van: ' + b for b in kl_fa_van.check(archive, log)]
     ex = kl_fa.controllers(sc, kl_fa.EXIT)
     (k, _i, v), = ex
     p, h = at(k), half(k)
@@ -821,7 +1061,7 @@ def test(out, keep=False, log=print):
 
 
 def main():
-    global WHO, ONE_VAN, PARK_OTHERS, RIGID, WAVES, POLICE
+    global WHO, ONE_VAN, PARK_OTHERS, RIGID, WAVES, POLICE, DYNAMIC, CHAINS
     a = sys.argv[1:]
     if '--merc-only' in a: WHO = 'ECPS_FA_MERCONLY'
     if '--three-vans' in a: ONE_VAN = False
@@ -829,6 +1069,9 @@ def main():
     if '--rigid' in a: RIGID = True
     if '--no-waves' in a: WAVES = False
     if '--no-police' in a: POLICE = False
+    if '--street-classic' in a: DYNAMIC = False
+    if '--no-chains' in a: CHAINS = False
+    if '--van-bent' in a: kl_fa_van.STRAIGHT = False
     au.NO_AI = '--no-ai' in a
     a = [x for x in a if not x.startswith('--') or x == '--keep']
     if len(a) >= 2 and a[0] == 'test':

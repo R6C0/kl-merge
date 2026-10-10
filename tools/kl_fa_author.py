@@ -19,6 +19,9 @@ settle: re/retomoto_fa.md. Nothing here installs anything or starts the game.
                                                  --guards-awake   the room squads as the campaign
                                                                   has them (active from the start)
                                                  --one-wave       every tower squad at the blast
+                                                 --room-classic   the boardroom's guards as the campaign has them
+                                                                  (default: they run from the window at the blast,
+                                                                  the pistol squad rushes back 6 s later)
                                                  --police-follow  tower police points off once a
                                                                   criminal is at the front entrance
                                                  --loot-bags      the loot keeps its money bags and its
@@ -325,7 +328,8 @@ CAMPAIGN_KEEP = {
     PART_A: ('WindowBlowup!BombWindow03',                                           # Explode: particles + the two sounds
              'WindowBlowup!InvisiBomb', 'WindowBlowup!Timer', 'WindowBlowup!Activator_FallingDebris',
              'AI_Players!Enemies!070_Elevators!AnimProxy_OpenEscapeElevator',       # MatPosAnimProxy 0..75 on Ext_A_03 / Int_A_03
-             'Audiotriggers!GeomActivator_ElevatorDing', 'Audiotriggers!GeomActivator_ElevatorOpen') + BLAST + STEPS,
+             'Audiotriggers!GeomActivator_ElevatorDing', 'Audiotriggers!GeomActivator_ElevatorOpen',
+             'AI_Players!Enemies!020_Office!SmokeTimer') + BLAST + STEPS,       # ROOM_TIMER: the pistol rush
     PART_B: ('Mercenaries!VideoProxy!MatPosAnimProxy',)}                            # the lobby car's doors, 0..75
 AT_BLAST = [R + n for n in BLAST]
 # a tower squad no campaign trigger box starts (the campaign started it from a cutscene or left
@@ -363,6 +367,28 @@ BEHAVE = {'DefendBehaviourRout', 'FlankingBehaviourRout', 'HuntBehaviourRout', '
 PLAIN = BEHAVE | {'ZSquadScript', 'ZSoldier', 'RunToCoverPosInfoRout', 'SquadModifierBehaviour', 'TriggerDelay', 'TriggerCounter', 'TriggerBox'}
 # in-game scripted animation of the campaign: removed from a squad that stays (before the join)
 STRIP = {'MiniCutsceneRout', 'MiniCutSlot', 'MiniCutPosObject', 'MiniCutSignal', 'MiniCutItemProxy'}
+# THE ROOM'S GUARDS RUN, THE PISTOLS RUSH (owner, 2026-10-09 late: 'when you spawn in you see them run away
+# and they hide for cover, then guys with pistols will rush you'; re/retomoto_ai.md 3). Values and places of
+# the campaign's own objects. The three room squads each have one FlankingBehaviourRout with two points and a
+# SquadModifierBehaviour; the blast timer names the flank rout. The points are moved (WORLD positions, on the
+# level's navigation mesh: boardroom floor 20995 / 20996, reception 20995; no mesh at x 3300..3600 beside the
+# doorway) so that at the blast the guards run AWAY from the window, to the door end and out into the
+# reception. RUSH_DELAY later the campaign's own 'SmokeTimer' fires the pistol squad's modifier, set to
+# eLM_Unleash: they come back through the door. GUESSES: every point, the delay, and that an unleashed squad hunts.
+ROOM_RUNS = True                        # False ('--room-classic'): the guards flank towards the table, as the campaign has it
+RO = 'AI_Players!Enemies!020_Office!'
+ROOM_PLACE = {
+    RO + 'Squad_Guards_Inside_01\\04_FlankingBehaviour\\LeftFlank#1': (3700, 20996, 700),    # was (5146, 522): the table
+    RO + 'Squad_Guards_Inside_01\\04_FlankingBehaviour\\RightFlank#1': (3700, 20996, -900),  # the door end's corners
+    RO + 'Squad_Guards_Inside_02\\03_FlankingBehaviour\\LeftFlank#1': (3300, 20995, 500),    # reception, behind the door jambs
+    RO + 'Squad_Guards_Inside_02\\03_FlankingBehaviour\\RightFlank#1': (3300, 20995, -700),  # (the door opens z -400..200)
+    RO + 'Squad_Guards_Inside_03\\02_FlankingBehaviour\\LeftFlank#1': (3100, 20995, 900),    # reception's far corners
+    RO + 'Squad_Guards_Inside_03\\02_FlankingBehaviour\\RightFlank#1': (3100, 20995, -1100)}
+ROOM_RUSH = RO + 'Squad_Guards_Inside_03\\01_SquadModifier'    # 3 men; kl_arms.FORCE gives them pistols
+ROOM_HOLD = RO + 'Squad_Guards_Inside_02\\02_SquadModifier'    # 4 men with SMGs hold the doorway (eDM_Tight, GUESS)
+ROOM_HIDE = RO + 'Squad_Guards_Inside_01'                        # the survivor at the table: eStayBack (the campaign: eUnleashed)
+ROOM_TIMER = RO + 'SmokeTimer'          # campaign TriggerDelay (single top-level node); its own list is cut by the prune
+RUSH_DELAY = 6                          # s after the blast (GUESS)
 SQUAD_DEAD = 8                          # ZSquadScript field 8: the list sent when the squad is wiped out
 
 
@@ -711,7 +737,20 @@ def wire(sc, log=print):
     have = [s for s in next(v for kk, _i, v in kl_fa.controllers(sc, 'AIMonitor') if kk == k)[2] if sc.resolve(s)]
     lists('monitor', 'AIMonitor', f2=have + [t for t in timers if t not in have])
     lists('arm timer', 'TriggerDelay2', f0=BLAST_DELAY, f4=must([R + ROLE['bomb']]))
-    lists('blast timer', 'TriggerDelay2', f0=BLAST_DELAY + BOMB_FUSE, f4=must([R + ROLE['glass']] + AT_BLAST) + at_blast)
+    rush = []
+    if ROOM_RUNS and not ONE_WAVE:
+        if sc.resolve(R + ROOM_RUSH) and sc.resolve(R + ROOM_TIMER):
+            put(node(ROOM_RUSH), 'SquadModifierBehaviour', f0='eLM_Unleash', f26=[])      # f26 named the flank rout: they would run back out
+            put(node(ROOM_TIMER), 'TriggerDelay', f0=RUSH_DELAY, f4=[R + ROOM_RUSH])
+            rush.append(R + ROOM_TIMER)
+        if sc.resolve(R + ROOM_HOLD):
+            put(node(ROOM_HOLD), 'SquadModifierBehaviour', f9='eDM_Tight', f26=[])
+            rush.append(R + ROOM_HOLD)
+        if sc.resolve(R + ROOM_HIDE):
+            put(node(ROOM_HIDE), 'ZSquadScript', f0='eStayBack')
+        log('  kl_fa_author: the room runs: guards to the door end / the reception at the blast; %s' % (
+            'the pistol squad is unleashed %d s later' % RUSH_DELAY if R + ROOM_TIMER in rush else 'NO RUSH (timer or squad not in the level)'))
+    lists('blast timer', 'TriggerDelay2', f0=BLAST_DELAY + BOMB_FUSE, f4=must([R + ROLE['glass']] + AT_BLAST) + at_blast + rush)
     lists('bomb', 'AIDWrapper', f0=must([R + 'WindowBlowup!BombWindow03']), f1='Activate')                 # the Explode's own message
     lists('glass', 'AIDWrapper', f0=must([WINDOW_PRE]), f1='ForceTriggerShotActivate')                     # the window's ShotActivate, field 10
     if sc.resolve(R + 'WindowBlowup!BombWindow03'):
@@ -783,6 +822,9 @@ def strip(M, log=print):
                 n += len(nd['ctrls']) - len(keep)
                 nd['ctrls'] = keep
     log('  kl_fa_author: %s: %d squads stay, %d mini-cutscene controllers taken off them' % (M.name, len(plan(M.name)[0]), n))
+    if M.name == PART_A and ROOM_RUNS:
+        import kl_fa_street                             # put_world: a squad's children are local to its group
+        kl_fa_street.put_world(M, ROOM_PLACE, log)
     return n
 
 
@@ -1062,6 +1104,7 @@ def main():
         ROOM_WAITS = '--guards-awake' not in a          # ('--guards-wait' of the builds before is the default now)
         BLAST_HARMLESS = '--blast-real' not in a
         ONE_WAVE = '--one-wave' in a
+        ROOM_RUNS = '--room-classic' not in a
         POLICE_FOLLOW = '--police-follow' in a
         if '--loot-bags' not in a:                      # the loot's props and places (kl_fa_loot, on the written level)
             import kl_fa_loot

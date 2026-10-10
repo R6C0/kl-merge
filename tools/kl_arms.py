@@ -120,6 +120,23 @@ MIX = {
 # where a map lies on the depth scale (GUESS): Retomoto's tower is the first half of the round, its street the second
 LEVEL_DEPTH = {'M09_A': (0.0, 0.6), 'M09_B': (0.6, 1.0)}
 DEPTH_DEFAULT = (0.2, 0.8)
+# Retomoto (owner, 2026-10-09 late: 'guys with pistols will rush you then the higher the caliber the more advanced /
+# technical they play'): squad -> the class all its armed actors get, whatever MIX would deal (GUESSES; the squads
+# kl_fa_author.ROOM_* makes run, rush and hold - re/retomoto_ai.md 3 and 7)
+FORCE = {'AI_Players!Enemies!020_Office!Squad_Guards_Inside_03': 'pistol',      # the rushers
+         'AI_Players!Enemies!020_Office!Squad_Guards_Inside_01': 'pistol',
+         'AI_Players!Enemies!020_Office!Squad_Guards_Inside_02': 'smg',         # hold the doorway
+         'AI_Players!Enemies!030_Reception!Squad_ShootBeforeStorm': 'smg',
+         'AI_Players!Enemies!030_Reception!Squad_Hallway#01': 'rifle',
+         'AI_Players!Enemies!030_Reception!Squad_Hallway': 'shotgun'}
+# ... and the class handed out sets ZSoldier field 3 (ESkillLevel), on the maps of SKILL_LEVELS only. Dead Men's
+# guards are all eRegular, its police eRegular / eVeteran; eVeteran actors fought in the owner's rounds. No stock
+# Fragile Alliance level uses eAmateur or eElite (their police are eCustom / eRegular): what the game makes of
+# them is a GUESS. The style (field 0) is left alone: it may choose animations. None = the pass is off.
+SKILL = {'pistol': 'eAmateur', 'revolver': 'eAmateur', 'smg': 'eRegular', 'shotgun': 'eRegular', 'rifle': 'eVeteran',
+         'mg': 'eVeteran', 'sniper': 'eElite', 'rocket': 'eVeteran'}
+SKILL_LEVELS = ('M09_A', 'M09_B')
+SKILL_FIELD = 3
 FALLBACK = ('pistol', 'smg', 'rifle')       # when an actor's set cannot play the class it should get
 ZONE = re.compile(r'(?:^|!)(\d{3})_')
 
@@ -296,7 +313,9 @@ def arm(sc, anm, m_name='', nodes=None, seed=SEED, log=print, launchers=False, g
         c = DM_LOWER.get(ws[0].lower())
         if c == 'launcher' and not launchers:
             c = 'smg'                                   # rule 4: the launcher man fights with an SMG
-        if c in MIX and any(fo.values()):
+        if squad in FORCE and c in POOLS and any(fo.values()):
+            cls_of[k] = FORCE[squad]
+        elif c in MIX and any(fo.values()):
             groups[zone(squad), c].append(k)
         else:
             cls_of[k] = c
@@ -369,6 +388,15 @@ def arm(sc, anm, m_name='', nodes=None, seed=SEED, log=print, launchers=False, g
             for j, i in enumerate(f[:4]):
                 us[i] = [kl_fa._str(sc, root + new[j] if new[j] else '')]
         kl_fa.edit(sc, k, None, fn)
+        got = next((c for c, ts in POOLS.items() if any(t == new[0] for t, _w in ts)), None)
+        si = next((i for i, (nm, _b) in enumerate(sc.nodes[k]['ctrls']) if sc.p.key(nm) == 'ZSoldier'), None)
+        if SKILL and m_name in SKILL_LEVELS and got in SKILL and si is not None:
+            def skill(us, v=SKILL[got]):
+                if len(us) != 23 or us[SKILL_FIELD][0][0] not in (0x0c, 0x0e):
+                    raise ValueError('%s: ZSoldier is not in the Dog Days layout' % sc.path[k])
+                us[SKILL_FIELD] = [(us[SKILL_FIELD][0][0], struct.pack('<I', sc.p.key_index(v)))]
+            kl_fa.edit(sc, k, si, skill)
+            rep.setdefault('skill', collections.Counter())[SKILL[got]] += 1
         rep['rows'].append((squad, sc.path[k], ws[0], new[0], why))
         rep['counts'][new[0] or '-'] += 1
     # any other holder of a weapon path that names nothing (a placed item, a script): the class's first template
@@ -396,6 +424,8 @@ def arm(sc, anm, m_name='', nodes=None, seed=SEED, log=print, launchers=False, g
     log('  kl_arms: %d actors of %s armed (seed %s, depth %.2f..%.2f, zones %s): %s' % (
         len(rep['rows']), m_name or 'the map', seed, lo, hi, zs or '-',
         ', '.join('%s %d' % x for x in sorted(rep['counts'].items(), key=lambda t: -t[1]))))
+    if rep.get('skill'):
+        log('  kl_arms: skill by the class handed out (ZSoldier field %d): %s' % (SKILL_FIELD, dict(rep['skill'])))
     was = collections.Counter(w or '-' for _s, _p, w, _n, _y in rep['rows'])
     log('  kl_arms: Dead Men gave them: %s' % ', '.join('%s %d' % x for x in was.most_common()))
     rep['emptied'] = +rep['emptied']                    # without the zero counts
