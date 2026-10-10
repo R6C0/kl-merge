@@ -182,6 +182,16 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+STATE 2026-10-10 20:30. RULE FROM THE OWNER: while they are at the PC, testing is WATCH-ONLY (SHIP hook, tools/kl_watch.py running,
+KLHook.log) - no scripted TEST-hook runs unless they say they are away. PENDING AUTO-SWAP when they close the game (background
+task, scratchpad now/swap5.py): tree <work>/build/w_tab5/KLExpansion = four maps <work>/build/y_loot2/<map> (bots open Late Night's
+glass cases by 'Activate' / 'Open' relays, the diner's exit boxes cut so the warehouse people can be looted, a drop link on the
+bank; still the SPLINE car) + Retomoto <work>/build/rt_full4/retomoto_full (kl-merge-b6 v4: blast 19 s after the round-start event;
+countdown scene Delay=0.30 on the GO clock; bots, guns, talk, Bain); hook SHIP <work>/build/klhook/ship_all4 (e1227328: + klbalance.c);
+owner's ini gets [Balance] Enable=1 Risk=2. BALANCE (re/balance.md): Arcade scales every hit by six floats per Arcade level (who
+shoots whom), level 1: police -> you 0.1, you -> police 2.0 = police need 91 body hits on the player, the player 2 on a
+policeman; stock Subway is the same. Risk=2 writes 1.0 for all six and 400 health. NOT RUN LIVE. RUNNING: wf_e36051ed-52b
+van-plus-bots (review defects D2-D4, then <work>/build/z_final/M01..M06 = F07's key-framed van + bots).
 STATE 2026-10-10 19:15. INSTALLED: tree <work>/build/w_tab3/KLExpansion (the tab's Retomoto = <work>/build/rt_full/retomoto_full: v3 +
 wardrobe + plates + guns (Entries) + BOTS through both halves (kl_fa_bots_rt) + TALK (kl_fa_talk) + BAIN (kl_bain)), hook SHIP
 <work>/build/klhook/ship_all3 (cd8c5f45), <DD>/PC_Def.str = <work>/build/v_bain/over_talk/PC_Def.str (1,694,610,488 bytes: base +
