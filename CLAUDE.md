@@ -182,6 +182,12 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+STATE 2026-10-10 11:45 - SWAPPED on the owner's word: F01 slot = <work>/build/rt_ai/retomoto_ai (dynamic AI + straight van + wardrobe +
+masks; sha1 b8d430d0), hook ship_stall + the owner's ini, overlay as before. Load check RTA: PASS (level in 2.3 s, Kane + Wolf,
+round reached GO, no fault). The AI / street / van behaviour (D1..D6, re/retomoto_ai.md 9) is for the owner to see by playing; the
+previous build is <work>/build/rt_masks/retomoto_masks. RUNNING (owner: 'continue the ai heisters', on Opus): workflow
+wf_0bc8776f-9fb (.wf/bots2.js): research (squad mechanics; backstab / pay the driver and leave / blow the van / help up; heister
+voice lines) -> tools/kl_fa_bots.py + builds <work>/build/b_bots -> adversarial review. Resume with that run id after a limit.
 STATE 2026-10-10 11:40 - INSTALLED FOR THE OWNER AND SEEN LIVE (owner: 'continue', and through kl-merge-db 'yes retomoto mask'):
 F01 slot = <work>/build/rt_masks/retomoto_masks (Retomoto + wardrobe + loot props + the four Payday 2 masks; sha1 a8e01b56) with its
 KLJoin.ini and KLWardrobe.ini; hook = SHIP <work>/build/klhook/ship_stall (c120880a) + the owner's own KLHook.ini (Expansion on,
