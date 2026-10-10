@@ -30,7 +30,11 @@ BOUNDS: only the model root's six floats at +0x20 (union box) - widened when a p
 MATERIAL: a clone of Merc_Masks (class SkinCloth, flags 0x10, normal + specular stages) with new TXIDs; the .TEX
 record for a DDS payload: 'u32 size | fourcc reversed x2 | u32 id | u16 h | u16 w | u32 mips | u32 flags | f32 scale
 | u32 0 | name\0 | mips x (u32 n, data)', DXT5 normal maps carry flags 0x40 and scale 251/255 (ASSUMPTION from the
-193 such records of F01, Merc_Masks' own normal map among them).
+193 such records of F01, Merc_Masks' own normal map among them). NORMAL MAP CHANNELS (measured 2026-10-10 on the
+DXT5 block end points): K&L's Merc_Masks / Merc_01 / MoneyBag normal maps hold x in ALPHA and y in GREEN with R = B = 0;
+Payday 2's wolf_nm ('A2D5' swizzle tag) holds x in alpha, y in green, R = 255, B = 0: the same layout, the payload is
+copied as is. ASSUMPTION: the shader ignores R, and the green sign agrees (the picture keeps its orientation: K&L v =
+1 + Payday 2 v, so dP/dv has the same sense).
 """
 import math, os, struct, sys, json
 

@@ -209,7 +209,7 @@ RoomMB=128 (all five blocks in the reserve from the second load on; klmem.c's co
 at 00:25 (same callers as 17:55). Sessions now: kl-merge-01 = this one, holds the game; kl-merge-39 = Payday 2 masks + Heister
 pictures (offline; rebuilt pair <work>/build/portraits/out2/Overlay waits for live run PV1b); kl-merge-b6 = Retomoto AI / street /
 van (offline; re/retomoto_ai.md, builds in G:\kl_scratch\ai_*; owns kl_fa_street.py, kl_fa_author.py, kl_arms.py, kl_fa_van.py).
-PAYDAY 2 MASKS (session kl-merge-39, 2026-10-10 07:00; owner away, 20-minute check-up loop; subagent usage limits reset 06:10,
+PAYDAY 2 MASKS (session kl-merge-39, 2026-10-10 07:25; owner away, 20-minute check-up loop; subagent usage limits reset 06:10,
 restart workflows at once after a reset). BUILT OFFLINE, NOTHING RUN IN THE GAME, NOTHING INSTALLED - a live package waits for
 kl-merge-01 (holds the game): F01 slot <work>/build/pd2/pd2_F01 (stock F01 + wardrobe + Wolf, Dallas, Chains, Hoxton as masks 9..12;
 .prm 85.7 MB, 45,831 chunks, problems: 0, kl_impact 0, invisible 65/65; KLWardrobe.ini Masks=12), hook <work>/build/klhook/pd2_ship
@@ -221,7 +221,10 @@ on Kane (Char=9): the wolf plate on the face in the level; PD3 a round: plate fo
 (Diesel .model/.texture), tools/kl_pd2mask.py (plates -> wardrobe; `kl_chars.py wardrobe <base> <out> --plates=wolf,dallas,chains,
 hoxton`); notes re/pd2_crates.md, re/pd2_model.md, re/pd2_attach.md, re/pd2_klside.md. Fit = (X,Y,Z) = (y,-z,-x) + (-1.6,+0.7,0),
 scale 1: kl_view pictures (<work>/build/pd2/pd2_F01_masks.png, _kane.png) show the eyes in the holes; ASSUMPTION until seen live.
-Not done: msk_backside (the PD2 back shell) is not carried - the character's own hair shows behind the plate (by design for now);
+07:20: the critic found the plates INSIDE-OUT in model space (the stored HEAD 3x3 is a reflection, det -1; kl_view does not
+cull so its pictures could not show it): fixed in kl_pd2mask (_keep_sense, outward_share check), pd2_F01 REBUILT, plates read back
+from the file face outward 1.000 on J.C. and Kane, problems: 0 (cc20daf). Normal maps: same channel layout in both games (x in
+alpha, y in green). Not done: msk_backside (the PD2 back shell) is not carried - the character's own hair shows behind the plate (by design for now);
 normal map taken as DXT5 0x40 like Merc_Masks' (swizzle unverified); more masks = add to kl_pd2mask.PD2_MASKS and the lists.
 First-person research: re/firstperson_camera.md + re/firstperson_assets.md (tier (a) camera-at-head + hidden-body variant feasible).
 STATE 2026-10-09 23:50 - INSTALLED FOR THE OWNER: F01 slot = <work>/build/y_loot/retomoto_loot (Retomoto + wardrobe + the loot
