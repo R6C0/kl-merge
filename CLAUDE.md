@@ -196,10 +196,11 @@ WHO HOLDS THE 2 GB (python debug/vmmap.py on those maps; second load, 204 MB fre
   => tell the owner: every overlay / recorder (Medal, NVIDIA overlay, Steam overlay, Discord) lives inside this 2 GB.
   => [Memory] StackMB as written is the WRONG set (it shrinks the game's own threads, among them the deep ones). Idea, not
   written: log start routine and peak stack use per thread, then shrink by routine.
-GAME FOLDER NOW (11:15) = kl-merge-39's mask test state, NOT the owner's Retomoto: slot <work>/build/pd2/pd2_F01 (stock Subway +
+GAME FOLDER NOW (11:15) = a mask test state left by ANOTHER session (not kl-merge-39, which never touched the game folder; most
+likely kl-merge-db, which relayed the owner's words and also wrote tools/kl_add_plates.py), NOT the owner's Retomoto: slot <work>/build/pd2/pd2_F01 (stock Subway +
 wardrobe + 4 Payday 2 masks; the owner: 'all work'), hook pd2_ship b4f1dc8b (no stall watch), KLHook.ini from the sample
-([Expansion] Enable=0, [Load] NudgeMs=0 = slow loads), Overlay/Patch01.zip 91,646 bytes of 06:52. Asked kl-merge-39 before
-changing anything. The live queue below is partly overtaken: M8 is answered by the owner's session.
+([Expansion] Enable=0, [Load] NudgeMs=0 = slow loads), Overlay/Patch01.zip 91,646 bytes of 06:52. Asked kl-merge-db before
+changing anything; the owner's own pair is kept in <work>/build/klhook/owner_now. The live queue below is partly overtaken: M8 is answered by the owner's session.
 STATE 2026-10-10 07:15 (kl-merge-01; owner away since 01:00, STEAM STILL AT ITS SIGN-IN WINDOW: no live run since 00:55).
 INSTALLED FOR THE OWNER: slot = <work>/build/y_loot/retomoto_loot (unchanged); hook = SHIP <work>/build/klhook/ship_stall (sha1
 c120880a = ship_mem3's several-block reserve and map files + the STALL WATCH + klchar that accepts 1..12 masks); their KLHook.ini
@@ -219,9 +220,11 @@ untouched; overlay Patch01.zip (90,729 bytes) untouched. None of the hook's new 
   for this game. With the window not in front the main loop only pumps messages (Arcade pauses; scripted runs stand still).
 - kl_watch.py took ONE picture of the Alt+Tab switcher over other windows (<work>/research/watch/20261009_174356/0081_661s.jpg;
   the owner has been told, the file is theirs to delete); grab() now also checks the window under the game's middle, twice.
-- RUNNING since 07:05 (offline): workflow wf_b313b726-548 (.wf/bots.js, one agent b-bots): an AI heister squad for the Dead Men
+- STOPPED by the lead at 11:25, nothing delivered (it died on the usage limit at 07:20, and the owner has asked another session
+  to use less): workflow wf_b313b726-548 (.wf/bots.js, one agent b-bots): an AI heister squad for the Dead Men
   maps - the owner plays Arcade ALONE on every grafted map (0 bot squads). To come: tools/kl_fa_bots.py, re/bots.md, builds in
-  <work>/build/b_bots/<map> made from the z_maps builds. If it died on a usage limit: resume with that run id.
+  <work>/build/b_bots/<map> made from the z_maps builds. Start it again only when the owner says usage allows (resume with
+  that run id; the agent starts from the beginning, about 500k tokens).
 - LIVE QUEUE, needs the owner's word once Steam is signed in (scratchpad now/QUEUE.txt; TEST hook <work>/build/klhook/test_stall):
   M8 six loads (klmem) -> M8b ReserveMB=176 RoomMB=128 -> PV1b Heister pictures with kl-merge-39's <work>/build/pd2/overlay/Overlay
   -> F1 <work>/build/fxc_slim/retomoto_loot -> PD2a/PD2b/PD3 Payday 2 masks (<work>/build/pd2/pd2_F01, scratchpad pd/PD2a.ini,
