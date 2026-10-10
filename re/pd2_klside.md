@@ -274,3 +274,54 @@ model units. No normal map, no alpha: a plate's cut-outs read as holes only if t
   fit test is the eye distance 6.5 .. 7 and the anchors of section 3.
 - Whether the root's +0x20 box is used for culling (section 2) was not read in kl2.exe.
 - ASSUMPTIONS listed in sections 2 (dword 5), 4 (plates clear the faces), 6 (flag 0x40, specular stage).
+
+## Verification (2026-10-10, skeptical re-check; scripts in the verifier's scratchpad: v_vertex.py, v_head.py, v_conv.py)
+
+Re-derived on data the document did not use: Bud's stock mask (F01 object 1251), Bud's Merc_07 body at LOD 2 (object
+1179), Kane's Dead Men head Hero_HEAD_Multiplayer (wardrobe object 10241) and Lynch's Accessories_01_Glass (12071).
+
+**Holds (section 1, 2, 5, 6, 7).**
+- 52-byte vertex: stride exactly 52 on all four (chunk = 52 n rounded to 16); weights' sum 0.78 .. 1.0, none negative;
+  palette bytes all multiples of 3 and max/3 < the run count (Bud body: max 186, 63 entries); +32 = ffffffff only; uv
+  inside 0 .. 1; +28 under (b2, b1, b0): |v| 0.99 .. 1.02 and cos with (b-a) x (c-a) = -0.94 .. -1.00 on 99 .. 100 %
+  of the vertices (so the outward normal IS (c-a) x (b-a), as section 2 says); the byte orders (b0, b1, b2) and int8
+  fail (cos ~ -0.2, |v| 0.73 .. 1.42). +44 agrees with +dP/du on 99.8 .. 100 %, +48 with +dP/dv on 99.5 .. 100 %;
+  N x T . B > 0 on 94 % (masks, Kane's head), 77 % (body), 50 % (glasses). Index chunk: 1 segment, triangle list.
+- kl2.exe (debug/dasm.py): 0x67cf77 `test [ebp+0x1c], 0x800000 / jne skip`; 0x67cf84 `mov al, [ebx+0x158]; test al,
+  al; je draw; cmp byte ptr [ebp+0xf], al; jne skip`; 0x57ee6d .. 0x57ee7a the same pattern; 0x4646e0 `mov cl, [edi+
+  0x50]; mov [esi+0x158], cl`; 0x88c810 `mov dword ptr [esi+0x50], eax`. Equality of two bytes, no sign extension, no
+  range test: unsigned, variant 0 draws every object, 1 .. 255 usable - as stated. The only other read of +0x158 that
+  widens it is 0x44a202 `movzx` (unsigned too). The `movsx` reads of a +0xf byte in find_variant_cmp.txt (0x46be8b,
+  0x80ae85, 0x8f7952, 0x9b9b14..) are in functions that never touch the chunk table 0xeac7b0.
+- Section 7: every file:line checked (kl_chars 756/758/790/857-863/1100/1127-1128; klchar.c 73/105/118/203/206/
+  219-220/340; mkoverlay 183/184/195-196; kl_portraits 52/54/61/160/188-189; kl_view 245-250; KLWardrobe.ini
+  Masks=8 OutfitStep=10 HeadBase=81).
+- Section 6 clone recipe, dry run re-run (mat_tex.py on retomoto_wardrobe): slot 1440 PD2_Mask_Dallas, texture 2341,
+  .TEX 254,515,744 bytes, loader simulation 2214 - identical to the document. Note: Merc_Masks is class slot 3 in F01
+  but class slot 2 in the wardrobe build (the recipe copies `src.cls`, so it does not matter). The dry run clones only
+  mapDiffuse and does not refresh `mat.refs`; the normal / specular stages and the refs step are untested.
+- HEAD = bone 7, parent neck1 (6), the HEAD [2] record byte-identical on the 8 F01 heisters, position (0, 162.69, -1.91).
+
+**Does not hold: the convention claim of section 3.** `heads16.py` casts `conv_votes['col'] += 1` unconditionally -
+"16 of 16 votes" is not a measurement - and `[2] x [18]` is NOT the identity (its own log: dev 1.0; R2 * R18^T dev
+0.025). `skel_conv.py` compares HEAD with NECK (bone 5), not with its parent neck1 (bone 6), and even so neither reading
+yields (4.862, 0, 0) (its output: row (0.14, 0, 9.72), column (9.53, -1.88, 0.35)). Measured on EVERY bone of J.C.
+(F01, 102 bones with a parent) and Kane (wardrobe, 101):
+- det of every stored 3x3 in [2] is -1.000: the stored matrix is improper, so neither the column nor the row reading
+  of it is a rotation frame. The document's "HEAD space" (X up, Y back, Z right) is LEFT-handed.
+- Let P swap x and z. With S' = P S (the stored rows taken in the order 2, 1, 0) in the ROW convention
+  (v_model = v_bone . S' + t): the local translation of [6] = (t - t_parent) . S'_p^T exactly on 102/102 and 101/101
+  bones (the document's column reading: 3/102); the local quaternion of [6] = S' S'_p^T under the DirectX
+  (transposed) formula on 102/102 and 101/101 (column reading: 20/102); [18] = (P S^T P | -P S t) on 102/102 and
+  101/101, i.e. the inverse (S'^T | -t S'^T) stored in the same row order (the pure readings: 0/102).
+- Hence the engine's HEAD frame is: **X = stored row 2 = model +y (up), Y = stored row 1 = model +x (the character's
+  LEFT), Z = stored row 0 = model -z (the FACE / front)**, right-handed, HEAD's own local offset (4.862, 0, 0) along X.
+  Relative to the document's frame: (X, Y, Z)_engine = (X, -Z, -Y)_document. "HEAD X = up" survives; "Y = back,
+  Z = right" do not.
+- Consequence: the boxes and anchors of section 3 are correct numbers in the document's own (left-handed) frame and
+  stay usable if the fit is done entirely in that frame or, better, in model space (the vertex positions ARE model
+  space). They must not be used as the bone's frame: any A-side mapping of Payday 2's head frame onto "X up, Y back,
+  Z right" by axis names is wrong in two axes and flips handedness (a mirrored mask).
+
+Not re-checked here: the root +0x20 box, descriptor dword 5, the .oct record, the LOD prefix (section 2 / 3 end),
+sections 4 and 8.

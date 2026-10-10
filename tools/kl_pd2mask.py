@@ -9,9 +9,13 @@ wardrobe build); nothing here was run in the game yet.
     python kl_pd2mask.py selftest [<build folder>]      round trip J.C.'s stock mask through the builders (byte-equal
                                                         vertex / index / descriptor / runs chunks), clone Merc_Masks dry
 
-HEAD space (re\pd2_klside.md 3): HEAD = bone 7 in all 16 wardrobe skeletons; rest rotation byte-identical:
-    model = R . h + t,  R columns = HEAD axes in model space:  X = model +y (up), Y = model +z (BACK: the face is -Y),
-    Z = model -x (the character's RIGHT); t = (0, 162.69 .. 162.88, -1.91).
+HEAD space (re\pd2_klside.md 3, and its 'Verification'): HEAD = bone 7 in all 16 wardrobe skeletons; the stored rest
+3x3 is byte-identical and this module applies it AS STORED: model = M . h + t with the rows M = ((0, -0.025, -1),
+(1, 0, 0), (0, 1, -0.025)), t = (0, 162.69 .. 162.88, -1.91). In that 'document frame' X = model +y (up), Y = model
++z (back: the face is -Y), Z = model -x (the character's right) - a LEFT-handed frame: det M = -1, the stored
+matrix is a reflection (the engine's own bone frame reads the rows in another order; only the numbers matter
+here). So every transform through M reverses triangle sense, which _keep_sense undoes, and add_plates refuses a
+plate that does not face outward in model space (outward_share).
 A rigid mask is stored in MODEL space (bind pose) like every vertex, weighted 1.0 to HEAD: weights (1, 0, 0),
 palette bytes (0, 0, 0, 0), one bone run {12 x 1, 12 x 7}. The game moves it with HEAD.
 
@@ -235,17 +239,42 @@ def head_frame(p, sk):
     return ((r[0], r[1], r[2]), (r[3], r[4], r[5]), (r[6], r[7], r[8])), (r[9], r[10], r[11])
 
 
+def _det(M):
+    return (M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0])
+            + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]))
+
+
+def _keep_sense(plate, M):
+    """THE STORED HEAD 3x3 IS A REFLECTION (det -1 on every bone of every skeleton: re/pd2_klside.md
+    'Verification'). Positions and normals go through it as they are, but a reflection reverses the sense of
+    every triangle, so the triangle order is reversed with it to keep 'counter-clockwise from outside' true in
+    the new space. Without this the plates came out inside-out in model space (0 of 926 wolf triangles outward;
+    kl_view does not cull, so its pictures could not show it)."""
+    return [(a, c, b) for a, b, c in plate.tris] if _det(M) < 0 else plate.tris
+
+
 def to_model(plate, frame):
     M, t = frame
     mv = lambda v: tuple(M[k][0] * v[0] + M[k][1] * v[1] + M[k][2] * v[2] for k in range(3))
     pos = [tuple(a + b for a, b in zip(mv(h), t)) for h in plate.pos]
-    return Plate(pos, [_norm(mv(n)) for n in plate.nrm], plate.uv, plate.tris, plate.name)
+    return Plate(pos, [_norm(mv(n)) for n in plate.nrm], plate.uv, _keep_sense(plate, M), plate.name)
 
 
 def to_head(plate, frame):
     M, t = frame
     inv = lambda v: tuple(M[0][k] * v[0] + M[1][k] * v[1] + M[2][k] * v[2] for k in range(3))   # M^T
-    return Plate([inv(_sub(q, t)) for q in plate.pos], [_norm(inv(n)) for n in plate.nrm], plate.uv, plate.tris, plate.name)
+    return Plate([inv(_sub(q, t)) for q in plate.pos], [_norm(inv(n)) for n in plate.nrm], plate.uv, _keep_sense(plate, M), plate.name)
+
+
+def outward_share(plate):
+    """Share of triangles whose (b - a) x (c - a) points along the vertex normals: 1.0 for a Plate in the
+    convention this module expects. The check add_plates refuses on."""
+    ok = 0
+    for a, b, c in plate.tris:
+        n = _cross(_sub(plate.pos[b], plate.pos[a]), _sub(plate.pos[c], plate.pos[a]))
+        avg = tuple(plate.nrm[a][k] + plate.nrm[b][k] + plate.nrm[c][k] for k in range(3))
+        ok += _dot(n, avg) > 0
+    return ok / float(len(plate.tris) or 1)
 
 
 class PlateSpec:
@@ -286,7 +315,11 @@ def add_plates(p, mat, tex, chars, specs, log=print):
             frame = head_frame(p, sk)
             key = tuple(round(x, 3) for row in frame[0] for x in row) + tuple(round(x, 3) for x in frame[1])
             if key not in geoms:
-                geoms[key] = Geometry(p, to_model(spec.plate, frame), tpl)
+                mp = to_model(spec.plate, frame)
+                share = outward_share(mp)
+                if share < 0.95:                                   # the plate would be culled or drawn inside-out
+                    raise ValueError('%s: only %.1f %% of the triangles face outward in model space' % (spec.name, 100 * share))
+                geoms[key] = Geometry(p, mp, tpl)
             g = geoms[key]
             widen_root(p, root, g.plate.box()); boxes.append(g.plate.box())
             objs = list(C.objects(p, root))
