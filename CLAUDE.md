@@ -182,6 +182,14 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+LIVE 2026-10-10 13:47-13:52, run K1 (TEST hook <work>/build/klhook/test_bot1 = ship_stall + klbot.c + klgun.c Version 2 after the
+review fixes; SHIP sibling ship_bot1 f4562d32, NOT installed; b_bots/M02 Late Night Opening, [Bots] Enable=1 Log=1): THE CREW LOG
+WORKS and settles the questions - records 1..7 are 'bot', actor vtable 00bb3bac = ZFFActor; every bot reaches heist stage 1 within
+50-60 s of GO and LOOTS ($20,000-$120,000 each); stage 3; the van comes (state 3) about 2.4 min after GO, 'record 4 (bot):
+aboard', 'record 7 (bot): aboard', the van leaves (state 5 -> 7) and three bots end 'status6 g3' (escaped), one 'dead', three
+left in play with their money - with the idle player left behind. So the AI heisters DO go to the vehicle and board (the owner
+had not seen it). Status 6 = escaped is new (the notes had 4 = aboard, 7 = dead). Next live: K2 Tune (traitors), Backstab, Bribe,
+Leave; H1 guns (every KLGuns.ini needs Entries=<chunk count> now: kl_map_guns.py check prints the line).
 OWNER 2026-10-10 ~14:00: 'i want to make it so you can come back as a fed or the ai heisters can come back as feds too'; through
 kl-merge-b6: 'make sure that the ai also go to the vehicle', the Dead Men maps on 'its own tab', and 'the original FA dog days maps
 to have these mods in the game too'. SPLIT with kl-merge-b6: stock maps with the mods = b6 (new tools/kl_stock_mod.py, builds in

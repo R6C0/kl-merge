@@ -544,6 +544,7 @@ static void klh_tick(int game_thread);
 #include "kljoin.c"
 #include "klgun.c"
 #include "klchar.c"
+#include "klbot.c"
 #include "klsteam.c"
 #include "klslot.c"
 #ifdef KLHOOK_TEST
@@ -580,6 +581,7 @@ static void klh_tick(int game_thread)
     klx_tick();
     klj_tick();
     klc_tick(game_thread);
+    klb_tick(game_thread);
     klg_tick();
     klm_tick();
     InterlockedExchange(&klh_tick_busy, 0);
@@ -730,6 +732,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klf_init();
     klj_init();
     klc_init();
+    klb_init();
     klg_init();
     klx_init();
     kls_init(inst);

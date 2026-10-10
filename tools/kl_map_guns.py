@@ -690,8 +690,13 @@ def check_sound(lv, sc, rep):
     return bad
 
 
-def write_ini(rep, path):
-    """KLGuns.ini, Version 2: Version 1's keys (kl_guns.write_ini) + how a group is hidden and which one the file shows."""
+def write_ini(rep, path, entries):
+    """KLGuns.ini, Version 2: Version 1's keys (kl_guns.write_ini) + how a group is hidden and which one the file shows.
+    entries: the chunk count of the .prm the Root indices belong to (its dword +4 = what the game puts at 0xeac7a4).
+    klgun.c refuses a Version 2 file without Entries= and leaves one alone whose Entries is not the loaded .prm's
+    count: a file left over beside a newer archive must not be taken for this build's (re/hook_review_1010.md G1)."""
+    if not 0 < entries <= 0x12000:
+        raise ValueError('KLGuns.ini: %r is not a chunk count the game\'s table holds' % (entries,))
     with open(path, 'w', newline='\r\n') as f:
         f.write('; written by tools/kl_map_guns.py - belongs to the level archive beside it (klhook\\klgun.c)\n')
         f.write('; Version 2: a part is hidden by bit HideBit of the dword at +HideWord of its mesh object (kl2 0x67cf77), NOT by its variant byte:\n')
@@ -704,7 +709,8 @@ def write_ini(rep, path):
             if s and s.get('donor'):
                 f.write('; %s shows %s and is built to sound like %s (was %s): the sound is in the level, a switch in the menu does not change it.\n' % (
                     g['template'], g['looks'][g['shown'] - 1]['label'], s['after'], s['before']))
-        f.write('[Guns]\nVersion=2\nCount=%d\nHidden=%d\nHideWord=%d\nHideBit=%d\n' % (len(rep['guns']), K.HIDDEN, HIDE_OFF, HIDE_BIT))
+        f.write('; Entries = the chunk count of the .prm in the archive beside this file: the hook takes the file for that .prm only.\n')
+        f.write('[Guns]\nVersion=2\nCount=%d\nHidden=%d\nHideWord=%d\nHideBit=%d\nEntries=%d\n' % (len(rep['guns']), K.HIDDEN, HIDE_OFF, HIDE_BIT, entries))
         for i, g in enumerate(rep['guns'], 1):
             f.write('[Gun.%d]\nTemplate=%s\nItem=%d\nRoot=%d\nStock=%d\nLooks=%d\nShown=%d\n' % (
                 i, g['template'], g['item'], g['root'], g['stock_parts'], len(g['looks']), g['shown']))
@@ -883,12 +889,13 @@ def build(src, out, start=START, sets=SET, level='M01_FA_A', audit=True, extra=F
         if os.path.isfile(os.path.join(out, f)):
             os.remove(os.path.join(out, f))
     path = lv.write(out, lv.name)
-    write_ini(rep, os.path.join(out, 'KLGuns.ini'))
+    write_ini(rep, os.path.join(out, 'KLGuns.ini'), struct.unpack_from('<I', lv['.prm'], 4)[0])
     with open(os.path.join(out, 'guns.json'), 'w') as fh:
         json.dump(dict(base=src, problems=bad, **rep), fh, indent=1, default=str)
     lv2 = C.Lv(out)                                                  # everything below reads the WRITTEN folder
     again = check(lv2, json.load(open(os.path.join(out, 'guns.json'))))
     bad += ['guns (written folder): ' + x for x in again]
+    bad += ['guns (written folder): ' + x for x in ini_entries(out, lv2)]
     imp = kl_impact.check(path)
     bad += ['impact: ' + x for x in imp]
     rows, wbad = weapons(lv2)
@@ -938,10 +945,29 @@ def build(src, out, start=START, sets=SET, level='M01_FA_A', audit=True, extra=F
     return out_rep
 
 
+def ini_entries(folder, lv=None):
+    """Does the folder's KLGuns.ini carry Entries= with the chunk count of the folder's own .prm? -> problems.
+    (klgun.c refuses the file without the key; the problem text holds the line to add to a build of before 2026-10-10.)"""
+    lv = lv or C.Lv(folder)
+    n = struct.unpack_from('<I', lv['.prm'], 4)[0]
+    got, sec = None, ''
+    for line in open(os.path.join(folder, 'KLGuns.ini')).read().splitlines():
+        line = line.strip()
+        if line.startswith('['):
+            sec = line
+        elif sec == '[Guns]' and line.split('=')[0].strip() == 'Entries':
+            got = line.split('=', 1)[1].strip()
+    if got is None:
+        return ['KLGuns.ini has no Entries= : the hook refuses it and the level shows what was built in - add the line "Entries=%d" under [Guns], or build again' % n]
+    if got != str(n):
+        return ['KLGuns.ini says Entries=%s, the .prm beside it has %d chunks: the hook leaves the file alone' % (got, n)]
+    return []
+
+
 def recheck(folder, log=print):
     lv = C.Lv(folder)
     rep = json.load(open(os.path.join(folder, 'guns.json')))
-    bad = check(lv, rep) + ['impact: ' + x for x in kl_impact.check(lv.src)]
+    bad = check(lv, rep) + ['impact: ' + x for x in kl_impact.check(lv.src)] + ini_entries(folder, lv)
     ini = open(os.path.join(folder, 'KLGuns.ini')).read()
     for g in rep['guns']:
         if 'Root=%d\n' % g['root'] not in ini.replace('\r', ''):
