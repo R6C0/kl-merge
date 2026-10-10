@@ -139,14 +139,23 @@ FORCE = {'AI_Players!Enemies!020_Office!Squad_Guards_Inside_03': 'pistol',      
 # pistols) made them softer still. The rows, read off stock levels (count of actors in the nine FA levels):
 #   'cop'   eCustom  50 50 50 100  0 ..  5000 800 800   eStreetCop, 38 (F01's platform police)
 #   'swat'  eCustom  50 50 50 175 50 ..  5000 800 800   eArmy, 140 (F07's own police on this street: 18)
-#   'sharp' eRegular 85 82 82 150  0 ..  5000 800 800   eArmy, 28 (F07: 8; F02's rifle sentries)
-# 'higher calibre = more technical' is kept by giving the rifle classes the 'sharp' row. What each float does was
-# NOT read in the exe (the fourth looks like health: dog 50..80, guard 65, cop 100, SWAT 175, bot 280, boss 300).
+#   'sharp' see below
+# WHAT THE FIELDS ARE (read in kl2.exe by kl-merge-01's map-tune agent, re/map_ai.md 2; this file's v2 table had it wrong):
+# ZSoldierRout slot 4 (0x846340) -> 0x46e410 switches on field 3, and ANY skill name but eCustom OVERWRITES fields
+# 4, 5, 6, 13, 14 with a preset (eN00b 20/0/20/100/40, eAmateur 35/20/10/70/45, eRegular 50/50/10/50/50, eVeteran
+# 60/60/5/20/55, eElite 90/90/10/0/60). Field 4 = ACCURACY in per cent (0x557ae0, 0x719b00: the miss share is
+# 1 - f4/100; x 1.1 for No_Mercenary, clamped 0..100), field 7 = HEALTH (0x8fbac0). So v2's 'eRegular 85 82 82 150'
+# shot at 50, not 85, with LESS health than the SMG row: the rifles were the soft ones. And the owner's 'i survive
+# being shot so much' on the build before v2 has its number: 22 of the tower's 44 guards were eAmateur = accuracy 35
+# (my first table), the rest 50, all with health 50.
+# 'sharp' is now eCustom (so the numbers are used) with accuracy 75: the value stock gives the rival gangs of F03 /
+# F04 / F05 / F07 / F09 (75..80), the accurate enemies of stock Fragile Alliance. Health 175 as the SWAT row.
+# 'higher calibre = more technical' = that row for the rifle classes. Fields 5, 6, 13, 14 were not read: stock's 50s.
 # The STYLE (field 0) is not touched: it may pick animations. An actor whose first three floats are not Dead Men's
 # 50 / 50 / 50 has a designer's row (Retomoto's boss: 30 50 30 300) and keeps it. None = the pass is off.
 _ROW = lambda a, b, c, hp, e: (a, b, c, hp, e, 1.0, 1.0, 1.0, 1.0, 50.0, 50.0, 5000.0, 800.0, 800.0)
 ROWS = {'cop': ('eCustom', _ROW(50.0, 50.0, 50.0, 100.0, 0.0)), 'swat': ('eCustom', _ROW(50.0, 50.0, 50.0, 175.0, 50.0)),
-        'sharp': ('eRegular', _ROW(85.0, 82.0, 82.0, 150.0, 0.0))}
+        'sharp': ('eCustom', _ROW(75.0, 50.0, 50.0, 175.0, 50.0))}
 SKILL = {'pistol': 'cop', 'revolver': 'cop', 'smg': 'swat', 'shotgun': 'swat', 'rocket': 'swat', 'rifle': 'sharp',
          'mg': 'sharp', 'sniper': 'sharp'}
 SKILL_LEVELS = ('M09_A', 'M09_B')

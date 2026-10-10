@@ -448,3 +448,25 @@ which row; every number is a stock one. `kl_arms.SKILL = None` turns the pass of
 y 2, z 8700 .. 21000, lane a clear floor 2 below the van to 6 m beyond the end. Folder
 `G:/kl_scratch/ai_dyn2/retomoto_loot` (zip 212 MB, KLJoin.ini, KLWardrobe.ini). It has the wardrobe but NOT the four
 Payday 2 mask plates of the installed build: that step is kl-merge-01's (`kl_chars.py wardrobe ... --plates=`).
+
+## 12. v3: the soldier fields are known now, and v2's rifle row was wrong (2026-10-10 13:20)
+
+Read in kl2.exe by kl-merge-01's map-tune agent (re/map_ai.md 2), which settles what 11.2 left open:
+`ZSoldierRout` slot 4 (0x846340) -> 0x46e410 switches on field 3, and ANY skill name but eCustom OVERWRITES
+fields 4, 5, 6, 13, 14 with a preset (eN00b 20/0/20/100/40, eAmateur 35/20/10/70/45, eRegular 50/50/10/50/50,
+eVeteran 60/60/5/20/55, eElite 90/90/10/0/60). **Field 4 = accuracy in per cent** (the miss share is 1 - f4/100;
+x 1.1 for No_Mercenary, clamped), **field 7 = health**. Field 15 was not among them: still unknown.
+
+So:
+- Why the owner survived so much on the build before v2: 22 of the tower's 44 guards were eAmateur = accuracy 35
+  (section 7's table, my guess), the rest 50, every one with health 50. Stock police: accuracy 50, health 100..175.
+- v2's "sharp" row (`eRegular 85 82 82 150`) was overwritten to accuracy 50 and had LESS health than the SMG row.
+  Its pistol and SMG rows (eCustom 50, health 100 / 175) were what stock police have.
+- v3: "sharp" = `eCustom 75 50 50 175 50`. 75 is what stock gives the rival gangs of F03 / F04 / F05 / F07 / F09
+  (75..80), the accurate enemies of stock Fragile Alliance. On Retomoto: tower 22 cop / 20 swat / 2 sharp, the
+  street's campaign police 4 / 13 / 3. So five men are sharper than stock police and nobody is softer.
+  GUESS: that five is enough to notice; `kl_arms.FORCE` / `MIX` decide who carries a rifle.
+
+`python tools/kl_fa_loot.py test G:\kl_scratch\ai_dyn3`: RESULT PASS, every check 0, van lane clear, voice
+repairs on (.WAV 27,158,864). Folder `G:/kl_scratch/ai_dyn3/retomoto_loot` (plain wardrobe; the Payday 2 plates
+and the gun looks are kl-merge-01's finishing steps). Not run in the game.
