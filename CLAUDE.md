@@ -182,6 +182,19 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+STATE 2026-10-10 01:35 - OWNER'S CRASHES 00:41, 00:44, 00:47 (all 0x8e5bbd, third / fourth level load of one process; dumps in
+<work>/research/owner_crash_1010_0047) AND THE FIX, INSTALLED, NOT RUN IN THE GAME: the reserve held one block (the 74.6 MB .prm);
+a level asks for five large blocks (32.0 scratch, 16.9 = .fxc, 74.6 = .prm, 20.6 = .ANM, 25.9 = no archive member) and the largest
+free piece of address space shrinks from load to load (242 -> 32 -> 26 -> 14 MB; about 400 MB stay free in total), so the 20.6 or
+25.9 MB block found no place while the reserve was 'in use'. klmem.c: the reserve is now an arena of several blocks; the .prm always,
+plus any request of 1 MB or more the heap refuses (same as before in every case that worked). Proof so far: klhook/klmem_test.c
+only (replays the requests in a cut-up 32-bit address space: PASS). Hook installed: SHIP <work>/build/klhook/ship_mem3 (sha1
+d71121d6); TEST sibling test_mem3; the previous one is ship_mem2. LIVE RUN OWED: scratchpad now/M8.ini (six loads in one process)
+- it did not start because STEAM IS AT ITS SIGN-IN WINDOW (01:25; nobody signs in but the owner). Then try [Memory] ReserveMB=176
+RoomMB=128 (all five blocks in the reserve from the second load on; klmem.c's comment). Also third DiscordHook.dll+0x1f7fd fault
+at 00:25 (same callers as 17:55). Sessions now: kl-merge-01 = this one, holds the game; kl-merge-39 = Payday 2 masks + Heister
+pictures (offline; rebuilt pair <work>/build/portraits/out2/Overlay waits for live run PV1b); kl-merge-b6 = Retomoto AI / street /
+van (offline; re/retomoto_ai.md, builds in G:\kl_scratch\ai_*; owns kl_fa_street.py, kl_fa_author.py, kl_arms.py, kl_fa_van.py).
 PAYDAY 2 MASKS (session kl-merge-88, 2026-10-10 01:25; owner away, 20-minute check-up loop running): PD2 is installed and its
 crate store decoded (Payday 2 section). First research run died on the usage limit at 00:10 (partial files kept: tools/pd2_crate.py,
 <work>/pd2/extract 413 files, <work>/pd2/kl scripts); relaunched 01:20. Heister pictures: run PV1 (kl-merge-74) showed them LIVE;
