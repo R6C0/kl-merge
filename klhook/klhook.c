@@ -382,9 +382,13 @@ static void write_dump(EXCEPTION_POINTERS *ep, const char *why)
     HANDLE f = CreateFileA(path, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
     if (f == INVALID_HANDLE_VALUE) return;
     MEI mei = { GetCurrentThreadId(), ep, FALSE };
-    /* Normal | DataSegs | IndirectlyReferencedMemory | ThreadInfo */
-    int type = 0x0 | 0x1 | 0x40 | 0x1000;
-    w(GetCurrentProcess(), GetCurrentProcessId(), f, type, &mei, 0, 0);
+    /* Normal | DataSegs | IndirectlyReferencedMemory | ThreadInfo | FullMemoryInfo (the list of every region of the
+       address space, free ones too: debug\vmmap.py reads it - who holds the 2 GB when a level's block finds no place) */
+    int type = 0x0 | 0x1 | 0x40 | 0x1000 | 0x800;
+    if (!w(GetCurrentProcess(), GetCurrentProcessId(), f, type, &mei, 0, 0)) {    /* a dbghelp.dll that does not know the list */
+        SetFilePointer(f, 0, 0, FILE_BEGIN); SetEndOfFile(f);
+        w(GetCurrentProcess(), GetCurrentProcessId(), f, type & ~0x800, &mei, 0, 0);
+    }
     CloseHandle(f);
     klog("  dump written: KLHook_%d.dmp (%s)", dumps, why);
 }

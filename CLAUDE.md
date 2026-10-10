@@ -189,7 +189,9 @@ free piece of address space shrinks from load to load (242 -> 32 -> 26 -> 14 MB;
 25.9 MB block found no place while the reserve was 'in use'. klmem.c: the reserve is now an arena of several blocks; the .prm always,
 plus any request of 1 MB or more the heap refuses (same as before in every case that worked). Proof so far: klhook/klmem_test.c
 only (replays the requests in a cut-up 32-bit address space: PASS). Hook installed: SHIP <work>/build/klhook/ship_mem3 (sha1
-d71121d6); TEST sibling test_mem3; the previous one is ship_mem2. LIVE RUN OWED: scratchpad now/M8.ini (six loads in one process)
+d638209b); TEST sibling test_mem3; the previous one is ship_mem2. It also logs one 'memory: at the level's largest block: free
+pieces ... in use ...' line per level load, and its dumps carry the region list (`python debug/vmmap.py <dump>`): the ROOT CAUSE -
+what stays behind after a level and cuts the space - is NOT known; read those lines after the owner's next session. LIVE RUN OWED: scratchpad now/M8.ini (six loads in one process)
 - it did not start because STEAM IS AT ITS SIGN-IN WINDOW (01:25; nobody signs in but the owner). Then try [Memory] ReserveMB=176
 RoomMB=128 (all five blocks in the reserve from the second load on; klmem.c's comment). Also third DiscordHook.dll+0x1f7fd fault
 at 00:25 (same callers as 17:55). Sessions now: kl-merge-01 = this one, holds the game; kl-merge-39 = Payday 2 masks + Heister

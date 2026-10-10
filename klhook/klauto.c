@@ -1548,7 +1548,10 @@ static void kla_dump_now(EXCEPTION_POINTERS *ep, const char *name)
     f = CreateFileA(path, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
     if (f == INVALID_HANDLE_VALUE) return;
     mei.tid = GetCurrentThreadId(); mei.ep = ep; mei.client = FALSE;
-    w(GetCurrentProcess(), GetCurrentProcessId(), f, 0x1 | 0x40 | 0x1000, ep ? &mei : 0, 0, 0);
+    if (!w(GetCurrentProcess(), GetCurrentProcessId(), f, 0x1 | 0x40 | 0x1000 | 0x800, ep ? &mei : 0, 0, 0)) {    /* as klhook.c's write_dump */
+        SetFilePointer(f, 0, 0, FILE_BEGIN); SetEndOfFile(f);
+        w(GetCurrentProcess(), GetCurrentProcessId(), f, 0x1 | 0x40 | 0x1000, ep ? &mei : 0, 0, 0);
+    }
     CloseHandle(f);
     kla_out(1, "  dump written: %s", name);
 }
