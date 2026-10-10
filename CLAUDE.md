@@ -182,6 +182,13 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+READY TO SWAP IN (2026-10-10 ~13:00, offline, NEVER LOADED): <work>/build/rt_ai2/retomoto_ai2 = kl-merge-b6's Retomoto v2
+(G:/kl_scratch/ai_dyn2, commit ca178fb, re/retomoto_ai.md 11) + wardrobe with the four plates + KLJoin.ini. Van: the parked car
+PC0700_M09_Cars_Qeue_A_01 it drove into is hidden, drive-away to z 21000. Enemies: Dead Men soldiers had kept Dead Men ZSoldier
+rows (field 15 = 1000, stock 5000) - now whole stock police rows by weapon class (which float is accuracy: NOT established).
+Voice repairs ON (.WAV 27,158,864). Checks: wardrobe problems 0, chunk table 65,119, kl_impact 0, kl_chars check = the known glow
+material, street report exit 0, kl_voice heisters: 1 SILENT (ExitHeist_01_R plain leaf, as in stock). Install on the owner's word:
+`python debug/slot.py put "<work>/build/rt_ai2/retomoto_ai2" F01`, then a load check with scratchpad pd/RTM.ini.
 OWNER PLAYED THE RETOMOTO AI + VAN BUILD (2026-10-10 ~12:30): 'i dont get why i survive from being shot so much maybe because im by
 myself? the van is almost perfect its just when it finally leaves like before the end game result it goes into a car just make sure it
 drives off down the road the whole time'. Passed to kl-merge-b6 (its files): the van's leave leg, enemy damage / accuracy against
