@@ -694,7 +694,8 @@ LIMIT_IN = 6000.0               # GUESS: the drive in is at most 60 m (7.2 s: 30
 LIMIT_OUT = 8000.0              # GUESS: the drive away at most 80 m (8.48 s; F07's own is 70 m with a top speed of 13 m/s, Retomoto's
                                 # 102 m on a straight road; these roads bend - M02's at 50 m - and at 100 m the van took that at 19 m/s)
 MIN_IN, MIN_OUT = 2000.0, 3000.0
-GAP = 900.0                     # the drive ends this far before a thing in the lane (a gate, a wall)
+GAP = 900.0                     # the drive ends this far before a thing in the lane (a wall, a gate that is not of
+                                # the form gate_find() handles)
 BOARD_BACK = 337.0              # the van's BoardingTrigger: 337 behind its origin (read on F07; tested in van_prepare)
 SIDE = 120.0                    # a crash piece may leave the drive this far to either side (the lane's half width + 10)
 AXLES = 140.0                   # the van's heading = the chord of the drive from its rear axle to its front one (wheels at -138 / +137)
@@ -795,26 +796,184 @@ def curve(pts, step=LANE_STEP):
     return out, marks
 
 
-def lane(L, G, path, s0, s1, skip=(), half=VAN_HALF):
+def lane(L, G, path, s0, s1, skip=(), half=VAN_HALF, only=None):
     """The lane of a van on `path` (a Poly whose y is the road) from s0 to s1, every LANE_STEP units, five rays across
     `half`: -> [(s, what, name)] for collision of the map VAN_BODY over the road, a place with no road under a
-    wheel, and a convex body (prop, parked car, key-framed piece) in the lane. skip: REF ids left out."""
+    wheel, and a convex body (prop, parked car, key-framed piece) in the lane. skip: REF ids left out.
+    only: a set of REF ids - then nothing but THEIR collision is listed (where the lane meets a gate)."""
     out, s = [], s0
     while s <= s1 + 1e-6:
         p, t = path.at(s), path.tan(s)
         for off in (-half, -half / 2, 0.0, half / 2, half):
             x, z = p[0] + off * t[1], p[2] - off * t[0]
             hs = [h for h in G.hits(x, z) if h[2] not in skip]
-            if not any(h[1] > FLOOR and abs(h[0] - p[1]) <= VAN_BODY[0] for h in hs):
+            road = lambda q: any(h[1] > FLOOR and abs(h[0] - p[1]) <= VAN_BODY[0] for h in q)
+            # a ray that falls exactly on the joint of two ground tiles meets neither (M01, z 24300.1: SO1001_Alley_A_6x8m_09
+            # ends, SO1001_Sidewalk_A_SpecialChunk_01 begins; road 1 unit before and 1 after). 'No road' is a ray that
+            # finds none here AND none 2 units before and behind along the drive: a hole a wheel could meet still is one.
+            if only is None and not road(hs) and not any(road([h for h in G.hits(x + d * t[0], z + d * t[1]) if h[2] not in skip]) for d in (-2.0, 2.0)):
                 out.append((round(s), 'no road within %d of the drive\'s height %.0f at %+d across' % (VAN_BODY[0], p[1], off), ''))
             for y, _up, r in hs:
-                if p[1] + VAN_BODY[0] < y < p[1] + VAN_BODY[1]:
+                if p[1] + VAN_BODY[0] < y < p[1] + VAN_BODY[1] and (only is None or r in only):
                     out.append((round(s), 'collision %d over the road at %+d across' % (y - p[1], off), L.name(r)))
         for ty, r, lo, hi in G.boxes:
-            if r not in skip and lo[0] - half < p[0] < hi[0] + half and lo[2] - half < p[2] < hi[2] + half and \
+            if r not in skip and (only is None or r in only) and lo[0] - half < p[0] < hi[0] + half and lo[2] - half < p[2] < hi[2] + half and \
                     lo[1] < p[1] + VAN_BODY[1] and hi[1] > p[1] + 10:
                 out.append((round(s), '%s body in the lane' % {2: 'rigid', 3: 'vehicle', 4: 'key-framed', 5: 'weapon'}.get(ty, ty), L.name(r)))
         s += LANE_STEP
+    return out
+
+
+# ---- a gate Dead Men's car broke through on its way out (M01_FA_A; re/map_escape.md 19)
+# Dead Men: Escape!EscapeCars\GateTrigger (a box the CAR enters, 5.6 m before the fence) -> RelayMsgList ->
+#   GateDeactivator @DeactivateGeom('AITrigger', [the closed fence piece SO1001_Fence_A_5m_01, the trigger itself])
+#   Activator @AIDWrapper([SO1001_Fence_A_5m_AnimGroup_00], 'Activate') -> the group's own RelayMessage -> its child
+#   SO1001_Fence_A_5m_Attach @MatPosAnim('Activate', frames 0..41) + a KEYS chunk.
+# The KEYS chunk is the van's own format and its six tables are in the built .buf, equal to Dead Men's key for key
+# (measured): 42 frames in which the fence piece is thrown 9.3 m up the road and tumbles = the car RAMS the gate.
+# It is NOT a clip of the .ANM (which is not carried). ASSUMPTION that Dog Days plays a Dead Men KEYS chunk as it
+# plays its own: same chunk header, same table forms; the owner has seen Dead Men's garage doors open on the bank.
+# For the van the same two things are done by the van's own leave message (gate_wire below).
+GATE_NOSE = 250.0               # the van's nose before its origin (F07: the front lights stand 245 ahead)
+GATE_EARLY = 2                  # the gate goes this many frames before the nose is at it (25 frames a second)
+GATE_PAST = 400.0               # a drive that ends nearer than this behind a gate ends IN it: a fault
+RELAY_EXIT = 'Relay_Stop_Audio_Idle'    # stock F07, in list 3 of the van's 'Activate_Exit' piece: its RelayMessage
+                                        # hears 'Activate_Exit' when the van sets off (and stops the idle sound)
+
+
+def gate_find(L, top):
+    """In the subtree `top` of Dead Men's escape car: the gate it opened -> None or {'off': [nodes a DeactivateGeom of
+    the car switches off, outside the subtree], 'knock': [(group, piece)]: an AIDWrapper 'Activate' target outside
+    the subtree whose RelayMessage hands 'Activate' to a piece with MatPosAnim and a KEYS chunk, 'own': the car's
+    trigger boxes that same DeactivateGeom switches off (the gate's trigger), 'refs': REF ids of all of it}.
+    A gate is HANDLED only in this exact form; anything else the car switched keeps the GAP rule."""
+    sc = L.sc
+    inside = lambda j: top <= j < sc.end[top]
+    res = lambda x: [j for s in (x if isinstance(x, list) else [x]) if isinstance(s, str) and s.startswith('ROOT\\') for j in sc.resolve(s)]
+    off, own, knock = [], [], []
+    for k in range(top, sc.end[top]):
+        for _i, v in L.ctrl(k, 'DeactivateGeom'):
+            tg = res(v[1])
+            if any(not inside(j) for j in tg):
+                off += [j for j in tg if not inside(j)]
+                own += [j for j in tg if inside(j)]
+        for _i, v in L.ctrl(k, 'AIDWrapper'):
+            if v[1] != 'Activate':
+                continue
+            for g in res(v[0]):
+                for _j, r in L.ctrl(g, 'RelayMessage'):
+                    for piece in (res(r[2]) if r[0] == 'Activate' and r[1] == 'Activate' else []):
+                        raw = L.ents[piece - 1].raw
+                        if not inside(g) and g <= piece < sc.end[g] and raw and b'SYEK' in raw and \
+                                any(m[0] == 'Activate' for _x, m in L.ctrl(piece, 'MatPosAnim')):
+                            knock.append((g, piece))
+    if not off or not knock:
+        return None
+    refs = {L.ents[j - 1].ref for j in off} | {L.ents[j - 1].ref for g, _p in knock for j in range(g, sc.end[g])}
+    return {'off': sorted(set(off)), 'knock': sorted(set(knock)), 'own': sorted(set(own)), 'refs': refs}
+
+
+def gate_wire(sc, P, delay, log=print):
+    """On the joined scene: the gate of plan P goes when the van's nose is at it. Four controllers are ADDED (at the
+    end of two nodes' lists; no entity added, nothing removed), each in a form stock levels use:
+      van's Relay_Stop_Audio_Idle   + RelayMessage('Activate_Exit' -> 'AITrigger', to ITSELF)   (the node hears
+                                      'Activate_Exit' at the start of the leave leg: its stock relay stops the idle
+                                      sound on it; a relay to its own node is AnimProxy_RearDoors_Close's form)
+                                    + TriggerDelay2(delay, 0, -1, 0, [the gate's group])        (the form of 183 stock
+                                      timers; armed by 'AITrigger' - read at kl2 0x71e250 -, sends 'AITrigger')
+      the gate's group              + DeactivateGeom('AITrigger', [the closed piece], 0)        (Dead Men's own
+                                      GateDeactivator, without the car's trigger)
+                                    + RelayMessage('AITrigger' -> 'Activate', to the animated piece)
+    ASSUMPTIONS: every controller of a node hears a message sent to the node (stock: the van's explosion node has
+    Explode and RelayMessage on the same 'Activate'); the stock relay's own reaction is not disturbed by a second
+    relay on its node; a deactivated static piece loses its collision with its picture (it did in Dead Men).
+    NOT ADDED: Dead Men's ActivateGeom on the group - the group is not hidden in the file (ZGEOM[3] 0, no .gms flag
+    0x400, in Dead Men's own file too), so there is nothing to switch on.
+    If the same van is called a second time the timer runs again and the piece is thrown again from the gate."""
+    g = P['gate']
+    host = sc.resolve('ROOT\\' + VAN_GROUP + '\\F07_Escape_Vehicle_01\\' + RELAY_EXIT)
+    proxy = sc.resolve('ROOT\\' + VAN_GROUP + '\\F07_Escape_Vehicle_01')
+    if len(host) != 1 or len(proxy) != 1:
+        raise ValueError('kl_map_escape: the van has no %s' % RELAY_EXIT)
+    host = host[0]
+    heard = [v for _k, _i, v in [(proxy[0], i, [kl_fa.value(sc, u) for u in units(b[1:-1])]) for i, (nm, b) in enumerate(sc.nodes[proxy[0]]['ctrls'])
+                                 if sc.p.key(nm) == 'MatPosAnimProxy'] if v[6] == 'Activate_Exit' and sc.path[host] in v[3]]
+    stock = [[kl_fa.value(sc, u) for u in units(b[1:-1])] for nm, b in sc.nodes[host]['ctrls'] if sc.p.key(nm) == 'RelayMessage']
+    if len(heard) != 1 or not any(v[0] == 'Activate_Exit' for v in stock):
+        raise ValueError('kl_map_escape: %s is not in the list of the van\'s Activate_Exit piece with a relay on that message' % RELAY_EXIT)
+    if len(g['knock']) != 1:
+        raise ValueError('kl_map_escape: %d animated gate groups (one is wired)' % len(g['knock']))
+    grp, piece = g['knock'][0]
+    for p in [grp, piece] + g['off']:
+        if len(sc.resolve(p)) != 1:
+            raise ValueError('kl_map_escape: the joined scene has %d nodes %s' % (len(sc.resolve(p)), p))
+    gk = sc.resolve(grp)[0]
+    if any(sc.p.key(nm) in ('DeactivateGeom', 'TriggerDelay2') for k in (host, gk) for nm, _b in sc.nodes[k]['ctrls']):
+        raise ValueError('kl_map_escape: the gate is wired already')
+
+    def add(k, name, cls, vals):
+        us = [list(u) for u in units(kl_fa.blank(sc, cls)[1:-1])]
+        for i, v in enumerate(vals):
+            if isinstance(v, str):
+                us[i] = [kl_fa._str(sc, v)]
+            elif isinstance(v, list):
+                us[i] = kl_fa._refs(sc, v)
+            elif isinstance(v, float):
+                us[i] = [(0x0a, struct.pack('<f', v))]
+            elif v:
+                raise ValueError('a flag that is set: not written here')
+        sc.nodes[k]['ctrls'].append((kl_fa._str(sc, name), [(0x02, b'')] + [t for u in us for t in u] + [(0x7e, b'')]))
+
+    add(host, 'RelayMessage', 'ZRelayMessage', ['Activate_Exit', 'AITrigger', sc.path[host], 0])
+    add(host, 'TriggerDelay2', 'ZTriggerDelay2', [float(delay), 0.0, -1.0, 0, [grp]])
+    add(gk, 'DeactivateGeom', 'ZDeactivateGeom', ['AITrigger', list(g['off']), 0])
+    add(gk, 'RelayMessage', 'ZRelayMessage', ['AITrigger', 'Activate', piece, 0])
+    log('  kl_map_escape: gate: the van\'s %s -> %.2f s -> %s: %s switched off, %s thrown (its own 42-frame keys)' % (
+        RELAY_EXIT, delay, grp.rsplit('\\', 1)[1], ', '.join(p.rsplit('\\', 1)[1] for p in g['off']), piece.rsplit('\\', 1)[1]))
+    return 4
+
+
+def gate_read(L, top):
+    """The gate wiring of a BUILT level, from its files -> None or {'delay', 'refs': REF ids that are gone or thrown
+    when the timer fires, 'faults': [...]}. top: the van's top-level node."""
+    sc = L.sc
+    N = _van_nodes(sc, top)
+    host = next((k for k in range(top, sc.end[top]) if sc.names[k] == RELAY_EXIT), None)
+    if host is None:
+        return None
+    tm = L.ctrl(host, 'TriggerDelay2')
+    if not tm:
+        return None
+    out = {'delay': tm[0][1][0], 'refs': set(), 'faults': [], 'names': []}
+    bad = out['faults'].append
+    rel = [v for _i, v in L.ctrl(host, 'RelayMessage')]
+    if not any(v[0] == 'Activate_Exit' and v[1] == 'AITrigger' and v[2] == sc.path[host] for v in rel):
+        bad('gate: %s has a timer and no relay Activate_Exit -> AITrigger to itself' % RELAY_EXIT)
+    if not any(v[6] == 'Activate_Exit' and sc.path[host] in v[3] for _i, v in L.ctrl(N['F07_Escape_Vehicle_01'], 'MatPosAnimProxy')):
+        bad('gate: %s is not in the list of the van\'s Activate_Exit piece' % RELAY_EXIT)
+    if len(tm) != 1 or tm[0][1][1:4] != [0.0, -1.0, 0]:
+        bad('gate: the timer is not one TriggerDelay2 of the stock form (d, 0, -1, 0)')
+    for s in tm[0][1][4]:
+        hit = sc.resolve(s)
+        if len(hit) != 1:
+            bad('gate: the timer names %d nodes %s' % (len(hit), s))
+            continue
+        for _i, v in L.ctrl(hit[0], 'DeactivateGeom'):
+            if v[0] == 'AITrigger':
+                for t in v[1]:
+                    for j in sc.resolve(t):
+                        out['refs'].add(L.ents[j - 1].ref); out['names'].append(sc.names[j])
+        for _i, v in L.ctrl(hit[0], 'RelayMessage'):
+            if v[0] == 'AITrigger' and v[1] == 'Activate':
+                for j in sc.resolve(v[2]):
+                    raw = L.ents[j - 1].raw
+                    if raw and b'SYEK' in raw and any(m[0] == 'Activate' for _x, m in L.ctrl(j, 'MatPosAnim')):
+                        out['refs'] |= {L.ents[i - 1].ref for i in range(hit[0], sc.end[hit[0]])}
+                        out['names'].append(sc.names[j])
+                    else:
+                        bad('gate: %s is handed Activate and has no MatPosAnim with keys' % sc.names[j])
+    if not out['refs']:
+        bad('gate: the timer switches nothing')
     return out
 
 
@@ -884,7 +1043,12 @@ def van_plan(src, log=print):
     P['rough'] = round(max(abs(a - b) for a, b in zip(raw, road)), 1)
     # how far each way
     s_wait, s_end = max(0.0, s_stop - LIMIT_IN), min(R.len - VAN_NOSE, s_stop + LIMIT_OUT)
-    # things Dead Men's car switched on its way (M01: the fence gate it opened) are closed for a van
+    # things Dead Men's car switched on its way are closed for a van - but a gate of the form gate_find() knows
+    # (M01: the fence it rammed) is opened by the van's own leave message (gate_wire) and does not end the drive
+    gate = gate_find(L, top)
+    gate_nodes = set(gate['off'] + gate['own'] + [j for g, _p in gate['knock'] for j in range(g, sc.end[g])]) if gate else set()
+    gate_refs = gate['refs'] if gate else set()
+    own = own | gate_refs if gate else own
     for k in range(top, sc.end[top]):
         for i, (nm, _b) in enumerate(sc.nodes[k]['ctrls']):
             name = sc.p.key(nm)
@@ -894,6 +1058,8 @@ def van_plan(src, log=print):
             tg = [j for x in vals for s in (x if isinstance(x, list) else [x]) if isinstance(s, str) and s.startswith('ROOT\\') for j in sc.resolve(s)]
             for j in ([k] if name == 'OnlineTriggerBox' else tg):
                 if top <= j < sc.end[top] and name != 'OnlineTriggerBox':
+                    continue
+                if j in gate_nodes:
                     continue
                 at = L.place(j)
                 s, d = R.project(at)
@@ -934,6 +1100,19 @@ def van_plan(src, log=print):
     P['lane'] = _first(lane(L, G, V, -VAN_TAIL, V.len + VAN_NOSE, own))
     for nm, (a, b_, cnt, what) in P['lane'].items():
         P['faults'].append('in the lane after the cut: %s (%s) at %d..%d' % (nm, what, a, b_))
+    if gate:                                            # where the lane meets the gate (the key is only there with a gate:
+        hit = sorted(lane(L, G, V, lin, V.len + VAN_NOSE, only=gate_refs))     # M02's and M03's plans stay as they were)
+        if not hit:
+            P['notes'].append('the gate Dead Men\'s car opened (%s) is not in the van\'s lane: left as it is' % sc.names[gate['off'][0]])
+        else:
+            at, last = hit[0][0] - lin, hit[-1][0] - lin
+            P['gate'] = collections.OrderedDict(
+                at=round(at), to=round(last), off=[sc.path[j] for j in gate['off']],
+                knock=[[sc.path[g], sc.path[p]] for g, p in gate['knock']], names=sorted({n for _s, _w, n in hit}))
+            if V.len - lin < last + GATE_PAST:
+                P['faults'].append('the drive ends %d behind the gate %s (least %d): it would end in it' % (V.len - lin - last, sc.names[gate['off'][0]], GATE_PAST))
+            P['notes'].append('gate %s, %d..%d along the drive away: Dead Men\'s car rammed it (%s); the van\'s leave message does the same '
+                              '(gate_wire), so the drive does not end before it' % (', '.join(P['gate']['names']), at, last, sc.names[gate['knock'][0][1]]))
     # the level bounds the drive passes, the other cars that use the road (said, not repaired: Dead Men's own design)
     bounds = level_bounds(L)
     P['bounds'] = _crossings(bounds, path, [c - lin for c in V.cum])
@@ -947,8 +1126,25 @@ def van_plan(src, log=print):
         P['cam_from'] = c['target_name'][5:]
         P['cam_sight'] = {'stop': [L.name(r) for _t, r in G.between(tuple(P['cam']), (P['stop'][0], P['stop'][1] + 100.0, P['stop'][2]))][:3],
                           'end': [L.name(r) for _t, r in G.between(tuple(P['cam']), (P['end'][0], P['end'][1] + 100.0, P['end'][2]))][:3]}
+        near = c
         for c in cams:
-            for k in (c['node'], sc.resolve(c['target_name'])[0], sc.resolve('ROOT\\' + c['trigger'])[0]):
+            trig = sc.resolve('ROOT\\' + c['trigger'])[0]
+            # a SECOND camera of the designers whose trigger box lies on the drive away, well after the van's own
+            # fixed camera has come on (CameraTrigger01, 8.5 m after the stop), is KEPT: it films the road out
+            # (M01: CamPos02 looks down the gate road). Same pattern as the first: OnlineEscCamTrigger(the van,
+            # the box) -> CCameraBox eFMM_LookFromPos -> a place of its own; van_wire names the van in field 0.
+            # ASSUMPTION as for the first (re/map_escape.md 14): what the trigger tests when field 0 names a vehicle.
+            if c is not near and sc.cls(trig) == 'ZBoxPrimitive' and not c['fault'] and c['mode'] in (FROM_FA, FROM_POS):
+                bv, (Rm, T) = L.values(trig), L.frame(trig)
+                half = [bv['ZBoxPrimitive[%d]' % i] for i in range(3)]
+                ins = [cs - lin for p, cs in zip(path, V.cum) if all(abs(sum(Rm[a][b] * ((p[a] + (100.0 if a == 1 else 0.0)) - T[a]) for a in range(3))) <= half[b] for b in range(3))]
+                if ins and min(ins) > 1500.0:
+                    P.setdefault('cams_keep', []).append(collections.OrderedDict(
+                        trigger=sc.path[trig], camera=sc.path[c['node']], eye=[round(x, 1) for x in c['eye'] or c['target']],
+                        on=[round(min(ins)), round(max(ins))],
+                        sight_end=[L.name(r) for _t, r in G.between(tuple(c['target']), (P['end'][0], P['end'][1] + 100.0, P['end'][2]))][:3]))
+                    continue
+            for k in (c['node'], sc.resolve(c['target_name'])[0], trig):
                 drop.append(sc.names[k])
     else:
         P['faults'].append('no escape camera with a place of its own in the build')
@@ -975,6 +1171,9 @@ def van_plan(src, log=print):
         log('  other car: ' + x[:230])
     for x in P['notes']:
         log('  note: ' + x)
+    for c in P.get('cams_keep', []):
+        log('  second camera kept: %s at (%d, %d, %d), its box %s holds the drive away from %d to %d; sight to the end: %s' % (
+            c['camera'][5:], *c['eye'], c['trigger'][5:], *c['on'], ', '.join(c['sight_end']) or 'clear'))
     log('  left out of Dead Men\'s map: ' + ', '.join(P['drop']))
     for x in P['faults']:
         log('  FAULT ' + x)
@@ -1031,7 +1230,8 @@ class VanKeys:
 def _van_nodes(sc, top):
     name = lambda n: next(k for k in range(top, sc.end[top]) if sc.names[k] == n and 'Reflection' not in sc.path[k])
     d = {n: name(n) for n in ('EscapeVehicle_Animation_F07', 'V_Van_00', 'BoardingTrigger', 'PathBlockerVan', 'TriggerBox_RearDoors_Open',
-                              'CameraTrigger01', 'CameraTrigger_InVan', 'CamPos01', 'CamPos_InVan_FocusPoint', 'F07_Escape_Vehicle_01')}
+                              'CameraTrigger01', 'CameraTrigger_InVan', 'CamPos01', 'CamPos_InVan_FocusPoint', 'F07_Escape_Vehicle_01',
+                              'F07_EscapeVan_01')}
     d['EscCamera01'] = next(k for k in range(top, sc.end[top]) if sc.names[k].startswith('EscCamera01_'))
     d['strays'] = [k for k in range(top + 1, sc.end[top]) if sc.parent[k] == top and k != d['EscapeVehicle_Animation_F07']]
     return d
@@ -1145,7 +1345,19 @@ def van_prepare(S, P, log=print):
         t = struct.unpack('<3f', S.ents[k - 1].trans[:12])
         put(k, tuple(PARK[i] + t[i] for i in range(3)))
     refs = lambda k: {S.ents[j - 1].ref for j in range(k, sc.end[k])}
+    gate = None
+    if P.get('gate'):                                   # the frame of the leave leg at which the nose is at the gate
+        f0, f1 = legs['Activate_Exit']
+        along = lambda f: to(old.cum[min(K.f2p[f], cut - 1)]) - lin
+        f = next((f for f in range(f0, f1 + 1) if along(f) + GATE_NOSE >= P['gate']['at']), None)
+        if f is None:
+            raise ValueError('kl_map_escape: the van\'s nose never reaches the gate at %d' % P['gate']['at'])
+        step = (along(f) - along(f - 1)) if f > f0 else 0.0
+        gate = dict(frame=f, delay=round(max(0, f - f0 - GATE_EARLY) / 25.0, 2), speed=round(step * 25 / 100.0, 1))
+    top_step = max(math.dist(a, b) for a, b in zip(pos[k_stop:cut], pos[k_stop + 1:cut]))
     rep = collections.OrderedDict(
+        gate=gate, speed_out=dict(mean=round(lout / 100.0 / ((legs['Activate_Exit'][1] - legs['Activate_Exit'][0]) / 25.0), 1), top=round(top_step * 25 / 100.0, 1),
+                                  stock_top=round(max(math.dist(a, b) for a, b in zip(K.pos[k_stop:cut], K.pos[k_stop + 1:cut])) * 25 / 100.0, 1)),
         keys=[K.npos, K.nrot, K.frames], drive_keys=cut, stop_key=k_stop, legs={k: list(v) for k, v in legs.items()},
         old=dict(wait=[round(x) for x in K.pos[0]], stop=[round(x) for x in stop_old], length_in=round(s_stop), length_out=round(old.len - s_stop)),
         scale=[round(lin / s_stop, 2), round(lout / (old.len - s_stop), 2)],
@@ -1156,6 +1368,11 @@ def van_prepare(S, P, log=print):
         '(x %.2f), away %d -> %d (x %.2f); crash pieces %d..%d to the side; %d objects moved: %s' % (
             VAN_TOP, K.npos, K.nrot, cut, k_stop, s_stop, lin, lin / s_stop, old.len - s_stop, lout, lout / (old.len - s_stop),
             *rep['crash_side'], len(moved), ', '.join(n for n, _a, _b in moved)))
+    if gate:
+        log('  kl_map_escape: the drive away: %.1f m/s on average, %.1f at most (stock F07: %.1f); the nose is at the gate (%d along) at frame %d '
+            'of %d..%d, doing %.1f m/s: the gate goes %.2f s after the van sets off' % (
+                rep['speed_out']['mean'], rep['speed_out']['top'], rep['speed_out']['stock_top'], P['gate']['at'], gate['frame'],
+                *legs['Activate_Exit'], gate['speed'], gate['delay']))
     ST['van'] = rep
     return rep
 
@@ -1184,6 +1401,16 @@ def van_wire(sc, P, log=print):
     left = [sc.path[k] for k, _i, _v in kl_fa.controllers(sc, 'OnlineEscHavokCar') if any(sc.cls(j) == 'ZHavokCar' for j in range(k, sc.end[k]))]
     if left:
         raise ValueError('kl_map_escape: Dead Men\'s escape car is still in the scene: %s' % left)
+    if P.get('gate'):
+        gate_wire(sc, P, ST['van']['gate']['delay'], log)
+    for c in P.get('cams_keep', []):                    # the kept second camera follows the VAN (field 0, as the van's own two)
+        hit = sc.resolve(c['trigger'])
+        v = [x for k, _i, x in kl_fa.controllers(sc, 'OnlineEscCamTrigger') if hit and k == hit[0]]
+        if len(hit) != 1 or len(v) != 1 or v[0][1] != c['camera']:
+            raise ValueError('kl_map_escape: the kept camera trigger %s does not name %s in field 1' % (c['trigger'], c['camera']))
+        i = next(i for i, (nm, _b) in enumerate(sc.nodes[hit[0]]['ctrls']) if sc.p.key(nm) == 'OnlineEscCamTrigger')
+        kl_fa.edit(sc, hit[0], i, lambda us: us.__setitem__(0, [kl_fa._str(sc, 'ROOT\\' + VAN_GROUP + '\\F07_EscapeVan_01')]))
+        log('  kl_map_escape: camera trigger %s names the van: %s films the drive away' % (c['trigger'][5:], c['camera'][5:]))
     ST['wired'] = n
     return n
 
@@ -1306,9 +1533,12 @@ def van_check(L, log=print, P=None):
         bad('boarding actions: %s (the van\'s own is wanted, alone)' % [sc.path[k][5:] for k in acts])
     if vans[0][2][0] != sc.path[N['BoardingTrigger']] or vans[0][2][12] != sc.path[van]:
         bad('OnlineEscAnimatedVehicle does not name its own boarding box and van')
-    cams = [k for k, _i, v in kl_fa.controllers(sc, 'OnlineEscCamTrigger') if not (top <= k < sc.end[top])]
-    if cams:
-        bad('escape camera triggers outside the van: %s' % [sc.path[k][5:] for k in cams])
+    # a camera trigger outside the van's archive is the map's kept second camera (van_plan 'cams_keep'): it must name
+    # the van as the van's own two do, and its box must hold a stretch of the drive away (tested below, with the keys)
+    cams = [(k, v) for k, _i, v in kl_fa.controllers(sc, 'OnlineEscCamTrigger') if not (top <= k < sc.end[top])]
+    for k, v in cams:
+        if v[0] != sc.path[N['F07_EscapeVan_01']]:
+            bad('escape camera trigger outside the van that does not name the van in field 0: %s' % sc.path[k][5:])
     if not any('FAEscCameraLAST' in str(v) for _k, _i, v in kl_fa.controllers(sc, 'ZSetZDefine')):
         out['notes'].append('no define FAEscCameraLAST in the level (the box that releases the escape camera)')
     # 2. the keys
@@ -1335,9 +1565,40 @@ def van_check(L, log=print, P=None):
     if worst_y > 6.0:
         bad('a drive key is %.1f off the height of the van on the ground (%.0f over it is wanted)' % (worst_y, VAN_UP))
     road = Poly([(p[0], p[1] - VAN_UP, p[2]) for p in K.pos[:cut]])
-    ob = _first(lane(L, G, road, -VAN_TAIL, road.len + VAN_NOSE, own))
+    # a gate in the lane is no fault when - and only when - the level's own wiring takes it away before the van's
+    # nose is there (gate_read: the chain from the van's leave message, read from the files) and not more than a
+    # second before; everything else in the lane is a fault as before
+    gate = gate_read(L, top)
+    skip = own
+    if gate:
+        out['faults'] += gate['faults']
+        hit = sorted(lane(L, G, road, -VAN_TAIL, road.len + VAN_NOSE, only=gate['refs']))
+        f0, f1 = legs['Activate_Exit']
+        if not hit:
+            bad('gate: the wiring switches %s, which is not in the van\'s lane' % gate['names'])
+        elif hit[0][0] <= lin + 200:
+            bad('gate: %s is in the lane %d along the drive, not after the stop (%d): it is closed when the van comes in' % (hit[0][2], hit[0][0], lin))
+        else:
+            fr = next((f for f in range(f0, f1 + 1) if D.cum[min(K.f2p[f], cut - 1)] + GATE_NOSE >= hit[0][0]), None)
+            fire = f0 + gate['delay'] * 25.0
+            if fr is None or D.len < hit[-1][0] + GATE_PAST:
+                bad('gate: the drive ends at %d, the gate is at %d..%d: the van ends in it' % (D.len, hit[0][0], hit[-1][0]))
+            elif fire > fr or fire < fr - 25:
+                bad('gate: the nose is at the gate at frame %d, the gate goes at frame %.0f (wanted: 0..25 frames before)' % (fr, fire))
+            else:
+                skip = own | gate['refs']
+                out['gate'] = dict(at=round(hit[0][0] - lin), frame=fr, fires=round(fire, 1), delay=gate['delay'], names=sorted(set(gate['names'])),
+                                   speed=round((D.cum[K.f2p[fr]] - D.cum[K.f2p[fr - 1]]) * 25 / 100.0, 1))
+    ob = _first(lane(L, G, road, -VAN_TAIL, road.len + VAN_NOSE, skip))
     for nm, (a, b, cnt, what) in ob.items():
         bad('in the van\'s lane: %s (%s) %d..%d along the drive' % (nm, what, a, b))
+    for k, v in cams:                                   # the kept second camera's box on the drive away
+        ins = [D.cum[i] - lin for i, p in enumerate(K.pos[:cut]) if D.cum[i] > lin and
+               all(abs(sum(L.frame(k)[0][a][b] * ((p[a] + (100.0 if a == 1 else 0.0)) - L.frame(k)[1][a]) for a in range(3))) <= L.values(k)['ZBoxPrimitive[%d]' % b] for b in range(3))]
+        if not ins or min(ins) < 1500.0:
+            bad('the box of camera trigger %s does not hold a stretch of the drive away after the van\'s own camera has come on' % sc.path[k][5:])
+        else:
+            out.setdefault('cameras_kept', []).append([sc.path[k][5:], round(min(ins)), round(max(ins))])
     # the nose against the chord of the drive, frame by frame. A rotation key serves several frames where F07's own
     # drive was straight (19 keys of the drive are held 3..6 frames); between two keys the heading is taken to run
     # linearly (ASSUMPTION, from stock F07: in its bends a held key and its successor both sit on the tangent at
@@ -1395,8 +1656,14 @@ def van_check(L, log=print, P=None):
         if c['fault']:
             bad('camera %s: %s' % (c['name'], c['fault']))
         if c['eye']:
-            out['camera'] = dict(eye=[round(x) for x in c['eye']], over=round(c['over']) if c.get('over') is not None else None,
-                                 far=round(c.get('far', 0)), sight=c.get('sight'))
+            d = dict(eye=[round(x) for x in c['eye']], over=round(c['over']) if c.get('over') is not None else None,
+                     far=round(c.get('far', 0)), sight=c.get('sight'))
+            if top <= c['node'] < sc.end[top]:
+                out['camera'] = d
+            else:
+                out.setdefault('cameras_more', []).append(dict(d, name=c['name'], mode=c['mode']))
+                if c['mode'] != FROM_POS:
+                    bad('kept camera %s has mode %s (only %s puts the eye at its place)' % (c['name'], c['mode'], FROM_POS))
     # 5. the collision file
     stat = sum(1 for s in L.hvk.shapes if s.type == kl_hvk.STATIC for i in s.inst if kl_hvk.ref(i) in own)
     if stat:
@@ -1445,6 +1712,13 @@ def van_check(L, log=print, P=None):
         out['hvk']['bytes'], out['hvk']['static'], '; '.join('%s %d bytes in %d placements' % (nm, b, c) for b, c, nm in sh)))
     for e in out['bounds']:
         log('  the drive passes the level bound %s from %d to %d (0 = the stop)' % tuple(e))
+    if out.get('gate'):
+        g = out['gate']
+        log('  gate %s, %d along the drive away: the van\'s leave message -> %.2f s -> off / thrown at frame %.0f; the nose is there at frame %d '
+            'doing %.1f m/s' % (', '.join(g['names']), g['at'], g['delay'], g['fires'], g['frame'], g['speed']))
+    for c, m in zip(out.get('cameras_kept', []), out.get('cameras_more', [])):
+        log('  second camera: %s, eye (%d, %d, %d) %d over the ground; its box %s holds the drive away from %d to %d' % (
+            m['name'], *m['eye'], m['over'], c[0], c[1], c[2]))
     for x in out['notes']:
         log('  note: ' + x)
     for x in out['faults']:

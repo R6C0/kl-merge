@@ -650,3 +650,119 @@ on these maps (Retomoto's rounds showed the 60 s).
 - **F4 left behind**: stay in the bank / mall until the van has left with the bots. Proof: what the
   clock shows (60 s expected), whether the same van comes again when you reach the exit box, and
   whether you can board it.
+
+---
+
+## 19. M01: through the gate (2026-10-10)
+
+OFFLINE. Nothing installed, the game not started. Owner, after `z_final\M01`: 'the van is almost
+perfect on coffee walk you just dont go through the gate like the original game does'.
+Build: `<work>\build\z_gate\M01` (logs `z_gate\_van.log`, `_bots.log`, `_checks.log`). **NOT RUN IN THE GAME.**
+
+### 19.1 What Dead Men's gate is (measured on `t_maps2\M01`, `z_final\M01` and Dead Men's own M01_FA_A)
+
+- Dead Men's car does not open a gate, it RAMS it. `Escape!EscapeCars\GateTrigger` (a box the car
+  enters 5.6 m before the fence) -> `RelayMsgList` -> `GateDeactivator` @DeactivateGeom('AITrigger',
+  [`SO1001_Fence_A_5m_01`, the trigger]) + `Activator` @AIDWrapper([`SO1001_Fence_A_5m_AnimGroup_00`],
+  'Activate') -> the group's RelayMessage -> `SO1001_Fence_A_5m_Attach` @MatPosAnim('Activate', 0..41).
+- The animated piece's motion is NOT in the .ANM. It is a KEYS chunk ('SYEK', 0x30) with six tables
+  in the .buf head - the form of the van's own keys - and the built level holds it key for key as
+  Dead Men's file does (42 positions, 38 rotations, compared). Decoded: in 42 frames (1.7 s) the
+  piece goes from the gate 9.3 m up the road (to about (1870, 25, 24539)) and tumbles; first steps
+  17 m/s.
+- The closed piece `SO1001_Fence_A_5m_01` has a static collision placement (x 1380..1882, 4 m
+  high); the animated piece a key-framed one. The group is not hidden in the file (ZGEOM[3] 0, no
+  .gms flag 0x400; the same in Dead Men's file), so both pieces are drawn, 8 units apart.
+
+### 19.2 What is built: the gate is (a), with the throw
+
+The van's own leave message does what the car's trigger did, at the moment the van's nose is there
+(`gate_find`, `gate_wire`, `gate_read` in `tools/kl_map_escape.py`). No entity is added; four
+controllers are appended to two existing nodes:
+
+```
+van: ...\F07_Escape_Vehicle_01\Relay_Stop_Audio_Idle      (stock: in list 3 of the 'Activate_Exit' piece; its
+                                                           RelayMessage('Activate_Exit' -> 'Deactivate') stops the idle sound)
+    + RelayMessage('Activate_Exit' -> 'AITrigger', to itself)      the form of AnimProxy_RearDoors_Close's relay
+    + TriggerDelay2(7.32, 0.0, -1.0, 0, [SO1001_Fence_A_5m_AnimGroup_00])
+map: SO1001_Fence_A_5m_AnimGroup_00
+    + DeactivateGeom('AITrigger', [SO1001_Fence_A_5m_01], 0)        Dead Men's GateDeactivator
+    + RelayMessage('AITrigger' -> 'Activate', SO1001_Fence_A_5m_Attach)
+```
+The closed fence stays shut (picture and collision) until then: nobody walks out there before the
+van has gone through. Afterwards the gap is open; both sides are inside the level bounds (the
+street's are `LevelBound_StreetWest` at z 28346 and `LevelBound_StreetEast`), so an open gate is a
+short cut between the alley and the street, not a way out of the map. The bots' mesh does not know
+it. 7.32 s = frame 456 of the leave leg 273..485; the nose (250 before the origin) is at the fence
+at frame 458, doing 16.4 m/s.
+
+### 19.3 The drive
+
+`van_plan` no longer ends the drive 900 before a gate of this exact form (anything else Dead Men's
+car switched keeps the GAP rule; M02 and M03 have none: `van-plan` gives their `z_final` plans key
+for key). The limit is the same 80 m that M02 and M03 drive (LIMIT_OUT, unchanged).
+
+| | `z_final\M01` | `z_gate\M01` |
+|---|---|---|
+| drive away | 52 m in 8.48 s, ends (1441, 2, 22179), 15 m before the fence | 80 m in 8.48 s, ends (1521, 2, 24942), 13 m past the fence, 10 m short of the street |
+| speed | mean 6.2 m/s, top 13.3 (x 0.74 of F07's keys) | mean 9.4 m/s, top 16.8 (x 1.14, as M02 / M03; stock F07 14.7) |
+| nose off the tangent if the engine does NOT interpolate rotation keys | 5.7 degrees | 11.2 (M02 10.7, M03 12.1) |
+
+Dead Men's car went on: right onto the street, 229 m in all. The van cannot without re-timing its
+frame tables (not done): in 8.48 s the street corner is 96 m = about 20 m/s at most through two
+bends. The leave leg is the same 212 frames and field 16 the same 8.48 s: nothing of the round's
+timing changed, the drive is not cut shorter than before.
+
+Route from the gate on (every key 2.0 over the ground; lane clear besides the gate):
+
+| frame | after the stop | key | ground | m/s |
+|---|---|---|---|---|
+| 455 | 62.1 m | (1533, 2, 23155) | 0.0 SO1001_Alley_A_6x8m_08 | 16.6 |
+| 458 | 64.0 m | (1554, 2, 23351), nose at the fence | 0.0 | 16.4 |
+| 461 | 66.0 m | (1573, 2, 23545) | 0.0 | 16.1 |
+| 464 | 67.9 m | (1587, 2, 23736) | 0.0 SO1001_Alley_A_6x8m_09 | 15.8 |
+| 470 | 71.6 m | (1598, 2, 24103) | 0.0 | 14.9 |
+| 476 | 75.0 m | (1578, 2, 24444) | 0.0 SO1001_Sidewalk_A_SpecialChunk_01 | 13.8 |
+| 485 | 79.5 m | (1527, 2, 24896) | 0.0 | 11.7 |
+
+`lane()` change: a ray exactly on the joint of two ground tiles (z 24300.1 here) met neither and was
+'no road'; it now also looks 2 units before and behind along the drive. A hole of 4 units still is one.
+
+### 19.4 The second camera
+
+Dead Men's `EscCameraSetup!EscCamera02` / `CamPos02` (1803, 211, 27411) / `CameraTrigger02` are KEPT
+(they were left out): the box (1570, 9, 22590), half 482 x 400 x 265, holds the drive away from
+54.0 to 58.7 m, half a second before the fence. `van_wire` writes the van into the trigger's field
+0, as the van's own two triggers have it; the mode is eFMM_LookFromPos (the tune step), the other
+fields equal F07's `EscCamera01_01` but the angle (80, not 40). Eye 226 over the ground, clear sight
+to the drive's end. The first camera (CamPos01) has a factory wall between it and the end.
+
+### 19.5 Commands, checks
+
+```
+python tools\kl_map_escape.py van <work>\build\t_maps2 <work>\build\z_gate\_van M01
+python tools\kl_fa_bots.py owner <work>\build\z_gate\_van <work>\build\z_gate\_pre M01
+python tools\kl_fix_lean.py apply <work>\build\z_gate\_pre\M01 <work>\build\z_gate\M01 --ctrl DistanceRumbleCam
+```
+On `z_gate\M01`: `kl_maps.py audit` PASS (0 that must be 0, 1 known); `kl_fa_bots.py check` PASS
+(0 FAIL, 1 NOTE; places 254..420 from the van's line); `kl_map_guns.py check` problems: 0;
+`kl_impact.py` problems: 0; `kl_map_escape.py check` and `van-check` 0 fault(s); `kl_fa_bots.py
+diff _van\M01 _pre\M01`: only the squad, 2 exit boxes cut. Against `z_rumble\M01`: 3 entities more
+(the camera), 4 controllers more, the van's keys; .prm .ANM .fxc .TEX and the .WAV byte for byte.
+`van-check` FAULTs a gate in the lane unless the wiring above is in the files and fires 0..25
+frames before the nose is there.
+
+### 19.6 ASSUMPTIONS, and what is not established
+
+- Dog Days plays a Dead Men KEYS chunk as its own (same header and tables; live hint only: the
+  owner saw the bank's garage door open). If not, the closed piece still goes and the other stands
+  shut IN the lane: the van drives through a fence that does not move. Fallback then: name the
+  group in the DeactivateGeom too (a gap, no throw).
+- Every controller on a node hears a message sent to it; `Relay_Stop_Audio_Idle` gets
+  'Activate_Exit' at the START of the leave leg; a TriggerDelay2 armed by 'AITrigger' sends
+  'AITrigger' (the Retomoto blast timers work so); a deactivated static piece loses its collision.
+- What `OnlineEscCamTrigger` tests when field 0 names a vehicle (section 14), now for two boxes.
+- The piece is thrown at 17 m/s and slows; the van does 16 and overtakes it about 9 m on: they
+  pass through one another (the van is key-framed). A second call of the same van throws it again.
+- Live checks: G1 load; G2 board and watch: the fence goes as the van reaches it, camera 2 from the
+  street side; G3 before the van comes the gate is shut for a player; G4 after it the gap is open.
