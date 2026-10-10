@@ -129,12 +129,26 @@ FORCE = {'AI_Players!Enemies!020_Office!Squad_Guards_Inside_03': 'pistol',      
          'AI_Players!Enemies!030_Reception!Squad_ShootBeforeStorm': 'smg',
          'AI_Players!Enemies!030_Reception!Squad_Hallway#01': 'rifle',
          'AI_Players!Enemies!030_Reception!Squad_Hallway': 'shotgun'}
-# ... and the class handed out sets ZSoldier field 3 (ESkillLevel), on the maps of SKILL_LEVELS only. Dead Men's
-# guards are all eRegular, its police eRegular / eVeteran; eVeteran actors fought in the owner's rounds. No stock
-# Fragile Alliance level uses eAmateur or eElite (their police are eCustom / eRegular): what the game makes of
-# them is a GUESS. The style (field 0) is left alone: it may choose animations. None = the pass is off.
-SKILL = {'pistol': 'eAmateur', 'revolver': 'eAmateur', 'smg': 'eRegular', 'shotgun': 'eRegular', 'rifle': 'eVeteran',
-         'mg': 'eVeteran', 'sniper': 'eElite', 'rocket': 'eVeteran'}
+# ... and the class handed out gives the actor a STOCK Fragile Alliance soldier row (ZSoldier fields 3..17), on the
+# maps of SKILL_LEVELS only. WHY (owner, 2026-10-10, after playing Retomoto alone: 'i dont get why i survive from
+# being shot so much'; re/retomoto_ai.md 11): the player, the settings object and every weapon template of the
+# build are stock F07's, so what a hit costs is stock - the difference is in who shoots. Dead Men's soldiers come
+# out of the conversion as eRegular / eVeteran with Dead Men's own numbers: 50, 50, 50, 50 .. and field 15 = 1000
+# on all 44 tower guards - a value no stock level has (stock Fragile Alliance: 5000 on all 256 police, guards and
+# SWAT) - while every stock FA policeman is one of the three rows below. The first try of this table (eAmateur for
+# pistols) made them softer still. The rows, read off stock levels (count of actors in the nine FA levels):
+#   'cop'   eCustom  50 50 50 100  0 ..  5000 800 800   eStreetCop, 38 (F01's platform police)
+#   'swat'  eCustom  50 50 50 175 50 ..  5000 800 800   eArmy, 140 (F07's own police on this street: 18)
+#   'sharp' eRegular 85 82 82 150  0 ..  5000 800 800   eArmy, 28 (F07: 8; F02's rifle sentries)
+# 'higher calibre = more technical' is kept by giving the rifle classes the 'sharp' row. What each float does was
+# NOT read in the exe (the fourth looks like health: dog 50..80, guard 65, cop 100, SWAT 175, bot 280, boss 300).
+# The STYLE (field 0) is not touched: it may pick animations. An actor whose first three floats are not Dead Men's
+# 50 / 50 / 50 has a designer's row (Retomoto's boss: 30 50 30 300) and keeps it. None = the pass is off.
+_ROW = lambda a, b, c, hp, e: (a, b, c, hp, e, 1.0, 1.0, 1.0, 1.0, 50.0, 50.0, 5000.0, 800.0, 800.0)
+ROWS = {'cop': ('eCustom', _ROW(50.0, 50.0, 50.0, 100.0, 0.0)), 'swat': ('eCustom', _ROW(50.0, 50.0, 50.0, 175.0, 50.0)),
+        'sharp': ('eRegular', _ROW(85.0, 82.0, 82.0, 150.0, 0.0))}
+SKILL = {'pistol': 'cop', 'revolver': 'cop', 'smg': 'swat', 'shotgun': 'swat', 'rocket': 'swat', 'rifle': 'sharp',
+         'mg': 'sharp', 'sniper': 'sharp'}
 SKILL_LEVELS = ('M09_A', 'M09_B')
 SKILL_FIELD = 3
 FALLBACK = ('pistol', 'smg', 'rifle')       # when an actor's set cannot play the class it should get
@@ -391,12 +405,16 @@ def arm(sc, anm, m_name='', nodes=None, seed=SEED, log=print, launchers=False, g
         got = next((c for c, ts in POOLS.items() if any(t == new[0] for t, _w in ts)), None)
         si = next((i for i, (nm, _b) in enumerate(sc.nodes[k]['ctrls']) if sc.p.key(nm) == 'ZSoldier'), None)
         if SKILL and m_name in SKILL_LEVELS and got in SKILL and si is not None:
-            def skill(us, v=SKILL[got]):
-                if len(us) != 23 or us[SKILL_FIELD][0][0] not in (0x0c, 0x0e):
+            def skill(us, row=ROWS[SKILL[got]]):
+                if len(us) != 23 or us[SKILL_FIELD][0][0] not in (0x0c, 0x0e) or any(us[j][0][0] != 0x0a for j in range(4, 18)):
                     raise ValueError('%s: ZSoldier is not in the Dog Days layout' % sc.path[k])
-                us[SKILL_FIELD] = [(us[SKILL_FIELD][0][0], struct.pack('<I', sc.p.key_index(v)))]
+                if [struct.unpack('<f', us[j][0][1])[0] for j in (4, 5, 6)] != [50.0, 50.0, 50.0]:
+                    return                              # a designer's own row
+                us[SKILL_FIELD] = [(us[SKILL_FIELD][0][0], struct.pack('<I', sc.p.key_index(row[0])))]
+                for j, x in enumerate(row[1]):
+                    us[4 + j] = [(0x0a, struct.pack('<f', x))]
+                rep.setdefault('skill', collections.Counter())[SKILL[got]] += 1
             kl_fa.edit(sc, k, si, skill)
-            rep.setdefault('skill', collections.Counter())[SKILL[got]] += 1
         rep['rows'].append((squad, sc.path[k], ws[0], new[0], why))
         rep['counts'][new[0] or '-'] += 1
     # any other holder of a weapon path that names nothing (a placed item, a script): the class's first template
@@ -425,7 +443,7 @@ def arm(sc, anm, m_name='', nodes=None, seed=SEED, log=print, launchers=False, g
         len(rep['rows']), m_name or 'the map', seed, lo, hi, zs or '-',
         ', '.join('%s %d' % x for x in sorted(rep['counts'].items(), key=lambda t: -t[1]))))
     if rep.get('skill'):
-        log('  kl_arms: skill by the class handed out (ZSoldier field %d): %s' % (SKILL_FIELD, dict(rep['skill'])))
+        log('  kl_arms: stock soldier rows by the class handed out (ZSoldier fields 3..17): %s' % dict(rep['skill']))
     was = collections.Counter(w or '-' for _s, _p, w, _n, _y in rep['rows'])
     log('  kl_arms: Dead Men gave them: %s' % ', '.join('%s %d' % x for x in was.most_common()))
     rep['emptied'] = +rep['emptied']                    # without the zero counts

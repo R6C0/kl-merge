@@ -369,3 +369,82 @@ This build has NO wardrobe and no KLJoin.ini beside it: for the owner it has to 
 steps as `<work>uild\y_lootetomoto_loot` (re/retomoto_loot.md 6). NOT INSTALLED, NOT RUN IN THE GAME.
 Three faults the checks caught on the way: a campaign squad group turned by 90 degrees (points landed 100 m
 off), the barricade across the lane, the queue of backdrop cars at the end of the drive.
+
+## 11. After the owner played it (2026-10-10 midday): the van's end, the soft enemies, the voices
+
+Owner, verbatim: "for retomoto i dont get why i survive from being shot so much maybe because im by myself? the
+van is almost perfect its just when it finally leaves like before the end game rtesult it goes into a car just
+make sure it drives off down the road the whole time". So run D1 of section 9 is seen: the van is on the road,
+straight, stops and is boarded. Three changes, built offline, NOT run in the game.
+
+### 11.1 The van drove into a car
+
+Read: `PC0700_M09_Cars_Qeue_A_01` is ONE static object, a queue of parked cars behind the north barricade; its
+collision spans x -2648..-1755, z 14832..16158 - the whole east carriageway. The first build ended the drive at
+z 14900 because the lane check sampled one cell every few metres and met the queue only at z 15430: the van's
+nose (its last key + its own length) stood in the first car. Now:
+- the queue is hidden with the barricade (`kl_fa_van.PROPS_OFF`, two objects, both inside the north level bound);
+- the drive away is STRETCHED, not cut: it ends at z 21000, 102 m beyond the stop in the baked 8.48 s (F07: 70 m).
+  The road and its collision run on to z 30000 and nothing else stands in the lane;
+- `kl_fa_van.check` samples every 20 units across the van's width, to 6 m beyond the last key.
+NOT ESTABLISHED: what the van does after its last key while the result page waits (stand, or be hidden). It is
+now 100 m away and still on the road when that happens. If it is seen standing there, raise `END_Z`.
+
+### 11.2 Why the player survived so much fire
+
+What was established (all read from the built level and the stock levels, nothing from the running game):
+- The player, the settings object and every weapon template of the build are stock F07's. What one hit costs
+  the player is therefore stock; no single-player or Arcade scaling was looked for in the exe (NOT established).
+- The difference is in who shoots. `ZSoldier` rows in the played build:
+
+| who | actors | skill | floats 4..8 | field 15 |
+|---|---:|---|---|---:|
+| F07's own police on the street (stock) | 18 | eCustom | 50 50 50 175 50 | 5000 |
+| F07's own police (stock) | 8 | eRegular | 85 82 82 150 0 | 5000 |
+| tower guards (Dead Men) | 44 | 22 eAmateur, 20 eRegular, 2 eVeteran | 50 50 50 50 50 | **1000** |
+| Retomoto's boss (Dead Men, a designer's row) | 1 | eVeteran | 30 50 30 300 50 | 5000 |
+| street police (Dead Men) | 20 | 4 eAmateur, 13 eRegular, 3 eVeteran | 50 50 50 50..120 50 | 5000 |
+
+- Field 15 = 1000 is in NO stock level sampled (nine Fragile Alliance + three story levels: 5000 on all 256 FA
+  police, guards and SWAT; 1 on bots and story thugs; one 100000). The fourth float reads as health (dog 50..80,
+  guard 65, cop 100, SWAT 175, bot 280, boss 300): the tower's guards had 50.
+- The eAmateur rows were MY first try at "pistols are worse" (section 7): it made 26 enemies softer still.
+- `SquadModifierBehaviour` damage / health modifiers: eDmgM_NotSet on all 37 modifiers of the level - no squad is
+  scaled down. `ZFFActor[2]` is 0 on the tower's actors and 1 on police, but 0 is also what all 23 stock eGuard
+  actors have: left alone.
+- NOT established: which float is accuracy, what field 15 does, whether few shots landed or each landed soft, and
+  whether being the only target changes anything. In stock Arcade seven AI heisters share the fire; Retomoto has
+  none (kl_fa.check: DEGRADED, no bot squads), so alone the player takes ALL of it - being alone cannot be why it
+  was soft.
+
+What is built (tools/kl_arms.py `ROWS` / `SKILL`, Retomoto's two parts only): every armed Dead Men actor whose row
+is Dead Men's default (first three floats 50 / 50 / 50) gets one of three rows copied whole from stock Fragile
+Alliance police, by the class of weapon handed out:
+
+| class | row | stock source | Retomoto: tower / street |
+|---|---|---|---:|
+| pistol, revolver | eCustom 50 50 50 **100** 0 .. 5000 | eStreetCop, 38 actors (F01's platform police) | 22 / 4 |
+| SMG, shotgun | eCustom 50 50 50 **175** 50 .. 5000 | eArmy, 140 actors (F07's police on this street) | 20 / 13 |
+| rifle, MG, sniper | eRegular **85 82 82** 150 0 .. 5000 | eArmy, 28 actors (8 of them F07's) | 2 / 3 |
+
+So nobody on the map is weaker than a stock policeman, and "higher calibre = more technical" is the stock row with
+85 / 82 / 82. The style (field 0) is still not touched. The boss keeps his own row. GUESS only in which class gets
+which row; every number is a stock one. `kl_arms.SKILL = None` turns the pass off.
+
+### 11.3 Voices
+
+- The build before was made with `kl_fa_blast.py test`, which leaves `kl_snd.VOICE` off. The command for a play
+  build is **`python tools/kl_fa_loot.py test <out>`**: it sets `kl_snd.VOICE = True`, builds blast + street + van +
+  AI + loot, lightens, adds the wardrobe and copies KLJoin.ini. F01_Main.WAV is 27,158,864 bytes again, the size
+  re/bots_voice.md 6.1 gives for a build with the repairs.
+- The briefing and reminder lines no longer speak of F07's data theft: `kl_fa_author.RT_LINES` (settings fields
+  17 - 20, 127, 130, 136, 137), the eight lines of re/bots_voice.md 6.2. Its 6.3 (the exit-heist line: a plain
+  .LOC leaf in nine languages) is NOT done.
+
+### 11.4 Result
+
+`python tools/kl_fa_loot.py test G:\kl_scratch\ai_dyn2`: **RESULT: PASS**. kl_graft.verify 1 known; kl_fa.check
+0 CRASH / BROKEN; street 0 faults; loot 0; kl_impact 0; kl_chars.undrawn 0; kl_arms check 0 findings; van: x -1850,
+y 2, z 8700 .. 21000, lane a clear floor 2 below the van to 6 m beyond the end. Folder
+`G:/kl_scratch/ai_dyn2/retomoto_loot` (zip 212 MB, KLJoin.ini, KLWardrobe.ini). It has the wardrobe but NOT the four
+Payday 2 mask plates of the installed build: that step is kl-merge-01's (`kl_chars.py wardrobe ... --plates=`).

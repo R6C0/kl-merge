@@ -58,9 +58,14 @@ WAIT_Z = 8700.0                         # GUESS: north of V_JPN_Civilian_B_00#18
 # object, 27 m past the stop, in every lane the van could leave by. Hidden (ZGEOM[3] + .gms flag 0x400, as the
 # level's own blown window). It stands INSIDE the campaign's north level bound (z 13036..13798), so no player
 # ever reaches the gap; the west carriageway's barricade (_01) stays.
-PROPS_OFF = (r'Locations/M09_B/M09B_Locations.zip\Locations/M09_B/M09B_LOC_Outside.zip\M09_B_Street_01a\Collapse_JPN_PoliceBarricade_02',)
-END_Z = 14900.0                         # the drive away ends here: a queue of backdrop cars (PC0700_M09_Cars_Qeue_A_01) fills
-                                        # the east carriageway from z 15000 north; the baked 70 m would end inside it (GUESS: 41 m)
+# ... and (owner, 2026-10-10, after playing it: 'when it finally leaves ... it goes into a car just make sure it drives
+# off down the road the whole time') the QUEUE OF CARS behind that barricade: ONE static object, PC0700_M09_Cars_Qeue_A_01,
+# collision x -2648..-1755, z 14832..16158, across the whole east carriageway. The first build ended the drive at z 14900,
+# measured against a coarser sample of that collision: the van's nose stood in the first car.
+_STREET = r'Locations/M09_B/M09B_Locations.zip\Locations/M09_B/M09B_LOC_Outside.zip\M09_B_Street_01a' + '\\'
+PROPS_OFF = (_STREET + 'Collapse_JPN_PoliceBarricade_02', _STREET + 'PC0700_M09_Cars_Qeue_A_01')
+END_Z = 21000.0                         # the drive away ends here: 102 m up the road in the baked 8.48 s (F07: 70 m). GUESS.
+                                        # The road and its collision run on to z 30000; nothing else stands in the lane
 SIDE = (-900.0, 300.0)                  # a crash piece may swerve this far west / east of the lane: the carriageway
 NEAR = 8000.0                           # a child of the group farther than this from the drive is not part of it
 
@@ -113,7 +118,7 @@ def straighten(S, log=print):
     s_stop = project(main, cum, stop)[0]
     y0 = main[0][1]
     scale = (STOP_Z - WAIT_Z) / s_stop                      # the approach, squeezed between WAIT_Z and STOP_Z
-    away = min(1.0, (END_Z - STOP_Z) / (cum[-1] - s_stop))  # ... and the drive away, to END_Z
+    away = (END_Z - STOP_Z) / (cum[-1] - s_stop)            # ... and the drive away, stretched to END_Z
     def to(q, exact=None, clamp=True):
         s, d, tan = project(main, cum, q) if exact is None else (exact, 0.0, None)
         lo, hi = SIDE if clamp else (-NEAR, NEAR)       # a camera stands where it stood beside the drive
@@ -237,16 +242,20 @@ def check(archive, log=print):
     if any(main[i][2] < main[i - 1][2] - 0.5 for i in range(1, len(main))):
         bad.append('the drive goes backwards somewhere')
     gone = {e.ref for e in ents if e.flags & au.HIDDEN}     # a hidden entity has no collision (ASSUMPTION, kl_fa_author.ledge)
-    w = kl_escape.Walk(hvk, box=(min(xs) - 400, max(xs) + 400, main[0][2] - 600, min(main[-1][2], 17000.0) + 200), skip=gone)
+    w = kl_escape.Walk(hvk, box=(min(xs) - 400, max(xs) + 400, main[0][2] - 600, main[-1][2] + 800), skip=gone)
     off = []
-    for p in main[::8]:
-        if p[2] > 17000:
-            break
-        fl = [y for y, f, _r in w.grid.get(w.cell(p[0], p[2]), ()) if f and y < p[1] + 150]
-        if not fl or abs(max(fl) - (p[1] - 2.0)) > 6.0:
-            off.append((round(p[2]), round(max(fl)) if fl else None))
+    # every 20 units of the drive and 6 m beyond its last key (the van's nose), across the van's width: whatever
+    # collision stands higher than the road there is in its way (the first check sampled one cell every few metres)
+    z = main[0][2]
+    while z <= main[-1][2] + 600:
+        for dx in (-110.0, -55.0, 0.0, 55.0, 110.0):
+            ys = [y for y, _f, _r in w.grid.get(w.cell(main[0][0] + dx, z), ()) if y < main[0][1] + 250]
+            fl = [y for y in ys if y <= main[0][1] + 6.0]
+            if not fl or abs(max(fl) - (main[0][1] - 2.0)) > 6.0 or len(fl) != len(ys):
+                off.append((round(z), round(max(ys)) if ys else None))
+        z += 20.0
     if off:
-        bad.append('the van\'s origin is not 2 over the floor at %d of the sampled keys, e.g. z %s floor %s (van y %.0f)' % (len(off), *off[0], main[0][1]))
+        bad.append('the lane is not a clear floor 2 below the van at %d sampled places, e.g. z %s: collision up to y %s (van y %.0f)' % (len(off), *off[0], main[0][1]))
     # static vehicles of the map: the bounding box of each group's parts against the van's body (half width 120)
     hit = []
     for j in range(1, len(sc.nodes)):
@@ -258,7 +267,7 @@ def check(archive, log=print):
                 hit.append(sc.names[j].split('!')[-1])
     if hit:
         bad.append('static vehicles in the van\'s lane: %s' % ', '.join(hit))
-    log('floor under the drive: %s; static vehicles in the lane: %s' % ('2 below the origin' if not off else 'OFF', ', '.join(hit) or 'none'))
+    log('lane under the drive and 6 m beyond its end: %s; static vehicles in the lane: %s' % ('clear floor 2 below the van' if not off else 'NOT CLEAR', ', '.join(hit) or 'none'))
     return bad
 
 

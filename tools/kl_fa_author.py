@@ -375,6 +375,10 @@ STRIP = {'MiniCutsceneRout', 'MiniCutSlot', 'MiniCutPosObject', 'MiniCutSignal',
 # doorway) so that at the blast the guards run AWAY from the window, to the door end and out into the
 # reception. RUSH_DELAY later the campaign's own 'SmokeTimer' fires the pistol squad's modifier, set to
 # eLM_Unleash: they come back through the door. GUESSES: every point, the delay, and that an unleashed squad hunts.
+RT_LINES = {17: 'Multiplayer/F05/MissionBriefing_03_R', 18: 'Multiplayer/F01/MissionBriefing_03_R',
+            19: 'Multiplayer/F05/MissionBriefing_02_R', 20: 'Multiplayer/F05/MissionBriefing_01_R',
+            127: 'Multiplayer/F06/ReachlootArea_01_R', 130: 'Multiplayer/F04/ExitLootArea_01_R',
+            136: 'Multiplayer/F06/MissionReminder_01_R', 137: 'Multiplayer/F09/MissionReminder_02_R'}   # settings field -> line
 ROOM_RUNS = True                        # False ('--room-classic'): the guards flank towards the table, as the campaign has it
 RO = 'AI_Players!Enemies!020_Office!'
 ROOM_PLACE = {
@@ -803,6 +807,14 @@ def wire(sc, log=print):
         ', '.join('%s %d' % (n.split('!')[-1], c) for n, c in sorted(by_box.items())) or '-', len(step['lobby'])))
     log('  kl_fa_author: wired: %d tower + %d street squads, %d room squads -> counter -> %d hidden stacks' % (
         len(first), len(start[PART_B]), len(room), len(hidden)))
+    # the briefing and reminder lines: stock F07's speak of a data theft ('grab the files'). Lines of other stock
+    # levels that fit a bomb, cash and a street, all eight voices in the bank (re/bots_voice.md 6.2; b-voice's choice)
+    try:
+        import kl_voice
+        for k, i, _v in kl_voice.settings(sc):
+            kl_fa.edit(sc, k, i, lambda us: [us.__setitem__(f, [kl_fa._str(sc, s)]) for f, s in RT_LINES.items()])
+    except (ImportError, AttributeError) as e:
+        log('  kl_fa_author: briefing lines left as F07 has them (%s)' % e)
     out = {'squads': squads, 'room': room, 'hidden': hidden, 'at_blast': at_blast, 'step': step, 'covered': covered}
     if street().get('wire'):                            # part B: k-street's module, after everything of this one
         street()['wire'](sc, log)
