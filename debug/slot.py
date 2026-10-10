@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), 'tools'))
 from kl_port_check import find, DD_GUESSES, DD_EXE
 import kl_autotest
 
-SIDE = ('KLJoin.ini', 'KLWardrobe.ini')
+SIDE = ('KLJoin.ini', 'KLWardrobe.ini', 'KLGuns.ini')    # KLGuns.ini: klgun.c, written by tools/kl_map_guns.py
 
 
 def sha1(path):

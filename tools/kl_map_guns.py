@@ -698,7 +698,7 @@ def write_ini(rep, path):
         f.write('; a gun entity\'s variant is 0 and variant 0 takes every object. Shown = the group the file was built to show (0 = the stock gun, n = look n).\n')
         f.write('; A hook that accepts Version 1 only leaves this file alone: the level then shows what was built in.\n')
         if rep.get('fitted'):
-            f.write('; The Dead Men looks are turned %.0f degrees into the Dog Days hold and seated on the grip (geometry of their own).\n' % HOUSE_DEG)
+            f.write('; The Dead Men looks are turned %.0f degrees and shifted (%.2f, %.2f, %.2f) into the Dog Days hold (geometry of their own).\n' % ((HOUSE_DEG,) + HOUSE_SHIFT))
         for g in rep['guns']:
             s = g.get('sound')
             if s and s.get('donor'):
