@@ -4,7 +4,7 @@ COVER FOR THE AI HEISTERS WHERE THE MAP HAS NONE: a step on a FINISHED, NON-dyna
 tools/kl_fa_bots_dyn.py. It asks the dynamic step's own plan where a bot wanted to hold and found no cover box,
 looks for REAL solid static collision near each such place, and puts a cover box on it - a clone of one of the
 build's own cover boxes. Where nothing solid stands, nothing is added and the place is reported as a gap.
-OFFLINE: nothing here installs anything or starts the game. Build notes: re/bots_dyn_build.md 12.
+OFFLINE: nothing here installs anything or starts the game. Build notes: re/bots_dyn_build.md 12 and 13 (corners, form b only).
 
     python kl_fa_cover.py plan  <bots build folder> [options]         the boxes and the gaps, nothing written
     python kl_fa_cover.py build <bots build folder> <out folder> [options]
@@ -15,22 +15,25 @@ OFFLINE: nothing here installs anything or starts the game. Build notes: re/bots
     python kl_fa_cover.py diff  <bots build folder> <out folder>      what the step changed; exit 1 if anything but the
                                                                       new group differs
     python kl_fa_cover.py all   <work>\\build [M01 ...]                z_gate\\M01, z_final\\M02 M03 M06, rt_full6\\
-                                                                      retomoto_full -> z_cover\\_pre\\<map> (this step),
+                                                                      retomoto_full -> z_cover2\\_pre\\<map> (this step),
                                                                       then kl_fa_bots_dyn.build (random routes) on it
-                                                                      -> z_cover\\<map>
+                                                                      -> z_cover2\\<map>
     options
-      --models b|ab   which of the build's cover boxes may be cloned (default ab; b is the careful one: on M01 it
-                      leaves none of the 8, because M01's only plain boxes are car-sized: then there is no step to run).
+      --models b|ab   which of the build's cover boxes may be cloned (default b: the exact form; ab is the first run's,
+                      kept for M01, whose plain boxes are all car-sized - 13.3).
                       b: boxes with flags 0x200 whose model root names no .oct record and that no room tree lists -
                          the form of stock F05's 203 and F08's 147 boxes and of 20..215 boxes of each of our builds
                          (re/bots_dyn_build.md 12.2). The clone is the same: in no tree.
-                      a: boxes with flags 0x302, whose model root names a collision record and that tree 0 of their
+                      a: UNPROVEN. boxes with flags 0x302, whose model root names a collision record and that tree 0 of their
                          ROOM lists (most stock boxes; 118 of M01's 139). The clone gets the same flags and model and
                          is listed in tree 0 of the ROOT's room set with its box in the world - where every level
                          lists the 134+ objects with a collision record that have no room above them (flags 0x102 /
                          0x182). ASSUMPTION: a cover box may be listed there instead of in a ZROOM's tree; no stock
                          cover box is (the stock ones without a room above them are in no tree at all)
       --near N        an object counts for a place when it is within N of it (default 600)
+      --corner-near N a corner counts for a place when it is within N of it (default 800)
+      --no-corners    objects only (the first run)
+      --no-borrow     no box with the 100 cube of F07's camera objects (forms())
       --rounds N      plan / add boxes / plan again, at most N times (default 4)
 
 WHAT A COVER IS (re/bots_dynamic.md 3.1, read in kl2.exe, nothing of it tried in the game): CFFCoverList slot 13
@@ -38,9 +41,16 @@ WHAT A COVER IS (re/bots_dynamic.md 3.1, read in kl2.exe, nothing of it tried in
   *coverboxm* / *coverboxl* -> low. 0x603830 builds the cover from the object's box, four sides. There is no list
   and no count in the level to bring up to date: the FFCoverList controller has no fields and its ZLIST is empty in
   every stock level; the run-time list is made at the load. The PLAYER's cover uses the same boxes.
-  ASSUMPTION: 'the object's box' is the bounding box of its model (root chunk + 0x20, six floats). Every cover box
-  of every stock level and of our builds has an unscaled matrix, so a box's SIZE is its model's: a new box can only
-  have a size one of the build's own box models has. No model is added (the .prm must not grow).
+  WHAT 0x603830 TAKES FROM THE ENTITY (read 2026-10-11, re/bots_dyn_build.md 13.2): its 128-byte slot ([obj + 4])
+  and nothing else of its geometry - matrix +0x00 (no cover when [+0x10], the Y of its up axis, is under 0.717),
+  place +0x24, BOX MIDDLE +0x30 and BOX HALF SIZE +0x40 (three floats each, the object's own frame), the parent
+  chain +0x50; four corners = middle +- half size on the box's FLOOR, each through 0x7b3020 (matrix, place, parents)
+  into the world; the cover's height = half height + 50. Not the mesh, not the collision record, not a room tree:
+  FORM B IS A WHOLE COVER. The slot's box is not in the level files (the loader zeroes it, 0x8adb19..2b); for a
+  ZSTDOBJ the only thing that can fill it is its model (the routine that does was NOT found: ASSUMPTION that it is
+  the model root's box, chunk + 0x20). Every cover box of every stock level and of our builds has an unscaled
+  matrix and a model with ONE HIDDEN mesh (draw mode 0x800000), so a box's SIZE is its model's: a new box can only
+  have a size a box model of the build has. No model is added (the .prm must not grow).
 
 WHAT IS ADDED
   One top-level ZGROUP 'KL_Cover!' (form: the build's first plain top-level group at the origin, e.g.
@@ -57,9 +67,19 @@ WHERE (all of it GUESS unless a stock number is named)
     its box is the smallest rectangle round that outline. It counts when it is 40..700 long, at least 10 thick
     (a single plane - a pane, a fence - is not), is there at 45 too (not a table top), and its name does not say
     glass / window / fence / rail / wire / bush / hedge / door / gate / camera / ColiObj (NOT_COVER);
-    longer = a wall or a building: NOT handled (a wall beside the way is no cover; its corners would need a corner
-    finder). An object over 400 long gets its box at the END nearest the place, and only when that end is free (no
-    other collision within 80 beyond it: a wall piece that goes on in the next piece has no corner there);
+    longer = a wall or a building: its CORNERS (below). An object over 400 long gets its box at the END nearest
+    the place, and only when that end is free (no other collision within 80 beyond it: a wall piece that goes on in
+    the next piece has no corner there);
+  - CORNERS (corners(), consider_corner(); tried for a place that got no object box in the round): the 75 plane's
+    cut segments of all entities (but the NOT_COVER names) joined into straight faces of at least 100, each with the
+    side its triangles face. 'L' = two faces end together at 60..120 degrees and face away from one another (a
+    building corner, a wide pillar); 'end' = two faces back to back 10..100 apart end side by side with nothing
+    beyond (a wall end, a jamb). It must be there 45 over the floor too; there at 175 = a HIGH box, else LOW. The
+    box sits as stock's do (measured on F05 and F08, 13.1): in the solid, a footprint corner ON the corner, along
+    the face, no deeper than the solid behind the face (a wall end: its thickness; else up to the first mesh behind
+    it) + 25. WHICH face: the one hidden from where the bot walks TOWARD on that leg (its normal against the way,
+    under -0.3) with mesh before it and a hold place on that side - 'the threat is ahead on the bot's way' is a
+    GUESS. Within 800;
   - 'the ground' is the collision's own floor under the place, not the mesh's height (Retomoto's street mesh lies
     40 under the road);
   - HIGH when the same entity is in the 175 plane over 60 % of the outline, else LOW (so 'low' is 75 .. 175 high:
@@ -104,11 +124,23 @@ NOT_COVER = ('glass', 'window', 'fence', 'rail', 'wire', 'bush', 'hedge', 'leave
              # 'Coli_HeroOnly_01', '...!OnlyHero'): a blocker may stand where nothing is drawn
              'camera', 'coli', 'heroonly', 'onlyhero')
 TIER_B = 0.6                    # GUESS: see fit()
+BORROW_MAX = 130.0              # forms(): 'a small low model' has no longer footprint side
 ENDS = 400.0                    # an object longer than this gets its box at an END (a corner), and only at a free one
 END_GAP = 80.0                  # ... free = no other collision in the BASE plane this far beyond the end
+# ---- wall corners (all GUESS but where a stock number is named: re/bots_dyn_build.md 13)
+CORNER_NEAR = 800.0             # a corner counts for a place when it is this near (the job: 'within ~8 m')
+WALL_RUN = 100.0                # a straight face of at least this length on each side of a corner (the job: 1 m)
+RUN_GAP = 25.0                  # pieces of one face are joined over gaps up to this
+JOIN = 25.0                     # two faces meet when their ends are this near
+WALL_THICK = (10.0, 100.0)      # a wall end: two faces back to back this far apart (thicker: two 'L' corners)
+CORNER_OVER = 25.0              # a corner box may stick out of the solid behind its face by this
+CORNER_MIN = 60.0               # ... and is at least this long along its face
+CORNER_AIM = 100.0             # the footprint a corner box should have when the build has the choice (stock: 13.1)
 MAP_TOPS = ('Locations/', 'CloneGroup_Locations')
+OUT = 'z_cover2'                # `all` writes <work>\\build\\z_cover2 (z_cover = the first run: form a boxes, no corners)
 OWNER = (('z_gate', 'M01'), ('z_final', 'M02'), ('z_final', 'M03'), ('z_final', 'M06'), ('rt_full6', 'retomoto_full'))
-DEFAULTS = {'models': 'ab', 'near': NEAR, 'rounds': ROUNDS}
+DEFAULTS = {'models': 'b', 'near': NEAR, 'rounds': ROUNDS, 'corners': True, 'corner_near': CORNER_NEAR, 'borrow': True}
+HELD = 'has a cover box (this step\'s or the map\'s) that another bot holds or that was refused'
 
 
 # ------------------------------------------------------------------ the map's static collision
@@ -149,7 +181,7 @@ class Solid:
                     for cx in range(int(x0 // self.GRID), int(x1 // self.GRID) + 1):
                         for cz in range(int(z0 // self.GRID), int(z1 // self.GRID) + 1):
                             self.grid[cx, cz].append(i)
-        self._scan = {}
+        self._scan, self._runs = {}, {}
 
     def near(self, x, z, r):
         g, ks = self.GRID, set(self.big)
@@ -206,6 +238,12 @@ class Solid:
                 (x0, z0), (x1, z1) = pts
                 if max(abs(x0 - x), abs(z0 - z)) > gather and max(abs(x1 - x), abs(z1 - z)) > gather:
                     continue
+                # a segment runs so that the triangle's normal points to its LEFT, (-dz, dx): the free side of the
+                # face when the collision is wound outward (wall_runs() tests that against the mesh)
+                nx = (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1])
+                nz = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+                if -(z1 - z0) * nx + (x1 - x0) * nz < 0:
+                    x0, z0, x1, z1 = x1, z1, x0, z0
                 n = max(1, int(math.hypot(x1 - x0, z1 - z0) / (CELL / 2)))
                 cells = occ[h][r]
                 for j in range(n + 1):
@@ -296,6 +334,142 @@ def objects(S, B, x, y, z, near, gather=GATHER):
     return out
 
 
+# ------------------------------------------------------------------ wall corners
+def wall_runs(S, B, x, y, z, reach):
+    """The straight faces of the static collision in the BASE plane round (x, z) -> [dict a, b (ends), u (a -> b),
+    n (unit normal, the side the triangles face), len, ref]. Cut segments of every entity whose name does not say it
+    is no cover, joined when they lie on one line (5 off it, 10 degrees, gaps up to RUN_GAP); a run counts from
+    WALL_RUN on and when at least 80 % of its length faces one way (a single two-sided plane has no side)."""
+    key = (round(x / 20), round(y / 5), round(z / 20), reach)
+    if key in S._runs:
+        return S._runs[key]
+    _occ, segs = S.scan(x, y, z)
+    sc, items = B.sc, []
+    for r, ss in segs.items():
+        k = S.node.get(r)
+        low = sc.names[k].lower() if k else ''
+        if any(t in low for t in NOT_COVER):
+            continue
+        for s in ss:
+            L = math.hypot(s[2] - s[0], s[3] - s[1])
+            if L < 2.0 or min(max(abs(s[0] - x), abs(s[1] - z)), max(abs(s[2] - x), abs(s[3] - z))) > reach:
+                continue
+            items.append((L, s, r))
+    items.sort(key=lambda it: -it[0])
+    bins = collections.defaultdict(list)
+    for i, (L, s, r) in enumerate(items):
+        bins[int(math.degrees(math.atan2(s[3] - s[1], s[2] - s[0])) % 360 // 10)].append(i)
+    used, runs = [False] * len(items), []
+    for i, (L, s, r) in enumerate(items):
+        if used[i] or L < 30.0:
+            continue
+        ux, uz = (s[2] - s[0]) / L, (s[3] - s[1]) / L
+        ab = int(math.degrees(math.atan2(uz, ux)) % 360 // 10)
+        got = []
+        for sign, base in ((1.0, ab), (-1.0, (ab + 18) % 36)):
+            for bb in (base - 1, base, base + 1):
+                for j in bins.get(bb % 36, ()):
+                    if used[j]:
+                        continue
+                    Lj, t, rj = items[j]
+                    if abs((t[0] - s[0]) * -uz + (t[1] - s[1]) * ux) > 5.0 or abs((t[2] - s[0]) * -uz + (t[3] - s[1]) * ux) > 5.0:
+                        continue
+                    if sign * ((t[2] - t[0]) * ux + (t[3] - t[1]) * uz) < 0.985 * Lj:
+                        continue
+                    t0, t1 = (t[0] - s[0]) * ux + (t[1] - s[1]) * uz, (t[2] - s[0]) * ux + (t[3] - s[1]) * uz
+                    got.append((min(t0, t1), max(t0, t1), sign * Lj, rj, j))
+        got.sort()
+        cur = None
+        groups = []
+        for g in got:
+            if cur is not None and g[0] <= cur[1] + RUN_GAP:
+                cur[1] = max(cur[1], g[1]); cur[2].append(g)
+            else:
+                cur = [g[0], g[1], [g]]; groups.append(cur)
+        for t0, t1, gs in groups:
+            if not any(g[4] == i for g in gs):
+                continue                                # (the pieces of this line the seed is not part of wait for a seed of their own)
+            for g in gs:
+                used[g[4]] = True
+            pos, neg = sum(g[2] for g in gs if g[2] > 0), -sum(g[2] for g in gs if g[2] < 0)
+            if t1 - t0 < WALL_RUN or max(pos, neg) < 0.8 * (pos + neg):
+                continue
+            sg = 1.0 if pos >= neg else -1.0
+            a, b = (s[0] + t0 * ux, s[1] + t0 * uz), (s[0] + t1 * ux, s[1] + t1 * uz)
+            if sg < 0:
+                a, b = b, a
+            runs.append({'a': a, 'b': b, 'u': (sg * ux, sg * uz), 'n': (-sg * uz, sg * ux), 'len': t1 - t0, 'ref': max(gs, key=lambda g: abs(g[2]))[3]})
+    if len(S._runs) > 300:
+        S._runs.clear()
+    S._runs[key] = runs
+    return runs
+
+
+def corners(S, B, x, y, z, near):
+    """The convex vertical corners of solid static collision within `near` of the place (x, y, z) -> [dict]:
+      kind 'L'   two faces of at least WALL_RUN meet (their ends within JOIN) at 60..120 degrees and each faces away
+                 from the other (a building corner, a wide pillar; an inner room corner faces the other way);
+      kind 'end' two faces back to back, WALL_THICK apart, end side by side (a wall end, a doorway jamb), and nothing
+                 goes on beyond the end for END_GAP;
+      at (x, z), faces [(end point, u = along the face away from the corner, n = the side it faces, length, REF)],
+      thick ('end'), high (both faces are there in the HIGH plane too), grounded (... and in the LOW plane)."""
+    runs = wall_runs(S, B, x, y, z, near + 350.0)
+    occ, _segs = S.scan(x, y, z)
+    ends = []
+    for i, r in enumerate(runs):
+        ends.append((r['a'], r['u'], r['n'], r['len'], r['ref'], i))
+        ends.append((r['b'], (-r['u'][0], -r['u'][1]), r['n'], r['len'], r['ref'], i))
+    def there(plane, p, u):
+        hit = 0
+        for t in (15.0, 50.0, 85.0):
+            cx, cz = int((p[0] + t * u[0]) // CELL), int((p[1] + t * u[1]) // CELL)
+            if any((cx + i, cz + j) in cells for cells in occ[plane].values() for i in (-2, -1, 0, 1, 2) for j in (-2, -1, 0, 1, 2)):
+                hit += 1
+        return hit >= 2
+    out = []
+    for i in range(len(ends)):
+        p, u, n, L, ref, ri = ends[i]
+        if math.hypot(p[0] - x, p[1] - z) > near:
+            continue
+        for j in range(i + 1, len(ends)):
+            q, v, m, L2, ref2, rj = ends[j]
+            if ri == rj:
+                continue
+            w = (q[0] - p[0], q[1] - p[1])
+            d = math.hypot(*w)
+            if d > WALL_THICK[1] + 25.0:
+                continue
+            c = u[0] * v[0] + u[1] * v[1]
+            kind = thick = None
+            if d <= JOIN and abs(c) <= 0.5 and n[0] * v[0] + n[1] * v[1] < -0.3 and m[0] * u[0] + m[1] * u[1] < -0.3:
+                kind = 'L'
+                # the corner = where the two lines cross
+                det = u[0] * v[1] - u[1] * v[0]
+                t = (w[0] * v[1] - w[1] * v[0]) / det
+                at = (p[0] + t * u[0], p[1] + t * u[1])
+                if math.hypot(at[0] - p[0], at[1] - p[1]) > JOIN:
+                    at = ((p[0] + q[0]) / 2, (p[1] + q[1]) / 2)
+            elif c >= 0.96 and n[0] * m[0] + n[1] * m[1] <= -0.9 and abs(w[0] * u[0] + w[1] * u[1]) <= 20.0:
+                thick = -(w[0] * n[0] + w[1] * n[1])
+                if WALL_THICK[0] <= thick < WALL_THICK[1]:
+                    kind = 'end'
+                    at = ((p[0] + q[0]) / 2, (p[1] + q[1]) / 2)
+                    free = True
+                    for step in range(2, int(END_GAP // CELL) + 1):
+                        for k in range(0, int(thick // CELL) + 1):
+                            px, pz = p[0] - step * CELL * u[0] - k * CELL * n[0], p[1] - step * CELL * u[1] - k * CELL * n[1]
+                            if any((int(px // CELL), int(pz // CELL)) in cells for cells in occ[BASE].values()):
+                                free = False
+                    if not free:
+                        continue
+            if kind is None:
+                continue
+            out.append({'kind': kind, 'at': at, 'thick': thick, 'faces': [(p, u, n, L, ref), (q, v, m, L2, ref2)],
+                        'high': there(HIGH, p, u) and there(HIGH, q, v), 'grounded': there(LOW, p, u) and there(LOW, q, v),
+                        'dist': math.hypot(at[0] - x, at[1] - z)})
+    return out
+
+
 # ------------------------------------------------------------------ the build's own cover boxes
 def _root(prm, model):
     t, n = struct.unpack_from('<II', prm, 0)
@@ -323,7 +497,7 @@ def all_boxes(B):
     return out
 
 
-def forms(B, boxes, tiers='b'):
+def forms(B, boxes, tiers='b', borrow=True):
     """The box models a new box may take -> [dict]: node (the box that is cloned), model, tier ('b': flags 0x200, no
     collision record; 'a': flags 0x302 with one), size (x, y, z), mid (x, z of the model box's middle), lo_y."""
     sc, seen, out = B.sc, set(), []
@@ -343,7 +517,45 @@ def forms(B, boxes, tiers='b'):
         if max(size[0], size[2]) > MODEL_MAX or math.hypot(*mid) > MODEL_OFF or min(size[0], size[2]) < 10:
             continue
         seen.add(c['model'])
-        out.append({'node': k, 'path': sc.path[k][5:], 'model': c['model'], 'tier': tier, 'size': size, 'mid': mid, 'lo_y': bb[1]})
+        out.append({'node': k, 'path': sc.path[k][5:], 'model': c['model'], 'tier': tier, 'size': size, 'mid': mid, 'lo_y': bb[1], 'kind': c['kind']})
+    # A SMALL LOW BOX WHERE THE BUILD HAS NONE OF ITS OWN (borrow): the box primitive of another object of the build.
+    # Every build carries F07's hand-held camera objects (AllLevels/FA_Cam_Handheld.zip\Cam_Handheld\*_Cam): ZSTDOBJ
+    # whose model is a 100 x 100 x 100 box with ONE hidden mesh and no collision record - the same kind of model a
+    # form b cover box has (stock F05's commonest low form b box is 100 x 100 x 100: 20 of them). The new box is a
+    # clone of one of the build's own form b cover boxes with that model number: flags 0x200, a model root without
+    # a collision record, in no tree = form b. ASSUMPTION: a cover box may share its model with an object that is no
+    # cover box (models are shared between entities everywhere; the cover list reads the entity's own box, 13.2).
+    own_low = [f for f in out if f['tier'] == 'b' and LOW_Y[0] <= f['size'][1] < LOW_Y[1] and max(f['size'][0], f['size'][2]) <= BORROW_MAX]
+    src = next((f for f in out if f['tier'] == 'b' and f['kind'] == 'low'), None) or next((f for f in out if f['tier'] == 'b'), None)
+    if borrow and 'b' in tiers and not own_low and src is not None:
+        prm = B['.prm']
+        t, n = struct.unpack_from('<II', prm, 0)
+        best = None
+        for k in range(1, len(sc.nodes)):
+            e = B.ents[k - 1]
+            if sc.cls(k) != 'ZSTDOBJ' or 'coverbox' in sc.names[k].lower() or e.model in seen or (best and e.model >= best[0]):
+                continue
+            root = _root(prm, e.model)
+            if root is None:
+                continue
+            cnt, objtab, octrec = struct.unpack_from('<III', root, 0x14)
+            bb = struct.unpack_from('<6f', root, 0x20)
+            size = tuple(bb[i + 3] - bb[i] for i in range(3))
+            if octrec or cnt != 1 or not 0 < objtab < n or not LOW_Y[0] <= size[1] < LOW_Y[1] or not 60.0 <= min(size[0], size[2]) <= max(size[0], size[2]) <= BORROW_MAX \
+                    or max(abs(bb[0] + bb[3]), abs(bb[2] + bb[5])) > 2.0:
+                continue
+            to, _ts = struct.unpack_from('<II', prm, t + 16 * objtab)
+            m0 = struct.unpack_from('<I', prm, to)[0]
+            if not 0 < m0 < n:
+                continue
+            mo, ms = struct.unpack_from('<II', prm, t + 16 * m0)
+            if ms != 64 or not struct.unpack_from('<I', prm, mo + 0x1c)[0] & 0x800000:      # one plain mesh, hidden (kl2 0x67cf77)
+                continue
+            best = (e.model, k, size, bb)
+        if best:
+            model, k, size, bb = best
+            out.append({'node': src['node'], 'path': src['path'], 'model': model, 'tier': 'b', 'size': size, 'mid': ((bb[0] + bb[3]) / 2, (bb[2] + bb[5]) / 2),
+                        'lo_y': bb[1], 'kind': 'low', 'borrowed': sc.path[k][5:]})
     return out
 
 
@@ -476,10 +688,117 @@ def consider(ctx, m, o, fs, new, near):
         return 'in the van\'s lane'
     return {'kind': 'high' if o['high'] else 'low', 'origin': [round(v, 2) for v in org], 'head': [round(v, 5) for v in got['head']],
             'mid': [round(v, 1) for v in c3], 'ext': [round(v, 1) for v in got['ext']], 'height': round(f['size'][1], 1),
-            'model': f['model'], 'form': f['path'], 'form_node': f['node'], 'tier': f['tier'],
+            'model': f['model'], 'form': f['path'], 'form_node': f['node'], 'tier': f['tier'], 'borrowed': f.get('borrowed'),
             'object': o['name'], 'object_ref': o['ref'], 'object_rect': o['rect'], 'ask': m['at'], 'ground': round(ground, 1),
             'hold': [round(v, 1) for v in ok[:3]],
             'role': m['role'], 'name': None}
+
+
+def consider_corner(ctx, m, cn, fs, new):
+    got = _corner(ctx, m, cn, fs, new, 0)
+    if isinstance(got, str):                            # its other face, when that one is hidden from ahead too
+        g2 = _corner(ctx, m, cn, fs, new, 1)
+        if not isinstance(g2, str):
+            return g2
+    return got
+
+
+def _corner(ctx, m, cn, fs, new, which):
+    """Corner cn (corners()) for the place m -> a new box (dict; HIGH when the corner is solid at 175 too) or a reason (str).
+    How the box sits is what stock does (re/bots_dyn_build.md 13.1, measured on F05 and F08: 219 of 240 'L' boxes
+    have a footprint corner within 15 of the wall corner, lie in the solid and along the face): in the solid, one
+    footprint corner ON the corner, along the face. WHICH face is OURS and a GUESS: the one hidden from where the bot
+    is walking TOWARD on this leg (m['dir']) - the threat is taken to be ahead on the bot's way."""
+    B = ctx.B
+    x, my, z = m['at']
+    y = m['ground']
+    d = m['dir']
+    if not cn['grounded']:
+        return 'a corner that does not stand on the floor here (nothing %d over it)' % LOW
+    kind = 'high' if cn['high'] else 'low'              # low: a garden wall, a parapet (there at 75, not at 175)
+    ky = HIGH_Y if cn['high'] else LOW_Y
+    on = lambda px, pz: ctx.grid.at(px, my, pz, 60.0) is not None
+    # the face to stand at: it faces back along the bot's way (n . dir most negative), and the ground before it is mesh
+    faces = sorted(cn['faces'], key=lambda f: f[2][0] * d[0] + f[2][1] * d[1])
+    p, u, n, L, ref = faces[which]
+    other = faces[1 - which]
+    if n[0] * d[0] + n[1] * d[1] > -0.3:
+        return 'a corner with no face hidden from ahead on the bot\'s way'
+    # (the mesh keeps off the walls: asked 50, 80 and 110 before the face; the hold place below is the real test)
+    if not any(on(p[0] + a * u[0] + b * n[0], p[1] + a * u[1] + b * n[1]) for a, b in ((40.0, 50.0), (40.0, 80.0), (40.0, 110.0), (80.0, 80.0))):
+        return 'a corner whose hidden face has no mesh before it'
+    # how deep the solid is behind that face: a wall end = its thickness; a corner = up to the first mesh behind it
+    # (a thin shell with a room behind it) or the length of the other face
+    if cn['kind'] == 'end':
+        depth = cn['thick']
+    else:
+        depth = min(MODEL_MAX, other[3] * abs(other[1][0] * n[0] + other[1][1] * n[1]))
+        for s in range(20, int(depth) + 1, 20):
+            if on(p[0] + 30.0 * u[0] - s * n[0], p[1] + 30.0 * u[1] - s * n[1]):
+                depth = s - 10.0
+                break
+    best = None
+    for f in fs:
+        if not ky[0] <= f['size'][1] < ky[1]:
+            continue
+        for along_u in (True, False):                   # the model's local Z along the face, or across it
+            eu, ev = (f['size'][2], f['size'][0]) if along_u else (f['size'][0], f['size'][2])
+            # not out of the solid, not longer than the face, not a sliver (stock's corner boxes are 70..150 along the
+            # face and as deep as the wall is thick, or 60..120 at a building corner: 13.1)
+            if ev > depth + CORNER_OVER or eu > L or eu < CORNER_MIN or ev < min(CORNER_MIN, 0.7 * depth):
+                continue
+            key = (abs(ev - min(depth, CORNER_AIM)) + abs(eu - CORNER_AIM), f['model'])
+            if best is None or key < best[0]:
+                best = (key, f, along_u, eu, ev)
+    if best is None:
+        return 'no %s box model of the build fits the corner (%s, the solid behind its face is %d deep)' % (kind, 'a wall end' if cn['kind'] == 'end' else 'two faces', depth)
+    _k, f, along_u, eu, ev = best
+    mid = (p[0] + eu / 2 * u[0] - ev / 2 * n[0], p[1] + eu / 2 * u[1] - ev / 2 * n[1])
+    head = u if along_u else n
+    xax = (head[1], -head[0])
+    org = (mid[0] - f['mid'][0] * xax[0] - f['mid'][1] * head[0], mid[1] - f['mid'][0] * xax[1] - f['mid'][1] * head[1])
+    for c in ctx.boxes + new:
+        if c.get('cls', 'ZSTDOBJ') != 'ZSTDOBJ' or c['kind'] is None:
+            continue
+        reach = max(APART, (math.hypot(c['bb'][3] - c['bb'][0], c['bb'][5] - c['bb'][2]) / 2 + 60.0) if c.get('bb') else APART)
+        if (math.hypot(c['mid'][0] - mid[0], c['mid'][2] - mid[1]) < APART or math.hypot(c['mid'][0] - cn['at'][0], c['mid'][2] - cn['at'][1]) < reach) \
+                and -150 <= c['mid'][1] - y <= 300:
+            return 'a cover box stands at the corner already (%s)' % c['name']
+    e4 = ctx.p4(m['at'], dy=40.0)
+    if e4 is None:
+        return 'the place that asked is not on the mesh'
+    ctx.covers.append({'node': 0, 'at': (org[0], y - f['lo_y'], org[1]), 'kind': kind, 'hidden': False})
+    ci = len(ctx.covers) - 1
+    spots = sorted((q for q in ctx.spots(ci) if (q[0] - p[0]) * n[0] + (q[2] - p[1]) * n[1] > 10.0), key=lambda q: math.hypot(q[0] - x, q[2] - z))
+    ok = next((q for q in spots[:10] if abs(q[1] - my) <= 200 and ctx.nav.part[q[3]] == m['part'] and D.hold_ok(ctx, m['part'], e4, q, None, m['post'])), None)
+    ctx.covers.pop(); ctx._spots.pop(ci, None)
+    if ok is None:
+        return 'no place on the mesh to hold at the corner\'s hidden face (%d places 70..230 from it)' % len(spots)
+    g2 = ctx.solid.floor(ok[0], ok[1], ok[2])
+    if g2 is not None and abs(g2 - y) > 20.0:
+        return 'the corner stands on other ground than the place that asked (%+d)' % (g2 - y)
+    c3 = (mid[0], y + f['size'][1] / 2, mid[1])
+    foot = [(mid[0] + su * eu / 2 * u[0] + sv * ev / 2 * n[0], y + 50.0, mid[1] + su * eu / 2 * u[1] + sv * ev / 2 * n[1])
+            for su in (-1, 1) for sv in (-1, 1)] + [(mid[0], y + 50.0, mid[1])]
+    for k in ctx.nocover:
+        if any(B.in_box(k, q) for q in foot) or B.in_box(k, ok[:3]):
+            return 'inside a NoCoverBox (%s)' % B.sc.names[k]
+    if ctx.exits and any(D.in_any_exit(ctx, q) for q in foot):
+        return 'in a level exit box'
+    if ctx.lane and min(F.lane_dist(ctx.lane, q) for q in foot) < F.LANE_CLEAR:
+        return 'within %d of the escape vehicle\'s road' % F.LANE_CLEAR
+    if ctx.rt is not None and m['part'] != ctx.home and any(ctx.rt.lane(q) for q in foot):
+        return 'in the van\'s lane'
+    k = ctx.solid.node.get(ref)
+    return {'kind': kind, 'via': 'corner', 'origin': [round(org[0], 2), round(y - f['lo_y'], 2), round(org[1], 2)], 'head': [round(v, 5) for v in head],
+            'mid': [round(v, 1) for v in c3], 'ext': [round(eu, 1), round(ev, 1)], 'height': round(f['size'][1], 1),
+            'model': f['model'], 'form': f['path'], 'form_node': f['node'], 'tier': f['tier'], 'borrowed': f.get('borrowed'),
+            'object': (B.sc.path[k][5:] if k else 'REF %d' % ref), 'object_ref': ref,
+            'object_rect': [round(mid[0], 1), round(mid[1], 1), round(u[0], 4), round(u[1], 4), round(eu / 2, 1), round(ev / 2, 1)],
+            'corner': {'kind': cn['kind'], 'at': [round(v, 1) for v in cn['at']], 'thick': cn['thick'] and round(cn['thick'], 1), 'depth': round(depth, 1),
+                       'face_normal': [round(v, 3) for v in n], 'face_length': round(L), 'other_face_length': round(other[3]),
+                       'way': [round(v, 3) for v in d]},
+            'ask': m['at'], 'ground': round(y, 1), 'hold': [round(v, 1) for v in ok[:3]], 'role': m['role'], 'name': None}
 
 
 def plan(ctx, opt=None, log=print):
@@ -489,7 +808,7 @@ def plan(ctx, opt=None, log=print):
     B = ctx.B
     if B.sc.resolve(F.R_ + GROUP):
         raise ValueError('%s: the build already has %s (run this step on the bots build, not on its result)' % (ctx.folder, GROUP))
-    fs = forms(B, ctx.boxes, opt['models'])
+    fs = forms(B, ctx.boxes, opt['models'], opt['borrow'])
     log('%s: %d cover boxes (%d the game makes covers of); box models a new box may take (--models %s): %d - low %s, high %s'
         % (ctx.folder, len(ctx.boxes), len(ctx.covers), opt['models'], len(fs),
            sorted('%dx%dx%d' % (f['size'][0], f['size'][1], f['size'][2]) for f in fs if LOW_Y[0] <= f['size'][1] < LOW_Y[1]) or 'none',
@@ -509,6 +828,7 @@ def plan(ctx, opt=None, log=print):
         for m in ms:
             g = ctx.solid.floor(*m['at'])
             m['ground'] = m['at'][1] if g is None else round(g, 1)
+            here = 0
             for o in sorted(objects(ctx.solid, B, m['at'][0], m['ground'], m['at'][2], opt['near']), key=lambda o: o['dist']):
                 key = (o['ref'], round(o['rect'][0] / 50), round(o['rect'][1] / 50)) if 'rect' in o else None
                 if o['no']:
@@ -517,10 +837,24 @@ def plan(ctx, opt=None, log=print):
                 if isinstance(got, str):
                     why[(tuple(m['at']), key)] = got
                     continue
+                got['via'] = 'object'
+                got['name'] = 'CoverBox%s%s%02d' % ('H' if got['kind'] == 'high' else 'M', TAG, 1 + sum(c['kind'] == got['kind'] for c in new))
+                new.append(got)
+                ctx.covers.append({'node': 0, 'at': tuple(got['origin']), 'kind': got['kind'], 'hidden': False})
+                added += 1; here += 1
+            if here or not opt['corners']:
+                continue
+            # no object: the nearest corner of a wall, a building, a wide pillar (one box a place and round)
+            for cn in sorted(corners(ctx.solid, B, m['at'][0], m['ground'], m['at'][2], opt['corner_near']), key=lambda c: c['dist']):
+                got = consider_corner(ctx, m, cn, fs, new)
+                if isinstance(got, str):
+                    why[(tuple(m['at']), 'corner', round(cn['at'][0] / 20), round(cn['at'][1] / 20))] = got
+                    continue
                 got['name'] = 'CoverBox%s%s%02d' % ('H' if got['kind'] == 'high' else 'M', TAG, 1 + sum(c['kind'] == got['kind'] for c in new))
                 new.append(got)
                 ctx.covers.append({'node': 0, 'at': tuple(got['origin']), 'kind': got['kind'], 'hidden': False})
                 added += 1
+                break
         if not added:
             break
     # what is left: per place what stands there and why it got no box
@@ -532,11 +866,14 @@ def plan(ctx, opt=None, log=print):
         reasons = collections.Counter()
         for o in objs:
             key = (o['ref'], round(o['rect'][0] / 50), round(o['rect'][1] / 50)) if 'rect' in o else None
-            reasons[o['no'] or why.get((tuple(m['at']), key)) or 'has a cover box (this step\'s or the map\'s) that another bot holds or that was refused'] += 1
+            reasons[o['no'] or why.get((tuple(m['at']), key)) or HELD] += 1
         near_new = [c['name'] for c in new if math.hypot(c['mid'][0] - m['at'][0], c['mid'][2] - m['at'][2]) < D.REACH]
         solid = [o for o in objs if not o['no']]
+        cns = corners(ctx.solid, B, m['at'][0], m['ground'], m['at'][2], opt['corner_near']) if opt['corners'] else []
+        creasons = collections.Counter(why.get((tuple(m['at']), 'corner', round(cn['at'][0] / 20), round(cn['at'][1] / 20))) or HELD for cn in cns)
         gaps.append({'at': m['at'], 'ground': m['ground'], 'why': m['why'], 'role': m['role'], 'solid_objects': len(solid), 'new_boxes_in_reach': near_new,
-                     'what_stands_there': dict(reasons), 'open_ground': not solid and not any('wall' in k for k in reasons)})
+                     'what_stands_there': dict(reasons), 'corners': len(cns), 'corners_why': dict(creasons),
+                     'open_ground': not solid and not cns and not any('wall' in k for k in reasons)})
     del ctx.covers[ctx.real:]
     ctx._spots.clear()
     if len(ctx.covers) + len(new) > 5000:
@@ -564,23 +901,32 @@ def clusters(gaps, r=1000.0):
 
 def describe(P, log=print):
     new = P['boxes']
-    log('new cover boxes: %d (%d low, %d high)%s' % (len(new), sum(c['kind'] == 'low' for c in new), sum(c['kind'] == 'high' for c in new),
-        '; %d of them clones of a box with a collision record (--models ab)' % sum(c['tier'] == 'a' for c in new) if any(c['tier'] == 'a' for c in new) else ''))
+    log('new cover boxes: %d (%d low, %d high; %d on objects, %d at corners; form a %d, form b %d)'
+        % (len(new), sum(c['kind'] == 'low' for c in new), sum(c['kind'] == 'high' for c in new), sum(c.get('via') != 'corner' for c in new),
+           sum(c.get('via') == 'corner' for c in new), sum(c['tier'] == 'a' for c in new), sum(c['tier'] == 'b' for c in new)))
     for c in new:
-        log('  %-18s %-4s at (%6d %5d %6d) %3d x %3d, %3d high, on %s (%d x %d); model %d of %s; asked from (%d, %d, %d)'
-            % (c['name'], c['kind'], *c['mid'], *c['ext'], c['height'], c['object'].split('\\')[-1], 2 * c['object_rect'][4], 2 * c['object_rect'][5],
-               c['model'], c['form'].split('\\')[-1], *c['ask']))
+        if c.get('via') == 'corner':
+            k = c['corner']
+            what = 'at a corner of %s (%s; faces %d and %d long, solid %d deep behind the face; the bot walks on toward %+.2f %+.2f)' \
+                % (c['object'].split('\\')[-1], 'a wall end %d thick' % k['thick'] if k['kind'] == 'end' else 'two faces meet',
+                   k['face_length'], k['other_face_length'], k['depth'], *k['way'])
+        else:
+            what = 'on %s (%d x %d)' % (c['object'].split('\\')[-1], 2 * c['object_rect'][4], 2 * c['object_rect'][5])
+        log('  %-18s %-4s at (%6d %5d %6d) %3d x %3d, %3d high, %s; model %d of %s; asked from (%d, %d, %d)'
+            % (c['name'], c['kind'], *c['mid'], *c['ext'], c['height'], what, c['model'], c['form'].split('\\')[-1], *c['ask']))
     a, b = P['holds_before'], P['holds_after']
     log('holds found / asked by the dynamic step\'s plan: %d / %d before -> %d / %d with the boxes' % (a.get('found', 0), a.get('asked', 0), b.get('found', 0), b.get('asked', 0)))
     gaps = P['gaps']
     log('places still without a hold: %d' % len(gaps))
     for mid, grp in clusters(gaps):
-        rs = collections.Counter()
+        rs, cr = collections.Counter(), collections.Counter()
         for g in grp:
             rs.update(g['what_stands_there'])
+            cr.update(g.get('corners_why', {}))
         opn = sum(g['open_ground'] for g in grp)
-        log('  round (%6d %5d %6d): %2d place(s), %d of them with NOTHING solid within %d m; what stands there: %s'
-            % (*mid, len(grp), opn, P['options']['near'] / 100, dict(rs.most_common(5)) or 'nothing'))
+        log('  round (%6d %5d %6d): %2d place(s), %d of them with NOTHING solid within %d m and no corner within %d m; what stands there: %s; corners: %s'
+            % (*mid, len(grp), opn, P['options']['near'] / 100, P['options'].get('corner_near', 0) / 100, dict(rs.most_common(5)) or 'nothing',
+               dict(cr.most_common(5)) or 'none'))
 
 
 # ------------------------------------------------------------------ writing
@@ -645,6 +991,9 @@ def apply(ctx, P, dst, log=print):
     for c in P['boxes']:
         n = grp.add(_node(M, B, c['form_node'], c['name']))
         M.place(n, c['origin'], F.rot9(*c['head']))
+        if c.get('borrowed'):                           # the clone with another object's box primitive (forms())
+            M.set(n, None, {'ZGEOM[4]': c['model']})
+            n.model = c['model']
         if n.model != c['model'] or n.links is not None or n.flags not in (0x200, 0x302):
             raise ValueError('%s: not the form that was planned' % c['name'])
         c['bb'] = list(struct.unpack_from('<6f', _root(prm, c['model']), 0x20))
@@ -809,7 +1158,7 @@ def check(folder, log=print):
     forms_ = {c['model']: c for c in others if c['cls'] == 'ZSTDOBJ'}
     planned = {c['name']: c for c in (plan_ or {}).get('boxes', [])}
     seen = set()
-    n_high = n_low = n_a = 0
+    n_high = n_low = n_a = n_lent = 0
     for k in mine:
         nm, e, c = sc.names[k], B.ents[k - 1], by.get(k)
         low = nm.lower()
@@ -820,14 +1169,31 @@ def check(folder, log=print):
         seen.add(nm)
         n_high += c['kind'] == 'high'; n_low += c['kind'] == 'low'
         src = forms_.get(e.model)
+        pl = planned.get(nm) or {}
+        lent = False
+        if src is None and pl.get('borrowed'):
+            # a borrowed box primitive: the box is a clone of the cover box cover.json names, with the model of the
+            # object it names; that model must be what forms() asks of one
+            hit = sc.resolve(F.R_ + pl['form'])
+            own = sc.resolve(F.R_ + pl['borrowed'])
+            src = by.get(hit[0]) if len(hit) == 1 else None
+            lent = len(own) == 1 and B.ents[own[0] - 1].model == e.model and sc.cls(own[0]) == 'ZSTDOBJ'
+            if src is None or not lent:
+                fail('%s: its borrowed model %d is not that of %s, or its form %s is not there' % (nm, e.model, pl['borrowed'], pl['form'])); continue
+            n_lent += 1
         if src is None:
             fail('%s: model %d is no other cover box\'s' % (nm, e.model)); continue
         se = B.ents[src['node'] - 1]
         if (e.flags, e.group, e.aux, e.raw, e.links, e.tid) != (se.flags, se.group, se.aux, se.raw, se.links, se.tid) or sc.nodes[k]['ctrls'] or sc.nodes[src['node']]['ctrls']:
             fail('%s: its record is not that of the box it is a clone of (%s)' % (nm, src['name']))
         va, vb = B.values(k), B.values(src['node'])
-        if {f: v for f, v in va.items() if f not in ('ZGEOM[1]', 'ZGEOM[2]')} != {f: v for f, v in vb.items() if f not in ('ZGEOM[1]', 'ZGEOM[2]')}:
+        skip = ('ZGEOM[1]', 'ZGEOM[2]', 'ZGEOM[4]') if lent else ('ZGEOM[1]', 'ZGEOM[2]')
+        if {f: v for f, v in va.items() if f not in skip} != {f: v for f, v in vb.items() if f not in skip}:
             fail('%s: a property other than place and rotation differs from %s' % (nm, src['name']))
+        if va.get('ZGEOM[4]') != e.model:
+            fail('%s: .prp and .gms disagree on its model (%s, %d)' % (nm, va.get('ZGEOM[4]'), e.model))
+        if lent and (c['bb'] is None or c['octrec']):
+            fail('%s: its borrowed model has a collision record or no plain root' % nm)
         if e.flags not in (0x200, 0x302) or e.flags & 0x400:
             fail('%s: flags %#x' % (nm, e.flags))
         if (e.flags == 0x200) != (not c['octrec']):
@@ -859,7 +1225,8 @@ def check(folder, log=print):
             fail('%s is in a level exit box' % nm)
         if lane and min(F.lane_dist(lane, q) for q in cs) < F.LANE_CLEAR:
             fail('%s is within %d of the escape vehicle\'s road (%d)' % (nm, F.LANE_CLEAR, min(F.lane_dist(lane, q) for q in cs)))
-        near = [o for o in others if math.hypot(o['mid'][0] - mid[0], o['mid'][2] - mid[2]) < APART - 1 and abs(o['mid'][1] - mid[1]) < 200]
+        near = [o for o in others if o['cls'] == 'ZSTDOBJ' and o['kind'] is not None            # (a 'NoCoverBox' is no cover box: the test above)
+                and math.hypot(o['mid'][0] - mid[0], o['mid'][2] - mid[2]) < APART - 1 and abs(o['mid'][1] - mid[1]) < 200]
         if near:
             fail('%s stands within %d of the cover box %s' % (nm, APART, near[0]['name']))
         # is something solid in it? the BASE plane over its foot: static collision inside its footprint
@@ -877,6 +1244,8 @@ def check(folder, log=print):
     if plan_ is not None and len(planned) != len(mine):
         fail('%d boxes in the build, %d in cover.json' % (len(mine), len(planned)))
     total = sum(1 for c in boxes if c['cls'] == 'ZSTDOBJ')
+    if n_lent:
+        note('%d of the boxes have the box primitive of an object that is no cover box (the 100 cube of F07\'s camera objects): ASSUMPTION (--no-borrow leaves them out)' % n_lent)
     if n_a:
         note('%d of the boxes are clones of boxes with a collision record (flags 0x302), listed in the root\'s tree 0: ASSUMPTION (--models b leaves them out)' % n_a)
     bad = F.room_sets_check(B.scene, octx, O.RoomIndex.parse(B['.rmi']), O.RoomIndex.parse(B['.rmc']))
@@ -1038,7 +1407,11 @@ def build(src, dst, opt=None, log=print):
 
 def options(a):
     opt = {}
-    for flag, key, conv in (('--models', 'models', str), ('--near', 'near', float), ('--rounds', 'rounds', int)):
+    if '--no-corners' in a:
+        a.remove('--no-corners'); opt['corners'] = False
+    if '--no-borrow' in a:
+        a.remove('--no-borrow'); opt['borrow'] = False
+    for flag, key, conv in (('--models', 'models', str), ('--near', 'near', float), ('--rounds', 'rounds', int), ('--corner-near', 'corner_near', float)):
         if flag in a:
             i = a.index(flag)
             opt[key] = conv(a[i + 1]); del a[i:i + 2]
@@ -1065,7 +1438,7 @@ def main():
             if a[2:] and d not in a[2:] and not (d == 'retomoto_full' and 'retomoto' in a[2:]):
                 continue
             print('==== %s: the cover step' % d)
-            pre, fin = os.path.join(a[1], 'z_cover', '_pre', d), os.path.join(a[1], 'z_cover', d)
+            pre, fin = os.path.join(a[1], OUT, '_pre', d), os.path.join(a[1], OUT, d)
             out, _rep = build(os.path.join(a[1], sub, d), pre, opt)
             ok = not any(s == 'FAIL' for s, _t in out)
             if ok:

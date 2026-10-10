@@ -694,3 +694,189 @@ builds to the byte. Entities: M01 15,927, M02 23,330, M03 20,893, M06 16,499, Re
   eight frames are the palm west of the start and the pillars along the shop fronts, the car park north of them is
   empty but for Dead Men's two boxes; M06's are the rocks of the east lawn, the bridge parts on the middle path
   and the tubs in the south.
+
+## 13. Corners, and the form question settled (`tools/kl_fa_cover.py`; 2026-10-11; OFFLINE, nothing ran in the game, nothing installed)
+
+    python tools\kl_fa_cover.py all <work>\build [M01 ...]     -> z_cover2\_pre\<map> (boxes: objects + corners, form b only)
+                                                               -> kl_fa_bots_dyn.build (random routes) -> z_cover2\<map>
+    options: --models b|ab (default b), --no-corners, --corner-near N (800), --no-borrow
+
+`z_cover` (section 12) is left as it was. `z_cover2` supersedes it: **no form a box in any of the five builds.**
+Also there, as a choice for the lead: `z_cover2\_ab\M01` = M01 with `--models ab` (13.3).
+
+### 13.1 How stock puts a box at a corner (measured: `scratchpad\cover2\s1.py`, the corner finder run on stock F05 and F08)
+
+For every HIGH cover box of the level the nearest corner the finder sees, and how the box lies to it:
+
+| | high boxes | at an 'L' corner (two faces meet) | at a wall end | no corner within 60 of a box corner |
+|---|---:|---:|---:|---:|
+| F05 | 444 | 140 | 193 | 111 |
+| F08 | 219 | 98 | 16 | 105 |
+
+Of the 238 'L' boxes 219 (F05 129, F08 90) have **a footprint corner within 15 of the wall corner, lie in the
+solid and along the face (within 5 degrees)**; 9 are turned or off by more, 10 lie outside. At a wall end the box
+is as deep as the wall is thick and its end is flush with the wall's end (F05 `SO0101_F05_Frame_Main_A_01!
+CoverBoxH_03` / `_04`: 150 x 200 x 40 and 70 x 200 x 40 on a 30 wall; `CoverBoxH_31`: 115 x 200 x 60 on a 60 wall).
+At a building corner it is 70..150 along the face and 60..120 deep (F05 `CoverBoxH_27` .. `_29` 100 x 200 x 120,
+`CoverBoxH_62` .. `_64` 125 x 200 x 72..104; F08 `CoverBoxH_33` / `_34` 70 x 200 x 70, `CoverBoxH_38` / `_39`
+110 x 200 x 70, `CoverBoxH_01` .. `_04` 30 x 200 x 100). So: **the box IS the corner** - it fills the end of the
+solid, and the engine makes its four sides the cover. That is what `consider_corner()` builds (`CORNER_AIM` 100).
+
+### 13.2 What a cover takes from the entity (kl2.exe read statically, `scratchpad\cover2\f603830.txt`)
+
+`0x6d6a80` hands the object to `0x603830(obj, high, 1, car)`. That routine reads `[obj + 4]`, the object's
+128-byte slot, and of its geometry nothing else:
+
+| slot | what | where read |
+|---|---|---|
+| +0x00 | 3 x 3 matrix. `[+0x10]` (the Y of its up axis) must be over 0.717 (`[0xb68900]`): a box tilted past 44 degrees is no cover | 0x603880 |
+| +0x24 | place | 0x7b3031 |
+| +0x30 | **box middle** (3 floats, the object's own frame) | 0x60395f, 0x42a4d0 (adds it to a corner) |
+| +0x40 | **box half size** (3 floats) | 0x60386b .. 0x60387c |
+| +0x50 | parent slot, walked to the root | 0x7b303b |
+| +0x6c | name (`*_depend_on_parent`) | 0x603c4e |
+
+Four corners = middle +- half size in X and Z at the box's FLOOR (`-half Y`), each through `0x7b3020` (matrix,
+place, every parent) into the world; then one side per pair of corners (`0x898e80`, `0x71fc30` x 4) with the
+height `half Y + 50.0` (`[0xb71b60]`). Besides that only controllers (`DynamicCover` on it or its parent = no
+cover; `DestructibleCover`, `PlayerCoverModifier`) and the define `OnlyFireOver`.
+
+- **Not read: the mesh, the model root's collision record, flags 0x100 / 0x002, any room tree.** So a form b box
+  (no record, in no tree) is a whole cover, and nothing form a has is needed. **Form a is dropped from the
+  builds.**
+- The extent DOES come from the model. The slot's box is not in the level files: the loader zeroes +0x30..+0x48
+  (0x8adb19..0x8adb2b) and no ZGEOM / ZSTDOBJ property is a size; a ZSTDOBJ has nothing but its model to fill it.
+  The routine that fills it was looked for and NOT found (ASSUMPTION: it is the model root's box, chunk + 0x20).
+  Evidence in the data: every cover box model of every level looked at (stock F01 F05 F08, the five builds) has
+  ONE mesh with draw mode 0x800000 = hidden (kl2 0x67cf77) - a box that exists only for its size - and no cover
+  box has a scaled matrix; stock keeps one model per size (F05: 100 x 100 x 100, 100 x 200 x 100, 140 x 200 x 140,
+  100 x 200 x 20 ...).
+- So a form b box can only have a size a hidden box model of the build has. Sizes of the builds' own form b
+  models: M01 low 110..220 wide, high 200 x 150 x 190 and up (all car-sized); M02 the same + 150 x 269 x 45;
+  M03 64 x 163 x 46, 70 x 200 x 70, 100 x 200 x 50 / x 100, 200 x 200 x 200; M06 30..125 wide (many); Retomoto
+  110 x 100 x 110 and up, high from 109 x 345 x 109.
+- **One more model without adding one** (`forms()`, 'borrow'; `--no-borrow` leaves it out): every build carries
+  F07's hand-held camera objects (`AllLevels/FA_Cam_Handheld.zip\Cam_Handheld\*_Cam`), ZSTDOBJ whose model is a
+  100 x 100 x 100 box with one hidden mesh and no collision record - the same kind of model, and the size of
+  stock F05's commonest low form b box. Where a build has no low form b model of its own up to 130 wide (M01,
+  M02, M03), a LOW box may be a clone of one of the build's form b cover boxes with that model number (.gms
+  record + 0x0c and `ZGEOM[4]`). ASSUMPTION: a cover box may share its model with an object that is no cover
+  box. Used by 2 boxes on M01 and 2 on M02; the check notes them. Not used for HIGH boxes (a 100-high model under
+  a `CoverBoxH` name gives a cover height of 100; the lowest high box of our maps gives 119).
+- Not taken: a NEW model root in a dead chunk of the `.prm` (64 bytes, another root's hidden mesh, other bounds)
+  would give any size without growing the file - it IS adding a model, and it is unproven; a scaled matrix would
+  scale the box in 0x603830 (no cover box of any level has one); a ZBoxPrimitive named `CoverBox*` (sized by its
+  properties) - whether the cover list's class test lets it through is not established.
+
+### 13.3 The corner finder
+
+For a place that got no object box in the round (`corners()`, `wall_runs()`, `consider_corner()`):
+
+1. The cut segments of the 75 plane of every entity (but the `NOT_COVER` names), each turned so that its
+   triangle's normal is on its left, are joined into straight FACES: on one line (5 off, 10 degrees), gaps up to
+   25, at least 100 long, at least 80 % of the length facing one way.
+2. **'L'**: two faces end within 25 of one another at 60..120 degrees and each faces AWAY from the other (convex:
+   a building corner, a pillar over the old 700 limit; a room's inner corner faces the other way and is left out).
+   **'end'**: two faces back to back, 10..100 apart, end side by side, nothing in the 75 plane for 80 beyond (a
+   wall end, a doorway jamb, the end of a garden wall).
+3. It must be there 45 over the floor too (not a sill, not a counter top). There at 175 = a HIGH box, else LOW.
+4. The face: the one whose normal points AGAINST the bot's way on that leg (dot under -0.3), i.e. hidden from
+   where the bot is walking TOWARD. **'The threat is ahead on the bot's way' is a GUESS**; it is the same guess
+   `kl_fa_bots_dyn.find_holds` makes when it takes the place 'behind the box as the bot walks'. Mesh must lie
+   50..110 before that face.
+5. The box: in the solid, a footprint corner ON the corner, along the face (13.1); no deeper than the solid behind
+   the face + 25 (a wall end: its thickness; else up to the first mesh behind the face - a thin shell with a room
+   behind it - or the other face's length); at least 60 along the face and not longer than it; of the models
+   that fit the one nearest 100 x 100.
+6. Then as for objects: no cover box at the corner already, a hold place of `kl_fa_bots_dyn` 70..230 from it ON
+   THE FACE'S SIDE that `hold_ok` passes, not in a NoCoverBox, a level exit box, within 250 of the vehicle's road,
+   in the van's lane; same floor as the place that asked. One corner box a place and round.
+
+### 13.4 Result (`z_cover2\_pre\<map>\cover.txt`, `cover.json`; `scratchpad\cover2\stats.py`, `zoom.py`)
+
+All boxes are form b. Holds are the dynamic plan's own tally with random routes, source build -> with the boxes
+(the final `dyn.json` has the same numbers).
+
+| map | boxes | on objects (low / high) | at corners (low / high) | with the borrowed cube | holds found / asked | section 12 (form a allowed) | places still without |
+|---|---:|---|---|---:|---|---|---:|
+| M01 | 2 | 2 / 0 | 0 / 0 | 2 | 53 / 151 -> 55 / 151 | 60 / 149 (8 boxes, all form a) | 95 |
+| M02 | 9 | 8 / 1 | 0 / 0 | 2 | 87 / 217 -> 92 / 207 | 93 / 207 (9, 2 form a) | 109 |
+| M03 | 22 | 3 / 15 | 0 / 4 | 0 | 50 / 189 -> 72 / 179 | 69 / 179 (20, 0) | 102 |
+| M06 | 15 | 12 / 3 | 0 / 0 | 0 | 61 / 159 -> 70 / 147 | 69 / 147 (15, 4) | 79 |
+| Retomoto | 4 | 1 / 1 | 0 / 2 | 0 | 91 / 180 -> 95 / 179 | 95 / 179 (2, 1) | 86 |
+| M01 `_ab` | 8 | 1 / 6 | 0 / 1 | 1 | 53 / 151 -> 60 / 149 | (7 form a, 1 form b) | 88 |
+
+**The corner finder adds little: 6 boxes on the five maps (7 with M01 `_ab`).** M03: four corners of the banking
+hall's square blocks (`NonDestructables_01`, 158 x 156) and of a column (`SI0102_M03_ColumnBankEnd_A_02`), each
+a 100 x 200 x 100 box. Retomoto: two corners of a pier of the street front (`SO0100_JPN_Street_Wide_a_02`, faces
+212 and 1214 long) at x -2900, z 130 and z -1357, a 170 x 150 x 200 box. M01 `_ab`: a corner of a phone booth.
+Why the others got none (counted a gap place and corner; a corner is counted once for every place that sees it):
+
+| | no corner within 8 m | a cover box is there already | no face hidden from ahead | not on the floor (nothing at 45) | no mesh before the hidden face | no model fits |
+|---|---:|---:|---:|---:|---:|---:|
+| M01 (95 places) | 47 places | 76 | 60 | 50 | 27 | 35 |
+| M02 (109) | 24 | 28 | 67 | 102 | 63 | 92 |
+| M03 (102) | 41 | 124 | 96 | 14 | 39 | 11 |
+| M06 (79) | 17 | 47 | 59 | 22 | 35 | 0 |
+| Retomoto (86) | 35 | 10 | 73 | 34 | 5 | 47 |
+
+So the walls are not the missing cover the first run took them for: where a wall corner is near a bot's way it
+mostly faces the wrong way for a threat ahead (a wall BESIDE the way), has a box already, or is a thin wall end
+(M02: jambs 20..22 thick, about two thirds of its 92) for which the build has no thin high model. The gaps of 12.3 stay, with
+these numbers: M01 the car park (41 of 95 places have nothing at all: no object within 6 m and no corner within
+8 m); M02 the gallery (45 places: glass, rails, sills) and the car park (24); M03 the hall's upper floor (31),
+the forecourt (28), beyond the wall drop (24); M06 the lawns (63); Retomoto the street (35 + 14).
+
+**M01**: with form b alone it gets 2 boxes (two metal bins, the borrowed cube); its pillars, palm and pole are
+40..62 wide and HIGH, and M01 has no slim high form b model. This is the one map where form a is the only way
+to more without a new model: `z_cover2\_ab\M01` has the 7 form a boxes of the first run again (same checks, all
+pass; its cover check notes 'form a: ASSUMPTION'). The lead chooses; `z_cover2\M01` is the safe one.
+
+LOOKED AT: `dyn_map.png` of M01 (two magenta frames, both at the shop fronts on the west way), M02 (nine in the
+jewel store, the sweeper and a panel), M03 (the pilasters along the hall's west wall, the blocks and the column
+in the hall on the bots' ways, the forecourt's pots and palms). The frames cannot tell a corner box from an
+object box at that scale, so every corner box was drawn alone (`scratchpad\cover2\zoom.txt`: collision in the 75
+plane, the footprint, the hold place, 20 units a cell): all six sit in the solid with a footprint corner on the
+corner of a block / column / pier, and the hold place is on the side the bot comes from.
+
+### 13.5 Checks (`scratchpad\cover2\gates.sh` -> `gates_all.txt`, `gates\`; M01 `_ab`: `m01ab.txt`, `gates_ab\`)
+
+| | cover diff | cover check (`_pre` and final) | dyn check | dyn diff | kl_impact | kl_maps audit | kl_map_guns | van-check | large blocks | side .ini |
+|---|---|---|---|---|---|---|---|---|---|---|
+| M01 | only the cover group was added | PASS (0 FAIL, 1 NOTE) | PASS (0 FAIL, 2 NOTE) | only the squad's steps were made anew | problems: 0 | PASS (0, 1 known) | problems: 0 | 0 fault(s) | equal | 2 same |
+| M02 | same | PASS (0, 1) | PASS (0, 5) | same | problems: 0 | PASS (0, 6 known) | problems: 0 | 0 fault(s) | equal | 2 same |
+| M03 | same | PASS (0, 0) | PASS (0, 1) | same | problems: 0 | PASS (0, 0 known) | problems: 0 | 0 fault(s) | equal | 2 same |
+| M06 | same | PASS (0, 0) | PASS (0, 3) | same | problems: 0 | PASS (0, 6 known) | problems: 0 | (no van) | equal | 2 same |
+| Retomoto | same | PASS (0, 0) | PASS (0, 4); kl_fa_bots_rt PASS (0, 6) | same | problems: 0 | (not a kl_maps map) | problems: 0 | (kl_fa_van's) | equal | 4 same |
+| M01 `_ab` | same | PASS (0, 2) | PASS (0, 2) | same | problems: 0 | PASS (0, 1 known) | problems: 0 | 0 fault(s) | equal | 2 same |
+
+(The cover check's NOTE on M01 / M02 is 'n boxes have the box primitive of an object that is no cover box'; on
+M01 `_ab` also 'form a'.) Entities: M01 15,900, M02 23,329, M03 20,901, M06 16,502, Retomoto 27,016.
+
+**Negative test** (`scratchpad\cover2\neg.py` -> `neg.txt`; scratch builds from `z_final\M03`, deleted at the end):
+the unspoiled control passes; a box moved 600 with `cover.json` moved too FAILS ('no static collision in its
+footprint ... (thin air)'); moved with `cover.json` left FAILS ('not where cover.json planned it'); a form b box
+listed in the root's tree 0 FAILS ('is listed in a room tree'); a box with flag 0x400 FAILS ('flags 0x600').
+`NEGATIVE TEST: PASS`.
+
+A fault found on the way: `check` counted a `NoCoverBox` (ZBoxPrimitive, kind none) as a cover box in its
+'within 150 of a cover box' rule (M03, first build); it now counts cover boxes only, as the planner does.
+
+### 13.6 Assumptions, and what is not done
+
+- NOT RUN. Everything of 12.5 still holds for these boxes (do Dead Men's cover boxes become covers at all; can the
+  PLAYER use a form b box).
+- The slot's box = the model root's box: ASSUMPTION (the filling routine was not found, 13.2).
+- 'The threat is ahead on the bot's way' (which face of a corner): GUESS. A corner whose faces look sideways or
+  forward gets no box, though it is cover against somebody round it.
+- The triangle normal as 'the free side of a face' relies on the collision being wound outward. It was not
+  tested on its own; a wrong one gives a face without mesh before it and so no box (never a box in the wrong
+  place: the hold place must be on the mesh on that side).
+- Thresholds (100 face, 25 join, 60..120 degrees, 10..100 thick, 25 over, 800 near): GUESS but where 13.1 names
+  stock.
+- The borrowed cube: ASSUMPTION (13.2). `--no-borrow` gives M01 no box at all (then the step refuses to write:
+  use `z_route\M01`) and M02 two fewer.
+- Not done: thin high wall ends where the build has no thin high model (M01, M02's jambs, Retomoto) - needs a
+  new model root (13.2); low corners got no box anywhere (the finder allows them; none passed); a corner box
+  for a place that already got an object box in the round; `kl_fa_bots_dyn.py map` does not tell corner boxes
+  from object boxes.
