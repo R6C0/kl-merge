@@ -182,6 +182,13 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+OWNER 2026-10-10 ~14:00: 'i want to make it so you can come back as a fed or the ai heisters can come back as feds too'; through
+kl-merge-b6: 'make sure that the ai also go to the vehicle', the Dead Men maps on 'its own tab', and 'the original FA dog days maps
+to have these mods in the game too'. SPLIT with kl-merge-b6: stock maps with the mods = b6 (new tools/kl_stock_mod.py, builds in
+G:/kl_scratch/stock_mod); bots boarding, the tab, the fed respawn = this session. RUNNING: wf_5d20ea26-dc8 come-back-as-fed
+(re/fed_respawn.md -> klhook/klfed.c, tools/kl_fa_fed.py, <work>/build/x_fed; review re/fed_review.md); wf_2172effb-c70 dead-men-tab
+(klslot.c page latch, mkoverlay expansion page, tree <work>/build/w_tab/KLExpansion). A TESTER PACKAGE (the owner asked kl-merge-39)
+must not carry game data: hook + tools + a build script run on the tester's own installs - told kl-merge-39 and the owner.
 OWNER ASKED 2026-10-10 ~13:45 (verbatim in .wf/round_prompts8.txt): AI heisters drawn at RANDOM from Dead Men and Dog Days bodies /
 outfits; bots that backstab, stay by you, try to leave you behind; BOTS ON RETOMOTO; an EASTER EGG - a Kane in the round speaks the
 campaign's countdown to the blast; a Kane - Lynch EXCHANGE when both are in (Retomoto, maybe the other maps); more of the games'
