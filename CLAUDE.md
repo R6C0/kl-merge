@@ -182,6 +182,24 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+STATE 2026-10-10 11:30 (kl-merge-01). THE SEVERAL-BLOCK RESERVE WORKS LIVE: the owner's own session 09:04-09:32 (hook ship_stall,
+log + maps kept in <work>/research/owner_1010_0904): one process, SEVEN level loads (Retomoto x3, stock x4), no crash; four
+requests the heap refused were served from the reserve - three 32 MB scratch blocks and, at 09:19:50, a 13.9 MB block with the
+.prm already in it ('free 103 MB, largest piece 10.0 MB'), the case that crashed three times the night before. No stall line.
+WHO HOLDS THE 2 GB (python debug/vmmap.py on those maps; second load, 204 MB free, largest piece 32 MB):
+- modules 306 MB: nvgpucomp32 63, nvd3dum 61, nvwgf2um 53 (the D3D10/11 driver - the game is D3D9, so an overlay or recorder
+  made that device: medal-hook32.dll, nvspcap.dll and gameoverlayrenderer.dll are loaded; d3d11.dll, dxgi.dll, dcomp.dll too);
+- private RESERVED ONLY ~770 MB besides our reserve: 24 heap segments of 15.8 MB with 221 MB of them uncommitted; 56 thread
+  stacks of 4 MB = 226 MB reserved, 10 MB used (deepest 3.5, 2.0, 1.3, 1.0 MB; the other 52 at most 204 KB); five 32 MB
+  write-combined driver arenas (142 MB uncommitted); a second 128 MB reservation at 0x3b420000 with 0.4 MB committed, owner
+  NOT found (kl2 0x64eac2 pushes a flag, not a size).
+  => tell the owner: every overlay / recorder (Medal, NVIDIA overlay, Steam overlay, Discord) lives inside this 2 GB.
+  => [Memory] StackMB as written is the WRONG set (it shrinks the game's own threads, among them the deep ones). Idea, not
+  written: log start routine and peak stack use per thread, then shrink by routine.
+GAME FOLDER NOW (11:15) = kl-merge-39's mask test state, NOT the owner's Retomoto: slot <work>/build/pd2/pd2_F01 (stock Subway +
+wardrobe + 4 Payday 2 masks; the owner: 'all work'), hook pd2_ship b4f1dc8b (no stall watch), KLHook.ini from the sample
+([Expansion] Enable=0, [Load] NudgeMs=0 = slow loads), Overlay/Patch01.zip 91,646 bytes of 06:52. Asked kl-merge-39 before
+changing anything. The live queue below is partly overtaken: M8 is answered by the owner's session.
 STATE 2026-10-10 07:15 (kl-merge-01; owner away since 01:00, STEAM STILL AT ITS SIGN-IN WINDOW: no live run since 00:55).
 INSTALLED FOR THE OWNER: slot = <work>/build/y_loot/retomoto_loot (unchanged); hook = SHIP <work>/build/klhook/ship_stall (sha1
 c120880a = ship_mem3's several-block reserve and map files + the STALL WATCH + klchar that accepts 1..12 masks); their KLHook.ini
