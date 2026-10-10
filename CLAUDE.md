@@ -182,6 +182,7 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+SLOT 2026-10-10 12:40 = <work>/build/rt_ai2/retomoto_ai2 (Retomoto v2, e5dd45c9) on the owner's word; load check RT2 PASS (level in 2.4 s, Kane + Wolf, GO, no fault). Van leave leg, enemy lethality and voices are for the owner to judge by playing.
 READY TO SWAP IN (2026-10-10 ~13:00, offline, NEVER LOADED): <work>/build/rt_ai2/retomoto_ai2 = kl-merge-b6's Retomoto v2
 (G:/kl_scratch/ai_dyn2, commit ca178fb, re/retomoto_ai.md 11) + wardrobe with the four plates + KLJoin.ini. Van: the parked car
 PC0700_M09_Cars_Qeue_A_01 it drove into is hidden, drive-away to z 21000. Enemies: Dead Men soldiers had kept Dead Men ZSoldier
