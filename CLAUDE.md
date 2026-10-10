@@ -200,7 +200,17 @@ GAME FOLDER NOW (11:15) = a mask test state left by ANOTHER session (not kl-merg
 likely kl-merge-db, which relayed the owner's words and also wrote tools/kl_add_plates.py), NOT the owner's Retomoto: slot <work>/build/pd2/pd2_F01 (stock Subway +
 wardrobe + 4 Payday 2 masks; the owner: 'all work'), hook pd2_ship b4f1dc8b (no stall watch), KLHook.ini from the sample
 ([Expansion] Enable=0, [Load] NudgeMs=0 = slow loads), Overlay/Patch01.zip 91,646 bytes of 06:52. Asked kl-merge-db before
-changing anything; the owner's own pair is kept in <work>/build/klhook/owner_now. The live queue below is partly overtaken: M8 is answered by the owner's session.
+changing anything; the owner's own pair is kept in <work>/build/klhook/owner_now. kl-merge-db did not do it either: the
+runs (kl_autotest tags pd2-wolf .. pd2-dallas-long) and tools/kl_add_plates.py (+ a 'plates' command in kl_chars.py, both
+uncommitted) come from a tool outside the Claude sessions. ITS Retomoto + masks builds (<work>/build/plates_test, plates_cli ..
+plates_cli3) FAIL kl_impact: the plates are appended, 69,743 chunk-table entries, 3,985 slots left of the 4,096 kept free.
+READY INSTEAD (11:21, offline, NOT LOADED): <work>/build/rt_masks/retomoto_masks = `kl_chars.py wardrobe <work>/build/y_loot/light
+<out> --plates=wolf,dallas,chains,hoxton`: chunk table still 65,119 entries (2,400 dead indices left), kl_chars check = the one
+known glow material, kl_impact 0, kl_pd2mask selftest PASS; against the installed Retomoto only .prm (74.2 -> 75.6 MB), .TEX
+(+2.7 MB) and .MAT differ; KLWardrobe.ini Masks=12 OutfitStep=14. HAND-OVER WAITS FOR THE OWNER'S WORD: slot = that build
+(debug/slot.py put ... F01 --join klhook/KLJoin.retomoto.ini), hook ship_stall, the owner's KLHook.ini, overlay = BOTH files of
+<work>/build/pd2/overlay/Overlay (the installed Patch01.zip IS that pictures build, but Scenes/kaneandlynch.zip is not beside
+it - harmless only while [Expansion] is off); then PV1b (menu pictures) and one level load with Mask=10. The live queue below is partly overtaken: M8 is answered by the owner's session.
 STATE 2026-10-10 07:15 (kl-merge-01; owner away since 01:00, STEAM STILL AT ITS SIGN-IN WINDOW: no live run since 00:55).
 INSTALLED FOR THE OWNER: slot = <work>/build/y_loot/retomoto_loot (unchanged); hook = SHIP <work>/build/klhook/ship_stall (sha1
 c120880a = ship_mem3's several-block reserve and map files + the STALL WATCH + klchar that accepts 1..12 masks); their KLHook.ini
