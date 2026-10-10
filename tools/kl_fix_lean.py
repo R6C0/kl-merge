@@ -9,6 +9,17 @@ Works on a FINISHED build folder (<slot>_Main.zip + the files beside it). Full a
                                                             the build with the NoCoverBox controller taken off
                                                             every box (not those whose path matches a --keep
                                                             pattern, fnmatch, case-insensitive)
+    python kl_fix_lean.py apply <folder> <out folder> --ctrl DistanceRumbleCam
+                                                            the same step for another controller. DistanceRumbleCam
+                                                            (owner, 2026-10-10, Hot Coffee: 'weird camera thing happens
+                                                            where u can barely see anything for a few seconds after the
+                                                            plane comes by'): M01's Planes!TrafficFlowController mixes
+                                                            0.4 of the ZCAMERA 'AnimatedRumbleCamera' into the view
+                                                            while the plane is within 1000..3300; that camera's motion
+                                                            is a MatPosAnim clip of Dead Men's .ANM, which is not
+                                                            carried. ASSUMPTION (not read in the exe, not tried): the
+                                                            missing clip is what throws the view; without the
+                                                            controller there is no plane rumble at all.
 
 READ IN kl2.exe (static; nothing of it was tried in the game)
   - A cover is a ZSTDOBJ-family entity whose NAME matches *coverbox* (CFFCoverList slot 13, 0x6d6a80: it walks
@@ -58,9 +69,9 @@ def _archive(folder):
     return os.path.join(folder, hit[0])
 
 
-def boxes(sc):
+def boxes(sc, ctrl=None):
     """-> [node index] of every node that carries the NoCoverBox controller."""
-    return [k for k in range(1, len(sc.nodes)) if kl_fa.has(sc, k, CTRL)]
+    return [k for k in range(1, len(sc.nodes)) if kl_fa.has(sc, k, ctrl or CTRL)]
 
 
 def facts(folder, log=print):
@@ -104,7 +115,7 @@ def facts(folder, log=print):
     return rep
 
 
-def apply(src, dst, keep=(), log=print):
+def apply(src, dst, keep=(), log=print, ctrl=CTRL):
     """The build of folder `src` written to folder `dst` with the NoCoverBox controller taken off its boxes. -> report."""
     zp = _archive(src)
     if os.path.abspath(dst) == os.path.abspath(os.path.dirname(zp)):
@@ -115,27 +126,28 @@ def apply(src, dst, keep=(), log=print):
     data0, bad0, _p, _n = J.check(sc, log=lambda *_a: None)
     keep = [p.lower() for p in keep]
     took, kept = [], []
-    for k in boxes(sc):
+    tag = 'lean' if ctrl == CTRL else ctrl.lower()
+    for k in boxes(sc, ctrl):
         path = sc.path[k]
         if any(fnmatch.fnmatch(path.lower(), p) or fnmatch.fnmatch(sc.names[k].lower(), p) for p in keep):
             kept.append(path); continue
         n = sc.nodes[k]
-        n['ctrls'] = [c for c in n['ctrls'] if sc.p.key(c[0]) != CTRL]
+        n['ctrls'] = [c for c in n['ctrls'] if sc.p.key(c[0]) != ctrl]
         took.append(path)
     if not took:
-        raise ValueError('no NoCoverBox to take off (%d kept)' % len(kept))
+        raise ValueError('no %s to take off (%d kept)' % (ctrl, len(kept)))
     data, bad, _p, _n = J.check(sc, log=lambda *_a: None)
     if len(bad) > len(bad0):
         raise ValueError('%d objects do not fit their class after the change (%d before): %s' % (len(bad), len(bad0), bad[:3]))
-    if boxes(sc) and not kept:
-        raise ValueError('a NoCoverBox is left')
+    if boxes(sc, ctrl) and not kept:
+        raise ValueError('a %s is left' % ctrl)
     # nothing names these controllers: a reference names a NODE, and the nodes stay
     files[ext['.prp']] = data
     os.makedirs(dst, exist_ok=True)
     out = kl_graft.write_zip(os.path.join(dst, os.path.basename(zp)), [(n, files[n]) for n in order])
     for x in os.listdir(os.path.dirname(zp)):
         q = os.path.join(os.path.dirname(zp), x)
-        if os.path.isfile(q) and q != zp and not x.startswith('lean.'):
+        if os.path.isfile(q) and q != zp and not x.startswith(tag + '.'):
             shutil.copyfile(q, os.path.join(dst, x))
     with zipfile.ZipFile(zp) as a, zipfile.ZipFile(out) as b:
         ia, ib = a.infolist(), b.infolist()
@@ -148,18 +160,18 @@ def apply(src, dst, keep=(), log=print):
     if os.path.isfile(sj):
         import kl_maps
         st = json.load(open(sj))
-        st['lean'], st['final'] = diff, kl_maps.member_ids(dst, os.path.basename(zp)[:-len('_Main.zip')])
+        st[tag], st['final'] = diff, kl_maps.member_ids(dst, os.path.basename(zp)[:-len('_Main.zip')])
         st['same'] = [e for e in st.get('same', []) if e not in diff]
         with open(sj, 'w') as fh:
             json.dump(st, fh, indent=1)
     rep = collections.OrderedDict(source=zp, out=out, taken=len(took), kept=kept, members_changed=diff,
                                   prp_bytes=[len(data0), len(data)], boxes=took)
-    with open(os.path.join(dst, 'lean.json'), 'w') as fh:
+    with open(os.path.join(dst, tag + '.json'), 'w') as fh:
         json.dump(rep, fh, indent=1)
     lines = ['kl_fix_lean: %s -> %s' % (zp, out),
-             '  NoCoverBox controller taken off %d boxes, %d kept; only the .prp member differs (%d -> %d bytes)' % (len(took), len(kept), len(data0), len(data))]
+             '  %s controller taken off %d objects, %d kept; only the .prp member differs (%d -> %d bytes)' % (ctrl, len(took), len(kept), len(data0), len(data))]
     lines += ['    ' + p[5:] for p in took]
-    with open(os.path.join(dst, 'lean.txt'), 'w') as fh:
+    with open(os.path.join(dst, tag + '.txt'), 'w') as fh:
         fh.write('\n'.join(lines) + '\n')
     for s in lines[:2]:
         log(s)
@@ -171,13 +183,15 @@ def main():
     if len(a) == 2 and a[0] == 'check':
         facts(a[1])
     elif len(a) >= 3 and a[0] == 'apply':
-        keep, rest, i = [], a[3:], 0
+        keep, rest, i, ctrl = [], a[3:], 0, CTRL
         while i < len(rest):
             if rest[i] == '--keep' and i + 1 < len(rest):
                 keep.append(rest[i + 1]); i += 2
+            elif rest[i] == '--ctrl' and i + 1 < len(rest):
+                ctrl = rest[i + 1]; i += 2
             else:
                 sys.exit('unknown option %s' % rest[i])
-        apply(a[1], a[2], keep)
+        apply(a[1], a[2], keep, ctrl=ctrl)
     else:
         sys.exit(__doc__)
 
