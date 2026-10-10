@@ -486,6 +486,21 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
             why = why + ['audit: ' + x for x in aud['bad']]
             bad[m['id']] = why
         took = json.load(open(os.path.join(info, 'adopted.json'))) if os.path.isfile(os.path.join(info, 'adopted.json')) else None
+        bot_build = None
+        bot_json = os.path.join(d, 'bots.json')
+        if not os.path.isfile(bot_json):
+            bot_json = os.path.join(info, 'bots.json')
+        if os.path.isfile(bot_json):
+            with open(bot_json, encoding='utf-8') as f:
+                bot_build = json.load(f)
+            bot_facts = bot_build.get('facts', {})
+            bot_build = {
+                'bots': bot_facts.get('bots'),
+                'squad_nodes': bot_facts.get('squad_nodes'),
+                'references_out_of_the_squad': bot_facts.get('references_out_of_the_squad', {}),
+                'routes': bot_facts.get('routes', {}),
+                'check': bot_build.get('check', []),
+            }
         numbers = {k: res.get(k) for k in ('archive_mb', 'beside_mb', 'entities', 'rooms', 'textures', 'materials', 'prm_chunks', 'sounds', 'waves', 'nav_bytes')}
         # result.json is written by the graft; a finished folder was lightened and given the wardrobe after it (DM01: 336 MB
         # there, 197 MB in the tree). The sizes are read off the tree, the counts off the folder's audit where it has one.
@@ -503,6 +518,7 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
             'taken_from': took,                         # a finished folder (adopt()); None = built here by kl_graft's defaults
             'wardrobe': os.path.isfile(os.path.join(d, 'KLWardrobe.ini')),
             'audit': {k: aud.get(k) for k in ('prm_mb', 'prm_entries', 'tex_mb', 'people', 'weapons', 'fa', 'round', 'preflight')} if aud else None,
+            'bot_build': bot_build,
             'options': res.get('options', {}),
             'build_id': build_id(d, m['slot']), 'accepted': not why, 'not_accepted_because': why,
             'problems': res.get('problems', []), 'known_problems': list(m['known']), 'fa_check': res.get('fa', {}),
@@ -644,7 +660,11 @@ def ini_block(entries):
     L = ['[Expansion]', 'Enable=1', 'Root=' + ROOT, 'Overlay=1', 'Fallback=1', 'Log=1', '',
          '; menu page %d = the Arcade button "%s": <stock slot> = <folder under %s\\Maps>' % (PAGE, PAGE_TITLE, ROOT), '[Redirect.%d]' % PAGE]
     L += ['%s=%s' % (e['slot'], e['id']) for e in entries]
-    L += ['', '[Page.%d]' % PAGE, 'Title=' + PAGE_TITLE] + ['%s=%s' % (e['slot'], e['name']) for e in entries]
+    L += ['', '; AI heisters are enabled for the adopted FA maps; the hook still gates behavior to non-stock levels.',
+          '[Bots]', 'Enable=1', 'Log=1',
+          '; Random crew looks remain off for the first live bot test; enable [Crew] Random=1 only after bot behavior passes.',
+          '[Crew]', 'Random=0',
+          '', '[Page.%d]' % PAGE, 'Title=' + PAGE_TITLE] + ['%s=%s' % (e['slot'], e['name']) for e in entries]
     return '\n'.join(L) + '\n'
 
 
@@ -1684,7 +1704,7 @@ def selftest(scratch=None, log=print):
     ok('the hook is the tree\'s, the old one is kept', sha1(os.path.join(game, 'dinput8.dll')) == man['files']['Hook/dinput8.dll']['sha1'] and open(os.path.join(dst, STATE, 'dinput8.dll.before'), 'rb').read() == b'old hook without pages')
     t = open(os.path.join(game, 'KLHook.ini'), newline='').read()
     secs = [n for n, _l in ini_sections(t.replace('\r\n', '\n')) if n]
-    ok('KLHook.ini keeps [KLHook] and [Auto], loses the stale [Redirect], gains the block: %s' % secs, secs == ['KLHook', 'Auto', 'Expansion', 'Redirect.2', 'Page.2'] and 'F01=DM03' not in t and '; a comment' in t and 'F06=DM09' in t and 'Log=2' not in t)
+    ok('KLHook.ini keeps [KLHook] and [Auto], loses the stale [Redirect], gains the block: %s' % secs, secs == ['KLHook', 'Auto', 'Expansion', 'Redirect.2', 'Bots', 'Crew', 'Page.2'] and 'F01=DM03' not in t and '; a comment' in t and 'F06=DM09' in t and 'Log=2' not in t)
     ok('KLHook.ini has CRLF line ends only', '\n' not in t.replace('\r\n', ''))
     f01 = lambda f: open(os.path.join(game, 'Scenes/Locations/F01', f), 'rb').read()
     ok('the F01 slot is stock again, by copy', f01('F01_Main.zip') == b'STOCK F01 archive' and f01('F01_Main.WAV') == b'STOCK wav' and f01('Loader_Sequence.zip') == b'stock loader (never replaced)' and sorted(state['slot']) == ['Scenes/Locations/F01/F01_Main.WAV', 'Scenes/Locations/F01/F01_Main.zip', 'Scenes/Locations/F01/F01_Main_LS.SND'])

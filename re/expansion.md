@@ -466,6 +466,11 @@ trimming and packing, not in sharing.**
 
 ## 7. Live checks, in order (one variable each; `python debug\zombies.py --count` before and after)
 
+Adopted map folders may include `bots.json` from `tools/kl_fa_bots.py` or
+`tools/kl_fa_bots_rt.py`. The expansion manifest records that evidence under each
+map's `bot_build` field; the older `audit.round` counters describe the original
+map audit and must not be used to decide whether adopted bot squads are present.
+
 `re/hook_live.md` S0, S1, S2 are done (the hook's code line runs in a session and the TEST build blocks
 every Steam write), so L0 can start. All runs: klauto TEST DLL unless said (build it from the same
 sources as the tree's SHIP DLL: `klhook\build_auto.bat`), and check the log for `steam: import

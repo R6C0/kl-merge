@@ -14,6 +14,8 @@ repairs. Spec with the evidence: re/voice.md. OFFLINE: nothing here has been hea
     python kl_voice.py build2 [<out>]        the bank and Retomoto without / with the repairs into
                                              <out> (default <work>/build/voice2), per-slot clip counts
                                              before / after, file sizes. Nothing is installed.
+    python kl_voice.py said <level|zip> <key> ...   plain line keys as one lookup finds them: clip form, seconds
+    python kl_voice.py talk <folder> [<file.str>]   the check of tools/kl_fa_talk.py on a build folder
     python kl_voice.py heisters <level|zip> [merged|dd]
                                              CHECK: the heisters' lines as kl2.exe looks them up, per
                                              heister, clip formats, stream file, AI heisters' character
@@ -778,6 +780,31 @@ def heisters(src, log=None, stream='merged'):
 
 
 # ------------------------------------------------------------------ tests
+def said(src, keys, stream='merged', log=None):
+    """CHECK (re/talk.md): PLAIN line keys the way a single lookup finds them (kl2 0x828fa0: OnlineSpeakPlayer's
+    key, a key the hook part kltalk says) on a built level archive or a stock Dog Days level. stream: 'merged' /
+    'dd' (kl_snd.stream_file), a path to a stream file, or None = streamed clips not looked up.
+    -> {key: (state, seconds)}; state as _clip() gives it ('stream vorbis', 'memory adpcm', 'no leaf', ...,
+    with ', NOT IN THE STREAM FILE'), seconds None when the exe would find no clip."""
+    sc, S, recs, leaves = load(src)
+    try:
+        clips = kl_snd.stream_index(stream if stream and os.path.isfile(stream) else kl_snd.stream_file(stream))[1] if stream else None
+    except (OSError, ValueError):
+        clips = None
+    out = collections.OrderedDict()
+    for key in keys:
+        k = key.strip('/').lower()
+        st, rec = _clip(S, recs, leaves, k, clips)
+        secs = None
+        if rec is not None:
+            f = recs[u32(S.b, u32(S.b, leaves[k] + 0x14) + 0x14)]
+            secs = f['samples'] / float(f['rate'] or 1)
+        out[key] = (st, secs)
+        if log:
+            log('  %-34s %s  %s' % (st, '%6.2f s' % secs if secs is not None else '   -    ', key))
+    return out
+
+
 def test(log=print):
     """The facts the module rests on, re-measured on the stock files. -> number of failures"""
     bad = 0
@@ -906,6 +933,12 @@ def main(a):
     if a[:1] == ['heisters'] and len(a) > 1:
         r = heisters(a[1], print, stream=a[2] if len(a) > 2 else 'merged')
         return sum(1 for s, _t in r['findings'] if s == 'CRASH')
+    if a[:1] == ['said'] and len(a) > 2:
+        r = said(a[1], a[2:], log=print)
+        return sum(1 for st, secs in r.values() if secs is None)
+    if a[:1] == ['talk'] and len(a) > 1:                 # the lines of tools/kl_fa_talk.py (KLTalk.ini beside the archive)
+        import kl_fa_talk
+        return sum(1 for s, _t in kl_fa_talk.check(a[1], a[2] if len(a) > 2 else None)[0] if s == 'FAIL')
     if a[:1] == ['build']:
         build(a[1] if len(a) > 1 else None); return 0
     if a[:1] == ['defs'] and len(a) > 1:

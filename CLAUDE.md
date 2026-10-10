@@ -182,6 +182,18 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+STATE 2026-10-10 16:20. INSTALLED: the EXPANSION TREE <work>/build/w_tab/KLExpansion (python tools/kl_expansion.py install ...
+--replace --no-stream --no-hook; the old KLExpansion is KLExpansion.before-0): Arcade -> 'Dead Men maps' = Hot Coffee (F01),
+Late Night Opening (F02), Withdrawal (F03), A Walk in the Park (F04), Retomoto Tower (F06 = rt_guns3 build); SUBWAY IS STOCK
+AGAIN. LIVE: TAB_PAGE, TAB_DM09 (Retomoto through slot F06: wardrobe 12 masks, round at GO), TAB_DM03 (bank through F03) all PASS -
+first levels loaded under another slot name than F01. Hook now = SHIP <work>/build/klhook/ship_bot1 (f4562d32; [Bots] / [Guns]
+inert unless enabled). K2 live: Tune written, 'backstab: bot 6 may turn', record 6 TRAITOR, aboard, escaped (whether he SHOT at the
+player was not seen: the player stood idle and lived). AT 14:24 A HOOK 'built 14:17:58' WITH klcrew.c WIRED (G:/kl_scratch/
+ai_crew_hook, not this session's) CRASHED TWICE AT THE MENU (0x3f800000 called from 0x8618b9 <- 0x6175ac <- 0x7471ee; dump in
+<work>/research/crash_1010_1424): klcrew.c is NOT to be installed before its review. klhook.c in the working tree has the three
+klcrew lines uncommitted - a build from the tree includes it. RUNNING again after the 14:10 usage limit: crew-talk-bain
+(wf_79796da2-0dc: Retomoto bots, talk, review; klcrew and Bain parts returned) ; come-back-as-fed must be relaunched.
+THE FOUR MAPS IN THE TREE ARE STILL z_maps (no bots, no tune): swap in <work>/build/u_maps/<map> after a live load of each.
 LIVE 2026-10-10 13:47-13:52, run K1 (TEST hook <work>/build/klhook/test_bot1 = ship_stall + klbot.c + klgun.c Version 2 after the
 review fixes; SHIP sibling ship_bot1 f4562d32, NOT installed; b_bots/M02 Late Night Opening, [Bots] Enable=1 Log=1): THE CREW LOG
 WORKS and settles the questions - records 1..7 are 'bot', actor vtable 00bb3bac = ZFFActor; every bot reaches heist stage 1 within
