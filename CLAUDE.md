@@ -182,6 +182,7 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+INSTALLED FOR THE OWNER 2026-10-10 19:43 (swap8, game closed): tree <work>/build/w_tab8 = z_final maps (key-framed F07 van + bots on M01/M02/M03) + rt_full6 Retomoto (street buses / car as cover, Lynch's balcony line at 11.5 s); hook ship_all5 (sha1 8e08d469, adds the read-only klshoulder.c) with [Shoulder] Log=1. The owner's sessions 19:02-19:37 were STOCK Subway from the stock Arcade page (log: 'menu page 0'), so the z_final vans and the shoulder log have NOT been played yet. Bots-dynamic workflow (tools/kl_fa_bots_dyn.py, builds <work>/build/z_dyn/<map>) had written its builds by 19:45, review pending; they sit on y_loot2 / rt_full4 and must be re-applied on z_final / rt_full6 before they go on the tab; then raise [Balance] CopToCrew (0.15) back toward 1.0.
 OWNER 2026-10-10 ~21:40: the blast after the whole line 'comes too late now' -> the bang goes ON Kane's 'NOW!' (kl-merge-b6 v5:
 BLAST_DELAY 12.5 = blast 16.5 s after the event; the lead's chain builds <work>/build/rt_full5 and tree w_tab6). RANDOM CREW SEEN BY
 THE OWNER on the bank ('the ai heisters do go random on withdrawl'); on Retomoto not seen (the installer had reset [Crew] to 0:
