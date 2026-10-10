@@ -3,7 +3,10 @@ the known sites and node-loader callers spelled out. Lines it does not know are 
 script, position and expansion lines). --all prints every session's one-line summary first.
 Also shown: what the Steam write guard did ('steam:' - blocked and passed writes, the level's verdict, NOT GUARDED), the end
 of a session ('session: ... SESSION END', the moment the game uploads) and every jump box that fired or failed ('join:');
-a run of more than four 'steam:' lines is folded."""
+a run of more than four 'steam:' lines is folded.
+Last: how the session went and ended (course): its session states, the stretches the game window was not in front (the game
+runs no frame then), and - for a run without any fault line - that the log simply stops, with what was overdue at that moment.
+--all marks every session that has no end line."""
 import datetime,os,re,sys
 import kl
 HEAD=re.compile(r'(\d\d:\d\d:\d\d\.\d+) (.*)')
@@ -59,6 +62,45 @@ def started(path,head):
     end=datetime.datetime.fromtimestamp(os.path.getmtime(path)); h,mi,s=m.group(1).split(':')
     t=end.replace(hour=int(h),minute=int(mi),second=int(float(s)),microsecond=0)
     return t if t<=end+datetime.timedelta(seconds=2) else t-datetime.timedelta(days=1)
+STATE=re.compile(r'session: state 0x(\w+) -> 0x(\w+)')
+NUDGE=re.compile(r'nudge: ([\d.]+) s: (\d+) calls \((\d+) /s\), \d+ passed on, game window in front at the last one: (\w+)')
+ENDS=re.compile(r'exit: |process exit|process ended here|RESULT |INTEGRITY EXIT|steam: at exit')
+def secs(t): h,m,s=t.split(':'); return int(h)*3600+int(m)*60+float(s)
+def raw(path):
+    """[[(time, text), ...]]: the lines of every session, its '==== KLHook loaded' header first."""
+    ses=[]
+    for ln in open(path,errors='replace'):
+        m=HEAD.match(ln.rstrip('\r\n'))
+        if not m: continue
+        if m.group(2).startswith('==== KLHook') and 'loaded' in m.group(2): ses.append([])
+        if ses: ses[-1].append(m.groups())
+    return ses
+def course(lines):
+    """How a session went and how it ended - for the runs that leave NO fault line: a hang, a kill, the machine going down
+    (the owner's freeze of 2026-10-09 22:23, re/freeze_1009.md). -> dict:
+    states [(time, from, to)]; ended = an exit / RESULT / 'process ended' line exists; last = (time, text) of the last line;
+    away [(from, to, seconds)] = stretches the 'nudge:' lines report the game window as not in front: the main loop then runs
+    no frame and polls no input (kl2 0x87a963, unless an online session runs), it only pumps messages some 15,000 times a second;
+    quiet = seconds from the last nudge line to the last line when one was overdue (they come every 10 s while the message
+    pump 0x82dfb0 is called); notes = what is unusual, in words."""
+    st=[(t,int(m.group(1),16),int(m.group(2),16)) for t,r in lines for m in [STATE.search(r)] if m]
+    nu=[(t,float(m.group(1)),int(m.group(3)),m.group(4)) for t,r in lines for m in [NUDGE.search(r)] if m]
+    ended=any(ENDS.search(r) for t,r in lines); last=lines[-1]; away=[]; notes=[]; cur=None
+    for t,dt,rate,front in nu:
+        if front=='no': cur=[cur[0] if cur else (secs(t)-dt)%86400,secs(t)]
+        elif cur: away.append(cur); cur=None
+    if cur: away.append(cur)
+    away=[(a,b,(b-a)%86400) for a,b in away]
+    quiet=(secs(last[0])-secs(nu[-1][0]))%86400 if nu else 0
+    if quiet<=10.5: quiet=0
+    for t,a,b in st:
+        if b==0x2e and a not in (0x28,0): notes.append('%s session closing (0x2e) entered from %#x, not from the session end 0x28: no upload, no stats - the quit on the page between two rounds, or an error close'%(t,a))
+    if st and st[-1][2]==0x2e and st[-1][1]!=0: notes.append('the session never left 0x2e: 0x0 normally follows within 25 ms, BEFORE the level is unloaded')
+    if away: notes.append('game window not in front for %.0f s in %d stretch(es) (%s): no frames, no input polls there'%(sum(x[2] for x in away),len(away),
+        ', '.join('%s-%s'%tuple('%02d:%02d:%02d'%(v//3600,v%3600//60,v%60) for v in x[:2]) for x in away[:4])+(' ...' if len(away)>4 else '')))
+    if quiet: notes.append('no nudge line in the last %.1f s of the log: the main thread did not reach its message pump (it waits for the render thread without a timeout at kl2 0x459b1a, or stands in a call)'%quiet)
+    if not ended: notes.append('NO END LINE: the log stops at %s ("%s"). The process hung or was killed, the machine went down - or the game is still running'%(last[0],last[1][:60]))
+    return dict(states=st,ended=ended,last=last,away=away,quiet=quiet,notes=notes)
 def line(e):
     if e['kind'] in ('ASSERT','CRASH'): return '%s %s %#x %s'%(e['time'],e['kind'] if e['kind']=='ASSERT' else 'CRASH %08x'%e['code'],e['at'],e['acc'])
     if e['kind']=='FAULT':
@@ -66,11 +108,14 @@ def line(e):
     return '%s %s'%(e['time'],e['text'])
 def report(path=None,every=False):
     path=path or os.path.join(kl.DD,'KLHook.log')
+    rs=raw(path)
     if every:
-        for h,ev in events(path,True):
+        al=events(path,True)
+        for n,(h,ev) in enumerate(al):
             c={}
             for e in ev: c[e['kind']]=c.get(e['kind'],0)+1
-            print(h[:60],' '.join('%s %d'%x for x in sorted(c.items())),'|',next((e['text'] for e in reversed(ev) if e['kind']=='RESULT'),''))
+            noend=len(rs)==len(al) and not any(ENDS.search(r) for t,r in rs[n])      # a hang, a kill - or the running game
+            print(h[:60],' '.join('%s %d'%x for x in sorted(c.items())),'|',next((e['text'] for e in reversed(ev) if e['kind']=='RESULT'),'NO END LINE, stops at '+rs[n][-1][0] if noend else ''))
         print()
     head,ev=events(path); print(head)
     for i,e in enumerate(ev):
@@ -88,6 +133,10 @@ def report(path=None,every=False):
             if t: print('      '+t)
         for w in e['where']: print('      where: '+w)
         if e['callers']: print('      callers: '+' < '.join('%#x%s'%(c,' ('+kl.CALLERS[c]+')' if c in kl.CALLERS else '') for c in e['callers']))
+    if rs:
+        c=course(rs[-1])
+        if c['states']: print('session states: '+' '.join('%#x'%s[2] for s in c['states'][-12:])+'   (last change %s %#x -> %#x)'%c['states'][-1])
+        for t in c['notes']: print('note: '+t)
     return ev
 if __name__=='__main__':
     a=[x for x in sys.argv[1:] if x!='--all']; report(a[0] if a else None,'--all' in sys.argv)

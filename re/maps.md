@@ -51,6 +51,11 @@ without that mark was run and seen.
    M02 build loads them as ZSTDOBJ (`--flat ZEnvSampler`).
 7. **The map names are now from the exe, not from content:** Dead Men's own table (kaneandlynch.exe
    0x641570) lists the four scenes in the order of `Title00..03` (section 2).
+8. **Fourth pass (section 14, 2026-10-10): the four FA maps with every fix the played Retomoto build
+   has** - kl_arms, the execution fix, bone ids, voices on, lightened, the wardrobe - in
+   `<work>\build\z_maps\M01 M02 M03 M06`, every checker at 0 or a listed finding, `python
+   tools\kl_maps.py ready <out>`. Archives 178 .. 197 MB, .prm 49.6 .. 60.5 MB (below stock F07's 63).
+   M02's boarding action stood at the bank's coordinates and is moved to its car. Not run in the game.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -928,3 +933,261 @@ the plaza civilian, the delivery truck, through the bank door past the clerk to 
 What would settle it: a person standing in front of a Dead Men guard's face and of a car whose
 door is opened by a script (the escape van's sliding door, a police car arriving in a round), or
 larger pictures - the game's window is 640 x 480 in these runs.
+
+---------------------------------------------------------------------------------------------------
+
+## 14. The four Fragile Alliance maps to the standard of the played Retomoto build (2026-10-10, agent z-maps)
+
+OFFLINE: nothing was installed, the game was not started, nothing was written into the Dog Days
+folder. Everything is in `<work>\build\z_maps\`. Commands (each map is a process of its own, about
+100 s a map on this machine, two at a time):
+
+    python tools\kl_maps.py ready <work>\build\z_maps [M01 M03 ...]     build + lighten + wardrobe + every checker
+    python tools\kl_maps.py audit <work>\build\z_maps\M03               every checker again on a finished folder
+    python tools\kl_maps.py readytable <work>\build\z_maps              the table below
+    python tools\kl_maps.py stations <folder> ...   |   bots F07        14.5
+
+### 14.0 Short answers
+
+1. **All four are READY**: `kl_graft.verify` problems: 0 at the build, and on the finished folder
+   `kl_fa.check` 0 CRASH / 0 BROKEN, `kl_impact.check` (bone ids, chunk table, surface rows) 0,
+   `kl_arms.check` 0, `kl_chars.undrawn` 0 people, `kl_chars.check` 0 beyond the known materials,
+   `kl_snd.verify` 0, `kl_maps.preflight` CRASH 0. Known and listed: 14.2.
+2. **They are lighter than stock F07 where it matters for the 0x8e5bbd allocation** (stock F07: .prm
+   63 MB, .TEX 281 MB, archive 200 MB): .prm 49.6 .. 60.5 MB WITH the wardrobe (15.5 MB of it), .TEX
+   205 .. 235 MB, archives 178 .. 197 MB. The builds that ran live on 2026-10-09 were .prm 76 .. 87 MB,
+   .TEX 374 .. 413 MB, archives 310 .. 336 MB.
+3. **One map fault was found and repaired: M02_FA_A's boarding action stands at the BANK's
+   coordinates, 95 m from its own escape car** (14.4). The first form of that repair moved M06's good
+   box 102 m away from its helicopter; the audit caught it, it is fixed, M06 was rebuilt.
+4. **The builds are reproducible**: M01, M02, M03 built twice (01:35 and 06:23, the second time on
+   the lead's commit b276ad2) have the same content id; M06 differs in `.gms` and `.prp` only (the
+   boarding box back in Dead Men's place).
+5. **AI heisters: not kept, on any of the four** - F07's squad is 694 nodes of route authored for
+   F07's alley; keeping it is authoring per map (14.5). The player is alone with the police, as on
+   Retomoto.
+6. NOT RUN IN THE GAME. What each map has that no live run exercised: 14.3.
+
+### 14.1 What a build is
+
+`kl_maps.ready_one` = the steps the lead used for the Retomoto candidate (`<work>\build\play3.log`,
+`y_loot\build.log`), in the order re/prm_limit.md gives:
+
+1. `kl_graft.build('F07', <M>)` with today's defaults and `kl_snd.VOICE = True`: kl_arms (seed 2026),
+   kl_fa.repair (define order, money triggers for people only, boarding action in stock form, settings
+   lists, exit / camera trigger, monitor), kl_escape.repair, kl_light (stock mode, `fit_shaders` +
+   plain twins), the map's post filter sets, light map baked at 0.5, merged bank with kl_voice's
+   repairs, joined .ANM, kl_chars reid / rebind + `kl_impact.sync_bone_ids`, .HVK surfaces renumbered.
+   `kl_graft.verify` must say problems: 0.
+2. `kl_graft.relight(..., 'trim,slim')` (= `kl_graft.py lighten`): 8,650 dead vertex / index chunks of
+   F07's own map emptied, 451 of its textures down to 4 x 4.
+3. `python tools\kl_chars.py wardrobe <lightened> <out>`: the eight Dead Men heroes and the mask /
+   outfit variants in dead chunk indices (15,509 taken on every map), `KLWardrobe.ini`.
+4. `kl_maps.preflight`, then `kl_maps.audit`: every checker on the FINISHED folder; `steps.json`
+   records which members steps 2 and 3 changed (lighten: .TEX .prm; wardrobe: .MAT .TEX .gms .oct
+   .prm .prp; the other 21 of 27 members and all 18 files beside the archive are the verified
+   build's byte for byte).
+
+A folder holds `F01_Main.zip`, the 18 files beside it, `KLWardrobe.ini`, `graft.txt`, `log.txt`,
+`result.json`, `wardrobe.txt`, `chars.json`, `steps.json`, `preflight.txt / .json`, `audit.txt / .json`.
+No `KLJoin.ini` (none is needed; `debug\slot.py put` removes the slot's). The systems level is F07 for
+all four: nothing proved another one better (section 3.3's F08 for M06 is a suggestion without a run).
+The `content id` is a sha1 over the members' CRC and size and the sha1 of the files beside the
+archive: the wardrobe step stamps the members with the build time, so the zip's own sha1 changes
+from run to run while the content does not.
+
+| folder | map | archive MB | beside MB (of it .WAV) | .prm MB | chunk-table entries (limit 69,632 / 73,728) | .TEX MB | nodes | people (actors / players) | sounds / waves | verify | FA | impact | arms | undrawn | chars | sound | boarding action from the vehicle's stop | known: materials without a shader | content id |
+|---|---|---:|---:|---:|---:|---:|---:|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|
+| `M01` | M01_FA_A "Hot Coffee" | 196.9 | 46.9 (21.7) | 55.1 | 50,042 | 234.5 | 15,000 | 32 (16 / 16) | 4,878 / 4,741 | 0 | 4 DEGRADED, 2 NOTE | 0 | 0 | 0 | 0 | 0 | 364 | 1 | `79d6df638c` |
+| `M02` | M02_FA_A "Late Night Opening" | 177.8 | 47.7 (22.5) | 54.6 | 58,371 | 216.1 | 21,935 | 31 (15 / 16) | 4,911 / 4,774 | 0 | 4 DEGRADED, 2 NOTE | 0 | 0 | 0 | 0 | 0 | 199 (was 9,534) | 6 | `b5838e7a63` |
+| `M03` | M03_FA_A "Withdrawal" | 188.5 | 47.9 (22.7) | 60.5 | 62,680 | 217.8 | 19,828 | 36 (20 / 16) | 4,919 / 4,783 | 0 | 5 DEGRADED, 2 NOTE | 0 | 0 | 0 | 0 | 0 | 288 | 0 | `cf1ace987a` |
+| `M06` | M06_FA_A "A Walk in the Park" | 177.6 | 47.0 (21.8) | 49.6 | 46,902 | 204.6 | 15,600 | 30 (14 / 16) | 4,797 / 4,658 | 0 | 3 DEGRADED, 2 NOTE | 0 | 0 | 0 | 0 | 0 | 305 | 6 | `6305f50b49` |
+
+Per step (from each `<tag>.ready.log`): archive 336 / 310 / 321 / 310 MB as built -> 179 / 153 / 164 /
+153 MB lightened -> 197 / 178 / 189 / 178 MB with the wardrobe; .prm 81.3 / 80.8 / 86.7 / 75.8 -> 38.9 /
+38.5 / 44.4 / 33.5 -> 55.1 / 54.6 / 60.5 / 49.6 MB; .TEX 413 / 386 / 387 / 374 -> 223 / 195 / 197 / 184 MB
+(+ 12 .. 21 MB of wardrobe textures). 8,835 .. 8,854 dead chunk indices are still free on each.
+
+Install one (the lead's step; the game must be closed; the slot's stock files are in KL_PortBackup):
+
+    python debug\slot.py put "G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men\KL_PortTools\build\z_maps\M03" F01
+    python debug\slot.py put "G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men\KL_PortTools\build\z_maps\M01" F01
+    python debug\slot.py put "G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men\KL_PortTools\build\z_maps\M02" F01
+    python debug\slot.py put "G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men\KL_PortTools\build\z_maps\M06" F01
+
+Not applied, one command each if wanted: the shader-cache cut of b276ad2 (`kl_graft.py lighten
+<folder> <out> --load fxc`, NOT LOADED LIVE): measured dry on these four it takes the .fxc from 242
+entries / 17.8 MB to 126 / 9.3 (M01), 125 / 9.1 (M02), 126 / 9.2 (M03), 122 / 8.8 MB (M06). Give it
+the FINISHED folder (the wardrobe adds materials) and copy `KLWardrobe.ini` along.
+
+### 14.2 Findings that are known and listed
+
+- `kl_fa.check` DEGRADED on all four: no spawn points of the Dog Days-only kinds (TEAM_MERC,
+  TEAM_POLICE, UCC: Cops & Robbers / Undercover Cop cannot place players), 0 `PointOfInterest` (no loot
+  / escape marker on the HUD), no bot squads (14.5). M01, M02, M03: the escape vehicle is a `ZHavokCar`
+  on a spline (never driven live). M03: 1 of 15 squads named by no object (`Civilians!Civ_in_02`).
+  NOTE on all: settings fields 157 / 158 are Dead Men's music, no `MercSpawnCam*` define.
+- Materials without a compiled shader (not drawn in that pass; no person is among them:
+  `kl_chars.undrawn` 0): M01 `Locations/M01/Glass/Glass_Grid_01b_M01`; M02
+  `Plastic_Basic_01a_LampMexi_M02_FA` and the five glows `Effect_Glow_Turkis_Round_01a_M06`,
+  `Glow_Flare_01a_M07`, `Glow_Headlights_01b_M07`, `Glow_Beam_01a_M07`, `_Basic/Colour_White_Glow`;
+  M06 the same five glows and `Paper_Rice_Lantern_01a_JPN`; M03 none.
+  The glass of M01, measured: it asks for `glass.fx`, MESH_STANDARD, {BLENDENABLED,
+  REFLECTIONENABLED, SPECULARENABLED, STDSAMPLERSTATE, USEDEFAULTREFLECTIONMAP}; all 14 `glass.fx`
+  entries of the cache have REFRACTION2DENABLED, and one of them is exactly the asked set plus that
+  switch. `fit_shaders` only switches features OFF. Switching that one ON would resolve it (NOT
+  TRIED: what the 2-D refraction reads when the material has no input for it was not looked at).
+- M01: 3 emitters name `Impacts_Default_Smoke`, the one Dead Men template Dog Days lacks (verify
+  allows it; section 7 patch 2). M01 / M02: 1 / 2 `OnlineSpeakTrigger` cut, their line is not in the bank.
+- `preflight` RISK (code no stock Dog Days level runs; all of it was LOADED live on 2026-10-09 in
+  runs M02c / M02r / M06a / M06r without a fault): M02 `ZEnvSampler` x7, `SoundSpline` x2; M06
+  `SoundSpline` x4, `SoundVolumetricRandom` x4.
+- "dynamic lists name different classes; kept F07's" on all four, as in every Dead Men build that ran.
+
+### 14.3 Per map: the round, the weapons, the voices, and what no live run has exercised
+
+Counts are read from the finished archive (`audit.json`: `round`, `weapons`, `voice`). "loot" =
+objects with `OnlineMoneyCtrl`; the dollar figure is the sum of its field 1 (ASSUMPTION: the amount).
+
+| | M01 Hot Coffee | M02 Late Night Opening | M03 Withdrawal | M06 A Walk in the Park |
+|---|---|---|---|---|
+| loot objects / field-1 sum / containers | 306 / 10,050,000 / 1 | 363 / 6,135,000 / 26 | 340 / 5,750,000 / 12 | 307 / 11,340,000 / 0 |
+| enter / leave / board triggers | 1 / 3 / 1 | 1 / 1 / 1 | 1 / 2 / 1 | 1 / 1 / 1 |
+| level exit (calls the vehicle) | 2 (`CallExitVehicle_01 / _02`) | 1 | 1 | 1 (`Call_ExitChpooer_Trigger`) |
+| escape vehicle | ZHavokCar on a spline | ZHavokCar on a spline | ZHavokCar on a spline | **ZHeli** (`OnlineEscHavokCar` + `OnlineEscVehicleController`, the form of stock F02 F03 F06 F08) |
+| escape monitor | 1 (F07's) | 1 | 1 | 1 |
+| START / AFTER_DEATH / TRAITOR points | 8 / 7 / 6 | 8 / 7 / 4 | 8 / 7 / 6 | 8 / 5 / 5 |
+| squads / actors | 16 / 16 | 10 / 15 | 15 / 20 | 11 / 14 |
+| bot squads | 0 | 0 | 0 | 0 |
+| weapons after kl_arms (seed 2026) | SMG_Type05 4, HG_SW_MP45 2, Shotgun_Hawk_Police 2, Rifle_AK74 1, SMG_Type79 1, HG_M-77B 1, SMG_MAC_10 1, Rifle_Type81 1, unarmed 3 | Rifle_AK74 3, SMG_MPi69 3, HG_M9Beretta 2, Rifle_FN_SCAR 2, SMG_Type79 1, Shotgun_Hawk_Police 1, unarmed 3 | Rifle_AK74 5, Rifle_Type81 3, SMG_Type79 2, HG_SigSauer226 1, Rifle_FN_SCAR 1, Shotgun_Hawk_Bullpup 1, HG_SW_MP45 1, HG_M9Beretta 1, unarmed 5 | SMG_Type79 3, SMG_MPi69 2, SMG_Type05 2, Rifle_AK74 2, Rifle_Type81 1, SMG_MAC_10 1, SMG_HK_sp89 1, Shotgun_Hawk_Police 1, Rifle_FN_SCAR 1 |
+| Dead Men gave them | USP 7, P90 5, Remington 870 1, none 3 | USP 4, M4A1 4, P90 4, none 3 | M4A1 9, USP 6, none 5 | P90 10, MP5 3, SG552 1 |
+| voice sets in use (characters) | police_01 / _02 / _03 (13 soldiers, F07's sets), civilian_male_01 / _03 (1) | usa_swat_01 (12, the map's own set), civilian_male_01 / _03 (1) | usa_swat_01 (15), civilian_male_01 / _03 (2) | police_01 / _02 / _03 (14, F07's sets) |
+| without a voice | 2 women | 2 women | 3 women | - |
+| line fields heard / empty; silent lines | 134 / 64; 0 | 134 / 64; 0 | 134 / 65; 0 | 134 / 66; 0 |
+| speak triggers with their line | 8 | 6 | 7 | 1 |
+| light map baked | none (no lit descriptor) | 1,375 meshes, mean 0.858 | 2,250 meshes, mean 0.793 | none |
+| post filter | palette 39 -> 51, 3 sets | 39 -> 47, 3 sets | 39 -> 53, 3 sets | 39 -> 58, 1 set |
+
+(Heisters and police players have no voice set in a character field in stock F07 either: `kl_voice
+census` of stock F07 says the same 8 + 8 "without". The bank's log: 6 sets widened by
+`kl_voice.planner`, 34 silent members in them.)
+
+What each map has that neither the bank's nor Retomoto's live rounds exercised:
+
+- **M01**: the diner's loot (306 stacks, one register) and BOTH of its exits were never played; the
+  spline car `Escape!EscapeCars\EscapeCar` never called. P90 / shotgun carriers now hold stock SMGs
+  and Hawk shotguns (shotguns in a Fragile Alliance round ran on Retomoto only). `Heroes!` groups
+  placed: 16 (the other three maps: 8).
+- **M02**: 26 `OnlineMoneyContainer` (the jewel displays; the bank has 12 that ran) and 303 jewel
+  bags; three floors with escalators; 32 rooms, 21,934 entities and a 238 KB mesh (each more than any
+  build that played a round with loot); `ZEnvSampler` x7 alive; 3 `PatrolBehaviourRout`; the spline
+  car; and the MOVED boarding action (14.4) - the one thing in these four builds that is new data.
+- **M03**: the opened wall, the reach of garage boxes 10 / 11 and the spline van are in (kl_escape, as
+  in ESC3, which ran WITHOUT the map's guards); with the guards and kl_arms's rifles the escape has
+  not been played. The wardrobe on the bank ran once (2026-10-09 19:11, a 96.5 MB .prm, before the
+  dead-index reuse); this build's .prm is 60.5 MB.
+- **M06**: everything about the helicopters - the escape `ZHeli` arriving on its spline and being
+  boarded, the boss chopper flying when its squad is alerted (run M06r: nobody was alerted in 5.5
+  minutes); weapon PICK-UPS lying on the map (`BossChopper!Items!Minime_01` -> `MG_GP_Type88`, three
+  `RPG7_01*` -> `RPG_7V`: stock Fragile Alliance has no pick-up at all, the class runs in story levels
+  only); the escape chopper's `HeliWeapon` now has an EMPTY weapon template (kl_arms does not hand
+  out the `_Heli` specials) - that is the stock form: the five escape helicopters of F02, F03, F06
+  (two), F08 and L04's have it empty, the SWAT choppers of F02 and F08 name `MG_GP_Type88_L09_Heli`; the builds that ran
+  live had `Mg_Minimi_SPW_L10_Heli` there. No `ExplodableOctree`, 8 `PhysicsLinkage`, no grass
+  (scatter), no paper lanterns (shader).
+- All four: `trim,slim` and the wardrobe ran live on Retomoto only; kl_arms and the voice repairs
+  ran live on Retomoto only (the owner: "guards good"); the execution fix (define order) has not
+  been confirmed by an execution on any map.
+
+### 14.4 The boarding action: M02_FA_A's stands at the bank's coordinates
+
+`OnlineEscHavokCar` field 2 names a box with `PlayerAction` "EnterVehicle". Measured on Dead Men's
+own data (`kl_maps.boarding`: the box against the last point of the vehicle's incoming spline, both
+through the entities' matrices):
+
+| map | boarding box | vehicle stops at | apart | the level's BOARDS trigger |
+|---|---|---|---:|---|
+| M01_FA_A | (5884, 181, 20448) | (6165, 6, 20680) | 364 | (5876, 141, 20745) |
+| M03_FA_A | (3252, 133, -20) | (2971, 26, 41) | 288 | (0, 0, 0) |
+| M06_FA_A | (-1687, 133, -6542) | (-1536, 368, -6276) | 305 | (-1577, 554, -6499) |
+| **M02_FA_A** | **(3252, 132, -20)** = the bank's box, half extents and all | (-583, 8, -8749), the car park | **9,534** | (-426, 136, -8627) |
+
+Read in kl2.exe: `ZOnlineEscHavokCar` (vtable 0xbc94ac, members +0x30 incoming route, +0x34 escaping
+route, +0x38 boarding box, +0x3c map icon) touches +0x38 in ONE place, slot 15 (0x769d80: the node's
+virtual +0x54 on its own group and on the box); its message handler (slot 26, 0x5497a0, 214
+instructions) sends to +0x30, +0x34 and +0x3c only. Dead Men's class (vtable 0x982254) does not use
++0x38 in its handler (0x6c90a0, 340 instructions) either, and its slot 15 (0x6c8e00) calls +0x54 on
+its own node only. So nothing of that class moves the box to the car. ASSUMPTION (from run ESC3, where the scripted player boarded standing in the bank's box): Dog
+Days offers the action at the box. How Dead Men's own M02 round got its players into the car with the
+box 95 m away is NOT ESTABLISHED.
+
+Repair, `kl_escape.board_box` (in `kl_escape.repair`, so in every `kl_graft.build` with the FA
+layer): a boarding box farther than 1,000 from its vehicle's stop is put where the level's own BOARDS
+trigger stands when that place is within the box's half extent of the stop (M02: (-426, 136, -8627),
+199 from the stop), else on the stop, 107 up as on the bank. `.prp` ZGEOM[2] and the `.gms` record;
+nothing else changes. M01, M03, M06 are left alone. NOT RUN IN THE GAME.
+
+The slip, for the record: the first `_spline_end` tested "the spline node is unrotated" with
+`round()`, which lets M06's 25 degrees about y pass; it then read the helicopter's stop as node +
+point = (7116, 368, -11795) and moved M06's good box there, 102 m from the real stop. `kl_maps.audit`
+(which composes the matrices) failed the build: "boarding: ... stands 10262 from the end of its
+vehicle's incoming route". Fixed: `_spline_end` applies the node's rotation as `kl_maps.world` does;
+that the reading is right shows in the level itself - the stop it gives is where M06's BOARDS
+trigger, exit trigger (-1593, 206, -8050) and Dead Men's own box stand.
+
+### 14.5 The AI heisters ("no bot squads")
+
+`python tools\kl_maps.py bots F07`: stock F07's squad is 8 top-level subtrees
+`Gameplay!merc_bot_squad!Squad#02..#08` + `...!Timer_start_bots`, **694 nodes**: 7 squads of one
+`ZFFActor` (Rifle_zastavam85) with 28 `DefendBehaviourRout` steps and 65 boxes each (329 of the 455
+are plain position boxes)
+(`020_..._pos_merc_fight_middle`, `031_..._pos_on_top_of_loot`, `050_..._rout_out_of_loot_area_left`,
+`060_..._rout_junction_garage`, ...: the alley of F07, x 8169..36283, z -3359..24504), 9
+`RandomTrigger`, 4 `TriggerDelay2`, 4 `TriggerActorsDead` and 1 `TriggerLootDepleted` per squad. Out
+of it: 175 references of `TriggerActorsDead[0]` to F07's own police and rival mercs, 35 of
+`TriggerLootDepleted[0]`, 7 of `DefendBehaviourRout[0]` - all into F07's MAP, which the graft
+removes; started by `Gameplay!AIMonitor` field 2 (kept by kl_fa already) through `Timer_start_bots`.
+
+So `--s-keep Gameplay!merc_bot_squad!*` alone would keep seven actors standing at F07's START row
+(10459, 440, 3252) - in the void of a Dead Men map - and 217 references into a map that is gone
+(`kl_fa.prune` cuts such references of kept objects). Keeping
+the squad means, PER MAP: 7 actors placed at the map's START row; a route of position boxes on the
+map's navigation mesh (start -> fight -> loot -> leave -> vehicle; 329 in stock, a cut-down route
+would do); the actor-dead waits re-pointed to the map's squads; the loot-depleted triggers to the
+map's loot; and a proof that a bot boards a Dead Men spline car / helicopter (stock bots board the
+baked van). That is what `kl_fa_street.py` did for Retomoto's police: authoring, not a switch. NOT
+BUILT for any of the four.
+
+What the map offers such a route (`python tools\kl_maps.py stations <folder>`: the round's stations
+looked up on the built navigation mesh; parts = polygons connected by the edges' neighbour fields):
+
+| map | mesh | START row, loot, way out, level exit and boarding box on one connected part? |
+|---|---|---|
+| M01 | 393 polygons, 6 parts (371, 16, ...) | yes, all on the part of 371 (the police's AFTER_DEATH points are on the part of 16) |
+| M02 | 908 polygons, 18 parts (859, 24, ...) | yes, all on the part of 859 |
+| M03 | 697 polygons, 9 parts (490, 159, 36, ...) | **no**: START, hall and garage on the part of 490; exit trigger, boarding box and van street on the part of 159. The wall kl_escape opens for the player is not opened in the mesh (Dead Men's AI never crossed it): a bot needs the two parts joined first |
+| M06 | 954 polygons, 7 parts (936, 12, ...) | yes, all on the part of 936 |
+
+So for bots the garden (M06) and the diner (M01) are the cheapest maps, the bank the most expensive.
+
+### 14.6 Not known
+
+- Nothing of section 14 ran in the game: no load of a lightened + wardrobe build of these four, no
+  round on any of them with kl_arms or the voice repairs, no escape with guards, no boarding on M02.
+- M02: that the action is offered at the box and not at the vehicle (14.4).
+- M06: the helicopters in flight, the pick-ups, a rocket at the boss chopper.
+- The dollar meaning of `OnlineMoneyCtrl` field 1 (the sums of 14.3).
+- Whether `--load fxc` changes anything on screen (the lead's live check F1).
+
+### 14.7 Changes outside kl_maps.py / kl_expansion.py, and for the lead
+
+- `tools/kl_escape.py` (may be edited for a proven fault): `board_box` + `_spline_end` + the `move`
+  entry of `repair()` / `place_entities()` (14.4), constants `BOARD_FAR`, `BOARD_UP`. `kl_graft.py`
+  needed no change: it already passes `repair()`'s result to `place_entities()`.
+- `kl_graft.py`, `kl_fa.py`, `kl_arms.py`, `kl_light.py`, `kl_snd.py`, `kl_voice.py`, `kl_chars.py`: not
+  touched.
+- Suggestions, not applied: (a) `kl_light.fit_shaders`: M01's glass (14.2) is one switch ON away from
+  a compiled entry; (b) `kl_graft.verify` could call `kl_maps.boarding` so a misplaced boarding
+  action fails a build and not only the audit; (c) CLAUDE.md lists the four maps' .prm as 75 - 87 MB
+  ("larger than any stock level"): with `ready` they are 49.6 - 60.5 MB, wardrobe included.
+- The expansion tree made from these four and the owner's Retomoto: re/expansion.md section 9.

@@ -37,6 +37,13 @@ LIVE** = nobody has run it; ASSUMPTION = not established by anyone.
    F02 F03 F04 F06, the stream file through the overlay, the SHIP hook's policy, the skeleton step on M02
    and M06, Retomoto's join read from `Maps\DM09`. Section 6 has the list, section 7 the live checks in
    order.
+7. **2026-10-10 (section 9): the tree can be made from FINISHED build folders** - `build --ready
+   <work>\build\z_maps --prebuilt DM09=<the owner's Retomoto folder>` takes the four Fragile Alliance
+   maps as `kl_maps.py ready` left them (every fix, lightened, the wardrobe) and Retomoto as the owner
+   plays it, renames them for their slots and carries `KLWardrobe.ini` / `KLJoin.ini` into `Maps\<id>`.
+   Built in `<work>\build\z_maps\expansion`: 5 maps accepted, 159 files, **2.88 GB** (maps 1.20 GB,
+   was 1.83). Not installed. `install` no longer leaves a test build's `KLWardrobe.ini` beside the
+   stock F01 archive.
 
 ## 1. Layout
 
@@ -288,7 +295,7 @@ is not touched by the slot restore: kljoin.c ignores it beside a stock archive, 
   the slot stock; `status`: '128 files, all as built', 'hook with expansion pages'; `uninstall` put ini
   and hook back, removed the folder and moved the foreign one back. A sha1 list of the folder before and
   after differs in four lines: the F01 slot's files, now equal to their `KL_PortBackup` copies; the five
-  `KL_PortBackup` hashes are the same before, between and after (scratch `ipackake_run.log`).
+  `KL_PortBackup` hashes are the same before, between and after (scratch `ipack\fake_run.log`).
 - NOT tested: the real game folder (by instruction), a hook DLL that is really locked.
 
 ## 4. The menu
@@ -548,3 +555,78 @@ SteamUserStats wrapped` before a script may let a session end.
   has `kl_expansion.py`; the titles are Hot Coffee / Late Night Opening / Withdrawal / A Walk in the
   Park; `<work>\build\_fake_game_ipack` is a made-up game folder of this tool's test (dummy files,
   can be deleted).
+
+## 9. The tree from finished folders (2026-10-10, agent z-maps)
+
+OFFLINE: built into `<work>\build\z_maps\expansion\`; nothing installed, the game not started, the
+tree of 2026-10-09 in `<work>\build\expansion\` left as it is.
+
+    python tools\kl_expansion.py build --out <work>\build\z_maps\expansion --ready <work>\build\z_maps
+           --prebuilt DM09=<work>\build\y_loot\retomoto_loot --hook <work>\build\klhook\owner_now\dinput8.dll
+
+### 9.1 What is new in the tool
+
+- `--ready <folder>`: DM01 DM02 DM03 DM06 are not built by `build` but taken from the finished
+  folders `M01 M02 M03 M06` of `kl_maps.py ready` (re/maps.md 14: every fix, voices on, lightened,
+  the wardrobe). `--prebuilt DM09=<folder>`: any map from a finished folder - here the owner's
+  current Retomoto build, the one in the F01 slot.
+- `adopt()`: such a folder holds an archive built for the F01 test slot. It is written again under
+  the map's own slot name - member names and file names only; the members' CRC and size are compared
+  after the write - and the hook's per-map files `KLWardrobe.ini` / `KLJoin.ini` (`SIDE`) go with it
+  into `Maps\<id>`; `graft.txt`, `log.txt`, `result.json`, `audit.*`, `preflight.*`, `wardrobe.txt`,
+  `steps.json`, `chars.json` go to `BuildInfo\<id>` with `adopted.json` (where from, built for which
+  slot, sha1 of the folder's archive). Nothing inside a level names its slot; the model numbers in
+  `KLWardrobe.ini` are .prm chunk indices and do not change. NOT LIVE: no adopted archive has been
+  loaded under F02 / F03 / F04 / F06 (the builds of section 2 under those names were not either).
+- A folder's `KLJoin.ini` is kept as it was played; `build` prints a NOTE if it no longer equals
+  kl_fa_author's box (it does equal it today).
+- A map whose `audit.json` lists a finding that must be 0 is NOT ACCEPTED (`audit: ...`).
+- Manifest, per map: `taken_from`, `wardrobe`, `audit` (prm_mb, prm_entries, tex_mb, people, weapons,
+  fa, round, preflight), `extra_files` = the SIDE files that are there. `numbers.archive_mb / beside_mb`
+  are read off the tree and the counts off the audit: `result.json` is written by the graft, before
+  lighten and the wardrobe (it says 336 MB for DM01; the archive in the tree is 197 MB).
+- `menu_check` accepts the windows `KLHeister` and `KLGuns` that `klhook\mkoverlay.py` now adds
+  beside the map page (their rows are mkoverlay's own check); the map page's own growth is still
+  held to 100 elements. `HOOK_MARKS` asks for the text `menu page %d latched`: a hook from before
+  0ad48d2 lost the page at StartGame (re/hook_live.md) and is refused.
+- **install, a fault found by reading klchar.c**: `restore_stock` put the F01 slot's stock files back
+  and left a test build's `KLWardrobe.ini` / `KLJoin.ini` beside them. `klc_level_open` reads
+  `KLWardrobe.ini` beside ANY archive the game opens (it has no stock test; `klj_level_open` has:
+  verdict 1), so stock Subway would have been given the model numbers of the build that was in the
+  slot - and the owner's slot holds one today (Retomoto, both files). The two files are now renamed
+  `<name>.of-test-build-N` when the slot goes back to stock (install and uninstall); not deleted.
+  `selftest`: 32 checks, 0 failed (one new).
+
+### 9.2 The tree (built 2026-10-10 06:40, `RESULT: PASS` in 56 s; `check`: 159 files against the manifest, exit 0)
+
+| id | name | slot / entry | from | bytes of `Maps\<id>` | archive MB | wardrobe | per-map files | accepted |
+|---|---|---|---|---:|---:|---|---|---|
+| DM01 | Hot Coffee | F01 / 0 | `z_maps\M01` | 243,859,165 | 196.9 | yes | KLWardrobe.ini | yes, 0 problems |
+| DM02 | Late Night Opening | F02 / 1 | `z_maps\M02` | 225,511,985 | 177.8 | yes | KLWardrobe.ini | yes, 0 problems |
+| DM03 | Withdrawal | F03 / 2 | `z_maps\M03` | 236,486,157 | 188.5 | yes | KLWardrobe.ini | yes, 0 problems |
+| DM06 | A Walk in the Park | F04 / 3 | `z_maps\M06` | 224,570,375 | 177.6 | yes | KLWardrobe.ini | yes, 0 problems |
+| DM09 | Retomoto Tower | F06 / 4 | `y_loot\retomoto_loot` | 264,604,105 | 212.2 | yes | KLJoin.ini, KLWardrobe.ini | yes, 1 problem, known ("39 particle template names do not resolve (stock M09_A: 36)") |
+
+- **2,880,113,871 bytes in 159 files** (the tree of 2026-10-09: 3.40 GB in 128): maps 1.20 GB (was
+  1.83), `Overlay\PC_Def.str` 1,684,486,009 bytes (sha1 3b14a846..., the extended merge the game folder
+  has), `Overlay\Patch01.zip`, `Hook\dinput8.dll`, `BuildInfo` 0.3 MB.
+- Hook in the tree: `<work>\build\klhook\owner_now\dinput8.dll`, sha1 bceda981... (the SHIP build of
+  2026-10-10 06:21, the pair kept for the owner): not a test build, Steam write guard in, klchar and
+  klgun in. Given with `--hook`, so the manifest says `built_from_these_sources: false`; without
+  `--hook` the build compiles `klhook\` itself.
+- Menu: page 2 "Dead Men maps" = Arcade button 8, entries 0..4 as above; `klhook\mkoverlay.py` (called
+  as it is) also wrote the Heister page (button 6: Character 17, Mask 10, Outfit 24 entries) and the
+  Guns page (button 7); 122 tags added to 4,542; rules hold. The page's pictures: none (section 4.2).
+- `share` on the lightened archives: F07's dead map is now about 14 MB of each archive (was 161 MB:
+  section 5.1's saving is what `lighten` does), F07's live systems 77 .. 91 MB each, 402 MB over the
+  five; 16 kinds of files beside the archives are equal in two or more maps, 92 MB as hard links
+  (`install --link`).
+- DM09 has no `audit.json` (the folder is the lead's and was only read); its manifest numbers are
+  its `result.json`'s, with the sizes read off the tree.
+
+### 9.3 Not known
+
+- Everything of section 6 still stands; in addition no build of this tree has run under its slot
+  name, and none of the four Fragile Alliance builds has run at all in this form (re/maps.md 14.6).
+- The wardrobe through the redirect: klchar.c reads `KLWardrobe.ini` beside the archive that is
+  opened, so from `Maps\<id>` - read in the source, NOT seen in a run.

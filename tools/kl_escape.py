@@ -32,7 +32,10 @@ entity, no controller added or removed, so kl_graft's controller indices stay va
                        the wall, so the opened piece is a 50 cm step down - one way, like the climb.
   money_reach(Jn)      Dead Men's container triggers with a reach below Dog Days' 125 get 125
                        (GUESS; the garage boxes have 80 and gave nothing live at 78..138 units).
-  repair(Jn, log)      open_wall + money_reach on the joined .prp scene.
+  board_box(Jn)        (2026-10-10, re/maps.md 14.4) the boarding action of an escape car that stands far from
+                       where the car stops is put there: M02_FA_A's box has the bank's coordinates, 95 m
+                       from its own car. .prp ZGEOM[2]; the .gms record follows in place_entities().
+  repair(Jn, log)      open_wall + money_reach + board_box on the joined .prp scene.
 
 FOR kl_graft.build (three lines; until then applied() patches the same three places from
 outside, as kl_maps and kl_fa_author do):
@@ -62,6 +65,9 @@ M03_OUT = 'Locations/M03_FA_A/M03FAA_Locations.zip\\Locations/M03_FA_A/M03FAA_LO
 # is the best (a dumpster stands behind its east third, x -1454..-1200; the other 5.5 m are free).
 OPEN = {'M03_FA_A': [(M03_OUT + 'SO0101_M03_Wall_Low_8m_05', -203.5)]}
 REACH = 125.0                   # TriggerBox2 radius of all 117 stock money containers (F01, F03, F08)
+BOARD_FAR = 1000.0              # board_box: a boarding action farther than this from its vehicle's stop is misplaced
+                                # (right ones: 288, 305, 364; M02_FA_A's: 9,534). The box is 800 x 600.
+BOARD_UP = 107.0                # the bank's boarding box centre stands this much above the van's stop (133 over 26)
 # The round's boxes in Dead Men's M03_FA_A, world space, (centre, half extents) - re/escape.md 1
 EXIT_BOX = ((408.0, 396.0, 460.0), (4000.0, 400.0, 1000.0))
 BOARD_BOX = ((3252.0, 133.0, -20.0), (400.0, 200.0, 300.0))
@@ -145,9 +151,87 @@ def money_reach(sc, log=print, reach=REACH):
     return n
 
 
+def _spline_end(sc, k):
+    """World place of the last point of the ZEditorSpline under node k, or None. The spline's raw field is 12 bytes
+    and then 24-byte records (x, y, z and three floats), relative to the spline node and in ITS frame; read only
+    when the parents are unrotated at the origin (M03_FA_A: 2971, 26, 41 = VAN_STOP).
+    The node's own rotation is applied as kl_maps.world() reads a record's nine floats (rows reversed, then
+    transposed). M06_FA_A's spline node is turned 25 degrees about y: its helicopter stops at (-1536, 368, -6276),
+    where the level's own BOARDS trigger (-1577, 554, -6499), exit trigger (-1593, 206, -8050) and boarding box
+    (-1686, 132, -6541) stand - not at node + point = (7116, 368, -11795). (The first version of this function
+    tested the rotation with round(), which lets 25 degrees pass as none, and board_box then moved M06's good box
+    102 m away: the build of 2026-10-10 01:37, caught by kl_maps.audit.)"""
+    sp = next((j for j in range(k, sc.end[k]) if sc.cls(j) == 'ZEditorSpline'), None)
+    if sp is None or not _world(sc, sp):
+        return None
+    lab, v = J.labels('dd', 'ZEditorSpline'), kl_fa.node_values(sc, sp)
+    raw, at, rot = v[lab.index('ZEditorSpline[0]')], v[lab.index('ZGEOM[2]')], v[lab.index('ZGEOM[1]')]
+    if not isinstance(raw, bytes) or len(rot) != 9:
+        return None
+    last = None
+    for o in range(12, len(raw) - 23, 24):
+        p = struct.unpack_from('<3f', raw, o)
+        if max(abs(x) for x in p) > 1e6:                # the records end before the raw block does (M03_FA_A)
+            break
+        last = p
+    if not last:
+        return None
+    m = [rot[6:9], rot[3:6], rot[0:3]]                  # rows reversed; world = place + transpose(m) . point
+    return tuple(at[i] + sum(m[b][i] * last[b] for b in range(3)) for i in range(3))
+
+
+def board_box(sc, log=print):
+    """The boarding action of an escape car that stands nowhere near where the car stops is put there.
+    WHY (measured on Dead Men's own files, 2026-10-10): OnlineEscHavokCar field 2 names a box with PlayerAction
+    'EnterVehicle'. It stands 288 (M03_FA_A), 364 (M01_FA_A) and 305 (M06_FA_A) from the last point of the
+    vehicle's incoming route, and in M02_FA_A 9,534: there the box 'Triggers!BoardingTrigger_Car' still has the
+    BANK's own place (3252, 133, -20), half extents and all, while the car stops in the car park at
+    (-583, 8, -8749). Dog Days offers the action at the action's own node: its nine stock helicopter boarding
+    actions (F02, F08) name no object at all and every stock boarding box is a child of its vehicle, which a
+    Dead Men box is not. So on that map 'get in' would be offered 95 m from the car, inside the mall.
+    The box goes where the level's own BOARDS trigger stands when that place holds the car's stop (M02_FA_A:
+    'Triggers!BoardingGameplayTrigger' (-426, 136, -8627), 198 from the stop; GUESS that the designers moved
+    that node instead of the box - it is a message target and needs no place), else onto the route's last point,
+    BOARD_UP above it as on the bank. Nothing else changes; a map whose box is within BOARD_FAR is left alone.
+    -> {node: (x, y, z)} for place_entities(). NOT RUN IN THE GAME."""
+    out = {}
+    for _car, _i, v in kl_fa.controllers(sc, 'OnlineEscHavokCar'):
+        if len(v) < 3 or not isinstance(v[0], str) or not isinstance(v[2], str):
+            continue
+        inc, box = sc.resolve(v[0]), sc.resolve(v[2])
+        if len(inc) != 1 or len(box) != 1 or sc.cls(box[0]) != 'ZBoxPrimitive' or not _world(sc, box[0]):
+            continue
+        k = box[0]
+        act = next((a for a in ([kl_fa.value(sc, u) for u in units(body[1:-1])] for nm, body in sc.nodes[k]['ctrls']
+                                if sc.p.key(nm) == 'PlayerAction') if 'EnterVehicle' in a), None)
+        end = _spline_end(sc, inc[0])
+        if act is None or end is None:
+            continue
+        lab, nv = J.labels('dd', 'ZBoxPrimitive'), kl_fa.node_values(sc, k)
+        at, half = nv[lab.index('ZGEOM[2]')], [nv[lab.index('ZBoxPrimitive[%d]' % i)] for i in range(3)]
+        far = math.hypot(at[0] - end[0], at[2] - end[2])
+        if far <= BOARD_FAR:
+            continue
+        new, why = (end[0], end[1] + BOARD_UP, end[2]), 'the last point of the incoming route'
+        for s in next((a for a in act if isinstance(a, list)), []):
+            for g in sc.resolve(s):
+                if kl_fa.has(sc, g, 'OnlineGamePlayTrigger') and 'ZGEOM[2]' in J.labels('dd', sc.cls(g)) and _world(sc, g):
+                    p = kl_fa.node_values(sc, g)[J.labels('dd', sc.cls(g)).index('ZGEOM[2]')]
+                    if math.hypot(p[0] - end[0], p[2] - end[2]) <= min(half[0], half[2]):
+                        new, why = tuple(p), 'the place of the level\'s own BOARDS trigger ' + sc.names[g]
+        def fn(us, new=new):
+            i = lab.index('ZGEOM[2]')
+            us[i] = [us[i][0]] + [(0x0a, struct.pack('<f', x)) for x in new] + [us[i][-1]]
+        kl_fa.edit(sc, k, None, fn)
+        out[k] = new
+        log('  kl_escape: boarding action %s stood %d from where its vehicle stops (%d, %d, %d) - at (%d, %d, %d); moved to '
+            '(%d, %d, %d), %s' % (sc.names[k], far, *end, *at, *new, why))
+    return out
+
+
 def repair(sc, log=print):
-    """Everything above on the joined .prp scene -> {'sink': {node: dy}, 'reach': count}."""
-    return {'sink': open_wall(sc, log), 'reach': money_reach(sc, log)}
+    """Everything above on the joined .prp scene -> {'sink': {node: dy}, 'reach': count, 'move': {node: place}}."""
+    return {'sink': open_wall(sc, log), 'reach': money_reach(sc, log), 'move': board_box(sc, log)}
 
 
 def place_entities(sc, ents, done, log=print):
@@ -162,6 +246,11 @@ def place_entities(sc, ents, done, log=print):
         x, y, z = struct.unpack_from('<3f', e.trans, 0)
         e.trans = struct.pack('<3f', x, y + dy, z) + e.trans[12:]
         refs.add(e.ref)
+    for k, new in (done or {}).get('move', {}).items():     # board_box: a trigger box, no collision to cut
+        e = ents[k - 1]
+        if e.name.decode('latin1') != sc.names[k]:
+            raise ValueError('entity %d is %r, node %d is %s' % (k - 1, e.name, k, sc.names[k]))
+        e.trans = struct.pack('<3f', *new) + e.trans[12:]
     return refs
 
 

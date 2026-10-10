@@ -164,6 +164,18 @@ SITES={
 # Return addresses inside the recursive node loader 0x46fe20 (Blood Money: ZEngineDataBase::LoadPropertiesRecursive).
 CALLERS={0x46fecc:'node record footer',0x46ff33:'controller count',0x46ffa6:'controller name',0x46ffd1:'create controller by name',
          0x47001a:'skip unknown controller',0x470079:'child node',0x8ade95:'scene root',0x7f8e33:'count header'}
+# Return addresses that say WHICH THREAD a stack belongs to and where in a frame it stands (read off the disassembly
+# 2026-10-10, re/freeze_1009.md): the game draws on a thread of its own and the main thread waits for it once a frame.
+CALLERS.update({
+ 0x584073:'ZSysInterfaceWintel slot 47: the main loop',0x87a93b:'main loop step 0x87a930, its first call',
+ 0x87aa7c:'main loop step: back from the engine frame',0x5c71cd:'engine frame 0x5c7100: back from the render hand-off',
+ 0x459b20:'MAIN THREAD WAITS FOR THE RENDER THREAD (WaitForSingleObject 0x459b1a, no timeout)',
+ 0x459b79:'main thread waits for the render thread (0x459b73, device-lost branch, no timeout)',
+ 0x48a21f:'pump step 0x48a1e0: back from the message pump 0x82dfb0',
+ 0x56139e:'RENDER THREAD loop 0x561330',0x7c4c09:'render frame 0x7c1c30: back from IDirect3DSwapChain9::Present',
+ 0x8409bc:'IDirect3DDevice9::DrawIndexedPrimitive (wrapper 0x840990)'})
+# DLLs other programs put into the game: overlays and recorders that hook its Direct3D 9 calls.
+GUESTS=('discordhook','medal-hook','gameoverlayrenderer','nvspcap','rtsshooks','graphics-hook','owclient','action_x86','reshade')
 
 def explain(at,reg,D=None):
     """One line on what a known site means, with the values in the registers."""

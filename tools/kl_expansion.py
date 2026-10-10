@@ -12,6 +12,12 @@ for them, a manifest, and install / uninstall. Spec, layout, what is proven and 
             that is already built in <out>. Without --hook the SHIP hook is compiled from klhook\ (build.bat, into
             <out>\_stage\hook) when the tree has none or one made from other sources. Nothing outside <out> is
             written; the game is not started.
+                                 [--ready <folder>] [--prebuilt DM09=<folder>[,DM03=<folder>]]
+            --ready <folder>: the four Fragile Alliance maps are NOT built here but taken from the finished folders
+            <folder>\M01 M02 M03 M06 of 'kl_maps.py ready' (re\maps.md 14: voices, lightened, wardrobe); --prebuilt: any
+            map from a finished folder (the owner's Retomoto build). Such a folder holds an archive built for the F01
+            test slot: adopt() writes it under the map's own slot name (member and file names only) and takes the
+            hook's per-map files KLWardrobe.ini / KLJoin.ini along into Maps\<id>.
     python kl_expansion.py check [<tree>]                    every file of the tree against manifest.json (sha1)
     python kl_expansion.py menu [<tree>]                     the rules of re\menus.md on the tree's Overlay\Patch01.zip
     python kl_expansion.py share [<tree>]                    what the maps have in common with their systems level
@@ -31,7 +37,8 @@ LAYOUT (what klhook\klslot.c reads; <DD> = the folder of kl2.exe)
     <DD>\KLExpansion\KLHook.expansion.ini
     <DD>\KLExpansion\Maps\<id>\          <slot>_Main.zip (members Scenes/Locations/<slot>/<slot>_Main.*), .WHD .WAV .hti,
                                          <slot>_Main_LS.SND, <slot>_Main_LS_<Language>.WHD / .WAV; Retomoto Tower also
-                                         KLJoin.ini (klhook\kljoin.c: the jump box between its two parts)
+                                         KLJoin.ini (klhook\kljoin.c: the jump box between its two parts); a map with
+                                         the wardrobe also KLWardrobe.ini (klhook\klchar.c: its model numbers)
     <DD>\KLExpansion\Overlay\Patch01.zip the stock patch archive + the page 'Dead Men maps' in menu/frontend.xml
     <DD>\KLExpansion\Overlay\PC_Def.str  the merged stream file (Dog Days' + Dead Men's streamed clips)
     <DD>\KLExpansion\BuildInfo\<id>\     graft.txt, result.json, log.txt, preflight.json of the build
@@ -73,9 +80,14 @@ PAGE = 2                                       # the stock page sets the option 
 PAGE_TITLE = 'Dead Men maps'
 JOIN_NAME = '06_Exit'                          # Retomoto: the jump point the join box sends to (kl_fa_author: Specials!JumpPoints!06_Exit)
 SYSTEMS = 'F07'                                # the only systems level a Dead Men map has run under (re\maps.md 3, 10)
+SIDE = ('KLJoin.ini', 'KLWardrobe.ini')        # the hook's per-map files: read beside the archive that is opened (kljoin.c, klchar.c)
+READY = {'DM01': 'M01', 'DM02': 'M02', 'DM03': 'M03', 'DM06': 'M06'}   # map id -> folder of 'kl_maps.py ready' (kl_maps.READY)
 BEGIN, END = '; >>> KLExpansion (kl_expansion.py install) - do not edit between these lines', '; <<< KLExpansion'
 OURS = re.compile(r'(?i)^(expansion|redirect(\.\d+)?|page\.\d+|slots)$')     # the ini sections that belong to klslot.c
-HOOK_MARKS = (b'expansion: enabled', b'Redirect.%d', b'menu page option')     # log texts only a klslot build with pages has
+# log texts only a klslot build with pages has. Since 0ad48d2 klslot.c reads the page off the window stack ('menu page %d
+# latched'); the build before it logged 'menu page option' and lost the page at StartGame (re\hook_live.md): not accepted.
+HOOK_MARKS = (b'expansion: enabled', b'Redirect.%d', b'menu page %d latched')
+MENU_EXTRA = ('KLHeister', 'KLGuns')           # windows klhook\mkoverlay.py adds beside the map page (its HEISTER, GUNS_WINDOW)
 # The maps. title: Dead Men's own name (its .LOC AllLevels/Menu/Online/Scenarios/Title00..03, re\maps.md 2; the tower
 # is the campaign chapter M09A's name). slot: the stock slot the build is named for = the entry of the page.
 # build: 'one' = kl_maps.one(S, M) with kl_graft's defaults, 'chain' = S + M[0], then that + M[1] with the authored
@@ -293,6 +305,50 @@ def build_map(mid, stage):
     return folder
 
 
+def adopt(m, src, d, info, log=print):
+    r"""A FINISHED build folder as map m of the tree: `src` holds one <X>_Main.zip built for slot X (the F01 test slot
+    for every kept build so far), the files beside it, the hook's per-map files (SIDE) and the build's notes. The
+    archive is written again under the map's own slot name - member names and file names only, the members' bytes
+    are not touched (kl_graft.member_name; packed as kl_graft.write_zip does, fixed time stamp) - into d =
+    Maps\<id>, the SIDE files go with it, everything else (graft.txt, log.txt, result.json, audit.*, preflight.*,
+    wardrobe.txt ...) into info = BuildInfo\<id>. `src` is only read. -> the slot the folder was built for.
+    Why a rename is enough: nothing inside a level names its slot (kl_graft builds any slot from the same members;
+    the engine asks for 'Locations/<slot>/<slot>_Main' and the hook answers from Maps\<id>). The model numbers in
+    KLWardrobe.ini are .prm chunk indices and do not change."""
+    import kl_graft
+    zips = [f for f in sorted(os.listdir(src)) if f.lower().endswith('_main.zip')]
+    if len(zips) != 1:
+        raise SystemExit('%s: expected one *_Main.zip, found %s' % (src, zips))
+    old, slot = zips[0][:-9], m['slot']
+    for x in (d, info):
+        shutil.rmtree(x, ignore_errors=True); os.makedirs(x)
+    with zipfile.ZipFile(os.path.join(src, zips[0])) as z:
+        members = [(kl_graft.member_name(n, old, slot), z.read(n)) for n in z.namelist()]
+        crc = [(i.CRC, i.file_size) for i in z.infolist()]
+    out = kl_graft.write_zip(os.path.join(d, slot + '_Main.zip'), members, kl_graft.load_options(''))
+    with zipfile.ZipFile(out) as z:                     # read back: the same members in the same order
+        if [(i.CRC, i.file_size) for i in z.infolist()] != crc or any(old + '_Main' in n for n in z.namelist() if old != slot):
+            raise SystemExit('%s: the archive written for slot %s is not the folder\'s' % (m['id'], slot))
+    for f in sorted(os.listdir(src)):
+        p = os.path.join(src, f)
+        if not os.path.isfile(p) or f == zips[0]:
+            continue
+        if f.startswith(old + '_Main'):
+            copy_checked(p, os.path.join(d, slot + f[len(old):]))
+        else:
+            copy_checked(p, os.path.join(d if f in SIDE else info, f))
+    if not os.path.isfile(os.path.join(info, 'result.json')):
+        raise SystemExit('%s holds no result.json: not a kept build of kl_maps' % src)
+    if not os.path.isfile(os.path.join(info, 'stdout.txt')) and os.path.isfile(os.path.join(info, 'log.txt')):
+        shutil.copyfile(os.path.join(info, 'log.txt'), os.path.join(info, 'stdout.txt'))    # skeleton_step() reads it
+    with open(os.path.join(info, 'adopted.json'), 'w') as f:
+        json.dump({'from': os.path.abspath(src), 'built_for_slot': old, 'written_for_slot': slot,
+                   'archive_sha1_of_the_folder': sha1(os.path.join(src, zips[0]))}, f, indent=1)
+    log('%s: taken from %s (built for %s, written for %s; %s)' % (m['id'], src, old, slot, ', '.join(
+        f for f in SIDE if os.path.isfile(os.path.join(d, f))) or 'no per-map hook file'))
+    return old
+
+
 def skeleton_step(m, info):
     """Whether this build has kl_graft's skeleton renumbering (read from the build's own log, not from an option:
     the line 'skeletons of <M>: n of n renumbered' is printed by the step), and whether such a build of this map
@@ -315,8 +371,11 @@ def verdict(m, res):
     return bad
 
 
-def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share_too=True, pictures_too=True, bones=True, hook_make=True, log=print):
+def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share_too=True, pictures_too=True, bones=True, hook_make=True, log=print,
+          prebuilt=None):
+    """prebuilt: {map id: finished build folder} - those maps are taken as they are (adopt()), not built."""
     out = os.path.abspath(out or default_out())
+    prebuilt = dict(prebuilt or {})
     if bones:
         os.environ.pop('KL_EXPANSION_NO_BONES', None)
     else:
@@ -334,7 +393,9 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
     todo, live, failed = [], [], []
     for m in maps:
         d = os.path.join(tree, 'Maps', m['id'])
-        if reuse and os.path.isfile(os.path.join(d, m['slot'] + '_Main.zip')) and os.path.isfile(os.path.join(tree, 'BuildInfo', m['id'], 'result.json')):
+        if m['id'] in prebuilt:
+            adopt(m, prebuilt[m['id']], d, os.path.join(tree, 'BuildInfo', m['id']), log)
+        elif reuse and os.path.isfile(os.path.join(d, m['slot'] + '_Main.zip')) and os.path.isfile(os.path.join(tree, 'BuildInfo', m['id'], 'result.json')):
             log('%s: kept (--reuse)' % m['id'])
         else:
             todo.append(m)
@@ -358,7 +419,7 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
             for x in (d, info):
                 shutil.rmtree(x, ignore_errors=True); os.makedirs(x)
             for f in sorted(os.listdir(src)):
-                os.replace(os.path.join(src, f), os.path.join(d if f.startswith(m['slot'] + '_Main') else info, f))
+                os.replace(os.path.join(src, f), os.path.join(d if f.startswith(m['slot'] + '_Main') or f in SIDE else info, f))
             shutil.copyfile(os.path.join(stage, m['id'] + '.stdout.txt'), os.path.join(info, 'stdout.txt'))
             shutil.rmtree(st, ignore_errors=True)
             log('%s: built in %d s' % (m['id'], json.load(open(os.path.join(info, 'result.json'))).get('seconds', 0)))
@@ -371,23 +432,46 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
         res = json.load(open(os.path.join(info, 'result.json')))
         why = verdict(m, res)
         if m.get('join'):
-            with open(os.path.join(d, 'KLJoin.ini'), 'w', newline='\r\n') as f:
-                f.write(join_ini(log))
+            jp, keys = os.path.join(d, 'KLJoin.ini'), lambda t: sorted(l.strip() for l in t.splitlines() if '=' in l and not l.lstrip().startswith(';'))
+            if m['id'] in prebuilt and os.path.isfile(jp):          # the file the folder was played with stays
+                if keys(open(jp).read()) != keys(join_ini(lambda *_a: None)):
+                    log('NOTE: %s: the folder\'s KLJoin.ini does not hold kl_fa_author\'s box as it is now; the folder\'s is kept' % m['id'])
+            else:
+                with open(jp, 'w', newline='\r\n') as f:
+                    f.write(join_ini(log))
         if why:
             bad[m['id']] = why
         pre = os.path.join(info, 'preflight.json')
         pf = collections.Counter(x[0] for x in json.load(open(pre))['findings']) if os.path.isfile(pre) else None
+        aud = json.load(open(os.path.join(info, 'audit.json'))) if os.path.isfile(os.path.join(info, 'audit.json')) else None
+        if aud and aud.get('bad'):                      # kl_maps.audit: every checker on the finished folder
+            why = why + ['audit: ' + x for x in aud['bad']]
+            bad[m['id']] = why
+        took = json.load(open(os.path.join(info, 'adopted.json'))) if os.path.isfile(os.path.join(info, 'adopted.json')) else None
+        numbers = {k: res.get(k) for k in ('archive_mb', 'beside_mb', 'entities', 'rooms', 'textures', 'materials', 'prm_chunks', 'sounds', 'waves', 'nav_bytes')}
+        # result.json is written by the graft; a finished folder was lightened and given the wardrobe after it (DM01: 336 MB
+        # there, 197 MB in the tree). The sizes are read off the tree, the counts off the folder's audit where it has one.
+        numbers['archive_mb'] = round(os.path.getsize(os.path.join(d, m['slot'] + '_Main.zip')) / 1e6, 1)
+        numbers['beside_mb'] = round(sum(os.path.getsize(os.path.join(d, f)) for f in os.listdir(d)
+                                         if f.startswith(m['slot'] + '_Main') and f != m['slot'] + '_Main.zip') / 1e6, 1)
+        if aud:
+            numbers.update({k: aud[k] for k in ('textures', 'materials', 'sounds', 'waves') if aud.get(k) is not None})
+            if aud.get('prm_entries'):
+                numbers['prm_chunks'] = aud['prm_entries'] - 1
         entries.append({
             'id': m['id'], 'name': m['title'], 'slot': m['slot'], 'menu_entry': ORDER.index(int(m['slot'][1:])), 'folder': 'Maps/' + m['id'],
             'scene': 'Locations/%s/%s_Main' % (m['slot'], m['slot']), 'systems_level': SYSTEMS, 'source_levels': m['sources'],
             'build': m['build'] + (' (kl_maps.one, kl_graft defaults)' if m['build'] == 'one' else ' (campaign pre-pass + kl_fa_author layer)'),
+            'taken_from': took,                         # a finished folder (adopt()); None = built here by kl_graft's defaults
+            'wardrobe': os.path.isfile(os.path.join(d, 'KLWardrobe.ini')),
+            'audit': {k: aud.get(k) for k in ('prm_mb', 'prm_entries', 'tex_mb', 'people', 'weapons', 'fa', 'round', 'preflight')} if aud else None,
             'options': res.get('options', {}),
             'build_id': build_id(d, m['slot']), 'accepted': not why, 'not_accepted_because': why,
             'problems': res.get('problems', []), 'known_problems': list(m['known']), 'fa_check': res.get('fa', {}),
             'fa_findings': res.get('fa_findings', []), 'preflight': dict(pf) if pf else None, 'live': m['live'],
             'skeleton_step': skeleton_step(m, info),
-            'extra_files': ['KLJoin.ini'] if m.get('join') else [],
-            'numbers': {k: res.get(k) for k in ('archive_mb', 'beside_mb', 'entities', 'rooms', 'textures', 'materials', 'prm_chunks', 'sounds', 'waves', 'nav_bytes')},
+            'extra_files': [f for f in SIDE if os.path.isfile(os.path.join(d, f))],
+            'numbers': numbers,
             'bytes': sum(os.path.getsize(os.path.join(d, f)) for f in os.listdir(d))})
         log('%s %-20s slot %s: %s; %d problems (%d known), FA %s, %.0f MB' % (
             m['id'], m['title'], m['slot'], 'ACCEPTED' if not why else 'NOT ACCEPTED', len(res.get('problems', [])),
@@ -540,8 +624,13 @@ def menu_check(tree, stock_patch, entries, dd, log=print):
     for k, v in wb.items():
         if len(v) > len(wa.get(k, [])) and len(v) > 1:  # stock itself holds three names twice (console alternatives)
             bad.append('window name %s is used %d times' % (k, len(v)))
-    if set(wb) - set(wa) != {name}:
-        bad.append('new windows %s, expected only %s' % (sorted(set(wb) - set(wa)), name))
+    # mkoverlay.py also adds the Heister page and the Guns page unless the ini turns them off (its own check() covers
+    # their rows); what this check is strict about is the MAP page and that nothing else is new
+    extra = sorted((set(wb) - set(wa)) & set(MENU_EXTRA))
+    if set(wb) - set(wa) - set(MENU_EXTRA) != {name}:
+        bad.append('new windows %s, expected %s and at most %s' % (sorted(set(wb) - set(wa)), name, ', '.join(MENU_EXTRA)))
+    if extra:
+        note.append('windows beside the map page (klhook\\mkoverlay.py): ' + ', '.join(extra))
     changed = [k for k in wa if k in wb and wa[k] != wb[k]]
     if changed != ['HeistModeMenu']:
         bad.append('stock windows changed: %s (only HeistModeMenu may)' % changed)
@@ -612,9 +701,11 @@ def menu_check(tree, stock_patch, entries, dd, log=print):
     # count is compared: the stock frontend already holds more tags than slots and runs, so only the growth counts.
     tags = lambda t: len(re.findall(r'<(?:Window|GuiElement|ColorSet|ButtonGraphic)\b', t))
     n0, n1, no = tags(a), tags(b), tags(online)
-    if n1 - n0 > 100:
-        bad.append('the page adds %d elements; more than 100 was never meant' % (n1 - n0))
-    out = {'ok': not bad, 'findings': bad, 'notes': note, 'window': name, 'elements_added': n1 - n0, 'tags_stock_frontend': n0, 'tags_frontend': n1,
+    n_extra = {k: sum(tags(t) for t in wb[k]) for k in extra}
+    if n1 - n0 - sum(n_extra.values()) > 100:
+        bad.append('the map page adds %d elements; more than 100 was never meant' % (n1 - n0 - sum(n_extra.values())))
+    out = {'ok': not bad, 'findings': bad, 'notes': note, 'window': name, 'extra_windows': n_extra, 'elements_added': n1 - n0,
+           'tags_stock_frontend': n0, 'tags_frontend': n1,
            'tags_online_xml': no, 'element_table': 5096, 'windows': len(wb), 'frontend_xml_sha1': hashlib.sha1(b.encode('latin-1')).hexdigest(),
            'entries': ['%s%s' % (want[s]['name'] if s in want else '(stock F%02d)' % s, ' [DLC slot]' if s in DLC else '') for s in ORDER]}
     log('menu page %s: %s; %d tags added to %d (frontend.xml) + %d (online.xml); table 5096, headroom not established' % (
@@ -1048,6 +1139,18 @@ def restore_stock(game, everything=False, log=print):
         copy_checked(src, dst, sha1(src))
         done.append(rel.replace('\\', '/'))
     log('stock files copied back from %s: %d%s' % (BACKUP, len(done), ' (%s)' % ', '.join(done[:4]) + (' ...' if len(done) > 4 else '') if done else ' (all were stock already)'))
+    # A test build's per-map hook files must not stay beside the STOCK archive: klchar.c (klc_level_open) reads
+    # KLWardrobe.ini beside ANY archive the game opens and would hand stock Subway the model numbers of the build that
+    # was there (kljoin.c ignores its file beside a stock archive, verdict 1; it goes aside all the same). Renamed, not
+    # deleted: the hook looks for the exact names. They are not in `done`: nothing of KL_PortBackup replaced them.
+    slot = os.path.join(game, 'Scenes', 'Locations', 'F01')
+    for f in SIDE:
+        p, n = os.path.join(slot, f), 0
+        if os.path.isfile(p):
+            while os.path.exists('%s.of-test-build-%d' % (p, n)):
+                n += 1
+            os.rename(p, '%s.of-test-build-%d' % (p, n))
+            log('test slot: %s of the build that was there is set aside as %s.of-test-build-%d (the archive beside it is stock now)' % (f, f, n))
     return done
 
 
@@ -1326,6 +1429,7 @@ def selftest(scratch=None, log=print):
     for f, stock in (('F01_Main.zip', b'STOCK F01 archive'), ('F01_Main.WAV', b'STOCK wav'), ('F01_Main_LS.SND', b'STOCK ls')):
         put(game, 'Scenes/Locations/F01/' + f, b'TEST BUILD ' + f.encode()); put(game, BACKUP + '/Scenes/Locations/F01/' + f, stock)
     put(game, 'Scenes/Locations/F01/Loader_Sequence.zip', b'stock loader (never replaced)')
+    put(game, 'Scenes/Locations/F01/KLWardrobe.ini', b'[Wardrobe] of the test build'); put(game, 'Scenes/Locations/F01/KLJoin.ini', b'[Join] of the test build')
     put(game, 'Scenes/Locations/F01/F01_Main.WHD', b'stock whd, equal to its backup'); put(game, BACKUP + '/Scenes/Locations/F01/F01_Main.WHD', b'stock whd, equal to its backup')
     put(game, BACKUP + '/PC_Def.str', b'STOCK stream file')
     ini0 = '[KLHook]\r\nContinueAsserts=1\r\nMaxDumps=4\r\n[Expansion]\r\nEnable=1\r\nLog=2\r\n[Redirect]\r\nF01=DM03\r\n[Auto]\r\nEnable=0\r\n; a comment\r\n'
@@ -1374,6 +1478,9 @@ def selftest(scratch=None, log=print):
     ok('KLHook.ini has CRLF line ends only', '\n' not in t.replace('\r\n', ''))
     f01 = lambda f: open(os.path.join(game, 'Scenes/Locations/F01', f), 'rb').read()
     ok('the F01 slot is stock again, by copy', f01('F01_Main.zip') == b'STOCK F01 archive' and f01('F01_Main.WAV') == b'STOCK wav' and f01('Loader_Sequence.zip') == b'stock loader (never replaced)' and sorted(state['slot']) == ['Scenes/Locations/F01/F01_Main.WAV', 'Scenes/Locations/F01/F01_Main.zip', 'Scenes/Locations/F01/F01_Main_LS.SND'])
+    ok('the test build\'s KLWardrobe.ini / KLJoin.ini no longer stand beside the stock archive, and are kept under another name',
+       not any(os.path.exists(os.path.join(game, 'Scenes/Locations/F01', f)) for f in SIDE)
+       and f01('KLWardrobe.ini.of-test-build-0') == b'[Wardrobe] of the test build' and f01('KLJoin.ini.of-test-build-0') == b'[Join] of the test build')
     ok('KL_PortBackup is untouched', snap(os.path.join(game, BACKUP)) == backup0)
     ok('PC_Def.str of the game folder is left alone', open(os.path.join(game, 'PC_Def.str'), 'rb').read() == b'MERGED stream file')
     ok('stock files outside the slot are untouched', all(snap(game)[r] == before[r] for r in ('kl2.exe', 'Patch01.zip', 'Scenes/Locations/F07/F07_Main.zip')))
@@ -1398,7 +1505,9 @@ def selftest(scratch=None, log=print):
     ok('the folder moved aside is still there when ours could not be removed', os.path.isdir(os.path.join(game, ROOT + '.before-0')))
     os.rename(os.path.join(game, ROOT + '.before-0'), dst)
     diff = sorted(r for r in set(before) | set(snap(game)) if before.get(r) != snap(game).get(r))
-    ok('the game folder differs from the start only by the F01 slot being stock: %s' % diff, diff == ['Scenes/Locations/F01/F01_Main.WAV', 'Scenes/Locations/F01/F01_Main.zip', 'Scenes/Locations/F01/F01_Main_LS.SND'])
+    ok('the game folder differs from the start only by the F01 slot being stock and its two hook files set aside: %s' % diff,
+       diff == sorted(['Scenes/Locations/F01/F01_Main.WAV', 'Scenes/Locations/F01/F01_Main.zip', 'Scenes/Locations/F01/F01_Main_LS.SND']
+                      + ['Scenes/Locations/F01/' + f + x for f in SIDE for x in ('', '.of-test-build-0')]))
     ok('KL_PortBackup is untouched', snap(os.path.join(game, BACKUP)) == backup0)
 
     log('5. a clean game folder (no hook, no ini, no KLExpansion), the ini edited after the install, --restore-all')
@@ -1448,9 +1557,17 @@ def main():
         sys.exit(0 if folder else 1)
     cmd = a.pop(0) if a else ''
     game, out, only, par, hook = opt('--game'), opt('--out'), opt('--maps'), int(opt('-j', 2)), opt('--hook')
+    pre, ready_dir = {}, opt('--ready')
+    if ready_dir:
+        pre.update({i: os.path.join(ready_dir, t) for i, t in READY.items()})
+    while '--prebuilt' in a:
+        for w in opt('--prebuilt').split(','):
+            i, _eq, folder = w.partition('=')
+            pre[i] = folder
     f = {k: flag('--' + k) for k in ('reuse', 'no-stream', 'no-share', 'no-pictures', 'keep-slot', 'no-hook', 'link', 'replace', 'restore-all', 'bones', 'no-bones', 'no-hook-build')}
     if cmd == 'build':
-        sys.exit(build(out, only.split(',') if only else None, par, f['reuse'], hook, not f['no-stream'], not f['no-share'], not f['no-pictures'], not f['no-bones'], not f['no-hook-build']))
+        sys.exit(build(out, only.split(',') if only else None, par, f['reuse'], hook, not f['no-stream'], not f['no-share'], not f['no-pictures'], not f['no-bones'],
+                       not f['no-hook-build'], prebuilt=pre))
     tree = os.path.join(default_out(), ROOT) if not a else a[0]
     if cmd == 'check':
         check(tree)

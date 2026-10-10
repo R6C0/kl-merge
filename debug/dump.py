@@ -1,7 +1,8 @@
 """dump.py <dump> [--threads]   what faulted, registers, code before the fault, kl2.exe return addresses on the stack.
 A dump without an exception record (KLHook_stall.dmp, KLHook_stackoverflow.dmp, KLHook_crt.dmp: written by the hook's
 watchdog, not by a fault handler) is read from its first thread, the game's main thread; --threads lists every thread.
-For a fault outside kl2.exe, a stack overflow and a watchdog dump the other modules on the stack are listed too."""
+For a fault outside kl2.exe, a stack overflow and a watchdog dump the other modules on the stack are listed too.
+Last lines: which thread faulted (main, render, other) and the overlay / recorder DLLs other programs put into the game."""
 import collections,re,struct,sys
 import kl
 def summary(D,E):
@@ -40,6 +41,27 @@ def foreign(D,depth=0x4000,reg=None):
             if w not in c: order.append(w)
             c[w]+=1
     return [(w,c[w]) for w in order]
+def guests(D):
+    """Overlay / recorder DLLs of other programs in the process (kl.GUESTS): [(name, position in the module list, of how many)].
+    The list is in load order: a guest near its end was injected into the RUNNING game (DiscordHook.dll in both of its fault
+    dumps of 2026-10-09: last but for the D3DCompiler it loads itself), one in the middle came in at start-up."""
+    n=len(D.mods)
+    return [(nm,i+1,n) for i,(_,_,nm) in enumerate(D.mods) if any(g in nm.lower() for g in kl.GUESTS)]
+def who(D,E):
+    """Lines on which thread faulted and what else lives in the process. The game draws on a thread of its own (loop 0x561330,
+    IDirect3DSwapChain9::Present at 0x7c4c07) and the main thread waits for it without a timeout (0x459b1a): a fault or a hang
+    inside Present - which is where every overlay hooks in - shows on the render thread, with the main thread standing in that wait."""
+    out=[]
+    if D.code is not None and D.threads and D.tid is not None:
+        main=D.threads[0]; fr=frames(D,E)
+        role='the render thread' if 0x56139e in fr else 'the main thread' if D.tid==main[0] else 'not the main thread'
+        t='faulting thread %d is %s'%(D.tid,role)
+        if 0x7c4c09 in fr: t+=', inside IDirect3DSwapChain9::Present (kl2 0x7c4c07)'
+        if D.tid!=main[0]: t+='; main thread %d: %s'%(main[0],chain(frames(D,E,0x2000,main[1])[:3]))
+        out.append(t)
+    g=guests(D)
+    if g: out.append('guest DLLs (position in load order): '+', '.join('%s %d/%d'%x for x in g))
+    return out
 def wants_foreign(D,E):
     at=D.addr if D.code is not None else D.reg.get('eip')
     return D.code is None or D.code==0xc00000fd or not (at and E.code(at))
@@ -60,5 +82,6 @@ if __name__=='__main__':
         strs=[t for i in E.dis(v-0x400,0x400) for m in re.findall(r'0x[0-9a-f]{6,8}',i.op_str) for t in [E.cstr(int(m,16))] if t]
         print('  %#x in %#x %s %s'%(v,E.func(v) or 0,kl.CALLERS.get(v,''),strs[-4:]))
     if wants_foreign(D,E): print(foreign_line(D,E))
+    for t in who(D,E): print(t)
     if '--threads' in sys.argv:
         for tid,r in D.threads: print('thread %6d eip %08x %-28s esp %08x  kl2: %s'%(tid,r['eip'],D.which(r['eip']) or '?',r['esp'],chain(frames(D,E,0x400,r)[:4])))

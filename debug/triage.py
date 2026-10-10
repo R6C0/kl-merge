@@ -55,6 +55,7 @@ for p in a:
     if not D.reg: print(); continue
     print('callers: '+dump.chain(dump.frames(D,E)[:8]))
     if dump.wants_foreign(D,E): print(dump.foreign_line(D,E))
+    for t in dump.who(D,E): print(t)                             # which thread, and the overlays / recorders in the process
     if D.code is None or D.addr==0xa8e3cb: print(); continue     # a watchdog dump, or the DRM probe: no reader to locate
     try: g=buf.get(D,E)
     except Exception as x: g=None; print('.prp reader not looked for (%s: %s)'%(type(x).__name__,x))

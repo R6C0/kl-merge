@@ -27,6 +27,13 @@ written: kl_graft.out_dir is replaced for the length of a build. Spec and result
                                                           exit code 1 on a CRASH finding
     python kl_maps.py deliver <out> [-j N]                the kept builds for the first live runs of
                                                           M02_FA_A and M06_FA_A + their preflight
+    python kl_maps.py ready <out> [M01 M03 ...] [-j 2]    THE FOUR FA MAPS READY TO INSTALL (re/maps.md 14): each
+                                                          built with every fix and the voices on, lightened,
+                                                          the wardrobe on top, every checker -> <out>/<M01|..>/
+    python kl_maps.py audit <folder>                      every checker and the numbers on a finished folder
+    python kl_maps.py readytable <out>                    the table of section 14 from the audits
+    python kl_maps.py bots [F07 ...]                      a stock level's AI heister squad: nodes, route, what it names
+    python kl_maps.py stations <folder> ...               a built map's round stations on its navigation mesh (14.5)
     python kl_maps.py stage <out>/F07+M02_FA_A            LIVE SIDE ONLY: copy a kept build into
                                                           <work>/build/install (then kl_graft.py install)
   options of 'one':  --keep        leave the archive and the files beside it (default: measured,
@@ -1001,6 +1008,540 @@ def hostfacts(m_name='M03_FA_A', log=print):
             sorted(x[len(kl_anm.PREFIX):] for x in (used or set()) - cols)))
 
 
+# ------------------------------------------------------------------ the four FA maps, ready to install
+# Each Dead Men Fragile Alliance map to the standard of the Retomoto build the owner plays (re/maps.md 14):
+# the build with every fix that is a default of kl_graft today and the voices on, then 'lighten', then the
+# wardrobe - the order re/prm_limit.md gives (lighten FIRST: after the wardrobe took the dead chunk indices
+# lighten finds no dead material left). (folder under <out>, level, Dead Men's own title, kl_maps.one options)
+READY_S = 'F07'                                 # the only systems level a Dead Men map has run under (sections 3, 10)
+READY = [('M01', 'M01_FA_A', 'Hot Coffee', {}), ('M02', 'M02_FA_A', 'Late Night Opening', {}),
+         ('M03', 'M03_FA_A', 'Withdrawal', {}), ('M06', 'M06_FA_A', 'A Walk in the Park', {})]
+READY_LOAD = 'trim,slim'                        # kl_graft.load_options: what the played Retomoto build has
+
+
+def round_facts(sc):
+    """What a Fragile Alliance round needs, counted on a built scene (kl_fa's readers) -> dict."""
+    import kl_fa
+    _ctrl, cls = kl_fa.census(sc)
+    n = lambda name: len(kl_fa.controllers(sc, name))
+    money = [v[1] for _k, _i, v in kl_fa.controllers(sc, 'OnlineMoneyCtrl') if len(v) > 1 and isinstance(v[1], (int, float))]
+    veh = ['%s %s' % (sc.cls(k), sc.path[k].split('\\', 1)[-1]) for k, _i, _v in kl_fa.controllers(sc, 'OnlineEscVehicleController')]
+    points = collections.Counter()
+    for k in range(1, len(sc.nodes)):
+        if sc.cls(k) == 'ZSpawnPoint':
+            points[next((x for x in kl_fa.node_values(sc, k) if isinstance(x, str) and 'SPAWN' in x.upper()), '?')] += 1
+    return collections.OrderedDict((
+        ('money objects (OnlineMoneyCtrl)', len(money)), ('their amounts added up (field 1)', int(sum(money))),
+        ('money containers (OnlineMoneyContainer)', n('OnlineMoneyContainer')),
+        ('enter / exit loot-area triggers (OnlineGamePlayTrigger)', n('OnlineGamePlayTrigger')),
+        ('level exit (OnlineExitLevelTrigger)', n('OnlineExitLevelTrigger')), ('escape monitor (OnlineEscVehicleMonitor)', n('OnlineEscVehicleMonitor')),
+        ('escape vehicles (OnlineEscVehicleController on)', veh),
+        ('squads (ZSquadScript)', n('ZSquadScript')), ('bot squads (TriggerLootDepleted)', n('TriggerLootDepleted')),
+        ('actors (ZFFActor)', cls['ZFFActor']), ('players (ZFFPlayer)', cls['ZFFPlayer']), ('spawn points', dict(points)),
+        ('HUD markers (PointOfInterest)', n('PointOfInterest'))))
+
+
+# ------------------------------------------------------------------ the AI heisters ('no bot squads')
+# kl_fa.check on every Dead Men map: 'no bot squads'. What a stock level's squad is and what a map offers it,
+# measured; nothing is built from it (re/maps.md 14.5: it is authoring per map, not a switch).
+def bot_facts(level=READY_S, log=print):
+    """The AI heister squad of a stock Fragile Alliance level, read from its .prp -> dict: top-level subtrees
+    ('Gameplay!merc_bot_squad!*'), nodes, squads and the fields of their ZSquadScript, controllers, the plain
+    position boxes its DefendBehaviourRout steps walk to, the actors' places against the START points, every
+    reference out of it by field and target side, and who outside starts it."""
+    import kl_fa, kl_prpjoin as J, kl_gms, kl_scene
+    sc, _snd, _loc = kl_fa.load(level)
+    with zipfile.ZipFile(J.level_zip(level, 'dd')) as z:
+        m = {n.rsplit('_Main', 1)[1]: n for n in z.namelist() if '_Main' in n}
+        scene = kl_scene.Scene(kl_gms.unpack(z.read(m['.gms'])), z.read(m['.buf']))
+    ents = list(scene.entities()); pos = world(scene)
+    at = lambda k: tuple(round(v) for v in pos[ents[k - 1]])
+    side = J.sides(sc)
+    tops = [t for t in sc.tops() if 'merc_bot' in sc.names[t].lower()]
+    mine = {k for t in tops for k in range(t, sc.end[t])}
+    ctrl = collections.Counter(sc.p.key(nm) for k in mine for nm, _b in sc.nodes[k]['ctrls'])
+    out_refs, into = collections.Counter(), collections.Counter()
+    for k, _holder, field, _st, hit in J.references(sc):
+        if k in mine and hit and not all(h in mine for h in hit):
+            out_refs['%s -> %s %s' % (field, side[hit[0]], sc.cls(hit[0]))] += 1
+        elif k not in mine and hit and any(h in mine for h in hit):
+            into['%s %s' % (sc.names[sc.top[k]] if k > 0 else 'scene block', field)] += 1
+    squads = [t for t in tops if kl_fa.has(sc, t, 'ZSquadScript')]
+    boxes = sorted(k for k in mine if sc.cls(k) == 'ZBoxPrimitive' and not sc.nodes[k]['ctrls'])
+    starts = [at(k) for k in range(1, len(sc.nodes)) if sc.cls(k) == 'ZSpawnPoint' and any(
+        isinstance(x, str) and x.endswith('_START') for x in kl_fa.node_values(sc, k))]
+    actors = [at(k) for k in sorted(mine) if sc.cls(k) == 'ZFFActor']
+    mid = lambda ps: tuple(round(sum(p[i] for p in ps) / len(ps)) for i in range(3)) if ps else None
+    ps = [at(k) for k in boxes]
+    r = collections.OrderedDict((
+        ('level', level), ('top-level subtrees', len(tops)), ('nodes', len(mine)), ('squads', len(squads)),
+        ('ZSquadScript fields 0..3', next(([kl_fa.value(sc, u) for u in units_of(b)][:4] for nm, b in sc.nodes[squads[0]]['ctrls']
+                                           if sc.p.key(nm) == 'ZSquadScript'), None) if squads else None),
+        ('controllers', dict(ctrl.most_common())), ('route steps (DefendBehaviourRout)', ctrl['DefendBehaviourRout']),
+        ('position boxes', len(boxes)),
+        ('position boxes: extent x, y, z', [(min(p[i] for p in ps), max(p[i] for p in ps)) for i in range(3)] if ps else None),
+        ('actors stand around', mid(actors)), ('START points around', mid(starts)),
+        ('references into the level outside the squad', dict(out_refs.most_common())), ('started from outside by', dict(into))))
+    for k, v in r.items():
+        log('  %-46s %s' % (k, v))
+    return r
+
+
+def units_of(body):
+    from kl_prp import units
+    return units(body[1:-1])
+
+
+class NavParts:
+    """A Dog Days-form navigation mesh as polygons with neighbours (kl_pf4: array 3 polygons, 9 edges, 6 vertices
+    stored x, z, y - as tools/kl_fa_street.py's Nav reads them) and its connected parts. `joined`: besides the edges'
+    neighbour fields, two waypoints of different polygons at one place (within 60) join their polygons - the
+    ASSUMPTION of re/fa_round.md 6.1 that every scripted walk bore out; part ids are given for both readings."""
+    def __init__(self, block):
+        import math, kl_pf4
+        _n, A = kl_pf4.split(block, True)
+        polys = [struct.unpack('<BBHIIIIIII', r) for r in A[3]]
+        edges = [struct.unpack('<iII', r) for r in A[9]]
+        verts = [struct.unpack('<5f', r) for r in A[6]]
+        self.pv = [[(verts[edges[e][1]][0], verts[edges[e][1]][2], verts[edges[e][1]][1]) for e in range(p[5], p[5] + p[0])] for p in polys]
+        nb = collections.defaultdict(set)
+        for i, p in enumerate(polys):
+            for e in range(p[5], p[5] + p[0]):
+                j = edges[e][0]
+                j = -2 - j if j < -1 else j
+                if 0 <= j < len(polys) and j != i:
+                    nb[i].add(j); nb[j].add(i)
+        self.links = sum(1 for _r in A[7])
+        wj = collections.defaultdict(set)
+        wps = [struct.unpack('<3fIIIHH', r) for r in A[5]]
+        grid = collections.defaultdict(list)
+        for w in wps:
+            grid[int(w[0] // 100), int(w[1] // 100)].append(w)
+        for w in wps:
+            for dx in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    for v in grid.get((int(w[0] // 100) + dx, int(w[1] // 100) + dz), ()):
+                        if v[5] != w[5] and math.dist(w[:3], v[:3]) < 60 and max(v[5], w[5]) < len(polys):
+                            wj[w[5]].add(v[5]); wj[v[5]].add(w[5])
+        self.part, self.joined = self._parts(nb, {}), self._parts(nb, wj)
+        self.box = [(min(v[0] for v in vs), max(v[0] for v in vs), min(v[2] for v in vs), max(v[2] for v in vs),
+                     sum(v[1] for v in vs) / len(vs)) if len(vs) >= 3 else None for vs in self.pv]
+
+    def _parts(self, nb, more):
+        part, n = [-1] * len(self.pv), 0
+        for s in range(len(self.pv)):
+            if part[s] >= 0:
+                continue
+            part[s], st = n, [s]
+            while st:
+                i = st.pop()
+                for j in nb.get(i, set()) | more.get(i, set()):
+                    if part[j] < 0:
+                        part[j] = n; st.append(j)
+            n += 1
+        return part
+
+    def inside(self, i, x, z):
+        vs, sign = self.pv[i], 0
+        for k in range(len(vs)):
+            a, b = vs[k], vs[(k + 1) % len(vs)]
+            c = (b[0] - a[0]) * (z - a[2]) - (b[2] - a[2]) * (x - a[0])
+            if abs(c) < 1e-6:
+                continue
+            if sign and (c > 0) != (sign > 0):
+                return False
+            sign = c
+        return True
+
+    def at(self, x, y, z):
+        """(polygon, horizontal distance to it, height difference): the polygon under the point whose height is
+        nearest to y, else the polygon whose centre is nearest (distance > 0: the point is off the mesh)."""
+        import math
+        under = [i for i, b in enumerate(self.box) if b and b[0] <= x <= b[1] and b[2] <= z <= b[3] and self.inside(i, x, z)]
+        if under:
+            i = min(under, key=lambda i: abs(self.box[i][4] - y))
+            return i, 0.0, self.box[i][4] - y
+        i = min((i for i, b in enumerate(self.box) if b), key=lambda i: math.dist(
+            ((self.box[i][0] + self.box[i][1]) / 2, self.box[i][4], (self.box[i][2] + self.box[i][3]) / 2), (x, y, z)))
+        b = self.box[i]
+        return i, math.hypot((b[0] + b[1]) / 2 - x, (b[2] + b[3]) / 2 - z), b[4] - y
+
+
+def stations(folder, slot=SLOT, log=print):
+    """Where a Fragile Alliance round happens on a built map, and whether an AI could walk it: the START row, the
+    loot-area triggers, the level exit, the boarding action and the escape vehicle (world places, kl_scene), each
+    looked up on the level's navigation mesh (NavParts). -> dict. Read only; for re/maps.md 14.5."""
+    import kl_fa, kl_gms, kl_scene
+    zp = os.path.join(folder, slot + '_Main.zip')
+    sc, _snd, _loc = kl_fa.load(zp)
+    with zipfile.ZipFile(zp) as z:
+        m = {n.rsplit('_Main', 1)[1]: n for n in z.namelist() if '_Main' in n}
+        scene = kl_scene.Scene(kl_gms.unpack(z.read(m['.gms'])), z.read(m['.buf']))
+    ents = list(scene.entities()); pos = world(scene)
+    at = lambda k: pos[ents[k - 1]]
+    nav = NavParts(scene.nav)
+    mid = lambda ps: tuple(sum(p[i] for p in ps) / len(ps) for i in range(3))
+    st = collections.OrderedDict()
+    kinds = collections.defaultdict(list)
+    for k in range(1, len(sc.nodes)):
+        if sc.cls(k) == 'ZSpawnPoint':
+            kind = next((x for x in kl_fa.node_values(sc, k) if isinstance(x, str) and 'SPAWN' in x.upper()), '?')
+            kinds[kind.rsplit('ALLIANCE_', 1)[-1]].append(at(k))
+    for kind in ('START', 'AFTER_DEATH', 'TRAITOR'):
+        if kinds.get(kind):
+            st['%s points (%d), their middle' % (kind, len(kinds[kind]))] = mid(kinds[kind])
+    for k, _i, v in kl_fa.controllers(sc, 'OnlineGamePlayTrigger'):
+        what_ = next((x for x in v if isinstance(x, str) and x.startswith('eOGPT_')), '?')
+        st['%s  %s' % (what_.replace('eOGPT_PLAYER_', ''), sc.path[k][5:])] = at(k)
+    for k, _i, v in kl_fa.controllers(sc, 'OnlineExitLevelTrigger'):
+        st['level exit  %s' % sc.path[k][5:]] = at(k)
+    for k, _i, v in kl_fa.controllers(sc, 'PlayerAction'):
+        if 'EnterVehicle' in v:
+            st['boarding  %s' % sc.path[k][5:]] = at(k)
+    for k, _i, v in kl_fa.controllers(sc, 'OnlineEscVehicleController'):
+        st['escape vehicle (%s)  %s' % (next((sc.cls(j) for j in range(k + 1, sc.end[k]) if sc.cls(j) in ('ZHavokCar', 'ZHeli', 'ZAnimatedVehicle')), sc.cls(k)),
+                                        sc.path[k][5:])] = at(k)
+    boxes = [at(k) for k, _i, _v in kl_fa.controllers(sc, 'OnlineMoneyContainer')]
+    if boxes:
+        st['money containers (%d), their middle' % len(boxes)] = mid(boxes)
+    sizes, sizes_j = collections.Counter(nav.part), collections.Counter(nav.joined)
+    out = collections.OrderedDict(folder=folder, polygons=len(nav.pv), links=nav.links,
+                                  parts_by_edges=len(sizes), parts_with_waypoint_joins=len(sizes_j),
+                                  largest_parts=[n for _p, n in sizes_j.most_common(6)], stations=[])
+    log('%s: navigation mesh %d polygons, %d links; %d connected parts by the edges\' neighbour fields, %d when waypoints at one place join '
+        '(largest: %s polygons)' % (folder, len(nav.pv), nav.links, len(sizes), len(sizes_j), ', '.join(str(n) for _p, n in sizes_j.most_common(6))))
+    home = None
+    for name, p in st.items():
+        i, d, dy = nav.at(*p)
+        part = nav.joined[i]
+        home = part if home is None else home
+        out['stations'].append({'what': name, 'at': [round(v) for v in p], 'polygon': i, 'off_mesh_by': round(d), 'height_off': round(dy),
+                                'part': part, 'part_polygons': sizes_j[part], 'with_start': part == home})
+        log('  %-74s (%6d %6d %6d)  part %3d of %4d polygons%s%s' % (
+            name[:74], *[round(v) for v in p], part, sizes_j[part], '' if part == home else '   NOT the part of the START row',
+            '' if d == 0 else '   [%d off the mesh: nearest polygon]' % round(d)))
+    return out
+
+
+def boarding(sc, scene):
+    """Where each escape vehicle's boarding action stands against where the vehicle stops: for every
+    OnlineEscHavokCar (Dead Men's form: a car or helicopter on a spline; field 0 = its incoming route, field 2 = the
+    box with PlayerAction 'EnterVehicle') -> [(box path, box place, last point of the incoming spline, horizontal
+    distance)]. Places through the entities' own matrices (world()'s convention), so a rotated spline node is
+    read too (M06_FA_A's). Dead Men's own boxes: 288 (M03), 364 (M01), 305 (M06) - and 9,534 in M02_FA_A, whose
+    box has the bank's coordinates (kl_escape.board_box moves it; re/maps.md 14.4)."""
+    import math, kl_fa, kl_prpjoin as J
+    ents, pos = list(scene.entities()), world(scene)
+    out = []
+    for _k, _i, v in kl_fa.controllers(sc, 'OnlineEscHavokCar'):
+        if len(v) < 3 or not isinstance(v[0], str) or not isinstance(v[2], str):
+            continue
+        inc, box = sc.resolve(v[0]), sc.resolve(v[2])
+        sp = next((j for h in inc for j in range(h, sc.end[h]) if sc.cls(j) == 'ZEditorSpline'), None)
+        if sp is None or len(box) != 1:
+            continue
+        raw = kl_fa.node_values(sc, sp)[J.labels(sc.game, 'ZEditorSpline').index('ZEditorSpline[0]')]
+        last = None
+        for o in range(12, len(raw) - 23, 24):          # 12 bytes, then 24-byte records (x, y, z, three floats)
+            p = struct.unpack_from('<3f', raw, o)
+            if max(abs(x) for x in p) > 1e6:
+                break
+            last = p
+        chain, j = [], sp
+        while j > 0:
+            chain.append(ents[j - 1]); j = sc.parent[j]
+        R, T = [[1, 0, 0], [0, 1, 0], [0, 0, 1]], (0.0, 0.0, 0.0)
+        for e in reversed(chain):                       # as world(): rows reversed, then transposed
+            r, t = struct.unpack('<9f', e.rot[:36]), struct.unpack('<3f', e.trans[:12])
+            m = [r[6:9], r[3:6], r[0:3]]
+            m = [[m[b][a] for b in range(3)] for a in range(3)]
+            T = tuple(T[i] + sum(R[i][b] * t[b] for b in range(3)) for i in range(3))
+            R = [[sum(R[i][c] * m[c][b] for c in range(3)) for b in range(3)] for i in range(3)]
+        end = tuple(T[i] + sum(R[i][b] * last[b] for b in range(3)) for i in range(3))
+        at = pos[ents[box[0] - 1]]
+        out.append((sc.path[box[0]][5:], tuple(round(x) for x in at), tuple(round(x) for x in end), round(math.hypot(at[0] - end[0], at[2] - end[2]))))
+    return out
+
+
+def member_ids(folder, slot=SLOT):
+    """{member extension: [CRC, size]} of a build folder's archive and {file beside it: sha1} -> (members, beside)
+    as lists (JSON form), to tell which members a step changed without keeping 0.3 GB per step."""
+    import hashlib
+    with zipfile.ZipFile(os.path.join(folder, slot + '_Main.zip')) as z:
+        mem = sorted([n.rsplit('_Main', 1)[1], i.CRC, i.file_size] for n, i in ((i.filename, i) for i in z.infolist()) if '_Main' in n)
+    side = []
+    for f in sorted(os.listdir(folder)):
+        if f.startswith(slot + '_Main') and f != slot + '_Main.zip':
+            h = hashlib.sha1()
+            with open(os.path.join(folder, f), 'rb') as fh:
+                for b in iter(lambda: fh.read(1 << 22), b''):
+                    h.update(b)
+            side.append([f, h.hexdigest()])
+    return [mem, side]
+
+
+def audit(folder, slot=SLOT, log=print):
+    """Every checker there is on a FINISHED folder (archive + the files beside it, with or without a wardrobe), and
+    the numbers of the table in re/maps.md 14, read back from the written files. Nothing is changed but
+    <folder>/audit.json and audit.txt. -> dict; ['bad'] = the findings that must be 0 before an install,
+    ['known'] = findings that are listed and accepted: a material of the MAP without a compiled shader (it is not
+    drawn in that pass; kl_light.TWIN_CLASSES says why a glow is not rebuilt; M02c / M06a / the bank ran live with
+    such) - a PERSON such a material leaves undrawn is in 'bad' through kl_chars.undrawn.
+    (kl_graft.verify needs the joined scene's origin, so its verdict is the build's: result.json. A CRASH finding
+    of <folder>/preflight.json - kl_maps.preflight, run before this by ready_one - counts as bad.)"""
+    import kl_fa, kl_impact, kl_chars, kl_arms, kl_light, kl_snd, kl_voice, kl_whd, kl_texmat as T
+    lines = []
+    def say(s=''):
+        lines.append(str(s)); log(s)
+    zp = os.path.join(folder, slot + '_Main.zip')
+    rj = os.path.join(folder, 'result.json')
+    res = json.load(open(rj)) if os.path.isfile(rj) else {}
+    out = collections.OrderedDict(folder=folder, S=res.get('S'), M=res.get('M'), bad=[], known=[])
+    bad, known = out['bad'], out['known']
+    out['tag'], out['title'] = next(((r[0], r[2]) for r in READY if r[1] == res.get('M')), (None, None))
+    out['seconds'] = res.get('seconds')
+    out['build'] = {k: res.get(k) for k in ('entities', 'rooms', 'nav_bytes', 'fdx', 'notes', 'dangling_templates', 'options')}
+    with zipfile.ZipFile(zp) as z:
+        m = {n.rsplit('_Main', 1)[1]: n for n in z.namelist() if '_Main' in n}
+        size = {e: z.getinfo(n).file_size for e, n in m.items()}
+        f = {e: z.read(m[e]) for e in ('.prm', '.MAT', '.fxc', '.SND', '.TEX', '.ANM', '.gms', '.buf')}
+    out['archive_mb'] = round(os.path.getsize(zp) / 1e6, 1)
+    out['beside_mb'] = round(sum(os.path.getsize(os.path.join(folder, x)) for x in os.listdir(folder)
+                                 if x.startswith(slot + '_Main') and x != slot + '_Main.zip') / 1e6, 1)
+    out['prm_mb'], out['tex_mb'] = round(size['.prm'] / 1e6, 1), round(size['.TEX'] / 1e6, 1)
+    out['prm_entries'] = struct.unpack_from('<I', f['.prm'], 4)[0]          # the header's count: what the game's table takes
+    out['textures'], out['materials'] = len(T.read_tex(f['.TEX']).tex), len(T.read_mat(f['.MAT']).insts)
+    say('%s: archive %.1f MB (+ %.1f MB beside it), .prm %.1f MB with %d table entries (the tools\' limit %d, the game\'s %d), '
+        '.TEX %.1f MB' % (folder, out['archive_mb'], out['beside_mb'], out['prm_mb'], out['prm_entries'], kl_impact.CHUNK_SAFE,
+                          0x12000, out['tex_mb']))
+    # one number for 'the same build': the wardrobe step stamps the archive's members with the time of the build, so
+    # the zip's own sha1 differs from run to run while every member is the same (seen: M06 built twice, 2026-10-10)
+    import hashlib
+    out['content_id'] = hashlib.sha1(json.dumps(member_ids(folder, slot)).encode()).hexdigest()
+    say('content id %s (members by CRC and size + sha1 of the files beside the archive; not the zip\'s sha1)' % out['content_id'])
+    # -- the build's own verify
+    out['verify'] = res.get('problems')
+    say('kl_graft.verify (at the build): %s' % ('problems: %d' % len(res['problems']) if isinstance(res.get('problems'), list)
+                                                else 'NOT KNOWN (no result.json)'))
+    for x in res.get('problems') or ():
+        say('  ' + str(x)[:300]); bad.append('verify: ' + str(x))
+    sj = os.path.join(folder, 'steps.json')             # ready_one: what the steps after verify changed
+    if os.path.isfile(sj):
+        st = json.load(open(sj))
+        now = member_ids(folder, slot)
+        out['steps'] = dict(st, folder_is_the_one_measured=now == st.get('final'))
+        say('  since that verify: lighten changed %s; the wardrobe changed %s; %d of %d members and %d of %d files beside the archive are '
+            'the verified build\'s, byte for byte%s' % (
+                ' '.join(st['lighten']) or 'nothing', ' '.join(st['wardrobe']) or 'nothing', len(st['same']), st['members'],
+                st['beside_same'], st['beside'], '' if now == st.get('final') else ' - BUT THE FOLDER IS NO LONGER THE ONE THAT WAS MEASURED'))
+        if now != st.get('final'):
+            bad.append('steps: the archive or a file beside it changed after the steps were recorded')
+    # -- Fragile Alliance
+    sc, snd, loc = kl_fa.load(zp)
+    fs = kl_fa.check(sc, snd, loc, f['.ANM'])
+    out['fa'] = dict(collections.Counter(kl_fa.SEV[x.sev] for x in fs))
+    out['fa_findings'] = [str(x) for x in fs]
+    say('kl_fa.check: %s' % (out['fa'] or 'nothing'))
+    for x in fs:
+        say('  ' + str(x)[:260])
+        if x.sev <= kl_fa.BROKEN:
+            bad.append('fa: ' + str(x))
+    out['round'], out['nodes'] = round_facts(sc), len(sc.nodes)
+    for k, v in out['round'].items():
+        say('  %-58s %s' % (k, v))
+    import kl_escape, kl_gms, kl_scene
+    out['boarding'] = boarding(sc, kl_scene.Scene(kl_gms.unpack(f['.gms']), f['.buf']))
+    for path, at, end, d in out['boarding']:
+        say('  boarding action %s at %s: %d from where its vehicle stops %s%s' % (path, at, d, end, '' if d <= kl_escape.BOARD_FAR else
+                                                                                '  - TOO FAR: the action is not at the vehicle'))
+        if d > kl_escape.BOARD_FAR:
+            bad.append('boarding: %s stands %d from the end of its vehicle\'s incoming route (kl_escape.board_box)' % (path, d))
+    # -- impacts: bone ids, chunk table, surface rows
+    imp = kl_impact.check(zp)
+    out['impact'] = imp
+    say('kl_impact.check (bone ids, chunk limit, surface table): problems: %d' % len(imp))
+    for x in imp:
+        say('  ' + x[:300]); bad.append('impact: ' + x)
+    # -- weapons
+    arms = kl_arms.check(sc, f['.ANM'])
+    out['arms'] = ['%s %s %s' % (('', 'BROKEN', 'DEGRADED')[s], c, t) for s, c, t in arms]
+    tot, by = collections.Counter(), collections.OrderedDict()
+    for squad, c in kl_arms.table(sc).items():
+        tot.update(c)
+        by[squad] = dict(c)
+    out['weapons'], out['weapons_by_squad'] = collections.OrderedDict(tot.most_common()), by
+    say('kl_arms.check: %d findings; carried: %s' % (len(arms), ', '.join('%s %d' % x for x in tot.most_common())))
+    for x in out['arms']:
+        say('  ' + x[:300])
+    bad += ['arms: ' + x for (s, _c, _t), x in zip(arms, out['arms']) if s == 1]
+    # -- people: who would not be drawn; the wardrobe's models
+    lv = kl_chars.Lv(folder)
+    rows = kl_chars.people(lv)
+    und = ['%s %s: %s' % (sev, r['path'], text) for r in rows for sev, text in r['faults'] if sev != 'NOTE']
+    out['people'], out['undrawn'] = len(rows), und
+    out['people_by_class'] = dict(collections.Counter(r['cls'] for r in rows))
+    say('kl_chars.undrawn: %d of %d people (%s)' % (len(und), len(rows), out['people_by_class']))
+    for x in und:
+        say('  ' + x[:300]); bad.append('people: ' + x)
+    extra = kl_chars.wardrobe_roots(lv)
+    out['wardrobe_roots'] = len(extra)
+    cb = kl_chars.check(lv, extra=extra, log=lambda *_a: None)
+    out['chars_check'] = [str(x) for x in cb]
+    say('kl_chars.check (wardrobe roots no entity names: %d): problems: %d' % (len(extra), len(cb)))
+    for x in cb:
+        mine = 'asks for a shader the .fxc lacks' in str(x)
+        say('  %s%s' % ('known: ' if mine else '', str(x)[:300]))
+        (known if mine else bad).append('chars: ' + str(x))
+    say('KLWardrobe.ini: %s' % ('there' if os.path.isfile(os.path.join(folder, 'KLWardrobe.ini')) else 'none (no wardrobe on this build)'))
+    # -- shaders (a material without a compiled shader is not drawn in that pass; a look, not a fault: the bank ran with 35)
+    mat = T.read_mat(f['.MAT'])
+    lack = kl_light.missing_shaders(mat, f['.fxc'])
+    out['missing_shaders'] = {str(s): [str(x) for x in v][:3] for s, v in lack.items()}
+    say('kl_light.missing_shaders: %d of %d materials ask for an effect the level\'s .fxc lacks' % (len(lack), len(mat.insts)))
+    for s in list(lack)[:12]:
+        say('  slot %d: %s' % (s, [str(x) for x in lack[s]][:2]))
+    # -- sound bank
+    rd = lambda suffix: open(os.path.join(folder, slot + '_Main' + suffix), 'rb').read()
+    whd, ls = rd('.WHD'), rd('_LS.SND')
+    sb, counts = kl_snd.verify(kl_snd.bank(res.get('S') or READY_S), f['.SND'], whd, rd('.WAV'), ls)
+    torn = set(kl_whd.torn_groups('dd', whd))
+    walked = kl_snd.Snd('dd', f['.SND'], ls).walk()
+    named = sum(off in torn for _w, _i, off in walked.waves())
+    if named:
+        sb.append('%d wave references name a record of a torn interleaved stream group (divide fault kl2 0x44668b)' % named)
+    out['snd'], out['sounds'], out['waves'] = sb, len(walked.tables.get(1, ())), len(walked.tables.get(4, ()))
+    say('kl_snd.verify: problems: %d; %d sounds, %d waves (largest stock bank 4,806 / 4,568), %d .WHD records, %d torn records named by a wave'
+        % (len(sb), out['sounds'], out['waves'], counts['.WHD records'], named))
+    for x in sb:
+        say('  ' + x[:300]); bad.append('sound: ' + x)
+    # -- voices
+    try:
+        c = kl_voice.census(zp)
+        out['voice'] = {k: c[k] for k in ('characters', 'line fields', 'speak triggers', 'bank', 'clips by format')}
+        out['voice']['voice sets in use'] = {k: v['characters'] for k, v in c['voice sets in use'].items()}
+        out['voice']['silent lines'] = len(c['silent lines'])
+        say('kl_voice.census:')
+        kl_voice.show(c, say)
+    except Exception as x:                              # a report: readiness does not hang on it
+        out['voice'] = {'error': '%s: %s' % (type(x).__name__, x)}
+        say('kl_voice.census did not run: %s' % out['voice']['error'])
+    pj = os.path.join(folder, 'preflight.json')
+    if os.path.isfile(pj):
+        pre = json.load(open(pj))['findings']
+        out['preflight'] = dict(collections.Counter(x[0] for x in pre))
+        out['preflight_risks'] = ['%s %s' % (x[1], x[2]) for x in pre if x[0] in ('CRASH', 'RISK')]
+        say('kl_maps.preflight: %s' % out['preflight'])
+        for x in pre:
+            if x[0] in ('CRASH', 'RISK'):
+                say('  %-5s %s %s' % (x[0], x[1], x[2][:260]))
+        bad += ['preflight: %s %s' % (x[1], x[2]) for x in pre if x[0] == 'CRASH']
+    say('RESULT: %s (%d findings that must be 0, %d known and accepted)' % ('PASS' if not bad else 'FAIL', len(bad), len(known)))
+    with open(os.path.join(folder, 'audit.json'), 'w') as fh:
+        json.dump(out, fh, indent=1, default=str)
+    with open(os.path.join(folder, 'audit.txt'), 'w', encoding='utf-8') as fh:
+        fh.write('\n'.join(lines) + '\n')
+    return out
+
+
+def ready_one(out, tag, wardrobe=True, log=print):
+    """One map of READY: <out>/_work/<tag>/ (the build, then its lightened copy) -> <out>/<tag>/ = the archive, the
+    files beside it, KLWardrobe.ini, graft.txt, log.txt, result.json, wardrobe.txt, preflight.*, audit.*. The
+    archives of the two intermediate steps are removed when the final folder passed.
+    -> audit dict (or {'error': ..., 'bad': [...]})."""
+    import shutil, kl_snd, kl_graft
+    tag, m_name, title, opt = next(r for r in READY if tag in r[:2])
+    work, final = os.path.join(out, '_work', tag), os.path.join(out, tag)
+    kl_snd.VOICE = True                                 # the speech repairs of re/voice.md, as the played builds have them
+    try:
+        r = one(work, READY_S, m_name, keep=True, **dict(opt))
+    finally:
+        kl_snd.VOICE = None
+    built = os.path.join(work, '%s+%s' % (READY_S, m_name))
+    if not r.get('ok'):
+        log('%s: build failed: %s at %s' % (tag, r.get('error'), r.get('where')))
+        return {'error': r.get('error'), 'bad': ['build failed']}
+    with open(os.path.join(built, 'graft.txt'), 'a') as f:
+        f.write('kl_maps ready: voices on (kl_snd.VOICE = True), then kl_graft lighten (%s)%s\n' % (
+            READY_LOAD, ', then kl_chars wardrobe' if wardrobe else ''))
+    light, new = os.path.join(work, 'light'), os.path.join(work, 'new')
+    shutil.rmtree(light, ignore_errors=True)
+    shutil.rmtree(new, ignore_errors=True)              # the folder of an earlier run stays until this one has its archive
+    kl_graft.relight(built, light, kl_graft.load_options(READY_LOAD), log)
+    if wardrobe:
+        w = subprocess.run([sys.executable, os.path.join(HERE, 'kl_chars.py'), 'wardrobe', light, new], capture_output=True, text=True)
+        log(w.stdout[-4000:] + w.stderr[-2000:])
+        if w.returncode or not os.path.isfile(os.path.join(new, SLOT + '_Main.zip')):
+            log('%s: kl_chars wardrobe: exit %d' % (tag, w.returncode))
+            return {'error': 'wardrobe exit %d' % w.returncode, 'bad': ['wardrobe failed']}
+        with open(os.path.join(new, 'wardrobe.txt'), 'w', encoding='utf-8') as f:
+            f.write(w.stdout + w.stderr)
+    else:
+        shutil.copytree(light, new)
+    shutil.rmtree(final, ignore_errors=True)
+    os.replace(new, final)
+    # kl_graft.verify ran on the build; lighten and the wardrobe came after it. Which members each of them changed
+    # (the rest is the verified build byte for byte) is recorded before the two intermediate archives are removed.
+    ids = [member_ids(d) for d in (built, light, final)]
+    diff = lambda a, b: [e for (e, *x), (_e, *y) in zip(a[0], b[0]) if x != y] if [m[0] for m in a[0]] == [m[0] for m in b[0]] else ['(member list)']
+    with open(os.path.join(final, 'steps.json'), 'w') as f:
+        json.dump({'lighten': diff(ids[0], ids[1]), 'wardrobe': diff(ids[1], ids[2]), 'members': len(ids[2][0]),
+                   'same': [m[0] for m, n in zip(ids[0][0], ids[2][0]) if m == n], 'beside': len(ids[2][1]),
+                   'beside_same': sum(a == b for a, b in zip(ids[0][1], ids[2][1])) if len(ids[0][1]) == len(ids[2][1]) else 0,
+                   'final': ids[2]}, f, indent=1)
+    with open(os.path.join(final, 'preflight.txt'), 'w', encoding='utf-8') as fh:
+        preflight(final, log=lambda t: fh.write(str(t) + '\n'))
+    a = audit(final, log=log)
+    if not a['bad']:
+        for d in (built, light):                        # 0.5 GB a map; log.txt / result.json of the build stay
+            for x in os.listdir(d):
+                if x.startswith(SLOT + '_Main'):
+                    os.remove(os.path.join(d, x))
+    log('%s %s: %s' % (tag, title, 'READY in ' + final if not a['bad'] else 'NOT READY: ' + '; '.join(a['bad'])[:600]))
+    return a
+
+
+def ready(out, tags=None, par=2, log=print):
+    """READY's maps, each in a process of its own -> number of maps that are not ready."""
+    tags = list(tags or [r[0] for r in READY])
+    os.makedirs(out, exist_ok=True)
+    live, bad = [], 0
+    while tags or live:
+        while tags and len(live) < par:
+            t = tags.pop(0)
+            fh = open(os.path.join(out, t + '.ready.log'), 'w', encoding='utf-8')
+            live.append((t, fh, subprocess.Popen([sys.executable, os.path.abspath(__file__), 'ready1', out, t], stdout=fh, stderr=subprocess.STDOUT)))
+        time.sleep(2)
+        for j in [j for j in live if j[2].poll() is not None]:
+            live.remove(j); j[1].close()
+            bad += j[2].returncode != 0
+            log('%s: %s (log %s)' % (j[0], 'ready' if not j[2].returncode else 'NOT READY, exit %d' % j[2].returncode, os.path.join(out, j[0] + '.ready.log')))
+    ready_table(out, log)
+    return bad
+
+
+def ready_table(out, log=print):
+    """The table of re/maps.md 14 from the audit.json of every finished folder under <out>."""
+    rows = []
+    for tag, m_name, title, _o in READY:
+        p = os.path.join(out, tag, 'audit.json')
+        if os.path.isfile(p):
+            rows.append((tag, m_name, title, json.load(open(p))))
+    log('| folder | map | archive MB | beside MB | .prm MB | chunk-table entries | .TEX MB | nodes | people (actors / players) | sounds / waves '
+        '| verify | FA | impact | arms | undrawn | chars | sound | boarding action from the vehicle\'s stop | known: map materials without a shader '
+        '| content id | result |')
+    log('|---|---|---:|---:|---:|---:|---:|---:|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---|')
+    for tag, m_name, title, a in rows:
+        pc = a.get('people_by_class', {})
+        log('| `%s` | %s "%s" | %s | %s | %s | %s | %s | %s | %s (%s / %s) | %s / %s | %s | %s | %d | %d | %d | %d | %d | %s | %d | `%s` | %s |' % (
+            tag, m_name, title, a['archive_mb'], a['beside_mb'], a['prm_mb'], '{:,}'.format(a['prm_entries']), a['tex_mb'], '{:,}'.format(a['nodes']),
+            a['people'], pc.get('ZFFActor', 0), pc.get('ZFFPlayer', 0), '{:,}'.format(a['sounds']), '{:,}'.format(a['waves']),
+            len(a['verify']) if isinstance(a.get('verify'), list) else '?',
+            ', '.join('%d %s' % (v, k) for k, v in a['fa'].items()) or '-', len(a['impact']), len(a['arms']), len(a['undrawn']),
+            len(a['chars_check']) - len(a.get('known', ())), len(a['snd']), ', '.join(str(b[3]) for b in a.get('boarding', ())) or '-',
+            len(a.get('known', ())), a.get('content_id', '')[:10], 'READY' if not a['bad'] else 'NOT READY (%d)' % len(a['bad'])))
+    return rows
+
+
 def main():
     a = sys.argv[1:]
     par = 3
@@ -1053,6 +1594,21 @@ def main():
             with open(os.path.join(d, 'preflight.txt'), 'w') as fh:
                 bad += any(x[0] == 'CRASH' for x in preflight(d, log=lambda t: (print(t, flush=True), fh.write(str(t) + '\n'))))
         sys.exit(1 if bad else 0)
+    elif len(a) >= 2 and a[0] == 'ready':
+        sys.exit(1 if ready(a[1], a[2:] or None, min(par, 2)) else 0)
+    elif len(a) >= 3 and a[0] == 'ready1':              # one map, in this process (ready() starts these)
+        sys.exit(1 if ready_one(a[1], a[2], wardrobe='--no-wardrobe' not in a).get('bad') else 0)
+    elif len(a) >= 2 and a[0] == 'audit':
+        sys.exit(1 if audit(a[1], *a[2:3])['bad'] else 0)
+    elif len(a) >= 2 and a[0] == 'readytable':
+        ready_table(a[1])
+    elif a and a[0] == 'bots':
+        for lv in a[1:] or [READY_S]:
+            print('AI heister squad of stock %s:' % lv)
+            bot_facts(lv)
+    elif len(a) >= 2 and a[0] == 'stations':
+        for d in a[1:]:
+            stations(d)
     elif a and a[0] == 'navtest':
         sys.exit(1 if navtest() else 0)
     elif len(a) >= 2 and a[0] == 'table':

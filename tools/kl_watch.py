@@ -5,15 +5,19 @@ Watch the owner play: pictures of the game's own window while kl2.exe runs, take
     python kl_watch.py [seconds between pictures, default 5] [hours to keep watching, default 6]
 
 Passive: it never starts or ends the game, sends no input and touches nothing in the game folder.
-Only the screen under the game's own window is grabbed, and only while that window is in front
-(ffmpeg gdigrab on that rectangle); never the rest of the desktop, a camera or a microphone. Each run of the game gets a folder
+Only the screen under the game's own window is grabbed, and only while that window is in front,
+not minimised and the window under its middle is the game's own - checked before AND after the grab
+(ffmpeg gdigrab on that rectangle); never the rest of the desktop, a camera or a microphone.
+(Until 2026-10-10 only 'in front' was tested, which stays true while the Alt+Tab switcher is up:
+one picture of run 20261009_174356 shows the switcher. grab() says how that is excluded now.)
+Each run of the game gets a folder
     <work>/research/watch/<date>_<time>/NNNN_<seconds since the start>s.jpg
 together with a copy of the KLHook.log lines written during that run (watch.log), so that a
 picture can be matched to what the hook logged at that moment. Pictures are 1280 wide JPEGs.
 ASSUMPTION: gdigrab sees the game's picture; in exclusive full screen it may return black frames
 (kl_autotest.shot has the same limit and retries). Black frames are dropped by size.
 """
-import ctypes, os, subprocess, sys, time
+import ctypes, ctypes.wintypes, os, subprocess, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from kl_port_check import find, workdir, DD_GUESSES, DD_EXE
@@ -24,6 +28,11 @@ user32.IsWindowVisible.argtypes = [HWND]
 user32.GetWindowThreadProcessId.argtypes = [HWND, ctypes.POINTER(ctypes.c_ulong)]
 user32.GetWindowTextW.argtypes = [HWND, ctypes.c_wchar_p, ctypes.c_int]
 user32.GetForegroundWindow.restype = HWND
+user32.IsIconic.argtypes = [HWND]
+user32.WindowFromPoint.argtypes = [ctypes.wintypes.POINT]
+user32.WindowFromPoint.restype = HWND
+user32.GetAncestor.argtypes = [HWND, ctypes.c_uint]
+user32.GetAncestor.restype = HWND
 user32.SetProcessDPIAware()
 SMALL = 12000                         # bytes: a 1280-wide JPEG of a black frame is smaller
 
@@ -51,10 +60,21 @@ def grab(hwnd, path):
     'title=' grab returned nothing for the game on 2026-10-09 (full screen), the screen region
     is what kl_autotest.shot reads too."""
     import ctypes.wintypes as wt
-    if user32.GetForegroundWindow() != hwnd:
-        return False
     r = wt.RECT()
-    user32.GetWindowRect(HWND(hwnd), ctypes.byref(r))
+
+    def showing():
+        """The game's window is what the screen shows there: in front, not minimised, and the window
+        under the middle of its rectangle is the game's own. The foreground test alone is not enough:
+        it stays true while the Alt+Tab switcher is up, and one picture of 2026-10-09 (run
+        20261009_174356, 0081) shows the switcher over other programs' windows. That must not happen."""
+        if user32.GetForegroundWindow() != hwnd or user32.IsIconic(HWND(hwnd)):
+            return False
+        user32.GetWindowRect(HWND(hwnd), ctypes.byref(r))
+        mid = wt.POINT((r.left + r.right) // 2, (r.top + r.bottom) // 2)
+        under = user32.WindowFromPoint(mid)
+        return bool(under) and user32.GetAncestor(HWND(under), 2) == hwnd       # 2 = GA_ROOT
+    if not showing():
+        return False
     x, y, cx, cy = max(r.left, 0), max(r.top, 0), r.right - max(r.left, 0), r.bottom - max(r.top, 0)
     if cx < 320 or cy < 200:
         return False
@@ -62,6 +82,8 @@ def grab(hwnd, path):
                         '-offset_x', str(x), '-offset_y', str(y), '-video_size', '%dx%d' % (cx - cx % 2, cy - cy % 2),
                         '-i', 'desktop', '-frames:v', '1', '-vf', 'scale=1280:-2', '-q:v', '4', path],
                        capture_output=True, text=True, timeout=30)
+    if not showing():                                     # something came in front while ffmpeg was taking it: no picture
+        return False
     return q.returncode == 0 and os.path.isfile(path) and os.path.getsize(path) > SMALL
 
 
