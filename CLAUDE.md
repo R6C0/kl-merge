@@ -191,7 +191,10 @@ plus any request of 1 MB or more the heap refuses (same as before in every case 
 only (replays the requests in a cut-up 32-bit address space: PASS). Hook installed: SHIP <work>/build/klhook/ship_mem3 (sha1
 d638209b); TEST sibling test_mem3; the previous one is ship_mem2. It also logs one 'memory: at the level's largest block: free
 pieces ... in use ...' line per level load, and its dumps carry the region list (`python debug/vmmap.py <dump>`): the ROOT CAUSE -
-what stays behind after a level and cuts the space - is NOT known; read those lines after the owner's next session. LIVE RUN OWED: scratchpad now/M8.ini (six loads in one process)
+what stays behind after a level and cuts the space - is NOT known; read those lines after the owner's next session.
+BUDGET for the builders: the five blocks are 32.0 scratch, .fxc + 0x60000, .prm + 0x60000, .ANM + 0x60000 and the WHOLE
+<level>.WAV beside the archive. Stock F01: .fxc 5.9, .prm 63.5, .ANM 19.8, .WAV 14.7 MB; Retomoto: 16.9, 74.2, 20.6, 25.9 MB =
+34 MB more than stock in large blocks. Slimming the merged .fxc (shaders nothing uses) and .WAV (sounds nothing plays) is open. LIVE RUN OWED: scratchpad now/M8.ini (six loads in one process)
 - it did not start because STEAM IS AT ITS SIGN-IN WINDOW (01:25; nobody signs in but the owner). Then try [Memory] ReserveMB=176
 RoomMB=128 (all five blocks in the reserve from the second load on; klmem.c's comment). Also third DiscordHook.dll+0x1f7fd fault
 at 00:25 (same callers as 17:55). Sessions now: kl-merge-01 = this one, holds the game; kl-merge-39 = Payday 2 masks + Heister

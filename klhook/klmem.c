@@ -47,7 +47,10 @@
  *     left with nothing (klmem_test.exe 128 128 shows it). Unknown until run: whether the game is content with
  *     its .ANM and .fxc blocks living outside the heap (the 32 MB scratch block was, 00:41:39).
  *     The blocks by size: 16.9 MB = the level's .fxc, 74.6 = .prm, 20.6 = .ANM (file size + 0x60000 each);
- *     25.9 MB is no file of the archive (callers 0x51cf8e, 0x8e0286, 0x51c46e: not looked at).
+ *     25.9 MB = the sound bank beside the archive, F01_Main.WAV, read whole (0x51cf80: allocate the size,
+ *     keep the pointer at +0x23c08, read through [0xdd263c] slot 26). Stock F01 has 5.9 / 63.5 / 19.8 / 14.7 MB
+ *     in those four: Retomoto asks for 34 MB more in large blocks than a stock level (.fxc +11, .prm +11,
+ *     .WAV +11), which a build can give back.
  *  2. THREAD STACKS (off unless StackMB is set). The exe's PE header reserves 4 MB for every thread that asks
  *     for the default, in this process about 100 of them. With StackMB=1 the game's OWN new threads (its
  *     CreateThread and _beginthreadex imports, 34 threads counted) get 1 MB reserved instead: about 100 MB
