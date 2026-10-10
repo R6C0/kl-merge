@@ -182,6 +182,18 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+STATE 2026-10-10 19:15. INSTALLED: tree <work>/build/w_tab3/KLExpansion (the tab's Retomoto = <work>/build/rt_full/retomoto_full: v3 +
+wardrobe + plates + guns (Entries) + BOTS through both halves (kl_fa_bots_rt) + TALK (kl_fa_talk) + BAIN (kl_bain)), hook SHIP
+<work>/build/klhook/ship_all3 (cd8c5f45), <DD>/PC_Def.str = <work>/build/v_bain/over_talk/PC_Def.str (1,694,610,488 bytes: base +
+talk + Bain clips; the previous one is <work>/build/PC_Def.str), owner's ini: [Crew] Random=1, [Talk] Enable=1, [CrewJoin] Enable=1,
+[Bots] Enable=1 Log=1. LIVE: T2 - Kane's six countdown lines are SAID and the owner HEARD them ('i hear the voiceline on kane but
+it doesnt match the explosion timing'); bot chatter lines said. The round-start event is 8.4-8.8 s BEFORE GO (state 0x19 = GO),
+so the blast (event + 13) is at GO + 4.5 and a clock started at GO is 8 s late. THE GAME DOES NOT SPEAK BEFORE GO: setting
+[session+0x15d] in the pre-round (run T4) said the early lines and then froze the round grey 8 s after GO - removed, do not
+retry. OWNER'S DECISION: the explosion comes AFTER Kane's last line; he also wants 'NOW! Let's get them all' (it is clip 5 + 6).
+ASKED kl-merge-b6 for Retomoto with BLAST_DELAY 15 (blast 19.0 s after the event = GO + ~10.3); then: finish chain, countdown
+scene Delay=0.30 on the GO clock, back onto the tab. Until then the countdown on the tab starts 5.8 s after GO (after the blast).
+NOT YET LIVE: bots through the Retomoto lift ([CrewJoin]), Bain by ear, a fed at a death, [Fed] Player=1.
 2026-10-10 18:40. HOOK INSTALLED FOR THE OWNER = SHIP <work>/build/klhook/ship_all1 (fa1b1eb6): + klcrew.c, klcrew_rt.c, kltalk.c,
 klfed.c, all OFF unless enabled; the tick now runs ONLY from the main loop's two SteamAPI_RunCallbacks sites on the main thread
 (the wrapper used to pass all twelve call sites as 'game thread'). The owner's KLHook.ini got [Crew] Random=1.

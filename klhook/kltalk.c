@@ -149,12 +149,12 @@ struct klk_pair { int cwho, rwho; char call[KLK_KEYLEN], reply[KLK_KEYLEN]; };
 static struct { int on, log, chatter, logonly; float start_offset; DWORD seed; } klk;
 static struct {
     int have, tried, version, kane, lynch, nscene, npool, npair, once, speakers, event_chance;
-    unsigned __int64 stream_bytes; float blast, gap_lo, gap_hi, member_gap, quiet;
+    unsigned __int64 stream_bytes; float blast, start16, gap_lo, gap_hi, member_gap, quiet;
     char key[64], file[MAX_PATH], map[32];
     struct klk_scene sc[KLK_NSCENE]; struct klk_pool pool[KLK_NPOOL]; struct klk_pair pair[KLK_NPAIR];
 } klk_lv;
 static struct {                                  /* the round */
-    DWORD rules, t0, join_seen; int left, running, rounds, init;
+    DWORD rules, t0, t16, join_seen; int left, running, rounds, init;
     float ev_stage[4], ev_aboard, ev_join, box_at[KLK_NSCENE], sc_t0[KLK_NSCENE];
     char sc_state[KLK_NSCENE], done[KLK_NSCENE]; int sc_next[KLK_NSCENE];              /* state: 0 waits, 1 runs, 2 over; done[] by group */
     float next_idle, last_scene_line, last_chatter, member_last[KLW_NREC];
@@ -232,6 +232,7 @@ static void klk_ini_value(const char *sec, const char *k, const char *v, int *ba
         else if (!_stricmp(k, "Lynch")) klk_lv.lynch = atoi(v);
         else if (!_stricmp(k, "StreamBytes")) klk_lv.stream_bytes = _strtoui64(v, 0, 10);
         else if (!_stricmp(k, "Blast")) klk_lv.blast = (float)atof(v);
+        else if (!_stricmp(k, "Start16")) klk_lv.start16 = (float)atof(v);
         else if (!_stricmp(k, "Map")) snprintf(klk_lv.map, sizeof klk_lv.map, "%s", v);
     } else if (!_strnicmp(sec, "Scene.", 6)) {
         struct klk_scene *s;
@@ -408,6 +409,10 @@ static int klk_say(const char *key, int rec, float rt, const char *what, DWORD r
         return 0;
     }
     if (!klh_rd32(rules + 0x5f8)) { static int told58; if (!told58++) klog("talk: [rules+0x5f8] is null: nothing is said (0x771a10 would read through it)"); return 0; }   /* review */
+    /* NOT DONE ON PURPOSE: setting [session+0x15d] before GO so that lines can be said in the pre-round. Tried live 2026-10-10
+       (run T4): the two early countdown lines were said, and 8 s after GO the round stood still with a grey screen (no
+       frame from the main loop, bots frozen; ended by the run's time limit). The game's speech is off before GO: start
+       scenes at GO or later. */
     if (off || !may) { klog("talk: NOT said %s at %.2f s (%s): the game's speech is off ([manager+0x956] = %u, [session+0x15d] = %u; 0x421c70 would return at once)", key, rt, what, off, may); return 0; }
     if (!(e = klk_entry(key, rules, scene))) return 0;
     if (!(line = (DWORD *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, 0x28 + 12))) return 0;      /* a new one per say, never freed (section 2) */
@@ -534,14 +539,27 @@ static void klk_tick(int game_thread)
 
     /* ---- the round: runs while the session state is 0x19 (klbot.c 1); a state >= 0x1f and back = the next round */
     if (w.rules != klk_r.rules || !klk_r.init) { klk_new_round(w.rules); klk_r.init = 1; }
-    if (w.state != KLK_ROUND) { if (w.state >= 0x1f && klk_r.running) klk_r.left = 1; return; }
-    if (klk_r.left) { klk_new_round(w.rules); klk_r.init = 1; }
+    /* THE ROUND-START EVENT IS NOT STATE 0x19. Seen live 2026-10-10 (run T2, the owner by ear: 'it doesnt match the
+       explosion timing'): the level's round-start event - the one the blast timer counts from - comes when the
+       'Heist starts in' countdown BEGINS, about 8 s before GO; state 0x19 is GO. A level may therefore say
+       Start16=<seconds from the entry of state 0x16 (the pre-round) to that event> in KLTalk.ini: the clock then
+       starts there and runs through 0x16 / 0x18 into the round. Retomoto: 0x16 lasts 21.2..21.4 s (five runs), the
+       event is 8.0 s before GO (kl_fa_author: blast 13 s after the event = 5 s after GO): Start16=13.3. MEASURED from
+       state times and the level's timers, not from a picture of the blast. */
     now = klk_now();
+    if (w.state == 0x16 && klk_r.left) { klk_new_round(w.rules); klk_r.init = 1; }      /* the next round's pre-round */
+    if (w.state == 0x16 && !klk_r.t16) klk_r.t16 = now ? now : 1;
+    if (w.state != KLK_ROUND) {
+        int pre = klk_lv.start16 > 0 && klk_r.t16 && (w.state == 0x16 || w.state == 0x18) && !klk_r.left && now - klk_r.t16 >= (DWORD)(klk_lv.start16 * 1000);
+        if (w.state >= 0x1f && klk_r.running) klk_r.left = 1;
+        if (!pre) return;
+    }
+    if (klk_r.left) { klk_new_round(w.rules); klk_r.init = 1; }
     klk_present(&w, &h);
     if (!klk_r.running) {
-        klk_r.running = 1; klk_r.t0 = now; klk_r.rounds = ++rounds; klk_r.join_seen = klj_after.at;
+        klk_r.running = 1; klk_r.t0 = (klk_lv.start16 > 0 && klk_r.t16) ? klk_r.t16 + (DWORD)(klk_lv.start16 * 1000) : now; klk_r.rounds = ++rounds; klk_r.join_seen = klj_after.at;
         klk_r.next_idle = klk_lv.gap_lo + (float)klk_rnd((DWORD)((klk_lv.gap_hi - klk_lv.gap_lo) * 10) + 1) / 10;
-        klog("talk: round %d: session state 0x19 at t0 (rules %08lx): %s%s", rounds, w.rules, klk_who_text(&w, &h, who), w.wardrobe ? "" : " - NO wardrobe");
+        klog("talk: round %d: clock starts in session state 0x%x, Start16=%.1f (rules %08lx): %s%s", rounds, w.state, klk_lv.start16, w.rules, klk_who_text(&w, &h, who), w.wardrobe ? "" : " - NO wardrobe");
     }
     rt = (float)(now - klk_r.t0) / 1000.0f;
 
