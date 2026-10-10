@@ -325,3 +325,40 @@ real size of health 175 against 100; what field 8 of the row and the `eVeteran` 
 | A4 | `t_ai\M02` | step into the exit box: does everybody alive come | nothing -> the monitor list does not fire; a fault there -> `--no-escape` |
 | A5 | `t_ai\M02` | do riflemen take visibly more hits than pistol guards | too spongy -> lower `STRENGTH`; too soft -> `--health=1.5` |
 | A6 | `t_ai\M03`, `t_ai\M01`, `t_ai\M06` | one round each, the same four things | per-map tables in `PLANS` |
+
+## 12. After the review (2026-10-10, `re/map_tune_review.md`): what was wrong, what is changed
+
+OFFLINE as everything above. The builds of sections 6 and 9 (`t_ai\<map>`, `t_maps\<map>`) are the OLD ones and
+carry the three defects; the corrected ones are `<work>\build\t_ai2\<map>` (this step alone) and
+`<work>\build\t_maps2\<map>` (guns -> escape -> ai). Sections 5 and 6 above describe the old plans where they
+differ from this table.
+
+| | defect | cause | now |
+|---|---|---|---|
+| F1 | all four maps: the 33 entries of the 'vehicle called' list were written without `ROOT\` | `rooted()` took the form 'the controller's lists have in this level' by majority and counted an all-empty controller (the monitor) as 0 > 0 = 'without' | `refs()` writes `ROOT\` always; `rooted()` is gone. Census (every reference list of every node and controller): `t_maps2` M01 1,745 / M02 4,117 / M03 3,777 / M06 1,229 entries with `ROOT\`, 1 / 129 / 7 / 0 empty, **0 without** |
+| F2 | M03: three 'wiped out' lists and the van call named `Triggers!ArrivingCops_Timer` -> `ArrivingCops_Squad_02\VehicleEnterBehaviour` (a fighting squad sent back into its car) | the plan | the timer is in no list of the plan |
+| F3 | M02 `PoliceSwats\HuntBehaviour` (from `TransporterGuards[8]` and the car call), M03 the hunt routs of `EscSquad`, `ArrivingCops_Squad_01 / _02`, `ParkingLotSWAT_01`: orders to a squad that has not driven yet | the plan | no list of the plan orders a car squad; M02's `TransporterGuards[8]` names `Triggers!ReinforcementsCounter` (calls the car through its gate), M03's chains and van call order the six men on foot only |
+| new | M03 `Triggers!Parkinglot_SWAT_Timer` (the review took it for harmless) names the EXIT nodes of `ArrivingCops_Squad_01` and `ParkingLotSWAT_01` - with the by-pass their hunt / flank routs | found by the new check | not named; `LoadingDockSquad_01\FlankingBehaviour` is named directly |
+
+The check that keeps it so: `kl_map_ai.faults(sc)` = (a) an entry of the lists this tool writes that names
+nothing, resolved AS WRITTEN (the old test added the prefix first, which is why F1 passed); (b) `bare()`: any
+non-empty reference-list entry of the WHOLE level without `ROOT\`; (c) `order_faults()`: every squad's list 8
+and the monitor's lists 4..7 are followed through timers, counters and random triggers (not through a
+`GatePath`) and must reach neither a `VehicleEnter` / `VehicleMove` rout (F2) nor anything inside another squad
+that has one (F3). `apply()` refuses to write a level with a finding; `kl_map_tune`'s checker `kl_map_ai` runs
+it on the written folder. On the old builds it finds 20 / 16 / 42 / 14 faults (`t_maps\M01 M02 M03 M06`), on
+`z_maps` and the new builds 0.
+
+What the plans give now (the rest of section 6 is unchanged: health, rifles, timers, unleashed squads):
+
+| | M01 | M02 | M03 | M06 |
+|---|---|---|---|---|
+| 'wiped out' lists | 9, as before | 6; `TransporterGuards` -> the police are called | 8; each names the loading dock's flank and / or the hall squads' hunt | 8, as before |
+| vehicle called -> | 10 routs, as before (the parked-car squads of M01 have no drive) | the police car's gate + 5 routs (not the police's hunt) | 4 routs: `LoadingDockSquad_01` flank, `BankMainSquad_01 / _02 / _03` hunt | 7 routs, as before |
+
+The price on M03: the nine police in four cars get no extra order at all; what moves them is what Dead Men
+gave them (boxes, their drives' end lists with the by-pass). 'Harder' on M03 is health 175 + two unleashed
+hall guards + the six on foot coming to the fight.
+
+`map_ai.json` now has `plan` = an id of the map's plan (`kl_map_ai.plan_id`); `kl_map_tune` compares a tuned
+map with the ai step alone only when both were made with the same plan.

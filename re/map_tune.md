@@ -312,3 +312,38 @@ agent measured its model chunks byte for byte the same, but that was not seen. S
   (re/map_escape.md 3, 7), whether `ZSquadScript` list 8 is 'wiped out', whether the monitor's field 4
   fires, what a seated squad does (re/map_ai.md 11).
 - Escape before ai was the only order tried between those two.
+
+## 7. After the review (2026-10-10): `t_maps2`, and the AI heisters on top: `u_maps`
+
+`re/map_tune_review.md` found three defects of the ai step in the `t_maps` builds (F1 the 'vehicle called'
+list without `ROOT\`, F2 / F3 orders on M02 and M03). They are fixed in `tools/kl_map_ai.py` and kept out by a
+check (re/map_ai.md 12). **The `t_maps` folders of sections 2 and 3 are the OLD builds; use `t_maps2`.**
+OFFLINE: nothing installed, the game not started.
+
+    python tools\kl_map_tune.py all <work>\build\z_maps <work>\build\t_maps2        four of four PASS
+    python tools\kl_fa_bots.py build <work>\build\t_maps2\Mxx <work>\build\u_maps\Mxx   the AI heister squad on top
+
+| bytes | .prm | chunk-table entries (`kl_impact.CHUNK_SAFE` 69,632) | .ANM | .fxc | F01_Main.WAV | .TEX |
+|---|---:|---:|---:|---:|---:|---:|
+| M01 `t_maps2` = `u_maps` | 55,917,968 | 50,254 | 22,061,764 | 17,760,648 | 21,722,704 | 242,724,752 |
+| M02 | 55,449,184 | 58,583 | 22,202,472 | 17,760,648 | 22,527,568 | 224,349,952 |
+| M03 | 61,299,008 | 62,892 | 22,202,616 | 17,760,648 | 22,716,752 | 225,939,136 |
+| M06 | 50,415,712 | 47,114 | 21,642,576 | 17,760,648 | 21,775,744 | 212,826,208 |
+
+- The `.prm` is 438,704 bytes and the chunk table 118 entries larger than in `t_maps` (+829,968 / +212 against
+  `z_maps`): the gun step (`kl_map_guns` / `kl_guns`, another session's, changed since) adds more than it did
+  for `t_maps`. Not this step's doing; `kl_map_guns.py check` says problems: 0 on all eight folders.
+- The checker `kl_map_ai` of this command now says 'list faults 0 (without ROOT in the whole level 0, order
+  rules F2 F3 0 ...)' and 'totals EQUAL to the ai step alone (`t_ai2\<map>`)'.
+- The squad step takes a tuned folder as it is (no clash with `KLGuns.ini`, which it copies; its `.prm` edit is
+  the 4-byte record offset of 987 .. 2,491 model roots, none of them a gun root: `kl_map_guns.py check`
+  problems: 0 after it). On the four `u_maps` folders: `kl_fa_bots.py check` PASS (0 FAIL; NOTES 0 / 0 / 8 / 1 as
+  on `b_bots`), `kl_fa_bots.py diff t_maps2 u_maps` 'only the squad was added', `kl_map_guns.py check` problems: 0,
+  `kl_maps.py audit` PASS (1 / 6 / 0 / 6 known), `kl_impact.py` problems: 0, `kl_maps.py preflight` CRASH 0,
+  `kl_map_ai.faults` 0, `kl_map_escape.check` 0 faults. `kl_map_tune.py check` is NOT for a `u_maps` folder
+  (its member test compares with `z_maps`; the squad changes .gms .buf .oct .rmi .rmc).
+- **Section 5's first item is out of date**: the working tree's `klhook\klgun.c` reads Version 2, so with that
+  hook `KLGuns.ini` matters, and `debug\slot.py` still neither copies nor removes it (`SIDE` has no
+  `KLGuns.ini`): after `slot.py put`, copy the build's `KLGuns.ini` beside the slot's archive by hand, or
+  remove a stale one - each map has other root numbers.
+- A bot carries `Rifle_zastavam85`, whose model shows the MP5 look in these builds: seven MP5s beside the player.

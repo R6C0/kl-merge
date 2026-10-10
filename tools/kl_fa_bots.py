@@ -34,6 +34,13 @@ driver, van, help up), re/bots_voice.md (the heisters' lines). OFFLINE: nothing 
                                For an A / B run if a load fault points at the .oct or the .prm.
       --no-stage               do NOT route the bots through the map's gameplay triggers (then no bot ever has a
                                heist stage: no looting, no boarding by tactic, no betrayal). For comparison runs only.
+      --early-call             the plan as it was until 2026-10-10: the shortest order of the stations and the richest
+                               loot, even when the way to the loot crosses a level exit box. A bot in such a box CALLS
+                               THE ESCAPE VEHICLE (kl2 0x6c3d50 -> 0x6cd8e0: any crew member, bot or human), and the
+                               round ends one vehicle cycle + 60 s later - on M01 that was 152..156 s after GO (runs
+                               BOT1 / BOT2), whatever the loot wait. Default: the way to the loot, the loot place and
+                               every place before the loot wait stay out of the level exit boxes; check() FAILs a
+                               build whose bots enter one before their loot wait (a NOTE with this option).
 
 WHAT A SQUAD IS HERE (re/bots_squad.md 8, the smallest form every link of which a stock level uses)
   Gameplay!merc_bot_squad!Timer_start_bots       ZBoxPrimitive + TriggerDelay2 {10 s -> the first step of each squad};
@@ -329,9 +336,10 @@ class Nav:
         """Polygon of `part` whose middle is nearest to p."""
         return min((i for i in range(len(self.pv)) if self.ok[i] and self.part[i] == part), key=lambda i: math.dist(self.mid[i], p))
 
-    def dist_map(self, i0, p0):
+    def dist_map(self, i0, p0, ban=()):
         """Dijkstra over the polygons from point p0 on polygon i0, through the middles of the shared edges:
-        ({polygon: distance to the portal it was entered by}, {polygon: (previous polygon, portal point)})."""
+        ({polygon: distance to the portal it was entered by}, {polygon: (previous polygon, portal point)}).
+        Polygons in `ban` are not entered (the start polygon may be one: it is left)."""
         dist, prev, at = {i0: 0.0}, {}, {i0: p0}
         pq = [(0.0, i0)]
         while pq:
@@ -339,6 +347,8 @@ class Nav:
             if d > dist.get(i, 1e30):
                 continue
             for j in self.nb[i]:
+                if j in ban:
+                    continue
                 q = self.portal(i, j)
                 nd = d + math.dist(at[i], q)
                 if nd < dist.get(j, 1e30):
@@ -356,9 +366,9 @@ class Nav:
                     return ((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2)
         return self.mid[j]
 
-    def path(self, a, b):
-        """a, b = (x, y, z, polygon) -> (points from a to b through the portals, length) or None."""
-        dist, prev, _at = self.dist_map(a[3], a[:3])
+    def path(self, a, b, ban=()):
+        """a, b = (x, y, z, polygon) -> (points from a to b through the portals, length) or None; `ban` as dist_map."""
+        dist, prev, _at = self.dist_map(a[3], a[:3], ban)
         if b[3] not in dist:
             return None
         pts, i = [b[:3]], b[3]
@@ -482,6 +492,36 @@ def box_places(B, nav, k, part, share=INSIDE, size=None, centre=None):
     return out
 
 
+CHEST = 90.0            # a walker is tested against a trigger box at his feet and this far above them
+
+
+def in_exit(B, exits, p):
+    """The OnlineExitLevelTrigger boxes of `exits` a walker standing at p is inside (feet or chest)."""
+    return [k for k in exits if B.in_box(k, p) or B.in_box(k, (p[0], p[1] + CHEST, p[2]))]
+
+
+def first_exit_entry(B, nav, exits, pts, dy=260.0):
+    """Walk the shortest mesh path through the places `pts` in order (this module's stand-in for the game's
+    pathfinder) and return where it FIRST is inside a level exit box: (path length up to there, index of the
+    place it was walking to, the box node), or None. Sampled every 20 units."""
+    run = 0.0
+    for si in range(len(pts) - 1):
+        a, c = pts[si], pts[si + 1]
+        ha, hc = nav.at(a[0], a[1], a[2], dy=dy), nav.at(c[0], c[1], c[2], dy=dy)
+        got = ha and hc and nav.path(tuple(a[:3]) + (ha[0],), tuple(c[:3]) + (hc[0],))
+        poly = got[0] if got else [tuple(a[:3]), tuple(c[:3])]         # off the mesh: the straight line
+        for p, q in zip(poly, poly[1:]):
+            d = math.dist(p, q)
+            n = max(1, int(d // 20))
+            for t in range(n + 1):
+                m = tuple(p[i] + (q[i] - p[i]) * t / n for i in range(3))
+                hit = in_exit(B, exits, m)
+                if hit:
+                    return run + d * t / n, si + 1, hit[0]
+            run += d
+    return None
+
+
 def plan(B, opt=None, log=print):
     """-> the plan (dict) for a squad on build B, or raises ValueError saying what the map lacks.
     plan['stations'] = the stations in order (what each one is, the seven places); plan['steps'] = the route steps as
@@ -558,6 +598,34 @@ def plan(B, opt=None, log=print):
         if s and math.hypot(s[0] - p[0], s[2] - p[2]) <= LOOT_SNAP:
             loot.append((k, p, amount, s))
     P['loot_objects'] = {'all': len(S['loot']), 'reachable': len(loot)}
+    # ---- THE LEVEL EXIT BOXES CALL THE VEHICLE FOR A BOT TOO (found 2026-10-10, runs BOT1 / BOT2 on M01: the round
+    # ended 152..156 s after GO whatever the loot wait was). Read: ZOnlineExitLevelTrigger slot 34 (0x6c3d50) hands
+    # ANY activator to the rules' slot 44 (ZGameRulesHeist 0x6cd8e0), which takes a player OR an actor that has a
+    # crew record (0x78f470) and, with the vehicle in state 0, calls it (0x8154f0). On M01 the diner's door
+    # (EXITS_BANK LeavingHeist_01) and both rich loot people stand INSIDE the two CallExitVehicle boxes, and the
+    # route 'way out before the loot' walked every bot into one 139..144 m after the start.
+    # So, unless --early-call: the way to the loot, the loot place and every place before the loot wait stay out
+    # of every polygon a level exit box touches; loot that can only be had inside a box is left to the tactic.
+    exits = S['exits']
+    calls = lambda p: in_exit(B, exits, p)
+    ban = set()
+    if exits and not opt['early_call'] and not opt['no_stage']:
+        for k in exits:
+            ban.update(c[3] for c in box_places(B, nav, k, home, share=1.0))
+        ban.update(i for i in range(len(nav.pv)) if nav.ok[i] and nav.part[i] == home and any(calls(v) for v in nav.pv[i] + [nav.mid[i]]))
+        free = nav.dist_map(a0[3], a0[:3], ban)[0]
+        clean = lambda s: s[3] not in ban and s[3] in free and not calls(s)
+        boxed = [x for x in loot if not (clean(x[3]) and not calls(x[1]))]
+        if boxed and len(boxed) < len(loot):
+            notes.append('%d loot object(s) worth %d stand INSIDE a level exit box (%s): a bot that walks there calls the escape vehicle '
+                         '(kl2 0x6cd8e0), so the route does not go there; the bots\' own loot tactic may still (not established)'
+                         % (len(boxed), sum(x[2] for x in boxed), ', '.join('%s %d' % (name(x[0]).split('\\')[-1], x[2]) for x in boxed[:4])))
+            loot = [x for x in loot if x not in boxed]
+        elif boxed:
+            notes.append('CALLS EARLY: every loot object in reach stands inside a level exit box; the route is planned as with --early-call')
+            ban = set()
+    P['exit_boxes'] = {'nodes': [name(k) for k in exits], 'polygons_kept_clear_before_the_loot': len(ban)}
+    okp = lambda c: not ban or (c[3] not in ban and not calls(c))
     areas, left = [], list(loot)
     while left:
         area, grow = [left.pop(0)], True
@@ -632,6 +700,15 @@ def plan(B, opt=None, log=print):
 
     head = [('start', 'the START row', a0, None, None)] + ([e_item] if e_item else [])
     park = ('park', '', park0, None, None)
+
+    def pre_ok(q):
+        """Do the stations of q up to and including the loot lie outside the level exit boxes, with a way between
+        them that stays outside? (No loot station: there is nothing to wait for, any order is as good.)"""
+        idx = next((i for i, it in enumerate(q) if it[0] == 'loot'), None)
+        if not ban or idx is None:
+            return True
+        return all(okp(b[2]) and nav.path(a[2], b[2], ban) is not None for a, b in zip(q[:idx], q[1:idx + 1]))
+
     if opt['no_stage']:
         seq = head + ([l_item] if l_item else [])
     else:
@@ -642,9 +719,17 @@ def plan(B, opt=None, log=print):
             if x2:
                 seqs.append((head + [i for i in (x2, l_item, v2) if i], said2))
         lens = [length(q + [park]) for q, _s in seqs]
-        seq, said = seqs[lens.index(min(lens))]
+        good = [i for i, (q, _s) in enumerate(seqs) if pre_ok(q)]
+        if not good:
+            notes.append('CALLS EARLY: no order of the stations keeps the way to the loot out of the level exit boxes; the shortest is taken '
+                         'and a bot calls the escape vehicle on its way IN')
+            ban = set()
+        pick = min(good or range(len(seqs)), key=lambda i: lens[i])
+        seq, said = seqs[pick]
         if len(seqs) > 1:
-            log('route order: loot before the way out = %d of path, the way out before the loot = %d: the shorter is taken' % tuple(round(x) for x in lens))
+            log('route order: loot before the way out = %d of path, the way out before the loot = %d: %s' % (
+                *(round(x) for x in lens), 'the shorter is taken' if lens[pick] == min(lens) else
+                'the LONGER is taken - on the shorter one the bots walk into a level exit box before the loot'))
         notes += list(dict.fromkeys(said))
         if not any(i[0] == 'exit' for i in seq):
             notes.append('no EXITS_BANK trigger on the route (stage 2 is skipped; stage 3 does not need it: 0x5dd890 only raises)')
@@ -657,8 +742,10 @@ def plan(B, opt=None, log=print):
 
     # ---- the anchors' path, the stations between them, seven places per station
     route, total = [], 0.0
-    for (ka, _wa, a, _na, _ca), (kb, wb, b, nb_, cb) in zip(seq, seq[1:]):
-        got = nav.path(a, b)
+    i_loot = next((i for i, it in enumerate(seq) if it[0] == 'loot'), None)
+    for leg, ((ka, _wa, a, _na, _ca), (kb, wb, b, nb_, cb)) in enumerate(zip(seq, seq[1:])):
+        pre = bool(ban) and i_loot is not None and leg < i_loot          # this leg ends at or before the loot
+        got = nav.path(a, b, ban if pre else ())
         if got is None:
             raise ValueError('no path on the mesh from %s to %s' % (ka, kb))
         pts, length = got
@@ -669,20 +756,27 @@ def plan(B, opt=None, log=print):
             while d > 0 and run + d >= nxt and length - nxt > SPACING * 0.5:
                 t = (nxt - run) / d
                 m = tuple(p[i] + (q[i] - p[i]) * t for i in range(3))
-                s = snap(m, 260.0)
+                s = None
+                if pre:                             # a place beside the path, but not one in a level exit box
+                    c = [x for x in nav.around(m, 260.0, home, dy=260.0) if okp(x)]
+                    s = (nav.spots(c, 1, 0.0, ref=m) or [None])[0]
+                s = s or snap(m, 260.0)
                 if s:
-                    route.append(('way', 'on the way to %s' % kb, s, None, None, length))
+                    route.append(('way', 'on the way to %s' % kb, s, None, None, length, pre))
                 nxt += SPACING
             run += d
-        route.append((kb, wb, b, nb_, cb, length))
+        route.append((kb, wb, b, nb_, cb, length, pre))
     P['path_length'] = round(total)
     places = []                                     # per station: (kind, what, [7 places])
-    for kind, what, anchor, node, cands, _len in route:
+    for kind, what, anchor, node, cands, _len, pre in route:
+        keep = (lambda c: [x for x in c if okp(x)] or c) if pre else (lambda c: c)
+        if cands:
+            cands = keep(cands)
         if kind == 'loot':
             got, used = [], []
             for b in range(7):                      # each bot beside 'its' loot object, the richest first
                 k, p, _amount, s = area[b % len(area)]
-                c = nav.spots(nav.around(p, LOOT_SNAP, home, dy=260.0), 1 + len(used), SEP, ref=s)
+                c = nav.spots(keep(nav.around(p, LOOT_SNAP, home, dy=260.0)), 1 + len(used), SEP, ref=s)
                 c = [x for x in c if all(math.hypot(x[0] - u[0], x[2] - u[2]) >= SEP for u in used)] or c
                 used.append(c[0]); got.append(c[0])
         elif kind == 'park':
@@ -701,7 +795,7 @@ def plan(B, opt=None, log=print):
             if len(got) < 7:                        # a doorway: closer together rather than all on one spot
                 got = nav.spots(cands, 7, 50.0, ref=anchor) or got
         else:
-            got = nav.spots(nav.around(anchor, 260.0, home), 7, SEP, ref=anchor) or [anchor]
+            got = nav.spots(keep(nav.around(anchor, 260.0, home)), 7, SEP, ref=anchor) or [anchor]
         places.append((kind, what, node, [got[b % len(got)] for b in range(7)], len(got)))
         log('  %-5s %-78s round (%6d %5d %6d): %d distinct places, clearance %d..%d' % (
             kind, what[:78], *anchor[:3], len(got), min(nav.clearance(*g[:3]) for g in got), max(nav.clearance(*g[:3]) for g in got)))
@@ -737,6 +831,25 @@ def plan(B, opt=None, log=print):
         P['bots'][N] = {'start': [round(v, 1) for v in stand[b][:3]], 'face': [round(v, 3) for v in fwd],
                         'places': [[round(v, 1) for v in x[3][b][:3]] for x in places],
                         'model': S['heroes'][N][0], 'snd': list(S['heroes'][N][1:])}
+    # ---- where each bot first is inside a level exit box (= where it calls the vehicle), walked as the check walks it
+    i_wait = next((i for i, x in enumerate(places) if x[0] == 'loot'), None)
+    P['vehicle_call'] = collections.OrderedDict()
+    early = []
+    for b, N in enumerate(BOTS):
+        pts = [stand[b]] + [x[3][b] for x in places]
+        hit = first_exit_entry(B, nav, exits, pts) if exits else None
+        if hit:
+            before = i_wait is not None and hit[1] - 1 <= i_wait
+            P['vehicle_call'][N] = {'path': round(hit[0]), 'on_the_way_to_station': hit[1], 'box': name(hit[2]), 'before_the_loot_wait': before}
+            if before:
+                early.append(N)
+    if P['vehicle_call']:
+        v = list(P['vehicle_call'].values())
+        log('level exit boxes (%s): a bot is first inside one after %d..%d of path, %s' % (
+            ', '.join(P['exit_boxes']['nodes']), min(x['path'] for x in v), max(x['path'] for x in v),
+            'BEFORE its loot wait (bots %s): THE VEHICLE IS CALLED ON THE WAY IN' % early if early else 'after its loot wait'))
+    if early and not opt['early_call'] and not any(n.startswith('CALLS EARLY') for n in notes):
+        notes.append('CALLS EARLY: bots %s cross a level exit box before the loot wait although the stations avoid it' % early)
     P['start_above_feet'] = [round(p[1] - fy) for p, _f in S['starts']]
     P['loot'] = [R_ + name(x[0]) for x in area[:LOOT_MAX]]
     P['guards'] = []
@@ -756,7 +869,7 @@ def plan(B, opt=None, log=print):
 
 
 DEFAULTS = {'ally_box': 'auto', 'wait_guards': False, 'loot_seconds': 20, 'start_delay': 10.0, 'heal': False, 'no_stage': False,
-            'tree': True, 'park': None}
+            'tree': True, 'park': None, 'early_call': False}
 
 
 # ------------------------------------------------------------------ node forms from the stock levels
@@ -978,8 +1091,11 @@ def room_sets_check(scene, octx, rmi, rmc):
     return ['%s (x%d)' % kv for kv in bad.items()]
 
 
-def apply(B, P, dst, log=print):
-    """Write the plan into a copy of build B in folder dst -> report dict."""
+def apply(B, P, dst, log=print, more=None):
+    """Write the plan into a copy of build B in folder dst -> report dict.
+    more (kl_fa_bots_rt, a map of two navigation parts): an object with nodes(M, tops), called on the made squads
+    before they are joined (it may add step nodes to them), and edit(Jn), called on the joined property tree after
+    the AIMonitor edit (it may edit ONE existing node; diff(also=...) then has to be told its name)."""
     if os.path.abspath(dst) == os.path.abspath(B.folder):
         raise ValueError('the output folder is the build\'s own')
     sc = B.sc
@@ -1001,6 +1117,8 @@ def apply(B, P, dst, log=print):
     pre = room_sets_check(B.scene, octx, rmi, rmc)
 
     M, tops = make(B, P, log)
+    if more is not None:
+        more.nodes(M, tops)
     q, order = M.scene(tops)
     Jn = J.join(sc, [(sc, t) for t in sc.tops()] + [(q, t) for t in q.tops()], 'bots')
     # ---- the round-start event starts the squad
@@ -1012,6 +1130,8 @@ def apply(B, P, dst, log=print):
         if timer.lower() not in [h.lower() for h in have]:
             us[2] = kl_fa._refs(Jn, have + [timer])
     kl_fa.edit(Jn, mon, mi, fn)
+    if more is not None:
+        more.edit(Jn)
     prp = Jn.p.serialize()
     back = Prp(prp)
     if back.serialize() != prp or len(back.nodes()) != len(Jn.nodes):
@@ -1132,10 +1252,14 @@ def apply(B, P, dst, log=print):
 
 
 # ------------------------------------------------------------------ the check
-def check(folder, log=print, slot=SLOT):
+def check(folder, log=print, slot=SLOT, early_ok=None):
     """Every check on a finished folder -> (list of (severity, text), facts). Severities: FAIL (must be none before
-    an install), NOTE (differs from stock, said aloud)."""
+    an install), NOTE (differs from stock, said aloud). early_ok: a bot that enters a level exit box before its
+    loot wait is a NOTE, not a FAIL (None: what the folder's bots.json says the build was made with)."""
     B = Built(folder, slot)
+    if early_ok is None:
+        bj = os.path.join(B.folder, 'bots.json')
+        early_ok = bool(os.path.isfile(bj) and json.load(open(bj)).get('plan', {}).get('options', {}).get('early_call'))
     sc, nav, out = B.sc, Nav(B.scene.nav), []
     fail = lambda s: out.append(('FAIL', s))
     note = lambda s: out.append(('NOTE', s))
@@ -1224,7 +1348,7 @@ def check(folder, log=print, slot=SLOT):
     feet = []
     for top, actor in sorted(squads.items(), key=lambda kv: sc.names[kv[0]]):
         first = [j for s in firsts for j in res(s) if sc.top[j] == top]
-        places, seen, k, tight, waits = [], set(), first[0] if first else None, False, []
+        places, seen, k, tight, waits, n_in = [], set(), first[0] if first else None, False, [], None
         while k is not None and k not in seen:
             seen.add(k)
             cn, v = ctrl_of.get(k, (None, None))
@@ -1238,6 +1362,8 @@ def check(folder, log=print, slot=SLOT):
             elif cn == 'SquadModifierBehaviour':
                 tight = v[9] == 'eDM_Tight'
             else:
+                if n_in is None:
+                    n_in = len(places)                  # the places walked before the first wait (the loot wait)
                 waits.append((cn, v))
             nx = [j for s in v[NEXT[cn]] for j in res(s)]
             k = nx[0] if nx else None
@@ -1268,6 +1394,13 @@ def check(folder, log=print, slot=SLOT):
             length += got[1]; prev = p
         if not ok:
             fail('%s: no path on the mesh along its places' % sc.names[top])
+        # the level exit boxes: an actor with a crew record inside one CALLS THE ESCAPE VEHICLE (kl2 0x6c3d50 ->
+        # ZGameRulesHeist slot 44, 0x6cd8e0); the round then ends one vehicle cycle + 60 s later (runs BOT1 / BOT2)
+        call = first_exit_entry(B, nav, S['exits'], [sp] + pts) if S['exits'] else None
+        if call and n_in is not None and call[1] <= n_in:
+            (note if early_ok else fail)('%s: is inside level exit box %s after %d of path, on the way to place %d of the %d BEFORE its loot wait: '
+                                         'it calls the escape vehicle on the way in%s' % (sc.names[top], name(call[2]), call[0], call[1], n_in,
+                                                                                         ' (--early-call build)' if early_ok else ''))
         # the stage
         st1 = any(B.in_box(t, p) for t in enters for p in pts)
         st3 = any(B.in_box(t, p) for t in lev for p in pts)
@@ -1299,6 +1432,8 @@ def check(folder, log=print, slot=SLOT):
                     fail('%s: TriggerActorsDead names %d groups, %d without an actor (it has no time limit)' % (sc.names[top], len(v[0]), len(bad)))
         routes[sc.names[top]] = {'bot': [round(v) for v in sp], 'places': [[round(v) for v in p] for p in pts], 'path_length': round(length),
                                  'least_clearance': round(low), 'stage_1': st1, 'stage_3': st3, 'ends_in_ally_box': inbox,
+                                 'places_before_the_loot_wait': n_in,
+                                 'first_inside_a_level_exit_box': call and {'path': round(call[0]), 'place': call[1], 'box': name(call[2])},
                                  'waits': [(cn, len(v[0]) if isinstance(v[0], list) else v[0], v[1]) for cn, v in waits]}
     facts['routes'] = routes
     # 4. where the seven stand
@@ -1383,7 +1518,7 @@ def build(src, dst, opt=None, log=print):
     say('kl_fa_bots build %s -> %s' % (src, dst))
     P = plan(B, opt, say)
     rep = apply(B, P, dst, say)
-    out, facts = check(dst, say)
+    out, facts = check(dst, say, early_ok=bool(P['options'].get('early_call')))
     rep.update(plan=P, check=[list(x) for x in out], facts=facts)
     with open(os.path.join(dst, 'bots.json'), 'w') as f:
         json.dump(rep, f, indent=1, default=str)
@@ -1392,11 +1527,13 @@ def build(src, dst, opt=None, log=print):
     return out, rep
 
 
-def diff(src, dst, log=print):
+def diff(src, dst, log=print, also=()):
     """What differs between the build the squad was added to and the result, file by file - the proof that the step
     changed nothing else. -> list of UNEXPECTED differences (must be empty). Expected: the new top-level subtrees at
     the end of the scene, one more entry in AIMonitor list 2, the new groups in the root's group tree, the .oct record
-    offsets in the .prm's model roots, and slot ids that name the same entities as before."""
+    offsets in the .prm's model roots, and slot ids that name the same entities as before.
+    also: names of top-level subtrees that may differ too (kl_fa_bots_rt: the JumpPoint whose list starts the
+    squads' second leg)."""
     A, B = Built(src), Built(dst)
     bad = []
     n = len(A.ents)
@@ -1421,6 +1558,7 @@ def diff(src, dst, log=print):
     ta, tb = J.fingerprints(A.sc), J.fingerprints(B.sc)
     differ = [t for t, u in zip(A.sc.tops(), B.sc.tops()) if ta[t] != tb[u]]
     mon = [A.sc.names[t] for t in differ]
+    differ = [t for t in differ if A.sc.names[t] not in also]
     if len(B.sc.tops()) < len(A.sc.tops()) or any(not any(A.sc.p.key(nm) == 'AIMonitor' for nm, _b in A.sc.nodes[t]['ctrls']) for t in differ) or len(differ) > 1:
         bad.append('.prp: top-level subtrees other than the AIMonitor differ: %s' % mon[:5])
     if J.text(A.sc, A.sc.p.settings) != J.text(B.sc, B.sc.p.settings):
@@ -1530,7 +1668,7 @@ def options(a):
             i = a.index(name)
             v = conv(a[i + 1]); del a[i:i + 2]
             return v
-    for flag, key in (('--wait-guards', 'wait_guards'), ('--heal', 'heal'), ('--no-stage', 'no_stage')):
+    for flag, key in (('--wait-guards', 'wait_guards'), ('--heal', 'heal'), ('--no-stage', 'no_stage'), ('--early-call', 'early_call')):
         if flag in a:
             a.remove(flag); opt[key] = True
     if '--no-tree' in a:

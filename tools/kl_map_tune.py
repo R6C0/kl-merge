@@ -48,7 +48,9 @@ THE CHECKERS (run on the WRITTEN out folder, after the last step)
                         kl_impact and kl_chars are reported from the audit's own run (not run a second time).
   kl_map_guns.recheck   the game's walk takes exactly the shown group of each gun; KLGuns.ini names the roots
   kl_map_escape.check   no camera eye at the origin / under the map, no route point under the ground
-  kl_map_ai             the .prp re-serialises byte for byte with 0 misfits; no list entry names nothing
+  kl_map_ai             the .prp re-serialises byte for byte with 0 misfits; kl_map_ai.faults: no list entry names
+                        nothing, NO reference-list entry of the whole level is written without ROOT (review F1), no
+                        late list sends a squad back to its car or orders a car squad outside its drive (F2, F3)
   side files            KLWardrobe.ini byte for byte the source's; KLGuns.ini there exactly when the gun step
                         ran; every file beside the archive (.WAV .WHD .SND ...) the source's by sha1
   members               only the members the steps that ran may change differ from the source
@@ -206,16 +208,29 @@ def checks(src, out, ran, log=print):
         data, bad, _p, _n = J.check(sc, log=lambda *_a: None)
         dang = MA.faults(sc)
         t = MA.measure(out)['totals']
-        text = '.prp re-serialises %s, %d misfit(s), %d list entries that name nothing; %d soldiers, %d hit points, accuracy as used %.1f' % (
-            'byte for byte' if data == files[ext['.prp']] else 'DIFFERENTLY', len(bad), len(dang), t['soldiers'], t['hit points (health added up)'], t['accuracy mean (as used)'])
+        # MA.faults = names nothing + ANY reference-list entry of the level without ROOT + the order rules F2 / F3
+        # (re/map_tune_review.md); it runs whether or not the ai step ran
+        text = '.prp re-serialises %s, %d misfit(s), list faults %d (without ROOT in the whole level %d, order rules F2 F3 %d, the rest name nothing); %d soldiers, %d hit points, accuracy as used %.1f' % (
+            'byte for byte' if data == files[ext['.prp']] else 'DIFFERENTLY', len(bad), len(dang), len(MA.bare(sc)), len(MA.order_faults(sc)),
+            t['soldiers'], t['hit points (health added up)'], t['accuracy mean (as used)'])
         ok = data == files[ext['.prp']] and not bad and not dang
-        alone = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(src))), 't_ai', os.path.basename(os.path.normpath(src)))
-        if 'ai' in ran and ran['ai'].get('parts') == ['strength', 'waves', 'chains', 'escape'] and ran['ai'].get('health_scale') == 1.0 \
-                and os.path.isfile(os.path.join(alone, SLOT + '_Main.zip')):
-            ta = MA.measure(alone)['totals']            # the ai step run alone on the same source, by its author
-            eq = json.dumps(ta, default=str) == json.dumps(t, default=str)
-            text += '; totals %s the ai step alone (%s)' % ('EQUAL to' if eq else 'DIFFER from', alone)
-            ok = ok and eq
+        # the ai step run alone on the same source (kl_map_ai all): compared when it was made with the SAME plan
+        # (map_ai.json 'plan'; t_ai2 = the builds after the review's fixes, t_ai = the first ones)
+        root, tag, m_name = os.path.dirname(os.path.dirname(os.path.abspath(src))), os.path.basename(os.path.normpath(src)), MA.map_of(out)
+        if 'ai' in ran and ran['ai'].get('parts') == ['strength', 'waves', 'chains', 'escape'] and ran['ai'].get('health_scale') == 1.0 and m_name in MA.PLANS:
+            for alone in (os.path.join(root, 't_ai2', tag), os.path.join(root, 't_ai', tag)):
+                mj = os.path.join(alone, 'map_ai.json')
+                if not (os.path.isfile(os.path.join(alone, SLOT + '_Main.zip')) and os.path.isfile(mj)):
+                    continue
+                if json.load(open(mj)).get('plan') != MA.plan_id(m_name):
+                    continue
+                ta = MA.measure(alone)['totals']
+                eq = json.dumps(ta, default=str) == json.dumps(t, default=str)
+                text += '; totals %s the ai step alone (%s)' % ('EQUAL to' if eq else 'DIFFER from', alone)
+                ok = ok and eq
+                break
+            else:
+                text += '; no build of the ai step alone with this plan to compare with'
         put('kl_map_ai', ok, text, bad=[str(x) for x in bad[:5]] + dang[:5], totals=t)
     run('kl_map_ai', ai)
 

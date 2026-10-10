@@ -470,3 +470,59 @@ Leaderboard rule as for every grafted map (CLAUDE.md): the Steam write guard on,
   squad (kl_fa_bots) changed ...'. Nothing else; `kl_fa.py`, `kl_escape.py`, `kl_graft.py` not touched.
 - For the lead: `kl_maps.ready_one` could call `kl_fa_bots.build` as a fourth step (after the wardrobe) once B1 - B4
   have passed on one map; `kl_expansion.py` would then take `b_bots\<map>` in place of `z_maps\<map>`.
+
+## 11. LIVE FINDING and its fix (2026-10-10): on M01 a bot called the escape vehicle on its way IN
+
+Runs BOT1 / BOT2 of the lead on `b_bots\M01`: the seven bots appear, walk to the diner, loot and gather at the
+escape; the round ended 152 .. 156 s after GO with the vehicle's countdown on the HUD - with the default squad
+and with `--wait-guards --loot-seconds 120` alike. Worked out OFFLINE (files and kl2.exe; the lead's control
+run without bots was not in when this was written):
+
+- **Read, kl2.exe.** `ZOnlineExitLevelTrigger` slot 34 (0x6c3d50) hands ANY activator to the rules' slot 44 =
+  `ZGameRulesHeist` 0x6cd8e0. That function takes a player (record 0) OR an object of the actor class (mask
+  0x1547b24) that has a crew record (0x78f470); for a bot (record +0x79 bit 1) the one player test (0x6cd965)
+  is skipped; with the record's status 0 and the vehicle state `[rules+0x1dc]` 0 it calls 0x8154f0 = the
+  vehicle is called. **A bot inside a level exit box calls the vehicle exactly as the human does.**
+- **Measured, the files.** M01's `Triggers!CallExitVehicle_02` is a box of half extents (2800, 200, 1400) round
+  (5996, 160, 20490): z up to 21,890. The diner's door `Triggers!LeavingHeist_01` (EXITS_BANK) stands at
+  z 21,883 - INSIDE it - and so do both rich loot people at their start places (`The_Senator` 1,250,000 in
+  `_02`, `FBI-Agents_01` 400,000 in `CallExitVehicle_01`). The old plan took 'the way out before the loot'
+  (the shorter order, section 2.2): every bot stepped into the box 139 .. 144 m after its start, on the way to
+  station 9 (the loot). Nothing else on M01 names the car (searched: only the two boxes and the boarding
+  action; no timer), and the round clock is 6 minutes.
+- **The time fits.** The round gets 60 s once the first vehicle has left (seen live, re/retomoto_street.md);
+  a Dead Men spline car takes the tuning object's 20 s in + 10 s waiting + 20 s out (re/bots_behaviour.md 2.2):
+  call + 110 s. The bots start 10 s after the round-start event = about 2 s after GO; 139 .. 144 m at a run of
+  about 3.3 m/s is 42 .. 44 s: 2 + 43 + 110 = 155 s. And the loot wait cannot change it: it comes after the box.
+  (The 3.3 m/s is computed FROM this fit, not measured; the control run decides.)
+- M02, M03, M06: no bot path enters a level exit box before the loot wait (measured the same way; M03's home
+  mesh part does not touch its box at all).
+
+**Changed in `tools/kl_fa_bots.py`** (plan and check; nothing else of the build step):
+
+- `plan()`: unless `--early-call`, every polygon of the START row's mesh part that a level exit box touches is
+  kept clear up to the loot wait: loot whose place is inside such a box is not the route's loot (a NOTE names
+  it), the order of the stations must have a way to the loot outside the boxes (`Nav.path(..., ban)`), and
+  the stations and the seven places before the loot wait are chosen outside them. The plan prints where each
+  bot is first inside a box (`plan.vehicle_call` in `bots.json`).
+- `check()`: walks each squad's places up to its first wait; a bot inside a level exit box there is a FAIL
+  (a NOTE on an `--early-call` build). The old `b_bots\M01` FAILS it (seven times), the other three and all
+  `u_maps` folders pass.
+- `--early-call`: the plan as it was (for a comparison run).
+
+M01's route now (`<work>\build\u_maps\M01`; Squad#02): five stations to the diner, ENTERS_BANK
+`EnterHeist_01` (6101, 0, 23059), **the loot = the diner** (4 objects, 280,000: the waitress, the till, the two
+gang members) round (6531, 0, 22970), wait 20 s or until it is empty, then (5642, 0, 22186), the door
+`LeavingHeist_01` (stage 2 - and the vehicle call), `CallExitVehicle_02` (4733, 0, 20700), the boarding place.
+First inside a level exit box after 155 .. 167 m of path, after the loot wait.
+
+Not established, say it to the owner: (1) the bots' own `ZLootTactic` takes any money object the pathfinder
+joins to the bot (re/bots_squad.md 4) - the Senator's 1,250,000 may still pull a bot into the box before the
+wait is over; (2) the vehicle is still called as soon as the squad has looted: by the same arithmetic about
+65 s after GO on M01 with the 20 s wait, the round over about 3 minutes after GO unless somebody boards.
+`<work>\build\u_maps\M01_wait90` is the same build with `--loot-seconds 90` (the wait ends earlier when the
+four objects are taken). A hold that does not depend on the loot would be a `TriggerDelay2` step before the
+way out (stock squads have 16 .. 71 s of them, re/bots_review.md D1): not built.
+
+The squad on the TUNED maps: `<work>\build\u_maps\M01 M02 M03 M06` = `kl_fa_bots.py build` on
+`<work>\build\t_maps2\<map>` (guns + camera + enemies, re/map_tune.md 7); checks and sizes there.

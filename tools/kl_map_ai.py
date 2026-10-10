@@ -69,6 +69,14 @@ THE FOUR PARTS (all values and reference lists of objects the build already has;
               these four lists (they use boxes on the way to the van): the loop is the one of the lists stock
               does fill, but it has NOT run with entries in any level.
 Nothing of this has run in the game. GUESS = a number that is not read from a stock object or the exe.
+
+THE LIST RULES (after re/map_tune_review.md, 2026-10-10; faults() must be empty or apply() writes nothing)
+  F1  every reference-list entry is written with 'ROOT\\' (refs()); bare() counts the entries of the WHOLE level
+      without it: no level of either game has one
+  F2  no 'wiped out' list and no 'vehicle called' list reaches a VehicleEnter / VehicleMove rout (through timers,
+      counters, random triggers; a GatePath stops the walk): a squad that is out is not sent to its car again
+  F3  ... nor anything inside another squad that comes by car: its orders belong to its drive's end list
+  order_faults() walks the written level, not the plan, so a by-passed exit node or a timer one step away counts.
 """
 import collections, json, math, os, random, shutil, struct, sys, zipfile
 
@@ -154,10 +162,14 @@ PLANS['M02_FA_A'] = {
         'AIEnemies!JewelShop_Guards': ['AIEnemies!2ndFloor_Guards\\FlankingBehaviour', 'AIEnemies!3rdFloor_Guard_01\\HuntBehaviour', 'Triggers!ReinforcementsCounter'],
         # the police dead -> the transporter guards hunt (they are the last armed people of the map)
         'AIEnemies!PoliceSwats': ['AIEnemies!TransporterGuards\\HuntBehaviour'],
-        'AIEnemies!TransporterGuards': ['AIEnemies!PoliceSwats\\HuntBehaviour'],
+        # the transporter guards dead -> the police are CALLED (the counter -> the gate -> their drive). NOT their
+        # hunt rout: the police hunt from their own HuntTimer, which their drive's end list starts (review F3:
+        # a hunt order before the drive reaches four men who have not come yet)
+        'AIEnemies!TransporterGuards': ['Triggers!ReinforcementsCounter'],
     },
-    # the car is called: the police car comes if it has not, and everybody alive hunts
-    'escape': ['AIEnemies!PoliceSwats\\Gate\\Way#01', 'AIEnemies!PoliceSwats\\HuntBehaviour', 'AIEnemies!TransporterGuards\\HuntBehaviour',
+    # the car is called: the police car comes if it has not (through its gate), and every squad that is ON FOOT
+    # hunts. The police's own hunt rout is not named: it follows their drive (F3)
+    'escape': ['AIEnemies!PoliceSwats\\Gate\\Way#01', 'AIEnemies!TransporterGuards\\HuntBehaviour',
                'AIEnemies!3rdFloor_Guard_01\\HuntBehaviour', 'AIEnemies!2ndFloor_Guards\\FlankingBehaviour',
                'AIEnemies!3rdFloor_Guard_02\\FlankingBehaviour', 'AIEnemies!JewelShop_Guards\\FlankingBehaviour'],
 }
@@ -194,23 +206,33 @@ PLANS['M03_FA_A'] = {
     'timers': {},
     'counters': {'Triggers!CivilWar_Counter': 2},   # Dead Men: 4 alarmed civilian squads bring the second police car
     'start': [],
+    # TWO RULES of re/map_tune_review.md, kept by order_faults():
+    #   F2  'Triggers!ArrivingCops_Timer' is named by NO list of this plan: after 2 s it runs
+    #       ArrivingCops_Squad_02\VehicleEnterBehaviour, and a squad that is out and fighting would be sent INTO
+    #       its car again (the rout that got it out is the one the conversion lost). Dead Men's own five boxes
+    #       still name it. 'Triggers!Parkinglot_SWAT_Timer' is not named either: it names no enter rout, but the
+    #       exit nodes of ArrivingCops_Squad_01 and ParkingLotSWAT_01 - with the by-pass their hunt / flank routs
+    #       (found by order_faults; the review took it for harmless). The loading dock's flank is named directly.
+    #   F3  the four squads that come by car (ParkingLotSWAT_01, ArrivingCops_Squad_01 / _02, EscSquad) get NO
+    #       hunt / flank order from another squad's list or from the van call: until their VehicleEnterBehaviour
+    #       runs their men stand at a holding place outside the navigation mesh (seen for EscSquad and
+    #       ArrivingCops_Squad_01: (-10262, 702, -6304)). They hunt from their drive's end list, as in Dead Men.
+    #   So the chains and the van call order the six men who are ON FOOT (the hall's three squads, the loading dock).
     'chains': {
-        # a squad of the hall down -> the others hunt and the next car is called (the map's own timers; Dead Men
-        # itself names ArrivingCops_Timer from five boxes)
-        'AI_Enemies!BankMainSquad_01': ['AI_Enemies!BankMainSquad_02\\HuntBehaviour', 'AI_Enemies!BankMainSquad_03\\HuntBehaviour', 'Triggers!Parkinglot_SWAT_Timer'],
-        'AI_Enemies!BankMainSquad_02': ['AI_Enemies!BankMainSquad_01\\HuntBehaviour', 'AI_Enemies!BankMainSquad_03\\HuntBehaviour', 'Triggers!ArrivingCops_Timer'],
-        'AI_Enemies!BankMainSquad_03': ['AI_Enemies!BankMainSquad_01\\HuntBehaviour', 'AI_Enemies!BankMainSquad_02\\HuntBehaviour', 'Triggers!Parkinglot_SWAT_Timer'],
-        'AI_Enemies!LoadingDockSquad_01': ['AI_Enemies!ParkingLotSWAT_01\\HuntBehaviour', 'Triggers!ArrivingCops_Timer'],
-        'AI_Enemies!ParkingLotSWAT_01': ['AI_Enemies!ArrivingCops_Squad_01\\HuntBehaviour', 'AI_Enemies!LoadingDockSquad_01\\FlankingBehaviour', 'Triggers!ArrivingCops_Timer'],
-        'AI_Enemies!ArrivingCops_Squad_01': ['AI_Enemies!ArrivingCops_Squad_02\\HuntBehaviour', 'AI_Enemies!ParkingLotSWAT_01\\HuntBehaviour'],
-        'AI_Enemies!ArrivingCops_Squad_02': ['AI_Enemies!ArrivingCops_Squad_01\\HuntBehaviour', 'AI_Enemies!EscSquad\\HuntBehaviour'],
-        'AI_Enemies!EscSquad': ['AI_Enemies!ArrivingCops_Squad_02\\HuntBehaviour', 'AI_Enemies!ParkingLotSWAT_01\\HuntBehaviour'],
+        # a squad of the hall down -> the others hunt and the loading dock comes round
+        'AI_Enemies!BankMainSquad_01': ['AI_Enemies!BankMainSquad_02\\HuntBehaviour', 'AI_Enemies!BankMainSquad_03\\HuntBehaviour', 'AI_Enemies!LoadingDockSquad_01\\FlankingBehaviour'],
+        'AI_Enemies!BankMainSquad_02': ['AI_Enemies!BankMainSquad_01\\HuntBehaviour', 'AI_Enemies!BankMainSquad_03\\HuntBehaviour', 'AI_Enemies!LoadingDockSquad_01\\FlankingBehaviour'],
+        'AI_Enemies!BankMainSquad_03': ['AI_Enemies!BankMainSquad_01\\HuntBehaviour', 'AI_Enemies!BankMainSquad_02\\HuntBehaviour', 'AI_Enemies!LoadingDockSquad_01\\FlankingBehaviour'],
+        'AI_Enemies!LoadingDockSquad_01': ['AI_Enemies!BankMainSquad_01\\HuntBehaviour', 'AI_Enemies!BankMainSquad_02\\HuntBehaviour', 'AI_Enemies!BankMainSquad_03\\HuntBehaviour'],
+        # a car squad down -> the men on foot come to the place
+        'AI_Enemies!ParkingLotSWAT_01': ['AI_Enemies!LoadingDockSquad_01\\FlankingBehaviour', 'AI_Enemies!BankMainSquad_02\\HuntBehaviour'],
+        'AI_Enemies!ArrivingCops_Squad_01': ['AI_Enemies!LoadingDockSquad_01\\FlankingBehaviour', 'AI_Enemies!BankMainSquad_01\\HuntBehaviour'],
+        'AI_Enemies!ArrivingCops_Squad_02': ['AI_Enemies!LoadingDockSquad_01\\FlankingBehaviour', 'AI_Enemies!BankMainSquad_03\\HuntBehaviour'],
+        'AI_Enemies!EscSquad': ['AI_Enemies!LoadingDockSquad_01\\FlankingBehaviour', 'AI_Enemies!BankMainSquad_02\\HuntBehaviour'],
     },
-    # the van is called: the last car is sent for and everybody alive hunts. No drive rout is named here: a
-    # squad that has driven is not sent back to its car
-    'escape': ['Triggers!ArrivingCops_Timer', 'AI_Enemies!EscSquad\\HuntBehaviour', 'AI_Enemies!ParkingLotSWAT_01\\HuntBehaviour',
-               'AI_Enemies!ArrivingCops_Squad_01\\HuntBehaviour', 'AI_Enemies!ArrivingCops_Squad_02\\HuntBehaviour',
-               'AI_Enemies!LoadingDockSquad_01\\FlankingBehaviour', 'AI_Enemies!BankMainSquad_01\\HuntBehaviour',
+    # the van is called: everybody on foot hunts. No car is sent for and no car squad is ordered (F2, F3); the
+    # map's own box Triggers!EscSquad_Triggere on the way to the van still brings the escape squad's car
+    'escape': ['AI_Enemies!LoadingDockSquad_01\\FlankingBehaviour', 'AI_Enemies!BankMainSquad_01\\HuntBehaviour',
                'AI_Enemies!BankMainSquad_02\\HuntBehaviour', 'AI_Enemies!BankMainSquad_03\\HuntBehaviour'],
 }
 
@@ -239,6 +261,13 @@ PLANS['M06_FA_A'] = {
 
 
 # ------------------------------------------------------------------ reading
+def plan_id(m_name):
+    """A short id of a map's plan and of the way lists are written (map_ai.json 'plan'): two builds with the
+    same id got the same orders. kl_map_tune compares a tuned map with the ai step run alone only then."""
+    import hashlib
+    return hashlib.sha1(json.dumps([PLANS[m_name], STRENGTH, 'refs: always ROOT', DRIVE, RELAY, GATE], sort_keys=True).encode()).hexdigest()[:12]
+
+
 def archive_of(src):
     if os.path.isdir(src):
         return next(os.path.join(src, x) for x in sorted(os.listdir(src)) if x.lower().endswith('_main.zip'))
@@ -443,8 +472,8 @@ def show(m, log=print, routs=True):
 
 # ------------------------------------------------------------------ writing
 def setv(sc, us, i, v):
-    """Field unit i = v in the token kind the field has (as kl_fa_author.setv); a reference list keeps the form
-    its level uses (with or without ROOT) - see refs()."""
+    """Field unit i = v in the token kind the field has (as kl_fa_author.setv); a reference list is written
+    as given - put() hands it over through refs() (always with ROOT)."""
     op = us[i][0][0]
     if op == 0x0a:
         us[i] = [(op, struct.pack('<f', v))]
@@ -460,21 +489,31 @@ def setv(sc, us, i, v):
         raise ValueError('field %d: token %#x' % (i, op))
 
 
-def rooted(sc, name):
-    """Does this level write the reference lists of controller `name` with 'ROOT\\'? Majority of what is there
-    (stock: ZSquadScript without, TriggerBox with; a converted Dead Men map: mostly without). Both forms are
-    resolved by the game in stock levels."""
-    n = collections.Counter()
-    for _k, _i, v in kl_fa.controllers(sc, name):
-        for x in v:
-            if isinstance(x, list):
-                n.update(p.startswith(R) for p in x if isinstance(p, str))
-    return n[True] > n[False]
-
-
 def refs(sc, name, paths):
-    r = rooted(sc, name)
-    return [full(p) if r else full(p)[len(R):] for p in paths]
+    """A reference list as it is WRITTEN: every entry with 'ROOT\\', always (an empty string stays empty).
+    WHY (re/map_tune_review.md F1): until 2026-10-10 this took 'the form the controller's lists have in this
+    level' by majority, and a controller whose lists were all empty (the escape monitor's, on every Dead Men map)
+    counted 0 > 0 = 'without': 33 entries went out as 'AI_Enemies!...'. The census says there is ONE form: 21
+    stock levels have 30,406 + 5,845 entries with ROOT\\ and none without that is not empty; Dead Men's own
+    levels and every build that ran in the game have none either. bare() / faults() keep it that way."""
+    return [full(p) if p else p for p in paths]
+
+
+def bare(sc):
+    """Every NON-EMPTY entry of every reference list of the level (all nodes, their own properties and all
+    their controllers - not only the lists this tool writes) that does not start with 'ROOT\\'. Must be empty:
+    no level of either game and no build that ran has one (re/map_tune_review.md F1)."""
+    out = []
+    for k in range(1, len(sc.nodes)):
+        nd = sc.nodes[k]
+        for name, obj in [('(node)', nd['props'])] + [(sc.p.key(nm), b) for nm, b in nd['ctrls']]:
+            for fi, u in enumerate(units(obj[1:-1])):
+                if u[0][0] == 0x04 and len(u) > 1 and u[1][0] == 0x0c:
+                    for x in u[1:]:
+                        s = sc.p.key(x)
+                        if s and s[:5].upper() != R.upper():
+                            out.append('%s %s[%d]: %r is written without ROOT\\' % (sc.path[k], name, fi, s))
+    return out
 
 
 def put(sc, k, names, **f):
@@ -732,7 +771,8 @@ def apply(src, dst, parts=('strength', 'waves', 'chains', 'escape'), presets=Fal
     def say(s):
         lines.append(str(s)); log(s)
     say('kl_map_ai: %s (%s): %s' % (m_name, zp, plan['what']))
-    rep = collections.OrderedDict(map=m_name, source=zp, parts=list(parts), presets=presets, car_exit=car_exit, health_scale=HEALTH_SCALE)
+    rep = collections.OrderedDict(map=m_name, source=zp, parts=list(parts), presets=presets, car_exit=car_exit, health_scale=HEALTH_SCALE,
+                                  plan=plan_id(m_name))
     if 'strength' in parts:
         rep['strength'] = strength(sc, files[ext['.ANM']], plan, say, presets)
     if 'waves' in parts:
@@ -745,9 +785,10 @@ def apply(src, dst, parts=('strength', 'waves', 'chains', 'escape'), presets=Fal
     data, bad, _paths, _names = J.check(sc, log=lambda *_a: None)
     if bad:
         raise ValueError('%d objects do not fit their class after the changes: %s' % (len(bad), bad[:3]))
-    rep['dangling'] = faults(sc)
+    rep['dangling'] = faults(sc)                    # names nothing / written without ROOT / order rules F2, F3
     if rep['dangling']:
-        raise ValueError('references that name nothing: %s' % rep['dangling'][:5])
+        raise ValueError('reference lists at fault (nothing is written): %s' % rep['dangling'][:8])
+    say('  kl_map_ai: lists: 0 entries that name nothing, 0 without ROOT in the whole level, 0 against the order rules')
     arms = kl_arms.check(sc, files[ext['.ANM']])
     if any(s == 1 for s, _c, _t in arms):
         raise ValueError('kl_arms.check: %s' % arms)
@@ -786,16 +827,71 @@ def apply(src, dst, parts=('strength', 'waves', 'chains', 'escape'), presets=Fal
     return rep
 
 
+DRIVE = ('VehicleMoveBehaviourRout', 'VehicleEnterBehaviourRout')      # a squad with one of these COMES BY CAR
+RELAY = ('TriggerDelay', 'TriggerDelay2', 'TriggerCounter', 'RandomTrigger')    # pass an order on (their lists are followed)
+GATE = ('GatePath',)                                # lets an order through once (Dead Men put one before M02's car):
+                                                    # ASSUMPTION, as re/map_ai.md 11; the walk stops there
+
+
+def order_faults(sc):
+    """The two order rules of re/map_tune_review.md on the lists that run LATE in a round - every squad's
+    'wiped out' list (ZSquadScript field 8) and the escape monitor's 'vehicle n called' lists (fields 4..7).
+    Each entry is followed through timers, counters and random triggers (not through a gate):
+      F2  it must not reach a VehicleEnter / VehicleMove rout: a squad that has driven and is out fighting
+          would be sent to its car again (M03: Triggers!ArrivingCops_Timer)
+      F3  it must not reach a rout or timer INSIDE another squad that comes by car: that squad's orders belong
+          to its drive's end list; before the drive its men are not at the place (M02 PoliceSwats, M03 EscSquad,
+          ArrivingCops_Squad_01). A gate before the drive is the one thing of such a squad a list may name.
+    The source builds have all these lists empty, so every finding is something a step wrote. -> texts."""
+    names = lambda k: [sc.p.key(nm) for nm, _b in sc.nodes[k]['ctrls']]
+    squads = [k for k in range(1, len(sc.nodes)) if kl_fa.has(sc, k, 'ZSquadScript')]
+    drives = {k for k in squads if any(set(names(c)) & set(DRIVE) for c in range(k + 1, sc.end[k]))}
+    def squad_of(c):
+        hit = [k for k in squads if k < c < sc.end[k]]
+        return max(hit) if hit else None                # the innermost
+    lists = [(k, 'ZSquadScript', SQUAD_DEAD, v[SQUAD_DEAD]) for k, _i, v in kl_fa.controllers(sc, 'ZSquadScript')]
+    lists += [(k, 'OnlineEscVehicleMonitor', fi, v[fi]) for k, _i, v in kl_fa.controllers(sc, 'OnlineEscVehicleMonitor') for fi in range(4, 8)]
+    out = []
+    for owner, cname, fi, entries in lists:
+        todo, seen = [(p, '') for p in entries if isinstance(p, str) and p], set()
+        while todo:
+            p, via = todo.pop(0)
+            for c in sc.resolve(full(p)):
+                if c in seen:
+                    continue
+                seen.add(c)
+                cn = names(c)
+                where = '%s %s[%d]: %s%s' % (sc.path[owner][5:], cname, fi, sc.path[c][5:], ' (through %s)' % via.strip(' >') if via else '')
+                if set(cn) & set(GATE):
+                    continue
+                if set(cn) & set(DRIVE):
+                    out.append('F2 %s sends a squad to its car, with no gate before it' % where)
+                    continue
+                s = squad_of(c)
+                if s in drives and s != owner:
+                    out.append('F3 %s orders the car squad %s outside its drive' % (where, sc.path[s][5:]))
+                    continue
+                for _i, n, v in ctrls(sc, c):
+                    if n in RELAY:
+                        todo += [(q, '%s > %s' % (via, sc.path[c][5:])) for x in v if isinstance(x, list) for q in x if isinstance(q, str) and q]
+    return out
+
+
 def faults(sc):
-    """Entries of the lists this tool writes that name nothing (must be empty)."""
+    """Everything that must be empty on a level this tool wrote (apply() refuses to write otherwise;
+    kl_map_tune's checker 'kl_map_ai' runs it on the written folder):
+      - entries of the lists this tool writes that name nothing. The entry is resolved AS WRITTEN: until
+        2026-10-10 the prefix was added before the look-up, which is why F1 passed
+      - bare(): any reference-list entry of the whole level without ROOT (F1)
+      - order_faults(): the order rules F2 and F3."""
     out = []
     for name, fs in (('ZSquadScript', range(4, 19)), ('AIMonitor', (START_LIST,)), ('OnlineEscVehicleMonitor', range(0, 9))):
         for k, _i, v in kl_fa.controllers(sc, name):
             for fi in fs:
                 for p in v[fi] if isinstance(v[fi], list) else ():
-                    if not sc.resolve(full(p)):
-                        out.append('%s %s[%d]: %s' % (sc.path[k], name, fi, p))
-    return out
+                    if p and not sc.resolve(p):
+                        out.append('%s %s[%d]: %s names nothing' % (sc.path[k], name, fi, p))
+    return out + bare(sc) + order_faults(sc)
 
 
 # ------------------------------------------------------------------ the check: before / after
