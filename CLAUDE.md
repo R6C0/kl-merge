@@ -182,6 +182,12 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+OWNER PLAYED LATE NIGHT OPENING (2026-10-10 ~12:00, build z_maps/M02): 'dead men guns dont show up', 'the late night van sometimes is a
+bit weird? camera goes under the map when ur in it', 'the ai a bit too easy so just probably take some logic from retomoto and put it
+in there and do the same fixes for the other maps'; the park's helicopter 'shouldnt be as bad'. (The round and the escape evidently
+work.) RUNNING: workflow map-tune (.wf/tune.js; run id in the session's workflows folder): tools/kl_map_escape.py (vehicle route
+and camera against the ground), kl_map_ai.py (Retomoto's skill / waves / fall-back on the four maps), gun looks on the map builds
+(kl_guns was never run on them), then kl_map_tune.py -> <work>/build/t_maps/<map>, then an adversarial review.
 STATE 2026-10-10 11:51 - SLOT NOW = LATE NIGHT OPENING on the owner's word: <work>/build/z_maps/M02 (8 masks: no Payday 2 plates on
 the four map builds yet; no KLJoin.ini). Load check LNO: PASS - the first live load of a lightened + wardrobe Dead Men map build:
 level in 2 s, .prm 52.5 MB in the reserve, Kane's body taken, round reached GO, no fault. To see by playing: the 26 jewel
