@@ -197,9 +197,12 @@ before (the 09:40 mask-test state) is kept in <work>/build/klhook/found_1010_111
 - STALL WATCH, first live lines: 'the main thread is back after 21.9 s without a frame or a loader step' at every start - the
   intro movie (the main loop does not run while a movie plays; the script's 'wait 1500' took 22 s). So a movie is a healthy
   silence: StallEndMs MUST STAY OFF (a campaign cutscene can be minutes long); StallMs 30 s only writes a dump.
-- NEXT for the game holder: finish kl-merge-b6's dynamic AI + van build (entry below) into a play build: `kl_graft.py lighten`
-  (trim,slim), `kl_chars.py wardrobe <light> <out> --plates=wolf,dallas,chains,hoxton`, KLJoin.ini = klhook/KLJoin.retomoto.ini;
-  then its checks D1..D6. Not started. Still unseen live: fxc_slim (F1), the four z_maps maps, the loot props (the owner's eyes),
+- READY TO SWAP IN (12:00, offline, NEVER LOADED): <work>/build/rt_ai/retomoto_ai = kl-merge-b6's dynamic AI + straight van
+  build (entry below; loot props included) finished like the installed one: lighten trim,slim -> wardrobe with the four plates
+  -> KLJoin.ini. Wardrobe problems 0, chunk table 65,119, kl_impact 0, kl_chars check = the known glow material,
+  kl_fa_street report exit 0 (van x -1850, y 2, z 8700 -> stop 10800 -> 14900). Same sizes as the installed build, .WAV 22.0 MB.
+  Install: `python debug/slot.py put "<work>/build/rt_ai/retomoto_ai" F01` (needs the owner's word; then one load check with
+  scratchpad pd/RTM.ini, then D1..D6 of re/retomoto_ai.md 9 - most of them the owner will see by playing). Still unseen live: fxc_slim (F1), the four z_maps maps, the loot props (the owner's eyes),
   AI heisters for the Dead Men maps (job parked for usage).
 RETOMOTO DYNAMIC AI + STRAIGHT VAN (owner asked 2026-10-09 late; BUILT OFFLINE 2026-10-10, NOT RUN IN THE GAME, NOT INSTALLED): re/retomoto_ai.md.
 Tower: the boardroom guards run from the window at the blast, the pistol squad is unleashed 6 s later (kl_fa_author ROOM_*, --room-classic).
