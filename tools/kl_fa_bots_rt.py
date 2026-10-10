@@ -569,11 +569,22 @@ def check(folder, log=print):
             if k in mine:
                 ctrl_of[k] = (cn, v)
 
-    def chain(k):
+    # A RandomTrigger between two steps (kl_fa_bots_dyn's random routes; this module makes none): the chain forks.
+    # As in kl_fa_bots.check, a chain is then walked once per BRANCH SET v: branch v mod (number of branches) at
+    # every fork - so every branch of every fork is walked and checked. forks[0] = the widest fork met.
+    rand_of = F.fork_branches(sc, mine)
+    forks = [1]
+
+    def chain(k, variant=0):
         """-> (places [node], index of the first place after a wait or None, ends tight, the wait's seconds, faults)"""
         places, seen, tight, n_wait, secs, bad = [], set(), False, None, None, []
         while k is not None and k not in seen:
             seen.add(k)
+            if k in rand_of and k not in ctrl_of:
+                br = rand_of[k]
+                forks[0] = max(forks[0], len(br))
+                k = br[variant % len(br)] if br else None
+                continue
             cn, v = ctrl_of.get(k, (None, None))
             if cn is None:
                 bad.append('the chain reaches %s, which has no behaviour or wait controller' % name(k)); break
@@ -595,6 +606,8 @@ def check(folder, log=print):
     for k in allies:
         top = sc.top[k]
         f = [j for s in firsts for j in res(s) if sc.top[j] == top]
+        # (the tower's LAST place is behind every fork: a fork's branches rejoin before it. The places of the
+        # tower's branches are kl_fa_bots.check's business, which walks every branch set)
         places, _nw, _t, _secs, _bad = chain(f[0]) if f else ([], None, False, None, [])
         if not places:
             continue
@@ -662,9 +675,18 @@ def check(folder, log=print):
             fail('two [CrewJoin] places are %d apart' % apart)
         routes = collections.OrderedDict()
         enters_exit = S['triggers'].get('EXITS', [])
-        for x in sorted(tgt, key=lambda x: sc.names[sc.top[x]]):
+        jobs = [(x, 0) for x in sorted(tgt, key=lambda x: sc.names[sc.top[x]])]
+        said, variant = set(), 0
+        fail = lambda s: None if (variant and ('FAIL', s) in said) else (said.add(('FAIL', s)), out.append(('FAIL', s)))[0]
+        note = lambda s: None if (variant and ('NOTE', s) in said) else (said.add(('NOTE', s)), out.append(('NOTE', s)))[0]
+        branch_sets = collections.OrderedDict()
+        for x, variant in jobs:                         # (a further branch set of a forking chain: findings said once)
             sq = sc.names[sc.top[x]]
-            places, n_wait, tight, secs, bad = chain(x)
+            forks[0] = 1
+            places, n_wait, tight, secs, bad = chain(x, variant)
+            if variant == 0 and forks[0] > 1:
+                jobs += [(x, n_v) for n_v in range(1, forks[0])]
+                branch_sets[sq] = forks[0]
             for t in bad:
                 fail('%s (street): %s' % (sq, t))
             pts, low, ok = [], 1e9, True
@@ -722,10 +744,17 @@ def check(folder, log=print):
                 fail('%s (street): its last place is %d from the boarding box at the stop (wanted %d..%d)' % (sq, d, *STOP_RING))
             if not tight:
                 note('%s (street): the chain does not end in a tight-defense SquadModifierBehaviour' % sq)
-            routes[sq] = {'places': [[round(v) for v in p[:3]] for p in pts], 'path_length_longest': round(length), 'least_clearance': round(low),
-                          'stage_2': st2, 'stage_3_from_place': st3[0] + 1 if st3 else None, 'places_before_the_hold': n_wait, 'hold_seconds': secs,
-                          'first_inside_the_exit_box': call and {'path': round(call[0]), 'place': call[1]}, 'last_place_from_the_stop': round(d),
-                          'legs_near_the_van_not_straight': cross, 'side_of_the_lane': 'east' if sides == {True} else 'west' if sides == {False} else None}
+            route = {'places': [[round(v) for v in p[:3]] for p in pts], 'path_length_longest': round(length), 'least_clearance': round(low),
+                     'stage_2': st2, 'stage_3_from_place': st3[0] + 1 if st3 else None, 'places_before_the_hold': n_wait, 'hold_seconds': secs,
+                     'first_inside_the_exit_box': call and {'path': round(call[0]), 'place': call[1]}, 'last_place_from_the_stop': round(d),
+                     'legs_near_the_van_not_straight': cross, 'side_of_the_lane': 'east' if sides == {True} else 'west' if sides == {False} else None}
+            if variant == 0:
+                routes[sq] = route
+            else:
+                facts.setdefault('street_branches', collections.OrderedDict()).setdefault(sq, []).append(route)
+        variant = 0
+        if branch_sets:
+            log('street forks (a RandomTrigger between two steps): every branch walked and checked, in up to %d branch sets a squad' % max(branch_sets.values()))
         facts['street'] = routes
         facts['stop'] = [round(v) for v in stop]
     facts['big'] = F.sizes(folder)

@@ -345,10 +345,8 @@ things), `--no-vision`, `--no-rusher`, `--sixth 800`. Each is a 30 s rebuild fro
 - More than one bot on another way: the mesh of four of the five maps offers no second way between the fixed
   places under this step's rule. Routes that really differ need new stations (other doors, other loot order),
   that is `kl_fa_bots.plan`'s business, not a post-process.
-- Per-round random ROUTES (stock's RandomTrigger at every junction): `kl_fa_bots.check` cannot walk a
-  RandomTrigger between two route steps (its NEXT table has no entry for it), and the task was not to change
-  it. If the lead wants them: `'RandomTrigger': 5` in `check()`'s `NEXT` lets its walk take the first branch;
-  the other branches then need this module's kind of check.
+- Per-round random ROUTES (stock's RandomTrigger at every junction): **DONE since, section 11** (the two
+  "more than one bot on another way" points above are overtaken by it).
 - Cover boxes in open ground (section 4). Weapons per bot. `RunToCoverBehaviourRout`.
 - Timing against the vehicle: the loot waits end for everybody when the loot is GONE, so the spread behind the
   loot is the way-out holds (0 .. 24 s) - on paper. If loot stays (a case nobody opened), the looters stand up
@@ -362,3 +360,199 @@ things), `--no-vision`, `--no-rusher`, `--sixth 800`. Each is a 30 s rebuild fro
 `1e45a579-...\scratchpad\dyn\`): `d1.py` (a squad node by node), `m1.py` `m2.py` `m3.py` (stock precedents:
 list fan-out, timers, modifiers, sixth-sense rows, transitions), `gates.sh` + `gates5\` (the gate runs),
 `owner6.txt` (the build log of the five), `sum_<map>.md`, `map_*.png`.
+
+## 11. Random routes (2026-10-10 night; OFFLINE, nothing ran in the game, nothing installed)
+
+The owner: "the ai heisters just path the same then die so quick", then "are u doing the routes yet". Until here
+the seven walked the build's places every round; only the cover at a hold was drawn. Now **the way itself is drawn,
+per bot and per round, the way stock does it: a `RandomTrigger` between two steps.**
+
+### 11.1 What is built
+
+`<work>\build\z_route\M01 M02 M03 M06 retomoto_full`, from the five NON-dynamic bots builds that are on the owner's
+tab (`z_gate\M01`, `z_final\M02 M03 M06`, `rt_full6\retomoto_full`; nothing is written into those):
+
+    python tools\kl_fa_bots_dyn.py routes <work>\build            all five (4 min)
+    python tools\kl_fa_bots_dyn.py build <bots build> <out>       one; --no-routes = the step as it was (section 1),
+                                                                  --ways 2 = at most two ways a fork
+
+Everything of sections 1 - 7 is still made (holds at cover boxes, stagger, the seven roles). `--no-routes` on
+`z_gate\M01` gives the installed `z_dyn3\M01` back byte for byte (every member of the archive).
+
+### 11.2 The form, and the stock object it is copied from
+
+Stock **F07 `Gameplay!merc_bot_squad!Squad#02`**:
+
+    040_SquadModifier_Loose_defense   {26: [040_RandomTrigger_out_of_loot_area]}
+    040_RandomTrigger_out_of_loot_area  ZBoxPrimitive + RandomTrigger {0: 1, 1..4: 3 3 0 0,
+                                        5: [050_DefendBehaviour_rout_out_of_loot_area_left],
+                                        6: [050_DefendBehaviour_rout_out_of_loot_area_right], 7: [], 8: []}
+    each way a DefendBehaviourRout chain of its own; the ways meet by naming the same next step
+    (the eight 090_DefendBehaviour_rout_escape_* all name 100_SquadModifier_tight_defense_van)
+
+The node that is cloned is the same squad's `060_RandomTrigger_BeforeStreet` (same class, same controller, same
+nine fields; it is also what the cover choice of section 2 clones). Ours:
+
+    <what stands before: a walk, a hold's timer, a modifier, the build's loot wait>
+      -> NNN_RandomTrigger_way {0: 1, 1..3: the weights, 5..7: [the first step of way a / b / c]}
+           NNN_DefendBehaviour_way_a ... the build's own way places of this stretch (with their holds and timers)
+           NNN_DefendBehaviour_way_b ... another way
+           NNN_DefendBehaviour_way_c ... another way
+      the last step of every way -> the step of the next place that stays
+
+Measured on the stock bots (F01..F09, 440 uses; `scratchpad\route\s2.py`): a RandomTrigger is started by a
+`TriggerDelay2` 181 x, a `DefendBehaviourRout` 119, `TriggerActorsDead` 49, `SquadModifierBehaviour` 42,
+`TriggerLootDepleted` 14, another RandomTrigger 28; it starts a `DefendBehaviourRout` step 728 times of 805.
+So every link we write has a stock bot precedent. One form of ours is rarer: a way WITHOUT a step of its own (the
+build's way where the stretch has no way place) names the step behind the fork directly - still RandomTrigger ->
+DefendBehaviourRout.
+
+**Weights by role** (a weight is a share: stock bots have (3,3) 154 x, (33,33) 44, (3,3,3) 28 and unequal ones -
+F02 `RandomTrigger_ramp_choice` (4,2), `RandomTrigger_arch_combat_choice` (7,1), `street_combat_choice` (2,4),
+F01 (32,13), and (8,24,34), (7,14,34)):
+
+| bot | prefers | weights (favourite / the others) |
+|---|---|---|
+| #02 point man | the SHORTEST way | 4 / 2 (stock pair; (4,2,2) with three ways: GUESS for the triple) |
+| #04 flanker | the way that lies furthest LEFT of the build's | 4 / 2 |
+| #05 flanker | the way that lies furthest RIGHT | 4 / 2 |
+| #08 runner | the shortest | 7 / 1 (stock pair; (7,1,1): GUESS) |
+| #03 #06 looters, #07 rear guard | none | 3 / 3 (/ 3): stock's commonest. The rear guard is last by its start (+8 s) and its 12 s holds, as before |
+
+Every bot still DRAWS: a preference is 50 % (4/2/2) or 78 % (7/1/1), never a fixed way.
+
+### 11.3 Where the ways come from
+
+A **stretch** = the way between two places that must stay: a place in a trigger box that gives the heist stage
+(ENTERS_BANK / EXITS_BANK / BOARDS), in a level exit box, in an AllyEscapeBox, a loot place, the gather place
+before the drop, a rally place, the last place. Those are never moved and every way passes them, in the old
+order; the build's waits (loot, cases timers + relays, rally) and modifiers stand where they stood. Per stretch:
+
+1. **Another corridor of the mesh** (up to two): the polygons of the ways already known cost 4 x their length and
+   the mesh is searched again; a find counts when it is at most 1.6 x + 6 m longer than the build's way, shares at
+   most 60 % of its length with it and with every other find (within 2.5 m in the plan, 2 m in height) and lies
+   5 m off it somewhere. Way places are then put along it about every 15 m (clear of the mesh's edge, 1.1 m from
+   every other bot's), the walk from place to place is measured again, and the same test is made on THAT line (a
+   place-to-place walk can fall back into the other corridor). All of it GUESS (thresholds as the old `LANE_*`).
+2. No other corridor and the stretch longer than 50 m: it is cut in two at the way place nearest its middle, and
+   each half is a stretch of its own (stock F07 has nine forks on ~250 m).
+3. **To a side**: where a fork still has fewer than three ways, the build's way with its way places moved 3.2 m
+   (2.4, 1.7) to the left / right - where the mesh has the room; a stretch of 12 m and more without a way place
+   gets one in its middle. This is the "not in single file" part: the corridor is the same, the line is not.
+4. No fork on a stretch shorter than 9 m, over the drop link (M03), on the first step of a chain that is started
+   from outside (Retomoto's street: the JumpPoint names it) and on Retomoto's way in through the blown window.
+
+Rules on every new way place (= what the checks ask of a route place): on the route's mesh part, flat (holds'
+rule 15; way places on the START row's part 100 - `WARP_HOME`, GUESS: M06's lawns are uneven polygons and the
+build's own way places stand on them), not in a level exit box and no walk through one unless the stretch already
+starts in one, 250 from the escape vehicle's line behind the last loot wait and no extra crossing of it,
+Retomoto: not in the van's lane, near the van on the bot's own side of it, in the tower clear of the two charges.
+Holds are looked for along EVERY way (same search, same one-box-one-bot rule), so a bot holds at the covers of
+the way it drew.
+
+### 11.4 How many (from `dyn.json`, `scratchpad\route\stats.py`)
+
+Per map, all seven bots together:
+
+| map | forks | with 3 ways | with 2 | forks that have another CORRIDOR | ways: other corridor / to a side | stretches >= 9 m with no other way |
+|---|---:|---:|---:|---:|---:|---:|
+| M01 | 32 | 20 | 12 | 16 | 23 / 29 | 3 |
+| M02 | 59 | 47 | 12 | 35 | 44 / 62 | 7 |
+| M03 | 34 | 24 | 10 | 24 | 27 / 31 | 11 |
+| M06 | 29 | 19 | 10 | 14 | 23 / 25 | 13 |
+| Retomoto | 42 | 42 | 0 | 30 | 36 / 48 | 9 |
+
+Per bot: forks (3 ways + 2 ways) / stretches with no other way. Stock bots have 3 .. 9 RandomTriggers each.
+
+| | #02 | #03 | #04 | #05 | #06 | #07 | #08 |
+|---|---|---|---|---|---|---|---|
+| M01 | 5 (3+2) / 0 | 4 (3+1) / 1 | 5 (3+2) / 0 | 5 (2+3) / 0 | 3 (3+0) / 1 | 6 (4+2) / 0 | 4 (2+2) / 1 |
+| M02 | 7 (6+1) / 0 | 11 (8+3) / 1 | 10 (7+3) / 1 | 7 (5+2) / 0 | 9 (7+2) / 2 | 10 (9+1) / 2 | 5 (5+0) / 1 |
+| M03 | 6 (4+2) / 0 | 4 (3+1) / 2 | 5 (3+2) / 2 | 5 (4+1) / 1 | 4 (3+1) / 3 | 6 (4+2) / 1 | 4 (3+1) / 2 |
+| M06 | 3 (3+0) / 3 | 4 (2+2) / 2 | 5 (2+3) / 1 | 4 (4+0) / 2 | 5 (2+3) / 1 | 3 (2+1) / 3 | 5 (4+1) / 1 |
+| Retomoto | 6 (6+0) / 1 | 6 (6+0) / 1 | 5 (5+0) / 2 | 8 (8+0) / 2 | 5 (5+0) / 1 | 5 (5+0) / 1 | 7 (7+0) / 1 |
+
+(Besides those: 1 - 4 stretches a bot that were not looked at - shorter than 9 m, the drop, a chain's first step.)
+
+Where the other corridors are (`dyn_map*.png` in each folder: dim line = the build's way, bright = the other ways
+of the forks; M01, M03, M06 and Retomoto's street were LOOKED at, M02 and Retomoto's tower only counted):
+
+- **M01**: the car park from the START row to the diner has three corridors (west, the middle, a loop round the
+  north-east); the build walked one. Two again between the two loot places and on the way out to the gate.
+- **M03**: the forecourt left / right; inside, a second staircase on the east side (the build sent all seven
+  down the same one); the yard along its west wall or its east side. Beyond the drop only the sides.
+- **M06**: one central path; a few wide loops off it (west of the middle, an east diagonal, the south-west) that
+  only some of the seven have (the others' way places found no room on them). Else the same path, to a side.
+- **Retomoto street**: other lines through the lobby, then the pavement OR out between the parked cars on the
+  road and back. The last 20 m before the van's stop: sides only (its lane).
+
+### 11.5 Checks (all PASS on the five; last lines below)
+
+- **`kl_fa_bots.check` and `kl_fa_bots_rt.check` now walk a fork.** Small, commented change (`fork_branches()`
+  + the walk): a chain that meets a RandomTrigger as its next link is walked once per BRANCH SET v = 0, 1, ..; at
+  each fork branch v mod (the number of its ways). Every way of every fork is in one of the (at most three) walks
+  and gets EVERY rule of those checks: on the mesh, clearance, a path in order, level exit boxes before the loot
+  wait, the lane, the stages, the drop link, the cases, the van's side on Retomoto. Not every COMBINATION of ways
+  is walked (two forks are separated by a place all ways pass). A build without a fork is walked once, as
+  before: `kl_fa_bots.py check z_final\M03` prints the RESULT line its `bots.txt` has.
+- **`kl_fa_bots_dyn.py check`**, new per fork: field 0 = 1, one target for every weight; the ways MEET again and
+  share no step before; at most one way without a step of its own; every way's places on the mesh part of the
+  place before the fork, clear of the edge, flat; a path A -> its places -> Z without a link; not in or through a
+  level exit box unless A is in one; not in the vehicle's lane behind the last loot wait; not in the van's lane;
+  every way walked (a way no branch set reached is a FAIL). The holds' rules of section 5 apply on every way.
+- **They bite** (three spoiled scratch builds of M01, `scratchpad\route\neg.py`): a place of a second way put into
+  a level exit box -> FAIL from both checks ("is inside level exit box ... BEFORE its loot wait" in branch set 2,
+  "way 2 of fork ... in or through a level exit box"); lifted off the mesh -> 4 FAIL; a way cut off from the step
+  behind the fork -> "the ways of fork ... never meet again" + the stage FAILs.
+- `diff`, `kl_impact`, `kl_maps audit` (same "known and accepted" counts as the source builds: 1 / 6 / 0 / 6),
+  `kl_map_guns check`, `kl_map_escape van-check`: unchanged tools.
+
+| | dyn check | diff | kl_impact | kl_maps audit | kl_map_guns check | van-check |
+|---|---|---|---|---|---|---|
+| M01 | PASS (0 FAIL, 2 NOTE) | only the squad's steps | problems: 0 | PASS (0, 1 known) | problems: 0 | 0 fault(s) |
+| M02 | PASS (0 FAIL, 6 NOTE) | only the squad's steps | problems: 0 | PASS (0, 6 known) | problems: 0 | 0 fault(s) |
+| M03 | PASS (0 FAIL, 3 NOTE) | only the squad's steps | problems: 0 | PASS (0, 0 known) | problems: 0 | 0 fault(s) |
+| M06 | PASS (0 FAIL, 3 NOTE) | only the squad's steps | problems: 0 | PASS (0, 6 known) | problems: 0 | (no van) |
+| Retomoto | PASS (0 FAIL, 4 NOTE); kl_fa_bots_rt PASS (0 FAIL, 6 NOTE) | only the squad's steps | problems: 0 | (not a kl_maps map) | problems: 0 | (kl_fa_van's) |
+
+(NOTEs: timers below 16 s on the runner and on bots whose way has no free cover box, holds 260 - 292 from their
+box, on Retomoto "1 (one way of Squad#05: 2) legs near the van are not a straight line on the mesh clear of its
+lane" for six squads - kl_fa_bots_rt's own NOTE; the installed z_dyn2 build has three NOTEs there. The gate logs:
+`scratchpad\route\gates\<map>_<gate>.txt`, the build log `routes_final.txt`.)
+
+### 11.6 Size
+
+| | entities: bots build -> dynamic (installed) -> routes | REF slots | squad nodes | `.prm` `.ANM` `.fxc` `.WAV` |
+|---|---|---|---:|---|
+| M01 | 15,352 -> 15,541 -> 15,889 | 26,009 -> 26,546 | 707 | equal to the source, to the byte |
+| M02 | 22,411 -> 22,622 -> 23,291 | 33,068 -> 33,948 | 1,169 | equal |
+| M03 | 20,214 -> 20,337 -> 20,769 | 30,871 -> 31,426 | 754 | equal |
+| M06 | 15,804 -> 15,970 -> 16,427 | 26,685 -> 27,308 | 828 | equal |
+| Retomoto | 26,038 -> 26,183 -> 26,991 | 35,771 -> 36,724 | 1,256 | equal |
+
+Only ZGROUP and ZBoxPrimitive entities (no model, no new class, no new controller name). Against what is known:
+stock's largest level has 42,915 entities (L10); stock bot squads have 429 .. 694 nodes (F07 the most), so **M02's
+and Retomoto's squads are 1.7 - 1.8 x the largest stock squad**. No limit is known for that; the level's heap
+budget (.gms +0x1c, not decoded, the sum of both source levels' since the graft) is not raised by this step, as
+it was not by `kl_fa_bots` or the first dynamic step. If a build with routes does not load where its `z_dyn`
+sibling does, `--ways 2` (about a third fewer new entities) and `--no-routes` are the two steps back.
+
+### 11.7 Assumptions and what is not done
+
+- NOT RUN. That a way drawn by our RandomTrigger is walked is stock's own mechanism; that the GAME's pathfinder
+  walks from one of our way places to the next along the corridor this module's portal path takes is an
+  ASSUMPTION (way places every ~15 m keep it short). The "to a side" ways assume a bot walks to a place 2 - 3 m
+  beside another line rather than treating both as the same spot.
+- Thresholds (60 % shared, 1.6 x, 5 m off, 3.2 m to a side, 50 m cut, uneven polygons up to 100): GUESS.
+  Weights' triples: GUESS.
+- A corridor is "another" by geometry only. Whether it is the SAFER or the more dangerous one (police lines,
+  open ground) is not looked at; M01's north-east loop is open car park, Retomoto's road ways lead between the
+  parked cars (which carry cover boxes).
+- Sum of hold timers: on the build's way as before (section 6); on another way planned against the same budget
+  (the way with the most seconds counts, <= 85 s).
+- The runner's second sprint step is now the last step BEHIND its last fork (a fork's ways are walked, not sprinted).
+- Not done: other loot ORDER or other doors at a fixed place (that is `kl_fa_bots.plan`'s station choice); a fork
+  across the drop on M03; the bots builds themselves (their lanes are unchanged: way a of every fork).
+- For the live look (watch-only), beside section 8: with `[Bots] Log=1` the stage lines of a bot should come at
+  different times from round to round; by eye, do the seven fan out on M01's car park and use both staircases of
+  the bank; does anybody stand still at a fork (it should be impossible: a RandomTrigger has no wait).

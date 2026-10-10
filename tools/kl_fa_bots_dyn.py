@@ -6,7 +6,11 @@ is how they get from one to the next: no sprint, a hold at a cover box every few
 choice between two or three covers at a hold, a start a few seconds apart, and seven sets of numbers
 ('personalities'). Research it is built on: re/bots_dynamic.md (kl2.exe read + the 21 stock levels measured).
 Build notes, per map what each of the seven does, live things to look for: re/bots_dyn_build.md.
-OFFLINE: nothing here installs anything or starts the game. kl_fa_bots.py is not changed; it is called.
+RANDOM ROUTES (2026-10-10 night, re/bots_dyn_build.md 11): between the places of a chain that must stay, the WAY
+FORKS - a RandomTrigger draws, per bot and per round, one of two or three ways (another corridor of the mesh where
+it has one, else the build's way moved to a side), and all of them meet again at the next fixed place.
+OFFLINE: nothing here installs anything or starts the game. kl_fa_bots.py is called; its check() (and
+kl_fa_bots_rt's) got one addition: a chain that forks is walked once per branch set, so every way is checked.
 
     python kl_fa_bots_dyn.py build <bots build folder> <out folder> [options]   plan + write + every check; exit 1 on a FAIL
     python kl_fa_bots_dyn.py plan  <bots build folder> [options]                the plan only (nothing written)
@@ -22,6 +26,8 @@ OFFLINE: nothing here installs anything or starts the game. kl_fa_bots.py is not
                                                                                 bot's places and holds (to LOOK at offline)
     python kl_fa_bots_dyn.py owner <work>\\build [M01 ...]                       y_loot2\\M01 M02 M03 M06 and
                                                                                 rt_full4\\retomoto_full into z_dyn\\<map>
+    python kl_fa_bots_dyn.py routes <work>\\build [M01 ...]                      z_gate\\M01, z_final\\M02 M03 M06 and
+                                                                                rt_full6\\retomoto_full into z_route\\<map>
     options
       --no-random       every hold is ONE cover and is walked by the chain (Defend 'rout' -> Defend 'pos' -> timer);
                         default: where a bot has two or three covers at a hold, a RandomTrigger picks one per round
@@ -30,7 +36,11 @@ OFFLINE: nothing here installs anything or starts the game. kl_fa_bots.py is not
                         the opening modifier: 'notices anybody within N without seeing him' (re/bots_dynamic.md 4)
       --no-rusher       the point man keeps attitude eStayBack (default: eUnleashed, stock F08's bots)
       --no-stagger      all seven start with Timer_start_bots, as before
-      --no-detour       no bot is sent the other way round (default: Squad#04 where the mesh has a second way)
+      --no-detour       no bot is sent the other way round (default: Squad#04 where the mesh has a second way);
+                        only with --no-routes: with the random routes the other way round is one of a fork's ways
+      --ways N          most ways a fork chooses between (default 3; 2 = about a third fewer new entities)
+      --no-routes       no fork of the way: every bot walks the build's places every round (the step as it was
+                        before the random routes)
       --gap N           least path between two holds of a bot on the way in (default GAP_IN)
       --no-tree         as kl_fa_bots: the new groups are not listed in the root's group tree
 
@@ -39,6 +49,12 @@ WHAT A SQUAD'S CHAIN IS AFTERWARDS (each form's stock precedent: re/bots_dyn_bui
   -> NNN_DefendBehaviour_<leg> ('rout': 1..3 way places of the build, eDMS_NotSet)
      -> NNN_DefendBehaviour_pos_cover (ONE place 70..230 from a cover box, behind it as the bot walks) -> NNN_Timer_hold
      or -> [NNN_Timer_hold, NNN_RandomTrigger_cover -> one of NNN_DefendBehaviour_pos_cover_a / _b / _c (no NEXT)]
+  -> NNN_RandomTrigger_way {0: 1, 1..3: weights by role, 5..7: the first step of each way} -> one of
+       NNN_DefendBehaviour_way_a ...  (the build's own way places of this stretch, with its holds)
+       NNN_DefendBehaviour_way_b ...  (another corridor of the mesh, or the build's way moved to the left / right)
+       NNN_DefendBehaviour_way_c ...
+     the last step of every way -> the step of the next fixed place (stock form: F07 Squad#02
+     040_RandomTrigger_out_of_loot_area; a way without a step of its own names that step directly)
   -> ... -> NNN_SquadModifier_tight_defense_loot -> the loot place -> the build's own loot wait (seconds per bot)
   -> NNN_SquadModifier_Loose_defense -> ... the way out the same way, shorter holds -> the last 'rout' (eDMS_Sprint:
   the dash to the vehicle) -> the build's own last modifier (leashed, tight).
@@ -109,7 +125,8 @@ ORDER = (2, 7, 4, 5, 3, 6, 8)   # who chooses his cover first at a station
 LOOT_SHORT = 15         # TriggerLootDepleted field 1 of the point man and the runner (stock: 15, 20, 60)
 LOOT_LONG = (15, 60)    # the looters: the build's own seconds + 15, at most 60
 DETOUR = 'side+'        # the bot (by its cover preference) that takes the other way round where the mesh has one
-DEFAULTS = {'random': True, 'vision': True, 'sixth': 0.0, 'rusher': True, 'stagger': True, 'gap': GAP_IN, 'tree': True, 'detour': True}
+DEFAULTS = {'random': True, 'vision': True, 'sixth': 0.0, 'rusher': True, 'stagger': True, 'gap': GAP_IN, 'tree': True, 'detour': True,
+            'routes': True, 'ways': None}
 
 NEXT = {'DefendBehaviourRout': 7, 'SquadModifierBehaviour': 26, 'TriggerDelay2': 4, 'TriggerLootDepleted': 4, 'TriggerActorsDead': 2}
 BS = '\\'
@@ -586,6 +603,427 @@ def other_way(ctx, A, Z, n, post):
     return out
 
 
+# ------------------------------------------------------------------ random routes (a RandomTrigger between two steps)
+# THE STOCK FORM, copied field for field: F07 Gameplay!merc_bot_squad!Squad#02
+#   040_SquadModifier_Loose_defense {26: [040_RandomTrigger_out_of_loot_area]}
+#   040_RandomTrigger_out_of_loot_area (ZBoxPrimitive + RandomTrigger {0: 1, 1..4: 3 3 0 0, 5: [..._rout_out_of_loot_area_left],
+#                                       6: [..._rout_out_of_loot_area_right], 7: [], 8: []})
+#   each branch a DefendBehaviourRout chain of its own; the branches meet again by naming the same next step
+#   (090_DefendBehaviour_rout_escape_* x 8 -> 100_SquadModifier_tight_defense_van).
+# The node that is cloned is the same squad's 060_RandomTrigger_BeforeStreet (FORM['random']; the same class, the
+# same controller, the same nine fields). What starts a RandomTrigger on a stock bot (measured, F01..F09, 440 uses):
+# TriggerDelay2 181, DefendBehaviourRout 119, TriggerActorsDead 49, SquadModifierBehaviour 42, TriggerLootDepleted
+# 14, another RandomTrigger 28; what it starts: a DefendBehaviourRout step 728 times of 805.
+# Weights on stock bots: (3,3) 154 x, (33,33) 44, (3,3,3) 28, (3,3,3,3) 14 ... and UNEQUAL ones: F02 (4,2) (7,1)
+# (2,4), F01 (32,13), (11,33), (8,24,34), (7,14,34) - so a weight is a share, and a bot may prefer a way.
+BR_MAX = 3              # most ways a fork chooses between (stock bots: two lists 239 x, three 77 x, four 28 x)
+ROUTE_LONG = (1.6, 600.0)   # GUESS (as LANE_LONG): another way is at most this much longer than the build's (factor, plus)
+ROUTE_SHARE = 0.6       # GUESS: ... and shares at most this part of its length with the build's way or with another one
+ROUTE_NEAR = 250.0      # ... 'shares' = lies within this of it in the plan (and within 200 in height)
+ROUTE_DEV = 500.0       # GUESS (as LANE_DEV): ... and lies this far from the build's way somewhere
+ROUTE_PEN = 4.0         # the polygons of the ways already found cost this many times their length in the next search
+ROUTE_MIN = 900.0       # GUESS: no fork on a stretch shorter than this (two fixed places a few steps apart)
+ROUTE_SPLIT = 5000.0    # GUESS: a stretch longer than this for which the mesh has no other corridor is cut in two at one
+                        # of its way places, each half a fork of its own (stock F07: nine forks on about 250 m of route)
+WAY_GAP = 1500.0        # GUESS: a way place about every 15 m of another way (kl_fa_bots.SPACING is 18 m)
+WAY_MAX = 6             # ... and at most this many
+SIDE_OFF = (320.0, 240.0, 170.0)    # GUESS: a 'side' way = the build's way places moved this far to the left / right
+SIDE_MIN = 150.0        # ... (the first that the mesh has room for), at least this far in the end
+SIDE_INSERT = 1200.0    # GUESS: a stretch without a way place gets one (in its middle, to the side) if it is this long
+WARP_HOME = 100.0       # GUESS: on the START row's mesh part a new WAY place may stand on a polygon this uneven (holds:
+                        # WARP). kl_fa_bots has no such rule there and its own way places on M06's lawns stand on
+                        # polygons whose fitted height is off by 61..99; with WARP the park had no other way at all.
+                        # On another part (Retomoto's street) WARP holds, as kl_fa_bots_rt.check demands.
+# who prefers which way: the weights. Stock values where a fork has two ways: (4, 2) is F02 Squad#0n
+# RandomTrigger_ramp_choice, (7, 1) F02 RandomTrigger_arch_combat_choice, (3, 3) the commonest. With three ways the
+# same numbers are used ((4, 2, 2), (7, 1, 1)): GUESS for the triples (stock's unequal triples are (8, 24, 34) and
+# (7, 14, 34)).
+PREF = {'ahead': ('short', 4, 2), 'side+': ('left', 4, 2), 'side-': ('right', 4, 2), 'behind': (None, 3, 3), 'near': (None, 3, 3)}
+PREF_RUNNER = ('short', 7, 1)
+
+
+def way(nav, a, b, ban=(), pen=(), factor=1.0):
+    """The mesh way a -> b (4-tuples) through the middles of the shared edges, as kl_fa_bots.Nav.path, but a
+    stretch inside a polygon of `pen` costs `factor` times its length, and the links (drops) are not walked.
+    -> (points, true length, polygons in order) or None."""
+    import heapq
+    dist, prev, at = {a[3]: 0.0}, {}, {a[3]: a[:3]}
+    pq = [(0.0, a[3])]
+    while pq:
+        d, i = heapq.heappop(pq)
+        if d > dist.get(i, 1e30):
+            continue
+        if i == b[3]:
+            break
+        f = factor if i in pen else 1.0
+        for j in nav.nb[i]:
+            if j in ban:
+                continue
+            q = nav.portal(i, j)
+            nd = d + math.dist(at[i], q) * f
+            if nd < dist.get(j, 1e30):
+                dist[j], prev[j], at[j] = nd, (i, q), q
+                heapq.heappush(pq, (nd, j))
+    if b[3] not in dist:
+        return None
+    pts, polys, i = [b[:3]], [b[3]], b[3]
+    while i != a[3]:
+        i, q = prev[i]
+        pts.append(q); polys.append(i)
+    pts.append(a[:3]); pts.reverse(); polys.reverse()
+    return pts, sum(math.dist(u, w) for u, w in zip(pts, pts[1:])), polys
+
+
+def along(pts, want):
+    """The point `want` along the line pts (3-tuples)."""
+    run = 0.0
+    for u, w in zip(pts, pts[1:]):
+        d = math.dist(u, w)
+        if d > 0 and run + d >= want:
+            t = (want - run) / d
+            return tuple(u[i] + (w[i] - u[i]) * t for i in range(3))
+        run += d
+    return tuple(pts[-1][:3])
+
+
+def samples_of(pts, step=100.0):
+    L = sum(math.dist(u, w) for u, w in zip(pts, pts[1:]))
+    n = max(1, int(L // step))
+    return [along(pts, L * i / n) for i in range(n + 1)]
+
+
+def near_line(p, pts, dy=200.0):
+    """Distance in the plan from p to the line pts, counting only stretches within dy of p's height."""
+    best = 1e9
+    for a, b in zip(pts, pts[1:]):
+        dx, dz = b[0] - a[0], b[2] - a[2]
+        L = dx * dx + dz * dz
+        t = 0.0 if L < 1e-9 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[2] - a[2]) * dz) / L))
+        if abs(a[1] + (b[1] - a[1]) * t - p[1]) <= dy:
+            best = min(best, math.hypot(p[0] - a[0] - t * dx, p[2] - a[2] - t * dz))
+    return best
+
+
+def shared(a, b):
+    """(the part of line a that lies within ROUTE_NEAR of line b, the farthest a gets from b)."""
+    ds = [near_line(p, b) for p in samples_of(a)]
+    return sum(d <= ROUTE_NEAR for d in ds) / len(ds), max(ds)
+
+
+def side_of(line, A, Z):
+    """Mean offset of a line to the LEFT of the straight line A -> Z (negative: to the right)."""
+    d = unit2(Z[0] - A[0], Z[2] - A[2])
+    s = (-d[1], d[0])
+    sm = samples_of(line)
+    return sum((p[0] - A[0]) * s[0] + (p[2] - A[2]) * s[1] for p in sm) / len(sm)
+
+
+class Routes:
+    """The search for other ways between the fixed places of the bots' chains (plan step of the random routes)."""
+
+    def __init__(self, ctx):
+        self.ctx = ctx
+        self.taken = []                                 # the way places made so far, all bots (kept F.SEP apart)
+        self._exit_polys = None
+        self.rt_side = {}                               # Retomoto's street: {bot: True = its places lie east of the van's lane}
+
+    def exit_polys(self):
+        ctx, nav = self.ctx, self.ctx.nav
+        if self._exit_polys is None:
+            self._exit_polys = {i for i in range(len(nav.pv)) if nav.ok[i] and any(in_any_exit(ctx, v) for v in nav.pv[i] + [nav.mid[i]])} if ctx.exits else set()
+        return self._exit_polys
+
+    def place_ok(self, N, part, post, exit_free):
+        """-> the test a new way place has to pass (the rules kl_fa_bots.check / kl_fa_bots_rt.check put on one)."""
+        ctx = self.ctx
+        RT = ctx.rt if (ctx.rt is not None and part != ctx.home) else None
+        au = ctx.rt.au if (ctx.rt is not None and part == ctx.home) else None
+
+        def ok(p):
+            if exit_free and in_any_exit(ctx, p[:3]):
+                return False
+            if au is not None and (hdist(p, au.BOMB) < ctx.rt.BOMB_KEEP or hdist(p, au.INVISIBOMB) < ctx.rt.INVISI_KEEP):
+                return False                            # (Retomoto's tower: kl_fa_bots_rt keeps its places clear of the charges)
+            if ctx.lane and post and F.lane_dist(ctx.lane, p) < F.LANE_CLEAR:
+                return False
+            if RT is not None:
+                if RT.lane(p):
+                    return False
+                if p[2] >= RT.van.WAIT_Z - RT.LANE_SOUTH and (p[0] > RT.van.LANE_X) != self.rt_side.get(N):
+                    return False                        # (near the van every place of a bot lies on ONE side of its lane)
+            return True
+        return ok
+
+    def pick(self, at, part, ok, others, radius=260.0, limit=None):
+        """A way place near `at`: on the mesh part, flat, clear of the mesh's edge, F.SEP from every other bot's
+        way place; the nearest with kl_fa_bots' own clearance first. limit = (place, most path from it)."""
+        ctx, g = self.ctx, self.ctx.grid
+        k, best = int(radius // 40), None
+        uneven = WARP_HOME if part == ctx.home else WARP
+        for ix in range(-k, k + 1):
+            for iz in range(-k, k + 1):
+                x, z = at[0] + ix * 40.0, at[2] + iz * 40.0
+                r = math.hypot(ix, iz) * 40.0
+                if r > radius:
+                    continue
+                hit = g.at(x, at[1], z, REACH_Y, part)
+                if not hit or g.warp(hit[0]) > uneven:
+                    continue
+                p = (x, hit[1], z, hit[0])
+                if not ok(p) or any(hdist(p, o) < F.SEP and abs(p[1] - o[1]) < 150.0 for o in others):
+                    continue
+                cl = g.clearance(x, hit[1], z)
+                if cl < HOLD_CLEAR:
+                    continue
+                key = (cl < F.CLEAR, r)
+                if best is None or key < best[0]:
+                    best = (key, p)
+        if best is None:
+            return None
+        if limit is not None:
+            w = ctx.walk(limit[0], best[1])
+            if w is None or w[2] or w[1] > limit[1]:
+                return None
+        return best[1]
+
+    def line(self, seq):
+        """The walked line through the places seq (4-tuples) -> (points, length) or None (no way, or over a link)."""
+        pts, L = [seq[0][:3]], 0.0
+        for u, w in zip(seq, seq[1:]):
+            g = self.ctx.walk(u, w)
+            if g is None or g[2]:
+                return None
+            pts += g[0][1:]; L += g[1]
+        return pts, L
+
+    def seq_ok(self, seq, post, exit_free):
+        """The rules on a whole way A, places.., Z: the escape vehicle's road and the level exit boxes."""
+        ctx = self.ctx
+        A, Z = seq[0], seq[-1]
+        if ctx.lane and post and not F._crosses(ctx.lane, A, Z) and any(F._crosses(ctx.lane, u, w) for u, w in zip(seq, seq[1:])):
+            return False
+        if exit_free and F.first_exit_entry(ctx.B, ctx.nav, ctx.exits, seq[:-1] + ([] if in_any_exit(ctx, Z[:3]) else [Z])):
+            return False
+        return True
+
+    def real(self, N, part, seq, main, L0, post, found, pen):
+        """Another way of the mesh from seq[0] to seq[-1] -> (branch or None, why not, its polygons)."""
+        ctx, nav = self.ctx, self.ctx.nav
+        A, Z = seq[0], seq[-1]
+        exit_free = bool(ctx.exits) and not in_any_exit(ctx, A[:3])
+        # (not through a polygon a level exit box touches, as kl_fa_bots.plan - unless the stretch itself ends in
+        # the box: then its places and the walk up to its last place are tested instead, place_ok / seq_ok)
+        got = way(nav, A, Z, self.exit_polys() if exit_free and not in_any_exit(ctx, Z[:3]) else (), pen, ROUTE_PEN)
+        if got is None:
+            return None, 'no way', set()
+        pts, L, polys = got
+        polys = set(polys)
+        if L > ROUTE_LONG[0] * L0 + ROUTE_LONG[1]:
+            return None, 'longer than %.1f x + %d m' % (ROUTE_LONG[0], ROUTE_LONG[1] / 100), polys
+        for other in [main] + [b['line'] for b in found]:
+            sh, dev = shared(pts, other)
+            if sh > ROUTE_SHARE or dev < ROUTE_DEV:
+                return None, 'the same way (shares %d %%, at most %d m off)' % (100 * sh, dev / 100), polys
+        n = min(WAY_MAX, max(1, len(seq) - 2, int(round(L / WAY_GAP))))
+        ok = self.place_ok(N, part, post, exit_free)
+        places = []
+        for m in range(n):
+            p = self.pick(along(pts, L * (m + 1) / (n + 1)), part, ok, self.taken + places)
+            if p is None:
+                return None, 'no room for a way place on it', polys
+            places.append(p)
+        full = [A] + places + [Z]
+        ln = self.line(full)
+        if ln is None or ln[1] > ROUTE_LONG[0] * L0 + ROUTE_LONG[1] or not self.seq_ok(full, post, exit_free):
+            return None, 'its way places do not pass the route\'s rules', polys
+        worst = 0.0
+        for other in [main] + [b['line'] for b in found]:
+            sh, dev = shared(ln[0], other)
+            worst = max(worst, sh)
+            if sh > ROUTE_SHARE or dev < ROUTE_DEV:     # (the walk from place to place fell back into the other way)
+                return None, 'the same way once its places are walked (shares %d %%)' % (100 * sh), polys
+        return {'kind': 'real', 'pts': places, 'length': ln[1], 'share': worst, 'line': ln[0]}, None, polys
+
+    def lateral(self, N, part, seq, main, L0, post, sign):
+        """The build's way with its way places moved to one side (sign +1 = left of the way) -> branch or None."""
+        ctx = self.ctx
+        A, Z = seq[0], seq[-1]
+        exit_free = bool(ctx.exits) and not in_any_exit(ctx, A[:3])
+        ok = self.place_ok(N, part, post, exit_free)
+        mids, made = list(seq[1:-1]), False
+        if not mids:
+            if L0 < SIDE_INSERT:
+                return None
+            m = along(main, L0 / 2)
+            hit = ctx.grid.at(m[0], m[1], m[2], REACH_Y, part)
+            if not hit:
+                return None
+            mids, made = [(m[0], hit[1], m[2], hit[0])], True
+        out, moved = [], 0
+        for m, p in enumerate(mids):
+            u = out[-1] if out else A
+            w = mids[m + 1] if m + 1 < len(mids) else Z
+            d = unit2(w[0] - u[0], w[2] - u[2])
+            s = (-d[1] * sign, d[0] * sign)
+            got = None
+            for off in SIDE_OFF:
+                t = (p[0] + s[0] * off, p[1], p[2] + s[1] * off)
+                got = self.pick(t, part, ok, self.taken + out, radius=90.0, limit=(p, 1.5 * off + 200.0))
+                if got is not None and ((got[0] - p[0]) * s[0] + (got[2] - p[2]) * s[1]) >= SIDE_MIN:
+                    break
+                got = None
+            if got is None:
+                if made:
+                    return None
+                out.append(p)                           # (no room beside this one: it stays)
+            else:
+                out.append(got); moved += 1
+        if moved < max(1, (len(mids) + 1) // 2):
+            return None
+        full = [A] + out + [Z]
+        ln = self.line(full)
+        if ln is None or ln[1] > ROUTE_LONG[0] * L0 + ROUTE_LONG[1] or not self.seq_ok(full, post, exit_free):
+            return None
+        return {'kind': 'left' if sign > 0 else 'right', 'pts': out, 'length': ln[1], 'share': shared(ln[0], main)[0], 'line': ln[0], 'moved': moved}
+
+    def forks(self, q, flats, pers, opt, log=print):
+        """Mark the forks of one bot in its legs (leg place ['fork']) -> [report of every stretch between two fixed
+        places]. A stretch = the run of plain way places between two places that must stay (a trigger box that
+        gives the heist stage, a level exit box, an AllyEscapeBox, a loot place, a gate, a rally, the last place)."""
+        ctx, nav, B, S, N = self.ctx, self.ctx.nav, self.ctx.B, self.ctx.S, q['N']
+        boxes = [k for ks in S['triggers'].values() for k in ks] + list(S['exits']) + list(ctx.ally)
+        fixed = lambda p: any(B.in_box(k, p) or B.in_box(k, (p[0], p[1] + F.CHEST, p[2])) for k in boxes)
+        if ctx.rt is not None:                          # which side of the van's lane this bot's street places lie on
+            RT = ctx.rt
+            zs = [p['pt'] for flat in flats for kind, leg in flat if kind == 'leg' for p in leg
+                  if nav.part[p['pt'][3]] != ctx.home and p['pt'][2] >= RT.van.WAIT_Z - RT.LANE_SOUTH]
+            if zs:
+                self.rt_side[N] = zs[-1][0] > RT.van.LANE_X
+        report = []
+        most = max(2, min(4, int(opt.get('ways') or BR_MAX)))
+        prev = ctx.p4(q['at'], dy=260.0)
+        for ci, flat in enumerate(flats):
+            if ci:
+                prev = None                             # (a chain started from outside: its first step is named, it stays)
+            is_wait = lambda x: x['kind'] in ('loot', 'dead') or (x['kind'] == 'timer' and x['loot'])
+            last_loot = max([i for i, (kind, x) in enumerate(flat) if kind == 'keep' and is_wait(x)], default=-1)
+            for i, (kind, leg) in enumerate(flat):
+                if kind != 'leg':
+                    continue
+                post = i > last_loot
+                n = len(leg)
+                free = [not fixed(p['pt'][:3]) for p in leg]
+                free[-1] = False
+                def stretch(j0, k, A, depth=0):
+                    """The stretch A -> leg[j0..k-1] -> leg[k]: a fork over all of it when the mesh has another
+                    corridor for it; else, when it is long, two stretches that meet at one of its way places (the
+                    ways of each meet there: more draws a round, stock F07 has a fork about every 28 m); else a
+                    fork between the build's way and the same way moved to a side."""
+                    Z = leg[k]['pt']
+                    rep = {'chain': ci, 'leg': i, 'place': j0, 'way_places': k - j0, 'post': post, 'to': [round(v) for v in Z[:3]],
+                           'from': [round(v) for v in A[:3]]}
+                    part = nav.part[A[3]]
+                    seq = [A] + [leg[m]['pt'] for m in range(j0, k)] + [Z]
+                    ln = self.line(seq) if nav.part[Z[3]] == part else None
+                    if ln is None:
+                        rep['why'] = 'a link (the drop) or another mesh part: left as it is'
+                        report.append(rep); return
+                    main, L0 = ln
+                    rep['length'] = round(L0)
+                    if L0 < ROUTE_MIN:
+                        rep['why'] = 'shorter than %d m' % (ROUTE_MIN / 100)
+                        report.append(rep); return
+                    if ctx.rt is not None and ci == 0 and A[:3] == tuple(ctx.p4(q['at'], dy=260.0)[:3]):
+                        # Retomoto: from the balcony the only way in is the blown window (the other panes of the
+                        # mesh's edge are glass that stays), past the charge: kl_fa_bots_rt planned that step
+                        rep['why'] = 'the way in through the blown window: left as it is'
+                        report.append(rep); return
+                    found, pen, why = [], set(), []
+                    for u, w in zip(seq, seq[1:]):
+                        g = way(nav, u, w)
+                        pen |= set(g[2]) if g else set()
+                    for _round in range(most - 1):
+                        br, w_, polys = self.real(N, part, seq, main, L0, post, found, pen)
+                        pen |= polys
+                        if br is None:
+                            why.append(w_)
+                            if not polys:
+                                break
+                            continue
+                        found.append(br)
+                    if not found and L0 > ROUTE_SPLIT and k > j0:
+                        # no other corridor for the whole of it: cut it at the way place nearest to its middle
+                        run, at, best = 0.0, A, None
+                        for m in range(j0, k):
+                            g = ctx.walk(at, leg[m]['pt'])
+                            run += g[1] if g else 0.0
+                            at = leg[m]['pt']
+                            if best is None or abs(run - L0 / 2) < best[0]:
+                                best = (abs(run - L0 / 2), m, run)
+                        if min(best[2], L0 - best[2]) >= ROUTE_MIN:
+                            stretch(j0, best[1], A, depth + 1)
+                            stretch(best[1] + 1, k, leg[best[1]]['pt'], depth + 1)
+                            return
+                    rep['real'] = len(found)
+                    rep['no_real'] = why
+                    # the sides: the flankers their own side first
+                    for sign in ((-1, 1) if pers.prefer == 'side-' else (1, -1)):
+                        if 1 + len(found) >= most:
+                            break
+                        br = self.lateral(N, part, seq, main, L0, post, sign)
+                        if br is not None:
+                            found.append(br)
+                    rep['branches'] = ['build'] + [b['kind'] for b in found]
+                    rep['lengths'] = [round(L0)] + [round(b['length']) for b in found]
+                    rep['shares'] = [round(100 * b['share']) for b in found]
+                    if found:
+                        base = side_of(main, A, Z)
+                        brs = [{'kind': 'build', 'pts': seq[1:-1], 'length': L0, 'side': 0.0}] + \
+                              [dict(b, side=side_of(b['line'], A, Z) - base) for b in found]
+                        for b in brs:
+                            b.pop('line', None)
+                        self.taken += [p for b in found for p in b['pts']]
+                        rep['weights'] = weights(pers, brs)
+                        leg[j0 if k > j0 else k]['fork'] = {'n': k - j0, 'branches': brs, 'weights': rep['weights'], 'to': Z}
+                    report.append(rep)
+
+                j = 0
+                while j < n:
+                    k = j
+                    while k < n and free[k]:
+                        k += 1                          # (k < n: the last place of a leg is never free)
+                    if prev is not None:
+                        stretch(j, k, prev)
+                    else:
+                        report.append({'chain': ci, 'leg': i, 'place': j, 'way_places': k - j, 'post': post, 'to': [round(v) for v in leg[k]['pt'][:3]],
+                                       'why': 'the first step of a chain that is started from outside: it stays'})
+                    prev, j = leg[k]['pt'], k + 1
+        return report
+
+
+def weights(pers, brs):
+    """The RandomTrigger's weights of a fork for this bot (PREF): which way it prefers; it still draws."""
+    what, hi, lo = PREF_RUNNER if pers.role == 'runner' else PREF.get(pers.prefer, (None, 3, 3))
+    if what == 'short':
+        fav = min(range(len(brs)), key=lambda i: brs[i]['length'])
+    elif what == 'left':
+        fav = max(range(len(brs)), key=lambda i: brs[i]['side'])
+    elif what == 'right':
+        fav = min(range(len(brs)), key=lambda i: brs[i]['side'])
+    else:
+        return [3] * len(brs)
+    return [hi if i == fav else lo for i in range(len(brs))]
+
+
+def all_items(items):
+    """Every item of a program, the ones inside a fork's branches too."""
+    for it in items:
+        yield it
+        if it['kind'] == 'fork':
+            for br in it['branches']:
+                yield from all_items(br['items'])
+
+
 def plan(ctx, opt=None, log=print):
     """-> the plan (dict, JSON-able): per bot its personality and, per chain, the program = the items of the new
     chain in order. plan['stations'] says what was found at each route place."""
@@ -602,7 +1040,28 @@ def plan(ctx, opt=None, log=print):
     flats = {N: [flat_chain(ctx, q, c) for c in q['chains']] for N, q in ctx.squads.items()}
     sc = B.sc
     P['detours'] = collections.OrderedDict()
-    if opt['detour']:
+    P['routes'] = collections.OrderedDict()
+    if opt['routes']:
+        # RANDOM ROUTES: between the fixed places of every bot's chain the other ways the mesh has (and, where it
+        # has one corridor only, the build's way moved to a side); a RandomTrigger draws one per bot per round
+        R = Routes(ctx)
+        for N in ORDER:
+            P['routes'][N] = R.forks(ctx.squads[N], flats[N], PERS[N], opt, log)
+        P['routes'] = collections.OrderedDict((N, P['routes'][N]) for N in sorted(P['routes']))
+        log('random routes: a stretch = the way between two places that stay (stage trigger, loot place, gate, rally, last place)')
+        for N, reps in P['routes'].items():
+            f = [r for r in reps if r.get('weights')]
+            none = [r for r in reps if 'branches' in r and not r.get('weights')]
+            log('  Squad#0%d %-22s %d stretches: %d fork(s) (%d with 3 ways, %d with 2); ways of another corridor of the mesh: %d; of the build\'s way '
+                'moved to a side: %d; stretches of %d m and more with no other way at all: %d; not looked at (short, a link, the first step): %d'
+                % (N, PERS[N].role, len(reps), len(f), sum(len(r['branches']) == 3 for r in f), sum(len(r['branches']) == 2 for r in f),
+                   sum(r['real'] for r in f), sum(b in ('left', 'right') for r in f for b in r['branches']), ROUTE_MIN / 100, len(none),
+                   len(reps) - len(f) - len(none)))
+            for r in f:
+                log('      chain %d, (%d, %d, %d) -> (%d, %d, %d), %d m: %s; lengths %s m; weights %s%s'
+                    % (r['chain'] + 1, *r['from'], *r['to'], r['length'] / 100, ' / '.join(r['branches']), [round(x / 100) for x in r['lengths']], r['weights'],
+                       '; shares with the build\'s way %s %%' % r['shares'] if r['real'] else ''))
+    if opt['detour'] and not opt['routes']:             # (with random routes the other way round is one of a fork's ways)
         for N in sorted(ctx.squads):
             if PERS[N].prefer == DETOUR:
                 moved, ways = detours(ctx, ctx.squads[N], flats[N], log)
@@ -642,9 +1101,11 @@ def plan(ctx, opt=None, log=print):
     log('  cover boxes refused on the way (a box may be refused for several bots): %s' % ({k[5:]: v for k, v in tally.items() if k.startswith('box:')} or 'none'))
     P['bots'] = collections.OrderedDict((N, P['bots'][N]) for N in sorted(P['bots']))
     for N, b in P['bots'].items():
-        rnd = sum(1 for c in b['chains'] for it in c if it['kind'] == 'rout' and it.get('fan') and it['fan']['kind'] == 'random')
-        log('  Squad#0%d %-22s starts +%g s, %2d holds (%d with a random choice of cover), %5.1f s of timers, loot seconds %s, sprint on %d step(s)'
-            % (N, b['role'], PERS[N].stagger if opt['stagger'] else 0.0, b['holds'], rnd, b['timer_seconds'],
+        rnd = sum(1 for c in b['chains'] for it in all_items(c) if it['kind'] == 'rout' and it.get('fan') and it['fan']['kind'] == 'random')
+        log('  Squad#0%d %-22s starts +%g s, %2d holds on the build\'s way (%d choices of cover on all ways), %d fork(s) of the way, %5.1f s of timers, '
+            'loot seconds %s, sprint on %d step(s)'
+            % (N, b['role'], PERS[N].stagger if opt['stagger'] else 0.0, b['holds'], rnd, sum(1 for c in b['chains'] for it in c if it['kind'] == 'fork'),
+               b['timer_seconds'],
                [it['loot_seconds'] for c in b['chains'] for it in c if it['kind'] == 'keep' and it.get('loot_seconds') is not None] or '-',
                sum(1 for c in b['chains'] for it in c if it['kind'] == 'rout' and it['sprint'])))
     return P
@@ -670,10 +1131,14 @@ def finish(ctx, N, progs, pers, opt, taken, spots_taken, used):
     stock F07's 070_DefendBehaviour_pos_to_street_middle -> 070_Timer_small_street_middle); several, or a hold
     during a timer of the build (a rally) = started beside the timer (rout -> [timer, RandomTrigger or pos]; a
     Defend step that starts a timer and another behaviour: stock F01 Gameplay!PolicePlatform#01 10_Defend)."""
-    for ci, items in enumerate(progs):
+    def fin(items):
         out = []
         for it in items:
             out.append(it)
+            if it['kind'] == 'fork':                    # the ways of a fork: each its own holds
+                for br in it['branches']:
+                    br['items'] = fin(br['items'])
+                continue
             h = it.pop('hold', None) if it['kind'] == 'rout' else None
             if h is None:
                 continue
@@ -697,7 +1162,10 @@ def finish(ctx, N, progs, pers, opt, taken, spots_taken, used):
                 a = alts[0]
                 a['name'] = uniq_in(used, '%s_DefendBehaviour_pos_cover' % pre)
                 out.append({'kind': 'hold', 'name': a['name'], 'place': a['place'], 'cover': a['cover'], 'cover_kind': a['cover_kind'], 'from_cover': a['from_cover']})
-        progs[ci] = out
+        return out
+
+    for ci, items in enumerate(progs):
+        progs[ci] = fin(items)
 
 
 def program(ctx, q, chain_no, flat, pers, opt, taken, spots_taken, gap_scale, used, tally):
@@ -767,7 +1235,59 @@ def program(ctx, q, chain_no, flat, pers, opt, taken, spots_taken, gap_scale, us
         part = nav.part[leg[0]['pt'][3]]
         gap = (opt['gap'] if not post else GAP_OUT) * gap_scale
         cur, cur_old = [], None
+        skip = 0
         for j, p in enumerate(leg):
+            if j < skip:                                # (a way place of the build that a fork's first way has taken)
+                continue
+            fk = p.get('fork') if opt['routes'] else None
+            if fk:
+                # A FORK OF THE WAY: what stands before it (a walk, a hold's timer, a modifier, a wait of the build)
+                # starts a RandomTrigger; each of its ways is a chain of its own (walk, holds at ITS covers) and
+                # every one of them ends by starting what follows the fork = the step of the next fixed place
+                if cur:
+                    routs.append({'kind': 'rout', 'name': uniq(cur_old), 'places': cur, 'sprint': False, 'way_out': post}); items.append(routs[-1])
+                    cur = []
+                pre = p['old'][:3]
+                gap_f = gap * (pers.phase if holds == 0 else 1.0)
+                want_f = (pers.out_holds or not post) and (pers.hold_out > 0 or not post) and (last_chain or not post)
+                brs, ends = [], []
+                for b, br in enumerate(fk['branches']):
+                    its, s_b, h_b, since_b, at_b = [], 0.0, 0, since, prev_pt
+                    cur_b = []
+                    for m, e in enumerate(br['pts']):
+                        since_b += math.dist(at_b[:3], e[:3])
+                        nx = br['pts'][m + 1] if m + 1 < len(br['pts']) else fk['to']
+                        cur_b.append([round(v, 2) for v in e[:3]])
+                        hold = None
+                        if want_f and since_b >= gap_f:
+                            key = (chain_no, i, j, b, m)
+                            tally['asked'] += 1
+                            got = find_holds(ctx, part, e, at_b, nx, pers, {c for c, n in taken.items() if n != N},
+                                             [x for n, k, x in spots_taken if n != N or k == key], 1, post, tally)
+                            if got:
+                                tally['found'] += 1
+                                hold = got[0]
+                                taken[hold[1]] = N; spots_taken.append((N, key, hold[0]))
+                        if m == len(br['pts']) - 1 or hold is not None or len(cur_b) >= F.STEP_MAX:
+                            r = {'kind': 'rout', 'name': uniq('%s_DefendBehaviour_way_%s' % (pre, 'abcd'[b])), 'places': cur_b, 'sprint': False, 'way_out': post}
+                            its.append(r)
+                            cur_b = []
+                            if hold is not None:
+                                h_b += 1; since_b = 0.0
+                                sec = pers.hold_out if post else pers.hold_in
+                                r['hold'] = {'pre': pre, 'rally': False, 'alts': [alt_of(ctx, hold)], 'boxes': {hold[1]}, 'search': (key, part, e, at_b, nx, post)}
+                                its.append({'kind': 'timer', 'name': uniq('%s_Timer_hold' % pre), 'seconds': sec}); s_b += sec
+                        at_b = e
+                    brs.append({'kind': br['kind'], 'length': round(br['length']), 'weight': fk['weights'][b], 'items': its})
+                    ends.append((s_b, h_b, since_b, at_b))
+                items.append({'kind': 'fork', 'name': uniq('%s_RandomTrigger_way' % pre), 'branches': brs,
+                              'to': [round(v, 2) for v in fk['to'][:3]]})
+                secs += max(x[0] for x in ends)         # (the budget of timers: the way with the most)
+                holds += ends[0][1]; since = ends[0][2]; prev_pt = ends[0][3]
+                del routs[:]                            # (the dash is the steps BEHIND the last fork)
+                skip = j + fk['n']
+                if fk['n']:
+                    continue
             e = p['pt']
             if prev_pt is not None:
                 since += math.dist(prev_pt[:3], e[:3])
@@ -890,11 +1410,28 @@ def make(ctx, P, log=print):
             M.set(g, 'DefendBehaviourRout', {0: refs[0] if single else '', 1: [] if single else refs, 2: 1, 3: 0,
                                              4: 'eDMS_Sprint' if sprint else 'eDMS_NotSet', 5: 'eDF_NotSet', 6: '', 7: nxt, 8: 1, 9: 0})
 
-        for ci, items in enumerate(b['chains']):
-            entry = lambda it: it['name']
+        entry = lambda it: it['name']                   # (a fork is entered by its RandomTrigger)
+
+        def emit(items, after):
+            """The nodes of a run of items; the last one starts `after` (a list of paths)."""
             for i, it in enumerate(items):
-                nxt = [path(entry(items[i + 1]))] if i + 1 < len(items) else []
-                if it['kind'] == 'rout':
+                nxt = [path(entry(items[i + 1]))] if i + 1 < len(items) else list(after)
+                if it['kind'] == 'fork':
+                    # stock F07 Squad#02 040_RandomTrigger_out_of_loot_area: {0: 1, 1..4: weights, 5..8: one target
+                    # list each}; a way without a step of its own (the build's, where it has no way place) names
+                    # what follows the fork
+                    brs = it['branches']
+                    if not nxt or not 2 <= len(brs) <= 4:
+                        raise ValueError('%s: fork %s has %d ways and %d steps behind it' % (q['name'], it['name'], len(brs), len(nxt)))
+                    r = top.add(M.clone(SX, FORM['random'], it['name']))
+                    r.keep = None
+                    M.place(r, (0.0, 0.0, 0.0))
+                    w = [int(brs[j]['weight']) if j < len(brs) else 0 for j in range(4)]
+                    lists = [([path(entry(brs[j]['items'][0]))] if brs[j]['items'] else nxt) if j < len(brs) else [] for j in range(4)]
+                    M.set(r, 'RandomTrigger', {0: 1, 1: w[0], 2: w[1], 3: w[2], 4: w[3], 5: lists[0], 6: lists[1], 7: lists[2], 8: lists[3]})
+                    for br in brs:
+                        emit(br['items'], nxt)
+                elif it['kind'] == 'rout':
                     fan = it.get('fan')
                     if fan and fan['kind'] == 'random':
                         nxt = nxt + [path(fan['name'])]
@@ -934,6 +1471,9 @@ def make(ctx, P, log=print):
                         f[1] = int(it['loot_seconds'])
                     if f:
                         M.set(n, it['ctrl'], f)
+
+        for ci, items in enumerate(b['chains']):
+            emit(items, [])
             if ci == 0:
                 firsts[N] = path(entry(items[0]))
             else:
@@ -1140,16 +1680,40 @@ def graph(ctx_or_B):
         actors = [k for k in range(t, sc.end[t]) if sc.cls(k) == 'ZFFActor']
         if not actors:
             continue
-        g = {'top': t, 'actor': actors[0], 'chains': [], 'reached': set(), 'faults': []}
-        for k in entries.get(t, []):
-            chain, seen = [], set()
+        g = {'top': t, 'actor': actors[0], 'chains': [], 'sets': [], 'forks': collections.OrderedDict(), 'reached': set(), 'faults': []}
+        # A chain that FORKS (a RandomTrigger as the next link) is walked once per BRANCH SET v = 0, 1, ..: at every
+        # fork branch v mod (its number of ways). g['chains'][c] is branch set 0 (every fork's first way = the
+        # build's), g['sets'][c] all of them; every way of every fork is in at least one. An item that is the first
+        # step of a way carries 'fork' = (the RandomTrigger, the way's index); g['forks'][node] says what it draws from.
+        jobs = [(k, 0, c) for c, k in enumerate(entries.get(t, []))]
+        for k, variant, c_no in jobs:
+            chain, seen, widest, via = [], set(), 1, None
             while k is not None and k not in seen:
                 seen.add(k); g['reached'].add(k)
                 cn, v = ctrl.get(k, (None, None))
+                if cn == 'RandomTrigger':
+                    ws, lists = list(v[1:5]), [[x for s in lst for x in sc.resolve(s)] for lst in v[5:9]]
+                    if variant == 0:
+                        if v[0] != 1:
+                            g['faults'].append('%s: field 0 is %s (stock: 1)' % (sc.names[k], v[0]))
+                        for w, tg, lst in zip(ws, lists, v[5:9]):
+                            if bool(w) != bool(lst) or len(tg) != len(lst) or len(tg) > 1:
+                                g['faults'].append('%s: weight %s with %d targets, %d of them resolve (stock: one target for every weight that is not 0)' % (sc.names[k], w, len(lst), len(tg)))
+                        if any(sc.top[x] != t for tg in lists for x in tg):
+                            g['faults'].append('%s names a step of another squad' % sc.names[k])
+                    br = [tg[0] for w, tg in zip(ws, lists) if w and tg]
+                    g['forks'][k] = {'name': sc.names[k], 'ways': br, 'weights': [w for w, tg in zip(ws, lists) if w and tg]}
+                    if len(br) < 2:
+                        g['faults'].append('%s: a fork with %d way(s)' % (sc.names[k], len(br))); break
+                    widest = max(widest, len(br))
+                    via = (k, variant % len(br))
+                    k = br[variant % len(br)]
+                    continue
                 if cn is None or cn in ('RandomTrigger', 'RelayMessageList'):
                     g['faults'].append('the chain reaches %s, which is no step of a chain' % sc.names[k]); break
                 nx = [j for s in v[NEXT[cn]] for j in sc.resolve(s)]
-                it = {'k': k, 'name': sc.names[k], 'ctrl': cn, 'v': v, 'side': []}
+                it = {'k': k, 'name': sc.names[k], 'ctrl': cn, 'v': v, 'side': [], 'fork': via}
+                via = None
                 if cn == 'DefendBehaviourRout':
                     it['places'] = [j for s in ([v[0]] if v[0] else []) + list(v[1]) for j in sc.resolve(s)]
                 for j in nx[1:]:                        # what is started beside the next link
@@ -1174,7 +1738,12 @@ def graph(ctx_or_B):
                         g['faults'].append('%s also starts %s (%s)' % (sc.names[k], sc.names[j], cj))
                 chain.append(it)
                 k = nx[0] if nx else None
-            g['chains'].append(chain)
+            if variant == 0:
+                g['chains'].append(chain); g['sets'].append([chain])
+                jobs += [(jobs[c_no][0], n_v, c_no) for n_v in range(1, widest)]
+            else:
+                g['sets'][c_no].append(chain)
+        g['faults'] = list(dict.fromkeys(g['faults']))
         g['ctrl'] = {k: v for k, v in ctrl.items() if sc.top[k] == t}
         out[sc.names[t]] = g
     return out
@@ -1207,6 +1776,7 @@ def check(folder, log=print, base=True):
     grid = Grid(nav)
     S = F.stations(B, nav)
     exits, lane = S['exits'], F.lanes(B)
+    hops = {(tuple(pa), tuple(pb)) for ds in nav.drops.values() for _j, pa, pb, _k in ds}
     covers = [c for c in cover_boxes(B) if not c['hidden']]
     RT = None
     if two_part:
@@ -1223,8 +1793,14 @@ def check(folder, log=print, base=True):
         if loose:
             fail('%s: %d step(s) nothing starts, e.g. %s' % (sq, len(loose), loose[0]))
         sp = B.at(g['actor'])
-        row = collections.OrderedDict(defend_steps=0, sprint=0, holds=0, random=0, alternatives=0, timers=0.0, places=0, modifiers=[], loot_seconds=[], steps=[])
-        for ci, chain in enumerate(g['chains']):
+        new_row = lambda: collections.OrderedDict(defend_steps=0, sprint=0, holds=0, random=0, alternatives=0, timers=0.0, places=0, modifiers=[], loot_seconds=[], steps=[])
+        row0 = new_row()
+        row0['forks'], row0['fork_ways'] = len(g['forks']), [len(f['ways']) for f in g['forks'].values()]
+        counted, ways_done = set(), {}
+        # every BRANCH SET of every chain (graph()): set 0 is the build's own way at every fork and fills the row;
+        # the further sets bring the other ways of the forks, which get the same rules (an item is counted once)
+        for ci, vi, chain in [(ci, vi, ch) for ci, cset in enumerate(g['sets']) for vi, ch in enumerate(cset)]:
+            row = row0 if vi == 0 else new_row()
             prev = None
             pts_chain = [B.at(j) for it in chain if it['ctrl'] == 'DefendBehaviourRout' for j in it['places']]
             if pts_chain:
@@ -1243,6 +1819,8 @@ def check(folder, log=print, base=True):
                     walked += [(i, B.at(j)) for j in it['places']]
             for i, it in enumerate(chain):
                 cn, v = it['ctrl'], it['v']
+                fresh = it['k'] not in counted
+                counted.add(it['k'])
                 if cn == 'DefendBehaviourRout':
                     row['defend_steps'] += 1
                     row['sprint'] += v[4] == 'eDMS_Sprint'
@@ -1252,13 +1830,14 @@ def check(folder, log=print, base=True):
                         fail('%s: %s names %d places (stock: 1..3)' % (sq, it['name'], len(it['places'])))
                     single = bool(v[0]) and not v[1]
                     row['places'] += len(it['places'])
-                    for j in it['places']:
+                    for j in it['places'] if fresh else ():
                         d_all.append(near_cover(B.at(j)))
                     row['steps'].append('%s %s %s' % (it['name'], 'pos' if single else 'rout', 'SPRINT' if v[4] == 'eDMS_Sprint' else ''))
                     if single and 'pos_cover' in it['name']:
                         row['holds'] += 1
-                        all_holds.append((sq, ci, i, B.at(it['places'][0]), prev, it['name']))
-                        d_hold.append(near_cover(B.at(it['places'][0])))
+                        if fresh:
+                            all_holds.append((sq, ci, i, B.at(it['places'][0]), prev, it['name']))
+                            d_hold.append(near_cover(B.at(it['places'][0])))
                     else:
                         prev = B.at(it['places'][-1])
                 elif cn == 'TriggerDelay2':
@@ -1303,9 +1882,10 @@ def check(folder, log=print, base=True):
                         if len(pl) != 1:
                             fail('%s: %s: its place does not resolve' % (sq, name(a))); continue
                         row['holds'] += kind == 'one' or a == alts[0]
-                        all_holds.append((sq, ci, i, B.at(pl[0]), B.at(it['places'][-1]), sc.names[a]))
-                        d_hold.append(near_cover(B.at(pl[0])))
-                        d_all.append(d_hold[-1])
+                        if fresh:
+                            all_holds.append((sq, ci, i, B.at(pl[0]), B.at(it['places'][-1]), sc.names[a]))
+                            d_hold.append(near_cover(B.at(pl[0])))
+                            d_all.append(d_hold[-1])
                         # the rules a walked place has to obey, for a place the chain does not walk
                         p = B.at(pl[0])
                         e = B.at(it['places'][-1])
@@ -1333,6 +1913,93 @@ def check(folder, log=print, base=True):
                             fail('%s: hold %s is %d from the escape vehicle\'s line: IN ITS LANE' % (sq, sc.names[a], F.lane_dist(lane, p)))
                         if RT is not None and nav.part[hit[0]] != S['home'] and RT.lane(p):
                             fail('%s: hold %s is in the van\'s lane' % (sq, sc.names[a]))
+            # THE WAYS OF THE FORKS met in this branch set. A way = its own steps from the RandomTrigger to the step
+            # where all its ways meet again; A = the place walked before the fork, Z = the first place behind it.
+            # Rules (each a FAIL): the ways meet, and share no step before they do; every place of the way on the
+            # mesh part of A, clear of the mesh's edge, on no warped polygon; a path A -> its places -> Z without a
+            # link; not in or through a level exit box unless A already is in one; not in the escape vehicle's lane
+            # behind the last loot wait; not in the van's lane (Retomoto's street).
+            is_place = lambda x: x['ctrl'] == 'DefendBehaviourRout' and not (x['v'][0] and not x['v'][1] and 'pos_cover' in x['name'])
+            for i, it in enumerate(chain):
+                if not it['fork'] or it['fork'] in ways_done:
+                    continue
+                rk, b = it['fork']
+                fk = g['forks'][rk]
+                if 'meet' not in fk:
+                    lists = []
+                    for w in fk['ways']:
+                        lst, k = [], w
+                        while k is not None and k not in lst:
+                            lst.append(k)
+                            cj, vj = g['ctrl'].get(k, (None, None))
+                            nx = [j for s in vj[NEXT[cj]] for j in sc.resolve(s)] if cj in NEXT else []
+                            k = nx[0] if nx else None
+                        lists.append(lst)
+                    common = set(lists[0]).intersection(*lists[1:])
+                    fk['meet'] = next((x for x in lists[0] if x in common), None)
+                    if fk['meet'] is None:
+                        fail('%s: the ways of fork %s never meet again' % (sq, fk['name']))
+                    else:
+                        fk['own'] = [lst[:lst.index(fk['meet'])] for lst in lists]
+                        flat_own = [x for o in fk['own'] for x in o]
+                        if len(flat_own) != len(set(flat_own)):
+                            fail('%s: two ways of fork %s share a step before they meet' % (sq, fk['name']))
+                        if sum(1 for o in fk['own'] if not o) > 1:
+                            fail('%s: two ways of fork %s have no step of their own' % (sq, fk['name']))
+                if fk['meet'] is None:
+                    continue
+                own, i1 = set(fk['own'][b]), i
+                while i1 < len(chain) and chain[i1]['k'] in own:
+                    i1 += 1
+                if i1 >= len(chain) or chain[i1]['k'] != fk['meet']:
+                    fail('%s: way %d of fork %s does not run on to %s' % (sq, b + 1, fk['name'], sc.names[fk['meet']])); continue
+                pts = [B.at(j) for x in chain[i:i1] if is_place(x) for j in x['places']]
+                before = [B.at(j) for x in chain[:i] if is_place(x) for j in x['places']]
+                behind = [B.at(j) for x in chain[i1:] if is_place(x) for j in x['places']]
+                A, Z = before[-1] if before else (sp if ci == 0 else None), behind[0] if behind else None
+                tag = '%s: way %d of fork %s' % (sq, b + 1, fk['name'])
+                if A is None or Z is None:
+                    fail('%s has no place before it or none behind it' % tag); continue
+                if b == 0:
+                    fk['base'] = {tuple(round(x) for x in p) for p in pts}
+                seq = [A] + pts + [Z]
+                hits = [nav.at(p[0], p[1], p[2], dy=15.0) for p in seq]
+                if any(h is None for h in hits):
+                    fail('%s: a place of it is not on the mesh, e.g. (%d, %d, %d)' % (tag, *seq[[h is None for h in hits].index(True)])); continue
+                if len({nav.part[h[0]] for h in hits}) > 1:
+                    fail('%s: its places are not on one mesh part' % tag); continue
+                for p, h in list(zip(seq, hits))[1:-1]:
+                    if nav.clearance(*p) < F.CLEAR_MIN:
+                        fail('%s: (%d, %d, %d) is %d from a mesh edge without a neighbour' % (tag, *p, nav.clearance(*p)))
+                    # (the warp rule is for the places THIS module made: way 1 is the build's own way, its places are
+                    # kl_fa_bots' - M02 and M06 have some on large uneven polygons - and a side way keeps the ones it
+                    # found no room beside. They are under kl_fa_bots.check's rules, in every branch set.)
+                    if grid.warp(h[0]) > (WARP_HOME if nav.part[h[0]] == S['home'] else WARP) and b and tuple(round(x) for x in p) not in fk.get('base', ()):
+                        fail('%s: (%d, %d, %d) stands on a polygon whose fitted height is off by %d' % (tag, *p, grid.warp(h[0])))
+                    if lane and i > n_wait_last and F.lane_dist(lane, p) < F.LANE_HALF + F.LANE_MAN:
+                        fail('%s: (%d, %d, %d) is %d from the escape vehicle\'s line: IN ITS LANE' % (tag, *p, F.lane_dist(lane, p)))
+                    if RT is not None and nav.part[h[0]] != S['home'] and RT.lane(p):
+                        fail('%s: (%d, %d, %d) is in the van\'s lane' % (tag, *p))
+                length = 0.0
+                for (u, hu), (w, hw) in zip(zip(seq, hits), list(zip(seq, hits))[1:]):
+                    got = nav.path(tuple(u) + (hu[0],), tuple(w) + (hw[0],))
+                    if got is None or any((tuple(x), tuple(y)) in hops for x, y in zip(got[0], got[0][1:])):
+                        fail('%s: %s from (%d, %d, %d) to (%d, %d, %d)' % (tag, 'no path' if got is None else 'the path takes a one-way link', *u, *w)); length = None; break
+                    length += got[1]
+                if exits and not F.in_exit(B, exits, A):
+                    if any(F.in_exit(B, exits, p) for p in pts) or F.first_exit_entry(B, nav, exits, [A] + pts + ([] if F.in_exit(B, exits, Z) else [Z])):
+                        fail('%s is in or through a level exit box before the route itself enters one' % tag)
+                ways_done[it['fork']] = length
+        fork_list = []
+        for rk, fk in g['forks'].items():
+            ls = [ways_done.get((rk, b)) for b in range(len(fk['ways']))]
+            if any((rk, b) not in ways_done for b in range(len(fk['ways']))):
+                fail('%s: fork %s: a way of it was not walked and checked' % (sq, fk['name']))
+            elif all(x is not None for x in ls) and max(ls) > ROUTE_LONG[0] * min(ls) + ROUTE_LONG[1]:
+                note('%s: fork %s: its ways are %s long' % (sq, fk['name'], [round(x) for x in ls]))
+            fork_list.append({'name': fk['name'], 'weights': fk['weights'], 'lengths': [x and round(x) for x in ls]})
+        row = row0
+        row['fork_list'] = fork_list
         if not BUDGET[0] <= row['timers'] <= BUDGET[1]:
             note('%s: %.0f s of timers (stock bots: %d..%d s)' % (sq, row['timers'], *BUDGET))
         rows[sq] = row
@@ -1365,6 +2032,7 @@ def check(folder, log=print, base=True):
         was = json.load(open(dj)).get('big_before')
         if was and dict(was) != dict(facts['big']):
             fail('a large block changed its size: %s -> %s' % (was, dict(facts['big'])))
+    out[:] = list(dict.fromkeys(out))                   # (a finding on a step two branch sets share is said once)
     out.sort(key=lambda x: x[0] != 'FAIL')
     for sev, text in out:
         log('%-4s %s' % (sev, text))
@@ -1373,8 +2041,11 @@ def check(folder, log=print, base=True):
         % (len(covers), facts['covers']['high'], facts['covers']['low'], facts['covers']['car'], len(d_all), med(d_all), share(d_all, 500.0),
            share(d_all, 250.0), len(d_hold), med(d_hold), share(d_hold, 250.0)))
     for sq, r in rows.items():
-        log('  %s: %d Defend steps (%d sprint), %d holds (%d by RandomTrigger, %d places to choose from), %g s of timers, loot waits %s s'
-            % (sq, r['defend_steps'], r['sprint'], r['holds'], r['random'], r['alternatives'], r['timers'], r['loot_seconds']))
+        log('  %s: on the build\'s way %d Defend steps (%d sprint), %d holds (%d by RandomTrigger, %d places to choose from), %g s of timers, loot waits %s s; '
+            'forks of the way: %d (%d with 3 ways, %d with 2), every way checked'
+            % (sq, r['defend_steps'], r['sprint'], r['holds'], r['random'], r['alternatives'], r['timers'], r['loot_seconds'],
+               r['forks'], sum(n >= 3 for n in r['fork_ways']), sum(n == 2 for n in r['fork_ways'])))
+    facts['forks'] = {'forks': sum(r['forks'] for r in rows.values()), 'ways': sum(sum(r['fork_ways']) for r in rows.values())}
     log('RESULT (kl_fa_bots_dyn): %s (%d FAIL, %d NOTE)' % ('PASS' if not any(s == 'FAIL' for s, _t in out) else 'FAIL',
                                                          sum(s == 'FAIL' for s, _t in out), sum(s == 'NOTE' for s, _t in out)))
     return out, facts
@@ -1534,22 +2205,32 @@ def describe(P, log=print):
         for ci, items in enumerate(b['chains']):
             if len(b['chains']) > 1:
                 log('  chain %d (%s)' % (ci + 1, 'from Timer_start_bots' if ci == 0 else 'started from outside the squad: the jump'))
-            for it in items:
-                if it['kind'] == 'rout':
-                    log('    %-44s walk %s%s' % (it['name'], ' -> '.join('(%d, %d, %d)' % tuple(p) for p in it['places']), '  SPRINT' if it['sprint'] else ''))
-                    fan = it.get('fan')
-                    if fan:
-                        log('    %-44s   + takes cover at %s' % (fan.get('name', ''), ' OR '.join(
-                            '(%d, %d, %d) %d from %s [%s]' % (*a['place'], a['from_cover'], a['cover'].split(BS)[-1], a['cover_kind']) for a in fan['alts'])))
-                elif it['kind'] == 'hold':
-                    log('    %-44s holds at (%d, %d, %d), %d from %s [%s]' % (it['name'], *it['place'], it['from_cover'], it['cover'].split(BS)[-1], it['cover_kind']))
-                elif it['kind'] == 'timer':
-                    log('    %-44s %g s' % (it['name'], it['seconds']))
-                elif it['kind'] == 'mod':
-                    log('    %-44s %s' % (it['name'], ' '.join(it['fields'].values())))
-                else:
-                    log('    %-44s the build\'s own %s%s' % (it['name'], it['what'], '' if it.get('loot_seconds') is None else
-                                                             ': until the loot is gone or %d s (the build: %d)' % (it['loot_seconds'], it['was'])))
+
+            def say(items, pad):
+                for it in items:
+                    if it['kind'] == 'fork':
+                        log('%s%-44s THE WAY FORKS, drawn per round: %d ways to (%d, %d, %d)' % (pad, it['name'], len(it['branches']), *it['to']))
+                        for n_b, br in enumerate(it['branches']):
+                            log('%s  way %d of %d, weight %d: %s, %d m%s' % (pad, n_b + 1, len(it['branches']), br['weight'],
+                                {'build': 'the build\'s way', 'real': 'ANOTHER CORRIDOR of the mesh', 'left': 'the build\'s way moved LEFT', 'right': 'the build\'s way moved RIGHT'}[br['kind']],
+                                br['length'] / 100, '' if br['items'] else ' (no step of its own: straight on)'))
+                            say(br['items'], pad + '      ')
+                    elif it['kind'] == 'rout':
+                        log('%s%-44s walk %s%s' % (pad, it['name'], ' -> '.join('(%d, %d, %d)' % tuple(p) for p in it['places']), '  SPRINT' if it['sprint'] else ''))
+                        fan = it.get('fan')
+                        if fan:
+                            log('%s%-44s   + takes cover at %s' % (pad, fan.get('name', ''), ' OR '.join(
+                                '(%d, %d, %d) %d from %s [%s]' % (*a['place'], a['from_cover'], a['cover'].split(BS)[-1], a['cover_kind']) for a in fan['alts'])))
+                    elif it['kind'] == 'hold':
+                        log('%s%-44s holds at (%d, %d, %d), %d from %s [%s]' % (pad, it['name'], *it['place'], it['from_cover'], it['cover'].split(BS)[-1], it['cover_kind']))
+                    elif it['kind'] == 'timer':
+                        log('%s%-44s %g s' % (pad, it['name'], it['seconds']))
+                    elif it['kind'] == 'mod':
+                        log('%s%-44s %s' % (pad, it['name'], ' '.join(it['fields'].values())))
+                    else:
+                        log('%s%-44s the build\'s own %s%s' % (pad, it['name'], it['what'], '' if it.get('loot_seconds') is None else
+                                                               ': until the loot is gone or %d s (the build: %d)' % (it['loot_seconds'], it['was'])))
+            say(items, '    ')
 
 
 def summary(P, log=print):
@@ -1557,12 +2238,16 @@ def summary(P, log=print):
     short = lambda c: c.split(BS)[-1].split('!')[-1]
     for N, b in P['bots'].items():
         pers = b['personality']
-        for ci, items in enumerate(b['chains']):
+        def words(items):
             out, i = [], 0
             while i < len(items):
                 it = items[i]
                 k = it['kind']
-                if k == 'timer':
+                if k == 'fork':
+                    kinds = {'build': 'the build\'s way', 'real': 'another corridor', 'left': 'to the left', 'right': 'to the right'}
+                    out.append('FORK (weights %s): %s' % (' / '.join(str(br['weight']) for br in it['branches']), ' OR '.join(
+                        '{%s: %s}' % (kinds[br['kind']], '; '.join(words(br['items'])) or 'straight on') for br in it['branches'])))
+                elif k == 'timer':
                     out.append('wait %g s' % it['seconds'])
                 elif k == 'mod':
                     out.append('[%s]' % ' '.join(v.replace('eDM_', '').replace('eLM_', '').replace('eVIM_Factor_2_0', 'vision x2').replace('eCSS_Enabled', 'sixth sense').lower() for v in it['fields'].values()))
@@ -1595,7 +2280,10 @@ def summary(P, log=print):
                 else:
                     out.append('the build\'s %s' % it['what'])
                 i += 1
-            log('- **Squad#0%s, %s**%s: %s' % (N, b['role'], '' if len(b['chains']) == 1 else ' (%s)' % ('tower' if ci == 0 else 'street, from the jump'), '; '.join(out)))
+            return out
+
+        for ci, items in enumerate(b['chains']):
+            log('- **Squad#0%s, %s**%s: %s' % (N, b['role'], '' if len(b['chains']) == 1 else ' (%s)' % ('tower' if ci == 0 else 'street, from the jump'), '; '.join(words(items))))
 
 
 def build(src, dst, opt=None, log=print):
@@ -1662,8 +2350,9 @@ def _png(path, w, h, rgb):
 def draw(folder, out, size=1800, log=print):
     """A top view of the squads of a build (dynamic or not) -> one PNG per navigation part the routes use:
     grey = the mesh's edges without a neighbour (walls, drops), white squares = cover boxes (hollow: created hidden),
-    one colour a bot: thin line = its walked places in order, dot = a place, ring = a hold place (a line joins it to
-    the route place it follows), big dot = where the bot stands at the start. Squad#02 red, 03 orange, 04 yellow,
+    one colour a bot: thin line = its walked places in order (dim: the build's way; BRIGHT: the other ways of a
+    fork, where a RandomTrigger draws per round), dot = a place, ring = a hold place (a line joins it to the route
+    place it follows), big dot = where the bot stands at the start. Squad#02 red, 03 orange, 04 yellow,
     05 green, 06 cyan, 07 blue, 08 violet."""
     B = F.Built(folder)
     sc, nav = B.sc, F.Nav(B.scene.nav)
@@ -1673,7 +2362,7 @@ def draw(folder, out, size=1800, log=print):
     routes = collections.defaultdict(list)             # part -> [(N, [walked places], [(route place, hold place)], start)]
     for sq, g in G.items():
         N = int(sc.names[sc.parent[g['actor']]][18])
-        for ci, chain in enumerate(g['chains']):
+        for ci, vi, chain in [(ci, vi, ch) for ci, cset in enumerate(g['sets']) for vi, ch in enumerate(cset)]:
             walked, holds, last = [], [], None
             for it in chain:
                 if it['ctrl'] != 'DefendBehaviourRout':
@@ -1681,20 +2370,21 @@ def draw(folder, out, size=1800, log=print):
                 pts = [B.at(j) for j in it['places']]
                 if it['v'][0] and not it['v'][1] and 'pos_cover' in it['name']:
                     holds.append((last, pts[0]))
+                    continue                            # (a hold is drawn as a ring beside the way, not as part of it)
                 walked += pts
-                last = pts[-1] if not ('pos_cover' in it['name']) else last
+                last = pts[-1]
                 for kind, j, alts in it['side']:
                     if kind in ('random', 'one'):
                         for a in alts:
                             va = g['ctrl'][a][1]
                             holds += [(pts[-1], B.at(x)) for x in sc.resolve(va[0])]
             if walked:
-                routes[part_of(walked[0])].append((N, walked, holds, B.at(g['actor']) if ci == 0 else None))
+                routes[part_of(walked[0])].append((N, walked, holds, B.at(g['actor']) if ci == 0 else None, vi))
     made = []
     for n_part, (part, rs) in enumerate(sorted(routes.items(), key=lambda kv: str(kv[0]))):
-        xs = [p[0] for _n, w, h, st in rs for p in w + [x[1] for x in h] + ([st] if st else [])]
-        zs = [p[2] for _n, w, h, st in rs for p in w + [x[1] for x in h] + ([st] if st else [])]
-        ys = [p[1] for _n, w, h, st in rs for p in w]
+        xs = [p[0] for _n, w, h, st, _v in rs for p in w + [x[1] for x in h] + ([st] if st else [])]
+        zs = [p[2] for _n, w, h, st, _v in rs for p in w + [x[1] for x in h] + ([st] if st else [])]
+        ys = [p[1] for _n, w, h, st, _v in rs for p in w]
         x0, x1, z0, z1 = min(xs) - 900, max(xs) + 900, min(zs) - 900, max(zs) + 900
         k = size / max(x1 - x0, z1 - z0)
         w, h = int((x1 - x0) * k) + 1, int((z1 - z0) * k) + 1
@@ -1739,9 +2429,11 @@ def draw(folder, out, size=1800, log=print):
                     for dy in range(-3, 4):
                         if not c['hidden'] or abs(dx) == 3 or abs(dy) == 3:
                             px(cx + dx, cy + dy, (250, 250, 250) if c['kind'] != 'low' else (170, 170, 170))
-        for N, walked, holds, st in rs:
+        # the further branch sets first, in the bot's full colour (the OTHER ways of its forks); then set 0 = the
+        # build's way at every fork, dimmer, over them: where a bright line leaves the dim one the way forks
+        for N, walked, holds, st, vi in sorted(rs, key=lambda r: -r[4]):
             c = COLOURS.get(N, (255, 255, 255))
-            dim = tuple(v * 2 // 3 for v in c)
+            dim = tuple(v * 2 // 3 for v in c) if vi == 0 else tuple(min(255, v + 25) for v in c)
             seq = ([st] if st else []) + walked
             for a, b in zip(seq, seq[1:]):
                 line(a, b, dim)
@@ -1761,15 +2453,18 @@ def draw(folder, out, size=1800, log=print):
 
 
 OWNER = (('y_loot2', 'M01'), ('y_loot2', 'M02'), ('y_loot2', 'M03'), ('y_loot2', 'M06'), ('rt_full4', 'retomoto_full'))
+# 2026-10-10 night, the random routes: the five bots builds that were on the owner's tab -> z_route\<map>
+ROUTE = (('z_gate', 'M01'), ('z_final', 'M02'), ('z_final', 'M03'), ('z_final', 'M06'), ('rt_full6', 'retomoto_full'))
 
 
 def options(a):
     opt = {}
     for flag, key, val in (('--no-random', 'random', False), ('--no-vision', 'vision', False), ('--no-rusher', 'rusher', False),
-                           ('--no-stagger', 'stagger', False), ('--no-tree', 'tree', False), ('--no-detour', 'detour', False)):
+                           ('--no-stagger', 'stagger', False), ('--no-tree', 'tree', False), ('--no-detour', 'detour', False),
+                           ('--no-routes', 'routes', False)):
         if flag in a:
             a.remove(flag); opt[key] = val
-    for flag, key in (('--sixth', 'sixth'), ('--gap', 'gap')):
+    for flag, key in (('--sixth', 'sixth'), ('--gap', 'gap'), ('--ways', 'ways')):
         if flag in a:
             i = a.index(flag)
             opt[key] = float(a[i + 1]); del a[i:i + 2]
@@ -1796,14 +2491,14 @@ def main():
         draw(a[1], a[2])
     elif len(a) == 2 and a[0] == 'summary':
         summary(json.load(open(os.path.join(a[1], 'dyn.json')), object_pairs_hook=collections.OrderedDict)['plan'])
-    elif len(a) >= 2 and a[0] == 'owner':
+    elif len(a) >= 2 and a[0] in ('owner', 'routes'):
         res = {}
-        for sub, d in OWNER:
+        for sub, d in (OWNER if a[0] == 'owner' else ROUTE):
             if a[2:] and d not in a[2:] and not (d == 'retomoto_full' and 'retomoto' in a[2:]):
                 continue
-            name = 'retomoto' if d == 'retomoto_full' else d
+            name = 'retomoto' if d == 'retomoto_full' and a[0] == 'owner' else d
             print('==== %s' % name)
-            out, _rep = build(os.path.join(a[1], sub, d), os.path.join(a[1], 'z_dyn', name), opt)
+            out, _rep = build(os.path.join(a[1], sub, d), os.path.join(a[1], 'z_dyn' if a[0] == 'owner' else 'z_route', name), opt)
             res[name] = not any(s == 'FAIL' for s, _t in out)
         for k, v in res.items():
             print('%s: %s' % (k, 'PASS' if v else 'FAIL'))

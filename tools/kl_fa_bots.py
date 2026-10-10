@@ -1872,6 +1872,19 @@ def apply(B, P, dst, log=print, more=None):
 
 
 # ------------------------------------------------------------------ the check
+def fork_branches(sc, mine):
+    """The RandomTriggers among the nodes `mine` -> {node: [first step of each branch]}: one entry per weight that
+    is not 0 and has a target (stock F07 Squad#02 040_RandomTrigger_out_of_loot_area: field 0 = 1, fields 1..4 the
+    weights, fields 5..8 one target list each). Used by check() here and in kl_fa_bots_rt to walk a chain that
+    forks (kl_fa_bots_dyn's random routes)."""
+    out = {}
+    for k, _i, v in kl_fa.controllers(sc, 'RandomTrigger'):
+        if k in mine:
+            br = [[j for s in lst for j in sc.resolve(s)] for w, lst in zip(v[1:5], v[5:9]) if w]
+            out[k] = [b[0] for b in br if b]
+    return out
+
+
 def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
     """Every check on a finished folder -> (list of (severity, text), facts). Severities: FAIL (must be none before
     an install), NOTE (differs from stock, said aloud). early_ok: a bot that enters a level exit box before its
@@ -1962,6 +1975,13 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
         for k, _i, v in kl_fa.controllers(sc, cn):
             if k in mine:
                 ctrl_of[k] = (cn, v)
+    # A RandomTrigger BETWEEN two steps (kl_fa_bots_dyn's random routes; this module's own plan makes none, so for
+    # its builds nothing changes): the chain forks there and every branch rejoins it at the next fixed place. The
+    # walk of section 3 is then made once per BRANCH SET v = 0, 1, ..: at each fork it takes branch v mod (the
+    # fork's number of branches). So EVERY branch of every fork is walked and put under every rule below - not
+    # every combination of branches (two forks are separated by a fixed place both ways pass, so a branch's
+    # places, its paths and its exit boxes do not depend on what was drawn at another fork).
+    rand_of = fork_branches(sc, mine)
     ally_boxes = [k for k, _i, _v in kl_fa.controllers(sc, 'AllyEscapeBox')]
     facts['ally_boxes'] = [name(k) for k in ally_boxes]
     # the cases: which container holds which loot object, which glass opens which container, which opens by itself
@@ -1990,12 +2010,28 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
     feet = []
     lane, lane_least, lane_cross, lane_path = lanes(B), collections.OrderedDict(), collections.OrderedDict(), collections.OrderedDict()
     hops = {(tuple(pa), tuple(pb)) for ds in nav.drops.values() for _j, pa, pb, _k in ds}
-    for top, actor in sorted(squads.items(), key=lambda kv: sc.names[kv[0]]):
+    # (branch sets: see rand_of above. A squad without a fork is walked once, as before; a fork met in branch set
+    # 0 adds the further sets to the list. Their findings are said once, their routes go to facts['route_branches'])
+    jobs = [(top, actor, 0) for top, actor in sorted(squads.items(), key=lambda kv: sc.names[kv[0]])]
+    said = set()
+    variant = 0
+    fail = lambda s: None if (variant and ('FAIL', s) in said) else (said.add(('FAIL', s)), out.append(('FAIL', s)))[0]
+    note = lambda s: None if (variant and ('NOTE', s) in said) else (said.add(('NOTE', s)), out.append(('NOTE', s)))[0]
+    facts['route_branches'] = collections.OrderedDict()
+    for top, actor, variant in jobs:
         first = [j for s in firsts for j in res(s) if sc.top[j] == top]
         places, seen, k, tight, waits, n_in = [], set(), first[0] if first else None, False, [], None
         opened, broken, relays = set(), set(), 0
+        widest = 1
         while k is not None and k not in seen:
             seen.add(k)
+            if k in rand_of and k not in ctrl_of:       # a fork: this branch set's branch of it
+                br = rand_of[k]
+                if len(br) < 2:
+                    fail('%s: RandomTrigger %s between two steps has %d branch(es) with a weight and a target' % (sc.names[top], name(k), len(br)))
+                widest = max(widest, len(br))
+                k = br[variant % len(br)] if br else None
+                continue
             cn, v = ctrl_of.get(k, (None, None))
             if cn is None:
                 fail('%s: the chain reaches %s, which has no behaviour or wait controller' % (sc.names[top], name(k))); break
@@ -2030,11 +2066,14 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
                         fail('%s: RelayMessageList %s sends %r to something that is no glass / no money container' % (sc.names[top], name(j), rv[1]))
             nx = [j for j in nx if j in ctrl_of] or [j for j in nx if j not in relay_of]
             k = nx[0] if nx else None
+        if variant == 0 and widest > 1:
+            jobs += [(top, actor, n_v) for n_v in range(1, widest)]
         if not places:
             fail('%s: no route place' % sc.names[top]); continue
         pts = [B.at(j) for j in places]
         sp = B.at(actor)
-        feet.append(sp)
+        if variant == 0:
+            feet.append(sp)
         # every place and the bot on a walkable polygon of the START row's part, clear of the walls
         low = 1e9
         for what_, p in [('the bot', sp)] + [(name(j), q) for j, q in zip(places, pts)]:
@@ -2075,7 +2114,10 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
                 if d < LANE_HALF + LANE_MAN:
                     fail('%s: place %d of %d, %s at (%d, %d, %d), is %d from the escape vehicle\'s line: IN ITS LANE (half width %d + %d)'
                          % (sc.names[top], n_p + 1, len(pts), 'the last place' if n_p == len(pts) - 1 else 'on the way out', *pts[n_p], d, LANE_HALF, LANE_MAN))
-            lane_least[sc.names[top]] = round(min(d for d, _n in near_l)) if near_l else None
+            least = round(min(d for d, _n in near_l)) if near_l else None
+            if variant and lane_least.get(sc.names[top]) is not None:       # (a further branch set: the least of all)
+                least = lane_least[sc.names[top]] if least is None else min(least, lane_least[sc.names[top]])
+            lane_least[sc.names[top]] = least
             # where the way out crosses the line: said, not failed - the bots walk on, they do not stand there.
             # 'sides' = two places that follow one another lie on different sides of it (the bot HAS to cross);
             # 'path' = only this module's stand-in path does (through the middles of the polygons' shared edges,
@@ -2135,12 +2177,23 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
                 bad = [s for s in v[0] if not any(sc.cls(c) == 'ZFFActor' for j in res(s) for c in range(j, sc.end[j]))]
                 if bad or not v[0]:
                     fail('%s: TriggerActorsDead names %d groups, %d without an actor (it has no time limit)' % (sc.names[top], len(v[0]), len(bad)))
-        routes[sc.names[top]] = {'bot': [round(v) for v in sp], 'places': [[round(v) for v in p] for p in pts], 'path_length': round(length),
-                                 'least_clearance': round(low), 'stage_1': st1, 'stage_3': st3, 'ends_in_ally_box': inbox,
-                                 'places_before_the_loot_wait': n_in,
-                                 'first_inside_a_level_exit_box': call and {'path': round(call[0]), 'place': call[1], 'box': name(call[2])},
-                                 'waits': [(cn, len(v[0]) if isinstance(v[0], list) else v[0], v[1]) for cn, v in waits],
-                                 'cases': {'relays': relays, 'glass_broken': len(broken), 'containers_opened': len(opened)}}
+        route = {'bot': [round(v) for v in sp], 'places': [[round(v) for v in p] for p in pts], 'path_length': round(length),
+                 'least_clearance': round(low), 'stage_1': st1, 'stage_3': st3, 'ends_in_ally_box': inbox,
+                 'places_before_the_loot_wait': n_in,
+                 'first_inside_a_level_exit_box': call and {'path': round(call[0]), 'place': call[1], 'box': name(call[2])},
+                 'waits': [(cn, len(v[0]) if isinstance(v[0], list) else v[0], v[1]) for cn, v in waits],
+                 'cases': {'relays': relays, 'glass_broken': len(broken), 'containers_opened': len(opened)}}
+        if variant == 0:
+            routes[sc.names[top]] = route
+        else:
+            facts['route_branches'].setdefault(sc.names[top], []).append(route)
+    variant = 0
+    if not facts['route_branches']:
+        del facts['route_branches']
+    else:
+        log('forks (a RandomTrigger between two steps): %s - every branch walked and checked, in %d branch sets'
+            % (', '.join('%s %d' % (nm[len(SQUAD):], 1 + len(v)) for nm, v in facts['route_branches'].items()),
+               1 + max(len(v) for v in facts['route_branches'].values())))
     facts['routes'] = routes
     if lane:
         vd = van_drives(B)
