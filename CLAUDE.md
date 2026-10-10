@@ -182,6 +182,13 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+GUN LOOKS, checked 2026-10-10 13:00 (agent t-guns; tools/kl_map_guns.py, re/map_guns.md; NOT RUN IN THE GAME): kl_guns' own way
+(variant byte 100 + n) CANNOT work - a gun entity has variant 0 and kl2 0x67cf84 then takes every object, so stock gun and all
+looks would be drawn in one another; what hides a part is bit 0x00800000 of the mesh object's dword +0x1c (0x67cf77). kl_map_guns
+BAKES one look per gun with that bit (Zastava=MP5, SCAR=SG 552, AK-47=M4A1, UMP=P90, MAC-10=Steyr TMP, M9=USP), KLGuns.ini
+Version 2. The Guns PAGE cannot switch until klgun.c takes Version 2 and writes the hide bit (re/map_guns.md 5; the lead's job).
+READY TO SWAP IN: <work>/build/rt_guns/retomoto_ai2_guns (= the installed rt_ai2 + looks; problems 0, kl_impact 0, table 65,213,
+.prm 79.4 MB, .TEX +8 MB). Live check G1 first: a Beretta carrier holds ONE pistol, a USP. Maps: <work>/build/t_guns/<map>.
 SLOT 2026-10-10 12:40 = <work>/build/rt_ai2/retomoto_ai2 (Retomoto v2, e5dd45c9) on the owner's word; load check RT2 PASS (level in 2.4 s, Kane + Wolf, GO, no fault). Van leave leg, enemy lethality and voices are for the owner to judge by playing.
 READY TO SWAP IN (2026-10-10 ~13:00, offline, NEVER LOADED): <work>/build/rt_ai2/retomoto_ai2 = kl-merge-b6's Retomoto v2
 (G:/kl_scratch/ai_dyn2, commit ca178fb, re/retomoto_ai.md 11) + wardrobe with the four plates + KLJoin.ini. Van: the parked car
