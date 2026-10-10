@@ -33,7 +33,8 @@ archive in a slot. Milestone A = two stock Dog Days levels (no Dead Men data): p
                                                dead vertex data emptied always, slim = S's dead map textures down to
                                                4 x 4, stored, level=N, stamp=now. re/loading.md says what each saves.
     python kl_graft.py lighten <build folder> <out folder> [--load trim,slim,level=6]
-                                               an existing build repacked with those options (default trim,slim);
+                                               an existing build repacked with those options (default trim,slim;
+                                               fxc = the shader cache cut to what the materials ask for);
                                                nothing is renumbered. Install it with 'install --from <out folder>'
     python kl_graft.py install [F01] [--from <folder>]   put the last build (or a kept one) into Dog Days
                                                (each stock file is MOVED to KL_PortBackup once, never overwritten)
@@ -370,7 +371,7 @@ TAKE = ('CameraFar', 'CameraFogBegin', 'CameraFogFull', 'CameraFogMin', 'CameraB
 LANGS = kl_package.LANGS
 PRM_LIMIT = 90000000                   # a joined .prm larger than this loses S's dead vertex data (build(); run RT1)
 STAMP = (2010, 8, 17, 12, 0, 0)        # time stamp of every archive member (write_zip): a constant, any valid date
-LOAD = {'stamp': True, 'level': 1, 'stored': False, 'trim': False, 'slim': False}   # load_options() defaults
+LOAD = {'stamp': True, 'level': 1, 'stored': False, 'trim': False, 'slim': False, 'fxc': False}   # load_options() defaults
 
 
 # ------------------------------------------------------------------ files in and out
@@ -486,6 +487,9 @@ def load_options(spec=None):
                  every Retomoto build (the PRM_LIMIT path); the bank never ran with it.
       slim       the .TEX's pictures that only S's dead map models show -> their smallest mip levels
                  (4 x 4 and below). Ids, names, formats and the material file stay. NOT LOADED LIVE.
+      fxc        the shader cache without the entries no material of the level asks for
+                 (kl_light.slim_cache: what every stock level's cache is). Use it on the FINISHED build
+                 ('lighten'), after the wardrobe and props: they add materials. NOT LOADED LIVE.
       stored     archive members uncompressed (write_zip: an ASSUMPTION about the reader).
       level=N    deflate level 1..9 (1 = what the builds had so far).
       stamp=now  the build time as the members' time stamp (default: the constant STAMP)."""
@@ -681,6 +685,10 @@ def relight(src, dst, opt=None, log=print):
     rep = {}
     if opt['trim'] or opt['slim']:
         files[ext['.prm']], files[ext['.TEX']], rep = lighten(files[ext['.prm']], files[ext['.TEX']], files[ext['.MAT']], live, hud, opt, log)
+    if opt['fxc']:
+        import kl_light
+        files[ext['.fxc']], frep = kl_light.slim_cache(T.read_mat(files[ext['.MAT']]), files[ext['.fxc']], log)
+        rep.update({'fxc ' + k: v for k, v in frep.items()})
     os.makedirs(dst, exist_ok=True)
     if os.path.abspath(dst) == os.path.abspath(os.path.dirname(zp)):
         raise ValueError('relight: the output folder is the build\'s own')

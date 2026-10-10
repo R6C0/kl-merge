@@ -460,6 +460,43 @@ def missing_shaders(mat, fxc, slots=None):
     return out
 
 
+ALWAYS_FX = {'sprite.fx'}      # in the cache of all 21 stock Dog Days levels although no material asks for it
+
+
+def slim_cache(mat, fxc, log=print):
+    """The cache `fxc` (bytes) without the entries nothing asks for -> (bytes, report).
+    Kept, in their order: the first entry of every effect a material instance of `mat`
+    (kl_texmat.Mat, as it is shipped: run fit_shaders first) asks for, and of ALWAYS_FX.
+    Why this is what a level needs: measured 2026-10-10 on all 21 stock Dog Days levels, their
+    1965 cache entries are exactly that - every entry is asked for by a material of its own level
+    (shader_needs), except sprite.fx / SPRITES, which all 21 have; no level has a key twice.
+    A grafted Dead Men map ships the systems level's cache + build/shared/union.fxc (every stock
+    entry there is): Retomoto 242 entries, 16.9 MB, of which its materials ask for 129 effects =
+    9.0 MB. The file is read whole into one heap block at load (klhook/klmem.c): 8 MB of address
+    space. Where two entries have the same effect, file and defines the first stays - ASSUMPTION:
+    the game's look-up (kl2 0x8b8fd0 walks the cache in order) takes the first too.
+    NOT LOADED LIVE."""
+    import kl_mat, kl_texmat
+    ver, ent = kl_mat.read_fxc(fxc)
+    need = set()
+    for s in mat.insts:
+        need |= set(shader_needs(mat, mat.insts[s]))
+    out, seen, twice = [], set(), 0
+    for head, blob in ent:
+        d = [n for n, _v in kl_texmat.fxc_defines(head)]
+        k = (head[0x810:0x850].split(b'\0')[0].decode('latin1').lower(), d[0], frozenset(d[1:]))
+        if k in seen:
+            twice += 1
+        elif k in need or k[0] in ALWAYS_FX:
+            seen.add(k); out.append((head, blob))
+    new = kl_mat.write_fxc(out, ver)
+    rep = {'entries before': len(ent), 'entries after': len(out), 'effects asked for': len(need), 'same effect twice': twice,
+           'asked for but not in the cache': len(need - seen), 'bytes before': len(fxc), 'bytes after': len(new)}
+    log('  shader cache: %d -> %d entries, %.2f -> %.2f MB (%d effects asked for by %d materials, %d of them in no entry; %d later copies of an effect dropped)' % (
+        len(ent), len(out), len(fxc) / 1048576, len(new) / 1048576, len(need), len(mat.insts), rep['asked for but not in the cache'], twice))
+    return new, rep
+
+
 def fit_shaders(mat, fxc, slots=None, log=print):
     """Give every material instance (kl_texmat.Mat, edited in place) a shader permutation the
     cache `fxc` (bytes of the .fxc the level ships) holds: where an instance asks for an effect

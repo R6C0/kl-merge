@@ -194,7 +194,12 @@ pieces ... in use ...' line per level load, and its dumps carry the region list 
 what stays behind after a level and cuts the space - is NOT known; read those lines after the owner's next session.
 BUDGET for the builders: the five blocks are 32.0 scratch, .fxc + 0x60000, .prm + 0x60000, .ANM + 0x60000 and the WHOLE
 <level>.WAV beside the archive. Stock F01: .fxc 5.9, .prm 63.5, .ANM 19.8, .WAV 14.7 MB; Retomoto: 16.9, 74.2, 20.6, 25.9 MB =
-34 MB more than stock in large blocks. Slimming the merged .fxc (shaders nothing uses) and .WAV (sounds nothing plays) is open. LIVE RUN OWED: scratchpad now/M8.ini (six loads in one process)
+34 MB more than stock in large blocks. .fxc DONE OFFLINE, NOT LOADED LIVE: `kl_graft.py lighten <build> <out> --load fxc`
+(kl_light.slim_cache) keeps what the materials ask for + sprite.fx, which is exactly what all 21 stock levels' caches hold:
+Retomoto 242 -> 129 entries, 16.9 -> 8.9 MB; candidate <work>/build/fxc_slim/retomoto_loot (only the .fxc member differs from
+the installed build; live check F1 = it looks the same). The .WAV (sounds nothing plays) is still open.
+Known, older: material Weapons/BombWindow_02 (the bomb on the boardroom window) asks for glow30.fx MESH_RIGID, which no
+cache has - it is not drawn. LIVE RUN OWED: scratchpad now/M8.ini (six loads in one process)
 - it did not start because STEAM IS AT ITS SIGN-IN WINDOW (01:25; nobody signs in but the owner). Then try [Memory] ReserveMB=176
 RoomMB=128 (all five blocks in the reserve from the second load on; klmem.c's comment). Also third DiscordHook.dll+0x1f7fd fault
 at 00:25 (same callers as 17:55). Sessions now: kl-merge-01 = this one, holds the game; kl-merge-39 = Payday 2 masks + Heister
