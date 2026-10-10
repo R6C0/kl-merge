@@ -182,6 +182,12 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+OWNER 2026-10-10 ~21:40: the blast after the whole line 'comes too late now' -> the bang goes ON Kane's 'NOW!' (kl-merge-b6 v5:
+BLAST_DELAY 12.5 = blast 16.5 s after the event; the lead's chain builds <work>/build/rt_full5 and tree w_tab6). RANDOM CREW SEEN BY
+THE OWNER on the bank ('the ai heisters do go random on withdrawl'); on Retomoto not seen (the installer had reset [Crew] to 0:
+fixed). NEW FAULT: 'on late night i think the thing u did broke my shoulder leaning but withdrawl its fine' - workflow
+wf_3cfb5265-08b (re/lean_m02.md). Bank with bots: 'once the garage door comes open literally just get slimed out' = the bots die at
+the garage door; the bots-dynamic workflow has it.
 OWNER, 2026-10-10 ~21:00, after playing the swap of 20:35 (tree w_tab5, hook ship_all4, [Balance] Risk=2): 'the difficulty i love ...
 but damn the ai heisters just path the same then die so quick now because of the changes ... make them more dynamic give them a bit
 of personality ... utilise cover and they know whos infront of them'; THE COUNTDOWN IS RIGHT NOW ('the explosion actually plays
