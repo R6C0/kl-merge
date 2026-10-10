@@ -182,6 +182,13 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+OWNER, 2026-10-10 ~21:00, after playing the swap of 20:35 (tree w_tab5, hook ship_all4, [Balance] Risk=2): 'the difficulty i love ...
+but damn the ai heisters just path the same then die so quick now because of the changes ... make them more dynamic give them a bit
+of personality ... utilise cover and they know whos infront of them'; THE COUNTDOWN IS RIGHT NOW ('the explosion actually plays
+after the whole voiceline'); 'bain voice lines are all amazing'; Late Night Opening's cases not checked yet. So LIVE BY THE OWNER:
+balance Risk=2, Retomoto v4 blast timing, Bain, the talk. Interim: [Balance] CopToCrew=0.6 in the owner's ini (read at the next
+start). RUNNING: wf_0348ba9c-840 bots-dynamic (re/bots_dynamic.md -> tools/kl_fa_bots_dyn.py -> <work>/build/z_dyn/<map>, review)
+and wf_e36051ed-52b van-plus-bots (<work>/build/z_final).
 STATE 2026-10-10 20:30. RULE FROM THE OWNER: while they are at the PC, testing is WATCH-ONLY (SHIP hook, tools/kl_watch.py running,
 KLHook.log) - no scripted TEST-hook runs unless they say they are away. PENDING AUTO-SWAP when they close the game (background
 task, scratchpad now/swap5.py): tree <work>/build/w_tab5/KLExpansion = four maps <work>/build/y_loot2/<map> (bots open Late Night's
