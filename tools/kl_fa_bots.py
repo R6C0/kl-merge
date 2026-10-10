@@ -35,6 +35,13 @@ driver, van, help up), re/bots_voice.md (the heisters' lines). OFFLINE: nothing 
                                piece), a gather place in front of it inside an AllyEscapeBox as the fall-back
       --lane                   the places of the way out keep LANE_CLEAR from the escape car's spline routes and stay on
                                the side the bots come from (the builds of the afternoon had bots waiting IN the road)
+    A KEY-FRAMED VAN (a build of `kl_map_escape.py van`: ONE OnlineEscAnimatedVehicle; 2026-10-10 night, re/bots.md 13)
+      needs no option: its lane is the line of its position keys (van_drives) and is always kept clear; the bots end
+      in an AllyEscapeBox PARK_SIDE beside its boarding box AT THE STOP, on the side they come from (the box itself
+      rides on the van and lies at the waiting place in the file; a place ON the line is where the van's nose
+      passes). With --drop the gather place in front of the one-way drop gets a second AllyEscapeBox.
+      check() FAILs a place of the way out or a last place nearer than LANE_HALF + LANE_MAN to the vehicle's line
+      (spline car or van), and a place beyond a one-way drop whose place before it is in no AllyEscapeBox.
     options
       --ally-box auto|on|off   an AllyEscapeBox at the boarding place with every bot's last place inside it (the form of
                                stock F02 F06 F08). auto (default): on when the vehicle is a helicopter or when the
@@ -138,6 +145,13 @@ GATE_BACK = 140.0       # GUESS: the gather place in front of a drop link lies t
 LANE_CLEAR = 250.0      # GUESS (option lane): a place on the way out is at least this far from the escape car's route
                         # in the plan (the van's wheels stand 98 to either side, tools/kl_map_escape.py; a man is 30)
 LANE_REACH = 500.0      # ... and is looked for within this of the shortest path
+LANE_HALF = 100.0       # half the width of the escape vehicle's body (kl_map_escape.HALF; the van's KillBox is 90 x 100 x 56)
+LANE_MAN = 60.0         # GUESS: clearance of a standing bot from the body's side (a person's radius is 30, CLEAR is 60)
+                        # check(): a way-out or park place nearer than LANE_HALF + LANE_MAN to the vehicle's line is a FAIL
+PARK_SIDE = 420.0       # a key-framed van: the middle of the bots' AllyEscapeBox stands this far to the side of the van's
+                        # line (the seven places lie within INSIDE x 350 = 157 of it: all at least LANE_CLEAR from the line)
+PARK_REACH = 900.0      # ... and within this of the van's boarding box at the stop
+PARK_NEAR = 3.0         # GUESS: weight of the distance to the boarding box against the length of the walk there
 LOOT_LINK = 900.0       # loot objects nearer than this to one another are one loot area
 LOOT_SNAP = 400.0       # a loot object farther than this from the START row's mesh part is not a bot's business
 LOOT_MAX = 38           # most objects a stock TriggerLootDepleted names (F08)
@@ -684,12 +698,57 @@ def prepare(B, opt=None, log=print):
     return out
 
 
-def lanes(B):
-    """The routes of the map's escape CAR in world space -> [[(x, y, z), ...]] (incoming, escaping): the
-    ZEditorSpline below each of OnlineEscHavokCar's fields 0 and 1 (12 bytes of header, then 24 bytes a point: x, y, z
-    in the spline node's frame, an angle, 10.0, four unset bytes - tools/kl_map_escape.spline). A helicopter's
-    routes are left out (nobody stands in its way), and so is a vehicle whose route is not a spline (a baked van)."""
+def van_drives(B):
+    """The key-framed escape vans of a build (OnlineEscAnimatedVehicle: stock F07's van as tools/kl_map_escape.py
+    lays it on a Dead Men road, Retomoto's three) -> [dict], world space:
+      line   the van's position keys from the first frame of its drive in to the last of its drive away, in order
+             (field 1 / 2 of the controller name the two MatPosAnimProxy pieces on the node of field 11; the keys
+             are decoded by kl_map_escape.VanKeys and stand in the frame of the van's parent)
+      wait / stop / end   the key of frame 0, of the last frame of the drive in, of the last of the drive away
+      board  where the van's boarding box (field 0, a child of the van) stands while the van is at the stop. IN THE
+             FILE that box lies at the WAITING place, with the van - stations() reads the file
+      seconds  (drive in, wait at the stop, drive away) = (frames / 25, field 15, frames / 25)
+    A van whose pieces cannot be read is left out (the build is then planned as before 2026-10-10 night)."""
     sc, out = B.sc, []
+    vans = kl_fa.controllers(sc, 'OnlineEscAnimatedVehicle')
+    if not vans:
+        return out
+    import kl_graft
+    import kl_map_escape as E
+    ends = None
+    for k, _i, v in vans:
+        try:
+            box, proxy, van = (sc.resolve(v[i])[0] for i in (0, 11, 12))
+            legs = E._leg_frames(sc, proxy)
+            (f0, f1), (g0, g1) = legs[v[1]], legs[v[2]]
+            if ends is None:
+                ends = sorted({o for e in B.ents if e.raw for _p, oo in kl_graft.keys_tracks(e.raw) for o in oo} | {len(B.scene.head)})
+            K = E.VanKeys(B.scene.head, B.ents[van - 1].raw, ends, kl_graft.keys_tracks)
+        except (IndexError, KeyError, TypeError, ValueError, StopIteration):
+            continue
+        par = sc.parent[van]
+        w = (lambda p: B.world(par, p)) if par > 0 else (lambda p: tuple(p))
+        idx = list(dict.fromkeys(K.f2p[f] for f in range(f0, g1 + 1)))
+        stop = w(K.pos[K.f2p[f1]])
+        h = math.radians(K.yaw(K.rot[K.f2r[f1]]))
+        back = -struct.unpack_from('<3f', B.ents[box - 1].trans, 0)[2] if sc.parent[box] == van else 0.0
+        out.append({'node': k, 'name': sc.path[k][5:], 'line': [w(K.pos[i]) for i in idx],
+                    'wait': w(K.pos[K.f2p[0]]), 'stop': stop, 'end': w(K.pos[K.f2p[g1]]),
+                    'board': (stop[0] - back * math.sin(h), stop[1] - 2.0, stop[2] - back * math.cos(h)),
+                    'heading': math.degrees(h), 'seconds': ((f1 - f0) / 25.0, v[15], (g1 - g0) / 25.0)})
+    return out
+
+
+def lanes(B):
+    """The road of the map's escape vehicle in world space -> [[(x, y, z), ...]].
+    A spline CAR (OnlineEscHavokCar over a ZHavokCar; incoming, escaping and the stretch between): the
+    ZEditorSpline below each of fields 0 and 1 (12 bytes of header, then 24 bytes a point: x, y, z
+    in the spline node's frame, an angle, 10.0, four unset bytes - tools/kl_map_escape.spline). A helicopter's
+    routes are left out (nobody stands in its way).
+    A key-framed VAN (OnlineEscAnimatedVehicle; re/play_fixes_review.md D3): the polyline of its position keys from
+    the first frame of the drive in to the last of the drive away (van_drives). Until 2026-10-10 night a baked van
+    gave no lane, and the bots of a van build were placed ON its drive with every checker passing."""
+    sc, out = B.sc, [d['line'] for d in van_drives(B) if len(d['line']) > 1]
     for k, _i, v in kl_fa.controllers(sc, 'OnlineEscHavokCar'):
         if not any(sc.cls(j) == 'ZHavokCar' for j in range(k, sc.end[k])):
             continue
@@ -707,6 +766,18 @@ def lanes(B):
             mine.append([mine[0][-1], mine[1][0]])
         out += mine
     return out
+
+
+def _crosses(lane, u, w, dy=400.0):
+    """Does the walk u -> w cross one of the lines `lane` in the plan (segments within dy of u's height)?"""
+    o = lambda a, b, c: (b[0] - a[0]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[0] - a[0])
+    for pts in lane:
+        for a, b in zip(pts, pts[1:]):
+            if min(abs(a[1] - u[1]), abs(b[1] - u[1])) > dy:
+                continue
+            if o(a, b, u) * o(a, b, w) < 0 and o(u, w, a) * o(u, w, b) < 0:
+                return True
+    return False
 
 
 def lane_dist(lane, p, dy=400.0):
@@ -883,6 +954,20 @@ def plan(B, opt=None, log=print):
     if act is None:
         raise ValueError('no boarding action (PlayerAction EnterVehicle)')
     ap = B.at(act)
+    # a key-framed van (tools/kl_map_escape.py van): its boarding box rides on the van, so in the FILE it lies at the
+    # waiting place (M01: 49 m from the stop, outside the level bound). The round's boarding place is the box's place
+    # while the van STANDS AT THE STOP - on the van's own line, 337 behind its origin, where its nose passes on the
+    # way in. So the bots do not end there (re/play_fixes_review.md D3) but in an AllyEscapeBox PARK_SIDE to the side.
+    van = van_drives(B) if S['vehicle'] and S['vehicle'][0] == 'OnlineEscAnimatedVehicle' else []
+    van = van[0] if len(van) == 1 else None             # (Retomoto's three vans are kl_fa_bots_rt's: planned as before)
+    park_c = []
+    if van:
+        ap = van['board']
+        P['van'] = {k: ([round(x, 1) for x in van[k]] if k != 'seconds' else list(van[k])) for k in ('wait', 'stop', 'end', 'board', 'seconds')}
+        P['van']['keys_on_the_line'] = len(van['line'])
+        log('escape van %s: waits (%d, %d, %d), stops (%d, %d, %d) after %.2f s, stands %.1f s, ends (%d, %d, %d) after %.2f s; its boarding box at the '
+            'stop: (%d, %d, %d) (in the file it lies at the waiting place)' % (van['name'].split('\\')[-1], *van['wait'], *van['stop'], van['seconds'][0],
+                                                                              van['seconds'][1], *van['end'], van['seconds'][2], *ap))
     park0 = on(ap, lo=B.box(act)[1] + 200.0, hi=B.box(act)[1])
     split = park0 is None
     if split:
@@ -900,6 +985,15 @@ def plan(B, opt=None, log=print):
         park0, split = s, True
         notes.append('--park: the bots end at (%d, %d, %d), %d from the boarding action in the plan and %d below / above it, in an AllyEscapeBox'
                      % (*park0[:3], math.hypot(park0[0] - ap[0], park0[2] - ap[2]), park0[1] - ap[1]))
+    elif van:
+        # every place beside the van's rear at the stop; the one of them the bots end at is chosen when the last
+        # loot stop is known (below: the side they come from)
+        park_c = [x for x in nav.around(ap, PARK_REACH, home, dy=260.0)
+                  if lane_dist([van['line']], x) >= PARK_SIDE and nav.clearance(*x[:3]) >= CLEAR]
+        if not park_c:
+            raise ValueError('no place on the mesh part of the START row within %d of the van\'s boarding box at the stop (%d, %d, %d) that is %d '
+                             'from the van\'s line: give --park x,y,z' % (PARK_REACH, *ap, PARK_SIDE))
+        park0, split = min(park_c, key=lambda x: math.dist(x[:3], ap)), True
     heli = S['vehicle'] and S['vehicle'][2] == 'ZHeli'
     ally = {'on': True, 'off': False}.get(opt['ally_box'], bool(split or heli))
     if split and not ally:
@@ -1012,6 +1106,18 @@ def plan(B, opt=None, log=print):
                     n + 1, len(a), worth(a), ', '.join(name(x[0]).split('\\')[-1] for x in a[:3]) + (' ..' if len(a) > 3 else '')),
                 a[0][3], None, None) for n, a in enumerate(stops)]
     last = (l_items or head)[-1][2]                     # where the way out begins
+    if park_c:
+        # the van's park place: beside its boarding box, on the side the bots come from (path from the last loot stop
+        # + PARK_NEAR x the distance to the box: a place across the van's line costs the way round its rear or nose,
+        # a place up the road costs its distance from the doors)
+        dm = nav.dist_map(last[3], last[:3])[0]
+        cc = [x for x in park_c if x[3] in dm]
+        if not cc:
+            raise ValueError('no park place beside the van can be reached from the last loot stop: give --park x,y,z')
+        park0 = min(cc, key=lambda x: dm[x[3]] + math.dist(x[:3], nav.mid[x[3]]) + PARK_NEAR * math.hypot(x[0] - ap[0], x[2] - ap[2]))
+        notes.append('KEY-FRAMED VAN: the bots end at (%d, %d, %d), %d to the side of the van\'s line and %d from its boarding box at the stop '
+                     '(%d, %d, %d), in an AllyEscapeBox: they are taken aboard from there when the van stands (kl2 0x907a50), they do not walk '
+                     'to its doors' % (*park0[:3], lane_dist([van['line']], park0), math.hypot(park0[0] - ap[0], park0[2] - ap[2]), *ap))
 
     def tail(pos):
         """The EXITS_BANK station put after `pos` of the stops (0 = before the first: a map whose loot lies beyond
@@ -1087,10 +1193,12 @@ def plan(B, opt=None, log=print):
     # ---- the anchors' path, the stations between them, seven places per station
     route, total, gates = [], 0.0, []
     # option lane: on the way out (after the last loot wait) nobody is sent to stand in the escape car's road
-    lane = lanes(B) if opt['lane'] else []
+    # (a key-framed van: always. It drives through whatever stands on its line; a spline car at least was a physics body)
+    lane = lanes(B) if opt['lane'] or van else []
     off = lambda c: lane_dist(lane, c) >= LANE_CLEAR
     if lane:
-        log('escape car: %d route(s), %d points; the places of the way out keep %d from them where the mesh allows' % (len(lane), sum(len(x) for x in lane), LANE_CLEAR))
+        log('escape %s: %d route(s), %d points; the places of the way out keep %d from them where the mesh allows' % (
+            'van' if van else 'car', len(lane), sum(len(x) for x in lane), LANE_CLEAR))
     hops = {(tuple(pa), tuple(pb)) for ds in nav.drops.values() for _j, pa, pb, _k in ds}
     i_loot = max([i for i, it in enumerate(seq) if it[0] == 'loot'], default=None)
     for leg, ((ka, _wa, a, _na, _ca), (kb, wb, b, nb_, cb)) in enumerate(zip(seq, seq[1:])):
@@ -1127,6 +1235,7 @@ def plan(B, opt=None, log=print):
                     # beside the road, and on the side they come from: a place across the road costs the way back
                     c = [x for x in nav.around(m, LANE_REACH, home, dy=260.0) if off(x)]
                     back = route[-1][2] if route else a
+                    c = [x for x in c if not _crosses(lane, back, x)] or c     # not across the road when a place this side will do
                     c.sort(key=lambda x: math.dist(x[:3], m) + 0.5 * math.dist(x[:3], back[:3]))
                     s = (nav.spots(c[:60], 1, 0.0, ref=c[0]) or [None])[0] if c else None
                 s = s or snap(m, 260.0)
@@ -1147,8 +1256,8 @@ def plan(B, opt=None, log=print):
         return min(c, key=lambda x: math.dist(x[:3], anchor[:3]) + 0.5 * math.dist(x[:3], came[:3]))
     for kind, what, anchor, node, cands, _len, pre in route:
         keep = (lambda c: [x for x in c if okp(x)] or c) if pre else (lambda c: c)
-        if lane and after_loot and not pre:             # the way out: beside the car's road
-            keep = lambda c: [x for x in c if off(x)] or c
+        if lane and after_loot and not pre:             # the way out: beside the car's road, and on the side they are on
+            keep = lambda c, came=came: [x for x in c if off(x) and not _crosses(lane, came, x)] or [x for x in c if off(x)] or c
             if kind == 'level' and node is not None:
                 # the whole box counts here, not its middle INSIDE share: the three size values ARE half extents
                 # (run BOT1 / BOT2: M01's bots called the car at a door 7 inside the box's edge, re/bots.md 11),
@@ -1174,6 +1283,11 @@ def plan(B, opt=None, log=print):
         elif kind == 'park':
             if ally:
                 c = box_places(B, nav, None, home, size=ALLY_SIZE, centre=(anchor[0], anchor[1] + ALLY_UP, anchor[2]))
+                if lane:                                # D3 b: the box may reach into the road, the seven places do not
+                    if len([x for x in c if off(x)]) >= 7:
+                        c = [x for x in c if off(x)]
+                    else:
+                        notes.append('the AllyEscapeBox: fewer than 7 places %d from the escape vehicle\'s line inside it; check() says which stand nearer' % LANE_CLEAR)
                 got = nav.spots(c, 7, 90.0, ref=anchor) or [anchor]
                 if len(got) < 7:
                     got = nav.spots(c, 7, 60.0, ref=anchor) or got
@@ -1209,8 +1323,22 @@ def plan(B, opt=None, log=print):
         ally_at = (gates[0][0], gates[0][1] + ALLY_UP, gates[0][2])
         notes.append('an AllyEscapeBox stands at the drop, round (%d, %d, %d): the fall-back if the AI does not take the link (kl2 0x907a50 boards a '
                      'bot inside it when the vehicle is in state 3 / 4); a bot that takes the link boards at the vehicle through the tactic' % ally_at)
+    # D4 (re/play_fixes_review.md): the bots end in a box beyond a one-way drop (M03 with the van: the box beside
+    # the van, on the street). If the AI does not take the hand-written link - never seen - seven bots would stand
+    # in the yard for the rest of the round with nothing to take them aboard. So the gather place in front of EVERY
+    # drop gets a box of its own as well (stock F02 / F06 have eight boxes each): both sides work.
+    ally_more = []
+    if ally and opt['ally_box'] != 'off':
+        for g in gates:
+            at = (g[0], g[1] + ALLY_UP, g[2])
+            if ally_at and all(abs(at[i] - ally_at[i]) <= ALLY_SIZE[i] * INSIDE for i in range(3)):
+                continue                                # the main box already holds the gather place
+            ally_more.append(at)
+            notes.append('a second AllyEscapeBox stands at the drop, round (%d, %d, %d): the drop is one way, and a bot the link does not carry '
+                         'is taken aboard from the gather place there when the vehicle stands (kl2 0x907a50)' % at)
     P['gates'] = [[round(v, 1) for v in g[:3]] for g in gates]
     P['ally_at'] = ally_at and [round(v, 1) for v in ally_at]
+    P['ally_more'] = [[round(v, 1) for v in a] for a in ally_more]
     # ---- the cases (option cases). A loot object of type CONTAINER cannot be taken before its OnlineMoneyContainer
     # was opened (kl2 0x766e50 -> after the container's own delay 0x868fb0 makes each object of its field 0 active;
     # an object that is not active ignores the take message, 0x6cdb8f). Stock containers are opened by their own
@@ -1549,13 +1677,14 @@ def make(B, P, log=print):
     M.place(t, (0.0, 0.0, 0.0))
     M.set(t, 'TriggerDelay2', {0: float(opt['start_delay']), 1: 0.0, 2: -1.0, 3: 0, 4: first})
     tops.append(t)
-    if P['ally_at']:
+    # the boxes: the one the bots end in, then (D4) one at the gather place in front of each one-way drop
+    for n, at in enumerate(([P['ally_at']] if P['ally_at'] else []) + list(P.get('ally_more') or [])):
         sc, _e = Maker.level('F02')
         k = kl_fa.controllers(sc, 'AllyEscapeBox')[0][0]
-        a = M.clone('F02', k, SQUAD + 'AllyEscapeBox')
+        a = M.clone('F02', k, SQUAD + 'AllyEscapeBox' + ('_%02d' % (n + 1) if n else ''))
         a.ctrls = [c for c in a.ctrls if M.p.key(c[0]) == 'AllyEscapeBox']     # F02's box is also the players' boarding action
         a.flags &= ~0x400                               # F02's is created hidden (flag 0x400, ZGEOM[3] = 1) and switched on by
-        M.place(a, P['ally_at'])                        # ActivateGeom when its helicopter comes. ASSUMPTION: a box that is
+        M.place(a, at)                                  # ActivateGeom when its helicopter comes. ASSUMPTION: a box that is
         M.set(a, None, {'ZGEOM[3]': 0, 'ZBoxPrimitive[0]': ALLY_SIZE[0], 'ZBoxPrimitive[1]': ALLY_SIZE[1], 'ZBoxPrimitive[2]': ALLY_SIZE[2]})
         tops.append(a)                                  # never hidden ticks from the start (0x907a50 has no flag of its own
     return M, tops                                      # and boards only in vehicle state 3 / 4: slot 45, 0x6840a0)
@@ -1859,6 +1988,8 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
     ap = act and B.at(act)
     routes = collections.OrderedDict()
     feet = []
+    lane, lane_least, lane_cross, lane_path = lanes(B), collections.OrderedDict(), collections.OrderedDict(), collections.OrderedDict()
+    hops = {(tuple(pa), tuple(pb)) for ds in nav.drops.values() for _j, pa, pb, _k in ds}
     for top, actor in sorted(squads.items(), key=lambda kv: sc.names[kv[0]]):
         first = [j for s in firsts for j in res(s) if sc.top[j] == top]
         places, seen, k, tight, waits, n_in = [], set(), first[0] if first else None, False, [], None
@@ -1917,15 +2048,46 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
             if c < CLEAR_MIN:
                 fail('%s at (%d, %d, %d): %d from a mesh edge without a neighbour (least %d)' % (what_, *p, c, CLEAR_MIN))
         # connected, in order: a path on the mesh from the bot through every place
-        length, prev, ok = 0.0, sp, True
-        for p in pts:
+        length, prev, ok, walked = 0.0, sp, True, []
+        for n_p, p in enumerate(pts):
             a, b = nav.at(prev[0], prev[1], prev[2], dy=15.0), nav.at(p[0], p[1], p[2], dy=15.0)
             got = a and b and nav.path(tuple(prev) + (a[0],), tuple(p) + (b[0],))
             if not got:
                 ok = False; break
+            walked.append(got[0])
+            # D4: beyond a one-way link nothing brings a bot back. The place it stands at before the link must be
+            # inside an AllyEscapeBox, or a bot the link does not carry (the AI taking a hand-written link was
+            # never seen) waits there for the rest of the round
+            if any((tuple(u), tuple(w)) in hops for u, w in zip(got[0], got[0][1:])) and ally_boxes \
+                    and not any(B.in_box(x, prev) for x in ally_boxes):
+                fail('%s: place %d lies beyond a one-way drop link and the place before it, (%d, %d, %d), is in no AllyEscapeBox: a bot the '
+                     'link does not carry is never taken aboard' % (sc.names[top], n_p + 1, *prev))
             length += got[1]; prev = p
         if not ok:
             fail('%s: no path on the mesh along its places' % sc.names[top])
+        # D3: the escape vehicle's road. A place of the way out (after the last loot wait) or the last place nearer
+        # than the body's half width + a man to the vehicle's line is IN its lane: a key-framed van drives through
+        # whatever stands there (and carries a KillBox at its nose)
+        if lane:
+            first_out = n_in if n_in is not None else len(pts) - 1
+            near_l = [(lane_dist(lane, p), n_p) for n_p, p in enumerate(pts) if n_p >= first_out]
+            for d, n_p in near_l:
+                if d < LANE_HALF + LANE_MAN:
+                    fail('%s: place %d of %d, %s at (%d, %d, %d), is %d from the escape vehicle\'s line: IN ITS LANE (half width %d + %d)'
+                         % (sc.names[top], n_p + 1, len(pts), 'the last place' if n_p == len(pts) - 1 else 'on the way out', *pts[n_p], d, LANE_HALF, LANE_MAN))
+            lane_least[sc.names[top]] = round(min(d for d, _n in near_l)) if near_l else None
+            # where the way out crosses the line: said, not failed - the bots walk on, they do not stand there.
+            # 'sides' = two places that follow one another lie on different sides of it (the bot HAS to cross);
+            # 'path' = only this module's stand-in path does (through the middles of the polygons' shared edges,
+            # which on a street polygon is the middle of the road; the game's own pathfinder was not read)
+            seq = ([sp] + pts)[first_out:]
+            for u, w in zip(seq, seq[1:]):
+                if _crosses(lane, u, w):
+                    lane_cross[sc.names[top]] = [round(v) for v in w]
+            for poly in walked[first_out:] if ok else []:
+                for u, w in zip(poly, poly[1:]):
+                    if _crosses(lane, u, w):
+                        lane_path[sc.names[top]] = [round(v) for v in u]
         # the level exit boxes: an actor with a crew record inside one CALLS THE ESCAPE VEHICLE (kl2 0x6c3d50 ->
         # ZGameRulesHeist slot 44, 0x6cd8e0); the round then ends one vehicle cycle + 60 s later (runs BOT1 / BOT2)
         call = first_exit_entry(B, nav, S['exits'], [sp] + pts) if S['exits'] else None
@@ -1980,6 +2142,31 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
                                  'waits': [(cn, len(v[0]) if isinstance(v[0], list) else v[0], v[1]) for cn, v in waits],
                                  'cases': {'relays': relays, 'glass_broken': len(broken), 'containers_opened': len(opened)}}
     facts['routes'] = routes
+    if lane:
+        vd = van_drives(B)
+        facts['lane'] = {'vehicle': 'key-framed van' if vd else 'spline car', 'lines': len(lane), 'points': sum(len(x) for x in lane),
+                         'least_distance_of_a_way_out_place': lane_least, 'fail_below': LANE_HALF + LANE_MAN,
+                         'places_on_different_sides_before': lane_cross, 'stand_in_path_crosses_the_line_at': lane_path}
+        got = [v for v in lane_least.values() if v is not None]
+        if got and min(got) >= 1e8:
+            log('escape %s: no place of the way out is within 400 in height of its line (the bots end on another floor)' % facts['lane']['vehicle'])
+        elif got:
+            log('escape %s: the places of the way out and the last places are %d .. %d from its line (FAIL below %d, planned at %d)'
+                % (facts['lane']['vehicle'], min(got), max(got), LANE_HALF + LANE_MAN, LANE_CLEAR))
+        if lane_cross:
+            note('%d squad(s) HAVE TO CROSS the escape vehicle\'s line on the way out (e.g. %s on the way to %s): two places that follow one '
+                 'another lie on different sides of its road. They do not stand there; a van that is driving at that moment drives through them'
+                 % (len(lane_cross), next(iter(lane_cross)), tuple(next(iter(lane_cross.values())))))
+        if lane_path:
+            log('  (the stand-in path of %d squad(s) touches the vehicle\'s line between two places of the same side, e.g. near %s: the middle of '
+                'a street polygon\'s edge. Not a finding: where the game\'s pathfinder walks between two places was not read)'
+                % (len(lane_path), tuple(next(iter(lane_path.values())))))
+        if vd:
+            facts['van'] = [{k: ([round(x) for x in d[k]] if k != 'seconds' else list(d[k])) for k in ('wait', 'stop', 'end', 'board', 'seconds')} for d in vd]
+            for d in vd:
+                for a in ally_boxes:
+                    q = B.at(a)
+                    facts.setdefault('ally_box_from_the_van_line', {})[name(a)] = round(lane_dist([d['line']], q))
     for j in sorted(set(relay_of) - used_relays):
         fail('%s: a RelayMessageList no walked chain names' % name(j))
     facts['cases'] = {'glass_broken_by_a_step': len(broken_all), 'containers_opened_by_a_step': len(opened_all),

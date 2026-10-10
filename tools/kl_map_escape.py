@@ -22,7 +22,10 @@ camera goes under the map when ur in it'.
                                    <out>/<map> (+ van.json, van.txt)
     python kl_map_escape.py van-plan <finished build>     only the plan: waiting place, stop, end, lane, camera
     python kl_map_escape.py van-check <folder>            the van of a built level from its files; exit 1 on a FAULT
-                                                          ('check' runs it too when the level has ONE animated van)
+                                                          ('check' runs it too when the level has ONE animated van).
+                                                          Also the .HVK: its size against HVK_MAX and the largest
+                                                          share one entity owns (the filler copies, D2 of
+                                                          re/play_fixes_review.md)
     python kl_map_escape.py van-keys                      stock F07's key tables, decoded (the evidence)
 
 WHAT IS WRONG (re/map_escape.md 1; read in both executables and measured on the four builds)
@@ -698,6 +701,14 @@ AXLES = 140.0                   # the van's heading = the chord of the drive fro
 REL_MAX = 6.0                   # van_check: degrees the nose may differ from that chord on the drive (stock F07: up to 9, its own
                                 # baked lead and lag in ITS bends - not carried over: on another bend it is a slide)
 PARK = (0.0, -60000.0, 0.0)     # where F07 pieces without a use go (kl_fa_author.PARK)
+HVK_STOCK = 3165936             # the largest stock .HVK (L10)
+HVK_MAX = 5002128               # van_check: the largest .HVK that has loaded and played in the game (Retomoto, v_rtbots)
+HVK_SHARE = 1000000             # van_check: bytes of shape records one entity may own. Measured on the builds of 2026-10-10
+                                # night: the packed filler 183 KB (1,757 placements); the largest single map object 29 KB;
+                                # M02's PC0401_M02_FA_Wall_Bottom_01 878 KB in 330 placements = the padding kl_hvk.join puts
+                                # between the map's static part and F07's (copies of the map's FIRST static placement, each
+                                # with that wall's 2.6 KB MOPP code; not cut here: kl_hvk is not this module's).
+                                # M02's unpacked filler of the afternoon owned 15.4 MB.
 ST = {}                         # the state of one van build in this process (van_build)
 
 
@@ -1402,6 +1413,16 @@ def van_check(L, log=print, P=None):
     out['keyframed'] = [nk, round(far, 1)]
     if far > 30.0:
         bad('a key-framed collision placement of the van is %.0f from its entity' % far)
+    # the file's size and who owns it (re/play_fixes_review.md D2: the filler copies kl_hvk.remap writes where F07's
+    # map was were 2,087 whole copies of a 7 KB mall wall on M02 - 15.7 MB - and nothing here said so)
+    import kl_escape
+    sh = kl_escape.shares(L.hvk, L.name, 3)
+    out['hvk'] = dict(bytes=L.sizes.get('.hvk'), static=L.hvk.static_count(), largest=[list(x) for x in sh])
+    if L.sizes.get('.hvk', 0) > HVK_MAX:
+        bad('the .HVK is %d bytes: over %d, the largest that has loaded in the game (Retomoto; the largest stock file is %d)' % (
+            L.sizes['.hvk'], HVK_MAX, HVK_STOCK))
+    if sh and sh[0][0] > HVK_SHARE:
+        bad('one entity owns %d bytes of the .HVK in %d placements (%s): filler copies that were not packed' % sh[0])
     # 6. the loose pieces
     loose = [sc.names[k] for k in N['strays'] if L.place(k)[1] > PARK[1] / 2]
     if loose:
@@ -1420,6 +1441,8 @@ def van_check(L, log=print, P=None):
             worst_y, steps, yaw_off, yaw_held, side, LANE_STEP, VAN_TAIL, VAN_NOSE, 'clear' if not ob else 'NOT CLEAR'))
     log('  boarding box at the stop: (%d, %d, %d); key-framed placements %d, at most %.1f from their entities; camera: %s' % (
         *board, nk, far, out.get('camera')))
+    log('  .HVK %d bytes, %d static placements; the largest shares of one entity: %s' % (
+        out['hvk']['bytes'], out['hvk']['static'], '; '.join('%s %d bytes in %d placements' % (nm, b, c) for b, c, nm in sh)))
     for e in out['bounds']:
         log('  the drive passes the level bound %s from %d to %d (0 = the stop)' % tuple(e))
     for x in out['notes']:

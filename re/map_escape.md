@@ -468,7 +468,9 @@ have not drifted in anything that is counted here; the y_van builds are made wit
 
 - Rebuild: `python tools\kl_map_escape.py van <work>\build\t_maps2 <work>\build\y_van [M01 M02 M03]`
   (2.5 min a map). Install as any tuned map: `python debug\slot.py put <work>\build\y_van\M02 F01`.
-- **AI heisters: pass `--park x,y,z` to `kl_fa_bots.py build`.** `kl_fa_bots.stations` takes the
+- **SUPERSEDED by part 3 (section 15): do NOT pass `--park` = plan.board - that point is ON the
+  van's line. `kl_fa_bots.py build` needs no option for a van build now.** What stood here:
+- AI heisters: pass `--park x,y,z` to `kl_fa_bots.py build`. `kl_fa_bots.stations` takes the
   boarding action's place from the FILE; the van's box rides on the van, so in the file it stands
   at the WAITING place (M01 (8453, 121, 16353), 49 m from the stop). Without `--park` the bots end
   at the mesh point nearest to that. Values (= `van.json` plan.board): M01 `--park 6163,0,20696`,
@@ -522,3 +524,129 @@ three, Dead Men's exit boxes instead of F07's, the camera on a Dead Men place.
 - How long the van waits at the stop and what happens after it is destroyed when it is the only
   vehicle of the level (the rules; Dead Men's maps had one car too).
 - Whether a `PathBlocker` on a converted Dead Men mesh behaves as on Retomoto's (it did there).
+
+---
+
+# Part 3 (2026-10-10 night): the review's defects fixed, van + bots in ONE build
+
+OFFLINE. Nothing installed, the game not started, nothing written into the Dog Days folder.
+Review: `re/play_fixes_review.md` (D2, D3, D4). Builds: `<work>\build\z_final\M01 M02 M03 M06`
+(the van builds without bots they are made from: `z_final\_van\M0x`; logs `z_final\_van.log`,
+`_bots.log`, `_checks.log`). **NONE OF IT RAN IN THE GAME.** Words: measured = on the written files.
+
+## 15. What changed
+
+### 15.1 D2: the .HVK (`kl_escape.cut_collision`, `smallest_static`, `pack_fillers`, `shares`)
+
+`kl_hvk.join` carries F07's static part behind the map's: every static placement of F07's map that
+is dropped (1,748) is replaced by a copy of a kept one, because the list codes address static
+placements by position. `van_hvk` then cuts the van's own nine, and `cut_collision` replaced all
+1,757 by copies of the FIRST kept static placement of the whole file - one full shape record each.
+Section 10.3's 'are cut' was wrong: they were swapped for 1,757 whole copies of a map object.
+- Now the filler is the kept static placement that is cheapest to copy (M01 / M02: a 60-byte box
+  with 19 bytes of code, M03: 48 + 15), and copies that follow one another are ONE record with that
+  many placements (the form `kl_hvk.join` itself writes for its padding; loaded and played on
+  Retomoto). The order of the static placements does not change.
+- `van-check` prints the file's size and the three largest shares of one entity, and FAULTs a file
+  over 5,002,128 bytes (Retomoto's, the largest that has loaded) or an entity owning over 1 MB.
+
+| .HVK bytes | `t_maps2` = `y_loot2` (spline car) | `y_van` (afternoon) | `z_final` | of it the filler | static placements |
+|---|---|---|---|---|---|
+| M01 | 1,401,088 | 2,077,840 | **1,614,096** | 182,947 in 1,758 placements | 3,287 |
+| M02 | 1,647,280 | 15,734,304 | **2,722,064** | 183,048 in 1,758 | 3,797 |
+| M03 | 2,536,304 | 3,588,400 | **2,772,880** | 183,224 in 1,759 | 4,817 |
+
+(largest stock file: L10, 3,165,936.) NOT cut: M02's remaining 878,316 bytes are 330 placements of
+`PC0401_M02_FA_Wall_Bottom_01` = the PADDING `kl_hvk.join` puts between the map's static part and
+F07's (up to a multiple of 510; it copies the map's FIRST static placement, whose MOPP code is
+about 2.6 KB a copy). `kl_hvk.py` is not this job's file; the fix there is `first_static` -> the
+smallest, once. M03's padding is `Neon_ON_06`, 26,712 bytes in 141 placements.
+
+### 15.2 D3 / D4: see `re/bots.md` 13 (the bots' places against the van's line, the second box)
+
+## 16. The final builds (`z_final`): van + guns + escape camera + enemies + bots
+
+Order as the review's section 4 forces it: `python tools\kl_map_escape.py van <work>\build\t_maps2
+<work>\build\z_final\_van M01 M02 M03` (the whole graft again, then lighten, wardrobe,
+`kl_map_tune`: guns, escape, ai), then `python tools\kl_fa_bots.py owner <work>\build\z_final\_van
+<work>\build\z_final M01 M02 M03` (RECIPE; no `--park`). M06 = `y_loot2\M06`, copied; its archive
+is byte for byte the same (sha1): nothing of this job touches the helicopter map.
+
+The van (all three: 563 position / 550 rotation keys; 7.20 s in, stands 8.0 s - field 15 -, 8.48 s
+away; then field 17 = 6.0 s before a vehicle can be called again):
+
+| | waits | stops | boarding box at the stop | ends | passes a level bound |
+|---|---|---|---|---|---|
+| M01 | (8405, 2, 16687) | (5829, 2, 20648) after 60 m | (6164, 0, 20691) | (1441, 2, 22179) after 52 m | 35 m before the stop (empty) |
+| M02 | (1116, 2, -12896) | (-793, 2, -9009) after 60 m | (-621, 0, -8719) | (-4947, 2, -13485) after 80 m | 38..36 m before (empty), 15.5..18.4 m after (players aboard) |
+| M03 | (-2555, 152, 558) | (3305, 2, 3) after 60 m | (2970, 0, 39) | (10289, 2, -1102) after 80 m | 15.9..17.6 m after (players aboard) |
+
+Sizes, bytes, `y_loot2` (spline car + bots) -> `z_final`; chunk table 69,632 usable:
+
+| | .prm | .ANM | .fxc | F01_Main.WAV | chunk entries | .HVK | .TEX | archive |
+|---|---|---|---|---|---|---|---|---|
+| M01 | 55,917,968 -> 56,992,176 | 22,061,764 -> 22,039,292 | 17,760,648 = | 21,722,704 -> 21,145,936 | 50,254 -> 49,973 | 1,401,088 -> 1,614,096 | 242,724,752 -> 246,355,616 | 201.0 -> 205.9 MB |
+| M02 | 55,449,184 -> 56,522,544 | 22,202,472 -> 22,180,036 | = | 22,527,568 -> 22,113,616 | 58,583 -> 58,300 | 1,647,280 -> 2,722,064 | 224,349,952 -> 227,980,720 | 181.9 -> 186.8 MB |
+| M03 | 61,299,008 -> 62,581,504 | 22,202,616 = | = | 22,716,752 -> 22,669,648 | 62,892 = | 2,536,304 -> 2,772,880 | 225,939,136 -> 237,631,936 | 192.6 -> 200.8 MB |
+| M06 | 50,415,712 = | 21,642,576 = | = | 21,775,744 = | 47,114 = | 1,332,400 = | 212,826,208 = | the same file |
+
+Checkers, run on the written folders after the last change of the tools (`_checks.log`):
+
+| | `kl_maps audit` | `kl_maps preflight` | `kl_fa_bots check` | `kl_map_guns check` | `kl_impact` | `kl_map_escape check` (+ van-check) | `kl_fa_bots diff` against `_van` |
+|---|---|---|---|---|---|---|---|
+| M01 | PASS (1 known) | CRASH 0 RISK 0 | PASS 0 FAIL 1 NOTE | exit 0, `Entries=49973` | problems: 0 | 0 faults | only the squad, 2 exit boxes cut |
+| M02 | PASS (6 known) | CRASH 0 RISK 3 (as the source) | PASS 0 / 2 | exit 0, `Entries=58300` | 0 | 0 faults | only the squad |
+| M03 | PASS (0 known) | CRASH 0 RISK 0 | PASS 0 / 1 | exit 0, `Entries=62892` | 0 | 0 faults | only the squad, 1 drop link |
+| M06 | PASS (6 known) | not run again | PASS 0 / 1 | exit 0, `Entries=47114` | 0 | 0 faults (no van) | - |
+
+Install (the lead; not run): `python debug\slot.py put "<work>\build\z_final\M0x" F01`.
+
+## 17. When the vehicle leaves with only bots aboard and the human still alive
+
+Read now in kl2.exe (0x55ec70, 0x6c3d50..0x6c4003) and in the level files; nothing of it seen live
+on these maps (Retomoto's rounds showed the 60 s).
+- **The round does not end at once.** State 5 (driving out) ends at 0x55edb3: `call 0x805120`
+  (those aboard have escaped), then 0x4906b0 = criminals still in play: more than 0 -> state 7,
+  else state 8 (over). The human alive = state 7.
+- State 7 lasts field 17 of the vehicle (6.0 s in all three stock F07 vans and here); at its end
+  (0x55ee06) a per-client bit is cleared, `[rules+0x1b3] = 0xff`, and the state is 0 again:
+  **a vehicle can be called again.**
+- **What calls the next: the level exit trigger, nothing else.** `ZOnlineExitLevelTrigger`
+  (0x6c3d50) with a crew member (human, or a bot with a crew record) as activator and the vehicle
+  in state 0 draws at 0x6c3f90 a random number 1..4 and takes field 2 / 3 / 4 / 5 by it; an EMPTY
+  field makes it draw again (`je 0x6c3f90`). No memory of the last pick: the same vehicle can come
+  twice in stock too. Then rules slot 44 (0x6cd8e0 -> 0x8154f0).
+- Stock F07: THREE vans (`Animation/F07/F07_Escape_Vehicle_01 / _02 / _03.zip`), ONE exit trigger
+  `Gameplay!EscapeSetup!otrExitLevel` with fields 2, 3, 4 = the three, field 5 empty.
+  **Kept here: ONE** (`_01` + `Gameplay!EscapeSetup!RelayDestroyedEsc_01`); every exit trigger of
+  the map names it in field 2, fields 3..5 are empty. So the 'second vehicle' on these maps is THE
+  SAME VAN called again: its `Activate_Enter` piece (frames 50..230) played a second time.
+  ASSUMPTION that it then jumps back to the waiting place and drives in again - a repeat in stock
+  goes through the same code; never seen on a grafted map.
+- **But the clock is cut.** 0x805120 -> 0x894450 counts criminals in play and police players; with
+  at most one of each the round clock is set to 60 s (`re/fed_respawn.md` 2.4, not read again here;
+  seen on Retomoto and the bank: 'the round gets 60 s once the first escape vehicle has left').
+  One human left = 60 s. In them: 6 s (state 7) + a crew member in an exit box + 7.2 s (drive in) +
+  up to 8 s standing. 0x8154f0 flags a vehicle 'the last one' when the time left is not more than
+  its cycle + 2 s (23.68 + 2; `re/retomoto_street.md`).
+- NOT established: whether the trigger fires for somebody who already STANDS in the box when the
+  state returns to 0 or only on entering (M02's and M03's exit boxes are 120 x 80 m and 80 x 20 m:
+  the human is most likely inside one); what the HUD says; the same van's second drive in.
+- The bots make this likely: the first bot that enters an exit box after its loot calls the van,
+  the seven are taken aboard from their box when it stands (7.2 s later), and the van leaves after
+  its 8 s (`re/bots_behaviour.md` 2.2: it leaves at once only when NOBODY is left). The first
+  criminal aboard can hold the driver 5 s once (slot 152) - a bot does not.
+
+## 18. Live checks of part 3 (after V0..V6 of section 13; one variable each)
+
+- **F1 load, each map**: `z_final\M0x` in the slot. Proof: clean exit, first frame; M02 first
+  (its .HVK changed most: 2.7 MB, the filler now a 60-byte box in one record of 1,757 placements).
+- **F2 collision where the filler lies**: nothing to see is the proof - no invisible wall, bullets
+  and people pass as before at the filler's own object (M01 `SI0104_M01_Floor_A_4x8m_01`, M02
+  `Si0403_M02_FA_CeilingA_10x10m_Shatter_04`, M03 `Shards_281`).
+- **F3 bots and the van** (V7): pictures at the stop when the van arrives: the seven stand beside
+  it (M01 round (6004, 0, 20211), M02 (-821, 0, -8400), M03 (2210, 16, -320)), nobody on the road,
+  and are gone when it stands. M03: also the yard side of the sunk wall, (-1707, 220, -900).
+- **F4 left behind**: stay in the bank / mall until the van has left with the bots. Proof: what the
+  clock shows (60 s expected), whether the same van comes again when you reach the exit box, and
+  whether you can board it.

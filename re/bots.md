@@ -779,6 +779,7 @@ one thing in the files that differs between a round with bots and one without; i
 the bots come from; the stage place uses the whole exit box instead of its middle (the middle is the road).
 A baked van (another job is laying F07's key-framed van on these maps) has no spline: `lanes()` then finds no
 route and the places are chosen as before - tell this job, or give `lanes()` the van's keys.
+(DONE 2026-10-10 night, section 13: `lanes()` reads the van's position keys.)
 
 ### 12.6 The builds, the budget, the checks
 
@@ -855,3 +856,94 @@ logs): `verify.py` (the builds read anew: references, chains, cases, exit boxes,
 `lanes.py` (12.5), `links*.py` / `wp.py` (the stock links and waypoints), `anm1.py` (the clips), `st*.py` (stock
 containers, glass, exit triggers, timers, relays, squad transitions), `msgtab.py` (message names of kl2.exe),
 `rt_compat.py` (Retomoto's plan with the old and the new module).
+
+## 13. The bots and the key-framed van in one build (2026-10-10 night; defects D3, D4 of `re/play_fixes_review.md`)
+
+OFFLINE; nothing installed, the game not started. Builds `<work>\build\z_final\M01 M02 M03` (van + guns + camera +
+enemies + bots; M06 = `y_loot2\M06` unchanged). The van itself: `re/map_escape.md` part 3. **Not run in the game.**
+
+### 13.1 What was wrong
+
+- **D3.** `lanes()` read `OnlineEscHavokCar` splines only. On a van build it found nothing, `--lane` did nothing,
+  and the note of the van job said `--park` = the van's boarding box at the stop - a point ON the van's line, 337
+  behind its origin, where its nose (with a `KillBox`) passes on the way in. Bots stood 2 .. 25 from the line on
+  all three maps and every checker passed.
+- **D4.** With the bots ending in a box at the street, M03 lost its only fall-back box at the gather place in front
+  of the drop. The drop link is one way and hand-written; whether the AI takes it was never seen.
+- 12.2 'the boarding action is in box 02' and 12.5's table are about the SPLINE car. On a van build the boarding
+  action (`...\V_Van_00\BoardingTrigger`) rides on the van and lies at the WAITING place in the file.
+
+### 13.2 What `tools/kl_fa_bots.py` does now
+
+- `van_drives(B)`: every `OnlineEscAnimatedVehicle` of the build, decoded with `kl_map_escape.VanKeys`: the line of
+  its position keys from the first frame of the drive in to the last of the drive away (382 keys on these maps),
+  the waiting place, the stop, the end, where the boarding box stands while the van is at the stop, the seconds.
+- `lanes(B)`: that line for a van, the splines for a car (as before).
+- `plan()`, a build with ONE van, no option needed: the lane is always kept; the boarding place of the plan is
+  the box's place AT THE STOP; the bots end in an `AllyEscapeBox` whose middle is `PARK_SIDE` = 420 from the line,
+  within `PARK_REACH` = 900 of that box and with `CLEAR` to the mesh's edges, chosen by 'path from the last loot
+  stop + 3 x distance to the box' (the side the bots come from). The seven places inside the box keep
+  `LANE_CLEAR` = 250 from the line (D3 b). Way-out places and the stage place are taken on the side of the road
+  the bots are on when one exists there (new; also for a spline car with `--lane`). `--park x,y,z` still wins.
+- D4: the gather place in front of every one-way drop gets a box of its own when the bots end in another box
+  (`P['ally_more']`, node `Gameplay!merc_bot_squad!AllyEscapeBox_02`). Stock F02 / F06 have eight boxes each.
+- `check()`:
+  - FAIL: a place of the way out (after the last loot wait) or a last place nearer than `LANE_HALF` + `LANE_MAN`
+    = 100 + 60 to the vehicle's line - van or spline car;
+  - FAIL: a place beyond a one-way drop link whose place before it is in no `AllyEscapeBox` (when the build has one);
+  - NOTE: two places that follow one another lie on different sides of the line (the bot has to cross);
+  - printed, not a finding: the stand-in path (through the middles of polygon edges) touches the line between two
+    places of the same side. Where the game's pathfinder walks between two places was not read.
+- Controls (run; scratch folders, removed): the notes' recipe on `z_final\_van\M01` (`--park` = the box, no lane)
+  -> **12 FAIL** (places 7 .. 107 from the line); M03 with the one box at the street -> **7 FAIL**;
+  `t_maps2\M01` without options still gives the archive of `u_maps\M01` byte for byte (sha1 `4ea0322d59cf`) -
+  and that played build now FAILS the check (6: places 4 .. 83 from the car's route; the bots in the road of 12.5).
+  `y_loot2\M01..M06` and `v_rtbots\retomoto_bots` still PASS.
+
+### 13.3 Where the bots stand and board (world units; the van's line = `van_drives`)
+
+| | the bot that calls the van | the seven end at | from the van's line | from its boarding box at the stop | boxes |
+|---|---|---|---|---|---|
+| M01 | first into `Triggers!CallExitVehicle_02` (x 4600..8796 after the cut), stage place round (5738, 0, 20020) | round (6004, 0, 20211): x 5892..6072, z 20099..20279 | box middle 457; every way-out place 254 .. 420 | 505 from (6164, 0, 20691) | `AllyEscapeBox` (6004, 200, 20211) |
+| M02 | first into `Triggers!ExitTrigger_01` (120 x 80 m round the car park), stage place round (-523, 0, -8437) | round (-821, 0, -8400): x -934..-754, z -8512..-8332 | 423; places 250 .. 402 | 377 from (-621, 0, -8719) | `AllyEscapeBox` (-821, 200, -8400) |
+| M03 | first to land in the street: `Triggers!ExitTrigger_01` is 80 x 20 m and begins at z -540, the drop lands at (-1700, 150, -534); stage place round (854, 71, -155) | round (2210, 16, -320): x 2098..2278, z -388..-208, the south side of the street | 431; places 250 .. 339 | 840 from (2970, 0, 39): nothing nearer has 420 to the line on that side | `AllyEscapeBox` (2210, 216, -320) and `AllyEscapeBox_02` (-1707, 420, -900) at the gather place in the yard |
+
+All boxes are 350 x 416 x 350 (half sizes), never hidden. Boarding: a bot with crew status 0 inside a box is
+taken aboard while the vehicle is in state 3 / 4 = standing at the stop (kl2 0x907a50); **the bots vanish in the
+box, they do not walk to the van's doors** (on `u_maps` M01 / M02 they walked to the car through the tactic).
+Whether `ZBoardEscapeVehicleTactic` would take a boarding box that arrives with a van was not read.
+M03: the van comes down the street from the west, BEHIND the bots that have dropped; they keep the south side
+(250+). Bots still in the yard box when the van stands are taken aboard from the yard.
+
+### 13.4 Sizes and checks
+
+The bot step adds nothing to the four blocks (as before). Entities added: 170 / 289 / 199 (M03: one more box).
+Tables of the final folders: `re/map_escape.md` 16. `kl_fa_bots.py diff z_final\_van\M0x z_final\M0x`: only the
+squad was added (+ M01: 2 exit boxes cut; + M03: 1 drop link).
+
+### 13.5 Live checks (the lead's; after L0..L5 of 12.7 and V0..V6 of `re/map_escape.md` 13)
+
+| # | run | what proves it |
+|---|---|---|
+| J1 | `z_final\M02`, do nothing, watch the car park | the bots come out, gather round (-821, 0, -8400) west of where the van stops; the van arrives through nobody; the seven are gone when it stands |
+| J2 | `z_final\M01` | the same round (6004, 0, 20211); the car's countdown still starts only past x 4600 (L4) |
+| J3 | `z_final\M03` | L3 with the van: the bots hop down and run east on the south side to (2210, 16, -320). If they do NOT hop: they stand round (-1707, 220, -900) and must vanish when YOU have called the van and it stands |
+| J4 | any | F4 of `re/map_escape.md` 18: left behind with the bots gone - the clock, the same van again |
+
+### 13.6 ASSUMPTIONS and guesses of this section
+
+- `LANE_MAN` 60, `PARK_SIDE` 420, `PARK_REACH` 900, `PARK_NEAR` 3: GUESSES.
+- That a key-framed van hurts an actor it drives through (`KillBox` 'CheckInsideEnter', 'FA_DieFromSelf': not read
+  for AI actors); the places are kept off the line either way.
+- That an `AllyEscapeBox` 4 .. 8 m from the van takes bots aboard as F02's boxes at the helicopter do: 0x907a50 has
+  no distance test (12.3 / `re/bots_behaviour.md` 2.3); the M06 and `u_maps\M03` boxes were built on the same reading.
+- The round is short with bots: the first bot in an exit box calls the van; it stands 7.2 s later and leaves after
+  8 s whether the human is there or not (`re/map_escape.md` 17). Not changed here.
+
+### 13.7 Changes in `tools/kl_fa_bots.py`
+
+`van_drives`, `lanes` (the van), `_crosses`, `plan` (the van's boarding place and park place, the lane for a van,
+the same side of the road, `ally_more`), `make` (several boxes), `check` (the two FAILs, the NOTE, `facts['lane']`,
+`facts['van']`), constants `LANE_HALF LANE_MAN PARK_SIDE PARK_REACH PARK_NEAR`. Also `tools/kl_escape.py`
+(`cut_collision`: the smallest filler, packed; `smallest_static`, `pack_fillers`, `shares`) and
+`tools/kl_map_escape.py` (`van_check`: the .HVK's size and shares). No other file of the repository was changed.

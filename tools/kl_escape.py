@@ -28,6 +28,9 @@ entity, no controller added or removed, so kl_graft's controller indices stay va
   cut_collision(hvk)   their static placements in the joined .HVK are replaced by a filler (a copy
                        of another kept static placement), as kl_hvk.remap does for a dropped map
                        object: the list MOPP addresses placements by position, so none may go.
+                       The filler is the SMALLEST kept static placement and its copies are packed
+                       into one record per run (2026-10-10 night, re/play_fixes_review.md D2: with
+                       the FIRST kept one M02's van build had 2,087 copies of a 7 KB wall, 15.7 MB).
                        The yard's asphalt (y 200) and the street's (y 150) meet at z -600 under
                        the wall, so the opened piece is a 50 cm step down - one way, like the climb.
   money_reach(Jn)      Dead Men's container triggers with a reach below Dog Days' 125 get 125
@@ -265,12 +268,83 @@ def cut_collision(hvk, refs, log=print):
         return hvk
     keep = {kl_hvk.ref(i): kl_hvk.ref(i) for s in hvk.shapes for i in s.inst if kl_hvk.ref(i) not in refs}
     n = collections.Counter(s.type for s in hvk.shapes for i in s.inst if kl_hvk.ref(i) in refs)
-    before = hvk.static_count()
-    hvk.shapes = kl_hvk.remap(hvk, keep, filler=kl_hvk.first_static(hvk.shapes, keep))
+    before, size0 = hvk.static_count(), len(hvk.serialize())
+    fill = smallest_static(hvk.shapes, keep)
+    hvk.shapes = kl_hvk.remap(hvk, keep, filler=fill)
+    if fill:
+        runs = pack_fillers(hvk, fill)
     if hvk.static_count() != before:
         raise ValueError('static placements %d -> %d: the list codes would address the wrong ones' % (before, hvk.static_count()))
     log('  kl_escape: collision of %d entities taken out of the .HVK (placements by shape type: %s)' % (len(refs), dict(n)))
+    if fill:
+        log('  kl_escape: the filler is the SMALLEST kept static placement (REF %d: %d bytes of vertices + faces, %d of code), its copies '
+            'packed %d to a record where they follow one another; .HVK %d -> %d bytes' % (
+                kl_hvk.ref(fill[1]), len(fill[0].verts) + len(fill[0].planes if fill[0].convex else fill[0].idx), len(fill[2][1]),
+                runs, size0, len(hvk.serialize())))
     return hvk
+
+
+def record_bytes(s, mopp):
+    """Bytes ONE placement of shape s costs as a record of its own (kl_hvk.Hvk.serialize): the record with the
+    vertices and faces repeated, and its MOPP code."""
+    body = len(s.verts) + (len(s.planes) if s.convex else len(s.idx))
+    return 20 + (12 if s.convex else 16) + body + 0x38 + 12 * len(s.sub) + ((20 + len(mopp[1]) + 15) & ~15)
+
+
+def smallest_static(shapes, refs=None):
+    """kl_hvk.first_static's form (shape, placement, code), but the kept static placement that is CHEAPEST to copy.
+    WHY (re/play_fixes_review.md D2, 2026-10-10): kl_hvk.remap writes one whole shape record - vertices, faces and
+    MOPP code - for every static placement it replaces. With the FIRST kept placement as the filler that was, on
+    M02_FA_A, 2,087 copies of the 7 KB wall PC0401_M02_FA_Wall_Bottom_01: .HVK 1.6 -> 15.7 MB (the largest stock
+    file is 3.2 MB, the largest that has loaded live 5.0 MB). Ties: the first in file order."""
+    best = None
+    for s in shapes:
+        if s.type != kl_hvk.STATIC:
+            continue
+        for i, m in zip(s.inst, s.mopp):
+            if refs is None or kl_hvk.ref(i) in refs:
+                c = record_bytes(s, m)
+                if best is None or c < best[0]:
+                    best = (c, s, (kl_hvk.renumber(i, refs) if refs else i), m)
+    return best and best[1:]
+
+
+def pack_fillers(hvk, fill):
+    """Records that are copies of the filler and follow one another become ONE record with that many placements
+    (the vertices and faces once; a MOPP code per placement stays, the reader wants one each). The form
+    kl_hvk.join itself writes for the padding between two maps (`fill[0].clone([fill[1]] * pad, ...)`: loaded and
+    played on Retomoto), so nothing new is asked of the game. The order of the static placements - what the list
+    codes address - does not change. -> the longest run."""
+    out, longest = [], 0
+    for s in hvk.shapes:
+        mine = s.type == kl_hvk.STATIC and s.verts is fill[0].verts and all(i == fill[1] for i in s.inst) \
+            and all(m == fill[2] for m in s.mopp)
+        if mine and out and out[-1][1]:
+            last = out[-1][0]
+            last.inst += s.inst
+            last.mopp += s.mopp
+            longest = max(longest, len(last.inst))
+        else:
+            out.append((s.clone(s.inst, s.mopp) if mine else s, mine))
+            longest = max(longest, len(s.inst) if mine else 0)
+    hvk.shapes = [s for s, _m in out]
+    return longest
+
+
+def shares(hvk, names=None, top=5):
+    """How the bytes of a .HVK's shape records are shared among the entities (REF ids): [(bytes, placements, REF or
+    name)], the largest first. A record's bytes are split evenly over its placements. The line the van check
+    prints, and the test that would have caught D2: one entity must not own most of the file."""
+    by, cnt = collections.Counter(), collections.Counter()
+    for s in hvk.shapes:
+        if not s.inst:
+            continue
+        body = 20 + (12 if s.convex else 16) + len(s.verts) + (len(s.planes) if s.convex else len(s.idx)) + 12 * len(s.sub)
+        for k, i in enumerate(s.inst):
+            r = kl_hvk.ref(i)
+            by[r] += body / len(s.inst) + 0x38 + (((20 + len(s.mopp[k][1]) + 15) & ~15) if s.mopp else 0)
+            cnt[r] += 1
+    return [(round(b), cnt[r], names(r) if names else r) for r, b in by.most_common(top)]
 
 
 @contextlib.contextmanager
