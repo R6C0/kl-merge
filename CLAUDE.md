@@ -201,6 +201,9 @@ untouched; overlay Patch01.zip (90,729 bytes) untouched. None of the hook's new 
   for this game. With the window not in front the main loop only pumps messages (Arcade pauses; scripted runs stand still).
 - kl_watch.py took ONE picture of the Alt+Tab switcher over other windows (<work>/research/watch/20261009_174356/0081_661s.jpg;
   the owner has been told, the file is theirs to delete); grab() now also checks the window under the game's middle, twice.
+- RUNNING since 07:05 (offline): workflow wf_b313b726-548 (.wf/bots.js, one agent b-bots): an AI heister squad for the Dead Men
+  maps - the owner plays Arcade ALONE on every grafted map (0 bot squads). To come: tools/kl_fa_bots.py, re/bots.md, builds in
+  <work>/build/b_bots/<map> made from the z_maps builds. If it died on a usage limit: resume with that run id.
 - LIVE QUEUE, needs the owner's word once Steam is signed in (scratchpad now/QUEUE.txt; TEST hook <work>/build/klhook/test_stall):
   M8 six loads (klmem) -> M8b ReserveMB=176 RoomMB=128 -> PV1b Heister pictures with kl-merge-39's <work>/build/pd2/overlay/Overlay
   -> F1 <work>/build/fxc_slim/retomoto_loot -> PD2a/PD2b/PD3 Payday 2 masks (<work>/build/pd2/pd2_F01, scratchpad pd/PD2a.ini,
