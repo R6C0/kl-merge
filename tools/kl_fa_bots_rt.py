@@ -14,6 +14,9 @@ M09_A, and lobby + street, M09_B) that only the hook joins. Spec, the reading of
                            The form that needs NO hook part - for an A / B run.
       --loot-seconds N     the wait at the boardroom table: until its six briefcases are gone or N s (default 30, GUESS:
                            the table's loot only appears when the room's guards are dead, kl_fa_author GATE_MAIN_ROOM)
+      --enter-after-blast  the bots walk in AFTER_BLAST s after the blast (as before 2026-10-11); default: they wait
+                           at the window until the boardroom's three squads are dead (the room counter), or
+                           --room-wait S (75) after the blast at the latest
       --after-blast S      Timer_start_bots = the level's own blast timer + S (default 1.0, GUESS): the bots stand on
                            the balcony until the window has gone
       --street-hold S      seconds the squad waits at the last place BEFORE the level exit box (default 10, GUESS;
@@ -56,6 +59,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import kl_fa, kl_fa_bots as F
 import kl_fa_author as au
+from kl_prp import units
 import kl_fa_van as van
 import kl_fa_street as street
 
@@ -63,6 +67,18 @@ R_ = F.R_
 JOIN_NAME = au.ROLE['join']             # 'Specials!JumpPoints!06_Exit': the entry KLJoin.ini jumps the player to
 BLAST_TIMER = au.ROLE['blast timer']    # the level's TriggerDelay2 that swaps the glass (kl_fa_author.wire)
 AFTER_BLAST = 1.0       # GUESS: the bots' start timer runs this long after the blast timer
+# THE ROOM FIRST (2026-10-11, after runs HP / T1 / T2_DM09: the seven walked in and looted while the boardroom's guards
+# lived, and died to their bullets in 95-150 s; the owner's design: the main room is looted 'once everyone in it is
+# dead'). The bots' chain is now started by kl_fa_author's room counter (ROLE['counter'], the TriggerCounter the three
+# room squads' field 8 feeds; it switched the table loot on and nothing else) through a one-shot gate counter, and by
+# Timer_start_bots as the FALL-BACK ROOM_WAIT s after the blast (stock pairs 'those enemies are dead' with a timer,
+# re/bots_dynamic.md 3) - so an idle player or a hiding guard does not leave the seven on the balcony for the round.
+# Until then they stand at the blown window and shoot at what shows. GUESS: ROOM_WAIT; ASSUMPTION: a TriggerCounter
+# with field 0 = 1 fires its list once when first named (stock F07 tcRunToEscape's form, fields 2 / 3 = 0).
+ROOM_GATE = True        # False ('--enter-after-blast'): Timer_start_bots alone, AFTER_BLAST after the blast, as before
+ROOM_WAIT = 75.0        # GUESS: the fall-back, seconds after the blast timer
+ROOM_COUNTER = au.ROLE['counter']
+GATE_NAME = F.SQUAD + 'Counter_room_clear'
 LOOT_SECONDS = 30       # GUESS (docstring)
 STREET_HOLD = 10.0      # GUESS (docstring)
 WARP = 15.0             # a polygon whose corners lie farther than this from the plane kl_fa_bots.Nav fits through its
@@ -82,7 +98,8 @@ STOP_RING = (150.0, 650.0)   # the last places: this far from the boarding box a
 LANE_SOUTH = 800.0      # the van's lane is kept clear from this far south of its waiting place (GUESS) to the end of the map
 EXIT_SHARE = 0.9        # a 'level exit' place lies within this share of the box's half extents (0.45 would leave no
                         # place on the pavement side of the lane: the box is x -5700..-300, the lane x -1850)
-DEFAULTS = {'tower_only': False, 'loot_seconds': LOOT_SECONDS, 'after_blast': AFTER_BLAST, 'street_hold': STREET_HOLD, 'tree': True}
+DEFAULTS = {'tower_only': False, 'loot_seconds': LOOT_SECONDS, 'after_blast': AFTER_BLAST, 'street_hold': STREET_HOLD, 'tree': True,
+            'room_gate': ROOM_GATE, 'room_wait': ROOM_WAIT}
 
 
 # ------------------------------------------------------------------ small things
@@ -435,12 +452,24 @@ class Street:
     """The second leg, for kl_fa_bots.apply(more=...): nodes(M, tops) adds the street steps to the seven squads,
     edit(Jn) writes the JumpPoint's list. Every node is a clone of the F07 form kl_fa_bots.make uses."""
 
-    def __init__(self, st):
+    def __init__(self, st, room=None):
         self.st = st
         self.firsts = []
+        self.room = room          # {'fallback': seconds after the round-start event} or None
 
     def nodes(self, M, tops):
         st, Sx = self.st, 'F07'
+        if self.room:
+            t = next(n for n in tops if n.name == F.SQUAD + 'Timer_start_bots')
+            body = next(b for nm, b in t.ctrls if M.p.key(nm) == 'TriggerDelay2')
+            first = [M.p.key(tok) for tok in [list(u) for u in units(body[1:-1])][4][1:]]      # the seven first steps
+            gate = M.clone(Sx, R_ + 'Gameplay!RunToEscape!tcRunToEscape', GATE_NAME)
+            M.place(gate, (0.0, 0.0, 0.0))
+            M.set(gate, 'TriggerCounter', {0: 1, 1: 4294967295, 2: 0, 3: 0, 4: first})
+            tops.append(gate)
+            M.set(t, 'TriggerDelay2', {0: float(self.room['fallback']), 4: [R_ + GATE_NAME]})
+        if st is None:
+            return
         for b, N in enumerate(F.BOTS):
             top = tops[b]
             if top.name != F.SQUAD + 'Squad#0%d' % N:
@@ -468,6 +497,15 @@ class Street:
             self.firsts.append(SQ(N, '\\' + chain[0]))
 
     def edit(self, Jn):
+        if self.room:
+            c = Jn.resolve(R_ + ROOM_COUNTER)[0]
+            ci = next(i for i, (nm, _b) in enumerate(Jn.nodes[c]['ctrls']) if Jn.p.key(nm) == 'TriggerCounter')
+            def fc(us):
+                have = [Jn.p.key(t) for t in us[4][1:]]
+                us[4] = kl_fa._refs(Jn, have + [R_ + GATE_NAME])
+            kl_fa.edit(Jn, c, ci, fc)
+        if self.st is None:
+            return
         k = Jn.resolve(R_ + JOIN_NAME)[0]
         i = next(i for i, (nm, _b) in enumerate(Jn.nodes[k]['ctrls']) if Jn.p.key(nm) == 'JumpPoint')
         firsts = self.firsts
@@ -560,6 +598,18 @@ def check(folder, log=print):
         fail('no blast timer or no Timer_start_bots')
     elif delay <= blast:
         fail('Timer_start_bots (%.1f s) does not wait for the blast timer (%.1f s): the bots would walk at the intact glass' % (delay, blast))
+    gate = res(R_ + GATE_NAME)
+    if gate:
+        gv = [v for k, _i, v in kl_fa.controllers(sc, 'TriggerCounter') if k == gate[0]][0]
+        cv = [v for k, _i, v in kl_fa.controllers(sc, 'TriggerCounter') if res(R_ + ROOM_COUNTER) and k == res(R_ + ROOM_COUNTER)[0]]
+        fed = cv and any(s.lower() == (R_ + GATE_NAME).lower() for s in cv[0][4])
+        facts['room_gate'] = {'counter_names_gate': bool(fed), 'gate_count': gv[0], 'gate_names': len(gv[4]), 'fallback': delay}
+        if not fed:
+            fail('the room counter %s does not name %s' % (ROOM_COUNTER, GATE_NAME))
+        if gv[0] != 1 or len(gv[4]) != len(F.BOTS) or any(not res(s) for s in gv[4]):
+            fail('%s: count %d, names %d of %d first steps' % (GATE_NAME, gv[0], len(gv[4]), len(F.BOTS)))
+        if tv and [s.lower() for s in tv[0][4]] != [(R_ + GATE_NAME).lower()]:
+            fail('Timer_start_bots does not name the gate alone: %s' % tv[0][4])
     # 2. the chains
     NEXT = {'DefendBehaviourRout': 7, 'SquadModifierBehaviour': 26, 'TriggerDelay2': 4, 'TriggerLootDepleted': 4, 'TriggerActorsDead': 2}
     mine = {k for t in sc.tops() if sc.names[t].startswith(F.SQUAD) for k in range(t, sc.end[t])}
@@ -789,7 +839,11 @@ def build(src, dst, opt=None, log=print):
     B = F.Built(src)
     say('kl_fa_bots_rt build %s -> %s (%s)' % (src, dst, 'tower only' if opt['tower_only'] else 'tower + street'))
     P, st = plan(B, opt, say)
-    more = Street(st) if st else None
+    room = {'fallback': blast_seconds(B) + float(opt['room_wait'])} if opt['room_gate'] else None
+    if room:
+        say('tower: the room first - the bots\' chain starts from %s through %s; fall-back Timer_start_bots at %.1f s after the round-start event (blast + %.0f s)' % (
+            ROOM_COUNTER, GATE_NAME, room['fallback'], float(opt['room_wait'])))
+    more = Street(st, room) if (st or room) else None
     rep = F.apply(B, P, dst, say, more=more)
     if st:
         write_ini(dst, st, say)
@@ -809,7 +863,10 @@ def options(a):
         a.remove('--tower-only'); opt['tower_only'] = True
     if '--no-tree' in a:
         a.remove('--no-tree'); opt['tree'] = False
-    for flag, key, conv in (('--loot-seconds', 'loot_seconds', int), ('--after-blast', 'after_blast', float), ('--street-hold', 'street_hold', float)):
+    if '--enter-after-blast' in a:
+        a.remove('--enter-after-blast'); opt['room_gate'] = False
+    for flag, key, conv in (('--loot-seconds', 'loot_seconds', int), ('--after-blast', 'after_blast', float), ('--street-hold', 'street_hold', float),
+                            ('--room-wait', 'room_wait', float)):
         if flag in a:
             i = a.index(flag)
             opt[key] = conv(a[i + 1]); del a[i:i + 2]

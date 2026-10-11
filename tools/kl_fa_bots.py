@@ -2223,6 +2223,11 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
     if timer:
         tv = [v for k, _i, v in kl_fa.controllers(sc, 'TriggerDelay2') if k == timer[0]]
         firsts = tv[0][4] if tv else []
+        # kl_fa_bots_rt's room gate: the timer names one TriggerCounter of the squad's family, whose list holds the first steps
+        gate = [k for s in firsts for k in res(s) if any(sc.p.key(nm) == 'TriggerCounter' for nm, _b in sc.nodes[k]['ctrls'])]
+        if len(firsts) == 1 and gate:
+            firsts = [v for k, _i, v in kl_fa.controllers(sc, 'TriggerCounter') if k == gate[0]][0][4]
+            facts['start_gate'] = sc.names[gate[0]]
         if len(firsts) != len(squads) or {sc.top[j] for s in firsts for j in res(s)} != set(squads):
             fail('Timer_start_bots names %d first steps of %d squads (%d squads have a bot)' % (len(firsts), len({sc.top[j] for s in firsts for j in res(s)}), len(squads)))
     mine = {k for t in sc.tops() if sc.names[t].startswith(SQUAD) for k in range(t, sc.end[t])}
