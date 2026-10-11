@@ -8,7 +8,8 @@ reflection tables give and without names. kl_rtp.py reads those tables from both
 exactly what Dog Days reads for that class:
 
   1. A field both games have keeps its value. Arrays whose length changed are padded with zeros
-     or cut; enum values Dog Days lacks are replaced (listed in the log).
+     or cut; an enum value Dog Days lacks takes its new name if ENUM_RENAME has one, else Dog Days'
+     most common value (both listed in the log, the second with the value written).
   2. A field only Dog Days has gets the value Dog Days' own levels store there most often, or
      zero/empty if its levels never store that class.
   3. A field only Dead Men has is dropped.
@@ -94,14 +95,51 @@ ITEM_RENAME = {
     'eFF2ItemNotInUse': 'eFF2ItemNoItem',
 }
 
+# Dead Men enum options Dog Days renamed in place: {enum: {Dead Men option: Dog Days option}}. Both games
+# read an enum from a level file BY NAME (ZPackedInput slot 15, kl2 0x88c9f0 / Dead Men 0x451060: key index
+# -> string -> strcmp walk of the ZEnumInfo, kl2 0x847060; a name the enum lacks reads as 0 without an
+# assert), so a name Dog Days lacks is otherwise replaced by Dog Days' most common value - which is how the
+# helicopter's FRONT_GUN became NO_ATTACK and a PRIORITY_CRITICAL body PRIORITY_NORMAL (re/convert_audit.md 6).
+# Only renames where the two tables are the same list under other names (same count, same numbers) are here.
+# NOT here because not read in the code of either exe (re/convert_audit.md 6 has the candidates):
+# EVisionModifier (eVIM_DoubleRange .. -> eVIM_Factor_2_0 ..), EHeliBoneType FRONT_TURRET / FRONT_BARREL,
+# ESPAWN_TYPE eSPAWN_TYPE_ALLIES / _COMUNISTS.
+# EHeliAttackMode: no stock Dog Days level has GUN_ATTACK on a helicopter without a HeliWeapon, and Dead Men's
+# M06_FA_A has exactly that (its boss helicopter): kl_fa.heli_attack (in kl_fa.repair, so in every graft) sets
+# those routs back to NO_ATTACK. A whole-level conversion without kl_fa keeps GUN_ATTACK there - NOT RUN.
+ENUM_RENAME = {
+    'ECOLLISIONPRIORITY': {'PRIORITY_NORMAL': 'COLLISION_PRIORITY_NORMAL', 'PRIORITY_CRITICAL': 'COLLISION_PRIORITY_CRITICAL'},
+    'EHeliAttackMode': {'FRONT_GUN': 'GUN_ATTACK', 'LAUNCHER': 'LAUNCHER_ATTACK'},
+}
+
 # Pairings the executables cannot give. Key: the class level; value: Dog Days field index within
 # that level -> Dead Men field index, plus fixed values for Dog Days fields that have no source.
 #
 # ZSquadScript: Dead Men has attitude, alertness, bool, 12 message lists, bool, uint. Dog Days
-# added a game-type enum after attitude and 3 message lists. Which Dog Days list each Dead Men
-# list became (SQUAD_LISTS) comes from the earlier comparison of both games' levels, not from
-# the executables: treat it as a carried-over assumption.
-SQUAD_LISTS = [0, 1, 2, 4, 6, 7, 8, 9, 10, 11, 12, 13]
+# added a game-type enum after attitude and 3 message lists. SQUAD_LISTS[k] = the Dog Days list
+# Dead Men's list k became. READ IN BOTH EXES 2026-10-11 (re/convert_audit.md 1.2); until then this
+# was [0, 1, 2, 4, 6, 7, 8, 9, 10, 11, 12, 13], carried over from a comparison of level values, and
+# eight of the twelve lists went to another event:
+#   Dead Men 0 first member dead, 1 half dead, 2 one left, 3 all dead   (update, Dead Men 0x6ee110)
+#   Dog Days 0 first dead, 1 EVERY death (new), 2 half dead, 3 one left, 4 all dead   (kl2 0x47e440)
+#   Dead Men 4 / 5 = Dog Days 6 / 7: something noticed / a hostile seen (the same code calls the two
+#     helpers: Dead Men 0x72835d + 0x728382, kl2 0x4881cf + 0x4881f6);  Dog Days 5 and 8 are new
+#   Dead Men 6 = Dog Days 9: a member is attacked (Dead Men 0x72493f, 0x725526 = kl2 0x5a82b3, 0x8474df)
+#   Dead Men 8 / 9 = Dog Days 11 / 12: the messages 'VehicleDead' / 'DriverDead' (handler Dead Men
+#     0x6edf90, kl2 0x8a9a60);  Dead Men 11 = Dog Days 14 (Dead Men 0x6f5021 = kl2 0x7dbee1)
+#   Dead Men 7 / 10 = Dog Days 10 / 13: by the order between those, and by the order in which the
+#     squad saves its 'sent' flags (Dead Men 0x6ede10, kl2 0x44a1e0) - not by a reader of their own.
+#   Dog Days' new 8 = a player starts close combat on a member (0x42dfa0 <- ZFFActionCloseCombat 0x76eab0);
+#     new 5 is sent from CPPScript::ZIdleWalkGoal slot 2 (0x4fc859), event not read.
+# NOT THE SAME SENDERS (re/convert_audit.md 9): in Dead Men only a SOLDIER sends 'attacked' (0x6edcd0 has two
+# callers, both CPPScript::ZSoldier); in Dog Days a CIVILIAN does too (event 0x1d -> 0x582fb0 -> 0x7cc4a0,
+# no test of who attacked). So a Dead Men squad of civilians with an 'attacked' list (M01_FA_A has three)
+# carries wiring that never fired in Dead Men and can fire here. NOT RUN.
+# NOT SEEN LIVE, and a live run of the tab maps cannot show it: on every build that exists each target of a
+# misplaced list is also named by a list that was always paired right or by another object, none by the
+# misplaced list alone (re/convert_audit.md 9; 'kl_map_ai.py pairfix <build>' prints it). The proof is the
+# code above.
+SQUAD_LISTS = [0, 2, 3, 4, 6, 7, 9, 10, 11, 12, 13, 14]
 LEVEL_MAPS = {
     # The HUD. Dead Men: CharObj, fonts Text / Header / DebugText, ...; Dog Days: CharObj, fonts
     # H1 / H2 / H3 / DebugText, ... (seen in the values of both games' levels). Pairing by type
@@ -155,20 +193,52 @@ LEVEL_MAPS.update({
     },
     # DD0..2 one slot per LOD, DD5 the slot every character fills (DM1): by values
     'ZLNKWHANDS': {'map': {0: 0, 5: 1, 6: 2}, 'values': {}},
-    # DM7 is a handle (type 46) = DD17; DM8 = DD19 by values (GUESS between DD18 and DD19); DM6 dropped
-    'ZFFActor': {'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 17: 7, 19: 8}, 'values': {}},
-    # by values only. DM12 dropped; DD16/DD17 = 800 is what Dog Days stores next to DD15 = 5000: GUESS
+    # DM7 is a handle (type 46) = DD17; DM6 dropped. DM8 = DD18, the bool right behind the handle: the same
+    # function reads both (Dead Men 0x5dda00 [actor+0x680], kl2 0x869b50 [actor+0x820]; four more readers
+    # agree, re/convert_audit.md 5). Until 2026-10-11 this was DD19 'by values' - wrong: DD19 is new.
+    # DD18 = 1 IS NOT RUN AND HAS NO STOCK PRECEDENT: field 18 is 0 on all 1,696 actors of the 21 stock Dog
+    # Days levels (Dead Men sets its field 8 on 197 of 1,668: M01_A, M03_A / B, M05_A, M08_A, M09_A / B).
+    # What speaks for letting it through: the branch the bool opens (kl2 0x869b79) is Dead Men's 0x5dda28
+    # step for step (the two players' entities against the object passed in, then the same mask test),
+    # so it is code Dead Men ran - but Dog Days never ran it on a shipped level. No actor of any build
+    # has it today (the 57 are M09 civilians, none in the Retomoto build; every Fragile Alliance actor
+    # has 0). DD19 stays 0 on a converted actor although some of Dog Days' own actors carry it (1 on 127
+    # of the 1,696): its readers are ZFFActor slots 364, 400, 406..408, 421..423 and, through the
+    # accessor 0x5e1250, the scripts ZLieWounded / ZWounded / ZHitAnimTask - what it switches is NOT
+    # established. READ THAT before a build carries Dead Men civilians (re/convert_audit.md 5).
+    'ZFFActor': {'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 17: 7, 18: 8}, 'values': {}},
+    # PROVEN by the readers of both exes (re/convert_audit.md 4): DD4..8 <- DM4..8 (accuracy, aim, .., health
+    # at 7, regeneration at 8: Dead Men 0x722090 = kl2 0x8fbac0), DD13 / 14 <- DM9 / 10 (the skill presets
+    # write them: Dead Men 0x724060, kl2 0x46e410), DD15 <- DM11 (Dead Men 0x723d40 = kl2 0x7842f0, byte for
+    # byte). DD9..12 are NEW: the health factor per difficulty (kl2 0x8fbb6e) - 1.0, never a Dead Men number
+    # (a 0 there is health 0). DD16 / 17 are NEW: the 'custom sixth sense' ranges, read only while a squad
+    # modifier has eCSS_Enabled (kl2 0x7837a0); 800 is what Dog Days stores next to DD15 = 5000: a GUESS that
+    # nothing reads on a converted map. DM12 (added to the alerted sense range, Dead Men 0x7222b0) and DM13
+    # (a whole-number health that overrides DM7 when > 0; -1 in every level but two soldiers of the game)
+    # have no Dog Days field: dropped.
+    # NOT the same scale behind the same number: health is 50 + 1.25 x DM7 hit points in Dead Men and
+    # DD7 hit points in Dog Days (tuning defaults, Dead Men 0x6e9210, kl2 0x5220e0) - carried as the number.
     'ZSoldierRout': {
         'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 13: 9, 14: 10, 15: 11, 18: 14, 19: 15, 20: 16},
         'values': {9: F(1.0), 10: F(1.0), 11: F(1.0), 12: F(1.0), 16: F(800.0), 17: F(800.0)},
     },
-    # by constants; DM3 -> DD3 (not DD4) and DM14 -> DD21 (not DD20) are GUESSES
+    # PROVEN by the readers of both exes (re/convert_audit.md 3), the two former guesses included: DM3 = DD3
+    # is the vehicle's health (Dead Men 0x688e01, kl2 0x42d6e0), DM4 = DD10 (the hit handler's threshold,
+    # Dead Men 0x68d491, kl2 0x7a7285), DM11..15 = DD17, 18, 19, 21, 22 (Dead Men 0x68c340 = kl2 0x590480,
+    # 0x689170 = 0x624a60). NEW in Dog Days and left at Dog Days' usual value: DD4 the health in team mode,
+    # DD5..8 the health factor per difficulty (kl2 0x42d6a6: 1.0 - a 0 there is a car that blows up at the
+    # first hit), DD9, DD20.
     'ZVehicleEffects': {'map': _run((0, 0, 4), (10, 4, 10), (21, 14, 21)), 'values': {}},
     # 3 legacy projectiles
     'CExplode': {'map': {0: 0, 1: 1, 3: 2, 4: 3, **_run((6, 4, 11))}, 'values': {}},
-    # the new bool is DD7 (update function, kl2 0x42afd0 against Dead Men 0x69fff0)
+    # The seven event bools, read in the update of both exes (Dead Men 0x69fff0, kl2 0x42afd0) and in the
+    # mask each init builds (Dead Men 0x69f4b7, kl2 0x49e583): 1 a player enters, 3 the players leave,
+    # 4 / 5 a 'Mercenary' actor enters / the last one leaves, 6 an 'Ally' enters, 7 any other actor (enemy,
+    # neutral) enters, [Dog Days 8: the last of those leaves - NEW], Dead Men 8 = Dog Days 9 an
+    # 'EnemyVehicle' enters. Until 2026-10-11 this put DM7 into DD8 ('somebody walks in' became 'everybody
+    # in here is gone'); re/convert_audit.md 1.1. DD8 has no Dead Men source and no stock level sets it.
     'ZTriggerBox': {
-        'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 8: 7, 9: 8, 10: 9, 12: 10, 13: 11, 14: 12, 17: 13},
+        'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 9: 8, 10: 9, 12: 10, 13: 11, 14: 12, 17: 13},
         'values': {},
     },
     # behaviour base: Dead Men's bool is the one at Dog Days +0x3e, the new one is at +0x3f
@@ -418,8 +488,15 @@ class Converter:
         if df.kind == 'e':
             name = p.key(u[0])
             if name not in self.options[df.enum]:
-                self.report['enum value replaced'][name + ' (' + self.dd.enums[df.enum]['name'] + ')'] += 1
-                return self.default(p, df, who)
+                enum = self.dd.enums[df.enum]['name']
+                new = ENUM_RENAME.get(enum, {}).get(name)
+                if new in self.options[df.enum]:
+                    self.report['enum value renamed'][name + ' -> ' + new + ' (' + enum + ')'] += 1
+                    return _materialize(p, [(0x0e, ('KEY', new))])
+                # the name is gone and nothing says what it became: Dog Days' usual value, and the log says which
+                out = self.default(p, df, who)
+                self.report['enum value replaced'][name + ' (' + enum + ') -> ' + p.key(out[0])] += 1
+                return out
         elif df.kind == 'k':
             names = _resolve(p, u)[0][1][1:]
             keep = tuple(n for n in names if n in self.options[df.enum])

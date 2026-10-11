@@ -20,6 +20,16 @@ Spec, the measurements and every table: re/map_ai.md.
     python kl_map_ai.py check <before> <after>                          the before / after table of one map
     python kl_map_ai.py all <z_maps folder> <out folder> [M02 ...] [options]   apply + check + kl_maps.audit on M01 M02
                                                                        M03 M06 (or the ones named)
+    python kl_map_ai.py pairfix <build folder> [<out folder>] [--levels=M09_A,M09_B]
+                                                                       a build made BEFORE 2026-10-11: the squad event
+                                                                       lists, trigger-box bools and two enums the
+                                                                       converter paired wrongly, put right in place
+                                                                       (re/convert_audit.md). Without an out folder:
+                                                                       the list of what would change, nothing written.
+                                                                       It also says, list by list, where else the
+                                                                       targets are named ('in play'). NOT RUN IN THE
+                                                                       GAME; a run of its output is a load check, it
+                                                                       cannot show the pairing (re/convert_audit.md 9).
   options of apply / all (each switches one part off; default = everything on):
     --no-strength   (1) soldier rows and weapons by class stay as built
     --no-waves      (2) timers, counters, round-start list stay as built
@@ -43,11 +53,15 @@ WHAT THE SOLDIER ROW IS (read in kl2.exe, 2026-10-10; property = ZSoldier field,
     4  accuracy      per cent: 0x557ae0 and 0x719b00 use (1 - field 4 / 100) as the miss share
     5  (aim)         two ranges of globals 0xd18fa4.. are read at field 5 per cent (0x5a85a0; meaning ASSUMED: how
                      fast the aim settles) and one of the tuning table (0x622b57)
-    7  HEALTH        0x8fbac0: skipped with the 'GodActors' option or when <= 0 (invulnerable); else a range of
+    7  HEALTH        0x8fbac0: skipped with the 'GodActors' option or when < 0 (invulnerable; 0 is NOT skipped, it
+                     is health 0); else a range of
                      the tuning table at field 7 per cent, times a team factor, times field 9..12 chosen by the
                      difficulty [0x156b5f0] (0..3), handed to the actor (virtual +0x674 / +0x670)
                      (2026-10-10, re/balance.md: the range is 0..100, so field 7 IS hit points; the 'team factor'
                      is the difficulty row's NPC health 0.5 / 0.9 / 1.15 / 1.3 - Arcade takes the story rows)
+                     (2026-10-11, re/convert_audit.md 4: DEAD MEN's range is 50..175 - its 0x722090 is the same
+                     function on tuning +0x110 / +0x114 - so a Dead Men '100' was 175 hit points there and is 100
+                     here. The converter carries the number; the floors below happen to give the rifle class 175.)
     8  REGENERATION  virtual +0x67c -> 0x8f9bf0: seconds before health comes back and seconds until it is whole,
                      both 15 .. 1 at field 8 per cent; -1 = none (SWAT and the AI heisters: 50 = 8 s / 8 s)
     9..12            health factor per difficulty (new in Dog Days; 1.0 everywhere)
@@ -128,8 +142,15 @@ OTHER = {'Rifle_zastavam85': 'rifle', 'Rifle_Type88': 'rifle', 'Rifle_Type95_C':
          'HG_DesertEagle': 'pistol', 'HG_M9Beretta_S': 'pistol', 'Shotgun_Hawk_SawnOff': 'shotgun'}    # stock NPC guns in no kl_arms pool
 CLASS_OF = dict({t: c for c, pool in kl_arms.POOLS.items() for t, _w in pool}, **OTHER)
 
-SQUAD_DEAD = 8                                      # ZSquadScript: the list sent when the squad is wiped out (ASSUMPTION;
-                                                    # stock: 653 of the story levels' entries are 'all dead' counters)
+SQUAD_DEAD = 8                                      # ZSquadScript: the list sent when the squad is wiped out. READ in kl2.exe
+                                                    # 2026-10-11 (re/convert_audit.md 1.2): the update 0x47e440 sends list 4
+                                                    # = field 8 through 0x87ebf0 when no member is left. Field 4 = the first
+                                                    # death, 5 = EVERY death, 6 = half dead, 7 = one left; 10 / 11 = something
+                                                    # noticed / a hostile seen, 13 = a member is attacked.
+                                                    # A Dead Men map built before that date has its 'attacked' lists in field
+                                                    # 12 (an event Dead Men does not have: a player starts close combat on a
+                                                    # member, kl2 0x42dfa0): kl_convert.SQUAD_LISTS was wrong. In Dog Days a
+                                                    # CIVILIAN sends field 13 too (kl2 0x7b4918), in Dead Men only a soldier.
 MON_CALLED = 4                                      # OnlineEscVehicleMonitor: sent when the exit trigger calls its vehicle 1
 START_LIST = 2                                      # AIMonitor: sent when the round starts (stock: timers)
 BEHAVE = ('HuntBehaviourRout', 'FlankingBehaviourRout', 'DefendBehaviourRout', 'RunToCoverBehaviourRout', 'PatrolBehaviourRout',
@@ -1120,6 +1141,283 @@ def balance(src, dist=10.0, diff=1, gun='Rifle_zastavam85', log=print):
     return rows
 
 
+# ------------------------------------------------------------------ pairfix: the converter's pairings found wrong on 2026-10-11
+# re/convert_audit.md. kl_convert is corrected, so a build made from now on is right; this step puts a build made
+# BEFORE that date right without re-making it (values and reference lists of objects it already has; only the .prp
+# member changes). It touches an object only when (a) the object has the scene path of a Dead Men object of the
+# build's own Dead Men level(s) and (b) it still holds exactly what the old converter wrote there.
+#
+# WHAT A LIVE RUN OF A pairfix BUILD CAN SHOW (review of 2026-10-11, re/convert_audit.md 9): that it loads and plays
+# as before - NOT that the pairing is right. On the five builds of the tab every target of a moved list is also
+# reached through a list that was always in its place (the same squad's 'a hostile is seen' list, another squad's,
+# a counter, a trigger box), and KLHook.log has no line for a squad event. The proof of the pairing is the code of
+# both exes. pairfix therefore prints, for every list it moves, where else its targets are named ('in play').
+OLD_SQUAD_LISTS = (0, 1, 2, 4, 6, 7, 8, 9, 10, 11, 12, 13)     # kl_convert.SQUAD_LISTS until 2026-10-11
+SQUAD_FIRST = 4                                                 # ZSquadScript: the Dog Days field of list 0 (Dead Men: 3)
+LIST_NAME = ('the first member is dead', 'half the squad is dead', 'one member is left', 'the squad is wiped out',
+             'something is noticed', 'a hostile is seen', 'a member is attacked', '(Dead Men list 7)', 'VehicleDead',
+             'DriverDead', '(Dead Men list 10)', '(Dead Men list 11)')
+DD_LIST_NAME = ('the first member is dead', 'EVERY death', 'half the squad is dead', 'one member is left',
+                'the squad is wiped out', '(Dog Days list 5)', 'something is noticed', 'a hostile is seen',
+                'a player starts close combat on a member', 'a member is attacked', '(Dog Days list 10)', 'VehicleDead',
+                'DriverDead', '(Dog Days list 13)', '(Dog Days list 14)')
+
+
+def _named(sc, skip=()):
+    """{lower-case scene path: [(node, controller name, field)]} of every reference-list entry of every controller
+    of the scene, without the ZSquadScript lists (node, field) in skip."""
+    out = {}
+    for k in range(1, len(sc.nodes)):
+        for nm, body in sc.nodes[k]['ctrls']:
+            n = sc.p.key(nm)
+            for i, u in enumerate(units(body[1:-1])):
+                if u[0][0] != 0x04 or (n == 'ZSquadScript' and (k, i) in skip):
+                    continue
+                x = kl_fa.value(sc, u)
+                if isinstance(x, list):
+                    for s in x:
+                        if isinstance(s, str) and s:
+                            out.setdefault(s.lower(), []).append((k, n, i))
+    return out
+
+
+def _squad_members(sc, k):
+    """(soldiers, civilians) of the squad at node k, as the level file has them."""
+    names = [sc.p.key(nm) for j in range(k, sc.end[k]) for nm, _b in sc.nodes[j]['ctrls']]
+    return names.count('ZSoldier'), names.count('ZCivilian')
+
+
+def dead_men_levels(src):
+    """The Dead Men levels a build folder was made from (result.json of kl_maps: 'M' and, for the two-part
+    Retomoto build, the level named in 'tag')."""
+    import re
+    d = src if os.path.isdir(src) else os.path.dirname(src)
+    rj = os.path.join(d, 'result.json')
+    if not os.path.isfile(rj):
+        return []
+    r = json.load(open(rj))
+    out = [r['M']] if str(r.get('M', '')).startswith('M') else []
+    out += [m for m in re.findall(r'M\d\d(?:_FA)?_[A-Z]', str(r.get('tag', ''))) if m not in out]
+    return out
+
+
+def _dead_men(levels):
+    """{lower-case scene path: {controller name or '(node)': (class, [Dead Men field values])}} of the objects
+    pairfix looks at, from the stock Dead Men levels (map side only: the graft drops the rest)."""
+    want = ('ZSquadScript', 'TriggerBox', 'HeliFlyBehaviourRout')
+    out = {}
+    for lv in levels:
+        sc = J.Scene.load(lv, 'dm')
+        side = J.sides(sc)
+        for k in range(1, len(sc.nodes)):
+            if side[k] != 'map':
+                continue
+            nd = sc.nodes[k]
+            for nm, body in nd['ctrls']:
+                n = sc.p.key(nm)
+                if n in want:
+                    out.setdefault(sc.path[k].lower(), {})[n] = (n, [kl_fa.value(sc, u) for u in units(body[1:-1])])
+            if sc.cls(k) == 'ZHavokRigidBody':
+                lab = J.labels('dm', 'ZHavokRigidBody')
+                out.setdefault(sc.path[k].lower(), {})['(node)'] = ('ZHavokRigidBody', kl_fa.node_values(sc, k)[lab.index('ZHavokRigidBody[2]')])
+    return out
+
+
+def pairfix(src, dst=None, levels=None, log=print):
+    """A finished build folder made before 2026-10-11 -> folder dst with the four things the converter paired
+    wrongly put right (dst None: only the report, nothing is written). -> report dict.
+      squads   the event lists of a Dead Men squad sit in the list the old kl_convert.SQUAD_LISTS gave: each list
+               Dead Men had entries in is moved to the list of the same event (kl_convert.SQUAD_LISTS now)
+      boxes    a Dead Men TriggerBox with 'another actor enters' (Dead Men field 7) has it in Dog Days field 8
+               ('the last of them leaves'): moved to field 7
+      enums    HeliFlyBehaviourRout FRONT_GUN / LAUNCHER and a rigid body's PRIORITY_CRITICAL that became Dog Days'
+               usual value (kl_convert.ENUM_RENAME)
+      right    what is in its place already (a second run on its own output lists everything here and moves nothing)
+      play     for every moved list: how many of its targets are also in a list of the same squad whose pairing never
+               changed, how many more another object names, how many nothing else names. Read off the lists, NOT RUN.
+    Not here: ZFFActor field 18 / 19 - no actor of the five maps has the Dead Men bool set."""
+    import kl_graft, kl_convert as K
+    zp = archive_of(src)
+    levels = levels or dead_men_levels(src)
+    if not levels:
+        raise ValueError('%s: no result.json names the Dead Men level; give --levels=M01_FA_A' % src)
+    if dst and os.path.abspath(dst) == os.path.abspath(os.path.dirname(zp)):
+        raise ValueError('the output folder is the build\'s own')
+    order, files, ext, sc, _live, _hud = kl_graft.open_built(zp)
+    data, bad, _paths, _names = J.check(sc, log=lambda *_a: None)
+    if data != files[ext['.prp']] or bad:
+        raise ValueError('the build\'s .prp does not re-serialise byte for byte (%d misfits): not changed' % len(bad))
+    dm = _dead_men(levels)
+    before = faults(sc)                         # what the build has anyway (a tab build has none; counted, not judged)
+    new = K.SQUAD_LISTS
+    if len(new) != 12 or list(new) != sorted(set(new)) or max(new) > 14 or tuple(new) == OLD_SQUAD_LISTS:
+        raise ValueError('kl_convert.SQUAD_LISTS is not a 12 -> 15 pairing other than the old one')
+    rep = collections.OrderedDict(source=zp, levels=levels, squads=[], boxes=[], enums=[], right=[], left=[], play=[])
+    lines = []
+    def say(s):
+        lines.append(str(s)); log(s)
+    say('kl_map_ai pairfix: %s, Dead Men level(s) %s' % (zp, ', '.join(levels)))
+    # 1. squads. First the plan - nothing is changed yet, so that 'who else names this target' is read off the
+    #    build as it stands.
+    plan = []                                   # (node, field values, [(from field, to field, Dead Men list)])
+    for k, _i, v in kl_fa.controllers(sc, 'ZSquadScript'):
+        d = dm.get(sc.path[k].lower(), {}).get('ZSquadScript')
+        if d is None or len(v) != 21:
+            continue
+        dv = d[1]
+        low = {i: {s.lower() for s in v[i]} for i in range(SQUAD_FIRST, SQUAD_FIRST + 15)}
+        # every list Dead Men had entries in and the old pairing misplaced
+        moves = []
+        for j in range(12):
+            if OLD_SQUAD_LISTS[j] == new[j] or not dv[3 + j]:
+                continue
+            a, b = SQUAD_FIRST + OLD_SQUAD_LISTS[j], SQUAD_FIRST + new[j]
+            want = {s.lower() for s in dv[3 + j]}
+            if want & low[b] and not want & low[a]:
+                # Dead Men's entries stand in the field of their own event and none of them in the old field: right
+                # already (an earlier pairfix, or a build converted after 2026-10-11); what field a holds, if
+                # anything, belongs to another event
+                rep['right'].append('%s: "%s" is in field %d' % (sc.path[k].replace(R, ''), LIST_NAME[j], b))
+            elif not v[a]:
+                rep['left'].append('%s: Dead Men had %d entries for "%s"; the build has none in field %d and field %d does not hold them either (a later step took or renamed them)' % (
+                    sc.path[k], len(dv[3 + j]), LIST_NAME[j], a, b))
+            else:
+                moves.append((a, b, j))
+        if not moves:
+            continue
+        srcs = {a for a, _b, _j in moves}
+        # a destination that is not itself moved away must be empty, or the entries of two events would be mixed
+        clash = sorted(b for _a, b, _j in moves if b not in srcs and v[b])
+        if clash:
+            rep['left'].append('%s: field(s) %s already hold entries of another event: NOT changed' % (sc.path[k], clash))
+            continue
+        plan.append((k, v, moves))
+    # what a move changes IN PLAY, read off the lists (nothing here was run): a target that is also in a list of
+    # the same squad whose pairing never changed, or that another object names, is reached without the move too
+    named = _named(sc, {(k, a) for k, _v, moves in plan for a, _b, _j in moves}) if plan else {}
+    kept = [(SQUAD_FIRST + new[j], LIST_NAME[j]) for j in range(12) if OLD_SQUAD_LISTS[j] == new[j]]
+    tot = collections.Counter()
+    for k, v, moves in plan:
+        sol, civ = _squad_members(sc, k)
+        own = {}
+        for fi, nm in kept:
+            for s in v[fi]:
+                own.setdefault(s.lower(), nm)
+        f = {a: [] for a, _b, _j in moves}
+        for a, b, j in moves:
+            f[b] = f.get(b, []) + list(v[a])
+            rep['squads'].append('%s: "%s", %d entries: field %d -> field %d' % (sc.path[k].replace(R, ''), LIST_NAME[j], len(v[a]), a, b))
+            same = [s for s in v[a] if s.lower() in own]
+            rest = [s for s in v[a] if s.lower() not in own]
+            other = [s for s in rest if named.get(s.lower())]
+            alone = [s for s in rest if not named.get(s.lower())]
+            tot.update({'entries': len(v[a]), 'same squad': len(same), 'another object': len(other), 'nothing else': len(alone)})
+            s = '%s (%d soldier(s), %d civilian(s)), "%s" (was in the field of "%s"): of %d entries %d are also in this squad\'s own %s' % (
+                sc.path[k].replace(R, ''), sol, civ, LIST_NAME[j], DD_LIST_NAME[a - SQUAD_FIRST], len(v[a]), len(same),
+                ' / '.join('"%s"' % x for x in sorted({own[q.lower()] for q in same})) or 'lists that never moved')
+            if other:
+                k2, n2, i2 = named[other[0].lower()][0]
+                s += '; %d more also named by another object (e.g. %s by %s @%s field %d)' % (
+                    len(other), other[0].replace(R, ''), sc.path[k2].replace(R, ''), n2, i2)
+            s += '; %d by nothing else%s' % (len(alone), (' (%s)' % ', '.join(x.replace(R, '') for x in alone)) if alone else '')
+            if j == 2 and 2 <= sol + civ <= 3:
+                # kl2 0x47e4d8: half dead = alive <= members / 2 (whole numbers), one left = alive <= 1, one update
+                s += ' - with %d members "half dead" and "one left" fall in the same update (kl2 0x47e4d8): the move changes nothing in play' % (sol + civ)
+            if j == 6 and civ and not sol:
+                s += ' - a squad of civilians: Dead Men\'s civilian never sent this event (its sender 0x6edcd0 is called by the soldier script only), Dog Days\' does (kl2 0x7b4918 -> 0x582fb0)'
+            rep['play'].append(s)
+        put(sc, k, 'ZSquadScript', **{'f%d' % i: x for i, x in f.items()})
+    rep['play totals'] = dict(tot)
+    # 2. trigger boxes
+    for k, _i, v in kl_fa.controllers(sc, 'TriggerBox'):
+        d = dm.get(sc.path[k].lower(), {}).get('TriggerBox')
+        if d is None or len(v) != 18 or not d[1][7]:
+            continue
+        if v[7] == 0 and v[8] == 1:
+            put(sc, k, 'TriggerBox', f7=1, f8=0)
+            rep['boxes'].append('%s: "another actor enters" was in field 8 ("the last of them leaves"): field 7 = 1, field 8 = 0' % sc.path[k].replace(R, ''))
+            if not v[12] and not v[17] and not _named(sc).get(sc.path[k].lower()):
+                rep['play'].append('%s: both lists of the box are empty and nothing names it: the move changes nothing in play' % sc.path[k].replace(R, ''))
+        elif v[7] == 1 and v[8] == 0:
+            rep['right'].append('%s: "another actor enters" is in field 7' % sc.path[k].replace(R, ''))
+        else:
+            rep['left'].append('%s: fields 7, 8 = %s, %s (not what the old converter wrote)' % (sc.path[k], v[7], v[8]))
+    # 3. the renamed enums. A fly rout's FRONT_GUN / LAUNCHER comes back only on a helicopter that carries a
+    #    weapon: kl_fa.heli_attack says why the pair 'attack' + 'no weapon' (M06's boss helicopter) is not written
+    for k, _i, v in kl_fa.controllers(sc, 'HeliFlyBehaviourRout'):
+        d = dm.get(sc.path[k].lower(), {}).get('HeliFlyBehaviourRout')
+        want = K.ENUM_RENAME['EHeliAttackMode'].get(d[1][6]) if d else None
+        if want and len(v) == 16 and v[6] == 'NO_ATTACK':
+            par = sc.parent[k]
+            armed = any(sc.cls(j) == 'ZHeli' and any(n == 'HeliWeapon' and w[3] for _x, n, w in ctrls(sc, j)) for j in range(par, sc.end[par]))
+            if armed:
+                put(sc, k, 'HeliFlyBehaviourRout', f6=want)
+                rep['enums'].append('%s: attack mode %s was NO_ATTACK: %s' % (sc.path[k].replace(R, ''), d[1][6], want))
+            else:
+                rep['left'].append('%s: Dead Men says %s, but its helicopter carries no weapon: NO_ATTACK stays (kl_fa.heli_attack)' % (sc.path[k], d[1][6]))
+    for k in range(1, len(sc.nodes)):
+        d = dm.get(sc.path[k].lower(), {}).get('(node)')
+        if d and sc.cls(k) == 'ZHavokRigidBody' and d[1] == 'PRIORITY_CRITICAL':
+            fi = J.labels('dd', 'ZHavokRigidBody').index('ZHavokRigidBody[2]')
+            now = kl_fa.node_values(sc, k)[fi]
+            if now == 'COLLISION_PRIORITY_NORMAL':
+                kl_fa.edit(sc, k, None, lambda us: setv(sc, us, fi, 'COLLISION_PRIORITY_CRITICAL'))
+                rep['enums'].append('%s: collision priority was NORMAL: COLLISION_PRIORITY_CRITICAL' % sc.path[k].replace(R, ''))
+            elif now == 'COLLISION_PRIORITY_CRITICAL':
+                rep['right'].append('%s: collision priority is COLLISION_PRIORITY_CRITICAL' % sc.path[k].replace(R, ''))
+    head = {'right': 'right already (an earlier pairfix, or converted after 2026-10-11)', 'left': 'left as they are'}
+    for key in ('squads', 'boxes', 'enums', 'right', 'left'):
+        say('  %s: %d' % (head.get(key, key), len(rep[key])))
+        for r in rep[key]:
+            say('      ' + r)
+    if rep['play']:
+        say('  in play (read off the build\'s lists, NOT RUN; old place of "a member is attacked" = Dog Days\' "a player starts close combat on a member", kl2 0x42dfa0):')
+        for r in rep['play']:
+            say('      ' + r)
+        if tot:
+            say('      squad entries moved: %d - %d also in a list of the same squad that never moved, %d more also named by another object, %d named by nothing else' % (
+                tot['entries'], tot['same squad'], tot['another object'], tot['nothing else']))
+        say('      a live run of the result can show that it loads and plays as before, not that the pairing is right (re/convert_audit.md 9)')
+    data, bad, _paths, _names = J.check(sc, log=lambda *_a: None)
+    if bad:
+        raise ValueError('%d objects do not fit their class after the changes: %s' % (len(bad), bad[:3]))
+    after = faults(sc)                          # entries are moved, none is written: the count cannot grow
+    rep['list faults'] = (len(before), len(after))
+    if len(after) > len(before):
+        raise ValueError('reference lists at fault after the changes (nothing is written): %s' % [x for x in after if x not in before][:8])
+    say('  kl_map_ai.faults (names nothing / without ROOT / order rules): %d before, %d after' % (len(before), len(after)))
+    rep['prp bytes'] = (len(files[ext['.prp']]), len(data))
+    rep['changed'] = data != files[ext['.prp']]
+    if not dst:
+        say('  nothing written (no output folder given)')
+        return rep
+    files[ext['.prp']] = data
+    os.makedirs(dst, exist_ok=True)
+    kl_graft.write_zip(os.path.join(dst, os.path.basename(zp)), [(n, files[n]) for n in order])
+    for x in os.listdir(os.path.dirname(zp)):
+        q = os.path.join(os.path.dirname(zp), x)
+        if os.path.isfile(q) and q != zp and not x.startswith('pairfix.'):
+            shutil.copyfile(q, os.path.join(dst, x))
+    sj = os.path.join(dst, 'steps.json')
+    if os.path.isfile(sj):
+        import kl_maps
+        st = json.load(open(sj))
+        old, now = st.get('final') or [[], []], kl_maps.member_ids(dst)
+        diff = [a[0] for a, b in zip(old[0], now[0]) if a != b] + [a[0] for a, b in zip(old[1], now[1]) if a != b]
+        if diff not in ([], ['.prp']) or [a[0] for a in old[0]] != [a[0] for a in now[0]] or len(old[1]) != len(now[1]):
+            raise ValueError('more than the .prp member differs from the build: %s' % diff)
+        st['pairfix'], st['final'] = diff, now
+        st['same'] = [e for e in st.get('same', []) if e not in diff]
+        with open(sj, 'w') as fh:
+            json.dump(st, fh, indent=1)
+    with open(os.path.join(dst, 'pairfix.json'), 'w') as fh:
+        json.dump(rep, fh, indent=1)
+    with open(os.path.join(dst, 'pairfix.txt'), 'w') as fh:
+        fh.write('\n'.join(lines) + '\n')
+    say('  written: %s' % dst)
+    return rep
+
+
 def main():
     global HEALTH_SCALE
     a = [x for x in sys.argv[1:] if not x.startswith('--')]
@@ -1137,6 +1435,9 @@ def main():
                     diff=next((int(x.split('=')[1]) for x in o if x.startswith('--diff=')), 1))
     elif len(a) == 3 and a[0] == 'apply':
         apply(a[1], a[2], parts, '--presets' in o, car_exit=car)
+    elif len(a) in (2, 3) and a[0] == 'pairfix':
+        lv = next((x.split('=')[1].split(',') for x in o if x.startswith('--levels=')), None)
+        pairfix(a[1], a[2] if len(a) == 3 else None, lv)
     elif len(a) == 3 and a[0] == 'check':
         compare(a[1], a[2])
     elif len(a) >= 3 and a[0] == 'all':

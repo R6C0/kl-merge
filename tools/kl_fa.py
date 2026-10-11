@@ -673,13 +673,41 @@ def boarding(sc, log=print):
     return n
 
 
+def heli_attack(sc, log=print):
+    """A helicopter fly rout that says 'attack with the gun / the launcher' on a helicopter that carries no
+    weapon -> NO_ATTACK.
+    WHY (re/convert_audit.md 6, 2026-10-11): Dead Men's M06_FA_A gives its boss helicopter - which has no
+    HeliWeapon controller - two fly routs with FRONT_GUN. Until that date kl_convert did not know the name and
+    wrote Dog Days' usual value, NO_ATTACK; with kl_convert.ENUM_RENAME they come out as GUN_ATTACK. No stock
+    Dog Days level has that pair: 49 fly routs say GUN_ATTACK, every one under a helicopter with a HeliWeapon;
+    65 are under one without and all 65 say NO_ATTACK. What the engine does with 'attack' and no weapon was
+    NOT read and never ran, so the pair is not let through: NO_ATTACK is what a helicopter without a gun does
+    anyway and what every build that ran had. A rout whose group holds no helicopter is left alone.
+    -> routs changed."""
+    n = 0
+    for k, i, v in controllers(sc, 'HeliFlyBehaviourRout'):
+        if len(v) != 16 or v[6] not in ('GUN_ATTACK', 'LAUNCHER_ATTACK'):
+            continue
+        par = sc.parent[k]
+        helis = [j for j in range(par, sc.end[par]) if sc.cls(j) == 'ZHeli']
+        armed = any(sc.p.key(nm) == 'HeliWeapon' and value(sc, units(b[1:-1])[3]) for j in helis for nm, b in sc.nodes[j]['ctrls'])
+        if helis and not armed:
+            def fn(us):
+                us[6] = [(us[6][0][0], struct.pack('<I', sc.p.key_index('NO_ATTACK')))]
+            edit(sc, k, i, fn)
+            n += 1
+    if n:
+        log('  kl_fa: %d helicopter fly rout(s) said attack on a helicopter without a weapon: NO_ATTACK (no stock level has that pair)' % n)
+    return n
+
+
 def repair(sc, kept=(), log=print):
     """Everything above that is safe to do without asking: the exit trigger's field, the escape
     camera's field, a monitor if there is none, settings 331 / 332, and prune(kept).
     -> {repair: count}. Run check() afterwards: what is left needs authoring (re/fa_round.md)."""
     done = {'prune': prune(sc, kept, log) if kept else 0, 'exit_trigger': exit_trigger(sc, log), 'cam_trigger': cam_trigger(sc, log),
             'monitor': monitor(sc, log), 'settings_lists': settings_lists(sc, log),
-            'boarding': boarding(sc, log), 'define_master': define_master(sc, log),
+            'boarding': boarding(sc, log), 'define_master': define_master(sc, log), 'heli_attack': heli_attack(sc, log),
             'money_people': money_people(sc, log) if any(sc.cls(k) == 'ZHavokCar' for k in range(1, len(sc.nodes))) else 0}
     return {k: v for k, v in done.items() if v}
 

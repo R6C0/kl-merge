@@ -1,5 +1,26 @@
 # Field pairings Dead Men -> Dog Days: what the converter assumes, checked
 
+> **CORRECTED 2026-10-11 (re/convert_audit.md, readers of both exes).** Two rows of table A below were WRONG and
+> one pairing that is not in the table was too; three rows marked 'values only' / 'guess' are now proven. The
+> rows and the paste block below carry the corrected form.
+> - `ZTriggerBox`: the new bool is **DD8**, not DD7 (DD7 <- DM7 'another actor enters', DD9 <- DM8 'a vehicle
+>   enters'; DD8 'the last of the others has left' is new). The update function was read for its code shape
+>   instead of for which event each bool gates.
+> - `ZFFActor`: DM8 is **DD18** (the bool right behind the handle - the [O] evidence was right, the [V]
+>   evidence chosen over it was not): DM 0x5dda00 = DD 0x869b50.
+> - `ZSquadScript` (never in this table; `kl_convert.SQUAD_LISTS`, 'carried over'): 8 of the 12 event lists
+>   were paired with another event. Now `[0, 2, 3, 4, 6, 7, 9, 10, 11, 12, 13, 14]`.
+> - `ZSoldierRout` and `ZVehicleEffects`: every pairing read in code, the guesses (DM3 -> DD3, DM14 -> DD21)
+>   included. The four `ZSoldierRout` DD9..12 and the four `ZVehicleEffects` DD5..8 are the health factor per
+>   difficulty.
+> - Lesson for the evidence kinds below: [V] and 'the code looks different here' both failed where a Dog Days
+>   field was inserted between same-typed ones; what held was reading what each member DOES in both exes.
+> - After the review of that audit (re/convert_audit.md 9): none of these corrections can be SEEN on a build
+>   that exists - every target of a misplaced squad list is also reached through a list that was always paired
+>   right, the one trigger box has empty lists, no actor has the bool. A live run is a load check; the proof is
+>   the code. Not the same senders in the two games: Dog Days' civilian sends 'a member is attacked', Dead Men's
+>   never did.
+
 Scope: the 46 class levels `Converter.plan` puts in `Converter.assumed` (2026-10-09, schemas
 `re/kaneandlynch.json` / `re/kl2.json`), ranked by objects in the four Dead Men FA maps
 (M01FAA, M02FAA, M03FAA, M06FAA). Field numbers are indices **within the class level** (the
@@ -55,11 +76,11 @@ Two facts about the present code that explain most of table A:
 | ZItemTemplateWeapon | 144 | 720 | DD7<-DM6, DD9<-DM7, DD10<-DM8, DD11<-DM9, DD12<-DM10; DD6, DD8 new; DD17 new (list), DM15 and DM18 (strings) dropped. Current: DD6..10<-DM6..10, DD11, DD12 new | [N] 10 legacy weapons: DD7=DM6 8/10 (chance 2), DD9=DM7 9/10, DD11=DM9 9/10, DD12=DM10 8/10; e.g. Grenade_Fragmentation DM 600,0,100,1500,1,80,200 -> DD 600,0,**-1**,100,**-1**,1500,1,80,200 | high |
 | ZItemTemplateAmmo | 128 | 640 | DD3<-DM2, DD5<-DM3; DD2, DD4 new. Current: DD2, DD3 new, DD4<-DM2, DD5<-DM3 | [N] 13 legacy ammo: Grenade_Incendiary / Smoke 500,200 -> -1,500,-1,200; RPG_7V_Hind 250,300 -> -1,250,-1,300; TearGas 0,0 -> -1,0,-1,0 (DD3=DM2 6/13 chance 2, DD5=DM3 7/13) | high |
 | ZLNKWHANDS | 129 | 1764 | DD0<-DM0, DD5<-DM1; DD1..4 new. Current: DD4<-DM0, DD5<-DM1 (DD0 = default) | [V] DD3, DD4 = 0 in 1891/1891, so DM0 (non-zero in 1450/1764) is not DD4; DM1 never 0, 23 values <-> DD5 never 0, 21 values; DD0,1,2 are a rising triple (292016, 306496, 320896) = one slot per LOD. [O] slots 0x10 apart, [T] all type 46 | DD5 high, DD0 medium |
-| ZFFActor | 65 | 1668 | DD17<-DM7, DD19<-DM8; DM6 dropped; DD6..16, DD18 new. Current: DD6<-DM6, DD7<-DM7, DD8<-DM8 | [T] DM7 is type 46 (handle), DD6/DD7 are type 21 (count), only DD17 is type 46; [O] DM7 and DD17 are both followed by a 0x14-byte gap, then bools. [V] DM8 = 1 on civilians (197 of 213 Neutral), DD19 = 1 on 115 Neutral, DD18 and DD8 = 0 in 1696/1696 | DD17 high, DD19 medium, DM6 not established |
-| ZSoldierRout | 54 | 1455 | DD13<-DM9, DD14<-DM10, DD15<-DM11; DD9..12 new; DM12, DM13 dropped. Current: DD9..12<-DM9..12, DD13..17 new | [V] DD9..12 = 1 in 1412/1413 while DM9..12 are 50, 50, 5000, 0; DD13, DD14 = 50 like DM9, DM10; DD15 = 5000 in 469 like DM11 (5000 in 1260) | medium (values only) |
-| ZVehicleEffects | 32 | 484 | DD0..3<-DM0..3, DD10..12<-DM4..6, DD15..19<-DM9..13, DD21<-DM14, DD22<-DM15; new DD4..9, DD20. Current: DD0..5 new, DD6..12<-DM0..6, DD15 new, DD16..22<-DM9..15 | [V] constants line up: DM 40, 60, (1/200), x, 0, 100, 100 / 900, 12, 2.5 <-> DD 40, 60, 200, x, x, 1,1,1,1,1, 0, 100, 100 / 900, 12, 2.5 (DD has 18 objects, all with these values) | block high; DD3 vs DD4 and DD20 vs DD21 not established |
+| ZFFActor | 65 | 1668 | DD17<-DM7, **DD18<-DM8** (corrected 2026-10-11; was DD19); DM6 dropped; DD6..16, DD19 new. Current: DD6<-DM6, DD7<-DM7, DD8<-DM8 | [T] DM7 is type 46 (handle), DD6/DD7 are type 21 (count), only DD17 is type 46; [O] DM7 and DD17 are both followed by a 0x14-byte gap, then bools. [C] the bool behind the handle is read by the same function in both exes (DM 0x5dda00 `[actor+0x680]`, DD 0x869b50 `[actor+0x820]` = DD18) and by four more that match slot for slot. The [V] argument for DD19 (DM8 = 1 on 197 of 213 Neutral, DD19 = 1 on 115 Neutral, DD18 = 0 in 1696/1696) was wrong | DD17 high, DD18 proven by code - NOT RUN, no stock actor has it set (re/convert_audit.md 5); DM6 not established |
+| ZSoldierRout | 54 | 1455 | DD13<-DM9, DD14<-DM10, DD15<-DM11; DD9..12 new; DM12, DM13 dropped. Current: DD9..12<-DM9..12, DD13..17 new | [V] DD9..12 = 1 in 1412/1413 while DM9..12 are 50, 50, 5000, 0; DD13, DD14 = 50 like DM9, DM10; DD15 = 5000 in 469 like DM11 (5000 in 1260). [C] 2026-10-11: every field read in both exes (re/convert_audit.md 4); DD9..12 = the health factor per difficulty (kl2 0x8fbb6e), DD16 / 17 the custom-sense ranges | **proven** |
+| ZVehicleEffects | 32 | 484 | DD0..3<-DM0..3, DD10..12<-DM4..6, DD15..19<-DM9..13, DD21<-DM14, DD22<-DM15; new DD4..9, DD20. Current: DD0..5 new, DD6..12<-DM0..6, DD15 new, DD16..22<-DM9..15 | [V] constants line up: DM 40, 60, (1/200), x, 0, 100, 100 / 900, 12, 2.5 <-> DD 40, 60, 200, x, x, 1,1,1,1,1, 0, 100, 100 / 900, 12, 2.5 (DD has 18 objects, all with these values). [C] 2026-10-11: DM3 = DD3 the health, DD5..8 the health factor per difficulty, DM4 = DD10, DM11..15 = DD17, 18, 19, 21, 22 (re/convert_audit.md 3) | **proven**, the two former guesses included |
 | CExplode | 28 | 246 | DD0<-DM0, DD1<-DM1, DD3<-DM2, DD4<-DM3; DD2, DD5, DD17 new. Current: DD0, DD1 new, DD2..5<-DM0..3 | [N] 3 legacy projectiles, all fields: Rocket_RPG7 500,150,1000,200 -> 500,150,**200**,1000,200,**1**; Projectile_50cal_01 250,0,50,100 -> 250,0,200,50,100,1; Rocket_RPG7_Hind likewise, and its DM12 = 1 -> DD14 = 1 | high |
-| ZTriggerBox | 26 | 926 | DD8<-DM7, DD9<-DM8; DD7 new. Current: DD7<-DM7, DD8<-DM8, DD9 new | [C] vtable slot 25 (DM 0x69fff0, DD 0x42afd0) tests the bools in member order, each `jne` (skip) or `je` + call: DM jne,je \| jne \| jne \| jne,je; DD jne,je \| jne \| jne,**je** \| jne,je - the extra `je`+call is DD byte +0x4c = DD7 | medium-high |
+| ZTriggerBox | 26 | 926 | **DD7<-DM7, DD9<-DM8; DD8 new** (corrected 2026-10-11; this row said DD8<-DM7, DD7 new). Current: DD7<-DM7, DD8<-DM8, DD9 new | [C] vtable slot 25 (DM 0x69fff0, DD 0x42afd0): each bool gates one event of one actor group. The group 'other actors' has one test in DM (enter, `[x+0x48]` = DM7) and two in DD (enter `[x+0x4c]` = DD7 at 0x42b3e9, LEAVE `[x+0x4d]` = DD8 at 0x42b3fc); the init masks agree (DM 0x69f4b7, DD 0x49e583); DD8 is 0 in all 1,880 stock boxes. The earlier reading took the changed code shape of the enter test (`je` + call) for the new member | **proven** (re/convert_audit.md 1.1) |
 | ZOnlineExitLevelTrigger | 5 | 5 | DD2<-DM0. Current: DD1<-DM0 | [V] DM0 is the escape vehicle path (5/5); DD1 = '' in 9/9, DD2 = the escape vehicle in 9/9 | medium-high |
 | ZOnlineEscCamTrigger | 5 | 5 | DD1<-DM0, DD0 new. Current: DD0<-DM0 | [V] DM0 is a camera (EscCamera01/02); DD1 is a camera / cam relay in 45/45, DD0 is '' or the escape vehicle animation in 45/45 | medium-high |
 | ZHeliFlyBehaviourRout | 4 | 60 | DD6<-DM6 (same enum), DD8<-DM7, DD9..12 new. Current: DD6, DD8 = default, DD9..11<-DM3..5 | [O] DM7 / DD8 is the list after the attack enum; DD9..12 are a new block behind it; DM3..5 sit before the enum where DD has two EHeliFacingMode enums and one bool | lists and enum high; DM3..5 not established (left unpaired) |
@@ -175,20 +196,29 @@ LEVEL_MAPS.update({
     },
     # DD0..2 one slot per LOD, DD5 the slot every character fills (DM1): by values
     'ZLNKWHANDS': {'map': {0: 0, 5: 1, 6: 2}, 'values': {}},
-    # DM7 is a handle (type 46) = DD17; DM8 = DD19 by values (GUESS between DD18 and DD19); DM6 dropped
-    'ZFFActor': {'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 17: 7, 19: 8}, 'values': {}},
-    # by values only. DM12 dropped; DD16/DD17 = 800 is what Dog Days stores next to DD15 = 5000: GUESS
+    # DM7 is a handle (type 46) = DD17; DM8 = DD18 (read in both exes, 2026-10-11; was DD19 by values); DM6 dropped.
+    # DD18 = 1 is NOT RUN and has no stock precedent (0 on all 1,696 stock actors); DD19 is new, its meaning
+    # not established - tools/kl_convert.py carries the full comment
+    'ZFFActor': {'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 17: 7, 18: 8}, 'values': {}},
+    # PROVEN by the readers of both exes (re/convert_audit.md 4): DD4..8 <- DM4..8 (health at 7, regeneration at
+    # 8: Dead Men 0x722090 = kl2 0x8fbac0), DD13 / 14 <- DM9 / 10 (the skill presets), DD15 <- DM11 (Dead Men
+    # 0x723d40 = kl2 0x7842f0). DD9..12 NEW: the health factor per difficulty (kl2 0x8fbb6e) - 1.0, never a Dead
+    # Men number. DD16 / 17 NEW: the 'custom sixth sense' ranges, read only with eCSS_Enabled; 800 is a GUESS that
+    # nothing reads on a converted map. DM12 and DM13 have no Dog Days field: dropped.
     'ZSoldierRout': {
         'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 13: 9, 14: 10, 15: 11, 18: 14, 19: 15, 20: 16},
         'values': {9: F(1.0), 10: F(1.0), 11: F(1.0), 12: F(1.0), 16: F(800.0), 17: F(800.0)},
     },
-    # by constants; DM3 -> DD3 (not DD4) and DM14 -> DD21 (not DD20) are GUESSES
+    # PROVEN by the readers of both exes (re/convert_audit.md 3), the two former guesses included: DM3 = DD3 the
+    # vehicle's health (Dead Men 0x688e01, kl2 0x42d6e0), DM4 = DD10, DM11..15 = DD17, 18, 19, 21, 22. NEW and left
+    # at Dog Days' usual value: DD4 (health in team mode), DD5..8 (the health factor per difficulty, kl2
+    # 0x42d6a6: 1.0), DD9, DD20
     'ZVehicleEffects': {'map': _run((0, 0, 4), (10, 4, 10), (21, 14, 21)), 'values': {}},
     # 3 legacy projectiles
     'CExplode': {'map': {0: 0, 1: 1, 3: 2, 4: 3, **_run((6, 4, 11))}, 'values': {}},
-    # the new bool is DD7 (update function, kl2 0x42afd0 against Dead Men 0x69fff0)
+    # the new bool is DD8 (update function, kl2 0x42afd0 against Dead Men 0x69fff0; corrected 2026-10-11, was DD7)
     'ZTriggerBox': {
-        'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 8: 7, 9: 8, 10: 9, 12: 10, 13: 11, 14: 12, 17: 13},
+        'map': {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 9: 8, 10: 9, 12: 10, 13: 11, 14: 12, 17: 13},
         'values': {},
     },
     # behaviour base: Dead Men's bool is the one at Dog Days +0x3e, the new one is at +0x3f
