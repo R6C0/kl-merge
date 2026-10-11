@@ -65,10 +65,10 @@ KEPT, NOT UNDERSTOOD (ASSUMPTIONS)
   type 4 dwords 9..12: S's. The loader (kl2 0x7079f0) stores 10 / 11 / 12 at manager +0x5c / +0x20
       / +0x24; none of the 68 functions that use the manager [0x1546f6c] was seen reading them, six
       stock levels have 0 there.
-  clip +0x2C of an added clip: the SOURCE file's value. It differs between two records of the same
-      clip and data inside one file and between files (HG_Default#Reload_UB: 0x2fc0 in F07, 0x59a0
-      in F06), rises with the clip index in steps of about 144 and is not an offset into the data
-      block (it lands in compressed key data). No reader found.
+  clip +0x2C of an added clip: the SOURCE file's value HERE (join() does not touch it). It is a byte offset into the
+      LEVEL'S OWN .SND (luvsic; kl_anm.snd_name): a caller that adds a clip from a file with another bank MUST then run
+      kl_anm.fix_clip_sounds(a, first_new, source .SND, target .SND) before saving (kl_fa_climb2 / kl_fa_climb.merge do);
+      the join functions themselves still hand the source value on (their callers are other tracks' files).
   condition bits of a Dead Men slot list (weapon / stance) are taken as Dog Days' (kl_anm: GUESS).
       Every '/Vehicles', '/Doors', '/Body' and '/Level_Specific' list of M01 / M03_FA_A, M09_A and
       M09_B has the bit-less default pair only (1,695 pairs), so for those the guess is moot.
@@ -120,6 +120,15 @@ def stock_anm(level, game=None):
     import kl_prpjoin as J
     with zipfile.ZipFile(J.level_zip(level, game)) as zf:
         return zf.read(next(n for n in zf.namelist() if n.lower().endswith('.anm')))
+
+
+def stock_snd(level, game=None):
+    """The level's own .SND member of a stock level (not the _LS ones): the bank clip record +0x2C points into
+    (kl_anm.snd_name; luvsic's finding, checked on the 41 stock files by `kl_anm.py sndcheck`)."""
+    import zipfile
+    import kl_prpjoin as J
+    with zipfile.ZipFile(J.level_zip(level, game)) as zf:
+        return zf.read(next(n for n in zf.namelist() if n.lower().endswith('.snd') and '_LS' not in n.upper()))
 
 
 def _anm(x):
@@ -301,7 +310,7 @@ def mentions(strings, slots):
     return hit
 
 
-def join(s, m, strings, donors=(), stand_in=STAND_IN, log=None):
+def join(s, m, strings, donors=(), stand_in=STAND_IN, log=None, snds=None):
     """S's .ANM (Dog Days) + what the joined level names of M's .ANM (either game, or None)
     -> (Anm, report). strings = the joined .prp's key table (or any strings holding the set names
     'anmcol:animationdatabase#X' and the slot names in use); donors = further Dog Days .ANM files
@@ -310,7 +319,11 @@ def join(s, m, strings, donors=(), stand_in=STAND_IN, log=None):
       'guesses' [stand-ins used, in words]      'stats'    Counter (clips / blocks / bytes added ...)
       'bones', 'poses', 'slots'  names added to the tables   'size' (S, M, result) in bytes
       'events'  {event id: uses} in added clips, of ids no clip of S fires
-      'taken'   [(set, slot name, source label)] - what verify() checks against the sources."""
+      'taken'   [(set, slot name, source label)] - what verify() checks against the sources.
+    snds = (the target level's .SND bytes, [the .SND bytes of M and of the donors]) makes join() set clip record +0x2C of
+    every ADDED clip by name in the target bank, 0 where it has none (kl_anm.fix_clip_sounds; luvsic's finding: the
+    dword is an offset into the level's own .SND). Without it the source file's value is handed on (the old behaviour);
+    'clip sounds' in the report says what was done. kl_graft's call (line ~1493) should pass it."""
     s, m = _anm(s), _anm(m)
     donors = [_anm(d) for d in donors]
     if s.game != 'dd' or any(d.game != 'dd' for d in donors):
@@ -394,6 +407,8 @@ def join(s, m, strings, donors=(), stand_in=STAND_IN, log=None):
                 rep['guesses'].append('%s plays %s (STAND_IN: a guess by role)' % (x, what))
     a.data = bytes(out.data)
     kl_anm.relist(a)
+    if snds is not None:
+        rep['clip sounds'] = dict(kl_anm.fix_clip_sounds(a, len(s.clips), list(snds[1]), snds[0]))
     rep['stats'] = out.st
     rep['events'] = dict(out.strange)                    # event id -> uses, of ids no clip of S fires
     if cross and out.strange:

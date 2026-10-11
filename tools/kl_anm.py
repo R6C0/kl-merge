@@ -51,8 +51,9 @@ CLIP RECORD (dm offsets; dd is the same up to +0x2F)
         Meaningless without events - that is the "large negative" value of Dead Men.
   +0x14 float, +0x18 vec3  +0x24 size of events + data; 0 = alias of the clip of the same name whose
         data starts at the same +0x0C (data: 2,767 dm + 24,843 dd records)  +0x28 0 / 8 / 24 (follows the flags)
-  +0x2C non-zero in 14% (dm) / 38% (dd) of clips, values in steps of ~144, no reader found: NOT
-        understood, copied.
+  +0x2C non-zero in 14% (dm) / 38% (dd) of clips: a BYTE OFFSET INTO THE LEVEL'S OWN .SND, the start of the clip's
+        'audio:animation/resources/<path>#seq' record (luvsic; see snd_name() below; proven on the stock files by `sndcheck`).
+        A clip added from another file must get the same-named record of the target bank or 0: fix_clip_sounds().
   +0x30 vec3, +0x3C vec3   dd: +0x30 and +0x3C are the first vector at clip start and end, +0x48 and
         +0x54 the second (kl2 0x8b4200 blends start -> end, or takes the start alone if flags bit 0).
   +0x48 float -> dd +0x60   +0x4C name pointer -> dd +0x64
@@ -425,6 +426,115 @@ def audit(a):
     return bad
 
 
+# ------------------------------------------------------------------ clip record +0x2C = a record of the LEVEL'S OWN .SND
+# FOUND BY luvsic (third_party/anp/tools/clipsnd.py, read 2026-10-11; credit to him) and checked here (python kl_anm.py sndcheck):
+# the dword at +0x2C of a clip record is a BYTE OFFSET INTO THE LEVEL'S OWN .SND, the start of the 'audio:animation/resources/
+# <path>#seq' record of that clip (reader chain ZPlayer vt+0x620 = 0x6b9d50 -> 0x409170 -> ZDllSound 0x875360 -> ... -> 0x5c8050;
+# the 'steps of ~144' above are record sizes). A clip carried into a level with another bank points anywhere: his M12 crashed at
+# kl2 0x5c8075 (a type-2 record's mode word walked as a list). Every clip THIS project added from a Dead Men file
+# (kl_anmjoin, kl_fa_climb) carried the source file's value. The rule here is his 'name' mode: look the record's name up in the
+# target bank, else 0. The record layout (type, 0xcdcdcdcd, name offset) and the directory (counts[25], offsets[25]) are his;
+# kl_anm.sndcheck() proves them on the 41 stock files: every non-zero value of every clip is a record start of its own level's .SND.
+SND_CD = 0xcdcdcdcd
+
+
+def snd_name(s, off):
+    """The name (bytes) of the .SND record that starts at `off`, None when `off` is not a record start."""
+    if not off or off % 4 or off + 12 > len(s):
+        return None
+    t, c, nm = struct.unpack_from('<3I', s, off)
+    if c != SND_CD or t >= 0x19 or not 0 < nm < len(s):
+        return None
+    e = s.find(b'\0', nm)
+    return s[nm:e] if e > nm else None
+
+
+def snd_index(s):
+    """{record name: offset} over the records the .SND's directory lists (Dead Men: 6 language slots, Dog Days: 10)."""
+    h0 = struct.unpack_from('<I', s, 0)[0]
+    head = struct.unpack_from('<16I', s, h0)
+    c0 = 1 + head.index(SND_CD, 1) - 1 + 4
+    dw = struct.unpack_from('<%dI' % (c0 + 50), s, h0)
+    counts, offs = dw[c0:c0 + 25], dw[c0 + 25:c0 + 50]
+    idx = {}
+    for t in range(25):
+        if not offs[t]:
+            continue
+        for i in range(counts[t]):
+            p = offs[t] + 4 * i
+            if p + 4 > len(s):
+                break
+            r = struct.unpack_from('<I', s, p)[0]
+            n = snd_name(s, r)
+            if n and struct.unpack_from('<I', s, r)[0] == t:
+                idx.setdefault(n, r)
+    return idx
+
+
+def clip_snd_bad(a, snd):
+    """[(clip index, value, why)] of the clips of a Dog Days .ANM whose +0x2C is not 0 and not the start of a type 1 / 2 / 3
+    record of `snd` (luvsic: stock F03 and L01 have 0 of these)."""
+    out = []
+    for i in range(len(a.clips)):
+        v = struct.unpack_from('<I', a.clips[i], 0x2c)[0]
+        if not v:
+            continue
+        if snd_name(snd, v) is None:
+            out.append((i, v, 'not a record start'))
+        elif struct.unpack_from('<I', snd, v)[0] not in (1, 2, 3):
+            out.append((i, v, 'record type %d' % struct.unpack_from('<I', snd, v)[0]))
+    return out
+
+
+def fix_clip_sounds(a, first_new, src_snd, dst_snd):
+    """In place: the clips first_new.. of Dog Days .ANM `a` (the ones a join added from a file whose bank is src_snd, or from several: a list) get the
+    offset of the SAME-NAMED record of dst_snd in +0x2C, 0 where dst_snd has none. -> {'kept by name': n, 'cleared': n,
+    'already 0': n}. A value that is not a record of src_snd either is cleared."""
+    import collections
+    idx, rep = snd_index(dst_snd), collections.Counter()
+    srcs = list(src_snd) if isinstance(src_snd, (list, tuple)) else [src_snd]      # several files may have added clips: the first that knows the offset
+    for i in range(first_new, len(a.clips)):
+        v = struct.unpack_from('<I', a.clips[i], 0x2c)[0]
+        if not v:
+            rep['already 0'] += 1
+            continue
+        nm = next((n for n in (snd_name(x, v) for x in srcs) if n), None)
+        nv = idx.get(nm, 0) if nm else 0
+        rep['kept by name' if nv else 'cleared'] += 1
+        struct.pack_into('<I', a.clips[i], 0x2c, nv)
+    return rep
+
+
+def sndcheck():
+    """Every stock level's .ANM against its own .SND (both games): is every non-zero +0x2C a record start?"""
+    import zipfile, kl_prpjoin as J
+    bad = files = 0
+    for game, level, raw in stock():
+        zp = J.level_zip(level, game)
+        with zipfile.ZipFile(zp) as zf:
+            sn = [n for n in zf.namelist() if n.lower().endswith('.snd') and '_LS' not in n.upper()]
+            if not sn:
+                print('%s %-9s no .SND member' % (game, level))
+                continue
+            snd = zf.read(sn[0])
+        a = Anm(raw)
+        if a.game != 'dd':
+            idx = snd_index(snd)
+            nz = [struct.unpack_from('<I', c, 0x2c)[0] for c in a.clips]
+            nz = [v for v in nz if v]
+            miss = sum(snd_name(snd, v) is None for v in nz)
+            print('%s %-9s %5d clips, %5d with +0x2C, %d not a record start (%d records indexed)' % (game, level, len(a.clips), len(nz), miss, len(idx)))
+            bad += bool(miss)
+            files += 1
+            continue
+        b = clip_snd_bad(a, snd)
+        print('%s %-9s %5d clips, %d with a bad +0x2C' % (game, level, len(a.clips), len(b)))
+        bad += bool(b)
+        files += 1
+    print('files with a bad value: %d of %d' % (bad, files))
+    return not bad
+
+
 def check():
     import collections
     files = same = 0
@@ -483,6 +593,8 @@ if __name__ == '__main__':
     a = sys.argv[1:]
     if a[:1] == ['check']:
         sys.exit(0 if check() else 1)
+    elif a[:1] == ['sndcheck']:
+        sys.exit(0 if sndcheck() else 1)
     elif a[:1] == ['compare'] and len(a) == 3:
         got = {(g, l): raw for g, l, raw in stock() if (g, l) in (('dm', a[1]), ('dd', a[2]))}
         compare(Anm(got['dm', a[1]]), Anm(got['dd', a[2]]))

@@ -328,7 +328,7 @@ def has_slots(a, short):
     return {s: ls[a.slots.index(s)] for s in SLOTS if s in a.slots and a.slots.index(s) in ls}
 
 
-def merge(raw, players, npcs, log=print):
+def merge(raw, players, npcs, log=print, snd=None):
     """A Dog Days .ANM + Dead Men's three climb slot lists in the sets `players` (from PLAYER_SOURCE) and `npcs`
     (from NPC_SOURCE). Sets that have all three already are left alone. -> (bytes, report). Raises on any failed
     proof. The machinery is kl_anmjoin's (_Out, _Source, _add_lists - the code of every graft's join; its names
@@ -379,6 +379,11 @@ def merge(raw, players, npcs, log=print):
     both = sorted(a.names[i].split('#')[1] for i in pl_clips & named(NPC_SOURCE))
     a.data = bytes(out.data)
     kl_anm.relist(a)
+    # clip record +0x2C is an offset into the LEVEL'S OWN .SND (luvsic; kl_anm.snd_name): an added Dead Men clip would carry an
+    # offset into Dead Men's bank. By name in the target bank, else 0 (this step's first form, z_climb3, did not do it).
+    snd_rep = None
+    if snd is not None:
+        snd_rep = dict(kl_anm.fix_clip_sounds(a, len(base.clips), kl_anmjoin.stock_snd(SOURCE, 'dm'), snd))
     res = a.save()
 
     # ---- the proofs
@@ -439,7 +444,13 @@ def merge(raw, players, npcs, log=print):
                data_blocks_added=st['data blocks added'], data_bytes_added=st['data bytes added'],
                new_clips=[re_.names[i] for i in range(n, len(re_.clips))], strange_events=dict(out.strange),
                slot_ids={s: re_.slots.index(s) for s in SLOTS}, foot_event=EV_FOOT_DD,
-               players_events={k: ['%d@%d' % t for t in v] for k, v in feet.items()}, players_clips_in_npc_lists=both)
+               players_events={k: ['%d@%d' % t for t in v] for k, v in feet.items()}, players_clips_in_npc_lists=both, clip_sounds=snd_rep)
+    if snd is not None:
+        bad = kl_anm.clip_snd_bad(re_, snd)
+        if bad:
+            raise ValueError("after the +0x2C fix %d clips still name a non-record of the level's .SND: %s" % (len(bad), bad[:3]))
+        log("  clip record +0x2C of the %d added clips (an offset into the level's .SND): %s; every non-zero +0x2C of the file is a record of the build's .SND" % (
+            len(re_.clips) - len(base.clips), ', '.join('%s %d' % kv for kv in sorted(snd_rep.items()))))
     log('  .ANM %d -> %d bytes (+%d): %d clips added in %d data blocks, slot names %d -> %d, bones %d (+%d), poses %d (+%d); %d lists in %d sets' % (
         len(raw), len(res), len(res) - len(raw), len(re_.clips) - n, st['data blocks added'], len(base.slots), len(re_.slots),
         len(re_.bones), len(re_.bones) - len(base.bones), len(re_.poses), len(re_.poses) - len(base.poses), len(taken), len(plan)))
@@ -720,6 +731,17 @@ def check(folder, log=print):
     bad = kl_anm.audit(a)
     say('FAIL' if a.save() != raw or bad else 'PASS', '%s: %d bytes, %d clips, %d slot names, %d sets; round trip %s, kl_anm.audit %s' % (
         name, len(raw), len(a.clips), len(a.slots), len(a.cols), 'identical' if a.save() == raw else 'DIFFERS', 'clean' if not bad else bad[:3]))
+    with zipfile.ZipFile(zp) as _z:
+        _sn = [n for n in _z.namelist() if n.lower().endswith('.snd') and '_LS' not in n.upper()]
+        _snd = _z.read(_sn[0]) if len(_sn) == 1 else None
+    if _snd is not None:
+        _bad = kl_anm.clip_snd_bad(a, _snd)
+        _climb = {i for i, n in enumerate(a.names) if 'Climb#' in n}
+        _mine = [b for b in _bad if b[0] in _climb]
+        say('FAIL' if _bad else 'PASS', "clip record +0x2C (an offset into the level's own .SND, luvsic): %s" % (
+            "every non-zero value of the %d clips is a record start of the build's .SND" % len(a.clips) if not _bad else
+            '%d clips name a non-record (%d of them climb clips: added by a join without kl_anm.fix_clip_sounds), e.g. %s' % (
+                len(_bad), len(_mine), ', '.join('#%d %s %#x' % (i, a.names[i].split('#')[-1], v) for i, v, _w in _bad[:3]))))
     L = E.Level(zp)
     who = sets_of(L.sc)
     players = sorted(x for x, c in who.items() if c['ZFFPlayer'])
@@ -934,7 +956,8 @@ def apply(src, dst, players_only=False, edges=True, log=print):
     npcs = [] if players_only else [n for n in npc_sets(base) if n not in players]
     say('  players\' sets (ZFFPlayer bodies): %s <- Dead Men %s\'s %s; NPC sets: %s <- %s' % (
         ', '.join(players), SOURCE, PLAYER_SOURCE, ', '.join(npcs) or 'none (--players-only)', NPC_SOURCE))
-    new, rep = merge(files[anm[0]], players, npcs, say)
+    snds = [n for n in order if n.lower().endswith('.snd') and '_LS' not in n.upper()]
+    new, rep = merge(files[anm[0]], players, npcs, say, snd=files[snds[0]] if len(snds) == 1 else None)
     secs, level = [], find_level(L.sc)
     if edges and level:
         say('  the map is %s: Dead Men\'s rule along its climb lines, on the build\'s collision' % level)
