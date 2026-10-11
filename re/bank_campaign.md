@@ -1945,19 +1945,47 @@ THE ORDER MATTERS: THE STREAM FILE FIRST. A folder of `<c_bank_music>` loaded wi
 the game folder has sixteen records that point at that file's TABLES (the guard lines, the ambience) or PAST ITS END (the
 music, from 1,693,372,160): what the stream player does with that was never tried - do not try it. (KLTalk.ini's
 StreamBytes 1,686,681,836 is the talk lines' need only and does not guard this; `stream.json` does, for a human.)
+(Steps 2, 4 and 5 were REWRITTEN after the review, M.6: the first text copied straight over the live file and did not
+name the expansion's overlay copy.)
+THE SECOND TRAP: WHICH FILE THE GAME OPENS. READ klhook/klslot.c (Overlay) and kltalk.c (klk_stream_size): with
+[Expansion] Enable=1 and Overlay=1 - the owner's KLHook.ini has both - a file `<DD>/KLExpansion/Overlay/PC_Def.str`
+REPLACES `<DD>/PC_Def.str`. READ tools/kl_expansion.py build() (the 'merged' lines) and install(): BOTH put one there
+unless `--no-stream`, and the file they take is `<tree's parent>/PC_Def.str` or else kl_snd's 'merged' place
+`<work>/build/PC_Def.str` = MEASURED 1,684,486,009 bytes, sha1 `3b14a846...`, the file of 2026-10-09: older than the
+talk, Bain and these clips (the installed tree's manifest names exactly that file, `in_tree: false`). With it in the
+overlay Retomoto's talk is refused (StreamBytes 1,688,413,044 > 1,684,486,009), the Bain clips of all five tab maps
+(from 1,688,475,392: the skeptic's figure, not re-measured) and the Vault's sixteen point into that file's tables or past its end. MEASURED today: no
+`Overlay/PC_Def.str` exists in the game folder or in `<work>/build/w_tabM/KLExpansion` (every install so far used
+`--no-stream`), so the trap is not sprung - it is sprung by ONE kl_expansion call without the flag.
 1. Game closed (no kl2.exe with a thread).
-2. `<DD>/PC_Def.str` <- COPY of `<v_vault>/PC_Def.str`; read it back: 1,753,469,945 bytes, sha1 `80e53495ae550feb281f08d63b33619907f700cb`.
-   Nothing is lost by the overwrite: the file there now IS `<work>/build/v_bain/over_talk/PC_Def.str` (MEASURED today, sha1
-   `b0cb8bcd...`), and Dog Days' ORIGINAL is in `<DD>/KL_PortBackup/PC_Def.str` (1,217,890,070 bytes) - not to be touched.
-   The .map.json and .bain.json are build inputs: they stay in `<v_vault>`, the game reads neither.
+2. The stream file, NOT by a plain copy over the live one (a copy cut short leaves no streamed sound on any map):
+   `python tools/kl_vault_str.py put "<v_vault>/PC_Def.str" "<DD>" --kept "<work>/build/v_bain/over_talk/PC_Def.str"`
+   = refusals first (a kl2.exe with a thread; an overlay copy that is another file; a sound bank under the game folder
+   that names a block the source lacks; less than size + 1 GB free - C: had 45 GB), then copy to `<DD>/PC_Def.str.new`,
+   read back (1,753,469,945 bytes, sha1 `80e53495ae550feb281f08d63b33619907f700cb`; else the .new file is removed and the
+   game's file was never touched), then two renames; the old file is deleted only because `--kept` has its size and
+   sha1 (MEASURED today: `<DD>/PC_Def.str` = over_talk's, sha1 `b0cb8bcd...`), otherwise it stays as
+   `PC_Def.str.old_<sha1[:8]>`. BY HAND the same: copy to `PC_Def.str.new` in `<DD>`, check size and sha1 THERE, rename
+   the old one aside, rename the new one in. Dog Days' ORIGINAL is `<DD>/KL_PortBackup/PC_Def.str` (1,217,890,070
+   bytes): never touched, refused by `put` as a source. The .map.json and .bain.json stay in `<v_vault>`.
+   `put` was run on a MADE-UP game folder only (M.6); on the real one it is the game holder's first run of it.
 3. Every map already installed keeps working: stock, the tab's five (M.1), the silent `<c_bank>` folders (their
    records are a subset). So step 2 can be done at any time, also before the silent folders' first load.
 4. Then the map, in D4's order but from `<c_bank_music>`: `bank_vault_noai` -> `bank_vault` -> `bank_vault_wavslim`
    (`python debug/slot.py put "<c_bank_music>/bank_vault" F01`, or the packaging of D5 with `--prebuilt`: the folder's
    audit.json is green now, so kl_expansion's 'known' entry for this map is not needed for these folders).
-5. TO GO BACK: game closed, `<DD>/PC_Def.str` <- copy of `<work>/build/v_bain/over_talk/PC_Def.str` (1,694,610,488 bytes,
-   sha1 `b0cb8bcd5040462d3caec025e65939d85702a5f0`) AND the map back to a `<c_bank>` folder (or off the slot) - never the
-   old file with a `<c_bank_music>` folder. To stock: `tools/RESTORE Dog Days originals.bat` as always.
+   EVERY `kl_expansion.py build` AND `install` FOR THIS MAP WITH `--no-stream`, as all tab installs so far.
+   (noai first also isolates the forms: it has both music sets and the ambience but no ADPCM guard line.)
+4b. BEFORE the first load and after every install: `python tools/kl_vault_str.py installed "<v_vault>/PC_Def.str" "<DD>"
+   ["<tree about to be installed>"]` (read only, about 30 s) must end `INSTALLED: PASS`: no overlay copy (or it IS the
+   wanted file), the file the game opens has the size and sha1 above, all sound banks under the game folder (240 to 248 today)
+   resolve in it, no tree carries another stream file. In the game: the hook's line on Retomoto
+   `talk: stream file ...\PC_Def.str has 1753469945 bytes ... ok` names the file that was opened and its size.
+5. TO GO BACK: game closed; FIRST the map back to a `<c_bank>` folder (or off the slot), THEN
+   `python tools/kl_vault_str.py put "<work>/build/v_bain/over_talk/PC_Def.str" "<DD>" --kept "<v_vault>/PC_Def.str"`
+   (1,694,610,488 bytes, sha1 `b0cb8bcd5040462d3caec025e65939d85702a5f0`). `put` REFUSES the old file while a
+   `<c_bank_music>` folder is anywhere under the game folder (16 records without a block) - never force it by hand.
+   To stock: `tools/RESTORE Dog Days originals.bat` as always.
 6. FOR LATER BUILDS OF ANY MAP: a build against `<work>/build/PC_Def.str.map.json` or the over_talk map stays valid with
    the new file. The next extension must take `<v_vault>/PC_Def.str` as its base (`kl_fa_talk.py stream --base`, `kl_bain.py
    build --stream`, `kl_vault_str.py build`), or these sixteen are lost again. `<work>/build/PC_Def.str` was not replaced.
@@ -1992,5 +2020,48 @@ StreamBytes 1,686,681,836 is the talk lines' need only and does not guard this; 
   default is the lead's call (it means replacing that file).
 - kl_fa_talk.check's last line calls sizes() with slot F01 whatever the folder's slot is (it stops on the tab's DM09 =
   F06 unless called with the slot from Python): that file is another session's, told here.
+- `kl_expansion.py` (another session's file) still takes `<work>/build/PC_Def.str` as the tree's stream file and copies
+  it into `Overlay/` by default (M.3, M.6): until its default is `--no-stream` or its 'merged' is the installed file,
+  the flag is a thing to REMEMBER. `kl_vault_str.py installed` is the check that does not depend on remembering.
+
+### M.6 Review of the stage (2026-10-11, about 19:35 - 20:10): what the skeptic found, reproduced, and what changed
+
+The stream file and the four folders were NOT rebuilt: no finding touches them. sha1 of `<v_vault>`'s three files, of
+over_talk's and of all eight archives (`<c_bank_music>`, `<c_bank>`) are the same before and after this section's runs
+(`C:/kl_scratch/vault_music/fix/sha1_before.txt` = `sha1_after.txt`). Changed: `tools/kl_vault_str.py` (+ `installed`,
+`put`, `opened`, `unresolved`), M.3 above, this section. Outputs: `C:/kl_scratch/vault_music/fix/`.
+
+1. CONFIRMED - the install text did not name the overlay copy. READ: klslot.c's overlay branch (any
+   `<Root>/Overlay/<path relative to the game folder>` that is a file wins), kltalk.c klk_stream_size, kl_expansion.py
+   build() / install(). MEASURED: `<work>/build/PC_Def.str` 1,684,486,009 bytes; the installed and the w_tabM manifest:
+   `needs.stream_file` bytes 1684486009, `in_tree` false; under `<DD>` only `PC_Def.str` (1,694,610,488) and
+   `KL_PortBackup/PC_Def.str` (1,217,890,070); `<DD>/KLExpansion/Overlay` holds Patch01.zip and Scenes only; the
+   owner's KLHook.ini: [Expansion] Enable=1 Overlay=1. FIX: M.3's second trap, steps 4 / 4b, and `installed`.
+   `installed` on the REAL game folder now (read only, before any install): overlay copy none; the game opens the
+   1,694,610,488-byte file `b0cb8bcd...` = 'NOT the wanted file' (right: nothing is installed); at 19:38 240 sound banks, 92,970 streamed records, at 20:08 248 and 96,684 (the game holder installed something in between); both times
+   0 findings; exit 1 for that one reason (`installed_before.txt`).
+2. CONFIRMED - a 1.75 GB copy straight over the live file. MEASURED: C: 45 GB free (96 % full), G: 21 GB. FIX: `put`
+   (M.3 step 2). TESTED on a made-up game folder `C:/kl_scratch/vault_music/fix/game` (dummy kl2.exe / dinput8.dll, the
+   owner's KLHook.ini, the REAL two stream files, the tab's DM03 and DM09 banks; removed afterwards), `test_put.py`,
+   16 of 16 PASS: a copy cut short at 64 MB is refused and the game's file keeps its sha1, no .new left; an overlay
+   copy that is another file stops `put` and `installed` names it, `opened()` = the overlay copy; a music folder's bank
+   with the old file = '16 streamed records name no block (first at 1692882176)'; the install comes out with the new
+   sha1 and nothing beside it; a second `put` is a no-op; the WAY BACK is refused while the music bank is in the slot
+   and done with the silent bank in it (without `--kept` the replaced file stays aside); a folder without kl2.exe and
+   KL_PortBackup as a source are refused. NOT TESTED: the kl2.exe-is-running refusal against a running game (the rename
+   fails by itself while the game holds the file: ASSUMED from Windows' sharing rules, not tried).
+3. NOT A FAULT TO FIX, agreed with the skeptic and already in M.4: a four-clip PCM group, 75 streamed single ADPCM
+   records and nine eLayer4 fades have never played in Dog Days. They are confined to The Vault; a failure is a mute,
+   garbled or faulting Vault, not lost sound on a map the owner has. Nothing changed; the test order stays noai first.
+RE-RUN after the change, all with the results of M.1 / M.2: `proof` PASS (5 of 5 parts), `levels` PASS (six levels),
+`kl_str.py info` 'problems: none', `kl_str.py check ... M03_A` the known '33 clips' line, `tab` PASS on the five maps,
+tabtalk byte-equal to the build stage's output (DM09's own countdown line, 0 Bain problems), `whd` PASS 16 / 16 / 16 and
+7 with --no-ai, checks.sh on all four folders with every summary line equal to the build stage's (main and wavslim:
+all exit 0, preflight 'CRASH 0, RISK 1, NOTE 76', audit PASS; noai: the one 'no police' finding in preflight and
+audit; bare: guns and talk exit 1 for want of their input), `kl_fa_bank.py check <c_bank>/bank_vault` PASS. The
+skeptic's own scripts cmp1 .. cmp8 again: same numbers (no differing byte in 0x38 .. 1,692,882,176; 10,199 of 10,199
+clips; 40 tab banks / 19,066 records and 248 game banks / 96,682 records with 0 of every finding; 12 blocks equal Dead
+Men's, problems 0).
+STILL TRUE: NOTHING RAN IN THE GAME, nothing is installed, the game folder was only read.
 
 (end of the Music stage)

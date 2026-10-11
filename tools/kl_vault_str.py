@@ -3,7 +3,8 @@
 The stream file for THE VAULT (kl_fa_bank.py: Dead Men M03_A under F07): the stream file that is installed for the
 owner + the sixteen clips the map's sound lacks in it (re/bank_campaign.md R1.2 and 'Music stage'). A DRIVER: the
 writing is tools/kl_str.py's merge() - the same call tools/kl_fa_talk.py `stream` made for the talk clips - with
-the installed file as the base and its .map.json as `prior`. Nothing here installs anything or starts the game.
+the installed file as the base and its .map.json as `prior`. Nothing here starts the game; only `put` writes into the
+game folder, and it is for the session that holds the game (the build stage never ran it on the real folder).
 
     python kl_vault_str.py need                      the sixteen clips: Dead Men block, bytes, form (from M03_A's .WHD)
     python kl_vault_str.py build <base.str> <out.str>   out = base + those blocks (+ <out>.map.json extended, the
@@ -21,6 +22,16 @@ the installed file as the base and its .map.json as `prior`. Nothing here instal
                                                      Dead Men source, rate, channels, codec, bytes)
     python kl_vault_str.py stamp <out.str> <built folder> ...   <folder>/stream.json: the file and the bytes of it the
                                                      build's streamed records need
+    python kl_vault_str.py installed <new.str> <Dog Days folder> [<kl_expansion tree> ...]
+                                                     READ ONLY: which PC_Def.str the game opens (the expansion's
+                                                     Overlay copy REPLACES the game's when the hook's overlay is on),
+                                                     that it is <new.str>, that every sound bank under the game folder
+                                                     resolves in it, and that no tree about to be installed carries
+                                                     another stream file. exit 1 on a problem
+    python kl_vault_str.py put <src.str> <Dog Days folder> [--kept <copy of the file there now>]
+                                                     INSTALLS (game closed; the game holder's command): copy beside
+                                                     the game's file, read back, swap by rename; refuses when a map
+                                                     in the game folder needs a block <src> lacks. Also the way back
 
 WHAT 'EXTENSION' MEANS FOR THIS FORMAT (READ: kl_str.py's docstring; MEASURED by `proof`)
   An IOISNDSTREAM file is header (0x38) + data blocks from 0x100 + format table + name table + index, the index LAST
@@ -380,8 +391,270 @@ def levels(out_path, names=None, log=print):
     return bad
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# THE INSTALL SIDE (added after the review of the music stage, re/bank_campaign.md M.6). Two things the first
+# install text did not say:
+#  - WHICH FILE THE GAME OPENS. READ klhook/klslot.c (Overlay) and klhook/kltalk.c klk_stream_size: with [Expansion]
+#    Enable=1 and Overlay=1 a file <game>/<Root>/Overlay/PC_Def.str REPLACES <game>/PC_Def.str. READ
+#    tools/kl_expansion.py build() / install(): both put one there unless --no-stream, and the one they take is
+#    <tree's parent>/PC_Def.str or kl_snd's 'merged' place = <work>/build/PC_Def.str, MEASURED 1,684,486,009 bytes
+#    (the file of 2026-10-09, before the talk, Bain and these clips). `installed` looks for that file.
+#  - A COPY STRAIGHT OVER THE LIVE FILE can be cut short and leave no stream file at all. `put` copies beside it,
+#    reads the copy back, and only then swaps by two renames on the same volume.
+# Neither is run by the session that builds: `put` writes into the game folder and is for the session that holds it.
+
+def _ini(path):
+    """{section lower: {key lower: value}} of an ini the way GetPrivateProfile reads it (first value of a key wins)."""
+    out, sec = {}, None
+    if os.path.isfile(path):
+        for line in open(path, encoding='latin1').read().splitlines():
+            line = line.strip()
+            if line.startswith('[') and line.endswith(']'):
+                sec = out.setdefault(line[1:-1].strip().lower(), {})
+            elif sec is not None and '=' in line and not line.startswith(';'):
+                k, v = line.split('=', 1)
+                sec.setdefault(k.strip().lower(), v.strip())
+    return out
+
+
+def _int(v, default):
+    try:
+        return int(str(v).split(';')[0].strip(), 0)
+    except ValueError:
+        return default
+
+
+def opened(game):
+    """-> dict(game = <game>/PC_Def.str, overlay = <game>/<Root>/Overlay/PC_Def.str, on = the hook's overlay is
+    switched on in <game>/KLHook.ini, file = the one of the two the game opens). READ: klslot.c / kltalk.c; an
+    absent key means Enable 0, Overlay 1, Root KLExpansion, as in the hook."""
+    e = _ini(os.path.join(game, 'KLHook.ini')).get('expansion', {})
+    on = bool(_int(e.get('enable', 0), 0) and _int(e.get('overlay', 1), 1))
+    hook = os.path.isfile(os.path.join(game, 'dinput8.dll'))
+    over = os.path.join(game, e.get('root', 'KLExpansion') or 'KLExpansion', 'Overlay', 'PC_Def.str')
+    own = os.path.join(game, 'PC_Def.str')
+    return dict(game=own, overlay=over, on=on and hook, hook=hook, file=over if on and hook and os.path.isfile(over) else own)
+
+
+def _id(path):
+    with open(path, 'rb') as f:
+        n = os.path.getsize(path)
+        return n, _sha(f, 0, n)
+
+
+def _game_whds(game):
+    """Every .WHD under the game folder that the game can load: KL_PortBackup (the stock originals, never loaded
+    from there) is left out."""
+    for root, dirs, files in os.walk(game):
+        dirs[:] = [d for d in dirs if d.lower() != 'kl_portbackup']
+        for n in sorted(files):
+            if n.lower().endswith('.whd'):
+                yield os.path.join(root, n)
+
+
+def unresolved(stream_path, game, log=print):
+    """Which sound banks under the game folder name a block the stream file does not have (= a map installed
+    without its stream file: the Vault's music folders with the 1.69 GB file). -> ([problems], banks read)"""
+    m = kl_str.Stream(stream_path)
+    bad, n, recs_n = [], 0, 0
+    for p in _game_whds(game):
+        try:
+            _recs, st = _streamed(open(p, 'rb').read())
+        except Exception as e:                          # a bank kl_whd does not read is said, not hidden
+            bad.append('%s: not read (%s)' % (p, e))
+            continue
+        n += 1; recs_n += len(st)
+        miss = [o for _a, _f, o in st if o not in m.blocks]
+        over = [o for _a, f, o in st if o in m.blocks and not f['fmt'] >> 24 and f['size'] > m.audio(o)]
+        if miss or over:
+            bad.append('%s: %d streamed records name no block of %s (first at %d), %d are larger than their block' % (
+                p, len(miss), os.path.basename(stream_path), min(miss) if miss else 0, len(over)))
+    size = m.size
+    m.close()
+    for root, _dirs, files in os.walk(game):
+        if 'KLTalk.ini' in files and 'kl_portbackup' not in root.lower():
+            need_b = _int(_ini(os.path.join(root, 'KLTalk.ini')).get('talk', {}).get('streambytes', 0), 0)
+            if need_b > size:                           # kltalk.c: 'have < need' switches the talk of that map off
+                bad.append('%s: KLTalk.ini StreamBytes %d > %d: the hook would REFUSE the talk of this map' % (root, need_b, size))
+    log('  %d sound banks under the game folder (KL_PortBackup left out), %d streamed PC_Def.str records: %d findings' % (n, recs_n, len(bad)))
+    return bad, n
+
+
+def installed(new_path, game, trees=(), log=print):
+    """READ ONLY. Is <new> the stream file the game opens, and does everything installed resolve in it? Also for
+    kl_expansion trees that are about to be installed (their Overlay/PC_Def.str would replace the game's).
+    -> [problems]"""
+    bad = []
+    size, sha = _id(new_path)
+    log('the wanted file: %s, %d bytes, sha1 %s' % (new_path, size, sha))
+    w = opened(game)
+    log('hook: dinput8.dll %s; KLHook.ini [Expansion] overlay %s' % ('present' if w['hook'] else 'ABSENT', 'ON' if w['on'] else 'off'))
+    if os.path.isfile(w['overlay']):
+        o = _id(w['overlay'])
+        same = o == (size, sha)
+        log('OVERLAY COPY: %s, %d bytes, sha1 %s: %s' % (w['overlay'], o[0], o[1], 'the wanted file' if same else 'ANOTHER FILE'))
+        if not same:
+            bad.append('%s exists and is another file: with the expansion\'s overlay on it REPLACES the game\'s PC_Def.str (%s now) - take it '
+                       'out (kl_expansion.py build / install without --no-stream put it there)' % (w['overlay'], 'it IS what the game reads' if w['on'] else 'overlay off'))
+    else:
+        log('overlay copy: none at %s (as it must be: every install so far used --no-stream)' % w['overlay'])
+    if not os.path.isfile(w['file']):
+        bad.append('%s: no such file' % w['file'])
+    else:
+        g = _id(w['file'])
+        log('the game opens: %s, %d bytes, sha1 %s: %s' % (w['file'], g[0], g[1], 'the wanted file' if g == (size, sha) else 'NOT the wanted file'))
+        if g != (size, sha):
+            bad.append('the game opens %s (%d bytes), not the wanted file' % (w['file'], g[0]))
+        try:
+            more, _n = unresolved(w['file'], game, log)
+            bad += more
+        except Exception as e:
+            bad.append('%s is not a stream file kl_str reads (%s) - a cut-short copy?' % (w['file'], e))
+    for extra in ('PC_Def.str.new',):
+        if os.path.isfile(os.path.join(game, extra)):
+            bad.append('%s is left over from an unfinished `put`: delete it' % os.path.join(game, extra))
+    for t in trees:
+        p = os.path.join(t, 'Overlay', 'PC_Def.str')
+        man = os.path.join(t, 'manifest.json')
+        sf = (json.load(open(man)).get('needs') or {}).get('stream_file', {}) if os.path.isfile(man) else {}
+        if os.path.isfile(p) and _id(p) != (size, sha):
+            bad.append('tree %s holds Overlay/PC_Def.str (%d bytes), another file: installing the tree without --no-stream puts it over the game\'s' % (t, os.path.getsize(p)))
+        log('tree %s: Overlay/PC_Def.str %s; manifest stream_file %s bytes, in_tree %s%s' % (
+            t, 'PRESENT' if os.path.isfile(p) else 'absent', sf.get('bytes'), sf.get('in_tree'),
+            '' if sf.get('bytes') in (None, size) else '  <- NOT the wanted file: install this tree with --no-stream ONLY'))
+    log('INSTALLED: %s' % ('PASS' if not bad else 'FAIL'))
+    for x in bad:
+        log('  PROBLEM ' + x)
+    return bad
+
+
+def _running(game):
+    """Paths of kl2.exe processes that still have a thread ('' when Windows gives none). The lingering entries
+    without a thread (CLAUDE.md) do not count. None when the question could not be asked."""
+    import subprocess
+    try:
+        r = subprocess.run(['powershell', '-NoProfile', '-Command',
+                            "Get-Process kl2 -ErrorAction SilentlyContinue | ForEach-Object { '{0}|{1}' -f $_.Threads.Count, $_.Path }"],
+                           capture_output=True, text=True, timeout=60)
+    except Exception:
+        return None
+    out = []
+    for line in r.stdout.splitlines():
+        n, _, p = line.strip().partition('|')
+        if n.isdigit() and int(n) > 0:
+            out.append(p)
+    g = os.path.abspath(game).lower()
+    return [p for p in out if not p or os.path.abspath(os.path.dirname(p)).lower() == g]
+
+
+def _copy(src, dst):
+    """src -> dst, flushed to the disk. -> sha1 of what was read."""
+    h = hashlib.sha1()
+    with open(src, 'rb') as a, open(dst, 'wb') as b:
+        while True:
+            chunk = a.read(32 << 20)
+            if not chunk:
+                break
+            h.update(chunk); b.write(chunk)
+        b.flush(); os.fsync(b.fileno())
+    return h.hexdigest()
+
+
+def put(src, game, kept=None, log=print, copy=_copy):
+    """WRITES INTO THE GAME FOLDER - for the session that holds the game, game closed. <game>/PC_Def.str becomes
+    a copy of <src> without ever standing half written:
+      1. refusals, before anything is written: not a game folder; a kl2.exe with a thread; an overlay copy that is
+         another file; a sound bank under the game folder that names a block <src> lacks (this is what stops the
+         WAY BACK while a music folder of The Vault is still installed); too little room on the volume;
+      2. <src> -> <game>/PC_Def.str.new, read back: size and sha1 must be <src>'s, else the .new file is deleted
+         and the game's file was never touched;
+      3. <game>/PC_Def.str -> <game>/PC_Def.str.old_<sha1[:8]> (a rename), .new -> PC_Def.str (a rename; if it
+         fails the old one is renamed back);
+      4. the old file is DELETED only when <kept> (a file outside the game folder) has its size and sha1; else it
+         stays beside the new one and the line says so. KL_PortBackup is never read or written.
+    The same call with the earlier file as <src> is the way back. -> [problems] (empty = done)"""
+    game = os.path.abspath(game)
+    dst, tmp = os.path.join(game, 'PC_Def.str'), os.path.join(game, 'PC_Def.str.new')
+    if not os.path.isfile(os.path.join(game, 'kl2.exe')) or not os.path.isfile(dst):
+        return ['%s is not the Dog Days folder (kl2.exe and PC_Def.str expected)' % game]
+    if 'kl_portbackup' in os.path.abspath(src).lower() or (kept and 'kl_portbackup' in os.path.abspath(kept).lower()):
+        return ['KL_PortBackup is not a source for this: tools/RESTORE Dog Days originals.bat puts stock back']
+    run = _running(game)
+    if run is None:
+        log('NOTE: could not ask Windows for kl2.exe; the rename in step 3 fails by itself while the game holds the file')
+    elif run:
+        return ['kl2.exe is running (%d process with threads): close the game first' % len(run)]
+    size, sha = _id(src)
+    log('source: %s, %d bytes, sha1 %s' % (src, size, sha))
+    old = _id(dst)
+    log('in the game now: %d bytes, sha1 %s' % old)
+    if old == (size, sha):
+        log('PUT: nothing to do, the game folder has this file')
+        return []
+    w = opened(game)
+    if os.path.isfile(w['overlay']) and _id(w['overlay']) != (size, sha):
+        return ['%s exists and is another file: the game would read IT, not what is put here - take it out first' % w['overlay']]
+    try:
+        bad, _n = unresolved(src, game, log)
+    except Exception as e:
+        return ['%s is not a stream file kl_str reads (%s)' % (src, e)]
+    if bad:
+        return ['something installed needs a block the source lacks - take that map off first:'] + bad
+    free = shutil.disk_usage(game).free
+    if free < size + (1 << 30):
+        return ['%.1f GB free on the game\'s volume, %.1f GB + 1 GB wanted (the old file stays until the new one is proven)' % (free / 2.0 ** 30, size / 2.0 ** 30)]
+    aside = os.path.join(game, 'PC_Def.str.old_' + old[1][:8])
+    if os.path.exists(aside):
+        if _id(aside) != old:
+            return ['%s exists and is not the file that would be moved there' % aside]
+        aside_was = True
+    else:
+        aside_was = False
+    try:
+        got = copy(src, tmp)
+        back = _id(tmp)
+    except Exception as e:
+        got, back = None, (-1, str(e))
+    if got != sha or back != (size, sha):
+        if os.path.isfile(tmp):
+            os.remove(tmp)
+        return ['the copy did not come out whole (%s read, %s on the disk): removed; the game\'s PC_Def.str was not touched' % (got, back)]
+    log('copied beside it and read back: %d bytes, sha1 %s' % back)
+    try:
+        if aside_was:
+            os.remove(aside)                            # equal to the file that takes its place in the next line
+        os.rename(dst, aside)
+    except OSError as e:
+        os.remove(tmp)
+        return ['the game\'s PC_Def.str could not be moved aside (%s): is the game open? Nothing changed' % e]
+    try:
+        os.rename(tmp, dst)
+    except OSError as e:
+        os.rename(aside, dst)
+        os.remove(tmp)
+        return ['the new file could not be renamed in (%s): the old one is back in place' % e]
+    now = os.path.getsize(dst)
+    if now != size:                                     # a rename does not change a file; said all the same
+        return ['after the rename PC_Def.str has %d bytes?' % now]
+    if kept and os.path.isfile(kept) and 'kl_portbackup' not in os.path.abspath(kept).lower() and \
+            not os.path.abspath(kept).lower().startswith(game.lower() + os.sep) and _id(kept) == old:
+        os.remove(aside)
+        log('the old file is gone from the game folder: %s is the same file (%d bytes, sha1 %s)' % (kept, old[0], old[1]))
+    else:
+        log('THE OLD FILE STAYS as %s (%d bytes): no kept copy outside the game folder was shown to equal it' % (aside, old[0]))
+    log('PUT: done. %s = %d bytes, sha1 %s' % (dst, size, sha))
+    return []
+
+
 def main(a):
     cmd = a[0] if a else ''
+    if cmd == 'installed' and len(a) >= 3:
+        return 1 if installed(a[1], a[2], a[3:]) else 0
+    if cmd == 'put' and len(a) in (3, 5) and (len(a) == 3 or a[3] == '--kept'):
+        bad = put(a[1], a[2], a[4] if len(a) == 5 else None)
+        for x in bad:
+            print('  REFUSED ' + x)
+        return 1 if bad else 0
     if cmd == 'need':
         show_need()
         return 0
