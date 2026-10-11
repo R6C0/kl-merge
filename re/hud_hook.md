@@ -216,3 +216,23 @@ stock object before the stock draw shows (H1l) -> Reuse=2 put our rows into the 
 the owner's probe round (16:32) measured the instances: the hook's xform had been misread (re/hud.md 9). Version 2 drops
 the Reuse / Borrow / Hijack / Before test keys and the five-step probe; `Probe=1` now logs the one comparison that
 matters.
+
+## 9. After Version 2 (kl-merge-76, 2026-10-11 evening; compiled only, NOT RUN)
+
+- 83b8772 `[HUD] Dials=1`: the round WATCH and the ESCAPE DIAL of the owner's draft (re/hud_layout.md). A ring that
+  empties is 24 brush dabs (extra picture 113) on a circle, the part that is LEFT drawn; the watch = disc (114) + ring +
+  a hand of five small dabs, fraction = `[rules+0x200]` (the round clock, klfed.c) against the longest value seen this
+  round; while it stands the stock clock's two texts get " " right before the stock Render (`klu_clock_face`, the H1l
+  way), in the last minute the digits stay and are set coral. Escape dial = disc + an ORANGE ring of `[rules+0x1d8]` / 8 s
+  while the vehicle's state is 3 / 4 + the car icon (170; the helicopter's kind is a virtual call, not read). With
+  Dials the round line and the money box sit 14 px lower. Needs the level's extra pictures: `klu_pic_prep` now reads a
+  handle for EVERY picture slot and says how many of 111..118 the level has.
+- Painted rows use 111 (stroke) and the strike 112 (dry) when the level has them, UI_White (181) otherwise.
+- Live check D1 (after H1, P1, X0): hook `<work>/build/klhook/hud_v3_test`, the bank archive `<work>/build/hud_x/DM03`
+  (the installed one + the extras), `Enable=1 Log=2 Probe=1 Grid=2 Plates=1 Dials=1 HideStock=1`.
+- THE WEAPON DIAL IS NOT BUILT. Read so far (0x88bac0, ZWeaponDisplay's inner tick; element at osd+0x1110, vtable
+  0xbbe8c0, Render 0x5ec380): the player is `[elem+0x10]`; the gun in hand `[player+0x920]`, the other `[player+0x924]`
+  or 0x748430(player), else looked up in the inventory `[player+0xcec]` by 0x49b2f0(inv, item, 4); per slot i a state
+  byte at elem+0x2f8+i / +0x2fa+i (0x40 = drawn), a colour at elem+0x2f0 + 4 i, the picture index at elem+0x2e8 + 4 i.
+  Where the magazine's rounds, its size and the reserve are read is NOT established - that is the next reading before
+  the dial can replace the stock panel (hide byte elem+0x25).
