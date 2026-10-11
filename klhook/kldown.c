@@ -189,8 +189,9 @@
  *
  * NOT DONE HERE, AND WHY (re\player_down.md 4)
  *   - the same trigger as the AI's exactly (down at the killing hit): that needs the player's damage routine, code
- *   - a prompt 'tap to get up faster' while he gets up: the game's own GET UP prompt (user action 0xc / 0xd, offered by
- *     0x5505c0 while [D+0x2c]) shows only while he LIES; text during the get-up is klhud.c's
+ *   - (DONE by track R7, [Down] Prompt: the game's own 'Tap Quickly' element, by data - the block before kld_tick_main.)
+ *     The game's own GET UP prompt (user action 0xc / 0xd, offered by 0x5505c0 while [D+0x2c]) shows only while he
+ *     LIES the stock way
  *   - a guard that stands over him still kills him (the point-blank step is 100 bullets: re\melee_damage.md);
  *     [Balance] PointBlankToYou is the key for that
  *
@@ -223,6 +224,11 @@
  *   down: flop: THE GAME ALIGNS THIS FALL ([D+0xf4]) to the place ..., heading, what is expected / does NOT align this fall
  *   down: flop: he stands x m from where he went down (by his node) ...; the clip alone goes y m; expected z m; collision
  *   down: flop: FlopUp: he lies ...: the get-up ... is asked for
+ *   down: camera: Camera=.. CameraSide=.. prompt: Prompt=.. ...       at start (track R7)
+ *   down: camera: the fall's LOOK bit of the input mask a is taken off t s after he went down: v -> w
+ *   down: camera: the down start had put the camera on the LEFT shoulder; the side he had is back ...
+ *   down: prompt: ON t s after he went down: the game's own tap prompt (ZMiniGameButtonMashingDisplay e ...)
+ *   down: prompt: OFF after t s (<why>) / NOT SHOWN in this down: <why> / the game shows its own tap prompt ...
  *   down: bots: on ...                                                 Bots=1, at start
  *   down: bots: record i (actor, soldier): health, modifier, chance, was down once; the level's pauses
  *   down: bots: record i: the modifier [soldier+0x124] 0 -> 1 (force ...)
@@ -295,6 +301,18 @@ static struct {
        fal / fap / fad: the game aligned this fall, to that place, that far from his feet (M2) */
     int fwf, fwu, pnok, fal; float pn[3], fap[3], fad;
 } kld_s;
+
+/* track R7 (the camera stays his; the game's own tap prompt - the block before kld_tick_main has the reading) */
+static struct {
+    int cam, side, prompt, style, pulse;     /* the keys: Camera, CameraSide, Prompt, PromptStyle, PromptPulse */
+    int act; DWORD pl; float rate;           /* from kld_tick_main, this pass: the part acts for this local player; the clip speed last set */
+    BYTE side0; int sidehave, lookn, siden, sidetold;      /* the camera: the side he had while up; writes in this down */
+    DWORD elem; int ours, presses, refused; DWORD t_press, gtick, t_gtick, t_on;      /* the prompt */
+    /* review 7: state = the session state of this pass ([session+0x70], from klr_arcade; S1); waswant = the prompt was
+       wanted in the last pass (the pause test starts afresh, S7); t_lost = since when no player answers for a prompt
+       that is still ours (S2); sidearm = a delayed side change was seen armed in this down (S5) */
+    DWORD state, t_lost; int waswant, sidearm;
+} kld_v;
 
 /* Flop=3 (track R6): the falls of the owner's sheet G_zoom_belly.png that throw a living man down and bring him up.
    sheet = the overview's number; group = clips with (nearly) the same keys - never two of one group in a row; slot /
@@ -1136,7 +1154,7 @@ static void kld_flop_one(DWORD pl, DWORD d, DWORD ds, DWORD now, float hp)
         }
         kld_s.meter -= kld.decay * dt; if (kld_s.meter < 0) kld_s.meter = 0;
         rate = B + P * kld_s.meter; if (rate > T) rate = T; if (rate < 0.05f) rate = 0.05f;
-        kld_s.sumr += rate; kld_s.nr++;
+        kld_s.sumr += rate; kld_s.nr++; kld_v.rate = rate;
         if (kld.log >= 2 && now - kld_s.lastline >= 250) { kld_s.lastline = now; klog("down: flop: frame %.1f of %.0f (%s), speed %.2f, meter %.2f, %d press(es)", frame, to, kld_s.f8 >= 0 && frame < kld_s.f8 ? "he lies" : "he rises", rate, kld_s.meter, kld_s.presses); }
         fps = rate * 25.0f;
         if (!klh_data((void *)(DWORD_PTR)(h + 0x10), &fps, 4, "the knock-down clip's channel: frames a second")) return;
@@ -1404,7 +1422,248 @@ static void kld_bots(int act, DWORD now)
     kld_kw = kw; kld_kwok = kwok;
 }
 
-static void kld_tick(int game_thread)
+/* ---- the camera stays the player's, and the game's own TAP QUICKLY prompt ([Down] Camera, Prompt; track R7) -------
+   The owner, 2026-10-11 19:10: 'for the animation should try and keep the camera like normal i think its fixes down
+   when it happen ... but make sure theres an prompt that lookls very similar to the break free from human shield in FA
+   or even campaign'. re\player_down.md 13 has the whole reading. NOTHING OF THIS HAS RUN IN THE GAME.
+
+   THE CAMERA (READ whole: 0x4844e0, 0x417310, 0x76fd40, 0x4d9ec0, 0x87d930, 0x8a4fa0, 0x8ee220, 0x74a120, 0x4719f0).
+   The four tests of the input mask [player+0xed0] (the dword kld_mask finds) all sit in ZGameplayInputWintel's
+   per-frame read 0x4844e0: the MOUSE's two look sums [input+0x3e0] (turn) and [input+0x3e4] (up / down) are zeroed
+   while the mask has bits 0x30 / 0x50 (0x4d9ec0, 0x87d930), the two MOVE axes [input+0x310] / [+0x314] while it has
+   bits 5 / 3 (0x417310, 0x76fd40). So of the fall's two bits (0x76a827 .. 0x76a834), 1 = NO MOVE and 0x10 = NO LOOK:
+   the look sums are what 0x8a4fa0 hands to the player's camera rig ([player+0xbd4], slots +0x1c / +0x20) every frame.
+   Stock gives the look back in the middle of the fall - 0x8ee25c takes bit 0x10 off as soon as 0x843fa0 is true (the
+   tick [M+0x8e0], 0.72 s in) - and the move at its end. THE FLOP HOLDS THAT TICK BEHIND THE CLIP'S END (kld_flop_one;
+   Flop=2 holds it at the end tick), so 0x843fa0 is never true and the mouse is dead for the whole knock-down, 2 - 9 s:
+   that is 'it fixes'. Nothing else of the camera is forced: no profile of the camera's selection 0x778f50 tests this
+   down state (only a human-shield carrier's, state 0x12), the follow camera takes its place from the player's rig as
+   ever (LIVE, run G1's pictures: it is low and close behind the lying body, by itself).
+   Camera=1: while a fall this part drives plays (kld_s.fnow, D state 2), bit 0x10 of that dword is taken off - the
+   game's own AND (0x787600), the game's own state from 0.72 s on in every stock fall - once, in the first pass. Bit 1
+   stays: he cannot walk. The pad's look stick ([input+0x3e8] / [+0x3ec]) is not gated by the mask in 0x4844e0.
+   CameraSide=1: the down start forces the camera to the LEFT shoulder (0x76a889 -> 0x74a120: left while [D+8] bit 0
+   and [D+4] != 3 - made for the stock pose, on his left side, head propped). For the flop the side he had is put back
+   by the setter's own writes done as data (0x74a1a8 .. 0x74a1cb, read whole): byte [player+0x280c], bit 0x400 of
+   [player+0x818], and - as the setter does when the side changes - [player+0x2f80] = float [0xb4c788] and float
+   [[player+0xbd8]+0x5a0] = 0 (0x4719f0: the camera's blend; written only when that object is a ZFFCamera1). The
+   The setter's direct form also writes dword [player+0xb8c] = 0 (0x74a1a8: no delayed change armed; review 7, S5) -
+   after the down start's own call it IS 0, so the data form does not write it: it is read into the side line, and a
+   value armed later in the fall (the timer form 0x74a15f) stops this part's side writes for that down. The
+   camera walks its side spline by itself when the byte differs from its own copy (0x9088c0). The blend is thus
+   restarted twice in two frames (the down start's, then ours: review 7, S6 - a twitch is possible; CameraSide=0). The game's end of the
+   down state puts its kept side back as ever (0x71089a). At most three times a down: a caller that forces it again
+   wins. NOT sent: the RMC SetLeftShoulder the key's handler sends (Arcade has no peer).
+
+   THE PROMPT (READ whole: ZMiniGameButtonMashingDisplay, vtable 0xbbe8f0 - slot 2 Render 0x48f4b0, slot 5 Tick
+   0x8ac680, slot 6 layout 0x4a8d40; 0x869fd0, 0x47e230, 0x4424f0, 0x588680, 0x4ddae0).
+   The game has ONE 'tap' prompt for all its mash games, the HUD element at [osd+0x10fc]: the text '{Tap<button>}' +
+   the level's own string AllLevels/Interface/TapQuickly ('Tap Quickly' - the token becomes the picture of the key or
+   pad button bound to it, 0x7bb920 by the player's controller [player+0x91e]) over a bar that FILLS: a white frame
+   (the OSD's picture [osd+0x7ec], layer 9) and a fill ([osd+0x888], layer 0xb, colour [E+0x114]) 177 wide x value /
+   max, below the middle of the screen (0x4a8d40's constants -61 .. 190). EVERY user of it in the exe drives it by
+   plain writes of four fields: byte [E+0x50] = shown, float [E+0x54] = value, float [E+0x58] = max, byte [E+0x5c] =
+   which button (0 {TapCover}, 1 {TapUse}, 2 {TapCycleWeapon}, 3 {TapCloseCombat}: the Tick's table 0x8ac8b8 - and
+   0x4424f0 pairs 0 with the Cover byte [player+0xeb4], the very input [D+0x2b] is fed from), and the fill's colour by
+   0x47e230 (white [0xbbe490], or red [0xbbe498] in the 'help him up' game 0x769630).
+   THIS ELEMENT IS THE HUMAN-SHIELD BREAK-FREE PROMPT - READ, not assumed (review 7, M1; the first form of this
+   comment filed these routines under 'the rise after a ragdoll throw': wrong). 0x860dc0 has ONE caller, 0x7fa515,
+   inside the human-shield part of the player's frame 0x7f9eb0; it works on the carrier [player+0xad4], the victim
+   [player+0xad0] and the two tap floats [+0xae4] / [+0xae8] (the fTaps of RMCSetHumanShieldPvPTaps..):
+   - the CARRIER's branch (0x860ddb): 0x4424f0 draws one of the four buttons at random, writes it into [E+0x5c] and
+     returns that button's input byte; +1 a press, a share off each frame, the value into [E+0x54];
+   - the VICTIM's branch (0x860ed3 .. 0x861075) = the break-free: 0x860f36 sets [E+0x50] = 1, [E+0x58] = his goal,
+     [E+0x5c] = 1 = {TapUse}; a press of Use adds 1 to [+0xae8], each frame takes a share off, the value goes to
+     [E+0x54] (0x860ffa); free at the goal, 0x861071 clears [E+0x50]. The colour is never touched there: WHITE.
+   So the game's break-free shows: the USE key's picture + 'Tap Quickly' + a WHITE bar that is his own tap METER and
+   falls back when he stops. 0x8d6628 (in 0x8d64f0, shown + max; it sets the same mask bits 1 / 0x200 / 0x400 as
+   the struggle - the start of a hold by the look of it; its caller 0x4d7b00 was NOT read), 0x451197 / 0x7cba04 /
+   0x7fa69a: the hold's other on / off writes. The other users: the campaign's button-mash action
+   (ZFFActionMiniGameButtonMashing 0x7fbf10, ZMiniGameButtonMashing 0x6ffab0 / 0x5d18c0), the downed-buddy game
+   (0x5fe270: 0x769630, 0x7371f0, 0x77d3a0, 0x7b6780) and the Fragile Alliance rules' reset (0x708500, slot 4: off).
+   No path clears the element every frame (the review looked at all 30 functions that load [osd+0x10fc]).
+   OURS AGAINST THE GAME'S: the same element, text and bar, drawn by the game. Different on purpose: the picture is
+   the COVER / GET UP key (button 0), not Use - it is the key the mash reads ([D+0x2b]); PromptStyle 1 (default) is
+   a progress bar, the hook's own design; PromptStyle=2 with PromptPulse=0 is the game's own behaviour (a meter,
+   white). The owner picks after seeing both (live checks C1 / C3).
+   Prompt=1: from the landing of a knock-down this part drives (Flop=1 / 3) and during a get-up it drives (Flop=0 / 2)
+   the same four fields are written each pass: shown 1, button 0 = {TapCover} = the game's GET UP button, max 1.0,
+   value = PromptStyle 1 (default): how far he is up (the clip's frame from the landing to its end) - the bar fills
+   as he rises, faster while he taps; PromptStyle 2: the mash meter's speed between FlopBase and FlopTop (it falls
+   back when he stops). PromptPulse=1 (default 0 since review 7: the game's break-free bar stays white): the fill is
+   the game's red [0xbbe498] for 0.12 s after each press - the hook's own touch, the two colours are the game's. No
+   call, no vtable copy, no text made: the element's own Tick builds the text and the bar, its own Render draws
+   them. [HUD] Enable=0 changes nothing here: klhud.c is not used.
+   OFF again (shown 0, value 0, white - what 0x7cba04 writes): when he is up, dead or out of play (kld_s.dead), when
+   the part stops acting (a stock level, no Arcade session, a police body, another player object), when the round
+   does not run any more (the session state [session+0x70] is not 0x19: review 7, S1), when the clip is
+   through, and while the game's tick stands still for half a second (the pause menu - ASSUMED that the tick
+   stands there, as the rest of this file assumes). The OFF is written only to the element the local player's OSD
+   leads to in that pass (review 7, S2). NEVER TAKEN while the game shows it itself ([E+0x50] already set
+   by somebody else - by the reading only a shield hold, the campaign's mash entity or the buddy game, none of which
+   is expected in a one-human Arcade round: a GUESS, not read); the element must be a
+   ZMiniGameButtonMashingDisplay whose player [E+0x10] is the local one.
+   NOT SHOWN: in a Dry run, for the stumble #43 (he never lies), while he lies the stock way (the game's own
+   '{TapCover} Get Up' use action shows there, 0x5505c0). */
+#define KLD_MASH_VT   0x00bbe8f0             /* ZMiniGameButtonMashingDisplay */
+#define KLD_CAM_VT    0x00bb76a4             /* ZFFCamera1 */
+#define KLD_OSD_MASH  0x10fc                 /* [osd + this] = the element (the OSD's constructor 0x42ec1d) */
+#define KLD_MASK_LOOK 0x10                   /* the mouse look: 0x4d9ec0 (0x30), 0x87d930 (0x50) */
+#define KLD_ROUND     0x19                   /* [session+0x70]: a round that runs (klbot.c's KLB_ROUND, klfed.c's KLP_ROUND) */
+/* (the block's state, kld_v, is declared beside kld_s: kld_flop_one leaves the clip speed in it) */
+
+/* The local player's mash element, as the game finds it (0x4ce73f .. 0x4ce753: 0x588680 = [gamedata+0x15dc], then
+   0x4ddae0(that, [player+0x91e]) = the OSD when the index is 0 / 1 and its byte is not 0xff). Reads only. -> 0 + why */
+/* own = 1: the element's player [E+0x10] must be pl (to SHOW it); own = 0: the element of pl's OSD whoever it names
+   (to switch OFF what is ours: review 7, S2). *posd = that OSD (review 7, S4: its 'HUD off' byte is logged). */
+static DWORD kld_mash_elem(DWORD pl, int own, DWORD *posd, const char **why)
+{
+    DWORD gd, mgr, osd, e; BYTE i = 0xff, there = 0xff;
+    if (posd) *posd = 0;
+    *why = "no OSD for this player ([gamedata+0x15dc], index [player+0x91e])";
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLD_GAMEDATA))) || !(mgr = klh_rd32(gd + 0x15dc)) || !klh_rd(pl + 0x91e, &i, 1) || i > 1) return 0;
+    if (!klh_rd(mgr + 8 * (DWORD)i + 4, &there, 1) || there == 0xff || !(osd = klh_rd32(mgr + 8 * (DWORD)i))) return 0;
+    if (posd) *posd = osd;
+    *why = "[osd+0x10fc] is not a ZMiniGameButtonMashingDisplay (vtable 0xbbe8f0)";
+    if (!(e = klh_rd32(osd + KLD_OSD_MASH)) || klh_rd32(e) != KLD_MASH_VT) return 0;
+    *why = "the element's player [E+0x10] is not the local player";
+    if (own && klh_rd32(e + 0x10) != pl) return 0;
+    *why = "";
+    return e;
+}
+
+/* Review 7, S2: the remembered pointer is NOT trusted by its vtable alone (freed memory keeps its bytes). The OFF is
+   written only when the local player object of THIS pass (kld_v.pl: gamedata's own table, vtable checked by
+   kld_tick_main) leads through its OSD to the very element we switched on. No player this pass: tried again for 3 s,
+   then dropped unwritten (the element died with its level). */
+static void kld_prompt_off(const char *why, DWORD now)
+{
+    BYTE zero = 0; float fz = 0; DWORD white = klh_rd32((DWORD_PTR)KLH_VA(0xbbe490)), e; const char *w2 = "";
+    if (!kld_v.ours) return;
+    if (!kld_v.pl) {
+        if (!kld_v.t_lost) kld_v.t_lost = now;
+        if (now - kld_v.t_lost < 3000) return;
+        kld_v.ours = 0; kld_v.t_lost = 0;
+        klog("down: prompt: over (%s) - no local player object for 3 s: the element %08lx is taken as gone with its level, nothing is written", why, kld_v.elem);
+        kld_v.elem = 0; return;
+    }
+    kld_v.ours = 0; kld_v.t_lost = 0;
+    if (!kld_v.elem || (e = kld_mash_elem(kld_v.pl, 0, NULL, &w2)) != kld_v.elem) { klog("down: prompt: over (%s) - the local player's OSD does not lead to the element %08lx any more (%s): it is gone with its level, nothing is written", why, kld_v.elem, w2[0] ? w2 : "another element is there"); kld_v.elem = 0; return; }
+    klh_data((void *)(DWORD_PTR)(kld_v.elem + 0x50), &zero, 1, "the tap prompt: not shown (as the game's own users switch it off, 0x7cba0c)");
+    klh_data((void *)(DWORD_PTR)(kld_v.elem + 0x54), &fz, 4, "the tap prompt: its bar's value, 0 (0x7cba16)");
+    if (white) klh_data((void *)(DWORD_PTR)(kld_v.elem + 0x114), &white, 4, "the tap prompt: its bar's colour, the game's white (0x47e245)");
+    klog("down: prompt: OFF after %.2f s (%s): [E+0x50] = 0, the bar 0", (now - kld_v.t_on) / 1000.0f, why);
+    kld_v.elem = 0;
+}
+
+static void kld_camera(DWORD pl, DWORD ds, DWORD now)
+{
+    DWORD ma = 0, mv = 0, nv, f818 = 0; BYTE side = 0xff;
+    if (!kld_v.cam) return;
+    if (ds == 0) {                             /* up: the side he has is the side to keep */
+        if (klh_rd(pl + 0x280c, &side, 1) && side <= 1) { kld_v.side0 = side; kld_v.sidehave = 1; }
+        kld_v.lookn = kld_v.siden = kld_v.sidetold = kld_v.sidearm = 0;
+        return;
+    }
+    if (ds != 2 || !kld_s.fnow || kld_s.dead) return;      /* only a fall this part drives (never in a Dry run: fnow is 0 there), never for a dead man */
+    /* review 7, S5: the setter's DELAYED form (0x74a15f .. 0x74a170: timer [player+0xb88], dword [player+0xb8c] = +1 /
+       -1; its direct form writes that dword 0, 0x74a1a8). The down start's own direct call leaves it 0, so a value
+       here was armed IN the fall by somebody else (the shoulder key? - not read): that side is theirs, this part
+       writes no side any more in this down. Which sign is which side is a GUESS from 0x74a167 (+1 = right). */
+    if (kld_v.side && !kld_v.sidearm) {
+        DWORD arm = 0;
+        if (klh_rd(pl + 0xb8c, &arm, 4) && arm != 0) {
+            kld_v.sidearm = 1;
+            klog("down: camera: a delayed side change is armed in this fall ([player+0xb8c] = %ld, the setter's timer form 0x74a15f; +1 = to the right - a GUESS): the side it sets is left alone, CameraSide writes nothing more in this down", (long)arm);
+        }
+    }
+    if (kld_mask(pl, &ma, &mv) && (mv & KLD_MASK_LOOK) && kld_v.lookn < 3) {
+        nv = mv & ~(DWORD)KLD_MASK_LOOK;
+        if (klh_data((void *)(DWORD_PTR)ma, &nv, 4, "the player's input object: the fall's LOOK bit (0x10) off, as the game takes it off at the fall's event tick (0x8ee25c)")) {
+            kld_v.lookn++;
+            klog("down: camera: the fall's LOOK bit of the input mask %08lx is taken off %.2f s after he went down: %08lx -> %08lx (bit 0x10 zeroes the mouse's two look sums, 0x4d9ec0 / 0x87d930; stock takes it off 0.72 s into its fall, the flop holds that tick) - the camera is his for the whole knock-down; bit 1 (no move) stays%s",
+                 ma, (now - kld_s.t_down) / 1000.0f, mv, nv, kld_v.lookn > 1 ? " - AGAIN in this down: somebody set it once more" : "");
+        }
+    }
+    if (kld_v.side && !kld_v.sidearm && kld_v.sidehave && klh_rd(pl + 0x280c, &side, 1) && side <= 1 && side != kld_v.side0 && klh_rd(pl + 0x818, &f818, 4)) {
+        if (kld_v.siden >= 3) {
+            if (!kld_v.sidetold) { kld_v.sidetold = 1; klog("down: camera: the game put the camera on the %s shoulder again after this part's third write in this down: left to the game", side ? "left" : "right"); }
+        } else {
+            DWORD nf = kld_v.side0 ? (f818 | 0x400) : (f818 & ~(DWORD)0x400), cam = klh_rd32(pl + 0xbd8); float blend = 0, fz = 0; int camok = cam && klh_rd32(cam) == KLD_CAM_VT;
+            if (klh_data((void *)(DWORD_PTR)(pl + 0x280c), &kld_v.side0, 1, "the player's camera side byte, the side he had (the setter's own write, 0x74a1b2)") &&
+                klh_data((void *)(DWORD_PTR)(pl + 0x818), &nf, 4, "the player's flags: bit 0x400 = the camera on the left shoulder (0x74a1bc / 0x74a1cb)")) {
+                if (camok && klh_rd((DWORD_PTR)KLH_VA(0xb4c788), &blend, 4) && kld_fin(blend)) {      /* 0x74a197 .. 0x74a1a3, as the setter does when the side changes */
+                    klh_data((void *)(DWORD_PTR)(pl + 0x2f80), &blend, 4, "the player's side-change time (0x74a19d)");
+                    klh_data((void *)(DWORD_PTR)(cam + 0x5a0), &fz, 4, "the camera's blend, restarted (0x4719f0)");
+                }
+                kld_v.siden++;
+                klog("down: camera: the down start had put the camera on the %s shoulder; the side he had is back (%s): byte [player+0x280c] %u -> %u, flags [player+0x818] %08lx -> %08lx%s; the delayed-change word [player+0xb8c] reads %ld (0 = none armed: the setter's own state after its direct form) (write %d of 3 in this down; the game's own end of the down state sets its kept side as ever)",
+                     side ? "LEFT" : "RIGHT", kld_v.side0 ? "left" : "right", (unsigned)side, (unsigned)kld_v.side0, f818, nf, camok ? ", the camera's blend restarted" : "; [player+0xbd8] is not a ZFFCamera1: its blend is left alone", (long)klh_rd32(pl + 0xb8c), kld_v.siden);
+            }
+        }
+    }
+}
+
+static void kld_prompt(DWORD pl, DWORD ds, DWORD now)
+{
+    int want = 0; float v = 0, lo = 0, hi = 1, one = 1.0f; DWORD e, osd = 0, clock, tick = 0, col; BYTE b = 0, on = 1, btn0 = 0; const char *why = "", *off = "he is up";
+    int paused = 0, inround = kld_v.state == KLD_ROUND;    /* review 7, S1: a round that runs; the score page (0x1f) and every other state = no prompt */
+    if (ds == 0) kld_v.refused = 0;
+    if (kld_v.prompt && kld_v.act && pl && !kld_s.dead && !kld.dry && inround) {
+        if (KLD_ONE && ds == 2 && kld_s.fnow && !kld_s.fdone && kld_s.t_land && kld_s.endf > 1.0f) {      /* a knock-down this part drives, from its landing (never the stumble: no landing is set for it) */
+            float land = kld_s.f7 >= 0 ? (float)kld_s.f7 : 0.3f * kld_s.endf;
+            want = 1; lo = kld.fbase; hi = kld.ftop;
+            v = kld_s.endf > land + 1.0f ? (kld_s.lastf - land) / (kld_s.endf - land) : 1.0f;
+        } else if (ds == 3 && kld_s.up && kld_s.endf > 1.0f) {                                            /* a get-up this part drives */
+            want = 1; lo = kld_s.fup ? kld.fbase : kld.base; hi = kld_s.fup ? kld.ftop : kld.top;
+            v = kld_s.lastf / kld_s.endf;
+        }
+        if (want && kld_v.style == 2) v = hi > lo + 0.01f ? (kld_v.rate - lo) / (hi - lo) : 0.0f;
+    }
+    if (kld_s.dead) off = "he is dead or out of play"; else if (!kld_v.act || !pl) off = "the part does not act here (a stock level, no Arcade session, a police body, no player)"; else if (!inround) off = "the round does not run any more (the session state is not 0x19: the round's end, the score page)"; else if (ds != 0) off = "the clip is through, or the game took the state over";
+    /* the pause menu: the game's tick stands (ASSUMED; live check C4). Review 7, S7: the clock of the test starts
+       afresh in the first pass the prompt is wanted (no stale tick of the last down), and the bound is 500 ms - one
+       long frame (a hitch, a streamed load) is not a pause */
+    if (want && (clock = klh_rd32((DWORD_PTR)KLH_VA(KLD_CLOCK))) != 0 && klh_rd(clock + 0x48, &tick, 4)) {
+        if (!kld_v.waswant || tick != kld_v.gtick) { kld_v.gtick = tick; kld_v.t_gtick = now; }
+        else if (now - kld_v.t_gtick > 500) { want = 0; paused = 1; off = "the game's tick stands still (the pause menu)"; }
+    }
+    kld_v.waswant = want || paused;            /* in a pause the test goes on from its own clock */
+    if (!want) { kld_prompt_off(off, now); return; }
+    if (!(e = kld_mash_elem(pl, 1, &osd, &why))) {
+        kld_prompt_off("the element is not there any more", now);
+        if (!kld_v.refused) { kld_v.refused = 1; klog("down: prompt: NOT SHOWN in this down: %s", why); }
+        return;
+    }
+    if (kld_v.ours && e != kld_v.elem) kld_prompt_off("another element belongs to the player now", now);
+    if (!kld_v.ours) {
+        if (!klh_rd(e + 0x50, &b, 1)) return;
+        if (b) { if (!kld_v.refused) { kld_v.refused = 1; klog("down: prompt: the game shows its own tap prompt (element %08lx, [E+0x50] = %u, button %d): left alone in this down", e, (unsigned)b, (int)(signed char)klh_rd32(e + 0x5c)); } return; }
+        if (kld_v.refused) return;
+        kld_v.ours = 1; kld_v.elem = e; kld_v.presses = kld_s.presses; kld_v.t_press = 0; kld_v.t_on = now; kld_v.t_lost = 0;
+        klog("down: prompt: ON %.2f s after he went down: the game's own tap prompt (ZMiniGameButtonMashingDisplay %08lx: '{TapCover}' + the level's 'Tap Quickly' over its bar) - [E+0x50] = 1, button [E+0x5c] = 0 (the Cover / GET UP button), the bar [E+0x54] / [E+0x58] = %s; PromptPulse=%d",
+             (now - kld_s.t_down) / 1000.0f, e, kld_v.style == 2 ? "the mash's speed between its base and its top (PromptStyle=2: the game's own break-free bar is such a meter)" : "how far he is up, 0 at the landing .. 1 on his feet (PromptStyle=1)", kld_v.pulse);
+        {   /* review 7, S4: what decides whether the element's Render draws (reads only): its own two bytes, and the OSD's
+               'HUD off' byte - while that is set the loop 0x8bf583 .. 0x8bf5cd draws the mash element only when
+               [[player+0x2940]+0x24] is 2 .. 0xd (the game's own mash states), which a knock-down of ours is not */
+            BYTE e24 = 0xee, e25 = 0xee, hudoff = 0xee; DWORD p2940 = klh_rd32(pl + 0x2940), st24 = 0xeeeeeeee;
+            klh_rd(e + 0x24, &e24, 1); klh_rd(e + 0x25, &e25, 1); klh_rd(osd + 0x1225, &hudoff, 1); if (p2940) klh_rd(p2940 + 0x24, &st24, 4);
+            klog("down: prompt: draw state: [E+0x24] = %02x (Render wants it not 0), [E+0x25] = %02x (the hide byte), the OSD's HUD-off byte [osd+0x1225] = %02x, [[player+0x2940]+0x24] = %lx%s (ee = not readable)",
+                 (unsigned)e24, (unsigned)e25, (unsigned)hudoff, st24,
+                 e24 == 0 ? " - [E+0x24] IS 0: THE ELEMENT WILL NOT DRAW" : (hudoff != 0 && hudoff != 0xee && !(st24 >= 2 && st24 <= 0xd)) ? " - THE HUD IS OFF AND THIS IS NOT ONE OF THE GAME'S MASH STATES: THE ELEMENT WILL NOT DRAW" : "");
+        }
+    }
+    if (kld_s.presses != kld_v.presses) { kld_v.presses = kld_s.presses; kld_v.t_press = now; }
+    if (!kld_fin(v) || v < 0) v = 0; if (v > 1.0f) v = 1.0f;
+    col = klh_rd32((DWORD_PTR)KLH_VA(kld_v.pulse && kld_v.t_press && now - kld_v.t_press < 120 ? 0xbbe498 : 0xbbe490));
+    if (!klh_data((void *)(DWORD_PTR)(e + 0x5c), &btn0, 1, "the tap prompt: which button, 0 = {TapCover} (the Tick's table 0x8ac8b8)") ||
+        !klh_data((void *)(DWORD_PTR)(e + 0x58), &one, 4, "the tap prompt: its bar's maximum") ||
+        !klh_data((void *)(DWORD_PTR)(e + 0x54), &v, 4, "the tap prompt: its bar's value") ||
+        !klh_data((void *)(DWORD_PTR)(e + 0x50), &on, 1, "the tap prompt: shown (as the game's own users switch it on, 0x8d6628)")) { kld_prompt_off("a write was refused", now); kld_v.refused = 1; return; }
+    if (col) klh_data((void *)(DWORD_PTR)(e + 0x114), &col, 4, "the tap prompt: the bar's colour, one of the game's two (0x47e230)");
+}
+
+static void kld_tick_main(int game_thread)
 {
     static DWORD toldrules; static char toldwhy[200];
     DWORD gd, pl, d, m, h, ho = 0, rules, state, now, tick = 0, clock, chans; int level, act, ok = 1, hpok, i = 0, st = -1;
@@ -1428,6 +1687,7 @@ static void kld_tick(int game_thread)
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLD_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || (signed char)idx < 0 || idx > 31 ||
         !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLD_PLAYER_VT || !klh_rd(pl + 0x2723, &police, 1)) pl = 0;
     if (!pl || police) act = 0;                /* a fed is left to the game */
+    kld_v.act = act; kld_v.pl = pl; kld_v.state = state;      /* track R7: for the camera / prompt pass (kld_tick) */
     if (pl && (h = klh_rd32(pl + 0xa48)) != 0) { ho = h; hp = kld_rdf(h + 4, &ok); max = kld_rdf(h + 8, &ok); } else ok = 0;
     hpok = ok && max >= 1.0f;
     kld_tuning(act, ok ? max : 0.0f);
@@ -1603,7 +1863,7 @@ static void kld_tick(int game_thread)
         kld_s.lastf = frame;
         kld_s.meter -= kld.decay * dt; if (kld_s.meter < 0) kld_s.meter = 0;
         rate = B + P * kld_s.meter; if (rate > T) rate = T; if (rate < 0.05f) rate = 0.05f;
-        kld_s.sumr += rate; kld_s.nr++;
+        kld_s.sumr += rate; kld_s.nr++; kld_v.rate = rate;
         if (kld.log >= 2 && now - kld_s.lastline >= 250) { kld_s.lastline = now; klog("down: get-up: frame %.1f of %.1f, speed %.2f, meter %.2f, %d press(es)", frame, kld_s.endf, rate, kld_s.meter, kld_s.presses); }
         if (kld.dry) return;
         /* the three writes: the channel's frames a second, and the two ticks the game ends the state by */
@@ -1620,6 +1880,22 @@ static void kld_tick(int game_thread)
         if (nv > ne) nv = ne;                                        /* 0x69a4c3: the game's other branch (start + 0.7 x length) is for an event AFTER the end */
         klh_data((void *)(DWORD_PTR)(m + 0x8e0), &nv, 4, "the prone movement: the tick from which the stick ends the get-up");
     }
+}
+
+/* The part's tick (klhook.c calls this): everything above, then the camera and the prompt (track R7) from what that
+   pass left in kld_s - one place, after every early return of kld_tick_main, so the prompt goes off whatever way a
+   down ends. Game thread only, as every write of this file. */
+static void kld_tick(int game_thread)
+{
+    DWORD pl, d, ds = 0, now;
+    if (!game_thread) return;
+    kld_v.act = 0; kld_v.pl = 0; kld_v.state = 0;
+    kld_tick_main(game_thread);
+    if (!kld.on || !klh_exe_ok || (!kld_v.cam && !kld_v.prompt && !kld_v.ours)) return;
+    now = GetTickCount(); pl = kld_v.act ? kld_v.pl : 0;
+    if (!pl || !(d = klh_rd32(pl + 0x2948)) || klh_rd32(d) != pl || !klh_rd(d + 4, &ds, 4)) { kld_v.act = 0; kld_prompt(0, 0, now); return; }
+    kld_camera(pl, ds, now);
+    kld_prompt(pl, ds, now);
 }
 
 static void kld_init(void)
@@ -1720,6 +1996,15 @@ static void kld_init(void)
         klog("down: flop: Flop=3 - ALL THE BELLY FALLS, A DIFFERENT ONE EACH TIME: the hook draws one whole clip a knock-down from the list (sheet numbers of G_zoom_belly.png : weight)%s, never one group twice in a row, and writes its number into the one pair of the carrier %s in the human's own set (no bot's draw, nobody's death changes); FlopLight=%d (the stumble #43: he stays up, no mash), FlopReach=%.2f m (a clip whose root goes further forward is left out; the default 1.0 = ONLY #25 until live checks W1 / W2 have shown the long dives safe at a wall and an edge - ALL the falls of the sheet need FlopReach=4.5; 0 = no limit), FlopUp=%s; from the landing on FlopBase %.2f + FlopPerPress %.2f x the mash meter, at most FlopTop %.2f; FlopUpPct=%.0f. Everything else is Flop=1's (re\\player_down.md 12)",
              m[0] ? m : " (EMPTY)", kld.fallslot, kld_mx.light, kld_mx.reach, kld_mx.up ? "71 (A TEST KEY: at a belly clip's event 8 the game's get-up state plays Rise_From_Stomach: FULL damage from there, and the get-up words are that slot for every down)" : "0 (every clip is played whole)", kld.fbase, kld.fper, kld.ftop, kld.uppct);
     }
+    /* track R7: the camera stays his, and the game's own tap prompt. Both default to 1 when Flop is set, else 0 */
+    memset(&kld_v, 0, sizeof kld_v);
+    kld_v.cam = GetPrivateProfileIntA("Down", "Camera", kld.flop != 0, klh_ini) != 0;
+    kld_v.side = GetPrivateProfileIntA("Down", "CameraSide", 1, klh_ini) != 0;
+    kld_v.prompt = GetPrivateProfileIntA("Down", "Prompt", kld.flop != 0, klh_ini) != 0;
+    kld_v.style = GetPrivateProfileIntA("Down", "PromptStyle", 1, klh_ini) == 2 ? 2 : 1;
+    kld_v.pulse = GetPrivateProfileIntA("Down", "PromptPulse", 0, klh_ini) != 0;      /* review 7, S3: default 0 - the game's own break-free bar stays white */
+    if (kld.on) klog("down: camera: Camera=%d (1 = in a fall this part drives the fall's LOOK bit 0x10 of the input mask [player+0xed0] is taken off at once - stock takes it off 0.72 s into its own fall, the flop holds that tick for the whole clip, so the mouse was dead for the whole knock-down; the move bit 1 stays), CameraSide=%d (1 = the shoulder side he had is put back: the down start forces the left one). prompt: Prompt=%d (1 = the game's own 'Tap Quickly' prompt - the element at [osd+0x10fc], the one its human-shield break-free shows (0x860ed3), here with '{TapCover}' + its bar - is shown by four data fields from the landing of a knock-down / during a get-up this part drives, only while the round runs), PromptStyle=%d (1 = the bar is how far he is up - the hook's design; 2 = the mash's speed - a meter as the game's break-free bar is), PromptPulse=%d (1 = the bar is the game's red for 0.12 s after a press; 0 = always white, as the game's). Camera and Prompt default to 1 when Flop is set. Data writes only (re\\player_down.md 13)",
+                     kld_v.cam, kld_v.side, kld_v.prompt, kld_v.style, kld_v.pulse);
     if (kld.on && kld.flop == 2) klog("down: flop: Flop=2 - THE BELLY FLOP, two clips: he goes down by %s and gets up by %s (slot ids written into his prone movement while he is up; the game plays them itself), the get-up at FlopBase %.2f + FlopPerPress %.2f x the meter, at most FlopTop %.2f; FlopTake=%.2f (the share of a loss in the get-up that stays), FlopUpPct=%.0f (health he is given when up; 0 = none)",
                                  kld.fallslot, kld.upslot, kld.fbase, kld.fper, kld.ftop, kld.take, kld.uppct);
 }

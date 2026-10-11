@@ -1116,3 +1116,210 @@ body`; `the carrier's pair in this set still holds clip N ..., an earlier choice
 as remembered`; `FlopUp: the get-up words ... are back as the game had them`; `THE GAME ALIGNS THIS FALL ...` /
 `the game does NOT align this fall ...`; the longer `he stands ...` line. New writes: none (S5's put-back writes
 are of words this part wrote itself).
+
+## 13. The camera stays his, and the game's own TAP QUICKLY prompt (track R7, 2026-10-11 evening)
+
+Owner, 19:10: *'for the animation should try and keep the camera like normal i think its fixes down when it happen well
+idk what would be better for user experience you tell me, but make sure theres an prompt that lookls very similar to the
+break free from human shield in FA or even campaign'*. **Offline; nothing here has run in the game.** READ = kl2.exe
+build 0490, each routine named read whole; FILE = stock F01's `.LOC` (`tools/kl_loc.py keys F01`); LIVE = the lead's
+run G1 (16:17, log + pictures `research/shots/G1_DM03_flop_100s .. 126s.png`). Scratch: the session's scratchpad `R7/`
+(`xref.py` = callers of an address, `disp.py` = functions using a displacement, `who.py` = the vtable a routine is in).
+
+### 13.0 The short answer
+
+- **Why it 'fixes': the fall switches the MOUSE LOOK off, and the flop never lets the game switch it back on.** The
+  down start sets two bits of the input mask `[player+0xed0]`: 1 = no move, 0x10 = no look. Stock takes 0x10 off 0.72 s
+  into its fall (at the tick `[M+0x8e0]`); `Flop=1 / 3` hold that tick 2 s behind the clip's end and `Flop=2` holds it
+  at the end tick, so the bit stayed for the whole knock-down - 2 to 9 s with a camera that cannot be turned.
+  Nothing else is forced: there is no 'down' camera profile, no cut, no bone the camera is tied to.
+- **What is better for him (the answer to 'you tell me'): his own camera, all the time.** He is on the floor for
+  seconds; he must be able to look at who shot him and at the way out. The game's follow camera already goes low and
+  close behind the lying body by itself (LIVE, G1's pictures) - that part is kept. Built: `[Down] Camera=1` (the look
+  bit off at once; he still cannot walk) and `CameraSide=1` (the shoulder he had instead of the forced left one).
+- **The prompt exists in the game and is switched on by four data fields.** One HUD element serves all the game's mash
+  games - the picture of the bound key / pad button, the words 'Tap Quickly', and a bar that fills
+  (`ZMiniGameButtonMashingDisplay`, `[osd+0x10fc]`). **It IS the human-shield break-free prompt: READ** (review 7,
+  M1 - 13.2). Built: `[Down] Prompt=1` shows it with the **Cover / GET UP** button's picture from the landing until
+  he stands, its bar filled by how far he is up. Same element, same text, same bar as the break-free's - drawn by
+  the game's own code. Two things differ on purpose: the key's picture (Cover, the key our mash reads; the
+  break-free shows Use) and the default bar (progress; the game's is a tap meter = `PromptStyle=2`). klhud.c is not
+  used.
+
+### 13.1 The camera in a down, as read
+
+| what | where | facts |
+|---|---|---|
+| the input mask's four tests | 0x417310 (`& 5`), 0x76fd40 (`& 3`), 0x4d9ec0 (`& 0x30`), 0x87d930 (`& 0x50`); all four callers are in **0x4844e0** (`ZGameplayInputWintel` slot 7, the per-frame read; the first two also in 0x7ea480, its key-only twin) | 0x4844e0 adds the mouse's movement (`[[gamedata+0x1590]+0x2c]` / `+0x30`, x sensitivity, x -1 by the invert bytes 0xddb944 / 0xddb948) into **`[H+0x3e0]` (turn) and `[H+0x3e4]` (up / down)** and ZEROES them when 0x4d9ec0 / 0x87d930 fail; the move axes `[H+0x310]` / `[H+0x314]` are zeroed when 0x417310 / 0x76fd40 fail. So: **bit 1 = no move (both axes), bit 2 / 4 = one move axis, bit 0x10 = NO LOOK (both), 0x20 = no turn, 0x40 = no up / down.** The pad's look stick (`[H+0x3e8]` / `+0x3ec`, read from `H+0x3a0` / `+0x3ac`) is not gated in 0x4844e0 |
+| where the look goes | **0x8a4fa0** (the input's hand-over to the player) | `[H+0x3e0]` -> rig slot `+0x1c`, `[H+0x3e4]` -> rig slot `+0x20`, the stick's pair -> slots `+0xc .. +0x18`; rig = 0x4446e0(player) = `[player+0xbd4]`, the object the camera takes its place and angles from (re/firstperson_camera.md 2, 5) |
+| the fall sets | 0x76a827 .. 0x76a834 (0x6feb90 = OR), in the down start 0x76a450 - its only callers in a down | bits 1 and 0x10. LIVE, G1: `in 0->17` at `dstate 0->2` |
+| stock gives the look back | **0x8ee22e .. 0x8ee260**: while D is 2, as soon as 0x843fa0 is true (M state 1, tick >= `[M+0x8e0]`, the weapon object's `+0xdc` 0) -> 0x787600(input, 0x10) | 0.72 s into the stock fall; both bits go at 2 -> 1 (0x8ee31e / 0x8ee327), in 0x8b1900 and in the reset 0x88a990 |
+| **the flop** | `kld_flop_one` holds `[M+0x8dc]` = `[M+0x8e0]` = the clip's end + 2 s; `Flop=2` holds `[M+0x8e0]` at `[M+0x8dc]` | 0x843fa0 is never true: **the look bit stays set for the whole knock-down.** LIVE, G1: the mask reads 00000011 from 16:18:58.16 to the part's own clearing at 16:19:06.86 = 8.7 s |
+| the camera's profile | 0x778f50 (read whole) | no branch tests the down state except the human-shield carrier's (player state 0x12: `[D+4]` 3 -> 0x154c338). In a fall the ordinary selection runs (Arcade: 0x154b810 / 0x154b9a8, or the 'lying' pair 0x154cb30 / 0x154ccc8 while word `[player+0xa54]` bit 1 - which is 0 in the flop: G1's `a54 0000`) |
+| the shoulder | 0x76a889 -> **0x74a120** (read whole) | LEFT is forced while `[D+8]` bit 0 and `[D+4]` != 3; the setter's writes: byte `[player+0x280c]`, bit 0x400 of `[player+0x818]`, and when the side changes `[player+0x2f80]` = float `[0xb4c788]` and 0x4719f0(`[player+0xbd8]`) = `[that+0x5a0]` = 0.0 (the camera's blend restarted). The old side is kept in `[D+0x30]` and put back by the three ends (0x5a756c, 0x71089a, 0x88aa3a). The camera walks its side spline by itself when `[player+0x280c]` differs from `[cam+0xb40]` (0x9088c0; re/shoulder_m02.md 1.3) |
+| where the low camera comes from | NOT READ to the instruction | the camera's place is the rig's (`rig+0x1d4`, re/firstperson_camera.md 3). LIVE, G1 `_104s.png`: 6 s into the knock-down the camera is at floor height close behind his head, level - it has followed the body down by itself. The red wash in that picture is the low-health screen effect (80 of 401 health), not the camera |
+
+### 13.2 The tap prompt, as read
+
+`ZMiniGameButtonMashingDisplay` (re/hud.md 2.2: `[osd+0x10fc]`, size 0x12c, vtable 0xbbe8f0, allocated in every
+mode), E:
+
+| what | where | facts |
+|---|---|---|
+| Tick, slot 5 | **0x8ac680** | nothing while byte `[E+0x50]` is 0. Else: the token by the signed byte `[E+0x5c]` (table 0x8ac8b8: **0 `{TapCover}`, 1 `{TapUse}`, 2 `{TapCycleWeapon}`, 3 `{TapCloseCombat}`**; anything else `{TapUse}`) + the string `AllLevels/Interface/` `TapQuickly` of the level's `.LOC` (FILE, F01 English: **'Tap Quickly'**), token expanded by 0x7bb920 for the controller `[[E+0x10]+0x91e]` (the key's or the pad button's picture), SetText on `[E+0x4c]`; then **0x869fd0(E, 160 x `[E+0x54]` / `[E+0x58]`, 160)** = the fill's width, 177 x value / max, capped at 177 (`[0xcef0ec]`) |
+| Render, slot 2 | 0x48f4b0 | when `[E+0x24]` and `[E+0x50]`: the text (at `E+0x40`), the bar's frame (picture `[osd+0x7ec]`, layer 9, white) and the fill (picture `[osd+0x888]`, layer 0xb, colour `[E+0x114]`) |
+| layout, slot 6 | 0x4a8d40 | from the screen's middle: the text at y +160, the frame at y +190, the fill at (-88, +186) - below the middle of the screen (`[0xcef0d8]` .. `[0xcef0e8]`) |
+| the colour | 0x47e230(E, flag) | `[E+0x114]` = `[0xbbe498]` = ffcc0000 (red) or `[0xbbe490]` = ffffffff (white) |
+| who drives it - ALL by plain writes of `[E+0x50]`, `+0x54`, `+0x58`, `+0x5c` | 0x8d6628 / 0x860f28 / 0x860ffa / 0x451197 / 0x7cba04 / 0x861071 (**THE HUMAN-SHIELD STRUGGLE** - see below; the first form of this note called it 'the rise after a ragdoll throw', which was wrong: max = `[T+0x680]`; **0x4424f0** picks the button and returns its input byte: 0 -> `[player+0xeb4]`, the Cover byte); `ZFFActionMiniGameButtonMashing` 0x7fbf10, `ZMiniGameButtonMashing` 0x6ffab0 / 0x5d18c0 (the campaign's mash action); 0x5fe270's 0x769630 / 0x7371f0 / 0x77d3a0 / 0x7b6780 (the downed buddy: max 100, red); **0x7f9eb0, the human-shield part of the player's frame (`[player+0xad4]` / `+0xad0`): off at 0x7fa69a when a hold ends**; `ZGameRulesFragileAlliance` slot 4 (0x708500): off | the OSD is found as 0x4ce73f does: 0x4ddae0(0x588680(gamedata) = `[gamedata+0x15dc]`, `[player+0x91e]`) = `[mgr + 8 i]` when i is 0 / 1 and byte `[mgr + 8 i + 4]` is not 0xff; `[E+0x10]` = the OSD's player (0x83ab0f) |
+| the stock 'Get Up' | FILE: `UseActions/DownNotDeadGetUp` = **'{TapCover} Get Up'**, `..GetUpInCover` | the use-action prompt of section 1 (0x5505c0), only while he lies the stock way: the same button picture |
+| `ZHumanShieldDisplay` (`[osd+0x1114]`, vtable 0xbbe920) | slots 2 / 4 / 5 scanned for strings: none | pictures only; not the tap text. NOT read further |
+
+**The 'break free' prompt IS this element - READ (review 7, M1; re-read by the reviewer in kl2.exe).**
+0x860dc0 has ONE caller, 0x7fa515, inside 0x7f9eb0 (the human-shield part of the player's frame), behind
+`test eax, 0x100`. It works on `[player+0xad4]` (the carrier), `[player+0xad0]` (the victim) and the two tap floats
+`[+0xae4]` / `[+0xae8]` - the `fTaps` of section 3 (`RMCSetHumanShieldPvPTapsShield / ..TapsCarrier`; 0x8288e0 and
+0x4ac030 are the two senders called there).
+
+| side | where | what the prompt shows |
+|---|---|---|
+| the carrier | 0x860ddb; 0x4424f0 | one of the FOUR buttons drawn at random (`[0x1548e08]`, drawn again on the timer `[player+0xaec]`) into `[E+0x5c]`; a press adds 1 to `[+0xae4]`, each frame takes `[0xce8a8c]` x the value off; the value -> `[E+0x54]` |
+| **the victim = the break-free** | **0x860ed3 .. 0x861075** | once the carrier's taps are over `[T+0x680]` x `[0xb794c0]`: 0x860f36 sets `[E+0x50]` = 1, `[E+0x58]` = `[T+0x680]` x `[0xb21fe0]`, **`[E+0x5c]` = 1 = `{TapUse}`**; a press of Use (`[victim+0x818]` bit 0x20) adds 1 to `[+0xae8]`, each frame takes `[0xce8a90]` x the value off; the value -> `[E+0x54]` (0x860ffa); at `[T+0x680]` x `[0xb6e5c0]` he is free and 0x861071 clears `[E+0x50]`. The colour is never touched: **white** |
+| the start of a hold (by the look of it) | 0x8d64f0 (0x8d6628: shown, max `[T+0x680]`) | sets the same mask bits 1 / 0x200 / 0x400 as 0x860f7b. Its caller 0x4d7b00 was NOT read |
+
+So the game's own break-free look is: **the Use key's picture + 'Tap Quickly' + a WHITE bar that is the victim's own
+tap METER (+1 a press, a share off every frame: it falls back when he stops).** Ours against it:
+
+| | the game's break-free | ours, default | ours, `PromptStyle=2 PromptPulse=0` |
+|---|---|---|---|
+| element, text, frame, place | `[osd+0x10fc]`, 'Tap Quickly', below the middle | the same | the same |
+| key picture | Use (`{TapUse}`) | **Cover / GET UP** (`{TapCover}`: the key the mash reads, `[D+0x2b]`) | Cover / GET UP |
+| bar | a tap meter | **progress** (how far he is up; the hook's own design: a man who does not tap still sees when he is up) | a tap meter (the mash's speed) |
+| colour | white | white (`PromptPulse` is 0 by default since review 7; 1 = the game's red for 0.12 s a press) | white |
+
+The owner picks between the two bars after C1 / C3.
+
+### 13.3 What was built (`klhook/kldown.c`: the block before `kld_tick_main`, `kld_camera`, `kld_prompt`, `kld_tick`)
+
+`kld_tick` is now a wrapper: `kld_tick_main` (the old tick, unchanged but for two `kld_v.rate = rate` and one
+`kld_v.act / pl` line), then the camera and the prompt from what that pass left in `kld_s` - one place after all of
+the old tick's early returns, so the prompt goes off whatever way a down ends.
+
+1. **`Camera=1`** (default 1 when `Flop` is not 0). In a fall this part drives (`kld_s.fnow`, D state 2, not a dead
+   man, never in a Dry run): bit 0x10 of the mask dword `kld_mask` finds is taken off in the first pass - the game's
+   own AND, the state every stock fall is in from 0.72 s on. Bit 1 stays. At most three times a down. The end of the
+   knock-down takes 'bits 0x11' off as before (its line now reads `00000001 -> 00000000`).
+2. **`CameraSide=1`** (default 1; acts only with `Camera=1`). While he is up his side byte is remembered each pass;
+   in the fall, when the byte differs, the setter's writes are made as data (13.1; the camera's blend only when
+   `[player+0xbd8]` is a `ZFFCamera1`, vtable 0xbb76a4). At most three times a down. The game's end of the down
+   state sets its kept side - the same one - as ever.
+   Review 7, S5: the setter's direct form also writes dword `[player+0xb8c]` = 0 (0x74a1a8); its timer form
+   (0x74a15f .. 0x74a170: delay > `[0xb22900]`) stores the delay in `[player+0xb88]` and +1 / -1 in `[+0xb8c]`
+   (+1 = to the right by 0x74a167 - a GUESS that this is the direction). After the down start's own direct call the
+   word is 0, so the data form leaves it; it is READ into the side line, and when it is found not 0 in a fall
+   (`a delayed side change is armed in this fall`) this part writes no side any more in that down.
+   Review 7, S6: the blend is restarted twice in two frames (the down start's flip to left, ours back) - a
+   sideways twitch at the hit is possible; `CameraSide=0` is the remedy (C1 looks for it).
+3. **`Prompt=1`** (default 1 when `Flop` is not 0). Shown: (a) `Flop=1 / 3`, from the landing (the clip's event 7)
+   until the clip is through; (b) any mode, while a get-up this part drives plays (D state 3: `Flop=0 / 2`, and
+   `FlopUp=71`). Each pass: `[E+0x5c]` = 0, `[E+0x58]` = 1.0, `[E+0x54]` = the value, `[E+0x50]` = 1, `[E+0x114]` =
+   white, or the game's red for 0.12 s after a press with `PromptPulse=1` (default 0 since review 7: the game's
+   break-free bar stays white). **`PromptStyle=1`** (default): the
+   value is how far he is up - (frame - landing) / (end - landing), or frame / end in a get-up: the bar fills by
+   itself and faster while he taps, and it is full when he stands. **`PromptStyle=2`**: the mash's speed between
+   `FlopBase` and `FlopTop` (`Base` / `Top`): it falls back when he stops - the game's own bar's behaviour.
+   Off (`[E+0x50]` = 0, value 0, white - what 0x7cba04 writes): he is up; dead or out of play; the part stops acting
+   (a stock level, no Arcade session, a police body = the fed, another player object); **the round does not run any
+   more** (review 7, S1: `[session+0x70]`, which `klr_arcade` already reads, is not 0x19 - the round's end, the
+   score page 0x1f); the clip is through or the game took the state over; the game's tick stands for 0.5 s (the
+   pause menu; review 7, S7: 0.25 s before, and the test's clock now starts afresh in the first pass the prompt is
+   wanted, so one long frame or a stale tick of the last down gives no OFF / ON pair).
+   The OFF is written only to the element that the local player object of THAT pass leads to through its OSD
+   (review 7, S2: the remembered pointer's vtable read alone is not trusted - freed memory keeps its bytes); if
+   that is another element, or none, `ours` is dropped unwritten with one line; with no local player object at all
+   it is tried again for 3 s, then dropped.
+   At ON a second line `down: prompt: draw state:` (review 7, S4; reads only) gives `[E+0x24]`, `[E+0x25]`, the
+   OSD's 'HUD off' byte `[osd+0x1225]` and `[[player+0x2940]+0x24]`: while the HUD is off the element loop
+   0x8bf583 .. 0x8bf5cd draws the mash element only in the game's own mash states 2 .. 0xd, and the line says
+   `THE ELEMENT WILL NOT DRAW` in that case and when `[E+0x24]` is 0. Never taken while `[E+0x50]` is
+   already set by the game; the element must have vtable 0xbbe8f0 and `[E+0x10]` = the local player, else one line
+   `NOT SHOWN` and nothing is written. Not shown: Dry; the stumble #43; lying the stock way (the game's own
+   '{TapCover} Get Up' shows there).
+   **klhud.c: no helper is called; `[HUD] Enable=0` or 1 changes nothing here.** The wording is the level's own
+   localised string; 'Get Up' cannot be put into this element by data (its Tick rebuilds the text from the fixed key
+   every frame).
+
+Writes added: one DWORD (the mask), the side's byte / DWORD / two floats, five fields of E. No call of a game
+routine, no patch, no vtable copy, no object made. Game thread only; Arcade, not a stock level, not police.
+Wiring: none new (HEAD wires `kld_init` / `kld_tick`).
+
+Compile check after the fix round (`git archive HEAD klhook` at ad6624d + this kldown.c, in `G:\kl_scratch\R7\src`;
+no line of klhook.c changed): 'built G:\kl_scratch\R7\test\dinput8.dll (TEST)' sha1
+d40a05c07da94e9844c0d85c02a7dc8cd59e5e5f, 'built G:\kl_scratch\R7\ship\dinput8.dll (SHIP)' sha1
+f735ec79313bdbb9528f66fda27dbd3986a470ef (a hash is per build); no warning. Compile only: not for the game folder.
+(First round: 7efe1a1 + kldown.c 754c7dea, TEST 08a1f026 / SHIP 71bb5b01.)
+
+### 13.4 Live checks (the lead; the bank DM03, the walk of G1, `[Shoulder] Log=1`; a picture every 2 s)
+
+The scripted player must MOVE THE MOUSE in the knock-down: the rig's mouse step if it has one, else these are for the
+owner's hand. (The rig injects inside the dinput8 proxy; whether its mouse deltas reach `[gamedata+0x1590]+0x2c` was
+not looked at.)
+
+| run | keys | PASS | FAIL |
+|---|---|---|---|
+| C0 | `Enable=1 Flop=1 Log=2 Camera=0 Prompt=0` | G1's lines exactly; no `down: camera:` write line, no `down: prompt:` line; shoulder `in 0->17` at the fall and `in 17->0` at the end | any `camera:` / `prompt:` line but the start-up one |
+| C1 | `Enable=1 Flop=1 Log=2` (both default to 1), the mouse moved left - right during the whole knock-down | start: `down: camera: Camera=1 ... CameraSide=1 ... Prompt=1 ...`; at the fall, after `THE KNOCK-DOWN` (mask `00000011`): **`down: camera: the fall's LOOK bit of the input mask ........ is taken off 0.0x s after he went down: 00000011 -> 00000001`**, shoulder `in 17->1`; `down: camera: the down start had put the camera on the LEFT shoulder; the side he had is back (right): byte [player+0x280c] 1 -> 0 ...`, shoulder `side 1->0`; at the landing **`down: prompt: ON 1.8x s after he went down: the game's own tap prompt (ZMiniGameButtonMashingDisplay ........`** and `down: prompt: draw state: [E+0x24] = 01 ..., [E+0x25] = 00 ..., the OSD's HUD-off byte [osd+0x1225] = 00, ...` with NO `WILL NOT DRAW`; the side line ends `[player+0xb8c] reads 0`; **no sideways jerk of the camera in the first picture of the fall** (the blend is restarted twice in two frames: else `CameraSide=0`); the bar WHITE in every picture (`PromptPulse` is 0 by default); at the end `the knock-down's clip is through ... 00000001 -> 00000000`, **`down: prompt: OFF after 6.8 s (the clip is through, or the game took the state over)`** or `(he is up)`, then `flop: UP ...`. PICTURES: at fall + 3 s and + 6 s the VIEW HAS TURNED against the picture before (the pillars are elsewhere) with the body still in frame, camera low behind him, on his RIGHT shoulder side; **below the middle of the screen the key's picture (C), 'Tap Quickly' and a framed bar, about a third full at + 3 s and nearly full at + 7.5 s**; after `UP`: no prompt in the picture, he walks, aims, fires (G1's test) | the view does not turn although the mask reads 1 (the look is gated elsewhere too: tell the track - the rig's `+0x1c` / `+0x20` slots are next); `AGAIN in this down` (somebody sets the bit every frame); `the game put the camera on the left shoulder again` (a caller forces it: then `CameraSide=0`); **`prompt: NOT SHOWN in this down: <why>`** (says which read failed); `prompt: ON` in the log and NOTHING in the pictures (the `draw state:` line names the cause: `WILL NOT DRAW` = `[E+0x24]` 0 or the HUD off outside the game's mash states; a set `[E+0x25]`; all clear = the element's Tick / Render do not run in Arcade: tell the track); `prompt: OFF ... (the game's tick stands still (the pause menu))` followed by `ON` with no pause pressed (a frame over 0.5 s: a hitch, NOT a fault of the prompt - but say it); `a delayed side change is armed in this fall` (somebody asked for a side change in the fall: tell the track who); the prompt still in a picture after `UP`; the body turns with the mouse while the clip plays, or the dive goes where the mouse points (then the look must wait for the landing: tell the track); a fault |
+| C2 | C1 + `PromptPulse=1` + `tap C 40` / `wait 60` x 80 from the fall on | the bar fills faster (compare the same times as C1); with a picture taken within 0.1 s of a press the fill is RED; `UP` under 4.5 s; `prompt: OFF` in the same pass or the one before `UP` | the bar does not move (the Tick does not run each frame) |
+| C3 | C1 + `PromptStyle=2` (with the default `PromptPulse=0` = THE GAME'S OWN BREAK-FREE BAR: a white tap meter), taps for 2 s, then none | the bar grows while he taps and falls back to empty about a second after the last press; white throughout. THE OWNER IS SHOWN C1's AND C3's PICTURES SIDE BY SIDE AND PICKS | - |
+| C4 | C1, ESCAPE pressed 3 s into the knock-down, 3 s in the pause menu, ESCAPE | `down: prompt: OFF after .. (the game's tick stands still (the pause menu))`, no prompt over the pause menu's picture, `prompt: ON` again after it; the knock-down ends as in C1 | the prompt over the pause menu (the tick runs on in the pause: then the pause must be read another way); `THE TIME BOUND OF THE WHOLE KNOCK-DOWN` right after the pause = the tick did run on (the old assumption of 10.2 point 5) |
+| C5 | C1 + `[Fed] Enable=1 Player=1`, `DownHealth=80` and a death on the floor (F6's keys) | `DEAD WHILE FALLING` (or `LYING`), **`down: prompt: OFF after .. (he is dead or out of play)`** in that pass, no prompt in the death camera's pictures, none for the fed's body, no `camera:` line after the death | a prompt on a dead man's screen; a `camera:` / `prompt: ON` line for the police body |
+| C6 | C1 on stock Subway (the Arcade page) | no `camera:` / `prompt:` line but the start-up one | any |
+| C7 | `Enable=1 Flop=0 Log=2 Prompt=1 DownHealth=200` (D2's run: the stock fall, the mash get-up) | while he LIES: the game's own '{TapCover} Get Up' line; after the press `GETTING UP ...`, **`prompt: ON`**, the bar from empty to full in the 1.5 s of the get-up, `prompt: OFF ... (he is up)` | both prompts at once in a picture (then (b) of 13.3 point 3 needs the use-action's end first) |
+| C8 | C1 with `Flop=3 FlopMix=43:1` (the stumble) | `camera:` look line, NO `prompt:` line (he never lies) | a prompt |
+| C9 (review 7, S1) | C1 with the round ending while he lies: the round clock run out (or the last crew member's death) 2 - 4 s into a knock-down | **`down: prompt: OFF after .. (the round does not run any more (the session state is not 0x19 ...))`** in the pass the state leaves 0x19; no prompt in the round-over / score page pictures | the prompt over the score page; no OFF line before the level is left; `the local player's OSD does not lead to the element ... nothing is written` WITH the prompt still in a picture |
+
+For the owner's eyes after C1 / C3: this IS the break-free's element (READ) with the Cover key's picture in place of
+Use; is the bar better as 'how far up' (1, the hook's) or as 'the mash' (2, the game's own); does he want the red
+flash at a press (`PromptPulse=1`); should the camera start a little slower (it is free from the first frame of the dive: stock waits 0.72 s); is
+the right shoulder right for the belly flop.
+
+### 13.5 ASSUMED / not done
+
+- ASSUMED: the look the owner misses is the MOUSE's (bit 0x10 zeroes only the mouse sums in 0x4844e0; a pad's look
+  stick was free already by this reading - not followed into the rig); nothing in the fall reads the camera's turn
+  for the body or the clip's direction (stock is in the same state from 0.72 s to the end of its fall); the side
+  written as data is all the setter does for the camera (its RMC is not sent: Arcade has no peer; the stance reader
+  0x41ad30 runs in the base move, not in a prone fall); the mash element's Tick and Render run in an Arcade round as
+  the other elements' do and its hide bytes are clear (no stock hide group names it: re/hud.md 2.3; the
+  `draw state:` line now says so in the run) and the OSD's 'HUD off' byte is clear in a round; `{TapCover}` is the
+  button the mash reads (0x4424f0 pairs it with the Cover byte; `[D+0x2b]` is fed from the same action: section
+  1); the game's tick stands in the pause menu (C4 decides); the session state is 0x19 for the whole of a round in
+  play, the pause menu included, and leaves it at the round's end (as klbot.c / klfed.c / klescort.c take it - LIVE
+  for those parts' purposes; that it does not leave 0x19 for a moment in play is ASSUMED).
+- NOT assumed any more (review 7, M1): that this element is what the human-shield break-free shows - READ (13.2).
+- KNOWN: while this part shows the prompt, a game user that wants it too finds `[E+0x50]` set and its values
+  overwritten until the knock-down ends. By the reading every such user is a human-shield hold between two humans
+  (0x860dc0 / 0x8d64f0), the campaign's mash entity or the downed-buddy game (session mode 2) - NOT a ragdoll
+  throw, as the first form of this note said. None of them is expected in an Arcade round with one human (a GUESS:
+  not read that an AI can hold the human as a shield in Arcade - if one can, the hold's own per-frame arm 0x860f28
+  takes the element again when our knock-down ends). The prompt says 'Tap Quickly', not 'Get Up'. With
+  `PromptStyle=1` the bar is progress, not taps: a man who does not tap sees it fill slowly all the same. A side
+  change the player himself asks for in the fall by the DIRECT form (no delay) is written back by `CameraSide`
+  up to three times (only the timer form is seen through `[player+0xb8c]`).
+- NOT DONE: the look for a pad (not needed by the reading; not checked); a slower camera start; a camera a little
+  higher than the game's own floor-level one (the profile numbers of re/firstperson_camera.md 2 are `.data`: a
+  key could write the 'lying' pair's distance, but the flop does not select that pair - not started); the prompt
+  during the dive before the landing; a text of our own ('GET UP') - that needs klhud.c's draw path (track V);
+  0x4d7b00 (the caller of 0x8d64f0); `ZHumanShieldDisplay`'s pictures.
+
+### 13.6 Review 7 (`re/player_down_review7.md`: ACCEPT WITH FIXES) - the fix round
+
+| point | what was done |
+|---|---|
+| M1 the 'ragdoll' label | DONE: the head comment of the block, 13.0, 13.2 (the struggle's two branches as a table, ours against the game's), 13.5 (the assumption struck, the KNOWN line rewritten) |
+| S1 round end | DONE in code: `want` needs `[session+0x70]` == 0x19 (`kld_v.state` from `klr_arcade`'s own read); off reason `the round does not run any more`; live check C9 added |
+| S2 stale pointer | DONE in code: `kld_prompt_off` re-resolves the element from the local player of that pass (`kld_mash_elem(.., own = 0)`) and writes only when it is the one we switched on |
+| S3 default style | DONE in part: `PromptPulse` default is now 0 (white, as the game's); `PromptStyle` default STAYS 1 (the lead's design; the review calls it defensible) - the ini text, the start-up line and 13.2 say which is the game's own, C3 = the game's bar, the owner picks |
+| S4 'HUD off' | DONE in code: the `draw state:` line at ON |
+| S5 `[player+0xb8c]` | DONE: named (13.3 point 2, the comment), read into the side line; a value armed in the fall stops the side writes of that down. NOT written (it is 0 after the down start's direct call) |
+| S6 two blend restarts | DONE in text: C1's PASS column, the ini's `CameraSide` line |
+| S7 pause test | DONE in code: 500 ms, the test's clock starts afresh at the first wanted pass; C1's FAIL column says what an OFF / ON pair without a pause means |
