@@ -583,6 +583,7 @@ static void klh_tick(int game_thread);
 #include "klhud_values.c"                             /* the HUD's readers (reads only): BEFORE klhud.c, AFTER klbot.c */
 #include "klhud.c"                                    /* includes klhud_weapon.c inside itself */
 #include "klhud_popup.c"                              /* AFTER klhud.c: pop-ups + loot ring (uses its klu / klu_r / klu_pic) */
+#include "klhud_escape.c"                             /* AFTER klhud_popup.c: the escape-vehicle panel in the new look (uses klu / klu_r / klu_pic) */
 #include "klshoulder.c"
 #include "klvis.c"
 #include "klnet.c"
@@ -636,6 +637,7 @@ static void klh_tick(int game_thread)
     klr_tick(game_thread);                            /* klbalance.c: one damage scale for player, police and crew */
     kly_tick(game_thread);                            /* klgrudge.c: the crew answers your bullets (off unless [Bots] Grudge) */
     klu_tick(game_thread);                            /* klhud.c: the crew list / money box texts (game thread only) */
+    klesc_tick(game_thread);                          /* klhud_escape.c: the escape-vehicle panel (off unless [HUD] Escape / Draft) */
     klpu_tick(game_thread);                           /* klhud_popup.c: centre pop-ups + loot ring (after klu_tick; off unless [HUD] Popups / LootRing / Draft) */
     klo_tick(game_thread);                            /* klshoulder.c: log only */
     klvis_tick();                                     /* klvis.c: log only (the vision grid and its record 0xff) */
@@ -814,6 +816,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klr_init();
     kly_init();
     klu_init();
+    klesc_init();                                     /* klhud_escape.c: after klu_init */
     klpu_init();                                      /* klhud_popup.c: after klu_init, it reads [HUD] with klhud.c's helpers */
     klo_init();
     klvis_init();

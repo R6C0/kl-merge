@@ -99,7 +99,7 @@
  *   LootRing=0        1 = the loot ring (default = [HUD] Draft)
  *   PopupFrame=0      1 = leave the stock background frame drawn under ours
  *   PopupMeasure=1    0 = size the bar from the string's length, never from the text object
- *   PopupPadX=61.4 PopupPadY=14.1 PopupDY=0 the bar = the text + 61.4 wide, 33.6 + 14.1 = 47.7 high (the draft's .toast); DY moves
+ *   PopupPadX=48 PopupPadY=11 PopupDY=3 the bar = the text + 48 wide, 27 + 11 = 38 high (quiet round 2026-10-11; the draft's .toast was 61.4 / 33.6 + 14.1 = 47.7 with 22.4 px letters; now the BIG font, cap 15); DY moves
  *                     the BAR ALONE (to seat it on the letters)
  *   PopupY=523        the BAR'S MIDDLE in virtual pixels (the draft's .toast: bottom 547, middle 523); the letters' capitals are centred on it
  *                     by the baked metric (see the 1:1 block). -1 = the game's own text top (480) + half a capital
@@ -137,21 +137,21 @@
 /* every place and size is a named number: NOTHING HERE HAS BEEN SEEN IN THE GAME (virtual 1280 x 720 pixels) */
 #define KLPU_STOCK_RGB   0x00ccccccu          /* the announcement text's own colour, [0xbbe494] = ffcccccc */
 #define KLPU_C_BOXFILL   0xe60c0c0du          /* the traitor box's dark fill */
-#define KLPU_CHAR_W      13.0f                /* the estimate: pixels a character (the stock frame takes 15, 20 for wide strings) */
-#define KLPU_LINE_H      22.0f                /* the estimate: a line's height; KLPU_LINE_STEP from line to line (the stock frame: 30) */
-#define KLPU_LINE_STEP   30.0f
+#define KLPU_CHAR_W      9.5f                 /* the estimate: pixels a character (the stock frame takes 15, 20 for wide strings) */
+#define KLPU_LINE_H      18.0f                /* the estimate: a line's height; KLPU_LINE_STEP from line to line (the stock frame: 30) */
+#define KLPU_LINE_STEP   22.0f                /* the baked H1's line height (review S8; was 24) */
 #define KLPU_BOX_GROW    5.0f                 /* the traitor box's outline stands this far outside its fill */
 #define KLPU_OUTLINE     2.0f                 /* without picture 118: the outline's thickness */
 #define KLPU_RING_DX     0.0f                 /* the ring's middle against the use-action prompt's place */
-#define KLPU_RING_DY     (-64.0f)
+#define KLPU_RING_DY     (-58.0f)
 #define KLPU_RING_X0     640.0f               /* without that element */
 #define KLPU_RING_Y0     545.0f
 #define KLPU_RING_N      32                   /* re\hud_layout.md: 20 dabs on r = 26, disc and thin ring 40, dollar 34 */
-#define KLPU_RING_R      26.0f
-#define KLPU_DAB_W       9.0f
-#define KLPU_DAB_H       8.0f
-#define KLPU_DISC        40.0f
-#define KLPU_DOLLAR      34.0f
+#define KLPU_RING_R      22.0f               /* quiet round: 26 -> 22 (disc 40 -> 34, dollar 34 -> 29, dabs 9 x 8 -> 8 x 7) */
+#define KLPU_DAB_W       8.0f
+#define KLPU_DAB_H       7.0f
+#define KLPU_DISC        34.0f
+#define KLPU_DOLLAR      29.0f
 #define KLPU_C_DISC      0xff0f100fu
 #define KLPU_C_THIN      0xff8d8982u
 #define KLPU_C_DOLLAR    0xb063a65bu          /* green hi, faded */
@@ -169,7 +169,7 @@
    (H2, SetFont +0x23c, the original put back like the colour) and their top is bar centre - cap / 2.
    The bar's height is the draft's constant, not a measure: .toast = line-height 1.5 x 22.4 px = 33.6 + 2 x .55 cqw (14.1). */
 #define KLPU_T_FONT      0xac                 /* ZCHAROBJ: the font object SetFont keeps (re\hud.md 3.1) */
-#define KLPU_BAR_LINE    33.6f                /* the draft's one line of the bar: line-height 1.5 x font 22.4 px */
+#define KLPU_BAR_LINE    27.0f                /* the draft's one line of the bar: line-height 1.5 x font 22.4 px */
 
 static struct { int popups, ring, frame, measure, layer, test, ringmode, traitor; float padx, pady, dy, y, ringx, ringy; } klpu;
 
@@ -242,7 +242,7 @@ static void klpu_font(DWORD obj, int slot, int on)
     if (!obj) return;
     cur = klh_rd32(obj + KLPU_T_FONT);
     if (on) {
-        want = klu.fontset ? klu_r.fonts[KLU_FNT_NAME] : 0;
+        want = klu.fontset ? klu_r.fonts[KLU_FNT_BIG] : 0;      /* quiet round: the BIG role (H1, cap 15) - the names' font is cap 11 now */
         if (!want || !cur || cur == want) return;
         klpu_font_obj[slot] = obj; klpu_font_orig[slot] = cur; klpu_font_set[slot] = want;
         klu_set(obj, KLU_VT_FONT, want);
@@ -310,7 +310,7 @@ static int klpu_popup(DWORD e, void *ctx)
     geom = *(const DWORD *)(DWORD_PTR)(text + KLPU_T_GEOM);
     if (klpu.measure && geom && klh_rd(geom + 0x40, ext, 8) && ext[0] > 2.0f && ext[0] < 600.0f && ext[1] > 2.0f && ext[1] < 120.0f) measured = 1;
     w = measured ? 2.0f * ext[0] : ew; h = measured ? 2.0f * ext[1] : eh;
-    cap = klu.fontset ? klu_cap_of(KLU_FNT_NAME) : 15.0f;
+    cap = klu.fontset ? klu_cap_of(KLU_FNT_BIG) : 15.0f;
     x = *(const float *)(DWORD_PTR)(e + 0x14);
     y = klpu.y >= 0 ? klpu.y : *(const float *)(DWORD_PTR)(e + 0x18) + cap * 0.5f;     /* the bar's middle: PopupY, else the game's own text top + half a capital */
     bw = w + klpu.padx; bh = KLPU_BAR_LINE + klpu.pady + KLPU_LINE_STEP * (float)(lines - 1);      /* the draft: text + 61.4 wide, 33.6 + 14.1 = 47.7 high */
@@ -562,9 +562,9 @@ static void klpu_init(void)
     klpu.frame = klu_inii("PopupFrame", 0, 0, 1); klpu.measure = klu_inii("PopupMeasure", 1, 0, 1);
     klpu.layer = klu_inii("PopupLayer", 0x17, 2, 0x18); klpu.test = klu_inii("PopupTest", 0, 0, 1); klpu.ringmode = klu_inii("RingMode", 1, 1, 2);
     klpu.traitor = klu_inii("PopupTraitor", 1, 0, 2);
-    klpu.padx = klu_inif("PopupPadX", "61.4"); klpu.pady = klu_inif("PopupPadY", "14.1"); klpu.dy = klu_inif("PopupDY", "4");   /* run T1: the letters sat 4 px under the bar's middle - the BAR goes 4 down */ klpu.y = klu_inif("PopupY", "523");
+    klpu.padx = klu_inif("PopupPadX", "48"); klpu.pady = klu_inif("PopupPadY", "11"); klpu.dy = klu_inif("PopupDY", "3");   /* run T1: the letters sat 4 px under the bar's middle - the BAR goes 4 down */ klpu.y = klu_inif("PopupY", "523");
     klpu.ringx = klu_inif("RingX", "-1"); klpu.ringy = klu_inif("RingY", "-1");
-    if (!(klpu.padx >= 0 && klpu.padx <= 400)) klpu.padx = 61.4f; if (!(klpu.pady >= 0 && klpu.pady <= 200)) klpu.pady = 14.1f;
+    if (!(klpu.padx >= 0 && klpu.padx <= 400)) klpu.padx = 48.0f; if (!(klpu.pady >= 0 && klpu.pady <= 200)) klpu.pady = 11.0f;
     if (!(klpu.dy >= -200 && klpu.dy <= 200)) klpu.dy = 0;
     if (!(klpu.y >= 40 && klpu.y <= 680)) klpu.y = -1;
     if (!(klpu.ringx <= 1280)) klpu.ringx = -1; if (!(klpu.ringy <= 720)) klpu.ringy = -1;

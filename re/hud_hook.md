@@ -388,3 +388,28 @@ Pass = no fault, no ONE-object warning, the pop-up letters' middle on the bar's 
 ### 11.4 Guesses left
 Anton's real cap height (the 0.9); +0xd5c as DebugText; SetFont on the stock announcement text (+0xac holds the font; its width is read from the same frame's layout, one frame stale at worst); H1 on the stock announcement element is replaced only while OUR bar shows; the old baseline 13 of non-centred texts (the total, the weapon counts) - unmeasured; the draw-instance budget (up to 168 ring dabs + rows; klu_n_maxinst logs the peak); everything is baked for the 1280 x 720 virtual screen (soft at 1440p).
 Decision for the owner: a real Anton / Montserrat would need installing the two fonts on the baking PC only (OFL; the glyphs are baked into the level) - previously declined; without them the display face stays Impact and reads as one face.
+
+
+## 12. Quieter sizes + the escape element (2026-10-11 night; owner: 'the player scoreboard text should be smaller than the dead men one ... some of the other text on the HUD should be like that as well so its not all in your face'; 'you can keep it via the restyle you said'; review re/hud_sizes_escape_review.md; builds compile, NOTHING OF IT HAS RUN)
+
+### 12.1 Sizes (the quiet round; kl_hud.py bake + the hook's Cap defaults, which must agree)
+| font role | stock role | cap before -> now | line height | used by |
+|---|---|---|---|---|
+| H2 (names, +0xd54) | name tags, crew rows, prompts | 19 -> 11 | 16 | rows, tags, escape time + prompts |
+| H1 (big, +0xd50) | intro countdown, headline, pop-ups, round-over | 30 -> 15 | 22 | pop-up bar, round line |
+| DebugText (labels, +0xd5c) | small labels | 10 -> 10 | - | labels |
+| H3 (small, +0xd58) | subtitles, tracker | 15 -> 10 | 15 | subtitles |
+Hook defaults Cap0..3 = 11 / 15 / 10 / 10. A level baked BEFORE this round (hud_x4, any map installed with the old `kl_hud.py all`) keeps cap 19 / 30: its text is then centred 4 to 8 px off with this hook -> ship the hook and the rebaked levels TOGETHER (review S4; reading each font header's header[9] is not done). KLPU_LINE_STEP 24 -> 22 (S8). The shared roles also shrink the knock-down prompt (osd+0x10fc, kldown.c's, untouched), the human-shield break-free prompt, the intro countdown and the round-over text (S5): look at them in the next run.
+
+### 12.2 The escape element (klhud_escape.c, re/hud_escape.md)
+`[HUD] Escape=1` (default = Draft) restyles ZFAEscapeDisplay ([osd+0x111c], bottom centre): the dark plate is not drawn (its Draw slot is wrapped in a private vtable copy), a chalk bar (picture 111) carries the time in ink letters (names font, centred), the vehicle icon is orange (state kept: green arriving, orange waiting, coral leaving), the vehicle health is a framed bar, the two prompts ('Q Share 50/50 ...', 'SPACE Hold escape vehicle') are chalk, centred. The stock '00:04' plate, the health bar and the prompts are one element, so it is restyled, not hidden. Fallback keys: Escape=0, EscapeCentre=0, EscapePrompts=0. Wired in klhook.c: include after klhud_popup.c, klesc_init() before klpu_init(), klesc_tick() before klpu_tick().
+Review fixes: M1 the colour is a DWORD with a set flag (ink / chalk were negative ints and never applied); S1 a refused wrap is retried after 3 s, only a wrong Render code is for good; S2 one log line per stand-down reason ('hud: escape: stands down for this call: ...'); S3 klesc_forget clears records without writing. Not done: S6 (no text-only offset key; E1 shows whether style 0x14 sits right), the popup's own put-back statics are left (its comment says they are deliberate).
+
+### 12.3 Live check S1 (owner away; hook hud_v15_test, archive <work>\build\hud_x5\DM03 swapped in for the run)
+Ini: `[HUD] Enable=1 Draft=1 Log=2`; the whole-heist script on the bank; pictures every 2 s. Log lines to find: `hud: escape: on; icon 30 px ...`, `hud: escape: element ... now renders through the private vtable`, `hud: escape: the plate object ... now draws through the private vtable`, `hud: escape: anchor (...) ... fraction ...` (once), then every 5 s `N element calls, N painted frames, 0 frames without a picture`. A line `stands down for this call: ...` names the reason.
+Pictures must show:
+1. Round start / crew list: names smaller than before (cap 11), skulls 11 px matching the cap, nothing clipped; pop-up (traitor box) and the round line smaller, text centred in the bars.
+2. Money box under TOTAL, weapon circle counts, watch ring: centred with the smaller caps (S4: if 4-8 px off, the level was not rebaked).
+3. Aboard (escape): NO dark stock plate; a chalk bar with the time in DARK letters (M1: not grey), orange icon left of it, a framed health bar below with an orange fill, both prompts chalk and centred under the bar. If the stock red icon / bar still shows, an alpha-0 picture draws (the main guess); if the time and the bar disagree vertically, style 0x14's anchor (S6) -> EscapeDY moves the pictures.
+4. Last: the knock-down prompt, intro countdown and round-over page if they come up (S5) - small but readable.
+Fall-back to compare: same run with `Escape=0`.

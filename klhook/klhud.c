@@ -249,6 +249,26 @@
    given to Draw and their height is cap (default {16, 24, 9, 13} = what DRAFT_SPECS gave in the 1:1 round, kl_hud.py prints the line; [HUD] Cap0..Cap3). A text with cen = 0 keeps the
    baseline the stock font gave it (y + 13); cen = 1: y is the top of its capitals (klu_cen). */
 #define KLU_BASE_OLD    13.0f
+/* SIZES, 2026-10-11 'quiet round' (owner: the small spaced labels are right, the heavy texts shout; 'so its not all in your face, just a nice touch').
+   The caps below are what tools/kl_hud.py bakes (DRAFT_SPECS_ANTON: Anton 12 / 17 / 11 px, Montserrat 12 px): names 11, total + pop-up 15, labels 10,
+   small 10. The draft layout (Draft=1) follows from them; every number is a [HUD] key too (Row, CrewW ...) or a constant here. Before -> after:
+   row pitch 30 -> 21, block 28 -> 19 high, text y under the head 34 -> 28 (block top cy + 24), name inset 8 -> 6, rule 5 -> 3 high, strike 4 -> 2, money lines
+   TOTAL / LOOT / REWARDS at +0 / +34 / +52 (was +0 / +40 / +64), the bar 8 -> 6 high at +22 (was +26), the total under the round line at +99 (was +114). */
+#define KLU_D_ROW        21.0f
+#define KLU_D_YOFF       28.0f                /* the first row's text y under the crew list's top (head label baseline cy + 13, rule cy + 17.5 .. + 20.5) */
+#define KLU_D_BLOCKUP    4.0f                 /* the painted block starts this far above the text's y: block top = cy + 24 */
+#define KLU_D_BLOCKH     19.0f
+#define KLU_D_PADX       6.0f
+#define KLU_D_RULE_Y     17.5f                /* the painted rule under 'DEAD MEN' */
+#define KLU_D_RULE_H     3.0f
+#define KLU_D_STRIKE_H   2.0f                 /* a dead heister's strike (was 4) */
+#define KLU_D_STRIKE_PAD 8.0f                 /* it reaches this far beyond the name's width (was 12) */
+#define KLU_D_MONEY_DY   99.0f                /* the money box's top (the TOTAL text's y) under the inset line, with the dials */
+#define KLU_D_MLINE0     34.0f                /* LOOT's y under the TOTAL's */
+#define KLU_D_MLINE      18.0f                /* LOOT -> REWARDS */
+#define KLU_D_BAR_Y      22.0f                /* the framed bar under TOTAL */
+#define KLU_D_BAR_H      6.0f                 /* its frame; the fill is 4 higher, 2 above and below the frame */
+#define KLU_D_MONEY_H    66.0f                /* the Grid box of the money lines */
 static float klu_cap_of(int f);
 static const int klu_sweep[8] = { 0x11, 0x14, 0x21, 0x41, 0x01, 0x10, 0x42, 0x24 };
 struct klu_text { DWORD obj, shadow; float x, y; int on, style, big, plain, noshadow, fnt, cen; DWORD colour, want_colour; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
@@ -519,7 +539,7 @@ static void klu_layout(void)
     klu_r.mx = klu.money_x >= 0 ? klu.money_x : 1280.0f - 1280.0f * inset;
     klu_r.wy = 720.0f * inset + 30.0f;                                       /* Dials: the watch's middle (66 at the game's inset) */
     klu_r.ry = klu.round_y >= 0 ? klu.round_y : 720.0f * inset + (klu.dials ? 72.0f : 58.0f);      /* under the clock's two lines (y, y + 28), or under the watch */
-    klu_r.my = klu.money_y >= 0 ? klu.money_y : 720.0f * inset + (klu.dials ? (klu.draft ? 114.0f : 100.0f) : 87.0f);   /* run T1: the 33 px total stood in the round line - 14 lower under Draft */     /* 123 at the game's inset = the draft's 9.6 % of the width */
+    klu_r.my = klu.money_y >= 0 ? klu.money_y : 720.0f * inset + (klu.dials ? (klu.draft ? KLU_D_MONEY_DY : 100.0f) : 87.0f);   /* run T1: the 33 px total stood in the round line - 14 lower under Draft */     /* 123 at the game's inset = the draft's 9.6 % of the width */
     for (i = 0; i < KLU_NTEXT; i++) { klu_r.t[i].style = KLU_STYLE_LEFT; klu_r.t[i].want_colour = KLU_C_CHALK; }
     x0 = klu_r.cx; x1 = klu_r.cx + klu.crew_w;
     klu_r.t[KLU_T_HEAD].x = x0; klu_r.t[KLU_T_HEAD].y = klu_r.cy; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;
@@ -532,7 +552,7 @@ static void klu_layout(void)
     klu_r.t[KLU_T_ROUND].x = klu_r.mx; klu_r.t[KLU_T_ROUND].y = klu_r.ry; klu_r.t[KLU_T_ROUND].style = KLU_STYLE_RIGHT;
     if (klu.draft) klu_r.t[KLU_T_ROUND].want_colour = klu.fontset ? KLU_C_CHALK : KLU_C_CORAL;      /* the draft's CSS: .clock .round { color: chalk } (S5 had coral) */
     for (k = 0; k < 3; k++) {
-        y = klu_r.my + (k == 0 ? 0.0f : 40.0f + 24.0f * (k - 1));            /* TOTAL, the bar at +26 .. +34, LOOT +40, REWARDS +64 */
+        y = klu_r.my + (k == 0 ? 0.0f : klu.draft ? KLU_D_MLINE0 + KLU_D_MLINE * (k - 1) : 40.0f + 24.0f * (k - 1));            /* TOTAL, the bar under it, LOOT, REWARDS (the quiet draft: +0 / +34 / +52; stock-font layout +0 / +40 / +64) */
         klu_r.t[KLU_T_MLABEL(k)].x = klu_r.mx - klu.money_w; klu_r.t[KLU_T_MLABEL(k)].y = y; klu_r.t[KLU_T_MLABEL(k)].want_colour = KLU_C_CORAL;
         klu_r.t[KLU_T_MVALUE(k)].x = klu_r.mx; klu_r.t[KLU_T_MVALUE(k)].y = y; klu_r.t[KLU_T_MVALUE(k)].style = KLU_STYLE_RIGHT;
         klu_r.t[KLU_T_MVALUE(k)].want_colour = k == 0 ? KLU_C_GREENHI : KLU_C_GREEN;
@@ -728,7 +748,7 @@ static void klu_row(int row, const char *name, long money, int kind)
         if (klu.draft) {                                           /* M2, the draft: (name width + 12) x 4 from x 33 + 2, centred on the row (name y + 7) */
             const unsigned char *c; float w = 0;
             for (c = (const unsigned char *)name; *c; c++) if ((*c & 0xc0) != 0x80) w += KLUV_NAME_CHARW;
-            klu_addpic(klu_r.handle[112] ? 112 : 181, klu_r.cx + 2.0f, y + klu.blockh * 0.5f - klu.blockup - 2.0f, w + 12.0f, 4.0f, KLU_C_DEAD, klu.layer);      /* 4 high, on the block's middle (2026-10-11: was y + 7, two pixels above it) */
+            klu_addpic(klu_r.handle[112] ? 112 : 181, klu_r.cx + 2.0f, y + klu.blockh * 0.5f - klu.blockup - KLU_D_STRIKE_H * 0.5f, w + KLU_D_STRIKE_PAD, KLU_D_STRIKE_H, KLU_C_DEAD, klu.layer);      /* KLU_D_STRIKE_H high (was 4), on the block's middle */
         } else klu_addpic(klu_r.handle[112] ? 112 : 181, klu_r.cx + 2.0f, y + 6.0f, klu.crew_w * 0.62f, klu_r.handle[112] ? 8.0f : 3.0f, KLU_C_DEAD, klu.layer);       /* the strike-through, over the name: 112 = the dry stroke */
     }       /* the strike-through, over the name: 112 = the dry stroke */
 }
@@ -752,7 +772,7 @@ static void klu_grid(void)
     struct { const char *name; float x0, y0, x1, y1; } box[3]; int i, k = KLU_T_GRID; struct klu_text *t;
     box[0].name = "CREW";  box[0].x0 = klu_r.cx; box[0].y0 = klu_r.cy; box[0].x1 = klu_r.cx + klu.crew_w; box[0].y1 = klu_r.cy + klu.yoff + klu.row * klu.rows;
     box[1].name = "ROUND"; box[1].x0 = klu_r.mx - klu.money_w; box[1].y0 = klu_r.ry; box[1].x1 = klu_r.mx; box[1].y1 = klu_r.ry + 22.0f;
-    box[2].name = "MONEY"; box[2].x0 = klu_r.mx - klu.money_w; box[2].y0 = klu_r.my; box[2].x1 = klu_r.mx; box[2].y1 = klu_r.my + 86.0f;
+    box[2].name = "MONEY"; box[2].x0 = klu_r.mx - klu.money_w; box[2].y0 = klu_r.my; box[2].x1 = klu_r.mx; box[2].y1 = klu_r.my + (klu.draft ? KLU_D_MONEY_H : 86.0f);
     for (i = 0; i < 3; i++) {
         t = &klu_r.t[k++]; t->x = box[i].x0; t->y = box[i].y0 - 18.0f; t->style = KLU_STYLE_LEFT; t->on = 1; t->want_colour = KLU_C_CORAL;
         if (i == 0) { t->x = box[i].x1 + 8.0f; t->y = box[i].y0; }            /* the crew box's label beside it: above it the screen ends */
@@ -815,7 +835,7 @@ static int klu_compose(int *state_ok)
         strcpy(klu_r.t[KLU_T_HEAD].want, "DEAD MEN"); klu_r.t[KLU_T_HEAD].on = 1; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;
         snprintf(klu_r.t[KLU_T_COUNT].want, KLU_TEXTLEN, "%d / %d", alive, used); klu_r.t[KLU_T_COUNT].on = 1;
         if (klu.plates) {                                     /* the painted rule: the draft's pic 112, 211 x 5, centre y 22 under the head */
-            if (klu.draft) klu_addpic(klu_r.handle[112] ? 112 : 181, klu_r.cx, klu_r.cy + 19.5f, klu.crew_w, 5.0f, KLU_C_CHALK, klu.layer - 2);
+            if (klu.draft) klu_addpic(klu_r.handle[112] ? 112 : 181, klu_r.cx, klu_r.cy + KLU_D_RULE_Y, klu.crew_w, KLU_D_RULE_H, KLU_C_CHALK, klu.layer - 2);
             else klu_addpic(181, klu_r.cx, klu_r.cy + 22.0f, klu.crew_w, 3.0f, KLU_C_CHALK, klu.layer - 2);
         }
     }
@@ -843,12 +863,12 @@ static int klu_compose(int *state_ok)
         }
         klu_r.t[KLU_T_ROUND].on = klu.round;
         if (klu.plates && klu.money) {                        /* the framed bar under TOTAL (re\hud_layout.md): what the crew holds of the level's loot ([rules+0xdd0], klhud_values.c d); a level that registered no loot: how much of your total you carry */
-            float x = klu_r.mx - klu.money_w, y = klu_r.my + 26.0f, f = total > 0 && loot > 0 ? (float)loot / (float)total : 0.0f;
+            float x = klu_r.mx - klu.money_w, y = klu_r.my + (klu.draft ? KLU_D_BAR_Y : 26.0f), bh = klu.draft ? KLU_D_BAR_H : 8.0f, f = total > 0 && loot > 0 ? (float)loot / (float)total : 0.0f;
             if (klu.grid == 2) f = 0.16f;
             else if (kluv_loot_total(&s) > 0) f = kluv_loot_share(&s);
             if (f > 1.0f) f = 1.0f;
-            klu_outline(x, y, klu.money_w, 8.0f, KLU_C_CHALK, klu.layer - 2);
-            klu_addpic(181, x - 2.0f, y - 2.0f, klu.money_w * f, 12.0f, KLU_C_CHALK, klu.layer - 2);
+            klu_outline(x, y, klu.money_w, bh, KLU_C_CHALK, klu.layer - 2);
+            klu_addpic(181, x - 2.0f, y - 2.0f, klu.money_w * f, bh + 4.0f, KLU_C_CHALK, klu.layer - 2);
         }
     }
     if (klu.log >= 2) kluv_dump(&s, human);                   /* 'hud: values: ...': looked at once a second, said when a value other than the clock changed */
@@ -1193,7 +1213,7 @@ static void klu_init(void)
     klu.plates = klu_inii("Plates", klu.draft, 0, 1); klu.anchor = klu_inii("PicAnchor", 1, 0, 1); klu.left = klu_inii("LeftStyle", 0x11, 0, 255); klu.extraflags = klu_inii("ExtraFlags", 1, 0, 1); klu.pictest = klu_inii("PicTest", 0, 0, 1);
     klu.fontset = klu_inii("Fonts", klu.draft, 0, 1);       /* TYPE: roles -> fonts and the centring (needs a level baked by kl_hud.py --look deadmen from 2026-10-11) */
     {   static const char *kn[KLU_NFONT] = { "FontName", "FontBig", "FontLabel", "FontSmall" }; static const char *dflt[KLU_NFONT] = { "0xd54", "0xd50", "0xd5c", "0xd58" };
-        static const char *cn[KLU_NFONT] = { "Cap0", "Cap1", "Cap2", "Cap3" }; static const char *cd[KLU_NFONT] = { "19", "30", "10", "15" }   /* the Anton / Montserrat bake of kl_hud.py (run T1) */; int fi;
+        static const char *cn[KLU_NFONT] = { "Cap0", "Cap1", "Cap2", "Cap3" }; static const char *cd[KLU_NFONT] = { "11", "15", "10", "10" }   /* the Anton / Montserrat bake of kl_hud.py, quiet sizes (2026-10-11; before 19 / 30 / 10 / 15, run T1) */; int fi;
         for (fi = 0; fi < KLU_NFONT; fi++) {
             char t[32]; GetPrivateProfileStringA("HUD", kn[fi], dflt[fi], t, sizeof t, klh_ini); klu.fofs[fi] = (DWORD)strtoul(t, 0, 0);
             if (klu.fofs[fi] < 0xd40 || klu.fofs[fi] > 0xd5c || (klu.fofs[fi] & 3)) klu.fofs[fi] = (DWORD)strtoul(dflt[fi], 0, 0);
@@ -1206,8 +1226,8 @@ static void klu_init(void)
     klu.inset = klu_inif("Inset", "-1"); if (!(klu.inset > 0 && klu.inset < 0.25f)) klu.inset = -1;
     klu.crew_x = klu_inif("CrewX", klu.draft ? "33" : "-1"); klu.crew_y = klu_inif("CrewY", klu.draft ? "38" : "-1"); klu.crew_w = klu_inif("CrewW", "211");
     klu.money_x = klu_inif("MoneyX", klu.draft ? "1247" : "-1"); klu.money_y = klu_inif("MoneyY", "-1"); klu.money_w = klu_inif("MoneyW", "211"); klu.round_y = klu_inif("RoundY", "-1");
-    klu.row = klu_inif("Row", klu.draft ? "30" : "24"); if (!(klu.row >= 8 && klu.row <= 64)) klu.row = klu.draft ? 30.0f : 24.0f;
-    klu.yoff = klu.draft ? 34.0f : 30.0f; klu.blockup = klu.draft ? 5.0f : 4.0f; klu.blockh = klu.draft ? 28.0f : klu.row; klu.padx = klu.draft ? 8.0f : 6.0f;      /* M2 (re/hud_layout.md: names at +8 / y 72 + 30 i, cash at right - 8, block 219 x 28) */
+    klu.row = klu_inif("Row", klu.draft ? "21" : "24"); if (!(klu.row >= 8 && klu.row <= 64)) klu.row = klu.draft ? KLU_D_ROW : 24.0f;
+    klu.yoff = klu.draft ? KLU_D_YOFF : 30.0f; klu.blockup = klu.draft ? KLU_D_BLOCKUP : 4.0f; klu.blockh = klu.draft ? KLU_D_BLOCKH : klu.row; klu.padx = klu.draft ? KLU_D_PADX : 6.0f;      /* M2 (re/hud_layout.md: names at +8 / y 72 + 30 i, cash at right - 8, block 219 x 28) */
     if (!(klu.crew_x <= 1280)) klu.crew_x = -1; if (!(klu.crew_y <= 720)) klu.crew_y = -1; if (!(klu.money_x <= 1280)) klu.money_x = -1;
     if (!(klu.money_y <= 720)) klu.money_y = -1; if (!(klu.round_y <= 720)) klu.round_y = -1;
     if (!(klu.crew_w >= 80 && klu.crew_w <= 640)) klu.crew_w = 211; if (!(klu.money_w >= 80 && klu.money_w <= 640)) klu.money_w = 211;

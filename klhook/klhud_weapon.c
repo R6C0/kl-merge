@@ -145,7 +145,7 @@
 #define KLWD_DAB_W       12.0f
 #define KLWD_DAB_H       10.0f
 #define KLWD_ACT_NUM_DX  (-7.0f)               /* the first gun's count: RIGHT-aligned at cx - 7, top at cy - 32 */
-#define KLWD_ACT_NUM_DY  (-32.0f)
+#define KLWD_ACT_NUM_DY  (-36.0f)               /* quiet round: the count is cap 11 (was 19) and keeps its middle: its baseline y + 13 lies at cy - 23 (was -19) */
 #define KLWD_ACT_PIC_DX  28.0f                 /* its picture's MIDDLE */
 #define KLWD_ACT_PIC_DY  (-26.0f)
 #define KLWD_ACT_PIC     64.0f                 /* its picture's size (the texture is 128 x 128) */
@@ -153,7 +153,7 @@
 #define KLWD_CUT_H       2.0f
 #define KLWD_CUT_DY      2.0f
 #define KLWD_OTH_NUM_DX  (-5.0f)               /* the other gun's count: right-aligned at cx - 5, top at cy + 20 */
-#define KLWD_OTH_NUM_DY  20.0f
+#define KLWD_OTH_NUM_DY  18.0f                  /* quiet round: cap 10 (was 15), the same middle */
 #define KLWD_OTH_PIC_DX  21.0f
 #define KLWD_OTH_PIC_DY  24.0f
 #define KLWD_OTH_PIC     36.0f

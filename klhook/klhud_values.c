@@ -185,11 +185,11 @@
    ink / 4c0c0c0d when lost'). klhud.c has no width of a text, so the name's width is ESTIMATED from its length: every
    number here is a named GUESS until a picture has shown the row (live check L2b). */
 #define KLUV_SKULL_PIC   178                   /* HUD picture 'Kill', 32 x 32 (re\hud_layout.md, re\hud_data.md) */
-#define KLUV_SKULL_SIZE  15.0f                 /* run V3: 'far too small' at 12 (picture 178's ink fills little of its 32 x 32) */
-#define KLUV_SKULL_GAP   2.0f                  /* between two skulls */
-#define KLUV_SKULL_LEAD  8.0f                  /* after the name (the layout's '+ 8') */
-#define KLUV_NAME_CHARW     11.5f                 /* run T1 (Anton 21 px, 1 px track): 'R6KXO' is 53 px wide; was 9.0 and the first skull sat on the last letter */                  /* GUESS: the mean width of one character of a name in the row's font */
-#define KLUV_CASH_ROOM   64.0f                 /* GUESS: kept free at the row's right end for the cash ('$1.2M') */
+#define KLUV_SKULL_SIZE  11.0f                 /* quiet round 2026-10-11: was 15 (run V3: 'far too small' at 12 with 19 px capitals; the names are cap 11 now, the owner's 'about 10'; the picture's ink fills little of its 32 x 32: GUESS until seen) */
+#define KLUV_SKULL_GAP   1.5f                  /* between two skulls */
+#define KLUV_SKULL_LEAD  12.0f                 /* from the row's left edge: the name's inset (KLU_D_PADX 6) + a 6 px gap after the name (was 8: inset 8, gap 0 on an over-wide name estimate) */
+#define KLUV_NAME_CHARW     6.8f                  /* MEASURED from the baked H2 font (Anton 12 px, 1 px track): mean advance over 22 heister names in capitals 6.76 ('R6KXO' 35, 'ASHKANAN' 56); was 11.5 for Anton 21 px */
+#define KLUV_CASH_ROOM   44.0f                 /* GUESS: kept free at the row's right end for the cash ('$1.2M') */
 #define KLUV_BLOCK_UP    4.0f                  /* klhud.c klu_row: the painted block starts 4 above the text's y and is one row pitch high */
 #define KLUV_C_SKULL_ON      0xff0c0c0du       /* ink: a life he has, on the chalk block */
 #define KLUV_C_SKULL_LOST    0x4c0c0c0du       /* the layout's lost look on the block */
