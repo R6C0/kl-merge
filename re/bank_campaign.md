@@ -1368,6 +1368,7 @@ every checker was run again: all pass except the two that only repeat the build'
 in stage F (`kl_maps.py preflight` 'CRASH 1', `kl_maps.py audit` 'FAIL 2' / no-AI 3). Scratch:
 `C:/kl_scratch/bank/fix_1/` (0.8 MB: `s/` scripts, `out/` every output; no archive is left there).
 NOTHING RAN IN THE GAME (kl2.exe was running: the owner was playing). No file of another session was edited.
+Committed as fedea0e (tools/kl_fa_bank.py, tools/kl_route.py, the two docstrings, this section).
 
 ### R1.1 The thirteen findings: reproduced or not, what changed
 
