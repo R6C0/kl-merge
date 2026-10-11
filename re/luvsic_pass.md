@@ -96,3 +96,47 @@ Fragile Alliance layers. Those stay ours.
 - The point-blank rule (re/melee_damage.md): a firing soldier within 1.6 m lands a hit worth 100 bullets.
 - ZFakeTarget outside the vision grid writes 16 bytes of heap every frame (re/crash_686a66.md).
 - The campaign pre-pass facts of re/campaign_fa.md (door clips that shut again, G1.8).
+
+## 5. His converter run here, and compared with ours on the campaign bank (2026-10-11 night)
+
+The owner (through the session that holds the game): "definitely use the maps that it got done since it has the whole
+campaign maps done from its tools". So I ran his converter on this machine and compared. Scratch: `C:/kl_scratch/anp_copy`
+(a copy of his clone), work folder `C:/kl_scratch/anp_work`, output `C:/kl_scratch/anp_out/M03`. Nothing installed.
+
+**It runs here, with two gaps in the repository as pushed (MEASURED):**
+- `tools/dd_enums_extra.json` is NOT in his repository (not ignored, simply never committed); `setup_workspace.py` stops
+  without it. I put an empty list in the scratch copy and ran with `ANP_SMB_FIX=0` (his own 'older behaviour' switch),
+  so my run is NOT his tested build: the enum families that file carries (eSEAT_*, eMOVEMENT_*) are missing from it.
+  ASK LUVSIC TO COMMIT THAT FILE.
+- his HUD step needs numpy (not installed here): run with `ANP_DM_HUD=0`.
+- `py tools/port_level.py M03_A M03A M03` then gives `M03_Main.zip` (170.6 MB) + its sound files: 'validate OK: node
+  order and overlap lists match the Dead Men source', 18,703 entities + 2,350 grafted (Dog Days' menu and HUD), 77 scripts
+  converted, 76 room exits converted.
+
+**What it is:** the WHOLE Dead Men level in Dog Days' format - map, the campaign's squads, scripts, cut scenes, weapons,
+players - with Dog Days' menus grafted in: the campaign chapter. Our Fragile Alliance map is the level's MAP under F07's
+systems with an authored layer. His output is not a finished thing we can put on the tab.
+
+**Is it a better INPUT for our graft? MEASURED** (`python debug/cmpconv.py M03_A <his zip>`: our `kl_convert` against his
+converter, the same 18,703 nodes, own object token by token with strings resolved):
+- **45 of 56 classes come out identical on every node** - all the geometry classes, lights, 4,913 of 4,914 particle
+  emitters, 972 of 973 AllocMany. For the map itself the two converters agree; there is nothing to gain by swapping.
+- Where they differ:
+  | class | nodes | the difference | what it means for us |
+  |---|---|---|---|
+  | ZFFActor 115 / 115, ZFFPlayer 2 / 2 | all | his animation database name is re-mapped to a Dog Days one (`Mercenary_04` -> `Thug`, `PlayerCharacter` -> `Kane`); ours keeps Dead Men's | CHECK: the campaign guards The Vault keeps - which database do they end with after kl_graft, and does F07's .ANM have it. They walked and shot in run V2, so something resolves; not read |
+  | ZCloth 1 / 1 | the flag on the square | one float: ours 0.0, his 8.0 | the cloth class is where The Vault crashed (another cause: the blob's size); worth reading which field this is |
+  | ZROOM 24 / 29 | | a bool and an offset: ours 1 + the gate table's offset, his 0 + 0 | we convert the gate records and keep them; he clears the reference. Ours loaded with 28 rooms |
+  | ZFFItemTemplateWeapon 36, Ammo 32 | all | one float each: ours -1.0 (Dog Days' common value), his Dead Men's value | we do not use Dead Men's guns |
+  | ZHavokRigidBody 278, ZHeli 2 | all | a sound reference: other offsets | both rewrite it against their own bank later; not a difference in kind |
+  | ZLNKOBJ 24 / 75 | | two floats | not read |
+- Type ids: he flattens `ZPlant`, `ZSHADOWMESHOBJ`, `ZHavokCar`, `ZLINEOBJ` to `ZSTDOBJ` and the Dead Men menu widgets to
+  `ZGROUP`; ours keeps the exact classes where Dog Days still has them.
+- Controllers: 1,000 or so differ (not broken down - my comparison keyed them wrongly); his 77 converted scripts are in there.
+
+**So:** "use his converted levels" as the source of the campaign Fragile Alliance maps would change nothing in the map
+and would bring in his flattened types. What is worth taking from his conversion is PIECES, each to be read and tried:
+the animation-database mapping for kept campaign actors, the converted mini-cutscene scripts (the vault breaker's
+sequence, the club), his sound-bank and speech handling (1.1), and for a first-person / campaign crossover later, the
+levels themselves. For the places our study ruled out for size or joins (both Havana chapters in one map, the prison's
+whole route) his converter does not help either: those limits are the engine's.
