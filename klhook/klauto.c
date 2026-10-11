@@ -137,6 +137,16 @@
  *      label score                          on at the label (a round can end while the script still walks)
  *   21=rewrite 0x168f750+0x16 64 slot-name   DATA WRITE test (experiment X2): read <n> bytes (at most 64) at an
  *      rewrite 0xd35420 4 netcode-global       address, or at [address] + offset, and write the same bytes back
+ *   22=waitstate 0x19 90000              wait until the session state ([0x168e598]+0x70; 0x19 = the round runs, 'GO') is
+ *                                        that value; a timeout (default 60000 ms) fails the script (exit 26). WHY: until
+ *                                        GO the hero stands on its parking place and cannot move - a goto given then finds
+ *                                        nobody moving and is skipped. GO comes 20.5 .. 22.1 s after the level's load.
+ *   23=waitvan 3 60000                   wait until the escape vehicle's state (byte [rules+0x1dc], rules =
+ *                                        [[0x168e9e4]+0x54], a ZGameRulesHeist: klbot.c 1) is that value; 3 also takes 4
+ *                                        (it WAITS and can be boarded), 1 also 2 (it drives in). A timeout (default 60000
+ *                                        ms) is LOGGED and the script goes on. WHY: a key-framed van's boarding box rides
+ *                                        on the van and its nose kills - a script may step to its rear doors only while it
+ *                                        stands. Read only.
  *   [Auto] PosLogMs=2000 logs 'pos tick' that often once a level runs; PosOff / DirOff / TurnDeg override the
  *   offsets and the mouse gain below. A script may have 640 lines.
  *
@@ -145,8 +155,10 @@
  *   +0x460 three floats: world position of the feet (x, y up, z), the navigation mesh's own heights.
  *   +0xc14 three floats: unit vector pointing BACK; heading = atan2(-x, -z), within 1 degree of the direction
  *   of travel on every straight stretch. The entity slot (+4) of a player holds an identity matrix: no use.
- *   Which of the 16 is the local one is not read anywhere: it is the one that moves (the other heroes stand
- *   at their start places in Arcade). kl2.exe's data holds no pointer to it that was found.
+ *   Which of the 16 is the local one: the game's own pointer [gamedata + 0x828 + 4 * (char)[gamedata + 0x898]],
+ *   gamedata = [0xdd265c] (0x660b00; kljoin.c reads it the same way, seen live). When that cannot be read: the one
+ *   that moves (the other heroes stand at their start places in Arcade). The pointer also follows a change of body
+ *   (a dead heister who comes back as police, klfed.c: the one that moved first stays dead where it fell).
  *   Keys (kl2.exe's default binding text, 'GameplayInput={...}'): W A S D, LSHIFT / SPACE sprint, E use /
  *   pick up / heal, C cover and 'Get Up', R reload, Q weapon, mouse left fire, right aim, TAB scores.
  *
@@ -999,7 +1011,7 @@ static int kla_install(void)
 /* ---------------------------------------------------------------- script */
 
 typedef struct { char op; BYTE key; DWORD n, n2; char text[80]; float f[4]; DWORD off[6]; BYTE noff; } KCMD;
-enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH, C_MOUSE, C_MDOWN, C_MUP, C_POS, C_GOTO, C_FACE, C_ONWIN, C_LABEL, C_REWRITE };
+enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH, C_MOUSE, C_MDOWN, C_MUP, C_POS, C_GOTO, C_FACE, C_ONWIN, C_LABEL, C_REWRITE, C_WAITSTATE, C_WAITVAN };
 static KCMD kla_cmd[640]; static int kla_ncmd, kla_pc; static DWORD kla_cmd_t, kla_cmd_f, kla_seq;
 static BYTE kla_held[256]; static DWORD kla_rel_t[256], kla_rel_f[256]; static int kla_taps, kla_started;
 
@@ -1056,10 +1068,26 @@ static int kla_find_players(void)
 }
 
 static int kla_local_player(void)
-{   /* the player the script moves: the one whose position has travelled furthest since the scan (the other
-       fifteen stand still while nobody else plays). -1 until one has moved 30 units. */
+{   /* the player the script moves: the game's own local player; when that pointer cannot be read, the one whose
+       position has travelled furthest since the scan (the other fifteen stand still while nobody else plays;
+       -1 until one has moved 30 units). */
     int i, best = -1; float v[3];
     kla_find_players();
+    {   /* [gamedata + 0x828 + 4 * (char)[gamedata + 0x898]] (kl2 0x660b00): a ZFFPlayer, or nothing in the frontend */
+        DWORD gd = kla_exe_ok ? kla_rd32((DWORD_PTR)VA(0xdd265c)) : 0, pl = 0; BYTE sel = 0xff;
+        if (gd && kla_rd(gd + 0x898, &sel, 1) && sel < 28 && (pl = kla_rd32(gd + 0x828 + 4 * sel)) != 0 && kla_rd32(pl) == KLA_VT_FFPLAYER) {
+            for (i = 0; i < kla_npl && kla_pl[i] != pl; i++) ;
+            if (i == kla_npl && kla_npl < 32) {         /* not one the scan found (it looks at 16-byte steps): taken in */
+                kla_pl[kla_npl++] = pl; kla_pl_path[i] = 0;
+                if (!kla_player_pos(i, kla_pl_first[i])) memset(kla_pl_first[i], 0, 12);
+                memcpy(kla_pl_prev[i], kla_pl_first[i], 12);
+            }
+            if (i < kla_npl) {
+                if (i != kla_me) { kla_me = i; kla_out(1, "players: the local one is #%d at %08lx (the game's own pointer, slot %u)", i, pl, sel); }
+                return kla_me;
+            }
+        }
+    }
     for (i = 0; i < kla_npl; i++) {
         if (!kla_player_pos(i, v)) continue;
         if (kla_pl_prev[i][0] != 0 || kla_pl_prev[i][2] != 0) {
@@ -1149,6 +1177,10 @@ static void kla_script_load(void)
         }
         else if (!_stricmp(op, "expect")) { c->op = C_EXPECT; c->n = strtoul(a, 0, 16); c->n2 = 0; sscanf(rest + strlen(a), "%lu", &c->n2); }
         else if (!_stricmp(op, "waitwin")) { c->op = C_WAITWIN; snprintf(c->text, sizeof c->text, "%s", a); c->n = 15000; sscanf(rest + strlen(a), "%lu", &c->n); }
+        else if (!_stricmp(op, "waitstate") || !_stricmp(op, "waitvan")) {      /* waitstate <state, hex or decimal> [timeout ms] / waitvan <state> [timeout ms] */
+            c->op = (char)(!_stricmp(op, "waitstate") ? C_WAITSTATE : C_WAITVAN); c->n2 = strtoul(a, 0, 0); c->n = 60000; sscanf(rest + strlen(a), "%lu", &c->n);
+            if (!a[0]) { kla_out(1, "script line %d: %s needs a state - script not loaded", i, op); kla_ncmd = 0; return; }
+        }
         else if (!_stricmp(op, "open")) { c->op = C_OPEN; snprintf(c->text, sizeof c->text, "%s", a); }
         else if (!_stricmp(op, "windows")) c->op = C_WINDOWS;
         else if (!_stricmp(op, "focus")) {              /* focus <text> <key> [max taps, default 8] */
@@ -1292,6 +1324,20 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
             if (!_stricmp(kla_top, c->text)) { char d[400]; kla_focus_desc(d, sizeof d); kla_out(1, "script %d: window '%s' is on top; focus: %s", kla_pc + 1, kla_top, d); next = 1; }
             else if (now - kla_cmd_t >= c->n) { char r[300]; snprintf(r, sizeof r, "script line %d: window '%s' did not come up within %lu ms (stack: %.150s)", kla_pc + 1, c->text, c->n, kla_stack); kla_where(); kla_finish("FAIL", r, KLA_SCRIPT); }
             break;
+        case C_WAITSTATE: {                             /* the session state: [[0x168e598]+0x70] (klsteam.c's 'session:' line reads the same dword) */
+            DWORD sm = kla_exe_ok ? kla_rd32((DWORD_PTR)VA(0x168e598)) : 0, st = 0xffffffff;
+            if (sm) kla_rd(sm + 0x70, &st, 4);
+            if (st == c->n2) { kla_out(1, "script %d: the session state is 0x%lx after %lu ms", kla_pc + 1, st, now - kla_cmd_t); next = 1; }
+            else if (now - kla_cmd_t >= c->n) { char r[160]; snprintf(r, sizeof r, "script line %d: the session state did not become 0x%lx within %lu ms (it is 0x%lx)", kla_pc + 1, c->n2, c->n, st); kla_where(); kla_finish("FAIL", r, KLA_SCRIPT); }
+            break; }
+        case C_WAITVAN: {                               /* the escape vehicle's state: byte [rules+0x1dc], rules = [[0x168e9e4]+0x54] with ZGameRulesHeist's vtable (klbot.c 1) */
+            DWORD gs = kla_exe_ok ? kla_rd32((DWORD_PTR)VA(0x168e9e4)) : 0, rules = gs ? kla_rd32(gs + 0x54) : 0; BYTE veh = 0xff; float left = 0;
+            if (rules && kla_rd32(rules) == 0xbd3514) { kla_rd(rules + 0x1dc, &veh, 1); kla_rd(rules + 0x1d8, &left, 4); }
+            if (veh == c->n2 || (c->n2 == 3 && veh == 4) || (c->n2 == 1 && veh == 2)) {
+                kla_out(1, "script %d: the vehicle's state is %u (its timer %.1f s) after %lu ms", kla_pc + 1, veh, left, now - kla_cmd_t); next = 1; }
+            else if (now - kla_cmd_t >= c->n) {
+                kla_out(1, "script %d: the vehicle's state did NOT become %lu within %lu ms (it is %u%s): the script goes on", kla_pc + 1, c->n2, c->n, veh, veh == 0xff ? " = no Arcade round object" : ""); next = 1; }
+            break; }
         case C_OPEN: {                                  /* what 0x478b6b-0x478b74 does: system->0x6bee50(name, 1, 0, 1) */
             DWORD w = kla_wsys();
             if (!w) { kla_where(); kla_finish("FAIL", "open: no window system", KLA_SCRIPT); }
