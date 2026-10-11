@@ -1819,3 +1819,178 @@ Built with the fixed module (the docstring lines added afterwards change no buil
 - 'Out of sight' for the waiting van, the retreat routs, the menu entry, the stream file: as in F.8.
 
 (end of Review round 1)
+
+---
+
+## Music stage - the stream file with the map's sixteen clips, and the four folders rebuilt against it (2026-10-11, about 18:50 - 19:30)
+
+The owner, today: 'May a larger music file be rebuilt and installed so the music plays? yes'. This stage BUILT, offline.
+NOTHING OF IT HAS RUN IN THE GAME, nothing is installed, the game folder was only read (one sha1). The silent folders in
+`<c_bank>` are untouched (they are the ones under test). `<work>` as above; `<v_vault>` = `<work>/build/v_vault`,
+`<c_bank_music>` = `<work>/build/c_bank_music`. Outputs of every command: `C:/kl_scratch/vault_music/out/`.
+Files of this stage: NEW `tools/kl_vault_str.py` (the driver), `tools/kl_fa_bank.py` (+ `--str`, `music_records`, three
+lines of check()), this section. No other tool was edited.
+
+### M.1 The stream file: `<v_vault>/PC_Def.str`
+
+| | bytes | sha1 |
+|---|---|---|
+| base = the installed pair `<work>/build/v_bain/over_talk/PC_Def.str` (MEASURED: `<DD>/PC_Def.str` has the same sha1) | 1,694,610,488 | `b0cb8bcd5040462d3caec025e65939d85702a5f0` |
+| NEW `<v_vault>/PC_Def.str` | 1,753,469,945 (1.633 GB; + 58,859,457 = 56.13 MB; 394 MB under 2 GB) | `80e53495ae550feb281f08d63b33619907f700cb` |
+| NEW `<v_vault>/PC_Def.str.map.json` (2,086 blocks = the base's 2,074 + 12) | 71,727 | `6b86aab44df05a7e18aee273cacbb54bcaf4d8eb` |
+| `<v_vault>/PC_Def.str.bain.json` (carried, byte for byte the base's) | 2,359 | `3321f08ad61adc0f2ff93137e6ce933046932f98` |
+
+HOW (one method, the one the earlier files were made with): `kl_str.merge(base, Dead Men's PC_Def.str, want, out, prior =
+the base's .map.json)` - the call `kl_fa_talk.py stream` made for the talk clips; kl_bain.stream_add is the same writing
+for clips that are not Dead Men's. `python tools/kl_vault_str.py build <base> <out>` (`out/str_build.txt`).
+`want` = the Dead Men blocks of the sixteen names, taken from M03_A's own .WHD records BY OFFSET
+(`kl_vault_str.need()`; MEASURED equal to `kl_fa_bank.lost_clips` on `<c_bank>/bank_vault_bare`: 16 of 16).
+
+WHICH PROOF HOLDS FOR THIS FORMAT (READ: kl_str.py's docstring; MEASURED: `kl_vault_str.py proof`, `out/proof.txt`, PASS).
+The index of an IOISNDSTREAM file is at the END (format table, name table, index behind the last data block; the header
+names the index's offset), and a level names a clip by the OFFSET of its block. So 'the first 1,694,610,488 bytes are
+the installed file' does NOT hold and is not claimed: the new blocks stand where the base's tables stood (from byte
+1,692,882,176), one fresh table and index for all 10,217 clips follows them. What holds:
+1. bytes 0x38 .. 1,692,882,176 (the base's whole data area, 1,692,882,120 bytes): sha1 `d2bc5972368f87b1d9e28d1fcfc646cf52d855e3`
+   in both files; the header differs only in 0x18..0x24 (index offset, clip count), build id 4c08b8d5 as the banks';
+2. clip by clip: 10,199 of the base's 10,199 index entries stand in the new index with the same id, name, block offset,
+   size, format bytes, lip word and layer;
+3. 2,074 of the base's 2,074 map entries keep their new offset (and byte count); the 26 Bain clips of the .bain.json are
+   found by name at their offsets with the base's bytes;
+4. the 12 appended blocks equal Dead Men's bytes and stand in the index with Dead Men's format, lip word and layer;
+5. `Stream.account()`: every byte of the file claimed, 0 problems (`kl_str.py info`: 'problems: none').
+
+THE SIXTEEN CLIPS = 12 blocks, 18 index entries (the two set entries come with their sets):
+
+| new offset | Dead Men block | bytes | what |
+|---|---|---|---|
+| 1,692,882,176 | 0x1e1e00 | 21,504 | `M03_Spotted_040_Guard.wav` (LIP + IMA ADPCM, 32 kHz mono) |
+| 1,692,903,680 | 0x3711a00 | 51,200 | `M02_GuardsShout_025_Guard.wav` |
+| 1,692,954,880 | 0x6a8bc00 | 52,224 | `M02_GuardsShout_020_Guard.wav` |
+| 1,693,007,104 | 0x6d3d900 | 16,384 | `M03_Enter_011_Guard.wav` |
+| 1,693,023,488 | 0x7578d00 | 28,672 | `M02_GuardsShout_060_Guard.wav` |
+| 1,693,052,160 | 0x7768300 | 182,693 | `SFX/Ambiences/M03_A/Inside/Ambience_Inside_Vault_Deeper.wav` (Vorbis, 120 s) |
+| 1,693,234,944 | 0x9e6a900 | 21,504 | `M03_GuardAlarm_010_Guard02.wav` |
+| 1,693,256,448 | 0xb8f7e00 | 18,432 | `M02_GuardsShout_050_Guard.wav` |
+| 1,693,274,880 | 0xc94bd00 | 79,872 | `M08_Cantina_010_Guard01.wav` |
+| 1,693,354,752 | 0xfd7f600 | 17,408 | `M08_Cantina_030_Guard01.wav` |
+| 1,693,372,160 | 0x17ea5900 | 21,503,688 | the WAY-OUT set `LevelSetup/Level/M03_A/Music/M03A_Bustout_A_I`: `M03_Bustout_ActionV34.wav` + `M03_Bustout_IntenseClimax_Loop.wav`, interleaved PCM, 2 stereo layers, 32 kHz, 168 s |
+| 1,714,875,904 | 0x2685e900 | 36,862,624 | the BREAK-IN set `LevelSetup/Level/M03_A/Music/BO_Sus_LOOP`: `BO_Sus_Layer1_Ambient` / `Layer2_Bass` / `Layer3_Intense` / `Layer4_Basic_LOOP.wav`, interleaved PCM, 4 stereo layers, 32 kHz, 144 s |
+
+(Dead Men's file also holds a shorter set `BO_Sus_..._LOOP2.wav`, 56 s, at 0x1e049d00: the level does not name it.)
+NOT taken: `kl_str.py check <new> M03_A` says '33 clips missing' (49 with the installed file): kl_str's selection for a
+story level is ALL of its map side, also what the campaign pre-pass drops (cut scenes, the crew's lines). The Vault's
+own build needs none of them: its verify reports 0 (M.2). The six levels the tab's maps are made from: `kl_str.py check
+<new>` -> 'RESULT: PASS', 0 records without a block, 0 clips missing on M01_FA_A, M02_FA_A, M03_FA_A, M06_FA_A, M09_A,
+M09_B (`out/str_check_levels.txt`).
+
+THE TAB'S MAPS AND RETOMOTO against the new file (tree `<work>/build/w_tabM/KLExpansion/Maps`, read only;
+`kl_vault_str.py tab`, `out/tab.txt`: PASS): DM01 3,847 streamed PC_Def.str records, DM02 3,847, DM03 3,849, DM06 3,833,
+DM09 3,690 - on each 0 name no block of the new file, 0 name a block the base does not have at the same place with the
+same clips, 0 are larger than their block; DM09's KLTalk.ini StreamBytes 1,688,413,044 fits. `kl_bain.check` with the
+new file on all five: 0 problems each. `kl_fa_talk.check` on DM09: FAIL 1 'the countdown's NOW! starts at [7.51], the
+blast is at 16.50' - THE SAME LINE with the installed file (`out/tabtalk.txt` = `out/tabtalk_base.txt`): a finding of that
+build's timing, not of the stream file; not this stage's.
+
+### M.2 The map with the music: `<c_bank_music>/` (0.93 GB), the same four names
+
+How a build is told its stream file (READ): kl_snd has ONE fixed place, `kl_snd.stream_file('merged')` =
+`<work>/build/PC_Def.str`, and `stream_map()` reads the .map.json beside it; `kl_snd.merge` inside `kl_maps.one` resolves
+Dead Men's streamed records through that map. That file is another session's and stays. `kl_fa_bank.py test ... --str
+<file>` (NEW, `use_stream`) replaces `kl_snd.stream_file` for the length of the process - the way Doors replaces
+kl_escape's three functions. kl_fa_talk has its own `--str`.
+
+- `python tools/kl_fa_bank.py test C:/kl_scratch/vault_music/bare --keep --music-layer4 --str <v_vault>/PC_Def.str --plan
+  <the delivered van.json>` -> 'verify: problems: 0', 'RESULT: PASS', 20,643 entities (`out/test_bare.txt`); the line
+  'sound: ... stream records added 94, interleaved stream groups added 2'.
+- the same with `--no-ai` -> 'verify: problems: 1' (the known 'no ZSquadScript: no police'), 'RESULT: PASS', 20,246
+  entities (`out/test_noai_bare.txt`).
+- `sh <c_bank_music>/chain.sh <bare folder> <work dir> <log dir>` on each: `<c_bank>/chain.sh` with ONE changed line (the
+  talk step's `--str` names `<v_vault>/PC_Def.str`); all steps exit 0 as before, and `4_guns` now exits 0 on the main build
+  ('problems: 0': its audit is green); on the no-AI build it exits 1 with the one known line (`out/main/`, `out/noai/`).
+- `sh <c_bank_music>/checks.sh <folder> <out dir>` (one changed line, the same) + `kl_vault_str.py whd` on each of the four:
+  copies in each folder's `checks/`, summary `checks.txt`. The archives' sha1 were the same after the checks as before.
+
+| folder | F01_Main.zip sha1 | archive bytes | F01_Main.WAV | five blocks | chunk table |
+|---|---|---|---|---|---|
+| `bank_vault` | `dd763485d90b11a94fa4db6698e4284bb8e9c1da` | 207.98 MB | 23.3 MB, sha1 `2e1d7827...` (= the silent build's) | 159.9 MB | 65,852 |
+| `bank_vault_wavslim` | the same archive | | 13.3 MB, `fcbd62b8...` (= the silent build's) | 149.8 MB | 65,852 |
+| `bank_vault_noai` | `5acb5e429cd0f84ed0239bac286aa3445dbab269` | 191.3 MB | 23.1 MB | 150.1 MB | 65,083 |
+| `bank_vault_bare` | `5489199a2a689fdce8bc771347fba237c31dbd5a` | 178.2 MB | 23.1 MB | 149.1 MB | 65,640 |
+
+The music costs the level load NOTHING: the clips are streamed, the .WAV of each of the four folders is byte for
+byte the silent build's (cmp), the five blocks are the same to the decimal (`<c_bank_music>/blocks.txt`); only the .WHD and
+the bank / level members inside the archive grow.
+
+| checker | `bank_vault` | `bank_vault_wavslim` | `bank_vault_noai` | `bank_vault_bare` |
+|---|---|---|---|---|
+| `kl_maps.py preflight` | PASS (exit 0): 'CRASH 0, RISK 1, NOTE 76' | the same | exit 1: 'CRASH 1, RISK 1, NOTE 76' = 'no police', what the build is | PASS: 'CRASH 0, RISK 1, NOTE 77' |
+| `kl_maps.py audit` | PASS (exit 0): 'RESULT: PASS (0 findings that must be 0, 0 known and accepted)' | the same | exit 1: 'FAIL (2 findings ...)' = 'no ZSquadScript: no police' + preflight's echo | PASS |
+| `kl_fa.py check`, `kl_impact.py`, `kl_arms.py check`, `kl_chars.py check`, `kl_map_guns.py check` / `sizes`, `kl_map_escape.py van-check` / `check`, `kl_fa_bots_dyn.py check` / `fake-test`, `kl_fa_bank.py bots-check` / `reverify` / `check`, `kl_fa_talk.py check --str <new>`, cover lists, `kl_route.py` x 3 | exit 0, the lines of D1 | the same | the same | as D1 (no gun looks, no talk, no bot squad in a bare folder: those two checkers stop for want of their input) |
+| NEW `kl_vault_str.py whd` | PASS: 3,730 streamed records, 0 without a block; 16 of 16 clips read back | the same | PASS (`--no-ai`): 7 of 7 (music + ambience; a build without guards names no guard line) | PASS: 16 of 16 |
+
+THE STREAM-CLIP FINDING IS GONE on `bank_vault`, `bank_vault_wavslim` and `bank_vault_bare`; `bank_vault_noai` keeps
+its 'no police'. NEW in preflight, on all four: 'RISK value x9 ZPlayMusicLayerFade[0] = eLayer4; stock has only eLayer1 ..
+eLayer3' - the nine fades of the fourth layer that `--music-layer4` keeps (the stage that brings the music sets the
+flag: MUSIC_LAYER4's note; without them the break-in set's basic layer is never faded out).
+READ BACK (`checks/stream_whd.txt` in each folder): each of the sixteen names has ONE streamed record in the built .WHD;
+its offset is the block of the table above; the index entry of that block and layer has the record's rate, channels and
+size (music: PCM 32,000 Hz 2 ch, 9,215,656 bytes a break-in layer, 10,751,844 a way-out layer; ambience: Vorbis 2 ch
+182,693; guards: ADPCM 32,000 Hz mono), and the bytes there are Dead Men's. Each folder has `stream.json`: the file, its
+sha1, and 'bytes_needed' 1,751,738,528 (the end of the last block a record names).
+
+### M.3 INSTALL, for the session that holds the game (this stage installed nothing)
+
+THE ORDER MATTERS: THE STREAM FILE FIRST. A folder of `<c_bank_music>` loaded with the 1,694,610,488-byte file still in
+the game folder has sixteen records that point at that file's TABLES (the guard lines, the ambience) or PAST ITS END (the
+music, from 1,693,372,160): what the stream player does with that was never tried - do not try it. (KLTalk.ini's
+StreamBytes 1,686,681,836 is the talk lines' need only and does not guard this; `stream.json` does, for a human.)
+1. Game closed (no kl2.exe with a thread).
+2. `<DD>/PC_Def.str` <- COPY of `<v_vault>/PC_Def.str`; read it back: 1,753,469,945 bytes, sha1 `80e53495ae550feb281f08d63b33619907f700cb`.
+   Nothing is lost by the overwrite: the file there now IS `<work>/build/v_bain/over_talk/PC_Def.str` (MEASURED today, sha1
+   `b0cb8bcd...`), and Dog Days' ORIGINAL is in `<DD>/KL_PortBackup/PC_Def.str` (1,217,890,070 bytes) - not to be touched.
+   The .map.json and .bain.json are build inputs: they stay in `<v_vault>`, the game reads neither.
+3. Every map already installed keeps working: stock, the tab's five (M.1), the silent `<c_bank>` folders (their
+   records are a subset). So step 2 can be done at any time, also before the silent folders' first load.
+4. Then the map, in D4's order but from `<c_bank_music>`: `bank_vault_noai` -> `bank_vault` -> `bank_vault_wavslim`
+   (`python debug/slot.py put "<c_bank_music>/bank_vault" F01`, or the packaging of D5 with `--prebuilt`: the folder's
+   audit.json is green now, so kl_expansion's 'known' entry for this map is not needed for these folders).
+5. TO GO BACK: game closed, `<DD>/PC_Def.str` <- copy of `<work>/build/v_bain/over_talk/PC_Def.str` (1,694,610,488 bytes,
+   sha1 `b0cb8bcd5040462d3caec025e65939d85702a5f0`) AND the map back to a `<c_bank>` folder (or off the slot) - never the
+   old file with a `<c_bank_music>` folder. To stock: `tools/RESTORE Dog Days originals.bat` as always.
+6. FOR LATER BUILDS OF ANY MAP: a build against `<work>/build/PC_Def.str.map.json` or the over_talk map stays valid with
+   the new file. The next extension must take `<v_vault>/PC_Def.str` as its base (`kl_fa_talk.py stream --base`, `kl_bain.py
+   build --stream`, `kl_vault_str.py build`), or these sixteen are lost again. `<work>/build/PC_Def.str` was not replaced.
+
+### M.4 What to listen for, and what is GUESS / ASSUMED
+
+- The break-in set from 1 s after the round-start event (MUSIC_AT, GUESS), its 'basic' layer at -14 dB and the others
+  silent; the rise at the ante-room box; at the beat's end all four layers fade in 1 s and the way-out set starts; the
+  vault's deeper ambience in the vault; the nine guard lines among the guards' other one-liners.
+- ASSUMED, NEVER HEARD: a FOUR-layer interleaved PCM set (8 channels in turn). MEASURED: no map that has played holds a
+  group of more than 3 (the tab's bank DM03: groups of 2 and 3; Retomoto, whose theme the owner HEARD: groups of 2); the
+  .WHD's group byte and kl_whd.Writer.add_group carry 4 the same way. If the break-in set is noise, silent or faults,
+  the way-out set (2 layers, Retomoto's form) is the control; the fall-back is the silent `<c_bank>` folder.
+- ASSUMED: Dog Days fades `eLayer4` (READ: tools/dd_enums.json has eLayer1 .. eLayer4 = 0 .. 3; no stock level uses
+  the fourth - preflight's RISK). A build without the nine fades: the same `test` line without `--music-layer4` (check() then
+  prints a NOTE that the basic layer plays on).
+- ASSUMED, as before this stage: streamed single IMA ADPCM records play (re/voice.md 7.3: a decode path no stock clip
+  uses). The silent build already has 66 such records (the kept guards' one-liners), this one 75; the tab's maps have 0
+  (their lines were moved into the .WAV). If the guards of this map are mute or garbled it is this, not the stream file.
+- ASSUMED: Dead Men's Vorbis ambience plays from the merged file (the form of the ambiences merged for Retomoto).
+- ASSUMED (kl_str): the engine reads the 0x38 header bytes and no table of the stream file; a file between 1.69 and
+  2 GB behaves as the 1.69 GB one (the largest that ran). 394 MB are left under 2 GB; nothing past 2 GB was ever tried.
+- Whether the round's own Fragile Alliance music (F07's) plays OVER the map's music was not looked at.
+
+### M.5 Open
+
+- Nothing ran in the game; nothing is installed.
+- `kl_expansion.py`'s EXTRA entry for this map still names `<c_bank>` and pins the known finding: with a
+  `<c_bank_music>` folder the finding is absent; the entry's text is that session's.
+- `<work>/build/PC_Def.str` (kl_snd's fixed 'merged' place) is still the 1,684,486,009-byte file of 2026-10-09: every
+  tool that builds without a `--str` resolves against ITS map (a subset of the new one). Making the new pair the
+  default is the lead's call (it means replacing that file).
+- kl_fa_talk.check's last line calls sizes() with slot F01 whatever the folder's slot is (it stops on the tab's DM09 =
+  F06 unless called with the slot from Python): that file is another session's, told here.
+
+(end of the Music stage)

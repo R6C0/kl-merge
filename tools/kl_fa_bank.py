@@ -41,6 +41,9 @@ what only a live run can settle: re/bank_campaign.md. Nothing here installs anyt
       --blast-real      the vault's blast with the campaign's own reach and damage (default: a harmless show)
       --no-blast        the vault stays intact: no blast, no swap to the blown vault
       --dead-men-rows   the campaign's soldiers keep Dead Men's rows (default: stock rows by weapon class)
+      --str FILE        the stream file the build resolves streamed clips against (FILE + FILE.map.json; default
+                        <work>/build/PC_Def.str): the one that holds the map's music (tools/kl_vault_str.py,
+                        re/bank_campaign.md 'Music stage'). With it: --music-layer4
       --plan FILE       the van's plan from a file (the van.json beside an earlier build, or 'kl_map_escape.py
                         van-plan <bare graft> --points ... --json'): no bare graft is built for it (60 s less)
 
@@ -1393,6 +1396,33 @@ def lost_clips(folder, res):
     return listed, [n for n in listed if n.lower() not in have], have
 
 
+def music_records(folder):
+    """How many of MUSIC_CLIPS have a streamed PC_Def.str record in the built .WHD beside the archive (0 for the
+    builds against the stream file without the music; 6 with it)."""
+    import kl_whd, kl_snd
+    whd = [f for f in os.listdir(folder) if f.lower().endswith('_main.whd')]
+    if not whd:
+        return 0
+    b = open(os.path.join(folder, whd[0]), 'rb').read()
+    have = {kl_snd.cs(b, f['name']).decode('latin1').replace('\\', '/').lower() for f in kl_whd.records('dd', b).values()
+            if f['fmt'] & kl_whd.STREAMED and not f['fmt'] & kl_whd.LANGFILE}
+    return sum(n.lower() in have for n in MUSIC_CLIPS)
+
+
+def use_stream(path, log=print):
+    """'--str': for THIS process kl_snd's 'merged' stream file is `path` (and stream_map() its .map.json) - what
+    kl_snd.merge inside kl_maps.one resolves Dead Men's streamed clips against. kl_snd has one fixed place for that
+    file (<work>/build/PC_Def.str, another session's, not to be overwritten); the function is replaced here the way
+    Doors replaces kl_escape's three for the length of a build. The other names ('dd', 'stock') stay."""
+    import kl_snd
+    path = os.path.abspath(path)
+    if not os.path.isfile(path) or not os.path.isfile(path + '.map.json'):
+        raise ValueError('kl_fa_bank: --str %s: the file or its .map.json is not there' % path)
+    real = kl_snd.stream_file
+    kl_snd.stream_file = lambda which='merged': path if which == 'merged' else real(which)
+    log('kl_fa_bank: streamed clips are resolved against %s (%d bytes) and its .map.json (%d blocks)' % (path, os.path.getsize(path), len(kl_snd.stream_map())))
+
+
 def inventory(folder, log=print):
     """What the layer consists of in a built level, with world places read back from it."""
     import kl_arms
@@ -1489,6 +1519,12 @@ def check(folder, log=print, problems=None):
             '%d have NO record = what a larger PC_Def.str would bring:%s' % (len(listed), len(listed) - len(lost), len(lost), ''.join('\n          ' + n for n in lost)))
         if any(n.lower() in have for n in MUSIC_CLIPS):
             fail('sound: MUSIC_CLIPS names %d clips that have a record in the built .WHD: the list for the owner is not the level\'s' % sum(n.lower() in have for n in MUSIC_CLIPS))
+    # a build against a stream file that holds the music ('--str', the Music stage): all six clips or none
+    in_whd = music_records(folder)
+    if in_whd not in (0, len(MUSIC_CLIPS)):
+        fail('sound: %d of the %d MUSIC_CLIPS have a streamed record in the built .WHD: a set is torn' % (in_whd, len(MUSIC_CLIPS)))
+    if in_whd and listed:
+        fail('sound: the music has its records but result.json still lists %d stream clips as missing' % len(listed))
     # ---- kl_fa.check on the written archive
     import kl_arms
     fa = kl_fa.check(sc, snd, loc, kl_arms.read_anm(arch))
@@ -1701,12 +1737,16 @@ def check(folder, log=print, problems=None):
     log('  chain: round start -> %s; ante-room box -> rods at %s s, %d more -> %.0f s -> %d objects%s' % (
         [s.split('!')[-1] for s in mon], ', '.join('%.0f' % x for x in rods), len(box) - 1 - len(rods), delay('beat timer'), len(beat),
         '; -> %.0f s -> %s' % (delay('door timer'), [s.split('!')[-1].split('\\')[-1] for s in late]) if late else ''))
-    log('  the beat: vault door %s; blast %s; alarm lamps %d, %s; music: break-in set at %.0f s, way-out set at the beat\'s end (silent until the stream file has %d clips)' % (
+    log('  the beat: vault door %s; blast %s; alarm lamps %d, %s; music: break-in set at %.0f s, way-out set at the beat\'s end (%s)' % (
         'sunk at build time' if vault_open else 'swings at the beat\'s end' + (', its body off %.0f s later' % delay('door timer') if named('door off') else ', stays'),
         'none (the vault stays intact)' if not blast else '%s: Explode reach %s, %d bodies come, %d go' % ('show' if reach == [(1.0, 1.0)] else 'REAL', reach, len(on), len(off)),
         len(lamps), '%d LightToggle' % len(toggles) if toggles else 'no LightToggle in the level, %d lights and %d slave spots hidden' % (len(dark), len(dark_s)),
-        delay('music timer'), len(MUSIC_CLIPS))
+        delay('music timer'), 'its %d clips have streamed records in the built .WHD: it plays once the stream file of the build is installed' % in_whd if in_whd
+        else 'silent until the stream file has %d clips' % len(MUSIC_CLIPS))
         + '; %d fades of the fourth layer' % four)
+    if in_whd and not four:                             # MUSIC_LAYER4's own note: without the nine fades the 'basic' layer is never faded out
+        log('  NOTE: the music\'s clips are in the bank but the fourth layer\'s nine fades are not (build without --music-layer4): '
+            'the break-in set\'s basic layer plays on under the way-out set (ASSUMPTION, MUSIC_LAYER4)')
     # ---- the enemies
     actors = [k for k in range(1, len(sc.nodes)) if sc.cls(k) == 'ZFFActor']
     top_of = lambda k: sc.names[sc.top[k]]
@@ -2426,6 +2466,8 @@ def main():
         CASE = None if '--loot-bags' in a else CASE
         if '--beat' in a:                               # OPTION, seconds from the ante-room box to the vault door
             BEAT = float(a[a.index('--beat') + 1])
+        if '--str' in a:                                # OPTION: the stream file that holds the map's music (kl_vault_str.py)
+            use_stream(a[a.index('--str') + 1])
         plan = plan_of(a[a.index('--plan') + 1]) if '--plan' in a else None
         sys.exit(test(a[1], '--keep' in a, plan=plan))
     elif len(a) == 2 and a[0] == 'finish':
