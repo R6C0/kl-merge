@@ -339,6 +339,7 @@ static const char *klb_who(const struct klb_rec *r) { return !(r->flags & 1) ? "
    1 d): +0x04 health, +0x08 maximum, +0x24 the owner. A line per loss ('record 3 (bot): lost 0.6 (279.4 of 280.0)') tells
    bullets (many small steps: 60 x 0.01 = 0.6 for a Zastava hit at the stock factor) from a blast, a fall or a kill
    volume (one step to 0); a line at the first sight says the maximum. Nothing is written. */
+static int kle_node(DWORD node, float pos[3], float dir[3]);          /* klescort.c (included after this file): a node's world place */
 static DWORD hp_rules;
 static void klb_health_tick(const struct klb_snap *s, int fresh)
 {
@@ -355,7 +356,15 @@ static void klb_health_tick(const struct klb_snap *s, int fresh)
             if (!said[i]++) klog("bots: record %d (bot): health object %08lx: %.1f of %.1f", i, h, raw[1], raw[2]);
             continue;
         }
-        if (raw[1] < seen[i] - 0.05f) klog("bots: record %d (bot): lost %.1f (%.1f of %.1f)%s", i, seen[i] - raw[1], raw[1], raw[2], raw[1] <= 0 ? " - DOWN" : "");
+        if (raw[1] < seen[i] - 0.05f) {
+            /* + where it stood (its node [actor+4] in the world, as klescort.c measures) and its heist stage: a step over
+               100 in one tick is no scaled bullet - the place names the killer (the window drop x > 6151, the FallingDebris
+               pillar in the boardroom by the window, close combat where a guard stands) */
+            float pos[3]; int have = kle_node(klh_rd32(r->actor + 4), pos, 0);
+            klog("bots: record %d (bot): lost %.1f (%.1f of %.1f) g%u at %s%.0f %.0f %.0f%s%s", i, seen[i] - raw[1], raw[1], raw[2], r->stage,
+                 have ? "" : "? ", have ? pos[0] : 0.0f, have ? pos[1] : 0.0f, have ? pos[2] : 0.0f,
+                 seen[i] - raw[1] > 100 ? " - ONE STEP" : "", raw[1] <= 0 ? " - DOWN" : "");
+        }
         seen[i] = raw[1];
     }
 }
