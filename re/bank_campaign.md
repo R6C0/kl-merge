@@ -248,3 +248,193 @@ python tools/kl_maps.py one "<out>" F07 M03_A --campaign --author kl_fa_bank --k
   top-level nodes of a built folder), manifest.py + beside.py (two build trees member for member), results.py,
   marker.py, passive.py, dummy_build.py (the Retomoto regression through kl_maps' command line: `dummy_build.py
   <out>` rebuilds what `before.manifest.json` records; 1.5 minutes).
+
+## Stage T3 - the collision route test as a tool (NEW tools/kl_route.py)
+
+STATE: DONE (2026-10-11 13:40). One new file, `tools/kl_route.py` (1,316 lines), and this section; no other file
+was touched, no build was run (T1 was editing kl_maps / kl_graft: every input is an archive that existed).
+Scratch C:/kl_scratch/bank/t3/ (0.2 MB): `checks.py` (every check below is one name of it: it prints the command
+and runs it), `out/<name>.txt` (the outputs quoted here), `place_agree.py`, `flags_census.py`, `dbg.py` (what the
+grid holds round a place). `<f1>` below = `<work>/build/cfa/fill1`.
+
+### T3.0 What was read, and what the tool takes from each
+
+- bank: `G:/kl_scratch/cfa_bank/skeptic/walk8.py` / `walk9.py` - kl_escape.Walk's sampled grid, a flood over
+  (cell, floor height), REF ids taken out at flood time. TAKEN: the cell (20), the sampling pitch (10), the floor
+  rule, the step (45 up / 60 down), the body heights (55..165), 'a place is reached from a floor near it', and
+  'shut each set again in turn' as the test of NECESSARY.
+- club: `G:/kl_scratch/cfa_club/skeptic/walk5.py` (kl_escape.Walk as it is: one floor per cell) - nothing new.
+- Havana / prison / the critic: `G:/kl_scratch/cfa_critic/hwalk.py`, `prison_walk.py`, and on built archives
+  `G:/kl_scratch/cfa_fill1/hwalk_built.py`, `prison_walk_open.py`, `havana_walk_open.py`. TAKEN: the body's
+  half width (30), the 'thinnest crossing' search that names what is in the way in the order it is met, 'take
+  out what was crossed and ask again', a crossing only where the mesh lies, and the snap of a place that stands
+  in something to the nearest walkable spot (they took the nearest mesh cell within 2 m without saying so).
+- park: `G:/kl_scratch/cfa_park/skeptic/sk_walk.py` - TAKEN whole as 'the way an AI is given': polygon middles
+  joined through the middles of the shared edges, a sample every 25, a floor within 90, the body column free.
+- `G:/kl_scratch/cfa_fill1/blockers.py`, `front_blockers.py` - TAKEN: the path blockers' boxes, tested against
+  that mesh way. `closures.py` - read for what a closure is in the files.
+NOT taken: walking only on mesh cells (hwalk: a player walks off the mesh, and a build with a broken mesh would
+read as shut), and a body without width (walk8).
+
+### T3.1 The tool
+
+`python tools/kl_route.py walk | stations | doors <level> ...` and `route()`, `blockers()`, `stations()`,
+`doors()`, `mesh_way()`, `load()` for other tools; `<level>` = a build folder, an archive or a stock level's name
+of either game. The docstring is the spec: every number of the walker with whose it is, and what is ASSUMED.
+In short: a lazy grid of 20-unit cells over the .HVK (floors under the cell middles, everything else sampled,
+convex shapes by their planes); a walker with a body 60 x 60, 55..165 over its floor, stepping 45 up / 60 down;
+a search that, when the way is shut, goes on through objects and names them; the navigation mesh for 'on the
+mesh / which part', for where a crossing may be, and for the line an AI is given (with the path blockers).
+Run times here: a walk 3 - 6 s, stations / doors over the whole bank 18 - 25 s.
+
+New against the study's scripts (each one MEASURED on real files, below): the body has a width AND the walk is
+not tied to the mesh; convex shapes are rasterized, not boxed; a place is walked from GROUND (not from a table
+top); hidden bodies count by default and the verdict says when it hangs on them; a placement that does not
+stand where its entity does is reported; path blockers and mesh links are part of the AI's line; every object
+named carries its collision flags and their reading.
+
+### T3.2 MEASURED while writing it
+
+- Placements against entities (`python C:/kl_scratch/bank/t3/place_agree.py M03_A F07 "<f1>/F07+M03_A campaign
+  open/walk_members.zip" "<f1>/F07+M03_A campaign beats/walk_members.zip"`): every STATIC / KEYFRAMED placement
+  stands exactly where its entity's .gms chain puts it, in place and rotation: 0 of 3,653 (M03_A), 0 of 1,859
+  (F07), 0 of 3,467 and 0 of 3,479 (the two built bank archives) differ by more than 2 units. (RIGID agrees too;
+  VEHICLE placements stand elsewhere, 13 of 13 in M03_A; WEAPON placements agree in place and differ in
+  rotation, 48 of 51 in F07 - neither is counted by the walker.) So 'a leaf moved, its collision left'
+  is detectable: with the roller door's entity sunk by 2,500 in memory `Level.moved()` returns exactly
+  `[(23559, 2500, 'M03_A_Garage_01a\SI0201_M03_BackDorAnim_01')]`, and `[]` on all four files as they are.
+- Convex shapes: on the 850 convex shapes of M03_A, M11_B and F07 every vertex satisfies n.v + d <= 0 for every
+  plane (largest value 1e-5) and every plane touches a vertex. Rasterized from the planes and clipped to the
+  vertices' box, the 431 / 259 convex placements of M03_A / M08_A stay inside their world boxes, reach top and
+  bottom, and fill 84 % / 76 % of the boxes' cells (what a turned door or car leaves free). Without the clip
+  35 flat shapes (car windows) ran up to 43 over their own box: their planes do not close them.
+- Collision flags by object name (`python C:/kl_scratch/bank/t3/flags_census.py M03_A M11_B M08_A F07`): 0x40
+  alone = `ColiObj_Camera*` / `ColiObj_CamLamp`; 0x10 alone = `ColiObj_BlockSight` / `ColiObj_Vision` /
+  `BlockVisionPlane`; 0x20 alone = `InvisibleBlock_*` / `ColiObj_NPCBlock`; 0x108 = `ColiObj_Hero*` / `OnlyHero`
+  / `HeroOnly` / `ColiObj_Player*` / `ColiObj_HERO_hack`; 0x102 / 0x42 = shards, lamps, monitors; the plain world
+  is 0x72. Read as: 0x20 stops every character, 0x8 the heroes only, 0x40 the camera, 0x10 sight, 0x2 shots.
+  BY NAMES ONLY. One thing fits it from another side: at the Capitol's wing door the campaign has BOTH a
+  hero-only plane (`ColiObj_Obj_Roadblock_01`, 0x108) and path blockers in state eBlocking
+  (`PathBlocker_BunkerBackDoor_01`, `PathBlocker_LastGuys_01`) - one for the heroes, one for the AI
+  (`python tools/kl_route.py walk M11_B --from 39211,830,30410 --to 40500,830,31900 --who npc`: FREE in the
+  collision, 9 samples of the mesh way in those boxes; `--who hero`: BLOCKED by the plane).
+- The bank's mesh: its narrowest shared edge on the round's way is 49 (a doorway: the mesh is drawn in from the
+  walls), so 'no edge under 100' (the park's rule) cannot be a condition; the tool prefers 100, then 50, then
+  any, and prints the narrowest it used. (The tab's Fragile Alliance bank: narrowest edges 18 and 29 on the two
+  legs through its garage exit. Recorded; whether that has to do with the bots' deaths there was not looked at.)
+- Path blockers as the tool reads them: bank 'open' build 4, all eBlocking, at the front entrance (boxes round
+  (108, 802, -9400), (129, 802, -9359), (467, 802, -9356), (486, 802, -9399): G1.2's four); prison 'open' build
+  35 with `PathBlocker_CageDoorB` eNotBlocking, prison 'beats' build the same one eBlocking (G1.4); the tab's
+  Fragile Alliance bank 2 (`Triggers!GarageDoors!PathBlocker` eBlocking at (296, 203, -4682)).
+- Places that are not ground: the Capitol's checkpoint 5 (37600, 830, 30521) lies INSIDE the block
+  `Collapsed_Rubble_005` (collision y 696..963) and 75 off the mesh; 'wing C_01' is a display case; 'table' is
+  the table. The study's walk snapped such a place to the nearest mesh cell within 2 m; this tool walks to the
+  nearest GROUND within 2 m and says how far that is. A free floor is not enough: the chairs round the
+  Capitol's table have free seats 54 over the floor, and a place given at the mesh's height (830 over a floor
+  at 800) is nearer to a seat than to the floor - hence 'ground' (300 away and more than 400 floors reachable,
+  by steps that can be taken back).
+
+### T3.3 The checks (each: `python C:/kl_scratch/bank/t3/checks.py <name>`; output `out/<name>.txt`)
+
+| what the study measured | input | the tool's line |
+|---|---|---|
+| bank: six door sets in series, each necessary (`walk9.py`) | `doors "<f1>/F07+M03_A campaign beats" --from "START yard=300,200,-4350" --via vault=399,-960,-12818 --to "street east=3958,700,-11173"` (name `bank_doors`: the built level with every door in its place) | `-> 7 closure(s) in 6 set(s); 7 necessary; with all of them out the way is FREE` - the roller door (REF 23559), a leaf of glass door 1 (27653), of glass door 2 (27648), the vault door (27063), the airlock's two planes (27787, 27790: one set), the hall / foyer leaf (26950) |
+| the same on the stock level | `doors M03_A ...` (`bank_stock`) | the same line; REF 7437, 13998, 13986, 12805, 14012, 14015, 12596 = the ids of `G:/kl_scratch/cfa_fill1/closures_M03_A.txt` |
+| bank, 'campaign open' build: free from the yard to the street (`walk8.py`: flood A reaches 45 of 46, the statue not) | `stations "<f1>/F07+M03_A campaign open"` + walk8's 46 places (`bank_open`) | `-> 45 of 46 places reached from the first in the collision; NOT: statue (behind bars)`; the statue: `NOT reached even through objects` |
+| | `walk` yard -> vault -> street east on it (`bank_open_walk`) | `FREE, 86 m of cells, floor y -960..242` and `FREE, 173 m of cells, floor y -960..803`; `RESULT: FREE; the mesh way: 1187 samples, all free` |
+| the plain build: only the yard (`walk8_built.txt`: 5 of 46) | `stations "<f1>/F07+M03_A campaign beats"` + the 46 (`bank_plain`) | `-> 5 of 46 places reached` (START, both stacks, the traitor row, the dock door) |
+| Capitol: four static switches, each on the only way (`walk3.py`) | `doors M11_B --from START=33981,830,30387 --via table=42500,830,31915 --to "van stop=27000,20,22600"` (`havana_strict`) | `-> 5 closure(s) in 5 set(s); 5 necessary; with all of them out the way is FREE`: `M11B_OYCHECK_BEFORE01` (4333) and `SI0100_M11_BarricadeB_01` (4617) = the bunker's ONE switch, `ColiObj_Obj_Roadblock_01` (5313, the wing door), `SO0201_M11_Corner_01` (10618), `SO0201_M11_BarricadeXX_01` (10619) - the five static pieces G1.5 took out for the four switches |
+| Capitol 'open' build: all 13 legs free | `walk "<f1>/F07+M11_B campaign open"` + walk3's chain (`havana_open`) | 13 x FREE (39, 14, 15, 26, 41, 53, 24, 47, 5, 32, 14, 39, 29 m) |
+| prison: seven closures in series (`prison_walk.py`) | `doors M08_A` + the critic's ten stations, `--hidden-out` (`prison`) | `-> 7 closure(s) in 7 set(s); 7 necessary; with all of them out the way is FREE`: cage door B, two in the ground passage, two of the last gate, the two fences |
+| | the same with hidden bodies counted (`prison_strict`) | the same seven; the two fences now each hold `FenceFall_Pre` AND its hidden twin `FenceFall` (13736, 13730) |
+| prison 'open' build: 9 of 9 legs free | `walk "<f1>/F07+M08_A campaign open"` + the ten (`prison_open`) | 9 x FREE; `the mesh way: 788 samples, all free` |
+| park: 1,271 samples free (`sk_walk.py`) | `walk M06_A` + its eight places (`park`) | `RESULT: FREE; the mesh way: 1271 samples, all free`; per leg 18, 128, 61, 272, 311, 270, 211 samples over 4, 30, 14, 66, 74, 62, 51 m: sk_walk.txt's own figures, leg for leg |
+| club (not asked; for the record) | `stations "<f1>/F07+M05_A campaign open"` + round A's 14; `doors` on the 'beats' build (`club_open`, `club_doors`) | `14 of 14 places reached`; `4 closure(s) in 4 set(s); 4 necessary`: a leaf of each office door and the two entrance seals (`HeroColi`, `Plane01`, both 0x108) |
+| the tab's Fragile Alliance bank: a known-good route | `walk "<work>/build/w_tabM/KLExpansion/Maps/DM03"` through the places of its bots' own route (`<work>/build/z_route/M03/bots.txt`: START row (-1808, 700, -11838) -> entrance -> hall -> stairs -> the dock's loot (424, 224, -6154) -> garage exit -> yard -> before the opened wall -> alley (-1650, 149, -170) -> level exit -> boarding place) (`fa_bank`) | 10 x FREE (31, 16, 30, 29, 29, 32, 10, 6, 26, 12 m; the opened wall: `floor y 150..200`); the mesh way crosses by `a LINK of the mesh (kind 2) from (-1704, 220, -766) to (-1700, 150, -534): 232 across, 70 down` - the link bots.txt names |
+| the other way round: the stock map, the wall standing | `python tools/kl_route.py walk M03_FA_A --from -1706,219,-899 --to -1650,149,-170` | `NO WAY even through objects`; first of what bounds the reached area: `SO0101_M03_Wall_Low_8m_05` - the piece tools/kl_escape.py opens |
+
+Also run: `--open` by name and by REF (the 'beats' build with five sets named out and the vault door left:
+both legs `BLOCKED` by REF 27063 `SI0102_M03_BankVault_Door_PRE` and nothing else, `with them out: FREE`, 9
+samples of the mesh way in the door; with the door named too: `RESULT: FREE`), `--rigid`, `--who`, `--no-mesh`,
+bad arguments (exit 2 with one line), and the five functions called from Python in one process (48 s for a route,
+its blockers, a stations run, a doors run and a mesh way on the bank).
+
+### T3.4 Where the tool's figures differ from the study's, and why
+
+- Lengths are of cells through the collision (bank 86 m in, 173 m out), not of mesh polygons (the study: 120 /
+  164 m; the tool's own mesh way: 96 / 188 m).
+- `doors` names the LEAF crossed, not the whole door: one leaf of a double door out is a gap of 1.2 m and enough
+  for the walker (it needs 0.8). Sets are counted by parent + name (less the number, less LEFT / RIGHT), so the
+  bank's airlock (two planes, four leaves) is one set and its vault door, crossed twice by one way, one closure.
+  The Capitol's bunker is one switch in the campaign and two closures here (two static pieces 5 m apart).
+- 'Reached' is 'the walk comes to a free floor within 86 of the place, nothing between the two but what the
+  place stands in'. 86 = the bank walk's rule (a floor within two cells: a square, 56 at its corners) plus the
+  half width (30) the bank walk's walker did not have. With 70 (40 + 30) the trolley place fails by 2 units -
+  the walk comes to within 72 of it, the trolley and two cartons stand there - which is why the constant is
+  argued in the source. For loot use `--near 125` (a money container's reach); for a spawn point read 'gap'.
+- Hidden bodies COUNT by default (the study's second agents left them out, fill1 ran both). It matters once in
+  these checks: at the Capitol's corner the only floor on the way is that of the HIDDEN `SO0201_M11_CornerBroken_01`
+  (`dbg.py M11_B 32255,864,28907`), so with `--hidden-out` the stock level has no way there at all - not even
+  through `Corner_01`; hwalk did not see it because it walked on the mesh where it found no collision floor.
+- In the bank 'open' build the six loot-wall places stand inside `Vault_POST` (REF 26914, the vault's blasted
+  state, hidden at load) - `stations` prints it. The walk comes to within 50 of each all the same.
+
+### T3.5 GUESS / ASSUMED (all in the docstring and at the constants)
+
+ASSUMED: the step (45 / 60) and the body (60 x 60, 55..165) - never read in kl2.exe; that a hidden body may
+collide (counted, `--hidden-out` for the other reading); the flag reading behind `--who` (names only); that the
+.HVK's place of a key-framed body is the one that holds when its entity was moved (the tool only reports the
+disagreement). GUESS: `ISLAND` / `ISLAND_N` (what is ground: 300 away, 400 floors), `PB_DY` (a path blocker's box
+counts 100 above and below itself: what a blocker does to the mesh was not read), `GAP` (2 m, the Havana walk's).
+LIMITS: no climb, vault or drop over 60 (`--down`); RIGID bodies, vehicles and weapons do not count (`--rigid`
+for the first two) but a car's KEYFRAMED doors, wheels and windows do, where the file has the car (the tab's
+bank has one on its yard way point: 45 samples of the mesh way); a convex plate thinner than 5 can slip through;
+a convex shape is never a floor (a lift, a plank); the mesh way runs between polygon MIDDLES, so a leg inside
+one polygon is one sample.
+
+### T3.6 For the next stages: testing the bank's route
+
+From the command line (`<b>` = the build folder; exit 0 = free / all reached):
+```
+python tools/kl_route.py walk <b> --from "START=<x,y,z>" --via "vault=399,-960,-12818" --to "street=3958,700,-11173"
+python tools/kl_route.py walk <b> ... --open SI0102_M03_BankVault_Door_PRE_01      (the same with the vault door out)
+python tools/kl_route.py doors <b> --from ... --via ... --to ...                   (what is still a closure, and is each necessary)
+python tools/kl_route.py stations <b> "START=<x,y,z>" <every spawn place> --near 30
+python tools/kl_route.py stations <b> "START=<x,y,z>" <every loot place> --near 125 --open SI0102_M03_BankVault_Door_PRE_01
+```
+What to expect of the authored bank with the lead's defaults (every door set open at build time EXCEPT the vault
+door) - MEASURED on the study's 'beats' build with the five other sets named out by `--open`, not on a build of
+the layer, which does not exist yet: `walk` without the vault door named: the legs into and out of the vault
+`BLOCKED` by `SI0102_M03_BankVault_Door_PRE` (there REF 27063) and nothing else, `with them out: FREE`, 9 samples
+of the mesh way in the door; with it named (or once its fall-back took its collision out at build time):
+`RESULT: FREE; the mesh way: 1187 samples, all free`. `doors` should then say `1 closure(s) in 1 set(s); 1
+necessary`. A `MOVED:` line in the head means a leaf was sunk and its placement left behind, or the reverse:
+fix the build, do not argue with the line.
+From a module (the same answers as dicts; one Level and one grid per process, so several questions cost one read):
+```
+import kl_route
+r = kl_route.route(folder, [START, VAULT, STREET], opened=['SI0102_M03_BankVault_Door_PRE_01'])   # r['free'], r['legs'][k]['crossed']
+objs, free = kl_route.blockers(folder, [START, VAULT, STREET])            # [{'ref', 'name', 'kind', 'at', 'dist', 'hidden'}] nearest first
+rows = kl_route.stations(folder, [START] + places, near=30)               # row['mesh'], row['part'], row['reached'], row['gap'], row['in']
+d = kl_route.doors(folder, [START, VAULT, STREET])                        # d['closures'][k]['necessary'], d['sets'], d['free']
+m = kl_route.mesh_way(folder, [START, VAULT, STREET])                     # per leg: 'samples', 'nofloor', 'hit', 'blockers', 'links'
+```
+`opened` takes REF ids and / or text looked for in the entities' paths (a group's name opens its subtree).
+What the bank's later stages should look at beside FREE: (1) the four path blockers at the front entrance are
+eBlocking in the bare build; the mesh way passes between their boxes (0 samples in them) - if the layer moves
+the way or the engine blocks whole polygons (not read), `walk` shows it as `PATH BLOCKER ...`; (2) `stations`
+puts every place on a mesh PART: all of the round must be on the part of the START (566 polygons); (3) hidden
+things the layer shows or blows (`Vault_POST`) are in the walk by default - use `hidden=False` / `--hidden-out`
+to see the level as it is at load, and both when a beat swaps geometry.
+
+### T3.7 Open
+
+- Nothing of the walker was held against the running game beyond what kl_escape.Walk's rules already were (the
+  yard wall). The body width is the new part: a FREE of this tool means a gap of at least 60 - 80.
+- What a path blocker does to the mesh, and whether a hidden body collides: both would be read in kl2.exe, not
+  measured in files.
+- tools/kl_maps.py and tools/kl_graft.py were neither imported nor run by this stage. The tool imports kl_gms,
+  kl_hvk, kl_pf4 and kl_scene, and kl_prpjoin / kl_fa only for a stock level's archive and for the path blockers
+  (when those two cannot read a .prp the walk still runs and says that the path blockers were not read).
+
+(end of Stage T3)
