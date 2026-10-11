@@ -793,3 +793,252 @@ keys still read `0,05` as 0 (their old behaviour; only the seventh's text is str
 | N3, N5 notes | left as they are, said in the code's head comment and in 10.4 | |
 | N7, N8 notes | section 7 / check B1 / B2 and 10.8 put right here; `kl_map_ai.py`, `klhook.c`'s head comment and CLAUDE.md are not this track's files | |
 | N6 note: the fed swap | not this track's; in 10.1 and 10.10 for the lead | |
+
+## 11. Everybody a bit more health; a fed who is not a one-man army (track X2, 2026-10-11) - keys `Tough`, `CrewToFed`, `FedHeadShot` / `HeadShot`
+
+NOT RUN IN THE GAME. Code: `klhook/klbalance.c` sections 2 a7 / a8 (no new file, no new wiring line; no code byte, no
+game call: floats of the tuning object, two .data floats, the local player's health object). Asked for by the owner
+after rounds as a fed (hook ship_w8; `[Balance] Enable=1 Risk=1 CopToCrew=0.05`, `[Fed] Enable=1 Player=1`): 'they die
+really quick, like i was saying everyone should have a bit more hp, especially when im a fed im dealing wayy too much
+damage and they do nothing to me'.
+
+### 11.0 Short answers
+
+1. **Why 'they do nothing to me' - the numbers are MEASURED, the targeting is only READ.** Under his settings a
+   heister's bullet costs the fed x 0.50 of a health of 550 that starts to come back 4 s after the last hit and is
+   whole 4 s later; the fed's bullet costs a heister x 1.00 of 252, a head shot x 10. So 4 body hits or ONE head shot
+   against 19 - 37 hits from men whose accuracy is 50 % (11.1). That alone would explain his words - IF they shoot.
+2. **Whether the AI heisters shoot a police human is NOT SEEN** (11.2; review M1). By the exe reading they may: kl2
+   0x882470 makes a police player a candidate target for a soldier of team Ally and for nobody else. But no log of any
+   run holds one hit of a heister on a fed, his two deaths as a fed (20:22:40, 20:27:06) name no killer, and how a
+   soldier ranks him among the police AI was not read. `[Fed] Hunted` is NOT built; **live check TH (11.7) decides
+   whether it is owed, and comes BEFORE the lines of 11.5 are offered as the answer.**
+3. **`Tough=<f>`**: one factor on every maximum health of the round (every NPC, you as a heister, you as a fed), the
+   damage factors untouched. Proposal 1.5.
+4. **`FedToCrew=0.4` + `CrewToFed=1.0`** make a heister take as many of the fed's rifle hits as the fed takes of a
+   heister's (9 / 10 / 13 / 18 against 10 / 11 / 14 / 19 at 5 / 15 / 30 / 50 m; with Tough 1.5: 14 / 15 / 19 / 26
+   against 15 / 17 / 20 / 28). **`FedHeadShot=3`** takes the one-shot head away from the fed alone (3 / 4 / 5 / 6
+   head shots; the heisters never get a head factor on him at all).
+
+### 11.1 Measured: what a fed does and takes today (Risk=1, CopToCrew=0.05, FedMirror=1, Arcade level 1)
+
+Which float each direction reads for a POLICE human (section 1 c, 2 a3; the routines re-read by the FedMirror review),
+and what the hook has in it today ('you are POLICE now: ... a policeman's bullet still costs a heister x 0.05, a
+heister's a policeman x 1.50, a heister's costs you x 0.50, yours a heister x 1.00', his log 20:19:57):
+
+| direction | float read for a police player | key that is there under FedMirror=1 | today |
+|---|---|---|---:|
+| the fed -> a heister | +0x0c (0x7c1bf0) | YouToCrew (or `FedToCrew`) | 1.00 |
+| a heister -> the fed | +0x08 (0x8b80a0) | CrewToYou (or `CrewToFed`, new) | 0.50 |
+| police AI -> a heister | +0x04 (0x591bbe) | CopToCrew | 0.05 |
+| a heister -> police AI | +0x00 (0x591bbe) | CrewToCop (the seventh, +0x1c, is never applied for a police player) | 1.50 |
+| police AI -> the fed / the fed -> police AI | +0x10 / +0x14 | CopToYou / YouToCop (friendly fire) | 0.50 / 1.50 |
+
+Guns (section 3, `re/bots_fight.md` 1; one bullet at 5 / 15 / 30 / 50 m): the fed's rifle = the hero's Zastava M85
+72 / 64 / 52 / 37, his pistol HG_M-77B 84 at 10 m; a heister's Zastava (NPC factor) 58 / 51 / 42 / 30. Health: a heister
+252 (280 x 0.9, option Difficulty 1 - his log), the fed 550 ('your health object ... a POLICEMAN ...: 550.0 of 550.0;
+it starts to come back 4.0 s after a hit and is whole 4.0 s later': Risk=1 sets no health and no times), a policeman
+90 .. 158. Body hits to kill, no regeneration and no miss counted:
+
+| | 5 m | 15 m | 30 m | 50 m | head |
+|---|---:|---:|---:|---:|---|
+| the fed kills a heister (rifle) | 4 | 4 | 5 | 7 | **1** at any range (x 10 on an NPC) |
+| the fed kills a heister (pistol, 10 m) | 3 | | | | 1 |
+| a heister kills the fed | 19 | 22 | 27 | 37 | never given (an NPC shooter's head hit is a body hit, 0x61ac87 / 0x4db7e7) |
+| for comparison, the human as a HEISTER: he kills a policeman (x 1.5, 10 m) | 2 | | | | 1 |
+| a policeman kills the heister-human (x 0.5, median gun, 10 m) | 19 - 21 | | | | never |
+| a policeman kills an AI heister (x 0.05) | ~ 90 - 140 | | | | never |
+| an AI heister kills a policeman (x 1.5; x 0.75 more at another stage than you) | 2 - 3 | | | | never |
+
+So the fed is five times as deadly per hit as a heister is to him, has more than twice the health, heals whole in any
+8 s without a hit, and has the only head shot in the fight. What does hurt him fast, by the numbers: the point-blank
+rule (section 2 a4; a firing heister within 1.6 m sends 100 bullets a step, x 0.5 = about 2,900) and police AI fire
+that strays onto him (+0x10 = x 0.50, as on the hero). WHO hurt him in his rounds is NOT KNOWN: his ini has Log=1, so
+no 'you lost' line exists (the point-blank guess of the first report is withdrawn as a statement - it is one of
+three candidates, with stray police fire and heisters' bullets).
+
+### 11.2 Do the AI heisters target a police human? By the exe reading yes - NOT SEEN in any run
+
+EXE READING (holds on a second disassembly, review):
+
+- **0x882470** (a soldier rates a ZFFPlayer as a target; `ecx` the soldier, `[ebp+8]` the player): outside a network
+  session it goes to 0x8824e7: `cmp byte [player+0x2723], 0` - police byte set -> `[[soldier's actor+0x54]+4] == 2`
+  (team Ally) or the answer is the constant 'no target' (0x8824d9). So a police player IS a candidate for every Ally
+  soldier and is none for police AI; nothing else in the path asks for the traitor mask. At 0x8826fb a police player
+  is scored by an Ally soldier that has no traitor byte.
+- The same byte makes the three damage routines take the other float (2 a3): the game treats him as police throughout.
+- NOT READ: how a soldier weighs a police human against the police AI around him (the score this routine returns),
+  and whether a heister on its squad's rout ever gets to act on that score. No enemy-list or side write was built.
+
+THE LOGS (circumstantial; they prove nothing either way):
+
+- **No log holds a single hit of a heister on a fed.** The only `Log=2` fed run, FD3_DM03_die, has a fed of 27.5
+  health alive for 145 s with five heisters in play and 0 'you lost' lines (the scripted fed stood before a door;
+  whether a heister had sight of him is not known). PT_DM03_die_f2 / _r2 ran with Log=1.
+- His own round 20:22 (Retomoto, Log=1): a fed at 20:22:27.466 with 550 of 550; `shoulder: CHANGE ... in 0->17 dstate
+  0->2` at 20:22:33.700 = KNOCKED DOWN 6.2 s after the respawn (the game's knock-down comes at 80 health: about 470
+  lost in 6 s), up at 20:22:39.084, `fed: you: status 0 -> 7 (dead for good ...)` at 20:22:40.979. Again at
+  20:27:06.075, 49 s after the respawn. So something was hurting him hard - a heister's bullets (16 rifle hits at
+  x 0.50), a point-blank step, or stray police fire (x 0.50): the log names no attacker.
+- So the answer to the task's '(a) the factor or (b) no targeting' is: (a) is established as numbers, (b) is NOT
+  excluded. Live check **TH** (11.7) decides; if it fails, `[Fed] Hunted` is owed and `CrewToFed` changes nothing.
+
+### 11.3 `Tough` - what was read
+
+- **An NPC's health** (police, guards, AI heisters, civilians) is made by ZSoldier@CPPScript slot 44 = **0x8fbac0**:
+  `lerp(tuning+0x364, +0x368; ZSoldier field [+0x1c])` (0x884a70) `x ROW[+8]` (0x8fbb5b) `x` one of the soldier's four
+  per-difficulty fields (+0x24 .. +0x30 by `[0x156b5f0]`), stored through the actor's slots +0x674 / +0x670. The actor
+  that is `[gamedata+0x4cf0]` (0x6fd7c0; the story's partner) takes `ROW[+0]` instead. `ROW = 0x831f00(tuning)`: in
+  Arcade (`[session+0x5c] == 4`: 0x863a60 false, 0x87c980 false) `[tuning + 0x594 + 4 * option Difficulty]`.
+  First worker's reading, the lines above re-read by the second: the four pointers name the four story rows
+  tuning+0x42c / +0x450 / +0x474 / +0x498, whose +8 is 0.5 / 0.9 / 1.15 / 1.3, and 0x8fbb5b / 0x74d99c (the other
+  script class) are the only readers of ROW+8 among the eleven callers of 0x831f00 (re-read by the review: the
+  eleven use +0xc, +0xc, +4, +0x18, +0x1c, +8, +0x20, +0, +8, +0x10, +0x14).
+- **The hook** multiplies those four floats by Tough in the pass that arms the dial and puts the code's values back
+  with the table; it writes only when the four pointers and the four values are this build's (else one line, and
+  your own health is still scaled). **ASSUMED: slot 44 runs for every actor after that pass** - the pass comes
+  40 ms (19:39:49.810 / .851) to about 200 ms (20:52:21.178 / .374, 20:57:19.422 / .623) after the level's archive
+  is opened, 1.6 - 2 s before the player's health object appears; the rules object exists before the archive is
+  opened. Who calls the slot was not found, nor whether a second round of one level re-makes the actors. The log
+  proves or refutes it in every round:
+  `balance: Tough x 1.50: the AI heisters' maximum health this round, by crew record: 1: 378.0 ...` (ALL records at
+  252.0 = refuted; ONE odd record is the actor `[gamedata+0x4cf0]`, who takes `ROW[+0]`, not +8 - no such heister
+  in the logs so far).
+- **The human** (hero or fed): the live health object, maximum = the game's x PlayerHealth x Tough; a man who is whole
+  is whole under the raised maximum (the game filled the object to its own maximum before the hook saw it), a hurt
+  man is not healed. Two holes the review found are closed (harness sections 8 / 9): (S1) when the game writes its
+  own maximum again and leaves the health the hook raised ('825 of 550'; his log shows the game writing the maximum
+  twice a level, ~21 s apart), that is now taken as a new maximum of the game's - scaled again, with the line 'your
+  health set: ... - the game had written its own maximum again ...' - instead of the hook going blind until he is
+  hurt under 556; (S2) a hurt man whom the hook cut down to a smaller maximum (the dial stopping for a pass: 600 of
+  825 -> 550 of 550) gets back what he had when it is raised again (600 of 825), not a whole health. With
+  `FedMirror=0` the fed's object is left alone, so the fed alone has no Tough (one line at start says so). Regeneration takes the same seconds (0x419570 adds `max / [H+0x18]` a second). One record per
+  health object as before (FedMirror review S3): the hero found again after a fed round is not scaled twice (harness).
+- **Does not double with anything**: `[Bots] CrewHealth` / `BackstabHealth` (klgrudge.c) scale the maximum they FIND, so
+  they come on top (CrewHealth 1.25 x Tough 1.5 = 472); klbot.c's Log=2 health log reads the same object. kldown.c:
+  `HealthPct` is a share of the maximum (the knock-down comes at 40 % of 825 = 330 instead of 220), `DownHealth` /
+  `MinHit` / `Burst` are absolute and are NOT scaled (the lead may want DownHealth x Tough). **Track R8's per-attacker
+  factors for a knocked-down human (DownFromCop / DownFromCrew) are per-hit prices; Tough is only in the maximum - a
+  downed man simply has what is left of a larger health. Nothing of the down state is read or written here.**
+- **'EVERY RATIO STAYS' HAS EXCEPTIONS HE WILL FEEL** (review S3) - everything that is an absolute number of health:
+  - the knock-down: the trigger is an absolute health (run D1: 'YOU ARE DOWN ... health 80.0 of 401.5'; kldown's
+    `DownHealth`): 80 of 550 = 14.5 % of the maximum, of 825 = 9.7 % - under Tough he goes down relatively LATER.
+    **To keep it: `[Down] DownHealth` x Tough by hand (120 at Tough 1.5), or track R8 reads the maximum.** kldown's
+    `MinHit` / `Burst` are absolute as well (a hit of MinHit is a smaller share of 825);
+  - a point-blank step and every fixed-damage blast take the same health off a larger maximum (a step still kills);
+  - the departure kill (1,000,000) and the van (9,600) are untouched.
+- **Not changed**: the escape vehicle's health (9,600: it is relatively weaker by nothing - no damage moved), the
+  1,000,000 of the departure kill, a point-blank step (100 bullets still kill anybody: set the PointBlank keys). The
+  game's tally of your hits on a crew member is in per cent of HIS maximum (0x4d17f0): the yellow card, Retaliate and
+  Grudge answer Tough times later in bullets.
+
+What Tough=1.5 does to hits-to-kill (everything x 1.5, rounded up; his Risk=1 + CopToCrew 0.05, 10 m unless said):
+
+| | Tough 1 | Tough 1.5 |
+|---|---:|---:|
+| your health (hero / fed) | 550 | 825 |
+| an AI heister / a policeman | 252 / 90 .. 158 | 378 / 135 .. 237 |
+| a policeman kills you | 19 - 21 | 29 - 32 |
+| you kill a policeman (head: 1) | 2 | 2 - 3 |
+| a policeman kills an AI heister | ~ 90 - 140 | ~ 140 - 210 |
+| an AI heister kills a policeman | 2 - 3 | 3 - 4 |
+| a turned heister kills you (5 / 15 / 30 / 50 m) | 19 / 22 / 27 / 37 | 29 / 33 / 40 / 55 |
+| you kill a heister, fed or hero (YouToCrew 1.0) | 4 / 4 / 5 / 7, head 1 | 6 / 6 / 8 / 11, head 1 (2 at 50 m) |
+
+### 11.4 The fed's keys
+
+- **`CrewToFed=<n>`** (new; 0 .. 20): a heister's bullet on you while you are police - written into +0x08 in place of
+  CrewToYou's number, exactly as `FedToCrew` is at +0x0c: the same pass, only while the pairs stand exchanged
+  (FedMirror=1), not under Ramp. No key = CrewToYou's number. The line 'you are POLICE now ...' prints both.
+- **`FedHeadShot=<x>` / `HeadShot=<x>`** (new; 1 .. 10): the body-part factor of a head for the HUMAN's bullet while he
+  is police / a heister. The two floats are .data globals **0xcdeffc / 0xcdf000** (bone types 2 / 3) that 0x572f60
+  hands out; the image names them four times: the two reads there and the two stores of 0x45c490 (0x45d5a8 / 0x45d5b4),
+  which copies ten factors from tuning+0x404.. (+0x41c / +0x420 the heads; the hook reads those as 'the game's own' and
+  never writes them). 0x572f60's callers: 0x61acb8 (an NPC victim) and 0x4db7ff (the player as victim, softened); an
+  NPC shooter's head is made a body hit before either, so in Arcade the two floats are 'the human's head shot on any
+  NPC'. Written every pass while the dial acts for the side he is on, the tuning's values back otherwise; a value
+  that is neither the tuning's nor the hook's last is left alone (one line). As a fed he only shoots heisters; as a
+  heister `HeadShot` would also take the one-shot head on police away - NOT ASKED FOR by the owner and not proposed
+  (review S6: kept because it is the same two floats and costs one branch; off without its line).
+- **The values, 'the same risk'** (fed 550 against 252, rifle 72 / 64 / 52 / 37 against 58 / 51 / 42 / 30):
+
+| | fed kills a heister, body | head | a heister kills the fed |
+|---|---|---|---|
+| today: FedToCrew = YouToCrew 1.0, CrewToFed = CrewToYou 0.5, head 10 | 4 / 4 / 5 / 7 | 1 | 19 / 22 / 27 / 37 |
+| FedToCrew 0.5, CrewToFed 1.0 | 7 / 8 / 10 / 14 | 1 | 10 / 11 / 14 / 19 |
+| **FedToCrew 0.4, CrewToFed 1.0, FedHeadShot 3 (proposed)** | **9 / 10 / 13 / 18** | **3 / 4 / 5 / 6** | **10 / 11 / 14 / 19** |
+| the same + Tough 1.5 | 14 / 15 / 19 / 26 | 5 / 5 / 7 / 9 | 15 / 17 / 20 / 28 |
+| softer on him: CrewToFed 0.75 (+ Tough 1.5) | 14 / 15 / 19 / 26 | 5 / 5 / 7 / 9 | 19 / 22 / 27 / 37 |
+
+  Exact parity of body hits would be FedToCrew 0.37; 0.4 leaves the fed one hit ahead. He is still one against up to
+  seven, they still miss every second shot and he still heals in 8 s: whether 1.0 is too hard on him is for a round to
+  say (0.75 is the step back). The fed's pistol (84 at 10 m): 3 hits today, 8 at 0.4.
+- **Point-blank beside it**: with CrewToFed 1.0 a firing heister within 1.6 m costs the fed about 5,800 a step (today
+  2,900: dead either way). `PointBlankToYou=2` is the existing key for that (NOT RUN either).
+- **`[Fed] Hunted`**: not built; owed if TH fails (11.2). klfedkit.c and klbot.c are unchanged by this track.
+
+### 11.5 THE LINES PROPOSED FOR THE OWNER'S INI (into his `[Balance]` section, beside `Risk=1` and `CopToCrew=0.05`)
+
+ONLY AFTER TH HAS PASSED (11.7): without a seen hit of a heister on a fed, `CrewToFed` is a number on a bullet
+nobody is known to fire, and the lines would make the fed weaker against men who may not fight back.
+
+```
+Tough=1.5
+FedToCrew=0.4
+CrewToFed=1.0
+FedHeadShot=3
+```
+
+With `Tough=1.5` also, in his `[Down]` section: `DownHealth` x 1.5 of whatever stands there (the game's 80 -> 120) so
+the knock-down comes at the same share of his health (track R8 / the lead; not this track's file).
+
+Not proposed, his call: `PointBlankToYou=2` / `PointBlankToCrew=2` (a guard or heister at arm's length no longer kills
+in one step), `HeadShot` (his head shots on police as a heister stay x 10). With Tough the police AI need 1.5 times
+the hits on the crew too: `CopToCrew=0.05` can stay.
+
+### 11.6 Proof without the game, builds
+
+- Harness `G:\kl_scratch\X2\t\klx_test.c` (klbalance.c included as it is; tuning object, round, two player bodies and the
+  two head floats made up in memory): `53 checks, 0 failed, 202 log lines, 1447 writes` / `PASS` (36 before the
+  review; sections 8 - 11 are the review's S1, S2 and S7: the game's maximum written again under a raised health,
+  whole and hurt, also with the dial stopping in the same pass; the hurt man through an off / on toggle; Tough 0.5;
+  Tough with FedMirror=0) - his ini without the keys writes nothing new and
+  the fed's two slots are what he played (0.50 / 1.00); Tough arms / proof line / armour's new base / the fed's body /
+  the hero found again / back to stock; the proposal's four keys by slot on levels 1 and 11, the head floats 10 -> 3
+  -> 10 with the side, a foreign head value left alone; Tough alone leaves the table bit for bit (review M1 holds
+  for a fed too); bad texts refused; Risk=2's 0.73 x 1.5; a tuning object of another shape (NPC rows refused, own
+  health scaled); CrewToFed alone under Risk=0 writes only +0x08. Track O's `klr_test.c` against the new file: `20
+  checks, 0 failed` / `PASS`.
+- Compile after the fix round (HEAD bac2f86's klhook + this klbalance.c, `G:\kl_scratch\X2\src`; no warning): TEST
+  `G:\kl_scratch\X2\test\dinput8.dll` sha1 e1dfb293ba86291dee0cc4b3f2b4477c5e6da242, SHIP
+  `G:\kl_scratch\X2\ship\dinput8.dll` sha1 19f4d68e4c722baef1ab8b299843e233262a28e9. They are a compile proof only:
+  HEAD moves and they carry HEAD's kldown.c, NOT track R8's working copy - the lead builds the hook that carries both.
+- Review: `re/balance_fed_review.md` (ACCEPT WITH FIXES; M1 and S1 - S8 applied here, none refuted).
+
+### 11.7 Live checks (the lead; `[Balance] Log=2`, the bank or Retomoto, one variable a run)
+
+| run | keys added to his ini | PASS |
+|---|---|---|
+| **TH - FIRST, decides (b)** | none but `Log=2` (his ini as it is; `[Fed] Enable=1 Player=1`). A fed who stands IN SIGHT of live AI heisters with NO police AI near and not within 2 m of one: e.g. the bank, die in the hall, walk the fed to the yard door while the crew loots (`--die --fed-walk`), or the owner himself standing still in front of them for 30 s | **PASS** = 'balance: you lost' lines of 21 - 29 (a heister's rifle x 0.50 at 30 - 5 m; 15 - 26 at 50 m and beyond) within seconds of standing in sight, several a second. **FAIL** = none in 30 s with heisters alive and in sight (klbot's `pos` lines / a picture as proof of sight) -> (b) holds: `[Fed] Hunted` is owed, do NOT offer 11.5's `CrewToFed`. Losses of ~2,900 in one step = the point-blank rule (too near: repeat); losses while police AI fire past him do not count |
+| T0 | none (the new hook alone) | the start lines as before, NO 'Tough' / 'CrewToFed' / 'head shots' line; a fed round reads 'a heister's costs you x 0.50, yours a heister x 1.00' |
+| T1 | `Tough=1.5` | 'balance: Tough=1.50: every maximum health ...' at start; at the level 'Tough x 1.50: 'NPC health x' ... 0.50 0.90 1.15 1.30 -> 0.75 1.35 1.72 1.95 (4 value(s) ...'; 'your health set: maximum 825.0 (the game gave 550.0; PlayerHealth x 1.00, Tough x 1.50)'; 2 s into the round '... by crew record: 1: 378.0 2: 378.0 ...' (**252.0 on ALL records = the game made the actors before the write: FAIL, tell the track**; one odd record among 378s = the actor `[gamedata+0x4cf0]`, who takes the row's +0: not a fail); klbot Log=2 losses '(.. of 378.0)'; the SECOND 'your health set: maximum 825.0' line ~21 s into the level must come as the second line does today (20:52:25 / 20:52:46), with or without '- the game had written its own maximum again'; NO pass may show the player at '825.0 of 550.0'; back at the menu 'the code's 'NPC health x' is back' |
+| T2 | T1, a second round and a second level in one process | the 378.0 line again each round; no 'Tough ... NOT written' line |
+| T3 | T1 + die, come back as a fed (`--die --fed-walk` script) | 'your health set (a policeman): maximum 825.0'; in the round AFTER it the hero has 825.0 again, not 1237.5 |
+| T4 | only after TH passed: `FedToCrew=0.4 CrewToFed=1.0`, the fed where TH had him shot | 'you are POLICE now: ... a heister's costs you x 1.00, yours a heister x 0.40'; 'you lost' lines of 42 - 58 for a single rifle hit at 30 - 5 m (today 21 - 29); a heister's losses under the fed's rifle 15 - 29 a hit |
+| T5 | T4 + `FedHeadShot=3` | 'head shots: your bullet on an NPC's head now counts x 3.0 (FedHeadShot: you are police ...)' in the tick of the respawn, '... x 10.0 (the game's own again ...)' when the next round's hero is in; a head shot on a heister at 15 m costs him ~77, not all 252 |
+| T6 | everything of 11.5, the owner plays | his word |
+
+### 11.8 Assumed, not known, not done
+
+- ASSUMED: slot 44 runs after the hook's write (T1 says); nothing caches `ROW[+8]` per actor class before the level;
+  raising `[H+8]` over the game's 550 breaks nothing (lowering it has run live since 2026-10-10; the HUD's bar and
+  0x46f210's '0.9 x maximum' test read the same float); 0x45c490 does not run again in mid-round with other numbers
+  (if it does the hook writes its number back within 50 ms).
+- NOT KNOWN: WHETHER AN AI HEISTER EVER FIRES AT A POLICE HUMAN (TH); who knocked the fed down at 20:22:33 and killed
+  him at 20:22:40 (no Log=2 in his ini); how a soldier ranks a police human among targets; the crew's spread by range;
+  whether the game writes the health together with its second maximum write of a level (S1 covers both cases).
+- A guard spawned LATER in a round is made with the raised row as well (the rows stay written while the dial acts);
+  civilians get Tough too (nothing separates them in 0x8fbac0).
+- NOT DONE: a per-class Tough (police other than crew), `[Fed] Hunted` (owed if TH fails), kldown's absolute numbers
+  under Tough (R8's file), any change of klfedkit.c /
+  klbot.c, anything for a multiplayer session (klr_arcade: Arcade only, as the whole part).

@@ -367,6 +367,29 @@ SQUAD_ACTIVE = 3
 # outside, the guard at the glass ((5770, 21012, -347)) is the campaign's own first casualty again
 # (the InvisiBomb, 98 from him); his partner stands at the table
 NOT_SQUADS = ('Arriving', 'TakingElevator', 'VSquad')
+# THE LIFT HALL'S GUARDS ARE THERE FROM THE LOAD (owner, 2026-10-11 20:15: 'with the lmg guy and the two pistol guy
+# at the elevator they always spawn in too late, make them spawn a bit early so its not like they just plop out').
+# READ (re/retomoto_spawns.md 1): a squad whose ZSquadScript field 3 (SQUAD_ACTIVE) is 0 has its men hidden at the
+# level's start (kl2 0x787a10 -> 0x8d2e20) and shown when the squad gets its first goal (0x7f6750 -> 0x7c0d50) -
+# for these four when the crew crosses the box named: the last man 5 m from the box that shows him, the machine
+# gunner at the lift end of the one passage the crew comes down. With 1 they stand at their places from the load,
+# as Squad_InFront does on the forecourt (seen live), and their boxes still start their routs. Also: the three
+# places a dead player comes back at as police are in this hall now (kl_fa_fedpoints LOW / LIFT_NEAR) - with the
+# guards asleep he stood in an empty hall and they appeared round him.
+# APPLIED TO A FINISHED BUILD by `kl_map_ai.py spawnfix` (which reads this table); wire() below does NOT write it:
+# a build made from scratch has the four asleep until that step is run on it.
+# ASSUMED: men who are in the world without a goal stand where the level put them until they see somebody (what
+# the boardroom's guards did with the field at 1 in run S2: they shot at the heisters at the glass).
+HALL_ACTIVE = ('AI_Players!Enemies!060_Atrium_1st!Squad_MG-Guy',                         # the machine gun, (2908, 19601, -68)
+               'AI_Players!Enemies!070_Elevators!010_Squad_Elevators',                   # 3: (2340, 1238) (2534, 882) (2604, -1063)
+               'AI_Players!Enemies!070_Elevators!010_Squad_Elevators_GuardingElevator',  # 1: (2484, -1554)
+               'AI_Players!Enemies!070_Elevators!020_Squad_Elevators_Last_Stand_02',     # 2: (2675, 959) (2461, -1239)
+               # the four first-floor squads that stand in the SAME hall as the fed's three places (review M1: 3.6 .. 9 m
+               # from them, woken only by Trigger_2ndFloorStairEnd - the fed would see them appear round him)
+               'AI_Players!Enemies!060_Atrium_1st!Atrium_1st_InfrontElevator_Squad_01',  # 1
+               'AI_Players!Enemies!060_Atrium_1st!Atrium_1st_PillarCover_Squad_01',       # 2
+               'AI_Players!Enemies!060_Atrium_1st!Atrium_1st_CoverMiddle_Squad_01',       # 2
+               'AI_Players!Enemies!060_Atrium_1st!Atrium_1st_CoverMiddle_Squad_02')       # 2
 BEHAVE = {'DefendBehaviourRout', 'FlankingBehaviourRout', 'HuntBehaviourRout', 'PatrolBehaviourRout', 'RunToCoverBehaviourRout'}
 PLAIN = BEHAVE | {'ZSquadScript', 'ZSoldier', 'RunToCoverPosInfoRout', 'SquadModifierBehaviour', 'TriggerDelay', 'TriggerCounter', 'TriggerBox'}
 # in-game scripted animation of the campaign: removed from a squad that stays (before the join)

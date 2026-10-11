@@ -235,6 +235,47 @@ GUARD = (G4 + '040_EscapeEntranceLeft\\30_smUnleash', G4 + '040_EscapeEntranceRi
 RUN_CLOCK = {'Gameplay!RunToEscape!Timer1Player': 20.0, 'Gameplay!RunToEscape!Timer3Player': 14.0, 'Gameplay!RunToEscape!Timer': 8.0}   # GUESS
 VAN_CLEAR = 350.0                       # nobody is given a place this near the van's lane (its nose carries a KillBox)
 
+# ------------------------------------------------------------------ IN POSITION, WAITING (owner, 2026-10-11 20:15)
+# 'when u spawn [as a fed on the street] the npc swat are like all bunched together, they should be in position
+# waiting'. Two things were wrong (re/retomoto_spawns.md 3):
+#  1. WHERE THEY START. relay() pulls a squad's actors in to MAX_BACK behind its cover points by SCALING their
+#     offsets (`pull`): F07's men, who stand 3 - 58 m apart round the corners of their alleys, come out 0.3 - 0.9 m
+#     from one another (030_FinancialAlleyExit_Left: three men within 0.7 m, and the next squad's two 6 m east).
+#     Whoever sees a wave before it has run to its cover sees clumps.
+#  2. WHEN THEY ARE THERE. Every squad of the waves has ZSquadScript field 3 = 0: hidden until its wave box is
+#     crossed (kl2 0x787a10 / 0x7f6750), so a fed who comes back at the SWAT truck sees nobody, and then men appear.
+# THE ANSWER, applied to a FINISHED build by `kl_map_ai.py spawnfix` (it reads these tables; relay() / prepare_host()
+# do NOT write them - a build made from scratch needs that step):
+#  - every actor of the squads of POSTED gets a post of its own: POST_BACK on the police side (north, away from
+#    the tower's doors) of the RunToCover point that names HIM (a man without one: where he stood), on the nearest
+#    cell that is free floor on the street's mesh, outside every static vehicle, POST_APART from every other man,
+#    POST_LEG from every leg of the AI heisters' lanes (kl_fa_bots_rt.check's rule: 200) and POST_HOLD from every
+#    place of theirs (its rule for a hold: 400), clear of the bounds and of the van's road. His cover point
+#    was put beside a car by the table above: the post is the far side of that car.
+#  - the squads of ACTIVE get field 3 = 1: in the world from the load, standing at those posts. The wave boxes go
+#    on naming the same routs: the wave runs to its cover, falls back, is unleashed and walks to the van as before.
+# NOT in ACTIVE, on purpose: the dog (nothing to see standing), Squad_Teargasguys (they run in from out of sight, 5 s
+# after the lift) and the three squads that come up the road from BEHIND the crew (Squad_RoadBlock_South, ..#02,
+# Squad_SWAT_From_Behind_South: the design of 2026-10-10; 41 m or more from the forecourt's mouth).
+# ASSUMED: police who are in the world without a goal stand at their posts and shoot at who they see (as
+# Squad_InFront on the forecourt); 33 more men in the world from the load cost nothing that matters (stock levels
+# hold back 17..35 of their 40-odd men - re/map_ai.md 2 - whether for the look or for the frame rate was not read:
+# `spawnfix --asleep wave1,wave2,...` leaves a set asleep, posts only).
+POSTED = tuple(n for n in SQUADS if not n.endswith('_Dog')) + (E2 + 'Squad_SWAT_From_Behind',)
+ACTIVE = collections.OrderedDict([
+    ('wave1', tuple(n for n, v in SQUADS.items() if v[0] == 1) + (E2 + 'Squad_SWAT_From_Behind',)),
+    ('wave2', tuple(n for n, v in SQUADS.items() if v[0] == 2 and not n.endswith('_Dog'))
+              + (E2 + 'Squad_SniperResponse', E2 + 'Squad_Launcher_Dude_North', E2 + 'Squad_RoadBlock_R2', E2 + 'Squad_RoadBlock_L')),
+    ('wave3', tuple(n for n, v in SQUADS.items() if v[0] == 3))])
+POST_BACK = 300.0                       # GUESS: a post lies this far north of the man's own cover point
+POST_SNAP = 700.0                       # ... on the nearest cell that passes, at most this far from that place
+POST_APART = 220.0                      # GUESS: between two men at their posts (a body is 60 wide)
+POST_LEG = 250.0                        # from every leg of the AI heisters' street lanes (kl_fa_bots_rt.POST_WALL is 200)
+POST_HOLD = 420.0                       # from every place a step of the AI heisters names (kl_fa_bots_rt.check FAILs a
+                                        # lane's hold within 400 of a post of the police: the first plan put four
+                                        # posts 294 .. 374 from a hold)
+POST_COVER = 150.0                      # from another man's cover point
+
 # MORE COVER ON THE STREET (owner, 2026-10-10 evening, after Retomoto with bots: 'maybe add more cars and cover to the 2nd
 # half?'). The level's parked vehicles are NOT static collision: each is a group with a place of its own (parts local to
 # it) directly under the map's 'outside' group (identity at the origin, not a room), and its collision is key-framed

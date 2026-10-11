@@ -30,6 +30,26 @@ Spec, the measurements and every table: re/map_ai.md.
                                                                        targets are named ('in play'). NOT RUN IN THE
                                                                        GAME; a run of its output is a load check, it
                                                                        cannot show the pairing (re/convert_audit.md 9).
+    python kl_map_ai.py spawns <build folder> ...                       WHO PLOPS OUT (owner, 2026-10-11): every enemy
+                                                                       squad - in the world from the load or hidden
+                                                                       until a box / timer first names it, and from
+                                                                       inside that box how near a man appears and
+                                                                       whether in sight (collision ray). Read only
+    python kl_map_ai.py spawnplan <build folder> [options]              what spawnfix would write, nothing written
+    python kl_map_ai.py spawnfix <build folder> <out folder> [options]  a FINISHED build -> a NEW folder: squads in the
+                                                                       world from the load (ZSquadScript field 3 = 1)
+                                                                       and, on Retomoto's street, every man of the
+                                                                       waves at a post of his own behind his cover
+                                                                       point. Tables: kl_fa_author.HALL_ACTIVE,
+                                                                       kl_fa_street.ACTIVE / POSTED / POST_*. Only .prp
+                                                                       and .gms change. NOT RUN IN THE GAME
+        --asleep=hall,wave1,wave2,wave3   Retomoto: these sets stay hidden until their box (posts are still laid)
+        --active=<squad>,<squad>          these squads instead of the map's table (scene paths without the ROOT part)
+        --auto                            also every squad the audit calls PLOP (the way to use it on another map)
+        --no-posts                        nobody is moved
+    python kl_map_ai.py spawndiff <build folder> <out folder>           entity by entity: only a squad's field 3, an
+                                                                       enemy actor group's place and the AFTER_DEATH
+                                                                       points may differ; exit 1 otherwise
   options of apply / all (each switches one part off; default = everything on):
     --no-strength   (1) soldier rows and weapons by class stay as built
     --no-waves      (2) timers, counters, round-start list stay as built
@@ -1418,6 +1438,527 @@ def pairfix(src, dst=None, levels=None, log=print):
     return rep
 
 
+# ------------------------------------------------------------------ SPAWNS: nobody plops out (owner, 2026-10-11)
+# Owner, after Retomoto: 'with the lmg guy and the two pistol guy at the elevator they always spawn in too late, make
+# them spawn a bit early so its not like they just plop out try and do that with other parts if you can' and, as a fed
+# on the street, 'the npc swat are like all bunched together, they should be in position waiting'.
+# READ in kl2.exe (re/retomoto_spawns.md 1): a squad whose ZSquadScript field 3 is 0 has its men HIDDEN and taken
+# out of the actor tables at the level's start (controller phase 5 = vtable slot 16, 0x787a10 -> 0x8d2e20: every
+# member's node gets ZGEOM's Hide; the loader 0x8b2120 stores the field inverted at +0x58), and they are shown again
+# the moment the squad is handed its first goal (0x7f6750 -> 0x7c0d50) - that is: when a box, a timer or a 'wiped out'
+# list first names a rout of theirs. Seen from the box that does it, that is a man appearing out of thin air.
+PLOP_NEAR = 4000.0              # GUESS: a man who appears in sight within this of where the waker stands 'plops out'
+SIGHT_FAR = 9000.0              # sight is not looked for beyond this
+EYE, CHEST = 150.0, 120.0       # above the floor: where the waker looks from, where the man is looked at
+
+
+def _sp_quiet(*_a):
+    pass
+
+
+def _sp_floor(L, p):
+    """The collision floor a man at place p stands on (a place may have the navigation mesh's height, which lies up
+    to 70 under the collision on Retomoto's street) -> (y, found)."""
+    G = L.ground(L.half_of(p))
+    for up in (60.0, 150.0):
+        _c, fy, _near = G.under((p[0], p[1] + up, p[2]))
+        if fy is not None:
+            return fy, True
+    return p[1], False
+
+
+def _sp_sight(G, a, b, step=12.0, slack=8.0, skip=45.0):
+    """Is b seen from a? The straight line through the walk test's collision samples (kl_escape.Walk: every triangle
+    of the static and key-framed shapes sampled every 10; convex shapes - crates, cars - are not in it, and a pane
+    of glass with collision stops the line): no sample within `slack` of the line's height in any cell it crosses.
+    Outside the box the ground was read for nothing is known: the line is clear there."""
+    return G.sight(a, b, step, slack, skip)                 # kl_fa_fedpoints.Ground.sight
+
+
+def _sp_stand(L, k, step=100.0):
+    """Where somebody can stand inside trigger box k -> [(x, floor y, z)]: the box's footprint sampled every `step`,
+    each sample on a polygon of the navigation mesh inside the box's height (any part), at the collision floor."""
+    B = L.B
+    hx, hy, hz = B.box(k)
+    out = []
+    nx, nz = max(1, int(2 * hx / step)), max(1, int(2 * hz / step))
+    for i in range(nx + 1):
+        for j in range(nz + 1):
+            x, y, z = B.world(k, (-hx + 2 * hx * i / nx, 0.0, -hz + 2 * hz * j / nz))
+            hit = L.polys.at(x, y, z, y - hy - 170.0, y + hy)
+            if hit is None:
+                continue
+            fy, _ok = _sp_floor(L, (x, hit[1], z))
+            out.append((x, fy, z))
+    return out
+
+
+def spawn_rows(L):
+    """Every enemy squad of a loaded build (kl_fa_fedpoints.Lv) -> rows (dicts): men, places, in the world from the
+    load or not, what first shows it, and from there how near a man appears and whether in sight.
+    verdict: 'active' (in the world from the load) | 'PLOP' (shown in sight within PLOP_NEAR of where its waker can
+    stand) | 'in sight, far' | 'out of sight' | 'by a timer' (no place to judge) | 'never' (nothing names it)."""
+    import kl_fa_bots_rt as RT
+    B, sc = L.B, L.sc
+    squads = RT.enemy_squads(B)
+    boxes, other = RT.wake_map(B, squads)
+    f = {t: v for t, _i, v in kl_fa.controllers(sc, 'ZSquadScript')}
+    of = {k: t for t in squads for k in range(t, sc.end[t])}
+    fall = collections.defaultdict(list)                # squad -> squads whose 'wiped out' list (field 8) names it
+    for t, v in f.items():
+        for s in v[8] if isinstance(v[8], list) else []:
+            for j in sc.resolve(s):
+                if j in of and of[j] != t and sc.names[t] not in fall[of[j]]:
+                    fall[of[j]].append(sc.names[t])
+    stand = {}
+    rows = []
+    for t, groups in squads.items():
+        men = [B.at(k) for k in range(t + 1, sc.end[t]) if sc.cls(k) == 'ZFFActor' and sc.parent[k] in groups]
+        r = collections.OrderedDict(squad=sc.path[t][5:], node=t, men=len(men), places=[[round(x) for x in m] for m in men],
+                                    active=bool(f[t][3]), wakers=[], fall_back_of=fall.get(t, []))
+        h = L.half_of(men[0])
+        mine = sorted((k for k, hit in boxes.items() if t in hit), key=lambda k: math.dist(B.at(k), h.anchor))
+        G = L.ground(h)
+        for k in mine:
+            if k not in stand:
+                stand[k] = _sp_stand(L, k)
+            S = stand[k]
+            near = seen = None
+            for m in men:
+                my, _ok = _sp_floor(L, m)
+                tgt = (m[0], my + CHEST, m[2])
+                order = sorted(S, key=lambda s: math.dist(s, (m[0], my, m[2])))
+                if order and (near is None or math.dist(order[0], (m[0], my, m[2])) < near):
+                    near = math.dist(order[0], (m[0], my, m[2]))
+                for s in order[:400]:
+                    d = math.dist(s, (m[0], my, m[2]))
+                    if d > SIGHT_FAR or (seen is not None and d >= seen):
+                        break
+                    if _sp_sight(G, (s[0], s[1] + EYE, s[2]), tgt):
+                        seen = d
+                        break
+            r['wakers'].append(collections.OrderedDict(box=sc.path[k][5:], at=[round(x) for x in B.at(k)], half=[round(x) for x in B.box(k)],
+                                                       stand=len(S), nearest=None if near is None else round(near), in_sight=None if seen is None else round(seen)))
+        if r['active']:
+            r['verdict'] = 'active'
+        elif r['wakers']:
+            w = r['wakers'][0]                          # the box nearest the crew's start: ASSUMED the first one crossed
+            r['verdict'] = 'out of sight' if w['in_sight'] is None else 'PLOP' if w['in_sight'] <= PLOP_NEAR else 'in sight, far'
+        elif other.get(t) == 'timer':
+            r['verdict'] = 'by a timer'
+        elif r['fall_back_of']:
+            r['verdict'] = 'by a timer'                 # (a 'wiped out' list: no place to judge either)
+        else:
+            r['verdict'] = 'never'
+        rows.append(r)
+    return rows
+
+
+FED_NEAR = 1500.0                       # a sleeping squad's man this near (horizontal, same floor +-400) to a fed point = he is seen to appear (GUESS)
+
+
+def sleeping_near_fed(L, rows=None, near=FED_NEAR):
+    """Review M1 / S4: -> [(squad, men near, nearest distance, fed point name)] for every squad still hidden from the load
+    (ZSquadScript field 3 = 0) with a man within `near` of an AFTER_DEATH point of the build."""
+    rows = rows if rows is not None else spawn_rows(L)
+    pts = [(r['name'], L.at(k)) for k, r in L.survey()]
+    out = []
+    for r in rows:
+        if r['active']:
+            continue
+        hit = None
+        for m in r['places']:
+            for nm, p in pts:
+                if abs(m[1] - p[1]) < 400.0 and math.hypot(m[0] - p[0], m[2] - p[2]) < near:
+                    d = math.hypot(m[0] - p[0], m[2] - p[2])
+                    if hit is None or d < hit[1]:
+                        hit = (nm, d)
+        if hit:
+            out.append((r['squad'], hit[1], hit[0]))
+    return out
+
+
+def spawns(src, log=print, L=None):
+    """The audit of one build, printed. -> rows."""
+    import kl_fa_fedpoints as FP
+    L = L or FP.Lv(src, _sp_quiet)
+    rows = spawn_rows(L)
+    log('%s: map %s - %d enemy squads, %d men; PLOP = shown in sight within %d m of a place inside the box that first names it' % (
+        src, L.map or '?', len(rows), sum(r['men'] for r in rows), PLOP_NEAR / 100))
+    log('  %-62s %3s  %-14s %s' % ('squad', 'men', 'verdict', 'first named by (box: nearest a man appears to somebody inside it, m / nearest IN SIGHT, m)'))
+    for r in rows:
+        ws = '; '.join('%s: %s / %s' % (w['box'].split('!')[-1].split('\\')[-1], '-' if w['nearest'] is None else '%.0f' % (w['nearest'] / 100),
+                                         'none' if w['in_sight'] is None else '%.0f' % (w['in_sight'] / 100)) for w in r['wakers'])
+        if not ws:
+            ws = 'in the world from the load' if r['active'] else 'a timer / the round start' if r['verdict'] == 'by a timer' else 'NOTHING names it'
+        if r['fall_back_of']:
+            ws += '; also when %s is wiped out' % ', '.join(n.split('!')[-1] for n in r['fall_back_of'])
+        log('  %-62s %3d  %-14s %s' % (r['squad'][-62:], r['men'], r['verdict'], ws))
+    c = collections.Counter(r['verdict'] for r in rows)
+    m = collections.Counter()
+    for r in rows:
+        m[r['verdict']] += r['men']
+    log('RESULT (kl_map_ai spawns): ' + ', '.join('%s %d squad(s) / %d men' % (k, c[k], m[k]) for k in ('PLOP', 'in sight, far', 'out of sight', 'by a timer', 'active', 'never') if c[k]))
+    return rows
+
+
+def _sp_legs(folder):
+    """The legs of the AI heisters' street ways as the build's bots.json has them (kl_fa_bots_rt: facts_rt.street /
+    street_branches: each squad's places in order) -> [((x, y, z), (x, y, z))]; [] without that file."""
+    p = os.path.join(folder, 'bots.json')
+    if not os.path.isfile(p):
+        return []
+    fr = json.load(open(p)).get('facts_rt') or {}
+    rows = [v.get('places') or [] for v in (fr.get('street') or {}).values()]
+    rows += [b.get('places') or [] for v in (fr.get('street_branches') or {}).values() for b in v]
+    return [(tuple(a), tuple(b)) for r in rows for a, b in zip(r, r[1:])]
+
+
+def _sp_leg_dist(legs, p):
+    best = 1e9
+    for a, b in legs:
+        dx, dz = b[0] - a[0], b[2] - a[2]
+        n = dx * dx + dz * dz
+        t = 0.0 if n < 1e-9 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[2] - a[2]) * dz) / n))
+        best = min(best, math.hypot(p[0] - a[0] - t * dx, p[2] - a[2] - t * dz))
+    return best
+
+
+def _sp_vehicles(L):
+    """The static vehicles of the street -> [(node, half width, half length)]: the walk test does not see them (their
+    collision is a convex box, V_Coli_Hero_01, and kl_escape.Walk leaves convex shapes out), so a 'free cell' may lie
+    inside a car. Sizes: kl_fa_street.BUS / CAR (measured there); the SWAT truck and van as a bus's width and 4 m of
+    half length (GUESS). A vehicle's length lies along its local Z (kl_fa_street.footprints)."""
+    import kl_fa_street as st
+    sc, out = L.sc, []
+    for k in range(1, len(sc.nodes)):
+        n = sc.names[k]
+        if n.startswith('Vehicles_static!') and sc.cls(k) == 'ZGROUP' and not L.B.ents[k - 1].flags & 0x400:
+            hw, hl = (st.BUS[0], st.BUS[1]) if 'Bus' in n else (st.BUS[0], 400.0) if 'SWAT' in n else (st.CAR[0], st.CAR[1])
+            out.append((k, hw, hl))
+    return out
+
+
+def _sp_in_vehicle(L, veh, p, body=70.0):
+    for k, hw, hl in veh:
+        at = L.B.at(k)
+        if abs(at[0] - p[0]) > hl + body + 1.0 or abs(at[2] - p[2]) > hl + body + 1.0 or abs(at[1] - p[1]) > 400.0:
+            continue
+        q = L.B.local(k, (p[0], at[1], p[2]))
+        if abs(q[0]) <= hw + body and abs(q[2]) <= hl + body:
+            return L.sc.names[k].split('!')[-1]
+    return None
+
+
+def _sp_named(sc, names, what):
+    out = []
+    for n in names:
+        hit = sc.resolve(full(n))
+        if len(hit) != 1 or not any(sc.p.key(nm) == 'ZSquadScript' for nm, _b in sc.nodes[hit[0]]['ctrls']):
+            raise ValueError('%s: %s is not one squad of this build' % (what, n))
+        out.append(hit[0])
+    return out
+
+
+def spawn_plan(L, opt=None, log=print):
+    """What spawnfix writes -> dict: 'active' [squad path] (ZSquadScript field 3 -> 1), 'moves' [dict(node, was, to,
+    why)] (an actor group's place), 'audit' (spawn_rows before), 'notes'.
+    opt: 'active' = None (the map's table: Retomoto = kl_fa_author.HALL_ACTIVE + kl_fa_street.ACTIVE; another map:
+    nothing) | [squad paths]; 'auto' = True adds every squad the audit calls PLOP; 'asleep' = set names of
+    kl_fa_street.ACTIVE left asleep ('hall' = kl_fa_author's four); 'posts' = False: nobody is moved."""
+    import kl_fa_fedpoints as FP
+    import kl_fa_bots_rt as RT
+    opt = dict({'active': None, 'auto': False, 'asleep': (), 'posts': True}, **(opt or {}))
+    B, sc = L.B, L.sc
+    rows = spawn_rows(L)
+    P = collections.OrderedDict(folder=L.folder, map=L.map, options={k: (sorted(v) if isinstance(v, (set, tuple)) else v) for k, v in opt.items()},
+                                audit=rows, active=[], moves=[], notes=[])
+    retomoto = L.map == 'M09_A' and len(L.halves) == 2
+    posted = []
+    if opt['active'] is not None:
+        act = _sp_named(sc, opt['active'], '--active')
+    elif retomoto:
+        import kl_fa_author as au
+        import kl_fa_street as st
+        sets = collections.OrderedDict([('hall', au.HALL_ACTIVE)] + list(st.ACTIVE.items()))
+        unknown = set(opt['asleep']) - set(sets)
+        if unknown:
+            raise ValueError('--asleep: %s is none of %s' % (sorted(unknown), list(sets)))
+        act = [t for name, names in sets.items() if name not in opt['asleep'] for t in _sp_named(sc, names, name)]
+        posted = _sp_named(sc, st.POSTED, 'POSTED') if opt['posts'] else []
+    else:
+        act = []
+    if opt['auto']:
+        act += [r['node'] for r in rows if r['verdict'] == 'PLOP' and r['node'] not in act]
+    f3 = {t: v[3] for t, _i, v in kl_fa.controllers(sc, 'ZSquadScript')}
+    for t in act:
+        if f3[t]:
+            P['notes'].append('%s is in the world from the load already' % sc.names[t])
+        else:
+            P['active'].append(sc.path[t][5:])
+    if not posted:
+        return P
+    # ---- the posts (Retomoto's street)
+    import kl_fa_street as st
+    h = L.halves[1]
+    L.ground(h)
+    legs = _sp_legs(L.folder)
+    if not legs:
+        P['notes'].append('no bots.json with the AI heisters\' street ways beside the archive: the posts are not held off their legs')
+    squads = RT.enemy_squads(B)
+    cover_of, covers = {}, []                           # actor group -> its own RunToCover point; every such point
+    for k, _i, v in kl_fa.controllers(sc, 'RunToCoverPosInfoRout'):
+        covers.append(B.at(k))
+        first = sc.names[sc.parent[k]].startswith('10_')
+        for g in sc.resolve(v[5]) if isinstance(v[5], str) and v[5] else []:
+            if g not in cover_of or first:
+                cover_of[g] = B.at(k)
+    veh = _sp_vehicles(L)
+    npcs, L.npcs = L.npcs, []                           # (candidates() keeps NPC_FAR from where the men stand NOW)
+    try:
+        mine = {g for t in posted for g in squads.get(t, [])}
+        taken = [B.at(g) for t, gs in squads.items() for g in gs if g not in mine and B.at(g)[1] < 5000.0]
+        for t in posted:
+            for g in sorted(squads.get(t, [])):
+                was = B.at(g)
+                cv = cover_of.get(g)
+                want = (cv[0], cv[2] + st.POST_BACK) if cv else (was[0], was[2])
+                pool = []
+                for c in FP.candidates(L, h, centre=want, radius=st.POST_SNAP, step=1, bot_far=st.POST_HOLD, far_from_start=0.0):
+                    if any(FP.hdist(c, q) < st.POST_APART for q in taken):
+                        continue
+                    if any(FP.hdist(c, q) < st.POST_COVER for q in covers if q is not cv):
+                        continue
+                    if legs and _sp_leg_dist(legs, c) < st.POST_LEG:
+                        continue
+                    if _sp_in_vehicle(L, veh, c):
+                        continue
+                    pool.append(c)
+                if not pool:
+                    P['notes'].append('%s: no free cell within %d of (%d, %d) passes every test - he stays at (%d, %d)' % (sc.path[g][5:], st.POST_SNAP, *want, was[0], was[2]))
+                    taken.append(was)
+                    continue
+                c = min(pool, key=lambda c: (round(math.hypot(c[0] - want[0], c[2] - want[1]) / 20.0), c[0], c[2]))
+                # his height: as far above the navigation mesh as he stood (F07's men are laid AT the mesh's height by
+                # kl_fa_street.relay, the campaign's 45 above it at the collision floor's: both stand in the game)
+                hit = L.polys.at(c[0], c[1], c[2], c[1] - 120.0, c[1] + 60.0, part=h.part)
+                old = L.polys.at(was[0], was[1], was[2], was[1] - 120.0, was[1] + 60.0, part=h.part)
+                to = (c[0], (hit[1] + (was[1] - old[1] if old else 0.0)) if hit else was[1], c[2])
+                taken.append(to)
+                if FP.hdist(to, was) < 1.0:
+                    continue
+                P['moves'].append(collections.OrderedDict(
+                    node=sc.path[g][5:], squad=sc.path[t][5:], was=[round(x, 1) for x in was], to=[round(x, 1) for x in to],
+                    cover=None if cv is None else [round(x, 1) for x in cv], moved=round(FP.hdist(to, was)),
+                    leg=round(_sp_leg_dist(legs, to)) if legs else None,
+                    why=('%d north of his cover point (%d, %d)' % (st.POST_BACK, cv[0], cv[2]) if cv else 'no cover point of his own: where he stood') +
+                        ', the nearest free cell %d from that place' % math.hypot(c[0] - want[0], c[2] - want[1])))
+    finally:
+        L.npcs = npcs
+    return P
+
+
+def _sp_show(P, log=print):
+    log('  IN THE WORLD FROM THE LOAD (ZSquadScript field 3: 0 -> 1): %d squad(s)' % len(P['active']))
+    men = {r['squad']: r for r in P['audit']}
+    for s in P['active']:
+        r = men.get(s, {})
+        log('    %-66s %d men, was: %s' % (s[-66:], r.get('men', 0), r.get('verdict', '?')))
+    log('  POSTS: %d man/men moved' % len(P['moves']))
+    for m in P['moves']:
+        log('    %-58s (%6d %5d %6d) -> (%6d %5d %6d)  %4d moved%s; %s' % (m['node'][-58:], *m['was'], *m['to'], m['moved'],
+                                                                         '' if m['leg'] is None else ', %d from the nearest leg of a heister' % m['leg'], m['why']))
+    for s in P['notes']:
+        log('  NOTE: ' + s)
+
+
+def spawnfix(src, dst, opt=None, log=print):
+    """A FINISHED build -> a NEW folder with the squads of the plan in the world from the load and the street's men at
+    posts of their own. Only .prp (ZSquadScript field 3; an actor group's ZGEOM[2]) and .gms (those groups' place)
+    change: no entity is added, removed or changes pool. -> the report (also spawnfix.json / spawnfix.txt)."""
+    import hashlib
+    import kl_graft
+    import kl_fa_fedpoints as FP
+    import kl_fa_bots as KB
+    if os.path.exists(dst) and os.listdir(dst):
+        raise ValueError('%s exists and is not empty: this step writes into a new folder only' % dst)
+    L = FP.Lv(src, _sp_quiet)
+    B, sc = L.B, L.sc
+    if sc.p.serialize() != B['.prp']:
+        raise ValueError('the build\'s .prp does not re-serialise byte for byte: not changed')
+    KB._roundtrip(B)
+    _d0, bad0, paths0, _n0 = J.check(sc, log=lambda *_a: None)
+    P = spawn_plan(L, opt, log)
+    res = lambda s: sc.resolve(full(s))[0]
+    for s in P['active']:
+        put(sc, res(s), 'ZSquadScript', f3=1)
+    for m in P['moves']:
+        g = res(m['node'])
+        par = sc.parent[g]
+        loc = B.local(par, tuple(m['to'])) if par else tuple(m['to'])
+        e = B.ents[g - 1]
+        old = struct.unpack('<3f', e.trans[:12])
+        if max(abs(a - b) for a, b in zip(B.local(par, B.at(g)) if par else B.at(g), old)) > 0.5:
+            raise ValueError('%s: its record\'s place is not its place in its parent\'s frame' % m['node'])
+        FP._set_point(L, g, loc, None, None)
+    data, bad, paths, _n = J.check(sc, log=lambda *_a: None)
+    if len(bad) > len(bad0) or len(paths) > len(paths0):
+        raise ValueError('after the change %d objects do not fit their class (%d before) and %d paths do not resolve (%d before)' % (len(bad), len(bad0), len(paths), len(paths0)))
+    faults_ = B.scene.check()
+    if faults_:
+        raise ValueError('kl_scene.check: %s' % faults_[:3])
+    gms, buf = B.scene.write()
+    new = dict(B.files)
+    new[B.ext['.prp']], new[B.ext['.gms']], new[B.ext['.buf']] = data, kl_gms.pack(gms), buf
+    changed = sorted(e for e, n in B.ext.items() if new[n] != B.files[n])
+    if not set(changed) <= {'.prp', '.gms'}:
+        raise ValueError('members changed: %s' % changed)
+    os.makedirs(dst, exist_ok=True)
+    out = kl_graft.write_zip(os.path.join(dst, os.path.basename(L.zip)), [(n, new[n]) for n in B.order])
+    for fn in os.listdir(src):
+        q = os.path.join(src, fn)
+        if os.path.isfile(q) and q != L.zip and not fn.startswith('spawnfix.') and fn not in FP.STALE:
+            shutil.copyfile(q, os.path.join(dst, fn))
+    sj = os.path.join(dst, 'steps.json')
+    if os.path.isfile(sj):
+        import kl_maps
+        stp = json.load(open(sj))
+        stp['spawnfix'], stp['final'] = changed, kl_maps.member_ids(dst, L.slot)
+        stp['same'] = [e for e in stp.get('same', []) if e not in changed]
+        with open(sj, 'w') as fh:
+            json.dump(stp, fh, indent=1)
+    # read back
+    L2 = FP.Lv(dst, _sp_quiet)
+    rows2 = spawn_rows(L2)
+    v2 = {L2.sc.path[t][5:]: v[3] for t, _i, v in kl_fa.controllers(L2.sc, 'ZSquadScript')}
+    probs = ['%s: field 3 reads %r' % (s, v2.get(s)) for s in P['active'] if not v2.get(s)]
+    for m in P['moves']:
+        at = L2.B.at(L2.sc.resolve(full(m['node']))[0])
+        if math.dist(at, m['to']) > 1.0:
+            probs.append('%s stands at (%d, %d, %d), not at its post' % (m['node'], *at))
+    rep = collections.OrderedDict(source=src, source_sha1=hashlib.sha1(open(L.zip, 'rb').read()).hexdigest(), out=dst,
+                                  out_sha1=hashlib.sha1(open(out, 'rb').read()).hexdigest(), members_changed=changed, active=P['active'],
+                                  moves=P['moves'], notes=P['notes'], options=P['options'], problems=probs,
+                                  audit_before=[{k: v for k, v in r.items() if k != 'node'} for r in P['audit']],
+                                  audit_after=[{k: v for k, v in r.items() if k != 'node'} for r in rows2])
+    with open(os.path.join(dst, 'spawnfix.json'), 'w') as fh:
+        json.dump(rep, fh, indent=1)
+    lines = ['kl_map_ai spawnfix: %s (archive sha1 %s) -> %s (sha1 %s)' % (src, rep['source_sha1'], out, rep['out_sha1']),
+             '  members changed: %s' % (' '.join(changed) or 'none')]
+    _sp_show(P, lines.append)
+    c = collections.Counter(r['verdict'] for r in rows2)
+    lines.append('  read back: ' + ', '.join('%s %d' % (k, n) for k, n in c.items()) + '; problems: %d' % len(probs))
+    lines += ['  PROBLEM: ' + s for s in probs]
+    lines.append('  NOT RUN IN THE GAME: live checks S0 .. S4 of re/retomoto_spawns.md before this build goes on the owner\'s tab')
+    with open(os.path.join(dst, 'spawnfix.txt'), 'w') as fh:
+        fh.write('\n'.join(lines) + '\n')
+    for s in lines:
+        log(s)
+    log('RESULT (kl_map_ai spawnfix): %s' % ('PASS' if not probs else 'FAIL (%d)' % len(probs)))
+    return rep
+
+
+def spawndiff(src, dst, log=print):
+    """What differs between two builds of one level, entity by entity, judged against what spawnfix and
+    kl_fa_fedpoints mean to change -> True when nothing else does. Allowed: members .prp and .gms; in the .prp a
+    ZSquadScript's field 3, the place (ZGEOM[2]) of a group that holds an enemy actor, ZGEOM[1..3] of an AFTER_DEATH
+    spawn point; in the .gms those groups' place and the points' matrix, place and flag 0x400; beside the archive
+    spawnfix.*, fedpoints.*, steps.json. Every other property, controller value and record field of every entity is
+    compared (name, type, model, aux, REF, raw block, group, parent, children, list key, list links)."""
+    import hashlib
+    import kl_fa_fedpoints as FP
+    A, Bn = FP.Lv(src, _sp_quiet), FP.Lv(dst, _sp_quiet)
+    ok = [True]
+    def bad(s):
+        ok[0] = False
+        log('  UNEXPECTED: ' + s)
+    with zipfile.ZipFile(A.zip) as a, zipfile.ZipFile(Bn.zip) as b:
+        ia, ib = a.infolist(), b.infolist()
+        if [i.filename.rsplit('_Main', 1)[-1] for i in ia] != [i.filename.rsplit('_Main', 1)[-1] for i in ib]:
+            bad('the member list changed')
+        for i, j in zip(ia, ib):
+            e, same = i.filename.rsplit('_Main', 1)[-1], (i.CRC, i.file_size) == (j.CRC, j.file_size)
+            log('  member %-14s %s' % (e, 'same (CRC, %d bytes)' % i.file_size if same else 'CHANGED %d -> %d bytes' % (i.file_size, j.file_size)))
+            if not same and e not in ('.prp', '.gms'):
+                bad('member %s differs' % e)
+    sha = lambda p: hashlib.sha1(open(p, 'rb').read()).hexdigest()
+    fa = {f[len(A.slot):] if f.startswith(A.slot) else f: f for f in os.listdir(src) if not f.lower().endswith('_main.zip')}
+    fb = {f[len(Bn.slot):] if f.startswith(Bn.slot) else f: f for f in os.listdir(dst) if not f.lower().endswith('_main.zip')}
+    free = lambda f: f.startswith(('spawnfix.', 'fedpoints.')) or f == 'steps.json' or f in FP.STALE
+    same = 0
+    for f in sorted(set(fa) | set(fb)):
+        if f not in fa or f not in fb:
+            log('  beside: %-28s %s' % (f, 'NEW' if f not in fa else 'GONE'))
+            if not free(f):
+                bad('file %s is %s' % (f, 'new' if f not in fa else 'gone'))
+        elif sha(os.path.join(src, fa[f])) != sha(os.path.join(dst, fb[f])):
+            log('  beside: %-28s CHANGED' % f)
+            if not free(f):
+                bad('file %s differs' % f)
+        else:
+            same += 1
+    log('  beside: %d other file(s) equal' % same)
+    sa, sb = A.sc, Bn.sc
+    if sa.names != sb.names or sa.tids != sb.tids:
+        bad('the entities differ')
+        return False
+    pts = set(A.points)
+    lab = J.labels('dd', 'ZSpawnPoint')
+    pt_ok = {lab.index('ZGEOM[%d]' % i) for i in (1, 2, 3)}
+    grp = {sa.parent[k] for k in range(1, len(sa.nodes)) if sa.cls(k) == 'ZFFActor' and A.B.values(k).get('ZFFActor[0]') == 'Enemy'}
+    n_sq, n_mv, n_pt = [], [], []
+    for k in range(1, len(sa.nodes)):
+        na, nb = sa.nodes[k], sb.nodes[k]
+        if J.text(sa, na['props']) != J.text(sb, nb['props']):
+            va, vb = kl_fa.node_values(sa, k), kl_fa.node_values(sb, k)
+            d = {i for i in range(max(len(va), len(vb))) if i >= len(va) or i >= len(vb) or va[i] != vb[i]}
+            if k in pts and d <= pt_ok:
+                n_pt.append(k)
+            elif k in grp and d == {J.labels('dd', sa.cls(k)).index('ZGEOM[2]')}:
+                n_mv.append(k)
+            else:
+                bad('node %s: properties %s differ' % (sa.path[k], sorted(d)))
+        ca = [(sa.p.key(nm), [kl_fa.value(sa, u) for u in units(b[1:-1])]) for nm, b in na['ctrls']]
+        cb = [(sb.p.key(nm), [kl_fa.value(sb, u) for u in units(b[1:-1])]) for nm, b in nb['ctrls']]
+        if ca == cb:
+            continue
+        if [c[0] for c in ca] == [c[0] for c in cb] and all(x == y or (x[0] == 'ZSquadScript' and x[1][:3] + x[1][4:] == y[1][:3] + y[1][4:] and (x[1][3], y[1][3]) == (0, 1))
+                                                           for x, y in zip(ca, cb)):
+            n_sq.append(k)
+        else:
+            bad('node %s: controllers differ: %s' % (sa.path[k], [c[0] for c, c2 in zip(ca, cb) if c != c2]))
+    log('  .prp: %d squad(s) with field 3 0 -> 1, %d enemy actor group(s) with another place, %d AFTER_DEATH point(s) with another matrix / place / hidden flag' % (len(n_sq), len(n_mv), len(n_pt)))
+    for k in n_sq:
+        log('      active   %s' % sa.path[k][5:])
+    for k in n_mv:
+        log('      moved    %-70s (%6d %5d %6d) -> (%6d %5d %6d)' % (sa.path[k][5:][-70:], *A.B.at(k), *Bn.B.at(k)))
+    for k in n_pt:
+        log('      point    %-70s (%6d %5d %6d) -> (%6d %5d %6d)' % (sa.path[k][5:][-70:], *A.B.at(k), *Bn.B.at(k)))
+    ia, ib = {id(e): n for n, e in enumerate(A.B.ents)}, {id(e): n for n, e in enumerate(Bn.B.ents)}
+    def rest(e, ix):
+        at = lambda t: None if t is None else ix.get(id(t), -1)
+        return (e.name, e.tid, e.model, e.aux, e.ref, e.raw, e.group, at(e.parent), [at(c) for c in e.kids], e.lkey,
+                None if e.links is None else [(at(t), bits) for t, bits in e.links])
+    ne = 0
+    if len(A.B.ents) != len(Bn.B.ents):
+        bad('.gms: %d entity records -> %d' % (len(A.B.ents), len(Bn.B.ents)))
+    for k, (ea, eb) in enumerate(zip(A.B.ents, Bn.B.ents), 1):
+        ra, rb = rest(ea, ia), rest(eb, ib)
+        if (ea.rot, ea.trans, ea.flags) != (eb.rot, eb.trans, eb.flags) or ra != rb:
+            ne += 1
+            if ra != rb:
+                bad('.gms record of %s differs: %s' % (sa.path[k], ', '.join(n for n, x, y in zip(
+                    ('name', 'type', 'model', 'aux', 'REF', 'raw', 'group', 'parent', 'children', 'list key', 'list links'), ra, rb) if x != y)))
+            elif k in pts:
+                if (ea.flags ^ eb.flags) & ~0x400:
+                    bad('.gms record of %s: flags %#x -> %#x' % (sa.path[k], ea.flags, eb.flags))
+            elif k not in grp or ea.rot != eb.rot or ea.flags != eb.flags:
+                bad('.gms record of %s differs (matrix / place / flags)' % sa.path[k])
+    log('  .gms: %d entity record(s) differ (the place of the moved groups; matrix, place, flag 0x400 of the AFTER_DEATH points); every other field of all %d records is equal' % (ne, len(A.B.ents)))
+    log('RESULT (kl_map_ai spawndiff): %s' % ('only what the steps mean to change differs' if ok[0] else 'UNEXPECTED DIFFERENCES'))
+    return ok[0]
+
+
 def main():
     global HEALTH_SCALE
     a = [x for x in sys.argv[1:] if not x.startswith('--')]
@@ -1438,6 +1979,22 @@ def main():
     elif len(a) in (2, 3) and a[0] == 'pairfix':
         lv = next((x.split('=')[1].split(',') for x in o if x.startswith('--levels=')), None)
         pairfix(a[1], a[2] if len(a) == 3 else None, lv)
+    elif len(a) >= 2 and a[0] == 'spawns':
+        for src in a[1:]:
+            spawns(src)
+    elif len(a) in (2, 3) and a[0] in ('spawnplan', 'spawnfix'):
+        so = {'auto': '--auto' in o, 'posts': '--no-posts' not in o,
+              'asleep': tuple(x for y in o if y.startswith('--asleep=') for x in y.split('=', 1)[1].split(',') if x),
+              'active': next(([x for x in y.split('=', 1)[1].split(',') if x] for y in o if y.startswith('--active=')), None)}
+        if a[0] == 'spawnplan' and len(a) == 2:
+            import kl_fa_fedpoints as FP
+            _sp_show(spawn_plan(FP.Lv(a[1], _sp_quiet), so))
+        elif a[0] == 'spawnfix' and len(a) == 3:
+            sys.exit(1 if spawnfix(a[1], a[2], so)['problems'] else 0)
+        else:
+            print(__doc__)
+    elif len(a) == 3 and a[0] == 'spawndiff':
+        sys.exit(0 if spawndiff(a[1], a[2]) else 1)
     elif len(a) == 3 and a[0] == 'check':
         compare(a[1], a[2])
     elif len(a) >= 3 and a[0] == 'all':

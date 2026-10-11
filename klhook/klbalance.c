@@ -162,6 +162,57 @@
  *       when you change targets between a near and a far one. NOT for a police player (FedToCrew is his number), not
  *       while YOU are the traitor (the game counts no hits then: flat YouToCrew). The stock values come back as the
  *       table's other values do. Log=2: a line when the target or the factor changes (one a second at most).
+ *    a7. Tough: EVERYBODY A BIT MORE HEALTH (2026-10-11, track X2; NOT RUN IN THE GAME; re\balance.md 11).
+ *       The owner, after a round as a fed: 'they die really quick, like i was saying everyone should have a bit more hp'.
+ *       Tough=<f> (0.25 .. 10; 1 or no key = nothing) is ONE factor on every maximum health of the round, the damage
+ *       factors left alone - so who needs how many hits against whom keeps its RATIO and every fight lasts f times as long:
+ *         - every NPC (police, guards, AI heisters, civilians): its health is made by ZSoldier@CPPScript slot 44 = 0x8fbac0
+ *           as  lerp(tuning+0x364, +0x368; ZSoldier field 7) x ROW[+8] x field 9..12  and stored through the actor's slots
+ *           +0x674 / +0x670 (0x8fbb5b fld [eax+8]; the other script class's 0x74d960 does the same with [script+0x558],
+ *           0x74d99c). ROW = 0x831f00(tuning): in Arcade [tuning + 0x594 + 4 * option Difficulty] = one of the four story
+ *           rows tuning+0x42c / +0x450 / +0x474 / +0x498 (+8 = 0.5 / 0.9 / 1.15 / 1.3, the 'NPC health x' of the first log
+ *           line). Those two instructions are the ONLY readers of ROW+8 (all eleven callers of 0x831f00 looked at). The
+ *           hook writes the four floats x f in the pass that arms the dial - the pass after the level's archive is opened
+ *           (KLHook.log: 40 ms after it at 19:39:49.810 / .851, about 200 ms in the later loads, 20:52:21.178 / .374 and
+ *           20:57:19.422 / .623; the rules object exists before the archive is opened, the player's health object
+ *           appears 1.6 .. 2 s after the pass) - and
+ *           puts them back with the table. ASSUMED, NOT READ: that slot 44 runs for every actor AFTER that pass (who calls
+ *           the slot was not found: it is virtual). The line 'Tough: the AI heisters' maximum health' 2 s into every round
+ *           says whether it did: 378.0 at Tough 1.5 on a level-1 heister (252.0 on ALL of them = it did not; one odd
+ *           record = the actor [gamedata+0x4cf0], who takes ROW[+0], 0x8fbb29 / 0x6fd7c0).
+ *           Written only when the four pointers at tuning+0x594 name those four rows and the four floats are the code's.
+ *         - the human, heister or fed: the live health object, on top of PlayerHealth (maximum = the game's x
+ *           PlayerHealth x Tough); a full health is raised with the maximum (the game sets both before the hook sees the
+ *           object: without that a new round would start at 550 of 825, under the 0.9 x maximum 0x46f210 asks about).
+ *       [Bots] CrewHealth (klgrudge.c) comes ON TOP for the AI heisters: it scales the maximum it finds.
+ *       NOT changed by it, so 'every ratio stays' has EXCEPTIONS (review X2 S3) - everything that is an ABSOLUTE number
+ *       of health: the knock-down's trigger (kldown.c DownHealth: 80 of 550 = 14.5 %, of 825 = 9.7 %; set DownHealth x
+ *       Tough by hand, 120 at 1.5) and kldown's MinHit / Burst, the point-blank step (a hundred bullets), every blast of
+ *       a fixed damage, the damage the van's departure deals the crew left behind (1,000,000). kldown.c's HealthPct is a
+ *       share of the maximum and follows. The game's own tally of your hits on a crew
+ *       member is in per cent of HIS maximum (0x4d17f0): the yellow card and Retaliate / Grudge come f times later.
+ *    a8. THE FED IS NOT A ONE-MAN ARMY: CrewToFed, FedHeadShot / HeadShot (2026-10-11, track X2; NOT RUN IN THE GAME).
+ *       The owner: 'especially when im a fed im dealing wayy too much damage and they do nothing to me'. Measured
+ *       (re\balance.md 11.1): under his Risk=1 the fed's bullet costs a heister x 1.00 (YouToCrew) and a head shot x 10,
+ *       a heister's costs the fed x 0.50 (CrewToYou) of 550 that are whole again 8 s after the last hit: 4 body hits or
+ *       ONE head shot against 22 hits from a man who misses every second shot. By the EXE READING a police player is a
+ *       candidate target for a team-Ally soldier and for nobody else (0x8824e7; 0x8826fb: scored, not a friend) - but
+ *       NO LOG OF ANY RUN HOLDS ONE HIT OF A HEISTER ON A FED (review X2 M1: the only Log=2 fed run, FD3_DM03_die, has
+ *       a 27.5-health fed alive 145 s beside five heisters and no 'you lost' line; the owner's two deaths as a fed name
+ *       no killer), and how a soldier RANKS him among the police AI was not read. So 'it is the numbers' is the
+ *       reading, NOT a seen fact: live check TH (re\balance.md 11.7) decides it before these keys are the answer.
+ *       CrewToFed=<n>: a heister's bullet on you while you are police, written into the slot a police player's victim
+ *         routine reads for an Ally attacker (+0x08, 0x8b80a0) in place of CrewToYou's, as FedToCrew is at +0x0c: same
+ *         pass, only while the three pairs stand exchanged (FedMirror=1), not under Ramp. No key = CrewToYou's number.
+ *       FedHeadShot=<x> / HeadShot=<x>: the body-part factor of a head (bone types 2 / 3) while you are police / while
+ *         you are a heister; the game's is 10. The two floats are .data globals 0xcdeffc / 0xcdf000 that 0x572f60 hands
+ *         out (its two callers: 0x61acb8 an NPC victim, 0x4db7ff the player as victim); 0x45c490 fills all ten from
+ *         tuning+0x404 .. +0x428 (+0x41c / +0x420 the two heads: read as 'the game's own', never written). An NPC
+ *         shooter turns a head into a body hit before the table is asked (0x61ac87, 0x4db7e7), so in Arcade - one human -
+ *         the two globals are 'the HUMAN's head shot on any NPC', police AI and heisters alike. Written every pass while
+ *         the dial acts, the tuning's values back otherwise; a value found there that is neither is left alone.
+ *       [Fed] Hunted (asked for in case the AI heisters did not treat a police human as an enemy): NOT BUILT - by the
+ *         reading they do; it is OWED if TH shows no 'you lost' line within 30 s in sight of live heisters.
  *    a4. THE POINT-BLANK RULE, keys PointBlankToYou / PointBlankToCrew / PointBlankToCop (2026-10-11; NOT RUN IN THE
  *       GAME; re\melee_damage.md has the reading and every address). What looks like a guard's melee is a rule of the
  *       soldier's FIRE TASK (kl2 0x8c62e0, called at every step of a burst, 0.1 .. 0.2 s): while his target is within
@@ -223,9 +274,10 @@
  *       step: ... the hit's scale 100 -> 2.00'), the first 200 of an arming.
  *
  * 3. NOT DONE HERE
- *    NPC health (level data: kl_map_ai's rows), accuracy (ZSoldier field 4: 100 on M01 / M02 / M03, 55 in stock -
+ *    NPC health per class (level data: kl_map_ai's rows; Tough, 2 a7, is one factor for all of them), accuracy (ZSoldier field 4: 100 on M01 / M02 / M03, 55 in stock -
  *    with CopToYou 1.0 that may be too much; re\balance.md 6 has the level-side answer), the campaign difficulty
- *    global (written by the option system and saved to the profile: only read here), the body part table.
+ *    global (written by the option system and saved to the profile: only read here), the body part table but for the
+ *    two head floats (2 a8).
  *
  * WIRING (klhook.c; nothing else of the hook changes)
  *   #include "klbalance.c"       after  #include "klbot.c"      (it uses klb_level, the 'not the stock level' test)
@@ -247,6 +299,12 @@
 #define KLR_NF        6                       /* the floats at R+0x00, +0x04 .. +0x14 */
 #define KLR_OFF       0x1c                    /* the seventh: an Ally NPC shooter at another heist stage than the player */
 #define KLR_ABS(x)    ((x) < 0 ? -(x) : (x))
+/* Tough and the head factor (sections 2 a7 / a8; every address read 2026-10-11, re\balance.md 11) */
+#define KLR_ROWS      0x42c                   /* tuning: the four story difficulty rows of 0x24 bytes; +8 = NPC health (0x8fbb5b, 0x74d99c) */
+#define KLR_ROWPTR    0x594                   /* tuning: four pointers to them, picked by the option Difficulty (0x831f4b) */
+#define KLR_HEAD_SRC  0x41c                   /* tuning: the body-part factors of bone types 2 / 3 as 0x45c490 copies them out (+0x41c, +0x420) */
+#define KLR_HEAD_G2   0x00cdeffc              /* .data: bone type 2 (0x572fb9) */
+#define KLR_HEAD_G3   0x00cdf000              /* .data: bone type 3 (0x572f71) */
 /* the point-blank rule (section 2 a4; every address read 2026-10-11, re\melee_damage.md) */
 #define KLR_ACTOR_VT  0x00bb3bac              /* ZFFActor */
 #define KLR_DB_VT     0x00b8fa04              /* ZEngineDataBase; the one object is [[0xdd2640]+0xac] (0x8c63fc / 0x8c6401) */
@@ -260,6 +318,8 @@
 #define KLR_PB_LINES  200                     /* Log=2: steps listed per arming; the rest are counted only */
 
 static int klb_level(char why[200]);          /* klbot.c: 1 only on a level whose archive is NOT the stock one */
+#define KLR_DOWN 2
+static float kld_factor(int k); static int kld_moving(void); static float kld_pb(float want); static int kld_pb_key(void);       /* kldown.c (track R8) */
 
 static const char *const klr_key[KLR_NF] = { "CopToCrew", "CrewToCop", "CopToYou", "YouToCop", "CrewToYou", "YouToCrew" };
 static const int klr_kind[KLR_NF] = { 1, -1, 1, -1, 1, 0 };      /* Ramp: 1 = at least stock, -1 = at most stock, 0 = as given */
@@ -291,6 +351,9 @@ static struct {
     float health, delay, full;                /* 0 = leave */
     float off;                                /* CrewOffStage; < 0 = leave +0x1c as the game has it */
     float fed;                                /* FedToCrew (2 a5); < 0 = a police player's bullet on a heister is YouToCrew's number */
+    float tofed;                              /* CrewToFed (2 a8); < 0 = a heister's bullet on a police player is CrewToYou's number */
+    float tough;                              /* Tough (2 a7); 0 = off */
+    float head, fedhead;                      /* HeadShot / FedHeadShot (2 a8); < 0 = the game's own */
 } klr;
 
 struct klr_row { float f[KLR_NF]; float off; };           /* off = the float at +0x1c */
@@ -300,7 +363,9 @@ struct klr_val { float v0, wrote; };          /* v0 = what the game gave, wrote 
    is not 'fresh': its v0 is still what the GAME gave (review S3 of re\balance_fedmirror_review.md: taken as fresh, the
    hook's own 401.5 would have been scaled a second time until the game wrote a new maximum). rules = the round object
    the record was made under: another one is another level's objects, even at the same addresses. */
-struct klr_pl { DWORD player, h, rules, used; struct klr_val max, delay, full; float seen; };
+struct klr_pl { DWORD player, h, rules, used; struct klr_val max, delay, full; float seen;
+                float clamp, clampto; };      /* a HURT man's health before this file lowered it to a smaller maximum, and that maximum
+                                                 (review X2 S2: a put-back followed by a raise must not heal him); 0 = none */
 static struct { int have; DWORD clock; struct klr_pl e[4]; } klr_p;
 
 static int klr_finite(float f) { return f == f && f > -1e9f && f < 1e9f; }
@@ -492,9 +557,11 @@ static void klr_table_tick(int arcade, int act, int level)
             int kk = mir && (klr.f[k] >= 0 || klr.f[klr_mir[k]] >= 0) ? klr_mir[k] : k;
             float want = act ? klr_want(kk, stock[L].f[kk]) : stock[L].f[k];
             if (act && mir && k == 3 && klr.fed >= 0) want = klr.fed;       /* FedToCrew (2 a5): the float a police player's bullet on an Ally NPC reads (0x7c1bf0) */
+            if (act && mir && k == 2 && klr.tofed >= 0) want = klr.tofed;   /* CrewToFed (2 a8): the float an Ally NPC's bullet on a police player reads (0x8b80a0) */
             if (k == 5 && farm != 1.0f) want *= farm;                      /* YouToCrewFar (2 a6) */
+            if (act && !mir && (k == 2 || k == 4)) want *= kld_factor(k);     /* kldown.c: DownFromCop / DownFromCrew while he is knocked down */
             if (want != cur[L].f[k]) {
-                int isfar = act && k == 5 && farm != farwas;               /* a change of the range factor is not the dial's line */
+                int isfar = act && ((k == 5 && farm != farwas) || (applied && !mir && (k == 2 || k == 4) && kld_moving()));               /* a change of the range factor is not the dial's line */
                 int w = klh_data((void *)(DWORD_PTR)(R + 4 * k), &want, 4, isfar ? "you -> crew damage factor by range" : "damage factor per Arcade level");
                 if (isfar) nfar += w; else n += w;
             }
@@ -520,7 +587,7 @@ static void klr_table_tick(int arcade, int act, int level)
     else if (mir != mirwas) {                 /* said at any Log level: it changes what every bullet of the round costs */
         mirwas = mir;
         if (mir) klog("balance: you are POLICE now: the game reads the other float of each pair for a police player, so the three pairs are written exchanged (%d value(s)) and every key keeps its meaning - on level %d a policeman's bullet still costs a heister x %.2f, a heister's a policeman x %.2f, a heister's costs you x %.2f, yours a heister x %.2f (FedMirror=0 = the game's own swap)",
-                      n, level, klr_want(0, stock[level].f[0]), klr_want(1, stock[level].f[1]), klr_want(4, stock[level].f[4]), klr.fed >= 0 ? klr.fed : klr_want(5, stock[level].f[5]));
+                      n, level, klr_want(0, stock[level].f[0]), klr_want(1, stock[level].f[1]), klr.tofed >= 0 ? klr.tofed : klr_want(4, stock[level].f[4]), klr.fed >= 0 ? klr.fed : klr_want(5, stock[level].f[5]));
         else klog("balance: you are no longer police: the table is in the ordinary order again (%d value(s))", n);
     }
     if (act && off && !toldoff) {             /* once per arming: the seventh on all eleven levels, and what Ramp made of it */
@@ -540,6 +607,98 @@ static void klr_table_tick(int arcade, int act, int level)
         klog("balance: crew off your stage (an AI heister at another heist stage than you, his hits on police and every other NPC), Arcade levels 1..11: x%s; stock x%s; CrewOffStage %.2f, Ramp=%d: %d level(s) differ from stock%s",
              klr_off_row(stock, 1, a), klr_off_row(stock, 0, b), klr.off, klr.ramp, chg, why);
     }
+}
+
+/* ---------------------------------------------------------------- Tough, the head factor (sections 2 a7 / a8) */
+
+/* what 0x524050 writes at +8 of the four story difficulty rows: this one GATES, as klr_code_off does */
+static const float klr_code_npc[4] = { 0.5f, 0.9f, 1.15f, 1.3f };
+
+/* Tough, the NPC half: the four floats 'NPC health x' of the campaign difficulty rows, x Tough while the dial acts and
+   the code's own otherwise. Data of the tuning object; any thread (as the damage table). The object has no vtable: the
+   four row pointers and the four values are the test that it is laid out as this build's. */
+static void klr_tough_tick(int act)
+{
+    static DWORD tun0; static float stock[4]; static int have, bad, applied;
+    DWORD tun, diff = 99; float cur[4], want; int k, n = 0;
+    if (klr.tough <= 0 || !(tun = klh_rd32((DWORD_PTR)KLH_VA(KLR_TUNING)))) return;
+    if (tun != tun0) { tun0 = tun; have = bad = applied = 0; }
+    if ((!act && !applied) || bad) return;
+    for (k = 0; k < 4; k++)
+        if (klh_rd32(tun + KLR_ROWPTR + 4 * k) != tun + KLR_ROWS + 0x24 * k || !klh_rd(tun + KLR_ROWS + 0x24 * k + 8, &cur[k], 4) || !klr_finite(cur[k])) {
+            if (!have) { bad = 1; klog("balance: Tough: the tuning object %08lx does not hold the four campaign difficulty rows where this build expects them (row %d): NPC health is NOT written; your own health still is", tun, k); }
+            return;
+        }
+    if (!have) {                              /* first sight in this process, before any write of ours */
+        for (k = 0; k < 4; k++) if (KLR_ABS(cur[k] - klr_code_npc[k]) > 0.001f) bad = 1;
+        if (bad) {
+            klog("balance: Tough: the 'NPC health x' of the four campaign difficulty rows is %.2f %.2f %.2f %.2f, not the 0.50 0.90 1.15 1.30 this build's code writes: NPC health is NOT written; your own health still is", cur[0], cur[1], cur[2], cur[3]);
+            return;
+        }
+        have = 1; memcpy(stock, cur, sizeof stock);
+    }
+    for (k = 0; k < 4; k++) {
+        want = act ? stock[k] * klr.tough : stock[k];
+        if (KLR_ABS(want - cur[k]) > 0.000001f) n += klh_data((void *)(DWORD_PTR)(tun + KLR_ROWS + 0x24 * k + 8), &want, 4, "NPC health factor of a campaign difficulty row");
+    }
+    if (act && n) {
+        applied = 1; klh_rd((DWORD_PTR)KLH_VA(KLR_DIFF), &diff, 4);
+        klog("balance: Tough x %.2f: 'NPC health x' of the four campaign difficulty rows %.2f %.2f %.2f %.2f -> %.2f %.2f %.2f %.2f (%d value(s); this profile's option is %lu) - every NPC made from here on (police, guards, AI heisters, civilians) has that much more; the code's values come back when the session is not Arcade or the level is stock",
+             klr.tough, stock[0], stock[1], stock[2], stock[3], stock[0] * klr.tough, stock[1] * klr.tough, stock[2] * klr.tough, stock[3] * klr.tough, n, diff);
+    } else if (!act) {
+        applied = 0;
+        if (n) klog("balance: Tough: the code's 'NPC health x' is back in the campaign difficulty rows (%d value(s))", n);
+    }
+}
+
+/* Tough, the proof: 2 s into every round the maximum health of each AI heister as the game made it (read only). With
+   the option Difficulty 1 a stock heister has 252.0 (280 x 0.9): 252 x Tough here = slot 44 ran after the hook's write. */
+static void klr_tough_say(DWORD now)
+{
+    static DWORD rules0, since; static int said;
+    struct klb_snap s; char t[320]; int i, n = 0, c = 0; float raw[0x28 / 4]; DWORD h;
+    if (klr.tough <= 0 || !klr.log) return;
+    if (!klb_read(&s) || s.state != KLB_ROUND) { rules0 = 0; return; }
+    if (s.rules != rules0) { rules0 = s.rules; since = now; said = 0; }
+    if (said || now - since < 2000) return;
+    said = 1; t[0] = 0;
+    for (i = 0; i < s.n && i < KLB_NREC && n < (int)sizeof t - 24; i++) {
+        const struct klb_rec *r = &s.r[i];
+        if (!r->used || !(r->flags & 1) || !r->actor || klh_rd32(r->actor) != KLR_ACTOR_VT || !(h = klh_rd32(r->actor + 0x5fc)) ||
+            !klh_rd(h, raw, sizeof raw) || ((DWORD *)raw)[0x24 / 4] != r->actor || !klr_finite(raw[2])) continue;
+        n += snprintf(t + n, sizeof t - n, " %d: %.1f", i, raw[2]); c++;
+    }
+    klog("balance: Tough x %.2f: the AI heisters' maximum health this round, by crew record:%s%s (a stock heister has 280 x the difficulty's 0.5 / 0.9 / 1.15 / 1.3 = 140 / 252 / 322 / 364; ALL of them at that number = the game made them BEFORE the hook's write, or the write was refused; ONE odd record is the actor [gamedata+0x4cf0], who takes the row's +0 and not its +8 (0x8fbb29); [Bots] CrewHealth comes on top)",
+         klr.tough, c ? t : " none could be read", "");
+}
+
+/* HeadShot / FedHeadShot: the two .data floats the body-part routine 0x572f60 hands out for a head. want = the key of
+   the side the human is on while the dial acts, else what the tuning object has for them (0x45c490's source; never
+   written here). One aligned float each; any thread. A value that is neither the tuning's nor the hook's own last
+   write is somebody else's and is left alone (one line). */
+static void klr_head_tick(int act)
+{
+    static const DWORD g[2] = { KLR_HEAD_G2, KLR_HEAD_G3 };
+    static float mine[2]; static int told, was = -1;
+    DWORD tun; int k, n = 0, police; float key, stock[2], cur, want = 0;
+    if (klr.head < 0 && klr.fedhead < 0) return;
+    if (!(tun = klh_rd32((DWORD_PTR)KLH_VA(KLR_TUNING))) || !klh_rd(tun + KLR_HEAD_SRC, stock, sizeof stock)) return;
+    police = act && klr_local_police();
+    key = !act ? -1.0f : police ? klr.fedhead : klr.head;
+    for (k = 0; k < 2; k++) {
+        if (!klr_finite(stock[k]) || stock[k] < 0.1f || stock[k] > 100 || !klh_rd((DWORD_PTR)KLH_VA(g[k]), &cur, 4)) return;
+        want = key >= 0 ? key : stock[k];
+        if (cur == want) { if (want == stock[k]) mine[k] = 0; continue; }
+        if (cur != stock[k] && (mine[k] == 0 || cur != mine[k])) {
+            if (!told++) klog("balance: head shots: the body-part factor at %08lx is %g - neither the tuning object's %g nor a number this hook wrote: HeadShot / FedHeadShot leave it alone", g[k], cur, stock[k]);
+            continue;
+        }
+        if (klh_data((void *)KLH_VA(g[k]), &want, 4, "body-part damage factor of a head")) { n++; mine[k] = want == stock[k] ? 0 : want; }
+    }
+    if (n && klr.log && (key >= 0 || was >= 0))
+        klog("balance: head shots: your bullet on an NPC's head now counts x %.1f (%s; the game's x %.1f / x %.1f for bone types 2 / 3; %d value(s))", want,
+             key < 0 ? "the game's own again" : police ? "FedHeadShot: you are police" : "HeadShot: you are a heister", stock[0], stock[1], n);
+    if (n) was = key >= 0 ? police : -1;
 }
 
 /* One tracked float of the health object: -> what the game gave it. A value that is neither the game's last nor
@@ -568,14 +727,22 @@ static int klr_put(struct klr_val *t, DWORD at, float cur, float want, const cha
 static void klr_player_tick(int act, int game_thread, DWORD rules)
 {
     DWORD gd, pl, h; BYTE idx = 0xff, police = 0; float raw[0x28 / 4]; int fresh, n = 0, i; struct klr_pl *p = 0;
-    float cur, max, delay, full, max0, delay0, full0, wmax, wdelay, wfull;
+    float cur, max, delay, full, max0, delay0, full0, wmax, wdelay, wfull, over = 0, to; int wasfull, samemax;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLR_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || idx == 0xff || (signed char)idx < 0 || idx > 31 ||
         !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLR_PLAYER_VT || !(h = klh_rd32(pl + 0xa48)) ||
         !klh_rd(h, raw, sizeof raw) || ((DWORD *)raw)[0x24 / 4] != pl || !klh_rd(pl + 0x2723, &police, 1)) { return; }      /* review D1: a failed read must not make the next pass 'fresh' (it would take our own value as the game's) */
     cur = raw[1]; max = raw[2]; delay = raw[5]; full = raw[6];
-    if (!klr_finite(cur) || !klr_finite(max) || !klr_finite(delay) || !klr_finite(full) || max < 1 || max > 100000 || cur > max * 1.01f + 1 ||
+    if (!klr_finite(cur) || !klr_finite(max) || !klr_finite(delay) || !klr_finite(full) || max < 1 || max > 100000 ||
         delay < 0 || delay > 3600 || full < 0 || full > 3600) { return; }
     for (i = 0; i < 4; i++) if (klr_p.e[i].used && klr_p.e[i].player == pl && klr_p.e[i].h == h) p = &klr_p.e[i];
+    /* A health over the maximum is no health object of the game's - but for one case (review X2 S1): this file RAISED
+       both (Tough, a PlayerHealth over 1) and the game has since written a maximum of its own and left the health. Then
+       the health is at most what this file wrote as the maximum; it is taken as 'a new maximum of the game's' below
+       (new base, scaled again, a line) instead of leaving the hook blind until he is hurt below the game's number. */
+    if (cur > max * 1.01f + 1) {
+        if (!p || p->max.wrote == 0 || cur > p->max.wrote * 1.01f + 1 || KLR_ABS(max - p->max.wrote) <= 0.01f) return;
+        over = p->max.wrote;
+    }
     if (!p && !rules) return;                 /* no session and no record of this object: nothing of ours is in it */
     fresh = !p;                               /* a record stays through a failed pass and through the other body's turn */
     if (p && rules && p->rules != rules) {    /* another round object = another level's objects, even at these addresses -
@@ -586,7 +753,8 @@ static void klr_player_tick(int act, int game_thread, DWORD rules)
         for (i = 0, p = &klr_p.e[0]; i < 4; i++) { if (!klr_p.e[i].used) { p = &klr_p.e[i]; break; } if (klr_p.e[i].used < p->used) p = &klr_p.e[i]; }
         memset(p, 0, sizeof *p);
     }
-    if (fresh) { p->player = pl; p->h = h; p->rules = rules; }
+    if (fresh) { p->player = pl; p->h = h; p->rules = rules; p->clamp = p->clampto = 0; }
+    if (p->clamp != 0 && KLR_ABS(cur - p->clampto) > 0.5f) p->clamp = p->clampto = 0;      /* hurt or refilled since: the note is void */
     p->used = ++klr_p.clock; klr_p.have = 1;
     max0 = klr_track(&p->max, max, fresh); delay0 = klr_track(&p->delay, delay, fresh); full0 = klr_track(&p->full, full, fresh);
     if (fresh) {
@@ -598,18 +766,37 @@ static void klr_player_tick(int act, int game_thread, DWORD rules)
     p->seen = cur;
     if (police && !klr.mirror) act = 0;
     wmax = act && klr.health > 0 ? max0 * klr.health : max0;
+    if (act && klr.tough > 0) wmax *= klr.tough;          /* Tough (2 a7): on top of PlayerHealth, hero and fed alike */
+    wasfull = cur >= (over > 0 ? over : max) - 0.5f;      /* whole before the write: a RAISED maximum takes a whole health up with it
+                                                             (over: whole = at the maximum this file had written, not the game's new one) */
     wdelay = act && klr.delay > 0 ? klr.delay : delay0;
     wfull = act && klr.full > 0 ? klr.full : full0;
-    if (KLR_ABS(max - wmax) <= 0.01f && KLR_ABS(delay - wdelay) <= 0.01f && KLR_ABS(full - wfull) <= 0.01f) return;
+    samemax = KLR_ABS(max - wmax) <= 0.01f;
+    if (samemax && !over && KLR_ABS(delay - wdelay) <= 0.01f && KLR_ABS(full - wfull) <= 0.01f) return;
     if (!game_thread) return;                 /* a live object of the round: only between two frames of the game itself */
-    if (klr_put(&p->max, h + 8, max, wmax, "the local player's maximum health")) {
+    if (samemax && over > 0) p->max.wrote = 0;      /* the game's own maximum is the one wanted (the dial does not act): only the health this file raised is left to take down */
+    if (klr_put(&p->max, h + 8, max, wmax, "the local player's maximum health") || (samemax && over > 0)) {
         n++;
-        if (cur > wmax) { klh_data((void *)(DWORD_PTR)(h + 4), &wmax, 4, "the local player's health, down to the new maximum"); p->seen = wmax; }
+        if (cur > wmax) {
+            if (klh_data((void *)(DWORD_PTR)(h + 4), &wmax, 4, "the local player's health, down to the new maximum")) {
+                if (!wasfull) { p->clamp = cur; p->clampto = wmax; }      /* a hurt man cut down: remembered, so that a raise gives him this back and no more */
+                p->seen = wmax;
+            }
+        }
+        /* Tough / a PlayerHealth over 1: the game filled the object to ITS maximum before the hook saw it; a man who was
+           whole is whole under the new one too (never for a hurt man: no healing by a key - one whom this file itself cut
+           down to a smaller maximum gets back what he had, review X2 S2). cur > 0: not a dead man's object. */
+        else if (wmax > max + 0.01f && wasfull && cur > 0) {
+            to = p->clamp != 0 && p->clamp < wmax ? p->clamp : wmax;
+            if (to > cur + 0.01f && klh_data((void *)(DWORD_PTR)(h + 4), &to, 4, "the local player's whole health, up to the new maximum")) p->seen = to;
+            p->clamp = p->clampto = 0;
+        }
     }
     n += klr_put(&p->delay, h + 0x14, delay, wdelay, "the local player's regeneration delay");
     n += klr_put(&p->full, h + 0x18, full, wfull, "the local player's regeneration time");
-    if (n && klr.log) klog("balance: your health %s%s: maximum %.1f (the game gave %.1f), comes back after %.1f s within %.1f s (the game: %.1f / %.1f)",
-                           act ? "set" : "put back", police ? " (a policeman)" : "", wmax, max0, wdelay, wfull, delay0, full0);
+    if (n && klr.log) klog("balance: your health %s%s: maximum %.1f (the game gave %.1f; PlayerHealth x %.2f, Tough x %.2f), comes back after %.1f s within %.1f s (the game: %.1f / %.1f)%s",
+                           act ? "set" : "put back", police ? " (a policeman)" : "", wmax, max0, act && klr.health > 0 ? klr.health : 1.0f, act && klr.tough > 0 ? klr.tough : 1.0f, wdelay, wfull, delay0, full0,
+                           over > 0 ? " - the game had written its own maximum again and left the health this hook raised" : "");
 }
 
 /* ---------------------------------------------------------------- the point-blank rule (section 2 a4) */
@@ -663,6 +850,7 @@ static void klr_pb_step(const DWORD *sp)
     InterlockedIncrement(&klr_pb.seen[who]);
     klr_pb.steptid = GetCurrentThreadId();
     want = klr_pb.want[who];
+    if (who == 0) want = kld_pb(want);         /* kldown.c: DownPointBlank while he is knocked down (review 8, M1) */
     if (want >= 0 && want != found && klh_data((void *)(DWORD_PTR)(rec + 0x18), &want, 4, "point-blank hit scale")) InterlockedIncrement(&klr_pb.put[who]);
     else want = found;
     if (klr.log < 2 || (n = InterlockedIncrement(&klr_pb.lines)) > KLR_PB_LINES + 1) return;
@@ -746,7 +934,10 @@ static void klr_tick(int game_thread)
         }
     }
     klr_table_tick(arcade, act, level);
-    klr_pb_tick(act, game_thread);            /* the point-blank keys: in while the dial acts, the game's own vtable back otherwise */
+    klr_tough_tick(act);                      /* Tough (2 a7): 'NPC health x' of the four difficulty rows; back when the dial stops acting */
+    klr_head_tick(act);                       /* HeadShot / FedHeadShot (2 a8): the two head floats; the tuning's own back otherwise */
+    if (arcade && act) klr_tough_say(now);    /* the proof line: what the game made the AI heisters' health */
+    klr_pb_tick(act, game_thread);           /* the point-blank keys: in while the dial acts, the game's own vtable back otherwise */
     if (arcade) klr_player_tick(act, game_thread, rules);
     else if (klr_p.have) klr_player_tick(0, game_thread, 0);      /* the session ended with the object alive: its own values go back */
 }
@@ -771,7 +962,8 @@ static int klr_number(const char *t, double *d)
 
 static void klr_init(void)
 {
-    int k, offbad = 0, pbsaid = 0, fedbad = 0, farbad = 0; float v; char t[32], p[32], a[24], b[24], c[24], fedt[32], fart[32]; double d;
+    int k, offbad = 0, pbsaid = 0, fedbad = 0, farbad = 0, tofedbad = 0, toughbad = 0, headbad = 0; float v; char t[32], p[32], a[24], b[24], c[24], fedt[32], fart[32]; double d;
+    char tofedt[32], tought[32], headt[2][32];
     klr.on = GetPrivateProfileIntA("Balance", "Enable", 0, klh_ini) != 0;
     if (!klr.on) return;
     klr.log = (int)GetPrivateProfileIntA("Balance", "Log", 1, klh_ini); if (klr.log < 0) klr.log = 0; if (klr.log > 2) klr.log = 2;
@@ -817,6 +1009,29 @@ static void klr_init(void)
             klr_far.near_at = (float)(na * 100); klr_far.far_at = (float)(fa * 100); klr_far.hold = (DWORD)(hs * 1000);
         }
     }
+    /* CrewToFed (2 a8): as FedToCrew - one number of 0 .. 20, written only while the pairs stand exchanged */
+    klr.tofed = -1.0f; tofedt[0] = 0;
+    GetPrivateProfileStringA("Balance", "CrewToFed", "", tofedt, sizeof tofedt, klh_ini);
+    if (tofedt[0]) {
+        if (!klr_number(tofedt, &d) || d < 0 || d > 20) tofedbad = 1;
+        else { klr.tofed = d > 0 ? (float)d : 0.0f; if (klr.mirror) klr.any = 1; }
+    }
+    /* Tough (2 a7): one number of 0.25 .. 10; 1 or no key = off. No Risk sets one. */
+    klr.tough = 0; tought[0] = 0;
+    GetPrivateProfileStringA("Balance", "Tough", "", tought, sizeof tought, klh_ini);
+    if (tought[0]) {
+        if (!klr_number(tought, &d) || d < 0.25 || d > 10) toughbad = 1;
+        else if (d != 1.0) { klr.tough = (float)d; klr.any = 1; }
+    }
+    /* HeadShot / FedHeadShot (2 a8): one number of 1 .. 10 (under 1 a head would cost less than a body: refused); no
+       key = the game's own for that side */
+    klr.head = klr.fedhead = -1.0f; headt[0][0] = headt[1][0] = 0;
+    for (k = 0; k < 2; k++) {
+        GetPrivateProfileStringA("Balance", k ? "FedHeadShot" : "HeadShot", "", headt[k], sizeof headt[k], klh_ini);
+        if (!headt[k][0]) continue;
+        if (!klr_number(headt[k], &d) || d < 1 || d > 10) headbad |= 1 << k;
+        else { if (k) klr.fedhead = (float)d; else klr.head = (float)d; klr.any = 1; }
+    }
     klr.health = klr_dial[klr.risk].health; v = klr_inif("PlayerHealth", "0"); if (klr_finite(v) && v >= 0.05f && v <= 10) klr.health = v;
     klr.delay = klr_dial[klr.risk].delay; v = klr_inif("RegenDelay", "0"); if (klr_finite(v) && v >= 0.1f && v <= 600) klr.delay = v;
     klr.full = klr_dial[klr.risk].full; v = klr_inif("RegenTime", "0"); if (klr_finite(v) && v >= 0.1f && v <= 600) klr.full = v;
@@ -828,6 +1043,23 @@ static void klr_init(void)
     else if (klr.fed >= 0)                    /* said only when the key is set: a hook without it starts with the lines it had */
         klog("balance: FedToCrew=%.2f: while YOU are police (and FedMirror=1) your bullet costs an AI heister x %.2f instead of YouToCrew's %.2f%s", klr.fed, klr.fed, klr.f[5],
              klr.mirror ? "" : " - FedMirror=0: the key does NOTHING (the game's own swap stands)");
+    /* track X2's keys: each line only when its key is set - a hook without them starts with the lines it had */
+    if (tofedbad) klog("balance: CrewToFed=%s is IGNORED: it must be one number of 0 .. 20 with a decimal point; a heister's bullet on a police player stays CrewToYou's number", tofedt);
+    else if (klr.tofed >= 0)
+        klog("balance: CrewToFed=%.2f: while YOU are police (and FedMirror=1) an AI heister's bullet costs you x %.2f instead of CrewToYou's %.2f%s", klr.tofed, klr.tofed, klr.f[4],
+             klr.mirror ? "" : " - FedMirror=0: the key does NOTHING (the game's own swap stands)");
+    if (toughbad) klog("balance: Tough=%s is IGNORED: it must be one number of 0.25 .. 10 with a decimal point (1 = nothing)", tought);
+    else if (klr.tough > 0)
+        klog("balance: Tough=%.2f: every maximum health of an Arcade round on a level that is not stock x %.2f - every NPC through the campaign difficulty rows' 'NPC health x' (police, guards, AI heisters, civilians), you (hero or fed) through your health object, on top of PlayerHealth; no damage factor is changed, so every fight takes %.2f times the hits; not the escape vehicle, not what a point-blank step or the departure kill deals",
+             klr.tough, klr.tough, klr.tough);
+    if (klr.tough > 0 && !klr.mirror)
+        klog("balance: Tough with FedMirror=0: a POLICE player's health object is left alone by this part, so as a fed you alone have NO Tough (every NPC still has it)");
+    for (k = 0; k < 2; k++) {
+        if (headbad & (1 << k)) klog("balance: %s=%s is IGNORED: it must be one number of 1 .. 10 with a decimal point (the game's is 10)", k ? "FedHeadShot" : "HeadShot", headt[k]);
+        else if ((k ? klr.fedhead : klr.head) >= 0)
+            klog("balance: %s=%.1f: while you are %s your bullet on an NPC's head counts x %.1f instead of the game's 10 (an NPC's bullet never gets a head factor); the game's own while you are %s%s", k ? "FedHeadShot" : "HeadShot",
+                 k ? klr.fedhead : klr.head, k ? "police" : "a heister", k ? klr.fedhead : klr.head, k ? "a heister" : "police", (k ? klr.head : klr.fedhead) >= 0 ? " (that side has its own key)" : "");
+    }
     if (farbad == 1) klog("balance: YouToCrewFar=%s is IGNORED: it must be one number of 0.05 .. 1 with a decimal point (what YouToCrew is multiplied with far away; 1 = off)", fart);
     else if (klr_far.far_ > 0)                /* said only when the key is set */
         klog("balance: YouToCrewFar=%.2f: your bullet on an AI heister costs him YouToCrew x 1 within %.0f m, x %.2f from %.0f m on, linear between - priced for the heister your last hit was on (for %.1f s), else the nearest that has turned, else the farthest in play; one float for all of them, re-written every pass (an approximation: re\\bots_fight.md 1); not for a police player, not while you are the traitor%s",
@@ -847,6 +1079,7 @@ static void klr_init(void)
             klog("balance: %s=%s is IGNORED: it must be one number of 0 .. 100 with a decimal point (how many ordinary bullets of his gun one point-blank step is worth; 100 = the game's own), or a negative one to leave that victim alone", klr_pb_key[k], p);
         else if (d >= 0) { klr_pb.want[k] = d > 0 ? (float)d : 0.0f; klr_pb.any = 1; }      /* '-0' is 0 */
     }
+    if (kld_pb_key()) klr_pb.any = 1;         /* kldown.c: [Down] DownPointBlank needs the wrapper although no PointBlank key is set */
     if (pbsaid)
         klog("balance: point-blank keys (in place of the game's 100 in the hit a soldier sends at every burst step while his target is within 160 units): %s on you, %s on an AI heister, %s on a policeman / another NPC%s",
              klr_pb_text(0, a), klr_pb_text(1, b), klr_pb_text(2, c), klr_pb.any ? "; Arcade only, only on a level that is not stock" : ": no key acts, nothing of it is put into the game");

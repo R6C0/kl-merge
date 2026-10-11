@@ -229,6 +229,17 @@
  *   down: camera: the down start had put the camera on the LEFT shoulder; the side he had is back ...
  *   down: prompt: ON t s after he went down: the game's own tap prompt (ZMiniGameButtonMashingDisplay e ...)
  *   down: prompt: OFF after t s (<why>) / NOT SHOWN in this down: <why> / the game shows its own tap prompt ...
+ *   down: rules: NoFire=.. Vulnerable=.. DownFromCop=.. DownFromCrew=..        at start (track R8)
+ *   down: rules: DownPointBlank=.. CooldownCredit=.. NoThrow=..                at start (review 8's fix round)
+ *   down: rules: Vulnerable: THE POINT-BLANK CAP DOES NOT / CANNOT STAND ...    once a down: hits stay swallowed, why
+ *   down: rules: CooldownCredit: ... [D+0x38] a -> b s                          when he is up
+ *   down: rules: NoThrow: the throw button was down ...                         a TEST key
+ *   down: rules: NoFire: the input mask a: v -> w ... / off (<why>): v -> w    bits 0x400 / 0x200 set while he is down, taken off after
+ *   down: rules: ... the damage table of Arcade level L holds police -> you a (x f ...) and crew -> you b ...   the factors stand
+ *   down: rules: THE FACTORS DO NOT STAND ...                           1 s into a down without them (says why)
+ *   down: rules: Vulnerable: ... switch [0xceb40c] 1 -> 0 ... EVERY HIT COSTS / ... is back at 1 after t s (<why>)
+ *   down: rules: he lost x on the floor ...; the last BULLET's attacker ... is POLICE / an AI HEISTER ...      the first 8 a down (Log=2: all)
+ *   down: rules: this knock-down is over after t s (<why>): n loss(es), x in all; hits could cost for y s; fire was masked
  *   down: bots: on ...                                                 Bots=1, at start
  *   down: bots: record i (actor, soldier): health, modifier, chance, was down once; the level's pauses
  *   down: bots: record i: the modifier [soldier+0x124] 0 -> 1 (force ...)
@@ -313,6 +324,30 @@ static struct {
        that is still ours (S2); sidearm = a delayed side change was seen armed in this down (S5) */
     DWORD state, t_lost; int waswant, sidearm;
 } kld_v;
+
+/* track R8 (while knocked down: no shooting, not invulnerable, police hurt him little and heisters in full - the
+   block before kld_tick_main has the reading). Declared here: kld_flop_one leaves its heartbeat in it. */
+static struct {
+    int nofire, hurt; float cop, crew;       /* the keys: NoFire (0 / 1 fire + aim / 2 fire only), Vulnerable, DownFromCop, DownFromCrew */
+    DWORD pass, beat;                        /* kld_tick's pass counter; the pass in which kld_flop_one last wrote the fall's two ticks */
+    int level;                               /* the Arcade level of this pass (kld_tick_main, from klr_arcade) */
+    /* NoFire: the mask bits THIS part set, on which player object and at which address */
+    DWORD mpl, mat, mbits, t_mlost; int mn, mtold;
+    /* the factors: fon = wanted this pass (kld_factor answers by it); the table's two floats as they stood while he
+       was up (police -> you +8, crew -> you +0x10 of the level's record); stand = the table holds them x the factors */
+    int fon, stand, standtold, uphave, unverified; DWORD upR, t_fon, t_foff; float up[2];
+    struct { DWORD at; float old, put; } w[2];      /* what this part wrote itself (only when klbalance.c does not own the table) */
+    /* Vulnerable: sw = the game's 'down not dead' switch [0xceb40c] is 0 by this part's write */
+    int sw, swn, swtold; DWORD t_sw, ms_hurt;
+    /* the log of one knock-down */
+    int was; DWORD t0; float hp0, hplast, lost; int nloss, nline;
+    /* review 8. pb = DownPointBlank (how many bullets one point-blank step on him is worth while he is down; < 0 = the
+       step is left alone); pbon = wanted this pass (kld_pb answers by it); npb = steps capped in this down (counted
+       on whatever thread the soldier scripts run); pbtold = the 'cap does not stand' line of this down.
+       cdfix = CooldownCredit; nothrow = NoThrow (a TEST key), nthrow = its writes in this down */
+    float pb; volatile LONG pbon, npb; int pbtold;
+    int cdfix, nothrow, nthrow;
+} kld_r;
 
 /* Flop=3 (track R6): the falls of the owner's sheet G_zoom_belly.png that throw a living man down and bring him up.
    sheet = the overview's number; group = clips with (nearly) the same keys - never two of one group in a row; slot /
@@ -1062,7 +1097,7 @@ static void kld_flop_one(DWORD pl, DWORD d, DWORD ds, DWORD now, float hp)
         kld_s.fclip = clip; kld_s.f7 = kld_evframe(clip, 7); kld_s.f8 = kld_evframe(clip, 8);
         if ((h = klh_rd32(m + 0x8d0)) != 0) klh_rd(h + 0x34, &q, 4);
         mk = kld_mask(pl, &ma, &mv);                                 /* the fall's two bits must read set here: the proof of the lookup (a Dry run prints it too) */
-        if (kld_s.fnow) klog("down: flop: THE KNOCK-DOWN: the fall is clip %08lx '%s' of %d frames (%.2f s at speed 1): he has landed at frame %d (its event 7), rises from frame %d (event 8; -1 = none); the whole clip is played in the fall - no press cuts it, every hit of it is swallowed by the game's own trigger; from the landing on FlopBase %.2f + FlopPerPress %.2f a press, at most FlopTop %.2f; the channel's event queue is %08lx; the input mask %08lx holds %08lx (%s; bits 0x11 are the fall's)%s",
+        if (kld_s.fnow) klog("down: flop: THE KNOCK-DOWN: the fall is clip %08lx '%s' of %d frames (%.2f s at speed 1): he has landed at frame %d (its event 7), rises from frame %d (event 8; -1 = none); the whole clip is played in the fall - no press cuts it; a hit of it is swallowed by the game's own trigger UNLESS the 'rules:' lines say the switch is off (Vulnerable, track R8); from the landing on FlopBase %.2f + FlopPerPress %.2f a press, at most FlopTop %.2f; the channel's event queue is %08lx; the input mask %08lx holds %08lx (%s; bits 0x11 are the fall's)%s",
                              clip, name, fr, (fr - 1) / 25.0f, kld_s.f7, kld_s.f8, kld.fbase, kld.fper, kld.ftop, q, ma, mv, mk ? "found" : "NO INPUT OBJECT: the game set no bit either", al ? "; THE GAME ALIGNS THIS FALL TO A PLACE ([D+0xf4]): look at it" : "");
         else klog("down: flop: this fall is the game's own (clip %08lx '%s' of %d frames, %d event(s), the channel's event queue %08lx; the input mask %08lx holds %08lx - %s; bits 0x11 are the fall's): %s", clip, name, fr, ev, q, ma, mv, mk ? "found" : "NO INPUT OBJECT",
                   kld.dry ? "Dry=1, nothing was written" : !kld_s.fok ? "no flop on this body" : "the slot ids were not in place when it began (he went down within a frame of the write, or the game filled its table again)");
@@ -1163,6 +1198,7 @@ static void kld_flop_one(DWORD pl, DWORD d, DWORD ds, DWORD now, float hp)
     ne = (long)tick + (long)(left / fps * 1024.0f + 0.5f) + 2048;
     klh_data((void *)(DWORD_PTR)(m + 0x8dc), &ne, 4, "the prone movement: the tick the fall is over, held behind the clip's end");
     klh_data((void *)(DWORD_PTR)(m + 0x8e0), &ne, 4, "the prone movement: the fall's event tick, held with its end");
+    kld_r.beat = kld_r.pass;                   /* track R8: THIS pass held the fall (D 2, M 1, the clip on its channel, inside both bounds) - only then may the game's switch be off (kld_rules) */
 }
 
 /* ---- the AI heisters ([Down] Bots=1; track R4, re\player_down.md 11) ------------------------------------------- */
@@ -1663,6 +1699,399 @@ static void kld_prompt(DWORD pl, DWORD ds, DWORD now)
     if (col) klh_data((void *)(DWORD_PTR)(e + 0x114), &col, 4, "the tap prompt: the bar's colour, one of the game's two (0x47e230)");
 }
 
+/* ---- track R8: while knocked down - NO SHOOTING, NOT INVULNERABLE, police hurt him little, heisters in full -------- */
+/* The owner, 2026-10-11 20:45, after playing Flop=3 with Camera / Prompt: 'you can shoot people whilst being downed
+   like that, should not be the case, and you are invulnerable, it should take a lot more shots from police but the
+   heisters should have the option to shoot you normal health and kill you (gonna apply this to online later on so
+   groundwork)'. NOTHING HERE HAS RUN IN THE GAME. READ = kl2.exe build 0490, each routine named read whole unless
+   said; re\player_down.md 14 has the tables.
+
+   WHY HE CAN SHOOT (READ). The buttons are read by ZGameplayInput slot 7 = 0x5fbfa0 (called by the Wintel class's
+   0x484a0e; the action objects are named by the constructor 0x8bbd70 from the pointer table 0xceba78 ..):
+     TapFire [H+0xa4] -> byte [H+0x2cd], HoldFire [H+0xb0] -> [H+0x2ce]: only while mask bits 0x80 AND 0x400 are clear
+     Tap / HoldPrecisionAim (and the '2' pair) [H+0x74 .. +0x98] -> [H+0x2c8 .. +0x2cb]: bits 0x80 and 0x200 clear
+     every other button (TapCover -> [H+0x2d3] = the GET UP / mash button, Use, Grenade, CloseCombat ...): bit 0x80
+     TapReload [H+0x188] -> [H+0x2e9]: no bit at all
+   and handed to the player by slot 12 (0x808bde: HoldFire -> 0x589d30 = bit 2 of [player+0xb90]; 0x808bee: TapFire
+   -> 0x5e9530 = bit 1). The mask is the dword [player+0xed0] kld_mask finds. THE FALL SETS BITS 1 AND 0x10 ONLY
+   (0x76a827 / 0x76a830: no move, no mouse look) - fire was never gated by it. Stock hides that: its fall is 0.72 s
+   and its lying state is MEANT to shoot (0x8ee283: a fire flag late in the fall cuts it to lying). The flop made the
+   fall 2 - 10 s long with fire open the whole time; R7's Camera gave him the aim back, it did not open the fire (one
+   bit does not gate both: look is 0x10 / 0x20 / 0x40, fire 0x400). Section 10.2's 'he cannot shoot' was an
+   ASSUMPTION of that track, never read.
+   THE GAME'S OWN 'MAY NOT FIRE' is exactly these two bits: the victim of a human-shield hold gets mask bits 1, 0x200
+   and 0x400 (0x860f7b / 0x860f87 / 0x860f93; taken off at 0x861099 ..) and keeps Use for his break-free.
+   NoFire=1 (default 1 when Flop is set): while he is down in ANY state of the down ([D+4] not 0: the fall, lying the
+   stock way after a time bound, a get-up) and alive and the round runs, bits 0x400 and 0x200 are set in that dword
+   (one DWORD write; NoFire=2 = 0x400 alone: he may aim, not fire); the bits THIS part set are taken off in the pass
+   that sees him up, dead, out of play, a fed, or the round over. Bits found set already are not ours and stay.
+   MELEE / A HUMAN SHIELD: the close-combat target is looked for by 0x612c20 in the player's frame (0x57fc0e), and
+   that routine leaves at once while [D+8] bit 0 is set (0x612d07 .. 0x612d11): a downed man starts no close combat -
+   the game's own rule, nothing written. A THROW (HoldGrenade -> [H+0x2d2] -> 0x4aa410) and Use have no bit but 0x80,
+   which would take the mash button too: NOT gated here. Whether a throw can start in the prone movement was NOT
+   READ (live check N3 presses it); a reload hurts nobody.
+
+   WHY HE IS INVULNERABLE (READ). The player's damage routine (slot +0x69c = 0x458880; every kind of hit ends there)
+   asks 0x8da3b0(D, record) at 0x458e7f before the health changes; TRUE = the hit costs nothing (0x458e93), unless
+   the hit's kind [rec+8] is 9 (a blast) or the routine's own flag byte is set (0x585de0: only with word
+   [player+0xa54] bit 2 and the attacker in a narrow angle - not our state). In D state 2 the answer is 'NOT
+   0x843fa0' = swallowed until the tick [M+0x8e0] has passed - and kld_flop_one holds that tick 2 s behind the clip's
+   end, so the whole knock-down is free. THE TICK CANNOT BE GIVEN BACK: the same test (0x843fa0) is what lets a fire
+   flag cut the fall to lying (0x8ee278 .. 0x8ee2d0) and a press of GET UP - the mash button - start the stock
+   get-up in the middle of the clip (0x47cde7 .. 0x47ce4d). A per-hit wrapper needs the PLAYER's vtable (slots 72 /
+   89 / 424 / +0x69c are all his), and a private vtable copy on the player changes the first dword every part of
+   this hook knows a ZFFPlayer by: not done (the same finding as klbalance.c 2 a6 for the AI heisters).
+   THE HANDLE THAT IS DATA: the trigger's first test is the game's own switch, dword [0xceb40c] (.data, 1 in the
+   image, not in a hashed range): 0 -> 0x8da3b0 returns 0 at once = every hit goes on to the health. Its eleven
+   readers, all read: 0x8da3b0 (the trigger), 0x658700 (the other starters: nothing while 0 - he is down already),
+   0x724420 (D's FRAME: returns at once while 0), 0x76a450 x 2 (the down start), 0x7107b0 x 2 (the end of the state),
+   0x8ee220 (2 -> 1, inside the frame), and the three state setters 0x5491d0 / 0x62db70 / 0x8c8150. So with the
+   switch at 0 the down state of EVERY player of this process stands still - which is all the flop asks of the game
+   while it plays its clip: kld_flop_one holds both ticks so that the frame does nothing, and ends the state itself
+   by movement state 5. What still runs with the switch at 0: the prone movement's own frame (the clip), the input's
+   write of the GET UP button [D+0x2b] (0x84dda0: tests only [D+8] bit 0), the damage, a death (the reset 0x88a990
+   does not read the switch). What does NOT: the pause before the next down [D+0x38] is not counted down (0x724432) -
+   the Cooldown seconds start when he is UP, not when he went down - and a second player's down state (none in an
+   Arcade round).
+   Vulnerable=1 (default 1 with Flop=1 / 3; no effect in Flop=0 / 2, whose falls the GAME ends by its frame): the
+   switch is written 0 ONLY in a pass in which kld_flop_one held the fall (its heartbeat kld_r.beat: D 2, M 1, the
+   clip on its channel, inside both time bounds, not dead, the round running, not Dry) AND the two factors below
+   stand in the table; in every other pass it is written back to 1 FIRST THING - the pass that writes state 5 (the
+   game's frame must run to end the state), a time bound, a read that failed, a death, the round's end, a police
+   body, no player. So the worst a missed pass costs is one frame of the old rule. A value found there that is
+   neither 1 nor this part's 0 is left alone.
+
+   WHO HURTS HIM HOW MUCH - 'by the attacker's side', read from the hit by the game itself (READ: 0x8b8050 whole).
+   A bullet's price on the player is made in his bullet routine 0x4db580: gun x body part x the record's scale x the
+   attacker's soldier factor x 0x8b8050(rules, ATTACKER) (0x4db9d1). 0x8b8050 takes the Arcade level's record R =
+   tuning + 0x6ac + 0x70 x level and the ATTACKER's team [[attacker+0x54]+4]: 2 (Ally: an AI heister, a traitor is
+   still Ally) -> float R+0x10, anything else (police, guards) -> R+0x08; the two exchanged while player 0 is police.
+   These are klbalance.c's CrewToYou and CopToYou. So the two factors are two floats:
+     DownFromCop  (default 0.15 with a Flop - a GUESS, 0.25 before review 8; 1 = as if he stood)  x R+0x08 while he is down
+     DownFromCrew (default 1.0 = 'normal health': a heister can finish him)  x R+0x10 while he is down
+   for the whole knock-down ([D+4] not 0, alive, the round running) in every Flop mode. THE POINT-BLANK STEP (a
+   guard within 1.6 m: a hundred bullets in one hit record, re\melee_damage.md) is priced by the same float, so the
+   cop factor applies to it - and a hundred bullets x 0.15 still kill: under Risk=1 one step is 72 x 1.05 x 100 x
+   0.5 x 0.15 = 567 of his 550. REVIEW 8, M1: so the hundred itself is capped while he is down - DownPointBlank
+   (kld_pb above; default half a bullet a step = 2.8 at those numbers), written into the hit record by klbalance.c's
+   wrapper (hand-over lines 4 / 5), and the switch below does not go off before that cap STANDS. A BLAST (kind 9)
+   costs what it always cost in a fall (it was never swallowed; whether a blast's price reads the table was NOT
+   READ). ANYTHING ELSE that reaches 0x458880 without the bullet routine (a fall, the flat 50 of close combat
+   0x499570) was swallowed in the fall and now costs in full, no factor - not read which of them can reach a lying
+   man; the loss line marks a loss of exactly 50.
+   THE SECOND CALLER OF 0x8b8050 (review 8, S3; READ): inside the damage routine, 0x458946 (Arcade, an attacker of
+   one class mask) takes the same float x 10.0 [0xb5cde8] as a THRESHOLD in place of the plain 10.0 [0xb3ef8c]: a
+   hit whose damage [rec+0x28] is at least that pushes the tick [player+0x84c] on (0x458990 ..; what that tick
+   times was not read - it is not the health, which is taken further down). The hit's damage carries the same
+   float already (0x4db9d1), so damage and threshold move together under the down factor: which bullets cross it
+   does not change. A flat hit (close combat's 50) crosses a threshold that is lower while he is down.
+   WHO WRITES THE TABLE. klbalance.c compares its eleven records every 50 ms and writes back whatever differs while
+   one of its keys is set (klr_table_tick) - and logs a line each time. So:
+     - klbalance.c OWNS the table ([Balance] Enable=1 with Risk or a factor key - the owner's game): this part writes
+       NOTHING there; klbalance.c multiplies by kld_factor() once it has the three hand-over lines, which define
+       KLR_DOWN (re\player_down.md 14.5). This part then only READS the level's two floats and waits until they are
+       'what they were while he was up x the factors' before the switch goes off. WITHOUT those lines (KLR_DOWN not
+       defined in this build) the factors cannot stand: said at start, and the switch then stays ON - hits stay
+       swallowed as before, rather than a floored man at the full price - unless both factors are 1.
+     - nobody owns it: this part writes the level's two floats itself and puts back what stood there.
+   ONLINE (groundwork, nothing acts there: klr_arcade): the rule is two numbers picked by the attacker's side at
+   the hit, which is how it has to be online too - but the table is Arcade's (0x7f6850) and only NPC attackers are
+   priced by it; a human attacker's bullet has no such float, the switch is one dword for all players of a process,
+   and who prices a hit between two machines is not read (re\netcode_fa.md 8). re\player_down.md 14.6 says what a
+   host-side form needs. */
+#define KLD_SWITCH    0x00ceb40c             /* .data: the game's 'down not dead' switch, 1 in the image (its eleven readers: above) */
+#define KLD_TABLE     0x6ac                  /* tuning: the Arcade damage records, 0x70 bytes a level (0x8b8093); +8 police -> you, +0x10 crew -> you */
+#define KLD_ACTOR_VT  0x00bb3bac             /* ZFFActor */
+#define KLD_MASK_FIRE 0x400                  /* TapFire / HoldFire (0x5fc02c, 0x5fc068) */
+#define KLD_MASK_AIM  0x200                  /* the four precision-aim actions (0x5fc2cd .. 0x5fc37e) */
+
+/* klbalance.c calls this from klr_table_tick once it has the hand-over lines (it declares it ahead): what the
+   table's slot k is multiplied with now. Any thread: one int and two floats that never change after kld_init. */
+static float kld_factor(int k)
+{
+    if (!kld_r.fon) return 1.0f;
+    return k == 2 ? kld_r.cop : k == 4 ? kld_r.crew : 1.0f;
+}
+
+/* review 8, S6 (hand-over line 3): the down factor has just come or gone - klbalance.c counts the table writes of
+   these 400 ms apart from the dial's own, so that its 'Risk=.. written' line is not printed twice a knock-down. */
+static int kld_moving(void)
+{
+    DWORD now = GetTickCount();
+    return (kld_r.t_fon && now - kld_r.t_fon < 400) || (kld_r.t_foff && now - kld_r.t_foff < 400);
+}
+
+/* review 8, M1. THE POINT-BLANK STEP ON A FLOORED MAN. A soldier whose target is within 160 units sends, at every
+   burst step, ONE hit worth a hundred bullets of his gun (kl2 0x8c62e0, re\melee_damage.md). The cop factor prices
+   it, and a hundred bullets x 0.15 still kill a man who lies with 80 .. 220: before Vulnerable the fall swallowed
+   that step, with it he would be dead at once beside any guard. DownPointBlank=N (default 0.5 with a Flop - a GUESS:
+   the guard beside him is a guard who fires - a step comes every 0.12 .. 0.19 s, about twice his gun's own rate, so
+   half a bullet a step at the floor's price; a negative number = the step is left alone) is what the hundred becomes ON THE PLAYER while he is down. The hit record is klbalance.c's to
+   write (its wrapper of the database's name look-up, section 2 a4 there): hand-over line 4 asks kld_pb() for the
+   scale of a step on a ZFFPlayer, line 5 puts the wrapper in although no [Balance] PointBlank key is set. A
+   PointBlankToYou that is smaller stays. Called from inside the game's fire task (ASSUMED the main loop's thread,
+   as klbalance.c assumes; one int and one float of this part's own are read, one counter is added to). */
+static float kld_pb(float want)
+{
+    if (!kld_r.pbon || kld_r.pb < 0) return want;
+    if (want >= 0 && want <= kld_r.pb) return want;
+    InterlockedIncrement(&kld_r.npb);
+    return kld_r.pb;
+}
+
+/* The key as kld_init reads it, straight from the ini: klbalance.c's init asks before this part's own has run
+   (hand-over line 5). < 0 = no cap. */
+static float kld_pb_ini(void)
+{
+    int flop = (int)GetPrivateProfileIntA("Down", "Flop", 0, klh_ini); char t[32]; float v;
+    if (!GetPrivateProfileIntA("Down", "Enable", 0, klh_ini)) return -1.0f;
+    GetPrivateProfileStringA("Down", "DownPointBlank", flop >= 1 && flop <= 3 ? "0.5" : "-1", t, sizeof t, klh_ini);
+    v = (float)atof(t);
+    return v != v || v < 0 ? -1.0f : v > 100.0f ? 100.0f : v;
+}
+static int kld_pb_key(void) { return kld_pb_ini() >= 0; }
+
+/* The cap can act NOW: this build's klbalance.c has lines 4 / 5 (KLR_DOWN 2), its wrapper is armed and its copy of
+   the vtable is the one in the game's database object (klr_pb_tick's own reads). */
+static int kld_pb_stands(void)
+{
+#if defined(KLR_DOWN) && KLR_DOWN >= 2
+    DWORD sys, db;
+    return klr.on && klr_pb.any && klr_pb.ready && klr_pb.act && (sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF))) != 0 && (db = klh_rd32(sys + 0xac)) != 0 &&
+           klh_rd32(db) == (DWORD)(DWORD_PTR)&klr_pb.vt[1];
+#else
+    return 0;
+#endif
+}
+
+/* klbalance.c compares and rewrites the table while it is on with a key set (klr_tick, klr_table_tick): read only */
+static int kld_owned(void) { return klr.on && klr.any; }
+
+/* The switch back to the image's 1. The game thread's passes; and the fallback thread when the game thread has made
+   no pass for 500 ms (review 8, S1: the factors and the cap are dropped there, so the switch must not stay off
+   behind them - one aligned dword of .data that the game only compares). */
+static void kld_sw_back(DWORD now, const char *why)
+{
+    DWORD sw = 0xffffffff, one = 1;
+    if (!kld_r.sw) return;
+    if (klh_rd((DWORD_PTR)KLH_VA(KLD_SWITCH), &sw, 4) && sw == 0) klh_data((void *)KLH_VA(KLD_SWITCH), &one, 4, "the game's 'down not dead' switch, back to the image's 1");
+    kld_r.sw = 0; kld_r.ms_hurt += now - kld_r.t_sw;
+    if (kld_r.swn <= 3 || kld.log >= 2) klog("down: rules: the game's 'down not dead' switch [0xceb40c] is back at 1 after %.2f s (%s; it read %lu) - from here the game's own rules of the down state run again", (now - kld_r.t_sw) / 1000.0f, why, sw);
+}
+
+static int kld_near(float a, float b) { return KLD_ABS(a - b) <= 0.0005f * (1.0f + KLD_ABS(b)); }
+
+/* One pass, after kld_tick_main (which left act / pl / state in kld_v, the level and kld_flop_one's heartbeat in
+   kld_r, the dead flag and the fall's flags in kld_s). Game thread only. */
+static void kld_rules(DWORD now)
+{
+    static const DWORD off[2] = { 8, 0x10 };
+    DWORD pl = kld_v.act ? kld_v.pl : 0, d = 0, ds = 0, ho = 0, tun, R = 0, sw = 0xffffffff, zero = 0;
+    float hp = 0, max = 0, cur[2] = { 0, 0 }, want[2]; int down, hpok = 0, need, tok = 0, k, owned = kld_owned(), hurtw, held, pbok; const char *why = "";
+    if (!kld.on || !klh_exe_ok) return;
+    need = kld_r.cop != 1.0f || kld_r.crew != 1.0f;
+    if (!kld_r.nofire && !kld_r.hurt && !need && !kld_r.mbits && !kld_r.sw && !kld_r.fon && !kld_r.w[0].at && !kld_r.w[1].at && !kld_r.was && kld_r.pb < 0 && !kld_r.pbon && !kld_r.nothrow) return;
+    if (pl && (!(d = klh_rd32(pl + 0x2948)) || klh_rd32(d) != pl || !klh_rd(d + 4, &ds, 4))) pl = 0;
+    down = pl && ds != 0 && !kld_s.dead && !kld.dry && kld_v.state == KLD_ROUND;
+    if (pl && (ho = klh_rd32(pl + 0xa48)) != 0) { int ok = 1; hp = kld_rdf(ho + 4, &ok); max = kld_rdf(ho + 8, &ok); hpok = ok; }
+    if (!pl || ds == 0) kld_r.beat = 0;        /* no heartbeat of an earlier down counts */
+    why = !pl ? "the part does not act here (no player, a police body, a stock level, no Arcade session)" : ds == 0 ? "he is up" : kld_s.dead ? "he is dead or out of play" :
+          kld_v.state != KLD_ROUND ? "the round does not run any more" : kld.dry ? "Dry=1" : "";
+
+    /* 3. VULNERABLE, the half that must never be late: the switch back to 1 before anything else of this pass */
+    /* review 8, M1: the point-blank cap is wanted for the whole down (before the switch can go off below), and
+       Vulnerable waits for it to STAND - a floored man without it is dead at one step of a guard beside him */
+    InterlockedExchange(&kld_r.pbon, down && kld_r.pb >= 0 ? 1 : 0);
+    pbok = kld_r.pb < 0 || kld_pb_stands();
+    held = kld_r.hurt && down && KLD_ONE && ds == 2 && kld_s.fnow && !kld_s.fdone && !kld_s.flost && kld_r.beat && kld_r.beat == kld_r.pass;
+    hurtw = held && pbok;
+    if (kld_r.sw && (!hurtw || (need && !kld_r.stand)))
+        kld_sw_back(now, why[0] ? why : kld_s.fdone == 1 ? "the clip is through and movement state 5 is written: the game's own frame must run to end the down state" :
+                         kld_s.fdone ? "this part gave the fall back to the game (a time bound, FlopUp, the channel)" : kld_s.flost ? "the game left the fall" :
+                         held && !pbok ? "the point-blank cap does not stand any more (klbalance.c's wrapper is out)" :
+                         need && !kld_r.stand ? "the two factors do not stand in the table any more" : "this pass did not hold the fall (a read of the channel failed, or it is not a fall this part drives)");
+    if (held && !pbok && !kld_r.pbtold) {
+        kld_r.pbtold = 1;
+#if defined(KLR_DOWN) && KLR_DOWN >= 2
+        klog("down: rules: Vulnerable: THE POINT-BLANK CAP DOES NOT STAND (DownPointBlank=%.2f; klbalance.c's wrapper of the database object is %s): hits stay SWALLOWED in this fall, as before review 8 - a guard within 1.6 m would take the lying man in one step. It needs [Balance] Enable=1 on this round; DownPointBlank=-1 = let him be hurt without the cap",
+             kld_r.pb, !klr.on ? "off ([Balance] Enable=0)" : !klr_pb.any ? "not asked for (hand-over line 5 did not see the key)" : !klr_pb.ready || !klr_pb.act ? "not in yet (does the dial act on this level?)" : "not the vtable in the object");
+#else
+        klog("down: rules: Vulnerable: THE POINT-BLANK CAP CANNOT STAND (DownPointBlank=%.2f): this build's klbalance.c has not got hand-over lines 4 / 5 (KLR_DOWN 2, re\\player_down.md 14.5): hits stay SWALLOWED in this fall, as before review 8. DownPointBlank=-1 = let him be hurt without the cap", kld_r.pb);
+#endif
+    }
+
+    /* the log of one knock-down: its start */
+    if (down && !kld_r.was) {
+        kld_r.was = 1; kld_r.t0 = now; kld_r.hp0 = kld_r.hplast = hp; kld_r.lost = 0; kld_r.nloss = kld_r.nline = 0; kld_r.swn = 0; kld_r.ms_hurt = 0; kld_r.swtold = 0; kld_r.mn = 0; kld_r.mtold = 0;
+        kld_r.pbtold = 0; kld_r.nthrow = 0; InterlockedExchange(&kld_r.npb, 0);
+    }
+
+    /* review 8, S2 - NoThrow, a TEST key (default 0). The throw button reaches the player as bit 0x40 of
+       [player+0xb90] and is copied to bit 0x800 of his action word [player+0x818] by 0x544780 (READ); the game takes
+       both off when the button is up (0x4aa417, 0x544805). WHERE a throw starts from that bit was NOT FOUND (no
+       reader by byte scan), so whether one can start in the prone movement is not read - live check N3. This key
+       writes the 'button up' form of both in every pass while he is down. ASSUMED that this hook's tick comes
+       between the input read and the routine that starts the throw; if N3b still throws, it does not. */
+    if (kld_r.nothrow && down) {
+        DWORD b = 0, a = 0, nb, na;
+        if (klh_rd(pl + 0xb90, &b, 4) && klh_rd(pl + 0x818, &a, 4) && ((b & 0x40) || (a & 0x800))) {
+            nb = b & ~0x40u; na = a & ~0x800u;
+            if ((nb == b || klh_data((void *)(DWORD_PTR)(pl + 0xb90), &nb, 4, "the player's buttons: the throw button is up while he is knocked down (NoThrow; as 0x4aa417)")) &&
+                (na == a || klh_data((void *)(DWORD_PTR)(pl + 0x818), &na, 4, "the player's action word: no throw asked while he is knocked down (NoThrow; as 0x544805)")) && !kld_r.nthrow++)
+                klog("down: rules: NoThrow: the throw button was down %.2f s after he went down: buttons [player+0xb90] %08lx -> %08lx, action word [player+0x818] %08lx -> %08lx (and in every pass of this down in which it is found again) - a TEST key: does anything fly?", (now - kld_r.t0) / 1000.0f, b, nb, a, na);
+        }
+    }
+
+    /* 1. NO FIRE: the game's own two bits of a man who may not shoot (0x860f87 / 0x860f93), while he is down */
+    {
+        DWORD ma = 0, mv = 0, nv, bits = kld_r.nofire == 2 ? KLD_MASK_FIRE : (KLD_MASK_FIRE | KLD_MASK_AIM);
+        if (kld_r.nofire && down) {
+            if (!kld_mask(pl, &ma, &mv)) { if (!kld_r.mtold) { kld_r.mtold = 1; klog("down: rules: NoFire: NO INPUT OBJECT for this player (the lookup of 0x61ef90 finds none): nothing is masked - he can fire in this down"); } }
+            else {
+                if (kld_r.mbits && (kld_r.mpl != pl || kld_r.mat != ma)) { klog("down: rules: NoFire: the bits %lx this part set on player %08lx (mask %08lx) are another object's now: dropped unwritten", kld_r.mbits, kld_r.mpl, kld_r.mat); kld_r.mbits = 0; }
+                if ((mv & bits) != bits) {
+                    if (kld_r.mbits && kld_r.mn >= 6) { if (!kld_r.mtold) { kld_r.mtold = 1; klog("down: rules: NoFire: somebody takes the bits off the input mask %08lx again and again (%d times in this down): left to them - he can fire", ma, kld_r.mn); } }
+                    else {
+                        nv = mv | bits;
+                        if (klh_data((void *)(DWORD_PTR)ma, &nv, 4, "the player's input object: the game's own 'no fire' / 'no aim' mask bits (0x400, 0x200: what a human-shield hold sets on its victim, 0x860f87)")) {
+                            kld_r.mbits |= bits & ~mv; kld_r.mpl = pl; kld_r.mat = ma; kld_r.mn++; kld_r.t_mlost = 0;
+                            if (kld_r.mn == 1 || kld.log >= 2) klog("down: rules: NoFire: the input mask %08lx: %08lx -> %08lx %.2f s after he went down (bit 0x400 = TapFire / HoldFire are not read, 0x5fc02c / 0x5fc068%s; the GET UP button, Use and the look stay) - until he is up%s",
+                                                                     ma, mv, nv, (now - kld_r.t0) / 1000.0f, bits & KLD_MASK_AIM ? "; bit 0x200 = the precision aim is not read" : "; NoFire=2: he may aim", kld_r.mn > 1 ? " - SET AGAIN in this down: somebody had taken it off" : "");
+                        }
+                    }
+                }
+            }
+        } else if (kld_r.mbits) {              /* ours come off: he is up / dead / out of play / a fed / the round is over */
+            if (!kld_v.pl) {                   /* no local player object this pass (a load, the menu): tried for 3 s, then the object is taken as gone */
+                if (!kld_r.t_mlost) kld_r.t_mlost = now;
+                if (now - kld_r.t_mlost >= 3000) { klog("down: rules: NoFire: no local player object for 3 s: the bits %lx on player %08lx are dropped unwritten (the object went with its level)", kld_r.mbits, kld_r.mpl); kld_r.mbits = 0; kld_r.t_mlost = 0; }
+            } else if (kld_v.pl != kld_r.mpl || !kld_mask(kld_r.mpl, &ma, &mv) || ma != kld_r.mat) {
+                klog("down: rules: NoFire: the local player is %08lx now, the bits %lx were set on %08lx (mask %08lx): dropped unwritten (another object, or another input object for it: this part writes only where it set them)", kld_v.pl, kld_r.mbits, kld_r.mpl, kld_r.mat);
+                kld_r.mbits = 0; kld_r.t_mlost = 0;
+            } else {
+                nv = mv & ~kld_r.mbits;
+                if (nv == mv || klh_data((void *)(DWORD_PTR)ma, &nv, 4, "the player's input object: this part's 'no fire' / 'no aim' bits off (as the game takes them off a freed shield victim, 0x861099)"))
+                    klog("down: rules: NoFire: off (%s): the input mask %08lx: %08lx -> %08lx%s", why[0] ? why : "the down is over", ma, mv, nv, (nv & (KLD_MASK_FIRE | KLD_MASK_AIM)) ? " - BITS 0x600 STILL STAND: they were set before this part's write and are somebody else's" : "");
+                kld_r.mbits = 0; kld_r.t_mlost = 0;
+            }
+        }
+    }
+
+    /* 2. THE FACTORS: the level's police -> you (+8) and crew -> you (+0x10) while he is down */
+    if ((tun = klh_rd32((DWORD_PTR)KLH_VA(KLD_TUNING))) != 0 && kld_r.level >= 1 && kld_r.level <= 11) {
+        R = tun + KLD_TABLE + 0x70 * (DWORD)kld_r.level;
+        tok = klh_rd(R + 8, &cur[0], 4) && klh_rd(R + 0x10, &cur[1], 4) && kld_fin(cur[0]) && kld_fin(cur[1]) && cur[0] >= 0 && cur[0] <= 50 && cur[1] >= 0 && cur[1] <= 50;      /* klbalance.c's own test of a factor */
+    }
+    if (!down || !need) {
+        int nb = 0, nl = 0;
+        if (kld_r.fon) { kld_r.fon = 0; kld_r.t_foff = now; }
+        for (k = 0; k < 2; k++) if (kld_r.w[k].at) {      /* what this part wrote itself goes back - only while it still reads as written */
+            float c = 0;
+            if (klh_rd(kld_r.w[k].at, &c, 4) && c == kld_r.w[k].put && klh_data((void *)(DWORD_PTR)kld_r.w[k].at, &kld_r.w[k].old, 4, "the Arcade damage table: a factor on the player, as it stood before he went down")) nb++; else nl++;
+            kld_r.w[k].at = 0;
+        }
+        if (nb || nl) klog("down: rules: the damage table has its own police -> you / crew -> you again (%d value(s) put back%s)", nb, nl ? "; one did not read as this part left it and was LEFT ALONE" : "");
+        if (pl && ds == 0 && tok && (!kld_r.t_foff || now - kld_r.t_foff >= 300)) { kld_r.up[0] = cur[0]; kld_r.up[1] = cur[1]; kld_r.upR = R; kld_r.uphave = 1; }      /* 300 ms: klbalance.c's own put-back is 50 ms + a frame behind */
+        kld_r.stand = 0; kld_r.standtold = 0; kld_r.unverified = 0;
+    } else {
+        if (!kld_r.fon) {
+            kld_r.fon = 1; kld_r.t_fon = now; kld_r.stand = 0; kld_r.standtold = 0; kld_r.unverified = 0;
+            if (!kld_r.uphave || kld_r.upR != R) {       /* he went down before the table was seen with him up (the first passes of a round) */
+                kld_r.uphave = 0;
+                if (!owned && tok) {                     /* nobody else writes it: what stands there now is the level's own - unless it is still ours */
+                    for (k = 0; k < 2; k++) kld_r.up[k] = kld_r.w[k].at == R + off[k] && cur[k] == kld_r.w[k].put ? kld_r.w[k].old : cur[k];
+                    kld_r.upR = R; kld_r.uphave = 1;
+                }
+            }
+        }
+        want[0] = kld_r.up[0] * kld_r.cop; want[1] = kld_r.up[1] * kld_r.crew;
+        if (!owned) {
+            int bad = !tok || !kld_r.uphave;
+            for (k = 0; k < 2 && !bad; k++) {
+                if (kld_near(cur[k], want[k])) continue;
+                if (!klh_data((void *)(DWORD_PTR)(R + off[k]), &want[k], 4, k ? "the Arcade damage table: crew -> you while he is knocked down (DownFromCrew)" : "the Arcade damage table: police -> you while he is knocked down (DownFromCop)")) { bad = 1; break; }
+                if (kld_r.w[k].at != R + off[k]) { kld_r.w[k].at = R + off[k]; kld_r.w[k].old = kld_r.up[k]; }
+                kld_r.w[k].put = want[k];
+            }
+            kld_r.stand = !bad;
+        } else {
+#ifdef KLR_DOWN
+            if (tok && kld_r.uphave) kld_r.stand = kld_near(cur[0], want[0]) && kld_near(cur[1], want[1]);
+            else if (now - kld_r.t_fon >= 200) { kld_r.stand = 1; kld_r.unverified = 1; }      /* nothing to compare with: klbalance.c has had four of its passes */
+#else
+            kld_r.stand = 0;                   /* klbalance.c owns the table and this build's has not got the hand-over lines: said at start */
+#endif
+        }
+        if (kld_r.stand && kld_r.standtold != 1) {
+            kld_r.standtold = 1;
+            klog("down: rules: %.2f s after he went down the damage table of Arcade level %d holds police -> you %.3f (x %.2f DownFromCop of the %.3f it held while he was up) and crew -> you %.3f (x %.2f DownFromCrew of %.3f) - %s%s; the game picks one of the two by the ATTACKER's team at every bullet (0x8b8050), a point-blank step is a hundred bullets at that price",
+                 (now - kld_r.t0) / 1000.0f, kld_r.level, cur[0], kld_r.cop, kld_r.up[0], cur[1], kld_r.crew, kld_r.up[1],
+                 owned ? "written by klbalance.c (its keys own the table; kld_factor)" : "written by this part (no [Balance] key owns the table)", kld_r.unverified ? " - NOT VERIFIED: the table was never seen with him up on this level, the numbers are what stands there now" : "");
+        } else if (!kld_r.stand && !kld_r.standtold && now - kld_r.t_fon >= 1000) {
+#ifdef KLR_DOWN
+            const char *ow = "klbalance.c owns the table and has not written them (does its dial act on this level?)";
+#else
+            const char *ow = "klbalance.c owns the table ([Balance] keys) and THIS BUILD'S klbalance.c HAS NOT GOT THE THREE HAND-OVER LINES (KLR_DOWN, re\\player_down.md 14.5)";
+#endif
+            kld_r.standtold = 2;
+            klog("down: rules: THE FACTORS DO NOT STAND 1 s after he went down: Arcade level %d holds police -> you %.3f, crew -> you %.3f; wanted %.3f (x %.2f) and %.3f (x %.2f) - %s. Hits stay SWALLOWED in the fall (the switch is not taken off), and lying the stock way he pays the full price",
+                 kld_r.level, cur[0], cur[1], want[0], kld_r.cop, want[1], kld_r.crew,
+                 !tok ? "the table cannot be read where this build expects it" : owned ? ow : !kld_r.uphave ? "the table was never seen with him up" : "this part's write was refused");
+        }
+    }
+
+    /* review 8, S1: 'stand' is this pass's now - the test at the top had last pass's. A switch that is off while the
+       table has lost the factors (klbalance.c wrote the standing price back on the fallback thread) goes back here */
+    if (kld_r.sw && need && !kld_r.stand) kld_sw_back(now, "the two factors do not stand in the table any more (seen after this pass's read of it)");
+
+    /* 3. VULNERABLE, the other half: the switch off - only in a pass that held the fall, with the factors in place */
+    if (hurtw && (!need || kld_r.stand) && !kld_r.sw) {
+        if (!klh_rd((DWORD_PTR)KLH_VA(KLD_SWITCH), &sw, 4) || sw != 1) {
+            if (!kld_r.swtold) { kld_r.swtold = 1; klog("down: rules: Vulnerable: the game's switch [0xceb40c] reads %lu, not the image's 1: left alone - hits stay swallowed in this fall", sw); }
+        } else if (klh_data((void *)KLH_VA(KLD_SWITCH), &zero, 4, "the game's 'down not dead' switch: 0 while this part holds the fall, so that its trigger swallows no hit (0x8da3bd)")) {
+            kld_r.sw = 1; kld_r.t_sw = now; kld_r.swn++;
+            if (kld_r.swn <= 3 || kld.log >= 2) klog("down: rules: Vulnerable: %.2f s after he went down the game's 'down not dead' switch [0xceb40c] 1 -> 0%s: the trigger 0x8da3b0 swallows nothing, EVERY HIT COSTS from here (health %.1f of %.1f); the down state's own frame stands still while this part plays the clip, and the switch goes back in the pass that ends it",
+                                                     (now - kld_r.t0) / 1000.0f, kld_r.swn > 1 ? " (again in this down)" : "", hp, max);
+        }
+    }
+
+    /* the log of one knock-down: what he lost and to whom, its end */
+    if (down && hpok) {
+        if (hp < kld_r.hplast - 0.05f) {
+            float dl = kld_r.hplast - hp; kld_r.lost += dl; kld_r.nloss++;
+            if (kld.log >= 2 || kld_r.nline < 8) {
+                DWORD att = klh_rd32(pl + 0x2778), avt = att ? klh_rd32(att) : 0, team = 99, sc; const char *who = "nobody yet / not readable";
+                kld_r.nline++;
+                if (avt == KLD_ACTOR_VT) { if ((sc = klh_rd32(att + 0x54)) != 0) klh_rd(sc + 4, &team, 4); who = team == 2 ? "an AI HEISTER (team Ally: the crew -> you float, DownFromCrew)" : "POLICE / a guard (not team Ally: the police -> you float, DownFromCop)"; }
+                else if (avt == KLD_PLAYER_VT) who = "a human player (no float of the table prices him)";
+                klog("down: rules: he lost %.1f on the floor (%.1f of %.1f; down state %lu, %.2f s after he went down); the last BULLET's attacker [player+0x2778] = %08lx is %s (team %lu); the table holds police -> you %.3f, crew -> you %.3f; the switch is %s; %ld point-blank step(s) capped so far%s%s",
+                     dl, hp, max, ds, (now - kld_r.t0) / 1000.0f, att, who, team, cur[0], cur[1], kld_r.sw ? "off (hits cost)" : "on", (long)kld_r.npb,
+                     KLD_ABS(dl - 50.0f) < 0.11f ? " - EXACTLY 50: the flat price of close combat (0x499570), which no factor of this part scales (review 8, S7: is the attacker beside him and not firing?)" : "",
+                     kld_r.nline == 8 && kld.log < 2 ? " - further losses of this down are only counted (Log=2 lists them)" : "");
+            }
+        }
+        kld_r.hplast = hp;
+    }
+    if (!down && kld_r.was) {
+        kld_r.was = 0;
+        klog("down: rules: this knock-down is over after %.2f s (%s): %d loss(es) of health, %.1f in all (%.1f when he went down, %.1f now); hits could cost for %.2f s of it (the switch was taken off %d time(s)); %ld point-blank step(s) on him were capped to %.2f bullet(s); fire %s",
+             (now - kld_r.t0) / 1000.0f, why[0] ? why : "over", kld_r.nloss, kld_r.lost, kld_r.hp0, hp, kld_r.ms_hurt / 1000.0f, kld_r.swn, (long)kld_r.npb, kld_r.pb, kld_r.nofire ? "was masked" : "was open (NoFire=0)");
+        /* review 8, S5 - CooldownCredit (default 1). The pause before the next down is the float [D+0x38], counted
+           down by D's frame (0x724432: minus the frame's seconds, not below 0) - which stood still while the switch
+           was off, so the pause would start when he is UP and a man who stands hurt could not be floored again for
+           the whole Cooldown. The seconds the switch was off are taken from it here, once, when he is up: the pause
+           then runs from the knock-down's start as it did before Vulnerable. One float of his down object. */
+        if (kld_r.cdfix && pl && ds == 0 && !kld_s.dead && kld_r.ms_hurt) {
+            int ok = 1; float c = kld_rdf(d + 0x38, &ok), n = c - kld_r.ms_hurt / 1000.0f;
+            if (ok && kld_fin(c) && c > 0 && c <= 600.0f) {
+                if (n < 0) n = 0;
+                if (klh_data((void *)(DWORD_PTR)(d + 0x38), &n, 4, "the down state: the pause before the next down, less the seconds its frame stood still (CooldownCredit)"))
+                    klog("down: rules: CooldownCredit: the pause before the next down [D+0x38] %.2f -> %.2f s (the %.2f s the down state's frame stood still in this knock-down are taken off: the pause counts from when he went down, as before Vulnerable)", c, n, kld_r.ms_hurt / 1000.0f);
+            }
+        }
+    }
+}
+
 static void kld_tick_main(int game_thread)
 {
     static DWORD toldrules; static char toldwhy[200];
@@ -1688,6 +2117,7 @@ static void kld_tick_main(int game_thread)
         !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLD_PLAYER_VT || !klh_rd(pl + 0x2723, &police, 1)) pl = 0;
     if (!pl || police) act = 0;                /* a fed is left to the game */
     kld_v.act = act; kld_v.pl = pl; kld_v.state = state;      /* track R7: for the camera / prompt pass (kld_tick) */
+    kld_r.level = level;                       /* track R8: the level's record of the damage table (kld_rules) */
     if (pl && (h = klh_rd32(pl + 0xa48)) != 0) { ho = h; hp = kld_rdf(h + 4, &ok); max = kld_rdf(h + 8, &ok); } else ok = 0;
     hpok = ok && max >= 1.0f;
     kld_tuning(act, ok ? max : 0.0f);
@@ -1888,9 +2318,21 @@ static void kld_tick_main(int game_thread)
 static void kld_tick(int game_thread)
 {
     DWORD pl, d, ds = 0, now;
-    if (!game_thread) return;
+    if (!game_thread) {                        /* the fallback thread (no frame for 500 ms: a load, a stall). Track R8: klbalance.c may tick there and
+                                                  asks kld_factor() - a factor must not outlive the passes that keep it (one int of this part's own) */
+        /* review 8, S1: the switch first - with the factors and the cap dropped here, a first frame after the stall
+           would otherwise price him in full (and a point-blank step at a hundred bullets) with the switch still off.
+           The one write of this file off the game thread: an aligned dword of .data the game only compares, made
+           only when the game thread has not ticked for 500 ms. */
+        if (kld_r.sw) kld_sw_back(GetTickCount(), "the game thread has made no pass for 500 ms (a stall, a load): written from the fallback thread, before the factors and the point-blank cap are dropped");
+        if (kld_r.fon) { kld_r.fon = 0; kld_r.t_foff = GetTickCount(); }
+        InterlockedExchange(&kld_r.pbon, 0);
+        return;
+    }
     kld_v.act = 0; kld_v.pl = 0; kld_v.state = 0;
+    if (!++kld_r.pass) kld_r.pass = 1;         /* track R8: kld_flop_one's heartbeat is 'this pass' */
     kld_tick_main(game_thread);
+    kld_rules(GetTickCount());                 /* track R8: after every early return of kld_tick_main, before the camera / prompt's own */
     if (!kld.on || !klh_exe_ok || (!kld_v.cam && !kld_v.prompt && !kld_v.ours)) return;
     now = GetTickCount(); pl = kld_v.act ? kld_v.pl : 0;
     if (!pl || !(d = klh_rd32(pl + 0x2948)) || klh_rd32(d) != pl || !klh_rd(d + 4, &ds, 4)) { kld_v.act = 0; kld_prompt(0, 0, now); return; }
@@ -1987,7 +2429,7 @@ static void kld_init(void)
     if (!kld_fin(kld_bk.near_) || kld_bk.near_ < 0 || kld_bk.near_ > 100000.0f) kld_bk.near_ = -1.0f;
     if (kld_bk.on) klog("down: bots: on%s - the AI heisters' 'down, not dead' by the game's own NPC rule (0x70e0e0; NOT SHOWN that it makes one go down: only tests f / g are taken away, a .. e stay the game's): BotsForce=%d (1 = each one's modifier [soldier+0x124] 0 -> 1: the level-wide pause and his 50 %% chance no longer refuse), BotsMax=%d downs a bot a round (the game's own: 1), BotsLie=%.1f s (0 = the game's 1.5 .. 3.0), BotsFree=%.2f s without damage from the down's start, BotsUpPct=%.0f (0 = the game's 75), BotsNear=%.0f (-1 = [T+0x5c] not written). Arcade, a level that is not stock, the round running; data writes only (re\\player_down.md 11)",
                         kld.dry || kld_bk.dry ? " (Dry: NOTHING is written; every AI heister's death prints the readable inputs of the game's test and his place)" : "", kld_bk.force, kld_bk.max, kld_bk.lie, kld_bk.freet, kld_bk.uppct, kld_bk.near_);
-    if (kld.on && kld.flop == 1) klog("down: flop: Flop=1 - DOG DAYS' OWN KNOCK-DOWN, ONE CLIP: he goes down by %s (thrown down, lying, up over a knee: the whole clip is played in the game's fall; no press cuts it, no hit of it costs), from the landing on at FlopBase %.2f + FlopPerPress %.2f x the mash meter, at most FlopTop %.2f; FlopBelly=%d (1 = every draw of the slot is the clip thrown forward, onto the belly); FlopUpPct=%.0f (health he is given when up; 0 = none). Flop=2 = the earlier pair (a death clip + the rise from the stomach)",
+    if (kld.on && kld.flop == 1) klog("down: flop: Flop=1 - DOG DAYS' OWN KNOCK-DOWN, ONE CLIP: he goes down by %s (thrown down, lying, up over a knee: the whole clip is played in the game's fall; no press cuts it; a hit of it costs only with Vulnerable=1 - the 'rules:' line), from the landing on at FlopBase %.2f + FlopPerPress %.2f x the mash meter, at most FlopTop %.2f; FlopBelly=%d (1 = every draw of the slot is the clip thrown forward, onto the belly); FlopUpPct=%.0f (health he is given when up; 0 = none). Flop=2 = the earlier pair (a death clip + the rise from the stomach)",
                                       kld.fallslot, kld.fbase, kld.fper, kld.ftop, kld.belly, kld.uppct);
     if (kld.on && kld.flop == 3) {
         char m[300]; int nm = 0;
@@ -2005,6 +2447,45 @@ static void kld_init(void)
     kld_v.pulse = GetPrivateProfileIntA("Down", "PromptPulse", 0, klh_ini) != 0;      /* review 7, S3: default 0 - the game's own break-free bar stays white */
     if (kld.on) klog("down: camera: Camera=%d (1 = in a fall this part drives the fall's LOOK bit 0x10 of the input mask [player+0xed0] is taken off at once - stock takes it off 0.72 s into its own fall, the flop holds that tick for the whole clip, so the mouse was dead for the whole knock-down; the move bit 1 stays), CameraSide=%d (1 = the shoulder side he had is put back: the down start forces the left one). prompt: Prompt=%d (1 = the game's own 'Tap Quickly' prompt - the element at [osd+0x10fc], the one its human-shield break-free shows (0x860ed3), here with '{TapCover}' + its bar - is shown by four data fields from the landing of a knock-down / during a get-up this part drives, only while the round runs), PromptStyle=%d (1 = the bar is how far he is up - the hook's design; 2 = the mash's speed - a meter as the game's break-free bar is), PromptPulse=%d (1 = the bar is the game's red for 0.12 s after a press; 0 = always white, as the game's). Camera and Prompt default to 1 when Flop is set. Data writes only (re\\player_down.md 13)",
                      kld_v.cam, kld_v.side, kld_v.prompt, kld_v.style, kld_v.pulse);
+    /* track R8: while knocked down - no shooting, not invulnerable, police little, heisters in full (the block before
+       kld_tick_main). NoFire and DownFromCop default to their values only with a Flop: with Flop=0 the stock down
+       ('he can crawl and shoot', full price) stays what it was unless a key is set. */
+    memset(&kld_r, 0, sizeof kld_r);
+    kld_r.nofire = (int)GetPrivateProfileIntA("Down", "NoFire", kld.flop != 0, klh_ini);
+    if (kld_r.nofire < 0 || kld_r.nofire > 2) kld_r.nofire = kld.flop != 0;
+    kld_r.hurt = GetPrivateProfileIntA("Down", "Vulnerable", KLD_ONE, klh_ini) != 0;
+    /* review 8, S4: 0.15, not 0.25 - most guards of the Dead Men maps carry pistols, which at 0.25 finish a man who
+       lies with 80 .. 220 in 2 .. 8 bullets (re\player_down.md 14.4); still a GUESS */
+    kld_r.cop = kld_inif("DownFromCop", kld.flop ? "0.15" : "1"); kld_r.crew = kld_inif("DownFromCrew", "1");
+    if (!kld_fin(kld_r.cop) || kld_r.cop < 0 || kld_r.cop > 4.0f) kld_r.cop = kld.flop ? 0.15f : 1.0f;
+    if (!kld_fin(kld_r.crew) || kld_r.crew < 0 || kld_r.crew > 4.0f) kld_r.crew = 1.0f;
+    kld_r.pb = kld.on ? kld_pb_ini() : -1.0f;                                 /* review 8, M1: DownPointBlank (kld_pb) */
+    kld_r.cdfix = GetPrivateProfileIntA("Down", "CooldownCredit", 1, klh_ini) != 0;      /* S5 */
+    kld_r.nothrow = GetPrivateProfileIntA("Down", "NoThrow", 0, klh_ini) != 0;           /* S2: a TEST key */
+    if (kld.on) {
+#if defined(KLR_DOWN) && KLR_DOWN >= 2
+        const char *ho = "this build's klbalance.c HAS the hand-over lines (KLR_DOWN 2: the factors AND the point-blank cap): while [Balance] keys own the damage table klbalance.c multiplies it by kld_factor(), and its point-blank wrapper asks kld_pb()";
+#elif defined(KLR_DOWN)
+        const char *ho = "THIS BUILD'S klbalance.c HAS ONLY THE FIRST THREE HAND-OVER LINES (KLR_DOWN 1): the factors stand, THE POINT-BLANK CAP CANNOT";
+#else
+        const char *ho = "THIS BUILD'S klbalance.c HAS NOT GOT THE HAND-OVER LINES (KLR_DOWN): while [Balance] keys own the damage table the two factors CANNOT STAND, nor can the point-blank cap";
+#endif
+        int owned = kld_owned(), need = kld_r.cop != 1.0f || kld_r.crew != 1.0f, dead_end = 0;
+#ifndef KLR_DOWN
+        dead_end = owned && need;
+#endif
+#if !defined(KLR_DOWN) || KLR_DOWN < 2
+        if (kld_r.pb >= 0) dead_end = 1;
+#else
+        if (kld_r.pb >= 0 && !klr.on) dead_end = 1;      /* klbalance.c's wrapper only goes in with [Balance] Enable=1 */
+#endif
+        klog("down: rules: DownPointBlank=%.2f (review 8: what the hundred bullets of a point-blank step - a soldier firing within 1.6 m, kl2 0x8c62e0 - become ON HIM while he is down, written into the hit record by klbalance.c's wrapper through kld_pb(); a negative number = the step is left alone; Vulnerable WAITS until the cap stands - it needs [Balance] Enable=1 (now %d) and hand-over lines 4 / 5), CooldownCredit=%d (1 = when he is up, the seconds the down state's frame stood still are taken off the pause before the next down [D+0x38]), NoThrow=%d (a TEST key: the throw button is written 'up' in every pass while he is down)",
+             kld_r.pb, klr.on, kld_r.cdfix, kld_r.nothrow);
+        klog("down: rules: NoFire=%d (1 = while he is down the game's own 'no fire' + 'no aim' bits 0x400 / 0x200 of the input mask [player+0xed0] are set - what a human-shield hold sets on its victim; 2 = fire only; the look, the GET UP button and Use stay; melee is off for a downed man by the game itself, 0x612d07), Vulnerable=%d (1 = in a knock-down of Flop=1 / 3 the game's 'down not dead' switch [0xceb40c] is 0 while this part holds the fall: its trigger swallows no hit; no effect in Flop=0 / 2), DownFromCop=%.2f (x the level's police -> you while he is down), DownFromCrew=%.2f (x crew -> you: 1 = a heister hurts him as if he stood); the game picks the float by the ATTACKER's team at every bullet (0x8b8050). The damage table is %s; %s%s. Arcade on a level that is not stock, not for a police player; data writes only (re\\player_down.md 14)",
+             kld_r.nofire, kld_r.hurt, kld_r.cop, kld_r.crew, owned ? "klbalance.c's ([Balance] Enable=1 with a key)" : "nobody's (no [Balance] key): this part writes the level's two floats itself and puts them back", ho,
+             dead_end ? " - SO Vulnerable DOES NOTHING IN THIS PROCESS: hits stay swallowed in the knock-down as before (a floored man at the full police price, or beside a guard without the point-blank cap, would be worse); give klbalance.c the five lines and [Balance] Enable=1, or set both factors to 1 and DownPointBlank=-1" : "");
+        if (kld_r.hurt && !KLD_ONE) klog("down: rules: Vulnerable=1 does nothing with Flop=%d: only the falls of Flop=1 / 3 are ended by this part - a stock fall (0.7 s free, then full price lying) and Flop=2's are ended by the game's own frame, which the switch would stop", kld.flop);
+    }
     if (kld.on && kld.flop == 2) klog("down: flop: Flop=2 - THE BELLY FLOP, two clips: he goes down by %s and gets up by %s (slot ids written into his prone movement while he is up; the game plays them itself), the get-up at FlopBase %.2f + FlopPerPress %.2f x the meter, at most FlopTop %.2f; FlopTake=%.2f (the share of a loss in the get-up that stays), FlopUpPct=%.0f (health he is given when up; 0 = none)",
                                  kld.fallslot, kld.upslot, kld.fbase, kld.fper, kld.ftop, kld.take, kld.uppct);
 }

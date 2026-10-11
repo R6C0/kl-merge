@@ -1323,3 +1323,354 @@ the right shoulder right for the belly flop.
 | S5 `[player+0xb8c]` | DONE: named (13.3 point 2, the comment), read into the side line; a value armed in the fall stops the side writes of that down. NOT written (it is 0 after the down start's direct call) |
 | S6 two blend restarts | DONE in text: C1's PASS column, the ini's `CameraSide` line |
 | S7 pause test | DONE in code: 500 ms, the test's clock starts afresh at the first wanted pass; C1's FAIL column says what an OFF / ON pair without a pause means |
+
+## 14. While knocked down: no shooting, not invulnerable, police hurt him little, heisters in full (track R8, 2026-10-11 night)
+
+Owner, 20:45, after playing `Flop=3` with Camera / Prompt (hook ship_w8): *'idk if i said but you can shoot people whilst
+being downed like that, should not be the case, and you are invulnerable, it should take a lot more shots from police
+but the heisters should have the option to shoot you normal health and kill you (gonna apply this to online later on so
+groundwork)'*. **Offline; compiled only; NOTHING HERE HAS RUN IN THE GAME.** READ = kl2.exe build 0490, each routine
+named read whole unless said (scratch listings: the session's scratchpad `R8/`: `fn_458880.txt`, `fn_4db580.txt`,
+`fn_5fbfa0.txt`, `fn_808720.txt`, `fn_8bbd70.txt`; R7's `xref.py` / `disp.py` / `who.py`).
+
+### 14.0 The short answer
+
+- **He can shoot because the fall never masked fire.** The fall's mask bits are 1 (no move) and 0x10 (no mouse look);
+  fire is bit **0x400** and the precision aim bit **0x200** of the same dword. Stock never needed them: its fall is
+  0.72 s and its lying state is meant to shoot. The flop made the fall 2 - 10 s with fire open all the time. R7's
+  Camera gave him the AIM back (the look bit) - it did not open the fire; 10.2's 'he cannot shoot from the floor' was
+  an assumption that nobody had read.
+- **He is invulnerable because the flop holds the tick the game's 'the fall is free' rule waits for** - and that tick
+  cannot be given back without the game cutting the clip (14.2). The data handle is the game's own switch of the
+  whole down state, dword `[0xceb40c]`: 0 = the trigger swallows nothing.
+- **Who hurts him how much is two floats the game picks by the attacker's team at every bullet** (`0x8b8050`): the
+  Arcade table's police -> you and crew -> you. `DownFromCop` / `DownFromCrew` multiply them while he is down.
+- **Built** (`klhook/kldown.c`, `kld_rules` + the block before `kld_tick_main`): `[Down] NoFire`, `Vulnerable`,
+  `DownFromCop`, `DownFromCrew`. Data writes only: one mask DWORD, one `.data` DWORD, two floats of the tuning
+  object (those two by klbalance.c when its keys own the table - **five hand-over lines for X2's file, 14.5; without
+  them `Vulnerable` does nothing in the owner's game and says so**).
+- **A guard at arm's length would kill a lying man in one step** (a hundred bullets x the cop factor). Since the fix
+  round (14.9) the hundred is capped while he is down - `DownPointBlank`, default half a bullet a step - and
+  `Vulnerable` does not act before that cap stands.
+- **THE FIX ROUND AFTER REVIEW 8 IS SECTION 14.9: it supersedes the defaults, the hand-over and the numbers of
+  14.3 - 14.8 where they differ** (`DownFromCop` 0.15, `DownPointBlank`, `CooldownCredit`, `NoThrow`, five lines).
+
+### 14.1 Why he can shoot (READ)
+
+| what | where | facts |
+|---|---|---|
+| the buttons | `ZGameplayInput` slot 7 = **0x5fbfa0** (the only caller: 0x484a0e in the Wintel class's per-frame read); the action objects are made by the constructor 0x8bbd70 with the names of the pointer table 0xceba78 .. | each action's 'is down' (0x5f4310) is OR-ed into a byte of the input object H only while its mask bits are clear. `H+0xa4` **TapFire** -> `[H+0x2cd]`, `H+0xb0` **HoldFire** -> `[H+0x2ce]`: bits **0x80 and 0x400** (0x5fc017 .. 0x5fc07a). `H+0x74 .. +0x98` Tap / HoldPrecisionAim and the '2' pair -> `[H+0x2c8 .. +0x2cb]`: bits **0x80 and 0x200**. Every other button - `H+0x104` **TapCover -> `[H+0x2d3]` = the GET UP / mash button**, HoldCover, TapUse, HoldGrenade (`[H+0x2d2]`), Tap / HoldCloseCombat (`[H+0x2de]` / `[H+0x2dc]`), cycle weapon, sprint ... - bit **0x80** only. `H+0x188` TapReload -> `[H+0x2e9]`: no bit |
+| to the player | slot 12 = 0x808720 | 0x808bde HoldFire -> 0x589d30 = bit 2 of `[player+0xb90]`; 0x808bee TapFire -> 0x5e9530 = bit 1; grenade 0x4aa410 (bit 0x40), cover 0x6ac710 (bit 0x100), use 0x63bc30 (bit 8) |
+| the mask | `[player+0xed0]` (the dword `kld_mask` finds; 13.1 has its move / look bits) | **the full bit list now: 1 no move, 2 / 4 one move axis, 0x10 no look, 0x20 / 0x40 one look axis, 0x80 NO BUTTON AT ALL, 0x100 (0x8088e0: an argument of 0x551d00, not read), 0x200 no precision aim, 0x400 no fire.** 0x84af60 (a level object's setter) sets / clears 2, 4, 0x20, 0x40, 0x80, 0x100 by six of its fields |
+| the fall sets | 0x76a827 / 0x76a830 | **1 and 0x10 only** - fire and aim were open in every fall the game ever made |
+| stock hides it | 0x8ee278 .. 0x8ee2d0 | from the fall's event tick on a fire flag (`[player+0x818]` bit 2), `[D+0x34]` or the rig's slot +0x2c cut the fall to LYING at once - the state that is made for shooting. So in stock he fires from 0.72 s on, by design |
+| **the game's own 'may not fire'** | 0x860f7b / 0x860f87 / 0x860f93 (the victim of a human-shield hold; off at 0x861099 ..) | mask bits **1, 0x200, 0x400** - and the victim keeps Use for his break-free. `NoFire` writes exactly the last two |
+| melee, a human shield | **0x612c20** (the player's frame, 0x57fc0e: it finds the close-combat target `[player+0xd38]` for `[player+0xebe]`) | leaves at once while `[D+8]` bit 0 is set (0x612d07 .. 0x612d11), and when the current movement is not 0 / 0xd (0x612c73): **a downed man starts no close combat. The game's own rule; nothing is written for it** |
+| a throw | HoldGrenade -> `[H+0x2d2]` -> 0x4aa410 | no mask bit but 0x80 (which would take the mash button too). Who sets bit 0x40 of `[player+0xb90]` and whether a throw can start in the prone movement: **NOT READ** (N3) |
+
+**Did R7's Camera give fire back? No.** One bit does not gate look and fire: look is 0x10 (and 0x20 / 0x40), fire
+0x400. Fire was open before R7 too; what R7 changed is that he can now turn to what he shoots at.
+
+### 14.2 Why he is invulnerable, and the handle (READ)
+
+| what | where | facts |
+|---|---|---|
+| where a hit is swallowed | the player's damage routine **0x458880** (slot +0x69c; every kind of hit) at 0x458e78 .. 0x458e93 | `0x8da3b0(D, record)` is asked BEFORE the health changes; true -> return, the hit costs nothing - unless the hit's kind `[rec+8]` is 9 (a blast), or the routine's flag byte `[esp+0x12]` is set (0x458aec: `0x585de0` - only with `[0xce89b0]`, word `[player+0xa54]` bit 2 and the attacker within a narrow angle of his facing; `a54` is 0 in a flop, G1) |
+| the trigger in a fall | 0x8da4db .. 0x8da4ec | D state 2: answer = NOT `0x843fa0` |
+| `0x843fa0` | whole | true when the rig's `+0xdc` is 0, D is 2, M is 1 and the tick is past `[M+0x8e0]`. `kld_flop_one` holds `[M+0x8e0]` 2 s behind the clip's end -> **never true -> every hit of the whole knock-down is swallowed** (the stretched 0.72 s of stock) |
+| why the tick cannot be given back | 0x8ee22e .. 0x8ee2d0; 0x47cde7 .. 0x47ce4d | the same test opens (a) the cut to lying by a fire flag / `[D+0x34]` / the rig, and (b) the GET UP press - **the mash button** - that sets `[D+0x21]` and starts the stock get-up in the middle of the clip. `Flop=1 / 3` exist by keeping `0x843fa0` false |
+| a per-hit wrapper | - | the hit reaches 0x458880 through the PLAYER's vtable only (slots 72 / 89 / 424 / +0x69c). A private vtable copy on the player changes the first dword every part of the hook knows a `ZFFPlayer` by (`KLD_PLAYER_VT` and its twins in eight files): **not done** - the same finding as klbalance.c 2 a6 for the AI heisters |
+| **the handle: the game's switch** | dword **`[0xceb40c]`**, `.data`, 1 in the image, in no hashed range (`klranges.h`) | the trigger's FIRST test (0x8da3b3): 0 -> it returns 0 at once = every hit goes on to the health. **All eleven readers, read:** 0x8da3b0 (the trigger); 0x658700 (the other starters: nothing while 0 - and its caller 0x489c40 leaves first for a man who is down); **0x724420 (D's frame: returns at once)**; 0x76a450 x 2 (the down start); 0x7107b0 x 2 (the end of the state); 0x8ee220 (the 2 -> 1 step, inside the frame); the three state setters 0x5491d0 / 0x62db70 / 0x8c8150 |
+| what a 0 stops | 0x724420 whole | the down state of **every player of the process** stands still: no 2 -> 1, no prompt, no press handling, no end of the state, and **`[D+0x38]` (the pause before the next down) is not counted down** |
+| what still runs | 0x84dda0; the prone movement's slot 17; 0x88a990 | the input's write of the GET UP button `[D+0x2b]` (it tests only `[D+8]` bit 0) = the mash; the clip; the damage; a death and the reset of D (they do not read the switch) |
+| why that is all the flop asks | 10.2, 12.3 | while it plays its clip `kld_flop_one` holds both ticks so that the frame does NOTHING (read again: with D 2, M 1 and `0x843fa0` false, 0x8ee220 returns, 0x47cd80 falls through to 0x69a440 - false while the event tick is ahead - and 0x4205b0 wants D 1), and it ends the state itself by movement state 5 - for which the frame must run once: the switch is back at 1 in that very pass |
+
+`[0x1535a2c]` (another global the trigger tests) and byte `[gamedata+0x4d38]` (0x828754: the down state is allowed
+at all) were looked at and are not used.
+
+### 14.3 What was built (`kld_rules`, one pass after `kld_tick_main`; game thread only)
+
+1. **`NoFire=1`** (default 1 when `Flop` is set; 0 otherwise). While he is down - `[D+4]` not 0: the dive, lying the
+   stock way after a time bound, any get-up -, alive, the round running (`[session+0x70]` 0x19), not Dry: bits 0x400
+   and 0x200 of the mask dword are set (ONE DWORD; `NoFire=2` = 0x400 alone: he may aim). Set again when somebody
+   takes them off (six times a down at most, then one line). **Only the bits this part set are its own**: they come
+   off in the pass that sees him up, dead, out of play, a police body, or the round over - on the same player object
+   and the same address only (another object, or none for 3 s: dropped unwritten, one line; that branch is not
+   reached in practice - the death pass clears the bits first. Review 8, S8: 0x804546 is NOT a reset, it is
+   0x803c40 reading the dword back from a stream, a state restore). Bits found set before (a shield hold of the
+   game's) stay.
+2. **`Vulnerable=1`** (default 1 with `Flop=1 / 3`; **no effect in `Flop=0 / 2`**: those falls are ended by the game's
+   own frame, which a 0 would stop - one line says so). The switch is written 0 **only in a pass in which
+   `kld_flop_one` held the fall** - its heartbeat `kld_r.beat`, set where it writes the two ticks: D 2, M 1, the clip
+   on its channel, inside both time bounds - and he is alive, the round runs, and the two factors stand in the table
+   (point 3). **In every other pass it goes back to 1 first thing**: the pass that wrote state 5, a time bound, a
+   failed read of the channel, `FlopUp`, a death, the round's end, a police body, no player. A value that is neither
+   the image's 1 nor this part's own 0 is left alone (one line). The stumble #43 costs too (it was 2.1 free seconds).
+3. **`DownFromCop`** (default **0.15 with a Flop - a GUESS**, 0.25 before review 8; 1 otherwise) and **`DownFromCrew`** (default 1.0), 0 .. 4:
+   while he is down in ANY `Flop` mode (`[D+4]` not 0, alive, the round running) the level's police -> you
+   (`R+0x08`) and crew -> you (`R+0x10`) are 'what they were while he was up' x the factor.
+   - **klbalance.c owns the table** (`[Balance] Enable=1` with `Risk` or a factor key: it compares the eleven records
+     every 50 ms, writes back what differs and logs a line each time - a second writer would be undone 20 times a
+     second): this part writes NOTHING there. klbalance.c multiplies by `kld_factor(k)` (14.5). This part reads the
+     two floats while he is up (not in the 300 ms after a down), and in a down waits until they read 'up x factor'
+     before the switch goes off (never seen with him up on that level: taken as standing after 200 ms, said as
+     `NOT VERIFIED`). **A build whose klbalance.c has not got the lines** (`KLR_DOWN` not defined): the start line
+     says `CANNOT STAND ... Vulnerable DOES NOTHING IN THIS PROCESS`, the down says `THE FACTORS DO NOT STAND`, and
+     hits stay swallowed as before - rather than a floored man at the full police price.
+   - **nobody owns it** (no `[Balance]` key): this part writes the level's two floats itself and puts back what
+     stood there, only while they still read as it left them.
+4. **The log** (`down: rules: ...`): the start line; `NoFire:` set / off with the mask before -> after; the table line
+   (who wrote it); `Vulnerable:` switch 1 -> 0 and back with the reason; **every loss of health on the floor with the
+   last bullet's attacker `[player+0x2778]` and his team** (the first 8 a down; `Log=2`: all) - the control for 'a
+   policeman at the cop factor, a traitor in full'; one summary line per knock-down.
+
+Writes added: the mask DWORD (bits 0x600), the `.data` DWORD `[0xceb40c]`, and - only when no `[Balance]` key is set
+- two floats of the tuning object. No call, no patch, no vtable copy, no object made. `kld_flop_one` gained one line
+(the heartbeat), `kld_tick_main` one (the level), `kld_tick` the pass counter and the call.
+
+**Side effects to tell the lead / the owner:**
+- **`Cooldown` now runs from the moment he is UP** (the frame that counts `[D+0x38]` down stands while the switch is
+  0): with the game's 10 he cannot be floored for 10 s after standing up; before, an 8.7 s flop left 1.3 s.
+- With klbalance.c owning the table its line `balance: Risk=.. written for 11 Arcade levels (11 value(s) changed ...`
+  comes twice a knock-down (down and up): the cop factor going in and out. Its `now on level ..: police->you`
+  number in that line is the DIAL's, without the factor; the `down: rules:` line beside it has the real one.
+- The flop's `UP` line prints the mask while this part's bits still stand (`00000600 ... the fall's bits 0x11 are
+  off`); the next line is `rules: NoFire: off (he is up): 00000600 -> 00000000`. G1's 'walk, aim, fire' test holds
+  after that line.
+- 10.2's decisions 1 and 2 and 12.3's 'nothing can hurt him' are now the `Vulnerable=0 NoFire=0` case.
+
+### 14.4 The numbers, and what each kind of hit does
+
+A bullet on the player (re/melee_damage.md 3.2, re/balance.md 1): gun x softened body part (1.05 for an NPC's hit) x
+the record's scale x the soldier's 1.0 x **`0x8b8050(rules, ATTACKER)`**, then the same-attacker limiter (x 0.2 over
+0.75 x maximum in 2 s). `0x8b8050` (whole): level record `R = tuning + 0x6ac + 0x70 x level`; the attacker's team
+`[[attacker+0x54]+4]` 2 (Ally: an AI heister; a traitor stays Ally) -> `R+0x10`, else -> `R+0x08`; exchanged while
+PLAYER 0 (`0x660b00(gamedata, 0)`) is police.
+
+The owner's settings (`[Balance] Risk=1`: police -> you 0.5, crew -> you 0.5, health 550; Arcade levels 1 - 3, near
+range; worked out, not seen). He goes down with at least `DownHealth` (the game's 80) and at most 40 % = 220:
+
+| attacker | a bullet standing | on the floor | bullets to finish him from 80 .. 220 |
+|---|---:|---:|---:|
+| police, FN SCAR | 28.4 | **7.1** at 0.25 | 12 .. 31 (standing price: 3 .. 8) |
+| police, AK-74 | 34.0 | **8.5** | 10 .. 26 (3 .. 7) |
+| police, Type 79 | 37.8 | **9.5** | 9 .. 24 (3 .. 6) |
+| police, Type 81 | 47.7 | **11.9** | 7 .. 19 (2 .. 5) |
+| police pistols (M9 / Sig / MP45) | 112 / 146 / 190 | 28 / 36 / 47 | 3 .. 8 / 3 .. 7 / 2 .. 5 (1 .. 2) |
+| shotgun pellet (Hawk) | 20.4 | 5.1 | 16 .. 44 pellets |
+| **an AI heister, Zastava** (`DownFromCrew` 1.0) | 30.2 | **30.2** | 3 .. 8, as standing |
+| `DownFromCop=0.15` / `0.1`, a 36 rifle | - | 5.4 / 3.6 | 15 .. 41 / 23 .. 62 |
+
+A knock-down is 8.7 - 10.4 s without a press, about 4.5 s mashing; the bots took about 3 police hits a second in a
+full room (T1 / T2_DM09): **at 0.25 a man who does not mash in a crowded room will often die on the floor** (25 - 30
+hits x 9 = 225 - 270 against 80 - 220), a man who mashes mostly not. Whether that is 'a lot more shots' enough is the
+owner's to say after N1: 0.15 is the next value.
+
+| kind of hit | under this design |
+|---|---|
+| a police / guard bullet | x `DownFromCop` (the game's own pick of `R+0x08`) |
+| an AI heister's bullet (traitor, backstab, grudge) | x `DownFromCrew` = full by default. The crew's hits on a human who is no traitor are the game's business as ever |
+| **the point-blank step** (a firing guard within 1.6 m: one hit record of scale 100, 0x8c62e0) | priced by the same float, so **the cop factor applies - and 100 bullets x 0.25 still kill**: 72 x 1.05 x 100 x 0.5 x 0.25 = **945 of 550** (standing: 3,780). `[Balance] PointBlankToYou=N` (klbalance.c, in HEAD, off) makes a step N bullets: with 4 it is 38 on the floor. This part does not touch a hit record. The lead's default 'the cop factor applies to it' is what happens; that it is not enough is the finding |
+| a blast (kind 9) | as before: it was never swallowed (0x458e8f). Whether its price reads the table: NOT READ |
+| a fall, the flat 50 of close combat (0x499570), anything else that reaches 0x458880 without the bullet routine | was swallowed in the fall, **now costs in full, no factor**. Which of them can reach a lying man: NOT READ |
+| a one-hit kill | nothing is rewritten after the fact: the health is the game's own write (0x8a7cfb). He dies as the game kills a man in the fall - the path a blast already took in a flop (`DEAD ... WHILE FALLING`, `kld_dead`); D keeps its state to the round's end as seen in D1 / D2, the switch and the mask bits are back in the pass that sees it, the fed's body is another player object with a fresh mask |
+
+### 14.5 The FIVE hand-over lines for `klhook/klbalance.c` (X2's file; this track did not touch it) - fix round, replaces the three
+
+They fit HEAD's klbalance.c (0d16a7a) and X2's working copy of 2026-10-11 night alike: each anchor is found exactly
+once in both, and both compile with them (14.9). `KLR_DOWN 2` is what kldown.c tests: with `1` (the first round's
+three lines) the factors stand and the point-blank cap does not, and `Vulnerable` then does nothing unless
+`DownPointBlank=-1`.
+
+**1.** After `static int klb_level(char why[200]);`:
+
+    #define KLR_DOWN 2
+    static float kld_factor(int k); static int kld_moving(void); static float kld_pb(float want); static int kld_pb_key(void);       /* kldown.c (track R8) */
+
+**2.** In `klr_table_tick`, directly after `if (k == 5 && farm != 1.0f) want *= farm;`:
+
+                if (act && !mir && (k == 2 || k == 4)) want *= kld_factor(k);     /* kldown.c: DownFromCop / DownFromCrew while he is knocked down */
+
+**3.** (S6) Two lines further down, REPLACE `int isfar = act && k == 5 && farm != farwas;` by:
+
+                    int isfar = act && ((k == 5 && farm != farwas) || (applied && !mir && (k == 2 || k == 4) && kld_moving()));
+
+**4.** (M1) In `klr_pb_step`, directly after `want = klr_pb.want[who];`:
+
+        if (who == 0) want = kld_pb(want);         /* kldown.c: DownPointBlank while he is knocked down (review 8, M1) */
+
+**5.** (M1) In `klr_init`, directly before `if (pbsaid)`:
+
+        if (kld_pb_key()) klr_pb.any = 1;         /* kldown.c: [Down] DownPointBlank needs the wrapper although no PointBlank key is set */
+
+What each does:
+- 2: `!mir` = never for a police player (slot 2 then holds another key's meaning, and kldown does not act for a
+  fed). With no knock-down `kld_factor` is 1.0 and the product is bit-identical: nothing is written.
+- 3: for 400 ms after the down factor comes or goes (`kld_moving`), a write of slot 2 / 4 is counted with the range
+  factor's (`nfar`), not in `n`: klbalance's `Risk=.. written (.. value(s) changed` line is no longer printed twice
+  a knock-down. The write's reason text in the Steam guard's line then reads 'you -> crew damage factor by range'
+  for these two slots - a label only. A dial write of slot 2 / 4 that falls into those 400 ms (the fed's mirror
+  going on is `mir`, so not that one) would not be counted in the dial's line either.
+- 4: a step on a `ZFFPlayer` asks kldown what the hundred becomes: `DownPointBlank` while he is down, else what
+  `PointBlankToYou` says (a `PointBlankToYou` that is smaller than the cap stays).
+- 5: klbalance's wrapper of the database object's name look-up (its section 2 a4: a private copy of ONE object's
+  vtable, slot 19) goes in on a level that is not stock although no `[Balance] PointBlank*` key is set. **This is
+  the first time that wrapper would be in the owner's game: it has never run (P0 of re/melee_damage.md).** With
+  no PointBlank key the steps on AI heisters and police are left at 100 (`want` -1), and on him too while he is up.
+  It needs `[Balance] Enable=1` (klr_tick returns without it).
+
+### 14.6 Online (groundwork only: nothing of this acts outside Arcade)
+
+What is already 'by the attacker's side, read from the hit': the two numbers are picked by the game from the
+attacker object of the hit record, per bullet, with no 'is an AI' test of the hook's. What does NOT carry over:
+
+| | Arcade (built) | online (re/netcode_fa.md 3, 8) |
+|---|---|---|
+| the price by side | `0x8b8050`, under `0x7f6850` (Arcade) only, **NPC attackers only** (0x4db7d9: the attacker's class is ZActor) | the multiplayer rules classes (Sv 0xbd2eb4 / Cl 0xbd31e4) never read the table; a human attacker's bullet has no such float at all. The victim's damage routine does know the side of a HUMAN attacker - 0x458b64 .. 0x458c43 test his police byte `[+0x2723]`, traitor byte `[+0x2726]` and `[+0x2729]` for the hit indicator's colour - so 'cop / crew / traitor' can be read from the record there; a factor there needs code or a wrapper |
+| whose police byte | player 0's (0x8b8087), not the victim's | wrong for anybody but player 0 |
+| friendly fire | - | 0x4db59f .. 0x4db5f9: with tuning byte `[T+0x2e4]` and `0x7aca80`, a bullet from a human, or from an actor of team 0 / 2 / 0xb, is dropped before it is priced - 'a heister can finish you' has to pass that gate (what `0x7aca80` and the byte are in an FA session: NOT READ) |
+| the switch | one dword for the process: fine with one human | **cannot be the handle**: it freezes every player's down state on that machine, and the three state setters (0x62db70 / 0x8c8150 / 0x5491d0 - they call 0x7033d0 / 0x841db0 with `[player+0x274c]`, by the look of it the replicated object: a GUESS) do nothing while it is 0, so a remote player's down would be lost |
+| who prices | this machine | not read which machine prices a bullet on a human (`RMCReceiveHit` carries `m_iDamage` for actors: the shooter's side); the factor would have to live where the price is made - **host-side at the earliest, and only once that is read** |
+| the mask (`NoFire`) | the local player's input object | per machine: each client masks its own human - every peer needs the hook, as for everything else (re/netcode_fa.md 0) |
+
+So for online the rule needs (1) a per-player 'the fall costs' in place of the switch, (2) a per-hit factor in the
+victim's routine keyed on the attacker's class and bytes, (3) both on the machine that prices the hit. Under the
+present hook policy (no code patch; no private vtable on a player object) neither (1) nor (2) can be had: the owner
+would have to allow one of the two - a vtable copy on player objects with every part's `ZFFPlayer` test taught the
+copy is the smaller. Not built.
+
+### 14.7 Live checks (the lead; the bank DM03, the walk of G1 into the fire; `[Shoulder] Log=1`, `[Balance] Log=2`; a hook WITH the lines of 14.5; the owner's `[Balance] Risk=1 CopToCrew=0.05` and his `[Down]` with `Flop=3`)
+
+| run | keys / script | PASS | FAIL |
+|---|---|---|---|
+| N0 | his keys + `Dry=1` | the start line `down: rules: NoFire=1 ..., Vulnerable=1 ..., DownFromCop=0.25 ..., DownFromCrew=1.00 ...; The damage table is klbalance.c's ...; this build's klbalance.c HAS the hand-over lines (KLR_DOWN) ...`; no other `rules:` line in the round (Dry) | `HAS NOT GOT THE HAND-OVER LINES` (the hook was built without 14.5: build again) |
+| **N1** | his keys, `Log=2`, no press, stand in the fire | at start the same line. Per knock-down, in this order: `YOU ARE DOWN`; **`down: rules: NoFire: the input mask ........: 00000011 -> 00000611 0.0x s after he went down`**; R7's `camera: ... 00000611 -> 00000601`; klbalance's `Risk=1 written ... (11 value(s) changed`; **`down: rules: 0.xx s after he went down the damage table of Arcade level 1 holds police -> you 0.125 (x 0.25 DownFromCop of the 0.500 ...) and crew -> you 0.500 (x 1.00 ...) - written by klbalance.c`**; **`down: rules: Vulnerable: 0.xx s after he went down the game's 'down not dead' switch [0xceb40c] 1 -> 0: ... EVERY HIT COSTS`**; then `balance: you lost` lines of **7 - 12** a rifle bullet (28 - 48 just before he fell) each with `down: rules: he lost .. on the floor ...; the last BULLET's attacker ... is POLICE / a guard ... (team 1 or 4); ... the switch is off (hits cost)`; the mash, the prompt, the camera as in C1; at the end `the knock-down's clip is through ... 00000601 -> 00000600 ..., movement state 5 is written`, **`down: rules: the game's 'down not dead' switch [0xceb40c] is back at 1 after t s (the clip is through and movement state 5 is written ...)` IN THE SAME PASS (same millisecond)**, shoulder `dstate 2->0` within a frame or two, `flop: UP ...` (mask `00000600`), `down: rules: NoFire: off (he is up): ... 00000600 -> 00000000`, `down: rules: this knock-down is over after t s (he is up): n loss(es) ..., hits could cost for .. s of it (the switch was taken off 1 time(s)); fire was masked`, klbalance's second `Risk=1 written` line; THEN THE SCRIPT WALKS, AIMS AND FIRES (G1's test) - all three work, the ammo count drops | `THE FACTORS DO NOT STAND` (says why); no `Vulnerable:` line and no `you lost` in the fall (= still invulnerable: which condition failed is in the line before); `you lost` of the standing size on the floor (the float is not what the bullet reads: tell the track); **shoulder stuck at `dstate 2` after `movement state 5 is written`** (the switch was not back: the frame did not run - STOP, tell the track); `the switch ... reads N, not the image's 1`; `(again in this down)` more than a few times (the heartbeat flaps: a read of the channel fails every other pass - say so); he cannot fire after `NoFire: off`; `BITS 0x600 STILL STAND`; a fault |
+| **N2** (no shooting) | N1, and from `YOU ARE DOWN` on the script HOLDS FIRE (left mouse) for the whole knock-down, then taps it; in a second fall holds AIM (right mouse) | the ammo count of the HUD is the same in the picture before the fall and in every picture of it; no muzzle flash in the pictures; with AIM held the view does not zoom; right after `NoFire: off` a held fire shoots at once | a shot on the floor (then fire reaches the weapon another way than `[H+0x2cd]` / `+0x2ce` -> bits 1 / 2 of `[player+0xb90]`: tell the track, with the mask value of the `NoFire:` line) |
+| N3 (throw, melee, shield; the owner's hand or the rig's keys) | N1 with a guard brought within 2 m / a throwable picked up before the fall; while down: the close-combat key, the grenade key, Use, reload | nothing that hurts anybody: no grab, no hit, no throw; a reload may play | **a throw** (the one action 14.1 did not read: then it needs its own answer - tell the track); a grab |
+| **N4** (a heister finishes him) | N1 + `[Bots] Tune=1 Backstab=100` (or shoot a crew member until `Retaliate` turns him) so that an AI heister fires at him while he lies | `down: rules: he lost 2x - 3x on the floor ...; the last BULLET's attacker ... is an AI HEISTER (team Ally: the crew -> you float, DownFromCrew) (team 2); the table holds police -> you 0.125, crew -> you 0.500` - the heister's bullet at the STANDING price (about 30 near), a policeman's at a quarter in the same down | a heister's bullet at a quarter (the two floats are exchanged: is he police?); no heister ever fires at a lying human (then 'the option to kill you' is the AI's targeting, not the price: say so - 0x8824e7 was read by X2 for the fed only) |
+| **N5** (a death on the floor) | N1 with `DownHealth=80`, no press, a full room; then the same with `[Fed] Enable=1 Player=1` | `DEAD WHILE FALLING ... in the belly flop`; in that pass `rules: ... switch [0xceb40c] is back at 1 (he is dead or out of play ...)`, `rules: NoFire: off (he is dead or out of play): ... -> ...`, klbalance's line (the factor out), `rules: this knock-down is over (he is dead ...)`; the death camera and the round's end as after any death; PICTURE of the body (which clip a man killed in a belly clip dies by was not read). With the fed: `fed: YOU ARE A FED` 5 s later, **the fed fires, walks, is hit at the fed's own prices** (klbalance's `you are POLICE now`), no `rules:` line for the police body; in the NEXT round the hero's first knock-down prints `Vulnerable: ... 1 -> 0` again | the round does not end / he stands frozen dead; the fed cannot fire (mask bits on the new body: `NoFire` dropped them unwritten on the wrong object - tell the track); the switch reads 0 at the next round's first down |
+| N6 (point-blank) | N1 lying within 1.6 m of a firing guard; then + `[Balance] PointBlankToYou=4` | first: `he lost 9xx` / dead in one step (the finding of 14.4, seen); second: steps of about 38 | - |
+| N7 | N1 on stock Subway (the Arcade page) | only the start line; the switch never written, no mask write, klbalance does not act | any other `rules:` line |
+| N8 (the pause) | N1, ESCAPE 3 s into a knock-down, 5 s in the menu, ESCAPE | the knock-down goes on and ends as in N1; if the hook's tick stops in the pause the fallback thread takes the factor out and it comes back with the first frame (`rules:` table line again) | he is up / dead when the menu closes; the switch at 0 after the round |
+| N9 (the control without 14.5) | a hook built from HEAD + this kldown.c only, his keys | start: `... HAS NOT GOT THE HAND-OVER LINES ... CANNOT STAND - SO Vulnerable DOES NOTHING IN THIS PROCESS`; in a down `THE FACTORS DO NOT STAND 1 s after he went down ... THIS BUILD'S klbalance.c HAS NOT GOT ...`, `NoFire` works, no `you lost` in the fall | a `Vulnerable:` switch line |
+| N10 (nobody owns the table) | N1 with `[Balance] Enable=0` | `... - written by this part (no [Balance] key owns the table)` with the stock level-1 numbers (police -> you 0.100 -> 0.025); at UP `rules: the damage table has its own police -> you / crew -> you again (1 value(s) put back)` | `one did not read as this part left it` |
+
+For the owner's eyes after N1 / N4: is a quarter 'a lot more shots' (0.15?); does a heister who turns finish him;
+is the full `Cooldown` after standing up right; the point-blank step (N6) - does he want `PointBlankToYou`.
+
+### 14.8 ASSUMED / not done / compile
+
+- ASSUMED: that the fire the owner used is the mouse / pad fire ACTION (TapFire / HoldFire through 0x5fbfa0; the
+  other writers of an `+0x2ce` byte - 0x466660, 0x4a9d60, 0x83e260, 0x7b1290 - are other classes' fields by their
+  code, not followed); that `[player+0x818]` bit 2 in 0x8ee283 is fed from the same bytes; that nothing but the
+  eleven listed sites reads `[0xceb40c]` (a byte scan for the address in `.text` and data; a computed address would
+  not show); that the frame standing still for the seconds of a flop loses nothing the flop needs (read: what it
+  does in that state; 0x50a9e0's two floats `[D+0x18]` / `[D+0x1c]` and the `[D+0x24]` / `+0x28` timer are simply not
+  updated - who reads them later was not followed); that a man killed in the fall with the switch at 0 dies as one
+  killed by a blast in a flop does (the same routine and state; the switch is back one pass later); that the hook's
+  game-thread tick runs in the pause menu (else N8's fallback path); that `[player+0x2778]` (the bullet routine's
+  'last attacker', 0x4dbb51) is the attacker of the loss just seen - it is the last BULLET's, a blast in between
+  prints the wrong man; every number of 14.4 (near range, body hits, levels 1 - 3; `Ramp` holds police -> you at
+  stock's 0.8 from Arcade level 4 on, where a quarter is 0.2).
+- NOT READ: whether a throw can start on the floor; what a blast's price reads; which unpriced hits (a fall, close
+  combat's 50) reach a lying man; whether an AI heister TARGETS a lying human who is not police (the price is there;
+  the will to shoot is theirs); which clip a man killed in a belly clip dies by; 0x7aca80 and tuning byte `+0x2e4`
+  (the online friendly-fire gate); mask bit 0x100.
+- NOT DONE: a point-blank answer of this part's own (klbalance.c has the key); `Vulnerable` for `Flop=0 / 2` (their
+  falls are the game's 0.7 - 2 s; lying and getting up already cost in full there, and the factors apply to them);
+  a factor for a human attacker; anything online (14.6); no line of klbalance.c or klhook.c was changed.
+- KNOWN: a human-shield hold that the game starts ON him during a knock-down sets bits 0x200 / 0x400 itself; if
+  they were ours first, our end takes them off and he could fire while held (not expected: 0x612c20's twin for an
+  NPC grabbing a downed human was not read). `DownFromCop=0` makes police bullets free.
+
+Compile check (rules: `git archive HEAD klhook` at bac2f86 -> `G:\kl_scratch\R8\src` + this `kldown.c`, sha1
+4956acc2eb93789cd0805916fb0a5e52946ef2a3; HEAD wires kldown.c, no line of klhook.c changed): `built
+G:\kl_scratch\R8\test\dinput8.dll (TEST)` sha1 7adf5cbf772b48fb297a31a7825c8467e72096e1, `built
+G:\kl_scratch\R8\ship\dinput8.dll (SHIP)` sha1 36bf431574d074c7db3485b987cd7aaf5cf19652 - **these two are the N9
+form (HEAD's klbalance.c: no hand-over)**. With the three lines of 14.5 put into HEAD's klbalance.c
+(`G:\kl_scratch\R8\srcho`): `built G:\kl_scratch\R8\test_ho\dinput8.dll (TEST)` sha1
+ff5fbc60a60cd5bf23ebebd54c726610d71f9292, `built G:\kl_scratch\R8\ship_ho\dinput8.dll (SHIP)` sha1
+ac56926b78817664c791c929a7241b2b2f8de713. No warning in any of the four. Compile only: not for the game folder
+(the lead builds from the committed sources once X2's klbalance.c carries the lines). **These four are the FIRST
+round's; the fix round's are in 14.9.**
+
+### 14.9 Review 8 (`re/player_down_review8.md`: ACCEPT WITH FIXES) - the fix round (2026-10-11 night; NOT RUN IN THE GAME)
+
+| point | answer |
+|---|---|
+| **M1** point-blank: `Vulnerable` made 'safe on the floor' into 'dead at once beside a guard' | **done, the review's second way, and the third as the fall-back.** New key **`DownPointBlank`** (default **0.5 with a Flop - a GUESS**; a negative number = the step is left alone; 0 .. 100): what the hundred bullets of a point-blank step become ON HIM while he is down (`[D+4]` not 0, alive, the round running - the whole down, any Flop mode). kldown.c does not touch a hit record: klbalance.c's wrapper asks `kld_pb()` (hand-over line 4) and goes in for this key alone (line 5). **`Vulnerable` now WAITS for the cap to stand** (`kld_pb_stands`: `KLR_DOWN` 2, `[Balance] Enable=1`, the wrapper armed and its vtable copy the one in the database object - read every pass): without it the switch is never taken off, hits stay swallowed as before R8, and one line a down says `THE POINT-BLANK CAP DOES NOT STAND` / `CANNOT STAND` with the reason; a switch that is off goes back in the pass that sees the cap gone. `DownPointBlank=-1` = the owner's 'let him be hurt without it' |
+| **M2** the hand-over lines in the klbalance.c that is built | **for the lead; made checkable.** Five lines now (14.5), verified to fit and compile in HEAD's file AND in X2's working copy. The start line reads `this build's klbalance.c HAS the hand-over lines (KLR_DOWN 2: the factors AND the point-blank cap)`; with the first round's three only: `HAS ONLY THE FIRST THREE HAND-OVER LINES (KLR_DOWN 1) ... THE POINT-BLANK CAP CANNOT` and `SO Vulnerable DOES NOTHING IN THIS PROCESS` |
+| **M3** runs N1 and N5 (N5 with `[Fed] Player=1`) before his game | **for the lead; nothing in code.** They stay the gate, with N6 now a gate too (the wrapper's first run). The order below |
+| **S1** a few frames at the full price after a stall | **done, two ways.** (a) the review's: `kld_rules` tests `sw && need && !stand` again AFTER it has read the table in this pass and writes the switch back there. (b) the cause: the fallback thread (no game-thread pass for 500 ms) now writes the switch back to 1 BEFORE it drops the factors and the cap - else the first frame after the stall could run its soldiers before this hook's tick, with the switch off, the standing price in the table and a hundred-bullet step. That is the one write of kldown.c off the game thread: an aligned `.data` dword the game only compares |
+| **S2** the throw is not read | **read further, not settled; a TEST key.** READ: the throw button is bit 0x40 of `[player+0xb90]`; `0x4aa410` only clears it when the button is up; **`0x544780` copies it every frame to bit 0x800 of the player's action word `[player+0x818]`** (0x5447ef .. 0x544805; the same routine makes the fire flags, bits 2 / 4 / 8, from bits 1 / 2). Who SETS bit 0x40 and who READS bit 0x800 was not found by byte scan (no `or` / `test` with that displacement and immediate): where a throw starts is still NOT READ. Dog Days' player has no grenade of his own (throwables are picked up), so the case is 'he was carrying one when he fell'. Key **`NoThrow=1`** (default **0**, a TEST key): while he is down both bits are written to their 'button up' form in every pass in which they are found set (what 0x4aa417 / 0x544805 write). ASSUMED that this hook's tick comes between the input read and whatever starts the throw. N3 decides whether it is needed, N3b whether it works |
+| **S3** the second caller of `0x8b8050` (0x458946) | **read.** In the damage routine, Arcade only, for an attacker whose class mask matches: the same float x **10.0** (`[0xb5cde8]`, a double) replaces the plain threshold 10.0 (`[0xb3ef8c]`). A hit whose damage `[rec+0x28]` is at least the threshold (or with byte `[rec+0x30]` set) pushes the tick `[player+0x84c]` on (0x458990 .. 0x458a79: by 0.2 / 0.5 x a curve of damage / 150 when it is already ahead of the clock, else set from (damage - 10) / 100 clamped 0 .. 2). **It is not the same-attacker limiter and not the health** (that is taken further down, after the trigger at 0x458e7f). What the tick times: NOT READ (32 sites use the displacement). The bullet's damage already carries the same float (0x4db9d1), so damage and threshold scale together: **which bullets cross it does not change under the down factor; the numbers of 14.4 stand.** A flat hit (close combat's 50) crosses a threshold that is 0.75 instead of 5 while he is down - it crossed both |
+| **S4** pistols are not 'a lot more shots' at 0.25 | **done: the default is 0.15** (still a GUESS; table below). Tell the owner with N1's `he lost` lines; 0.1 is the next step |
+| **S5** the cooldown starts at UP | **done: key `CooldownCredit`** (default 1). READ 0x724432: `[D+0x38]` is a float of seconds, less the frame's seconds each frame of D, not below 0. When he is up (not dead), the seconds the switch was off in this knock-down are taken off it once (not below 0): the pause counts from when he went down again, as before `Vulnerable`. One float of his down object; line `rules: CooldownCredit: ... [D+0x38] a -> b s`. 0 = the pause starts when he stands |
+| **S6** klbalance's `Risk=.. written` line twice a knock-down | **done by hand-over line 3** + `kld_moving()` (14.5) |
+| **S7** non-bullet hits cost in full | **not refuted, not read further; made visible.** Which flat hits reach a lying man is still unread. The loss line now marks a loss of exactly 50 (`EXACTLY 50: the flat price of close combat (0x499570), which no factor of this part scales`) and says how many point-blank steps were capped so far: N11 |
+| **S8** the comment on 0x804546 | **done**: the log text and the note (14.3, 1) say what it is - 0x803c40 reading the dword from a stream |
+| **S9** the `[Down]` sample is in HEAD's `KLHook.ini`, `kldown.c` is not committed | **for the lead** (this track commits nothing): commit `klhook/kldown.c`, `klhook/KLHook.ini` (its `[Down]` sample is changed again by this round), `re/player_down.md`, `re/player_down_review8.md` TOGETHER, and the five lines with X2's klbalance.c |
+| **S10** online | **no change**: the switch is one dword for the process, the floats price NPC attackers only; and the point-blank cap is the same kind - one flag for the local human, keyed on 'the target is a ZFFPlayer'. 14.6 stands |
+
+**Keys after the fix round** (all `[Down]`; nothing acts on a stock level, for a police player, or outside Arcade):
+
+| key | default | |
+|---|---|---|
+| `NoFire` | 1 with a Flop | unchanged |
+| `Vulnerable` | 1 with `Flop=1 / 3` | now also waits for the point-blank cap |
+| `DownFromCop` | **0.15** with a Flop (GUESS) | was 0.25 |
+| `DownFromCrew` | 1.0 | unchanged |
+| `DownPointBlank` | **0.5** with a Flop (GUESS), else none | bullets a point-blank step on him is worth while he is down; -1 = none |
+| `CooldownCredit` | 1 | the pause before the next down counts from the knock-down's start |
+| `NoThrow` | 0 | TEST key |
+
+**Numbers at his settings again** (`Risk=1`: police -> you 0.5, health 550; he lies with 80 .. 220; worked out, not seen):
+
+| attacker | standing | on the floor at 0.15 | bullets to finish him |
+|---|---:|---:|---:|
+| police rifle / SMG (SCAR, AK-74, Type 79, Type 81) | 28 .. 48 | 4.3 .. 7.2 | 12 .. 52 (a 36 rifle: 15 .. 41) |
+| police pistols (M9 / Sig / MP45) | 112 / 146 / 190 | 16.8 / 21.9 / 28.5 | 5 .. 14 / 4 .. 11 / 3 .. 8 |
+| an AI heister, Zastava | 30.2 | 30.2 | 3 .. 8 |
+| **a point-blank step** (Type 79 / MP45) | 3,780 / 18,966 | **2.8 / 14.2** with `DownPointBlank=0.5` (uncapped at 0.15: 567 / 2,845) | a step every 0.12 .. 0.19 s (the logs' 'ONE STEP' lines): the SMG guard beside him takes 15 .. 24 a second = 3 .. 15 s; the pistol guard 6 .. 16 steps = 1 .. 3 s |
+
+Why 0.5 and not 1: a step comes 5 .. 8 times a second, about twice a gun's own rate of fire, so at one bullet a
+step the guard beside him would hurt him twice as fast as the same guard across the room. Half a bullet is about
+'a guard who fires'; a GUESS. `DownPointBlank=0` makes the step free, `-1` leaves the hundred.
+
+**Live checks: changes to 14.7** (a hook with the FIVE lines; `[Balance] Enable=1 Log=2`):
+
+| run | change |
+|---|---|
+| N0 | start lines: `down: rules: DownPointBlank=0.50 ... (now 1) ..., CooldownCredit=1 ..., NoThrow=0`; `... DownFromCop=0.15 ...; this build's klbalance.c HAS the hand-over lines (KLR_DOWN 2: ...)`; klbalance's `balance: point-blank: the database object ... now has the hook's copy ... left at 100 on you, left at 100 on an AI heister, left at 100 on a policeman` at the round's start. FAIL: `HAS ONLY THE FIRST THREE` / `HAS NOT GOT`; `SO Vulnerable DOES NOTHING` |
+| **N1** | the table line reads `police -> you 0.075 (x 0.15 ...)`; `you lost` of **4 - 7** a rifle bullet; **klbalance's `Risk=1 written` line does NOT come at the down nor at UP** (S6); after `NoFire: off`: `rules: this knock-down is over ...; n point-blank step(s) on him were capped to 0.50 bullet(s)`, then **`rules: CooldownCredit: ... [D+0x38] 10.00 -> x s`** with x = 10 less the seconds of `hits could cost for`. FAIL in addition: `THE POINT-BLANK CAP DOES NOT STAND` (says why) with no `Vulnerable:` line |
+| **N5** | as before; it is M3's gate: `DEAD WHILE FALLING in the belly flop`, the switch back and `NoFire: off` in that pass, the fed fires, the next round's first down prints `Vulnerable: ... 1 -> 0` and he can fire before it |
+| **N6** (now a gate: the wrapper's first run) | N1 lying within 1.6 m of a firing guard: `balance: point-blank step: soldier ... on you ... the hit's scale 100 -> 0.50` (Log=2) only while he is down, `100 -> 100.00 (no key for this victim)` while he stands; `rules: he lost 2.8` (an SMG) per step, `... point-blank step(s) capped so far` counting; the summary's count not 0. FAIL: `a call ... whose record is NOT as expected`; a loss of hundreds in one step on the floor; a fault at the round's start (the wrapper: P0 of re/melee_damage.md never ran) |
+| N3 | unchanged (does a carried throwable fly?). **N3b**, only if it does: `NoThrow=1` - `rules: NoThrow: the throw button was down ...` and nothing flies; if it still flies the tick comes too late and the key is useless |
+| N8 (the pause / a stall) | new PASS line when the game thread stops for 500 ms in a down: `rules: ... switch [0xceb40c] is back at 1 ... (the game thread has made no pass for 500 ms ...: written from the fallback thread ...)`, then `Vulnerable: ... 1 -> 0 (again in this down)` once the table and the cap stand again |
+| N9 | a hook without the lines: `... HAS NOT GOT THE HAND-OVER LINES ... nor can the point-blank cap ... SO Vulnerable DOES NOTHING`; with the first three only: `HAS ONLY THE FIRST THREE` and in a down `THE POINT-BLANK CAP CANNOT STAND` |
+| N10 (`[Balance] Enable=0`) | **changed**: the factors are `written by this part`, but the cap cannot stand (klbalance.c is off): `THE POINT-BLANK CAP DOES NOT STAND ... off ([Balance] Enable=0)` and hits stay swallowed - unless `DownPointBlank=-1`, with which the first round's N10 holds |
+| **N11** (S7) | any run: a `he lost 50.0 ... EXACTLY 50` line on the floor = close combat reaches a lying man at its flat price: tell the track (it needs its own answer) |
+
+Order for the lead: N0, N9 (free), **N1, N6, N5 + fed, a second round** - then his game. For the owner after them:
+is 0.15 'a lot more shots'; the point-blank step at half a bullet; the cooldown as it was.
+
+**ASSUMED, added:** that a soldier's fire task runs on the main loop's thread (klbalance.c's own assumption; `kld_pb`
+reads one int and one float and adds to a counter, so another thread costs at most one step at the wrong scale);
+that the wrapper in the owner's game is as harmless as its off-game harness says (never run); that `[D+0x38]` is
+set at the down's start (section 0) and by nobody after it; `NoThrow`'s place in the frame; every number above.
+**NOT READ, still:** where a throw starts; what `[player+0x84c]` times; which flat hits reach a lying man; a blast's
+price.
+
+Compile, fix round (`git archive HEAD klhook` at 0d16a7a + this `kldown.c`, sha1
+c47ec6604734aceef8d764ba34776938b37436b6; no line of klhook.c or klbalance.c changed in the repo; the five lines put into scratch copies
+by `G:\kl_scratch\R8fix\handover.py <klbalance.c>`, which requires each anchor exactly once). No warning, no error in any:
+
+| build | klbalance.c | last line | sha1 |
+|---|---|---|---|
+| TEST | HEAD's, no hand-over (the N9 form) | `built G:\kl_scratch\R8fix\test\dinput8.dll (TEST)` | 23b977562402b76278d47c625f28ed2c1f5e08f9 |
+| SHIP | HEAD's, no hand-over | `built G:\kl_scratch\R8fix\ship\dinput8.dll (SHIP)` | 17c7cd9adad001ae525057f1e9757c413020db73 |
+| TEST | HEAD's + the five lines | `built G:\kl_scratch\R8fix\test_ho\dinput8.dll (TEST)` | 84a2e42eb584fcbb1f079fca7f8c6596577cab3c |
+| SHIP | HEAD's + the five lines | `built G:\kl_scratch\R8fix\ship_ho\dinput8.dll (SHIP)` | bf4400954704c0b0cd17a18d526706a1301f0b81 |
+| TEST | X2's working copy + the five lines (fit check only) | `built G:\kl_scratch\R8fix\test_x2\dinput8.dll (TEST)` | a88cc0e16bbc5560f88a044842f6bef3bfd3eaea |
+
+Compile only: none of them is for the game folder.

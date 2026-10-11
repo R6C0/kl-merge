@@ -32,9 +32,13 @@ OFFLINE: nothing here installs anything or starts the game. NOTHING OF THIS HAS 
       --only-bad          leave the doubtful ones where they are
       --first N           a map of two halves: how many of its points stay in the START half (default 3)
       --low N             a map of two halves: how many of those stand on the floor of the join box instead of the START
-                          row's floor (default 1; 0 = all on the START row's floor, the first form of this step). The
-                          round cannot go on until the human - now police - has walked into the join box, so one of the
-                          draws puts him on its floor
+                          row's floor (default 3 = all of them, since the owner's 'it spawns at the very top, should
+                          be at the elevator at the bottom' of 2026-10-11; 1 = the second form, one draw in three;
+                          0 = all on the START row's floor, the first form). The round cannot go on until the human -
+                          now police - has walked into the join box
+      --lift-near D       ... and those stand within D on foot of the join box's middle, the free cells nearest the box first,
+                          POST_FAR from every post of an enemy squad (default 2000: 'at the elevator'; 0 = the cells
+                          of that floor farthest from the heisters' places, as before)
       --at box|jump       a map of two halves: what switches the points at the join. 'box' (default) = the trigger box
                           the crew arrives in (the street's own start box); 'jump' = the JumpPoint's own list - the exact
                           moment, but kl_fa_bots_rt.check then FAILs the build (it wants that list to hold the squads'
@@ -88,9 +92,11 @@ WHAT apply DOES
     row. Only .prp (ZGEOM[1] / [2]) and .gms (the same in the entity's record) change.
   two halves (Retomoto): all its points are placed anew. FIRST of them in the START half: on the START row's floor,
     off the way the AI heisters take (the cells farthest from every place their steps name), not within BLAST_FAR
-    of the START row (the boardroom and its blast) - but the last LOW of them on the floor of the join box (the
-    floor the tower's way ends on), by the same rule, JOIN_FAR or more from the box itself (a man put down inside
-    it would be jumped in the same breath). The rest in the jump half, at the places of PLACES (the police
+    of the START row (the boardroom and its blast) - but the last LOW of them (default: all three) on the floor of
+    the join box (the floor the tower's way ends on): JOIN_FAR or more from the box itself (a man put down inside
+    it would be jumped in the same breath), BOT_FAR from the heisters' places, within LIFT_NEAR on foot of the box and
+    POST_FAR from every post of an enemy squad, the nearest to the box first = Retomoto's lift hall, outside every
+    lift car (a car's floor is closed in: not the crew's ground). The rest in the jump half, at the places of PLACES (the police
     side of the street: behind the road block where wave 2 starts, behind the SWAT truck where wave 3 stands, and
     two of the west pavement for a build whose heisters take both sides), each moved to the nearest cell that passes
     every test STREET_FAR from every place of the heisters - a place with no such cell within SNAP is left out for
@@ -142,8 +148,19 @@ TOP_BAND = 200.0                # 'the START row's floor': floors within this of
 BLAST_FAR = 3000.0              # GUESS: the START half of Retomoto - not within this of the START row in the plan
 SNAP = 400.0                    # an authored place may move this far to the nearest cell that passes
 FIRST = 3                       # two halves: points that stay in the START half
-LOW = 1                         # ... of which this many stand on the join box's floor (review S3: from the START row's
-                                # floor it is 129 m of stairs to the box, and the round waits for him there)
+LOW = 3                         # ... of which this many stand on the join box's floor (review S3: from the START row's
+                                # floor it is 129 m of stairs to the box, and the round waits for him there).
+                                # 3 = ALL OF THEM since 2026-10-11 20:15, the owner after coming back on the top gallery:
+                                # 'yes but it spawns at the very top, should be at the elevator at the bottom' (was 1)
+LIFT_NEAR = 2000.0              # GUESS: 'at the elevator' = a point of the join box's floor lies within this ON FOOT
+                                # (cell by cell over the crew's ground, along x and z) of the floor under the box's
+                                # middle, and of the cells that pass the NEAREST to the box are taken (the first
+                                # form took the cells FARTHEST from the heisters' places: with three low points two of
+                                # them came out 30 and 41 m away at the far end of the floor). 0 = that first form
+POST_FAR = 250.0                # GUESS: ... and this far from every POST of an enemy squad on that floor - where a man
+                                # of theirs stands at the load and every place a rout of theirs names
+                                # (kl_fa_bots_rt.enemy_posts; NPC_FAR only knows the start places): the lift hall's
+                                # guards are in the world from the load in a build `kl_map_ai.py spawnfix` has been through
 JOIN_FAR = 300.0                # GUESS: a point of the join box's floor is this far outside the box (kljoin.c jumps a
                                 # local player whose feet are inside it, whatever he is)
 STALE = ('audit.json', 'audit.txt')    # papers that name the content id of the build they were written for
@@ -162,7 +179,7 @@ PLACES = {'M09_A': [(-4250.0, 5950.0, 'behind the road block, west lane (wave 2 
 STREET_FAR = 1500.0             # GUESS: an authored place of the jump half is this far from every place a step of the
                                 # AI heisters names (BOT_FAR would let him appear 6 m from a hold of theirs)
 VAN_NEAR = 6000.0               # no authored place left: within this of the boarding action (where the run ends)
-DEFAULTS = {'all': False, 'only_bad': False, 'first': FIRST, 'low': LOW, 'at': 'box', 'reset': True, 'place': {}}
+DEFAULTS = {'all': False, 'only_bad': False, 'first': FIRST, 'low': LOW, 'lift_near': LIFT_NEAR, 'at': 'box', 'reset': True, 'place': {}}
 
 
 def _archive(folder):
@@ -217,6 +234,29 @@ class Ground:
         al = self.info(c)[1]
         i = bisect.bisect_right(al, y + self.w.LO)
         return i < len(al) and al[i] < y + self.w.HI
+
+    def sight(self, a, b, step=12.0, slack=8.0, skip=45.0):
+        """Is point b seen from point a? The straight line through the walk test's collision samples (every
+        triangle of the static and key-framed shapes sampled every 10): no sample within `slack` of the line's height
+        in any cell it crosses, the first and last `skip` of it left out. Convex shapes (crates, cars) are not in
+        the samples; a pane of glass that has collision stops the line; outside the box nothing is known and the
+        line is clear. A reading for 'the same room' and 'who pops into view', not the game's own test."""
+        d = math.dist(a, b)
+        if d <= 2 * skip:
+            return True
+        w, n = self.w, int(d / step) + 1
+        for i in range(1, n):
+            t = i / n
+            if t * d < skip or (1.0 - t) * d < skip:
+                continue
+            x, y, z = (a[j] + (b[j] - a[j]) * t for j in range(3))
+            if not (w.x0 <= x < w.x1 and w.z0 <= z < w.z1):
+                continue
+            al = self.info(w.cell(x, z))[1]
+            j = bisect.bisect_left(al, y - slack)
+            if j < len(al) and al[j] <= y + slack:
+                return False
+        return True
 
     def under(self, p):
         """(cell, the floor the game's ray finds under point p or None, the nearest floor of the cell or None)."""
@@ -804,6 +844,32 @@ def plan(L, opt=None, log=print):
             log('  %s: %d cell(s) of the join box\'s floor (y %d) pass every test (%d or more outside the box, %d from the heisters\' places)' % (A.name, len(cand_low), jy, JOIN_FAR, BOT_FAR))
             if abs(jy - L.ground(A).under((A.anchor[0], A.anchor[1] + 60.0, A.anchor[2]))[1]) <= TOP_BAND:
                 n_low = 0                                # (the box is on the START row's own floor: nothing to gain)
+    # 'at the elevator at the bottom' (owner, 2026-10-11): of the join floor's cells those within LIFT_NEAR of the box
+    # and POST_FAR from every post of an enemy squad, the nearest to the box first
+    jmid = ((jb[0] + jb[1]) / 2, 0.0, (jb[2] + jb[3]) / 2) if jb else None
+    cand_lift = []
+    if n_low and opt.get('lift_near', LIFT_NEAR) > 0:
+        import kl_fa_bots_rt as RT
+        posts = [q for _t, ps in RT.enemy_posts(L.B).items() for _w, q, _r in ps if abs(q[1] - jy) <= 300.0]
+        # 'within LIFT_NEAR' is measured ON FOOT over the crew's ground, cell by cell from the floor under the box's
+        # middle (steps along x and z: a little more than the straight way): the passage that leads to the hall is
+        # near the box through a wall and far from it on foot
+        w, near_by = L.ground(A).w, opt.get('lift_near', LIFT_NEAR)
+        walk, todo = {st[0]: 0.0}, collections.deque([st[0]])
+        while todo:
+            k0 = todo.popleft()
+            if walk[k0] + w.CELL > near_by:
+                continue
+            for dx, dz in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                for lv in (k0[2] - 1, k0[2], k0[2] + 1):
+                    k1 = (k0[0] + dx, k0[1] + dz, lv)
+                    if k1 in A.sym and k1 not in walk and abs(A.sym[k1][1] - A.sym[k0][1]) <= SYM:
+                        walk[k1] = walk[k0] + w.CELL
+                        todo.append(k1)
+        on_foot = lambda c: walk.get((*w.cell(c[0], c[2]), int(c[1] // 40)))
+        cand_lift = [c for c in cand_low if on_foot(c) is not None and all(hdist(c, q) >= POST_FAR for q in posts)]
+        log('  %s: %d of them within %d on foot of the join box\'s middle and %d from every post of an enemy squad on that floor (%d post(s))' % (
+            A.name, len(cand_lift), near_by, POST_FAR, len(posts)))
     P['low'] = n_low
     for n, k in enumerate(first):
         i = order.index(k)
@@ -817,11 +883,20 @@ def plan(L, opt=None, log=print):
                 low, pool = False, [c for c in cand if free(c)]
             if not pool:
                 raise ValueError('%s: no free cell left for point %d' % (A.name, i + 1))
-            score = lambda c: min([math.dist(c, q) for q in way] + [2.0 * hdist(c, t) for t in taken if abs(t[1] - c[1]) < 300.0] + [1e9])
-            c = max(pool, key=lambda c: (round(score(c) / 40.0), -c[0], c[2]))
-            why = 'on the %s floor, off the heisters\' way: %d from the nearest place a step of theirs names, %d from the %s' % (
-                'join box\'s' if low else 'START row\'s', min(math.dist(c, q) for q in way) if way else -1,
-                hdist(c, ((jb[0] + jb[1]) / 2, 0.0, (jb[2] + jb[3]) / 2)) if low else hdist(c, A.anchor), 'join box' if low else 'START row')
+            lift = [c for c in cand_lift if free(c)] if low else []
+            if low and cand_lift and not lift:
+                P['notes'].append('no free cell within %d of the join box is left for point %d: it goes by the first form\'s rule (the cell of that floor farthest from the heisters\' places)' % (
+                    opt.get('lift_near', LIFT_NEAR), i + 1))
+            if lift:
+                c = min(lift, key=lambda c: (round(on_foot(c) / 40.0), c[0], c[2]))
+                why = 'at the elevator: on the join box\'s floor, the free cell nearest the box on foot - ' + '%d on foot (along x and z) and ' % on_foot(c) + '%d in a line from its middle, %d outside it, %d from the nearest place a step of the heisters names, %d or more from every post of an enemy squad' % (
+                    hdist(c, jmid), max(jb[0] - c[0], c[0] - jb[1], jb[2] - c[2], c[2] - jb[3]), min(math.dist(c, q) for q in way) if way else -1, POST_FAR)
+            else:
+                score = lambda c: min([math.dist(c, q) for q in way] + [2.0 * hdist(c, t) for t in taken if abs(t[1] - c[1]) < 300.0] + [1e9])
+                c = max(pool, key=lambda c: (round(score(c) / 40.0), -c[0], c[2]))
+                why = 'on the %s floor, off the heisters\' way: %d from the nearest place a step of theirs names, %d from the %s' % (
+                    'join box\'s' if low else 'START row\'s', min(math.dist(c, q) for q in way) if way else -1,
+                    hdist(c, ((jb[0] + jb[1]) / 2, 0.0, (jb[2] + jb[3]) / 2)) if low else hdist(c, A.anchor), 'join box' if low else 'START row')
         near = min(way, key=lambda q: math.dist(c, q)) if way else A.anchor
         take(k, c, why, hidden=False, look=near)
     # the jump half: the authored places, each on the nearest cell that passes
@@ -1138,6 +1213,20 @@ def check(folder, log=print):
             note('nothing of the round-start list puts the points back (%d of the START half not shown again, %d of the jump half not hidden again): a second round on the same '
                  'loaded level rests on the game restoring them (ActivateGeom / DeactivateGeom save and load what they name: kl2 0x899c50, 0x6e8c70, 0x8d6750 - whether an Arcade round start runs that is not read)'
                  % (len(set(first) - back_on), len(set(second) - back_off)))
+    try:                                # review M1 / S4 of re/retomoto_spawns_review.md: NOTEs only, they need kl_map_ai's audit
+        import kl_map_ai
+        rows = kl_map_ai.spawn_rows(L)
+        for sq, d, nm in kl_map_ai.sleeping_near_fed(L, rows):
+            note('SLEEPING MEN NEAR A FED POINT: %s has a man %d from %s and is hidden from the load (ZSquadScript field 3 = 0): a fed who comes back there sees them appear (kl_map_ai spawnfix puts the Retomoto tables in)' % (sq, d / 100.0 if False else round(d), nm))
+        if L.map == 'M09_A' and len(L.halves) == 2:
+            import kl_fa_author as au
+            import kl_fa_street as st
+            want = set(au.HALL_ACTIVE) | {n for v in st.ACTIVE.values() for n in v}
+            asleep = [r['squad'] for r in rows if not r['active'] and any(r['squad'].endswith(w.split('!', 1)[-1]) or r['squad'] == w[5:] for w in want)]
+            if asleep:
+                note('%d squad(s) of kl_fa_author.HALL_ACTIVE / kl_fa_street.ACTIVE are still field 3 = 0 in this build (wire() / relay() do not write them): run kl_map_ai spawnfix' % len(asleep))
+    except Exception as e:
+        note('spawn audit not run: %s' % e)
     n_fail = sum(1 for a, _b in out if a == 'FAIL')
     for a, b in out:
         log('%s: %s' % (a, b))
@@ -1338,6 +1427,8 @@ def options(a):
             opt['first'] = int(a[i + 1]); i += 1
         elif x == '--low' and i + 1 < len(a):
             opt['low'] = int(a[i + 1]); i += 1
+        elif x == '--lift-near' and i + 1 < len(a):
+            opt['lift_near'] = float(a[i + 1]); i += 1
         elif x == '--at' and i + 1 < len(a) and a[i + 1] in ('box', 'jump'):
             opt['at'] = a[i + 1]; i += 1
         elif x == '--place' and i + 1 < len(a) and '=' in a[i + 1]:
