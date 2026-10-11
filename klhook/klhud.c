@@ -137,15 +137,13 @@ static struct {
 } klu;
 
 static struct {
-    DWORD osd, tmpl, font, parent; char scene[160];
+    DWORD osd, elem, tmpl, font, parent; char scene[160];
     int made, fault, hid, inset_done, visible;
     struct klu_text t[KLU_NTEXT];
 } klu_r;
 static volatile LONG klu_draw_on;             /* read by the render hook: 1 = texts exist and the round shows the HUD */
 static volatile LONG klu_n_call, klu_n_off, klu_n_branch, klu_n_try, klu_n_draw;   /* render wrapper counters (Log=2: a line every 5 s) */
 static CRITICAL_SECTION klu_cs;
-static DWORD klu_vt[KLU_OSD_NSLOT + 1];       /* [0] RTTI locator, [1..] the slots (as klchar.c's klc_vt) */
-static int klu_vt_ready;
 
 typedef DWORD (__fastcall *klu_create_t)(void *, void *, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD);
 typedef void (__fastcall *klu_set1_t)(void *, void *, DWORD);
@@ -159,17 +157,6 @@ static int klu_same_code(DWORD va, const BYTE *bytes, int n)
 
 /* ---------------------------------------------------------------- the render hook (any thread; reads only) */
 
-/* The four tests of 0x558370 (section 1): did the stock call just take the HUD branch? */
-static int klu_hud_branch(DWORD osd, DWORD cam)
-{
-    DWORD gate = 0, id = 0, menu = 0, b = 0, c = 0;
-    if (!klh_rd((DWORD_PTR)KLH_VA(KLU_HUD_GATE), &gate, 4) || !gate) return 0;
-    if (!klh_rd(cam + KLU_CAM_ID, &id, 4) || !klh_rd(osd + KLU_O_CAM_MENU, &menu, 4) || !klh_rd(osd + KLU_O_CAM_B, &b, 4) || !klh_rd(osd + KLU_O_CAM_C, &c, 4)) return 0;
-    if (menu && id == menu) return 0;
-    if (id == b || id == c) return 0;
-    return 1;
-}
-
 static void klu_draw_one(DWORD obj, void *ctx, void *cam, float x, float y)
 {
     float xform[9] = { 0, 0, 0, 0, 0, 0, 1.0f, 0, 0 };      /* what 0x7f07a0 writes: [+0x18] = 1.0, the rest 0 */
@@ -179,14 +166,21 @@ static void klu_draw_one(DWORD obj, void *ctx, void *cam, float x, float y)
     ((klu_draw_t)(DWORD_PTR)fn)((void *)(DWORD_PTR)obj, 0, ctx, cam, xform, pos);
 }
 
-/* slot 55 of the private vtable: Render(ctx, cam), thiscall ret 8 (a __fastcall wrapper cleans the same 8 bytes) */
-static char __fastcall klu_render(void *osd, void *edx, void *ctx, void *cam)
+/* slot 2 (Render(ctx, cam), thiscall ret 8) of the private vtable of the TIMER ELEMENT (ZFATimeDisplay at osd+0x10cc):
+   runs INSIDE 0x8bf300's element loop, with the ctx / cam the stock elements draw with. Run H1c (hud_test4, OSD
+   slot 55 wrapped and drawn AFTER the stock 0x558370): Draw was called 12 times a HUD frame on good objects and
+   nothing reached the frame - whatever 0x558370 does after 0x8bf300 (flush / end of the HUD plane) had passed. */
+#define KLU_TIME_RENDER 0x81e090u             /* ZFATimeDisplay slot 2 (re\hud.md 3.1: the per-frame draw read) */
+#define KLU_ELEM_NSLOT  11                    /* IDisplayInterface: 11 slots (re\hud.md 2.1), then RTTI */
+static DWORD klu_evt[KLU_ELEM_NSLOT + 1];     /* [0] RTTI locator, [1..] the slots */
+static int klu_evt_ready;
+
+static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam)
 {
     char r; int i; (void)edx;
-    r = ((char (__fastcall *)(void *, void *, void *, void *))(DWORD_PTR)KLH_VA(KLU_OSD_RENDER))(osd, 0, ctx, cam);
+    r = ((char (__fastcall *)(void *, void *, void *, void *))(DWORD_PTR)KLH_VA(KLU_TIME_RENDER))(el, 0, ctx, cam);
     InterlockedIncrement(&klu_n_call);
-    if (!klu_draw_on || (DWORD)(DWORD_PTR)osd != klu_r.osd) { InterlockedIncrement(&klu_n_off); return r; }
-    if (!klu_hud_branch((DWORD)(DWORD_PTR)osd, (DWORD)(DWORD_PTR)cam)) { InterlockedIncrement(&klu_n_branch); return r; }
+    if (!klu_draw_on || (DWORD)(DWORD_PTR)el != klu_r.elem) { InterlockedIncrement(&klu_n_off); return r; }
     if (!TryEnterCriticalSection(&klu_cs)) { InterlockedIncrement(&klu_n_try); return r; }   /* the tick is changing a text: this frame goes without ours */
     if (klu_draw_on && klu_r.made && !klu_r.fault)
         for (i = 0; i < KLU_NTEXT; i++) {
@@ -203,26 +197,27 @@ static char __fastcall klu_render(void *osd, void *edx, void *ctx, void *cam)
 /* ---------------------------------------------------------------- the private vtable (main thread) */
 
 static int klu_vtable_tick(DWORD osd)
-{   /* -> 1 while the OSD's first dword is ours (installed here when it shows the stock one) */
-    static LONG told; DWORD vt, cur;
-    if (!klh_rd(osd, &cur, 4)) return 0;
-    if (!klu_vt_ready) {
-        if (!klh_rd((DWORD_PTR)KLH_VA(KLU_OSD_VT - 4), klu_vt, sizeof klu_vt)) return 0;
-        if (klu_vt[1 + 55] != KLU_OSD_RENDER) {
-            if (!InterlockedExchange(&told, 1)) klog("hud: slot 55 of ZOnScreenDisplay2 is %08lx, not %08x: the HUD is off", klu_vt[1 + 55], KLU_OSD_RENDER);
+{   /* -> 1 while the timer element's first dword is ours (installed here when it shows the stock one) */
+    static LONG told; DWORD el, vt, cur;
+    if (!(el = klh_rd32(osd + KLU_O_TIME)) || !klh_rd(el, &cur, 4)) return 0;
+    if (!klu_evt_ready) {
+        if (!klh_rd((DWORD_PTR)KLH_VA(KLU_TIME_VT - 4), klu_evt, sizeof klu_evt)) return 0;
+        if (klu_evt[1 + 2] != KLU_TIME_RENDER) {
+            if (!InterlockedExchange(&told, 1)) klog("hud: slot 2 of ZFATimeDisplay is %08lx, not %08x: the HUD is off", klu_evt[1 + 2], KLU_TIME_RENDER);
             return 0;
         }
-        klu_vt[1 + 55] = (DWORD)(DWORD_PTR)klu_render;
-        klu_vt_ready = 1;
+        klu_evt[1 + 2] = (DWORD)(DWORD_PTR)klu_render_elem;
+        klu_evt_ready = 1;
     }
-    vt = (DWORD)(DWORD_PTR)&klu_vt[1];
-    if (cur == vt) return 1;
-    if (cur != KLU_OSD_VT) {
-        if (!InterlockedExchange(&told, 1)) klog("hud: the object at [0x154da50] = %08lx has vtable %08lx, not ZOnScreenDisplay2's %08x: the HUD is off", osd, cur, KLU_OSD_VT);
+    vt = (DWORD)(DWORD_PTR)&klu_evt[1];
+    if (cur == vt) { klu_r.elem = el; return 1; }
+    if (cur != KLU_TIME_VT) {
+        if (!InterlockedExchange(&told, 1)) klog("hud: the timer element at osd+0x10cc = %08lx has vtable %08lx, not ZFATimeDisplay's %08x: the HUD is off", el, cur, KLU_TIME_VT);
         return 0;
     }
-    if (!klh_data((void *)(DWORD_PTR)osd, &vt, 4, "the OSD's vtable (private copy, slot 55 wrapped)")) return 0;
-    if (klu.log) klog("hud: osd %08lx now renders through the private vtable (slot 55 -> klu_render, then the stock 0x558370 first)", osd);
+    if (!klh_data((void *)(DWORD_PTR)el, &vt, 4, "the timer element's vtable (private copy, slot 2 wrapped)")) return 0;
+    klu_r.elem = el;
+    if (klu.log) klog("hud: timer element %08lx now renders through the private vtable (slot 2 -> klu_render_elem: the stock 0x81e090 first, then our texts, inside the OSD's element loop)", el);
     return 1;
 }
 
@@ -407,7 +402,6 @@ static int klu_find_osd(void)
        klauto.c's kla_find_players: 0.1 - 0.3 s on the main thread, so only in an Arcade session's round states (the
        caller's gate), at most every 2 s, and every 15 s after three scans of a scene found no usable one. */
     MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; static BYTE buf[0x10000]; DWORD t0 = GetTickCount();
-    DWORD mine = (DWORD)(DWORD_PTR)&klu_vt[1];
     if (klu_scan_t && t0 - klu_scan_t < (klu_scan_fails < 3 ? 2000u : 15000u)) return klu_ncand;
     klu_ncand = 0;
     while ((DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
@@ -418,7 +412,7 @@ static int klu_find_osd(void)
                 if (!klh_rd((DWORD_PTR)mbi.BaseAddress + o, buf, n)) continue;
                 for (k = 0; k + 4 <= n; k += 8) {
                     DWORD v = *(DWORD *)(buf + k);
-                    if ((v == KLU_OSD_VT || (klu_vt_ready && v == mine)) && klu_ncand < 4) klu_cand[klu_ncand++] = (DWORD)((DWORD_PTR)mbi.BaseAddress + o + k);
+                    if (v == KLU_OSD_VT && klu_ncand < 4) klu_cand[klu_ncand++] = (DWORD)((DWORD_PTR)mbi.BaseAddress + o + k);
                 }
             }
         }
@@ -432,8 +426,8 @@ static int klu_find_osd(void)
 static DWORD klu_current_osd(int may_scan)
 {   /* the OSD held, while it still is one; else the candidate that has the FA player list element and whose
        transform the HUD render has written (1280 x 720): only one instance is rendered per frame. 0 = none yet. */
-    DWORD vt, mine = (DWORD)(DWORD_PTR)&klu_vt[1]; float wh[2]; int i;
-    if (klu_r.osd && klh_rd(klu_r.osd, &vt, 4) && (vt == KLU_OSD_VT || (klu_vt_ready && vt == mine))) return klu_r.osd;
+    DWORD vt; float wh[2]; int i;
+    if (klu_r.osd && klh_rd(klu_r.osd, &vt, 4) && vt == KLU_OSD_VT) return klu_r.osd;
     if (!may_scan) return 0;                   /* the scan runs only in an Arcade session's round states (no hitch in menus, loads, the campaign) */
     if (!klu_find_osd()) { klu_scan_fails++; return 0; }
     for (i = 0; i < klu_ncand; i++) {
@@ -499,7 +493,7 @@ static void klu_tick(int game_thread)
         static DWORD said;
         if (klu_r.made && now - said >= 5000) {
             said = now;
-            klog("hud: render: %ld calls, %ld with the HUD off / another osd, %ld not the HUD branch, %ld lock busy, %ld text draws (draw_on %ld)",
+            klog("hud: render: %ld timer-element calls, %ld with the HUD off / another element, %ld (unused), %ld lock busy, %ld text draws (draw_on %ld)",
                  InterlockedExchange(&klu_n_call, 0), InterlockedExchange(&klu_n_off, 0), InterlockedExchange(&klu_n_branch, 0), InterlockedExchange(&klu_n_try, 0), InterlockedExchange(&klu_n_draw, 0), klu_draw_on);
         }
     }
