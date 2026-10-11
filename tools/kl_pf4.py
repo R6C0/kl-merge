@@ -19,7 +19,10 @@ fields are paired this way (check() tests every one of them), and would not hold
       polygon, or the polygon count for "none") and three floats.            structure (ranges)
   1   second tree: same record; its leaves index array 2.                    structure (ranges)
   2   three floats per leaf of tree 1. Same size, copied.
-  3   polygon: u8 edge count +0, u8 flags +1, area M+8 D+8, first edge M+0xa D+0xc (code: both
+  3   polygon: u8 edge count +0, u8 +1 = THE NUMBER OF WAYPOINTS ON THE POLYGON (called 'flags'
+      here until 2026-10-11; kl2 0x5ce32c: the path search turns that many records of array 10,
+      from 'waypoints before' on, into search nodes; kl_maps.nav_facts tests it on every mesh),
+      area M+8 D+8, first edge M+0xa D+0xc (code: both
       parsers), waypoints before this polygon M+0xc D+0x10, a node of tree 1 M+0x10 D+0x18.
       structure: first edge = running sum of the edge counts; area < areas, never decreasing;
       "waypoints before" = number of array-5 records on earlier polygons; M+4, M+0x14, D+4,
@@ -56,7 +59,7 @@ fields are paired this way (check() tests every one of them), and would not hold
       D+4, a link slot both parsers overwrite M+4 D+8.                         code + structure
   10  a permutation of the waypoint numbers, u16 -> u32.                      structure
 NOT established: the meaning of the floats in arrays 0 and 1, of area fields [1] / [6], of the
-polygon flags and of the link byte M+7; none is reinterpreted, they are carried over.
+link byte M+7; none is reinterpreted, they are carried over.
 """
 import struct
 

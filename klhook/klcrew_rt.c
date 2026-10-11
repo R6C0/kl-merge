@@ -186,29 +186,54 @@ static int klt_code(DWORD va)
     return va >= KL2_BASE + 0x1000 && va < KL2_BASE + KL2_IMAGESIZE;
 }
 
+/* What 0x62a900 takes for granted of the actor it is handed (section 2, NOT moved) -> 0 = it may be called, else
+   why not. Reads only. klhop.c makes the same tests through this function. */
+static const char *klt_refuse(DWORD actor)
+{
+    DWORD node, fl3c = 0, body[2] = { 0, 0 }, p7c0 = 0, p50c = 0, vt = 0, tmp = 0;
+    if (klh_rd32(actor) != KLT_ACTOR_VT) return "its actor is not a ZFFActor";
+    if (!(node = klh_rd32(actor + 4)) || !klh_rd(node + 0x3c, &fl3c, 4) || (fl3c >> 10 & 1)) return "its node is off (flag bit 10)";
+    if (!klh_rd(actor + 0x77c, body, 8) || (!body[0] && !body[1])) return "both pointers the game's routine asserts on are zero";
+    if (!klh_rd((body[0] ? body[0] : body[1]) + 0xec, &tmp, 4)) return "the pointer at +0x77c / +0x780 cannot be read at +0xec (0x62a9d2)";
+    if (!klh_rd(actor + 0x7c0, &p7c0, 4) || !p7c0 || !klt_writable(p7c0, 4)) return "[actor+0x7c0], which the game's routine writes through (0x62a99e), is null or not writable";
+    if (!klh_rd(actor + 0x50c, &p50c, 4) || !p50c || !klh_rd(p50c, &vt, 4) || !klt_code(klh_rd32((DWORD_PTR)KLH_VA(vt + 0xac)))) return "[actor+0x50c], which the game's routine calls through (0x62a9e8, vtable +0xac), is null or no object of the game";
+    return 0;
+}
+
+/* Is 0x62a900 the routine this build knows (its first 14 bytes)? */
+static int klt_tele_known(void)
+{
+    static const BYTE tele_code[14] = { 0x81, 0xec, 0x90, 0x00, 0x00, 0x00, 0xd9, 0xee, 0x53, 0x56, 0x57, 0x8b, 0xf1, 0x8b };          /* 0x62a900 */
+    return klt_same_code(KLT_TELEPORT, tele_code, sizeof tele_code);
+}
+
+/* THE call: the game's own actor teleport with the identity matrix and the two flags 0x8f4128 passes. Game thread
+   only, and only for an actor klt_refuse() let through while klt_tele_known() holds. */
+static void klt_teleport(DWORD actor, const float pos[3])
+{
+    static const float rot[12] = { 1, 0, 0,  0, 1, 0,  0, 0, 1,  0, 0, 0 };      /* nine are read (0x7f07a0); three spare */
+    float p[4];
+    p[0] = pos[0]; p[1] = pos[1]; p[2] = pos[2]; p[3] = 0;
+    ((void (__fastcall *)(void *, void *, const float *, const float *, int, int))(DWORD_PTR)KLH_VA(KLT_TELEPORT))((void *)(DWORD_PTR)actor, 0, rot, p, 1, 1);
+}
+
 /* Game thread only. Every AI crew record in play to its place -> how many were moved. */
 static int klt_move(DWORD rules)
 {
-    static const float rot[12] = { 1, 0, 0,  0, 1, 0,  0, 0, 1,  0, 0, 0 };      /* nine are read (0x7f07a0); three spare */
     DWORD recs = klh_rd32(rules + 0x348), inuse = klh_rd32(rules + 0x34c); int cap = (int)klh_rd32(rules + 0x354), i, n = 0, moved = 0;
     if (cap < 1 || !recs || !inuse) return 0;
     if (cap > KLT_NREC) cap = KLT_NREC;
     for (i = 0; i < cap; i++) {
-        DWORD at = recs + (DWORD)i * 0x7c, actor, node, fl3c = 0, body[2] = { 0, 0 }, p7c0 = 0, p50c = 0, vt = 0, tmp = 0; BYTE u = 1, fl = 0, status = 0xff; float was[3] = { 0, 0, 0 }, is[3] = { 0, 0, 0 }, pos[3]; const char *why = 0;
+        DWORD at = recs + (DWORD)i * 0x7c, actor; BYTE u = 1, fl = 0, status = 0xff; float was[3] = { 0, 0, 0 }, is[3] = { 0, 0, 0 }, pos[3]; const char *why = 0;
         if (!klh_rd(inuse + i, &u, 1) || u || !klh_rd(at + 0x79, &fl, 1) || !(fl & 1) || !(actor = klh_rd32(at + 4))) continue;
         if (!klh_rd(at + 0x10, &status, 1) || status) continue;                 /* aboard, dead: not in play, takes no place */
         if (n >= klt_lv.nplace) { if (klt.log) klog("crewjoin: bot %d NOT moved: the level has %d places", i, klt_lv.nplace); continue; }
         memcpy(pos, klt_lv.place[n], sizeof pos); pos[1] += klt_lv.lift; n++;
         klh_rd(actor + 0x460, was, 12);                                         /* ASSUMPTION: the feet, as a player's +0x460 (same base class); for the log and the Near test only */
-        if (klh_rd32(actor) != KLT_ACTOR_VT) why = "its actor is not a ZFFActor";
-        else if (!(node = klh_rd32(actor + 4)) || !klh_rd(node + 0x3c, &fl3c, 4) || (fl3c >> 10 & 1)) why = "its node is off (flag bit 10)";
-        else if (!klh_rd(actor + 0x77c, body, 8) || (!body[0] && !body[1])) why = "both pointers the game's routine asserts on are zero";
-        else if (!klh_rd((body[0] ? body[0] : body[1]) + 0xec, &tmp, 4)) why = "the pointer at +0x77c / +0x780 cannot be read at +0xec (0x62a9d2)";
-        else if (!klh_rd(actor + 0x7c0, &p7c0, 4) || !p7c0 || !klt_writable(p7c0, 4)) why = "[actor+0x7c0], which the game's routine writes through (0x62a99e), is null or not writable";
-        else if (!klh_rd(actor + 0x50c, &p50c, 4) || !p50c || !klh_rd(p50c, &vt, 4) || !klt_code(klh_rd32((DWORD_PTR)KLH_VA(vt + 0xac)))) why = "[actor+0x50c], which the game's routine calls through (0x62a9e8, vtable +0xac), is null or no object of the game";
-        else if (fabs(was[0] - klt_lv.target[0]) < klt_lv.near_ && fabs(was[2] - klt_lv.target[2]) < klt_lv.near_ && fabs(was[1] - klt_lv.target[1]) < 1000) why = "it is at the entry already";
+        why = klt_refuse(actor);
+        if (!why && fabs(was[0] - klt_lv.target[0]) < klt_lv.near_ && fabs(was[2] - klt_lv.target[2]) < klt_lv.near_ && fabs(was[1] - klt_lv.target[1]) < 1000) why = "it is at the entry already";
         if (why) { if (klt.log) klog("crewjoin: bot %d (actor %08lx) NOT moved: %s", i, actor, why); continue; }
-        ((void (__fastcall *)(void *, void *, const float *, const float *, int, int))(DWORD_PTR)KLH_VA(KLT_TELEPORT))((void *)(DWORD_PTR)actor, 0, rot, pos, 1, 1);
+        klt_teleport(actor, pos);
         klh_rd(actor + 0x460, is, 12); moved++;
         if (klt.log) klog("crewjoin: bot %d (actor %08lx) at (%.0f, %.0f, %.0f) -> place %d (%.0f, %.0f, %.0f): now at (%.0f, %.0f, %.0f)", i, actor, was[0], was[1], was[2], n, pos[0], pos[1], pos[2], is[0], is[1], is[2]);
     }
@@ -217,7 +242,6 @@ static int klt_move(DWORD rules)
 
 static void klt_tick(int game_thread)
 {
-    static const BYTE tele_code[14] = { 0x81, 0xec, 0x90, 0x00, 0x00, 0x00, 0xd9, 0xee, 0x53, 0x56, 0x57, 0x8b, 0xf1, 0x8b };          /* 0x62a900 */
     static const BYTE trig_code[14] = { 0x51, 0x53, 0x8b, 0xd9, 0x83, 0x7b, 0x34, 0x00, 0x74, 0x5d, 0x8b, 0x4b, 0x34, 0x8b };          /* 0x72e0f0 */
     static int toldcode;
     char scene[160], key[64], name[64]; DWORD sm, gs, rules, state, gd, jp = 0, req = 0, pl; int pend = -1, e, i, n; BYTE sel[2]; float feet[3];
@@ -233,7 +257,7 @@ static void klt_tick(int game_thread)
     if (klt_r.left) { memset(&klt_r, 0, sizeof klt_r); klt_r.rules = rules; }                                      /* the next round */
     if (klt_r.done) return;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || (e = klt_entry(gd, &jp, name)) < 0) return;
-    if (!klt_same_code(KLT_TELEPORT, tele_code, sizeof tele_code) || !klt_same_code(KLT_AITRIGGER, trig_code, sizeof trig_code)) {
+    if (!klt_tele_known() || !klt_same_code(KLT_AITRIGGER, trig_code, sizeof trig_code)) {
         if (!toldcode++) klog("crewjoin: the game routines are not the ones this build knows: nothing is moved");
         return;
     }

@@ -32,7 +32,12 @@ driver, van, help up), re/bots_voice.md (the heisters' lines). OFFLINE: nothing 
                                is outside (M01: the Senator and his flank; a crew member in such a box calls the car)
       --drop                   DROPS: one link of kind 2 (a drop, the only kind stock Dog Days has) in the navigation
                                mesh where a Dog Days player walks down and the mesh has a gap (M03: the sunk wall
-                               piece), a gather place in front of it inside an AllyEscapeBox as the fall-back
+                               piece), a gather place in front of it inside an AllyEscapeBox as the fall-back.
+                               Since 2026-10-11 (re/bots_bank.md): the link's two polygons COUNT their new waypoint
+                               (polygon byte +1; without it no path search reached the link - run R12_DM03), and the
+                               build writes a [CrewHop] section into <out>/KLJoin.ini for klhook/klhop.c: the gather
+                               place and seven landing places beyond the drop (hop_plan; check() tests it: hop_check).
+                               A map without a drop gets no such section
       --lane                   the places of the way out keep LANE_CLEAR from the escape car's spline routes and stay on
                                the side the bots come from (the builds of the afternoon had bots waiting IN the road)
     A KEY-FRAMED VAN (a build of `kl_map_escape.py van`: ONE OnlineEscAnimatedVehicle; 2026-10-10 night, re/bots.md 13)
@@ -189,6 +194,23 @@ EXIT_CUT = {'M01_FA_A': {'Triggers!CallExitVehicle_01': (-8.0, 2400.0), 'Trigger
 # yard's mesh ends on the edge (-3645, 220, -693)..(-704, 220, -802) of polygon 527, the street's on z -535 between
 # x -2559 and x -1487 (polygon 687, y 150): 70 down, about 230 across at x -1700.
 DROPS = {'M03_FA_A': [{'at': (-1700.0, -650.0), 'needs': ('SO0101_M03_Wall_Low_8m_05', -100.0)}]}
+
+# THE HOOK HOP (klhook\klhop.c, [CrewHop] in the level's KLJoin.ini; re/bots_bank.md): for every drop link of the
+# plan the build also names the gather place in front of it and seven places beyond it. A bot that still stands
+# at the gather place after HOP_WAIT seconds - the link did not carry it - is put on one of the seven by the game's
+# own actor teleport (kl2 0x62a900, as klcrew_rt.c does on Retomoto). Off in the hook unless [CrewHop] Enable=1.
+HOP_FILE = 'KLJoin.ini'     # the file kljoin.c reads beside the archive (a file without a [Join] section is taken:
+                            # 0 boxes); it is in kl_expansion.SIDE and debug/slot.py SIDE already
+HOP_WAIT = 6                # GUESS, seconds within the radius before the hook acts: a bot the link carries walks 135
+                            # from its gather place to the take-off and falls 70 (Fall_1m) in less; klhop.c's default is 3
+HOP_MARGIN = 120.0          # the radius = the farthest gather place from their middle + this (a bot holds its place
+                            # within about a metre; the escort / cover tactics move it a little)
+HOP_HEIGHT = 60.0           # a bot counts as 'at the gather place' within this of its height (the landing is 70 lower)
+HOP_IN = 250.0              # the landing places are looked for round the point this far beyond the link's end ...
+HOP_REACH = 450.0           # ... within this of it,
+HOP_OFF = 100.0             # ... at least this far beyond the link's end (the foot of the wall), CLEAR from every
+                            # mesh edge, SEP apart (the game's own crew jump 0x8f4100 puts its members 100 apart)
+HOP_APART = 100.0           # check(): two landing places nearer than this FAIL (klhop.c drops the second)
 
 # What the four maps are built with for the owner (python kl_fa_bots.py owner ...; re/bots.md 12). Every key is
 # an option of build; the defaults (DEFAULTS) are the squad as it was before 2026-10-10 evening.
@@ -557,7 +579,7 @@ def add_drop(block, frm, to, kind=2):
     build). Kind 1 would be a climb UP (/Movement/Climb/Up/Low, Medium, High at 120 / 170) - Dog Days' animation
     files have no such clip, which is why this module writes drops only.
     A new waypoint may only go onto a polygon that has none: array 10 orders the waypoints of one polygon by a
-    rule that was not established."""
+    rule that was not established. The polygon's waypoint count (byte +1) goes up with it: see put()."""
     n, A = kl_pf4.split(block, True)
     A = [list(a) for a in A]
     polys = [list(struct.unpack('<BBHIIIIIII', r)) for r in A[3]]
@@ -582,6 +604,13 @@ def add_drop(block, frm, to, kind=2):
         own[:] = [v + (v >= i) for v in own]
         for q in polys[poly + 1:]:
             q[6] += 1
+        # THE POLYGON'S OWN WAYPOINT COUNT (byte +1; kl_pf4 called it 'flags'). kl2 0x5ce320..0x5ce3a7, the path
+        # search's polygon step: `ecx = [polygon+0x10]` (waypoints before), `al = [polygon+1] ; test al, al ; jbe`,
+        # then al waypoints array10[ecx + k] become search nodes. With the byte left at 0 the new waypoint was in the
+        # file and no search ever reached it: the link of the builds up to 2026-10-10 could NOT be taken (run
+        # R12_DM03: seven bots at the gather place, stage 2, to the end of the round). Measured: the byte equals the
+        # number of waypoints that name the polygon on every polygon of stock F02..F07 (re/bots_bank.md 1).
+        polys[poly][1] += 1
         a = polys[poly][4]
         areas[a][0] += 1
         for b in areas[a + 1:]:
@@ -907,6 +936,145 @@ def first_exit_entry(B, nav, exits, pts, dy=260.0):
     return None
 
 
+# ------------------------------------------------------------------ the hook hop (klhook\klhop.c)
+def hop_plan(B, nav, lane, exits, gather, frm, to, after, stage):
+    """One hop for klhop.c at a drop link frm -> to (the link's two ends): From = the middle of the seven gather
+    places, a radius that holds them all and NOT the landing, and seven landing places on the landing's own mesh
+    part (the mesh read WITHOUT links), HOP_OFF beyond the foot of the wall, CLEAR from every mesh edge, SEP apart,
+    LANE_CLEAR from the escape vehicle's line. `after` = the seven places of the station behind the link: taken
+    when the search finds fewer than seven. -> dict (also what bots.json keeps)."""
+    nav0 = Nav(B.scene.nav)                             # no links: the two sides of the drop are two parts here
+    mid = tuple(sum(g[k] for g in gather) / len(gather) for k in range(3))
+    far = max(math.hypot(g[0] - mid[0], g[2] - mid[2]) for g in gather)
+    radius = float(math.ceil((far + HOP_MARGIN) / 10.0) * 10)
+    land = math.hypot(to[0] - mid[0], to[2] - mid[2])
+    down = frm[1] - to[1]
+    height = HOP_HEIGHT if down > HOP_HEIGHT + 5.0 else max(20.0, down - 10.0) if down > 30.0 else HOP_HEIGHT
+    if radius > land - 60.0 and down <= HOP_HEIGHT + 5.0:      # neither the radius nor the height would tell the two sides apart
+        radius = float(math.floor((land - 60.0) / 10.0) * 10)
+        if radius < far + 30.0:
+            raise ValueError('hop at (%d, %d, %d): the gather places reach %d from their middle and the landing is %d from it, %d lower: '
+                             'no radius tells a bot that waits from one that has landed' % (*frm, far, land, down))
+    hit = nav0.at(to[0], to[1], to[2], dy=15.0)
+    if hit is None:
+        raise ValueError('hop: the link\'s end (%d, %d, %d) is on no polygon' % tuple(to))
+    side = nav0.part[hit[0]]
+    if nav0.at(mid[0], mid[1], mid[2], dy=15.0) is None or nav0.part[nav0.at(mid[0], mid[1], mid[2], dy=15.0)[0]] == side:
+        raise ValueError('hop: the gather place and the landing are on one mesh part without the link: nothing to hop')
+    L = math.hypot(to[0] - frm[0], to[2] - frm[2]) or 1.0
+    u = ((to[0] - frm[0]) / L, (to[2] - frm[2]) / L)
+    ref = (to[0] + u[0] * HOP_IN, to[1], to[2] + u[1] * HOP_IN)
+    beyond = lambda x: (x[0] - to[0]) * u[0] + (x[2] - to[2]) * u[1]
+    c = [x for x in nav0.around(ref, HOP_REACH, side, dy=40.0)
+         if beyond(x) >= HOP_OFF and nav0.clearance(x[0], x[1], x[2]) >= CLEAR and (not lane or lane_dist(lane, x) >= LANE_CLEAR)]
+    free = [x for x in c if not in_exit(B, exits, x)]
+    note = ''
+    got = nav0.spots(free, 7, SEP, ref=ref)
+    if len(got) < 7:
+        got = nav0.spots(c, 7, SEP, ref=ref)
+        if len(got) >= 7 and any(in_exit(B, exits, x) for x in got):
+            note = ('the landing places are INSIDE level exit box %s (the whole landing side is; the link\'s own end too): a bot put there '
+                    'has heist stage 3 and calls the escape vehicle, as one that took the link would' % B.sc.names[in_exit(B, exits, got[0])[0]])
+    if len(got) < 7:
+        got = [tuple(a) for a in after]
+        note = 'fewer than 7 free places near the landing: the places of the station behind the link are taken'
+        if len({(round(a[0]), round(a[2])) for a in got}) < 7:
+            raise ValueError('hop at (%d, %d, %d): no seven places beyond the link' % tuple(frm))
+    return collections.OrderedDict(
+        [('from', [round(v, 1) for v in mid]), ('radius', radius), ('height', height), ('wait', HOP_WAIT), ('stage', stage), ('player', 0),
+         ('to', [[round(v, 1) for v in g[:3]] for g in got]), ('link', [[round(v, 1) for v in frm], [round(v, 1) for v in to]]),
+         ('beyond', [round(min(beyond(g) for g in got)), round(max(beyond(g) for g in got))]),
+         ('clearance', [round(min(nav0.clearance(*g[:3]) for g in got)), round(max(nav0.clearance(*g[:3]) for g in got))]),
+         ('in_exit_box', any(bool(in_exit(B, exits, g)) for g in got)), ('note', note)])
+
+
+def hop_text(hops, level=''):
+    """The [CrewHop] sections of a level's KLJoin.ini as klhop.c reads them."""
+    g = lambda v: ' '.join('%g' % round(x, 1) for x in v)
+    L = ['; [CrewHop]: written by tools\\kl_fa_bots.py%s. Read by KLHook (klhop.c) from the KLJoin.ini beside the level archive;' % (' for ' + level if level else ''),
+         '; acts only with [CrewHop] Enable=1 in KLHook.ini, in an Arcade round, on a level that is not stock. An AI heister that has',
+         '; stood within Radius / Height of From for Wait seconds at heist stage >= Stage is put on the next free To.n by the game\'s',
+         '; own actor teleport (kl2 0x62a900): the way over a one-way drop when the navigation link does not carry it. re\\bots_bank.md']
+    for i, h in enumerate(hops):
+        L += ['[CrewHop%s]' % ('.%d' % (i + 1) if i else ''), 'From=' + g(h['from']), 'Radius=%g' % h['radius'], 'Height=%g' % h['height'],
+              'Wait=%g' % h['wait'], 'Stage=%d' % h['stage'], 'Player=%d' % h['player'], 'Places=%d' % len(h['to'])]
+        L += ['To.%d=%s' % (k + 1, g(t)) for k, t in enumerate(h['to'])]
+    return '\r\n'.join(L) + '\r\n'
+
+
+def hop_strip(text):
+    """An ini text without its [CrewHop...] sections and without hop_text's own comment lines."""
+    out, skip = [], False
+    for line in text.splitlines():
+        s = line.strip()
+        if s.startswith('['):
+            skip = s.lower().startswith('[crewhop')
+        if skip or (s.startswith(';') and ('[CrewHop]' in s or 'acts only with [CrewHop]' in s or 'stood within Radius / Height of From' in s or 'own actor teleport (kl2 0x62a900)' in s)):
+            continue
+        out.append(line)
+    while out and not out[-1].strip():
+        out.pop()
+    return out
+
+
+def hop_write(dst, hops, level='', log=print):
+    """<dst>/KLJoin.ini gets the plan's [CrewHop] sections (those a copied file had are replaced; a file that
+    holds nothing else and no hop is removed). -> the text written, or None."""
+    p = os.path.join(dst, HOP_FILE)
+    old = hop_strip(open(p, 'rb').read().decode('latin1')) if os.path.isfile(p) else []
+    if not hops:
+        if os.path.isfile(p):
+            if old:
+                with open(p, 'wb') as f:
+                    f.write(('\r\n'.join(old) + '\r\n').encode('latin1'))
+            else:
+                os.remove(p)
+        return None
+    text = ('\r\n'.join(old) + '\r\n\r\n' if old else '') + hop_text(hops, level)
+    with open(p, 'wb') as f:
+        f.write(text.encode('latin1'))
+    log('%s: %d [CrewHop] section(s) written (%s)' % (p, len(hops), 'beside the sections it had' if old else 'the file is new: this map has no join'))
+    return text
+
+
+def hop_read(folder):
+    """The [CrewHop], [CrewHop.2] .. sections of <folder>/KLJoin.ini, read as klhop.c reads them (its defaults,
+    its limits: 4 hops, 8 places, a place nearer than 100 to an earlier one is dropped by the hook - kept here so
+    that check() can say so) -> [dict]; [] when there is no file or no section."""
+    p = os.path.join(folder, HOP_FILE)
+    if not os.path.isfile(p):
+        return []
+    sec, cur = collections.OrderedDict(), None
+    for line in open(p, 'rb').read().decode('latin1').splitlines():
+        s = line.strip()
+        if s.startswith('[') and s.endswith(']'):
+            cur = sec.setdefault(s[1:-1].strip().lower(), collections.OrderedDict())
+        elif cur is not None and '=' in s and not s.startswith(';'):
+            k, v = s.split('=', 1)
+            cur.setdefault(k.strip().lower(), v.strip())
+    def vec(t):
+        try:
+            v = [float(x) for x in t.replace(',', ' ').replace(';', ' ').replace('(', ' ').replace(')', ' ').split()[:3]]
+            return v if len(v) == 3 else None
+        except (ValueError, AttributeError):
+            return None
+    out = []
+    for i in range(4):
+        d = sec.get('crewhop' if i == 0 else 'crewhop.%d' % (i + 1))
+        if d is None:
+            continue
+        h = {'section': 'CrewHop' if i == 0 else 'CrewHop.%d' % (i + 1), 'from': vec(d.get('from')), 'radius': float(d.get('radius', 300)),
+             'height': float(d.get('height', 150)), 'wait': float(d.get('wait', 3)), 'stage': int(d.get('stage', 2)), 'player': int(d.get('player', 0)),
+             'to': []}
+        for k in range(min(int(d.get('places', 0)), 8)):
+            v = vec(d.get('to.%d' % (k + 1)))
+            if v is None:
+                break
+            h['to'].append(v)
+        out.append(h)
+    return out
+
+
 def plan(B, opt=None, log=print):
     """-> the plan (dict) for a squad on build B, or raises ValueError saying what the map lacks.
     plan['stations'] = the stations in order (what each one is, the seven places); plan['steps'] = the route steps as
@@ -1200,6 +1368,7 @@ def plan(B, opt=None, log=print):
         log('escape %s: %d route(s), %d points; the places of the way out keep %d from them where the mesh allows' % (
             'van' if van else 'car', len(lane), sum(len(x) for x in lane), LANE_CLEAR))
     hops = {(tuple(pa), tuple(pb)) for ds in nav.drops.values() for _j, pa, pb, _k in ds}
+    gate_links = []                                 # (take-off, landing) of the link behind each gather place, in route order
     i_loot = max([i for i, it in enumerate(seq) if it[0] == 'loot'], default=None)
     for leg, ((ka, _wa, a, _na, _ca), (kb, wb, b, nb_, cb)) in enumerate(zip(seq, seq[1:])):
         pre = bool(ban) and i_loot is not None and leg < i_loot          # this leg ends at or before the last loot stop
@@ -1221,6 +1390,7 @@ def plan(B, opt=None, log=print):
                     route.append(('gate', 'in front of the drop at (%d, %d, %d): %d across, %d down' % (
                         *p, math.hypot(p[0] - q[0], p[2] - q[2]), p[1] - q[1]), g, None, None, length, pre))
                     gates.append(g)
+                    gate_links.append((tuple(p), tuple(q)))
                 run += d
                 nxt = max(nxt, run + 300.0)             # the next way place not nearer than 3 m beyond the landing
                 continue
@@ -1339,6 +1509,20 @@ def plan(B, opt=None, log=print):
     P['gates'] = [[round(v, 1) for v in g[:3]] for g in gates]
     P['ally_at'] = ally_at and [round(v, 1) for v in ally_at]
     P['ally_more'] = [[round(v, 1) for v in a] for a in ally_more]
+    # ---- the hook hop: per drop link the gather place and seven landing places for klhop.c (HOP_*)
+    P['hops'] = []
+    gi = [i for i, pl in enumerate(places) if pl[0] == 'gate']
+    for (frm, to), i in zip(gate_links, gi):
+        h = hop_plan(B, nav, lane, S['exits'], places[i][3], frm, to, places[i + 1][3] if i + 1 < len(places) else [],
+                     2 if any(pl[0] == 'exit' for pl in places[:i]) else 1 if any(pl[0] == 'enter' for pl in places[:i]) else 0)
+        P['hops'].append(h)
+        log('hook hop (klhop.c, [CrewHop] in %s): from round (%d, %d, %d), radius %d, height %d, stage %d, after %d s -> %d places round '
+            '(%d, %d, %d), %d..%d beyond the link\'s end, clearance %d..%d%s' % (
+                HOP_FILE, *h['from'], h['radius'], h['height'], h['stage'], h['wait'], len(h['to']),
+                *[sum(t[k] for t in h['to']) / len(h['to']) for k in range(3)], h['beyond'][0], h['beyond'][1], h['clearance'][0], h['clearance'][1],
+                '; ' + h['note'] if h['note'] else ''))
+        if h['note']:
+            notes.append('hook hop: ' + h['note'])
     # ---- the cases (option cases). A loot object of type CONTAINER cannot be taken before its OnlineMoneyContainer
     # was opened (kl2 0x766e50 -> after the container's own delay 0x868fb0 makes each object of its field 0 active;
     # an object that is not active ignores the take message, 0x6cdb8f). Stock containers are opened by their own
@@ -1885,6 +2069,89 @@ def fork_branches(sc, mine):
     return out
 
 
+def hop_check(B, lane, exits, links, prev, nxt, bots, fail, note, log, facts):
+    """The [CrewHop] sections of the folder's KLJoin.ini (klhop.c) against the build: From and every To.n on the
+    mesh, on the two sides of a drop link of the mesh (read WITHOUT links: two parts); every squad's place before
+    the link inside Radius / Height of From; the link's own end NOT inside them (a bot that has landed must not
+    count as waiting); the landing places clear of the mesh's edges, HOP_APART apart, out of the escape vehicle's
+    lane, enough for every bot; and from each of them a way WITHOUT a link to every place the chains name beyond
+    the drop - so a bot that was put there walks on. links = {(take-off, landing)} of the mesh; prev / nxt = what
+    check()'s walk met at them."""
+    H = hop_read(B.folder)
+    facts['hops'] = H
+    if not H:
+        if links:
+            note('the mesh has %d drop link(s) but %s has no [CrewHop] section: klhop.c has nothing to do on this map; a bot the link does not '
+                 'carry stays at the gather place (its AllyEscapeBox takes it aboard when the vehicle stands)' % (len(links), HOP_FILE))
+        return
+    nav0 = Nav(B.scene.nav)
+    at = lambda p: nav0.at(p[0], p[1], p[2], dy=15.0)
+    for h in H:
+        sec, f = h['section'], h['from']
+        if f is None or not h['to']:
+            fail('%s [%s]: no From= or no To.1= (klhop.c refuses the section)' % (HOP_FILE, sec)); continue
+        hf = at(f)
+        if hf is None:
+            fail('%s [%s]: From (%d, %d, %d) is on no walkable polygon' % (HOP_FILE, sec, *f)); continue
+        pf = nav0.part[hf[0]]
+        inside = lambda p: math.hypot(p[0] - f[0], p[2] - f[2]) <= h['radius'] and abs(p[1] - f[1]) <= h['height']
+        if len(h['to']) < bots:
+            fail('%s [%s]: %d landing places for %d bots' % (HOP_FILE, sec, len(h['to']), bots))
+        if not (0 <= h['stage'] <= 3 and 1.0 <= h['wait'] <= 600.0 and h['radius'] >= 50.0 and h['height'] >= 10.0):
+            fail('%s [%s]: Stage %d / Wait %g / Radius %g / Height %g out of klhop.c\'s range' % (HOP_FILE, sec, h['stage'], h['wait'], h['radius'], h['height']))
+        sides, polys, n_exit, low = set(), [], 0, 1e9
+        for k, t in enumerate(h['to']):
+            ht = at(t)
+            if ht is None:
+                fail('%s [%s]: To.%d (%d, %d, %d) is on no walkable polygon (within 15 of the mesh\'s height)' % (HOP_FILE, sec, k + 1, *t)); continue
+            sides.add(nav0.part[ht[0]]); polys.append((t, ht[0]))
+            c = nav0.clearance(*t)
+            low = min(low, c)
+            if c < CLEAR / 2.0:
+                fail('%s [%s]: To.%d (%d, %d, %d) is %d from a mesh edge without a neighbour (a person\'s radius is %d)' % (HOP_FILE, sec, k + 1, *t, c, CLEAR / 2))
+            if inside(t):
+                fail('%s [%s]: To.%d lies inside From\'s own radius and height: a bot put there still counts as waiting' % (HOP_FILE, sec, k + 1))
+            if lane and lane_dist(lane, t) < LANE_HALF + LANE_MAN:
+                fail('%s [%s]: To.%d (%d, %d, %d) is %d from the escape vehicle\'s line: IN ITS LANE' % (HOP_FILE, sec, k + 1, *t, lane_dist(lane, t)))
+            for j, o in enumerate(h['to'][:k]):
+                if math.hypot(t[0] - o[0], t[2] - o[2]) < HOP_APART:
+                    fail('%s [%s]: To.%d and To.%d are %d apart (klhop.c drops a place nearer than %d to an earlier one)'
+                         % (HOP_FILE, sec, j + 1, k + 1, math.hypot(t[0] - o[0], t[2] - o[2]), HOP_APART))
+            n_exit += bool(in_exit(B, exits, t))
+        if pf in sides:
+            fail('%s [%s]: a landing place is on From\'s own mesh part (read without links): nothing to hop over' % (HOP_FILE, sec))
+        if len(sides) > 1:
+            fail('%s [%s]: the landing places are on %d mesh parts' % (HOP_FILE, sec, len(sides)))
+        mine = [(pa, pb) for pa, pb in links if at(pa) and at(pb) and nav0.part[at(pa)[0]] == pf and nav0.part[at(pb)[0]] in sides]
+        if not mine:
+            fail('%s [%s]: no drop link of the mesh leads from From\'s mesh part to the landing places\' (%d link(s) in the mesh): the hop '
+                 'belongs to no way of the squads' % (HOP_FILE, sec, len(links)))
+        for pa, pb in mine:
+            if inside(pb):
+                fail('%s [%s]: the link\'s end (%d, %d, %d) is inside From\'s radius and height: a bot the link carried would be hopped as well'
+                     % (HOP_FILE, sec, *pb))
+        before = [(nm, p) for nm, p in prev if at(p) and nav0.part[at(p)[0]] == pf]
+        for nm, p in before:
+            if not inside(p):
+                fail('%s [%s]: %s waits before the drop at (%d, %d, %d), outside Radius %g / Height %g of From (%d, %d, %d): the hook never '
+                     'carries it' % (HOP_FILE, sec, nm, *p, h['radius'], h['height'], *f))
+        if links and not before:
+            note('%s [%s]: no squad\'s place before a drop link is on From\'s mesh part' % (HOP_FILE, sec))
+        beyond = sorted({q for q in nxt if at(q) and nav0.part[at(q)[0]] in sides})
+        lost = 0
+        for t, poly in polys:
+            dist, _p, _a = nav0.dist_map(poly, tuple(t))
+            lost += sum(at(q)[0] not in dist for q in beyond)
+        if lost:
+            fail('%s [%s]: %d (landing place, next place of a chain) pairs have no way on the mesh without a link' % (HOP_FILE, sec, lost))
+        if n_exit:
+            note('%s [%s]: %d of %d landing places are inside a level exit box: a bot put there has heist stage 3 and calls the escape vehicle, '
+                 'as a bot does that takes the link (its end is in the box too)' % (HOP_FILE, sec, n_exit, len(h['to'])))
+        log('hook hop [%s]: From (%d, %d, %d) radius %g height %g, wait %g s, stage %d; %d landing places, least clearance %d; %d place(s) of %d '
+            'squad walk(s) wait inside From; %d place(s) beyond the drop reached from every landing place without a link'
+            % (sec, *f, h['radius'], h['height'], h['wait'], h['stage'], len(h['to']), low, len({p for _n, p in before}), len(before), len(beyond)))
+
+
 def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
     """Every check on a finished folder -> (list of (severity, text), facts). Severities: FAIL (must be none before
     an install), NOTE (differs from stock, said aloud). early_ok: a bot that enters a level exit box before its
@@ -2009,6 +2276,7 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
     routes = collections.OrderedDict()
     feet = []
     lane, lane_least, lane_cross, lane_path = lanes(B), collections.OrderedDict(), collections.OrderedDict(), collections.OrderedDict()
+    hop_prev, hop_next = [], []                         # per walk over a drop link: (squad, the place before it), the place beyond it
     hops = {(tuple(pa), tuple(pb)) for ds in nav.drops.values() for _j, pa, pb, _k in ds}
     # (branch sets: see rand_of above. A squad without a fork is walked once, as before; a fork met in branch set
     # 0 adds the further sets to the list. Their findings are said once, their routes go to facts['route_branches'])
@@ -2097,6 +2365,8 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
             # D4: beyond a one-way link nothing brings a bot back. The place it stands at before the link must be
             # inside an AllyEscapeBox, or a bot the link does not carry (the AI taking a hand-written link was
             # never seen) waits there for the rest of the round
+            if any((tuple(u), tuple(w)) in hops for u, w in zip(got[0], got[0][1:])):
+                hop_prev.append((sc.names[top], tuple(prev))); hop_next.append(tuple(p))
             if any((tuple(u), tuple(w)) in hops for u, w in zip(got[0], got[0][1:])) and ally_boxes \
                     and not any(B.in_box(x, prev) for x in ally_boxes):
                 fail('%s: place %d lies beyond a one-way drop link and the place before it, (%d, %d, %d), is in no AllyEscapeBox: a bot the '
@@ -2195,6 +2465,16 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
             % (', '.join('%s %d' % (nm[len(SQUAD):], 1 + len(v)) for nm, v in facts['route_branches'].items()),
                1 + max(len(v) for v in facts['route_branches'].values())))
     facts['routes'] = routes
+    if hops:                                            # a link is only taken when the search can reach its waypoint (add_drop.put)
+        import kl_maps
+        nf = kl_maps.nav_facts(B.scene.nav)
+        for rule_ in ('polygon: byte +1 = the waypoints that name it', 'polygon: array 10 from its \'waypoints before\' names its waypoints'):
+            ok_, of_ = nf.get(rule_, (0, 0))
+            if ok_ != of_:
+                fail('navigation mesh: %d of %d polygons break the rule "%s" (all 21 stock meshes keep it): the path search reaches a waypoint '
+                     'only through its polygon\'s count (kl2 0x5ce32c), so the drop link CANNOT be taken - a build made by kl_fa_bots before '
+                     '2026-10-11; build it again' % (of_ - ok_, of_, rule_))
+    hop_check(B, lane, S['exits'], hops, hop_prev, hop_next, len(allies), fail, note, log, facts)
     if lane:
         vd = van_drives(B)
         facts['lane'] = {'vehicle': 'key-framed van' if vd else 'spline car', 'lines': len(lane), 'points': sum(len(x) for x in lane),
@@ -2340,6 +2620,9 @@ def build(src, dst, opt=None, log=print):
     P['edits'] = edits
     rep = apply(B, P, dst, say)
     rep['guns_ini_entries'] = guns_entries(dst, say)
+    rep['hop_file'] = bool(hop_write(dst, P.get('hops') or [], P.get('map') or '', say))     # [CrewHop] for klhop.c; a map without a drop gets none
+    with open(os.path.join(dst, 'bots.json'), 'w') as f:                                       # check() reads the plan's edits and options from it
+        json.dump(dict(rep, plan=P), f, indent=1, default=str)
     out, facts = check(dst, say, early_ok=bool(P['options'].get('early_call')), links=bool(P['options'].get('drop')))
     rep.update(plan=P, check=[list(x) for x in out], facts=facts)
     with open(os.path.join(dst, 'bots.json'), 'w') as f:
@@ -2384,8 +2667,10 @@ def diff(src, dst, log=print, also=()):
         # a drop link: two more waypoints, one more link; trees, polygons' shape, vertices and edges as they were
         na, Aa = kl_pf4.split(A.scene.nav, True)
         nb, Ab = kl_pf4.split(B.scene.nav, True)
-        shape = lambda X: [r[:16] + r[20:] for r in X[3]]            # a polygon without its 'waypoints before'
+        shape = lambda X: [r[:1] + r[2:16] + r[20:] for r in X[3]]   # a polygon without its waypoint count and 'waypoints before'
+        grew = [i for i, (ra, rb) in enumerate(zip(Aa[3], Ab[3])) if ra[1] != rb[1]]   # ... the count: +1 on the drops' two polygons each
         ok = (len(drops) > 0 and all(Aa[k] == Ab[k] for k in (0, 1, 2, 6, 8, 9, 11, 12)) and shape(Aa) == shape(Ab)
+              and sorted(grew) == sorted(p for d in drops for p in d['polygons']) and all(Ab[3][i][1] == Aa[3][i][1] + 1 for i in grew)
               and nb[5] == na[5] + 2 * len(drops) and nb[7] == na[7] + len(drops) and nb[4] == na[4]
               and [r[48:] for r in Aa[4]] == [r[48:] for r in Ab[4]])
         if not ok:

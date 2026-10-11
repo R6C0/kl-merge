@@ -30,6 +30,9 @@
  *   klbot.c        x     x    the AI crew's log and the backstab / bribe / leave / van rules ([Bots]). OFF by default
  *   klescort.c     x     x    one or two AI heisters stay near the human ([Bots] Escort; calls 0x760e50, the soldier's own
  *                             'defend this place' order; no data, no code). OFF by default
+ *   klhop.c        x     x    an AI heister that stands at a place the mesh does not carry it over is put beyond it
+ *                             ([CrewHop], KLJoin.ini; calls 0x62a900 through klcrew_rt.c's functions, with Reorder
+ *                             0x760e50; no data, no code). OFF by default
  *   klmem.c klnudge.c x  x    address space reserve ([Memory]); the loader's cursor nudge ([Load])
  *   klauto.c             x    scripted input, breadcrumb detours, [Auto] options, result file, watchdog
  *   mkoverlay.py              builds KLExpansion\Overlay\Patch01.zip (the menu page of the expansion maps)
@@ -154,6 +157,7 @@
  *   [Steam]                                                 klsteam.c (Block, Log, State)
  *   [Join] [Join.2] .. [Join.8]                             kljoin.c (also KLJoin.ini beside a level archive)
  *   [CrewJoin] [Crew] [Talk]                                klcrew_rt.c, klcrew.c, kltalk.c - each OFF unless its key is set
+ *   [CrewHop]                                               klhop.c (also [CrewHop] in the KLJoin.ini beside a level archive) - OFF unless Enable=1
  *   [Auto] [Engine] [Script]                                klauto.c (TEST)
  *
  * BUILD: cl 19.4x x86, /O2 /LD /W3, export DirectInput8Create=_DirectInput8Create@20 (build.bat, build_auto.bat).
@@ -562,6 +566,7 @@ static void klh_tick(int game_thread);
 #include "kltalk.c"
 #include "klbot.c"
 #include "klescort.c"
+#include "klhop.c"
 #include "klbalance.c"
 #include "klshoulder.c"
 #include "klfed.c"
@@ -601,6 +606,7 @@ static void klh_tick(int game_thread)
     klx_tick();
     klj_tick();
     klt_tick(game_thread);                            /* DIRECTLY after klj_tick: it must see kljoin.c's request while it is pending (klcrew_rt.c, EARLY) */
+    klv_tick(game_thread);                            /* klhop.c: an AI heister that stands at a [CrewHop] place is put beyond it (one game call a tick) */
     klc_tick(game_thread);
     klw_tick(game_thread);                            /* after klc_tick: the player's own body goes first */
     klk_tick(game_thread);                            /* after klw_tick: it reads who wears whom */
@@ -774,6 +780,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klk_init();
     klb_init();
     kle_init();
+    klv_init();
     klr_init();
     klo_init();
     klp_init();

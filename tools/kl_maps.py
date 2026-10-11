@@ -219,6 +219,16 @@ def nav_facts(block):
                 todo += [ch for ch in t1[i] if ch >= 0]
         cover |= seen
     rule('tree 1: per polygon, children relative to its root, no node shared, all covered', clean and len(cover) == n[1])
+    # polygon byte +1 = how many waypoints name the polygon, and array 10 from 'waypoints before' on names exactly
+    # them: what the path search's polygon step reads (kl2 0x5ce320..0x5ce3a7). Found 2026-10-11 through a
+    # hand-written link no AI took (kl_fa_bots.add_drop left the byte at 0; re/bots_bank.md 1).
+    own = collections.defaultdict(list)
+    for wi, r in enumerate(A[5]):
+        own[struct.unpack_from('<I', r, 0x14)[0]].append(wi)
+    for i, p in enumerate(polys):
+        rule('polygon: byte +1 = the waypoints that name it', p[1] == len(own.get(i, ())))
+        if own.get(i):
+            rule('polygon: array 10 from its \'waypoints before\' names its waypoints', sorted(perm[p[6]:p[6] + p[1]]) == own[i])
     rule('areas: vertex counts add up to array 6', sum(a[1] for a in areas) == n[6])
     rule('tree 1: -1 - c of the leaves covers array 2 to its last record',
          max([-1 - ch for r in t1 for ch in r if ch < 0] or [-1]) == n[2] - 1)
