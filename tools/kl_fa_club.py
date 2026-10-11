@@ -7,12 +7,18 @@ none of its tables. The study: re/campaign_fa_club.md (its section 8 weighs more
 re/campaign_fa.md 4.2 and G1.3 / G1.8; the build stage by stage, every check with its output and what only a
 live run can settle: re/club_campaign.md. Nothing here installs anything or starts the game.
 
-THE ENEMIES AND THE BEAT ARE IN (stage L2); the escape's drive is not: F07's van only stands where it may wait
-(VAN_WAIT; stage L3). '--no-ai' builds the round without enemies of stage L1.
+THE ENEMIES, THE BEAT (stage L2) AND THE ESCAPE (stage L3: F07's van on ROAD) ARE IN. '--no-ai' builds the round
+without enemies of stage L1.
 
-    python kl_fa_club.py test <out> [--keep] [options]    build F07 + M05_A with the layer into <out> (build()),
-                                                          finish() on the written level, check(); exit 1 if a
-                                                          problem is left that is not in KNOWN
+    python kl_fa_club.py test <out> [--keep] [options]    build F07 + M05_A with the layer into <out> (build():
+                                                          a bare graft first, for the van's plan, then the level
+                                                          inside kl_map_escape.van_layer), finish() on the written
+                                                          level, check(); exit 1 if a problem is left that is not
+                                                          in KNOWN. Beside the archive: van.json
+    python kl_fa_club.py van-check <built folder>         kl_map_escape.van_check on a built folder WITH THE DRAWN
+                                                          PAVEMENT AS THE ROAD (Pavement: the plain 'kl_map_escape.py
+                                                          van-check' faults every key of the drive that has no
+                                                          collision floor under it - by design of this map)
     python kl_fa_club.py finish <built folder>            what needs the WRITTEN level, on a folder build() made:
                                                           the load weight, the briefcases, the level's own texts
     python kl_fa_club.py check <built folder>             every check of this layer on a built folder
@@ -47,6 +53,8 @@ THE ENEMIES AND THE BEAT ARE IN (stage L2); the escape's drive is not: F07's van
       --str FILE        Dead Men's streamed clips are resolved against FILE and FILE.map.json instead of the
                         work folder's merged PC_Def.str (kl_fa_bank.use_stream): for the build against a stream
                         file that holds the club's music (MUSIC_CLIPS; the extension is a later step)
+      --plan FILE       the van's plan from a file (the van.json beside an earlier build) instead of a new one:
+                        saves the bare graft (35 s). Refused when its way points are not ROAD's
 
 THE ROUND (re/campaign_fa.md 4.2)
   START   shut in Yoko's office over dance floor 2 with the money: two rows of four, six briefcases on and
@@ -68,6 +76,11 @@ THE ROUND (re/campaign_fa.md 4.2)
   ESCAPE  the exit box and the escape marker lie on the pavement, on the only collision floor outside the
           building (the slab: x -1200..1800, z -3450..-2650, y 30). Bound trios stand outside its three open
           edges and kill boxes under them: beyond the slab the street is drawn and not there (BOUNDS, KILL).
+          F07's first key-framed van (ROAD; kl_map_escape's way-point front end) waits 50 m up the pavement to
+          the west, comes along the house fronts when a criminal steps onto the slab and stops WEST of the
+          lane's mouth, its rear doors at (-637, 30, -3100) on the slab; it leaves east along the pavement.
+          It drives ON THE DRAWN PAVEMENT (y 30.0 from x -7200 to 7600: check() measures the models): outside
+          the slab there is no collision floor under it, and a key-framed van needs none (Pavement).
 
 HOW (as kl_fa_bank: no new entity, no new controller - every object is a stock one, re-placed and re-wired)
   The nine names of kl_graft.AUTHOR_NAMES: HOST, prepare_host(S), strip(M), KEEP, DROP, layer_names(Jn),
@@ -81,6 +94,11 @@ HOW (as kl_fa_bank: no new entity, no new controller - every object is a stock o
      door is the group under which .prp and .gms hold different local places).
   3. finish(folder), on the written level (chunk numbers and the .LOC exist only then): the load weight, the
      briefcase model (kl_fa_loot.case_model, into dead chunk indices), the level's own texts.
+  4. THE VAN (as kl_fa_bank): the plan of ROAD needs a BUILT level's collision and must not see the layer's own
+     van, so build() makes a bare graft first (<out>/_bare, deleted again) or takes a plan from a file, hands it
+     to prepare_host() / wire() (lay_van) and wraps the build in kl_map_escape.van_layer (the van's collision
+     placements). NEW HERE: the plan and van_check run inside pavement() - kl_map_escape.Ground with the DRAWN
+     pavement as a floor where the collision has none (Pavement; kl_map_escape itself is unchanged).
 
 GUESS = a value that is not copied from a stock object or measured in the levels; ASSUMPTION = fits the
 evidence, not proven. Every table entry carries its source. Rotation, box and 'hidden' facts: kl_fa_author's
@@ -94,6 +112,7 @@ import kl_prpjoin as J
 import kl_fa_author as A                # the small tools only (place, setv ...); none of Retomoto's tables
 import kl_fa_bank as BK                 # the generic parts only (Doors' frames, put / values / facing, world_of, set_text,
                                         # read_built, lost_clips, reverify); none of the bank's tables
+import kl_map_escape as ESC             # the van: the way-point front end, van_prepare / van_wire / van_layer / van_check
 
 HOST, LEVEL = 'F07', 'M05_A'
 TITLE = 'Last Call'                     # the map's name (for the menu page: kl_expansion's table, a later stage)
@@ -136,13 +155,15 @@ SLAB = ((-1200.0, 1800.0), (-3450.0, -2650.0), 30.0)    # the pavement's collisi
 START = [(float(x), OFFICE, z) for z in (2420.0, 2560.0) for x in (2700, 2817, 2933, 3050)]
 # TRAITOR: east of the desk (its top is x 2600..2800, z 2200..2300: the study's first row stood on it). GUESS
 TRAITOR = [(float(x), OFFICE, 2290.0) for x in (2940, 3020, 3100, 3180)]
-# police who come back: the pavement, both sides of the lane's mouth and clear of it. The lane is sealed until
-# the beat: until then they are outside the round, as the campaign's own dead-end has it. Rows at z -2760 and
-# nearer the wall than z -2850: the next stage's van drives along the slab (the study: z -3100, a lane 220 wide)
-# and wants 250 either side of its line free of spawn points. GUESS: the points
-POLICE = [(float(x), SLAB[2], -2760.0) for x in (-900, -800, -700, -600, 1300, 1400, 1500)]
+# police who come back: the pavement EAST of the lane's mouth and clear of it (8 m and more). The lane is sealed
+# until the beat: until then they are outside the round, as the campaign's own dead-end has it. Rows at z -2760
+# and nearer the wall than z -2850: the van drives along the slab (ROAD: z -3100, a lane 220 wide) and wants 250
+# either side of its line free of spawn points. Stage L3 moved the four that stood at x -900..-600 east: the van
+# stops WEST of the mouth and its rear doors are at x -637 - a policeman must not come back beside them
+# (FED_CLEAR; check()). GUESS: the points
+POLICE = [(float(x), SLAB[2], -2760.0) for x in (900, 1000, 1100, 1200, 1300, 1400, 1500)]
 # the eight police bodies (Heroes!Henchmen_0n) beside those points. GUESS
-BODIES = [(p[0], p[1], p[2] - 70.0) for p in POLICE] + [(-1000.0, SLAB[2], -2830.0)]
+BODIES = [(p[0], p[1], p[2] - 70.0) for p in POLICE] + [(1600.0, SLAB[2], -2830.0)]
 # team mode's respawn stages: the front office, the wardrobe, the entrance hall. GUESS: the points beside each
 STAGE_B = [(1900.0, 354.0, 3300.0), (2000.0, 354.0, 3300.0), (2100.0, 354.0, 3300.0), (2000.0, 354.0, 3400.0)]
 STAGE_C = [(-4.0, 180.0, -240.0), (96.0, 180.0, -240.0), (196.0, 180.0, -240.0), (-4.0, 180.0, -150.0)]
@@ -276,8 +297,11 @@ NEVER_RAN = collections.OrderedDict([('PositionLightControl', 7), ('StartAnim', 
 
 # ------------------------------------------------------------------ the host's layer
 PARK = (0.0, -60000.0, 0.0)             # where a host object without a use is put (kl_fa_author.PARK)
-ESC_AT = (300.0, SLAB[2], -2800.0)      # the escape marker's place on the slab, 1.8 m east of the lane's mouth. GUESS; the next
-ESC_POI_UP = 188.0                      # stage holds it against its van's drive (kl_fa_bank.LANE_CLEAR). The marker over the floor
+ESC_AT = (-640.0, SLAB[2], -2800.0)     # the escape marker's place on the slab: BESIDE the van's lane (300 north of its line),
+                                        # level with the rear doors of the standing van, 7.8 m from the lane's mouth - not over
+                                        # the stop and not in the arriving van's sweep (kl_fa_bank's review finding; prepare_host
+                                        # and check() hold it against the drive: LANE_CLEAR). GUESS
+ESC_POI_UP = 188.0                      # the marker over the floor (F07: 190 over its road; Retomoto's)
 # THE BOUNDS at the slab's three open edges (re/campaign_fa.md 4.2 item 9): beyond the slab there is no collision
 # floor - whoever walks 13 m west, 17 m east or 8 m towards the parked cars from the lane's mouth falls through a
 # pavement that is drawn (club 8.4 item 6). Three of F07's bound trios: the Bound box 6 m deep from the edge
@@ -492,13 +516,15 @@ STOCK_ROWS = True                       # False ('--dead-men-rows'): Dead Men's 
 #   he falls into a kill box and the wave does not come: POLICE_ON_SLAB ('--police-slab') puts the ten on the slab.
 #   WHERE THEY RUN TO: cover points at the slab's two ends, 10.5 - 16 m from the lane's mouth and none before it (the
 #   bank's run V2: eight police set up in the mouth of the only exit killed the crew), each 2.5 m or more from the
-#   line z -3100 the next stage's van drives (LANE_CLEAR). GUESS: every place. MEASURED (check()): each man and
-#   cover point on the START's mesh part, each cover point on free floor, each man out of sight.
+#   line z -3100 the van drives (LANE_CLEAR) and - stage L3, the two southern points of the west squads moved for it
+#   (they were (-950, -3400) and (-800, -3400): 4.3 and 3.4 m from the rear doors of the standing van) - 5 m or more
+#   from the boarding place (BOARD_CLEAR). GUESS: every place. MEASURED (check()): each man and cover point on the
+#   START's mesh part, each cover point on free floor, each man out of sight.
 G30 = 'Gameplay!030_AfterLoot!'
 ARRIVE = collections.OrderedDict([
     (G30 + '030_FinancialAlleyExit_Left', ((-2000, -2750), [(-2300, -2750), (-2200, -2750), (-2100, -2750)],
-                                           [(-1100, -2720), (-1100, -3380), (-950, -3400)], (-1050, -2780))),
-    (G30 + '030_FinancialAlleyExitStreet_Left', ((-2000, -2850), [(-2500, -2850), (-2400, -2850)], [(-1150, -2850), (-800, -3400)], (-950, -2780))),
+                                           [(-1100, -2720), (-1100, -3380), (-1160, -3410)], (-1050, -2780))),
+    (G30 + '030_FinancialAlleyExitStreet_Left', ((-2000, -2850), [(-2500, -2850), (-2400, -2850)], [(-1150, -2850), (-1000, -2680)], (-950, -2780))),
     (G30 + '030_FinancialAlleyExit_Right', ((2000, -2750), [(1950, -2750), (2050, -2750), (2150, -2750)],
                                             [(1750, -2700), (1700, -3380), (1550, -3400)], (1750, -2850))),
     (G30 + '030_FinancialAlleyExitStreet_Right', ((2000, -2850), [(2250, -2850), (2350, -2850)], [(1600, -2850), (1400, -3400)], (1750, -2950)))])
@@ -510,7 +536,10 @@ ARRIVE_START = '10_RunToCover'
 ARRIVE_Y = SLAB[2] + 1.0                # a man's height on the pavement (F07's stand 1 over their floor)
 POLICE_ARRIVE = True                    # False ('--no-police'): none of the four squads is kept
 POLICE_ON_SLAB = False
-LANE_CLEAR = 250.0                      # kl_fa_bank's: no man and no cover point nearer than this to the van's line (z VAN_WAIT)
+LANE_CLEAR = 250.0                      # kl_fa_bank's: no spawn point, player body, man, cover point, escape marker or station of
+                                        # the way out nearer than this to the van's drive (the lane that is tested is 110 either
+                                        # side; the van's kill box is 90). GUESS. The boarding place is the one exception: the
+                                        # box rides on the van, a player goes there when the van STANDS
 POLICE_CLEAR = BK.POLICE_CLEAR          # a returning policeman's point or body this far from a squad's man
 LATE_CLEAR = 300.0                      # a man who comes into the world after the load: at least this far from every place the
                                         # crew can be before his stage (and out of sight of each: check()). GUESS
@@ -519,11 +548,54 @@ LATE_CLEAR = 300.0                      # a man who comes into the world after t
 # the map - its ZFakeTarget outside the rooms' bounds is the 0x686a66 crash).
 VAN = 'Animation/F07/F07_Escape_Vehicle_01.zip'
 VAN_GROUP = 'EscapeVehicle_Animation_F07'       # everything of the van with a place is below it (kl_fa_author.place_vans)
-VAN_WAIT = (-3000.0, 32.0, -3100.0)     # THIS HALF ONLY: where the van STANDS - on the study's pavement line (z -3100, free of
-                                        # every collision from x -3700 to 5700), 18 m west of the slab, y = the slab + 2. Its
-                                        # drive is still F07's baked one (an L of 121 m from there, through whatever stands in
-                                        # the way) if the exit box calls it: the next stage's kl_map_escape.van_prepare replaces
-                                        # park_van(). GUESS: the place. Not under the map: see VAN
+# THE VAN'S ROAD (kl_map_escape.van_plan_points makes the plan of it - keys, boarding box, camera, bounds - and
+# van_prepare lays F07's keys on it; the bank's ROAD is the worked example). One straight line along the pavement,
+# z -3100, the study's (re/campaign_fa.md 4.2 item 8), FROM THE WEST:
+#   arrive  the van waits at the first point, 50 m west of its stop and 41 m west of the slab's edge, where the
+#           pavement is drawn between the house fronts (z -2600) and the kerb (z -3460) and NOTHING has collision:
+#           west of x -3765 it stands off the navigation mesh too. 50 m in F07's 7.2 s is F07's own drive (51 m),
+#           unscaled; the study's first road was 62 m, over kl_map_escape.LIMIT_IN
+#   stop    the standing van's origin at x -300: its nose (250 ahead) is at x -50, 1.7 m WEST of the line straight
+#           out of the lane's mouth (x 118) - the arriving van never passes before the door the crew comes out of
+#           (MOUTH_SIDE; the study's stop at x 1000 swept 22 m of slab in front of it). Its rear doors (the
+#           boarding box, 337 behind the origin) are at (-637, 30, -3100): on the slab, 5.6 m inside its west edge
+#           and 4.6 m clear of the west bound's warn box, 8.9 m from the lane's mouth on foot
+#   leave   east along the same line to x 6700 (70 m in 8.48 s: F07's own drive away, unscaled; 'leave' reaches
+#           600 farther because the lane is tested that far beyond the last key). It crosses the rest of the slab
+#           with its passengers and the east level bound 21 - 27 m after the stop (the stock form: BOUND_AFTER)
+#   cam     None = kl_map_escape.cam_spot's eye (GUESS: behind the standing van, over the pavement)
+# GUESS: the side it comes from, the stop, both lengths. MEASURED on a bare graft (C:/kl_scratch/club/l3/s/drawn.py:
+# every drawn model of the map rastered from above): the pavement 'SO0100_M05_Street_Wide_A_03 / B_04 .. B_01 / B_05 /
+# A_01' is drawn at y 30.0 under every 20-unit cell of z -3460..-2580 from x -7200 to 7600, and nothing is drawn
+# 25..220 over it between z -3280 and -2880 (street lamps and two bins stand at z -3300..-3400, the house fronts at
+# z -2620, four parked cars beyond the kerb). West of x -400 the fronts are modelled buildings; east of x 2100 the
+# street's north side is a glow plane ('UNIQUE_StreetGLOW'): the van COMES along the real fronts and LEAVES into the
+# faked distance. check() measures the same along the drive of the written level (drawn_lane).
+ROAD = dict(arrive=[(-5300, 30, -3100), (-2800, 30, -3100)], stop=(-300, 30, -3100), leave=[(3000, 30, -3100), (7300, 30, -3100)],
+            at='origin', heading=None, cam=None)
+PLAN = None                             # the plan of ROAD (lay_van): prepare_host() and wire() lay the van on it
+NO_PLAN = ('kl_fa_club: the van has no plan: build with \'kl_fa_club.py test <out>\' or kl_fa_club.build() (the plan is made on a bare graft and '
+           'kl_map_escape.van_layer has to stand round the build; \'kl_maps.py one ... --author kl_fa_club\' can do neither)')
+# THE ROAD WHERE THERE IS NO FLOOR. Outside the slab the level has no collision floor (re/campaign_fa_club.md 1.3,
+# 8.1 item 8), and kl_map_escape's planner and van_check hold every key of a drive against 'the ground under it':
+# as it stands the tool refuses any road that leaves the slab ('only -340 of clear lane before the stop',
+# C:/kl_scratch/club/l3/out/plan0.txt), and the slab is 30 m long where the least drive is 20 + 30 m. A key-framed
+# van needs no floor (Retomoto's first drove 40 UNDER its road: re/retomoto_fa.md 9.3); what it must do is LOOK
+# right, and the pavement it is seen on is drawn at one height. So the road's height is DECLARED: PAVEMENT is the
+# drawn pavement (x, z, y), and Pavement / pavement() give kl_map_escape's Ground that floor wherever the collision
+# has none within the tool's own tolerance of it. Everything else of the tool's tests is the tool's: collision in
+# the van's body, convex bodies, the lengths, the bounds, the boxes at the stop, the camera, the collision file.
+PAVEMENT = ((-7200.0, 7600.0), (-3460.0, -2580.0), SLAB[2])
+BOARD_NEAR = 30.0                       # the boarding place is a station of the round: on the START's mesh part and on free
+                                        # floor within this (the measure of the spawn points)
+BOUND_AFTER = 1000.0                    # kl_fa_bank's: a level bound on the drive away at least this far after the stop (every
+                                        # stock Dog Days van passes one with its passengers, the nearest 10.9 m after its stop)
+MOUTH_SIDE = 150.0                      # the ARRIVING van's nose stops at least this far short of the line straight out of the
+                                        # lane's mouth (a criminal who runs out of the door is not in its way). GUESS
+BOARD_CLEAR = 500.0                     # no cover point of the arriving police nearer than this to the boarding place (the
+                                        # rule of the lane's mouth is 10 m; the slab is 30 x 8.8 m). GUESS
+FED_CLEAR = 1000.0                      # no AFTER_DEATH point and no police body nearer than this to the boarding place. GUESS
+STREET_ROOM = 'M05_A_Outside_Street_01a'        # the pavement's room: its box holds the whole drive and the camera (check())
 ESCAPE = ('Gameplay!EscapeSetup!otrExitLevel', 'Gameplay!EscapeSetup!RelayDestroyedEsc_01',
           'Gameplay!EscapeSetup!OnScreenMSG_LastEscapeVan', 'Gameplay!EscapeSetup!Timer_OSM_LastEscape')
 _KEEP = ('FASpecials!', 'Specials!', VAN) + ESCAPE + tuple(v for v in ROLE.values() if v.startswith(('Gameplay!0', 'Gameplay!RunToEscape!')))
@@ -591,16 +663,70 @@ AMBIENCE_CLIPS = ('SFX/Ambiences/M05_A/Inside/Club_Entrance_Ambience.wav', 'SFX/
 
 
 # ------------------------------------------------------------------ 1. the host level before the graft
-def park_van(S, log=print):
-    """F07's first van stands at VAN_WAIT: its group gets the move that puts the first position of its baked drive
-    there (no turn). THIS HALF ONLY - the drive itself is still F07's; see VAN_WAIT."""
-    sc = S.prp
-    top = A.node_of(sc, VAN)
-    main, _all, _stop = A.van_path(S, top)
-    grp = next(k for k in range(top, sc.end[top]) if sc.names[k] == VAN_GROUP)
-    t = tuple(VAN_WAIT[a] - main[0][a] for a in range(3))
-    A.place(S, grp, t)
-    log('  kl_fa_club: %s stands at (%d, %d, %d) (its group moved by (%d, %d, %d)); its drive is still F07\'s' % (VAN, *VAN_WAIT, *t))
+_Ground = ESC.Ground                    # kl_map_escape's own, whatever pavement() has put in its place
+
+
+class Pavement(_Ground):
+    """kl_map_escape.Ground of this level WITH THE DRAWN PAVEMENT AS A FLOOR where the collision has none (PAVEMENT's
+    note): a vertical line inside PAVEMENT that meets no collision floor within the tool's tolerance of the
+    pavement's height (VAN_BODY[0] = 25) meets one more 'floor' at that height, owned by the REF id DRAWN, which no
+    entity has (kl_map_escape.Level.name says 'REF -5'). Nothing else changes: the slab's own floor answers where
+    it is, collision over the road is collision, `between` (lines of sight) sees only what is really there."""
+    DRAWN = -5
+
+    def hits(self, x, z):
+        out = _Ground.hits(self, x, z)
+        (x0, x1), (z0, z1), y = PAVEMENT
+        if x0 <= x <= x1 and z0 <= z <= z1 and not any(h[1] > ESC.FLOOR and abs(h[0] - y) <= ESC.VAN_BODY[0] for h in out):
+            out = sorted(out + [(y, 1.0, self.DRAWN)])
+        return out
+
+
+@contextlib.contextmanager
+def pavement():
+    """For its length kl_map_escape makes its Ground as a Pavement (van_plan_points, van_check)."""
+    ESC.Ground = Pavement
+    try:
+        yield
+    finally:
+        ESC.Ground = _Ground
+
+
+def van_plan(src, log=print):
+    """The plan of ROAD (kl_map_escape.van_plan_points, on the drawn pavement) against the collision of a BUILT
+    F07 + M05_A folder WITHOUT the layer (a bare 'kl_maps.py one <out> F07 M05_A --campaign --m-drop "Boundaries!*"
+    --keep': on a build that has the van, the planner takes the van's own camera for a designer's and lists it to
+    be left out). A fault of the plan is an error."""
+    with pavement():
+        P = ESC.van_plan_points(src, log=log, **ROAD)
+    if P['faults']:
+        raise ValueError('kl_fa_club: no van on ROAD: %s' % '; '.join(P['faults']))
+    return P
+
+
+def plan_of(path):
+    """A plan from a file: the van.json test() writes beside a build (the plan is its 'plan'), or a plan as JSON."""
+    import json
+    with open(path, encoding='utf-8') as f:
+        P = json.load(f, object_pairs_hook=collections.OrderedDict)
+    P = P.get('plan', P)
+    lack = [k for k in ('path', 'lin', 'lout', 'wait', 'stop', 'end', 'board', 'cam', 'points') if k not in P]
+    if lack or P.get('faults'):
+        raise ValueError('%s is no plan of the van without a fault (lacks %s; faults %s)' % (path, lack, P.get('faults')))
+    road = {k: [list(map(float, p)) for p in v] if k in ('arrive', 'leave') else list(map(float, v)) if k == 'stop' else v for k, v in ROAD.items()}
+    if any(P['points'].get(k) != v for k, v in road.items()):
+        raise ValueError('%s is a plan of other way points than ROAD: %s' % (path, {k: P['points'].get(k) for k in road if P['points'].get(k) != road[k]}))
+    return P
+
+
+def lay_van(P):
+    """The plan the next build lays the van on (prepare_host, wire). -> P."""
+    global PLAN
+    PLAN = P
+    return P
+
+
+def van_path():
     return R + VAN + '\\' + VAN_GROUP
 
 
@@ -688,6 +814,8 @@ def prepare_host(S, log=print):
     sc = S.prp
     if not BEAT_ANIM and kl_gms.RETYPE.get(IK[1][0]) != IK[1][1]:      # before anything is armed: a caller that goes on in
         raise ValueError(NO_BUILD)                                     # this process must not find kl_escape wrapped
+    if PLAN is None:
+        raise ValueError(NO_PLAN)
     Doors.arm(log)                                      # the build that follows opens the doors (see Doors)
     for name, (pos, face, half, _why) in PLACE.items():
         put(S, name, pos, face, half)
@@ -734,8 +862,16 @@ def prepare_host(S, log=print):
     by = collections.Counter(what for _p, _y, _v, what in LOOT)
     log('  kl_fa_club: loot: %d objects, %d in all, shown from the load: %s' % (len(LOOT), sum(v for _p, _y, v, _w in LOOT), ', '.join('%d on %s' % (n, w) for w, n in by.items())))
     place_police(S, log)
-    # escape: the one van where it may wait, the exit trigger names it alone (kl2 0x6c3f90 loops until one field is set)
-    van = park_van(S, log)
+    # escape: the one van laid on the plan of ROAD - F07's own keys re-written in place, the boxes beside its drive
+    # and its camera moved with it (kl_map_escape.van_prepare; the van's nodes must still stand where F07 has them);
+    # the exit trigger names it alone (kl2 0x6c3f90 loops until one field is set). The escape marker stays where
+    # PLACE has it, beside the lane: held against this plan's drive here (check() does it again on the written level)
+    S.van = ESC.van_prepare(S, PLAN, log)
+    off = abs(ESC.Poly([tuple(p) for p in PLAN['path']]).project(ESC_AT)[1])
+    if off < LANE_CLEAR:
+        raise ValueError('kl_fa_club: the escape marker\'s place %s is %d from the van\'s drive (%d wanted)' % (ESC_AT, off, LANE_CLEAR))
+    log('  kl_fa_club: the escape marker stands %d from the van\'s drive, %d from the boarding place at the stop' % (off, math.dist(ESC_AT, PLAN['board'])))
+    van = van_path()
     k = A.node_of(sc, ROLE['exit'])
     kl_fa.edit(sc, k, A.ctrl_of(sc, k, kl_fa.EXIT), lambda us: [A.setv(sc, us, 2 + j, s) for j, s in enumerate((van, '', ''))])
     S.authored = {'loot': loot, 'van': van}
@@ -987,6 +1123,12 @@ def wire(sc, log=print):
     # ---- the way out: F07's 'exit heist' box in the wardrobe, with a line that fits a front door
     lists('speak box', 'TriggerBox', f14='ECPS_FA_MERCONLY', f17=[R + ROLE['speak']])
     lists('speak', 'OnlineSpeakPlayer', f1=EXIT_LINE)
+    # ---- the escape: every exit trigger of the level (there is F07's one) calls the van - field 0 false, field 2
+    # the van's group, 1 and 3..5 empty, the form the three car maps on the tab have (kl_map_escape.van_wire). The
+    # rest of the round's last stage is F07's own and stays as the graft left it (kl_fa_bank.wire's note)
+    if PLAN is None:
+        raise ValueError('kl_fa_club: wire() without a plan of the van (see prepare_host)')
+    ESC.van_wire(sc, PLAN, log)
     for k, i, v in kl_fa.controllers(sc, kl_fa.SETTINGS):
         if len(v) != 340:
             raise ValueError('the settings object has %d fields' % len(v))
@@ -1251,6 +1393,106 @@ def way_views(mesh, stations, step=150.0):
     return out
 
 
+def drawn_lane(folder, road, half=ESC.VAN_HALF):
+    """What the MAP DRAWS in the lane of a drive - kl_map_escape's lane test sees collision only, and outside the
+    slab this level has none (the study's open point: 'nothing DRAWN was tested in the lane'). road: an ESC.Poly
+    whose y is the road. Every mesh of every entity below a 'Locations/' subtree that has a model and is not
+    hidden (kl_fa_loot.Assets: static meshes, vertex stride 40; without collision hulls and blob shadows), in
+    world space; the lane's samples are the tool's (five rays across `half`, every LANE_STEP, VAN_TAIL before
+    and VAN_NOSE beyond). -> dict: samples, floor = how many have a drawn surface of upness > FLOOR within
+    VAN_BODY[0] of the road under them, first_bare, y = that surface's range, pieces = Counter of the entities it
+    belongs to, body = {entity: [first, last, count, material]} of what is drawn VAN_BODY over the road - under a
+    ray, or with a corner inside the lane (a lamp post is thinner than the rays are apart) -, tris.
+    What it cannot know: what the game does not draw (a model switched off by something), and a person."""
+    import kl_fa_loot as L
+    arch = BK.archive_of(folder)
+    As, B = L.Assets(arch), L.Built(arch)
+    fr = L.frames(B.scene)
+    pts, s = [], -ESC.VAN_TAIL
+    while s <= road.len + ESC.VAN_NOSE + 1e-6:
+        p, t = road.at(s), road.tan(s)
+        pts += [(s, p[0] + off * t[1], p[1], p[2] - off * t[0]) for off in (-half, -half / 2, 0.0, half / 2, half)]
+        s += ESC.LANE_STEP
+    x0, x1 = min(q[1] for q in pts) - 30.0, max(q[1] for q in pts) + 30.0
+    z0, z1 = min(q[3] for q in pts) - 30.0, max(q[3] for q in pts) + 30.0
+    y0, y1 = min(q[2] for q in pts) - 60.0, max(q[2] for q in pts) + ESC.VAN_BODY[1]
+    box, tris, cell = {}, [], collections.defaultdict(list)
+    for k, e in enumerate(B.ents):
+        if e.model <= 0 or e.flags & HIDDEN or not B.sc.names[B.sc.top[k + 1]].startswith('Locations/'):
+            continue
+        if e.model not in box:
+            try:
+                box[e.model] = As.bounds(e.model)
+            except (ValueError, IndexError, struct.error):  # no model root (a light, a sprite): nothing solid is drawn
+                box[e.model] = None
+        if box[e.model] is None:
+            continue
+        Rm, T = fr[e]
+        w = lambda q: tuple(T[a] + sum(Rm[a][b] * q[b] for b in range(3)) for a in range(3))
+        lo, hi = box[e.model]
+        cs = [w((x, y, z)) for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])]
+        if max(c[0] for c in cs) < x0 or min(c[0] for c in cs) > x1 or max(c[2] for c in cs) < z0 or min(c[2] for c in cs) > z1 \
+                or max(c[1] for c in cs) < y0 or min(c[1] for c in cs) > y1:
+            continue
+        name = B.sc.path[k + 1][5:]
+        for o in As.meshes(e.model):
+            pos, _uv, ii = As.geometry(o)
+            ws, mat = [w(q) for q in pos], As.material(o).split('/')[-1]
+            for ia, ib, ic in ii:
+                a, b, c = ws[ia], ws[ib], ws[ic]
+                if max(a[0], b[0], c[0]) < x0 or min(a[0], b[0], c[0]) > x1 or max(a[2], b[2], c[2]) < z0 or min(a[2], b[2], c[2]) > z1 \
+                        or max(a[1], b[1], c[1]) < y0 or min(a[1], b[1], c[1]) > y1:
+                    continue
+                e1, e2 = [b[i] - a[i] for i in range(3)], [c[i] - a[i] for i in range(3)]
+                n = (e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0])
+                ln = math.sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2])
+                if ln < 1e-6:
+                    continue
+                tris.append((a, b, c, abs(n[1]) / ln, name, mat))
+                for i in range(int(min(a[0], b[0], c[0]) // 200), int(max(a[0], b[0], c[0]) // 200) + 1):
+                    for j in range(int(min(a[2], b[2], c[2]) // 200), int(max(a[2], b[2], c[2]) // 200) + 1):
+                        cell[i, j].append(len(tris) - 1)
+    out = dict(samples=len(pts), floor=0, first_bare=None, pieces=collections.Counter(), body=collections.OrderedDict(), tris=len(tris))
+    ys = []
+    def body(name, mat, s):
+        e = out['body'].setdefault(name, [round(s), round(s), 0, mat])
+        e[0], e[1], e[2] = min(e[0], round(s)), max(e[1], round(s)), e[2] + 1
+    for s, x, y, z in pts:
+        under = None
+        for t in cell.get((int(x // 200), int(z // 200)), ()):
+            a, b, c, up, name, mat = tris[t]
+            d = (b[2] - c[2]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[2] - c[2])
+            if abs(d) < 1e-9:
+                continue
+            u = ((b[2] - c[2]) * (x - c[0]) + (c[0] - b[0]) * (z - c[2])) / d
+            v = ((c[2] - a[2]) * (x - c[0]) + (a[0] - c[0]) * (z - c[2])) / d
+            if u < -1e-6 or v < -1e-6 or u + v > 1 + 1e-6:
+                continue
+            h = u * a[1] + v * b[1] + (1 - u - v) * c[1]
+            if up > ESC.FLOOR and abs(h - y) <= ESC.VAN_BODY[0] and (under is None or h > under[0]):
+                under = (h, name)
+            if y + ESC.VAN_BODY[0] < h < y + ESC.VAN_BODY[1]:
+                body(name, mat, s)
+        if under:
+            out['floor'] += 1
+            out['pieces'][under[1]] += 1
+            ys.append(under[0])
+        elif out['first_bare'] is None:
+            out['first_bare'] = round(s)
+    # corners inside the lane, in the body's height (the line carried on VAN_TAIL before and VAN_NOSE beyond the drive)
+    ext = ESC.Poly([road.at(-ESC.VAN_TAIL)] + list(road.p) + [road.at(road.len + ESC.VAN_NOSE)])
+    lo_y, hi_y = min(p[1] for p in road.p) + ESC.VAN_BODY[0], max(p[1] for p in road.p) + ESC.VAN_BODY[1]
+    for a, b, c, _up, name, mat in tris:
+        for q in (a, b, c):
+            if lo_y < q[1] < hi_y:
+                s, d = ext.project(q)
+                r = ext.at(s)[1]
+                if abs(d) <= half and 1e-3 < s < ext.len - 1e-3 and r + ESC.VAN_BODY[0] < q[1] < r + ESC.VAN_BODY[1]:
+                    body(name, mat, s - ESC.VAN_TAIL)
+    out['y'] = (min(ys), max(ys)) if ys else (0.0, 0.0)
+    return out
+
+
 def check(folder, log=print, problems=None):
     """Every check of this layer on a built (and finished) folder -> [what is wrong]. problems: kl_graft.verify's
     list of the build, when the caller has it (else result.json beside the archive is read). What the BUILD did
@@ -1322,12 +1564,8 @@ def check(folder, log=print, problems=None):
     seal_refs = [ref_of[p] for p in standing]
     lv = kl_route.load(folder)
     path_of = {e.ref: sc.path[k + 1] for k, e in enumerate(ents)}
-    for ref, far in lv.moved():                         # a placement that stands off its entity
-        if ('\\' + VAN_GROUP) in path_of.get(ref, ''):
-            log('  note: REF %d (%s): its key-framed placement stands %d from its entity - the parked van\'s bodies are still where F07 has them '
-                '(the next stage\'s kl_map_escape.van_hvk moves them)' % (ref, path_of[ref].split('\\')[-1], far))
-        else:
-            fail('REF %d (%s): its collision placement stands %d from its entity' % (ref, path_of.get(ref, '?')[-60:], far))
+    for ref, far in lv.moved():                         # a placement that stands off its entity (the van's five key-framed
+        fail('REF %d (%s): its collision placement stands %d from its entity' % (ref, path_of.get(ref, '?')[-60:], far))     # bodies too: van_hvk)
     # ---- every spawn point and player group: on the START's mesh part, on free floor (the gates taken out: the
     # police who come back stand beyond the seal)
     pts, names = [START[1]], ['START']
@@ -1508,6 +1746,7 @@ def check(folder, log=print, problems=None):
     more = sorted({top_of(k) for k in squads} - set(SQUADS) - set(ARRIVE))
     men = [k for k in actors if top_of(k) in SQUADS or top_of(k) in ARRIVE]
     at = lambda k: pos[ents[k - 1]]
+    cover_at = []
     if squads:
         if len(camp_sq) != len(SQUADS) or len(pol_sq) not in (0, len(ARRIVE)):
             fail('%d of the %d campaign squads and %d of the %d police squads are in the level' % (len(camp_sq), len(SQUADS), len(pol_sq), len(ARRIVE)))
@@ -1541,14 +1780,10 @@ def check(folder, log=print, problems=None):
         for (h, mine_, cover), r in zip(own, rows3[1:]):
             if mine_ and not (r['mesh'] and r['part'] == part and (r['reached'] or not cover)):
                 fail('the police\'s %s at (%d, %d, %d): mesh %s, part %s, on free floor %s' % (sc.path[h][5:][-60:], *r['at'], r['mesh'], r['part'], r['reached']))
-        lane = [(sc.path[h][5:][-60:], at(h)) for h in [k for k in men if top_of(k) in ARRIVE] + [h for h, m_, c in own if m_ and c]
-                if abs(at(h)[2] - VAN_WAIT[2]) < LANE_CLEAR]
-        for who, p in lane:
-            fail('%s at (%d, %d, %d) is %d from the van\'s line z %d (%d wanted)' % (who, *p, abs(p[2] - VAN_WAIT[2]), VAN_WAIT[2], LANE_CLEAR))
-        mouth = min([math.dist(at(h), LANE_MOUTH) for h, m_, c in own if m_ and c] or [9e9])
+        cover_at = [(sc.path[h][5:][-60:], at(h)) for h, m_, c in own if m_ and c]      # (held against the van's drive below)
+        mouth = min([math.dist(p, LANE_MOUTH) for _n, p in cover_at] or [9e9])
         if pol_sq:
-            log('  enemies: the police\'s %d cover points: the nearest %.1f m from the lane\'s mouth; men and cover points %d and more from the van\'s line' % (
-                sum(1 for _h, m_, c in own if m_ and c), mouth / 100, LANE_CLEAR))
+            log('  enemies: the police\'s %d cover points: the nearest %.1f m from the lane\'s mouth' % (len(cover_at), mouth / 100))
             if mouth < 1000.0:                          # the bank's run V2: nobody sets up before the only exit
                 fail('a cover point of the police lies %.1f m from the lane\'s mouth (10 m wanted)' % (mouth / 100))
         # nothing of a squad names a node that is not there; the kinds are the ones that ran live
@@ -1681,10 +1916,184 @@ def check(folder, log=print, problems=None):
         if not on_slab or not in_exit(ESC_AT) or in_exit(ROUTE_OUT[0][1]) or [s for s in ev[2:6] if s] != [R + VAN + '\\' + VAN_GROUP] \
                 or math.dist(mark, (ESC_AT[0], ESC_AT[1] + ESC_POI_UP, ESC_AT[2])) > 1.0:
             fail('the exit box / escape marker are not as this file places them (on the slab, beyond the seal, naming the one van)')
-        log('  van: THIS HALF - it stands at its waiting place with F07\'s own drive; the next stage lays the drive (kl_map_escape)')
-    # ... its ZFakeTarget inside the vision space, by kl_fa_bots_dyn's rule (the 0x686a66 crash; re/crash_686a66.md)
+        # ---- the van on its road. kl_map_escape.van_check reads the WRITTEN files - who the exit trigger calls, the keys
+        # against the road's height, the lane (five rays, every 20), the boxes at the stop, the camera's eye and sight,
+        # the collision file - here on the drawn pavement (Pavement); held against the plan in van.json when test()
+        # wrote one. What the PLAIN tool says is counted beside it: nothing but the missing collision floor may differ
+        plan, pj = None, os.path.join(folder, 'van.json')
+        if os.path.isfile(pj):
+            try:
+                plan = plan_of(pj)
+            except ValueError as x:
+                fail('the van\'s plan beside the build: %s' % x)
+        else:
+            log('  van: no van.json beside the build: the drive is tested as the level has it, not against a plan')
+        rep, VL, plain = van_check(folder, lambda s: log('  ' + s), plan)
+        for x in rep['faults']:
+            fail('van: ' + x)
+        floorless = ('no ground under it', 'no road within', 'the eye is outside the map')
+        odd = [x for x in plain if x not in rep['faults'] and not any(w in x for w in floorless)]
+        log('  van: the plain kl_map_escape.van_check (collision only) has %d fault(s): %s - each one the missing collision floor outside the slab, '
+            'which the drawn pavement stands in for%s' % (len(plain), ', '.join('%d x \'%s\'' % (sum(w in x for x in plain), w) for w in floorless if any(w in x for x in plain)) or '-',
+                                                       '' if not odd else '; AND %d OTHER' % len(odd)))
+        for x in odd:
+            fail('van (the plain tool): ' + x)
+    if stop_at_all := (len(vans) == 1 and len(fakes) == 1 and len(ex) == 1 and 'stop' in rep):
+        if any('FAEscCameraLAST' in x for x in rep['notes']):   # MEASURED (kl_fa_bank): no such define in stock F07, F02, F05 either
+            log('    (the stock form: no Dog Days Fragile Alliance level has that define - it is Dead Men\'s box, which the three car maps kept)')
+        N = ESC._van_nodes(sc, sc.top[vans[0][0]])
+        ends_ = sorted({o for e in VL.ents for _p, oo in kl_graft.keys_tracks(e.raw) for o in oo} | {len(VL.scene.head)})
+        K = ESC.VanKeys(VL.scene.head, VL.ents[N['V_Van_00'] - 1].raw, ends_, kl_graft.keys_tracks)
+        drive = K.pos[:K.drive()]
+        k_stop = K.f2p[ESC._leg_frames(sc, N['F07_Escape_Vehicle_01'])['Activate_Enter'][1]]
+        wait, stop, end, board = drive[0], drive[k_stop], drive[-1], tuple(rep['board'])
+        D2 = ESC.Poly([tuple(p) for p in drive])
+        to_drive = lambda p: abs(D2.project(p)[1]) if 0.0 < D2.project(p)[0] < D2.len else min(math.dist(p, drive[0]), math.dist(p, drive[-1]))
+        # what the van drives over: collision floor (the slab) or the drawn pavement alone; the stop on real floor
+        def real_under(x, y, z):                        # kl_map_escape.Ground.under on the collision alone (no Pavement)
+            fl = [h for h in _Ground.hits(VL.G, x, z) if h[1] > ESC.FLOOR and h[0] <= y + ESC.REACH]
+            return (fl[-1][0], fl[-1][2]) if fl else None
+        real = [real_under(p[0], p[1] + 20.0, p[2]) for p in drive]
+        on = [i for i, g in enumerate(real) if g is not None]
+        g = real[k_stop]
+        log('  van: of the %d keys of the drive %d have a collision floor under them (x %d..%d: %s), %d the drawn pavement alone (PAVEMENT y %.0f); '
+            'the stop: origin y %.1f, the floor under it y %s; keys at most %.1f off the road\'s height; drive in %.0f m, away %.0f m' % (
+                len(drive), len(on), drive[on[0]][0] if on else 0, drive[on[-1]][0] if on else 0, ', '.join(sorted({VL.name(real[i][1]) for i in on})) or '-',
+                len(drive) - len(on), PAVEMENT[2], stop[1], '%.1f' % g[0] if g else '-', rep['height_off'], rep['length_in'] / 100.0, rep['length_out'] / 100.0))
+        if g is None or abs(stop[1] - ESC.VAN_UP - g[0]) > 3.0:
+            fail('van: the standing van\'s origin (y %.1f) is not %.0f over a collision floor (%s): the crew boards on the slab' % (stop[1], ESC.VAN_UP, '%.1f' % g[0] if g else 'none'))
+        # ... and what is DRAWN there (the tool's lane test sees collision only): the pavement under every wheel
+        # sample of the lane, nothing of the map's models in the van's body
+        try:
+            dl = drawn_lane(folder, ESC.Poly([(p[0], p[1] - ESC.VAN_UP, p[2]) for p in drive]))
+            log('  van: DRAWN in its lane (the map\'s models, %d triangles near it; 5 rays every %d, %d before and %d beyond): a surface within %d of the road under '
+                '%d of %d samples, y %.1f..%.1f (%s); in the van\'s body (%d..%d over the road): %s' % (
+                    dl['tris'], ESC.LANE_STEP, ESC.VAN_TAIL, ESC.VAN_NOSE, ESC.VAN_BODY[0], dl['floor'], dl['samples'], dl['y'][0], dl['y'][1],
+                    ', '.join('%s x %d' % (n.split('\\')[-1], c) for n, c in dl['pieces'].most_common(8)), *ESC.VAN_BODY,
+                    '; '.join('%s [%s] %d..%d along' % (n.split('\\')[-1], m, a, b) for n, (a, b, _c, m) in dl['body'].items()) or 'nothing'))
+            if dl['floor'] != dl['samples']:
+                fail('van: no drawn surface under %d of the %d wheel samples of its lane, the first %d along the drive: it would be seen driving on nothing' % (
+                    dl['samples'] - dl['floor'], dl['samples'], dl['first_bare']))
+            if abs(dl['y'][0] - PAVEMENT[2]) > 2.0 or abs(dl['y'][1] - PAVEMENT[2]) > 2.0:
+                fail('van: the drawn surface under its lane is y %.1f..%.1f, PAVEMENT says %.1f' % (*dl['y'], PAVEMENT[2]))
+            for n, (a, b, c, m) in dl['body'].items():
+                fail('van: DRAWN in its lane, without collision: %s [%s] %d..%d along the drive' % (n[-60:], m, a, b))
+        except (ImportError, AttributeError, KeyError, struct.error) as x:
+            log('  van: what is drawn in its lane: NOT CHECKED (%s: %s)' % (type(x).__name__, x))
+        # the boarding place (the box rides on the van: in the file it stands at the waiting place): a station of the
+        # round - on the START's mesh part, on free floor - and reached in the collision from the queue lane
+        rows4 = kl_route.stations(lv, [START[1], board, tuple(stop)], opened=gates, near=BOARD_NEAR)
+        b4 = rows4[1]
+        walk = kl_route.route(lv, [ROUTE_OUT[0][1], board], opened=gates)
+        on_slab_ = lambda p, pad=0.0: SLAB[0][0] + pad <= p[0] <= SLAB[0][1] - pad and SLAB[1][0] + pad <= p[2] <= SLAB[1][1] - pad
+        log('  van: boarding place at the stop (%d, %d, %d): on the slab %s, mesh %s, part %s (the START\'s: %s), free floor within %d: %s; the van\'s stop: mesh %s, part %s; '
+            'queue lane, street end -> boarding place in the collision (the seal out): %s; %.1f m from the lane\'s mouth' % (
+                *board, on_slab_(board, 100.0), b4['mesh'], b4['part'], part, BOARD_NEAR, b4['reached'], rows4[2]['mesh'], rows4[2]['part'], say(walk), math.dist(board, LANE_MOUTH) / 100.0))
+        if not (b4['mesh'] and b4['part'] == part and b4['reached'] and on_slab_(board, 100.0)):
+            fail('van: the boarding place (%d, %d, %d) is no station of the round on the slab: mesh %s, part %s, reached %s (gap %s)' % (*board, b4['mesh'], b4['part'], b4['reached'], b4.get('gap')))
+        if not walk['free']:
+            fail('van: no free way from the queue lane to the boarding place: crossed %s' % [n for _r, n in crossing(walk)])
+        # ... and the way an AI is GIVEN there stays on the slab. The pavement's mesh polygons run on beyond the slab
+        # (x -3765..5786) where nothing has collision: kl_route's model of a mesh way (through the middles of the
+        # polygons' shared edges) from the escape marker to the boarding place goes 17 m WEST of the slab and back
+        # (MEASURED: kl_route.py walk ... --via marker --to boarding place). The straight leg from the lane does not
+        off_slab = lambda leg: [p for p in way_views(lv.mesh(), leg, step=25.0) if p[2] < SLAB[1][1] and not on_slab_(p)]
+        direct, by_mark = off_slab([ROUTE_OUT[0][1], board]), off_slab([ROUTE_OUT[0][1], ESC_AT, board])
+        log('  van: the way an AI is given over the mesh (kl_route\'s model), lane\'s street end -> boarding place: %s; by way of the escape marker: %s' % (
+            'on the slab all the way' if not direct else '%d samples OFF THE SLAB, the first (%d, %d, %d)' % (len(direct), *direct[0]),
+            'on the slab all the way' if not by_mark else '%d samples off the slab (as far as x %d) - the marker is for the HUD, no station for a bot' % (
+                len(by_mark), min(p[0] for p in by_mark))))
+        if direct:
+            fail('van: the mesh way from the lane to the boarding place leaves the slab at (%d, %d, %d): no collision floor there' % direct[0])
+        # the van's own path blocker (eToggle: it blocks where the van STANDS): the boarding place must be outside it
+        inside = lambda k, p, up=0.0: all(abs(sum(VL.frame(k)[0][a][b] * ((p[a] + (up if a == 1 else 0.0)) - VL.frame(k)[1][a]) for a in range(3)))
+                                          <= VL.values(k)['ZBoxPrimitive[%d]' % b] for b in range(3))
+        pb = N['PathBlockerVan']
+        log('  van: PathBlockerVan at (%d, %d, %d) half %s: the boarding place is %s it' % (
+            *VL.place(pb), tuple(round(VL.values(pb)['ZBoxPrimitive[%d]' % b]) for b in range(3)), 'INSIDE' if inside(pb, board, 50.0) else 'outside'))
+        if inside(pb, board, 50.0):
+            fail('van: the boarding place lies inside the van\'s path blocker: an AI heister cannot be sent there')
+        # the exit box calls the van: the stock form - it holds the van's stop and its boarding place (12 of 12 stock
+        # vans of F01 F04 F05 F07: kl_fa_bank L3.3); not entered from inside the lane (above)
+        at_van = [in_exit(stop), in_exit(board)]
+        log('  van: the exit box holds the van\'s stop %s, the boarding place %s; drive in %.1f s' % (*at_van, rep['seconds'][0]))
+        if not all(at_van):
+            fail('van: the exit box does not hold the van\'s stop and its boarding place (%s, %s)' % tuple(at_van))
+        # the ARRIVING van and the door: its nose stops short of the line straight out of the lane's mouth
+        ahead = D2.tan(D2.cum[k_stop], ESC.AXLES)
+        nose = (stop[0] + ESC.GATE_NOSE * ahead[0], stop[1], stop[2] + ESC.GATE_NOSE * ahead[1])
+        swept = [p for p in drive[:k_stop + 1] if on_slab_(p)] + [nose]     # (the lane runs out of the building along -z,
+        x0, x1 = min(p[0] for p in swept), max(p[0] for p in swept)         # the drive along x: the rule is one of x)
+        short = 0.0 if x0 <= LANE_MOUTH[0] <= x1 else min(abs(x0 - LANE_MOUTH[0]), abs(x1 - LANE_MOUTH[0]))
+        log('  van: the arriving van, nose included, sweeps the slab from x %d to x %d (%.1f m of it) and stops %d short of the line straight out of the '
+            'lane\'s mouth (x %d; %d wanted)' % (x0, x1, (x1 - x0) / 100.0, short, LANE_MOUTH[0], MOUTH_SIDE))
+        if short < MOUTH_SIDE:
+            fail('van: the arriving van passes before the lane\'s mouth or stops %d short of it (its sweep on the slab is x %d..%d, the mouth x %d; %d wanted)' % (
+                short, x0, x1, LANE_MOUTH[0], MOUTH_SIDE))
+        # level bounds: neither the stop nor the boarding place in a bound, warn or kill box; a bound on the drive AWAY
+        # is the stock form (every stock van passes one with its passengers aboard: BOUND_AFTER), not at the stop itself
+        for n, p in (('the van\'s stop', stop), ('the boarding place', board)):
+            for b, lo_, hi_ in boxes:
+                if all(lo_[a] <= (p[a] + (50 if a == 1 else 0)) <= hi_[a] for a in range(3)):
+                    fail('van: %s lies inside %s' % (n, b))
+        edge = min(board[0] - SLAB[0][0], SLAB[0][1] - board[0], board[2] - SLAB[1][0], SLAB[1][1] - board[2])
+        warn = min([max(lo_[0] - board[0], board[0] - hi_[0], lo_[2] - board[2], board[2] - hi_[2]) for _b, lo_, hi_ in boxes if hi_[1] > SLAB[2]] or [9e9])
+        log('  van: the boarding place is %.1f m inside the slab\'s nearest rim and %.1f m from the nearest bound or warn box' % (edge / 100.0, warn / 100.0))
+        for nm, a, b in rep['bounds']:
+            ok = b < 0 or a >= BOUND_AFTER
+            log('  van: the drive passes the level bound %s %.1f .. %.1f m %s the stop: %s' % (
+                nm.split('!')[-2] if '!' in nm else nm, abs(a) / 100.0, abs(b) / 100.0, 'before' if b < 0 else 'after',
+                'the van is empty there' if b < 0 else 'players aboard - the stock form (stock vans: 10.9 .. 105 m after their stops)' if ok else 'TOO NEAR THE STOP'))
+            if not ok:
+                fail('van: the level bound %s lies on the drive %d .. %d from the stop (after it: at least %d)' % (nm, a, b, BOUND_AFTER))
+        # nobody starts in the lane - spawn points, player bodies, the squads' men, the police's cover points - and
+        # nobody is SENT into it: the escape marker and the stations of the way out (the van's kill box rides at its nose)
+        sent = [('the escape marker', pos[ents[A.node_of(sc, 'FASpecials!POI!POI_TheEscapeArea') - 1]])] + [('station \'%s\'' % n, p) for n, p in ROUTE_OUT]
+        near_ = sorted((to_drive(p), n, p) for n, p in list(zip(names, pts))[1:] + [(sc.path[k][5:][-50:], at(k)) for k in men] + cover_at + sent
+                       if abs(p[1] - stop[1]) < 400.0 and p[2] < LANE_MOUTH[2] + 100.0)
+        mark = next(d for d, n, _p in near_ if n == sent[0][0])
+        log('  van: the escape marker stands %d from the drive, %d from the boarding place at the stop' % (mark, math.dist(sent[0][1][::2], board[::2])))
+        log('  van: of %d spawn points, player bodies, men, cover points, the marker and stations on the pavement the nearest to the drive is %s' % (
+            len(near_), '%s, %d from it' % (near_[0][1], near_[0][0]) if near_ else '-'))
+        for d, n, p in near_:
+            if d < LANE_CLEAR:
+                fail('van: %s at (%d, %d, %d) stands %d from the van\'s drive (%d wanted)' % (n, *p, d, LANE_CLEAR))
+        # the boarding place against the police: no cover point of the arriving squads beside the rear doors, nobody
+        # comes back as police beside them
+        cov = min([(math.dist(p[::2], board[::2]), n) for n, p in cover_at] or [(9e9, '-')])
+        back_pts = [(sc.names[k], at(k)) for k in bodies] + [(sc.names[k], at(k)) for k in range(1, len(sc.nodes)) if sc.cls(k) == 'ZSpawnPoint'
+                                                             and kl_fa.node_values(sc, k)[8].endswith(('AFTER_DEATH', 'POLICE'))]
+        fed = min([(math.dist(p[::2], board[::2]), n) for n, p in back_pts] or [(9e9, '-')])
+        log('  van: the boarding place and the police: the nearest cover point of the arriving squads %.1f m (%s; %.0f m wanted), the nearest point or body of '
+            'police who come back %.1f m (%s; %.0f m wanted)' % (cov[0] / 100.0, cov[1][-40:], BOARD_CLEAR / 100.0, fed[0] / 100.0, fed[1][-40:], FED_CLEAR / 100.0))
+        if cov[0] < BOARD_CLEAR:
+            fail('van: the police\'s cover point %s lies %.1f m from the boarding place (%.0f m wanted)' % (cov[1], cov[0] / 100.0, BOARD_CLEAR / 100.0))
+        if fed[0] < FED_CLEAR:
+            fail('van: %s lies %.1f m from the boarding place (%.0f m wanted)' % (fed[1], fed[0] / 100.0, FED_CLEAR / 100.0))
+        # is the waiting van seen from where the crew comes out? (said, not a rule: the street is straight and open)
+        eyes = [('the queue lane before the seal', (118.0, 20.0 + 160.0, -2320.0)), ('the lane\'s mouth', (LANE_MOUTH[0], LANE_MOUTH[1] + 160.0, LANE_MOUTH[2])),
+                ('the escape marker', (ESC_AT[0], ESC_AT[1] + 160.0, ESC_AT[2])), ('the boarding place', (board[0], board[1] + 160.0, board[2]))]
+        solid = lambda e: [VL.name(r) for _d, r in VL.G.between(e, (wait[0], wait[1] + 100.0, wait[2])) if 'ColiObj' not in VL.name(r) and 'HeroColi' not in VL.name(r)]
+        seen = ['%s: %s' % (n, 'hidden by %s' % solid(e)[0] if solid(e) else 'SEEN (%d m)' % (math.dist(e, wait) / 100.0)) for n, e in eyes]
+        log('  van: waits at (%d, %d, %d), %.0f m from its stop, %s the navigation mesh; from %s' % (
+            *wait, math.dist(wait, stop) / 100.0, 'ON' if kl_route.stations(lv, [START[1], tuple(wait)], opened=gates, near=BOARD_NEAR)[1]['mesh'] else 'off', '; from '.join(seen)))
+        # the camera: F07's own fixed escape camera, moved with the drive (cam_spot's eye)
+        cam = rep.get('camera') or {}
+        if cam.get('eye'):
+            e = cam['eye']
+            under = real_under(e[0], e[1], e[2])
+            log('  van: the escape camera\'s eye (%d, %d, %d): %s over the road, %.0f m from the stop, %s; between it and the van at the stop: %s' % (
+                *e, cam.get('over'), cam.get('far', 0) / 100.0, 'over the collision floor %s' % VL.name(under[1]) if under else 'over the drawn pavement (no collision under it)',
+                cam.get('sight') or 'nothing'))
+        else:
+            fail('van: no escape camera with an eye of its own')
+    # ---- the van's ZFakeTarget: inside the vision space, by kl_fa_bots_dyn's rule (the 0x686a66 crash: a target that
+    # cannot register writes behind ZCheckVisible's table every frame; re/crash_686a66.md). The rule is for the place
+    # at the LOAD; where the drive takes it is said beside it. And the street's ROOM: the van's three places and the
+    # camera's eye inside the room box of the pavement's room (ASSUMPTION that a thing outside every room box may not
+    # be drawn; MEASURED C:/kl_scratch/club/l3/s/rooms.py: M05_A_Outside_Street_01a x -6725..9275, y 20..3000, z -7075..-2490)
     try:
-        import kl_fa_bots as FB, kl_fa_bots_dyn as D
+        import kl_fa_bots as FB, kl_fa_bots_dyn as D, kl_octree as O
         B = FB.Built(folder)
         space = D.vision_space(B)
         log('  ' + D.space_words(space)[:330])
@@ -1694,6 +2103,20 @@ def check(folder, log=print, problems=None):
                                                       if good else 'OUTSIDE the vision space (%s)' % (f['out'],)))
             if not good:
                 fail('FakeTarget %s at (%d, %d, %d) cannot register (outside by %s)' % (f['path'].split('\\')[0], *f['at'], f['out']))
+            if stop_at_all and space is not None:
+                later = [(n, D.outside(space, tuple(f['at'][a] + p[a] - wait[a] for a in range(3)))) for n, p in (('the stop', stop), ('the end of the drive', end))]
+                log('    on the drive: %s' % '; '.join('at %s %s' % (n, 'inside' if o is None else 'outside by (%d, %d, %d)' % o) for n, o in later))
+        if stop_at_all:
+            slots = B.scene.slots()
+            by_id = {slots[e] + 2: k + 1 for k, e in enumerate(B.ents) if e in slots}
+            room = [D._record_box(b.raw)[:2] for b in O.RoomIndex.parse(B['.rmi']).boxes if by_id.get(b.room) and sc.names[by_id[b.room]].endswith(STREET_ROOM)]
+            places = [('waits', wait), ('stops', stop), ('ends', end)] + ([('the camera\'s eye', tuple(cam['eye']))] if cam.get('eye') else [])
+            out_ = [n for n, p in places if not any(all(abs(p[a] - c[a]) <= h[a] for a in range(3)) for c, h in room)]
+            log('  van: the room box of %s (%d record(s)%s) holds: %s' % (STREET_ROOM, len(room), ': x %d..%d, y %d..%d, z %d..%d' % tuple(
+                v for a in range(3) for v in (room[0][0][a] - room[0][1][a], room[0][0][a] + room[0][1][a])) if room else '',
+                ', '.join('%s %s' % (n, 'NO' if n in out_ else 'yes') for n, _p in places)))
+            for n in out_:
+                fail('van: where it %s is outside the room box of %s' % (n, STREET_ROOM))
     except (ImportError, AttributeError) as x:
         log('  FakeTarget: NOT CHECKED (%s: %s)' % (type(x).__name__, x))
     # ---- texts
@@ -1770,7 +2193,7 @@ def inventory(folder, log=print):
         k = A.node_of(sc, name)
         row(k, '= ' + role)
         targets(k)
-    log('ESCAPE (the van stands at its waiting place)')
+    log('ESCAPE (in the file the van and its boarding box stand at the waiting place; the boxes beside the drive at the stop)')
     for k in range(1, len(sc.nodes)):
         names = [sc.p.key(nm) for nm, _b in sc.nodes[k]['ctrls']]
         if any(n in names for n in (kl_fa.EXIT, kl_fa.MONITOR, 'OnlineEscAnimatedVehicle', 'FakeTarget')) or sc.names[k] == 'V_Van_00' and 'Reflection' not in sc.path[k]:
@@ -1789,30 +2212,65 @@ def inventory(folder, log=print):
         row(A.node_of(sc, p))
 
 
-def build(out, log=print):
-    """F07 + M05_A with the layer into <out>/F07+M05_A campaign -> (kl_maps.one's result, that folder). The build's
-    own arguments: M_DROP, and - unless BEAT_ANIM - the two beat objects loaded as plain objects (kl_maps' 'flat',
-    with the class pair IK lent to kl_maps.FLAT for the call, as kl_fa_bank lends kl_fa_author its squad roots)."""
+def build(out, log=print, plan=None):
+    """F07 + M05_A with the layer into <out>/F07+M05_A campaign -> (kl_maps.one's result, that folder, the van's
+    plan, kl_map_escape's report of what it did to the van). The build's own arguments: M_DROP, and - unless
+    BEAT_ANIM - the two beat objects loaded as plain objects (kl_maps' 'flat', with the class pair IK lent to
+    kl_maps.FLAT for the call, as kl_fa_bank lends kl_fa_author its squad roots). plan: a plan of ROAD (plan_of /
+    van_plan); None = made here, on a BARE graft of the two levels built into <out>/_bare (35 s, 284 MB) and deleted
+    again - the plan needs a built level's collision and must not see the layer's own van (van_plan)."""
+    import shutil
+    name = '%s+%s campaign' % (HOST, LEVEL)
+    if plan is None:
+        bare = os.path.join(out, '_bare')
+        r = kl_maps.one(bare, HOST, LEVEL, keep=True, campaign=True, tag=' campaign', m_drop=M_DROP)
+        try:
+            if not r.get('ok'):
+                raise ValueError('kl_fa_club: the bare graft for the van\'s plan did not build: %s at %s' % (r.get('error'), r.get('where')))
+            plan = van_plan(os.path.join(bare, name), log)
+        finally:
+            shutil.rmtree(bare, ignore_errors=True)
+    lay_van(plan)
     flat = () if BEAT_ANIM else (IK[0],)
     lent = [c for c in flat if c not in kl_maps.FLAT]
     for c in lent:
         kl_maps.FLAT[c] = IK[1]
+    r, st = {}, {}
     try:
-        with doors(log):
+        with ESC.van_layer(plan, log) as st, doors(log):
             r = kl_maps.one(out, HOST, LEVEL, keep=True, campaign=True, tag=' campaign', author='kl_fa_club', m_drop=M_DROP, flat=flat)
+    except ValueError:                                  # van_layer: 'a step of the van did not run'. After a build that
+        if r.get('ok') or not r:                        # failed (r says why) that is no news; after one that did not, it is
+            raise
     finally:
         for c in lent:
             del kl_maps.FLAT[c]
-    return r, os.path.join(out, '%s+%s campaign' % (HOST, LEVEL))
+    return r, os.path.join(out, name), plan, {k: st.get(k) for k in ('van', 'wired', 'hvk')}
 
 
-def test(out, keep=False, log=print):
-    """Build the level with the layer into <out>, finish it, check it. -> 0 or 1."""
-    r, folder = build(out, log)
+def van_check(folder, log=print, plan=None):
+    """kl_map_escape.van_check on a built folder with the drawn pavement as the road (Pavement) -> (its report, the
+    Level it read, how many keys of the drive have NO collision floor under them: each of those is a fault of the
+    plain 'kl_map_escape.py van-check', and the only kind it has here)."""
+    L = ESC.Level(folder)
+    with pavement():
+        rep = ESC.van_check(L, log, plan)
+    bare = [x for x in ESC.van_check(ESC.Level(folder), lambda *a: None, plan)['faults']]
+    return rep, L, bare
+
+
+def test(out, keep=False, log=print, plan=None):
+    """Build the level with the layer into <out>, finish it, check it. -> 0 or 1. Beside the archive: van.json
+    (the van's plan, what was done to F07's van, kl_map_escape.van_check's report: kl_map_escape.van_build's form)."""
+    import json
+    r, folder, plan, did = build(out, log, plan)
     if not r.get('ok'):
         log('BUILD FAILED: %s at %s' % (r.get('error'), r.get('where')))
         return 1
     late = finish(folder, log)
+    with open(os.path.join(folder, 'van.json'), 'w', encoding='utf-8') as f:
+        json.dump(collections.OrderedDict(tag=LEVEL, plan=plan, van=did['van'], wired=did['wired'], hvk=did['hvk'],
+                                          check=van_check(folder, lambda *a: None, plan)[0]), f, indent=1, default=str)
     bad = check(folder, log, r['problems']) + late
     log('level: %d entities, %d rooms, %.0f MB' % (r['entities'], r['rooms'], r['archive_mb']))
     if not keep:
@@ -1846,7 +2304,15 @@ def main():
         CASE = None if '--loot-bags' in a else CASE
         if '--seal' in a:                               # OPTION, seconds from the round-start event to the seal's end
             SEAL_AT = float(a[a.index('--seal') + 1])
-        sys.exit(test(a[1], '--keep' in a))
+        plan = plan_of(a[a.index('--plan') + 1]) if '--plan' in a else None
+        sys.exit(test(a[1], '--keep' in a, plan=plan))
+    elif len(a) == 2 and a[0] == 'van-check':
+        pj = os.path.join(a[1], 'van.json')
+        rep, L_, bare = van_check(a[1], print, plan_of(pj) if os.path.isfile(pj) else None)
+        rep['faults'] += ESC.check(L_)['faults']        # the escape cameras' table (L_ keeps the Pavement it was read with)
+        print('kl_fa_club.van-check %s: %d fault(s) on the drawn pavement; the plain kl_map_escape.van_check has %d, %d of them \'no ground under it\'' % (
+            a[1], len(rep['faults']), len(bare), sum('no ground under it' in x for x in bare)))
+        sys.exit(1 if rep['faults'] else 0)
     elif len(a) == 2 and a[0] == 'finish':
         sys.exit(1 if finish(a[1]) else 0)
     elif len(a) == 2 and a[0] == 'check':

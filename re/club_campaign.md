@@ -454,3 +454,217 @@ Variant archives are deleted; only the default build is kept.
 - The bank's regression was not re-run: no shared file was edited.
 
 (end of Stage L2)
+
+## Stage L3 - the escape (tools/kl_fa_club.py: F07's van on a way-point plan along the pavement)
+
+STATE: DONE (2026-10-11 21:50). `tools/kl_fa_club.py` lays F07's first key-framed van on a straight road along the
+pavement, FROM THE WEST, and check() has a block 'the escape'; every check of the stage passes and all of L1's / L2's
+still do ('RESULT: PASS', the same one known verify finding). NOTHING RAN IN THE GAME. Kept = 'THE BARE MAP' the
+finishing stage starts from: `C:/kl_scratch/club/l3/build/F07+M05_A campaign/` (188 MB: F01_Main.zip 150,075,064 bytes,
+sha1 2eb2edb526ff..., finished = lightened + briefcases + texts; result.json, log.txt, graft.txt, NEW van.json). A
+second build with `--plan <its van.json>` gave the same archive and the same van.json. `C:/kl_scratch/club/l2/build`
+is deleted. Scratch `C:/kl_scratch/club/l3/`: `s/` (drawn.py what the map DRAWS along the pavement, plan0.py the plan by
+the unchanged tool, plan1.py the plan, rooms.py room boxes and the vision grid, dl.py drawn_lane with its negative
+controls), `out/` (every output named below). No other file of the repo was edited: kl_map_escape.py is only called.
+ONE THING IS NOT AS THE STAGE'S ORDER READS, and is said first (L3.1): 'van-check 0 faults' holds on the DRAWN
+pavement, through a wrapper of this module; the plain `kl_map_escape.py van-check` has 217, every one the missing
+collision floor outside the slab.
+
+### L3.1 The hard part: a drive where nothing has collision - what was measured, and how the tool is used
+
+- **The unchanged tool refuses every road that leaves the slab** (`python C:/kl_scratch/club/l3/s/plan0.py <bare graft>`
+  -> `out/plan0.txt`): the planner holds each ray of the lane against 'the road under it', so the study's line gives
+  'FAULT only -340 of clear lane before the stop (least 2000)', 'only 610 of clear lane after the stop (least 3000)';
+  a drive that stays on the slab cannot be had either (the slab is 30 m, the least drive is 20 + 30 m: 'only -39 ...',
+  'only 1099 ...'). van_check does the same per key ('drive key N: no ground under it').
+- **What is DRAWN there was never looked at (the study's open point). It is now** (`python C:/kl_scratch/club/l3/s/drawn.py
+  <bare graft>` -> `out/drawn.txt`: every mesh of every map entity that has a model, by kl_fa_loot.Assets, in world
+  space, rastered from above into 20-unit cells over x -7200..7600, z -3700..-2500; 1,707 model roots read):
+  - the pavement is drawn at **y 30.0 under every cell** of the eleven rows tested between z -3460 and -2620, from
+    x -7200 to 7600: seven pieces `M05_A_Outside_Street_01a\SO0100_M05_Street_Wide_A_03, B_04, B_03, B_02, B_01, B_05,
+    A_01` (sidewalk tiles `Stone_SidewalkTiles_07a_M05` + a dirt overlay; the asphalt of the road is y 10 beyond the
+    kerb). So the collision slab (y 30) is one piece of a pavement 148 m long and 8.8 m deep that is drawn at the
+    same height everywhere;
+  - **nothing is drawn 25..220 over it between z -3280 and -2880** (the map at the end of `drawn.txt`): street lamps
+    `PC0100_JPN_Metal_OldStreetLamp_B_Group_06 / 04 / 01 / 08` at x -3200, -1200, 800, 2800 and two bins
+    `PC0100_JPN_Trashcan_B_02 / _01` at x -3000 and -520 stand at z -3300..-3400; the house fronts at z -2620
+    (`SO0002_M05_Facade_K_Base_01`, `..._Facade_A_Base_01` glass x -1420..-400, `FrontBuilding`, a switch box at
+    x 1680); four parked cars beyond the kerb (z -3520..-3750);
+  - west of x -400 the fronts are modelled buildings; **east of x 2100 the street's north side is a glow plane**
+    (`M05_A_Outside_Roof_01a\UNIQUE_StreetGLOW`, material `Effects_StreetGLOW_DistFADE`, z above -2860) - the faked
+    far end of the street. Hence the side: the van COMES along the real fronts and LEAVES into the faked distance.
+- **How the tool is used: the road's height is DECLARED** (`PAVEMENT`, class `Pavement`, `pavement()`).
+  `Pavement` is kl_map_escape.Ground with one more floor: inside `PAVEMENT` = x -7200..7600, z -3460..-2580 a vertical
+  line that meets no collision floor within the tool's own tolerance (25) of y 30 meets one at y 30, owned by the REF
+  id -5 that no entity has. `pavement()` puts it in kl_map_escape.Ground's place for the length of the plan and of
+  van_check (the idiom of kl_map_escape.van_layer, which swaps kl_hvk.join). Everything else is the tool's own:
+  collision in the van's body, convex bodies, the four lengths, the bounds, the boxes at the stop, the camera's sight,
+  the collision file. kl_map_escape.py IS NOT CHANGED (it is a finished file, and this is no bug of it: the study
+  foresaw 'a road-height constant: small tool change' - it is done from outside instead).
+  WHY THIS IS HONEST AND WHERE IT IS NOT: a key-framed van needs no floor (Retomoto's first drove 40 UNDER its road:
+  re/retomoto_fa.md 9.3); what the height must be is what is DRAWN, and that is measured - by drawn.py once, and by
+  check() on every build along the actual drive (`drawn_lane`, L3.3). NOT covered: what a key-framed van does to
+  people in its lane where there is no floor, bodies and dropped money at the slab's rim, a model switched off or on
+  at run time. The plain tool's verdict is printed beside the wrapper's on every check.
+
+### L3.2 What was changed (one file, tools/kl_fa_club.py, 1,866 -> 2,332 lines)
+
+| part | where | what |
+|---|---|---|
+| the road | `ROAD` (replaces `VAN_WAIT`) | `arrive` (-5300, 30, -3100), (-2800, 30, -3100); `stop` (-300, 30, -3100) at = origin; `leave` (3000, 30, -3100), (7300, 30, -3100); heading and camera not forced |
+| the drawn road | `PAVEMENT`, `Pavement`, `pavement()` | L3.1 |
+| the plan | `van_plan(src)`, `plan_of(file)`, `lay_van(P)`, `van_path()`, `PLAN NO_PLAN` | kl_fa_bank's four, with this file's ROAD; van_plan runs inside pavement() |
+| the build | `build(out, log, plan=None)` | bare graft into `<out>/_bare` (35 s, 284 MB, deleted again; `kl_maps.one(..., m_drop=M_DROP)`) -> plan -> `with kl_map_escape.van_layer(plan), doors(): kl_maps.one(...)`; -> (result, folder, plan, what was done to the van) - FOUR values now, as kl_fa_bank.build |
+| the layer | `prepare_host()` | `park_van()` is gone: `kl_map_escape.van_prepare(S, PLAN, log)`; the escape marker held against the plan's drive (`LANE_CLEAR`) |
+| | `wire()` | `kl_map_escape.van_wire(sc, PLAN, log)` |
+| places moved for the van | `ESC_AT`, `POLICE`, `BODIES`, `ARRIVE` | below |
+| test | `test(out, keep, log, plan)`, `--plan FILE`; NEW command `van-check <folder>` | van.json beside the archive (kl_map_escape.van_build's form: tag, plan, van, wired, hvk, check) |
+| check | check(): 'the escape'; NEW `drawn_lane()`, `van_check()`; `BOARD_NEAR BOUND_AFTER MOUTH_SIDE BOARD_CLEAR FED_CLEAR STREET_ROOM` | L3.3 |
+
+**The plan** (MEASURED: `out/plan1.txt`, the build's lines in `out/test1.txt`, `van.json`): 0 faults, lane empty on the
+first pass, no cut.
+```
+waits (-5300, 32, -3100) heading 90 -> 50.0 m in 7.2 s -> stops (-300, 32, -3100) heading 90 (rear box (-637, 30, -3100))
+      -> 70.0 m in 8.48 s -> ends (6700, 32, -3100) heading 90;  600 path points, y 30.0 all the way
+camera eye (-2100, 360, -3100) (cam_spot: 18 m BEHIND the standing van, 330 over the pavement; '15 of the 144 places
+      tried see the stop and the drive 850 and 2500 after it; this one sees the end')
+```
+'kl_map_escape: ... 563 position and 550 rotation keys rewritten in place (391 of them the drive, stop at key 159);
+drive in 5063 -> 5000 (x 0.99), away 7019 -> 6999 (x 1.00); crash pieces -120..120 to the side; 19 objects moved' -
+**F07's own drive, unscaled, laid straight**. 'exit trigger Gameplay!EscapeSetup!otrExitLevel calls ...
+EscapeVehicle_Animation_F07'; '.HVK: 9 static placements of the van's subtree cut, 5 key-framed placements of the van
+put at its waiting place' (.HVK 1,910,256 bytes). F07's second and third van are NOT in the level (L1's decision,
+kept): one `OnlineEscAnimatedVehicle`, one `FakeTarget`; check() fails any other count.
+
+**Why from the west, why the stop at x -300** (GUESS as a design; each number below is MEASURED by check()):
+- The van's nose (250 ahead of its origin) stops at x -50: **168 short of the line straight out of the lane's mouth
+  (x 118)** - the arriving van sweeps the slab from x -1193 to -50 (11.4 m) and never passes before the door the crew
+  comes out of. The study's road (stop x 1000) swept 22 m of slab in front of it; `MOUTH_SIDE` 150 is check()'s rule.
+- The rear doors (the boarding box rides 337 behind the origin) are at (-637, 30, -3100): on the slab, 5.6 m inside
+  its west edge, 3.5 m from the kerb's rim, 2.4 m from the nearest warn box (the kerb's), 8.9 m from the lane's
+  mouth; 'queue lane, street end -> boarding place in the collision (the seal out): FREE, 7 m'.
+- 50 m in and 70 m away are F07's own lengths. It waits at x -5300: where the pavement is drawn, 15 m west of the
+  mesh strip's end (x -3765: it stands OFF the navigation mesh - the bank's van stood on it, L3.4 there) and 14 m
+  inside the street room's west edge.
+- It leaves east: over the rest of the slab with its passengers (the away leg must cross the slab either way) and
+  through the east level bound 21.3 .. 26.8 m after the stop - the stock form (kl_fa_bank L3.3: stock vans pass one
+  10.9 .. 105 m after their stops); the west bound 15.1 .. 9.3 m before the stop, empty.
+
+**Places that moved for the van** (all in this file; each was a GUESS of L1 / L2 made before the stop was known):
+- `ESC_AT` (300, 30, -2800) -> **(-640, 30, -2800)**: the escape marker (and jump point 06_Exit, and the route's last
+  station) beside the lane, level with the rear doors - 300 from the drive, 295 from the boarding place, 7.8 m from
+  the lane's mouth. NOT over the stop and not in the sweep (the bank's review finding).
+- `POLICE` / `BODIES`: the four points and bodies that stood at x -900..-600 (ON the new marker, 3.4 m from the rear
+  doors) are now east with the other three: x 900..1500, z -2760, the eighth body (1600, -2830). The nearest point of
+  police who come back is 15.2 m from the boarding place (`FED_CLEAR` 10 m), 8 m from the lane's mouth; the nearest
+  squad man 359 from one (was 450; `POLICE_CLEAR` 100).
+- `ARRIVE`: two cover points of the WEST police squads, (-950, -3400) and (-800, -3400), stood 4.3 and 3.4 m from the
+  rear doors of the standing van; now (-1160, -3410) and (-1000, -2680). The nearest cover point is 5.4 m from the
+  boarding place (`BOARD_CLEAR` 5 m), 11.2 m from the lane's mouth (rule 10 m), 250 from the drive.
+
+### L3.3 The checks (all on the kept build; outputs in `C:/kl_scratch/club/l3/out/`)
+
+| check | command | result |
+|---|---|---|
+| build + finish + check | `python tools/kl_fa_club.py test C:/kl_scratch/club/l3/build --keep` -> `test1.txt` (112 s: bare graft, plan, build, finish, check; 84 s with `--plan`) | **'RESULT: PASS'**, exit 0; 26,824 entities, 20 rooms, 'verify: problems: 1' (the known stream clips) |
+| the same archive again | `... test C:/kl_scratch/club/l3/again --keep --plan "<kept>/van.json"` -> `again.txt` | 'RESULT: PASS'; sha1 2eb2edb526ff... = the kept one; van.json byte-equal; deleted |
+| check alone | `python tools/kl_fa_club.py check "<kept>"` -> `check.txt` | 'PASS', exit 0 |
+| **van-check** | `python tools/kl_fa_club.py van-check "<kept>"` -> `van_check.txt`; inside check() with the plan | **'0 fault(s)' on the drawn pavement** (van_check and the escape cameras' table): 'keys 0.0 off the road height at most, largest step 58, nose up to 0.9 degrees off the tangent, crash pieces up to 120 to the side; lane (5 rays, every 20, 350 before and 600 beyond): clear'; 'boarding box at the stop: (-636, 32, -3094); key-framed placements 5, at most 1.1 from their entities'; wait / stop / end within 25 of the plan's. One note: 'no define FAEscCameraLAST' = the stock form |
+| ... the plain tool | `python tools/kl_map_escape.py van-check "<kept>"` -> `van_check_plain.txt` | exit 1, **217 faults: 211 x 'drive key N: no ground under it', 5 x 'in the van's lane: no road within 25 of the drive's height' (one per ray), 1 x 'camera ...: the eye is outside the map: no collision above or below it'** - nothing else. check() counts them on every run and FAILS on any fault of another kind |
+| what the van drives over | check() | 'of the 391 keys of the drive 180 have a collision floor under them (x -1193..1796: ColiObj_01), 211 the drawn pavement alone (PAVEMENT y 30); the stop: origin y 32.0, the floor under it y 30.0' (the stop must stand on real floor, else FAIL) |
+| **the lane, drawn** | check(): `drawn_lane`; `python C:/kl_scratch/club/l3/s/dl.py <bare graft>` -> `dl_bare.txt` | 'DRAWN in its lane (the map's models, 128 triangles near it; 5 rays every 20, 350 before and 600 beyond): a surface within 25 of the road under 3240 of 3240 samples, y 30.0..30.0 (SO0100_M05_Street_Wide_B_04 x 500, B_03 x 500, B_02 x 500, B_01 x 500, B_05 x 500, A_01 x 375, A_03 x 365); in the van's body (25..220 over the road): nothing'. The test does fail: the same on the line z -3300 finds the four lamps and two bins, on z -2620 six pieces of the fronts and 214 samples without a surface, on z -3560 the four parked cars |
+| the lane, collision | the plan's own test on the bare graft (`test1.txt`, 'van plan for ...') and van_check's on the finished build | both clear |
+| **fake-test** | `python tools/kl_fa_bots_dyn.py fake-test <work>/build/z_route/M01 <work>/build/rt_full6/retomoto_full "<kept>"` -> `fake_test.txt` | **'RESULT (fake-test): PASS (grid control 1, parked control 1, lattice 3)'**; the club: 'FakeTarget Animation/F07/F07_Escape_Vehicle_01.zip at (-5316.6, 32.0, -3099.9): inside; kl2's arithmetic: cell (1, 0, 4) (a record)', the only FakeTarget of the level (vision space x -6725..10906, y -31..3000, z -7074..6724). check(): the same, and 'on the drive: at the stop inside; at the end of the drive inside' |
+| the street's room | check(); `python C:/kl_scratch/club/l3/s/rooms.py <folder> wait=... stop=... end=... cam=...` -> `rooms.txt` | 'the room box of M05_A_Outside_Street_01a (1 record(s): x -6725..9274, y 20..3000, z -7074..-2489) holds: waits yes, stops yes, ends yes, the camera's eye yes' |
+| **the boarding place** | check() (`kl_route.stations` near 30, `kl_route.route`); `python tools/kl_route.py stations "<kept>" START=2817,342,2420 "lane street end=105,20,-2600" "escape marker=-640,30,-2800" "boarding place=-637,30,-3100" "van stop=-300,32,-3100" "van waits=-5300,32,-3100" --near 30 --open "M05_A_Inside_Entrance_01a\HeroColi"` -> `route_stations.txt` | 'boarding place at the stop (-637, 32, -3095): on the slab True, mesh True, part 0 (the START's: 0), free floor within 30: True; the van's stop: mesh True, part 0'. stations: '5 of 6 places reached ... 5 of 6 on the mesh, on 1 part(s)'; the WAITING place is 'OFF the mesh by 1535 ... NOT reached' (exit 1 for that): as it should be |
+| ... reached | `python tools/kl_route.py walk "<kept>" --from "lane street end=105,20,-2600" --to "boarding place=-637,30,-3100" --open ...HeroColi` -> `route_board.txt`; the whole round with 13 places -> `route_open.txt`; as built -> `route_built.txt` | 'FREE, 8 m of cells, floor y 30..30 ... the mesh way: 35 samples, all free'; the whole round 'RESULT: FREE'; as built 'NOT FREE', the leg through the seal alone |
+| ... **the way an AI is given** | check() (`way_views` on kl_route's mesh model) | 'lane's street end -> boarding place: on the slab all the way; by way of the escape marker: 94 samples off the slab (as far as x -2326)' - L3.4 |
+| the slab's rim against the bounds | check() | L1's three edge tests still pass (a walker 1 m before each open edge in no bound, 1.2 m beyond it in one); '3 LevelBound in their place ..., 3 kill boxes; 0 of the 93 spawn points, player groups and stations inside one'; neither the stop nor the boarding place in a bound, warn or kill box; the two bounds on the drive as above |
+| path blocker | check() | 'PathBlockerVan at (-294, 147, -3096) half (101, 130, 250): the boarding place is outside it' |
+| exit box | check() | 'exit box x -1150..1750, z -3450..-2650: on the slab True; holds the pavement station True, the lane's street end False'; 'holds the van's stop True, the boarding place True; drive in 7.2 s' (the stock form) |
+| nobody in the lane | check() | 'the escape marker stands 300 from the drive, 295 from the boarding place'; 'of 52 spawn points, player bodies, men, cover points, the marker and stations on the pavement the nearest to the drive is FinancialAlleyExitStreet_Right\10_RunToCover\RunToPosInfo#02, 250 from it' (`LANE_CLEAR` 250) |
+| the police and the rear doors | check() | 'the nearest cover point of the arriving squads 5.4 m (5 m wanted), the nearest point or body of police who come back 15.2 m (10 m wanted)' |
+| **the camera** | check(); `kl_fa_club.py van-check` (kl_map_escape.check's table) | 'EscCamera01_01 ... mode eFMM_LookFromPos ... Dog Days' eye: (-2100, 360, -3100), 330 over [the pavement]; looks at the player' - F07's own camera, the mode that puts the eye at its place; 'the escape camera's eye: 330 over the road, 18 m from the stop, over the drawn pavement (no collision under it); between it and the van at the stop: nothing'. The in-van camera eFMM_LookAtPos as stock |
+| is the waiting van in sight | check() | 'waits at (-5300, 32, -3100), 50 m from its stop, off the navigation mesh; from the queue lane before the seal: hidden by SI0101_WallB_Front_01; from the lane's mouth: hidden by SO0002_M05_Facade_A_Base_01...; from the escape marker: SEEN (46 m); from the boarding place: SEEN (46 m)' - L3.5 |
+| L1's / L2's checks | check() on the kept build | all as L2.3: verify 1 known; 79 spawn places on the mesh; loot 11 / 2,200,000 takable; route as built crossed = the seal alone, 'office -> queue lane: FREE, 122 m', 'with the 1 standing piece out: FREE, 138 m' (the last station moved: was 133); 50 of 50 men on the mesh; staging; the beat's chain; nobody in sight; 50 actors in 21 squads; chunk table 53,873 entries, 23,683 dead; five load blocks 139 MB; written level 'problems: 0'; no collision placement off its entity (the van's five included now) |
+| kl_fa.check | `python tools/kl_fa.py check <archive>` -> `fa.txt` | exit 0: 0 CRASH, 0 BROKEN, 2 DEGRADED (no bot squads; the heuristic's '5 of 21 squads named by no object') |
+| kl_impact / kl_arms | `kl_impact.py <archive>`, `kl_arms.py check <archive>` -> `impact.txt`, `arms.txt` | 'problems: 0 in 1 levels'; '0 findings' |
+| preflight | `python tools/kl_maps.py preflight "<kept>"` -> `preflight.txt` | exit 1: 'preflight: CRASH 1, RISK 3, NOTE 65' (CRASH = the known verify problem; RISK = ZEnvSampler x 3 twice, SoundSpline x 1): as L2 |
+| the flags | `test <out> --no-ai --plan <van.json>` -> `var_noai.txt`; `... --squads-awake --police-slab --dead-men-rows --office 12 --plan ...` -> `var_a.txt`; `... --no-police --seal-open --doors-animate --light-show --beat-anim --fan-damage --plan ...` -> `var_b.txt` | 'RESULT: PASS' three times, exit 0: no-ai 26,593 entities; (a) the ten police on the slab, 'POLICE ON THE SLAB: 2 of the police come into the world IN SIGHT' (that fall-back's cost, as L2); (b) four leaves standing, no seal, the three never-run kinds in. Archives deleted |
+
+### L3.4 What the stage found beside laying the van
+
+- **THE PAVEMENT'S NAVIGATION MESH LEADS OFF THE SLAB.** Its polygons run from x -3765 to 5786 and the slab is
+  x -1200..1800. kl_route's model of the way an AI is given (through the middles of the polygons' shared edges) from
+  the lane's street end STRAIGHT to the boarding place stays on the slab (35 samples, all with floor); from the
+  escape marker (-640, -2800) to the boarding place (-637, -3100), 3 m apart, it goes **17 m west of the slab and
+  back** (to x -2346; 50 of 86 samples without a floor: `route_open.txt`). The model's 'middle of the shared edge'
+  is cruder than what the game's path-finder does (not read), but the polygons ARE that long, and L2's police already
+  rest on 'an AI walks the mesh where there is no collision floor'. FOR THE BOTS' STAGE: the last stations are the
+  lane's street end and then the boarding place, nothing between; check() fails a build in which that leg leaves the slab.
+- **The whole drive lies in one room box and inside the vision grid** (`rooms.txt`): the wait place, the stop, the end
+  and the camera's eye are inside `M05_A_Outside_Street_01a`'s box (x -6725..9274, y 20..3000). The road's y 30 is
+  10 over that box's floor; a van at F07's own height (y -198) or 'under the map' would not be.
+- **The escape marker and four police points stood where the van's rear doors now are** (L3.2).
+
+### L3.5 GUESS / ASSUMED (each marked in the file), and what is not met
+
+- **NOT MET, as on the bank: 'out of sight'.** The waiting van is hidden from the queue lane and from the lane's mouth
+  (the house fronts), and SEEN from the pavement, 46 m up a straight street; the first criminal on the slab calls it,
+  so it is seen driving in, not standing. Nothing hides a van on this street; nothing was tried.
+- GUESS: the side it comes from, the stop, both lengths, `MOUTH_SIDE` 150, `BOARD_CLEAR` 500, `FED_CLEAR` 1000, the new
+  places of the marker, the seven police points, the two cover points; the camera's eye (cam_spot's).
+- ASSUMPTION, the stage's largest: **a key-framed van is drawn and drives where there is no collision floor** - and the
+  van's own five key-framed bodies collide there with players' bullets and bodies as anywhere. Retomoto's van drove
+  under its road; no van of ours has stood off every floor.
+- ASSUMPTION: being inside a room's box matters for being drawn (STREET_ROOM); the van's and the camera's are.
+- ASSUMPTION: the camera's eye over the drawn pavement, with no collision under it, is as good as one over a floor
+  (kl_map_escape calls it 'outside the map'; its rule is there to keep an eye out of the void under a level). If the
+  picture is wrong: `cam=(1500, 360, -3100)` in ROAD is an eye over the slab, ahead of the van (cam_spot's choice
+  when only real floor counts: `out/plan0.txt`).
+- NOT KNOWN: what the van's kill box does to a policeman who crosses its line - the west squads run to their cover
+  from z -2750 / -2850 and three of their five points lie north of the line, two south (they cross it). Their men
+  come into the world when the seal opens; the van comes 7.2 s after a criminal is on the slab.
+- NOT KNOWN: what the passengers see of the east end - the drive ends at x 6700 beside the glow plane (z above
+  -2860, 1.3 m from the van's flank).
+- kl_map_escape's own (unchanged): a key-framed body moves with its entity; the engine interpolates rotation keys.
+- A build made by `kl_maps.py one ... --author kl_fa_club` alone still stops in prepare_host (NO_BUILD, then NO_PLAN):
+  READ, not run.
+
+### L3.6 For the next stage
+
+- **Build**: `python tools/kl_fa_club.py test <out> --keep [flags] [--plan "<kept>/van.json"]`; from Python
+  `r, folder, plan, did = kl_fa_club.build(out)` (FOUR values now), then `finish(folder)`, `check(folder)`.
+  `--plan` saves the bare graft (35 s) while ROAD is unchanged (plan_of refuses the plan of another road).
+- **Whoever copies the build folder copies van.json with it**: check() holds the drive against its plan.
+- **Any tool that calls kl_map_escape.van_check / check / van_plan_points on this map** (the finishing chain's bots,
+  tune and talk tools read van.json and may call them) must do it inside `kl_fa_club.pavement()`, or it gets the 217
+  floor faults. `kl_fa_club.van_check(folder, log, plan)` -> (report, Level, the plain tool's faults) is the ready call.
+- **Bots**: the boarding place at the stop is (-636, 32, -3094) (`van.json` 'check' 'board'; the plan's (-637, 30,
+  -3100)); in the FILE the box rides on the van at the waiting place (re/map_escape.md 12 / 15). Stations: ... queue
+  lane, street end (105, 20, -2600) -> boarding place, NOT by the marker (L3.4). `ROUTE_OUT`'s last station is the
+  marker's place (for the route test), not a bot's.
+- **Anything a later stage puts on the pavement**: run check() again - `LANE_CLEAR` sees spawn points, player bodies,
+  squads' men, the police's cover points, the marker and the stations of the way out; van_check's lane sees collision
+  under 'Locations/' and convex bodies; `drawn_lane` sees the map's models (below 'Locations/'), not a layer's object.
+- Still not wired (as the bank's L3.5): the vehicle monitor's list 4 is empty; nothing retreats when the van is called.
+- **Live order** (owner away; after L2.5's): does the van show 50 m up the pavement when the slab is entered, and is
+  it DRAWN all the way in (no floor under it until x -1200); 'Get in' at the rear doors at (-637, -3100); the in-van
+  view, then the fixed camera from behind; the east bound 21 m into the drive away; the score page. If the van is not
+  seen west of the slab, the cure is a shorter way in that starts on the slab's edge - which the tool's 20 m least
+  drive does not allow from x -300 (the slab's edge is 9 m west): that would be a tool change.
+
+### L3.7 Open
+
+- Nothing ran in the game; no picture was rendered (drawn.py's map is a raster of the models, not a view).
+- 'Out of sight' (L3.5).
+- The gate is still invisible (L1.6); no dancing crowd; the upstairs squads lead nowhere (L2.6).
+- What is drawn was tested for the map's static models with the 40-byte vertex; a model with another vertex form
+  would be read wrong or not at all (219 entities of the band had no model root: lights, sprites, sound objects).
+- The bank's regression was not re-run: no shared file was edited (kl_map_escape.py, kl_route.py, kl_fa_bank.py are
+  only called; kl_fa_bank.py has another job's uncommitted changes in the tree, and every `BK.` name used here is in
+  the committed version too).
+- check()'s FakeTarget and room-box tests lean on kl_fa_bots / kl_fa_bots_dyn / kl_octree (another session's files; it
+  prints 'NOT CHECKED' if their names change - then run the fake-test command of L3.3).
+
+(end of Stage L3)
