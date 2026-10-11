@@ -34,6 +34,9 @@
  *   klhop.c        x     x    an AI heister that stands at a place the mesh does not carry it over is put beyond it
  *                             ([CrewHop], KLJoin.ini; calls 0x62a900 through klcrew_rt.c's functions, with Reorder
  *                             0x760e50; no data, no code). OFF by default
+ *   klclimb.c      x     x    the PLAYER climbs a wall edge of the level's KLJoin.ini with Dead Men's climb clip
+ *                             ([Climb]; game routines called: the mini animation, AlignTo, the collision switch, the
+ *                             proxy; no code). OFF by default. Wired 2026-10-11 after two reviews; NOT RUN IN THE GAME
  *   klhud.c        x     x    the expansion's FA / Arcade HUD, Version 1 ([HUD]): crew list + money box drawn with the game's
  *                             own ZCHAROBJ texts from a private copy of the OSD's vtable (slot 55 wrapped, as klchar.c
  *                             wraps the option object); calls 0x8ccde0, 0x598460, 0x817810 and ZCHAROBJ slots on the
@@ -573,6 +576,7 @@ static void klh_tick(int game_thread);
 #include "klbot.c"
 #include "klescort.c"
 #include "klhop.c"
+#include "klclimb.c"
 #include "klbalance.c"
 #include "klhud.c"
 #include "klshoulder.c"
@@ -615,6 +619,7 @@ static void klh_tick(int game_thread)
     klj_tick();
     klt_tick(game_thread);                            /* DIRECTLY after klj_tick: it must see kljoin.c's request while it is pending (klcrew_rt.c, EARLY) */
     klv_tick(game_thread);                            /* klhop.c: an AI heister that stands at a [CrewHop] place is put beyond it (one game call a tick) */
+    klq_tick(game_thread);                            /* klclimb.c: the player at the foot of a [Climb] edge climbs it (OFF unless [Climb] Enable=1) */
     klc_tick(game_thread);
     klw_tick(game_thread);                            /* after klc_tick: the player's own body goes first */
     klk_tick(game_thread);                            /* after klw_tick: it reads who wears whom */
@@ -791,6 +796,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klb_init();
     kle_init();
     klv_init();
+    klq_init();
     klr_init();
     klu_init();
     klo_init();
