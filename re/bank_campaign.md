@@ -796,3 +796,201 @@ check() reads what the BUILD did off the level (a leaf is 'sunk' when it stands 
 - `LightToggle` x22 at load, the 28 rooms, the doors' draw state 25 m under the map: the first live load.
 
 (end of Stage L1)
+
+## Stage L2 - the enemies and the beat (tools/kl_fa_bank.py, second half)
+
+STATE: DONE (2026-10-11 15:35). `tools/kl_fa_bank.py` (1,682 lines) now holds the squads, the hall's police, the beat
+(rods, door, loot, alarm, blast, music) and the checks for them; every check of the stage passes on the kept build with
+ONE known verify finding (the stream clips: L2.3). NOTHING RAN IN THE GAME (kl2.exe was running: the owner was playing).
+Kept for the next stage: `C:/kl_scratch/bank/l2/build/F07+M03_A campaign/` (217 MB: F01_Main.zip 178,166,674 bytes sha1
+7948ec14..., finished = lightened + briefcases + texts; result.json, log.txt, graft.txt, preflight.json).
+`C:/kl_scratch/bank/l1/build` is deleted. Scratch `C:/kl_scratch/bank/l2/`: `s/` (tops.py, built.py, squads.py, ctl.py,
+lists.py, pts.py, loot2.py, floor2.py: what the tables below were measured with), `out/` (every output named below).
+No other file of the repo was touched; no table of another tool gained an entry (L2.5).
+
+### L2.1 What was built into the module
+
+| part | where | what |
+|---|---|---|
+| campaign squads | `SQUAD_ROOTS STAGE START_ROUT HUNT SQUADS_AT SQUAD_ACTIVE`, `squad_plan()`, `campaign_names()`, `strip()`, `snap_men()` | 22 squads / 53 men stay by `kl_fa_author.squad_plan`'s own rule (the real function, its name-root table lent the bank's entry for the call); 83 mini-cutscene controllers come off; every squad waits (`ZSquadScript` field 3 = 0: not in the world until a rout is named) |
+| soldier rows | `STOCK_ROWS`, `soldier_rows()` | stock Fragile Alliance rows (`kl_arms.ROWS` by `kl_arms.SKILL`) written in wire(), after kl_arms armed them |
+| the hall | `HALL HALL_Y HALL_START`, `place_hall()` | three of F07's own police squads (3 + 3 + 2 men) re-placed in the banking hall |
+| the beat | `RODS ROD_FIRST ROD_STEP rod_times()`, `CAMP`, `ALARM_LIGHTS LAMP`, `VAULT_BLAST EXPLODE_REACH BLAST_* blast_lists()`, `MUSIC_* MUSIC_LAYER4`, 16 new `ROLE` entries | below |
+| returning police | `POLICE` (moved), `POLICE_CLEAR` | the rows 2 m beyond the plaza squads' men (they stood ON them: 0 apart) |
+| loot | `VAULT_LOOT` (two places moved) | a case must lie on bare floor in BOTH vaults (intact / blown) |
+| checks | `check()`: 'the beat', 'enemies', 'police who come back', 'people', 'chunk table ... dead'; `KNOWN_NO_AI WARDROBE_CHUNKS ACTORS_LIVE` | L2.3 |
+| inventory | `inventory()`: 'THE CAMPAIGN'S KEPT OBJECTS', 'SQUADS' | each squad's stage, each man's weapon and row |
+| flags | `test`: `--no-ai --alarm-lights --music-layer4 --blast-real --no-blast --dead-men-rows` | one each, beside L1's six |
+
+**The staging** (MEASURED `python tools/kl_fa_bank.py inventory <kept>` -> `out/inventory.txt`; `python C:/kl_scratch/bank/l2/s/squads.py
+<build>` -> `out/squads0.txt` = every squad's nodes, rout lists and rows as converted):
+
+| stage | started by | squads (men) | what they do |
+|---|---|---|---|
+| start | round-start event -> `start timer` (`SQUADS_AT` 10 s: just after GO) | `3_Garage_Part!PatrolGuards_01a` (2), `4_Vault_Part!Guards_Reinforcement_StayUpstairs` (4), `...#01` (3), `Guards_Reinforcement_01a` (2), `01b` (2) = 13 | their `10_DefendBehaviour`: dock and vault lobby |
+| down | the same timer | `Guards_01` (2), `Guards_02` (2), `Guards_03` (2) | defend the upper flight, the cross corridor, the ante-room |
+| beat | the ante-room box | `Police_Reinforcement_02` (2), `_03` (4), `Police_Reinforcement_Teargas_01` (1), `...#01` (1), `Vault_Reinforcement_Police_01..03` (6) = 14 | defend places that run DOWN the stairs (e.g. (432, -157, -9414), (202, -559, -10698), (396, -956, -12332)): they come down behind the crew |
+| (hunt) | the beat's timer | the five squads with `49_SquadMod` (Police_Reinforcement_02 / _03 / Teargas_01, Guards_Reinforcement_01a / 01b) | unleash + fire at will -> `50_HuntBehaviour`, search box in the vault (427, -733, -12986) |
+| hall | the beat's timer | F07 `030_FinancialAlleyExit_Left` (3), `_Right` (3), `030_FinancialAlleyExitStreet_Left` (2) = 8 | stock `10_RunToCover` at re-placed points west / east / before the entrance |
+| plaza | the foyer box (`Specials!LevelSpeak!TriggerBox`, with the exit line) | `5_Lobby!Police_OutSide_01` (4), `Police_Outside_Teargas_01` (4), `COOP!Squads_Lobby!Police_OutSide_SWAT_02` (4), `_03` (4), `..._02_ShieldSupport` (1), `..._03_ShieldSupport` (1), `Police_Reinforce_Wave1_COOP_03` (2) = 20 | their flank routs into the hall; the two single SWAT men by `050_Move_In_01` (START_ROUT: squad_plan's pick `080_Cutscene_MoveOutside` is a place ON the van's stop) |
+
+61 soldiers in 25 squads, 9,450 hit points, accuracy 61.8 as used (MEASURED `python tools/kl_map_ai.py table <kept>` ->
+`out/map_ai_table.txt`; stock Fragile Alliance: 21..45 soldiers, 2,575..6,120 hit points; F07 34 / 4,640). Rows as
+converted: skill NAMES (eN00b 1, eAmateur 24, eRegular 16, eVeteran 12 = accuracy 20 / 35 / 50 / 60 by the name) and
+health 50 (13 of them 120); after `soldier_rows`: 15 'cop' (eCustom 50 / 100), 23 'swat' (50 / 175), 15 'sharp'
+(75 / 175). Weapons by kl_arms (seed 2026): Rifle_AK74 10, Rifle_FN_SCAR 5, SMGs 18, pistols 15, shotguns 5.
+Three men stood 9 - 32 beside the navigation mesh in the campaign's own places; `snap_men` puts them 15 inside it.
+
+**The beat as wired** (MEASURED: check()'s 'chain' and 'the beat' lines, `out/check.txt`; `out/inventory.txt` lines 'THE CHAIN'):
+- round start (AIMonitor list 2) -> F07's `Timer_MissionBriefing`, `start timer` (10 s -> 8 routs), `music timer` (1 s ->
+  `Special!Audio!PlayMusic_Outside`).
+- the ante-room box (ECPS_FA_MERCONLY, field 15 = 1) -> all at once: `beat timer` (48 s); six `rod timer n` (2, 10, 18,
+  26, 34, 42 s; `rod_times()` squeezes them under a short `--beat`) -> `rod n` (AIDWrapper 'Activate' ->
+  `M03_A_VaultEntrance_01a\Rod_A01 .. F01`, each rod's own one-way `MatPosAnim`) + the campaign's
+  `Special!Audio!GeomActivator_PlaysoundVaultRod01..05` / `...FinalRod`; the 7 start routs of stage 'beat'; the music's
+  `03_Ambient` / `03_Intense` fades.
+- `beat timer` ends -> the vault door's 'Activate' + `GeomActivator_PlaysoundVaultOpen`; the 7 hidden cases on; the alarm
+  (`GeomActivator_PlaysoundAlarm` -> `Audio!3D!Alarm_01 / _02`; `3_Garage_Part!Activator_AlarmRedLights` -> 'Activate' to
+  the 11 lamps); the music's `23_*` fade-outs + `PlayMusic_Inside_Part2`; the three hall squads; the five hunts;
+  `door timer`.
+- `door timer` (6 s) -> the door's body off (L1's guarantee) AND THE BLAST: `BoomBox_BlowVault#01..#03` (each its own
+  AIDWrapper -> Explode; #01 a ShakeCamera), `4_Vault_Part!Activator_SetOffAlarm` (the campaign's empty wrapper, now ->
+  `Audio!3D!Sound_VaultExplosion`), `post on` (ActivateGeom: 36 objects = the campaign's `GeomActivator_POST_Vault` +
+  `GeomActivator_Efx_Geoms` lists: `Vault_POST`, overlays, burnt ceiling, fire and smoke groups, flame sounds, the 'post
+  explosion' filter box), `pre off` (DeactivateGeom: 17 of the campaign's 26 = `Vault_PRE` and 16 more; the other 9 are
+  the story's plastic bombs and sports bag, not in the build). A door that did not swing is 'blown away'.
+- the six rod proxies, the door proxy and every other object of the vault breaker's two `ZMercSquad` are NOT kept: no
+  husk was needed (each rod and the door take 'Activate' themselves).
+
+**The three flags the lead asked for, and the fourth**
+- `ALARM_LIGHTS = False` (default; preflight called `LightToggle` x22 a RISK): strip() takes the 22 controllers off and
+  hides the 22 lights (ZGEOM[3] = 1 + .gms flag 0x400, the form the level's own fire lights have); the lamps still get
+  'Activate' (their glow's VertAnim), no light, the vault lobby's white light stays. `--alarm-lights`: the controllers stay,
+  `3_Garage_Part!GeomDeactivator_Lights` (white halogen rows off) joins the alarm, as the campaign's `Timer_Alarm` has it.
+- `VAULT_BLAST = 'show'` (default): Explode fields 0 / 1 = 1.0 on the three boxes (kl_fa_author.BLAST_HARMLESS's way).
+  `--blast-real`: the campaign's 1300 / 1000 and 800 / 800 with field 4 = 30 (MEASURED `python .../s/ctl.py F07 dd Explode`:
+  stock grenade 350, RPG 200..300, gas tank 1000 in that field - GUESS that it is the damage: even 'real' is a light hit).
+  `--no-blast`: the vault stays intact. The fire is a picture in both (`FireDamageBox` = EffectDmgBox is not kept).
+- `MUSIC_LAYER4 = False` (default; NOT asked for - preflight raised it once the music objects were kept: 'RISK value x9
+  ZPlayMusicLayerFade[0] = eLayer4; stock has only eLayer1..3'): strip() takes the nine fourth-layer fades' controller
+  off and nothing names them. Dog Days' enum HAS the value (MEASURED tools/dd_enums.json enum 155: four names). With
+  the clips in the stream file the 'basic' layer (the one that sounds from the start, -14 dB) would play on under the
+  way-out set: THE STAGE THAT BRINGS THE MUSIC MUST BUILD WITH `--music-layer4`.
+- music clips (silent until the stream file has them; `MUSIC_CLIPS`): `Music/InHouse/M03A/BO_Sus_Layer1_Ambient_LOOP.wav`,
+  `..._Layer2_Bass_LOOP.wav`, `..._Layer3_Intense_LOOP.wav`, `..._Layer4_Basic_LOOP.wav` (set BO_Sus_LOOP, 144 s, 36.9 MB),
+  `M03_Bustout_ActionV34.wav`, `M03_Bustout_IntenseClimax_Loop.wav` (set M03A_Bustout_A_I, 168 s, 21.5 MB). The build's
+  result.json lists 85 clips not in the installed PC_Def.str: these 6, `SFX/Ambiences/M03_A/Inside/
+  Ambience_Inside_Vault_Deeper.wav` and 78 guards' / SWAT one-liners (`Dialog/AllLevels/Oneliners/...`, `Dialog/M02 / M03 /
+  M08/...Guard*.wav`) - the kept guards' voices. No stream file was built or installed.
+
+### L2.2 The build
+
+`python tools/kl_fa_bank.py test C:/kl_scratch/bank/l2/build --keep` (110 s, exit 0, 'RESULT: PASS', `out/test.txt`). Lines:
+- 'M03_A: 12 of 12 door nodes of the route found; 22 squads stay, 83 mini-cutscene controllers taken off them'
+- '3 men of the kept squads stood beside the navigation mesh and were put on it: Police_Reinforcement_Teargas_01\Police_01
+  14 off, moved 29, Police_Reinforcement_03\Police_04 9 off, moved 24, Guards_Reinforcement_01a\Guard_01#02 32 off, moved 46'
+- 'the music: 9 fades of the fourth layer lose their controller'; 'the alarm lamps: 22 lights; their LightToggle taken off
+  and the lights hidden'
+- 'the banking hall: 3 of F07's police squads re-placed (8 men)'
+- 'kl_arms: 53 actors of M03_A armed ...'; 'the vault's blast (show): 3 Explode with reach 1, 36 objects on, 17 off; of the
+  campaign's lists 0 / 9 entries are not in the build'
+- 'enemies: 22 campaign squads (53 men): round start + 10 s -> 8 routs; ante-room box -> 7; the beat's end -> 5 hunts + 3
+  of F07's squads in the hall; foyer box -> 7; stock soldier rows: {'cop': 15, 'swat': 23, 'sharp': 15}'
+- 'verified: 20643 entities ... 1903 textures, 1239 materials'; 'verify: problems: 1'; 'level: 20643 entities, 28 rooms, 305 MB'
+The plain interface still builds: `python tools/kl_maps.py one <out> F07 M03_A --campaign --author kl_fa_bank` -> 'verify:
+problems: 1', exit 1 (`out/one.txt`; then `finish` and `check` on the folder, as in L1).
+
+### L2.3 The checks (all on the kept build; outputs in `C:/kl_scratch/bank/l2/out/`)
+
+| check | command | result |
+|---|---|---|
+| verify problems = KNOWN | check()'s 'verify:' lines | **1, known**: 'sound: 10 stream clips are not in the merged stream file' (the 85 clips of L2.1; the owner's go-ahead). The 'no ZSquadScript' finding of L1 is gone |
+| kl_fa.check | `python tools/kl_fa.py check <archive>` -> `fa.txt` | **0 CRASH, 0 BROKEN**, exit 0; 1 DEGRADED (no bot squads: a later stage). ZSquadScript 25 |
+| one cover list | `python C:/kl_scratch/bank/t1/s/covers.py <folder>` -> `covers.txt` | '1 FFCoverList' on `ROOT\Special!CoverList`; 20,643 nodes, 768 top-level |
+| route | check(); `python tools/kl_route.py doors <folder> --from START=250,200,-4350 --via vault=399,-960,-12818 --to street=949,702,-11105` -> `route_doors.txt`; `... walk ... --open SI0102_M03_BankVault_Door_PRE_01` -> `route_open.txt` | as built 'NOT free', crossed = the vault door's body alone; 'route without the vault ... FREE, 208 m'; 'with the 1 standing door(s) out: FREE, 226 m'; NEW 'route after the blast (the standing door(s) and the 148 bodies the blast takes away out, the blown vault in): FREE, 226 m'. doors: '1 closure(s) in 1 set(s); 1 necessary'. walk: 'RESULT: FREE; the mesh way: 1059 samples, all free' |
+| loot in both vaults | check() | '11 objects, 2600000; 11 can be taken in the intact and in the blown vault'; no case 'UNDER' anything. (MEASURED first with `s/loot2.py`, `s/floor2.py`: L1's case at (400, -960, -13310) lay in the blown vault's rubble heap (collision up to y -891) and the trolley with its cartons goes with the intact vault: the south wall's cases are now at x 200 / 300 / 600, the big one at (430, -960, -12950)) |
+| every man on the mesh | check() (kl_route.stations near 30, the standing door out) | '22 campaign squads (53 men) + 3 of F07's in the hall (8 men); 61 of the 61 men on the mesh part of the START and on free floor within 30' |
+| the places their routs name | check() | '83 places their behaviour routs name; 7 not on the START's mesh part': all the campaign's own - five hunts' `SearchBox` (427, -733, -12986), a volume 227 over the vault's floor, and `Pos#01` (71, 241, -6855) of two squads, 7 beside the mesh. The hall's 11 points are all on it (a hall point off it is a FAIL) |
+| no dropped node named | check(); result.json | 'dangling' [] in result.json; no list of any squad node, CAMP node or ROLE object names a node that is not there |
+| behaviour kinds | check() | 'controllers of the squads: ZSquadScript 25, SquadModifierBehaviour 35, DefendBehaviourRout 32, ZSoldier 61, HuntBehaviourRout 5, FlankingBehaviourRout 5, RunToCoverBehaviourRout 3, RunToCoverPosInfoRout 8': all in kl_fa_author.PLAIN / BEHAVE (the kinds Retomoto's layer ran live); no first-timer |
+| squads start where they should | check() | 'started by: {start timer: 8, beat box: 7, speak box: 7, beat timer: 3}; 5 hunts at the beat's end'; every squad's field 3 is 0 |
+| rows | check() | 'soldier rows of the campaign's men: 23 x eCustom 50 / 175, 15 x eCustom 50 / 100, 15 x eCustom 75 / 175' |
+| the beat's chain | check() | 'chain: round start -> [Timer_MissionBriefing, Timer, Timer]; ante-room box -> rods at 2, 10, 18, 26, 34, 42 s, 9 more -> 48 s -> 18 objects; -> 6 s -> [GeomDeactivator_DriveInVan, BoomBox_BlowVault#01, #02, #03, Activator_SetOffAlarm, GeomActivator_TearGas_RIGHT, GeomDeactivator]'; 'the beat: vault door swings at the beat's end, its body off 6 s later; blast show: Explode reach [(1.0, 1.0)], 57 bodies come, 148 go; alarm lamps 11, no LightToggle in the level, 22 lights hidden; music: break-in set at 1 s, way-out set at the beat's end; 0 fades of the fourth layer' |
+| police who come back | check() | '8 bodies, 7 AFTER_DEATH points; the nearest of the squads' men stands 214 from one' (before the move: 0). The 8 bodies are F07's eight `Heroes!Henchmen_0n`: nothing here adds a police body |
+| actors against the limits | check() | 'people: 61 ZFFActor in 25 squads + 16 player bodies (ran live: 99 actors, 55 squads)' (re/campaign_fa_tooling.md 5.4: stock Fragile Alliance 35..57 actors) |
+| chunk table, blocks | check() | 'chunk table: 65640 entries (the tools' line: 69632); .prm 53.2, .fxc 17.8, .ANM 21.9, .WAV 23.1 MB; the five load blocks 149 MB (Retomoto on the tab: 171)'; 'chunk table: 23690 of its indices are dead (free for the wardrobe, which took 15509 on the study's build, and the gun looks)' |
+| kl_impact | `python tools/kl_impact.py <archive>` -> `impact.txt` | 'problems: 0' |
+| kl_arms | `python tools/kl_arms.py check <archive>` | '0 findings' |
+| preflight | `python tools/kl_maps.py preflight <folder>` -> `preflight.txt` | **'preflight: CRASH 1, RISK 0, NOTE 78'**: CRASH = 'kl_graft.verify reported 1 problems' (the known one). L1 had RISK 2 (`fa:squads`, `LightToggle` x22); with the music kept and the fourth layer's fades left in it is RISK 1 ('value x9 ... eLayer4') |
+| NO_AI still builds | `python tools/kl_fa_bank.py test <out> --no-ai` -> `var_noai.txt` | 'RESULT: PASS': 20,246 entities, 'verify: problems: 2' both known ('sound: 1 stream clips ...', 'no ZSquadScript' = `KNOWN_NO_AI`, which check() accepts only when the level has no squad); 'enemies: none (a build without squads)'; the beat, loot, blast and music as with them |
+| every flag on | `... test <out> --alarm-lights --music-layer4 --blast-real --doors-animate --vault-stays` -> `var_all.txt` | 'RESULT: PASS': 12 doors stand, 'route with the 12 standing door(s) out: FREE, 226 m', 'blast REAL: Explode reach [(800.0, 800.0), (1300.0, 1000.0)]', 'alarm lamps 11, 22 LightToggle', '9 fades of the fourth layer', the door timer names the blast alone |
+| every flag the other way | `... test <out> --no-blast --vault-open --loot-shown --loot-bags --beat 30 --dead-men-rows` -> `var_plain.txt` | 'RESULT: PASS': 'route ... the level as built: FREE, 226 m', 'rods at 2, 7, 12, 16, 21, 26 s ... -> 30 s', 'blast none (the vault stays intact)', Dead Men's rows read back (16 x eAmateur 50 / 50 ...) |
+
+Variant archives are deleted; only the default build is kept.
+
+### L2.4 GUESS / ASSUMED (each marked in the file)
+
+- GUESS: the split of the 22 squads over the stages; `SQUADS_AT` 10 s (on two clock readings of 8.4 - 8.8 s between the
+  round-start event and GO); `ROD_FIRST` 2 / `ROD_STEP` 8; every point of `HALL` (MEASURED only: on the START's mesh part,
+  on free floor); `MAN_OFF` 60 / `MAN_IN` 15; `POLICE_CLEAR` 100; the new police rows at z -9900; the two moved loot places.
+- GUESS: Explode fields 0 / 1 are its reach and field 4 its damage (by the stock rows; not read in kl2.exe).
+- ASSUMPTION: a squad whose field 3 is 0 is not in the world until a rout of it is named (re/map_ai.md 2; seen live on
+  Retomoto) - the whole staging rests on it, and the round's first seconds (no fire through the open dock door in the
+  countdown).
+- ASSUMPTION: a hidden light (ZGEOM[3] = 1, flag 0x400) does not shine. If it does: eleven red lamps lit all round.
+- ASSUMPTION: an ActivateGeom brings the blown vault's collision and a DeactivateGeom takes the intact one's away (L1's
+  for the door). The route and the loot are tested in both states AND with both vaults standing at once (kl_route counts
+  hidden bodies), so only 'the intact floor goes and the blown one does not come' would hurt; `--no-blast` avoids it.
+- ASSUMPTION: TriggerBox field 15 = 'once' (L1's). The ante-room box now also names seven squads' routs and two fades;
+  if it fires again, the timers restart or fire twice - door, loot and blast named twice, nothing that breaks.
+  The foyer box is F07's speak box as L1 left it (field 15 untouched): a criminal who re-enters it re-names the plaza
+  squads' start routs.
+- ASSUMPTION: a second PlayMusic does not stop the first (why MUSIC_LAYER4 matters once the clips play).
+- ASSUMPTION: an AIDWrapper 'Activate' plays a hidden ZSNDOBJ (`Sound_VaultExplosion`): the campaign's own
+  `Activator_BlowVault` sends it so; stock F07 sends 'Activate' to its van and shutter sounds.
+- Not known: whether the postfilter boxes `Inside_VaultPreExplosion` / `...PostExplosion` (in the campaign's own lists,
+  kept as they are) change the picture under F07's palette; whether the two rigid bodies in those lists (a chair, a
+  stack of forms) behave when shown at run time.
+- The men's strength is a first setting: 9,450 hit points is 1.5 times the hardest stock level's, staged in five waves.
+  The knobs: `--dead-men-rows`, kl_arms.ROWS, the hook's [Balance].
+
+### L2.5 kl_arms / kl_map_ai: what the enemy tools needed
+
+- kl_arms: NOTHING added to its tables. `kl_arms.arm` arms M03_A's 53 by its general rules (no zone numbers in the
+  bank's squad names: depth 0.5 for all); its stock-row pass is tied to `SKILL_LEVELS` (Retomoto) and would skip ten
+  police whose first float is 2 - the rows are written from this module instead (`soldier_rows`, reading
+  `kl_arms.POOLS / SKILL / ROWS`). `kl_arms.py check`: 0 findings.
+- kl_map_ai: `table` and `balance` run on the build as it is. `apply` wants `PLANS['M03_A']`; NO plan is given, on
+  purpose: its `STRENGTH` floors are made for maps of 12 - 15 men (rifles -> accuracy eElite 90) and would lift the
+  bank's 19 riflemen to 99 as used. A stage that wants its 'chains' / 'escape' parts sets
+  `kl_map_ai.PLANS['M03_A'] = {...}` from a script and calls `apply(..., parts=('chains', 'escape'))`.
+
+### L2.6 For the next stage
+
+- **Build**: `python tools/kl_fa_bank.py test <out> --keep [flags]`; `check <folder>` is right for any variant (it reads
+  what the build did off the level). The first live run: `--no-ai` first (a round without enemies), then the default.
+- **The van** is still L1's (parked at `VAN_WAIT` with F07's drive): L1.5's three lines stand. The plan's lane is on the
+  street; nothing of this stage stands on it (the plaza squads' start places are z -9686..-9397, the police rows z
+  -10220..-9900, the lane z -12332..-11105). The two single SWAT men's unused `080_Cutscene_MoveOutside` points ARE on
+  the van's stop: do not name that rout.
+- **Bots** (kl_fa_bots): the loot places changed (L2.3); the round has two vault states; `Gameplay!merc_bot_squad!*` is not
+  kept yet (check() lists squads that are not this file's without failing). The ante-room box is MERCONLY.
+- **Free F07 objects left**: six TriggerDelay2 under `Gameplay!010_FirstFight!Shutters!`, three under `Gameplay!RunToEscape!`,
+  the trigger boxes and counters listed over `KEEP_MORE`. NO AIDWrapper / ActivateGeom / DeactivateGeom of F07 is free;
+  the campaign has single ones that stay when `CAMP` names them.
+- **Music stage**: `--music-layer4`, the 85 clips of L2.1, `kl_str.py` (the owner's go-ahead).
+- **Wardrobe**: 23,690 dead chunk indices are free (it took 15,509 on the study's build); table 65,640 of 69,632.
+
+### L2.7 Open
+
+- Nothing ran in the game. Live only: do the squads come into the world when named and stay out before; do the rods and
+  the door move; the blast's look and whether 'show' is harmless; the alarm with hidden lights; the hall's eight men at
+  guessed points; the plaza under 20 men; how hard 61 soldiers are.
+- The van (drive, camera, boarding) and the AI heisters are later stages; `kl_fa.check` has 1 DEGRADED (no bot squads).
+- The campaign squads' retreat routs (`40_DefendBehaviour_Moveback`), the hall squads' `40_RunToEscape` and the ring
+  round the van F07 runs its police to are not wired; no 'wiped out' chain (ZSquadScript field 8) is written.
+- Team mode / Undercover Cop: nothing of this stage was thought through for them (the squads' game-type fields are the
+  campaign's 'all types'; F07's eight are FragileAllianceOnly / FragileAllianceUCC as stock).
+- `check()`'s FakeTarget test still leans on kl_fa_bots_dyn (another session's file).
+
+(end of Stage L2)
