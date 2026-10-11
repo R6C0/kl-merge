@@ -43,9 +43,11 @@ written: kl_graft.out_dir is replaced for the length of a build. Spec and result
                      --heroes      S's Heroes! groups at the level's HERO_AT markers
                      --author [module]   an authored Fragile Alliance layer (kl_graft.build's `author`, where
                                    the module's interface is written down): alone = kl_fa_author (Retomoto
-                                   Tower), with a name = that module of tools/, e.g. 'one <out> F07 M03_A
-                                   --campaign --author kl_fa_bank --keep'. With --campaign the module's
-                                   campaign_names() stay out of the pre-pass. The name follows the option directly
+                                   Tower), with a name = that module of tools/ ('--author kl_fa_x'). With
+                                   --campaign the module's campaign_names() stay out of the pre-pass. The name
+                                   follows the option directly. (kl_fa_bank, the bank the campaign way, is NOT
+                                   built by this command: its van needs a plan and a wrapper round the build -
+                                   'kl_fa_bank.py test <out>'; asked here it stops with a line that says so)
                      --flat ZEnvSampler   load that Dead Men class as its base class (FLAT)
                      kl_graft's own: --silent --no-loc --no-fa --stock-anm --light X
                      --m-drop A,B  --m-add A,B

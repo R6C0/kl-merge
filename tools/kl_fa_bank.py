@@ -18,6 +18,12 @@ what only a live run can settle: re/bank_campaign.md. Nothing here installs anyt
                                                           BOT_OPT and the vault gate: bots_gate), then bots-check
     python kl_fa_bank.py bots-check <folder>              the gate and the vault's loot window on a folder with the
                                                           squad, before or after kl_fa_bots_dyn's step
+    python kl_fa_bank.py seal <folder>                    in place, the LAST step of the finishing chain: room list
+                                                          entries that name an entity outside the map (the bots'
+                                                          squad group took the id the graft parked them on) go to
+                                                          the scene's free REF id
+    python kl_fa_bank.py reverify <folder>                kl_graft.verify's cross-reference tests on the level as
+                                                          WRITTEN (check does it too): exit 1 on a problem
     options of 'test' (one flag each for the live runs):
       --doors-animate   the eleven door leaves of the route stay where the level has them and get 'Activate' at
                         the round start (default: they are OPEN AT BUILD TIME - sunk, their collision cut)
@@ -45,7 +51,8 @@ THE ROUND
           13 guards hold the dock and the vault lobby, three pairs the way down (STAGE 'start' / 'down': they come
           into the world SQUADS_AT seconds after the round-start event, just after GO).
   BEAT    a box in the ante-room starts, all at once: six timers that pull the vault door's six locking rods one
-          by one, 14 police who come down behind the crew, the music's rise, and the beat's timer. When that ends
+          by one, 14 police who come down behind the crew (they come into the world behind the airlock, off the
+          way in: BEAT_MEN), the music's rise, and the beat's timer. The box fires ONCE. When the timer ends
           the vault door gets 'Activate', the loot appears, the alarm goes (sound, lamps), the music changes to
           the way-out set, five squads hunt into the vault and three of F07's own police squads take the banking
           hall. DOOR_GONE seconds later the door's body is switched off - the vault can be entered whatever the
@@ -59,7 +66,8 @@ THE ROUND
           (nose east-north-east; its rear doors are 18 - 20 m from the front entrance), and leaves east along their away
           road, 71 m in 8.48 s, passing the campaign's east level bound 26 m after the stop as every stock van
           passes one. Boarding box, kill box, path blocker, in-van and fixed camera are the van's own, moved with
-          it; F07's second and third van are not in the level (VAN).
+          it; F07's second and third van are not in the level (VAN). The escape marker stands beside the lane,
+          4 m from the drive (ESC_AT), not on the van's stop.
 
 HOW (as kl_fa_author: no new entity, no new controller - every object is a stock one, re-placed and re-wired)
   The nine names of kl_graft.AUTHOR_NAMES: HOST, prepare_host(S), strip(M), KEEP, DROP, layer_names(Jn),
@@ -95,8 +103,10 @@ IN = 'Locations/M03_A/M03A_Locations.zip\\Locations/M03_A/M03A_LOC_Inside.zip\\'
 VA = IN + 'Locations/M03_A/M03A_LOC_Ins_Vault.zip\\'
 HIDDEN = 0x400
 # problems kl_graft.verify reports that this layer cannot remove: (text looked for, why it stands)
-KNOWN = (('stream clips are not in the merged stream file', 'the level\'s music (MUSIC_CLIPS), its vault ambience and the kept guards\' lines '
-          'are not in the installed PC_Def.str; a larger stream file is the owner\'s go-ahead (re/campaign_fa.md 3.1 K): those sounds are silent, nothing else'),)
+KNOWN = (('stream clips are not in the merged stream file', 'the level\'s music (MUSIC_CLIPS), its vault ambience and nine guard lines have no record in '
+          'the built .WHD - they are not in the installed PC_Def.str; a larger stream file is the owner\'s go-ahead (re/campaign_fa.md 3.1 K): those sounds '
+          'are silent, nothing else. (The kept guards\' other one-liners DO stream from the merged file; result.json\'s list of names is longer than what '
+          'is lost - check() reads the built .WHD: lost_clips)'),)
 # ... and in a build without enemies ('--no-ai'), which check() knows by the level having no squad at all
 KNOWN_NO_AI = ('no ZSquadScript', 'a round without enemies (NO_AI): the build for a first live run')
 
@@ -104,10 +114,19 @@ KNOWN_NO_AI = ('no ZSquadScript', 'a round without enemies (NO_AI): the build fo
 # Floors (collision, tools/kl_route.py stations on a built level): yard and loading dock y 200, vault lobby 240,
 # vault and ante-room -960, banking hall and plaza 800, front street 700. Everything below is on ONE part of the
 # navigation mesh (566 polygons; re/bank_campaign.md T3).
-YARD, STREET = 200.0, 700.0
-DOCK_DOOR = (560.0, -4706.0)            # the roller door M03_A_Garage_01a\SI0201_M03_BackDorAnim_01: doorway x 385..735
+YARD = 200.0                            # (the dock's roller door M03_A_Garage_01a\SI0201_M03_BackDorAnim_01: doorway x 385..735, z -4706)
 FRONT = (300.0, 800.0, -9350.0)         # the front entrance: no door, a 2.0 m gap between two glass wings (x 200..400, z -9410)
 TO_DOOR = (0.0, -1.0)                   # from the yard at the dock door
+# THE ESCAPE MARKER (the HUD's 'go here') stands BESIDE the van's lane, between the plaza and the place where the
+# van's rear doors will be: MEASURED 425 from the drive's line and 357 from the boarding place, on the START's
+# mesh part and on free floor (C:/kl_scratch/bank/fix_1/s/lane.py). The first three stages had it over the van's
+# STOP: the van is called when the plaza is entered, 18 m away, and takes 7.2 s - a running player stood on the
+# marker before the van's nose came, and the van's KillBox (180 wide, at its nose) 'kills what it runs over'
+# (re/map_escape.md). Stock F07's marker stands 3 m off the nearest of its three stops, on none of them
+# (review round 1). GUESS: the place itself (the bots' own waiting place beside the stop, kl_fa_bots' AllyEscapeBox)
+ESC_AT = (316.0, 702.0, -11070.0)       # on the street's floor (y 700): the round's last station (ROUTE_OUT)
+ESC_POI_UP = 188.0                      # the marker over the floor (F07: 190 over its road; Retomoto's)
+ESC_POI = (ESC_AT[0], ESC_AT[1] + ESC_POI_UP, ESC_AT[2])
 # START (re/campaign_fa.md 4.1 item 1): two stacks of four beside the dock door, under the back wall where the
 # campaign's ropes end ((-35 / -151, 200, -4525)). GUESS: the stacks; MEASURED: each point on the mesh and on free
 # floor (check()). A parked armoured transport (x -30..190, z -4130..-3590) stops the rows moving west.
@@ -156,7 +175,8 @@ HENCH_SHIFT = (0.0, 0.0, -160.0)        # the eight police bodies (Heroes!Henchm
 VAULT_LOOT = [((200.0, -960.0, -13310.0), 8.0, 300000), ((300.0, -960.0, -13310.0), -6.0, 300000), ((600.0, -960.0, -13310.0), 11.0, 300000),
               ((110.0, -960.0, -13230.0), 96.0, 300000), ((110.0, -960.0, -13030.0), 84.0, 300000), ((110.0, -960.0, -12830.0), 101.0, 300000),
               ((430.0, -960.0, -12950.0), 20.0, 500000)]            # the last: the middle of the room, before the door
-VAULT_BOX = ((-50.0, 1150.0), (-1000.0, -400.0), (-13560.0, -12650.0))      # the room, for finish() / check(): what lies in the vault
+VAULT_BOX = ((-50.0, 1150.0), (-1000.0, -400.0), (-13560.0, -12650.0))      # the room, for finish() / check(): what lies in the vault. GUESS: the
+                                                                            # box, drawn round the walls' places above with room to spare
 # THE TELLERS (M03_A_Bank_Main_01): counters Pc0100_M03_Bankcounter_A_* at x -791 (z -7202, -7602, -8002) and x 1393
 # (z -7206, -7606, -8006), their top y 899, a glass grille over it (MEASURED in the collision). The stack lies on the
 # counter's public edge - the side the crew passes on its way out. GUESS: the edge distance (26) and the value
@@ -201,6 +221,7 @@ MPA_MESSAGE, MPA_LAST = 0, 14           # MatPosAnim fields: the message that st
 VAULT_OPEN = False
 VAULT_DOOR_GOES = True                  # False ('--vault-stays'): once the swing has been SEEN to play and to let people in
 BEAT = 48.0                             # s from the ante-room box to the door. GUESS: six rods at 8 s steps (the study)
+BOX_PER_MAN = 15                        # TriggerBox field: 1 = fires for every criminal that enters, 0 = once (wire(): the census)
 DOOR_GONE = 6.0                         # s after the door's 'Activate'. GUESS: the swing is at its 100 degrees after 2.4 s
 
 # ------------------------------------------------------------------ the host's layer
@@ -210,13 +231,14 @@ BOX = (0.0, 1.0)                        # a box is laid in the world's axes (the
 PLACE = {
     # the round's markers and planes
     'FASpecials!POI!Trigger_POI_TheLootArea': ((575, 350, -4150), None, (700, 200, 450), 'GUESS: box round the START stacks in the yard (F07: round its start); it starts the loot marker\'s 11 s timer'),
-    'FASpecials!POI!POI_TheLootArea': ((400, -800, -13000), None, None, 'the vault\'s middle, 160 over its floor'),
+    'FASpecials!POI!POI_TheLootArea': ((400, -800, -13000), None, None, 'the vault\'s middle; GUESS: 160 over its floor'),
     'FASpecials!PIP!EnterLootArea': ((560, 380, -4800), None, (250, 230, 50), 'GUESS: a plane 1 m inside the dock\'s roller door (doorway x 385..735, z -4706)'),
     'FASpecials!PIP!ExitLootArea': ((303, 974, -9407), None, (300, 200, 100), 'the front entrance: M03_FA_A\'s own ENTERS box there (Triggers!EnterBankTrigger_01), same world'),
-    'FASpecials!POI!POI_TheEscapeArea': ((949, 890, -11105), None, None, 'ROAD\'s stop, ESC_POI_UP over the road as on Retomoto; prepare_host() puts it over the PLAN\'s stop'),
-    'FASpecials!POI!Trigger_POI_TheEscapeArea': ((300, 1075, -8600), None, (1500, 425, 2900), 'GUESS: hall, plaza and street, y 650..1500 (floors 800 / 700) - not the vault lobby under the hall (floor 240, ceiling 640)'),
-    'FASpecials!POI!Trigger_POI_TheEscapeAreaCP_OffenseOnlyRespawn': ((300, 1075, -8600), None, (1500, 425, 2900), 'as above'),
-    'FASpecials!POI!Trigger_POI_TheEscapeAreaFA_RespawnOnly': ((300, 1075, -8600), None, (1500, 425, 2900), 'as above'),
+    'FASpecials!POI!POI_TheEscapeArea': (ESC_POI, None, None, 'BESIDE the van\'s lane, not over its stop (ESC_POI); prepare_host() holds it against the PLAN\'s drive'),
+    'FASpecials!POI!Trigger_POI_TheEscapeArea': ((300, 1075, -10550), None, (1500, 425, 1150), 'GUESS: plaza and street as the exit box (z -11700..-9400), y 650..1500. NOT the banking hall: '
+                                                 'the box takes the loot marker away (GeomDeactivator_TheLootArea), and the hall is reached from the vault lobby without the vault (review round 1)'),
+    'FASpecials!POI!Trigger_POI_TheEscapeAreaCP_OffenseOnlyRespawn': ((300, 1075, -10550), None, (1500, 425, 1150), 'as above'),
+    'FASpecials!POI!Trigger_POI_TheEscapeAreaFA_RespawnOnly': ((300, 1075, -10550), None, (1500, 425, 1150), 'as above'),
     # the beat's box and the exit
     'Gameplay!010_FirstFight!tb_LEFT_TheySpotYou': ((460.4, -714.0, -12151.8), None, (550.2, 254.0, 556.1), 'the campaign\'s own box GamePlay!4_Vault_Part!...\\TB_VbByVault: place and half extents'),
     'Gameplay!EscapeSetup!otrExitLevel': ((300, 800, -10550), None, (1500, 300, 1150), 'GUESS (the study): plaza and street in front of the entrance, from 50 beyond its gap: z -11700..-9400 - carried '
@@ -316,15 +338,18 @@ VAN_GROUP = 'EscapeVehicle_Animation_F07'       # everything of the van with a p
 ROAD = dict(arrive=[(-3248, 710, -11859), (-1917, 712, -12126), (-231, 707, -12332)], stop=(949, 704, -11105),
             leave=[(2473, 705, -11177), (3958, 713, -11173), (8600, 705, -11173)], at='origin', heading=None, cam=None)
 PLAN = None                             # the plan of ROAD (lay_van): prepare_host() and wire() lay the van on it
+NO_PLAN = ('kl_fa_bank: the van has no plan: build with \'kl_fa_bank.py test <out>\' or kl_fa_bank.build() (the plan is made on a bare graft and '
+           'kl_map_escape.van_layer has to stand round the build; \'kl_maps.py one ... --author kl_fa_bank\' can do neither)')
 BOARD_NEAR = 30.0                       # the boarding place is a station of the round: on the START's mesh part and on free
                                         # floor within this (the measure of the spawn points)
-LANE_CLEAR = 250.0                      # no spawn point, player body or squad's man nearer than this to the van's drive
-                                        # (the lane that is tested is 110 either side). GUESS
+LANE_CLEAR = 250.0                      # no spawn point, player body, squad's man, escape marker or station of the way out
+                                        # nearer than this to the van's drive (the lane that is tested is 110 either side;
+                                        # the van's kill box is 90). GUESS. The boarding place is the one exception: the box
+                                        # rides on the van, a player goes there when the van STANDS
 BOUND_AFTER = 1000.0                    # a level bound on the drive away at least this far after the stop: every stock
                                         # Dog Days van passes one with its passengers, the nearest 10.9 m after the stop
                                         # (F01; F07's own 18.6 .. 39.8 m; MEASURED C:/kl_scratch/bank/l3/s/stockbound.py)
-ESC_POI_UP = 188.0                      # the escape marker over the standing van's origin (F07: 190 over its road; Retomoto's)
-ESCAPE = ('Gameplay!EscapeSetup!otrExitLevel', 'Gameplay!EscapeSetup!RelayDestroyedEsc_01',
+ESCAPE =('Gameplay!EscapeSetup!otrExitLevel', 'Gameplay!EscapeSetup!RelayDestroyedEsc_01',
           'Gameplay!EscapeSetup!OnScreenMSG_LastEscapeVan', 'Gameplay!EscapeSetup!Timer_OSM_LastEscape')
 _KEEP = ('FASpecials!', 'Specials!', VAN) + ESCAPE + tuple(v for v in ROLE.values() if v.startswith('Gameplay!0'))
 
@@ -411,6 +436,23 @@ SQUADS_AT = 10.0                        # s from the round-start event to the fi
                                         # readings); a squad that waits is not in the world, so nobody is shot in the countdown
                                         # through the open dock door (Retomoto's run S2). GUESS: 10
 MAN_OFF, MAN_IN = 60.0, 15.0            # snap_men: a man this far beside the mesh at most is put this far inside it. GUESS
+# WHERE THE 14 POLICE OF THE BEAT COME INTO THE WORLD. The campaign has them in the dock and the vault lobby (seven
+# within 4.5 m of the route's own station there, the nearest 165 from it): right for a story in which everybody is
+# down at the vault when they come, wrong here - the box fires for the FIRST criminal in the ante-room (an AI heister,
+# some 35 - 40 s after GO), and a human still fighting the 13 guards upstairs would get 14 police out of the air at
+# arm's length (review round 1). So their men are re-placed (strip: beat_men) BEHIND THE AIRLOCK, off the way in:
+# eight in the corridor that leads from the airlock to the hall's stairs (x 1467..1625, flat floor y 240 from
+# z -7125 to -6050; round the corner from the airlock's doorway) and six on the landing above its stairs (floor
+# y 420). From there their own defend routs bring them through the airlock and the lobby and down: they still come
+# down behind the crew, on foot. MEASURED (C:/kl_scratch/bank/fix_1/s/beat_floor.py): each place on the START's mesh
+# part and on free collision floor, the nearest 1195 from a station of the way in. GUESS: the places themselves, and
+# 100 - 125 between two men. ASSUMPTION: a defend rout walks its men from wherever they stand on the mesh.
+# None: the campaign's places stay (check() then fails on BEAT_CLEAR)
+BEAT_MEN = [(1510, 240, -6700), (1585, 240, -6610), (1510, 240, -6520), (1585, 240, -6430), (1510, 240, -6340), (1585, 240, -6250),
+            (1510, 240, -6160), (1585, 240, -6070),
+            (1510, 420, -5620), (1585, 420, -5540), (1510, 420, -5460), (1585, 420, -5380), (1415, 420, -5510), (1415, 420, -5400)]
+BEAT_CLEAR = 1000.0                     # no man of a squad that comes later than the round's start nearer than this to a
+                                        # station of the round that lies BEFORE the squad's trigger (check()). GUESS
 SQUAD_ACTIVE = A.SQUAD_ACTIVE           # ZSquadScript field 3, 'in the world from the load': 1 on the dock patrol only; 0 is
                                         # written, so that it waits for the start timer like the rest (kl_fa_author.ROOM_WAITS:
                                         # SEEN LIVE on Retomoto, run GW2)
@@ -467,7 +509,8 @@ CAMP = collections.OrderedDict(
 # is a group with a RelayMessageList 'Activate' -> its glow (VertAnim) and its two lights, an omni and a spinning
 # spot, which hold a LightToggle (state OFF, on at 'Activate'). LightToggle is registered in kl2.exe and used by NO
 # stock Dog Days level: 'kl_maps.py preflight' calls the 22 a RISK (re/campaign_fa_bank.md 3.4). So, the lead's rule:
-#   False (default)        the 22 LightToggle are TAKEN OFF before the join and the 22 lights hidden (ZGEOM[3] = 1 and
+#   False (default)        the 22 LightToggle are TAKEN OFF before the join and the 22 lights - and the 8 slave spots
+#                          the spinning ones have in the rooms next door - hidden (ZGEOM[3] = 1 and
 #                          the .gms flag, the form the level's own fire lights have): the first live load runs no
 #                          LightToggle code. The lamps still get 'Activate' at the alarm - their glow plays, no light.
 #                          ASSUMPTION that a hidden light does not shine; if it does, eleven red lamps are lit all round
@@ -475,6 +518,7 @@ CAMP = collections.OrderedDict(
 #                          rows go off, as the campaign has it (its 'Timer_Alarm' names the same three objects)
 ALARM_LIGHTS = False
 LAMP = 'Pc0100_M03_LampAlarm_Wall_'
+SLAVES = 'ZGateLightSpot[3]'            # a gate light's list of slave spots (8 of the 11 spinning spots reach into the room next door)
 # THE VAULT'S OWN BLAST. The campaign blows the deposit boxes 15 s after the charges are set: three 'BoomBox'
 # (Explode + its own AIDWrapper, #01 also a ShakeCamera), the explosion sound, the intact vault 'Vault_PRE' off and
 # the blown one 'Vault_POST' on (26 objects each way: walls, overlays, burnt ceiling, the ante-room's carpet), the
@@ -654,6 +698,8 @@ def place_hall(S, log=print):
 def prepare_host(S, log=print):
     """Re-place F07's Fragile Alliance layer for the bank. S: kl_graft.Level('F07'), unedited."""
     sc = S.prp
+    if PLAN is None:                                    # before anything is armed: a caller that goes on in this process must
+        raise ValueError(NO_PLAN)                       # not find kl_escape wrapped (review round 1)
     Doors.arm(log)                                      # the build that follows opens the doors (see Doors)
     for name, (pos, face, half, _why) in PLACE.items():
         put(S, name, pos, face, half)
@@ -705,13 +751,14 @@ def prepare_host(S, log=print):
     log('  kl_fa_bank: loot: %d in the vault (%s), %d at the tellers, %d in all' % (
         len(VAULT_LOOT), 'hidden until the beat\'s timer ends' if GATE_VAULT else 'shown', len(TELLER_LOOT), total))
     # escape: the one van laid on the plan of ROAD - F07's own keys re-written in place, the boxes beside its drive
-    # and its camera moved with it (kl_map_escape.van_prepare; the van's nodes must still stand where F07 has them) -
-    # the marker over its stop; the exit trigger names it alone (kl2 0x6c3f90 loops until one field is set)
-    if PLAN is None:
-        raise ValueError('kl_fa_bank: the van has no plan: build with \'kl_fa_bank.py test <out>\' or kl_fa_bank.build() (the plan is made on a '
-                         'bare graft and kl_map_escape.van_layer has to stand round the build; \'kl_maps.py one ... --author kl_fa_bank\' can do neither)')
+    # and its camera moved with it (kl_map_escape.van_prepare; the van's nodes must still stand where F07 has them);
+    # the exit trigger names it alone (kl2 0x6c3f90 loops until one field is set). The escape marker stays where
+    # PLACE has it, beside the lane: held against this plan's drive here (check() does it again on the written level)
     S.van = ESC.van_prepare(S, PLAN, log)
-    put(S, 'FASpecials!POI!POI_TheEscapeArea', (PLAN['stop'][0], PLAN['stop'][1] + ESC_POI_UP, PLAN['stop'][2]))
+    off = abs(ESC.Poly([tuple(p) for p in PLAN['path']]).project(ESC_AT)[1])
+    if off < LANE_CLEAR:
+        raise ValueError('kl_fa_bank: the escape marker\'s place %s is %d from the van\'s drive (%d wanted)' % (ESC_AT, off, LANE_CLEAR))
+    log('  kl_fa_bank: the escape marker stands %d from the van\'s drive, %d from the boarding place at the stop' % (off, math.dist(ESC_AT, PLAN['board'])))
     van = van_path()
     k = A.node_of(sc, ROLE['exit'])
     kl_fa.edit(sc, k, A.ctrl_of(sc, k, kl_fa.EXIT), lambda us: [A.setv(sc, us, 2 + j, s) for j, s in enumerate((van, '', ''))])
@@ -776,16 +823,46 @@ def snap_men(M, keep, log=print):
                 if mesh.inside(i, x, z) and math.hypot(x - w[0], z - w[2]) >= d + MAN_IN:
                     break
             new = (x, mesh.height(i, x, z), z)
-            Rm, T = (world_of(M.ents[g - 1].parent)[1], world_of(M.ents[g - 1].parent)[0]) if M.ents[g - 1].parent is not None else (
-                [[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]], (0.0, 0.0, 0.0))
-            dv = [new[a] - T[a] for a in range(3)]
-            A.place(M, g, tuple(sum(Rm[b][a] * dv[b] for b in range(3)) for a in range(3)))   # the parent's turn undone (transpose)
-            got = world_of(M.ents[g - 1])[0]
-            if math.dist(got, new) > 1.0 or mesh.on(*got) is None:
-                raise ValueError('%s: placed at %s, stands at %s' % (sc.path[g], new, got))
+            man_to(M, g, new, mesh)
             moved.append((sc.path[g][5:], round(d), math.dist(w, new)))
     log('  kl_fa_bank: %d men of the kept squads stood beside the navigation mesh and were put on it: %s' % (
         len(moved), ', '.join('%s %d off, moved %d' % (p.split('!')[-1], d, m) for p, d, m in moved) or '-'))
+    return moved
+
+
+def man_to(M, g, new, mesh):
+    """A man's group g of the converted level M to the world place `new` (his turn stays): the place in his parent's
+    frame, read back; the place must be on the navigation mesh."""
+    par = M.ents[g - 1].parent
+    T, Rm = world_of(par) if par is not None else ((0.0, 0.0, 0.0), [[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]])
+    dv = [new[a] - T[a] for a in range(3)]
+    A.place(M, g, tuple(sum(Rm[b][a] * dv[b] for b in range(3)) for a in range(3)))   # the parent's turn undone (transpose)
+    got = world_of(M.ents[g - 1])[0]
+    if math.dist(got, new) > 1.0 or mesh.on(*got) is None:
+        raise ValueError('%s: placed at %s, stands at %s%s' % (M.prp.path[g], new, got, '' if mesh.on(*got) else ', which is not on the mesh'))
+
+
+def beat_men(M, keep, log=print):
+    """The men of the squads the ante-room box starts (STAGE 'beat') to the places of BEAT_MEN, behind the airlock:
+    in STAGE's order, a squad's men side by side. -> [(squad, man's group, from, to)]"""
+    import kl_route
+    if not BEAT_MEN or not keep:
+        return []
+    sc = M.prp
+    mesh = kl_route.load(LEVEL).mesh()
+    men = [(n, sc.parent[k]) for n, s in STAGE.items() if s == 'beat' for t in sc.tops() if sc.names[t] == n
+           for k in range(t, sc.end[t]) if sc.cls(k) == 'ZFFActor']
+    if len(men) != len(BEAT_MEN):
+        raise ValueError('kl_fa_bank: %d men in the squads of the beat, BEAT_MEN has %d places' % (len(men), len(BEAT_MEN)))
+    moved = []
+    for (n, g), new in zip(men, BEAT_MEN):
+        was = world_of(M.ents[g - 1])[0]
+        man_to(M, g, tuple(float(v) for v in new), mesh)
+        moved.append((n, sc.path[g][5:], was, new))
+    log('  kl_fa_bank: the %d police of the beat (%d squads) re-placed behind the airlock, off the way in: from x %d..%d, z %d..%d to x %d..%d, z %d..%d' % (
+        len(moved), len({n for n, _g, _w, _t in moved}), min(w[0] for _n, _g, w, _t in moved), max(w[0] for _n, _g, w, _t in moved),
+        min(w[2] for _n, _g, w, _t in moved), max(w[2] for _n, _g, w, _t in moved), min(t[0] for t in BEAT_MEN), max(t[0] for t in BEAT_MEN),
+        min(t[2] for t in BEAT_MEN), max(t[2] for t in BEAT_MEN)))
     return moved
 
 
@@ -808,6 +885,7 @@ def strip(M, log=print):
     log('  kl_fa_bank: %s: %d of %d door nodes of the route found; %d squads stay, %d mini-cutscene controllers taken off them' % (
         M.name, have, len(LEAVES) + 1, len(keep), n))
     snap_men(M, keep, log)
+    beat_men(M, keep, log)
     # the music's fourth layer (MUSIC_LAYER4): without the flag its nine fades lose their controller
     four = [(k, i) for k, i, v in kl_fa.controllers(sc, 'PlayMusicLayerFade') if v[0] == LAYER4 and sc.names[sc.top[k]] in (CAMP['music'], CAMP['music out'])]
     if len(four) != 9:
@@ -821,12 +899,22 @@ def strip(M, log=print):
     lights = [k for k in range(1, len(sc.nodes)) if ('\\' + LAMP) in sc.path[k] and any(sc.p.key(c[0]) == 'LightToggle' for c in sc.nodes[k]['ctrls'])]
     if len(lights) != 22:
         raise ValueError('kl_fa_bank: %d lights with a LightToggle under the alarm lamps, 22 expected' % len(lights))
+    # ... and with it every SLAVE of a spinning spot (ZGateLightSpot's last field: a ZSPOTLIGHT '<room>@<lamp>@Alarm_Spot
+    # __slave' in the room next door, 8 in all). The engine carries a gate light's state to its slaves only at RUN time
+    # (show / hide 0x8e4600 and light off 0x743240 walk the slave list; the LightToggle's init switches the master off
+    # so): with the controller gone and the master hidden in the file neither call ever runs, and a slave left shown
+    # could shine from the load with nothing to turn it off (review round 1; whether it would was not seen)
+    slaves = sorted({j for k in lights if sc.cls(k) == 'ZGateLightSpot'
+                     for s in kl_fa.node_values(sc, k)[J.labels('dd', 'ZGateLightSpot').index(SLAVES)] for j in sc.resolve(s)})
+    if len(slaves) != 8 or any(not sc.names[j].endswith('__slave') for j in slaves):
+        raise ValueError('kl_fa_bank: %d slave spots under the alarm lamps\' gate lights, 8 expected' % len(slaves))
     if not ALARM_LIGHTS:
-        for k in lights:
+        for k in lights + slaves:
             sc.nodes[k]['ctrls'] = [c for c in sc.nodes[k]['ctrls'] if sc.p.key(c[0]) != 'LightToggle']
             A.place(M, k, hidden=True)
-    log('  kl_fa_bank: the alarm lamps: %d lights; %s' % (len(lights), 'their LightToggle stays (ALARM_LIGHTS)' if ALARM_LIGHTS else
-                                                       'their LightToggle taken off and the lights hidden (a kind no stock Dog Days level runs)'))
+    log('  kl_fa_bank: the alarm lamps: %d lights and %d slave spots of theirs in the rooms next door; %s' % (
+        len(lights), len(slaves), 'their LightToggle stays (ALARM_LIGHTS)' if ALARM_LIGHTS else
+        'the LightToggle taken off and all of them hidden (a kind no stock Dog Days level runs)'))
     return n
 
 
@@ -911,9 +999,14 @@ def wire(sc, log=print):
             put_(j, 'MatPosAnim', **{'f%d' % MPA_LAST: GLASS_LAST})
         log('  kl_fa_bank: DOORS ANIMATE: %d leaves get \'Activate\' at the round start; %d glass leaves store LAST %d' % (len(leaves), len(glass), GLASS_LAST))
 
-    # ---- the beat. The ante-room box (the form of stock F07's own box that starts a timer - FASpecials!POI!
-    # Trigger_POI_TheLootArea: field 15 = 1; the squad boxes have 0. ASSUMPTION that 15 is 'once') starts, all at
-    # once: the six rod timers, the beat's timer, the 14 police of stage 'beat', the music's rise
+    # ---- the beat. The ante-room box starts, all at once: the six rod timers, the beat's timer, the 14 police of
+    # stage 'beat', the music's rise. TriggerBox FIELD 15 = 0 (BOX_PER_MAN): by the stock data 0 is 'fires once', 1 'fires
+    # for every criminal that enters' - of the 226 TriggerBox of F01..F09 the 125 with 0 start the squad routs and
+    # the one-shot timers (this very object in F07 has 0), and not one of the 101 with 1 names a squad rout; F07's
+    # 'tbRunToEscape' (1) feeds a TriggerCounter of three, its twin 'tbRunToEscape1Player' (0) a timer
+    # (C:/kl_scratch/bank/review_round_1/tb.py). The first three stages wrote 1 on the opposite ASSUMPTION: the beat
+    # would have begun again for each further criminal - seven AI heisters among them (review round 1).
+    # ASSUMPTION still: the field's meaning is read off the census, not in kl2.exe
     rods = must([R + p for p in RODS])
     for p in rods:
         msg = [v[MPA_MESSAGE] for k, _i, v in kl_fa.controllers(sc, 'MatPosAnim') if k == sc.resolve(p)[0]]
@@ -927,7 +1020,7 @@ def wire(sc, log=print):
     rise = fades(MUSIC_RISE)                            # without MUSIC_LAYER4 the fourth layer's fades hold no controller: not named
     gone = VAULT_DOOR_GOES and not VAULT_OPEN
     late = gone or bool(VAULT_BLAST)                    # the door timer has something to do
-    lists('beat box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', f15=1,
+    lists('beat box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BOX_PER_MAN: 0},
           f17=[R + ROLE['beat timer']] + [R + ROLE['rod timer %d' % (i + 1)] for i in range(len(rods))] + stage['beat'] + rise)
     # ... when it ends: the door's swing and its sound, the loot, the alarm (sound, lamps), the music's change, the
     # hall's police, the hunt; DOOR_GONE later the door's body goes and the vault blows
@@ -1037,7 +1130,7 @@ class Doors:
         if cls.real is None:
             cls.real = (kl_escape.repair, kl_escape.place_entities, kl_escape.cut_collision)
             kl_escape.repair, kl_escape.place_entities, kl_escape.cut_collision = cls.repair, cls.place, cls.cut
-        cls.state = {'sink': {}, 'old': {}, 'prp_w': {}, 'rows': []}
+        cls.state = {'sink': {}, 'old': {}, 'prp_w': {}}
 
     @classmethod
     def disarm(cls):
@@ -1111,7 +1204,6 @@ class Doors:
                 raise ValueError('%s moved %s -> %s, not straight down by %g' % (sc.path[k], before[k], after, -DOOR_DY))
             if max(abs(after[a] - st['prp_w'][k][1][a]) for a in range(3)) > 1.0:
                 raise ValueError('%s: after the move the .gms says %s, the .prp %s' % (sc.path[k], after, st['prp_w'][k][1]))
-            st['rows'].append((sc.path[k], e.ref, before[k], after))
         if st['sink']:
             log('  kl_fa_bank: doors: %d entities moved in the .gms (%d of them hold another local place there than in the .prp; '
                 'the world places agree); %d REF ids go to cut_collision' % (len(st['sink']), other, len(refs)))
@@ -1246,18 +1338,22 @@ ROUTE_IN = [('START', START[1]), ('dock door', (550, 200, -4650)), ('dock', (266
 ROUTE_VAULT = [('vault', (399, -960, -12818))]
 ROUTE_OUT = [('ante-room', (400, -959, -11800)), ('vault lobby', (394, 241, -7129)), ('airlock', (1100, 240, -7000)), ('stairs', (1538, 355, -5822)),
              ('foyer', (309, 803, -5624)), ('hall', (377, 801, -8423)), ('front entrance', FRONT), ('plaza', (281, 812, -9700)),
-             ('street', (949, 702, -11105))]
+             ('street', ESC_AT)]                        # beside the van's lane, under the escape marker - not ON the van's stop
 # the five large blocks a level load asks of the 2 GB process (CLAUDE.md, 2026-10-10 01:35): 32.0 MB scratch, .fxc, .prm and
 # .ANM + 0x60000 each, the whole .WAV beside the archive. No limit is known; the yardstick is what has loaded live many
-# times in one process: Retomoto on the tab, 16.9 + 74.2 + 20.6 + 25.9 MB = 171 MB with the scratch block
+# times in one process: the Retomoto build of 2026-10-10 (the owner's session of seven level loads in one process),
+# 16.9 + 74.2 + 20.6 + 25.9 MB = 171 MB with the scratch block. (The tab's Retomoto of today is heavier - 180.3 MB by
+# <work>/build/c_bank/blocks.txt - and plays; 171 is the figure a counted run stands behind, the safe side)
 BLOCKS_LIVE = 171.0
 # the chunk table: 69,632 entries is the tools' line (kl_impact.CHUNK_SAFE). The wardrobe and the gun looks come into
-# DEAD indices; the wardrobe took 15,509 on the study's build of this level with its 22 squads (re/campaign_fa_bank.md 8.2)
-WARDROBE_CHUNKS = 15509
+# DEAD indices. MEASURED on this level by the finishing chain: 'kl_chars.py wardrobe --plates=wolf,dallas,chains,hoxton'
+# took 20,989 of the bare map's 23,690 (re/bank_campaign.md F.4; the study's 15,509 was a wardrobe without the four plates)
+WARDROBE_CHUNKS = 20989
 ACTORS_LIVE = (99, 55)                  # ZFFActor and squads of the largest build that runs live: Retomoto on the tab
                                         # (re/campaign_fa_tooling.md 5.4; stock Fragile Alliance: 35..57 and 20..36)
 POLICE_CLEAR = 100.0                    # a returning policeman's point or body this far from a squad's man. GUESS
-# the walk test of the loot's pick-up: (box x0, x1, z0, z1; a place the route test reaches) for the vault and the banking hall
+# the walk test of the loot's pick-up: (box x0, x1, z0, z1; a place the route test reaches) for the vault and the banking hall.
+# GUESS: the two boxes (each room with a margin); the two places are stations of ROUTE_VAULT / ROUTE_OUT
 LOOT_WALKS = (((-100.0, 1200.0, -13600.0, -12600.0), (399.0, -960.0, -12818.0)), ((-1300.0, 1900.0, -9500.0, -5700.0), (377.0, 801.0, -8423.0)))
 
 
@@ -1281,6 +1377,20 @@ def read_built(folder):
     wav = [f for f in os.listdir(folder) if f.lower().endswith('_main.wav')]
     size['.wav'] = os.path.getsize(os.path.join(folder, wav[0])) if wav else 0
     return sc, scene, list(scene.entities()), kl_maps.world(scene), hvk, snd, loc, size
+
+
+def lost_clips(folder, res):
+    """(the clip names result.json lists as missing from the stream file, those of them WITHOUT a record in the built
+    .WHD beside the archive, every name that has a record - lower case). Only the second are silent: a name with a
+    record streams from the installed file. Names with '/'; ([], [], set()) when the folder has no list or no .WHD."""
+    import kl_whd, kl_snd
+    whd = [f for f in os.listdir(folder) if f.lower().endswith('_main.whd')]
+    listed = [n.replace('\\', '/') for n in res.get('stream_clips_missing') or ()]
+    if not listed or not whd:
+        return [], [], set()
+    b = open(os.path.join(folder, whd[0]), 'rb').read()
+    have = {kl_snd.cs(b, f['name']).decode('latin1').replace('\\', '/').lower() for f in kl_whd.records('dd', b).values()}
+    return listed, [n for n in listed if n.lower() not in have], have
 
 
 def inventory(folder, log=print):
@@ -1371,6 +1481,14 @@ def check(folder, log=print, problems=None):
         log('  verify: %s %s%s' % ('known' if why else 'OPEN ', p[:200], '\n          = %s' % why if why else ''))
         if not why:
             fail('kl_graft.verify: ' + p[:200])
+    # ... and what of the sound is really lost: result.json's 'stream_clips_missing' is a list by NAME (kl_maps.one's
+    # reconstruction: a name is listed when any record of that name is a language-file one), the built .WHD says more
+    listed, lost, have = lost_clips(folder, res)
+    if listed:
+        log('  sound: of the %d clip names result.json lists, %d have a streamed record in the built .WHD (they play from the installed stream file); '
+            '%d have NO record = what a larger PC_Def.str would bring:%s' % (len(listed), len(listed) - len(lost), len(lost), ''.join('\n          ' + n for n in lost)))
+        if any(n.lower() in have for n in MUSIC_CLIPS):
+            fail('sound: MUSIC_CLIPS names %d clips that have a record in the built .WHD: the list for the owner is not the level\'s' % sum(n.lower() in have for n in MUSIC_CLIPS))
     # ---- kl_fa.check on the written archive
     import kl_arms
     fa = kl_fa.check(sc, snd, loc, kl_arms.read_anm(arch))
@@ -1530,6 +1648,8 @@ def check(folder, log=print, problems=None):
     box, beat = named('beat box'), named('beat timer')
     if R + ROLE['beat timer'] not in box or R + ROLE['loot on'] not in beat:
         fail('the beat\'s chain is not box -> timer -> loot: %s / %s' % (box, beat))
+    if values(sc, A.node_of(sc, ROLE['beat box']), 'TriggerBox')[BOX_PER_MAN]:      # 1 = again for every criminal that enters (wire())
+        fail('the beat\'s box fires for every criminal that enters (TriggerBox field %d is not 0): the beat would begin again with each' % BOX_PER_MAN)
     rods = []
     for i in range(len(RODS)):
         t, w = 'rod timer %d' % (i + 1), 'rod %d' % (i + 1)
@@ -1563,11 +1683,15 @@ def check(folder, log=print, problems=None):
     lamps = [s for s in A.named(sc, camp['alarm lamps'])] if camp['alarm lamps'] is not None else []
     toggles = [k for k, _i, _v in kl_fa.controllers(sc, 'LightToggle')]
     lights = [k for k in range(1, len(sc.nodes)) if ('\\' + LAMP) in sc.path[k] and sc.cls(k) in ('ZOMNILIGHT', 'ZGateLightSpot')]
-    dark = [k for k in lights if kl_fa.node_values(sc, k)[3] and ents[k - 1].flags & HIDDEN]
-    if len(lamps) != 11 or len(lights) != 22 or (toggles and dark) or (not toggles and len(dark) != 22) or R + CAMP['alarm lamps'] not in beat \
-            or (R + CAMP['lights off'] in beat) != bool(toggles):
-        fail('the alarm: %d lamps named, %d lights, %d LightToggle, %d lights hidden; the white light goes off: %s' % (
-            len(lamps), len(lights), len(toggles), len(dark), R + CAMP['lights off'] in beat))
+    # ... and the spinning spots' slaves in the rooms next door (strip): what a gate light's list names. Hidden with their masters
+    slaves = sorted({j for k in lights if sc.cls(k) == 'ZGateLightSpot'
+                     for s in kl_fa.node_values(sc, k)[J.labels('dd', 'ZGateLightSpot').index(SLAVES)] for j in sc.resolve(s)})
+    is_dark = lambda k: bool(kl_fa.node_values(sc, k)[3] and ents[k - 1].flags & HIDDEN)
+    dark, dark_s = [k for k in lights if is_dark(k)], [k for k in slaves if is_dark(k)]
+    if len(lamps) != 11 or len(lights) != 22 or len(slaves) != 8 or (toggles and (dark or dark_s)) or (not toggles and len(dark + dark_s) != 30) \
+            or R + CAMP['alarm lamps'] not in beat or (R + CAMP['lights off'] in beat) != bool(toggles):
+        fail('the alarm: %d lamps named, %d lights and %d slave spots, %d LightToggle, %d + %d of them hidden; the white light goes off: %s' % (
+            len(lamps), len(lights), len(slaves), len(toggles), len(dark), len(dark_s), R + CAMP['lights off'] in beat))
     music = [s for s in named('music timer')]
     live = lambda names: [p for p in (R + CAMP['music'] + '\\' + n for n in names) if sc.resolve(p) and kl_fa.has(sc, sc.resolve(p)[0], 'PlayMusicLayerFade')]
     four = sum(1 for _k, _i, v in kl_fa.controllers(sc, 'PlayMusicLayerFade') if v[0] == LAYER4)
@@ -1580,7 +1704,8 @@ def check(folder, log=print, problems=None):
     log('  the beat: vault door %s; blast %s; alarm lamps %d, %s; music: break-in set at %.0f s, way-out set at the beat\'s end (silent until the stream file has %d clips)' % (
         'sunk at build time' if vault_open else 'swings at the beat\'s end' + (', its body off %.0f s later' % delay('door timer') if named('door off') else ', stays'),
         'none (the vault stays intact)' if not blast else '%s: Explode reach %s, %d bodies come, %d go' % ('show' if reach == [(1.0, 1.0)] else 'REAL', reach, len(on), len(off)),
-        len(lamps), '%d LightToggle' % len(toggles) if toggles else 'no LightToggle in the level, %d lights hidden' % len(dark), delay('music timer'), len(MUSIC_CLIPS))
+        len(lamps), '%d LightToggle' % len(toggles) if toggles else 'no LightToggle in the level, %d lights and %d slave spots hidden' % (len(dark), len(dark_s)),
+        delay('music timer'), len(MUSIC_CLIPS))
         + '; %d fades of the fourth layer' % four)
     # ---- the enemies
     actors = [k for k in range(1, len(sc.nodes)) if sc.cls(k) == 'ZFFActor']
@@ -1636,6 +1761,23 @@ def check(folder, log=print, problems=None):
                 fail('%s is not named by %s' % (sc.names[t], ROLE[r]))
             if values(sc, t, 'ZSquadScript')[SQUAD_ACTIVE]:
                 fail('%s is in the world from the load (ZSquadScript field %d)' % (sc.names[t], SQUAD_ACTIVE))
+        # ... and nobody who comes LATER is put into the world where the crew may still be: no man of such a squad within
+        # BEAT_CLEAR of a station of the round that lies before the squad's trigger, on that station's floor (a squad
+        # that waits 'spawns in' when its rout is named: the 14 police of the beat stood in the vault lobby - BEAT_MEN)
+        foyer = [n for n, _p in ROUTE_OUT].index('foyer')
+        ahead = {'beat box': ROUTE_IN[:-1], 'beat timer': ROUTE_IN + ROUTE_VAULT, 'speak box': ROUTE_IN + ROUTE_VAULT + ROUTE_OUT[:foyer]}
+        close = []
+        for k in men:
+            r = role_of[STAGE[top_of(k)]] if top_of(k) in STAGE else 'beat timer'
+            p = pos[ents[k - 1]]
+            close += [(math.dist(p, q), sc.path[k][5:][-60:], n, p) for n, q in ahead.get(r, ()) if abs(p[1] - q[1]) < 400.0]
+        close.sort()
+        log('  enemies: of the %d men who come after the round\'s start the nearest to a station that lies before his squad\'s trigger: %s' % (
+            sum(top_of(k) not in STAGE or STAGE[top_of(k)] not in ('start', 'down') for k in men),
+            '%s, %d from \'%s\'' % (close[0][1], close[0][0], close[0][2]) if close else '-'))
+        for d, who, n, p in close:
+            if d < BEAT_CLEAR:
+                fail('%s at (%d, %d, %d) comes into the world %d from the station \'%s\', which the crew passes before his squad is started (%d wanted)' % (who, *p, d, n, BEAT_CLEAR))
         hunts = sum(1 for s in beat if s.endswith('\\' + HUNT))
         rows_ = collections.Counter((values(sc, k, 'ZSoldier')[3], values(sc, k, 'ZSoldier')[4], values(sc, k, 'ZSoldier')[7]) for k in men if top_of(k) in STAGE)
         stock = sum(n for (skill, _a, _h), n in rows_.items() if skill == 'eCustom')
@@ -1736,11 +1878,15 @@ def check(folder, log=print, problems=None):
             if not ok:
                 fail('van: the level bound %s lies on the drive %d .. %d from the stop (after it: at least %d)' % (nm, a, b, BOUND_AFTER))
         # nobody starts in the lane: spawn points, player bodies, the squads' men (at the street's height: the
-        # ante-room lies under the square)
+        # ante-room lies under the square) - and nobody is SENT into it: the escape marker and the stations of the way
+        # out (the van is called from the plaza and its kill box rides at its nose: ESC_AT)
         P2 = ESC.Poly([tuple(p) for p in drive])
+        sent = [('the escape marker', pos[ents[A.node_of(sc, 'FASpecials!POI!POI_TheEscapeArea') - 1]])] + [('station \'%s\'' % n, p) for n, p in ROUTE_OUT]
         near_ = sorted((abs(P2.project(p)[1]) if 0.0 < P2.project(p)[0] < P2.len else min(math.dist(p, drive[0]), math.dist(p, drive[-1])), n, p)
-                       for n, p in list(zip(names, pts))[1:] + [(sc.path[k][5:][-50:], pos[ents[k - 1]]) for k in men] if abs(p[1] - stop[1]) < 400.0)
-        log('  van: of %d spawn points, player bodies and men at the street\'s height the nearest to the drive is %s' % (
+                       for n, p in list(zip(names, pts))[1:] + [(sc.path[k][5:][-50:], pos[ents[k - 1]]) for k in men] + sent if abs(p[1] - stop[1]) < 400.0)
+        mark = next(d for d, n, _p in near_ if n == sent[0][0])
+        log('  van: the escape marker stands %d from the drive, %d from the boarding place at the stop' % (mark, math.dist(sent[0][1][::2], board[::2])))
+        log('  van: of %d spawn points, player bodies, men, the marker and stations of the way out at the street\'s height the nearest to the drive is %s' % (
             len(near_), '%s, %d from it' % (near_[0][1], near_[0][0]) if near_ else '-'))
         for d, n, p in near_:
             if d < LANE_CLEAR:
@@ -1789,19 +1935,23 @@ def check(folder, log=print, problems=None):
     for b in kl_impact.check(arch):
         fail('kl_impact: ' + b[:200])
     blocks = 32.0 + sum(size[e] + 0x60000 for e in ('.prm', '.fxc', '.anm')) / 1e6 + size['.wav'] / 1e6
-    log('  chunk table: %d entries (the tools\' line: %d); .prm %.1f, .fxc %.1f, .ANM %.1f, .WAV %.1f MB; the five load blocks %.0f MB (Retomoto on the tab: %.0f)' % (
+    log('  chunk table: %d entries (the tools\' line: %d); .prm %.1f, .fxc %.1f, .ANM %.1f, .WAV %.1f MB; the five load blocks %.0f MB (the Retomoto build that loaded seven times in one process: %.0f)' % (
         size['entries'], kl_impact.CHUNK_SAFE, size['.prm'] / 1e6, size['.fxc'] / 1e6, size['.anm'] / 1e6, size['.wav'] / 1e6, blocks, BLOCKS_LIVE))
     if blocks > BLOCKS_LIVE:
         fail('the five load blocks are %.0f MB, more than has loaded live (%.0f)' % (blocks, BLOCKS_LIVE))
     import kl_chars as C
     E = L.Edit(folder)                                  # read only: nothing of it is saved
     dead, _saved = C.dead_indices(E.p, E.sc, E.raw, E.oct, E.extra, lambda *a: None)
-    log('  chunk table: %d of its indices are dead (free for the wardrobe, which took %d on the study\'s build, and the gun looks)' % (dead, WARDROBE_CHUNKS))
+    log('  chunk table: %d of its indices are dead (free for the wardrobe, which takes %d with the four plates, and the gun looks)' % (dead, WARDROBE_CHUNKS))
     worn = os.path.isfile(os.path.join(folder, 'KLWardrobe.ini'))      # the finishing chain's folder: the wardrobe is in, the room it wanted is taken
     if worn:
         log('  chunk table: KLWardrobe.ini is there - the wardrobe is in the level, no room is asked for it')
     if size['entries'] > kl_impact.CHUNK_SAFE or (dead < WARDROBE_CHUNKS and not worn):
         fail('chunk table %d entries (line %d) with %d dead indices (the wardrobe wants %d)' % (size['entries'], kl_impact.CHUNK_SAFE, dead, WARDROBE_CHUNKS))
+    # ---- kl_graft.verify's cross-references on the level AS WRITTEN (the build's own verify ran before finish() and
+    # before every step of the finishing chain)
+    for b in reverify(folder, log):
+        fail('written level: ' + b[:200])
     log('kl_fa_bank.check %s: %s' % (folder, 'PASS' if not bad else '%d FAILED' % len(bad)))
     return bad
 
@@ -1825,7 +1975,9 @@ def check(folder, log=print, problems=None):
 # If the assumption is wrong and no human is in the ante-room, the bots walk on to a shut door after the wait and
 # their loot wait runs out: they leave without the vault's money (nothing worse).
 BOT_SQUAD = 'Gameplay!merc_bot_squad!'  # kl_fa_bots.SQUAD (that module is imported only where the squad is made or read)
-BOT_OPT = {'stops': 1, 'cases': 'glass', 'lane': True, 'window': True, 'loot_seconds': 30}    # kl_fa_bots.RECIPE's M03_FA_A row without its drop; one stop: the tellers' stacks are the loot tactic's
+# kl_fa_bots.RECIPE's M03_FA_A row ('cases', 'lane', 'window') without its drop link. GUESS, this file's own: ONE stop (that
+# row has kl_fa_bots.STOP_MAX; the tellers' stacks are left to the loot tactic) and a loot wait of 30 s
+BOT_OPT = {'stops': 1, 'cases': 'glass', 'lane': True, 'window': True, 'loot_seconds': 30}
 GATE_AT = (400.0, -960.0, -11900.0)     # GUESS: the ante-room's middle, 6 m before the vault door (z -12509); the seven places are the mesh's round it
 GATE_REACH = 400.0                      # ... within this of it
 GATE_MORE = 2.0                         # s on top of the beat's and the door's delay, both read from the built level. GUESS
@@ -1917,6 +2069,8 @@ def bots_check(folder, log=print):
     hidden = [o for o in money if B.ents[o['node'] - 1].flags & HIDDEN]
     tops = [t for t in sc.tops() if sc.names[t].startswith(F.SQUAD + 'Squad#')]
     defend = {k: v for k, _i, v in kl_fa.controllers(sc, 'DefendBehaviourRout')}
+    if len(tops) != len(F.BOTS):                        # a folder without the squad must not pass (review round 1)
+        fail('%d squads of AI heisters in the level, %d wanted' % (len(tops), len(F.BOTS)))
     near, n_place, n_gate = None, 0, 0
     for t in tops:
         mine = range(t, sc.end[t])
@@ -1944,6 +2098,265 @@ def bots_check(folder, log=print):
     log('kl_fa_bank.bots_check %s: %d squads, %d with the gate (%s >= %g s); %d places before the gate, the nearest %s from one of the vault\'s %d money '
         'objects (%d hidden at the load; the window is %d): %s' % (folder, len(tops), n_gate, GATE_NAME, need, n_place, '%d' % near if near is not None else '-',
                                                                  len(money), len(hidden), F.LOOT_WINDOW[0], 'PASS' if not bad else '%d FAILED' % len(bad)))
+    return bad
+
+
+# ------------------------------------------------------------------ the delivered level (after the finishing chain)
+# TWO THINGS NO TOOL OF THE CHAIN DOES (review round 1):
+# seal()     THE ROOMS' NEIGHBOUR LISTS. The graft sends a list entry whose entity did not come along to the scene's
+#            free REF id (kl_scene.remap_refs: 'an id no entity has', it resolves to nothing: 229 entries of two rooms
+#            here, the form Late Night Opening loaded and played with). Every tool that ADDS entities afterwards hands
+#            exactly that id to its first new entity: after the bots' step the 229 entries name the squad group
+#            'Gameplay!merc_bot_squad!Squad#02', which kl2 0x83dca0 then counts among 'the objects of the room' (no
+#            crash by live precedent - the tab's maps carry it - but not what was meant). seal() sends every list entry
+#            that names an entity outside the map's own subtrees ('Locations/...') to the free id of the WRITTEN
+#            scene. It must be the chain's LAST step: a tool that adds an entity after it takes the id again.
+# reverify() kl_graft.verify's cross-reference tests, on the written archive. audit and preflight only quote the
+#            BUILD's result.json, and the chain takes some 160 entities out and puts some 530 in afterwards (slot ids
+#            of the .oct / .rmi / .rmc move with each). Lifted from kl_graft.verify with the build-time arguments
+#            taken out (the reviewer's C:/kl_scratch/bank/review_crash_1/s/verify2.py), plus seal()'s rule.
+MAP_SIDE = 'Locations/'                 # top-level names of the map's own subtrees: what a room's list may name
+
+
+def room_cells(sc, buf):
+    """[(room node, offset in the .buf, kind)] of every REF id cell of the rooms' gates and neighbour lists
+    (kl_scene.room_refs); kind 'gate' / 'head' (a list's own room) / 'entry'. Rooms whose two offsets lie outside
+    the .buf are left out (reverify says so)."""
+    out = []
+    for k in range(1, len(sc.nodes)):
+        lab = kl_graft.labels(sc.cls(k))
+        if 'ZROOM[9]' not in lab:
+            continue
+        us = units(sc.nodes[k]['props'][1:-1])
+        ng, nl = kl_graft.u32(us[lab.index('ZROOM[0]')][0]), us[lab.index('ZROOM[1]')][0][1][0]
+        g, l = kl_graft.u32(us[lab.index('ZROOM[9]')][0]), kl_graft.u32(us[lab.index('ZROOM[10]')][0])
+        if (ng and not 16 <= g <= len(buf) - 0x74 * ng) or (nl and not 16 <= l < len(buf)):
+            continue
+        gate, heads = {g + 0x74 * i + 0x30 for i in range(ng)}, {l + 12 * i for i in range(nl)}
+        out += [(k, o, 'gate' if o in gate else 'head' if o in heads else 'entry') for o in kl_scene.room_refs(buf, 'dd', g, ng, l, nl)]
+    return out
+
+
+def strays(sc, scene, buf):
+    """-> ([offsets of list entries that name an entity outside the map's subtrees], Counter of who they name, the
+    number of entries that name no entity at all = the parked ones, the scene's free REF id)."""
+    ents = list(scene.entities())
+    by_ref = {e.ref: k + 1 for k, e in enumerate(ents)}
+    free = scene.ref_slots
+    if free in by_ref:
+        raise ValueError('kl_fa_bank: REF id %d (the header\'s slot count) is taken by %s' % (free, sc.path[by_ref[free]]))
+    offs, who, parked = [], collections.Counter(), 0
+    for _room, o, kind in room_cells(sc, buf):
+        v = struct.unpack_from('<I', buf, o)[0]
+        if kind != 'entry' or v in (0, 0xffffffff):
+            continue
+        if v not in by_ref:
+            parked += 1
+        elif not sc.names[sc.top[by_ref[v]]].startswith(MAP_SIDE):
+            offs.append(o); who[sc.path[by_ref[v]][len(R):]] += 1
+    return offs, who, parked, free
+
+
+def seal(folder, log=print):
+    """In place, on a folder the finishing chain is through with: the room list entries that name an entity outside
+    the map (strays) go to the scene's free REF id. Only the .buf member changes. -> the number of entries moved."""
+    import kl_chars as C
+    lv = C.Lv(folder)
+    sc, raw = lv.scene()
+    buf = lv['.buf']
+    offs, who, parked, free = strays(sc, kl_scene.Scene(raw, buf), buf)
+    if offs:
+        new = bytearray(buf)
+        for o in offs:
+            struct.pack_into('<I', new, o, free)
+        lv['.buf'] = bytes(new)
+        tmp = lv.src + '.tmp'
+        kl_graft.write_zip(tmp, [(n, lv.files[n]) for n in lv.order])
+        os.replace(tmp, lv.src)
+    log('kl_fa_bank.seal %s: %d room list entries named an entity outside the map (%s) and now name the free REF id %d; %d named no entity before' % (
+        folder, len(offs), ', '.join('%d x %s' % (n, p) for p, n in who.most_common(3)) or '-', free, parked))
+    return len(offs)
+
+
+def reverify(folder, log=print):
+    """kl_graft.verify's cross-reference tests on the WRITTEN level of a folder (bare, finished or delivered) ->
+    [problems]. What it follows: .gms / .buf round trip and Scene.check; the property tree against the schemas and
+    its scene paths; model = ZGEOM[4]; the .prm's materials, textures and .oct records; the .oct room trees by slot
+    id under their room; .rmi / .rmc boxes; gates and neighbour lists; KEYS offsets; .HVK / .sgd / surface-table
+    REFs; the .sgp's rooms; FDX; sound references; animation sets; registered classes."""
+    import kl_prmgraph as G, kl_texmat as T, kl_octree as O, kl_members as MB, kl_anm, kl_snd
+    from kl_prp import Prp
+    arch = archive_of(folder)
+    with zipfile.ZipFile(arch) as z:
+        low = {n.rsplit('_Main', 1)[1].lower(): n for n in z.namelist() if '_Main' in n}
+        get = lambda e: z.read(low[e.lower()])
+        out = {e: get(e) for e in ('.gms', '.buf', '.prp', '.prm', '.TEX', '.MAT', '.oct', '.rmi', '.rmc', '.HVK', '.sgd', '.sgp', '.ANM')}
+    Jn, snd, _loc = kl_fa.load(arch)
+    sch, bad = J.schema('dd'), []
+    sc = kl_scene.Scene(kl_gms.unpack(out['.gms']), out['.buf'])
+    bad += sc.check()
+    g2, b2 = sc.write()
+    if kl_gms.pack(g2) != out['.gms'] or b2 != out['.buf']:
+        bad.append('.gms / .buf do not round-trip')
+    ents = list(sc.entities())
+    by_slot, by_ref, head = {v + 2: e for e, v in sc.slots().items()}, {e.ref: e for e in ents}, len(sc.head)
+    # .prp
+    _data, misfits, paths, _names = J.check(Jn, log=lambda *_a: None)
+    bad += ['%s: %s: %s' % (Jn.path[k], what, why) for k, what, why in misfits[:10]]
+    bad += ['scene path does not resolve: %s %s -> %s' % (h, f, s) for _k, h, f, s in paths[:10]]
+    twice = [n for n, c in collections.Counter(Jn.names[k] for k in Jn.tops()).items() if c > 1]
+    if twice:
+        bad.append('%d top-level names are used twice, e.g. %s' % (len(twice), twice[:3]))
+    if len(Jn.nodes) != len(ents) + 1 or Jn.names[1:] != [e.name.decode('latin1') for e in ents] or Jn.tids[1:] != [e.tid for e in ents]:
+        bad.append('.prp nodes and .gms entities differ')
+    # .prm, .TEX, .MAT, .oct records
+    p, prm = Prp(out['.prp']), G.read(out['.prm'], 'dd')
+    proots = G.prp_roots(p, Jn.tids, sch, 'dd')
+    geom = {w[0]: c for w, c, k in proots if w[0] != 'scene' and w[1] is None and k is None}
+    wrong = sum(1 for k, e in enumerate(ents, 1) if e.model != geom.get(k, 0))
+    if wrong:
+        bad.append('%d entities: .gms model differs from ZGEOM[4]' % wrong)
+    try:
+        kinds, args = G.walk(prm, [(c, k) if k else c for _w, c, k in proots] + [e.model for e in ents if e.model])
+    except ValueError as x:
+        kinds, args = {}, {}
+        bad.append('.prm: %s' % x)
+    tex, mat = T.read_tex(out['.TEX']), T.read_mat(out['.MAT'])
+    octj = O.Oct.parse(out['.oct'])
+    if octj.pack() != out['.oct']:
+        bad.append('.oct does not round-trip')
+    recs, seen, miss = set(octj.record_refs()), collections.Counter(), collections.Counter()
+    for i, k in kinds.items():
+        for off, typ, _k in G.fields(prm, i, k, args.get(i, 0)):
+            if typ == 'm' and prm.u16(i, off) not in mat.insts:
+                miss['material'] += 1
+            elif typ in 'tT' and prm.u32(i, off) and prm.u32(i, off) % G.SLOTS['dd'] not in tex.tex:
+                miss['texture'] += 1
+            elif typ == 'o':
+                seen[prm.u32(i, off)] += 1
+                miss['.oct record'] += prm.u32(i, off) not in recs
+    bad += ['.prm names %d missing %ss' % (v, k) for k, v in miss.items() if v]
+    if any(v > 1 for v in seen.values()):
+        bad.append('.oct record named by two live model roots: %d' % sum(1 for v in seen.values() if v > 1))
+    if mat.refs != T.material_refs(out['.prm']):
+        bad.append('.MAT ref table is not the .prm\'s')
+    lost = T.used_textures(mat) - set(tex.tex)
+    if lost:
+        bad.append('%d material textures are not in the .TEX' % len(lost))
+    if any(not (0 < c < len(prm.chunks) and len(prm.chunks[c]) == 64 and prm.u16(c, 2) == 8) for _f, c in octj.tail):
+        bad.append('.oct tail names a chunk that is not a 64-byte mesh')
+    # rooms: the .oct trees by SLOT id, the room index, gates and lists by REF id
+    is_room = kl_graft.is_room
+    _e, ro = kl_graft.rooms_of(sc)
+    if len(ro) != len(octj.rooms):
+        bad.append('.oct has %d tree sets, the scene %d rooms' % (len(octj.rooms), len(ro)))
+    def room_above(e):
+        e = e.parent
+        while e is not None and not is_room(e.tid):
+            e = e.parent
+        return e
+    wr, nitems = collections.Counter(), 0
+    for owner, five in zip(ro, octj.rooms):
+        for ti, t in enumerate(five):
+            for it in (t.items if t else ()):
+                nitems += 1
+                e = by_slot.get(it[0])
+                if e is None:
+                    wr['no entity'] += 1
+                elif room_above(e) is not owner:
+                    wr['other room'] += 1
+                elif (ti == 4) != is_room(e.tid) or (ti < 4 and kl_gms.category(e.tid) != {0: 1, 1: 2, 2: 3, 3: 0}[ti]):
+                    wr['wrong tree'] += 1
+            if t:
+                try:
+                    t.check()
+                except Exception as x:
+                    wr['tree: %s' % x] += 1
+    bad += ['.oct room trees: %d items: %s' % (v, k) for k, v in wr.items()]
+    nbox = 0
+    for ext in ('.rmi', '.rmc'):
+        for b in O.RoomIndex.parse(out[ext]).boxes:
+            nbox += 1
+            if b.room not in by_slot or not is_room(by_slot[b.room].tid):
+                bad.append('%s: box names slot id %d, not a room' % (ext, b.room))
+            if b.second and b.second not in by_slot:
+                bad.append('%s: second id %d is no entity' % (ext, b.second))
+    buf = out['.buf']
+    cells = room_cells(Jn, buf)
+    rooms_in = {k for k, _o, _kind in cells}
+    for k in range(1, len(Jn.nodes)):
+        lab = kl_graft.labels(Jn.cls(k))
+        if 'ZROOM[9]' in lab and k not in rooms_in:
+            us = units(Jn.nodes[k]['props'][1:-1])
+            if kl_graft.u32(us[lab.index('ZROOM[0]')][0]) or us[lab.index('ZROOM[1]')][0][1][0]:
+                bad.append('%s: gates / lists outside the .buf' % Jn.path[k])
+        for l in ('ZParticleEmitter[10]', 'ZParticleEmitter[11]'):
+            if l in lab:
+                v = kl_graft.u32(units(Jn.nodes[k]['props'][1:-1])[lab.index(l)][0])
+                if v not in (0, 0xffffffff) and not 16 <= v < head:
+                    bad.append('%s: %s outside the .buf head' % (Jn.path[k], l))
+    for k, o, kind in cells:
+        v = struct.unpack_from('<I', buf, o)[0]
+        if o >= head:
+            bad.append('%s: a gate / list cell lies outside the .buf head' % Jn.path[k])
+        elif kind != 'entry' and (v not in by_ref or not is_room(by_ref[v].tid)) and not (kind == 'gate' and v in (0, 0xffffffff)):
+            bad.append('%s: %s names REF %d, not a room' % (Jn.path[k], 'a gate' if kind == 'gate' else 'a list', v))
+    stray, who, parked, free = strays(Jn, sc, buf)
+    if stray:                                           # seal()'s rule
+        bad.append('%d room list entries name an entity outside the map (%s): seal() not run after the last tool that adds entities?' % (
+            len(stray), ', '.join('%d x %s' % (n, q) for q, n in who.most_common(3))))
+    # KEYS, .HVK, .sgd, .sgp, the surface table, FDX
+    nk = 0
+    for e in ents:
+        tr = kl_graft.keys_tracks(e.raw)
+        nk += len(tr)
+        if any(not 16 <= v < head for _p, ko in tr for v in ko):
+            bad.append('%r: KEYS offset outside the .buf head' % e)
+    h = kl_hvk.Hvk(out['.HVK'])
+    if h.serialize() != out['.HVK']:
+        bad.append('.HVK does not round-trip')
+    n = sum(1 for s in h.shapes for i in s.inst if kl_hvk.ref(i) not in by_ref)
+    if n:
+        bad.append('.HVK: %d placements name no entity' % n)
+    for name, payload in MB.sgd_read(out['.sgd']):
+        if name in ('HavokShatterOctree', 'ExplodableOctree'):
+            n = sum(1 for leaf in MB.Octree(payload).leaves if leaf[0] not in by_ref)
+            if n:
+                bad.append('.sgd %s: %d leaves name no entity' % (name, n))
+    if sorted(r[0] for r in MB.Sgp(out['.sgp']).rooms) != sorted(Jn.path[k][5:] for k in range(1, len(Jn.nodes)) if is_room(Jn.tids[k])):
+        bad.append('.sgp rooms are not the level\'s rooms')
+    table = MB.SurfaceTable(sc.tail)
+    if table.refs() - set(by_ref):
+        bad.append('surface table names %d entities that are gone' % len(table.refs() - set(by_ref)))
+    n = sum(1 for s in h.shapes for su, _f, _n in s.sub if su > len(table.materials))
+    if n:
+        bad.append('.HVK: %d sub-parts name a surface row past the %d of the table' % (n, len(table.materials)))
+    if sc.fdx is not None:
+        for r in MB.fdx_read(buf, sc.fdx)[1]:
+            if kinds.get(r['model']) != 'root':
+                bad.append('FDX record names chunk %d, not a model' % r['model'])
+    # sound references, animation sets, registered classes
+    objs = kl_snd.Snd('dd', snd).kind
+    n = nsnd = 0
+    for k in range(1, len(Jn.nodes)):
+        for cls, holder, key in kl_graft.objects(Jn, k):
+            for f, u in zip(sch.fields(cls), units(kl_graft.get_obj(holder, key)[1:-1])):
+                if f.type in kl_graft.SOUND_TYPES and f.kind == 'I' and kl_graft.u32(u[0]):
+                    nsnd += 1
+                    n += kl_graft.u32(u[0]) not in objs and kl_graft.u32(u[0]) != kl_snd.LS_SOUND
+    if n:
+        bad.append('%d sound references name no object of the .SND' % n)
+    lack = {s for s in p.keys if s.startswith(kl_anm.PREFIX)} - {c.name for c in kl_anm.Anm(out['.ANM'], 'dd').cols}
+    if lack:
+        bad.append('animation sets the .ANM lacks: %s' % sorted(lack))
+    unreg = {hex(t): c for t, c in collections.Counter(e.tid for e in ents).items() if t not in sch.geoms}
+    if unreg:
+        bad.append('entity classes kl2.exe does not register: %s' % unreg)
+    log('  the written level again (kl_graft.verify\'s cross-references): %d entities, %d reachable chunks of %d, %d room sets with %d tree items, %d room boxes, '
+        '%d gate / list cells (%d list entries parked on the free REF id %d), %d KEYS tracks, %d sound references, %d .HVK placements, misfits %d: problems: %d' % (
+            len(ents), len(kinds), len(prm.chunks), len(octj.rooms), nitems, nbox, len(cells), parked, free, nk, nsnd, sum(len(s.inst) for s in h.shapes), len(misfits), len(bad)))
+    for b in bad[:40]:
+        log('  PROBLEM (written level): ' + b[:300])
     return bad
 
 
@@ -2026,6 +2439,12 @@ def main():
         sys.exit(1 if any(x[0] == 'FAIL' for x in out) or bots_check(a[2]) else 0)
     elif len(a) == 2 and a[0] == 'bots-check':
         sys.exit(1 if bots_check(a[1]) else 0)
+    elif len(a) == 2 and a[0] == 'seal':
+        seal(a[1])
+    elif len(a) == 2 and a[0] == 'reverify':
+        bad = reverify(a[1])
+        print('kl_fa_bank.reverify %s: problems: %d' % (a[1], len(bad)))
+        sys.exit(1 if bad else 0)
     else:
         print(__doc__)
 

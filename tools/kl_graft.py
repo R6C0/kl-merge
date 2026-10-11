@@ -28,8 +28,9 @@ archive in a slot. Milestone A = two stock Dog Days levels (no Dead Men data): p
                                                S's whose name starts alike') instead of kl_arms' table (re/combat.md)
                        ... --author [module]   an authored FA layer. Alone: kl_fa_author.py's (Retomoto Tower; the
                                                two-part level is built by 'kl_maps.py chain ... --author'). With a
-                                               name: that module of tools/ ('--author kl_fa_bank'; the name follows
-                                               the option directly). What such a module holds: build()'s docstring
+                                               name: that module of tools/ (the name follows the option directly;
+                                               kl_fa_bank builds through its own 'kl_fa_bank.py test' only).
+                                               What such a module holds: build()'s docstring
                        ... --load trim,slim    packing / weight options (load_options(); also the environment
                                                variable KL_GRAFT_LOAD, for builds made through kl_maps): trim = S's
                                                dead vertex data emptied always, slim = S's dead map textures down to

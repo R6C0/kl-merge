@@ -660,7 +660,7 @@ node_of, rot9 / look9, named, van_path), none of its tables. No new entity, no n
   five timers of its opening, two of which (`RivalMercVan!Timer`, `TimerVanGo`) are ROLE objects here and must not start
   with the round.
 - `Gameplay!010_FirstFight!tb_LEFT_TheySpotYou` = the BEAT BOX, at the campaign's own `TB_VbByVault` (460, -714, -12152)
-  half (550, 254, 556), ECPS_FA_MERCONLY, field 15 = 1 -> `RivalMercVan!Timer` (TriggerDelay2 `BEAT` = 48 s) ->
+  half (550, 254, 556), ECPS_FA_MERCONLY, field 15 = 1 (0 since Review round 1) -> `RivalMercVan!Timer` (TriggerDelay2 `BEAT` = 48 s) ->
   `Activator_VanSound` (AIDWrapper 'Activate' -> the vault door's group) + `GeomActivator_TearGas_LEFT` (ActivateGeom ->
   the 7 hidden loot objects) + `TimerVanGo` (TriggerDelay2 `DOOR_GONE` = 6 s) -> `GeomDeactivator_DriveInVan`
   (DeactivateGeom -> the door's body `...\SI0102_M03_BankVault_Door_PRE`).
@@ -753,7 +753,8 @@ check() reads what the BUILD did off the level (a leaf is 'sunk' when it stands 
 - ASSUMPTION: a body switched off by a DeactivateGeom at run time stops colliding (the vault door's guarantee; stock F07
   removes its `BlockVisionPlane` so). If not: `--vault-open`.
 - ASSUMPTION: TriggerBox field 15 = 'once' (stock F07's own box -> timer pair has 1, its squad boxes 0): the beat's
-  timer must not be started twice. Not read in kl2.exe.
+  timer must not be started twice. Not read in kl2.exe. **WRONG WAY ROUND - corrected in Review round 1 (R1.1 #4): by the
+  stock census 1 = 'for every criminal that enters', 0 = once; the beat box now has 0.**
 - ASSUMPTION: the vault door's 'Activate' plays in Dog Days (frames 0..200, one way; G1.8). If the swing plays, the door
   vanishes 3.6 s after it stands open - ugly; `--vault-stays` once it has been SEEN.
 - ASSUMPTION carried from the study: a leaf sunk 2,500 under its room does nothing to the room's draw list (G1.6); a
@@ -845,7 +846,7 @@ Three men stood 9 - 32 beside the navigation mesh in the campaign's own places; 
 **The beat as wired** (MEASURED: check()'s 'chain' and 'the beat' lines, `out/check.txt`; `out/inventory.txt` lines 'THE CHAIN'):
 - round start (AIMonitor list 2) -> F07's `Timer_MissionBriefing`, `start timer` (10 s -> 8 routs), `music timer` (1 s ->
   `Special!Audio!PlayMusic_Outside`).
-- the ante-room box (ECPS_FA_MERCONLY, field 15 = 1) -> all at once: `beat timer` (48 s); six `rod timer n` (2, 10, 18,
+- the ante-room box (ECPS_FA_MERCONLY, field 15 = 1; 0 since Review round 1) -> all at once: `beat timer` (48 s); six `rod timer n` (2, 10, 18,
   26, 34, 42 s; `rod_times()` squeezes them under a short `--beat`) -> `rod n` (AIDWrapper 'Activate' ->
   `M03_A_VaultEntrance_01a\Rod_A01 .. F01`, each rod's own one-way `MatPosAnim`) + the campaign's
   `Special!Audio!GeomActivator_PlaysoundVaultRod01..05` / `...FinalRod`; the 7 start routs of stage 'beat'; the music's
@@ -883,6 +884,8 @@ Three men stood 9 - 32 beside the navigation mesh in the campaign's own places; 
   result.json lists 85 clips not in the installed PC_Def.str: these 6, `SFX/Ambiences/M03_A/Inside/
   Ambience_Inside_Vault_Deeper.wav` and 78 guards' / SWAT one-liners (`Dialog/AllLevels/Oneliners/...`, `Dialog/M02 / M03 /
   M08/...Guard*.wav`) - the kept guards' voices. No stream file was built or installed.
+  **CORRECTED in Review round 1 (R1.1 #8, R1.2): only 16 of the 85 names have no record in the built .WHD - these 6, the
+  ambience and 9 guard lines; the other 69 one-liners stream from the installed merged file.**
 
 ### L2.2 The build
 
@@ -905,7 +908,7 @@ problems: 1', exit 1 (`out/one.txt`; then `finish` and `check` on the folder, as
 
 | check | command | result |
 |---|---|---|
-| verify problems = KNOWN | check()'s 'verify:' lines | **1, known**: 'sound: 10 stream clips are not in the merged stream file' (the 85 clips of L2.1; the owner's go-ahead). The 'no ZSquadScript' finding of L1 is gone |
+| verify problems = KNOWN | check()'s 'verify:' lines | **1, known**: 'sound: 10 stream clips are not in the merged stream file' (the 85 clip names of L2.1 - 16 really lost, R1.2; the owner's go-ahead). The 'no ZSquadScript' finding of L1 is gone |
 | kl_fa.check | `python tools/kl_fa.py check <archive>` -> `fa.txt` | **0 CRASH, 0 BROKEN**, exit 0; 1 DEGRADED (no bot squads: a later stage). ZSquadScript 25 |
 | one cover list | `python C:/kl_scratch/bank/t1/s/covers.py <folder>` -> `covers.txt` | '1 FFCoverList' on `ROOT\Special!CoverList`; 20,643 nodes, 768 top-level |
 | route | check(); `python tools/kl_route.py doors <folder> --from START=250,200,-4350 --via vault=399,-960,-12818 --to street=949,702,-11105` -> `route_doors.txt`; `... walk ... --open SI0102_M03_BankVault_Door_PRE_01` -> `route_open.txt` | as built 'NOT free', crossed = the vault door's body alone; 'route without the vault ... FREE, 208 m'; 'with the 1 standing door(s) out: FREE, 226 m'; NEW 'route after the blast (the standing door(s) and the 148 bodies the blast takes away out, the blown vault in): FREE, 226 m'. doors: '1 closure(s) in 1 set(s); 1 necessary'. walk: 'RESULT: FREE; the mesh way: 1059 samples, all free' |
@@ -942,7 +945,7 @@ Variant archives are deleted; only the default build is kept.
 - ASSUMPTION: an ActivateGeom brings the blown vault's collision and a DeactivateGeom takes the intact one's away (L1's
   for the door). The route and the loot are tested in both states AND with both vaults standing at once (kl_route counts
   hidden bodies), so only 'the intact floor goes and the blown one does not come' would hurt; `--no-blast` avoids it.
-- ASSUMPTION: TriggerBox field 15 = 'once' (L1's). The ante-room box now also names seven squads' routs and two fades;
+- ASSUMPTION: TriggerBox field 15 = 'once' (L1's; **wrong way round, see R1.1 #4: 0 is 'once' and is written now**). The ante-room box now also names seven squads' routs and two fades;
   if it fires again, the timers restart or fire twice - door, loot and blast named twice, nothing that breaks.
   The foyer box is F07's speak box as L1 left it (field 15 untouched): a criminal who re-enters it re-names the plaza
   squads' start routs.
@@ -979,8 +982,8 @@ Variant archives are deleted; only the default build is kept.
 - **Free F07 objects left**: six TriggerDelay2 under `Gameplay!010_FirstFight!Shutters!`, three under `Gameplay!RunToEscape!`,
   the trigger boxes and counters listed over `KEEP_MORE`. NO AIDWrapper / ActivateGeom / DeactivateGeom of F07 is free;
   the campaign has single ones that stay when `CAMP` names them.
-- **Music stage**: `--music-layer4`, the 85 clips of L2.1, `kl_str.py` (the owner's go-ahead).
-- **Wardrobe**: 23,690 dead chunk indices are free (it took 15,509 on the study's build); table 65,640 of 69,632.
+- **Music stage**: `--music-layer4`, the 16 clips of R1.2 (not the 85 names of L2.1), `kl_str.py` (the owner's go-ahead).
+- **Wardrobe**: 23,690 dead chunk indices are free (it took 15,509 on the study's build, without the four plates; with them 20,989 - F.4, R1.1 #9); table 65,640 of 69,632.
 
 ### L2.7 Open
 
@@ -1356,3 +1359,151 @@ Beside the folders: `chain.sh`, `checks.sh`, `blocks.py`, `blocks.txt`.
   (SCRIPTS['M03'] has none) would be a talk-script entry in another session's file; not done.
 
 (end of Stage F)
+
+## Review round 1 - the fixes (tools/kl_fa_bank.py, tools/kl_route.py; a docstring line each in kl_maps.py / kl_graft.py)
+
+STATE: DONE (2026-10-11 evening). All thirteen findings were reproduced and fixed, none rejected. The four folders
+in `<work>/build/c_bank/` are REBUILT from the fixed module (same names, same chain + its new last step `seal`) and
+every checker was run again: all pass except the two that only repeat the build's known verify finding, exactly as
+in stage F (`kl_maps.py preflight` 'CRASH 1', `kl_maps.py audit` 'FAIL 2' / no-AI 3). Scratch:
+`C:/kl_scratch/bank/fix_1/` (0.8 MB: `s/` scripts, `out/` every output; no archive is left there).
+NOTHING RAN IN THE GAME (kl2.exe was running: the owner was playing). No file of another session was edited.
+
+### R1.1 The thirteen findings: reproduced or not, what changed
+
+| # | finding (lens) | reproduced | what changed |
+|---|---|---|---|
+| 1 | 8 slave spots of the alarm lamps' gate lights stay shown (crash) | yes: `review_crash_1/s/slaves.py bank_vault` -> 11 + 11 masters hidden, '8 (ZSPOTLIGHT, slave, not hidden)' | `strip()`: the slaves named by each hidden ZGateLightSpot's last field (`SLAVES`) are hidden with their masters (8 expected, else an error); `check()` wants 22 + 8 hidden when no LightToggle is in the level |
+| 2 | 229 room list entries name the bots' squad group (crash) | yes: `refs.py bank_vault_bare bank_vault` -> bare '229 NO ENTITY' (REF 30965), finished '229 x Squad#02 [ZGROUP]' | NEW `seal(folder)` (command `seal`): entries that name an entity outside 'Locations/...' go to the written scene's free REF id; the LAST step of `chain.sh` (the dynamic bot step adds entities too, so `bots()` alone could not hold it); rule in `reverify()` |
+| 3 | no checker re-runs verify's cross-references on the delivered archive (crash) | yes (audit.txt quotes 'at the build') | NEW `reverify(folder)` (command `reverify`; `check()` calls it; `checks.sh` runs it): kl_graft.verify's tests lifted from the reviewer's `verify2.py` |
+| 4 | the beat box has TriggerBox field 15 = 1, which by stock data is 'for every criminal' (round) | yes: `review_round_1/tb.py` -> 101 boxes with 1, none names a squad rout; 125 with 0; `tbRunToEscape` (1) -> TriggerCounter, its twin (0) -> timer; stock F07's own `tb_LEFT_TheySpotYou` has 0 | `wire()`: field 15 (`BOX_PER_MAN`) = 0 on the beat box; `check()` fails on anything else. L1.4 / L2.4's 'field 15 = once' was the wrong way round |
+| 5 | the escape marker stands on the van's stop (round) | yes: `fix_1/s/lane.py` -> marker 0 from the drive's line, boarding place 80, the bots' place 425 | `ESC_AT` = (316, 702, -11070): 425 from the drive, 357 from the boarding place, on the mesh and free floor; marker `ESC_POI` 188 over it; `prepare_host()` holds it against the plan (`LANE_CLEAR`); ROUTE_OUT's last station is that place; `check()`: marker and stations of the way out in the lane rule |
+| 6 | the 14 'beat' police come into the world in the dock and vault lobby (round) | yes: inventory of bank_vault - seven within 4.5 m of the 'vault lobby' station | `BEAT_MEN`: 14 measured places behind the airlock (8 in the corridor to the hall's stairs, 6 on the landing above), `strip()` -> `beat_men()`; `check()`: `BEAT_CLEAR` 1000 from every station before a later squad's trigger |
+| 7 | the escape-area box (takes the loot marker away) holds the banking hall (round) | yes: PLACE had z -11500..-5700 | the three `Trigger_POI_TheEscapeArea*` boxes are the plaza and street only (z -11700..-9400, as the exit box) |
+| 8 | '85 clips need a larger PC_Def.str' is wrong: 16 (regress) | yes: `review_regress_1/s/clips.py` -> '69 streamed, 16 NO RECORD' | `KNOWN`'s reason; NEW `lost_clips()` + a line of `check()` that lists the names without a record in the built .WHD; the notes L2.1 / L2.3 / L2.6 corrected in R1.2 below |
+| 9 | WARDROBE_CHUNKS 15,509, the chain's wardrobe took 20,989 (regress) | yes: `f/out/main/2_ward.txt` | `WARDROBE_CHUNKS = 20989` |
+| 10 | bots-check passes a folder without a squad (regress) | yes: 'bank_vault_bare: 0 squads ... PASS' | `bots_check()` fails unless there are `len(kl_fa_bots.BOTS)` squads |
+| 11 | the docstring example stops by design and leaves kl_escape wrapped (regress) | yes (read: `Doors.arm` stood before the plan test) | `prepare_host()` tests the plan FIRST; kl_maps.py / kl_graft.py docstrings no longer give the command as a way to build the bank |
+| 12 | BLOCKS_LIVE 171 called 'Retomoto on the tab' (regress) | yes (blocks.txt: 180.3) | the comment and the check's line say which build 171 is |
+| 13 | guesses without the word, dead names (regress) | yes | GUESS added (BOT_OPT, VAULT_BOX, LOOT_WALKS, POI_TheLootArea; kl_route: HULL, NEAR, GAP, LINE_FLOOR); STREET, DOCK_DOOR and Doors' 'rows' removed |
+
+No finding was rejected.
+
+### R1.2 What is really lost of the sound (finding 8), for the owner's go-ahead
+
+`check()` now prints it from the built .WHD ('sound: of the 85 clip names result.json lists, 69 have a streamed record
+... 16 have NO record'). The 16 clips a larger PC_Def.str would bring:
+- music (6, `MUSIC_CLIPS`): `Music/InHouse/M03A/BO_Sus_Layer1_Ambient_LOOP.wav`, `..._Layer2_Bass_LOOP.wav`,
+  `..._Layer3_Intense_LOOP.wav`, `..._Layer4_Basic_LOOP.wav`, `M03_Bustout_ActionV34.wav`, `M03_Bustout_IntenseClimax_Loop.wav`
+- ambience (1): `SFX/Ambiences/M03_A/Inside/Ambience_Inside_Vault_Deeper.wav`
+- guard lines (9): `Dialog/M02/Dialogue/Situation/M02_GuardsShout/M02_GuardsShout_020 / 025 / 050 / 060_Guard.wav`,
+  `Dialog/M03/Dialogue/M03a_OneLiners/M03_GuardAlarm/M03_GuardAlarm_010_Guard02.wav`,
+  `Dialog/M03/Dialogue/M03a_OneLiners/M03_Spotted/M03_Spotted_040_Guard.wav`,
+  `Dialog/M03/Dialogue/Situation/M03_Enter/M03_Enter_011_Guard.wav`,
+  `Dialog/M08/Dialogue/Situations/M08_Cantina/M08_Cantina_010 / 030_Guard01.wav`
+The other 69 names (`Dialog/AllLevels/Oneliners/...`) have streamed records that point into the installed merged
+file: the kept guards speak. result.json's longer list is kl_maps.one's reconstruction BY NAME (kl_maps.py, 'the
+names are a reconstruction': a name is listed when any record of that name is a language-file one) - that code is
+outside stage T1's two changes and was left; FOR THE LEAD: it over-reports on every campaign map.
+
+### R1.3 The rebuild and every checker again
+
+Built with the fixed module (the docstring lines added afterwards change no build):
+- `python tools/kl_fa_bank.py test C:/kl_scratch/bank/fix_1/bare --keep --plan <the delivered van.json>` -> 'RESULT: PASS',
+  20,643 entities, 'verify: problems: 1' (known); `out/test_bare.txt`. New lines of the build: 'the escape marker stands
+  425 from the van's drive, 362 from the boarding place at the stop', 'the 14 police of the beat (7 squads) re-placed
+  behind the airlock, off the way in: from x -901..716, z -7489..-6010 to x 1415..1585, z -6700..-5380', 'the alarm
+  lamps: 22 lights and 8 slave spots of theirs in the rooms next door; the LightToggle taken off and all of them hidden'.
+- `... test C:/kl_scratch/bank/fix_1/noai_bare --keep --no-ai --plan ...` -> 'RESULT: PASS', 20,246 entities, 'verify:
+  problems: 2' both known; `out/test_noai_bare.txt`.
+- `sh <work>/build/c_bank/chain.sh <bare folder> <work dir> <log dir>` on each (3.9 min): the steps of F.2 with the
+  same result lines, then NEW `8_seal`: 'kl_fa_bank.seal ...: 229 room list entries named an entity outside the map (229 x
+  Gameplay!merc_bot_squad!Squad#02) and now name the free REF id 31540; 0 named no entity before' (no-AI: id 31192).
+  `out/main/`, `out/noai/`.
+- `sh <work>/build/c_bank/checks.sh <folder> <out dir>` on the three finished folders (`out/chk_main_fin/`,
+  `chk_main_fin_wav/`, `chk_noai_fin/`; copies in each folder's `checks/`, summary = `checks.txt`):
+
+| checker | bank_vault | bank_vault_wavslim | bank_vault_noai |
+|---|---|---|---|
+| `kl_maps.py preflight` | 'CRASH 1, RISK 0, NOTE 77' (the known verify finding) | the same | 'CRASH 1, RISK 0, NOTE 77' ('reported 2 problems') |
+| `kl_maps.py audit` | 'FAIL (2 findings that must be 0 ...)' = the stream clips + preflight's echo | the same | 'FAIL (3 ...)' = + 'no ZSquadScript: no police' |
+| `kl_fa.py check` | exit 0, no finding, ZSquadScript 32 | the same | exit 0, ZSquadScript 7 |
+| `kl_impact.py` | 'problems: 0' | 'problems: 0' | 'problems: 0' |
+| `kl_arms.py check` | '0 findings' | '0 findings' | '0 findings' |
+| `kl_chars.py check` | '21219 nodes, 84 people ... problems: 0' | the same | '20822 nodes, 23 people ... problems: 0' |
+| `kl_map_guns.py check` | '6 guns with looks ... problems: 0' | the same | the same |
+| `kl_map_escape.py van-check` / `check` | '0 fault(s)' / '0 fault(s)' | the same | the same |
+| `kl_fa_bots_dyn.py check` | 'PASS (0 FAIL, 0 NOTE)' (after the seal) | the same | the same |
+| `kl_fa_bank.py bots-check` | '7 squads, 7 with the gate ... 76 places before the gate, the nearest 906 ...: PASS' | the same | the same |
+| `kl_fa_talk.py check` | 'findings: FAIL 0, NOTE 1' | the same | the same |
+| `kl_fa_bots_dyn.py fake-test` | 'PASS (grid control 1, parked control 1, lattice 3)' | the same | the same |
+| cover lists | 1, `ROOT\Special!CoverList` | 1 | 1 |
+| `kl_route.py walk` (vault door opened) / without the vault | 'FREE; the mesh way: 1064 samples, all free' / '1008 samples, all free' | the same | the same |
+| `kl_route.py doors` (to the new last station (316, 702, -11070)) | '1 closures in 1 sets, 1 necessary' | the same | the same |
+| NEW `kl_fa_bank.py reverify` | 'problems: 0' (21,218 entities, 694 gate / list cells, 229 parked on REF 31540) | 'problems: 0' | 'problems: 0' |
+| `kl_fa_bank.py check` (now with the lines of findings 1, 4, 5, 6, 8 and reverify) | 'PASS' | 'PASS' | 'PASS' |
+
+- `bank_vault_bare`: `kl_fa_bank.py check` 'PASS' (`bank_check.txt` in the folder), `kl_maps.py preflight` 'CRASH 1,
+  RISK 0, NOTE 78'; reverify inside check: 'problems: 0', 229 entries parked on the free REF id 30965 (the graft's form).
+- Read back with the reviewers' own scripts on the rebuilt bank_vault: `slaves.py` -> '8 (ZSPOTLIGHT, slave, flag 0x400
+  (hidden), ZGEOM[3] 1)'; `refs.py` -> 'list entry NO ENTITY 229', no 'ZGROUP' line (bank_vault and bank_vault_noai);
+  `pairs.py ... TriggerBox:ZBoxPrimitive` -> the beat box's field 15 is 0; `armed.py` -> 'kl_escape.repair /
+  place_entities / cut_collision are the real ones again: [True, True, True]'; inventory: the escape marker at
+  (316, 890, -11070), the three escape-area boxes at (300, 1075, -10550) half (1500, 425, 1150), the beat's men at the
+  places of `BEAT_MEN`.
+- check()'s new lines on the bare map: 'of the 42 men who come after the round's start the nearest to a station that
+  lies before his squad's trigger: ...Vault_Reinforcement_Police_03\Police_02\Ground, 1165 from 'dock door''; 'the
+  escape marker stands 425 from the drive, 358 from the boarding place at the stop'; '61 of the 61 men on the mesh part
+  of the START and on free floor within 30'; 'alarm lamps 11, no LightToggle in the level, 22 lights and 8 slave spots hidden'.
+- Sizes (`<work>/build/c_bank/blocks.txt`, unchanged to the first decimal): bank_vault five blocks 159.9 MB, chunk table
+  65,852; wavslim 149.8; noai 150.1 / 65,083; bare 149.1 / 65,640. c_bank is 0.93 GB.
+- Delivered archives (sha1, first 12): bank_vault = bank_vault_wavslim `ac97b4f13ca2` (only F01_Main.WAV / .WHD differ,
+  as before), bank_vault_noai `ecf445f1ceac`, bank_vault_bare `b7e48d31634c`.
+
+### R1.4 GUESS / ASSUMED that the fixes bring (each marked in the file)
+
+- GUESS: the 14 places of `BEAT_MEN` (measured: on the START's mesh part, on free collision floor, 100 - 125 apart, the
+  nearest 1165 from a station of the way in) and `BEAT_CLEAR` 1000. ASSUMPTION: the squads' defend routs walk their men
+  from there through the airlock and the lobby and down (one mesh part; the airlock's four leaves are open at build
+  time). With `--doors-animate` the airlock leaves stand until the round start's 'Activate' - then the police depend on
+  that animation too.
+- NOT TESTED: sight. The corridor is round the corner from the airlock's doorway (the room behind the airlock is x
+  1285..1625, z -7125..-6867; the nearest man stands at z -6700), but no sight line was computed.
+- The 13 guards of stage 'start' still come into the world in the dock, 10 - 15 m behind the open roller door, about
+  1.4 s after GO (the reviewer's 'same mechanism, smaller'): left - it is the round's opening fight, as Retomoto's.
+- ASSUMPTION still: TriggerBox field 15's meaning is read off the stock census (226 boxes), not in kl2.exe.
+- GUESS: `ESC_AT` (the marker's place; measured 425 from the drive, on the mesh). The BOARDING place stays 80 from the
+  drive's line by nature (the box rides on the van): a player who waits where the rear doors WILL be is in the kill box's
+  sweep. The marker no longer sends him there; nothing else was done about it.
+- ASSUMPTION: a slave spot hidden in the file (ZGEOM[3] = 1, flag 0x400) does not shine - the same assumption as for the
+  22 masters. With `--alarm-lights` nothing is hidden and the engine's own calls carry the state to the slaves.
+- seal(): the form 'a room list entry names REF id = the header's slot count, which no entity has' is the graft's own
+  and has LOADED AND PLAYED (Late Night Opening, `<work>/build/z_maps/M02`: 80 such entries; 2026-10-10). The other form
+  (entries name the bots' squad group) is what the tab's maps carry and play with. Neither was read in kl2.exe.
+- reverify() is a COPY of kl_graft.verify's tests: when that function gains a test this one does not follow by itself.
+
+### R1.5 For the next stage / the lead
+
+- Build, chain and checks as before; the chain has one more step: `python tools/kl_fa_bank.py seal <folder>` LAST (after
+  `kl_fa_bots_dyn.py build`). Any tool that adds entities after it needs the seal again; `kl_fa_bank.py reverify <folder>`
+  (or `check`) says so ('... room list entries name an entity outside the map').
+- `kl_fa_bank.py check` now also re-runs the cross-references on the written level: a finished folder that was not
+  sealed FAILS check.
+- FOR kl_fa_bots' OWNER (told here, no file of theirs touched): the tab's maps carry the same 'list entries -> Squad#02'
+  form (w_tabX DM03 224 entries, DM02 80, DM06 2 by the reviewer's count); `kl_fa_bank.seal` works on any built folder.
+- The first live order is unchanged: bank_vault_noai -> bank_vault -> bank_vault_wavslim.
+- New things to look at in a live round: the 14 police arriving on foot from the airlock after the first criminal
+  reaches the ante-room; the escape marker on the street 4 m beside the van's lane; no red lamp lit before the alarm.
+
+### R1.6 Open
+
+- Nothing ran in the game.
+- preflight / audit stay 'not green' for the known verify finding (F.8's first item): unchanged, the lead's call.
+- kl_maps.one's by-name clip list (R1.2) and kl_graft.verify's missing 'ZERO cover lists' line (T1's open item) are
+  in shared files outside this workflow's two changes: not touched.
+- Whether a human in the vault lobby SEES the police come into the world in the corridor behind the airlock (R1.4).
+- The boarding place inside the arriving van's sweep (R1.4): only moving the stop's heading or the boarding box would
+  change it; the van stands when 'Get in' shows.
+- 'Out of sight' for the waiting van, the retreat routs, the menu entry, the stream file: as in F.8.
+
+(end of Review round 1)

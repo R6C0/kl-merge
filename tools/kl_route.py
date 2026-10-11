@@ -113,19 +113,21 @@ FLOORISH = 0.7                  # |normal y| above this is a floor (Walk; 45.6 d
 UP, DOWN = 45.0, 60.0           # a step (Walk). ASSUMPTION: see the docstring
 LO, HI = 55.0, 165.0            # the body column over the floor (Walk)
 WIDE = 1                        # ... and its width: the cell and WIDE cells round it = half width 30 (the Havana walk's radius)
-HULL = 5.0                      # a convex shape is tested on upright lines this far apart
+HULL = 5.0                      # a convex shape is tested on upright lines this far apart. GUESS (a quarter of a cell)
 BLOCK = 16                      # cells along a block that is rasterized in one go
-NEAR, NEAR_Y = 86.0, 100.0      # a place counts as reached from a free floor within 86 in the plan and 100 in height: the bank walk's
+NEAR, NEAR_Y = 86.0, 100.0      # GUESS (argued, not measured: with 70 the bank's trolley place fails by 2 units). A place counts as
+                                # reached from a free floor within 86 in the plan and 100 in height: the bank walk's
                                 # rule (a floor within two cells: a square, 56 at its corners) was for a walker WITHOUT width; this
                                 # one's half width (30) is added, because it cannot bring its middle that much nearer to a thing
-GAP = 200.0                     # how far round a place that stands IN something its floor is looked for (the Havana walk: 2 m)
+GAP = 200.0                     # GUESS: how far round a place that stands IN something its floor is looked for (the Havana walk: 2 m)
 ISLAND, ISLAND_N = 300.0, 400   # GUESS: a free floor is ground when the walker gets this far from it and to this many floors
                                 # (a table top, a bank counter's 8 m and a shut room of 4 x 4 m do not)
 CROSS = 1e7                     # price of a cell an object stands in, per object: far above any length in units
 ROUNDS = 24                     # blockers(): at most this many times 'take out what was crossed and ask again'
 MESH_DY = 130.0                 # a place is on a polygon within this height of it (kl_fa_bots.DY)
 PORTAL = 100.0                  # the mesh way does not use a shared edge narrower than this (park second agent: a person is about 60 wide)
-LINE, LINE_FLOOR = 25.0, 90.0   # ... is sampled this often, and wants a collision floor within this of the mesh height
+LINE, LINE_FLOOR = 25.0, 90.0   # ... is sampled this often, and wants a collision floor within this of the mesh height. GUESS: the
+                                # 90 (the park agent's 25 gives the park's 1,271 samples)
 PB_DY = 100.0                   # GUESS: a path blocker's box counts this far above and below itself
 STATIC, RIGID, VEHICLE, KEYFRAMED = kl_hvk.STATIC, kl_hvk.RIGID, kl_hvk.VEHICLE, kl_hvk.KEYFRAMED
 TYPE = {1: 'STATIC', 2: 'RIGID', 3: 'VEHICLE', 4: 'KEYFRAMED', 5: 'WEAPON'}
