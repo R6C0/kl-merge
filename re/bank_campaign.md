@@ -439,3 +439,190 @@ to see the level as it is at load, and both when a beat swaps geometry.
   (when those two cannot read a .prp the walk still runs and says that the path blockers were not read).
 
 (end of Stage T3)
+
+## Stage T2 - the escape van from WAY POINTS (tools/kl_map_escape.py: a second front end)
+
+State 2026-10-11: DONE, all three checks PASS. Offline; nothing installed, the game not started (the owner was
+playing). Scratch: C:/kl_scratch/bank/t2/ (2 MB: scripts `s/`, outputs `out/`, the three manifests, the build logs;
+every archive deleted, the bare graft too).
+
+### T2.0 Baseline, made BEFORE any edit
+
+`python tools/kl_map_escape.py van <work>/build/t_maps2 C:/kl_scratch/bank/t2/before M03` (tree at dca38bf + the
+other sessions' uncommitted files) -> `RESULT M03: van built; kl_map_tune PASS; van check: 0 fault(s)`;
+`before.manifest.json` = 2 archives, 62 members (the graft step and the tuned map), `before/M03/*` = its 32 text
+files. sha1 of tools/*.py and re/*.json before and after the stage: only kl_map_escape.py (mine) and
+kl_fa_bots_rt.py (another session's, not used by this build) differ.
+
+### T2.1 What was changed (one file)
+
+tools/kl_map_escape.py, +219 / -20 lines. The old `van_plan` is CUT IN TWO at the line after its two routes are
+read; nothing of what follows was rewritten, only guarded for 'no car':
+- `van_plan(src, log)`: as before reads the ONE Dead Men escape car and its two spline routes, then calls
+- `_van_road(src, L, G, P, pin, pout, log, v=None, back=BOARD_BACK, heading=None, cam=None, clear=())`: the old
+  body from the curve on (road height, LIMIT_IN / LIMIT_OUT / MIN_IN / MIN_OUT, the lane, the cuts, wait / stop /
+  end / heading / board, bounds, other cars, camera, drop list, the log). Guards: `v` None -> no own REFs, no gate,
+  no 'things the car switched' loop, `car` None, `drop` empty, no boarding action looked for, the first log line
+  says 'the road as way points'. `back` = how far beyond the last way-in point the van's origin stands (337 = the
+  old rule, 0 = the point IS the origin). `clear` REFs are left out of the lane AND of the road height.
+- NEW `van_plan_points(src, arrive, stop, leave, heading=None, at='origin', cam=None, clear=(), log=print)`: THE
+  SECOND FRONT END. Docstring = the spec. `at='box'` gives the stop the meaning a Dead Men car's stop has (rear
+  box there). `heading` given is MADE by two guide points STRAIGHT = 300 either side of the stop and a plan more
+  than REL_MAX (6 degrees) off is a fault. A build that still has ONE escape car is planned as `van_plan` plans it
+  (drop list, gate, switches) with only the road from the points: that is what makes check (a) an identity.
+- NEW `van_road(src)`: a car map's own road in that form (`arrive`, `stop`, `at='box'`, `leave`).
+- NEW `cam_spot(L, G, stop, heading, must, wish)` + `_van_cam(L, G, P, cam)`: a campaign level has no escape camera.
+  `cam` given = that eye; None = the designers' when the build has one (old rule), else cam_spot's: a ring CAM_FAR
+  = 18 / 22 m round the stop, CAM_OVER = 330 / 430 / 530 over the road, a floor under the eye, clear sight to the
+  stop and to the drive CAM_SEES = 850 and 2500 after it; chosen: sees the end if any does, then most nearly behind
+  the standing van. Faults: eye outside / under the map, within EYE_MIN of a floor, or NOT SEEING THE STOP.
+- NEW `van_layer(P, log)`: a context manager for a build whose layer is an authoring module (T2.5).
+- `van_build(..., road=None)`: with `road` the plan is made from points (the test); `other_cars(L, v, ...)` takes
+  `v` None; `main()`: `van-plan <build> --points <road.json> [--json]`, `van-plan <build> --road`,
+  `van <builds> <out> M03 --points <road.json>`. Without `--points` the argument list is parsed as before.
+Not touched: `curve`, `lane`, `Poly`, `van_prepare`, `van_wire`, `van_hvk`, `van_check`, `gate_*`, `repair`, `check`.
+
+### T2.2 Check (a): M03_FA_A's own two spline routes, given back as points, give the same van - PASS
+
+- THE PLAN. `python C:/kl_scratch/bank/t2/s/check_a.py <work>/build/t_maps2/M03 out/road_M03.json` (van_plan against
+  van_plan_points(**van_road(src)), every key of the two plans compared as JSON):
+  `keys of the plan: 23 (spline front end), 24 (points front end); only in one: ['points']; in both and different:
+  none`, `path 701 points, SAME, every coordinate`, `RESULT: SAME PLAN`. Numbers: lin 6000.0, lout 7999.9, waits
+  (-2555.4, 152.0, 558.5), stops (3305.6, 2.0, 3.8), ends (10289.6, 2.0, -1102.8), headings 129.1 / 95.3 / 171.7,
+  rear box (2970.0, 0.0, 34.8), camera (1576.7, 328.8, 407.6) from EscCameraSetup!CamPos01 = re/map_escape.md 10.4's
+  bank row. The same on M01 (25 / 26 keys: gate and second camera too) and M02: `RESULT: SAME PLAN` twice
+  (`out/check_a_M01.txt`, `_M02.txt`, `_M03.txt`).
+- THE BUILD. `python tools/kl_map_escape.py van <work>/build/t_maps2 C:/kl_scratch/bank/t2/points M03 --points
+  C:/kl_scratch/bank/t2/out/road_M03.json` -> `RESULT M03: van built; kl_map_tune PASS; van check: 0 fault(s)`.
+  `python s/compare.py before.manifest.json points.manifest.json before points`:
+  `M03/F01_Main.zip: 31 / 31 members, 0 differ; archive bytes 200762666 / 200762666`,
+  `_graft/M03/F01_Main.zip: 31 / 31 members, 0 differ; archive bytes 196717360 / 196717360`,
+  `M03/van.json: equal once the plan's "points" key (8 + 1 + 8 points) is taken out`,
+  `RESULT: archive members that differ: 0; files beside M03's archive: 32 equal (but for the folder name), 0
+  different, 0 only in one`. So the van laid from points IS the map's existing van, byte for byte.
+
+### T2.3 Check (b): the old front end is unchanged - PASS
+
+`python tools/kl_map_escape.py van <work>/build/t_maps2 C:/kl_scratch/bank/t2/after M03` on the file as committed
+(its sha1 checked again after the run) -> `RESULT M03: van built; kl_map_tune PASS; van check: 0 fault(s)`;
+`python s/compare.py before.manifest.json after.manifest.json before after`: both archives `31 / 31 members, 0
+differ`, same archive bytes; `RESULT: archive members that differ: 0; files beside M03's archive: 32 equal (but for
+the folder name), 0 different, 0 only in one` (van.json and van.txt among them: the plan's key order and every log
+line are the old ones). `python tools/kl_map_escape.py van-plan <bare bank graft>` (old front end, no car) prints
+nothing, as before (the '0 escape cars' fault is returned in the plan; that path is the old code, line for line).
+
+### T2.4 Check (c): the bank's through lane against M03_A's collision - PASS, with ONE change to the study's road
+
+Bare graft: `python tools/kl_maps.py one C:/kl_scratch/bank/t2/m03 F07 M03_A --campaign --keep` (310 MB, 11
+problems as T1 says; deleted after the checks). Ground: 103,131 triangles of map collision, 525 convex bodies.
+- THE STUDY'S LANE AS WRITTEN FAILS ONE LIMIT, on the leave leg: `FAULT only 2426 of clear lane after the stop
+  (least 3000)`. Not collision: the designers' away road ENDS at (3958, 713, -11173), 30.1 m after the stop, the lane
+  is tested VAN_NOSE = 600 beyond the drive's end, and MIN_OUT is 3000. Everything else of it passes (lane clear,
+  drive in 48 m).
+- THE CURE: the away road carried on east along its own line to (8600, 705, -11173). MEASURED (`s/east.py`,
+  `s/probe.py`): the square's ground plane (S00701_M03_Square_PlaneA_03 / _15, y 700.0) runs unbroken along z -11173
+  from x -2900 to 8600; the square is furnished out to x 8000 (benches, walls, palms; 12 - 15 map entities per
+  1000 of x), 'UNIQUE_StreetFAR' stands at 9000 - 10000. What is DRAWN in the lane out there was not looked at.
+- THE PASSING PLAN = `C:/kl_scratch/bank/t2/out/road_bank.json`:
+  ```
+  arrive  (-3248, 710, -11859) (-1917, 712, -12126) (-231, 707, -12332)        the designers' in-road, first three points
+  stop    (949, 704, -11105)   at = origin, heading not forced
+  leave   (2473, 705, -11177) (3958, 713, -11173) (8600, 705, -11173)          their away road + the extension
+  ```
+  `python tools/kl_map_escape.py van-plan "<bare graft>" --points out/road_bank.json` -> exit 0, 0 faults:
+  `waits (-3248, 702, -11859) heading 102 -> 48 m in 7.2 s -> stops (949, 702, -11105) heading 67 (rear box at (638,
+  700, -11235)) -> 71 m in 8.48 s -> ends (8000, 702, -11172) heading 90`; `road under the drive y 700.0 .. 700.0`;
+  lane first pass: nothing (no cut); exact: lin 4805.3, lout 7068.2, wait [-3248.0, 702.0, -11859.0], stop [949.1,
+  702.0, -11105.0], end [8000.0, 702.0, -11172.9], headings 101.6 / 67.3 / 90.0, board [638.3, 700.0, -11235.3],
+  camera [-711.5, 1030.0, -11799.6] (cam_spot, GUESS: 18 m behind the stop, 330 over the square; `54 of the 144
+  places tried see the stop and the drive 850 and 2500 after it; this one does not see the end` - ColiObj_Camera_01
+  and SO0502_M03_Coner_01_01 are between, as on two of the three car maps).
+  The four limits: 4805 of at most 6000 in (least 2000), 7068 of at most 8000 away (least 3000).
+- MARGIN (`s/bank.py through`): the lane is also clear 260 and 320 wide (the test is 220); at 400 wide the planter
+  S00701_M03_Square_DirtB_04 comes in 27 m before the stop, at 520 four benches on the drive away. The study's own
+  script found 7 ray places on that planter: it walked straight legs, the tool walks the curve through the points.
+- LEVEL BOUNDS the drive passes: Special!Levelbound!LevelBound_Outside_Right!Bound 46.3 .. 41.5 m BEFORE the stop
+  (empty van), ...LevelBound_Outside_Left!Bound 25.8 .. 30.6 m AFTER it (players aboard). The same case as the
+  Fragile Alliance bank's van (its Back_West bound 15.8 .. 17.6 m after the stop), where bots boarded and escaped
+  live (CLAUDE.md, run H0_DM03). Not seen for a human passenger.
+- ON F07'S KEYS (`s/prepare_dry.py`, van_prepare on stock F07 in memory): `563 position and 550 rotation keys
+  rewritten in place (391 of them the drive, stop at key 159); drive in 5063 -> 4805 (x 0.95), away 7019 -> 7068 (x
+  1.01)`, speed away 8.3 m/s mean, 14.8 top (stock 14.7): nearly F07's own drive, unscaled.
+- END TO END (`s/trial.py`: F07 + M03_A --campaign with a throw-away module = KEEP VAN_KEEP, prepare_host ->
+  van_prepare, the build inside van_layer; no layer, so no exit trigger to wire): the build `ok True, problems 10`
+  (the layer findings), `.HVK: 9 static placements of the van's subtree cut, 5 key-framed placements of the van put
+  at its waiting place`, then van_check on the WRITTEN folder with the plan: `keys 0.0 off the road height at most,
+  largest step 59, nose up to 1.1 degrees off the tangent ... lane (5 rays, every 20, 350 before and 600 beyond):
+  clear`, `boarding box at the stop: (636, 702, -11230); key-framed placements 5, at most 1.1 from their entities;
+  camera: {'eye': [-712, 1030, -11800], 'over': 330, 'far': 1814, 'sight': []}`, `.HVK 3268992 bytes`, `0 fault(s)`.
+  One note it prints: `no define FAEscCameraLAST in the level` (the layer's to bring: T2.5).
+- THE CREW CAN GET THERE: `python tools/kl_route.py stations <bare graft> ... "rear box=638,700,-11235" "van
+  stop=949,702,-11105"`: both `on the mesh, part 0 (566 polygons)` = the START's part; `kl_route.py walk --from
+  "front entrance=300,800,-9350" --to "rear box=638,700,-11235"`: `FREE, 18 m of cells, floor y 700..800`, mesh way
+  20 m, narrowest shared edge 310.
+- OTHER STOPS TRIED (`s/paths.py`, `out/paths.txt`): heading 90 asked -> 93.7 made, rear box (613, 700, -11083), 0
+  faults; heading 44 -> 39.9, 0 faults; heading 0 -> fault (-8 made, the bend refuses it); `at='box'` with the box at
+  (638, 700, -11235) -> 0 faults; the first agent's stop (250, 707, -10700): `FAULT only 414 of clear lane before
+  the stop (least 2000)` - confirmed dead. A way in laid THROUGH the planter and a bench: fault (1075 of lane);
+  with both named in `clear`: 0 faults.
+
+### T2.5 For the layer stage: the calls
+
+```
+import kl_map_escape as E
+ROAD = dict(arrive=[(-3248, 710, -11859), (-1917, 712, -12126), (-231, 707, -12332)], stop=(949, 704, -11105),
+            leave=[(2473, 705, -11177), (3958, 713, -11173), (8600, 705, -11173)])       # at='origin', heading None
+P = E.van_plan_points(<a built F07 + M03_A folder>, log=log, **ROAD)      # P['faults'] must be empty
+KEEP          += E.VAN_KEEP             # 'Animation/F07/F07_Escape_Vehicle_01.zip', 'Gameplay!EscapeSetup!RelayDestroyedEsc_01'
+prepare_host:    E.van_prepare(S, P, log)       # F07's keys + the 19 objects beside the drive
+wire:            E.van_wire(Jn, P, log)         # names the van in EVERY OnlineExitLevelTrigger; raises when there is none
+with E.van_layer(P, log): kl_maps.one(out, 'F07', 'M03_A', keep=True, campaign=True, tag=' campaign', author='kl_fa_bank')
+rep = E.van_check(E.Level(<written folder>), log, P)                      # rep['faults'] must be empty
+```
+- The plan needs a BUILT folder for its collision (`Level` reads a build's F01_Main.zip, not a stock Dead Men
+  archive). Either plan once on a bare graft and keep P as JSON beside the module (`van-plan ... --points ROAD.json
+  --json` prints it; it is the map's collision that counts, and the layer does not change the square), or build
+  twice. If the layer puts ANYTHING with collision on the square (kept squads' cars, cover objects), plan again on
+  the layered build: the lane test sees only what stands under a 'Locations/' subtree plus every convex body.
+- `van_layer` raises on leaving when one of van_prepare / van_wire / the collision join did not run.
+- P['board'] (638.3, 700.0, -11235.3) = where the van's own BoardingTrigger stands at the stop: the bots' boarding
+  station, the exit box and the escape marker go round it. In the FILE that box stands at the waiting place (it
+  rides on the van): kl_fa_bots takes its place from the file - re/map_escape.md 12 and 15 say what was done for
+  the three car maps ('--park' is superseded there).
+- The layer brings: at least one OnlineExitLevelTrigger (F07's or a made one) and the box with the define
+  FAEscCameraLAST (van_check prints a note without it; the three car maps have Dead Men's EscCameraSetup!EscCameraLAST).
+- F07's second and third van are not kept by this (VAN_KEEP is the first only). Whatever unused van stays: CLAUDE.md's
+  rule about a FakeTarget outside the rooms' bounds (crash 0x686a66) is the layer's to hold; the kept van's own
+  waiting place (-3248, 702, -11859) is on the square, 46 m from the stop.
+- Command-line twin: `python tools/kl_map_escape.py van-plan <folder> --points C:/kl_scratch/bank/t2/out/road_bank.json`
+  (exit 1 on a fault), `python tools/kl_map_escape.py van-check <folder>`.
+
+### T2.6 GUESS / ASSUMED (each marked in the code)
+
+- GUESS (the lead's to turn): the leave leg's extension to x 8600. The collision floor and the furniture are
+  MEASURED; that the square LOOKS like a road out there, and that nothing only drawn stands in the lane, is not.
+  A shorter drive away should pass too - by arithmetic, not run: the end 3000 after the stop is at about x 3950, and
+  the lane is tested 600 beyond it, so a leave leg that reaches x 4600.
+- GUESS: cam_spot's choice (CAM_FAR, CAM_OVER, CAM_SEES, 'behind the van first'). The eye (-711, 1030, -11800) is
+  over the square west of the stop, looking east along the drive. `cam=(x, y, z)` in ROAD overrides it.
+- ASSUMPTION: STRAIGHT = 300 (what a forced heading means). Not used by the delivered plan (heading None).
+- ASSUMPTION (the old ones, unchanged and now also the bank's): the Catmull-Rom curve, LIMIT_IN / LIMIT_OUT (GUESS
+  in the code), the van not pitched to the road (flat here: y 700.0 all the way), a key-framed body moves with its
+  entity, a passenger of a key-framed van passing a level bound.
+- The stop's heading 67 is what the curve gives at the bend between the straight in (44) and the away road (90):
+  the van stops already turning. Heading 90 (east) passes too and puts the rear box at (613, 700, -11083), nearer
+  the steps; not chosen - the lead's / the owner's taste.
+
+### T2.7 Open
+
+- Nothing ran in the game. First live questions for this van: does it show and drive on the square; the bound
+  25.8 .. 30.6 m after the stop with a human aboard; the camera's picture.
+- `kl_fa_bots` / the talk and tune tools that read `van.json` of a `van_build` folder were not run on a
+  points plan; the plan has the same keys plus 'points' ('car' is None, 'drop' and 'exits' empty on a level
+  without a layer).
+- The lane test does not see what is only DRAWN, nor what a layer adds outside 'Locations/' unless it is a convex
+  body. van_check on the layered build is the gate.
+- Another systems level than F07: `_van_nodes` still looks the van up by F07's names (re/campaign_fa.md, 'Another systems level as the way out of the chunk table');
+  not this stage's.
+
+(end of Stage T2)

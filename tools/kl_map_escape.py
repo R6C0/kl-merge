@@ -21,6 +21,15 @@ camera goes under the map when ur in it'.
                                    van kept and Dead Men's car left out -> <out>/_graft/<map>, kl_map_tune.build ->
                                    <out>/<map> (+ van.json, van.txt)
     python kl_map_escape.py van-plan <finished build>     only the plan: waiting place, stop, end, lane, camera
+    python kl_map_escape.py van-plan <build> --points <road.json> [--json]
+                                   THE SECOND FRONT END (van_plan_points; re/bank_campaign.md 'Stage T2'): the road
+                                   as way points, for a Dead Men CAMPAIGN level, which has no escape car to read it
+                                   from. road.json = {"arrive": [[x, y, z], ...], "stop": [x, y, z], "heading": degrees
+                                   or null, "at": "origin" | "box", "leave": [[x, y, z], ...], "cam": [x, y, z] or
+                                   null, "clear": [names]}. Same plan, same lane test, same four length limits.
+                                   'van ... --points' builds one car map from such a file (the test of the front end).
+                                   From an authoring module: van_plan_points(), then van_layer()'s docstring
+    python kl_map_escape.py van-plan <build> --road       the build's Dead Men car road in that JSON form
     python kl_map_escape.py van-check <folder>            the van of a built level from its files; exit 1 on a FAULT
                                                           ('check' runs it too when the level has ONE animated van).
                                                           Also the .HVK: its size against HVK_MAX and the largest
@@ -66,7 +75,7 @@ THE CHECK (for every map, before and after)
              eye and the vehicle's stop
 A check FAULT is: a point under the ground, a camera eye not over ground or within EYE_MIN of it.
 """
-import collections, json, math, os, shutil, struct, sys, zipfile
+import collections, contextlib, json, math, os, shutil, struct, sys, zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -378,14 +387,14 @@ def _apart(p, pts):
 
 
 def other_cars(L, v, routes):
-    """The level's other physics cars (ZHavokCar outside the escape vehicle's group) against the escape
+    """The level's other physics cars (ZHavokCar outside the escape vehicle's group; v None = every one) against the escape
     routes {which: points}: -> [(car path, which route, what)] for a car PARKED within SHARE of a route and for
     a car whose own spline route (a sibling group with VehicleMoveBehaviourRout) runs within SHARE of one.
     Dead Men's design, the same in its own game - listed because two Havok cars on one road is where a
     physics car can be 'weird', and Dog Days ships no level with even one."""
     sc, out = L.sc, []
     for k in range(1, len(sc.nodes)):
-        if sc.cls(k) != 'ZHavokCar' or v['node'] <= k < sc.end[v['node']]:
+        if sc.cls(k) != 'ZHavokCar' or (v and v['node'] <= k < sc.end[v['node']]):
             continue
         at, top = L.place(k), sc.top[k]
         for which, pts in routes.items():
@@ -694,6 +703,11 @@ LIMIT_IN = 6000.0               # GUESS: the drive in is at most 60 m (7.2 s: 30
 LIMIT_OUT = 8000.0              # GUESS: the drive away at most 80 m (8.48 s; F07's own is 70 m with a top speed of 13 m/s, Retomoto's
                                 # 102 m on a straight road; these roads bend - M02's at 50 m - and at 100 m the van took that at 19 m/s)
 MIN_IN, MIN_OUT = 2000.0, 3000.0
+STRAIGHT = 300.0                # van_plan_points: a heading asked for at the stop = this much of straight road either side (ASSUMPTION)
+CAM_FAR = (1800.0, 2200.0)      # cam_spot: the eye this far from the stop (the three car maps' designers: 18, 18 and 22 m)
+CAM_OVER = (330.0, 430.0, 530.0)    # ... and this far over the road at the stop (theirs: 326, 233 and 524)
+CAM_SEES = (850.0, 2500.0)      # ... seeing the van this far along the drive away (GUESS: where the van's own trigger box
+                                # switches the camera on, and 25 m of the drive, its first three to four seconds)
 GAP = 900.0                     # the drive ends this far before a thing in the lane (a wall, a gate that is not of
                                 # the form gate_find() handles)
 BOARD_BACK = 337.0              # the van's BoardingTrigger: 337 behind its origin (read on F07; tested in van_prepare)
@@ -1076,19 +1090,154 @@ def van_plan(src, log=print):
         P['faults'].append('%d escape cars with two spline routes (one is wanted)' % len(cars))
         return P
     v = cars[0]
-    top = sc.top[v['node']]
-    own = {L.ents[j - 1].ref for j in range(top, sc.end[top])}
     pin, pout = spline(L, v['routes']['incoming'])[0], spline(L, v['routes']['escaping'])[0]
+    return _van_road(src, L, G, P, pin, pout, log, v)
+
+
+def van_road(src):
+    """The road of a build's ONE Dead Men escape car in the form van_plan_points takes (and `van-plan --points`
+    reads): its incoming route but for the last point = 'arrive', that point = 'stop' with at = 'box' (the place the
+    CAR stopped, where the van's rear box goes), its escaping route = 'leave'. For the test that the points front
+    end lays the same van as the spline one."""
+    L = Level(src)
+    cars = [v for v in vehicles(L) if v['kind'] == 'car' and len(v['routes']) == 2]
+    if len(cars) != 1:
+        raise ValueError('%s: %d escape cars with two spline routes (one is wanted)' % (src, len(cars)))
+    pin, pout = spline(L, cars[0]['routes']['incoming'])[0], spline(L, cars[0]['routes']['escaping'])[0]
+    return collections.OrderedDict(arrive=[list(p) for p in pin[:-1]], stop=list(pin[-1]), at='box', leave=[list(p) for p in pout])
+
+
+def cam_spot(L, G, stop, heading, must, wish=()):
+    """A place for the fixed escape camera on a map whose designers set none (a campaign level): -> ((x, y, z),
+    how many of the places tried were good, how many were tried, how many of `wish` the chosen one sees) or None.
+    Tried: a ring round the stop (road height) at CAM_FAR, CAM_OVER over the road there; good: a floor under the
+    eye and nothing of the map's collision between it and chest height over the stop and over every place of `must`.
+    Chosen: the one that sees most of `wish`, then the one most nearly BEHIND the standing van, then the nearest
+    and lowest (GUESS: the Fragile Alliance bank's designers stood theirs 18 m behind the stop, so that the drive
+    away runs from the camera into the picture; M01's and M02's stand to a side; two of the three do not see the
+    end of an 80 m drive either)."""
+    sees = lambda eye, q: not G.between(eye, (q[0], q[1] + 100.0, q[2]))
+    good, n = [], 0
+    for r in CAM_FAR:
+        for a in range(0, 360, 15):
+            for up in CAM_OVER:
+                h = math.radians(heading + 180.0 + a)
+                eye = (stop[0] + r * math.sin(h), stop[1] + up, stop[2] + r * math.cos(h))
+                g = G.under(*eye)
+                n += 1
+                if g is None or g[0] > eye[1] - EYE_MIN or not all(sees(eye, q) for q in [stop] + list(must)):
+                    continue
+                good.append((-sum(sees(eye, q) for q in wish), abs(_wrap(a)), r, up, eye))
+    return (min(good)[4], len(good), n, -min(good)[0]) if good else None
+
+
+def van_plan_points(src, arrive, stop, leave, heading=None, at='origin', cam=None, clear=(), log=print):
+    """THE SECOND FRONT END (2026-10-11, for a Dead Men CAMPAIGN level, which has no escape car to read a road
+    from; re/bank_campaign.md 'Stage T2'): the road as way points -> the same plan van_plan gives, by the same
+    code from the curve on (_van_road: the road's height, the four length limits, the lane test, the boarding
+    box, the bounds, the camera's sight). src: a finished build folder - the lane is tested against ITS collision.
+      arrive   [(x, y, z)] the way in, in driving order, WITHOUT the stop; y = about the road's height there (the
+               ground is looked for from REACH over it down)
+      stop     (x, y, z); at = 'origin': where the standing van's ORIGIN is (its rear box is BOARD_BACK behind it),
+               at = 'box': where its REAR BOX is (= where a Dead Men car stopped; the origin is BOARD_BACK farther)
+      heading  degrees from +z towards +x the standing van's nose points to, or None = as the curve through the
+               points runs there. Given, it is MADE: two guide points STRAIGHT (ASSUMPTION about what a
+               designer means by a heading: 3 m of straight road either side of the place) before and behind the
+               stop go into the curve, and a plan whose heading at the stop is then more than REL_MAX off is a fault
+      leave    [(x, y, z)] the way out, the first point at least 150 from the stop (nearer ones are left out, as
+               the first point of a Dead Men escaping route, which lies on the car's stop, is)
+      cam      (x, y, z) of the fixed escape camera's eye; None = the map's own escape camera when a designer set
+               one (van_plan's rule), else cam_spot's (GUESS, said in the notes)
+      clear    names (or REF ids) of map objects the LAYER takes out of the van's way (it must: nothing here does):
+               left out of the lane test, listed in the plan's 'clear'
+    A build that still has ONE Dead Men escape car (the test of this front end on a Fragile Alliance map) is planned
+    as van_plan plans it - the car's objects in 'drop', its gate, the things it switched - with only the road taken
+    from the points. Without one, 'drop' is empty and 'car' is None."""
+    L = Level(src)
+    G = Ground(L)
+    P = collections.OrderedDict(src=os.path.abspath(src), faults=[], notes=[])
+    arrive, leave, stop = [tuple(float(x) for x in p) for p in arrive], [tuple(float(x) for x in p) for p in leave], tuple(float(x) for x in stop)
+    P['points'] = collections.OrderedDict(arrive=[list(p) for p in arrive], stop=list(stop), at=at, heading=heading, leave=[list(p) for p in leave],
+                                          cam=list(cam) if cam else None, clear=list(clear))
+    if at not in ('origin', 'box') or not arrive or not leave or any(len(p) != 3 for p in arrive + leave + [stop]):
+        P['faults'].append('the road as points wants at least one point to arrive by, a stop, one to leave by (each x, y, z) and at = origin or box')
+        return P
+    cars = [v for v in vehicles(L) if v['kind'] == 'car' and len(v['routes']) == 2]
+    if len(cars) > 1:
+        P['faults'].append('%d escape cars with two spline routes: which one the van replaces is not said' % len(cars))
+        return P
+    pin, pout = arrive + [stop], list(leave)
+    if heading is not None:
+        t = (math.sin(math.radians(heading)), math.cos(math.radians(heading)))
+        pin.insert(-1, (stop[0] - STRAIGHT * t[0], stop[1], stop[2] - STRAIGHT * t[1]))
+        pout.insert(0, (stop[0] + STRAIGHT * t[0], stop[1], stop[2] + STRAIGHT * t[1]))
+    skip = set()
+    for c in clear:
+        refs = {c} if isinstance(c, int) else {e.ref for e in L.ents if e.name.decode('latin1') == c}
+        if not refs or (isinstance(c, int) and c not in L.byref):
+            P['faults'].append('clear: no object %s in the level' % c)
+        skip |= refs
+    return _van_road(src, L, G, P, pin, pout, log, cars[0] if cars else None, back=BOARD_BACK if at == 'box' else 0.0,
+                     heading=heading, cam=cam, clear=skip)
+
+
+def _van_cam(L, G, P, cam):
+    """The fixed escape camera of a plan whose map has no designer's (or whose caller gives a place): P['cam'],
+    'cam_from', 'cam_sight'. The eye is held to what check() holds a camera's eye to: a floor under it, EYE_MIN
+    over that floor. cam_spot is asked for a place that sees the stop and the drive away CAM_SEES after it (the
+    van's own CameraTrigger01 switches this camera on 8.5 m after the stop), and by preference its end."""
+    stop, end = tuple(P['stop']), tuple(P['end'])
+    if cam is None:
+        V = Poly([tuple(p) for p in P['path']])
+        found = cam_spot(L, G, V.at(P['lin']), P['heading']['stop'], [V.at(min(V.len, P['lin'] + d)) for d in CAM_SEES], [V.at(V.len)])
+        if not found:
+            P['faults'].append('no escape camera in the build and no place %d..%d from the stop that sees the stop and the drive %s after it: '
+                               'give one' % (*CAM_FAR, ' and '.join('%d' % d for d in CAM_SEES)))
+            return
+        cam, good, n, far = found
+        P['cam_from'] = 'cam_spot'
+        P['notes'].append('the map has no escape camera: the eye at (%d, %d, %d) is cam_spot\'s choice (GUESS; %d of the %d places tried see '
+                          'the stop and the drive %s after it; this one %s the end)' % (
+                              *cam, good, n, ' and '.join('%d' % d for d in CAM_SEES), 'sees' if far else 'does not see'))
+    else:
+        P['cam_from'] = 'given'
+    P['cam'] = [round(float(x), 1) for x in cam]
+    fl = [h for h in G.hits(cam[0], cam[2]) if h[1] > FLOOR]
+    below = [h for h in fl if h[0] <= cam[1] + 1.0]
+    if not fl:
+        P['faults'].append('the camera\'s eye is outside the map: no collision above or below it')
+    elif not below:
+        P['faults'].append('the camera\'s eye is UNDER the map: the lowest floor there is %.0f above it (%s)' % (fl[0][0] - cam[1], L.name(fl[0][2])))
+    elif cam[1] - below[-1][0] < EYE_MIN:
+        P['faults'].append('the camera\'s eye is %.0f over the floor %s: in the floor\'s plane' % (cam[1] - below[-1][0], L.name(below[-1][2])))
+    P['cam_sight'] = {'stop': [L.name(r) for _t, r in G.between(tuple(P['cam']), (stop[0], stop[1] + 100.0, stop[2]))][:3],
+                      'end': [L.name(r) for _t, r in G.between(tuple(P['cam']), (end[0], end[1] + 100.0, end[2]))][:3]}
+    if P['cam_sight']['stop']:                          # every designer's camera of the three car maps sees its stop; an eye in
+        P['faults'].append('the camera does not see the van at the stop: %s is between' % ', '.join(P['cam_sight']['stop']))    # a cellar has a floor under it too
+
+
+def _van_road(src, L, G, P, pin, pout, log, v=None, back=BOARD_BACK, heading=None, cam=None, clear=()):
+    """The plan from a road on: pin = the way in, its last point the stop (the van's origin is `back` beyond it on
+    the curve), pout = the way out; v = Dead Men's escape car the van replaces (vehicles()), None on a level that
+    has none. heading / cam / clear: van_plan_points' (van_plan gives none of the three)."""
+    sc = L.sc
+    top = sc.top[v['node']] if v else None
+    own = {L.ents[j - 1].ref for j in range(top, sc.end[top])} if v else set()
+    own |= set(clear)
     car_stop = pin[-1]
     ahead = [p for p in pout if math.hypot(p[0] - car_stop[0], p[2] - car_stop[2]) > 150.0]
     dense, marks = curve(pin + ahead)
     C = Poly(dense)
     s_car = C.cum[marks[len(pin) - 1]]
-    s_stop = s_car + BOARD_BACK                         # the van's REAR box stands where Dead Men's car stopped
+    s_stop = s_car + back                               # the van's REAR box stands where Dead Men's car stopped
     # the road under the curve, smoothed over +-100 (a kerb must not make the van hop)
     raw = []
     for p in dense:
         g = G.under(p[0], p[1], p[2])
+        if g and g[1] in clear:                         # a thing the layer takes away is not the road (G.under's rule without it)
+            fl = [h for h in G.hits(p[0], p[2]) if h[1] > FLOOR and h[2] not in clear]
+            low = [h for h in fl if h[0] <= p[1] + REACH]
+            g = low[-1] if low else fl[0] if fl else None
         raw.append(g[0] if g else None)
     if any(r is None for r in raw):
         i = next(i for i, r in enumerate(raw) if r is None)
@@ -1104,11 +1253,11 @@ def van_plan(src, log=print):
     s_wait, s_end = max(0.0, s_stop - LIMIT_IN), min(R.len - VAN_NOSE, s_stop + LIMIT_OUT)
     # things Dead Men's car switched on its way are closed for a van - but a gate of the form gate_find() knows
     # (M01: the fence it rammed) is opened by the van's own leave message (gate_wire) and does not end the drive
-    gate = gate_find(L, top)
+    gate = gate_find(L, top) if v else None
     gate_nodes = set(gate['off'] + gate['own'] + [j for g, _p in gate['knock'] for j in range(g, sc.end[g])]) if gate else set()
     gate_refs = gate['refs'] if gate else set()
     own = own | gate_refs if gate else own
-    for k in range(top, sc.end[top]):
+    for k in (range(top, sc.end[top]) if v else ()):
         for i, (nm, _b) in enumerate(sc.nodes[k]['ctrls']):
             name = sc.p.key(nm)
             if name not in ('ActivateGeom', 'DeactivateGeom', 'AIDWrapper', 'OnlineTriggerBox'):
@@ -1149,7 +1298,7 @@ def van_plan(src, log=print):
     path = [R.at(s_wait + (s_end - s_wait) * i / n) for i in range(n + 1)]
     V = Poly(path)
     lin = s_stop - s_wait
-    P.update(car=v['name'], car_stop=[round(x, 1) for x in car_stop], lin=round(lin, 1), lout=round(V.len - lin, 1),
+    P.update(car=v['name'] if v else None, car_stop=[round(x, 1) for x in car_stop], lin=round(lin, 1), lout=round(V.len - lin, 1),
              path=[[round(x, 2) for x in p] for p in path])
     up = lambda p: [round(p[0], 1), round(p[1] + VAN_UP, 1), round(p[2], 1)]
     P['wait'], P['stop'], P['end'] = up(V.at(0.0)), up(V.at(lin)), up(V.at(V.len))
@@ -1178,8 +1327,10 @@ def van_plan(src, log=print):
     P['other_cars'] = ['%s %s' % (c, w_) for c, _which, w_ in other_cars(L, v, {'the van\'s drive': path})]
     # the camera: the designers' place nearest the stop, and what the car's objects are called
     cams = [c for c in cameras(L, G, [tuple(P['stop'])]) if c['target']]
-    drop = [sc.names[top]]
-    if cams:
+    drop = [sc.names[top]] if v else []
+    if cam is not None or not (cams or v):
+        _van_cam(L, G, P, cam)
+    elif cams:
         c = min(cams, key=lambda c: math.dist(c['target'], P['stop']))
         P['cam'] = [round(x, 1) for x in c['target']]
         P['cam_from'] = c['target_name'][5:]
@@ -1207,7 +1358,7 @@ def van_plan(src, log=print):
                 drop.append(sc.names[k])
     else:
         P['faults'].append('no escape camera with a place of its own in the build')
-    for k, _i, vals in kl_fa.controllers(sc, 'PlayerAction'):
+    for k, _i, vals in (kl_fa.controllers(sc, 'PlayerAction') if v else ()):    # with no car to replace, a boarding action is the layer's own
         if 'EnterVehicle' in vals:
             drop.append(sc.names[k])
             drop += [sc.names[j] for x in vals if isinstance(x, list) for s in x for j in sc.resolve(s) if kl_fa.has(sc, j, 'OnlineGamePlayTrigger')]
@@ -1217,7 +1368,14 @@ def van_plan(src, log=print):
             P['faults'].append('%s is not one top-level object: it cannot be left out by name' % nm)
     P['drop'] = list(collections.OrderedDict.fromkeys(drop))
     P['exits'] = [sc.path[k][5:] for k, _i, _v in kl_fa.controllers(sc, kl_fa.EXIT)]
-    log('van plan for %s: Dead Men\'s %s stops at (%d, %d, %d)' % (src, v['name'], *car_stop))
+    if heading is not None and abs(_wrap(P['heading']['stop'] - heading)) > REL_MAX:
+        P['faults'].append('the standing van heads %.0f, %.0f was asked for (more than %.0f off: the points beside the stop bend the curve)' % (
+            P['heading']['stop'], heading, REL_MAX))
+    if v:
+        log('van plan for %s: Dead Men\'s %s stops at (%d, %d, %d)' % (src, v['name'], *car_stop))
+    else:
+        log('van plan for %s: the road as way points, %d of them; the van\'s %s is put at (%d, %d, %d)' % (
+            src, len(pin) + len(ahead), 'rear box' if back else 'origin', *car_stop))
     log('  waits (%d, %d, %d) heading %.0f -> %.0f m in 7.2 s -> stops (%d, %d, %d) heading %.0f (rear box at (%d, %d, %d)) -> %.0f m in '
         '8.48 s -> ends (%d, %d, %d) heading %.0f' % (*P['wait'], P['heading']['wait'], lin / 100, *P['stop'], P['heading']['stop'], *P['board'],
                                                   (V.len - lin) / 100, *P['end'], P['heading']['end']))
@@ -1514,10 +1672,40 @@ def van_hvk(hvk, rep, log=print):
     return hvk
 
 
-def van_build(tag, src_root, out_root, log=print):
+@contextlib.contextmanager
+def van_layer(P, log=print):
+    """The van of a plan P (van_plan_points) in a build whose Fragile Alliance layer is an AUTHORING MODULE
+    (kl_graft.build's 'author'; the bank the campaign way). The module does three things and wraps the build in this:
+        KEEP            holds VAN_KEEP (F07's first escape van and the relay its monitor names)
+        prepare_host    kl_map_escape.van_prepare(S, P, log)      the keys and what stands beside the drive
+        wire            kl_map_escape.van_wire(Jn, P, log)        every OnlineExitLevelTrigger of the layer calls the van
+        with kl_map_escape.van_layer(P, log): kl_maps.one(...)    the van's collision placements (van_hvk), which
+                                                                  no name of the module interface reaches
+    For the length of the `with`, kl_hvk.join is van_build's patched one. On leaving, a build in which a step of
+    the van did not run is an error (as van_build's). Then: van_check(Level(<folder>), log, P)."""
+    import kl_hvk
+    saved = kl_hvk.join
+    ST.clear()
+    def join(*a, **kw):
+        if 'van' not in ST:
+            raise ValueError('kl_map_escape: the collision is joined and van_prepare has not run (the module\'s prepare_host calls it)')
+        return van_hvk(saved(*a, **kw), ST['van'], log)
+    kl_hvk.join = join
+    try:
+        yield ST
+    finally:
+        kl_hvk.join = saved
+    lack = [k for k in ('van', 'wired', 'hvk') if k not in ST]
+    if lack:
+        raise ValueError('kl_map_escape: a step of the van did not run: %s (van_prepare / van_wire / the collision join)' % lack)
+
+
+def van_build(tag, src_root, out_root, log=print, road=None):
     """One map: plan on <src_root>/<tag> (a finished build with Dead Men's car), then the map built again as
     kl_maps.ready_one builds it, with the van (module comment), into <out_root>/_graft/<tag>, then kl_map_tune.build
-    -> <out_root>/<tag>. -> report (also <out_root>/<tag>/van.json, van.txt)."""
+    -> <out_root>/<tag>. -> report (also <out_root>/<tag>/van.json, van.txt).
+    road: van_plan_points' arguments as a dict (van_road's form) - then the plan is made from THOSE points, not
+    from the car's two routes (the test of the second front end; the car is still what the van replaces)."""
     import kl_graft, kl_hvk, kl_map_tune
     lines = []
     def say(s=''):
@@ -1525,7 +1713,7 @@ def van_build(tag, src_root, out_root, log=print):
     src, graft, out = os.path.join(src_root, tag), os.path.join(out_root, '_graft'), os.path.join(out_root, tag)
     if 'kl_portbackup' in os.path.abspath(out).lower() or 'dog days' in os.path.abspath(out).lower():
         raise ValueError('kl_map_escape writes build folders only, never the game\'s')
-    P = van_plan(src, say)
+    P = van_plan_points(src, log=say, **road) if road else van_plan(src, say)
     if P['faults']:
         raise ValueError('%s: no van: %s' % (tag, '; '.join(P['faults'])))
     entry = next(r for r in kl_maps.READY if r[0] == tag)
@@ -1840,10 +2028,21 @@ def van_keys(level='F07', log=print):
 
 
 def main():
-    a = [x for x in sys.argv[1:] if not x.startswith('--')]
+    argv, road = sys.argv[1:], None
+    if '--points' in argv:                              # van-plan / van: the road from a JSON file (van_plan_points' arguments)
+        i = argv.index('--points')
+        with open(argv[i + 1], encoding='utf-8') as f:
+            road = json.load(f)
+        del argv[i:i + 2]
+    a = [x for x in argv if not x.startswith('--')]
     heights = '--level' in sys.argv
-    if len(a) == 2 and a[0] == 'van-plan':
-        P = van_plan(a[1])
+    if len(a) == 2 and a[0] == 'van-plan' and '--road' in argv:
+        print(json.dumps(van_road(a[1]), indent=1))
+        return
+    elif len(a) == 2 and a[0] == 'van-plan':
+        P = van_plan_points(a[1], **road) if road else van_plan(a[1])
+        if '--json' in argv:
+            print(json.dumps(P, indent=1, default=str))
         sys.exit(1 if P['faults'] else 0)
     elif a[:1] == ['van-keys']:
         van_keys(*a[1:2])
@@ -1855,7 +2054,7 @@ def main():
         for tag in a[3:] or VAN_TAGS:
             print('=' * 20 + ' ' + tag, flush=True)
             try:
-                r = van_build(tag, a[1], a[2])
+                r = van_build(tag, a[1], a[2], road=road)
                 bad += bool(r['check']['faults']) or not r['tune_ok']
             except Exception:
                 import traceback
