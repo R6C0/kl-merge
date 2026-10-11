@@ -3,6 +3,12 @@ r"""kl_laa.py <kl2.exe> <out exe>      a COPY of kl2.exe with the 'large address
                                     of address space on 64-bit Windows). The original is only read.
     kl_laa.py <exe>                 print the flag
 
+DO NOT RUN THE GAME WITH THE PATCHED COPY (2026-10-10). The engine marks a direct pointer in a chunk reference by
+its TOP BIT (`test eax,eax ; jns <table look-up> ; and eax,0x7fffffff`, seen at 0x6ad0c7; klhook\klmem.c counts
+429 such sites around the chunk table 0xeac7b0). With this flag Windows hands out addresses above 0x80000000, and
+model data placed there is misread - a crash at best, silently wrong geometry at worst, depending on where the
+allocator happens to put things. Kept as a record of why 4 GB is not available by a header flag.
+
 One bit: IMAGE_FILE_LARGE_ADDRESS_AWARE (0x20) in the PE file header's Characteristics (+22 from 'PE\0\0').
 Why it may be safe: the game's integrity checks (Valve CEG, re/antitamper.md 2.1) hash .text, .rdata and .version
 in memory; the header page 0x400000-0x401000 is in none of the 626 range sets read. NOT TRIED IN THE GAME
