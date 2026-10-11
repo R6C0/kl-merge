@@ -664,6 +664,9 @@ def ini_block(entries):
           '[Bots]', 'Enable=1', 'Log=1',
           '; one AI heister stays beside the player (klescort.c; seen live 2026-10-11 with a standing player only); 0 = off, 2 = two',
           'Escort=1',
+          '; while the escape vehicle waits, an AI heister that has stood 15 s without moving or earning is sent to it',
+          '; (klescort.c BoardAll; seen live 2026-10-11, runs L12a / L12b); 0 = off',
+          'BoardAll=1',
           '; random AI heister looks from the wardrobe, no body twice, never the one the player wears (klcrew.c; seen live 2026-10-10)',
           '[Crew]', 'Random=1',
           '', '[Page.%d]' % PAGE, 'Title=' + PAGE_TITLE] + ['%s=%s' % (e['slot'], e['name']) for e in entries]
