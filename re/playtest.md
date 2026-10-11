@@ -9,6 +9,12 @@ version, and at 10:13 an early copy of THIS version's Withdrawal script - **it w
 $550,000, boarded the van and escaped.** What those runs showed is used here. The scripts as they are written
 now (that run's two failed gotos repaired) have not run; the four other maps have not been walked at all.
 
+**THIRD ROUND (track H3, the same day; section 10).** Since then the lead has run the scripts on Hot Coffee,
+the park and Retomoto too (whole heists, section 10.0). Section 10 is what those runs showed and what the tool
+does about it; it SUPERSEDES sections 0 - 9 in four things: the scripts' damage dial (0.001, not 0.02), the
+bank's stairs (walked in motion again, not from stop to stop), `--die` (a guard's post, not 'near a guard'),
+and the fed, who now has a walk of his own (`--fed-walk`). The third round's work was offline as well.
+
 Words: **read** = seen in `klhook/klauto.c` or another hook source at the place named; **measured** = counted
 on logs (`<work>\build\klhook\live\`) or on the build files, with what was counted; **live** = seen in a log of
 a run in the game (the lead's or an earlier one); **model** = `kl_playtest.steer()`, the rig's steering law run
@@ -562,3 +568,325 @@ Verdict ACCEPT WITH FIXES: one must, four should, notes. Each is answered at the
 | 4.4 SHOULD the fire button is on by default | **fixed**: off by default, `--shoot` and `PT_DM02_shoot` for the second run; friendly fire named (section 4 B) |
 | 4.5 SHOULD the expect files contradict themselves | **fixed**: the push lines are named expected; the rig2 files quote the patched rig's line; `RESULT PASS` is said to prove nothing; `judge` |
 | notes | selftest covers Retomoto's street part; the join's pace (`--join-after`; the later start already puts him behind the crew's own timer); `MaxRunMs` past the round's own end; the AllyEscapeBox note; `floor()` and the box sizes worded as the review found them; the section 6 text |
+
+## 10. The third round (track H3): what the live runs showed, the point-blank rule, the fed's own walk
+
+OFFLINE: no game was started, nothing written in a game folder, nothing committed. Changed: `tools/kl_playtest.py`,
+this file. Written: `<work>\research\playtest\v3\` (15 scripts since the review's fix round, 10.8; each with `.route.txt` / `.expect.txt` / `.plan.json`,
+and `klauto_h3_onbody.patch`, a patch TEXT for the rig that is NOT applied). Every number below is from the logs in
+`<work>\build\klhook\live\` or from the five builds of the tree `<work>\build\w_tabM` (`z_route3\M01`, `z_loot3\M02`,
+`z_cover3\M03`, `z_route\M06`, `z_rooms\retomoto_full`); the commands that print them are named.
+
+### 10.0 The runs
+
+Whole heists by the scripted player: `PB_DM03_board_hp`, `PB_DM01_board_hp`, `PB_DM06_board_hp`,
+`B1_DM09_board_gates`, `J1_DM09_join`, `J0_DM09_join_oldchain`, `FO_J1_DM03_follow`, `K2c_DM03_wall_hp` (to the
+wall). Deaths on the bank's stairs with 5,500 of health: `FO_J0_DM03_dry`, `FO_J4_DM03_spare`, `FO_J3_DM03_all`.
+The fed: `PT_DM03_die_r2`, `PT_DM03_die_f2`, `FD3_DM03_die`. Late Night Opening has still not been walked by anybody.
+
+### 10.1 The start (`python tools\kl_playtest.py starts <run> ..`)
+
+MEASURED: the second after `session: state 0x18 -> 0x19` at which the human is last seen on his START place and
+first seen off it, from every line of a log that has his place (`pos`, a goto's result or 'stuck', klescort's
+'you are ... at').
+
+| runs | the first goto began | last line ON the START place | first line OFF it | the first goto |
+|---|---|---|---|---|
+| the bank, W held through the countdown: S5, SH1, K1, K2, K2b, K2c, PT_DM03_die_r2 / _f2 (8) | before he could move | 10.22 / 10.38 s ('stuck' lines of S5, SH1), 10.32 s (K1, a `pos`) | 10.42 .. 10.84 s, 34 .. 289 units off | K1 .. die_f2 (began at 0x19, timeout 9.5 s): **NOT reached, 6 of 6**; S5 / SH1 (earlier scripts, longer gotos): reached |
+| Retomoto's earlier builds, W held: N0, N0b, VAN1 - 5 (7) | before he could move | 10.16 .. 10.19 s | 10.33 .. 10.56 s (five), 98 .. 236 off | reached in six; VAN1 not (another cause) |
+| the bank, the wait of 11.0 s: PB_DM03, FD3, FO_J0, FO_J4, FO_J1, FO_J3 (6) | + 11.0 s | 9.47 .. 10.70 s | 11.31 .. 12.33 s | **reached, 6 of 6**, in 0.30 .. 1.33 s |
+| Hot Coffee PB_DM01, the park PB_DM06 (1 each) | + 11.0 s | 10.79 / 10.53 s | 12.28 / 12.25 s | reached in 1.27 / 1.25 s: he walked from its first tick |
+| Retomoto J1, J0, B1 (3) | + 18.5 s (the blast) | 17.99 .. 18.16 s | 19.99 .. 20.16 s | reached in 1.7 .. 2.0 s |
+
+So: **he is free 10.16 .. 10.4 s after 0x19 on both maps where W was held through it (15 runs), and with the 11.0 s
+wait the first goto was reached in 11 runs of 11 on four maps.** The loss of 'the first goto' is the six runs of
+the first scripts, which had no wait; all six are bank runs because nothing else was walked then. The second
+version's first goto on the bank was reached in 0.3 .. 1.3 s; in PB_DM03 / FD3 it was 'reached' 218 units from
+the START place after an arc (the target lay 160 away and 122 degrees off, radius 110: W is down while he turns)
+and the next goto took a loop of about a second - no time lost to the countdown. Retomoto's script is covered by
+its own wait for the blast (18.5 s). **Not measured: Late Night Opening** (never walked), and on Hot Coffee and
+the park only 'free by 11.0 s'. What the scripts do: the wait stays (FREE_S 10.4 + 0.6), and **the first goto of
+every round now has a timeout of 20 s** (`FIRST_TIMEOUT`): should a map's countdown be longer, W is simply held
+until he can move (S5, SH1 and six of the Retomoto runs held W through the countdown and their goto was reached)
+- a first goto 'whose loss does not matter', because it is not lost. The rig cannot wait for 'he can move'
+itself: no session state changes then (0x19 holds to the round's end).
+
+### 10.2 The bank's stairs and the point-blank rule (`python tools\kl_playtest.py danger <build>`)
+
+**The rule (re/melee_damage.md, read there in kl2.exe):** a soldier who fires at a target within 160 units (node
+to node, 3-D) sends at every step of his burst a hit worth 100 bullets of his gun; the Arcade dial scales it. At
+`CopToYou=0.02` one step costs the human 151.2 from a Type 79, 449.2 from the M9, 582.8 from the Sig, 758.6 from
+the .45, 81.6 from the shotgun - `danger` prints the map's guards with their guns' steps, and they are the very
+numbers of the logs. MEASURED in the logs: a guard sends about six steps a second (0.12 .. 0.19 s apart). The
+5,500 of health (PlayerHealth=10) last 1.1 s beside the .45.
+
+**The scripts compared.** The lead's `PB_DM03_board_hp.ini` and `rig2\PT_DM03_board_r2.ini` are the same on the
+stairs line for line (script lines 47 - 68; line 69's radius is 40 against 25): both have the five REAL stops
+there (lines 58, 61, 63, 65, 67, each with `wait 600`; then 69, 71, 73). The script that differs is the FIRST
+one (`K2c_DM03_wall_hp.ini`, lines 56 - 64), whose 'stops' had no wait and were none: `keep` gotos of radius 35 ..
+70. The staircase = from 'reached' at (-997, -5912) to 'reached' at (-875, -5945):
+
+| run (script) | the staircase took | point-blank steps on it (from the logs' `balance: you lost`) | least health | end |
+|---|---|---|---|---|
+| K2c (first script: in motion) | **3.7 s** | 3 x Type 79 = 454 | 4,981 | lived (one .45 step later, at the vault) |
+| PB_DM03_board_hp (stops) | 7.65 s | 12 lines: Type 79 x 10, Sig x 3 = 3,262 | 3,442 | lived |
+| FO_J1_DM03_follow (stops) | 7.95 s | 16 lines: Type 79 x 12, .45 x 5 = 5,608 | **796** | lived |
+| FO_J3_DM03_all (stops) | 7.4 s | 10 lines on the stairs (Type 79 x 10 = 1,514); behind them 13 shotgun lines and nine steps of the .45 in 15 s | 293 | dead 47.7 s after 0x19 in the vault corridor, after 9.4 s on one leg ('goto is stuck' at (-838, 240, -6948)) |
+| FO_J0_DM03_dry (stops) | - | 16 lines = 4,583 in 2.6 s | - | **dead 31.1 s after 0x19 at (-346, 438, -5879)**: in the wait of line 68 |
+| FO_J4_DM03_spare (stops) | - | 13 lines = 6,097; the last second alone 5,190 (.45 x 3, Sig x 5; one line of 1,341.4 is one step of each) | - | **dead 31.5 s after 0x19 at (-571, 344, -5949)**: the lower flight, line 69 |
+| K1, K2, K2b (first script, 401.5 of health) | - | K2b: 2 x Type 79 + the rest of a third | - | dead 25.6 .. 29.8 s after 0x19 on the upper flight |
+
+**Which stop did it:** the two at the ends of the staircase's middle landing - script lines **65 / 66** (the stop at
+(-321, -5692)) and **67 / 68** (at (-322, -5910)), 217 apart. In every run of the stop scripts the first step (always
+a Type 79) comes on the upper flight at x -640 .. -390, which he WALKS (310 .. 350 units a second: the flight runs
+from one stop to the next); 2 .. 4 more come while he stands the 0.6 s of line 66 (PB 4, FO_J0 4, FO_J1 2, FO_J3
+4); the 217 units to the second stop he covers at 105 .. 190 units a second (a turn of 90 degrees from a stand
+first), 1 .. 4 more steps, and by the second stop the .45 and the Sig have come up from the garage floor: FO_J0
+died standing in the wait of line 68, FO_J4 one second behind it. K2c crossed the landing in 0.48 s.
+
+**Where the guards are.** All 15 armed enemies of the bank are in the world when the level loads, 'eUnleashed', in
+squads with a hunt or flanking rout: they come to him. The posts of those that sent the steps lie 2,128 .. 3,890 of
+mesh way from the landing (Type 79: `Guard_03` (-505, 240, -4973) 2,128, `Guard_01` (624, 802, -5995) 2,904; the
+.45 `SecurityGuard_02` 3,226 to the landing's south end; the Sig `Guard_04` 3,890; the shotgun 2,430 to the foot),
+and the first step of each gun came 7.4 .. 15 s after the human's stage 1 (17.3 .. 17.9 s after 0x19): **160 .. 390
+units a second along the mesh, most 215 .. 300** (5 runs). So a rule by POSTS alone cannot keep him clear of
+hunters: the straight distance from the landing to the nearest post is 424 (the M9's, which sent no step in any
+of the eight runs), to the posts of the guns that killed him 600 .. 2,000.
+
+**The rule the tool now has** (`Route.danger()`; printed in every `.route.txt`, counted in every `.expect.txt`):
+
+- **R1 - a stop, or a walk under sprint speed, within 400 units (3-D) of an armed enemy's post** (`PB_POST`: the
+  160 of the rule + 240 for his own steps, the 240 a GUESS), every post counted, also of a squad that comes into
+  the world later. **Live it holds where guards STAY**: Retomoto's two stops in front of the jump box (way points
+  67, 68 of the tower part) stand 30 and 95 from the posts of `Atrium_1st_CoverMiddle_Squad_02` and
+  `010_Squad_Elevators`, and both runs that came there took 4 .. 5 steps in the 0.6 s wait of the first (B1: sp89 /
+  MPi69 x 3 + a double; J1: sp89 x 3 + Type 79 x 2). It says nothing where they hunt: Hot Coffee's way stops 84
+  from `KitchenBoy`'s post and stands 5 s ON the Senator's (the bots' loot place is the man with the .45) and
+  PB_DM01 took no step at all; the park's four loot stops are 4 .. 83 from the bosses' posts and PB_DM06 took two
+  SCAR steps elsewhere, in motion.
+- **R2 - a stop that a guard can have reached**: his mesh way from his post at `GUARD_RUN` = 300 units a second,
+  counted from the human's stage 1 (a route without an ENTERS box: from its start), against the second the model
+  has him leave the way point. MEASURED on the bank only; a GUESS elsewhere, and blind to squads that come later.
+- **What is done about a hit.** (a) Where a LIVE run walked the place in motion, the stop is taken out whatever
+  the model says: `LIVE_MOVING`, so far the bank's nine way points of the stairs with K2c's radii and `keep`
+  (reached in K1 / K2 / K2b up to his death and all nine in K2c; `--stops` puts the stops back). (b) Everything
+  else stays - a door stop is there because the mesh is 14 .. 50 wide and nobody has walked it in motion, a loot
+  stop is the thing itself - and is covered by the dial: **a route script now carries `[Balance] CopToYou=0.001
+  CrewToYou=0.001`** (`COP_DIAL`; `--cop 0.02` = the old). A .45 step is then 37.9, a Type 79's 7.6, the shotgun's
+  4.1: still in the log's `you lost` lines (which is why it is not 0), and FO_J4's worst second, 5,190, would have
+  been 260 of the 5,500.
+
+| the board route of | armed enemies in the world at the load (later) | R1: stops / walks within 400 of a post | R2: stops in reach, of the route's stops | stops that MOVE |
+|---|---|---|---|---|
+| Hot Coffee | 13 (0), all hunt | 11: way points 10 - 16 (the diner's east door, 84 .. 367 from `KitchenBoy`; 13 is a stop 84 from him), 18 (money), 25, 26 (walks at `CornerShop`'s Type 79), 32 (the loot stop = the Senator, 3) | 13 of 14 | none (no live run in motion) |
+| Late Night Opening | 12 (0), all hunt | 4: 20, 22, 26 (walks), 28 (money, 325 from `DiamondGuards_02`) | 11 of 15 | none |
+| Withdrawal | 15 (0), all hunt | 4: 30, 31, 32 (stops 183 .. 297 from `Guard_03`'s post at the garage's west door), 33 | 13 of 13 | **eight stops gone: way points 11, 13 - 19 (the stairs; with 12, nine way points in motion). 21 stops -> 13** |
+| A Walk in the Park | 14 (0), 12 hunt | 9: the four loot stops 14, 20, 25, 29 (83, 40, 4, 49 from the bosses' posts: the money is on them) and the legs beside them | 9 of 11 | none |
+| Retomoto Tower | 3 (88) | 16, all of squads that come later; INSIDE the 160: the two stops and the last step of the join (30, 95, 46) | 4 of 24 (blind to the 88) | none (the join needs its two stands) |
+
+### 10.3 `--die`
+
+Was: the first way point with a guard within 700 by a straight line on the mesh ('near a guard and hope'). Is:
+**he walks to the POST of an armed enemy and stands 110 .. 130 from it** (`DIE_STAND`: inside the 160, where every
+shot of that guard is the point-blank step) - the guard that costs the least way (the route up to one of its way
+points, then up to 2,500 of mesh way), those in the world at the load first. The balance is as before (`CopToYou=20
+PlayerHealth=0.05`: 27 of health, any bullet kills) - but NOT in a `--fed-walk` script without `--fed-die`, which
+has no `CopToYou` key (10.4: unmirrored, that float is a heister's bullet on the fed): there the 27 of health die
+to one police bullet at Risk=2's 1.0 (a Type 79's is 75.6 near, 39 at 50 m; a far shotgun hit may take two). The
+place only makes sure somebody fires. Live so far (the old
+rule, the bank, 3 runs): dead 19.1 / 20.0 / 25.4 s after 0x19 in the hall, twice ON THE WAY.
+
+| map | he stands at | the guard |
+|---|---|---|
+| Hot Coffee | (5839, 0, 23884) | `FrontMall_01\\FBI-Agents_01` (SCAR), post 126 away; the squad hunts |
+| Late Night Opening | (1486, 1000, 1283), on the START floor | `3rdFloor_Guard_01` (shotgun), 128 |
+| Withdrawal | (-184, 800, -6067), the hall | `BankMainSquad_02\\Guard_02` (M9), 126 |
+| A Walk in the Park | (928, 239, 6490) | `US_Boss` (AK-74), 128; attitude eStayBack |
+| Retomoto | (5850, 21021, -247): IN the blown window (he walks 18.5 s after 0x19) | `Squad_Guards_Inside_01` (.45), 128; the squad comes into the world later |
+
+ASSUMED: a hunter has not left his post for somebody else when the human comes (then another comes to him: the
+bank shows it).
+
+### 10.4 The fed (`python tools\kl_playtest.py fed <build> [--fed-group N]`; `script ... --die --fed-walk`)
+
+**Live so far (the bank, 3 runs):** he is police exactly 5.0 s after his death, **ON an AFTER_DEATH point and on
+the floor**: `fed: YOU ARE A FED ... at (-4414, 300, -3486)` (r2: 20 from point 1), `(-4570, 300, -3349)` (f2: 26
+from point 4), `(-4457, 300, -3593)` (FD3: point 2 itself); the floor there is 300 by mesh and by collision. **He
+CAN move**: r2 and f2 walked him 5 .. 6 m - the hero's gotos that were left steer the new body at the old way
+points - into the room's south-east corner, (-4155, 300, -3645), where both stuck for the rest of the run: 44
+from `SI0200_M03_DoorSteelWin_A_09`, a static steel door in the south wall (the picture's double door) that is
+SHUT in the collision. The room's way out is its north-west door. FD3 had no goto left and stood.
+
+**How a script copes with what it cannot see.** No window comes up at his death and the session state stays 0x19:
+the rig has nothing to wait on (`waitstate`, `waitwin`, `onwin` see neither; there is no loop and no jump but
+`onwin`). So: he stands `--die-wait` seconds (20) at the die place with a `pos` every 5 s; then `peek 0x168ea60`
+(klfed's switch: 0 once he stands as police, 1 while he is alive or waiting - a 1 says the run shows nothing of
+the fed) and `pos fed-appeared`; then gotos that steer whatever body the game calls local.
+
+**A death ON THE WAY** (2 of the 3 live deaths: r2 during script 52, f2 during 53; only FD3 reached its place): the
+hero's gotos that are left run out one after the other, each to its timeout, and steer the FED at the hero's way
+points; then come the 20 s of `--die-wait`. With the ordinary timeouts (3 x the model's time + 4 s, at least 6 s)
+that was 42.5 s on the bank after a death at script 53 and up to 94 s on Hot Coffee - not '6 .. 8.5 s', which is
+one goto. So the HERO's gotos of a `--die --fed-walk` script now have short timeouts (`DIE_GOTO`: 1.5 x the
+model's time + 2.5 s, at least 4 s; the first goto of the round keeps its 20 s): after a death in the second goto
+the fed's own first goto begins at most **70 s (Hot Coffee), 43 (Late Night), 68 (the bank), 60 (the park), 19
+(Retomoto)** after he appeared (each `.expect.txt` has its number), and usually about half of that. Whether he
+then still stands where a straight line reaches his first way point is shown for the bank only (its room is convex,
+and the review's flood has the line from the live corner (-4155, -3645) clear); NOT for Hot Coffee (a control room
+8.6 m up with a landing and a catwalk), the park (a deck with stairs) and Late Night Opening. For those three the
+set has an `onbody` twin (`H3_DM01 / DM02 / DM06_die_fed_rig3`, 10.6): the trap skips the leftover gotos and the
+wait. They need a TEST hook with the patch, which nobody has built.
+
+**The point is the game's (a random free one): the gotos are written for one GROUP of points** (points within
+1,500 of each other), the first way point being one a straight line reaches from every point of the group.
+Retomoto has three groups - two lift cars 36 m apart on one floor, and the square 196 m below them: one script a
+group (`--fed-group 1 / 2 / 3`), and the `pos fed-appeared` line (and `judge`) says which group the run got.
+**What that costs:** a run of `_g1` fits 3 picks of 7, `_g2` and `_g3` 2 of 7 each - IF the pick is uniform over
+the free points (how kl2 picks is not read here; track L's question) - and a run that got another group shows only
+where he appeared: plan on about 3 runs for group 1 and 4 for each of the others, or wait for `ifnear` / `jump`
+(10.6). Group 1 is partly answered already: the owner's own round of 2026-10-11 12:31 has `fed: YOU ARE A FED ...
+at (1804, 19601, 812)` = point 2 itself, and his words are 'spawn as a fed but in a lift'.
+
+**The BLIND gotos must be read by the height.** klauto's `goto` is 2-D ('reached' = a distance in x, z), and a
+blind target is the crew's mesh UNDER the place he stands at: in the park it is (-975, 259, -9784), which in the
+plan lies inside the fed's own row on the deck - 199 from points 3 and 4, whose floor is at 1549, and 372 from the
+stairs' end the blind gotos start at; on Hot Coffee (2045, 60, 17479) is 800 under the landing. A fed who never
+came down, or went back up, can 'reach' it. So `pos fed-blind-N` shows a way only when its y is within 150
+(`BLIND_DY`) of the crew's mesh there (259 / 60); the `.expect.txt` says so and `judge` tests the y, not the goto.
+On Retomoto's group 2 the target is on his own floor (2.6 m outside the car's door): there 'reached' does mean he
+got out.
+
+What the rig lacks for a better answer: 10.6.
+
+**What is known offline, per map** (`fed`; 'collision' = `kl_escape.Walk` on the level's .HVK: the static,
+non-convex shapes only - no door that opens, no character radius; it takes a slab's underside for a floor and the
+flight above for a ceiling, so on stacked stair flights its 'no' is weak):
+
+| map | the points | mesh under them | collision | the way to the crew, what stands between | the script (`v3\\H3_..`) |
+|---|---|---|---|---|---|
+| **Withdrawal** | 7, x -4791 .. -4317, z -3593 .. -3369, y 391 .. 396: the parkade's stairway room (`M03_FAA_Parkade_StairwayRoom_01a`) | 91 .. 96 under each: **the crew's own part** (649 polygons) | floor 300 under each; from them the collision alone reaches 5,555 m2 (the whole map read), among it the EXITS box, the gate and the level exit | **joined by both.** North-west door (-4565 .. -4435, 300, -3054), three more frames east of it where the mesh is 10 wide ((-4165, -3162), (-4045, -3162), (-3755, -3048)), down to the parkade floor, then 21 m east to the garage's west door (-1299, -4574) - 87 m to the loot (424, -6154) through the garage against the crew's way; to the level exit 77 m by the yard and **the same drop the crew takes** | `DM03_die_fed`: 35 gotos to the loot place. `DM03_F3_fed_dies`: to the level exit (854, 70, -155) by the drop, and he stands on the crew's way to the van |
+| **Late Night Opening** | 7, x 4228 .. 4716, z -2616 .. -2042, y 90: the car park east of the mall (`M02_FA_A_Out_Parkinglot_101a`) | **none**: the crew's mesh begins 1,800 .. 2,350 west | floor 0 under each (90); the collision reaches 10,071 m2, the ground floor's EXITS box and the level exit among it | **joined by the collision**: 26 m west over the car park and in along z -2366 .. -2426 to where the mesh begins, (1888, 0, -2386); then the mesh. The collision shows nothing shut between the car park and the ground floor's two boxes; what bounds the flood near the way are plants, the escalators and `WallA_10mDor_*` | `DM02_die_fed`: 6 gotos OFF the mesh, then 18 on it up the lower escalator to loot stop 2 (-1892, 500, 2593) |
+| **Hot Coffee** | 7, x 2105 .. 2789, z 16923 .. 17129, y 951: the warehouse's control room, 8.6 m above its floor (`WarehouseControlRm_301a`) | 91 under each, **a part of its own: 16 polygons, x 1935 .. 3034, z 16565 .. 17264 at y 860, joined to nothing**; one polygon of it, 10 x 49, points west at x 1935 .. 1945, z 17125 .. 17174 | floor 859; the collision reaches 127 m2: the room, a landing west of it and a catwalk (`MainBridgeA / C`) north to z 17893, all at 859 .. 872 | **NOT joined by mesh or collision.** West of the room stands `Si0105_M01_Staircase_FA_version_01` (x 1499 .. 1900, z 16499 .. 17300, y 23 .. 1244; landings at 860 / 650 / 450 / 266 / 62; its north face has wall only at x 1500 .. 1540 and 1860 .. 1900) - a stair tower built for Fragile Alliance, GUESSED to be the way a Dead Men policeman comes down. The walk test does not take it: across the top landing's south edge (z 17031 .. 17097) the collision has a strip 90 .. 150 over the floor - a parapet or the next flight up, not told apart - and of the flights only undersides and side walls are in the non-convex shapes it reads | `DM01_die_fed`: 4 gotos over the collision to the tower's top landing (1695, 860, 17093), then 3 BLIND ones at the crew's mesh (2044, 60, 17478), 8 m below. The `pos` heights say whether he comes down |
+| **A Walk in the Park** | 5, x -1158 .. -1001, z -10246 .. -9473, y 1630 .. 1656: on a freeway deck 13.4 m above the park (`SO0201_M06_FreeW_Junction_E_Stairs_FA_01`) | the park's own polygons are 1,345 .. 1,396 BELOW three of them; none at their height | floor 1539 .. 1561 (the deck); the collision reaches 129 m2: the deck inside `ColiObj_Police_spawn_BLOCK_01` (an unseen wall round the spawn, x -1354 .. -428, z -10742 .. -8777) and **the FA stairs down to y 1004** | **NOT joined.** The stairs wind down a pillar (collision way: (-606, 1556, -9996) (-266, 1451, -9896) (-226, 1238, -9496) (-506, 1124, -9456) (-586, 1056, -9656) (-606, 1004, -9736)); the walk test stops at 1004, where the next floors of its cell lie at 871 / 438 / 195. The park's mesh is at (-975, 259, -9783), 4 m to the side and 7.5 m below | `DM06_die_fed`: 7 gotos down the stairs as far as the walk test went, then 3 BLIND ones at the park's mesh |
+| **Retomoto**, group 1 (points 1 - 3; 3 of 7) | (1904 / 1800 / 1987, 19601, 818 / 812 / 973): INSIDE the lift car `SI0101_JPN_Elevator_Int_A_04` on the join's floor | the crew's tower part under two; none under (1800, 812) | floor 19600; the collision reaches **8 m2: the car**, bounded by `Elevator_Main_A_00` and the door leaves `Elevator_DrInt_A / B_00` | the mesh runs out through the car's door; **the collision says the door is shut** - as the neighbour car's was live (run J1, 2026-10-09: 'the car's doors are shut and stop the player') | `DM09_die_fed_g1`: 2 gotos in the car, then the mesh way up to the boardroom's loot (193 m); a goto that sticks at the fed's way point 2 = the door |
+| group 2 (points 4, 5) | (-1764 / -1508, 19613, -61 / -147): the atrium lift `SI0103_M09_ElevatorCar_00` | a mesh part of ONE polygon | floor 19604 / 19620; 16 m2: the car, bounded by `ElevatorCar_00`, `Elevator_01`, `ElevatorDoor_01` | NOT joined; the crew's mesh is 2.6 m outside the door, at (-2054, 19600, -167) | `DM09_die_fed_g2`: 2 gotos, 3 BLIND at that place |
+| group 3 (points 6, 7) | (447, -50, -7956), (-367, -50, -7594): the square in front of the lobby | the street's part (the crew's after the join), at the points' own height | **the only floor of the collision in their cells is at 19: 69 ABOVE the points** (the street's mesh lies 40 .. 50 under the road's collision; the player's feet read -50 there in run RT4) - whether he is put on the ground or under it is for the `pos` line | joined by the mesh: 34 m to the crew's first street place (2054, 54, -6019) | `DM09_die_fed_g3`: 7 gotos |
+
+So, by what the files say: **a fed can leave on the bank and on Late Night Opening; on Hot Coffee and in the
+park he stands at the head of stairs made for him which only a run can judge; on Retomoto five of the seven points
+are inside two lift cars whose doors are shut in the collision** (the authored points of `kl_fa_author.POLICE`:
+'the elevator lobby, the atrium lift, the square'), and the two on the square lie 69 under the road's collision.
+
+**The fed's balance keys** (`FED_WALK` / `FED_DIE` in the tool; corrected after the third review's M1 - the first
+form did the opposite of what it said; what follows is a READING of `klhook/klbalance.c` 2 a3 and `klr_mir`, NOT
+RUN). A police player's game reads the OTHER float of each of the three pairs. With `FedMirror=1` the hook writes
+the pairs exchanged and every key keeps the meaning of its name (live: f2, FD3) - and puts the fed's health under
+the hero's dial. With `FedMirror=0` the fed keeps the game's own 550 (live: r2, 'a POLICEMAN: left alone') and
+nothing is exchanged, so each key means two things in one run:
+
+| key (slot) | while he is the hero | once he is police | a `--fed-walk` script writes |
+|---|---|---|---|
+| `CopToCrew` (+0x00) | a police bullet on a heister | a heister's bullet on a police AI | 0.005 |
+| `CrewToCop` (+0x04) | a heister's bullet on the police | a police AI's bullet on a heister | 0.005 |
+| `CopToYou` (+0x08) | a police bullet on him | **a heister's bullet on him** | no key = Risk=2's 1.0 |
+| `CrewToYou` (+0x10) | a heister's bullet on him | a police AI's bullet on him (a stray) | 0.001 |
+
+The first form had `CopToYou=20` and `CopToCrew=0.005` alone: after the switch a heister's bullet cost the fed x 20
+(about 940 against his 550 - one bullet = his second, final death, at the very place the bank's script sends him:
+the crew's loot place), and a police AI's bullet cost a heister `CrewToCop` = x 1.0 - the crew NOT protected, as
+in r2 at 0.05 (all seven dead 15 .. 47 s after the switch), while the 0.005 only made the crew harmless. Now: the
+hero's 27 of health die to one police bullet at 1.0 just the same; a heister's bullet costs the fed x 1.0 of 550
+(about 12 hits - he can still be shot dead by the crew he walks to, as in the owner's game); a police bullet costs
+a heister x 0.005 on BOTH sides of the switch. **The price:** a heister's bullet costs the police x 0.005 too, all
+round long - the crew cannot clear a room, and a guard who comes close still takes 43 of a heister's 252 with every
+point-blank step. That a crew is then in play for the 2 .. 4 minutes of the walk is a GUESS. (The other way,
+`FedMirror=1` with `CrewToYou` low, was not taken: the fed then has the hero's 27 of health and a colleague's stray
+bullet - `CopToYou` - ends the walk.) The hook prints factors with two decimals: 'police->crew 0.01' / '0.00' in
+the `balance: on` line are these numbers. `[Fed] EndSeconds=0`: klfed does not end the round when no heister is
+left.
+
+`--fed-die` (F3): `FedMirror=1`, `CopToYou=20`, `CopToCrew=0.005` - under the mirror the names hold: the fed has
+the hero's 27 of health and a heister's bullet (`CrewToYou` = 1.0) is his second death. A colleague's stray is x 20
+there and kills him as well; the log's `you lost` line cannot tell the two apart (a loss is at most his 27).
+`H3_DM03_F4_two_rounds` has no `FedMirror` key (= 1) and `CopToCrew=0.05`: the same reading, nothing to correct.
+A police player in a stage box: only a `pos fed-in-..` line; what the rules make of it is not known.
+
+`judge` reads a `--fed-walk` run: the point he appeared on (and its group), whether he was on the floor, klfed's
+switch, every `pos fed-..` line (a blind one with its height against the crew's mesh), which of his gotos were
+reached (the blind ones counted apart), how far from his goal he ended; for `--rounds 2` it counts the
+`session: state 0x18 -> 0x19` lines and the verdict is not clean when fewer rounds began than the script is for.
+
+### 10.5 The set (`python tools\kl_playtest.py set3 <work>\build\w_tabM` -> `<work>\research\playtest\v3\`; rig2 form)
+
+| script | what | lines, about |
+|---|---|---|
+| `H3_DM03_board` | the bank to the van and aboard: the stairs in motion, the dial at 0.001 (the FollowOut tests ride on it) | 195, 524 s |
+| `H3_DM02_board` | Late Night Opening to the van and aboard (never walked: the glass doors, the escalators; its first goto holds W up to 20 s) | 205, 557 s |
+| `H3_DM03_van_clear` | the bank `--until van --clear`: he calls the van and stands at (1386, 48, -316), inside the level exit box, 19 m from the van's stop, 451 from its line, outside the bots' box, 90 s, a `pos` every 10 s - in play and NOT aboard while the bots board (Bribe / Leave) | 148, 388 s |
+| `H3_DM01_die_fed`, `H3_DM02_die_fed`, `H3_DM03_die_fed`, `H3_DM06_die_fed` | `--die --fed-walk` (10.3, 10.4): the fed's keys of 10.4, the hero's gotos with short timeouts | 99 .. 130, 349 .. 387 s |
+| `H3_DM01_die_fed_rig3`, `H3_DM02_die_fed_rig3`, `H3_DM06_die_fed_rig3` | the same three with `onbody` (10.6): **only for a TEST hook with `klauto_h3_onbody.patch` - none exists; any other hook loads NO script** | 101 .. 112 |
+| `H3_DM09_die_fed_g1` / `_g2` / `_g3` | Retomoto, one script a group of points; a run fits 3 / 2 / 2 picks of 7 (10.4) | 81 .. 129, 311 .. 370 s |
+| `H3_DM03_F3_fed_dies` | F3 of re/fed.md: the fed walks to the level exit, where the crew runs to the van, and stands **180 s** (to the round's end; with the first form's 60 s the crew might still have been looting - it passes there only on its way out) with the hero's 27 of health; expected: the stock end about 3 s after his second death, no `status 7 -> 1`. If nobody passes, the run shows the walk and the drop, not F3 | 128, 486 s |
+| `H3_DM03_F4_two_rounds` | F4: `--die --rounds 2`. At the score page `tap RETURN` after 8 s, **`wait 3000` and `windows`**, then `onwin` armed again (armed in the poll after the tap it would fire on round 1's page if that were still up and the script would 'PASS' there; SH1 had 9 s between, and the page was gone 2 ms after the key - but nobody has seen this page after a fed round), `waitstate 0x19`, 11 s, the same walk: he dies in each round (round 2's `fed: police bodies:` shows the first body used). **Read the run by `session: state 0x18 -> 0x19` appearing TWICE** (`judge` counts them), not by RESULT PASS | 111, 479 s .. 14 min |
+
+The second round of a session (READ in klauto.c and in run SH1 of 2026-10-09, three rounds): `onwin` is ONE trap
+and is spent when it fires - it is armed again behind its label; RETURN on `HeistStatusLeaderboard` goes 0x20 ->
+0x23 -> 0x24 (`FAWaitForPlayers`) -> 0x25 -> 0x26 -> 0x16 -> 0x18 -> 0x19 in about 2 s, no load; when the last life is
+lost the page is `HeistStatusLeaderboard_EndGame`, another window - no trap, the run then ends by `MaxRunMs`.
+Every script takes the tree's own `[Bots]` block as it is installed (the owner's: BoardAll, FollowOut, Tune,
+Backstab 35); `--extra` changes it.
+
+### 10.6 What the rig lacks, as a patch text (NOT applied: `v3\\klauto_h3_onbody.patch`; `git apply --check` passes on the tree's klhook/klauto.c of 2026-10-11 13:30)
+
+- **`onbody <label>`**: a second trap beside `onwin` - armed, it remembers the game's local player object, and the
+  poll in which the game's pointer names ANOTHER object (his return as police) it lets go of every key and goes to
+  the label, logging the new body's place. The hero's leftover gotos are then skipped instead of steering the fed,
+  the 20 s of `--die-wait` are not needed, and the logged place IS the AFTER_DEATH point.
+- **`ifnear <x> <z> <radius> <label>`** and **`jump <label>`**: with them ONE script can carry the gotos of every
+  group of points (Retomoto) and take the right ones.
+
+The text compiles in a TEST build (`cl /c /W3 /DKLHOOK_TEST klhook.c` on a scratch copy of klhook\\ with the
+patched file: no new warning) and has run nowhere. `kl_playtest.py script ... --fed-walk --rig3` writes the
+`onbody` form (the trap after `pos spawn`, `label fed<round>` in front of the fed's part); `ifnear` / `jump` are not
+used by the tool yet.
+
+### 10.7 ASSUMED, not done
+
+ASSUMED: `GUARD_RUN` 300 outside the bank; `PB_POST`'s 240; that the dial at 0.001 is all a route needs (the
+limiter and the regeneration are as before); that a guard chosen for `--die` is at his post or sends another;
+that the fed's keys of 10.4 (`FedMirror=0`, no `CopToYou`, `CopToCrew` = `CrewToCop` = 0.005, `CrewToYou=0.001`,
+`EndSeconds=0`) do what the reading of klbalance.c says and keep a round going long enough for the fed's walk -
+NOT RUN; r2's 45 s 'unhurt' is no evidence for any key (nobody shot at him in the stair room), and a crew that
+cannot kill a policeman may not live either; that the pick of the AFTER_DEATH point is uniform; that a hero's goto
+with the short timeout (`DIE_GOTO`) still gets him near the die place (when not, he is shot where he is); that
+3 s are enough for round 1's score page to go after RETURN following a fed round; that the first way point of the
+fed's part is still in a straight line from where the hero's leftover gotos have pushed him (the bank's room is
+convex: yes there; Hot Coffee, the park, Late Night Opening: not shown - their `_rig3` twins are the answer); that `kl_escape.Walk`'s 'reached' means a player gets there (no character radius); everything BLIND in
+10.4. The collision's floor under Retomoto's square (19) against the height the player's feet were logged at
+there (-50) is a contradiction this note does not resolve.
+
+Not done: nothing of the third round has run in the game. No way DOWN the two stair towers (Hot Coffee, the park):
+the walk test does not take them and the tool has no other. The stops that R1 / R2 name are not moved but on the
+bank's stairs. `--fed-to van` ends at the crew's level exit place, not beside the van. No `--die` place is checked
+against where the guard really is. Late Night Opening's countdown is not measured. The `onbody` patch is a text.
+
+### 10.8 The review of this round (`re/playtest_review3.md`: ACCEPT WITH FIXES) and what was done
+
+Every point was re-checked against the code and the files before it was taken; none is refuted.
+
+| point | what it said | done |
+|---|---|---|
+| **M1** | the `[Balance]` block of the seven `--fed-walk` scripts without `--fed-die` did the opposite of its `.expect.txt`: unmirrored, `CopToYou=20` is a heister's bullet on the fed x 20 and `CrewToCop` 1.0 a police AI's on a heister | HOLDS (`klbalance.c` `klr_mir = {1, 0, 4, 5, 2, 3}`; with `FedMirror=0` the pass writes slot k = key k). The review's form (a) taken, plus `CrewToYou=0.001`: `FED_WALK` / `FED_WALK_DROP` in the tool, the table and the price in 10.4, the `In the ini:` sentence of each `.expect.txt`, the die line's text. F3 / F4 untouched in their keys (10.4) |
+| **S1** | a death on the way leaves 42.5 s (the bank) of the hero's timeouts + the 20 s wait; 'harmless' is shown for the bank only; '6 .. 8.5 s each' understates | HOLDS. The hero's gotos of a `--die --fed-walk` script have short timeouts (`DIE_GOTO`; the sums are in 10.4 and in each `.expect.txt`); `_rig3` twins of Hot Coffee, Late Night Opening and the park are in the set for a hook with `onbody`. The patch is NOT applied (klhook\\ is not this track's) |
+| **S2** | the park's blind goto lies in the plan inside the fed's own row; a 2-D 'reached' proves no way | HOLDS (199 from points 3 / 4; `klauto.c`'s goto compares x, z). The expect text says 'read the y', with the target's height and its distance in the plan; `judge` tests each `pos fed-blind-N` against the crew's mesh height (`BLIND_DY` 150) and counts the blind gotos apart; where the target is on his own floor (Retomoto's group 2) it says that 'reached' is the test |
+| **S3** | Retomoto: a script fits 3, 2, 2 picks of 7 | HOLDS as arithmetic (the pick's law is not read). Said in each group script's `.expect.txt`, in 10.4 and 10.5, with the owner's 12:31 round for group 1 |
+| **S4** | F4 arms `onwin` in the poll after `tap RETURN` | HOLDS. `wait 3000` + `windows` before it (`PAGE_GONE_MS`); `judge` counts the 0x19 lines and a run with fewer rounds than the script's is not clean |
+| **S5** | F3's fed stands 60 s where the crew only passes on its way out | HOLDS. `--linger 180` for that script: he stands to the round's end. Not walked on to the loot place: the level exit is where F3 wants him |
+| N7 | two `log` texts cut mid-word at 79 | shortened |
+| N3 | `H3_DM03_board` line 58 has `keep` where K2c's line 56 had none | LEFT: one untested difference at a 50 degree turn; the first run of that script tests it |
+| N10 | other sessions' `tools/kl_fa_fedpoints.py` may move the points | LEFT, and it stands: the fed scripts are for the builds of `w_tabM` as they are - after a `kl_fa_fedpoints` step run `set3` again on the new tree |
+
+`set3` now writes 15 scripts; the three board / van scripts' `.ini`, `.route.txt` and `.expect.txt` came out byte
+for byte as before (their `.plan.json` gained each goto's timeout), the nine other old ones changed as above and
+three are new. All 15 pass the review's own parser check (`rev3\\parse.py`, written from klauto.c: 0 problems,
+`onbody` allowed for the three twins) and a second `set3` reproduces them. Nothing of it has run in the game.

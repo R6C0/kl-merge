@@ -19,7 +19,7 @@ map build, and the complete KLHook.ini (TEST hook, klhook\klauto.c [Script]) tha
         --bot N        whose planned places are walked (2 .. 8 = Squad#02 .. #08; default 2)
         --build <folder>   take the route from this build instead (it must then be what Maps\<id> holds for the run)
         --extra "[Section];Key=V;[Other];Key=V"   more ini keys; a key goes into the FIRST section of that name
-        --no-survive   leave the owner's balance (default: [Balance] CopToYou / CrewToYou 0.02 - he never shoots)
+        --no-survive   leave the owner's balance (default: [Balance] CopToYou / CrewToYou = --cop - he never shoots)
         --no-loot / --loot N / --loot-hold S / --loot-wait S   money objects walked to at a loot stop (default 2), seconds
                        of E at each (4), seconds he stands after a stop (5)
         --shoot        hold the fire button over the last 2.5 m before a shatter-glass door. NOT the default: the AI heisters
@@ -32,7 +32,42 @@ map build, and the complete KLHook.ini (TEST hook, klhook\klauto.c [Script]) tha
                        a step to its doors by the clock is blind (--blind-board writes the timed steps all the same)
         --join-after S Retomoto: he stands in the tower until about S seconds after the round began, so that the crew has
                        started by itself (its fall-back timer is the blast + 75 s = 91.5 s) before he takes the join
+        --cop F        [Balance] CopToYou and CrewToYou of a route script (default 0.001: THE THIRD ROUND below; 0.02 = the
+                       scripts before it). Not for --die
+        --stops        keep the stops the model asks for where a live run walked the place in motion (LIVE_MOVING)
+        --clear        with --until van: he does not wait beside the van's doors but stands CLEAR of the vehicle and of the
+                       place the AI heisters gather at, inside a level exit box, for --linger seconds (default 90)
+        --fed-walk     with --die: after his death the script goes on FROM THE AFTER_DEATH POINTS (where a police player
+                       appears): `pos`, then gotos that work from every point of the group, along the collision where
+                       the mesh does not reach and along the mesh to where the heisters are (THE FED below)
+        --fed-group N  the group of AFTER_DEATH points the gotos are written for (1 = the largest; Retomoto has three
+                       groups far apart and the game picks the point: one script a group)
+        --fed-to K     loot | exit | level | enter | van: the crew's place the fed walks to (default loot; when that is
+                       not on the mesh part he can reach: the nearest of the crew's places that is)
+        --fed-die      F3: [Balance] FedMirror=1 (the fed has the hero's 27 of health): he walks into the heisters and the
+                       first of their bullets is his second death. Without it FedMirror=0 (550, the game's own), NO
+                       CopToYou key, CopToCrew = CrewToCop = 0.005, CrewToYou 0.001 and [Fed] EndSeconds=0 (FED_WALK below:
+                       unmirrored, a police player's game reads the OTHER float of each pair): the walk is seen
+        --die-wait S   seconds he stands at the --die place before the fed's gotos begin (default 20). When he dies ON THE
+                       WAY (2 live deaths of 3) the hero's gotos that are left run out first, each to its timeout, and push
+                       the fed about: up to 28 .. 55 s in all on the four maps with a long way, 4 s on Retomoto (DIE_GOTO
+                       keeps them short; the .expect.txt has the sum) - `onbody` (--rig3) is the answer to that
+        --linger S     with --fed-walk: seconds the fed stands at the end of his walk (default 60)
+        --rounds 2     F4: at the score page the script taps RETURN, waits 3 s for the page to go, arms the page's trap
+                       again, waits for the next round's 0x19 and walks the same route again (the level is not loaded
+                       again: run SH1). Read such a run by its TWO 0x19 lines (judge counts them), not by RESULT PASS
+        --rig3         a --fed-walk script for a klauto.c that has `onbody` (the patch text <work>\research\playtest\v3\
+                       klauto_h3_onbody.patch; NOT applied, in no hook): the trap is armed after 0x19 and brings the
+                       script to the fed's part the tick the local player is another object
     python tools\kl_playtest.py set    <installed tree folder> [out folder] [--rig2]     the first set (re\playtest.md 5)
+    python tools\kl_playtest.py set3   <installed tree folder> [out folder]     the third round's set, rig2 (re\playtest.md 10)
+    python tools\kl_playtest.py fed    <build folder> [--fed-group N] [--fed-to K]     what is known OFFLINE about the map's
+        AFTER_DEATH points: over which mesh part, over which floor of the collision, how far the collision alone lets a
+        walker get from them and what bounds that, the way to the crew
+    python tools\kl_playtest.py danger <build folder> [--bot N] [--until ..]     the route's stops against the map's armed
+        enemies (THE POINT-BLANK RULE below)
+    python tools\kl_playtest.py starts [<log folder>] <run> [<run> ..]      per run: when the first goto began after 0x19,
+        when the human was last seen on his START place and first seen off it, how the first goto ended
     python tools\kl_playtest.py selftest <build folder>      the geometry against itself: funnel legs walked by trace()
     python tools\kl_playtest.py rigfit [<log folder>] <run> [<run> ..]      the steering model against the logs of scripted
         walks that ran in the game (<run>.ini + <run>.log; default folder <work>\build\klhook\live): every goto that was
@@ -141,6 +176,56 @@ places on every map (0 units off, seven runs, two different places on Retomoto) 
 point's own +Z; 92 .. 100 % of the bots' logged places lie on the mesh by floor() (the park: 78 %, the rest within
 60 of it). floor() is exact on a polygon's edges and an estimate inside one that is not flat.
 
+THE THIRD ROUND (2026-10-11, track H3; re\playtest.md 10 has the numbers). What the lead's runs of this tool's scripts
+showed, and what the tool does about it:
+  THE START (`starts`). With the wait of FREE_S + FREE_PAD after 0x19 the first goto was reached in all 11 runs that
+have it (the bank 6, Hot Coffee 1, the park 1, Retomoto 3 - whose 18.5 s wait for the blast covers it: 0.3 .. 2.0 s);
+without it, it was lost in 6 of 6 (all on the bank: nothing else was walked so). He is free 10.16 .. 10.4 s after
+0x19 wherever W was held through it (the bank's build 8 runs, Retomoto's 7); Hot Coffee and the park: free by 11.0 s
+(one run each); Late Night Opening: never walked. So: the wait stays, and the first goto of a round gets
+FIRST_TIMEOUT - should a map's countdown be longer, W is held until he can move, and nothing is lost.
+  THE POINT-BLANK RULE (re\melee_damage.md: a guard that fires at a target within PB_REACH sends, at every step of
+his burst, a hit worth 100 bullets). At CopToYou 0.02 that is 151.2 a step from a Type 79 and 758.6 from the .45,
+about six steps a second a guard: the 5,500 of health last 1.1 s beside the .45. The bank's guards are all
+'unleashed' hunters: they come to him. In all eight bank runs the steps began on the stairs down to the garage
+(his way point 14 - 15), 7 .. 15 s after his stage 1, 2,100 .. 3,900 of mesh way from the posts of the guards that
+sent them: about GUARD_RUN a second. The scripts with real stops (five on those stairs, 7.7 s for the staircase)
+were dead there in 3 runs of 5; the first scripts, whose 'stops' were none, took 3.7 s and 4 steps (K2c).
+  So (Route.danger(), `danger`): R1 - a stop or a walk within PB_POST of an armed enemy's post (as the level places
+him; also one whose squad comes into the world later) is printed: 11 way points on Hot Coffee, 4 on Late Night
+Opening, 4 on the bank, 9 in the park, 16 on Retomoto. Live it holds where the guards STAY: Retomoto's two stops in
+front of the jump box stand 30 and 95 from posts and cost him 4 .. 5 steps there in both runs that came to them (B1,
+J1); it says nothing where they hunt (Hot Coffee's way passes 84 from a post: no step in PB_DM01). R2 - a stop a
+guard can have reached (his mesh way from his post at GUARD_RUN, from the human's stage 1 on) is IN REACH: nearly
+every stop behind the entrance, on every map. NOTHING IS MOVED BY EITHER but where a live run walked the place in
+motion (LIVE_MOVING: the bank's nine way points of the stairs, eight of them stops before): a door stop is there
+because the mesh is 14 .. 50 wide, a loot stop is the thing itself (the park's four are the bosses' own places).
+What cannot move is what COP_DIAL is for: a route script now carries [Balance] CopToYou = CrewToYou = 0.001 (a .45
+step 37.9, a Type 79's 7.6 - still in the log's 'you lost' lines; FO_J4's worst second, 5,190, would have been 260).
+  --die: he walks to the post of the first armed enemy the route comes near and stands DIE_STAND from it (inside
+PB_REACH: any shot is point-blank; with CopToYou 20 and 27 of health the first bullet from anywhere kills as before -
+a --fed-walk script has no CopToYou key: 1.0, and the 27 still die to one bullet of anything but a far shotgun hit).
+  THE FED (klhook\klfed.c). The game puts a dead human on a random free AFTER_DEATH spawn point as police; the rig's
+pointer follows the new body. The script cannot SEE the death (no window comes, the session state stays 0x19): it
+stands --die-wait seconds, writes `peek 0x168ea60` (klfed's switch: 0 once he stands as police) and `pos`, and then
+steers whatever body the game calls the local player. `fed` prints what is known offline; the gotos are written for
+ONE group of points (all of them, where they stand together), the first way point being one a straight line reaches
+from every point of the group. Where the points are off the crew's mesh part the first gotos follow the collision
+(kl_escape.Walk: the non-convex static shapes, no doors that open, no character radius), and where neither joins
+the crew's part the script walks to the edge of what the collision leaves open, tries FED_BLIND gotos toward the
+crew and stands: the `pos` lines say how far he got - BY THEIR HEIGHT: a goto's 'reached' is a distance in the plan,
+and a blind target can lie under (the park: inside) the very place he starts from; `judge` tests the y (BLIND_DY).
+  THE FED'S BALANCE (FED_WALK / FED_DIE; the third review's M1). A police player's game reads the OTHER float of each
+of the three pairs (klbalance.c 2 a3). --fed-die: FedMirror=1, the hook writes the pairs exchanged and every key keeps
+its name's meaning (live: FD3). Without it: FedMirror=0 for the game's own 550 of health - then nothing is exchanged
+and CopToYou becomes 'a heister's bullet on the fed', CrewToCop 'a police AI's bullet on a heister': so NO CopToYou=20
+(the hero's 27 of health die to one bullet at 1.0 too), and CrewToCop = CopToCrew = 0.005 so that the crew is
+protected before and after his death - at the price that it cannot kill a policeman all round long. NOT RUN.
+  WHAT THE GAME PICKS. The point is the game's: on a map with several groups (Retomoto: 3 + 2 + 2 points) a script
+fits only the runs that get its group - if the pick is uniform (not read), 3 / 2 / 2 runs in 7.
+  --rounds 2: `onwin` for round 2's page is armed PAGE_GONE_MS after `tap RETURN` (armed at once it would fire on
+round 1's page if that were still up, and the script would 'PASS' there); `judge` counts the 0x19 lines.
+
 OUTPUT of `script`: <out>.ini (complete: the tree's KLHook.expansion.ini block as mk_tab_inis.py writes it, the
 gameplay sections of the lead's mkrun.py, [Auto], [Script]), <out>.route.txt (the route as `route` prints it),
 <out>.expect.txt (the log lines that show each stage, in order) and <out>.plan.json (the same for `judge`: every
@@ -246,6 +331,35 @@ LOOT_NEAR = 1500.0              # a money object belongs to a loot stop within t
 LOOT_OFF = 40.0                 # he stands at least this far from a money object's own place (it is a thing he would run into)
 LOOT_PUSH, LOOT_PUSH_MS = 120.0, 1200     # a money object whose trigger the mesh does not reach: a mesh place up to this far outside it, then a goto
                                           # straight at the object for this long (under the 1.5 s after which a goto side-steps)
+# ---- the third round (2026-10-11; re\playtest.md 10)
+FIRST_TIMEOUT = 20000           # ms: the first goto of a round. Should a map's countdown outlast the wait, W is held until he can move
+PB_REACH = 160.0                # kl2 0x8c62e0: a firing soldier's target within this (node to node, 3-D) gets the x100 step (re\melee_damage.md 2)
+PB_POST = 400.0                 # R1: no stop / walk within this of an armed enemy's post: PB_REACH + 240 for his own steps round it. GUESS for the 240
+GUARD_RUN = 300.0               # R2: a hunting guard's way along the mesh, units a second, from the human's stage 1 on. MEASURED on the bank only (5 runs:
+                                # the first step of each gun against its carrier's mesh way from his post - Type 79 2,128 / 2,904 in 7.4 .. 11.4 s, the
+                                # .45 3,226 in 12.5 .. 15, the Sig 3,890 in 13.4, the shotgun 2,430 in 15: 160 .. 390, most 215 .. 300); a GUESS elsewhere
+COP_DIAL = 0.001                # [Balance] CopToYou / CrewToYou of a route script: a point-blank step is then 7.6 (Type 79) .. 37.9 (the .45) of 5,500
+# way points a LIVE run walked IN MOTION although the model asks for a stop there: {map: [(x, z, goto radius, sprint)]}. The bank's stairs from
+# the hall down to the garage: runs K1 / K2 / K2b (the first five, until his death) and K2c (all nine) of the first scripts, whose gotos there had
+# these radii and `keep` - every one reached, the staircase in 3.7 s (K2c) against 7.4 .. 8.0 s with the five real stops (PB, FO_J1, FO_J3)
+LIVE_MOVING = {'M03_FA_A': [(-990, -6072, 40, False), (-997, -5912, 70, False), (-960, -5791, 35, False), (-797, -5680, 35, False), (-321, -5692, 70, False),
+                            (-322, -5910, 70, False), (-875, -5945, 70, True), (-950, -6400, 70, True), (-914, -6915, 70, True)]}
+DIE_STAND = 110.0               # --die: he stands this far from the chosen guard's post (inside PB_REACH with 50 to spare)
+DIE_REACH = 2500.0              # --die: ... the guard whose post is within this of mesh way from a way point of the route, the first on the route
+DIE_WAIT = 20.0                 # --fed-walk: seconds at the --die place before the fed's gotos begin: live he was dead 8 .. 15 s after he could move
+                                # (PT_DM03_die_r2 / _f2, FD3_DM03_die: on the way, before he stood) and police 5.0 s after that. The hero's gotos that
+                                # are left when he dies run out first (each to its timeout, steering the new body at the old way points): the wait
+                                # is for the case that he reaches the place alive
+DIE_GOTO = (1.5, 2.5, 4000)     # --die --fed-walk, rig2: the timeout of a goto of the HERO = 1.5 x the model's time + 2.5 s, at least 4 s (any other
+                                # goto: 3 x + 4 s, at least 6 s). Room for one 'stuck' side step (1.5 + 0.7 s); the model's time was within 0.1 s of
+                                # the log for 8 gotos in 10 (rigfit). NOT RUN with these
+PAGE_GONE_MS = 3000             # --rounds 2: between `tap RETURN` on the score page and the `onwin` for the next round's page (review 3, S4)
+BLIND_DY = 150.0              # a fed's BLIND goto shows a way down only when his `pos` after it is within this of the crew's mesh height there
+FED_GROUP = 1500.0              # AFTER_DEATH points nearer than this to another (3-D) are one group
+FED_PAD = 1800.0                # the collision is read this far round a group and its way
+FED_BLIND, FED_BLIND_MS = 3, 6000   # where neither mesh nor collision joins the crew's part: this many gotos toward it, each this long
+FED_SPAWN_UNDER = (260.0, 60.0)     # a spawn point floats: the floor is looked for this far below / above it
+CLEAR_MIN = 450.0               # --clear: he stands at least this far from the van's line, its boarding box and the bots' AllyEscapeBox
 R_ = 'ROOT\\'
 
 
@@ -333,6 +447,69 @@ class Level:
                 k, v = line.split('=', 1)
                 cur[k.strip()] = v.strip()
         return out
+
+    def hvk(self):
+        """The level's Havok file (kl_hvk.Hvk), read when the collision is asked for."""
+        if getattr(self, '_hvk', None) is None:
+            import kl_hvk
+            with zipfile.ZipFile(self.B.zp) as z:
+                self._hvk = kl_hvk.Hvk(z.read(next(n for n in z.namelist() if n.lower().endswith('_main.hvk'))))
+        return self._hvk
+
+    def refs(self):
+        """{REF label: node} of the build's entities (a collision shape names its entity by that)."""
+        if getattr(self, '_refs', None) is None:
+            self._refs = {e.ref: i + 1 for i, e in enumerate(self.B.ents)}
+        return self._refs
+
+    def soldiers(self):
+        """The armed Enemy soldiers as the level places them -> [dict node, name, at, weapon, squad (node or None),
+        active (ZSquadScript field 3: in the world when the level loads), attitude (field 0), hunts (the squad has a
+        hunt or flanking rout), place (x, y, z, polygon on the mesh or None), g (one bullet of his gun on a body at
+        arm's length before any factor: kl_map_ai.bullet; None when the gun is not read)]."""
+        if getattr(self, '_soldiers', None) is not None:
+            return self._soldiers
+        B, sc, nav = self.B, self.B.sc, self.nav
+        sq, guns = {}, {}
+        for t, _i, v in kl_fa.controllers(sc, 'ZSquadScript'):
+            hunts = any(sc.p.key(nm) in ('HuntBehaviourRout', 'FlankingBehaviourRout') for k in range(t + 1, sc.end[t]) for nm, _b in sc.nodes[k]['ctrls'])
+            for k in range(t + 1, sc.end[t]):
+                sq[k] = (t, v[0], v[3], hunts)
+        try:
+            import kl_map_ai as MA
+            for n, g in MA.guns(sc).items():
+                guns[n] = MA.bullet(g, 1.0, True)
+        except Exception as e:                           # the gun table is a nicety: the rule does not need it
+            self.gun_note = 'the gun templates were not read (%s: %s)' % (type(e).__name__, e)
+        out = []
+        for k in range(1, len(sc.nodes)):
+            if sc.cls(k) != 'ZFFActor' or not any(sc.p.key(nm) == 'ZSoldier' for nm, _b in sc.nodes[k]['ctrls']):
+                continue
+            v = B.values(k)
+            w = (v['ZFFActor[1]'] or '').rsplit('\\', 1)[-1] if isinstance(v['ZFFActor[1]'], str) else ''
+            if v['ZFFActor[0]'] != 'Enemy' or not w:
+                continue
+            p = B.at(k)
+            t, att, act, hunts = sq.get(k, (None, '?', 1, False))
+            a = snap(nav, p, dy=200.0) or nearest(nav, p, 200.0, dy=260.0)
+            out.append(dict(node=k, name=sc.path[k][5:], at=p, weapon=w, squad=t, active=bool(act), attitude=att, hunts=hunts, place=a, g=guns.get(w)))
+        self._soldiers = out
+        return out
+
+    def dead_points(self):
+        """The FRAGILE_ALLIANCE_AFTER_DEATH spawn points (where a police PLAYER appears: kl2 0x518e30 takes a random
+        free one) -> [(node, place, heading of its +Z as klauto logs one)]."""
+        B, sc, out = self.B, self.B.sc, []
+        for k in range(1, len(sc.nodes)):
+            if sc.cls(k) == 'ZSpawnPoint' and any(isinstance(x, str) and x == kl_fa.DEAD for x in kl_fa.node_values(sc, k)):
+                Rm = B.fr[B.ents[k - 1]][0]
+                out.append((k, B.at(k), math.degrees(math.atan2(Rm[0][2], Rm[2][2]))))
+        return out
+
+    def walk(self, box):
+        """kl_escape.Walk (where a character can walk by the collision alone) over box = (x0, x1, z0, z1)."""
+        import kl_escape
+        return kl_escape.Walk(self.hvk(), box)
 
 
 def vec(text):
@@ -721,8 +898,276 @@ def way(nav, a, b):
     return out
 
 
+# ------------------------------------------------------------------ the fed: where a police player appears, and his way to the crew
+def crew_places(L, bot=2):
+    """The crew's places on the mesh, in the order of the round -> [(kind, (x, y, z, polygon), what)]: the START row's
+    middle, then the stations of bots.json (the bot's own place of each), Retomoto's street stations too."""
+    nav, plan, out = L.nav, L.plan, []
+    me = plan['bots'].get(str(bot)) or next(iter(plan['bots'].values()))
+    mid = tuple(sum(p[i] for p, _f in L.st['starts']) / len(L.st['starts']) for i in range(3))
+    rows = [('start', mid, 'the START row')]
+    for i, st in enumerate(plan['stations']):
+        rows.append((st['kind'], tuple(me['places'][i]) if i < len(me['places']) else tuple(st['places'][0]), st['what']))
+    if L.rt:
+        rows += [(st['kind'], tuple(st['places'][0]), 'street: ' + st['what']) for st in L.rt['street']['stations']]
+    for kind, p, what in rows:
+        q = snap(nav, p, under=START_FLOOR) if kind == 'start' else (snap(nav, p) or nearest(nav, p, 150.0))
+        if q:
+            out.append((kind, q, what))
+    return out
+
+
+def coll_floor(W, p, under=FED_SPAWN_UNDER):
+    """The floor of the collision a body put at p comes to stand on: the highest floor sample of p's cell that is not
+    more than under[1] above p (a spawn point floats) -> (height or None, every floor of the cell)."""
+    fl = sorted(y for y, f, _r in W.grid.get(W.cell(p[0], p[2]), ()) if f)
+    below = [y for y in fl if y <= p[1] + under[1]]
+    return (below[-1] if below else None), fl
+
+
+def coll_line(W, seen, a, b):
+    """Can the straight line a -> b be walked over the cells the flood reached: every cell on it reached, no step over
+    the walk test's own limits."""
+    n = max(1, int(d2(a, b) // (W.CELL / 2)))
+    last = None
+    for t in range(n + 1):
+        c = W.cell(a[0] + (b[0] - a[0]) * t / n, a[2] + (b[2] - a[2]) * t / n)
+        if c not in seen or (last is not None and not -W.DOWN <= seen[c] - last <= W.UP):
+            return False
+        last = seen[c]
+    return True
+
+
+def fed_facts(L, group=1, to='loot', bot=2, log=None):
+    """What is known OFFLINE about the place a police PLAYER appears at, and his way to the crew -> dict:
+    points [dict n, name, at, head, mesh (polygon, height, part) under it or None, off (distance in the plan to the
+    nearest polygon of a crew part, when none is under it), floor (the collision's, or None), floors, group],
+    groups [[n]] (the largest first), group (the chosen one's n), crew_parts, seen / W (the walk test's flood from the
+    group and the test itself; None when no point of the group has a floor), area, bounds, blockers [(name, cells)],
+    reached {kind: bool} (the crew's places by the collision alone), entries + heads (the group's points when every one
+    stands over a crew part), pre [(x, y, z)] (the collision's way to the mesh, when they do not and the flood gets
+    there), join (x, y, z, polygon), blind [(x, y, z)] (when nothing joins), goal (kind, place, what), notes."""
+    B, sc, nav = L.B, L.B.sc, L.nav
+    F = dict(points=[], groups=[], group=[], notes=[], pre=[], blind=[], entries=[], heads=[], join=None, goal=None, seen=None, W=None, blockers=[], reached={},
+             area=0.0, bounds=None, edge=None)
+    crew = crew_places(L, bot)
+    parts = {nav.part[q[3]] for _k, q, _w in crew}
+    F['crew_parts'], F['crew'] = parts, crew
+    dead = L.dead_points()
+    if not dead:
+        F['notes'].append('the build has no FRAGILE_ALLIANCE_AFTER_DEATH spawn point: a fed stays where the level put the police body')
+        return F
+    for n, (k, p, head) in enumerate(dead):
+        under = []
+        for i, b in enumerate(nav.box):
+            if nav.ok[i] and b[0] <= p[0] <= b[1] and b[2] <= p[2] <= b[3] and nav.inside(i, p[0], p[2]):
+                h = floor(nav, i, p[0], p[2])
+                if p[1] - FED_SPAWN_UNDER[0] <= h <= p[1] + FED_SPAWN_UNDER[1]:
+                    under.append((nav.part[i] not in parts, abs(h - p[1]), i, h))
+        m = min(under)[2:] if under else None
+        off = None
+        if m is None or nav.part[m[0]] not in parts:
+            c = [(math.hypot(nav.mid[i][0] - p[0], nav.mid[i][2] - p[2]), nav.mid[i][1] - p[1], i) for i in range(len(nav.pv)) if nav.ok[i] and nav.part[i] in parts]
+            off = min(c) if c else None
+        F['points'].append(dict(n=n + 1, node=k, name=sc.path[k][5:], at=p, head=head, mesh=(m[0], m[1], nav.part[m[0]]) if m else None, off=off, floor=None, floors=[]))
+    left, groups = list(range(len(dead))), []
+    while left:                                         # single-link groups
+        g, todo = [left.pop(0)], None
+        grew = True
+        while grew:
+            grew = False
+            for j in list(left):
+                if any(math.dist(dead[j][1], dead[i][1]) <= FED_GROUP for i in g):
+                    g.append(j); left.remove(j); grew = True
+        groups.append(sorted(g))
+    groups.sort(key=lambda g: (-len(g), g[0]))
+    F['groups'] = [[i + 1 for i in g] for g in groups]
+    for gi, g in enumerate(groups):
+        for i in g:
+            F['points'][i]['group'] = gi + 1
+    if not 1 <= group <= len(groups):
+        raise SystemExit('--fed-group %d: the AFTER_DEATH points stand in %d group(s)' % (group, len(groups)))
+    G = [F['points'][i] for i in groups[group - 1]]
+    F['group'] = [q['n'] for q in G]
+    # ---- the collision round the group: the floor under each point, the flood from them
+    gx, gz = [q['at'][0] for q in G], [q['at'][2] for q in G]
+    near = min(((math.hypot(q[0] - sum(gx) / len(gx), q[2] - sum(gz) / len(gz)), q) for _k, q, _w in crew), key=lambda x: x[0])[1]
+    cx, cz = gx + [near[0]], gz + [near[2]]
+    if max(cx) - min(cx) > 9000 or max(cz) - min(cz) > 9000:    # the crew is far: only round the group (the flood then ends at the box)
+        cx, cz = gx, gz
+    try:
+        W = L.walk((min(cx) - FED_PAD, max(cx) + FED_PAD, min(cz) - FED_PAD, max(cz) + FED_PAD))
+    except Exception as e:
+        F['notes'].append('the collision could not be read (%s: %s): the mesh alone is used' % (type(e).__name__, e))
+        W = None
+    start = None
+    if W is not None:
+        for q in G:
+            q['floor'], q['floors'] = coll_floor(W, q['at'])
+            if q['floor'] is not None and start is None:
+                start = (q['at'][0], q['floor'], q['at'][2])
+    if start is not None:
+        seen, par, block = W.flood(start)
+        F.update(seen=seen, W=W, par=par, area=len(seen) * W.CELL * W.CELL / 1e4)
+        cs = [W.centre(c) for c in seen]
+        F['bounds'] = (min(x for x, _ in cs), max(x for x, _ in cs), min(z for _, z in cs), max(z for _, z in cs), min(seen.values()), max(seen.values()))
+        refs = L.refs()
+        F['blockers'] = [(sc.path[refs[r]][5:] if r in refs else 'REF %d' % r, len(c)) for r, c in sorted(block.items(), key=lambda kv: -len(kv[1]))[:10]]
+        for q in G:
+            c = W.cell(q['at'][0], q['at'][2])
+            q['flood'] = q['floor'] is not None and c in seen and abs(seen[c] - q['floor']) < 30.0
+        for kind, q, _w in crew:
+            c = W.cell(q[0], q[2])
+            F['reached'][kind] = F['reached'].get(kind, False) or (c in seen and abs(seen[c] - q[1]) < 150.0)
+    # ---- the way onto the crew's mesh
+    on = [q for q in G if q['mesh'] and q['mesh'][2] in parts]
+    if len(on) == len(G):
+        F['entries'] = [(q['at'][0], q['mesh'][1], q['at'][2], q['mesh'][0]) for q in G]
+        F['heads'] = [q['head'] for q in G]
+        e0 = F['entries'][0]
+    else:
+        e0 = None
+        if F['seen'] is not None:
+            seen, depth = F['seen'], {}
+            def deep(c):                                # steps of the flood from its start: the way's length in cells
+                stack = []
+                while c is not None and c not in depth:
+                    stack.append(c); c = F['par'][c]
+                d = depth[c] if c is not None else -1
+                for s in reversed(stack):
+                    d += 1; depth[s] = d
+                return d
+            best, idx = None, collections.defaultdict(list)
+            for i in range(len(nav.pv)):                # the crew's polygons by a grid of 400: 250,000 cells are asked
+                if nav.ok[i] and nav.part[i] in parts:
+                    b = nav.box[i]
+                    for ix in range(int(b[0] // 400), int(b[1] // 400) + 1):
+                        for iz in range(int(b[2] // 400), int(b[3] // 400) + 1):
+                            idx[ix, iz].append(i)
+            for c, y in seen.items():
+                x, z = W.centre(c)
+                for i in idx.get((int(x // 400), int(z // 400)), ()):
+                    if nav.inside(i, x, z) and abs(floor(nav, i, x, z) - y) <= 80.0 and clear(nav, x, floor(nav, i, x, z), z) >= 40.0:
+                        d = deep(c)
+                        if best is None or d < best[0]:
+                            best = (d, (x, floor(nav, i, x, z), z, i), (x, y, z))
+                        break
+            if best:
+                F['join'] = e0 = best[1]
+                w = W.way(seen, start, best[2], margin=3) or [best[2]]
+                k0 = next((k for k in range(len(w)) if all(q['floor'] is not None and coll_line(W, seen, (q['at'][0], q['floor'], q['at'][2]), w[k]) for q in G)), None)
+                if k0 is None:
+                    F['notes'].append('no way point of the collision\'s way is reached by a straight line from EVERY point of the group: the way is the one from point %d' % G[0]['n'])
+                    k0 = 0
+                F['pre'] = [tuple(q) for q in w[k0:]]
+            else:
+                # nothing joins. The gotos go to the EDGE of what the collision leaves open, and from there blind at the crew's mesh.
+                # The edge: where the flood went DOWN (it spans more than 150 in height: stairs it took part of) its lowest cell;
+                # else the cell nearest to an object named 'stair' among those that bound it; else the cell nearest to the crew's
+                # mesh in the plan. (A walk test that knew a stair's stacked flights would do better: kl_escape.Walk takes a
+                # slab's underside for a floor and the flight above for a ceiling.)
+                polys = [i for i in range(len(nav.pv)) if nav.ok[i] and nav.part[i] in parts]
+                refs = L.refs()
+                lo, hi = min(seen.values()), max(seen.values())
+                stairs = [n_ for n_, _c in F['blockers'] if 'stair' in n_.lower()]
+                if hi - lo > 150.0:
+                    c, F['edge_why'] = min(seen, key=lambda c: seen[c]), 'the lowest place the walk test came to (it went down %d from the points)' % (hi - lo)
+                elif stairs:
+                    pts_ = [W.centre(c_) for c_, g in W.grid.items() for _y, _f, r in g[:1] if r in refs and 'stair' in sc.path[refs[r]].lower()]
+                    mx, mz = sum(x for x, _ in pts_) / len(pts_), sum(z for _, z in pts_) / len(pts_)
+                    c = min(seen, key=lambda c: math.hypot(W.centre(c)[0] - mx, W.centre(c)[1] - mz))
+                    F['edge_why'] = 'the place of the region nearest to the middle of %s, which bounds it' % stairs[0].split('\\')[-1]
+                else:
+                    cells = list(seen)
+                    c = min(cells[::max(1, len(cells) // 3000)], key=lambda c: min(math.hypot(nav.mid[i][0] - W.centre(c)[0], nav.mid[i][2] - W.centre(c)[1]) for i in polys))
+                    F['edge_why'] = 'the place of the region nearest to the crew\'s mesh in the plan'
+                ex, ez = W.centre(c)
+                F['edge'] = (ex, seen[c], ez)
+                w = W.way(seen, start, F['edge'], margin=2) or [F['edge']]
+                F['pre'] = [tuple(q) for q in w]
+                i = min(polys, key=lambda i: math.hypot(nav.mid[i][0] - ex, nav.mid[i][2] - ez) + 0.25 * abs(nav.mid[i][1] - seen[c]))
+                F['blind'] = [tuple(nav.mid[i])]
+        if e0 is None and not F['blind']:
+            c = [(q['off'][0], q) for q in G if q['off']]
+            if c:
+                F['notes'].append('no floor of the collision under the group and no mesh of the crew\'s under it: nothing to walk on is known')
+    if F['pre']:                                        # no goto of the collision's way longer than LEG_MAX
+        out = [F['pre'][0]]
+        for q in F['pre'][1:]:
+            n = int(math.ceil(d2(out[-1], q) / LEG_MAX))
+            a = out[-1]
+            out += [lerp(a, q, k / n) for k in range(1, n + 1)]
+        F['pre'] = out
+    # ---- where the fed walks to: the crew's place of kind `to`, or the nearest of the crew's places he has a mesh way to
+    if e0 is not None:
+        dist = nav.dist_map(e0[3], e0[:3])[0]
+        ok = [(dist[q[3]], kind, q, what) for kind, q, what in crew if q[3] in dist and kind != 'start']
+        want = {'van': 'level', 'hall': 'enter'}.get(to, to)
+        pick = [x for x in ok if x[1] == want]
+        if pick:
+            x = pick[-1] if want == 'loot' else pick[0]
+        elif ok:
+            x = min(ok)
+            F['notes'].append('--fed-to %s: no such place of the crew on the mesh part he can reach: the nearest of the crew\'s places instead (%s)' % (to, x[1]))
+        else:
+            x = None
+            F['notes'].append('none of the crew\'s places has a way on the mesh from where the fed comes onto it')
+        if x:
+            F['goal'] = (x[1], x[2], x[3], x[0])
+    return F
+
+
+def fed_text(L, F):
+    """fed_facts() as lines (the `fed` command; the route print of a --fed-walk route)."""
+    nav, o = L.nav, []
+    if not F['points']:
+        return ['THE FED: ' + t for t in F['notes']]
+    o.append('THE FED (klfed.c, [Fed] Player=1: the dead human comes back as police on a random free AFTER_DEATH point; the points float as START points do): '
+             '%d point(s) in %d group(s) %s (a group = within %d of another); the crew\'s mesh part(s) %s; the gotos are written for group %s'
+             % (len(F['points']), len(F['groups']), F['groups'], FED_GROUP, sorted(F['crew_parts']), F['group']))
+    for q in F['points']:
+        m = q['mesh']
+        mesh = 'NO mesh under it' if not m else 'mesh %d under it, part %d (%d polygons%s)' % (q['at'][1] - m[1], m[2], nav.part_size[m[2]],
+                                                                                         ' = the crew\'s' if m[2] in F['crew_parts'] else ': NOT the crew\'s')
+        if q['off']:
+            mesh += '; the crew\'s mesh is %d away in the plan and %+d in height' % (q['off'][0], q['off'][1])
+        coll = ''
+        if q['n'] in F['group']:
+            coll = '; collision: ' + ('the floor he stands or falls on is %d (%d under the point)' % (q['floor'], q['at'][1] - q['floor']) if q['floor'] is not None else
+                                      'NO floor at or under it' + (' - the floors of its cell are %s (the lowest %d ABOVE it)' % (', '.join('%d' % y for y in q['floors'][:5]),
+                                                                                                                         min(q['floors']) - q['at'][1]) if q['floors'] else ' - its cell has no floor at all'))
+        o.append('   point %d (group %d) %s at (%d, %d, %d), heading %d: %s%s' % (q['n'], q['group'], q['name'].split('!')[-1], *q['at'], q['head'], mesh, coll))
+    if F['seen'] is not None:
+        b = F['bounds']
+        yes, no = [k for k, v in F['reached'].items() if v], [k for k, v in F['reached'].items() if not v]
+        o.append('   the walk test over the collision from the group (kl_escape.Walk: the static shapes only - no door that opens, no character radius; stacked stair flights it '
+                 'often does NOT take, so a \'no\' is weaker than a \'yes\'): %d m2, x %d..%d z %d..%d, floors %d..%d; of the crew\'s places it reaches: %s; not: %s'
+                 % (F['area'], *b, ', '.join(yes) or 'none', ', '.join(no) or 'none'))
+        o.append('   what bounds that region (cells blocked): ' + '; '.join('%s x%d' % (n.split('\\')[-1][-44:], c) for n, c in F['blockers']))
+    elif any(q['n'] in F['group'] for q in F['points']):
+        o.append('   the walk test over the collision could not start: no point of the group has a floor of the collision at or under it')
+    if F['entries']:
+        o.append('   every point of the group stands over the crew\'s mesh: the fed\'s gotos follow the mesh from the points (the first way point: a straight line from each)')
+    if F['pre']:
+        o.append('   %s: %s' % ('the collision\'s way from the group to where the crew\'s mesh begins, (%d, %d, %d) - gotos OFF the mesh' % F['join'][:3] if F['join'] else
+                               'NEITHER the mesh NOR the collision joins the group to the crew\'s part: the way to the edge of what the collision leaves open, (%d, %d, %d)' % F['edge'],
+                               ' '.join('(%d, %d, %d)' % q for q in F['pre'])))
+    if F['blind']:
+        o.append('   the edge is %s; from it %d BLIND goto(s) of %d ms straight at the crew\'s mesh at (%d, %d, %d), %d under it (a GUESS that there is a way: the `pos` lines say '
+                 'how far he got)' % (F.get('edge_why', '?'), FED_BLIND, FED_BLIND_MS, *F['blind'][-1], F['edge'][1] - F['blind'][-1][1]))
+    if F['goal']:
+        o.append('   the fed walks to the crew\'s \'%s\' place (%d, %d, %d): %d of mesh way' % (F['goal'][0], *F['goal'][1][:3], F['goal'][3]))
+    if F.get('coll_end') is not None:
+        o.append('   THE MESH WAY LEAVES THE REGION THE COLLISION LEAVES OPEN at way point %d of the fed\'s part (a door that is shut in the collision, or stairs the walk test '
+                 'does not take): a goto that sticks there in the game says which' % (F['coll_end'] + 1))
+    for t in F['notes']:
+        o.append('   NOTE ' + t)
+    return o
+
+
 # ------------------------------------------------------------------ the route
-HARD = ('first', 'enter', 'exit', 'level', 'call', 'loot', 'gate', 'rally', 'board', 'wait', 'join', 'foot', 'approach', 'money', 'drop', 'land', 'die', 'stair', 'align')
+HARD = ('first', 'enter', 'exit', 'level', 'call', 'loot', 'gate', 'rally', 'board', 'wait', 'join', 'foot', 'approach', 'money', 'drop', 'land', 'die', 'stair', 'align',
+        'fedgoal')
 KIND_TEXT = {'first': 'the first way point', 'way': 'a place of the bot\'s way', 'corner': 'a corner of the mesh', 'door': 'a door (a short shared edge)',
              'stair': 'foot / top of a slope', 'long': 'on a long leg', 'drop': 'the take-off of a drop', 'land': 'where the drop lands (not a goto)'}
 UNTIL = ('enter', 'loot', 'exit', 'join', 'van', 'board', 'wall')
@@ -745,9 +1190,10 @@ class Route:
     'r' (goto radius), 'sprint', 'stop' (something else than a goto follows), 'boxes' [...], and for the script:
     'keys' (lines after it is reached), 'say' (what the log should show there)}."""
 
-    def __init__(self, L, bot=2, until='board', loot=2, die=False, walk=False, shoot=False):
+    def __init__(self, L, bot=2, until='board', loot=2, die=False, walk=False, shoot=False, stops=False, clear=False, fed=None):
         self.L, self.nav, self.B = L, L.nav, L.B
         self.bot, self.until, self.loot_n, self.die, self.walk, self.shoot = bot, until, loot, die, walk, shoot
+        self.keep_stops, self.clear, self.fed = stops, clear, None      # (fed: the facts of fed_facts() once the fed's part is made)
         self.notes, self.segs, self._doors = [], [], None
         self.lanes = KB.lanes(self.B)
         self.boarding = None                    # 'van' (the box rides on a key-framed van) | 'fixed' | None (not walked)
@@ -766,11 +1212,18 @@ class Route:
             self.die_place()
         elif until in ('van', 'board'):
             self.call_point()
+        if fed:
+            if not die:
+                raise SystemExit('--fed-walk goes with --die (the fed is the human after his death)')
+            self.fed_part(fed)
         for s in self.segs:
             self.split(s)
             self.finish(s)
             self.drive(s)
         self.stage_boxes()
+        self.danger()
+        if self.fed:
+            self.fed_collision()
 
     # ---- what the plan gives
     def note(self, text):
@@ -910,9 +1363,34 @@ class Route:
                 q = snap(nav, c, dy=150.0) or nearest(nav, c, 90.0, dy=150.0)
                 cands.append((0 if q else 1, d2(c, ref), q or (c[0], c[1], c[2], None)))
             q = min(cands)[2]
+            what = 'beside the van\'s rear doors at its stop'
+            if self.clear and self.until == 'van':
+                # --clear: in play and NOT aboard while the AI heisters board. A place of the mesh inside a level exit box (the
+                # van keeps coming while somebody stands in one), CLEAR_MIN from the van's line and its boarding box at the stop and
+                # outside the box the bots gather in - the nearest such place to where the route enters the exit box
+                ally, a0 = self.L.plan.get('ally_at'), snap(nav, frm) or nearest(nav, frm, 150.0)
+                best = None
+                for c in around(nav, d['stop'], 2000.0, nav.part[a0[3]] if a0 else None, step=80.0, dy=260.0):
+                    if clear(nav, *c[:3]) < 60.0 or d2(c, d['board']) < CLEAR_MIN or d2(c, d['stop']) < CLEAR_MIN:
+                        continue
+                    if self.lanes and KB.lane_dist(self.lanes, c) < CLEAR_MIN:
+                        continue
+                    if ally and abs(c[0] - ally[0]) <= KB.ALLY_SIZE[0] + 150.0 and abs(c[2] - ally[2]) <= KB.ALLY_SIZE[2] + 150.0:
+                        continue
+                    if not KB.in_exit(B, self.exits, c[:3]):
+                        continue
+                    key = d2(c, frm)
+                    if best is None or key < best[0]:
+                        best = (key, c)
+                if best:
+                    q = best[1]
+                    what = 'CLEAR of the vehicle (--clear): %d from the van\'s stop, %d from its boarding box, outside the bots\' AllyEscapeBox, inside a level exit box' \
+                           % (d2(q, d['stop']), d2(q, d['board']))
+                else:
+                    self.note('--clear: no place of the mesh inside a level exit box is %d from the van\'s line, its stop and the bots\' box: he waits beside the rear doors' % CLEAR_MIN)
             lane = KB.lane_dist(self.lanes, q) if self.lanes else 1e9
             inbox = [B.sc.path[k][5:] for k in KB.in_exit(B, self.exits, q[:3])]
-            w = wp(q, 'wait', 'beside the van\'s rear doors at its stop, %.0f from its line' % lane, q[3], stop=True, r=45.0, lane=lane, in_exit=inbox)
+            w = wp(q, 'wait', '%s, %.0f from its line' % (what, lane), q[3], stop=True, r=45.0, lane=lane, in_exit=inbox)
             if q[3] is None:
                 self.note('the waiting place beside the van\'s stop is NOT on the mesh (neither side of the van within 90)')
             ally = self.L.plan.get('ally_at')
@@ -1040,9 +1518,11 @@ class Route:
             return [g]
         return [g if q['kind'] == 'goal' else wp(q['p'], q['kind'], poly=q['poly'], axis=q.get('axis')) for q in w]
 
-    def first(self, entries, g0, part):
+    def first(self, entries, g0, part, near=2 * END_ZONE, what='START places'):
         """The first way point: a straight line on the mesh from EVERY entry (the human gets one START point of the row
-        at random), as far along the way to the first guide as LEG_MAX allows."""
+        at random), as far along the way to the first guide as LEG_MAX allows. near: how near to an entry it may lie
+        (the fed's part: 0 - a goto that is reached at once costs nothing, and a way point that only SOME of the
+        AFTER_DEATH points see is worse)."""
         nav = self.nav
         c = tuple(sum(e[i] for e in entries) / len(entries) for i in range(3))
         cs = snap(nav, c, part=part, dy=150.0) or min(entries, key=lambda e: d2(e, c))
@@ -1058,7 +1538,7 @@ class Route:
         cands = [cs] + cands
         best = None
         for q in reversed(cands):                       # the farthest first; a START place may stand at a wall, so the line's 'mid'
-            if max(d2(e, q) for e in entries) > LEG_MAX or min(d2(e, q) for e in entries) < 2 * END_ZONE:
+            if max(d2(e, q) for e in entries) > LEG_MAX or min(d2(e, q) for e in entries) < near:
                 continue
             ts = [trace(nav, e, q) for e in entries]
             ok = [t for t in ts if t['ok'] and abs(t['end'][1] - q[1]) < 60]
@@ -1073,12 +1553,14 @@ class Route:
         info = {'starts': len(entries), 'ok': len(ok), 'clear': min([t['clear'] for t in ok] or [0]), 'mid': min([t['mid'] for t in ok] or [0]),
                 'len': (min([t['len'] for t in ts] or [0]), max([t['len'] for t in ts] or [0]))}
         if len(ok) < len(entries):
-            self.note('only %d of the %d START places have a straight line on the mesh to the first way point (%d, %d, %d)' % (len(ok), len(entries), *q[:3]))
-        return wp(q, 'first', 'the first way point: a straight line from %d of the %d START places' % (len(ok), len(entries)), q[3], starts=info)
+            self.note('only %d of the %d %s have a straight line on the mesh to the first way point (%d, %d, %d)' % (len(ok), len(entries), what, *q[:3]))
+        return wp(q, 'first', 'the first way point: a straight line from %d of the %d %s' % (len(ok), len(entries), what), q[3], starts=info)
 
     def segment(self, s):
         nav, st = self.nav, self.L.st
-        if s.get('entry'):
+        if s.get('entries'):                            # given places on the mesh (the fed's: the AFTER_DEATH points, or where the collision way joins it)
+            entries, heads = list(s['entries']), list(s['heads'])
+        elif s.get('entry'):
             e = snap(nav, s['entry'], dy=200.0) or nearest(nav, s['entry'], 200.0)
             if e is None:
                 raise SystemExit('the entry (%d, %d, %d) of the %s part has no mesh under it' % (*s['entry'], s['name']))
@@ -1121,7 +1603,7 @@ class Route:
             raise SystemExit('the %s part has no place to walk to' % s['name'])
         pts = []
         if len(entries) > 1:
-            cur = self.first(entries, G[0], part)
+            cur = self.first(entries, G[0], part) if s['name'] != 'fed' else self.first(entries, G[0], part, near=0.0, what='AFTER_DEATH points of the group')
             pts.append(cur)
         else:
             cur = wp(entries[0], 'entry', poly=entries[0][3])
@@ -1316,8 +1798,171 @@ class Route:
         seg['pts'] = out
 
     def die_place(self):
-        """--die: the route is cut at the place from which the most guards (Enemy actors as the level places them) can
-        be reached by a straight line on the mesh within DIE_SIGHT - a stand-in for 'they see him' - and he stands."""
+        """--die: he walks to the POST of an armed enemy that is in the world when the level loads and stands DIE_STAND
+        from it - inside PB_REACH, where every shot of that guard is the point-blank step (re\\melee_damage.md) - the
+        guard that costs the least way: the route up to one of its way points, then the mesh way to him (DIE_REACH at
+        most). With the --die balance the first bullet from anybody kills as before; the place only makes sure that
+        somebody fires. Where no post can be walked to: the old rule (die_sight)."""
+        nav, best, seg = self.nav, None, self.segs[0]
+        # (those in the world at the load first; a map whose guards all come in later - Retomoto: 88 of 91 - takes any post)
+        for sol in ([s for s in self.L.soldiers() if s['active'] and s['place'] is not None], [s for s in self.L.soldiers() if s['place'] is not None]):
+            run = 0.0
+            for i, w in enumerate(seg['pts']):
+                a = self.before(seg, i)
+                run += d2(a['p'], w['p']) if a is not None else 0.0
+                if w.get('poly') is None or w['kind'] in ('land', 'drop'):
+                    continue
+                dist, _prev, at_ = nav.dist_map(w['poly'], w['p'])
+                for s in sol:
+                    j = s['place'][3]
+                    if j in dist:
+                        dm = dist[j] + math.dist(at_[j], s['place'][:3])
+                        if dm <= DIE_REACH and (best is None or run + dm < best[0]):
+                            best = (run + dm, i, s, dm)
+            if best is not None:
+                break
+        if best is None:
+            return self.die_sight()
+        _key, i, s, dm = best
+        w0, post = seg['pts'][i], s['place']
+        dist0 = nav.dist_map(w0['poly'], w0['p'])[0]
+        c = [q for q in around(nav, post, PB_REACH - 20.0, nav.part[post[3]], step=20.0, dy=120.0)
+             if 70.0 <= math.dist(q[:3], s['at']) <= DIE_STAND + 20.0 and clear(nav, *q[:3]) >= RISK_CLEAR and q[3] in dist0]
+        if not c:
+            self.note('--die: no place of the mesh stands %d from the post of %s: the old rule' % (DIE_STAND, s['name']))
+            return self.die_sight()
+        q = min(c, key=lambda q: d2(q, w0['p']))
+        self.segs = self.segs[:1]
+        seg['pts'] = seg['pts'][:i + 1]
+        step = 100.0 * (s['g'] or 0.0) * 1.05
+        target = wp(q, 'die', '--die: he stands here, %d from the post (%d, %d, %d) of %s (%s%s; squad %s%s) - inside the %d of the point-blank rule; %d of mesh way from way point %d'
+                    % (math.dist(q[:3], s['at']), *s['at'], s['name'].split('!')[-1], s['weapon'], ', one point-blank step = %.0f x the dial' % step if step else '',
+                       s['attitude'], (', it hunts' if s['hunts'] else '') + ('' if s['active'] else ', it comes into the world LATER'), PB_REACH, dm, i + 1),
+                    q[3], stop=True, r=40.0, guards=1, soldier=s['name'])
+        if d2(q, w0['p']) > 60.0:
+            seg['pts'] += self.link(w0, target)
+        else:
+            seg['pts'][-1] = dict(target, p=w0['p'], poly=w0['poly'])
+        if s['hunts']:
+            self.note('--die: %s belongs to a squad that hunts: he may have left his post when the human comes (then he, or another, comes to the human)' % s['name'].split('!')[-1])
+
+    def fed_part(self, opt):
+        """--fed-walk: the fed's part of the route (fed_facts()): on the mesh from the AFTER_DEATH points of one group -
+        or from where the collision's way joins the crew's mesh - to the crew's place asked for. The gotos BEFORE the
+        mesh (the collision's way; the blind ones where nothing joins) are not way points: the script writes them
+        from self.fed['pre'] / ['blind']."""
+        F = self.fed = fed_facts(self.L, opt.get('group', 1), opt.get('to', 'loot'), self.bot)
+        F['opt'] = dict(opt)
+        for t in F['notes']:
+            self.note('the fed: ' + t)
+        if F['goal'] is None:
+            return
+        kind, q, what, dist = F['goal']
+        guide = [{'p': q[:3], 'kind': 'fedgoal', 'node': None,
+                  'what': 'the fed\'s goal: the crew\'s \'%s\' place (%s), %d of mesh way from where he comes onto the mesh' % (kind, what[:50], dist)}]
+        ent, heads = (F['entries'], F['heads']) if F['entries'] else ([F['join']], [None])
+        self.segs.append(self.segment({'name': 'fed', 'guides': guide, 'tail': [], 'entries': ent, 'heads': heads}))
+
+    def fed_collision(self):
+        """Which way points of the fed's mesh part the walk test over the collision reaches from where he appears
+        (w['coll']: True / False / None = outside the box that was read); F['coll_end'] = the first that it does not."""
+        F = self.fed
+        seg = next((s for s in self.segs if s['name'] == 'fed'), None)
+        F['coll_end'] = None
+        if seg is None or F['seen'] is None:
+            return
+        W, seen = F['W'], F['seen']
+        for i, w in enumerate(seg['pts']):
+            c = W.cell(w['p'][0], w['p'][2])
+            w['coll'] = None if not (W.x0 + 40 <= w['p'][0] < W.x1 - 40 and W.z0 + 40 <= w['p'][2] < W.z1 - 40) else (c in seen and abs(seen[c] - w['p'][1]) < 120.0)
+            if w['coll'] is False and F['coll_end'] is None:
+                F['coll_end'] = i
+
+    def danger(self):
+        """THE POINT-BLANK RULE (the docstring). Every way point of the human's own route against the armed enemies
+        that are in the world when the level loads: w['t'] = the model's seconds from the route's start to its
+        'reached', w['dwell'] = how long he then stays (about); w['pb_post'] = (distance, soldier) when a post is within
+        PB_POST of it (3-D): R1; w['pb_reach'] = [(soldier, his mesh way from his post, the second he can be within
+        PB_REACH)] for those that can be there before he leaves it - from the human's stage 1 (the ENTERS box; a
+        route without one: its start) at GUARD_RUN along the mesh: R2. A GUESS but for the bank (see GUARD_RUN)."""
+        nav, sol = self.nav, [s for s in self.L.soldiers() if s['active']]
+        t, t1, rows = 0.0, None, []
+        for seg in self.segs:
+            if seg['name'] == 'fed':
+                break
+            for i, w in enumerate(seg['pts']):
+                if w['kind'] == 'land':
+                    continue
+                rig = w.get('rig')
+                t += rig['t'] if rig and rig.get('clean') else w['leg']['len'] / (SPRINT if w.get('sprint') else WALK)
+                if t1 is None and any(nm.startswith('ENTERS') for nm, _p, _b in w.get('boxes', [])):
+                    t1 = t
+                nxt = seg['pts'][i + 1] if i + 1 < len(seg['pts']) else None
+                dwell = STOP_MS / 1000.0 if w.get('stop') else 0.0
+                if w['kind'] == 'money':
+                    dwell = LOOT_HOLD + 0.3 + (0.0 if nxt is not None and nxt['kind'] == 'money' else 5.0)
+                elif w['kind'] == 'loot' and not (nxt is not None and nxt['kind'] == 'money'):
+                    dwell = 5.0
+                elif w['kind'] in ('wait', 'board', 'die', 'foot'):
+                    dwell = 30.0
+                w['t'], w['dwell'] = t, dwell
+                t += dwell
+                rows.append(w)
+        self.t_stage1 = t1
+        t1 = t1 or 0.0
+        for s in sol:
+            if s['place'] is not None and '_d' not in s:
+                s['_d'] = nav.dist_map(s['place'][3], s['place'][:3])
+        for w in rows:
+            near = [(math.dist(s['at'], w['p']), s) for s in self.L.soldiers()]      # R1: every post, also of a squad that comes into the world later
+            near = [x for x in near if x[0] <= PB_POST]
+            w['pb_post'] = min(near, key=lambda x: x[0]) if near else None
+            w['pb_reach'] = []
+            if w.get('poly') is None:
+                continue
+            for s in sol:
+                if s['place'] is None or w['poly'] not in s['_d'][0]:
+                    continue
+                dm = s['_d'][0][w['poly']] + math.dist(s['_d'][2][w['poly']], w['p'])
+                tg = t1 + max(0.0, dm - PB_REACH) / GUARD_RUN
+                if tg <= w['t'] + w['dwell']:
+                    w['pb_reach'].append((s, dm, tg))
+            w['pb_reach'].sort(key=lambda r: r[2])
+
+    def danger_rows(self):
+        """-> (R1 rows, R2 rows): [(part, way point, w)] of the way points where he stops or walks within PB_POST of a
+        post, and of the stops a guard can have reached."""
+        r1 = [(si, i, w) for si, _seg, i, w in self.points() if w.get('pb_post') and (w.get('stop') or not w.get('sprint'))]
+        r2 = [(si, i, w) for si, _seg, i, w in self.points() if w.get('pb_reach') and w.get('stop') and not w.get('blind')]
+        return r1, r2
+
+    def danger_text(self):
+        o, sol = [], [s for s in self.L.soldiers() if s['active']]
+        later = len(self.L.soldiers()) - len(sol)
+        r1, r2 = self.danger_rows()
+        made = [x for x in r2 if x[2].get('halt')]
+        live = [(si, i, w) for si, _seg, i, w in self.points() if w.get('live')]
+        o.append('THE POINT-BLANK RULE (a firing guard within %d sends a hit worth 100 bullets a step): %d armed enemies are in the world at the load (%d come later: their posts '
+                 'count for R1, not for R2 - when they come is not read), %d of them in squads that hunt; the human\'s stage 1 %s' % (PB_REACH, len(sol), later, sum(1 for s in sol if s['hunts']),
+                 'about %.0f s after the route starts' % self.t_stage1 if self.t_stage1 is not None else 'is not on this route: the guards are taken to hunt from its start'))
+        o.append('   R1, a stop or a walk within %d of a post: %s' % (PB_POST, 'none' if not r1 else ''))
+        for si, i, w in r1:
+            d, s = w['pb_post']
+            o.append('      part %d way point %d [%s%s] (%d, %d, %d): %d from the post of %s (%s%s)%s' % (si + 1, i + 1, w['kind'], ', STOP' if w.get('stop') else ', walk', *w['p'], d,
+                     s['name'].split('!')[-1], s['weapon'], '' if s['active'] else '; his squad comes into the world LATER', ' - INSIDE the %d' % PB_REACH if d <= PB_REACH else ''))
+        o.append('   R2, stops a guard can have reached by then (%d units a second along the mesh from his post; measured on the bank, a GUESS elsewhere): %d of the route\'s %d stops, '
+                 '%d of them made for the turning circle%s' % (GUARD_RUN, len(r2), len(self.stops()), len(made),
+                 '; %d way point(s) are walked in motion because a live run did so (LIVE_MOVING)' % len(live) if live else ''))
+        for si, i, w in r2:
+            s, dm, tg = w['pb_reach'][0]
+            o.append('      part %d way point %d [%s] (%d, %d, %d): he is there %.0f s after the start for %.1f s; %d guard(s) can be, the first %s (%s) %.0f s after it, %d of mesh way%s'
+                     % (si + 1, i + 1, w['kind'], *w['p'], w['t'], w['dwell'], len(w['pb_reach']), s['name'].split('!')[-1], s['weapon'], tg, dm, ' [made for the turning circle]' if w.get('halt') else ''))
+        return o
+
+    def die_sight(self):
+        """--die, the rule of the first two rounds: the route is cut at the place from which the most guards (Enemy
+        actors as the level places them) can be reached by a straight line on the mesh within DIE_SIGHT - a stand-in
+        for 'they see him' - and he stands."""
         nav, guards = self.nav, [p for _g, p in self.L.st['guards']]
         best = first = None
         for si, seg in enumerate(self.segs):
@@ -1424,6 +2069,13 @@ class Route:
                 and not (w['kind'] == 'first' and cl < 150.0) \
                 and not (a is not None and a.get('slow'))
             # ('first' on a narrow place - Retomoto's balcony - is walked; so are the legs into and out of a door that is turned at)
+            live = None if self.keep_stops or seg['name'] == 'fed' else \
+                next((e for e in LIVE_MOVING.get(self.L.map, ()) if math.hypot(w['p'][0] - e[0], w['p'][2] - e[1]) <= 30.0), None)
+            if live and w['kind'] in ('corner', 'door', 'align', 'way', 'stair', 'long') and i + 1 < len(pts):
+                # a live run walked this place in motion with this radius: no stop here, whatever the model says (the stops
+                # put him at rest where the guards come: THE POINT-BLANK RULE)
+                w.pop('slow', None)
+                w.update(stop=False, r=float(live[2]), sprint=bool(live[3]) and not self.walk, live=True)
             for src in ([a['p']] if a else [e[:3] for e in seg['entries']]):
                 for name, g in self.doors():            # a pane of glass that goes when it is shot, beside or in this leg
                     dx, dz = w['p'][0] - src[0], w['p'][2] - src[2]
@@ -1584,8 +2236,8 @@ class Route:
                'the next steered line leaves the mesh by %d' % max(res['chord'], res['chord0'], res['chord_i'], res['off'])
                if max(res['chord'], res['chord0'], res['chord_i'], res['off']) > MESH_TOL else
                'under the wide turn rate the next steered line leaves the mesh by %d' % res['off_wide'])
-        if w['kind'] == 'drop':
-            return False                                # the take-off of a drop: he must walk on
+        if w['kind'] == 'drop' or w.get('live'):
+            return False                                # the take-off of a drop: he must walk on; a place a live run walked in motion
         if not w.get('stop'):
             w.update(stop=True, halt=why, r=min(w['r'], R_STOP))
             return True
@@ -1757,9 +2409,15 @@ class Route:
         for si, seg in enumerate(self.segs):
             e = seg['entries']
             o.append('')
-            o.append('PART %d (%s): %s' % (si + 1, seg['name'], 'he starts on one of %d START places, x %d..%d z %d..%d (which one differs from run to run)' %
-                                           (len(e), min(q[0] for q in e), max(q[0] for q in e), min(q[2] for q in e), max(q[2] for q in e)) if len(e) > 1 else
-                                           'he arrives at (%d, %d, %d) (the jump entry)' % e[0][:3]))
+            if seg['name'] == 'fed':
+                o.append('PART %d (the FED, after his death; group %s of the AFTER_DEATH points): %s' % (si + 1, self.fed['group'],
+                         'he appears on one of %d points, x %d..%d z %d..%d (the game picks one)' % (len(e), min(q[0] for q in e), max(q[0] for q in e), min(q[2] for q in e),
+                                                                                                    max(q[2] for q in e)) if len(e) > 1 else
+                         'he comes onto the mesh at (%d, %d, %d)%s' % (*e[0][:3], ' after the collision\'s way (%d gotos, below)' % len(self.fed['pre']) if self.fed['pre'] else '')))
+            else:
+                o.append('PART %d (%s): %s' % (si + 1, seg['name'], 'he starts on one of %d START places, x %d..%d z %d..%d (which one differs from run to run)' %
+                                               (len(e), min(q[0] for q in e), max(q[0] for q in e), min(q[2] for q in e), max(q[2] for q in e)) if len(e) > 1 else
+                                               'he arrives at (%d, %d, %d) (the jump entry)' % e[0][:3]))
             o.append('   #  kind          x       y       z    leg  line   at    r  how            s  what')
             for i, w in enumerate(seg['pts']):
                 leg = w['leg']
@@ -1773,7 +2431,10 @@ class Route:
                     (' [' + leg['why'] + ']' if leg['why'] else '') + (' [IN THE VEHICLE\'S ROAD: %d from its line]' % leg['lane'] if 'lane' in leg else '') +
                     (' [PASSES %d FROM A PLACE WHERE A GOTO STUCK IN THE GAME: see the NOTE]' % leg['blocked'] if 'blocked' in leg else '') +
                     (' [GLASS DOOR %s %d from this leg: %s]' % (*w['glass'], 'he fires over its last %d, at a walk (--shoot)' % GLASS_RUN if self.shoot else 'not shot at')
-                     if w.get('glass') else '') + (' [STOP: %s]' % w['halt'] if w.get('halt') else '')))
+                     if w.get('glass') else '') + (' [STOP: %s]' % w['halt'] if w.get('halt') else '') +
+                    (' [LIVE: walked in motion with this radius in the game (LIVE_MOVING): no stop]' if w.get('live') else '') +
+                    (' [THE WALK TEST OVER THE COLLISION DOES NOT REACH THIS PLACE from where he appears: see THE FED]' if w.get('coll') is False and
+                     self.fed and self.fed.get('coll_end') == i and seg['name'] == 'fed' else '')))
                 for a, b, _w, t in rigs:
                     if (a, b) == (si, i):
                         o.append('%s-> RIG: %s' % (' ' * 60, t))
@@ -1810,6 +2471,9 @@ class Route:
         made = [(si, i, w) for si, i, w in self.stops() if w.get('halt')]
         o.append('STOPS MADE FOR THE TURNING CIRCLE (the way point is walked to within its radius, W is let go, %d ms; the next goto starts from a stand): %s'
                  % (STOP_MS, 'none' if not made else ', '.join('%d.%d' % (si + 1, i + 1) for si, i, w in made)))
+        o += self.danger_text()
+        if self.fed:
+            o += fed_text(self.L, self.fed)
         for t in self.notes:
             o.append('NOTE ' + t)
         return o
@@ -1882,10 +2546,48 @@ TO_PAGE = ['waitwin CampaignMenu 180000', 'wait 1500', 'tap ESCAPE', 'waitwin Ma
 # 151.2 is 100 x the bullets of the burst before it (and 5 x 30.24): the same weapon at a factor the two keys did not set, or a shotgun at about
 # full weight; who shot was not established. So the keys' most: ten times the health (5,500) and all of it back half a second after a hit.
 # LIVE with that (K2c_DM03_wall_hp, PB_DM03_board_hp): he came through the bank twice of twice (steps of up to 759 among his losses). A TEST AID.
-SURVIVE = [('Balance', 'Ramp', '0'), ('Balance', 'CopToYou', '0.02'), ('Balance', 'CrewToYou', '0.02'), ('Balance', 'PlayerHealth', '10'), ('Balance', 'RegenDelay', '0.5'),
-           ('Balance', 'RegenTime', '0.5'), ('Balance', 'Log', '2')]
+# THE THIRD ROUND (re\playtest.md 10.2): that 151.2 is the fire task's point-blank rule (re\melee_damage.md: kl2 0x8c62e0, a firing guard within 160
+# units sends a hit worth 100 bullets a step, and the dial DOES scale it: 72.0 x 1.05 x 100 x 0.02). With the 5,500 he was still dead on those stairs
+# in 3 runs of 5 of the scripts that STOP there (FO_J0 / J4 / J3; FO_J1 came through with 796 left): the .45 costs 758.6 a step, six steps a second.
+# So the dial is COP_DIAL now: 0.001 = 37.9 a step from the .45, 7.6 from a Type 79 - still seen in the log's 'you lost' lines - and the stairs are
+# walked in motion again (LIVE_MOVING). What the police do to the human is not what these runs measure.
+def survive(cop=COP_DIAL):
+    v = '%.4g' % cop
+    return [('Balance', 'Ramp', '0'), ('Balance', 'CopToYou', v), ('Balance', 'CrewToYou', v), ('Balance', 'PlayerHealth', '10'), ('Balance', 'RegenDelay', '0.5'),
+            ('Balance', 'RegenTime', '0.5'), ('Balance', 'Log', '2')]
+
+
+SURVIVE = survive()
 # ... and --die makes the first hit his last (27 of health, a police bullet times 20)
 FRAGILE = [('Balance', 'Ramp', '0'), ('Balance', 'CopToYou', '20'), ('Balance', 'PlayerHealth', '0.05'), ('Fed', 'Enable', '1'), ('Fed', 'Player', '1'), ('Fed', 'Log', '1')]
+# ... and --fed-walk without --fed-die: the keys for a fed who is to WALK (review 3, M1; a READING of klbalance.c, NOT RUN).
+# FedMirror=0 = the game's own 550 of health for a police player (klbalance.c 2 a3; live, PT_DM03_die_r2: 'a POLICEMAN: left alone: 550.0 of
+# 550.0') - and then NOTHING is exchanged: from the tick he is police his game reads the OTHER float of each pair (klr_mir = {1, 0, 4, 5, 2, 3};
+# kl2 0x591bbe, 0x8b80a0, 0x7c1bf0), so every key means two things in one run:
+#     key (slot)          while he is the hero                 once he is police
+#     CopToCrew (+0x00)   a police bullet on a heister         a heister's bullet on a police AI
+#     CrewToCop (+0x04)   a heister's bullet on the police     a police AI's bullet on a heister
+#     CopToYou  (+0x08)   a police bullet on him               a HEISTER's bullet on him (the fed)
+#     CrewToYou (+0x10)   a heister's bullet on him            a police AI's bullet on him (a colleague's stray)
+# The first round's scripts had CopToYou=20 and CopToCrew=0.005 'so that the crew lives': after the switch that was a heister's bullet on the fed
+# x 20 (about 940 against his 550: his second, final death) and a police AI's bullet on a heister x 1.0 (CrewToCop under Risk=2) - the crew NOT
+# protected, as in PT_DM03_die_r2 (all seven dead 15 .. 47 s after the switch) - while the 0.005 only made the crew harmless. So:
+#   no CopToYou key (FED_WALK_DROP): Risk=2's 1.0. The hero's 27.5 of health still die to one bullet (a Type 79's is 75.6 near, 39 at 50 m;
+#       a shotgun's hit far off may take two), and a heister's bullet costs the fed x 1.0 of his 550 - about what it costs in the owner's game;
+#   CopToCrew = CrewToCop = 0.005: a police bullet costs a heister x 0.005 on BOTH sides of the switch. The price: a heister's bullet costs
+#       the police x 0.005 too, all round long - the crew cannot clear a room, the guards live and come close (their point-blank step is still
+#       43 of a heister's 252, six a second). ASSUMED that this leaves a crew in play for the 2 .. 4 minutes of the walk; a GUESS;
+#   CrewToYou = 0.001: a colleague's stray bullet does not end the fed's walk (while he is the hero it is a heister's bullet on him: only a
+#       traitor fires one, and the police kill him all the same).
+# EndSeconds=0: klfed does not end the round when no heister is left to hunt (the walk is what the run is for).
+FED_WALK_DROP = ('CopToYou',)
+FED_WALK = [('Balance', 'FedMirror', '0'), ('Balance', 'CopToCrew', '0.005'), ('Balance', 'CrewToCop', '0.005'), ('Balance', 'CrewToYou', '0.001'), ('Fed', 'EndSeconds', '0'),
+            ('Fed', 'Log', '2')]
+# --fed-die (F3): FedMirror=1 - the pairs are written exchanged, every key keeps the meaning of its name on both sides (live: FD3_DM03_die), the
+# fed has the hero's 27.5 of health and a heister's bullet costs him CrewToYou = 1.0: the first is his second death. (A colleague's stray is
+# CopToYou = 20 there: it kills him as well - the run then shows a second death, not F3's 'shot by the crew', and the log's 'you lost' line
+# cannot tell the two apart: a loss is at most his 27.)
+FED_DIE = [('Balance', 'FedMirror', '1'), ('Balance', 'CopToCrew', '0.005'), ('Fed', 'EndSeconds', '0'), ('Fed', 'Log', '2')]
 
 
 def find_tree(folder):
@@ -1939,6 +2641,7 @@ class Script:
         self.lines, self.expect, self.secs, self.clock, self.go_line, self.go_secs = [], [], 0.0, [], 0, 0.0
         self.by_design, self.gotos, self.stages = [], [], []      # script lines of gotos that end by their timeout on purpose; every goto; the log lines of each stage
         self.L = route.L
+        self.first_goto, self.in_fed, self.round, self.fed_line, self.label_n = False, False, 1, None, 0
 
     def add(self, line, secs=0.0):
         cmd = line.split(' ', 1)
@@ -1965,11 +2668,25 @@ class Script:
         rig = w.get('rig')
         nominal = rig['t'] + 0.1 if rig and rig['clean'] else w['leg']['len'] / v + 0.4      # the model's time for it (drive()), else the leg at its speed
         timeout = int(min(20000, max(6000, math.ceil((3.0 * nominal + 4.0) * 2) * 500)))
+        if self.R.die and self.R.fed and not self.in_fed and not self.o['rig3']:
+            # --die --fed-walk on a rig that cannot see his death (review 3, S1): when he dies on the way - 2 live deaths of 3 - every goto of the
+            # hero that is left runs to its timeout and steers the FED at the hero's way points. So these are short: DIE_GOTO. (A hero who misses a
+            # way point by it goes on from where he is; he is there to be shot.)
+            timeout = int(min(timeout, max(DIE_GOTO[2], math.ceil((DIE_GOTO[0] * nominal + DIE_GOTO[1]) * 2) * 500)))
         if w.get('timeout'):
             timeout = w['timeout']
+        if self.first_goto:                             # the first goto of a round: should the countdown outlast the wait, W is held until he can move
+            timeout, self.first_goto = FIRST_TIMEOUT, False
         n = self.add('goto %d %d %d %d%s%s' % (round(w['p'][0]), round(w['p'][2]), round(w['r']), timeout, ' sprint' if w['sprint'] else '', ' keep' if keep else ''), nominal)
         w['line'] = n
-        self.gotos.append(dict(line=n, x=round(w['p'][0]), z=round(w['p'][2]), r=round(w['r']), kind=w['kind'], stop=not keep, ms=int(nominal * 1000)))
+        self.gotos.append(dict(line=n, x=round(w['p'][0]), z=round(w['p'][2]), r=round(w['r']), kind=w['kind'], stop=not keep, ms=int(nominal * 1000), fed=self.in_fed,
+                               round=self.round, to=timeout))
+        return n
+
+    def raw_goto(self, p, r, ms, kind, what):
+        """A goto that is no way point of the route (the fed's way over the collision; his blind ones): at a walk."""
+        n = self.add('goto %d %d %d %d' % (round(p[0]), round(p[2]), r, ms), min(ms / 1000.0, 8.0))
+        self.gotos.append(dict(line=n, x=round(p[0]), z=round(p[2]), r=r, kind=kind, stop=True, ms=ms, fed=True, round=self.round, what=what, to=ms))
         return n
 
     def stage(self, key, pattern, what, need=True, after=None):
@@ -2016,10 +2733,17 @@ class Script:
         n = self.add('peek 0x168e598+0x70 session-state-must-be-0x19')
         self.want('script %d: peek 0168e598+70 = 00000019 ...' % n, n)
         self.add('pos spawn')
+        if self.o['rig3'] and self.R.fed:
+            k = self.add('onbody fed%d' % self.round)
+            self.want('script %d: when the local player becomes another object (now xxxxxxxx), go to label \'fed%d\'   and, 5 s after his death,   script: the local player is another '
+                      'object (... -> ...) at (x, y, z), line N: going on at label \'fed%d\'   [--rig3: the hero\'s gotos that were left are skipped: the place in this line is the very '
+                      'AFTER_DEATH point he was put on]' % (k, self.round, self.round), k)
         self.add('log ' + why)
         self.wait(int(round(free * 2) * 500))
-        n = self.add('log GO+: the route starts (--until %s%s)' % (self.R.until, ' --die' if self.R.die else ''))
-        self.want('script %d: GO+: the route starts   [%.1f s or more after the session state became 0x19: he can move]' % (n, free), n)
+        n = self.add('log GO+: the route starts (--until %s%s)%s' % (self.R.until, ' --die' if self.R.die else '', ' round %d' % self.round if self.o['rounds'] > 1 else ''))
+        self.first_goto, self.in_fed = True, False
+        self.want('script %d: GO+: the route starts   [%.1f s or more after the session state became 0x19: he can move. The first goto has a timeout of %d s: should the countdown '
+                  'be longer on this map, W is held until he can move and the goto is not lost]' % (n, free, FIRST_TIMEOUT / 1000), n)
         if self.R.die:
             self.want('fed: ARMED: your death will not end the round - you come back as police (N AI heister(s) in play, ...)   [said when the round starts; needs [Fed] Enable=1 Player=1]', n)
         else:
@@ -2035,7 +2759,9 @@ class Script:
         hold_at = stops0[-1] if (o.get('join_after') and self.L.rt and stops0) else None       # the tower's last loot stop
         for n, (si, seg, i, w) in enumerate(flat):
             nxt = flat[n + 1][3] if n + 1 < len(flat) and flat[n + 1][0] == si else None
-            if i == 0 and si > 0:
+            if seg['name'] == 'fed' and not self.in_fed:
+                self.fed_start()
+            elif i == 0 and si > 0:
                 k = self.add('pos part-%d-%s-starts' % (si + 1, seg['name']))
             stop = bool(w.get('stop') or w['kind'] == 'loot' or nxt is None)
             if w['kind'] == 'board' and R.boarding == 'van':
@@ -2076,7 +2802,9 @@ class Script:
             if self.t_call is not None:
                 self.t_call += w['leg']['len'] / (SPRINT if w['sprint'] else WALK) + 0.4
             for nm, path, _back in w.get('boxes', []):
-                k = self.add('pos in-%s' % path.split('!')[-1].split('\\')[-1])
+                k = self.add('pos %sin-%s' % ('fed-' if self.in_fed else '', path.split('!')[-1].split('\\')[-1]))
+                if self.in_fed:                         # a police player in a stage box: what the rules make of it is not known; the `pos` line is all
+                    continue
                 if nm.startswith('ENTERS'):
                     self.want('bots: record 0 (you): heist stage 0 -> 1   [%s; between script %d and %d]' % (path, max(1, g - 1), k), k)
                     self.stage('stage 1', r'bots: record 0 \(you\): heist stage \d -> 1', 'he walked into %s' % path, after=k)
@@ -2141,10 +2869,22 @@ class Script:
                 self.stage('at the foot', r'climb: at the foot of edge \d+', 'klclimb saw him stand at the wall, looking at it', after=k)
                 self.stage('the climb', r'climb: edge \d+: started', 'klclimb started the climb', after=k)
             elif kind == 'die':
-                self.add('log --die: he stands here until he is dead (the first hit: CopToYou 20, health 27)')
-                for t in range(int(o['linger'] // 15) or 1):
-                    self.wait(15000)
-                    self.add('pos die-%ds' % ((t + 1) * 15))
+                self.add('log --die: he stands here until he is dead (the first hit: CopToYou %s, health 27)' % ('1' if R.fed and not o['fed_die'] else '20'))
+                if R.fed and not o['rig3']:             # review 3, S1: what a death ON THE WAY costs on a rig that cannot see it
+                    left = [g['to'] for g in self.gotos if not g['fed'] and g['round'] == self.round]
+                    self.want('WHEN HE DIES ON THE WAY (2 live deaths of 3 did): the hero\'s gotos that are left run out one by one, each to its timeout, and steer the FED at the '
+                              'hero\'s way points - after a death in the second goto that is up to %d s (in the last one %.1f s), then the %d s of --die-wait: the fed\'s first goto '
+                              'begins up to %d s after he appeared, from wherever he was pushed to, and "pos fed-appeared" is that place, not the point (the point is in "fed: YOU '
+                              'ARE A FED ... at"). The hero\'s gotos of this script have short timeouts for that reason (1.5 x the model\'s time + 2.5 s). A rig with `onbody` skips '
+                              'all of it: --rig3' % (sum(left[1:]) / 1000, left[-1] / 1000.0, o['die_wait'], sum(left[1:]) / 1000 + o['die_wait'] - 5), len(self.lines))
+                if R.fed:                               # --fed-walk: the script cannot see his death: it stands --die-wait seconds, a `pos` every 5
+                    for t in range(max(1, int(o['die_wait'] // 5))):
+                        self.wait(5000)
+                        self.add('pos die-%ds' % ((t + 1) * 5))
+                else:
+                    for t in range(int(o['linger'] // 15) or 1):
+                        self.wait(15000)
+                        self.add('pos die-%ds' % ((t + 1) * 15))
                 self.want('fed: you: status 0 -> N (...)   [he is dead or down]   then   fed: YOU ARE A FED: local player object N (..., type 3, police byte 1) at (x, y, z); ...   [the respawn]',
                           len(self.lines))
                 self.want('NOT: script: window \'HeistStatusLeaderboard\' is up ... within seconds of his death   [= the round ended with him: the fed did not arm]', len(self.lines))
@@ -2170,11 +2910,86 @@ class Script:
                         self.wait(min(ms, 15000))
                         ms -= 15000
                     self.add('pos stood-in-the-tower')
-        if R.until in ('enter', 'loot', 'exit', 'join') and not R.die:
+        if R.fed:
+            if not self.in_fed:                         # no part on the mesh (nothing joins): the gotos over the collision and the blind ones all the same
+                self.fed_start()
+            self.fed_end()
+        elif R.until in ('enter', 'loot', 'exit', 'join') and not R.die:
             self.linger(o['linger'])
         elif not R.die:
             self.want('escort: record N re-pointed: you are X m away at (x, y, z); ...   [from here on all through the walk, at most every 5 s: the place "at (x, y, z)" must MOVE with him]',
                       flat[0][3].get('line', 1) + 1)
+
+    # ---- the fed
+    def fed_start(self):
+        """The fed's part begins: klfed's switch, where he stands, then the gotos that are not way points of the mesh
+        (the collision's way to it; the blind ones where nothing joins)."""
+        F, o = self.R.fed, self.o
+        self.in_fed = True
+        G = [q for q in F['points'] if q['n'] in F['group']]
+        if o['rig3']:                                   # the rig with `onbody` (re\playtest.md 10.6): the trap armed after 0x19 brings the script here
+            self.add('label fed%d' % self.round)        # the tick the game's local player is another object; without a death it comes here by the wait
+        self.fed_line = self.add('log FED: from here the gotos steer the game\'s local body: police, if he died')
+        k = self.add('peek 0x168ea60 fed-switch-1-armed-0-he-is-police-or-never-armed')
+        self.want('script %d: peek 0168ea60 = 00000000 ...   [klfed\'s switch: 1 while it is armed (the human alive, or dead and waiting), 0 once he stands as police. 00000001 here = '
+                  'he is NOT police yet (still alive: nobody shot him in the %d s of --die-wait): the gotos after it steer the hero and the run shows nothing of the fed]' % (k, o['die_wait']), k)
+        k = self.add('pos fed-appeared')
+        floors = '; '.join('%d (%d, %s, %d)' % (q['n'], q['at'][0], '%d' % q['floor'] if q['floor'] is not None else '%d' % q['mesh'][1] if q['mesh'] else '?', q['at'][2]) for q in G)
+        self.want('pos fed-appeared: me #k (x, y, z) ...   [the FED\'s body: "fed: YOU ARE A FED: ... at (x, y, z)" has the very place he was put on - one of the points of group %s, at '
+                  'the floor\'s height: %s. He may have been moved since by the hero\'s gotos that were left when he died (they steer the new body too). A y far under the floor = he '
+                  'fell through; a place of another group = the gotos below are for the wrong group]' % (F['group'], floors), k)
+        self.stage('the fed is seen', r'pos fed-appeared: me #', 'the script\'s own `pos` when the fed\'s part begins', after=k)
+        if len(F['groups']) > 1:                        # review 3, S3: the game picks the point, the script cannot
+            np_, ng = len(F['points']), len(G)
+            self.want('THE GAME PICKS THE POINT: this script\'s gotos fit %d of the map\'s %d AFTER_DEATH points (group %s; the groups are %s). If the pick is uniform over the free '
+                      'points - how kl2 picks is NOT read - a run fits with a chance of %d in %d: plan on about %d runs for this group. In a run that got another group the gotos '
+                      'below aim at the wrong place and ONLY "fed: YOU ARE A FED ... at" and pos fed-appeared are of use (judge says which group it was). One script for all '
+                      'groups needs `ifnear` / `jump` in the rig (re\\playtest.md 10.6)' % (ng, np_, F['group'], F['groups'], ng, np_, math.ceil(np_ / ng)), k)
+        for j, q in enumerate(F['pre']):
+            prev = F['pre'][j - 1] if j else max(G, key=lambda g: d2(g['at'], q))['at']
+            ms = int(min(20000, max(6000, math.ceil((3.0 * d2(prev, q) / WALK + 4.0) * 2) * 500)))
+            g = self.raw_goto(q, 60, ms, 'fedpre', 'the collision\'s way, point %d of %d' % (j + 1, len(F['pre'])))
+            k = self.add('pos fed-way-%d' % (j + 1))
+            self.want('script %d: goto (%d, %d) reached ...   then   pos fed-way-%d: me #k (x, %d +-40, z)   [the fed on the collision\'s way, OFF the mesh: point %d of %d%s]'
+                      % (g, q[0], q[2], j + 1, q[1], j + 1, len(F['pre']), '' if F['join'] else '; its end is the edge of what the collision leaves open'), k)
+        for j in range(FED_BLIND if F['blind'] else 0):
+            q = F['blind'][min(j, len(F['blind']) - 1)]
+            g = self.raw_goto(q, 100, FED_BLIND_MS, 'fedblind', 'blind')
+            self.by_design.append(g)
+            k = self.add('pos fed-blind-%d' % (j + 1))
+            if F['edge'][1] - q[1] < 2 * BLIND_DY:      # the crew's mesh is on his own floor (Retomoto's lift cars): the height says nothing, the plan does
+                self.want('script %d: goto (%d, %d) ...   then   pos fed-blind-%d: me #k (x, y, z)   [BLIND, try %d of %d: straight at the crew\'s mesh at y %d, on the floor he '
+                          'stands on (the edge of what the collision leaves open is at y %d), %d away in the plan. "reached" = he is out of what the collision shuts him in (a '
+                          'door that opens); "NOT reached": the pos line says where he stuck. Neither voids the run]'
+                          % (g, q[0], q[2], j + 1, j + 1, FED_BLIND, q[1], F['edge'][1], math.hypot(q[0] - F['edge'][0], q[2] - F['edge'][2])), k)
+                continue
+            self.want('script %d: goto (%d, %d) ...   then   pos fed-blind-%d: me #k (x, y, z)   [BLIND, try %d of %d: straight at the crew\'s mesh at y %d, %d under the edge of what '
+                      'the collision leaves open (y %d). READ THE y, NOT THE GOTO\'S LINE: the goto\'s "reached" is a distance in the plan (x, z only) and this place lies %d in the '
+                      'plan from the edge he starts at%s - a fed who is still up there can "reach" it. There IS a way down only when y is within %d of %d (stairs the walk test did '
+                      'not take, a door that opens); a y that falls from one pos line to the next = he came part of the way; the same y as fed-way-%d = no way shown, whatever the '
+                      'goto says. Neither voids the run]'
+                      % (g, q[0], q[2], j + 1, j + 1, FED_BLIND, q[1], F['edge'][1] - q[1], F['edge'][1], math.hypot(q[0] - F['edge'][0], q[2] - F['edge'][2]),
+                         ' and %d from the nearest point he can appear on' % min(math.hypot(q[0] - g_['at'][0], q[2] - g_['at'][2]) for g_ in G),
+                         BLIND_DY, q[1], len(F['pre'])), k)
+
+    def fed_end(self):
+        F, o = self.R.fed, self.o
+        n = self.add('log FED: his walk is done; he stands %d s (%s)' % (o['linger'], 'the crew shoots him: F3' if o['fed_die'] else 'pos every 15 s'))
+        for t in range(int(o['linger'] // 15) or 1):
+            self.wait(15000)
+            self.add('pos fed-end-%ds' % ((t + 1) * 15))
+        if F['goal']:
+            self.want('pos fed-end-15s: me #k (%d, %d, %d) +-60   [he stands at the crew\'s \'%s\' place: every goto of the fed\'s part was reached. Any other place: the last "reached" '
+                      'line and the "goto is stuck at" lines of the fed\'s part say where the way ended%s]'
+                      % (*F['goal'][1][:3], F['goal'][0], '; the walk test over the collision does not reach beyond way point %d of his part' % (F['coll_end'] + 1)
+                         if F.get('coll_end') is not None else ''), n)
+        else:
+            self.want('pos fed-end-15s: me #k ...   [how far the fed got: neither the mesh nor the collision joins the place he appears at to the crew\'s part]', n)
+        self.stage('the fed walks', r'pos fed-end-15s: me #', 'the fed\'s part of the script ran to its end', need=False, after=n)
+        if o['fed_die']:
+            self.want('F3 (re\\fed.md): the fed is shot by the crew he walked into: "balance: you lost ..." lines of a policeman with 27 of health, then the round ends about 3 s after '
+                      'his second death ("session: state 0x19 -> 0x1f") and NOT a line "fed: you: status 7 -> 1" (a second death is final)', len(self.lines))
+            self.stage('the fed\'s death ends the round', r'session: state 0x19 -> 0x1f', 'F3: a second death is final', need=False, after=n)
 
     def linger(self, secs):
         n = self.add('log ROUTE DONE (--until %s); he stands %d s' % (self.R.until, secs))
@@ -2191,7 +3006,11 @@ class Script:
         k = self.add('pos at-the-vehicle')
         self.want('pos at-the-vehicle: me #k (%d, y, %d) ...   [%s]' % (w['p'][0], w['p'][2], w['what'][:80]), k)
         if self.R.until == 'van':
-            self.watch_van(w, 'AT THE VAN: he waits beside its rear doors and does not board')
+            self.watch_van(w, 'CLEAR OF THE VAN: in play, not aboard, in the exit box; %d s' % self.o['linger'] if 'CLEAR' in w['what'] else
+                           'AT THE VAN: he waits beside its rear doors and does not board')
+            if 'CLEAR' in w['what']:
+                self.want('bots: record N (bot): aboard   ...   and   bots: record 0 (you): in-play all the time, NOT aboard   [--clear: the human is in play and not aboard while the AI '
+                          'heisters board - for the Bribe / Leave / FollowOut tests; what the rules do to the one left behind is theirs to show]', len(self.lines))
 
     def watch_van(self, w, text):
         n = self.add('log ' + text)
@@ -2288,7 +3107,7 @@ class Script:
     def tail(self):
         self.add('windows')
         self.add('pass 1000')
-        self.add('label score')
+        self.add('label score2' if self.o['rounds'] > 1 else 'label score')
         n = self.add('log SCORE PAGE: the round is over')
         self.wait(8000)
         self.add('windows')
@@ -2297,10 +3116,47 @@ class Script:
                   'fault and the script ran to its end: it comes just the same when every goto timed out. What the run showed: python tools\\kl_playtest.py judge <this ini> <its log>]',
                   len(self.lines))
 
+    def next_round(self):
+        """--rounds 2 (F4). The first round's walk is done: wait for the score page, tap RETURN, and the same level's
+        next round begins about 2 s later without a load - session states 0x20 -> 0x23 -> 0x24 (FAWaitForPlayers) ->
+        0x25 -> 0x26 -> 0x16 -> 0x18 -> 0x19 (live: run SH1, 2026-10-09, three rounds by `tap RETURN` 8 s after the page
+        came). `onwin` is armed once: it is armed again for the next round's page. When his last life is lost the page
+        is 'HeistStatusLeaderboard_EndGame' - another window: no trap, the run ends by its own clock (MaxRunMs)."""
+        n = self.add('log ROUND 1: the walk is done; waiting for the score page (the clock ends it)')
+        self.add('wait %d' % int((ROUND_S + 60) * 1000), 60.0)          # (the page's trap ends this wait: a minute is the guess for the estimate)
+        self.add('log ROUND 1: no score page came: the script ends')
+        self.add('pass 1000')
+        self.add('label score')
+        self.add('log SCORE PAGE of round 1: RETURN in 8 s, then round 2 on the same level')
+        self.wait(8000)
+        self.add('windows')
+        k = self.add('tap RETURN')
+        self.want('script: window \'HeistStatusLeaderboard\' is up ...: going on at label \'score\'   then   script %d: tap key 0x1c   then   session: state 0x20 -> 0x23 ... -> 0x16 -> '
+                  '0x18 -> 0x19   [the next round of the same session, about 2 s after RETURN, no load (run SH1). "windows: 1 [HeistStatusLeaderboard_EndGame]" instead = his last life was '
+                  'lost: no second round]' % k, k)
+        # review 3, S4: `onwin` fires the poll it finds its window on top. Armed in the poll after the tap (80 ms and 2 frames after the key went
+        # down) it would fire on ROUND 1's page if that were still up, and the script would end 'PASS' there. In SH1 the page was gone 2 ms after
+        # the key, but nobody has seen this page after a FED round: PAGE_GONE_MS first (SH1 itself had 9 s here; round 2's 0x19 comes about 2 s
+        # after RETURN and the waitstate behind this takes a state that already holds)
+        self.wait(PAGE_GONE_MS)
+        k = self.add('windows')
+        self.want('windows: 0 []  (or the next round\'s windows) - NOT windows: 1 [HeistStatusLeaderboard]   [script %d, %.0f s after RETURN: round 1\'s page must be gone before the '
+                  'trap for round 2\'s page is armed in the next line; if it is still up the trap fires at once and the script ends on round 1\'s page. READ THIS RUN BY "session: state '
+                  '0x18 -> 0x19" APPEARING TWICE, not by RESULT PASS (judge counts them)]' % (k, PAGE_GONE_MS / 1000), k)
+        self.add('onwin HeistStatusLeaderboard score2')
+        self.round = 2
+        self.secs += 10.0
+
     def build(self, entry):
         self.menu(entry)
         self.go()
         self.walk()
+        if self.o['rounds'] > 1:
+            self.next_round()
+            self.go()
+            self.walk()
+            self.want('fed: round N: ... / fed: police bodies: ...   [F4 (re\\fed.md): in round 2 the body round 1 took shows "used 1"; his second return takes the next one and '
+                      '"N of 8 police bodies still free" counts down]', len(self.lines))
         self.tail()
         if len(self.lines) > SCRIPT_MAX:
             raise SystemExit('the script has %d lines; klauto reads %d (kla_cmd[640])' % (len(self.lines), SCRIPT_MAX))
@@ -2317,13 +3173,15 @@ def write_script(tree_folder, mid, out, opt):
         L = Level(build)
     else:                                               # the tree's own copy of the map: the archive it will load, the plan it was adopted with
         L = Level(os.path.join(tree, 'Maps', entry['id']), os.path.join(tree, 'BuildInfo', entry['id']))
-    R = Route(L, bot=opt['bot'], until=opt['until'], loot=0 if opt['no_loot'] else opt['loot'], die=opt['die'], walk=opt['walk'], shoot=opt['shoot'])
+    R = make_route(L, opt)
     S = Script(R, opt).build(entry)
     name = os.path.splitext(os.path.basename(out))[0]
     total = int(S.secs * 1.25 + 60)                     # a quarter for turns, stuck steps and slow legs
     # no script outlasts the round: its clock ends it and the score page (onwin) ends the script. The run's own limits are
     # set past that, so that a run ends by `pass` and not by the clock even when every goto and waitvan runs out
     worst = 62.0 + LOAD_GO[1] + ROUND_S + 120.0         # the menu and the load, the wait for the round, the round, the score page and a slow load
+    if opt['rounds'] > 1:
+        worst += ROUND_S + 40.0
     budget = max(total * 1.3, worst)
     block = open(os.path.join(tree, 'KLHook.expansion.ini')).read().replace('Log=1', 'Log=2', 1).rstrip('\n')
     needs = ''
@@ -2334,6 +3192,9 @@ def write_script(tree_folder, mid, out, opt):
     if opt['rig2']:
         needs += '\n;   and klauto.c WITH THE PATCH of re\\playtest.md 6 (waitstate, waitvan; the TEST hook <work>\\build\\klhook\\test_pt1 has it): an unpatched\n' \
                  ';   hook answers "unknown command" and loads NO script'
+    if opt['rig3']:
+        needs += '\n;   and klauto.c WITH THE THIRD ROUND\'S PATCH (`onbody`: <work>\\research\\playtest\\v3\\klauto_h3_onbody.patch, re\\playtest.md 10.6) - NOT in the\n' \
+                 ';   tree and in no built hook when this file was written: a hook without it loads NO script'
     elif opt['until'] == 'board' and R.boarding == 'van' and not opt['blind_board']:
         needs += '\n;   WRITTEN FOR THE UNPATCHED klauto: it does NOT board (that rig cannot see the van; a step to its doors by the clock is blind).\n' \
                  ';   For boarding run the rig2 script of the same name (rig2\\%s_r2.ini)' % name
@@ -2343,10 +3204,17 @@ def write_script(tree_folder, mid, out, opt):
                                                            and a not in (tree_folder, mid, out, 'script'))
     text = HEAD % dict(tag=name, args=args, name=name, tree=tree, needs=needs, wait=int(budget) + 400, shots='%d-%d:20' % (90, min(total, 600)),
                        what='Arcade -> Dead Men maps -> entry %d "%s" (slot %s, Maps\\%s), then the human WALKS: --until %s%s, bot %d\'s places, %d way points, %.0f m'
-                            % (entry['menu_entry'], entry['name'], entry['slot'], entry['id'], opt['until'], ' --die' if opt['die'] else '', opt['bot'],
+                            % (entry['menu_entry'], entry['name'], entry['slot'], entry['id'], opt['until'], (' --die' if opt['die'] else '') +
+                               (' --fed-walk (the AFTER_DEATH points of group %s%s)' % (R.fed['group'], ', F3: the fed dies' if opt['fed_die'] else '') if R.fed else '') +
+                               (' --clear' if opt['clear'] else '') + (' --rounds 2' if opt['rounds'] > 1 else ''), opt['bot'],
                                sum(1 for _ in R.points()), R.length() / 100),
                        block=block, autoexit=int(budget) + 300, maxrun=(int(budget) + 200) * 1000)
-    sets = list(FRAGILE if opt['die'] else [] if opt['no_survive'] else SURVIVE)
+    sets = list(FRAGILE if opt['die'] else [] if opt['no_survive'] else survive(opt['cop']))
+    if opt['die'] and opt['fed_walk']:                  # the fed's keys: FED_WALK / FED_DIE above have the reasons (review 3, M1)
+        if opt['fed_die']:
+            sets += FED_DIE
+        else:
+            sets = [s for s in sets if not (s[0] == 'Balance' and s[1] in FED_WALK_DROP)] + FED_WALK
     if opt['until'] == 'wall':
         sets += [('Climb', 'Enable', '1'), ('Climb', 'Key', '0'), ('Climb', 'Log', '2')]
     for sec, k, v in sets + parse_extra(opt.get('extra')):
@@ -2373,12 +3241,34 @@ def write_script(tree_folder, mid, out, opt):
            'After "bots: record 0 (you): aboard" the gotos that are left steer nobody: their "NOT reached" lines mean nothing.',
            'Length of the run: about %d s when every wait of the script runs out; the round\'s own clock ends a run about %d s after its start at the latest (the score page '
            'comes and the script goes to its end); script lines: %d of %d.' % (total, worst, len(S.lines), SCRIPT_MAX)]
-    ex += ['', 'In the ini: ' + ('[Balance] Ramp=0 CopToYou=20 PlayerHealth=0.05 and [Fed] Enable=1 Player=1: the first hit kills him' if opt['die'] else
+    fed_keys = ''
+    if opt['die'] and opt['fed_walk'] and opt['fed_die']:
+        fed_keys = ('[Balance] Ramp=0 CopToYou=20 PlayerHealth=0.05 and [Fed] Enable=1 Player=1: the first hit kills him; and for the fed [Balance] FedMirror=1 (the pairs are written '
+                    'exchanged: every key keeps the meaning of its name on both sides; live in FD3_DM03_die), so he has the hero\'s 27 of health and a heister\'s bullet costs him x 1.0 '
+                    '(CrewToYou): the first is his second death. CopToCrew=0.005: a police bullet costs a heister x 0.005 before and after the switch. A COLLEAGUE\'s stray bullet is '
+                    'CopToYou = x 20 on him too and kills him as well: the log\'s "balance: you lost" line cannot tell the two apart (a loss is at most his 27) - where the crew '
+                    'stood then is in the bots: lines. [Fed] EndSeconds=0 (klfed does not end the round when nobody is left to hunt)')
+    elif opt['die'] and opt['fed_walk']:
+        fed_keys = ('[Balance] Ramp=0 PlayerHealth=0.05, NO CopToYou key (Risk=2\'s 1.0) and [Fed] Enable=1 Player=1: he has 27 of health and one police bullet kills him (75.6 from a '
+                    'Type 79 near, 39 at 50 m; a shotgun\'s far hit may take two). For the fed [Balance] FedMirror=0: the game\'s own 550 of health for a police player (live in '
+                    'PT_DM03_die_r2) and NOTHING exchanged - once he is police his game reads the OTHER float of each pair (klbalance.c 2 a3), so the keys change their meaning at '
+                    'his death:  CopToYou (1.0) is then a HEISTER\'s bullet on him - x 1.0 of 550, he can be shot dead by the crew he walks to, about 12 hits;  CrewToYou=0.001 a '
+                    'police AI\'s stray on him;  CrewToCop=0.005 a police AI\'s bullet on a heister, as CopToCrew=0.005 was before the switch: the crew is protected on both sides '
+                    'of it, AND ITS OWN BULLETS COST THE POLICE x 0.005 ALL ROUND LONG (it cannot clear a room; whether it then lives for him to walk to is a guess). The balance '
+                    'lines print two decimals: "police->crew 0.01" / "0.00" are these numbers. A READING of klbalance.c, NOT RUN. [Fed] EndSeconds=0 (klfed does not end the round '
+                    'when nobody is left to hunt). The first round\'s scripts had CopToYou=20 here: a heister\'s bullet on the fed x 20 (review 3, M1) - do not run those')
+    ex += ['', 'In the ini: ' + (fed_keys if fed_keys else '[Balance] Ramp=0 CopToYou=20 PlayerHealth=0.05 and [Fed] Enable=1 Player=1: the first hit kills him' if opt['die'] else
                               'the owner\'s balance, nothing more (--no-survive): he does not shoot and will be shot' if opt['no_survive'] else
-                              '[Balance] Ramp=0 CopToYou=0.02 CrewToYou=0.02 PlayerHealth=10 RegenDelay=0.5 RegenTime=0.5 Log=2: as hard to kill as the keys make him, because he '
-                              'never shoots (a test aid: what the police do to HIM is not measured by this run). NOT PROOF: with the two factors alone he was dead on the bank\'s '
-                              'stairs in three live runs of three (steps of 151.2 that no factor scaled). "bots: record 0 (you): dead" = the run ends there; the "balance: you lost" '
-                              'lines before it say by what')]
+                              '[Balance] Ramp=0 CopToYou=%.4g CrewToYou=%.4g PlayerHealth=10 RegenDelay=0.5 RegenTime=0.5 Log=2: as hard to kill as the keys make him, because he '
+                              'never shoots (a test aid: what the police do to HIM is not measured by this run). At 0.02 he was dead on the bank\'s stairs in 3 live runs of 5 with the '
+                              '5,500 of health: the point-blank rule (a firing guard within %d sends a hit worth 100 bullets a step: 758.6 from the .45 at 0.02, %.1f at this dial). '
+                              '"bots: record 0 (you): dead" = the run ends there; the "balance: you lost" lines before it say by what'
+                              % (opt['cop'], opt['cop'], PB_REACH, 37931.25 * opt['cop']))]
+    r1, r2 = R.danger_rows()
+    ex += ['', 'THE POINT-BLANK RULE on this route (the .route.txt has each): %d stop(s) or walked leg(s) within %d of a guard\'s post; %d of its %d stops are where a guard can have come '
+           'to by then (a model: %d units a second along the mesh from his post, measured on the bank only)%s' % (len(r1), PB_POST, len(r2), len(R.stops()), GUARD_RUN,
+           '; %d way point(s) are walked in motion although the model asks for a stop (a live run did so)' % sum(1 for _a, _b, _c, w in R.points() if w.get('live'))
+           if any(w.get('live') for _a, _b, _c, w in R.points()) else '')]
     rigs = R.not_reached() + R.steered_off() + R.behind() + [x for x in R.stand_arcs() if 'circles' in x[3]]
     if rigs:
         ex += ['', 'Gotos the route print marks for the rig (the .route.txt has the reason at each; those he would circle if he did not turn before he walks from a stand are among '
@@ -2386,7 +3276,14 @@ def write_script(tree_folder, mid, out, opt):
     with open(base + '.expect.txt', 'w', newline='\r\n') as f:
         f.write('\n'.join(ex) + '\n')
     plan = dict(script=os.path.basename(out), map=entry['id'], until=opt['until'], die=bool(opt['die']), rig2=bool(opt['rig2']), bot=opt['bot'], go_line=S.go_line,
-                free_s=FREE_S, by_design=S.by_design, gotos=S.gotos, stages=S.stages, lines=len(S.lines), seconds=total)
+                free_s=FREE_S, by_design=S.by_design, gotos=S.gotos, stages=S.stages, lines=len(S.lines), seconds=total, rounds=opt['rounds'], cop=opt['cop'])
+    if R.fed:
+        F = R.fed
+        plan['fed'] = dict(line=S.fed_line, group=F['group'], groups=F['groups'], goal=[F['goal'][0]] + [round(v) for v in F['goal'][1][:3]] if F['goal'] else None,
+                           points=[dict(n=q['n'], at=[round(v) for v in q['at']], group=q['group'], floor=None if q['floor'] is None else round(q['floor']),
+                                        mesh=None if not q['mesh'] else round(q['mesh'][1])) for q in F['points']],
+                           pre=[[round(v) for v in q] for q in F['pre']], blind=[[round(v) for v in q] for q in F['blind']], joined=bool(F['entries'] or F['join']),
+                           edge=[round(v) for v in F['edge']] if F.get('edge') else None)
     with open(base + '.plan.json', 'w') as f:
         json.dump(plan, f, indent=1)
     return R, S, total
@@ -2409,15 +3306,45 @@ def options(a):
          'no_survive': take('--no-survive', flag=True), 'no_loot': take('--no-loot', flag=True), 'loot': int(take('--loot', '2')), 'loot_hold': float(take('--loot-hold', str(LOOT_HOLD))),
          'loot_wait': float(take('--loot-wait', '5')), 'linger': float(take('--linger', '30')), 'walk': take('--walk', flag=True), 'build': take('--build'),
          'shoot': take('--shoot', flag=True), 'blind_board': take('--blind-board', flag=True), 'join_after': float(take('--join-after', '0')),
-         'visits': int(take('--visits', '3')), 'out': take('--out'), 'argv': argv}
+         'visits': int(take('--visits', '3')), 'out': take('--out'), 'argv': argv,
+         'cop': float(take('--cop', str(COP_DIAL))), 'stops': take('--stops', flag=True), 'clear': take('--clear', flag=True), 'fed_walk': take('--fed-walk', flag=True),
+         'fed_group': int(take('--fed-group', '1')), 'fed_to': take('--fed-to', 'loot'), 'fed_die': take('--fed-die', flag=True),
+         'die_wait': float(take('--die-wait', str(DIE_WAIT))), 'rounds': int(take('--rounds', '1')), 'rig3': take('--rig3', flag=True)}
+    o['rig2'] = o['rig2'] or o['rig3']
     take('--no-shoot', flag=True)                       # (the default now; the old spelling is taken and means nothing)
     if o['die'] and '--linger' not in argv:
-        o['linger'] = 150.0
+        o['linger'] = 60.0 if o['fed_walk'] else 150.0
     if o['until'] == 'van' and '--linger' not in argv:
-        o['linger'] = 70.0
+        o['linger'] = 90.0 if o['clear'] else 70.0
+    if o['fed_to'] not in ('loot', 'exit', 'level', 'enter', 'van', 'hall', 'gate', 'rally'):
+        raise SystemExit('--fed-to %s: one of loot exit level enter van' % o['fed_to'])
+    if o['rounds'] not in (1, 2):
+        raise SystemExit('--rounds %d: 1 or 2' % o['rounds'])
     return o
 
 
+def make_route(L, o):
+    """The Route of the options `o` on level L."""
+    return Route(L, bot=o['bot'], until=o['until'], loot=0 if o['no_loot'] else o['loot'], die=o['die'], walk=o['walk'], shoot=o['shoot'], stops=o['stops'], clear=o['clear'],
+                 fed={'group': o['fed_group'], 'to': o['fed_to']} if o['fed_walk'] else None)
+
+
+# the third round's set (re\playtest.md 10.5): rig2 only, into <work>\research\playtest\v3
+DIE_FED = ['--until', 'loot', '--die', '--fed-walk']
+SET3 = [('H3_DM03_board', 'DM03', ['--until', 'board']),                # the bank with the stairs in motion and the dial at 0.001: the FollowOut tests ride on it
+        ('H3_DM02_board', 'DM02', ['--until', 'board']),                # Late Night Opening, never walked: the glass doors, the escalators
+        ('H3_DM03_van_clear', 'DM03', ['--until', 'van', '--clear']),   # in play and not aboard for 90 s while the bots board (Bribe / Leave)
+        ('H3_DM01_die_fed', 'DM01', DIE_FED), ('H3_DM02_die_fed', 'DM02', DIE_FED), ('H3_DM03_die_fed', 'DM03', DIE_FED), ('H3_DM06_die_fed', 'DM06', DIE_FED),
+        ('H3_DM09_die_fed_g1', 'DM09', DIE_FED + ['--fed-group', '1']), ('H3_DM09_die_fed_g2', 'DM09', DIE_FED + ['--fed-group', '2']),
+        ('H3_DM09_die_fed_g3', 'DM09', DIE_FED + ['--fed-group', '3']),
+        # F3: the fed walks to where the crew runs to the van and is shot. He stands until the round's clock ends the run (--linger 180: review 3,
+        # S5 - the crew passes the level exit place only on its way out, stage 3 came 80 .. 95 s after 0x19 for a human who sprints and later
+        # for bots; with 60 s nobody might have passed)
+        ('H3_DM03_F3_fed_dies', 'DM03', DIE_FED + ['--fed-to', 'level', '--fed-die', '--linger', '180']),
+        ('H3_DM03_F4_two_rounds', 'DM03', ['--until', 'loot', '--die', '--rounds', '2', '--linger', '45']),     # F4: a death in each of two rounds
+        # the `onbody` form (review 3, S1) of the three maps where a fed pushed about by the hero's leftover gotos may no longer stand where his own
+        # first goto starts (a control room with a catwalk, a deck with stairs, a car park): for a TEST hook with klauto_h3_onbody.patch - none has it
+        ('H3_DM01_die_fed_rig3', 'DM01', DIE_FED + ['--rig3']), ('H3_DM02_die_fed_rig3', 'DM02', DIE_FED + ['--rig3']), ('H3_DM06_die_fed_rig3', 'DM06', DIE_FED + ['--rig3'])]
 SET = [('PT_DM01_board', 'DM01', ['--until', 'board']), ('PT_DM02_board', 'DM02', ['--until', 'board']), ('PT_DM03_board', 'DM03', ['--until', 'board']),
        ('PT_DM06_board', 'DM06', ['--until', 'board']), ('PT_DM09_join', 'DM09', ['--until', 'join']), ('PT_DM09_board', 'DM09', ['--until', 'board']),
        ('PT_DM03_wall', 'DM03', ['--until', 'wall', '--build', os.path.join(WORK, 'build', 'z_climb', 'M03')]), ('PT_DM03_die', 'DM03', ['--until', 'loot', '--die']),
@@ -2427,19 +3354,36 @@ SET = [('PT_DM01_board', 'DM01', ['--until', 'board']), ('PT_DM02_board', 'DM02'
 
 def main():
     a = sys.argv[1:]
-    if len(a) < 2 or a[0] not in ('route', 'script', 'set', 'selftest', 'rigfit', 'judge'):
+    if len(a) < 2 or a[0] not in ('route', 'script', 'set', 'set3', 'selftest', 'rigfit', 'judge', 'fed', 'danger', 'starts'):
         sys.exit(__doc__)
     cmd = a.pop(0)
-    if cmd == 'rigfit':
+    if cmd in ('rigfit', 'starts'):
         folder = a.pop(0) if os.path.isdir(a[0]) else os.path.join(WORK, 'build', 'klhook', 'live')
-        return rigfit(folder, a)
+        return rigfit(folder, a) if cmd == 'rigfit' else starts(folder, a)
     if cmd == 'judge':
         if len(a) != 2:
             sys.exit(__doc__)
         return judge(a[0], a[1])
     o = options(a)
+    if cmd == 'fed':
+        L = Level(a[0])
+        print('\n'.join(['kl_playtest fed %s (map %s)' % (a[0], L.map)] + fed_text(L, fed_facts(L, o['fed_group'], o['fed_to'], o['bot']))))
+        return 0
+    if cmd == 'danger':
+        L = Level(a[0])
+        R = make_route(L, o)
+        print('kl_playtest danger %s (map %s; the places of AI heister %d, --until %s)' % (a[0], L.map, o['bot'], o['until']))
+        for s in L.soldiers():
+            step = 100.0 * 1.05 * s['g'] if s['g'] else None
+            print('   %-52s %-22s at (%6d, %5d, %6d)  %-11s %-9s %s  a point-blank step on the human: %s'
+                  % (s['name'][-52:], s['weapon'], *s['at'], s['attitude'], 'in world' if s['active'] else 'LATER', 'hunts' if s['hunts'] else '     ',
+                     '%.1f x the dial = %.1f at %.3g, %.1f at 0.02' % (step, step * o['cop'], o['cop'], step * 0.02) if step else '?'))
+        if getattr(L, 'gun_note', None):
+            print('   NOTE ' + L.gun_note)
+        print('\n'.join(R.danger_text()))
+        return 0
     if cmd == 'route':
-        R = Route(Level(a[0]), bot=o['bot'], until=o['until'], loot=0 if o['no_loot'] else o['loot'], die=o['die'], walk=o['walk'], shoot=o['shoot'])
+        R = make_route(Level(a[0]), o)
         text = '\n'.join(R.text())
         print(text)
         if o['out']:
@@ -2454,10 +3398,12 @@ def main():
         for t in R.notes:
             print('  NOTE ' + t)
         return 0
-    if cmd == 'set':
-        out = a[1] if len(a) > 1 else OUT
-        for name, mid, args in SET:
-            name += '_r2' if o['rig2'] else ''          # another tag: kl_autotest keeps a run's log under its tag
+    if cmd in ('set', 'set3'):
+        if cmd == 'set3':
+            o['rig2'] = True
+        out = a[1] if len(a) > 1 else (OUT if cmd == 'set' else os.path.join(OUT, 'v3'))
+        for name, mid, args in (SET if cmd == 'set' else SET3):
+            name += '_r2' if o['rig2'] and cmd == 'set' else ''         # another tag: kl_autotest keeps a run's log under its tag
             oo = options(list(args) + (['--rig2'] if o['rig2'] else []))
             oo['argv'] = ['script', a[0], mid, os.path.join(out, name + '.ini')] + oo['argv']
             R, S, total = write_script(a[0], mid, os.path.join(out, name + '.ini'), oo)
@@ -2663,6 +3609,71 @@ def rigfit(folder, runs):
     return 0
 
 
+HUMAN_RE = re.compile(r'escort: (?:record \d+ .*re-pointed: you are [\d.]+ m away at|you: record 0, player \w+, feet) \(([-\d]+), ([-\d]+), ([-\d]+)\)')
+
+
+def starts(folder, runs):
+    """THE START, measured (re\\playtest.md 10.1): per run the second after 0x19 at which the first goto began, the last
+    line that has the human on his START place and the first that has him off it (every line with his place: `pos`,
+    a goto's result or 'stuck', klescort's 'you are ... at'), how far off, and how the first goto ended. A goto that
+    began before he could move ('held') shows the moment he was let go to within the lines' spacing."""
+    print('%-26s %-20s %8s  %-18s %-24s %s' % ('run', 'level', 'goto at', 'last on START', 'first off it (units)', 'the first goto'))
+    for run in runs:
+        log = os.path.join(folder, run + '.log')
+        if not os.path.isfile(log):
+            print('%-26s no %s' % (run, log))
+            continue
+        t19, seq, first, name, end, held = None, [], None, '?', '', False
+        for s in open(log, errors='replace'):
+            m = re.match(r'(\d\d):(\d\d):(\d\d)\.(\d+) (.*)', s)
+            if not m:
+                continue
+            t, b = clock(m.groups()), m.group(5)
+            mm = re.search(r"scene '([^']*)' is loaded", b)
+            if mm:
+                name = re.split(r'[\\/]', mm.group(1))[-1]
+            if t19 is None:
+                t19 = t if 'session: state 0x18 -> 0x19' in b else None
+                continue
+            mm = GOTO_RE.search(s)
+            if mm:
+                g = mm.groups()
+                if first is None:
+                    first = t - t19 - int(g[8]) / 1000.0
+                if not end:
+                    end = '%s in %s ms, %d from the START place' % (g[7], g[8], 0)
+                    end_at = (float(g[9]), float(g[11]))
+                seq.append((t - t19, float(g[9]), float(g[11]), 'goto'))
+                continue
+            mm = re.search(r'script \d+: goto is stuck at \(([-\d]+), ([-\d]+), ([-\d]+)\)', b)
+            if mm:
+                held = held or first is None
+                seq.append((t - t19, float(mm.group(1)), float(mm.group(3)), 'stuck'))
+                continue
+            mm = POS_RE.search(s)
+            if mm:
+                seq.append((t - t19, float(mm.group(5)), float(mm.group(7)), 'pos'))
+                continue
+            mm = HUMAN_RE.search(b)
+            if mm:
+                seq.append((t - t19, float(mm.group(1)), float(mm.group(3)), 'escort'))
+        if t19 is None or not seq:
+            print('%-26s %-20s no round, or no line with his place' % (run, name[:20]))
+            continue
+        sp, last, off = seq[0][1:3], None, None
+        for t, x, z, k in seq:
+            d = math.hypot(x - sp[0], z - sp[1])
+            if d <= 30.0 and off is None:
+                last = (t, k)
+            elif d > 30.0 and off is None:
+                off = (t, k, d)
+        if end:
+            end = end.replace(', 0 from', ', %d from' % math.hypot(end_at[0] - sp[0], end_at[1] - sp[1]))
+        print('%-26s %-20s %8s  %-18s %-24s %s' % (run, name[:20], 'held' if held else '-' if first is None else '%+.2f' % first, '-' if last is None else '%.2f s (%s)' % last,
+                                             '-' if off is None else '%.2f s (%s) %d' % off, end or '-'))
+    return 0
+
+
 STAGES = [('the round begins', r'session: state 0x18 -> 0x19'), ('stage 1', r'bots: record 0 \(you\): heist stage \d -> 1'), ('stage 2', r'bots: record 0 \(you\): heist stage \d -> 2'),
           ('stage 3', r'bots: record 0 \(you\): heist stage \d -> 3'), ('the vehicle comes', r'bots: L\d+ s\w+ van [1-4] '), ('the join', r'join: player 0 entered box'),
           ('the crew follows', r'crewjoin: \d+ moved'), ('the escort follows', r'escort: record \d+ re-pointed'), ('the escort is let go', r'escort: record \d+ released \(the vehicle waits'),
@@ -2681,11 +3692,13 @@ def judge(ini, log):
     lines = open(log, errors='replace').read().splitlines()
     tm = lambda s: clock(re.match(r'(\d\d):(\d\d):(\d\d)\.(\d+)', s).groups()) if re.match(r'\d\d:\d\d:\d\d\.\d+', s) else None
     t19 = death = gone = None                           # gone: dead, or aboard - the gotos after that steer nobody (or a fed)
-    res, stuck, skipped, front_no, result, away = {}, collections.Counter(), {}, 0, None, set()
+    res, stuck, skipped, front_no, result, away, n19 = {}, collections.Counter(), {}, 0, None, set(), 0
     for s in lines:
         t = tm(s)
         if t is None:
             continue
+        if 'session: state 0x18 -> 0x19' in s:
+            n19 += 1
         if t19 is None and 'session: state 0x18 -> 0x19' in s:
             t19 = t
         if death is None and re.search(r'fed: you: status 0 -> 1|bots: record 0 \(you\): (dead|status1|aboard)', s):
@@ -2720,13 +3733,16 @@ def judge(ini, log):
     if first is not None and first in res:
         o.append('the round began at %s; the first goto (script %d) started %.1f s after it (he can move 10.1 .. %.1f s after it)'
                  % (time_text(t19), first, res[first][1] - res[first][2] / 1000.0 - t19, FREE_S))
-    live = [n for n in gl if n not in by_design]
+    fedp = plan.get('fed') if plan else None
+    fedl = {g['line'] for g in plan['gotos'] if g.get('fed')} if plan else set()
+    live = [n for n in gl if n not in by_design and n not in fedl]
     done = [n for n in live if n in res or n in skipped]
     dead = lambda n: death is not None and ((n in res and res[n][1] > death) or (n in skipped and skipped[n] > death))
     okn = [n for n in done if n in res and res[n][0] and not dead(n)]
     bad = [n for n in done if (n in skipped or not res[n][0]) and not dead(n)]
-    o.append('gotos: %d in the script (and %d that end by their timeout by design); %d ran before the round ended%s: %d reached, %d NOT reached or skipped; %d \'stuck\' line(s) on %d goto(s)'
-             % (len(live), len(gl) - len(live), len(done), ', %d of them after %s (left out)' % (sum(1 for n in done if dead(n)), gone) if death else '', len(okn), len(bad),
+    o.append('gotos: %d in the script (and %d that end by their timeout by design%s); %d ran before the round ended%s: %d reached, %d NOT reached or skipped; %d \'stuck\' line(s) on %d goto(s)'
+             % (len(live), len([n for n in gl if n in by_design and n not in fedl]), '; the fed\'s %d are judged below' % len(fedl) if fedl else '', len(done),
+                ', %d of them after %s (left out)' % (sum(1 for n in done if dead(n)), gone) if death else '', len(okn), len(bad),
                 sum(stuck[n] for n in live if not dead(n)), sum(1 for n in live if stuck[n] and not dead(n))))
     if len(done) < len(live):
         o.append('   %d goto(s) of the script never ran (script %d and after): the round was over, or the script was still waiting when it ended'
@@ -2753,7 +3769,63 @@ def judge(ini, log):
         pl = [(float(a), float(c)) for a, _b, c in away]
         span = max(math.hypot(p[0] - q[0], p[1] - q[1]) for p in pl for q in pl)
         o.append('   the escort was called to %d different place(s) of the human, up to %.0f m apart (he %s)' % (len(away), span / 100, 'MOVED' if span > 300 else 'stood'))
+    if fedp:                                            # the fed's part: where he appeared, what his gotos did, how far he got
+        o.append('THE FED (the script\'s part from line %s on, written for group %s of the AFTER_DEATH points):' % (fedp['line'], fedp['group']))
+        m = next((re.search(r'fed: YOU ARE A FED: .*? at \(([-\d]+), ([-\d]+), ([-\d]+)\)', s) for s in lines if 'fed: YOU ARE A FED' in s), None)
+        if m:
+            p = tuple(float(v) for v in m.groups())
+            q = min(fedp['points'], key=lambda q: math.hypot(q['at'][0] - p[0], q['at'][2] - p[2]))
+            fl = q['floor'] if q['floor'] is not None else q['mesh']
+            o.append('   he appeared at (%d, %d, %d): %d from point %d (group %d%s); the floor there is %s: %s' % (
+                *p, math.hypot(q['at'][0] - p[0], q['at'][2] - p[2]), q['n'], q['group'], '' if q['n'] in fedp['group'] else ' - NOT the group the gotos were written for',
+                'not known' if fl is None else '%d' % fl, '' if fl is None else 'ON THE GROUND' if abs(p[1] - fl) <= 40 else '%+d from it' % (p[1] - fl)))
+        else:
+            o.append('   no "fed: YOU ARE A FED" line: he did not come back as police (was he shot at all? "fed: you: status 0 -> 1" %s)' % ('came' if death is not None else 'did not come'))
+        pk = next((s for s in lines if re.search(r'script %d: peek 0168ea60 = ' % (fedp['line'] + 1), s)), None)
+        if pk:
+            o.append('   klfed\'s switch when the fed\'s part began: %s' % ('0 = he stood as police' if '= 00000000' in pk else 'NOT 0: he was not police yet - the gotos steered the hero'))
+        last = None
+        by = fedp['blind'][-1][1] if fedp.get('blind') else None        # the crew's mesh height a BLIND goto aims at
+        if by is not None and fedp.get('edge') and fedp['edge'][1] - by < 2 * BLIND_DY:
+            by = None                                   # ... on his own floor (a lift car): the height says nothing, the goto's 'reached' does
+        down = False
+        for s in lines:
+            mm = re.search(r'pos (fed-[^:]*): me #\d+ \(([-\d]+), ([-\d]+), ([-\d]+)\)', s)
+            if mm:
+                note = ''
+                if by is not None and mm.group(1).startswith('fed-blind'):      # review 3, S2: a goto's 'reached' is 2-D - only the height says he came down
+                    dy = float(mm.group(3)) - by
+                    down = down or abs(dy) <= BLIND_DY
+                    note = '   AT THE CREW\'S HEIGHT (%d): there IS a way down' % by if abs(dy) <= BLIND_DY else \
+                           '   %+d from the crew\'s mesh (%d): NOT down - a "reached" of the blind goto before it is a distance in the plan and shows no way' % (dy, by)
+                o.append('   %-22s (%s, %s, %s)%s' % (*mm.groups(), note))
+                last = tuple(float(v) for v in mm.groups()[1:])
+        fg = [g for g in plan['gotos'] if g.get('fed')]
+        ok = [g for g in fg if g['line'] in res and res[g['line']][0] and g['kind'] != 'fedblind']
+        nb = [g for g in fg if g['kind'] == 'fedblind']
+        o.append('   his gotos: %d in the script%s, %d ran, %d reached%s' % (len(fg) - len(nb), ' (and %d blind ones, judged below)' % len(nb) if nb else '',
+                 sum(1 for g in fg if g['line'] in res and g['kind'] != 'fedblind'), len(ok),
+                 '; the last one reached: script %d (%d, %d) [%s]' % (ok[-1]['line'], ok[-1]['x'], ok[-1]['z'], ok[-1]['kind']) if ok else ''))
+        if nb:
+            nr = sum(1 for g in nb if g['line'] in res and res[g['line']][0])
+            if by is None:
+                o.append('   the blind gotos: %d of %d reached (the crew\'s mesh is on his own floor there: reached = he got out of what the collision shuts him in)' % (nr, len(nb)))
+            else:
+                o.append('   the blind gotos: %d of %d "reached" in the plan, which shows nothing by itself; by the height he %s' % (nr, len(nb),
+                         'CAME DOWN to the crew\'s mesh' if down else 'did NOT come down (or no pos fed-blind line is in the log)'))
+        for g in fg:
+            if g['line'] in res and not res[g['line']][0]:
+                o.append('      script %d [%s]: %s%s' % (g['line'], g['kind'], res[g['line']][3], ' - a blind one: expected either way' if g['kind'] == 'fedblind' else ''))
+        if last and fedp.get('goal'):
+            d = math.hypot(last[0] - fedp['goal'][1], last[2] - fedp['goal'][3])
+            o.append('   at the end he stood %d from his goal, the crew\'s \'%s\' place (%d, %d, %d): %s' % (d, *fedp['goal'], 'HE GOT THERE' if d <= 150 else 'he did not get there'))
     why = []
+    if plan and plan.get('rounds', 1) > 1:              # review 3, S4: RESULT PASS comes on round 1's page too when the page's trap fired early
+        o.append('ROUNDS: "session: state 0x18 -> 0x19" came %d time(s); the script is written for %d (gotos and stage lines above are of BOTH rounds: a goto\'s line is the last '
+                 'one logged for it, a stage is found at its first line)' % (n19, plan['rounds']))
+        if n19 < plan['rounds']:
+            why.append('only %d round(s) began of the %d the script is for (the page\'s trap fired on the old page, the last life was lost, or RETURN did not start a round)'
+                       % (n19, plan['rounds']))
     if front_no:
         why.append('the game window was not in front (%d nudge line(s) say so): the round stood still' % front_no)
     if result:
