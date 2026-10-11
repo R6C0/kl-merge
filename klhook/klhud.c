@@ -171,6 +171,7 @@ static int klu_draw_one(DWORD obj, void *ctx, void *cam, float x, float y)
    runs INSIDE 0x8bf300's element loop, with the ctx / cam the stock elements draw with. Run H1c (hud_test4, OSD
    slot 55 wrapped and drawn AFTER the stock 0x558370): Draw was called 12 times a HUD frame on good objects and
    nothing reached the frame - whatever 0x558370 does after 0x8bf300 (flush / end of the HUD plane) had passed. */
+#define KLU_PLIST_RENDER 0x5e60f0u           /* ZFAPlayerListDisplay slot 2 (its Render draws its five text + shadow pairs) */
 #define KLU_TIME_RENDER 0x81e090u             /* ZFATimeDisplay slot 2 (re\hud.md 3.1: the per-frame draw read) */
 #define KLU_ELEM_NSLOT  11                    /* IDisplayInterface: 11 slots (re\hud.md 2.1), then RTTI */
 static DWORD klu_evt[KLU_ELEM_NSLOT + 1];     /* [0] RTTI locator, [1..] the slots */
@@ -186,6 +187,25 @@ static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam
 {
     char r; int i; (void)edx;
     InterlockedIncrement(&klu_n_call);
+    if (klu.reuse == 2) {                                  /* STOCK DRAWS (run H1n: every Draw the hook issues is invisible; a string put into a
+                                                              stock object right before the stock draw shows, H1l): the wrapped element is the
+                                                              PLAYER LIST itself, shown; its five text + shadow pairs get our rows' strings and
+                                                              colours here, then its own Render draws them at its own places */
+        if (klu_draw_on && (DWORD)(DWORD_PTR)el == klu_r.elem && TryEnterCriticalSection(&klu_cs)) {
+            int k;
+            for (k = 0; k < 5; k++) {
+                struct klu_text *t = &klu_r.t[k];        /* rows 0..4 = the first five crew rows (or what the data gives) */
+                DWORD a = t->obj, b = t->shadow, vt = 0;
+                if (!a || !klh_rd(a, &vt, 4) || vt != KLU_TEXT_VT) continue;
+                ((klu_set1_t)(DWORD_PTR)klh_rd32(vt + KLU_VT_TEXT))((void *)(DWORD_PTR)a, 0, (DWORD)(DWORD_PTR)t->want);
+                if ((klh_rd32(a + 0x14) & 0xffffff) != (t->want_colour & 0xffffff)) ((klu_set1_t)(DWORD_PTR)klh_rd32(vt + KLU_VT_COLOUR))((void *)(DWORD_PTR)a, 0, t->want_colour);
+                if (b && klh_rd32(b) == KLU_TEXT_VT) ((klu_set1_t)(DWORD_PTR)klh_rd32(vt + KLU_VT_TEXT))((void *)(DWORD_PTR)b, 0, (DWORD)(DWORD_PTR)t->want);
+                InterlockedIncrement(&klu_n_draw);
+            }
+            LeaveCriticalSection(&klu_cs);
+        }
+        return ((char (__fastcall *)(void *, void *, void *, void *))(DWORD_PTR)KLH_VA(KLU_PLIST_RENDER))(el, 0, ctx, cam);
+    }
     if (klu.hijack && klu_hijack_on) {                     /* TEST: the timer's text gets our string right before its own draw (run H1k: a
                                                               SetText on the tick is overwritten by the timer's Update the same frame) */
         DWORD tobj = klh_rd32((DWORD)(DWORD_PTR)el + 0x28), vt = 0;
@@ -251,11 +271,12 @@ static void klu_draw_ours(void *el, void *ctx, void *cam)
 static int klu_vtable_tick(DWORD osd)
 {   /* -> 1 while the timer element's first dword is ours (installed here when it shows the stock one) */
     static LONG told; DWORD el, vt, cur;
-    if (!(el = klh_rd32(osd + KLU_O_TIME)) || !klh_rd(el, &cur, 4)) return 0;
+    const DWORD want_vt = klu.reuse == 2 ? KLU_PLIST_VT : KLU_TIME_VT, want_fn = klu.reuse == 2 ? KLU_PLIST_RENDER : KLU_TIME_RENDER;
+    if (!(el = klh_rd32(osd + (klu.reuse == 2 ? KLU_O_PLIST : KLU_O_TIME))) || !klh_rd(el, &cur, 4)) return 0;
     if (!klu_evt_ready) {
-        if (!klh_rd((DWORD_PTR)KLH_VA(KLU_TIME_VT - 4), klu_evt, sizeof klu_evt)) return 0;
-        if (klu_evt[1 + 2] != KLU_TIME_RENDER) {
-            if (!InterlockedExchange(&told, 1)) klog("hud: slot 2 of ZFATimeDisplay is %08lx, not %08x: the HUD is off", klu_evt[1 + 2], KLU_TIME_RENDER);
+        if (!klh_rd((DWORD_PTR)KLH_VA(want_vt - 4), klu_evt, sizeof klu_evt)) return 0;
+        if (klu_evt[1 + 2] != want_fn) {
+            if (!InterlockedExchange(&told, 1)) klog("hud: slot 2 of the element to wrap is %08lx, not %08lx: the HUD is off", klu_evt[1 + 2], want_fn);
             return 0;
         }
         klu_evt[1 + 2] = (DWORD)(DWORD_PTR)klu_render_elem;
@@ -263,13 +284,13 @@ static int klu_vtable_tick(DWORD osd)
     }
     vt = (DWORD)(DWORD_PTR)&klu_evt[1];
     if (cur == vt) { klu_r.elem = el; return 1; }
-    if (cur != KLU_TIME_VT) {
-        if (!InterlockedExchange(&told, 1)) klog("hud: the timer element at osd+0x10cc = %08lx has vtable %08lx, not ZFATimeDisplay's %08x: the HUD is off", el, cur, KLU_TIME_VT);
+    if (cur != want_vt) {
+        if (!InterlockedExchange(&told, 1)) klog("hud: the element at osd+0x%x = %08lx has vtable %08lx, not %08lx: the HUD is off", klu.reuse == 2 ? KLU_O_PLIST : KLU_O_TIME, el, cur, want_vt);
         return 0;
     }
-    if (!klh_data((void *)(DWORD_PTR)el, &vt, 4, "the timer element's vtable (private copy, slot 2 wrapped)")) return 0;
+    if (!klh_data((void *)(DWORD_PTR)el, &vt, 4, "the element's vtable (private copy, slot 2 wrapped)")) return 0;
     klu_r.elem = el;
-    if (klu.log) klog("hud: timer element %08lx now renders through the private vtable (slot 2 -> klu_render_elem: the stock 0x81e090 first, then our texts, inside the OSD's element loop)", el);
+    if (klu.log) klog("hud: element %08lx (%s) now renders through the private vtable (slot 2 -> klu_render_elem%s)", el, klu.reuse == 2 ? "the player list, shown" : "the timer", klu.reuse == 2 ? ": our strings into its pairs, then its stock Render draws them" : ": the stock 0x81e090 first, then our texts");
     return 1;
 }
 
@@ -325,6 +346,24 @@ static int klu_make_all(DWORD osd)
                                                         ZCHAROBJ draws our string; a mid-level-made one never shows): its header texts at
                                                         +0xea8..+0xecc and +0xed0 (ZFAPlayerListDisplay::Init 0x4700c0 stores them there) */
         static const DWORD offs[KLU_NTEXT] = { 0xea8, 0xeac, 0xeb0, 0xeb4, 0xeb8, 0xebc, 0xec0, 0xec4, 0xec8, 0xecc, 0xed0, 0 };
+        static const DWORD pairs[5][2] = { { 0xea8, 0xeac }, { 0xeb0, 0xeb4 }, { 0xeb8, 0xebc }, { 0xec0, 0xec4 }, { 0xec8, 0xecc } };   /* run H1n: light text on layer 0f + its black shadow on 0e */
+        if (klu.reuse == 2) {
+            DWORD el2 = klh_rd32(osd + KLU_O_PLIST), evt2 = 0;
+            if (!el2 || !klh_rd(el2, &evt2, 4) || evt2 != KLU_PLIST_VT) { klog("hud: osd %08lx: no ZFAPlayerListDisplay: no text is made", osd); return 0; }
+            for (i = 0; i < KLU_NTEXT; i++) {
+                struct klu_text *t = &klu_r.t[i]; DWORD a, b, va = 0;
+                memset(t, 0, sizeof *t);
+                t->want_colour = KLU_C_TEXT;
+                if (i >= 5) continue;
+                a = klh_rd32(el2 + pairs[i][0]); b = klh_rd32(el2 + pairs[i][1]);
+                if (!a || !klh_rd(a, &va, 4) || va != KLU_TEXT_VT) { klog("hud: osd %08lx: player list +0x%lx is not a ZCHAROBJ: row %d goes without", osd, pairs[i][0], i); continue; }
+                t->obj = a; t->shadow = (b && klh_rd32(b) == KLU_TEXT_VT) ? b : 0; n++;
+                if (klu.log >= 2) klog("hud: row %d <- player list pair +0x%lx / +0x%lx (%08lx / %08lx)", i, pairs[i][0], pairs[i][1], a, b);
+            }
+            if (!n) { klog("hud: osd %08lx: no usable pair in the player list: no text is made", osd); return 0; }
+            if (klu.log) klog("hud: osd %08lx, %d rows of the SHOWN player list %08lx take our strings right before its own Render (Reuse=2; the element's own places and style)", osd, n, el2);
+            return 1;
+        }
         DWORD el = klh_rd32(osd + KLU_O_PLIST), evt = 0;
         if (!el || !klh_rd(el, &evt, 4) || evt != KLU_PLIST_VT) { klog("hud: osd %08lx: no ZFAPlayerListDisplay to borrow texts from: no text is made", osd); return 0; }
         for (i = 0; i < KLU_NTEXT; i++) {
@@ -621,8 +660,9 @@ static void klu_init(void)
     klu.crew = GetPrivateProfileIntA("HUD", "Crew", 1, klh_ini) != 0;
     klu.money = GetPrivateProfileIntA("HUD", "Money", 1, klh_ini) != 0;
     klu.hide = GetPrivateProfileIntA("HUD", "HideStock", 1, klh_ini) != 0;
+    if (klu.reuse == 2) klu.hide = 0;            /* the player list must stay shown: its own Render draws our rows */
     klu.shadow = GetPrivateProfileIntA("HUD", "Shadow", 1, klh_ini) != 0;
-    klu.reuse = (int)GetPrivateProfileIntA("HUD", "Reuse", 1, klh_ini);
+    klu.reuse = (int)GetPrivateProfileIntA("HUD", "Reuse", 2, klh_ini);            /* 2 = the shown player list's pairs get our strings, the stock code draws (default); 1 = borrowed objects drawn by the hook (invisible, H1n); 0 = own objects (invisible) */
     if (klu.reuse) klu.shadow = 0;            /* 1 = borrow the hidden player list's text objects (default); 0 = create our own (never drew) */
     klu.hijack = (int)GetPrivateProfileIntA("HUD", "Hijack", 0, klh_ini);          /* 1 = the timer's own text gets our string 3 s in 10 (test) */
     klu.borrow = (int)GetPrivateProfileIntA("HUD", "Borrow", 0, klh_ini);          /* 1 = text 8 draws with the timer text's desc[2] (test) */
