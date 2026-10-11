@@ -807,6 +807,7 @@ Kept for the next stage: `C:/kl_scratch/bank/l2/build/F07+M03_A campaign/` (217 
 `C:/kl_scratch/bank/l1/build` is deleted. Scratch `C:/kl_scratch/bank/l2/`: `s/` (tops.py, built.py, squads.py, ctl.py,
 lists.py, pts.py, loot2.py, floor2.py: what the tables below were measured with), `out/` (every output named below).
 No other file of the repo was touched; no table of another tool gained an entry (L2.5).
+Committed as c3a1f82 (tools/kl_fa_bank.py, this section).
 
 ### L2.1 What was built into the module
 
