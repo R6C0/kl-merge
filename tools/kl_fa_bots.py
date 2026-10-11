@@ -14,6 +14,10 @@ driver, van, help up), re/bots_voice.md (the heisters' lines). OFFLINE: nothing 
     python kl_fa_bots.py stock [F01 ...]                                the control: the stock squads through this
                                                                         module's reading of mesh and trigger boxes
     python kl_fa_bots.py sizes <folder> [<folder> ...]                  the four large blocks (.prm .ANM .fxc .WAV)
+    python kl_fa_bots.py census <folder> [<folder> ...]                 the money of a bots build against its squads: what
+                                                                        each object is, when a bot can take it, and how
+                                                                        close each squad's places come to one it cannot
+                                                                        (the loot window, re/bots_loot.md)
     python kl_fa_bots.py owner <root of builds> <out root> [M01 ...]    every map folder of the root with its RECIPE =
                                                                         the squad as the owner asked for it on 2026-10-10
                                                                         (re/bots.md 12): loot stops, cases, the diner's
@@ -40,6 +44,27 @@ driver, van, help up), re/bots_voice.md (the heisters' lines). OFFLINE: nothing 
                                A map without a drop gets no such section
       --lane                   the places of the way out keep LANE_CLEAR from the escape car's spline routes and stay on
                                the side the bots come from (the builds of the afternoon had bots waiting IN the road)
+      --window                 THE LOOT WINDOW (2026-10-11, re/bots_loot.md; RECIPE has it on, --no-window takes it off for
+                               a comparison build). A bot with a heist stage goes for every money object within 800 (3D)
+                               and 400 in height of itself (kl2 0x8b94d0; LOOT_WINDOW) and can be held for the round by
+                               one it cannot take (runs L8 / L10: every living bot at the post of the watch shop's clerk;
+                               L11: two at a shut watch case). With the option: (1) every squad's relays open EVERY case
+                               a bot comes near - not the CASE_BOTS nearest bots' - from a timer after the last station
+                               that is still LOOT_WINDOW + the case guard away, so the glass goes before the bots are in
+                               reach of it (the human finds those cases open: both stores of Late Night Opening about
+                               half a minute after GO); (2) the money ON A CIVILIAN that a place comes near is TAKEN OUT
+                               OF THE LEVEL: build() takes the OnlineMoneyCtrl and its own TriggerBox2 off her group
+                               (strip_money; STORED, so nothing depends on a message arriving - the first form, a relay
+                               'Deactivate', is dropped by a hidden node like the take itself, kl2 0x6cdb65; review D1).
+                               Nobody gets that money, the human neither, and it is no loot of the route. diff() allows
+                               exactly this edit. A map without a case or a civilian in reach comes out byte for byte
+                               as without the option (M06). check() - also on builds made without it - FAILs every
+                               place (every branch, the holds of kl_fa_bots_dyn too) from where the bot first has a
+                               heist stage on that lies inside the window of an object the bot cannot take at that
+                               time (cannot_take)
+      --case-guard N           the guard of --window (default CASE_GUARD = 1150: what kl_fa_bots_dyn's holds need today).
+                               A smaller one lets the glass go later; check() says whether a hold is then in reach of a
+                               shut case too early
     A KEY-FRAMED VAN (a build of `kl_map_escape.py van`: ONE OnlineEscAnimatedVehicle; 2026-10-10 night, re/bots.md 13)
       needs no option: its lane is the line of its position keys (van_drives) and is always kept clear; the bots end
       in an AllyEscapeBox PARK_SIDE beside its boarding box AT THE STOP, on the side they come from (the box itself
@@ -90,6 +115,16 @@ WHAT A SQUAD IS HERE (re/bots_squad.md 8, the smallest form every link of which 
                                                  TriggerDelay2 when the map has no loot object there)
     03x_DefendBehaviour_out + Pos#nn             ... through the way out and the level exit to the vehicle (eDMS_Sprint)
     040_SquadModifier_tight_defense_van          SquadModifierBehaviour eDM_Tight, the end of the chain (as F01 F03 F04 F07)
+    With --stops N every loot stop n = 0, 1 .. has its own block of twenty numbers: (10 + 20 n)_DefendBehaviour_to_loot ..,
+    (20 + 20 n)_Timer_done_looting; the way out and the last modifier follow the last stop's block.
+    With --cases, in each stop's block (the form of 2026-10-11, option window; without it the timer stands before
+    the stop's last step and each squad names only the cases of its own bot, CASE_BOTS squads a case):
+    (18 + 20 n)_Timer_at_cases                   TriggerDelay2 {CASE_DELAY}, between two steps of the way to the stop: after
+                                                 the last station that is still LOOT_WINDOW + the case guard from every
+                                                 case it opens. It names the next step and the relays:
+    (18 + 20 n)_Relay_break_glass [_b ..]        RelayMessageList {'AITrigger' -> 'Activate', the panes of EVERY case a
+                                                 place of the leg comes near}; lists of at most RELAY_MAX targets
+    (18 + 20 n)_Relay_open_cases [_b ..]         RelayMessageList {'AITrigger' -> 'Open', their OnlineMoneyContainer nodes}
   Gameplay!merc_bot_squad!AllyEscapeBox          (option) ZBoxPrimitive + AllyEscapeBox, cloned from F02
   Looting, boarding and turning traitor are NOT in this data: they are three tactics of the soldier script that
   every Ally actor gets in Arcade (kl2 0x6ab56d..). What the route gives them is the bot's heist STAGE: 1 inside an
@@ -157,6 +192,45 @@ PARK_SIDE = 420.0       # a key-framed van: the middle of the bots' AllyEscapeBo
                         # line (the seven places lie within INSIDE x 350 = 157 of it: all at least LANE_CLEAR from the line)
 PARK_REACH = 900.0      # ... and within this of the van's boarding box at the stop
 PARK_NEAR = 3.0         # GUESS: weight of the distance to the boarding box against the length of the walk there
+# ---- THE LOOT WINDOW (2026-10-11, re/bots_loot.md): what an AI heister's own ZLootTactic goes for, read in kl2.exe.
+# ZGameRulesHeist slot 202 (0x8b94d0) hands the tactic the five nearest of the rules' money objects that are not taken
+# ([object+0x34] > 0, 0x4536e0), have byte +0x6c set (ZOnlineMoneyCtrl's init 0x4d8ec4 sets it for EVERY type, a
+# shut container's item too; only being taken or a 'Deactivate' message clears it, 0x4e3f76 / 0x4c95e6) and lie
+# within a 3D distance and a height of the bot's node. The four floats are code defaults of the tuning object's
+# constructor (0x52ad20: +0xc1c = 800 at 0x530aa2, +0xc20 = 400 at 0x530ad8, +0xc24 = 400, +0xc28 = 200; the 786
+# variables are made and freed there, no file feeds them): list one (placed loot, rules+0xdcc) 800 / 400, list two
+# (dropped stacks, rules+0xdb8) 400 / 200. The tactic's test (0x451920) returns 1.0 while one of the five has a
+# path and no field 11, its action (0x7bc7d0) runs to the NEAREST one with a path - and an object that cannot be
+# taken stays a candidate for the whole round. SEEN LIVE: every living bot at the post of the watch shop's clerk to
+# the end of the round (L8, L10), two bots in front of two shut watch cases (L11). NOT a general law: in L8 / L10
+# the bots left the jewel store with 200,000 untaken in their window, in R13 / H0 a waitress and two bank
+# civilians held nobody (re/bots_loot.md 3; why is not established).
+LOOT_WINDOW = (800.0, 400.0)    # list one: 3D distance, height (kl2 0x8b9641 / 0x8b9678)
+DROP_WINDOW = (400.0, 200.0)    # list two (not used here: a dropped stack can be taken)
+TRIGGER_PAD = 40.0      # a TriggerBox2 in radius mode reaches its field 2 + 40 (kl2 0x783f06)
+CASE_GUARD = 1150.0     # plan, option window (--case-guard): a case is opened before a bot's place comes within the
+                        # window + this of it, and a civilian within that of a place loses her money controller.
+                        # kl_fa_bots_dyn puts a hold up to its REACH 900 + RING 230 from a route place and BEFORE the
+                        # timer that follows the place (the first z_loot3 build, guard 600: four squads held 163..230
+                        # from a shut case, inside the ENTERS_BANK box, before their timer). NOT a property of the game
+RELAY_MAX = 10          # most targets of a stock RelayMessageList (F01's KickDoor_RelayList_Door0n: 8 / 10); option
+                        # window splits a longer list over several relay nodes
+LEG_STEP = 40.0         # check(): the stand-in path between two places is sampled this often for the loot window
+# why a bot cannot take an object (cannot_take) and what is KNOWN about each case (check()'s FAIL text says it):
+WHY_LATE = 'in a case that opens only when its glass is shot, which a squad\'s relay opens only AFTER this place'
+WHY_SHUT = 'in a case that opens only when its glass is shot, and no relay of any squad opens it'
+WHY_BOX = 'in a container nothing opens'
+WHY_ORPHAN = 'a CONTAINER object no OnlineMoneyContainer names: never active'
+WHY_CIVIL = 'on a civilian (by the code paid only to somebody inside the trigger on her GROUP node; the loot tactic runs to the node\'s origin, her post)'
+WHY_KNOWN = {
+    WHY_LATE: 'THE STRICTER RULE, not a hold that was seen: with the cases opened from the store\'s door both stores were looted in runs L8 / L10. '
+              'By the code a bot with a heist stage in reach of a shut case goes to it (kl2 0x451920 / 0x7bc7d0) and its own timer may then never fire',
+    WHY_SHUT: 'SEEN: the bot\'s own loot tactic (kl2 0x451920 / 0x7bc7d0) held two bots in front of two such cases to the end of the round (run L11)',
+    WHY_BOX: 'by the code the same hold as a shut glass case (kl2 0x451920 / 0x7bc7d0; run L11); this form was not seen live',
+    WHY_ORPHAN: 'by the code a candidate for the whole round that nobody can take (kl2 0x4d8ea6 / 0x8b95f2); not seen live: no build has one in reach',
+    WHY_CIVIL: 'SEEN for ONE of them: the 75,000 of Late Night Opening\'s watch shop clerk were paid to nobody and every living bot stood at her post to '
+               'the end of the round (L8, L10). The jewel store\'s clerk, Hot Coffee\'s waitress and the bank\'s two held nobody (L8 / L10 / L11, R13, H0) '
+               'and why is not established: for those the rule is stricter than what was seen'}
 LOOT_LINK = 900.0       # loot objects nearer than this to one another are one loot area
 LOOT_SNAP = 400.0       # a loot object farther than this from the START row's mesh part is not a bot's business
 LOOT_MAX = 38           # most objects a stock TriggerLootDepleted names (F08)
@@ -214,10 +288,17 @@ HOP_APART = 100.0           # check(): two landing places nearer than this FAIL 
 
 # What the four maps are built with for the owner (python kl_fa_bots.py owner ...; re/bots.md 12). Every key is
 # an option of build; the defaults (DEFAULTS) are the squad as it was before 2026-10-10 evening.
-RECIPE = {'M01_FA_A': {'stops': STOP_MAX, 'cases': 'glass', 'exit_boxes': 'cut', 'loot_seconds': 30, 'lane': True},
-          'M02_FA_A': {'stops': STOP_MAX, 'cases': 'glass', 'loot_seconds': 45, 'lane': True},
-          'M03_FA_A': {'stops': STOP_MAX, 'cases': 'glass', 'drop': True, 'lane': True},
-          'M06_FA_A': {'stops': STOP_MAX, 'cases': 'glass'}}
+# 'window' (2026-10-11, re/bots_loot.md): nothing a bot cannot take stays in its loot window. Late Night Opening
+# keeps its two stops (the jewel store AND the watch shop, as the owner wants): what held the bots at the second
+# one in runs L8 / L10 - the clerk's 75,000, never paid to anybody - is taken out of the level by the build (her
+# group loses its money controller: stored, no message), and the cases are opened a station earlier, outside
+# their window. OWNER'S DECISION OWED (re/bots_loot.md 6): the same is done to every civilian a place comes near -
+# 215,000 on Late Night Opening, 40,000 on Hot Coffee, 30,000 on Withdrawal that the human cannot have either -
+# although only the watch shop's clerk was seen to hold anybody. A build that keeps such money FAILS check().
+RECIPE = {'M01_FA_A': {'stops': STOP_MAX, 'cases': 'glass', 'exit_boxes': 'cut', 'loot_seconds': 30, 'lane': True, 'window': True},
+          'M02_FA_A': {'stops': STOP_MAX, 'cases': 'glass', 'loot_seconds': 45, 'lane': True, 'window': True},
+          'M03_FA_A': {'stops': STOP_MAX, 'cases': 'glass', 'drop': True, 'lane': True, 'window': True},
+          'M06_FA_A': {'stops': STOP_MAX, 'cases': 'glass', 'window': True}}
 
 
 # ------------------------------------------------------------------ small things
@@ -665,7 +746,9 @@ def prepare(B, opt=None, log=print):
     so that the plan walks the level as it will be: the cut level exit boxes (EXIT_CUT, option exit_boxes = 'cut')
     and the drop link in the navigation mesh (DROPS, option drop). -> {'boxes': {...}, 'drops': [...]} for
     bots.json; diff() allows exactly these. Nothing is added or removed here: two fields of a trigger box
-    (ZGEOM[2].x, ZBoxPrimitive[0]) with its .gms place, and three arrays of the mesh block."""
+    (ZGEOM[2].x, ZBoxPrimitive[0]) with its .gms place, and three arrays of the mesh block.
+    (The third edit of existing data, option window's strip_money, is made by build() AFTER the plan: which
+    civilians a place comes near is known only then. It goes into the same dict as 'money_off'.)"""
     opt = dict(DEFAULTS, **(opt or {}))
     out = collections.OrderedDict(boxes=collections.OrderedDict(), drops=[])
     if not getattr(B, 'verified', False):
@@ -936,6 +1019,277 @@ def first_exit_entry(B, nav, exits, pts, dy=260.0):
     return None
 
 
+# ------------------------------------------------------------------ the loot window (re/bots_loot.md)
+def money_objects(B):
+    """Every OnlineMoneyCtrl of the build that the rules put on their list one (type NORMAL or CONTAINER: kl2
+    0x4d8edc -> rules +0x144 = 0x4c1dc0; a DROP stack goes on list two and is left out) -> [dict], scene order:
+      node, at, amount, type, flag (stored field 11), radius (field 2 of its own TriggerBox2, None without one)
+      kind   'plain'     a NORMAL object on a node without an actor: taken by standing in its trigger
+             'armed'     NORMAL on the group of an actor that is no civilian (a boss, a guard): as plain, where he is
+             'civilian'  NORMAL on the group of a ZFFActor with a ZCivilian controller - a person who runs away
+             'case'      CONTAINER named by an OnlineMoneyContainer: inactive (byte +0x74 = 0, kl2 0x4d8ea6) until the
+                         container got 'Open' (0x419f80 -> 0x766e50 -> 0x868fb0 -> 0x4fb580); a take message to an
+                         inactive object is dropped (0x6cdb8f)
+             'orphan'    CONTAINER that no container names: never active
+      container, glass [nodes], self_open (the container has its own TriggerBox2 'Open', the stock form)
+      person (the actor node or None)
+    The meanings of the stored fields (ZOnlineMoneyCtrl, members = field offset + 4): re/bots_loot.md 2."""
+    sc, out = B.sc, []
+    box_of, glass_of, self_open, radius = {}, collections.defaultdict(list), set(), {}
+    for k, _i, v in kl_fa.controllers(sc, 'OnlineMoneyContainer'):
+        for s in (v[0] if v and isinstance(v[0], list) else []):
+            for j in sc.resolve(s):
+                box_of.setdefault(j, k)
+    for k, _i, v in kl_fa.controllers(sc, 'TriggerBox2'):
+        tg = [j for s in (v[0] if v and isinstance(v[0], list) else []) for j in sc.resolve(s)]
+        if 'Open' in v:
+            self_open.update(j for j in tg if kl_fa.has(sc, j, 'OnlineMoneyContainer'))
+        elif k in tg and len(v) > 2 and isinstance(v[2], (int, float)):
+            radius[k] = float(v[2])
+    for k, _i, v in kl_fa.controllers(sc, 'RelayMessage'):
+        if len(v) > 2 and v[0] == 'HavokShattered' and v[1] == 'Open' and kl_fa.has(sc, k, 'HavokShatterGlass'):
+            for j in sc.resolve(v[2]):
+                if kl_fa.has(sc, j, 'OnlineMoneyContainer'):
+                    glass_of[j].append(k)
+    for k, _i, v in kl_fa.controllers(sc, 'OnlineMoneyCtrl'):
+        typ = next((x[16:] for x in v if isinstance(x, str) and x.startswith('ZMONEYCTRL_TYPE_')), '?')
+        if typ == 'DROP':
+            continue
+        person = next((j for j in range(k, sc.end[k]) if sc.cls(j) == 'ZFFActor'), None)
+        c = box_of.get(k)
+        if typ == 'CONTAINER':
+            kind = 'case' if c is not None else 'orphan'
+        elif person is not None:
+            kind = 'civilian' if kl_fa.has(sc, person, 'ZCivilian') else 'armed'
+        else:
+            kind = 'plain'
+        out.append({'node': k, 'at': B.at(k), 'amount': v[1] if len(v) > 1 and isinstance(v[1], (int, float)) else 0, 'type': typ,
+                    'flag': bool(v[11]) if len(v) > 11 else False, 'radius': radius.get(k), 'kind': kind, 'container': c,
+                    'glass': list(glass_of.get(c, [])) if c is not None else [], 'self_open': c in self_open, 'person': person})
+    return out
+
+
+def in_window(p, at, extra=0.0, window=LOOT_WINDOW):
+    """Is the object at `at` inside the loot window of a bot whose node is at p (kl2 0x8b9631..0x8b9681: the height
+    first, then the 3D distance, both from the object's node to the position the tactic passes = the bot's node)?"""
+    return abs(at[1] - p[1]) <= window[1] + extra / 2.0 and math.dist(at[:3], p[:3]) <= window[0] + extra
+
+
+def cannot_take(o, opened=(), doors=(), ever=()):
+    """Why a bot that stands in the loot window of object o cannot take it at this time ('' = it can, or o is no
+    candidate; else one of the WHY_ texts): opened = the containers 'Open' reached so far and the panes 'Activate'
+    reached, doors = the places of the build's KickDoor controllers, ever = the containers and panes that a relay
+    of ANY squad names at any time (a case that is only opened too late is the stricter rule, WHY_LATE; one that
+    nothing opens is what held two bots in run L11, WHY_SHUT).
+    An object with stored field 11 (member +0x5c) is passed over by the tactic's test unless an enabled KickDoor is
+    within 500 / 250 of it (0x451a88 -> 0x454c20: stock F01's 58 vault items, cleared by 'DoorOpened'); it is 'closed
+    to the AI' and no trap by the test - the action (0x7bc8d5) still runs to it when it is the nearest of the five
+    and another one passes the test, which is why this module does not use the field (re/bots_loot.md 6).
+    Money on a civilian counts as 'cannot' wherever it still is (WHY_CIVIL; what is known: WHY_KNOWN). The option
+    window takes it out of the level (strip_money); a 'Deactivate' message is NOT counted as switching it off: the
+    handler drops it for a hidden node (kl2 0x6cdb65), which is one of the two unread explanations of the clerk."""
+    if o['amount'] <= 0:
+        return ''                                           # taken from the start: no candidate
+    if o['flag'] and not any(abs(d[1] - o['at'][1]) <= 250.0 and math.dist(d, o['at']) <= 500.0 for d in doors):
+        return ''
+    if o['kind'] == 'case' and not o['self_open'] and o['container'] not in opened and not (set(o['glass']) & set(opened)):
+        if ever and (o['container'] in ever or set(o['glass']) & set(ever)):
+            return WHY_LATE
+        return WHY_SHUT if o['glass'] else WHY_BOX
+    if o['kind'] == 'orphan':
+        return WHY_ORPHAN
+    if o['kind'] == 'civilian':
+        return WHY_CIVIL
+    return ''
+
+
+def window_report(objs, walk, doors=(), ever=()):
+    """walk = [(place, opened)] in the order one squad's chain meets them, from where the bot first has a heist
+    stage on (ZLootTactic needs record +0x78 >= 1, kl2 0x4519d4) -> ([trap], [armed], [plain]): a trap =
+    (index in walk, place, object dict, distance, why) for every object in the window of a place that the bot
+    cannot take at that time; armed = the same for money on an armed person (a NOTE: it is the designed loot of
+    Hot Coffee and the park); plain = the same for a plain object (check() looks whether anybody on the bots' mesh
+    can stand in its trigger)."""
+    traps, armed, plain = [], [], []
+    for n, (p, opened) in enumerate(walk):
+        for o in objs:
+            if not in_window(p, o['at']):
+                continue
+            why = cannot_take(o, opened, doors, ever)
+            if why:
+                traps.append((n, p, o, math.dist(p, o['at']), why))
+            elif o['kind'] == 'armed' and o['amount'] > 0:
+                armed.append((n, p, o, math.dist(p, o['at']), ''))
+            elif o['kind'] == 'plain' and o['amount'] > 0:
+                plain.append((n, p, o, math.dist(p, o['at']), ''))
+    return traps, armed, plain
+
+
+def leg_samples(poly, step=LEG_STEP):
+    """The points of a polyline every `step` along each of its segments, both ends of each included."""
+    for p, q in zip(poly, poly[1:]):
+        n = max(1, int(math.dist(p, q) // step))
+        for t in range(n + 1):
+            yield tuple(p[i] + (q[i] - p[i]) * t / n for i in range(3))
+
+
+def stand_in_way(nav, a, c, dy=260.0):
+    """The polyline this module walks from a to c: the shortest mesh path through the middles of the shared edges
+    (first_exit_entry's stand-in for the game's pathfinder), the straight line where the mesh gives none."""
+    ha, hc = nav.at(a[0], a[1], a[2], dy=dy), nav.at(c[0], c[1], c[2], dy=dy)
+    got = ha and hc and nav.path(tuple(a[:3]) + (ha[0],), tuple(c[:3]) + (hc[0],))
+    return got[0] if got else [tuple(a[:3]), tuple(c[:3])]
+
+
+def strip_money(B, paths, log=print):
+    """Option window, the edit of EXISTING level data it needs (made on the loaded build, in memory, after the plan;
+    diff() allows exactly this): the money on a civilian's GROUP node is taken out of the level - the node loses its
+    OnlineMoneyCtrl and the TriggerBox2 that sends 'AI_TRIGGER_WITH_ACTIVATOR' to the node itself. Nothing else of
+    the node changes (place, flags, its OnlineSpeakTrigger, the civilian below it), no entity is added or removed
+    and no reference is re-pointed: the only reference to the node was that trigger's own (checked here).
+    WHY STORED and not the 'Deactivate' relay of the first form (review D1): ZOnlineMoneyCtrl's handler tests the
+    node's hidden bit and its state BEFORE it looks for 'Deactivate' (kl2 0x6cdb65..0x6cdb7f against 0x6cdc1b), so a
+    message that arrives when the group is hidden - one of the two explanations of the clerk that were not read to
+    the end - would be dropped like the take message. Without the controller the object is never registered with
+    the rules (the registration is the controller's own init, 0x4d8f3a) - whatever the civilian does.
+    WHAT IS LEFT is a form the same maps already run: a ZGROUP with an OnlineSpeakTrigger and a ZCivilian's actor
+    below it (Hot Coffee's LeavingWoman / LeavingMan, Withdrawal's Civ_out_03 / Civ_in_02 / Civ_in_01). The .gms
+    record keeps its flags (bit 0x200000, which nodes named by a reference carry, stays set: 289 nodes of the bank
+    and 283 of stock F07 carry it without being named).
+    -> {path: {'amount', 'at', 'taken_off', 'left'}} for bots.json."""
+    sc, out = B.sc, collections.OrderedDict()
+    refs = J.references(sc) if paths else []
+    for path in paths:
+        hit = sc.resolve(R_ + path)
+        if len(hit) != 1:
+            raise ValueError('strip_money: %s names %d nodes' % (path, len(hit)))
+        k = hit[0]
+        n = sc.nodes[k]
+        cv = [(sc.p.key(nm), [kl_fa.value(sc, u) for u in units(body[1:-1])]) for nm, body in n['ctrls']]
+        money = [i for i, (cn, _v) in enumerate(cv) if cn == 'OnlineMoneyCtrl']
+        trig = [i for i, (cn, v) in enumerate(cv) if cn == 'TriggerBox2' and 'AI_TRIGGER_WITH_ACTIVATOR' in v and v
+                and isinstance(v[0], list) and [j for s in v[0] for j in sc.resolve(s)] == [k]]
+        person = [j for j in range(k + 1, sc.end[k]) if sc.cls(j) == 'ZFFActor' and kl_fa.has(sc, j, 'ZCivilian')]
+        named = [(h, f) for kk, h, f, _s, got in refs if got and k in got and kk != k]
+        if sc.cls(k) != 'ZGROUP' or len(money) != 1 or len(trig) != 1 or not person or 'ZMONEYCTRL_TYPE_NORMAL' not in cv[money[0]][1]:
+            raise ValueError('strip_money: %s is not a ZGROUP with one NORMAL OnlineMoneyCtrl, its own take trigger and a civilian below it '
+                             '(class %s, controllers %s)' % (path, sc.cls(k), [c for c, _v in cv]))
+        if named:
+            raise ValueError('strip_money: %s is named by %s: not a node this step may edit' % (path, named[:3]))
+        gone = set(money + trig)
+        n['ctrls'] = [c for i, c in enumerate(n['ctrls']) if i not in gone]
+        v = cv[money[0]][1]
+        out[path] = collections.OrderedDict(amount=int(v[1]), at=[round(x) for x in B.at(k)], taken_off=[cv[i][0] for i in sorted(gone)],
+                                            left=[cn for i, (cn, _v) in enumerate(cv) if i not in gone])
+        log('  money taken out of the level: %s at (%d, %d, %d), %d - its group loses %s and keeps %s. NOBODY gets this money, the human '
+            'neither (no run shows a civilian\'s money paid to a bot; one such object held every living bot at the civilian\'s post in runs L8 / L10)'
+            % (path, *B.at(k), v[1], ' + '.join(out[path]['taken_off']), ', '.join(out[path]['left']) or 'no controller'))
+    return out
+
+
+def trigger_reach(nav, o, part=None):
+    """Can a bot that stands on the mesh be inside the object's own TriggerBox2? The box in radius mode (field 1
+    set: every money trigger of the builds and of stock) is a ball of field 2 + TRIGGER_PAD round the node's centre
+    point (kl2 0x783e60), tested against the visitor's centre. ASSUMPTION here: the node's centre is its origin and
+    a bot's centre is 90 above its feet, with the 100 of slack the code has (0x783f5c) -> the least distance in
+    the plan of a mesh point inside the ball, or None (no such point: nobody on foot gets the money)."""
+    if o['radius'] is None:
+        return None
+    R, at, best = o['radius'] + TRIGGER_PAD, o['at'], None
+    for x, h, z, _poly in nav.around(at, R, part, step=5.0, dy=R + 190.0):
+        d = math.hypot(x - at[0], z - at[2])
+        if d <= R and abs(h + 90.0 - at[1]) <= math.sqrt(max(0.0, R * R - d * d)) + 100.0 and (best is None or d < best):
+            best = d
+    return best
+
+
+def census(folder, log=print, slot=SLOT):
+    """The money of a finished bots build against its squads (re/bots_loot.md 4): every object of the rules' list
+    one - what it is, whether a bot can take it from the start, after a message of the squads' relays, or not at
+    all - and per squad the closest any of its places (every branch, from heist stage 1 on) comes to an object it
+    cannot take at that time. -> (rows, facts of check())."""
+    _out, facts = check(folder, lambda *a: None, slot)
+    B = Built(folder, slot)
+    sc, nav = B.sc, Nav(B.scene.nav)
+    name = lambda k: sc.path[k][5:]
+    short = lambda k: name(k).split('\\')[-1] if sc.names[k] not in ('Ground', 'MoneyContainer') else '\\'.join(name(k).split('\\')[-2:])
+    mine = {k for t in sc.tops() if sc.names[t].startswith(SQUAD) for k in range(t, sc.end[t])}
+    by = collections.defaultdict(lambda: collections.defaultdict(set))         # message -> target node -> squads
+    for k, _i, v in kl_fa.controllers(sc, 'RelayMessageList'):
+        if k in mine:
+            for s in v[2]:
+                for t in sc.resolve(s):
+                    by[v[1]][t].add(sc.names[sc.top[k]][-2:])
+    home = stations(B, nav)['home']
+    win = facts.get('loot_window', {})
+    hit = collections.defaultdict(dict)                 # object path -> {squad: distance} of the traps
+    for sq, lst in win.get('traps', {}).items():
+        for t in lst:
+            hit[t['object']][sq[-2:]] = t['distance']
+    rows = []
+    for o in money_objects(B):
+        k, c = o['node'], o['container']
+        opens = by['Open'].get(c, set()) | set().union(*[by['Activate'].get(g, set()) for g in o['glass']]) if c is not None else set()
+        off = by['Deactivate'].get(k, set())
+        if off:
+            can = 'switched off by the relays of %d squad(s) (\'Deactivate\'): no candidate from then on, nobody gets it' % len(off)
+        elif o['kind'] == 'case' and o['self_open']:
+            can = 'after its container\'s own TriggerBox2 \'Open\' (whoever stands there: a bot too)'
+        elif o['kind'] == 'case':
+            can = 'after \'Open\' / \'Activate\' from the relays of %d squad(s)' % len(opens) if opens else \
+                'only after its glass is SHOT (nothing in the build opens it for a bot)' if o['glass'] else 'never (nothing opens its container)'
+        elif o['kind'] == 'orphan':
+            can = 'never (a CONTAINER object no container names)'
+        elif o['kind'] == 'civilian':
+            can = 'only where the civilian is (not at her post once she has left)'
+        elif o['kind'] == 'armed':
+            can = 'where the armed person is, alive or dead (no test of his life in the grab)'
+        else:
+            can = 'from the start'
+        reach, far = trigger_reach(nav, o, home), None
+        if reach is None and o['kind'] == 'plain' and trigger_reach(nav, o) is not None:
+            # its trigger is reached from another part of the mesh only (Late Night Opening's office, a room of 24
+            # polygons: a bot has no path there, so the tactic's path test drops it, kl2 0x451b36 - no trap, and no
+            # loot for the bots). ASSUMPTION when the other part is an islet beside the bots' own mesh (Retomoto's
+            # table stack TM_MoneyStack_022): which part the pathfinder takes the object to was not read
+            far = ('its trigger is reached only from a mesh part the START row\'s is not joined to: no path for a bot if the pathfinder puts the '
+                   'object on that part (then dropped by the path test, 0x451b36: no trap, no loot for the bots) - not read for an islet')
+        rows.append({'object': name(k), 'kind': o['kind'], 'amount': o['amount'], 'at': [round(v) for v in o['at']], 'take': far or can,
+                     'trigger': o['radius'], 'mesh_point_in_trigger': None if reach is None else round(reach), 'other_part': bool(far),
+                     'traps': dict(hit.get(name(k), {}))})
+    kinds = collections.Counter(r['kind'] for r in rows)
+    log('%s: %d money objects on the rules\' list one (%s), %d worth' % (folder, len(rows), ', '.join('%d %s' % (n, k) for k, n in sorted(kinds.items())),
+                                                                       sum(r['amount'] for r in rows)))
+    for r in rows:
+        if r['kind'] in ('plain',) and r['mesh_point_in_trigger'] is not None and not r['traps']:
+            continue                                    # plain, in reach, no trap: counted above
+        if r['kind'] == 'case' and not r['traps'] and 'relays' in r['take']:
+            continue
+        log('  %-9s %-46s %8d at (%6d %5d %6d): %s%s%s' % (
+            r['kind'], '\\'.join(r['object'].split('\\')[-2:])[-46:], r['amount'], *r['at'], r['take'],
+            '' if r['mesh_point_in_trigger'] is not None or r['trigger'] is None or r['kind'] != 'plain' or r['other_part'] else
+            '; NO mesh point inside its trigger (radius %d + %d): on foot it cannot be had (ASSUMPTION, trigger_reach)' % (r['trigger'], TRIGGER_PAD),
+            '; TRAP for squads %s' % ', '.join('%s %d' % kv for kv in sorted(r['traps'].items())) if r['traps'] else ''))
+    opened = sum(1 for r in rows if r['kind'] == 'case' and 'relays' in r['take'])
+    if opened:
+        log('  (%d objects in cases the squads\' relays open: not listed one by one)' % opened)
+    for p, d in (win.get('money_taken_off') or {}).items():
+        log('  taken out of the level by the build (strip_money): %s, %s at %s - no money object any more, nobody gets it' % (p, d.get('amount'), tuple(d.get('at') or ())))
+    for r in win.get('plain_out_of_reach') or []:
+        log('  plain, out of reach: %s %d, %d from the place %s of %s%s' % ('\\'.join(r['object'].split('\\')[-2:])[-46:], r['amount'], r['distance'], tuple(r['place']),
+            r['squad'][-8:], ' (reached from another mesh part only)' if r['reached_from_another_mesh_part'] else ''))
+    for sq, lst in (win.get('on_the_way') or {}).items():
+        log('  %s: on the way (not at a place) inside the window of %d object(s) it cannot take then; nearest %d from %s on the way to place %d'
+            % (sq[-8:], len(lst), lst[0]['distance'], '\\'.join(lst[0]['object'].split('\\')[-2:])[-40:], lst[0]['to_place']))
+    for sq, v in win.get('closest_it_cannot_take', {}).items():
+        log('  %s: the closest any place comes to an object it cannot take at that time: %d (height %d) from %s at place %s - %s the window %d / %d'
+            % (sq[-8:], v['distance'], v['height'], '\\'.join(v['object'].split('\\')[-2:])[-40:], tuple(v['place']),
+               'INSIDE' if v['inside'] else 'outside', *LOOT_WINDOW))
+    if not win.get('closest_it_cannot_take'):
+        log('  no squad has an object it cannot take anywhere in the level (from heist stage 1 on, at the time it is there)')
+    return rows, facts
+
+
 # ------------------------------------------------------------------ the hook hop (klhook\klhop.c)
 def hop_plan(B, nav, lane, exits, gather, frm, to, after, stage):
     """One hop for klhop.c at a drop link frm -> to (the link's two ends): From = the middle of the seven gather
@@ -1168,8 +1522,14 @@ def plan(B, opt=None, log=print):
         notes.append('--ally-box off on a split mesh: NO BOT CAN BOARD')
 
     # ---- loot: the area with the most money that the home part reaches
+    # option window: money on a civilian is no loot of the route (build() takes it out of the level when a place
+    # comes near it, see 'the loot window' below) - so no loot wait names it and no bot gets its place beside it
+    objs = money_objects(B) if opt['window'] else []
+    civil = {o['node'] for o in objs if o['kind'] == 'civilian'}
     loot = []
     for k, p, amount in S['loot']:
+        if k in civil:
+            continue
         s = snap(p)
         if s and math.hypot(s[0] - p[0], s[2] - p[2]) <= LOOT_SNAP:
             loot.append((k, p, amount, s))
@@ -1554,7 +1914,7 @@ def plan(B, opt=None, log=print):
             cs = [c for c in cs if glass_of.get(c)]
         elif opt['cases'] != 'all':
             cs = []
-        if cs:
+        if cs and not opt['window']:                    # (option window names the cases anew below: every squad, every case in reach)
             spot = places[loot_at[n]][3]
             for c in cs:
                 p = B.at(c)
@@ -1568,6 +1928,79 @@ def plan(B, opt=None, log=print):
                 % (n + 1, len(cs), sum(1 for c in cs if glass_of.get(c)), w['glass'], CASE_BOTS,
                    min([len(d['open']) for d in w['cases'].values()] + [0] * (7 - len(w['cases']))), max(len(d['open']) for d in w['cases'].values())))
         waits.append(w)
+    # ---- THE LOOT WINDOW (option window; re/bots_loot.md). A bot with a heist stage goes for every money object
+    # within LOOT_WINDOW of its node, and one it cannot take can hold it for the round (runs L8 / L10 / L11). So:
+    #   a case (a container only its glass opens)  is opened by EVERY squad's own relay - not by the three nearest -
+    #       and BEFORE the bot's first place inside the window + the guard of one of its objects: the timer follows
+    #       the last station before that one, not the station in front of the loot place. A case met first on the
+    #       way out is handled by the last stop's timer; one met at a leg's first station by the stop before;
+    #   money on a civilian                         that a place comes within the window + the guard of is TAKEN OUT
+    #       OF THE LEVEL by build() (strip_money: her group loses the money controller and its trigger). The first
+    #       form of this option sent 'Deactivate' from the stop's timer (kl2 0x6cdc1b -> 0x4c95d0); the handler
+    #       drops that message for a hidden node (0x6cdb65) like the take itself, so it did not rule out the one
+    #       hold that was seen (review D1). The plan only NAMES the civilians (P['window']['money_off']).
+    if opt['window']:
+        guard = float(opt['case_guard'])
+        i_enter = next((i for i, x in enumerate(places) if x[0] == 'enter'), None)
+        units = collections.OrderedDict()               # key -> (what, [places of its objects], node)
+        for o in objs:
+            if o['kind'] == 'case' and (opt['cases'] == 'all' or (opt['cases'] == 'glass' and o['glass'] and not o['self_open'])):
+                units.setdefault(('case', o['container']), ('case', [], o['container']))[1].append(o['at'])
+            elif o['kind'] == 'civilian':
+                units[('off', o['node'])] = ('off', [o['at']], o['node'])
+        # the first station within the window + the guard - at ANY heist stage: where a bot first has a stage is
+        # not a station of the plan (a leg through a stage box, a hold kl_fa_bots_dyn adds; check() walks it)
+        need = {key: next((i for i, x in enumerate(places) if any(in_window(g, at, guard) for g in x[3] for at in ats)), None)
+                for key, (_what, ats, _node) in units.items()}
+        assign = [[] for _ in stops]
+        for key, i in need.items():
+            if i is not None and key[0] == 'case' and stops and loot_at:
+                assign[next((n for n, li in enumerate(loot_at) if i <= li), len(stops) - 1)].append(key)
+        first = [0] + [li + 1 for li in loot_at[:-1]]   # the first station of each stop's leg
+        for n in range(len(stops) - 1, 0, -1):          # no station before it in this leg: the stop before opens it
+            early = [key for key in assign[n] if need[key] - 1 < first[n] or loot_at[n] - 1 < first[n]]
+            assign[n] = [key for key in assign[n] if key not in early]
+            assign[n - 1] += early
+        for n, w in enumerate(waits if stops and loot_at else []):
+            w['cases'] = collections.OrderedDict()
+            w['relays'] = ['%03d_Relay_break_glass' % (18 + 20 * n), '%03d_Relay_open_cases' % (18 + 20 * n)]
+            w['containers'] = w['glass'] = 0
+            keys = sorted(assign[n], key=lambda key: (need[key], key[0], name(key[1])))
+            if not keys:
+                continue
+            t = min(min(need[key] for key in keys) - 1, loot_at[n] - 1)
+            if t < first[n]:
+                notes.append('LOOT WINDOW: stop %d has no station before the bots are within %d of %s: its timer stands after the '
+                             'first station and check() will say which place is inside the window too early'
+                             % (n + 1, LOOT_WINDOW[0] + guard, name(keys[0][1]).split('\\')[-1]))
+                t = first[n]
+            if t > loot_at[n] - 1:
+                notes.append('LOOT WINDOW: stop %d is the first station of the route: nothing can be opened before it' % (n + 1))
+                continue
+            cs = [key[1] for key in keys]
+            d = {'glass': [R_ + name(g) for c in cs for g in glass_of.get(c, [])], 'open': [R_ + name(c) for c in cs]}
+            for N in BOTS:
+                w['cases'][N] = {k_: list(v_) for k_, v_ in d.items()}
+            w['timer_station'] = t
+            w['containers'], w['glass'] = len(cs), len(d['glass'])
+            near = min(math.dist(g[:3], at) for key in keys for at in units[key][1] for g in places[t][3])
+            log('  loot window, stop %d: every squad\'s timer after station %d (%s; nearest object %d away, the window is %d, the guard %d) '
+                'opens %d case(s) (%d pane(s)); first needed at station %d'
+                % (n + 1, t + 1, places[t][1][:40], near, LOOT_WINDOW[0], guard, len(cs), len(d['glass']), min(need[key] for key in keys) + 1))
+        left = [key for key, i in need.items() if i is None]
+        off = [key for key, i in need.items() if i is not None and key[0] == 'off']
+        amount = {o['node']: o['amount'] for o in objs}
+        P['window'] = {'window': list(LOOT_WINDOW), 'guard': guard, 'stage_1_station': i_enter,
+                       'cases_handled': sum(1 for key, i in need.items() if i is not None and key[0] == 'case'),
+                       'money_off': [name(key[1]) for key in off], 'money_off_worth': sum(amount[key[1]] for key in off),
+                       'never_near': [name(key[1]) for key in left]}
+        if off:
+            log('  loot window: %d civilian(s) with money within %d of a place - %s: build() takes it out of the level (strip_money), %d that '
+                'nobody gets' % (len(off), LOOT_WINDOW[0] + guard, ', '.join('%s %d (first near at station %d)' % (
+                    name(key[1]).split('\\')[-1], amount[key[1]], need[key] + 1) for key in off), P['window']['money_off_worth']))
+        if left:
+            log('  loot window: %d unit(s) no place of the plan comes within %d of (left as they are): %s' % (
+                len(left), LOOT_WINDOW[0] + guard, ', '.join(name(key[1]).split('\\')[-1] for key in left[:6]) + (' ..' if len(left) > 6 else '')))
     if not waits:                                       # no loot in reach: one plain timer, as before
         waits.append(collections.OrderedDict(name='020_Timer_done_looting', stop=0, seconds=int(opt['loot_seconds']), loot=[], worth=0,
                                              timer='018_Timer_at_cases', relays=[], cases={}))
@@ -1593,7 +2026,15 @@ def plan(B, opt=None, log=print):
         start = i + 1
         if not idx:
             continue
-        if not out_leg and n < len(waits) and waits[n]['cases'] and len(idx) > 1:
+        t = waits[n].get('timer_station') if not out_leg and n < len(waits) else None
+        if t is not None and waits[n]['cases'] and len(idx) > 1 and t in idx[:-1]:
+            # option window: the timer follows station t, the last one outside the window of what it opens; the
+            # stations between it and the loot place are steps of their own, the loot place the last one as before
+            cut = idx.index(t) + 1
+            parts = chunks(idx[:cut])
+            waits[n]['timer_after'] = '%03d_DefendBehaviour_to_loot' % (10 + 20 * n + len(parts) - 1)
+            parts += (chunks(idx[cut:-1]) if idx[cut:-1] else []) + [[idx[-1]]]
+        elif not out_leg and n < len(waits) and waits[n]['cases'] and len(idx) > 1:
             parts = chunks(idx[:-1]) + [[idx[-1]]]      # the loot place is a step of its own: the cases go before it
         else:
             parts = chunks(idx)
@@ -1647,7 +2088,8 @@ def plan(B, opt=None, log=print):
 
 DEFAULTS = {'ally_box': 'auto', 'wait_guards': False, 'loot_seconds': 20, 'start_delay': 10.0, 'heal': False, 'no_stage': False,
             'tree': True, 'park': None, 'early_call': False,
-            'stops': 1, 'cases': 'off', 'exit_boxes': 'keep', 'drop': False, 'lane': False}    # 2026-10-10 evening; RECIPE turns them on per map
+            'stops': 1, 'cases': 'off', 'exit_boxes': 'keep', 'drop': False, 'lane': False,    # 2026-10-10 evening; RECIPE turns them on per map
+            'window': False, 'case_guard': CASE_GUARD}                                        # 2026-10-11: the loot window (re/bots_loot.md)
 
 
 # ------------------------------------------------------------------ node forms from the stock levels
@@ -1810,8 +2252,15 @@ def make(B, P, log=print):
                 # DefendBehaviourRout -> TriggerDelay2 -> DefendBehaviourRout are stock transitions (329 and 119 in
                 # the nine stock squads); TriggerDelay2 -> a RelayMessageList is stock F02's (2). The timer stands
                 # BEFORE the step that walks to the loot place, so that step ends in the loot wait as it always did.
-                names.insert(max(0, len(names) - 1), w['timer'])
+                # (option window: after the step the plan names - the last one outside the window of what the
+                # relays open; lists of at most RELAY_MAX targets: a longer one goes on as _b, _c .. _j, _11, _12 ..)
+                after = w.get('timer_after')
+                names.insert(names.index(after) + 1 if after in names else max(0, len(names) - 1), w['timer'])
                 relays = [(w['relays'][0], 'Activate', list(dict.fromkeys(cs['glass']))), (w['relays'][1], 'Open', list(dict.fromkeys(cs['open'])))]
+                if opt.get('window'):
+                    part = lambda m: '' if not m else '_%s' % ('bcdefghij'[m - 1] if m <= 9 else '%d' % (m + 1))
+                    relays = [(rn + part(i // RELAY_MAX), msg, tg[i:i + RELAY_MAX])
+                              for rn, msg, tg in relays for i in range(0, len(tg), RELAY_MAX)]
                 fan[w['timer']] = [r for r in relays if r[2]]
                 waits.append((w['timer'], 'TriggerDelay2', {0: float(CASE_DELAY), 1: 0.0, 2: -1.0, 3: 0}, 4))
             if P['guards'] and w['stop'] == 0:
@@ -2156,10 +2605,23 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
     """Every check on a finished folder -> (list of (severity, text), facts). Severities: FAIL (must be none before
     an install), NOTE (differs from stock, said aloud). early_ok: a bot that enters a level exit box before its
     loot wait is a NOTE, not a FAIL (None: what the folder's bots.json says the build was made with). links: walk the
-    mesh's links too (None: when bots.json says the build has a drop link of this module)."""
+    mesh's links too (None: when bots.json says the build has a drop link of this module).
+    2026-10-11, the loot window (re/bots_loot.md; facts['loot_window']): FAIL for a squad with a place - of any
+    branch, a hold beside the chain included - from where the bot first has a heist stage on that lies within
+    LOOT_WINDOW of a money object the bot cannot take at that time: an object in a case this squad's own relays
+    have not opened before that place, money on a civilian that is still in the level, a CONTAINER object nothing
+    names. 'Where it first has a stage' (review D3) = the place it is walking to when the stand-in path is first
+    inside ANY stage box (ENTERS_BANK, and EXITS_BANK / BOARDS / a level exit: 0x5dd890 only raises, so those give
+    2 / 3 to a bot that never was in an ENTERS box), or a hold beside the chain that lies in such a box or is reached
+    through one - not only the first place that lies inside an ENTERS box. NOTEs: the same test on the WAY between
+    the places (sampled every LEG_STEP; a bot in transit was not seen held), a plain object in the window whose
+    trigger nobody on the bots' mesh part can stand in (review D4), money the build took off civilians.
+    It fails <work>/build/z_route/M02 (the clerk; the cases opened only at the door) and z_m02s1/M02 (the two
+    watches)."""
     B = Built(folder, slot)
     bj = os.path.join(B.folder, 'bots.json')
-    popt = json.load(open(bj)).get('plan', {}).get('options', {}) if os.path.isfile(bj) else {}
+    bplan = json.load(open(bj)).get('plan', {}) if os.path.isfile(bj) else {}
+    popt = bplan.get('options', {})
     if early_ok is None:
         early_ok = bool(popt.get('early_call'))
     if links is None:                                   # a build with a drop link written by this module (option drop)
@@ -2274,8 +2736,31 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
     opened_all = {t for rv in relay_of.values() if rv[1] == 'Open' for s in rv[2] for t in res(s)}
     broken_all = {t for rv in relay_of.values() if rv[1] == 'Activate' for s in rv[2] for t in res(s)}
     used_relays = set()
+    # the loot window (re/bots_loot.md): every money object of the rules' list one, the KickDoor controllers (an
+    # object with field 11 is a candidate only near one), and per squad what it stands near that it cannot take
+    money = money_objects(B)
+    doors = [B.at(k) for k, _i, _v in kl_fa.controllers(sc, 'KickDoor')]
+    ever = frozenset(opened_all | broken_all)           # what some squad's relay opens at some time (WHY_LATE against WHY_SHUT)
+    risky = [o for o in money if cannot_take(o, (), doors)]     # what a bot cannot take while nothing has been opened
+    win_traps, win_armed, win_near = collections.OrderedDict(), collections.OrderedDict(), collections.OrderedDict()
+    win_legs, win_plain, win_stage = collections.OrderedDict(), {}, collections.OrderedDict()
+
+    def side_holds(j, depth=0):
+        """The DefendBehaviourRout steps WITHOUT a NEXT that node j leads to through a RandomTrigger and / or a
+        short timer (kl_fa_bots_dyn: a cover hold beside the chain; with its FORK_GAP the draw sits behind a timer)."""
+        if j in ctrl_of:
+            cn_, v_ = ctrl_of[j]
+            if cn_ == 'DefendBehaviourRout':
+                return [] if v_[7] else [j]
+            if cn_ == 'TriggerDelay2' and depth < 2:
+                return [h for s in v_[4] for t in res(s) for h in side_holds(t, depth + 1)]
+            return []
+        if j in rand_of and depth < 3:
+            return [h for b in rand_of[j] for h in side_holds(b, depth + 1)]
+        return []
     # 3. per squad: the walk of its chain
     enters, lev = S['triggers'].get('ENTERS', []), S['exits'] + S['triggers'].get('BOARDS', [])
+    stage_boxes = enters + S['triggers'].get('EXITS', []) + lev     # every box that gives a bot a heist stage >= 1 (0x5dd890)
     act = S['action']
     ap = act and B.at(act)
     routes = collections.OrderedDict()
@@ -2295,6 +2780,7 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
         first = [j for s in firsts for j in res(s) if sc.top[j] == top]
         places, seen, k, tight, waits, n_in = [], set(), first[0] if first else None, False, [], None
         opened, broken, relays = set(), set(), 0
+        state_at, side = [], []                         # the loot window: what this squad's relays had opened at each place; holds beside the chain
         widest = 1
         while k is not None and k not in seen:
             seen.add(k)
@@ -2313,6 +2799,7 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
                 if not tg:
                     fail('%s: DefendBehaviourRout without a place' % name(k))
                 places += [j for s in tg for j in res(s)]
+                state_at += [frozenset(opened | broken)] * (len(places) - len(state_at))
             elif cn == 'SquadModifierBehaviour':
                 tight = v[9] == 'eDM_Tight'
             else:
@@ -2336,7 +2823,21 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
                     elif rv[1] == 'Open' and all(kl_fa.has(sc, t, 'OnlineMoneyContainer') for t in tg):
                         opened.update(tg)
                     else:
+                        # ('Deactivate' to a money object - the first form of option window - is NOT accepted: the
+                        # handler drops it for a hidden node or an object in state 2 / 3, kl2 0x6cdb65..0x6cdb7f, and
+                        # no stock level sends it to one. The rule is the one of before 2026-10-11 again.)
                         fail('%s: RelayMessageList %s sends %r to something that is no glass / no money container' % (sc.names[top], name(j), rv[1]))
+            # a hold beside the chain (kl_fa_bots_dyn: the step also names one cover place, or a RandomTrigger that
+            # draws one of two or three; none of them has a NEXT): a bot STANDS there, so the loot window counts
+            # for those places too. They are under no other rule of this walk.
+            main = ([j for j in nx if j in ctrl_of] or [None])[0]
+            for j in nx:
+                if main is None or j == main or j in relay_of:
+                    continue
+                for h in side_holds(j):
+                    hv = ctrl_of[h][1]
+                    side += [(t, len(places), frozenset(opened | broken))
+                             for s in ([hv[0]] if hv[0] else []) + list(hv[1]) for t in res(s)]
             nx = [j for j in nx if j in ctrl_of] or [j for j in nx if j not in relay_of]
             k = nx[0] if nx else None
         if variant == 0 and widest > 1:
@@ -2452,6 +2953,66 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
                 bad = [s for s in v[0] if not any(sc.cls(c) == 'ZFFActor' for j in res(s) for c in range(j, sc.end[j]))]
                 if bad or not v[0]:
                     fail('%s: TriggerActorsDead names %d groups, %d without an actor (it has no time limit)' % (sc.names[top], len(v[0]), len(bad)))
+        # THE LOOT WINDOW (re/bots_loot.md): from where the bot first has a heist stage on (the tactic's test needs
+        # one, kl2 0x4519d4) every place - and every hold beside the chain - against every money object of the
+        # rules' list one, with what this squad's own relays had opened by then.
+        # WHERE THE BOT FIRST HAS A STAGE (review D3). Not 'the first place inside an ENTERS box': the body gets the
+        # stage on the leg that crosses the box, so the place it is walking to then already counts; a hold beside the
+        # chain that lies in a stage box (or is reached through one) gives it too; and an EXITS_BANK / BOARDS / level
+        # exit box gives 2 / 3 to a bot that never was in an ENTERS box (0x5dd890 only raises; the test wants >= 1).
+        sq = sc.names[top]
+        # (a leg the mesh gives no path for - the chain broke there, a FAIL above, or a map of two parts - is its end place only)
+        legs = [walked[n_p] if n_p < len(walked) else [tuple(pts[n_p][:3])] * 2 for n_p in range(len(pts))]
+        entry = None                                    # the leg whose stand-in path is first inside a stage box (feet or chest)
+        for n_p, poly in enumerate(legs):
+            if any(in_exit(B, stage_boxes, m) for m in leg_samples(poly, 20.0)):
+                entry = n_p; break
+        i_place = next((n_p for n_p, p in enumerate(pts) if any(B.in_box(t, p) for t in enters)), None)    # (the rule of the first form)
+        early = set()                                   # holds beside the chain that give the stage themselves
+        for h_i, (t, at_n, _op) in enumerate(side):
+            if entry is None or at_n <= entry:
+                if any(in_exit(B, stage_boxes, m) for m in leg_samples(stand_in_way(nav, pts[at_n - 1] if at_n else sp, B.at(t)), 20.0)):
+                    early.add(h_i)
+        i1 = min([x for x in [entry] + [side[h_i][1] for h_i in early] if x is not None], default=None)
+        if i1 is not None and i1 >= len(pts):           # (a hold behind the last place gave the stage: only the holds count)
+            i1 = len(pts)
+        if i1 is not None:
+            by_hold = bool(early) and (entry is None or i1 < entry)
+            cur = win_stage.get(sq)
+            if cur is None or i1 + 1 < cur['first_staged_place']:
+                win_stage[sq] = {'first_staged_place': i1 + 1, 'first_place_inside_an_ENTERS_box': None if i_place is None else i_place + 1,
+                                 'by': 'a hold beside the chain in / through a stage box' if by_hold else
+                                       'the place lies in a stage box' if i_place == i1 else 'the way to the place crosses a stage box'}
+            walk = [(pts[n_p], state_at[n_p]) for n_p in range(i1, len(pts))]
+            walk += [(B.at(t), op) for h_i, (t, at_n, op) in enumerate(side) if at_n > i1 or h_i in early]
+            traps, armed, plain = window_report(money, walk, doors, ever)
+            for store, found in ((win_traps, traps), (win_armed, armed)):
+                for _n, p, o, d, why in found:
+                    cur = store.setdefault(sq, {}).get(o['node'])
+                    if cur is None or d < cur[0]:
+                        store[sq][o['node']] = (d, tuple(p), why)
+            for _n, p, o, d, _why in plain:             # (review D4: looked at after the walks)
+                if o['node'] not in win_plain or d < win_plain[o['node']][0]:
+                    win_plain[o['node']] = (d, tuple(p), sq)
+            for p, op in walk:                          # the closest any place comes to one, inside the window or not
+                for o in risky:
+                    why = cannot_take(o, op, doors, ever)
+                    if why and (sq not in win_near or math.dist(p, o['at']) < win_near[sq][0]):
+                        win_near[sq] = (math.dist(p, o['at']), tuple(p), o['node'], abs(o['at'][1] - p[1]), why)
+            # the WAY between the staged places (the stand-in path, every LEG_STEP): a NOTE, not a FAIL - a bot was
+            # seen held where it STOOD (L8 / L10 / L11); whether one in transit is pulled off its way is not established
+            for n_p in range(i1, len(pts)):
+                inside = not (entry == n_p == i1)       # on the leg of the entry: no stage before the box
+                for m in leg_samples(legs[n_p], LEG_STEP):
+                    inside = inside or bool(in_exit(B, stage_boxes, m))
+                    if not inside:
+                        continue
+                    for o in risky:
+                        if in_window(m, o['at']):
+                            why = cannot_take(o, state_at[n_p], doors, ever)
+                            d = math.dist(m, o['at'])
+                            if why and (o['node'] not in win_legs.setdefault(sq, {}) or d < win_legs[sq][o['node']][0]):
+                                win_legs[sq][o['node']] = (d, tuple(round(v) for v in m), why, n_p + 1)
         route = {'bot': [round(v) for v in sp], 'places': [[round(v) for v in p] for p in pts], 'path_length': round(length),
                  'least_clearance': round(low), 'stage_1': st1, 'stage_3': st3, 'ends_in_ally_box': inbox,
                  'places_before_the_loot_wait': n_in,
@@ -2470,6 +3031,94 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
             % (', '.join('%s %d' % (nm[len(SQUAD):], 1 + len(v)) for nm, v in facts['route_branches'].items()),
                1 + max(len(v) for v in facts['route_branches'].values())))
     facts['routes'] = routes
+    # the loot window: said once per squad and reason (the nearest object of all branch sets)
+    short = lambda k: name(k).split('\\')[-1] if sc.names[k] not in ('Ground', 'MoneyContainer') else '\\'.join(name(k).split('\\')[-2:])
+    for sq, found in win_traps.items():
+        by = collections.OrderedDict()
+        for node, (d, p, why) in found.items():
+            by.setdefault(why, []).append((d, p, node))
+        for why, lst in by.items():
+            d, p, node = min(lst)
+            fail('%s: %d money object(s) inside the loot window (%d, height %d: kl2 0x8b94d0) of its places that a bot cannot take there - %s. '
+                 '%s. Nearest: %s, %d from the place (%d, %d, %d)' % (sq, len(lst), LOOT_WINDOW[0], LOOT_WINDOW[1], why, WHY_KNOWN[why], short(node), d, *p))
+    # the way between the places: what is not already a FAIL of the same squad at a place
+    legs_only = collections.OrderedDict()
+    for sq, found in win_legs.items():
+        for node, (d, m, why, n_p) in found.items():
+            if node not in win_traps.get(sq, {}):
+                legs_only.setdefault(node, []).append((d, m, sq, n_p, why))
+    if legs_only:
+        d, m, sq, n_p, why = min(v for lst in legs_only.values() for v in lst)
+        node = next(k for k, lst in legs_only.items() if (d, m, sq, n_p, why) in lst)
+        note('ON THE WAY between two places (the stand-in path, every %d) %d squad(s) pass inside the loot window of %d money object(s) they cannot '
+             'take then, without a place of theirs inside it - nearest: %s on its way to place %d passes %d from %s at (%d, %d, %d) (%s). A NOTE, not a '
+             'FAIL: a bot was seen held where it STOOD (runs L8, L10, L11); whether one in transit is pulled off its way is not established'
+             % (LEG_STEP, len({v[2] for lst in legs_only.values() for v in lst}), len(legs_only), sq[len(SQUAD):], n_p, d, short(node), *m, why))
+    # review D4: a plain object in the window whose own trigger nobody on the bots' mesh part can stand in
+    unreach = []
+    for node, (d, p, sq) in sorted(win_plain.items(), key=lambda kv: kv[1][0]):
+        o = next(x for x in money if x['node'] == node)
+        if o['radius'] is None or trigger_reach(nav, o, home) is None:
+            unreach.append((node, o, d, p, sq, o['radius'] is not None and trigger_reach(nav, o) is not None))
+    if unreach:
+        node, o, d, p, sq, other = unreach[0]
+        note('%d plain money object(s) inside the loot window of the squads\' places that NO point of the bots\' mesh part is inside the trigger of '
+             '(%s; %d worth): nearest %s, %d from the place (%d, %d, %d) of %s, trigger radius %s + %d%s. By the code such an object is a candidate as '
+             'long as the pathfinder finds a path to it, and nobody standing on that mesh part takes it (trigger_reach is this module\'s ESTIMATE of '
+             'the trigger\'s ball, kl2 0x783e60). Late Night Opening\'s two office jewels are of this kind and held nobody in L8 / L10 / L11; for any '
+             'other object it is NOT established - if bots stand still near it, this is the first suspect'
+             % (len(unreach), ', '.join(short(u[0]) for u in unreach[:4]) + (' ..' if len(unreach) > 4 else ''), sum(u[1]['amount'] for u in unreach),
+                short(node), d, *p, sq[len(SQUAD):], '%d' % o['radius'] if o['radius'] is not None else 'none', TRIGGER_PAD,
+                ' - it is reached from another mesh part only' if other else ''))
+    # the money the build took out of the level (option window, strip_money): said aloud in every check
+    stripped = (bplan.get('edits') or {}).get('money_off') or {}
+    if stripped:
+        back = [p for p in stripped if any(kl_fa.has(sc, k, 'OnlineMoneyCtrl') for k in res(R_ + p))]
+        if back:
+            fail('bots.json says the money controller was taken off %s, and the node has one' % ', '.join(back))
+        note('the build took the money controller off %d civilian(s) - %s: %d that NOBODY gets, the human neither (option window; the owner\'s '
+             'decision, re/bots_loot.md 6). Seen to hold bots: only the watch shop\'s clerk of Late Night Opening (runs L8, L10)'
+             % (len(stripped), ', '.join('%s %s' % (p.split('\\')[-1], d.get('amount')) for p, d in stripped.items()),
+                sum(int(d.get('amount') or 0) for d in stripped.values())))
+    if win_armed:
+        nodes = sorted({node for found in win_armed.values() for node in found})
+        note('money on %d armed person(s) is inside the loot window of the squads\' places (%s): the designed loot of this map. Its trigger is '
+             'tested against the centre point of the person\'s GROUP node (kl2 0x783e60) and the loot tactic runs to that node\'s origin '
+             '(0x8d3150) - ASSUMPTION that the centre follows the person, so the money is paid where he IS. No bot was held by such money in '
+             'runs R12 / R13 (the Senator\'s and the park\'s bosses\' stayed untaken and the bots went on); why not is not established'
+             % (len(nodes), ', '.join(short(k) for k in nodes[:6])))
+    kinds = collections.Counter(o['kind'] + (' (opens itself)' if o['self_open'] else ' (glass only)' if o['kind'] == 'case' and o['glass'] else '')
+                                for o in money)
+    facts['loot_window'] = collections.OrderedDict(
+        window=list(LOOT_WINDOW), objects=dict(kinds),
+        traps={sq: [{'object': name(node), 'distance': round(d), 'place': [round(v) for v in p], 'why': why}
+                    for node, (d, p, why) in sorted(found.items(), key=lambda kv: kv[1][0])] for sq, found in win_traps.items()},
+        armed={sq: [{'object': name(node), 'distance': round(d), 'place': [round(v) for v in p]}
+                    for node, (d, p, _w) in sorted(found.items(), key=lambda kv: kv[1][0])] for sq, found in win_armed.items()},
+        closest_it_cannot_take={sq: {'object': name(node), 'distance': round(d), 'height': round(dy), 'place': [round(v) for v in p], 'why': why,
+                                     'inside': d <= LOOT_WINDOW[0] and dy <= LOOT_WINDOW[1]}
+                                for sq, (d, p, node, dy, why) in win_near.items()},
+        first_stage=win_stage,
+        on_the_way={sq: [{'object': name(node), 'distance': round(d), 'at': list(m), 'to_place': n_p, 'why': why}
+                         for node, (d, m, why, n_p) in sorted(found.items(), key=lambda kv: kv[1][0])] for sq, found in win_legs.items() if found},
+        plain_out_of_reach=[{'object': name(node), 'amount': o['amount'], 'distance': round(d), 'place': [round(v) for v in p], 'squad': sq,
+                             'trigger_radius': o['radius'], 'reached_from_another_mesh_part': other} for node, o, d, p, sq, other in unreach],
+        money_taken_off=stripped)
+    if win_stage:
+        moved = {sq[-2:]: (v['first_place_inside_an_ENTERS_box'], v['first_staged_place']) for sq, v in win_stage.items()
+                 if v['first_place_inside_an_ENTERS_box'] != v['first_staged_place']}
+        log('loot window: a bot first has a heist stage at place %s of its chain (squads %s)%s' % (
+            ' / '.join(str(v['first_staged_place']) for v in win_stage.values()), ' '.join(sq[-2:] for sq in win_stage),
+            '; before its first place inside an ENTERS_BANK box for %s' % ', '.join('%s (place %s, not %s)' % (k_, b_, a_) for k_, (a_, b_) in moved.items())
+            if moved else ''))
+    if win_near or win_traps:
+        got = [v for v in win_near.values()]
+        log('loot window (%d / %d): %d squad(s) with a place inside the window of something they cannot take there; the closest any place '
+            'comes to such an object: %s' % (LOOT_WINDOW[0], LOOT_WINDOW[1], len(win_traps),
+                                             ', '.join('%s %d' % (sq[-2:], v[0]) for sq, v in win_near.items()) if got else '-'))
+    else:
+        log('loot window (%d / %d): no place of any squad has an object in reach that a bot cannot take there (%s)'
+            % (LOOT_WINDOW[0], LOOT_WINDOW[1], ', '.join('%d %s' % (n_, k_) for k_, n_ in sorted(kinds.items())) or 'no money object'))
     if hops:                                            # a link is only taken when the search can reach its waypoint (add_drop.put)
         import kl_maps
         nf = kl_maps.nav_facts(B.scene.nav)
@@ -2622,6 +3271,9 @@ def build(src, dst, opt=None, log=print):
     say('kl_fa_bots build %s -> %s' % (src, dst))
     edits = prepare(B, opt, say)
     P = plan(B, opt, say)
+    # option window: the money on the civilians the plan names goes out of the level (the third edit of existing
+    # level data beside prepare()'s two; made after the plan, which has left every civilian out of the loot already)
+    edits['money_off'] = strip_money(B, (P.get('window') or {}).get('money_off') or [], say)
     P['edits'] = edits
     rep = apply(B, P, dst, say)
     rep['guns_ini_entries'] = guns_entries(dst, say)
@@ -2650,7 +3302,8 @@ def diff(src, dst, log=print, also=()):
     bj = os.path.join(B.folder, 'bots.json')
     edits = (json.load(open(bj)).get('plan', {}).get('edits') or {}) if os.path.isfile(bj) else {}
     cut, drops = set(edits.get('boxes') or {}), edits.get('drops') or []
-    also = tuple(also) + tuple(cut)
+    off = edits.get('money_off') or {}                  # option window: {path of a civilian's group: what strip_money took off}
+    also = tuple(also) + tuple(cut) + tuple(sorted({p.split('\\')[0] for p in off}))
     new = B.ents[n:]
     if any(e.parent is not None and e.parent not in set(new) for e in new) or len(B.ents) < n:
         bad.append('the new entities are not whole top-level subtrees at the end of the scene')
@@ -2701,6 +3354,32 @@ def diff(src, dst, log=print, also=()):
         if sorted(d) != ['ZBoxPrimitive[0]', 'ZGEOM[2]'] or va['ZGEOM[2]'][1:] != vb['ZGEOM[2]'][1:] or \
                 cv(A, ka) != cv(B, kb):
             bad.append('.prp: %s differs in more than its x and its first size: %s' % (nm, d))
+    # a civilian whose money was taken out of the level (strip_money): in its top-level subtree every node is as it
+    # was, and the one group has its controllers in the old order without exactly one OnlineMoneyCtrl and one
+    # TriggerBox2 - the one that sent AI_TRIGGER_WITH_ACTIVATOR to the group itself
+    ctl = lambda X, k: [(X.sc.p.key(nm), J.text(X.sc, [nm] + body)) for nm, body in X.sc.nodes[k]['ctrls']]
+    for path in off:
+        ka, kb = A.sc.resolve(R_ + path), B.sc.resolve(R_ + path)
+        if len(ka) != 1 or len(kb) != 1 or A.sc.top[ka[0]] != B.sc.top[kb[0]]:
+            bad.append('.prp: %s (money taken off) is not one node at the same place in both builds' % path); continue
+        t = A.sc.top[ka[0]]
+        if A.sc.end[t] != B.sc.end[t]:
+            bad.append('.prp: the subtree of %s differs in its number of nodes' % A.sc.names[t]); continue
+        for x in range(t, A.sc.end[t]):
+            ca, cb = ctl(A, x), ctl(B, x)
+            if A.sc.names[x] != B.sc.names[x] or A.sc.tids[x] != B.sc.tids[x] or J.text(A.sc, A.sc.nodes[x]['props']) != J.text(B.sc, B.sc.nodes[x]['props']):
+                bad.append('.prp: %s differs in its name, class or own values (only two controllers of %s may be gone)' % (A.sc.path[x][5:], path))
+            elif x != ka[0] and ca != cb:
+                bad.append('.prp: %s differs in its controllers (only two controllers of %s may be gone)' % (A.sc.path[x][5:], path))
+            elif x == ka[0]:
+                gone = [c for c in ca if c not in cb]
+                take = lambda c: c[0] == 'TriggerBox2' and b'AI_TRIGGER_WITH_ACTIVATOR' in c[1]
+                if [c for c in ca if c in cb] != cb or sorted(c[0] for c in gone) != ['OnlineMoneyCtrl', 'TriggerBox2'] \
+                        or not any(take(c) for c in gone) or any(c[0] == 'OnlineMoneyCtrl' or take(c) for c in cb):
+                    bad.append('.prp: %s lost %s, not exactly its OnlineMoneyCtrl and its own take trigger' % (path, [c[0] for c in gone]))
+    if off:
+        log('.prp: %d civilian group(s) without their money controller and its trigger, everything else of their subtrees equal: %s'
+            % (len(off), ', '.join('%s %s' % (p.split('\\')[-1], d.get('amount')) for p, d in off.items())))
     if J.text(A.sc, A.sc.p.settings) != J.text(B.sc, B.sc.p.settings):
         bad.append('.prp: the scene property block differs')
     log('.prp: %d of %d top-level subtrees equal, changed: %s; %d new subtrees; scene property block equal' % (
@@ -2764,7 +3443,8 @@ def diff(src, dst, log=print, also=()):
     log('the other %d members and the %d files beside the archive (KLWardrobe.ini too): byte for byte' % (len(A.ext) - 7, len(side)))
     for x in bad:
         log('UNEXPECTED: ' + x)
-    extra = ''.join([', %d level exit boxes cut (x and first size)' % len(cut) if cut else '', ', %d drop link(s) in the navigation mesh' % len(drops) if drops else ''])
+    extra = ''.join([', %d level exit boxes cut (x and first size)' % len(cut) if cut else '', ', %d drop link(s) in the navigation mesh' % len(drops) if drops else '',
+                     ', the money controller taken off %d civilian(s)' % len(off) if off else ''])
     log('RESULT: %s' % ('only the squad was added' + extra if not bad else '%d unexpected differences' % len(bad)))
     return bad
 
@@ -2814,11 +3494,13 @@ def options(a):
             a.remove(flag); opt[key] = True
     if '--no-tree' in a:
         a.remove('--no-tree'); opt['tree'] = False
-    for flag in ('--drop', '--lane'):
+    for flag in ('--drop', '--lane', '--window'):
         if flag in a:
             a.remove(flag); opt[flag[2:]] = True
+    if '--no-window' in a:                              # (owner: RECIPE has it on; for a comparison build)
+        a.remove('--no-window'); opt['window'] = False
     for name, key, conv in (('--ally-box', 'ally_box', str), ('--loot-seconds', 'loot_seconds', int), ('--start-delay', 'start_delay', float),
-                            ('--stops', 'stops', int), ('--cases', 'cases', str), ('--exit-boxes', 'exit_boxes', str)):
+                            ('--stops', 'stops', int), ('--cases', 'cases', str), ('--exit-boxes', 'exit_boxes', str), ('--case-guard', 'case_guard', float)):
         v = take(name, conv)
         if v is not None:
             opt[key] = v
@@ -2880,6 +3562,9 @@ def main():
     elif len(a) >= 2 and a[0] == 'sizes':
         for d in a[1:]:
             print('%s: %s' % (d, ', '.join('%s %d' % kv for kv in sizes(d).items())))
+    elif len(a) >= 2 and a[0] == 'census':
+        for d in a[1:]:
+            census(d)
     else:
         print(__doc__)
         sys.exit(2)
