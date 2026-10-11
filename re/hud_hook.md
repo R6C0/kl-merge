@@ -236,3 +236,117 @@ matters.
   byte at elem+0x2f8+i / +0x2fa+i (0x40 = drawn), a colour at elem+0x2f0 + 4 i, the picture index at elem+0x2e8 + 4 i.
   Where the magazine's rounds, its size and the reserve are read is NOT established - that is the next reading before
   the dial can replace the stock panel (hide byte elem+0x25).
+
+## 10. Version 3: the parts wired (2026-10-11 night; builds compile at /W3 without a warning; NOTHING OF IT HAS RUN)
+
+Three reviewed parts (re/hud_values.md, re/hud_weapon.md, re/hud_popup.md) are now in the hook. Include order in klhook.c:
+`klbot.c ... klgrudge.c`, `klhud_values.c` (reads only, needs klb_snap), `klhud.c` (which includes `klhud_weapon.c` just before
+`klu_row`, after `klu_dials`), `klhud_popup.c` (after klhud.c). `klpu_init()` after `klu_init()`, `klpu_tick()` after `klu_tick()`.
+
+### 10.1 What each part adds to klhud.c
+- VALUES: lives are the byte `[score+0x6c]` (the old `KLU_S_LIVES` 0x44 was the number of rounds); three skull pictures (178) in
+  the own row (`klu_lives_row`; 'LIVES n' in the round line when the level has no 178); the row kind is `kluv_kind` (the one
+  decision: dead / waiting, escaped, fed before traitor, traitor, you, crew); round line 'ROUND n' + ' OF m' (RoundOf); the money
+  bar = what the crew holds of the level's loot (`kluv_loot_share`); the watch = `kluv_round_left / _len / _played`; the escape
+  dial's icon 170 or 171 (`kluv_vehicle_pic`, a ZHeli = 171); `kluv_dump` at Log=2.
+- WEAPON: three texts (`KLU_T_WEAP` .. +2: first count right-aligned, second count right-aligned, label centred), disc / ring /
+  divider / arrow as klhud pictures, the two gun pictures (type 6) in its own queue drawn from the ammo panel's private
+  vtable (osd+0x1110, slot 2); `klwd_compose()` straight after `klu_dials`; `klwd_show` at both places klu_draw_on is set,
+  `klwd_reset` in `klu_reset`.
+- POPUP: nothing in klhud.c except the key `Draft` it reads; it wraps osd+0x10a8 (announcements) and reads osd+0x110c.
+
+### 10.2 Conflicts and how they were settled
+- Text objects: only the weapon part adds texts; `KLU_NTEXT` is `KLU_T_WEAP + KLU_NWEAP`, last. Values and popup add none.
+- Private vtables: four different elements are wrapped (clock 0x10cc by klhud.c, ammo 0x1110 by weapon, announcements 0x10a8 by
+  popup); none twice. The hide byte (+0x25) is written only by klhud.c, on the player list (0x10c4); weapon and popup never write it.
+- THE KNOCK-DOWN PROMPT (kldown.c, ZMiniGameButtonMashingDisplay at osd+0x10fc) is read, hidden, wrapped or restyled by NO
+  part (grep of the four files for 0x10fc: none).
+- The shared picture record slot `klu_prec[KLU_NPIC]` is used by PicTest and by popup / ring: DrawChunk copies the record
+  before it returns and all three run on the render thread one after the other.
+- `klu_pic_prep`: now also asked for when `Weapon` is on; popup calls it itself when it finds `pic_done` 0.
+- `LeftStyle` stays the one `KLU_STYLE_LEFT` (default 0x11); Grid / Probe untouched.
+
+### 10.3 Keys ([HUD]; every one needs Enable=1)
+`Draft=1` is the owner's switch: Plates, Dials, Weapon, RoundOf, Popups, LootRing default to 1 (HideStock and Lives are on by
+default anyway). Any key that is written wins (`Dials=0` with `Draft=1` = no dials). The sample klhook/KLHook.ini was not
+edited (another session has it uncommitted); the list is in klhud.c's header:
+`Draft Lives RoundOf Weapon WeaponX WeaponY WeaponSmall WeaponOther Popups LootRing PopupFrame PopupMeasure PopupPadX PopupPadY
+PopupDY PopupY PopupLayer PopupTraitor PopupTest RingMode RingX RingY`.
+Suggested for the owner: `[HUD]` `Enable=1` `Draft=1` `PopupY=520` (after Q2b).
+
+### 10.4 Live checks, in order (TEST hook `hud_v6_test`; the bank with the extras `<work>/build/hud_x/DM03`; log `Log=2`)
+Stop at once for a crash with `klwd_`, `klpu_`, 0x5ec380, 0x4895b0, 0x842d00, 0x45d6e0 or 0x639700 in the callers.
+- **A0** `Enable=1 Log=2` only: as Version 2 (list, round line, money box); the round line reads `ROUND n   LIVES m` unless the
+  level has picture 178; no `hud: weapon:` or `hud: popup:` line except the start-up 'on' of klu.
+- **A1** + `Plates=1 Dials=1 Grid=2`: skulls (2 dark, 1 faint) in the first demo row, the bar at 16 %, watch and escape dial; log
+  `hud: values: lives ...`, `clock: left .. played .. length .. ring ..`.
+- **W1** + `Weapon=1`: see re/hud_weapon.md W0-W6 (the log's `render: N stock panel calls skipped, 0 passed, 2N gun pictures drawn`;
+  the disc at about (1145, 598), no stock ammo panel).
+- **Q1** + `Popups=1 PopupTest=1 PopupFrame=1`, then Q2 .. Q3b of re/hud_popup.md; **R1** `LootRing=1 PopupTest=1`.
+- **K1** the knock-down prompt with everything on: `[Down] Enable=1 Flop=3 Camera=1 Prompt=1`, go down: the game's own mash
+  bar must show unchanged (no restyle, no hide) while the weapon dial shows the empty disc or the normal dial (not a fault).
+- **D0** `Enable=1 Draft=1`: the whole draft; the log's 'hud: on (Version 3 ...)' line says Dials=1 Weapon=1 Lives=1 RoundOf=1, then
+  `hud: popup: on; Popups=1 LootRing=1`. Round 2 of the same process (reset path), then a stock level (nothing drawn, stock HUD whole).
+
+### 10.5 Guesses that remain
+The ones named in each part (re/hud_values.md 'Remaining guesses', hud_weapon.md 9, hud_popup.md 10), plus: 'OF 10' is nominal
+(RoundOf follows Draft here because the draft shows it; `RoundOf=0` removes it); the extra picture slots 111..118 must exist
+in the level (Draft on a level without them falls back to plain bars and shows no rings / dials / weapon dial).
+
+### 10.6 Review round (re/hud_v3_review.md; hooks `hud_v7_test` 8d37f104 / `hud_v7_ship` bb8f2318; NOTHING OF IT HAS RUN)
+
+Built from `git archive HEAD klhook` + the working tree's klhud.c, klhud_weapon.c, klhud_popup.c, klhud_values.c and klhook.c (its
+uncommitted diff is only the HUD wiring: include order, klpu_tick, klpu_init). TEST `build_auto.bat`, SHIP `build.bat`, /W3, no warning.
+
+| finding | result |
+|---|---|
+| M1 positions | DONE. `Draft=1` defaults CrewX 33, CrewY 38, MoneyX 1247 (klhud.c) and WeaponX 1177 (klhud_weapon.c); a written key still wins. Inset untouched. |
+| M2 rows | DONE under Draft: Row 30, text y = top + 34 + 30 i, name x = left + 8, cash right = right - 8, block 28 high starting 5 above the text (`klu.yoff / blockup / blockh / padx`), dead strike (name width estimate + 12) x 4 at name y + 7 from left + 2, rule = pic 112 (181 if absent) 211 x 5 at top + 19.5, skulls at name y + 3. Without Draft the Version 2 numbers (30 / 4 / row / 6) are unchanged. The name width is still the 9 px a character estimate. |
+| M3 stock escape line | DONE. `klu_render_elem` zeroes byte elem+0xbc around the stock Render and puts it back, only while Dials=1, our HUD draws, `el` is the wrapped clock element and pictures 113, 114, 170 are in the level (else the stock escape line stays: no dial would show instead). |
+| S1 klwd_reset unlocked | DONE: inside klu_cs in `klu_reset`. |
+| S2 lock busy blinks | REJECTED for now: the busy count is already in the 5 s 'render:' line; only a log of W1 can say whether it is visible. The fix (queue built off-lock) is larger than the risk shown. |
+| S3 popup swap race | REJECTED (probability tiny, which thread runs Render still suspected; watch Q2 for a message that vanishes early). |
+| S4 instance bound | DONE as a measurement: the 5 s 'render:' line (Log=2) ends 'largest instance count after our draws N' (`klu_n_maxinst`, the largest [ctx+4] seen after the clock element's draws). Read it in A1 / W1 / D1. |
+| S5 round line coral | DONE under Draft (the draft's colour); Version 2 look keeps chalk. |
+| S6 Lives default | DONE: Lives defaults to 1 only with Draft=1, else 0, so A0 (`Enable=1 Log=2`) has no 'LIVES n' and looks like Version 2. |
+| S7 level without extras | DONE: with Draft=1 `klu_pic_prep` logs 'hud: draft: this level has N of the 8 extra pictures: Draft=1 falls back ...'. |
+| S8 rebuild of the five maps | NOT DONE here (tooling, not hook): `kl_hud.py all` on each installed archive into build/hud_x2/<map>; hud_x2 holds DM03 and F01 as .zip only, so V1 copies the support files (.WHD .WAV .ini .hti) from hud_x/DM03. |
+| S9 text objects never freed | DEFERRED: ~56 objects a round; reuse needs a per-OSD cache, not worth an unrun change. |
+| N7 83-check test of klhud_values | NOT RERUN: the harness is not in the repo (it lived in an earlier session's scratch folder) and klhud_values.c is unchanged this round; the file compiled with the wiring at /W3. |
+
+#### Owner's ini lines (after V1 has passed; SHIP hook hud_v7_ship, the archive of his map rebuilt by kl_hud.py)
+```
+[HUD]
+Enable=1
+Draft=1
+PopupY=520
+```
+(Log=1 default; add `Log=2` for a round that is to be read.)
+
+#### Live check V1 (TEST hook `hud_v7_test`; owner away; the bank, slot F03 of page 2)
+1. Level archive: `<work>/build/hud_x2/DM03/F03_Main.zip` (200,769,316 bytes) in place of the tab's DM03 `.zip`, the support files
+   (.WHD .WAV .ini .hti .KLJoin) of `<work>/build/hud_x/DM03` beside it. The previous archive is `<work>/build/hud_new/DM03`; put it back after.
+2. KLHook.ini: `[HUD] Enable=1 Draft=1 Log=2 Grid=0`. Hook test_v7 = `<work>/build/klhook/hud_v7_test/dinput8.dll`. Idle player,
+   pictures every 5 s from GO.
+3. Log must show, in order:
+   - `hud: on (Version 3 ...; Draft=1 Dials=1 Weapon=1 Lives=1 RoundOf=1) ...` and `hud: weapon: on`, `hud: popup: on; Popups=1 LootRing=1`.
+   - `hud: pictures: 8 of the 8 extra pictures (slots 111..118 ...) are in this level` (and NO 'hud: draft: this level has' line). The Log=2
+     lines `slot 111 .. 118: handle ... type 5` are the answer to the one open loader guess (a slot with no table row gets flags 0x10, type 5):
+     a slot with handle 0 or another type = the guess is wrong, stop and read re/hud_extras.md.
+   - `hud: osd ... N texts + N shadows made ... crew list at (33, 38) 211 wide, 30 px a row; round line right-aligned at (1247, ...); money box right edge 1247`.
+   - the 5 s `hud: render:` line: text draws > 0, `pictures` > 0, `pictures refused` 0, `lock busy` small, `largest instance count` (note it; hundreds is expected).
+   - no fault line (`stands down`, `no longer has ZCHAROBJ's vtable`).
+4. Pictures must show (bank at GO, then at +60 s): the crew list at the screen's left margin 33 px / 38 px (coral DEAD MEN, count right
+   at x 244, the white rule), rows 30 px apart with your row on a chalk block 219 x 28 (ink name, dark green cash, three skulls
+   after the name), a traitor row orange; coral ROUND n OF 10 right-aligned at x 1247; the round watch (ring of 24 dabs and a hand)
+   centred about (1212, 66), the stock clock digits blanked; the orange escape dial at about (1137, 71) when the vehicle waits and
+   NO stock 'escape' text or second vehicle icon beside it (M3); the money block with coral labels from x 1036; the weapon dial
+   centred about (1177, 598) with the stock ammo panel gone; coral green money. Compare against hud_mockup.html side by side.
+5. Then: a second round in the same process (reset path), and a stock level (nothing of ours drawn, the stock HUD whole). With the
+   knock-down (`[Down] Enable=1 Flop=3`) the game's own mash bar must show unrestyled.
+6. Stop on any crash whose callers include klwd_, klpu_, 0x5ec380, 0x4895b0, 0x842d00, 0x45d6e0 or 0x639700.
+
+#### Guesses that remain after this round
+The loader's type 5 / flags 0x10 default for slots 111..118 (V1 log); the name width (9 px a character) behind the skulls and the
+strike; the draft's skull y (name y + 3) and the rule's 112 stroke height; whether DrawChunk's instance array has room for the
+frame (V1 prints the largest count); 'OF 10'; the weapon dial layout; the popup parts of re/hud_popup.md 10.

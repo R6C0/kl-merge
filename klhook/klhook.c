@@ -166,7 +166,7 @@
  *   [Join] [Join.2] .. [Join.8]                             kljoin.c (also KLJoin.ini beside a level archive)
  *   [CrewJoin] [Crew] [Talk]                                klcrew_rt.c, klcrew.c, kltalk.c - each OFF unless its key is set
  *   [CrewHop]                                               klhop.c (also [CrewHop] in the KLJoin.ini beside a level archive) - OFF unless Enable=1
- *   [HUD]                                                   klhud.c - OFF unless Enable=1
+ *   [HUD]                                                   klhud.c (+ klhud_values.c, klhud_weapon.c, klhud_popup.c) - OFF unless Enable=1; Draft=1 = the whole draft
  *   [Auto] [Engine] [Script]                                klauto.c (TEST)
  *
  * BUILD: cl 19.4x x86, /O2 /LD /W3, export DirectInput8Create=_DirectInput8Create@20 (build.bat, build_auto.bat).
@@ -580,7 +580,9 @@ static void klh_tick(int game_thread);
 #include "klclimb.c"
 #include "klbalance.c"
 #include "klgrudge.c"
-#include "klhud.c"
+#include "klhud_values.c"                             /* the HUD's readers (reads only): BEFORE klhud.c, AFTER klbot.c */
+#include "klhud.c"                                    /* includes klhud_weapon.c inside itself */
+#include "klhud_popup.c"                              /* AFTER klhud.c: pop-ups + loot ring (uses its klu / klu_r / klu_pic) */
 #include "klshoulder.c"
 #include "klvis.c"
 #include "klnet.c"
@@ -634,6 +636,7 @@ static void klh_tick(int game_thread)
     klr_tick(game_thread);                            /* klbalance.c: one damage scale for player, police and crew */
     kly_tick(game_thread);                            /* klgrudge.c: the crew answers your bullets (off unless [Bots] Grudge) */
     klu_tick(game_thread);                            /* klhud.c: the crew list / money box texts (game thread only) */
+    klpu_tick(game_thread);                           /* klhud_popup.c: centre pop-ups + loot ring (after klu_tick; off unless [HUD] Popups / LootRing / Draft) */
     klo_tick(game_thread);                            /* klshoulder.c: log only */
     klvis_tick();                                     /* klvis.c: log only (the vision grid and its record 0xff) */
     klnet_tick(game_thread);                          /* klnet.c: multiplayer log / update numbers (off unless [Net]) */
@@ -811,6 +814,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klr_init();
     kly_init();
     klu_init();
+    klpu_init();                                      /* klhud_popup.c: after klu_init, it reads [HUD] with klhud.c's helpers */
     klo_init();
     klvis_init();
     klnet_init();

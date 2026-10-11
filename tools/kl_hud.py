@@ -373,6 +373,20 @@ def check(src, dst, log=print, pictures=False, extras=False):
     new_ids = set(range(EXTRA_ID, EXTRA_ID + len(EXTRAS))) if extras else set()
     if set(t1.tex) | new_ids != set(t2.tex):
         bad.append('texture ids differ')
+    if extras:                                           # the way the game looks them up (re/hud_extras.md): 0x5e3810 walks the
+        have = hud_slots(f2, e2)                         # 200 ids at osd+0xd68; a non-zero id is loaded as a texture
+        for k, (slot, kind, w, h) in enumerate(EXTRAS):  # (id, flags|0x10, type 5, 1) and the handle goes to osd+0x3ec+12*slot
+            tid = EXTRA_ID + k
+            if have.get(slot) != tid:
+                bad.append('extra %s: slot %d holds %s in the written .prp, not %d (the game would load nothing)' % (kind, slot, have.get(slot), tid))
+            t = t2.tex.get(tid)
+            if t is None:
+                bad.append('extra %s: texture %d is not in the .TEX' % (kind, tid)); continue
+            if tid >= 4096:
+                bad.append('extra %s: texture id %d is over the 4096 limit' % (kind, tid))
+            sz, f1_, f2_, hid, th_, tw_, mips = struct.unpack_from('<I4s4sIHHI', t.entry, 0)
+            if hid != tid or (tw_, th_) != (w, h) or sz != len(t.entry):
+                bad.append('extra %s: the .TEX record header (id %d, %dx%d, size %d) does not match' % (kind, hid, tw_, th_, sz))
     allowed = set(tex_page(t1, max(r[1] for r in parse(p1.chunks[ci])[1]))[0] for ci in fonts.values())
     if pictures:
         allowed |= set(tid for slot, tid in hud_slots(f1, e1).items() if slot in PLATE_SLOTS)
@@ -616,22 +630,27 @@ def add_extras(files, ext, log=print, png=None):
             os.makedirs(png, exist_ok=True)
             _png_rgba(os.path.join(png, 'extra_%d_%s.png' % (slot, kind)), w, h, px)
     files[ext['.TEX']] = T.write_tex(tex)
-    # the two 200-entry lists in the .prp: an array-begin token of 200 followed by 200 integer tokens
+    # the 200-entry lists in the .prp: an array-begin token of 200 followed by 200 integer tokens. THE EDIT MUST GO INTO THE
+    # NODES' prop lists: Prp.serialize() rebuilds the stream from nodes (Prp.tokens is a read-only flat copy of them; the
+    # first version of this function edited it, wrote nothing, and 'extras: ... 2 HUD list(s) updated' lied - slots 111..118
+    # stayed 0 in the game, so the hook found no extra picture; re/hud_extras.md).
     p = Prp(files[ext['.prp']])
-    toks, done = p.tokens, 0
-    for i, (op, pl) in enumerate(toks):
-        if op == 0x01 and struct.unpack('<I', pl)[0] == 200 and i + 200 < len(toks):
-            run = toks[i + 1:i + 201]
-            if any(t[0] not in (0x04, 0x09) for t in run):
-                continue
-            vals = [struct.unpack('<I', t[1])[0] for t in run]
-            if sum(1 for v in vals if v) < 100 or max(vals) >= 4096:
-                continue                                   # not a HUD picture list
-            for slot, tid in out.items():
-                if vals[slot] not in (0, tid):
-                    raise ValueError('HUD picture slot %d holds %d' % (slot, vals[slot]))
-                toks[i + 1 + slot] = (run[slot][0], struct.pack('<I', tid))
-            done += 1
+    done = 0
+    for node in p.nodes():
+        toks = node['props']
+        for i, (op, pl) in enumerate(toks):
+            if op == 0x01 and len(pl) == 4 and struct.unpack('<I', pl)[0] == 200 and i + 200 < len(toks):
+                run = toks[i + 1:i + 201]
+                if any(t[0] not in (0x04, 0x09) for t in run):
+                    continue
+                vals = [struct.unpack('<I', t[1])[0] for t in run]
+                if sum(1 for v in vals if v) < 100 or max(vals) >= 4096:
+                    continue                                   # not a HUD picture list
+                for slot, tid in out.items():
+                    if vals[slot] not in (0, tid):
+                        raise ValueError('HUD picture slot %d holds %d' % (slot, vals[slot]))
+                    toks[i + 1 + slot] = (run[slot][0], struct.pack('<I', tid))
+                done += 1
     if not done:
         raise ValueError('no 200-entry HUD picture list found in the .prp')
     files[ext['.prp']] = p.serialize()

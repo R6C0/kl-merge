@@ -126,6 +126,26 @@
  *   CrewX=-1 CrewY=-1 CrewW=211 Row=24 Rows=8          -1 = the inset
  *   MoneyX=-1 MoneyY=-1 MoneyW=211 RoundY=-1           MoneyX = the RIGHT edge; -1 = inset, inset + 87, inset + 58
  *   Layer=13          the texts' layer byte (shadows one below, plates two below; 15 = the clock's)
+ *   LeftStyle=17      0x11 = KLU_STYLE_LEFT (proven live, run H1_DM03_hud: low nibble 1 left / 2 right / 4 centre)
+ *
+ * VERSION 3 (2026-10-11 night): THE PARTS WIRED. re\hud_hook.md 10 has the live checks in order.
+ *   Draft=0           1 = the whole draft at once: Plates, Dials, Weapon, Popups, LootRing, RoundOf default to 1 (HideStock
+ *                     and Lives are on by default anyway). 'Enable=1' + 'Draft=1' is the owner's ini; every single key below
+ *                     still overrides (Dials=0 with Draft=1 = no dials)
+ *   --- klhud_values.c (included BEFORE this file; reads only; re\hud_values.md) ---
+ *   Lives=1           0 none, 1 three skull pictures (178) in your row ('LIVES n' in the round line when the level has no 178),
+ *                     2 TEST: skull glyphs after your name, 3 'LIVES n' in the round line
+ *   RoundOf=0         1 = 'ROUND n OF m' with the game's own m (10; whether a session ends there is not established)
+ *   --- klhud_weapon.c (included inside this file; re\hud_weapon.md) ---
+ *   Weapon=0          1 = the weapon dial, the stock ammo panel's Render is skipped while it stands (needs pictures 113 / 114)
+ *   WeaponX=-1 WeaponY=-1 WeaponSmall=0.8 WeaponOther=0
+ *   --- klhud_popup.c (included by klhook.c after this file; re\hud_popup.md) ---
+ *   Popups=0 LootRing=0 PopupFrame=0 PopupMeasure=1 PopupPadX=62 PopupPadY=12 PopupDY=0 PopupY=-1 PopupLayer=23
+ *   PopupTraitor=1 PopupTest=0 RingMode=1 RingX=-1 RingY=-1
+ *   THE KNOCK-DOWN PROMPT (kldown.c) is the game's own ZMiniGameButtonMashingDisplay at osd+0x10fc: no part of the HUD
+ *   reads, hides, wraps or restyles that element. The elements the parts touch: +0x10cc clock (wrapped, this file),
+ *   +0x10c4 player list (hide byte), +0x1110 ammo panel (wrapped, klhud_weapon.c), +0x10a8 announcements (wrapped,
+ *   klhud_popup.c); +0x110c use-action is only read.
  */
 #ifndef KLHUD_C
 #define KLHUD_C
@@ -173,7 +193,7 @@
 #define KLU_S_MONEY     0x150                 /* score: cash carried, one int a crew record (klbot.c) */
 #define KLU_S_REWARDS   0x184                 /* score: rewards, one int a client (klfedkit.c 6) */
 #define KLU_S_FLAGS     0x1d4                 /* score: one dword a client: 1 traitor, 8 police (klfedkit.c 5) */
-#define KLU_S_LIVES     0x44                  /* score: the lives the HUD shows (re\leaderboard.md 2.3) */
+/* (KLU_S_LIVES 0x44 is gone: that byte is the number of rounds, the lives are [score+0x6c] - klhud_values.c a) */
 
 #define KLU_ROWS        8
 #define KLU_T_HEAD      0                     /* 'DEAD MEN' */
@@ -186,7 +206,9 @@
 #define KLU_T_GRID      25
 #define KLU_NSWEEP      8                     /* Grid: one label per candidate style byte */
 #define KLU_NGRID       (10 + KLU_NSWEEP)
-#define KLU_NTEXT       (KLU_T_GRID + KLU_NGRID)
+#define KLU_T_WEAP      (KLU_T_GRID + KLU_NGRID)      /* klhud_weapon.c: the first gun's count, the other gun's, the label */
+#define KLU_NWEAP       3
+#define KLU_NTEXT       (KLU_T_WEAP + KLU_NWEAP)      /* LAST: every part that adds texts goes before this line (klhud_values.c / klhud_popup.c add none) */
 #define KLU_NPIC        224                   /* rings are drawn dab by dab (Dials) */
 #define KLU_TEXTLEN     64
 #define KLU_STYLE_LEFT  (klu.left)        /* [HUD] LeftStyle: 0x44 turned out CENTRED at x (run H1_DM03_hud); 0x11 is a GUESS until the sweep of Grid shows it */
@@ -213,8 +235,12 @@ struct klu_picq { int n; float x, y, w, h; DWORD argb; int layer; };
 
 static struct {
     int left;                                 /* LeftStyle */
+    int weapon;                               /* Weapon: the weapon dial (klhud_weapon.c) */
+    int draft;                                /* Draft: the defaults of every part of the draft are 1 */
+    int lives, roundof;                       /* Lives, RoundOf (klhud_values.c) */
     int on, log, stock, crew, money, round, hide, shadow, tags, cashshort, totalfont, draw, plates, anchor, pictest, grid, probe, layer, rows, dials;
     float inset, crew_x, crew_y, crew_w, row, money_x, money_y, money_w, round_y;
+    float yoff, blockup, blockh, padx;        /* the rows: the text's y under the head, the block's rise above it, its height, the text's side margin (the draft: 34 / 5 / 28 / 8) */
 } klu;
 
 static struct {
@@ -227,7 +253,7 @@ static struct {
     struct klu_picq pic[KLU_NPIC]; int npic;
 } klu_r;
 static volatile LONG klu_draw_on;             /* read by the render slot: 1 = objects exist and the round shows the HUD */
-static volatile LONG klu_n_call, klu_n_try, klu_n_draw, klu_n_refused, klu_n_pic, klu_n_picno;
+static volatile LONG klu_n_call, klu_n_try, klu_n_draw, klu_n_refused, klu_n_pic, klu_n_picno, klu_n_maxinst;
 static volatile LONG klu_probe_want, klu_probe_ready;
 static struct { float stock[14], ours[14], pic[14]; LONG nstock, nours, npic; } klu_pr;
 static CRITICAL_SECTION klu_cs;
@@ -339,6 +365,7 @@ static void klu_draw_ours(void *el, void *ctx, void *cam, DWORD n_before, DWORD 
             if (want && first_text && ok) { DWORD b = *cnt; first_text = 0; klu_pr.nours = (LONG)(b - a); if (b > a) klu_inst(ctx, b - 1, klu_pr.ours); }   /* the last one appended = the text itself (the shadow comes first with Draw=1) */
         }
         if (want) InterlockedExchange(&klu_probe_ready, 1);
+        if ((LONG)*cnt > klu_n_maxinst) InterlockedExchange(&klu_n_maxinst, (LONG)*cnt);      /* S4: DrawChunk has no capacity test; the largest count seen after our draws */
     }
     if (klu.pictest && live) {             /* TEST [HUD] PicTest=1: are pictures drawn, how large, anchored where, tinted?
                                                       A = UI_White (picture 181) 200 x 24 px in coral, asked for at (400, 500)
@@ -375,7 +402,15 @@ static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam
     InterlockedIncrement(&klu_n_call);
     n0 = ctx ? ((const DWORD *)ctx)[1] : 0;       /* the stock Render reads the same object two instructions on */
     klu_clock_face(el);
-    r = ((klu_render_t)(DWORD_PTR)KLH_VA(KLU_TIME_RENDER))(el, 0, ctx, cam);
+    if (klu.dials && klu_draw_on && (DWORD)(DWORD_PTR)el == klu_r.elem && klu_r.handle[113] && klu_r.handle[114] && klu_r.handle[170]) {
+        /* M3: our escape dial stands for the stock escape line + vehicle icon (byte elem+0xbc, 0x81e142): off around the stock
+           Render, put back after it (a heap byte of the element the game is rendering in this very call, as klu_draw_stock) */
+        BYTE *esc = (BYTE *)(DWORD_PTR)((DWORD)(DWORD_PTR)el + KLU_E_ESCAPE), b = *esc;
+        *esc = 0;
+        r = ((klu_render_t)(DWORD_PTR)KLH_VA(KLU_TIME_RENDER))(el, 0, ctx, cam);
+        *esc = b;
+    } else
+        r = ((klu_render_t)(DWORD_PTR)KLH_VA(KLU_TIME_RENDER))(el, 0, ctx, cam);
     n1 = ctx ? ((const DWORD *)ctx)[1] : 0;
     klu_draw_ours(el, ctx, cam, n0, n1);
     return r;
@@ -450,11 +485,12 @@ static void klu_layout(void)
     klu_r.t[KLU_T_HEAD].x = x0; klu_r.t[KLU_T_HEAD].y = klu_r.cy; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;
     klu_r.t[KLU_T_COUNT].x = x1; klu_r.t[KLU_T_COUNT].y = klu_r.cy; klu_r.t[KLU_T_COUNT].style = KLU_STYLE_RIGHT;
     for (i = 0; i < KLU_ROWS; i++) {
-        y = klu_r.cy + 30.0f + klu.row * i;
-        klu_r.t[KLU_T_NAME(i)].x = x0 + 6.0f; klu_r.t[KLU_T_NAME(i)].y = y;
-        klu_r.t[KLU_T_CASH(i)].x = x1 - 6.0f; klu_r.t[KLU_T_CASH(i)].y = y; klu_r.t[KLU_T_CASH(i)].style = KLU_STYLE_RIGHT;
+        y = klu_r.cy + klu.yoff + klu.row * i;
+        klu_r.t[KLU_T_NAME(i)].x = x0 + klu.padx; klu_r.t[KLU_T_NAME(i)].y = y;
+        klu_r.t[KLU_T_CASH(i)].x = x1 - klu.padx; klu_r.t[KLU_T_CASH(i)].y = y; klu_r.t[KLU_T_CASH(i)].style = KLU_STYLE_RIGHT;
     }
     klu_r.t[KLU_T_ROUND].x = klu_r.mx; klu_r.t[KLU_T_ROUND].y = klu_r.ry; klu_r.t[KLU_T_ROUND].style = KLU_STYLE_RIGHT;
+    if (klu.draft) klu_r.t[KLU_T_ROUND].want_colour = KLU_C_CORAL;                     /* S5: the draft's round line is coral */
     for (k = 0; k < 3; k++) {
         y = klu_r.my + (k == 0 ? 0.0f : 40.0f + 24.0f * (k - 1));            /* TOTAL, the bar at +26 .. +34, LOOT +40, REWARDS +64 */
         klu_r.t[KLU_T_MLABEL(k)].x = klu_r.mx - klu.money_w; klu_r.t[KLU_T_MLABEL(k)].y = y; klu_r.t[KLU_T_MLABEL(k)].want_colour = KLU_C_CORAL;
@@ -462,6 +498,7 @@ static void klu_layout(void)
         klu_r.t[KLU_T_MVALUE(k)].want_colour = k == 0 ? KLU_C_GREENHI : KLU_C_GREEN;
     }
     klu_r.t[KLU_T_MVALUE(0)].big = klu.totalfont;
+    klu_r.t[KLU_T_WEAP + 0].style = klu_r.t[KLU_T_WEAP + 1].style = KLU_STYLE_RIGHT; klu_r.t[KLU_T_WEAP + 2].style = KLU_STYLE_CENTRE;      /* klhud_weapon.c: the counts right-aligned, the label centred under the disc */
     {   /* the Grid labels: their style is fixed when the object is made (klu_grid fills the same order) */
         int gs[KLU_NGRID] = { KLU_STYLE_LEFT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_LEFT, KLU_STYLE_RIGHT, KLU_STYLE_LEFT, KLU_STYLE_RIGHT };
         for (i = 0; i < KLU_NSWEEP; i++) gs[10 + i] = klu_sweep[i];
@@ -506,7 +543,8 @@ static int klu_make_all(DWORD osd)
     klu_layout();
     for (i = 0; i < KLU_NTEXT; i++) {
         struct klu_text *t = &klu_r.t[i];
-        if (i >= KLU_T_GRID && !klu.grid) continue;
+        if (i >= KLU_T_GRID && i < KLU_T_WEAP && !klu.grid) continue;
+        if (i >= KLU_T_WEAP && !klu.weapon) continue;
         t->colour = t->want_colour;
         if (!(t->obj = klu_make_obj(tmpl, t->big && big ? big : font, t->style, t->colour, klu.layer, why))) { klog("hud: osd %08lx: text %d: %s; the HUD stands down for this level", osd, i, why); return 0; }
         n++;
@@ -573,10 +611,10 @@ static void klu_dials(const struct klb_snap *s)
     float clock = 0, cx = klu_r.mx - 35.0f, cy = klu_r.wy; int i;
     klu_r.watch = 0;
     if (!klu.dials || !klu_r.handle[113] || !klu_r.handle[114]) return;
-    /* the round watch: [rules+0x200] = the round clock in seconds, counting down (klfed.c: slot 192 0x5dff40) */
+    /* the round watch: the float the stock clock prints, [rules+0x4c], against the round's length [score+0x3c]
+       (klhud_values.c f); a clock above the length (something set a longer time) is measured against left + played */
     if (klu.grid == 2) { clock = 219.0f; klu_r.clock_max = 360.0f; }
-    else if (!klh_rd(s->rules + 0x200, &clock, 4) || !(clock >= 0 && clock < 36000.0f)) clock = 0;
-    if (clock > klu_r.clock_max) klu_r.clock_max = clock;
+    else { clock = kluv_round_left(s); klu_r.clock_max = kluv_round_len(s); if (clock > klu_r.clock_max) klu_r.clock_max = clock + kluv_round_played(s); }
     if (clock > 60.0f && klu_r.clock_max > 60.0f) {
         float left = clock / klu_r.clock_max, a = 6.2831853f * (1.0f - left);
         klu_addpic(114, cx - 34.5f, cy - 34.5f, 69.0f, 69.0f, 0x9c080809u, klu.layer - 2);
@@ -587,20 +625,23 @@ static void klu_dials(const struct klb_snap *s)
         klu_r.watch = 1;                                           /* the render slot blanks the stock clock's digits while this is set */
     }
     /* the escape dial: the vehicle waits (state 3 / 4), [rules+0x1d8] = the seconds it still waits, 8 s a visit (klbot.c) */
-    if ((s->veh == 3 || s->veh == 4 || klu.grid == 2) && klu_r.handle[170]) {
+    i = kluv_vehicle_pic(s) == KLUV_PIC_CHOPPER && klu_r.handle[KLUV_PIC_CHOPPER] ? KLUV_PIC_CHOPPER : KLUV_PIC_CAR;      /* a ZHeli: the helicopter (171); both kinds of car: 170 (klhud_values.c e) */
+    if ((s->veh == 3 || s->veh == 4 || klu.grid == 2) && klu_r.handle[i]) {
         float ex = cx - 75.0f, ey = cy + 5.0f, left = klu.grid == 2 ? 0.35f : s->timer / 8.0f;
         klu_addpic(114, ex - 27.5f, ey - 27.5f, 55.0f, 55.0f, 0x9c080809u, klu.layer - 2);
         klu_ring(ex, ey, 23.0f, 24, left, 7.0f, 9.0f, KLU_C_ORANGE, klu.layer);
-        klu_addpic(170, ex - 15.0f, ey - 15.0f, 30.0f, 30.0f, KLU_C_CHALK, klu.layer);       /* the car icon; a helicopter map still shows the car (the vehicle's kind is a virtual call: not read here) */
+        klu_addpic(i, ex - 15.0f, ey - 15.0f, 30.0f, 30.0f, KLU_C_CHALK, klu.layer);
     }
 }
+
+#include "klhud_weapon.c"                     /* the weapon dial: klwd_compose / klwd_show / klwd_reset / klwd_init (re\hud_weapon.md) */
 
 /* one crew row: kind 0 crew, 1 you, 2 traitor, 3 dead, 4 escaped, 5 fed */
 static void klu_row(int row, const char *name, long money, int kind)
 {
     struct klu_text *tn = &klu_r.t[KLU_T_NAME(row)], *tc = &klu_r.t[KLU_T_CASH(row)];
     const char *tag = !klu.tags ? "" : kind == 2 ? "  TRAITOR" : kind == 4 ? "  OUT" : kind == 5 ? "  FED" : "";
-    float y = klu_r.cy + 30.0f + klu.row * row; int block = klu.plates && (kind == 1 || kind == 2);
+    float y = klu_r.cy + klu.yoff + klu.row * row; int block = klu.plates && (kind == 1 || kind == 2);
     snprintf(tn->want, sizeof tn->want, "%s%s", name, tag);
     klu_cash(tc->want, sizeof tc->want, money);
     tn->on = tc->on = klu.crew;
@@ -614,8 +655,24 @@ static void klu_row(int row, const char *name, long money, int kind)
     default: tn->want_colour = KLU_C_CHALK; tc->want_colour = KLU_C_GREENHI; break;
     }
     if (!klu.plates || !klu.crew) return;
-    if (block) klu_addpic(klu_r.handle[111] ? 111 : 181, klu_r.cx - 4.0f, y - 4.0f, klu.crew_w + 8.0f, klu.row, kind == 1 ? KLU_C_CHALK : KLU_C_ORANGE, klu.layer - 2);   /* 111 = the painted stroke (kl_hud extras) */
-    if (kind == 3) klu_addpic(klu_r.handle[112] ? 112 : 181, klu_r.cx + 2.0f, y + 6.0f, klu.crew_w * 0.62f, klu_r.handle[112] ? 8.0f : 3.0f, KLU_C_DEAD, klu.layer);       /* the strike-through, over the name: 112 = the dry stroke */
+    if (block) klu_addpic(klu_r.handle[111] ? 111 : 181, klu_r.cx - 4.0f, y - klu.blockup, klu.crew_w + 8.0f, klu.blockh, kind == 1 ? KLU_C_CHALK : KLU_C_ORANGE, klu.layer - 2);   /* 111 = the painted stroke (kl_hud extras) */
+    if (kind == 3) {
+        if (klu.draft) {                                           /* M2, the draft: (name width + 12) x 4 from x 33 + 2, centred on the row (name y + 7) */
+            const unsigned char *c; float w = 0;
+            for (c = (const unsigned char *)name; *c; c++) if ((*c & 0xc0) != 0x80) w += KLUV_NAME_CHARW;
+            klu_addpic(klu_r.handle[112] ? 112 : 181, klu_r.cx + 2.0f, y + 7.0f, w + 12.0f, 4.0f, KLU_C_DEAD, klu.layer);
+        } else klu_addpic(klu_r.handle[112] ? 112 : 181, klu_r.cx + 2.0f, y + 6.0f, klu.crew_w * 0.62f, klu_r.handle[112] ? 8.0f : 3.0f, KLU_C_DEAD, klu.layer);       /* the strike-through, over the name: 112 = the dry stroke */
+    }       /* the strike-through, over the name: 112 = the dry stroke */
+}
+
+/* the own row's lives (re\hud_layout.md): three skull pictures (178) after the name, the lost ones faint. The name's
+   width is an estimate and every number a named guess in klhud_values.c (a) until a picture has shown the row */
+static void klu_lives_row(int row, const char *name, int lives, int block)
+{
+    float y = klu_r.cy + klu.yoff + klu.row * row + (klu.draft ? 3.0f : kluv_skull_y(klu.row)); int k;      /* the draft: the block's middle (28 high, 5 above the text) */
+    if (!klu.crew || klu.lives != 1 || !klu_r.handle[KLUV_SKULL_PIC]) return;
+    for (k = 0; k < KLUV_LIVES_MAX; k++)
+        klu_addpic(KLUV_SKULL_PIC, klu_r.cx + kluv_skull_x(name, klu.crew_w, k), y, KLUV_SKULL_SIZE, KLUV_SKULL_SIZE, kluv_skull_argb(k, lives, block), klu.layer);
 }
 
 static void klu_grid(void)
@@ -625,7 +682,7 @@ static void klu_grid(void)
        are in virtual 1280 x 720 pixels). With Plates=1 each box also gets a 1 px coral outline: text and picture
        coordinates on one picture. */
     struct { const char *name; float x0, y0, x1, y1; } box[3]; int i, k = KLU_T_GRID; struct klu_text *t;
-    box[0].name = "CREW";  box[0].x0 = klu_r.cx; box[0].y0 = klu_r.cy; box[0].x1 = klu_r.cx + klu.crew_w; box[0].y1 = klu_r.cy + 30.0f + klu.row * klu.rows;
+    box[0].name = "CREW";  box[0].x0 = klu_r.cx; box[0].y0 = klu_r.cy; box[0].x1 = klu_r.cx + klu.crew_w; box[0].y1 = klu_r.cy + klu.yoff + klu.row * klu.rows;
     box[1].name = "ROUND"; box[1].x0 = klu_r.mx - klu.money_w; box[1].y0 = klu_r.ry; box[1].x1 = klu_r.mx; box[1].y1 = klu_r.ry + 22.0f;
     box[2].name = "MONEY"; box[2].x0 = klu_r.mx - klu.money_w; box[2].y0 = klu_r.my; box[2].x1 = klu_r.mx; box[2].y1 = klu_r.my + 86.0f;
     for (i = 0; i < 3; i++) {
@@ -649,7 +706,7 @@ static void klu_grid(void)
 /* -> every text's wanted string and colour and the picture list; 0 = nothing to show (no Arcade round) */
 static int klu_compose(int *state_ok)
 {
-    struct klb_snap s; int i, row = 0, human, used = 0, alive = 0; long total = 0, loot = 0, rewards = 0; DWORD cat[0x3c / 4]; char name[40]; BYTE lives = 0;
+    struct klb_snap s; int i, row = 0, human, used = 0, alive = 0; long total = 0, loot = 0, rewards = 0; DWORD cat[0x3c / 4]; char name[56]; int lives = 0, rn = 0, rm = 0;
     *state_ok = 0;
     if (!klb_read(&s)) return 0;                              /* klbot.c 1: Arcade, ZGameRulesHeist, the records */
     /* the stock player list's own window (its Tick 0x76db00). Draw=2: the stock clock Render draws nothing outside
@@ -658,27 +715,41 @@ static int klu_compose(int *state_ok)
     for (i = 0; i < KLU_NTEXT; i++) { klu_r.t[i].on = 0; klu_r.t[i].noshadow = 0; }
     klu_r.npic = 0;
     human = s.human >= 0 ? s.human : 0;
-    if (klu.grid == 2) {                                      /* the draft's own eight rows: every state on one picture */
+    lives = klu.grid == 2 ? 2 : kluv_lives(&s);               /* byte [score+0x6c]; +0x44 is the number of rounds (klhud_values.c a, c) */
+    if (klu.grid == 2) {                                    /* the draft's own eight rows: every state on one picture */
         static const struct { const char *n; long m; int kind; } demo[KLU_ROWS] = { { "J.C.", 540000, 1 }, { "KANE", 310000, 0 }, { "LYNCH", 0, 0 }, { "PARKER", 860000, 2 },
                                                                                     { "TOMMY", 120000, 0 }, { "RED", 400000, 4 }, { "MELDAL", 0, 3 }, { "ASHKANAN", 1250000, 3 } };
         for (row = 0; row < klu.rows; row++) klu_row(row, demo[row].n, demo[row].m, demo[row].kind);
+        klu_lives_row(0, demo[0].n, lives, klu.plates);
         used = 8; alive = 5;
     } else for (i = 0; i < s.n; i++) {
-        const struct klb_rec *r = &s.r[i]; DWORD blk, str = 0, fl = 0; int kind;
+        const struct klb_rec *r = &s.r[i]; DWORD blk, str = 0; int kind;
         if (!r->used) continue;
         used++; if (r->status != 7 && r->status != 6) alive++;
         if (row >= klu.rows) continue;
         name[0] = 0;
         if ((blk = klh_rd32(r->at)) != 0 && klh_rd(blk + 8, &str, 4) && str) klh_rdstr(str, name, sizeof name);     /* [[record]+8]: 0x841e50 */
         if (!name[0]) snprintf(name, sizeof name, r->flags & 1 ? "Heister %d" : "You", i);
-        klh_rd(s.score + KLU_S_FLAGS + 4 * i, &fl, 4);        /* ASSUMED indexed like the money (section 4) */
-        kind = r->status == 7 ? 3 : r->status == 6 ? 4 : (fl & 8) ? 5 : ((r->flags & 2) || (fl & 1)) ? 2 : !(r->flags & 1) ? 1 : 0;
+        kind = kluv_kind(&s, i);                              /* klhud_values.c g: THE row decision (dead / waiting, escaped, fed before traitor, traitor, you, crew) */
+        if (i == human && (kind == KLUV_K_YOU || kind == KLUV_K_TRAITOR)) {
+            if (klu.lives == 2) {                             /* TEST: the stock list's own way, skull glyphs U+E018 appended to the name (0x6f3116) */
+                size_t l = strlen(name); int nl = lives > KLUV_LIVES_MAX ? KLUV_LIVES_MAX : lives;
+                if (nl && l + 4 * (size_t)nl < sizeof name) kluv_skulls(name + l, (int)(sizeof name - l), nl);
+            } else {                                          /* the draft: three skull pictures after the name (and after the tag, when the row carries one) */
+                char full[96];
+                snprintf(full, sizeof full, "%s%s", name, kind == KLUV_K_TRAITOR && klu.tags ? "  TRAITOR" : "");
+                klu_lives_row(row, full, lives, klu.plates);
+            }
+        }
         klu_row(row++, name, (long)r->money, kind);
     }
     if (klu.crew) {
         strcpy(klu_r.t[KLU_T_HEAD].want, "DEAD MEN"); klu_r.t[KLU_T_HEAD].on = 1; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;
         snprintf(klu_r.t[KLU_T_COUNT].want, KLU_TEXTLEN, "%d / %d", alive, used); klu_r.t[KLU_T_COUNT].on = 1;
-        if (klu.plates) klu_addpic(181, klu_r.cx, klu_r.cy + 22.0f, klu.crew_w, 3.0f, KLU_C_CHALK, klu.layer - 2);     /* the painted rule */
+        if (klu.plates) {                                     /* the painted rule: the draft's pic 112, 211 x 5, centre y 22 under the head */
+            if (klu.draft) klu_addpic(klu_r.handle[112] ? 112 : 181, klu_r.cx, klu_r.cy + 19.5f, klu.crew_w, 5.0f, KLU_C_CHALK, klu.layer - 2);
+            else klu_addpic(181, klu_r.cx, klu_r.cy + 22.0f, klu.crew_w, 3.0f, KLU_C_CHALK, klu.layer - 2);
+        }
     }
     /* Total as 0x807520(rules) (EXE): record 0's money when in use, + the score object's dwords +4..+0x10, +0x18..+0x24, +0x2c, + [+0x38] */
     if (klh_rd(s.score + 4, cat, sizeof cat)) {
@@ -689,24 +760,32 @@ static int klu_compose(int *state_ok)
         if (s.r[0].used) total += (long)s.r[0].money;
         loot = s.human >= 0 ? (long)s.r[human].money : 0;
         klh_rd(s.score + KLU_S_REWARDS + 4 * human, &rewards, 4);
-        klh_rd(s.score + KLU_S_LIVES, &lives, 1);
+        if (!kluv_round(&s, &rn, &rm)) rn = s.level;          /* n = byte [score+0x45], m = byte [score+0x44] (10 in Arcade) */
         if (klu.grid == 2) { total = 3400000; loot = 540000; rewards = 0; }
         v[0] = total; v[1] = loot; v[2] = rewards;
         for (i = 0; i < 3; i++) {
             strcpy(klu_r.t[KLU_T_MLABEL(i)].want, label[i]); klu_r.t[KLU_T_MLABEL(i)].on = klu.money;
             klu_dollars(klu_r.t[KLU_T_MVALUE(i)].want, KLU_TEXTLEN, v[i]); klu_r.t[KLU_T_MVALUE(i)].on = klu.money;
         }
-        if ((signed char)lives >= 0 && lives <= 9) snprintf(klu_r.t[KLU_T_ROUND].want, KLU_TEXTLEN, "ROUND %d   LIVES %d", s.level, lives);
-        else snprintf(klu_r.t[KLU_T_ROUND].want, KLU_TEXTLEN, "ROUND %d", s.level);
+        {
+            char of[16] = "", lv[16] = "";
+            if (klu.roundof && rm > 0) snprintf(of, sizeof of, " OF %d", rm);          /* the game's own number: 10 in Arcade */
+            if (klu.lives == 3 || (klu.lives == 1 && !klu_r.handle[KLUV_SKULL_PIC])) snprintf(lv, sizeof lv, "   LIVES %d", lives);   /* digits: on request, or when this level has no skull picture */
+            snprintf(klu_r.t[KLU_T_ROUND].want, KLU_TEXTLEN, "ROUND %d%s%s", rn, of, lv);
+        }
         klu_r.t[KLU_T_ROUND].on = klu.round;
-        if (klu.plates && klu.money) {                        /* the framed bar under TOTAL; its painted part = how much of your total you carry right now (the draft gives the bar no meaning: this one is OURS) */
+        if (klu.plates && klu.money) {                        /* the framed bar under TOTAL (re\hud_layout.md): what the crew holds of the level's loot ([rules+0xdd0], klhud_values.c d); a level that registered no loot: how much of your total you carry */
             float x = klu_r.mx - klu.money_w, y = klu_r.my + 26.0f, f = total > 0 && loot > 0 ? (float)loot / (float)total : 0.0f;
+            if (klu.grid == 2) f = 0.16f;
+            else if (kluv_loot_total(&s) > 0) f = kluv_loot_share(&s);
             if (f > 1.0f) f = 1.0f;
             klu_outline(x, y, klu.money_w, 8.0f, KLU_C_CHALK, klu.layer - 2);
             klu_addpic(181, x - 2.0f, y - 2.0f, klu.money_w * f, 12.0f, KLU_C_CHALK, klu.layer - 2);
         }
     }
+    if (klu.log >= 2) kluv_dump(&s, human);                   /* 'hud: values: ...': looked at once a second, said when a value other than the clock changed */
     klu_dials(&s);
+    klwd_compose();                                           /* klhud_weapon.c: straight after the dials (it adds its texts and pictures to the same queues); a no-op without Weapon=1 */
     if (klu.grid) klu_grid();
     return 1;
 }
@@ -773,6 +852,7 @@ static void klu_hide_tick(DWORD osd, int want)
 static void klu_stand_down(DWORD osd)
 {
     InterlockedExchange(&klu_draw_on, 0);
+    klwd_show(0);                              /* the weapon dial: every call of the ammo panel goes to the stock Render again */
     if (osd && klu_r.hid) klu_hide_tick(osd, 0);
 }
 
@@ -808,7 +888,9 @@ static void klu_pic_prep(DWORD el)
             if (!klh_rd(tbl + 12 * (DWORD)k, &hk, 4) || !hk) continue;
             ck = (hk & 0x80000000u) ? (hk & 0x7fffffffu) : klh_rd32((DWORD_PTR)KLH_VA(KLU_CHUNKTAB) + 4 * hk);
             if (ck && klh_rd32(ck + 0xc) == KLU_PICTYPE) { klu_r.handle[k] = hk; if (k >= 111 && k <= 118) extra++; }
+            if (klu.log > 1 && ((k >= 108 && k <= 120) || k == 181)) klog("hud: pictures: slot %d: handle %08lx chunk %08lx type %lu, head %08lx %08lx %08lx %08lx", k, hk, ck, ck ? klh_rd32(ck + 0xc) : 0, ck ? klh_rd32(ck) : 0, ck ? klh_rd32(ck + 4) : 0, ck ? klh_rd32(ck + 8) : 0, ck ? klh_rd32(ck + 0x10) : 0);
         }
+        if (klu.draft && extra < 8) klog("hud: draft: this level has %d of the 8 extra pictures: Draft=1 falls back to plain bars, no rings, no dials, no weapon dial (the level needs the archive of tools/kl_hud.py all, build/hud_x2)", extra);
         if (klu.log) klog("hud: pictures: %d of the 8 extra pictures (slots 111..118, tools/kl_hud.py --look deadmen) are in this level%s", extra, extra == 8 ? "" : " - plates fall back to UI_White, rings are not drawn");
     }
     if (klu.log) klog("hud: pictures: 181 (UI_White) handle %08lx chunk type %lu, 170 (the car icon) handle %08lx chunk type %lu; type %d = the 40-byte record this part writes%s%s",
@@ -828,6 +910,7 @@ static void klu_reset(const char *why, DWORD osd)
     if (klu_r.osd && klu.log) klog("hud: osd %08lx is over (%s): texts dropped%s", klu_r.osd, why, klu_r.made ? " (the scene owns them: not freed by the hook)" : "");
     InterlockedExchange(&klu_draw_on, 0);
     EnterCriticalSection(&klu_cs);
+    klwd_reset();                                              /* S1: inside the lock, the render slot walks klwd_r under it */
     memset(&klu_r, 0, sizeof klu_r);
     klu_r.osd = osd;
     LeaveCriticalSection(&klu_cs);
@@ -974,8 +1057,9 @@ static void klu_tick(int game_thread)
     LeaveCriticalSection(&klu_cs);
     if (klu_r.fault || !show) klu_stand_down(osd);
     if (klu_r.fault) return;
-    if (klu_r.made && (klu.plates || klu.pictest || klu.dials) && !klu_r.pic_done) klu_pic_prep(klu_r.elem);      /* before the first frame that draws */
+    if (klu_r.made && (klu.plates || klu.pictest || klu.dials || klu.weapon) && !klu_r.pic_done) klu_pic_prep(klu_r.elem);      /* before the first frame that draws */
     InterlockedExchange(&klu_draw_on, show);
+    klwd_show(show);
     if (show && klu.hide && klu.crew) klu_hide_tick(osd, 1);
     if (klu.probe && klu_probe_ready) {
         const float *a = klu_pr.stock, *b = klu_pr.ours, *p = klu_pr.pic; int same = klu_pr.nours > 0 && b[0] == a[0] && b[2] == a[2] && b[4] == a[4] && b[9] == a[9] && a[0] != 0;
@@ -990,9 +1074,9 @@ static void klu_tick(int game_thread)
         if (klu.probe) InterlockedExchange(&klu_probe_want, 1);
         if (klu.log >= 2) {
             if (!klu_r.made) klog("hud: waiting: FA set shown %d, fault %d", klu_fa_shown(osd), klu_r.fault);
-            klog("hud: render: %ld clock-element calls, %ld text draws, %ld refused by the checks, %ld pictures, %ld pictures refused, %ld lock busy (draw_on %ld, %d pictures a frame)",
+            klog("hud: render: %ld clock-element calls, %ld text draws, %ld refused by the checks, %ld pictures, %ld pictures refused, %ld lock busy (draw_on %ld, %d pictures a frame, largest instance count after our draws %ld)",
                  InterlockedExchange(&klu_n_call, 0), InterlockedExchange(&klu_n_draw, 0), InterlockedExchange(&klu_n_refused, 0), InterlockedExchange(&klu_n_pic, 0), InterlockedExchange(&klu_n_picno, 0),
-                 InterlockedExchange(&klu_n_try, 0), klu_draw_on, klu_r.npic);
+                 InterlockedExchange(&klu_n_try, 0), klu_draw_on, klu_r.npic, InterlockedExchange(&klu_n_maxinst, 0));
         }
     }
 }
@@ -1022,20 +1106,25 @@ static void klu_init(void)
     klu.draw = klu_inii("Draw", 1, 1, 2);
     klu.shadow = klu_inii("Shadow", 1, 0, 1); if (klu.draw == 2) klu.shadow = 1;     /* the stock Render draws a pair */
     klu.tags = klu_inii("Tags", 1, 0, 1); klu.cashshort = klu_inii("CashShort", 1, 0, 1); klu.totalfont = klu_inii("TotalFont", 0, 0, 1);
-    klu.dials = klu_inii("Dials", 0, 0, 1);              /* the round watch + the escape dial (needs the level's extra pictures 113 / 114) */
-    klu.plates = klu_inii("Plates", 0, 0, 1); klu.anchor = klu_inii("PicAnchor", 1, 0, 1); klu.left = klu_inii("LeftStyle", 0x11, 0, 255); klu.pictest = klu_inii("PicTest", 0, 0, 1);
+    klu.draft = klu_inii("Draft", 0, 0, 1);              /* the whole draft: the defaults of Plates, Dials, Weapon, RoundOf (and klhud_popup.c's Popups, LootRing) become 1; a key that is set still wins */
+    klu.dials = klu_inii("Dials", klu.draft, 0, 1);      /* the round watch + the escape dial (needs the level's extra pictures 113 / 114) */
+    klu.weapon = klu_inii("Weapon", klu.draft, 0, 1); klwd_init();      /* the weapon dial (klhud_weapon.c; needs 113 / 114 too) */
+    klu.lives = klu_inii("Lives", klu.draft, 0, 3);              /* 0 none, 1 three skull pictures (178) in your row - 'LIVES n' in the round line when the level has no such picture -, 2 TEST: skull glyphs after your name (the stock way), 3 'LIVES n' in the round line */
+    klu.roundof = klu_inii("RoundOf", klu.draft, 0, 1);  /* 1 = 'ROUND n OF m' with the game's own m (10 in Arcade; whether a session ends there is not established) */
+    klu.plates = klu_inii("Plates", klu.draft, 0, 1); klu.anchor = klu_inii("PicAnchor", 1, 0, 1); klu.left = klu_inii("LeftStyle", 0x11, 0, 255); klu.pictest = klu_inii("PicTest", 0, 0, 1);
     klu.grid = klu_inii("Grid", 0, 0, 2); klu.probe = klu_inii("Probe", 0, 0, 1);
     klu.layer = klu_inii("Layer", 0xd, 3, 15);
     klu.rows = klu_inii("Rows", KLU_ROWS, 1, KLU_ROWS);
     klu.inset = klu_inif("Inset", "-1"); if (!(klu.inset > 0 && klu.inset < 0.25f)) klu.inset = -1;
-    klu.crew_x = klu_inif("CrewX", "-1"); klu.crew_y = klu_inif("CrewY", "-1"); klu.crew_w = klu_inif("CrewW", "211");
-    klu.money_x = klu_inif("MoneyX", "-1"); klu.money_y = klu_inif("MoneyY", "-1"); klu.money_w = klu_inif("MoneyW", "211"); klu.round_y = klu_inif("RoundY", "-1");
-    klu.row = klu_inif("Row", "24"); if (!(klu.row >= 8 && klu.row <= 64)) klu.row = 24;
+    klu.crew_x = klu_inif("CrewX", klu.draft ? "33" : "-1"); klu.crew_y = klu_inif("CrewY", klu.draft ? "38" : "-1"); klu.crew_w = klu_inif("CrewW", "211");
+    klu.money_x = klu_inif("MoneyX", klu.draft ? "1247" : "-1"); klu.money_y = klu_inif("MoneyY", "-1"); klu.money_w = klu_inif("MoneyW", "211"); klu.round_y = klu_inif("RoundY", "-1");
+    klu.row = klu_inif("Row", klu.draft ? "30" : "24"); if (!(klu.row >= 8 && klu.row <= 64)) klu.row = klu.draft ? 30.0f : 24.0f;
+    klu.yoff = klu.draft ? 34.0f : 30.0f; klu.blockup = klu.draft ? 5.0f : 4.0f; klu.blockh = klu.draft ? 28.0f : klu.row; klu.padx = klu.draft ? 8.0f : 6.0f;      /* M2 (re/hud_layout.md: names at +8 / y 72 + 30 i, cash at right - 8, block 219 x 28) */
     if (!(klu.crew_x <= 1280)) klu.crew_x = -1; if (!(klu.crew_y <= 720)) klu.crew_y = -1; if (!(klu.money_x <= 1280)) klu.money_x = -1;
     if (!(klu.money_y <= 720)) klu.money_y = -1; if (!(klu.round_y <= 720)) klu.round_y = -1;
     if (!(klu.crew_w >= 80 && klu.crew_w <= 640)) klu.crew_w = 211; if (!(klu.money_w >= 80 && klu.money_w <= 640)) klu.money_w = 211;
-    klog("hud: on (Version 2: the draft's crew list, round line and money box); Stock=%d Log=%d Crew=%d Money=%d Round=%d HideStock=%d Draw=%d (1 own Draw with the 16:34 xform, 2 through the stock clock's Render) Shadow=%d Tags=%d CashShort=%d TotalFont=%d Plates=%d PicAnchor=%d PicTest=%d Grid=%d Probe=%d Layer=%d Rows=%d Inset=%.3f; Arcade only; VERSION 2 HAS NOT RUN IN THE GAME",
-         klu.stock, klu.log, klu.crew, klu.money, klu.round, klu.hide, klu.draw, klu.shadow, klu.tags, klu.cashshort, klu.totalfont, klu.plates, klu.anchor, klu.pictest, klu.grid, klu.probe, klu.layer, klu.rows, klu.inset);
+    klog("hud: on (Version 3: the draft's crew list, round line, money box + the parts: values, weapon dial, pop-ups; Draft=%d Dials=%d Weapon=%d Lives=%d RoundOf=%d); Stock=%d Log=%d Crew=%d Money=%d Round=%d HideStock=%d Draw=%d (1 own Draw with the 16:34 xform, 2 through the stock clock's Render) Shadow=%d Tags=%d CashShort=%d TotalFont=%d Plates=%d PicAnchor=%d PicTest=%d Grid=%d Probe=%d Layer=%d Rows=%d Inset=%.3f; Arcade only; VERSION 2 HAS NOT RUN IN THE GAME",
+         klu.draft, klu.dials, klu.weapon, klu.lives, klu.roundof, klu.stock, klu.log, klu.crew, klu.money, klu.round, klu.hide, klu.draw, klu.shadow, klu.tags, klu.cashshort, klu.totalfont, klu.plates, klu.anchor, klu.pictest, klu.grid, klu.probe, klu.layer, klu.rows, klu.inset);
 }
 
 #endif /* KLHUD_C */
