@@ -14,6 +14,10 @@ what only a live run can settle: re/bank_campaign.md. Nothing here installs anyt
                                                           vault loot's briefcases, the level's own texts
     python kl_fa_bank.py check <built folder>             every check of this layer on a built folder
     python kl_fa_bank.py inventory <built folder>         the layer with world places read back from the level
+    python kl_fa_bank.py bots <finished folder> <out>     the seven AI heisters into a copy (kl_fa_bots.build with
+                                                          BOT_OPT and the vault gate: bots_gate), then bots-check
+    python kl_fa_bank.py bots-check <folder>              the gate and the vault's loot window on a folder with the
+                                                          squad, before or after kl_fa_bots_dyn's step
     options of 'test' (one flag each for the live runs):
       --doors-animate   the eleven door leaves of the route stay where the level has them and get 'Activate' at
                         the round start (default: they are OPEN AT BUILD TIME - sunk, their collision cut)
@@ -1359,8 +1363,9 @@ def check(folder, log=print, problems=None):
         problems = res.get('problems')
     if res.get('dangling'):                             # scene paths the build found naming nothing
         fail('the build left %d dangling scene paths: %s' % (len(res['dangling']), res['dangling'][:3]))
-    squads = [k for k, _i, _v in kl_fa.controllers(sc, 'ZSquadScript')]
-    known = KNOWN + (() if squads else (KNOWN_NO_AI,))  # what the BUILD is is read off the level: no squad = a NO_AI build
+    every = [k for k, _i, _v in kl_fa.controllers(sc, 'ZSquadScript')]
+    squads = [k for k in every if not sc.path[k][len(R):].startswith(BOT_SQUAD)]      # the enemies': the finishing chain's seven AI heisters are squads too
+    known = KNOWN + (() if squads else (KNOWN_NO_AI,))  # what the BUILD is is read off the level: no squad of enemies = a NO_AI build
     for p in problems or ():
         why = next((w for t, w in known if t in p), None)
         log('  verify: %s %s%s' % ('known' if why else 'OPEN ', p[:200], '\n          = %s' % why if why else ''))
@@ -1581,7 +1586,7 @@ def check(folder, log=print, problems=None):
     actors = [k for k in range(1, len(sc.nodes)) if sc.cls(k) == 'ZFFActor']
     top_of = lambda k: sc.names[sc.top[k]]
     camp_sq, hall_sq = [k for k in squads if sc.names[k] in STAGE], [k for k in squads if sc.names[k] in HALL]
-    more = sorted({top_of(k) for k in squads} - set(STAGE) - set(HALL))
+    more = sorted({top_of(k) for k in every} - set(STAGE) - set(HALL))
     men = [k for k in actors if top_of(k) in STAGE or top_of(k) in HALL]
     if squads:
         if len(camp_sq) != len(STAGE) or len(hall_sq) != len(HALL):
@@ -1650,9 +1655,9 @@ def check(folder, log=print, problems=None):
     if len(bodies) != 8 or len(back) != len(POLICE) or near < POLICE_CLEAR:
         fail('police who come back: %d bodies (8 wanted), %d points (%d), a squad\'s man %d from one (%d wanted)' % (len(bodies), len(back), len(POLICE), near, POLICE_CLEAR))
     # people: stock Fragile Alliance levels have 35..57 ZFFActor and 20..36 squads, Retomoto on the tab 99 / 55 (re/campaign_fa_tooling.md 5.4)
-    log('  people: %d ZFFActor in %d squads + 16 player bodies (ran live: %d actors, %d squads)' % (len(actors), len(squads), ACTORS_LIVE[0], ACTORS_LIVE[1]))
-    if len(actors) > ACTORS_LIVE[0] or len(squads) > ACTORS_LIVE[1]:
-        fail('%d actors in %d squads: more than has run live (%d / %d)' % (len(actors), len(squads), *ACTORS_LIVE))
+    log('  people: %d ZFFActor in %d squads + 16 player bodies (ran live: %d actors, %d squads)' % (len(actors), len(every), ACTORS_LIVE[0], ACTORS_LIVE[1]))
+    if len(actors) > ACTORS_LIVE[0] or len(every) > ACTORS_LIVE[1]:
+        fail('%d actors in %d squads: more than has run live (%d / %d)' % (len(actors), len(every), *ACTORS_LIVE))
     # ---- the escape: the one key-framed van on its road. kl_map_escape.van_check reads the WRITTEN files: who the
     # exit trigger calls, the keys against the road's height, the lane (five rays, every 20), the boxes at the stop,
     # the camera's eye and sight, the collision file; held against the plan in van.json when test() wrote one
@@ -1792,9 +1797,153 @@ def check(folder, log=print, problems=None):
     E = L.Edit(folder)                                  # read only: nothing of it is saved
     dead, _saved = C.dead_indices(E.p, E.sc, E.raw, E.oct, E.extra, lambda *a: None)
     log('  chunk table: %d of its indices are dead (free for the wardrobe, which took %d on the study\'s build, and the gun looks)' % (dead, WARDROBE_CHUNKS))
-    if size['entries'] > kl_impact.CHUNK_SAFE or dead < WARDROBE_CHUNKS:
+    worn = os.path.isfile(os.path.join(folder, 'KLWardrobe.ini'))      # the finishing chain's folder: the wardrobe is in, the room it wanted is taken
+    if worn:
+        log('  chunk table: KLWardrobe.ini is there - the wardrobe is in the level, no room is asked for it')
+    if size['entries'] > kl_impact.CHUNK_SAFE or (dead < WARDROBE_CHUNKS and not worn):
         fail('chunk table %d entries (line %d) with %d dead indices (the wardrobe wants %d)' % (size['entries'], kl_impact.CHUNK_SAFE, dead, WARDROBE_CHUNKS))
     log('kl_fa_bank.check %s: %s' % (folder, 'PASS' if not bad else '%d FAILED' % len(bad)))
+    return bad
+
+
+# ------------------------------------------------------------------ the seven AI heisters (the finishing chain)
+# tools/kl_fa_bots.py plans the squad of this level without a table entry of its own: START row -> the dock's
+# ENTERS box -> vault lobby -> the two flights -> the vault's loot -> back up -> airlock stairs -> hall -> the front
+# entrance's EXITS box -> the exit box -> beside the van's stop (re/bank_campaign.md F.3). What it cannot know is
+# THE VAULT DOOR: the mesh runs through it, the door's body stands until DOOR_GONE after the beat's end and the
+# loot is hidden until then (a take message to a hidden object is dropped, kl2 0x6cdb65: kl_fa_bots.cannot_take).
+# So bots() changes the PLAN between kl_fa_bots.plan and its apply (kl_fa_bots.plan is wrapped for the length of
+# one build, as Doors wraps kl_escape): the last way station before the loot becomes seven places IN THE ANTE-ROOM,
+# inside the beat's box, and a TriggerDelay2 stands behind it in every squad's chain - kl_fa_bots' own two-stop form
+# (make(): a wait without loot is a plain timer), which kl_fa_bots_dyn reads as 'a rally' and holds at cover during.
+# THE GATE IS A CLOCK, NOT THE EVENT, on purpose: a bot stands in the box, so the beat began when it arrived at the
+# latest (ASSUMPTION: an AI heister trips an ECPS_FA_MERCONLY box - re/retomoto_bots_rooms.md 8, 'measured in
+# effect'), and beat + DOOR_GONE later the door's body is off whatever the swing did. Naming the squads' next step
+# from the beat's timer instead would start it while a hold timer of the way in may still be armed; that timer then
+# starts a step of the way in for a bot that is in the vault and the chain cannot come back (a step starts once:
+# re/retomoto_bots_rooms.md 9.1, 'the join'). The price: a bot that arrives when the vault is open still waits.
+# If the assumption is wrong and no human is in the ante-room, the bots walk on to a shut door after the wait and
+# their loot wait runs out: they leave without the vault's money (nothing worse).
+BOT_SQUAD = 'Gameplay!merc_bot_squad!'  # kl_fa_bots.SQUAD (that module is imported only where the squad is made or read)
+BOT_OPT = {'stops': 1, 'cases': 'glass', 'lane': True, 'window': True, 'loot_seconds': 30}    # kl_fa_bots.RECIPE's M03_FA_A row without its drop; one stop: the tellers' stacks are the loot tactic's
+GATE_AT = (400.0, -960.0, -11900.0)     # GUESS: the ante-room's middle, 6 m before the vault door (z -12509); the seven places are the mesh's round it
+GATE_REACH = 400.0                      # ... within this of it
+GATE_MORE = 2.0                         # s on top of the beat's and the door's delay, both read from the built level. GUESS
+GATE_NAME = '020_Timer_vault_opens'     # no 'done_looting' in it: kl_fa_bots.check and kl_fa_bots_dyn take it for a wait that is no loot wait
+GATE_CLEAR = 100.0                      # a place before the gate keeps kl_fa_bots.LOOT_WINDOW + this from the vault's hidden loot. GUESS
+
+
+def bots_gate(B, P, log=print):
+    """kl_fa_bots' plan P of built level B (a kl_fa_bots.Built) with the vault gate -> P (changed in place)."""
+    import kl_fa_bots as F
+    sc = B.sc
+    loot = [i for i, s in enumerate(P['stations']) if s['kind'] == 'loot']
+    if len(loot) != 1 or len(P['waits']) != 1 or P['waits'][0]['cases'] or not P['waits'][0]['loot']:
+        raise ValueError('kl_fa_bank.bots_gate: the plan has %d loot stations and %d waits (wanted: one stop, the vault, no case)' % (len(loot), len(P['waits'])))
+    i_loot, i_gate = loot[0], loot[0] - 1
+    at_loot = [B.at(k) for s in P['waits'][0]['loot'] for k in sc.resolve(s)]
+    if i_gate < 1 or P['stations'][i_gate]['kind'] != 'way' or not all(in_vault(p) for p in at_loot):
+        raise ValueError('kl_fa_bank.bots_gate: the richest loot is not the vault\'s, or no way station stands before it')
+    delay = {sc.path[k]: v[0] for k, _i, v in kl_fa.controllers(sc, 'TriggerDelay2')}
+    seconds = delay[R + ROLE['beat timer']] + delay[R + ROLE['door timer']] + GATE_MORE
+    box = sc.resolve(R + ROLE['beat box'])[0]
+    nav = F.Nav(B.scene.nav)
+    home = nav.part[nav.at(*P['bots'][F.BOTS[0]]['start'])[0]]
+    far = F.LOOT_WINDOW[0] + GATE_CLEAR
+    cands = [c for c in nav.around(GATE_AT, GATE_REACH, home, dy=60.0)
+             if B.in_box(box, c[:3]) and all(math.dist(c[:3], q) >= far for q in at_loot)]
+    got = nav.spots(cands, 7, F.SEP, ref=GATE_AT)
+    if len(got) < 7:
+        raise ValueError('kl_fa_bank.bots_gate: only %d places for seven round %s inside the beat\'s box and %d from the vault\'s loot' % (len(got), GATE_AT, far))
+    st = P['stations'][i_gate]
+    st.update(what='the ante-room: the hold until the vault is open (%g s)' % seconds, distinct_places=7, places=[[round(v, 1) for v in g[:3]] for g in got])
+    for b, N in enumerate(F.BOTS):
+        P['bots'][N]['places'][i_gate] = [round(v, 1) for v in got[b][:3]]
+    # the chain as kl_fa_bots' two-stop form: stop 0 = the ante-room with a plain timer, stop 1 = the vault
+    steps = []
+    for s in [s for s in P['steps'] if s['leg'] == 'in']:
+        idx = [i for i in s['stations'] if i != i_loot]
+        if idx:
+            steps.append({'name': '%03d_DefendBehaviour_to_loot' % (10 + len(steps)), 'leg': 'in', 'stop': 0, 'stations': idx})
+    if steps[-1]['stations'][-1] != i_gate:
+        raise ValueError('kl_fa_bank.bots_gate: the way in does not end at the ante-room')
+    steps.append({'name': '030_DefendBehaviour_to_loot', 'leg': 'in', 'stop': 1, 'stations': [i_loot]})
+    for m, s in enumerate(s for s in P['steps'] if s['leg'] == 'out'):
+        steps.append(dict(s, name='%03d_DefendBehaviour_out' % (50 + m)))
+    P['steps'] = steps
+    w = P['waits'][0]
+    w.update(name='040_Timer_done_looting', stop=1, timer='038_Timer_at_cases')
+    P['waits'] = [collections.OrderedDict(name=GATE_NAME, stop=0, seconds=seconds, loot=[], worth=0, timer='018_Timer_at_cases', relays=[], cases={}), w]
+    P['gate'] = {'station': i_gate, 'seconds': seconds, 'box': ROLE['beat box'], 'places': st['places'],
+                 'nearest_hidden_loot': round(min(math.dist(g[:3], q) for g in got for q in at_loot))}
+    note = ('THE VAULT GATE: station %d is seven places in the ante-room round (%d, %d, %d), inside %s and %d or more from the vault\'s loot; every squad '
+            'waits %g s there (%s, a plain timer: the beat\'s %g s + the door\'s %g s + %g) before its step into the vault'
+            % (i_gate + 1, *[sum(g[i] for g in got) / 7 for i in range(3)], ROLE['beat box'], P['gate']['nearest_hidden_loot'], seconds, GATE_NAME,
+               delay[R + ROLE['beat timer']], delay[R + ROLE['door timer']], GATE_MORE))
+    P['notes'].append(note)
+    log('  NOTE ' + note)
+    log('steps: %s' % [(s['name'], s['stations']) for s in steps])
+    return P
+
+
+def bots(src, dst, log=print):
+    """The seven AI heisters into a COPY of a finished build of this level: kl_fa_bots.build with BOT_OPT and the
+    vault gate (bots_gate) -> (kl_fa_bots' findings, its report). The dynamic step, cover, guns and talk are the
+    other tools' own commands on the result (re/bank_campaign.md F)."""
+    import kl_fa_bots as F
+    plan0 = F.plan
+    F.plan = lambda B, opt=None, log=print: bots_gate(B, plan0(B, opt, log), log)
+    try:
+        return F.build(src, dst, dict(BOT_OPT), log)
+    finally:
+        F.plan = plan0
+
+
+def bots_check(folder, log=print):
+    """What kl_fa_bots.check / kl_fa_bots_dyn.check do not know of this level, on a folder with the squad (with or
+    without the dynamic step) -> list of faults: every squad's chain has the gate's timer, at least the beat's and
+    the door's delay long, started by a step whose last place is inside the beat's box; and no place of any squad
+    before the gate lies in the loot window of a vault object (hidden until the beat's end: a bot with a heist
+    stage goes for it, kl2 0x8b94d0, and cannot take it)."""
+    import kl_fa_bots as F
+    B = F.Built(folder)
+    sc, bad = B.sc, []
+    def fail(s):
+        bad.append(s); log('  FAIL ' + s)
+    delay = {sc.path[k]: v[0] for k, _i, v in kl_fa.controllers(sc, 'TriggerDelay2')}
+    need = delay[R + ROLE['beat timer']] + delay[R + ROLE['door timer']]
+    box = sc.resolve(R + ROLE['beat box'])[0]
+    money = [o for o in F.money_objects(B) if in_vault(o['at'])]
+    hidden = [o for o in money if B.ents[o['node'] - 1].flags & HIDDEN]
+    tops = [t for t in sc.tops() if sc.names[t].startswith(F.SQUAD + 'Squad#')]
+    defend = {k: v for k, _i, v in kl_fa.controllers(sc, 'DefendBehaviourRout')}
+    near, n_place, n_gate = None, 0, 0
+    for t in tops:
+        mine = range(t, sc.end[t])
+        gate = [k for k in mine if sc.names[k] == GATE_NAME]
+        if len(gate) != 1 or delay[sc.path[gate[0]]] < need:
+            fail('%s: %d timer(s) %s%s (the beat\'s and the door\'s delay: %g s)' % (sc.names[t], len(gate), GATE_NAME,
+                 ' of %g s' % delay[sc.path[gate[0]]] if gate else '', need))
+            continue
+        # who starts the timer: Defend steps of this squad (after the dynamic step also a RandomTrigger's ways' last steps)
+        ends = [B.at(sc.resolve(v[1][-1])[0]) for k, v in defend.items() if k in mine and v[1] and any(j == gate[0] for s in v[7] for j in sc.resolve(s))]
+        if not ends or not all(B.in_box(box, p) for p in ends):
+            fail('%s: %d step(s) start %s, their last places %s: not all inside %s' % (sc.names[t], len(ends), GATE_NAME, [tuple(round(x) for x in p) for p in ends], ROLE['beat box']))
+        n_gate += 1
+        # the places BEFORE the gate: both tools number a chain's steps in blocks, the gate's block is GATE_NAME's
+        before = lambda k: sc.names[sc.parent[k]][:3].isdigit() and int(sc.names[sc.parent[k]][:3]) < int(GATE_NAME[:3])
+        for k in mine:
+            if sc.cls(k) == 'ZBoxPrimitive' and sc.names[k].startswith('Pos#') and before(k):
+                n_place += 1
+                for o in money:
+                    d = math.dist(B.at(k), o['at'])
+                    near = d if near is None else min(near, d)
+                    if F.in_window(B.at(k), o['at']):
+                        fail('%s: place %s at (%d, %d, %d) before the gate is %d from the vault\'s %s: inside the loot window' % (
+                            sc.names[t], sc.path[k].split('\\', 2)[-1], *B.at(k), d, sc.names[o['node']]))
+    log('kl_fa_bank.bots_check %s: %d squads, %d with the gate (%s >= %g s); %d places before the gate, the nearest %s from one of the vault\'s %d money '
+        'objects (%d hidden at the load; the window is %d): %s' % (folder, len(tops), n_gate, GATE_NAME, need, n_place, '%d' % near if near is not None else '-',
+                                                                 len(money), len(hidden), F.LOOT_WINDOW[0], 'PASS' if not bad else '%d FAILED' % len(bad)))
     return bad
 
 
@@ -1872,6 +2021,11 @@ def main():
         sys.exit(1 if check(a[1]) else 0)
     elif len(a) == 2 and a[0] == 'inventory':
         inventory(a[1])
+    elif len(a) == 3 and a[0] == 'bots':
+        out, _rep = bots(a[1], a[2])
+        sys.exit(1 if any(x[0] == 'FAIL' for x in out) or bots_check(a[2]) else 0)
+    elif len(a) == 2 and a[0] == 'bots-check':
+        sys.exit(1 if bots_check(a[1]) else 0)
     else:
         print(__doc__)
 

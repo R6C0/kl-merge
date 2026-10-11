@@ -1151,3 +1151,207 @@ kl_hvk.join, which no name of the module interface reaches. From Python: `kl_fa_
   CHECKED' if their names change - then run the fake-test command of L3.2).
 
 (end of Stage L3)
+
+## Stage F - the finishing chain: wardrobe, the seven AI heisters, gun looks, talk, the load weight (tools/kl_fa_bank.py: `bots`)
+
+STATE: DONE (2026-10-11 17:00). Four folders are DELIVERED in `<work>/build/c_bank/` (0.93 GB): `bank_vault`,
+`bank_vault_wavslim`, `bank_vault_noai`, `bank_vault_bare`. Every checker passes on the three finished folders
+EXCEPT the two that repeat the build's ONE known verify finding (`kl_maps.py preflight` 'CRASH 1' and
+`kl_maps.py audit` 'FAIL (2 ...)': the stream clips of L2, the lead's default 3; on the no-AI folder also its 'no
+police', which is what that build is). NOTHING RAN IN THE GAME (the owner was playing). No file of another session
+was edited and no table of another tool got an entry: the bank's bot data is passed in from `tools/kl_fa_bank.py`.
+Tools as run: the working tree at d560c53 (tools/kl_chars.py carries another session's uncommitted change; it was
+RUN as it stands). Scratch `C:/kl_scratch/bank/f/`: `s/` (chain.sh, checks.sh, blocks.py - copies lie in c_bank),
+`out/` (every output named below); every intermediate archive is deleted.
+
+### F.1 What was changed (one file, `tools/kl_fa_bank.py`)
+
+| part | what |
+|---|---|
+| NEW `bots(src, dst)`, command `bots <finished folder> <out>` | the seven AI heisters into a copy: `kl_fa_bots.build` with `BOT_OPT` (the M03_FA_A row of kl_fa_bots.RECIPE without its drop, one loot stop, 30 s) and THE VAULT GATE. `kl_fa_bots.plan` is wrapped for the length of the one build (as `Doors` wraps kl_escape): no line of kl_fa_bots.py is changed and no 'M03_A' entry was needed in it |
+| NEW `bots_gate(B, P)`; `GATE_AT GATE_REACH GATE_MORE GATE_NAME GATE_CLEAR BOT_SQUAD` | the plan's last way station before the loot becomes seven places in the ANTE-ROOM (the mesh's round (400, -960, -11900), inside the beat's box, 800 + 100 or more from every vault object), and every squad's chain gets a plain `TriggerDelay2` `020_Timer_vault_opens` behind it = kl_fa_bots' own two-stop form (stop 0: a wait without loot; stop 1: the vault). Seconds = the beat timer's + the door timer's delay READ FROM THE BUILT LEVEL + 2 (56 s with the defaults) |
+| NEW `bots_check(folder)`, command `bots-check <folder>` | on a folder with the squad, before or after the dynamic step: seven squads each with ONE gate timer at least beat + door long, started by steps whose last place is inside the beat's box; no place of a step before the gate inside the loot window (800 / 400) of a vault object |
+| `check()` | (1) a NO_AI build is known by having no squad OF ENEMIES (the bots' seven are squads too: the first run on the finished no-AI folder said '0 of the 22 campaign squads'); squads and actors are counted with the bots against ACTORS_LIVE; (2) 'room for the wardrobe' is not asked of a folder that has KLWardrobe.ini. On the bare maps check() says what it said (PASS, same lines) |
+
+WHY A CLOCK AND NOT THE EVENT (the comment over `BOT_OPT` says it in full). The mesh runs through the vault door,
+whose body stands until 6 s after the beat's end, and the loot is hidden until the beat's end (a take message to a
+hidden object is dropped, kl2 0x6cdb65). A bot that holds in the ante-room stands inside the beat's box, so the beat
+began when it arrived at the latest; beat + door later the body is off whatever the swing did. Naming the squads'
+vault step from the beat's timer instead would start it while a hold timer of the way in may still be armed - that
+timer then starts a way-in step for a bot that is in the vault, and a step starts only once
+(re/retomoto_bots_rooms.md 9.1, 'the join'): the chain could not come back. The price: a bot that arrives when the
+vault is already open still waits its 56 s.
+
+### F.2 The chain as built, and the two places where it is NOT the order asked for
+
+`sh C:/kl_scratch/bank/f/s/chain.sh <bare folder> <work dir> <log dir>` (3.5 min; `out/main/`, `out/noai/` = one
+file a step):
+
+| # | step | command | result on the map with enemies (`out/main/`) |
+|---|---|---|---|
+| 1 | lighten | `kl_graft.py lighten <bare> <1> --load trim,slim,fxc` | nothing left to trim or slim (finish() had done it: '0 dead vertex / index chunks', '0 shrunk'); shader cache 242 -> 127 entries, 16.94 -> 8.85 MB; archive 178.2 -> 176.3 MB |
+| 2 | wardrobe | `kl_chars.py wardrobe <1> <2> --plates=wolf,dallas,chains,hoxton` | 'problems: 0'; NO compaction needed: 'chunk table: 65640 entries (20989 of the base's 23690 dead indices taken, 2701 still free; limit 69632 ...)'; .prm 53.2 -> 71.5 MB; KLWardrobe.ini Masks=12 OutfitStep=14. It writes the FULL shader cache back (17.76 MB: its merge, re/campaign_fa_tooling.md 12.8) |
+| 3 | bots, base | `kl_fa_bank.py bots <2> <3>` | 'RESULT: PASS (0 FAIL, 2 NOTE); 7 bots, 205 squad nodes'; bots_check PASS (F.3) |
+| 4 | gun looks | `kl_map_guns.py build <3> <4> --start=1 --set=1` (the tab's maps' options: `<work>/build/z_final/M03/map_guns.json`) | six guns, 65640 -> 65852 entries, .prm 71.5 -> 72.2 MB, .TEX 237.7 -> 245.8 MB, KLGuns.ini Version 2 `Entries=65852`; exit 1 = its audit's two lines for the known verify finding and nothing else (chain.sh tests that) |
+| 5 | talk | `kl_fa_talk.py build <4> <5> --map M03 --str <work>/build/v_bain/over_talk/PC_Def.str` | '10 lines in 6 scenes (M03_A)', 7 ADPCM clips into the .WAV (+0.25 MB), 'findings: FAIL 0, NOTE 1' (the note: 'the level has a blast timer (48.00 s) and KLTalk.ini no countdown' - the beat's timer has the name Retomoto's blast timer has); KLTalk.ini. No new stream file: the one named is the twin of the INSTALLED `<DD>/PC_Def.str` (1,694,610,488 bytes, read only) and its map file equals v_talk's |
+| 6 | shader cache again | `kl_graft.py lighten <5> <6> --load fxc` | 242 -> 127 entries, 16.94 -> 8.85 MB ('126 effects asked for by 1277 materials, 0 of them in no entry') |
+| 7 | [the sound bank] | `kl_graft.py lighten <6> <7> --load wav` (only for `bank_vault_wavslim`) | 'kl_wavslim: 972 in-memory clips, 338 reached; 151 dropped (10.0 MB, 2 silence block(s)); .WAV 23.3 -> 13.3 MB' |
+| 8 | bots, dynamic - LAST | `kl_fa_bots_dyn.py build <6 or 7> <fin>` | 'RESULT (kl_fa_bots_dyn): PASS (0 FAIL, 0 NOTE)'; 161 entities out, 531 in (575 squad nodes) |
+| - | fake-fix | not needed: fake-test PASS, 'FakeTargets: 1, outside the vision space: 0' | |
+| - | kl_fa_cover | LEFT OUT, measured: `kl_fa_cover.py plan <3>` -> 9 new boxes, 'holds found / asked ...: 36 / 56 before -> 36 / 53 with the boxes' - not one hold more (`out/3_cover_plan.txt`) | |
+
+- **DEVIATION 1, the dynamic step is the LAST step, not part of step 3.** kl_fa_bots_dyn.check holds the four large
+  blocks against what its build recorded (dyn.json). MEASURED on the first run in the order asked (`out/chk_fin/` of
+  16:25, overwritten): 'FAIL a large block changed its size: {.prm 71548176 ... .fxc 17760648, .WAV 23074256} ->
+  {.prm 72157904 ... .fxc 9279136, .WAV 23325136}' - the gun looks, the talk and the cache cut each change one.
+  With the step last every checker of the squad passes on the delivered folder. (The tab's maps were made the same
+  way round: gun looks, then the squad, the dynamic step on the finished folder.)
+- **DEVIATION 2, the shader cache is cut TWICE** (steps 1 and 6): the wardrobe merges the whole cache back, so the
+  cut of step 1 is gone after step 2 - the order the study measured ('cut, wardrobe, gun looks, cut again',
+  re/campaign_fa_tooling.md 12.8). The delivered folders have the CUT cache (9.3 MB).
+- The no-AI chain is the same script on a bare map built here with `python tools/kl_fa_bank.py test
+  C:/kl_scratch/bank/f/noai_bare --keep --no-ai --plan <L3's van.json>` ('RESULT: PASS', 20,246 entities, 'verify:
+  problems: 2' both known; `out/noai_bare.txt`).
+
+### F.3 The seven AI heisters (MEASURED: `bots.txt`, `dyn.txt`, `dyn_map.png` in each delivered folder)
+
+- kl_fa_bots plans the level WITHOUT help: 'navigation mesh: 902 polygons in 30 parts; the START row is on a part of
+  566', loot '11 objects ... in 3 areas; the richest: 7 objects, 2300000 round (390, -960, -12950)', 'route order:
+  loot before the way out = 26059 of path'. The stations (16): the dock's ENTERS box (stage 1) -> vault lobby (0,
+  240, -6368), (394, 240, -7948) -> the flights (399, -165, -9649) -> THE ANTE-ROOM round (417, -960, -11871)
+  [bots_gate; the plan had the foot of the stairs (403, -806, -11293)] -> wait 56 s -> the vault (390, -960, -12950),
+  loot wait -> back up -> airlock (1546, 240, -6970) -> stairs (1230, 487, -5453) -> hall (300, 799, -6265), (736,
+  799, -8014) -> the front entrance's EXITS box (stage 2) -> the exit box (stage 3, calls the van) -> an
+  AllyEscapeBox at (316, 700, -11070), 424 beside the van's line and 357 from its boarding box at the stop.
+  25,366 - 28,247 of path a bot = 254 - 282 m.
+- 'level exit boxes (...otrExitLevel): a bot is first inside one after 23584..26409 of path, after its loot wait':
+  no bot calls the van on the way in. 'loot window (800 / 400): no place of any squad has an object in reach that a
+  bot cannot take there (11 plain)' - kl_fa_bots does not know that the vault's seven are HIDDEN until the beat's
+  end; bots_check does: '76 places before the gate, the nearest 906 from one of the vault's 7 money objects (7
+  hidden at the load; the window is 800): PASS'.
+- The dynamic step (default options = the form on the owner's tab: random routes, no fork gap): 'cover boxes ... 74
+  high, 44 low' (the campaign's own 118); 'holds: 56 route places asked for one; found 36; without: {no free cover
+  box in reach: 20}'; forks 2 / 4 / 3 / 4 / 2 / 5 / 6 a bot, 'every branch walked and checked, in 3 branch sets';
+  starts +0 / +3 / +3 / +5 / +5 / +8 / +0 s; 64 - 84 s of timers a bot (the gate's 56 s is in that sum, so the
+  holds of the way are 4 - 5 s each); loot seconds 15 / 45 / 30 / 30 / 45 / 30 / 15. During the gate's wait each
+  bot takes a cover near the ante-room ('+ takes cover at (459, -931, -11554) 126 from CoverBoxH_10').
+  'the hold places alone: 64, median 160, 100 % within 250'.
+- The tellers' four stacks are no stop of the route (150,000 a side, under kl_fa_bots' share): the bots pass within
+  their window in the hall and the loot tactic may take them.
+
+### F.4 The checks on the delivered folders
+
+`sh C:/kl_scratch/bank/f/s/checks.sh <folder> <out dir>` (2 min a folder); the last line of each is `checks.txt` in
+the delivered folder, the whole outputs `checks/`. V = `bank_vault`, W = `bank_vault_wavslim`, N = `bank_vault_noai`.
+
+| checker | command | V | W | N |
+|---|---|---|---|---|
+| preflight | `kl_maps.py preflight <f>` | 'CRASH 1, RISK 0, NOTE 77' - the one CRASH is 'verify kl_graft.verify reported 1 problems (result.json)' | the same | 'CRASH 1, RISK 0, NOTE 77' ('... reported 2 problems') |
+| audit | `kl_maps.py audit <f>` | 'RESULT: FAIL (2 findings that must be 0, 0 known ...)' = 'verify: sound: 10 stream clips are not in the merged stream file' + preflight's echo of it; every checker inside it at 0: kl_fa.check nothing, kl_impact 0, kl_arms 0 findings, kl_chars.undrawn 0 of 84 people, kl_chars.check 0, missing shaders 0 of 1277, kl_snd.verify 0 (4839 sounds, 4686 waves) | the same (kl_snd.verify 0 on the slimmed bank) | 'FAIL (3 ...)': 'sound: 1 stream clips ...', 'FA: BROKEN squads no ZSquadScript: no police' (the BUILD's verify: a round without enemies), the echo |
+| Fragile Alliance | `kl_fa.py check <zip>` | exit 0, no finding at all (L3 had 1 DEGRADED 'no bot squads'); ZSquadScript 32 | the same | exit 0, no finding; ZSquadScript 7 |
+| impacts | `kl_impact.py <zip>` | 'problems: 0 in 1 levels' | the same | the same |
+| weapons | `kl_arms.py check <zip>` | '0 findings' | the same | the same |
+| people, wardrobe | `kl_chars.py check <f>` | '21219 nodes, 84 people, .prm 65851 chunks ... problems: 0' | the same | '20822 nodes, 23 people, .prm 65082 chunks ... problems: 0' |
+| gun looks | `kl_map_guns.py check <f>` | '6 guns with looks, shows Rifle_zastavam85=MP5, Rifle_FN_SCAR=SG 552, Rifle_AK47=M4A1, SMG_Type05=P90, SMG_MAC_10=Steyr TMP, HG_M9Beretta=USP; problems: 0' | the same | the same |
+| the van | `kl_map_escape.py van-check <f>`; `... check <f>` | '0 fault(s)'; '0 fault(s)' | the same | the same |
+| the squad | `kl_fa_bots_dyn.py check <f>` (kl_fa_bots.check inside) | 'RESULT: PASS (0 FAIL, 2 NOTE); 7 bots, 575 squad nodes'; 'RESULT (kl_fa_bots_dyn): PASS (0 FAIL, 0 NOTE)'. The notes: START points 0 above the bots' feet (stock 92..137); AllyEscapeBox is not F07's kind (stock F02 F06 F08 run it; every tab map has it) | the same | the same |
+| the gate | `kl_fa_bank.py bots-check <f>` | '7 squads, 7 with the gate (020_Timer_vault_opens >= 54 s); 76 places before the gate, the nearest 906 ...: PASS' | the same | the same |
+| talk | `kl_fa_talk.py check <f> --str <work>/build/v_bain/over_talk/PC_Def.str` | 'findings: FAIL 0, NOTE 1' | the same, on the slimmed pair | the same |
+| FakeTarget | `kl_fa_bots_dyn.py fake-test <work>/build/z_route/M01 <work>/build/rt_full6/retomoto_full <f>` | 'RESULT (fake-test): PASS (grid control 1, parked control 1, lattice 3)' | the same | the same |
+| cover list | `C:/kl_scratch/bank/t1/s/covers.py <f>` | 1 FFCoverList, on ROOT\Special!CoverList | the same | the same |
+| route | `kl_route.py walk <f> --from START=250,200,-4350 --via vault=399,-960,-12818 --via hall=377,801,-8423 --via "front entrance=300,800,-9350" --to "boarding place=636,702,-11231" --open SI0102_M03_BankVault_Door_PRE_01` | 'RESULT: FREE; the mesh way: 1064 samples, all free' | the same | the same |
+| route, as built, without the vault | `kl_route.py walk <f> --from START... --via "ante-room=400,-959,-11800" --via hall... --to "boarding place..."` | 'RESULT: FREE; the mesh way: 1008 samples, all free' | the same | the same |
+| doors | `kl_route.py doors <f> --from START... --via vault... --to "street=949,702,-11105"` | 'RESULT: 1 closures in 1 sets, 1 necessary' (the vault door) | the same | the same |
+| the layer | `kl_fa_bank.py check <f>` | 'PASS' ('68 ZFFActor in 32 squads + 16 player bodies (ran live: 99 actors, 55 squads)') | 'PASS' | 'PASS' ('enemies: none', '7 ZFFActor in 7 squads') |
+
+The bare maps: `kl_fa_bank.py check` PASS on `bank_vault_bare` (= L3's kept build, sha1 5f11b846..., byte for byte)
+and on the no-AI bare (deleted after its chain).
+
+**Chunk table and the five large blocks** (`python C:/kl_scratch/bank/f/s/blocks.py <label>=<zip> ...` ->
+`c_bank/blocks.txt`; MB = 10^6; five blocks = 32.0 + (.fxc, .prm, .ANM each + 0x60000) + the .WAV beside):
+
+| level | .prm | .fxc | .ANM | .WAV | .TEX | five blocks | chunk table (line 69,632) | archive |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `bank_vault` | 72.2 | 9.3 | 21.9 | 23.3 | 245.8 | **159.9** | 65,852 | 208.0 |
+| `bank_vault_wavslim` | 72.2 | 9.3 | 21.9 | 13.3 | 245.8 | **149.8** | 65,852 | 208.0 |
+| `bank_vault_noai` | 63.0 | 9.3 | 21.6 | 23.1 | 228.1 | **150.1** | 65,083 | 191.3 |
+| `bank_vault_bare` | 53.2 | 17.8 | 21.9 | 23.1 | 213.9 | 149.1 | 65,640 | 178.2 |
+| stock F07 | 63.6 | 8.1 | 21.6 | 18.3 | 281.0 | 144.7 | 35,102 | 200.2 |
+| the tab's Retomoto (`w_tabK` DM09) | 79.9 | 17.8 | 21.6 | 27.8 | 264.9 | 180.3 | 65,331 | 218.9 |
+| the tab's Withdrawal (`w_tabK` DM03) | 62.6 | 17.8 | 22.3 | 22.7 | 237.6 | 158.5 | 62,892 | 200.9 |
+
+So the finished bank asks for 15 MB more than stock F07 in large blocks, 20 MB LESS than the Retomoto that loads,
+and as much as the Fragile Alliance bank on the tab - with the cut cache; with the full one it would be 168.4.
+Chunk table: 3,780 entries under the tools' line; 5,364 indices are still dead.
+
+### F.5 What is delivered (`<work>/build/c_bank/`)
+
+| folder | what | F01_Main.zip sha1 | first use |
+|---|---|---|---|
+| `bank_vault` | the finished map, the sound bank WHOLE | 943e1e5c031c... | the map |
+| `bank_vault_wavslim` | the same archive byte for byte; `F01_Main.WAV` (13.3 MB) and `F01_Main.WHD` are the slim pair (kl_wavslim: NEVER LOADED LIVE). KLGuns.ini, KLTalk.ini, KLWardrobe.ini, van.json equal | 943e1e5c031c... | only after `bank_vault` has loaded |
+| `bank_vault_noai` | the same chain on the NO_AI build: no enemy, the beat, loot, van, bots, wardrobe, guns, talk as with them | 14b51ed39031... | THE FIRST LIVE LOAD |
+| `bank_vault_bare` | L3's bare map before the chain (enemies, no wardrobe / bots / guns / talk; full shader cache) | 5f11b846ec79... | a direct boot; the start of a new chain |
+
+Each finished folder: `F01_Main.zip`, the 18 files beside it, `KLWardrobe.ini` (16 characters, 12 masks),
+`KLGuns.ini` (Version 2, Entries = the .prm's chunk count), `KLTalk.ini`; NO KLJoin.ini (one mesh part, no join, no
+drop: kl_fa_bots writes no [CrewHop]); `van.json` (check() holds the drive against it), `result.json`, `log.txt`,
+`graft.txt`, `bots.txt / .json`, `dyn.txt / .json`, `dyn_map.png`, `guns.json`, `map_guns.json`, `talk.json`,
+`chars.json`, `audit.txt / .json`, `preflight.txt / .json`, `checks.txt`, `checks/`. Member and file names are
+kl_maps' (slot name F01); the packaging onto a slot and the menu entry are another session's.
+Beside the folders: `chain.sh`, `checks.sh`, `blocks.py`, `blocks.txt`.
+
+### F.6 GUESS / ASSUMED (each marked in the file)
+
+- ASSUMPTION the gate rests on: an AI heister trips the `ECPS_FA_MERCONLY` beat box (re/retomoto_bots_rooms.md 8:
+  'measured in effect', never read in kl2.exe). If not, and no human is in the ante-room: the bots walk on to a
+  shut door after 56 s, their loot wait runs out and they leave without the vault's money. Nothing worse.
+- CONSEQUENCE of the same assumption, the lead should know: the FIRST BOT in the ante-room starts the beat (rods,
+  the 14 police, the 48 s), not only the human. The point man starts at +0 s and has about 80 m to walk, with three holds of 5 s.
+- ASSUMPTION: a step that was started does not start again and a started step replaces the running one (the reason
+  for the clock; re/retomoto_bots_rooms.md 3.2).
+- GUESS: `GATE_AT` (400, -960, -11900), `GATE_REACH` 400, `GATE_MORE` 2 s, `GATE_CLEAR` 100; the 30 s loot wait
+  (the dynamic step makes 15 / 30 / 45 of it by role).
+- ASSUMPTION (kl_fa_bots'): the bots are taken aboard from the AllyEscapeBox beside the van's stop when the van
+  stands (kl2 0x907a50); they do not walk to its doors.
+- NOT KNOWN: what a bot with heist stage 1 does about HIDDEN money inside its window. The places before the gate
+  keep out of it (906); the 'cover' a bot takes during the wait is chosen by the dynamic step within its own reach
+  and is tested by nothing here against that window (the one seen: (459, -931, -11554), 1,400 from the loot).
+- The guns' options (`--start=1 --set=1`) are the tab's; which stream file the owner's game has was READ by size only.
+
+### F.7 For the next stage / the lead
+
+- **First live order**: `bank_vault_noai` (a round without enemies: start in the yard, doors, the bots' walk, the
+  gate, the vault, the van) -> `bank_vault` -> `bank_vault_wavslim`. Install is the game holder's
+  (`python debug/slot.py put "<work>/build/c_bank/bank_vault_noai" F01`; the folders hold no KLJoin.ini, slot.py
+  removes the slot's).
+- TWO THINGS IN THESE FOLDERS HAVE NEVER LOADED LIVE ANYWHERE, beside the level itself: the cut shader cache
+  (the owner's tab maps carry the full 17.8 MB one; READ kl_graft.load_options: 'NOT LOADED LIVE') and, in
+  `bank_vault_wavslim`, the slimmed bank. If a first load faults, a folder with the FULL cache is the chain
+  without its step 6 (`chain.sh`: 3.5 min; five blocks then 168.4 MB, still under Retomoto's 180.3).
+- **Rebuild**: `python tools/kl_fa_bank.py test <out> --keep [flags] --plan "<work>/build/c_bank/bank_vault_bare/van.json"`,
+  then `sh <work>/build/c_bank/chain.sh "<out>/F07+M03_A campaign" <work dir> <log dir>` -> `<work dir>/fin`,
+  `fin_wav`; then `sh .../checks.sh <folder> <out dir>`. A `--beat S` build needs nothing else: the gate reads the
+  two delays off the level. A `--vault-open --loot-shown` build still gets the 56 s wait (harmless, not needed).
+- The audit's 'FAIL' goes only with a rebuild after the stream file has the level's clips (the owner's go-ahead;
+  re/campaign_fa_tooling.md 12.7: 'a first-build line').
+- `kl_maps.audit` has no 'known' entry for a verify finding: whoever gates an install on `audit.json` 'bad' must
+  read the two (three) lines above as the known ones.
+
+### F.8 Open
+
+- Nothing ran in the game.
+- The bots through the six open door sets, down two flights and back up the airlock stairs: one order a leg over
+  20 - 45 m of stairs is what Retomoto's bots managed live (G1), nothing of this level's was seen.
+- Whether the first bot starting the beat is wanted (F.6). To make the HUMAN start it the beat box would have to
+  tell a human from a bot; no such field is known.
+- 20 of 56 hold places have no cover box in reach (the yard, the stairs, the plaza: `dyn.txt`); kl_fa_cover finds
+  nothing for them.
+- The bots do not go for the tellers' stacks by route; the vault's 2.3 M is shared with the human by the loot
+  waits (15 - 45 s).
+- 'Out of sight' for the waiting van (L3.4), the retreat routs and the police ring at the van's call (L2.7), the
+  menu entry / slot packaging, the stream file with the music and the guards' lines: untouched.
+- kl_fa_talk's note 'the level has a blast timer and KLTalk.ini no countdown': a Kane countdown to the vault door
+  (SCRIPTS['M03'] has none) would be a talk-script entry in another session's file; not done.
+
+(end of Stage F)
