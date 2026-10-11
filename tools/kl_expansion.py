@@ -18,14 +18,25 @@ for them, a manifest, and install / uninstall. Spec, layout, what is proven and 
             map from a finished folder (the owner's Retomoto build). Such a folder holds an archive built for the F01
             test slot: adopt() writes it under the map's own slot name (member and file names only) and takes the
             hook's per-map files KLWardrobe.ini / KLJoin.ini / KLGuns.ini along into Maps\<id>.
+            MIND: --ready and --prebuilt come BEFORE --reuse - a map they name is taken again from its folder even
+            when the tree holds it (so '--reuse --ready <dir>' replaces DM01 .. DM06 of the tree by <dir>'s); to keep
+            the tree's maps give --reuse alone.
                                  [--overlay-from <folder>]
             <folder> holds an overlay that is in use (Overlay\Patch01.zip, and Overlay\Scenes\kaneandlynch.zip when
             its Heister page has pictures): the tree's overlay is then that one PLUS the map page - mkoverlay.py is
             run the way that archive was made (--pictures when it has the picture rows), every file under its
             Overlay\Scenes is carried, and the build FAILS unless the windows KLHeister and KLGuns of the result are
             the reference's character for character and nothing but the Arcade page, the map page and its gamepad
-            template differs (overlay_kept()).
-    python kl_expansion.py check [<tree>]                    every file of the tree against manifest.json (sha1)
+            template differs (overlay_kept()). When that overlay's menu scene holds a picture entity LevelPicture_<id>
+            of a map of the tree (a 'mappics' variant), the map page names it ([Page.2] <slot>.Picture=), so the tree
+            keeps the pictures the reference shows; --no-map-pictures = the page as before 2026-10-11 (story pictures).
+                                 [--prebuilt DM03A=<folder>]
+            THE SIXTH MAP, opt-in (EXTRA): 'The Vault' = the campaign bank M03_A (tools\kl_fa_bank.py, re\bank_campaign.md)
+            as entry 5 of the page = slot F07. It is never built here: it is in the tree only when --prebuilt names its
+            finished folder (or, with --reuse, when the tree already holds it); without that the tree is the five maps
+            and a Maps\DM03A left by an earlier build in <out> is removed - by a WHOLE build only: with --maps <ids> a
+            held DM03A that is not named is left as it lies, like the other maps that are not named. re\expansion.md 11.
+    python kl_expansion.py check [<tree>]                   every file of the tree against manifest.json (sha1)
     python kl_expansion.py menu [<tree>]                     the rules of re\menus.md on the tree's Overlay\Patch01.zip
     python kl_expansion.py share [<tree>]                    what the maps have in common with their systems level
                                                              and with each other (measured; nothing is changed)
@@ -33,7 +44,10 @@ for them, a manifest, and install / uninstall. Spec, layout, what is proven and 
                                                              level-picture tiles + a PNG each (<out>\pictures)
     python kl_expansion.py mappics <tree> <folder>           a VARIANT of the tree's overlay whose map page shows Dead Men's
                                                              own picture of each map: <folder>\Overlay\Patch01.zip +
-                                                             Overlay\Scenes\kaneandlynch.zip (map_pictures(); not seen live)
+                                                             Overlay\Scenes\kaneandlynch.zip (map_pictures(); the five
+                                                             of 2026-10-11 are seen live). A tree whose menu scene
+                                                             already holds some of the pictures gets only the missing
+                                                             ones added: the entities that are there stay as they are
     python kl_expansion.py install [<tree>] [--game <Dog Days>] [--keep-slot] [--no-hook] [--no-stream] [--link]
                                    [--replace]
     python kl_expansion.py uninstall [--game <Dog Days>] [--restore-all]
@@ -57,7 +71,9 @@ LAYOUT (what klhook\klslot.c reads; <DD> = the folder of kl2.exe)
   A map is built FOR A SLOT: the engine keeps loading 'Locations/<slot>/<slot>_Main' and the hook answers the opens
   from Maps\<id> while menu page 2 is chosen ([Redirect.2]). Entry k of a page loads slot F01 F02 F03 F04 F06 F07 F05
   F08 F09 [k] (kl2 0x746570); F05, F08 and F09 are the paid DLC slots and stay untouched, so a page has six free
-  entries and the five maps take the first five (MAPS).
+  entries and the five maps take the first five (MAPS); the sixth, F07, is The Vault's when it is asked for (EXTRA).
+  With it page 2 is FULL: a seventh map needs page 3 (PAGE is one number here; mkoverlay.py has buttons for pages 2..5 - 2..4 with the
+  Heister button -, klslot.c takes [Redirect.2] .. [Redirect.9]).
 
 WHAT INSTALL DOES, IN ORDER (uninstall undoes each step; both refuse while a kl2.exe with a thread exists)
     1. the tree is checked against its manifest;
@@ -134,6 +150,30 @@ MAPS = [
          live='loads, both parts walked, Arcade rounds start and reach the score page (RT2b - RT6); three lost rounds to the '
               'session end with every Steam write blocked (S2); the way from the tower to the lobby by the hook\'s jump box, '
               'on a direct boot and in an Arcade round (J1b, J2, J3; the builds without the map\'s guards); no round with loot and escape'),
+]
+# OPT-IN maps: in a tree only when 'build' is given their finished folder (--prebuilt <id>=<folder>; --reuse keeps one that
+# is already in the tree). A build that does not name them gives the tree of MAPS and nothing else - selftest, the manifest
+# entries of the five and the ini block are then what they were before this list existed.
+# build='prebuilt': there is no way to make the map here (build_map refuses): The Vault comes from tools\kl_fa_bank.py +
+# <work>\build\c_bank\chain.sh (re\bank_campaign.md D2, D5), then the HUD look and the fed's body line as the other five
+# got them (re\expansion.md 11).
+# audit=True: the folder MUST hold kl_maps.audit's audit.json, made on exactly these files (content id), and every line
+# of its 'bad' list that is not a KNOWN finding refuses the map (audit_known()).
+# known: as for MAPS - but here it is the whole reason the folder's audit and preflight are not green: 16 streamed clips
+# (music, the vault's ambience, nine guard lines) are not in the installed PC_Def.str, so the map is SILENT in those
+# (re\bank_campaign.md D1, D6); kl_graft.verify counts them as '10 stream clips' in result.json.
+# known_re: for such a map the known finding is PINNED (is_known()): the whole problem line must be the pattern and its
+# number at most the cap - 'sound: 400 stream clips ...' or a line that carries a second finding beside the phrase is
+# NOT known (a later rebuild of the bank that loses more clips must be looked at, then the cap raised here by hand).
+# slot F07: entry 5 of the page, the one free entry. F07 is also the SYSTEMS level of every map here, but only as a
+# build input: the stock F07 files are not touched and the stock page still loads stock F07 ([Redirect.2] only).
+# NOT TRIED: no map has loaded under the slot name F07 through the redirect (re\expansion.md 11, live check M0).
+EXTRA = [
+    dict(id='DM03A', slot='F07', title='The Vault', build='prebuilt', sources=['M03_A'], picture='LevelPicture_M03A', bones_live=False,
+         audit=True, known=('stream clips are not in the merged stream file',),
+         known_re=((r'sound: (\d+) stream clips are not in the merged stream file \(kl_audio\.merge\)', 10),),
+         live='NOTHING: the map has never been loaded in the game (re/bank_campaign.md D4: L0 .. L3 on the F01 test slot come first; '
+              'then M0 .. M3 of re/expansion.md 11 under slot F07)'),
 ]
 
 
@@ -276,6 +316,9 @@ def build_map(mid, stage):
     <work>\build\install). -> the folder that holds <slot>_Main.zip, result.json, log.txt, graft.txt."""
     import inspect
     import kl_maps as K, kl_graft
+    if any(m['id'] == mid for m in EXTRA):
+        print('%s is not built here: it is taken from a finished folder only (--prebuilt %s=<folder>)' % (mid, mid))
+        return None
     m = next(m for m in MAPS if m['id'] == mid)
     known = inspect.signature(kl_graft.build).parameters
     opt = {k: v for k, v in OPTIONS.items() if k in known}
@@ -352,9 +395,13 @@ def adopt(m, src, d, info, log=print):
         raise SystemExit('%s holds no result.json: not a kept build of kl_maps' % src)
     if not os.path.isfile(os.path.join(info, 'stdout.txt')) and os.path.isfile(os.path.join(info, 'log.txt')):
         shutil.copyfile(os.path.join(info, 'log.txt'), os.path.join(info, 'stdout.txt'))    # skeleton_step() reads it
+    took = {'from': os.path.abspath(src), 'built_for_slot': old, 'written_for_slot': slot,
+            'archive_sha1_of_the_folder': sha1(os.path.join(src, zips[0]))}
+    if m.get('audit'):                                  # kl_maps.audit's own number of the folder AS IT IS NOW: build() holds the
+        import kl_maps                                  # folder's audit.json against it (an audit of other files is no audit)
+        took['content_id'] = hashlib.sha1(json.dumps(kl_maps.member_ids(src, old)).encode()).hexdigest()
     with open(os.path.join(info, 'adopted.json'), 'w') as f:
-        json.dump({'from': os.path.abspath(src), 'built_for_slot': old, 'written_for_slot': slot,
-                   'archive_sha1_of_the_folder': sha1(os.path.join(src, zips[0]))}, f, indent=1)
+        json.dump(took, f, indent=1)
     log('%s: taken from %s (built for %s, written for %s; %s)' % (m['id'], src, old, slot, ', '.join(
         f for f in SIDE if os.path.isfile(os.path.join(d, f))) or 'no per-map hook file'))
     return old
@@ -373,13 +420,70 @@ def skeleton_step(m, info):
             'ran_live_in_this_form': m['bones_live'] if done else True}
 
 
+def is_known(m, p):
+    """Whether the verify problem p (a line of result.json's 'problems') is a KNOWN finding of map m. The five maps of
+    MAPS: p holds one of m['known'] (as since the first tree). A map with known_re (EXTRA): the WHOLE line is one of the
+    patterns and its number is not over the pattern's cap."""
+    if m.get('known_re'):
+        for pat, cap in m['known_re']:
+            q = re.fullmatch(pat, p.strip())
+            if q and int(q.group(1)) <= cap:
+                return True
+        return False
+    return any(k in p for k in m['known'])
+
+
 def verdict(m, res):
     """-> list of reasons the build of map m must not be shipped (empty = accepted)."""
     if not res.get('ok'):
         return ['build failed: %s' % res.get('error')]
-    bad = ['problem: ' + p for p in res.get('problems', []) if not any(k in p for k in m['known'])]
+    bad = ['problem: ' + p for p in res.get('problems', []) if not is_known(m, p)]
     bad += ['Fragile Alliance check: ' + f for f in res.get('fa_findings', []) if f.startswith(('CRASH', 'BROKEN'))]
     return bad
+
+
+def audit_known(m, res, lines):
+    r"""The 'bad' list of a folder's audit.json (kl_maps.audit) against the map's KNOWN findings. -> (lines that still
+    refuse the map, lines that are known and accepted). Known is ONLY:
+      'verify: <problem>'   where <problem> is known by is_known() (the same test verdict() makes on result.json: for
+                            The Vault the whole line, with a count of at most 10), and
+      'preflight: verify kl_graft.verify reported N problems (result.json)'   when N is the number of problems in
+                            result.json and every one of them is known - that line only QUOTES result.json
+                            (kl_maps.preflight), it is no finding of its own.
+    Every other line - another verify problem, fa / impact / arms / people / sound / steps / boarding, any other
+    preflight CRASH - stays a reason to refuse. kl_maps.audit itself has no 'known' entry for a verify problem and is
+    a shared file (re\bank_campaign.md D1): the acceptance is made HERE, per map, and written into the manifest.
+    Called ONLY for a map with audit=True (build()): for the five maps of MAPS every line of an audit.json's 'bad' list
+    refuses the map, as before this function existed."""
+    known = lambda t: is_known(m, t)
+    probs = res.get('problems', [])
+    left, ok = [], []
+    for x in lines:
+        q = re.fullmatch(r'preflight: verify kl_graft\.verify reported (\d+) problems \(result\.json\)', x.strip())
+        if x.startswith('verify: ') and known(x[len('verify: '):]):
+            ok.append(x)
+        elif q and probs and int(q.group(1)) == len(probs) and all(known(p) for p in probs):
+            ok.append(x)
+        else:
+            left.append(x)
+    return left, ok
+
+
+def scene_names(path):
+    r"""Entity names of a menu scene archive (Scenes\kaneandlynch.zip: the stock one or an overlay's)."""
+    import kl_gms
+    with zipfile.ZipFile(path) as z:
+        low = {n.lower(): n for n in z.namelist()}
+        gms, buf = z.read(low['scenes/kaneandlynch.gms']), z.read(low['scenes/kaneandlynch.buf'])
+    try:
+        raw = kl_gms.unpack(gms)
+    except Exception:                                   # a scene written unpacked (kl_portraits._packed)
+        raw = gms
+    names = set()
+    for decl, _tid, _prio in kl_gms.entities(raw):
+        o = struct.unpack_from('<I', raw, 4 * (decl & 0xffffff))[0]
+        names.add(buf[o:buf.index(b'\0', o)].decode('latin1'))
+    return names
 
 
 def overlay_kept(ref_patch, new_patch):
@@ -392,7 +496,18 @@ def overlay_kept(ref_patch, new_patch):
     wa, wb = windows(a), windows(b)
     name, bad = 'HeistPlayMenu%d' % PAGE, []
     if name in wa:
-        return [], ['the reference overlay already has the map page: nothing to compare']
+        # the reference is itself a tree's overlay (a 'mappics' variant, the overlay that is installed): then nothing
+        # but the map page may differ from it - the Arcade page, the Heister and Guns pages and everything outside the
+        # windows must be the reference's - and the note says whether the page itself is the reference's too
+        diff = sorted(k for k in set(wa) | set(wb) if wa.get(k) != wb.get(k))
+        if [k for k in diff if k != name]:
+            bad.append('windows that differ from the reference overlay: %s (only %s may)' % (diff, name))
+        strip = lambda t: re.sub(r'<Window Name="[^"]+"[^>]*>.*?</Window>', '', t, flags=re.S)
+        if strip(a) != strip(b):
+            bad.append('outside the windows the overlay differs from the reference overlay')
+        return bad, ['overlay kept from %s (it has the map page already): every other window and everything outside the windows as there; '
+                     'the map page %s' % (ref_patch, 'is the reference\'s character for character' if name not in diff else
+                                          'differs from the reference\'s (other entries or pictures)')]
     for k in MENU_EXTRA:
         if k in wa and wa[k] != wb.get(k):
             bad.append('window %s is not the one of %s' % (k, ref_patch))
@@ -410,10 +525,14 @@ def overlay_kept(ref_patch, new_patch):
 
 
 def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share_too=True, pictures_too=True, bones=True, hook_make=True, log=print,
-          prebuilt=None, overlay_from=None):
-    """prebuilt: {map id: finished build folder} - those maps are taken as they are (adopt()), not built."""
+          prebuilt=None, overlay_from=None, map_pics=True):
+    """prebuilt: {map id: finished build folder} - those maps are taken as they are (adopt()), not built.
+    map_pics: with overlay_from, name the reference scene's own map pictures on the page (False: the story pictures)."""
     out = os.path.abspath(out or default_out())
     prebuilt = dict(prebuilt or {})
+    unknown = sorted(set(prebuilt) - {m['id'] for m in MAPS + EXTRA})
+    if unknown:
+        raise SystemExit('--prebuilt names %s: the maps are %s' % (', '.join(unknown), ', '.join(m['id'] for m in MAPS + EXTRA)))
     if bones:
         os.environ.pop('KL_EXPANSION_NO_BONES', None)
     else:
@@ -425,7 +544,29 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
     if inside(out, dd):
         raise SystemExit('refusing to build inside the game folder: %s' % out)
     os.makedirs(tree, exist_ok=True); os.makedirs(stage, exist_ok=True)
-    maps = [m for m in MAPS if not only or m['id'] in only]
+    # the opt-in maps (EXTRA): in this tree only when their finished folder is given, or kept by --reuse
+    held = lambda m: os.path.isfile(os.path.join(tree, 'Maps', m['id'], m['slot'] + '_Main.zip')) and os.path.isfile(os.path.join(tree, 'BuildInfo', m['id'], 'result.json'))
+    extra_do = [m for m in EXTRA if (not only or m['id'] in only) and (m['id'] in prebuilt or (reuse and held(m)))]
+    # --maps <ids> that does not name an opt-in map the tree HOLDS: the map is left as it lies and stays in the manifest
+    # and on the page, like every map of MAPS that is not named (until 2026-10-11 evening '--maps DM01 --reuse' on a
+    # six-map tree removed Maps\DM03A while DM02 .. DM09 stayed). Only a WHOLE build that does not ask for it takes it out.
+    extra_keep = [m for m in EXTRA if only and m['id'] not in only and held(m)]
+    for m in extra_keep:
+        log('%s: not named by --maps: left in the tree as it lies' % m['id'])
+    extra = extra_do + extra_keep
+    for m in EXTRA:
+        if m in extra:
+            continue
+        if only and m['id'] in only:
+            raise SystemExit('%s (%s) is not built here: give its finished folder, --prebuilt %s=<folder>' % (m['id'], m['title'], m['id']))
+        for x in (os.path.join(tree, 'Maps', m['id']), os.path.join(tree, 'BuildInfo', m['id'])):
+            if os.path.isdir(x):                        # left by an earlier build in <out>: this tree is without the map
+                shutil.rmtree(x); log('%s: not asked for (no --prebuilt %s=...): %s removed from the tree' % (m['id'], m['id'], os.path.relpath(x, tree)))
+    for a in MAPS + extra:                              # one slot, one map
+        for b in MAPS + extra:
+            if a is not b and a['slot'] == b['slot']:
+                raise SystemExit('%s and %s both want slot %s' % (a['id'], b['id'], a['slot']))
+    maps = [m for m in MAPS if not only or m['id'] in only] + extra_do
     t0 = time.time()
     # ---- the maps, each in a process of its own, `par` at a time (a build takes 40 .. 90 s and about 3 GB of memory)
     todo, live, failed = [], [], []
@@ -463,7 +604,7 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
             log('%s: built in %d s' % (m['id'], json.load(open(os.path.join(info, 'result.json'))).get('seconds', 0)))
     # ---- per map: verdict and the manifest entry
     entries, bad = [], {i: ['build failed'] for i in failed}
-    for m in MAPS:
+    for m in MAPS + extra:
         d, info = os.path.join(tree, 'Maps', m['id']), os.path.join(tree, 'BuildInfo', m['id'])
         if not os.path.isfile(os.path.join(info, 'result.json')):
             continue
@@ -471,7 +612,10 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
         why = verdict(m, res)
         if m.get('join'):
             jp, keys = os.path.join(d, 'KLJoin.ini'), lambda t: sorted(l.strip() for l in t.splitlines() if '=' in l and not l.lstrip().startswith(';'))
-            if m['id'] in prebuilt and os.path.isfile(jp):          # the file the folder was played with stays
+            # the file the folder was played with stays - also when the map is KEPT by --reuse after it was taken from a
+            # finished folder (adopted.json): until 2026-10-11 a --reuse pass wrote join_ini() over it and the folder's
+            # other sections ([FedBody], [CrewJoin], the fed's points) were gone from the tree
+            if (m['id'] in prebuilt or os.path.isfile(os.path.join(info, 'adopted.json'))) and os.path.isfile(jp):
                 if keys(open(jp).read()) != keys(join_ini(lambda *_a: None)):
                     log('NOTE: %s: the folder\'s KLJoin.ini does not hold kl_fa_author\'s box as it is now; the folder\'s is kept' % m['id'])
             else:
@@ -482,10 +626,26 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
         pre = os.path.join(info, 'preflight.json')
         pf = collections.Counter(x[0] for x in json.load(open(pre))['findings']) if os.path.isfile(pre) else None
         aud = json.load(open(os.path.join(info, 'audit.json'))) if os.path.isfile(os.path.join(info, 'audit.json')) else None
+        aud_known = []
         if aud and aud.get('bad'):                      # kl_maps.audit: every checker on the finished folder
-            why = why + ['audit: ' + x for x in aud['bad']]
-            bad[m['id']] = why
+            # only an opt-in map's audit is read against its known findings; for the five every 'bad' line refuses, as ever
+            left, aud_known = audit_known(m, res, aud['bad']) if m.get('audit') else (list(aud['bad']), [])
+            if left:
+                why = why + ['audit: ' + x for x in left]
+                bad[m['id']] = why
         took = json.load(open(os.path.join(info, 'adopted.json'))) if os.path.isfile(os.path.join(info, 'adopted.json')) else None
+        if m.get('audit'):                              # an opt-in map: no audit of exactly these files, no map
+            more = []
+            if not aud:
+                more.append('audit: the folder holds no audit.json (python tools\\kl_maps.py audit <folder>)')
+            elif not took or not took.get('content_id'):
+                more.append('audit: the map was not taken from a finished folder by this build: its audit cannot be tied to the files')
+            elif aud.get('content_id') != took['content_id']:
+                more.append('audit: audit.json was made on other files than the folder holds now (content id %s, the folder %s): run kl_maps.py audit again' % (
+                    str(aud.get('content_id'))[:10], took['content_id'][:10]))
+            if more:
+                why = why + more
+                bad[m['id']] = why
         bot_build = None
         bot_json = os.path.join(d, 'bots.json')
         if not os.path.isfile(bot_json):
@@ -514,7 +674,8 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
         entries.append({
             'id': m['id'], 'name': m['title'], 'slot': m['slot'], 'menu_entry': ORDER.index(int(m['slot'][1:])), 'folder': 'Maps/' + m['id'],
             'scene': 'Locations/%s/%s_Main' % (m['slot'], m['slot']), 'systems_level': SYSTEMS, 'source_levels': m['sources'],
-            'build': m['build'] + (' (kl_maps.one, kl_graft defaults)' if m['build'] == 'one' else ' (campaign pre-pass + kl_fa_author layer)'),
+            'build': m['build'] + (' (kl_maps.one, kl_graft defaults)' if m['build'] == 'one' else ' (campaign pre-pass + kl_fa_author layer)' if m['build'] == 'chain' else
+                                   ' (a finished folder only: tools\\kl_fa_bank.py + c_bank\\chain.sh, re/bank_campaign.md D2)'),
             'taken_from': took,                         # a finished folder (adopt()); None = built here by kl_graft's defaults
             'wardrobe': os.path.isfile(os.path.join(d, 'KLWardrobe.ini')),
             'audit': {k: aud.get(k) for k in ('prm_mb', 'prm_entries', 'tex_mb', 'people', 'weapons', 'fa', 'round', 'preflight')} if aud else None,
@@ -527,15 +688,19 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
             'extra_files': [f for f in SIDE if os.path.isfile(os.path.join(d, f))],
             'numbers': numbers,
             'bytes': sum(os.path.getsize(os.path.join(d, f)) for f in os.listdir(d))})
+        if aud_known:                                   # only where there is one: the entries of the other maps stay as they were
+            entries[-1]['audit_known'] = aud_known
         log('%s %-20s slot %s: %s; %d problems (%d known), FA %s, %.0f MB' % (
             m['id'], m['title'], m['slot'], 'ACCEPTED' if not why else 'NOT ACCEPTED', len(res.get('problems', [])),
             len(res.get('problems', [])) - sum(w.startswith('problem') for w in why), res.get('fa', {}), entries[-1]['bytes'] / 1e6))
         for w in why:
             log('     ' + w[:200])
+        for w in aud_known:
+            log('     KNOWN and accepted (audit): ' + w[:200])
+        if m in EXTRA and any(is_known(m, p) for p in res.get('problems', [])):
+            log('     KNOWN: the map is SILENT in its streamed clips (music, ambience, some guard lines) until a stream file holds them')
     # ---- the hook's ini block, the menu overlay, the stream file, the hook
     ini = os.path.join(tree, 'KLHook.expansion.ini')
-    with open(ini, 'w', newline='\r\n') as f:
-        f.write(ini_block(entries))
     stock_patch = stock_file(dd, 'Patch01.zip')
     ref = ref_patch = None
     if overlay_from:                                    # an overlay that is in use: keep its Heister / Guns pages and its scene files
@@ -546,10 +711,29 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
         if inside(ref, tree):
             raise SystemExit('--overlay-from must not be the tree itself')
     with_pics = bool(ref_patch) and b'KLH_CharPics' in zipfile.ZipFile(ref_patch).read('menu/frontend.xml')
+    # The reference's menu scene may hold Dead Men's own picture of a map as an entity LevelPicture_<id> (a 'mappics'
+    # variant - the overlay the owner's game has since 2026-10-11). Its scene is carried into the tree below; the page
+    # must then NAME those entities, or the tree shows the story pictures again under a scene that has the right ones
+    # (that happened to <work>\build\w_tabP: its frontend.xml is not hud_mappics'). A map without an entity there
+    # keeps mkoverlay's default (the story picture of its slot) until 'mappics' on the tree adds one.
+    ref_scene = next((os.path.join(ref, rel) for rel in (files_under(ref) if ref else []) if rel.lower() == 'scenes/kaneandlynch.zip'), None)
+    page_pics = {}
+    if ref_scene and map_pics:
+        have = scene_names(ref_scene)
+        page_pics = {e['slot']: MAP_PIC % e['id'] for e in entries if MAP_PIC % e['id'] in have}
+        lack = [e['id'] for e in entries if e['slot'] not in page_pics]
+        if page_pics:
+            log('map pictures of the reference scene named on the page: %s%s' % (
+                ', '.join('%s %s' % (s, n) for s, n in sorted(page_pics.items())),
+                '; NONE there for %s (story picture of the slot; "mappics" adds it)' % ', '.join(lack) if lack else ''))
+    with open(ini, 'w', newline='\r\n') as f:
+        f.write(ini_block(entries, page_pics))
     r = subprocess.run([sys.executable, os.path.join(REPO, 'klhook', 'mkoverlay.py'), ini, stock_patch, tree] + (['--pictures'] if with_pics else []),
                        capture_output=True, text=True)
     log(r.stdout.rstrip() or r.stderr.rstrip())
-    menu = {'ok': False, 'findings': ['mkoverlay.py failed: ' + (r.stderr or r.stdout).strip()[-300:]]} if r.returncode else menu_check(tree, stock_patch, entries, dd, log)
+    menu = {'ok': False, 'findings': ['mkoverlay.py failed: ' + (r.stderr or r.stdout).strip()[-300:]]} if r.returncode else menu_check(tree, stock_patch, entries, dd, log, ref_scene or False)
+    if page_pics:
+        menu['map_pictures'] = page_pics
     if ref_patch and not r.returncode:
         kb, kn = overlay_kept(ref_patch, os.path.join(tree, 'Overlay', 'Patch01.zip'))
         carried = []
@@ -612,7 +796,7 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
         if not hook_info['built_from_these_sources']:
             log('NOTE: the hook in the tree was not compiled from the klhook\\ sources as they are now')
     # ---- pictures and the sharing measurement (reports beside the tree, not part of it)
-    pics = pictures(out, log) if pictures_too else None
+    pics = pictures(out, log, MAPS + extra) if pictures_too else None
     if pics is None and os.path.isfile(os.path.join(out, 'pictures', 'pictures.json')):     # --no-pictures: what an earlier build made
         pics = json.load(open(os.path.join(out, 'pictures', 'pictures.json')))
     shared = share(tree, log) if share_too and entries else None
@@ -649,14 +833,22 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
     log('\n%s: %d maps, %d files, %.2f GB (maps %.2f GB, overlay %.2f GB); built in %d s' % (
         tree, len(entries), len(man['files']), man['total_bytes'] / 1e9, sum(v for k, v in part.items() if k.startswith('Maps/')) / 1e9,
         part.get('Overlay', 0) / 1e9, time.time() - t0))
-    ok = not bad and menu['ok'] and len(entries) == len(MAPS if not only else maps)
-    log('RESULT: %s' % ('PASS' if ok else 'FAIL - ' + '; '.join(['%s: %s' % (k, v[0][:120]) for k, v in bad.items()] + menu['findings'][:3])))
+    # a whole build: every map of the tree has its entry; --maps: every NAMED map has one (the maps that are not named
+    # and lie in the tree have theirs too - until 2026-10-11 that made a --maps build on a whole tree 'FAIL - ' with
+    # no reason, entries 5 against maps 1)
+    got = {e['id'] for e in entries}
+    lack = [m['id'] for m in (maps if only else MAPS + extra) if m['id'] not in got]
+    ok = not bad and menu['ok'] and not lack
+    log('RESULT: %s' % ('PASS' if ok else 'FAIL - ' + '; '.join(['%s: %s' % (k, v[0][:120]) for k, v in bad.items()] + menu['findings'][:3]
+                                                             + (['no build of %s in the tree' % ', '.join(lack)] if lack else []))))
     return 0 if ok else 1
 
 
-def ini_block(entries):
+def ini_block(entries, pics=None):
     """The sections klslot.c and mkoverlay.py read. Only [Redirect.<PAGE>]: no rule for 'every page', so the stock
-    page and a direct boot load the stock levels ([Expansion] Page=2 forces the page for a direct-boot test)."""
+    page and a direct boot load the stock levels ([Expansion] Page=2 forces the page for a direct-boot test).
+    pics: {slot: entity of the menu scene} -> '<slot>.Picture=' lines at the end of [Page.<PAGE>], in the form and
+    place map_pictures() writes them (mkoverlay.py reads them; klslot.c reads only Title of that section)."""
     L = ['[Expansion]', 'Enable=1', 'Root=' + ROOT, 'Overlay=1', 'Fallback=1', 'Log=1', '',
          '; menu page %d = the Arcade button "%s": <stock slot> = <folder under %s\\Maps>' % (PAGE, PAGE_TITLE, ROOT), '[Redirect.%d]' % PAGE]
     L += ['%s=%s' % (e['slot'], e['id']) for e in entries]
@@ -680,6 +872,7 @@ def ini_block(entries):
           '; random AI heister looks from the wardrobe, no body twice, never the one the player wears (klcrew.c; seen live 2026-10-10)',
           '[Crew]', 'Random=1',
           '', '[Page.%d]' % PAGE, 'Title=' + PAGE_TITLE] + ['%s=%s' % (e['slot'], e['name']) for e in entries]
+    L += ['%s.Picture=%s' % (e['slot'], pics[e['slot']]) for e in entries if pics and e['slot'] in pics]
     return '\n'.join(L) + '\n'
 
 
@@ -705,10 +898,12 @@ def windows(xml):
     return out
 
 
-def menu_check(tree, stock_patch, entries, dd, log=print):
+def menu_check(tree, stock_patch, entries, dd, log=print, scene=None):
     r"""The generated menu/frontend.xml against what re\menus.md establishes: nine entries per selector and per image
     list (4.3, 8.1), literal titles (2.6), graphics that exist in the frontend scene (2.7), the element table of 5096
-    (2.5), unique window names, the stock map page byte for byte. -> {'ok', 'findings', numbers}."""
+    (2.5), unique window names, the stock map page byte for byte. -> {'ok', 'findings', numbers}.
+    scene: the menu scene archive the overlay is installed WITH (Overlay\Scenes\kaneandlynch.zip); None = the tree's
+    own when it has one, else the stock scene; False = the stock scene only. Its entities are what a Graphic= may name."""
     import xml.etree.ElementTree as ET
     bad, note = [], []
     new = zipfile.ZipFile(os.path.join(tree, 'Overlay', 'Patch01.zip')); old = zipfile.ZipFile(stock_patch)
@@ -734,6 +929,13 @@ def menu_check(tree, stock_patch, entries, dd, log=print):
     if changed != ['HeistModeMenu']:
         bad.append('stock windows changed: %s (only HeistModeMenu may)' % changed)
     names, online = frontend_names(dd)
+    own = os.path.join(tree, 'Overlay', 'Scenes', 'kaneandlynch.zip') if scene is None else scene
+    if own and os.path.isfile(own):                     # the scene the overlay comes with: stock + the picture entities
+        more = scene_names(own)
+        if names - more:
+            bad.append('the overlay\'s menu scene lacks %d entities of the stock scene' % len(names - more))
+        note.append('menu scene of the overlay: %d entities more than the stock scene (%s)' % (len(more - names), own))
+        names = names | more
     want = {int(e['slot'][1:]): e for e in entries}
     if name in wb:
         try:
@@ -845,15 +1047,6 @@ def map_pictures(tree, dest, log=print):
     if not os.path.isfile(src):
         src = stock_file(dd, os.path.join('Scenes', 'kaneandlynch.zip'))
     pdir = os.path.join(os.path.dirname(tree), 'pictures')
-    pics = []
-    for e in man['maps']:
-        path = os.path.join(pdir, e['id'] + '.png')
-        if not os.path.isfile(path):
-            raise SystemExit('no %s: run "pictures" (or a build without --no-pictures) first' % path)
-        w, h, px = P.png_read(path)
-        if (w, h) != (540, 304):
-            raise SystemExit('%s is %d x %d, the page wants 540 x 304' % (path, w, h))
-        pics.append((MAP_PIC % e['id'], e, (w, h, px)))
     z = zipfile.ZipFile(src)
     names = {i.filename.lower(): i for i in z.infolist()}
     stem = 'scenes/kaneandlynch'
@@ -864,8 +1057,26 @@ def map_pictures(tree, dest, log=print):
     if len(nodes) != len(ents) + 1:
         raise SystemExit('.prp nodes and .gms entities do not line up')
     have = {e.name.decode('latin1') for e in ents}
-    if any(n in have for n, _e, _p in pics):
-        raise SystemExit('%s already holds map pictures' % src)
+    # A scene that already holds some of the pictures (the tree was built on a 'mappics' variant: the five of the
+    # owner's game) gets only the MISSING ones: the entities, textures and chunks that are there are not written again,
+    # so what was seen in the game stays exactly what it was. `every` = all maps of the page, `pics` = the new ones.
+    every = [(MAP_PIC % e['id'], e) for e in man['maps']]
+    kept = [n for n, _e in every if n in have]
+    pics = []
+    for name, e in every:
+        if name in have:
+            continue
+        path = os.path.join(pdir, e['id'] + '.png')
+        if not os.path.isfile(path):
+            raise SystemExit('no %s: run "pictures" (or a build without --no-pictures) first' % path)
+        w, h, px = P.png_read(path)
+        if (w, h) != (540, 304):
+            raise SystemExit('%s is %d x %d, the page wants 540 x 304' % (path, w, h))
+        pics.append((name, e, (w, h, px)))
+    if not pics:
+        raise SystemExit('%s already holds the picture of every map of the tree (%s): nothing to add' % (src, ', '.join(kept)))
+    if kept:
+        log('%s already holds %s: kept as they are; adding %s' % (src, ', '.join(kept), ', '.join(n for n, _e, _p in pics)))
     node_of = {id(e): nodes[i + 1] for i, e in enumerate(ents)}
     slot0 = sc.slots()
     parent = P._find(sc.roots, P.PARENT); model = P._find(sc.roots, P.PARENT + (P.MODEL,))
@@ -915,14 +1126,15 @@ def map_pictures(tree, dest, log=print):
     try:
         P.NAMES = [n for n, _e, _p in pics]
         bad = ['map pictures: ' + x for x in P.check(path, src, log)]
-        P.NAMES = keep
-        if any(n in have for n in keep):
-            bad += ['heister pictures: ' + x for x in P.check(path, None, log)]
+        P.NAMES = kept + (keep if any(n in have for n in keep) else [])      # what the source scene had: the earlier map pictures, the Heister pictures
+        if P.NAMES:
+            bad += ['pictures of the source scene: ' + x for x in P.check(path, None, log)]
     finally:
         P.NAMES = keep
     # ---- the page: the tree's ini block with the pictures named, through mkoverlay.py exactly as the tree's was made
     ini = os.path.join(dest, 'KLHook.expansion.ini')
-    text = open(os.path.join(tree, 'KLHook.expansion.ini')).read().rstrip('\n') + '\n' + ''.join('%s.Picture=%s\n' % (e['slot'], n) for n, e, _p in pics)
+    text = ''.join(l + '\n' for l in open(os.path.join(tree, 'KLHook.expansion.ini')).read().splitlines() if not re.match(r'F0\d\.Picture=', l))
+    text = text.rstrip('\n') + '\n' + ''.join('%s.Picture=%s\n' % (e['slot'], n) for n, e in every)
     with open(ini, 'w', newline='\r\n') as f:
         f.write(text)
     tpatch = os.path.join(tree, 'Overlay', 'Patch01.zip')
@@ -943,7 +1155,7 @@ def map_pictures(tree, dest, log=print):
         bad.append('the overlay differs from the tree\'s outside the windows')
     now = {e.name.decode('latin1') for e in kl_scene.read(zipfile.ZipFile(path), 'Scenes/kaneandlynch').entities()}
     used = re.findall(r'Template="LevelPicture_T" Graphic="([^"]+)"', wb[page][0])
-    for n, e, _p in pics:
+    for n, e in every:
         if used.count(n) != 1:
             bad.append('%s is used %d times on the page' % (n, used.count(n)))
     pic = r'<GuiElement\b[^>]*Template="LevelPicture_T"[^>]*\bGraphic="([^"]+)"'       # the picture elements; a <Graphic Graphic=> child names an ELEMENT
@@ -952,10 +1164,10 @@ def map_pictures(tree, dest, log=print):
             bad.append('Graphic="%s" is no entity of the variant\'s menu scene' % g)
     with open(os.path.join(dest, 'variant.json'), 'w') as f:
         json.dump({'of_tree_built': man['built'], 'scene_from': os.path.abspath(src), 'scene_from_sha1': sha1(src),
-                   'pictures': {n: e['id'] for n, e, _p in pics}, 'problems': bad,
+                   'pictures': {n: e['id'] for n, e in every}, 'added': [n for n, _e, _p in pics], 'kept_from_the_source_scene': kept, 'problems': bad,
                    'files': {rel: {'sha1': sha1(os.path.join(dest, rel)), 'bytes': os.path.getsize(os.path.join(dest, rel))}
                              for rel in files_under(dest) if rel != 'variant.json'}}, f, indent=1)
-    log('map page pictures: %s' % ', '.join('%s %s' % (e['slot'], n) for n, e, _p in pics))
+    log('map page pictures: %s' % ', '.join('%s %s%s' % (e['slot'], n, '' if n in kept else ' (NEW)') for n, e in every))
     log('RESULT: %s' % ('PASS' if not bad else 'FAIL'))
     for x in bad:
         log('   ' + x)
@@ -1089,7 +1301,7 @@ def winpic(sc, prm, tex, name):
     return out
 
 
-def pictures(out=None, log=print):
+def pictures(out=None, log=print, maps=None):
     r"""Dead Men ships a menu picture for each of its four Fragile Alliance maps and for both Retomoto chapters
     (frontend scene entities LevelPicture_FA01 / FA02 / FA03 / FA06 and LevelPicture_M09A / M09B: 891 x 530 pixels in
     nine DXT1 tiles: a photograph of about 400 x 250 on a black sheet). A Dog Days Arcade picture (LevelPicture_H01..
@@ -1099,14 +1311,17 @@ def pictures(out=None, log=print):
     stock records' header fields) - what a ZWINPIC of the frontend scene needs. NOT DONE: the entity itself. A new
     LevelPicture_* needs a ZWINGROUP + ZWINPIC in Scenes\kaneandlynch.gms/.buf/.prp, a winpic and six sprite chunks in
     its .prm and six textures in its .TEX, delivered as Overlay\Scenes\kaneandlynch.zip - a graft on the frontend
-    scene nobody has loaded yet. Until then the page shows the stock picture of each slot."""
+    scene nobody has loaded yet. Until then the page shows the stock picture of each slot.
+    (DONE since: map_pictures() / 'mappics' makes the entities; the five of the tab are seen in the game.)
+    maps: the maps to convert (default MAPS; build() adds the opt-in maps of its tree, EXTRA). The Vault's is the
+    campaign chapter's picture LevelPicture_M03A - a sheet of the same size, cut by the same fixed box PHOTO."""
     out = os.path.join(os.path.abspath(out or default_out()), 'pictures')
     os.makedirs(out, exist_ok=True)
     dm, dd = front_scene('dm'), front_scene('dd')
     ref = winpic(*dd, 'LevelPicture_H01')               # the layout and record headers every Arcade picture uses
     W, H = max(x + w for x, _y, w, _h, _e in ref), max(y + h for _x, y, _w, h, _e in ref)
     res = {'dog_days_picture': '%d x %d in %d tiles' % (W, H, len(ref)), 'maps': {}}
-    for m in MAPS:
+    for m in (maps or MAPS):
         tiles = winpic(*dm, m['picture'])
         sw, sh = max(x + w for x, _y, w, _h, _e in tiles), max(y + h for _x, y, _w, h, _e in tiles)
         px = [[(0, 0, 0)] * sw for _ in range(sh)]
@@ -1221,7 +1436,7 @@ def share(tree, log=print):
     log('share: stock %s: archive %.0f MB; .TEX %.0f MB, of it %.0f MB (%d textures) named by nothing this method knows; .prm %.0f MB, %.1f MB unreached vertex data' % (
         SYSTEMS, os.path.getsize(szip) / 1e6, st['tex_bytes'] / 1e6, st['tex_unnamed_bytes'] / 1e6, st['textures_unnamed'], st['prm_bytes'] / 1e6, st['prm_dead_vertex_bytes'] / 1e6))
     by_hash = collections.defaultdict(list)
-    for m in MAPS:
+    for m in MAPS + EXTRA:
         d = os.path.join(tree, 'Maps', m['id'])
         zp = os.path.join(d, m['slot'] + '_Main.zip')
         if not os.path.isfile(zp):
@@ -1675,6 +1890,7 @@ def selftest(scratch=None, log=print):
         put(game, 'Scenes/Locations/F01/' + f, b'TEST BUILD ' + f.encode()); put(game, BACKUP + '/Scenes/Locations/F01/' + f, stock)
     put(game, 'Scenes/Locations/F01/Loader_Sequence.zip', b'stock loader (never replaced)')
     put(game, 'Scenes/Locations/F01/KLWardrobe.ini', b'[Wardrobe] of the test build'); put(game, 'Scenes/Locations/F01/KLJoin.ini', b'[Join] of the test build'); put(game, 'Scenes/Locations/F01/KLGuns.ini', b'[Guns] of the test build')
+    put(game, 'Scenes/Locations/F01/KLTalk.ini', b'[Talk] of the test build')      # SIDE has four names since KLTalk.ini: without this file check 4's list was one pair short (FAIL at 27731de)
     put(game, 'Scenes/Locations/F01/F01_Main.WHD', b'stock whd, equal to its backup'); put(game, BACKUP + '/Scenes/Locations/F01/F01_Main.WHD', b'stock whd, equal to its backup')
     put(game, BACKUP + '/PC_Def.str', b'STOCK stream file')
     ini0 = '[KLHook]\r\nContinueAsserts=1\r\nMaxDumps=4\r\n[Expansion]\r\nEnable=1\r\nLog=2\r\n[Redirect]\r\nF01=DM03\r\n[Auto]\r\nEnable=0\r\n; a comment\r\n'
@@ -1775,6 +1991,37 @@ def selftest(scratch=None, log=print):
     ok('install + uninstall on the clean folder leaves no trace', snap(game) == now)
     ok('uninstall with nothing installed changes nothing', uninstall(game, log=quiet) is None and snap(game) == now)
 
+    log('6. a tree with an opt-in map (EXTRA: slot F07 beside the stock F07 files), then the update back to the five')
+    tree6 = os.path.join(scratch, 'out6', ROOT)
+    shutil.copytree(tree, tree6)
+    entries6 = list(entries)
+    for m in EXTRA:
+        d = 'Maps/%s/%s_Main' % (m['id'], m['slot'])
+        put(tree6, d + '.zip', b'archive of ' + m['id'].encode() * 9000); put(tree6, d + '.WAV', b'wav of ' + m['id'].encode())
+        put(tree6, 'Maps/%s/KLWardrobe.ini' % m['id'], b'[Wardrobe] of ' + m['id'].encode()); put(tree6, 'BuildInfo/%s/result.json' % m['id'], '{}')
+        entries6.append({'id': m['id'], 'name': m['title'], 'slot': m['slot'], 'menu_entry': ORDER.index(int(m['slot'][1:])), 'accepted': True, 'build_id': 'x' * 40, 'bytes': 1})
+    put(tree6, 'KLHook.expansion.ini', ini_block(entries6).replace('\n', '\r\n'))
+    man6 = dict(man, maps=entries6)
+    man6['files'] = {r: {'sha1': sha1(os.path.join(tree6, r)), 'bytes': os.path.getsize(os.path.join(tree6, r))} for r in files_under(tree6) if r != 'manifest.json'}
+    put(tree6, 'manifest.json', json.dumps(man6))
+    x0 = EXTRA[0]
+    line6, own6 = '%s=%s' % (x0['slot'], x0['id']), ['Maps/%s/%s_Main.zip' % (x0['id'], x0['slot']), 'Maps/%s/KLWardrobe.ini' % x0['id'], 'BuildInfo/%s/result.json' % x0['id']]
+    install(tree6, game, log=quiet)
+    t = open(os.path.join(game, 'KLHook.ini'), newline='').read()
+    ok('six maps installed: %s and its files are there, [Redirect.%d] has %s after the five, [Page.%d] its title' % ('Maps/' + x0['id'], PAGE, line6, PAGE),
+       all(os.path.isfile(os.path.join(dst, r)) for r in own6) and t.index('F06=DM09') < t.index(line6) and '%s=%s' % (x0['slot'], x0['title']) in t)
+    ok('the stock files of slot %s are untouched by it' % x0['slot'], snap(game)['Scenes/Locations/F07/F07_Main.zip'] == before['Scenes/Locations/F07/F07_Main.zip']
+       and not any(os.path.exists(os.path.join(game, 'Scenes/Locations', x0['slot'], f)) for f in SIDE))
+    install(tree, game, log=quiet)                      # the update from six to five (re\expansion.md 11.6)
+    t = open(os.path.join(game, 'KLHook.ini'), newline='').read()
+    ok('update to the five-map tree: every file of %s is gone, the five are whole' % x0['id'],
+       not any(os.path.exists(os.path.join(dst, r)) for r in own6) and not [r for r in files_under(dst) if ('/' + x0['id'] + '/') in r]
+       and all(sha1(os.path.join(dst, r)) == v['sha1'] for r, v in man['files'].items() if not r.startswith('Hook/')))
+    ok('KLHook.ini: no %s line and no title of it any more, the block once, the five lines there' % line6,
+       line6 not in t and x0['title'] not in t and t.count(BEGIN) == 1 and all('%s=%s' % (m['slot'], m['id']) in t for m in MAPS))
+    uninstall(game, log=quiet)
+    ok('uninstall after six -> five leaves no trace', snap(game) == now)
+
     running = real_running
     log('selftest in %s: %d checks failed' % (scratch, len(fails)))
     log('RESULT: %s' % ('PASS' if not fails else 'FAIL'))
@@ -1812,10 +2059,11 @@ def main():
         for w in opt('--prebuilt').split(','):
             i, _eq, folder = w.partition('=')
             pre[i] = folder
-    f = {k: flag('--' + k) for k in ('reuse', 'no-stream', 'no-share', 'no-pictures', 'keep-slot', 'no-hook', 'link', 'replace', 'restore-all', 'bones', 'no-bones', 'no-hook-build')}
+    f = {k: flag('--' + k) for k in ('reuse', 'no-stream', 'no-share', 'no-pictures', 'keep-slot', 'no-hook', 'link', 'replace', 'restore-all', 'bones', 'no-bones', 'no-hook-build',
+                                     'no-map-pictures')}
     if cmd == 'build':
         sys.exit(build(out, only.split(',') if only else None, par, f['reuse'], hook, not f['no-stream'], not f['no-share'], not f['no-pictures'], not f['no-bones'],
-                       not f['no-hook-build'], prebuilt=pre, overlay_from=overlay_from))
+                       not f['no-hook-build'], prebuilt=pre, overlay_from=overlay_from, map_pics=not f['no-map-pictures']))
     tree = os.path.join(default_out(), ROOT) if not a else a[0]
     if cmd == 'check':
         check(tree)
@@ -1827,7 +2075,7 @@ def main():
         with open(os.path.join(os.path.dirname(os.path.abspath(tree)), 'share.json'), 'w') as f:
             json.dump(r, f, indent=1)
     elif cmd == 'pictures':
-        pictures(a[0] if a else None)
+        pictures(a[0] if a else None, maps=MAPS + EXTRA)
     elif cmd == 'mappics':
         if len(a) != 2:
             raise SystemExit('mappics <tree> <folder for the variant>')

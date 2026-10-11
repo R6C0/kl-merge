@@ -818,3 +818,222 @@ four more entries that are stock maps under their stock names (slot F07 and the 
 text. The picture is a story-mode picture, not the map's (10.4). Accept loads the map; the loading screen and the
 lobby / score titles are those of the stock map whose slot it uses. 'Start Arcade Game' is the stock page with
 the nine stock maps, Subway being Subway again. Heister and Guns are as installed.
+
+## 11. The sixth map: 'The Vault' (DM03A, slot F07) on the 'Dead Men maps' page (2026-10-11, track U)
+
+OFFLINE: the game was not started, nothing was written to the Dog Days folder, NOTHING IS INSTALLED. Built into
+`<work>\build\q_vault\`. The map itself (the campaign bank M03_A as a Fragile Alliance map, kl-merge-9b:
+`tools\kl_fa_bank.py`, `re\bank_campaign.md` DELIVERY) HAS NEVER BEEN LOADED IN THE GAME; its builder's live order
+L0 .. L3 (re\bank_campaign.md D4, on the F01 test slot) comes BEFORE anything of this section is installed.
+
+### 11.1 What changed (`tools\kl_expansion.py` only; `klhook\mkoverlay.py` and `klhook\klslot.c` needed nothing)
+
+| what | where | note |
+|---|---|---|
+| the map as an OPT-IN entry | `EXTRA` beside `MAPS`: id `DM03A`, slot `F07` = entry 5 of page 2, title 'The Vault', picture `LevelPicture_M03A`, `build='prebuilt'`, `audit=True`, `known=('stream clips are not in the merged stream file',)` | in a tree ONLY with `--prebuilt DM03A=<folder>` (or kept by `--reuse`). It is never built here (`--maps DM03A` without the folder stops with that sentence). A `Maps\DM03A` left in `<out>` by an earlier build is removed when the map is not asked for |
+| the slot rename | `adopt()`, as for the five: archive members and file names F01 -> F07, bytes untouched, read back by CRC | `KLWardrobe.ini`, `KLGuns.ini`, `KLTalk.ini`, `KLJoin.ini` go to `Maps\DM03A`, the notes to `BuildInfo\DM03A` |
+| `[Redirect.2] F07=DM03A`, `[Page.2] F07=The Vault` | `ini_block()` - from the tree's entries, as before | the hook's `[Bots]` / `[Crew]` block is the same for all six |
+| the KNOWN finding | `verdict()` (result.json: 'sound: 10 stream clips are not in the merged stream file' is known) and NEW `audit_known()`: of the folder's `audit.json` 'bad' list only `verify: <a known problem>` and `preflight: verify kl_graft.verify reported N problems (result.json)` (when N = all of result.json's problems and every one is known) are accepted; every other line refuses the map | accepted lines are in the manifest entry as `audit_known` and printed ('KNOWN and accepted (audit): ...', 'KNOWN: the map is SILENT in its streamed clips ...'). PINNED since the review (11.8): for this map `known_re` + `is_known()` want the WHOLE line 'sound: N stream clips are not in the merged stream file (kl_audio.merge)' with N <= 10 - '400 stream clips', '11', or a line with a second finding beside the phrase refuse the map. `audit_known()` is called ONLY for a map with `audit=True`: for the five maps every line of an `audit.json` 'bad' list refuses, as before this track |
+| an audit is REQUIRED for an opt-in map | `audit=True`: no `audit.json`, or one made on other files than the folder holds (kl_maps' content id, taken by `adopt()` into `adopted.json`), refuses the map | tried: a made-up 'fa: BROKEN ...' line -> `RESULT: FAIL - DM03A: audit: fa: BROKEN ...`; one byte added to `F01_Main_LS.SND` -> 'audit.json was made on other files ...'; no audit.json -> 'the folder holds no audit.json' (exit 1 each) |
+| the page's pictures follow the reference overlay | `build()`: when the `--overlay-from` scene holds an entity `LevelPicture_<id>` of a map of the tree, `[Page.2] <slot>.Picture=` names it (`ini_block(entries, pics)`); `menu_check()` takes the overlay's own scene for what a `Graphic=` may name; `overlay_kept()` now also compares against a reference that already HAS the map page (nothing but `HeistPlayMenu2` may differ) | `--no-map-pictures` = the page as before. WHY: see 11.2 |
+| `mappics` adds only what is missing | `map_pictures()`: a tree whose menu scene already holds some `LevelPicture_<id>` gets the others added; the entities, textures and chunks that are there are not written again (kl_portraits' check against the source scene: nothing of it moved) | so the five pictures the owner has seen stay what they are |
+| `--maps <ids>` leaves a held opt-in map alone | `build()`: `extra_keep` | a `--maps DM01 --reuse` on a six-map tree used to REMOVE `Maps\DM03A` while DM02 .. DM09 stayed (review S2); now 'DM03A: not named by --maps: left in the tree as it lies', six entries. Only a WHOLE build that does not ask for the map takes it out. The same run used to end 'RESULT: FAIL - ' with no reason (entries 6 against maps 1): the result now asks for an entry of every NAMED map and says 'no build of <id> in the tree' when one is missing |
+| `pictures` | `pictures(out, log, maps)`: also the opt-in maps of the tree; the CLI `pictures` makes all six | `LevelPicture_M03A` is an entity of DEAD MEN's frontend scene (the campaign chapter's picture: the 'US Credit Bank' front with its columns - looked at: `<work>\build\q_vault\w_tabQ\pictures\DM03A.png`); same 891 x 530 sheet, same fixed cut `PHOTO` |
+| `--reuse` keeps an adopted map's `KLJoin.ini` | `build()`: a `--reuse` pass used to write `join_ini()` over DM09's file (the folder's `[FedBody]` and other sections were gone from the tree) | found while proving 11.3 |
+| `--prebuilt` with an unknown id stops | `build()` | it was silently ignored |
+| selftest | a `KLTalk.ini` in the made-up slot | check 4 FAILED at commit 27731de (SIDE has four names, the made-up folder had three); now 37 checks, 0 failed: part 6 (new with the review) installs a made-up SIX-map tree (slot F07 beside the stock F07 file), updates to the five-map tree - every file of `DM03A` gone, no `F07=DM03A` line or title left in the ini, the five whole - and uninstalls without a trace |
+
+PAGE 2 IS NOW FULL (F01 F02 F03 F04 F06 F07; F05 F08 F09 are the paid DLC slots). A seventh map needs page 3:
+`PAGE` is one number in kl_expansion.py; mkoverlay.py has buttons for pages 2..5 (2..4 with the Heister button),
+klslot.c takes `[Redirect.2]` .. `[Redirect.9]`.
+
+A CHANGED DEFAULT (say it as such): with `--overlay-from` a reference whose scene holds `LevelPicture_<id>` entities,
+`build` now NAMES them on the page. The lead's `mk_ptab.py` command therefore no longer gives w_tabP's tree: two
+files differ, `KLHook.expansion.ini` (five `.Picture=` lines more) and `Overlay\Patch01.zip` (frontend.xml 0dde5f61
+instead of bdfe83b7); everything else is identical (11.3). `--no-map-pictures` gives the old page.
+
+THE MENU needed nothing new: the page always had nine selector entries and nine pictures (re\menus.md 4.3, 8.1) -
+entry 5 was there and loaded STOCK F07 under its stock title. Against hud_mappics' overlay (the page the owner
+called good; NOT what the game folder holds since 18:42, see 11.2),
+`menu/frontend.xml` of the six-map tree differs in exactly two lines:
+
+    -  <GuiElement Type="Graphic" Name="H07_LevelPicture_P2" Template="LevelPicture_T" Graphic="LevelPicture_H07" />
+    +  <GuiElement Type="Graphic" Name="H07_LevelPicture_P2" Template="LevelPicture_T" Graphic="LevelPicture_DM03A" />
+    -  <Text Text="/Menu/Online/Scenarios/Title07" />
+    +  <Text Text="%The Vault" />
+
+klslot.c (read whole for this): the redirect rules are per slot NAME (`kls_rules`: any plain folder name, 16
+slots, 64 lines), the page latch is per WINDOW (`HeistPlayMenu2`), the page is taken at the open of
+`<slot>_main.zip`: nothing names F01..F06, so F07 needs no hook change. Stock F07 has `Loader_Sequence.zip /
+.WHD / .WAV` beside its archive like every slot; the map folder has none, so the hook says 'stock
+Loader_Sequence.zip has no counterpart: the STOCK file will be used' at start, as for the other five: the
+loading screen is stock F07's. The stock page ('Start Arcade Game') still loads stock F07: there is no
+`[Redirect]` line, only `[Redirect.2]`.
+
+### 11.2 FOUND: `<work>\build\w_tabP` does NOT carry the map pictures the owner has
+
+`w_tabP` was built with `--overlay-from <work>\build\hud_mappics`. That carried hud_mappics' menu SCENE (sha1
+5be87b0d..., the five `LevelPicture_DM*` entities) but wrote the PAGE from the tree's own ini, which had no
+`.Picture=` lines: `w_tabP\KLExpansion\Overlay\Patch01.zip` holds frontend.xml sha1 bdfe83b7... with the pictures
+`LevelPicture_L01 L02 L03 L04 L06` (story pictures), while the game folder and hud_mappics hold 0dde5f61... with
+`LevelPicture_DM01 ..`. INSTALLING w_tabP AS IT LIES WOULD PUT THE STORY PICTURES BACK ('pictures are good', owner).
+With the change of 11.1 the same command gives hud_mappics' page (11.3 b). w_tabP itself was not touched: build
+it again, or copy hud_mappics' `Overlay\Patch01.zip` over the installed one after installing it.
+
+IT HAS SINCE BEEN INSTALLED (read 2026-10-11 evening, review M1 - FOR THE LEAD): `<DD>\KLExpansion\Overlay\Patch01.zip`
+is 9a9ab0b2 = w_tabP's (frontend.xml bdfe83b7, `LevelPicture_L01 .. L06` on page 2), installed 18:42; the scene beside
+it is still the pictured 5be87b0d; the game folder's manifest is w_tabP's file for file. So THE STORY PICTURES ARE
+BACK ON THE OWNER'S TAB. `dinput8.dll` there is 37949c06 = `<work>\build\klhook\test_w6` (a TEST hook: the owner's
+SHIP hook must be back before he plays). THE REMEDY IS BUILT: `<work>\build\q_vault\w_tab5\KLExpansion` = mk_ptab's
+command with the tool as it is now: `RESULT: PASS`, 248 files, `check` exit 0, `menu` 'rules hold'; against the game
+folder's manifest the five map entries are identical and exactly TWO files differ, `KLHook.expansion.ini` (=
+hud_mappics' byte for byte) and `Overlay\Patch01.zip` (members = hud_mappics' by CRC, frontend.xml 0dde5f61). Game
+closed: `python tools\kl_expansion.py install "<work>\build\q_vault\w_tab5\KLExpansion" --replace --no-stream --no-hook`
+(an update: two files copied, the ini block rewritten - then the usual settings check), or by hand: hud_mappics'
+`Overlay\Patch01.zip` over the installed one. Nothing was written to the game folder by this track.
+
+### 11.3 Proof that a build without `--prebuilt DM03A=...` leaves the five maps as they are
+
+Both into a scratch folder (deleted afterwards), with exactly the arguments of the lead's `mk_ptab.py`
+(`--ready <work>\build\z_route --prebuilt DM01=<p_tab>\DM01,...,DM09=<p_tab>\DM09 --overlay-from
+<work>\build\hud_mappics --hook <ship_main1>\dinput8.dll --no-stream --no-share`), compared with w_tabP's manifest:
+
+| build | the five manifest entries | 244 files under `Maps\` + `BuildInfo\` | ini | frontend.xml |
+|---|---|---|---|---|
+| a) with `--no-map-pictures` | all five IDENTICAL (every key) | 244 identical by sha1 | identical | bdfe83b7... = w_tabP's (only the zip's time stamp differs) |
+| b) default | all five IDENTICAL | 244 identical | = `hud_mappics\KLHook.expansion.ini` byte for byte | 0dde5f61... = hud_mappics' (the page the owner saw until 18:42; the game folder holds bdfe83b7 since, 11.2) |
+
+Both `RESULT: PASS`. So b), the DEFAULT, is NOT 'exactly w_tabP': the maps, `BuildInfo`, `Hook` and the scene are, the
+ini and `Patch01.zip` are hud_mappics' instead (the changed default of 11.1). Run again after the review's fixes
+(tool sha1 7834fb70): b) into a folder that still held `Maps\DM03A` ('DM03A: not asked for ...: Maps\DM03A removed
+from the tree', five maps, PASS, the same two files differ from w_tabP) and into `q_vault\w_tab5` (kept: 11.2).
+`selftest`: 37 checks, 0 failed.
+
+### 11.4 The map's finishing, as the other five got it (`<work>\build\q_vault\DM03A`)
+
+Order of the lead's `mk_ptab.py`: copy of `<work>\build\c_bank\bank_vault` (archive ac97b4f1...) -> `kl_hud.py
+all <zip> <out> --look deadmen` (the owner's HUD look; 'check: PASS'; only the archive is taken from its output)
+-> `kl_fa_fedbody.py apply` LAST and merged in (a NEW `KLJoin.ini` with `[FedBody]` only: the map has no join)
+-> `kl_maps.py audit` again (the archive changed, the old audit would be stale). Archive now 047a157c... (207,931,003
+bytes; in the tree, renamed: `F07_Main.zip` bd94d046...).
+
+| check on the finished folder | last line |
+|---|---|
+| `kl_fa_fedbody.py check` | 'PASS (0 FAIL, 0 NOTE); section: Entries=65852, Root=0, Stock=1919, AkItem=32, AkRecord=30' |
+| `kl_fa_fedpoints.py check` | 'RESULT (kl_fa_fedpoints): PASS (0 FAIL, 7 NOTE); 7 point(s): 7 good, 0 doubtful, 0 bad' |
+| `kl_impact.py` | 'problems: 0 in 1 levels' |
+| `kl_fa_bots_dyn.py check` | 'RESULT (kl_fa_bots_dyn): PASS (0 FAIL, 0 NOTE)' |
+| `kl_fa_bank.py check` / `reverify` | 'PASS' / 'problems: 0' (the HUD step adds no entity: no new seal needed) |
+| `kl_chars.py check` | '21219 nodes, 84 people, .prm 65851 chunks ... problems: 0' |
+| `kl_map_guns.py check` | '6 guns with looks ...' (exit 0) |
+| `kl_fa_talk.py check` | 'findings: FAIL 0, NOTE 1' |
+| `kl_maps.py audit` | 'RESULT: FAIL (2 findings that must be 0, 0 known and accepted)' = the two KNOWN lines of 11.1, nothing else |
+
+WHAT THE FED PART WILL DO ON THIS MAP (owner's ini: `[Fed] Enable=1 Player=1`; nothing was authored here):
+- the level HAS the respawn points: 7 AFTER_DEATH points, F07's own objects, moved by kl_fa_bank to the FRONT
+  STREET - x -1750 .. -1437 and 2016 .. 2178, y 705, z -9900; all 7 'GOOD' (floor 5 - 6 below, on the crew's
+  mesh part, 232 of the crew's 240 places reached on foot); 8 police bodies.
+- so a player who dies ANYWHERE - in the yard, in the vault 16.6 m under the street - comes back on the front street,
+  11.5 - 14 m from the nearest heister's place and 57 - 60 m from the START row, OUTSIDE the bank, where the round ends
+  (plaza, van). He walks in through the front entrance. Whether that is where the owner wants it (on Retomoto the
+  place was wrong, 2026-10-11) is his to say; `kl_fa_fedpoints.py` is the tool.
+- body: the police player's own (stock SWAT, `Root=0`) - kl_fa_fedbody's table does not know M03_A and the
+  owner's rule for the bank is 'normal swat'. AkChance rifle: item 32 (AK-74), because this build's gun looks
+  show an M4A1 on the AK-47.
+- AI heisters as feds (`[Fed] Bots`, kl_fa_fed.py squads): not in this build.
+Other per-map parts: `[Bots]` / escort / BoardAll / FollowOut / `[Crew] Random` act (7 AI heisters, wardrobe 16 /
+12); `KLTalk.ini` asks for a stream file of 1,686,681,836 bytes or more - the game's has 1,694,610,488; no
+`[Join]`, no `[CrewHop]`, no `[Climb]` section.
+
+### 11.5 The tree and the overlay
+
+    1. python tools\kl_expansion.py build --out <work>\build\q_vault\w_tabQ
+           --prebuilt DM01=<p_tab>\DM01,DM02=<p_tab>\DM02,DM03=<p_tab>\DM03,DM06=<p_tab>\DM06,DM09=<p_tab>\DM09,DM03A=<work>\build\q_vault\DM03A
+           --overlay-from <work>\build\hud_mappics --hook <work>\build\klhook\ship_main1\dinput8.dll --no-stream --no-share
+       -> six maps, the five pictures named, The Vault with the story picture LevelPicture_L07 (already a whole tree;
+          L07 because mkoverlay.py gives a MAPPED slot without a Picture= line the story picture LevelPicture_L<slot>,
+          its line 345 - the five-map page shows LevelPicture_H07 at entry 5 because there the slot is NOT mapped and
+          keeps the stock Arcade picture: both names in this section are right)
+    2. python tools\kl_expansion.py mappics <work>\build\q_vault\w_tabQ\KLExpansion <work>\build\q_vault\overlay
+       -> the six-map overlay VARIANT: hud_mappics' scene + ONE entity LevelPicture_DM03A, the page naming all six
+    3. python tools\kl_expansion.py build --out <work>\build\q_vault\w_tabQ --reuse --overlay-from <work>\build\q_vault\overlay
+           --hook <work>\build\klhook\ship_main1\dinput8.dll --no-stream --no-share --no-pictures
+       -> the same six maps (kept), the tree's overlay = the variant
+
+Each step `RESULT: PASS`; `check`: 293 files as in the manifest, 1,528,870,342 bytes; `menu`: 'rules hold'.
+Step 3 was run AGAIN with the tool after the review's fixes (7834fb70; `_log\fix_six_3.txt`, `fix_check.txt`): the six
+manifest entries are identical to the first build's, no file but the container of `Patch01.zip` differs.
+
+MIND with `--reuse`: (a) `--ready <dir>` and `--prebuilt` come BEFORE `--reuse` - a map they name is taken again from
+its folder, so step 3 has no `--ready` (now also in the tool's docstring; older than this track); (b) a kept map's
+audit is tied to its files through `adopted.json` of the build that took it; a file changed INSIDE the tree
+afterwards is not seen by `build` (the manifest is written from what lies there) - the rule 'never edit a file
+inside a tree' is what covers it, for all six.
+
+- `<work>\build\q_vault\w_tabQ\KLExpansion` - the tree. Entries of the page: Hot Coffee, Late Night Opening,
+  Withdrawal, A Walk in the Park, Retomoto Tower, **The Vault**, then the three DLC slots under their stock names.
+  The five maps are p_tab's: their manifest entries and all 244 files are w_tabP's by sha1.
+  `Maps\DM03A`: `F07_Main.zip` + 18 files beside it + KLGuns / KLJoin / KLTalk / KLWardrobe.ini, 256 MB, build id
+  5694ff41a949. `Hook\dinput8.dll` = ship_main1 (5868b48f...; the game folder held 71d133ae... when this was
+  written and the TEST hook test_w6 37949c06... in the evening: install with `--no-hook` or with the hook that is wanted).
+- `<work>\build\q_vault\overlay` - the variant by itself (`Overlay\Patch01.zip`, `Overlay\Scenes\kaneandlynch.zip`
+  a07448ea..., `KLHook.expansion.ini`, `variant.json`): made from hud_mappics' scene (5be87b0d... - the scene the game folder holds;
+  its PAGE there is w_tabP's since 18:42, 11.2);
+  6293 -> 6295 entities, 1026 textures; kl_portraits' checks '1 of 1' against that scene (no stock or earlier entity, texture or
+  chunk changed) and '36 of 36' (the five map pictures and the 31 Heister pictures still resolve), 0 problems.
+  The two Overlay files belong together. frontend.xml sha1 0dcc758a... in the variant and in the tree.
+- `<work>\build\q_vault\DM03A` - the finished folder (11.4). `_log\` - every command's output.
+
+NOT SEEN IN THE GAME: any of it. Assumed, as for the five: a level loads under another slot name than the one it
+was built for (seen for F01 F02 F03 F04 F06, never F07); a sixth picture entity in the menu scene (the scene grows
+by 2 entities and one 1024 x 512 texture; its heap budget, header +0x1c, was again not raised - five were fine).
+
+### 11.6 Stepping back to five
+
+- Not installed yet: nothing to do; `w_tabP` / `w_tabM` are untouched (mind 11.2 for w_tabP's pictures).
+- A tree of five from the same folder: run step 1 without the `DM03A=` part (the tool removes `Maps\DM03A` and
+  `BuildInfo\DM03A` from the tree and says so - RUN, 11.3) with `--overlay-from <work>\build\hud_mappics`. A build
+  with `--maps <ids>` does NOT take the map out (11.1). A five-map tree with the owner's pictures lies ready:
+  `<work>\build\q_vault\w_tab5` (11.2).
+- Installed and unwanted: install the five-map tree again (`install <tree> --replace --no-stream --no-hook`; an
+  update removes the files the new tree lacks, `Maps\DM03A` with them, and rewrites the ini block without the
+  F07 lines - tested on a made-up game folder: `selftest` part 6). Or, at once and by hand in the game's KLHook.ini: delete the line `F07=DM03A` under `[Redirect.2]` -
+  entry 5 then loads stock F07 (under the title 'The Vault' until the overlay is the five-map one again).
+
+### 11.7 Live order for the lead, AFTER the builder's L0 .. L3 have passed on the F01 slot
+
+Game closed, the owner away. Install: `python tools\kl_expansion.py install
+"<work>\build\q_vault\w_tabQ\KLExpansion" --replace --no-stream --no-hook`, then the settings check every install
+needs (`[Bots] Escort / BoardAll / FollowOut`, `[Crew] Random=1`, `[Fed]`, `[Balance]`), TEST sibling of the
+owner's hook. Scripts: the w-tab ones (10.5) with entry 5 - the lead's `mkrun.py` / `live.py` know five ids and
+need `DM03A` = entry 5 = slot F07:
+
+    sel HeistLevel_P2 0xceceec 5
+    expect 0xceceec 5
+    msg HeistLevel_P2 StartGame
+
+FAIL in every run: a `FATAL` line, a `KLHook_N.dmp`, `RESULT: crash / assert / hung`, a 'stall watch:' line in a level.
+
+| run | what | PASS lines / what to look at | FAIL means |
+|---|---|---|---|
+| M0 | start + the page only (TAB_PAGE's way: Arcade -> 'Dead Men maps', step the selector 0..5, Back). `[Expansion] Log=2` | at start: `expansion: [Redirect.2] Scenes\Locations\F07\ -> ...\KLExpansion\Maps\DM03A\`, `expansion:   stock Loader_Sequence.zip has no counterpart: the STOCK file will be used` (also .WHD, .WAV), `... 6 redirect rule(s) for 6 slot(s)`, `expansion: CreateFileA overlay: ...\Scenes\kaneandlynch.zip -> ...\KLExpansion\Overlay\Scenes\kaneandlynch.zip`; `expansion: menu page 2 latched: window 'HeistPlayMenu2' is open ([Redirect.2] F01=DM01, ..., F06=DM09, F07=DM03A)`. PICTURE at entry 5: the bank front with columns ('US CREDIT BANK'), 'Location: The Vault'; entries 0..4 as the owner knows them; the Heister page's pictures still there | no menu / a fault at the frontend = the menu scene with the sixth entity (put hud_mappics' two Overlay files back: the five pictures; entry 5 then shows stock F07's picture and title and STILL loads The Vault); a grey or wrong picture at entry 5 alone = the new entity only |
+| M1 | THE CONTROL: stock page -> entry 5 (stock F07), 30 s in the level, in ONE process after having opened and left page 2 | `expansion: menu page 1 latched ...`, `expansion: slot F07: menu page 1 from now on -> the stock level`, `steam: level archive f07\f07_main.zip opened from ...\Scenes\Locations\F07\F07_Main.zip: STOCK (...)`; NO `character: ... has a wardrobe` line | a redirect line for F07 here = the page-2 rule leaks to the stock page: take `F07=DM03A` out |
+| M2 | page 2 -> entry 5 -> StartGame, 60 s in the level, idle; `[Vis] Log=1`, `[Bots] Log=1` | `(expect 0xceceec 5 passes)`, `session: state 0x0 -> 0x12`, `expansion: slot F07: menu page 2 from now on -> DM03A`, `expansion: CreateFileA redirect: ...\Locations\F07\F07_Main.zip -> ...\KLExpansion\Maps\DM03A\F07_Main.zip`, `steam: level archive f07\f07_main.zip opened from ...\Maps\DM03A\F07_Main.zip: NOT stock (207931003 bytes ...)`, `character: level f07\f07_main has a wardrobe (version 2): 16 characters, 12 masks`, `guns: level f07\f07_main has 6 gun(s) with ... look(s) (...\Maps\DM03A\KLGuns.ini, Version 2 ..., for a .prm of 65852 chunks)`, no `talk: ... REFUSED` / `has no KLTalk.ini` line, seconds later the `.WHD` / `.WAV` redirects from `Maps\DM03A`; state 0x19 (GO); `bots: ... 7 AI`; `vis: ... record 0xff has never held 'no cell'`; the yard as in L1 / L2. Must NOT appear between 'latched' and 'slot F07:': `menu page 2 dropped`, `slot F07: menu page 0` | stock F07 loads = the redirect did not take F07 (the log's `slot F07:` line says which page it saw); a fault at load that L2 on F01 did not have = something in the engine keyed to the slot name F07 (not known to exist) |
+| M3 | a whole round by the scripted player from the tab (`kl_playtest.py script <tree> ...` needs a route for this map: the builder's L1 / L2 walk), then the SECOND load of the map in the same process, and one death with `[Fed] Player=1` | `record 0 (you): heist stage 0 -> 1 -> 2 -> 3`, `aboard`, `status6`; `memory: at the level's largest block` on the second load without a refused request; `fed: YOU ARE A FED ... at (x, 705, -9900)` with x in -1750 .. -1437 or 2016 .. 2178 (the front street); with a hook that has klfedkit.c: `fedkit: level f07\f07_main: [FedBody] Root=0 ...` and `fedkit: body: this map keeps the stock police body ([FedBody] Root=0)` | the fed appears elsewhere = the level's AFTER_DEATH points are not the ones read offline |
+
+After M0 .. M2 the owner can be told the entry is there; M3 is the round. The map stays SILENT in its music, the
+vault's ambience and nine guard lines until a stream file holds the 16 clips (re\bank_campaign.md D6): that needs
+the owner's go-ahead for a larger PC_Def.str, then a rebuild with `--music-layer4`, the chain, 11.4 and 11.5 again.
+
+### 11.8 The review round (re\expansion_vault_review.md: ACCEPT WITH FIXES), 2026-10-11 evening
+
+Tool after the round: `tools\kl_expansion.py` sha1 7834fb70. NOT RUN IN THE GAME, nothing installed, nothing committed.
+
+| point | what was done |
+|---|---|
+| M1 (lead) the game folder holds w_tabP's page | confirmed by reading (11.2); this track writes nothing there. The remedy tree `q_vault\w_tab5` is built, and the sentences of 11.1 / 11.2 / 11.3 / 11.5 that called 0dde5f61 'the installed one' are corrected |
+| S1 the default is not 'exactly today's tree' | said as a CHANGED DEFAULT in 11.1 and 11.3 (two files differ, by name) |
+| S2 `--maps <id> --reuse` deleted The Vault | fixed (`extra_keep`); run on a copy of w_tabQ: 'left in the tree as it lies', 6 entries identical to before, `RESULT: PASS` |
+| S3 the known finding was a substring without its number | pinned: `known_re` (whole line, count <= 10) through `is_known()` in `verdict()` and `audit_known()`; tried: 10 accepted; 400, 11 and a line with '; fa: BROKEN x' beside the phrase refused in both |
+| S4 `audit_known()` loosened the five | gated on `audit=True`: for the five every 'bad' line of an audit.json refuses again |
+| S5 small things | L07 / H07: both right, the reason is now in 11.5; the docstring's pages: corrected (mkoverlay 2..5, klslot 2..9); selftest part 6 covers install and the step from six to five; the `--reuse` audit tie and `--ready` before `--reuse` are written down in 11.5 and the docstring (behaviour older than this track, not changed) |
