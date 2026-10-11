@@ -133,7 +133,7 @@
 struct klu_text { DWORD obj, shadow; float x, y; int on, style; DWORD colour, want_colour; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
 
 static struct {
-    int on, log, crew, money, hide, shadow, layer, rows, before; float inset, crew_x, crew_y, money_x, money_y, row;
+    int on, log, crew, money, hide, shadow, layer, rows, before, borrow; float inset, crew_x, crew_y, money_x, money_y, row;
 } klu;
 
 static struct {
@@ -201,6 +201,11 @@ static void klu_draw_ours(void *el, void *ctx, void *cam)
             const struct klu_text *t = &klu_r.t[i];
             if (!t->on || !t->obj) continue;
             if (klu.shadow && t->shadow) klu_draw_one(t->shadow, ctx, cam, t->x + 2.0f, t->y + 2.0f);     /* 0xbbe4ec / 0xbbe4f0 = 2.0 */
+            if (klu.borrow && i == KLU_ROWS) {           /* TEST [HUD] Borrow=1 (run H1h: our desc[2] 6f45daa0 against the timer's 47e6cb80 is the
+                                                            only difference at the emit): text 8 draws with the timer's text's desc[2] */
+                DWORD tobj = klh_rd32((DWORD)(DWORD_PTR)el + 0x28), td = klh_rd32(tobj + 0x30), od = klh_rd32(t->obj + 0x30), v = td ? klh_rd32(td + 8) : 0;
+                if (v && od && klh_rd32(od + 8) != v) { klh_data((void *)(DWORD_PTR)(od + 8), &v, 4, "text 8 desc[2] := the timer's"); if (klu.log) klog("hud: borrow: text 8 desc[2] -> %08lx (the timer's)", v); }
+            }
             if (klu_draw_one(t->obj, ctx, cam, t->x, t->y)) InterlockedIncrement(&klu_n_draw); else InterlockedIncrement(&klu_n_refused);
             if (klu.log >= 2 && i == KLU_ROWS && !klu_probe_busy) {      /* text 8 as the draw left it (the tick prints it) */
                 klu_probe_busy = 1;
@@ -567,6 +572,7 @@ static void klu_init(void)
     klu.money = GetPrivateProfileIntA("HUD", "Money", 1, klh_ini) != 0;
     klu.hide = GetPrivateProfileIntA("HUD", "HideStock", 1, klh_ini) != 0;
     klu.shadow = GetPrivateProfileIntA("HUD", "Shadow", 1, klh_ini) != 0;
+    klu.borrow = (int)GetPrivateProfileIntA("HUD", "Borrow", 0, klh_ini);          /* 1 = text 8 draws with the timer text's desc[2] (test) */
     klu.before = (int)GetPrivateProfileIntA("HUD", "Before", 0, klh_ini);          /* 1 = our texts before the stock timer's draw (test) */
     klu.layer = (int)GetPrivateProfileIntA("HUD", "Layer", 0xd, klh_ini); if (klu.layer < 2) klu.layer = 2; if (klu.layer > 15) klu.layer = 15;
     klu.rows = (int)GetPrivateProfileIntA("HUD", "Rows", KLU_ROWS, klh_ini); if (klu.rows < 1) klu.rows = 1; if (klu.rows > KLU_ROWS) klu.rows = KLU_ROWS;
@@ -578,6 +584,7 @@ static void klu_init(void)
     if (!(klu.money_x >= 0 && klu.money_x <= 1280)) klu.money_x = 1216; if (!(klu.money_y >= 0 && klu.money_y <= 720)) klu.money_y = 100;
     klog("hud: on; Log=%d Crew=%d Money=%d HideStock=%d Shadow=%d Layer=%d Rows=%d Inset=%.3f (-1 = the game's); crew at (%.0f, %.0f), money box at (%.0f, %.0f), %.0f px a row; Arcade only, texts through the game's own ZCHAROBJ path, NOT YET RUN IN THE GAME",
          klu.log, klu.crew, klu.money, klu.hide, klu.shadow, klu.layer, klu.rows, klu.inset, klu.crew_x, klu.crew_y, klu.money_x, klu.money_y, klu.row);
+    if (klu.before || klu.borrow) klog("hud: test keys: Before=%d (ours drawn before the stock timer) Borrow=%d (text 8 with the timer text's desc[2])", klu.before, klu.borrow);
 }
 
 #endif /* KLHUD_C */
