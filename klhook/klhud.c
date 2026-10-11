@@ -349,7 +349,7 @@ static int klu_make_all(DWORD osd)
         static const DWORD pairs[5][2] = { { 0xea8, 0xeac }, { 0xeb0, 0xeb4 }, { 0xeb8, 0xebc }, { 0xec0, 0xec4 }, { 0xec8, 0xecc } };   /* run H1n: light text on layer 0f + its black shadow on 0e */
         if (klu.reuse == 2) {
             DWORD el2 = klh_rd32(osd + KLU_O_PLIST), evt2 = 0;
-            if (!el2 || !klh_rd(el2, &evt2, 4) || evt2 != KLU_PLIST_VT) { klog("hud: osd %08lx: no ZFAPlayerListDisplay: no text is made", osd); return 0; }
+            if (!el2 || !klh_rd(el2, &evt2, 4) || (evt2 != KLU_PLIST_VT && evt2 != (DWORD)(DWORD_PTR)&klu_evt[1])) { klog("hud: osd %08lx: no ZFAPlayerListDisplay (vtable %08lx): no text is made", osd, evt2); return 0; }   /* ours once wrapped (run H1o) */
             for (i = 0; i < KLU_NTEXT; i++) {
                 struct klu_text *t = &klu_r.t[i]; DWORD a, b, va = 0;
                 memset(t, 0, sizeof *t);
@@ -365,7 +365,7 @@ static int klu_make_all(DWORD osd)
             return 1;
         }
         DWORD el = klh_rd32(osd + KLU_O_PLIST), evt = 0;
-        if (!el || !klh_rd(el, &evt, 4) || evt != KLU_PLIST_VT) { klog("hud: osd %08lx: no ZFAPlayerListDisplay to borrow texts from: no text is made", osd); return 0; }
+        if (!el || !klh_rd(el, &evt, 4) || (evt != KLU_PLIST_VT && evt != (DWORD)(DWORD_PTR)&klu_evt[1])) { klog("hud: osd %08lx: no ZFAPlayerListDisplay to borrow texts from: no text is made", osd); return 0; }
         for (i = 0; i < KLU_NTEXT; i++) {
             struct klu_text *t = &klu_r.t[i]; DWORD o, vt = 0;
             int money = i >= KLU_ROWS;
@@ -480,7 +480,7 @@ static void klu_apply(void)
 static void klu_hide_tick(DWORD osd, int want)
 {
     DWORD el, vt = 0; BYTE h = 0;
-    if (!(el = klh_rd32(osd + KLU_O_PLIST)) || !klh_rd(el, &vt, 4) || vt != KLU_PLIST_VT || !klh_rd(el + KLU_E_HIDDEN, &h, 1)) return;
+    if (!(el = klh_rd32(osd + KLU_O_PLIST)) || !klh_rd(el, &vt, 4) || (vt != KLU_PLIST_VT && vt != (DWORD)(DWORD_PTR)&klu_evt[1]) || !klh_rd(el + KLU_E_HIDDEN, &h, 1)) return;
     if (want && !h) {
         h = 1;
         if (klh_data((void *)(DWORD_PTR)(el + KLU_E_HIDDEN), &h, 1, "ZFAPlayerListDisplay hidden")) {
