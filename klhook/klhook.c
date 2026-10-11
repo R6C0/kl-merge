@@ -576,12 +576,17 @@ static void klh_tick(int game_thread);
 #include "klbot.c"
 #include "klescort.c"
 #include "klhop.c"
+#include "klmove.c"
 #include "klclimb.c"
 #include "klbalance.c"
+#include "klgrudge.c"
 #include "klhud.c"
 #include "klshoulder.c"
 #include "klvis.c"
+#include "klnet.c"
 #include "klfed.c"
+#include "klfedkit.c"
+#include "kldown.c"
 #include "klsteam.c"
 #include "klslot.c"
 #ifdef KLHOOK_TEST
@@ -625,11 +630,16 @@ static void klh_tick(int game_thread)
     klk_tick(game_thread);                            /* after klw_tick: it reads who wears whom */
     klb_tick(game_thread);
     kle_tick(game_thread);                            /* klescort.c: after klb_tick; one game call per order, game thread only */
+    klmv_tick(game_thread);                           /* klmove.c: Restless / WaitForYou / BoardNear (all off unless set) */
     klr_tick(game_thread);                            /* klbalance.c: one damage scale for player, police and crew */
+    kly_tick(game_thread);                            /* klgrudge.c: the crew answers your bullets (off unless [Bots] Grudge) */
     klu_tick(game_thread);                            /* klhud.c: the crew list / money box texts (game thread only) */
     klo_tick(game_thread);                            /* klshoulder.c: log only */
     klvis_tick();                                     /* klvis.c: log only (the vision grid and its record 0xff) */
+    klnet_tick(game_thread);                          /* klnet.c: multiplayer log / update numbers (off unless [Net]) */
     klp_tick(game_thread);                            /* klfed.c: come back as a fed (data writes only) */
+    klfk_tick(game_thread);                           /* klfedkit.c: the fed can hunt, body, AK (with [Fed] Player=1; Kit=0 = off) */
+    kld_tick(game_thread);                            /* kldown.c: the mash get-up (off unless [Down] Enable) */
     klg_tick();
     klm_tick();
     InterlockedExchange(&klh_tick_busy, 0);
@@ -795,13 +805,18 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klk_init();
     klb_init();
     kle_init();
+    klmv_init();
     klv_init();
     klq_init();
     klr_init();
+    kly_init();
     klu_init();
     klo_init();
     klvis_init();
+    klnet_init();
     klp_init();
+    klfk_init();
+    kld_init();
     klg_init();
     klx_init();
     kls_init(inst);
