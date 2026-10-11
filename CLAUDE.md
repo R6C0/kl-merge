@@ -183,7 +183,12 @@ Static reading and file statistics unless marked; none of it was tried in the ru
 
 ## Open work
 2026-10-11 16:05 - THE OWNER IS PLAYING AGAIN (15:56 on; his own hook ship_main1; the belly-flop runs G1 / G2 wait behind him - G0_DM03_flop_dry ran clean 15:47). His tab since 15:20: kl-merge-3e's NEW HUD LOOK on all five archives (`kl_hud.py all <zip> <out> --look deadmen`; installed copies <work>/build/hud_new/<map>, the archives before in hud_new/_src) + the map-picture menu <work>/build/hud_mappics: ANY MAP INSTALLED FROM NOW ON must go through that kl_hud step and carry that overlay; <DD> no longer equals tree w_tabM. Disk: 23 superseded test trees deleted (kept w_tabM, w_tabX, w_tabU, w_tabK), G: 32 GB free. OWNER 16:00: 'btw fix that black box on these cars that are blown up' - picture <work>/research/watch/20261011_155753/0007_150s.jpg (the bank's yard: a dark hard-edged rectangle over the upper right half of the screen beside a burning police car; from afar, 0006, it reads as a smoke column) -> workflow wf_65e77ab1-3e0, track T (scratchpad wf/T_black_box.md: new tools/kl_fa_carfx.py, re/carfx.md, builds <work>/build/z_carfx/<map>; all five maps).
-NEW HUD LOOK INSTALLED ON THE OWNER'S WORD ('put new hud on'), 2026-10-11 15:20, game closed - FONTS AND BAR PICTURES ONLY:
+NEW HUD LOOK SEEN LIVE 2026-10-11 15:58-16:02 (the owner's own bank round, watch run 20261011_155753; pictures 0005 / 0007 / 0014): THE
+DEAD MEN CAPITALS SHOW on the HUD, the name tags, the status list and the round-over page; ammo backing + chalk ticks sit right. FAULT:
+the chips broke letters at 18-20 px ('HOUND SCORE', 'LiAM'); kl_hud._chip made gentler (56746f0: outline nicks only, narrow glyphs whole,
+<= 3 % ink), the five maps rebuilt (<work>/build/hud_new/<map>: DM01 61aaf796, DM02 dcc68b5e, DM03 1f2dbbf7, DM06 6bcf0958, DM09 7d6c53fa)
+and a background task of this session copies them in when the game closes (scratchpad hud/swap_when_closed.py -> swap_result.txt).
+NEW HUD LOOK INSTALLED ON THE OWNER'S WORD ('put new hud on'), 2026-10-11 15:54, game closed - FONTS AND BAR PICTURES ONLY:
 `python tools/kl_hud.py all <archive> <out> --look deadmen` (Impact, lower case DRAWN as capitals, light chips; brush-kit plate / ticks /
 tracker bars / borders) run on the five archives AS INSTALLED in <DD>/KLExpansion/Maps (DM01 F01, DM02 F02, DM03 F03, DM06 F04, DM09 F06;
 kl_hud check PASS x5) and copied over them. PREVIOUS ARCHIVES = <work>/build/hud_new/_src/<map>/ (byte copies of what was installed),
