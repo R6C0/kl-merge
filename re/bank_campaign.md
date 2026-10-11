@@ -1,5 +1,9 @@
 # The bank the campaign way (M03_A under F07): the build, stage by stage
 
+**START AT THE SECTION 'DELIVERY' just below (D0 what was built, D1 the folders and every checker, D2 the round as
+built and the flags, D3 guesses by cost, D4 the live order, D5 packaging, D6 not done). The stage sections after it
+are the record.**
+
 The study: re/campaign_fa.md (summary), re/campaign_fa_bank.md (the place; its section 8 and the notes
 'corrected after the critic' weigh more than the first text), re/campaign_fa_tooling.md (the tools). This file is
 the working note of the workflow that BUILDS the map: one section per stage, appended by the stage itself and kept
@@ -7,6 +11,313 @@ current while it runs (a usage limit can cut a stage off: what is here and on di
 Evidence labels as in the study: MEASURED = an output produced here (command named), READ = code or a note,
 ASSUMPTION = says why, GUESS = a value nobody measured. Everything is OFFLINE: nothing is installed, the game is
 not started. Scratch: C:/kl_scratch/bank/<stage>/; delivered builds: <work>/build/c_bank/.
+
+## DELIVERY (2026-10-11 evening) - start here
+
+Written by the workflow's last stage from the files as they lie; every checker was RE-RUN on the four delivered
+folders for this section (D1). The stage sections below (T1 .. Review round 1) are the record of how it came
+about; where one of them disagrees with this section, this section is the later one. NOTHING OF THIS MAP HAS EVER
+RUN IN THE GAME. Nothing is installed. `<work>` = `G:/SteamLibrary/steamapps/common/Kane and Lynch Dead Men/KL_PortTools`,
+`<c_bank>` = `<work>/build/c_bank`.
+
+### D0 What was built
+
+1. A second bank map, 'The Vault': Dead Men's CAMPAIGN level M03_A (chapter 3, 'Withdrawal') alone under the Dog Days
+   systems level F07, as a Fragile Alliance / Arcade map beside the Fragile Alliance bank M03_FA_A the owner plays.
+2. The round: start in the secure yard -> loading dock and vault lobby -> two flights down -> a 48 s beat in the
+   vault's ante-room -> seven briefcases in the vault (2.3 M) + four stacks at the tellers (0.3 M) -> up into the
+   banking hall -> out of the front entrance -> F07's key-framed van on the front street.
+3. 61 enemies in 25 squads, staged in five waves (the campaign's own guards, police and SWAT + three of F07's
+   police squads in the hall); seven AI heisters walk the whole way and wait for the vault at a gate of their own.
+4. Every door of the way is OPEN AT BUILD TIME (leaves sunk 25 m, their collision cut); only the vault door stands,
+   and it is switched off 6 s after the beat whatever its animation does.
+5. One authoring module, `tools/kl_fa_bank.py` (2,454 lines; twelve flags for the live questions), on three tool
+   changes: the authored layer as a module (`kl_maps.py` / `kl_graft.py` `--author <module>`), the escape van from
+   way points (`kl_map_escape.py`), the collision route test (`tools/kl_route.py`).
+6. Then the finishing chain other sessions' tools make (wardrobe with the four Payday 2 masks, AI heisters + dynamic
+   step, six gun looks, talk, cut shader cache) and a seal step of this module: `<c_bank>/chain.sh`.
+7. FOUR FOLDERS are delivered, all built for the F01 test slot (D1). Offline every checker passes on them except the
+   two that only repeat one KNOWN finding (16 sound clips that the installed stream file does not hold).
+8. The map is complete without them, but SILENT in three things: its music, the vault's ambience, nine guard lines
+   (D6). Bringing them needs a larger PC_Def.str = the owner's go-ahead.
+9. It is not on the menu: slot packaging and the menu entry are `tools/kl_expansion.py`'s (another session's); the
+   facts for it are in D5.
+10. What decides whether it plays is the live order D4, safest first; what a wrong guess would cost is D3.
+
+### D1 The delivered folders (`<c_bank>/`, 0.93 GB) and every checker, re-run on them
+
+| folder | what | F01_Main.zip sha1 | archive bytes | folder | chunk table | five large blocks |
+|---|---|---|---|---|---|---|
+| `bank_vault` | the finished map (enemies, AI heisters, wardrobe, gun looks, talk), sound bank whole | `ac97b4f13ca27fc51c629c162263cdf75dc7d1c2` | 207,977,920 | 246 MB | 65,852 | 159.9 MB |
+| `bank_vault_wavslim` | THE SAME ARCHIVE; only `F01_Main.WAV` (13.3 MB, sha1 `fcbd62b8...`; whole: 23.3 MB, `2e1d7827...`) and `F01_Main.WHD` differ | `ac97b4f13ca27fc51c629c162263cdf75dc7d1c2` | 207,977,920 | 236 MB | 65,852 | 149.8 MB |
+| `bank_vault_noai` | the same chain on the `--no-ai` build: NO ENEMIES, but the seven AI heisters, wardrobe, gun looks and talk are in | `ecf445f1ceac692fe206f89c650404a581e895e2` | 191,319,066 | 230 MB | 65,083 | 150.1 MB |
+| `bank_vault_bare` | the map as `kl_fa_bank.py test` leaves it, before the chain: enemies, beat, loot, van; no AI heisters, no wardrobe, FULL shader cache | `b7e48d31634c9c33cf19a7e8cc315eb65bbcf0af` | 178,157,196 | 217 MB | 65,640 | 149.1 MB |
+
+Yardsticks (`<c_bank>/blocks.txt`, made by `<c_bank>/blocks.py`): chunk-table line of the tools 69,632; five blocks of
+stock F07 144.7 MB, of the tab's Retomoto 180.3; stage F measured the tab's Withdrawal at 158.5 (both load live). Members of
+`bank_vault`: .prm 72.2, .fxc 9.3, .ANM 21.9, .TEX 245.8 MB, .WAV beside it 23.3.
+Beside each finished archive: `KLWardrobe.ini` (16 characters, 12 masks), `KLGuns.ini` (Version 2), `KLTalk.ini`
+(Map=M03, StreamBytes=1686681836), `van.json`, `bots.json` / `bots.txt`, `dyn.json` / `dyn.txt` / `dyn_map.png`, NO
+`KLJoin.ini`; `checks.txt` + `checks/` = this section's run. `result.json`, `log.txt`, `graft.txt` in the three
+finished folders are the BARE build's (20,643 / 20,246 entities): the chain does not rewrite them.
+There is NO folder 'no enemies and no AI heisters'; it is one command (D2: `test <out> --keep --no-ai`).
+
+THE RE-RUN (2026-10-11, about 18:05 - 18:30): `sh <c_bank>/checks.sh <folder> C:/kl_scratch/bank/deliver/out/<name>` on each
+of the four, one after another; the outputs are also copied into each folder's `checks/` and `checks.txt`. The
+archives' sha1 were the same after the run as before it.
+
+| checker | `bank_vault` | `bank_vault_wavslim` | `bank_vault_noai` | `bank_vault_bare` |
+|---|---|---|---|---|
+| `kl_maps.py preflight` | FAIL (exit 1): 'preflight: CRASH 1, RISK 0, NOTE 77' | the same | FAIL (exit 1): 'preflight: CRASH 1, RISK 0, NOTE 77' | FAIL (exit 1): 'preflight: CRASH 1, RISK 0, NOTE 78' |
+| `kl_maps.py audit` | FAIL (exit 1): 'RESULT: FAIL (2 findings that must be 0, 0 known and accepted)' | the same | FAIL (exit 1): 'RESULT: FAIL (3 findings that must be 0, 0 known and accepted)' | FAIL (exit 1): 'RESULT: FAIL (2 findings that must be 0, 0 known and accepted)' |
+| `kl_fa.py check` | PASS (exit 0): 'no finding; 21219 nodes, ZSquadScript 32' | the same | PASS (exit 0): 'no finding; 20822 nodes, ZSquadScript 7' | PASS (exit 0): '1 DEGRADED (no bot squads: the chain brings them), 0 CRASH, 0 BROKEN' |
+| `kl_impact.py` | PASS (exit 0): 'problems: 0 in 1 levels' | the same | the same | the same |
+| `kl_arms.py check` | PASS (exit 0): '0 findings' | the same | the same | the same |
+| `kl_chars.py check` | PASS (exit 0): '21219 nodes, 84 people, 65851 chunks: problems: 0' | the same | PASS (exit 0): '20822 nodes, 23 people, 65082 chunks: problems: 0' | PASS (exit 0): '20644 nodes, 77 people, 65639 chunks: problems: 0' |
+| `kl_map_guns.py check` | PASS (exit 0): '6 guns with looks; problems: 0' | the same | PASS (exit 0): '6 guns with looks; problems: 0' | does not apply: the folder has no gun looks and no KLTalk.ini (the checker stops for want of its input, exit 1) |
+| `kl_map_guns.py sizes` | PASS (exit 0): 'chunk table 65852 entries' | the same | PASS (exit 0): 'chunk table 65083 entries' | PASS (exit 0): 'chunk table 65640 entries' |
+| `kl_map_escape.py van-check` | PASS (exit 0): '0 fault(s)' | the same | the same | the same |
+| `kl_map_escape.py check` | PASS (exit 0): '0 fault(s)' | the same | the same | the same |
+| `kl_fa_bots_dyn.py check` | PASS (exit 0): 'RESULT (kl_fa_bots_dyn): PASS (0 FAIL, 0 NOTE)' | the same | PASS (exit 0): 'RESULT (kl_fa_bots_dyn): PASS (0 FAIL, 0 NOTE)' | not run (the folder has no bot squad) |
+| `kl_fa_bank.py bots-check` | PASS (exit 0): '7 squads, 7 with the gate: PASS' | the same | PASS (exit 0): '7 squads, 7 with the gate: PASS' | not run (the folder has no bot squad) |
+| `kl_fa_talk.py check` | PASS (exit 0): 'findings: FAIL 0, NOTE 1' | the same | PASS (exit 0): 'findings: FAIL 0, NOTE 1' | does not apply: the folder has no gun looks and no KLTalk.ini (the checker stops for want of its input, exit 1) |
+| `kl_fa_bots_dyn.py fake-test` | PASS (exit 0): 'RESULT (fake-test): PASS (grid control 1, parked control 1, lattice 3)' | the same | the same | the same |
+| cover lists (`C:/kl_scratch/bank/t1/s/covers.py`) | PASS (exit 0): 'FFCoverList on ROOT\Special!CoverList (ZLIST)' | the same | the same | the same |
+| `kl_route.py walk`, the vault door opened | PASS (exit 0): 'RESULT: FREE; the mesh way: 1064 samples, all free' | the same | the same | the same |
+| `kl_route.py doors` | PASS (exit 0): 'RESULT: 1 closures in 1 sets, 1 necessary' | the same | the same | the same |
+| `kl_route.py walk` as built, without the vault | PASS (exit 0): 'RESULT: FREE; the mesh way: 1008 samples, all free' | the same | the same | the same |
+| `kl_fa_bank.py reverify` | PASS (exit 0): 'problems: 0' | the same | the same | the same |
+| `kl_fa_bank.py check` | PASS (exit 0): 'PASS' | the same | the same | the same |
+
+THE TWO THAT FAIL, said plainly: `kl_maps.py preflight` and `kl_maps.py audit` FAIL on all four folders. Both only
+quote the build's `result.json` ('verify kl_graft.verify reported 1 problems'): 'sound: 10 stream clips are not in the
+merged stream file' - on `bank_vault_noai` also 'FA: BROKEN squads no ZSquadScript: no police', which is what that
+build is. Inside the audit every checker of its own is at 0. kl_maps.audit has no 'known' entry for a verify finding
+and is not this workflow's file; the finding goes only with a rebuild after the stream file holds the clips (D6).
+WHOEVER GATES AN INSTALL ON `audit.json` 'bad' OR ON preflight's 'CRASH' MUST READ THOSE LINES AS KNOWN - or decide
+that the map waits for the stream file. That is the lead's / the owner's call; it was not made here.
+
+### D2 The round as BUILT (read back from the folders: `python tools/kl_fa_bank.py inventory <folder>`, `check <folder>`)
+
+Floors: yard and dock y 200, vault lobby 240, ante-room and vault -960, banking hall and plaza 800, front street 700.
+All of it is on ONE part of the navigation mesh (566 polygons).
+
+| step | what stands in the level | where |
+|---|---|---|
+| START | 8 START points in two stacks of four beside the dock's roller door; 4 TRAITOR behind them; the 16 player bodies with them (`Heroes!Hero_01` at (150, 200, -4350)) | x 150..450 and 700..1000, y 200, z -4350; traitors z -4000 |
+| loot marker / stage 1 | marker in the vault's middle (400, -800, -13000); ENTERS plane 1 m inside the dock door | (560, 380, -4800) half (250, 230, 50) |
+| doors, open from the load | 11 leaves of 5 sets sunk 2,500 with 0 collision placements: dock roller door (560, -, -4706), glass door 1 (+-125, -, -6808), glass door 2 (274 / 525, -, -7602), airlock (1000 / 1215, -, -6895 / -7105), hall / foyer (195 / 405, -, -5801) | `LEAVES` |
+| wave 'start' + 'down' | 13 guards of dock and vault lobby + 3 pairs on the way down come into the world 10 s after the round-start event (= about 1.4 s after GO) | their campaign places |
+| the way down | vault lobby (394, 241, -7129) -> glass door 2 -> upper flight (-70, -158, -9200) -> cross corridor (-75, -558, -10600) -> ante-room (400, -959, -11800) | `ROUTE_IN` |
+| THE BEAT BOX | F07's `Gameplay!010_FirstFight!tb_LEFT_TheySpotYou`, criminals only, fires ONCE (field 15 = 0) | (460, -714, -12152) half (550, 254, 556) |
+| ... at once | six rod timers (2, 10, 18, 26, 34, 42 s: each pulls one locking rod, with its sound); 14 police come into the world BEHIND THE AIRLOCK and walk down; the music's rise; the beat timer 48 s | police: x 1415..1585, y 240 / 420, z -6700..-5380 (`BEAT_MEN`) |
+| ... 48 s | the vault door gets 'Activate'; the 7 hidden cases appear; alarm sound and the 11 lamps' glow; music to the way-out set; 5 squads hunt into the vault (search box (427, -733, -12986)); 3 F07 police squads (8 men) take the banking hall; door timer | vault door body at (571, -760, -12509) |
+| ... 6 s more | the door's body is switched OFF (DeactivateGeom); the blast as a harmless show (3 Explode boxes with reach 1 / 1, a camera shake, the blast sound); the intact vault is swapped for the blown one (57 bodies come, 148 go) | - |
+| LOOT, vault | 6 x 300,000 at the deposit-box walls + 500,000 in the middle; Dead Men's briefcase model x 1.25; takable in the intact AND the blown vault | (200 / 300 / 600, -960, -13310), (110, -960, -13230 / -13030 / -12830), (430, -960, -12950) |
+| LOOT, tellers | 4 x 75,000, F07's money bags on the counters' public edge, shown from the start | (-765, 899, -7202 / -8002), (1367, 899, -7206 / -8006) |
+| the way out | ante-room -> vault lobby -> airlock (1100, 240, -7000) -> stairs (1538, 355, -5822) -> foyer (309, 803, -5624) -> hall (377, 801, -8423) -> front entrance (300, 800, -9350; no door, a 2 m gap) -> plaza (281, 812, -9700) | `ROUTE_OUT` |
+| the foyer box | F07's `Specials!LevelSpeak!TriggerBox`: the line 'Get out on the street! straight ahead!' and the plaza's 7 squads (20 men, two SWAT fours) | (300, 930, -5650) half (300, 180, 150) |
+| stage 2 | EXITS plane at the front entrance | (303, 974, -9407) half (300, 200, 100) |
+| the exit box (calls the van) | `Gameplay!EscapeSetup!otrExitLevel`: plaza and street; holds the van's stop and the boarding place, not the hall | (300, 800, -10550) half (1500, 300, 1150) |
+| escape marker | beside the van's lane: 425 from the drive, 358 from the boarding place | (316, 890, -11070), over the station (316, 702, -11070) |
+| THE VAN | F07's first van only. Waits at the west end of the square (IN SIGHT from the plaza, 41 m) -> 48 m in 7.2 s -> stops, nose east-north-east -> 71 m in 8.48 s east, passing the east level bound 26 - 30 m after the stop as stock vans do | waits (-3248, 702, -11859); stops (949, 702, -11104); ends (8000, 702, -11172); boarding place at the stop (636, 702, -11231); camera eye (-712, 1030, -11800) |
+| police who come back | 8 bodies, 7 AFTER_DEATH points on the front street | x -1750..-1437 and 2016..2178, y 705, z -9900 |
+| AI heisters (finished folders) | 7 squads `Gameplay!merc_bot_squad!Squad#02..#08`, 16 stations along the same way; at the ante-room round (417, -960, -11871) each waits 56 s (`020_Timer_vault_opens`) before the vault; they are taken aboard from an AllyEscapeBox at (316, 700, -11070) | `bots.txt`, `dyn.txt` in the folder |
+| texts | start windows `AllLevels/Interface/Online/GameStart/M03A_FA_Start` / `_Team_B_Start` / `_UCC_Start`; title and briefing under Dead Men's unused keys `AllLevels/Menu/Online/Scenarios/TitleDL01` / `BriefingDL01`; 8 stock briefing / reminder lines | the level's .LOC |
+
+People: 61 soldiers (9,450 hit points, stock rows by weapon class: 23 x eCustom 50 / 175, 15 x 50 / 100, 15 x 75 / 175
++ F07's 8) + 7 AI heisters = 68 ZFFActor in 32 squads + 16 player bodies (the largest build that ran live: 99 / 55).
+
+THE FLAGS of `python tools/kl_fa_bank.py test <out> [--keep] ...` (each is a module name; the delivered folders are
+all DEFAULTS except `--no-ai` on `bank_vault_noai`):
+
+| flag | module name, default | what the flag does |
+|---|---|---|
+| `--doors-animate` | `DOORS_ANIMATE = False` | the 11 leaves stay and get 'Activate' at the round start (glass leaves with LAST 50); default: open at build time |
+| `--vault-open` | `VAULT_OPEN = False` | the vault door is sunk at build time too |
+| `--vault-stays` | `VAULT_DOOR_GOES = True` | the vault door's body is NOT switched off after the swing |
+| `--loot-shown` | `GATE_VAULT = True` | the vault's cases lie there from the load |
+| `--loot-bags` | `CASE = 'dm'` | F07's money bags instead of the briefcase model |
+| `--beat S` | `BEAT = 48.0` | seconds from the ante-room box to the vault door (the rods squeeze under it) |
+| `--no-ai` | `NO_AI = False` | no enemy squad at all; beat, loot, blast, van as with them |
+| `--alarm-lights` | `ALARM_LIGHTS = False` | the 22 alarm lights keep their `LightToggle` (a controller no stock Dog Days level runs); default: taken off, 22 lights + 8 slave spots hidden |
+| `--music-layer4` | `MUSIC_LAYER4 = False` | the nine `eLayer4` fades stay; NEEDED once the music clips are in the stream file |
+| `--blast-real` | `VAULT_BLAST = 'show'` | the campaign's reach (1300 / 1000, 800 / 800) and damage field |
+| `--no-blast` | (`VAULT_BLAST = None`) | no blast, the vault stays intact |
+| `--dead-men-rows` | `STOCK_ROWS = True` | the soldiers keep Dead Men's skill / health rows |
+| `--plan FILE` | - | the van's plan from a kept `van.json` (60 s less; refused if `ROAD` changed) |
+
+Rebuild any variant (about 8 min; `chain.sh` deletes its intermediate folders as it goes; ONE build at a time):
+```
+python tools/kl_fa_bank.py test <out> --keep [flags] --plan "<c_bank>/bank_vault_bare/van.json"     -> "<out>/F07+M03_A campaign"  (the bare map; 'RESULT: PASS')
+sh "<c_bank>/chain.sh" "<out>/F07+M03_A campaign" <work dir> <log dir>                              -> <work dir>/fin and <work dir>/fin_wav  ('CHAIN DONE')
+sh "<c_bank>/checks.sh" <folder> <out dir>                                                          -> <out dir>/summary.txt
+```
+`python tools/kl_maps.py one ... --author kl_fa_bank` alone does NOT build this map (it stops in prepare_host and says
+why: the van's plan). Any tool that adds entities after the chain needs `python tools/kl_fa_bank.py seal <folder>` again
+(`check` / `reverify` say so).
+
+### D3 Everything that is GUESS or ASSUMED, sorted by what a wrong value would cost
+
+Nothing below was seen in the game. 'Way out' = what to build or switch if it is wrong.
+
+**A. Wrong = the level does not load, or faults (cost: no map until fixed)**
+
+| # | what is assumed | evidence | way out |
+|---|---|---|---|
+| A1 | A Dead Men CAMPAIGN level grafted by the `--campaign` pre-pass loads at all: 28 rooms, 20,643 entities, its own `Special!CoverList` (118 cover boxes) kept. No campaign graft but Retomoto has ever loaded | offline: verify, reverify 'problems: 0', exactly 1 FFCoverList | L0 is this test; triage |
+| A2 | 11 leaves sunk 2,500 under their rooms do nothing to the rooms' draw lists or the room fix-up (study G1.6) | read, not seen | `--doors-animate` (then A7) |
+| A3 | The CUT shader cache (9.3 MB, in the three finished folders) loads and shows every material. It has NEVER loaded live on any map | offline: 126 effects asked for by 1,277 materials, 0 in no entry | `bank_vault_bare` has the full cache (L0); a full-cache finished folder = `chain.sh` without its step 6 (five blocks 168.4 MB) |
+| A4 | 229 room list entries parked on the free REF id (seal) resolve to nothing at load | the same form loaded and played on Late Night Opening (80 entries) | - |
+| A5 | The one FakeTarget (the van's, at its waiting place) gets a vision record at load, at the stop and at the end of the drive (the 0x686a66 rule) | kl2's arithmetic re-done offline: inside; fake-test PASS | - |
+| A6 | 22 lights and 8 slave spots HIDDEN in the file (ZGEOM[3] = 1, flag 0x400) with their `LightToggle` taken off load cleanly | the level's own fire lights have that form | - |
+| A7 | (flags only) `LightToggle` x22 and Dead Men door animations run in Dog Days: `--alarm-lights`, `--doors-animate` | none: first-timers | they are OFF by default for this reason |
+| A8 | Chunk table 65,852 of 69,632, five blocks 159.9 MB, 68 actors / 32 squads are inside what loads | Retomoto on the tab: 65,331 entries, 180.3 MB, 99 / 55 | `bank_vault_wavslim` (149.8 MB) |
+| A9 | The slimmed sound bank of `bank_vault_wavslim` (151 clips dropped) loads and misses nothing that plays | kl_snd.verify 0; never loaded live | `bank_vault` |
+| A10 | A hidden rigid body / the campaign's two postfilter boxes in the blast's lists do no harm when shown at run time under F07's palette | not known | `--no-blast` |
+
+**B. Wrong = the round cannot be finished, or the crew is stuck (cost: a rebuild with a flag)**
+
+| # | what is assumed | evidence | way out |
+|---|---|---|---|
+| B1 | A squad with `ZSquadScript` field 3 = 0 is not in the world until one of its routs is named (the whole staging) | seen live on Retomoto | `--no-ai` build to play meanwhile |
+| B2 | The beat box (ECPS_FA_MERCONLY) is tripped by a Fragile Alliance HUMAN and by an AI heister; TriggerBox field 15 = 0 means 'once' | field 15: a census of 226 stock boxes, not read in kl2.exe; bots tripping such a box: 'measured in effect' on Retomoto | if the beat never starts there is no loot and the vault stays shut: `--vault-open --loot-shown` |
+| B3 | A body switched off by DeactivateGeom stops colliding (the vault door's guarantee) | stock F07 removes its BlockVisionPlane so | `--vault-open` |
+| B4 | ActivateGeom makes the 7 hidden cases appear AND takable | stock form | `--loot-shown` |
+| B5 | The blast's swap: ActivateGeom brings the blown vault's collision, DeactivateGeom takes the intact one's. Route and loot are tested in both states and with both at once; only 'the intact floor goes and the blown one does not come' hurts | not seen | `--no-blast` |
+| B6 | A player can stand at the START points in the yard and a body 60 wide walks every leg (kl_route's walker: step 45 up / 60 down, body 60 x 60 - never read in kl2.exe); 'FREE' is the only evidence that the way is open | offline walk: 1,064 samples free, 1 closure = the vault door | L1 walks it |
+| B7 | The exit box calls the van; a key-framed van moves with its entity; a human aboard is not ended by the level bound the drive passes 26 - 30 m after the stop | every one of 15 stock vans passes a bound; bots did it live on the tab's bank; no human seen | shorten `ROAD`'s leave leg (x 4600 passes MIN_OUT by arithmetic, not run) |
+| B8 | The 14 police of the beat WALK from behind the airlock through the lobby and down (their own defend routs, one mesh part) | measured: on the mesh, on free floor | `BEAT_MEN = None` (the campaign's places; check then fails BEAT_CLEAR) |
+| B9 | The AI heisters' vault gate is a CLOCK (56 s = beat + door delay + 2, read off the level): a started squad step is not started again. If no criminal trips the beat box while they wait, they walk on to a shut door, their loot wait runs out and they leave without the vault's money | Retomoto's bots waited on timers live | - |
+| B10 | AI heisters are taken aboard from the AllyEscapeBox beside the stop when the van stands (kl2 0x907a50) | seen live on the tab's maps | the hook's [Bots] BoardAll |
+| B11 | Three men moved 15 inside the mesh (`snap_men`), 7 rout places off the START's mesh part (the campaign's own: five hunt search boxes, one defend point 7 beside the mesh) | - | - |
+
+**C. Wrong = it looks, sounds or plays badly (cost: a value to turn)**
+
+- THE FIRST CRIMINAL in the ante-room starts the beat - with AI heisters that is usually a bot (the point man starts at
+  +0 s and has about 80 m to walk): the rods, the 14 police and the 48 s can begin while the human still fights
+  upstairs. No field is known that tells a human from a bot. Whether that is wanted is the owner's to say.
+- The vault door's 'Activate' swing: if it plays, the door vanishes 3.6 s after it stands open (ugly): `--vault-stays`
+  once the swing has been SEEN to let people in. If it does not play, the door disappears at the blast.
+- The blast 'show' is harmless (ASSUMED: Explode fields 0 / 1 are its reach, field 4 its damage; box #01 stands in the
+  ante-room among the crew). `--blast-real` = the campaign's values (30 in the damage field: a light hit by stock rows).
+- Hidden alarm lights do not shine (if they do, eleven red lamps are lit from the load). The lamps' glow animation
+  still gets 'Activate'.
+- STRENGTH: 61 soldiers with 9,450 hit points = 1.5 times the hardest stock level, in five waves. Knobs:
+  `--dead-men-rows`, `kl_arms.ROWS`, the hook's [Balance].
+- The 13 'start' guards come into the world in the dock 10 - 15 m behind the open roller door about 1.4 s after GO
+  (`SQUADS_AT` 10 s rests on two clock readings of 8.4 - 8.8 s between the round-start event and GO).
+- Whether a human in the vault lobby SEES the 14 police appear in the corridor behind the airlock: no sight line computed.
+- THE VAN WAITS IN SIGHT (41 m from the plaza); a longer in-road does not hide it (measured). It would take a blind.
+- The leave leg carried on east from (3958, 713, -11173) to x 8600: the collision floor is measured, what is DRAWN
+  out there was never looked at. The escape camera's eye is `cam_spot`'s choice and does not see the end of the drive.
+- A player who waits where the van's rear doors WILL be stands 80 from the arriving van's line (its kill box).
+- GUESS, placed and only measured 'on the mesh, on free floor, in no bound box': every spawn row, the team / Undercover
+  Cop sets and their cameras and stage boxes (nothing of those modes was thought through), the two back level bounds,
+  the exit and escape-area boxes' extents, `ESC_AT`, the police rows, the hall's eight men, `BEAT_MEN`.
+- GUESS: loot places, turns and values (2.6 M); `CASE_SCALE` 1.25; F07's bag as the tellers' prop. NO PICTURE of the
+  briefcases, the vault or anything else of the map was ever rendered or looked at.
+- GUESS: `BEAT` 48, `DOOR_GONE` 6, rods 2 s + 8 s steps, `MUSIC_AT` 1, `GATE_AT` / `GATE_REACH` / `GATE_MORE`, the bots'
+  30 s loot wait; 20 of the bots' 56 hold places have no cover box in reach (yard, stairs, plaza).
+- GUESS: every wording (start windows, 'The Vault', the briefing) and the choice of stock briefing / reminder / exit
+  lines; the other eight languages show the English text.
+- ASSUMPTION (only once the music clips exist): a second PlayMusic does not stop the first, hence `--music-layer4`.
+- The gun options (`--start=1 --set=1`) are copied from the tab's maps; `tools/kl_chars.py` ran with another session's
+  uncommitted change in the working tree.
+
+### D4 THE LIVE ORDER, for the session that holds the game (safest first)
+
+Before any of it: the owner's word that they are away (a scripted run takes keyboard and mouse); `kl2.exe` closed;
+`python debug/slot.py status F01` and the hook pair noted so that everything is put back afterwards. Never Quit
+inside a session on this map with an unguarded hook. The folders are built for the F01 TEST SLOT:
+`python debug/slot.py put "<c_bank>/<folder>" F01` copies the archive, the files beside it and the three side inis.
+Scripted run: `python tools/kl_autotest.py 1200 --hook <TEST hook folder> --ini <run ini> --tag <tag> --shots ...`.
+In every run's ini: `[Load] NudgeMs=1000`; `[KLHook] StallMs=30000`, `StallEndMs=0`; `[Expansion]` so that an open of
+F01 is NOT answered from `Maps\DM01` (`Enable=0`, or `Page=1`); `[Vis] Log=1` on the TEST hook.
+FAIL in every run: a `FATAL` line / a `KLHook_N.dmp` / kl_autotest's `RESULT: crash ...`, `RESULT: assert ...` or
+`RESULT: hung`; a 'stall watch:' line inside a level; then `python debug/triage.py --keep`. Addresses that would name a
+cause here: 0x686a66 (FakeTarget outside the vision space), 0x8e5bbd (a large block refused), 0x719884 / 0x48e910
+(room index / gates), 0x8adbba (empty pool), 0x46fe87 / 0x8add12 (unregistered type), 0x796ff4 (a relay naming itself),
+kl2+0x207280 (chunk table).
+
+| run | folder | how, ini keys | look at | PASS / FAIL in the log |
+|---|---|---|---|---|
+| L0 | `bank_vault_bare` | DIRECT BOOT: the launch options kl_autotest's docstring names (`-o DefaultScene=Locations/F01/F01_Main.gms -o AutoExit=120`; if they are not set any more, do NOT change them - load it from the stock Arcade page as L1). `[Bots] Enable=0`, `[Character] Enable=0`. This folder has the FULL shader cache and no side ini | does it load; the yard, lit and textured, the hero beside the dock door at (150, 200, -4350); the roller doorway OPEN; no red lamp lit; walk (scripted) dock -> vault lobby -> glass doors -> down: every door set but the vault's is a hole | PASS: `RESULT: clean exit after N s`, klauto 'level loaded and running', with `[Vis] Log=1` the line 'vis: 30 s after the grid appeared: record 0xff has never held 'no cell'' (FAIL: 'A TARGET OUTSIDE THE GRID WRITES THERE EVERY FRAME'). This run answers A1, A2, A4, A5, A6. FAIL: any fault during the load (the percentage it stops at) |
+| L1 | `bank_vault_noai` | from the menu, stock Arcade page -> Subway (the F01 slot). `[Bots] Enable=1`, `Log=1`; `[Character] Enable=1`; `[Crew] Random=0` for the first run. NO ENEMIES; the seven AI heisters ARE in this folder | start window text; 'Heist starts in ...' in the yard; walk to the ante-room: do six rods pull one by one over 48 s, does the door swing, do seven briefcases appear, alarm sound, does the door vanish 6 s later and the vault 'blow' without hurting; take a case; up through the airlock; the line in the foyer; out of the front; DOES THE VAN COME when the plaza is entered, 'Get in' at the rear doors, the fixed camera, the score page | 'character: level ... has a wardrobe (version 2): 16 characters, 12 masks'; session state 0x19 (GO); 'bots: Arcade round object ...: ... 7 AI'; 'bots: record N (bot): heist stage 0 -> 1' within a minute, later '-> 2', '-> 3'; the `bots:` line's 'van 3' (waits) then 5 -> 7; 'record N (bot): aboard'. FAIL: bots stay at stage 0 (the dock's ENTERS plane), no case appears after 48 s (B2 / B4), nobody can enter the vault 54 s after the box (B3), no van (B7). This run also first loads the CUT shader cache (A3): anything drawn black or missing that L0 showed = the cache |
+| L2 | `bank_vault` | as L1; then `[Crew] Random=1`, `[Talk] Enable=1` | 13 guards in the dock just after GO and not before; nobody else in the world until the ante-room; 14 police arriving ON FOOT from the airlock after the box; hunts and the hall's 8 at the beat's end; 20 on the plaza at the foyer box; police bodies for returning players on the street; how hard it is; do the AI heisters live to the van | the same lines; `bots:` lines 'lost ...' show where the crew dies; a crash 0x686a66 would be a FakeTarget (fake-test said no). Play it twice in one process (the second load is the memory test) |
+| L3 | `bank_vault_wavslim` | only `F01_Main.WAV` + `F01_Main.WHD` differ from L2's slot: put the folder, same ini | by ear: gunfire, footsteps, doors, alarm, the heisters' and guards' lines as in L2 | no new line; 'memory: at the level's largest block' line shows 10 MB less asked |
+| L4 | a NEW build: `test <out> --keep --doors-animate --vault-stays --plan ...` then `chain.sh` (D2) | as L2 | at the round start the roller door rolls up, the glass doors swing to 109 degrees and STAY, the airlock and foyer leaves slide; the vault door stays swung open. If a leaf stays shut the crew is locked in the yard: that is the answer, not a fault | no fault at the load = Dead Men's door KEYS play or are ignored; the route's verdict is by eye. Until this passes the default (open at build time) stays |
+| L5 | a NEW build: `test <out> --keep --alarm-lights ...` then `chain.sh` | as L2 | lobby lit white until the alarm; at the beat's end eleven red lamps spin and the white rows go off | a fault at LOAD here = `LightToggle` (22 of them, a controller no stock level runs): the default stays off for good |
+
+After L2: `--vault-stays` if the swing was seen to work (C); `--blast-real`, `--beat S`, `--dead-men-rows` are taste.
+`--music-layer4` belongs to the build that follows the stream file (D6), not to a test of its own.
+
+### D5 Packaging facts for `tools/kl_expansion.py` (that file was NOT edited; it is another session's)
+
+- **id**: `DM03A` is PROPOSED (the table's ids are DM01 DM02 DM03 DM06 DM09; `DM03` is the Fragile Alliance bank).
+- **slot**: `F07` = entry 6 of page 2, the ONE entry left (`ORDER` = 1 2 3 4 6 7 5 8 9; F05 F08 F09 are the paid DLC
+  slots; the five maps hold F01 F02 F03 F04 F06). `[Redirect.2] F07=DM03A`, `[Page.2] F07=The Vault`. F07 is also the
+  systems level, but only as a build input: the stock F07 files are not touched, the hook answers the opens from
+  `Maps\DM03A`. NOT TRIED: no map has been loaded under the slot name F07 through the redirect.
+- **title**: 'The Vault' (`kl_fa_bank.TITLE`). **briefing**: the text of `kl_fa_bank.TEXTS` under
+  `AllLevels/Menu/Online/Scenarios/BriefingDL01` (Dead Men's own unused 'Bank Vault' slot); both are in the level's
+  .LOC, in all 8 languages as English. The wording is a GUESS.
+- **picture**: `LevelPicture_M03A` - the entity EXISTS in Dead Men's frontend scene (read for this section with
+  `kl_expansion.front_scene('dm')`: FA01 FA02 FA03 FA06, M01, M02, M03A, M03B, M05 ... M14); it is the campaign
+  chapter's picture. `kl_expansion.pictures()` has not been run on it.
+- **sources**: `['M03_A']` under systems `F07`, with kl_maps' `campaign=True`.
+- **build**: neither 'one' nor 'chain'. The map is made by `kl_fa_bank.build()` + `finish()` (the van's plan and
+  `kl_map_escape.van_layer` round kl_maps.one, `author='kl_fa_bank'`) and then `<c_bank>/chain.sh`. For the tree it is
+  a FINISHED FOLDER: `--prebuilt DM03A=<c_bank>/bank_vault` (adopt() renames members and files F01 -> F07, bytes
+  untouched). `result.json` is in the folder (adopt() wants it).
+- **'author' module**: `kl_fa_bank`. **known**: `('stream clips are not in the merged stream file',)`.
+- **side files** (all in kl_expansion.SIDE): `KLWardrobe.ini`, `KLGuns.ini`, `KLTalk.ini`; NO `KLJoin.ini`
+  (`join` unset). `van.json`, `bots.json`, `dyn.json` and the notes go to `BuildInfo\DM03A` by adopt()'s rule; the
+  folder's `checks/` is a subfolder and is skipped. Nothing inside the side files names the slot (`KLTalk.ini` has
+  `Map=M03`, kl_fa_talk's script key).
+- **live**: nothing. `bones_live`: the build goes through kl_graft's defaults (the skeleton step on), never run.
+- **the hook's per-map behaviour** ([Bots], [Crew], [Talk]) is gated to non-stock levels by the hook, as for the
+  other adopted maps; nothing of klhook/ was touched or needed.
+
+### D6 What was NOT done, and why
+
+- **Music, the vault's ambience, nine guard lines: SILENT.** They are wired (PlayMusic objects, fades, the alarm and
+  blast sounds play from the level's own bank), but 16 clips have no record in the built .WHD because the installed
+  `PC_Def.str` does not hold them, and a larger stream file is the owner's go-ahead (no stream file was built or
+  installed). The 16: music `Music/InHouse/M03A/BO_Sus_Layer1_Ambient_LOOP.wav`, `BO_Sus_Layer2_Bass_LOOP.wav`,
+  `BO_Sus_Layer3_Intense_LOOP.wav`, `BO_Sus_Layer4_Basic_LOOP.wav` (the break-in set), `M03_Bustout_ActionV34.wav`,
+  `M03_Bustout_IntenseClimax_Loop.wav` (the way-out set); ambience `SFX/Ambiences/M03_A/Inside/Ambience_Inside_Vault_Deeper.wav`;
+  guard lines `Dialog/M02/Dialogue/Situation/M02_GuardsShout/M02_GuardsShout_020_Guard.wav`, `_025_`, `_050_`, `_060_`,
+  `Dialog/M03/Dialogue/M03a_OneLiners/M03_GuardAlarm/M03_GuardAlarm_010_Guard02.wav`,
+  `Dialog/M03/Dialogue/M03a_OneLiners/M03_Spotted/M03_Spotted_040_Guard.wav`,
+  `Dialog/M03/Dialogue/Situation/M03_Enter/M03_Enter_011_Guard.wav`,
+  `Dialog/M08/Dialogue/Situations/M08_Cantina/M08_Cantina_010_Guard01.wav`, `_030_Guard01.wav`.
+  The kept guards' other 69 one-liners DO stream from the installed file. After the stream file: rebuild with
+  `--music-layer4`, run the chain; preflight / audit then lose their one finding.
+- **preflight / audit are not green** (D1) and no 'known' entry was added to kl_maps.audit (a shared file).
+- **Nothing ran in the game**: the owner was playing during every stage.
+- **No picture** of the map was rendered (tools/kl_view.py renders models; nobody looked).
+- **The menu entry, the slot packaging, the map picture**: kl_expansion's (D5).
+- **'Out of sight' for the waiting van**: not met; it needs a blind (a parked truck, a kept campaign car) - not tried.
+- **The squads' retreat routs** (`40_DefendBehaviour_Moveback` as a retreat, the hall squads' `40_RunToEscape`), F07's
+  police ring at the van's call, any 'wiped out' chain (ZSquadScript field 8): not wired.
+- **F07's vans 2 and 3**: not in the level (a van parked under the map is the 0x686a66 crash).
+- **The vault guards as a loot gate**: the loot is gated on the beat's timer only.
+- **The vault's fire as damage** (`FireDamageBox`): not kept; the fire is a picture.
+- **kl_fa_cover**: left out, measured (9 new boxes, not one hold more for the bots).
+- **A Kane countdown to the vault door** (kl_fa_talk notes 'the level has a blast timer and KLTalk.ini no countdown'):
+  that is a `SCRIPTS['M03']` entry in another session's file.
+- **kl_map_ai plan for M03_A**: none on purpose (its STRENGTH floors would lift 19 riflemen to accuracy 99).
+- **Team mode / Undercover Cop**: spawn sets are placed and on the mesh; nothing else was thought through.
+- **In shared files, left for their owners**: kl_graft.verify has no line for ZERO cover lists; kl_maps.one's
+  `stream_clips_missing` is a reconstruction by name and over-reports (85 for 16); the tab's maps carry the unsealed
+  'room list entries -> Squad#02' form (`kl_fa_bank.py seal` works on any built folder); kl_fa_author.FINISH is still
+  not called by kl_graft / kl_maps; M07_A, M12_A, M13_B now keep their cover list through the pre-pass, nobody built them.
+- **Deviations from the order the lead gave**, both kept: the dynamic bot step runs LAST in the chain (its check holds
+  the four large blocks against its own build), and the shader cache is cut twice (the wardrobe merges the whole
+  cache back).
+
+(end of DELIVERY)
 
 ## Stage T1 - the cover list survives the campaign pre-pass; the authored layer is a MODULE (tools/kl_maps.py, tools/kl_graft.py)
 
