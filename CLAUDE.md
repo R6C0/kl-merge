@@ -187,7 +187,7 @@ NEW HUD LOOK SEEN LIVE 2026-10-11 15:58-16:02 (the owner's own bank round, watch
 DEAD MEN CAPITALS SHOW on the HUD, the name tags, the status list and the round-over page; ammo backing + chalk ticks sit right. FAULT:
 the chips broke letters at 18-20 px ('HOUND SCORE', 'LiAM'); kl_hud._chip made gentler (56746f0: outline nicks only, narrow glyphs whole,
 <= 3 % ink), the five maps rebuilt (<work>/build/hud_new/<map>: DM01 61aaf796, DM02 dcc68b5e, DM03 1f2dbbf7, DM06 6bcf0958, DM09 7d6c53fa)
-and a background task of this session copies them in when the game closes (scratchpad hud/swap_when_closed.py -> swap_result.txt).
+and copied in at 16:04:37 when the game closed (all five verified by hash). Not yet seen live with the gentler chips.
 NEW HUD LOOK INSTALLED ON THE OWNER'S WORD ('put new hud on'), 2026-10-11 15:54, game closed - FONTS AND BAR PICTURES ONLY:
 `python tools/kl_hud.py all <archive> <out> --look deadmen` (Impact, lower case DRAWN as capitals, light chips; brush-kit plate / ticks /
 tracker bars / borders) run on the five archives AS INSTALLED in <DD>/KLExpansion/Maps (DM01 F01, DM02 F02, DM03 F03, DM06 F04, DM09 F06;
