@@ -293,4 +293,164 @@ below every floor (MEASURED inline, kl_route's grid): in nobody's way.
 - Team mode / Undercover Cop: spawn sets placed and measured, nothing else thought through.
 - Nothing ran in the game; no picture was rendered.
 
-(end of Stage L1)
+(end of Stage L1; committed as 95ff22a)
+
+## Stage L2 - the enemies, the beat, the music (tools/kl_fa_club.py, second half)
+
+STATE: DONE (2026-10-11 21:05; the stage was cut off once about 20:41 after its first passing build and continued from
+the working tree - the second sitting re-ran every build and check below, corrected one claim (L2.1 'STAGED') and one
+check (L2.3 'police-slab'), and added `--str`). `tools/kl_fa_club.py` keeps 40 of the campaign's guards in 17 squads,
+staged, brings ten of F07's police onto the pavement when the seal opens, opens the seal by 'both dance-floor squads
+wiped out' or the clock, and still builds the round without enemies (`--no-ai`). NOTHING RAN IN THE GAME. Kept:
+`C:/kl_scratch/club/l2/build/F07+M05_A campaign/` (F01_Main.zip 150,086,073 bytes, sha1 b64b85eb2b8c...; three builds
+of the same command gave that archive). l1's build is deleted (rebuild: `test <out> --no-ai`).
+Scratch `C:/kl_scratch/club/l2/`: `s/` (sq.py squads of a level, sqnamed.py / amact.py / gates.py the stock censuses,
+los.py / hidden.py / seen_strip.py / plan.py lines of sight, f07free.py free host objects), `out/` (every output named
+below). No other file of the repo was edited; no per-level table of another tool gained an entry. kl_fa_bank.py has
+another job's uncommitted changes in the tree: every `BK.` name this file uses is in the committed version too.
+
+### L2.1 What was built into the module
+
+| part | where | what |
+|---|---|---|
+| the squads that stay | `SQUADS E1 E2`, `squad_plan()`, `campaign_names()` | 17 squads, 40 men: the nine usable as they stand and eight 'first run' squads on the round's way. kl_fa_author's rule wants a behaviour rout; 16 of the 17 have none, so the rule is widened: only plain squad kinds and what `STRIP` takes off, a ZSoldier for every actor, a start child that holds a rout or a SquadModifierBehaviour |
+| what comes off them | `STRIP MESSAGE_KINDS`, `strip_squads()` | MiniCutsceneRout 3, MiniCutSlot 3, MiniCutPosObject 7, AttachGeomToBone 18 (each prop hidden with its group), WarnBehaviourRout 1; 5 message-list entries that would name a node left without a controller are cut in wire() |
+| men moved | `MEN MAN_OFF MAN_IN` | 7 by table (below), 3 who stood 19 - 30 beside the mesh put 15 inside it |
+| stages | `SQUADS`' second column, `STAGED MOD_ACTIVE SQUAD_ACTIVE SQUADS_AWAKE OFFICE_AT WALK_BOX FLOOR_BOX`, ROLE 'office timer' / 'walk box' / 'floor box' | 'load' 7 squads (15 bouncers, ZSquadScript field 3 = 1); 'office' 2 (4 men) by F07's `RivalMercs!Timer` 10 s after the round-start event = GO + 1.2 .. 1.6 s; 'walk' 2 (5) by the box at the inner office door; 'floor' 5 (13) by the box on the walkway's upper half; 'open' 1 (the 3 hunters) by the beat's gate |
+| rows | `STOCK_ROWS`, `BK.soldier_rows` | stock Fragile Alliance rows by weapon class: swat 23, cop 12, sharp 5 (read back: 23 x eCustom 50 / 175, 12 x eCustom 50 / 100, 5 x eCustom 75 / 175) |
+| police that arrive | `ARRIVE ARRIVE_SLAB ARRIVE_START ARRIVE_Y POLICE_ARRIVE POLICE_ON_SLAB LANE_CLEAR`, `place_police()`, `police()` | four of F07's squads (`Gameplay!030_AfterLoot!030_FinancialAlleyExit_Left / _Right`, `...ExitStreet_Left / _Right`), ten men, on the pavement's mesh strip beyond the slab's two ends (x -2500..-2100 and 1950..2350, z -2750 / -2850), started by the gate naming their `10_RunToCover`; ten cover points at the slab's ends |
+| the beat | `BEAT_SQUADS GATE_WAYS SEAL_AT`, ROLE 'floors counter' / 'gate' | `SecondRun!Dance#01` and `Dance#02`: field 8 ('wiped out') -> `Gameplay!020_Loot!FollowPlayers!TriggerCounter` (2) -> the seal's DeactivateGeom + the gate's `Way#01`; the clock (`SEAL_AT`) -> the same DeactivateGeom + `Way#02`; both ways name the hunters' `HuntBehaviour` and the four `10_RunToCover` |
+| checks | `Sight`, `way_views()`, `LANE_VIEWS LATE_CLEAR POLICE_CLEAR ACTORS_LIVE`, check()'s 'enemies' block | L2.3 |
+| flags | `--no-ai --squads-awake --no-police --police-slab --office S --dead-men-rows --str FILE` | docstring |
+
+**What differs from the stage's order, each on purpose - for the lead to confirm:**
+- THE HUNTERS DO NOT COME INTO THE WORLD IN THE WARDROBE. The campaign has them there, 1.3 - 3 m from the round's own
+  station (MEASURED `out/sight_neg.txt`: 'campaign hunter, wardrobe seen from 8 of 103' places of the way) - the bank's
+  review finding 6 again. They are re-placed in the second floor's lounge over the stairs ('hunter as placed seen from
+  0 of 103'), 21 - 27 m of mesh from the stair landing: they come DOWN to the wardrobe on foot. GUESS: the three places.
+- `SEAL_AT` 75 -> 120 s (about 111 s after GO). With 40 guards on 80 m of way a clock of 66 s after GO would nearly
+  always come before the two squads are dead, and the beat would be no beat. GUESS; `--seal S`.
+- The front office comes at GO + 1.2 .. 1.6 s (`OFFICE_AT` 10.0), not + 2 s: the nearest START point is 7.8 m from
+  the inner doorway and nobody is to stand in it when four men come into the world 2 m behind it. `--office S`.
+- `YokoGuards`: its 'flag' is the STAGED value written into its `SquadModifier` child (below), and both men are moved
+  2 m into the front office's south half - at the campaign's place one is seen through the inner doorway from a START
+  point ('Yoko guard, campaign place seen from 1 of 8').
+- `Rave#01`'s two men go from behind the rave bar (105 / 154 off the mesh) to its public side.
+
+**STAGED - corrected in the second sitting.** 'office', 'walk' and 'floor' start a squad that has NO behaviour rout by
+naming its SquadModifierBehaviour child whose field 4 (`EActivationModifier`) is `eAM_Activate` - the campaign's own
+way (six 'Alert' children have the value; it is written into the three that lack it). The first sitting called this
+'used by no stock Dog Days level'. MEASURED on all levels (`s/amact.py` -> `out/amact.txt`): no FRAGILE ALLIANCE level
+has such a modifier, but the STORY levels have 19 (L02 8, L06 4, L09 2, L11 5), 16 of them on a squad with field 3 = 0,
+named by a TriggerBox (6), a GatePath, a TriggerCounter, a CheckPointSave - and one (L11) on a squad without any rout,
+from a TriggerBox, exactly this file's 'walk' / 'floor' case. So it is stock behaviour that no build of OURS has run.
+Not in stock: the value named from a TriggerDelay2 (the 'office' stage; ASSUMPTION that the sender does not matter -
+F07 names modifiers from a TriggerDelay2 18 times, with NotSet or Deactivate). If it fails, 22 men never come: `--squads-awake` (all 17 squads
+in the world from the load).
+
+**The gate** (`Gameplay!RunToEscape!RunToEscapeGate`, F07's own). MEASURED `s/gates.py` -> `out/gates.txt`: stock names
+a GatePath from a TriggerCounter (F08) and from TriggerDelay2 (F05 F07 F08), and a GatePath names a DefendBehaviourRout
+once (F01), else modifiers, timers and geom switches. ASSUMPTION (GateGroup not read in kl2.exe): only the first path
+passes; if both do, the five routs are named twice. The SEAL does not hang on the gate.
+
+**Music** (the stage's item 4). Nothing new had to be wired: the two tracks are the kept audio subtree's own layered
+stream objects (`Locations/M05_A/M05A_Audio.zip!STREAMS!Inside!Music!Club_01_* / Club_02_*`, `out/music_nodes.txt`),
+which nothing starts and nothing stops; L1's host AIDWrapper sends 'Doors_Opening' to `GeomActivator_Door_01 / _02`
+at the round start (the doors are open from the load); with `--doors-animate` the door timer sends it. The light show
+is OFF by default (L1.1; `--light-show --beat-anim`). check(): 'music: 0 of the 7 clips of the club's two tracks have a
+record in the built .WHD'. THE 12 CLIPS THE STREAM FILE LACKS are L1.5's list, unchanged - and MEASURED against the
+bank's extended file too: `test <out> --str <work>/build/v_vault/PC_Def.str` (read only) lists the same 12
+(`out/var_a.txt` line 77). `--str FILE` is now a flag (kl_fa_bank.use_stream) for the build after the club's extension.
+
+### L2.2 The build
+
+```
+python tools/kl_fa_club.py test C:/kl_scratch/club/l2/build --keep     (80 s; 'RESULT: PASS', exit 0: out/test3.txt)
+python tools/kl_fa_club.py check "C:/kl_scratch/club/l2/build/F07+M05_A campaign"            ('PASS': out/check2.txt)
+```
+Lines: 'the police that arrive: 4 of F07's squads re-placed (10 men) on the pavement's mesh strip beyond the slab's two
+ends, out of sight'; 'M05_A: 17 squads stay (40 men); taken off them: {MiniCutsceneRout 3, MiniCutSlot 3,
+MiniCutPosObject 7, AttachGeomToBone 18, WarnBehaviourRout 1}; 18 props hidden'; '7 men re-placed (MEN)'; '3 men stood
+beside the navigation mesh and were put on it: WaitingRoom\Guard#02 20 off, Dancefloor02a#02\Guard#03 30 off,
+...\Guard#04 19 off'; 'enemies: 17 campaign squads (40 men): 7 in the world from the load; round start + 10 s -> 2
+(front office); the box at the inner office door -> 2; the box on the walkway -> 5; the gate -> 1 hunt + 4 of F07's
+police squads; 5 dead entries cut from the squads' message lists; soldier rows: {swat 23, sharp 5, cop 12}';
+'.ANM joined: clips +0' with the guesses 'Bouncer plays copy of Thug', 'Army plays copy of Swat_02' (kl_anm STAND_IN);
+'verify: problems: 1'; 26,824 entities.
+
+### L2.3 The checks (all on the kept build; outputs in `C:/kl_scratch/club/l2/out/`)
+
+| check | command | result |
+|---|---|---|
+| verify problems = KNOWN | check()'s 'verify:' lines | **1, known**: 'sound: 5 stream clips are not in the merged stream file' (the 12 clip names). L1's 'no ZSquadScript' is gone |
+| kl_fa.check | `python tools/kl_fa.py check <archive>` -> `fa.txt` | **0 CRASH, 0 BROKEN**, exit 0, 'problems: 0'; 2 DEGRADED: no bot squads (a later stage); '5 of 21 squads are named by no object' = squads of the 'load' stage, which are in the world from the load (field 3 = 1) and need no start |
+| one cover list | check() | 'cover lists (FFCoverList): 1' |
+| route | check() | as built 'NOT free; crossed: [HeroColi]'; 'office -> queue lane, club end: FREE, 122 m'; 'with the 1 standing piece out: FREE, 133 m' |
+| every man on the mesh | check() (kl_route.stations near 30, the seal out) | '17 campaign squads (40 men) + 4 of F07's police squads (10 men); 50 of the 50 men on the mesh part of the START and on free floor within 30 - 10 of them police on the mesh strip beside the slab, where there is NO collision floor (ASSUMPTION: an AI walks the mesh)' |
+| the places their routs go by | check() | '19 places; 1 not on the START's mesh part': the hunters' `SearchBox` (546, 638, 740), a volume, the campaign's own. The police's ten cover points: all on that part and on free floor (else FAIL), 'the nearest 12.0 m from the lane's mouth; men and cover points 250 and more from the van's line' |
+| no dropped node named | check(); result.json | 'dangling' [] ; no list of a squad node names a node that is not there or a node of its squad without a controller |
+| behaviour kinds | check() | 'ZSquadScript 21, SquadModifierBehaviour 19, ZSoldier 50, TriggerBox 4, HuntBehaviourRout 1, DefendBehaviourRout 8, RunToCoverBehaviourRout 4, RunToCoverPosInfoRout 10': all in kl_fa_author.PLAIN / BEHAVE (ran live on Retomoto / the bank). The first for a build of ours is not a kind but a VALUE: 'started: {floor 5, office 2, walk 2, load 7, open 1}; 9 of them by a SquadModifierBehaviour with eAM_Activate' |
+| squads start where they should | check() | each squad's field 3 against its stage, each start child named by its stage's object, the two boxes 'in use, once, criminals only' (TriggerBox fields 0 / 15 / 14 = 1 / 0 / ECPS_FA_MERCONLY: the bank's review finding 4), the gate's two paths name the same 5 objects |
+| the beat | check() | 'Dance#01 + Dance#02 wiped out -> counter of 2 -> [GeomDeactivator_DriveInVan, Way#01]; the clock (120 s) -> the same'; chain 'round start -> [Timer_MissionBriefing, Timer, Timer, Activator_VanSound]' |
+| nobody comes into the world in sight | check(): `Sight` (lines through kl_route's collision grid, eyes 160, head 160 / chest 90) from every place the crew can be before a stage | 'office 4 men / 39 places / nearest 430, walk 5 / 55 / 1367, floor 13 / 91 / 693, open 13 / 103 / 324 - nobody in sight of one'. The check does fail: `sight_neg.txt` (the campaign's places: seen) |
+| police who come back | check() | '8 bodies, 7 AFTER_DEATH points; the nearest of the squads' men stands 450 from one'. Nothing adds a police body |
+| actors against the limits | check() | 'people: 50 ZFFActor in 21 squads + 16 player bodies (ran live: 99 actors, 55 squads)' |
+| chunk table, blocks | check() | 'chunk table: 53873 entries (the tools' line: 69632); .prm 44.8, .fxc 17.8, .ANM 21.6, .WAV 21.4 MB; the five load blocks 139 MB (...: 171)'; '23683 of its indices are dead (the wardrobe takes 20989)' - the study's 53,898 was with the wardrobe appended; here it goes into dead indices |
+| written level | `kl_fa_club.py reverify` | 'problems: 0' (26,824 entities, 3,498 .HVK placements, 24 list entries parked) |
+| kl_impact | `python tools/kl_impact.py <archive>` -> `impact.txt` | 'problems: 0 in 1 levels' |
+| kl_arms | `python tools/kl_arms.py check <archive>` -> `arms.txt` | '0 findings' |
+| preflight | `python tools/kl_maps.py preflight <folder>` -> `preflight.txt` | exit 1: **'CRASH 1, RISK 3, NOTE 65'**: CRASH = 'kl_graft.verify reported 1 problems' (the known one); RISK = `ZEnvSampler` x 3 (two lines) and `SoundSpline` x 1, as L1; 'fa:squads' is gone |
+| NO_AI still builds | `test <out> --no-ai` -> `var_noai.txt` | 'RESULT: PASS': 26,593 entities, 'verify: problems: 2' both known (the clips; 'no ZSquadScript' = KNOWN_NO_AI), 'enemies: none (a build without squads); the seal opens by its clock'; the timer, both boxes and the counter name nothing (else FAIL) |
+| the fall-backs | `test <out> --str <v_vault>/PC_Def.str --squads-awake --police-slab --dead-men-rows --office 12` -> `var_a.txt` | 'RESULT: PASS': all 17 squads in the world from the load, Dead Men's rows read back (18 x eRegular 50 / 50, 17 x eAmateur 50 / 50, ...), 'POLICE ON THE SLAB: 2 of the police come into the world IN SIGHT of a place in the queue lane (the cost of that fall-back)'. (The first sitting's check FAILED this variant on exactly those two men although the flag's text says 'in sight': check() now reads a police man ON the slab as that variant and says so; anybody else in sight still fails.) |
+| the other flags | `test <out> --no-police --seal-open --doors-animate --light-show --beat-anim --fan-damage` -> `var_b.txt` | 'RESULT: PASS': 26,761 entities, the gate lets in 1 object (the hunt), four leaves stand ('with the 4 standing piece(s) out: FREE, 133 m'), the clock names no seal |
+
+Variant archives are deleted; only the default build is kept.
+
+### L2.4 GUESS / ASSUMED (each marked in the file)
+
+- ASSUMPTION, the largest: a squad WITHOUT a behaviour rout that is in the world fights whoever it sees (16 of the 17;
+  the campaign's own form; every Fragile Alliance squad of stock Dog Days has a rout; L11 has one such squad).
+- ASSUMPTION: `eAM_Activate` brings a waiting squad into the world (STAGED above), also when a TriggerDelay2 sends it.
+- ASSUMPTION: ZSquadScript field 8 is sent when the last man is dead (Retomoto's room counter hangs on it; not seen
+  live for a squad that was started by a modifier). If never: the clock.
+- ASSUMPTION: an AI character walks the navigation mesh where there is no collision floor (the ten police start on
+  the strip beside the slab). If a man falls he falls into a kill box and the wave is thinner: `--police-slab`.
+- ASSUMPTION: only the first of the gate's two paths passes (stock use; GateGroup not read).
+- ASSUMPTION: the round-start event comes 8.4 - 8.8 s before GO here as on Retomoto (OFFICE_AT, SEAL_AT count from it).
+- NOT KNOWN (L1): whether the heroes-only seal stops an AI at all - the three hunters and the police are let in by the
+  gate, not by the seal, so they may walk through it either way; the bouncer in the lane stands inside it from the load.
+- GUESS: the split into stages, both stage boxes, every place in `MEN` and `ARRIVE`, `LATE_CLEAR` 300, `Sight`'s three
+  heights and its tolerance (a drawn wall without collision hides nobody for it; a window's collision does).
+- GUESS carried by kl_anm: the bouncers play a copy of the 'Thug' set, 'Army' a copy of 'Swat_02'.
+- ASSUMED harmless: the 18 props (flashlights, the wand) hidden with their groups; AI through the bound boxes at the
+  slab's ends.
+
+### L2.5 For the next stage
+
+- **L3 (van)**: as L1.5. NEW: the police's cover points keep 250 from the line z -3100 (`LANE_CLEAR`; check() fails
+  otherwise), and their men start at x -2500..-2100 / 1950..2350 on the strip - a drive along the strip passes
+  THROUGH the west group's start places (z -2750 / -2850 against the lane's z -3100: 250 - 350 off the line) before the
+  seal opens; they are not in the world then. `VAN_WAIT` (-3000, 32, -3100) is 500 west of them.
+- **Bots (F)**: nothing holds an AI heister at the seal; a hold in the wardrobe until the seal's clock (the bank's
+  `GATE_NAME` pattern) reads `SEAL_AT` off the built level. The 'walk' and 'floor' boxes are criminals-only and fire
+  ONCE: the first bot through the inner office door starts the walkway's squads.
+- **Stream stage**: the 12 clips of L1.5; then `test <out> --str <file>`; KNOWN's first entry goes away by itself
+  (check() lists what the built .WHD lacks).
+- **Live order** (owner away): `--no-ai` first (the seal, loot, exit box, bounds), then the default, then
+  `--squads-awake` if the log shows no guard beyond the 15 bouncers, `--police-slab` if no police reach the slab.
+  What to look for: do the bouncers fight; do four men appear in the front office just after GO; does the seal open
+  when the six `Dance#01 / #02` men are dead; police from both sides of the pavement.
+
+### L2.6 Open
+
+- Nothing ran in the game; no picture was rendered.
+- The gate is still invisible (L1.6); the entrance door is not shut.
+- No dancing crowd, no civilians, no Yoko (the lead's order).
+- The upstairs squads (`Lounge#01 / #02`, `Rave#01 / #02`, 10 men) are off the round's way: they are there for a crew
+  that wanders, and nothing leads it up (no loot upstairs yet, L1.6).
+- `kl_fa`'s DEGRADED line about 5 unnamed squads is its heuristic not reading field 3; kl_fa.py is not this stage's.
+- The 'office' squads come 4.3 m and more from the nearest START point, behind a wall: a sprinting human reaches the
+  inner doorway about when they appear. Measured as 'out of sight of every START point', not of a moving player.
+- The bank's regression was not re-run: no shared file was edited.
+
+(end of Stage L2)
