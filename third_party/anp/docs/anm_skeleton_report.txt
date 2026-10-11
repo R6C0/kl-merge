@@ -1,0 +1,231 @@
+== DM PlayerCharacter clips 1238 tracks/clip min 0 med 55 max 84  bones 94
+   DD Kane            clips 1743 tracks/clip min 0 med 55 max 81  bones 91
+   bones only in DM DB: FA_FOREHEAD, w_bone_clip, w_bone_frame, w_bone_slide
+   bones only in DD DB: free_bone01
+   local bone translation (median first key), DM vs DD, largest differences:
+      head attacher          DM (  -2.11  -10.42    3.42)  DD (   3.38   -3.69    6.85)  max|d| 6.73
+      PELVIS                 DM (   0.00   87.37    0.22)  DD (   0.00   81.77    0.00)  max|d| 5.60
+      l hand attacher        DM (  -0.00   -0.08    2.00)  DD (   4.67   -0.56    2.00)  max|d| 4.67
+      fa_right_cheek         DM (   4.59   -3.15   11.18)  DD (   4.24   -3.15    7.30)  max|d| 3.88
+      fa_left_cheek          DM (   4.59    3.15   11.18)  DD (   4.25    3.15    7.30)  max|d| 3.88
+      fa_right_lower_eye     DM (   6.58   -3.30   11.88)  DD (   7.08   -3.26    9.34)  max|d| 2.54
+      fa_left_lower_eye      DM (   6.58    3.30   11.88)  DD (   7.08    3.26    9.34)  max|d| 2.54
+      RIGHT_HAND_ATTACHER    DM (  -0.00   -0.00    2.00)  DD (  -2.16    0.61    0.74)  max|d| 2.16
+   66 of 90 shared bones have translations within 0.5 units
+      PELVIS                 DM (   0.00   87.37    0.22)  DD (   0.00   81.77    0.00)
+      SPINE                  DM (   9.89   -0.00   -0.01)  DD (   9.89   -0.00   -0.01)
+      SPINE_1                DM (  12.18   -0.00   -0.01)  DD (  12.18    0.00   -0.01)
+      SPINE_2                DM (  14.05    0.00   -0.01)  DD (  14.05   -0.00   -0.01)
+      NECK                   DM (  20.85   -0.00    0.92)  DD (  20.85   -0.00    0.92)
+      HEAD                   DM (   4.86    0.00    0.00)  DD (   4.86    0.00    0.00)
+      LEFT_THIGH             DM (  -0.00    9.68    0.00)  DD (  -0.00    9.68    0.00)
+      LEFT_CALF              DM (  43.78   -0.00   -0.00)  DD (  43.78   -0.00    0.00)
+      LEFT_FOOT              DM (  43.06    0.00   -0.00)  DD (  43.06    0.00   -0.00)
+      RIGHT_CALF             DM (  43.78   -0.00    0.00)  DD (  43.78    0.00    0.00)
+      LEFT_CLAVICLE          DM (  13.85    3.01   -0.00)  DD (  13.85    3.01   -0.00)
+      LEFT_UPPER_ARM         DM (  16.97   -0.00   -0.00)  DD (  16.97    0.00   -0.00)
+      LEFT_FOREARM           DM (  25.13   -0.00   -0.00)  DD (  25.13    0.00   -0.00)
+      LEFT_HAND              DM (  24.15    0.00   -0.00)  DD (  24.15    0.00   -0.00)
+      RIGHT_FOREARM          DM (  25.13   -0.00    0.00)  DD (  25.13    0.00    0.00)
+      RIGHT_HAND             DM (  24.15    0.00   -0.00)  DD (  24.15   -0.00    0.00)
+      r hand attacher        DM (   0.00   -0.00    2.00)  DD (   0.00   -0.54    2.00)
+      l hand attacher        DM (  -0.00   -0.08    2.00)  DD (   4.67   -0.56    2.00)
+      head attacher          DM (  -2.11  -10.42    3.42)  DD (   3.38   -3.69    6.85)
+      fa_jaw                 DM (   2.04    0.00    5.30)  DD (   1.72    0.00    4.01)
+== DM Lynch_Coop      clips 1238 tracks/clip min 0 med 55 max 84  bones 94
+   DD Lynch           clips 1743 tracks/clip min 0 med 55 max 81  bones 91
+   bones only in DM DB: FA_FOREHEAD, w_bone_clip, w_bone_frame, w_bone_slide
+   bones only in DD DB: free_bone01
+   local bone translation (median first key), DM vs DD, largest differences:
+      head attacher          DM (  -2.11  -10.42    3.42)  DD (   3.38   -3.52    6.73)  max|d| 6.90
+      PELVIS                 DM (   0.00   87.37    0.22)  DD (   0.00   81.77    0.00)  max|d| 5.60
+      l hand attacher        DM (  -0.00   -0.08    2.00)  DD (   4.68   -0.56    2.00)  max|d| 4.68
+      fa_right_cheek         DM (   4.59   -3.15   11.18)  DD (   4.24   -3.15    7.30)  max|d| 3.88
+      fa_left_cheek          DM (   4.59    3.15   11.18)  DD (   4.25    3.15    7.30)  max|d| 3.88
+      fa_right_lower_eye     DM (   6.58   -3.30   11.88)  DD (   7.08   -3.26    9.34)  max|d| 2.54
+      fa_left_lower_eye      DM (   6.58    3.30   11.88)  DD (   7.08    3.26    9.34)  max|d| 2.54
+      RIGHT_HAND_ATTACHER    DM (  -0.00   -0.00    2.00)  DD (  -2.16    0.61    0.74)  max|d| 2.16
+   66 of 90 shared bones have translations within 0.5 units
+      PELVIS                 DM (   0.00   87.37    0.22)  DD (   0.00   81.77    0.00)
+      SPINE                  DM (   9.89   -0.00   -0.01)  DD (   9.89   -0.00   -0.01)
+      SPINE_1                DM (  12.18   -0.00   -0.01)  DD (  12.18    0.00   -0.01)
+      SPINE_2                DM (  14.05    0.00   -0.01)  DD (  14.05   -0.00   -0.01)
+      NECK                   DM (  20.85   -0.00    0.92)  DD (  20.85   -0.00    0.92)
+      HEAD                   DM (   4.86    0.00    0.00)  DD (   4.86    0.00    0.00)
+      LEFT_THIGH             DM (  -0.00    9.68    0.00)  DD (  -0.00    9.68    0.00)
+      LEFT_CALF              DM (  43.78   -0.00   -0.00)  DD (  43.78   -0.00    0.00)
+      LEFT_FOOT              DM (  43.06    0.00   -0.00)  DD (  43.06    0.00   -0.00)
+      RIGHT_CALF             DM (  43.78   -0.00    0.00)  DD (  43.78   -0.00   -0.00)
+      LEFT_CLAVICLE          DM (  13.85    3.01   -0.00)  DD (  13.85    3.01   -0.00)
+      LEFT_UPPER_ARM         DM (  16.97   -0.00   -0.00)  DD (  16.97    0.00   -0.00)
+      LEFT_FOREARM           DM (  25.13   -0.00   -0.00)  DD (  25.13    0.00   -0.00)
+      LEFT_HAND              DM (  24.15    0.00   -0.00)  DD (  24.15    0.00   -0.00)
+      RIGHT_FOREARM          DM (  25.13   -0.00    0.00)  DD (  25.13    0.00    0.00)
+      RIGHT_HAND             DM (  24.15    0.00   -0.00)  DD (  24.15   -0.00    0.00)
+      r hand attacher        DM (   0.00   -0.00    2.00)  DD (   0.00   -0.54    2.00)
+      l hand attacher        DM (  -0.00   -0.08    2.00)  DD (   4.68   -0.56    2.00)
+      head attacher          DM (  -2.11  -10.42    3.42)  DD (   3.38   -3.52    6.73)
+      fa_jaw                 DM (   2.04    0.00    5.30)  DD (   1.72    0.00    4.01)
+== DM Army            clips 1252 tracks/clip min 0 med 55 max 84  bones 94
+   DD Swat_02         clips 1558 tracks/clip min 0 med 55 max 81  bones 91
+   bones only in DM DB: FA_FOREHEAD, w_bone_clip, w_bone_frame, w_bone_slide
+   bones only in DD DB: free_bone01
+   local bone translation (median first key), DM vs DD, largest differences:
+      PELVIS                 DM (   0.00   87.04    0.26)  DD (   0.00   81.27    0.00)  max|d| 5.77
+      head attacher          DM (  -2.54  -10.42    2.30)  DD (   1.53   -5.94    6.73)  max|d| 4.48
+      fa_right_cheek         DM (   4.59   -3.15   11.18)  DD (   4.24   -3.15    7.30)  max|d| 3.88
+      fa_left_cheek          DM (   4.59    3.15   11.18)  DD (   4.25    3.15    7.30)  max|d| 3.88
+      l hand attacher        DM (  -0.00   -0.08    2.00)  DD (   3.47   -0.23    2.00)  max|d| 3.47
+      fa_right_lower_eye     DM (   6.58   -3.30   11.88)  DD (   7.08   -3.26    9.34)  max|d| 2.54
+      fa_left_lower_eye      DM (   6.58    3.30   11.88)  DD (   7.08    3.26    9.34)  max|d| 2.54
+      RIGHT_HAND_ATTACHER    DM (  -0.00   -0.00    2.00)  DD (  -2.16    0.61    0.74)  max|d| 2.16
+   67 of 90 shared bones have translations within 0.5 units
+      PELVIS                 DM (   0.00   87.04    0.26)  DD (   0.00   81.27    0.00)
+      SPINE                  DM (   9.89   -0.00   -0.01)  DD (   9.89   -0.00   -0.01)
+      SPINE_1                DM (  12.18   -0.00   -0.01)  DD (  12.18    0.00   -0.01)
+      SPINE_2                DM (  14.05    0.00   -0.01)  DD (  14.05   -0.00   -0.01)
+      NECK                   DM (  20.85   -0.00    0.92)  DD (  20.85   -0.00    0.92)
+      HEAD                   DM (   4.86    0.00    0.00)  DD (   4.86    0.00   -0.00)
+      LEFT_THIGH             DM (  -0.00    9.68    0.00)  DD (  -0.00    9.68    0.00)
+      LEFT_CALF              DM (  43.78   -0.00   -0.00)  DD (  43.78   -0.00   -0.00)
+      LEFT_FOOT              DM (  43.06    0.00   -0.00)  DD (  43.06   -0.00   -0.00)
+      RIGHT_CALF             DM (  43.78   -0.00    0.00)  DD (  43.78   -0.00    0.00)
+      LEFT_CLAVICLE          DM (  13.85    3.01   -0.00)  DD (  13.85    3.01   -0.00)
+      LEFT_UPPER_ARM         DM (  16.97   -0.00   -0.00)  DD (  16.97    0.00   -0.00)
+      LEFT_FOREARM           DM (  25.13   -0.00   -0.00)  DD (  25.13   -0.00   -0.00)
+      LEFT_HAND              DM (  24.15   -0.00    0.00)  DD (  24.15    0.00   -0.00)
+      RIGHT_FOREARM          DM (  25.13   -0.00    0.00)  DD (  25.13   -0.00    0.00)
+      RIGHT_HAND             DM (  24.15    0.00    0.00)  DD (  24.15   -0.00    0.00)
+      r hand attacher        DM (   0.00   -0.00    2.00)  DD (   0.00   -0.00    2.00)
+      l hand attacher        DM (  -0.00   -0.08    2.00)  DD (   3.47   -0.23    2.00)
+      head attacher          DM (  -2.54  -10.42    2.30)  DD (   1.53   -5.94    6.73)
+      fa_jaw                 DM (   2.04    0.00    5.30)  DD (   1.72    0.00    4.01)
+== DM Police_USA      clips    8 tracks/clip min 1 med 1 max 2  bones 5
+   DD Police          clips 1562 tracks/clip min 0 med 55 max 81  bones 91
+   bones only in DM DB: DOOR_BACK_LEFT, DOOR_BACK_RIGHT, DOOR_FRONT_LEFT, DOOR_FRONT_RIGHT
+   bones only in DD DB: HEAD, LEFT_CALF, LEFT_CLAVICLE, LEFT_FINGER_0, LEFT_FINGER_0_1, LEFT_FINGER_0_2, LEFT_FINGER_1, LEFT_FINGER_1_1, LEFT_FINGER_1_2, LEFT_FINGER_2, LEFT_FINGER_2_1, LEFT_FINGER_2_2, LEFT_FINGER_3, LEFT_FINGER_3_1, LEFT_FINGER_3_2, LEFT_FINGER_4, LEFT_FINGER_4_1, LEFT_FINGER_4_2, LEFT_FOOT, LEFT_FOREARM, LEFT_FORETWIST, LEFT_FORETWIST1, LEFT_HAND, LEFT_HAND_ATTACHER, LEFT_THIGH, LEFT_TOE, LEFT_UPPER_ARM, NECK, NECK1, PELVIS, RIGHT_CALF, RIGHT_CLAVICLE, RIGHT_FINGER_0, RIGHT_FINGER_0_1, RIGHT_FINGER_0_2, RIGHT_FINGER_1, RIGHT_FINGER_1_1, RIGHT_FINGER_1_2, RIGHT_FINGER_2, RIGHT_FINGER_2_1, RIGHT_FINGER_2_2, RIGHT_FINGER_3, RIGHT_FINGER_3_1, RIGHT_FINGER_3_2, RIGHT_FINGER_4, RIGHT_FINGER_4_1, RIGHT_FINGER_4_2, RIGHT_FOOT, RIGHT_FOREARM, RIGHT_FORETWIST, RIGHT_FORETWIST1, RIGHT_HAND, RIGHT_HAND_ATTACHER, RIGHT_THIGH, RIGHT_TOE, RIGHT_UPPER_ARM, SPINE, SPINE_1, SPINE_2, fa_chin, fa_forehead01, fa_forehead02, fa_jaw, fa_left_cheek, fa_left_eye, fa_left_eyebrow, fa_left_eyelid, fa_left_lower_eye, fa_left_lower_lip, fa_left_lowercheek, fa_left_mouth_edge, fa_left_nostril, fa_left_upper_lip, fa_lower_lip, fa_nosebridge, fa_right_cheek, fa_right_eye, fa_right_eyebrow, fa_right_eyelid, fa_right_lower_eye, fa_right_lower_lip, fa_right_lowercheek, fa_right_mouth_edge, fa_right_nostril, fa_right_upper_lip, fa_upper_lip, free_bone01, head attacher, l hand attacher, r hand attacher
+   local bone translation (median first key), DM vs DD, largest differences:
+      GROUND                 DM (  -0.00    0.00   -0.00)  DD (   0.00    0.00    0.00)  max|d| 0.00
+   1 of 1 shared bones have translations within 0.5 units
+      PELVIS                 DM    -  DD (   0.00   81.27    0.00)
+      SPINE                  DM    -  DD (   9.89   -0.00   -0.01)
+      SPINE_1                DM    -  DD (  12.18    0.00   -0.01)
+      SPINE_2                DM    -  DD (  14.05   -0.00   -0.01)
+      NECK                   DM    -  DD (  20.85   -0.00    0.92)
+      HEAD                   DM    -  DD (   4.86    0.00    0.00)
+      LEFT_THIGH             DM    -  DD (  -0.00    9.68    0.00)
+      LEFT_CALF              DM    -  DD (  43.78   -0.00   -0.00)
+      LEFT_FOOT              DM    -  DD (  43.06    0.00   -0.00)
+      RIGHT_CALF             DM    -  DD (  43.78   -0.00    0.00)
+      LEFT_CLAVICLE          DM    -  DD (  13.85    3.01   -0.00)
+      LEFT_UPPER_ARM         DM    -  DD (  16.97    0.00   -0.00)
+      LEFT_FOREARM           DM    -  DD (  25.13   -0.00   -0.00)
+      LEFT_HAND              DM    -  DD (  24.15    0.00   -0.00)
+      RIGHT_FOREARM          DM    -  DD (  25.13   -0.00    0.00)
+      RIGHT_HAND             DM    -  DD (  24.15   -0.00    0.00)
+      r hand attacher        DM    -  DD (   0.00   -0.00    2.00)
+      l hand attacher        DM    -  DD (   3.60   -0.23    2.00)
+      head attacher          DM    -  DD (   1.53   -5.27    6.73)
+      fa_jaw                 DM    -  DD (   1.72    0.00    4.01)
+== DM Mercenary_04    clips 1249 tracks/clip min 0 med 55 max 84  bones 94
+   DD Thug            clips 1562 tracks/clip min 0 med 55 max 81  bones 91
+   bones only in DM DB: FA_FOREHEAD, w_bone_clip, w_bone_frame, w_bone_slide
+   bones only in DD DB: free_bone01
+   local bone translation (median first key), DM vs DD, largest differences:
+      head attacher          DM (  -2.47  -10.42    2.91)  DD (   3.24   -6.53    6.73)  max|d| 5.72
+      PELVIS                 DM (   0.00   86.35    0.13)  DD (   0.00   81.47    0.00)  max|d| 4.87
+      fa_right_cheek         DM (   4.59   -3.15   11.18)  DD (   4.24   -3.15    7.30)  max|d| 3.88
+      fa_left_cheek          DM (   4.59    3.15   11.18)  DD (   4.25    3.15    7.30)  max|d| 3.88
+      l hand attacher        DM (  -0.07   -0.08    2.00)  DD (   3.74   -0.54    2.00)  max|d| 3.80
+      fa_right_lower_eye     DM (   6.58   -3.30   11.88)  DD (   7.08   -3.26    9.34)  max|d| 2.54
+      fa_left_lower_eye      DM (   6.58    3.30   11.88)  DD (   7.08    3.26    9.34)  max|d| 2.54
+      RIGHT_HAND_ATTACHER    DM (  -0.00   -0.00    2.00)  DD (  -2.16    0.61    0.74)  max|d| 2.16
+   67 of 90 shared bones have translations within 0.5 units
+      PELVIS                 DM (   0.00   86.35    0.13)  DD (   0.00   81.47    0.00)
+      SPINE                  DM (   9.89    0.00   -0.01)  DD (   9.89   -0.00   -0.01)
+      SPINE_1                DM (  12.18   -0.00   -0.01)  DD (  12.18   -0.00   -0.01)
+      SPINE_2                DM (  14.05    0.00   -0.01)  DD (  14.05   -0.00   -0.01)
+      NECK                   DM (  20.85   -0.00    0.92)  DD (  20.85   -0.00    0.92)
+      HEAD                   DM (   4.86    0.00    0.00)  DD (   4.86    0.00    0.00)
+      LEFT_THIGH             DM (  -0.00    9.68    0.00)  DD (  -0.00    9.68    0.00)
+      LEFT_CALF              DM (  43.78   -0.00   -0.00)  DD (  43.78   -0.00   -0.00)
+      LEFT_FOOT              DM (  43.06    0.00   -0.00)  DD (  43.06    0.00   -0.00)
+      RIGHT_CALF             DM (  43.78   -0.00    0.00)  DD (  43.78   -0.00    0.00)
+      LEFT_CLAVICLE          DM (  13.85    3.01   -0.00)  DD (  13.85    3.01   -0.00)
+      LEFT_UPPER_ARM         DM (  16.97   -0.00   -0.00)  DD (  16.97    0.00   -0.00)
+      LEFT_FOREARM           DM (  25.13   -0.00   -0.00)  DD (  25.13    0.00   -0.00)
+      LEFT_HAND              DM (  24.15   -0.00    0.00)  DD (  24.15    0.00   -0.00)
+      RIGHT_FOREARM          DM (  25.13   -0.00   -0.00)  DD (  25.13    0.00    0.00)
+      RIGHT_HAND             DM (  24.15    0.00    0.00)  DD (  24.15   -0.00    0.00)
+      r hand attacher        DM (   0.00   -0.00    2.00)  DD (   0.00   -0.00    2.00)
+      l hand attacher        DM (  -0.07   -0.08    2.00)  DD (   3.74   -0.54    2.00)
+      head attacher          DM (  -2.47  -10.42    2.91)  DD (   3.24   -6.53    6.73)
+      fa_jaw                 DM (   2.04    0.00    5.30)  DD (   1.72    0.00    4.01)
+== DM Female          clips 1255 tracks/clip min 0 med 54 max 84  bones 94
+   DD Civilian        clips 1581 tracks/clip min 0 med 55 max 81  bones 91
+   bones only in DM DB: FA_FOREHEAD, w_bone_clip, w_bone_frame, w_bone_slide
+   bones only in DD DB: free_bone01
+   local bone translation (median first key), DM vs DD, largest differences:
+      PELVIS                 DM (   0.00   87.06    0.15)  DD (   0.00   81.70    0.00)  max|d| 5.36
+      head attacher          DM (  -2.54  -10.42    2.30)  DD (   1.22   -5.94    6.73)  max|d| 4.48
+      l hand attacher        DM (  -0.03   -0.08    2.00)  DD (   3.97   -0.56    2.00)  max|d| 4.00
+      fa_right_cheek         DM (   4.59   -3.15   11.18)  DD (   4.24   -3.15    7.30)  max|d| 3.88
+      fa_left_cheek          DM (   4.59    3.15   11.18)  DD (   4.25    3.15    7.30)  max|d| 3.88
+      fa_right_lower_eye     DM (   6.58   -3.30   11.88)  DD (   7.08   -3.26    9.34)  max|d| 2.54
+      fa_left_lower_eye      DM (   6.58    3.30   11.88)  DD (   7.08    3.26    9.34)  max|d| 2.54
+      RIGHT_HAND_ATTACHER    DM (  -0.00   -0.00    2.00)  DD (  -2.16    0.61    0.74)  max|d| 2.16
+   67 of 90 shared bones have translations within 0.5 units
+      PELVIS                 DM (   0.00   87.06    0.15)  DD (   0.00   81.70    0.00)
+      SPINE                  DM (   9.89   -0.00   -0.01)  DD (   9.89   -0.00   -0.01)
+      SPINE_1                DM (  12.18   -0.00   -0.01)  DD (  12.18   -0.00   -0.01)
+      SPINE_2                DM (  14.05    0.00   -0.01)  DD (  14.05   -0.00   -0.01)
+      NECK                   DM (  20.85   -0.00    0.92)  DD (  20.85   -0.00    0.92)
+      HEAD                   DM (   4.86    0.00    0.00)  DD (   4.86    0.00    0.00)
+      LEFT_THIGH             DM (  -0.00    9.68    0.00)  DD (  -0.00    9.68    0.00)
+      LEFT_CALF              DM (  43.78   -0.00   -0.00)  DD (  43.78   -0.00   -0.00)
+      LEFT_FOOT              DM (  43.06    0.00   -0.00)  DD (  43.06   -0.00   -0.00)
+      RIGHT_CALF             DM (  43.78   -0.00    0.00)  DD (  43.78   -0.00    0.00)
+      LEFT_CLAVICLE          DM (  13.85    3.01   -0.00)  DD (  13.85    3.01   -0.00)
+      LEFT_UPPER_ARM         DM (  16.97   -0.00    0.00)  DD (  16.97   -0.00   -0.00)
+      LEFT_FOREARM           DM (  25.13    0.00   -0.00)  DD (  25.13    0.00   -0.00)
+      LEFT_HAND              DM (  24.15   -0.00    0.00)  DD (  24.15    0.00   -0.00)
+      RIGHT_FOREARM          DM (  25.13   -0.00    0.00)  DD (  25.13   -0.00    0.00)
+      RIGHT_HAND             DM (  24.15    0.00    0.00)  DD (  24.15   -0.00    0.00)
+      r hand attacher        DM (   0.00   -0.00    2.00)  DD (   0.00   -0.00    2.00)
+      l hand attacher        DM (  -0.03   -0.08    2.00)  DD (   3.97   -0.56    2.00)
+      head attacher          DM (  -2.54  -10.42    2.30)  DD (   1.22   -5.94    6.73)
+      fa_jaw                 DM (   2.04    0.00    5.30)  DD (   1.72    0.00    4.01)
+== DM Civilian        clips 1253 tracks/clip min 0 med 55 max 84  bones 94
+   DD Civilian        clips 1581 tracks/clip min 0 med 55 max 81  bones 91
+   bones only in DM DB: FA_FOREHEAD, w_bone_clip, w_bone_frame, w_bone_slide
+   bones only in DD DB: free_bone01
+   local bone translation (median first key), DM vs DD, largest differences:
+      PELVIS                 DM (   0.00   87.24    0.22)  DD (   0.00   81.70    0.00)  max|d| 5.54
+      head attacher          DM (  -2.54  -10.42    2.30)  DD (   1.22   -5.94    6.73)  max|d| 4.48
+      l hand attacher        DM (  -0.02   -0.08    2.00)  DD (   3.97   -0.56    2.00)  max|d| 3.98
+      fa_right_cheek         DM (   4.59   -3.15   11.18)  DD (   4.24   -3.15    7.30)  max|d| 3.88
+      fa_left_cheek          DM (   4.59    3.15   11.18)  DD (   4.25    3.15    7.30)  max|d| 3.88
+      fa_right_lower_eye     DM (   6.58   -3.30   11.88)  DD (   7.08   -3.26    9.34)  max|d| 2.54
+      fa_left_lower_eye      DM (   6.58    3.30   11.88)  DD (   7.08    3.26    9.34)  max|d| 2.54
+      RIGHT_HAND_ATTACHER    DM (  -0.00   -0.00    2.00)  DD (  -2.16    0.61    0.74)  max|d| 2.16
+   67 of 90 shared bones have translations within 0.5 units
+      PELVIS                 DM (   0.00   87.24    0.22)  DD (   0.00   81.70    0.00)
+      SPINE                  DM (   9.89   -0.00   -0.01)  DD (   9.89   -0.00   -0.01)
+      SPINE_1                DM (  12.18   -0.00   -0.01)  DD (  12.18   -0.00   -0.01)
+      SPINE_2                DM (  14.05    0.00   -0.01)  DD (  14.05   -0.00   -0.01)
+      NECK                   DM (  20.85   -0.00    0.92)  DD (  20.85   -0.00    0.92)
+      HEAD                   DM (   4.86    0.00    0.00)  DD (   4.86    0.00    0.00)
+      LEFT_THIGH             DM (  -0.00    9.68    0.00)  DD (  -0.00    9.68    0.00)
+      LEFT_CALF              DM (  43.78   -0.00   -0.00)  DD (  43.78   -0.00   -0.00)
+      LEFT_FOOT              DM (  43.06    0.00   -0.00)  DD (  43.06   -0.00   -0.00)
+      RIGHT_CALF             DM (  43.78   -0.00    0.00)  DD (  43.78   -0.00    0.00)
+      LEFT_CLAVICLE          DM (  13.85    3.01   -0.00)  DD (  13.85    3.01   -0.00)
+      LEFT_UPPER_ARM         DM (  16.97   -0.00   -0.00)  DD (  16.97   -0.00   -0.00)
+      LEFT_FOREARM           DM (  25.13   -0.00   -0.00)  DD (  25.13    0.00   -0.00)
+      LEFT_HAND              DM (  24.15   -0.00    0.00)  DD (  24.15    0.00   -0.00)
+      RIGHT_FOREARM          DM (  25.13   -0.00    0.00)  DD (  25.13   -0.00    0.00)
+      RIGHT_HAND             DM (  24.15    0.00    0.00)  DD (  24.15   -0.00    0.00)
+      r hand attacher        DM (   0.00   -0.00    2.00)  DD (   0.00   -0.00    2.00)
+      l hand attacher        DM (  -0.02   -0.08    2.00)  DD (   3.97   -0.56    2.00)
+      head attacher          DM (  -2.54  -10.42    2.30)  DD (   1.22   -5.94    6.73)
+      fa_jaw                 DM (   2.04    0.00    5.30)  DD (   1.72    0.00    4.01)
