@@ -134,7 +134,7 @@
 struct klu_text { DWORD obj, shadow; float x, y; int on, style, style_done; DWORD colour, want_colour; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
 
 static struct {
-    int on, log, crew, money, hide, shadow, layer, rows, before, borrow, hijack, reuse, probe; float inset, crew_x, crew_y, money_x, money_y, row;
+    int on, log, crew, money, hide, shadow, layer, rows, before, borrow, hijack, reuse, probe, pictest; float inset, crew_x, crew_y, money_x, money_y, row;
 } klu;
 
 static struct {
@@ -188,6 +188,37 @@ static volatile LONG klu_hijack_on;           /* the tick opens the 3 s window; 
 static int klu_evt_ready;
 
 static void klu_draw_ours(void *el, void *ctx, void *cam);
+
+/* ---------------------------------------------------------------- pictures (the render slot)
+   The game's own picture draw, read in the timer element (0x81e20b..0x81e275, Init 0x452566.., Update 0x80e397..):
+     record, 40 bytes: vec3 offset (0) | +0xc 0, +0x10 1.0, +0x14 1.0, +0x18 0 (0x775a10) | +0x1c width, +0x20 height in
+                       camera units = pixels * [0xcee050] * T[+0xc] / T[+0x10] | +0x24 ARGB
+     desc, 0x34 bytes at elem+0x40: [+0] = 1 (records), [+8] = &record, the rest as the element's Init left it
+     place: 0x5a3e90(T = [elem+0xc], &out3, &in2) = (x * T[+0x14], y * T[+0x18], 0) + the plane's origin
+     ctx->DrawChunk([[elem+8] + 12 * n] = the sprite of HUD picture n, &desc, &xform9, &out3, layer, 1, 0)
+   Here the timer element's own desc and record are COPIED each call (so every field this reading did not decode is the
+   game's), and width / height / colour / the record pointer are set. NOT RUN IN THE GAME before [HUD] PicTest=1. */
+#define KLU_DRAWCHUNK   0x842d00u
+#define KLU_CTX_VT      0x00b55484u           /* ZDrawBufferSimple */
+#define KLU_PLACE       0x5a3e90u
+
+static int klu_pic(void *el, void *ctx, int n, float x, float y, float w, float h, DWORD argb, int layer)
+{   /* w <= 0: the record's width / height as the element has them (its own picture's size) */
+    DWORD e = (DWORD)(DWORD_PTR)el, c = (DWORD)(DWORD_PTR)ctx, T = klh_rd32(e + 0xc), tbl = klh_rd32(e + 8), handle;
+    DWORD desc[13]; float rec[10], in[2], out[3] = { 0, 0, 0 }, t[5];
+    float xform[9] = { 0, 0, 1.0f, 0, 1.0f, 0, 1.0f, 0, 0 };
+    if (!T || !tbl || klh_rd32(c) != KLU_CTX_VT || klh_rd32(KLU_CTX_VT + 0x14) != KLU_DRAWCHUNK) return 0;
+    if (!klh_rd(tbl + 12 * (DWORD)n, &handle, 4) || !handle) return 0;
+    if (!klh_rd(e + 0x40, desc, sizeof desc) || !klh_rd(e + 0x4c, rec, sizeof rec) || !klh_rd(T + 0xc, t, sizeof t)) return 0;
+    if (desc[0] != 1) return 0;
+    if (w > 0) { rec[7] = w * t[0]; rec[8] = h * t[1]; }             /* T+0xc, T+0x10: virtual pixel -> camera units */
+    memcpy(&rec[9], &argb, 4);
+    desc[2] = (DWORD)(DWORD_PTR)rec;
+    in[0] = x; in[1] = y;
+    ((void (__fastcall *)(void *, void *, float *, float *))(DWORD_PTR)KLH_VA(KLU_PLACE))((void *)(DWORD_PTR)T, 0, out, in);
+    ((DWORD (__fastcall *)(void *, void *, DWORD, DWORD *, float *, float *, DWORD, DWORD, DWORD))(DWORD_PTR)KLH_VA(KLU_DRAWCHUNK))(ctx, 0, handle, desc, xform, out, (DWORD)layer, 1, 0);
+    return 1;
+}
 
 /* PROBE ([HUD] Probe=1, with Reuse=0; 2026-10-11): why does nothing the hook draws reach the frame, when the same object
    drawn by the stock code does (runs H1c .. H1n)? DrawChunk (0x842d00) takes a render instance for the chunk (0x5f6ad0),
@@ -329,6 +360,16 @@ static void klu_draw_ours(void *el, void *ctx, void *cam)
             if (klu_r.t[KLU_ROWS].obj) klu_draw_one(klu_r.t[KLU_ROWS].obj, ctx, cam, tp[0], tp[1] + 56.0f);
             if (!klu_twin_said) { klu_twin_said = 1; klu_twin_obj = tobj; memcpy(klu_twin_pos, tp, 12); }
         }
+    }
+    if (klu.pictest) {                               /* TEST [HUD] PicTest=1: are pictures drawn, how large, anchored where?
+                                                        A = UI_White (picture 181) 200 x 24 px in coral at (400, 500)
+                                                        B = UI_White with the element's own size, chalk, at (700, 500)
+                                                        C = the car icon (170) with the element's own size at (900, 500) */
+        static DWORD said; DWORD now = GetTickCount(); int a, b, c2;
+        a = klu_pic(el, ctx, 181, 400.0f, 500.0f, 200.0f, 24.0f, 0xfff0475au, klu.layer);
+        b = klu_pic(el, ctx, 181, 700.0f, 500.0f, 0, 0, 0xfff3f0eau, klu.layer);
+        c2 = klu_pic(el, ctx, 170, 900.0f, 500.0f, 0, 0, 0xffffffffu, klu.layer);
+        if (klu.log && now - said >= 5000) { said = now; klog("hud: pictest: A (white 200x24 coral at 400,500) %d, B (white, own size, at 700,500) %d, C (car icon at 900,500) %d; 1 = DrawChunk called", a, b, c2); }
     }
     LeaveCriticalSection(&klu_cs);
 }
@@ -731,6 +772,7 @@ static void klu_init(void)
     klu.reuse = (int)GetPrivateProfileIntA("HUD", "Reuse", 2, klh_ini);            /* 2 = the shown player list's pairs get our strings, the stock code draws (default); 1 = borrowed objects drawn by the hook (invisible, H1n); 0 = own objects (invisible) */
     if (klu.reuse == 2) klu.hide = 0;            /* the player list must stay shown: its own Render draws our rows (run H1p: this line stood before the Reuse read and never fired) */
     if (klu.reuse) klu.shadow = 0;            /* 1 = borrow the hidden player list's text objects (default); 0 = create our own (never drew) */
+    klu.pictest = (int)GetPrivateProfileIntA("HUD", "PicTest", 0, klh_ini);        /* 1 = three test pictures at y 500 */
     klu.probe = (int)GetPrivateProfileIntA("HUD", "Probe", 0, klh_ini);            /* 1 = the five-step draw probe (with Reuse=0) */
     klu.hijack = (int)GetPrivateProfileIntA("HUD", "Hijack", 0, klh_ini);          /* 1 = the timer's own text gets our string 3 s in 10 (test) */
     klu.borrow = (int)GetPrivateProfileIntA("HUD", "Borrow", 0, klh_ini);          /* 1 = text 8 draws with the timer text's desc[2] (test) */
