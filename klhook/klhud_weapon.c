@@ -141,7 +141,7 @@
 #define KLWD_D           141.0f                /* the disc's diameter */
 #define KLWD_FROM_BOTTOM 86.0f                 /* the middle stands this far above the inset line (720 - 36 - 86 = 598) */
 #define KLWD_RING_R      62.0f
-#define KLWD_RING_N      32
+#define KLWD_RING_N      48                    /* run V2: 32 read as beads */
 #define KLWD_DAB_W       12.0f
 #define KLWD_DAB_H       16.0f
 #define KLWD_ACT_NUM_DX  (-7.0f)               /* the first gun's count: RIGHT-aligned at cx - 7, top at cy - 32 */
@@ -158,7 +158,7 @@
 #define KLWD_OTH_PIC_DY  24.0f
 #define KLWD_OTH_PIC     36.0f
 #define KLWD_LABEL_DX    0.0f                  /* the label: CENTRED under the disc (style 0x44 = KLU_STYLE_CENTRE, seen live in run H1_DM03_hud; set by the WIRING in klu_layout) */
-#define KLWD_LABEL_DY    78.0f                 /* its top */
+#define KLWD_LABEL_DY    88.0f                 /* its top */
 #define KLWD_SEP         " . "                 /* between the name and the reserve (the draft's middle dot is not in the baked fonts for sure) */
 #define KLWD_ARROW_DX    (-86.0f)              /* the pick-up arrow's MIDDLE: left of the disc (OUR place, a GUESS at the look), at the row it means */
 #define KLWD_ARROW_ACT_DY (-26.0f)

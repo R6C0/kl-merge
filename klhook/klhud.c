@@ -619,7 +619,7 @@ static void klu_dials(const struct klb_snap *s)
     if (clock > 60.0f && klu_r.clock_max > 60.0f) {
         float left = clock / klu_r.clock_max, a = 6.2831853f * (1.0f - left);
         klu_addpic(114, cx - 34.5f, cy - 34.5f, 69.0f, 69.0f, 0x9c080809u, klu.layer - 2);
-        klu_ring(cx, cy, 29.0f, 24, left, 9.0f, 11.0f, KLU_C_CHALK, klu.layer);
+        klu_ring(cx, cy, 29.0f, 40, left, 8.0f, 8.0f, KLU_C_CHALK, klu.layer);       /* run V2: 24 dabs read as beads - 40 overlap into a painted ring */
         for (i = 1; i <= 5; i++)                                   /* the hand: five small dabs from the hub to the ring's edge of 'now' */
             klu_addpic(113, cx + 4.4f * i * (float)sin(a) - 2.5f, cy - 4.4f * i * (float)cos(a) - 2.5f, 5.0f, 5.0f, KLU_C_CHALK, klu.layer);
         klu_addpic(113, cx - 4.0f, cy - 4.0f, 8.0f, 8.0f, KLU_C_CHALK, klu.layer);
@@ -630,7 +630,7 @@ static void klu_dials(const struct klb_snap *s)
     if ((s->veh == 3 || s->veh == 4 || klu.grid == 2) && klu_r.handle[i]) {
         float ex = cx - 75.0f, ey = cy + 5.0f, left = klu.grid == 2 ? 0.35f : s->timer / 8.0f;
         klu_addpic(114, ex - 27.5f, ey - 27.5f, 55.0f, 55.0f, 0x9c080809u, klu.layer - 2);
-        klu_ring(ex, ey, 23.0f, 24, left, 7.0f, 9.0f, KLU_C_ORANGE, klu.layer);
+        klu_ring(ex, ey, 23.0f, 32, left, 7.0f, 7.0f, KLU_C_ORANGE, klu.layer);
         klu_addpic(i, ex - 15.0f, ey - 15.0f, 30.0f, 30.0f, KLU_C_CHALK, klu.layer);
     }
 }
