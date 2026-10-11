@@ -235,6 +235,7 @@ struct klu_picq { int n; float x, y, w, h; DWORD argb; int layer; };
 
 static struct {
     int left;                                 /* LeftStyle */
+    int extraflags;                           /* ExtraFlags: give the eight extra pictures a stock picture's chunk flags */
     int weapon;                               /* Weapon: the weapon dial (klhud_weapon.c) */
     int draft;                                /* Draft: the defaults of every part of the draft are 1 */
     int lives, roundof;                       /* Lives, RoundOf (klhud_values.c) */
@@ -888,6 +889,17 @@ static void klu_pic_prep(DWORD el)
             if (!klh_rd(tbl + 12 * (DWORD)k, &hk, 4) || !hk) continue;
             ck = (hk & 0x80000000u) ? (hk & 0x7fffffffu) : klh_rd32((DWORD_PTR)KLH_VA(KLU_CHUNKTAB) + 4 * hk);
             if (ck && klh_rd32(ck + 0xc) == KLU_PICTYPE) { klu_r.handle[k] = hk; if (k >= 111 && k <= 118) extra++; }
+            if (k >= 111 && k <= 118 && ck && klh_rd32(ck + 0xc) == KLU_PICTYPE && klh_rd32(ck + 0x10) == 0x10 && klu.extraflags) {
+                /* run V1 (2026-10-11): the eight extras load and DRAW NOTHING. The game's per-slot table (0xcee058) has
+                   no row for 111..118, so 0x5e3810 loads them with flags 0x10 alone; every stock HUD picture has
+                   0x60200 (or 0x60002) | 0x10 at chunk+0x10. A DATA write on the level's own chunk: the flags of
+                   UI_White's chunk are copied (GUESS that the draw reads them from the chunk each time). */
+                DWORD h181 = 0, c181, f181;
+                klh_rd(tbl + 12 * 181u, &h181, 4);
+                c181 = !h181 ? 0 : (h181 & 0x80000000u) ? (h181 & 0x7fffffffu) : klh_rd32((DWORD_PTR)KLH_VA(KLU_CHUNKTAB) + 4 * h181);
+                f181 = c181 ? klh_rd32(c181 + 0x10) : 0;
+                if ((f181 & 0xfff00000u) == 0 && (f181 & 0x60000u)) { *(DWORD *)(DWORD_PTR)(ck + 0x10) = f181; if (klu.log) klog("hud: pictures: slot %d: flags 00000010 -> %08lx (UI_White's)", k, f181); }
+            }
             if (klu.log > 1 && ((k >= 108 && k <= 120) || k == 181)) klog("hud: pictures: slot %d: handle %08lx chunk %08lx type %lu, head %08lx %08lx %08lx %08lx", k, hk, ck, ck ? klh_rd32(ck + 0xc) : 0, ck ? klh_rd32(ck) : 0, ck ? klh_rd32(ck + 4) : 0, ck ? klh_rd32(ck + 8) : 0, ck ? klh_rd32(ck + 0x10) : 0);
         }
         if (klu.draft && extra < 8) klog("hud: draft: this level has %d of the 8 extra pictures: Draft=1 falls back to plain bars, no rings, no dials, no weapon dial (the level needs the archive of tools/kl_hud.py all, build/hud_x2)", extra);
@@ -1111,7 +1123,7 @@ static void klu_init(void)
     klu.weapon = klu_inii("Weapon", klu.draft, 0, 1); klwd_init();      /* the weapon dial (klhud_weapon.c; needs 113 / 114 too) */
     klu.lives = klu_inii("Lives", klu.draft, 0, 3);              /* 0 none, 1 three skull pictures (178) in your row - 'LIVES n' in the round line when the level has no such picture -, 2 TEST: skull glyphs after your name (the stock way), 3 'LIVES n' in the round line */
     klu.roundof = klu_inii("RoundOf", klu.draft, 0, 1);  /* 1 = 'ROUND n OF m' with the game's own m (10 in Arcade; whether a session ends there is not established) */
-    klu.plates = klu_inii("Plates", klu.draft, 0, 1); klu.anchor = klu_inii("PicAnchor", 1, 0, 1); klu.left = klu_inii("LeftStyle", 0x11, 0, 255); klu.pictest = klu_inii("PicTest", 0, 0, 1);
+    klu.plates = klu_inii("Plates", klu.draft, 0, 1); klu.anchor = klu_inii("PicAnchor", 1, 0, 1); klu.left = klu_inii("LeftStyle", 0x11, 0, 255); klu.extraflags = klu_inii("ExtraFlags", 1, 0, 1); klu.pictest = klu_inii("PicTest", 0, 0, 1);
     klu.grid = klu_inii("Grid", 0, 0, 2); klu.probe = klu_inii("Probe", 0, 0, 1);
     klu.layer = klu_inii("Layer", 0xd, 3, 15);
     klu.rows = klu_inii("Rows", KLU_ROWS, 1, KLU_ROWS);
