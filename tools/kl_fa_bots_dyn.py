@@ -107,6 +107,14 @@ GAP_IN = 1300.0         # GUESS: least path between two holds of a bot on the wa
                         # a 'pos' step every third; ours had none)
 GAP_OUT = 1700.0        # GUESS: ... on the way out (the owner: 'move a bit more like the bots to the van')
 BUDGET = (16.0, 85.0)   # sum of a bot's TriggerDelay2 seconds: what stock bots have (re/bots_dynamic.md 2.1)
+# THE GAP BEFORE A FORK (2026-10-11; re/retomoto_ai.md, CLAUDE.md 'CRASH 0x686a66'): kl2 0x686a66 crashed in one of four
+# Retomoto runs of the routes build inside a ZDefendBehaviourGoal whose list had been freed under it - the only wiring
+# the routes add is 'Defend rout -> RandomTrigger -> Defend rout of the same squad' (57 on Retomoto, 48 on M02; stock
+# bots have it 119 times, so a chance race). A TriggerDelay2 of FORK_GAP s between the Defend rout's arrival list and
+# every RandomTrigger lets the old goal finish its tick before the next step replaces it (ASSUMPTION that a timer
+# defers to the next tick; stock's own transitions Defend -> TriggerDelay2 -> Defend are the commonest, 329).
+# 0 = no gap (the wiring of the first routes builds). Not yet seen live.
+FORK_GAP = 0.1
 ALTS = 3                # most covers a RandomTrigger chooses between (stock bots: 2 lists 147 x, 3 lists 42 x, 4 14 x)
 
 # ---- the seven. Every number is a value stock gives a bot (timers: 3 4 5 6 8 10 12 15; loot seconds 15 20 60;
@@ -298,6 +306,11 @@ def parse(ctx):
     if any(k in mine for k, _i, _v in kl_fa.controllers(sc, 'RandomTrigger')) or sc.resolve(R_ + F.SQUAD + 'Squad#02\\001_SquadModifier_awake'):
         raise ValueError('%s: the squad already has the steps of this module (build from the bots build, not from its result)' % ctx.folder)
     firsts = [j for k, _i, v in kl_fa.controllers(sc, 'TriggerDelay2') if k == timer for s in v[4] for j in sc.resolve(s)]
+    # kl_fa_bots_rt's room-first build (2026-10-11): Timer_start_bots names one TriggerCounter gate (also fed by the
+    # boardroom's counter) and the gate names the seven first steps - look through it.
+    gates = {k: v for k, _i, v in kl_fa.controllers(sc, 'TriggerCounter') if k in mine}
+    if firsts and all(j in gates for j in firsts):
+        firsts = [j for g in firsts for s in gates[g][4] for j in sc.resolve(s)]
     squads = collections.OrderedDict()
     for t in tops:
         actors = [k for k in range(t, sc.end[t]) if sc.cls(k) == 'ZFFActor']
@@ -1414,7 +1427,13 @@ def make(ctx, P, log=print):
             M.set(g, 'DefendBehaviourRout', {0: refs[0] if single else '', 1: [] if single else refs, 2: 1, 3: 0,
                                              4: 'eDMS_Sprint' if sprint else 'eDMS_NotSet', 5: 'eDF_NotSet', 6: '', 7: nxt, 8: 1, 9: 0})
 
-        entry = lambda it: it['name']                   # (a fork is entered by its RandomTrigger)
+        entry = lambda it: it['name'] + '_gap' if (it['kind'] == 'fork' and FORK_GAP) else it['name']   # a fork is entered by its gap timer, else its RandomTrigger
+        def gap(name, target):
+            """A TriggerDelay2 of FORK_GAP s named <name>_gap that starts the RandomTrigger <name>."""
+            t = top.add(M.clone(SX, FORM['timer'], name + '_gap'))
+            t.keep = None
+            M.place(t, (0.0, 0.0, 0.0))
+            M.set(t, 'TriggerDelay2', {0: float(FORK_GAP), 1: 0.0, 2: -1.0, 3: 0, 4: [path(target)]})
 
         def emit(items, after):
             """The nodes of a run of items; the last one starts `after` (a list of paths)."""
@@ -1433,12 +1452,14 @@ def make(ctx, P, log=print):
                     w = [int(brs[j]['weight']) if j < len(brs) else 0 for j in range(4)]
                     lists = [([path(entry(brs[j]['items'][0]))] if brs[j]['items'] else nxt) if j < len(brs) else [] for j in range(4)]
                     M.set(r, 'RandomTrigger', {0: 1, 1: w[0], 2: w[1], 3: w[2], 4: w[3], 5: lists[0], 6: lists[1], 7: lists[2], 8: lists[3]})
+                    if FORK_GAP:
+                        gap(it['name'], it['name'])
                     for br in brs:
                         emit(br['items'], nxt)
                 elif it['kind'] == 'rout':
                     fan = it.get('fan')
                     if fan and fan['kind'] == 'random':
-                        nxt = nxt + [path(fan['name'])]
+                        nxt = nxt + [path(fan['name'] + '_gap' if FORK_GAP else fan['name'])]
                     elif fan:
                         nxt = nxt + [path(fan['alts'][0]['name'])]
                     defend(it['name'], it['places'], False, nxt, it['sprint'])
@@ -1452,6 +1473,8 @@ def make(ctx, P, log=print):
                         w = [3 if j < len(fan['alts']) else 0 for j in range(4)]
                         lists = [[path(fan['alts'][j]['name'])] if j < len(fan['alts']) else [] for j in range(4)]
                         M.set(r, 'RandomTrigger', {0: 1, 1: w[0], 2: w[1], 3: w[2], 4: w[3], 5: lists[0], 6: lists[1], 7: lists[2], 8: lists[3]})
+                        if FORK_GAP:
+                            gap(fan['name'], fan['name'])
                 elif it['kind'] == 'hold':
                     defend(it['name'], [it['place']], True, nxt, False)
                 elif it['kind'] == 'timer':
@@ -1485,12 +1508,20 @@ def make(ctx, P, log=print):
                 if items[0]['kind'] != 'rout' or items[0]['name'] != old_first:
                     raise ValueError('%s: the step %s is named from outside the squad and would change' % (q['name'], old_first))
         out[q['top']] = top
-    t = from_build(M, B, ctx.timer)
-    was = [v for k, _i, v in kl_fa.controllers(sc, 'TriggerDelay2') if k == ctx.timer][0][4]
-    order = [sc.top[sc.resolve(s)[0]] for s in was]
     by_top = {q['top']: N for N, q in ctx.squads.items()}
-    M.set(t, 'TriggerDelay2', {4: [firsts[by_top[x]] for x in order]})
-    out[ctx.timer] = t
+    was = [v for k, _i, v in kl_fa.controllers(sc, 'TriggerDelay2') if k == ctx.timer][0][4]
+    gates = {k: v for k, _i, v in kl_fa.controllers(sc, 'TriggerCounter') if k in [sc.resolve(s)[0] for s in was]}
+    if gates:                                   # the room-first build: the gate counter names the first steps
+        for g, gv in gates.items():
+            gn = from_build(M, B, g)
+            order = [sc.top[sc.resolve(s)[0]] for s in gv[4]]
+            M.set(gn, 'TriggerCounter', {4: [firsts[by_top[x]] for x in order]})
+            out[g] = gn
+    else:
+        t = from_build(M, B, ctx.timer)
+        order = [sc.top[sc.resolve(s)[0]] for s in was]
+        M.set(t, 'TriggerDelay2', {4: [firsts[by_top[x]] for x in order]})
+        out[ctx.timer] = t
     return M, out, sorted(set(removed))
 
 
@@ -1671,6 +1702,9 @@ def graph(ctx_or_B):
             if k in mine and k != timer:
                 ctrl[k] = (cn, v)
     firsts = [j for k, _i, v in kl_fa.controllers(sc, 'TriggerDelay2') if k == timer for s in v[4] for j in sc.resolve(s)]
+    gates = {k: v for k, _i, v in kl_fa.controllers(sc, 'TriggerCounter') if k in mine}
+    if firsts and all(j in gates for j in firsts):        # the room-first build: through the gate counter
+        firsts = [j for g in firsts for s in gates[g][4] for j in sc.resolve(s)]
     entries = collections.defaultdict(list)
     for k in firsts:
         entries[sc.top[k]].append(k)
@@ -1723,6 +1757,12 @@ def graph(ctx_or_B):
                 for j in nx[1:]:                        # what is started beside the next link
                     g['reached'].add(j)
                     cj, vj = ctrl.get(j, (None, None))
+                    if cj == 'TriggerDelay2' and sc.names[j].endswith('_gap'):     # the FORK_GAP timer: look through it
+                        tg = [x for s in vj[4] for x in sc.resolve(s)]
+                        if len(tg) == 1 and ctrl.get(tg[0], (None,))[0] == 'RandomTrigger':
+                            j = tg[0]; cj, vj = ctrl[j]; g['reached'].add(j)
+                        else:
+                            g['faults'].append('%s does not name one RandomTrigger' % sc.names[j])
                     if cj == 'RandomTrigger':
                         alts = []
                         for w, lst in zip(vj[1:5], vj[5:9]):
@@ -1813,7 +1853,8 @@ def check(folder, log=print, base=True):
             n_wait_last = max([i for i, it in enumerate(chain) if it['ctrl'] in ('TriggerLootDepleted', 'TriggerActorsDead') or
                                (it['ctrl'] == 'TriggerDelay2' and 'done_looting' in it['name'])], default=-1)
             if ci < len(g['chains']) - 1:
-                late = [it['name'] for i, it in enumerate(chain) if i > n_wait_last and it['ctrl'] == 'TriggerDelay2']
+                # (a FORK_GAP timer of 0.1 s is as good as the RandomTrigger it precedes: not a timer in this sense)
+                late = [it['name'] for i, it in enumerate(chain) if i > n_wait_last and it['ctrl'] == 'TriggerDelay2' and not it['name'].endswith('_gap')]
                 if late:
                     fail('%s: timer %s runs behind the last loot wait of a chain that the jump cuts off: it would start a step of this '
                          'part for a bot the hook has moved to the next' % (sq, late[0]))
@@ -2116,7 +2157,7 @@ def diff(src, dst, log=print):
     ka = {sa.path[k]: k for k in range(1, len(sa.nodes))}
     kb = {sb.path[k]: k for k in range(1, len(sb.nodes))}
     allowed = {'TriggerDelay2': {4}, 'TriggerLootDepleted': {1, 4}, 'TriggerActorsDead': {2}, 'SquadModifierBehaviour': {26},
-               'ZSquadScript': {0}, 'ZSoldier': {4, 16, 17}}
+               'ZSquadScript': {0}, 'ZSoldier': {4, 16, 17}, 'TriggerCounter': {4}}       # TriggerCounter: the room-first gate
     changed = collections.Counter()
     for p in kept:
         if p in renewed:
