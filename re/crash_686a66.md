@@ -541,7 +541,7 @@ build crashes both times. What decides is memory, read only:
   low (-87017.0, -10000.0, -99949.3) high (8596.2, 28722.6, 52922.5) cell (5975.8, 38722.6, 9554.5)` and, at the second the
   round starts, `vis: record 0xff behind the grid holds 'no cell' ff100110 + (-3216.6, -60040.0, 3419.3), 23 s after the grid
   appeared`. THE WRITE IS SEEN IN THE RUNNING GAME, with the place the dump had.
-- Run V2b_DM09, `<work>uild\z_route4etomoto_tab_fix`: the same grid line, then `vis: 30 s after the grid appeared: record
+- Run V2b_DM09, `<work>\build\z_route4\retomoto_tab_fix`: the same grid line, then `vis: 30 s after the grid appeared: record
   0xff has never held 'no cell' (its bytes now: 00000000 00000000 00000000 00000000)`. Run V1_DM09 before it: the build loads and
   plays four minutes, clean.
 - `python tools\kl_fa_bots_dyn.py grid <retomoto_tab_fix> <those 96 hex digits>`: `'all': the same six floats, bit for bit` /
