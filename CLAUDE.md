@@ -182,6 +182,7 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+04:15 2026-10-11 (first session; the owner at the PC said 'continue'; OFFLINE): workflow wf_e831481a-b41 runs three tracks, each worked -> adversarially reviewed -> fixed (task files: scratchpad wf/A_loot_trap.md, B_defend_crash.md, C_convert_audit.md): A = bots held by loot they cannot take (the grab path, the window, a census of the five builds, the fix in kl_fa_bots; builds <work>/build/z_loot3), B = the 0x686a66 crash (kl_fa_bots_dyn; builds <work>/build/z_route4, Retomoto from rt_full7), C = the converter against luvsic's four faults (kl_convert / kl_fa / kl_map_ai; no rebuild). NOTHING of it is installed. BoardAll reworked (ad3070d: the stage byte no longer waits for the order test; builds ship_board2 8683b0ba / test_board2 735ad362, not run). Live queue for when the owner is away: scratchpad now/QUEUE_live.txt (L12 first). Resume the workflow after a usage limit with that run id.
 INSTALLED 2026-10-11 03:50 (kl-merge-0e; game closed, the owner at the PC: watch-only): tree <work>/build/w_tabC = w_tabM with DM09 =
 <work>/build/rt_full7/retomoto_full = rt_full6 + THE ROOM FIRST (commit be66e7b: the seven hold at the blown window; their chain starts from
 kl_fa_author's room counter through Counter_room_clear when the boardroom's three squads are dead, fall-back Timer_start_bots at blast + 75 s =
