@@ -124,6 +124,17 @@
  *   EscortRefill=0      1 = an escort that died is replaced
  *   EscortRecord=-1     crew record of the first escort (a test aid); -1 = the nearest
  *   EscortLog=1         2 = also every order and every place the route chain gave
+ *   BoardAll=0          1 = NOBODY IS LEFT LOOTING (2026-10-11): while the escape vehicle WAITS (state 3 / 4), every AI
+ *                       heister in play under heist stage 3 gets (a) heist stage 3 written into its crew record and
+ *                       (b) the order to the rules' boarding place, once per visit of the vehicle. Works without Escort.
+ *                       WHY (live runs L8 / L10 / L11 on Late Night Opening): ZLootTactic (0x451920) goes on choosing
+ *                       any money object in reach that is not 'taken', and one a bot cannot take (a watch behind glass
+ *                       nobody opened, the watch shop's clerk) holds him for the rest of the round - six of seven stood
+ *                       on the clerk for minutes. The tactic lets go only 'if the stage is 3 and the vehicle's state is
+ *                       3 or 4' (re/bots_squad.md 4), and the rules send only stage-3 AI aboard (0x8fb04c): a bot
+ *                       caught at stage 1 or 2 has neither. (a) is ONE data byte (record +0x78; the game only ever
+ *                       raises it, 0x5dd890), (b) the call this file already makes. BoardAllStage=0: (b) alone.
+ *                       ASSUMPTION: nothing else reads 'stage 3' as 'this bot went through the exit box'.
  *
  * LOG (the lines the live checks look for)
  *   escort: on; Escort=1 Far=800 Side=300 ...
@@ -134,6 +145,8 @@
  *   escort: record 3 released (the vehicle waits, state 3): sent to the boarding place (x, y, z)
  *   escort: record 3 released (you are aboard): back to its route place (x, y, z)
  *   escort: record 3 dropped: its record says dead
+ *   board: record 5 (stage 1) at (x, y, z): the vehicle waits (state 3): heist stage set to 3, sent to the boarding
+ *          place (x, y, z), the game set (x, y, z)
  */
 #ifndef KLESCORT_C
 #define KLESCORT_C
@@ -146,6 +159,7 @@
 
 static struct {
     int n, dry, log, record, refill, until, stage, board; DWORD every; float far_, side, retarget;
+    int all, all_stage;                       /* BoardAll, BoardAllStage */
 } kle;
 
 struct kle_e {
@@ -156,6 +170,7 @@ struct kle_e {
 static struct {
     DWORD rules, state, round_at; int stages, picked, told_you, told_none, told_gate; char used[KLB_NREC];
     struct kle_e e[KLE_MAX];
+    int visit, was_waiting; int all_visit[KLB_NREC]; char all_told[KLB_NREC];      /* BoardAll: the vehicle's visits, who was sent at which */
 } kle_r;
 
 static float kle_dist(const float a[3], const float b[3])
@@ -372,11 +387,40 @@ static void kle_release(const struct klb_snap *s, int slot, int reason, DWORD no
     (void)now;
 }
 
+/* BoardAll: the vehicle waits - every AI heister in play under stage 3 is given stage 3 and the boarding order, once
+   per visit (the key's comment at the top says why). Escorts still held are left to kle_release. */
+static void kle_board_all(const struct klb_snap *s)
+{
+    int i, j, k; DWORD actor, soldier; float bp[3], bd[3], got[3]; char w[100]; struct kle_e t;
+    if (!kle_boarding(s->rules, bd)) return;
+    for (i = 0; i < s->n && i < KLB_NREC; i++) {
+        const struct klb_rec *r = &s->r[i];
+        if (!r->used || !(r->flags & 1) || (r->flags & 2) || r->status || r->stage >= 3 || kle_r.all_visit[i] == kle_r.visit) continue;
+        for (j = 0; j < kle.n; j++) if (kle_r.e[j].mode == 1 && kle_r.e[j].rec == i) break;
+        if (j < kle.n) continue;
+        if (!kle_bot(s, i, &actor, &soldier, bp, w)) {
+            if (!kle_r.all_told[i]++) klog("board: record %d (stage %u): the vehicle waits but it is not sent: %s", i, r->stage, w);
+            continue;
+        }
+        kle_r.all_visit[i] = kle_r.visit;
+        memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
+        if (kle.all_stage && !kle.dry && !klb_put8(r->at + 0x78, 3, "crew record: heist stage 3 (the vehicle waits; ZLootTactic lets go at stage 3)")) {
+            klog("board: record %d (stage %u): the stage byte was not written: nothing is ordered", i, r->stage);
+            continue;
+        }
+        k = kle_order(&t, bd, got, w);
+        if (k) klog("board: record %d (stage %u) at (%.0f, %.0f, %.0f): the vehicle waits (state %u): %s%s to the boarding place (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f)",
+                    i, r->stage, bp[0], bp[1], bp[2], s->veh, kle.all_stage ? (k == 2 ? "heist stage WOULD be set to 3, " : "heist stage set to 3, ") : "", k == 2 ? "WOULD be sent (dry run)" : "sent",
+                    bd[0], bd[1], bd[2], got[0], got[1], got[2]);
+        else klog("board: record %d (stage %u): NOT sent to the boarding place: %s", i, r->stage, w);
+    }
+}
+
 static void kle_tick(int game_thread)
 {
     static DWORD last; static int toldthread; struct klb_snap s; DWORD now = GetTickCount(), player = 0, actor, soldier; char why[200], w[100];
     float hp[3], hn[3], bp[3], bd[3], got[3]; const struct klb_rec *h; int i, stages = 0, human_in, rel = 0, waiting, k;
-    if (!kle.n || !klb.on || !klh_exe_ok || now - last < 500) return;
+    if ((!kle.n && !kle.all) || !klb.on || !klh_exe_ok || now - last < 500) return;
     last = now;
     if (!klb_read(&s)) { kle_r.rules = 0; return; }
     for (i = 0; i < s.n; i++) if (s.r[i].used) stages += s.r[i].stage;
@@ -393,6 +437,9 @@ static void kle_tick(int game_thread)
     h = s.human >= 0 ? &s.r[s.human] : 0;
     human_in = h && h->status == 0 && kle_human(&player, hp, hn);
     waiting = s.veh == 3 || s.veh == 4;
+    if (waiting && !kle_r.was_waiting) kle_r.visit++;                         /* a new visit of the vehicle (the first is 1) */
+    kle_r.was_waiting = waiting;
+    if (kle.all && waiting) kle_board_all(&s);
     if (human_in && !kle_r.told_you++)
         klog("escort: you: record %d, player %08lx, feet (%.0f, %.0f, %.0f), node (%.0f, %.0f, %.0f) - the two should agree to within a body's height", s.human, player, hp[0], hp[1], hp[2], hn[0], hn[1], hn[2]);
     if (!human_in) rel = 1;
@@ -419,7 +466,7 @@ static void kle_tick(int game_thread)
             else klog("escort: record %d (released): NOT sent to the boarding place: %s", e->rec, w);
         }
     }
-    if (!rel && now - kle_r.round_at >= 3000) kle_pick(&s, hn, now);          /* one slot per pass */
+    if (kle.n && !rel && now - kle_r.round_at >= 3000) kle_pick(&s, hn, now); /* one slot per pass */
 }
 
 static void kle_init(void)
@@ -429,8 +476,12 @@ static void kle_init(void)
     if (!klb.on) return;                      /* [Bots] Enable=0: klbot.c is off, and so is this */
     v = (int)GetPrivateProfileIntA("Bots", "Escort", 0, klh_ini);
     kle.n = v < 0 ? 0 : v > KLE_MAX ? KLE_MAX : v;
-    if (!kle.n) return;
+    kle.all = GetPrivateProfileIntA("Bots", "BoardAll", 0, klh_ini) != 0;
+    kle.all_stage = GetPrivateProfileIntA("Bots", "BoardAllStage", 1, klh_ini) != 0;
     kle.dry = GetPrivateProfileIntA("Bots", "EscortDry", 0, klh_ini) != 0;
+    if (kle.all) klog("board: on; BoardAll=1 BoardAllStage=%d%s: while the escape vehicle waits, every AI heister in play under heist stage 3 gets %sthe order to the boarding place (%08x), once per visit; Arcade only, on a level that is not the stock one of its slot",
+                      kle.all_stage, kle.dry ? " DRY RUN (EscortDry=1: nothing is written or called)" : "", kle.all_stage ? "heist stage 3 (one byte of its crew record) and " : "", KLE_ORDER);
+    if (!kle.n) return;
     kle.log = klb_pos("EscortLog", 1, 2);
     kle.record = (int)GetPrivateProfileIntA("Bots", "EscortRecord", -1, klh_ini); if (kle.record >= KLB_NREC) kle.record = -1;
     kle.refill = GetPrivateProfileIntA("Bots", "EscortRefill", 0, klh_ini) != 0;
