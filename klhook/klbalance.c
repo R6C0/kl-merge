@@ -105,12 +105,34 @@
  *       1.0), and the live check that is to SHOW the factor uses 20 on purpose (re\balance.md 10.9, run O3).
  *       While the table fails klr_table's shape test nothing is written and nothing is put back, the seventh included
  *       (as the six always did); it goes back on the first pass the test holds again (review N5).
+ *    a3. A POLICE PLAYER (klfed.c's fed; key FedMirror, default 1; 2026-10-11). The three routines of 1 c each read
+ *       the local player's police byte [player+0x2723] and, when it is set, take the OTHER float of their pair
+ *       (0x591bbe, 0x8b80a0 / 0x8b80ad, 0x7c1bf0 / 0x7c1bfd; re-read 2026-10-11): the table is really 'your enemies ->
+ *       your side, your side -> your enemies, an enemy -> you, you -> an enemy, a friend -> you, you -> a friend', and
+ *       the six keys are named for a criminal player. LIVE, run PT_DM03_die_r2 (the bank, CopToCrew 0.05, CrewToCop
+ *       1.0): the human came back as police and all seven AI heisters were dead 15 .. 47 s later - they had lost the
+ *       0.05 that kept them alive against the police and hit the police at 0.05 themselves. FedMirror=1: while the
+ *       local player is police the three pairs are WRITTEN EXCHANGED (+0x00 <-> +0x04, +0x08 <-> +0x10, +0x0c <->
+ *       +0x14), so that every key keeps the meaning of its name whichever side the human is on: CopToCrew stays what
+ *       a policeman's bullet costs a heister, CrewToYou what a heister's costs you. Each value is the one the
+ *       criminal row has (Ramp and all), only its place changes; the table goes back to the ordinary order the pass
+ *       after the byte clears (the next round's hero). FedMirror=0: the game's own swap. The seventh factor is never
+ *       applied for a police player (0x591be0) and is not touched by this. A pair of which NO key is set is left to
+ *       the game's own swap (review M1). Reviewed: re\balance_fedmirror_review.md (the exe reading and klr_mir hold).
+ *       WHAT IT MEANS IN PLAY, the owner's ini (Risk=2, CopToCrew=0.05, Arcade level 1): a police AI's bullet costs a
+ *       heister x 0.05 as before (without the mirror x 1.00, stock x 3.00), a heister's a police AI x 1.00, a
+ *       heister's costs the fed x 1.00 and the fed's a heister x 1.00: the police AI cannot finish the crew, the fed
+ *       has to. The player pairs are mirrored too so that CrewToYou / YouToCrew stay 'a heister's bullet on you /
+ *       yours on a heister' on either side (review S1: a choice; under Risk=2 / 3 they are all 1.0 anyway).
  *    b. THE PLAYER'S HEALTH. The tuning block is read when the player object is made, before this hook knows the
  *       level; so the LIVE health object is written instead: H = [player+0xa48] of the local player (ZFFPlayer,
  *       vtable 0xbb45f4; [H+0x24] is the player again, 0x4aadaf), from the game's own thread only:
  *       [H+0x08] maximum = (the maximum the game gave) * PlayerHealth, [H+0x04] lowered to it when above,
  *       [H+0x14] / [H+0x18] the two regeneration times. When the game writes a new maximum (a new round, armour),
- *       that becomes the base and is scaled again. A player who is a policeman ([player+0x2723]) is left alone.
+ *       that becomes the base and is scaled again. A player who is a policeman ([player+0x2723], klfed.c's fed) is
+ *       under the same dial while FedMirror=1 and left alone with FedMirror=0 (until 2026-10-11: always left alone -
+ *       550 and 4 s / 4 s beside a hero of 401.5 and 8 s / 8 s). Each object has its own record (klr_pl): the hero is
+ *       the local player again in the round after a fed round and must not be taken for a new object.
  *       The game's values go back when the hook stops acting while the object still lives.
  *       ASSUMPTION: nothing but 0x8ab200 / the HUD derives anything from the maximum that a smaller one breaks;
  *       the 16-bit copy at [player+0x274c] (what a session peer would be sent, 0x6443b8) is NOT written - Arcade
@@ -169,8 +191,12 @@ static const float klr_code[KLR_NLEVEL + 1][KLR_NF] = {
    the seventh factor is written only into a table whose eleven values are these. */
 static const float klr_code_off[KLR_NLEVEL + 1] = { 0, 0.5f, 0.5f, 0.5f, 0.4f, 0.3f, 0.3f, 0.2f, 0.2f, 0.2f, 0.1f, 0.1f };
 
+/* a police player reads the OTHER float of each pair (section 2 a3): slot k then holds the meaning of key klr_mir[k] */
+static const int klr_mir[KLR_NF] = { 1, 0, 4, 5, 2, 3 };
+
 static struct {
     int on, log, risk, ramp, any;
+    int mirror;                               /* FedMirror: the pairs are written exchanged while the local player is police */
     float f[KLR_NF];                          /* < 0 = leave this factor as the game has it */
     float health, delay, full;                /* 0 = leave */
     float off;                                /* CrewOffStage; < 0 = leave +0x1c as the game has it */
@@ -178,7 +204,13 @@ static struct {
 
 struct klr_row { float f[KLR_NF]; float off; };           /* off = the float at +0x1c */
 struct klr_val { float v0, wrote; };          /* v0 = what the game gave, wrote = what the hook put there (0 = nothing) */
-static struct { DWORD player, h; int have; struct klr_val max, delay, full; float seen; } klr_p;
+/* One record per health object seen: a fed round has TWO local player objects in turn (the hero, then a police body) and
+   the hero is the local one again in the next round, still holding what the hook wrote into it. A record found again
+   is not 'fresh': its v0 is still what the GAME gave (review S3 of re\balance_fedmirror_review.md: taken as fresh, the
+   hook's own 401.5 would have been scaled a second time until the game wrote a new maximum). rules = the round object
+   the record was made under: another one is another level's objects, even at the same addresses. */
+struct klr_pl { DWORD player, h, rules, used; struct klr_val max, delay, full; float seen; };
+static struct { int have; DWORD clock; struct klr_pl e[4]; } klr_p;
 
 static int klr_finite(float f) { return f == f && f > -1e9f && f < 1e9f; }
 
@@ -248,16 +280,28 @@ static const char *klr_off_row(const struct klr_row stock[KLR_NLEVEL + 1], int w
     return out;
 }
 
+/* 1 when the local player object is a ZFFPlayer whose police byte is set (klfed.c's fed); 0 also when anything of it
+   cannot be read - the table then stays in the ordinary order. Reads only. */
+static int klr_local_police(void)
+{
+    DWORD gd, pl; BYTE idx = 0xff, police = 0;
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLR_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || (signed char)idx < 0 || idx > 31 ||
+        !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLR_PLAYER_VT || !klh_rd(pl + 0x2723, &police, 1)) return 0;
+    return police != 0;
+}
+
 /* arcade: the table is looked at (and logged once, on any level); act: and the level is not stock - only then is
    anything written; otherwise what was written goes back. Data of a heap object; any thread (as klbot.c's Tune). */
 static void klr_table_tick(int arcade, int act, int level)
 {
     static DWORD tun0; static struct klr_row stock[KLR_NLEVEL + 1]; static int have, applied, toldbad;
     static int offok, toldoff;                /* the seventh: the stock row is the known one; its line was written */
-    struct klr_row cur[KLR_NLEVEL + 1]; DWORD tun; int L, k, n = 0, off; float offnow;
+    static int mirwas;                        /* the table stands in the police player's order (section 2 a3) */
+    struct klr_row cur[KLR_NLEVEL + 1]; DWORD tun; int L, k, n = 0, off, mir; float offnow;
     if (!(tun = klh_rd32((DWORD_PTR)KLH_VA(KLR_TUNING)))) return;
-    if (tun != tun0) { tun0 = tun; have = applied = offok = toldoff = 0; }
+    if (tun != tun0) { tun0 = tun; have = applied = offok = toldoff = mirwas = 0; }
     if (!act) toldoff = 0;                    /* the seventh's line is written once each time the dial starts to act */
+    mir = act && klr.mirror && klr_local_police();
     if (!arcade && !applied) return;
     if (!klr_table(tun, cur)) {
         if (arcade && !toldbad++) klog("balance: the tuning object %08lx does not hold the damage table where this build expects it: nothing is written", tun);
@@ -288,8 +332,11 @@ static void klr_table_tick(int arcade, int act, int level)
     off = klr.off >= 0 && offok;              /* the seventh is ours to write: asked for, and the game's row is the known one */
     for (L = 1; L <= KLR_NLEVEL; L++) {
         DWORD R = tun + 0x6ac + 0x70 * L;
-        for (k = 0; k < KLR_NF; k++) {
-            float want = act ? klr_want(k, stock[L].f[k]) : stock[L].f[k];
+        for (k = 0; k < KLR_NF; k++) {        /* mir: slot k gets the value the criminal row has for the key a police player reads there -
+                                                 only for a pair of which a key is SET: a pair left to the game keeps the game's own swap
+                                                 (review M1: with Risk=0 and one key the other 4 x 11 stock values must not move) */
+            int kk = mir && (klr.f[k] >= 0 || klr.f[klr_mir[k]] >= 0) ? klr_mir[k] : k;
+            float want = act ? klr_want(kk, stock[L].f[kk]) : stock[L].f[k];
             if (want != cur[L].f[k]) n += klh_data((void *)(DWORD_PTR)(R + 4 * k), &want, 4, "damage factor per Arcade level");
         }
         if (off) {                            /* a computed number: compared with a margin, so one that is in the table is not written again */
@@ -297,8 +344,8 @@ static void klr_table_tick(int arcade, int act, int level)
             if (KLR_ABS(want - cur[L].off) > 0.000001f) n += klh_data((void *)(DWORD_PTR)(R + KLR_OFF), &want, 4, "off-stage damage factor per Arcade level");
         }
     }
-    if (act && n) {
-        applied = 1;
+    if (act && n) applied = 1;
+    if (act && n && mir == mirwas) {          /* a change of the order alone has its own line below (review S5) */
         offnow = off ? klr_want_off(&stock[level]) : klr_finite(stock[level].off) ? stock[level].off : -1.0f;      /* what stands at +0x1c of this level now */
         klog("balance: Risk=%d written for %d Arcade levels (%d value(s) changed, Ramp=%d); now on level %d: police->crew %.2f  crew->police %.2f  police->you %.2f  you->police %.2f  crew->you %.2f  you->crew %.2f  crew off your stage x %.2f - the stock values come back when the session is not Arcade or the level is stock",
              klr.risk, KLR_NLEVEL, n, klr.ramp, level, klr_want(0, stock[level].f[0]), klr_want(1, stock[level].f[1]), klr_want(2, stock[level].f[2]),
@@ -306,6 +353,13 @@ static void klr_table_tick(int arcade, int act, int level)
     } else if (!act) {
         applied = 0;
         if (n) klog("balance: the stock damage table is back (%d value(s))", n);
+    }
+    if (!act) mirwas = 0;
+    else if (mir != mirwas) {                 /* said at any Log level: it changes what every bullet of the round costs */
+        mirwas = mir;
+        if (mir) klog("balance: you are POLICE now: the game reads the other float of each pair for a police player, so the three pairs are written exchanged (%d value(s)) and every key keeps its meaning - on level %d a policeman's bullet still costs a heister x %.2f, a heister's a policeman x %.2f, a heister's costs you x %.2f, yours a heister x %.2f (FedMirror=0 = the game's own swap)",
+                      n, level, klr_want(0, stock[level].f[0]), klr_want(1, stock[level].f[1]), klr_want(4, stock[level].f[4]), klr_want(5, stock[level].f[5]));
+        else klog("balance: you are no longer police: the table is in the ordinary order again (%d value(s))", n);
     }
     if (act && off && !toldoff) {             /* once per arming: the seventh on all eleven levels, and what Ramp made of it */
         char a[96], b[96], h[128]; int chg = 0, held = 0; const char *why = "";
@@ -344,10 +398,14 @@ static int klr_put(struct klr_val *t, DWORD at, float cur, float want, const cha
     return 1;
 }
 
-/* The local player's health object: logged as found, then scaled while act, put back when not. */
-static void klr_player_tick(int act, int game_thread)
+/* The local player's health object: logged as found, then scaled while act, put back when not. rules = the round
+   object of the Arcade session, 0 when there is none (then only an object this file has a record of is looked at: its
+   own values go back). A POLICE player (klfed.c's fed): under FedMirror=1 the same dial as the hero's - 'the same risk
+   for everybody' (review S2: left alone he had the game's 550 and 4 s / 4 s beside a hero of 401.5 and 8 s / 8 s);
+   FedMirror=0: left alone. */
+static void klr_player_tick(int act, int game_thread, DWORD rules)
 {
-    DWORD gd, pl, h; BYTE idx = 0xff, police = 0; float raw[0x28 / 4]; int fresh, n = 0;
+    DWORD gd, pl, h; BYTE idx = 0xff, police = 0; float raw[0x28 / 4]; int fresh, n = 0, i; struct klr_pl *p = 0;
     float cur, max, delay, full, max0, delay0, full0, wmax, wdelay, wfull;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLR_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || idx == 0xff || (signed char)idx < 0 || idx > 31 ||
         !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLR_PLAYER_VT || !(h = klh_rd32(pl + 0xa48)) ||
@@ -355,29 +413,41 @@ static void klr_player_tick(int act, int game_thread)
     cur = raw[1]; max = raw[2]; delay = raw[5]; full = raw[6];
     if (!klr_finite(cur) || !klr_finite(max) || !klr_finite(delay) || !klr_finite(full) || max < 1 || max > 100000 || cur > max * 1.01f + 1 ||
         delay < 0 || delay > 3600 || full < 0 || full > 3600) { return; }
-    fresh = !klr_p.have || klr_p.player != pl || klr_p.h != h;      /* have stays set through a failed pass */
-    klr_p.have = 1; klr_p.player = pl; klr_p.h = h;
-    max0 = klr_track(&klr_p.max, max, fresh); delay0 = klr_track(&klr_p.delay, delay, fresh); full0 = klr_track(&klr_p.full, full, fresh);
-    if (fresh) {
-        klr_p.seen = cur;
-        if (klr.log) klog("balance: your health object %08lx (player %08lx%s): %.1f of %.1f; it starts to come back %.1f s after a hit and is whole %.1f s later", h, pl, police ? ", a POLICEMAN: left alone" : "", cur, max, delay, full);
+    for (i = 0; i < 4; i++) if (klr_p.e[i].used && klr_p.e[i].player == pl && klr_p.e[i].h == h) p = &klr_p.e[i];
+    if (!p && !rules) return;                 /* no session and no record of this object: nothing of ours is in it */
+    fresh = !p;                               /* a record stays through a failed pass and through the other body's turn */
+    if (p && rules && p->rules != rules) {    /* another round object = another level's objects, even at these addresses -
+                                                 unless the object still holds what this file wrote into it */
+        if (p->max.wrote != 0 && KLR_ABS(max - p->max.wrote) <= 0.01f) p->rules = rules; else fresh = 1;
     }
-    if (klr.log >= 2 && cur < klr_p.seen - 0.05f) klog("balance: you lost %.1f (%.1f of %.1f)", klr_p.seen - cur, cur, max);
-    klr_p.seen = cur;
-    if (police) act = 0;
+    if (!p) {                                 /* a free record, else the one not looked at for the longest */
+        for (i = 0, p = &klr_p.e[0]; i < 4; i++) { if (!klr_p.e[i].used) { p = &klr_p.e[i]; break; } if (klr_p.e[i].used < p->used) p = &klr_p.e[i]; }
+        memset(p, 0, sizeof *p);
+    }
+    if (fresh) { p->player = pl; p->h = h; p->rules = rules; }
+    p->used = ++klr_p.clock; klr_p.have = 1;
+    max0 = klr_track(&p->max, max, fresh); delay0 = klr_track(&p->delay, delay, fresh); full0 = klr_track(&p->full, full, fresh);
+    if (fresh) {
+        p->seen = cur;
+        if (klr.log) klog("balance: your health object %08lx (player %08lx%s): %.1f of %.1f; it starts to come back %.1f s after a hit and is whole %.1f s later", h, pl,
+                          !police ? "" : klr.mirror ? ", a POLICEMAN: under the same dial as the hero (FedMirror=1)" : ", a POLICEMAN: left alone (FedMirror=0)", cur, max, delay, full);
+    }
+    if (klr.log >= 2 && cur < p->seen - 0.05f) klog("balance: you lost %.1f (%.1f of %.1f)", p->seen - cur, cur, max);
+    p->seen = cur;
+    if (police && !klr.mirror) act = 0;
     wmax = act && klr.health > 0 ? max0 * klr.health : max0;
     wdelay = act && klr.delay > 0 ? klr.delay : delay0;
     wfull = act && klr.full > 0 ? klr.full : full0;
     if (KLR_ABS(max - wmax) <= 0.01f && KLR_ABS(delay - wdelay) <= 0.01f && KLR_ABS(full - wfull) <= 0.01f) return;
     if (!game_thread) return;                 /* a live object of the round: only between two frames of the game itself */
-    if (klr_put(&klr_p.max, h + 8, max, wmax, "the local player's maximum health")) {
+    if (klr_put(&p->max, h + 8, max, wmax, "the local player's maximum health")) {
         n++;
-        if (cur > wmax) { klh_data((void *)(DWORD_PTR)(h + 4), &wmax, 4, "the local player's health, down to the new maximum"); klr_p.seen = wmax; }
+        if (cur > wmax) { klh_data((void *)(DWORD_PTR)(h + 4), &wmax, 4, "the local player's health, down to the new maximum"); p->seen = wmax; }
     }
-    n += klr_put(&klr_p.delay, h + 0x14, delay, wdelay, "the local player's regeneration delay");
-    n += klr_put(&klr_p.full, h + 0x18, full, wfull, "the local player's regeneration time");
-    if (n && klr.log) klog("balance: your health %s: maximum %.1f (the game gave %.1f), comes back after %.1f s within %.1f s (the game: %.1f / %.1f)",
-                           act ? "set" : "put back", wmax, max0, wdelay, wfull, delay0, full0);
+    n += klr_put(&p->delay, h + 0x14, delay, wdelay, "the local player's regeneration delay");
+    n += klr_put(&p->full, h + 0x18, full, wfull, "the local player's regeneration time");
+    if (n && klr.log) klog("balance: your health %s%s: maximum %.1f (the game gave %.1f), comes back after %.1f s within %.1f s (the game: %.1f / %.1f)",
+                           act ? "set" : "put back", police ? " (a policeman)" : "", wmax, max0, wdelay, wfull, delay0, full0);
 }
 
 static void klr_tick(int game_thread)
@@ -396,8 +466,8 @@ static void klr_tick(int game_thread)
         }
     }
     klr_table_tick(arcade, act, level);
-    if (arcade) klr_player_tick(act, game_thread);
-    else if (klr_p.have) klr_player_tick(0, game_thread);         /* the session ended with the object alive: its own values go back */
+    if (arcade) klr_player_tick(act, game_thread, rules);
+    else if (klr_p.have) klr_player_tick(0, game_thread, 0);      /* the session ended with the object alive: its own values go back */
 }
 
 static float klr_inif(const char *key, const char *def)
@@ -426,6 +496,7 @@ static void klr_init(void)
     klr.log = (int)GetPrivateProfileIntA("Balance", "Log", 1, klh_ini); if (klr.log < 0) klr.log = 0; if (klr.log > 2) klr.log = 2;
     klr.risk = (int)GetPrivateProfileIntA("Balance", "Risk", 0, klh_ini); if (klr.risk < 0) klr.risk = 0; if (klr.risk > 3) klr.risk = 3;
     klr.ramp = GetPrivateProfileIntA("Balance", "Ramp", 1, klh_ini) != 0;
+    klr.mirror = GetPrivateProfileIntA("Balance", "FedMirror", 1, klh_ini) != 0;
     for (k = 0; k < KLR_NF; k++) {
         klr.f[k] = klr_dial[klr.risk].f[k];
         v = klr_inif(klr_key[k], "-1"); if (klr_finite(v) && v >= 0 && v <= 20) klr.f[k] = v;
@@ -446,8 +517,8 @@ static void klr_init(void)
     klr.full = klr_dial[klr.risk].full; v = klr_inif("RegenTime", "0"); if (klr_finite(v) && v >= 0.1f && v <= 600) klr.full = v;
     if (klr.health == 1.0f) klr.health = 0;                   /* times one = leave */
     if (klr.health > 0 || klr.delay > 0 || klr.full > 0) klr.any = 1;
-    klog("balance: on; Log=%d Risk=%d Ramp=%d; factors (-1 = stock) police->crew %.2f crew->police %.2f police->you %.2f you->police %.2f crew->you %.2f you->crew %.2f, crew off your stage x %.2f; your health x %.2f (0 = stock), comes back after %.1f s within %.1f s (0 = stock); Arcade only, written only on a level that is not stock",
-         klr.log, klr.risk, klr.ramp, klr.f[0], klr.f[1], klr.f[2], klr.f[3], klr.f[4], klr.f[5], klr.off, klr.health, klr.delay, klr.full);
+    klog("balance: on; Log=%d Risk=%d Ramp=%d FedMirror=%d; factors (-1 = stock) police->crew %.2f crew->police %.2f police->you %.2f you->police %.2f crew->you %.2f you->crew %.2f, crew off your stage x %.2f; your health x %.2f (0 = stock), comes back after %.1f s within %.1f s (0 = stock); Arcade only, written only on a level that is not stock",
+         klr.log, klr.risk, klr.ramp, klr.mirror, klr.f[0], klr.f[1], klr.f[2], klr.f[3], klr.f[4], klr.f[5], klr.off, klr.health, klr.delay, klr.full);
     if (offbad)                               /* said at any Log level: the user asked for something and does not get it */
         klog("balance: CrewOffStage=%s is IGNORED: it must be one number of 0 .. 20 with a decimal point (0.75, not 0,75), or a negative one for the game's own; what stands is the dial's %.2f (-1 = the game's own)", t, klr.off);
 }
