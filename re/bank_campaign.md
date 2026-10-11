@@ -2065,3 +2065,140 @@ Men's, problems 0).
 STILL TRUE: NOTHING RAN IN THE GAME, nothing is installed, the game folder was only read.
 
 (end of the Music stage)
+
+---
+
+## Run V2, diagnosed from the build (2026-10-11 night; OFFLINE, nothing built, nothing installed, no tool edited)
+
+Asked: why the crew failed in live run V2 (`<work>/build/klhook/live/V2_vault_full.log`: the full map, an idle human,
+`[Bots] Log=2 Escort=1`, `CopToCrew 0.05`), with the lead's hypothesis 'the tellers' four stacks pull the crew into
+the hall instead of down to the vault'. Read: that log and V1's, the built level `<c_bank>/bank_vault` and, for
+comparison, the tab's Withdrawal `<work>/build/w_tabM/KLExpansion/Maps/DM03` (read only). Scripts and their outputs:
+`C:/kl_scratch/vault_fix/build/` (`diag.py` -> `vault.txt`, `dm03.txt`; `diag2.py` -> `vault2.txt`; `diag3.py` ->
+`vault3.txt`). MEASURED = counted there; READ = the log's or the level's own words; GUESS says so.
+
+### V2.1 THE HYPOTHESIS IS REFUTED: the crew went down, emptied the vault and died ON THE WAY OUT
+
+- READ (the log's once-a-second crew line, GO = 19:26:57.9): at GO + 137 s the first vault money is paid
+  (`4 bot ... $30000` at 19:29:15.2), and by GO + 155 s five bots hold 330,000 + 615,000 + 500,000 + 180,000 +
+  675,000 = **2,300,000 = the vault's seven cases to the dollar**. The tellers' 300,000 was never touched.
+- Why it looked otherwise: a 'lost' line exists only where a bot is HIT. MEASURED, hits by 20 s and floor: yard /
+  dock 0 - 20 s (9); vault lobby 20 - 40 s (124 hits, 361 health at the 0.05 dial); the flights 40 - 80 s (115); the
+  ante-room 60 - 80 s (9); **GO + 80 .. 160 s: one hit** (the gate's 56 s and the vault - nobody shot at them down
+  there, so no line names y -960); the hall GO + 160 .. 220 s: **445 hits, 1,261 health**. 'Still at stage 1' is what
+  a bot on the way out has: stage 2 is the EXITS plane AT the front entrance (303, 974, -9407), which none reached.
+- Deaths (READ): record 1 at GO + 32 s, one step of 240 at (-900, 334, -6109) = the vault lobby's west end;
+  record 7 at + 185 s (79 + 79 + 53 in 0.2 s at (617, 800, -8150)); record 4 at + 203 s (78 + 78 + 27 at
+  (614 .. 631, 800, -8229 .. -8256)); records 6, 2, 5 at + 205 / 211 / 217 s by 150 - 200 small hits each (1 .. 8 a
+  hit) at (609, 800, -8034), (229, 800, -6770) and (615, 800, -7647). Two of the five hall deaths are the point-blank
+  rule (re/melee_damage.md: a step of the victim's whole rest), three are plain fire from many guns.
+- The same crew in V1 (no enemies; READ): vault 2,300,000 by GO + 121 s, then THREE of the four teller stacks are
+  taken IN THE HALL ON THE WAY OUT (records 2, 7, 3: + 75,000 each, GO + 155 .. 165 s), stage 2 from + 153 s, six
+  aboard. So the tellers do pull - on the way out, for about 5 s a stack - and record 3, who took one last, got
+  stage 3 but was never 'aboard': left in play with 495,000 to the end of the run.
+
+### V2.2 The crew as BUILT (MEASURED, `vault.txt`; `bots.txt` / `dyn.txt` of the folder say the same)
+
+- No station, hold or fork of any of the seven squads lies in the hall before the vault. Way in: ENTERS box
+  (582, 199, -4822) -> vault lobby (0, 239, -6368), (394, 239, -7948) -> flights (399, -165, -9649) -> ante-room
+  round (417, -960, -11871), `020_Timer_vault_opens` 56 s -> vault (390, -960, -12950), loot wait 15 / 30 / 45 s.
+  Way out: -> lobby (394, 239, -7875) -> airlock (1546, 240, -6970) -> stairs (1230, 487, -5453) -> hall
+  (300, 799, -6265), (736, 799, -8014) -> EXITS box (303, 799, -9362) -> street. Forks (2 - 6 a squad) are side
+  ways of the same corridors; in the hall they use BOTH aisles (x 656 .. 816 and x -135 .. -214) and the east wall
+  (x 1056 .. 1279).
+- **There is no other way.** With the hall's 120 mesh polygons banned there is NO path from the ante-room, or from
+  the yard, to the escape station (316, 700, -11070). The hall has one door in (foyer, (300, 800, -5800)), one out
+  (front entrance, (300, 800, -9500), a 2 m gap) and four stairs to a gallery at y 1220: a 36 m crossing.
+- In the hall the squads have 4 - 14 places each, NO sprint step, and holds with timers of 4 / 6 / 8 s (Squad#02
+  4 s at (420, 800, -6246) and 4 s at (464, 800, -9264); #04 and #05 6 s; #07 8 s). Record 2 died standing at
+  (229, 800, -6770) for 16 s = the hold `051_DefendBehaviour_pos_cover` (245, 800, -6778); record 5 at
+  (615, 800, -7647) = the hold `052_DefendBehaviour_pos_cover_a` (659, 800, -7683).
+- Loot window (800 / 400, re/bots_loot.md): 31 of the 81 places the seven squads have on the hall's floor have a teller stack in it (the east aisle:
+  `TM_MoneyStack_025` (1367, 899, -8006) from every place x 656 .. 816; the west way: `_023` / `MoneyStack_100`).
+  They can be taken (check(): 55 - 57 from the public edge), so the loot tactic may send a bot from the aisle to a
+  counter at x 1310 / -710 - past the hall police's cover points (below). Not SEEN in V2 (nobody lived that long).
+- Mesh path from the first bot (575, 200, -4350): the tellers 9,320 .. 10,176, the vault's cases 9,279 .. 9,841 -
+  the same distance; at GO the tellers are 660 ABOVE the dock's floor, outside the window's 400 of height, and the
+  seven cases are HIDDEN (entity flag 0x400) until the beat's end. Live at GO: the four teller stacks only (plain,
+  shown, radius 125).
+
+### V2.3 What stands in the hall when the crew comes up (MEASURED / READ, `vault.txt`, `vault2.txt`, `vault3.txt`)
+
+| who | men | where they stand / go | when |
+|---|---|---|---|
+| F07's three hall squads (`HALL`) | 8 | in a row at z -9000, x -500 .. 1100: 3.5 - 4 m INSIDE the front entrance, between the crew and its only exit; `10_RunToCover` to (-500, -8400), (-300, -7800), (-500, -7200), (1100, -8400), (900, -7800), (1100, -7200), (100, -8600), (500, -8600) | not in the world until the beat timer (`RivalMercVan!Timer`, 48 s after the ante-room box) names `10_RunToCover`: about GO + 118 s in V2, 57 s before the crew |
+| `Police_OutSide_SWAT_02`, `_03` (rifles) | 8 | `FlankingBehaviour` points IN the hall: (-545, 805, -7069), **(394, 802, -9406) = the front entrance itself**, (-70, 830, -8937), (671, 801, -8937) | the foyer box `Specials!LevelSpeak!TriggerBox` (300, 930, -5650): the FIRST criminal in the foyer = an AI heister at the hall's north door |
+| `Police_Outside_Teargas_01`, `Police_OutSide_01`, `Police_Reinforce_Wave1_COOP_03` | 10 | flank points on the hall's GALLERY, y 1220, both sides: (-661, -7943), (1256, -7452), (-652, -7862), (1265, -7371), (1119, -6626); COOP_03's left flank (1113, 1222, -8524) is on no mesh | the same box |
+| the two `..._ShieldSupport` men | 2 | `050_Move_In_01`: into the hall (`START_ROUT`, on purpose) | the same box |
+
+- So 8 men are set up in the hall a minute before the crew, and at the moment the first bot steps into the foyer
+  the whole 'plaza' wave of 20 is sent INTO the hall and onto its gallery: 28 guns on a 36 m crossing whose 2 m exit
+  is a SWAT squad's own flank point. The plaza itself is left empty.
+- READ: `10_RunToCover`'s next list is empty and nothing names `10_Defend` or `30_smUnleash` (the comment over
+  `HALL` says 'the point of 10_Defend'; no rout ever goes there): the hall squads stay at their cover points.
+- MEASURED, nearest place of each bot squad to a hall cover point: 85 (Squad#05's hold `052_..._pos_cover_c_c`
+  (575, 800, -8639) against (500, -8600)), 159, 173, 174, 237, 265, 302; to a SWAT flank point: every squad's EXITS
+  place is 44 .. 186 from (394, 802, -9406). The point-blank rule's ball is 160. check() / bots_check test none of
+  this: `BEAT_CLEAR` asks only that late squads stand 1000 from stations BEFORE their trigger, `LANE_CLEAR` is the van's.
+- For scale, the tab's Withdrawal (MEASURED, `dm03.txt`): the same hall, crossed the other way; 15 armed men in the
+  whole level in 9 squads, TWO of them in the hall (at its foyer end, (625, 803, -5996) and (-144, 803, -5947)),
+  the nearest man to any place of a bot squad 132. The Vault: 61 men, 28 of them told into the hall.
+- The 14 police of the beat and the five hunts into the vault: between GO + 80 and + 160 s no bot lost a point, so
+  none of them fought the crew at the vault or on the way up. Whether they came down at all is NOT established
+  (the log has no line for enemies). GUESS: they were still upstairs, or dead - one more thing a watched run shows.
+
+### V2.4 The escort and the dial (READ)
+
+- `[Bots] Escort=1` with an idle human: record 3 was chosen 3 s after GO and re-pointed 15 times to 8 - 14 m from the
+  player, who stood at (250, 200, -4350); it never went past z -5446, earned nothing, and is the one survivor.
+  So V2's crew was FIVE after the first death, not seven. An idle-human test of the crew wants `Escort=0`.
+- While that bot stood in the yard its squad's chain went on: the escort's lines give 'its route place' as the
+  ante-room (479, -960, -11973) at GO + 43 s, the vault (505, -960, -13031) at + 109 s, the street at + 195 s.
+  So a chain can run ahead of its man. NOT established why (the escort's own order may end a Defend step).
+  Consequence for `bots_gate`: 'a bot that holds in the ante-room stands inside the beat's box, so the beat began
+  when it arrived' holds only for a bot that is THERE; a squad whose man is held up can be sent on to the vault
+  place while the door's body still stands. Harmless in V2 (others had started the beat).
+- The dial was 0.05. On the way IN one bot was at 26 of 252 in the vault lobby (GO + 44 s) and the lobby cost 361
+  health in 20 s; the owner's ini has 0.15. At 0.15 this crew, alone, does not reach the vault. The map is laid out
+  for a human who shoots; V2 measured six bots alone against 61.
+
+### V2.5 WHAT THE FIX MUST BE, in this module's terms (nothing of it is written; every place below is to be MEASURED)
+
+1. **The plaza wave stays on the plaza** (the largest term: 20 of the 28). `STAGE`'s 'plaza' squads are started by
+   the foyer box and their flank points are the campaign's, in the hall. Wanted, behind a named flag (default = as
+   built, e.g. `PLAZA_IN_HALL = True` / `--plaza-outside`): (a) started by the EXITS plane at the front entrance
+   (the stage-2 trigger) or a box just inside it, not by the foyer box - the foyer box keeps the line 'Get out on
+   the street!'; (b) the five flanking squads' `LeftFlank#1` / `RightFlank#1` re-laid on the plaza and the street
+   (z < -9500, y 700 .. 812), as `HALL` re-lays F07's squads; (c) `START_ROUT` of the two shield men back off the
+   hall. That is the owner's 'big shootout' where the van is, with 61 men still in the level.
+2. **The hall squads off the crew's line** (`HALL`): the men's row at z -9000 and the cover points at x 100 / 500,
+   z -8600 are in the mouth of the only exit; cover points at x -300 / 900 are 159 - 174 from the aisles' places.
+   Wanted: places at the hall's sides or on the gallery, and a new test in `bots_check`: no place of a bot squad
+   within the point-blank ball (160) + a margin (GUESS 250) of a man's start, a cover point, a flank point or a
+   defend place of any enemy squad - it FAILS the delivered folder as it is (85, 44).
+3. **The crew crosses the hall in one go**: a step after the dynamic one (this module's, as `seal` is; the dynamic
+   tool is not this file's): every `DefendBehaviourRout` of the bots' squads with a place in the hall box gets
+   `eDMS_Sprint` (field 4) and the hold timers those steps start are set to 0 (or the hold steps taken out).
+   Flag, default off.
+4. **The tellers**: not the cause, but a cost in the same 36 m - a bot stops for a stack under every gun of the hall,
+   and one missed the van for it in V1. Flag (default = as built): the four stacks out, or their 300,000 moved into
+   the vault lobby (y 240, on the way in, where the tab's Withdrawal has its eight cases).
+5. Not this module's: an idle-human test with `Escort=0`; `[Balance] CopToCrew` is not a cure (V2 had 0.05).
+
+### V2.6 Other faults seen on the way
+
+- `HALL`'s comment promises a 'point of 10_Defend'; no rout names it (V2.3).
+- `Police_Reinforce_Wave1_COOP_03\FlankingBehaviour\LeftFlank#1` (1113, 1222, -8524) is on no mesh polygon;
+  check() counts only Defend places and search boxes ('83 places their behaviour routs name').
+- The hall's 8 come into the world at their row inside the front entrance: a human who is in the hall at the
+  beat's end (nothing stops him: every door is open from the load, the tellers are live at GO) sees them appear.
+- Record 1's death at GO + 32 s: a hold of the dynamic step at a cover box in the lobby's west end
+  (`010_DefendBehaviour_pos_cover_b` (-965, 240, -6244) of Squad#08, or `_c` (-645, 240, -6014) of Squad#02), 9 - 10 m
+  off the route, where a guard reached arm's length. GUESS: one of the dock patrol's two (their place
+  (-496, 241, -5083)). Holds are chosen by cover boxes alone; where the enemies stand is not asked.
+- V1: record 3 at stage 3 with 495,000 was never aboard (the van stands 8 s; `BoardAll` was off in that run's first
+  `[Bots]` block and on in the second - which the hook took is not read here).
+- The run's ini has `[Bots]` three times and `[Balance]` twice with different values (`Escort`, `BoardAll`,
+  `FollowOut`, `Tune`, `Log` each twice): what the hook used is what its first log lines say, not the file.
+
+(end of the V2 diagnosis)
