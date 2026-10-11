@@ -2202,3 +2202,84 @@ comparison, the tab's Withdrawal `<work>/build/w_tabM/KLExpansion/Maps/DM03` (re
   `FollowOut`, `Tune`, `Log` each twice): what the hook used is what its first log lines say, not the file.
 
 (end of the V2 diagnosis)
+
+## Crew fix after run V2 (2026-10-11 night; OFFLINE: built and checked, NOT RUN IN THE GAME, nothing installed)
+
+Folders: `<work>/build/c_bank2` (silent, against the installed stream file) and `<work>/build/c_bank2_music` (with
+`--music-layer4 --str <work>/build/v_vault/PC_Def.str`), the four names each. `c_bank` / `c_bank_music` (runs V0 - V2)
+are untouched. Each folder set holds its own `chain.sh`, `checks.sh`, `crew_route.py`; the driver of the whole rebuild
+is `C:/kl_scratch/vault_fix/s/run_all.sh <silent|music>`.
+
+### X.1 The diagnosis (two readers, settled on the log and the build)
+- MEASURED: the crew did NOT go to the hall instead of the vault. $0 for every bot until GO + 137 s, then five bots
+  take 2,300,000 = the vault's seven cases; they come up again and die in the BANKING HALL ON THE WAY OUT
+  (GO + 185 .. 217 s). 'Stage 1' is right for a bot short of the EXITS plane; 'nobody at y -960' was read off 'lost'
+  lines, which exist only where a bot is hit (one hit in all between GO + 80 and + 160 s). The lead's hypothesis
+  (teller stacks + open doors pull the crew into the hall first) is REFUTED: no station, hold or fork lies in the
+  hall before the vault (`crew_route.py`: gate's hold station 5, vault's loot 6, first hall station 12 of 16).
+- WHY THEY DIE THERE (MEASURED on the build of V2): the hall is the only way out (one door in, a 2 m door out, 36 m);
+  F07's 8 hall police came into the world in a row 3.5 - 4 m inside that exit and their places lay 39 .. 174 from the
+  heisters' own on both aisles; the foyer box started the plaza's 20 for the first criminal at the hall's NORTH door
+  and their campaign flank points are in the hall, one IN the entrance gap (394, 802, -9406), six on the gallery;
+  the heisters crossed with cover holds (28 s of hold timers) and no sprint. Two of five hall deaths are point-blank
+  steps (79 + 79 + 53, 78 + 78 + 27; re/melee_damage.md), three were shot standing 9 - 25 s at holds.
+- THE ONE DISAGREEMENT, settled (MEASURED): the balance dial was OFF in V2. `V2_vault_full.ini` has `[Balance]`
+  twice - the first one is `Log=1[Crew]` (a lost newline) without `Enable` - and `V2_vault_full.log` has 0 'balance:'
+  lines (V1: 20, 'balance: on; ... police->crew 0.05'). V2 ran on stock Arcade level 1: police -> crew 0.01, a
+  heister off the human's stage x 0.5 against police. 79 a step = 66 x 1.2 x 100 x 0.01. 'CopToCrew 0.05' was NOT in
+  force; at 0.05 a point-blank step is 395. NOTHING ABOUT THE BALANCE CAN BE READ FROM V2.
+- Not this module's, for the run: `Escort=1` with an idle human parks one of the seven in the yard for the round.
+
+### X.2 The change (tools/kl_fa_bank.py; every flag OFF by default = the level of V0 - V2; no man taken out: 61)
+The tellers and the route's order are NOT changed (they were not the cause).
+1. `PLAZA_OUTSIDE` (`test --plaza-outside`): the plaza's seven squads (20 men) stay on the plaza. `PLAZA_PLACES`: 14
+   places of their routs (ten flank points, the two shield men's `050_Move_In_01`, COOP_03's `Cutscene_MoveOutside`)
+   re-laid on the two sides of the plaza, x -1450 .. 1700, z -10650 .. -9900 (GUESS: every place; MEASURED: on the
+   START's mesh part, free floor, 12 of them were in the hall, none is left in `HALL_BOX`). They are started by
+   stock F07's own box `Gameplay!030_AfterLoot!tbExitFinancialAlley`, re-placed across the hall's SOUTH end
+   (z -9200 .. -8200, fires once, criminals only), not by the foyer box, which keeps only the line.
+   ASSUMPTION: a flanking rout takes its men to its two places and they fight from there.
+2. `HALL_UP` (`test --hall-gallery`): F07's eight hall police on the hall's GALLERY (y 1221; `HALL_GALLERY`): three on
+   each long side, a pair at the north corners. The floor is the crew's; the nearest police place to a heister's is
+   421 (straight up). GUESS: every place; MEASURED: on the mesh part of the START. ASSUMPTION: they fire down from the
+   rail (F07's cover-point rout, unchanged in kind). Still true: nothing names `10_Defend` - they stay at the rail.
+3. `hall-dash <folder>` (a chain step after kl_fa_bots_dyn, before seal; .prp only): every Defend step of a heister
+   squad with a place in `DASH_BOX` (the hall's floor south of the foyer) is `eDMS_Sprint`, the hold timers those
+   steps start are 0 s. On the build: 25 steps of 7 squads, 5 timers (4 / 6 s) -> 0. GUESS: a sprint is better than a
+   hold under fire from above.
+4. `crew-check <folder>` (new test, in checks.sh): no heister place within `CREW_CLEAR` 400 (160 point-blank reach +
+   GUESS 240) of a man, cover point, flank point or defend place of a hall / plaza squad. `c_bank/bank_vault`: FAILS
+   (hall 39, 92 pairs; plaza 43, 27 pairs). `c_bank2/bank_vault`: PASS (hall 421, plaza 469).
+   `check()` also says where the hall's police stand and FAILS a plaza rout place left in the hall.
+`test --crew-fix` = 1 + 2; `c_bank2*/chain.sh` runs 3.
+
+### X.3 The rebuild
+`kl_fa_bank.py test <out> --keep --crew-fix [--no-ai] [--music-layer4 --str ...] --plan <c_bank>/bank_vault_bare/van.json`,
+then chain.sh (the delivery's + `hall-dash`), then checks.sh (the delivery's + `crew`, `crew_route`).
+Silent, `c_bank2` (zip sha1): bank_vault 8f67ac56 = bank_vault_wavslim; bank_vault_noai e48e40a7; bank_vault_bare
+ba85322a. Blocks as before (159.9 / 149.8 / 150.1 / 149.1 MB, chunk table 65,852). EVERY CHECKER PASSES except
+`kl_maps preflight` CRASH 1 / `audit` FAIL 2 (noai 3) = the known stream-clip finding of the silent set, and on the
+bare folder `guns` / `talk` (no such step there, as in the delivery). kl_route: route_walk FREE (START -> vault ->
+hall -> front entrance -> boarding place), route_built FREE, crew_route PASS on the 16 stations 'THE VAULT BEFORE THE
+HALL'.
+Music, `c_bank2_music` (zip sha1): bank_vault c869dda8 = bank_vault_wavslim; bank_vault_noai 2e6d5163;
+bank_vault_bare 0ac3c519. Same blocks. All checkers PASS incl. `kl_vault_str.py whd` (WHD: PASS on all four), crew,
+crew_route; left: the known RISK 'eLayer4' (x9), on noai 'no ZSquadScript: no police' (by design), on bare guns / talk.
+The music set needs the stream file `<work>/build/v_vault/PC_Def.str` installed first (Music stage M.3 / M.6).
+CONTROL (MEASURED): `test --keep --plan ...` WITHOUT the new flags still gives the bare archive of runs V0 - V2
+byte for byte (sha1 b7e48d31): the defaults are unchanged. tools/kl_fa_club.py imports the module as before.
+
+### X.4 What the next live run must show (V3 = c_bank2/bank_vault, owner away)
+THE INI FIRST: one `[Balance]` and one `[Bots]` section; the log must have 'balance: on; ... police->crew 0.05' (V2
+had no 'balance:' line). `Escort=0` for an idle human (else one of seven is parked in the yard).
+- as V2 up to the vault: stage 1 at GO + 12 .. 19 s, first vault money about GO + 137 s, 2,300,000 in the crew;
+- NEW: heisters past z -8635 in the hall, 'heist stage 1 -> 2' lines (the EXITS plane; V2: none), then stage 3, the
+  van's state leaving 0, 'aboard' / 'status6'; hall 'lost' lines (y 800) well under V2's 445, no bot standing more
+  than a few seconds between z -6400 and -9420; no point-blank step (three hits of 79 or 395 within 0.3 s) there;
+- the second fight is on the plaza: 'lost' lines at y 700, z < -9500 after the first bot is in the hall's last 10 m;
+- to LOOK at (pictures / a human): the eight police on the gallery do fire down and do not stand in the air; the
+  plaza's men are on the two sides of the plaza, not in the entrance; nobody appears in the human's sight.
+NOT SHOWN BY ANY CHECK: that the crew now survives. With the dial really at 0.05 the way IN is five times harder
+than V2 was (bot 4 was at 24 of 252 in the vault lobby at 0.01): if they die before the vault, that is the 19 guards
+of 'start' / 'down' and the balance, not this change. Still open from V2: whether the 14 beat police and the five
+hunts ever reach the crew in the vault (no hit GO + 74 .. 170 s); the point-blank key (re/melee_damage.patch).

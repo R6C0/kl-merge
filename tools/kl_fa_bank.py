@@ -24,6 +24,13 @@ what only a live run can settle: re/bank_campaign.md. Nothing here installs anyt
                                                           the scene's free REF id
     python kl_fa_bank.py reverify <folder>                kl_graft.verify's cross-reference tests on the level as
                                                           WRITTEN (check does it too): exit 1 on a problem
+    python kl_fa_bank.py hall-dash <folder>               in place, AFTER kl_fa_bots_dyn's step and before seal: the AI
+                                                          heisters cross the banking hall in one go (sprint, no cover
+                                                          hold between the foyer and the front entrance: DASH_BOX);
+                                                          only the .prp member changes
+    python kl_fa_bank.py crew-check <folder>              a folder with the squad: no place of an AI heister within
+                                                          CREW_CLEAR of a man, cover point, flank point or defend
+                                                          place of a hall / plaza squad; exit 1 on a FAIL
     options of 'test' (one flag each for the live runs):
       --doors-animate   the eleven door leaves of the route stay where the level has them and get 'Activate' at
                         the round start (default: they are OPEN AT BUILD TIME - sunk, their collision cut)
@@ -46,6 +53,12 @@ what only a live run can settle: re/bank_campaign.md. Nothing here installs anyt
                         re/bank_campaign.md 'Music stage'). With it: --music-layer4
       --plan FILE       the van's plan from a file (the van.json beside an earlier build, or 'kl_map_escape.py
                         van-plan <bare graft> --points ... --json'): no bare graft is built for it (60 s less)
+      --plaza-outside   THE CREW FIX AFTER RUN V2, part 1 (PLAZA_OUTSIDE): the plaza's seven squads stay on the plaza -
+                        the places their routs go by are re-laid in front of the bank (PLAZA_PLACES) and they are
+                        started by a box across the hall's south end (PLAZA_BOX), not by the foyer box
+      --hall-gallery    part 2 (HALL_UP): F07's eight hall police stand on the hall's gallery (HALL_GALLERY), off the
+                        floor the crew has to cross (default: on the floor, in a row before the front entrance)
+      --crew-fix        both (what <work>/build/c_bank2 is built with; its chain then runs 'hall-dash')
 
 THE ROUND
   START   roped down in the secure yard, two stacks of four beside the loading dock's roller door.
@@ -360,6 +373,7 @@ _KEEP = ('FASpecials!', 'Specials!', VAN) + ESCAPE + tuple(v for v in ROLE.value
 def __getattr__(name):
     if name == 'KEEP':                  # kl_graft.build reads kl_fa_bank.KEEP at the moment of use
         more = tuple(KEEP_MORE) + (() if NO_AI else tuple(HALL))        # F07's three police squads of the banking hall
+        more += (PLAZA_BOX,) if PLAZA_OUTSIDE else ()                   # ... and the box that starts the plaza's squads
         return _KEEP + tuple(x for x in more if x not in _KEEP)
     raise AttributeError(name)
 
@@ -486,6 +500,87 @@ HALL = collections.OrderedDict([
     (G30 + '030_FinancialAlleyExitStreet_Left', ((300, HALL_Y, -8900), [(100, -9000), (500, -9000)],                   # before the entrance
                                                  [(100, -8600), (500, -8600)], (300, -8600)))])
 HALL_START = '10_RunToCover'
+# (review after run V2: nothing names '10_Defend' - '10_RunToCover' has an empty next list - so the hall's squads stay
+# at their cover points for good; the table's last column is a place that is laid and never walked to.)
+
+# ------------------------------------------------------------------ the crew fix after live run V2
+# RUN V2 (2026-10-11, the full map, an idle human; re/bank_campaign.md 'Run V2, diagnosed from the build' and 'Crew fix
+# after run V2'). MEASURED on its log: the AI heisters walked the right order - down, the vault's 2,300,000, up again -
+# and five of them died in the BANKING HALL ON THE WAY OUT: 8 hall police stood in a row before the only exit, their
+# places 39 .. 174 from the heisters' own on both aisles (two deaths by the point-blank rule,
+# re/melee_damage.md), and the foyer box sent the plaza's 20 into the hall and onto its gallery through the 2 m front
+# entrance (a SWAT flank point lies IN that gap). 28 guns on a 36 m crossing, the plaza left empty.
+# Nobody is taken out: 61 men stay. What changes is WHERE the two fights are - the hall is held from its gallery by
+# F07's eight, the plaza by the campaign's twenty - and that the heisters cross the hall without a stop.
+# Every flag is OFF by default (= the level of runs V0 .. V2, <work>/build/c_bank); 'test --crew-fix' sets both.
+#
+# 1. PLAZA_OUTSIDE ('--plaza-outside'): the plaza's squads stay outside.
+#    PLAZA_PLACES: squad -> {a place of one of its routs: (x, z) on the plaza's floor}. The campaign's flank points
+#    (five squads, ten places: six on the hall's gallery, four on its floor), the two shield men's '050_Move_In_01'
+#    and COOP_03's 'Cutscene_MoveOutside' (its Pos#01 stood 125 from a heister's place on the plaza) go to the two
+#    sides of the plaza in front of the bank, west x -1450 .. -600, east x 1150 .. 1700, z -10650 .. -9900. GUESS:
+#    every place. MEASURED (plaza_places on the campaign's mesh, check() and crew_check on each build): on the
+#    START's mesh part and on free floor, clear of every place of an AI heister by CREW_CLEAR. West squads keep
+#    the west side and east the east: nobody crosses in front of the door.
+#    ASSUMPTION: a flanking rout sends its men to its two places and they fight from there; the two SWAT fours are
+#    'eUnleashed' in the campaign and may come in after the crew all the same - which is a fight at the door, not
+#    twenty men set up in the hall.
+#    PLAZA_BOX: they are started by a box across the hall's SOUTH end (z -9200 .. -8200, the last 10 m before the
+#    front entrance), not by the foyer box 36 m earlier: the police arrive while the crew leaves, instead of standing
+#    set up before the one door for the 20 - 40 s the hall takes. The box is stock F07's own 'tbExitFinancialAlley'
+#    - the very box that starts these hall squads' '10_RunToCover' in F07 (field 0 = 1, field 15 = 0: fires once) -
+#    re-placed; a free object of the host (the list at ROLE). GUESS: the box's place.
+#    Their men come into the world where the campaign has them: on the street at the bank's two corners
+#    (x -2269 .. -1415 and 1968 .. 2201, z -9690 .. -9397), 17 m and more to either side of the front entrance.
+PLAZA_OUTSIDE = False
+PLAZA_BOX = 'Gameplay!030_AfterLoot!tbExitFinancialAlley'
+PLAZA_BOX_AT = ((300, 930, -8700), (1700, 400, 500))            # place, half extents: x -1400..2000, y 530..1330 (the gallery too), z -9200..-8200
+PLAZA_Y, PLAZA_UP = 700.0, 5.0          # the plaza's floor (the mesh's own height is taken); a place stands this far over it (the campaign's: 1 .. 11)
+PLAZA_PLACES = collections.OrderedDict([
+    (G5 + 'Police_OutSide_01', {'30_FlankingBehaviour\\LeftFlank#1': (-700, -9930), '30_FlankingBehaviour\\RightFlank#1': (-1150, -9900)}),
+    (G5 + 'Police_Outside_Teargas_01', {'30_FlankingBehaviour\\LeftFlank#1': (1250, -10000), '30_FlankingBehaviour\\RightFlank#1': (1600, -9930)}),
+    (CO + 'Police_OutSide_SWAT_02', {'FlankingBehaviour\\LeftFlank#1': (-1050, -10600), 'FlankingBehaviour\\RightFlank#1': (-830, -10600)}),
+    (CO + 'Police_OutSide_SWAT_03', {'FlankingBehaviour\\LeftFlank#1': (1410, -10650), 'FlankingBehaviour\\RightFlank#1': (1700, -10600)}),
+    (CO + 'Police_OutSide_SWAT_02_ShieldSupport', {'050_Move_In_01\\Pos#01': (-1450, -10050)}),
+    (CO + 'Police_OutSide_SWAT_03_ShieldSupport', {'050_Move_In_01\\Pos#01': (-1450, -10350)}),
+    (CO + 'Police_Reinforce_Wave1_COOP_03', {'FlankingBehaviour\\LeftFlank#1': (-600, -10200), 'FlankingBehaviour\\RightFlank#1': (1200, -10150),
+                                             'Cutscene_MoveOutside\\Pos#01': (1150, -10350), 'Cutscene_MoveOutside\\Pos#02': (-650, -10380)})])
+# 2. HALL_UP ('--hall-gallery'): F07's eight hall police on the hall's GALLERY (floor y 1220: both long sides,
+#    x -764 .. -515 and 1115 .. 1381 from z -9284 to -6380, and the north end over the foyer door; four stairs at the
+#    corners), in HALL's form with a height of its own per point. The three of each long side come into the world in
+#    a group at the gallery's south end (x -1000 .. -800 / 1400 .. 1600, z -9100) and run to three places along the
+#    rail; the pair of 'ExitStreet_Left' stands at the two north corners. So the hall is held from above on three
+#    sides, the floor - both aisles and the east wall's way, all of which the heisters use - is the crew's, and no
+#    policeman's place is within the point-blank rule's reach of a heister's (the nearest 420, straight up).
+#    GUESS: every place. MEASURED (C:/kl_scratch/vault_fix/fix/cand.py on the delivered folder; check() on each
+#    build): each on the START's mesh part and on free floor.
+HALL_UP = False
+GAL_Y = 1221.0
+HALL_GALLERY = collections.OrderedDict([
+    (G30 + '030_FinancialAlleyExit_Left', ((-640, GAL_Y, -8000), [(-1000, GAL_Y, -9100), (-900, GAL_Y, -9100), (-800, GAL_Y, -9100)],      # the west gallery
+                                           [(-600, GAL_Y, -8700), (-600, GAL_Y, -7900), (-600, GAL_Y, -7100)], (-640, GAL_Y, -8300))),
+    (G30 + '030_FinancialAlleyExit_Right', ((1250, GAL_Y, -8000), [(1400, GAL_Y, -9100), (1500, GAL_Y, -9100), (1600, GAL_Y, -9100)],     # the east gallery
+                                            [(1200, GAL_Y, -8700), (1200, GAL_Y, -7900), (1200, GAL_Y, -7100)], (1250, GAL_Y, -8300))),
+    (G30 + '030_FinancialAlleyExitStreet_Left', ((300, GAL_Y, -6100), [(-700, GAL_Y, -6100), (1350, GAL_Y, -6100)],                       # its two north corners
+                                                 [(-600, GAL_Y, -6600), (1250, GAL_Y, -6600)], (300, GAL_Y, -6000)))])
+# the banking hall with its gallery, for the tests: (x), (y), (z). MEASURED: the mesh's hall polygons lie inside it,
+# the plaza squads' own men (x beyond -1415 / 1968) and every place of PLAZA_PLACES outside
+HALL_BOX = ((-1200.0, 1800.0), (700.0, 1400.0), (-9450.0, -5750.0))
+# 3. THE HEISTERS CROSS THE HALL IN ONE GO (hall_dash, 'kl_fa_bank.py hall-dash <folder>': a step of the finishing
+#    chain after kl_fa_bots_dyn's and before seal). Run V2: three of the five died standing 9 - 25 s at cover holds
+#    of the dynamic step in the open hall (its timers say 4 - 8 s; a bot under fire stays in its Defend place).
+#    Every Defend step of an AI heister squad with a place inside DASH_BOX - the hall's floor from its first row of
+#    furniture to the front entrance; the foyer, where the crew comes up, is NOT in it - gets 'eDMS_Sprint' (the
+#    dynamic step's own form for the last dash to the van) and the hold timers those steps start go to 0 s (its own
+#    form too: the first bot's '000_Timer_stagger' is 0 s). GUESS: that a sprint through is better than a hold
+#    under fire from above; the box's north edge.
+DASH_BOX = ((-1200.0, 1800.0), (700.0, 1000.0), (-9420.0, -6400.0))
+DASH_MOVE, DASH_HOLD = 'eDMS_Sprint', '_Timer_hold'
+# 4. THE TEST (crew_check, 'kl_fa_bank.py crew-check <folder>'): no place of an AI heister squad within CREW_CLEAR of
+#    a man's start, a cover point, a flank point or a defend place of a squad of the hall or the plaza. 160 is the
+#    point-blank rule's reach (kl2 0x8c62e0, re/melee_damage.md); GUESS: the margin of 240. The delivered folder of
+#    runs V0 .. V2 FAILS it (39 in the hall, 43 at the front entrance: 28 of its 60 men and places).
+CREW_CLEAR = 400.0
 
 # ------------------------------------------------------------------ the beat
 # the six locking rods of the vault door, in the campaign's order (its 'MatPosAnimProxy_Rod#01..#06' play frames
@@ -670,7 +765,8 @@ def place_hall(S, log=print):
     routs) to its place of the table, as an offset from the anchor. -> [(squad, actors)]"""
     sc, out = S.prp, []
     tr = lambda k: struct.unpack('<3f', S.ents[k - 1].trans[:12])
-    for name, (anchor, actors, cover, defend) in HALL.items():
+    y3 = lambda p: (p[0], HALL_Y, p[1]) if len(p) == 2 else tuple(p)    # HALL: (x, z) on the hall's floor; HALL_GALLERY: (x, y, z)
+    for name, (anchor, actors, cover, defend) in (HALL_GALLERY if HALL_UP else HALL).items():
         top = A.node_of(sc, name)
         turned = max(abs(a - b) for a, b in zip(struct.unpack('<9f', S.ents[top - 1].rot[:36]), A.rot9(BOX)))
         if not kl_fa.has(sc, top, 'ZSquadScript') or turned > 1e-3 or not sc.resolve(R + name + '\\' + HALL_START):
@@ -684,8 +780,7 @@ def place_hall(S, log=print):
         by = collections.defaultdict(list)
         for k in own:
             by['actors' if any(sc.cls(c) == 'ZFFActor' for c in range(k, sc.end[k])) else sc.names[sc.parent[k]]].append(k)
-        want = {'actors': [(x, HALL_Y, z) for x, z in actors], '10_RunToCover': [(x, HALL_Y, z) for x, z in cover],
-                '10_Defend': [(defend[0], HALL_Y, defend[1])], '40_RunToEscape': [anchor]}
+        want = {'actors': [y3(p) for p in actors], '10_RunToCover': [y3(p) for p in cover], '10_Defend': [y3(defend)], '40_RunToEscape': [anchor]}
         if {k: len(v) for k, v in by.items()} != {k: len(v) for k, v in want.items()}:
             raise ValueError('%s: placed children %s, the table has %s' % (name, {k: len(v) for k, v in by.items()}, {k: len(v) for k, v in want.items()}))
         A.place(S, top, anchor)
@@ -693,8 +788,8 @@ def place_hall(S, log=print):
             for k, p in zip(ks, want[kind]):
                 A.place(S, k, tuple(p[a] - anchor[a] for a in range(3)))
         out.append((name, len(by['actors'])))
-    log('  kl_fa_bank: the banking hall: %d of F07\'s police squads re-placed (%d men); the beat\'s timer names their %s' % (
-        len(out), sum(n for _s, n in out), HALL_START))
+    log('  kl_fa_bank: the banking hall: %d of F07\'s police squads re-placed (%d men) %s; the beat\'s timer names their %s' % (
+        len(out), sum(n for _s, n in out), 'ON ITS GALLERY (HALL_UP)' if HALL_UP else 'on its floor', HALL_START))
     return out
 
 
@@ -708,6 +803,11 @@ def prepare_host(S, log=print):
         put(S, name, pos, face, half)
     for name in PARKED:
         put(S, name, PARK)
+    if PLAZA_OUTSIDE:                                   # the box that starts the plaza's squads: across the hall's south end
+        if not kl_fa.has(sc, A.node_of(sc, PLAZA_BOX), 'TriggerBox'):
+            raise ValueError('%s is no TriggerBox' % PLAZA_BOX)
+        put(S, PLAZA_BOX, PLAZA_BOX_AT[0], None, PLAZA_BOX_AT[1])
+        log('  kl_fa_bank: PLAZA_OUTSIDE: %s re-placed across the hall\'s south end: (%d, %d, %d), half extents %s' % (PLAZA_BOX, *PLAZA_BOX_AT[0], PLAZA_BOX_AT[1]))
     # spawn points by kind, and the sixteen player groups (a direct boot starts at Heroes!Hero_01)
     seen = collections.Counter()
     for t in sc.tops():
@@ -869,6 +969,50 @@ def beat_men(M, keep, log=print):
     return moved
 
 
+def in_box(p, box):
+    return all(lo <= v <= hi for v, (lo, hi) in zip(p, box))
+
+
+def rout_places(sc, t):
+    """The nodes the behaviour routs of squad group t go by: every ZBoxPrimitive / ZSTDOBJ child of a node that
+    holds a behaviour rout (kl_fa_author.BEHAVE) - flank points, defend places, cover points, search boxes."""
+    return [c for j in range(t + 1, sc.end[t]) if any(sc.p.key(nm) in A.BEHAVE for nm, _b in sc.nodes[j]['ctrls'])
+            for c in range(j + 1, sc.end[j]) if sc.parent[c] == j and sc.cls(c) in ('ZBoxPrimitive', 'ZSTDOBJ')]
+
+
+def plaza_places(M, keep, log=print):
+    """PLAZA_OUTSIDE: the places of PLAZA_PLACES on the converted level M, each on the navigation mesh at the mesh's
+    own height; afterwards NO place a rout of a plaza squad goes by may lie in the banking hall (HALL_BOX) - a
+    place the table forgot is an error, not a man in the hall. -> [(squad, place, from, to)]"""
+    import kl_route
+    if not keep:
+        return []
+    sc = M.prp
+    mesh = kl_route.load(LEVEL).mesh()
+    moved = []
+    for squad, places in PLAZA_PLACES.items():
+        if squad not in keep or STAGE.get(squad) != 'plaza':
+            raise ValueError('kl_fa_bank: PLAZA_PLACES names %s, which is no kept squad of the plaza' % squad)
+        for rel, (x, z) in places.items():
+            ks = sc.resolve(R + squad + '\\' + rel)
+            hit = mesh.on(x, PLAZA_Y, z)
+            if len(ks) != 1 or hit is None:
+                raise ValueError('kl_fa_bank: %s: %s: %d nodes; (%d, %d) is %s the mesh at y %d' % (squad, rel, len(ks), x, z, 'on' if hit else 'NOT on', PLAZA_Y))
+            was = world_of(M.ents[ks[0] - 1])[0]
+            new = (float(x), hit[1] + PLAZA_UP, float(z))
+            man_to(M, ks[0], new, mesh)
+            moved.append((squad, rel, was, new))
+    left = [(sc.path[c][5:], world_of(M.ents[c - 1])[0]) for t in sc.tops() if STAGE.get(sc.names[t]) == 'plaza' and sc.names[t] in keep
+            for c in rout_places(sc, t) if in_box(world_of(M.ents[c - 1])[0], HALL_BOX)]
+    if left:
+        raise ValueError('kl_fa_bank: PLAZA_OUTSIDE: %d places of the plaza\'s squads are still in the banking hall: %s' % (
+            len(left), ['%s (%d, %d, %d)' % (p, *w) for p, w in left]))
+    log('  kl_fa_bank: PLAZA_OUTSIDE: %d places of %d plaza squads re-laid on the plaza (x %d..%d, z %d..%d), %d of them out of the banking hall; '
+        'no place of their routs is left in it' % (len(moved), len(PLAZA_PLACES), min(t[0] for *_a, t in moved), max(t[0] for *_a, t in moved),
+                                                 min(t[2] for *_a, t in moved), max(t[2] for *_a, t in moved), sum(in_box(w, HALL_BOX) for _s, _r, w, _t in moved)))
+    return moved
+
+
 def strip(M, log=print):
     """On the converted Dead Men level, before the join (nothing goes by controller index yet): the campaign's
     mini-cutscene controllers come off the squads that stay (kl_fa_author.STRIP). The door leaves are map nodes
@@ -889,6 +1033,8 @@ def strip(M, log=print):
         M.name, have, len(LEAVES) + 1, len(keep), n))
     snap_men(M, keep, log)
     beat_men(M, keep, log)
+    if PLAZA_OUTSIDE:
+        plaza_places(M, keep, log)
     # the music's fourth layer (MUSIC_LAYER4): without the flag its nine fades lose their controller
     four = [(k, i) for k, i, v in kl_fa.controllers(sc, 'PlayMusicLayerFade') if v[0] == LAYER4 and sc.names[sc.top[k]] in (CAMP['music'], CAMP['music out'])]
     if len(four) != 9:
@@ -1068,7 +1214,12 @@ def wire(sc, log=print):
 
     # ---- the way out: F07's 'exit heist' box in the foyer, with a line that fits a front door - and the plaza's
     # seven squads: the police are outside when a criminal comes up into the hall
-    lists('speak box', 'TriggerBox', f14='ECPS_FA_MERCONLY', f17=[R + ROLE['speak']] + stage['plaza'])
+    # PLAZA_OUTSIDE (the crew fix after run V2): the foyer box keeps the line; the plaza's squads are started by the
+    # box across the hall's south end, in the stock form of a box that starts squad routs (field 0 = 1, 15 = 0: once)
+    lists('speak box', 'TriggerBox', f14='ECPS_FA_MERCONLY', f17=[R + ROLE['speak']] + ([] if PLAZA_OUTSIDE else stage['plaza']))
+    if PLAZA_OUTSIDE:
+        put_(node(PLAZA_BOX), 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', f17=list(stage['plaza']), **{'f%d' % BOX_PER_MAN: 0})
+        log('  kl_fa_bank: PLAZA_OUTSIDE: %s (the hall\'s south end) starts the plaza\'s %d routs; the foyer box only the line' % (PLAZA_BOX, len(stage['plaza'])))
     lists('speak', 'OnlineSpeakPlayer', f1=EXIT_LINE)
     # ---- the escape: every exit trigger of the level (there is F07's one) calls the van - field 0 false, field 2
     # the van's group, 1 and 3..5 empty, the form the three car maps on the tab have (kl_map_escape.van_wire). The
@@ -1082,9 +1233,9 @@ def wire(sc, log=print):
             raise ValueError('the settings object has %d fields' % len(v))
         kl_fa.edit(sc, k, i, lambda us: [us.__setitem__(f, [kl_fa._str(sc, s)]) for f, s in LINES.items()])
     log('  kl_fa_bank: enemies: %d campaign squads (%d men): round start + %.0f s -> %d routs (dock, vault lobby, the way down); ante-room box -> %d; '
-        'the beat\'s end -> %d hunts + %d of F07\'s squads in the hall; foyer box -> %d; stock soldier rows: %s' % (
+        'the beat\'s end -> %d hunts + %d of F07\'s squads in the hall; %s -> %d; stock soldier rows: %s' % (
             len(plan), sum(a for _f, a, _s in plan.values()), SQUADS_AT, len(stage['start'] + stage['down']), len(stage['beat']), len(hunt), len(hall),
-            len(stage['plaza']), dict(armed) or ('none (NO_AI)' if NO_AI else 'Dead Men\'s rows stay')))
+            'the box at the hall\'s south end (PLAZA_OUTSIDE)' if PLAZA_OUTSIDE else 'foyer box', len(stage['plaza']), dict(armed) or ('none (NO_AI)' if NO_AI else 'Dead Men\'s rows stay')))
     log('  kl_fa_bank: sequence: ante-room box -> rods at %s s -> %.0f s -> the vault door %s, %d hidden loot objects on, alarm (%s), music -> way-out set%s' % (
         ', '.join('%.0f' % t for t in rod_times()), BEAT, 'is sunk already (VAULT_OPEN)' if VAULT_OPEN else 'gets \'Activate\'',
         len(hidden), 'sound, lamps, white light off' if ALARM_LIGHTS else 'sound, the lamps\' glow', '; -> %.0f s -> %s' % (
@@ -1765,12 +1916,15 @@ def check(folder, log=print, problems=None):
             fail('%s at (%d, %d, %d): mesh %s, part %s, reached %s (gap %s)' % (sc.path[k][5:][-70:], *r['at'], r['mesh'], r['part'], r['reached'], r.get('gap')))
         # the places their routs name (cover, flank, defend, search): the hall's are this file's and must be on that part
         pts2, own = [], []
+        pbox = sc.resolve(R + PLAZA_BOX)                # a build with PLAZA_OUTSIDE (read off the level): the box is in it
+        plaza_sq = [t for t in camp_sq if STAGE[sc.names[t]] == 'plaza'] if pbox else []
+        hall_sq_ = hall_sq + plaza_sq                   # ... and then the plaza squads' places are this file's too
         for t in camp_sq + hall_sq:
             for j in range(t + 1, sc.end[t]):
                 if any(sc.p.key(nm) in A.BEHAVE for nm, _b in sc.nodes[j]['ctrls']):      # what its lists name, and its own children
                     for h in sorted({h for s in A.named(sc, j) for h in sc.resolve(s)} | {c for c in range(j + 1, sc.end[j]) if sc.parent[c] == j}):
                         if sc.top[h] == t and sc.cls(h) in ('ZBoxPrimitive', 'ZSTDOBJ') and all(sc.p.key(nm) == 'RunToCoverPosInfoRout' for nm, _b in sc.nodes[h]['ctrls']):
-                            pts2.append(pos[ents[h - 1]]); own.append((h, t in hall_sq))
+                            pts2.append(pos[ents[h - 1]]); own.append((h, t in hall_sq_))
         rows3 = kl_route.stations(lv, [START[1]] + pts2, opened=gates, near=86) if pts2 else [None]
         away = [(h, mine_, r) for (h, mine_), r in zip(own, rows3[1:]) if not (r['mesh'] and r['part'] == rows3[0]['part'])]
         log('  enemies: %d places their behaviour routs name; %d not on the START\'s mesh part (the campaign\'s own; a hunt\'s search box is a volume '
@@ -1779,6 +1933,19 @@ def check(folder, log=print, problems=None):
         for h, mine_, r in away:
             if mine_:
                 fail('the hall\'s %s at (%d, %d, %d) is not on the START\'s mesh part' % (sc.path[h][5:], *r['at']))
+        # the crew fix after run V2, read off the level: where the hall's eight stand, and - when the plaza's squads
+        # have a box of their own - that no place their routs go by is in the banking hall
+        up = [k for k in men if top_of(k) in HALL and pos[ents[k - 1]][1] > 1000.0]
+        if up and len(up) != sum(top_of(k) in HALL for k in men):
+            fail('%d of the hall\'s %d police stand on the gallery, the others on the floor' % (len(up), sum(top_of(k) in HALL for k in men)))
+        in_hall = [(h, r['at']) for (h, _m), r in zip(own, rows3[1:]) if sc.top[h] in plaza_sq and in_box(r['at'], HALL_BOX)]
+        campaign = sum(1 for (h, _m), r in zip(own, rows3[1:]) if STAGE.get(sc.names[sc.top[h]]) == 'plaza' and in_box(r['at'], HALL_BOX))
+        log('  enemies: the hall\'s police stand %s; the plaza\'s squads are started by %s; %d places of their routs lie in the banking hall%s' % (
+            'ON THE GALLERY (HALL_UP)' if up else 'on the hall\'s floor', '%s at (%d, %d, %d), half %s (PLAZA_OUTSIDE)' % (
+                PLAZA_BOX.split('!')[-1], *pos[ents[pbox[0] - 1]], tuple(round(x) for x in kl_fa.node_values(sc, pbox[0])[8:11])) if pbox else 'the foyer box',
+            campaign, '' if pbox or not campaign else ' (the build of runs V0 .. V2: 28 guns in the hall - \'test --crew-fix\')'))
+        for h, p in in_hall:
+            fail('PLAZA_OUTSIDE: %s at (%d, %d, %d) is a place of a plaza squad inside the banking hall' % (sc.path[h][5:], *p))
         # nothing of a squad names a node that is not there; the kinds are the ones that ran live
         kinds = collections.Counter(sc.p.key(nm) for t in camp_sq + hall_sq for j in range(t, sc.end[t]) for nm, _b in sc.nodes[j]['ctrls'])
         for t in camp_sq + hall_sq:
@@ -1791,21 +1958,27 @@ def check(folder, log=print, problems=None):
         if first:
             fail('the squads hold controllers that are not kl_fa_author\'s plain squad kinds: %s' % first)
         # each squad is started by its stage's object and waits for it
-        role_of = {'start': 'start timer', 'down': 'start timer', 'beat': 'beat box', 'plaza': 'speak box'}
+        role_of = {'start': 'start timer', 'down': 'start timer', 'beat': 'beat box', 'plaza': 'plaza box' if pbox else 'speak box'}
         lists_ = {r: {sc.top[h] for s in named(r) for h in sc.resolve(s)} for r in ('start timer', 'beat box', 'speak box', 'beat timer')}
+        if pbox:                                        # PLAZA_OUTSIDE: the box is no ROLE object (the default build does not keep it)
+            lists_['plaza box'] = {sc.top[h] for s in A.named(sc, pbox[0]) for h in sc.resolve(s)}
+            v = values(sc, pbox[0], 'TriggerBox')
+            if (v[0], v[14], v[BOX_PER_MAN]) != (1, 'ECPS_FA_MERCONLY', 0) or lists_['speak box'] & set(plaza_sq):
+                fail('PLAZA_OUTSIDE: %s has fields 0 / 14 / %d = %s, or the foyer box still names a plaza squad' % (PLAZA_BOX, BOX_PER_MAN, (v[0], v[14], v[BOX_PER_MAN])))
         by = collections.Counter()
         for t in camp_sq + hall_sq:
             r = role_of[STAGE[sc.names[t]]] if sc.names[t] in STAGE else 'beat timer'
             by[r] += 1
             if t not in lists_[r]:
-                fail('%s is not named by %s' % (sc.names[t], ROLE[r]))
+                fail('%s is not named by %s' % (sc.names[t], ROLE.get(r, PLAZA_BOX)))
             if values(sc, t, 'ZSquadScript')[SQUAD_ACTIVE]:
                 fail('%s is in the world from the load (ZSquadScript field %d)' % (sc.names[t], SQUAD_ACTIVE))
         # ... and nobody who comes LATER is put into the world where the crew may still be: no man of such a squad within
         # BEAT_CLEAR of a station of the round that lies before the squad's trigger, on that station's floor (a squad
         # that waits 'spawns in' when its rout is named: the 14 police of the beat stood in the vault lobby - BEAT_MEN)
         foyer = [n for n, _p in ROUTE_OUT].index('foyer')
-        ahead = {'beat box': ROUTE_IN[:-1], 'beat timer': ROUTE_IN + ROUTE_VAULT, 'speak box': ROUTE_IN + ROUTE_VAULT + ROUTE_OUT[:foyer]}
+        ahead = {'beat box': ROUTE_IN[:-1], 'beat timer': ROUTE_IN + ROUTE_VAULT, 'speak box': ROUTE_IN + ROUTE_VAULT + ROUTE_OUT[:foyer],
+                 'plaza box': ROUTE_IN + ROUTE_VAULT + ROUTE_OUT[:foyer + 1]}
         close = []
         for k in men:
             r = role_of[STAGE[top_of(k)]] if top_of(k) in STAGE else 'beat timer'
@@ -2141,6 +2314,119 @@ def bots_check(folder, log=print):
     return bad
 
 
+# ------------------------------------------------------------------ the crew fix after run V2: the bots' side
+def hall_dash(folder, log=print):
+    """In place, on a folder kl_fa_bots_dyn's step is through with (before seal): every DefendBehaviourRout of an AI
+    heister squad that has a place inside DASH_BOX gets DASH_MOVE, and every TriggerDelay2 such a step starts whose
+    name holds DASH_HOLD goes to 0 s (DASH_BOX's note). Values of existing controllers only: the .prp member alone
+    changes, no entity is added or removed. A second run changes nothing. -> {'steps', 'timers', 'squads'}"""
+    import kl_fa_bots as F
+    B = F.Built(folder)
+    sc = B.sc
+    Jn = J.join(sc, [(sc, t) for t in sc.tops()], 'dash')              # kl_fa_bots_dyn.fake_fix's way of a .prp-only edit
+    if J.fingerprints(Jn)[0] != J.fingerprints(sc)[0] or J.text(Jn, Jn.p.settings) != J.text(sc, sc.p.settings) or Jn.path != sc.path:
+        raise ValueError('kl_prpjoin.join does not reproduce the build\'s .prp')
+    delay = {k: (i, v[0]) for k, i, v in kl_fa.controllers(Jn, 'TriggerDelay2')}
+    steps, timers, squads, was = [], [], set(), collections.Counter()
+    for k, i, v in kl_fa.controllers(Jn, 'DefendBehaviourRout'):
+        t = Jn.top[k]
+        if not Jn.names[t].startswith(BOT_SQUAD + 'Squad#'):
+            continue
+        at = [B.at(j) for s in (v[1] or []) for j in Jn.resolve(s)]
+        # ... and the covers this step's hold is AT: a hold's timer is started by the step BEFORE the cover (the
+        # step names [the timer, a RandomTrigger that draws one of the covers]; or [the cover], which names the timer)
+        nxt = [j for s in (v[7] or []) for j in Jn.resolve(s)]
+        drawn = [h for j in nxt if kl_fa.has(Jn, j, 'RandomTrigger') and '_cover' in Jn.names[j] for s in A.named(Jn, j) for h in Jn.resolve(s)]
+        held = [B.at(c) for h in drawn if kl_fa.has(Jn, h, 'DefendBehaviourRout') for c in range(h + 1, Jn.end[h]) if Jn.parent[c] == h and Jn.names[c].startswith('Pos#')]
+        mine = any(in_box(p, DASH_BOX) for p in at)
+        if not mine and not any(in_box(p, DASH_BOX) for p in held):
+            continue
+        squads.add(Jn.names[t])
+        if mine and v[4] != DASH_MOVE:
+            was[v[4]] += 1
+            kl_fa.edit(Jn, k, i, lambda us: A.setv(Jn, us, 4, DASH_MOVE))
+            steps.append(Jn.path[k][5:])
+        for s in (v[7] or []):
+            for j in Jn.resolve(s):
+                if j in delay and DASH_HOLD in Jn.names[j] and delay[j][1] != 0.0:
+                    kl_fa.edit(Jn, j, delay[j][0], lambda us: A.setv(Jn, us, 0, 0.0))
+                    timers.append((Jn.path[j][5:], delay[j][1]))
+                    delay[j] = (delay[j][0], 0.0)
+    if steps or timers:
+        prp = Jn.p.serialize()
+        back = F.Prp(prp)
+        if back.serialize() != prp or len(back.nodes()) != len(Jn.nodes):
+            raise ValueError('the new .prp does not round-trip')
+        new = dict(B.files)
+        new[B.ext['.prp']] = prp
+        tmp = B.zp + '.tmp'
+        kl_graft.write_zip(tmp, [(n, new[n]) for n in B.order])
+        os.replace(tmp, B.zp)
+    log('kl_fa_bank.hall_dash %s: %d Defend steps of %d AI heister squads with a place in the banking hall (x %d..%d, z %d..%d) now %s (they were %s); '
+        '%d hold timers those steps start set to 0 s (they were %s s)' % (folder, len(steps), len(squads), *DASH_BOX[0], *DASH_BOX[2], DASH_MOVE,
+        dict(was) or '-', len(timers), sorted({x for _p, x in timers}) or '-'))
+    for p, x in timers:
+        log('    %-90s %g s -> 0' % (p[-90:], x))
+    return {'steps': steps, 'timers': timers, 'squads': sorted(squads)}
+
+
+def crew_check(folder, log=print):
+    """A folder with the AI heisters' squads (with or without the dynamic step) -> [faults]: no place of a heister
+    squad within CREW_CLEAR of where a squad of the hall or the plaza stands or goes - a man's start, a cover
+    point, a flank point, a defend place (CREW_CLEAR's note; run V2: two heisters died by the point-blank rule at
+    such places and three stood at holds between them). The other stages' squads are reported, not judged: the
+    guards of the way in stand ON the way by the map's design. Also said: how the heisters cross the hall."""
+    import kl_fa_bots as F
+    B = F.Built(folder)
+    sc, bad = B.sc, []
+    def fail(s):
+        bad.append(s); log('  FAIL ' + s)
+    P = lambda p: '(%d, %d, %d)' % tuple(round(x) for x in p)
+    bots = [(k, B.at(k)) for t in sc.tops() if sc.names[t].startswith(F.SQUAD + 'Squad#')
+            for k in range(t, sc.end[t]) if sc.cls(k) == 'ZBoxPrimitive' and sc.names[k].startswith('Pos#')]
+    if not bots:
+        fail('no place of an AI heister squad in the level')
+    posts = collections.defaultdict(list)               # stage -> [(what, node, place)]
+    for t in sc.tops():
+        stage = STAGE.get(sc.names[t], 'hall' if sc.names[t] in HALL else None)
+        if stage is None or not kl_fa.has(sc, t, 'ZSquadScript'):
+            continue
+        posts[stage] += [('man', k, B.at(k)) for k in range(t + 1, sc.end[t]) if sc.cls(k) == 'ZFFActor']
+        posts[stage] += [('place', c, B.at(c)) for c in rout_places(sc, t)]
+    for stage in ('start', 'down', 'beat', 'hall', 'plaza'):
+        judged = stage in ('hall', 'plaza')
+        near = sorted((math.dist(p, q), k, c, what) for what, c, q in posts.get(stage, ()) for k, p in bots)
+        if not near:
+            log('  %-5s no squad of this stage in the level' % stage)
+            continue
+        close = [x for x in near if x[0] < CREW_CLEAR]
+        d, k, c, what = near[0]
+        log('  %-5s %3d men and places; the nearest to a heister\'s place: %d (%s %s %s - %s %s)%s' % (
+            stage, len(posts[stage]), d, what, sc.path[c][5:][-60:], P(B.at(c)), sc.path[k][5:].split('!')[-1][-52:], P(B.at(k)),
+            '' if not judged else '; %d pairs under %d' % (len(close), CREW_CLEAR)))
+        if judged:
+            seen = set()
+            for d, k, c, what in close:
+                if c not in seen:                       # one line per police place: its nearest heister place
+                    seen.add(c)
+                    fail('%s: %s %s at %s is %d from the heisters\' %s at %s (%d wanted)' % (
+                        stage, what, sc.path[c][5:][-70:], P(B.at(c)), d, sc.path[k][5:].split('!')[-1][-52:], P(B.at(k)), CREW_CLEAR))
+    # how the hall is crossed (hall_dash): said, not judged - a folder without the step is the build of runs V0 .. V2
+    delay = {k: v[0] for k, _i, v in kl_fa.controllers(sc, 'TriggerDelay2')}
+    n = collections.Counter()
+    for k, _i, v in kl_fa.controllers(sc, 'DefendBehaviourRout'):
+        if sc.names[sc.top[k]].startswith(F.SQUAD + 'Squad#') and any(in_box(B.at(j), DASH_BOX) for s in (v[1] or []) for j in sc.resolve(s)):
+            n['steps'] += 1
+            n['sprint'] += v[4] == DASH_MOVE
+            n['hold s'] += sum(delay[j] for s in (v[7] or []) for j in sc.resolve(s) if j in delay and DASH_HOLD in sc.names[j])
+    log('  the hall\'s crossing: %d Defend steps of the heisters have a place in the hall, %d of them %s; the hold timers they start add up to %g s%s' % (
+        n['steps'], n['sprint'], DASH_MOVE, n['hold s'], ' (hall_dash has run)' if n['steps'] and n['sprint'] == n['steps'] and not n['hold s'] else
+        ' (no hall_dash: the heisters stop in the hall as in run V2)'))
+    log('kl_fa_bank.crew_check %s: %d places of the AI heisters against %d men and places of the hall\'s and the plaza\'s squads (%d wanted between them): %s' % (
+        folder, len(bots), len(posts['hall']) + len(posts['plaza']), CREW_CLEAR, 'PASS' if not bad else '%d FAILED' % len(bad)))
+    return bad
+
+
 # ------------------------------------------------------------------ the delivered level (after the finishing chain)
 # TWO THINGS NO TOOL OF THE CHAIN DOES (review round 1):
 # seal()     THE ROOMS' NEIGHBOUR LISTS. The graft sends a list entry whose entity did not come along to the scene's
@@ -2454,6 +2740,9 @@ def main():
     a = sys.argv[1:]
     if len(a) >= 2 and a[0] == 'test':
         global DOORS_ANIMATE, VAULT_OPEN, VAULT_DOOR_GOES, GATE_VAULT, CASE, BEAT, NO_AI, ALARM_LIGHTS, VAULT_BLAST, STOCK_ROWS, MUSIC_LAYER4
+        global PLAZA_OUTSIDE, HALL_UP
+        PLAZA_OUTSIDE = '--plaza-outside' in a or '--crew-fix' in a     # the crew fix after run V2 (both off = the build of V0 .. V2)
+        HALL_UP = '--hall-gallery' in a or '--crew-fix' in a
         MUSIC_LAYER4 = '--music-layer4' in a
         NO_AI = '--no-ai' in a
         ALARM_LIGHTS = '--alarm-lights' in a
@@ -2483,6 +2772,10 @@ def main():
         sys.exit(1 if bots_check(a[1]) else 0)
     elif len(a) == 2 and a[0] == 'seal':
         seal(a[1])
+    elif len(a) == 2 and a[0] == 'hall-dash':
+        hall_dash(a[1])
+    elif len(a) == 2 and a[0] == 'crew-check':
+        sys.exit(1 if crew_check(a[1]) else 0)
     elif len(a) == 2 and a[0] == 'reverify':
         bad = reverify(a[1])
         print('kl_fa_bank.reverify %s: problems: %d' % (a[1], len(bad)))
