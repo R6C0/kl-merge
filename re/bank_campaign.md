@@ -251,8 +251,9 @@ python tools/kl_maps.py one "<out>" F07 M03_A --campaign --author kl_fa_bank --k
 
 ## Stage T3 - the collision route test as a tool (NEW tools/kl_route.py)
 
-STATE: DONE (2026-10-11 13:40). One new file, `tools/kl_route.py` (1,316 lines), and this section; no other file
-was touched, no build was run (T1 was editing kl_maps / kl_graft: every input is an archive that existed).
+STATE: DONE (2026-10-11 13:40), committed as 812565b. One new file, `tools/kl_route.py` (1,316 lines), and this
+section; no other file was touched, no build was run (T1 was editing kl_maps / kl_graft: every input is an
+archive that existed).
 Scratch C:/kl_scratch/bank/t3/ (0.2 MB): `checks.py` (every check below is one name of it: it prints the command
 and runs it), `out/<name>.txt` (the outputs quoted here), `place_agree.py`, `flags_census.py`, `dbg.py` (what the
 grid holds round a place). `<f1>` below = `<work>/build/cfa/fill1`.
