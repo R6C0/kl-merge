@@ -668,3 +668,72 @@ kept): one `OnlineEscAnimatedVehicle`, one `FakeTarget`; check() fails any other
   prints 'NOT CHECKED' if their names change - then run the fake-test command of L3.3).
 
 (end of Stage L3)
+
+
+## Stage F - the finishing chain: wardrobe, the seven AI heisters (seal gate), gun looks, the load weight (tools/kl_fa_club.py: `bots`, `bots-check`, `strays`)
+
+STATE: DONE (2026-10-11 ~22:00). Four folders are DELIVERED in `<work>/build/c_club/` (0.8 GB): `club` (finished, sound bank
+whole), `club_wavslim` (same archive byte for byte, slim `.WAV` + `.WHD`: NEVER LOADED LIVE), `club_noai` (the same chain on the
+NO_AI build), `club_bare` (L3's kept build before the chain, full shader cache). F01_Main.zip sha1: club and club_wavslim
+9972c87e1389, club_noai 85afae2f3f6a, club_bare 2eb2edb526ff (= L3's, byte for byte). NOTHING RAN IN THE GAME. Every checker
+passes on the finished folders EXCEPT those that only repeat the known findings (F.3). Scratch `C:/kl_scratch/club/f/`
+(`s/` scripts, `out/` every output; intermediates deleted). Tools as run: the working tree with kl_chars.py and kl_fa_bank.py
+carrying other sessions' uncommitted changes (kl_fa_bank.py was syntactically broken for a few minutes mid-stage by one of
+them; the checks that hit it were re-run after it parsed again).
+
+### F.1 What changed (one file, `tools/kl_fa_club.py`, +120 lines, nothing removed)
+| part | what |
+|---|---|
+| `BOT_OPT` | kl_fa_bots has no M05_A row: `{'stops': 1, 'cases': 'glass', 'lane': True, 'window': True, 'loot_seconds': 30, 'park': ESC_AT + 80 in z}`. `park` is needed: kl_fa_bots wants the bots' AllyEscapeBox PARK_SIDE (420) beside the van's line and finds no such place on the 800-wide slab; the box stands at (-640, 219, -2720) |
+| `bots_gate(B, P)`, `bots(src, dst)` | THE SEAL GATE. One loot stop (the office: the richest six cases, the bots start beside them). The way station nearest `GATE_AT` (entrance hall, (400, 100, -150); chosen (495, 122, -141)) becomes a hold of `040_Timer_seal_opens` = SEAL_AT 120 + GATE_MORE 5 - the start delay 10 - the fastest bot's straight way (9,068 / GATE_SPEED 400) = 92 s, a plain TriggerDelay2 (kl_fa_bank's two-stop form: stop 0 = office with the loot wait, stop 1 = the way to the hall + the hold, then the sprinting way out). Plan wrapped for the length of one `kl_fa_bots.build`, as kl_fa_bank.bots does |
+| `bots_check(folder)`, command `bots-check` | seven squads each with ONE `040_Timer_seal_opens` of 10 s or more and not over SEAL_AT + 5, started by steps whose last place is within 600 of GATE_AT |
+| command `strays <folder>` | = `kl_fa_bank.seal` (the room-list entries the squads' first new entity took; only `.buf` changes). Named `strays` because 'seal' is this level's entrance barrier |
+
+No table of another tool got an entry. Talk: `kl_fa_talk.SCRIPTS` has no M05 key, so there is NO talk step (the club's lines are the campaign's own and the HUD texts of L1).
+
+### F.2 The chain (`c_club/chain.sh`, 3.5 min a build) and every line changed against `c_bank/chain.sh`
+`sh chain.sh "<L3 build>" <work dir> <log dir>`: 1 lighten trim,slim,fxc (cache 17.8 -> 9.1 MB) -> 2 wardrobe with the four plates ('problems: 0'; 20,989 of 23,683 dead indices taken, 2,694 free) -> 3 `kl_fa_club.py bots` ('RESULT: PASS (0 FAIL, 2 NOTE); 7 bots, 149 squad nodes') -> 4 gun looks (`--start=1 --set=1`, 6 guns, exit 1 = the known stream finding only, tested by the script) -> 6 fxc cut again -> 7 `kl_fa_bots_dyn.py build` LAST ('PASS (0 FAIL, 7 NOTE)') -> 8 `strays` (24 room-list entries moved) -> the same on the wav-slim copy ('.WAV 21.4 -> 11.4 MB').
+
+Changed lines of chain.sh: (a) `kl_fa_bank.py bots` -> `kl_fa_club.py bots`; (b) `kl_fa_bank.py seal` -> `kl_fa_club.py strays` (twice); (c) the talk step with its `--map M03 --str ...` line and its `rm`, and the variable `$W`, are gone, the gun step's folder feeds step 6 directly; (d) step names 8_seal -> 8_strays.
+
+Changed lines of checks.sh: `kl_fa_bank.py bots-check / reverify / check` -> `kl_fa_club.py`; `kl_map_escape.py van-check` -> `kl_fa_club.py van-check` (the plain one has 217 faults here by design, L3); the bank's three route lines and its talk line are replaced by `routes.py` (the club's 13 places: ROUTE_IN + the lane's street end -> boarding place (-637, 30, -3100); built / `--open HeroColi` / doors). The plain `kl_map_escape.py check` line stays and shows its 217 faults (every one the missing collision floor outside the slab).
+
+### F.3 Checks on the delivered folders (`checks.txt`, `checks/` in each)
+| checker | club / club_wavslim | club_noai | club_bare |
+|---|---|---|---|
+| kl_fa_club.check | PASS | PASS | PASS |
+| reverify | problems: 0 | 0 | 0 |
+| kl_impact / kl_arms | 0 / 0 | 0 / 0 | 0 / 0 |
+| kl_fa.check | exit 0; ZSquadScript 28; 1 DEGRADED ('5 of 28 squads named by no object' = squads in the world from the load, L2) | exit 0, no finding, 7 squads | exit 0, same DEGRADED (5 of 21) |
+| gun looks | 6 guns, problems: 0 | same | no KLGuns.ini: the checker raises, as it should |
+| kl_fa_club van-check | 0 faults on the drawn pavement | same | same |
+| kl_fa_bots_dyn.check | PASS (0 FAIL, 7 NOTE) | same | (no bots) |
+| bots-check | 7 of 7 squads with the gate, longest 92 s: PASS | same | - |
+| fake-test | PASS (grid 1, parked 1, lattice 3) -> no fake-fix | same | same |
+| route as built | NOT FREE, crossed only by `HeroColi` | same | same |
+| route, seal out / doors | FREE (777 samples) / 1 closure, 1 necessary | same | same |
+| FFCoverList | 1 | 1 | 1 |
+| kl_maps.preflight | exit 1 'CRASH 1, RISK 3, NOTE 64' (the CRASH repeats the known verify finding) | NOTE 63 | NOTE 65 |
+| kl_maps.audit | 'FAIL (2 findings that must be 0, 4 known)' = the stream clips + preflight's echo; kl_snd.verify 0 (wavslim: 4,774 sounds, 4,625 waves) | 'FAIL (3 ...)': + 'no ZSquadScript: no police' (what the build is) | FAIL (2) |
+| kl_chars.check | 4 'known' findings (below) | same | same |
+
+KNOWN FINDING 1, the ONE verify finding (audit, preflight): 5 stream clips = the 12 clip names listed by check() (the club's two music sets and five ambience beds, MUSIC_CLIPS and AMBIENCE_CLIPS) are not in the installed `PC_Def.str` nor in `v_vault/PC_Def.str`: the club is silent in its music until the club's stream extension.
+KNOWN FINDING 2, kl_chars.check (the audit lists them as known; they are in L1's bare graft too): glow30.fx MESH_TWEENED / MESH_RIGID asked by materials 987 (Items_Dynamic/MobilePhone_Front_01a), 1040 StripeLight_01a_Blue_M05, 1073 ObjectLight_01_White_M05, 1087 CeilingLight_01b_White_M05 (1060 on the no-AI build): the .fxc has no such effect, so those light strips and the phone are not drawn (Retomoto's BombWindow case).
+
+Large blocks (`blocks.txt`; line 171 MB): club .prm 63.7, .fxc 9.1, .ANM 21.6, .WAV 21.4 -> five blocks 149.1 MB, chunk table 54,085 entries (line 69,632), archive 179.3 MB; wavslim 139.1 MB; noai 141.3 MB; bare 138.8 MB.
+
+### F.4 The seven AI heisters (`bots.txt`, `dyn.txt`, `dyn_map.png`)
+Plan: mesh 437 polygons, the START part 401; loot 11 objects in 4 areas, the richest the office's 6 (1.8 M); 17,200 - 18,950 of path a bot; stations: ENTERS box -> office loot -> walkway ... -> hall hold -> EXITS box (queue lane, 3 places, clearance 12..44: the narrow lane) -> level exit box (calls the van) -> the AllyEscapeBox at (-640, 219, -2720) beside the van's line (250 .. 358 from it). Dynamic step: 11 of 26 hold places found a cover box (10 'every box in reach refused', 5 none free), forks 1-2 a bot, starts +0 .. +8 s, 96 - 105 s of timers a bot (the 92 s gate included), loot seconds 15 / 30 / 45.
+
+### F.5 GUESS / ASSUMED
+- ASSUMPTION the gate rests on: nothing is known to stop an AI at the heroes-only seal (L1), so the hold is what keeps the crew from reaching the lane before the seal's clock; if the seal does stop them, the gate is harmless. A slow bot leaves the hall at about 180 s after the round-start event, the seal opens at 120 s (or earlier if both dance-floor squads die): the hold is conservative (the straight way is 55 % of the path), up to ~30 s too long for an average bot. GUESS: GATE_AT, GATE_MORE, GATE_SPEED, GATE_MIN, the park place.
+- The bots start the beat's stage boxes (criminals only, fire once): the first bot through the inner office door starts the walkway's squads (L2).
+- ASSUMED as in F of the bank: an AllyEscapeBox takes bots aboard in vehicle state 3 / 4 without a path test (kl2 0x907a50).
+- The cut shader cache is NEVER LOADED LIVE (as the bank's); the full-cache twin is `club_bare` or the chain without its step 6.
+
+### F.6 For the lead / the next stage
+- First live order: `club_noai` -> `club` -> `club_wavslim` (the bank's order); install is the game holder's (`slot.py put <folder> F01`; the folders hold no KLJoin.ini).
+- Rebuild: `python tools/kl_fa_club.py test <out> --keep [--no-ai] --plan "<c_club>/club_bare/van.json"`, then `sh <c_club>/chain.sh "<out>/F07+M05_A campaign" <work> <log>`, then `sh <c_club>/checks.sh <work>/fin <out dir>` (needs `routes.py` beside it and `C:/kl_scratch/bank/t1/s/covers.py`).
+- OPEN: nothing ran in the game; only 11 of 26 hold places found cover; the bar's / ticket counter's / coat check's cases are no stop of the route (the loot tactic may take them); the gate is a clock, not the seal's event; no talk; the stream extension for the 12 clips; the bank regression (`kl_fa_bank.py check` on c_bank/bank_vault) was not re-run: kl_fa_bank.py was being edited by another session and no line of it was changed here.
+
+(end of Stage F)

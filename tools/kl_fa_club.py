@@ -2259,6 +2259,119 @@ def van_check(folder, log=print, plan=None):
     return rep, L, bare
 
 
+# ------------------------------------------------------------------ the finishing chain's bots (re/club_campaign.md 'Stage F')
+# kl_fa_bots.RECIPE has no M05_A row, so the options come from here (as kl_fa_bank.BOT_OPT does): ONE loot stop (the office, where
+# the richest six cases are: the bots start beside them; the bar's, the ticket counter's and the coat check's cases are left to
+# the loot tactic, which takes what lies within its window on the way) and a loot wait of 30 s.
+BOT_OPT = {'stops': 1, 'cases': 'glass', 'lane': True, 'window': True, 'loot_seconds': 30,
+           'park': [ESC_AT[0], ESC_AT[1], ESC_AT[2] + 80.0]}
+# GUESS: the bots end beside the van's lane, 0.8 m south of the escape marker's place. kl_fa_bots wants the AllyEscapeBox PARK_SIDE
+# (420) to the side of the van's line (z -3100) and the slab's north edge is z -2650; the van's body must not sweep it.
+GATE_AT = (400.0, 100.0, -150.0)        # GUESS: the entrance hall, 13 m before the queue lane (z -1500); the way station nearest to it is the hold
+GATE_MORE = 5.0                         # s on top of SEAL_AT. GUESS
+GATE_SPEED = 400.0                      # units a second the FASTEST bot is taken to walk from the start to the hold (the step is a walk, not a sprint). GUESS:
+                                        # an estimate that is too high only makes the hold longer for every bot
+GATE_MIN = 10.0                         # s: no hold shorter than this
+GATE_NAME = '040_Timer_seal_opens'      # no 'done_looting' in it: kl_fa_bots.check and kl_fa_bots_dyn take it for a wait that is no loot wait
+
+
+def bots_gate(B, P, log=print):
+    """kl_fa_bots' plan P of built level B with the SEAL GATE -> P (changed in place). The round's beat seals the entrance from the
+    load; it opens when both dance-floor squads are dead or SEAL_AT seconds after the round-start event, whichever comes first.
+    Nothing is known to stop an AI at the heroes-only seal, but the bots should come to the queue lane when it is open and not
+    before: after the loot stop the way station nearest GATE_AT is a hold (stop 1) of plain-timer seconds = SEAL_AT + GATE_MORE minus
+    the time the fastest bot needs to be there (kl_fa_bots' start delay + the straight way / GATE_SPEED), then the way out."""
+    loot = [i for i, s in enumerate(P['stations']) if s['kind'] == 'loot']
+    if len(loot) != 1 or len(P['waits']) != 1 or P['waits'][0]['cases'] or not P['waits'][0]['loot']:
+        raise ValueError('kl_fa_club.bots_gate: the plan has %d loot stations and %d waits (wanted: one stop with loot, no case)' % (len(loot), len(P['waits'])))
+    out = [i for s in P['steps'] if s['leg'] == 'out' for i in s['stations']]
+    ways = [i for i in out if P['stations'][i]['kind'] == 'way']
+    if not ways:
+        raise ValueError('kl_fa_club.bots_gate: the way out has no way station to hold at')
+
+    def mid(i):
+        pl = P['stations'][i]['places']
+        return [sum(p[k] for p in pl) / len(pl) for k in range(3)]
+    i_gate = min(ways, key=lambda i: math.dist(mid(i), GATE_AT))
+    if math.dist(mid(i_gate), GATE_AT) > 600.0:
+        raise ValueError('kl_fa_club.bots_gate: the nearest way station to %s is %d away' % (GATE_AT, math.dist(mid(i_gate), GATE_AT)))
+    first = [s for s in P['steps'] if s['leg'] == 'in']
+    before = [i for i in out if i <= i_gate]
+    after = [i for i in out if i > i_gate]
+    if not after:
+        raise ValueError('kl_fa_club.bots_gate: nothing is left to walk after the hold')
+    b0 = P['bots'][next(iter(P['bots']))]
+    pts = [b0['start']] + [b0['places'][i] for s in first for i in s['stations']] + [b0['places'][i] for i in before]
+    straight = sum(math.dist(a, b) for a, b in zip(pts, pts[1:]))
+    start = float(P['options'].get('start_delay', 10.0))
+    seconds = max(GATE_MIN, round(SEAL_AT + GATE_MORE - start - straight / GATE_SPEED))
+    steps = [dict(s) for s in first]
+    for k in range(0, len(before), 3):
+        steps.append({'name': '%03d_DefendBehaviour_to_loot' % (30 + k // 3), 'leg': 'in', 'stop': 1, 'stations': before[k:k + 3]})
+    for m, k in enumerate(range(0, len(after), 3)):
+        steps.append({'name': '%03d_DefendBehaviour_out' % (50 + m), 'leg': 'out', 'stop': None, 'stations': after[k:k + 3]})
+    P['steps'] = steps
+    P['waits'] = [P['waits'][0], collections.OrderedDict(name=GATE_NAME, stop=1, seconds=seconds, loot=[], worth=0, timer='038_Timer_at_cases',
+                                                       relays=[], cases={})]
+    P['stations'][i_gate]['what'] = 'the hold before the queue lane until the seal is open (%g s)' % seconds
+    P['gate'] = {'station': i_gate, 'seconds': seconds, 'straight': round(straight), 'seal_at': SEAL_AT, 'places': P['stations'][i_gate]['places']}
+    note = ('THE SEAL GATE: station %d (round %s) is a hold of %g s, a plain timer (%s): SEAL_AT %g s + %g, minus the start delay %g s and the fastest '
+            'bot\'s straight way of %d / %g'
+            % (i_gate + 1, tuple(round(v) for v in mid(i_gate)), seconds, GATE_NAME, SEAL_AT, GATE_MORE, start, straight, GATE_SPEED))
+    P['notes'].append(note)
+    log('  NOTE ' + note)
+    log('steps: %s' % [(s['name'], s['stations']) for s in steps])
+    return P
+
+
+def bots(src, dst, log=print):
+    """The seven AI heisters into a COPY of a finished build of this level: kl_fa_bots.build with BOT_OPT and the seal gate
+    (bots_gate) -> (kl_fa_bots' findings, its report). The dynamic step, guns and the rest are the other tools' own commands."""
+    import kl_fa_bots as F
+    plan0 = F.plan
+    F.plan = lambda B, opt=None, log=print: bots_gate(B, plan0(B, opt, log), log)
+    try:
+        return F.build(src, dst, dict(BOT_OPT), log)
+    finally:
+        F.plan = plan0
+
+
+def bots_check(folder, log=print):
+    """What kl_fa_bots.check / kl_fa_bots_dyn.check do not know of this level, on a folder with the squad (before or after the dynamic
+    step) -> list of faults: seven squads, each with ONE timer GATE_NAME of at least GATE_MIN s, started by steps whose last place lies
+    in the entrance hall (within 600 of GATE_AT), and not longer than the seal's clock and the margin."""
+    import kl_fa_bots as F
+    B = F.Built(folder)
+    sc, bad = B.sc, []
+
+    def fail(s):
+        bad.append(s); log('  FAIL ' + s)
+    delay = {sc.path[k]: v[0] for k, _i, v in kl_fa.controllers(sc, 'TriggerDelay2')}
+    tops = [t for t in sc.tops() if sc.names[t].startswith(BK.BOT_SQUAD + 'Squad#')]
+    defend = {k: v for k, _i, v in kl_fa.controllers(sc, 'DefendBehaviourRout')}
+    if len(tops) != len(F.BOTS):
+        fail('%d squads of AI heisters in the level, %d wanted' % (len(tops), len(F.BOTS)))
+    n_gate, longest = 0, 0.0
+    for t in tops:
+        mine = range(t, sc.end[t])
+        gate = [k for k in mine if sc.names[k] == GATE_NAME]
+        if len(gate) != 1 or delay[sc.path[gate[0]]] < GATE_MIN:
+            fail('%s: %d timer(s) %s%s' % (sc.names[t], len(gate), GATE_NAME, ' of %g s' % delay[sc.path[gate[0]]] if gate else ''))
+            continue
+        secs = delay[sc.path[gate[0]]]
+        longest = max(longest, secs)
+        ends = [B.at(sc.resolve(v[1][-1])[0]) for k, v in defend.items() if k in mine and v[1] and any(j == gate[0] for s in v[7] for j in sc.resolve(s))]
+        if not ends or not all(math.dist(p, GATE_AT) <= 600.0 for p in ends):
+            fail('%s: %d step(s) start %s, their last places %s: not all within 600 of %s' % (sc.names[t], len(ends), GATE_NAME,
+                                                                                            [tuple(round(x) for x in p) for p in ends], GATE_AT))
+        if secs > SEAL_AT + GATE_MORE:
+            fail('%s: the hold of %g s is longer than the seal\'s clock (%g s) and the margin' % (sc.names[t], secs, SEAL_AT))
+        n_gate += 1
+    log('kl_fa_club.bots_check %s: %d squads, %d with the seal gate (%s, longest %g s; seal clock %g s): %s' % (
+        folder, len(tops), n_gate, GATE_NAME, longest, SEAL_AT, 'PASS' if not bad else '%d FAILED' % len(bad)))
+    return bad
+
+
 def test(out, keep=False, log=print, plan=None):
     """Build the level with the layer into <out>, finish it, check it. -> 0 or 1. Beside the archive: van.json
     (the van's plan, what was done to F07's van, kl_map_escape.van_check's report: kl_map_escape.van_build's form)."""
@@ -2313,6 +2426,13 @@ def main():
         print('kl_fa_club.van-check %s: %d fault(s) on the drawn pavement; the plain kl_map_escape.van_check has %d, %d of them \'no ground under it\'' % (
             a[1], len(rep['faults']), len(bare), sum('no ground under it' in x for x in bare)))
         sys.exit(1 if rep['faults'] else 0)
+    elif len(a) == 3 and a[0] == 'bots':
+        res = bots(a[1], a[2])
+        print('kl_fa_club.bots: %s' % (res[0] if isinstance(res, tuple) else res))
+    elif len(a) == 2 and a[0] == 'bots-check':
+        sys.exit(1 if bots_check(a[1]) else 0)
+    elif len(a) == 2 and a[0] == 'strays':
+        BK.seal(a[1])                   # kl_fa_bank.seal: stray room-list entries (not this level's entrance SEAL)
     elif len(a) == 2 and a[0] == 'finish':
         sys.exit(1 if finish(a[1]) else 0)
     elif len(a) == 2 and a[0] == 'check':
