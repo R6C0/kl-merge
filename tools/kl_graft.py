@@ -371,7 +371,7 @@ TAKE = ('CameraFar', 'CameraFogBegin', 'CameraFogFull', 'CameraFogMin', 'CameraB
 LANGS = kl_package.LANGS
 PRM_LIMIT = 90000000                   # a joined .prm larger than this loses S's dead vertex data (build(); run RT1)
 STAMP = (2010, 8, 17, 12, 0, 0)        # time stamp of every archive member (write_zip): a constant, any valid date
-LOAD = {'stamp': True, 'level': 1, 'stored': False, 'trim': False, 'slim': False, 'fxc': False}   # load_options() defaults
+LOAD = {'stamp': True, 'level': 1, 'stored': False, 'trim': False, 'slim': False, 'fxc': False, 'wav': False}   # load_options() defaults
 
 
 # ------------------------------------------------------------------ files in and out
@@ -490,6 +490,9 @@ def load_options(spec=None):
       fxc        the shader cache without the entries no material of the level asks for
                  (kl_light.slim_cache: what every stock level's cache is). Use it on the FINISHED build
                  ('lighten'), after the wardrobe and props: they add materials. NOT LOADED LIVE.
+      wav        the in-memory sound bank beside the archive without the clips nothing in the level
+                 can play (kl_wavslim: S's map sounds under SFX/Environment, 10 MB on Retomoto; the
+                 .WHD keeps every record, the .SND is not touched). 'lighten' only. NOT LOADED LIVE.
       stored     archive members uncompressed (write_zip: an ASSUMPTION about the reader).
       level=N    deflate level 1..9 (1 = what the builds had so far).
       stamp=now  the build time as the members' time stamp (default: the constant STAMP)."""
@@ -697,6 +700,15 @@ def relight(src, dst, opt=None, log=print):
         p = os.path.join(os.path.dirname(zp), f)
         if os.path.isfile(p) and p != zp:
             shutil.copyfile(p, os.path.join(dst, f))
+    if opt['wav'] and os.path.isfile(zp[:-4] + '.WAV'):
+        import kl_wavslim
+        whd0, wav0 = open(zp[:-4] + '.WHD', 'rb').read(), open(zp[:-4] + '.WAV', 'rb').read()
+        whd1, wav1, wrep = kl_wavslim.slim(_sc, files[ext['.SND']], files[ext['English.LOC']], whd0, wav0, log)
+        bad = kl_wavslim.check(whd0, wav0, whd1, wav1)
+        if bad:
+            raise ValueError('kl_wavslim: ' + '; '.join(bad[:5]))
+        open(out[:-4] + '.WHD', 'wb').write(whd1); open(out[:-4] + '.WAV', 'wb').write(wav1)
+        rep.update({'wav ' + k: v for k, v in wrep.items()})
     rep.update({'zip before': os.path.getsize(zp), 'zip after': os.path.getsize(out)})
     log('repacked %s: %.1f -> %.1f MB (%s)' % (out, rep['zip before'] / 1e6, rep['zip after'] / 1e6,
                                              ', '.join('%s=%s' % kv for kv in sorted(opt.items()))))
