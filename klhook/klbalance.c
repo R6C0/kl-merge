@@ -5,10 +5,14 @@
  * should be all the same kinda risk and how the traitors could be'.
  * Part of KLHook (included by klhook.c after klbot.c, SHIP and TEST alike). DATA WRITES ONLY: floats of two heap
  * objects (the tuning object, the local player's health object). No code byte, no call of a game function.
+ * (The point-blank keys of 2 a4, when one is set, add one heap dword - the database object's vtable pointer, as
+ * klchar.c does it for the option object - one heap float, and a wrapper that passes every call on to the game's own
+ * routine. With no such key nothing of it exists in the process.)
  * Research and every number: re\balance.md. LIVE since 2026-10-10 in the owner's game (KLHook.log: 'the damage table
  * ... is what the game's code builds', 'Risk=2 written for 11 Arcade levels (39 value(s) changed', 'your health set:
- * maximum 401.5'): the six factors and the health part. NOT RUN: the seventh factor (CrewOffStage, 2 a2). Everything
- * is OFF unless [Balance] Enable=1, and nothing is written outside an Arcade session on a level that is not stock.
+ * maximum 401.5'): the six factors and the health part. NOT RUN: the seventh factor (CrewOffStage, 2 a2), the
+ * point-blank keys (2 a4). Everything is OFF unless [Balance] Enable=1, and nothing is written outside an Arcade
+ * session on a level that is not stock.
  *
  * 1. WHAT WAS MEASURED (kl2.exe build 0490, read 2026-10-10; EXE = in the disassembly)
  *    A bullet's damage is made in three steps.
@@ -124,6 +128,44 @@
  *       heister's costs the fed x 1.00 and the fed's a heister x 1.00: the police AI cannot finish the crew, the fed
  *       has to. The player pairs are mirrored too so that CrewToYou / YouToCrew stay 'a heister's bullet on you /
  *       yours on a heister' on either side (review S1: a choice; under Risk=2 / 3 they are all 1.0 anyway).
+ *    a4. THE POINT-BLANK RULE, keys PointBlankToYou / PointBlankToCrew / PointBlankToCop (2026-10-11; NOT RUN IN THE
+ *       GAME; re\melee_damage.md has the reading and every address). What looks like a guard's melee is a rule of the
+ *       soldier's FIRE TASK (kl2 0x8c62e0, called at every step of a burst, 0.1 .. 0.2 s): while his target is within
+ *       160 units (1.6 m, node to node, height counts) he sends it a 'ProjectileHit' of his own gun with the hit
+ *       record's scale [hit+0x18] = 100.0 (0x8c63a1 fld [0xb5c050] / 0x8c63aa) and the head bone, which an NPC shooter
+ *       turns into a body hit. The victim's ordinary bullet routine multiplies by that float (0x4db8a2 the player,
+ *       0x61acc6 an NPC) AND by the six factors above, so the dial does scale it - it is one bullet x 100: a Type 79
+ *       guard costs 72.0 x 1.05 x 100 x CopToYou = 151.2 a step at 0.02 (the three 'you lost 151.2' of run
+ *       K2b_DM03_wall_log), 7,560 at Risk=2's 1.0, and an AI heister 72.0 x 1.2 x 100 x CopToCrew.
+ *       No float that only this hit reads exists as data: the 100.0 is a constant in hashed .rdata with 138 users, and
+ *       the record's copy is written anew at every call. But between that store and the send the routine makes a
+ *       VIRTUAL call on a heap object: the name look-up of 'ProjectileHit', slot 19 (+0x4c, 0x698840: thiscall, four
+ *       arguments, ret 0x10) of the one ZEngineDataBase [[0xdd2640]+0xac] (0x8c63fc .. 0x8c641c), with the record's
+ *       address already pushed for the send (0x8c63f4) right above the look-up's four arguments. So, as klchar.c does
+ *       for the option object: a private copy of the 74-slot vtable 0xb8fa04 (RTTI locator in front) with slot 19
+ *       wrapped, its address written into the object's first dword. The wrapper compares its return address with
+ *       0x8c641e - every other of the game's about 450 call sites of that slot is passed straight on - and there
+ *       checks the record (file argument 0xb22648, [rec] == rec + 0x20, bone id 7 at rec + 0x48, scale exactly 100.0,
+ *       attacker == the soldier's actor) and writes the key's number over the 100.0, by the VICTIM:
+ *         PointBlankToYou    the target is a ZFFPlayer (you, on either side)
+ *         PointBlankToCrew   the target is a ZFFActor of team Ally (an AI heister; a traitor is still Ally)
+ *         PointBlankToCop    the target is any other ZFFActor (police, guards, civilians: an AI heister's own steps)
+ *       The number is how many ordinary bullets of his gun one step is worth: 100 = the game's own (the steps are then
+ *       seen and logged, nothing is written: the dry run), 1 = one bullet, 0 = none; no key or a negative number = that
+ *       victim is left alone. NOT part of the Risk dial: no Risk sets a value (the game's rule is the same in every
+ *       mode and on every Arcade level, so Ramp has nothing to hold either) - whether Risk=2 should imply one is the
+ *       owner's call. Nothing has to be put back in a record: 0x8c63aa writes 100.0 again at the next step.
+ *       WHEN: the copy is written into the object only while the dial acts (an Arcade session, a level that is not
+ *       stock), from the game's own thread; the game's vtable pointer goes back the first pass after (any thread: one
+ *       aligned dword, both tables are valid for ever), and a flag makes the wrapper pass everything on from the moment
+ *       the dial stops acting. The copy is made ONCE per process and never changed afterwards (a TEST build's klauto.c
+ *       pokes entry 8 of the stock table at start-up under policy 'direct': it is in the copy).
+ *       RISKS, all unseen: hook code now runs inside a call the game makes from about 450 places (it is one compare
+ *       and the game's own routine); the record is found one dword above the look-up's arguments, which holds for
+ *       build 0490 only (klr_tick does nothing on another exe) and is why five things are checked before the write;
+ *       ASSUMED that nothing compares the object's first dword with 0xb8fa04 (the address stands in the image twice,
+ *       in the constructor's and the destructor's stamp) and that the fire task runs on the main loop's thread (the
+ *       first step's log line says which thread it was). Needs [KLHook] Tick=1 (the default).
  *    b. THE PLAYER'S HEALTH. The tuning block is read when the player object is made, before this hook knows the
  *       level; so the LIVE health object is written instead: H = [player+0xa48] of the local player (ZFFPlayer,
  *       vtable 0xbb45f4; [H+0x24] is the player again, 0x4aadaf), from the game's own thread only:
@@ -142,6 +184,9 @@
  *       health object as found - the first live run thereby checks every number of section 1. Log=2 adds a line for
  *       every loss of health of the player ('you lost 6.1'): with one policeman shooting, that IS gun damage times
  *       CopToYou. Nothing logs what a heister's bullet costs a policeman: the seventh shows in its lines only.
+ *       With a point-blank key (2 a4), at any Log level: one line when the copy of the vtable goes in and one when the
+ *       game's own is back, with the steps counted by victim; Log=2 adds a line for every step seen ('point-blank
+ *       step: ... the hit's scale 100 -> 2.00'), the first 200 of an arming.
  *
  * 3. NOT DONE HERE
  *    NPC health (level data: kl_map_ai's rows), accuracy (ZSoldier field 4: 100 on M01 / M02 / M03, 55 in stock -
@@ -168,6 +213,17 @@
 #define KLR_NF        6                       /* the floats at R+0x00, +0x04 .. +0x14 */
 #define KLR_OFF       0x1c                    /* the seventh: an Ally NPC shooter at another heist stage than the player */
 #define KLR_ABS(x)    ((x) < 0 ? -(x) : (x))
+/* the point-blank rule (section 2 a4; every address read 2026-10-11, re\melee_damage.md) */
+#define KLR_ACTOR_VT  0x00bb3bac              /* ZFFActor */
+#define KLR_DB_VT     0x00b8fa04              /* ZEngineDataBase; the one object is [[0xdd2640]+0xac] (0x8c63fc / 0x8c6401) */
+#define KLR_DB_NSLOT  74
+#define KLR_DB_SLOT   19                      /* +0x4c: name -> id; thiscall (name, id asked for, file, line), ret 0x10 */
+#define KLR_DB_FN     0x00698840              /* the game's routine in that slot (no other pointer to it, no direct call) */
+#define KLR_PB_RET    0x008c641e              /* where the fire task's call of the slot returns to (call edx at 0x8c641c) */
+#define KLR_PB_FILE   0x00b22648              /* 'ff2\scripts\soldier\fireweapontask.cpp': pushed at 0x8c6410 and nowhere else */
+#define KLR_PB_STOCK  100.0f                  /* 0x8c63a1 fld [0xb5c050] / 0x8c63aa fstp [task+0x30] = hit record +0x18 */
+#define KLR_PB_NWHO   3
+#define KLR_PB_LINES  200                     /* Log=2: steps listed per arming; the rest are counted only */
 
 static int klb_level(char why[200]);          /* klbot.c: 1 only on a level whose archive is NOT the stock one */
 
@@ -450,6 +506,123 @@ static void klr_player_tick(int act, int game_thread, DWORD rules)
                            act ? "set" : "put back", police ? " (a policeman)" : "", wmax, max0, wdelay, wfull, delay0, full0);
 }
 
+/* ---------------------------------------------------------------- the point-blank rule (section 2 a4) */
+
+static const char *const klr_pb_key[KLR_PB_NWHO] = { "PointBlankToYou", "PointBlankToCrew", "PointBlankToCop" };
+static const char *const klr_pb_who[KLR_PB_NWHO] = { "you", "an AI heister", "a policeman / another NPC" };
+static struct {
+    int any;                                  /* a key is set: the wrapper goes in while the dial acts */
+    float want[KLR_PB_NWHO];                  /* what stands in for the game's 100.0, by victim; < 0 = that victim is left alone */
+    volatile LONG act;                        /* 1 only while the dial acts: the wrapper looks at nothing otherwise */
+    DWORD vt[KLR_DB_NSLOT + 1];               /* [0] RTTI locator, [1..] the slots; made once, never changed afterwards */
+    int ready, told;
+    DWORD tid, steptid;                       /* the thread the hook's game tick runs on; the thread the last step came on */
+    volatile LONG seen[KLR_PB_NWHO], put[KLR_PB_NWHO], other, odd, lines, first;
+} klr_pb;
+
+/* "left at 100" or the key's number */
+static const char *klr_pb_text(int who, char out[24])
+{
+    if (klr_pb.want[who] < 0) strcpy(out, "left at 100"); else snprintf(out, 24, "%.2f", klr_pb.want[who]);
+    return out;
+}
+
+/* One step of a soldier's point-blank rule, seen from inside the name look-up the game makes between writing the hit
+   record and sending it (0x8c63aa .. 0x8c642a). sp = the address of the wrapper's return address: sp[1..4] the
+   look-up's arguments (name, 0, file, line 0x50), sp[5] the record's address pushed for the send at 0x8c63f4, sp[6] the
+   send's 0. The record is the fire task's own memory - task + 0x18, the soldier at [task + 4], the trace block at
+   task + 0x38 with the bone id at task + 0x60: +0x00 trace, +0x08 the gun, +0x0c the attacker's actor, +0x14 the
+   distance, +0x18 the scale. Reads that cannot fault; ONE float written, and only when all of it is as expected. */
+static void klr_pb_step(const DWORD *sp)
+{
+    DWORD rec = sp[5], r[7], seven = 0, sol = 0, tgt = 0, tvt = 0, info, team = 0xff, ateam = 0xff; float found, dist, want; int who, ok; LONG n; char note[80];
+    memset(r, 0, sizeof r);
+    ok = sp[3] == KLR_PB_FILE && klh_rd(rec, r, sizeof r) && r[0] == rec + 0x20 && klh_rd(rec + 0x48, &seven, 4) && seven == 7 &&
+         (sol = klh_rd32(rec - 0x14)) != 0 && r[3] && klh_rd32(sol + 0x40) == r[3] && (tgt = klh_rd32(sol + 0xac)) != 0 && klh_rd(tgt, &tvt, 4);
+    memcpy(&dist, &r[5], 4); memcpy(&found, &r[6], 4);
+    if (!ok || found != KLR_PB_STOCK) {       /* said at any Log level, three times an arming: it means this file's reading of the call is wrong */
+        if (InterlockedIncrement(&klr_pb.odd) <= 3)
+            klog("balance: point-blank: a call from %08lx whose record is NOT as expected - left alone (file argument %08lx, record %08lx: first dword %08lx, bone id %lu, scale %g, attacker %08lx, soldier %08lx, target %08lx)",
+                 (DWORD)KLR_PB_RET, sp[3], rec, r[0], seven, found, r[3], sol, tgt);
+        return;
+    }
+    if (tvt == KLR_PLAYER_VT) who = 0;
+    else if (tvt == KLR_ACTOR_VT) who = (info = klh_rd32(tgt + 0x54)) != 0 && klh_rd(info + 4, &team, 4) && team == 2 ? 1 : 2;      /* team Ally, as 0x8b80a6 / 0x591bc3 test it */
+    else {                                    /* a vehicle, a fake target ...: not ours */
+        InterlockedIncrement(&klr_pb.other);
+        if (klr.log >= 2 && InterlockedIncrement(&klr_pb.lines) <= KLR_PB_LINES)
+            klog("balance: point-blank step: soldier %08lx on a target of another class %08lx (vtable %08lx) at %.0f units: left alone", sol, tgt, tvt, dist);
+        return;
+    }
+    InterlockedIncrement(&klr_pb.seen[who]);
+    klr_pb.steptid = GetCurrentThreadId();
+    want = klr_pb.want[who];
+    if (want >= 0 && want != found && klh_data((void *)(DWORD_PTR)(rec + 0x18), &want, 4, "point-blank hit scale")) InterlockedIncrement(&klr_pb.put[who]);
+    else want = found;
+    if (klr.log < 2 || (n = InterlockedIncrement(&klr_pb.lines)) > KLR_PB_LINES + 1) return;
+    if (n > KLR_PB_LINES) { klog("balance: point-blank: %d steps listed; further ones are counted only (the line that says the game's vtable is back has the sums)", KLR_PB_LINES); return; }
+    note[0] = 0;
+    if (!InterlockedExchange(&klr_pb.first, 1)) {      /* which thread runs the soldier scripts: ASSUMED the main loop's until this is seen */
+        if (klr_pb.steptid == klr_pb.tid) strcpy(note, " [on the main loop's thread]"); else snprintf(note, sizeof note, " [on thread %lu, NOT the main loop's %lu]", klr_pb.steptid, klr_pb.tid);
+    }
+    if ((info = klh_rd32(r[3] + 0x54)) != 0) klh_rd(info + 4, &ateam, 4);
+    klog("balance: point-blank step: soldier %08lx (actor %08lx, team %lu) on %s %08lx at %.0f units: the hit's scale %.0f -> %.2f%s%s", sol, r[3], ateam, klr_pb_who[who], tgt, dist, found, want,
+         want != found ? "" : klr_pb.want[who] < 0 ? " (no key for this victim)" : " (the key is the game's own number, or the write was refused: logged only)", note);
+}
+
+/* ZEngineDataBase slot 19 as the game calls it (thiscall: edx is no argument). Every name look-up of the game comes
+   through here while the copy is in the object: one compare, then the game's own routine with the same arguments.
+   Its result is handed back untouched (the id is in ax). */
+static DWORD __fastcall klr_pb_name(void *self, void *edx, DWORD name, DWORD id, DWORD file, DWORD line)
+{
+    (void)edx;
+    if ((DWORD_PTR)_ReturnAddress() == (DWORD_PTR)KLH_VA(KLR_PB_RET) && klr_pb.act) klr_pb_step((const DWORD *)_AddressOfReturnAddress());
+    return ((DWORD (__fastcall *)(void *, void *, DWORD, DWORD, DWORD, DWORD))(DWORD_PTR)KLH_VA(KLR_DB_FN))(self, 0, name, id, file, line);
+}
+
+/* act = the dial acts (klr_tick's own test: an Arcade session on a level that is not stock). The copy goes into the
+   database object on the game's thread only; the flag and the way back work from any thread (one aligned dword each,
+   and both tables stay valid for the life of the process). The game's pointer is written back only where the hook's
+   own still stands. */
+static void klr_pb_tick(int act, int game_thread)
+{
+    DWORD sys, db, cur = 0, mine = (DWORD)(DWORD_PTR)&klr_pb.vt[1], stock = KLR_DB_VT; int k; char a[24], b[24], c[24], th[96];
+    if (!klr_pb.any) return;
+    if (game_thread) klr_pb.tid = GetCurrentThreadId();
+    InterlockedExchange(&klr_pb.act, act ? 1 : 0);
+    if (!(sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF))) || !(db = klh_rd32(sys + 0xac)) || !klh_rd(db, &cur, 4)) return;
+    if (!act) {
+        if (cur == mine && klh_data((void *)(DWORD_PTR)db, &stock, 4, "database object: the game's own vtable back")) {
+            th[0] = 0;
+            if (klr_pb.steptid && klr_pb.steptid == klr_pb.tid) strcpy(th, "; the steps came on the main loop's thread");
+            else if (klr_pb.steptid) snprintf(th, sizeof th, "; the steps came on thread %lu, NOT the main loop's %lu", klr_pb.steptid, klr_pb.tid);
+            klog("balance: point-blank: the game's own vtable %08lx is back in the database object %08lx; steps seen while the hook's copy was in: on you %ld (%ld re-scaled), on AI heisters %ld (%ld), on police / other NPCs %ld (%ld), on other kinds of target %ld, records that were not as expected %ld%s",
+                 stock, db, klr_pb.seen[0], klr_pb.put[0], klr_pb.seen[1], klr_pb.put[1], klr_pb.seen[2], klr_pb.put[2], klr_pb.other, klr_pb.odd, th);
+        }
+        return;
+    }
+    if (cur == mine || !game_thread) return;
+    if (cur != KLR_DB_VT) {
+        if (!klr_pb.told++) klog("balance: point-blank: the database object %08lx has vtable %08lx, not ZEngineDataBase's %08lx: the PointBlank keys do nothing", db, cur, (DWORD)KLR_DB_VT);
+        return;
+    }
+    if (!klr_pb.ready) {                      /* once per process: the 74 slots as they stand, the locator in front, slot 19 ours */
+        if (!klh_rd((DWORD_PTR)KLH_VA(KLR_DB_VT - 4), klr_pb.vt, sizeof klr_pb.vt)) return;
+        if (klr_pb.vt[1 + KLR_DB_SLOT] != KLR_DB_FN) {
+            if (!klr_pb.told++) klog("balance: point-blank: slot %d of the database's vtable is %08lx, not %08lx: the PointBlank keys do nothing", KLR_DB_SLOT, klr_pb.vt[1 + KLR_DB_SLOT], (DWORD)KLR_DB_FN);
+            return;
+        }
+        klr_pb.vt[1 + KLR_DB_SLOT] = (DWORD)(DWORD_PTR)klr_pb_name;
+        klr_pb.ready = 1;
+    }
+    for (k = 0; k < KLR_PB_NWHO; k++) { InterlockedExchange(&klr_pb.seen[k], 0); InterlockedExchange(&klr_pb.put[k], 0); }
+    InterlockedExchange(&klr_pb.other, 0); InterlockedExchange(&klr_pb.odd, 0); InterlockedExchange(&klr_pb.lines, 0); InterlockedExchange(&klr_pb.first, 0);
+    klr_pb.steptid = 0;
+    if (klh_data((void *)(DWORD_PTR)db, &mine, 4, "database object: the hook's copy of its vtable (slot 19 wrapped)"))
+        klog("balance: point-blank: the database object %08lx now has the hook's copy %08lx of its vtable %08lx (slot 19, the name look-up %08lx, wrapped): a soldier's step at arm's length - his gun's hit x 100, sent while the target is within 160 units - gets, in place of the 100: %s on you, %s on an AI heister, %s on a policeman / another NPC; the game's own vtable comes back when the session is not Arcade or the level is stock",
+             db, mine, stock, (DWORD)KLR_DB_FN, klr_pb_text(0, a), klr_pb_text(1, b), klr_pb_text(2, c));
+}
+
 static void klr_tick(int game_thread)
 {
     static DWORD last, toldrules; static char toldwhy[200];
@@ -457,15 +630,17 @@ static void klr_tick(int game_thread)
     if (!klr.on || !klh_exe_ok || now - last < (game_thread ? 50u : 100u)) return;
     last = now;
     arcade = klr_arcade(&rules, &state, &level);
-    if (arcade && klr.any) {
+    if (arcade && (klr.any || klr_pb.any)) {
         act = klb_level(why);                 /* asked every pass: the verdict changes when the archive is opened */
         if (rules != toldrules || strcmp(why, toldwhy)) {
             toldrules = rules; strcpy(toldwhy, why);
-            if (act) klog("balance: %s: Risk=%d acts on this round (Arcade level %d); the Steam guard blocks every write of it", why, klr.risk, level);
+            if (act && !klr.any) klog("balance: %s: the point-blank keys act on this round (Arcade level %d; no Risk, no factor, no health key is set); the Steam guard blocks every write of it", why, level);
+            else if (act) klog("balance: %s: Risk=%d acts on this round (Arcade level %d); the Steam guard blocks every write of it", why, klr.risk, level);
             else klog("balance: %s: nothing is written here (the dial acts only on a level that is not stock); the log runs", why);
         }
     }
     klr_table_tick(arcade, act, level);
+    klr_pb_tick(act, game_thread);            /* the point-blank keys: in while the dial acts, the game's own vtable back otherwise */
     if (arcade) klr_player_tick(act, game_thread, rules);
     else if (klr_p.have) klr_player_tick(0, game_thread, 0);      /* the session ended with the object alive: its own values go back */
 }
@@ -490,7 +665,7 @@ static int klr_number(const char *t, double *d)
 
 static void klr_init(void)
 {
-    int k, offbad = 0; float v; char t[32]; double d;
+    int k, offbad = 0, pbsaid = 0; float v; char t[32], p[32], a[24], b[24], c[24]; double d;
     klr.on = GetPrivateProfileIntA("Balance", "Enable", 0, klh_ini) != 0;
     if (!klr.on) return;
     klr.log = (int)GetPrivateProfileIntA("Balance", "Log", 1, klh_ini); if (klr.log < 0) klr.log = 0; if (klr.log > 2) klr.log = 2;
@@ -521,6 +696,22 @@ static void klr_init(void)
          klr.log, klr.risk, klr.ramp, klr.mirror, klr.f[0], klr.f[1], klr.f[2], klr.f[3], klr.f[4], klr.f[5], klr.off, klr.health, klr.delay, klr.full);
     if (offbad)                               /* said at any Log level: the user asked for something and does not get it */
         klog("balance: CrewOffStage=%s is IGNORED: it must be one number of 0 .. 20 with a decimal point (0.75, not 0,75), or a negative one for the game's own; what stands is the dial's %.2f (-1 = the game's own)", t, klr.off);
+    /* the point-blank keys (section 2 a4): no key or a negative number = that victim is left alone. As the seventh's:
+       one number and nothing else, here 0 .. 100 (100 = the game's own: the steps are then only seen and logged).
+       They do not set klr.any: with them alone the table and the health object are not touched. Without a key no
+       line is written and klr_pb_tick returns at once: the hook is then what it was. */
+    for (k = 0; k < KLR_PB_NWHO; k++) {
+        klr_pb.want[k] = -1.0f;
+        GetPrivateProfileStringA("Balance", klr_pb_key[k], "", p, sizeof p, klh_ini);
+        if (!p[0]) continue;
+        pbsaid = 1;
+        if (!klr_number(p, &d) || d > 100)
+            klog("balance: %s=%s is IGNORED: it must be one number of 0 .. 100 with a decimal point (how many ordinary bullets of his gun one point-blank step is worth; 100 = the game's own), or a negative one to leave that victim alone", klr_pb_key[k], p);
+        else if (d >= 0) { klr_pb.want[k] = d > 0 ? (float)d : 0.0f; klr_pb.any = 1; }      /* '-0' is 0 */
+    }
+    if (pbsaid)
+        klog("balance: point-blank keys (in place of the game's 100 in the hit a soldier sends at every burst step while his target is within 160 units): %s on you, %s on an AI heister, %s on a policeman / another NPC%s",
+             klr_pb_text(0, a), klr_pb_text(1, b), klr_pb_text(2, c), klr_pb.any ? "; Arcade only, only on a level that is not stock" : ": no key acts, nothing of it is put into the game");
 }
 
 #endif /* KLBALANCE_C */
