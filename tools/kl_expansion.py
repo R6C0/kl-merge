@@ -1774,6 +1774,8 @@ def selftest(scratch=None, log=print):
 def main():
     a = sys.argv[1:]
     sys.stdout.reconfigure(line_buffering=True)         # a build takes minutes: its lines must not wait in a pipe
+    if '--help' in a or '-h' in a:                      # 'build --help' used to START a whole default build (2026-10-11)
+        print(__doc__); return 0
 
     def opt(name, default=None):
         if name in a:
