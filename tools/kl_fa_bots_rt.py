@@ -7,6 +7,9 @@ M09_A, and lobby + street, M09_B) that only the hook joins. Spec, the reading of
     python kl_fa_bots_rt.py build <build folder> <out folder> [options]   plan + write + every check; exit 1 on a FAIL
     python kl_fa_bots_rt.py plan  <build folder> [options]                the plan only (stations, places, notes)
     python kl_fa_bots_rt.py check <folder>                                kl_fa_bots.check + the checks of this module
+    python kl_fa_bots_rt.py lanes <folder> <out.json>                     the street chain of a built folder as it is in its
+                                                                          nodes: per squad and lane the places in order
+                                                                          (for a picture, or to read place lines against)
     python kl_fa_bots_rt.py diff  <build folder> <out folder>             kl_fa_bots.diff, the JumpPoint allowed
     options
       --tower-only         no second leg: the bots end beside the tower car in an AllyEscapeBox and are taken from
@@ -33,6 +36,16 @@ M09_A, and lobby + street, M09_B) that only the hook joins. Spec, the reading of
       --street-hold S      seconds the squad waits at the last place BEFORE the level exit box (default 10, GUESS;
                            0 = no wait). A bot inside that box calls the van (kl2 0x6cd8e0, re/bots.md 11), and
                            Retomoto has ONE van (kl_fa_street.ONE_VAN).
+      --no-lanes           the street chain as it was until 2026-10-11 noon (<work>\\build\\z_rooms\\retomoto_full; the
+                           bots step is that build's byte for byte): all seven down the east pavement in one file,
+                           sprinting from way place to way place. Default: THE STREET IN LANES (STREET_LANES below,
+                           re/retomoto_bots_street.md) - a timed way inside the building in short bounds, its clock
+                           laid for a slow walk (so a bot whose street step a late wait of the tower chain has taken
+                           is ordered on again), then three lanes with holds at cover boxes: the east pavement, the
+                           east carriageway and through the median to the far side, the far side from the square on;
+                           three squads always take one lane each, four draw one of two per round (a RandomTrigger);
+                           all meet at the rally. No sprint. No way within 2 m of a place the police are posted at.
+                           The last legs are laid round the vehicles kl_fa_street parked there.
       --no-tree            as kl_fa_bots
 
 THE DESIGN (the three ways weighed: re/bots_retomoto.md 2)
@@ -52,10 +65,14 @@ THE DESIGN (the three ways weighed: re/bots_retomoto.md 2)
             that list ([jp+0x34]); a DefendBehaviourRout takes 'AITrigger' in its slot 26 (0x4ebed0, word
             [0x168d804]) and starts. Stock form: campaign L05 `Jumppoints!Jump05` names `AI!Friendly!B6!Kane_B6\\
             FollowLynch` (a friendly AI's step), L02 has six such lists.
-            lobby (EXITS_BANK on the stairs, stage 2) -> entrance -> forecourt -> east pavement of the road -> a
-            place before the level exit box (TriggerDelay2 --street-hold) -> into the box (stage 3; the van is
-            called) -> beside the van's stop, on the pavement side of its lane; boarding by ZBoardEscapeVehicleTactic
-            (stock F07's form: these ARE F07's vans).
+            lobby (EXITS_BANK on a ramp, stage 2) -> THE TIMED WAY through the lobby (short bounds by a clock that
+            runs at V_SLOW, JOIN_SAFE seconds) -> THE DEAL (a RandomTrigger: one of the bot's lanes) -> THE LANE
+            (over the square and up the road, holds at cover boxes with a timer each: this side of the road, or
+            the far side; no leg within POST_WALL of a wall post of the police) -> a place before the
+            level exit box (TriggerDelay2 --street-hold: the rally, where all lanes meet) -> into the box (stage 3;
+            the van is called) -> round the parked bus to beside the van's stop, on the pavement side of its lane;
+            boarding by ZBoardEscapeVehicleTactic (stock F07's form: these ARE F07's vans). (--no-lanes: lobby ->
+            entrance -> forecourt -> east pavement -> rally -> box -> stop, one file.)
   What moves the ACTORS from the tower part to the street part is the hook (klhook/klcrew_rt.c, [CrewJoin] Enable=1):
   in the tick in which kljoin.c's jump request for that entry is pending - before the game moves the player and
   sends the 'AITrigger' - it calls the game's own actor teleport 0x62a900 (the routine 0x8f3fa0 itself uses on the
@@ -64,7 +81,8 @@ THE DESIGN (the three ways weighed: re/bots_retomoto.md 2)
   started for bots that stand in the tower: what a DefendBehaviourRout does with a place on another navigation
   part is NOT established - use a --tower-only build then.
 
-WHAT IS WRITTEN beyond kl_fa_bots.apply: the street steps (cloned F07 forms, as every other step), the room gate
+WHAT IS WRITTEN beyond kl_fa_bots.apply: the street steps (cloned F07 forms, as every other step; with the lanes
+  also their timers - F07's Timer_start_bots form - and the deal's RandomTrigger, F07 Squad#02's), the room gate
   (a TriggerCounter cloned from F07, named by the room counter of kl_fa_author: the second edit of an existing node),
   the gates' TriggerActorsDead nodes (cloned from F07's bots; inside the squads, no existing node touched), ONE edit
   of an existing node for the join (field 0 of the JumpPoint controller of 06_Exit), the [CrewJoin] section appended
@@ -72,7 +90,7 @@ WHAT IS WRITTEN beyond kl_fa_bots.apply: the street steps (cloned F07 forms, as 
 
 GUESS = a value not copied from a stock object and not measured; ASSUMPTION = fits the evidence, not proven.
 """
-import collections, json, math, os, sys
+import collections, heapq, json, math, os, struct, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -261,7 +279,7 @@ LANE_SOUTH = 800.0      # the van's lane is kept clear from this far south of it
 EXIT_SHARE = 0.9        # a 'level exit' place lies within this share of the box's half extents (0.45 would leave no
                         # place on the pavement side of the lane: the box is x -5700..-300, the lane x -1850)
 DEFAULTS = {'tower_only': False, 'loot_seconds': LOOT_SECONDS, 'after_blast': AFTER_BLAST, 'street_hold': STREET_HOLD, 'tree': True,
-            'room_gate': ROOM_GATE, 'room_wait': ROOM_WAIT, 'gates': TOWER_GATES, 'gate_names': None}
+            'room_gate': ROOM_GATE, 'room_wait': ROOM_WAIT, 'gates': TOWER_GATES, 'gate_names': None}     # (+ 'lanes', 'join_safe': below, at STREET_LANES)
 
 
 # ------------------------------------------------------------------ small things
@@ -1183,6 +1201,1032 @@ def street_plan(B, nav, S, opt, log=print):
         lane_from_z=lane_z0, path_length=round(total), hold=hold, stations=places, steps=steps, notes=notes)
 
 
+# ------------------------------------------------------------------ the street in lanes (2026-10-11, re/retomoto_bots_street.md)
+# THE OWNER, after the gates build: 'when doing the run to the car they need to spread out more like some try going to
+# the other side some stay on that side etc. they need to use the map a bit more'. What the seven did until now
+# (runs J0 / J1 / B1_DM09, place lines every 5 s): one file - both lobby stairs, the middle of the front door, the
+# north bays of the square, the east pavement (x -850..-1000) - and the five of J0 dead at the kerb of that pavement,
+# z -4200..-150, 40..49 s after the join.
+# NOW: behind the lobby's EXITS_BANK box every bot's street chain is
+#   A. THE TIMED WAY (the first JOIN_SAFE seconds): through the lobby towards the door in short bounds, at cover
+#      boxes where there are any, each bot its own ramp of the lobby and line towards its bay of the square. The form is
+#      the plain one - a step to the next place, a timer, the next step (stock F07's rout -> timer) - but every place
+#      lies within CALL_REACH of the place before. A step is 'reached' and sends its list within ARRIVE_3D of its place
+#      (kl2 0x686c4c), so a step of this way is reached THE MOMENT IT STARTS: its timer runs while the bot walks the
+#      bound, and for a bot on its way a timer is pending all the time - the chain runs by the clock. THE CLOCK RUNS
+#      AT V_SLOW (a place's timer = its way at V_SLOW): a bot that walks V_SLOW or faster is at the place when its
+#      timer fires - he stands the rest - and falls behind at no speed above it. (The first build's clock ran at
+#      160..220 units / s: tight from 250 on, 3..10 s of the 31 without a pending timer at 150 - review S2.) The
+#      timed way ends when its clock has run JOIN_SAFE, 31..41 m from the ramp, inside the building or at the door;
+#      the rest of the bay's line is the first stretch of the bot's lane.
+#      WHY: runs J1 / B1 showed what the gates' note 'THE JOIN' feared. A bot that stood at a gate with its wait armed
+#      when the human took the tower car lost its street step up to 30 s later (the wait fired, the next TOWER step
+#      started and took its place) and stood in the square for the rest of the run - B1: records 2 and 5, exactly at
+#      their door holds at the join; J1: six of seven. A chain that only goes on when the bot ARRIVES is dead then.
+#      Here the pending timer starts the next step all the same: for that bot it names a real place, he walks to it,
+#      it is reached, and he is on the clock again. (One wait a bot can be armed, and none can be armed after the join.)
+#   B. THE DEAL: a RandomTrigger (stock F07 Squad#02's form, as kl_fa_bots_dyn's forks) draws one of the bot's two
+#      lanes, per bot and per round. DEAL gives three bots one lane each (no draw): no lane is ever empty.
+#   C. THE LANE: holds at cover boxes a bound apart - a step to the hold, a timer, the next (the form of the tower's
+#      gates, with a timer for the wait) - to the lane's last place before the rally. A hold's timer = the stand
+#      wanted + the walk in at V_SLOW (hold_timer); the cover box a hold is nearest to is given to one bot (box_room);
+#      NO WAY WITHIN POST_WALL OF A WALL POST of the police (wall_posts: the ground there is no ground for a way).
+#   D. all lanes meet at the rally (the old chain's own: STREET_HOLD seconds outside the level exit box), then the
+#      level exit box and the places beside the van's stop, laid round the vehicles kl_fa_street parked there.
+# GUESS: every number below and every lane's line.
+STREET_LANES = True     # False ('--no-lanes'): the street chain of 2026-10-11 noon (z_rooms\retomoto_full), node for node
+JOIN_SAFE = 31.0        # s after the jump within which a wait of the tower chain can still fire: WAIT_S (and the loot wait's 30) + 1
+V_PLAN = 300.0          # units / s a free bot walks, for the PACE the plan and the check say (measured between two place lines
+                        # after the join, runs J0 / J1 / B1: 240..440 - but those steps were eDMS_Sprint)
+V_SLOW = 150.0          # THE SLOWEST WALK THE CHAIN IS LAID FOR. The lanes' steps are eDMS_NotSet; such steps of the gates build
+                        # in the tower, fights and stairs included, moved at a median 124..127 units / s over 5 s, 90 % under
+                        # 259, top 368 (the review's speed.py on runs J1 / B1). The clock of the timed way runs at THIS speed
+                        # (a bot that walks it or faster is at each place before its timer fires, so a timer is pending all
+                        # the time) and a hold's timer counts the walk in at this speed. What the pace on the square under
+                        # fire is, is NOT KNOWN: a bot slower than this falls behind the clock (check(): the walk model)
+CLOCK_PAUSE = 1.2       # GUESS: seconds at each cover of the timed way, on top of the walk to it
+CLOCK_START = 0.5       # GUESS: seconds at the EXITS_BANK place before the first bound (+ the bot's STAGGER)
+CLOCK_MIN = 350.0       # the next place of the timed way lies at least this far along the way
+CLOCK_REACH = 420.0     # ... its box within this of the way's line
+CLOCK_END = 700.0       # the timed way ends within this of way of its bay's end place
+GRID = 40.0             # the cell of the grid the ways are laid on (Walk)
+FOOT_KEEP = 70.0        # a way and a place keep this far from the footprint of a vehicle kl_fa_street brought to the road
+                        # (kl_fa_street.footprints(): the navigation mesh has no hole under them)
+BOUND_BEST = 2400.0     # a lane's bound: the next hold lies about this far along the lane's line from the last - or the lane's
+LANE_HOLDS = 5          # length over LANE_HOLDS + 1 where that is more. Stock F07's bots: a 'pos' step every ~25 m. (6 until the
+                        # hold timers grew by the walk in at V_SLOW: a lane now begins at the timed way's end INSIDE the
+                        # building, 20..40 m longer, and seven holds of 8..10 s put the far lanes at the rally after 2.5 min)
+BOUND = (0.7, 1.4)      # ... between these shares of the bound (never under ARRIVE_3D + 100 in 3D: a step to a nearer hold would
+                        # be 'reached' where the bot stands)
+BOUND_FAR = 2.2         # where no free cover lies in that window: up to this share; beyond it the bot walks on without a hold
+LANE_REACH = 520.0      # a lane's cover box lies within this of the lane's line
+SPOT = (35.0, 170.0)    # a lane's hold place lies this far outside the edge of its cover box's own box (the model's box, which is
+                        # what kl2 0x603830 makes the cover of; on the street the boxes are 0.5..6 m long and their origin is not
+                        # always their middle), and within HOLD_COVER - 30 of the box's middle
+SHARE_LEN = (200.0, 400.0)  # a cover box this long (its box's longer side) may be two / three bots' box, HOLD_SEP apart
+COVER_OFF = 150.0       # (said in the plan: a box whose origin lies further than this from its box's middle - a bus's end.
+                        # kl_fa_bots_dyn.check measures 'a hold within 500 of a cover box' from the ORIGIN; the lanes' holds are
+                        # steps of the route form, which that rule does not look at, and check() here measures from the box)
+POST_PASS = 300.0       # a way is laid this far round a post of the police where the ground has room (Walk.DANGER: a cost)
+POST_WALL = 200.0       # ... and NEVER nearer than this to a WALL POST (wall_posts(): every post - a RunToCover point, a place
+                        # a behaviour of a squad names, a start place): the ground within it is no ground for a way (Walk
+                        # `walls`), and check() FAILs a leg that comes nearer. A soldier whose target
+                        # is within 160 fires 100 bullets a burst step (kl2 0x8c62e0, re/melee_damage.md: 432 against a bot's
+                        # 252 at the owner's CopToCrew 0.05) - the first build's ways passed 13..75 from such points
+                        # (re/retomoto_bots_street_review.md M1). 160 + the 40 of a grid cell
+POST_KEEP_ST = 400.0    # no hold of the street nearer than this to a post of the police: where a man stands at the load, a
+                        # place a rout of his squad names, a RunToCover point (the campaign and F07 post their men at the same cars)
+LINE_SLACK = (1.5, 500.0)   # a way between two holds is at most this much longer than the straight line (factor, plus)
+END_GAP = 900.0         # no hold in the last stretch of a lane before its end place
+LANE_STAND = {'E': 2.0, 'X': 1.5, 'W': 1.5}     # GUESS: seconds a bot is to STAND at a hold, by lane (longest on the short lane),
+HOLD_OFF = {2: -0.5, 3: 0.0, 4: 0.0, 5: 0.0, 6: 0.5, 7: 0.5, 8: -0.5}      # + this by squad. A hold's TIMER starts when the step is
+STAND_MIN = 1.0         # 'reached', ARRIVE_3D before the hold, so timer = the stand + THE WALK IN AT V_SLOW - by the walk model
+                        # from where the step is reached, through the step's way places, to the hold: 6.7 s on a straight
+                        # line, more round a corner (lanes_plan sets it per hold). A bot at V_SLOW stands the stand, one at
+                        # V_PLAN about 3.3 s longer. check(): no hold's timer under ARRIVE_3D / V_SLOW + STAND_MIN, and by
+                        # the walk model at V_SLOW a stand of STAND_MIN at every hold. (The first build's timers of 5..9 s
+                        # were a stand of 1.7..5.7 s at V_PLAN and none at V_SLOW: review S1)
+hold_stand = lambda key, N: max(STAND_MIN, LANE_STAND.get(key, 2.0) + HOLD_OFF.get(N, 0.0))
+hold_timer = lambda key, N: round(hold_stand(key, N) + ARRIVE_3D / V_SLOW, 1)
+STREET_SEP = HOLD_SEP   # two bots' places of the street - a hold of a lane, a place of the timed way - are at least this far apart
+STAGGER = {2: 0.0, 3: 3.0, 4: 1.0, 5: 4.0, 6: 2.0, 7: 5.0, 8: 1.5}      # seconds a bot waits longer at its first cover in the lobby
+PHASE = {2: 0.75, 3: 1.0, 4: 0.85, 5: 1.2, 6: 1.3, 7: 0.9, 8: 1.1}      # the first bound of a lane x this: not all at the same cars
+WEIGHTS = (3, 3)        # the RandomTrigger's weights (stock: 3 / 3 on 147 of the bots' RandomTriggers)
+# THE LANES. key; what; via = the line from the square to the lane's last place, as points (x, z) the way is laid
+# through (GUESS, read off the top views <work>\build\z_lanes\maps); end = its last place, short of the rally.
+#   E  stays on this side: the east pavement, the old line
+#   X  the east carriageway among the taxis, then through the gap of the median at z 0 (the carriageway is shut at
+#      z 2000 by the bus kl_fa_street laid across it) and up the inner side of the west carriageway; back east just
+#      north of the median's end (z 4900: between two of the bollards that stand 1.2 m apart from there to z 8840)
+#   W  the other side at once: west across the open road in front of the square, up the west carriageway's parked row,
+#      back east at z 6700 (another gap of the bollards), south of the bus beside the median and of the van's waiting place
+#   The police's road block (z 3450..3960) shuts the west carriageway from the median to 2 m short of the kerb: X goes
+#   round its west end along the kerb, W over the west pavement.
+#   A LINE CHOOSES THE HOLDS, NOT THE WAY: the way from hold to hold is the cheapest on the grid (Walk.leg). As built
+#   the X ways cross the median at its slit at z 1440 (#02, #03, #08) or south of its end at z -1730 (#06) and come
+#   back east through bollard gaps at z 5280..5320 or 6480; W crosses the open road at z -5390..-4350 and comes back
+#   at z 6480 / 6920. No way of the build uses the gap at z 0 (MEASURED: scratch K2\cross2.py on the build's nodes).
+LANES = (
+    {'key': 'E', 'what': 'this side: the east pavement',
+     'via': ((-760.0, -4080.0), (-900.0, -2600.0), (-880.0, -900.0), (-880.0, 900.0), (-930.0, 2700.0), (-980.0, 4500.0), (-900.0, 6200.0)),
+     'end': (-1000.0, 7350.0)},
+    {'key': 'X', 'what': 'the middle: the east carriageway, through the median\'s gap at z 0, the west carriageway\'s inner side',
+     'via': ((-1250.0, -4040.0), (-2330.0, -3300.0), (-2380.0, -1900.0), (-2420.0, -600.0), (-3050.0, -15.0), (-3480.0, 500.0), (-3520.0, 2000.0),
+             (-4250.0, 2950.0), (-4800.0, 3700.0), (-3700.0, 4550.0), (-3000.0, 4900.0), (-2350.0, 5500.0), (-1650.0, 6850.0)),
+     'end': (-1280.0, 7300.0)},
+    {'key': 'W', 'what': 'the other side: across the road in front of the square, the west carriageway\'s parked row',
+     'via': ((-1650.0, -5560.0), (-2750.0, -5950.0), (-3980.0, -5250.0), (-3950.0, -2800.0), (-3980.0, -1300.0), (-3930.0, 0.0), (-3980.0, 1900.0),
+             (-4950.0, 2850.0), (-5080.0, 3800.0), (-4350.0, 4950.0), (-3800.0, 6250.0), (-3000.0, 6700.0), (-2100.0, 7050.0)),
+     'end': (-1500.0, 7300.0)},
+)
+# THE DEAL. Squad -> its lanes: one = it always takes it (#05 E, #02 X, #04 W: no lane is empty WHILE THOSE THREE
+# LIVE), two = a RandomTrigger draws per round (the first is the way branch set 0 of the checks walks). E has 1..3 of
+# the seven, X 1..4, W 1..4; 16 deals. #08 draws X or W, not E: the east pavement has ten cover boxes and none between
+# z -100 and 5400, and the squad that chooses last got ONE hold in 135 m on it - alone and first in every wake box,
+# as run J1's record 5 (dead at +37.7 s; review S3). With the squad that always takes a lane dead before the join
+# that lane is empty in 2 of 16 deals for X (#03 E, #06 W, #08 W) and for W (#06 X, #07 E, #08 X), in 4 of 16 for E
+# (#03 X, #07 W) - a deal by who is alive cannot be made in level data (review S6).
+DEAL = {2: ('X',), 3: ('E', 'X'), 4: ('W',), 5: ('E',), 6: ('X', 'W'), 7: ('W', 'E'), 8: ('X', 'W')}
+# THE SQUARE. The points (x, z) each bot's timed way is laid through behind the door, the last = where it ends and the
+# lanes start: the west end of a way down from the terrace between the square's four planters (x 550..1600).
+#   n = down the steps at the terrace's north-east corner and along the north side of the first planter
+#   a = the bay between the first planter and the second
+# (The bays further south are ramps whose polygons are no planes - fitted heights off by 1..2 m, WARP - and they open
+# on the police cars of Squad_InFront: not used.)
+BAYS = {'n': ((2270.0, -4740.0), (1750.0, -4330.0), (1150.0, -4720.0), (520.0, -4760.0)), 'a': ((430.0, -5600.0),)}
+BAY = {2: 'a', 3: 'n', 4: 'a', 5: 'n', 6: 'a', 7: 'a', 8: 'n'}
+WARP_WAY = 30.0         # a place of the timed way WITHOUT a cover box may stand on a polygon this uneven (the terrace in front of
+                        # the door is one polygon of 8 x 13 m whose corners lie 24 off the fitted plane; nobody stands at such
+                        # a place, the bot walks through it)
+RAMP = {2: 's', 3: 'n', 4: 's', 5: 'n', 6: 's', 7: 's', 8: 'n'}     # the lobby's ramp a bot takes down from the lift landing (north / south)
+CALL_REACH = 600.0      # a place of the timed way lies within this (3D) of the place before - so the step that names it is
+                        # 'reached' (ARRIVE_3D) the moment it starts, also for a bot that is up to 4 m short of the place
+                        # before (780 until the review's S2: tight only from 250 units / s on)
+LANE_MIN_HOLDS = 3      # check(): every way of the deal has this many holds at cover (the first build's #08 on E had one: review S3)
+LANE_PRE = {'E': '061', 'X': '062', 'W': '063'}
+LANE_TAG = '_DefendBehaviour_lane_'     # a lane's step: <pre>_DefendBehaviour_lane_<key>_<nn> (a hold: a timer <pre>_Timer_lane_.. follows)
+TIMED_TAG = '_DefendBehaviour_out_'     # a step of the timed way (the tower's own way out is ..._DefendBehaviour_out_<gate> in chain 1)
+CLOCK_MARGIN = 150.0    # check(): a place of the timed way lies within ARRIVE_3D less this of the place before
+ROAD_MID = -3000.0      # the road's middle: the median (x -3145..-2854 from z -1410 to 4666)
+DEFAULTS.update(lanes=STREET_LANES, join_safe=JOIN_SAFE)
+
+
+def cover_geom(B):
+    """The cover boxes as BOXES -> [dict]: node, at (the origin), mid (the middle of the model's box in the world), fp
+    (x0, x1, z0, z1 of that box in the plan), y (its floor), off (origin to middle in the plan), high. kl2 0x603830 builds
+    a cover from the entity's box (middle +0x30, half size +0x40: re/bots_dyn_build.md 13); the model's 64-byte root
+    holds the same box at +0x20 (kl_fa_cover.all_boxes). A box without such a root: its origin, 50 round it."""
+    sc, prm, out = B.sc, B['.prm'], []
+    t, n = struct.unpack_from('<II', prm, 0)
+    for k, at in cover_boxes(B):
+        e, bb = B.ents[k - 1], None
+        if 0 < e.model < n:
+            o, size = struct.unpack_from('<II', prm, t + 16 * e.model)
+            if size == 64 and prm[o:o + 4] == b'\0\1\7\0':
+                bb = struct.unpack_from('<6f', prm, o + 0x20)
+        if bb:
+            cs = [B.world(k, (x, y, z)) for x in (bb[0], bb[3]) for y in (bb[1], bb[4]) for z in (bb[2], bb[5])]
+            fp = (min(c[0] for c in cs), max(c[0] for c in cs), min(c[2] for c in cs), max(c[2] for c in cs))
+            y0 = min(c[1] for c in cs)
+        else:
+            fp, y0 = (at[0] - 50.0, at[0] + 50.0, at[2] - 50.0, at[2] + 50.0), at[1]
+        mid = ((fp[0] + fp[1]) / 2, y0, (fp[2] + fp[3]) / 2)
+        out.append({'node': k, 'at': at, 'mid': mid, 'fp': fp, 'y': y0, 'off': hdist(at, mid), 'high': 'coverboxh' in sc.names[k].lower()})
+    return out
+
+
+def box_room(c):
+    """How many bots a cover box (cover_geom) takes: one - a box SHARE_LEN[0] long two, one SHARE_LEN[1] long three,
+    HOLD_SEP apart (a car's middle box is 2 m, the square's low walls 6 m: run J1 had five of the seven in a row
+    behind one such wall, a metre apart, of the game's own choosing)."""
+    return 1 + sum(1 for n in SHARE_LEN if max(c['fp'][1] - c['fp'][0], c['fp'][3] - c['fp'][2]) >= n)
+
+
+def fp_dist(fp, x, z):
+    """Distance in the plan from (x, z) to the rectangle fp = (x0, x1, z0, z1); 0 inside it."""
+    return math.hypot(max(fp[0] - x, 0.0, x - fp[1]), max(fp[2] - z, 0.0, z - fp[3]))
+
+
+def street_posts(B, squads=None):
+    """[(squad node, what, place)] - every post of the police below the tower: enemy_posts() and the RunToCover points
+    (a child with a RunToCoverPosInfoRout controller: where F07's squads are sent first)."""
+    sc = B.sc
+    squads = squads if squads is not None else enemy_squads(B)
+    out = [(t, what, q) for t, ps in enemy_posts(B, squads).items() for what, q, _r in ps if q[1] < 5000.0]
+    of = {k: t for t in squads for k in range(t, sc.end[t])}
+    for k, _i, _v in kl_fa.controllers(sc, 'RunToCoverPosInfoRout'):
+        if k in of and B.at(k)[1] < 5000.0:
+            out.append((of[k], 'RunToCover ' + sc.names[k], B.at(k)))
+    return out
+
+
+def wall_posts(posts):
+    """THE WALL POSTS of street_posts()' list -> [(squad node, what, place)]: the posts no way may pass within
+    POST_WALL of. ALL OF THEM: every RunToCover point, every place a behaviour of a squad names (where its men are
+    sent) and every start place (where a man stands at the load - a road block's man is sent 1.3 m and stays; a
+    squad that is sent 50 m away has LEFT its start place when a lane comes by, every wave being woken by the first
+    bot on the road, but nothing here rests on that: the street has room for the ways without those places too)."""
+    return list(posts)
+
+
+def post_gap(walls, a, b, step=20.0):
+    """The nearest a straight leg a -> b comes to a wall post on its floor -> (distance, post) or (1e9, None)."""
+    best = (1e9, None)
+    n = max(1, int(math.dist(a[:3], b[:3]) // step))
+    for t in range(n + 1):
+        m = [a[i] + (b[i] - a[i]) * t / n for i in range(3)]
+        for w in walls:
+            q = w[2]
+            if abs(q[1] - m[1]) <= 260.0:
+                d = math.hypot(m[0] - q[0], m[2] - q[2])
+                if d < best[0]:
+                    best = (d, w)
+    return best
+
+
+def walk_model(steps, v, start=None):
+    """THE WALK MODEL (this module's and the review's reading of kl2 0x686c4c; nothing of it was seen in the game):
+    steps = [(name, [place ..], seconds of the timer behind it or None)] in the order they run. The bot walks at v
+    units / s in straight lines through a step's places; a step is 'reached' when he is within ARRIVE_3D (3D) of
+    its LAST place; a timer starts then, and the next step starts when it fires (at once without a timer), from
+    where the bot is. -> rows {name, start, reached, arrive (bodily at the last place, were he left to walk),
+    next, timer, stood (seconds at the last place before the next step starts), no_timer (seconds between the
+    step's start and its 'reached': nothing is pending for the bot then)}."""
+    t, pos, rows = 0.0, start, []
+    for name, pts, timer in steps:
+        if not pts:
+            continue
+        if pos is None:
+            pos = tuple(pts[0])
+        last, path = tuple(pts[-1]), [tuple(pos)] + [tuple(p) for p in pts]
+        reached, tt, cur = (t if math.dist(pos, last) <= ARRIVE_3D else None), t, tuple(pos)
+        for q in path[1:]:
+            seg = math.dist(cur, q)
+            if reached is None:
+                n = max(1, int(seg / 10))
+                for j in range(1, n + 1):
+                    p = tuple(cur[x] + (q[x] - cur[x]) * j / n for x in range(3))
+                    if math.dist(p, last) <= ARRIVE_3D:
+                        reached = tt + seg * j / n / v
+                        break
+            tt += seg / v
+            cur = q
+        if reached is None:
+            reached = tt
+        fire = reached + (timer or 0.0)
+        if fire >= tt:
+            nxt, stood = last, fire - tt
+        else:                                           # still walking when the next step starts
+            rem, cur = (fire - t) * v, tuple(pos)
+            for q in path[1:]:
+                seg = math.dist(cur, q)
+                if rem <= seg:
+                    cur = tuple(cur[x] + (q[x] - cur[x]) * rem / max(seg, 1e-6) for x in range(3))
+                    break
+                rem, cur = rem - seg, q
+            nxt, stood = cur, 0.0
+        rows.append({'name': name, 'start': t, 'reached': reached, 'arrive': tt, 'next': fire, 'timer': timer, 'stood': stood, 'no_timer': reached - t})
+        t, pos = fire, nxt
+    return rows
+
+
+class Ground:
+    """nav.at() and nav.clearance() for many calls: the polygons of one mesh part and the mesh's open edges in buckets."""
+    CELL = 400.0
+
+    def __init__(self, nav, part):
+        self.nav, self.part = nav, part
+        self.b, self.w = collections.defaultdict(list), collections.defaultdict(list)
+        c = self.CELL
+        for i, bx in enumerate(nav.box):
+            if nav.ok[i] and nav.part[i] == part:
+                for gx in range(int(bx[0] // c), int(bx[1] // c) + 1):
+                    for gz in range(int(bx[2] // c), int(bx[3] // c) + 1):
+                        self.b[(gx, gz)].append(i)
+        for wl in nav.walls:
+            for gx in range(int(min(wl[0], wl[2]) // c), int(max(wl[0], wl[2]) // c) + 1):
+                for gz in range(int(min(wl[1], wl[3]) // c), int(max(wl[1], wl[3]) // c) + 1):
+                    self.w[(gx, gz)].append(wl)
+
+    def under(self, x, z):
+        """[(polygon, its height there)] of the part's polygons under (x, z)."""
+        nav = self.nav
+        return [(i, nav.height(i, x, z)) for i in self.b.get((int(x // self.CELL), int(z // self.CELL)), ())
+                if nav.box[i][0] <= x <= nav.box[i][1] and nav.box[i][2] <= z <= nav.box[i][3] and nav.inside(i, x, z)]
+
+    def at(self, x, y, z, dy=F.DY):
+        best = None
+        for i, h in self.under(x, z):
+            if abs(h - y) <= dy and (best is None or abs(h - y) < abs(best[1] - y)):
+                best = (i, h)
+        return best
+
+    def clearance(self, x, y, z, limit=400.0):
+        """As kl_fa_bots.Nav.clearance (walls of every part, within 150 of height y), up to `limit`."""
+        best, c = limit, self.CELL
+        for gx in range(int((x - limit) // c), int((x + limit) // c) + 1):
+            for gz in range(int((z - limit) // c), int((z + limit) // c) + 1):
+                for x0, z0, x1, z1, wy in self.w.get((gx, gz), ()):
+                    if abs(wy - y) > 150.0:
+                        continue
+                    dx, dz = x1 - x0, z1 - z0
+                    L = dx * dx + dz * dz
+                    t = 0.0 if L < 1e-9 else max(0.0, min(1.0, ((x - x0) * dx + (z - z0) * dz) / L))
+                    best = min(best, math.hypot(x - x0 - t * dx, z - z0 - t * dz))
+        return best
+
+
+class Walk:
+    """THE GROUND A WAY MAY BE LAID ON: the street's mesh part as a grid of GRID, inside `region` (x0, x1, z0, z1).
+    A cell is FREE when a polygon of the part lies under it that is `usable` and it is FOOT_KEEP clear of every
+    rectangle of `blocks` (the vehicles kl_fa_street parked on the road: the mesh has no hole under them, so the
+    game's pathfinder - and this module's stand-in path - walks through them; the van's lane; for the lanes the level
+    exit box) and POST_WALL from every place of `walls` on its floor (the wall posts of the police). OPEN: free, and so are its neighbours to both sides along x or along z (a gap two cells wide can be
+    walked: the bollards north of the median stand 120 apart); WIDE: all four are. A way costs NARROW times its
+    length over cells that are not wide, so it keeps a cell from the mesh's edge where it can, and DANGER times near
+    a place of `danger`.
+    leg(a, b) = the cheapest way over open cells, pulled straight: [a, .., b] with every piece a straight line over
+    open cells. All of it is this module's own reading of 'a way a bot can take'; what a build's legs really are is
+    tested again on the mesh itself (straight_clear, check())."""
+    NARROW = 3.0
+    NARROW_MIN = 33.0       # an open cell that is not wide lies at least this far from the mesh's edge: a gap of 111 (the
+                            # bollards north of the median: holes of 89 every 200) is walked. MEANT to shut the slit in the
+                            # median at z 1387..1473 - IT DOES NOT: the row of cells at z 1440 lies 33 from both edges and is
+                            # open, and three of the four X ways of the build (and record 1's of the first build) cross
+                            # the median THERE, not at the gap at z 0 the lane's line is drawn through: a way between two
+                            # holds is the cheapest on the grid, the line only chooses the holds. Left so: the mesh is
+                            # drawn in from what stands on it, so by the mesh both are walked, and the ways back east go
+                            # through bollard gaps of the same kind. (re/retomoto_bots_street.md 3.3; a bot standing at
+                            # (-2960, 1440) in a live run = the game does not walk it: raise this to 36)
+    DANGER = 4.0            # a way costs this many times its length within POST_PASS of a place of `danger` (a post of the
+                            # police): it goes round where the ground lets it (inside 1.6 m a bullet counts x 100: kl2 0x8c62e0)
+
+    def __init__(self, G, blocks=(), usable=None, step=GRID, region=None, danger=(), walls=()):
+        self.G, self.step, self.blocks = G, step, [tuple(b) for b in blocks]
+        self.cells, nav = {}, G.nav
+        wb = collections.defaultdict(list)              # the wall posts (places x, y, z) in buckets of 400
+        wr = POST_WALL + 0.75 * step                    # (a line over free cells runs up to 0.71 of a cell from their middles)
+        for q in walls:
+            for gx in range(int((q[0] - wr) // 400), int((q[0] + wr) // 400) + 1):
+                for gz in range(int((q[2] - wr) // 400), int((q[2] + wr) // 400) + 1):
+                    wb[(gx, gz)].append(q)
+        walled = lambda x, h, z: any(abs(q[1] - h) <= 260.0 and math.hypot(x - q[0], z - q[2]) < wr for q in wb.get((int(x // 400), int(z // 400)), ()))
+        for i, bx in enumerate(nav.box):
+            if not (nav.ok[i] and nav.part[i] == G.part) or (usable is not None and not usable(i)):
+                continue
+            if region is not None and (bx[1] < region[0] or bx[0] > region[1] or bx[3] < region[2] or bx[2] > region[3]):
+                continue
+            for ix in range(int(math.ceil(bx[0] / step)), int(math.floor(bx[1] / step)) + 1):
+                for iz in range(int(math.ceil(bx[2] / step)), int(math.floor(bx[3] / step)) + 1):
+                    x, z = ix * step, iz * step
+                    if region is not None and not (region[0] <= x <= region[1] and region[2] <= z <= region[3]):
+                        continue
+                    if nav.inside(i, x, z) and not self.blocked(x, z):
+                        h = nav.height(i, x, z)
+                        if walled(x, h, z):
+                            continue
+                        cur = self.cells.get((ix, iz))
+                        if cur is None or h < cur[0]:          # (two floors over one another: the lower one)
+                            self.cells[(ix, iz)] = (h, i)
+        near = lambda c, dx, dz: abs(self.cells.get((c[0] + dx, c[1] + dz), (1e9,))[0] - self.cells[c][0]) <= 50.0
+        self.wide = {c for c in self.cells if near(c, 1, 0) and near(c, -1, 0) and near(c, 0, 1) and near(c, 0, -1)}
+        self.open = set(self.wide)
+        for c in self.cells:
+            if c not in self.wide and ((near(c, 1, 0) and near(c, -1, 0)) or (near(c, 0, 1) and near(c, 0, -1))) \
+                    and G.clearance(c[0] * step, self.cells[c][0], c[1] * step, 80.0) >= self.NARROW_MIN:
+                self.open.add(c)
+        self.cost = {}
+        r = int(POST_PASS // step) + 1
+        for d in danger:
+            c0 = (int(round(d[0] / step)), int(round(d[2] / step)))
+            for dx in range(-r, r + 1):
+                for dz in range(-r, r + 1):
+                    c = (c0[0] + dx, c0[1] + dz)
+                    if c in self.cells and abs(self.cells[c][0] - d[1]) <= 260.0 and math.hypot(c[0] * step - d[0], c[1] * step - d[2]) <= POST_PASS:
+                        self.cost[c] = self.DANGER
+        self.comp, n = {}, 0                            # the open cells' connected parts (a planter's inside is one of its own)
+        for c0 in self.open:
+            if c0 in self.comp:
+                continue
+            self.comp[c0], todo = n, [c0]
+            while todo:
+                c = todo.pop()
+                for dx, dz in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    q = (c[0] + dx, c[1] + dz)
+                    if q in self.open and q not in self.comp and abs(self.cells[q][0] - self.cells[c][0]) <= 50.0:
+                        self.comp[q] = n; todo.append(q)
+            n += 1
+
+    def blocked(self, x, z, keep=FOOT_KEEP):
+        return any(b[0] - keep <= x <= b[1] + keep and b[2] - keep <= z <= b[3] + keep for b in self.blocks)
+
+    def cell(self, p):
+        return (int(round(p[0] / self.step)), int(round(p[2] / self.step)))
+
+    def snap(self, p, reach=6):
+        """The open cell nearest to place p (within reach cells, at about its height), or None."""
+        c0, best = self.cell(p), None
+        for dx in range(-reach, reach + 1):
+            for dz in range(-reach, reach + 1):
+                c = (c0[0] + dx, c0[1] + dz)
+                if c in self.open and abs(self.cells[c][0] - p[1]) <= 150.0:
+                    d = math.hypot(c[0] * self.step - p[0], c[1] * self.step - p[2])
+                    if best is None or d < best[0]:
+                        best = (d, c)
+        return best and best[1]
+
+    def point(self, c):
+        return (c[0] * self.step, self.cells[c][0], c[1] * self.step)
+
+    def clear(self, a, b):
+        """Is the straight line a -> b over free cells (a sample every 20, each within 120 of the line's height) - and,
+        but for its first and last 80, over WIDE ones? (So a line of any length keeps a cell from the mesh's edge, and
+        a narrow gap is walked in pieces of at most 160.)"""
+        d = math.dist(a[:3], b[:3])
+        n = max(1, int(d // 20))
+        for t in range(n + 1):
+            m = [a[i] + (b[i] - a[i]) * t / n for i in range(3)]
+            c = self.cell(m)
+            got = self.cells.get(c)
+            if got is None or abs(got[0] - m[1]) > 120.0 or self.blocked(m[0], m[2]):
+                return False
+            if c not in self.wide and min(d * t / n, d * (n - t) / n) > 80.0:
+                return False
+        return True
+
+    def cells_path(self, c0, c1, limit=60000):
+        """A* over the open cells from c0 to c1 -> [cell] or None."""
+        if c0 == c1:
+            return [c0]
+        s = self.step
+        hfun = lambda c: math.hypot(c[0] - c1[0], c[1] - c1[1]) * s
+        dist, prev, pq, done = {c0: 0.0}, {}, [(hfun(c0), 0.0, c0)], 0
+        while pq:
+            _f, d, c = heapq.heappop(pq)
+            if c == c1:
+                out = [c]
+                while c in prev:
+                    c = prev[c]; out.append(c)
+                return out[::-1]
+            if d > dist.get(c, 1e30):
+                continue
+            done += 1
+            if done > limit:
+                return None
+            h0 = self.cells[c][0]
+            for dx, dz in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)):
+                q = (c[0] + dx, c[1] + dz)
+                if q not in self.open or abs(self.cells[q][0] - h0) > 50.0:
+                    continue
+                if dx and dz and ((c[0] + dx, c[1]) not in self.open or (c[0], c[1] + dz) not in self.open):
+                    continue
+                nd = d + s * (1.41421356 if dx and dz else 1.0) * (1.0 if q in self.wide else self.NARROW) * self.cost.get(q, 1.0)
+                if nd < dist.get(q, 1e30):
+                    dist[q], prev[q] = nd, c
+                    heapq.heappush(pq, (nd + hfun(q), nd, q))
+        return None
+
+    def leg(self, a, b):
+        """A way a -> b (places x, y, z): ([a, turning points .., b], its length) or None."""
+        if self.clear(a, b):
+            return [tuple(a[:3]), tuple(b[:3])], math.dist(a[:3], b[:3])
+        c0, c1 = self.snap(a), self.snap(b)
+        if c0 is None or c1 is None or self.comp[c0] != self.comp[c1]:
+            return None
+        cs = self.cells_path(c0, c1)
+        if cs is None:
+            return None
+        pts = [tuple(a[:3])] + [self.point(c) for c in cs] + [tuple(b[:3])]
+        out, i = [pts[0]], 0
+        while i < len(pts) - 1:
+            j = len(pts) - 1
+            while j > i + 1 and not self.clear(pts[i], pts[j]):
+                j -= 1
+            out.append(pts[j]); i = j
+        return out, sum(math.dist(p, q) for p, q in zip(out, out[1:]))
+
+
+def straight_clear(G, blocks, a, b, keep=FOOT_KEEP - 10.0, dy=120.0, walls=(), wall=POST_WALL):
+    """THE TEST A BUILD'S LEG IS HELD TO (the plan and check()): the straight line a -> b stays on the mesh of the
+    street's part (a sample every 20, each within dy of the line's height), out of the van's lane, `keep` clear of
+    the vehicles parked on the road and `wall` from every wall post of `walls` [(squad, what, place)]. A straight
+    line that is all mesh is the way any pathfinder takes."""
+    n = max(1, int(math.dist(a[:3], b[:3]) // 20))
+    for t in range(n + 1):
+        m = [a[i] + (b[i] - a[i]) * t / n for i in range(3)]
+        if lane(m) or G.at(m[0], m[1], m[2], dy=dy) is None:
+            return False
+        if any(bx[0] - keep <= m[0] <= bx[1] + keep and bx[2] - keep <= m[2] <= bx[3] + keep for bx in blocks):
+            return False
+    return not walls or post_gap(walls, a, b)[0] >= wall
+
+
+class Line:
+    """A lane's line: points with the length run up to each; where(p) = (how far along it, how far to its side) for
+    the nearest point of it."""
+
+    def __init__(self, pts):
+        self.pts = [tuple(p[:3]) for p in pts]
+        self.run = [0.0]
+        for p, q in zip(self.pts, self.pts[1:]):
+            self.run.append(self.run[-1] + math.hypot(q[0] - p[0], q[2] - p[2]))
+        self.length = self.run[-1]
+
+    def where(self, p):
+        best = (1e18, 0.0)
+        for i, (a, b) in enumerate(zip(self.pts, self.pts[1:])):
+            dx, dz = b[0] - a[0], b[2] - a[2]
+            L = dx * dx + dz * dz
+            t = 0.0 if L < 1e-9 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[2] - a[2]) * dz) / L))
+            d = math.hypot(p[0] - a[0] - t * dx, p[2] - a[2] - t * dz)
+            if d < best[0]:
+                best = (d, self.run[i] + t * math.sqrt(L))
+        return best[1], best[0]
+
+    def at(self, s):
+        s = max(0.0, min(self.length, s))
+        for i in range(len(self.pts) - 1):
+            if s <= self.run[i + 1] or i == len(self.pts) - 2:
+                L = self.run[i + 1] - self.run[i]
+                t = 0.0 if L < 1e-9 else (s - self.run[i]) / L
+                a, b = self.pts[i], self.pts[i + 1]
+                return tuple(a[k] + (b[k] - a[k]) * t for k in range(3))
+
+    def heading(self, s):
+        a, b = self.at(s - 60.0), self.at(s + 60.0)
+        n = math.hypot(b[0] - a[0], b[2] - a[2]) or 1.0
+        return ((b[0] - a[0]) / n, (b[2] - a[2]) / n)
+
+
+def program_steps(items, key):
+    """A bot's program (lanes_plan: step / timer / fork items) along lane `key` -> [[name, [place ..], timer seconds
+    or None]] for walk_model()."""
+    out = []
+    for it in items:
+        if it['kind'] == 'step':
+            out.append([it['name'], [tuple(p) for p in it['places']], None])
+        elif it['kind'] == 'timer' and out:
+            out[-1][2] = float(it['seconds'])
+        elif it['kind'] == 'fork':
+            out += program_steps(next(w for w in it['ways'] if w['lane'] == key)['items'], key)
+    return out
+
+
+def parked(B):
+    """[(name, x0, x1, z0, z1)] of kl_fa_street's parked vehicles (COVER_PLACE) that stand on the road in THIS build."""
+    out = []
+    for (nm, x0, x1, z0, z1), path in zip(street.footprints(), street.COVER_PLACE):
+        hit = B.sc.resolve(R_ + path)
+        if len(hit) == 1 and hdist(B.at(hit[0]), ((x0 + x1) / 2, 0.0, (z0 + z1) / 2)) < 60.0:
+            out.append((nm, x0, x1, z0, z1))
+    return out
+
+
+STREET_WINDOW = (-6600.0, 7300.0, -9200.0, 13400.0)     # x0, x1, z0, z1: the lobby, the square and the road (not the bus terminal)
+
+
+def street_ground(B, nav, part, exits=(), danger=(), walls=()):
+    """-> (Ground, Walk, blocks) of the street's mesh part: the grid without the pedestrian bridge (polygons over the
+    road, y > 150 west of the lobby), without the parked vehicles and without the van's lane (lane()); with `exits`
+    (level exit box nodes) without those boxes too: a bot inside one calls the van; with `walls` (places) without
+    the ground within POST_WALL of each."""
+    G = Ground(nav, part)
+    blocks = [f[1:] for f in parked(B)]
+    # (... and without the polygons that are no planes: fitted heights off by more than WARP_WAY - the two southern
+    # bays of the square, 1.1 and 2.3 m, which open on Squad_InFront's cars. Since the timed way ends inside the
+    # building - its clock runs at V_SLOW - the lanes' own ways cross the square)
+    usable = lambda i: not (nav.mid[i][0] < 2400.0 and max(v[1] for v in nav.pv[i]) > 150.0) and warp(nav, i) <= WARP_WAY
+    k = FOOT_KEEP
+    more = [(van.LANE_X - street.VAN_CLEAR + k, van.LANE_X + street.VAN_CLEAR - k, van.WAIT_Z - LANE_SOUTH + k, 1e9)]
+    for e in exits:
+        s_ = B.box(e)
+        cs = [B.world(e, (sx * s_[0], 0.0, sz * s_[2])) for sx in (-1, 1) for sz in (-1, 1)]
+        more.append((min(c[0] for c in cs) + k, max(c[0] for c in cs) - k, min(c[2] for c in cs) + k - 60.0, max(c[2] for c in cs) - k))
+    return G, Walk(G, blocks + more, usable, region=STREET_WINDOW, danger=danger, walls=walls), blocks
+
+
+def lanes_plan(B, nav, S, st, opt, log=print):
+    """THE STREET IN LANES: the stations of street_plan()'s plan `st` between the lobby's EXITS_BANK box and the rally
+    laid anew - per bot the timed way out of the building, its lane(s), the rally, the level exit box and the place
+    beside the van's stop (each leg a straight line clear of the parked vehicles). st is rewritten: 'lanes' holds the
+    plan (per bot its program: the items Street.lane_nodes turns into nodes), 'stations' the same places in the old
+    shape (one row a station, a place a bot: kl_playtest walks them; a bot's row is its first lane)."""
+    sc, notes = B.sc, []
+    name = lambda k: sc.path[k][5:]
+    r1 = lambda p: [round(v, 1) for v in p[:3]]
+    _jp, jpos, _face = join_point(B)
+    part = nav.part[nav.at(jpos[0], jpos[1], jpos[2], lo=jpos[1] - 300.0, hi=jpos[1] + 100.0)[0]]
+    posts = street_posts(B)
+    walls = wall_posts(posts)
+    wall_q = [q for _t, _w, q in walls]
+    G, W, blocks = street_ground(B, nav, part, S['exits'], [q for _t, _w, q in posts], wall_q)
+    log('lanes: the street\'s mesh part as a grid of %d: %d free cells, %d open, %d with room on all sides; %d parked vehicle(s) of kl_fa_street on '
+        'the road (no hole in the mesh under them): %s' % (GRID, len(W.cells), len(W.open), len(W.wide), len(blocks),
+                                                          ', '.join(f[0].split('_')[-1] for f in parked(B)) or 'none'))
+    main = collections.Counter(W.comp.values()).most_common(1)[0][0]     # the ground the ways are laid on: the grid's largest connected part
+    exits = S['exits']
+    inbox = lambda q: bool(F.in_exit(B, exits, q))
+    post_d = lambda q: min([hdist(q, p) for _t, _w, p in posts if abs(p[1] - q[1]) <= 260.0] or [1e9])
+    covers = [c for c in cover_geom(B) if G.at(c['mid'][0], c['y'], c['mid'][2], dy=400.0) is not None
+              or any(G.at(c['mid'][0] + dx, c['y'], c['mid'][2] + dz, dy=400.0) is not None for dx, dz in ((260, 0), (-260, 0), (0, 260), (0, -260)))]
+    anchors = covers
+    log('lanes: %d cover boxes at the street part (%d with the origin over %d from their box\'s middle: a bus\'s end); %d posts of the police, %d of them '
+        'WALL posts (no way within %d: a start place, a place a behaviour names, a RunToCover point)'
+        % (len(covers), sum(1 for c in covers if c['off'] > COVER_OFF), COVER_OFF, len(posts), len(walls), POST_WALL))
+    _spots = {}
+
+    def spots(c):
+        """The hold places of cover box c: [(x, y, z, polygon, clearance, distance from the box's edge)]."""
+        if c['node'] not in _spots:
+            fp, out = c['fp'], []
+            for ix in range(int((fp[0] - SPOT[1]) // 40), int((fp[1] + SPOT[1]) // 40) + 2):
+                for iz in range(int((fp[2] - SPOT[1]) // 40), int((fp[3] + SPOT[1]) // 40) + 2):
+                    x, z = ix * 40.0, iz * 40.0
+                    d = fp_dist(fp, x, z)
+                    if not SPOT[0] <= d <= SPOT[1] or math.hypot(x - c['mid'][0], z - c['mid'][2]) > HOLD_COVER - 30.0:
+                        continue
+                    hit = G.at(x, c['y'], z, dy=150.0)
+                    if hit is None or warp(nav, hit[0]) > WARP or W.blocked(x, z) or lane((x, hit[1], z)):
+                        continue
+                    # (c must be the box NEAREST to the place: 'one bot a box' is counted by the box a hold is nearest to -
+                    # the first build had three squads round one sign of 1.7 m, each at a neighbour box's place: review S5)
+                    if any(o is not c and abs(o['y'] - c['y']) < 260.0 and fp_dist(o['fp'], x, z) < max(25.0, d) for o in covers):
+                        continue
+                    cl = G.clearance(x, hit[1], z)
+                    cell = cl >= HOLD_CLEAR and W.snap((x, hit[1], z), 3)
+                    if not cell or W.comp[cell] != main:    # (not on the ground the ways are laid on: inside a planter, behind a rail)
+                        continue
+                    out.append((x, hit[1], z, hit[0], cl, d))
+            _spots[c['node']] = out
+        return _spots[c['node']]
+
+    def place_of(xz, what):
+        """A point (x, z) of a table above as a place on the grid: the open cell nearest to it."""
+        hs = sorted(h for _i, h in G.under(xz[0], xz[1]) if h <= 700.0)
+        c = W.snap((xz[0], hs[0] if hs else 0.0, xz[1]), 8)
+        if c is None:
+            raise ValueError('lanes: %s (%d, %d) is not on open ground of the street part' % (what, xz[0], xz[1]))
+        return W.point(c)
+
+    def leg_ok(a, b, slack=LINE_SLACK):
+        """A way a -> b whose pieces are straight on the mesh and clear -> (points, length) or None."""
+        got = W.leg(a, b)
+        if got is None or got[1] > slack[0] * math.dist(a[:3], b[:3]) + slack[1]:
+            return None
+        if not all(straight_clear(G, blocks, p, q, walls=walls) for p, q in zip(got[0], got[0][1:])):
+            return None
+        return got
+
+    i_exit = next((i for i, x in enumerate(st['stations']) if x['kind'] == 'exit'), None)
+    i_rally = next((i for i, x in enumerate(st['stations']) if x['kind'] == 'rally'), None)
+    if i_exit is None or i_rally is None:
+        raise ValueError('lanes: the street plan has no EXITS_BANK place or no rally (--street-hold 0?): build with --no-lanes')
+    taken, held = {}, []                                # {cover node: [squad]}, [(squad, hold place)]
+    # one bot a box - but a box SHARE_LEN[0] long takes two and one SHARE_LEN[1] long three, HOLD_SEP apart (a car's
+    # middle box is 2 m, the square's low walls 6 m: run J1 had five of the seven in a row behind one such wall, a
+    # metre apart, of the game's own choosing)
+    room = box_room
+    free = lambda c, N: N in taken.get(c['node'], ()) or len(taken.get(c['node'], ())) < room(c)
+    take = lambda c, N: taken.setdefault(c['node'], []).append(N) if N not in taken.get(c['node'], ()) else None
+    apart = lambda q, N: all(n == N or hdist(q, o) >= STREET_SEP for n, o in held)
+    bots = collections.OrderedDict()
+    order = [N for N in (2, 7, 4, 5, 3, 6, 8) if N in F.BOTS]       # who chooses his covers first (kl_fa_bots_dyn.ORDER)
+
+    # ---- A. the timed way out of the building
+    # e0: a bot's place in the EXITS_BANK box (stage 2; the box lies across the lobby between the lift landing and the
+    # two ramps down, so every way out passes it) - the ramp of its side, the place with the most room. Bots share it:
+    # nobody stands there, the step that names it is 'reached' from where the hook puts them.
+    ek = S['triggers'].get('EXITS', [])[:1]
+    ec = [q for k in ek for q in F.box_places(B, nav, k, part, share=F.INSIDE) if flat(nav, q) and W.snap(q, 3) is not None]
+    ramp = {}
+    for r_, keep in (('n', lambda q: q[2] > jpos[2]), ('s', lambda q: q[2] <= jpos[2])):
+        c = [q for q in ec if keep(q)]
+        if not c:
+            raise ValueError('lanes: no place inside the EXITS_BANK box on the %s ramp of the lobby' % {'n': 'north', 's': 'south'}[r_])
+        ramp[r_] = max(c, key=lambda q: (min(G.clearance(*q[:3]), 150.0), -abs(q[0] - sum(x[0] for x in c) / len(c))))
+    for N in order:
+        e0 = ramp[RAMP[N]]
+        pts = [tuple(e0[:3])]
+        for v in BAYS[BAY[N]]:
+            q = place_of(v, 'a point of bay %s' % BAY[N])
+            got = W.leg(pts[-1], q)
+            if got is None:
+                raise ValueError('lanes: Squad#0%d: no way on the grid from (%d, %d, %d) to (%d, %d) of its bay %s' % (N, *pts[-1], q[0], q[2], BAY[N]))
+            pts += got[0][1:]
+        line = Line(pts)
+        near = [c for c in anchors if line.where(c['mid'])[1] <= CLOCK_REACH + 300.0]
+        cur, s_cur, timed = e0, 0.0, []
+        safe = float(opt.get('join_safe', JOIN_SAFE))
+        on_clock = lambda: STAGGER.get(N, 0.0) + CLOCK_START + sum(t['seconds'] for t in timed)
+        # THE CLOCK RUNS AT V_SLOW: a place's timer = its way at V_SLOW (+ CLOCK_PAUSE at a cover), so a bot that walks
+        # V_SLOW or faster is AT the place when the timer fires, the next step is 'reached' as it starts, and a timer
+        # is pending all the time. The timed way ends when the clock has run JOIN_SAFE (or at its bay's end); the rest
+        # of the bay's line is the first stretch of the bot's lane (bay_rest), walked by arrivals as every lane.
+        while line.length - s_cur > CLOCK_END and on_clock() < safe:
+            # the next place: a cover box's, within CALL_REACH of this one (so its step is 'reached' as it starts and
+            # its timer runs while the bot walks) and CLOCK_MIN further along; where there is none, a place on the way
+            cands = []
+            for c in near:
+                if not free(c, N):
+                    continue
+                for q in spots(c):
+                    s, d = line.where(q)
+                    if d > CLOCK_REACH or s < s_cur + CLOCK_MIN or math.dist(q[:3], cur[:3]) > CALL_REACH:
+                        continue
+                    if post_d(q) < POST_KEEP_ST or not apart(q, N) or inbox(q) or post_gap(walls, cur, q)[0] < POST_WALL:
+                        continue
+                    hd = line.heading(s)
+                    behind = (c['mid'][0] - q[0]) * hd[0] + (c['mid'][2] - q[2]) * hd[1] > 0.3 * hdist(c['mid'], q)
+                    cands.append((s + (0.0 if behind else -250.0) + min(q[4], F.CLEAR) - 0.5 * d, q, c))
+            pick = None
+            for _key, q, c in sorted(cands, key=lambda x: -x[0])[:12]:
+                way = W.leg(cur, q)
+                if way is not None and way[1] <= CALL_REACH * 1.5:
+                    pick = (q, c, way[1]); break
+            if pick is None:                            # no cover box in reach: a place on the way (as far on as may be), or beside it
+                s_try = s_cur + CALL_REACH - 100.0
+                while pick is None and s_try >= s_cur + 160.0:
+                    m, hd = line.at(s_try), line.heading(s_try)
+                    for off in (0.0, 80.0, -80.0, 160.0, -160.0, 240.0, -240.0):
+                        cell = W.snap((m[0] - hd[1] * off, m[1], m[2] + hd[0] * off), 1)
+                        q = cell and W.point(cell)
+                        if q and W.comp[cell] == main and math.dist(q, cur[:3]) <= CALL_REACH and warp(nav, W.cells[cell][1]) <= WARP_WAY \
+                                and G.clearance(*q) >= F.CLEAR and line.where(q)[0] >= s_cur + 120.0 and not inbox(q) and apart(q, N) \
+                                and post_gap(walls, cur, q)[0] >= POST_WALL:
+                            way = W.leg(cur, q)
+                            if way is not None and way[1] <= CALL_REACH * 1.5:
+                                pick = (q + (W.cells[cell][1], G.clearance(*q), 0.0), None, way[1]); break
+                    s_try -= 40.0
+            if pick is None:
+                raise ValueError('lanes: Squad#0%d: no next place on its timed way within %d of (%d, %d, %d), %d along it' % (N, CALL_REACH, *cur[:3], s_cur))
+            q, c, plen = pick
+            held.append((N, q))                         # (a place without a cover box too: no two bots are sent to one point)
+            if c is not None:
+                take(c, N)
+            timed.append({'place': r1(q), 'cover': c and name(c['node']), 'cover_at': c and r1(c['mid']), 'path': round(plen), 'from_the_last': round(math.dist(q[:3], cur[:3])),
+                          'from_a_post': round(post_d(q)), 'seconds': round(plen / V_SLOW + (CLOCK_PAUSE if c is not None else 0.2) + 0.05, 1)})
+            cur, s_cur = q, line.where(q)[0]
+            if len(timed) > 14:
+                raise ValueError('lanes: Squad#0%d: over 14 places on its timed way' % N)
+        bay_rest = [p for p, r_ in zip(line.pts, line.run) if r_ > s_cur + 80.0]     # the bay's line from the timed way's last place on
+        short = safe - on_clock()
+        at_cover = [t for t in timed if t['cover']] or timed
+        if short > 0:                                   # (the clock must run as long as a wait of the tower chain can still fire)
+            for t in at_cover:
+                t['seconds'] = round(t['seconds'] + short / len(at_cover) + 0.05, 1)
+        bots[N] = collections.OrderedDict(squad='Squad#0%d' % N, ramp=RAMP[N], bay=BAY[N], exit=r1(e0), start_seconds=round(STAGGER.get(N, 0.0) + CLOCK_START, 1),
+                                          timed=timed, timed_seconds=round(STAGGER.get(N, 0.0) + CLOCK_START + sum(t['seconds'] for t in timed), 1),
+                                          timed_path=round(sum(t['path'] for t in timed)), bay_rest=[r1(p) for p in bay_rest], lanes=collections.OrderedDict())
+        log('  Squad#0%d  %s ramp, timed way towards bay %s: %d places (%d at a cover box), %d of way, each %d..%d from the last; %.1f s on the clock at %d units / s '
+            '(%g s of it at the ramp); the last at (%d, %d, %d), %d of the bay\'s line still to walk'
+            % (N, {'n': 'north', 's': 'south'}[RAMP[N]], BAY[N], len(timed), sum(1 for t in timed if t['cover']),
+               bots[N]['timed_path'], min(t['from_the_last'] for t in timed), max(t['from_the_last'] for t in timed),
+               bots[N]['timed_seconds'], V_SLOW, bots[N]['start_seconds'], *timed[-1]['place'], line.length - s_cur))
+
+    # ---- D (first: the lanes end at it). The rally, the level exit box, the places beside the van's stop
+    side = 1.0 if st['lane_side'] == 'east' else -1.0
+    _G2, W2, _b2 = street_ground(B, nav, part, walls=wall_q)    # (the ground with the level exit box in it)
+    good = lambda q: flat(nav, q) and not W2.blocked(q[0], q[2]) and W2.snap(q, 3) is not None \
+        and (q[2] < st['lane_from_z'] or (q[0] - van.LANE_X) * side >= street.VAN_CLEAR)
+    anchor = tuple(st['stations'][i_rally]['places'][0])
+    c = [x for x in nav.around(anchor, 360.0, part) if good(x) and not inbox(x) and post_d(x) >= POST_KEEP_ST * 0.5]
+    rally = nav.spots(c, 7, F.SEP, ref=anchor)
+    if len(rally) < 7:
+        raise ValueError('lanes: only %d rally places round (%d, %d, %d) clear of the parked vehicles' % (len(rally), *anchor))
+    s0 = tuple(st['stop'])
+    ring = [q for q in nav.around(s0, STOP_RING[1], part, dy=120.0) if good(q) and STOP_RING[0] <= hdist(q, s0) <= STOP_RING[1]]
+    if not ring:
+        raise ValueError('lanes: no place %d..%d from the van\'s stop clear of the parked vehicles' % STOP_RING)
+    park0 = min(ring, key=lambda q: (hdist(q, s0), abs(q[2] - s0[2])))
+    park = nav.spots([q for q in ring if hdist(q, park0) <= 420.0], 7, F.SEP, ref=park0)
+    if len(park) < 7:
+        park = nav.spots([q for q in ring if hdist(q, park0) <= 420.0], 7, 80.0, ref=park0)
+    lev_k = next((k for k in exits if any(x.get('node') == name(k) for x in st['stations'])), exits[0])
+    lc = [q for q in F.box_places(B, nav, lev_k, part, share=EXIT_SHARE) if good(q) and post_d(q) >= POST_KEEP_ST * 0.5]
+    lc.sort(key=lambda q: hdist(q, anchor))
+    level = None
+    for ref in lc[:60]:                                 # the place inside the box nearest to the rally from which seven fit, each a straight way in
+        pick = nav.spots([q for q in lc if hdist(q, ref) <= 420.0], 7, F.SEP, ref=ref)
+        if len(pick) == 7 and all(straight_clear(G, blocks, r, q, walls=walls) for r, q in zip(rally, pick)):
+            level = pick; break
+    if level is None or len(park) < 7:
+        raise ValueError('lanes: no seven places inside the level exit box with a straight way from the rally, or beside the van\'s stop (%d)' % len(park))
+    tail = {}
+    for N in F.BOTS:
+        b = N - 2
+        got = W2.leg(level[b], park[b])
+        if got is not None and not all(straight_clear(G, blocks, p_, q_, walls=walls) for p_, q_ in zip(got[0], got[0][1:])):
+            got = None
+        if got is None:
+            raise ValueError('lanes: Squad#0%d: no clear way from its place in the level exit box (%d, %d, %d) to its place beside the van (%d, %d, %d)'
+                             % (N, *level[b][:3], *park[b][:3]))
+        tail[N] = got
+    log('lanes: rally round (%d, %d, %d); in the level exit box round (%d, %d, %d); beside the stop round (%d, %d, %d): the ways from box to stop %d..%d long, '
+        '%d..%d turning point(s) (round the parked vehicles)' % (*anchor, *level[0][:3], *park0[:3], min(t[1] for t in tail.values()), max(t[1] for t in tail.values()),
+                                                                min(len(t[0]) - 2 for t in tail.values()), max(len(t[0]) - 2 for t in tail.values())))
+
+    # ---- C. the lanes
+    table = {L['key']: L for L in LANES}
+    ends = {L['key']: place_of(L['end'], 'the end of lane %s' % L['key']) for L in LANES}
+    vias = {L['key']: [place_of(v, 'a point of lane %s' % L['key']) for v in L['via']] for L in LANES}
+    population = collections.Counter()
+    ways_drawn = []
+    for N in order:
+        me = bots[N]
+        start = tuple(me['timed'][-1]['place'])
+        for li, key in enumerate(DEAL[N]):
+            pts = [start]
+            chain_ = [tuple(p) for p in me['bay_rest']] + vias[key]
+            for a_, b_ in zip([start] + chain_, chain_ + [ends[key]]):
+                got = W.leg(a_, b_)
+                if got is None:
+                    raise ValueError('lanes: lane %s for Squad#0%d: no way on the grid from (%d, %d, %d) to (%d, %d, %d)' % (key, N, *a_[:3], *b_[:3]))
+                pts += got[0][1:]
+            line = Line(pts)
+            near = [c_ for c_ in anchors if line.where(c_['mid'])[1] <= LANE_REACH + 300.0]
+            cur, s_cur, holds, first, open_run = start, 0.0, [], True, 0
+            # (a lane's bound: its length over LANE_HOLDS + 1, at least BOUND_BEST - the far side is twice as long as
+            # this side, and a bot that stops as often on it comes a minute late)
+            best = max(BOUND_BEST, line.length / (LANE_HOLDS + 1.0))
+            secs = hold_timer(key, N)
+            while True:
+                lo, hi = s_cur + best * BOUND[0], s_cur + best * BOUND[1]
+                if lo > line.length - END_GAP:
+                    break
+                want = s_cur + best * (PHASE.get(N, 1.0) if first else 1.0)
+                pick = None
+                for reach in (hi, s_cur + best * BOUND_FAR):
+                    cands = []
+                    for c_ in near:
+                        if not free(c_, N):
+                            continue
+                        for q in spots(c_):
+                            s, d = line.where(q)
+                            if d > LANE_REACH or not lo <= s <= min(reach, line.length - END_GAP):
+                                continue
+                            if post_d(q) < POST_KEEP_ST or not apart(q, N) or inbox(q) or math.dist(q[:3], cur[:3]) < ARRIVE_3D + 100.0:
+                                continue
+                            hd = line.heading(s)
+                            behind = (c_['mid'][0] - q[0]) * hd[0] + (c_['mid'][2] - q[2]) * hd[1] > 0.3 * hdist(c_['mid'], q)
+                            cands.append((abs(s - want) + (0.0 if behind else 500.0) + (0.0 if q[4] >= F.CLEAR else 150.0) + 0.5 * d, s, q, c_))
+                    for _key, s, q, c_ in sorted(cands, key=lambda x: x[0])[:40]:
+                        got = leg_ok(cur, q)
+                        on = got and W.leg(q, line.at(min(s + 700.0, line.length)))     # (no hold in a dead end, behind the median)
+                        if on is not None and on[1] <= 1.6 * math.dist(q[:3], on[0][-1]) + 700.0:
+                            pick = (s, q, c_, got); break
+                    if pick:
+                        break
+                if pick is None:
+                    # no cover in reach: the bot walks on (a way place on the lane's line, no wait)
+                    q = W.snap(line.at(s_cur + best), 6)
+                    q = q and W.point(q)
+                    got = q and leg_ok(cur, q, (2.5, 800.0))
+                    if not got:
+                        raise ValueError('lanes: lane %s for Squad#0%d: no hold and no clear way on from (%d, %d, %d), %d along the lane' % (key, N, *cur[:3], s_cur))
+                    holds.append({'place': r1(q), 'cover': None, 'ways': [r1(p) for p in got[0][1:-1]], 'seconds': 0.0, 'path': round(got[1]), 'along': round(s_cur + best)})
+                    cur, s_cur, open_run = q, s_cur + best, open_run + 1
+                    continue
+                s_cur, q, c_, got = pick
+                take(c_, N); held.append((N, q))
+                holds.append({'place': r1(q), 'cover': name(c_['node']), 'cover_at': r1(c_['mid']), 'ways': [r1(p) for p in got[0][1:-1]],
+                              'seconds': secs, 'path': round(got[1]), 'along': round(s_cur), 'from_cover': round(q[5]), 'from_a_post': round(post_d(q))})
+                cur, first = q, False
+            # the lane's last piece: to its end place, and on to the bot's rally place (the last line into the rally is straight)
+            g1, g2 = leg_ok(cur, ends[key], (2.5, 800.0)), leg_ok(ends[key], rally[N - 2], (2.5, 800.0))
+            if g1 is None or g2 is None:
+                raise ValueError('lanes: lane %s for Squad#0%d: no clear way from its last hold (%d, %d, %d) to the lane\'s end or from there to the rally'
+                                 % (key, N, *cur[:3]))
+            end_ways = [r1(p) for p in g1[0][1:] + g2[0][1:-1]]
+            n_hold = sum(1 for h in holds if h['cover'])
+            walk_len = sum(h['path'] for h in holds) + g1[1] + g2[1]
+            me['lanes'][key] = collections.OrderedDict(
+                what=table[key]['what'], holds=holds, end_ways=end_ways, length=round(walk_len), n_holds=n_hold, open_stretches=open_run,
+                hold_seconds=round(sum(h['seconds'] for h in holds), 1))
+            population[key] += 1
+            ways_drawn.append({'bot': N - 1, 'squad': N, 'lane': key, 'main': li == 0,
+                               'pts': [me['exit']] + [t['place'] for t in me['timed']] + [p for h in holds for p in h['ways'] + [h['place']]] + end_ways + [r1(rally[N - 2])]})
+            log('  Squad#0%d  lane %s%s: %d holds at cover (a timer of %g s or more each: the walk in at %d units / s, %g s on a straight line, + a stand of %g s)%s, %d of way '
+                'from the timed way\'s end to the rally' % (N, key, ' (always)' if len(DEAL[N]) == 1 else ' (drawn, %d : %d)' % WEIGHTS if li == 0 else ' (the other draw)', n_hold,
+                                                           secs, V_SLOW, round(ARRIVE_3D / V_SLOW, 1), hold_stand(key, N),
+                                                           ', %d stretch(es) without a cover in reach' % open_run if open_run else '', walk_len))
+    for N in F.BOTS:
+        b = N - 2
+        bots[N]['rally'], bots[N]['level'], bots[N]['park'] = r1(rally[b]), r1(level[b]), r1(park[b])
+        bots[N]['tail_ways'] = [r1(p) for p in tail[N][0][1:-1]]
+        ways_drawn.append({'bot': N - 1, 'squad': N, 'lane': 'to the van', 'main': True, 'pts': [r1(rally[b])] + [r1(p) for p in tail[N][0]]})
+    if any(population[L['key']] == 0 for L in LANES):
+        raise ValueError('lanes: DEAL leaves a lane empty: %s' % dict(population))
+    always = collections.Counter(DEAL[N][0] for N in DEAL if len(DEAL[N]) == 1)
+    for L in LANES:
+        if not always[L['key']]:
+            notes.append('lane %s has no bot that always takes it: in some rounds it is empty' % L['key'])
+    # ---- the programs: what Street.lane_nodes writes, per bot, in the order it runs
+    hold_s = float(opt['street_hold'])
+    for N in F.BOTS:
+        me, items = bots[N], []
+        # (050 keeps its name - the JumpPoint names it: the bot's place in the EXITS_BANK box; then the timed way)
+        items.append({'kind': 'step', 'name': '050_DefendBehaviour_street', 'places': [me['exit']]})
+        items.append({'kind': 'timer', 'name': '050_Timer_out_start', 'seconds': me['start_seconds']})
+        for k, t in enumerate(me['timed']):
+            items.append({'kind': 'step', 'name': '051_DefendBehaviour_out_%02d' % (k + 1), 'places': [t['place']], 'timed': True})
+            items.append({'kind': 'timer', 'name': '051_Timer_out_%02d' % (k + 1), 'seconds': t['seconds']})
+        ways = []
+        for key in DEAL[N]:
+            pre, its, run = LANE_PRE[key], [], []
+            for i, h in enumerate(me['lanes'][key]['holds']):
+                run += h['ways'] + [h['place']]
+                if h['cover'] is None:                  # (a stretch without cover: its place is a way place of the next step)
+                    continue
+                while len(run) > F.STEP_MAX:
+                    its.append({'kind': 'step', 'name': '%s_DefendBehaviour_lane_%s_%02d_way%s' % (pre, key, i + 1, 'abcdefghijklmnopqrstuvwxyz'[len([x for x in its if ('_%02d_way' % (i + 1)) in x['name']])]),
+                                'places': run[:F.STEP_MAX]})
+                    run = run[F.STEP_MAX:]
+                its.append({'kind': 'step', 'name': '%s_DefendBehaviour_lane_%s_%02d' % (pre, key, i + 1), 'places': run, 'hold': True})
+                its.append({'kind': 'timer', 'name': '%s_Timer_lane_%s_%02d' % (pre, key, i + 1), 'seconds': h['seconds']})
+                run = []
+            run += me['lanes'][key]['end_ways']
+            n = 0
+            while run:
+                its.append({'kind': 'step', 'name': '%s_DefendBehaviour_lane_%s_in%s' % (pre, key, '' if not n else '_' + 'bcdefghijklmnopqrstuvwxyz'[n - 1]), 'places': run[:F.STEP_MAX]})
+                run, n = run[F.STEP_MAX:], n + 1
+            ways.append({'lane': key, 'items': its})
+        if len(ways) == 1:
+            items += ways[0]['items']
+        else:
+            items.append({'kind': 'fork', 'name': '060_RandomTrigger_lane', 'ways': [dict(w, weight=WEIGHTS[i]) for i, w in enumerate(ways)]})
+        items.append({'kind': 'step', 'name': '069_DefendBehaviour_rally', 'places': [me['rally']]})
+        if hold_s > 0:
+            items.append({'kind': 'timer', 'name': '070_Timer_rally', 'seconds': hold_s})
+        run, n = [me['level']] + me['tail_ways'] + [me['park']], 0
+        while run:
+            items.append({'kind': 'step', 'name': '%03d_DefendBehaviour_to_van' % (80 + n), 'places': run[:F.STEP_MAX]})
+            run, n = run[F.STEP_MAX:], n + 1
+        me['program'] = items
+        # A HOLD'S TIMER = its stand + the walk in at V_SLOW by the walk model (a timer that has fired before a slow
+        # bot is at the hold orders him on from the open: review S1). One pass serves: with every timer at least the
+        # walk in, the bot is AT the hold when the next step starts, whatever the timers before were.
+        timer_of = {}
+        def index(its):
+            for it in its:
+                if it['kind'] == 'timer':
+                    timer_of[it['name']] = it
+                elif it['kind'] == 'fork':
+                    for w_ in it['ways']:
+                        index(w_['items'])
+        index(items)
+        for key in DEAL[N]:
+            hs_plan = [h for h in me['lanes'][key]['holds'] if h['cover']]
+            rows_ = [r_ for r_ in walk_model(program_steps(items, key), V_SLOW) if LANE_TAG in r_['name'] and r_['timer'] is not None]
+            if len(rows_) != len(hs_plan):
+                raise ValueError('lanes: Squad#0%d lane %s: %d hold steps for %d holds' % (N, key, len(rows_), len(hs_plan)))
+            for r_, h in zip(rows_, hs_plan):
+                secs = max(hold_timer(key, N), round(r_['arrive'] - r_['reached'] + hold_stand(key, N) + 0.05, 1))
+                h['seconds'] = secs
+                h['walk_in_slow'] = round(r_['arrive'] - r_['reached'], 1)
+                timer_of[r_['name'].replace('_DefendBehaviour_lane_', '_Timer_lane_')]['seconds'] = secs
+            me['lanes'][key]['hold_seconds'] = round(sum(h['seconds'] for h in hs_plan), 1)
+        # THE PACE BY THE WALK MODEL (walk_model: a hold's timer starts ARRIVE_3D before the hold, so it is NOT added
+        # whole to the walk - the first note's table did that: review S7), at V_PLAN and at V_SLOW
+        for key in DEAL[N]:
+            pace = collections.OrderedDict()
+            for v in (V_PLAN, V_SLOW):
+                rows_ = walk_model(program_steps(items, key), v)
+                rl = next(r_ for r_ in rows_ if r_['name'] == '069_DefendBehaviour_rally')
+                hs_ = [r_ for r_ in rows_ if LANE_TAG in r_['name'] and r_['timer'] is not None]
+                pace[str(int(v))] = collections.OrderedDict(
+                    at_the_rally=round(rl['arrive'], 1), leaves_the_rally=round(rl['next'], 1),
+                    no_timer_on_the_timed_way=round(sum(r_['no_timer'] for r_ in rows_[1:] if TIMED_TAG in r_['name']), 1),
+                    stands_at_a_hold=[round(min(r_['stood'] for r_ in hs_), 1), round(max(r_['stood'] for r_ in hs_), 1)] if hs_ else None)
+            me['lanes'][key]['pace'] = pace
+            a_, b_ = pace[str(int(V_PLAN))], pace[str(int(V_SLOW))]
+            log('  Squad#0%d  lane %s by the walk model: at the rally %d s after its first street step at %d units / s (stands %s s at a hold), %d s at %d (stands %s s); '
+                'seconds of the timed way without a pending timer: %g / %g' % (N, key, a_['at_the_rally'], V_PLAN, '..'.join('%g' % x for x in a_['stands_at_a_hold'] or []) or '-',
+                                                                             b_['at_the_rally'], V_SLOW, '..'.join('%g' % x for x in b_['stands_at_a_hold'] or []) or '-',
+                                                                             a_['no_timer_on_the_timed_way'], b_['no_timer_on_the_timed_way']))
+    # ---- the old shape, for what reads it (kl_playtest walks a bot's row): a bot's first lane
+    rows = collections.OrderedDict()
+    for N in F.BOTS:
+        me = bots[N]
+        lane0 = me['lanes'][DEAL[N][0]]
+        rows[N] = [t['place'] for t in me['timed']] + [p for h in lane0['holds'] for p in h['ways'] + [h['place']]] + lane0['end_ways']
+    n_way = max(len(r) for r in rows.values())
+    stations = [dict(st['stations'][i_exit], places=[bots[N]['exit'] for N in F.BOTS], distinct_places=len({tuple(bots[N]['exit']) for N in F.BOTS}))]
+    for j in range(n_way):
+        stations.append({'kind': 'way', 'what': 'the timed way and the first lane of each bot, place %d (a bot with fewer: its last)' % (j + 1), 'node': None,
+                         'distinct_places': 7, 'places': [rows[N][min(j, len(rows[N]) - 1)] for N in F.BOTS]})
+    stations.append({'kind': 'rally', 'what': 'the rally place before the level exit box (hold %g s)' % hold_s, 'node': None, 'distinct_places': 7,
+                     'places': [bots[N]['rally'] for N in F.BOTS]})
+    stations.append({'kind': 'level', 'what': 'level exit %s (stage 3; a bot inside it calls the van: kl2 0x6cd8e0)' % name(lev_k), 'node': name(lev_k),
+                     'distinct_places': 7, 'places': [bots[N]['level'] for N in F.BOTS]})
+    for j in range(max(len(bots[N]['tail_ways']) for N in F.BOTS)):
+        stations.append({'kind': 'way', 'what': 'round the parked vehicles to the van\'s stop, place %d' % (j + 1), 'node': None, 'distinct_places': 7,
+                         'places': [(bots[N]['tail_ways'] + [bots[N]['park']])[min(j, len(bots[N]['tail_ways']))] for N in F.BOTS]})
+    stations.append({'kind': 'park', 'what': 'beside the van\'s stop, %d..%d from the boarding box, on the %s side of its lane' % (*STOP_RING, st['lane_side']),
+                     'node': None, 'distinct_places': 7, 'places': [bots[N]['park'] for N in F.BOTS]})
+    st['stations'] = stations
+    st['steps'] = [{'name': it['name'], 'kind': it['kind']} for it in bots[F.BOTS[0]]['program']]
+    # ---- the lanes as stations (for the pictures and the report)
+    lanes_out = []
+    for L in LANES:
+        hs = [(N, h) for N in F.BOTS if L['key'] in bots[N]['lanes'] for h in bots[N]['lanes'][L['key']]['holds'] if h['cover']]
+        lanes_out.append(collections.OrderedDict(
+            key=L['key'], what=L['what'], bots_always=[N for N in DEAL if DEAL[N] == (L['key'],)], bots_drawn=[N for N in DEAL if L['key'] in DEAL[N] and len(DEAL[N]) > 1],
+            holds=len(hs), boxes=len({h['cover'] for _n, h in hs}), x=[round(min(h['place'][0] for _n, h in hs)), round(max(h['place'][0] for _n, h in hs))] if hs else None,
+            z=[round(min(h['place'][2] for _n, h in hs)), round(max(h['place'][2] for _n, h in hs))] if hs else None,
+            from_a_post=[round(min(h['from_a_post'] for _n, h in hs)), round(max(h['from_a_post'] for _n, h in hs))] if hs else None,
+            stations=[{'n': i + 1, 'squad': n, 'places': [h['place']], 'cover_at': [h['cover_at']]} for i, (n, h) in enumerate(hs)]))
+        log('lanes: lane %s (%s): always Squad %s, drawn by %s; %d holds at %d cover boxes for those, x %s, z %s; nearest post of the police %s from a hold'
+            % (L['key'], L['what'], ' '.join('#0%d' % n for n in lanes_out[-1]['bots_always']) or '-', ' '.join('#0%d' % n for n in lanes_out[-1]['bots_drawn']) or '-',
+               lanes_out[-1]['holds'], lanes_out[-1]['boxes'], lanes_out[-1]['x'], lanes_out[-1]['z'], lanes_out[-1]['from_a_post']))
+    for n in notes:
+        log('  NOTE ' + n)
+    st['notes'] = st.get('notes', []) + notes
+    st['lanes'] = collections.OrderedDict(
+        deal={str(N): list(DEAL[N]) for N in F.BOTS}, bay={str(N): BAY[N] for N in F.BOTS}, weights=list(WEIGHTS), join_safe=float(opt.get('join_safe', JOIN_SAFE)),
+        v_plan=V_PLAN, v_slow=V_SLOW, post_wall=POST_WALL, wall_posts=len(walls), parked=[list(f) for f in parked(B)], lanes=lanes_out, ways=ways_drawn, bots=collections.OrderedDict((str(N), bots[N]) for N in F.BOTS))
+    return st
+
+
 SQ = lambda N, tail='': '%s%sSquad#0%d%s' % (R_, F.SQUAD, N, tail)
 LAST = '090_SquadModifier_tight_defense_van'
 
@@ -1244,6 +2288,8 @@ class Street:
             M.set(t, 'TriggerDelay2', {0: float(self.room['fallback']), 4: [R_ + GATE_NAME]})
         if st is None:
             return
+        if st.get('lanes'):
+            return self.lane_nodes(M, tops)
         for b, N in enumerate(F.BOTS):
             top = tops[b]
             if top.name != F.SQUAD + 'Squad#0%d' % N:
@@ -1269,6 +2315,67 @@ class Street:
             M.place(g, (0.0, 0.0, 0.0))
             M.set(g, 'SquadModifierBehaviour', {0: 'eLM_Leash', 9: 'eDM_Tight', 26: []})
             self.firsts.append(SQ(N, '\\' + chain[0]))
+
+    def lane_nodes(self, M, tops):
+        """THE STREET IN LANES (lanes_plan): every bot's program as nodes. A step = stock F07 Squad#02
+        020_DefendBehaviour_rout_merc_fight_left with its Pos boxes (the route form: field 1 = the places, the last
+        the place the bot defends), eDMS_NotSet - no sprint anywhere, as on the tower's way out; a timer = F07's
+        Timer_start_bots {seconds, 0.0, -1.0, 0, [next]}; the deal = F07 Squad#02 060_RandomTrigger_BeforeStreet
+        {0: 1, weights, one target list a weight}, the node kl_fa_bots_dyn clones for its forks."""
+        st, Sx, L = self.st, 'F07', self.st['lanes']
+        unit0 = M.unit                                  # (a RandomTrigger's weights are 16-bit fields: as kl_fa_bots_dyn.Maker)
+        M.unit = lambda old, v: [(0x08, struct.pack('<H', v))] if old[0][0] == 0x08 else unit0(old, v)
+        try:
+            for b, N in enumerate(F.BOTS):
+                top = tops[b]
+                if top.name != F.SQUAD + 'Squad#0%d' % N:
+                    raise ValueError('kl_fa_bots.make: squad %d is %s' % (N, top.name))
+                path = lambda nm, N=N: SQ(N, '\\' + nm)
+                have = {k.name.lower() for k in top.kids}
+
+                def emit(items, after, top=top, path=path, have=have):
+                    for i, it in enumerate(items):
+                        nxt = [path(items[i + 1]['name'])] if i + 1 < len(items) else list(after)
+                        if it['name'].lower() in have:
+                            raise ValueError('%s: two nodes named %s' % (top.name, it['name']))
+                        have.add(it['name'].lower())
+                        if it['kind'] == 'step':
+                            g = top.add(M.clone(Sx, SQ(2, '\\020_DefendBehaviour_rout_merc_fight_left'), it['name']))
+                            M.place(g, (0.0, 0.0, 0.0))
+                            refs = []
+                            for j, pl in enumerate(it['places']):
+                                box = g.add(M.clone(Sx, SQ(2, '\\020_DefendBehaviour_rout_merc_fight_left\\Pos#01'), 'Pos#%02d' % (j + 1)))
+                                M.place(box, pl)
+                                refs.append(path('%s\\Pos#%02d' % (it['name'], j + 1)))
+                            if not 1 <= len(refs) <= F.STEP_MAX:
+                                raise ValueError('%s: step %s has %d places' % (top.name, it['name'], len(refs)))
+                            M.set(g, 'DefendBehaviourRout', {0: '', 1: refs, 2: 1, 3: 0, 4: 'eDMS_NotSet', 5: 'eDF_NotSet', 6: '', 7: nxt, 8: 1, 9: 0})
+                        elif it['kind'] == 'timer':
+                            w = top.add(M.clone(Sx, R_ + F.SQUAD + 'Timer_start_bots', it['name']))
+                            M.place(w, (0.0, 0.0, 0.0))
+                            M.set(w, 'TriggerDelay2', {0: float(it['seconds']), 1: 0.0, 2: -1.0, 3: 0, 4: nxt})
+                        elif it['kind'] == 'fork':
+                            ways = it['ways']
+                            if not 2 <= len(ways) <= 4 or any(not w['items'] for w in ways) or not nxt:
+                                raise ValueError('%s: fork %s: %d ways' % (top.name, it['name'], len(ways)))
+                            r = top.add(M.clone(Sx, SQ(2, '\\060_RandomTrigger_BeforeStreet'), it['name']))
+                            M.place(r, (0.0, 0.0, 0.0))
+                            wt = [int(ways[j]['weight']) if j < len(ways) else 0 for j in range(4)]
+                            lists = [[path(ways[j]['items'][0]['name'])] if j < len(ways) else [] for j in range(4)]
+                            M.set(r, 'RandomTrigger', {0: 1, 1: wt[0], 2: wt[1], 3: wt[2], 4: wt[3], 5: lists[0], 6: lists[1], 7: lists[2], 8: lists[3]})
+                            for w in ways:
+                                emit(w['items'], nxt)
+                        else:
+                            raise ValueError('%s: item %s of kind %s' % (top.name, it['name'], it['kind']))
+
+                prog = L['bots'][str(N)]['program']
+                emit(prog, [path(LAST)])
+                g = top.add(M.clone(Sx, SQ(2, '\\100_SquadModifier_tight_defense_van'), LAST))
+                M.place(g, (0.0, 0.0, 0.0))
+                M.set(g, 'SquadModifierBehaviour', {0: 'eLM_Leash', 9: 'eDM_Tight', 26: []})
+                self.firsts.append(path(prog[0]['name']))
+        finally:
+            del M.unit
 
     def edit(self, Jn):
         if self.room:
@@ -1731,20 +2838,18 @@ def check(folder, log=print):
         # step of every squad and the hook moves the bots; nothing ends the tower chain. A wait of it that is ARMED at
         # that moment still fires - a TriggerActorsDead at the latest 30 s after it was armed (kl2 0x4afbbd / 0x8df00b),
         # the loot wait after its seconds - and sends 'AITrigger' to the next TOWER step, which has not run and so
-        # starts (0x4ebed0) for a bot that stands in the street: ASSUMED to replace its street step, which cannot be
-        # started again (field 8). The chain of 2026-10-11 morning had one such wait a bot (the loot table), a gates
-        # build has one more per gate. Not armed = not exposed: a bot that walks between two holds, and one at a hold
-        # whose men are dead (its wait fires at once). Said here with the number; what such a bot does is NOT
-        # established - no joined run with bots has been made at all.
+        # starts (0x4ebed0) for a bot that stands in the street. The chain of 2026-10-11 morning had one such wait a
+        # bot (the loot table), a gates build has one more per gate. Not armed = not exposed: a bot that walks between
+        # two holds, and one at a hold whose men are dead (its wait fires at once).
+        # WHAT IT DOES TO THE BOT IS KNOWN SINCE RUNS J1 / B1_DM09 (2026-10-11 11:10 / 11:28; re/retomoto_bots_street.md
+        # 1): it loses its street step and stands. B1: the two bots that stood exactly at their door holds at the join
+        # (records 2 and 5) stopped in the lobby and the square within 11 s and stood 40 s, until [Bots] BoardAll raised
+        # them; the four that were between two holds walked the street. J1: six of seven stopped within 16..42 s.
+        # The note is said below, behind the street's own rules: a street chain that runs by the clock for JOIN_SAFE
+        # (STREET_LANES) gives such a bot an order again.
         n_g = sorted({len(a) for a, _b in g_join.values()})
         n_l = sorted({len(b) for _a, b in g_join.values()})
         facts['join_waits'] = {'gates': n_g, 'loot': n_l}
-        if n_g and n_g[-1]:
-            note('THE JOIN: every bot has %s gate wait(s) and %s loot wait(s) in its tower chain. One that is armed when the human takes the join '
-                 'fires up to 30 s later and starts the next TOWER step for a bot the hook has moved to the street; a bot that walks, or holds '
-                 'where the men are dead, has none armed. What the late step does to that bot is NOT ESTABLISHED: one joined run with bots '
-                 'waiting at a gate is owed before this build goes on the tab (re/retomoto_bots_rooms.md 7, run J1; [Bots] BoardAll=1 raises a '
-                 'bot that stands once the van has been called)' % ('..'.join(str(x) for x in n_g), '..'.join(str(x) for x in n_l)))
         jpos = B.at(jp[0])
         j = ini.get('join', {})
         if j.get('name', '') not in JOIN_NAME or 'target' not in j or max(abs(a - b) for a, b in zip(vec(j['target']), jpos)) > float(j.get('tolerance', 8)):
@@ -1787,6 +2892,7 @@ def check(folder, log=print):
         if arr and apart < 80.0:
             fail('two [CrewJoin] places are %d apart' % apart)
         routes = collections.OrderedDict()
+        uneven = set()                                  # places of the timed way on a polygon between WARP and WARP_WAY
         enters_exit = S['triggers'].get('EXITS', [])
         jobs = [(x, 0) for x in sorted(tgt, key=lambda x: sc.names[sc.top[x]])]
         said, variant = set(), 0
@@ -1803,6 +2909,9 @@ def check(folder, log=print):
             for t in bad:
                 fail('%s (street): %s' % (sq, t))
             pts, low, ok = [], 1e9, True
+            places_of_step = collections.OrderedDict()
+            for jn in places:
+                places_of_step.setdefault(sc.parent[jn], []).append(jn)
             for jn in places:
                 p = B.at(jn)
                 h = nav.at(p[0], p[1], p[2], dy=15.0)
@@ -1810,8 +2919,13 @@ def check(folder, log=print):
                     fail('%s (street): %s at (%d, %d, %d) is not on a walkable polygon within 15 of the mesh\'s height' % (sq, name(jn), *p)); ok = False; continue
                 if nav.part[h[0]] != part:
                     fail('%s (street): %s at (%d, %d, %d) is not on the jump entry\'s mesh part' % (sq, name(jn), *p)); ok = False; continue
-                if warp(nav, h[0]) > WARP:
+                # (a place nobody stands at - a place of the timed way, a WAY place of a lane's step - may lie on the terrace)
+                par = sc.parent[jn]
+                timed_place = TIMED_TAG in sc.names[par] or (LANE_TAG in sc.names[par] and jn != places_of_step.get(par, [jn])[-1])
+                if warp(nav, h[0]) > (WARP_WAY if timed_place else WARP):
                     fail('%s (street): %s stands on a polygon whose fitted height is off by %d' % (sq, name(jn), warp(nav, h[0])))
+                elif warp(nav, h[0]) > WARP:
+                    uneven.add(tuple(round(v) for v in p))
                 c = nav.clearance(*p)
                 low = min(low, c)
                 if c < F.CLEAR_MIN:
@@ -1870,6 +2984,255 @@ def check(folder, log=print):
             log('street forks (a RandomTrigger between two steps): every branch walked and checked, in up to %d branch sets a squad' % max(branch_sets.values()))
         facts['street'] = routes
         facts['stop'] = [round(v) for v in stop]
+        if uneven:
+            note('%d place(s) of the way out of the building (the timed way, way places of a lane\'s first steps) stand on a polygon whose fitted height is '
+                 'off by %d..%d (the terrace before the door, one polygon of 8 x 13 m): places a bot walks through, nobody stands there' % (len(uneven), WARP, WARP_WAY))
+        # 3b. THE STREET IN LANES (STREET_LANES; re/retomoto_bots_street.md). Read from the build's nodes, every branch set:
+        #   a. THE CLOCK: behind the first street step (the EXITS_BANK place) the steps of the timed way: one place each,
+        #      within ARRIVE_3D - CLOCK_MARGIN of the place before - so each is 'reached' as it starts and its timer
+        #      runs while the bot walks - a timer behind each, the timers together at least JOIN_SAFE: as long as a wait
+        #      of the tower chain can still fire and take a bot's street step (runs J1 / B1)
+        #   b. THE DEAL: two lanes at least; every lane has a squad that always takes it (no lane is empty whatever is
+        #      drawn); one lane with a hold west of the road's middle and one without (some go to the other side, some
+        #      stay); a fork's ways are two different lanes with a weight each
+        #      ... and BY THE WALK MODEL (walk_model) at V_SLOW no second of the timed way is without a pending timer
+        #   c. HOLDS AT COVER: a lane's hold (the last place of a lane step a timer follows) is within SPOT[1] + 30 of
+        #      the box of a cover box, POST_KEEP_ST from every post of the police, ARRIVE_3D from the place the bot
+        #      waited at before (else its step is reached where he stands), out of the level exit box; its timer is
+        #      at least ARRIVE_3D / V_SLOW + STAND_MIN (the timer starts ARRIVE_3D before the hold: under that a bot at
+        #      V_SLOW is ordered on before he has stood)
+        #   d. NO TWO BOTS ON ONE HOLD: two squads' holds - of any lane either may draw - are STREET_SEP apart, and the
+        #      cover box a hold is NEAREST to has no more squads at it than box_room() gives it
+        #   g. NO LEG AT A POLICE POST: no leg of the street chain - from its first place to the place beside the van,
+        #      every branch set - comes within POST_WALL of a wall post (wall_posts(): point-blank is 160, kl2 0x8c62e0)
+        #   e. A LANE'S WAY STAYS ON THE MESH: from the timed way's last place to the place beside the van every leg is
+        #      a straight line on the street's mesh part, clear of the parked vehicles and of the van's lane
+        #   f. no place inside the level exit box before the rally's timer, and no leg through it (the old chain's rule
+        #      took the chain's FIRST wait for the rally; here the rally is found by its name)
+        Gs = Ground(nav, part)
+        vblocks = [f[1:] for f in parked(B)]
+        vnames = [f[0] for f in parked(B)]
+        cg = cover_geom(B)
+        sposts = street_posts(B, e_squads)
+        swalls = wall_posts(sposts)
+        post_least = [1e9, None]                        # the nearest any leg comes to a wall post
+        cg_of = {c['node']: c for c in cg}
+        near_posts, pace_f = [], collections.OrderedDict()
+        rand_v = {k: v for k, _i, v in kl_fa.controllers(sc, 'RandomTrigger') if k in mine}
+        lanes_f, sq_f, all_holds = collections.OrderedDict(), collections.OrderedDict(), []
+        n_lane_squads = 0
+        for x in sorted(tgt, key=lambda x: sc.names[sc.top[x]]):
+            sq = sc.names[sc.top[x]]
+            forks[0] = 1
+            sets = [items(x, 0)]
+            sets += [items(x, v_) for v_ in range(1, forks[0])]
+            if not any(LANE_TAG in sc.names[k] for its in sets for k, _cn, _v in its):
+                continue
+            n_lane_squads += 1
+            f_sq = sq_f.setdefault(sq[-2:], collections.OrderedDict(lanes=[], timed_places=0, clock_seconds=0.0, holds={}, seconds={}))
+            keys_of = []
+            for vi, its in enumerate(sets):
+                # the chain as (step name, [places]) and what follows each step
+                steps = [(i, sc.names[k], [B.at(j) for s_ in v[1] for j in res(s_)] + [B.at(j) for j in (res(v[0]) if v[0] else [])])
+                         for i, (k, cn, v) in enumerate(its) if cn == 'DefendBehaviourRout']
+                timer_after = lambda i: (lambda nx: nx[2][0] if nx and nx[1] == 'TriggerDelay2' else None)(its[i + 1] if i + 1 < len(its) else None)
+                key_of = lambda nm: nm.split(LANE_TAG)[1][:1] if LANE_TAG in nm else None
+                keys = [k_ for k_ in dict.fromkeys(key_of(nm) for _i, nm, _p in steps) if k_]
+                keys_of.append(keys)
+                if len(keys) != 1:
+                    fail('%s: branch set %d of its street chain walks %d lanes (%s): a way of the deal is one lane' % (sq, vi + 1, len(keys), ' '.join(keys) or 'none'))
+                    continue
+                key = keys[0]
+                # a. the clock
+                if vi == 0:
+                    clock, prev, n_t, bad = 0.0, None, 0, False
+                    for i, nm, pl in steps:
+                        first, timed = i == steps[0][0], TIMED_TAG in nm
+                        if not (first or timed):
+                            break
+                        t = timer_after(i)
+                        if len(pl) != 1 or t is None:
+                            fail('%s: %s of the timed way has %d places and %s behind it (wanted: one place, a timer)' % (sq, nm, len(pl), 'a timer' if t is not None else 'no timer'))
+                            bad = True; break
+                        if prev is not None and math.dist(pl[0], prev) > ARRIVE_3D - CLOCK_MARGIN:
+                            fail('%s: %s of the timed way lies %d (3D) from the place before: over %d its step is not \'reached\' as it starts (kl2 0x686c4c: within '
+                                 '%d), no timer runs while the bot walks the bound, and a bot whose street step a late wait of the tower chain has taken '
+                                 'stands for good (runs J1 / B1)' % (sq, nm, math.dist(pl[0], prev), ARRIVE_3D - CLOCK_MARGIN, ARRIVE_3D))
+                        clock, prev, n_t = clock + t, pl[0], n_t + timed
+                    f_sq['timed_places'], f_sq['clock_seconds'] = n_t, round(clock, 1)
+                    if not bad and n_t:
+                        way_t = [(nm, pl, timer_after(i)) for i, nm, pl in steps if i == steps[0][0] or TIMED_TAG in nm]
+                        gap = {v_: round(sum(r_['no_timer'] for r_ in walk_model(way_t, v_)[1:]), 1) for v_ in (V_PLAN, V_SLOW, 120.0, 100.0)}
+                        f_sq['no_timer_by_speed'] = {str(int(v_)): g_ for v_, g_ in gap.items()}
+                        if gap[V_SLOW] > 0.05:
+                            fail('%s: by the walk model a bot at %d units / s is %.1f s of its timed way without a pending timer (a step that is not '
+                                 '\'reached\' as it starts: the clock is faster than he walks): a wait of the tower chain that fires then takes his street '
+                                 'step for good' % (sq, V_SLOW, gap[V_SLOW]))
+                    if not bad and (n_t == 0 or clock < JOIN_SAFE - 0.05):
+                        fail('%s: the timed way out of the building runs %.1f s on %d places: under %g s a wait of the tower chain that was armed at the join '
+                             'can still fire AFTER it and take the bot\'s street step for good' % (sq, clock, n_t, JOIN_SAFE))
+                # c. the holds, e. the legs, f. the level exit box
+                seq = [(nm, p_, i) for i, nm, pl in steps for p_ in pl]
+                i_rally = next((i for i, (k, cn, _v) in enumerate(its) if cn == 'TriggerDelay2' and 'Timer_rally' in sc.names[k]), None)
+                i_lane0 = next((n for n, (nm, _p, _i) in enumerate(seq) if LANE_TAG in nm), len(seq))
+                wait_at = None                          # the place the bot last waited at (a timer ran there)
+                holds_n, hold_s = 0, 0.0
+                for n, (nm, p_, i) in enumerate(seq):
+                    if i_rally is not None and i < i_rally and F.in_exit(B, S['exits'], p_):
+                        fail('%s: %s at (%d, %d, %d) is inside the level exit box BEFORE the rally: the van is called before the squad has gathered' % (sq, nm, *p_))
+                    hit = [vn for vn, bx in zip(vnames, vblocks) if bx[0] - 20.0 <= p_[0] <= bx[1] + 20.0 and bx[2] - 20.0 <= p_[2] <= bx[3] + 20.0]
+                    if hit:
+                        fail('%s: %s at (%d, %d, %d) stands in the footprint of %s, a vehicle kl_fa_street parked on the road' % (sq, nm, *p_, hit[0]))
+                    last_of_step = n + 1 == len(seq) or seq[n + 1][2] != i
+                    t = timer_after(i) if last_of_step else None
+                    if n >= 1:
+                        gp = post_gap(swalls, seq[n - 1][1], p_)
+                        if gp[0] < post_least[0]:
+                            post_least = [gp[0], '%s lane %s, %s: %s %s at (%d, %d)' % (sq[-8:], key, nm, sc.names[gp[1][0]].split('!')[-1], gp[1][1], gp[1][2][0], gp[1][2][2])]
+                        if gp[0] < POST_WALL - 5.0:
+                            near_posts.append((gp[0], sq, key, nm))
+                            fail('%s: lane %s: the leg from (%d, %d, %d) to %s at (%d, %d, %d) passes %d from a post of the police (%s, %s at (%d, %d)): '
+                                 'under %d a way is at point-blank range of a man posted there (160: kl2 0x8c62e0 - 100 bullets a burst step)'
+                                 % (sq, key, *seq[n - 1][1], nm, *p_, gp[0], sc.names[gp[1][0]].split('!')[-1], gp[1][1], gp[1][2][0], gp[1][2][2], POST_WALL))
+                    if n >= max(1, i_lane0) and not straight_clear(Gs, vblocks, seq[n - 1][1], p_):
+                        fail('%s: lane %s: the leg from (%d, %d, %d) to %s at (%d, %d, %d) is no straight line on the street\'s mesh, clear of the parked '
+                             'vehicles and of the van\'s lane: where the bot walks there is not known' % (sq, key, *seq[n - 1][1], nm, *p_))
+                    if LANE_TAG in nm and t is not None and 'Timer_lane' in sc.names[its[i + 1][0]]:
+                        holds_n, hold_s = holds_n + 1, hold_s + t
+                        d_box = min([(math.hypot(max(c['fp'][0] - p_[0], 0.0, p_[0] - c['fp'][1]), max(c['fp'][2] - p_[2], 0.0, p_[2] - c['fp'][3])), c['node'])
+                                     for c in cg if abs(c['y'] - p_[1]) <= 260.0] or [(1e9, None)])
+                        if d_box[0] > SPOT[1] + 30.0:
+                            fail('%s: lane %s: its hold %s at (%d, %d, %d) is %d from the box of the nearest cover box (wanted within %d): it would wait '
+                                 'standing in the open' % (sq, key, nm, *p_, d_box[0], SPOT[1] + 30.0))
+                        d_post = min([(hdist(p_, q), sc.names[t_].split('!')[-1], w_) for t_, w_, q in sposts if abs(q[1] - p_[1]) <= 260.0] or [(1e9, '', '')])
+                        if d_post[0] < POST_KEEP_ST - 20.0:
+                            fail('%s: lane %s: its hold %s at (%d, %d, %d) is %d from a post of the police (%s, %s): wanted %d' % (sq, key, nm, *p_, d_post[0], d_post[1], d_post[2], POST_KEEP_ST))
+                        if t < ARRIVE_3D / V_SLOW + STAND_MIN - 0.05:
+                            fail('%s: lane %s: its hold %s has a timer of %g s: the timer starts %d before the hold, so under %.1f s (%d at %d units / s + '
+                                 '%g s) a slow bot is ordered on before he has stood there' % (sq, key, nm, t, ARRIVE_3D, ARRIVE_3D / V_SLOW + STAND_MIN, ARRIVE_3D, V_SLOW, STAND_MIN))
+                        if wait_at is not None and math.dist(p_, wait_at) < ARRIVE_3D:
+                            fail('%s: lane %s: its hold %s lies %d (3D) from the place the bot waited at before: within %d the step to it is \'reached\' where he '
+                                 'stands and its timer runs out before he is there' % (sq, key, nm, math.dist(p_, wait_at), ARRIVE_3D))
+                        all_holds.append((sq, key, nm, p_, d_box[1]))
+                        L_ = lanes_f.setdefault(key, {'always': set(), 'drawn': set(), 'holds': [], 'boxes': set()})
+                        L_['holds'].append(p_); L_['boxes'].add(d_box[1])
+                    if t is not None:
+                        wait_at = p_
+                    if its[i][2][4] == 'eDMS_Sprint' and LANE_TAG in nm:
+                        note('%s: lane %s: step %s sprints (a sprinting bot was seen to run past its enemies; the old chain\'s five were dead 40..49 s after the join)' % (sq, key, nm))
+                call = F.first_exit_entry(B, nav, S['exits'], [p_ for _nm, p_, _i in seq]) if S['exits'] else None
+                n_before = sum(1 for _nm, _p, i in seq if i_rally is not None and i < i_rally)
+                if i_rally is None:
+                    fail('%s: its street chain has no 070_Timer_rally: nothing holds the squad before the level exit box' % sq)
+                elif call and call[1] < n_before:
+                    fail('%s: lane %s: the stand-in path is inside the level exit box on the way to place %d of the %d before the rally' % (sq, key, call[1] + 1, n_before))
+                f_sq['holds'][key], f_sq['seconds'][key] = holds_n, round(hold_s, 1)
+                if holds_n < LANE_MIN_HOLDS:
+                    fail('%s: lane %s: %d hold(s) at cover on its whole way (wanted %d at least): it walks the street without a stop, ahead of the others, '
+                         'the first bot in every wake box - run J1\'s record 5, alone on the east pavement, dead 37.7 s after the join' % (sq, key, holds_n, LANE_MIN_HOLDS))
+                # the pace by the walk model (a NOTE's numbers, no rule)
+                way_all = [(nm, pl, timer_after(i)) for i, nm, pl in steps]
+                pr = collections.OrderedDict()
+                for v_ in (V_PLAN, V_SLOW):
+                    rows_ = walk_model(way_all, v_)
+                    rl = [r_ for r_ in rows_ if 'DefendBehaviour_rally' in r_['name']]
+                    hs_ = [r_['stood'] for r_ in rows_ if LANE_TAG in r_['name'] and r_['timer'] is not None]
+                    if v_ == V_SLOW:
+                        for r_ in rows_:
+                            if LANE_TAG in r_['name'] and r_['timer'] is not None and r_['stood'] < STAND_MIN - 0.15:
+                                fail('%s: lane %s: by the walk model a bot at %d units / s stands %.1f s at its hold %s (timer %g s, %.1f s of them the walk in '
+                                     'through the step\'s way places): under %g s he is ordered on as he arrives, or before'
+                                     % (sq, key, V_SLOW, r_['stood'], r_['name'], r_['timer'], r_['arrive'] - r_['reached'], STAND_MIN))
+                    pr[str(int(v_))] = {'at_the_rally': round(rl[0]['arrive'], 1) if rl else None, 'stands': [round(min(hs_), 1), round(max(hs_), 1)] if hs_ else None}
+                pace_f.setdefault(sq[-2:], collections.OrderedDict())[key] = pr
+                lanes_f.setdefault(key, {'always': set(), 'drawn': set(), 'holds': [], 'boxes': set()})
+            flat_keys = [k_ for ks in keys_of for k_ in ks]
+            f_sq['lanes'] = flat_keys
+            if len(sets) == 1 and flat_keys:
+                lanes_f[flat_keys[0]]['always'].add(sq[-2:])
+            else:
+                for k_ in flat_keys:
+                    lanes_f[k_]['drawn'].add(sq[-2:])
+                if len(set(flat_keys)) != len(flat_keys):
+                    fail('%s: the deal draws between %s: two ways into one lane are no draw' % (sq, ' '.join(flat_keys)))
+            for k, v in rand_v.items():
+                if sc.top[k] == sc.top[x] and 'RandomTrigger_lane' in sc.names[k]:
+                    ws = [w for w, lst in zip(v[1:5], v[5:9]) if w and lst]
+                    if v[0] != 1 or len(ws) != len(sets) or any(bool(w) != bool(lst) or len(lst) > 1 for w, lst in zip(v[1:5], v[5:9])):
+                        fail('%s: %s: field 0 %s, weights %s for %d lanes (stock: 1; one target for every weight that is not 0)' % (sq, sc.names[k], v[0], list(v[1:5]), len(sets)))
+        if not n_lane_squads:
+            note('NO LANES: the street chain is one file down the east pavement for all seven (a build made with --no-lanes, or before 2026-10-11 '
+                 'afternoon; runs J0 / J1 / B1_DM09)')
+        else:
+            if n_lane_squads != len(allies):
+                fail('%d of %d squads have a street chain in lanes' % (n_lane_squads, len(allies)))
+            if len(lanes_f) < 2:
+                fail('the street has %d lane(s): nobody spreads' % len(lanes_f))
+            for key, L_ in lanes_f.items():
+                if not L_['always']:
+                    fail('lane %s has no squad that always takes it (drawn by %s): in some rounds it is empty' % (key, ' '.join(sorted(L_['drawn'])) or 'nobody'))
+            west = [key for key, L_ in lanes_f.items() if any(h[0] < ROAD_MID for h in L_['holds'])]
+            if not west or len(west) == len(lanes_f):
+                fail('%s lane has a hold west of the road\'s middle (x %d): %s' % ('no' if not west else 'every', ROAD_MID,
+                                                                                  'nobody goes to the other side' if not west else 'nobody stays on this side'))
+            clash = 0
+            for a_ in range(len(all_holds)):
+                for b_ in range(a_ + 1, len(all_holds)):
+                    u, w = all_holds[a_], all_holds[b_]
+                    if u[0] != w[0] and hdist(u[3], w[3]) < STREET_SEP - 10.0 and abs(u[3][1] - w[3][1]) < 150.0:
+                        clash += 1
+                        if clash <= 3:
+                            fail('%s (lane %s, %s) and %s (lane %s, %s) hold %d apart at (%d, %d, %d): two bots on one hold (wanted %d)'
+                                 % (u[0][-8:], u[1], u[2], w[0][-8:], w[1], w[2], hdist(u[3], w[3]), *u[3], STREET_SEP))
+            by_box = collections.defaultdict(set)
+            for sq_, key_, nm_, p_, node_ in all_holds:
+                if node_ is not None:
+                    by_box[node_].add(sq_)
+            for node_, sqs in sorted(by_box.items()):
+                if len(sqs) > box_room(cg_of[node_]):
+                    c_ = cg_of[node_]
+                    fail('cover box %s (%d x %d at (%d, %d)) is the nearest box of holds of %d squads (%s): a box of that length takes %d (two bots at one '
+                         'small box: one of them stands on its open side)' % (sc.names[node_], c_['fp'][1] - c_['fp'][0], c_['fp'][3] - c_['fp'][2], c_['mid'][0], c_['mid'][2],
+                                                                           len(sqs), ' '.join(sorted(x[-8:] for x in sqs)), box_room(c_)))
+            facts['lane_pace'] = pace_f
+            facts['nearest_leg_to_a_post'] = [round(post_least[0]), post_least[1]]
+            note('NO LEG AT A POLICE POST: the nearest any leg of the street chain (every branch set, straight lines between its places) comes to one of the %d '
+                 'posts of the police - start places, places their behaviours name, RunToCover points - is %d (%s); the rule is %d, point-blank is 160. What the '
+                 'game\'s pathfinder makes of a leg is not this straight line (it lays its own path on the mesh)' % (len(swalls), post_least[0], post_least[1], POST_WALL))
+            facts['wall_posts'] = len(swalls)
+            rs = [pr_[str(int(V_PLAN))]['at_the_rally'] for d_ in pace_f.values() for pr_ in d_.values() if pr_[str(int(V_PLAN))]['at_the_rally'] is not None]
+            rs2 = [pr_[str(int(V_SLOW))]['at_the_rally'] for d_ in pace_f.values() for pr_ in d_.values() if pr_[str(int(V_SLOW))]['at_the_rally'] is not None]
+            if rs and rs2:
+                note('THE PACE by the walk model (a step is \'reached\' %d before its place, a hold\'s timer starts then; NOT SEEN IN THE GAME): the bots are at the '
+                     'rally %d..%d s after their first street step at %d units / s, %d..%d s at %d; a human who is at the van before that leaves them to the '
+                     'hook ([Bots] FollowOut calls them when HE has stage 3; FollowOutHold lets the van wait for them)'
+                     % (ARRIVE_3D, min(rs), max(rs), V_PLAN, min(rs2), max(rs2), V_SLOW))
+            facts['lanes'] = collections.OrderedDict(
+                (key, collections.OrderedDict(always=sorted(L_['always']), drawn=sorted(L_['drawn']), holds=len(L_['holds']), cover_boxes=len(L_['boxes'] - {None}),
+                                              x=[round(min(h[0] for h in L_['holds'])), round(max(h[0] for h in L_['holds']))] if L_['holds'] else None,
+                                              z=[round(min(h[2] for h in L_['holds'])), round(max(h[2] for h in L_['holds']))] if L_['holds'] else None))
+                for key, L_ in lanes_f.items())
+            facts['lane_squads'] = sq_f
+            facts['parked_vehicles'] = vnames
+            # the first step against where the hook puts the bots: reached at once only within ARRIVE_3D
+            e0s = {sq_: B.at([j for s_ in ctrl_of[x_][1][1] for j in res(s_)][0]) for x_ in tgt for sq_ in [sc.names[sc.top[x_]]]}
+            ds = [math.dist(a_, e_) for a_ in arr for e_ in e0s.values()]
+            facts['crew_place_to_first_place'] = [round(min(ds)), round(max(ds))] if ds else None
+            if ds and max(ds) > ARRIVE_3D:
+                note('the first street step\'s place (in the EXITS_BANK box, on a ramp of the lobby) is %d..%d (3D) from the [CrewJoin] places: over %d a bot '
+                     'the hook puts on the far side of the lift landing has to walk up to %d before that step is \'reached\' and the clock starts'
+                     % (min(ds), max(ds), ARRIVE_3D, max(ds) - ARRIVE_3D))
+        clock = min([f_['clock_seconds'] for f_ in sq_f.values()] or [0.0])
+        if n_g and (n_g[-1] or n_l[-1]):
+            note('THE JOIN: every bot has %s gate wait(s) and %s loot wait(s) in its tower chain. One that is armed when the human takes the join fires '
+                 'up to 30 s later and starts the next TOWER step for a bot the hook has moved to the street: that bot LOSES ITS STREET STEP (runs '
+                 'J1 / B1_DM09: the bots that stood at a gate with living men at the join stopped ADVANCING within 11..26 s - they move about where they are, none goes on). %s'
+                 % ('..'.join(str(x) for x in n_g), '..'.join(str(x) for x in n_l),
+                    'This build\'s street chain runs by the clock for its first %.1f s (a timer is pending while the bot walks; no wait can be armed after '
+                    'the join, so none fires later than %g s after it): the next timer orders such a bot on. NOT SEEN IN THE GAME' % (clock, JOIN_SAFE - 1.0)
+                    if n_lane_squads and clock >= JOIN_SAFE - 0.05 else
+                    'This build\'s street chain goes on only when the bot ARRIVES somewhere: nothing orders such a bot again but the hook ([Bots] '
+                    'BoardAll once the van waits, FollowOut once the human has stage 3)'))
     facts['big'] = F.sizes(folder)
     out.sort(key=lambda x: x[0] != 'FAIL')
     for sev, text in out:
@@ -1890,10 +3253,59 @@ def check(folder, log=print):
                   '; no way round %s' % ', '.join(f_['no_way_round']) if f_['no_way_round'] else '',
                   ', '.join('%s %d of %d' % (n_.replace('Atrium_', '').replace('_Squad_01', ''), s_['straight_line_on_the_mesh'], s_['posts'])
                             for n_, s_ in f_['sight'].items())) if 'nearest_post' in f_ else ''))
-    log('RESULT (kl_fa_bots_rt): %s (%d FAIL, %d NOTE); start delay %s s after a blast at %s s; %d gate(s) on the tower\'s way out; jump list %d; [CrewJoin] places %d'
+    for key, f_ in facts.get('lanes', {}).items():
+        log('  lane %s: always %s, drawn by %s; %d holds at %d cover boxes, x %s, z %s' % (
+            key, ' '.join('#' + x for x in f_['always']) or '-', ' '.join('#' + x for x in f_['drawn']) or '-', f_['holds'], f_['cover_boxes'], f_['x'], f_['z']))
+    for nm, f_ in facts.get('lane_squads', {}).items():
+        log('  Squad#%s lanes %s: the timed way %d places, %.1f s on the clock, seconds of it without a pending timer by walking speed %s; holds %s, seconds of their timers %s; '
+            'by the walk model %s' % (nm, ' / '.join(f_['lanes']), f_['timed_places'], f_['clock_seconds'], f_.get('no_timer_by_speed'), dict(f_['holds']), dict(f_['seconds']),
+                                      '; '.join('%s at the rally %s s at %d (stands %s), %s s at %d (stands %s)' % (
+                                          k_, pr_[str(int(V_PLAN))]['at_the_rally'], V_PLAN, pr_[str(int(V_PLAN))]['stands'], pr_[str(int(V_SLOW))]['at_the_rally'], V_SLOW,
+                                          pr_[str(int(V_SLOW))]['stands']) for k_, pr_ in facts.get('lane_pace', {}).get(nm, {}).items())))
+    log('RESULT (kl_fa_bots_rt): %s (%d FAIL, %d NOTE); start delay %s s after a blast at %s s; %d gate(s) on the tower\'s way out; %s; jump list %d; [CrewJoin] places %d'
         % ('PASS' if not any(s == 'FAIL' for s, _t in out) else 'FAIL', sum(s == 'FAIL' for s, _t in out), sum(s == 'NOTE' for s, _t in out),
-           delay, blast, len(facts.get('gates', {})), len(lst), len(facts.get('crew_places', []))))
+           delay, blast, len(facts.get('gates', {})), '%d lane(s) on the street' % len(facts['lanes']) if facts.get('lanes') else 'no lanes on the street',
+           len(lst), len(facts.get('crew_places', []))))
     return out, facts
+
+
+def lanes_of(folder):
+    """The street chain of a built folder, read from its nodes -> {squad name: [{'lane': key or None, 'steps': [(step
+    name, [place], seconds of the timer behind it or None)]}]} - one entry a branch set (a squad without a draw: one)."""
+    B = F.Built(folder)
+    sc, res = B.sc, B.sc.resolve
+    NEXT = {'DefendBehaviourRout': 7, 'SquadModifierBehaviour': 26, 'TriggerDelay2': 4, 'TriggerLootDepleted': 4, 'TriggerActorsDead': 2}
+    mine = {k for t in sc.tops() if sc.names[t].startswith(F.SQUAD) for k in range(t, sc.end[t])}
+    ctrl_of = {k: (cn, v) for cn in NEXT for k, _i, v in kl_fa.controllers(sc, cn) if k in mine}
+    rand_of = F.fork_branches(sc, mine)
+    jp = res(R_ + JOIN_NAME)
+    lst = [v for k, _i, v in kl_fa.controllers(sc, 'JumpPoint') if jp and k == jp[0]]
+    out = collections.OrderedDict()
+    for x in sorted([j for s in (lst[0][0] if lst else []) for j in res(s)], key=lambda x: sc.names[sc.top[x]]):
+        sets, variant, widest = [], 0, 1
+        while variant < widest:
+            k, seen, steps = x, set(), []
+            while k is not None and k not in seen:
+                seen.add(k)
+                if k in rand_of and k not in ctrl_of:
+                    widest = max(widest, len(rand_of[k]))
+                    k = rand_of[k][variant % len(rand_of[k])] if rand_of[k] else None
+                    continue
+                if k not in ctrl_of:
+                    break
+                cn, v = ctrl_of[k]
+                if cn == 'DefendBehaviourRout':
+                    steps.append([sc.names[k], [[round(c, 1) for c in B.at(j)] for s in ([v[0]] if v[0] else []) + list(v[1]) for j in res(s)], None])
+                elif cn == 'TriggerDelay2' and steps:
+                    steps[-1][2] = v[0]
+                nx = [j for s in v[NEXT[cn]] for j in res(s)]
+                nx = [j for j in nx if j in ctrl_of] or [j for j in nx if j in rand_of]
+                k = nx[0] if nx else None
+            keys = [nm.split(LANE_TAG)[1][:1] for nm, _p, _t in steps if LANE_TAG in nm]
+            sets.append({'lane': keys[0] if keys else None, 'steps': steps})
+            variant += 1
+        out[sc.names[sc.top[x]]] = sets
+    return out
 
 
 # ------------------------------------------------------------------ build
@@ -1903,6 +3315,8 @@ def plan(B, opt=None, log=print):
     st = None
     if not opt['tower_only']:
         st = street_plan(B, nav, S, opt, log)
+        if opt.get('lanes'):
+            st = lanes_plan(B, nav, S, st, opt, log)
         P['rt']['street'] = st
     return P, st
 
@@ -1944,6 +3358,8 @@ def options(a):
         a.remove('--enter-after-blast'); opt['room_gate'] = False
     if '--no-gates' in a:
         a.remove('--no-gates'); opt['gates'] = False
+    if '--no-lanes' in a:
+        a.remove('--no-lanes'); opt['lanes'] = False
     for flag, key, conv in (('--loot-seconds', 'loot_seconds', int), ('--after-blast', 'after_blast', float), ('--street-hold', 'street_hold', float),
                             ('--room-wait', 'room_wait', float), ('--gates', 'gate_names', lambda s: [x for x in s.split(',') if x])):
         if flag in a:
@@ -1973,6 +3389,15 @@ def main():
         sys.exit(1 if any(s == 'FAIL' for s, _t in out + out2) else 0)
     elif len(a) == 3 and a[0] == 'diff':
         sys.exit(1 if F.diff(a[1], a[2], also=(JOIN_NAME, ROOM_COUNTER)) else 0)     # (the room gate: the room counter names it)
+    elif len(a) == 3 and a[0] == 'lanes':
+        got = lanes_of(a[1])
+        with open(a[2], 'w') as f:
+            json.dump(got, f, indent=1)
+        for sq, sets in got.items():
+            for st_ in sets:
+                holds = [(p[-1], t) for nm, p, t in st_['steps'] if LANE_TAG in nm and t is not None]
+                print('%s lane %s: %d steps, %d places; holds at %s' % (sq[-8:], st_['lane'], len(st_['steps']), sum(len(p) for _n, p, _t in st_['steps']),
+                                                                         ' '.join('(%d, %d) %gs' % (p[0], p[2], t) for p, t in holds) or '-'))
     else:
         print(__doc__)
         sys.exit(2)

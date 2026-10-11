@@ -120,6 +120,8 @@
  *   fed: stood down: <why>
  *   fed: you: status 0 -> 1 (dead, waiting to return as police; countdown 5.0 s)
  *   fed: YOU ARE A FED: local player object 9 (type 3, police byte 1) at (x, y, z); client flags ... ; body 9 used
+ *   fed: YOU STAND at (x, y, z) 5xx ms after you became police (object ...)      <- the place to judge by: the line
+ *        above is printed in the tick the pointer changes and can read (0, 0, 0) or the body's parked place
  *   fed: nobody is left to hunt: the round clock 412.0 s -> 3.0 s
  *   fed: bot 3: squad script ... (squad ..., 1 man, latch 0, count 1): MUTED
  *   fed: bot 3 is DEAD: latch 0 and count 1 written: the game sends its 'wiped out' list at the next update
@@ -177,6 +179,7 @@ struct klp_bodies { int n, type3, free_, first; };
 static struct {                               /* what is remembered of the round */
     DWORD rules, state; int round, ended, ours, told_thread, told_foreign, was_fed;
     const char *why; struct klp_rec h; DWORD player; int have_h;
+    DWORD fed_t, fed_p;                       /* when and as which object he became police: the second place line (below) */
 } klp_r;
 static struct { DWORD at, actor, squad, script, since; BYTE state, status; } klp_b[KLP_NREC];
 enum { KLP_NONE, KLP_MUTED, KLP_RELEASED, KLP_SENT, KLP_REFUSED, KLP_TIMEOUT, KLP_LATE };
@@ -310,7 +313,18 @@ static void klp_say_human(const struct klp_snap *s, const struct klp_bodies *b)
             klp_r.was_fed = 1;
             klog("fed: YOU ARE A FED: local player object %u (%08lx, type %u, police byte %u) at (%.0f, %.0f, %.0f); client flags %08lx, record 0 status %u, police index %02x; %d of %d police bodies still free", s->sel, s->player, s->ptype, s->ppolice,
                  s->feet[0], s->feet[1], s->feet[2], h->cflags, h->status, h->body, b ? b->free_ : -1, b ? b->type3 : -1);
+            klp_r.fed_t = KLP_T(GetTickCount()); klp_r.fed_p = s->player;
         } else klog("fed: the local player is now object %u (%08lx, type %u, police byte %u) at (%.0f, %.0f, %.0f)", s->sel, s->player, s->ptype, s->ppolice, s->feet[0], s->feet[1], s->feet[2]);
+    }
+    /* The line above is printed in the tick the local player pointer changes, and on some maps that is before the
+       game has placed the body (the owner's log 2026-10-11: 'at (0, 0, 0)' at 12:43:29, 12:44:04, 15:06:59, 15:14:34).
+       So the place is said once more half a second later: the line the live checks of re\fed_points.md 6 are read by.
+       A read of the same three floats, nothing written. */
+    if (klp_r.fed_t && GetTickCount() - klp_r.fed_t >= 500) {
+        if (s->player && s->player == klp_r.fed_p)
+            klog("fed: YOU STAND at (%.0f, %.0f, %.0f) %lu ms after you became police (object %08lx): where the game put you (the line above can read a tick early)",
+                 s->feet[0], s->feet[1], s->feet[2], (unsigned long)(GetTickCount() - klp_r.fed_t), s->player);
+        klp_r.fed_t = 0;
     }
     klp_r.h = *h; klp_r.player = s->player; klp_r.have_h = 1;
 }

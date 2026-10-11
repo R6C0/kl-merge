@@ -152,6 +152,8 @@ BUDGET = (16.0, 85.0)   # sum of a bot's TriggerDelay2 seconds: what stock bots 
 # parked FakeTargets, so the write was there in all three of its rounds. build() says in its log which form it made
 # (another module, kl_fa_cover, builds through here with this default).
 FORK_GAP = 0.0
+LANE_FORK = '_RandomTrigger_lane'       # kl_fa_bots_rt's deal of the street's lanes (its DEAL): a RandomTrigger of the BUILD's
+LANE_STEP = '_DefendBehaviour_lane_'    # ... and a step of a lane (kl_fa_bots_rt.LANE_TAG): parse() keeps such a chain whole
 # FAKE TARGETS OUTSIDE THE VISION SPACE (the cause of the 0x686a66 crash; re/crash_686a66.md). ZFakeTarget's update
 # (kl2 0x560630, every frame) registers with ZCheckVisible (0x55cc40 -> 0x59c790) and then ALWAYS writes its cell and
 # place into its record (0x7143f0). 0x59c790 answers 0xff for a place outside the grid of 16 x 1 x 16 cells that
@@ -617,7 +619,14 @@ def parse(ctx):
             if k in mine and k != timer:
                 ctrl_of[k] = (cn, v, i)
     relay_of = {k for k, _i, _v in kl_fa.controllers(sc, 'RelayMessageList') if k in mine}
-    if any(k in mine for k, _i, _v in kl_fa.controllers(sc, 'RandomTrigger')) or sc.resolve(R_ + F.SQUAD + 'Squad#02\\001_SquadModifier_awake'):
+    # A STREET CHAIN IN LANES (kl_fa_bots_rt, 2026-10-11 afternoon: re/retomoto_bots_street.md) is the bots build's own
+    # and is KEPT WHOLE: it has its holds at cover, its deal of the lanes (a RandomTrigger of the build's:
+    # LANE_FORK) and its own clock, and kl_fa_bots_rt.check holds it to its rules. This step neither reads its steps
+    # as legs nor makes one of them anew; the chain stays in the squad's list (with no element), so the chain before
+    # it is still 'a chain that the jump cuts off' for every rule here.
+    lane_rand = {k: v for k, _i, v in kl_fa.controllers(sc, 'RandomTrigger') if k in mine and LANE_FORK in sc.names[k]}
+    if any(k in mine and k not in lane_rand for k, _i, _v in kl_fa.controllers(sc, 'RandomTrigger')) \
+            or sc.resolve(R_ + F.SQUAD + 'Squad#02\\001_SquadModifier_awake'):
         raise ValueError('%s: the squad already has the steps of this module (build from the bots build, not from its result)' % ctx.folder)
     firsts = [j for k, _i, v in kl_fa.controllers(sc, 'TriggerDelay2') if k == timer for s in v[4] for j in sc.resolve(s)]
     # kl_fa_bots_rt's room-first build (2026-10-11): Timer_start_bots names one TriggerCounter gate (also fed by the
@@ -647,8 +656,23 @@ def parse(ctx):
                 entries[sc.top[j]].append((sc.path[k], j))
     for t, q in by_top.items():
         seen = set()
+        lanes = any(LANE_STEP in sc.names[k] for k in ctrl_of if sc.top[k] == t)
         for entry, k in entries.get(t, []):
             if k in seen:
+                continue
+            if lanes and entry != 'timer':              # the street chain in lanes: every node it can reach, kept
+                kept, todo = [], [k]
+                while todo:
+                    j = todo.pop()
+                    if j in seen:
+                        continue
+                    seen.add(j); kept.append(j)
+                    if j in ctrl_of:
+                        cn, v, _ci = ctrl_of[j]
+                        todo += [x for s in v[NEXT[cn]] for x in sc.resolve(s) if x in ctrl_of or x in lane_rand]
+                    elif j in lane_rand:
+                        todo += [x for lst in lane_rand[j][5:9] for s in lst for x in sc.resolve(s)]
+                q['chains'].append({'entry': entry, 'elems': [], 'kept': sorted(kept)})
                 continue
             elems = []
             while k is not None and k not in seen:
@@ -680,7 +704,7 @@ def parse(ctx):
             q['chains'].append({'entry': entry, 'elems': elems})
         if not q['chains'] or q['chains'][0]['entry'] != 'timer':
             raise ValueError('%s: Timer_start_bots does not start it' % q['name'])
-        old = {e['k'] for c in q['chains'] for e in c['elems']}
+        old = {e['k'] for c in q['chains'] for e in c['elems']} | {k for c in q['chains'] for k in c.get('kept', ())}
         loose = [sc.names[k] for k in ctrl_of if sc.top[k] == t and k not in old]
         if loose:
             raise ValueError('%s: steps no chain reaches: %s' % (q['name'], loose[:4]))
@@ -1906,6 +1930,10 @@ def make(ctx, P, log=print):
                         M.set(n, it['ctrl'], f)
 
         for ci, items in enumerate(b['chains']):
+            if q['chains'][ci].get('kept') is not None:     # (kl_fa_bots_rt's street chain in lanes: parse())
+                if items:
+                    raise ValueError('%s: a program for a chain that is kept whole' % q['name'])
+                continue
             emit(items, [])
             if ci == 0:
                 firsts[N] = path(entry(items[0]))
