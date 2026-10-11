@@ -1,0 +1,2 @@
+# kept byte for byte: the patch carries CR bytes in its KLHook.ini hunk (core.autocrlf would rewrite them)
+re/melee_damage.patch -text
