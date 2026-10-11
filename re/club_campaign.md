@@ -96,3 +96,201 @@ No other Dead Men level has the value.
 - Whether the walkway material's five meshes are on the round's route (then the tiling is in sight) - not looked up.
 - The bank's regression (`kl_fa_bank.py check` on `<work>/build/c_bank/bank_vault`) was NOT re-run: M03_A's converted
   .MAT is byte-identical (check 1) and that tree is not this stage's to touch.
+
+## Stage L1 - the authoring module, first half: a round without enemies (NEW tools/kl_fa_club.py)
+
+STATE: DONE (2026-10-11 20:30). `tools/kl_fa_club.py` (1,256 lines) holds the nine names of the interface and builds
+F07 + M05_A with the first half of the layer; every check of the stage passes with TWO known findings, both justified
+below (L1.3). NOTHING RAN IN THE GAME (another session holds it). Kept for the next stage:
+`C:/kl_scratch/club/l1/build/F07+M05_A campaign/` (174 MB: F01_Main.zip 135,476,152 bytes, sha1 f109b3ca4bda..., lightened,
+briefcases and texts in; result.json, log.txt, graft.txt, preflight.json). A second build of the same command gave the
+same archive (`out/again.txt`). Scratch `C:/kl_scratch/club/l1/`: `s/` (b.py nodes of a built folder by regex, scan.py a
+character map of mesh + free floor, floors.py the collision floors under points, vt.py / vt34.py vtables in kl2.exe),
+`out/` (every output named below), `bare/` (result and log of the bare graft the places were measured on; its archive is
+deleted - rebuild: T.4's command with `--keep`, 34 s). No other file of the repo was touched: kl_fa_author.py,
+kl_fa_bank.py, kl_fa_loot.py, kl_route.py, kl_maps.py are only imported / run. No per-level table of another tool gained
+an entry (kl_maps.FLAT is lent one class pair for the length of the build, in memory).
+
+### L1.1 What the file is
+
+Pattern: kl_fa_bank.py. Its generic parts are IMPORTED (`import kl_fa_bank as BK`: `Doors`' frame arithmetic and arm /
+disarm, `put` / `values` / `facing` / `world_of`, `set_text`, `archive_of`, `read_built`, `lost_clips`, `reverify`,
+`BOT_SQUAD`, `BLOCKS_LIVE`, `WARDROBE_CHUNKS`), none of its tables; kl_fa_author's small tools as there. No new entity,
+no new controller. NOTE FOR WHOEVER EDITS kl_fa_bank.py: those names are now used from outside (another job was
+changing that file while this stage ran; the builds before and after its change gave the same archive).
+
+| part | where | what |
+|---|---|---|
+| the build's own arguments | `M_DROP IK NO_BUILD`, `build()` | `Boundaries!*` out; the two `Beat_M05` objects loaded as plain ZSTDOBJ (kl_maps' `flat`) |
+| the measured club | `START TRAITOR POLICE BODIES STAGE_B/C/D SPAWN SLAB LANE_MOUTH DOOR_IN` | 8 START in two rows of four in Yoko's office (x 2700..3050, z 2420 / 2560, y 342), 4 TRAITOR east of the desk (z 2290), 7 AFTER_DEATH on the pavement slab (x -900..-600 and 1300..1500, z -2760), 8 police bodies beside them (z -2830), every other kind F07 has in rows of their own; 16 player groups |
+| loot | `LOOT LOOT_REACH CASE CASE_SCALE` | 11 briefcases, 2,200,000: 6 x 300,000 in the office (2 on the desk, 2 on the sofa table, 2 on the floor), 3 x 100,000 on dance floor 1's bar (top y 158), 50,000 on the coat check's counter (y 284) and on the ticket counter's shelf (y 128) - each on the PUBLIC edge; shown from the load |
+| doors and the seal | `LEAVES DOORS_ANIMATE DOOR_DY DOOR_LAST DOORS_AT SEAL SEAL_PLANE SEAL_OPEN SEAL_AT MUFFLE`, class `Doors`, `doors()`, `gate()` | four office leaves; the seal's two pieces `HeroColi` / `Plane01` |
+| what never ran in Dog Days | `LIGHT_SHOW BEAT_ANIM FAN_DAMAGE BEAT NEVER_RAN`, `strip()`, `take_off()` | three flags, all OFF = dropped (L1.2 'The three kinds') |
+| host layer | `PLACE BOUNDS PARKED KILL ROLE KEEP_MORE VAN VAN_GROUP VAN_WAIT ESCAPE _KEEP` -> `KEEP`, `DROP` | 41 re-placed objects (markers, planes, cameras, stage boxes, jump points, three bound trios), 9 parked bound boxes, 3 campaign kill boxes, 9 objects with a new job |
+| texts, sound | `TITLE TEXTS START_KEY START_FIELDS LINES EXIT_LINE MUSIC_CLIPS AMBIENCE_CLIPS` | 5 .LOC keys of the level's own, 8 briefing / reminder lines, the exit line; the 12 clips the stream file lacks |
+| the interface | `HOST prepare_host strip KEEP DROP layer_names complete wire campaign_names` | as kl_graft.build's docstring asks; `campaign_names` keeps the three kill boxes and no squad (`NO_AI = True`, fixed in this half) |
+| the written level | `finish(folder)` | lighten (trim, slim) -> briefcase model into dead chunk indices -> texts |
+| checks | `check(folder)`, `inventory(folder)`, `ROUTE_IN ROUTE_OUT LOOT_WALKS KNOWN` | L1.3 |
+| commands | `test <out> [--keep] [flags]`, `finish`, `check`, `inventory`, `reverify` | `test` = build + finish + check in one process |
+
+**The round as wired** (MEASURED: `python tools/kl_fa_club.py inventory <kept folder>` -> `out/inventory.txt`, check()'s
+'chain' line):
+- round start (AIMonitor list 2): F07's `FASpecials!Timer_MissionBriefing`, the seal's clock
+  `Gameplay!010_FirstFight!RivalMercVan!Timer` (TriggerDelay2 `SEAL_AT` = 75 s) and `...!Activator_VanSound` (AIDWrapper
+  'Doors_Opening' -> the music's two muffle switches `...Audio.zip!STREAMS!Inside!Music!GeomActivator_Door_01 / _02`).
+  wire() WRITES that list (F07's own names five timers of its opening).
+- the clock -> `...RivalMercVan!GeomDeactivator_DriveInVan` (DeactivateGeom) -> `M05_A_Inside_Entrance_01a\HeroColi`.
+- `Specials!LevelSpeak!TriggerBox` in the wardrobe -> its speaker, line `Multiplayer/F04/ExitHeist_01_R`.
+- ENTERS box ROUND the START rows (2800, 450, 2450) half (450, 150, 320): all 8 START points and the 6 office cases
+  inside (check()); EXITS plane behind the entrance door (125, 120, -1440); loot marker over the desk, its 11 s box
+  round the START rows; escape marker on the slab (300, 218, -2800); exit trigger `otrExitLevel` = the slab
+  (300, 200, -3050) half (1450, 250, 400): x -1150..1750, z -3450..-2650, wholly beyond the seal's box.
+- team mode: stages front office / wardrobe / entrance hall with their triggers at the inner office door, the stair
+  landing and the hall's top (all GUESS; nothing of that mode was thought through).
+
+**The doors** (the lead's default). `DOORS_ANIMATE = False`: the four office leaves `D1 D2` (inner) `D04 D05` (outer) are
+SUNK 1,500 in world y and their key-framed placements cut, by `Doors` = `kl_fa_bank.Doors` with this level's nodes (the
+three wrappers are this file's, about 60 lines the bank's class has bound to its own tables; the frame arithmetic and
+arm / disarm are inherited). Build lines: '5 nodes sunk by 1500', '5 entities moved in the .gms (2 of them hold another
+local place there than in the .prp; the world places agree)' - trap 2 of G1.1, the outer door - 'placements by shape type
+{4: 4, 1: 1}; none is left'. `--doors-animate`: the leaves stay, store LAST 30 and get 'Activate' from
+`...RivalMercVan!TimerVanGo` 10.4 s after the round-start event (GO + 2 s), the muffle switch with them.
+
+**The seal - and one choice of mine the lead should see.** The stage asked for 'the entrance SEAL of the beat present
+from the start with its guaranteed clock'. The seal is two STATIC, heroes-only objects, each alone enough to shut the
+lane (MEASURED `out/bare_doors.txt`: 4 closures, 4 necessary). By default ONE of them stands: `HeroColi` (.gms flags
+0x200308, the very form of the storage room's `HeroColi`, which the campaign itself switches off with a DeactivateGeom);
+`Plane01` (flags 0x308, switched by nothing in the campaign: the study's open question whether DeactivateGeom frees it)
+is taken out at build time with the leaves. So the seal is present, the clock opens it, and what opens it has the
+campaign's own precedent. `--seal-plane` = both stand and both are named; `--seal-open` = neither (no gate).
+NOT DONE and said plainly: the gate is INVISIBLE (a wall of air 3 m before the lane's mouth); the campaign's visible
+version - the entrance door shut by `Doors!Entrance!CloseEntranceDoor` - needs a Dead Men door clip to play and is the
+next stage's to decide (L1.6).
+
+**The three kinds that never ran in Dog Days** (READ in kl2.exe: `python C:/kl_scratch/club/l1/s/vt.py <Class> <Base>`,
+`vt34.py`; the reasoning stands at the flags in the file):
+
+| kind | read | default | flag |
+|---|---|---|---|
+| `PositionLightControl` x 7 (the light show) | own init (slot 13, 0x671cb0, 244 instructions) and an own routine in slot 25 (0x72c400, 289: ASSUMED the per-frame step), own save / load; reads `Beat_M05\Ground_Beat05` and `Club_01_Clean_Music_01` | OFF: the controller comes off, the lights are static | `--light-show` |
+| `ZIKLNKOBJ` + `StartAnim` x 2 (`Beat_M05`) | StartAnim: own init (0x8f6b90, 92), no step; it starts a Dead Men .ANM clip converted by kl_anm's GUESS | OFF: loaded as plain ZSTDOBJ, no model, hidden, no StartAnim; the .ANM then holds NO Dead Men clip ('.ANM joined: clips +0') | `--beat-anim` |
+| `ShotActivateDamage` x 5 (roof fans) | differs from stock `ZShotActivate` (439 in this build) in ONE routine, slot 34 (0x4bb9b0, 132); its init is the base's (0x5aa380, 22 instructions, no call of slot 34). Where slot 34 is called from was NOT found | OFF: taken off (the fans cannot be shot to pieces); they stand on the roof, off this round | `--fan-damage` |
+
+`--light-show` without `--beat-anim` reads a still object: the two belong together. With all three off preflight's 'first'
+list is down to `ZEnvSampler` x 3 and `SoundSpline` x 1, both of which ran live on Late Night Opening / the park
+(re/campaign_fa_club.md 3.5).
+
+**Bounds.** The campaign's five go (`M_DROP`). Three of F07's bound trios stand outside the slab's open edges - Bound box
+6 m deep from the edge outwards, warn boxes the same and 1.2 m onto the slab - the other three are parked; the campaign's
+three single `Specials!KillBox` (kept by campaign_names, re-placed in strip) lie under the edges, tops y -100: west
+x -4020..-1220, east x 1820..6020, kerb and road z -5350..-3450. They punish, they do not stop (GUESS, marked).
+
+**The van.** F07's first van only, STANDING at `VAN_WAIT` (-3000, 32, -3100) with F07's own baked drive; the exit trigger
+names it alone. A first-half state, as the bank's L1: the next stages replace `park_van` by `kl_map_escape.van_prepare`.
+
+### L1.2 The build
+
+```
+python tools/kl_fa_club.py test C:/kl_scratch/club/l1/build --keep        (about 2 min; 'RESULT: PASS', exit 0: out/test2.txt)
+python tools/kl_fa_club.py check "C:/kl_scratch/club/l1/build/F07+M05_A campaign"       (25 s, 'PASS': out/check.txt)
+```
+`python tools/kl_maps.py one ... --author kl_fa_club` alone does NOT build this map: prepare_host stops with a line that
+says why (the build needs `M_DROP` and the retype). Lines of the build:
+- 'kl_maps: --flat ZIKLNKOBJ: 0x200027 is loaded as 0x200002 in this build'; 'F07 systems (411 subtrees, 9636 nodes) +
+  M05_A map (242 subtrees, 16950 nodes)'; 'verified: 26586 entities, 26587 nodes, 25102 reachable chunks, 21 room sets,
+  566 gate / list REF cells, 1676 textures, 1134 materials'
+- 'spawn points placed: START 8, TRAITOR 4, AFTER_DEATH 7, UCC 8, UCC_TRAITOR 4, UCC_POLICE 7, TEAM_MERC 6, TEAM_MERC1..3 4
+  each, TEAM_POLICE 7' + 8 + 8 player groups; 'Heroes! groups placed where M05_A has them: 0'
+- 'verify: problems: 2'; 'built ... F01_Main.zip, 284 MB, 30 members'
+finish: 'load weight: 1346 dead model roots; .prm 78.9 -> 38.0 MB ...; .TEX 342.3 -> 163.9 MB'; 'briefcase M01_FA_A root
+6380 (DropMoney!KillDrop!Suitcase) -> chunk 70: 18 chunks into dead indices, 0 at the end'; '11 briefcases (model 70,
+x 1.25, its underside 0.3 over its origin); chunk table 52910 entries, as before'; '5 text keys in 8 languages'.
+
+### L1.3 The checks (all on the kept, finished build; outputs in `C:/kl_scratch/club/l1/out/`)
+
+| check | command | result |
+|---|---|---|
+| verify problems | the build's last lines; check()'s 'verify:' lines | **2, both KNOWN**: (1) 'sound: 5 stream clips are not in the merged stream file' = the club's music and ambience (L1.5 lists the 12 names); (2) 'FA: BROKEN squads no ZSquadScript: no police' = this half IS a round without enemies. The bare graft has 11 |
+| kl_fa.check | `python tools/kl_fa.py check <archive>` -> `fa.txt` | **0 CRASH, 1 BROKEN** = the same 'no ZSquadScript'; 1 DEGRADED (no bot squads: a later stage). settings 1, exit trigger 1, monitor 1, animated vehicle 1, AIMonitor 1, OnlineMoneyCtrl 133 |
+| cover list | check() | 'cover lists (FFCoverList): 1' (the club's own top-level `CoverList`; F07's is dropped) |
+| doors and seal read back | check() | four leaves at their stock x / z, 1,500 lower, 0 placements; `HeroColi` at (131, 0, -2478) with 1; `Plane01` sunk, 0 |
+| spawn points | check() (kl_route.stations, near 30, the gate taken out) | '79 places, 79 on the mesh part of the START (401 polygons) and on free floor within 30' = 63 ZSpawnPoint + 16 player groups; every one outside the building is on the slab |
+| bounds, kill boxes | check() | '3 LevelBound in their place (18 bound and warn boxes with the parked ones), 3 kill boxes; 0 of the 93 spawn points, player groups and stations inside one'; at each of the slab's three edges a walker 1 m before it is in no bound, 1.2 m beyond it in one; kill boxes' tops 130 under the slab |
+| loot | check() (kl_fa_loot's pick-up test as read at kl2 0x783e60, from floors a walk reaches) | '11 objects, 2200000; 11 can be taken', least 87 of reach to spare (the ticket shelf from (150, 19, -1250), 78 away, 107 up; the bar from 72 away, 137 up) |
+| ... its standing places | `python tools/kl_route.py stations <folder> START=... desk=... bar_1=... --near 30` -> `stations_loot.txt` | 'RESULT: ALL REACHED', 10 of 11 on the mesh; the place before the coat check is 16 off it |
+| the route as built | `python tools/kl_route.py walk <folder> --from START=2817,342,2420 --via ... --to pavement=300,30,-2800` (12 places) -> `route_built.txt` | 'NOT FREE': the leg queue lane -> street end 'BLOCKED - the thinnest crossing (11 m) goes through REF 23632 M05_A_Inside_Entrance_01a\HeroColi [STATIC mesh 0x108; stops heroes only]', nothing else |
+| ... up to the seal | the same to `lane_club=105,20,-1500` -> `route_inside.txt` | 'RESULT: FREE; the mesh way: 716 samples, 1 with something in the body column' (the level's own stair `Si0102_M05_StairsA_01` beside the mesh line at (268, 40, 3150)); check(): 'FREE, 122 m' |
+| ... the seal out | `... --open "M05_A_Inside_Entrance_01a\HeroColi"` -> `route_open.txt` | 'RESULT: FREE; the mesh way: 767 samples'; check(): 'FREE, 133 m' |
+| doors | `python tools/kl_route.py doors <folder> ...` -> `route_doors.txt` | '1 closure(s) in 1 set(s); 1 necessary; with all of them out the way is FREE' (bare graft: 4 / 4, `bare_doors.txt`) |
+| the chain | check() | 'round start -> [Timer_MissionBriefing, Timer, Activator_VanSound]; -> 75 s -> seal off [HeroColi]; doors: open at build time; the music's muffle switch Doors_Opening -> 2 objects' |
+| never-run kinds | check() | PositionLightControl 0, StartAnim 0, ShotActivateDamage 0; the beat objects 'ZSTDOBJ, model none, hidden' |
+| exit box, van, FakeTarget | check() | 'exit box x -1150..1750, z -3450..-2650: on the slab True; holds the pavement station True, the lane's street end False; it names [EscapeVehicle_Animation_F07]'; 'FakeTarget ... at (-2995, 31, -3084): inside the vision space, kl2's arithmetic gives a record' (vision space x -6725..10906, z -7074..6724) |
+| chunk table, blocks | check() | 'chunk table: 52910 entries (the tools' line: 69632); .prm 37.3, .fxc 17.8, .ANM 21.6, .WAV 21.2 MB; the five load blocks 131 MB (...: 171)'; '23799 of its indices are dead (the wardrobe takes 20989)' |
+| written level | check() / `kl_fa_club.py reverify` -> `reverify.txt` | 'problems: 0' (26,586 entities, 566 gate / list cells, 24 list entries parked on the free REF id 36975) |
+| kl_impact | `python tools/kl_impact.py <archive>` -> `impact.txt` | 'problems: 0' |
+| preflight | `python tools/kl_maps.py preflight <folder>` -> `preflight.txt` | 'preflight: CRASH 1, RISK 4, NOTE 64': CRASH = 'kl_graft.verify reported 2 problems' (the two above); RISK = 'fa:squads', `ZEnvSampler` x 3 (twice) and `SoundSpline` x 1 (both ran live on other maps). The bare graft: CRASH 2, RISK 16, NOTE 65 |
+| the flags | `test <out> --doors-animate --seal-plane --fan-damage` -> `var_a.txt`; `test <out> --seal-open --light-show --beat-anim --loot-bags --seal 40` -> `var_b.txt` | a: PASS - four leaves stand with LAST 30, both seal pieces stand and are named, 'route with the 6 standing piece(s) out: FREE, 133 m', ShotActivateDamage 5. b: PASS - 6 nodes sunk ({4: 4, 1: 2}), 'route ... as built: FREE, 133 m', the clock names nothing, 7 PositionLightControl, the beat objects 'ZIKLNKOBJ with its StartAnim'. Both archives deleted |
+
+The van's five key-framed bodies still stand at F07's place, 30,083 from their entities (check()'s notes; the next
+stage's van_hvk); the nine static bits of `V_Van_Reflection` lie at F07's origin = under the coat check, y -183..-66,
+below every floor (MEASURED inline, kl_route's grid): in nobody's way.
+
+### L1.4 GUESS / ASSUMED (each marked in the file)
+
+- GUESS: every spawn row (measured only: on the mesh, on free floor, in no bound or kill box), every camera, stage
+  box and trigger of team mode, the loot's places, turns and values, `SEAL_AT` 75 s, `DOORS_AT` 10.4 s, the exit and
+  escape-area boxes, `ESC_AT`, `VAN_WAIT`, the bound and kill boxes, every wording in `TEXTS`, the choice of `LINES`.
+- ASSUMPTION: a body switched off by a DeactivateGeom at run time stops colliding - here a STATIC placement (the bank's
+  vault door is key-framed); the campaign's own storage `HeroColi` is the precedent. If not: `--seal-open`.
+- NOT KNOWN: whether 'heroes only' collision (flags 0x108) stops a Fragile Alliance player at all, and whether it stops
+  an AI heister or a policeman. kl_route counts it for everybody. If it stops nobody, there is no gate and no harm.
+- ASSUMPTION: the music plays from the load (nothing starts it); 'Doors_Opening' un-muffles it (from the names; the
+  suppress boxes are not hidden in the file, so the message may change nothing).
+- ASSUMPTION carried from the study: a piece sunk 1,500 under its room does nothing to the room's draw list (G1.6).
+- GUESS: a level bound / a kill box does something useful to a player who steps off the slab; the kill boxes keep
+  the campaign's field values ([1, 1, 0, 0, 'CheckInsideEnter', [], 0, 'FA_DieFromSelf', 'OFF', 'Placholder_Died', 1];
+  F07's van has [1, 0, ..., 0]: fields 1 and 10 differ, their meaning was not read).
+- ASSUMED from vtables only: which slot is a controller's init (13) and step (25) - consistent over the three kinds,
+  not read further.
+- Nothing was LOOKED AT: no picture of the briefcases on the counters was rendered.
+
+### L1.5 For the next stage
+
+- **Build with `python tools/kl_fa_club.py test <out> --keep`**; in a script `r, folder = kl_fa_club.build(out)`.
+- **Squads** (L2): `campaign_names()` returns the kept squads beside `tuple(KILL)`; `NO_AI` becomes a real flag and
+  `KNOWN_NO_AI` conditional as in the bank; the strip of `AttachGeomToBone` / `WarnBehaviourRout` goes into `strip()`.
+  `YokoGuards` needs its 'active' flag in data, `Rave#01` stands off the mesh (club 8.2 item 5).
+- **The beat's fast way**: the two dance-floor squads' field 8 -> a counter (free: `Gameplay!020_Loot!FollowPlayers!
+  TriggerCounter`) -> `R + ROLE['seal off']`; the clock stays. A free-object list stands above `KEEP_MORE` in the file.
+- **Police that arrive**: F07's squad groups re-placed on the pavement's mesh strip (x -3765..5786, z -3500..-2650; only
+  x -1200..1800 has collision floor) as `kl_fa_bank.place_hall` does. LESSON OF THE BANK'S RUN V2 (re/bank_campaign.md,
+  tonight): police standing in the mouth of the only exit killed the crew - the queue lane is 0.96 m of mesh and 12.5 m
+  long. The west / east bound boxes begin at the slab's edges: squads come THROUGH them (ASSUMED harmless for AI).
+- **The van** (L3): `park_van` -> `kl_map_escape.van_prepare`, wire -> `van_wire`, build inside `van_layer`; `_KEEP`
+  holds the van already. The slab is 30 x 8 m: the police rows are at z -2760 / -2830 so that a lane along z -3100 has
+  250 either side; the east bound begins 8.2 m after a stop at x 1000 (the bank's rule wants 10 m: move the stop or
+  the bound). The boarding place must be on the slab; the road's height is a constant (no floor west of x -1200).
+- **Music**: the build is complete without it. The stream file's extension must bring 12 clips (check() prints them from
+  the built .WHD): `Music/InHouse/Japan/M05_A/M05_A_Club_Clean.wav`, `_Clean_3D`, `_Muffled`, `_Muffled_3D`,
+  `M05_A_Club_2_Clean.wav`, `_2_Clean_3D`, `_2_Muffled` (the two interleaved four-layer sets 'M05_A_Club_Layers' 32.4 MB
+  and 'M05_A_Club_2_Layers' 49.5 MB; the second set's fourth layer `_2_Muffled_3D` is named by no object) and
+  `SFX/Ambiences/M05_A/Inside/Club_Entrance_Ambience.wav`, `.../Inside/M05_Club_Ambience_01.wav`,
+  `.../Inside/Yoko_Office_Ambience.wav`, `.../Outside/Roftop/Ambience_Rooftop_M05_A.wav`, `.../Outside/Street/Street_01.wav`.
+  Then `kl_fa_bank.use_stream(<file>)` before the build (the bank's `--str`; not yet a flag here).
+- **finish()** is where anything goes that needs chunk numbers or the .LOC; check() takes no flag and reads what the
+  build did off the level.
+
+### L1.6 Open
+
+- The 'no ZSquadScript' finding stands until the squads are in.
+- The gate is invisible. Whether to shut the ENTRANCE DOOR as the campaign does (a visible 'exit blocked') is open: it
+  needs `Doors!Entrance!CloseEntranceDoor` (a `MatPosAnimProxy`, frames 0..50) and a Dead Men door clip that plays.
+- AI heisters walk the mesh: nothing holds a bot at the seal (the study's station 8, 'wardrobe: hold until the door
+  goes', is the bots' stage's).
+- Van: stands in sight 18 m west of the slab with F07's drive; vans 2 and 3 are dropped.
+- The upstairs bars' loot (the study's four stacks) waits for the stairs to be proven.
+- `ZEnvSampler` x 3 stays as on Late Night Opening; `flat` takes a second class with one word in build() if a load says so.
+- Team mode / Undercover Cop: spawn sets placed and measured, nothing else thought through.
+- Nothing ran in the game; no picture was rendered.
+
+(end of Stage L1)
