@@ -635,6 +635,7 @@ below (L1.3). NOTHING RAN IN THE GAME. Kept for the next stage: `C:/kl_scratch/b
 (201 MB: F01_Main.zip 161,288,648 bytes sha1 d3ad5986..., lightened, briefcases and texts in; result.json, log.txt,
 graft.txt, preflight.json). Scratch `C:/kl_scratch/bank/l1/`: `s/` (f07.py, dm.py, dmloc.py, places.py, bounds.py),
 `out/` (every output named below). No other file of the repo was touched; kl_fa_author.py is only imported.
+Committed as 7fa3910 (tools/kl_fa_bank.py, this section).
 
 ### L1.1 What the file is
 
