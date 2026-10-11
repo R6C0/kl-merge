@@ -82,6 +82,14 @@ WHAT A SQUAD'S CHAIN IS AFTERWARDS (each form's stock precedent: re/bots_dyn_bui
   (so every stage trigger, gate and park place is still walked, in the old order). REMOVED: the old Defend steps.
   A second chain (Retomoto's street route, started by the JumpPoint) is treated the same; its first step keeps its
   name, so the JumpPoint is not touched.
+  ON A CHAIN THE JUMP CUTS OFF (Retomoto's tower) nothing of this module waits behind the table's loot wait: no hold,
+  no timer - a timer that still runs when the human takes the join would start a tower step for a bot the hook has
+  moved to the street. On a GATES build of kl_fa_bots_rt (2026-10-11, re/retomoto_bots_rooms.md) that is the whole
+  way down: what this step adds there is the forks between two gates' holds (another way goes through no trigger
+  box the build's way keeps out of, Routes.wakes_more, and past no post of an enemy the build's way keeps clear
+  of, Routes.passes_more), the staggered starts and the opening modifier; the holds and the waits are the build's
+  own. The build's own gate waits are the same hazard and are not this module's to
+  remove: check() counts them and says so (the NOTE 'THE JOIN').
 
 WHAT IS WRITTEN: .prp, .gms + .buf (entities added / removed inside the squad groups; REF ids of removed entities
   are reused), .oct / .rmi / .rmc (slot ids renumbered; the squad's groups re-listed in the root's group tree with
@@ -783,6 +791,25 @@ def find_holds(ctx, part, e, prev, nxt, pers, taken, spots_taken, want, post, ta
     return out
 
 
+def last_loot_wait(flat, cut_off, timers=True):
+    """THE LAST LOOT WAIT of a chain in flat form -> its index in `flat` (-1: the chain has none). 'Behind the last
+    loot wait' is the way OUT: other gaps, no hold of this module on a chain the jump cuts off (program()).
+    A TriggerActorsDead counts as a loot wait where it is one - kl_fa_bots' '--wait-guards' puts it in front of the
+    table's own wait - and that is all it was until 2026-10-11. kl_fa_bots_rt's GATES are TriggerActorsDead waits
+    too, but they stand BEHIND the table, seven of them, down to the foot of the tower: counted as loot waits they
+    moved 'the last loot wait' to the last gate, and the rule 'no timer behind the last loot wait of a chain that the
+    jump cuts off' then covered the last leg alone (36 timers of this module between the gates of the first gates
+    build, re/retomoto_bots_rooms_review.md D1 / D2). So: on a chain that the jump cuts off (cut_off: not the
+    squad's last chain) that HAS a loot wait, only loot waits count. Everywhere else as before - the plan of every
+    build without such a chain is the same byte for byte.
+    timers=False: detours()' own older reading (TriggerLootDepleted and TriggerActorsDead only), kept as it was."""
+    is_loot = lambda x: x['kind'] == 'loot' or (timers and x['kind'] == 'timer' and x.get('loot'))
+    loot = [i for i, (kind, x) in enumerate(flat) if kind == 'keep' and is_loot(x)]
+    if cut_off and loot:
+        return loot[-1]
+    return max([i for i, (kind, x) in enumerate(flat) if kind == 'keep' and (is_loot(x) or x['kind'] == 'dead')], default=-1)
+
+
 def flat_chain(ctx, q, chain):
     """A chain's elements as legs -> [('leg', [place dict]) | ('keep', element)]; a place: pt (4-tuple), old (the
     old step's name), flags."""
@@ -839,7 +866,7 @@ def detours(ctx, q, flats, log=print):
     for ci, flat in enumerate(flats):
         if ci:
             prev = None
-        last_loot = max([i for i, (kind, x) in enumerate(flat) if kind == 'keep' and x['kind'] in ('loot', 'dead')], default=-1)
+        last_loot = last_loot_wait(flat, ci < len(flats) - 1, timers=False)
         legs = [i for i, (kind, _x) in enumerate(flat) if kind == 'leg']
         for i, (kind, leg) in enumerate(flat):
             if kind != 'leg':
@@ -1048,7 +1075,56 @@ class Routes:
         self.ctx = ctx
         self.taken = []                                 # the way places made so far, all bots (kept F.SEP apart)
         self._exit_polys = None
+        self._wake = None
+        self._posts = None
         self.rt_side = {}                               # Retomoto's street: {bot: True = its places lie east of the van's lane}
+
+    def wakes_more(self, part, main, line):
+        """A GATES BUILD OF kl_fa_bots_rt (2026-10-11, re/retomoto_bots_rooms.md; nothing on any other build):
+        does the way `line` go through a trigger box that wakes an enemy squad and that the build's own way
+        `main` between the same two places keeps out of? Between two gates of Retomoto's tower the build's way
+        goes through exactly the boxes of the fight it walks to. The first try of this step on such a build gave
+        one bot, one round in three, the way from the south gallery to the second floor round the NORTH of the
+        atrium (91 m for 56): alone through three boxes the gates keep for later - where runs R7a / R7d each
+        lost a bot. Only the tower (the START row's mesh part): the street has no gates."""
+        ctx = self.ctx
+        if self._wake is None:
+            self._wake = ()
+            if ctx.rt is not None and any(e['kind'] == 'dead' for q in ctx.squads.values() for c in q['chains'] for e in c['elems']):
+                self._wake = tuple(ctx.rt.wake_map(ctx.B)[0])
+        if not self._wake or part != ctx.home:
+            return False
+        RT, B = ctx.rt, ctx.B
+        on = lambda pts: {k for m in RT.samples([p[:3] for p in pts]) for k in self._wake if RT.in_trigger(B, k, m)}
+        return bool(on(line) - on(main))
+
+    def passes_more(self, part, main, line):
+        """A GATES BUILD OF kl_fa_bots_rt, the tower part (as wakes_more; nothing anywhere else): does the way `line`
+        come within reach (RT.PASS_NEAR, on the post's floor) of a POST of an enemy that the build's own way `main`
+        keeps clear of - or walk on farther past one than the build's way does, beyond RT.PASS_ON? A gate's hold is
+        laid so that no way to it walks PAST a man the gate waits for (kl_fa_bots_rt.passes; the first gates build
+        had a hold 20 m beyond such men). Another way of a fork is held to the build's own: no new post, no longer
+        walk with a post behind it. The first try of this step on the second gates build sent the runner to his last
+        hold round a place of Atrium_1st_PillarCover, 2.9 m from it and 11 m on; kl_fa_bots_rt.check FAILS that."""
+        ctx = self.ctx
+        if self._posts is None:
+            self._posts = ()
+            if ctx.rt is not None and any(e['kind'] == 'dead' for q in ctx.squads.values() for c in q['chains'] for e in c['elems']):
+                self._posts = tuple(q for ps in ctx.rt.enemy_posts(ctx.B).values() for _w, q, _r in ps)
+        if not self._posts or part != ctx.home:
+            return False
+        RT = ctx.rt
+
+        def left(pts):
+            """{post: the way left when the line has come out of the post's reach for the last time}"""
+            sm, out = list(RT.samples([p[:3] for p in pts])), {}
+            for n, q in enumerate(self._posts):
+                near = [i for i, m in enumerate(sm) if abs(m[1] - q[1]) <= RT.FLOOR_DY and hdist(m, q) < RT.PASS_NEAR]
+                if near:
+                    out[n] = sum(math.dist(u, w) for u, w in zip(sm[near[-1]:], sm[near[-1] + 1:]))
+            return out
+        a, b = left(main), left(line)
+        return any(n not in a or (v > RT.PASS_ON and v > a[n] + 1.0) for n, v in b.items())
 
     def exit_polys(self):
         ctx, nav = self.ctx, self.ctx.nav
@@ -1165,6 +1241,10 @@ class Routes:
             worst = max(worst, sh)
             if sh > ROUTE_SHARE or dev < ROUTE_DEV:     # (the walk from place to place fell back into the other way)
                 return None, 'the same way once its places are walked (shares %d %%)' % (100 * sh), polys
+        if self.wakes_more(part, main, ln[0]):
+            return None, 'through a trigger box of a fight the build\'s way keeps out of', polys
+        if self.passes_more(part, main, ln[0]):
+            return None, 'past a post of an enemy the build\'s way keeps clear of', polys
         return {'kind': 'real', 'pts': places, 'length': ln[1], 'share': worst, 'line': ln[0]}, None, polys
 
     def lateral(self, N, part, seq, main, L0, post, sign):
@@ -1207,6 +1287,8 @@ class Routes:
         ln = self.line(full)
         if ln is None or ln[1] > ROUTE_LONG[0] * L0 + ROUTE_LONG[1] or not self.seq_ok(full, post, exit_free):
             return None
+        if self.wakes_more(part, main, ln[0]) or self.passes_more(part, main, ln[0]):
+            return None
         return {'kind': 'left' if sign > 0 else 'right', 'pts': out, 'length': ln[1], 'share': shared(ln[0], main)[0], 'line': ln[0], 'moved': moved}
 
     def forks(self, q, flats, pers, opt, log=print):
@@ -1228,8 +1310,7 @@ class Routes:
         for ci, flat in enumerate(flats):
             if ci:
                 prev = None                             # (a chain started from outside: its first step is named, it stays)
-            is_wait = lambda x: x['kind'] in ('loot', 'dead') or (x['kind'] == 'timer' and x['loot'])
-            last_loot = max([i for i, (kind, x) in enumerate(flat) if kind == 'keep' and is_wait(x)], default=-1)
+            last_loot = last_loot_wait(flat, ci < len(flats) - 1)
             for i, (kind, leg) in enumerate(flat):
                 if kind != 'leg':
                     continue
@@ -1513,7 +1594,7 @@ def program(ctx, q, chain_no, flat, pers, opt, taken, spots_taken, gap_scale, us
     # which elements follow each leg; where the last loot wait is
     kinds = [(kind, x) for kind, x in flat]
     is_lootwait = lambda e: e['kind'] == 'loot' or (e['kind'] == 'timer' and e['loot'])
-    last_loot = max([i for i, (kind, x) in enumerate(kinds) if kind == 'keep' and (is_lootwait(x) or x['kind'] == 'dead')], default=-1)
+    last_loot = last_loot_wait(kinds, not last_chain)   # (a gates build of kl_fa_bots_rt: the TABLE's wait, not the last gate)
     n_legs = [i for i, (kind, _x) in enumerate(kinds) if kind == 'leg']
     prev_pt = (ctx.p4(q['at'], dy=260.0) or None) if main else None
     since = 0.0
@@ -1526,6 +1607,13 @@ def program(ctx, q, chain_no, flat, pers, opt, taken, spots_taken, gap_scale, us
                 # (a map of two parts: nobody waits longer than the build says - see the hold rule below)
                 long_ = pers.loot == 'long' and len(q['chains']) == 1
                 it['loot_seconds'] = int(min(s, LOOT_SHORT) if pers.loot == 'short' else min(LOOT_LONG[1], s + LOOT_LONG[0]) if long_ else s)
+                # A GATES BUILD OF kl_fa_bots_rt (a TriggerActorsDead behind this loot wait, 2026-10-11): nobody's wait at
+                # the table is cut short. A gate holds the seven at one fight, each from his own arrival, 30 s at most;
+                # the point man and the runner leaving the table 15 s before the others would be at every gate 15 s
+                # early and, wherever a gate runs out (run G1_DM09: six of seven did, with an idle player), walk on
+                # alone 15 s ahead - the string the gates are there to prevent.
+                if any(k2 == 'keep' and x2['kind'] == 'dead' for k2, x2 in kinds[i + 1:]):
+                    it['loot_seconds'] = int(s)
                 it['was'] = x['seconds']
             if x['kind'] == 'timer':
                 secs += x['seconds']
@@ -1631,7 +1719,18 @@ def program(ctx, q, chain_no, flat, pers, opt, taken, spots_taken, gap_scale, us
             # would start the next TOWER step for a bot that stands in the street (what a Defend step does with a
             # place on another navigation part is not established: kl_fa_bots_rt). So behind the last loot wait
             # the first chain gets no timer: no hold on the tower's way out.
-            want_hold = (not is_loot_place and not last_place and not gate[j] and (nx is not None or rally)
+            # A GATE OF kl_fa_bots_rt (2026-10-11, re/retomoto_bots_rooms.md): the place a TriggerActorsDead follows is
+            # itself a hold at a cover box, chosen there against the trigger boxes of the next fight (beyond the box
+            # that wakes this fight's squads, out of the next one's). A cover of this module's choosing in its place
+            # knows nothing of those boxes - on the first try it put a bot 6 m back from the reception's hold, and
+            # within REACH of the gallery's hold lies the box that sends the second floor's men up. So: no hold of
+            # ours there; the bot stands where the gate put it until the gate lets it go.
+            # (Since the afternoon of 2026-10-11 the rule above it does the same for the whole of the tower's way
+            # out: the gates stand behind the table's loot wait, last_loot_wait() no longer takes them for loot
+            # waits, so `post` is true from the table on and the first chain gets no hold there at all. This rule
+            # still acts where a TriggerActorsDead stands BEFORE the last loot wait - kl_fa_bots' --wait-guards.)
+            gate_hold = j == n - 1 and nxt_kind is not None and nxt_kind['kind'] == 'dead'
+            want_hold = (not is_loot_place and not last_place and not gate[j] and not gate_hold and (nx is not None or rally)
                          and (pers.out_holds or not post) and (pers.hold_out > 0 or not post) and (last_chain or not post))
             rally_here = rally and j == n - 1
             hold = None
@@ -2283,6 +2382,7 @@ def check(folder, log=print, base=True):
     stock_mod = {('eDM_Tight',), ('eDM_Loose',), ('eLM_Unleash', 'eDM_Tight'), ('eLM_Leash', 'eDM_Tight'), ('eLM_Leash', 'eDM_Loose')}
     rows, all_holds = collections.OrderedDict(), []
     d_all, d_hold = [], []
+    join_waits = collections.OrderedDict()              # {squad: (gate waits behind the last loot wait, loot waits)} of a chain the jump cuts off
     for sq, g in G.items():
         for t in g['faults']:
             fail('%s: %s' % (sq, t))
@@ -2303,14 +2403,29 @@ def check(folder, log=print, base=True):
             if pts_chain:
                 h = nav.at(*pts_chain[0], dy=15.0)
                 part = h and nav.part[h[0]]
-            n_wait_last = max([i for i, it in enumerate(chain) if it['ctrl'] in ('TriggerLootDepleted', 'TriggerActorsDead') or
-                               (it['ctrl'] == 'TriggerDelay2' and 'done_looting' in it['name'])], default=-1)
-            if ci < len(g['chains']) - 1:
+            # 'the last loot wait' as last_loot_wait() takes it: on a chain that the jump cuts off the table's own wait,
+            # not a gate of kl_fa_bots_rt (a TriggerActorsDead behind it). Until 2026-10-11 afternoon a gate counted as
+            # a loot wait here, the rule below looked at the last leg alone and the first gates build passed with 36
+            # timers of this module between its gates (re/retomoto_bots_rooms_review.md D1).
+            is_loot = lambda it: it['ctrl'] == 'TriggerLootDepleted' or (it['ctrl'] == 'TriggerDelay2' and 'done_looting' in it['name'])
+            cut_off = ci < len(g['chains']) - 1
+            loot_i = [i for i, it in enumerate(chain) if is_loot(it)]
+            n_wait_last = loot_i[-1] if (cut_off and loot_i) else max([i for i, it in enumerate(chain) if is_loot(it) or it['ctrl'] == 'TriggerActorsDead'],
+                                                                      default=-1)
+            if cut_off:
                 # (a '--fork-gap' timer is as good as the RandomTrigger it precedes: not a timer in this sense)
                 late = [it['name'] for i, it in enumerate(chain) if i > n_wait_last and it['ctrl'] == 'TriggerDelay2' and not it['name'].endswith('_gap')]
                 if late:
                     fail('%s: timer %s runs behind the last loot wait of a chain that the jump cuts off: it would start a step of this '
-                         'part for a bot the hook has moved to the next' % (sq, late[0]))
+                         'part for a bot the hook has moved to the next (%d such timer(s) in this branch set)' % (sq, late[0], len(late)))
+                # THE SAME HAZARD, NOT OF THIS MODULE'S MAKING: the waits of the build that stand there. A wait that is
+                # armed when the human takes the join fires later (a TriggerActorsDead 30 s after it was armed at the
+                # latest, kl2 0x4afbbd; a loot wait after its seconds) and sends 'AITrigger' to the next step of THIS
+                # part, which has never run and so starts (0x4ebed0) - for a bot that stands on the next part. Counted
+                # and said, once for the build; whether it strands a bot is not established (no joined run with bots).
+                if vi == 0:
+                    join_waits[sq] = ([it['name'] for i, it in enumerate(chain) if i > n_wait_last and it['ctrl'] == 'TriggerActorsDead'],
+                                      [it['name'] for i, it in enumerate(chain) if i <= n_wait_last and is_loot(it)])
             walked = []                                 # (index in chain, place) of every walked place
             for i, it in enumerate(chain):
                 if it['ctrl'] == 'DefendBehaviourRout':
@@ -2501,6 +2616,18 @@ def check(folder, log=print, base=True):
         if not BUDGET[0] <= row['timers'] <= BUDGET[1]:
             note('%s: %.0f s of timers (stock bots: %d..%d s)' % (sq, row['timers'], *BUDGET))
         rows[sq] = row
+    n_gate = [len(a) for a, _b in join_waits.values()]
+    n_loot = [len(b) for _a, b in join_waits.values()]
+    facts['join_waits'] = {sq: {'gates': a, 'loot': b} for sq, (a, b) in join_waits.items()}
+    if any(n_gate):
+        first = next(a for a, _b in join_waits.values() if a)
+        note('THE JOIN: every bot has %s TriggerActorsDead wait(s) behind the last loot wait of the chain that the jump cuts off (%s .. %s; '
+             'kl_fa_bots_rt\'s gates) and %s loot wait(s) before them. One that is armed when the human takes the join fires up to 30 s later and '
+             'starts the next step of THAT part for a bot the hook has moved on - the hazard this check FAILs a timer of this module for. Not '
+             'established what such a bot then does: wanted before the build goes on the tab, ONE JOINED RUN with bots waiting at a gate '
+             '(re/retomoto_bots_rooms.md 7, run J1)'
+             % ('%d' % n_gate[0] if len(set(n_gate)) == 1 else '%d..%d' % (min(n_gate), max(n_gate)), first[0], first[-1],
+                '%d' % n_loot[0] if len(set(n_loot)) == 1 else '%d..%d' % (min(n_loot), max(n_loot))))
     # the walked single holds: within reach of a cover box
     for sq, ci, i, p, e, nm in all_holds:
         d = near_cover(p)
