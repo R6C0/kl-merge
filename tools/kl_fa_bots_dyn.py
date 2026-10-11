@@ -43,6 +43,25 @@ kl_fa_bots_rt's) got one addition: a chain that forks is walked once per branch 
                         before the random routes)
       --gap N           least path between two holds of a bot on the way in (default GAP_IN)
       --no-tree         as kl_fa_bots: the new groups are not listed in the root's group tree
+      --keep-fake-targets   a FakeTarget that stands outside the vision space keeps its controller (default: taken
+                        off - it is what wrote over the heap in the 0x686a66 crash; check FAILS a build that has one)
+      --fork-gap S      a TriggerDelay2 of S seconds before every RandomTrigger (default 0 = none; commit 76bfdcd
+                        had 0.1 as the default: say '--fork-gap 0.1', or opt {'fork_gap': 0.1} to build(), for
+                        that form - the build log says which it made. Both forms have run in the game.)
+    python kl_fa_bots_dyn.py fake-test <M01 build> <a Retomoto build with the parked vans> [...]
+                                                                                the FakeTarget rule against the two facts
+                                                                                known from the running game (the grid of
+                                                                                the M01 dump, 'no record' for the parked
+                                                                                van) + a lattice; exit 1 if one fails or
+                                                                                a control did not run
+    python kl_fa_bots_dyn.py fake-fix <build folder> <out folder>               ONLY the FakeTargets outside the vision
+                                                                                space taken off (the .prp member alone;
+                                                                                the squads stay): for a build that is not
+                                                                                to get the dynamic step; exit 1 on a FAIL
+    python kl_fa_bots_dyn.py grid <folder> <96 hex digits | 12 floats | 6 floats>
+                                                                                a grid read in the running game (the twelve
+                                                                                floats at [0x1535c70] + 0x50) against the
+                                                                                level's boxes: the one-load proof per map
 
 WHAT A SQUAD'S CHAIN IS AFTERWARDS (each form's stock precedent: re/bots_dyn_build.md 2)
   Timer_start_bots -> 000_Timer_stagger (0 / 3 / 5 / 8 s) -> 001_SquadModifier_awake (eDM_Loose, vision x 2)
@@ -68,6 +87,10 @@ WHAT IS WRITTEN: .prp, .gms + .buf (entities added / removed inside the squad gr
   are reused), .oct / .rmi / .rmc (slot ids renumbered; the squad's groups re-listed in the root's group tree with
   the box of their places), .prm (only the 4-byte .oct record offsets in model roots, same size). No model, no
   animation, no sound, no shader: the four large blocks keep their size.
+  ONE THING OUTSIDE THE SQUADS (2026-10-11, re/crash_686a66.md): a FakeTarget controller on an object that stands
+  outside the vision space is taken off its node (.prp only). That object is what crashed the routes build of
+  Retomoto at kl2 0x686a66 - not the forks: its update writes 16 bytes behind ZCheckVisible's table every frame.
+  The vision space is read from the .rmi records of the rooms' bounds (FAKE TARGETS below; proven on one level).
 
 GUESS = a value not copied from a stock object and not measured; ASSUMPTION = fits the evidence, not proven.
 """
@@ -107,14 +130,66 @@ GAP_IN = 1300.0         # GUESS: least path between two holds of a bot on the wa
                         # a 'pos' step every third; ours had none)
 GAP_OUT = 1700.0        # GUESS: ... on the way out (the owner: 'move a bit more like the bots to the van')
 BUDGET = (16.0, 85.0)   # sum of a bot's TriggerDelay2 seconds: what stock bots have (re/bots_dynamic.md 2.1)
-# THE GAP BEFORE A FORK (2026-10-11; re/retomoto_ai.md, CLAUDE.md 'CRASH 0x686a66'): kl2 0x686a66 crashed in one of four
-# Retomoto runs of the routes build inside a ZDefendBehaviourGoal whose list had been freed under it - the only wiring
-# the routes add is 'Defend rout -> RandomTrigger -> Defend rout of the same squad' (57 on Retomoto, 48 on M02; stock
-# bots have it 119 times, so a chance race). A TriggerDelay2 of FORK_GAP s between the Defend rout's arrival list and
-# every RandomTrigger lets the old goal finish its tick before the next step replaces it (ASSUMPTION that a timer
-# defers to the next tick; stock's own transitions Defend -> TriggerDelay2 -> Defend are the commonest, 329).
-# 0 = no gap (the wiring of the first routes builds). Not yet seen live.
-FORK_GAP = 0.1
+# THE GAP BEFORE A FORK ('--fork-gap S'; OFF since 2026-10-11, re/crash_686a66.md): a TriggerDelay2 of S seconds between
+# a Defend rout's arrival list and every RandomTrigger. It was written as an untested answer to the kl2 0x686a66 crash
+# of the routes build (a ZDefendBehaviourGoal with a broken place list) on the thought that a fork starts the next
+# Defend step from inside the old goal. The crash was NOT that: the list was never freed, 16 bytes of it were written
+# over from outside (see FAKE TARGETS below). What is true of the thought: a RandomTrigger passes its message on at
+# once, in the sender's stack (kl2 0x4d86e0), a TriggerDelay2 only arms and fires from its own update (0x71e250 /
+# 0x744c30) - but the engine starts every next step from the old goal's last call anyway (0x5c6e70 -> 0x8df0d0), a
+# Defend naming a Defend is stock's commonest link, and a goal is one object per rout that is never freed. So the
+# form of the builds on the owner's tab stays the default (no gap). The timer form has run in the game since
+# (2026-10-11 05:38-06:08, the lead's runs R7a / R7b / R7c_DM09 on z_route7\retomoto_full and C3_DM03 on
+# z_cover3\M03: four clean rounds) - it does no harm that was seen and mends nothing: z_route7 still had the two
+# parked FakeTargets, so the write was there in all three of its rounds. build() says in its log which form it made
+# (another module, kl_fa_cover, builds through here with this default).
+FORK_GAP = 0.0
+# FAKE TARGETS OUTSIDE THE VISION SPACE (the cause of the 0x686a66 crash; re/crash_686a66.md). ZFakeTarget's update
+# (kl2 0x560630, every frame) registers with ZCheckVisible (0x55cc40 -> 0x59c790) and then ALWAYS writes its cell and
+# place into its record (0x7143f0). 0x59c790 answers 0xff for a place outside the grid of 16 x 1 x 16 cells that
+# 0x541e40 lays over the rooms - and record 0xff of a table of 200 lies 0x5a8 bytes BEHIND the ZCheckVisible
+# object: 16 bytes of whatever the heap has there are overwritten every frame. kl_fa_street parks Retomoto's two
+# spare vans 600 m under the road with the FakeTarget 'Mercenary' on their bodies.
+# WHAT THE GRID LIES OVER (kl2 0x541e40, read 2026-10-11; the first form of this rule took the items of the root's
+# room tree instead - those are the rooms' CONTENTS, 7,300 to 12,400 wider than the engine's box on M01, and under
+# the engine's own arithmetic that box would have let the parked vans register: re/crash_686a66_review.md D1):
+#   a pre-order walk of the WHOLE scene (0x883840) takes every object of a ZROOM-derived class but the root, a
+#   hidden one (slot flags & 0x400), one named *backdrop* (0x7472b0: a search without case) and one whose vtable
+#   +0x2fc answers true (bit 2 of the dword at +0x118: 0 from the constructor 0x545150, and the only other writer,
+#   the setter 0x6b81e0, is called for rooms with bit 0 alone - no code was found that sets it); a room named
+#   *VisionSpaceBox* is the box alone and ends the walk (no stock level and no build has one). A room with a list at
+#   +0x38 gives the box of every object of that list, a room without gives its own slot's (0x44a010 -> 0x8849b0:
+#   centre -/+ the half extents turned into world axes, 0x7d8460).
+#   OFFLINE that list is the room's ZBOUND children and the boxes are the records of the .rmi ('InsideBound_NN'; one
+#   record per bound, +0x28 centre, +0x34 the bound's own place, +0x40 half extents; a room without bounds has one
+#   record of its own with +0x34 = 0; some rooms of either kind have no record at all; no room of 14 levels has
+#   bounds and another number of records).
+#   PROOF, one level: the dump of 2026-10-08 20:05 (M01_FA_A) holds ZCheckVisible's grid, and its lo and hi are the
+#   union of M01's bound records bit for bit on all six floats (GRID_M01; 'fake-test').
+# TWO BOXES are therefore read (vision_space): 'sure' = the records of rooms whose records are their ZBOUND children
+# (the kind the dump proves), 'all' = those and the one-record rooms without bounds (ASSUMPTION that such a record is
+# the room's own slot box: Retomoto's 'all' is twice as wide as its 'sure'). NOT KNOWN offline: the box of a room
+# that the walk takes and the .rmi has no record for (Retomoto 2, Late Night Opening 1, the bank 1, stock F02 F03
+# F05 F06 F07 F08 F09) - so the engine's box is 'sure' or larger, never smaller.
+# THE RULE (check): the place a FakeTarget registers at (its node's, 140 higher: 0x55cc40) must lie inside 'sure',
+# EDGE clear of its faces. Inside 'sure' it registers under every reading (a larger box only makes the cells
+# larger); the engine's own arithmetic is looser (it truncates toward zero and keeps the low byte, so a place up to
+# one cell under lo, or 256 cells away, also gets a cell) and is printed beside it, not relied on. The build step
+# takes the controller of a FakeTarget that fails off (nothing in kl2.exe asks an object for its FakeTarget: the
+# class info 0x168e3d4 is named by its own registration only) - '--keep-fake-targets' leaves it.
+VISION_SKIP = 'backdrop'        # kl2 0x541f0e: a room named *backdrop* is not joined
+VISION_ALONE = 'visionspacebox'  # kl2 0x541eeb: a room of that name is the box alone
+PROBE_UP = 140.0                # kl2 0x55cc40 adds 140.0 (the double at 0xb45358) to y before it asks for a record
+EDGE = 1.0                      # GUESS: a place this near a face of the box is not called inside (the cell is float32)
+NO_CELL = 0xff                  # what 0x59c790 answers, and the index 0x560630 then writes with
+# The two facts from the running game the reading is held against ('fake-test'):
+# 1. ZCheckVisible's grid ([0x1535c70] + 0x50: cell size, 1 / cell size, lo, hi - twelve floats) in the dump
+#    %TEMP%\kl_triage\20261008_200513\KLHook_2.dmp, the whole-level conversion of M01_FA_A (no DebugRoom in it).
+GRID_M01 = ('3bc2614502c08f4629764a45' '6825913986f3633817d9a139' 'f4009ec6400048c3cacef745' 'c1c1124701308e4602706947')
+GRID_M01_ROOM = 'M01FAA_Out_Street_02a'     # a level with this room is held against GRID_M01
+# 2. record 0xff in the dump of the crash (%TEMP%\kl_triage\20261011_013427\KLHook_2.dmp, 0x7d73f738): 'no cell' and
+#    the place of the FakeTarget on Retomoto's parked van 02 - that target could NOT register in the game.
+PARKED_RT = (-3216.61, -60040.02, 3419.27)
 ALTS = 3                # most covers a RandomTrigger chooses between (stock bots: 2 lists 147 x, 3 lists 42 x, 4 14 x)
 
 # ---- the seven. Every number is a value stock gives a bot (timers: 3 4 5 6 8 10 12 15; loot seconds 15 20 60;
@@ -134,7 +209,7 @@ LOOT_SHORT = 15         # TriggerLootDepleted field 1 of the point man and the r
 LOOT_LONG = (15, 60)    # the looters: the build's own seconds + 15, at most 60
 DETOUR = 'side+'        # the bot (by its cover preference) that takes the other way round where the mesh has one
 DEFAULTS = {'random': True, 'vision': True, 'sixth': 0.0, 'rusher': True, 'stagger': True, 'gap': GAP_IN, 'tree': True, 'detour': True,
-            'routes': True, 'ways': None}
+            'routes': True, 'ways': None, 'fork_gap': FORK_GAP, 'fake': True}
 
 NEXT = {'DefendBehaviourRout': 7, 'SquadModifierBehaviour': 26, 'TriggerDelay2': 4, 'TriggerLootDepleted': 4, 'TriggerActorsDead': 2}
 BS = '\\'
@@ -284,6 +359,237 @@ def cover_boxes(B):
             continue
         out.append({'node': k, 'at': B.at(k), 'kind': kind, 'hidden': bool(B.ents[k - 1].flags & 0x400)})
     return out
+
+
+def _f32(x):
+    return struct.unpack('<f', struct.pack('<f', x))[0]
+
+
+def _record_box(raw):
+    """One .rmi record -> (centre, half extents in world axes at their largest, at their smallest). An axis-aligned
+    record (+0 = 1) is centre -/+ half as it stands. A turned one (+0 = 0, matrix at +4; stock F09, the park) has
+    the half extents |matrix| x half, as kl2 0x7d8460 forms a slot's; whether the record's matrix is that one or
+    its transpose is NOT established, so both are formed and the 'sure' box takes the smaller per axis."""
+    c, h = struct.unpack_from('<3f', raw, 0x28), struct.unpack_from('<3f', raw, 0x40)
+    if struct.unpack_from('<I', raw, 0)[0]:
+        return c, h, h
+    m = struct.unpack_from('<9f', raw, 4)
+    r1 = [sum(abs(m[3 * r + a]) * h[r] for r in range(3)) for a in range(3)]
+    r2 = [sum(abs(m[3 * a + r]) * h[r] for r in range(3)) for a in range(3)]
+    return c, [max(x, y) for x, y in zip(r1, r2)], [min(x, y) for x, y in zip(r1, r2)]
+
+
+def vision_space(B):
+    """The box ZCheckVisible lays its grid over (kl2 0x541e40; FAKE TARGETS at the top), as far as the level files
+    give it -> dict, or None when no room has a record that can be relied on:
+      'sure'   (lo, hi, records): the .rmi records that name a ZBOUND child of their room (+0x34 = its place) -
+               the kind the dump of M01 proves bit for bit. The engine's box is this or larger.
+      'all'    (lo, hi, records): 'sure' and the single records of rooms without bounds (ASSUMPTION: such a
+               record is the room's own slot box, which is what the engine joins for a room without a list).
+      'own'    names of the rooms counted in 'all' only;  'unknown' names of rooms the walk takes that have no
+               record (the engine joins a box for them that is not read here);
+      'skipped' {'backdrop': names, 'hidden': names};  'alone' the name of a *VisionSpaceBox* room, if any (its box
+               is the room's own slot box and it ends the walk: then nothing is 'sure' and None is returned).
+    lo and hi are float32, centre - half and centre + half as kl2 0x44a010 forms them."""
+    sc, sch = B.sc, J.schema('dd')
+    slots = B.scene.slots()
+    by_id = {slots[e] + 2: k + 1 for k, e in enumerate(B.ents) if e in slots}
+    per = collections.defaultdict(list)
+    for b in O.RoomIndex.parse(B['.rmi']).boxes:
+        per[by_id.get(b.room)].append(b)
+    roomish = lambda k: 'ZROOM' in sch.bases(sc.cls(k) or '')
+    box = {'sure': None, 'all': None}
+    out = {'own': [], 'unknown': [], 'skipped': {'backdrop': [], 'hidden': []}, 'alone': None, 'rooms': 0}
+
+    def join(key, c, h):
+        lo, hi, n = box[key] or ([1e38] * 3, [-1e38] * 3, 0)
+        box[key] = ([min(lo[a], _f32(c[a] - h[a])) for a in range(3)], [max(hi[a], _f32(c[a] + h[a])) for a in range(3)], n + 1)
+
+    for k in range(1, len(sc.nodes)):                   # scene order = the engine's pre-order walk
+        if not roomish(k):
+            continue
+        name, low = sc.names[k], sc.names[k].lower()
+        if B.ents[k - 1].flags & 0x400:
+            out['skipped']['hidden'].append(name); continue
+        if VISION_ALONE in low:
+            out['alone'] = name
+            return None
+        if VISION_SKIP in low:
+            out['skipped']['backdrop'].append(name); continue
+        out['rooms'] += 1
+        bounds = [B.at(b) for b in range(k + 1, sc.end[k]) if sc.parent[b] == k and sc.cls(b) == 'ZBOUND']
+        recs = per.get(k, [])
+        if not recs:
+            out['unknown'].append(name); continue
+        for b in recs:
+            c, big, small = _record_box(b.raw)
+            join('all', c, big)
+            # a bound's record names its bound: +0x34 is the ZBOUND child's place (582 of 582 records of rooms with
+            # bounds on 14 levels, and where +0x50 holds a second slot id it is that child's, 59 of 59; a room's
+            # own record has 0, 0, 0 there: 53 of 53). Only such a record is 'sure'.
+            at = struct.unpack_from('<3f', b.raw, 0x34)
+            if len(bounds) == len(recs) and any(math.dist(at, q) <= 1.0 for q in bounds):
+                join('sure', c, small)
+            elif name not in out['own']:
+                out['own'].append(name)
+    if box['sure'] is None:
+        return None
+    out.update(sure=tuple(tuple(x) if isinstance(x, list) else x for x in box['sure']),
+               all=tuple(tuple(x) if isinstance(x, list) else x for x in box['all']))
+    return out
+
+
+def grid_cell(lo, hi, p):
+    """kl2's own arithmetic for the cell of place p in a grid over lo..hi -> ((x, y, z) as the three bytes it
+    forms, True when 0x59c790 would give a record). The grid (tail of 0x541e40): 16 cells in x and z, ONE in y,
+    cell size and 1 / cell size kept as float32. The cell (0x59c790, 0x79bae0): (BYTE) ftol((p - lo) / size) with
+    ftol = 0xa8d330 = cvttsd2si, a truncation TOWARD ZERO - so a place up to one cell under lo gets cell 0, and only
+    the low byte is tested (x <= 15, y == 0, z <= 15)."""
+    size = (_f32((hi[0] - lo[0]) * 0.0625), _f32(hi[1] - lo[1]), _f32((hi[2] - lo[2]) * 0.0625))
+    c = []
+    for a in range(3):
+        v = (_f32(p[a]) - lo[a]) * _f32(1.0 / size[a]) if size[a] else 1e30
+        c.append(int(v) & 0xff if abs(v) < 2.0 ** 31 else 0)       # cvttsd2si out of range: 0x80000000, low byte 0
+    return tuple(c), c[0] <= 15 and c[1] == 0 and c[2] <= 15
+
+
+def grid_floats(lo, hi):
+    """The twelve floats ZCheckVisible keeps at +0x50 for a box lo..hi (cell size, 1 / cell size, lo, hi), as bytes."""
+    size = (_f32((hi[0] - lo[0]) * 0.0625), _f32(hi[1] - lo[1]), _f32((hi[2] - lo[2]) * 0.0625))
+    return struct.pack('<12f', *size, *[1.0 / s for s in size], *lo, *hi)
+
+
+def outside(space, p):
+    """How far the place a FakeTarget at p registers at (PROBE_UP higher) lies outside the 'sure' box per axis,
+    EDGE counted; None when it is inside (or there is no space)."""
+    if not space:
+        return None
+    lo, hi = space['sure'][0], space['sure'][1]
+    q = (p[0], p[1] + PROBE_UP, p[2])
+    ex = tuple(max(lo[a] + EDGE - q[a], q[a] - (hi[a] - EDGE), 0.0) for a in range(3))
+    return ex if any(ex) else None
+
+
+def fake_targets(B, space=None):
+    """Every FakeTarget of the level -> [dict]: node, index of the controller in the node's list, path (without
+    ROOT), place, 'out' = how far the place it registers at lies outside the 'sure' box per axis (None: inside, or
+    no space could be read), 'cell' / 'cell_sure' = what kl2's own arithmetic makes of that place on the 'all' and
+    the 'sure' box ((bytes), registers). The place is the node's own, as the level starts: a FakeTarget that cannot
+    register THEN writes behind ZCheckVisible's table every frame until it has moved into the grid."""
+    space = space if space is not None else vision_space(B)
+    out = []
+    for k, i, v in kl_fa.controllers(B.sc, 'FakeTarget'):
+        p = B.at(k)
+        q = (p[0], p[1] + PROBE_UP, p[2])
+        out.append({'node': k, 'ctrl': i, 'path': B.sc.path[k][5:], 'at': tuple(p), 'team': v[0] if v else None, 'out': outside(space, p),
+                    'cell': grid_cell(space['all'][0], space['all'][1], q) if space else None,
+                    'cell_sure': grid_cell(space['sure'][0], space['sure'][1], q) if space else None})
+    return out
+
+
+def space_words(space):
+    """The two boxes in one line."""
+    if not space:
+        return 'the vision space cannot be read (no room has a record for each of its bounds, or a VisionSpaceBox room)'
+    s, a = space['sure'], space['all']
+    return ('vision space: the %d bound records of %d rooms x %d..%d y %d..%d z %d..%d (the kind the M01 dump proves; the rule\'s box); with %d '
+            'room(s) counted by a record of their own x %d..%d y %d..%d z %d..%d (ASSUMPTION); %d room(s) without a record, their box not read (%s)'
+            % (s[2], space['rooms'] - len(space['own']) - len(space['unknown']), s[0][0], s[1][0], s[0][1], s[1][1], s[0][2], s[1][2],
+               len(space['own']), a[0][0], a[1][0], a[0][1], a[1][1], a[0][2], a[1][2], len(space['unknown']), ', '.join(space['unknown']) or '-'))
+
+
+def fake_test(folders, log=print):
+    """The tests of the FakeTarget rule against what is KNOWN from the running game -> True when every one that
+    applies to the folders holds and both controls ran at least once:
+      1. GRID: a level with the room GRID_M01_ROOM - the 'sure' box and the grid floats formed from it must be the
+         twelve floats of GRID_M01 bit for bit.
+      2. PARKED: a level with a FakeTarget at PARKED_RT - kl2's own arithmetic must give 'no record' for it on the
+         'sure' AND on the 'all' box (the game did), and the rule must fail it.
+      3. LATTICE, on every folder: of 31 x 31 x 31 places over three times the 'all' box, none may pass the rule
+         that kl2's arithmetic gives no record on either box (the first form of the rule passed a van 400 m above
+         the road, 200 m east of the tower and 600 m up the road: re/crash_686a66_review.md D1). This one only
+         holds outside() against grid_cell() on the boxes as read; a WRONG box is what 1 and 2 are for."""
+    good, ran = True, collections.Counter()
+    want = struct.unpack('<12f', bytes.fromhex(GRID_M01))
+    for folder in folders:
+        B = F.Built(folder)
+        space = vision_space(B)
+        log('%s' % folder)
+        if space is None:
+            log('  FAIL %s' % space_words(space))
+            good = False
+            continue
+        log('  ' + space_words(space))
+        s, a = space['sure'], space['all']
+        if any(B.sc.names[k] == GRID_M01_ROOM for k in range(1, len(B.sc.nodes))):
+            got = grid_floats(s[0], s[1])
+            ok = got == bytes.fromhex(GRID_M01)
+            good, ran['grid'] = good and ok, ran['grid'] + 1
+            log('  %s GRID: the \'sure\' box lo (%r, %r, %r) hi (%r, %r, %r)' % ('ok  ' if ok else 'FAIL', *s[0], *s[1]))
+            log('       the game\'s (dump 2026-10-08)  lo (%r, %r, %r) hi (%r, %r, %r); the twelve floats %s'
+                % (*want[6:9], *want[9:12], 'bit for bit' if ok else 'DIFFER: %s against %s' % (got.hex(), GRID_M01)))
+        fts = fake_targets(B, space)
+        for f in fts:
+            if math.dist(f['at'], PARKED_RT) > 1.0:
+                continue
+            ok = not f['cell'][1] and not f['cell_sure'][1] and f['out'] is not None
+            good, ran['parked'] = good and ok, ran['parked'] + 1
+            log('  %s PARKED: %s at (%.1f, %.1f, %.1f): kl2\'s arithmetic gives cell %s on the \'all\' box (%s), %s on the \'sure\' box (%s); '
+                'the game: no record (0xff); the rule: %s' % ('ok  ' if ok else 'FAIL', f['path'].split(BS)[0], *f['at'], f['cell'][0],
+                'a record' if f['cell'][1] else 'no record', f['cell_sure'][0], 'a record' if f['cell_sure'][1] else 'no record',
+                'outside by (%d, %d, %d)' % f['out'] if f['out'] else 'INSIDE'))
+        n = bad = 0
+        steps = [i / 10.0 for i in range(-10, 21)]          # -1 .. 2 box widths: 31 x 31 x 31 places
+        for fx in steps:
+            for fy in steps:
+                for fz in steps:
+                    q = tuple(a[0][i] + fr * (a[1][i] - a[0][i]) for i, fr in enumerate((fx, fy, fz)))
+                    p = (q[0], q[1] - PROBE_UP, q[2])
+                    r_all, r_sure, rule_in = grid_cell(a[0], a[1], q)[1], grid_cell(s[0], s[1], q)[1], outside(space, p) is None
+                    n += 1
+                    if rule_in and not (r_all and r_sure):
+                        bad += 1
+        ok = not bad
+        good, ran['lattice'] = good and ok, ran['lattice'] + 1
+        log('  %s LATTICE: %d places over three times the box: %d the rule passes although kl2\'s arithmetic gives no record on one of the boxes'
+            % ('ok  ' if ok else 'FAIL', n, bad))
+        for f in fts:
+            log('       FakeTarget %s at (%.1f, %.1f, %.1f): %s; kl2\'s arithmetic: cell %s (%s)' % (f['path'].split(BS)[0], *f['at'],
+                'outside by (%d, %d, %d) - the rule FAILS it' % f['out'] if f['out'] else 'inside', f['cell'][0], 'a record' if f['cell'][1] else 'no record'))
+    whole = True
+    for key, what in (('grid', 'a level with the room %s (the grid of the 2026-10-08 dump)' % GRID_M01_ROOM),
+                      ('parked', 'a level with the FakeTarget of the 0x686a66 dump at (%.1f, %.1f, %.1f)' % PARKED_RT)):
+        if not ran[key]:
+            log('NOT RUN: %s is not among the folders' % what)
+            whole = False
+    log('RESULT (fake-test): %s (grid control %d, parked control %d, lattice %d)'
+        % ('FAIL' if not good else 'PASS' if whole else 'INCOMPLETE - nothing failed, but a control did not run', ran['grid'], ran['parked'], ran['lattice']))
+    return good and whole
+
+
+def grid_compare(folder, text, log=print):
+    """A grid read in the running game (the twelve floats at [0x1535c70] + 0x50: 96 hex digits, or twelve numbers,
+    or six = lo and hi) against the boxes read from the level -> True when 'sure' or 'all' is that grid's box."""
+    words = text.replace(',', ' ').split()
+    if len(words) == 1 and len(words[0]) == 96:
+        fl = struct.unpack('<12f', bytes.fromhex(words[0]))
+    else:
+        fl = tuple(_f32(float(w)) for w in words)
+    if len(fl) not in (6, 12):
+        raise ValueError('twelve floats (cell, 1 / cell, lo, hi), their 96 hex digits, or six (lo, hi)')
+    lo, hi = fl[-6:-3], fl[-3:]
+    space = vision_space(F.Built(folder))
+    log(space_words(space))
+    log('the game\'s grid: lo (%r, %r, %r) hi (%r, %r, %r)' % (*lo, *hi))
+    hit = False
+    for key in ('sure', 'all') if space else ():
+        b = space[key]
+        d = [b[0][i] - lo[i] for i in range(3)] + [b[1][i] - hi[i] for i in range(3)]
+        same = tuple(b[0]) == tuple(lo) and tuple(b[1]) == tuple(hi)
+        hit = hit or same
+        log('  \'%s\': %s' % (key, 'the same six floats, bit for bit' if same else 'differs by lo (%+.4f, %+.4f, %+.4f) hi (%+.4f, %+.4f, %+.4f)' % tuple(d)))
+    log('RESULT (grid): %s' % ('the level\'s box is the game\'s' if hit else 'NEITHER box is the game\'s - the reading is wrong for this level (say so in re/crash_686a66.md)'))
+    return hit
 
 
 def parse(ctx):
@@ -1427,13 +1733,14 @@ def make(ctx, P, log=print):
             M.set(g, 'DefendBehaviourRout', {0: refs[0] if single else '', 1: [] if single else refs, 2: 1, 3: 0,
                                              4: 'eDMS_Sprint' if sprint else 'eDMS_NotSet', 5: 'eDF_NotSet', 6: '', 7: nxt, 8: 1, 9: 0})
 
-        entry = lambda it: it['name'] + '_gap' if (it['kind'] == 'fork' and FORK_GAP) else it['name']   # a fork is entered by its gap timer, else its RandomTrigger
+        fork_gap = float(opt.get('fork_gap') or 0.0)        # '--fork-gap S': off by default (FORK_GAP above)
+        entry = lambda it: it['name'] + '_gap' if (it['kind'] == 'fork' and fork_gap) else it['name']   # a fork is entered by its RandomTrigger (by its gap timer with '--fork-gap')
         def gap(name, target):
-            """A TriggerDelay2 of FORK_GAP s named <name>_gap that starts the RandomTrigger <name>."""
+            """A TriggerDelay2 of fork_gap s named <name>_gap that starts the RandomTrigger <name>."""
             t = top.add(M.clone(SX, FORM['timer'], name + '_gap'))
             t.keep = None
             M.place(t, (0.0, 0.0, 0.0))
-            M.set(t, 'TriggerDelay2', {0: float(FORK_GAP), 1: 0.0, 2: -1.0, 3: 0, 4: [path(target)]})
+            M.set(t, 'TriggerDelay2', {0: fork_gap, 1: 0.0, 2: -1.0, 3: 0, 4: [path(target)]})
 
         def emit(items, after):
             """The nodes of a run of items; the last one starts `after` (a list of paths)."""
@@ -1452,14 +1759,14 @@ def make(ctx, P, log=print):
                     w = [int(brs[j]['weight']) if j < len(brs) else 0 for j in range(4)]
                     lists = [([path(entry(brs[j]['items'][0]))] if brs[j]['items'] else nxt) if j < len(brs) else [] for j in range(4)]
                     M.set(r, 'RandomTrigger', {0: 1, 1: w[0], 2: w[1], 3: w[2], 4: w[3], 5: lists[0], 6: lists[1], 7: lists[2], 8: lists[3]})
-                    if FORK_GAP:
+                    if fork_gap:
                         gap(it['name'], it['name'])
                     for br in brs:
                         emit(br['items'], nxt)
                 elif it['kind'] == 'rout':
                     fan = it.get('fan')
                     if fan and fan['kind'] == 'random':
-                        nxt = nxt + [path(fan['name'] + '_gap' if FORK_GAP else fan['name'])]
+                        nxt = nxt + [path(fan['name'] + '_gap' if fork_gap else fan['name'])]
                     elif fan:
                         nxt = nxt + [path(fan['alts'][0]['name'])]
                     defend(it['name'], it['places'], False, nxt, it['sprint'])
@@ -1473,7 +1780,7 @@ def make(ctx, P, log=print):
                         w = [3 if j < len(fan['alts']) else 0 for j in range(4)]
                         lists = [[path(fan['alts'][j]['name'])] if j < len(fan['alts']) else [] for j in range(4)]
                         M.set(r, 'RandomTrigger', {0: 1, 1: w[0], 2: w[1], 3: w[2], 4: w[3], 5: lists[0], 6: lists[1], 7: lists[2], 8: lists[3]})
-                        if FORK_GAP:
+                        if fork_gap:
                             gap(fan['name'], fan['name'])
                 elif it['kind'] == 'hold':
                     defend(it['name'], [it['place']], True, nxt, False)
@@ -1526,6 +1833,146 @@ def make(ctx, P, log=print):
 
 
 # ------------------------------------------------------------------ writing
+def take_off(B, Jn, log=print):
+    """Every FakeTarget of build B that fails the rule loses its controller in the joined scene Jn (same paths as
+    B's) -> [dict], what dyn.json keeps as fake_targets_removed. Only a node's controller list changes."""
+    gone = []
+    for f in fake_targets(B):
+        if not f['out']:
+            continue
+        hit = Jn.resolve(R_ + f['path'])
+        if len(hit) != 1 or len(B.sc.resolve(R_ + f['path'])) != 1:
+            raise ValueError('FakeTarget %s: its path names %d nodes of the new scene' % (f['path'], len(hit)))
+        ctrls = Jn.nodes[hit[0]]['ctrls']
+        idx = [i for i, (nm, _b) in enumerate(ctrls) if Jn.p.key(nm) == 'FakeTarget']
+        if len(idx) != 1:
+            raise ValueError('FakeTarget %s: the node has %d controllers of that name' % (f['path'], len(idx)))
+        del ctrls[idx[0]]
+        gone.append({'path': f['path'], 'at': [round(x, 1) for x in f['at']], 'outside': [round(x, 1) for x in f['out']], 'team': f['team'],
+                     'cell': list(f['cell'][0]), 'registers': f['cell'][1]})
+        log('FakeTarget taken off %s: at (%d, %d, %d) the place it registers at lies outside the vision space by (%d, %d, %d); kl2\'s own '
+            'arithmetic: cell %s = %s - without a record its update writes 16 bytes behind ZCheckVisible\'s table every frame '
+            '(re/crash_686a66.md)' % (f['path'], *f['at'], *f['out'], f['cell'][0],
+                                      'a record, by the truncation alone' if f['cell'][1] else 'no record (0xff)'))
+    return gone
+
+
+def fake_fix(src, dst, log=print):
+    """A copy of build src in folder dst in which the FakeTargets that fail the rule have lost their controller and
+    NOTHING else differs: the .prp member alone (the squads' steps stay as they are - this is not the dynamic
+    step). For a build that must not get the random routes, e.g. the Retomoto on the owner's tab.
+    -> ([(severity, text)], report). Writes dyn_fake.json and a line in graft.txt; every other file is copied."""
+    lines = []
+    def say(s=''):
+        lines.append(str(s)); log(s)
+    say('kl_fa_bots_dyn fake-fix %s -> %s' % (src, dst))
+    B = F.Built(src)
+    sc = B.sc
+    if os.path.abspath(dst) == os.path.abspath(B.folder):
+        raise ValueError('the output folder is the build\'s own')
+    if os.path.isdir(dst) and os.listdir(dst):
+        raise ValueError('%s is there and not empty' % dst)
+    before = F.sizes(B.folder)
+    Jn = J.join(sc, [(sc, t) for t in sc.tops()], 'fake')
+    if J.fingerprints(Jn)[0] != J.fingerprints(sc)[0] or J.text(Jn, Jn.p.settings) != J.text(sc, sc.p.settings):
+        raise ValueError('kl_prpjoin.join does not reproduce the build\'s .prp')
+    say(space_words(vision_space(B)))
+    gone = take_off(B, Jn, say)
+    prp = Jn.p.serialize()
+    back = F.Prp(prp)
+    if back.serialize() != prp or len(back.nodes()) != len(Jn.nodes):
+        raise ValueError('the new .prp does not round-trip')
+    new = dict(B.files)
+    new[B.ext['.prp']] = prp
+    os.makedirs(dst, exist_ok=True)
+    import kl_graft
+    zp = kl_graft.write_zip(os.path.join(dst, os.path.basename(B.zp)), [(n, new[n]) for n in B.order])
+    for f in os.listdir(B.folder):
+        p = os.path.join(B.folder, f)
+        if os.path.isfile(p) and p != B.zp and not f.startswith('audit.'):
+            shutil.copyfile(p, os.path.join(dst, f))
+    after = F.sizes(dst)
+    rep = collections.OrderedDict(source=B.folder, out=dst, members_changed=['.prp'] if gone else [], fake_targets_removed=gone,
+                                  big_before=before, big_after=after)
+    sj = os.path.join(dst, 'steps.json')
+    if os.path.isfile(sj) and gone:                     # kl_maps.audit compares the folder with what was measured
+        import kl_maps
+        st = json.load(open(sj))
+        st['bots'] = sorted(set(st.get('bots') or []) | {'.prp'})
+        st['same'] = [e for e in st.get('same', []) if e != '.prp']
+        st['final'] = kl_maps.member_ids(dst)
+        with open(sj, 'w') as f:
+            json.dump(st, f, indent=1)
+    with open(os.path.join(dst, 'graft.txt'), 'a') as f:
+        for x in gone:
+            f.write('kl_fa_bots_dyn fake-fix: FakeTarget controller taken off %s (outside the vision space: kl2 0x560630 wrote behind '
+                    'ZCheckVisible\'s table, crash 0x686a66); nothing else of %s changed\n' % (x['path'], B.folder))
+    say('written %s: %d FakeTarget controller(s) taken off; the .prp member %d -> %d bytes; every other member byte for byte'
+        % (zp, len(gone), len(B['.prp']), len(prp)))
+    out = []
+    if before != after:
+        out.append(('FAIL', 'a large block changed its size: %s -> %s' % (dict(before), dict(after))))
+    bad = fake_diff(src, dst, say)
+    out += [('FAIL', 'diff: ' + x) for x in bad]
+    left = [f for f in fake_targets(F.Built(dst)) if f['out']]
+    out += [('FAIL', 'FakeTarget on %s still fails the rule' % f['path']) for f in left]
+    rep.update(check=[list(x) for x in out], diff=bad)
+    say('RESULT (fake-fix): %s' % ('PASS: %d controller(s) off, nothing else changed' % len(gone) if not out else 'FAIL: %s' % [t for _s, t in out]))
+    with open(os.path.join(dst, 'dyn_fake.json'), 'w') as f:
+        json.dump(rep, f, indent=1, default=str)
+    with open(os.path.join(dst, 'dyn_fake.txt'), 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines) + '\n')
+    return out, rep
+
+
+def fake_expected(A):
+    """What the step may take off build A outside the squads -> ([(path, node)] of the FakeTargets that fail the
+    rule ON THE SOURCE, a scene like A's in which those nodes have no FakeTarget controller - for
+    kl_prpjoin.fingerprints, which hashes names, classes, properties, controllers and the tree)."""
+    sa = A.sc
+    hits = [(f['path'], f['node']) for f in fake_targets(A) if f['out']]
+    nodes = list(sa.nodes)
+    for p, k in hits:
+        n = dict(nodes[k])
+        n['ctrls'] = [c for c in n['ctrls'] if sa.p.key(c[0]) != 'FakeTarget']
+        if len(n['ctrls']) != len(nodes[k]['ctrls']) - 1:
+            raise ValueError('FakeTarget %s: the node has not exactly one controller of that name' % p)
+        nodes[k] = n
+    import copy
+    cut = copy.copy(sa)
+    cut.nodes = nodes
+    return hits, cut
+
+
+def fake_diff(src, dst, log=print):
+    """fake-fix's own diff -> list of UNEXPECTED differences: every member but the .prp byte for byte, the files
+    beside the archive too, and the .prp = the source's with exactly the FakeTargets that fail the rule on the
+    source taken off (whole-tree fingerprint, scene property block)."""
+    A, Bn = F.Built(src), F.Built(dst)
+    bad = []
+    hits, cut = fake_expected(A)
+    paths = [p for p, _k in hits]
+    if A.sc.names != Bn.sc.names or A.sc.tids != Bn.sc.tids:
+        bad.append('.prp / .gms: the entities are not the same list')
+    elif J.fingerprints(cut)[0] != J.fingerprints(Bn.sc)[0]:
+        bad.append('.prp: the tree is not the source\'s with %d FakeTarget controller(s) taken off (%s)' % (len(paths), ', '.join(p.split(BS)[0] for p in paths) or 'none'))
+    if J.text(A.sc, A.sc.p.settings) != J.text(Bn.sc, Bn.sc.p.settings):
+        bad.append('.prp: the scene property block differs')
+    rest = [n for n in A.order if n != A.ext['.prp'] and A.files[n] != Bn.files.get(n)]     # every member by name, the menu XML too
+    if rest or A.order != Bn.order:
+        bad.append('other members differ: %s' % rest)
+    skip = ('audit.', 'dyn_fake.', 'steps.json', 'graft.txt', os.path.basename(A.zp))
+    side = [f for f in os.listdir(A.folder) if os.path.isfile(os.path.join(A.folder, f)) and not f.startswith(skip)]
+    sdiff = [f for f in side if not os.path.isfile(os.path.join(Bn.folder, f)) or open(os.path.join(A.folder, f), 'rb').read() != open(os.path.join(Bn.folder, f), 'rb').read()]
+    if sdiff:
+        bad.append('files beside the archive differ: %s' % sdiff)
+    log('.prp: the source\'s tree with %d FakeTarget controller(s) taken off (%s) and nothing else; the other %d members byte for byte; '
+        '%d files beside the archive byte for byte' % (len(paths), ', '.join(p.split(BS)[0] for p in paths) or 'none', len(A.order) - 1, len(side)))
+    for x in bad:
+        log('UNEXPECTED: ' + x)
+    return bad
+
+
 def apply(ctx, P, dst, log=print):
     """Write the plan into a copy of the build in folder dst -> report dict."""
     B, sc = ctx.B, ctx.B.sc
@@ -1544,6 +1991,9 @@ def apply(ctx, P, dst, log=print):
     q, order = M.scene(tops_new)
     qtop = dict(zip([t for t in sc.tops() if t in made], q.tops()))
     Jn = J.join(sc, [(q, qtop[t]) if t in made else (sc, t) for t in sc.tops()], 'dyn')
+    # ---- FakeTargets outside the vision space lose their controller (FAKE TARGETS at the top; the 0x686a66 crash).
+    # Only the node's controller list in the .prp changes: no entity, no record, no other member.
+    fake_gone = take_off(B, Jn, log) if P['options'].get('fake', True) else []
     prp = Jn.p.serialize()
     back = F.Prp(prp)
     if back.serialize() != prp or len(back.nodes()) != len(Jn.nodes):
@@ -1664,7 +2114,7 @@ def apply(ctx, P, dst, log=print):
         controllers_added=dict(collections.Counter(M.p.key(nm) for n in added for nm, _b in n.ctrls)),
         ref_slots=[ref_before, A.ref_slots], slot_ids_moved=moved, groups_listed_in_root_tree_3=listed,
         groups_unlisted=len(listed_before), prm_model_roots_repointed=repointed, slot_id_faults_before=pre, slot_id_faults_after=post,
-        big_before=before, big_after=after)
+        fake_targets_removed=fake_gone, big_before=before, big_after=after)
     sj = os.path.join(dst, 'steps.json')
     if os.path.isfile(sj):                              # kl_maps.audit compares the folder with what was measured
         import kl_maps
@@ -1677,6 +2127,9 @@ def apply(ctx, P, dst, log=print):
     with open(os.path.join(dst, 'graft.txt'), 'a') as f:
         f.write('kl_fa_bots_dyn: the AI heisters\' steps made anew (%d entities out, %d in) from %s; options %s\n'
                 % (len(gone), len(added), B.folder, json.dumps(P['options'], sort_keys=True)))
+        for x in fake_gone:
+            f.write('kl_fa_bots_dyn: FakeTarget controller taken off %s (outside the vision space: kl2 0x560630 wrote behind ZCheckVisible\'s '
+                    'table, crash 0x686a66)\n' % x['path'])
     log('written %s: %d entities removed (the old route steps), %d added (%s); members changed: %s; %d slot ids renumbered, %d groups '
         'listed in the root\'s group tree (%d were), %d model roots of the .prm re-pointed at their moved .oct records'
         % (zp, len(gone), len(added), ', '.join('%s %d' % kv for kv in rep['classes_added'].items()), ' '.join(changed), moved, listed,
@@ -1757,7 +2210,7 @@ def graph(ctx_or_B):
                 for j in nx[1:]:                        # what is started beside the next link
                     g['reached'].add(j)
                     cj, vj = ctrl.get(j, (None, None))
-                    if cj == 'TriggerDelay2' and sc.names[j].endswith('_gap'):     # the FORK_GAP timer: look through it
+                    if cj == 'TriggerDelay2' and sc.names[j].endswith('_gap'):     # a '--fork-gap' timer: look through it
                         tg = [x for s in vj[4] for x in sc.resolve(s)]
                         if len(tg) == 1 and ctrl.get(tg[0], (None,))[0] == 'RandomTrigger':
                             j = tg[0]; cj, vj = ctrl[j]; g['reached'].add(j)
@@ -1853,7 +2306,7 @@ def check(folder, log=print, base=True):
             n_wait_last = max([i for i, it in enumerate(chain) if it['ctrl'] in ('TriggerLootDepleted', 'TriggerActorsDead') or
                                (it['ctrl'] == 'TriggerDelay2' and 'done_looting' in it['name'])], default=-1)
             if ci < len(g['chains']) - 1:
-                # (a FORK_GAP timer of 0.1 s is as good as the RandomTrigger it precedes: not a timer in this sense)
+                # (a '--fork-gap' timer is as good as the RandomTrigger it precedes: not a timer in this sense)
                 late = [it['name'] for i, it in enumerate(chain) if i > n_wait_last and it['ctrl'] == 'TriggerDelay2' and not it['name'].endswith('_gap')]
                 if late:
                     fail('%s: timer %s runs behind the last loot wait of a chain that the jump cuts off: it would start a step of this '
@@ -2072,6 +2525,24 @@ def check(folder, log=print, base=True):
     facts['holds_to_cover'] = {'places': len(d_hold), 'median': med(d_hold), 'within_250_pct': share(d_hold, 250.0)}
     facts['squads'] = rows
     facts['big'] = F.sizes(folder)
+    # no FakeTarget outside the vision space (FAKE TARGETS at the top; this rule is the one that fails the build of
+    # the 0x686a66 crash, z_route\retomoto_full, and every Retomoto build since kl_fa_street parked the spare vans)
+    space = vision_space(B)
+    fts = fake_targets(B, space)
+    facts['fake_targets'] = {'all': len(fts), 'outside': sum(1 for f in fts if f['out']),
+                             'vision_space': space and {'sure': {'lo': [round(x, 1) for x in space['sure'][0]], 'hi': [round(x, 1) for x in space['sure'][1]], 'records': space['sure'][2]},
+                                                        'all': {'lo': [round(x, 1) for x in space['all'][0]], 'hi': [round(x, 1) for x in space['all'][1]], 'records': space['all'][2]},
+                                                        'own': space['own'], 'unknown': space['unknown'], 'skipped': space['skipped']},
+                             'cells': [{'path': f['path'], 'at': [round(x, 1) for x in f['at']], 'cell': list(f['cell'][0]), 'registers': f['cell'][1]} for f in fts if f['cell']]}
+    for f in fts:
+        if f['out']:
+            fail('FakeTarget on %s stands at (%d, %d, %d): the place it registers at (140 higher) lies outside the vision space by (%d, %d, %d); '
+                 'kl2\'s own arithmetic (0x59c790) on the box: cell %s = %s. Without a record its update 0x560630 writes its cell and place into '
+                 'record 0xff of a table of 200 - 16 bytes behind the ZCheckVisible object, every frame (the 0x686a66 crash, re/crash_686a66.md)'
+                 % (f['path'], *f['at'], *f['out'], f['cell'][0], 'a record, but only by the truncation toward zero / the low byte - not relied on'
+                    if f['cell'][1] else 'no record (0xff)'))
+    if fts and space is None:
+        fail('%d FakeTarget(s) and %s: it is not known that they can register' % (len(fts), space_words(space)))
     dj = os.path.join(B.folder, 'dyn.json')
     if os.path.isfile(dj):
         was = json.load(open(dj)).get('big_before')
@@ -2085,6 +2556,11 @@ def check(folder, log=print, base=True):
         '500, %s %% within 250 (stock bots: 165..291, 61..100 %%, 31..94 %%); the hold places alone: %s, median %s, %s %% within 250'
         % (len(covers), facts['covers']['high'], facts['covers']['low'], facts['covers']['car'], len(d_all), med(d_all), share(d_all, 500.0),
            share(d_all, 250.0), len(d_hold), med(d_hold), share(d_hold, 250.0)))
+    log('FakeTargets: %d, outside the vision space: %d; %s' % (len(fts), sum(1 for f in fts if f['out']), space_words(space)))
+    for f in fts:
+        if f['cell']:
+            log('  FakeTarget %s at (%d, %d, %d): %s; kl2\'s arithmetic: cell %s (%s)' % (f['path'].split(BS)[0], *f['at'],
+                'OUTSIDE by (%d, %d, %d)' % f['out'] if f['out'] else 'inside', f['cell'][0], 'a record' if f['cell'][1] else 'no record'))
     for sq, r in rows.items():
         log('  %s: on the build\'s way %d Defend steps (%d sprint), %d holds (%d by RandomTrigger, %d places to choose from), %g s of timers, loot waits %s s; '
             'forks of the way: %d (%d with 3 ways, %d with 2), every way checked'
@@ -2112,13 +2588,39 @@ def diff(src, dst, log=print):
         bad.append('the top-level subtrees are not the same list')
     fa, fb = J.fingerprints(sa), J.fingerprints(sb)
     differ = [sa.names[t] for t, u in zip(sa.tops(), sb.tops()) if fa[t] != fb[u]]
-    out = [n for n in differ if not n.startswith(F.SQUAD)]
+    # a subtree outside the squad may differ in ONE way: the FakeTarget controllers that fail the rule ON THE SOURCE
+    # are gone - all of that subtree's, and nothing else of it (the subtree's fingerprint: names, classes,
+    # properties, controllers, tree). Which those are is worked out here from the source build; the new build's
+    # dyn.json is only held against it (it was believed in the first form: re/crash_686a66_review.md D3).
+    hits, cut = fake_expected(A)
+    fc = J.fingerprints(cut)
+    dj = os.path.join(Bn.folder, 'dyn.json')
+    dyn = json.load(open(dj)) if os.path.isfile(dj) else {}
+    said = [x['path'] for x in (dyn.get('fake_targets_removed') or [])]
+    asked = (dyn.get('plan') or {}).get('options', {}).get('fake', True)
+    out, fake_seen = [], []
+    for t, u in zip(sa.tops(), sb.tops()):
+        if fa[t] == fb[u] or sa.names[t].startswith(F.SQUAD):
+            continue
+        if fc[t] == fb[u]:
+            fake_seen += [p for p, k in hits if sa.top[k] == t]
+        else:
+            out.append(sa.names[t])
     if out:
-        bad.append('.prp: top-level subtrees outside the squad differ: %s' % out[:5])
+        bad.append('.prp: top-level subtrees outside the squad differ in more than the FakeTarget controllers that fail the rule on the source: %s' % out[:5])
+    if sorted(fake_seen) != sorted(said):
+        bad.append('.prp: dyn.json names %d FakeTarget(s) taken off (%s), the tree lost %d (%s)'
+                   % (len(said), ', '.join(p.split(BS)[0] for p in said) or '-', len(fake_seen), ', '.join(p.split(BS)[0] for p in fake_seen) or '-'))
+    if asked and sorted(fake_seen) != sorted(p for p, _k in hits):
+        bad.append('.prp: %d FakeTarget(s) fail the rule on the source, %d were taken off' % (len(hits), len(fake_seen)))
+    if not asked and fake_seen:
+        bad.append('.prp: built with --keep-fake-targets and %d FakeTarget controller(s) are gone' % len(fake_seen))
     if J.text(sa, sa.p.settings) != J.text(sb, sb.p.settings):
         bad.append('.prp: the scene property block differs')
-    log('.prp: %d of %d top-level subtrees equal; changed: %d, all of the squad (%s ...); scene property block equal'
-        % (len(sa.tops()) - len(differ), len(sa.tops()), len(differ), ', '.join(n[len(F.SQUAD):] for n in differ[:3])))
+    n_sq = sum(1 for n in differ if n.startswith(F.SQUAD))
+    log('.prp: %d of %d top-level subtrees equal; changed: %d of the squad (%s ...)%s; scene property block equal'
+        % (len(sa.tops()) - len(differ), len(sa.tops()), n_sq, ', '.join(n[len(F.SQUAD):] for n in differ if n.startswith(F.SQUAD))[:60],
+           '; %d other(s) differ ONLY in a FakeTarget controller taken off (%s)' % (len(differ) - n_sq - len(out), ', '.join(p.split(BS)[0] for p in fake_seen)) if fake_seen else ''))
     # entities: by path outside the squad everything equal; inside: kept ones equal records
     key = lambda e: (e.name, e.tid, e.flags, e.group, e.model, e.rot, e.trans, e.raw, e.aux, e.ref)
     pa = {sa.path[k]: A.ents[k - 1] for k in range(1, len(sa.nodes))}
@@ -2225,7 +2727,8 @@ def diff(src, dst, log=print):
             if spans or pa_[t:] != pb_[t:] or pa_[:16] != pb_[:16]:
                 bad.append('.prm: %d chunks differ in more than their .oct record offset, or the table differs' % spans)
     log('.prm: %s' % ('byte for byte' if pa_ == pb_ else '%d model roots differ, each only in its .oct record offset (+0x1c), old record -> the same record' % cells))
-    rest = [e for e in A.ext if e not in ('.prp', '.gms', '.buf', '.oct', '.rmi', '.rmc', '.prm') and A[e] != Bn[e]]
+    seven = {A.ext[e] for e in ('.prp', '.gms', '.buf', '.oct', '.rmi', '.rmc', '.prm')}
+    rest = [n for n in A.order if n not in seven and A.files[n] != Bn.files.get(n)]         # every member by name, the menu XML too
     if rest or A.order != Bn.order:
         bad.append('other members differ: %s' % rest)
     skip = ('audit.', 'dyn.', 'steps.json', 'graft.txt', F.SLOT + '_Main.zip')
@@ -2234,10 +2737,11 @@ def diff(src, dst, log=print):
     if sdiff:
         bad.append('files beside the archive differ: %s' % sdiff)
     log('the other %d members byte for byte; %d files beside the archive byte for byte (%s; steps.json and graft.txt get a line of this step)'
-        % (len(A.ext) - 7, len(side), ', '.join(f for f in side if f.endswith('.ini')) or 'no .ini'))
+        % (len(A.order) - 7, len(side), ', '.join(f for f in side if f.endswith('.ini')) or 'no .ini'))
     for x in bad:
         log('UNEXPECTED: ' + x)
-    log('RESULT: %s' % ('only the squad\'s steps were made anew' if not bad else '%d unexpected differences' % len(bad)))
+    log('RESULT: %s' % (('only the squad\'s steps were made anew' + (' and %d FakeTarget controller(s) outside the vision space taken off' % len(fake_seen) if fake_seen else ''))
+                        if not bad else '%d unexpected differences' % len(bad)))
     return bad
 
 
@@ -2340,6 +2844,10 @@ def build(src, dst, opt=None, log=print):
     for h, f, t in ctx.outside:
         say('named from outside the squad: %s (%s) -> %s' % (h[5:], f, t[5:]))
     P = plan(ctx, opt, say)
+    gap = float(P['options'].get('fork_gap') or 0.0)    # said aloud: another module (kl_fa_cover) builds through here with the default
+    say('fork gap: %s' % ('a TriggerDelay2 of %g s before every RandomTrigger (the form of commit 76bfdcd)' % gap if gap else
+                          'NONE - every fork is the form of the builds on the owner\'s tab. FORK_GAP is 0 since 2026-10-11 (the 0x686a66 crash was a '
+                          'FakeTarget, re/crash_686a66.md); commit 76bfdcd built 0.1 s by default: \'--fork-gap 0.1\' / opt fork_gap makes that form'))
     rep = apply(ctx, P, dst, say)
     rep['plan'] = P
     with open(os.path.join(dst, 'dyn.json'), 'w') as f:
@@ -2511,10 +3019,10 @@ def options(a):
     opt = {}
     for flag, key, val in (('--no-random', 'random', False), ('--no-vision', 'vision', False), ('--no-rusher', 'rusher', False),
                            ('--no-stagger', 'stagger', False), ('--no-tree', 'tree', False), ('--no-detour', 'detour', False),
-                           ('--no-routes', 'routes', False)):
+                           ('--no-routes', 'routes', False), ('--keep-fake-targets', 'fake', False)):
         if flag in a:
             a.remove(flag); opt[key] = val
-    for flag, key in (('--sixth', 'sixth'), ('--gap', 'gap'), ('--ways', 'ways')):
+    for flag, key in (('--sixth', 'sixth'), ('--gap', 'gap'), ('--ways', 'ways'), ('--fork-gap', 'fork_gap')):
         if flag in a:
             i = a.index(flag)
             opt[key] = float(a[i + 1]); del a[i:i + 2]
@@ -2535,6 +3043,13 @@ def main():
         sys.exit(1 if any(s == 'FAIL' for s, _t in out) else 0)
     elif len(a) == 3 and a[0] == 'diff':
         sys.exit(1 if diff(a[1], a[2]) else 0)
+    elif len(a) >= 2 and a[0] == 'fake-test':
+        sys.exit(0 if fake_test(a[1:]) else 1)
+    elif len(a) == 3 and a[0] == 'fake-fix':
+        out, _rep = fake_fix(a[1], a[2])
+        sys.exit(1 if out else 0)
+    elif len(a) >= 3 and a[0] == 'grid':
+        sys.exit(0 if grid_compare(a[1], ' '.join(a[2:])) else 1)
     elif len(a) == 2 and a[0] == 'covers':
         covers_report(a[1])
     elif len(a) == 3 and a[0] == 'map':

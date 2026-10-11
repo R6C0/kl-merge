@@ -576,6 +576,7 @@ static void klh_tick(int game_thread);
 #include "klbalance.c"
 #include "klhud.c"
 #include "klshoulder.c"
+#include "klvis.c"
 #include "klfed.c"
 #include "klsteam.c"
 #include "klslot.c"
@@ -622,6 +623,7 @@ static void klh_tick(int game_thread)
     klr_tick(game_thread);                            /* klbalance.c: one damage scale for player, police and crew */
     klu_tick(game_thread);                            /* klhud.c: the crew list / money box texts (game thread only) */
     klo_tick(game_thread);                            /* klshoulder.c: log only */
+    klvis_tick();                                     /* klvis.c: log only (the vision grid and its record 0xff) */
     klp_tick(game_thread);                            /* klfed.c: come back as a fed (data writes only) */
     klg_tick();
     klm_tick();
@@ -792,6 +794,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klr_init();
     klu_init();
     klo_init();
+    klvis_init();
     klp_init();
     klg_init();
     klx_init();

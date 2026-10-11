@@ -880,3 +880,71 @@ A fault found on the way: `check` counted a `NoCoverBox` (ZBoxPrimitive, kind no
   new model root (13.2); low corners got no box anywhere (the finder allows them; none passed); a corner box
   for a place that already got an object box in the round; `kl_fa_bots_dyn.py map` does not tell corner boxes
   from object boxes.
+
+## 14. The 0x686a66 crash: not the forks - a FakeTarget outside the vision space (2026-10-11; OFFLINE, nothing ran in the game, nothing installed)
+
+Full account: `re/crash_686a66.md`. What it means for this step:
+
+- The crash of `z_route\retomoto_full` (run C_DM09, a `ZDefendBehaviourGoal` with a broken place list) was NOT
+  a fork starting a Defend step inside another one. The list (`Squad#08\030_DefendBehaviour_way_c_b`'s places)
+  was never freed; 16 bytes of it were written over by `ZFakeTarget`'s update (kl2 0x560630) for the 'Mercenary'
+  target on the body of a van that `kl_fa_street` parks 600 m under the road: a target outside ZCheckVisible's
+  grid cannot register (0x59c790 -> 0xff) and its update still writes record 0xff of a table of 200 - 0x5a8
+  bytes behind the object. Every Retomoto build since `play2` has the two parked targets (the ones without
+  routes too: `rt_full6`, `rt_full7`); the four maps have none outside (M01 M02 M03 one inside, M06 none).
+- The route form of section 11 stays as it is. It is stock's, field for field: F07 `Squad#08`
+  `060_DefendBehaviour_rout_junction_garage -> 060_RandomTrigger_BeforeStreet -> 065_DefendBehaviour_rout_...`
+  (stock: 119 Defend steps name a RandomTrigger, 77 of those draw a Defend of the same squad). A RandomTrigger
+  passes its message on at once (0x4d86e0), a TriggerDelay2 fires from its own update (0x71e250 / 0x744c30), and
+  every chain starts its next step from the old goal's last call (0x5c6e70 -> 0x8df0d0); a goal is one object per
+  rout (0x4b4af0) that borrows the rout's own place list.
+- `FORK_GAP` (a 0.1 s timer before every RandomTrigger; commit 76bfdcd, build `z_route7\retomoto_full`) is off
+  again; `--fork-gap S` builds it. It had never run in the game when that was decided; the lead ran it on
+  2026-10-11 05:38-06:08 (`z_route7\retomoto_full` three rounds, `z_cover3\M03` one: clean). It mends nothing:
+  `z_route7` still has the two parked targets, so the write was there in each of its rounds.
+  `build` says in its log which form it made (`fork gap: NONE ...` / `fork gap: a TriggerDelay2 of 0.1 s ...`):
+  `tools/kl_fa_cover.py` builds through `D.build(pre, fin, None)` and gets this default. Whoever wants the timer
+  form passes `{'fork_gap': 0.1}`.
+- New in the tool (REWRITTEN after the review, `re/crash_686a66_review.md` D1: the first form read the wrong box):
+  `check` FAILS a FakeTarget whose registration place (its node's, 140 higher: kl2 0x55cc40) is not inside the
+  vision space. `vision_space` reads it from the `.rmi` records of the rooms' ZBOUND children - the grid of the
+  one dump that holds one (M01, 2026-10-08) is the union of those records bit for bit; the rule's box (`sure`) is
+  that proven kind alone, the wider `all` adds the rooms counted by a record of their own (ASSUMPTION), and the
+  box of a room without a record is not read (the engine's box is `sure` or larger, so a PASS holds under every
+  reading). 27 of 27 stock FakeTargets pass. `build` takes a failing controller off its node (.prp only;
+  `--keep-fake-targets` leaves it); `diff` works out from the SOURCE build which may be gone and accepts exactly
+  that; `fake-fix <build> <out>` does only the taking off (no dynamic step); `fake-test <M01 build> <a Retomoto
+  with the parked vans>` holds the rule against the two facts from the running game; `grid <folder> <floats>`
+  compares a grid read in the game (the twelve floats at `[0x1535c70] + 0x50`) with the level's boxes.
+- One shape of ours that stock does not have (0 of 1,100 stock Defend steps): a 'rout' step whose arrival list
+  names TWO things, the hold's timer and the RandomTrigger of the hold (106 lists over the five maps). It starts
+  one Defend step, as a list of one does, and ran on all five maps; left as it is.
+
+Builds `<work>\build\z_route4\<map>` (default options; from `z_gate\M01`, `z_m02s1\_bots\M02`, `z_hop\_bots\M03`,
+`z_final\M06`, `rt_full7\retomoto_full`):
+
+| folder | archive sha1 | what it is |
+|---|---|---|
+| M01 M02 M03 M06 | 58491ae9, a980fff9, 94587886, 1d799830 | byte-identical to the builds on the tab (`z_route3\M01`, `z_m02s1\M02`, `z_hop\M03`, `z_route\M06`; the tab's archives are these member for member) |
+| retomoto_full_r2 | acf622dc | the room-first bots of `rt_full7` + routes (42 forks) + the FakeTargets of vans 02 and 03 off; built with the tool after the review. `retomoto_full` (first pass) is the same archive with the first rule's box in its dyn.txt / dyn.json |
+| retomoto_tab_fix | eed07a72 | `fake-fix` of `rt_full7\retomoto_full` = the tab's Retomoto with ONLY the two FakeTarget controllers off (the .prp member; no routes) |
+
+Checks (every last line: `re/crash_686a66.md` 7): on all seven folders `diff` clean (the Retomoto builds: '... and
+2 FakeTarget controller(s) outside the vision space taken off'; `retomoto_tab_fix`: only the controllers),
+`kl_impact.py` problems: 0, `kl_map_guns.py check` problems: 0; the four maps `kl_maps.py audit` PASS; M01 M02 M03
+`kl_map_escape.py van-check` 0 fault(s); the three Retomoto folders `kl_fa_bots_rt.py check` PASS (start delay
+91.5 s after a blast at 16.5 s). Side .ini files byte-identical, no large block grew.
+`kl_fa_bots_dyn.py check`: PASS on M06 and the three Retomoto folders. On M01 M02 M03 this module's own rules
+give 0 FAIL, but the command exits 1 with 7 / 17 / 7 FAIL (kl_fa_bots.py of 06:12): all of them the loot-window rule that track A put
+into `kl_fa_bots.check` on the same morning (money a bot cannot take inside the loot window of its places) -
+a finding about the bots builds under these three, i.e. about the maps on the tab, answered by track A's
+`z_loot3` builds, not by this step.
+The check FAILS (exit 1, exactly 2 FAIL lines, both the FakeTarget rule) `z_route\retomoto_full`,
+`rt_full7\retomoto_full` (= the tab's DM09), `rt_full6\retomoto_full`, `z_cover2\retomoto_full`,
+`z_route7\retomoto_full`.
+Retomoto's room-first hold is kept: `Counter_room_clear` (named by `Timer_start_bots` at 91.5 s and by the
+boardroom's counter) names the seven first steps of the new chains.
+
+Not done: the fix where the vans are parked (`kl_fa_street.place_escape`, another session's file: take the
+FakeTarget off a van it parks); a live run; the hook's two read-only lines that would prove the reading on every
+map with one load each (`re/crash_686a66.md` 9).
