@@ -609,3 +609,278 @@ Each finding was read again in kl2.exe (or run again on the rig) before anything
 | N1 | the drive-out is 8.4 .. 8.5 s, not 8.0 | LIVE both logs (`van 5 8.4s`); EXE 0x8fab3e | 1.1, 1.2, 1.3 and 1.6 corrected (slot 7 misses in ~3 rounds of 10; record 4 boarded 1.1 s in) |
 | N2, N3, N5 .. N7, N9 | the hold's count, the round clock, 0x805120's flag, wall-time clocks, the fast pass, J2's run length | EXE 0x8b3933, 0x5dffc6 (N5 is the review's reading, not read again) | said in 1.4, 1.6, 3, 4 and J2 |
 | - | the multiplayer server class's slot 194 was missing from 1.5 | `debug\rtti.py`: 0x51e390 / 0x827f00 = `ZGameRulesFragileAllianceSv` | 1.5 |
+
+## 11. The hold killed the human aboard: the vehicle was destroyed (track N3, 2026-10-11 afternoon)
+
+**OFFLINE: read in kl2.exe and in the three live logs; the fix compiles; NOTHING OF IT HAS RUN IN THE GAME.**
+Files changed: `klhook/klescort.c` (section 3 c2, `kle_veh_read`, `kle_hold_guard`, `kle_veh_pass`, `kle_shield_off`, key
+`FollowOutShield`), `klhook/klmove.c` (WaitForYouHold asks the same guard), the sample ini, `re/bots_move.md`, this section.
+
+### 11.1 What the logs say (LIVE, `<work>\build\klhook\live\N1_DM03_boardnear.log`, `N1b_...notune.log`, `N1c_...nohold.log`)
+
+| | N1 (hold 15, Tune=1) | N1b (hold 15, Tune=0) | N1c (no hold) |
+|---|---|---|---|
+| vehicle state 3 begins (from klbot's `van 1 0.8s` / `0.4s` line) | 15:27:50.9 | 15:37:36.3 | 15:42:57.8 |
+| `record 0 (you): aboard` | :54.12 | :39.49 | 15:43:01.07 |
+| holds (`timer 1.9 -> 6.9 s`) | :57.0, :02.0, :07.0 | :42.4, :47.4, :52.4 | - |
+| a bot aboard | record 5, 15:28:09.5 | record 1, :52.9 | - |
+| **the end** | `record 0 (you): dead` **and `record 5: dead` in the same tick**, 15:28:11.73; next line `van 6 9.8s` | `record 0 (you): dead` **and `record 1 (bot): dead`**, :57.52; `van 6 9.8s` | `van 5` at 15:43:05.8, `status6` 15:43:14.3 |
+| from the wait's begin | **20.9 s** | **21.3 s** | 8.0 s + 8.5 s of state 5: escaped |
+
+It is not the timer and not a second clock of the boarding: the vehicle's state goes **3 -> 6** (in N1 with 3.1 s still
+on the timer 0.9 s before; in N1b 0.17 s after the fourth hold pass read state 3). State 6 = destroyed, and both
+records that had status 4 are dead in that tick - nobody else. `balance: you lost 4949.7 (550.0 of 550.0)` 30 ms later
+is the dead human's health object made new, not a hit. The traitors have nothing to do with it (N1b has none).
+
+No fixed clock fits (the review's table, `re\bots_hold_review.md` 2): the death is 28.00 / 28.43 s after the call,
+20.83 / 21.26 s after the wait's begin, 17.61 / 18.03 s after `aboard`, 14.7 / 15.17 s after the first hold write -
+0.4 s of scatter from every possible start - and the wait timer AT the death was 2.25 s (N1) and 1.73 s (N1b).
+
+**A fourth log, without any hold: `U_M01.log`** (Hot Coffee, 2026-10-10, idle human, no FollowOut; found by the
+review): `van 2 7.9s` 16:28:24.4, `van 4 8.0s` 16:28:32.3, **`van 6 9.9s` 16:28:33.7** - the van destroyed 1.3 s into
+its SECOND visit of a stock-length round, nobody aboard. It is the only other state 6 in `<work>\build\klhook\live`.
+So the mechanism is the game's own and is seen without a hold; and either the health is NOT made new between visits
+(`Reset`, 0x87f396, is a level message: who sends it was not read) or one step takes all of it.
+
+### 11.2 What kills (EXE)
+
+- **`ZGameRulesHeist` slot 94 = 0x6a1100 (grade)**: `[score+0x60] = grade`; grade 1: announcement, and in state 3 / 4
+  the timer = 0 (0x6a1285..0x6a12a0); **grade 2, in states 1..5 (jump table 0x6a12b0): slot 194 (6), then for every
+  record in use with status 4 (0x6a11a1 `cmp byte [record+0x10], 4`): its money gone (0x544550) and the rules' kill
+  rule - slot 11 (`[vt+0x2c]`, 0x6a1240) for a human, slot 16 (`[vt+0x40]`, 0x6a1227) for an AI member**, the attacker
+  `[rules+0x1e8]`. That is the whole of 'he is dead while aboard with 5,500 health'.
+- **Who calls it - THE DIRECT PATH (found by the review; this is what the death rests on)**: the hit routine
+  0x5aebb0 itself. After `health -= amount`: if the rules' vehicle kind (rules slot 95 = 0x5822d0 = byte
+  `[rules+0x1ec]`) is 3 and the health is at or under 0 (0x5aec7c..0x5aec89) -> rules slot 33 (0x4d8a30: the attacker
+  into `[rules+0x1e8]`) and **rules slot 84 = 0x61e570, which in states 1..5 calls slot 94 with 2** (0x61e5e7). No
+  level wiring is in the chain. It is also why the state went **3 -> 6 with no 'heavily damaged' departure**: grade 1
+  exists only as a level message, grade 2 comes straight from the hit that takes the last health. Slot 84's only
+  other caller is the vehicle's update at 0x8fa37f behind the dword `[0x168d620]` (no writer in .text: a debug
+  switch). State 6 is set by nothing else: the state machine (slot 195 = 0x55ec70) never makes it, the only `push 6`
+  are slot 94 and its multiplayer twin 0x839380.
+- **The kind byte `[rules+0x1ec]`** (read in this fix round): written by 0x42cfb0 from the class of `[rules+0x1e4]` -
+  1 if the cast 0x7d29f0 takes it, 2 if 0x7ae760 does, 3 if 0x409920 does, else 0 (0x42cfc6 / 0x42cfe2 / 0x42cffe /
+  0x42d016; the same triple at 0x626840.. and 0x7437d0..). 3 is asked by the hit routine (0x5aec7c) and the state
+  machine (0x55ecf4) = the key-framed van. Which of 1 / 2 is the helicopter and which the Havok car: NOT read.
+- **The second way to the same routine (the level's)**: `ZOnlineEscVehicleController` slot 26 (0x6d7d20), message
+  0x168c770 with the grade as its argument -> 0x594b10 -> slot 94. The van's health object, a `ZAnimatedVehicle`
+  (vtable 0xbcc0b4, the class's only one), sends `Activate_DamageFX_01 / 02 / 03` from its update (slot 87 =
+  0x8fa330) when its health `[+0x14]` is at or under twice `[+0x18]`, at or under `[+0x18]`, at or under 0
+  (0x8fa4f5..0x8fa5a8; one byte each at +0x1c..+0x1e so that each is sent once). `[+0x18]` = a quarter of the maximum
+  (slot 82, 0x65322a; double 0xb293f0 = 0.25). Which of the three the level wires to which grade was not read, and
+  the death does not need it.
+- **The maximum** (0x552e10): in Arcade (0x7aca80) one of four of the object's floats by the dword `[0x156b5f0]`
+  (0..3; +0x34 / +0x38 / +0x3c / +0x40), or +0x30 when 0x87c980 says so; the stock van's seven numbers are 9600, 10000,
+  8000, 3000, 5000, 7000, 10000 (`re\bots_behaviour.md` 3.1) - if they lie in field order from +0x28, an Arcade van has
+  **3000 .. 10000**. `[0x156b5f0]` is the option 'Difficulty' (`re\map_ai.md`: 0x472d50; `klbalance.c` KLR_DIFF), and
+  every balance log of the owner's game says `campaign difficulty option 1` (`re\balance.md`): the second of the
+  four = **5000, IF the field order holds** (ASSUMED; N3a's first `health H of M` line says M).
+- **What takes the health** (slot 89 = 0x87f340, the object's messages, names from the registrars at 0xafdb00..):
+  - `ProjectileHit` (0x168d6a4) -> 0x6c4730: **nothing if `[+0x21]` is set** (0x6c4740); else the weapon's damage
+    (`[weapon vt+0x2f0]`) **x the hit's scale `[hit+0x18]`** (0x6c476e) x the vehicle's own factor for the attacker's
+    kind (`[+0x48]` / `[+0x4c]`) -> 0x5aebb0: `health -= amount`, not under 0.
+  - `DamageInfo` (0x168d6b0): `[info+0x28]` through the same 0x5aebb0, **nothing if `[+0x21]` is set** (0x87f36e).
+  - `Invulnerable` / `Vulnerable` (0x168d6e0 / 0x168d6ec): `[+0x21] = 1 / 0` (0x87f426..0x87f448). No level of ours
+    sends either (the string is in none of the five builds' .prp).
+  - `FakeDamage` (0x168d6f8; a `ZAnimatedVehicleFakeDamage` controller sends it): `health -= x`, does not ask the
+    byte. None of the five builds has that controller (same string count).
+  - the rules' ten scripted hits (1.6; 0x6db660, the third branch for a `ZAnimatedVehicle` child, 0x6db7bb..): a
+    thirtieth of the maximum each, **never under a tenth** (0xb45350 = 30, 0xb4e7e8 = 0.1): a third of the health
+    while the human sits aboard, made once per wait - the hold adds none. They cannot destroy it.
+- **So: real hits took the van's health to 0 - READ, NOT SEEN** (no log has the vehicle's health; besides 0x5aebb0
+  the exe leaves only `FakeDamage`, the scripted hits, which cannot, and the debug switch). Police shoot it because
+  `Body_Main` carries a `FakeTarget` of team Mercenary. Stock exposes it for 8 s of wait + 8.4 s of drive-out =
+  16.4 s a visit (N1c: 16.5 s, alive); the 15 s hold made it 31 s, and it lasted 21. **That is not a rule 'under
+  16.4 s is safe'**: `U_M01.log` (11.1) lost the van 1.3 s into a stock-length second visit.
+- **NOT ESTABLISHED - steady fire or one step**: the direct path gives 3 -> 6 whatever took the last health, so the
+  missing grade 1 says nothing about it. `re\melee_damage.md`'s rule fits: a soldier within 1.6 m of
+  his target sends `ProjectileHit` with scale 100.0 at every burst step, and this handler multiplies the scale in
+  (0x6c476e) - one step of an SMG is then 7,200 x the vehicle's factor, more than a 3000 .. 7000 van has. A squad
+  that needs about 20 s to walk up to the van would give the two equal times. GUESS; the new `follow: vehicle:` lines
+  (health at the wait, at every fall of a twentieth, at the drive-out, at state 6) decide it in the first run.
+- The four vans of the tab are this one (F07's key-framed van: Hot Coffee, Late Night Opening, the bank, Retomoto -
+  `OnlineEscAnimatedVehicle` + `FakeTarget` in their .prp). **The park's helicopter is an `OnlineEscHavokCar` with no
+  FakeTarget and no `ZAnimatedVehicle`**: nothing was found that shoots it.
+
+### 11.3 The fix: `[Bots] FollowOutShield` (default 2)
+
+The hold still writes ONE clock, the wait timer `[rules+0x1d8]` (the hold's own start line says so); no second clock
+exists. What is new is that a hold is only made when the vehicle cannot be shot to pieces meanwhile:
+
+- right before a timer write, `kle_hold_guard` finds the health object as the game's HUD bar does
+  (`[rules+0x1e4]` -> `[+0x40]` the first child's entity slot -> `[slot+0x60]` the object, word `[slot+0x5e]` the
+  next sibling; 0x793b7e..0x793c60; every slot pointer checked against the scene's slot table `[[[0xe0ff90]+0xc]+0xc]`)
+  and sets its **`Invulnerable` byte `[+0x21]` = 1** - one byte of a heap object, the byte the object's own
+  `Invulnerable` message writes; no game routine is called;
+- `kle_veh_pass` (every 0.5 s) takes it back - only the 1 this file wrote, only on an object that is still a
+  `ZAnimatedVehicle` - when the vehicle is gone (state 0, 1, 2, 6, 7, 8; `FollowOutShield=2`) or when it drives out
+  (`=1`: the 8.4 s of the drive-out are the game's own risk again); `kle_tick` takes it back at a new round, when the
+  round is over or can no longer be read. The bookkeeping is outside the per-round block for that. If the level set
+  the byte itself, it is left alone and not taken back; if the level cleared ours, it is set again (said once);
+- **no shield possible = no hold, FAIL CLOSED** (fix round, the review's point 2): `... is NOT held: the vehicle's
+  health object cannot be read ...`; and when the walk finds no `ZAnimatedVehicle`, the game's own kind byte
+  `[rules+0x1ec]` decides: **3 (the key-framed van, the only kind a hit can destroy) = NOT held** (`... the rules say
+  it is the key-framed van (kind 3 ...) but no ZAnimatedVehicle was found under it ...`), unreadable = not held, any
+  other kind (helicopter, car) = held without a shield, the hold line ending `... is of kind N, not 3 ...: nothing to
+  shield`. This also covers a derived class the exact-vtable test would miss. The walk was checked against the level
+  on the bank only (`F07_EscapeVan_01 [ZAnimatedVehicle]` is the sixth direct child of the group that carries
+  `OnlineEscAnimatedVehicle`, `z_cover3\M03`); the other three van maps were not looked at - there the log decides;
+- `FollowOutShield=0` = the hold as it was. Its start line says what that did.
+- `klmove.c`'s **WaitForYouHold shared the fault** in another form (the crew sits aboard while the human comes: a
+  destroyed vehicle kills them) and asks the same guard now.
+- **the DESTROYED line can accuse the shield** (fix round, the review's MUST): `kle_veh_pass` takes what the shield
+  was at the top of the pass (our object, its byte as read then, seconds since it was set) BEFORE the release branch
+  runs, and the state-6 line ends `- ALTHOUGH THIS FILE'S SHIELD WAS ON (the 'Invulnerable' byte of ... read 1 at
+  this pass, set N s ago): SOMETHING ELSE THAN A HIT TOOK ITS HEALTH ...`, or `- this file's shield was set N s ago
+  but the 'Invulnerable' byte ... read 0 ...` (the level's `Vulnerable` inside the last 0.5 s), or `- ALTHOUGH ITS
+  'Invulnerable' BYTE IS n (the level's, not this file's)`. It is printed also without FollowOut (WaitForYouHold
+  alone), and also when the health object can no longer be read at state 6;
+- a guard call that finds OUR object with the byte 0 again sets it again and says `SHIELD ON AGAIN: ... was 0 again
+  (the level's 'Vulnerable'?)` - no longer `shield: off (another vehicle is held)` (the review's point 7).
+
+**The largest safe hold**: with the shield the key's own limit (60 s a visit; the timer stays under 7 s, so the
+HUD's signed byte and the boarding rule's window are as before). **Without the shield nothing is safe at all - stock
+only makes it rare**: the van stood 20.9 / 21.3 s in N1 / N1b, and `U_M01.log` lost one 1.3 s into a second visit.
+
+**What the shield does NOT cover** (said in the hold's start line too):
+- **the first ~6 s of every wait**: the shield goes on at the first timer write, when the timer has fallen from 8.0
+  to under 2 s, and only if the hold's other tests pass (the human aboard, a called bot coming). Before that, and at
+  any visit that is not held, the risk is stock's. A shield from the wait's first second was NOT built: it would
+  change rounds in which no hold is ever made;
+- **a vehicle that comes back damaged**: if the health is not made new between visits (`U_M01.log` suggests so), a
+  second visit starts low and can be destroyed before the first hold. N3a must be read at a SECOND visit too;
+- the scripted hits (they go on under the shield, to a tenth at the lowest: `Activate_DamageFX_01 / 02` can come - if
+  the level wires one of them to grade 1 the vehicle leaves at once, which only ends the hold). **With `=1` the
+  vehicle then drives out UNSHIELDED at what is left - possibly a tenth - for 8.4 s, and with either value it stands
+  at that health at the next visit**: the `shield: off` line says `it takes hits again at health H of M (P %)`;
+- a `[Bots] Van` call of klbot.c (the damage rule itself); `FakeDamage` on a level that has the controller.
+
+**The default is the owner's choice, not this track's.** `=2` (as built) keeps the drive-out invulnerable although
+nothing holds the driver any more: after a hold he cannot lose the van at all - less than stock's risk, against his
+'it should be all the same kinda risk'. `=1` gives the drive-out back to the game - with a van the scripted hits
+may have taken to a tenth, so MORE than stock's risk for those 8.4 s, and a destroyed van there kills him aboard
+again (the death this section is about, by the game's own rule). The default stays 2 until N3b / N3e have run.
+
+Builds (HEAD 1fee632's `klhook` by `git archive` + this track's two files, fix round; HEAD wires both parts, no new
+lines for `klhook.c`): TEST `G:\kl_scratch\n3\test\dinput8.dll` sha1 `be27b9bc17ce460007c1a2a82d098db28bf3af44`, SHIP
+`G:\kl_scratch\n3\ship\dinput8.dll` sha1 `543f34e3890a59ab97939e316582e71d980a1c51`; /W3: the one warning is
+`klhud.c(188)`, not this track's. THE BUILD IS NOT BYTE-REPRODUCIBLE (the review got other hashes from the same
+sources; in this round a comment-only change gave new ones): whoever builds the hook for a run takes the hash of the DLL he built. No rig was run for the new code.
+
+### 11.4 The crew must arrive: what the three logs say (the bank, BoardNear=1500)
+
+- At the call the six or seven stand 64 .. 84 m from the boarding place in a straight line - inside the bank; the way
+  is the yard at x -1500 (z -6000 -> -900), the drop at the denied box (-1707, 420, -900), then 43 m to the van:
+  about 110 .. 130 m. For the first seconds the straight distance does not shrink (`not coming` at the wait edge for
+  five of six in N1b): the way leads sideways first, and a bot in reach of loot still loots while the vehicle drives
+  in (1.6).
+- Once in the yard they RUN: 6.6 .. 8.2 m nearer per 2 s sample = 3.3 .. 4.1 m/s (N1c's and FO_J1's leave lines).
+- **First bot aboard 24.0 s (N1b) / 25.5 s (N1) after the call**; when the 15 s were used, 28 s after the call, the
+  other five stood 10 .. 35 m off (N1b) - the last of them needs about 36 s. Without a hold the vehicle leaves 15 s
+  after the call (6.9 s drive-in + 8 s): in N1c the crew is 46 .. 56 m off then and five are shot.
+- What stops them is time, not the route: nobody stood still in the yard, and the board tactic takes a stage-3 bot
+  the last metres. (BoardNear's far box used to give them 43 m: FO_J1, three aboard 7 .. 15 s after the call.)
+- So the bank needs the driver for **about 21 s more: `FollowOutHold=25`**.
+
+**ONLY THE BANK IS MEASURED** (`record 1 (an escort) aboard 24.0 s after the crew was called`, N1b; 25.5 s, N1).
+The other maps are ESTIMATES from the board runs without FollowOut (straight distances of the bots that were shot,
+when the human boarded; an assumed 3.5 m/s; they were NOT called in those runs, so these are upper bounds for a
+called crew - no run has a called crew on any of them):
+
+| map | run | the crew when he boards | a called crew needs | hold |
+|---|---|---|---|---|
+| Hot Coffee | `PB_DM01_board_hp` | 17 .. 26 m from the stop (6153, 0, 20659) | 5 .. 8 s: inside the plain 8 s wait, the call comes 8 s before he boards | 0 .. 5 s |
+| Late Night Opening | - (no board run with a human) | not known; idle run W1: the crew gets out by itself | - | not known |
+| Withdrawal | `N1` / `N1b` (BoardNear) | 58 .. 72 m at the wait edge, ~110 m by the way | 24 .. 36 s after the call | **~21 s** |
+| A Walk in the Park | `PB_DM06_board_hp` | 80 .. 124 m from the helicopter (-1217, 133, -6713) | 23 .. 35 s and more by the paths | 10 .. 20 s and more |
+| Retomoto | `B1_DM09_board_gates` | three on the road 127 .. 145 m behind, two at the lobby's square ~190 m | 36 .. 41 s; the two: 55 s | 21 .. 26 s; the two not |
+
+**Proposed for the owner** (the keys are global, not per map; **25 is the BANK's value** - Retomoto's estimate wants
+as much or more, the park's is open; the hold only lasts while a called bot comes nearer,
+and ends by itself when the last of the crew is aboard - 0x6841b1 - so a large N costs nothing on Hot Coffee):
+
+| key | value | what it costs |
+|---|---|---|
+| `FollowOut=1` | as now | 2.5: the split, traitors |
+| `FollowOutHold=25` | from 0 | he sits up to 25 s longer; every bot it gets aboard joins the split (2.5) - and a TRAITOR can board with him (N1: `record 5 (TRAITOR) aboard`) |
+| `FollowOutShield=2` | default; **HIS CHOICE between 2 and 1** (11.3) | 2: once held, the vehicle cannot be destroyed, the drive-out included - less risk than stock. 1: the drive-out is the game's again, with a van the scripted hits may have worn to a tenth - more risk than stock for 8.4 s. Either way the first ~6 s of a wait are stock's |
+| `FollowOutSpare=1` | from 0 | whoever still does not make it (Retomoto's two at the square, a bot cut off) is left, not shot: no payout change, a round that ends with crew in play (4) |
+| `BoardNear=1500` | as in the runs | the bank's crew walks the last 43 m: that is the 21 s above. A larger radius per map is NOT proposed - it would put the far box back and with it 'they vanish at the wall' |
+
+NOT proposed: the order at the human's stage 2 (2.1: nothing says where to send them before the vehicle is
+called; it would win 10 s on the bank - N1b: stage 2 at 15:37:19, stage 3 at :29 - and is the next step if 25 s of
+sitting is too long for the owner).
+
+### 11.5 Live checks (the bank, the board script and ini of `N1b_DM03_boardnear_notune`; one variable a run)
+
+- **N3a - the health, dry** (`FollowOutDry=1 FollowOutHold=25`): the round must go as N1c (he escapes, the rules
+  shoot the crew). PASS: `follow: hold: FollowOutShield=2: ...` at the start; at the wait `follow: vehicle: it waits
+  (state 3, timer 7.9 s, 0.0 s after it began to wait): health H of M (100 %), takes hits; you are in play` with M one
+  of 3000 / 5000 / 7000 / 8000 / 10000; `follow: vehicle: hit (...): health ...` lines as it falls;
+  `follow: vehicle: it drives out (state 5, ...)`; `follow: hold: ... its timer WOULD get 5.0 s more (dry run); the
+  vehicle WOULD be shielded (dry run); health H of M` - or, as likely in a dry run where nobody was called,
+  `... is NOT held: none of the called crew in play comes nearer ...` (the guard is then not asked: the `vehicle:`
+  lines are what this run is for). FAIL: `follow: vehicle: its health object cannot be read`
+  (the walk is wrong: tell the track; no hold will be made), an M that is none of those, any `SHIELD ON`.
+  M is expected to be 5000 (Difficulty option 1, if the field order holds).
+  READ from it: does the health fall in steps of tens (steady fire) or in one step of thousands (the point-blank
+  rule)? How much is left when it drives out at 8 s? **And let the run go on to a SECOND visit** (the dry human
+  escapes at the first: use the idle human of `U_M01` / an `--until exit` script for this): does the second
+  `it waits` line say `health M of M (100 %)` again, or what the first visit left (then a damaged van comes back,
+  and the ~6 s before a hold's shield are the weak place)?
+- **N3b - the shielded hold** (`FollowOutHold=15`, as N1b). PASS: `follow: hold: ... timer 1.9 -> 6.9 s (5.0 of 15.0
+  s used this visit); SHIELD ON: the vehicle's 'Invulnerable' byte [xxxxxxxx+0x21] 0 -> 1 until it is gone
+  (FollowOutShield=2); health H of M`, the next two holds `...; shielded since N s; health ...`; `follow: vehicle:`
+  lines after it say `SHIELDED by this file` and fall by at most M / 30 a hit (the scripted hits) to no less than a
+  tenth; klbot's `van 3` for ~23 s, then `van 5`; **`record 0 (you): status6`**; `follow: shield: off (the vehicle is
+  gone): ... 1 -> 0 after N s`; `follow: over (you escaped): ...`. FAIL: `record 0 (you): dead` while aboard;
+  `follow: vehicle: DESTROYED ... - ALTHOUGH THIS FILE'S SHIELD WAS ON ...` (**the cause read in the exe is then
+  wrong or not the whole: send the log**; the line is made from what the shield was BEFORE the pass released it);
+  `DESTROYED ... - this file's shield was set N s ago but the 'Invulnerable' byte ... read 0` (the level cleared it:
+  the 0.5 s upkeep is too slow); `DESTROYED` with no tail BEFORE the first `SHIELD ON` (the unshielded first ~6 s:
+  not the hold's doing, but tell the track - it is the case for a shield from the wait's begin);
+  `is NOT held: the vehicle's health object cannot be read`; **on any of the four van maps: `nothing to shield`,
+  `has no ZAnimatedVehicle health object`, or `is NOT held: the rules say it is the key-framed van (kind 3 ...) but
+  no ZAnimatedVehicle was found`** (the walk misses that level's van: no hold is made there until it is fixed);
+  no `shield: off` line by the score page; `could NOT be written back`.
+  READ from the `shield: off` line: `it takes hits again at health H of M (P %)` - how far the scripted hits wore
+  it under the shield (expected: not under 10 %).
+- **N3c - the crew arrives** (`FollowOutHold=25`): as N3b with up to five holds; count `follow: record N aboard T s
+  after the crew was called` - expected 24 .. 36 s, most of the crew; the last hold line's `nearest / farthest`.
+  Then with `FollowOutSpare=1`: nobody shot (J3's lines).
+- **N3d - a second round in the same process** after N3b / N3c: `follow: vehicle: it waits ...: health M of M (100
+  %), takes hits` - not `Invulnerable by the level` (that would be our byte left behind).
+- **N3e - `FollowOutShield=1`**: `SHIELD ON ... until it drives out`, `follow: shield: off (it drives out, and
+  FollowOutShield=1 leaves the drive-out to the game)` at `van 5`, then `vehicle: hit` lines again; he should escape
+  (if the vehicle is destroyed in state 5: that is the answer 'use 2', not a fault). A STATED CHECK of this run:
+  the `shield: off` line's `health H of M (P %)` = what the van drives out with unshielded, and the `vehicle: hit`
+  lines of the 8.4 s after it = what the drive-out costs; with P near 10 one real hit of 500 ends it. The same
+  health is what a NEXT visit starts with if nothing resets it (N3a's second visit says whether).
+- **N3f - the park** (`PT_DM06_board_r2`, `FollowOutHold=25`): `follow: vehicle: it has no ZAnimatedVehicle health
+  object (a helicopter or a car) ...` once, hold lines ending `...; the vehicle has no ZAnimatedVehicle health
+  object and is of kind N, not 3 ...: nothing to shield` (N = 1 or 2: which is the helicopter was not read); he
+  escapes. FAIL: he dies aboard (then helicopters are shot too: tell the track); `is NOT held: the rules say it is
+  the key-framed van (kind 3 ...)` (the park's vehicle is of kind 3 after all: tell the track, the park gets no
+  hold until then).
+- **N3g - WaitForYouHold** (`WaitForYou=1 WaitForYouHold=15`, the human slow to the van): `wait: hold: ... timer 1.x
+  -> 6.x s (...); SHIELD ON: ...` and the `follow: shield: off` line when the vehicle is gone (the prefix is
+  `follow:` also there).
+
+### 11.6 ASSUMED, not established, not done
+
+- ASSUMED: that hits took the health (not a path that does not ask the byte - READ in the exe, seen in no log; the
+  DESTROYED line's tail is the evidence against it if it ever prints); the park's vehicle is of kind 1 or 2 and is
+  not shot; the field order of the van's seven numbers (so: 5000 at the owner's Difficulty option 1); bots run
+  3.5 m/s on the other maps as in the bank's yard.
+- Not established: steady fire or one point-blank step; whether the van's health is made new between visits and who
+  sends `Reset` (`U_M01.log`); which `Activate_DamageFX` the level wires to which grade (not needed for the death);
+  that the health walk finds the van on Hot Coffee, Late Night Opening and Retomoto (checked on the bank only);
+  how long each other map's called crew really takes (no FollowOut board run exists for them); whether a traitor
+  aboard does anything to the human there.
+- Not done: no rig for the new code (compile only); a shield from the wait's first second; the earlier call at
+  stage 2; per-map values (the keys are global); `CLAUDE.md` (the lead's). The J2 / J3 checks of section 8 are
+  superseded by N3b / N3c.
+- Review: `re\bots_hold_review.md` (ACCEPT WITH FIXES); its MUST and SHOULD 2 - 9 are in this section and the code
+  (fix round, 2026-10-11): 1 the DESTROYED line, 2 fail closed by the kind byte, 3 the direct path, 4 `U_M01.log`
+  and the uncovered seconds, 5 the default as the owner's choice, 6 the health at `shield: off`, 7 the guard's
+  wrong reason, 8 only the bank is measured, 9 `[0x156b5f0]` = the option Difficulty, 1 in the owner's game.

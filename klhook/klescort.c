@@ -186,7 +186,46 @@
  *         (0x5dffc6): a held vehicle postpones the round's end, it cannot lose the round by the clock. While the
  *         human sits aboard the game's ten scripted hits on the vehicle run as ever (0x6db660, read as: 1/30 of its
  *         health each, never under a tenth; made once per wait); real police fire can destroy a vehicle that waits
- *         longer.
+ *         longer - AND DID, the first two times the hold ran (c2).
+ *     c2. THE HELD VEHICLE WAS DESTROYED WITH THE HUMAN ABOARD (LIVE 2026-10-11, the bank, runs N1_DM03_boardnear and
+ *         N1b: 'record 0 (you): dead' with 5,500 health and no hit, the bot aboard dead in the same tick, klbot's
+ *         line 'van 6 9.8s' = STATE 6, 20.9 / 21.3 s after the wait began; the run without the hold, N1c: escaped).
+ *         EXE: the key-framed van's health is a ZAnimatedVehicle object under the vehicle group (kle_veh_read). Its
+ *         'ProjectileHit' message (slot 89 = 0x87f340 -> 0x6c4730) takes weapon damage x the hit's scale [hit+0x18] x
+ *         the vehicle's own factor off [+0x14] (0x5aebb0). THE DIRECT PATH (found by the review, re\bots_hold_review.md
+ *         1): that hit routine itself, when the rules' vehicle kind [rules+0x1ec] is 3 and the health is at or under
+ *         0 (0x5aec7c..0x5aec89), calls rules slot 33 (the attacker into [rules+0x1e8]) and rules slot 84 = 0x61e570,
+ *         which in states 1..5 calls slot 94 = 0x6a1100 with grade 2: GRADE 2 SETS STATE 6 AND KILLS EVERY RECORD
+ *         WITH STATUS 4 - the human by slot 11, an AI member by slot 16. No level wiring is in that chain, and it is
+ *         why the state went 3 -> 6 with no 'heavily damaged' departure: grade 1 (a waiting vehicle's timer = 0)
+ *         comes only as a level message (the object's update, slot 87 = 0x8fa330, sends 'Activate_DamageFX_01 / 02 /
+ *         03' at half, a quarter and 0; the escape controller's 'EscVehicleState' 0x6d7d64 -> 0x594b10 -> slot 94 -
+ *         a second way to the same routine, not what the death rests on). State 6 is made by nothing else (the
+ *         review: slot 195 never makes it; the only 'push 6' are slot 94 and its multiplayer twin 0x839380).
+ *         In Arcade the maximum is one of four of the vehicle's fields by the option Difficulty [0x156b5f0] (0x552e53;
+ *         klbalance.c's KLR_DIFF, 0..3; the owner's logs say 'campaign difficulty option 1' = the second: the stock
+ *         van's, IF the file's seven numbers lie in field order 3000 / 5000 / 7000 / 10000, is 5000 - N3a's first
+ *         'health H of M' line says M). Stock exposes it for 8 s + the 8.4 s of the drive-out; a 15 s hold for 31.
+ *         STOCK'S OWN EXPOSURE IS NOT SAFE EITHER: U_M01.log (Hot Coffee, idle human, no hold) has state 6 1.3 s into
+ *         a second visit - so the health is not made new between visits, or one step takes all of it. NOT
+ *         ESTABLISHED: that HITS took the health (no log has it; the DESTROYED line now says so when it went with
+ *         this file's shield on), and whether steady fire did it or one point-blank step (a soldier within 1.6 m of
+ *         his target sends 'ProjectileHit' with scale 100, re\melee_damage.md); the 'follow: vehicle:' lines now say
+ *         the health as it falls.
+ *         THE ANSWER (FollowOutShield, default 2): right before the first timer write of a visit the hook sets that
+ *         object's 'Invulnerable' byte (+0x21: what its own 'Invulnerable' message writes, 0x87f426; both hit
+ *         messages ask it first, 0x6c4740 / 0x87f36e) and takes it back (the 1 it wrote, on the same object) when the
+ *         vehicle is gone - state 0, 1, 2, 6, 7, 8 - or, with FollowOutShield=1, when it drives out; also at a new
+ *         round, at the round's end and when the round can no longer be read. NO SHIELD POSSIBLE = NO HOLD (the
+ *         health object cannot be read, or the rules' kind byte [rules+0x1ec] is 3 = the key-framed van and no
+ *         ZAnimatedVehicle was found under it); a vehicle of another kind with no such object (helicopter, car) is
+ *         held unshielded - the hit routine calls 'destroyed' for kind 3 only (0x5aec7c). The shield goes on at the
+ *         first timer write, about 6 s into the wait: before it, and at a visit that is not held, the risk is
+ *         stock's. Under the shield the scripted hits go on (to a tenth at the lowest): with FollowOutShield=1, or
+ *         at the next visit, the vehicle stands unshielded at what is left - the 'shield: off' line says how much.
+ *         The scripted hits and a level's 'FakeDamage'
+ *         do not ask the byte: the first cannot go under a tenth, the second no level of ours has (not checked).
+ *         klmove.c's WaitForYouHold asks the same guard (kle_hold_guard): there bots sit aboard while the human comes.
  *      d. FollowOutSpare=1 (works without FollowOut): when the vehicle drives out, the times at rules +0xeec are set
  *         to 0x7fffffff (the loop's test is signed, `jg` 0x74b966): no slot's time comes, nobody left behind is shot.
  *         They stay in play to the round's end, 3 s after the human has escaped - an end state stock produces too (a
@@ -290,8 +329,16 @@
  *   FollowOutHold=0     seconds the driver may be held per visit, at most (0 = never; 15 is a fair first value): while
  *                       the vehicle waits with YOU ABOARD and crew that was called still COMES (2 m nearer to the
  *                       boarding place in 2 s), its timer gets up to 5 s more each time it falls under 2 s - the float
- *                       and the amount of the game's own HoldEscape rule, more often than that rule's once
- *   FollowOutSpare=0    1 = those who are not aboard when the vehicle drives out are NOT shot by the rules (one block
+ *                       and the amount of the game's own HoldEscape rule, more often than that rule's once.
+ *                       25 is what the bank's crew needs once BoardNear makes it walk (re\bots_follow_out.md 11)
+ *   FollowOutShield=2   what keeps a HELD vehicle from being destroyed with you aboard (section 3 c2; also for
+ *                       WaitForYouHold): 2 = from the first held second it takes no hit until it is gone, 1 = until
+ *                       it drives out (the drive-out's 8.4 s are the game's own risk again), 0 = no shield - the
+ *                       form that killed the human aboard in runs N1 / N1b; nothing is safe then, stock's 8 s only
+ *                       make it rare (U_M01.log). 2 or 1 is the OWNER's choice: 2 = after a hold the van cannot be
+ *                       lost at all (less than stock's risk), 1 = it drives out unshielded at what the scripted
+ *                       hits left of it (a tenth at the lowest: more than stock's risk for those 8.4 s)
+ *   FollowOutSpare=0   1 = those who are not aboard when the vehicle drives out are NOT shot by the rules (one block
  *                       of the rules object: the times of their deaths, put off). A key of its own: works with
  *                       FollowOut=0. They are left in play; the round still ends 3 s after you have escaped. No
  *                       payout changes: dead or left in play, their money is not in the escaped crew's pool.
@@ -316,7 +363,11 @@
  *   follow: the vehicle arrives in 1.9 s (call 1): no order from here on ...                       once per call
  *   follow: the vehicle waits (state 3, timer 8.0 s, visit 1): record 3 (stage 3, $0) in play at (x, y, z), 31.0 m from the boarding place, coming (4.2 m nearer in the last 2 s)
  *   follow: the vehicle waits: 1 of the crew aboard, 4 in play (nearest 12.0 m, farthest 55.1 m), 1 dead; you are in play
- *   follow: hold: the vehicle would leave in 1.8 s with you aboard and 3 of the crew still coming ...: timer 1.8 -> 6.8 s (5.0 of 15.0 s used)
+ *   follow: hold: the vehicle would leave in 1.8 s with you aboard and 3 of the crew still coming ...: timer 1.8 -> 6.8 s (5.0 of 15.0 s used); SHIELD ON: the vehicle's 'Invulnerable' byte [..+0x21] 0 -> 1 until it is gone (FollowOutShield=2); health 2400 of 3000
+ *   follow: vehicle: it waits (state 3, timer 7.9 s, 0.0 s after it began to wait): health 3000 of 3000 (100 %), takes hits; you are in play
+ *   follow: vehicle: hit (state 3, timer 4.1 s, 3.9 s after ...): health 2700 of 3000 (90 %), takes hits / SHIELDED by this file; you are aboard
+ *   follow: vehicle: DESTROYED (state 6) 21.2 s after it began to wait: health 0 of 3000; the line before said ...
+ *   follow: shield: off (the vehicle is gone): the vehicle's 'Invulnerable' byte [..+0x21] 1 -> 0 after 23.5 s; its health 2400 of 3000
  *   follow: record 3 aboard 21.4 s after the crew was called (vehicle state 3, timer 4.1 s)
  *   follow: the vehicle leaves (state 5, timer 8.4 s, visit 1): record 5 (stage 3, $0) in play at (x, y, z), 22.0 m from the boarding place, coming (5.1 m nearer in the last 2 s)
  *   follow: the vehicle leaves (state 5) with you aboard: 4 of the crew aboard, 1 left in play (record(s) 5), 1 dead
@@ -341,12 +392,21 @@
 #define KLE_HOLD_STEP   5.0f                  /* ... this much at a time: what the game's own hold rule adds (0x8b3959, 0xb5a068) */
 #define KLE_COME        200.0f                /* ... while a called bot COMES: this much nearer to the boarding place than 2 s before. GUESS (a walk is about 3 m/s) */
 #define KLE_BOARD_WIN   2.0f                  /* state 1 / 2 with the timer under this: the board tactic is live for a stage-3 bot (0x4faff7, 0x82f9be; float 0xb5c828) - no order */
+#define KLE_VEH_VT      0x00bcc0b4            /* ZAnimatedVehicle, the class's only vtable (slot 87 = 0x8fa330 its update, slot 89 = 0x87f340 its messages): the escape van's health object */
+#define KLE_ENTS        0x00e0ff90            /* the scene: [[[this]+0xc]+0xc] = the table of 128-byte entity slots (0x7936ea, 0x793c48) */
+#define KLE_VEH_KIND    0x1ec                 /* rules: the escape vehicle's kind, a byte (slot 95 = 0x5822d0; written by 0x42cfb0 from the class of [rules+0x1e4]): 3 = the key-framed van, the only kind a hit can destroy (0x5aec7c) */
+#define KLE_VEH_INV     0x21                 /* ZAnimatedVehicle: 1 = it takes no hit - the byte its messages 'Invulnerable' / 'Vulnerable' write (0x87f426 / 0x87f43b), asked by 'ProjectileHit' (0x6c4740) and 'DamageInfo' (0x87f36e) */
 
 static struct {
     int n, dry, log, record, refill, until, stage, board; DWORD every; float far_, side, retarget;
     int all, all_stage, all_order; DWORD all_still;      /* BoardAll, BoardAllStage, BoardAllOrder, BoardAllStill in ms */
-    int fo, fo_dry, fo_order, fo_spare; DWORD fo_after, fo_every, fo_money; float fo_hold;      /* FollowOut..: After / Every in ms, Hold in s */
+    int fo, fo_dry, fo_order, fo_spare, fo_shield; DWORD fo_after, fo_every, fo_money; float fo_hold;      /* FollowOut..: After / Every in ms, Hold in s; Shield 0 / 1 / 2 */
 } kle;
+
+/* THE HOLD'S SHIELD (section 3 c2). Not in kle_r: that is cleared at every new round, and a byte of the level's vehicle
+   that this file set must be taken back whatever happens to the round. obj = the ZAnimatedVehicle whose 'Invulnerable'
+   byte is OURS (0 = none), rules = the round object it was set under, at = when, told = 'set again' was said */
+static struct { DWORD obj, rules, at; int told; } kle_sh;
 
 struct kle_e {
     int rec, mode;                            /* mode: 0 free, 1 hold, 2 released (may still be sent aboard), 3 done */
@@ -373,6 +433,9 @@ static struct {
     /* FollowOutSpare: the rules object whose vehicle state the fast pass watches (0 = none); this departure is dealt
        with; its times were put off by this file (the dead of this departure are then not the rules' shot) */
     DWORD spare_rules; int spare_at5, spare_told, spare_put;
+    /* the vehicle's health log (FollowOut): its state at the last pass, when its wait began, the health the last line
+       said and when, 'cannot be read' / 'has no health object' said */
+    BYTE vh_prev; DWORD vh_wait_at, vh_said_at; float vh_said; int vh_told;
 } kle_r;
 
 static float kle_dist(const float a[3], const float b[3])
@@ -680,6 +743,155 @@ static int kle_criminal(void)
     return (pl = klh_rd32(gd + 0x828 + 4 * sel)) != 0 && klh_rd(pl + 0x273c, &type, 1) && type == 2;
 }
 
+/* THE ESCAPE VEHICLE'S HEALTH (section 3 c2; EXE). [rules+0x1e4] is the vehicle the rules use (slot 32 = 0x54b1a0; set
+   from [score+0x5c] by slot 89, 0x49d18d). For the key-framed van it is a group; the game finds the health under it
+   as the HUD's bar does (ZFAEscapeDisplay 0x793b7e..0x793c60, the scripted hits 0x6db841..): [group+0x40] = the first
+   child's entity slot, [slot+0x60] = its object, word [slot+0x5e] = the next sibling's slot number (0 = none; the slot
+   is table + 0x80 * number - 0x80). The child that is a ZAnimatedVehicle holds
+       +0x14 health  +0x18 a quarter of the maximum (slot 82, 0x65322a: max * 0.25, double 0xb293f0)
+       +0x1c..+0x1e  'Activate_DamageFX_01 / 02 / 03' was sent (health <= half, <= a quarter, <= 0: slot 87, 0x8fa4f5..)
+       +0x21 Invulnerable  +0x22 its frame update runs
+   -> 1 = found, 0 = the children were walked and none is one (a helicopter / a car), -1 = something could not be read.
+   Reads only. */
+struct kle_veh { DWORD obj; float hp, max; BYTE fx[3], inv, upd; };
+static int kle_veh_read(DWORD rules, struct kle_veh *v)
+{
+    DWORD g = 0, vt = 0, slot = 0, tab = 0, p, c, o = 0; WORD next = 0; int k; float f[2]; BYTE b[7];
+    memset(v, 0, sizeof *v);
+    if (!klh_rd(rules + 0x1e4, &g, 4) || !g || !klh_rd(g, &vt, 4)) return -1;
+    if (vt == KLE_VEH_VT) o = g;
+    else {
+        if (!klh_rd(g + 0x40, &slot, 4) || !(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return -1;
+        for (k = 0; k < 64; k++) {
+            if (slot < tab || slot - tab >= 0x10000u * 0x80 || ((slot - tab) & 0x7f)) return k ? -1 : 0;      /* no slot of the table: the first = this object has no children as a group has them */
+            if (!klh_rd(slot + 0x60, &c, 4) || !klh_rd(slot + 0x5e, &next, 2)) return -1;
+            if (c && klh_rd32(c) == KLE_VEH_VT) { o = c; break; }
+            if (!next) return 0;
+            slot = tab + (DWORD)next * 0x80 - 0x80;
+        }
+        if (!o) return -1;                    /* 64 children and no end: not the list this build knows */
+    }
+    if (!klh_rd(o + 0x14, f, sizeof f) || !klh_rd(o + 0x1c, b, sizeof b) || !klb_finite(f[0]) || !klb_finite(f[1]) || !(f[1] > 0) || f[0] < 0 || f[0] > f[1] * 4 + 1) return -1;
+    v->obj = o; v->hp = f[0]; v->max = f[1] * 4; memcpy(v->fx, b, 3); v->inv = b[5]; v->upd = b[6];
+    return 1;
+}
+
+/* the shield off: the byte back to 0 - only if the object is still a ZAnimatedVehicle and the byte still the 1 we wrote */
+static void kle_shield_off(const char *why, DWORD now)
+{
+    DWORD o = kle_sh.obj; BYTE b = 0; float f[2] = { 0, 0 };
+    if (!o) return;
+    kle_sh.obj = 0;
+    if (klh_rd32(o) != KLE_VEH_VT || !klh_rd(o + KLE_VEH_INV, &b, 1)) { klog("follow: shield: off (%s): the vehicle's health object %08lx can no longer be read: nothing is written back", why, o); return; }
+    if (b != 1) { klog("follow: shield: off (%s): the 'Invulnerable' byte of %08lx is %u, no longer the 1 this file wrote: left alone", why, o, b); return; }
+    klh_rd(o + 0x14, f, sizeof f);
+    if (klb_put8(o + KLE_VEH_INV, 0, "escape vehicle: Vulnerable again (the hold's shield is taken off)"))
+        klog("follow: shield: off (%s): the vehicle's 'Invulnerable' byte [%08lx+0x%x] 1 -> 0 after %.1f s; it takes hits again at health %.0f of %.0f (%.0f %%; the game's scripted hits went on under the shield, down to a tenth at the lowest)", why, o, KLE_VEH_INV, (now - kle_sh.at) / 1000.0, f[0], f[1] * 4, f[1] > 0 ? 25.0f * f[0] / f[1] : 0.0f);
+    else klog("follow: shield: off (%s): the 'Invulnerable' byte of %08lx could NOT be written back: THE VEHICLE STAYS INVULNERABLE until the level is loaded again", why, o);
+}
+
+/* May the driver be held now? Asked by BOTH holds (FollowOutHold here, WaitForYouHold in klmove.c) right before the
+   timer is written. WHY (live runs N1 / N1b, 2026-10-11): a vehicle held 15 s was DESTROYED 20.9 / 21.3 s after it
+   began to wait, and the rules then kill everybody aboard, the human too (slot 94 = 0x6a1100, grade 2: state 6, slot
+   11 for a human and slot 16 for an AI member with status 4). Stock never lets it stand that long: 8 s + the 8.4 s
+   of the drive-out. So with FollowOutShield 1 / 2 (default 2) the vehicle's own 'Invulnerable' byte is set from the
+   first held second on - one byte of the level's ZAnimatedVehicle, what its 'Invulnerable' message writes - and
+   kle_veh_pass takes it back. -> 1 = hold (note[200] says what was done), 0 = do not (why[200]).
+   NOT COVERED, and said in the start line: the shield goes on at the first timer write, about 6 s into the wait
+   (the timer falls from 8.0 to under KLE_HOLD_AT first). Until then, and at any visit that is not held, the risk is
+   stock's - and stock's is not nil: U_M01.log (Hot Coffee, 2026-10-10, no hold, nobody aboard) has 'van 4 8.0s' and
+   1.3 s later 'van 6 9.9s' on a SECOND visit. */
+static int kle_hold_guard(const struct klb_snap *s, DWORD now, int dry, char *why, char *note)
+{
+    struct kle_veh v; int k; BYTE kind = 0xff;
+    why[0] = note[0] = 0;
+    if (!kle.fo_shield) { strcpy(note, "NO SHIELD (FollowOutShield=0): a vehicle that stands longer than stock's 8 s can be destroyed with everybody aboard"); return 1; }
+    k = kle_veh_read(s->rules, &v);
+    if (k < 0) { strcpy(why, "the vehicle's health object cannot be read, so it cannot be shielded - and an unshielded hold got the vehicle destroyed with everybody aboard (FollowOutShield=0 holds all the same)"); return 0; }
+    if (!k) {
+        /* FAIL CLOSED (the review's point 2). The game's own name for the vehicle's kind is the byte [rules+0x1ec]
+           (slot 95 = 0x5822d0; set by 0x42cfb0 from the class of [rules+0x1e4]: 1, 2 = two other vehicle classes, 3 =
+           the third cast 0x409920, 0 = none). 3 is what the hit routine asks before it calls 'destroyed' (0x5aec7c)
+           and what the state machine asks (0x55ecf4): a vehicle of kind 3 CAN be destroyed by a hit, so one whose
+           health object this file's walk did not find (a derived class, another tree) is not held. */
+        if (!klh_rd(s->rules + KLE_VEH_KIND, &kind, 1)) { strcpy(why, "the vehicle's kind [rules+0x1ec] cannot be read and no health object was found: it cannot be shielded"); return 0; }
+        if (kind == 3) { strcpy(why, "the rules say it is the key-framed van (kind 3: a hit can destroy it) but no ZAnimatedVehicle was found under it: it cannot be shielded (FollowOutShield=0 holds all the same)"); return 0; }
+        snprintf(note, 200, "the vehicle has no ZAnimatedVehicle health object and is of kind %u, not 3 (a helicopter or a car: no hit calls 'destroyed' for it, 0x5aec7c): nothing to shield", kind);
+        return 1;
+    }
+    if (!(v.hp > 0)) { strcpy(why, "the vehicle's health is 0: it is destroyed"); return 0; }
+    if (kle_sh.obj == v.obj && v.inv == 1) { snprintf(note, 200, "shielded since %.1f s; health %.0f of %.0f", (now - kle_sh.at) / 1000.0, v.hp, v.max); return 1; }
+    if (v.inv) { snprintf(note, 200, "the level itself has the vehicle Invulnerable (byte %u): left as it is; health %.0f of %.0f", v.inv, v.hp, v.max); return 1; }
+    if (dry) { snprintf(note, 200, "the vehicle WOULD be shielded (dry run); health %.0f of %.0f", v.hp, v.max); return 1; }
+    if (kle_sh.obj == v.obj) {                /* ours, and the byte is 0 again (the level's 'Vulnerable' inside the last 0.5 s): set again, the shield's start stays */
+        if (!klb_put8(v.obj + KLE_VEH_INV, 1, "escape vehicle: Invulnerable while the driver is held (set again)")) { strcpy(why, "the vehicle's 'Invulnerable' byte was 0 again and could not be written, so it cannot be shielded"); return 0; }
+        snprintf(note, 200, "SHIELD ON AGAIN: the 'Invulnerable' byte [%08lx+0x%x] was 0 again (the level's 'Vulnerable'?), 0 -> 1; shielded since %.1f s; health %.0f of %.0f", v.obj, KLE_VEH_INV, (now - kle_sh.at) / 1000.0, v.hp, v.max);
+        return 1;
+    }
+    if (kle_sh.obj) kle_shield_off("another vehicle is held", now);
+    if (!klb_put8(v.obj + KLE_VEH_INV, 1, "escape vehicle: Invulnerable while the driver is held")) { strcpy(why, "the vehicle's 'Invulnerable' byte could not be written, so it cannot be shielded"); return 0; }
+    kle_sh.obj = v.obj; kle_sh.rules = s->rules; kle_sh.at = KLB_T(now); kle_sh.told = 0;
+    snprintf(note, 200, "SHIELD ON: the vehicle's 'Invulnerable' byte [%08lx+0x%x] 0 -> 1 %s (FollowOutShield=%d); health %.0f of %.0f", v.obj, KLE_VEH_INV,
+             kle.fo_shield == 1 ? "until it drives out" : "until it is gone", kle.fo_shield, v.hp, v.max);
+    return 1;
+}
+
+/* every 0.5 s pass of a round, before FollowOut: the shield's upkeep and release, and (FollowOut on) the vehicle's
+   health in the log - at the wait, at the drive-out, whenever it fell by a twentieth of the maximum (1 s apart at
+   least), and when the vehicle is destroyed. The log is what tells steady fire from one step. */
+static void kle_veh_pass(const struct klb_snap *s, DWORD now)
+{
+    struct kle_veh v; BYTE prev = kle_r.vh_prev, b = 0; int k, live = s->veh >= 3 && s->veh <= 5, edge = s->veh != prev;
+    const struct klb_rec *h = s->human >= 0 ? &s->r[s->human] : 0; float timer = klb_finite(s->timer) ? s->timer : -1.0f, since;
+    /* what the shield WAS when this pass began, before the release below takes it off (the review's MUST: the
+       DESTROYED line must be able to say that the vehicle went with our shield on): sh_was = our object of this
+       round, sh_byte = its 'Invulnerable' byte as this pass found it (0xff = it could not be read) */
+    DWORD sh_was = kle_sh.obj && kle_sh.rules == s->rules ? kle_sh.obj : 0; BYTE sh_byte = 0xff; float sh_for = sh_was ? (now - kle_sh.at) / 1000.0f : 0; char tail[240];
+    if (sh_was && (klh_rd32(sh_was) != KLE_VEH_VT || !klh_rd(sh_was + KLE_VEH_INV, &sh_byte, 1))) sh_byte = 0xff;
+    kle_r.vh_prev = s->veh;
+    if (kle_sh.obj) {
+        if (s->rules != kle_sh.rules) kle_shield_off("another round object", now);
+        else if (!(s->veh == 3 || s->veh == 4 || (s->veh == 5 && kle.fo_shield != 1)))
+            kle_shield_off(s->veh == 5 ? "it drives out, and FollowOutShield=1 leaves the drive-out to the game" : s->veh == 6 ? "the vehicle is destroyed" : "the vehicle is gone", now);
+        else if (klh_rd32(kle_sh.obj) != KLE_VEH_VT || !klh_rd(kle_sh.obj + KLE_VEH_INV, &b, 1)) kle_shield_off("its health object can no longer be read", now);
+        else if (!b) {                        /* the level sent 'Vulnerable' meanwhile: ours again while the hold's reason lasts */
+            k = klb_put8(kle_sh.obj + KLE_VEH_INV, 1, "escape vehicle: Invulnerable while the driver is held (set again)");
+            if (!kle_sh.told++) klog("follow: shield: the vehicle's 'Invulnerable' byte was 0 again (the level's own 'Vulnerable' message?): %s (said once)", k ? "set to 1 again" : "it could NOT be written");
+        }
+    }
+    /* the wait's begin: only FollowOut sees it for sure (with WaitForYouHold alone this pass does not run before the
+       shield is set: no begin is known then, and the lines say -1.0 s) */
+    if ((s->veh == 3 || s->veh == 4) && prev != 3 && prev != 4) { kle_r.vh_wait_at = kle.fo ? KLB_T(now) : 0; kle_r.vh_said = -1; kle_r.vh_told = 0; }
+    /* DESTROYED is said whenever our shield was on this round, FollowOut or not (klmove.c's hold); the rest is FollowOut's log */
+    if (!kle.fo && !(sh_was && edge && s->veh == 6)) return;
+    if (!live && !(edge && s->veh == 6)) return;
+    tail[0] = 0;
+    if (edge && s->veh == 6) {
+        if (sh_was && sh_byte == 1)
+            snprintf(tail, sizeof tail, " - ALTHOUGH THIS FILE'S SHIELD WAS ON (the 'Invulnerable' byte of %08lx read 1 at this pass, set %.1f s ago): SOMETHING ELSE THAN A HIT TOOK ITS HEALTH, the cause read in the exe is not the whole of it (tell the track)", sh_was, sh_for);
+        else if (sh_was)
+            snprintf(tail, sizeof tail, " - this file's shield was set %.1f s ago but the 'Invulnerable' byte of %08lx read %u at this pass (0 = the level's 'Vulnerable' inside the last 0.5 s, 255 = unreadable): a hit could get through", sh_for, sh_was, sh_byte);
+    }
+    k = kle_veh_read(s->rules, &v);
+    if (k <= 0) {
+        if (!kle_r.vh_told++) klog("follow: vehicle: %s (state %u)", k ? "its health object cannot be read" : "it has no ZAnimatedVehicle health object (a helicopter or a car): no health is logged, no shield is needed", s->veh);
+        if (edge && s->veh == 6) klog("follow: vehicle: DESTROYED (state 6): the rules kill everybody aboard (slot 94, grade 2)%s", tail);
+        return;
+    }
+    since = kle_r.vh_wait_at ? (now - kle_r.vh_wait_at) / 1000.0f : -1.0f;
+    if (edge && s->veh == 6) {
+        if (!tail[0] && v.inv) snprintf(tail, sizeof tail, " - ALTHOUGH ITS 'Invulnerable' BYTE IS %u (the level's, not this file's): something else than a hit took its health (tell the track)", v.inv);
+        klog("follow: vehicle: DESTROYED (state 6) %.1f s after it began to wait: health %.0f of %.0f; the line before said %.0f, %.1f s ago. The rules kill everybody aboard (0x5aec7c -> slot 84 -> slot 94 = 0x6a1100, grade 2)%s",
+             since, v.hp, v.max, kle_r.vh_said, kle_r.vh_said_at ? (now - kle_r.vh_said_at) / 1000.0 : -1.0, tail);
+        if (!kle.fo) return;
+    }
+    else if ((edge && (s->veh == 5 || prev < 3 || prev > 5)) || kle_r.vh_said < 0 || (kle_r.vh_said - v.hp >= v.max / 20 && now - kle_r.vh_said_at >= 1000))
+        klog("follow: vehicle: %s (state %u, timer %.1f s, %.1f s after it began to wait): health %.0f of %.0f (%.0f %%), %s; you are %s", edge && s->veh == 5 ? "it drives out" : edge ? "it waits" : "hit", s->veh, timer, since, v.hp, v.max,
+             100.0f * v.hp / v.max, kle_sh.obj == v.obj ? "SHIELDED by this file" : v.inv ? "Invulnerable by the level" : "takes hits", h && h->status == 4 ? "aboard" : h && !h->status ? "in play" : "out");
+    else return;
+    kle_r.vh_said = v.hp; kle_r.vh_said_at = KLB_T(now);
+}
+
 /* FollowOutSpare: the vehicle drives out (state 5). The rules have just set, for every slot, the time at which the
    record it names is shot if it is an AI member still in play (0x8fab77..0x8fac9a; read by 0x74b8a2..0x74b99a while the
    human's client flag 0x20 is set). All of them are put off to a time that never comes - ONE block of the rules
@@ -931,7 +1143,8 @@ static void kle_follow(const struct klb_snap *s, DWORD now)
 
     /* c. FollowOutHold: the human is aboard, the vehicle waits and would leave, crew that was called still comes */
     if (kle.fo_hold > 0 && waiting && h->status == 4) {
-        BYTE grade = 1, paid = 0, veh2 = 0; float tnow = 0, add; const char *no = 0;
+        BYTE grade = 1, paid = 0, veh2 = 0; float tnow = 0, add; const char *no = 0; char gw[200], gn[200];
+        gw[0] = gn[0] = 0;
         if (kle_r.fo_hold_visit != kle_r.visit) { kle_r.fo_hold_visit = kle_r.visit; kle_r.fo_held = 0; kle_r.fo_hold_told = 0; }
         if (!(timer > 0 && timer < KLE_HOLD_AT)) return;                      /* not yet; or a timer of 0: somebody set it to leave */
         if (kle.fo_hold - kle_r.fo_held < 0.5f) {                             /* the seconds of this visit are used */
@@ -943,11 +1156,13 @@ static void kle_follow(const struct klb_snap *s, DWORD now)
         else if (!klh_rd(s->score + 0x60, &grade, 1) || grade) no = "the vehicle is damaged and must go";
         else if (!klh_rd(s->rules + 0x1b3, &paid, 1) || paid != 0xff) no = "somebody paid the driver";
         else if (!klh_rd(s->rules + 0x1dc, &veh2, 1) || (veh2 != 3 && veh2 != 4) || !klh_rd(s->rules + 0x1d8, &tnow, 4) || !klb_finite(tnow) || !(tnow > 0 && tnow < KLE_HOLD_AT)) no = "its timer changed since this pass read it";
+        /* the last test, and the only one that writes: the vehicle must not be shot to pieces while it is held (runs N1 / N1b) */
+        if (!no && !kle_hold_guard(s, now, dry, gw, gn)) no = gw;
         if (no || dry) {
             if (!(kle_r.fo_hold_told & 1)) {
                 kle_r.fo_hold_told |= 1;
                 if (no) klog("follow: hold: the vehicle leaves in %.1f s with you aboard and is NOT held: %s (%d in play%s)", timer, no, n_play, rg);
-                else klog("follow: hold: the vehicle would leave in %.1f s with you aboard and %d of the crew still coming%s: its timer WOULD get %.1f s more (dry run)", timer, n_moving, rg, add);
+                else klog("follow: hold: the vehicle would leave in %.1f s with you aboard and %d of the crew still coming%s: its timer WOULD get %.1f s more (dry run); %s", timer, n_moving, rg, add, gn);
             }
             return;
         }
@@ -957,7 +1172,7 @@ static void kle_follow(const struct klb_snap *s, DWORD now)
             return;
         }
         kle_r.fo_held += add;
-        klog("follow: hold: the vehicle would leave in %.1f s with you aboard and %d of the crew still coming%s: timer %.1f -> %.1f s (%.1f of %.1f s used this visit)", timer, n_moving, rg, tnow - add, tnow, kle_r.fo_held, kle.fo_hold);
+        klog("follow: hold: the vehicle would leave in %.1f s with you aboard and %d of the crew still coming%s: timer %.1f -> %.1f s (%.1f of %.1f s used this visit); %s", timer, n_moving, rg, tnow - add, tnow, kle_r.fo_held, kle.fo_hold, gn);
     }
 }
 
@@ -965,20 +1180,23 @@ static void kle_tick(int game_thread)
 {
     static DWORD last; static int toldthread; struct klb_snap s; DWORD now = GetTickCount(), player = 0, actor, soldier; char why[200], w[100];
     float hp[3], hn[3], bp[3], bd[3], got[3]; const struct klb_rec *h; int i, stages = 0, human_in, rel = 0, waiting, k;
-    if ((!kle.n && !kle.all && !kle.fo && !kle.fo_spare) || !klb.on || !klh_exe_ok) return;
+    /* kle_sh.obj: klmove.c's WaitForYouHold can have set the shield with none of this file's keys on - it is still taken back here */
+    if ((!kle.n && !kle.all && !kle.fo && !kle.fo_spare && !kle_sh.obj) || !klb.on || !klh_exe_ok) return;
     if (kle_r.spare_rules && game_thread) kle_spare_fast();                   /* FollowOutSpare: one read on every pass while the vehicle waits */
     if (now - last < 500) return;
     last = now;
-    if (!klb_read(&s)) { kle_r.rules = 0; kle_r.spare_rules = 0; return; }
+    if (!klb_read(&s)) { kle_r.rules = 0; kle_r.spare_rules = 0; if (game_thread) kle_shield_off("the round can no longer be read", now); return; }
     for (i = 0; i < s.n; i++) if (s.r[i].used) stages += s.r[i].stage;
     if (s.rules != kle_r.rules || (s.state == KLB_ROUND && kle_r.state != KLB_ROUND) || stages < kle_r.stages) {      /* a new round: as klbot.c's klb_act */
+        if (game_thread && kle_r.rules) kle_shield_off("a new round", now);   /* not at the first pass of this file after the shield was set by klmove.c (kle_r.rules is 0 then) */
         memset(&kle_r, 0, sizeof kle_r); kle_r.rules = s.rules; kle_r.round_at = KLB_T(now);
     }
     kle_r.state = s.state; kle_r.stages = stages;
-    if (s.state != KLB_ROUND) { kle_r.spare_rules = 0; return; }
+    if (s.state != KLB_ROUND) { kle_r.spare_rules = 0; if (game_thread) kle_shield_off("the round is over", now); return; }
     if (!klb_level(why)) {                    /* klbot.c section 0: nothing on a stock level, on an unknown one, or without the Steam guard */
         if (!kle_r.told_gate++) klog("%s: %s: nothing is done here (this part acts only on a level that is not stock)", kle.n ? "escort" : kle.all ? "board" : "follow", why);
         kle_r.spare_rules = 0;
+        if (game_thread) kle_shield_off("the level counts as stock now", now);
         return;
     }
     if (!game_thread) { if (!toldthread++) klog("escort / board / follow: the tick is not on the game's thread ([KLHook] Tick=0?): nothing is ordered or written"); return; }
@@ -996,6 +1214,7 @@ static void kle_tick(int game_thread)
         tracked = KLB_T(now);
         kle_all_track(&s, now); if (waiting) kle_board_all(&s, now);
     }
+    kle_veh_pass(&s, now);                                                    /* the shield's upkeep and release; with FollowOut the vehicle's health in the log */
     if (kle.fo || kle.fo_spare) kle_follow(&s, now);                          /* after BoardAll: a byte it has just written is seen as 'stage 3 since this pass' */
     if (kle.n && human_in && !kle_r.told_you++)
         klog("escort: you: record %d, player %08lx, feet (%.0f, %.0f, %.0f), node (%.0f, %.0f, %.0f) - the two should agree to within a body's height", s.human, player, hp[0], hp[1], hp[2], hn[0], hn[1], hn[2]);
@@ -1065,6 +1284,7 @@ static void kle_init(void)
     kle.fo_after = (DWORD)klb_pos("FollowOutAfter", 0, 600) * 1000;
     kle.fo_every = (DWORD)klb_pos("FollowOutEvery", 2, 60) * 1000; if (kle.fo_every < 1000) kle.fo_every = 1000;
     kle.fo_hold = klb_inif("FollowOutHold", "0"); if (!klb_finite(kle.fo_hold) || kle.fo_hold < 0) kle.fo_hold = 0; if (kle.fo_hold > 60) kle.fo_hold = 60;
+    kle.fo_shield = klb_pos("FollowOutShield", 2, 2);                         /* also klmove.c's WaitForYouHold goes by it */
     if (kle.fo && klb.van && klb.van_left) {
         klog("follow: FollowOut is OFF: [Bots] VanLeftBehind=1 takes every bot at heist stage 3 as standing at the vehicle, and FollowOut gives stage 3 to bots far from it");
         kle.fo = 0;
@@ -1074,6 +1294,10 @@ static void kle_init(void)
                      kle.fo_order ? " and, while the vehicle drives in and is 2 s or more away, the soldier's own order to the boarding place" : "",
                      kle.fo_hold > 0 ? "; while it waits with you aboard and called crew still comes nearer, its timer gets up to 5 s more under 2 s, that many seconds a visit at most" : "",
                      klb.van ? "; NOTE [Bots] Van is on: a bot that turns traitor after it was called counts as 'at the vehicle' for it" : "");
+    if (kle.fo && kle.fo_hold > 0)
+        klog(kle.fo_shield ? "follow: hold: FollowOutShield=%d: from the first held second the vehicle takes no hit (its own 'Invulnerable' byte, ZAnimatedVehicle +0x%x, one data write) %s; no shield possible = no hold. BEFORE the first hold (about the first 6 s of a wait) and at a visit that is not held it takes hits as in stock. The clocks a hold touches: the wait timer [rules+0x1d8] and nothing else"
+                           : "follow: hold: FollowOutShield=%d (+0x%x not written%s): THE HELD VEHICLE CAN BE DESTROYED WITH YOU ABOARD - live runs N1 / N1b: 20.9 / 21.3 s after it began to wait, stock stands 8 s",
+             kle.fo_shield, KLE_VEH_INV, !kle.fo_shield ? "" : kle.fo_shield == 1 ? "until it drives out (the 8.4 s of the drive-out are the game's)" : "until it is gone");
     if (kle.fo_spare) klog("follow: spare on%s: when the escape vehicle drives out, the rules' times for shooting the AI heisters left behind (rules +0x%x) are put off: they stay in play; Arcade only, on a level that is not the stock one of its slot",
                            kle.dry || kle.fo_dry ? " DRY RUN (nothing is written)" : "", KLE_KILL_TIMES);
     if (!kle.n) return;

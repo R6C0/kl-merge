@@ -190,7 +190,23 @@ together with `FollowOutHold=<seconds>` (the driver waits while called crew come
 (nobody left behind is shot); the start line names both keys' values and says so when neither is on. The part counts
 the cost itself: at every departure `near: visit N: the vehicle leaves WITH YOU ABOARD / without you: K AI
 heister(s) still in play (record, metres from the boarding place: ...), M of them (*) stood at a denied box on this
-visit`. NOT MEASURED - live checks N1 / N2 are run as pairs with and without the key for that number.
+visit`.
+
+**MEASURED 2026-10-11 (runs N1c / N1 / N1b on the bank, BoardNear=1500; re/bots_follow_out.md 11) - the advice
+changes:** BoardNear itself works (the drop's box, 42.7 m off, 'takes nobody aboard', asked ~6,000 times a visit).
+- **With BoardNear and a plain 8 s visit nobody of the crew arrives**: the vehicle leaves 15 s after the call, the
+  crew is 46 .. 56 m off (N1c) and five are shot. The 14 s above was the walk from the drop only; from inside the
+  bank the first bot is aboard 24.0 / 25.5 s after the call, the last would need about 36 s.
+- **`FollowOutHold=15` as it was KILLED THE HUMAN ABOARD** (N1, N1b): a van that stands 21 s is destroyed by the
+  police, and the rules then kill everybody with status 4 (slot 94 = 0x6a1100, grade 2). The hold is only safe with
+  `FollowOutShield` (new, default 2: the held vehicle takes no hit; klescort.c 3 c2) - `WaitForYouHold` asks the
+  same guard now. After the review (`re\bots_hold_review.md`): the guard fails closed (a key-framed van whose health
+  object is not found is not held), the shield only starts at the first timer write (~6 s into a wait), 2 against 1
+  is the owner's choice, and 25 s is the bank's measured value only (`re\bots_follow_out.md` 11.3, 11.4).
+- **So BoardNear=1500 wants `FollowOutHold=25` (shielded) AND `FollowOutSpare=1`** for whoever still does not make
+  it; `FollowOutSpare` alone is the cheap form ('they are simply left, not shot'), `FollowOutHold` alone under 20 s
+  gets one or two of the bank's seven aboard. A larger BoardNear for the bank would only bring the far box back.
+  NOT RUN IN THE GAME in this form: checks N3a .. N3g there.
 
 **What WaitForYou costs** (the owner did not ask for the key): the round clock is red while the crew waits
 (section 2.2), and the crew that is through the exit trigger stands at its last place - the escape box beside the
