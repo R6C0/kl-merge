@@ -184,11 +184,13 @@
 #define KLU_T_MLABEL(k) (19 + 2 * (k))        /* k = 0 TOTAL, 1 LOOT, 2 REWARDS */
 #define KLU_T_MVALUE(k) (20 + 2 * (k))
 #define KLU_T_GRID      25
-#define KLU_NGRID       10
+#define KLU_NSWEEP      8                     /* Grid: one label per candidate style byte */
+#define KLU_NGRID       (10 + KLU_NSWEEP)
 #define KLU_NTEXT       (KLU_T_GRID + KLU_NGRID)
 #define KLU_NPIC        224                   /* rings are drawn dab by dab (Dials) */
 #define KLU_TEXTLEN     64
-#define KLU_STYLE_LEFT  0x44
+#define KLU_STYLE_LEFT  (klu.left)        /* [HUD] LeftStyle: 0x44 turned out CENTRED at x (run H1_DM03_hud); 0x11 is a GUESS until the sweep of Grid shows it */
+#define KLU_STYLE_CENTRE 0x44
 #define KLU_STYLE_RIGHT 0x12
 #define KLU_SHADOW_RGB  0x80000000u
 
@@ -205,10 +207,12 @@
 #define KLU_C_INKCASH   0xff1f4a1du           /* own cash on the chalk block */
 #define KLU_C_BLUE      0xff6ea3d6u           /* own row without plates, a fed */
 
+static const int klu_sweep[8] = { 0x11, 0x14, 0x21, 0x41, 0x01, 0x10, 0x42, 0x24 };
 struct klu_text { DWORD obj, shadow; float x, y; int on, style, big, plain, noshadow; DWORD colour, want_colour; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
 struct klu_picq { int n; float x, y, w, h; DWORD argb; int layer; };
 
 static struct {
+    int left;                                 /* LeftStyle */
     int on, log, stock, crew, money, round, hide, shadow, tags, cashshort, totalfont, draw, plates, anchor, pictest, grid, probe, layer, rows, dials;
     float inset, crew_x, crew_y, crew_w, row, money_x, money_y, money_w, round_y;
 } klu;
@@ -459,7 +463,8 @@ static void klu_layout(void)
     }
     klu_r.t[KLU_T_MVALUE(0)].big = klu.totalfont;
     {   /* the Grid labels: their style is fixed when the object is made (klu_grid fills the same order) */
-        static const int gs[KLU_NGRID] = { KLU_STYLE_LEFT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_LEFT, KLU_STYLE_RIGHT, KLU_STYLE_LEFT, KLU_STYLE_RIGHT };
+        int gs[KLU_NGRID] = { KLU_STYLE_LEFT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_LEFT, KLU_STYLE_RIGHT, KLU_STYLE_LEFT, KLU_STYLE_RIGHT };
+        for (i = 0; i < KLU_NSWEEP; i++) gs[10 + i] = klu_sweep[i];
         for (i = 0; i < KLU_NGRID; i++) { klu_r.t[KLU_T_GRID + i].plain = 1; klu_r.t[KLU_T_GRID + i].style = gs[i]; klu_r.t[KLU_T_GRID + i].want_colour = KLU_C_CORAL; }
     }
 }
@@ -614,7 +619,8 @@ static void klu_row(int row, const char *name, long money, int kind)
 }
 
 static void klu_grid(void)
-{   /* Grid: every box of the layout named with its top-left corner above it and its bottom-right corner under it, and
+{   /* (the style sweep: eight labels '|xx' at x 640, y 420 + 22 i, each made with style byte xx - the one whose bar
+       stands at 640 with the text to its right is LEFT) */   /* Grid: every box of the layout named with its top-left corner above it and its bottom-right corner under it, and
        marks at the screen's middle and edges - one screenshot at any resolution shows where everything sits (the labels
        are in virtual 1280 x 720 pixels). With Plates=1 each box also gets a 1 px coral outline: text and picture
        coordinates on one picture. */
@@ -636,6 +642,7 @@ static void klu_grid(void)
     t = &klu_r.t[k++]; t->x = 640.0f; t->y = 384.0f; t->style = KLU_STYLE_RIGHT; t->on = 1; t->want_colour = KLU_C_CORAL; strcpy(t->want, "RIGHT-ALIGNED 640,384+");
     t = &klu_r.t[k++]; t->x = 0.0f; t->y = 500.0f; t->style = KLU_STYLE_LEFT; t->on = 1; t->want_colour = KLU_C_CORAL; strcpy(t->want, "0,500");
     t = &klu_r.t[k++]; t->x = 1280.0f; t->y = 698.0f; t->style = KLU_STYLE_RIGHT; t->on = 1; t->want_colour = KLU_C_CORAL; strcpy(t->want, "1280,698");
+    for (i = 0; i < KLU_NSWEEP; i++) { t = &klu_r.t[k++]; t->x = 640.0f; t->y = 420.0f + 22.0f * i; t->style = klu_sweep[i]; t->on = 1; t->want_colour = KLU_C_CHALK; snprintf(t->want, sizeof t->want, "|STYLE %02X AT 640", klu_sweep[i]); }
     if (klu.plates) { klu_addpic(181, 640.0f, 356.0f, 1.0f, 60.0f, KLU_C_CORAL, klu.layer); klu_addpic(181, 610.0f, 360.0f, 60.0f, 1.0f, KLU_C_CORAL, klu.layer); }   /* a cross whose arms meet at (640, 360) */
 }
 
@@ -1016,7 +1023,7 @@ static void klu_init(void)
     klu.shadow = klu_inii("Shadow", 1, 0, 1); if (klu.draw == 2) klu.shadow = 1;     /* the stock Render draws a pair */
     klu.tags = klu_inii("Tags", 1, 0, 1); klu.cashshort = klu_inii("CashShort", 1, 0, 1); klu.totalfont = klu_inii("TotalFont", 0, 0, 1);
     klu.dials = klu_inii("Dials", 0, 0, 1);              /* the round watch + the escape dial (needs the level's extra pictures 113 / 114) */
-    klu.plates = klu_inii("Plates", 0, 0, 1); klu.anchor = klu_inii("PicAnchor", 1, 0, 1); klu.pictest = klu_inii("PicTest", 0, 0, 1);
+    klu.plates = klu_inii("Plates", 0, 0, 1); klu.anchor = klu_inii("PicAnchor", 1, 0, 1); klu.left = klu_inii("LeftStyle", 0x11, 0, 255); klu.pictest = klu_inii("PicTest", 0, 0, 1);
     klu.grid = klu_inii("Grid", 0, 0, 2); klu.probe = klu_inii("Probe", 0, 0, 1);
     klu.layer = klu_inii("Layer", 0xd, 3, 15);
     klu.rows = klu_inii("Rows", KLU_ROWS, 1, KLU_ROWS);
