@@ -862,6 +862,15 @@ static void kle_veh_pass(const struct klb_snap *s, DWORD now)
     /* the wait's begin: only FollowOut sees it for sure (with WaitForYouHold alone this pass does not run before the
        shield is set: no begin is known then, and the lines say -1.0 s) */
     if ((s->veh == 3 || s->veh == 4) && prev != 3 && prev != 4) { kle_r.vh_wait_at = kle.fo ? KLB_T(now) : 0; kle_r.vh_said = -1; kle_r.vh_told = 0; }
+    /* FollowOutShield=3 (owner 2026-10-11: 'all the police outside the vault shoot the van straight away'; the club's first full run
+       lost its van, state 3 -> 6, with two AI heisters aboard and no hold): the shield goes on in the first pass of EVERY wait, held or
+       not, human aboard or not, and stays until the vehicle is gone, as with 2. Less risk than stock on purpose. */
+    if (kle.fo_shield == 3 && (s->veh == 3 || s->veh == 4) && !kle_sh.obj) {
+        char why3[200], note3[200]; static DWORD said3; int ok3;
+        ok3 = kle_hold_guard(s, now, kle.fo_dry, why3, note3);
+        if (ok3 && (kle_sh.obj || now - said3 > 30000)) { said3 = now; klog("follow: shield: the vehicle waits (state %u) and FollowOutShield=3 shields every wait: %s", s->veh, note3); }
+        else if (!ok3 && now - said3 > 30000) { said3 = now; klog("follow: shield: FollowOutShield=3 but the waiting vehicle is NOT shielded: %s", why3); }
+    }
     /* DESTROYED is said whenever our shield was on this round, FollowOut or not (klmove.c's hold); the rest is FollowOut's log */
     if (!kle.fo && !(sh_was && edge && s->veh == 6)) return;
     if (!live && !(edge && s->veh == 6)) return;
@@ -1284,7 +1293,7 @@ static void kle_init(void)
     kle.fo_after = (DWORD)klb_pos("FollowOutAfter", 0, 600) * 1000;
     kle.fo_every = (DWORD)klb_pos("FollowOutEvery", 2, 60) * 1000; if (kle.fo_every < 1000) kle.fo_every = 1000;
     kle.fo_hold = klb_inif("FollowOutHold", "0"); if (!klb_finite(kle.fo_hold) || kle.fo_hold < 0) kle.fo_hold = 0; if (kle.fo_hold > 60) kle.fo_hold = 60;
-    kle.fo_shield = klb_pos("FollowOutShield", 2, 2);                         /* also klmove.c's WaitForYouHold goes by it */
+    kle.fo_shield = klb_pos("FollowOutShield", 2, 3);                         /* also klmove.c's WaitForYouHold goes by it */
     if (kle.fo && klb.van && klb.van_left) {
         klog("follow: FollowOut is OFF: [Bots] VanLeftBehind=1 takes every bot at heist stage 3 as standing at the vehicle, and FollowOut gives stage 3 to bots far from it");
         kle.fo = 0;
