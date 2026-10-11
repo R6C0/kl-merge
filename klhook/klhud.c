@@ -133,7 +133,7 @@
 struct klu_text { DWORD obj, shadow; float x, y; int on, style; DWORD colour, want_colour; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
 
 static struct {
-    int on, log, crew, money, hide, shadow, layer, rows, before, borrow; float inset, crew_x, crew_y, money_x, money_y, row;
+    int on, log, crew, money, hide, shadow, layer, rows, before, borrow, hijack; float inset, crew_x, crew_y, money_x, money_y, row;
 } klu;
 
 static struct {
@@ -523,6 +523,18 @@ static void klu_tick(int game_thread)
         else { klu_r.fault = 1; show = 0; }
     }
     if (klu_r.made && !klu_r.fault && data) klu_apply();
+    if (klu.hijack && klu_r.made && !klu_r.fault) {      /* TEST [HUD] Hijack=1 (runs H1c..H1j: our objects draw nothing): the TIMER's own text
+                                                           object gets our text 8 string for 3 s of every 10 s - if 'TOTAL  $0' shows top
+                                                           right (the timer's Update rewrites it each second, so it may flicker), the object
+                                                           identity is the whole difference */
+        static DWORD t0; DWORD tobj = klh_rd32(klu_r.elem + 0x28), vt = 0, fn;
+        if (!t0) t0 = now;
+        if (tobj && klh_rd(tobj, &vt, 4) && vt == KLU_TEXT_VT && ((now - t0) % 10000) < 3000) {
+            fn = klh_rd32(vt + KLU_VT_TEXT);
+            ((klu_set1_t)(DWORD_PTR)fn)((void *)(DWORD_PTR)tobj, 0, (DWORD)(DWORD_PTR)klu_r.t[KLU_ROWS].want);
+            if (klu.log >= 2 && ((now - t0) % 10000) < 150) klog("hud: hijack: the timer's text %08lx <- '%s' (chunk now %08lx; ours %08lx)", tobj, klu_r.t[KLU_ROWS].want, klh_rd32(klh_rd32(tobj + 0x2c)), klh_rd32(klh_rd32(klu_r.t[KLU_ROWS].obj + 0x2c)));
+        }
+    }
     LeaveCriticalSection(&klu_cs);
     if (klu_r.fault) { InterlockedExchange(&klu_draw_on, 0); klu_hide_tick(osd, 0); return; }
     InterlockedExchange(&klu_draw_on, show && klu_r.made);
@@ -572,6 +584,7 @@ static void klu_init(void)
     klu.money = GetPrivateProfileIntA("HUD", "Money", 1, klh_ini) != 0;
     klu.hide = GetPrivateProfileIntA("HUD", "HideStock", 1, klh_ini) != 0;
     klu.shadow = GetPrivateProfileIntA("HUD", "Shadow", 1, klh_ini) != 0;
+    klu.hijack = (int)GetPrivateProfileIntA("HUD", "Hijack", 0, klh_ini);          /* 1 = the timer's own text gets our string 3 s in 10 (test) */
     klu.borrow = (int)GetPrivateProfileIntA("HUD", "Borrow", 0, klh_ini);          /* 1 = text 8 draws with the timer text's desc[2] (test) */
     klu.before = (int)GetPrivateProfileIntA("HUD", "Before", 0, klh_ini);          /* 1 = our texts before the stock timer's draw (test) */
     klu.layer = (int)GetPrivateProfileIntA("HUD", "Layer", 0xd, klh_ini); if (klu.layer < 2) klu.layer = 2; if (klu.layer > 15) klu.layer = 15;
@@ -584,7 +597,7 @@ static void klu_init(void)
     if (!(klu.money_x >= 0 && klu.money_x <= 1280)) klu.money_x = 1216; if (!(klu.money_y >= 0 && klu.money_y <= 720)) klu.money_y = 100;
     klog("hud: on; Log=%d Crew=%d Money=%d HideStock=%d Shadow=%d Layer=%d Rows=%d Inset=%.3f (-1 = the game's); crew at (%.0f, %.0f), money box at (%.0f, %.0f), %.0f px a row; Arcade only, texts through the game's own ZCHAROBJ path, NOT YET RUN IN THE GAME",
          klu.log, klu.crew, klu.money, klu.hide, klu.shadow, klu.layer, klu.rows, klu.inset, klu.crew_x, klu.crew_y, klu.money_x, klu.money_y, klu.row);
-    if (klu.before || klu.borrow) klog("hud: test keys: Before=%d (ours drawn before the stock timer) Borrow=%d (text 8 with the timer text's desc[2])", klu.before, klu.borrow);
+    if (klu.before || klu.borrow || klu.hijack) klog("hud: test keys: Before=%d (ours drawn before the stock timer) Borrow=%d (text 8 with the timer text's desc[2]) Hijack=%d (the timer's text gets our string 3 s in 10)", klu.before, klu.borrow, klu.hijack);
 }
 
 #endif /* KLHUD_C */
