@@ -379,7 +379,7 @@ static void klu_hide_tick(DWORD osd, int want)
 static int klu_fa_shown(DWORD osd)
 {   /* the proxy for 'the game shows the FA set now': ZFATimeDisplay enabled and not hidden, 'HUD off' clear */
     DWORD el, vt = 0; BYTE en = 0, h = 1, off = 1;
-    if (!(el = klh_rd32(osd + KLU_O_TIME)) || !klh_rd(el, &vt, 4) || vt != KLU_TIME_VT) return 0;
+    if (!(el = klh_rd32(osd + KLU_O_TIME)) || !klh_rd(el, &vt, 4) || (vt != KLU_TIME_VT && vt != (DWORD)(DWORD_PTR)&klu_evt[1])) return 0;   /* ours once wrapped (run H1d: this refused everything) */
     if (!klh_rd(el + KLU_E_ENABLED, &en, 1) || !klh_rd(el + KLU_E_HIDDEN, &h, 1) || !klh_rd(osd + KLU_O_HUDOFF, &off, 1)) return 0;
     return en && !h && !off;
 }
@@ -491,8 +491,9 @@ static void klu_tick(int game_thread)
     if (klu.hide && (klu.crew || klu.money)) klu_hide_tick(osd, show && klu_r.made);
     if (klu.log >= 2) {                         /* the render wrapper's counters, every 5 s while texts exist */
         static DWORD said;
-        if (klu_r.made && now - said >= 5000) {
+        if (klu_r.osd && now - said >= 5000) {
             said = now;
+            if (!klu_r.made) klog("hud: waiting: data %d, state ok %d, FA set shown %d, fault %d", data, state_ok, klu_fa_shown(osd), klu_r.fault);
             klog("hud: render: %ld timer-element calls, %ld with the HUD off / another element, %ld (unused), %ld lock busy, %ld text draws (draw_on %ld)",
                  InterlockedExchange(&klu_n_call, 0), InterlockedExchange(&klu_n_off, 0), InterlockedExchange(&klu_n_branch, 0), InterlockedExchange(&klu_n_try, 0), InterlockedExchange(&klu_n_draw, 0), klu_draw_on);
         }
