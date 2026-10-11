@@ -533,3 +533,19 @@ build crashes both times. What decides is memory, read only:
 | N4 | the crash dump holds only the pointer | section 2 |
 | small inaccuracies | six call sites / four other functions; the whole tree; 0x63c6c0 | sections 1, 2, 2.1 |
 | live check | runs cannot decide | section 9 rewritten; the `grid` command for the hook's line |
+
+## LIVE, 2026-10-11 07:00-07:06 (the lead; hook TEST test_vis2 with klhook/klvis.c, [Vis] Log=1, reads only)
+
+- Run V2a_DM09, the OLD archive (rt_full7's, with the two parked targets): `vis: grid of ZCheckVisible 7d6c2040 (scene
+  SCENES\Locations\F06\F06_Main.gms): 98beba459a421747ee4915463d782f3925a2d8377a7edb387cf4a9c700401cc6a236c3c7e35006463565e04674ba4e47;
+  low (-87017.0, -10000.0, -99949.3) high (8596.2, 28722.6, 52922.5) cell (5975.8, 38722.6, 9554.5)` and, at the second the
+  round starts, `vis: record 0xff behind the grid holds 'no cell' ff100110 + (-3216.6, -60040.0, 3419.3), 23 s after the grid
+  appeared`. THE WRITE IS SEEN IN THE RUNNING GAME, with the place the dump had.
+- Run V2b_DM09, `<work>uild\z_route4etomoto_tab_fix`: the same grid line, then `vis: 30 s after the grid appeared: record
+  0xff has never held 'no cell' (its bytes now: 00000000 00000000 00000000 00000000)`. Run V1_DM09 before it: the build loads and
+  plays four minutes, clean.
+- `python tools\kl_fa_bots_dyn.py grid <retomoto_tab_fix> <those 96 hex digits>`: `'all': the same six floats, bit for bit` /
+  `RESULT (grid): the level's box is the game's` - so the reading 'a room without bounds is counted by its one own record' holds
+  on Retomoto too ('sure' is smaller by 48,547 in x and 73,399 / 3,622 in z, as section 2.1 expected).
+- The first version of klvis.c printed no grid line (runs V0 / V1): it took the box for the first six floats; the twelve are
+  cell size, 1 / cell size, low, high.
