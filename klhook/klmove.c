@@ -155,7 +155,11 @@
  *       WITH THE HUMAN ABOARD, stock Arcade shoots every AI heister still in play (rules slot 7 = 0x74b6d0,
  *       re\bots_follow_out.md): in the owner's bank rounds records 4, 5 and 3 lived only because the drop's box took
  *       them. So BoardNear belongs together with [Bots] FollowOutHold=<seconds> (the driver waits while called crew
- *       comes) or FollowOutSpare=1 (nobody left behind is shot), and the part counts it: at every departure one line
+ *       comes) or FollowOutSpare=1 (nobody left behind is shot), and the part counts it. LIVE 2026-10-11 (runs N1c /
+ *       N1 / N1b, BoardNear=1500 on the bank): in a plain 8 s visit NOBODY of the crew arrives (46 .. 56 m off when it
+ *       leaves, five shot); a bot from inside the bank is aboard 24 .. 25.5 s after the call, the last of the crew
+ *       would need about 36 s: FollowOutHold=25, with FollowOutShield (klescort.c 3 c2 - the unshielded 15 s hold of
+ *       those runs got the van destroyed and the human killed aboard). Then, as before: at every departure one line
  *       'near: visit N: the vehicle leaves ...: K AI heister(s) still in play ..., M of them (*) stood at a denied box'.
  *    NOT ESTABLISHED: on which thread a controller's update runs (the wrapper only reads a table of at most eight
  *    entries the tick writes); what a bot in a denied box does whose stage-3 board tactic finds no path (it stands;
@@ -174,7 +178,9 @@
  *   WaitForYouStage=3     your heist stage that ends the wait (3 your own call, 2 out of the building, 1 inside)
  *   WaitForYouFloor=0     seconds after the round's start in which no vehicle is called, whatever your stage
  *   WaitForYouMax=150     seconds the crew waits at most, from the first bot that stood ready
- *   WaitForYouHold=15     seconds the driver is held per visit while you come; 0 = never
+ *   WaitForYouHold=15     seconds the driver is held per visit while you come; 0 = never. A held vehicle is shielded
+ *                         by [Bots] FollowOutShield (default 2; klescort.c 3 c2): unshielded, a 15 s hold got the
+ *                         bank's van destroyed with everybody aboard (live runs N1 / N1b, 2026-10-11)
  *   BoardNear=0           a ZAllyEscapeBox farther than this from the boarding place takes nobody aboard; 0 = off.
  *                         Use it with FollowOutHold or FollowOutSpare: who is left in play when you are driven out is shot
  *   BoardNearVisits=3     from this visit of a vehicle on every box works again (0 = never again)
@@ -510,7 +516,8 @@ static void klmv_gate(const struct klb_snap *s, DWORD now, const struct klb_rec 
 /* e. the driver waits for the human who comes */
 static void klmv_driver(const struct klb_snap *s, DWORD now, const struct klb_rec *h, int human_in, int criminal, const float hp[3])
 {
-    float bd[3], d, timer = klb_finite(s->timer) ? s->timer : -1.0f, tnow = 0, add; BYTE grade = 1, paid = 0, veh2 = 0; const char *no = 0;
+    float bd[3], d, timer = klb_finite(s->timer) ? s->timer : -1.0f, tnow = 0, add; BYTE grade = 1, paid = 0, veh2 = 0; const char *no = 0; char gw[200], gn[200];
+    gw[0] = gn[0] = 0;
     if (!(klmv.wait_hold > 0) || !(s->veh == 3 || s->veh == 4) || !h || h->status || !human_in || !criminal || !kle_boarding(s->rules, bd)) { klmv_r.h_at = 0; return; }
     if (klmv_r.hold_visit != klmv_r.visit) { klmv_r.hold_visit = klmv_r.visit; klmv_r.hold_used = 0; klmv_r.hold_told = 0; klmv_r.h_at = 0; }
     d = kle_dist(hp, bd);
@@ -526,18 +533,23 @@ static void klmv_driver(const struct klb_snap *s, DWORD now, const struct klb_re
     else if (!klh_rd(s->score + 0x60, &grade, 1) || grade) no = "the vehicle is damaged and must go";
     else if (!klh_rd(s->rules + 0x1b3, &paid, 1) || paid != 0xff) no = "somebody paid the driver";
     else if (!klh_rd(s->rules + 0x1dc, &veh2, 1) || (veh2 != 3 && veh2 != 4) || !klh_rd(s->rules + 0x1d8, &tnow, 4) || !klb_finite(tnow) || !(tnow > 0 && tnow < KLE_HOLD_AT)) no = "its timer changed since this pass read it";
+    /* klescort.c 3 c2: a vehicle held past stock's 8 s was destroyed with everybody aboard (runs N1 / N1b; here the
+       crew sits aboard while the human comes). The same guard as FollowOutHold's: [Bots] FollowOutShield (default 2)
+       sets the vehicle's own 'Invulnerable' byte from the first held second, klescort.c takes it back; no shield
+       possible = no hold. The last test, and the only one that writes. */
+    if (!no && !kle_hold_guard(s, now, klmv.dry, gw, gn)) no = gw;
     if (no || klmv.dry) {
         if (!(klmv_r.hold_told & 1)) {
             klmv_r.hold_told |= 1;
             if (no) klog("wait: hold: the vehicle leaves in %.1f s without you (%.1f m away) and is NOT held: %s", timer, d / 100, no);
-            else klog("wait: hold: the vehicle would leave in %.1f s and you are %.1f m from it, coming: its timer WOULD get %.1f s more (dry run)", timer, d / 100, add);
+            else klog("wait: hold: the vehicle would leave in %.1f s and you are %.1f m from it, coming: its timer WOULD get %.1f s more (dry run); %s", timer, d / 100, add, gn);
         }
         return;
     }
     tnow += add;
     if (!klh_data((void *)(DWORD_PTR)(s->rules + 0x1d8), &tnow, 4, "escape vehicle wait timer (the driver waits for the human)")) { if (!(klmv_r.hold_told & 1)) { klmv_r.hold_told |= 1; klog("wait: hold: the vehicle's timer could NOT be written"); } return; }
     klmv_r.hold_used += add;
-    klog("wait: hold: the vehicle would leave in %.1f s and you are %.1f m from it, coming: timer %.1f -> %.1f s (%.1f of %.1f s used this visit)", timer, d / 100, tnow - add, tnow, klmv_r.hold_used, klmv.wait_hold);
+    klog("wait: hold: the vehicle would leave in %.1f s and you are %.1f m from it, coming: timer %.1f -> %.1f s (%.1f of %.1f s used this visit); %s", timer, d / 100, tnow - add, tnow, klmv_r.hold_used, klmv.wait_hold, gn);
 }
 
 /* ---------------------------------------------------------------- Restless */
