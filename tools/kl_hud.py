@@ -77,7 +77,12 @@ class _Gdi:
         self.hbm = g.CreateDIBSection(ctypes.c_void_p(self.mdc), ctypes.byref(bi), 0, ctypes.byref(self.bits), None, 0)
         g.SelectObject(self.mdc, self.hbm)
         ANTIALIASED_QUALITY = 4
-        self.hf = g.CreateFontW(-px, 0, 0, 0, weight, 0, 0, 0, 1, 0, 0, ANTIALIASED_QUALITY, 0, face)
+        self.ss = 4                                                            # supersampling: GDI's own AA left stair-steps live (F1)
+        self.w = self.h = self.ss * (4 * px + 32)
+        bi.bmiHeader.biWidth = self.w; bi.bmiHeader.biHeight = -self.h
+        self.hbm = g.CreateDIBSection(ctypes.c_void_p(self.mdc), ctypes.byref(bi), 0, ctypes.byref(self.bits), None, 0)
+        g.SelectObject(self.mdc, self.hbm)
+        self.hf = g.CreateFontW(-px * self.ss, 0, 0, 0, weight, 0, 0, 0, 1, 0, 0, ANTIALIASED_QUALITY, 0, face)
         g.SelectObject(self.mdc, self.hf)
         buf = ctypes.create_unicode_buffer(64); g.GetTextFaceW(ctypes.c_void_p(self.mdc), 64, buf)
         if buf.value.lower() != face.lower():
@@ -90,7 +95,8 @@ class _Gdi:
                         ('tmItalic', ctypes.c_byte), ('tmUnderlined', ctypes.c_byte), ('tmStruckOut', ctypes.c_byte),
                         ('tmPitchAndFamily', ctypes.c_byte), ('tmCharSet', ctypes.c_byte)]
         tm = TM(); g.GetTextMetricsW(ctypes.c_void_p(self.mdc), ctypes.byref(tm))
-        self.ascent, self.descent = tm.tmAscent, tm.tmDescent
+        self.ascent, self.descent = (tm.tmAscent + self.ss // 2) // self.ss, (tm.tmDescent + self.ss // 2) // self.ss
+        self.ascent_ss = tm.tmAscent
         g.SetBkColor(ctypes.c_void_p(self.mdc), 0x000000); g.SetTextColor(ctypes.c_void_p(self.mdc), 0xffffff)
         return self
 
@@ -105,19 +111,30 @@ class _Gdi:
         if not g.GetCharABCWidthsW(ctypes.c_void_p(self.mdc), ord(ch), ord(ch), ctypes.byref(abc)):
             sz = W.SIZE(); g.GetTextExtentPoint32W(ctypes.c_void_p(self.mdc), ch, 1, ctypes.byref(sz))
             abc.a, abc.b, abc.c = 0, sz.cx, 0
+        ss = self.ss
+        ox, oy = (ox // ss) * ss, (oy // ss) * ss                                # pen on a whole output pixel
         g.TextOutW(ctypes.c_void_p(self.mdc), ox, oy, ch, 1)
         g.GdiFlush()
-        px = ctypes.string_at(self.bits, self.w * self.h * 4)
-        W_, H_ = self.w, self.h
-        rows = [px[4 * y * W_: 4 * (y + 1) * W_: 4] for y in range(H_)]       # blue channel = coverage
-        ys = [y for y in range(H_) if any(rows[y])]
-        if not ys:
-            return abc.a + abc.b + abc.c, 0, 0, 0, 0, []
-        xs0 = min(next(x for x in range(W_) if rows[y][x]) for y in ys)
-        xs1 = max(max(x for x in range(W_) if rows[y][x]) for y in ys)
-        y0, y1 = ys[0], ys[-1]
-        ink = [rows[y][xs0:xs1 + 1] for y in range(y0, y1 + 1)]
-        return abc.a + abc.b + abc.c, xs0 - ox, y0 - (oy + self.ascent), xs1 - xs0 + 1, y1 - y0 + 1, ink
+        big = ctypes.string_at(self.bits, self.w * self.h * 4)
+        BW = self.w
+        brow = [big[4 * y * BW: 4 * (y + 1) * BW: 4] for y in range(self.h)]  # blue channel = coverage, supersampled
+        bys = [y for y in range(self.h) if brow[y].strip(b'\0')]
+        adv = (abc.a + abc.b + abc.c + ss // 2) // ss
+        if not bys:
+            return adv, 0, 0, 0, 0, []
+        bx0 = min(len(brow[y]) - len(brow[y].lstrip(b'\0')) for y in bys)
+        bx1 = max(len(brow[y].rstrip(b'\0')) - 1 for y in bys)
+        x0, x1 = bx0 // ss, bx1 // ss; y0, y1 = bys[0] // ss, bys[-1] // ss  # output-pixel box
+        ink = []
+        for y in range(y0, y1 + 1):
+            row = bytearray(x1 - x0 + 1)
+            for x in range(x0, x1 + 1):
+                t = 0
+                for yy in range(ss):
+                    t += sum(brow[y * ss + yy][x * ss: x * ss + ss])
+                row[x - x0] = (t + ss * ss // 2) // (ss * ss)
+            ink.append(row)
+        return adv, x0 - ox // ss, y0 - (oy // ss + self.ascent), x1 - x0 + 1, y1 - y0 + 1, ink
 
     def close(self):
         g = self.gdi
@@ -326,12 +343,12 @@ PLATE_SLOTS = {107: 'plate', 108: 'plate', 169: 'meter', 161: 'bar0', 162: 'bar1
 
 
 def _plate_pixels(kind, w, h):
-    """ABGR pixels (stored B G R A, as kl_portraits found for 'ABGR') of a plate of w x h."""
+    """ABGR pixels of a plate of w x h, stored R G B A (run F1_DM03 drew a B G R A amber bar BLUE)."""
     px = bytearray(4 * w * h)
 
     def put(x, y, rgb, a):
         if 0 <= x < w and 0 <= y < h:
-            i = 4 * (y * w + x); px[i], px[i + 1], px[i + 2], px[i + 3] = rgb[2], rgb[1], rgb[0], a
+            i = 4 * (y * w + x); px[i], px[i + 1], px[i + 2], px[i + 3] = rgb[0], rgb[1], rgb[2], a
 
     def box(x0, y0, x1, y1, rgb, a, r=2):
         for y in range(y0, y1):
@@ -357,10 +374,11 @@ def _plate_pixels(kind, w, h):
         for y in range(h // 2 - 3, h // 2 + 3):
             for x in range(8, 8 + (w - 16) * (4 - k) // 4):
                 put(x, y, AMBER, 0xff)
-    elif kind == 'tick':                                   # one magazine tick: a 6 x 20 amber bar in the 32 x 32 cell
-        for y in range(6, 26):
-            for x in range(13, 19):
-                put(x, y, AMBER, 0xff)
+    elif kind == 'tick':                                   # one magazine tick: the code draws the WHOLE cell as one thin
+        for y in range(h):                                 # tall bar (stock = a full grey gradient square; run F1 showed a
+            for x in range(w):                             # 6 x 20 bar inside the cell as a dot), so the cell is filled
+                f = 1.0 - 0.25 * y / h
+                put(x, y, tuple(int(c * f) for c in AMBER), 0xff)
     elif kind.startswith('border'):
         rgb = (216, 70, 60) if kind == 'border_red' else EDGE_RGB
         for x in range(w):
@@ -426,7 +444,7 @@ def apply_pictures(src, dst, png=None, log=print, _files=None):
         tex.tex[tid] = T.Texture(e, t.faces, t.cube, t.frames, t.group)
         if png:
             os.makedirs(png, exist_ok=True)
-            rgba = bytearray(px); rgba[0::4], rgba[2::4] = px[2::4], px[0::4]
+            rgba = bytearray(px)
             _png_rgba(os.path.join(png, '%d_%s.png' % (tid, kind)), tw, th, rgba)
     files[ext['.TEX']] = T.write_tex(tex)
     if _files is not None:
