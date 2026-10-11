@@ -182,6 +182,11 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+OWNER 2026-10-11 ~16:10: 'i want the ui to be exactly what we said ... reverse engineer then do what u shown me on the latest artifact'.
+So the FULL draft is the goal (watch, escape dial, money box, weapon dial, painted rows). BLOCKER = hook draws are invisible (cause not
+established). Read today: DrawChunk in full (re/hud.md 8). NEXT = run P1 with <work>/build/klhook/hud_probe1 (04fdb28a; [HUD] Enable=1
+Log=2 Reuse=0 Probe=1; asked of kl-merge-31 for when the owner is away): if the STOCK Render called again by the hook at another place
+draws (E2 / E3), every text of the draft can be drawn that way and pictures follow by the same test on DrawChunk.
 2026-10-11 16:05 - THE OWNER IS PLAYING AGAIN (15:56 on; his own hook ship_main1; the belly-flop runs G1 / G2 wait behind him - G0_DM03_flop_dry ran clean 15:47). His tab since 15:20: kl-merge-3e's NEW HUD LOOK on all five archives (`kl_hud.py all <zip> <out> --look deadmen`; installed copies <work>/build/hud_new/<map>, the archives before in hud_new/_src) + the map-picture menu <work>/build/hud_mappics: ANY MAP INSTALLED FROM NOW ON must go through that kl_hud step and carry that overlay; <DD> no longer equals tree w_tabM. Disk: 23 superseded test trees deleted (kept w_tabM, w_tabX, w_tabU, w_tabK), G: 32 GB free. OWNER 16:00: 'btw fix that black box on these cars that are blown up' - picture <work>/research/watch/20261011_155753/0007_150s.jpg (the bank's yard: a dark hard-edged rectangle over the upper right half of the screen beside a burning police car; from afar, 0006, it reads as a smoke column) -> workflow wf_65e77ab1-3e0, track T (scratchpad wf/T_black_box.md: new tools/kl_fa_carfx.py, re/carfx.md, builds <work>/build/z_carfx/<map>; all five maps).
 NEW HUD LOOK SEEN LIVE 2026-10-11 15:58-16:02 (the owner's own bank round, watch run 20261011_155753; pictures 0005 / 0007 / 0014): THE
 DEAD MEN CAPITALS SHOW on the HUD, the name tags, the status list and the round-over page; ammo backing + chalk ticks sit right. FAULT:

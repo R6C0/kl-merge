@@ -331,3 +331,24 @@ helpers; 0x8f7eb0 = string init, 0x6ad680 = string free, 0x694bc0 = sprintf).
 - The three global displays [0x154da58..60]; the writers of [0xcedfb8]; the texture flag table at 0xcee058
   (0x14-byte entries to 0xceeea4, indexed by picture id in 0x5e3810).
 - Whether a hidden stock element still allocates / plays sounds (the Tick runs; only Render is skipped).
+
+## 8. DrawChunk read in full (2026-10-11, kl-merge-3e; static) and the open question
+
+`ZDrawBufferSimple::DrawChunk` 0x842d00 `(this = ctx, chunk, desc, xform9, pos3, layer u8, f1, f2)`, `ret 0x1c`:
+- `chunk == 0` -> returns 0. A negative chunk is a direct pointer (bit 31 cleared), else `[0xeac7b0 + 4*chunk]`.
+- `inst = 0x5f6ad0(renderer = [[[0xdd2640]+0x970]+0xfc], chunk)`: takes a cached render instance for that chunk out of a
+  256-bucket table (0x815f40, key `chunk >> 4`), else creates one through the factory chain at `[0xef4d88]` (0x770d40);
+  a new one is listed at renderer+0x5f9ec. `or word [inst+4], 5`. NULL -> DrawChunk returns 0 (nothing drawn).
+  So EVERY call gets its own instance: two draws of one chunk in a frame are two instances (no de-duplication).
+- matrix from `xform9` (0x64ecc0), translation `pos3` -> 0x78f360(inst, &m); `[inst+0x1a0] = f1`;
+  `[inst + frame*20 + 0x1ac] = 5 dwords of the chunk` (frame = `[0xef4d7c]`); the desc is COPIED into a per-frame block
+  (0x926db0, size by the chunk's kind 1..8 at chunk+0xc) -> `[inst + frame*4 + 0x1a4]`; `[inst+0x1a1]` = has data.
+- `0x5359d0(inst, layer)`; then **`[ctx+8][[ctx+4]++] = inst`** and the instance is returned.
+The element's picture call (timer, 0x81e20b..0x81e275): `pos2 = 0x5a3e90(T = [elem+0xc], &out, &in)` = (in.x * T[+0x14],
+in.y * T[+0x18], 0); `ctx->DrawChunk([[elem+0x38]] = the sprite handle, elem+0x40 = desc, &xform9 (0x7f07a0: [6] = 1.0 =
+scale), &pos2, 0xf, 1, 0)`. The text Draw (0x8f7420) hands `obj+0x48` (its 9 floats, [6] at obj+0x60 = the 0.005972
+scale) and `obj+0x6c` (translation) to the same routine, one call per glyph run.
+OPEN: nothing in this path tells a hook's call from the game's own, yet every Draw the hook issued (own objects, borrowed
+level objects, the timer's own text a second time) was invisible in runs H1c .. H1n while a string set into a stock object
+and drawn by the stock Render shows (H1l). `[HUD] Probe=1` (klhud.c, build hud_probe1) measures the buffer count and the
+instances per step and calls the stock Render re-entrantly at another place / with our objects: run P1 owed.
