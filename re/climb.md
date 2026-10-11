@@ -2,7 +2,9 @@
 
 2026-10-11, track F. OFFLINE: static reading of `kl2.exe` (build 0490) and `kaneandlynch.exe`, the 20 + 21 stock
 level files, and the bank build `<work>\build\z_hop\M03` (read only). **Nothing here ran in either game. Nothing is
-installed, nothing is wired into the hook, nothing is committed.**
+installed, nothing is wired into the hook, nothing is committed.** (The first version's words. SINCE THEN the file
+was wired and RUN ONCE, and the game crashed in the clip: the 'Fourth version' paragraph below and
+`re/climb_crash.md`.)
 Three readers did parts A, B and C; their scratch notes are not in the repo, so what the plan rests on is written
 out here. What the PLAN rests on was read again by the writer of this file: every kl2.exe routine of section 3,
 the head of the vault test, `0x619790`, the vault's start, the NPC link mover (1.2 - 1.4), Dead Men's table, enter
@@ -13,7 +15,8 @@ with `python debug\dasm.py f:<address>`. Where a reader's note was wrong it is c
 Status words: **read** = seen in the disassembly at the address given; **measured** = counted on the files, the
 command is named; **ASSUMED**; **not established**.
 
-Built with it (section 4): `tools/kl_fa_climb.py`, `<work>\build\z_climb\M03`, `klhook/klclimb.c` (NOT WIRED).
+Built with it (section 4): `tools/kl_fa_climb.py`, `<work>\build\z_climb\M03` (first form; the build to run is
+`z_climb3\M03`, 4.2b), `klhook/klclimb.c` (wired since commit 9c8077d).
 
 **Second version, 2026-10-11, after the adversarial review `re/climb_review.md`** (verdict: account and build
 accepted, `klclimb.c` not to go live as written). The level's half and the build are unchanged. `klclimb.c` was
@@ -50,6 +53,36 @@ again by the writer of this version: `0x74efc0` (its three gates, `0x598460`, th
 collision-off call at `0x6a2a4a`, Play at `0x6a2a5d`), `0x619790`'s two ways out, `0x8b41c0`, `0x686600`; the
 clips with `kl_fa_climb.root_keys` (scratch `meas.py`). The level's half and the build are unchanged.
 **Still nothing ran in either game; the file is still NOT WIRED.**
+
+**Fourth version, 2026-10-11, after the FIRST LIVE START** (the lead wired the third version - commit 9c8077d - and
+ran it on `z_climb\M03` with a scripted player; the earlier runs ended with him dead inside the bank, the first
+that reached the wall was `K2c_DM03_wall_hp`, 10:02). **The game crashed 0.24 s into the clip, at kl2.exe+0x7e400. The account is
+`re/climb_crash.md`**; in short: a mini animation is handed its clip's events, its event routine is
+`ZFFActionGeneric`'s (`0x637060`), and at event id 5 that routine aligns to an object a mini animation has not got
+(`[action+0xc]`, used with no test at `0x6370e7`) - and Dead Men's climb clips carry id 5 at frame 6. What the run
+showed before that is good news for the plan and is written into K1 / K2 (section 7): the node's place, the proxy,
+the facing sign, the slot, the kept action, the clip, and that the game TOOK the first alignment (**(5)** this line
+said 'the root IS at P1 at frame 6': that was never seen, 6.5).
+Changed for it (6.4): the level's players' clips carry event id **105** instead of 5 (`tools/kl_fa_climb.py`; the
+build is `<work>\build\z_climb3\M03`, from `z_cover3\M03`), and `klclimb.c` reads that id and refuses to play a clip
+with an event id the game's routine acts on. New in section 3: the rows on clip events. **`z_climb\M03` and
+`z_climb2\M03` are of the first form and must not be played by the third version of the hook.** Of the fourth
+version nothing has run in the game; of the climb nothing after clip frame 6 has been seen.
+
+**Fix round of the fourth version, 2026-10-11, after the crash's own review `re/climb_crash_review.md`** (accept
+with fixes: one MUST, text only; four SHOULDs; none refuted - the table is 6.5; what is marked **(5)** came in with
+it). The MUST: this account said 'nothing else reaches a mini animation' besides its own clip's events and the
+channel reports. Wrong: **the current action is handed the clip events of EVERY subscribed channel of its player**
+(section 3), so an id-5 event of another clip that plays on him during the climb would fault the game at the same
+address. For the build of today that is closed by reading and counting (only an action's start subscribes a
+player's channel; the mini animation's Play stops the full-body channels; the 872 clips of the other body class
+carry only ids the routine returns at), and since this round it is a rule on both sides: `kl_fa_climb.py check`
+FAILs a build with such a clip, and `klclimb.c` refuses or calls off a climb beside such a channel. Besides:
+'the root is at P1 at clip frame 6' was an assumption written as seen (the dump holds neither his node nor his
+proxy) - corrected everywhere, and the hook's `aligned to P2` line prints his node from now on; `klq_code`
+compares the way to the event routine too; and the first live start was most likely one with FORWARD HELD
+against the wall (the gate measures his node, not the keys): **the rerun with the same script is K2b, not K2**
+(section 7, set-up). The level build is unchanged (`z_climb3\M03`, the same archive). Nothing of it has run.
 
 ## 0. Verdicts
 
@@ -257,6 +290,11 @@ back street (checkpoint 1 at (-2976, 154, -202)) over a dumpster and the wall in
 
   NPC clips: `Up_High_NPC` 52 frames, event 6 at 25 with the root at (-0.5, 166, -39.9): the campaign's 35.5
   across fits it; `Up_Medium_NPC` 31, event 6 at 24; `Sprint_Low_NPC` 27, event 6 at 13.
+  **(4) In a BUILD the players' clips carry event id 105 where this table says 5** (same frames; the fourth
+  version, `re/climb_crash.md` 6): Dog Days' generic action answers id 5 itself. The other variants of the
+  players' lists: `Up_High_No_Weapon` 5 at 6, 6 at 20; `Up_Medium_Pistol` / `_No_Weapon` 5 at 6, 6 at 16;
+  `Sprint_Low_No_Weapon` 5 at **3**, 6 at **15** (so the frames belong to the clip, not to the class). That last
+  clip is also in Dead Men's `Police` Low list (its pistol / unarmed conditions), i.e. in the NPC sets of a build.
   The 24.5 the High clip still rises after event 6 (the code puts the feet at top level AT event 6) is not
   established: a settle of that size at the end is what the numbers say. Stock Dog Days has the same shape in a
   path it does run: `Fall#Fall_1m_NPC` has its root at -93.2 at event 6 and ends at -100.
@@ -294,7 +332,9 @@ back street (checkpoint 1 at (-2976, 154, -202)) over a dumpster and the wall in
 
 Read again here, except the three rows marked (C): those are the reader's reading, taken over. Rows marked
 **(2)** are new in the second version (read for it; the review had not read them); what is marked **(3)** came
-in with the third (the second review's N1 and D1; read again by the writer of the third version).
+in with the third (the second review's N1 and D1; read again by the writer of the third version); **(4)** = read
+for the fourth version, from the dump of the first live start (`re/climb_crash.md`); **(5)** = read again for the
+fix round after the crash's review (`re/climb_crash_review.md`).
 
 | what | address | notes |
 |---|---|---|
@@ -314,7 +354,9 @@ in with the third (the second review's N1 and D1; read again by the writer of th
 | collision off / on | 0x5d6200 / 0x686600 | 0x8c5270: `++[player+0x7b4]`, `[player+0x7a5] = 0`; 0x8b41c0: the count back (not below 0), `[player+0x7a5] = 1` at zero; 0x5d6200 also clears byte `[player+0x968]`; both set the body's Havok layer (0xc / 5, whatever the count is) through 0x40ed30 (writes the body's filter word +0x2c; when the world's byte +0x14fc is set, Havok 0xa01ee0 on `[world+0x14dc]`) on `[[world+0x11840+4*[player+0x27cc]]]`, world = `[[sysif+0xac]+0x52cc]`. The body table has 5,000 entries (0x1388), its count is at world+0x1183c, entries are only ever added (0x4adce0) |
 | **StartMiniAnim** | 0x5ea340 `(u16 slot, x, alignObject, char endWithClip)`, ret 0x10 | writes through `[player+0xbe0]` and `[player+0xdbc]` (0x8b7410, 0x4c1a70), stops the current action, makes `ZFFActionMiniAnim` (kind 0x23, vtable 0xbb4f0c, 0x28 bytes from the pool 0x15151c0: +8 player, +0x18 slot, +0x1c alignObject, +0x20 the channel, +0x24 'reports count', +0x25 endWithClip) and starts it. A null action is handed on when the pool is empty (the game's own flaw) |
 | its start | 0x76d1d0 | slot < 0 or no clip: `[player+0x2758] = 1`, the action is over at once, no fault. Else 0x74c040 (the weapon is lowered), `Play(clip, 1)` **with byte +0x24 cleared around it: its 'a channel ended' slot 0x42b7f0 ignores the reports that Play itself causes**; with an alignObject: AlignTo(its world transform, the frame of event 6 or the last). Slot 10 afterwards: with endWithClip any report ends the action; without, a report re-plays the clip's last frame at speed 0 (the pose is held), sets `[player+0x2758] = 1` and the action stays until somebody stops it |
-| who calls it | 0x5022c0 from 0x60b5c2; 0x607950 | **Two callers** (the first version had one). (a) 0x5022c0, from 0x60b230 = players near a blast (the routine with the string `DisableTinitus`): `vtable +0x388 == 0` (no action) and **down state `[[player+0x2940]+0x24] == 0`**, then `StartMiniAnim([player+0x25b0], 0, 0, 1)`: a stagger on a standing or walking player, in every mode. (b) **(2)** 0x607950 = `ZMiniPlayerMoveTask@CPPScript` (vtable 0xbce7a4, slot 5; a mini cutscene's task, campaign): guard 0x4b3270, the current action stopped, `StartMiniAnim([task+0x62], task, [task+0x30], 0)` = the clip ALIGNED TO A SCENE OBJECT and held at its end, done when `[player+0x2758]` is set. So 'mini animation + AlignTo on the player' is a stock combination - with the collision ON. Mini animation + AlignTo + collision OFF is the hook's own |
+| who calls it | 0x5022c0 from 0x60b5c2; 0x607950 | **Two callers** (the first version had one). (a) 0x5022c0, from 0x60b230 = players near a blast (the routine with the string `DisableTinitus`): `vtable +0x388 == 0` (no action) and **down state `[[player+0x2940]+0x24] == 0`**, then `StartMiniAnim([player+0x25b0], 0, 0, 1)`: a stagger on a standing or walking player, in every mode. (b) **(2)** 0x607950 = `ZMiniPlayerMoveTask@CPPScript` (vtable 0xbce7a4, slot 5; a mini cutscene's task, campaign): guard 0x4b3270, the current action stopped, `StartMiniAnim([task+0x62], task, [task+0x30], 0)` = the clip ALIGNED TO A SCENE OBJECT and held at its end, done when `[player+0x2758]` is set. So 'mini animation + AlignTo on the player' is a stock combination - with the collision ON. Mini animation + AlignTo + collision OFF is the hook's own. **(4) Correction: the stagger is a stock CALL, not a stock clip.** Its slot is the name `/Special_moves/Cover_From_Explosives` (resolved at `0x89cb31`), and none of the 21 stock `.ANM` files has that name (measured): the retail stagger's mini animation is over before it plays anything (`0x76d1f5`). The only stock maker of a mini animation that plays a clip is (b), with endWithClip = 0. Nothing in the retail game runs a mini animation to the natural end of its clip |
+| **a clip's events (4)** | `0x4011e0`, `0x7f60e0`, `0x8b67d0`, `0x60c370`, `0x9290f0`, `0x7c6c80`, `0x8b76e0`, **`0x637060`** | Read after the first live start (`re/climb_crash.md` 2, 3). A channel's clip events ({u32 id, u16 frame, u16 text}, `[clip+6]` of them at `[[0x1546f6c]+0x10] + [clip+0x10]`) are handed out only when somebody subscribed the channel: `0x7f60e0(channel)` -> `0x4011e0` queues every event with the handler `0x60c370` (queue `[channel+0x34]`). **The mini animation's own start does (`0x76d22e`)**; Play alone does not, the vault's start does not, the NPC link mover does not. The animation update hands the due entries out per playing channel (`0x8b67d0` at `0x50af60`): `0x60c370` -> the owner's vtable +0x21c = for a player `0x9290f0` = the dispatcher's slot 4 `0x7c6c80` -> **the current action's slot 11** (`0x8b76e0` in a mini animation) -> its slot 13 = **`0x637060`, `ZFFActionGeneric`'s routine**: slot 12 (`0x721060`, 'the action's object' `[action+0xc]`, tested there), then a switch on the id (`0x637077`; ids 5 .. 53 by the byte table `0x637314` and the 13 targets `0x6372e0`; everything else, and 6, 7, 8, 12 .. 19, 22, 23, 36 .. 41, 43 .. 47, 52, to `0x6372d3` = `mov al, 1`). **Case 5 = `AlignTo` the place of `[action+0xc]` by the frame of event 6, the object used with no test (`0x6370e7`).** A generic action has that object from its constructor (`0x70ca90`); a mini animation's constructor writes 0 there (`0x6b2987`); `ZFFActionMiniAct` (0 too) returns at id 5 in its own slot 13 (`0x68ac6d`). A stopped channel hands nothing out (`0x63e600` -> `0x4ff500`). **(5)** Who subscribes: `0x7f60e0` has 23 call sites - 20 in slot 2 (the start) of 19 `ZFFAction*` classes, 3 in routines of animation states (`0x40a6b0`, `0x468640`, `0x6aa7b0`; taken for the NPCs': reasoned, not read); two other routines make a queue that does not reach an action (`0x425280`, handler `0x5edc40`: a message to the owner; `0x812a50`: one id, from the sound starter `0x409170`). **(5)** What the other cases need: 9, 10, 11, 21, 24 .. 35, 42 return when the action has no object (`0x7de320` is a pure map; slot 12 and `je` in `0x428d90`, `0x77ca60`, `0x70dc00`, `0x4fe5c0`, `0x87a8d0`); 20 takes an object from the player (`0x86a130`) and acts; 48 .. 51 and 53 act on his owner or the game data whatever the action is (`re/climb_crash.md` 3) |
+| **what an action is handed while it runs (4)** | the dispatcher `0xba38d8`, eight slots | 1 start (action slot 2); 2 -> action slot 4 and 3 -> action slot 3 (both `mov al, 1` in a mini animation); **4 -> slot 11, a clip event**; 5 / 6 stop / end (action slot 5, then delete by slot 9 / 0); **7 -> slot 10, a channel ended**. No other way reaches a mini animation between its start and its end. **(5) Correction: 'a clip event' is the event of ANY subscribed channel of the player, not of the action's own channel alone** (this row said 'nothing else reaches a mini animation', meaning its own clip's events: wrong as written). The hand-out calls the handler on the channel's OWNER (`[channel+0x30]`, `0x8b68e1 .. 0x8b6915`); `0x60c370` passes the channel to the owner's vtable +0x21c (`0x60c3be`); slot 4 gives it to whatever action is current (`0x7c6c83 .. 0x7c6ca0`); slot 11 strips it to (clip, record) (`0x8b76e0`); the channel is never compared with `[action+0x20]`, and case 5 finds a channel by the EVENT's clip (`0x63709b` -> `0x5a6ec0`) before it uses the object. **So while a mini animation is current, an id-5 event of another clip that plays on him subscribed faults at kl2.exe+0x7e400 too.** What stands against it: only an action's start subscribes a player's channel and an action that starts ends the mini animation first (`0x869e1c`); the mini animation's own Play stops every playing channel of the clip's class and throws its queue away (`0x4da294 .. 0x4da2be`), so no full-body channel outlives the start; a channel of the other class plays on - and the build's 872 clips of that class carry only ids 9 and 10 of those the routine acts on (4.1, the check's rule; `klclimb.c` `klq_others`) |
 | the mini cutscene (C) | `MiniCutsceneRout` (vtable 0xbcdf14), script text in field 0 | a script entry with a `Lynch` head and an `act` task (`anim` = a slot name, `startpos` = a pos object) makes `ZMiniPlayerActTask` for the player in gamedata slot 0: put on the pos object (0x82cc40), collision off, the slot played with its own root motion, the last frame held, input back at the script's end (0x8e8d00, 0x447bd0). 2,339 uses in the 21 stock levels, 755 scripts with a Lynch head, 38 Lynch acts with a start place - **all in campaign levels, none in an FA level**. 0x872f70 / 0x5f6df0 have an int3 when the player's slot byte `[player+0x91d]` is not 0 or 1. Stock template: L02 `ROOT\AI!Friendly!Script_Door` (a `PlayerAction` box whose list starts `MC_Door_Lynch`) |
 | placing a player (C) | 0x82cc40 `(rot, pos, char resetMove, char force, char sendNet)`, ret 0x14 | the round start uses (1, 0, 1). 0x62a900 (klcrew_rt.c) is the ACTOR's routine. kljoin.c's debug jump is the only placement seen live |
 | `ZFFActionJumpOver` | kind 0x2c, vtable 0xbb51bc, constructor 0x594fa0, start 0x8f0440 | new here: the constructor resolves ONE slot, `/Cover/Vaulting/Sprint_Vault_Right_0.5M`; the start is Play + AlignTo(frames) + collision off, after a test 0x523e40. No site was found that asks the factory for kind 0x2c: a cut action. Not used |
@@ -366,6 +408,23 @@ What follows for a hook (second version; **(3)** = third):
    plays its Dead Men source (name, events + data, bone NAMES, condition flags); no bone or pose name added;
    only the `.ANM` member of the archive differs. `tools/kl_anm.py` was not changed (`kl_anm.py check`:
    `byte-identical: 41 of 41`).
+   **(4) One difference from Dead Men's data, on purpose** (after the first live start, `re/climb_crash.md` 6):
+   in the 7 clips the PLAYERS' lists name, the event with id 5 is written with id **105** (`EV_FOOT_DD`; `refoot`).
+   Frame, event 6 and the clip's data stay. The proof compares those lists with 105 read as 5 and proves besides
+   that exactly that entry differs and that no players' clip carries an id the game's generic action acts on
+   (`GENERIC_ACTS`: 5, 9 .. 11, 20, 21, 24 .. 35, 42, 48 .. 51, 53). `check` FAILs a players' set that does
+   (a build of the first form: `z_climb\M03` now gets `RESULT (kl_fa_climb): FAIL (2 FAIL, 1 NOTE)`), and `merge`
+   refuses such a build instead of calling it complete. The five `*_NPC` clips keep 5 and 6; `Sprint_Low_No_Weapon`,
+   a players' clip the NPC Low lists name too, has 105 there as well (an NPC cannot tell: the link mover asks for
+   event 6 alone, `0x4a53aa`, and subscribes nothing).
+   **(5) `check` has one rule more, on clips this step did NOT add** (the crash review's M1 / S2; section 3, 'what
+   an action is handed'): no clip of the OTHER body class (record +0x28 bit 0x10 - what the mini animation's Play
+   does not stop) may carry an event id at which the generic action's routine does not simply return for an action
+   without an object, i.e. an id of `GENERIC_ACTS` outside `GENERIC_QUIET` (9, 10, 11, 21, 24 .. 35, 42: each read).
+   Its line on a build: `PASS  the 872 clips of the other body class ...: of the event ids kl2 0x637060 acts on they
+   carry only 9 (15 clips), 10 (69 clips), at which it returns when the action has no object ...`; else `FAIL  N of
+   the M clips of the other body class ... id 5 in ...`. And a refused `apply` (a first-form build, a failed proof)
+   now ends in one line, `kl_fa_climb: NOT applied: <why> - nothing was written`, exit 1, instead of a traceback.
 2. **`KLJoin.ini`**: `[Climb]` sections beside kl_fa_bots' `[CrewHop]` (which stays byte for byte). A section is
    the top edge of an obstacle (`A`, `B`, `Normal`, `Floor`, `Depth`) where **Dead Men's own rule** (2.1) holds
    on the build's collision: the tool walks `LINES` (per map, a seed) every 25 units, tries the rule from 30 /
@@ -416,11 +475,85 @@ east end, not from the street, and the level's hero-only wall closes it in the w
 With the hook that is installed today the build is `z_hop\M03` with 141 KB more animation data: the installed
 hook reads no `[Climb]` section and nothing in the game asks for the three slots. That is live check K0.
 
-### 4.3 `klhook/klclimb.c` - the hook's half, NOT WIRED
+**(4) `z_climb\M03` IS OF THE FIRST FORM (its players' clips carry event id 5): the game faults 0.24 s into a
+climb on it** (`re/climb_crash.md`). So is `z_climb2\M03` (the lead's of 09:22: the first form on `z_cover3\M03`).
+The fourth version of the hook refuses both with a line; the third must not play them.
+
+### 4.2b `<work>\build\z_climb3\M03` = `z_cover3\M03` + the two additions, in the new form (4)
+
+`python tools\kl_fa_climb.py apply <work>\build\z_cover3\M03 <work>\build\z_climb3\M03` (the bank with the extra
+cover boxes: the base the lead wants from now on). `F01_Main.zip` sha1 0698b298de54bcebd8bfb1972c0509df01f43983
+(200,895,904 bytes); `.ANM` 22,202,616 -> 22,343,864 (12 clips, slot ids 2505 High, 2506 Low, 2507 Medium; bones
+156, poses 36); the same two `[Climb]` sections as above (63 of 65 samples pass). Against `z_climb2\M03` (the first
+form on the same base) the `.ANM` members differ in **7 dwords, each 5 -> 105**, and nothing else differs.
+
+| check on `z_climb3\M03` | last line |
+|---|---|
+| `kl_fa_climb.py check` | `RESULT (kl_fa_climb): PASS (0 FAIL, 1 NOTE)`; new lines: `players' set Kane: none of the 7 clips of its three climb lists has an event id kl2 0x637060 acts on ...; the first alignment's frame is event 105, the second's event 6` (and Lynch); **(5)** and `the 872 clips of the other body class (record +0x28 bit 0x10: what the mini animation's Play does not stop): of the event ids kl2 0x637060 acts on they carry only 9 (15 clips), 10 (69 clips), at which it returns when the action has no object ...` |
+| `kl_fa_bots_dyn.py check` | `RESULT (kl_fa_bots_dyn): FAIL (7 FAIL, 1 NOTE)` - the 7 FAIL of `z_cover3\M03` itself (the civilian loot-window rule; the two outputs differ in one line, the `.ANM` size). Not this step's, not fixed |
+| `kl_impact.py` | `problems: 0 in 1 levels` |
+| `kl_maps.py audit` | `RESULT: PASS (0 findings that must be 0, 0 known and accepted)` |
+| `kl_map_escape.py van-check` | `0 fault(s)` |
+| `kl_anm.py check` (the tool, untouched) | `byte-identical: 41 of 41` |
+
+**(5)** The fix round changed the tool's `check` and `main`, not `merge`: `apply` with the tool as it is now, into a
+scratch folder, gives the same `F01_Main.zip` (sha1 0698b298..) and the same `KLJoin.ini`, so `z_climb3\M03` was
+NOT rebuilt (only its own record of the check, `climb.txt` / `climb.json`, lacks the new line). All six checks of
+the table were run again after the round, with these last lines.
+
+### 4.3 `klhook/klclimb.c` - the hook's half (wired by the lead, commit 9c8077d; fourth version below)
+
+**(5) The fix round of the fourth version** (after `re/climb_crash_review.md`; the table is 6.5). What changed in
+the file, and nothing else:
+- `klq_others(player, own channel, spare class)` - his channels other than the climb's that play (state 1 or 3) and
+  have an event queue (`[channel+0x34]` not 0), and the first of them whose clip has an event the game's routine
+  sends to its case 5 (`klq_clip5`, by the game's own tables through the new `klq_ev_to`) or whose events cannot be
+  read. Asked three times: **before the start**, for the channels the start's Play would leave playing (those of
+  the other body class than the clip's) - one with such a clip: `edge N NOT climbed: channel C of his plays the clip
+  X with an event queue, and that clip has event id 5 at frame F, which the game's event routine 0x637060 sends to
+  its case 5: ... NOTHING WAS STARTED (such a channel runs out by itself: step away and come back)`; **right after
+  the start**, for all his other channels as they are then - the action is stopped in the tick of its start (`...
+  STOPPED in the tick of its start, before any event could be handed out`); **every frame of the climb** - `edge N:
+  frame F: channel C of his plays the clip ...: the climb is called off`, then stopped and given back like any
+  call-off (`CALLED OFF by this file (another channel of his plays a clip with an event for the game's case 5)`).
+  With `Log=2` a change of the set during a climb is a line of its own (`frame F: his other channels that play with
+  an event queue are now MMMM (n; they were MMMM) ...`): by the reading none can come, so that line means the
+  reading is short of something. The queue is not walked - a queue of sound events counts too - so the rule can
+  refuse more than it must; and it refuses case 5 only (the build's check has the other ids).
+- `klq_code` also compares the WAY to the event routine (S3): `[0xbb45f4 + 0x21c]` = `0x9290f0`, `[0xba38d8 + 0x10]`
+  = `0x7c6c80`, `[0xbb4f0c + 0x2c]` = `0x8b76e0`, and that id 5 goes to `0x637093`.
+- The `frame 6.x: aligned to P2 (...) in N frames` line goes on `; his node is at (x, y, z) now = (dx, dy, dz) from
+  P1 (x, y, z)` (S1: read before the second alignment is set). The `started` line has `, movement kind K` after
+  `under 150` and ends `; N other channel(s) of his play with an event queue (MMMM)`; the dry run's `WOULD climb`
+  line has `, N channel(s) of any class with an event queue (MMMM)`.
+Calls: none added (reads only; the stops are the `0x8aef30` the file made before). Built from the tree
+(`klhook\build_auto.bat G:\kl_scratch\f3\test`, `klhook\build.bat G:\kl_scratch\f3\ship`): no warning from this
+file, `cl /Zs /W4` names no line of it. Its off-game test: `SIM: PASS (0 failed)`, 101 expectations (the 84 of
+before and 17 new, X and Y); the control - the fourth version as it was before the round - starts the climb beside
+a subscribed channel whose clip has event 5 and faults in the model when that event comes due, at climb frame
+23 (`re/climb_crash.md` 7).
+
+**(4) Fourth version, after the first live start** (`re/climb_crash.md`; the file's own section 0). What changed,
+and nothing else: `KLQ_EV_FOOT` = 105 is the event whose frame the first alignment takes (the third version read
+id 5); `klq_ev_acts(id)` asks the game's own switch (`0x637314`, `0x6372e0`) whether its event routine acts on an
+id; `klq_code` also compares that routine (`0x637060`, the switch `0x637077` / `0x637085`, the 'nothing' target
+`0x6372d3`, slot 12 `0x721060`, the mini animation's vtable entries 12 / 13) and wants 5 to act and 105 and 6 not
+to; `klq_clip` returns 0 for a clip whose event table cannot be read and reports the first event the game would act
+on; `klq_climb` looks at the clip `0x59d550` gives BEFORE the start (no clip, unreadable events, or such an event:
+`NOT climbed: ...`, nothing started - a level of the first form gets `the clip ... has event id 5 at frame 6 ...
+NOTHING WAS STARTED`) and at the channel's own clip after it (such an event: stopped in the same tick); the
+`started` line says `speed S after D ms at the foot under 150` and `events 105 (the foot) at 6 and 6 (the top) at
+20, none the game acts on`. Calls added: `0x59d550` once per try in `Mode=climb` (it was the vault's only).
+Built from the tree (`klhook\build_auto.bat G:\kl_scratch\f3\test`, `klhook\build.bat G:\kl_scratch\f3\ship`): no
+warning from this file. Its off-game test (the third version's, with the clip's events and a model of `0x637060`
+added): `SIM: PASS`, 84 expectations; the control - the THIRD version with the first build's clip - faults in the
+model at clip frame 6.25 (`re/climb_crash.md` 7).
 
 Third version (after two reviews; what the third changed is marked **(3)**). Its top comment is the spec. In
 short: Arcade only, a level that is not
 stock, the game's thread; off unless `[Climb] Enable=1`; `Dry=1` logs and calls nothing. Twenty times a second
+(**(5)** at ticks 50 ms or more apart: 62 ms, 16 a second, in the first live run by the crash review's reckoning -
+a tick count that steps by 15.6 ms; `Dwell=400` was 437 ms there)
 the local human's node place is held against the `[Climb]` edges; AT THE FOOT (15 .. 70 from the face - Dead
 Men's last probe; the first version had 75 -, between A and B, his height within 40 of `Floor`) for `Dwell` ms
 (400), slower than `Speed` (150), looking at the face within `Angle` (60), with `Key` down if one is set, and
@@ -587,7 +720,7 @@ shown by the second version`.
 Limits of the model, besides the one above: it has no collision geometry, so what a proxy does against the
 wall is not in it; in L the start's own clip is not played on after the action is gone.
 
-The three lines for `klhook.c` (unchanged; the file is still NOT WIRED in the repo):
+The three lines for `klhook.c` (in the repo since commit 9c8077d: the file is wired, off unless `[Climb] Enable=1`):
 
     #include "klclimb.c"        after  #include "klhop.c"
     klq_tick(game_thread);      in klh_tick, after  klv_tick(game_thread);
@@ -701,17 +834,85 @@ Not changed by the third version: `klq_node`, `klq_slot`, `klq_clip`, `klq_align
 `klq_carry_refuse`, `klq_code` (its 8 byte rows and 4 vtable entries compared with kl2.exe again: all the
 same), the three wiring lines, `tools/kl_fa_climb.py`, the build.
 
-## 7. Live checks, in order (none run)
+### 6.4 Fourth version: what the first live start found (`re/climb_crash.md`)
+
+| what this account said | what the game did | what was done |
+|---|---|---|
+| 3, 4.3: a mini animation is told of ended channels (slot 10); nothing else was looked for | it is also handed its clip's EVENTS (the dispatcher's slot 4 -> slot 11 -> `0x637060`), and at event id 5 that routine uses an object a mini animation has not got: the fault at kl2.exe+0x7e400, clip frame 6 | section 3 has the rows; the players' clips of a build carry 105 for 5; the hook refuses a clip with an id the routine acts on, before the start and after it |
+| 3, 'who calls it': the stagger is a stock mini animation on a walking player | the stagger's slot name is in none of the 21 stock `.ANM` files: it never plays a clip. The call is stock, the playing is not | corrected in section 3; said in 9 |
+| 2.3: 'the player-timed clips' table, events 5 and 6 | - | the variants' events added: `Sprint_Low_No_Weapon` has 5 at 3 and 6 at 15, and is in the NPC Low lists too |
+| 7 K1: 'if the node reads (0, 0, 0) ...', the proxy, the sign of facing, the heights | all as hoped: node = his place, proxy = node at rest, facing 1.00, the node's height 201 on a floor of 200; +0x460 is the mesh's place and stays at the mesh's edge | K1 / K2 say what was seen |
+| 4.3, the off-game test: 'a MODEL of the frame as section 3 reads it' | the model had no clip events | the fourth version's test has them, by the game's own tables; the third version faults in it as in the game |
+| 9: 'clip record +0x2C ... if K2 shows a fault inside the animation code, this is the first thing to zero' | the fault was not there: no routine of the chain reads +0x2C (0x2330 in the clip that played) | left as it is |
+| the speed gate (`Speed`, `Dwell`) | did its work: 483 as he came into reach, the start 499 ms later from a stand | unchanged; the `started` line prints speed and stand |
+
+### 6.5 The fix round of the fourth version: what the crash's review (`re/climb_crash_review.md`) found
+
+Every finding was re-checked against `kl2.exe` and the dump before anything was changed (`re/climb_crash.md` 12 has
+the how, finding by finding). **None is refuted.**
+
+| review | where | finding | what was done |
+|---|---|---|---|
+| **M1** must | 3 ('what an action is handed'), 9; `re/climb_crash.md` 7, 11; `klclimb.c` section 0 | 'nothing else reaches a mini animation' is wrong: it is handed the clip events of EVERY subscribed channel of its player; an id-5 event of another clip faults the same way. Closed for this build by reading and counting | The text corrected in all three files, with the addresses; the 'same crash again' key (K2, `re/climb_crash.md` 10) tells the two cases apart by the moment and by what the dump holds at esp+0x48 / +0x54. Beyond the text: the hook refuses / stops / calls off a climb beside such a channel (`klq_others`, 4.3) |
+| **S1** should | head, 6.4, 7 (K2), 9; `re/climb_crash.md` 0; `klclimb.c` section 0 | 'the root IS at P1 at clip frame 6.03' is given as seen and is not shown | ASSUMED everywhere. Read for it: the vector the claim rested on is a leftover of an earlier frame in the animation update's locals, and the game's own record (`[player+0xe8]` = 0, `[player+0xec]` = 6.0) says the blend was still short of its target in every frame it finished. The `aligned to P2` line prints his node and its distance from P1 |
+| **S2** should | `kl_fa_climb.check`; optional: the hook | make M1's closure a rule | `check` FAILs a clip of the other body class with an id outside `GENERIC_QUIET` (4.1; 9, 10, 11, 21, 24 .. 35, 42 - the review had 9, 10, 24 .. 35; 11, 21, 42 were read for this round, 20 is not quiet). In the hook: more than the optional `Log=2` line (4.3) |
+| **S3** should | `klq_code` | slots 12 and 13 are compared, the way to them is not | three compares added (4.3) |
+| **S4** should (the lead's) | 7, K2's set-up | the rerun is K2b, not K2, unless the script lets go of W; the gate measures node displacement | set-up rewritten; the `started` line prints his movement kind |
+| N1 .. N6 notes | - | a third event-queueing routine; `0x7de320` read; the split of `0x4a75d0`'s call sites; `apply`'s traceback; the likeliest failure unchanged; things for the lead | `re/climb_crash.md` 3, 5, 6, 12; the tool's `main`; the lead's points are in the track's report |
+
+Not changed by the fix round: `klq_refuse`, `klq_carry_refuse`, `klq_give_back`, the vault, the gate, `merge` and
+the build.
+
+## 7. Live checks, in order (the first half of K2 seen, and in it what K0 and K1 ask; the rest not run)
 
 Rewritten for the second version: every check names the lines that mean PASS and the lines that mean FAIL, in
 the hook's log (`KLHook.log`, lines beginning `climb:`) and in the runner's own position lines.
 **Changed for the third version** (6.3): K1 (which channel count answers K6, the two new refusal reasons), K2
 (the HAND-OVER line: frame 46.x and its two places; the likeliest failure), K5 (the lift), K6 (PASS, REFUSED
 and FAIL are told apart anew), K7 c. K0, K2b, K3, K4, K7 a / b / d and K8 are as they were.
+**Changed for the fourth version** (6.4, after the first live start): what K1 and K2 SHOWED is written into them
+('SEEN 2026-10-11'); K2's `started` line has its new form and K2's FAIL list the crash and the refusal; the
+set-up names the new build.
+**Changed for the fix round** (6.5): the set-up says what the rerun will be (K2b unless the script lets go of
+forward); K1's and K2's lines have their new ends (`movement kind`, `other channel(s)`, his node in the `aligned
+to P2` line); what was 'seen' of the first alignment is cut down to what the dump holds; K2's FAIL list has the
+other channels' lines and the second form of 'the same crash again'.
 
-**Set-up.** `z_climb\M03` in the test slot; a TEST hook built from the tree with the three lines of 4.3 (the
-scratch build of 4.3 is a proof of compiling, not the hook to install); `[Bots] Enable=1 Log=1`; `[CrewHop]` as
-in re/bots_bank.md with `Log=2` (the 'left From' line needs it). Each check changes one thing.
+**What the first live start showed, in one place** (run `K2c_DM03_wall_hp`, the third version, `z_climb\M03`, a
+scripted player at edge 2; `re/climb_crash.md` 1): the level loads and plays with the merged `.ANM` (K0's
+question); `2 edge(s) from ...KLJoin.ini`; node, +0x460 and proxy printed side by side - **the node is his place,
+the proxy reads the same place at rest, +0x460 is the navigation mesh's place and stays at the mesh's edge** (z
+-751 while he stood at z -666; its height 220 against the node's 201); **facing 1.00** as he ran at the face; `at
+the foot of edge 2: ... 48 from the face, speed 483 ... the top is 202.5 over his feet = /Movement/Climb/Up/High,
+id 2505; 0 full-body channel(s) of his play as he arrives`; 499 ms later `started ... action 0150d1c4, clip
+78168c98 of 52 frames (flags 10c0), events 5 at 6 and 6 at 20; aligned to (-2074, 201, -672) in 6 frames`;
+`collision off (the climb starts; count 0 -> 1)`; 0.24 s later the crash. In the dump: the game's record of the
+alignment it took (`[player+0xe8]` = 0, `[player+0xec]` = 6.0); no other channel of his playing, none with an event
+queue. **(5)** NOT in the dump: where he was - his node and his proxy are not among its memory, and the vector
+this paragraph gave as 'the root at P1' is an earlier frame's leftover (`re/climb_crash.md` 1). Not seen:
+anything after frame 6.
+
+**Set-up.** **`z_climb3\M03`** in the test slot (4.2b; NOT `z_climb\M03` or `z_climb2\M03`, which the fourth
+version refuses and the third crashes on); a TEST hook built from the tree; `[Bots] Enable=1 Log=1`; `[CrewHop]`
+as in re/bots_bank.md with `Log=2` (the 'left From' line needs it). Each check changes one thing.
+**The rig's goto and the foot** (seen in the run above): klauto's `goto` judges by +0x460, and +0x460 does not
+follow him off the mesh - a `goto` to a place the mesh does not reach is never `reached` and W stays down until its
+time-out. In K2c that most likely made the start one with FORWARD HELD against the wall (he stood 41 from the
+face, about a man's radius; the gate saw 'slower than 150' and started him): K2b's condition, not K2's. The mesh
+ends 126 from the face at edge 2, the foot is 15 .. 70 from it: no mesh place is at the foot. So either the
+script lets W go by time before the dwell is over (the rig's own business: `tools/kl_playtest.py`, not this
+track's), or K2's result is read as K2b's. NOT ESTABLISHED which it was: the log has no line for the keys.
+**(5) What the rerun will be** (the crash review's S4, which reads the log the same way): the gate measures his
+NODE's displacement from tick to tick, so a man who runs on the spot against the wall 'stands' for it - the gate
+as written, not a fault of it (Dead Men asks for speed and the USE tap, held stick or not). **With the wall script
+as it was, the next run is therefore K2b - a climb with forward held through the clip - and not K2**, and it must
+be read by K2b's lines: `ended at frame N ... BEFORE the hand-over` + `BACK AT THE FOOT` would then mean 'held
+input ends the mini animation', not 'the climb does not hold'. For a K2 proper the script must let go of W
+before the start: e.g. the last `goto` to a place the mesh reaches (z -760 at edge 2; it ends `reached` and lets
+the keys go), then the rig's `down W` / `wait N` / `up W` for the last 80 (N by trial: he must end 15 .. 70 from
+the face, looking at it), then `wait 6000`. The `started` line now prints `movement kind K` beside the speed;
+whether K tells a stand (2?) from a run against a wall (3?) is not known - compare it between a run with W held
+and one without.
 **The place.** Edge 1 at x -3000: the face is the plane z -625; the yard is z < -625 (floor 200 by the
 collision, 220 by the navigation mesh), the wall's top is y 403.5 from z -625 to -575.5, beyond it a dumpster
 lid (y about 281) and then the street (y 150). AT THE FOOT is z -695 .. -640.
@@ -747,10 +948,22 @@ the clip plays:
   (the sign; if it reads -0.9x while he looks at the wall: `Angle=0` until the sign is turned in the file), the
   id 2505, and no `(his NODE is not at the floor ...)` at its end (if it is there: the heights come from +0x460
   and the RESULT lines judge no height);
-  `climb: edge 1: WOULD climb by /Movement/Climb/Up/High (slot 2505) ... P1 (x, y, -672) at event 5, P2 (x,
-  y + rise, -672) at event 6; N full-body channel(s) of his play NOW (after the dwell) - DRY RUN, nothing is
-  called`;
+  `climb: edge 1: WOULD climb by /Movement/Climb/Up/High (slot 2505) ... P1 (x, y, -672) at event 105, P2 (x,
+  y + rise, -672) at event 6; N full-body channel(s) of his play NOW (after the dwell), M channel(s) of any class
+  with an event queue (mask) - DRY RUN, nothing is called (the clip and its events are not looked at: that takes
+  the game's 0x59d550)` (**(5)** M and the mask are new: what a start would find playing with a queue; if the line
+  goes on `, ONE OF THEM WITH A CLIP THAT HAS AN EVENT FOR THE GAME'S CASE 5`, a start would be refused - say which
+  body and weapon);
   the runner's `pos foot` with z -688 .. -648 and `pos after` at the same place (nothing moved him).
+  **SEEN 2026-10-11** (in the lines of the `Dry=0` run K2c, at edge 2, x -2074): the two edges; node and proxy the
+  same place, agreeing with the runner in x and z while he moves; at the wall the runner's +0x460 stays at the
+  mesh's edge (z -751) while the node goes on to z -673 / -666 - **from there on only the hook's node lines say
+  where he is, and `pos foot` / `pos after` do NOT** (the runner prints +0x460); `at the foot of edge 2: node
+  (-2074, 201, -673), +0x460 (-2077, 220, -751), proxy (-2074, 201, -673), 48 from the face, speed 483, facing
+  1.00; the top is 202.5 over his feet ... id 2505; 0 full-body channel(s) of his play as he arrives`, no `(his
+  NODE is not at the floor ...)`. So the node's height is the collision floor's (201 on 200), the facing sign is
+  right, the proxy read is right. No `NOT climbed yet` line: `klq_refuse` passes a healthy standing player (its
+  two gates of the third version among them).
   FAIL = `climb: edge 1 NOT climbed yet: <reason>` while he just stands there: one of `klq_refuse`'s tests does
   not hold for a healthy standing player (the reason names the field: the frame bytes +0x7a4 / +0x430, **the
   two gates new in the third version - `[player+0xd50] is not 0`, `the node [[[node+0x50]+0x60]+4] ... cannot be
@@ -764,10 +977,23 @@ the clip plays:
   tried; over 0 in all of them = it would be refused from this stand; changing = it would be refused at first
   and tried when the channel is over. A count is not a verdict on (ii): K6 is.
 - **K2** `Dry=0`, the script. PASS = all of, in this order:
-  `climb: edge 1: started /Movement/Climb/Up/High (slot 2505) from node ... clip ... of 52 frames (flags
-  10c0), events 5 at 6 and 6 at 20; aligned to (x, y, -672) in 6 frames`;
+  `climb: edge 1: started /Movement/Climb/Up/High (slot 2505) from node ..., N from the face, speed S after D ms
+  at the foot under 150, movement kind K: action ..., clip ... of 52 frames (flags 10c0), events 105 (the foot)
+  at 6 and 6 (the top) at 20, none the game acts on; aligned to (x, y, -672) in 6 frames; M other channel(s) of
+  his play with an event queue (mask)` (fourth version; S near 0 from a stand, D 400 .. 500; **(5)** K and M are
+  new - M was 0 in the dump of the first start; an M over 0 is no fault, none of those clips has an event for the
+  game's case 5 or the climb would not have been started, but say it);
   `climb: collision off (the climb starts; count 0 -> 1)`;
-  `climb: edge 1: frame 6.x: aligned to P2 (x, 403 or 404, -672) in 13.x frames`;
+  **SEEN 2026-10-11 up to here** (third version, `events 5 at 6 and 6 at 20`), and in the dump that the game took
+  the first alignment (**(5)** not where it brought him: 6.5). Then the game faulted - on the first-form level;
+  `re/climb_crash.md`.
+  `climb: edge 1: frame 6.x: aligned to P2 (x, 403 or 404, -672) in 13.x frames; his node is at (x, y, z) now =
+  (dx, dy, dz) from P1 (x, y, -672.0)` - **about 0.25 s after `started`: the first line the game has never
+  reached. It is the fix seen** (the clip's event at frame 6 went to the routine's 'nothing'). **(5) Its second
+  half is the first sight of what the first alignment does**: PASS = (dx, dy, dz) about (0, 0 .. +3.5, 0 .. +0.6)
+  - he IS at P1 but for what the clip's own root has moved since frame 6 (+1.1 up at frame 6.3, +3.5 at 7.0;
+  measured). A dz of +6 or more (where he stood, or nearer the face) or a dy well outside that: the alignment did
+  not move his node as section 3 reads it - the climb may still go on; tell the lead with the line;
   `climb: edge 1: frame 46.x of 51: HAND-OVER - the proxy put at the node: proxy (x, y, z of pos foot) -> (x,
   428, about -608), node (the same); collision on (count 1 -> 0)` (`HandFrames=5`, the default: frame 46.0 ..
   46.5 at 60 frames a second, later by up to one tick's worth at a lower rate; measured on the clip: z -609.6
@@ -793,7 +1019,10 @@ the clip plays:
   (the second review's N6): the game reports EVERY channel of his that ends (0x50b5e8 .., no class test) and
   the mini animation says yes to each once its own Play is over - weapon handling and faces are channels of
   the other body class (872 such clips in this build, the review's count) and nobody has to press anything for
-  one of them to end. The game's own stagger (0x5022c0) has the same exposure. With the `HAND-OVER` line before
+  one of them to end. (The game's own stagger (0x5022c0) does NOT have the same exposure, as this line said: it
+  never plays a clip in the retail game, section 3.) **(5)** In K2b's condition - forward held, which is what the
+  rerun with the wall script will be (set-up) - held input is a second candidate for the same line. With the
+  `HAND-OVER` line before
   it: section 3's reading is wrong somewhere after the hand-over - or Havok did not hold him 24.5 over the wall
   top (not readable); the `+500 ms` line says where he went.
   `... the proxy is NOT put at the node: node (...) is N beyond the face ... = INSIDE it` in any line - the two
@@ -807,7 +1036,35 @@ the clip plays:
   `RESULT ... INSIDE THE OBSTACLE` or `ELSEWHERE` - he was left where a man cannot stand: the line has the place.
   `... the hand-over is NOT made: <reason>` / `GIVEN UP after 3 s` - `klq_carry_refuse` refuses a live player:
   its reason names the field.
+  **`climb: edge 1 NOT climbed: the clip ... has event id 5 at frame 6, which the game's own event routine 0x637060
+  acts on ... NOTHING WAS STARTED`** (fourth version) - the level in the slot is of the first form (`z_climb\M03`,
+  `z_climb2\M03`): install `z_climb3\M03`. With `... STOPPED in the tick of its start ...` instead: the start
+  picked another clip than the one looked at before it, and that one has such an event - say which body and
+  weapon.
+  `... NOT climbed: this body's set has no clip for ... (0x59d550 gives none ...)` or `the record or the event
+  table of the clip ... cannot be read` - nothing was started; the first names the body's set, the second the
+  animation manager `[0x1546f6c]`.
+  **(5)** `climb: edge 1 NOT climbed: channel C of his plays the clip X with an event queue, and that clip has
+  event id 5 at frame F, which the game's event routine 0x637060 sends to its case 5: ... NOTHING WAS STARTED` -
+  another channel of his, one the start's Play would not stop, plays a clip whose event would fault the mini
+  animation (6.5, M1). No clip of this build's other body class has such an event (the check's PASS line), so the
+  line means either a queue on a channel of a class the hook mis-took, or a level that is not `z_climb3`: say C,
+  X and the `at the foot` line. The same with `... STOPPED in the tick of its start ...` (seen right after the
+  start) or `frame F: channel C of his plays the clip ...: the climb is called off` + `CALLED OFF by this file
+  (another channel of his ...)` + `BACK AT THE FOOT` (it appeared during the climb - by the reading it cannot:
+  something subscribes a player's channel besides an action's start).
+  **A crash at kl2.exe+0x7e400 (`reading address 00000060`) about 0.24 s after `started`, with no `aligned to P2`
+  line between: the crash of 2026-10-11 again** - an event id 5 of the climb's own clip reached the game's routine
+  (the third version of the hook on a first-form level does exactly that; the fourth cannot by the reading).
+  **(5) The same address at ANY OTHER moment of a climb** (after the `aligned to P2` line; anywhere but clip frame
+  6): **an id-5 event of ANOTHER channel of his** that got past the hook's test - NOT 'the table reading is
+  wrong'. In the dump `esp+0x48` is that event's clip (not the clip of the `started` line), `esp+0x54` its channel
+  (not `[esi+0x20]`), `esi` the mini animation. A crash elsewhere in `0x637060 .. 0x6372dc` about 0.8 s after
+  `started`, after the `aligned to P2` line: the clip's event 6 (frame 20) - the reading of the switch table is
+  wrong for id 6. `re/climb_crash.md` 10.
   A crash: `python debug/triage.py --keep`; the last `climb:` line says which call was the last.
+  **Where he is, from the runner's lines**: nowhere near the wall - `pos foot` / `pos after` print +0x460, which
+  stays at the mesh's edge (SEEN, K1). Judge by the hook's `node (...)` places only (`+500 ms`, `RESULT`).
 - **K2b** the run-through (K4's first question): the script with `goto -3000 -400 110 15000 keep` in place of
   the last three lines (a point on the street: W is held into the wall and through the clip), then `pos
   after`. PASS = K2's lines up to `over`, then `RESULT ... ACROSS - N beyond the face, -122 (the lid) or -253
@@ -904,8 +1161,38 @@ chapter 'Withdrawal' (`Scenes\Locations\M03_A`), from the start (checkpoint 1 in
 
 ## 9. Assumed, not established, not done
 
-- Nothing ran. The clips have never been loaded by Dog Days. `klclimb.c` has been built into a SHIP and a TEST
-  hook in a scratch copy (4.3) and never loaded by the game; it is not wired in the repo.
+- **(4) What has run** (2026-10-11, the third version on `z_climb\M03`): the level loads and plays with the merged
+  `.ANM`; one climb was started and the game faulted 0.24 s into it (`re/climb_crash.md`). SEEN since: the node's
+  place and height, the proxy's place at rest, the facing sign, the slot, the kept action, the clip, that the game
+  TOOK the first alignment (its record in the dump), 14 frames of an aligned mini animation with the collision
+  off. NOT SEEN: anything after clip frame 6 - the second alignment, the hand-over, the end, where he stands.
+  Of the fourth version (the hook's refusal, the level's id 105) nothing has run.
+- **(5) ASSUMED, and written as seen until the fix round** (the crash review's S1): that the first alignment
+  brought him to P1 by clip frame 6. The dump holds neither his node nor his proxy; by the game's own record the
+  blend had not reached its target in any frame it finished. It is the reading of `0x50b0f6 ..` (3, AlignTo); the
+  `aligned to P2` line of the next run prints his node.
+- **(4)** READ, not seen: a clip event id outside 5 .. 53, and id 6, does nothing in a mini animation (`0x637077`,
+  the tables). ASSUMED: nothing but the current action is told of the events of the mini animation's channel (the
+  queue held one subscriber's two entries). **(5)** That covers one direction only. The other is READ (the crash
+  review's M1): the current action is told of the clip events of every OTHER subscribed channel of the player as
+  well, and an id-5 event among them faults a mini animation. Against it stand a reading, a count and two rules
+  (section 3; 4.1; 4.3): REASONED, not read - that the three callers of `0x7f60e0` outside the actions' starts
+  never subscribe a PLAYER's channel; MEASURED - no clip of the body class that outlives the mini animation's
+  Play carries an id the routine does not return at (872 clips: 9 and 10 only); the check FAILs a build where one
+  does, and the hook refuses or calls off beside a channel with a queue whose clip has an event for case 5. NOT
+  covered: a channel subscribed and due inside one frame of the game; the hook does not walk a queue, so it
+  cannot tell an action's subscription from a queue of sound events (it refuses the more for it).
+  **(5)** Read in the fix round: `0x7de320` and the cases for ids 11, 21, 42 (quiet without an object); 20 and
+  48 .. 53 act without the action's object (20 on one it takes from the player). Not read: what they then do.
+- **(4)** The stock precedents are thinner than this account said: the stagger never plays a clip in the retail
+  game, so 'a mini animation that plays a clip on a player in ordinary play' and 'a mini animation that ends with
+  its clip' (endWithClip = 1 running to the natural end: `0x42b7f0` -> `0x595b70` -> `0x6fb600`) are READ, with no
+  stock run behind them. Left behind by such an end: `[player+0x2758]` stays 0 (read only by the mini cutscene
+  tasks); the weapon flag `[player+0x979]` set at the start (the weapon code's own, not read).
+- **(4)** Not established: whether forward was held when the climb of K2c started (section 7, 'the rig's goto and
+  the foot'; **(5)** most likely it was - the crash review reads the log the same way - and the rerun with that
+  script is K2b); the clips the mini cutscene's move task plays; **(5)** whether the player's movement kind
+  (printed in the `started` line now) tells a stand from a run on the spot.
 - READ, not seen (second version; the first had it as an assumption): the root motion of an aligned full-body
   clip moves the player whatever action started it - the channel decides, and with the collision off the
   animation movement does not step the proxy (3). ASSUMED still: that the hand-over five frames before the end
@@ -941,18 +1228,18 @@ chapter 'Withdrawal' (`Scenes\Locations\M03_A`), from the start (checkpoint 1 in
 - Not read (review N2): clip record +0x2C. 8 of the 12 added clips carry Dead Men's non-zero value (9,008 ..
   61,120); it is a per-file value with no reader found, the 67 Dead Men clips the graft had put into this build
   all have 0, and these are the first such clips a PLAYER will play. The join's rule is 'copy' (re/anmjoin.md).
-  If K2 shows a wrong pose or a fault inside the animation code, this is the first thing to zero.
+  If K2 shows a wrong pose or a fault inside the animation code, this is the first thing to zero. **(4)** The
+  first live start played such a clip (+0x2C = 0x2330) for 14 frames; its fault was not in the animation code
+  and no routine on its stack reads +0x2C.
 - For the lead (review N3): `kl_fa_climb.py apply` rewrites `big_before` in the copied `dyn.json` / `fed.json`
   so that `kl_fa_bots_dyn.check` does not fail on this step's growth (said in `climb.txt`, the old numbers are
   kept as `big_before_climb`). The reviewer would rather have that check learn of the step; the tool was not
   changed in this version.
-- ASSUMED: the player's node is at his feet (the vault's own end place is 'the player's own height' on the
-  floor; kljoin's live lines show +0x460 at floor height). `klclimb.c` takes whichever of the two is at `Floor`.
-  That the node's WORLD place is his place at all is read, not seen: `0x4af5b0` takes the proxy's place from
-  exactly that (the node through its parents, 0x7b3020), while klauto.c notes of a player's entity slot 'an
-  identity matrix: no use' (its own matrix; the parents carry the place - ASSUMED). K1's `near none of the 2
-  edge(s)` and `at the foot` lines print node, +0x460 and proxy side by side: the first thing to look at.
-- ASSUMED: row 0 of a rotation = the back (read in 0x857110, 0x619790 and the NPC mover; not seen).
+- **(4) SEEN** (it was an assumption): the player's node is at his feet on the COLLISION floor (201 on a floor
+  of 200, where +0x460 reads the mesh's 220), its world place is his place, and the proxy reads the same place
+  at rest. +0x460 is the navigation mesh's place: it stops at the mesh's edge. `klclimb.c` takes the node when
+  that is within 40 of `Floor=` - right for this wall.
+- **(4) SEEN** (it was an assumption): row 0 of a rotation = the back - `facing 1.00` while he ran at the face.
 - ASSUMED: the condition bits of Dead Men's lists (8, 0x10) mean the same in Dog Days; if not, the default
   (rifle) clip plays - every variant is a climb of the same class. (The review found the stock example: Dog
   Days' own `Fall_1m` / `Fall_2m` lists of Kane have the same pairs.)
@@ -967,4 +1254,7 @@ chapter 'Withdrawal' (`Scenes\Locations\M03_A`), from the start (checkpoint 1 in
   and what the campaign-bank map of re/campaign_fa_bank.md needs at its start); other maps (`LINES` has only
   `M03_FA_A`); finding climbable edges of a whole map by itself; a gamepad key; anything online.
 - The build stands on `z_hop\M03`, which fails this night's loot-window rule of `kl_fa_bots.check` (4.2). When
-  the loot track delivers a new bank build, run `kl_fa_climb.py apply <that> <new folder>` on it.
+  the loot track delivers a new bank build, run `kl_fa_climb.py apply <that> <new folder>` on it. **(4)** The
+  build to run is now `z_climb3\M03`, on `z_cover3\M03` (4.2b), which fails the same rule 7 times - as its base
+  does; apply the step again to whatever bank build comes next (a build that has the slots already is refused
+  if it is of the first form, left alone if it is of the new one).
