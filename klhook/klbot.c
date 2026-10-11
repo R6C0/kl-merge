@@ -183,7 +183,7 @@
  * KLHook.ini
  *   [Bots]
  *   Enable=0            1 = this file is on (then only the log; every part below has its own key)
- *   Log=1               0 none, 1 on change and every 10 s, 2 every second
+ *   Log=1               0 none, 1 on change and every 10 s, 2 every second + every loss of a bot's health in words
  *   Tune=0              1 = write the traitor tuning: Traitors=1 Limit=6.0 Retaliate=0 (0 = stock) and per level
  *                       Traitors.<1..11>= Limit.<1..11>=
  *   Backstab=0          percent per round that one bot is picked; BackstabStage=2 BackstabMoney=250000 BackstabDelay=20
@@ -333,6 +333,33 @@ static const char *klb_status(BYTE st, char tmp[12])
 
 static const char *klb_who(const struct klb_rec *r) { return !(r->flags & 1) ? "you" : r->flags & 2 ? "TRAITOR" : "bot"; }
 
+/* Log=2 (2026-10-11, the Retomoto question 'all seven bots die in the boardroom within 95-150 s, with police->crew at
+   the stock 0.01 too'): what each bot's health does, read-only. An NPC's health object is [actor+0x5fc] (set by its
+   constructor at 0x8307fb, regenerated at 0x40f24d), the same 0x28-byte object the player keeps at +0xa48 (klbalance.c
+   1 d): +0x04 health, +0x08 maximum, +0x24 the owner. A line per loss ('record 3 (bot): lost 0.6 (279.4 of 280.0)') tells
+   bullets (many small steps: 60 x 0.01 = 0.6 for a Zastava hit at the stock factor) from a blast, a fall or a kill
+   volume (one step to 0); a line at the first sight says the maximum. Nothing is written. */
+static DWORD hp_rules;
+static void klb_health_tick(const struct klb_snap *s, int fresh)
+{
+    static DWORD obj[KLB_NREC]; static float seen[KLB_NREC]; static int said[KLB_NREC];
+    int i; float raw[0x28 / 4];
+    if (fresh) { memset(obj, 0, sizeof obj); memset(seen, 0, sizeof seen); memset(said, 0, sizeof said); }
+    for (i = 0; i < s->n && i < KLB_NREC; i++) {
+        const struct klb_rec *r = &s->r[i]; DWORD h;
+        if (!r->used || !(r->flags & 1) || !r->actor) continue;
+        if (!(h = klh_rd32(r->actor + 0x5fc)) || !klh_rd(h, raw, sizeof raw) || ((DWORD *)raw)[0x24 / 4] != r->actor) continue;
+        if (!klb_finite(raw[1]) || !klb_finite(raw[2]) || raw[2] < 1 || raw[2] > 100000) continue;
+        if (h != obj[i]) {
+            obj[i] = h; seen[i] = raw[1];
+            if (!said[i]++) klog("bots: record %d (bot): health object %08lx: %.1f of %.1f", i, h, raw[1], raw[2]);
+            continue;
+        }
+        if (raw[1] < seen[i] - 0.05f) klog("bots: record %d (bot): lost %.1f (%.1f of %.1f)%s", i, seen[i] - raw[1], raw[1], raw[2], raw[1] <= 0 ? " - DOWN" : "");
+        seen[i] = raw[1];
+    }
+}
+
 static void klb_log_tick(const struct klb_snap *s, DWORD now)
 {
     static DWORD rules0, lastline, lastsay; static struct klb_rec prev[KLB_NREC]; static BYTE veh0; static DWORD state0; static int level0, dirty;
@@ -359,6 +386,8 @@ static void klb_log_tick(const struct klb_snap *s, DWORD now)
             }
         } else if (r->used && r->money != p->money) changed = 1;
     }
+    if (klb.log >= 2) klb_health_tick(s, s->rules != hp_rules);          /* Log=2: every loss of health of every bot, in words */
+    hp_rules = s->rules;
     if (s->veh != veh0 || s->state != state0 || s->level != level0) changed = 1;
     memcpy(prev, s->r, sizeof prev); veh0 = s->veh; state0 = s->state; level0 = s->level;      /* the words above are said once */
     dirty |= changed;
