@@ -62,6 +62,20 @@ class _Gdi:
         for f in ('SetBkColor', 'SetTextColor', 'GetTextMetricsW', 'GetTextFaceW', 'TextOutW', 'GetCharABCWidthsW',
                   'GetTextExtentPoint32W', 'SetBkMode', 'PatBlt'):
             getattr(g, f).argtypes = None
+        # the draft's own faces (Anton, Montserrat: open licence) are taken from <work>/fonts/*.ttf WITHOUT installing them:
+        # AddFontResourceExW(FR_PRIVATE) makes them visible to this process only. Absent files = the installed stand-ins.
+        try:
+            import glob, kl_port_check
+            for f in glob.glob(os.path.join(kl_port_check.workdir(), 'fonts', '*.ttf')):
+                g.AddFontResourceExW(f, 0x10, None)
+        except Exception:
+            pass
+
+    def has(self, face):
+        try:
+            self.font(face, 16, 400); return True
+        except ValueError:
+            return False
 
     def font(self, face, px, weight):
         """A DC with the face selected at `px` pixels (cell height = px; GDI's negative height = character
@@ -327,6 +341,19 @@ def build_font(chunk, tex, face, weight=600, scale=1.0, log=print, caps=False, c
 # name sits at which offset is ASSUMED from the elements' registrations (re/hud.md 2.2: d50 = the headline / ammo font = H1,
 # d54 = the FA list / names = H2, d58 = tracker / text display = H3, d48 = the fourth = DebugText) - klhud.c's [HUD] Font*
 # keys can re-point a role without a rebuild. face, weight, px, tracking px, chips, role (what klhud.c draws with it)
+DRAFT_SPECS_ANTON = {
+    # THE DRAFT'S OWN FACES at the draft's own sizes (1 cqw = 12.8 px): used when <work>/fonts holds Anton-Regular.ttf and Montserrat
+    # (the variable file; GDI picks the weight). Same slots / roles as DRAFT_SPECS below.
+    'H2':        ('Anton', 400, 21, 1, True,  'names, money rows, weapon count, pop-up  (draft 1.6cqw = 20.5 px, .04em)'),
+    'DebugText': ('Montserrat', 800, 12, 4, False, 'LABELS  (draft Montserrat 800 .9cqw = 11.5 px, .32em)'),
+    'H3':        ('Anton', 400, 16, 0, False, 'cash, count, reserve; stock: subtitles, tracker  (draft 1.25cqw = 16 px)'),
+    'H1':        ('Anton', 400, 33, 1, True,  'the total  (draft 2.6cqw = 33 px)'),
+    'Button':    ('Anton', 400, 17, 0, False, 'stock: button prompts'),
+    'Text':      ('Anton', 400, 21, 1, True,  'stock: general text'),
+    'Menu':      ('Anton', 400, 21, 1, True,  'stock: menus in the level'),
+    'Header':    ('Anton', 400, 27, 0, True,  'stock: headers'),
+}
+
 DRAFT_SPECS = {
     # 1:1 round (2026-10-11). The hook reaches four fonts: H1 = osd+0xd50, H2 = +0xd54, H3 = +0xd58, DebugText = +0xd5c (the property
     # order of re/hud_data.md: [0] template +0xd4c, [1..4] H1 H2 H3 DebugText; +0xd5c as DebugText is read from that order, NOT seen live).
@@ -926,7 +953,9 @@ def main():
             elif k == '--caps': kw['caps'] = True
             elif k == '--chip': kw['chip'] = float(rest.pop(0))
             elif k == '--look' and rest.pop(0) == 'deadmen':      # the owner's look of 2026-10-11
-                kw.update(face='Impact', weight=400, scale=.9, caps=True, chip=.6, extras=True, specs=DRAFT_SPECS)
+                _g = _Gdi(); _own = _g.has('Anton') and _g.has('Montserrat')
+                print('faces:', 'the draft own faces (Anton, Montserrat from <work>/fonts)' if _own else 'stand-ins (Impact, Segoe UI Black): put Anton-Regular.ttf and Montserrat into <work>/fonts for the draft own faces')
+                kw.update(face='Anton' if _own else 'Impact', weight=400, scale=.9, caps=True, chip=.6, extras=True, specs=DRAFT_SPECS_ANTON if _own else DRAFT_SPECS)
             else: raise SystemExit('unknown option ' + k)
         _out, _reps = apply(a[1], a[2], pictures=True, **kw)
         if kw.get('specs'):
