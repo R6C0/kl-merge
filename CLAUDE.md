@@ -182,6 +182,13 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+CRASH 0x686a66 READ FROM THE DUMP (kl-merge-0e, 2026-10-11 02:30; offline): the faulting object is a CPPScript::ZDefendBehaviourGoal (vtable
+0xbccf54) whose +0x04 is its CPPScript::ZSquad; the goal's +0x2c list (3 entries, array at +0x8) had been FREED while the goal still iterates
+it (first dwords overwritten, the array zeroed). No bot had died in that run (C_DM09): not a member death. Wiring census: z_route's
+Retomoto has 57 chains Defend rout -> RandomTrigger -> Defend rout of the SAME squad, z_route M02 has 48 (five clean runs), rt_full6 none;
+stock bots have the same pattern 119 times, so it is a chance race, not a forbidden shape. Untested data-side fix if it comes back: a
+TriggerDelay2 of 0.1 s between a Defend rout's arrival list and the RandomTrigger (kl_fa_bots_dyn), so the old goal finishes its tick first
+(ASSUMPTION). Until then Retomoto on the tab stays rt_full6 (no forks). Scratch readers: kl-merge-0e scratchpad goal*.py, rt_refs.py.
 BOT HEALTH LOG (kl-merge-9b, 2026-10-11 02:30; commit 1e5674f; NOT RUN): for 'all seven bots die in the boardroom' - [Bots] Log=2
 now says every loss of a bot's health ([actor+0x5fc], the NPC's 0x28-byte health object; 'record 3 (bot): lost 0.6 (279.4 of
 280.0)'): many 0.6 steps = bullets at the stock 0.01 factor, one step to 0 = blast / fall / kill volume. Builds <work>/build/klhook/
