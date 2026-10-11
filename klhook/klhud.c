@@ -133,7 +133,7 @@
 struct klu_text { DWORD obj, shadow; float x, y; int on, style; DWORD colour, want_colour; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
 
 static struct {
-    int on, log, crew, money, hide, shadow, layer, rows; float inset, crew_x, crew_y, money_x, money_y, row;
+    int on, log, crew, money, hide, shadow, layer, rows, before; float inset, crew_x, crew_y, money_x, money_y, row;
 } klu;
 
 static struct {
@@ -176,15 +176,26 @@ static int klu_draw_one(DWORD obj, void *ctx, void *cam, float x, float y)
 static DWORD klu_evt[KLU_ELEM_NSLOT + 1];     /* [0] RTTI locator, [1..] the slots */
 static volatile LONG klu_twin_said; static DWORD klu_twin_obj; static float klu_twin_pos[3]; static int klu_twin_logged;
 static volatile LONG klu_n_refused, klu_probe_busy, klu_probe_ok; static DWORD klu_probe[7];
+static DWORD klu_probe2[13];
 static int klu_evt_ready;
+
+static void klu_draw_ours(void *el, void *ctx, void *cam);
 
 static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam)
 {
     char r; int i; (void)edx;
-    r = ((char (__fastcall *)(void *, void *, void *, void *))(DWORD_PTR)KLH_VA(KLU_TIME_RENDER))(el, 0, ctx, cam);
     InterlockedIncrement(&klu_n_call);
-    if (!klu_draw_on || (DWORD)(DWORD_PTR)el != klu_r.elem) { InterlockedIncrement(&klu_n_off); return r; }
-    if (!TryEnterCriticalSection(&klu_cs)) { InterlockedIncrement(&klu_n_try); return r; }   /* the tick is changing a text: this frame goes without ours */
+    if (klu.before) klu_draw_ours(el, ctx, cam);          /* [HUD] Before=1: ours first, then the stock timer */
+    r = ((char (__fastcall *)(void *, void *, void *, void *))(DWORD_PTR)KLH_VA(KLU_TIME_RENDER))(el, 0, ctx, cam);
+    if (!klu.before) klu_draw_ours(el, ctx, cam);
+    return r;
+}
+
+static void klu_draw_ours(void *el, void *ctx, void *cam)
+{
+    int i;
+    if (!klu_draw_on || (DWORD)(DWORD_PTR)el != klu_r.elem) { InterlockedIncrement(&klu_n_off); return; }
+    if (!TryEnterCriticalSection(&klu_cs)) { InterlockedIncrement(&klu_n_try); return; }   /* the tick is changing a text: this frame goes without ours */
     if (klu_draw_on && klu_r.made && !klu_r.fault) {
         for (i = 0; i < KLU_NTEXT; i++) {
             const struct klu_text *t = &klu_r.t[i];
@@ -195,6 +206,12 @@ static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam
                 klu_probe_busy = 1;
                 klu_probe[0] = klh_rd32(t->obj + 0x30); klu_probe[1] = klh_rd32(t->obj + 0x3c); klu_probe[2] = klh_rd32(t->obj + 0x40);
                 klu_probe[3] = klh_rd32(t->obj + 0x88); klu_probe[4] = klh_rd32(t->obj + 0x60); klu_probe[5] = klh_rd32(t->obj + 0x28); klu_probe[6] = klh_rd32(t->obj + 4);
+                {   /* what the emit loop hands DrawChunk: count (+0x2a), chunk [+0x2c][0], desc dwords at [+0x30] - ours and the timer's */
+                    DWORD tobj = klh_rd32((DWORD)(DWORD_PTR)el + 0x28), o;
+                    o = t->obj; klu_probe2[0] = klh_rd32(o + 0x28); klu_probe2[1] = klh_rd32(klh_rd32(o + 0x2c)); klh_rd(klh_rd32(o + 0x30), &klu_probe2[2], 12);
+                    o = tobj;   klu_probe2[5] = klh_rd32(o + 0x28); klu_probe2[6] = klh_rd32(klh_rd32(o + 0x2c)); klh_rd(klh_rd32(o + 0x30), &klu_probe2[7], 12);
+                    klu_probe2[10] = klh_rd32(o + 0x60); klu_probe2[11] = klh_rd32(o + 0x48); klu_probe2[12] = klh_rd32(t->obj + 0x48);
+                }
                 klu_probe_ok = 1;
             }
         }
@@ -208,7 +225,6 @@ static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam
         }
     }
     LeaveCriticalSection(&klu_cs);
-    return r;
 }
 
 /* ---------------------------------------------------------------- the private vtable (main thread) */
@@ -526,6 +542,8 @@ static void klu_tick(int game_thread)
             if (klu_probe_ok) {
                 klog("hud: probe: text 8 right after its Draw: +0x30 %08lx, +0x3c %08lx, +0x40 %08lx, +0x88 %08lx, +0x60 %08lx, +0x28 %08lx, +0x04 %08lx (tick reads now: +0x30 %08lx +0x3c %08lx)",
                      klu_probe[0], klu_probe[1], klu_probe[2], klu_probe[3], klu_probe[4], klu_probe[5], klu_probe[6], klh_rd32(klu_r.t[KLU_ROWS].obj + 0x30), klh_rd32(klu_r.t[KLU_ROWS].obj + 0x3c));
+                klog("hud: probe: emit: ours count|kind %08lx chunk %08lx desc %08lx %08lx %08lx pos.x %08lx; timer's count|kind %08lx chunk %08lx desc %08lx %08lx %08lx scale %08lx pos.x %08lx",
+                     klu_probe2[0], klu_probe2[1], klu_probe2[2], klu_probe2[3], klu_probe2[4], klu_probe2[12], klu_probe2[5], klu_probe2[6], klu_probe2[7], klu_probe2[8], klu_probe2[9], klu_probe2[10], klu_probe2[11]);
                 klu_probe_ok = 0; klu_probe_busy = 0;
             }
         }
@@ -549,6 +567,7 @@ static void klu_init(void)
     klu.money = GetPrivateProfileIntA("HUD", "Money", 1, klh_ini) != 0;
     klu.hide = GetPrivateProfileIntA("HUD", "HideStock", 1, klh_ini) != 0;
     klu.shadow = GetPrivateProfileIntA("HUD", "Shadow", 1, klh_ini) != 0;
+    klu.before = (int)GetPrivateProfileIntA("HUD", "Before", 0, klh_ini);          /* 1 = our texts before the stock timer's draw (test) */
     klu.layer = (int)GetPrivateProfileIntA("HUD", "Layer", 0xd, klh_ini); if (klu.layer < 2) klu.layer = 2; if (klu.layer > 15) klu.layer = 15;
     klu.rows = (int)GetPrivateProfileIntA("HUD", "Rows", KLU_ROWS, klh_ini); if (klu.rows < 1) klu.rows = 1; if (klu.rows > KLU_ROWS) klu.rows = KLU_ROWS;
     klu.inset = klu_inif("Inset", "-1"); if (!(klu.inset > 0 && klu.inset < 0.25f)) klu.inset = -1;
