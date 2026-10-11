@@ -142,6 +142,7 @@ static struct {
     struct klu_text t[KLU_NTEXT];
 } klu_r;
 static volatile LONG klu_draw_on;             /* read by the render hook: 1 = texts exist and the round shows the HUD */
+static volatile LONG klu_n_call, klu_n_off, klu_n_branch, klu_n_try, klu_n_draw;   /* render wrapper counters (Log=2: a line every 5 s) */
 static CRITICAL_SECTION klu_cs;
 static DWORD klu_vt[KLU_OSD_NSLOT + 1];       /* [0] RTTI locator, [1..] the slots (as klchar.c's klc_vt) */
 static int klu_vt_ready;
@@ -183,14 +184,17 @@ static char __fastcall klu_render(void *osd, void *edx, void *ctx, void *cam)
 {
     char r; int i; (void)edx;
     r = ((char (__fastcall *)(void *, void *, void *, void *))(DWORD_PTR)KLH_VA(KLU_OSD_RENDER))(osd, 0, ctx, cam);
-    if (!klu_draw_on || (DWORD)(DWORD_PTR)osd != klu_r.osd || !klu_hud_branch((DWORD)(DWORD_PTR)osd, (DWORD)(DWORD_PTR)cam)) return r;
-    if (!TryEnterCriticalSection(&klu_cs)) return r;            /* the tick is changing a text: this frame goes without ours */
+    InterlockedIncrement(&klu_n_call);
+    if (!klu_draw_on || (DWORD)(DWORD_PTR)osd != klu_r.osd) { InterlockedIncrement(&klu_n_off); return r; }
+    if (!klu_hud_branch((DWORD)(DWORD_PTR)osd, (DWORD)(DWORD_PTR)cam)) { InterlockedIncrement(&klu_n_branch); return r; }
+    if (!TryEnterCriticalSection(&klu_cs)) { InterlockedIncrement(&klu_n_try); return r; }   /* the tick is changing a text: this frame goes without ours */
     if (klu_draw_on && klu_r.made && !klu_r.fault)
         for (i = 0; i < KLU_NTEXT; i++) {
             const struct klu_text *t = &klu_r.t[i];
             if (!t->on || !t->obj) continue;
             if (klu.shadow && t->shadow) klu_draw_one(t->shadow, ctx, cam, t->x + 2.0f, t->y + 2.0f);     /* 0xbbe4ec / 0xbbe4f0 = 2.0 */
             klu_draw_one(t->obj, ctx, cam, t->x, t->y);
+            InterlockedIncrement(&klu_n_draw);
         }
     LeaveCriticalSection(&klu_cs);
     return r;
@@ -347,7 +351,8 @@ static void klu_apply(void)
             fn = klh_rd32(vt + KLU_VT_TEXT);
             ((klu_set1_t)(DWORD_PTR)fn)((void *)(DWORD_PTR)t->obj, 0, (DWORD)(DWORD_PTR)t->want);
             if (klu.shadow && t->shadow) ((klu_set1_t)(DWORD_PTR)fn)((void *)(DWORD_PTR)t->shadow, 0, (DWORD)(DWORD_PTR)t->want);
-            if (klu.log >= 2) klog("hud: text %d: '%s' -> '%s'", i, t->cur, t->want);
+            if (klu.log >= 2) klog("hud: text %d: '%s' -> '%s' (obj %08lx: +0x30 %08lx, +0x14 %08lx, +0x3c %08lx, +0x84 %02x, +0x86 %02x, +0x87 %02x)", i, t->cur, t->want, t->obj,
+                                   klh_rd32(t->obj + 0x30), klh_rd32(t->obj + 0x14), klh_rd32(t->obj + 0x3c), klh_rd32(t->obj + 0x84) & 0xff, (klh_rd32(t->obj + 0x84) >> 16) & 0xff, (klh_rd32(t->obj + 0x84) >> 24) & 0xff);
             strcpy(t->cur, t->want);
         }
         if (t->want_colour != t->colour) {
@@ -490,6 +495,14 @@ static void klu_tick(int game_thread)
     if (klu_r.fault) { InterlockedExchange(&klu_draw_on, 0); klu_hide_tick(osd, 0); return; }
     InterlockedExchange(&klu_draw_on, show && klu_r.made);
     if (klu.hide && (klu.crew || klu.money)) klu_hide_tick(osd, show && klu_r.made);
+    if (klu.log >= 2) {                         /* the render wrapper's counters, every 5 s while texts exist */
+        static DWORD said;
+        if (klu_r.made && now - said >= 5000) {
+            said = now;
+            klog("hud: render: %ld calls, %ld with the HUD off / another osd, %ld not the HUD branch, %ld lock busy, %ld text draws (draw_on %ld)",
+                 InterlockedExchange(&klu_n_call, 0), InterlockedExchange(&klu_n_off, 0), InterlockedExchange(&klu_n_branch, 0), InterlockedExchange(&klu_n_try, 0), InterlockedExchange(&klu_n_draw, 0), klu_draw_on);
+        }
+    }
 }
 
 static float klu_inif(const char *key, const char *def)
