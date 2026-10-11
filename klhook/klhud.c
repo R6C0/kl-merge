@@ -157,13 +157,14 @@ static int klu_same_code(DWORD va, const BYTE *bytes, int n)
 
 /* ---------------------------------------------------------------- the render hook (any thread; reads only) */
 
-static void klu_draw_one(DWORD obj, void *ctx, void *cam, float x, float y)
-{
+static int klu_draw_one(DWORD obj, void *ctx, void *cam, float x, float y)
+{   /* -> 0 refused by the checks, 1 Draw called */
     float xform[9] = { 0, 0, 0, 0, 0, 0, 1.0f, 0, 0 };      /* what 0x7f07a0 writes: [+0x18] = 1.0, the rest 0 */
     float pos[3]; DWORD vt, fn;
     pos[0] = x; pos[1] = y; pos[2] = 0;
-    if (!obj || !klh_rd(obj, &vt, 4) || vt != KLU_TEXT_VT || !klh_rd(vt + KLU_VT_DRAW, &fn, 4) || fn != 0x5a6d40) return;
+    if (!obj || !klh_rd(obj, &vt, 4) || vt != KLU_TEXT_VT || !klh_rd(vt + KLU_VT_DRAW, &fn, 4) || fn != 0x5a6d40) return 0;
     ((klu_draw_t)(DWORD_PTR)fn)((void *)(DWORD_PTR)obj, 0, ctx, cam, xform, pos);
+    return 1;
 }
 
 /* slot 2 (Render(ctx, cam), thiscall ret 8) of the private vtable of the TIMER ELEMENT (ZFATimeDisplay at osd+0x10cc):
@@ -174,6 +175,7 @@ static void klu_draw_one(DWORD obj, void *ctx, void *cam, float x, float y)
 #define KLU_ELEM_NSLOT  11                    /* IDisplayInterface: 11 slots (re\hud.md 2.1), then RTTI */
 static DWORD klu_evt[KLU_ELEM_NSLOT + 1];     /* [0] RTTI locator, [1..] the slots */
 static volatile LONG klu_twin_said; static DWORD klu_twin_obj; static float klu_twin_pos[3]; static int klu_twin_logged;
+static volatile LONG klu_n_refused, klu_probe_busy, klu_probe_ok; static DWORD klu_probe[7];
 static int klu_evt_ready;
 
 static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam)
@@ -188,8 +190,13 @@ static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam
             const struct klu_text *t = &klu_r.t[i];
             if (!t->on || !t->obj) continue;
             if (klu.shadow && t->shadow) klu_draw_one(t->shadow, ctx, cam, t->x + 2.0f, t->y + 2.0f);     /* 0xbbe4ec / 0xbbe4f0 = 2.0 */
-            klu_draw_one(t->obj, ctx, cam, t->x, t->y);
-            InterlockedIncrement(&klu_n_draw);
+            if (klu_draw_one(t->obj, ctx, cam, t->x, t->y)) InterlockedIncrement(&klu_n_draw); else InterlockedIncrement(&klu_n_refused);
+            if (klu.log >= 2 && i == KLU_ROWS && !klu_probe_busy) {      /* text 8 as the draw left it (the tick prints it) */
+                klu_probe_busy = 1;
+                klu_probe[0] = klh_rd32(t->obj + 0x30); klu_probe[1] = klh_rd32(t->obj + 0x3c); klu_probe[2] = klh_rd32(t->obj + 0x40);
+                klu_probe[3] = klh_rd32(t->obj + 0x88); klu_probe[4] = klh_rd32(t->obj + 0x60); klu_probe[5] = klh_rd32(t->obj + 0x28); klu_probe[6] = klh_rd32(t->obj + 4);
+                klu_probe_ok = 1;
+            }
         }
         if (klu.log >= 2) {                      /* SPLIT TEST (run H1e: our Draw calls reach the frame never): the timer's OWN text object
                                                     drawn a second time at (64, 200), and our text 8 at the timer's own place + 56 down */
@@ -514,8 +521,13 @@ static void klu_tick(int game_thread)
         if (klu_r.osd && now - said >= 5000) {
             said = now;
             if (!klu_r.made) klog("hud: waiting: data %d, state ok %d, FA set shown %d, fault %d", data, state_ok, klu_fa_shown(osd), klu_r.fault);
-            klog("hud: render: %ld timer-element calls, %ld with the HUD off / another element, %ld (unused), %ld lock busy, %ld text draws (draw_on %ld)",
-                 InterlockedExchange(&klu_n_call, 0), InterlockedExchange(&klu_n_off, 0), InterlockedExchange(&klu_n_branch, 0), InterlockedExchange(&klu_n_try, 0), InterlockedExchange(&klu_n_draw, 0), klu_draw_on);
+            klog("hud: render: %ld timer-element calls, %ld with the HUD off / another element, %ld draws refused by the checks, %ld lock busy, %ld text draws (draw_on %ld)",
+                 InterlockedExchange(&klu_n_call, 0), InterlockedExchange(&klu_n_off, 0), InterlockedExchange(&klu_n_refused, 0), InterlockedExchange(&klu_n_try, 0), InterlockedExchange(&klu_n_draw, 0), klu_draw_on);
+            if (klu_probe_ok) {
+                klog("hud: probe: text 8 right after its Draw: +0x30 %08lx, +0x3c %08lx, +0x40 %08lx, +0x88 %08lx, +0x60 %08lx, +0x28 %08lx, +0x04 %08lx (tick reads now: +0x30 %08lx +0x3c %08lx)",
+                     klu_probe[0], klu_probe[1], klu_probe[2], klu_probe[3], klu_probe[4], klu_probe[5], klu_probe[6], klh_rd32(klu_r.t[KLU_ROWS].obj + 0x30), klh_rd32(klu_r.t[KLU_ROWS].obj + 0x3c));
+                klu_probe_ok = 0; klu_probe_busy = 0;
+            }
         }
     }
 }
