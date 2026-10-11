@@ -6,7 +6,9 @@
  * the one the level scripts and the heist rules themselves give - from the game's own thread. The BoardAll part
  * (2026-10-11, its key's text below) writes ONE data byte, a held bot's heist stage, as the game's own 0x5dd890 does. Full account, the reading it
  * rests on and the live checks E0..E5: re\bots_escort.md. Everything below was read in kl2.exe build 0490 for this
- * file (debug\dasm.py, 2026-10-10). NOTHING HERE HAS RUN IN THE GAME. Off unless [Bots] Enable=1 AND Escort=1 or 2.
+ * file (debug\dasm.py, 2026-10-10). THE ESCORT PART HAS RUN IN THE GAME (2026-10-11, runs E1_DM03, E3_DM01, L11_DM02:
+ * 63 orders, the release at the vehicle, the escort aboard; no fault). BoardAll HAS NOT. Off unless [Bots] Enable=1 AND
+ * (Escort=1 or 2, or BoardAll=1).
  *
  * 1. THE GAME'S MECHANISM (EXE = seen in the code)
  *    soldier = [actor + 0x77c] (set by the soldier's constructor 0x761900, `mov [edx+0x77c], esi`; the ONLY class
@@ -114,8 +116,9 @@
  *    a bot called away from a loot place drops what it does cleanly (the route chain's Defend steps do the same to
  *    looting bots, 0x686bac / 0x686df2 with the same arguments); two escorts whose places snap to the same polygon.
  *
- * TESTED OFF-GAME ONLY: both builds compile. The logic has not run against a made-up round (klbot.c had such a
- * rig; this file has none yet).
+ * NO OFF-GAME RIG: the logic has not run against a made-up round (klbot.c had such a rig; this file has none). The
+ * escort part is proven by its live runs; BoardAll by three reviews of the code against the exe only
+ * (re\boardall_review_exe.md, _code.md, _rework.md).
  *
  * KLHook.ini
  *   [Bots]
@@ -145,14 +148,22 @@
  *                       ZBoardEscapeVehicleTactic is on from stage 3 (0x4fb064) - so the bot runs to the vehicle by
  *                       itself; when the vehicle leaves, slot 194 gives every stage-3 AI the (soft) order to the
  *                       boarding place. It is what 0x5dd890 (the trigger boxes' routine) writes: max(stage, n), nothing else.
- *                       LIMITS: the vehicle waits 8 s a visit and Loot is on again at state 5 - a bot 100 m away needs
- *                       several visits, and may be held again by other loot on its way. A bot with no path to the
- *                       boarding object (the bank's yard before the drop, Retomoto's tower) only stops looting.
+ *                       LIMITS: it ACTS ONLY ONCE SOMEBODY HAS CALLED THE VEHICLE - a wait needs somebody in the exit
+ *                       trigger, and Loot lets a stage-3 bot go only while the vehicle waits. The case of runs L8 /
+ *                       L10 (the whole crew held at the clerk, the human elsewhere, no vehicle ever) is NOT touched:
+ *                       that one is the map's to solve (un-takeable money out of the bots' reach). The vehicle waits
+ *                       8 s a visit and Loot is on again at state 5 - a bot 100 m away needs several visits, and may
+ *                       be held again by other loot on its way. A bot with no path to the boarding object (the bank's
+ *                       yard before the drop, Retomoto's tower) only stops looting. 'Held' as coded is 'stands and
+ *                       earns nothing': a long route wait at stage 1 or 2 qualifies too (replay of L10 / L11: of 24
+ *                       spells of 15 s, 8 were the trap; a wrong raise only sends a bot to the vehicle early).
  *                       WHO ELSE READS STAGE 3 (five readers in all, re\boardall_review_exe.md 1): the bot's own damage
  *                       on police (x [R+0x1c] while its stage is not the human's, 0x591c00), the traitor tactic's stage
  *                       term (0x79b883), klbot.c's Backstab ('stage >= BackstabStage') and Van ('at the vehicle' =
  *                       stage 3: DO NOT COMBINE BoardAll WITH Van / VanLeftBehind), kltalk.c's 'Stage2' line.
  *   BoardAllStill=15    seconds without moving and without earning that make a bot 'held'; 0 = every bot at stage 1 or 2
+ *                       (a value that is not a plain number counts as 15). The clock starts again when the round stood
+ *                       still (no pass of this file for 1.5 s: the game window was not in front).
  *   BoardAllStage=1     0 = the byte is not written (the pass only logs whom it would free)
  *   BoardAllOrder=0     1 = a freed bot also gets ONE not-soft order to the rules' boarding place per visit (the call
  *                       the escort part makes). Off: the byte alone does it, and that place lies on the van's approach.
@@ -195,7 +206,7 @@ static struct {
     /* BoardAll: the vehicle's visits; who was ordered at which; all_raised 1 = this file wrote the byte, 2 = looked at
        (dry run / BoardAllStage=0); all_told bit 1 / 2 / 4 = a line said; where a bot stands, what it has, since when */
     int visit, was_waiting, told_nobd; int all_visit[KLB_NREC]; char all_told[KLB_NREC], all_raised[KLB_NREC], all_seen[KLB_NREC];
-    float all_pos[KLB_NREC][3]; DWORD all_money[KLB_NREC], all_since[KLB_NREC];
+    float all_pos[KLB_NREC][3]; DWORD all_money[KLB_NREC], all_since[KLB_NREC], all_actor[KLB_NREC];
 } kle_r;
 
 static float kle_dist(const float a[3], const float b[3])
@@ -241,11 +252,13 @@ static int kle_human(DWORD *player, float feet[3], float nodepos[3])
     return 1;
 }
 
+static int kle_later;                         /* kle_bot's last refusal was one that passes (asked again next pass; no escort is dropped for it) */
+
 /* Is crew record i a bot the order may be given to, now? -> 0 and why[100], or 1 with its actor, soldier and place. */
 static int kle_bot(const struct klb_snap *s, int i, DWORD *actor_, DWORD *soldier_, float pos[3], char why[100])
 {
     const struct klb_rec *r = &s->r[i]; DWORD actor = r->actor, node, soldier, fl = 0, held = 1, blk, goal, tmp; BYTE b576 = 0, raw[0x1c];
-    why[0] = 0;
+    why[0] = 0; kle_later = 0;
     if (i < 0 || i >= s->n || !r->used) { strcpy(why, "its record is gone"); return 0; }
     if (!(r->flags & 1)) { strcpy(why, "its record is not an AI member's"); return 0; }
     if (r->flags & 2) { strcpy(why, "it is a traitor"); return 0; }
@@ -260,7 +273,7 @@ static int kle_bot(const struct klb_snap *s, int i, DWORD *actor_, DWORD *soldie
     if (!(goal = klh_rd32(soldier + 0x648)) || !klh_rd(goal + 8, &tmp, 4)) { strcpy(why, "its soldier has no defend goal yet"); return 0; }
     if (tmp != 0 && tmp != 4) {               /* the defend goal RUNS: a not-soft order goes through 0x7bbf70, which pops the goal stack with no empty test */
         DWORD sb = klh_rd32(soldier + 4), se = klh_rd32(soldier + 8), g0 = 0;
-        if (!sb || se <= sb || ((se - sb) & 3) || !klh_rd(sb, &g0, 4) || !g0) { strcpy(why, "its defend goal runs but its goal stack is empty (0x7bbf70 has no test for that)"); return 0; }
+        if (!sb || se <= sb || ((se - sb) & 3) || !klh_rd(sb, &g0, 4) || !g0) { strcpy(why, "its defend goal runs but its goal stack is empty (0x7bbf70 has no test for that)"); kle_later = 1; return 0; }
     }
     if (!kle_node(node, pos, 0)) { strcpy(why, "its place cannot be read"); return 0; }
     *actor_ = actor; *soldier_ = soldier;
@@ -399,7 +412,7 @@ static void kle_release(const struct klb_snap *s, int slot, int reason, DWORD no
     e->mode = 2;
     if (waiting) {
         e->mode = 3;
-        if (r->stage >= 3) { klog("escort: record %d released (%s): it is at stage 3, the game's rules send it aboard themselves", e->rec, what); return; }
+        if (r->stage >= 3) { klog("escort: record %d released (%s): it is at stage 3, its own board tactic takes it aboard", e->rec, what); return; }
         if (!kle.board) { klog("escort: record %d released (%s): EscortBoard=0, it is left where it is", e->rec, what); return; }
         if (!kle_boarding(s->rules, bd)) { klog("escort: record %d released (%s): the boarding place cannot be read, nothing is called", e->rec, what); return; }
         k = kle_order(e, bd, got, why);
@@ -423,6 +436,9 @@ static void kle_all_track(const struct klb_snap *s, DWORD now)
     int i; DWORD node; float p[3];
     for (i = 0; i < s->n && i < KLB_NREC; i++) {
         const struct klb_rec *r = &s->r[i];
+        if (r->used && r->actor != kle_r.all_actor[i]) {                       /* another member in this record: nothing of the old one counts */
+            kle_r.all_actor[i] = r->actor; kle_r.all_seen[i] = 0; kle_r.all_raised[i] = 0; kle_r.all_told[i] = 0; kle_r.all_visit[i] = 0;
+        }
         if (!r->used || !(r->flags & 1) || r->status || !r->actor || klh_rd32(r->actor) != KLB_ACTOR_VT
             || !(node = klh_rd32(r->actor + 4)) || !kle_node(node, p, 0)) { kle_r.all_seen[i] = 0; continue; }
         if (!kle_r.all_seen[i] || kle_dist(p, kle_r.all_pos[i]) > 100.0f || r->money != kle_r.all_money[i]) {
@@ -451,11 +467,17 @@ static void kle_board_all(const struct klb_snap *s, DWORD now)
         if (!kle_r.all_raised[i]) {
             BYTE fl = 0, st = 0, cur = 3; DWORD stood;
             if (r->stage < 1 || r->stage >= 3) continue;
-            if (!kle_r.all_seen[i]) continue;                                 /* its place cannot be read: not judged */
+            if (!kle_r.all_seen[i]) {                                         /* its place cannot be read: not judged */
+                if (!(kle_r.all_told[i] & 4)) { kle_r.all_told[i] |= 4; klog("board: record %d (stage %u): the vehicle waits but its place cannot be read: it is not judged", i, r->stage); }
+                continue;
+            }
             stood = now - kle_r.all_since[i];
             if (kle.all_still && stood < kle.all_still) continue;             /* it moves or it earns: not held */
             if (kle.all_stage && !kle.dry) {
-                if (!klb_still(s, i, &fl, &st) || st || (fl & 2) || !klh_rd(r->at + 0x78, &cur, 1)) continue;      /* gone, aboard, dead or turned since the snapshot */
+                if (!klb_still(s, i, &fl, &st) || st || (fl & 2) || !klh_rd(r->at + 0x78, &cur, 1)) {            /* gone, aboard, dead or turned since the snapshot */
+                    if (!(kle_r.all_told[i] & 8)) { kle_r.all_told[i] |= 8; klog("board: record %d: its record changed since this pass read it: nothing is written", i); }
+                    continue;
+                }
                 if (cur < 3 && !klb_put8(r->at + 0x78, 3, "crew record: heist stage 3 (a bot held by loot while the vehicle waits)")) {
                     if (!(kle_r.all_told[i] & 1)) { kle_r.all_told[i] |= 1; klog("board: record %d (stage %u): the stage byte was not written: it is left alone", i, r->stage); }
                     continue;
@@ -466,13 +488,13 @@ static void kle_board_all(const struct klb_snap *s, DWORD now)
                  kle_r.all_pos[i][0], kle_r.all_pos[i][1], kle_r.all_pos[i][2], stood / 1000, r->money, s->veh,
                  !kle.all_stage ? "BoardAllStage=0, the stage is left" : kle.dry ? "heist stage WOULD be set to 3 (dry run)" : "heist stage set to 3");
         }
-        if (!kle.all_order || !have_bd || kle_r.all_visit[i] == kle_r.visit) continue;
+        if (!kle.all_order || !have_bd || kle_r.all_visit[i] == kle_r.visit || r->stage >= 3 && kle_r.all_raised[i] != 1) continue;
         if (!kle_bot(s, i, &actor, &soldier, bp, w)) {
             if (!(kle_r.all_told[i] & 2)) { kle_r.all_told[i] |= 2; klog("board: record %d: no order to the boarding place yet: %s (tried again every pass of a visit)", i, w); }
             continue;
         }
         kle_r.all_visit[i] = kle_r.visit;
-        memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier;
+        memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;      /* kle_order's 'soft' line is worded for an escort */
         k = kle_order(&t, bd, got, w);
         if (k) klog("board: record %d at (%.0f, %.0f, %.0f): %s to the boarding place (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f); visit %d of the vehicle",
                     i, bp[0], bp[1], bp[2], k == 2 ? "WOULD be sent (dry run)" : "sent", bd[0], bd[1], bd[2], got[0], got[1], got[2], kle_r.visit);
@@ -497,13 +519,21 @@ static void kle_tick(int game_thread)
         if (!kle_r.told_gate++) klog("%s: %s: nothing is done here (this part acts only on a level that is not stock)", kle.n ? "escort" : "board", why);
         return;
     }
-    if (!game_thread) { if (!toldthread++) klog("escort: the tick is not on the game's thread ([KLHook] Tick=0?): nothing is ordered"); return; }
+    if (!game_thread) { if (!toldthread++) klog("escort / board: the tick is not on the game's thread ([KLHook] Tick=0?): nothing is ordered or written"); return; }
     h = s.human >= 0 ? &s.r[s.human] : 0;
     human_in = h && h->status == 0 && kle_human(&player, hp, hn);
     waiting = s.veh == 3 || s.veh == 4;
-    if (waiting && !kle_r.was_waiting) kle_r.visit++;                         /* a new visit of the vehicle (the first is 1) */
+    if (waiting && !kle_r.was_waiting) {                                      /* a new visit of the vehicle (the first is 1) */
+        kle_r.visit++;
+        for (i = 0; i < KLB_NREC; i++) if (kle_r.all_raised[i] == 2) kle_r.all_raised[i] = 0;      /* only looked at (dry / Stage=0): judged again */
+    }
     kle_r.was_waiting = waiting;
-    if (kle.all) { kle_all_track(&s, now); if (waiting) kle_board_all(&s, now); }
+    if (kle.all) {
+        static DWORD tracked;                 /* the last pass that got here: the stillness clock is wall time, the round is not */
+        if (tracked && now - tracked > 1500) memset(kle_r.all_seen, 0, sizeof kle_r.all_seen);     /* a pass was missing (the window was not in front, the round stood still): every clock starts again */
+        tracked = KLB_T(now);
+        kle_all_track(&s, now); if (waiting) kle_board_all(&s, now);
+    }
     if (kle.n && human_in && !kle_r.told_you++)
         klog("escort: you: record %d, player %08lx, feet (%.0f, %.0f, %.0f), node (%.0f, %.0f, %.0f) - the two should agree to within a body's height", s.human, player, hp[0], hp[1], hp[2], hn[0], hn[1], hn[2]);
     if (!human_in) rel = 1;
@@ -512,7 +542,9 @@ static void kle_tick(int game_thread)
     for (i = 0; i < kle.n; i++) {
         struct kle_e *e = &kle_r.e[i];
         if (e->mode != 1 && e->mode != 2) continue;
-        if (!kle_bot(&s, e->rec, &actor, &soldier, bp, w) || actor != e->actor || soldier != e->soldier) {
+        k = kle_bot(&s, e->rec, &actor, &soldier, bp, w);
+        if (!k && kle_later) continue;                                        /* a state that passes: asked again next pass, no order meanwhile */
+        if (!k || actor != e->actor || soldier != e->soldier) {
             klog("escort: record %d dropped: %s", e->rec, w[0] ? w : "its actor is no longer the one chosen");
             k = e->mode; memset(e, 0, sizeof *e);
             if (k == 2 || !kle.refill) e->mode = 3;                           /* mode 0 = the slot may be given to another */
@@ -523,7 +555,7 @@ static void kle_tick(int game_thread)
             else kle_hold(&s, i, hp, bp, now);
         } else if (waiting && kle.board) {                                    /* released earlier; now the vehicle waits */
             e->mode = 3;
-            if (s.r[e->rec].stage >= 3) continue;                             /* the rules have sent it themselves */
+            if (s.r[e->rec].stage >= 3) continue;                             /* its own board tactic takes it (0x4fb064) */
             if (!kle_boarding(s.rules, bd)) { klog("escort: record %d (released): the vehicle waits but the boarding place cannot be read", e->rec); continue; }
             k = kle_order(e, bd, got, w);
             if (k) klog("escort: record %d (released, stage %u): the vehicle waits: %s to the boarding place (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f)", e->rec, s.r[e->rec].stage, k == 2 ? "WOULD be sent (dry run)" : "sent", bd[0], bd[1], bd[2], got[0], got[1], got[2]);
@@ -547,10 +579,19 @@ static void kle_init(void)
     kle.all = GetPrivateProfileIntA("Bots", "BoardAll", 0, klh_ini) != 0;
     kle.all_stage = GetPrivateProfileIntA("Bots", "BoardAllStage", 1, klh_ini) != 0;
     kle.all_order = GetPrivateProfileIntA("Bots", "BoardAllOrder", 0, klh_ini) != 0;
-    kle.all_still = (DWORD)klb_pos("BoardAllStill", 15, 600) * 1000;
+    {   char t[16]; int j, num = 1;           /* a value that is not a plain number is the default, not 0 = 'every bot' */
+        GetPrivateProfileStringA("Bots", "BoardAllStill", "15", t, sizeof t, klh_ini);
+        for (j = 0; t[j]; j++) if (t[j] < '0' || t[j] > '9') num = 0;
+        kle.all_still = (DWORD)(num && j ? klb_pos("BoardAllStill", 15, 600) : 15) * 1000;
+    }
+    if (kle.all && klb.van && klb.van_left) {
+        klog("board: BoardAll is OFF: [Bots] VanLeftBehind=1 takes every bot at heist stage 3 as standing at the vehicle, and BoardAll gives stage 3 to bots far from it");
+        kle.all = 0;
+    }
     kle.dry = GetPrivateProfileIntA("Bots", "EscortDry", 0, klh_ini) != 0;
-    if (kle.all) klog("board: on; BoardAll=1 Still=%lu s Stage=%d Order=%d%s: while the escape vehicle waits, an AI heister at heist stage 1 or 2 that has neither moved 1 m nor earned for that long gets heist stage 3 (one byte of its crew record: the game's loot tactic lets go, its board tactic starts)%s; Arcade only, on a level that is not the stock one of its slot",
+    if (kle.all) klog("board: on; BoardAll=1 Still=%lu s Stage=%d Order=%d%s: while the escape vehicle waits, an AI heister at heist stage 1 or 2 that has neither moved 1 m nor earned for that long %s%s; Arcade only, on a level that is not the stock one of its slot",
                       kle.all_still / 1000, kle.all_stage, kle.all_order, kle.dry ? " DRY RUN (EscortDry=1: nothing is written or called)" : "",
+                      kle.all_stage ? "gets heist stage 3 (one byte of its crew record: the game's loot tactic lets go, its board tactic starts)" : "is named in the log (BoardAllStage=0: nothing is written)",
                       kle.all_order ? " and one order to the boarding place a visit" : "");
     if (!kle.n) return;
     kle.log = klb_pos("EscortLog", 1, 2);
