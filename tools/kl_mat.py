@@ -39,7 +39,7 @@ M02_FA, M03_FA, M06_FA, M09_A, M09_B unless said otherwise)
    on SkinCloth, the Mirror / Reflection2D / Refraction2D / Fresnel / Scatter* sets).
    ASSUMPTION: a missing always-present property matters; whether the engine defaults it was
    not read. Node shapes inside a property (RSTA, TEXT, BOOL, ...) and every string value
-   (blend mode, culling, tiling) are the same in both games.
+   (blend mode, culling, tiling) are the same in both games, but for STRING_MAP's one case.
 3. Entry +0x08 feature flags = 8 * ParallaxEnabled + 16 * BumpEnabled + 64 * BumpInterpolated-
    Enabled, each read from the BOOL of that name (ENAB and VALU set): holds for 12,462 of
    12,462 Dog Days instances. Dead Men only ever sets 8 (12,190 of 12,190). Recomputed.
@@ -88,6 +88,18 @@ CLASS_MAP = {
     ('ScatterNew', 'ScatterNew'): ('Standard', 'Standard'),
 }
 FALLBACK = ('Standard', 'Standard')
+
+# Dead Men string values on a key where no stock Dog Days material has them -> the one written.
+# TEXT/TILU = MIRRORED: Dog Days' 21 levels have only '', NONE, TILED on the U axis (MIRRORED three times on
+# TILV, F04 slot 443), and how kl2.exe turns the value's name into an addressing mode was not found (the
+# reader at 0x8e7c55 hands the three strings on; 'MIRR' is nowhere in the exe). So TILED is written: the one
+# value certain to be read on U. LOOK DIFFERENCE: the picture then repeats along U where Dead Men flipped
+# every second repeat. Carried by M05_A slot 538 Locations/M05/Concrete/Concrete_Walkway_01a_M05 (three
+# stages: mapDiffuse, mapNormal, mapSpecularMask) and M01_A slot 615 Vechicles/Civil_USA_01/V_Civ_USA_01_02
+# (mapDiffuse); no other Dead Men level.
+STRING_MAP = {
+    ('TEXT', 'TILU', b'MIRRORED'): b'TILED',
+}
 
 # Row names of the surface table (.buf tail), row id = position + 1; the same in every level.
 SURFACE_DM = ('Default', 'Seabed', 'Concrete', 'PlantPink', 'Steam', 'Ceramic', 'Stone', 'StoneReflect', 'Metal',
@@ -345,7 +357,8 @@ def convert_mat_full(data, ref=None, prm=None, surface='dd', texture_ids=None):
     no_counterpart [Dead Men classes mapped by guess], added / dropped {(class, property): n},
     bump (instances that gained the bump bit), surface / surface_guess / group / group_unmapped
     {(old, new): n}, group_not_in_dd {value: n} (render groups written that no stock Dog Days
-    material has), engine_slots {old: n}, misused [slots], refs_changed."""
+    material has), engine_slots {old: n}, strings {('slot node/key', old, new): n} (STRING_MAP
+    cases written), misused [slots], refs_changed."""
     import kl_texmat as TM
     src = TM.read_mat(data)
     if not src.wide:
@@ -356,7 +369,7 @@ def convert_mat_full(data, ref=None, prm=None, surface='dd', texture_ids=None):
     rep = dict(instances=len(src.insts), classes={}, no_counterpart=[], added=collections.Counter(),
                dropped=collections.Counter(), bump=0, surface=collections.Counter(), surface_guess=collections.Counter(),
                group=collections.Counter(), group_unmapped=collections.Counter(), group_not_in_dd=collections.Counter(),
-               engine_slots=collections.Counter(),
+               engine_slots=collections.Counter(), strings=collections.Counter(),
                misused=[], refs_changed=0)
     slot_of, guessed = {}, set()
     for slot in sorted(src.insts):
@@ -394,6 +407,11 @@ def convert_mat_full(data, ref=None, prm=None, surface='dd', texture_ids=None):
                     elif c[3] and texture_ids is not None and c[3] not in texture_ids:
                         raise ValueError('material %d (%s): texture %d is not in the .TEX' % (slot, e.name, c[3]))
                 elif c[1] == STRING and c[0] != 'NAME' and c[3] not in ref.strings[(n[0], c[0])]:
+                    to = STRING_MAP.get((n[0], c[0], c[3]))
+                    if to is not None and to in ref.strings[(n[0], c[0])]:
+                        rep['strings'][('%d %s/%s' % (slot, n[0], c[0]), c[3].decode('latin1'), to.decode('latin1'))] += 1
+                        c[2], c[3] = len(to) + 1, to        # a string node's count is its length with the terminator
+                        continue
                     raise ValueError('material %d (%s): %s/%s value %r never occurs in Dog Days' % (slot, e.name, n[0], c[0], c[3]))
         f = list(e.f)
         f[1] = slot_of[new]
