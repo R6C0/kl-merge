@@ -123,12 +123,13 @@
 #define KLU_SHADOW_RGB  0x80000000u           /* [0xbbe4a4] (re\hud.md 3.1) */
 
 /* the draft's colours (ARGB; SetColour takes the RGB, the alpha byte of the object stays) */
-#define KLU_C_TEXT      0xffece8dfu
-#define KLU_C_YOU       0xff6fb3ffu
-#define KLU_C_TRAITOR   0xffe0962eu
-#define KLU_C_DEAD      0xff6a6a66u           /* the draft's 0x55ece8df needs alpha, which SetColour keeps: grey instead */
-#define KLU_C_ESCAPED   0xff7fd27au
-#define KLU_C_TOTAL     0xffe0962eu
+#define KLU_C_TEXT      0xfff3f0eau           /* chalk (the owner's draft of 2026-10-11) */
+#define KLU_C_YOU       0xff6ea3d6u           /* own row: Dead Men's blue until the painted white block can be drawn */
+#define KLU_C_TRAITOR   0xffe8831fu           /* traitor: orange */
+#define KLU_C_DEAD      0xff8c3138u           /* dead: dark faded red (the strike-through needs pictures) */
+#define KLU_C_ESCAPED   0xffa9a59du           /* escaped: greyed */
+#define KLU_C_TOTAL     0xff63a65bu           /* money: dark green, the total a shade brighter */
+#define KLU_C_MONEY     0xff4f8f49u
 
 struct klu_text { DWORD obj, shadow; float x, y; int on, style, style_done; DWORD colour, want_colour; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
 
@@ -437,7 +438,7 @@ static int klu_make_all(DWORD osd)
             int money = i >= KLU_ROWS;
             memset(t, 0, sizeof *t);
             t->style = money ? KLU_STYLE_RIGHT : KLU_STYLE_LEFT;
-            t->colour = 0; t->want_colour = money && i == KLU_ROWS ? KLU_C_TOTAL : KLU_C_TEXT;    /* colour / style are set in the render slot */
+            t->colour = 0; t->want_colour = !money ? KLU_C_TEXT : i == KLU_ROWS ? KLU_C_TOTAL : KLU_C_MONEY;    /* colour / style are set in the render slot */
             t->x = money ? klu.money_x : klu.crew_x;
             t->y = money ? klu.money_y + klu.row * (i - KLU_ROWS) : klu.crew_y + klu.row * i;
             if (!offs[i]) continue;                  /* text 11 (ROUND) has no object in this version */
@@ -456,7 +457,7 @@ static int klu_make_all(DWORD osd)
         int money = i >= KLU_ROWS;
         memset(t, 0, sizeof *t);
         t->style = money ? KLU_STYLE_RIGHT : KLU_STYLE_LEFT;
-        t->colour = money && i == KLU_ROWS ? KLU_C_TOTAL : KLU_C_TEXT;
+        t->colour = !money ? KLU_C_TEXT : i == KLU_ROWS ? KLU_C_TOTAL : KLU_C_MONEY;
         t->x = money ? klu.money_x : klu.crew_x;
         t->y = money ? klu.money_y + klu.row * (i - KLU_ROWS) : klu.crew_y + klu.row * i;
         if (!(t->obj = klu_make_obj(tmpl, font, t->style, t->colour, klu.layer, why))) { klog("hud: osd %08lx: text %d: %s; the HUD stands down for this level", osd, i, why); return 0; }
@@ -511,7 +512,7 @@ static int klu_compose(int *state_ok)
         klu_dollars(money, sizeof money, loot); snprintf(klu_r.t[KLU_ROWS + 1].want, KLU_TEXTLEN, "LOOT  %s", money);
         klu_dollars(money, sizeof money, total - loot); snprintf(klu_r.t[KLU_ROWS + 2].want, KLU_TEXTLEN, "BANKED  %s", money);
         snprintf(klu_r.t[KLU_ROWS + 3].want, KLU_TEXTLEN, "ROUND  %d", s.level);      /* byte score+0x45, clamped as every reader does (klb_read) */
-        for (i = 0; i < KLU_MONEY; i++) { klu_r.t[KLU_ROWS + i].on = klu.money; klu_r.t[KLU_ROWS + i].want_colour = i == 0 ? KLU_C_TOTAL : KLU_C_TEXT; }
+        for (i = 0; i < KLU_MONEY; i++) { klu_r.t[KLU_ROWS + i].on = klu.money; klu_r.t[KLU_ROWS + i].want_colour = i == 0 ? KLU_C_TOTAL : i == 3 ? KLU_C_TEXT : KLU_C_MONEY; }
     }
     return 1;
 }
