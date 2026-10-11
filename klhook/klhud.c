@@ -177,6 +177,7 @@ static DWORD klu_evt[KLU_ELEM_NSLOT + 1];     /* [0] RTTI locator, [1..] the slo
 static volatile LONG klu_twin_said; static DWORD klu_twin_obj; static float klu_twin_pos[3]; static int klu_twin_logged;
 static volatile LONG klu_n_refused, klu_probe_busy, klu_probe_ok; static DWORD klu_probe[7];
 static DWORD klu_probe2[13];
+static volatile LONG klu_hijack_on;           /* the tick opens the 3 s window; the render slot writes the string */
 static int klu_evt_ready;
 
 static void klu_draw_ours(void *el, void *ctx, void *cam);
@@ -185,6 +186,12 @@ static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam
 {
     char r; int i; (void)edx;
     InterlockedIncrement(&klu_n_call);
+    if (klu.hijack && klu_hijack_on) {                     /* TEST: the timer's text gets our string right before its own draw (run H1k: a
+                                                              SetText on the tick is overwritten by the timer's Update the same frame) */
+        DWORD tobj = klh_rd32((DWORD)(DWORD_PTR)el + 0x28), vt = 0;
+        if (tobj && klh_rd(tobj, &vt, 4) && vt == KLU_TEXT_VT)
+            ((klu_set1_t)(DWORD_PTR)klh_rd32(vt + KLU_VT_TEXT))((void *)(DWORD_PTR)tobj, 0, (DWORD)(DWORD_PTR)"TOTAL  $0");
+    }
     if (klu.before) klu_draw_ours(el, ctx, cam);          /* [HUD] Before=1: ours first, then the stock timer */
     r = ((char (__fastcall *)(void *, void *, void *, void *))(DWORD_PTR)KLH_VA(KLU_TIME_RENDER))(el, 0, ctx, cam);
     if (!klu.before) klu_draw_ours(el, ctx, cam);
@@ -529,11 +536,9 @@ static void klu_tick(int game_thread)
                                                            identity is the whole difference */
         static DWORD t0; DWORD tobj = klh_rd32(klu_r.elem + 0x28), vt = 0, fn;
         if (!t0) t0 = now;
-        if (tobj && klh_rd(tobj, &vt, 4) && vt == KLU_TEXT_VT && ((now - t0) % 10000) < 3000) {
-            fn = klh_rd32(vt + KLU_VT_TEXT);
-            ((klu_set1_t)(DWORD_PTR)fn)((void *)(DWORD_PTR)tobj, 0, (DWORD)(DWORD_PTR)klu_r.t[KLU_ROWS].want);
-            if (klu.log >= 2 && ((now - t0) % 10000) < 150) klog("hud: hijack: the timer's text %08lx <- '%s' (chunk now %08lx; ours %08lx)", tobj, klu_r.t[KLU_ROWS].want, klh_rd32(klh_rd32(tobj + 0x2c)), klh_rd32(klh_rd32(klu_r.t[KLU_ROWS].obj + 0x2c)));
-        }
+        InterlockedExchange(&klu_hijack_on, tobj && klh_rd(tobj, &vt, 4) && vt == KLU_TEXT_VT && ((now - t0) % 10000) < 3000);
+        if (klu_hijack_on && klu.log >= 2 && ((now - t0) % 10000) < 150) klog("hud: hijack: window open: the timer's text %08lx gets 'TOTAL  $0' in the render slot (chunk now %08lx; ours %08lx)", tobj, klh_rd32(klh_rd32(tobj + 0x2c)), klh_rd32(klh_rd32(klu_r.t[KLU_ROWS].obj + 0x2c)));
+        (void)fn;
     }
     LeaveCriticalSection(&klu_cs);
     if (klu_r.fault) { InterlockedExchange(&klu_draw_on, 0); klu_hide_tick(osd, 0); return; }
