@@ -130,10 +130,10 @@
 #define KLU_C_ESCAPED   0xff7fd27au
 #define KLU_C_TOTAL     0xffe0962eu
 
-struct klu_text { DWORD obj, shadow; float x, y; int on, style; DWORD colour, want_colour; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
+struct klu_text { DWORD obj, shadow; float x, y; int on, style, style_done; DWORD colour, want_colour; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
 
 static struct {
-    int on, log, crew, money, hide, shadow, layer, rows, before, borrow, hijack; float inset, crew_x, crew_y, money_x, money_y, row;
+    int on, log, crew, money, hide, shadow, layer, rows, before, borrow, hijack, reuse; float inset, crew_x, crew_y, money_x, money_y, row;
 } klu;
 
 static struct {
@@ -207,6 +207,13 @@ static void klu_draw_ours(void *el, void *ctx, void *cam)
         for (i = 0; i < KLU_NTEXT; i++) {
             const struct klu_text *t = &klu_r.t[i];
             if (!t->on || !t->obj) continue;
+            if (klu.reuse) {                             /* a borrowed object: the element's Tick may have rewritten it this frame */
+                DWORD vt = klh_rd32(t->obj); struct klu_text *w = (struct klu_text *)t;
+                if (vt != KLU_TEXT_VT) continue;
+                if (!w->style_done) { ((klu_set1_t)(DWORD_PTR)klh_rd32(vt + KLU_VT_STYLE))((void *)(DWORD_PTR)w->obj, 0, (DWORD)w->style); ((klu_set1_t)(DWORD_PTR)klh_rd32(vt + KLU_VT_LAYER))((void *)(DWORD_PTR)w->obj, 0, (DWORD)klu.layer); w->style_done = 1; }
+                if ((klh_rd32(w->obj + 0x14) & 0xffffff) != (w->want_colour & 0xffffff)) ((klu_set1_t)(DWORD_PTR)klh_rd32(vt + KLU_VT_COLOUR))((void *)(DWORD_PTR)w->obj, 0, w->want_colour);
+                ((klu_set1_t)(DWORD_PTR)klh_rd32(vt + KLU_VT_TEXT))((void *)(DWORD_PTR)w->obj, 0, (DWORD)(DWORD_PTR)w->want);   /* SetText compares first (0x896e6e) */
+            }
             if (klu.shadow && t->shadow) klu_draw_one(t->shadow, ctx, cam, t->x + 2.0f, t->y + 2.0f);     /* 0xbbe4ec / 0xbbe4f0 = 2.0 */
             if (klu.borrow && i == KLU_ROWS) {           /* TEST [HUD] Borrow=1 (run H1h: our desc[2] 6f45daa0 against the timer's 47e6cb80 is the
                                                             only difference at the emit): text 8 draws with the timer's text's desc[2] */
@@ -314,6 +321,29 @@ static int klu_make_all(DWORD osd)
     klu_r.parent = (DWORD)(DWORD_PTR)((void *(__fastcall *)(void *, void *))(DWORD_PTR)KLH_VA(KLU_PARENT))((void *)(DWORD_PTR)klh_rd32(tmpl + 4), 0);
     if (!klu_r.parent) { klog("hud: osd %08lx: the template %08lx has no parent node (0x598460 gave 0): no text is made", osd, tmpl); return 0; }
     klu_r.tmpl = tmpl; klu_r.font = font;
+    if (klu.reuse) {                                 /* REUSE the hidden player-list element's own text objects (run H1l: a level-made
+                                                        ZCHAROBJ draws our string; a mid-level-made one never shows): its header texts at
+                                                        +0xea8..+0xecc and +0xed0 (ZFAPlayerListDisplay::Init 0x4700c0 stores them there) */
+        static const DWORD offs[KLU_NTEXT] = { 0xea8, 0xeac, 0xeb0, 0xeb4, 0xeb8, 0xebc, 0xec0, 0xec4, 0xec8, 0xecc, 0xed0, 0 };
+        DWORD el = klh_rd32(osd + KLU_O_PLIST), evt = 0;
+        if (!el || !klh_rd(el, &evt, 4) || evt != KLU_PLIST_VT) { klog("hud: osd %08lx: no ZFAPlayerListDisplay to borrow texts from: no text is made", osd); return 0; }
+        for (i = 0; i < KLU_NTEXT; i++) {
+            struct klu_text *t = &klu_r.t[i]; DWORD o, vt = 0;
+            int money = i >= KLU_ROWS;
+            memset(t, 0, sizeof *t);
+            t->style = money ? KLU_STYLE_RIGHT : KLU_STYLE_LEFT;
+            t->colour = 0; t->want_colour = money && i == KLU_ROWS ? KLU_C_TOTAL : KLU_C_TEXT;    /* colour / style are set in the render slot */
+            t->x = money ? klu.money_x : klu.crew_x;
+            t->y = money ? klu.money_y + klu.row * (i - KLU_ROWS) : klu.crew_y + klu.row * i;
+            if (!offs[i]) continue;                  /* text 11 (ROUND) has no object in this version */
+            o = klh_rd32(el + offs[i]);
+            if (!o || !klh_rd(o, &vt, 4) || vt != KLU_TEXT_VT) { klog("hud: osd %08lx: player list +0x%lx = %08lx (vtable %08lx) is not a ZCHAROBJ: no text is made", osd, offs[i], o, vt); return 0; }
+            t->obj = o; n++;
+        }
+        if (klu.log) klog("hud: osd %08lx, %d texts BORROWED from the hidden player list %08lx (+0xea8..+0xed0; %d crew rows at (%.0f, %.0f), money box right-aligned at (%.0f, %.0f), %.0f px a row); strings / colours / styles set in the render slot",
+                          osd, n, el, klu.rows, klu.crew_x, klu.crew_y, klu.money_x, klu.money_y, klu.row);
+        return 1;
+    }
     for (i = 0; i < KLU_NTEXT; i++) {
         struct klu_text *t = &klu_r.t[i];
         int money = i >= KLU_ROWS;
@@ -383,6 +413,7 @@ static int klu_compose(int *state_ok)
 static void klu_apply(void)
 {
     int i;
+    if (klu.reuse) return;                         /* the render slot applies want / want_colour right before each draw */
     for (i = 0; i < KLU_NTEXT; i++) {
         struct klu_text *t = &klu_r.t[i]; DWORD vt, fn;
         if (!t->obj || !t->on) continue;
@@ -589,6 +620,8 @@ static void klu_init(void)
     klu.money = GetPrivateProfileIntA("HUD", "Money", 1, klh_ini) != 0;
     klu.hide = GetPrivateProfileIntA("HUD", "HideStock", 1, klh_ini) != 0;
     klu.shadow = GetPrivateProfileIntA("HUD", "Shadow", 1, klh_ini) != 0;
+    klu.reuse = (int)GetPrivateProfileIntA("HUD", "Reuse", 1, klh_ini);
+    if (klu.reuse) klu.shadow = 0;            /* 1 = borrow the hidden player list's text objects (default); 0 = create our own (never drew) */
     klu.hijack = (int)GetPrivateProfileIntA("HUD", "Hijack", 0, klh_ini);          /* 1 = the timer's own text gets our string 3 s in 10 (test) */
     klu.borrow = (int)GetPrivateProfileIntA("HUD", "Borrow", 0, klh_ini);          /* 1 = text 8 draws with the timer text's desc[2] (test) */
     klu.before = (int)GetPrivateProfileIntA("HUD", "Before", 0, klh_ini);          /* 1 = our texts before the stock timer's draw (test) */
