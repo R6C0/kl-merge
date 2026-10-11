@@ -182,6 +182,7 @@ Static reading and file statistics unless marked; none of it was tried in the ru
   Update intervals / tolerances are globals KLHook could tune (0xd35420.., after 0x4825b0 ran).
 
 ## Open work
+STATE 2026-10-11 (kl-merge-01, Fable; the owner asked for frugal work). COMMITTED 76bfdcd: kl_fa_bots_dyn FORK_GAP 0.1 s timer before every RandomTrigger (candidate fix for the 0x686a66 crash) + the step builds on the room-first gate. PASS offline, NOT RUN LIVE: <work>/build/z_route7/retomoto_full (rt_full7 + routes) and <work>/build/z_cover3/M03 (bank + cover, dyn). Installed tab stays w_tabC. kl-merge-31 runs three offline tracks (loot-held bots: kl_fa_bots.py; 0x686a66: kl_fa_bots_dyn.py; converter vs luvsic: kl_convert/kl_fa/kl_map_ai) - do not edit those files until they report. kl-merge-9b 88ad206: .WAV slim candidate <work>/build/wavslim/DM09_l (swap two files, listen) for the next Retomoto run. NEXT LIVE (owner away only): z_route7 with hp_test [Bots] Log=2, then z_cover3/M03.
 SOUND BANK SLIM (kl-merge-9b, 2026-10-11 03:05; commit 88ad206; BUILT, NOT LOADED LIVE): tools/kl_wavslim.py and
 `kl_graft.py lighten <build> <out> --load wav`: the .WAV beside the archive (the fifth large block, read whole) without
 the clips nothing in the level can play - on Retomoto 151 of F07's map sounds (sirens, traffic, machines), 27.8 -> 17.8 MB;
