@@ -305,7 +305,7 @@ def build_font(chunk, tex, face, weight=600, scale=1.0, log=print, caps=False, c
     return pack(h, recs2, tail), {tid: tex_replace(entry, rgba)}, rep
 
 
-def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, only=None, log=print, pictures=False, caps=False, chip=0.0):
+def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, only=None, log=print, pictures=False, caps=False, chip=0.0, extras=False):
     """A build (folder or zip) -> folder `dst` with the fonts replaced. Files beside the archive are copied."""
     zp, order, files, ext = open_level(src)
     fonts = fonts_of(files, ext)
@@ -325,6 +325,8 @@ def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, onl
     files[ext['.TEX']] = T.write_tex(tex)
     if pictures:
         apply_pictures(None, None, None, log, _files=(zp, order, files, ext))
+    if extras:
+        add_extras(files, ext, log)
     os.makedirs(dst, exist_ok=True)
     if os.path.abspath(dst) == os.path.abspath(os.path.dirname(zp)):
         raise ValueError('the output folder is the build\'s own')
@@ -338,7 +340,7 @@ def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, onl
     return out, reps
 
 
-def check(src, dst, log=print, pictures=False):
+def check(src, dst, log=print, pictures=False, extras=False):
     """The two builds differ only in the font chunks and their page-0 textures; every record's rectangle lies
     on its page, every char is still there. -> list of problems."""
     _z, o1, f1, e1 = open_level(src); _z2, o2, f2, e2 = open_level(dst)
@@ -346,6 +348,12 @@ def check(src, dst, log=print, pictures=False):
     if o1 != o2:
         bad.append('member order differs')
     for n in o1:
+        if extras and n == e1['.prp']:
+            a, b = Prp(f1[n]), Prp(f2[n])
+            d = [i for i, (x, y) in enumerate(zip(a.tokens, b.tokens)) if x != y]
+            if len(a.tokens) != len(b.tokens) or a.keys != b.keys or len(d) > 2 * len(EXTRAS):
+                bad.append('.prp: more than the HUD picture slots changed (%d tokens)' % len(d))
+            continue
         if n not in (e1['.prm'], e1['.TEX']) and f1[n] != f2.get(n):
             bad.append('member %s changed' % n)
     p1, p2 = G.read(f1[e1['.prm']], 'dd'), G.read(f2[e2['.prm']], 'dd')
@@ -356,12 +364,13 @@ def check(src, dst, log=print, pictures=False):
     if set(changed) - set(fonts.values()):
         bad.append('chunks other than fonts changed: %s' % sorted(set(changed) - set(fonts.values()))[:5])
     t1, t2 = T.read_tex(f1[e1['.TEX']]), T.read_tex(f2[e2['.TEX']])
-    if set(t1.tex) != set(t2.tex):
+    new_ids = set(range(EXTRA_ID, EXTRA_ID + len(EXTRAS))) if extras else set()
+    if set(t1.tex) | new_ids != set(t2.tex):
         bad.append('texture ids differ')
     allowed = set(tex_page(t1, max(r[1] for r in parse(p1.chunks[ci])[1]))[0] for ci in fonts.values())
     if pictures:
         allowed |= set(tid for slot, tid in hud_slots(f1, e1).items() if slot in PLATE_SLOTS)
-    other = [i for i in t1.tex if t1.tex[i].entry != t2.tex[i].entry and i not in allowed]
+    other = [i for i in t1.tex if i in t2.tex and t1.tex[i].entry != t2.tex[i].entry and i not in allowed and i not in new_ids]
     if other:
         bad.append('textures other than the fonts / plates changed: %s' % other[:5])
     for name, ci in fonts.items():
@@ -464,6 +473,163 @@ def build_pictures(tex, slots_ids, log=print):
         body = struct.pack('<4s4sIHHIIfI', b'ABGR', b'ABGR', _id, th, tw, 1, fl & ~0x100, sc, x20) + e[36:q] + struct.pack('<I', len(px)) + bytes(px)
         out[tid] = (struct.pack('<I', len(body) + 4) + body, kind, tw, th, px)
         log('picture slot %3d id %4d %-10s %dx%d %s -> ABGR' % (slot, tid, kind, tw, th, f1[::-1].decode('latin1')))
+    return out
+
+
+# ------------------------------------------------------------------ extra pictures for the hook's HUD (klhud.c klu_pic)
+# The owner's draft (2026-10-11) needs shapes no stock HUD picture has. They go into picture slots every stock FA
+# level leaves 0 (re/hud_data.md 2: 111..118), as NEW textures (ids from EXTRA_ID up; the .TEX holds 4096). All are
+# WHITE with the shape in the alpha channel, so klu_pic's record colour paints them (chalk, coral, orange, green, black).
+# NOT LOADED IN THE GAME: that the loader makes a sprite for a slot the stock list has 0 in is ASSUMED (it does for
+# every non-zero id); klhud.c's [HUD] PicTest is the check.
+EXTRA_ID = 3000
+EXTRAS = (            # slot, name, width, height
+    (111, 'stroke', 256, 32),     # a solid painted bar, hand-cut edge, small breaks: row blocks, pop-up bars, rules
+    (112, 'dry', 256, 32),        # the same, streaked: strike-through, bar tails
+    (113, 'dab', 32, 32),         # one brush dab: rings are drawn as dabs on a circle and empty dab by dab
+    (114, 'disc', 128, 128),      # a filled disc with a rough rim: dial backs
+    (115, 'ring', 128, 128),      # a thin broken ring: the loot ring's inner circle, dial rims
+    (116, 'dollar', 128, 128),    # '$' dragged sideways with streaks rubbed out: the loot ring
+    (117, 'frame', 256, 32),      # a thin outlined bar: magazine, loot taken, vehicle bars (fill = 'stroke' over it)
+    (118, 'box', 256, 64),        # an outlined box: the traitor pop-up
+)
+
+
+def _extra_pixels(kind, w, h):
+    import random, math
+    rnd = random.Random(w * 7 + h * 131 + sum(map(ord, kind)) * 17)
+    a = bytearray(w * h)                                   # alpha only; colour is white
+
+    def put(x, y, v):
+        if 0 <= x < w and 0 <= y < h:
+            a[y * w + x] = max(a[y * w + x], v)
+
+    def bar(x0, y0, x1, y1, streak):
+        top = [y0 + rnd.choice((0, 0, 0, 1, 1, 2)) for _ in range(w)]
+        bot = [y1 - rnd.choice((0, 0, 0, 1, 1, 2)) for _ in range(w)]
+        gaps = {rnd.randrange(x0 + 3, x1 - 3) for _ in range((x1 - x0) // (20 if streak else 42))}
+        rows = {rnd.randrange(y0 + 2, y1 - 2) for _ in range((y1 - y0) // 3)} if streak else set()
+        for y in range(y0, y1):
+            lo = x0 + rnd.choice((0, 0, 1, 2, 3)); hi = x1 - rnd.choice((0, 0, 1, 2, 3))
+            for x in range(lo, hi):
+                if x in gaps and rnd.random() < .85:
+                    continue
+                if y in rows and rnd.random() < .7 and (x // 23 + y) % 3:
+                    continue
+                if top[x] <= y < bot[x]:
+                    put(x, y, 255 if rnd.random() > .015 else 70)
+
+    cx, cy = (w - 1) / 2.0, (h - 1) / 2.0
+    if kind == 'stroke':
+        bar(2, 3, w - 2, h - 3, False)
+    elif kind == 'dry':
+        bar(2, 6, w - 2, h - 6, True)
+    elif kind == 'frame':
+        for x in range(2, w - 2):
+            for t in (0, 1):
+                if rnd.random() > .03: put(x, 6 + t, 235)
+                if rnd.random() > .03: put(x, h - 8 + t, 235)
+        for y in range(6, h - 6):
+            for t in (0, 1):
+                put(2 + t, y, 235); put(w - 4 + t, y, 235)
+    elif kind == 'box':
+        for x in range(3, w - 3):
+            for t in (0, 1, 2):
+                if rnd.random() > .04: put(x, 3 + t, 240)
+                if rnd.random() > .04: put(x, h - 6 + t, 240)
+        for y in range(3, h - 3):
+            for t in (0, 1, 2):
+                put(3 + t, y, 240); put(w - 6 + t, y, 240)
+    elif kind == 'dab':
+        for y in range(h):
+            for x in range(w):
+                d = math.hypot((x - cx) / 1.0, (y - cy) / 1.25)
+                r = 9.5 + .55 * math.sin(math.atan2(y - cy, x - cx) * 2 + 1.3)
+                if d < r:
+                    put(x, y, 255 if rnd.random() > .03 else 90)
+                elif d < r + 1:
+                    put(x, y, int(255 * (r + 1 - d)))
+    elif kind in ('disc', 'ring'):
+        R = w / 2.0 - 4
+        for y in range(h):
+            for x in range(w):
+                ang = math.atan2(y - cy, x - cx)
+                d = math.hypot(x - cx, y - cy)
+                rr = R + .45 * math.sin(ang * 7 + .4) + .3 * math.sin(ang * 17)
+                if kind == 'disc':
+                    if d < rr: put(x, y, 255)
+                    elif d < rr + 1: put(x, y, int(255 * (rr + 1 - d)))
+                else:
+                    if rr - 3.2 < d < rr and (int((ang + math.pi) * 9) % 11 or rnd.random() < .35) and rnd.random() > .04:
+                        put(x, y, 255)
+    elif kind == 'dollar':
+        gd = _Gdi().font('Impact', 96, 400)
+        _adv, _xo, _yo, gw, gh, ink = gd.glyph('$')
+        gd.close()
+        ox, oy = int(cx - gw / 2), int(cy - gh / 2)
+        rub = {rnd.randrange(0, h) for _ in range(h // 4)}
+        for yy, row in enumerate(ink):
+            y = oy + yy
+            for xx, v in enumerate(row):
+                if not v:
+                    continue
+                if y in rub and (xx // 9 + yy) % 4 != 0:
+                    v = v // 6
+                if rnd.random() < .05:
+                    v = v // 3
+                for dx in range(0, 7):                     # dragged to the right, fading
+                    put(ox + xx + dx, y, v if dx == 0 else int(v * .32 * (1 - dx / 7.0)))
+    px = bytearray(b'\xff\xff\xff\0' * (w * h))
+    px[3::4] = a
+    return px
+
+
+def add_extras(files, ext, log=print, png=None):
+    """New textures + their ids in the spare slots of every ZOnScreenDisplay2's 200-entry list. Edits files in place.
+    -> {slot: texture id}. A level that already has them (ids at EXTRA_ID..) gets the pictures re-made in place."""
+    tex = T.read_tex(files[ext['.TEX']])
+    proto = None
+    for tid in sorted(tex.tex):                            # header words of a small stock HUD picture
+        n = tex.tex[tid].name
+        if 'UI_KL2_Small_Icons_01' in n:
+            proto = tex.tex[tid].entry; break
+    if proto is None:
+        raise ValueError('no stock HUD icon to model the new records on')
+    _size, _f1, _f2, _id, _th, _tw, _mips, fl, sc, x20 = struct.unpack_from('<I4s4sIHHIIfI', proto, 0)
+    out = {}
+    for k, (slot, kind, w, h) in enumerate(EXTRAS):
+        tid = EXTRA_ID + k
+        if tid in tex.tex and 'KLMerge' not in tex.tex[tid].name:
+            raise ValueError('texture id %d is taken by %s' % (tid, tex.tex[tid].name))
+        px = _extra_pixels(kind, w, h)
+        name = ('tex:UserInterface/KLMerge_HUD_01#%s' % kind).encode('latin1') + b'\0'
+        body = struct.pack('<4s4sIHHIIfI', b'ABGR', b'ABGR', tid, h, w, 1, fl & ~0x100, sc, 0) + name + struct.pack('<I', len(px)) + bytes(px)
+        tex.tex[tid] = T.Texture(struct.pack('<I', len(body) + 4) + body)
+        out[slot] = tid
+        if png:
+            os.makedirs(png, exist_ok=True)
+            _png_rgba(os.path.join(png, 'extra_%d_%s.png' % (slot, kind)), w, h, px)
+    files[ext['.TEX']] = T.write_tex(tex)
+    # the two 200-entry lists in the .prp: an array-begin token of 200 followed by 200 integer tokens
+    p = Prp(files[ext['.prp']])
+    toks, done = p.tokens, 0
+    for i, (op, pl) in enumerate(toks):
+        if op == 0x01 and struct.unpack('<I', pl)[0] == 200 and i + 200 < len(toks):
+            run = toks[i + 1:i + 201]
+            if any(t[0] not in (0x04, 0x09) for t in run):
+                continue
+            vals = [struct.unpack('<I', t[1])[0] for t in run]
+            if sum(1 for v in vals if v) < 100 or max(vals) >= 4096:
+                continue                                   # not a HUD picture list
+            for slot, tid in out.items():
+                if vals[slot] not in (0, tid):
+                    raise ValueError('HUD picture slot %d holds %d' % (slot, vals[slot]))
+                toks[i + 1 + slot] = (run[slot][0], struct.pack('<I', tid))
+            done += 1
+    if not done:
+        raise ValueError('no 200-entry HUD picture list found in the .prp')
+    files[ext['.prp']] = p.serialize()
+    log('extras: %d pictures in slots %s (texture ids %d..%d), %d HUD list(s) updated' % (len(out), ', '.join(str(k) for k in sorted(out)), EXTRA_ID, EXTRA_ID + len(EXTRAS) - 1, done))
     return out
 
 
@@ -607,11 +773,14 @@ def main():
             elif k == '--caps': kw['caps'] = True
             elif k == '--chip': kw['chip'] = float(rest.pop(0))
             elif k == '--look' and rest.pop(0) == 'deadmen':      # the owner's look of 2026-10-11
-                kw.update(face='Impact', weight=400, scale=.9, caps=True, chip=.6)
+                kw.update(face='Impact', weight=400, scale=.9, caps=True, chip=.6, extras=True)
             else: raise SystemExit('unknown option ' + k)
         apply(a[1], a[2], pictures=True, **kw)
-        bad = check(a[1], a[2], pictures=True)
+        bad = check(a[1], a[2], pictures=True, extras=kw.get('extras', False))
         print('check:', 'PASS' if not bad else 'FAIL ' + '; '.join(bad))
+    elif cmd == 'extras':                                   # only the extra pictures, as PNGs to look at
+        zp, order, files, ext = open_level(a[1])
+        print(add_extras(files, ext, png=a[2]))
     elif cmd == 'fonts':
         kw = {}
         rest = a[3:]
