@@ -188,7 +188,7 @@
 #define KLUV_SKULL_SIZE  15.0f                 /* run V3: 'far too small' at 12 (picture 178's ink fills little of its 32 x 32) */
 #define KLUV_SKULL_GAP   2.0f                  /* between two skulls */
 #define KLUV_SKULL_LEAD  8.0f                  /* after the name (the layout's '+ 8') */
-#define KLUV_NAME_CHARW  9.0f                  /* GUESS: the mean width of one character of a name in the row's font */
+#define KLUV_NAME_CHARW     11.5f                 /* run T1 (Anton 21 px, 1 px track): 'R6KXO' is 53 px wide; was 9.0 and the first skull sat on the last letter */                  /* GUESS: the mean width of one character of a name in the row's font */
 #define KLUV_CASH_ROOM   64.0f                 /* GUESS: kept free at the row's right end for the cash ('$1.2M') */
 #define KLUV_BLOCK_UP    4.0f                  /* klhud.c klu_row: the painted block starts 4 above the text's y and is one row pitch high */
 #define KLUV_C_SKULL_ON      0xff0c0c0du       /* ink: a life he has, on the chalk block */

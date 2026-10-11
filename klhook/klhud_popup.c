@@ -562,7 +562,7 @@ static void klpu_init(void)
     klpu.frame = klu_inii("PopupFrame", 0, 0, 1); klpu.measure = klu_inii("PopupMeasure", 1, 0, 1);
     klpu.layer = klu_inii("PopupLayer", 0x17, 2, 0x18); klpu.test = klu_inii("PopupTest", 0, 0, 1); klpu.ringmode = klu_inii("RingMode", 1, 1, 2);
     klpu.traitor = klu_inii("PopupTraitor", 1, 0, 2);
-    klpu.padx = klu_inif("PopupPadX", "61.4"); klpu.pady = klu_inif("PopupPadY", "14.1"); klpu.dy = klu_inif("PopupDY", "0"); klpu.y = klu_inif("PopupY", "523");
+    klpu.padx = klu_inif("PopupPadX", "61.4"); klpu.pady = klu_inif("PopupPadY", "14.1"); klpu.dy = klu_inif("PopupDY", "4");   /* run T1: the letters sat 4 px under the bar's middle - the BAR goes 4 down */ klpu.y = klu_inif("PopupY", "523");
     klpu.ringx = klu_inif("RingX", "-1"); klpu.ringy = klu_inif("RingY", "-1");
     if (!(klpu.padx >= 0 && klpu.padx <= 400)) klpu.padx = 61.4f; if (!(klpu.pady >= 0 && klpu.pady <= 200)) klpu.pady = 14.1f;
     if (!(klpu.dy >= -200 && klpu.dy <= 200)) klpu.dy = 0;

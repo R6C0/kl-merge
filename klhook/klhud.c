@@ -519,7 +519,7 @@ static void klu_layout(void)
     klu_r.mx = klu.money_x >= 0 ? klu.money_x : 1280.0f - 1280.0f * inset;
     klu_r.wy = 720.0f * inset + 30.0f;                                       /* Dials: the watch's middle (66 at the game's inset) */
     klu_r.ry = klu.round_y >= 0 ? klu.round_y : 720.0f * inset + (klu.dials ? 72.0f : 58.0f);      /* under the clock's two lines (y, y + 28), or under the watch */
-    klu_r.my = klu.money_y >= 0 ? klu.money_y : 720.0f * inset + (klu.dials ? 100.0f : 87.0f);     /* 123 at the game's inset = the draft's 9.6 % of the width */
+    klu_r.my = klu.money_y >= 0 ? klu.money_y : 720.0f * inset + (klu.dials ? (klu.draft ? 114.0f : 100.0f) : 87.0f);   /* run T1: the 33 px total stood in the round line - 14 lower under Draft */     /* 123 at the game's inset = the draft's 9.6 % of the width */
     for (i = 0; i < KLU_NTEXT; i++) { klu_r.t[i].style = KLU_STYLE_LEFT; klu_r.t[i].want_colour = KLU_C_CHALK; }
     x0 = klu_r.cx; x1 = klu_r.cx + klu.crew_w;
     klu_r.t[KLU_T_HEAD].x = x0; klu_r.t[KLU_T_HEAD].y = klu_r.cy; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;
@@ -1193,7 +1193,7 @@ static void klu_init(void)
     klu.plates = klu_inii("Plates", klu.draft, 0, 1); klu.anchor = klu_inii("PicAnchor", 1, 0, 1); klu.left = klu_inii("LeftStyle", 0x11, 0, 255); klu.extraflags = klu_inii("ExtraFlags", 1, 0, 1); klu.pictest = klu_inii("PicTest", 0, 0, 1);
     klu.fontset = klu_inii("Fonts", klu.draft, 0, 1);       /* TYPE: roles -> fonts and the centring (needs a level baked by kl_hud.py --look deadmen from 2026-10-11) */
     {   static const char *kn[KLU_NFONT] = { "FontName", "FontBig", "FontLabel", "FontSmall" }; static const char *dflt[KLU_NFONT] = { "0xd54", "0xd50", "0xd5c", "0xd58" };
-        static const char *cn[KLU_NFONT] = { "Cap0", "Cap1", "Cap2", "Cap3" }; static const char *cd[KLU_NFONT] = { "16", "24", "9", "13" }; int fi;
+        static const char *cn[KLU_NFONT] = { "Cap0", "Cap1", "Cap2", "Cap3" }; static const char *cd[KLU_NFONT] = { "19", "30", "10", "15" }   /* the Anton / Montserrat bake of kl_hud.py (run T1) */; int fi;
         for (fi = 0; fi < KLU_NFONT; fi++) {
             char t[32]; GetPrivateProfileStringA("HUD", kn[fi], dflt[fi], t, sizeof t, klh_ini); klu.fofs[fi] = (DWORD)strtoul(t, 0, 0);
             if (klu.fofs[fi] < 0xd40 || klu.fofs[fi] > 0xd5c || (klu.fofs[fi] & 3)) klu.fofs[fi] = (DWORD)strtoul(dflt[fi], 0, 0);
