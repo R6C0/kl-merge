@@ -660,9 +660,9 @@ static void klu_init(void)
     klu.crew = GetPrivateProfileIntA("HUD", "Crew", 1, klh_ini) != 0;
     klu.money = GetPrivateProfileIntA("HUD", "Money", 1, klh_ini) != 0;
     klu.hide = GetPrivateProfileIntA("HUD", "HideStock", 1, klh_ini) != 0;
-    if (klu.reuse == 2) klu.hide = 0;            /* the player list must stay shown: its own Render draws our rows */
     klu.shadow = GetPrivateProfileIntA("HUD", "Shadow", 1, klh_ini) != 0;
     klu.reuse = (int)GetPrivateProfileIntA("HUD", "Reuse", 2, klh_ini);            /* 2 = the shown player list's pairs get our strings, the stock code draws (default); 1 = borrowed objects drawn by the hook (invisible, H1n); 0 = own objects (invisible) */
+    if (klu.reuse == 2) klu.hide = 0;            /* the player list must stay shown: its own Render draws our rows (run H1p: this line stood before the Reuse read and never fired) */
     if (klu.reuse) klu.shadow = 0;            /* 1 = borrow the hidden player list's text objects (default); 0 = create our own (never drew) */
     klu.hijack = (int)GetPrivateProfileIntA("HUD", "Hijack", 0, klh_ini);          /* 1 = the timer's own text gets our string 3 s in 10 (test) */
     klu.borrow = (int)GetPrivateProfileIntA("HUD", "Borrow", 0, klh_ini);          /* 1 = text 8 draws with the timer text's desc[2] (test) */
