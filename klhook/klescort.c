@@ -2,8 +2,9 @@
  * klescort.c - ONE OR TWO AI HEISTERS STAY NEAR THE HUMAN PLAYER and fight beside him; the others keep their routes.
  * Owner, 2026-10-10: 'the backstab helping out via being next to you', 'make the ai heisters go like with lynch or
  * someone else random every time'. Part of KLHook (included by klhook.c after klbot.c, SHIP and TEST alike).
- * NO data write and no code byte: calls of ONE game function - the soldier's own 'defend this place' order, the one
- * the level scripts and the heist rules themselves give - from the game's own thread. Full account, the reading it
+ * No code byte. The ESCORT part writes no data: calls of ONE game function - the soldier's own 'defend this place' order,
+ * the one the level scripts and the heist rules themselves give - from the game's own thread. The BoardAll part
+ * (2026-10-11, its key's text below) writes ONE data byte, a held bot's heist stage, as the game's own 0x5dd890 does. Full account, the reading it
  * rests on and the live checks E0..E5: re\bots_escort.md. Everything below was read in kl2.exe build 0490 for this
  * file (debug\dasm.py, 2026-10-10). NOTHING HERE HAS RUN IN THE GAME. Off unless [Bots] Enable=1 AND Escort=1 or 2.
  *
@@ -25,19 +26,26 @@
  *        for the place ON THE NAVIGATION MESH and stores that, or pos itself when the pathfinder has none.
  *        So the order snaps its own point: the hook needs no mesh query of its own. (ASSUMPTION for what the two
  *        virtual calls are - 'nearest polygon' and 'point on it'; the stored place is read back and logged.)
- *      - block +0x11 = 1; then: defend goal idle (state 0 or 4) -> soldier vtable +0x1b4 (0x6e49b0: every running
- *        goal is interrupted), the goal is queued (0x6cabf0, priority 150), vtable +0x50 (1); goal running and not
- *        soft2 -> 0x7bbf70 (the block is queued for a new plan); running and soft2 -> nothing more.
+ *      - block +0x11 = 1; then: defend goal idle (state 0 or 4) -> soldier vtable +0x1b4 (0x6e49b0: NOT an interrupt -
+ *        it erases the {goal, 150} queue entries of eleven behaviour goals, soldier +0x638..+0x664; re\boardall_review_exe.md
+ *        3), the goal is queued (0x6cabf0, priority 150), vtable +0x50 (1) re-selects the root; goal running and not
+ *        soft2 -> 0x7bbf70: the goal stack is popped down to its first element and that is pushed back - a running
+ *        tactic (Loot too) is cut at its yield. 0x7bbf70 has NO empty-stack test (0x5ca0bf is an int3): kle_bot asks.
+ *        Running and soft2 -> nothing more.
  *    WHO CALLS IT (38 call sites): ZDefendBehaviourGoal's run 0x686920 at 0x686bac / 0x686df2 with (place, 0, 1, 0)
  *    - this is what every Defend step of the bots' route chain does; ZDefendPlayerPosBehaviour 0x622d52 with (the
  *    nearest player's place, 0 on the first pass / 1 later, 1, 0); ZDefendNPCPos, ZDefendCurrentPos, ZMove, ZFlanking,
  *    ZLeapFrog, ZRunForHelp, ZGrenadeAttack goals the same way; the soldier's own tactics (ZAttackTarget,
  *    ZStayInCoverGoal, ZCloseInOnTarget) with (place, x, 0, 0); and - THE PRECEDENT FOR A CALL FROM OUTSIDE THE
  *    SOLDIER'S OWN SCRIPT - ZGameRulesHeist slot 194 (0x8fa6d0, the vehicle's state change) at 0x8fb04c: when the
- *    vehicle starts to WAIT (state 3 / 4) it walks the crew records exactly as this file does and, for every AI
+ *    vehicle is CALLED, LEAVES or is destroyed (state 1, 2, 5, 6: byte table 0x8fb0a0 = 0,0,1,1,0,0 - NOT while it
+ *    waits, as this file said until 2026-10-11) it walks the crew records exactly as this file does and, for every AI
  *    record (+0x79 mask 1) with heist stage >= 3 whose [actor + 0x77c] is not null:
  *        soldier->vtable[0x1b4]();  soldier->vtable[0x13c](&place, 1, 1, 0);
  *    with place = the boarding object's position + 500 along its own x axis (0x8faf72..0x8fafe6).
+ *    WHILE THE VEHICLE WAITS (state 3 / 4) a stage-3 bot is taken aboard by its own ZBoardEscapeVehicleTactic (test
+ *    0x4faf60, 'stage >= 3' at 0x4fb064), second in every soldier's tactic list (Loot is last); the running goal runs
+ *    the first tactic whose test is over 0 (0x85f8e2..0x85f933).
  *    HOW A DEFEND STEP WAITS (0x686c42..0x686ce1): for every member, until the actor's vtable +0x3d0 says yes, or
  *    [soldier + 0x4fc] != 0, or the member is within 10 or 1000 (by the goal's +0x40, not read further) of the step's place. Then the
  *    step is over and its NEXT list is triggered. So: a step whose man was sent elsewhere WAITS; a step whose man
@@ -83,7 +91,7 @@
  *         beside the human, or later on its own route.
  *    RELEASE - the escort must still board:
  *      - the vehicle WAITS (state 3 / 4; EscortUntil=1: already while it drives in): an escort at stage 3 is left
- *        alone - the rules' slot 194 has just ordered it to the boarding place itself. An escort under stage 3
+ *        alone - its own board tactic takes it to the vehicle (and slot 194 orders it when the vehicle leaves). An escort under stage 3
  *        (its chain stood still, so it never walked its last leg) gets the rules' own place by the same order with
  *        (place, 0, 1, 0): boarding object + 500 along its x axis, computed from the node data as 0x8faf72 does.
  *        Not soft, unlike the rules' call: a soft order would end the waiting step of (a) and the chain's next
@@ -103,8 +111,8 @@
  *    == soldier; the defend goal readable; the pathfinder object and its two vtable entries inside kl2.exe.
  *    NOT ESTABLISHED: what [actor + 0x576] is beyond 'this member takes orders' (a downed or ragdolled bot?); what
  *    [soldier + 0xec] is; which of the soldier's tactics move the defend block by themselves and how far; whether
- *    a bot called away from a loot place drops what it does cleanly (the rules' slot 194 does the same to bots
- *    at stage 3, with the interrupt 0x1b4 on top); two escorts whose places snap to the same polygon.
+ *    a bot called away from a loot place drops what it does cleanly (the route chain's Defend steps do the same to
+ *    looting bots, 0x686bac / 0x686df2 with the same arguments); two escorts whose places snap to the same polygon.
  *
  * TESTED OFF-GAME ONLY: both builds compile. The logic has not run against a made-up round (klbot.c had such a
  * rig; this file has none yet).
@@ -124,17 +132,30 @@
  *   EscortRefill=0      1 = an escort that died is replaced
  *   EscortRecord=-1     crew record of the first escort (a test aid); -1 = the nearest
  *   EscortLog=1         2 = also every order and every place the route chain gave
- *   BoardAll=0          1 = NOBODY IS LEFT LOOTING (2026-10-11): while the escape vehicle WAITS (state 3 / 4), every AI
- *                       heister in play under heist stage 3 gets (a) heist stage 3 written into its crew record and
- *                       (b) the order to the rules' boarding place, once per visit of the vehicle. Works without Escort.
- *                       WHY (live runs L8 / L10 / L11 on Late Night Opening): ZLootTactic (0x451920) goes on choosing
- *                       any money object in reach that is not 'taken', and one a bot cannot take (a watch behind glass
- *                       nobody opened, the watch shop's clerk) holds him for the rest of the round - six of seven stood
- *                       on the clerk for minutes. The tactic lets go only 'if the stage is 3 and the vehicle's state is
- *                       3 or 4' (re/bots_squad.md 4), and the rules send only stage-3 AI aboard (0x8fb04c): a bot
- *                       caught at stage 1 or 2 has neither. (a) is ONE data byte (record +0x78; the game only ever
- *                       raises it, 0x5dd890), (b) the call this file already makes. BoardAllStage=0: (b) alone.
- *                       ASSUMPTION: nothing else reads 'stage 3' as 'this bot went through the exit box'.
+ *   BoardAll=0          1 = NOBODY IS LEFT HELD BY LOOT (2026-10-11; reviewed re\boardall_review_exe.md, _code.md): while
+ *                       the escape vehicle WAITS (state 3 / 4), an AI heister that is HELD gets heist stage 3 written
+ *                       into its crew record. HELD = in play, no traitor, never an escort this round, at stage 1 or 2,
+ *                       and for BoardAllStill seconds it has neither moved 1 m nor earned anything.
+ *                       WHY (live runs L8 / L10 / L11 on Late Night Opening): ZLootTactic (test 0x451920) goes on
+ *                       choosing any money object within 8 m (tuning +0xc1c.., 0x8b94d0) that is not 'taken'; one a
+ *                       bot cannot take (a watch behind glass nobody opened, the watch shop's clerk) holds him for
+ *                       the rest of the round - six of seven stood on the clerk for minutes, and the tactic runs
+ *                       before the route chain's order is walked. The byte flips TWO of the game's own tests: Loot is
+ *                       off while 'stage == 3 and the vehicle's state is 3 or 4' (0x4519dc), and
+ *                       ZBoardEscapeVehicleTactic is on from stage 3 (0x4fb064) - so the bot runs to the vehicle by
+ *                       itself; when the vehicle leaves, slot 194 gives every stage-3 AI the (soft) order to the
+ *                       boarding place. It is what 0x5dd890 (the trigger boxes' routine) writes: max(stage, n), nothing else.
+ *                       LIMITS: the vehicle waits 8 s a visit and Loot is on again at state 5 - a bot 100 m away needs
+ *                       several visits, and may be held again by other loot on its way. A bot with no path to the
+ *                       boarding object (the bank's yard before the drop, Retomoto's tower) only stops looting.
+ *                       WHO ELSE READS STAGE 3 (five readers in all, re\boardall_review_exe.md 1): the bot's own damage
+ *                       on police (x [R+0x1c] while its stage is not the human's, 0x591c00), the traitor tactic's stage
+ *                       term (0x79b883), klbot.c's Backstab ('stage >= BackstabStage') and Van ('at the vehicle' =
+ *                       stage 3: DO NOT COMBINE BoardAll WITH Van / VanLeftBehind), kltalk.c's 'Stage2' line.
+ *   BoardAllStill=15    seconds without moving and without earning that make a bot 'held'; 0 = every bot at stage 1 or 2
+ *   BoardAllStage=1     0 = the byte is not written (the pass only logs whom it would free)
+ *   BoardAllOrder=0     1 = a freed bot also gets ONE not-soft order to the rules' boarding place per visit (the call
+ *                       the escort part makes). Off: the byte alone does it, and that place lies on the van's approach.
  *
  * LOG (the lines the live checks look for)
  *   escort: on; Escort=1 Far=800 Side=300 ...
@@ -145,8 +166,9 @@
  *   escort: record 3 released (the vehicle waits, state 3): sent to the boarding place (x, y, z)
  *   escort: record 3 released (you are aboard): back to its route place (x, y, z)
  *   escort: record 3 dropped: its record says dead
- *   board: record 5 (stage 1): the vehicle waits (state 3): heist stage set to 3
- *   board: record 5 at (x, y, z): sent to the boarding place (x, y, z), the game set (x, y, z); visit 1 of the vehicle
+ *   board: on; BoardAll=1 Still=15 s Stage=1 Order=0 ...
+ *   board: record 5 (stage 1) at (x, y, z): held for 41 s with $150000: the vehicle waits (state 3): heist stage set to 3
+ *   board: record 5 at (x, y, z): sent to the boarding place (x, y, z) ...; visit 1 of the vehicle      (BoardAllOrder=1)
  */
 #ifndef KLESCORT_C
 #define KLESCORT_C
@@ -159,7 +181,7 @@
 
 static struct {
     int n, dry, log, record, refill, until, stage, board; DWORD every; float far_, side, retarget;
-    int all, all_stage;                       /* BoardAll, BoardAllStage */
+    int all, all_stage, all_order; DWORD all_still;      /* BoardAll, BoardAllStage, BoardAllOrder, BoardAllStill in ms */
 } kle;
 
 struct kle_e {
@@ -170,7 +192,10 @@ struct kle_e {
 static struct {
     DWORD rules, state, round_at; int stages, picked, told_you, told_none, told_gate; char used[KLB_NREC];
     struct kle_e e[KLE_MAX];
-    int visit, was_waiting; int all_visit[KLB_NREC]; char all_told[KLB_NREC], all_raised[KLB_NREC];      /* BoardAll: the vehicle's visits, who was sent at which, whose stage this file raised */
+    /* BoardAll: the vehicle's visits; who was ordered at which; all_raised 1 = this file wrote the byte, 2 = looked at
+       (dry run / BoardAllStage=0); all_told bit 1 / 2 / 4 = a line said; where a bot stands, what it has, since when */
+    int visit, was_waiting, told_nobd; int all_visit[KLB_NREC]; char all_told[KLB_NREC], all_raised[KLB_NREC], all_seen[KLB_NREC];
+    float all_pos[KLB_NREC][3]; DWORD all_money[KLB_NREC], all_since[KLB_NREC];
 } kle_r;
 
 static float kle_dist(const float a[3], const float b[3])
@@ -233,6 +258,10 @@ static int kle_bot(const struct klb_snap *s, int i, DWORD *actor_, DWORD *soldie
     if (!(soldier = klh_rd32(actor + 0x77c)) || klh_rd32(soldier) != KLE_SOLDIER_VT || klh_rd32(soldier + 0x40) != actor) { strcpy(why, "actor +0x77c is not its ZSoldier"); return 0; }
     if (!(blk = klh_rd32(soldier + 0x64c)) || !klh_rd(blk, raw, sizeof raw) || *(DWORD *)(raw + 0x14) != soldier) { strcpy(why, "its soldier has no defend block yet"); return 0; }
     if (!(goal = klh_rd32(soldier + 0x648)) || !klh_rd(goal + 8, &tmp, 4)) { strcpy(why, "its soldier has no defend goal yet"); return 0; }
+    if (tmp != 0 && tmp != 4) {               /* the defend goal RUNS: a not-soft order goes through 0x7bbf70, which pops the goal stack with no empty test */
+        DWORD sb = klh_rd32(soldier + 4), se = klh_rd32(soldier + 8), g0 = 0;
+        if (!sb || se <= sb || ((se - sb) & 3) || !klh_rd(sb, &g0, 4) || !g0) { strcpy(why, "its defend goal runs but its goal stack is empty (0x7bbf70 has no test for that)"); return 0; }
+    }
     if (!kle_node(node, pos, 0)) { strcpy(why, "its place cannot be read"); return 0; }
     *actor_ = actor; *soldier_ = soldier;
     return 1;
@@ -387,37 +416,63 @@ static void kle_release(const struct klb_snap *s, int slot, int reason, DWORD no
     (void)now;
 }
 
-/* BoardAll: the vehicle waits - every AI heister in play under stage 3 is given stage 3 and the boarding order, once
-   per visit (the key's comment at the top says why). Escorts still held are left to kle_release.
-   The two halves are separate on purpose: the STAGE BYTE is what makes ZLootTactic let go, so it is written as soon as
-   the record is a bot's in play - it must not wait for the test 'does this actor take an order now' (a bot standing in
-   a grab may fail it); the ORDER is tried again every pass until it could be given for this visit. A bot that reached
-   stage 3 by itself is the rules' business (0x8fb04c) and is not touched. */
-static void kle_board_all(const struct klb_snap *s)
+/* BoardAll, every pass of a round: where each AI heister in play stands and what it has, and since when neither
+   has changed. Reads only. */
+static void kle_all_track(const struct klb_snap *s, DWORD now)
 {
-    int i, j, k; DWORD actor, soldier; float bp[3], bd[3], got[3]; char w[100]; struct kle_e t;
-    if (!kle_boarding(s->rules, bd)) return;
+    int i; DWORD node; float p[3];
     for (i = 0; i < s->n && i < KLB_NREC; i++) {
         const struct klb_rec *r = &s->r[i];
-        if (!r->used || !(r->flags & 1) || (r->flags & 2) || r->status || kle_r.all_visit[i] == kle_r.visit) continue;
-        if (r->stage >= 3 && !kle_r.all_raised[i]) continue;                  /* there by itself: the rules have sent it */
-        for (j = 0; j < kle.n; j++) if (kle_r.e[j].mode == 1 && kle_r.e[j].rec == i) break;
-        if (j < kle.n) continue;
-        if (r->stage < 3 && !kle_r.all_raised[i]) {
-            if (kle.all_stage && !kle.dry && !klb_put8(r->at + 0x78, 3, "crew record: heist stage 3 (the vehicle waits; ZLootTactic lets go at stage 3)")) {
-                if (!kle_r.all_told[i]++) klog("board: record %d (stage %u): the stage byte was not written: it is left alone", i, r->stage);
-                continue;
-            }
-            kle_r.all_raised[i] = 1;
-            klog("board: record %d (stage %u): the vehicle waits (state %u): %s", i, r->stage, s->veh,
+        if (!r->used || !(r->flags & 1) || r->status || !r->actor || klh_rd32(r->actor) != KLB_ACTOR_VT
+            || !(node = klh_rd32(r->actor + 4)) || !kle_node(node, p, 0)) { kle_r.all_seen[i] = 0; continue; }
+        if (!kle_r.all_seen[i] || kle_dist(p, kle_r.all_pos[i]) > 100.0f || r->money != kle_r.all_money[i]) {
+            memcpy(kle_r.all_pos[i], p, 12); kle_r.all_money[i] = r->money; kle_r.all_since[i] = now; kle_r.all_seen[i] = 1;
+        }
+    }
+}
+
+/* BoardAll: the vehicle waits - a HELD AI heister gets heist stage 3 (the key's text at the top says why and what
+   'held' is). The byte is the whole of it by default: the game's own tests then stop the loot tactic and start the
+   board tactic. BoardAllOrder=1 adds the order to the rules' boarding place, once per visit, tried again every pass
+   until kle_bot allows it. Never: a bot at stage 0 (the loot tactic is off for it, 0x4519d4, and the byte would switch
+   it ON between two visits), a bot that reached 3 by itself, a traitor, anybody who was an escort this round
+   (kle_release and the escort loop send that one), a record that changed since the snapshot. */
+static void kle_board_all(const struct klb_snap *s, DWORD now)
+{
+    int i, k, have_bd; DWORD actor, soldier; float bp[3], bd[3], got[3]; char w[100]; struct kle_e t;
+    have_bd = kle_boarding(s->rules, bd);
+    if (kle.all_order && !have_bd && kle_r.told_nobd != kle_r.visit) {
+        kle_r.told_nobd = kle_r.visit;
+        klog("board: visit %d: the boarding place cannot be read (rules +0x1e0 = %08lx): the stage is still written, nobody is ordered", kle_r.visit, klh_rd32(s->rules + 0x1e0));
+    }
+    for (i = 0; i < s->n && i < KLB_NREC; i++) {
+        const struct klb_rec *r = &s->r[i];
+        if (!r->used || !(r->flags & 1) || (r->flags & 2) || r->status || kle_r.used[i]) continue;
+        if (!kle_r.all_raised[i]) {
+            BYTE fl = 0, st = 0, cur = 3; DWORD stood;
+            if (r->stage < 1 || r->stage >= 3) continue;
+            if (!kle_r.all_seen[i]) continue;                                 /* its place cannot be read: not judged */
+            stood = now - kle_r.all_since[i];
+            if (kle.all_still && stood < kle.all_still) continue;             /* it moves or it earns: not held */
+            if (kle.all_stage && !kle.dry) {
+                if (!klb_still(s, i, &fl, &st) || st || (fl & 2) || !klh_rd(r->at + 0x78, &cur, 1)) continue;      /* gone, aboard, dead or turned since the snapshot */
+                if (cur < 3 && !klb_put8(r->at + 0x78, 3, "crew record: heist stage 3 (a bot held by loot while the vehicle waits)")) {
+                    if (!(kle_r.all_told[i] & 1)) { kle_r.all_told[i] |= 1; klog("board: record %d (stage %u): the stage byte was not written: it is left alone", i, r->stage); }
+                    continue;
+                }
+                kle_r.all_raised[i] = 1;
+            } else kle_r.all_raised[i] = 2;
+            klog("board: record %d (stage %u) at (%.0f, %.0f, %.0f): held for %lu s with $%lu: the vehicle waits (state %u): %s", i, r->stage,
+                 kle_r.all_pos[i][0], kle_r.all_pos[i][1], kle_r.all_pos[i][2], stood / 1000, r->money, s->veh,
                  !kle.all_stage ? "BoardAllStage=0, the stage is left" : kle.dry ? "heist stage WOULD be set to 3 (dry run)" : "heist stage set to 3");
         }
+        if (!kle.all_order || !have_bd || kle_r.all_visit[i] == kle_r.visit) continue;
         if (!kle_bot(s, i, &actor, &soldier, bp, w)) {
-            if (!kle_r.all_told[i]++) klog("board: record %d: no order to the boarding place yet: %s (tried again every pass of this visit)", i, w);
+            if (!(kle_r.all_told[i] & 2)) { kle_r.all_told[i] |= 2; klog("board: record %d: no order to the boarding place yet: %s (tried again every pass of a visit)", i, w); }
             continue;
         }
         kle_r.all_visit[i] = kle_r.visit;
-        memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
+        memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier;
         k = kle_order(&t, bd, got, w);
         if (k) klog("board: record %d at (%.0f, %.0f, %.0f): %s to the boarding place (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f); visit %d of the vehicle",
                     i, bp[0], bp[1], bp[2], k == 2 ? "WOULD be sent (dry run)" : "sent", bd[0], bd[1], bd[2], got[0], got[1], got[2], kle_r.visit);
@@ -439,7 +494,7 @@ static void kle_tick(int game_thread)
     kle_r.state = s.state; kle_r.stages = stages;
     if (s.state != KLB_ROUND) return;
     if (!klb_level(why)) {                    /* klbot.c section 0: nothing on a stock level, on an unknown one, or without the Steam guard */
-        if (!kle_r.told_gate++) klog("escort: %s: no escort here (it acts only on a level that is not stock)", why);
+        if (!kle_r.told_gate++) klog("%s: %s: nothing is done here (this part acts only on a level that is not stock)", kle.n ? "escort" : "board", why);
         return;
     }
     if (!game_thread) { if (!toldthread++) klog("escort: the tick is not on the game's thread ([KLHook] Tick=0?): nothing is ordered"); return; }
@@ -448,8 +503,8 @@ static void kle_tick(int game_thread)
     waiting = s.veh == 3 || s.veh == 4;
     if (waiting && !kle_r.was_waiting) kle_r.visit++;                         /* a new visit of the vehicle (the first is 1) */
     kle_r.was_waiting = waiting;
-    if (kle.all && waiting) kle_board_all(&s);
-    if (human_in && !kle_r.told_you++)
+    if (kle.all) { kle_all_track(&s, now); if (waiting) kle_board_all(&s, now); }
+    if (kle.n && human_in && !kle_r.told_you++)
         klog("escort: you: record %d, player %08lx, feet (%.0f, %.0f, %.0f), node (%.0f, %.0f, %.0f) - the two should agree to within a body's height", s.human, player, hp[0], hp[1], hp[2], hn[0], hn[1], hn[2]);
     if (!human_in) rel = 1;
     else if (s.veh >= (BYTE)kle.until && s.veh <= 5) rel = 2;
@@ -482,14 +537,21 @@ static void kle_init(void)
 {
     int v;
     memset(&kle, 0, sizeof kle); memset(&kle_r, 0, sizeof kle_r);
-    if (!klb.on) return;                      /* [Bots] Enable=0: klbot.c is off, and so is this */
+    if (!klb.on) {                            /* [Bots] Enable=0: klbot.c is off, and so is this */
+        if (GetPrivateProfileIntA("Bots", "BoardAll", 0, klh_ini) || GetPrivateProfileIntA("Bots", "Escort", 0, klh_ini) > 0)
+            klog("escort / board: [Bots] Escort or BoardAll is set but [Bots] Enable is 0: both need klbot.c's crew records, nothing is done");
+        return;
+    }
     v = (int)GetPrivateProfileIntA("Bots", "Escort", 0, klh_ini);
     kle.n = v < 0 ? 0 : v > KLE_MAX ? KLE_MAX : v;
     kle.all = GetPrivateProfileIntA("Bots", "BoardAll", 0, klh_ini) != 0;
     kle.all_stage = GetPrivateProfileIntA("Bots", "BoardAllStage", 1, klh_ini) != 0;
+    kle.all_order = GetPrivateProfileIntA("Bots", "BoardAllOrder", 0, klh_ini) != 0;
+    kle.all_still = (DWORD)klb_pos("BoardAllStill", 15, 600) * 1000;
     kle.dry = GetPrivateProfileIntA("Bots", "EscortDry", 0, klh_ini) != 0;
-    if (kle.all) klog("board: on; BoardAll=1 BoardAllStage=%d%s: while the escape vehicle waits, every AI heister in play under heist stage 3 gets %sthe order to the boarding place (%08x), once per visit; Arcade only, on a level that is not the stock one of its slot",
-                      kle.all_stage, kle.dry ? " DRY RUN (EscortDry=1: nothing is written or called)" : "", kle.all_stage ? "heist stage 3 (one byte of its crew record) and " : "", KLE_ORDER);
+    if (kle.all) klog("board: on; BoardAll=1 Still=%lu s Stage=%d Order=%d%s: while the escape vehicle waits, an AI heister at heist stage 1 or 2 that has neither moved 1 m nor earned for that long gets heist stage 3 (one byte of its crew record: the game's loot tactic lets go, its board tactic starts)%s; Arcade only, on a level that is not the stock one of its slot",
+                      kle.all_still / 1000, kle.all_stage, kle.all_order, kle.dry ? " DRY RUN (EscortDry=1: nothing is written or called)" : "",
+                      kle.all_order ? " and one order to the boarding place a visit" : "");
     if (!kle.n) return;
     kle.log = klb_pos("EscortLog", 1, 2);
     kle.record = (int)GetPrivateProfileIntA("Bots", "EscortRecord", -1, klh_ini); if (kle.record >= KLB_NREC) kle.record = -1;

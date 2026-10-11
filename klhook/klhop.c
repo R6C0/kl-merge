@@ -55,8 +55,9 @@
  *    holds, 0, 1, 0), the arguments of a Defend step, the call klescort.c makes (its tests, its helper
  *    kle_callable). The place is the soldier's own: nothing of the route is chosen here.
  *    And without either: on the bank the landing places are inside the level exit box, which gives the bot heist
- *    stage 3 and calls the escape vehicle; when the vehicle starts to wait the game's rules themselves order every
- *    AI record of stage 3 to the boarding place (slot 194, 0x8fb04c: klescort.c section 1).
+ *    stage 3 and calls the escape vehicle; while the vehicle waits a stage-3 bot boards by its own board tactic
+ *    (0x4fb064), and when it is called or leaves the game's rules order every AI record of stage 3 to the boarding
+ *    place (slot 194, 0x8fb04c, vehicle states 1 / 2 / 5 / 6: klescort.c section 1).
  *
  * KLHook.ini
  *   [CrewHop]

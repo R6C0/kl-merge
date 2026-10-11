@@ -28,7 +28,11 @@
  *         +0x0c  the player -> an NPC that is not Ally         0x7c1ba0   (YOU hitting police)
  *         +0x10  an Ally NPC -> the player                     0x8b8050   (a heister - a traitor - hitting YOU)
  *         +0x14  the player -> an Ally NPC                     0x7c1ba0   (YOU hitting a heister / a traitor)
- *         +0x1c  times this when an NPC hits an Ally NPC whose heist stage differs from the player's (0x591c1d)
+ *         +0x1c  times this when the SHOOTER is an Ally NPC whose heist stage differs from the player's (0x591be4..0x591c1d:
+ *                the routine's argument - the one whose team picked +0x00 or +0x04 above - is looked up as a crew record,
+ *                0x78f470, and its stage compared with the local player's, 0x6c7700): an AI heister that is not at your
+ *                stage hits police at 0.5 .. 0.1 of his damage. Until 2026-10-11 this line had shooter and victim swapped
+ *                (re\boardall_review_exe.md 1, re-read in the code by the lead).
  *       As the tuning object's constructor writes them (0x524050, emulated: re\balance.md 2):
  *         level        1     2     3     4     5     6     7     8     9    10    11
  *         +0x00     0.01  0.05   0.1  0.15   0.2  0.25   0.3  0.35   0.4  0.45   0.5
@@ -64,7 +68,8 @@
  *       Ramp=1 (default): the stock ramp still counts where it is HARDER than the dial - damage you and your crew
  *       take is max(dial, stock), damage dealt to the police is min(dial, stock) - so a late Arcade level is never
  *       easier than stock. Ramp=0: the dial's numbers on every level. YouToCrew is always the dial's number.
- *       NOT written: +0x1c (police hurt a heister less while he is at another heist stage than you) and +0x18
+ *       NOT written: +0x1c (a heister at another heist stage than you hits police at 0.5 .. 0.1 - so with you outside
+ *       and the crew inside, 'CrewToCop 1.0' is really 0.5; a key for it is owed) and +0x18
  *       (klbot.c's Retaliate).
  *    b. THE PLAYER'S HEALTH. The tuning block is read when the player object is made, before this hook knows the
  *       level; so the LIVE health object is written instead: H = [player+0xa48] of the local player (ZFFPlayer,

@@ -76,7 +76,7 @@ all the same kinda risk and how the traitors could be".
 | R+0x10 | 0x8b8050 | an Ally NPC hits the player: **heister / traitor -> you** |
 | R+0x14 | 0x7c1ba0 | the player hits an Ally NPC: **you -> heister / traitor** |
 | R+0x18 | 0x6a1c40 | damage you may do to a bot before it turns on you (klbot.c's Retaliate) |
-| R+0x1c | 0x591c1d | times this when an NPC hits an Ally NPC whose heist stage (record +0x78) is not the player's: 0.5 .. 0.1 |
+| R+0x1c | 0x591be4..0x591c1d | times this when the SHOOTER is an Ally NPC (an AI heister) whose heist stage (record +0x78) is not the player's: 0.5 .. 0.1. Corrected 2026-10-11: this row had shooter and victim swapped; the routine's argument is the one whose team picks R+0x00 / R+0x04 above, and it is that actor's crew record (0x78f470) whose stage is compared with the local player's (0x6c7700). So a crew that is inside while you are outside hits police at half strength on Arcade levels 1-3 |
 
   Team = `[[actor+0x54]+4]`, enum TEAM: Mercenary 0, Enemy 1, **Ally 2**, Enemy2 4. A traitor bot stays team Ally,
   so R+0x10 / R+0x14 are also 'a traitor on you' and 'you on a traitor'.

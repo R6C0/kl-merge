@@ -29,7 +29,8 @@
  *                             code). OFF by default
  *   klbot.c        x     x    the AI crew's log and the backstab / bribe / leave / van rules ([Bots]). OFF by default
  *   klescort.c     x     x    one or two AI heisters stay near the human ([Bots] Escort; calls 0x760e50, the soldier's own
- *                             'defend this place' order; no data, no code). OFF by default
+ *                             'defend this place' order; no data, no code) and [Bots] BoardAll (ONE data byte: a bot
+ *                             held by loot gets heist stage 3 while the vehicle waits). OFF by default
  *   klhop.c        x     x    an AI heister that stands at a place the mesh does not carry it over is put beyond it
  *                             ([CrewHop], KLJoin.ini; calls 0x62a900 through klcrew_rt.c's functions, with Reorder
  *                             0x760e50; no data, no code). OFF by default
