@@ -9,7 +9,11 @@
  * OFF unless [HUD] Enable=1. Live checks and what is assumed: re\hud_hook.md.
  *
  * 1. HOW THE GAME DRAWS ITS HUD (re\hud.md 0, 1, 3; EXE)
- *    osd = [0x154da50], the active ZOnScreenDisplay2 (vtable 0xbbe504, 119 slots). The renderer calls its vtable
+ *    osd = the active ZOnScreenDisplay2 (vtable 0xbbe504, 119 slots). NOT [0x154da50]: that global is the class's
+ *    static property pair registered by RTP at 0xaedb48 (setter 0x47d800; run H1_stock read 0x54 there). The
+ *    instances are found by their vtable in the committed private memory, as klauto.c finds the players (klu_find_osd);
+ *    the active one is the candidate whose ZFAPlayerListDisplay (+0x10c4) is real and whose transform (+0x1130+0x1c)
+ *    the HUD render has written (1280 x 720). The renderer calls its vtable
  *    slot 55 = 0x558370 Render(ctx, cam) (thiscall, ret 8): `if ([0xce2e9c] == 0) return; id = [cam+0x14c]; if
  *    ([osd+0x1220] && id == [osd+0x1220]) -> 0x64f930 (MenuCam); if (id == [osd+0x121c]) -> 0x4deda0; if (id ==
  *    [osd+0x1210]) -> 0x4942f0; else 0x8bf300(osd, ctx, cam)` = the HUD: it updates every element and draws every
@@ -32,7 +36,7 @@
  *    b. THE TEXTS: made once per OSD instance on the game's main thread through the exact path of 1 (the create
  *       slot of the template must be 0x817810, every routine's first bytes are compared before it is called);
  *       never freed by the hook - ASSUMPTION (re\hud.md 6.4): the scene owns children made by +0x19c and frees
- *       them with the level, as it frees the elements' own texts. A new [0x154da50] or a new scene name = a new
+ *       them with the level, as it frees the elements' own texts. A new OSD object or a new scene name = a new
  *       set. Each row is a pair (shadow, text). SetText / SetColour are called from the main-thread tick only when
  *       the string / colour changed (the stock elements do the same in their Tick); the render hook only calls
  *       Draw, under a critical section it TRIES (a busy lock skips the frame, never waits).
@@ -75,7 +79,7 @@
 #ifndef KLHUD_C
 #define KLHUD_C
 
-#define KLU_OSD_PTR     0x0154da50u           /* the active ZOnScreenDisplay2 (re\hud.md 1: slot 12 0x70b140 returns it; written by 0x47d710) */
+#define KLU_OSD_PTR     0x0154da50u           /* NOT the instance (run H1_stock read 0x54): the class's static property pair, setter 0x47d800 registered at 0xaedb48. Unused. */
 #define KLU_OSD_VT      0x00bbe504u           /* ZOnScreenDisplay2 (re\hud.md 1) */
 #define KLU_OSD_NSLOT   119                   /* slots 0..118 (debug\vtfuncs.py ZOnScreenDisplay2: 119 code pointers, then RTTI) */
 #define KLU_OSD_RENDER  0x00558370u           /* slot 55 Render(ctx, cam) (re\hud.md 1; section 1 above) */
@@ -390,6 +394,53 @@ static void klu_reset(const char *why, DWORD osd)
     LeaveCriticalSection(&klu_cs);
 }
 
+/* ---------------------------------------------------------------- finding the OSD (main thread) */
+static DWORD klu_cand[4]; static int klu_ncand, klu_scan_fails; static DWORD klu_scan_t;
+
+static int klu_find_osd(void)
+{   /* every ZOnScreenDisplay2 (stock vtable, or ours once wrapped) in the committed private read-write memory, as
+       klauto.c's kla_find_players: 0.1 - 0.3 s on the main thread, so at most every 2 s, and every 15 s after three
+       scans of a scene found no usable one (a campaign level, the menus). */
+    MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; static BYTE buf[0x10000]; DWORD t0 = GetTickCount();
+    DWORD mine = (DWORD)(DWORD_PTR)&klu_vt[1];
+    if (klu_scan_t && t0 - klu_scan_t < (klu_scan_fails < 3 ? 2000u : 15000u)) return klu_ncand;
+    klu_ncand = 0;
+    while ((DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
+        if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
+            SIZE_T o, k;
+            for (o = 0; o < mbi.RegionSize; o += sizeof buf) {
+                SIZE_T n = mbi.RegionSize - o < sizeof buf ? mbi.RegionSize - o : sizeof buf;
+                if (!klh_rd((DWORD_PTR)mbi.BaseAddress + o, buf, n)) continue;
+                for (k = 0; k + 4 <= n; k += 8) {
+                    DWORD v = *(DWORD *)(buf + k);
+                    if ((v == KLU_OSD_VT || (klu_vt_ready && v == mine)) && klu_ncand < 4) klu_cand[klu_ncand++] = (DWORD)((DWORD_PTR)mbi.BaseAddress + o + k);
+                }
+            }
+        }
+        a = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
+    }
+    klu_scan_t = GetTickCount();
+    if (klu.log > 1 || (klu.log && klu_ncand)) klog("hud: %d ZOnScreenDisplay2 object(s) found in %lu ms", klu_ncand, klu_scan_t - t0);
+    return klu_ncand;
+}
+
+static DWORD klu_current_osd(void)
+{   /* the OSD held, while it still is one; else the candidate that has the FA player list element and whose
+       transform the HUD render has written (1280 x 720): only one instance is rendered per frame. 0 = none yet. */
+    DWORD vt, mine = (DWORD)(DWORD_PTR)&klu_vt[1]; float wh[2]; int i;
+    if (klu_r.osd && klh_rd(klu_r.osd, &vt, 4) && (vt == KLU_OSD_VT || (klu_vt_ready && vt == mine))) return klu_r.osd;
+    if (!klu_find_osd()) { klu_scan_fails++; return 0; }
+    for (i = 0; i < klu_ncand; i++) {
+        DWORD el, evt;
+        if (!(el = klh_rd32(klu_cand[i] + KLU_O_PLIST)) || !klh_rd(el, &evt, 4) || evt != KLU_PLIST_VT) continue;
+        if (!klh_rd(klu_cand[i] + KLU_O_XFORM + 0x1c, wh, 8) || wh[0] != 1280.0f || wh[1] != 720.0f) continue;
+        klu_scan_fails = 0;
+        return klu_cand[i];
+    }
+    klu_scan_fails++;
+    return 0;
+}
+
 static void klu_tick(int game_thread)
 {
     static DWORD last; static int toldthread;
@@ -400,12 +451,18 @@ static void klu_tick(int game_thread)
         if (!toldthread++) klog("hud: the tick is not on the game's thread ([KLHook] Tick=0?): the HUD does nothing");
         return;
     }
-    osd = klh_rd32((DWORD_PTR)KLH_VA(KLU_OSD_PTR));
     if (!klh_scene(scene, sizeof scene)) scene[0] = 0;
-    if (osd != klu_r.osd || strcmp(scene, klu_r.scene)) {
+    if (strcmp(scene, klu_r.scene)) {
         /* the old OSD is not touched (it went with its level; its hidden element went with it) */
-        klu_reset(osd != klu_r.osd ? "[0x154da50] changed" : "the scene changed", osd);
+        klu_reset("the scene changed", 0);
         snprintf(klu_r.scene, sizeof klu_r.scene, "%s", scene);
+        klu_scan_fails = 0; klu_scan_t = 0;
+    }
+    osd = scene[0] ? klu_current_osd() : 0;
+    if (osd != klu_r.osd) {
+        klu_reset("the OSD object changed", osd);
+        snprintf(klu_r.scene, sizeof klu_r.scene, "%s", scene);
+        if (osd && klu.log) klog("hud: osd %08lx (ZOnScreenDisplay2 with the FA player list at %08lx)", osd, klh_rd32(osd + KLU_O_PLIST));
     }
     if (!osd || !scene[0] || klu_r.fault) { InterlockedExchange(&klu_draw_on, 0); return; }
     /* live and drawing: the transform 0x8bf300 writes every HUD frame says 1280 x 720 (re\hud.md 4.1) */

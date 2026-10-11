@@ -48,6 +48,13 @@ not read; **not established** = unknown.
 
 ## 1. ZOnScreenDisplay2 (vtable 0xbbe504, instance 0x1230 bytes)
 
+> CORRECTION 2026-10-11 06:40 (kl-merge-3e, after run H1_stock): `[0x154da50]` is NOT the OSD instance. Slot 12
+> (0x70b140) and slot 13 (0x43e330) read the pair `[0x154da50]` / `[0x154da54]`, whose only writer is the two-argument
+> setter 0x47d800, registered by the class's RTP registration at 0xaedb48 (size 0x1230, base `ZSTDOBJ`, type id
+> 0x200483): a STATIC property pair of the class. Live it held 0x54 during a load and nothing drew. The hook now finds
+> the instances by their vtable 0xbbe504 in the committed private memory (klhud.c `klu_find_osd`, the players' scan of
+> klauto.c) and takes the one whose +0x10c4 is a ZFAPlayerListDisplay and whose +0x1130+0x1c reads 1280 x 720.
+
 Stored fields (property records at 0xd0ba74..0xd0b9c0, each {next, name=0, filter=1, handler, member
 offset}; established):
 

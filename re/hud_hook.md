@@ -101,3 +101,14 @@ Plates (UI_White tinted) behind the blocks: DrawChunk's 0x34-byte descriptor and
 established in detail (re/hud.md 3.2) and a wrong one is a crash in the renderer. Strike-through / translucent dead
 rows (SetColour keeps the alpha). Moving the stock timer or any other element. The ammo panel. FA online
 (klb_read is Arcade only). Localised labels (TOTAL / LOOT / BANKED / ROUND are English constants, not .LOC keys).
+
+## Run H1_stock (kl-merge-31, 2026-10-11 06:27) and the fix
+
+Hook hud_test, stock Subway, [HUD] Enable=1 Log=2, 150 s: NO fault, NO new HUD. Log: 'hud: on', then 'hud: osd 00000054 is
+over (the scene changed)' during the load, then nothing. `[0x154da50]` is not the OSD instance (re/hud.md 1, correction):
+it read 0x54. FIX (this commit): the OSD is found by a memory scan for its vtable (klu_find_osd / klu_current_osd; 0.1-0.3 s
+on the main thread, at most every 2 s, every 15 s after three empty scans of a scene) and the hook logs 'hud: N
+ZOnScreenDisplay2 object(s) found in M ms' and 'hud: osd XXXXXXXX (ZOnScreenDisplay2 with the FA player list at YYYYYYYY)'.
+Builds: <work>/build/klhook/hud_ship2 (e8344ec6) / hud_test2 (f2a2c40c). Check H1 again with hud_test2. The 'tick is not on
+the game's thread' line is said once about the first fallback ticks and is NOT a latch (the part goes on when the main loop
+drives).
