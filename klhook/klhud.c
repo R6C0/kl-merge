@@ -337,9 +337,11 @@ static int klu_make_all(DWORD osd)
             t->y = money ? klu.money_y + klu.row * (i - KLU_ROWS) : klu.crew_y + klu.row * i;
             if (!offs[i]) continue;                  /* text 11 (ROUND) has no object in this version */
             o = klh_rd32(el + offs[i]);
-            if (!o || !klh_rd(o, &vt, 4) || vt != KLU_TEXT_VT) { klog("hud: osd %08lx: player list +0x%lx = %08lx (vtable %08lx) is not a ZCHAROBJ: no text is made", osd, offs[i], o, vt); return 0; }
+            if (!o || !klh_rd(o, &vt, 4) || vt != KLU_TEXT_VT) { klog("hud: osd %08lx: player list +0x%lx = %08lx (vtable %08lx) is not a ZCHAROBJ: text %d goes without (run H1m: +0xed0 is one)", osd, offs[i], o, vt, i); continue; }
+            if (klu.log >= 2) klog("hud: text %d <- player list +0x%lx = %08lx (ZCHAROBJ; +0x84 %02lx, layer %02lx, colour %08lx)", i, offs[i], o, klh_rd32(o + 0x84) & 0xff, (klh_rd32(o + 0x84) >> 24) & 0xff, klh_rd32(o + 0x14));
             t->obj = o; n++;
         }
+        if (!n) { klog("hud: osd %08lx: none of the player list's slots holds a ZCHAROBJ: no text is made", osd); return 0; }
         if (klu.log) klog("hud: osd %08lx, %d texts BORROWED from the hidden player list %08lx (+0xea8..+0xed0; %d crew rows at (%.0f, %.0f), money box right-aligned at (%.0f, %.0f), %.0f px a row); strings / colours / styles set in the render slot",
                           osd, n, el, klu.rows, klu.crew_x, klu.crew_y, klu.money_x, klu.money_y, klu.row);
         return 1;
