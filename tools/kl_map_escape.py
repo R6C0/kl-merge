@@ -873,20 +873,32 @@ def gate_find(L, top):
     return {'off': sorted(set(off)), 'knock': sorted(set(knock)), 'own': sorted(set(own)), 'refs': refs}
 
 
-def gate_wire(sc, P, delay, log=print):
-    """On the joined scene: the gate of plan P goes when the van's nose is at it. Four controllers are ADDED (at the
-    end of two nodes' lists; no entity added, nothing removed), each in a form stock levels use:
-      van's Relay_Stop_Audio_Idle   + RelayMessage('Activate_Exit' -> 'AITrigger', to ITSELF)   (the node hears
-                                      'Activate_Exit' at the start of the leave leg: its stock relay stops the idle
-                                      sound on it; a relay to its own node is AnimProxy_RearDoors_Close's form)
-                                    + TriggerDelay2(delay, 0, -1, 0, [the gate's group])        (the form of 183 stock
-                                      timers; armed by 'AITrigger' - read at kl2 0x71e250 -, sends 'AITrigger')
-      the gate's group              + DeactivateGeom('AITrigger', [the closed piece], 0)        (Dead Men's own
+def gate_wire(sc, P, delay, timer, log=print):
+    """On the joined scene: the gate of plan P goes when the van's nose is at it. Three controllers are ADDED (at the
+    end of three nodes' lists; no entity added, nothing removed) and one field is changed:
+      van's Relay_Stop_Audio_Idle   + RelayMessage('Activate_Exit' -> 'AITrigger', to the TIMER node)   (the node
+                                      hears 'Activate_Exit' at the start of the leave leg: its stock relay stops
+                                      the idle sound on it)
+      the timer node `timer`        + TriggerDelay2(delay, 0, -1, 0, [the gate's group])   (the form of 183 stock
+                                      timers; armed by 'AITrigger' and by nothing else: kl2 0x71e25d; a node that
+                                      has NO controller and that no message reaches: the kept camera's place box)
+      the gate's group              + DeactivateGeom('AITrigger', [the closed piece], 0)   (Dead Men's own
                                       GateDeactivator, without the car's trigger)
-                                    + RelayMessage('AITrigger' -> 'Activate', to the animated piece)
-    ASSUMPTIONS: every controller of a node hears a message sent to the node (stock: the van's explosion node has
-    Explode and RelayMessage on the same 'Activate'); the stock relay's own reaction is not disturbed by a second
-    relay on its node; a deactivated static piece loses its collision with its picture (it did in Dead Men).
+                                    its own RelayMessage('Activate' -> 'Activate', to the animated piece): the
+                                      in-message becomes 'AITrigger' (one field; no second relay)
+    NO NODE SENDS TO ITSELF AND NO NODE IS REACHED TWICE (gate_read tests it). WHY, live 2026-10-11 (stack overflow
+    c00000fd at the level's start, callers 008f1733 <- 0069733e <- 00759314 <- 004461b2 <- 006175ce <- 008f1733):
+    ZRelayMessage's handler 0x8f1680 hands the message 'GetMatPosAnim' (id at 0x1538910, tested at 0x8f16bf) on to
+    its target WHATEVER its in-message is, and a MatPosAnimProxy asks every node of its list for its MatPosAnim
+    with that message when the level starts. Relay_Stop_Audio_Idle is in the list of the van's 'Activate_Exit'
+    piece; the first form of this wiring had a relay on it that named its OWN node: node -> relay -> node, without
+    end. (Stock has relays to their own node - AnimProxy_RearDoors_Close, F01's Wall_Explosion_Sound - but none
+    of those nodes is in a proxy's list.) For the same reason nothing with a MatPosAnim may be reached from that
+    node through relays alone: it would answer the van's proxy. The timer in between ends that message (0x71e2d4:
+    anything but 'AITrigger' goes to the base class).
+    ASSUMPTIONS: every controller of a node hears a message sent to the node; a relay -> TriggerDelay2 link (no
+    stock F level has one; both ends read in the exe); a deactivated static piece loses its collision with its
+    picture (it did in Dead Men).
     NOT ADDED: Dead Men's ActivateGeom on the group - the group is not hidden in the file (ZGEOM[3] 0, no .gms flag
     0x400, in Dead Men's own file too), so there is nothing to switch on.
     If the same van is called a second time the timer runs again and the piece is thrown again from the gate."""
@@ -904,10 +916,12 @@ def gate_wire(sc, P, delay, log=print):
     if len(g['knock']) != 1:
         raise ValueError('kl_map_escape: %d animated gate groups (one is wired)' % len(g['knock']))
     grp, piece = g['knock'][0]
-    for p in [grp, piece] + g['off']:
+    for p in [grp, piece, timer] + g['off']:
         if len(sc.resolve(p)) != 1:
             raise ValueError('kl_map_escape: the joined scene has %d nodes %s' % (len(sc.resolve(p)), p))
-    gk = sc.resolve(grp)[0]
+    gk, tk = sc.resolve(grp)[0], sc.resolve(timer)[0]
+    if sc.nodes[tk]['ctrls'] or sc.cls(tk) != 'ZBoxPrimitive' or tk in (host, gk) or gk <= tk < sc.end[gk]:
+        raise ValueError('kl_map_escape: the timer node %s is not a box without a controller outside the gate' % timer)
     if any(sc.p.key(nm) in ('DeactivateGeom', 'TriggerDelay2') for k in (host, gk) for nm, _b in sc.nodes[k]['ctrls']):
         raise ValueError('kl_map_escape: the gate is wired already')
 
@@ -924,35 +938,80 @@ def gate_wire(sc, P, delay, log=print):
                 raise ValueError('a flag that is set: not written here')
         sc.nodes[k]['ctrls'].append((kl_fa._str(sc, name), [(0x02, b'')] + [t for u in us for t in u] + [(0x7e, b'')]))
 
-    add(host, 'RelayMessage', 'ZRelayMessage', ['Activate_Exit', 'AITrigger', sc.path[host], 0])
-    add(host, 'TriggerDelay2', 'ZTriggerDelay2', [float(delay), 0.0, -1.0, 0, [grp]])
+    add(host, 'RelayMessage', 'ZRelayMessage', ['Activate_Exit', 'AITrigger', timer, 0])
+    add(tk, 'TriggerDelay2', 'ZTriggerDelay2', [float(delay), 0.0, -1.0, 0, [grp]])
     add(gk, 'DeactivateGeom', 'ZDeactivateGeom', ['AITrigger', list(g['off']), 0])
-    add(gk, 'RelayMessage', 'ZRelayMessage', ['AITrigger', 'Activate', piece, 0])
-    log('  kl_map_escape: gate: the van\'s %s -> %.2f s -> %s: %s switched off, %s thrown (its own 42-frame keys)' % (
-        RELAY_EXIT, delay, grp.rsplit('\\', 1)[1], ', '.join(p.rsplit('\\', 1)[1] for p in g['off']), piece.rsplit('\\', 1)[1]))
-    return 4
+    # the group's own relay ('Activate' -> 'Activate', to the piece; Dead Men's Activator sent it 'Activate' and is
+    # gone) gets the in-message 'AITrigger': a second relay to the same piece would be a node reached two ways
+    own = [i for i, (nm, bd) in enumerate(sc.nodes[gk]['ctrls']) if sc.p.key(nm) == 'RelayMessage'
+           and [kl_fa.value(sc, u) for u in units(bd[1:-1])][:3] == ['Activate', 'Activate', piece]]
+    if len(own) != 1:
+        raise ValueError('kl_map_escape: the gate group has %d relays Activate -> Activate to its piece' % len(own))
+    kl_fa.edit(sc, gk, own[0], lambda us: us.__setitem__(0, [kl_fa._str(sc, 'AITrigger')]))
+    log('  kl_map_escape: gate: the van\'s %s -> timer on %s, %.2f s -> %s: %s switched off, %s thrown (its own 42-frame keys)' % (
+        RELAY_EXIT, timer[5:], delay, grp.rsplit('\\', 1)[1], ', '.join(p.rsplit('\\', 1)[1] for p in g['off']), piece.rsplit('\\', 1)[1]))
+    return 3
+
+
+def message_walk(L, start):
+    """The nodes a message entering node `start` can be handed on to, by the controllers that hand messages on
+    (RelayMessage field 2, RelayMessageList field 2, TriggerDelay2 field 4, AIDWrapper field 0) -> (order,
+    faults). A FAULT is a node reached twice - by a loop or by two ways - and a node that names itself: a relay
+    hands 'GetMatPosAnim' on whatever its in-message (kl2 0x8f16bf, 0x6e3cd6), so a loop of relays is endless
+    (the stack overflow of 2026-10-11); two ways are refused too, the wiring this module writes is a chain.
+    Also a FAULT: a node with MatPosAnim / MatPosAnimProxy reached from `start` through relays ALONE - it would
+    get the 'GetMatPosAnim' of the proxy that has `start` in its list."""
+    sc, seen, faults, order = L.sc, {start: None}, [], [start]
+    def go(k, relays_only):
+        for name, f in (('RelayMessage', 2), ('RelayMessageList', 2), ('TriggerDelay2', 4), ('AIDWrapper', 0)):
+            for _i, v in L.ctrl(k, name):
+                x = v[f]
+                for s in (x if isinstance(x, list) else [x]):
+                    for j in (sc.resolve(s) if isinstance(s, str) and s else []):
+                        ro = relays_only and name.startswith('Relay')
+                        if j in seen:
+                            faults.append('message loop: %s (%s) hands on to %s, which %s' % (
+                                sc.names[k], name, sc.names[j], 'is the node itself' if j == k else 'the wiring has reached already'))
+                            continue
+                        seen[j] = k; order.append(j)
+                        if ro and (L.ctrl(j, 'MatPosAnim') or L.ctrl(j, 'MatPosAnimProxy')):
+                            faults.append('%s has a MatPosAnim and is reached from %s through relays alone: it would answer the '
+                                          'van\'s GetMatPosAnim' % (sc.names[j], sc.names[start]))
+                        go(j, ro)
+    go(start, True)
+    return order, faults
 
 
 def gate_read(L, top):
     """The gate wiring of a BUILT level, from its files -> None or {'delay', 'refs': REF ids that are gone or thrown
-    when the timer fires, 'faults': [...]}. top: the van's top-level node."""
+    when the timer fires, 'faults': [...], 'chain': [node names]}. top: the van's top-level node."""
     sc = L.sc
     N = _van_nodes(sc, top)
     host = next((k for k in range(top, sc.end[top]) if sc.names[k] == RELAY_EXIT), None)
     if host is None:
         return None
-    tm = L.ctrl(host, 'TriggerDelay2')
-    if not tm:
+    rel = [v for _i, v in L.ctrl(host, 'RelayMessage') if v[0] == 'Activate_Exit' and v[1] == 'AITrigger']
+    if not rel and not L.ctrl(host, 'TriggerDelay2'):
         return None
-    out = {'delay': tm[0][1][0], 'refs': set(), 'faults': [], 'names': []}
+    out = {'delay': 0.0, 'refs': set(), 'faults': [], 'names': []}
     bad = out['faults'].append
-    rel = [v for _i, v in L.ctrl(host, 'RelayMessage')]
-    if not any(v[0] == 'Activate_Exit' and v[1] == 'AITrigger' and v[2] == sc.path[host] for v in rel):
-        bad('gate: %s has a timer and no relay Activate_Exit -> AITrigger to itself' % RELAY_EXIT)
+    order, loops = message_walk(L, host)
+    out['faults'] += ['gate: ' + x for x in loops]
+    out['chain'] = [sc.names[k] for k in order]
+    if L.ctrl(host, 'TriggerDelay2'):
+        bad('gate: the timer sits on %s itself (it must be fed by a relay from it)' % RELAY_EXIT)
+    tks = [j for v in rel for j in sc.resolve(v[2])]
+    if len(rel) != 1 or len(tks) != 1 or tks[0] == host:
+        bad('gate: %s does not hand Activate_Exit as AITrigger to ONE other node' % RELAY_EXIT)
+        return out
+    tk = tks[0]
+    tm = L.ctrl(tk, 'TriggerDelay2')
+    if len(tm) != 1 or len(sc.nodes[tk]['ctrls']) != 1 or tm[0][1][1:4] != [0.0, -1.0, 0]:
+        bad('gate: %s does not carry one TriggerDelay2 of the stock form (d, 0, -1, 0) and nothing else' % sc.names[tk])
+        return out
+    out['delay'] = tm[0][1][0]
     if not any(v[6] == 'Activate_Exit' and sc.path[host] in v[3] for _i, v in L.ctrl(N['F07_Escape_Vehicle_01'], 'MatPosAnimProxy')):
         bad('gate: %s is not in the list of the van\'s Activate_Exit piece' % RELAY_EXIT)
-    if len(tm) != 1 or tm[0][1][1:4] != [0.0, -1.0, 0]:
-        bad('gate: the timer is not one TriggerDelay2 of the stock form (d, 0, -1, 0)')
     for s in tm[0][1][4]:
         hit = sc.resolve(s)
         if len(hit) != 1:
@@ -1402,7 +1461,13 @@ def van_wire(sc, P, log=print):
     if left:
         raise ValueError('kl_map_escape: Dead Men\'s escape car is still in the scene: %s' % left)
     if P.get('gate'):
-        gate_wire(sc, P, ST['van']['gate']['delay'], log)
+        # the timer's node: a box that has no controller and that nothing sends a message to - the kept second
+        # camera's place box (CCameraBox field 9 reads its place; ASSUMPTION that it sends it nothing)
+        spots = [v[9] for c in P.get('cams_keep', []) for k in sc.resolve(c['camera'])
+                 for v in [[kl_fa.value(sc, u) for u in units(b[1:-1])] for nm, b in sc.nodes[k]['ctrls'] if sc.p.key(nm) == 'CCameraBox']]
+        if not spots:
+            raise ValueError('kl_map_escape: no node for the gate\'s timer (a kept camera\'s place box is used)')
+        gate_wire(sc, P, ST['van']['gate']['delay'], spots[0], log)
     for c in P.get('cams_keep', []):                    # the kept second camera follows the VAN (field 0, as the van's own two)
         hit = sc.resolve(c['trigger'])
         v = [x for k, _i, x in kl_fa.controllers(sc, 'OnlineEscCamTrigger') if hit and k == hit[0]]
@@ -1587,7 +1652,7 @@ def van_check(L, log=print, P=None):
                 bad('gate: the nose is at the gate at frame %d, the gate goes at frame %.0f (wanted: 0..25 frames before)' % (fr, fire))
             else:
                 skip = own | gate['refs']
-                out['gate'] = dict(at=round(hit[0][0] - lin), frame=fr, fires=round(fire, 1), delay=gate['delay'], names=sorted(set(gate['names'])),
+                out['gate'] = dict(chain=gate['chain'], at=round(hit[0][0] - lin), frame=fr, fires=round(fire, 1), delay=gate['delay'], names=sorted(set(gate['names'])),
                                    speed=round((D.cum[K.f2p[fr]] - D.cum[K.f2p[fr - 1]]) * 25 / 100.0, 1))
     ob = _first(lane(L, G, road, -VAN_TAIL, road.len + VAN_NOSE, skip))
     for nm, (a, b, cnt, what) in ob.items():
@@ -1716,6 +1781,7 @@ def van_check(L, log=print, P=None):
         g = out['gate']
         log('  gate %s, %d along the drive away: the van\'s leave message -> %.2f s -> off / thrown at frame %.0f; the nose is there at frame %d '
             'doing %.1f m/s' % (', '.join(g['names']), g['at'], g['delay'], g['fires'], g['frame'], g['speed']))
+        log('  gate wiring, no node twice: ' + ' -> '.join(g['chain']))
     for c, m in zip(out.get('cameras_kept', []), out.get('cameras_more', [])):
         log('  second camera: %s, eye (%d, %d, %d) %d over the ground; its box %s holds the drive away from %d to %d' % (
             m['name'], *m['eye'], m['over'], c[0], c[1], c[2]))

@@ -677,18 +677,38 @@ Build: `<work>\build\z_gate\M01` (logs `z_gate\_van.log`, `_bots.log`, `_checks.
 ### 19.2 What is built: the gate is (a), with the throw
 
 The van's own leave message does what the car's trigger did, at the moment the van's nose is there
-(`gate_find`, `gate_wire`, `gate_read` in `tools/kl_map_escape.py`). No entity is added; four
-controllers are appended to two existing nodes:
+(`gate_find`, `gate_wire`, `gate_read`, `message_walk` in `tools/kl_map_escape.py`). No entity is
+added; three controllers are appended to three existing nodes and one field is changed.
+
+**THE FIRST WIRING (build of 2026-10-10, sha1 31ccdbd7) CRASHED AT LOAD, live 2026-10-11**: stack
+overflow c00000fd right after session state 0x12 -> 0x15, callers 008f1733 <- 0069733e <- 00759314
+<- 004461b2 <- 006175ce <- 008f1733 ... It had the relay and the timer both on
+`Relay_Stop_Audio_Idle`, the relay naming ITS OWN node. Cause, read in kl2.exe: `ZRelayMessage`'s
+handler 0x8f1680 hands the message 'GetMatPosAnim' (name object 0x1538908, id tested at 0x8f16bf)
+on to its target whatever its in-message is; a `MatPosAnimProxy` asks every node of its list for
+its MatPosAnim with that message when the level starts - and `Relay_Stop_Audio_Idle` is in the list
+of the van's 'Activate_Exit' piece. Node -> relay (0x8f1731, the owner's send) -> node dispatch
+(0x6175cc, message class 0x20) -> the same relay, without end. That is why it fell at the load and
+not at the van's leave. Stock relays that name their own node (`AnimProxy_RearDoors_Close`, F01's
+`Wall_Explosion_Sound`) are in no proxy's list. `ZRelayMessageList` passes the same message
+(0x6e3cd6); `ZTriggerDelay2` does not (0x71e25d: 'AITrigger' arms, anything else goes to the base).
 
 ```
 van: ...\F07_Escape_Vehicle_01\Relay_Stop_Audio_Idle      (stock: in list 3 of the 'Activate_Exit' piece; its
                                                            RelayMessage('Activate_Exit' -> 'Deactivate') stops the idle sound)
-    + RelayMessage('Activate_Exit' -> 'AITrigger', to itself)      the form of AnimProxy_RearDoors_Close's relay
+    + RelayMessage('Activate_Exit' -> 'AITrigger', EscCameraSetup!CamPos02)
+map: EscCameraSetup!CamPos02                               (the kept camera's place box: no controller, nothing sends to it)
     + TriggerDelay2(7.32, 0.0, -1.0, 0, [SO1001_Fence_A_5m_AnimGroup_00])
 map: SO1001_Fence_A_5m_AnimGroup_00
     + DeactivateGeom('AITrigger', [SO1001_Fence_A_5m_01], 0)        Dead Men's GateDeactivator
-    + RelayMessage('AITrigger' -> 'Activate', SO1001_Fence_A_5m_Attach)
+    its own RelayMessage('Activate' -> 'Activate', SO1001_Fence_A_5m_Attach): in-message now 'AITrigger'
 ```
+No node names itself, none is reached twice, and the timer stands between the van's proxy list and
+the fence's MatPosAnim (through relays alone the fence would answer the van's 'GetMatPosAnim').
+`van-check` walks the wiring (RelayMessage, RelayMessageList, TriggerDelay2, AIDWrapper targets)
+and FAULTs a node reached twice, a node that names itself and a MatPosAnim reached through relays
+alone; the first build gets 7 faults from it. A relay -> TriggerDelay2 link has no stock F-level
+precedent (both ends read in the exe): ASSUMPTION.
 The closed fence stays shut (picture and collision) until then: nobody walks out there before the
 van has gone through. Afterwards the gap is open; both sides are inside the level bounds (the
 street's are `LevelBound_StreetWest` at z 28346 and `LevelBound_StreetEast`), so an open gate is a
