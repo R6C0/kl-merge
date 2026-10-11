@@ -352,3 +352,15 @@ OPEN: nothing in this path tells a hook's call from the game's own, yet every Dr
 level objects, the timer's own text a second time) was invisible in runs H1c .. H1n while a string set into a stock object
 and drawn by the stock Render shows (H1l). `[HUD] Probe=1` (klhud.c, build hud_probe1) measures the buffer count and the
 instances per step and calls the stock Render re-entrantly at another place / with our objects: run P1 owed.
+
+## 9. SOLVED 2026-10-11 16:40: why the hook's draws were invisible (the owner's probe round, hook hud_probe_owner)
+
+`0x7f07a0` does NOT write {0,0,0, 0,0,0, 1,0,0}: it writes **{0,0,1, 0,1,0, 1,0,0}** (`fld1; fst [+0x18]; fldz; fst
+[+0x1c],[+0x20],[+0xc],[+0x14],[+0]; fstp [+4]` pops the zero, so the following `fst [+0x10]; fstp [+8]` store the 1.0).
+With the wrong xform the instance DrawChunk makes has no scale and no depth. Measured on the instances (head +0x28..+0x5c):
+stock timer text: 1.0 | 0.005972 | 0.005972 | translation (3.437, 1.86, 6.0) | 1.0; the hook's Draw of the SAME object:
+0 | 0 | 0.005972 | (-3.443, -0.0, 0.0). Counts per frame: stock Render +2 instances (text + shadow), our Draw +1, the stock
+Render called again by the hook with the element's place moved +2 and VISIBLE (a second clock at (640, 200)), the stock
+Render with OUR created text + shadow in the element's slots +2 and VISIBLE ('TOTAL $145,000' in our colour at (640, 300):
+picture research/watch/20261011_160216/0029_1895s.jpg). So objects made mid-level by the hook are fine; section 3.1's
+Draw signature is (ctx, cam, &xform9, &pos3) with that xform. Corrects 3.1 / 6.3 ('zeroes with [+0x18] = 1.0').

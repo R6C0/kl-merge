@@ -159,7 +159,12 @@ static int klu_same_code(DWORD va, const BYTE *bytes, int n)
 
 static int klu_draw_one(DWORD obj, void *ctx, void *cam, float x, float y)
 {   /* -> 0 refused by the checks, 1 Draw called */
-    float xform[9] = { 0, 0, 0, 0, 0, 0, 1.0f, 0, 0 };      /* what 0x7f07a0 writes: [+0x18] = 1.0, the rest 0 */
+    /* what 0x7f07a0 writes: [+8] = [+0x10] = [+0x18] = 1.0, the rest 0 (fld1; fst [+0x18]; fldz; five zero stores, the
+       last one a POP; then the 1.0 left on the stack goes to [+0x10] and [+8]). Until 2026-10-11 16:40 this had only
+       [+0x18] = 1.0: the instance came out with no scale, no depth (z 0 for the HUD plane's 6.0) and a mirrored x -
+       every Draw of the hook was invisible (runs H1c .. H1n). Found by the owner's probe round: the stock instance
+       has 1.0 / 0.005972 / 0.005972 and (x, y, 6.0), ours had 0 / 0 / 0.005972 and (-x, -0, 0). */
+    float xform[9] = { 0, 0, 1.0f, 0, 1.0f, 0, 1.0f, 0, 0 };
     float pos[3]; DWORD vt, fn;
     pos[0] = x; pos[1] = y; pos[2] = 0;
     if (!obj || !klh_rd(obj, &vt, 4) || vt != KLU_TEXT_VT || !klh_rd(vt + KLU_VT_DRAW, &fn, 4) || fn != 0x5a6d40) return 0;
