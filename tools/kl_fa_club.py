@@ -2267,19 +2267,28 @@ def van_check(folder, log=print, plan=None):
 # kl_fa_bots.RECIPE has no M05_A row, so the options come from here (as kl_fa_bank.BOT_OPT does): ONE loot stop (the office, where
 # the richest six cases are: the bots start beside them; the bar's, the ticket counter's and the coat check's cases are left to
 # the loot tactic, which takes what lies within its window on the way) and a loot wait of 30 s.
+# GUESS: the bots end beside the van's lane. kl_fa_bots wants the AllyEscapeBox PARK_SIDE (420) to the side of the van's line
+# (z -3100) and the slab is only 800 wide, so the place is chosen by hand. REVIEW ROUND 2: the first form (-640, -2720) stood 3.6 m
+# from the west police's cover point (-1000, -2680) and 5 m from their men - bots_check now holds BOT_PARK against every police place
+# (PARK_POLICE_CLEAR). On the lane's own side of the van's road (the south side, tried first, made all seven squads CROSS the road the
+# van drives, and stood 0.8 m from the rim): slab's middle, 2.5 m north of the van's line (= LANE_CLEAR), 10.1 m
+# 10 m or more from every place the arriving police run to or start at (x 0 was 9.5 m from a man), 7.9 m from the nearest place police come back at.
+BOT_PARK = (60.0, ESC_AT[1], -2850.0)
+PARK_POLICE_CLEAR = 1000.0              # no cover point, defend place or start place of the ARRIVING police nearer than this to BOT_PARK (10 m). GUESS
+PARK_FED_CLEAR = 700.0                  # ... nor a place police COME BACK at (a dead human's respawn: once, later in a round) nearer than this (7 m): the arriving police's
+                                        # west places end at x -950 and the returning ones begin at x 850 (z -2795), so no spot north of the van's road is 10 m
+                                        # from both. GUESS
 BOT_OPT = {'stops': 1, 'cases': 'glass', 'lane': True, 'window': True, 'loot_seconds': 30,
-           'park': [ESC_AT[0], ESC_AT[1], ESC_AT[2] + 80.0]}
-# GUESS: the bots end beside the van's lane, 0.8 m south of the escape marker's place. kl_fa_bots wants the AllyEscapeBox PARK_SIDE
-# (420) to the side of the van's line (z -3100) and the slab's north edge is z -2650; the van's body must not sweep it.
+           'park': list(BOT_PARK)}
 GATE_AT = (400.0, 100.0, -150.0)        # GUESS: the entrance hall, 13 m before the queue lane (z -1500); the way station nearest to it is the hold
-GATE_MORE = 5.0                         # s on top of SEAL_AT. GUESS
+GATE_MORE = 0.0                         # s on top of SEAL_AT before which the QUICKEST bot must not leave the hold (review round 2: it was 5 s with
+                                        # a hold made for a typical bot, so the quickest left at 115 s, 5 s before the clock). GUESS
 GATE_SPEED = 400.0                      # units a second the FASTEST bot is taken to walk from the start to the hold (the step is a walk, not a sprint). GUESS:
                                         # an estimate that is too high only makes the hold longer for every bot
 GATE_SLOW = 200.0                       # units a second the SLOWEST bot is taken to walk (a path that winds: the straight way is only its lower bound). GUESS
-GATE_LOOT_TYPICAL = 15.0                # s a bot is taken to spend at the office loot (kl_fa_bots' wait ends when the loot is gone or after BOT_OPT's
-                                        # loot_seconds, whichever is first: 6 cases for 7 men, so most leave before the deadline). GUESS
+# (a GATE_LOOT_TYPICAL of 15 s, used by review round 1 for the hold, is gone: round 2 makes the hold for the QUICKEST bot, see bots_gate)
 GATE_LOOT_MIN = 5.0                     # s the quickest bot spends there. GUESS
-GATE_LATE = 45.0                        # s after SEAL_AT + GATE_MORE the SLOWEST bot may leave the hold at most (bots_check). GUESS
+GATE_LATE = 50.0                        # s after SEAL_AT + GATE_MORE the SLOWEST bot may leave the hold at most (bots_check). GUESS
 GATE_MIN = 10.0                         # s: no hold shorter than this
 GATE_NAME = '040_Timer_seal_opens'      # no 'done_looting' in it: kl_fa_bots.check and kl_fa_bots_dyn take it for a wait that is no loot wait
 
@@ -2289,9 +2298,10 @@ def bots_gate(B, P, log=print):
     load; it opens when both dance-floor squads are dead or SEAL_AT seconds after the round-start event, whichever comes first.
     Nothing is known to stop an AI at the heroes-only seal, but the bots should come to the queue lane when it is open and not
     before: after the loot stop the way station nearest GATE_AT is a hold (stop 1) of plain-timer seconds = SEAL_AT + GATE_MORE minus
-    the time a TYPICAL bot needs to be there (kl_fa_bots' start delay + GATE_LOOT_TYPICAL at the loot + the straight way / GATE_SPEED),
+    the time the QUICKEST bot needs to be there (kl_fa_bots' start delay + GATE_LOOT_MIN at the loot + the straight way / GATE_SPEED;
+    review round 2: made for a typical bot the first form let the quickest leave 5 s before the clock),
     then the way out. (Review round 1: the first form left out the loot wait. The hold's timer starts when a bot ARRIVES, so the
-    bots leave spread out: the quickest about SEAL_AT, the slowest GATE_LATE s after SEAL_AT + GATE_MORE at most - bots_check says
+    bots leave spread out: the quickest not before SEAL_AT, the slowest GATE_LATE s after SEAL_AT + GATE_MORE at most - bots_check says
     so with the plan's own numbers, written to the report as plan['gate'].) With SEAL_OPEN there is no seal: the hold is GATE_MIN."""
     loot = [i for i, s in enumerate(P['stations']) if s['kind'] == 'loot']
     if len(loot) != 1 or len(P['waits']) != 1 or P['waits'][0]['cases'] or not P['waits'][0]['loot']:
@@ -2317,7 +2327,7 @@ def bots_gate(B, P, log=print):
     straight = sum(math.dist(a, b) for a, b in zip(pts, pts[1:]))
     start = float(P['options'].get('start_delay', 10.0))
     loot_cap = float(P['options'].get('loot_seconds', 20))
-    seconds = GATE_MIN if SEAL_OPEN else max(GATE_MIN, round(SEAL_AT + GATE_MORE - start - min(GATE_LOOT_TYPICAL, loot_cap) - straight / GATE_SPEED))
+    seconds = GATE_MIN if SEAL_OPEN else max(GATE_MIN, math.ceil(SEAL_AT + GATE_MORE - start - min(GATE_LOOT_MIN, loot_cap) - straight / GATE_SPEED))
     steps = [dict(s) for s in first]
     for k in range(0, len(before), 3):
         steps.append({'name': '%03d_DefendBehaviour_to_loot' % (30 + k // 3), 'leg': 'in', 'stop': 1, 'stations': before[k:k + 3]})
@@ -2329,8 +2339,8 @@ def bots_gate(B, P, log=print):
     P['stations'][i_gate]['what'] = 'the hold before the queue lane until the seal is open (%g s)' % seconds
     P['gate'] = {'station': i_gate, 'seconds': seconds, 'straight': round(straight), 'seal_at': SEAL_AT, 'seal_open': SEAL_OPEN, 'start': start, 'loot_cap': loot_cap, 'places': P['stations'][i_gate]['places']}
     note = ('THE SEAL GATE: station %d (round %s) is a hold of %g s, a plain timer (%s) that starts when the bot ARRIVES: SEAL_AT %g s + %g, minus the '
-            'start delay %g s, a typical loot wait of %g s and the fastest bot\'s straight way of %d / %g%s'
-            % (i_gate + 1, tuple(round(v) for v in mid(i_gate)), seconds, GATE_NAME, SEAL_AT, GATE_MORE, start, min(GATE_LOOT_TYPICAL, loot_cap), straight,
+            'start delay %g s, the quickest bot\'s loot wait of %g s and the fastest bot\'s straight way of %d / %g%s'
+            % (i_gate + 1, tuple(round(v) for v in mid(i_gate)), seconds, GATE_NAME, SEAL_AT, GATE_MORE, start, min(GATE_LOOT_MIN, loot_cap), straight,
                GATE_SPEED, ' (--seal-open: no seal, the shortest hold)' if SEAL_OPEN else ''))
     P['notes'].append(note)
     log('  NOTE ' + note)
@@ -2401,12 +2411,52 @@ def bots_check(folder, log=print):
         if g.get('seal_open'):
             log('  the seal is open from the load (--seal-open): the hold only spaces the bots')
         else:
-            if quick < SEAL_AT - 2 * GATE_MORE:
+            if quick < SEAL_AT + GATE_MORE - 0.1:       # (g['straight'] is rounded)
                 fail('the quickest bot leaves the hold %.0f s after the round-start event, the seal\'s clock is at %g s' % (quick, SEAL_AT))
             if slow > SEAL_AT + GATE_MORE + GATE_LATE:
                 fail('the slowest bot leaves the hold %.0f s after the round-start event, %g s after the seal\'s clock and its margin at most' % (slow, GATE_LATE))
         log('  the bots leave the hold %d s (quickest: start %g + loot %g + walk %.0f) .. %d s (slowest: loot deadline %g, walk at %g) after the round-start event; '
             'the seal opens at %g s or when both dance-floor squads are dead' % (quick, g['start'], GATE_LOOT_MIN, g['straight'] / GATE_SPEED, slow, g['loot_cap'], GATE_SLOW, SEAL_AT))
+    # ---- ONE CLOCK (review round 2): the seal's clock and the bots' start delay both count from the round-start event only if the
+    # same AIMonitor list (field 2) names the seal timer and kl_fa_bots' Timer_start_bots; the arithmetic above relies on that.
+    mon = [v[2] for _k, _i, v in kl_fa.controllers(sc, 'AIMonitor')]
+    seal_t, start_t = R + ROLE['seal timer'], F.R_ + F.SQUAD + 'Timer_start_bots'
+    if not any(seal_t in m and start_t in m for m in mon):
+        fail('the seal timer and %s are not named by the same AIMonitor list (the round-start event): the gate clocks would differ' % start_t)
+    else:
+        log('  clocks: the seal timer and Timer_start_bots are named by the same AIMonitor list (the round-start event, which comes before GO)')
+    # ---- THE PARK PLACE against the police (review round 2): nobody the bots end beside may be within PARK_POLICE_CLEAR of a
+    # place the arriving police run to or start at, or of a place police come back at (the bank's run V2 lost its crew in the mouth of its only exit)
+    _sc, _scene, ents, pos, *_rest = BK.read_built(folder)
+    at = lambda k: pos[ents[k - 1]]
+    park = None
+    try:
+        import json
+        with open(os.path.join(folder, 'bots.json'), encoding='utf-8') as f:
+            park = json.load(f).get('plan', {}).get('options', {}).get('park')
+    except (OSError, ValueError):
+        pass
+    if not park:
+        log('  NOTE bots.json holds no park place: the police check of it is NOT CHECKED')
+    else:
+        near, back = [], []
+        for name in police():
+            top = A.node_of(sc, name)
+            for k in range(top, sc.end[top]):
+                if sc.cls(k) in ('ZBoxPrimitive', 'ZSTDOBJ', 'ZFFActor') and k != top:
+                    near.append(('%s/%s' %(name.split('!')[-1], sc.names[k][-24:]), at(k)))
+        back += [(sc.names[k], at(k)) for k in range(1, len(sc.nodes)) if sc.cls(k) == 'ZSpawnPoint'
+                 and kl_fa.node_values(sc, k)[8].endswith(('AFTER_DEATH', 'POLICE'))]
+        back += [(sc.names[k], at(k)) for k in range(1, len(sc.nodes)) if sc.parent[k] == 0 and sc.names[k].startswith('Heroes!Henchmen_')]
+        for what, pts, want in (('arriving', near, PARK_POLICE_CLEAR), ('returning', back, PARK_FED_CLEAR)):
+            if not pts:
+                log('  park: no place of %s police in this level (--no-ai / --no-police)' % what)
+                continue
+            d, who = min((math.dist((park[0], park[2]), (p[0], p[2])), n) for n, p in pts)
+            log('  park: the bots end at (%d, %d, %d); the nearest of %d place(s) of %s police is %.1f m away (%s; %.0f m wanted)' % (
+                *park, len(pts), what, d / 100.0, who[-50:], want / 100.0))
+            if d < want:
+                fail('the park place of the bots lies %.1f m from the place %s of the %s police (%.0f m wanted)' % (d / 100.0, who, what, want / 100.0))
     log('kl_fa_club.bots_check %s: %d squads, %d with the seal gate (%s, longest %g s; seal clock %g s; leaving %s): %s' % (
         folder, len(tops), n_gate, GATE_NAME, longest, SEAL_AT, '%d..%d s' % window if window else 'not checked', 'PASS' if not bad else '%d FAILED' % len(bad)))
     return bad
@@ -2416,7 +2466,8 @@ def bots_check(folder, log=print):
 # so the flags a variant was built with are kept in van.json ('flags') and read back by load_flags. A folder without them is a build
 # with the defaults.
 FLAG_NAMES = ('DOORS_ANIMATE', 'SEAL_OPEN', 'SEAL_PLANE', 'SEAL_AT', 'LIGHT_SHOW', 'BEAT_ANIM', 'FAN_DAMAGE', 'CASE', 'NO_AI', 'SQUADS_AWAKE',
-              'POLICE_ARRIVE', 'POLICE_ON_SLAB', 'STOCK_ROWS', 'OFFICE_AT')
+              'POLICE_ARRIVE', 'POLICE_ON_SLAB', 'STOCK_ROWS', 'OFFICE_AT', 'STREAM')
+STREAM = None                           # '--str FILE': the merged stream file the clips are resolved against (review round 2: it travels in van.json)
 
 
 def flags_of():
@@ -2438,6 +2489,8 @@ def load_flags(folder, log=print):
     g = globals()
     changed = {k: v for k, v in fl.items() if k in FLAG_NAMES and g[k] != v}
     g.update({k: v for k, v in fl.items() if k in FLAG_NAMES})
+    if g['STREAM']:
+        BK.use_stream(g['STREAM'])
     if changed:
         log('  kl_fa_club: the build flags of %s (van.json): %s' % (folder, ', '.join('%s = %s' % kv for kv in sorted(changed.items()))))
     return True
@@ -2469,7 +2522,7 @@ def main():
     a = sys.argv[1:]
     if len(a) >= 2 and a[0] == 'test':
         global DOORS_ANIMATE, SEAL_OPEN, SEAL_PLANE, SEAL_AT, LIGHT_SHOW, BEAT_ANIM, FAN_DAMAGE, CASE
-        global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, POLICE_ON_SLAB, STOCK_ROWS, OFFICE_AT
+        global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, POLICE_ON_SLAB, STOCK_ROWS, OFFICE_AT, STREAM
         NO_AI = '--no-ai' in a
         SQUADS_AWAKE = '--squads-awake' in a
         POLICE_ARRIVE = '--no-police' not in a
@@ -2492,7 +2545,8 @@ def main():
         if '--police-slab' in a and '--police-strip' in a:
             sys.exit('kl_fa_club: --police-slab contradicts --police-strip')
         if '--str' in a:                                # OPTION, the stream file the clips are resolved against
-            BK.use_stream(value('--str'))
+            STREAM = os.path.abspath(value('--str'))
+            BK.use_stream(STREAM)
         if '--office' in a:                             # OPTION, seconds from the round-start event to the front office's guards
             OFFICE_AT = value('--office', float)
         DOORS_ANIMATE = '--doors-animate' in a
