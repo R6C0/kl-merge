@@ -86,6 +86,23 @@
  *       leaves behind. The game clears the flag at the next round start (0x817d20).
  *    NOT ESTABLISHED: whether a traitor bot also fights the other bots; whether anything announces it (the tactic
  *    does not call the 'make traitor' rule). The log line is the only sure sign.
+ *    d. THE MOMENT OF THE TURN (2026-10-11, track O; NOT RUN IN THE GAME; re\bots_fight.md 3). The owner: 'i saw one
+ *       backstab me it was too lenient i could get away with killing him'. Once b's own conditions have held for
+ *       BackstabDelay seconds the turn can wait for a moment that is bad for YOU: BackstabNear=<units> (the bot is
+ *       within that many world units of you, 100 = 1 m), BackstabBehind=1 (it is more than 90 degrees off the way you
+ *       face), BackstabBusy=1 (your health is under 97 % of its maximum = you were hit within the regeneration time).
+ *       All that are set must hold at once; BackstabWait seconds (default 30) after the delay was FIRST over the bot
+ *       turns at the next pass in which b's conditions hold, moment or not (the wait is not started again when they
+ *       lapse). With none of the three set the turn is what it was. Reads only (klb_moment); the write is b's.
+ *       BackstabBehind is a GUESS about where you LOOK: the vector at player+0xc14 is your direction of TRAVEL (seen
+ *       live), so a player who backs away or strafes is judged wrongly; the camera's direction is not known to the hook.
+ *    e. TraitorsMax=<n> (needs Tune=1; 0 = no cap, the default). SEEN in the owner's own rounds of 2026-10-11 (his
+ *       KLHook.log 12:36 and 12:43, Tune=1 Traitors=1 Limit=6.0): FOUR bots carried the traitor flag in one round and
+ *       two in the next, all set by the game's own tactic at the vehicle - 'traitors allowed' is a switch, not a count
+ *       (above: [rules+0x338] is never raised). While n or more bots carry the flag the hook writes 0 into the switch
+ *       of every level and puts Tune's number back when fewer do (the game clears the flags at the next round start).
+ *       A cap PER ROUND, not 'alive at once': a traitor who is dead, aboard or escaped keeps his flag until the round
+ *       start and still counts. A soft cap: the tactic can turn two bots between two passes of the hook (100 ms).
  *
  * 4. PAY THE DRIVER AND LEAVE WITHOUT YOU
  *    The player's rule is ZGameRulesHeist slot 149 = 0x757510(index): slot 151 (0) -> [rules+0x1b2] = 0;
@@ -186,7 +203,10 @@
  *   Log=1               0 none, 1 on change and every 10 s, 2 every second + every loss of a bot's health in words
  *   Tune=0              1 = write the traitor tuning: Traitors=1 Limit=6.0 Retaliate=0 (0 = stock) and per level
  *                       Traitors.<1..11>= Limit.<1..11>=
+ *                       TraitorsMax=0 (with Tune: at most that many bots turn traitor in a ROUND - dead ones count; 0 = no cap)
  *   Backstab=0          percent per round that one bot is picked; BackstabStage=2 BackstabMoney=250000 BackstabDelay=20
+ *                       the turn then waits for BackstabNear=0 (units) / BackstabBehind=0 (by your direction of travel: a guess) /
+ *                       BackstabBusy=0, BackstabWait=30 s at most
  *   Bribe=0             percent per bot aboard; BribeMoney=500000 BribeDelay=4
  *   Leave=0             percent per vehicle; LeaveDistance=4000 LeaveDelay=3
  *   Van=0               0 off, 1 'heavily damaged', 2 destroyed; VanChance=50 VanDelay=5 VanLeftBehind=0
@@ -233,6 +253,8 @@ static int klx_level_verdict(const char *scene, char *why);          /* 0 no lev
 static struct {
     int on, log, tune, traitors, trl[KLB_NLEVEL + 1]; float limit, liml[KLB_NLEVEL + 1], retaliate;
     int backstab, bs_stage, bs_money, bs_delay;
+    int tr_max;                               /* TraitorsMax: 0 = no cap (section 3 e) */
+    int bs_behind, bs_busy, bs_wait; float bs_near;      /* the moment of the turn (section 3 d); all 0 = as before */
     int bribe, br_money, br_delay;
     int leave, lv_delay; float lv_dist;
     int van, van_chance, van_delay, van_left;
@@ -246,6 +268,7 @@ struct klb_snap {
 
 static struct {                               /* what the hook remembers of the round and of the vehicle now waiting */
     DWORD rules, state, round_at; int cand, backstabbed, stages; DWORD cand_since;      /* cand: -2 not rolled yet, -1 nobody */
+    DWORD wait_since;                         /* section 3 d: BackstabDelay was first over (the wait for the moment runs from here and is NOT started again) */
     BYTE veh; DWORD aboard_at[KLB_NREC]; char rolled[KLB_NREC]; int bribed;
     DWORD leave_since; int leave_rolled; DWORD van_since; int van_rolled;
 } klb_r;
@@ -343,17 +366,24 @@ static int kle_node(DWORD node, float pos[3], float dir[3]);          /* klescor
 static DWORD hp_rules;
 static void klb_health_tick(const struct klb_snap *s, int fresh)
 {
-    static DWORD obj[KLB_NREC]; static float seen[KLB_NREC]; static int said[KLB_NREC];
+    static DWORD obj[KLB_NREC]; static float seen[KLB_NREC], smax[KLB_NREC]; static int said[KLB_NREC];
     int i; float raw[0x28 / 4];
-    if (fresh) { memset(obj, 0, sizeof obj); memset(seen, 0, sizeof seen); memset(said, 0, sizeof said); }
+    if (fresh) { memset(obj, 0, sizeof obj); memset(seen, 0, sizeof seen); memset(smax, 0, sizeof smax); memset(said, 0, sizeof said); }
     for (i = 0; i < s->n && i < KLB_NREC; i++) {
         const struct klb_rec *r = &s->r[i]; DWORD h;
         if (!r->used || !(r->flags & 1) || !r->actor) continue;
         if (!(h = klh_rd32(r->actor + 0x5fc)) || !klh_rd(h, raw, sizeof raw) || ((DWORD *)raw)[0x24 / 4] != r->actor) continue;
         if (!klb_finite(raw[1]) || !klb_finite(raw[2]) || raw[2] < 1 || raw[2] > 100000) continue;
         if (h != obj[i]) {
-            obj[i] = h; seen[i] = raw[1];
+            obj[i] = h; seen[i] = raw[1]; smax[i] = raw[2];
             if (!said[i]++) klog("bots: record %d (bot): health object %08lx: %.1f of %.1f", i, h, raw[1], raw[2]);
+            continue;
+        }
+        if (raw[2] > smax[i] + 0.01f || raw[2] < smax[i] - 0.01f) {
+            /* the MAXIMUM changed (klgrudge.c's CrewHealth / BackstabHealth going in or back, at the same share): that
+               step of the health is no loss and must not read as one - 'ONE STEP' below is evidence for other questions */
+            klog("bots: record %d (bot): its maximum health changed %.1f -> %.1f (health %.1f -> %.1f): not counted as a loss", i, smax[i], raw[2], seen[i], raw[1]);
+            smax[i] = raw[2]; seen[i] = raw[1];
             continue;
         }
         if (raw[1] < seen[i] - 0.05f) {
@@ -438,12 +468,13 @@ static int klb_tune_ok(DWORD tun, struct klb_level out[KLB_NLEVEL + 1])
 
 /* arcade: an Arcade round object is up (the table is looked at and its stock values logged, on any level);
    act: and the level is not stock (section 0) - only then is anything written; otherwise what was written goes back. */
-static void klb_tune_tick(int arcade, int act)
+static void klb_tune_tick(int arcade, int act, int capped)
 {
-    static DWORD tun0; static struct klb_level stock[KLB_NLEVEL + 1]; static int have, applied, toldbad;
+    static DWORD tun0; static struct klb_level stock[KLB_NLEVEL + 1]; static int have, applied, toldbad, wascap;
     struct klb_level cur[KLB_NLEVEL + 1]; DWORD tun; int L, n = 0;
     if (!(tun = klh_rd32((DWORD_PTR)KLH_VA(KLB_TUNING)))) return;
-    if (tun != tun0) { tun0 = tun; have = applied = 0; }
+    if (tun != tun0) { tun0 = tun; have = applied = wascap = 0; }
+    if (!act) wascap = 0;
     if (!arcade && !applied) return;
     if (!klb_tune_ok(tun, cur)) {
         if (arcade && !toldbad++) klog("bots: the tuning object %08lx does not hold the traitor table where this build expects it: nothing is written", tun);
@@ -464,6 +495,7 @@ static void klb_tune_tick(int arcade, int act)
         struct klb_level want = stock[L]; DWORD R = tun + 0x6ac + 0x70 * L;
         if (act) {
             want.maxtr = klb.trl[L] >= 0 ? klb.trl[L] : stock[L].maxtr > klb.traitors ? stock[L].maxtr : klb.traitors;
+            if (capped) want.maxtr = 0;       /* TraitorsMax reached: the switch is off until a traitor's flag is cleared (the next round) */
             want.limit = klb.liml[L] > 0 ? klb.liml[L] : klb.limit > 0 ? klb.limit : stock[L].limit;
             if (klb.retaliate > 0) want.retaliate = klb.retaliate;
         }
@@ -471,7 +503,12 @@ static void klb_tune_tick(int arcade, int act)
         if (want.limit != cur[L].limit) n += klh_data((void *)(DWORD_PTR)(R + 0x20), &want.limit, 4, "traitor limit per Arcade level");
         if (want.retaliate != cur[L].retaliate) n += klh_data((void *)(DWORD_PTR)(R + 0x18), &want.retaliate, 4, "retaliation limit per Arcade level");
     }
-    if (act && n) {
+    if (act && capped != wascap) {            /* said once per change, at any Log level: it changes who may turn */
+        wascap = capped;
+        if (capped) klog("bots: TraitorsMax=%d is reached: 'traitors allowed' is written 0 on every level (%d value(s)) - the game's own tactic turns nobody else this round", klb.tr_max, n);
+        else klog("bots: no traitor flag is over TraitorsMax=%d any more: 'traitors allowed' is back (%d value(s))", klb.tr_max, n);
+        if (n) applied = 1;
+    } else if (act && n) {
         applied = 1;
         klog("bots: tuning written for %d levels (%d value(s) changed): traitors allowed at least %d, limit %.1f%s - stock values are in the lines above and come back when the session is not Arcade or the level is stock", KLB_NLEVEL, n, klb.traitors, klb.limit, klb.retaliate > 0 ? ", retaliation limit set" : "");
     } else if (!act) {
@@ -510,6 +547,35 @@ static int klb_make_traitor(const struct klb_snap *s, int i)
     return 1;
 }
 
+/* Section 3 d: is NOW a good moment for the picked bot to turn? how[120] says what was measured ("" when no key asks).
+   Reads only: the local player (as klb_distance finds him), his feet +0x460, the way he faces = MINUS the vector at
+   player+0xc14 (klauto.c's kla_player_dir: seen live in run PX3 to be his direction of travel within 1 degree), his
+   health object [player+0xa48] (+4 health, +8 maximum: klbalance.c 1 d), the bot's node [actor+4] (kle_node).
+   Anything that cannot be read counts as 'not now' - BackstabWait then ends the wait. */
+static int klb_moment(const struct klb_rec *r, char how[120])
+{
+    DWORD gd, pl, hobj; BYTE sel = 0xff, type = 0; float feet[3], face[3], bp[3], hp[2] = { 0, 0 }, dx, dz, d, dot = 0; int near_ = 1, behind = 1, busy = 1, n = 0;
+    how[0] = 0;
+    if (klb.bs_near <= 0 && !klb.bs_behind && !klb.bs_busy) return 1;
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x898, &sel, 1) || sel > 3 ||
+        !(pl = klh_rd32(gd + 0x828 + 4 * sel)) || !klh_rd(pl + 0x273c, &type, 1) || type != 2 || !klh_rd(pl + 0x460, feet, 12) ||
+        !r->actor || !kle_node(klh_rd32(r->actor + 4), bp, 0)) { strcpy(how, "you or the bot could not be placed"); return 0; }
+    dx = bp[0] - feet[0]; dz = bp[2] - feet[2]; d = (float)sqrt(dx * dx + dz * dz + (bp[1] - feet[1]) * (bp[1] - feet[1]));
+    if (!klb_finite(d)) { strcpy(how, "you or the bot could not be placed"); return 0; }
+    if (klb.bs_near > 0) near_ = d <= klb.bs_near;
+    if (klb.bs_behind) {                      /* behind = more than 90 degrees off the way you face (in the ground plane) */
+        behind = klh_rd(pl + 0xc14, face, 12) && klb_finite(face[0]) && klb_finite(face[2]) && (face[0] != 0 || face[2] != 0);
+        if (behind) { dot = -face[0] * dx - face[2] * dz; behind = dot < 0; }
+    }
+    if (klb.bs_busy)                          /* hurt = your health is under 97 % of its maximum: you were hit within the regeneration time */
+        busy = (hobj = klh_rd32(pl + 0xa48)) != 0 && klh_rd(hobj + 4, hp, 8) && klb_finite(hp[0]) && klb_finite(hp[1]) && hp[1] >= 1 && hp[0] > 0 && hp[0] < hp[1] * 0.97f;
+    n = snprintf(how, 120, "it is %.1f m from you", d / 100);
+    if (klb.bs_near > 0 && n < 100) n += snprintf(how + n, 120 - n, " (BackstabNear %.0f m)", klb.bs_near / 100);
+    if (klb.bs_behind && n < 100) n += snprintf(how + n, 120 - n, behind ? ", behind you" : ", in front of you");
+    if (klb.bs_busy && n < 90) n += snprintf(how + n, 120 - n, busy ? ", you are hurt (%.0f of %.0f)" : ", you are not hurt", hp[0], hp[1]);
+    return near_ && behind && busy;
+}
+
 static void klb_act(const struct klb_snap *s, DWORD now)
 {
     const struct klb_rec *h = s->human >= 0 ? &s->r[s->human] : 0;
@@ -524,7 +590,7 @@ static void klb_act(const struct klb_snap *s, DWORD now)
         /* B5 of the review: only a GUESS at a new round (a record released in the middle of one would look the same).
            The backstab pick starts again; the once-per-vehicle marks (bribed, rolled, leave, van) stay until the
            vehicle itself is a new one (below): no second bribe, no second call of the damage rule for one vehicle. */
-        klb_r.cand = -2; klb_r.backstabbed = 0; klb_r.cand_since = 0; klb_r.round_at = KLB_T(now);
+        klb_r.cand = -2; klb_r.backstabbed = 0; klb_r.cand_since = 0; klb_r.wait_since = 0; klb_r.round_at = KLB_T(now);
     }
     klb_r.stages = stages;
     if (klb_r.cand == -2 && s->state == KLB_ROUND && nb && now - klb_r.round_at >= 3000) {      /* 3 s: the crew has registered */
@@ -559,10 +625,18 @@ static void klb_act(const struct klb_snap *s, DWORD now)
         const struct klb_rec *r = &s->r[klb_r.cand];
         if (r->used && (r->flags & 3) == 1 && r->status == 0 && r->stage >= klb.bs_stage && r->money >= (DWORD)klb.bs_money && h && h->status == 0) {
             if (!klb_r.cand_since) klb_r.cand_since = KLB_T(now);
-            else if (now - klb_r.cand_since >= (DWORD)klb.bs_delay * 1000) {
-                klb_r.backstabbed = 1;
-                if (klb_make_traitor(s, klb_r.cand)) klog("bots: BACKSTAB: bot %d (actor %08lx, stage %u, $%lu; you have $%lu) turned traitor: record +0x79 |= 2", klb_r.cand, r->actor, r->stage, r->money, h->money);
-                else klog("bots: BACKSTAB: bot %d could NOT be turned (its record changed or is not writable)", klb_r.cand);
+            else if (now - klb_r.cand_since >= (DWORD)klb.bs_delay * 1000 || (klb_r.wait_since && now - klb_r.wait_since >= (DWORD)klb.bs_wait * 1000)) {
+                /* section 3 d: the turn waits for its moment (near you / behind you / while you are hurt), BackstabWait
+                   seconds at most; with none of the three keys the test is 1 at once = as before */
+                char how[120]; int late;
+                if (!klb_r.wait_since) klb_r.wait_since = KLB_T(now);      /* kept when b's conditions lapse for a pass: BackstabWait is a limit */
+                late = now - klb_r.wait_since >= (DWORD)klb.bs_wait * 1000;
+                if (klb_moment(r, how) || late) {
+                    klb_r.backstabbed = 1;
+                    if (klb_make_traitor(s, klb_r.cand)) klog("bots: BACKSTAB: bot %d (actor %08lx, stage %u, $%lu; you have $%lu) turned traitor: record +0x79 |= 2%s%s%s", klb_r.cand, r->actor, r->stage, r->money, h->money,
+                                                              how[0] ? "; " : "", how, how[0] && late ? " - BackstabWait is over, it turns anyway" : "");
+                    else klog("bots: BACKSTAB: bot %d could NOT be turned (its record changed or is not writable)", klb_r.cand);
+                }
             }
         } else klb_r.cand_since = 0;
     }
@@ -637,7 +711,7 @@ static void klb_act(const struct klb_snap *s, DWORD now)
 
 static void klb_tick(int game_thread)
 {
-    static DWORD last, toldrules; static int toldthread; static char toldwhy[200]; struct klb_snap s; DWORD now = GetTickCount(); int arcade, act = 0;
+    static DWORD last, toldrules; static int toldthread; static char toldwhy[200]; struct klb_snap s; DWORD now = GetTickCount(); int arcade, act = 0, capped = 0;
     char why[200];
     if (!klb.on || !klh_exe_ok || now - last < 100) return;
     last = now;
@@ -650,7 +724,12 @@ static void klb_tick(int game_thread)
             else klog("bots: %s: Tune / Backstab / Bribe / Leave / Van do nothing here (they act only on a level that is not stock); the log runs", why);
         }
     }
-    klb_tune_tick(arcade, act);
+    if (arcade && act && klb.tune && klb.tr_max > 0) {       /* section 3 e: bots that carry the traitor flag now */
+        int i;
+        for (i = 0; i < s.n; i++) capped += s.r[i].used && (s.r[i].flags & 3) == 3;
+        capped = capped >= klb.tr_max;
+    }
+    klb_tune_tick(arcade, act, capped);
     if (!arcade) { klb_r.rules = 0; return; }
     if (klb.log) klb_log_tick(&s, now);
     if (!(klb.backstab > 0 || klb.bribe > 0 || klb.leave > 0 || klb.van > 0)) return;
@@ -687,12 +766,19 @@ static void klb_init(void)
         snprintf(key, sizeof key, "Limit.%d", L); klb.liml[L] = klb_inif(key, "0"); if (!klb_finite(klb.liml[L]) || klb.liml[L] < 0 || klb.liml[L] > 1000) klb.liml[L] = 0;
     }
     klb.backstab = klb_pct("Backstab"); klb.bs_stage = klb_pos("BackstabStage", 2, 3); klb.bs_money = klb_pos("BackstabMoney", 250000, 0x7fffffff); klb.bs_delay = klb_pos("BackstabDelay", 20, 3600);
+    klb.tr_max = klb_pos("TraitorsMax", 0, 32);
+    klb.bs_near = klb_inif("BackstabNear", "0"); if (!klb_finite(klb.bs_near) || klb.bs_near < 0) klb.bs_near = 0;
+    klb.bs_behind = GetPrivateProfileIntA("Bots", "BackstabBehind", 0, klh_ini) != 0; klb.bs_busy = GetPrivateProfileIntA("Bots", "BackstabBusy", 0, klh_ini) != 0;
+    klb.bs_wait = klb_pos("BackstabWait", 30, 3600);
     klb.bribe = klb_pct("Bribe"); klb.br_money = klb_pos("BribeMoney", 500000, 0x7fffffff); klb.br_delay = klb_pos("BribeDelay", 4, 600);
     klb.leave = klb_pct("Leave"); klb.lv_delay = klb_pos("LeaveDelay", 3, 600); klb.lv_dist = klb_inif("LeaveDistance", "4000"); if (!klb_finite(klb.lv_dist) || klb.lv_dist < 0) klb.lv_dist = 4000;
     klb.van = klb_pos("Van", 0, 2); klb.van_chance = klb_pos("VanChance", 50, 100); klb.van_delay = klb_pos("VanDelay", 5, 600); klb.van_left = GetPrivateProfileIntA("Bots", "VanLeftBehind", 0, klh_ini) != 0;
     klb_seed = GetTickCount() ^ (GetCurrentProcessId() << 12) ^ 0x9e3779b9u;
     klog("bots: on; Log=%d Tune=%d (Traitors=%d Limit=%.1f Retaliate=%.0f) Backstab=%d%% (stage %d, $%d, %d s) Bribe=%d%% ($%d, %d s) Leave=%d%% (%.0f units, %d s) Van=%d (%d%%, %d s, left behind %d); Arcade only, and everything but the log only on a level that is not the stock one of its slot",
          klb.log, klb.tune, klb.traitors, klb.limit, klb.retaliate, klb.backstab, klb.bs_stage, klb.bs_money, klb.bs_delay, klb.bribe, klb.br_money, klb.br_delay, klb.leave, klb.lv_dist, klb.lv_delay, klb.van, klb.van_chance, klb.van_delay, klb.van_left);
+    if (klb.tr_max || klb.bs_near > 0 || klb.bs_behind || klb.bs_busy)      /* only when one is set: the start-up lines of a hook without them are what they were */
+        klog("bots: TraitorsMax=%d a round (0 = no cap; needs Tune=1; dead traitors count); the picked bot's turn waits for: within %.0f units of you (0 = any distance), behind you %d (by your direction of travel), you hurt %d - for BackstabWait=%d s at most, then it turns anyway",
+             klb.tr_max, klb.bs_near, klb.bs_behind, klb.bs_busy, klb.bs_wait);
 }
 
 #endif /* KLBOT_C */
