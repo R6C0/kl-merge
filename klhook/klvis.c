@@ -15,9 +15,10 @@
  *
  * WHAT IS READ
  *   V = [0x1535c70], the ZCheckVisible object (0 before a level has one).
- *   [V + 0x50 .. + 0x80): twelve floats, the grid: box low x y z, box high x y z, cell size x y z and three more
- *      (the track's reading; `python tools\kl_fa_bots_dyn.py grid <build folder> <the 96 hex digits>` compares them
- *      with the level's own room boxes).
+ *   [V + 0x50 .. + 0x80): twelve floats, the grid: cell size x y z, 1 / cell size x y z, box low x y z, box high
+ *      x y z (re\crash_686a66.md 8; `python tools\kl_fa_bots_dyn.py grid <build folder> <the 96 hex digits>` compares
+ *      them with the level's own room boxes). The first version of this file took the box for the first six floats
+ *      and so never saw a 'filled' grid (runs V0_DM09 / V1_DM09, 2026-10-11: no grid line).
  *   [V + 0x12ae4 + 0xff * 0x1c) = [V + 0x146c8 .. + 0x146d8): the sixteen bytes of 'record 0xff'. In a level
  *      without the fault they belong to something else and never start with 0xff100110.
  *
@@ -53,10 +54,10 @@ static void klvis_tick(void)
         if (!klh_rd(v + KLV_GRID, g, sizeof g)) return;
         memcpy(f, g, sizeof g);
         for (i = 0; i < 48; i++) snprintf(hex + 2 * i, 3, "%02x", g[i]);
-        if (f[3] <= f[0] && f[4] <= f[1]) return;                        /* not filled in yet: look again next pass */
+        if (!(f[0] > 0) || !(f[2] > 0) || !(f[9] > f[6]) || !(f[11] > f[8])) return;      /* cell size and box not filled in yet: look again next pass */
         obj = v; since = now; places = 0; told_clean = 0;
         if (!klh_scene(scene, sizeof scene)) strcpy(scene, "?");
-        klog("vis: grid of ZCheckVisible %08lx (scene %s): %s; low (%.1f, %.1f, %.1f) high (%.1f, %.1f, %.1f)", v, scene, hex, f[0], f[1], f[2], f[3], f[4], f[5]);
+        klog("vis: grid of ZCheckVisible %08lx (scene %s): %s; low (%.1f, %.1f, %.1f) high (%.1f, %.1f, %.1f) cell (%.1f, %.1f, %.1f)", v, scene, hex, f[6], f[7], f[8], f[9], f[10], f[11], f[0], f[1], f[2]);
     }
     if (!klh_rd(obj + KLV_REC_FF, r, sizeof r)) return;
     if (*(DWORD *)r == KLV_NOCELL) {
