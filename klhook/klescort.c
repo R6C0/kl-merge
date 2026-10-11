@@ -7,8 +7,13 @@
  * (2026-10-11, its key's text below) writes ONE data byte, a held bot's heist stage, as the game's own 0x5dd890 does. Full account, the reading it
  * rests on and the live checks E0..E5: re\bots_escort.md. Everything below was read in kl2.exe build 0490 for this
  * file (debug\dasm.py, 2026-10-10). THE ESCORT PART HAS RUN IN THE GAME (2026-10-11, runs E1_DM03, E3_DM01, L11_DM02:
- * 63 orders, the release at the vehicle, the escort aboard; no fault). BoardAll HAS NOT. Off unless [Bots] Enable=1 AND
- * (Escort=1 or 2, or BoardAll=1).
+ * 63 orders, the release at the vehicle, the escort aboard; no fault). BoardAll too since (runs L12b_DM02, C3_DM03,
+ * B1_DM01, B6_DM06: the byte, the bots board; no fault). Off unless [Bots] Enable=1 AND
+ * (Escort=1 or 2, or BoardAll=1, or FollowOut=1, or FollowOutSpare=1).
+ * The FollowOut part (2026-10-11, section 3; re\bots_follow_out.md) - 'the crew follows you out' - writes the same stage
+ * byte, makes the same order call, and (each behind a key of its own) two more data writes: the vehicle's wait timer,
+ * raised as the game's own 'hold the driver' rule raises it, and the rules' table of times at which the crew left
+ * behind is shot. IT HAS NOT RUN IN THE GAME.
  *
  * 1. THE GAME'S MECHANISM (EXE = seen in the code)
  *    soldier = [actor + 0x77c] (set by the soldier's constructor 0x761900, `mov [edx+0x77c], esi`; the ONLY class
@@ -116,9 +121,109 @@
  *    a bot called away from a loot place drops what it does cleanly (the route chain's Defend steps do the same to
  *    looting bots, 0x686bac / 0x686df2 with the same arguments); two escorts whose places snap to the same polygon.
  *
- * NO OFF-GAME RIG: the logic has not run against a made-up round (klbot.c had such a rig; this file has none). The
- * escort part is proven by its live runs; BoardAll by three reviews of the code against the exe only
- * (re\boardall_review_exe.md, _code.md, _rework.md).
+ * 3. THE CREW FOLLOWS YOU OUT (FollowOut; read in kl2.exe 2026-10-11, full account re\bots_follow_out.md)
+ *    WHAT KILLS THE CREW THAT IS LEFT BEHIND (EXE; live run PB_DM03_board_hp: four bots, 252 of 252 in one step each).
+ *    ZGameRulesHeist - the Arcade class only - shoots them itself. Slot 194 (0x8fa6d0), case 'state 5 = the vehicle
+ *    drives out', when client 0 (the human) has flag 0x20 'aboard' (0x8fab77 `test byte [score+0x1d4], 0x20`):
+ *        base = now + 1.0 .. 1.3 s  ([sysif+0x48], 1/1024 s);  step = 8.0 s / [rules+0x354] (8 record slots: 1 s)
+ *        [rules+0xeec + 4*k] = base + step * (k +- 0.7)          one time per slot k
+ *        [rules+0xf1c + k]   = k, then shuffled (0x7f87c0)       which crew record slot k names
+ *    and the rules' update, slot 7 (0x74b6d0), every frame while the state is 5 and that flag is set (0x74b8a2..0x74b99a):
+ *    for every slot whose time has come and whose record is in use, an AI member (+0x79 mask 1) and has none of the
+ *    client flags 4 dead / 0x20 aboard / 0x40 escaped:
+ *        actor->vtable[0x694](&damage)    (0x69f900; the record's amount is float 1000000.0, 0xb631b0, no attacker)
+ *        rules->vtable[0x40](actor, 0)    (slot 16 = 0x485740: money 0, kill text, flag 4, status 7)
+ *    No distance, no stage, no traitor test: EVERY AI heister in play dies while the vehicle leaves, one about every
+ *    second, in a random order (the times span 8 s over the slots whatever the vehicle's own drive-out is - 8.4 s on
+ *    the F07 van, from its field [controller+0x74], 0x8fab3e: the last slot's time can lie past it, and stock then
+ *    ends the round with one AI heister still in play - live run PB_DM01_board_hp). A bot is safe only aboard - the
+ *    boarding rule (slot 45, 0x6840a0) still
+ *    takes it in state 5 while float [tuning+0x630] minus the timer is under 1.0. With the human NOT aboard nothing of
+ *    this runs (the vehicle comes back, state 7 -> 0): every idle-human run. Nothing of ours is in that code, stock
+ *    Arcade does the same, and the multiplayer classes have no such loop (that flags test occurs once in the exe,
+ *    here). When state 5 ends: 0x805120 (aboard -> escaped), the round is over 3 s later.
+ *    WHAT THE HOOK DOES (Arcade round, a level that is not stock, the game's thread - as sections 0 / 2)
+ *    SIGNAL: the human's own crew record has heist stage 3 - he stood in the exit trigger, whose routine 0x6c3d50
+ *    gives stage 3 and calls the vehicle in the same step - while he is a heister in play or aboard and carries
+ *    FollowOutMoney or more; FollowOutAfter seconds later. (Not 'near the boarding place': the rules know no boarding
+ *    place before the vehicle is called, [rules+0x1e0] is 0 in state 0; and the exit boxes are large - the bank's is
+ *    50 m from the van - so a distance only comes later than the stage. Time is what the crew lacks.)
+ *    THEN, for every AI record in play that is no traitor:
+ *      a. heist stage 3 into its record, once (the byte BoardAll writes; what 0x5dd890 writes). ONLY FOR A RECORD
+ *         WHOSE ACTOR IS A ZFFActor WITH A READABLE PLACE: from stage 3 on the rules walk the record themselves, at
+ *         every call and departure of the vehicle, with no test of the actor (0x8fb031 `mov ecx, [record+4]` /
+ *         0x8fb034 `mov edi, [ecx+0x77c]`) - a stage 3 in a record with no actor would be a fault inside kl2.exe.
+ *         From there the GAME does the work: its loot tactic lets go while the vehicle waits (0x4519dc - ONLY then:
+ *         while the vehicle drives in a stage-3 bot in reach of loot goes on looting), its board tactic runs to the
+ *         vehicle and boards (0x4fb064; also in the last 2 s of the drive in), and slot 194 gives every stage-3 AI the
+ *         order to the boarding place at every later call and departure.
+ *      b. FollowOutOrder=1: while the vehicle DRIVES IN (state 1 / 2) AND ITS TIMER IS 2 s OR MORE, one order to the
+ *         rules' boarding place by the soldier's own routine (place, 0, 1, 0) - the call the escort's release makes.
+ *         It is the order slot 194 gave the stage-3 AI when the vehicle was called, a moment before these bots had
+ *         their stage. Again only when somebody else has moved its defend place more than 6 m from what our order
+ *         left (KLE_ROUTE, section 2's measure for 'the route chain, not one of the soldier's own tactics'; GUESS as
+ *         there - a renewal pops a fighting bot's goal stack, so a tactic's small move is left alone), and
+ *         FollowOutEvery seconds apart; at a later call the game's own order has put the place there, and
+ *         the hook orders only a bot whose place is not within 3 m of it. Only bots this part gave their stage: the
+ *         others had the game's order. NOT while the board tactic can have the bot - while the vehicle waits, and
+ *         in state 1 / 2 once the timer is under 2.0 (its test 0x4faff7 and its run 0x82f9be, `fcomp [0xb5c828]`): a
+ *         not-soft order would cut that tactic at its yield. Not within 4 m of the place (within 2.5 m the game
+ *         takes an order as 'soft', which ends a waiting step of the route chain). Never to an escort (section 2).
+ *         THE ROUTE CHAIN against it: a step that was running waits for its man (2 a); a step started by a timer or
+ *         a death orders him elsewhere and is answered by the renewal; the stage byte is not read by the chain.
+ *      c. FollowOutHold=N: the game has a rule for 'driver, wait' - slot 152 (0x8b3930), the first criminal aboard
+ *         pressing HoldEscape: timer += 5.0 (0xb5a068), ONCE a vehicle (behind [rules+0xd95]). The hook writes the
+ *         same float by the same amount, up to N / 5 times a visit, and leaves that byte alone (the human's own
+ *         HoldEscape still gives its 5 s): while the vehicle
+ *         waits, the HUMAN IS ABOARD, its timer is under 2 s (and not 0: something set it to leave), nobody paid the
+ *         driver ([rules+0x1b3] == 0xff), the vehicle is not damaged ([score+0x60] == 0: a heavily damaged one must
+ *         go, 0x55ed4a) and at least one of the called crew in play COMES - it is 2 m or more nearer to the boarding
+ *         place than 2 s before (KLE_COME; a bot that stands, fights, loots or walks the other way does not hold the
+ *         driver): timer += min(5, what is
+ *         left of N). At most N seconds a visit. Readers of the timer: its countdown (slot 195), the HUD's seconds
+ *         (slot 191, a signed byte: the timer stays under 8 s here), the boarding rule's state-5 window, the board
+ *         tactic in state 1 / 2. The round's own end timer (slot 192) does nothing while the vehicle's state is 1..6
+ *         (0x5dffc6): a held vehicle postpones the round's end, it cannot lose the round by the clock. While the
+ *         human sits aboard the game's ten scripted hits on the vehicle run as ever (0x6db660, read as: 1/30 of its
+ *         health each, never under a tenth; made once per wait); real police fire can destroy a vehicle that waits
+ *         longer.
+ *      d. FollowOutSpare=1 (works without FollowOut): when the vehicle drives out, the times at rules +0xeec are set
+ *         to 0x7fffffff (the loop's test is signed, `jg` 0x74b966): no slot's time comes, nobody left behind is shot.
+ *         They stay in play to the round's end, 3 s after the human has escaped - an end state stock produces too (a
+ *         slot whose time lies past the drive-out, 8.4 s on the F07 van: live run PB_DM01_board_hp). The first time
+ *         is due 0.3 s after the state change at the earliest, so
+ *         the state byte is read on EVERY pass of the tick while the vehicle waits. Written only when the table looks
+ *         like one: every time a value of the game's clock (or ours), and EITHER the slot bytes a shuffle of
+ *         0..slots-1 (a schedule was made: 0x8fabfd + 0x7f87c0) OR all twelve times 0 (a table never used: the
+ *         constructor zeroes the times, 0x8355db.., and writes NOTHING at +0xf1c, so the slot bytes are then what the
+ *         heap held - the game itself skips a slot byte out of range, 0x74b91e, and so must this test).
+ *    STOPS: a bot aboard, dead, escaped, turned traitor or replaced in its record is left alone; orders end when the
+ *    vehicle is 2 s from arriving; everything ends when the human is dead or has escaped (a bot found dead in that
+ *    last pass still gets its line). THE STAGE IS NOT TAKEN BACK: a human who
+ *    walks back inside after his stage 3 has a crew that goes to the vehicle and boards without him, as the game's own
+ *    stage-3 bots do (his escort stays until the vehicle waits). FollowOutMoney keeps a walk through the exit box
+ *    before any loot from calling the crew out.
+ *    WHO ELSE READS STAGE 3: as under BoardAll below (the traitor tactic's stage term, Backstab, Van, the off-stage
+ *    damage factor, kltalk). FollowOut is OFF with VanLeftBehind=1, for BoardAll's reason.
+ *    TWO CONSEQUENCES THE OWNER MUST KNOW (EXE; re\bots_follow_out.md 2.5):
+ *      - THE PAYOUT. At the round's end the rules zero the money of everybody who did not escape (0x70b920) and give
+ *        every ESCAPED NON-TRAITOR the same share: the sum of what they carried over their number (0x796410; its
+ *        factor 0x7360a0 is `fld1 / ret`). Being shot or being left in play is the same there - FollowOutSpare
+ *        changes no payout - but every bot FollowOut / FollowOutHold gets aboard joins that pool: the human's cut,
+ *        in stock already the average of those who escaped, becomes the average of a larger crew (control run: 550,000
+ *        + 40,000 + 415,000 over 3). (A member with client flag 8 or 0x80 gets his own money instead; what those
+ *        flags are was not read. What the score page prints, 0x783010, was not followed.)
+ *      - TRAITORS. The traitor tactic's stage term is 0 / 0 / 2 / 3 by the BOT's stage (0x79b883; klbot.c 3): a bot
+ *        inside at stage 1 cannot reach the stock limit 7.0 (0 + 3 + 3), a bot raised to 3 can (3 + its money + your
+ *        money). So FollowOut makes a betrayal possible for a called bot wherever the tuning allows traitors: Arcade
+ *        level 4 and up in stock. With [Bots] Tune=1 (every level, limit 6.0) a stage-1 bot could just turn already;
+ *        a called one needs 3 points less of the two money terms.
+ *
+ * NO OFF-GAME RIG IN THE REPO: klbot.c had a scratch rig; the escort part is proven by its live runs; BoardAll by three
+ * reviews of the code against the exe (re\boardall_review_exe.md, _code.md, _rework.md) and two live runs (L12a / b);
+ * FollowOut by a scratch rig against a made-up round (re\bots_follow_out.md 6) - its own logic, nothing of the game -
+ * and by one adversarial review (re\bots_follow_out_review.md: one MUST, seven SHOULD - all applied, re\bots_follow_out.md 10;
+ * the rig now holds the review's five cases as checks).
  *
  * KLHook.ini
  *   [Bots]
@@ -167,6 +272,29 @@
  *   BoardAllStage=1     0 = the byte is not written (the pass only logs whom it would free)
  *   BoardAllOrder=0     1 = a freed bot also gets ONE not-soft order to the rules' boarding place per visit (the call
  *                       the escort part makes). Off: the byte alone does it, and that place lies on the van's approach.
+ *   FollowOut=0         1 = THE CREW FOLLOWS YOU OUT (section 3; NOT RUN IN THE GAME): once YOUR crew record has heist
+ *                       stage 3 (you stood in the exit trigger: the vehicle is called), every AI heister in play that
+ *                       is no traitor gets heist stage 3 and, while the vehicle drives in (and is 2 s or more away),
+ *                       one order to the boarding place. Works without Escort and with BoardAll. Not with
+ *                       VanLeftBehind=1. TWO PRICES: every bot it gets aboard shares the escaped crew's money with
+ *                       you (the rules pay each escaped non-traitor the average of what they carried); and a called
+ *                       bot counts as 'at the vehicle' for the game's traitor tactic - on Arcade level 4 and up it
+ *                       can turn on you where a bot inside the building could not (with Tune=1: on every level, and
+ *                       with less money).
+ *   FollowOutDry=0      1 = every line, NOTHING written or called (EscortDry=1 does the same for this part)
+ *   FollowOutMoney=1    you must carry this much for the signal to count (a walk through the exit box before any loot
+ *                       does not call the crew out); 0 = no condition
+ *   FollowOutAfter=0    seconds between your stage 3 and the call (a grace for the crew's last grab)
+ *   FollowOutOrder=1    0 = the stage byte only (the game's own order comes at the vehicle's next call)
+ *   FollowOutEvery=2    seconds between two orders to one bot, at least
+ *   FollowOutHold=0     seconds the driver may be held per visit, at most (0 = never; 15 is a fair first value): while
+ *                       the vehicle waits with YOU ABOARD and crew that was called still COMES (2 m nearer to the
+ *                       boarding place in 2 s), its timer gets up to 5 s more each time it falls under 2 s - the float
+ *                       and the amount of the game's own HoldEscape rule, more often than that rule's once
+ *   FollowOutSpare=0    1 = those who are not aboard when the vehicle drives out are NOT shot by the rules (one block
+ *                       of the rules object: the times of their deaths, put off). A key of its own: works with
+ *                       FollowOut=0. They are left in play; the round still ends 3 s after you have escaped. No
+ *                       payout changes: dead or left in play, their money is not in the escaped crew's pool.
  *
  * LOG (the lines the live checks look for)
  *   escort: on; Escort=1 Far=800 Side=300 ...
@@ -180,6 +308,23 @@
  *   board: on; BoardAll=1 Still=15 s Stage=1 Order=0 ...
  *   board: record 5 (stage 1) at (x, y, z): held for 41 s with $150000: the vehicle waits (state 3): heist stage set to 3
  *   board: record 5 at (x, y, z): sent to the boarding place (x, y, z) ...; visit 1 of the vehicle      (BoardAllOrder=1)
+ *   follow: on; FollowOut=1 Money=1 After=0 s Order=1 Every=2 s Hold=15.0 s Spare=1 ...
+ *   follow: you are at heist stage 3 (in play, $550000); vehicle state 1, timer 7.2 s: THE CREW IS CALLED - 5 AI ...
+ *   follow: record 3 (stage 1, $0) at (472, 294, -4932), 55.1 m from the boarding place: heist stage set to 3
+ *   follow: record 3 (stage 1): its actor is no ZFFActor with a readable place (00000000): the stage byte is NOT written ...
+ *   follow: record 3 sent to the boarding place (x, y, z), the game set (x, y, z); order 1
+ *   follow: the vehicle arrives in 1.9 s (call 1): no order from here on ...                       once per call
+ *   follow: the vehicle waits (state 3, timer 8.0 s, visit 1): record 3 (stage 3, $0) in play at (x, y, z), 31.0 m from the boarding place, coming (4.2 m nearer in the last 2 s)
+ *   follow: the vehicle waits: 1 of the crew aboard, 4 in play (nearest 12.0 m, farthest 55.1 m), 1 dead; you are in play
+ *   follow: hold: the vehicle would leave in 1.8 s with you aboard and 3 of the crew still coming ...: timer 1.8 -> 6.8 s (5.0 of 15.0 s used)
+ *   follow: record 3 aboard 21.4 s after the crew was called (vehicle state 3, timer 4.1 s)
+ *   follow: the vehicle leaves (state 5, timer 8.4 s, visit 1): record 5 (stage 3, $0) in play at (x, y, z), 22.0 m from the boarding place, coming (5.1 m nearer in the last 2 s)
+ *   follow: the vehicle leaves (state 5) with you aboard: 4 of the crew aboard, 1 left in play (record(s) 5), 1 dead
+ *   follow: spare: the vehicle drives out with you aboard: the rules' times for those left behind (8 slots, the first due in 0.6 s) are put off: record(s) 5 not shot
+ *   follow: spare: the vehicle drives out without you: no time was set for this departure; the table ... is put off in case you board in its first second
+ *   follow: record 5 dead at (x, y, z) ... - LEFT BEHIND: the rules shoot whoever is not aboard while the vehicle drives out with you
+ *   follow: record 5 dead ..., seen as the round ended for you - LEFT BEHIND: ...                  a death in the last pass before 'over'
+ *   follow: over (you escaped): of the crew 4 escaped, 2 dead, 0 left in play
  */
 #ifndef KLESCORT_C
 #define KLESCORT_C
@@ -189,10 +334,18 @@
 #define KLE_HELD_VT     0x0086dba0            /* ZFFActor vtable +0x620: [actor + 0x770] != 0 */
 #define KLE_MAX         2
 #define KLE_ROUTE       600.0f                /* a foreign place farther than this from ours = the route chain's. GUESS */
+#define KLE_KILL_TIMES  0xeec                 /* rules: per slot the time ([sysif+0x48], 1/1024 s) at which its record is shot (0x8fabe3, 0x74b907) */
+#define KLE_KILL_SLOTS  0xf1c                 /* rules: per slot one byte, the crew record it names (0x8fabfd, 0x74b910) */
+#define KLE_KILL_NEVER  0x7fffffffu           /* a time the loop's signed test (0x74b963 cmp / jg) never reaches */
+#define KLE_HOLD_AT     2.0f                  /* FollowOutHold: the wait timer under this many seconds gets more */
+#define KLE_HOLD_STEP   5.0f                  /* ... this much at a time: what the game's own hold rule adds (0x8b3959, 0xb5a068) */
+#define KLE_COME        200.0f                /* ... while a called bot COMES: this much nearer to the boarding place than 2 s before. GUESS (a walk is about 3 m/s) */
+#define KLE_BOARD_WIN   2.0f                  /* state 1 / 2 with the timer under this: the board tactic is live for a stage-3 bot (0x4faff7, 0x82f9be; float 0xb5c828) - no order */
 
 static struct {
     int n, dry, log, record, refill, until, stage, board; DWORD every; float far_, side, retarget;
     int all, all_stage, all_order; DWORD all_still;      /* BoardAll, BoardAllStage, BoardAllOrder, BoardAllStill in ms */
+    int fo, fo_dry, fo_order, fo_spare; DWORD fo_after, fo_every, fo_money; float fo_hold;      /* FollowOut..: After / Every in ms, Hold in s */
 } kle;
 
 struct kle_e {
@@ -207,6 +360,19 @@ static struct {
        (dry run / BoardAllStage=0); all_told bit 1 / 2 / 4 = a line said; where a bot stands, what it has, since when */
     int visit, was_waiting, told_nobd; int all_visit[KLB_NREC]; char all_told[KLB_NREC], all_raised[KLB_NREC], all_seen[KLB_NREC];
     float all_pos[KLB_NREC][3]; DWORD all_money[KLB_NREC], all_since[KLB_NREC], all_actor[KLB_NREC];
+    /* FollowOut: fo_since = the human was first seen at stage 3 with his money, fo_fired = the crew was called (both a
+       tick time, 0 = not), fo_over = said that it is over; fo_call = the calls of the vehicle seen since (state 1 / 2);
+       fo_win_call = the call for which 'no order from here on' was said;
+       per record fo_did: 1 the stage byte written, 2 would be (dry), 4 'not written' said, 8 aboard said, 0x10 dead
+       said, 0x20 'no order' said for this call, 0x40 'has stage 3 / is a traitor' said, 0x80 'no actor' said;
+       fo_moves = 1 it COMES: fo_d (its distance to the boarding place at the sample of fo_pos_at) fell by KLE_COME over
+       the last 2 s sample, fo_near = by how much; 0 it does not; 2 not known yet (no whole sample: counted as no) */
+    DWORD fo_since, fo_fired; int fo_over, fo_told, fo_call, fo_was_coming, fo_win_call, fo_hold_visit, fo_hold_told; BYTE fo_veh; float fo_held;
+    BYTE fo_did[KLB_NREC]; char fo_moves[KLB_NREC]; int fo_ocall[KLB_NREC], fo_orders[KLB_NREC];
+    DWORD fo_actor[KLB_NREC], fo_order_at[KLB_NREC], fo_pos_at[KLB_NREC]; float fo_target[KLB_NREC][3], fo_d[KLB_NREC], fo_near[KLB_NREC];
+    /* FollowOutSpare: the rules object whose vehicle state the fast pass watches (0 = none); this departure is dealt
+       with; its times were put off by this file (the dead of this departure are then not the rules' shot) */
+    DWORD spare_rules; int spare_at5, spare_told, spare_put;
 } kle_r;
 
 static float kle_dist(const float a[3], const float b[3])
@@ -299,13 +465,13 @@ static int kle_callable(char why[100])
 
 /* ONE call of the game's order (game thread only). want = the place asked; got = what the defend block holds after.
    -> 1 called, 0 not (why says), 2 dry run. */
-static int kle_order(struct kle_e *e, const float want[3], float got[3], char why[100])
+static int kle_order2(struct kle_e *e, const float want[3], float got[3], char why[100], int dry)
 {
     float p[4]; BYTE soft = 0;
     memcpy(got, want, 12);
     if (!kle_ok3(want)) { strcpy(why, "the place is not a number"); return 0; }
     if (!kle_callable(why)) return 0;
-    if (kle.dry) return 2;
+    if (dry) return 2;
     p[0] = want[0]; p[1] = want[1]; p[2] = want[2]; p[3] = 0;
     ((void (__fastcall *)(void *, void *, const float *, int, int, int))(DWORD_PTR)KLH_VA(KLE_ORDER))((void *)(DWORD_PTR)e->soldier, 0, p, 0, 1, 0);
     if (!kle_block(e->soldier, got)) memcpy(got, want, 12);
@@ -313,6 +479,7 @@ static int kle_order(struct kle_e *e, const float want[3], float got[3], char wh
         klog("escort: record %d: the game took an order as 'he is there already' ([soldier+0x4fc] = 1): a waiting step of its route chain ends now (said once per escort)", e->rec);
     return 1;
 }
+static int kle_order(struct kle_e *e, const float want[3], float got[3], char why[100]) { return kle_order2(e, want, got, why, kle.dry); }
 
 /* the rules' own boarding place: boarding object + 500 along its x axis (0x8faf72..0x8fafe6) */
 static int kle_boarding(DWORD rules, float out[3])
@@ -502,24 +669,319 @@ static void kle_board_all(const struct klb_snap *s, DWORD now)
     }
 }
 
+/* ---------------------------------------------------------------- FollowOut (section 3) */
+
+/* Is the local player a heister? [player + 0x273c] == 2 (a policeman after his death is 3: klfed.c). Without the node
+   test of kle_human: a player aboard the vehicle must still count. */
+static int kle_criminal(void)
+{
+    DWORD gd, pl; BYTE sel = 0xff, type = 0;
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x898, &sel, 1) || sel > 3) return 0;
+    return (pl = klh_rd32(gd + 0x828 + 4 * sel)) != 0 && klh_rd(pl + 0x273c, &type, 1) && type == 2;
+}
+
+/* FollowOutSpare: the vehicle drives out (state 5). The rules have just set, for every slot, the time at which the
+   record it names is shot if it is an AI member still in play (0x8fab77..0x8fac9a; read by 0x74b8a2..0x74b99a while the
+   human's client flag 0x20 is set). All of them are put off to a time that never comes - ONE block of the rules
+   object, written only when it looks like that table. The table has three honest shapes:
+     - scheduled (at this departure, or at an earlier one of this round object): every time a value of the game's
+       clock that is not more than 16 s ahead (the latest the game sets is 9.3 s), the slot bytes a shuffle of
+       0..slots-1 (0x8fabfd writes k, 0x7f87c0 swaps);
+     - never used: all TWELVE times 0, as the constructor leaves them (0x8355db..0x83561d). It writes NOTHING at
+       +0xf1c: the slot bytes are then what the heap held, and the game's loop skips one out of range (0x74b91e
+       `cmp edi, [esi+0x354] / jge`). So the bytes are not judged in this shape (review S3: the first departure of a
+       round object with the human not aboard was refused as 'not the table');
+     - put off by this file: every time ours.
+   Also done when the human is not aboard: no time was set then, but he can still board in the first second of
+   state 5, and the loop would run on what the table held before. */
+static void kle_spare(DWORD rules)
+{
+    struct klb_snap s; DWORD sys, tnow = 0, fl0 = 0, t[12], put[12], named = 0; BYTE slot[12]; char list[100]; long first = 0x7fffffff;
+    int i, k = 0, n, due = 0, left = 0, zero = 0, shuffle = 1, dry = kle.dry || kle.fo_dry;
+    if (kle_r.spare_at5) return;
+    if (!klb_read(&s) || s.rules != rules || s.state != KLB_ROUND || s.veh != 5) return;
+    kle_r.spare_at5 = 1;                      /* this departure is dealt with, whatever is found below */
+    n = s.n;
+    if (n < 1 || n > 12 || !(sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF))) || !klh_rd(sys + 0x48, &tnow, 4) || !klh_rd(rules + KLE_KILL_TIMES, t, sizeof t)
+        || !klh_rd(rules + KLE_KILL_SLOTS, slot, (SIZE_T)n) || !klh_rd(s.score + 0x1d4, &fl0, 4)) {
+        klog("follow: spare: the rules' table of times cannot be read (%d record slots): nothing is written", n);
+        return;
+    }
+    for (i = 0; i < 12; i++) if (!t[i]) zero++;                               /* 12 = the table as the constructor made it */
+    for (i = 0; i < n; i++) {
+        if (t[i] != KLE_KILL_NEVER && ((long)t[i] < 0 || t[i] > tnow + 16 * 1024)) {
+            klog("follow: spare: rules +0x%x does not hold the table of times this build knows (slot %d: %08lx is no time of the clock, which is %08lx): nothing is written", KLE_KILL_TIMES, i, t[i], tnow);
+            return;
+        }
+        if (slot[i] >= n || (named >> slot[i] & 1)) shuffle = 0; else named |= 1u << slot[i];
+        if (t[i] != KLE_KILL_NEVER) { due++; if (t[i] && (long)(t[i] - tnow) < first) first = (long)(t[i] - tnow); }
+        put[i] = KLE_KILL_NEVER;
+    }
+    if (!due) return;                         /* put off already, at an earlier departure of this round object */
+    if (!shuffle && zero != 12) {             /* times of the clock, but the bytes beside them name no record each: not the table */
+        klog("follow: spare: rules +0x%x / +0x%x do not hold the table this build knows (the %d slot bytes %02x %02x %02x %02x .. are no shuffle of 0..%d, and the times are not the zeros of a table never used; the clock is %08lx): nothing is written",
+             KLE_KILL_TIMES, KLE_KILL_SLOTS, n, slot[0], n > 1 ? slot[1] : 0, n > 2 ? slot[2] : 0, n > 3 ? slot[3] : 0, n - 1, tnow);
+        return;
+    }
+    list[0] = 0;
+    for (i = 0; i < n; i++)
+        if (s.r[i].used && (s.r[i].flags & 1) && s.r[i].status == 0) { left++; if (k < (int)sizeof list - 8) k += snprintf(list + k, sizeof list - k, "%s%d", k ? " " : "", i); }
+    if (!dry && !klh_data((void *)(DWORD_PTR)(rules + KLE_KILL_TIMES), put, 4 * n, "the times at which the rules shoot the crew left behind (put off)")) {
+        klog("follow: spare: the rules' times could NOT be written: those left behind are shot as in stock");
+        return;
+    }
+    if (!dry) kle_r.spare_put = 1;
+    if (zero == 12) {                         /* never used: nobody was scheduled, whoever is aboard */
+        if (fl0 & 0x20)
+            klog("follow: spare: the vehicle drives out with you aboard, but the rules' table was never used (twelve times of 0: you boarded after it began to drive out, no time was set): it %s all the same - a slot byte the heap left could name a record: %d AI heister(s) in play%s%s%s",
+                 dry ? "WOULD be put off (dry run)" : "is put off", left, left ? " (record(s) " : "", list, left ? ")" : "");
+        else if (!kle_r.spare_told++)
+            klog("follow: spare: the vehicle drives out without you: no time was set for this departure; the table as the round object was made (never used: times of 0, and slot bytes that are whatever the heap held - the game skips those out of range) %s in case you board in its first second (said once a round)", dry ? "WOULD be put off (dry run)" : "is put off");
+    } else if (fl0 & 0x20)
+        klog("follow: spare: the vehicle drives out with you aboard: the rules' times for those left behind (%d slot(s), the first due in %.1f s) %s: %d AI heister(s) in play%s%s%s", due, first / 1024.0,
+             dry ? "WOULD be put off (dry run: they are shot)" : "are put off", left, left ? (dry ? " (record(s) " : " are not shot (record(s) ") : "", list, left ? ")" : "");
+    else if (!kle_r.spare_told++)
+        klog("follow: spare: the vehicle drives out without you: no time was set for this departure; the table of an earlier one (%d slot(s)) %s in case you board in its first second (said once a round)", due, dry ? "WOULD be put off (dry run)" : "is put off");
+}
+
+/* every pass of the tick while the vehicle waits: ONE read of its state byte. The first time is due 0.3 s after the
+   change to state 5 at the earliest (8 slots), and the 500 ms pass could come later than that. */
+static void kle_spare_fast(void)
+{
+    DWORD rules = kle_r.spare_rules; BYTE veh = 0;
+    if (!klh_rd(rules + 0x1dc, &veh, 1)) { kle_r.spare_rules = 0; return; }
+    if (veh == 3 || veh == 4) return;         /* it still waits */
+    kle_r.spare_rules = 0;
+    if (veh == 5) kle_spare(rules);
+}
+
+/* FollowOut, every pass of a round (the key's text and section 3 say why and what). */
+static void kle_follow(const struct klb_snap *s, DWORD now)
+{
+    const struct klb_rec *h = s->human >= 0 ? &s->r[s->human] : 0; struct kle_e t; DWORD actor, soldier; BYTE prev;
+    int i, k, dry = kle.dry || kle.fo_dry, waiting = s->veh == 3 || s->veh == 4, coming = s->veh == 1 || s->veh == 2, have_bd, edge_wait, edge_leave;
+    int n_play = 0, n_aboard = 0, n_dead = 0, n_moving = 0, nl = 0; float bd[3] = { 0, 0, 0 }, p[3] = { 0, 0, 0 }, bp[3], got[3], cur[3], d, dmin = -1, dmax = -1, timer = klb_finite(s->timer) ? s->timer : -1.0f;
+    char w[100], left[100], dt[64], rg[80];
+
+    if (kle.fo_spare) {                       /* a key of its own: before every test of FollowOut */
+        if (s->veh != 5) kle_r.spare_at5 = 0;
+        if (s->veh >= 1 && s->veh <= 4) kle_r.spare_put = 0;                  /* a new visit; kept through state 5 and after it, for the 'dead' lines of that departure */
+        kle_r.spare_rules = waiting ? s->rules : 0;                           /* the fast pass reads the state byte from here on */
+        if (s->veh == 5) kle_spare(s->rules);
+    }
+    if (!kle.fo || !h) return;
+
+    /* ---- the signal: the human's own record has heist stage 3, he is a heister in play or aboard, with his money */
+    if (!kle_r.fo_fired) {
+        int ai = 0; float tun[4] = { 0, 0, 0, 0 }; DWORD tu;
+        if (kle_r.fo_over || (h->status != 0 && h->status != 4) || h->stage < 3 || !kle_criminal()) { kle_r.fo_since = 0; return; }
+        if (h->money < kle.fo_money) {
+            if (!(kle_r.fo_told & 1)) { kle_r.fo_told |= 1; klog("follow: you are at heist stage 3 with $%lu, under FollowOutMoney=%lu: the crew is not called yet", h->money, kle.fo_money); }
+            kle_r.fo_since = 0;
+            return;
+        }
+        if (!kle_r.fo_since) {
+            kle_r.fo_since = KLB_T(now);
+            if (kle.fo_after) klog("follow: you are at heist stage 3 with $%lu (vehicle state %u): the crew is called in %lu s (FollowOutAfter)", h->money, s->veh, kle.fo_after / 1000);
+        }
+        if (now - kle_r.fo_since < kle.fo_after) return;
+        kle_r.fo_fired = KLB_T(now); kle_r.fo_veh = 0;
+        for (i = 0; i < s->n && i < KLB_NREC; i++) {
+            const struct klb_rec *r = &s->r[i];
+            kle_r.fo_actor[i] = r->actor; kle_r.fo_did[i] = 0; kle_r.fo_pos_at[i] = 0; kle_r.fo_ocall[i] = 0; kle_r.fo_orders[i] = 0;
+            if (!r->used || !(r->flags & 1)) continue;
+            if (r->status >= 4 && r->status <= 6) kle_r.fo_did[i] |= 8;       /* aboard before the call: not this part's to report */
+            else if (r->status) kle_r.fo_did[i] |= 0x10;                      /* dead before it */
+            else if (!(r->flags & 2)) ai++;
+        }
+        if ((tu = klh_rd32((DWORD_PTR)KLH_VA(KLB_TUNING))) != 0) klh_rd(tu + 0x628, tun, sizeof tun);
+        for (i = 0; i < 4; i++) if (!klb_finite(tun[i])) tun[i] = -1;
+        klog("follow: you are at heist stage 3 (%s, $%lu); vehicle state %u, timer %.1f s: THE CREW IS CALLED - %d AI heister(s) in play that are no traitors %s heist stage 3%s%s; the tuning's vehicle times %.1f / %.1f / %.1f / %.1f s (boarding stays open in state 5 while the third minus the timer is under 1)",
+             h->status == 4 ? "aboard" : "in play", h->money, s->veh, timer, ai, dry ? "WOULD get (dry run)" : "get",
+             kle.fo_order ? " and, while the vehicle drives in, the order to the boarding place" : "", kle.fo_hold > 0 ? "; the driver may be held for them" : "", tun[0], tun[1], tun[2], tun[3]);
+    }
+    if (h->status != 0 && h->status != 4) {   /* dead, or escaped: the round is over for him */
+        if (!kle_r.fo_over) {
+            int esc = 0, dead = 0, play = 0, escaped = h->status == 5 || h->status == 6, out = escaped && kle_r.fo_veh == 5;      /* out: the pass before this one saw the vehicle drive out with him aboard */
+            kle_r.fo_over = 1;
+            for (i = 0; i < s->n && i < KLB_NREC; i++) {
+                const struct klb_rec *r = &s->r[i]; BYTE did;
+                if (!r->used || !(r->flags & 1)) continue;
+                if (r->status == 0) play++; else if (r->status >= 4 && r->status <= 6) esc++;
+                else {
+                    dead++;
+                    /* a bot that died since the last pass - with the human aboard, in the last half second of the
+                       drive-out (review S4: the control's last death is 0.43 s before 'status6') - still gets its line */
+                    did = r->actor == kle_r.fo_actor[i] ? kle_r.fo_did[i] : 0;
+                    if (did & 0x10) continue;
+                    kle_r.fo_actor[i] = r->actor; kle_r.fo_did[i] = (BYTE)(did | 0x10);
+                    if (!(r->actor && klh_rd32(r->actor) == KLB_ACTOR_VT && kle_node(klh_rd32(r->actor + 4), p, 0))) p[0] = p[1] = p[2] = 0;
+                    klog("follow: record %d%s dead %.1f s after the crew was called, at (%.0f, %.0f, %.0f); vehicle state %u, seen as the round ended for you%s", i, kle_r.used[i] ? " (an escort)" : "", (now - kle_r.fo_fired) / 1000.0, p[0], p[1], p[2], s->veh,
+                         !out ? "" : kle_r.spare_put ? " - while the vehicle drove out with you, although the rules' times were put off (FollowOutSpare): not their shot" : " - LEFT BEHIND: the rules shoot whoever is not aboard while the vehicle drives out with you");
+                }
+            }
+            klog("follow: over (you %s): of the crew %d escaped, %d dead, %d left in play", escaped ? "escaped" : "are dead", esc, dead, play);
+        }
+        return;
+    }
+
+    prev = kle_r.fo_veh; kle_r.fo_veh = s->veh;
+    edge_wait = waiting && prev != 3 && prev != 4;
+    edge_leave = s->veh == 5 && prev != 5;
+    if (coming && !kle_r.fo_was_coming) { kle_r.fo_call++; for (i = 0; i < KLB_NREC; i++) kle_r.fo_did[i] &= ~0x20; }      /* the vehicle was called: a new visit */
+    kle_r.fo_was_coming = coming;
+    have_bd = s->veh >= 1 && s->veh <= 5 && kle_boarding(s->rules, bd);      /* [rules+0x1e0] is set from the call on (slot 89, 0x49d170) and cleared in state 0 and 7 */
+    left[0] = 0;
+    for (i = 0; i < s->n && i < KLB_NREC; i++) {
+        const struct klb_rec *r = &s->r[i]; BYTE *did = &kle_r.fo_did[i]; const char *esc = kle_r.used[i] ? " (an escort)" : ""; int havep; BYTE fl = 0, st = 0, curst = 3, soft = 0; char mv[64];
+        if (!r->used || !(r->flags & 1)) continue;
+        if (r->actor != kle_r.fo_actor[i]) {                                  /* another member in this record: nothing of the old one counts */
+            kle_r.fo_actor[i] = r->actor; *did = 0; kle_r.fo_pos_at[i] = 0; kle_r.fo_moves[i] = 0; kle_r.fo_ocall[i] = 0; kle_r.fo_orders[i] = 0;
+        }
+        havep = r->actor && klh_rd32(r->actor) == KLB_ACTOR_VT && kle_node(klh_rd32(r->actor + 4), p, 0);
+        d = havep && have_bd ? kle_dist(p, bd) : -1;
+        if (d >= 0) snprintf(dt, sizeof dt, ", %.1f m from the boarding place", d / 100); else strcpy(dt, havep ? "" : " (its place cannot be read)");
+        if (!havep) p[0] = p[1] = p[2] = 0;
+        if (r->status >= 4 && r->status <= 6) {
+            n_aboard++;
+            if (!(*did & 8)) { *did |= 8; klog("follow: record %d%s %s %.1f s after the crew was called (vehicle state %u, timer %.1f s)", i, esc, r->status == 4 ? "aboard" : "escaped", (now - kle_r.fo_fired) / 1000.0, s->veh, timer); }
+            continue;
+        }
+        if (r->status) {
+            n_dead++;
+            if (!(*did & 0x10)) {
+                *did |= 0x10;
+                klog("follow: record %d%s dead %.1f s after the crew was called, at (%.0f, %.0f, %.0f)%s; vehicle state %u%s", i, esc, (now - kle_r.fo_fired) / 1000.0, p[0], p[1], p[2], dt, s->veh,
+                     s->veh != 5 || h->status != 4 ? "" : kle_r.spare_put ? " - while the vehicle drives out with you, although the rules' times were put off (FollowOutSpare): not their shot" : " - LEFT BEHIND: the rules shoot whoever is not aboard while the vehicle drives out with you");
+            }
+            continue;
+        }
+        if (r->flags & 2) { if (!(*did & 0x40)) { *did |= 0x40; klog("follow: record %d is a traitor: it is not called", i); } continue; }
+        n_play++;
+        if (nl < (int)sizeof left - 8) nl += snprintf(left + nl, sizeof left - nl, "%s%d", nl ? " " : "", i);
+        if (d >= 0) { if (dmin < 0 || d < dmin) dmin = d; if (d > dmax) dmax = d; }
+        /* does it COME? Its distance to the boarding place fell by KLE_COME over the last 2 s sample. Not 'does it move':
+           a bot that walks the other way moved too, and held the driver with the human aboard (review S1). Not known
+           (no place, no boarding place, no whole sample yet) = no. */
+        if (d < 0) { kle_r.fo_moves[i] = 2; kle_r.fo_pos_at[i] = 0; }
+        else if (!kle_r.fo_pos_at[i]) { kle_r.fo_d[i] = d; kle_r.fo_near[i] = 0; kle_r.fo_pos_at[i] = KLB_T(now); kle_r.fo_moves[i] = 2; }
+        else if (now - kle_r.fo_pos_at[i] >= 2000) { kle_r.fo_near[i] = kle_r.fo_d[i] - d; kle_r.fo_moves[i] = kle_r.fo_near[i] >= KLE_COME; kle_r.fo_d[i] = d; kle_r.fo_pos_at[i] = KLB_T(now); }
+        if (edge_wait || edge_leave) {        /* the two lines a bot's way during the wait is read from (review S5): place and distance when it began and when it ended */
+            if (kle_r.fo_moves[i] == 2) strcpy(mv, "not known yet whether it comes"); else snprintf(mv, sizeof mv, "%s (%.1f m nearer in the last 2 s)", kle_r.fo_moves[i] ? "coming" : "not coming", kle_r.fo_near[i] / 100);
+            klog("follow: the vehicle %s (state %u, timer %.1f s, visit %d): record %d%s (stage %u, $%lu) in play at (%.0f, %.0f, %.0f)%s, %s", edge_wait ? "waits" : "leaves", s->veh, timer, kle_r.visit, i, esc, r->stage, r->money, p[0], p[1], p[2], dt, mv);
+        }
+        /* a. the stage byte, once */
+        if (!(*did & 0x43)) {
+            const char *what;
+            if (r->stage >= 3) { *did |= 0x40; what = "it has heist stage 3 already"; }
+            else if (!havep) {
+                /* review M1: no stage 3 for a record whose actor was not seen to be one. From stage 3 on the rules' own
+                   order loop reads [record+4] and [actor+0x77c] at every call and departure with no test (0x8fb031 /
+                   0x8fb034): a null or stale actor there is a fault inside kl2.exe. BoardAll asks the same (all_seen). */
+                if (!(*did & 0x80)) { *did |= 0x80; klog("follow: record %d%s (stage %u): its actor is no ZFFActor with a readable place (%08lx): the stage byte is NOT written - the rules walk a stage-3 record's actor with no test of their own (looked at again every pass)", i, esc, r->stage, r->actor); }
+                continue;
+            }
+            else if (dry) { *did |= 2; what = "heist stage WOULD be set to 3 (dry run)"; }
+            else if (!klb_still(s, i, &fl, &st) || st || (fl & 2) || !klh_rd(r->at + 0x78, &curst, 1)) {      /* gone, aboard, dead or turned since the snapshot */
+                if (!(*did & 4)) { *did |= 4; klog("follow: record %d: its record changed since this pass read it: nothing is written (looked at again next pass)", i); }
+                continue;
+            }
+            else if (curst >= 3) { *did |= 0x40; what = "it has heist stage 3 since this pass read it (BoardAll, or a trigger box)"; }
+            else if (!klb_put8(r->at + 0x78, 3, "crew record: heist stage 3 (the crew follows the human out)")) {
+                if (!(*did & 4)) { *did |= 4; klog("follow: record %d (stage %u): the stage byte was NOT written: it is left alone", i, r->stage); }
+                continue;
+            }
+            else { *did |= 1; what = "heist stage set to 3"; }
+            klog("follow: record %d%s (stage %u, $%lu) at (%.0f, %.0f, %.0f)%s: %s", i, esc, r->stage, r->money, p[0], p[1], p[2], dt, what);
+        }
+        if (kle_r.fo_moves[i] == 1) n_moving++;                               /* only a bot that passed (a): called crew at stage 3 */
+        /* b. the order to the boarding place: only while the vehicle drives in AND the board tactic cannot have the bot
+           yet. That tactic is live while the vehicle waits and, in state 1 / 2, once the timer is under 2.0 (its test
+           0x4faff7, its run 0x82f9be): a not-soft order then would cut the very tactic that takes him aboard (review S2). */
+        if (!kle.fo_order || !coming || !have_bd || !havep || kle_r.used[i] || !(*did & 3) || d < 400.0f) continue;      /* only whom this part gave its stage (the others had the game's order at the call); within 4 m it is there (and within 2.5 m the game would take the order as 'soft') */
+        if (!(timer >= KLE_BOARD_WIN)) {                                      /* also a timer that is no number */
+            if (kle_r.fo_win_call != kle_r.fo_call) { kle_r.fo_win_call = kle_r.fo_call; klog("follow: the vehicle arrives in %.1f s (call %d): no order from here on - under %.0f s a stage-3 bot's own board tactic is live, and a not-soft order would cut it", timer, kle_r.fo_call, KLE_BOARD_WIN); }
+            continue;
+        }
+        k = kle_r.fo_ocall[i] == kle_r.fo_call;                               /* ordered for this call already */
+        if (k && (dry || now - kle_r.fo_order_at[i] < kle.fo_every)) continue;
+        /* its defend place IS the boarding place: what the game's own order at this call did (snapped to the mesh: 3 m),
+           or - after an order of ours - anything within KLE_ROUTE of what that left: nearer than that, one of the
+           soldier's own tactics moved it (section 2's GUESS), and a renewal would pop a fighting bot's goal stack every
+           FollowOutEvery (review S2) */
+        if ((soldier = klh_rd32(r->actor + 0x77c)) != 0 && kle_block(soldier, cur)
+            && kle_dist(cur, k ? kle_r.fo_target[i] : bd) <= (k ? KLE_ROUTE : 300.0f)) continue;
+        if (!kle_bot(s, i, &actor, &soldier, bp, w)) {
+            if (!(*did & 0x20)) { *did |= 0x20; klog("follow: record %d: no order to the boarding place yet: %s (asked again every pass while the vehicle drives in)", i, w); }
+            continue;
+        }
+        memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;      /* kle_order2's 'soft' line is worded for an escort */
+        k = kle_order2(&t, bd, got, w, dry);
+        kle_r.fo_order_at[i] = KLB_T(now);
+        if (!k) { if (!(*did & 0x20)) { *did |= 0x20; klog("follow: record %d NOT sent to the boarding place: %s", i, w); } continue; }
+        kle_r.fo_ocall[i] = kle_r.fo_call; memcpy(kle_r.fo_target[i], got, 12); kle_r.fo_orders[i]++;
+        if (k == 1) klh_rd(soldier + 0x4fc, &soft, 1);
+        klog("follow: record %d %s to the boarding place (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f); order %d%s%s", i, k == 2 ? "WOULD be sent (dry run)" : "sent", bd[0], bd[1], bd[2], got[0], got[1], got[2],
+             kle_r.fo_orders[i], kle_r.fo_orders[i] > 1 ? ": something had moved its place since the last one" : "", soft ? " - the game took it as 'he is there already' (soft): a waiting step of its route chain ends" : "");
+    }
+    if (dmin >= 0) snprintf(rg, sizeof rg, " (nearest %.1f m, farthest %.1f m from the boarding place)", dmin / 100, dmax / 100); else rg[0] = 0;
+    if (edge_wait) klog("follow: the vehicle waits: %d of the crew aboard, %d in play%s, %d dead; you are %s", n_aboard, n_play, rg, n_dead, h->status == 4 ? "aboard" : "in play");
+    if (edge_leave) klog("follow: the vehicle leaves (state 5, timer %.1f s) %s: %d of the crew aboard, %d left in play%s%s%s, %d dead%s", timer, h->status == 4 ? "with you aboard" : "without you", n_aboard, n_play,
+                         n_play ? " (record(s) " : "", left, n_play ? ")" : "", n_dead, h->status == 4 && n_play && !kle.fo_spare ? "; the rules shoot those left in play, one about every second" : "");
+
+    /* c. FollowOutHold: the human is aboard, the vehicle waits and would leave, crew that was called still comes */
+    if (kle.fo_hold > 0 && waiting && h->status == 4) {
+        BYTE grade = 1, paid = 0, veh2 = 0; float tnow = 0, add; const char *no = 0;
+        if (kle_r.fo_hold_visit != kle_r.visit) { kle_r.fo_hold_visit = kle_r.visit; kle_r.fo_held = 0; kle_r.fo_hold_told = 0; }
+        if (!(timer > 0 && timer < KLE_HOLD_AT)) return;                      /* not yet; or a timer of 0: somebody set it to leave */
+        if (kle.fo_hold - kle_r.fo_held < 0.5f) {                             /* the seconds of this visit are used */
+            if (!(kle_r.fo_hold_told & 2)) { kle_r.fo_hold_told |= 2; klog("follow: hold: the vehicle leaves in %.1f s with you aboard: the %.1f s of FollowOutHold are used (%d of the crew in play%s)", timer, kle.fo_hold, n_play, rg); }
+            return;
+        }
+        add = kle.fo_hold - kle_r.fo_held; if (add > KLE_HOLD_STEP) add = KLE_HOLD_STEP;
+        if (!n_moving) no = n_play ? "none of the called crew in play comes nearer to the boarding place (2 m in 2 s)" : "nobody of the crew is left in play";
+        else if (!klh_rd(s->score + 0x60, &grade, 1) || grade) no = "the vehicle is damaged and must go";
+        else if (!klh_rd(s->rules + 0x1b3, &paid, 1) || paid != 0xff) no = "somebody paid the driver";
+        else if (!klh_rd(s->rules + 0x1dc, &veh2, 1) || (veh2 != 3 && veh2 != 4) || !klh_rd(s->rules + 0x1d8, &tnow, 4) || !klb_finite(tnow) || !(tnow > 0 && tnow < KLE_HOLD_AT)) no = "its timer changed since this pass read it";
+        if (no || dry) {
+            if (!(kle_r.fo_hold_told & 1)) {
+                kle_r.fo_hold_told |= 1;
+                if (no) klog("follow: hold: the vehicle leaves in %.1f s with you aboard and is NOT held: %s (%d in play%s)", timer, no, n_play, rg);
+                else klog("follow: hold: the vehicle would leave in %.1f s with you aboard and %d of the crew still coming%s: its timer WOULD get %.1f s more (dry run)", timer, n_moving, rg, add);
+            }
+            return;
+        }
+        tnow += add;
+        if (!klh_data((void *)(DWORD_PTR)(s->rules + 0x1d8), &tnow, 4, "escape vehicle wait timer (the driver is held for the crew)")) {
+            if (!(kle_r.fo_hold_told & 1)) { kle_r.fo_hold_told |= 1; klog("follow: hold: the vehicle's timer could NOT be written"); }
+            return;
+        }
+        kle_r.fo_held += add;
+        klog("follow: hold: the vehicle would leave in %.1f s with you aboard and %d of the crew still coming%s: timer %.1f -> %.1f s (%.1f of %.1f s used this visit)", timer, n_moving, rg, tnow - add, tnow, kle_r.fo_held, kle.fo_hold);
+    }
+}
+
 static void kle_tick(int game_thread)
 {
     static DWORD last; static int toldthread; struct klb_snap s; DWORD now = GetTickCount(), player = 0, actor, soldier; char why[200], w[100];
     float hp[3], hn[3], bp[3], bd[3], got[3]; const struct klb_rec *h; int i, stages = 0, human_in, rel = 0, waiting, k;
-    if ((!kle.n && !kle.all) || !klb.on || !klh_exe_ok || now - last < 500) return;
+    if ((!kle.n && !kle.all && !kle.fo && !kle.fo_spare) || !klb.on || !klh_exe_ok) return;
+    if (kle_r.spare_rules && game_thread) kle_spare_fast();                   /* FollowOutSpare: one read on every pass while the vehicle waits */
+    if (now - last < 500) return;
     last = now;
-    if (!klb_read(&s)) { kle_r.rules = 0; return; }
+    if (!klb_read(&s)) { kle_r.rules = 0; kle_r.spare_rules = 0; return; }
     for (i = 0; i < s.n; i++) if (s.r[i].used) stages += s.r[i].stage;
     if (s.rules != kle_r.rules || (s.state == KLB_ROUND && kle_r.state != KLB_ROUND) || stages < kle_r.stages) {      /* a new round: as klbot.c's klb_act */
         memset(&kle_r, 0, sizeof kle_r); kle_r.rules = s.rules; kle_r.round_at = KLB_T(now);
     }
     kle_r.state = s.state; kle_r.stages = stages;
-    if (s.state != KLB_ROUND) return;
+    if (s.state != KLB_ROUND) { kle_r.spare_rules = 0; return; }
     if (!klb_level(why)) {                    /* klbot.c section 0: nothing on a stock level, on an unknown one, or without the Steam guard */
-        if (!kle_r.told_gate++) klog("%s: %s: nothing is done here (this part acts only on a level that is not stock)", kle.n ? "escort" : "board", why);
+        if (!kle_r.told_gate++) klog("%s: %s: nothing is done here (this part acts only on a level that is not stock)", kle.n ? "escort" : kle.all ? "board" : "follow", why);
+        kle_r.spare_rules = 0;
         return;
     }
-    if (!game_thread) { if (!toldthread++) klog("escort / board: the tick is not on the game's thread ([KLHook] Tick=0?): nothing is ordered or written"); return; }
+    if (!game_thread) { if (!toldthread++) klog("escort / board / follow: the tick is not on the game's thread ([KLHook] Tick=0?): nothing is ordered or written"); return; }
     h = s.human >= 0 ? &s.r[s.human] : 0;
     human_in = h && h->status == 0 && kle_human(&player, hp, hn);
     waiting = s.veh == 3 || s.veh == 4;
@@ -534,6 +996,7 @@ static void kle_tick(int game_thread)
         tracked = KLB_T(now);
         kle_all_track(&s, now); if (waiting) kle_board_all(&s, now);
     }
+    if (kle.fo || kle.fo_spare) kle_follow(&s, now);                          /* after BoardAll: a byte it has just written is seen as 'stage 3 since this pass' */
     if (kle.n && human_in && !kle_r.told_you++)
         klog("escort: you: record %d, player %08lx, feet (%.0f, %.0f, %.0f), node (%.0f, %.0f, %.0f) - the two should agree to within a body's height", s.human, player, hp[0], hp[1], hp[2], hn[0], hn[1], hn[2]);
     if (!human_in) rel = 1;
@@ -570,8 +1033,9 @@ static void kle_init(void)
     int v;
     memset(&kle, 0, sizeof kle); memset(&kle_r, 0, sizeof kle_r);
     if (!klb.on) {                            /* [Bots] Enable=0: klbot.c is off, and so is this */
-        if (GetPrivateProfileIntA("Bots", "BoardAll", 0, klh_ini) || GetPrivateProfileIntA("Bots", "Escort", 0, klh_ini) > 0)
-            klog("escort / board: [Bots] Escort or BoardAll is set but [Bots] Enable is 0: both need klbot.c's crew records, nothing is done");
+        if (GetPrivateProfileIntA("Bots", "BoardAll", 0, klh_ini) || GetPrivateProfileIntA("Bots", "Escort", 0, klh_ini) > 0
+            || GetPrivateProfileIntA("Bots", "FollowOut", 0, klh_ini) || GetPrivateProfileIntA("Bots", "FollowOutSpare", 0, klh_ini))
+            klog("escort / board / follow: [Bots] Escort, BoardAll, FollowOut or FollowOutSpare is set but [Bots] Enable is 0: they need klbot.c's crew records, nothing is done");
         return;
     }
     v = (int)GetPrivateProfileIntA("Bots", "Escort", 0, klh_ini);
@@ -593,6 +1057,25 @@ static void kle_init(void)
                       kle.all_still / 1000, kle.all_stage, kle.all_order, kle.dry ? " DRY RUN (EscortDry=1: nothing is written or called)" : "",
                       kle.all_stage ? "gets heist stage 3 (one byte of its crew record: the game's loot tactic lets go, its board tactic starts)" : "is named in the log (BoardAllStage=0: nothing is written)",
                       kle.all_order ? " and one order to the boarding place a visit" : "");
+    kle.fo = GetPrivateProfileIntA("Bots", "FollowOut", 0, klh_ini) != 0;
+    kle.fo_spare = GetPrivateProfileIntA("Bots", "FollowOutSpare", 0, klh_ini) != 0;
+    kle.fo_dry = GetPrivateProfileIntA("Bots", "FollowOutDry", 0, klh_ini) != 0;
+    kle.fo_order = GetPrivateProfileIntA("Bots", "FollowOutOrder", 1, klh_ini) != 0;
+    kle.fo_money = (DWORD)klb_pos("FollowOutMoney", 1, 0x7fffffff);
+    kle.fo_after = (DWORD)klb_pos("FollowOutAfter", 0, 600) * 1000;
+    kle.fo_every = (DWORD)klb_pos("FollowOutEvery", 2, 60) * 1000; if (kle.fo_every < 1000) kle.fo_every = 1000;
+    kle.fo_hold = klb_inif("FollowOutHold", "0"); if (!klb_finite(kle.fo_hold) || kle.fo_hold < 0) kle.fo_hold = 0; if (kle.fo_hold > 60) kle.fo_hold = 60;
+    if (kle.fo && klb.van && klb.van_left) {
+        klog("follow: FollowOut is OFF: [Bots] VanLeftBehind=1 takes every bot at heist stage 3 as standing at the vehicle, and FollowOut gives stage 3 to bots far from it");
+        kle.fo = 0;
+    }
+    if (kle.fo) klog("follow: on; FollowOut=1 Money=%lu After=%lu s Order=%d Every=%lu s Hold=%.1f s Spare=%d%s: once your own crew record has heist stage 3 (the exit trigger: the vehicle is called) and you carry that money, every AI heister in play that is no traitor gets heist stage 3 (one byte of its record)%s%s%s; Arcade only, on a level that is not the stock one of its slot",
+                     kle.fo_money, kle.fo_after / 1000, kle.fo_order, kle.fo_every / 1000, kle.fo_hold, kle.fo_spare, kle.dry || kle.fo_dry ? " DRY RUN (nothing is written or called)" : "",
+                     kle.fo_order ? " and, while the vehicle drives in and is 2 s or more away, the soldier's own order to the boarding place" : "",
+                     kle.fo_hold > 0 ? "; while it waits with you aboard and called crew still comes nearer, its timer gets up to 5 s more under 2 s, that many seconds a visit at most" : "",
+                     klb.van ? "; NOTE [Bots] Van is on: a bot that turns traitor after it was called counts as 'at the vehicle' for it" : "");
+    if (kle.fo_spare) klog("follow: spare on%s: when the escape vehicle drives out, the rules' times for shooting the AI heisters left behind (rules +0x%x) are put off: they stay in play; Arcade only, on a level that is not the stock one of its slot",
+                           kle.dry || kle.fo_dry ? " DRY RUN (nothing is written)" : "", KLE_KILL_TIMES);
     if (!kle.n) return;
     kle.log = klb_pos("EscortLog", 1, 2);
     kle.record = (int)GetPrivateProfileIntA("Bots", "EscortRecord", -1, klh_ini); if (kle.record >= KLB_NREC) kle.record = -1;
