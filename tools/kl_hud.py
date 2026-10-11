@@ -212,32 +212,44 @@ def tex_replace(entry, rgba):
 
 # ------------------------------------------------------------------ build a font
 def _chip(ink, w, h, seed, px, amount):
-    """Light damage on one glyph, after the Dead Men title lettering: at most two small chips bitten out of the ink
-    and, rarely, one hairline crack. Deterministic per character. amount 0..1 scales how often."""
+    """Light damage on one glyph, after the Dead Men title lettering: at most two small nicks bitten out of the
+    OUTLINE and, on large sizes only, rarely one hairline crack. Deterministic per character. amount 0..1 scales
+    how often. LIVE 2026-10-11 (the owner's bank round): the first version chipped anywhere in the ink with a radius
+    up to 1.1 px at 18 px, which closed the bowl of every 'R' ('HOUND SCORE') and cut the capital 'I' into an 'i'.
+    So: narrow glyphs are left whole, a nick sits on an edge pixel, is small against the stem, and all nicks
+    together may not take more than 3 % of the glyph's ink."""
     import random
-    if w < 4 or h < 6 or amount <= 0:
+    if w < 6 or h < 8 or amount <= 0:
         return ink
     rnd = random.Random(seed * 7919 + px * 31)
     rows = [bytearray(r) for r in ink]
-    solid = [(x, y) for y in range(h) for x in range(w) if rows[y][x] > 160]
-    if len(solid) < 12:
+
+    def at(x, y):
+        return rows[y][x] if 0 <= x < w and 0 <= y < h else 0
+    edge = [(x, y) for y in range(h) for x in range(w)
+            if rows[y][x] > 160 and min(at(x - 1, y), at(x + 1, y), at(x, y - 1), at(x, y + 1)) < 60]
+    total = sum(sum(r) for r in rows)
+    if len(edge) < 12 or not total:
         return ink
     roll = rnd.random()
-    chips = 2 if roll < .10 * amount else 1 if roll < .50 * amount else 0
+    chips = 2 if roll < .08 * amount else 1 if roll < .42 * amount else 0
     for _ in range(chips):
-        cx, cy = rnd.choice(solid)
-        rad = .7 + rnd.random() * (.5 + px / 45.0)
+        cx, cy = rnd.choice(edge)
+        rad = .35 + rnd.random() * min(.55, px / 60.0)
+        trial = [bytearray(r) for r in rows]
         for y in range(max(0, int(cy - rad - 1)), min(h, int(cy + rad + 2))):
             for x in range(max(0, int(cx - rad - 1)), min(w, int(cx + rad + 2))):
                 d = ((x - cx) ** 2 + (y - cy) ** 2) ** .5
-                if d < rad + .6:
-                    rows[y][x] = int(rows[y][x] * max(0.0, min(1.0, d - rad + .4)))
-    if rnd.random() < .09 * amount and h >= 10:           # a hairline crack, a few pixels long, slanted
-        x, y = rnd.choice(solid); dx = rnd.choice((-1, 1)) * (.35 + rnd.random() * .4)
-        for k in range(rnd.randint(3, max(4, h // 3))):
+                if d < rad + .5:
+                    trial[y][x] = int(trial[y][x] * max(0.0, min(1.0, d - rad + .5)))
+        if total - sum(sum(r) for r in trial) <= .03 * total:
+            rows = trial
+    if px >= 24 and rnd.random() < .07 * amount and h >= 14:   # a hairline crack, two or three pixels, large sizes only
+        x, y = rnd.choice(edge); dx = rnd.choice((-1, 1)) * .5
+        for k in range(rnd.randint(2, 3)):
             xi, yi = int(x + dx * k), y + k
             if 0 <= xi < w and 0 <= yi < h:
-                rows[yi][xi] = rows[yi][xi] // 5
+                rows[yi][xi] = rows[yi][xi] // 2
     return rows
 
 
