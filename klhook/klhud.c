@@ -173,6 +173,7 @@ static void klu_draw_one(DWORD obj, void *ctx, void *cam, float x, float y)
 #define KLU_TIME_RENDER 0x81e090u             /* ZFATimeDisplay slot 2 (re\hud.md 3.1: the per-frame draw read) */
 #define KLU_ELEM_NSLOT  11                    /* IDisplayInterface: 11 slots (re\hud.md 2.1), then RTTI */
 static DWORD klu_evt[KLU_ELEM_NSLOT + 1];     /* [0] RTTI locator, [1..] the slots */
+static volatile LONG klu_twin_said; static DWORD klu_twin_obj; static float klu_twin_pos[3]; static int klu_twin_logged;
 static int klu_evt_ready;
 
 static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam)
@@ -182,7 +183,7 @@ static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam
     InterlockedIncrement(&klu_n_call);
     if (!klu_draw_on || (DWORD)(DWORD_PTR)el != klu_r.elem) { InterlockedIncrement(&klu_n_off); return r; }
     if (!TryEnterCriticalSection(&klu_cs)) { InterlockedIncrement(&klu_n_try); return r; }   /* the tick is changing a text: this frame goes without ours */
-    if (klu_draw_on && klu_r.made && !klu_r.fault)
+    if (klu_draw_on && klu_r.made && !klu_r.fault) {
         for (i = 0; i < KLU_NTEXT; i++) {
             const struct klu_text *t = &klu_r.t[i];
             if (!t->on || !t->obj) continue;
@@ -190,6 +191,15 @@ static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam
             klu_draw_one(t->obj, ctx, cam, t->x, t->y);
             InterlockedIncrement(&klu_n_draw);
         }
+        if (klu.log >= 2) {                      /* SPLIT TEST (run H1e: our Draw calls reach the frame never): the timer's OWN text object
+                                                    drawn a second time at (64, 200), and our text 8 at the timer's own place + 56 down */
+            DWORD tobj = klh_rd32((DWORD)(DWORD_PTR)el + 0x28); float tp[3] = { 0, 0, 0 };
+            klh_rd((DWORD)(DWORD_PTR)el + 0x14, tp, 12);
+            if (tobj) klu_draw_one(tobj, ctx, cam, 64.0f, 200.0f);
+            if (klu_r.t[KLU_ROWS].obj) klu_draw_one(klu_r.t[KLU_ROWS].obj, ctx, cam, tp[0], tp[1] + 56.0f);
+            if (!klu_twin_said) { klu_twin_said = 1; klu_twin_obj = tobj; memcpy(klu_twin_pos, tp, 12); }
+        }
+    }
     LeaveCriticalSection(&klu_cs);
     return r;
 }
@@ -489,6 +499,16 @@ static void klu_tick(int game_thread)
     if (klu_r.fault) { InterlockedExchange(&klu_draw_on, 0); klu_hide_tick(osd, 0); return; }
     InterlockedExchange(&klu_draw_on, show && klu_r.made);
     if (klu.hide && (klu.crew || klu.money)) klu_hide_tick(osd, show && klu_r.made);
+    if (klu.log >= 2 && klu_twin_said && !klu_twin_logged && klu_r.made) {   /* the timer's text object next to ours, once */
+        BYTE a[0xb0], b[0xb0]; char ha[2 * sizeof a + 1], hb[2 * sizeof b + 1]; int k;
+        klu_twin_logged = 1;
+        if (klh_rd(klu_twin_obj, a, sizeof a) && klh_rd(klu_r.t[KLU_ROWS].obj, b, sizeof b)) {
+            for (k = 0; k < (int)sizeof a; k++) { sprintf(ha + 2 * k, "%02x", a[k]); sprintf(hb + 2 * k, "%02x", b[k]); }
+            klog("hud: twin: the timer's text %08lx at (%.1f, %.1f, %.1f): %s", klu_twin_obj, klu_twin_pos[0], klu_twin_pos[1], klu_twin_pos[2], ha);
+            klog("hud: twin: our text 8      %08lx at (%.1f, %.1f, 0.0): %s", klu_r.t[KLU_ROWS].obj, klu_r.t[KLU_ROWS].x, klu_r.t[KLU_ROWS].y, hb);
+            for (k = 0; k < (int)sizeof a; k += 4) if (memcmp(a + k, b + k, 4)) klog("hud: twin: +0x%02x differs: timer %08lx ours %08lx", k, *(DWORD *)(a + k), *(DWORD *)(b + k));
+        }
+    }
     if (klu.log >= 2) {                         /* the render wrapper's counters, every 5 s while texts exist */
         static DWORD said;
         if (klu_r.osd && now - said >= 5000) {
