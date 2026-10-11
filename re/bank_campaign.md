@@ -11,7 +11,8 @@ not started. Scratch: C:/kl_scratch/bank/<stage>/; delivered builds: <work>/buil
 ## Stage T1 - the cover list survives the campaign pre-pass; the authored layer is a MODULE (tools/kl_maps.py, tools/kl_graft.py)
 
 STATE: DONE (2026-10-11 12:50). Checks (a), (b), (c) pass; every archive is deleted. Kept in C:/kl_scratch/bank/t1/
-(20 MB): the logs, the four manifests, result.json / log.txt / graft.txt of every build, the scripts in s/.
+(1 MB): the logs, the four manifests, result.json / log.txt / graft.txt of every build, the scripts in s/.
+Committed as 2b092c0 (tools/kl_maps.py, tools/kl_graft.py, this section).
 
 ### T1.0 Regression baseline, made BEFORE any change (tree at 40a8a7a + the two other sessions' uncommitted files)
 
