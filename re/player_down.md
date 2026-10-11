@@ -838,3 +838,281 @@ For the owner, two lines each:
 | S5 a human who floors a bot | rules slot 131 = 0x7cc270 read whole (row in 11.1): the attacker's score word is added to at the floor and again at the death. Not prevented (it is the game's call before the down is asked); `IS DOWN` prints the word now and one pass before; run B7 |
 | S6 the owner's question | 11.1a: who writes `[soldier+0x98]` = 2 - four tasks, by displacement and vtable, the routines not read whole. The answer to him: the bots have the shot clips and the game plays them on a living bot in those tasks |
 | S7 small | e 'more than 1,000'; the round line under `Enable=0`; the slots are the soldier's; klgrudge / `BotsUpPct` said in the key table |
+
+## 12. All the belly falls, a different one each time (track R6, 2026-10-11 ~18:30)
+
+Owner, on the sheet `<work>\research\animsheet\G_zoom_belly.png`: *'i think zoom belly is it'*, then *'but i like having
+them all they are all nice'*. So his knock-down is ANY of the sheet's falls that throw a living man down and bring him
+up, another one each time. **Offline; compiled only; NOTHING HERE HAS RUN IN THE GAME.** FILE = `kl_animsheet.py list`
+on `z_cover3\M03` (F07's animation table = all five tab builds'); LIVE = the owner's log of run G1 (16:18, `Flop=1`);
+READ = kl2.exe as sections 9 / 10 and re/climb.md 3 read it (this track read nothing new whole - see 12.6).
+
+### 12.0 The short answer
+
+- **Built**: `[Down] Flop=3` in `klhook/kldown.c` = `Flop=1`'s whole machine (`kld_flop_one`: one whole clip in the
+  game's own fall, the mash from its landing, the end by movement state 5, the input mask off, both time bounds, the
+  dead-man test, the fed left alone, `Dry`) with the clip **drawn by the hook** from a list (`kld_md[]`), by weight,
+  never one group twice in a row. Default 0; `Flop=1` / `Flop=2` unchanged.
+- **No bot's draw and nobody's death changes.** The chosen clip is carried by ONE pair of the HUMAN's own set (12.2);
+  the pairs the clips are found in are only read.
+- **Not shown**: how each looks on the player, and what a 3 - 4 m dive does at a wall, a ledge, a door (12.4).
+- **FIX ROUND (review6, `re/player_down_review6.md`: ACCEPT WITH FIXES; all applied, 12.9).** Two things changed
+  what this section says: **`FlopReach` is 1.0 in the code** (`Flop=3` alone = only #25; the owner's 'all' is
+  `FlopReach=4.5`, set by the lead's runs and then by what they allow), and **the game's own alignment of the fall
+  will most likely NOT let the long dives travel as the sheet shows** (12.4): until L1's pictures say otherwise,
+  nobody tells the owner that he gets the falls of the sheet.
+
+### 12.1 The list (FILE; sheet numbers = the overview's)
+
+| sheet | group | found in (slot id on the tab builds; pair) | clip (number) | frames | events (all of them) | root forward | at speed 1 / with the defaults, no press |
+|---|---|---|---|---|---|---|---|
+| **41** (default of its group) | 1 | `/Damage/Impact/FB/Running/Front_Torso` (1801; pair 1 of 3) | `Impact_02#Running_torso_Front_3` (770) | 216 | 7@43, 31@43, 8@72 | 3.01 m | 8.6 s / 1.7 + 8.6 = 10.3 s |
+| 7 | 1 | `/Damage/Wounded/Running/Torso/Front_01` (1766) | `Wounded#Run_Torso_Front_03` (715) | 206 | 7@43, 31@43, 8@72 | 2.49 m | ends BENT (no last 10 frames) |
+| 13 | 1 | `.../Torso/Merc_Front` (1769) | `Wounded#Merc_Run_Torso_Front_03` (721) | 206 | the same | 2.49 m | the same |
+| **12** | 2 | `.../Torso/Merc_Back` (1768; its ONE pair = the carrier's own) | `Wounded#Merc_Run_Torso_Back_03` (719) | 239 | 31@7, 7@55, 8@115 | 3.28 m | 9.5 s / 2.2 + 9.2 = 11.4 s |
+| 9 | 2 | `.../Torso/Back_01` (1767) | `Wounded#Run_Torso_Back_03` (718) | 239 | the same | 3.28 m | the same |
+| **10** | 3 | `.../Torso/Back_01` (1767) | `Wounded#Run_Torso_Back_02` (717) | 140 | 31@17, 7@46, 8@80 | 3.41 m | 5.6 s / 1.8 + 4.7 = 6.5 s |
+| **25** | 4 | `/Damage/Wounded/Hero_Torso_F` (1775) | `Wounded#Hero_Torso_Back` (731) | 186 | 31@1, 0@39, 7@46, 8@116 | 0.66 m | 7.4 s / 8.7 s (LIVE, G1: 8.70) |
+| **42** | 5 | `/Damage/Impact/FB/Running/Front_Torso` (1801; pair 2) | `Impact_02#Running_Torso_Front_2` (769) | 219 | 7@53, 31@53, 8@119 | 3.63 m (0.35 to his left) | 8.7 s / 2.1 + 8.3 = 10.4 s |
+| **43** light | 6 | the same slot (pair 3) | `Impact_02#Run_Torso_Impact` (768) | 53 | 31@18, 7@47, **no 8** | 4.05 m | 2.1 s, he stays up; no mash |
+
+Bold = in the default mix (`41:2,12:2,10:1,25:1,42:1,43:1` = shares 25 / 25 / 12.5 / 12.5 / 12.5 / 12.5 %; the
+task's `7:2` is taken as 41: the same dive with its last ten frames, to standing - 7 and 13 stop bent and would snap
+upright). NOT in the list: 5 (a death), 71 (a rise only: `FlopUp`), 72 / 75 (crawls), 105 (upper body).
+**43 in the mix is the lead's GUESS** (the rare 'nearly went down'): `FlopLight=0` takes it out.
+
+**Record flags (review6 S1 / S2; FILE, the review's reading).** All nine have bit 0x40 ('moved by animation') -
+that is the bit that matters. **41, 13, 12, 10, 42 and 43 are `c0`; only 7, 9, 25 (and 71) are `10c0`.** Bit 0x1000
+= the record has four non-zero vectors at +0x30 .. +0x5c (a unit direction and a place, start and end), used only
+by 0x8b4200; the stock pair is `Down_Not_Dead_Get_Down` (10c0) against `..._No_Weapon` (c0), so the GUESS is that
+they are weapon data. Five of the six clips of the default mix lack them, and #25 - the only clip ever seen on the
+player - has them: **what his rifle does in 41 / 12 / 10 / 42 / 43 is unseen.** 9 is 12's data WITH the vectors and
+7 is 41's dive with them (7 stops bent): L1 plays 9 beside 12 once (`FlopMix=12:1,9:1`) and the default mix takes
+whichever holds the rifle right. The `list:` line prints both bits per clip.
+
+| sheet | record flags | travel before the align frame 0.3 x (N - 1) | left after it (`kld_md[].after`) |
+|---|---|---|---|
+| 41 | c0 | 2.33 of 3.01 m (78 %), frame 64.5 | 0.68 m |
+| 7 / 13 | 10c0 / c0 | 2.33 of 2.49 (94 %) | 0.16 |
+| 12 / 9 | c0 / 10c0 | 3.16 of 3.28 (96 %), frame 71.4 | 0.12 |
+| 10 | c0 | 2.94 of 3.41 (86 %), frame 41.7 | 0.47 |
+| 25 | 10c0 | 0.56 of 0.66 (85 %) | 0.10 |
+| 42 | c0 | 2.88 of 3.63 (79 %), frame 65.4 | 0.75 |
+| 43 | c0 | 1.22 of 4.05 (30 %), frame 15.6 | 2.83 |
+
+**Events against what the game acts on.** 0x637060 acts on ids 5, 9 - 11, 20, 21, 24 - 35, 42, 48 - 51, 53 (R5: its two
+tables). Of the list's events (0, 7, 8, 31) only **31** is one (case 0x637147, the weapon item); 0, 7 and 8 go to
+'nothing'; none has 5 (the climb's crash, re/climb_crash.md). And LIVE (G1): **`the channel's event queue is
+00000000`** - the prone fall's Play hands no clip event to an action at all, so 31 at frame 1 of #25 did nothing; the
+same is expected at frame 43 / 53 / 7 / 17 / 18 of the others and the `THE KNOCK-DOWN` line prints the queue at every
+fall (non-zero = stop, as G1's FAIL list). What the prone movement itself uses: 0x478270 looks for the fall's events 6
+and 2 (none in any of these: it takes 0.3 x and 0.5 x the frames, and this part holds both ticks anyway); 7 is where
+this part starts the mash; 8 is only a word in the log ('he lies' / 'he rises') and `FlopUp`'s cut. `kld_badevent`
+refuses any clip with another acted-on event, per body.
+
+### 12.2 How a chosen clip is played, and why no bot changes
+
+The game reads the slot id of the fall from three words of the prone movement and draws from that slot's pair list
+when the fall STARTS (0x5d6060 -> 0x59d550 -> 0x7c6750). `Flop=3`:
+
+1. The three fall words hold the id of the **carrier** `/Damage/Wounded/Running/Torso/Merc_Back` (`FlopCarrier`).
+   FILE: in all four heister sets of F01, F07 and the five tab builds its list is **one pair, condition word 0** -
+   nothing to draw. The part refuses a carrier that is not exactly that.
+2. The pair's clip NUMBER, in the set the HUMAN wears (`[player+0x78]` + the slot's offset), is rewritten to the
+   chosen clip's (clip records are global: `[[0x1546f6c]] + number x 0x68`). One DWORD.
+3. **Who else reads that pair: nobody.** The slot is an NPC death word (`ZWounded` 0x865180: 'Merc' x running x shot
+   in the back) - no routine plays it for a `ZFFPlayer` - and the AI heisters wear the OTHER sets (`Kane_NPC` /
+   `Lynch_NPC`), each set with its own lists (FILE: per set; `[player+0x78]` is the set's pool). So:
+
+| pair | written? | a bot's hit reaction / anybody's death changes? |
+|---|---|---|
+| the carrier's one pair, in the human's set | yes, the clip number | NO: no bot wears the human's set; the human himself never plays the slot outside the knock-down |
+| `/Damage/Impact/FB/Running/Front_Torso` (41, 42, 43), in any set | read only | NO - the bots keep their 60 / 20 / 20 |
+| `/Damage/Wounded/Hero_Torso_F` (25) | read only | NO - **his death keeps the stock draw** (back one time in two): `FlopBelly` does nothing in this mode, which settles decision 3 of 10.2 |
+| `.../Front_01`, `Merc_Front`, `Back_01` (7, 13, 9, 10) | read only | NO |
+
+   Guard, by data: only the NPC sets have a list for `/Damage/Hit/Front/Front` (FILE) - a human whose set has one
+   wears a bot's set and gets `NO KNOCK-DOWN LIST on this body`. ASSUMED: no bot of a round is given a human set
+   (klcrew.c changes models, not sets - not read again here).
+4. The pair goes back to the level's own number when the part stops acting, the player object changes or the body is
+   swapped - only while a live player wears that pool and the pair reads {0, what was put} (review3 S1's rule).
+   **A body swap A -> B -> A** (review6 S4): when nobody wore A any more its pair kept the last choice; the last four
+   sets' {pair address, pool, own number, number left, both clips' names} are now remembered (`kld_cm[]`), and a
+   later check of A takes the remembered number as the level's own (`... as remembered`) and finds #12 by it - only
+   while the pair reads {0, the number left} and both numbers still name those clips (another level's data at the
+   same address does not, and the entry is dropped).
+
+**When the next choice is written, exactly.** (a) In the pass that checks a player object: a new round, another level,
+a body swap seen while he is up (`kld_mix_check`: `the first choice on this body`). (b) In the pass that sees the down
+state back at 0 (`the down state is over: he is up`) - whatever ended it. Both are one hook tick between two frames
+of the game, and the game cannot floor him again at once (`[D+0x38]`, the `Cooldown` seconds - 10 as built).
+**A fall that starts in a tick between** (`Cooldown=0`; a body swap whose re-check waits because he is already
+falling): the game plays what the pair holds then - the last choice. That is a clip of the list **only because of
+the order inside one pass** (review6 S3): `kld_tick` runs the check - which writes the first choice - BEFORE it
+writes the fall words, so the words never name the carrier while its pair still holds the set's own #12 under a
+`FlopMix` / `FlopReach` that left #12 out. And a pair write that FAILS now ends the list on that body (`the carrier
+pair ... could not be written: NO KNOCK-DOWN LIST from here on this body`; the fall words get the game's ids back in
+the next pass) instead of leaving the words on a clip the keys excluded. The part identifies the fall by the clip the movement REALLY plays (`[M+0x8cc]`, a global record), takes
+that clip's own landing / length, and the `THE KNOCK-DOWN` line says `NOT the clip written for this fall`. The cost
+is one repeat, nothing else. A fall on a body whose check found no list is the game's own stock fall.
+
+### 12.3 Per clip: mash, bound, mask, dead man, fed, Dry
+
+All of `Flop=1`'s (10.2 points 3 - 5), by the clip that plays: the landing = that clip's event 7, the absolute bound
+= its way to the landing at the game's pace + the rest at `FlopBase` + 1 s, the bound after the landing = the rest at
+`FlopBase` + 0.5 s, the mask off with the state-5 write, nothing written for a dead man / a fed / in `Dry`.
+**#43 never lies**: no speed write and no mash at all, the two ticks are held as for the others, the bound is the
+clip at the game's pace + 1 s, and the knock is over (state 5, mask off) when the clip is - 2.1 s, free of damage
+like every fall. The down's cooldown starts as after any down.
+
+**FOR THE OWNER, IN PLAIN WORDS (review6 S7; for the lead to say to him before `Flop=3` is his):**
+- With all the falls in and no button pressed he is on the floor for **10 to 11 seconds** in the long ones (today's
+  single fall: 8.7 s). Nothing can hurt him in that time and he can do nothing. Mashing the get-up button brings it
+  under 5 s. If it is too long without mashing: `FlopBase=1.0` (8.6 - 9.5 s) or more. His to decide.
+- The stumble (#43) is **2.1 seconds in which nothing can hurt him, for a man who never fell** - and he gets the
+  down's health (`DownHealth`) as after any knock-down, and the cooldown starts. If that is too generous:
+  `FlopLight=0` takes the stumble out. His to decide.
+- The three decisions of 10.2 stand otherwise (1 and 2 unchanged, 3 settled above).
+
+### 12.4 Root motion: a wall, a ledge, a door, the level bounds
+
+- READ (re/climb.md 3, 'who moves him while a clip plays'): a full-body channel whose clip has record flag 0x40 makes
+  the player's frame use movement number 1 (`ZMovementAnimation`, 0x5397e0): the node follows the clip's root delta,
+  **then the physics step runs whenever his collision is on** (0x53986f: velocity = the move x 60, the Havok
+  character proxy `[player+0x7d0]` is integrated, the result is the PROXY's place). LIVE (G1): #25 has
+  `record flags 10c0`; FILE: all nine have bit 0x40 (six of them are `c0`: 12.1). READ by review6: the prone
+  movement's slot 13 (0x7e4bc0) calls collision ON and no routine of its vtable loads collision off. The down start 0x76a450 and 0x478270 make no direct call of collision-off 0x5d6200 (this
+  track: their call lists; their virtual calls were NOT followed). So **a wall, a closed door, a prop stop him as
+  they stop a walking player** - he dives on the spot against it; the game's own NPC rule ('only with room',
+  0x54a790) is not applied to a player and is not copied.
+- **An edge is NOT stopped** (ASSUMED from the same reading: a character proxy walks off a ledge): a 3 - 4 m dive at
+  the bank's wall top, a balcony, Retomoto's blown window or a stair head can carry him over. Level bounds are
+  boxes that act on a player inside them (not collision): a dive can put him into one like a step can.
+- **The game ALIGNS the fall** when `[D+0xf4]` is set (0x478270: AlignTo(`D+0xf8`, `D+0x11c`, the frame of event 6 -
+  none here: 0.3 x the frames)). LIVE: it was set in G1, in the open (`THE GAME ALIGNS THIS FALL TO A PLACE`). Who
+  sets it and how the place is chosen was NOT read (0x8cf030, the trigger's 'room to lie' probe, is the candidate;
+  begun, not finished). **Effect by the reading of AlignTo (review6 M2; table in 12.1): at frame 0.3 x (N - 1) the
+  body is at the align place, the correction cancelling whatever the clip's root did up to there - 78 - 96 % of the
+  travel of 41 / 7 / 12 / 10 / 42, which keep 0.68 / 0.16 / 0.12 / 0.47 / 0.75 m; #43 keeps 2.83 m of 4.05.** So if
+  the align place is his own, every long dive is a dive ON THE SPOT (the body sliding back under the clip for 2 - 3
+  s); if it is elsewhere he is carried there. **Neither is the fall the owner chose from the sheet**, and which it
+  is, is not known. And a dive that ends short proves no wall. Logged now (reads only): in the `THE KNOCK-DOWN` line
+  his collision byte `[player+0x7a5]` and off count `[player+0x7b4]` (anything but 1 / 0 = `HIS COLLISION IS NOT ON
+  IN THIS FALL`); then `THE GAME ALIGNS THIS FALL ... to the place (x, y, z), a m from where he went down; the align
+  heading is d degrees off his own; ... of its 3.xx m only 0.xx m come after that frame (FILE): he should end about
+  e m from where he went down` (with `THE ALIGN PLACE IS AT HIS FEET: THIS DIVE IS PLAYED (NEARLY) ON THE SPOT` when
+  it is under 1 m for a clip of over 2 m) or `the game does NOT align this fall`. Places are his NODE's (klclimb.c's
+  first live start: the floats at +0x460 stay at the navigation mesh's edge); the heading is row 0 of the rotation at
+  `D+0xf8` = the back, as klclimb.c reads a rotation (ASSUMED the same form here). Whether the alignment's
+  correction itself goes through the physics step (as the root delta does) was NOT read.
+- **What the hook does about it**: it cannot test the way (a probe is a game call; none is made). `FlopReach` =
+  metres of forward root motion a clip may have. **Default 1.0 = only 25 (review6 M1: by the task's rule a clip
+  that can carry him through a wall or off a ledge is OUT until shown safe, and nothing is shown); the owner's 'all'
+  is `FlopReach=4.5`**, set by the lead in L1 / W1 / W2 and then in the owner's ini as far as those runs allow
+  (2.6 = + 7 / 13, 3.1 = + 41, 3.3 = + 12 / 9, 3.5 = + 10, 3.7 = + 42, 4.5 = + 43; 0 = no limit). #43 is the one to
+  watch: the alignment leaves it 2.83 m of its own. And it MEASURES: at every UP `he stands x m from where he went
+  down (y m lower / higher; by his node; the floats at +0x460 say w m); the clip alone goes z m; THE GAME ALIGNED
+  THIS FALL: the align place + the clip's travel after the align frame = e m` (or `not aligned: expected the clip's
+  own`), with `SHORTER THAN THE ALIGNMENT EXPLAINS: something stopped him` only when he is more than 0.5 m (a GUESS)
+  short of THAT, `shorter than the clip, AS THE ALIGNMENT ALONE EXPLAINS: this line says nothing about a wall`
+  otherwise, `HE WENT DOWN OVER AN EDGE`, and the collision byte and count again. **`Flop=3` with the long dives
+  goes on the owner's game only after L1 (do they look like the sheet at all), W1 and W2 (12.7).**
+
+### 12.5 `FlopUp=71` (optional, default off) - and what it costs
+
+Can a second clip be started from inside the prone state by data: YES, by `Flop=2`'s path (9.2: `[D+0x21]` is acted on
+whenever it stands, 0x47ce56 -> 0x8b1900 - the fall's channel stopped, M = 2, the mask off, D = 3, 0x478270(M, 4) plays
+the get-up words' clip in that frame). `FlopUp=71`: the three get-up words hold `/Movement/Rise/Rise_From_Stomach`
+(`FlopUpSlot`; clip 701, 202 frames: lies chest down 0 - 93, all fours, **upright kneel 145 - 182**, stands), and at
+the fall clip's event 8 - only for the clips that lie chest down there (41 / 7 / 13 at 72, 12 / 9 at 115, 10 at 80,
+25 at 116; NOT 42: on his side at 119; not 43) - the part sets `[D+0x21]` and writes nothing more to the fall. The
+get-up is then the game's own state with this file's mash (`FlopBase` / `FlopPerPress` / `FlopTop`, bound = the clip
+at `FlopBase` + 0.25 s). **Cost**: (1) the get-up state takes FULL damage (10.2 decision 1 turns round: free to the
+cut, exposed for 202 frames = 10.1 s at 0.8 without a press); (2) beside a cover the game takes the request as 'get up
+into the cover' and there is no rise at all; (3) 71 walks 1.26 m forward at its end; (4) the stock get-up of a fall
+the game handed back (a time bound) is 71 too, out of the side-lying pose - a jump; (5) whether a fall's pose at its
+event 8 joins 71's first frame without a jump was NOT measured for 41 / 12 / 10 (R3 measured 'the lying pose of the
+three belly clips' = 25, 12 and the front one); (6) review6 S6: while the key stands the three get-up words are
+71's for EVERY down - also after #42 (which is not cut: if the game ever takes that fall to lying itself he rises
+by 71 out of the side pose), after #43, and after a fall a time bound handed back. **A TEST KEY until U1**; the
+review checked only its gating (with 0 no line of it runs). Fixed in the fix round (S5): a re-check (body swap) on
+which the get-up slot is not usable now puts the three get-up words back (`FlopUp: the get-up words ... are back as
+the game had them`) - words are put back by what was WRITTEN (`kld_s.fwf` / `fwu`), not by the ids of the current
+check; the same holds for the three fall words when a re-check finds no list. Not for the owner before he has seen
+it in pictures.
+
+### 12.6 Keys, writes, compile
+
+`Flop=3`; `FlopMix` (sheet number or the clip's name after '#', `:weight`, comma separated; default above; a clip not
+named is out; known: 41 7 13 12 9 10 25 42 43); `FlopLight` 1; `FlopReach` **1.0** (= only #25; 4.5 = all);
+`FlopUp` 0 (71: a test key); `FlopCarrier`;
+`FlopUpSlot`; `FlopBase` 0.8, `FlopPerPress` 0.5, `FlopTop` 3.5, `FlopUpPct` 0 as mode 1. `FlopBelly`, `FlopFallSlot`,
+`FlopTake` do nothing in this mode. Writes beyond `Flop=1`'s: the carrier pair's DWORD (in place of `FlopBelly`'s
+pairs); with `FlopUp` the three get-up WORDs and the byte `[D+0x21]`. No call, no patch, no vtable copy.
+
+Compile check (rules: `git archive HEAD klhook` -> `G:\kl_scratch\R6\src`, HEAD = 1d528a9 when looked at after the
+build; this `kldown.c` sha1 05cb16e1146d390e0d52d6578c0b4d40ca609a16 copied in; HEAD wires kldown.c, no line of
+klhook.c changed): `built G:\kl_scratch\R6\test\dinput8.dll (TEST)` sha1 3d04bc6316ac8f84cf3797384da45f4588f39edb,
+`built G:\kl_scratch\R6\ship\dinput8.dll (SHIP)` sha1 12095f7e85d41e3ca287c7477dce8fd5252c3479; the one warning is
+klhud.c(285) C4101. Compile only. **After the fix round** (same recipe, HEAD still 1d528a9, `kldown.c` sha1
+9ea06c6a2669449bda43293f878487c8948ef18f): `built G:\kl_scratch\R6\test\dinput8.dll (TEST)` sha1
+49a9ebd0a487d427200ebf04d64d89d19f756a57, `built G:\kl_scratch\R6\ship\dinput8.dll (SHIP)` sha1
+ebe1daa7aba348822ba5a41b18acdef3d295d467; the same one warning. (Review6: the build is not reproducible byte for
+byte - a sha1 names one build, not the source.)
+
+### 12.7 Live checks (the lead; the bank DM03 unless said, the walk of G1, `[Shoulder] Log=1`, `[Balance] Log=2`)
+
+| run | keys | PASS | FAIL |
+|---|---|---|---|
+| L0 | `Enable=1 Dry=1 Flop=3 FlopReach=4.5 Log=2` (without `FlopReach` five clips are `OUT by FlopReach=1.00`: the code's default since review6 M1) | at start `down: flop: Flop=3 - ALL THE BELLY FALLS ... #41:2.0 #12:2.0 #10:1.0 #25:1.0 #42:1.0 #43:1.0 ...`; in the round SIX lines `down: flop: list: sheet #41 = clip 770 ........ 'anim:Dammage/Impact_02#Running_torso_Front_3' (pair 1 of /Damage/Impact/FB/Running/Front_Torso, slot 1801 - only read), 216 frames (8.60 s at speed 1), events 7@43,31@43,8@72 (lands at 43, rises from 72; -1 = none), the root goes 3.01 m forward (0.68 m of it after the align frame 64.5: FILE), record flags c0 (0x40 moved by animation: yes; 0x1000 the four extra vectors of 0x8b4200: no), weight 2.0: IN` and so for #12 (clip 719, 239 fr, 31@7,7@55,8@115, 3.28), #10 (717, 140, 31@17,7@46,8@80, 3.41), #25 (731, 186, 31@1,0@39,7@46,8@116, 0.66), #42 (769, 219, 7@53,31@53,8@119, 3.63), #43 (768, 53, 31@18,7@47, 4.05, `HE STAYS UP`); `the carrier is /Damage/Wounded/Running/Torso/Merc_Back = slot 1768, ONE pair {0, clip 719} ...; 6 clip(s) in the list`; `the NEXT knock-down WOULD be clip ... - the first choice on this body ...; Dry=1: the carrier pair keeps clip 719`; `... holds fall 1847/65535/1850 ...: Dry=1, it WOULD be written 1768/1768/1768 ...`; the fall itself is the stock one (G0's lines). **Once on each of the five maps and once after a Heister-page body swap** (every clip must say `0x40 moved by animation: yes`; the flags are `c0` for 41 / 12 / 10 / 42 / 43 and `10c0` for 25: review6 S1); the carrier line ends `(pool ...; the level's own clip is 719); 6 clip(s) in the list` | `NO KNOCK-DOWN LIST on this body` (says why); a `list: ... is OUT` line (says why); other numbers than the table of 12.1 (then the file reading is off: tell the track) |
+| L1 | `Enable=1 Flop=3 FlopReach=4.5 Log=2`, `Cooldown=3`, no press, **in the OPEN (four metres free ahead)**; five knock-downs or more in one round (the scripted player stands in fire with `DownHealth` high enough) | per fall: `the NEXT knock-down is clip N ...` BEFORE it, then `YOU ARE DOWN`, `down: flop: THE KNOCK-DOWN: clip N '...' (sheet #n), drawn a of b; the clip alone carries him x m forward; ...` with the SAME N, never the same group twice running; the long line of G1 with `the channel's event queue is 00000000` and the mask `00000011`; `he has landed` (not for #43); `the knock-down's clip is through ... (bits 0x11 off), movement state 5 is written`; `UP after ...` with the mask off; `he stands x m from where he went down ...`; then `the NEXT knock-down is ...`. After every UP the script walks, aims and fires (G1's M1 test). PICTURES at fall + 0.8 s, + 3 s, + 7 s of each: 41 / 12 / 25 flat on the belly, 42 on his side, 10 a passing kneel, 43 on his feet. No `balance: you lost` line between DOWN and UP. **Review6 M2 - the question L1 must answer before anything is said to the owner: IS EACH DIVE A DIVE, OR A SLIDE ON THE SPOT?** Per fall read `his collision [player+0x7a5] is 1 ..., the off count [player+0x7b4] 0`, then `THE GAME ALIGNS THIS FALL ... a m from where he went down; the align heading is d degrees off his own ... he should end about e m ...` (or `does NOT align this fall`), and at UP `he stands x m ...; THE GAME ALIGNED THIS FALL: ... = e m`: write down a, d, e and x for every clip, and judge the pictures at + 0.8 s / + 3 s against the sheet (does he travel, is the body dragged back, is he turned). **Review6 S2: one more round with `FlopMix=12:1,9:1`** (the same dive without / with the record's four extra vectors): look at the RIFLE in both - in his hand, at his side, floating - and say which the default should take (and so 41 against 7) | a fault; **a non-zero event queue = STOP**; his rifle gone after a fall (event 31 acted); `THE TIME BOUND ...`; `NOT the clip written for this fall` with `Cooldown` 3 or more (the choice is then not read when the fall starts: tell the track); a mask bit left; `dstate 2->1` during a fall; `HIS COLLISION IS NOT ON IN THIS FALL` (then no wall stops any clip: `FlopReach=1`, tell the track); `the carrier pair ... could not be written` |
+| L2 | L1 + `tap C 40` / `wait 60` from each fall on | every `UP after` under 5 s for the long clips, `presses` over 10; #43: 2.1 s, `0 press(es)`, speed never written | #43 sped up or slowed |
+| L3 | L1; then the menu, then another map | at the round's end / the menu `the carrier pair of ... holds its own clip 719 again` or `... is NOT put back: no player wears that animation set any more ...`; **watch an AI heister die running, shot from behind, 'Merc'**: still his own #12 (nothing of the human's set shows on a bot); the HUMAN's own death (a `[Fed]` run): back one time in two as stock | a bot playing a 2.1 s stumble as its death; `NO KNOCK-DOWN LIST ... the carrier ... is not a list of ONE pair` on the second map |
+| **W1** (rewritten, review6 M2: the old PASS line prints in the open too) | **after L1**, `FlopReach=4.5`, one clip a run (`FlopMix=43`, then `41`, `12`, `10`, `42`): the SAME clip taken **once in the open** (L1's numbers serve) **and once facing a wall at one metre**, then a closed door, then a car; the script logs his place (klauto's position log) and takes pictures at UP | **by position and picture, not by a log word**: his place at UP (the node, as the `he stands ...` line takes it) is on HIS side of the wall / door / car; the picture shows him against it, no limb through it more than an NPC's would be; he gets up, walks, aims, fires. To note, not to judge by: `SHORTER THAN THE ALIGNMENT EXPLAINS` at the wall and not in the open = the wall stopped him; the same expected / stood numbers in both = the alignment decided and the wall was never tested (then stand him so that the ALIGN PLACE of the open run would lie beyond the wall, and run again). **#43 first**: it keeps 2.83 m of its own after the align frame | he ends beyond the wall / inside a prop / cannot move after UP; `HIS COLLISION IS NOT ON IN THIS FALL`; then `FlopReach=1` stays and tell the track |
+| **W2** | the same, facing an EDGE at one metre: the bank's yard wall top (after the climb is in) or its loading dock, Retomoto's balcony, a stair head | for the owner's eyes + the line: `HE WENT DOWN OVER AN EDGE` says he fell; does he live, does the round go on, does he end somewhere he can leave | out of the map, stuck, dead by the fall: then the long dives stay behind `FlopReach` (1, or 2.6) until a test of the way exists |
+| W3 | L1 with the fall taken beside a low cover and in a doorway box (join / exit / level bounds) | `the game left the fall ...` (into the cover: no fault); a box he is carried into acts as if he had walked in | a fault |
+| U1 | L1 + `FlopUp=71`, `DownHealth=300` | `FlopUp: the get-up is /Movement/Rise/Rise_From_Stomach = slot 1755 ...`; at a belly clip `FlopUp: he lies (frame 72.x / 115.x / 80.x / 116.x ...): the get-up ... is asked for`, shoulder `dstate 2->3`, `GETTING UP ...: clip ... of 201 frames ... THE FLOP'S FlopBase 0.80`, `UP after ...`; #42 and #43 play whole. Pictures at the cut (a jump?) and at the kneel | `he lies` without `GETTING UP`; a visible jump at the cut (then 12.5 point 5 is a NO for that clip) |
+
+For the owner's eyes after L1: are these the falls he liked; is 43 wanted (`FlopLight`); how often each (`FlopMix`);
+is 10 s on the floor without presses right (`FlopBase`).
+
+### 12.8 ASSUMED / not done
+
+- ASSUMED: everything `Flop=1` assumes (10.5); that the carrier's pair in memory is the file's and no routine plays
+  that slot for a player; that the AI heisters never wear a human set; that a wall stops the root motion (read, not
+  seen) and an edge does not; that event 31 in the middle of a clip (43 / 53 / 7 / 17 / 18) is as dead as at frame 1
+  (no event queue: LIVE for #25 only); that 41's last frames to standing make a clean hand-over (7 / 13 would not);
+  43 in the mix (the lead's guess); every number of `FlopMix` / `FlopReach`'s defaults.
+- NOT ESTABLISHED (review6 could not either): whether the alignment's correction goes through the physics step like
+  the root delta; what the down state's camera does over 4 m; whether the dives look like the sheet at all (12.4);
+  what the four extra record vectors drive (the rifle is a GUESS).
+- NOT ESTABLISHED: who sets `[D+0xf4]` and how the align place is chosen (0x8cf030 was begun, not read whole); what
+  the prone state's own collision / 'room to lie' rule is for a clip that goes 3 m FORWARD (it was made for 23 back);
+  the down start's virtual calls (a collision switch behind one of them is not excluded by reading - G1 moved and
+  stood up normally); how any clip but #25 LOOKS on the player.
+- NOT DONE: a test of the way in front of him (a navigation-mesh or collision probe is a game call: not read whole,
+  not made); a choice by the side the shot came from or by whether he runs (the NPC's own rule: running clips only
+  above 250 a second - the hook could weight the long dives by his speed while he is up; not built: the owner asked
+  for all of them); the level step `tools/kl_fa_flop.py`; a joint measurement of each fall's event-8 pose against
+  71's first frame; 71 as the rise of #42.
+
+### 12.9 The fix round (review6, `re/player_down_review6.md`; 2026-10-11 evening; compiled, NOT RUN IN THE GAME)
+
+| point | what the review said | what was done |
+|---|---|---|
+| **M1** | `FlopReach` default 4.5 breaks the task's rule | DONE: the code's default and its fallback are 1.0 (= only #25); the start line, the ini sample, 12.4 / 12.6 and L0 / L1 / W1 say that the owner's 'all' is `FlopReach=4.5`. **This stands against the owner's 'i like having them all' only until L1 / W1 / W2 have run: the list, the weights and `FlopMix` are still all of them** |
+| **M2** | the alignment makes W1 pass in the open; the dives may not look like the sheet | DONE (log only, reads): the collision byte and off count in `THE KNOCK-DOWN` and at UP; the align place, its distance, its heading against his own, the travel left after the align frame (`kld_md[].after`, FILE) and the expected end; UP is judged against that, by his node; W1 rewritten (the same clip in the open and at the wall, by position and picture); L1 asks 'a dive or a slide'; 12.0 says what must not be told to the owner yet |
+| S1 | 'record flags 10c0' in the text | DONE: 12.1 (table), 12.4, L0's sample line; the `list:` line prints the two bits in words |
+| S2 | bit 0x1000 and the rifle | DONE as far as offline goes: 12.1, the `list:` line, L1's `FlopMix=12:1,9:1` round. The default mix is NOT changed (nothing was seen) |
+| S3 | a failed pair write leaves the words on the carrier | DONE: `kld_mix_next` sets `fok = 0` and says so; 12.2 corrected |
+| S4 | body swap A -> B -> A | DONE: `kld_cm[]` (four sets, the two clips' names as the proof) |
+| S5 | `KLD_KEEPUP` on the current `idu` | DONE: `kld_s.fwf` / `fwu` = what was written, put back by them. The same hole for the three FALL words (a re-check that finds no list sets `idf` to -1, so the carrier's id was never put back) is closed with it - in `Flop=3` only; `Flop=1` / `2` have that hole as before and were not touched |
+| S6 | `FlopUp=71` reviewed only for its gating | DONE in words: 12.5 (6); the start line and the `FlopUp:` line call it a test key and say the words are 71's for every down |
+| S7 | plain words for the owner | DONE: 12.3 and the ini sample |
+| S8 | the heredoc edits | nothing to fix (the review found no damage). This round every edit of kldown.c, KLHook.ini and this file was made with the Edit tool |
+
+New in the log with this round: `... could not be written (it keeps clip N): NO KNOCK-DOWN LIST from here on this
+body`; `the carrier's pair in this set still holds clip N ..., an earlier choice ...: the level's own is clip M ...,
+as remembered`; `FlopUp: the get-up words ... are back as the game had them`; `THE GAME ALIGNS THIS FALL ...` /
+`the game does NOT align this fall ...`; the longer `he stands ...` line. New writes: none (S5's put-back writes
+are of words this part wrote itself).

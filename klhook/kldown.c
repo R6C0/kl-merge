@@ -91,6 +91,48 @@
  *   while a live player wears that pool and the pair reads as it was left.
  *   Flop=2 = the block below as it was (FlopFallSlot /Damage/Death/Die_Forward + FlopUpSlot, FlopTake).
  *
+ * ALL THE BELLY FALLS, A DIFFERENT ONE EACH TIME ([Down] Flop=3; default 0; track R6, re\player_down.md 12)
+ *   The owner on the picture sheet G_zoom_belly.png: 'i think zoom belly is it' and 'but i like having them all they are
+ *   all nice'. Flop=3 = Flop=1's whole machine (one whole clip in the game's fall, the mash from its landing, the end by
+ *   movement state 5, the input mask, the bounds, the dead-man test, Dry) with the clip DRAWN BY THE HOOK from a list:
+ *   kld_md[] - sheet numbers 41 (= 7 = 13), 12 (= 9), 10, 25, 42 and the stumble 43 (FlopMix = weights, FlopLight).
+ *   HOW A CHOSEN CLIP IS PLAYED WITHOUT TOUCHING A BOT'S DRAW. The three fall words name the CARRIER slot
+ *   /Damage/Wounded/Running/Torso/Merc_Back (FlopCarrier): in every set of F01, F07 and the five tab builds its list
+ *   is ONE pair with condition word 0 = no draw. The clip NUMBER of that one pair, in the HUMAN's set, is rewritten to
+ *   the chosen clip's (clip records are global: [[0x1546f6c]] + number x 0x68). The slot is an NPC death word
+ *   (ZWounded 0x865180, 'Merc' x running x shot in the back): nothing plays it for a ZFFPlayer, and the AI heisters wear
+ *   OTHER sets (Kane_NPC / Lynch_NPC: their own lists), so no bot's 60 / 20 / 20 draw of
+ *   /Damage/Impact/FB/Running/Front_Torso and no death of anybody changes - the pairs the clips are FOUND in are only
+ *   read. A body whose set has a list for /Damage/Hit/Front/Front (only the NPC sets have one: file) is refused.
+ *   WHEN THE NEXT ONE IS WRITTEN (the game reads the list when the fall STARTS, 0x5d6060): in the pass that checks a
+ *   player object (a new round, another level, a body swap) and in the pass that sees the down state back at 0 - the
+ *   same pass, before the game's next frame. The check writes the first choice BEFORE the fall words are written in
+ *   the same pass (kld_tick: kld_mix_check, then kld_flop_words), so the words never name the carrier while its pair
+ *   holds a clip the list left out (the set's own #12 under a FlopMix / FlopReach without it) - that order is what
+ *   makes 'whatever the pair holds is a clip of the list' true; a pair write that FAILS ends the list on that body
+ *   (review6 S3). A fall that starts between two choices plays the last one, and it is identified by the clip the
+ *   movement really plays ([M+0x8cc]), never by what was written. Never the same group twice in a row.
+ *   #43 never lies: no mash, no speed write; the knock is over when the clip is (2.1 s, all of it free of damage).
+ *   FlopReach (metres; DEFAULT 1.0 = ONLY #25 - review6 M1: the long dives are out until live checks W1 / W2 have
+ *   shown them safe; the owner's 'all' is FlopReach=4.5): a clip whose own root goes further forward is left out. READ
+ *   (re\climb.md 3): these clips have record flag 0x40, so the game's 'moved by animation' movement carries him and
+ *   runs its physics step - the Havok character proxy - while his collision is on, and the prone start does not
+ *   switch it off (LIVE: G1's Hero_Torso_Back; review6: prone slot 13, 0x7e4bc0, calls collision ON): a wall stops
+ *   him like any step of his; an EDGE does not (ASSUMED: he goes over it as when he walks). The hook cannot test the
+ *   way: live checks W1 / W2 of section 12 decide.
+ *   THE GAME'S ALIGNMENT (review6 M2): when [D+0xf4] is set - it was in G1, in the open - the fall is aligned to the
+ *   place at D+0x11c at frame 0.3 x (N - 1), which cancels the clip's travel up to there: 78 - 96 % of the long
+ *   dives' (41 keeps 0.68 m, 12 0.12, 10 0.47, 42 0.75; the stumble 43 keeps 2.83 of 4.05). So a dive may be played
+ *   ON THE SPOT or carried to the align place - NOT what the sheet shows - and 'he ended short' proves no wall. The
+ *   KNOCK-DOWN lines print the collision byte and count, the align place, heading and what is expected; the UP line
+ *   judges against that. Whether the owner gets the falls OF THE SHEET is live check L1's pictures to say.
+ *   FIX ROUND (re\player_down_review6.md, applied): M1, M2 above; S3 a pair write that fails ends the list on that
+ *   body; S4 the last sets' own carrier numbers are remembered (a body swap A -> B -> A); S5 the fall / get-up words
+ *   are put back by what was WRITTEN (kld_s.fwf / fwu), not by the current ids.
+ *   FlopUp=71 (default off): at the clip's event 8, when he lies on the belly there, the game's own 'get-up asked'
+ *   byte [D+0x21] is set (Flop=2's path) and the get-up words hold /Movement/Rise/Rise_From_Stomach: the upright
+ *   kneel of the owner's picture 2. COST: the get-up state takes FULL damage (the fall is free), and it is longer.
+ *
  * THE BELLY FLOP, FIRST FORM ([Down] Flop=2; track R2, re\player_down.md 9; its 'what the AI heisters do' is corrected above)
  *   The owner on what is above: 'when i go down it does that gun one, i mean the other one where its like a full belly
  *   flop dive on the floor'. READ: 'the gun one' is the game's own fall, the slot /Damage/Down_Not_Dead/
@@ -174,6 +216,13 @@
  *   down: flop: the knock-down's clip is through ...: the fall's input mask a: v -> w, movement state 5 is written
  *   down: flop: UP after t s: ...; the input mask a holds v (the fall's bits 0x11 are off)
  *   down: flop: THE TIME BOUND (OF THE WHOLE KNOCK-DOWN) ...          the part gave the fall back to the game
+ *   down: flop: list: sheet #n = clip N ... : IN / is OUT: <why>       Flop=3, once per player object and set (Dry too)
+ *   down: flop: the carrier is <slot> = slot n, ONE pair {0, clip N} ...
+ *   down: flop: the NEXT knock-down is clip N '...' (sheet #n) ... - <when>      the choice, when it is written
+ *   down: flop: THE KNOCK-DOWN: clip N '...' (sheet #n), drawn a of b ...        Flop=3: which clip this fall plays
+ *   down: flop: THE GAME ALIGNS THIS FALL ([D+0xf4]) to the place ..., heading, what is expected / does NOT align this fall
+ *   down: flop: he stands x m from where he went down (by his node) ...; the clip alone goes y m; expected z m; collision
+ *   down: flop: FlopUp: he lies ...: the get-up ... is asked for
  *   down: bots: on ...                                                 Bots=1, at start
  *   down: bots: record i (actor, soldier): health, modifier, chance, was down once; the level's pauses
  *   down: bots: record i: the modifier [soldier+0x124] 0 -> 1 (force ...)
@@ -203,6 +252,8 @@
 #define KLD_M_UP       0x898                  /* M: three slot ids of the get-up, 0x5d6072 */
 #define KLD_NT         6
 #define KLD_ABS(x)     ((x) < 0 ? -(x) : (x))
+#define KLD_ONE        (kld.flop == 1 || kld.flop == 3)      /* one whole clip in the game's fall (kld_flop_one); 3 = the hook draws it from a list */
+#define KLD_KEEPUP     (kld.flop == 1 || (kld.flop == 3 && kld_s.idu < 0))      /* the three get-up words stay the game's */
 
 /* the trigger numbers of the tuning object: offset, the value the tuning constructor stores (0x526cfe .. 0x526f48), limits */
 static const struct { const char *key; DWORD off; float built, lo, hi; const char *what; } kld_t[KLD_NT] = {
@@ -237,7 +288,61 @@ static struct {
     DWORD cap0; int cap0set;                   /* Flop=1: the tick past which this part writes nothing more in this knock-down, whatever the clip's frame says (review3 M2) */
     int f7, f8, fdone, flost; DWORD fclip, t_land;      /* Flop=1: the fall clip's events 7 (he has landed) and 8 (he rises), 1 = this part ended the state / 2 = the time bound gave it back to the game, the game left the fall, the clip, GetTickCount at the landing */
     int dead;                                  /* he died / left play while down: said once, and nothing is written until D is 0 again (kld_drop) */
+    int fmi; float p0[3];                      /* Flop=3: the list entry the fall plays (-1 = none); his feet when he went down */
+    /* review6 (the fix round). fwf / fwu: Flop=3 - the slot id + 1 this part WROTE into the three fall / get-up words
+       (0 = none): what is put back goes by what was written, not by idf / idu, which a later check sets to -1 (S5).
+       pn: his NODE's place when he went down (klclimb.c: the floats at +0x460 stay at the navigation mesh's edge);
+       fal / fap / fad: the game aligned this fall, to that place, that far from his feet (M2) */
+    int fwf, fwu, pnok, fal; float pn[3], fap[3], fad;
 } kld_s;
+
+/* Flop=3 (track R6): the falls of the owner's sheet G_zoom_belly.png that throw a living man down and bring him up.
+   sheet = the overview's number; group = clips with (nearly) the same keys - never two of one group in a row; slot /
+   clip = where the clip is FOUND in this body's set (the slot's pairs are only read) and its name after '#';
+   light = he never lies (no mash; over when the clip is); upcut = at its event 8 he lies chest down (FILE: the
+   sheet's measured 'pose:' ranges), so FlopUp may cut there; w = the default weight (FlopMix).
+   FILE (F07's table = the five tab builds'): frames / events / root forward -
+     41 Running_torso_Front_3 216 fr, 7@43 31@43 8@72, 3.01 m (ends STANDING; 7 and 13 are the same dive, 206 fr,
+        2.49 m, and end bent: 41 is the default of the group)        12 = 9 ..._Back_03 239 fr, 31@7 7@55 8@115, 3.28 m
+     10 Run_Torso_Back_02 140 fr, 31@17 7@46 8@80, 3.41 m (a passing kneel)   25 Hero_Torso_Back 186 fr, 31@1 0@39
+        7@46 8@116, 0.66 m        42 Running_Torso_Front_2 219 fr, 7@53 31@53 8@119, 3.63 m (back, side, belly)
+     43 Run_Torso_Impact 53 fr, 31@18 7@47, no 8, 4.05 m (a stumble; he stays up)
+   Of these events the game's clip-event routine 0x637060 acts only on 31 (the weapon item, case 0x637147); 0, 7, 8 go
+   to 'nothing' (R5: its two tables). LIVE (G1, 2026-10-11 16:18): the prone fall's channel has NO event queue, so no
+   event of the clip reaches an action at all - the KNOCK-DOWN line prints the queue every time.
+   after (review6 M2; FILE, the review's reading of the GROUND keys - a number of the FILE, not read in the game):
+   metres of forward travel the clip has LEFT after frame 0.3 x (N - 1), where the game's AlignTo has put him at the
+   align place when it aligns the fall ([D+0xf4]) - all that is the clip's own of an aligned dive.
+   Record flags (review6 S1 / S2; FILE): all nine have 0x40 ('moved by animation'); 7, 9 and 25 are 10c0, the other
+   six c0. Bit 0x1000 = the record has four vectors at +0x30 .. +0x5c that 0x8b4200 reads (stock: Down_Not_Dead_Get_Down
+   has them, ..._No_Weapon has not - that they are WEAPON data is a GUESS). #25 is the only clip seen on the player. */
+#define KLD_NMIX 9
+static const struct { int sheet, group; const char *slot, *clip; int light, upcut; float w, after; } kld_md[KLD_NMIX] = {
+    { 41, 1, "/Damage/Impact/FB/Running/Front_Torso",       "Running_torso_Front_3",    0, 1, 2.0f, 0.68f },
+    {  7, 1, "/Damage/Wounded/Running/Torso/Front_01",      "Run_Torso_Front_03",       0, 1, 0.0f, 0.16f },
+    { 13, 1, "/Damage/Wounded/Running/Torso/Merc_Front",    "Merc_Run_Torso_Front_03",  0, 1, 0.0f, 0.16f },
+    { 12, 2, "/Damage/Wounded/Running/Torso/Merc_Back",     "Merc_Run_Torso_Back_03",   0, 1, 2.0f, 0.12f },
+    {  9, 2, "/Damage/Wounded/Running/Torso/Back_01",       "Run_Torso_Back_03",        0, 1, 0.0f, 0.12f },
+    { 10, 3, "/Damage/Wounded/Running/Torso/Back_01",       "Run_Torso_Back_02",        0, 1, 1.0f, 0.47f },
+    { 25, 4, "/Damage/Wounded/Hero_Torso_F",                "Hero_Torso_Back",          0, 1, 1.0f, 0.10f },
+    { 42, 5, "/Damage/Impact/FB/Running/Front_Torso",       "Running_Torso_Front_2",    0, 0, 1.0f, 0.75f },      /* at its event 8 (119) he lies on his SIDE (40 - 135): no cut */
+    { 43, 6, "/Damage/Impact/FB/Running/Front_Torso",       "Run_Torso_Impact",         1, 0, 1.0f, 2.83f },      /* the lead's GUESS: the rare 'nearly went down' (FlopLight) */
+};
+static struct {
+    float w[KLD_NMIX], reach; int light, up;   /* the keys: FlopMix, FlopReach (metres; 0 = no limit), FlopLight, FlopUp=71 */
+    int n, next, lastgroup, played, drawn[KLD_NMIX];      /* entries found on this body; the entry written for the next fall; counters of the process */
+    struct { int def, frames, f7, f8; DWORD num, rec; float fwd; } e[KLD_NMIX];
+} kld_mx;
+static struct { DWORD at, old, put, pool; int have; } kld_cx;      /* the carrier's one pair: the address of its clip number, what the level had, what stands there now */
+/* review6 S4: a body swap A -> B -> A. When A's pair could not be put back (nobody wore A's set any more) it keeps the
+   last choice, and a later check of A would take that number for 'the level's own' and lose #12. So the last sets'
+   {pair address, pool, the level's own number, what this part left there} are kept, WITH THE TWO CLIPS' NAMES: an entry
+   is believed only while the pair reads {0, put} and both numbers still name those clips (another level at the same
+   address reads otherwise and the entry is dropped). */
+#define KLD_NCM 4
+static struct { DWORD at, pool, old, put; char oldname[96], putname[96]; } kld_cm[KLD_NCM];
+static int kld_cmi;
+static DWORD kld_rng;
 
 /* the names the game's filler 0x750900 looks up for the six words (0x752e5b .. 0x752f0b), in the order fall x 3, get-up x 3 */
 static const char *const kld_stock[6] = {
@@ -324,6 +429,7 @@ static void kld_drop(void)
     kld_s.cap = 0; kld_s.capped = 0; kld_s.lastf = 0; kld_s.hp_up = 0;
     kld_s.fseen = kld_s.fnow = kld_s.fasked = kld_s.fup = 0; kld_s.t_ask = 0; kld_s.fhp = 0; kld_s.fgiven = 0; kld_s.dead = 0;
     kld_s.f7 = kld_s.f8 = -1; kld_s.fdone = kld_s.flost = 0; kld_s.fclip = kld_s.t_land = 0; kld_s.cap0 = 0; kld_s.cap0set = 0;
+    kld_s.fmi = -1; kld_s.fal = 0; kld_s.fad = -1.0f;
 }
 
 /* THE FALL'S INPUT MASK (review3 M1; READ whole: 0x61ef90, 0x6feb90, 0x787600). The down state's start (0x76a450, at
@@ -431,7 +537,7 @@ static int kld_badevent(DWORD clip, DWORD *id, int *fr)
         if (!klh_rd(base + *(DWORD *)(r + 0x10) + 8 * i, ev, 8)) return -1;
         e = *(DWORD *)ev;
         if (e == 2 || e == 5 || e == 6) continue;
-        if (kld.flop == 1 && (e == 7 || e == 8 || e == 31)) continue;      /* Flop=1: what the stock game's own clips of this family carry, and it plays them ON THE HUMAN itself:
+        if (KLD_ONE && (e == 7 || e == 8 || e == 31)) continue;      /* Flop=1: what the stock game's own clips of this family carry, and it plays them ON THE HUMAN itself:
                                                                                /Damage/Wounded/Hero_Torso_F is his death (ZFFPlayerMovementDie slot 20, 0x789b10). 7 and 8 go to 'nothing'
                                                                                in 0x637060; 31 goes to its case 2 (0x77ca60: an item of the action's) - ASSUMED harmless in the prone
                                                                                movement as it is in the die movement (the fall line prints the channel's event queue) */
@@ -559,23 +665,221 @@ static void kld_flop_check(DWORD pl)
     kld_flop_belly(pl, 1);
 }
 
+/* ---- Flop=3: the list (track R6) ------------------------------------------------------------------------------- */
+
+/* The address of a slot's pair list in this body's set (kld_list's lookup; reads only). -> 0 = none / not readable */
+static DWORD kld_listat(DWORD pl, int id, DWORD *recs, DWORD *cnt)
+{
+    DWORD pool = klh_rd32(pl + 0x78), tab = klh_rd32(pl + 0x7c), n = 0, off = 0xffffffff, mgr;
+    *recs = 0; *cnt = 0;
+    if (id < 0 || !pool || !tab || !klh_rd(tab, &n, 4) || n > 60000 || (DWORD)id >= n || !klh_rd(tab + 4 + 4 * (DWORD)id, &off, 4) || off == 0xffffffff) return 0;
+    if (!(mgr = klh_rd32((DWORD_PTR)KLH_VA(KLD_ANIM))) || !(*recs = klh_rd32(mgr)) || !klh_rd(mgr + 4, cnt, 4)) return 0;
+    return pool + off;
+}
+
+/* every event of a clip as 'id@frame,...' (the table as kld_badevent reads it) */
+static void kld_evtext(DWORD clip, char *t, int cap)
+{
+    BYTE r[0x30], ev[8]; DWORD mgr, base; short n, i; int k = 0;
+    snprintf(t, cap, "?");
+    if (!clip || !klh_rd(clip, r, sizeof r)) return;
+    n = *(short *)(r + 6);
+    if (!n) { snprintf(t, cap, "none"); return; }
+    if (n < 0 || n >= 64 || !(mgr = klh_rd32((DWORD_PTR)KLH_VA(KLD_ANIM))) || !(base = klh_rd32(mgr + 0x10))) return;
+    t[0] = 0;
+    for (i = 0; i < n && k < cap - 16; i++) {
+        if (!klh_rd(base + *(DWORD *)(r + 0x10) + 8 * i, ev, 8)) break;
+        k += snprintf(t + k, cap - k, "%s%lu@%u", i ? "," : "", *(DWORD *)ev, (unsigned)*(WORD *)(ev + 4));
+    }
+}
+
+static int kld_mix_find(DWORD clip)
+{
+    int i;
+    for (i = 0; i < kld_mx.n; i++) if (kld_mx.e[i].rec == clip) return i;
+    return -1;
+}
+
+/* The carrier's pair gets the level's own clip number back - only while a live player wears that pool and the pair
+   reads {condition word 0, the number this part put} (kld_flop_belly's rule, review3 S1). Game thread only. */
+static int kld_cm_find(DWORD at, DWORD pool)
+{
+    int i;
+    for (i = 0; i < KLD_NCM; i++) if (kld_cm[i].at && kld_cm[i].at == at && kld_cm[i].pool == pool) return i;
+    return -1;
+}
+
+/* review6 S4: what the carrier's pair holds now against the level's own, remembered (or forgotten when they are the
+   same). Called after every write of the pair. Reads only. */
+static void kld_cm_keep(void)
+{
+    DWORD mgr, recs = 0, cnt = 0, a4; int i = kld_cm_find(kld_cx.at, kld_cx.pool), a1, a2, a3;
+    if (!kld_cx.have) return;
+    if (kld_cx.put == kld_cx.old) { if (i >= 0) kld_cm[i].at = 0; return; }
+    if (!(mgr = klh_rd32((DWORD_PTR)KLH_VA(KLD_ANIM))) || !(recs = klh_rd32(mgr)) || !klh_rd(mgr + 4, &cnt, 4) || kld_cx.old >= cnt || kld_cx.put >= cnt) { if (i >= 0) kld_cm[i].at = 0; return; }
+    if (i < 0) { i = kld_cmi; kld_cmi = (kld_cmi + 1) % KLD_NCM; }
+    kld_cm[i].at = kld_cx.at; kld_cm[i].pool = kld_cx.pool; kld_cm[i].old = kld_cx.old; kld_cm[i].put = kld_cx.put;
+    kld_clipfacts(recs + kld_cx.old * 0x68, &a1, &a2, &a4, &a3, kld_cm[i].oldname, sizeof kld_cm[i].oldname);
+    kld_clipfacts(recs + kld_cx.put * 0x68, &a1, &a2, &a4, &a3, kld_cm[i].putname, sizeof kld_cm[i].putname);
+    if (!kld_cm[i].oldname[0] || !kld_cm[i].putname[0]) kld_cm[i].at = 0;      /* no name to know it again by: not remembered */
+}
+
+static void kld_mix_back(DWORD pl)
+{
+    DWORD pr[2] = { 1, 0 }; int i;
+    if (!kld_cx.have) return;
+    kld_cx.have = 0;
+    if (kld_cx.put == kld_cx.old) return;
+    if (kld_pool_live(pl, kld_cx.pool) && klh_rd(kld_cx.at - 4, pr, 8) && pr[0] == 0 && pr[1] == kld_cx.put) {
+        if (klh_data((void *)(DWORD_PTR)kld_cx.at, &kld_cx.old, 4, "the animation set: the carrier pair's clip number, back as the level had it")) {
+            klog("down: flop: the carrier pair of %s holds its own clip %lu again (it held %lu)", kld.fallslot, kld_cx.old, kld_cx.put);
+            if ((i = kld_cm_find(kld_cx.at, kld_cx.pool)) >= 0) kld_cm[i].at = 0;
+        }
+    } else klog("down: flop: the carrier pair of %s (clip %lu put for %lu) is NOT put back: no player wears that animation set any more, or the pair does not read as it was left (the level's data is gone, or a body swap left the set unworn); remembered: a later check of that set takes clip %lu as its own again while the pair still reads as left", kld.fallslot, kld_cx.put, kld_cx.old, kld_cx.old);
+}
+
+/* The clip of the NEXT knock-down: one of the entries by weight, not of the group played last (unless there is no
+   other), its clip number written into the carrier's pair. Called in the pass that checked the body and in the pass
+   that saw the down state back at 0. Dry: said, not written. Game thread only. */
+static void kld_mix_next(DWORD pl, const char *why)
+{
+    float sum = 0, r; int i, pick = -1, others = 0; DWORD pr[2] = { 1, 0 }, num; char name[96]; int a1, a2, a3; DWORD a4;
+    if (kld.flop != 3 || !kld_s.fok || kld_mx.n <= 0 || !kld_cx.have) return;
+    for (i = 0; i < kld_mx.n; i++) if (kld_md[kld_mx.e[i].def].group != kld_mx.lastgroup) others++;
+    for (i = 0; i < kld_mx.n; i++) if (!others || kld_md[kld_mx.e[i].def].group != kld_mx.lastgroup) sum += kld_mx.w[kld_mx.e[i].def];
+    kld_rng ^= GetTickCount() * 2654435761u; if (!kld_rng) kld_rng = 0x1234567;
+    kld_rng ^= kld_rng << 13; kld_rng ^= kld_rng >> 17; kld_rng ^= kld_rng << 5;
+    r = (float)(kld_rng >> 8) / 16777216.0f * sum;
+    for (i = 0; i < kld_mx.n; i++) {
+        if (others && kld_md[kld_mx.e[i].def].group == kld_mx.lastgroup) continue;
+        pick = i;
+        if ((r -= kld_mx.w[kld_mx.e[i].def]) < 0) break;
+    }
+    if (pick < 0) return;
+    num = kld_mx.e[pick].num;
+    if (!klh_rd(kld_cx.at - 4, pr, 8) || pr[0] != 0 || pr[1] != kld_cx.put) {
+        klog("down: flop: the carrier pair of %s reads {%lx, %lu} and this part left {0, %lu}: not the pair any more - NO KNOCK-DOWN LIST from here on this body (the game's own fall comes back)", kld.fallslot, pr[0], pr[1], kld_cx.put);
+        kld_s.fok = 0;                         /* the tick puts the fall words back; kld_mix_back finds the pair changed and leaves it */
+        return;
+    }
+    kld_mx.next = pick;
+    kld_clipfacts(kld_mx.e[pick].rec, &a1, &a2, &a4, &a3, name, sizeof name);
+    if (kld.dry) { klog("down: flop: the NEXT knock-down WOULD be clip %lu '%s' (sheet #%d) - %s; Dry=1: the carrier pair keeps clip %lu", num, name, kld_md[kld_mx.e[pick].def].sheet, why, pr[1]); return; }
+    if (num != pr[1] && !klh_data((void *)(DWORD_PTR)kld_cx.at, &num, 4, "the animation set: the carrier pair's clip number = the clip of the next knock-down")) {
+        /* review6 S3: the pair keeps what it held - the last choice or the set's own #12, which FlopMix / FlopReach
+           may have left OUT of the list. The fall words must not go on naming the carrier then: no list from here on
+           (the tick puts the game's own ids back in its next pass while he is up). */
+        kld_mx.next = -1; kld_s.fok = 0;
+        klog("down: flop: the carrier pair of %s could not be written (it keeps clip %lu): NO KNOCK-DOWN LIST from here on this body - the fall words get the game's own ids back, the game's own fall plays", kld.fallslot, pr[1]);
+        return;
+    }
+    kld_cx.put = num; kld_cm_keep();
+    if (kld.log) klog("down: flop: the NEXT knock-down is clip %lu '%s' (sheet #%d%s), written into the one pair of %s (it held %lu; the level's own is %lu) - %s", num, name, kld_md[kld_mx.e[pick].def].sheet,
+                      kld_md[kld_mx.e[pick].def].light ? ", the stumble: he stays up" : "", kld.fallslot, pr[1], kld_cx.old, why);
+}
+
+/* Once per player object and set (Flop=3): the carrier and every entry of the list, on THIS body. */
+static void kld_mix_check(DWORD pl)
+{
+    DWORD recs = 0, cnt = 0, at, pr[2], bid, fl, c[8], cnum, own; int id, i, k, n, be, bf, fr, ev, full; char name[96], evs[96]; const char *hash; float net[3];
+    kld_mix_back(pl);                          /* a check made again (a body swap): what an earlier one put into a set goes back first */
+    kld_s.fchk = 1; kld_s.fok = 0; kld_s.idf = kld_s.idu = -1; kld_mx.n = 0; kld_mx.next = -1;
+    kld_s.fset[0] = klh_rd32(pl + 0x78); kld_s.fset[1] = klh_rd32(pl + 0x7c); kld_s.fset[2] = klh_rd32(pl + 0x80);
+    for (k = 0; k < 6; k++) kld_s.fst[k] = (WORD)klq_slot(pl, kld_stock[k]);
+    /* the bots' draw: only the NPC sets have a list for /Damage/Hit/Front/Front (FILE: F01, F07, the five tab builds).
+       A human in such a set would share the carrier's pair with every AI heister of that set: refused. */
+    id = klq_slot(pl, "/Damage/Hit/Front/Front");
+    if (id >= 0 && kld_list(pl, id, c, 8) > 0) {
+        klog("down: flop: NO KNOCK-DOWN LIST on this body (player %08lx): its animation set has a clip for /Damage/Hit/Front/Front = an AI heister's set, and a pair rewritten in it would change the bots' own deaths. The game's own fall stays", pl);
+        return;
+    }
+    id = klq_slot(pl, kld.fallslot);
+    at = id >= 0 && id <= 0x7fff ? kld_listat(pl, id, &recs, &cnt) : 0;
+    pr[0] = 1; pr[1] = 0;
+    if (!at || !klh_rd(at, pr, 8) || pr[0] != 0 || pr[1] >= cnt) {
+        klog("down: flop: NO KNOCK-DOWN LIST on this body (player %08lx): the carrier %s (slot %d) %s. The game's own fall stays", pl, kld.fallslot, id,
+             !at ? "has no list in this set" : "is not a list of ONE pair with condition word 0 (a list the game draws from cannot carry a chosen clip)");
+        return;
+    }
+    cnum = own = pr[1];
+    /* review6 S4: a set this part left with a choice in its pair (a body swap away from it, nobody wore it then) and
+       that is worn again: the level's own number is the remembered one, not what the pair reads. */
+    if ((i = kld_cm_find(at + 4, klh_rd32(pl + 0x78))) >= 0) {
+        char n1[96], n2[96];
+        if (cnum == kld_cm[i].put && kld_cm[i].old < cnt && kld_clipfacts(recs + kld_cm[i].old * 0x68, &fr, &ev, &fl, &full, n1, sizeof n1) && !strcmp(n1, kld_cm[i].oldname)
+            && kld_clipfacts(recs + cnum * 0x68, &fr, &ev, &fl, &full, n2, sizeof n2) && !strcmp(n2, kld_cm[i].putname)) {
+            own = kld_cm[i].old;
+            klog("down: flop: the carrier's pair in this set still holds clip %lu '%s', an earlier choice of this part that could not be put back (a body swap): the level's own is clip %lu '%s', as remembered", cnum, n2, own, n1);
+        } else kld_cm[i].at = 0;                /* not as it was left (another level's data at that address): forgotten */
+    }
+    for (k = 0; k < KLD_NMIX; k++) {
+        DWORD lat, rec = 0, num = 0; int sid, pair = -1; float fwd;
+        if (kld_mx.w[k] <= 0) continue;
+        if (kld_md[k].light && !kld_mx.light) { klog("down: flop: list: sheet #%d '%s' (the stumble: he stays up) is OUT by FlopLight=0", kld_md[k].sheet, kld_md[k].clip); continue; }
+        sid = klq_slot(pl, kld_md[k].slot);
+        lat = sid >= 0 ? kld_listat(pl, sid, &recs, &cnt) : 0;
+        for (i = 0; lat && i < 16; i++) {
+            if (!klh_rd(lat + 8 * i, pr, 8)) break;
+            if (pr[1] < cnt && kld_clipfacts(recs + pr[1] * 0x68, &fr, &ev, &fl, &full, name, sizeof name) && (hash = strrchr(name, '#')) != 0 && !strcmp(hash + 1, kld_md[k].clip)) { rec = recs + pr[1] * 0x68; num = pr[1]; pair = i; break; }
+            if (!pr[0]) break;
+        }
+        /* review6 S4: the carrier's own clip (#12) when its pair holds an earlier choice - by the remembered number */
+        if (!rec && sid == id && own != cnum && own < cnt && kld_clipfacts(recs + own * 0x68, &fr, &ev, &fl, &full, name, sizeof name) && (hash = strrchr(name, '#')) != 0 && !strcmp(hash + 1, kld_md[k].clip)) { rec = recs + own * 0x68; num = own; pair = 0; }
+        if (!rec) { klog("down: flop: list: sheet #%d '%s' is OUT: %s (slot %d) %s in this body's set", kld_md[k].sheet, kld_md[k].clip, kld_md[k].slot, sid, lat ? "has no pair with a clip of that name" : "has no list"); continue; }
+        kld_evtext(rec, evs, sizeof evs);
+        net[0] = net[1] = net[2] = 0; klh_rd(rec + 0x18, net, 12); fwd = kld_fin(net[2]) ? -net[2] : 0.0f;      /* the record's net root movement; forward is -z */
+        if (!full) { klog("down: flop: list: sheet #%d clip %lu '%s' is OUT: not a full-body clip (record +0x28 bit 0x10)", kld_md[k].sheet, num, name); continue; }
+        if ((be = kld_badevent(rec, &bid, &bf)) != 0) {
+            if (be > 0) klog("down: flop: list: sheet #%d clip %lu '%s' is OUT: event id %lu at frame %d, which the game's clip-event routine 0x637060 acts on (events %s)", kld_md[k].sheet, num, name, bid, bf, evs);
+            else klog("down: flop: list: sheet #%d clip %lu '%s' is OUT: its events cannot be read", kld_md[k].sheet, num, name);
+            continue;
+        }
+        if (kld_mx.reach > 0 && fwd > kld_mx.reach * 100.0f) {
+            klog("down: flop: list: sheet #%d clip %lu '%s' is OUT by FlopReach=%.2f: its root goes %.2f m forward (%d frames, events %s)", kld_md[k].sheet, num, name, kld_mx.reach, fwd / 100.0f, fr, evs);
+            continue;
+        }
+        n = kld_mx.n++;
+        kld_mx.e[n].def = k; kld_mx.e[n].frames = fr; kld_mx.e[n].num = num; kld_mx.e[n].rec = rec; kld_mx.e[n].fwd = fwd;
+        kld_mx.e[n].f7 = kld_evframe(rec, 7); kld_mx.e[n].f8 = kld_evframe(rec, 8);
+        klog("down: flop: list: sheet #%d = clip %lu %08lx '%s' (pair %d of %s, slot %d - only read), %d frames (%.2f s at speed 1), events %s (lands at %d, rises from %d; -1 = none), the root goes %.2f m forward (%.2f m of it after the align frame %.1f: FILE), record flags %lx (0x40 moved by animation: %s; 0x1000 the four extra vectors of 0x8b4200: %s), weight %.1f%s%s: IN",
+             kld_md[k].sheet, num, rec, name, pair + 1, kld_md[k].slot, sid, fr, (fr - 1) / 25.0f, evs, kld_mx.e[n].f7, kld_mx.e[n].f8, fwd / 100.0f, kld_md[k].after, 0.3f * (fr - 1), fl,
+             (fl & 0x40) ? "yes" : "NO - not the kind this was read on: tell the track", (fl & 0x1000) ? "yes" : "no", kld_mx.w[k],
+             kld_md[k].light ? "; HE STAYS UP: no mash, over when the clip is" : "", kld_mx.up && kld_md[k].upcut && kld_mx.e[n].f8 >= 0 ? "; FlopUp cuts it at its event 8" : "");
+    }
+    if (!kld_mx.n) { klog("down: flop: NO KNOCK-DOWN LIST on this body (player %08lx): no clip of FlopMix is usable here. The game's own fall stays", pl); return; }
+    if (kld_mx.up) {                           /* FlopUp=71: the get-up words get FlopUpSlot - checked as Flop=2 checks its get-up */
+        int idu = klq_slot(pl, kld.upslot), ok = idu >= 0 && idu <= 0x7fff && (n = kld_list(pl, idu, c, 8)) > 0;
+        for (i = 0; ok && i < n; i++) ok = kld_clipfacts(c[i], &fr, &ev, &fl, &full, name, sizeof name) && full && kld_badevent(c[i], &bid, &bf) == 0;
+        if (ok) { kld_s.idu = idu; klog("down: flop: FlopUp (A TEST KEY until live check U1): the get-up is %s = slot %d, '%s' of %d frames: asked for at a belly clip's event 8 by the game's own byte [D+0x21]; THE GET-UP STATE TAKES FULL DAMAGE; the three get-up words are this slot for EVERY down while the key stands - also after #42, after the stumble #43 if the game ever takes it to lying, and after a fall a time bound handed back to the game", kld.upslot, idu, name, fr); }
+        else klog("down: flop: FlopUp: %s is not usable on this body (no such slot, no clip, not full-body or an event the game acts on): every clip is played whole", kld.upslot);
+    }
+    kld_s.idf = id; kld_s.fok = 1;
+    kld_cx.at = at + 4; kld_cx.old = own; kld_cx.put = cnum; kld_cx.pool = klh_rd32(pl + 0x78); kld_cx.have = 1;
+    klog("down: flop: the carrier is %s = slot %d, ONE pair {0, clip %lu} at %08lx in this body's set (pool %08lx; the level's own clip is %lu); %d clip(s) in the list", kld.fallslot, id, cnum, at, kld_cx.pool, own, kld_mx.n);
+    kld_mix_next(pl, "the first choice on this body (a new round, another level or a body swap)");
+}
+
 /* The six id words of M: kept as found, ours written while he is UP (the fall reads them when it starts, the get-up
    when it starts: 0x5d6060 - never between). act = 0: what was found goes back. Game thread only. */
 static void kld_flop_words(DWORD pl, DWORD ds, int act)
 {
-    DWORD m; WORD w[6], want; int k, n = 0, ok = 1;
+    DWORD m; WORD w[6], want; int k, n = 0, ok = 1, back = 0;
     if (!act) {
-        kld_flop_belly(pl, 0);
+        kld_flop_belly(pl, 0); kld_mix_back(pl);
         if (!kld_s.fhave || !kld_s.fput) return;
         m = kld_s.fm;
-        if (klh_rd32(pl) != KLD_PLAYER_VT || klh_rd32(m) != KLD_PRONE_VT || klh_rd32(m + 0x8d4) != pl) { kld_s.fhave = kld_s.fput = 0; return; }      /* the object is gone: nothing of ours is anywhere */
+        if (klh_rd32(pl) != KLD_PLAYER_VT || klh_rd32(m) != KLD_PRONE_VT || klh_rd32(m + 0x8d4) != pl) { kld_s.fhave = kld_s.fput = 0; kld_s.fwf = kld_s.fwu = 0; return; }      /* the object is gone: nothing of ours is anywhere */
         for (k = 0; k < 6; k++) {
             DWORD at = m + (k < 3 ? KLD_M_FALL + 2 * k : KLD_M_UP + 2 * (k - 3));
             want = (WORD)(k < 3 ? kld_s.idf : kld_s.idu);
-            if (k >= 3 && kld.flop == 1) continue;                   /* Flop=1 never wrote the get-up words */
+            if (kld.flop == 3) {                                  /* review6 S5: by what was WRITTEN - a check made again has set idf / idu to -1 by now */
+                int wr = k < 3 ? kld_s.fwf : kld_s.fwu;
+                if (!wr) continue;
+                want = (WORD)(wr - 1);
+            } else if (k >= 3 && KLD_KEEPUP) continue;            /* Flop=1 never wrote the get-up words */
             if (klh_rd(at, &w[k], 2) && w[k] == want && want != kld_s.forig[k] && klh_data((void *)(DWORD_PTR)at, &kld_s.forig[k], 2, "the prone movement: a clip slot id, back as the game had it")) n++;
         }
-        kld_s.fput = 0;
+        kld_s.fput = 0; kld_s.fwf = kld_s.fwu = 0;
         if (n) klog("down: flop: the prone movement %08lx has its own %d slot id(s) again (fall %u/%u/%u, get-up %u/%u/%u)", m, n,
                     kld_s.forig[0], kld_s.forig[1], kld_s.forig[2], kld_s.forig[3], kld_s.forig[4], kld_s.forig[5]);
         return;
@@ -589,30 +893,44 @@ static void kld_flop_words(DWORD pl, DWORD ds, int act)
        or ours. Anything else: these are not the six words on this build / level / body, and nothing is written. */
     for (k = 0; k < 6; k++) {
         WORD st = kld_s.fst[k];                                      /* looked up with the check (kld_flop_check) */
-        want = (WORD)(k < 3 || kld.flop != 1 ? k < 3 ? kld_s.idf : kld_s.idu : st);
+        want = (WORD)(k < 3 || !KLD_KEEPUP ? k < 3 ? kld_s.idf : kld_s.idu : st);
         if (w[k] == want || w[k] == st || w[k] == 0xffff) continue;
+        if (kld.flop == 3 && m == kld_s.fm && (k < 3 ? kld_s.fwf : kld_s.fwu) && w[k] == (WORD)((k < 3 ? kld_s.fwf : kld_s.fwu) - 1)) continue;      /* review6 S5: this part's own earlier write (the get-up words of a FlopUp that a later check lost): dealt with below */
         klog("down: flop: NO BELLY FLOP: word %d of the prone movement %08lx (+0x%x) holds %u, and %s is slot %u (65535 = none) in this level: not the words this part was read on - nothing is written, the game's own fall stays",
              k, m, (unsigned)(k < 3 ? KLD_M_FALL + 2 * k : KLD_M_UP + 2 * (k - 3)), w[k], kld_stock[k], st);
         kld_s.fok = 0;                                               /* the tick puts back what was written before, if anything */
         return;
     }
-    if (!kld_s.fhave || m != kld_s.fm) { kld_s.fhave = 1; kld_s.fm = m; kld_s.fput = 0; memcpy(kld_s.forig, w, sizeof w); }
+    if (!kld_s.fhave || m != kld_s.fm) { kld_s.fhave = 1; kld_s.fm = m; kld_s.fput = 0; kld_s.fwf = kld_s.fwu = 0; memcpy(kld_s.forig, w, sizeof w); }
     for (k = 0; k < 6; k++) {
         DWORD at = m + (k < 3 ? KLD_M_FALL + 2 * k : KLD_M_UP + 2 * (k - 3));
         want = (WORD)(k < 3 ? kld_s.idf : kld_s.idu);
-        if (k >= 3 && kld.flop == 1) continue;                       /* Flop=1: the get-up words are the game's own */
+        if (k >= 3 && KLD_KEEPUP) {                               /* Flop=1: the get-up words are the game's own */
+            /* review6 S5: Flop=3 with FlopUp wrote them, and a check made again (a body swap) found the get-up slot
+               not usable: they go back to what the game had, here, while he is up */
+            if (kld.flop == 3 && kld_s.fwu && w[k] == (WORD)(kld_s.fwu - 1) && w[k] != kld_s.forig[k] && klh_data((void *)(DWORD_PTR)at, &kld_s.forig[k], 2, "the prone movement: a get-up slot id of FlopUp, back as the game had it (the get-up slot is not usable on this body)")) back++;
+            if (k == 5 && kld.flop == 3 && kld_s.fwu) {
+                kld_s.fwu = 0;
+                klog("down: flop: FlopUp: the get-up words of the prone movement %08lx held this part's slot from an earlier body: %d of them are back as the game had them (%u/%u/%u)", m, back, kld_s.forig[3], kld_s.forig[4], kld_s.forig[5]);
+            }
+            continue;
+        }
         if (w[k] == want) continue;
-        if (kld_s.fput) kld_s.forig[k] = w[k];                       /* the game filled its table again (0x750900): that is the new 'found' */
+        if (kld_s.fput && !(kld.flop == 3 && (k < 3 ? kld_s.fwf : kld_s.fwu) && w[k] == (WORD)((k < 3 ? kld_s.fwf : kld_s.fwu) - 1)))
+            kld_s.forig[k] = w[k];                                   /* the game filled its table again (0x750900): that is the new 'found' */
         if (kld.dry) { n++; continue; }
-        if (klh_data((void *)(DWORD_PTR)at, &want, 2, "the prone movement: the slot id of the fall / the get-up")) n++;
+        if (klh_data((void *)(DWORD_PTR)at, &want, 2, "the prone movement: the slot id of the fall / the get-up")) {
+            n++;
+            if (kld.flop == 3) { if (k < 3) kld_s.fwf = want + 1; else kld_s.fwu = want + 1; }
+        }
     }
     if (n && !kld_s.fput) {
         kld_s.fput = 1;
         klog("down: flop: the prone movement %08lx holds fall %u/%u/%u get-up %u/%u/%u (plain / compact / on the spot; 65535 = none): %s %d/%d/%d and %d/%d/%d%s",
              m, kld_s.forig[0], kld_s.forig[1], kld_s.forig[2], kld_s.forig[3], kld_s.forig[4], kld_s.forig[5],
              kld.dry ? "Dry=1, it WOULD be written" : "written", kld_s.idf, kld_s.idf, kld_s.idf,
-             kld.flop == 1 ? kld_s.forig[3] : kld_s.idu, kld.flop == 1 ? kld_s.forig[4] : kld_s.idu, kld.flop == 1 ? kld_s.forig[5] : kld_s.idu,
-             kld.flop == 1 ? " (Flop=1: the three get-up words are left as they are)" : "");
+             KLD_KEEPUP ? kld_s.forig[3] : kld_s.idu, KLD_KEEPUP ? kld_s.forig[4] : kld_s.idu, KLD_KEEPUP ? kld_s.forig[5] : kld_s.idu,
+             KLD_KEEPUP ? " (one whole clip in the fall: the three get-up words are left as they are)" : "");
     }
 }
 
@@ -686,15 +1004,43 @@ static void kld_flop_down(DWORD pl, DWORD d, DWORD ho, DWORD ds, DWORD now, floa
    Nothing here is written in a Dry run, for a dead man (the caller), or when the fall that plays is not the slot's. */
 static void kld_flop_one(DWORD pl, DWORD d, DWORD ds, DWORD now, float hp)
 {
-    DWORD m, ms = 0, clip, h, chans, clock, tick = 0, fl, q = 0, five = 5, ma = 0, mv = 0; float frame, to, fps, dt, rate, left, land; int ok = 1, i, fr, ev, full, mk; char name[96]; long ne; BYTE al = 0;
+    DWORD m, ms = 0, clip, h, chans, clock, tick = 0, fl, q = 0, five = 5, ma = 0, mv = 0; float frame, to, fps, dt, rate, left, land; int ok = 1, i, fr, ev, full, mk, light; char name[96]; long ne; BYTE al = 0;
     if (!(m = klh_rd32(d + 0xc)) || klh_rd32(m) != KLD_PRONE_VT || klh_rd32(m + 0x8d4) != pl || !klh_rd(m + 0x8ec, &ms, 4)) return;
     if (!kld_s.fseen) {
         clip = klh_rd32(m + 0x8cc);
         if (ds == 2 && (ms != 1 || !clip)) return;                   /* the fall has not begun in M yet: look again next tick */
         kld_s.fseen = 1;
         if (ds != 2) { klog("down: flop: first seen in down state %lu (the fall was over within one tick): this down is the game's own", ds); return; }
-        kld_s.fnow = kld_s.fok && !kld.dry && kld_inlist(pl, kld_s.idf, clip);
+        /* Flop=3: by the clip the movement REALLY plays (record addresses are global), not by what was written last */
+        kld_s.fmi = kld.flop == 3 ? kld_mix_find(clip) : -1;
+        kld_s.fnow = kld_s.fok && !kld.dry && (kld.flop == 3 ? kld_s.fmi >= 0 : kld_inlist(pl, kld_s.idf, clip));
         kld_clipfacts(clip, &fr, &ev, &fl, &full, name, sizeof name); klh_rd(d + 0xf4, &al, 1);
+        if (kld.flop == 3 && kld_s.fmi >= 0) {
+            /* review6 M2 (log only: reads). The game's alignment of the fall decides how far a dive really goes: by
+               AlignTo (0x80fdc0, re\climb.md 3) he is AT the align place at frame 0.3 x (N - 1), whatever the clip's
+               root did up to there; only the travel after that frame is the clip's own (kld_md's `after`: FILE).
+               His place is his NODE's (klclimb.c: the floats at +0x460 stay at the navigation mesh's edge); the align
+               heading is row 0 of the rotation at D+0xf8 = where the back points, as klclimb.c reads a rotation
+               (ASSUMED the same form here: who fills D+0xf8 was not read). Collision: byte [player+0x7a5] (1 = on:
+               ZMovementAnimation then runs the physics step, 0x53986f) and the off count [player+0x7b4]. */
+            int df = kld_mx.e[kld_s.fmi].def; float pa[3] = { 0, 0, 0 }, ad = -1.0f, rot[9], nd[3], bk[3], deg = 999.0f; BYTE con = 0xff; DWORD coff = 0xffffffff; const float *from = kld_s.pnok ? kld_s.pn : kld_s.p0;
+            int nok = klq_node(klh_rd32(pl + 4), nd, bk);
+            klh_rd(pl + 0x7a5, &con, 1); klh_rd(pl + 0x7b4, &coff, 4);
+            if (al && klh_rd(d + 0x11c, pa, 12) && kld_fin(pa[0]) && kld_fin(pa[2])) ad = (float)sqrt((pa[0] - from[0]) * (pa[0] - from[0]) + (pa[2] - from[2]) * (pa[2] - from[2]));
+            if (al && nok && klh_rd(d + 0xf8, rot, sizeof rot) && kld_fin(rot[0]) && kld_fin(rot[2]) && (rot[0] * rot[0] + rot[2] * rot[2]) > 0.01f && (bk[0] * bk[0] + bk[2] * bk[2]) > 0.01f)
+                deg = (float)(atan2(rot[0] * bk[2] - rot[2] * bk[0], rot[0] * bk[0] + rot[2] * bk[2]) * 57.29577951);
+            kld_s.fal = al && ad >= 0; kld_s.fad = ad; kld_s.fap[0] = pa[0]; kld_s.fap[1] = pa[1]; kld_s.fap[2] = pa[2];
+            if (kld_s.fnow) { kld_mx.lastgroup = kld_md[df].group; kld_mx.played++; kld_mx.drawn[df]++; }
+            klog("down: flop: THE KNOCK-DOWN: clip %lu '%s' (sheet #%d), drawn %d of %d%s; the clip alone carries him %.2f m forward; %s%s; his collision [player+0x7a5] is %u (1 = on: the physics step runs in the fall), the off count [player+0x7b4] %lu%s",
+                 kld_mx.e[kld_s.fmi].num, name, kld_md[df].sheet, kld_mx.drawn[df], kld_mx.played, kld_s.fnow ? "" : " (NOT counted: Dry=1 or no list - the game plays it its own way)", kld_mx.e[kld_s.fmi].fwd / 100.0f,
+                 kld_md[df].light ? "HE STAYS UP: no mash, the knock is over when the clip is" : "the mash runs from its landing",
+                 kld_s.fmi != kld_mx.next ? "; NOT the clip written for this fall (it began before the choice was in the pair): played all the same" : "",
+                 (unsigned)con, coff, con == 1 && coff == 0 ? "" : " - HIS COLLISION IS NOT ON IN THIS FALL: nothing stops the clip's root at a wall; say so to the lead (FlopReach=1)");
+            if (al && ad >= 0) klog("down: flop: THE GAME ALIGNS THIS FALL ([D+0xf4]) to the place (%.0f, %.0f, %.0f), %.2f m from where he went down; the align heading is %.0f degrees off his own (999 = not readable; 0 = he keeps his heading); by AlignTo he is at that place at frame %.1f (0.3 x the last frame) whatever the clip's root did - of its %.2f m only %.2f m come after that frame (FILE): he should end about %.2f m from where he went down%s",
+                                    pa[0], pa[1], pa[2], ad / 100.0f, deg, 0.3f * (fr - 1), kld_mx.e[kld_s.fmi].fwd / 100.0f, kld_md[df].after, ad / 100.0f + kld_md[df].after,
+                                    kld_mx.e[kld_s.fmi].fwd > 200.0f && ad < 100.0f && !kld_md[df].light ? " - THE ALIGN PLACE IS AT HIS FEET: THIS DIVE IS PLAYED (NEARLY) ON THE SPOT, the body held back under the clip - look at the pictures: is it the fall of the sheet?" : "");
+            else klog("down: flop: the game does NOT align this fall ([D+0xf4] is %u): the whole %.2f m are the clip's own, unless something stops him", (unsigned)al, kld_mx.e[kld_s.fmi].fwd / 100.0f);
+        }
         kld_s.fclip = clip; kld_s.f7 = kld_evframe(clip, 7); kld_s.f8 = kld_evframe(clip, 8);
         if ((h = klh_rd32(m + 0x8d0)) != 0) klh_rd(h + 0x34, &q, 4);
         mk = kld_mask(pl, &ma, &mv);                                 /* the fall's two bits must read set here: the proof of the lookup (a Dry run prints it too) */
@@ -730,13 +1076,28 @@ static void kld_flop_one(DWORD pl, DWORD d, DWORD ds, DWORD now, float hp)
        knock-down: the fall ends at the tick last written (2 s at most) by the game's own 2 -> 1 (0x8ee220: the mask
        comes off there), he lies the game's way and its GET UP gets him up. (Every `return` above writes nothing, so
        a channel that cannot be read ends the same way.) */
+    light = kld.flop == 3 && kld_s.fmi >= 0 && kld_s.fmi < kld_mx.n && kld_md[kld_mx.e[kld_s.fmi].def].light;      /* #43: he never lies - the game's pace to the end */
     if (!kld_s.cap0set) {
-        float way = land > frame ? (land - frame) / fps : 0.0f, rest = (to - (land > frame ? land : frame)) / (kld.fbase * 25.0f);
+        float way = land > frame ? (land - frame) / fps : 0.0f, rest = (to - (land > frame ? land : frame)) / (light ? fps : kld.fbase * 25.0f);
         kld_s.cap0set = 1; kld_s.cap0 = tick + (DWORD)((way + rest) * 1024.0f + 0.5f) + 1024;
     }
     if ((long)(tick - kld_s.cap0) > 0) {
         kld_s.fdone = 2;
         klog("down: flop: THE TIME BOUND OF THE WHOLE KNOCK-DOWN (frame %.1f of %.0f, %.2f s after he went down, channel flags %lx): this part stops writing - the game ends the fall at the tick last written and its own lying / GET UP take over; say so to the lead", frame, to, (now - kld_s.t_down) / 1000.0f, fl);
+        return;
+    }
+    /* FlopUp=71 (Flop=3; kld_s.idu is the get-up slot only then): at the clip's event 8, when he lies chest down there
+       (kld_md's upcut), the game's own 'get-up asked' byte - what a press sets (0x7180b0), acted on whenever it stands
+       (0x47ce56 -> 0x8b1900: while D is 2 the fall's channel is stopped, M = 2, THE INPUT MASK COMES OFF, D = 3 and
+       0x478270(M, 4) starts the get-up words' clip in that frame; re\player_down.md 9.2). From there the get-up is the
+       game's state with this file's mash (FlopBase / FlopPerPress / FlopTop by the clip). Nothing more is written to the
+       fall; a request the game does not take is taken back when D ends, and the fall ends by the game's own tick. */
+    if (kld.flop == 3 && kld_s.idu >= 0 && kld_s.fmi >= 0 && kld_s.fmi < kld_mx.n && kld_md[kld_mx.e[kld_s.fmi].def].upcut && kld_s.f8 >= 0 && frame >= (float)kld_s.f8) {
+        BYTE one = 1;
+        if (klh_data((void *)(DWORD_PTR)(d + 0x21), &one, 1, "down-not-dead: the get-up is asked for (FlopUp)")) {
+            kld_s.fasked = 1; kld_s.t_ask = now; kld_s.fdone = 3;
+            klog("down: flop: FlopUp: he lies (frame %.1f of %.0f, the clip's event 8 at %d, %.2f s after he went down): the get-up %s is asked for by the game's own byte [D+0x21] - FROM HERE EVERY HIT COSTS", frame, to, kld_s.f8, (now - kld_s.t_down) / 1000.0f, kld.upslot);
+        } else kld_s.fdone = 2;
         return;
     }
     if (left <= 0.5f || (frame > 2.0f && ((fl & 7) == 0 || (fl & 7) == 4))) {      /* the clip is through (or its channel has stopped - state 0 / 4, as the get-up below reads it): the state is over */
@@ -761,7 +1122,7 @@ static void kld_flop_one(DWORD pl, DWORD d, DWORD ds, DWORD now, float hp)
         } else if (mk && nv != mv) klh_data((void *)(DWORD_PTR)ma, &mv, 4, "the player's input object: the fall's mask bits back (the state write was refused: the fall goes on)");
         return;
     }
-    if (frame >= land) {
+    if (frame >= land && !light) {
         float B = kld.fbase, P = kld.fper, T = kld.ftop;
         if (!kld_s.t_land) {
             kld_s.t_land = now; kld_s.hp_up = hp;
@@ -1073,7 +1434,7 @@ static void kld_tick(int game_thread)
     if (!act || !pl) {
         if (kld_s.player) {
             if (kld.flop) kld_flop_words(kld_s.player, 0, 0);       /* the slot ids of the object we wrote go back while it still lives */
-            kld_s.player = 0; kld_drop(); kld_s.dstate = 0; kld_s.nwin = 0; kld_s.fchk = kld_s.fok = kld_s.fhave = kld_s.fput = 0;
+            kld_s.player = 0; kld_drop(); kld_s.dstate = 0; kld_s.nwin = 0; kld_s.fchk = kld_s.fok = kld_s.fhave = kld_s.fput = 0; kld_s.fwf = kld_s.fwu = 0;
         }
         return;
     }
@@ -1083,7 +1444,7 @@ static void kld_tick(int game_thread)
         if (kld.flop && kld_s.player) kld_flop_words(kld_s.player, 0, 0);
         kld_s.player = pl; kld_drop(); kld_s.dstate = ds; kld_s.btn = btn; kld_s.hp = hp; kld_s.nwin = 0; kld_s.cool = 0; kld_s.downs = 0;
         kld_s.t_down = kld_s.t_lie = kld_s.t_up = now;
-        kld_s.fchk = kld_s.fok = kld_s.fhave = kld_s.fput = 0;
+        kld_s.fchk = kld_s.fok = kld_s.fhave = kld_s.fput = 0; kld_s.fwf = kld_s.fwu = 0;
     }
     if (kld.flop) {                            /* the belly flop: his prone movement's slot ids, while he is up */
         /* review2 S3: klchar.c's body swap keeps the player object and gives it another set - the verdict (full-body, the
@@ -1092,7 +1453,7 @@ static void kld_tick(int game_thread)
             klog("down: flop: the player %08lx has another animation set / slot table than the flop was checked on (a body swap): checked again", pl);
             kld_s.fchk = 0;
         }
-        if (!kld_s.fchk) kld_flop_check(pl);
+        if (!kld_s.fchk) { if (kld.flop == 3) kld_mix_check(pl); else kld_flop_check(pl); }
         kld_flop_words(pl, ds, 1);
         if (!kld_s.fok && kld_s.fput && ds == 0) kld_flop_words(pl, 0, 0);      /* no flop any more on this body: the game's own ids go back */
     }
@@ -1101,6 +1462,8 @@ static void kld_tick(int game_thread)
         if (kld_s.dstate == 0) {
             kld_s.t_down = kld_s.t_lie = now; kld_s.downs++; kld_drop();
             klh_rd(pl + 0x460, pos, 12);                             /* his feet (kljoin.c) */
+            kld_s.p0[0] = pos[0]; kld_s.p0[1] = pos[1]; kld_s.p0[2] = pos[2];
+            { float bk[3]; kld_s.pnok = kld.flop == 3 && klq_node(klh_rd32(pl + 4), kld_s.pn, bk); }      /* review6 M2: his node's place (reads) */
             klog("down: YOU ARE DOWN (%d this round object) at (%.0f, %.0f, %.0f): health %.1f of %.1f, down state %lu; the button is %s",
                  kld_s.downs, pos[0], pos[1], pos[2], hp, max, ds, btn ? "held" : "up");
         } else if (ds == 1 && kld_s.dstate == 2) {
@@ -1121,11 +1484,28 @@ static void kld_tick(int game_thread)
             else if (kld_s.up) klog("down: UP after %.2f s on the floor, the get-up took %.2f s (stock: 0.80; from [D+4] = 3, a press late in the fall counts the rest of the fall in), %d press(es) in it, mean speed %.2f, %.1f health lost in it (%.1f -> %.1f)%s%s",
                                (now - kld_s.t_down) / 1000.0f, (now - kld_s.t_up) / 1000.0f, kld_s.presses, kld_s.nr ? kld_s.sumr / kld_s.nr : 0.0f, kld_s.hp_up - hp, kld_s.hp_up, hp,
                                kld_s.capped ? "; ENDED BY THE TIME BOUND, not by the clip (its frame stood still or ran behind: say so to the lead)" : "", kld.dry ? " (Dry=1: the game's own 1.00 was played)" : "");
-            else if (kld.flop == 1 && kld_s.fnow && kld_s.fdone == 1 && hp > 0.01f) {
+            else if (KLD_ONE && kld_s.fnow && kld_s.fdone == 1 && hp > 0.01f) {
                 DWORD ma = 0, mv = 0; int mk = kld_mask(pl, &ma, &mv);      /* review3 M1: he must stand UNMASKED */
                 klog("down: flop: UP after %.2f s: the dive took %.2f s, lying and rising %.2f s, %d press(es) in it, mean speed %.2f; health %.1f (%.1f at the landing); the input mask %08lx holds %08lx%s",
                      (now - kld_s.t_down) / 1000.0f, ((kld_s.t_land ? kld_s.t_land : now) - kld_s.t_down) / 1000.0f, kld_s.t_land ? (now - kld_s.t_land) / 1000.0f : 0.0f, kld_s.presses, kld_s.nr ? kld_s.sumr / kld_s.nr : 0.0f, hp, kld_s.hp_up,
                      ma, mv, !mk ? " (no input object)" : (mv & KLD_MASK_FALL) ? " - THE FALL'S BITS (0x11) ARE SET ON A MAN WHO IS UP: he cannot do what the fall forbade; say so to the lead (nothing more is written)" : " (the fall's bits 0x11 are off)");
+                if (kld.flop == 3 && kld_s.fmi >= 0 && kld_s.fmi < kld_mx.n && klh_rd(pl + 0x460, pos, 12)) {      /* track R6: where the clip's root put him - the measure for 'a wall stops it' */
+                    /* review6 M2: by his NODE when both ends were read (the floats at +0x460 are printed beside it),
+                       and against what the game's ALIGNMENT alone makes of the clip - an aligned dive is short in the
+                       open too, so 'shorter than the clip' says nothing about a wall there. The 0.5 m margin is a GUESS. */
+                    float nd[3], bk[3]; int nok = kld_s.pnok && klq_node(klh_rd32(pl + 4), nd, bk); const float *a = nok ? kld_s.pn : kld_s.p0, *b = nok ? nd : pos;
+                    float dx = b[0] - a[0], dz = b[2] - a[2], dy = b[1] - a[1], mv2 = (float)sqrt(dx * dx + dz * dz), own = kld_mx.e[kld_s.fmi].fwd;
+                    float fx = pos[0] - kld_s.p0[0], fz = pos[2] - kld_s.p0[2], mvf = (float)sqrt(fx * fx + fz * fz);
+                    float want = kld_s.fal ? kld_s.fad + kld_md[kld_mx.e[kld_s.fmi].def].after * 100.0f : own; BYTE con = 0xff; DWORD coff = 0xffffffff;
+                    klh_rd(pl + 0x7a5, &con, 1); klh_rd(pl + 0x7b4, &coff, 4);
+                    klog("down: flop: he stands %.2f m from where he went down (%.2f m %s; %s; the floats at +0x460 say %.2f m); the clip alone goes %.2f m forward; %s %.2f m%s%s; his collision [player+0x7a5] is %u, the off count %lu",
+                         mv2 / 100.0f, KLD_ABS(dy) / 100.0f, dy < 0 ? "lower" : "higher", nok ? "by his node" : "by the floats at +0x460: his node was not readable", mvf / 100.0f, own / 100.0f,
+                         kld_s.fal ? "THE GAME ALIGNED THIS FALL: the align place + the clip's travel after the align frame =" : "not aligned: expected the clip's own", want / 100.0f,
+                         mv2 < want - 50.0f ? (kld_s.fal ? " - SHORTER THAN THE ALIGNMENT EXPLAINS: something stopped him (a wall, a prop) - or the align place was not reached" : " - SHORTER: something stopped him (a wall, a prop)")
+                                            : (kld_s.fal && own > 100.0f && mv2 < 0.6f * own ? " - shorter than the clip, AS THE ALIGNMENT ALONE EXPLAINS: this line says nothing about a wall (compare the same clip in the open: W1)" : ""),
+                         dy < -100.0f ? " - HE WENT DOWN OVER AN EDGE: say so to the lead (FlopReach)" : "",
+                         (unsigned)con, coff);
+                }
             }
             else klog("down: the down state is over after %.2f s (from state %lu) without a get-up this part drove: %s", (now - kld_s.t_down) / 1000.0f, kld_s.dstate,
                       hp <= 0.01f ? "he is dead" : kld_s.dstate == 3 ? "the game's own get-up (into a cover, or its fast one)" : "ended by the game (a reset, a death, a vehicle)");
@@ -1144,10 +1524,11 @@ static void kld_tick(int game_thread)
                 }
             }
             kld_drop();
+            kld_mix_next(pl, "the down state is over: he is up");   /* Flop=3: the next fall's clip, in the pass that saw him up */
         }
         kld_s.dstate = ds;
     }
-    if (btn && !kld_s.btn && (kld_s.up || (kld.flop == 1 && kld_s.fnow && kld_s.t_land && !kld_s.fdone))) { kld_s.meter += 1.0f; kld_s.presses++; }
+    if (btn && !kld_s.btn && (kld_s.up || (KLD_ONE && kld_s.fnow && kld_s.t_land && !kld_s.fdone))) { kld_s.meter += 1.0f; kld_s.presses++; }
     kld_s.btn = btn;
     if (ds != 0 && (kld_s.dead || (i = kld_dead(hpok, hp, &st)) != 0)) {
         /* SEEN LIVE (runs D1 / D2, 2026-10-11): a death does NOT clear D - its state stays 1 / 3 to the round's end, so
@@ -1165,7 +1546,7 @@ static void kld_tick(int game_thread)
         }
         return;
     }
-    if (kld.flop == 1 && ds != 0) kld_flop_one(pl, d, ds, now, hp);
+    if (KLD_ONE && ds != 0) kld_flop_one(pl, d, ds, now, hp);
     else if (kld.flop && ds != 0) kld_flop_down(pl, d, ho, ds, now, &hp, max, hpok);
     if (ds != 3) { if (kld_s.up) kld_drop(); return; }
 
@@ -1258,7 +1639,7 @@ static void kld_init(void)
        + the rise from the stomach); anything else = off. Mode 1's numbers drive the clip from the landing to its end
        (Hero_Torso_Back: 140 frames = 5.6 s at speed 1); mode 2's the 202-frame get-up. All GUESSES for the owner's eyes */
     kld.flop = GetPrivateProfileIntA("Down", "Flop", 0, klh_ini);
-    if (kld.flop != 1 && kld.flop != 2) kld.flop = 0;
+    if (kld.flop != 1 && kld.flop != 2 && kld.flop != 3) kld.flop = 0;
     kld.belly = GetPrivateProfileIntA("Down", "FlopBelly", 1, klh_ini) != 0;
     {
         const char *fall = kld.flop == 2 ? "/Damage/Death/Die_Forward" : "/Damage/Wounded/Hero_Torso_F";
@@ -1270,10 +1651,42 @@ static void kld_init(void)
         if (!kld_fin(kld.fper) || kld.fper < 0 || kld.fper > 10.0f) kld.fper = p0;
         if (!kld_fin(kld.take) || kld.take < 0 || kld.take > 1.0f) kld.take = 1.0f;
         if (!kld_fin(kld.uppct) || kld.uppct < 0 || kld.uppct > 100.0f) kld.uppct = 0;
-        GetPrivateProfileStringA("Down", "FlopFallSlot", fall, kld.fallslot, sizeof kld.fallslot, klh_ini);
+        if (kld.flop == 3) fall = "/Damage/Wounded/Running/Torso/Merc_Back";      /* Flop=3: the CARRIER (its own key: FlopFallSlot is modes 1 / 2's) */
+        GetPrivateProfileStringA("Down", kld.flop == 3 ? "FlopCarrier" : "FlopFallSlot", fall, kld.fallslot, sizeof kld.fallslot, klh_ini);
         GetPrivateProfileStringA("Down", "FlopUpSlot", "/Movement/Rise/Rise_From_Stomach", kld.upslot, sizeof kld.upslot, klh_ini);
         if (kld.fallslot[0] != '/') strcpy(kld.fallslot, fall);
         if (kld.upslot[0] != '/') strcpy(kld.upslot, "/Movement/Rise/Rise_From_Stomach");
+    }
+    /* Flop=3 (track R6): the list. FlopMix = '<sheet number or clip name>:<weight>,...' - only the clips of kld_md[]
+       (41 7 13 12 9 10 25 42 43); a clip the key does not name is out; no key = the table's weights = the owner's 'all'
+       (41:2,12:2,10:1,25:1,42:1,43:1). FlopLight=0 takes the stumble #43 out. FlopReach = metres of forward root motion
+       a clip may have. Its DEFAULT IS 1.0 = ONLY #25 (review6 M1; the task's rule: a clip that can carry him through a
+       wall or off a ledge is OUT until shown safe, and the hook cannot test the way). The owner's 'all' is
+       FlopReach=4.5 - the lead's runs L1 / W1 / W2 set it, his ini gets the value those runs allow. 0 = no limit.
+       FlopUp=71 = cut into Rise_From_Stomach (a test key). */
+    memset(&kld_mx, 0, sizeof kld_mx); memset(&kld_cx, 0, sizeof kld_cx); kld_mx.next = -1;
+    kld_rng = GetTickCount() ^ (DWORD)GetCurrentProcessId() * 2246822519u;
+    {
+        char mix[400], *p, *q, *c; int any = 0;
+        for (k = 0; k < KLD_NMIX; k++) kld_mx.w[k] = kld_md[k].w;
+        GetPrivateProfileStringA("Down", "FlopMix", "", mix, sizeof mix, klh_ini);
+        for (p = mix; kld.flop == 3 && *p; p = q) {
+            float w = 1.0f; int hit = -1;
+            for (q = p; *q && *q != ','; q++) ;
+            if (*q) *q++ = 0;
+            while (*p == ' ') p++;
+            if ((c = strchr(p, ':')) != 0) { *c = 0; w = (float)atof(c + 1); }
+            for (c = p + strlen(p); c > p && c[-1] == ' '; ) *--c = 0;
+            if (!*p) continue;
+            for (k = 0; k < KLD_NMIX; k++) if (atoi(p) == kld_md[k].sheet || !_stricmp(p, kld_md[k].clip)) hit = k;
+            if (hit < 0 || !kld_fin(w) || w < 0 || w > 100.0f) { if (kld.on) klog("down: flop: FlopMix: '%s' is not a clip of the list (41 7 13 12 9 10 25 42 43, or the clip's name after '#') or its weight is not 0 .. 100: left out", p); continue; }
+            if (!any) { any = 1; for (k = 0; k < KLD_NMIX; k++) kld_mx.w[k] = 0; }
+            kld_mx.w[hit] = w;
+        }
+        kld_mx.light = GetPrivateProfileIntA("Down", "FlopLight", 1, klh_ini) != 0;
+        kld_mx.reach = kld_inif("FlopReach", "1.0");
+        if (!kld_fin(kld_mx.reach) || kld_mx.reach < 0 || kld_mx.reach > 50.0f) kld_mx.reach = 1.0f;
+        kld_mx.up = kld.flop == 3 && GetPrivateProfileIntA("Down", "FlopUp", 0, klh_ini) == 71;
     }
     t[0] = 0;
     for (k = 0; k < KLD_NT; k++) {
@@ -1300,6 +1713,13 @@ static void kld_init(void)
                         kld.dry || kld_bk.dry ? " (Dry: NOTHING is written; every AI heister's death prints the readable inputs of the game's test and his place)" : "", kld_bk.force, kld_bk.max, kld_bk.lie, kld_bk.freet, kld_bk.uppct, kld_bk.near_);
     if (kld.on && kld.flop == 1) klog("down: flop: Flop=1 - DOG DAYS' OWN KNOCK-DOWN, ONE CLIP: he goes down by %s (thrown down, lying, up over a knee: the whole clip is played in the game's fall; no press cuts it, no hit of it costs), from the landing on at FlopBase %.2f + FlopPerPress %.2f x the mash meter, at most FlopTop %.2f; FlopBelly=%d (1 = every draw of the slot is the clip thrown forward, onto the belly); FlopUpPct=%.0f (health he is given when up; 0 = none). Flop=2 = the earlier pair (a death clip + the rise from the stomach)",
                                       kld.fallslot, kld.fbase, kld.fper, kld.ftop, kld.belly, kld.uppct);
+    if (kld.on && kld.flop == 3) {
+        char m[300]; int nm = 0;
+        m[0] = 0;
+        for (k = 0; k < KLD_NMIX; k++) if (kld_mx.w[k] > 0 && nm < (int)sizeof m - 24) nm += snprintf(m + nm, sizeof m - nm, " #%d:%.1f", kld_md[k].sheet, kld_mx.w[k]);
+        klog("down: flop: Flop=3 - ALL THE BELLY FALLS, A DIFFERENT ONE EACH TIME: the hook draws one whole clip a knock-down from the list (sheet numbers of G_zoom_belly.png : weight)%s, never one group twice in a row, and writes its number into the one pair of the carrier %s in the human's own set (no bot's draw, nobody's death changes); FlopLight=%d (the stumble #43: he stays up, no mash), FlopReach=%.2f m (a clip whose root goes further forward is left out; the default 1.0 = ONLY #25 until live checks W1 / W2 have shown the long dives safe at a wall and an edge - ALL the falls of the sheet need FlopReach=4.5; 0 = no limit), FlopUp=%s; from the landing on FlopBase %.2f + FlopPerPress %.2f x the mash meter, at most FlopTop %.2f; FlopUpPct=%.0f. Everything else is Flop=1's (re\\player_down.md 12)",
+             m[0] ? m : " (EMPTY)", kld.fallslot, kld_mx.light, kld_mx.reach, kld_mx.up ? "71 (A TEST KEY: at a belly clip's event 8 the game's get-up state plays Rise_From_Stomach: FULL damage from there, and the get-up words are that slot for every down)" : "0 (every clip is played whole)", kld.fbase, kld.fper, kld.ftop, kld.uppct);
+    }
     if (kld.on && kld.flop == 2) klog("down: flop: Flop=2 - THE BELLY FLOP, two clips: he goes down by %s and gets up by %s (slot ids written into his prone movement while he is up; the game plays them itself), the get-up at FlopBase %.2f + FlopPerPress %.2f x the meter, at most FlopTop %.2f; FlopTake=%.2f (the share of a loss in the get-up that stays), FlopUpPct=%.0f (health he is given when up; 0 = none)",
                                  kld.fallslot, kld.upslot, kld.fbase, kld.fper, kld.ftop, kld.take, kld.uppct);
 }
