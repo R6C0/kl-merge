@@ -5,7 +5,8 @@ Track M, 2026-10-11. Files: `klhook/klfedkit.c` (new hook part, NOT wired: three
 `<work>\build\z_fedbody\`. kl2.exe build 0490, read with `debug\dasm.py`. **NOTHING HERE HAS RUN IN THE GAME.**
 EXE = read in the disassembly; LOG = the owner's / the test runs' `KLHook.log`; FILE = level data.
 Second version, after the adversarial review `re\fed_kit_review.md` (ACCEPT WITH FIXES): section 9 says what was
-done about each of its points.
+done about each of its points. **Section 10 (track S, 2026-10-11 afternoon): a fed is only a fed - no traitor mark,
+his kills pay, the HUD's two blocks on one place; keys `NoTraitor`, `Pay`, `PayKill`, `HudFade`. NOT RUN either.**
 
 **FOR THE LEAD BEFORE WIRING (review MUST 1):** the owner's `KLHook.ini` already has `[Fed] Enable=1 Player=1`, and
 `Hunt` and `Crosshair` default to 1 under exactly those two - the moment a hook with this part is installed for him
@@ -314,3 +315,251 @@ dice per life (K4's logic), every refusal of sections 3 and 4. It proves the par
 | S10 | is there an AK-74 object at all; row 29 is a DLC row | settled by the pool builder 0x78a8d0: 8 of every shop item with a template, no DLC / rank test (4.1); the hook says 'no object of that item at all' when a level has none |
 | S11 | `+0x283` not put back | now put back when a heister is in play again on that rules object |
 | S12 | no off-game harness | written and run: 56 checks PASS (section 7); in the scratch folder |
+
+## 10. A fed is only a fed: no traitor mark, his kills pay, the HUD's two blocks (track S, 2026-10-11)
+
+The owner, 14:40, after the bank as a fed (hook ship_main1, `[Fed] Player=1`): 'i became a traitor, as a fed youre
+only a fed, hud glitch fix and as a fed kill should pay check the FA multiplayer for these things'.
+LOG, his round: a fed 14:30:24, six AI heisters `dead` 14:30:58 .. 14:31:22, `dead for good` 14:31:26.
+PICTURES `<work>\research\watch\20261011_142846\`: 0005 / 0007 the fed's block in police blue (`r6kxo` + three
+skulls, `Total score: $0`, `Round: 1`); 0006 the crew list alone (his row first, in blue); **0008** 'You killed a
+criminal. $0', the list faint and the block in ORANGE on the same place (`Total score: -20,000` on the list's
+header, `Round: 1` on its first row), his own row and the dead man's gone from the list; **0009** the block alone:
+`Traitor` where his name was. Everything below is EXE (kl2.exe 0490, `debug\dasm.py`) unless marked. **NOTHING OF
+THE FIX HAS RUN IN THE GAME.** Code: `klhook\klfedkit.c` sections 5 - 7.
+
+**FOR THE LEAD BEFORE THIS HOOK GOES TO THE OWNER:** `NoTraitor`, `Pay` and `HudFade` are ON by default under the
+`Enable=1 Player=1` his ini already has (the task asked for that; none of them calls the game, each stands down by
+itself when the routine it relies on is not the known one). Run S1 first, or give his ini `Kit=0` / the three keys
+`=0` with the hook. And tell him: the text 'You killed a criminal. $0' is NOT fixed (10.3) - the pop-up is.
+**THE LEAD'S DECISION, `Pay` (review MUST 1, 10.3 'Where the paid money goes'):** the money goes into the total the
+session's end files in the owner's LOCAL profile under the stock slot; it is left ON because he asked for it
+('as a fed kill should pay') - `Pay=0` in his ini if the profile's rows matter more. **`HudFade` IS A GUESS about
+his words 'hud glitch'** (the fade is stock design; `NoTraitor` alone takes the orange 'Traitor' block out of
+picture 0008): show him S3 and S3b side by side and let him say which.
+
+### 10.1 What multiplayer Fragile Alliance does (the reference he names)
+
+Classes: `ZGameRulesFragileAllianceSv` 0xbd2eb4, `..Cl` 0xbd31e4, Arcade's `ZGameRulesHeist` 0xbd3514 (a sibling
+that re-implements the server's slots). Client flags = the dword slot 114 answers: 1 traitor, 4 dead, 8 police,
+0x40 escaped, 0x80 the undercover cop.
+
+- **Can a cop be marked a traitor? No.** The server's 'becomes a traitor', slot 129 = **0x41d480**, begins
+  `flags(killer) & 0xc -> return` (0x41d4ac): a client that is police or dead is never marked.
+- **What a kill pays**: 0x4eb260(rules; killer player, victim player) (from 0x794190 <- the server's slot 11, and
+  from the client's slot 11), by slot 108 'traitor', 110 'undercover cop', 112 'a criminal' (not police, not 0x80).
+  The amounts are ints of the tuning object `[0x168d7c0]`, defaults from its constructor 0x524050:
+
+  | killer | victim | reward |
+  |---|---|---|
+  | a traitor | anybody | 0 |
+  | criminal | a traitor | `+0x65c` = 100,000 |
+  | criminal | a policeman | `+0x66c` = 10,000 (an undercover cop in that mode: `+0x674` = 100,000) |
+  | criminal | a loyal criminal | 0 (and he becomes a traitor elsewhere) |
+  | **policeman** | **a criminal** | **`+0x664` = 50,000** (0x4eb4c4) |
+  | policeman | a traitor | `+0x65c` = 100,000; the traitor who had killed HIM: `+0x660` = 200,000 |
+  | policeman | a policeman | 0 |
+
+  **A fixed reward. What the criminal carried plays no part** (no money term is in the routine; Arcade's own kill
+  rule drops a dead human's money where he falls, 0x5ab010 - the server's was not read); a criminal with nothing
+  pays the same 50,000. It goes to the killer's score at once (0x7f3050 on `[rules+0x2c]`),
+  the points pop-up says "<victim> +N" (0x4eb533), and the announcement **'You killed a criminal. {Reward1}'**
+  (`AllLevels/Interface/Online/Announcements/FA_Killed_Merc`, built in 0x463b70 at 0x463f67 for a local client
+  that is police and killed a non-traitor) takes its number from **rules slot 169(kind 0)** - for both multiplayer
+  classes the table read 0x4d8950: kind 0 = `[tuning+0x664]`, 2 = `+0x674`, 4 = `+0x678`, 3 / 5 = the constants
+  150,000 / 50,000 at 0xd1b3b8 / 0xd1b3c0.
+- **The round for a cop**: the outro (0x73c830) gives a police client 'Your finder's fee' (0x73dcd3) = the money
+  he holds, a traitor 'Your grab', a loyal criminal 'Your split'; his kill rewards are in his total already.
+  NOT READ: the server's payout routine line by line (Arcade's copy 0x796410 was: 10.2), whether a cop can pick
+  the dropped money up.
+- **His HUD**: the same element as everybody's (10.4); the row's role comes from 0x572050 - waiting 6, dead 7,
+  **traitor 1 before police 5** - which is right in multiplayer only because a cop never carries flag 1.
+
+### 10.2 What Arcade does to a police human today
+
+- **Why 'a traitor'.** A dead AI heister goes to `ZGameRulesHeist` slot 16 = 0x485740, which calls the crew
+  bookkeeping **0x6706b0** - a routine only the Arcade class has (callers 0x4857b9, 0x70472f). A `ZFFPlayer`
+  killer is client 0 (0x6707bc). At 0x6709dd: victim no policeman, without flag 1 (0x6709f4), holding no yellow
+  card against the killer (slot 122 = 0x833f70) -> **slot 129 = 0x8fb0d0** (killer, victim). Nothing asks whether
+  the KILLER is police; Arcade's slot 129 has no `& 0xc` test. Read whole, it does: (a) the announcer 0x67ee80 -
+  silent for a police local client (0x67ef20) but with the list pop-up and the betrayal sting at the round's first
+  betrayal - and flag 2 with a 5 s timer; (b) **`test byte [score+4*killer+0x1d4], 1 / jne end`** (0x8fb193);
+  (c) flag 1, the local player's byte `+0x2726` = 1 (0x70f770, and the sense manager is told); (d) for killer 0:
+  **`[score+0x24] += [tuning+0xc10]`** (0x8fb1d3; **-25,000**, 0x5309f7) and the points pop-up
+  (`ZHeistPointsPopupDisplay` slot 11 = 0x66bfa0, "%s$%d"); (e) byte `+0x35` of his record clamped.
+- **Why '$0'.** `ZGameRulesHeist` slot 169 = **0x58bbd0 = `xor eax, eax / ret 4`**: every reward kind is 0 in
+  Arcade. Its slot 128 (the server's 0x5df280) is `ret 0x10`. What the heisters carried ('Liam $50,000') was never
+  in it - not in multiplayer either.
+- **Why -20,000.** -25,000 (d) + 5,000: every NPC kill adds `[tuning+0xbf8]` to the round's kill line
+  `[score+0x10]` (0x48592a; `+0xbfc` = 10,000 / `+0xc00` = 8,000 are the two other kinds of that branch). After
+  that he carried flag 1, so the five later kills only added 5,000 each (b).
+- **Why 'Traitor' on the HUD**: 0x572050 again - flag 1 before flag 8 (0x6f31b9 puts `FA_Traitor` in the name's
+  place). LOG cannot show the flag: the human's death rule clears it (his last line has `client flags 0000a10e`).
+- **What else Arcade does to a police human that multiplayer does not - THE ROUND'S END.** Slot 192 = 0x5dff40,
+  at 0x5dffec, for a human without flag 0x40 (a policeman cannot board, 0x68414e): 0x491ad0 gives client 0 his
+  round-start numbers back (money `+0x150`, rewards `+0x184`, the kill counters), the life goes (`dec byte
+  [score+0x6c]`), and **0x696410 ZEROES EVERY LINE OF THE ROUND, `[score+4 .. +0x30]`**; then the payout 0x796410
+  (its police branch 0x7965f2 makes the 'finder's fee' = his money, which 0x70b920 has just zeroed for everybody
+  who did not escape) and `[score+0x38] += [score+0x30]` (0x5e001b). `[score+0x38]` is the total the shop buys
+  from (0x8eaa4a) and the HUD's 'Total score' = money + lines + total (0x807520). **So a fed can earn nothing
+  that survives the round in any round line.**
+
+### 10.3 The fixes (klfedkit.c sections 5 and 6; data writes only)
+
+**No data stops slot 129 for a police killer cleanly**: the ways past it are a victim with flag 1 (pays 100,000,
+changes the payout), yellow cards on every heister (flag 0x400: the exe has 35 `test eax, 0x400` sites, not sorted), or a killer
+who already has flag 1 (reads 'Traitor'). A private vtable on the rules object is out: every part of the hook knows
+the Arcade rules by their vtable 0xbd3514. So the game's routine runs and the hook takes it back / uses it:
+
+| key | what | where | when |
+|---|---|---|---|
+| `NoTraitor=1` | bits 1 and 2 of client 0's `[score+0x1d4]` cleared when bit 1 is set; the player's byte `+0x2726` = 0 | read-modify-write, the game's thread only | EVERY frame of the main loop while he is a fed in play |
+| | `[tuning+0xc10]` held at 0 (or at the pay): the kill costs nothing; put back to the game's -25,000 when he is no fed in play (second death, round over, menu, a heister again), if it is still the hook's number on that object | one int | the 50 ms pass |
+| | a negative amount that lands in `[score+0x24]` all the same is taken out - **only in a frame that also finds flag 1 set** | one int | every frame |
+| `Pay=1` | `[tuning+0xc10]` held at **+N, N = the game's `[tuning+0x664]` (50,000)**: with the flag cleared, 5.d runs at EVERY kill of a loyal heister - the case multiplayer pays 50,000 for: the game adds N to `[score+0x24]` and its pop-up shows `+$50000`. The hook's next frame - **when it finds flag 1 set, i.e. slot 129 ran** - moves it out of that doomed line: `[score+0x24]` back, **`[score+0x38] += N`** (kept; 'Total score' does not change by the move) | two ints | every frame |
+| | **a TRAITOR victim**: the game's own reward in his rewards int (below) is ADDED to `[score+0x38]` | one int | every frame |
+| `PayKill=<n>` | another N for a loyal heister (the traitor's numbers stay the game's) | | |
+
+**The line and the flag go together (review SHOULD 1).** Slot 129 sets flag 1 in the call that adds to the line
+(0x8fb1aa .. 0x8fb1e5). So a changed `[score+0x24]` is the rule's add only in a frame that finds the flag; any
+other change (the hook knows of none in state 0x19) only moves the hook's note of the line, with one log line
+`fedkit: the round line [score+0x24] went A -> B with no traitor flag set ... left alone`. The case it closes: a
+human who betrayed as a heister (line -25,000), died and came back - a zeroing seen in play would have been paid.
+
+**A traitor victim (review SHOULD 2; EXE 0x6708a9 .. 0x6709bd, read for this round).** A victim with flag 1 (a bot
+that backstabbed; one `klgrudge.c` marked) never reaches slot 129 (0x6709f4). Before it: slot 108(victim) true,
+slots 108 / 109(killer) false -> `[score+0x184+4*killer] += [tuning+0x65c]` (100,000; 0x67099b), or, when the
+victim is the one who had killed him (0x6708f9), `+= [tuning+0x660]` (200,000; 0x670975) and `[score+0x18] +=
+[tuning+0xc04]`; then the crew-kill byte `[score+0x126+killer]` (0x6709bd). Multiplayer's two numbers for a
+policeman - but in the REWARDS, which 0x491ad0 puts back at the round's end for a man who did not escape: the
+first report's 'paid by the game itself' was true for the round's display only. With `Pay` the hook now adds the
+same amount to the total when ONE frame shows all of: the rewards risen by exactly `[tuning+0x65c]` or
+`[tuning+0x660]`, and the crew-kill byte moved. The rewards int is never written (the first version's own
+`+0x184 += N` for a loyal kill is gone - review SHOULD 4: it rested on an unseen assumption). NOT READ: whether
+slot 56 (the 'money' of 'Total score' = slot 56 + lines + total) includes the rewards - if it does, the HUD's
+'Total score' counts a traitor's 100,000 twice until the round ends; the kept total is right either way.
+
+**Slot 129's first and last part now run at EVERY kill (review SHOULD 3).** With flag 1 cleared each frame, (a)
+flag 2 and the 5 s timer at record `+0x70` are set anew per kill (the hook clears flag 2 with flag 1; the timer
+runs out alone; the announcer stays silent for a police client except the round's first betrayal), and (e) the
+minimum into byte `+0x35` of HIS crew record is taken again with that moment's numbers. **What `+0x35` is was not
+read**; stock lets it fall once a round, here it can fall at each kill.
+
+**The put-back of `[tuning+0xc10]` (review SHOULD 5).** A put-back that cannot be written is tried again at every
+50 ms pass and the hook goes on knowing the number is its own; a number above 0 found there before the hook's
+first write is never taken for the game's - -25,000 (the constructor's, 0x5309f7) goes back, with a log line.
+
+**Where the paid money goes when the session ends (review MUST 1; EXE 0x68b930 as the review read it, NOTE
+re\leaderboard.md 2.1 / 2.3).** `Pay` writes `[score+0x38]`. The stats commit 0x68b930 (state 0x28: the last life
+lost, or Quit inside a session) reads that dword three times: `stats+0x24 = max(..)`, `HeistTotalPoints[slot]
+= max(..)` (0x68bad9 .. 0x68baef), and the LOCAL top-12 list of the slot, `profile+0x1408 + slot*0x30`
+(0x68bb6d .. 0x68bc29), which 0x6587c0 saves to disk when a profile is loaded; the same dword is the score of
+`UploadLeaderboardScore` (`KL2_Heist<slot>_TotalMoney`).
+- **Steam: not reached - and only because of `klsteam.c`.** Its guard blocks the upload and every SetStat /
+  StoreStats on a level that is not stock; klfedkit.c acts only with `klx_on` and verdict 2, the same test.
+  THIS FILE DEPENDS ON THAT GUARD: were it ever off or its verdict changed, `Pay`'s money would be uploaded as a
+  score of the STOCK map's board. Live check S2b is the proof in the game.
+- **The owner's local profile: NOT PROTECTED BY ANYTHING.** Every session on a tab map already files its total
+  under the stock slot's local list (re\leaderboard.md 4.3 'proposal, not tried'; klsteam.c has no code for it).
+  `Pay` adds money to that number the game would never have given: up to 7 x 50,000 (more with traitors) a fed
+  round, where a fed round banks 0 in stock Arcade. An old channel with new content. `Pay=0` keeps it out; the
+  real cure (protect the profile rows on a level that is not stock) is klsteam.c's, not this track's.
+
+`Pay` needs `NoTraitor`. Both stand down when slots 129 / 114 or the 32 code bytes at 0x8fb193 / 0x8fb1d3 are not
+the known ones. Gates: klfedkit.c's section 0 (a police human, record 0 in play, Arcade rules, round state 0x19,
+a level that is not stock); nothing online.
+
+**What stays** (all EXE, none seen):
+- **'You killed a criminal. $0' keeps its $0.** The number is slot 169's code; the text is set once into the
+  announcement's two text objects (0x468430). Nothing in data reaches it. A LEVEL fix exists (not done, not this
+  track's files): the string `AllLevels/Interface/Online/Announcements/FA_Killed_Merc` in the map's `.LOC` without
+  `{Reward1}` - that text is shown only to a police human who killed a heister.
+- 'Traitor' can show for the one frame between the kill and the hook's pass.
+- At his FIRST kill in a round with no betrayal yet: the list pops up 2 s and the betrayal sting plays
+  (`[rules+0xe84] == 0`; holding that int at 1 would stop it - its other readers were not followed: not written).
+- The kill line still gets its 5,000 a kill (wiped at the round's end like every heister's who dies).
+- Not paid: a second kill in the SAME frame (the flag is still set: the game adds nothing; the log's 'your crew
+  kills this round' count shows the gap); two traitors in one frame (the sum is neither of the two numbers).
+- **A kill in the round's very last frame** (slot 192 leaves state 0x19 in the frame of the kill; review SHOULD 6):
+  the hook's frame does not run again - flag 1 and the byte `+0x2726` stay, the score page can read 'Traitor',
+  that kill is not paid. The round reset 0x8c7a80 clears the flags; nothing read here clears `+0x2726` of the
+  police object, which is not used again (re\fed_respawn.md 2.3a).
+- **The life**: a fed's round still costs it, as re\fed_respawn.md 2.4 says. Not changed, not asked.
+
+### 10.4 The HUD glitch (klfedkit.c section 7, key `HudFade`)
+
+The crew list and the top-left block are ONE element, `ZFAPlayerListDisplay` (osd `+0x10c4`, 0xbbdf6c), by its
+state `+0xee0`: 0 the block, 2 the list (2 s by 0x72d130(0) at every kill announcement 0x704ae1 and at a betrayal
+0x67eef1; 10 s by 0x72d130(1)), **1 the way back**: the update (slot 5 = 0x76db00) adds `dt x 0.5` to `+0xf00`
+and the render (slot 2 = 0x5e60f0) draws the block with alpha `+0xf00` (0x5e6249) and the list with `1 - +0xf00`
+(0x5e66bb) **on the same place: two seconds of two texts on each other.** That is picture 0008 (the list's plate
+is faint in it). **No test of the player's side is in the fade**: a heister has the same two seconds after every
+kill line (not found in his earlier pictures - one every 7 s; `20261011_122753\0085, 0090` show the list alone).
+A fed who hunts gets it at every kill; with the traitor mark the block was orange and said 'Traitor' on top.
+Rows: the list leaves out the dead and, for a traitor, his own row (seen in 0008; the routine was not read).
+
+`HudFade=1`: when the state is 1 the hook writes state 0 and `+0xf00` = -1.0 - what the update itself writes when
+the fade is over (0x76dbab / 0x76dbb1): the list goes, the block stands at once (at most 50 ms of fade, block
+alpha under 3 %). The element is reached as the game reaches it (`[[gamedata+0x15dc]]`, 0x588680 / 0x4ddae0) and
+must have 0x76db00 in slot 5 (stock vtable or a private copy of klhud.c). `HudFade=2` does it for a heister too.
+**Nothing of klhud.c is needed or touched.** For kl-merge-3e: `[HUD] Reuse=2` puts strings into this element's
+row texts - state 1 is when stock draws them at `1 - +0xf00`; with `HudFade` that state lasts one pass.
+
+### 10.5 Live checks for the lead (a tab map, `[Fed] Enable=1 Player=1`, `[Bots] Log=2`; the scripted player that dies early)
+
+| # | keys | do | PASS |
+|---|---|---|---|
+| S0 | `NoTraitor=0 HudFade=0` | die, come back, kill one heister | the control: the block orange with 'Traitor', Total -20,000 (the owner's pictures 0008 / 0009); no `fedkit: traitor:` / `pay:` line |
+| S1 | defaults | die in the first 20 s, kill a heister | at the respawn `fedkit: rules: your flags 00080108, round line [score+0x24] 0, total N; [tuning+0xc10] -25000 -> 50000`; at the kill `fedkit: traitor: the game marked you a traitor (flags 0008010b): flags -> 00080108` (0000010b -> 00000108 when the respawn's 10 s flag 0x80000 has run out) and `fedkit: pay: +50000 for a heister (kill 1 ...): round line 50000 -> 0, total N -> N+50000`; picture: the block BLUE with his name, 'Total score' = N + 55,000, the pop-up `+$50000` (and the kill feed's `+$5000`); no 'Traitor' |
+| S2 | defaults | kill three more, then die | one `pay:` line per kill, 'your crew kills this round' counting 1, 2, 3, 4 with 'kill' the same number; at his death `fedkit: traitor: [tuning+0xc10] put back to -25000 (you are no fed in play)`; the score page: 'Total' holds the 4 x 50,000 (the round's own lines are 0: he did not escape) |
+| S3 | defaults | watch the top-left corner after each kill | `fedkit: hud: the player list's cross-fade cut (state 1 -> 0, ...)` about 2 s after the first kill line; pictures every second for 5 s after a kill: the list alone, then the block alone, never both |
+| S2b | defaults, `[Steam] Log=2` | as S2, then lose the LAST life as a fed (the session ends, state 0x28) | **the proof that the paid money does not reach Steam**: `steam: BLOCKED UploadLeaderboardScore(.., <the total with the 50,000s>)` and the blocked SetStat / StoreStats lines; no 'passed' line. (The local profile's rows are NOT protected: 10.3.) Run it with the TEST hook, which never writes to Steam at all, before any SHIP run |
+| S3b | `HudFade=0` | as S3 | the stock fade WITHOUT the traitor mark: block blue with his name fading in over the list for 2 s. Beside S3's pictures it is what the owner chooses between - `HudFade` is a guess about his 'hud glitch' |
+| S4 | defaults | the next round as a heister; kill a heister on purpose | `fedkit: traitor: [tuning+0xc10] put back to -25000 (you are no fed in play)` in the log BEFORE the heister's kill (at the fed's death or the round's end); then the game's own rule again: 'Traitor', -25,000; `HudFade=1` does nothing for him |
+| S7 | defaults, `[Bots] Backstab=100` (or a bot `klgrudge.c` marked) | as a fed, kill a bot the log calls TRAITOR | `fedkit: pay: +100000 for a TRAITOR ([tuning+0x65c]; the game put it into your rewards A -> A+100000 ...): total N -> N+100000`; no `the game marked you a traitor` line for that kill; note what 'Total score' shows (N+100,000 or N+200,000 = the open question about slot 56) |
+| S5 | `Pay=0` | as S1 | `[tuning+0xc10] -25000 -> 0`, no `pay:` line, Total moves by the kill line's 5,000 only, the pop-up says `+$0` |
+| S6 | `HudFade=2` | a round as a heister | the `hud:` line after a kill line, no overlap |
+
+Off the game: `G:\kl_scratch\S\harness\klfedkit_test.c` (track M's harness + a score object, the tuning object,
+the list element and a stand-in for slot 129): `PASS: 105 checks, 0 failed` (56 old + 33 + 16 for the review: a
+line change without the flag is neither paid nor undone, a traitor's 100,000 / 200,000 added once and only with
+the crew-kill byte and the exact number, a put-back that fails and is tried again, a +50,000 found there never
+taken for the game's; the 33: the int held and put
+back, the flag off inside the 50 ms, the move to the total, two kills in one frame, a round line that was not 0,
+the game writing its number back, not the game's thread, a stock level, another rules class, the fade's cases).
+It proves the part's own logic, nothing about the game.
+
+### 10.6 Assumed / not done
+
+- ASSUMED: that slot 56 does not include the rewards int (else a traitor's reward shows twice in 'Total score'
+  for the rest of the round); that the 'had killed him' test of 0x6708f9 is multiplayer's 'the traitor who had
+  killed HIM' (the byte compared was not followed to its writer); that the outro's 'Total' is `[score+0x38]` as the code
+  at 0x7df882 reads it; that clearing flag 1 a frame late leaves no AI state behind (0x4801a0 tells the sense
+  manager at every kill and is not told again; of the 20 readers of `+0x2726` three were read); 0x72d130(1) = the
+  list key; that the cross-fade is what the owner calls 'the hud glitch' (it is the only state in which the element
+  draws both, and it is his picture).
+- NOT DONE: the '$0' text (level `.LOC`, or a rules-side answer that needs code); the betrayal sting at the first
+  kill; the life; the server's payout routine and the dropped money for a cop; the AI feds' kills (they are NPCs:
+  no client, no score); the list's row rule for a traitor; `klhook\klhud.c` (not this track's).
+- The owner's fifth point of the same message - 'the belly flop shouldnt be when im already dead' - is kldown.c's
+  (another track; `klhook/kldown.c` and `re/player_down.md` are modified in the tree by it); nothing of it is in
+  this note. THE LEAD: make sure that track holds it.
+
+### 10.7 The review's points (re\fed_rules_review.md) and what was done (fix round; NOT RUN IN THE GAME)
+
+Compiled: `git archive 28953d8 klhook` + this klfedkit.c in `G:\kl_scratch\S\src2`; no warning from klfedkit.c
+(the one warning is klhud.c(188) C4101). TEST `G:\kl_scratch\S\test2\dinput8.dll` sha1
+1e08dcd99496e1b55bc0c28c13f0f978ea3118a8, SHIP `G:\kl_scratch\S\ship2\dinput8.dll` sha1
+c298e00db420d841f5213eb57e1ce0fb5be43f66 (the first round's `test` / `ship` are superseded).
+
+| point | done |
+|---|---|
+| MUST 1 where the paid money goes | written: 10.3 'Where the paid money goes', the ini's `Pay` comment, klfedkit.c section 6; the default is the lead's decision (top of section 10); no code change |
+| SHOULD 1 tie pay / undo to the flag | done: `marked` in `klfk_rule_frame`; a change without the flag only moves `line0`, one log line |
+| SHOULD 2 a traitor pays nothing kept | done by the first choice: the game's reward in the rewards int is added to the total, tied to the exact number and the crew-kill byte (EXE 0x6708a9 .. 0x6709bd read); live check S7 |
+| SHOULD 3 slot 129's first part at every kill | written: 10.3 and klfedkit.c section 5; `+0x35` still not read |
+| SHOULD 4 the rewards write | dropped; the int is only read |
+| SHOULD 5 `klfk_pen_back` | done: `have` stays until the write holds, a number above 0 is never adopted as the game's |
+| SHOULD 6 the last frame's kill | written under 'What stays' |
+| SHOULD 7 live checks | S2b added, S4 names its log line (and S3b, S7) |
+| SHOULD 8 `HudFade` is a guess | kept marked: top of section 10, S3b beside S3; default unchanged |
