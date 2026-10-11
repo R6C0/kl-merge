@@ -388,7 +388,13 @@ static void klg_tick(void)
 static void klg_init(void)
 {
     InitializeCriticalSection(&klg_cs);
-    klg_on = GetPrivateProfileIntA("Guns", "Enable", 0, klh_ini) == 1;
+    {   /* Enable=1 switches the part on. An ini that carries a Start or Set choice but no Enable key at all counts as on
+           too: on 2026-10-11 the owner's ini was rewritten with [Guns] Start=1 Set=1 and without Enable, and the Guns
+           page did nothing for a day. Enable=0 written out still switches it off. */
+        int en = (int)GetPrivateProfileIntA("Guns", "Enable", -1, klh_ini);
+        if (en < 0) en = GetPrivateProfileIntA("Guns", "Start", -1, klh_ini) >= 0 || GetPrivateProfileIntA("Guns", "Set", -1, klh_ini) >= 0;
+        klg_on = en == 1;
+    }
     klg_log = GetPrivateProfileIntA("Guns", "Log", 1, klh_ini);
     klg_start = (LONG)GetPrivateProfileIntA("Guns", "Start", 0, klh_ini); if (klg_start < 0 || klg_start > klg_upper[0]) klg_start = 0;
     klg_set = (LONG)GetPrivateProfileIntA("Guns", "Set", 0, klh_ini); if (klg_set < 0 || klg_set > klg_upper[1]) klg_set = 0;
