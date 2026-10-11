@@ -188,7 +188,8 @@ and NO Enable=1 ('guns: off' at every start; some install wrote the ini fresh wi
 (game closed; backup <work>/build/klhook/owner_ini_backup), and klgun.c (3a8306b) counts a [Guns] with Start / Set and no Enable key as on.
 CHECK [Guns] Enable=1 after every install, like [Bots] Escort and [Crew] Random. (2) MAP PREVIEWS: the installed menu overlay has no Dead
 Men map pictures; variant built from the installed one = <work>/build/hud_mappics/Overlay (kl_expansion mappics, PASS offline, NOT SEEN
-LIVE): handed to kl-merge-31 for a menu-only run when the owner is away, then install both files together.
+LIVE). INSTALLED 15:02 ON THE OWNER'S WORD ('ill risk it'), game closed: both files in <DD>/KLExpansion/Overlay; the previous pair (Patch01
+9a460181, kaneandlynch 30e0fd90) is in <work>/build/hud_mappics_prev - copy both back if the menu faults. Not yet reported on by the owner.
 HUD DRAFT AS AGREED SO FAR (artifact, version 24): heister list headed 'Dead Men' (own row white block, traitor ORANGE block, dead faded
 red + struck), round WATCH that becomes a red timer in the last minute, orange escape-vehicle dial, green money, ONE circular weapon dial
 (active gun on top, inactive dim below, ring = magazine), centre pop-ups white bar / black text with the traitor one orange in a box, loot
