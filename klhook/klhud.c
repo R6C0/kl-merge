@@ -399,8 +399,8 @@ static DWORD klu_cand[4]; static int klu_ncand, klu_scan_fails; static DWORD klu
 
 static int klu_find_osd(void)
 {   /* every ZOnScreenDisplay2 (stock vtable, or ours once wrapped) in the committed private read-write memory, as
-       klauto.c's kla_find_players: 0.1 - 0.3 s on the main thread, so at most every 2 s, and every 15 s after three
-       scans of a scene found no usable one (a campaign level, the menus). */
+       klauto.c's kla_find_players: 0.1 - 0.3 s on the main thread, so only in an Arcade session's round states (the
+       caller's gate), at most every 2 s, and every 15 s after three scans of a scene found no usable one. */
     MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; static BYTE buf[0x10000]; DWORD t0 = GetTickCount();
     DWORD mine = (DWORD)(DWORD_PTR)&klu_vt[1];
     if (klu_scan_t && t0 - klu_scan_t < (klu_scan_fails < 3 ? 2000u : 15000u)) return klu_ncand;
@@ -424,11 +424,12 @@ static int klu_find_osd(void)
     return klu_ncand;
 }
 
-static DWORD klu_current_osd(void)
+static DWORD klu_current_osd(int may_scan)
 {   /* the OSD held, while it still is one; else the candidate that has the FA player list element and whose
        transform the HUD render has written (1280 x 720): only one instance is rendered per frame. 0 = none yet. */
     DWORD vt, mine = (DWORD)(DWORD_PTR)&klu_vt[1]; float wh[2]; int i;
     if (klu_r.osd && klh_rd(klu_r.osd, &vt, 4) && (vt == KLU_OSD_VT || (klu_vt_ready && vt == mine))) return klu_r.osd;
+    if (!may_scan) return 0;                   /* the scan runs only in an Arcade session's round states (no hitch in menus, loads, the campaign) */
     if (!klu_find_osd()) { klu_scan_fails++; return 0; }
     for (i = 0; i < klu_ncand; i++) {
         DWORD el, evt;
@@ -458,7 +459,10 @@ static void klu_tick(int game_thread)
         snprintf(klu_r.scene, sizeof klu_r.scene, "%s", scene);
         klu_scan_fails = 0; klu_scan_t = 0;
     }
-    osd = scene[0] ? klu_current_osd() : 0;
+    {   /* gate for the scan: an Arcade session (klb_read) in the states the FA HUD exists in (0x16 countdown .. 0x19 GO) */
+        struct klb_snap pre; int arcade = klb_read(&pre) && pre.state >= 0x16 && pre.state <= 0x19;
+        osd = scene[0] ? klu_current_osd(arcade) : 0;
+    }
     if (osd != klu_r.osd) {
         klu_reset("the OSD object changed", osd);
         snprintf(klu_r.scene, sizeof klu_r.scene, "%s", scene);
