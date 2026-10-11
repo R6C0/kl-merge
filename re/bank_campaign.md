@@ -2285,84 +2285,96 @@ of 'start' / 'down' and the balance, not this change. Still open from V2: whethe
 hunts ever reach the crew in the vault (no hit GO + 74 .. 170 s); the point-blank key (re/melee_damage.patch).
 
 
-## Waves (2026-10-11 night; OFFLINE: built and checked, NOT RUN IN THE GAME, nothing installed)
+## Waves (2026-10-11 night, SECOND ROUND; OFFLINE: built and checked, NOT RUN IN THE GAME, nothing installed)
 
-Folders: `<work>/build/c_bank3_fx` (silent, against the installed stream file) and `<work>/build/c_bank3_music_fx` (with
-`--music-layer4 --str <work>/build/v_vault/PC_Def.str`), the four names each, every one padded by `kl_fa_vaultfx.py apply`
-(`check` PASS). `c_bank2*` / `c_bank*` are untouched. The owner, 21:48: 'i want the vault enemies to keep spawning in like its in waves';
-~21:45: 'all the police outside the vault shoot the van straight away ... only spawns in once theyre close'; ~22:00: 'after the first
-round the vault door is open so thats a bug'. This section is the tool (`tools/kl_fa_bank.py`: `test --waves`, the chain step
-`extras`, the check `waves-check`), the table AS BUILT, the flags, and what the live run must show.
+Folders (second round): `C:/kl_build/c_bank4_fx` (silent, against the installed stream file) and `C:/kl_build/c_bank4_music_fx` (with
+`--music-layer4 --str <work>/build/v_vault/PC_Def.str`), the four names each, every one padded by `kl_fa_vaultfx.py apply` (`check` PASS). They
+are on C: because G: is full; copy them into `<work>/build/` when there is room. `c_bank3*` (the first waves build: a one-shot set of 24 men)
+and `c_bank2*` / `c_bank*` are untouched and superseded by these. The owner, 21:48: 'i want the vault enemies to keep spawning in like its
+in waves'; ~21:45: 'all the police outside the vault shoot the van straight away ... only spawns in once theyre close'; ~22:00:
+'after the first round the vault door is open so thats a bug'; 'need better enemy spawns ... for them to be in that lobby underneath
+... should put some money in the cash registers up top so people could hold the swat from coming in and get rewarded'. This section is the
+tool (`tools/kl_fa_bank.py`: `test --waves`, the chain step `extras`, the check `waves-check`), the supply AS BUILT, the flags, the skeptic's
+seven findings on the first waves build and what became of each (W.10), and what the live run must show.
 
-### W.1 The mechanism (the proven form; every flag OFF by default, no flag = the crew-fix build byte for byte)
-1. **Parked squads, started by the crew's own progress.** A wave is 2 - 4 cloned police (the models, weapons and soldier rows of an
-   existing squad's men) in a new top-level squad `Gameplay!bank_waves!Wave_<name>` with `ZSquadScript` field 3 = 0 (not in the world
-   until a rout is named: ran live in every stock FA round, on Retomoto, and for all 25 squads of The Vault). Below it ONE
-   `DefendBehaviourRout` `10_Defend` (the bots' own form, `Squad#02`'s) and one `Pos#NN` box a man: each man his own post, nobody
-   shares one (READ in the check: 150 apart, 150 from the posts and men of every old squad). The rout has no next list: they hold
-   their posts, in position waiting (the owner's word for Retomoto's SWAT). No Hunt (the research's 'then the usual Hunt' is
-   left out: an unproven chase of an empty room is not wanted; they engage what comes into their sight).
-2. **One timer a wave, named by ONE existing trigger.** `Gameplay!bank_waves!Clock` (a plain group, the precedent of every tool
-   that adds entities: a top-level group with nodes below it) holds a `TriggerDelay2` `Timer_<wave>` per wave, cloned from the
-   start timer; the wave's timer names its `10_Defend`. The three triggers are existing nodes whose lists grow: the round-start timer
-   (phase A, the way in), the ante-room box (phase B, the crew is downstairs: `TriggerBox` field 15 = 0, once), the plaza box
-   `tbExitFinancialAlley` (phase D, the crew is at the hall's south end: once). **No free clock**: a wave never starts from time alone,
-   and each phase has a LAST wave - after phase B's last (+46 s) nothing comes into the world in the airlock corridor again, which is
-   the crew's own way out (the review finding that stays fixed).
-3. **Sight and distance chosen at build time, tested again on the folder.** `wave_plan` (the step) picks entries and posts in the
-   boxes of `WAVE_TABLE`; `waves-check` re-tests every man of the written level: on the START's mesh part, 30 from a wall, **blind
-   from the stations of the regions the crew is in while the wave comes** (the research's line of sight, `Sight`: `kl_route.Grid`
-   of the collision, shapes with flag bit 0x10 block - ASSUMED meaning - solid samples every 20, eye 160 over the observer, 120 and
-   175 over the target, 90 m), 250 (phase D 400 = `CREW_CLEAR`) from any station of those regions, 70 from another man's entry of a wave
-   that comes within 20 s. The stations are the 238 `Pos#` places of the seven heister squads and their actors, the START row, the loot
-   AND the stations of `ROUTE_IN` / `ROUTE_VAULT` / `ROUTE_OUT` (a human walks those, the bots' places are not where he is). A post is
-   45 from a wall, 150 from another post, and phase D's are `LANE_CLEAR` (250) from the van's drive.
+### W.1 The mechanism (every flag OFF by default: no flag = the crew-fix build byte for byte)
+1. **Parked squads, started by the crew's own progress.** A wave is 2 - 3 cloned police (the models, weapons and soldier rows of an
+   existing squad's men) in a new top-level squad `Gameplay!bank_waves!Wave_<name>` with `ZSquadScript` field 3 = 0 (not in the world until
+   a rout is named: ran live in every stock FA round, on Retomoto, and for all 25 squads of The Vault). Below it ONE `DefendBehaviourRout`
+   `10_Defend` and one `Pos#NN` box a man: each man his own post. The rout has no next list: they hold their posts, in position waiting.
+2. **A supply is a CHAIN of links, three chains by the crew's phase (new in this round).** Link i of a chain starts wave i and arms link
+   i + 1; a link is three `TriggerDelay2` nodes of the clock group `Gameplay!bank_waves!Clock` (one-shot, re-arm -1, cloned from the
+   start timer):
+   `Pace_<w>` (the wait: the chain's gap) -> `Go_<w>` (0.1 s; its list: the wave's `10_Defend` and the NEXT `Pace`) and `Fast_<w>`
+   (the latch: 12 s) -> `Go_<w>`, named by the 'wiped out' list (`ZSquadScript` field 8) of the PREVIOUS wave. `Go` fires once, so the
+   timer and the latch can both reach it and the first wins; the latch only ever brings a wave EARLIER. The first `Pace` of a chain is
+   named by ONE existing trigger: phase A the round-start timer (the whole round: the FLOOR), phase B the ante-room box (once; the crew is
+   downstairs), phase D the plaza box (once; the crew is at the hall's south end). The last link names no timer: **every chain stops**,
+   and the round ends with the vehicle's departure. Nothing in level data cancels an armed timer (GUESS that a leftover one is harmless).
+   ASSUMED: that field 8 fires when a squad's men have all died (nothing in this level uses it; Retomoto's street chain was never watched);
+   if it fired for a parked squad at the load, every `Fast` would run 12 s after its `Go` and the supply would take 12 s a link instead of
+   the gap - which is why the floor is tested on the `Pace` chain alone. `--no-waves-latch` builds the plain timer chains.
+3. **Sight and distance chosen at build time, tested again on the folder.** `wave_plan` picks entries and posts in the boxes of
+   `chain_table()` (a post box may be a tuple of boxes, the first preferred); `waves-check` re-tests every man of the written level: on
+   the START's mesh part, 30 from a wall, **blind from the stations of the regions the crew is in while the wave comes** (`Sight`:
+   `kl_route.Grid` of the collision, flag 0x10 shapes block - ASSUMED meaning -, eye 160 / target 120 and 175, 90 m), 250 (phase D 400)
+   from any station of those regions, 70 from another man's entry of a wave within 20 s, **300 from every LEG of the round's way**
+   (`route_dist`: ROUTE_IN + ROUTE_VAULT + ROUTE_OUT, point to segment, 3D - entries AND posts; was the finding that phase B stood ON
+   the leg vault lobby - airlock - stairs). A post is 45 from a wall, 150 .. 300 from every other wave post (`POST_GAPS`: the planner
+   tries 3.0 m, 2.2 m, then 1.5 m = `POST_GAP_MIN`; MEASURED: all 54 posts came out at 3.0 m), 100 / 150 from a place of an old squad,
+   and phase D's are `LANE_CLEAR` (250) from the van's drive. Phase A and B posts are picked NEAREST THE CREW'S WAY (just beyond the 3 m)
+   so that the men a slow human meets stand where he is, not 30 m off in the yard.
 
-### W.2 The table as built (MEASURED by `waves-check` on the written folders; GUESS: every box and delay)
-| wave | phase: trigger | after | men | the men come into the world at | their posts | template |
+### W.2 The supply as built (MEASURED by `waves-check` on the written folders; GUESS: every box, gap and number)
+Totals: **A 11 waves / 25 men, B 2 / 5, D 8 / 24 = 21 squads, 54 men** on top of the 61 (+ the 7 heisters): 122 actors, 53 squads. Against
+12 men a squad (largest 3), 500 squads (53), the largest stock STORY level 147 actors (122), and what has run live in the game, Retomoto
+on the tab with 99 actors / 55 squads: **the actors are 23 past what has run live** (`check()` allows `WAVES_ACTORS` = 147 / 500 and says
+so; `--waves-extra N` thins it, a chain is cut from its END). 273 entities added (MEASURED, `extras.json`): 21 squads with 21 routs, 54 posts and 54 men (a group and an actor each), the clock group, 60 chain
+nodes (21 `Pace`, 21 `Go`, 18 `Fast`) and 8 switches (reset 2, van 1 + 3 timers, teller 1 + 1 timer); the chunk table is unchanged (65,852: a cloned `ZFFActor` that reuses a police model adds
+entities, not chunks: ASSUMED for the clone, MEASURED by `sizes`).
+| chain: trigger | links | first after the trigger | then every | last wave at | men a wave | where they come from -> where they stand |
 |---|---|---|---|---|---|---|
-| A1 | A: round-start timer (way in) | +12 s | 4 | (2080,200,-2500) (2020,200,-2540) (2020,200,-2460) (2120,200,-2560) | (700,200,-5100) (550,200,-5100) (100,200,-4800) (750,200,-5250) | Guards_Reinforcement_01a |
-| A2a | A: round-start timer (way in) | +30 s | 2 | (-640,240,-5600) (-640,240,-5520) | (-650,240,-5550) (-650,240,-5300) | Guards_Reinforcement_01a |
-| A2b | A: round-start timer (way in) | +30 s | 3 | (-1060,240,-4760) (-1020,240,-4700) (-1100,240,-4700) | (-1050,240,-4750) (-950,240,-4900) (-950,240,-5150) | Guards_Reinforcement_01a |
-| B2 | B: ante-room box (crew downstairs) | +22 s | 4 | (1540,240,-6420) (1580,240,-6480) (1580,240,-6360) (1500,240,-6480) | (900,240,-7000) (750,240,-6900) (850,240,-7150) (700,240,-7050) | Police_Reinforcement_02 |
-| B3 | B: ante-room box (crew downstairs) | +46 s | 4 | (1540,240,-6420) (1580,240,-6480) (1580,240,-6360) (1500,240,-6480) | (1400,240,-6950) (1250,240,-7000) (1100,240,-7000) (750,240,-7300) | Police_Reinforcement_02 |
-| D1 | D: plaza box (crew at the hall's south end) | +3 s | 3 | (-1560,700,-9440) (-1500,700,-9480) (-1600,700,-9380) | (-1550,700,-9900) (-1400,700,-9900) (-1700,700,-9900) | Police_OutSide_SWAT_02 |
-| D2 | D: plaza box (crew at the hall's south end) | +25 s | 4 | (2140,700,-9480) (2200,700,-9440) (2100,700,-9420) (2100,700,-9540) | (1900,700,-9950) (1750,700,-9900) (1900,700,-10100) (1450,700,-9900) | Police_OutSide_SWAT_03 |
-
-24 men in 7 squads (A 9, B 8, D 7); 98 entities (the clock group, its 11 timers / geometry switches, the 7 squads with 24 men, 7 routs, 24 posts). Actors 68 -> 92 of 99, squads 32 -> 39 of 55 (`check()` holds the line). D3 / D4 (4 + 3 men, +50 / +75 s, the recesses again) come with `--waves-extra 31`. The list of each trigger grows: round-start timer +3 (A), ante-room box +2 (B), plaza box +2 (D) +1 (the van); the round-start event's list gets the two reset objects FIRST. B2 and B3 enter at the same place 24 s apart (`ENTRY_REUSE`): the first has walked on. A1's men walk 60 m of mesh from the yard's east lane to the dock (20 - 23 s at 3 m/s: they ARRIVE, visibly, from the yard's north end).
+| A: the round-start timer | 11 (A01 .. A11) | 12 s | 35 s | 362 s | 3, 3, 3, then 2 | the yard's east lane and west end, one after the other -> posts 3 .. 12 m beside the crew's first leg (dock, yard, armoury) |
+| B: the ante-room box (once) | 2 (B01, B02) | 22 s | 24 s | 46 s | 3, 2 | the airlock corridor (1580, 240, -6560), 3 m+ from the leg -> the lobby underneath, 3 .. 8.5 m off the way |
+| D: the plaza box (once) | 8 (D01 .. D08) | 3 s | 25 s | 178 s | 3 | the hall's two corner recesses, left and right in turn -> posts on the plaza's two sides, 8 .. 31 m from the crew's way, 2.5 m+ off the van's drive |
+**THE FLOOR: chain A alone outlasts a human who takes his time (last wave 362 s >= `SUPPLY_MIN` 360 s; `waves-check` FAILS below it).** A
+human who sprints reaches B at about GO + 90 s and D at about GO + 190 s; each adds its pressure where he is. One who dawdles in the dock
+for six minutes meets 25 men in eleven arrivals 35 s apart; one who dawdles on the plaza meets D's 24 over 3 minutes. The seven AI heisters
+alone meet A on the way in (a wave of three is at their posts by +12 + 20 s) and B on the way down; the hall's exit gets D only after the
+dash (the first D wave comes into the world 3 s after the plaza box from the recesses, 400 from every station).
 
 ### W.3 The flags (`kl_fa_bank.py test <out> ... `; each is also a module variable; `bank_opts.json` beside the archive carries them to the chain's steps)
 | flag | variable | what | default |
 |---|---|---|---|
-| `--waves` | `WAVES` | the wave squads; implies `--crew-fix`, `--crew-fix2`, `--teller-late`, `--van-late`, `--reset` | off |
-| `--waves-extra N` | `WAVES_EXTRA` | men on top of the 61 (max 31 = `ACTORS_LIVE` 99 / 55 less the 68 / 32 now); waves are taken in table order while they fit | 24 |
-| `--waves-near M` | `WAVES_NEAR` | the softer crew line of phases A and B (the 400 rule leaves no post in the lobby, flights, ante-room, vault) | 250 |
-| `--crew-fix2` | `CREW_FIX2` | review points (a) and (c), below | off |
-| `--teller-late` | `TELLER_LATE` | review point (b): the four teller stacks lie hidden and come with the vault's loot | off |
-| `--van-late` | `VAN_LATE` | the van is hidden from the load and shown `VAN_SHOW` (4 s) after the plaza box; its FakeTarget is taken off | off; on with `--waves` (`--no-van-late`) |
+| `--waves` | `WAVES` | the three chains; implies `--crew-fix`, `--crew-fix2`, `--teller-late`, `--teller-more`, `--van-late`, `--reset` | off |
+| `--waves-extra N` | `WAVES_EXTRA` | men on top of the 61 (0 .. 79 = `WAVES_ACTORS` 147 less the 68 there are); a chain is cut from its END | 54 |
+| `--waves-near M` | `WAVES_NEAR` | the softer crew line of phases A and B | 250 |
+| `--no-waves-latch` | `WAVES_LATCH` | the chains are plain timer chains (W.1 point 2) | latch on |
+| `--crew-fix2` | `CREW_FIX2` | the review points (a) and (c) of W.4; `dash_chain` now follows a '_pos_cover' rout the step names DIRECTLY too | off |
+| `--teller-late` | `TELLER_LATE` | the teller stacks lie hidden, shown `TELLER_SHOW` (20 s) after the plaza box | off; on with `--waves` |
+| `--teller-more` / `--no-teller-more` | `TELLER_MORE` | six stacks of 100,000 (the two middle counters too) instead of four of 75,000 | off; on with `--waves` |
+| `--van-late` | `VAN_LATE` | the van is hidden from the load, its FakeTarget off; shown by the foyer box + 6 s, the plaza box + 1 s, or (backstop) the ante-room box + 120 s | off; on with `--waves` (`--no-van-late`) |
 | `--no-van-hide`, `--no-van-target-off` | `VAN_HIDE`, `VAN_NO_TARGET` | the two halves of `--van-late` separately | both on |
 | `--reset` | `RESET` | the round-restart objects (W.5) | off; on with `--waves` |
-The delivery's commands (X.3 of 'Crew fix'): `kl_fa_bank.py test <out> --keep --waves [--no-ai] [--music-layer4 --str ...] --plan <c_bank>/bank_vault_bare/van.json`,
-then `chain.sh` (the crew fix's + the step `extras` between `hall-dash` and `seal`: it adds entities, `seal` must stay last), then
-`checks.sh` (+ `waves`). The scripts are in each folder (`chain.sh`, `checks.sh`, `crew_route.py`).
-**VAN_LATE is on by default only with `--waves`**: the module default stays off so that `test` without a flag is the build of the
-crew fix and `tools/kl_fa_club.py` is unchanged (CONTROL, MEASURED below).
+The delivery's commands: `kl_fa_bank.py test <out> --keep --waves [--no-ai] [--music-layer4 --str ...] --plan <c_bank>/bank_vault_bare/van.json`
+for the chain's input, `test <out> --keep --crew-fix [--music-layer4 --str ...] --plan ...` for the DELIVERED `bank_vault_bare` (nothing
+hidden, no chain is owed: W.10 finding 5), then `chain.sh` (the crew fix's + the step `extras` between `hall-dash` and `seal`: it adds
+entities, `seal` must stay last), `kl_fa_vaultfx.py apply`, `checks.sh` (+ `waves`). The scripts are in each folder (`chain.sh`, `checks.sh`,
+`crew_route.py`, `blocks.py`); the driver of this round is `C:/kl_scratch/vault_waves2/scripts/` (`all.sh` -> `run_all.sh`, `final.sh`).
 
 ### W.4 The three review points of the crew fix
 - **(a) DONE.** `DASH_BOX`'s north edge z -6400 -> `DASH_NORTH` -5800, the foyer-to-hall door (READ, the research: mesh polygon 815,
   x 235..364, z -5799..-5744). MEASURED: 10 more Defend steps of the heister squads are dashes now, among them the four live
   6 - 8 s holds of Squad#04 / #07 (z -6235 .. -6116); the foyer room (z > -5744) is left alone; the gallery pair is 421 .. 657 from
   those places and stays.
-- **(b) PARTLY.** The owner's 21:40 word (the tellers stay, 'cash registers') supersedes 'hide them'. `--teller-late` shows the four
-  stacks when the beat ends, with the vault's loot (the proven `loot on` list). MEASURED: the stacks pull a bot only inside the loot
-  window (800 / 400) and the crew passes the hall only on the way OUT; hiding until the beat takes the pull off the way in (which does
-  not touch the hall anyway) and NOT off the way out. That pull stays and costs the dash seconds (GUESS: not lives). NOT BUILT: four
-  more public-side stacks (`--register-pay`) and refilling registers (`--registers-refill`): the design marked both unproven, and a
-  new money object needs a pool stack of the host (take()) and a mesh test that this session did not do. The lead decides.
+- **(b) DONE in the second round (W.10 finding 4).** The owner's 21:40 word (the tellers stay, 'cash registers') is met: six stacks of
+  100,000 on the counters, shown 20 s after the plaza box, not with the vault's loot. MEASURED: a stack pulls a bot only inside the
+  loot window (800 / 400); the crew crosses the hall on the way OUT after the vault; at the box a bot is 2 .. 10 m from the stacks, 20 s
+  later (GUESS: ~60 m of a dash) it is past them. NOT made un-takeable for the bots (no such kind in the loot tactic's reading).
 - **(c) FALLBACK.** The review's cure (the cover reference out of a dash step's next list) was built (`DASH_CUT_COVER`) and TRIED on
   the delivered chain's folder: `kl_fa_bots_dyn.check` FAILS ('N step(s) nothing starts', 4 squads, 36 cover steps) - the cover
   steps and the `RandomTrigger` are then named by nothing, and taking nodes out below the top level needs an entity removal
-  `kl_prpjoin.join` does not offer. So the default is the proven form: the cover branch STAYS (a cover rout and a hold timer in one list
+  `kl_prpjoin.join` does not offer. (Second round: the fallback now also reaches the '_pos_cover' rout a dash step names DIRECTLY - Squad#02 / #03 / #04: 3 more timers, 4 - 6 s -> 1.5 s - and `crew-check` follows 4 hops.) So the default is the proven form: the cover branch STAYS (a cover rout and a hold timer in one list
   ran live in V0 - V2, with 4 - 8 s) and the hold timers of the dash steps are `DASH_GAP` = 1.5 s (a shorter number of the live form) instead of
   the 0 s of the crew fix, which has no precedent. `crew-check` FAILS a dash step with a cover branch and a timer under 0.05 s.
   GUESS: that 1.5 s under a cover order is better than 6 - 8 s or none.
@@ -2398,8 +2410,9 @@ MEASURED in the written level: the van carries ONE `FakeTarget` (faction 'Mercen
 aim at - and waits 54 m west of its stop from the load, in sight of the plaza's squads. `--van-late`: the FakeTarget controller is taken
 off (the 0x686a66 rule - a FakeTarget outside the vision space - cannot bite with none; `check()` and `kl_fa_bots_dyn` wanted one and
 want none now) and the van's group is hidden at the load (`ZGEOM[3]` + the .gms flag, the form the vault's loot has); `Clock\Van_show`
-(`ActivateGeom`) shows it `VAN_SHOW` s after the plaza box (`Timer_van`), when the crew is at the hall's south end and 12 .. 20 s from
-the exit box. `waves-check` FAILS: a FakeTarget left on the van; the group not hidden; the timer named by anything but the plaza
+(`ActivateGeom`) shows it `VAN_SHOW` (1 s) after the plaza box (`Timer_van`), `VAN_FOYER` (6 s) after the FOYER box (`Specials!LevelSpeak!TriggerBox`,
+`Timer_van_c`: 30 m earlier; the plaza box has never fired live in the Vault) and, as a backstop, `VAN_BACKSTOP` (120 s) after the ante-room box
+(`Timer_van_b`); all three show the same group, the first one wins and the others do nothing. `waves-check` FAILS: a FakeTarget left on the van; the group not hidden; the timer named by anything but the plaza
 box; any police rout / search box / squad list of the old squads or the waves naming the van. **A waiting van that kept a FakeTarget
 would do so because every stock van has one (12 of 12) - it does not here.**
 NOT BUILT, and why: the van does not 'arrive from afar when the exit box calls it'. The exit trigger names the van only in its field 2
@@ -2408,54 +2421,67 @@ to the key length (6000 units = 54 m before the stop even with a way point at x 
 is ASSUMED to run its key frames hidden and to board normally when shown (not seen: V3 decides). Fallbacks, in this order:
 `--no-van-hide` (FakeTarget off, van visible), then `--no-van-late` (the V2 van).
 
-### W.7 What the next live run (V3 on `c_bank3_fx/bank_vault`, owner away) must show
-THE INI: one `[Balance]`, one `[Bots]`; `Escort=0` for an idle human (X.4).
-- round 1 to the vault as X.4; NEW: 'wave' squads in `[Bots] Log=2` / the pictures: A1 walks in from the yard's east lane GO + ~35 s
-  (nobody 'plops'), the armoury / vestibule pairs stand at posts, B2 / B3 come into the airlock corridor 22 / 46 s after the
-  ante-room box and walk to the lobby posts, D1 / D2 come from the bank's two corner recesses 3 / 25 s after the hall's south end
-  box and walk to posts on the plaza's two sides; nobody comes into the world in sight of a heister;
-- the van is not there until ~4 s after the plaza box; no police fire at it before; it boards as before;
+### W.7 What the next live run (V3 on `c_bank4_fx/bank_vault`, owner away) must show
+THE INI: one `[Balance]`, one `[Bots]`; `Escort=0` for an idle human (X.4). Copy the folder from C: first.
+- round 1 to the vault as X.4; NEW: 'wave' squads in `[Bots] Log=2` / the pictures: A01 walks in from the yard's east lane GO + ~12 s + ~20 s
+  (nobody 'plops'), A02 from the west end 35 s later, then a pair every 35 s up to A11 at GO + 362 s: a slow human in the dock is never
+  without an arrival; B01 / B02 come into the airlock corridor 22 / 46 s after the ante-room box and walk to the lobby posts; D01 .. D08 come
+  from the bank's two corner recesses 3 s, then every 25 s, after the hall's south end box (left, right, left ...) and walk to posts on the
+  plaza's two sides; nobody comes into the world in sight of a heister. THE LATCH: if a wave is killed, the next one should come 12 s
+  after, not at the full gap (a wave of the same chain arriving EARLIER than its Pace is the latch working; arriving 12 s after the
+  previous Go at the very start, all of them, is the latch firing for parked squads: then rebuild with `--no-waves-latch`);
+- the van is not there until the foyer box + 6 s (or the plaza box + 1 s); no police fire at it before; it boards as before;
+- the cash registers: six stacks appear in the hall 20 s after the plaza box (the first D wave is then 17 s old): a human who holds the
+  hall's south end and kills D01 / D02 can pick up 600,000 behind him; the bots mostly have left (look at whether any turns back);
 - round 2 (play a second round in the same process): the vault door's body is back and the intact vault shown, no blown vault / fire /
-  smoke, the vault's loot and the teller stacks hidden until the beat, no alarm sound at the start. If the door leaf stands at its swung
-  pose it is the MatPosAnim (W.5), and the hook-side reset is what is missing;
-- to LOOK at: the 24 men are 'in position' and not bunched; the crew does not die before the vault more than in V1 / V2 (the way in
-  has 9 more men and phase B 8 more behind the crew: if the bots die in the lobby, `--waves-extra 0` / `--no-van-late` separate the causes).
-NOT SHOWN BY ANY CHECK: that the crew survives; that waves read as 'keep coming' (24 men over the round is a wave of 3 - 4 about every
-20 s inside a phase, then NOTHING: the supply is finite and a slow human outlasts it - see W.8).
+  smoke, the vault's loot and the teller stacks hidden until the beat, no alarm sound at the start; the chains start again (A01 at
+  +12 s). If the door leaf stands at its swung pose it is the MatPosAnim (W.5), and the hook-side reset is what is missing. If NO wave comes
+  in round 2 the one-shot timers did not come back (ASSUMED that the game re-arms them with the round, as the stock one-shot triggers);
+- to LOOK at: 54 men are 'in position' and not bunched (3 m apart or more); the crew does not die before the vault more than in V1 / V2
+  (the way in has 25 more men over six minutes and phase B 5 more behind the crew: if the bots die in the lobby, `--waves-extra 0` /
+  `--no-van-late` / `--no-waves-latch` separate the causes); the actor count is past what has run live (122 against 99).
+NOT SHOWN BY ANY CHECK: that the crew survives; that the latch fires; that the load with 122 actors is as stable as Retomoto's 99.
 
 ### W.8 GUESS / ASSUMED / NOT BUILT (each marked in the file)
-- **It does NOT run dry only as long as the phases last.** Phase A ends at +30 s, B at +46 s after the ante-room box, D at +75 s (D3 / D4
-  with `--waves-extra 31`); a human who takes 8 minutes in the vault gets no more men than one who takes 3. The design's 'backstop clock
-  every 25 s' and 'field 8 wiped-out chain' are NOT built: a clock without a box puts men behind or in front of the crew at random, and
-  a wiped-out latch fires once. A ring that re-arms (`--waves-ring`) and a hook revive (`--waves-revive`) are not written.
-- 61 stay; 24 more = 85 men / 39 squads (limit 99 / 55); never loaded together; the chunk table is unchanged (shared models: 0 new
-  entries, ASSUMED for the cloned `ZFFActor`).
-- GUESS: every delay, box, gap and wall distance; ASSUMED: sight shapes = collision flag bit 0x10; police walk 3 m/s; a hidden group hides
-  its subtree; the posts hold (a rout with no next list); `ENTRY_REUSE` (B2 and B3 use the same corridor 24 s apart).
-- NOT BUILT: `--distribute-start` (the 13 start men spread over the building: they are the campaign's places, moved by nobody),
-  `--register-pay`, `--waves-clock`, `--waves-chain`.
+- **The supply does not run dry for six minutes**: chain A alone ends at GO + 362 s; B (46 s) and D (178 s) add where the crew is. It still ends:
+  a human who takes ten minutes meets nothing new after minute six on the dock, after 46 s in the lobby, after 3 minutes on the plaza.
+  NOT BUILT: a ring that re-arms (`TriggerDelay2` re-arm >= 0 would fire again after its deaf time; a loop needs a delay in it: `waves-check`
+  refuses a node under 0.05 s) and a hook revive.
+- 61 stay; 54 more = 115 men, 122 actors with the heisters / 53 squads (the engine: 12 a squad, 500 squads; the largest stock story level:
+  147 actors; what has run live: 99 / 55). Never loaded together; the chunk table is unchanged (shared models, ASSUMED for the cloned
+  `ZFFActor`, MEASURED 65,852).
+- GUESS: every delay (12 / 35, 22 / 24, 3 / 25 s), box, gap and wall distance; the latch's 12 s; `SUPPLY_MIN` 360 s = 'about six minutes of
+  Arcade round clock'; the teller show at 20 s and 100,000 a stack. ASSUMED: sight shapes = collision flag bit 0x10; police walk 3 m/s; a
+  hidden group hides its subtree; the posts hold (a rout with no next list); `ZSquadScript` field 8 = 'wiped out'; a `TriggerDelay2` naming a
+  `TriggerDelay2` passes the message on.
+- NOT BUILT: `--distribute-start` (the 13 start men spread over the building), `--register-pay` as NEW money objects (the six counters
+  of the hall are the six stacks; a seventh needs a pool stack of the host), `--waves-clock`.
 - `Escort=1` with an idle human parks one of the seven (X.1).
 
 ### W.9 The rebuild, the checks, the control (MEASURED)
-Driver (not in the repo; `C:/kl_scratch/vault_waves/s/run_all.sh <silent|music>`, a copy of X.3's with `--waves` and the step `extras` in
-`chain.sh`): `test --keep --waves [--no-ai] [--music-layer4 --str ...] --plan <c_bank>/bank_vault_bare/van.json` -> chain (lighten, wardrobe,
-bots, gun looks, talk, fxc, dyn, **hall-dash, extras, seal**) -> `kl_fa_vaultfx.py apply` -> `checks.sh` (+ `waves`) + `vaultfx check`.
-Folders (zip sha1 / chunk table; the full map and the wav-slim share a zip, as before): silent `c_bank3_fx`: bank_vault 8f605553 =
-bank_vault_wavslim, bank_vault_noai de583acc, bank_vault_bare 99ee93f4; music `c_bank3_music_fx`: bank_vault d93c3213 = bank_vault_wavslim,
-bank_vault_noai ae7f9007, bank_vault_bare 9036b880. Blocks as X.3 (159.9 / 149.8 / 150.1 / 149.1 MB), chunk table 65,852 (full) / 65,083 (noai) /
-65,640 (bare) of 69,632. `kl_fa_vaultfx.py check` PASS on all eight. Every checker PASSES (bank_check, waves, crew, crew_route, bots_dyn,
-bots_gate, reverify, van, escape, fake, impact, route_walk / route_built FREE, stream_whd PASS for the music set) except the known: the
-silent set's `preflight` CRASH 1 / `audit` FAIL 2 (noai 3) = the stream-clip finding; the noai folders' 'no police' (music: preflight CRASH 1,
-RISK 1 = the eLayer4 risk; audit FAIL 2); the bare folders' `guns` / `talk` (no such step there, as in the delivery) and `waves` (no
-`extras.json`: the bare folder has no chain).
-CONTROL (MEASURED): `test --keep --plan <c_bank>/bank_vault_bare/van.json` WITHOUT a flag -> bare archive sha1 **b7e48d31** (the archive of runs V0 - V2);
-`import kl_fa_club, kl_fa_bank` works, every public name and default is as before (`WAVES`, `VAN_LATE`, `CREW_FIX2`, `RESET`, `TELLER_LATE`
-False; `DASH_BOX` unchanged).
-WHAT THE CHECKS PROVE: waves-check re-tests the WRITTEN level - every one of the 24 men on the START's mesh part, 30 from a wall, blind from
-the sight of the stations of his wave's regions, clear of the crew by 250 / 400; 24 posts apart by 150, 45 from a wall, 150 from the old
-squads' places, phase D's 250 from the van's drive; each rout named only by its own timer, each timer only by its phase's trigger; the reset
-covers the 28 / 53 objects the module switches; the van has no FakeTarget, is hidden at the load, is shown only by the plaza box's timer, and
-no police behaviour names it (25 squad trees read).
-WHAT IT DOES NOT PROVE: that any of it loads or behaves (nothing ran in the game); that 'blind' holds (collision flag 0x10 = blocks
-sight is ASSUMED from names); that a parked clone of a `ZFFActor` costs no chunk (ASSUMED; MEASURED: the chunk table did not grow beyond the
-reserve: 65,852 entries are the crew fix's); that the hidden van boards; that round 2 shows the door shut.
+Driver (not in the repo; `C:/kl_scratch/vault_waves2/scripts/all.sh`, `run_all.sh <silent|music>`, `final.sh <silent|music>`, `chain_*.sh`,
+`checks_*.sh` copied from the first round's; every intermediate on C:): `test --keep --waves [--no-ai] [--music-layer4 --str ...] --plan
+<c_bank>/bank_vault_bare/van.json` (chain input) and `test --keep --crew-fix [--music-layer4 --str ...]` (the delivered bare folder) -> chain
+(lighten, wardrobe, bots, gun looks, talk, fxc, dyn, **hall-dash, extras, seal**) -> `kl_fa_vaultfx.py apply` -> `checks.sh` (+ `waves`) +
+`vaultfx check`. One test build is 95 s, a chain about 6 min.
+Folders (zip sha1 first 8 / chunk table; the full map and the wav-slim share a zip, as before): silent `C:/kl_build/c_bank4_fx`: bank_vault b12c9fed =
+bank_vault_wavslim, bank_vault_noai 411fc312, bank_vault_bare c3fd8eb6; music `C:/kl_build/c_bank4_music_fx`: bank_vault 695ecbed = bank_vault_wavslim,
+bank_vault_noai 7dc5a565, bank_vault_bare 4ddf9883. Blocks as X.3 (159.9 / 149.8 / 150.1 / 149.1 MB), chunk table 65,852 (full) / 65,083 (noai) /
+65,640 (bare) of 69,632. `kl_fa_vaultfx.py check` PASS on all eight. Every checker PASSES (bank_check, waves, crew - the three long hold timers are
+gone -, crew_route, bots_dyn, bots_gate, reverify, van, escape, fake, impact, route_walk / route_built FREE, stream_whd PASS for the music set) except the
+known: the silent set's `preflight` CRASH 1 / `audit` FAIL 2 (noai 3) = the stream-clip finding; the noai folders' 'no police' (music noai: preflight
+CRASH 1, audit FAIL 2); the bare folders' `guns` / `talk` (no such step there, as in the delivery) and `waves` (no `extras.json`: the bare folder has no chain).
+Music full / wavslim / bare: preflight CRASH 0 (RISK 1 = the eLayer4 risk). Disk: C: 36 GB free after the two sets (927 MB each).
+CONTROL: `kl_fa_bank.py test <out> --keep --plan <c_bank>/bank_vault_bare/van.json` WITHOUT any flag gives `F01_Main.zip` sha1 **b7e48d31634c9c33cf19a7e8cc315eb65bbcf0af**
+= the first delivery's bare archive, RESULT PASS (20,643 entities, MEASURED after every edit of this round).
+
+### W.10 The skeptic's seven findings on the first waves build, and what became of each
+| # | finding | what was done | what fails now |
+|---|---|---|---|
+| 1 | the supply is a one-shot set of 24 men | three chains (W.1 / W.2): 21 waves, links every 24 .. 35 s, gated on phase triggers, a wiped-out latch, floor 362 s, finite | `waves-check`: a Pace/Go/Fast that is not what it should be (delay, one-shot, who names it), a chain whose gaps do not add up, a last link that still names a timer, a chain past 600 s, chain A ending before 360 s |
+| 2 | B2 / B3 stand ON the crew's way out | entries and posts 300 .. from every leg of ROUTE_IN + ROUTE_VAULT + ROUTE_OUT (`route_dist`), B shrunk to 5 men because the lobby only has 3 spots at that distance (MEASURED: `cap.py`) | an entry or post nearer than 300 to a leg |
+| 3 | three long hold timers at the hall's north end | `dash_chain` follows a '_pos_cover' rout the dash step names DIRECTLY (Squad#02 / #03 / #04 051_Timer_hold, 4 - 6 s -> 1.5 s); `crew-check` follows 4 hops and FAILS a long hold timer started by a step with a place in the hall | crew-check: 'hold timer ... within 4 steps' |
+| 4 | the teller stacks pull the bots sideways | six stacks of 100,000 on the counters' public edge (the two middle counters added), shown 20 s after the plaza box instead of 2 s (a bot at the box edge is 2 .. 10 m from the stacks: inside the loot window, 800 / 400; 20 s later the heisters' dash is some 60 m on); MEASURED the stacks sit 0.6 .. 1 m from mesh floor; NOT made un-takeable for the bots (no such kind in the tactic's reading) | `waves-check`: Teller_show names all hidden stacks, nothing else shows them, one timer named by the plaza box alone |
+| 5 | the bare folders keep the van hidden for good | the DELIVERED `bank_vault_bare` is the `--crew-fix` build: van visible with its FakeTarget (V2's), stacks and the vault's loot as the first delivery; the chain's `--waves` bare stays an intermediate | (none: no extras.json = nothing to test) |
+| 6 | the late van hangs on the plaza box | also the foyer box (`Specials!LevelSpeak!TriggerBox`) + 6 s (30 m earlier = 6 .. 10 s of a sprint) and, as backstop, the ante-room box + 120 s; `ActivateGeom` twice is idempotent | `waves-check`: each timer named by its box alone, the foyer timer shows the van |
+| 7 | posts 1.5 m apart are a bunch | `POST_GAPS` tries 3.0 m, then 2.2, then 1.5 m (the floor); MEASURED: all 54 posts at 3.0 m | a post nearer than 1.5 m to another wave post |

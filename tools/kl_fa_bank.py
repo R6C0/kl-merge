@@ -60,12 +60,16 @@ what only a live run can settle: re/bank_campaign.md. Nothing here installs anyt
                         floor the crew has to cross (default: on the floor, in a row before the front entrance)
       --crew-fix        both (what <work>/build/c_bank2 is built with; its chain then runs 'hall-dash')
       THE WAVES BUILD (2026-10-11 night; re/bank_campaign.md 'Waves'; every flag off = the crew-fix build byte for byte):
-      --waves           police that keep coming: WAVE_TABLE's parked squads (24 men on top of the 61), each started by the
-                        crew's own progress; implies --crew-fix --crew-fix2 --teller-late --van-late --reset
-      --waves-extra N   men on top of the 61 (0 .. 31, default 24)       --waves-near M   the softer crew line (250)
+      --waves           police that keep coming: three CHAINS of parked squads (WAVE_TABLE: A 11 waves from the round's start, B 2 from the
+                        ante-room box, D 8 from the plaza box; 54 men on top of the 61, one link every 24 .. 35 s, the floor
+                        SUPPLY_MIN = 360 s); implies --crew-fix --crew-fix2 --teller-late --teller-more --van-late --reset
+      --waves-extra N   men on top of the 61 (0 .. 79, default 54; a chain is cut from its end)   --waves-near M   the softer crew line (250)
+      --no-waves-latch  the chains are plain timer chains (without the 'wiped out' latch that brings the next wave earlier)
       --crew-fix2       review points (a) DASH_BOX's north edge at the foyer door and (c) the hold timers of the dash steps
-      --teller-late     the four teller stacks lie hidden until the beat ends    --reset  the round-restart objects
-      --van-late        the van hidden until the plaza box + 4 s, its FakeTarget off (--no-van-hide, --no-van-target-off)
+      --teller-late     the teller stacks lie hidden until the plaza box + TELLER_SHOW (20 s)      --reset  the round-restart objects
+      --teller-more     (on with --waves, --no-teller-more) six stacks of 100,000 on the counters instead of four of 75,000
+      --van-late        the van hidden until the foyer box + 6 s / the plaza box + 1 s / (backstop) the ante-room box + 120 s,
+                        its FakeTarget off (--no-van-hide, --no-van-target-off)
     python kl_fa_bank.py extras <folder> <out>            the finishing chain's step that adds the waves, the reset and the
                                                           late van's show (flags: bank_opts.json beside the archive); after
                                                           hall-dash, before seal
@@ -209,6 +213,15 @@ VAULT_BOX = ((-50.0, 1150.0), (-1000.0, -400.0), (-13560.0, -12650.0))      # th
 # (z -7206, -7606, -8006), their top y 899, a glass grille over it (MEASURED in the collision). The stack lies on the
 # counter's public edge - the side the crew passes on its way out. GUESS: the edge distance (26) and the value
 TELLER_LOOT = [((-765.0, 899.0, -7202.0), 75000), ((-765.0, 899.0, -8002.0), 75000), ((1367.0, 899.0, -7206.0), 75000), ((1367.0, 899.0, -8006.0), 75000)]
+
+
+def teller_loot():
+    """The teller stacks as the flags say: TELLER_LOOT (4 x 75,000: the build of every earlier delivery) or, with TELLER_MORE, six of TELLER_MORE_VALUE."""
+    if not TELLER_MORE:
+        return list(TELLER_LOOT)
+    return [(p, TELLER_MORE_VALUE) for p, _v in TELLER_LOOT] + [(p, TELLER_MORE_VALUE) for p in TELLER_MORE_EXTRA]
+
+
 LOOT_REACH = 125.0                      # TriggerBox2 radius: the value of all 117 stock OnlineMoneyContainer triggers (kl_escape.REACH)
 GATE_VAULT = True                       # False ('--loot-shown'): the vault's loot lies there from the start
 CASE = 'dm'                             # the vault's prop: Dead Men's Fragile Alliance briefcase (kl_fa_loot.CASES); None = F07's bags
@@ -619,11 +632,21 @@ TELLER_LATE = False
 #   no target ('--van-no-target', in VAN_LATE): the FakeTarget controller is taken off the van. ASSUMPTION that police aim at
 #         it for that reason. The 0x686a66 rule (a FakeTarget outside the vision space) cannot bite with none. A waiting
 #         van that keeps one does so because every stock van has one (12 vans of F01 F04 F05 F07).
-VAN_LATE, VAN_HIDE, VAN_NO_TARGET, VAN_SHOW = False, True, True, 4.0
+VAN_LATE, VAN_HIDE, VAN_NO_TARGET, VAN_SHOW = False, True, True, 1.0     # shown 1 s after the plaza box (was 4: the review of the waves build measured the box 28 m before the exit trigger, ~5 s of a sprint)
+VAN_BACKSTOP = 120.0                    # ... and, should that box never fire with bots in the crew, 120 s after the ante-room box (the van is no police target: its FakeTarget is off). GUESS
+TELLER_SHOW = 20.0                      # TELLER_LATE: the teller stacks are shown this long after the plaza box = once the AI heisters' hall dash is past the registers (review fault 4:
+                                        # at 2 s a bot at the box was still inside the loot window, 800, of a stack and was pulled back). GUESS: 20 s = ~60 m of a dash
+# TELLER_MORE ('--teller-more', on with --waves): the owner, 21:45: 'put some money in the cash registers up top so people could hold the swat from coming in and get rewarded'.
+# Six counters stand in the hall (x -791 and x 1393, z -7202 / -7602 / -8002 and -7206 / -7606 / -8006); the module used the outer four. The middle two get a stack
+# too and every stack is worth TELLER_MORE_VALUE: 6 x 100,000 instead of 4 x 75,000. All on the public side, on the START's mesh (checked in check()). GUESS: the number.
+TELLER_MORE, TELLER_MORE_VALUE = False, 100000
+TELLER_MORE_EXTRA = [(-765.0, 899.0, -7602.0), (1367.0, 899.0, -7606.0)]
+VAN_FOYER = 6.0                         # the van is also shown this long after the FOYER box (Specials!LevelSpeak!TriggerBox, 30 m before the plaza box = 6 .. 10 s of a sprint
+                                        # earlier; ActivateGeom twice is idempotent). The plaza box has never fired live in the Vault (review fault 6). GUESS: the margin
 # RESET ('--reset'): the owner, ~22:00: 'after the first round the vault door is open'. See Reset below.
 RESET = False
 # WAVES ('--waves'): police that keep coming. See waves() below.
-WAVES, WAVES_EXTRA, WAVES_NEAR = False, 24, 250.0
+WAVES, WAVES_EXTRA, WAVES_NEAR = False, 54, 250.0
 OPTS_FILE = 'bank_opts.json'
 DASH_BOX_V1 = DASH_BOX
 # 4. THE TEST (crew_check, 'kl_fa_bank.py crew-check <folder>'): no place of an AI heister squad within CREW_CLEAR of
@@ -749,15 +772,16 @@ def set_dash():
 def opts_now():
     return collections.OrderedDict(crew_fix2=CREW_FIX2, teller_late=TELLER_LATE, van_late=VAN_LATE, van_hide=VAN_HIDE, van_no_target=VAN_NO_TARGET,
                                    van_show=VAN_SHOW, reset=RESET, waves=WAVES, waves_extra=WAVES_EXTRA, waves_near=WAVES_NEAR,
-                                   plaza_outside=PLAZA_OUTSIDE, hall_up=HALL_UP, no_ai=NO_AI)
+                                   plaza_outside=PLAZA_OUTSIDE, hall_up=HALL_UP, no_ai=NO_AI, teller_more=TELLER_MORE, waves_latch=WAVES_LATCH)
 
 
 def apply_opts(o):
     """Set the module's flags from a dict (opts_now's form). -> o"""
-    global CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, VAN_SHOW, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR
+    global CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, VAN_SHOW, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
+    TELLER_MORE, WAVES_LATCH = bool(o.get('teller_more')), bool(o.get('waves_latch', True))
     CREW_FIX2, TELLER_LATE, VAN_LATE = bool(o.get('crew_fix2')), bool(o.get('teller_late')), bool(o.get('van_late'))
     VAN_HIDE, VAN_NO_TARGET, VAN_SHOW = bool(o.get('van_hide', True)), bool(o.get('van_no_target', True)), float(o.get('van_show', VAN_SHOW))
-    RESET, WAVES, WAVES_EXTRA, WAVES_NEAR = bool(o.get('reset')), bool(o.get('waves')), int(o.get('waves_extra', 24)), float(o.get('waves_near', 250.0))
+    RESET, WAVES, WAVES_EXTRA, WAVES_NEAR = bool(o.get('reset')), bool(o.get('waves')), int(o.get('waves_extra', 54)), float(o.get('waves_near', 250.0))
     set_dash()
     return o
 
@@ -926,7 +950,7 @@ def prepare_host(S, log=print):
     for k, i, v in kl_fa.controllers(sc, 'OnlineMoneyCtrl'):
         if v[2] == 'ZMONEYCTRL_TYPE_DROP' and sc.parent[k] == 0:
             pool[v[0]].append((sc.names[k], k, i))
-    spots = [(p, value, GATE_VAULT) for p, _yaw, value in VAULT_LOOT] + [(p, value, TELLER_LATE) for p, value in TELLER_LOOT]
+    spots = [(p, value, GATE_VAULT) for p, _yaw, value in VAULT_LOOT] + [(p, value, TELLER_LATE) for p, value in teller_loot()]
     take = (sorted(pool['ZMONEYCTRL_GAMEMODE_ALL'])[-8:] + sorted(pool['ZMONEYCTRL_GAMEMODE_TM_ONLY'])[8 - len(spots):])[:len(spots)]
     if len(take) != len(spots) or len(spots) < 8:
         raise ValueError('%d pool stacks for %d loot places' % (len(take), len(spots)))
@@ -939,9 +963,9 @@ def prepare_host(S, log=print):
         kl_fa.edit(sc, k, A.ctrl_of(sc, k, 'TriggerBox2'), lambda us: A.setv(sc, us, 2, LOOT_REACH))
         A.place(S, k, p, hidden=hide)
         loot.append((name, hide))
-    total = sum(v for _p, _y, v in VAULT_LOOT) + sum(v for _p, v in TELLER_LOOT)
+    total = sum(v for _p, _y, v in VAULT_LOOT) + sum(v for _p, v in teller_loot())
     log('  kl_fa_bank: loot: %d in the vault (%s), %d at the tellers, %d in all' % (
-        len(VAULT_LOOT), 'hidden until the beat\'s timer ends' if GATE_VAULT else 'shown', len(TELLER_LOOT), total))
+        len(VAULT_LOOT), 'hidden until the beat\'s timer ends' if GATE_VAULT else 'shown', len(teller_loot()), total))
     # escape: the one van laid on the plan of ROAD - F07's own keys re-written in place, the boxes beside its drive
     # and its camera moved with it (kl_map_escape.van_prepare; the van's nodes must still stand where F07 has them);
     # the exit trigger names it alone (kl2 0x6c3f90 loops until one field is set). The escape marker stays where
@@ -1282,10 +1306,10 @@ def wire(sc, log=print):
         raise ValueError('%s does not send \'Activate\' to the eleven alarm lamps: %s' % (CAMP['alarm lamps'], lamps))
     hidden = [R + sc.names[t] for t in sc.tops() if sc.names[t].startswith('FASpecials!DropMoney!') and kl_fa.node_values(sc, t)[3]
               and any(v[2] == 'ZMONEYCTRL_TYPE_NORMAL' for kk, _i, v in kl_fa.controllers(sc, 'OnlineMoneyCtrl') if kk == t)]
-    want_hidden = len(VAULT_LOOT) * bool(GATE_VAULT) + len(TELLER_LOOT) * bool(TELLER_LATE)
+    want_hidden = len(VAULT_LOOT) * bool(GATE_VAULT) + len(teller_loot()) * bool(TELLER_LATE)
     if len(hidden) != want_hidden:
         raise ValueError('%d hidden loot objects, %d wanted (the vault %d%s)' % (len(hidden), want_hidden, len(VAULT_LOOT) * bool(GATE_VAULT),
-                                                                            ', the tellers %d (TELLER_LATE)' % len(TELLER_LOOT) if TELLER_LATE else ''))
+                                                                            ', the tellers %d (TELLER_LATE)' % len(teller_loot()) if TELLER_LATE else ''))
     lists('loot on', 'ActivateGeom', f0='AITrigger', f1=hidden)
 
     # ---- the blast (VAULT_BLAST), on the door's timer with the door's body
@@ -1950,7 +1974,9 @@ def check(folder, log=print, problems=None):
             fail('rod %d: the box names its timer %s, the timer (%.0f s) its wrapper %s, the wrapper %s' % (i + 1, R + ROLE[t] in box, delay(t), R + ROLE[w] in named(t), got))
         rods.append(delay(t))
     hid = [R + sc.names[k] for k, _v in loot if kl_fa.node_values(sc, k)[3]]
-    if sorted(named('loot on')) != sorted(hid):
+    ts = sc.resolve(R + CLOCK + '\\' + 'Teller_show')         # extras: the teller stacks come with their own switch after the hall
+    tel = values(sc, ts[0], 'ActivateGeom')[1] if ts else []
+    if sorted(named('loot on') + tel) != sorted(hid):
         fail('the loot\'s ActivateGeom names %d objects, %d are hidden' % (len(named('loot on')), len(hid)))
     last = {p: [v[MPA_LAST] for k, _i, v in kl_fa.controllers(sc, 'MatPosAnim') if k == A.node_of(sc, p)] for p, _at, _set in LEAVES if '\\GlassDoor_' in p}
     if animate and (sorted(named('doors')) != sorted(R + p for p, _at, _set in LEAVES) or any(v != [GLASS_LAST] for v in last.values())):
@@ -2113,9 +2139,11 @@ def check(folder, log=print, problems=None):
     if len(bodies) != 8 or len(back) != len(POLICE) or near < POLICE_CLEAR:
         fail('police who come back: %d bodies (8 wanted), %d points (%d), a squad\'s man %d from one (%d wanted)' % (len(bodies), len(back), len(POLICE), near, POLICE_CLEAR))
     # people: stock Fragile Alliance levels have 35..57 ZFFActor and 20..36 squads, Retomoto on the tab 99 / 55 (re/campaign_fa_tooling.md 5.4)
-    log('  people: %d ZFFActor in %d squads + 16 player bodies (ran live: %d actors, %d squads)' % (len(actors), len(every), ACTORS_LIVE[0], ACTORS_LIVE[1]))
-    if len(actors) > ACTORS_LIVE[0] or len(every) > ACTORS_LIVE[1]:
-        fail('%d actors in %d squads: more than has run live (%d / %d)' % (len(actors), len(every), *ACTORS_LIVE))
+    cap = WAVES_ACTORS if WAVES else ACTORS_LIVE         # the waves build may pass what ran live (Retomoto 99 / 55) up to the largest stock story level (147) and the engine's 500 squads
+    log('  people: %d ZFFActor in %d squads + 16 player bodies (ran live: %d actors, %d squads; allowed here: %d / %d%s)' % (
+        len(actors), len(every), ACTORS_LIVE[0], ACTORS_LIVE[1], cap[0], cap[1], ' = the waves build: past what ran live' if cap is not ACTORS_LIVE and len(actors) > ACTORS_LIVE[0] else ''))
+    if len(actors) > cap[0] or len(every) > cap[1]:
+        fail('%d actors in %d squads: more than allowed (%d / %d)' % (len(actors), len(every), *cap))
     # ---- the escape: the one key-framed van on its road. kl_map_escape.van_check reads the WRITTEN files: who the
     # exit trigger calls, the keys against the road's height, the lane (five rays, every 20), the boxes at the stop,
     # the camera's eye and sight, the collision file; held against the plan in van.json when test() wrote one
@@ -2425,6 +2453,31 @@ def bots_check(folder, log=print):
 
 
 # ------------------------------------------------------------------ the crew fix after run V2: the bots' side
+def dash_chain(sc, v, delay, rout):
+    """The hold timers a Defend step (values v) starts: those its own list names, and - the review's fault 3 - those the cover
+    branch of that list starts one or two steps on (step -> [RandomTrigger '..._cover' ->] a '_pos_cover' Defend rout -> its hold
+    timer: Squad#02 / #03 / #04 051_Timer_hold kept 4 - 6 s at the hall's north end; MEASURED on the second round's folder: the
+    step names the '_pos_cover' rout DIRECTLY, which the first form of this function did not follow). -> [node], without repeats."""
+    out, seen = [], set()
+    def walk(vals, depth):
+        for s in (vals[7] or []):
+            for j in sc.resolve(s):
+                if j in delay and DASH_HOLD in sc.names[j]:
+                    out.append(j)
+                elif depth < 3 and '_cover' in sc.names[j] and j not in seen:
+                    seen.add(j)
+                    if j in rout:                                   # the step names a '_pos_cover' Defend rout directly (second round, Squad#02 / #03 / #04)
+                        walk(rout[j], depth + 1)
+                    elif kl_fa.has(sc, j, 'RandomTrigger'):         # ... or through the RandomTrigger '..._cover'
+                        for s1 in A.named(sc, j):
+                            for h in sc.resolve(s1):
+                                if h in rout and h not in seen:
+                                    seen.add(h)
+                                    walk(rout[h], depth + 1)
+    walk(v, 0)
+    return list(dict.fromkeys(out))
+
+
 def hall_dash(folder, log=print):
     """In place, on a folder kl_fa_bots_dyn's step is through with (before seal): every DefendBehaviourRout of an AI
     heister squad that has a place inside DASH_BOX gets DASH_MOVE, and every TriggerDelay2 such a step starts whose
@@ -2440,6 +2493,7 @@ def hall_dash(folder, log=print):
         raise ValueError('kl_prpjoin.join does not reproduce the build\'s .prp')
     delay = {k: (i, v[0]) for k, i, v in kl_fa.controllers(Jn, 'TriggerDelay2')}
     steps, timers, squads, was, cut = [], [], set(), collections.Counter(), []
+    drout = {kk: vv for kk, _ii, vv in kl_fa.controllers(Jn, 'DefendBehaviourRout')}
     for k, i, v in kl_fa.controllers(Jn, 'DefendBehaviourRout'):
         t = Jn.top[k]
         if not Jn.names[t].startswith(BOT_SQUAD + 'Squad#'):
@@ -2465,12 +2519,15 @@ def hall_dash(folder, log=print):
             was[v[4]] += 1
             kl_fa.edit(Jn, k, i, lambda us: A.setv(Jn, us, 4, DASH_MOVE))
             steps.append(Jn.path[k][5:])
-        for s in (v[7] or []):
-            for j in Jn.resolve(s):
-                if j in delay and DASH_HOLD in Jn.names[j] and delay[j][1] != hold:
-                    kl_fa.edit(Jn, j, delay[j][0], lambda us: A.setv(Jn, us, 0, hold))
-                    timers.append((Jn.path[j][5:], delay[j][1]))
-                    delay[j] = (delay[j][0], hold)
+        if CREW_FIX2:
+            js = dash_chain(Jn, v, delay, drout)
+        else:
+            js = [j for s in (v[7] or []) for j in Jn.resolve(s) if j in delay and DASH_HOLD in Jn.names[j]]
+        for j in js:
+            if delay[j][1] != hold:
+                kl_fa.edit(Jn, j, delay[j][0], lambda us: A.setv(Jn, us, 0, hold))
+                timers.append((Jn.path[j][5:], delay[j][1]))
+                delay[j] = (delay[j][0], hold)
     if steps or timers or cut:
         prp = Jn.p.serialize()
         back = F.Prp(prp)
@@ -2537,11 +2594,30 @@ def crew_check(folder, log=print):
     # how the hall is crossed (hall_dash): said, not judged - a folder without the step is the build of runs V0 .. V2
     delay = {k: v[0] for k, _i, v in kl_fa.controllers(sc, 'TriggerDelay2')}
     n = collections.Counter()
+    drout = {kk: vv for kk, _ii, vv in kl_fa.controllers(sc, 'DefendBehaviourRout')}
+    if CREW_FIX2:           # the skeptic's test (waves review, fault 3): a hold timer of the heisters, 4 hops up the lists, a step with a place in the dash box
+        named_by = collections.defaultdict(list)
+        for kk in range(1, len(sc.nodes)):
+            for s_ in A.named(sc, kk):
+                for j in sc.resolve(s_):
+                    named_by[j].append(kk)
+        dbox = {kk for kk, vv in drout.items() if sc.names[sc.top[kk]].startswith(F.SQUAD + 'Squad#') and any(in_box(B.at(j), DASH_BOX) for s_ in (vv[1] or []) for j in sc.resolve(s_))}
+        for j, d in delay.items():
+            if d > DASH_GAP + 1e-6 and DASH_HOLD in sc.names[j] and sc.names[sc.top[j]].startswith(F.SQUAD + 'Squad#'):
+                front, seen_ = [j], {j}
+                for _hop in range(4):
+                    front = [x for y in front for x in named_by.get(y, ()) if x not in seen_]
+                    seen_.update(front)
+                if seen_ & dbox:
+                    fail('hold timer %s (%g s) is started, within 4 steps, by a Defend step with a place in the hall (%s)' % (sc.path[j][5:][-60:], d, sc.path[min(seen_ & dbox)][5:][-50:]))
     for k, _i, v in kl_fa.controllers(sc, 'DefendBehaviourRout'):
         if sc.names[sc.top[k]].startswith(F.SQUAD + 'Squad#') and any(in_box(B.at(j), DASH_BOX) for s in (v[1] or []) for j in sc.resolve(s)):
             n['steps'] += 1
             n['sprint'] += v[4] == DASH_MOVE
-            n['hold s'] += sum(delay[j] for s in (v[7] or []) for j in sc.resolve(s) if j in delay and DASH_HOLD in sc.names[j])
+            n['hold s'] += sum(delay[j] for j in dash_chain(sc, v, delay, drout))        # ... and the cover branch's, one step on
+            long_ = [(sc.path[j][5:][-50:], delay[j]) for j in dash_chain(sc, v, delay, drout) if delay[j] > DASH_GAP + 1e-6]
+            if long_ and CREW_FIX2:
+                fail('dash step %s: its hold timers (direct or through the cover branch) are longer than %g s: %s' % (sc.path[k][5:][-60:], DASH_GAP, long_[:3]))
             nx = [j for s in (v[7] or []) for j in sc.resolve(s)]
             tm = [delay[j] for j in nx if j in delay and DASH_HOLD in sc.names[j]]
             if tm and min(tm) < 0.05 and any(kl_fa.has(sc, j, 'RandomTrigger') and '_cover' in sc.names[j] for j in nx):
@@ -2842,7 +2918,15 @@ POST_WALL = 45.0                        # a post this far from a wall of the mes
 WAVE_GAP = 70.0                         # two entries of a wave, and the entries of different waves: this far apart. GUESS
 ENTRY_REUSE = 20.0                      # two waves of a phase may come into the world at the same place when they start this far apart (s). GUESS
 POST_GAP = 150.0                        # two posts of the level (any waves): this far apart (design: 3 m; a man is 0.5 m wide). GUESS
+POST_OLD_B = 100.0                      # phase B: the lobby is narrow (MEASURED: 8 posts only fit at 1 m from an old squad's place, 250 from the way). GUESS
 POST_OLD = 150.0                        # a post this far from a place of an existing squad's man or rout. GUESS
+# THE CREW'S OWN WAY (review of the waves build, fault 2): a man's entry and his post keep this far from every leg of the round's way
+# (ROUTE_IN + ROUTE_VAULT + ROUTE_OUT, 3D, point to segment): phase B stood ON the leg vault lobby - airlock - stairs. GUESS: the numbers.
+ROUTE_POST = {'A': 300.0, 'B': 300.0, 'D': 300.0}
+ROUTE_ENTRY = {'A': 300.0, 'B': 300.0, 'D': 300.0}
+POST_GAPS = {'A': (300.0, 220.0, 150.0), 'B': (300.0, 220.0, 150.0), 'D': (300.0, 220.0, 150.0)}       # review fault 7: 3 m where the mesh allows, then 2.2, never under 1.5 (POST_GAP_MIN)
+# posts of the level this far apart: the first the mesh allows for the whole wave (review: 150 = 1.5 m is a bunch)
+POST_GAP_MIN = 150.0
 SIGHT_FAR = 9000.0                      # beyond 90 m in 3D a pair is not tested (the research's rule: ASSUMED not noticed)
 BLIND_WAY = ('dock', 'lobby', 'flights', 'vault')               # the crew's regions on the way in / down (bank_waves research)
 BLIND_OUT = ('hall', 'airlock', 'plaza')
@@ -2851,20 +2935,88 @@ BLIND_OUT = ('hall', 'airlock', 'plaza')
 # (wave_plan) and tested by waves-check; the boxes are the research's (C:/kl_scratch/vault_waves/bank/cands.txt, posts_250.txt).
 # GUESS: every box and every delay; MEASURED in the research: the entry boxes are blind from the regions named (static
 # collision, flag bit 0x10 = blocks sight ASSUMED), on the START's mesh part, 18 .. 90 m from where the men go.
-WAVE_TABLE = [
-    ('A1', 'A', 12.0, 4, BLIND_WAY + BLIND_OUT, (1800, 2350, -3500, -1500, 190, 215), (0, 900, -5700, -4800, 190, 215), G4 + 'Guards_Reinforcement_01a'),
-    ('A2a', 'A', 30.0, 2, BLIND_WAY + BLIND_OUT, (-700, -560, -5700, -5500, 235, 245), (-1100, -500, -6300, -4700, 235, 245), G4 + 'Guards_Reinforcement_01a'),
-    ('A2b', 'A', 30.0, 3, BLIND_WAY + BLIND_OUT, (-1150, -950, -4850, -4650, 235, 245), (-1100, -500, -6300, -4700, 235, 245), G4 + 'Guards_Reinforcement_01a'),
-    ('B2', 'B', 22.0, 4, BLIND_WAY, (1467, 1625, -6780, -6060, 235, 245), (-300, 900, -7500, -6850, 235, 245), G4 + 'Police_Reinforcement_02'),
-    ('B3', 'B', 46.0, 4, BLIND_WAY, (1467, 1625, -6780, -6060, 235, 245), (-600, 1400, -7700, -5900, 235, 245), G4 + 'Police_Reinforcement_02'),
-    ('D1', 'D', 3.0, 3, ('hall', 'airlock', 'plaza'), (-1750, -1400, -9650, -9300, 695, 710), (-2000, -700, -10600, -9900, 695, 710), CO + 'Police_OutSide_SWAT_02'),
-    ('D2', 'D', 25.0, 4, ('hall', 'airlock', 'plaza'), (2000, 2300, -9650, -9300, 695, 710), (1100, 1900, -10650, -9900, 695, 710), CO + 'Police_OutSide_SWAT_03'),
-    ('D3', 'D', 50.0, 4, ('hall', 'airlock', 'plaza'), (-1750, -1400, -9650, -9300, 695, 710), (-2000, -700, -10600, -9900, 695, 710), CO + 'Police_OutSide_SWAT_02'),
-    ('D4', 'D', 75.0, 3, ('hall', 'airlock', 'plaza'), (2000, 2300, -9650, -9300, 695, 710), (1100, 1900, -10650, -9900, 695, 710), CO + 'Police_OutSide_SWAT_03')]
+# THE SUPPLY (review of the waves build, fault 1: 'a one-shot set of 24 men'). Each phase is a CHAIN of links; link i of a phase starts the
+# parked squad Wave_<name> and arms link i + 1. A link is two TriggerDelay2 nodes of the clock group (a one-shot is spent after it fires, kl2 0x71e250):
+#     Pace_<name>  the wait (the chain's gap)            -> Go_<name>
+#     Go_<name>    0.1 s, one-shot: starts the wave      -> [the squad's Defend rout, Pace of the next link]
+#     Fast_<name>  LATCH_DELAY s (ASSUMED, see below)    -> Go_<name>        named by the 'wiped out' list (ZSquadScript field 8) of the PREVIOUS wave
+# Go is the only node that starts a wave and it fires once, so the timer and the latch can both reach it and the first one wins. The latch
+# only ever brings a wave EARLIER (the crew has killed the last one); without it (--no-waves-latch) the chain is the plain timer chain.
+# ASSUMED, never seen: that field 8 fires for a squad whose men all died (nothing in this level uses it; Retomoto's street chain was
+# never watched). If it fired for a parked squad at the load, every Fast would run LATCH_DELAY after its Go: the supply would then
+# take LATCH_DELAY a link, not the gap - which is why the floor (SUPPLY_MIN) is tested on the Pace chain alone and LATCH_DELAY is 12 s.
+# The phases: A starts with the round (the ROUND-START timer), B with the ante-room box (once), D with the plaza box (once).
+# THE FLOOR: chain A alone runs SUPPLY_MIN seconds from the start of the round, whatever the crew does (a human who takes his time in the
+# dock, the lobby or the vault still has police arriving); B and D add pressure where the crew is. Nothing cancels an armed timer, the
+# chains are finite (the last link names no timer) and end before SUPPLY_MAX; the round ends with the vehicle's departure.
+# Totals (default table): A 11 waves / 25 men, B 2 / 5, D 8 / 24 = 21 squads of 2 .. 3 men and 54 men: actors 68 + 54 = 122 and squads
+# 32 + 21 = 53, against 12 men a squad (engine), 500 squads (engine), the largest stock STORY level 147 actors, and what has run live in the
+# game: Retomoto on the tab 99 actors / 55 squads - the actors are past that and under 147 (WAVES_ACTORS; --waves-extra thins it).
+LATCH_DELAY, SUPPLY_MIN, SUPPLY_MAX, WAVES_LATCH, GO_DELAY = 12.0, 360.0, 600.0, True, 0.1
+WAVES_ACTORS = (147, 500)              # ZFFActor / squads the waves may bring the level to (check()): the largest stock story level, the engine's squad limit
+SQUAD_MEN_MAX = 12
+E_YARD_E = (1800, 2350, -3500, -1500, 190, 215)        # the yard's east lane (A1 of the first build)
+E_YARD_W = (-1050, -300, -3500, -1500, 190, 215)       # the yard's west end (READ in the survey: dock-region spots, 36 .. 60 m from the start)
+P_DOCK = (0, 900, -5700, -4800, 190, 215)
+P_YARD = (-1050, 2300, -4800, -800, 190, 215)
+P_ARMOURY = (-1100, -500, -6300, -4700, 235, 245)
+E_AIRLOCK = (1467, 1625, -7000, -6060, 235, 245)
+P_LOBBY = (-700, 1600, -7700, -6400, 235, 245)
+E_RECESS_L = (-1750, -1400, -9650, -9300, 695, 710)
+E_RECESS_R = (2000, 2300, -9650, -9300, 695, 710)
+P_PLAZA_L = (-3600, -700, -11800, -9900, 695, 710)
+P_PLAZA_R = (1000, 3900, -11800, -9900, 695, 710)
+
+
+def chain_table(a_links=11, b_links=2, d_links=8):
+    """The default supply as WAVE_TABLE rows: (name, phase, GAP s since the chain's previous link (the first: since its trigger), men,
+    regions it must be blind from, entry box, post box, template). Chain A: 12 s then every 35 s (11 links: the last at 362 s); chain B:
+    22 s then 24 s; chain D: 3 s then every 25 s."""
+    rows = []
+    A_POSTS = ((P_DOCK, P_YARD), (P_YARD, P_DOCK), (P_ARMOURY, P_DOCK, P_YARD))
+    for i in range(a_links):
+        rows.append(('A%02d' % (i + 1), 'A', 12.0 if i == 0 else 35.0, 3 if i < 3 else 2, BLIND_WAY + BLIND_OUT, (E_YARD_E, E_YARD_W)[i % 2],
+                     A_POSTS[i % 3], G4 + 'Guards_Reinforcement_01a'))
+    for i in range(b_links):
+        rows.append(('B%02d' % (i + 1), 'B', 22.0 if i == 0 else 24.0, (3, 2)[i % 2], BLIND_WAY, E_AIRLOCK, P_LOBBY, G4 + 'Police_Reinforcement_02'))
+    for i in range(d_links):
+        rows.append(('D%02d' % (i + 1), 'D', 3.0 if i == 0 else 25.0, 3, ('hall', 'airlock', 'plaza'), (E_RECESS_L, E_RECESS_R)[i % 2],
+                     (P_PLAZA_L, P_PLAZA_R)[i % 2], CO + ('Police_OutSide_SWAT_02', 'Police_OutSide_SWAT_03')[i % 2]))
+    return rows
+
+
+# name, phase, gap [s] after the chain's previous link, men, regions it must be blind from, entry box, post box (x0, x1, z0, z1, y0, y1),
+# template squad (the models and weapons come from its men). READ: the entries and posts are CHOSEN at build time in these boxes
+# (wave_plan) and tested by waves-check. GUESS: every box and every number; MEASURED (survey.py, 11 s on a finished level): the dock region
+# (the yard) has 105 spots 3 m apart, the lobby 3, the hall 160 and the plaza 490 - the lobby cannot take a supply, so chain B is 5 men.
+WAVE_TABLE = chain_table()
+
+
+def link_times(rows):
+    """{name: seconds after the chain's trigger at which the link starts its wave}: the Pace gaps added up per phase."""
+    t, out = collections.defaultdict(float), {}
+    for r in rows:
+        t[r[1]] += r[2]
+        out[r[0]] = t[r[1]]
+    return out
+
+
 WAVE_TRIGGER = {'A': 'start timer', 'B': 'beat box', 'D': None}          # D: PLAZA_BOX (not a ROLE)
 WAVE_LIST = {'A': ('TriggerDelay2', 4), 'B': ('TriggerBox', 17), 'D': ('TriggerBox', 17)}
 RESET_CANNOT = ('MatPosAnim end poses: the vault door, the six rods (and the leaves with --doors-animate); the alarm lamps\' glow (VertAnim, '
                 'AIDWrapper \'Activate\'); the Explode of the blast (one-shot); the music layers (PlayMusic: the round-start list starts them again)')
+
+
+def route_dist(p):
+    """3D distance of p to the nearest leg of the round's way (ROUTE_IN + ROUTE_VAULT + ROUTE_OUT)."""
+    pts = [tuple(q) for _n, q in ROUTE_IN + ROUTE_VAULT + ROUTE_OUT]
+    best = 1e18
+    for a, b in zip(pts, pts[1:]):
+        ab = [b[i] - a[i] for i in range(3)]
+        L2 = sum(x * x for x in ab)
+        t = 0.0 if L2 < 1e-9 else max(0.0, min(1.0, sum((p[i] - a[i]) * ab[i] for i in range(3)) / L2))
+        best = min(best, math.dist(p, tuple(a[i] + ab[i] * t for i in range(3))))
+    return best
 
 
 class Sight:
@@ -2971,8 +3123,11 @@ def wave_plan(B, S, o, log=print):
            for k in range(t + 1, sc.end[t]) if sc.cls(k) in ('ZFFActor', 'ZBoxPrimitive')]
     drive = ESC.Poly([tuple(p) for p in (PLAN or plan_of(os.path.join(B.folder, 'van.json')))['path']])
     used_e, used_p, plan, men = [], [], [], 0
-    for name, phase, delay, n, blind, ebox, pbox, template in WAVE_TABLE:
-        if men + n > o['waves_extra']:
+    at_of, cut = link_times(WAVE_TABLE), set()
+    for name, phase, gap_s, n, blind, ebox, pbox, template in WAVE_TABLE:
+        delay = at_of[name]                         # seconds after the chain's trigger (the gaps added up)
+        if phase in cut or men + n > o['waves_extra']:
+            cut.add(phase)                          # the rest of the chain goes too: a chain with a hole in it would stop for good
             log('  waves: %s (%d men) left out: %d of %d men used' % (name, n, men, o['waves_extra']))
             continue
         near = CREW_CLEAR if phase == 'D' else o['waves_near']
@@ -2985,7 +3140,7 @@ def wave_plan(B, S, o, log=print):
             if hit is None or nav.clearance(x, hit[1], z) < WAVE_WALL:
                 continue
             p = (x, hit[1], z)
-            if not far(p) or any(math.dist(p, q) < WAVE_GAP for q in [e for e, ph, dl in used_e if ph == phase and abs(dl - delay) < ENTRY_REUSE] + ents):
+            if not far(p) or route_dist(p) < ROUTE_ENTRY[phase] or any(math.dist(p, q) < WAVE_GAP for q in [e for e, ph, dl in used_e if ph == phase and abs(dl - delay) < ENTRY_REUSE] + ents):
                 continue
             tries += 1
             if S.seen_by(p, blind):
@@ -2996,27 +3151,32 @@ def wave_plan(B, S, o, log=print):
         if len(ents) < n:
             raise ValueError('kl_fa_bank.wave_plan: wave %s found %d of %d entries unseen from %s in %s (%d tried)' % (name, len(ents), n, blind, ebox, tries))
         mid = tuple(sum(e[a] for e in ents) / n for a in range(3))
-        posts = []
-        for x, y, z, dy in sorted(lattice(pbox, 50), key=lambda c: math.dist(c[:3], mid)):
-            hit = nav.at(x, y, z, dy, S.home)
-            if hit is None or nav.clearance(x, hit[1], z) < POST_WALL:
-                continue
-            p = (x, hit[1], z)
-            if not far(p) or any(math.dist(p, q) < POST_OLD for q in old) or any(math.dist(p, q) < POST_GAP for q in used_p + posts):
-                continue
-            if abs(drive.project(p)[1]) < LANE_CLEAR and phase == 'D':
-                continue
-            posts.append(p)
+        for gap in POST_GAPS[phase]:
+            posts = []
+            boxes = pbox if isinstance(pbox[0], tuple) else (pbox,)          # a tuple of boxes: the first is preferred, the others take over when it is full
+            for x, y, z, dy in [c for b_ in boxes for c in sorted(lattice(b_, 50), key=(lambda c: route_dist(c[:3])) if phase in 'AB' else (lambda c: math.dist(c[:3], mid)))]:
+                hit = nav.at(x, y, z, dy, S.home)
+                if hit is None or nav.clearance(x, hit[1], z) < POST_WALL:
+                    continue
+                p = (x, hit[1], z)
+                if not far(p) or route_dist(p) < ROUTE_POST[phase] or any(math.dist(p, q) < (POST_OLD_B if phase == 'B' else POST_OLD) for q in old) or any(math.dist(p, q) < gap for q in used_p + posts):
+                    continue
+                if abs(drive.project(p)[1]) < LANE_CLEAR and phase == 'D':
+                    continue
+                posts.append(p)
+                if len(posts) == n:
+                    break
             if len(posts) == n:
                 break
         if len(posts) < n:
-            raise ValueError('kl_fa_bank.wave_plan: wave %s found %d of %d posts in %s (%d from the crew, %d from old places, %d from each other)' % (
-                name, len(posts), n, pbox, near, POST_OLD, POST_GAP))
+            raise ValueError('kl_fa_bank.wave_plan: wave %s found %d of %d posts in %s (%d from the crew, %d from old places, %d from each other, %d from the way)' % (
+                name, len(posts), n, pbox, near, POST_OLD, POST_GAP_MIN, ROUTE_POST[phase]))
+        log('  waves: %s posts %d apart, %d..%d from the way of the crew' % (name, gap, min(route_dist(q) for q in posts), max(route_dist(q) for q in posts)))
         # a man to the nearest free post (greedy), so that nobody crosses another's way
         pairs, free = [], list(posts)
         for e in ents:
             q = min(free, key=lambda q: math.dist(e, q)); free.remove(q); pairs.append((e, q))
-        plan.append(dict(name=name, phase=phase, delay=delay, template=template, blind=list(blind), men=pairs))
+        plan.append(dict(name=name, phase=phase, delay=delay, gap=gap_s, template=template, blind=list(blind), men=pairs, post_gap=gap))
         used_e += [(e, phase, delay) for e in ents]; used_p += posts; men += n
         log('  waves: %s (phase %s, +%.0f s): %d men in %s, %s' % (name, phase, delay, n, 'x %d..%d z %d..%d' % tuple(ebox[:4]), '; '.join(
             '(%d,%d,%d)->(%d,%d,%d) %d m' % (*e, *q, math.dist(e, q) / 100.0) for e, q in pairs)))
@@ -3042,7 +3202,7 @@ def module_nodes(sc):
     """The nodes whose controllers switch things in a round: the host objects of ROLE and the campaign's of CAMP (both with the
     ones below them) and the clock group's own (less the two reset objects)."""
     names = [R + v for v in ROLE.values()] + [R + v for v in CAMP.values()]
-    return names + [R + CLOCK + '\\' + c for c in ('Van_show',) if sc.resolve(R + CLOCK + '\\' + c)]
+    return names + [R + CLOCK + '\\' + c for c in ('Van_show', 'Teller_show') if sc.resolve(R + CLOCK + '\\' + c)]
 
 
 def reset_lists(sc, o):
@@ -3060,7 +3220,16 @@ def reset_lists(sc, o):
 STAGE_TOP = G4 + 'Police_Reinforcement_02'
 
 
-def extras_make(B, o, plan, show, hide):
+def teller_stacks(B):
+    """The paths of the teller stacks: hidden NORMAL money of FASpecials!DropMoney! outside the vault (TELLER_LATE hides them)."""
+    sc, out = B.sc, []
+    for k, _i, v in kl_fa.controllers(sc, 'OnlineMoneyCtrl'):
+        if sc.parent[k] == 0 and sc.names[k].startswith('FASpecials!DropMoney!') and v[2] == 'ZMONEYCTRL_TYPE_NORMAL' and kl_fa.node_values(sc, k)[3]                 and not in_vault(B.at(k)):
+            out.append(R + sc.names[k])
+    return out
+
+
+def extras_make(B, o, plan, show, hide, stacks=()):
     """The nodes of the step -> (maker, [top Node], report). Every node is a clone of a node of the build itself (kl_fa_fed.clone_built)
     or of the stock bot squad's forms (kl_fa_bots.Maker.clone, as the AI heisters' squads are made)."""
     import kl_fa_bots as KB, kl_fa_fed as FED
@@ -3085,35 +3254,55 @@ def extras_make(B, o, plan, show, hide):
     if o.get('van_late') and o.get('van_hide', True):
         v = single('loot on', 'Van_show', 'ActivateGeom', {0: 'AITrigger', 1: [R + VAN + '\\' + VAN_GROUP]})
         out['van'] = single('start timer', 'Timer_van', 'TriggerDelay2', {0: float(o.get('van_show', VAN_SHOW)), 4: [v]})
+        out['van_b'] = single('start timer', 'Timer_van_b', 'TriggerDelay2', {0: float(VAN_BACKSTOP), 4: [v]})
+        out['van_c'] = single('start timer', 'Timer_van_c', 'TriggerDelay2', {0: float(VAN_FOYER), 4: [v]})
+    if stacks:
+        t = single('loot on', 'Teller_show', 'ActivateGeom', {0: 'AITrigger', 1: list(stacks)})
+        out['teller'] = single('start timer', 'Timer_teller', 'TriggerDelay2', {0: float(TELLER_SHOW), 4: [t]})
     sq2 = lambda tail='': R + KB.SQUAD + 'Squad#02' + tail
     form = '\\020_DefendBehaviour_rout_merc_fight_left'
+    cp = lambda n: R + CLOCK + '\\' + n
+    by_phase = collections.defaultdict(list)
     for w in plan:
+        by_phase[w['phase']].append(w)
+    for w in plan:
+        ch = by_phase[w['phase']]
+        i = ch.index(w)
+        nxt = ch[i + 1] if i + 1 < len(ch) else None
         top = FED.clone_built(M, B, node(R + w['template']), WAVE_G + 'Wave_' + w['name'])
         top.ctrls = [c for c in top.ctrls if M.p.key(c[0]) == 'ZSquadScript']
         M.place(top, (0.0, 0.0, 0.0))
-        M.set(top, 'ZSquadScript', {3: 0, **{i: [] for i in range(4, 19)}})
+        # ZSquadScript field 3 = 0: parked. Field 8 ('wiped out', ASSUMED) names the NEXT link's Fast node: the latch (WAVES_LATCH)
+        M.set(top, 'ZSquadScript', {3: 0, **{j: [] for j in range(4, 19)}, **({8: [cp('Fast_' + nxt['name'])]} if nxt and o.get('waves_latch', WAVES_LATCH) else {})})
         me = R + WAVE_G + 'Wave_' + w['name']
         d = top.add(M.clone('F07', sq2(form), '10_Defend'))
         M.place(d, (0.0, 0.0, 0.0))
         refs = []
-        for i, (e, q) in enumerate(w['men']):
-            p = d.add(M.clone('F07', sq2(form + '\\Pos#01'), 'Pos#%02d' % (i + 1)))
-            M.place(p, q)
-            refs.append(me + '\\10_Defend\\Pos#%02d' % (i + 1))
+        for j, (e, q) in enumerate(w['men']):
+            pp = d.add(M.clone('F07', sq2(form + '\\Pos#01'), 'Pos#%02d' % (j + 1)))
+            M.place(pp, q)
+            refs.append(me + '\\10_Defend\\Pos#%02d' % (j + 1))
         M.set(d, 'DefendBehaviourRout', {0: '', 1: refs, 2: 1, 3: 0, 4: 'eDMS_NotSet', 5: 'eDF_NotSet', 6: '', 7: [], 8: 1, 9: 0})
         t = node(R + w['template'])
         acts = [k for k in range(t, sc.end[t]) if sc.cls(k) == 'ZFFActor']
-        for i, (e, q) in enumerate(w['men']):
-            a = acts[i % len(acts)]
-            grp = top.add(FED.clone_built(M, B, sc.parent[a], 'Wave_%s_%02d' % (w['name'], i + 1)))
+        for j, (e, q) in enumerate(w['men']):
+            a = acts[j % len(acts)]
+            grp = top.add(FED.clone_built(M, B, sc.parent[a], 'Wave_%s_%02d' % (w['name'], j + 1)))
             dx, dz = q[0] - e[0], q[2] - e[2]
             L = math.hypot(dx, dz) or 1.0
             M.place(grp, e, KB.rot9(dx / L, dz / L))
             grp.add(FED.clone_built(M, B, a))
-        tm = single('start timer', 'Timer_' + w['name'], 'TriggerDelay2', {0: float(w['delay']), 4: [me + '\\10_Defend']})
-        rep['timers'][w['phase']].append(tm)
-        rep['waves'].append(dict(name=w['name'], phase=w['phase'], squad=me, timer=tm, delay=w['delay'], template=w['template'],
-                                 men=[[list(map(round, e)), list(map(round, q))] for e, q in w['men']]))
+        # the link: Pace (the wait) -> Go (once: the rout, the next Pace); Fast (the latch) -> Go
+        go = cp('Go_' + w['name'])
+        pace = single('start timer', 'Pace_' + w['name'], 'TriggerDelay2', {0: float(w['gap']), 4: [go]})
+        single('start timer', 'Go_' + w['name'], 'TriggerDelay2', {0: GO_DELAY, 4: [me + '\\10_Defend'] + ([cp('Pace_' + nxt['name'])] if nxt else [])})
+        fast = None
+        if i > 0 and o.get('waves_latch', WAVES_LATCH):
+            fast = single('start timer', 'Fast_' + w['name'], 'TriggerDelay2', {0: LATCH_DELAY, 4: [go]})
+        if i == 0:
+            rep['timers'][w['phase']].append(pace)
+        rep['waves'].append(dict(name=w['name'], phase=w['phase'], squad=me, timer=pace, pace=pace, go=go, fast=fast, delay=w['delay'], gap=w['gap'], template=w['template'],
+                                 post_gap=w.get('post_gap'), men=[[list(map(round, e)), list(map(round, q))] for e, q in w['men']]))
         tops.append(top)
     rep['timers'] = dict(rep['timers'])
     rep.update(out)
@@ -3151,7 +3340,8 @@ def extras(src, dst, log=print):
     if octx.pack() != B['.oct'] or rmi.pack() != B['.rmi'] or rmc.pack() != B['.rmc']:
         raise ValueError('kl_octree does not reproduce the build\'s .oct / .rmi / .rmc')
     pre = KB.room_sets_check(B.scene, octx, rmi, rmc)
-    M, tops, rep = extras_make(B, o, plan, show, hide)
+    stacks = teller_stacks(B) if o.get('teller_late') else []
+    M, tops, rep = extras_make(B, o, plan, show, hide, stacks)
     q, order = M.scene(tops)
     Jn = J.join(sc, [(sc, t) for t in sc.tops()] + [(q, t) for t in q.tops()], 'extras')
     def add_to(path, ctrl, field, new, first=False):
@@ -3168,6 +3358,14 @@ def extras(src, dst, log=print):
         wired[phase] = add_to(trig, ctrl, field, tms)
     if 'van' in rep:
         wired['van'] = add_to(R + PLAZA_BOX, 'TriggerBox', 17, [rep['van']])
+        wired['van_b'] = add_to(R + ROLE['beat box'], 'TriggerBox', 17, [rep['van_b']])
+        wired['van_c'] = add_to(R + ROLE['speak box'], 'TriggerBox', 17, [rep['van_c']])      # the foyer box: the earlier event (review fault 6)
+    if 'teller' in rep:                                 # the stacks leave the beat's 'loot on' list and come after the hall has been crossed
+        k = Jn.resolve(R + ROLE['loot on'])[0]
+        ci = A.ctrl_of(Jn, k, 'ActivateGeom')
+        keep = [x for x in values(Jn, k, 'ActivateGeom')[1] if x not in stacks]
+        kl_fa.edit(Jn, k, ci, lambda us: A.setv(Jn, us, 1, keep))
+        wired['teller'] = add_to(R + PLAZA_BOX, 'TriggerBox', 17, [rep['teller']])
     if 'reset' in rep:
         wired['reset'] = add_to(R + ROLE['monitor'], 'AIMonitor', 2, rep['reset'], first=True)
     prp = Jn.p.serialize()
@@ -3330,6 +3528,7 @@ def waves_check(folder, log=print):
         old = [B.at(k) for t in sc.tops() if STAGE.get(sc.names[t]) or sc.names[t] in HALL for k in range(t + 1, sc.end[t]) if sc.cls(k) in ('ZFFActor', 'ZBoxPrimitive')]
         drive = ESC.Poly([tuple(p) for p in plan_of(os.path.join(folder, 'van.json'))['path']])
         every_post, every_entry, table = [], [], {w[0]: w for w in WAVE_TABLE}
+        chains = {ph: [w for w in rep['waves'] if w['phase'] == ph] for ph in 'ABD'}
         for w in rep['waves']:
             tab = table[w['name']]
             near = CREW_CLEAR if w['phase'] == 'D' else o['waves_near']
@@ -3359,6 +3558,8 @@ def waves_check(folder, log=print):
                 near_ = min(math.dist(p, q) for q in ref)
                 if near_ < near:
                     fail('wave %s: %s at %s is %d from a heister station (%d wanted)' % (w['name'], nm, P(p), near_, near))
+                if route_dist(p) < ROUTE_ENTRY[w['phase']]:
+                    fail('wave %s: %s comes into the world at %s, %d from a leg of the way of the crew (%d wanted)' % (w['name'], nm, P(p), route_dist(p), ROUTE_ENTRY[w['phase']]))
                 for q, ph, dl, wn in every_entry:
                     if ph == w['phase'] and abs(dl - w['delay']) < ENTRY_REUSE and math.dist(p, q) < WAVE_GAP:
                         fail('wave %s: %s at %s is %d from the entry of a man of wave %s that comes at the same time' % (w['name'], nm, P(p), math.dist(p, q), wn))
@@ -3370,29 +3571,106 @@ def waves_check(folder, log=print):
                 if S.nav.clearance(p[0], h[1], p[2]) < POST_WALL - 1:
                     fail('wave %s: post %s is %d from a wall (%d wanted)' % (w['name'], P(p), S.nav.clearance(p[0], h[1], p[2]), POST_WALL))
                 for q in every_post:
-                    if math.dist(p, q) < POST_GAP:
-                        fail('wave %s: post %s SHARED: %d from another wave post (%d wanted)' % (w['name'], P(p), math.dist(p, q), POST_GAP))
+                    if math.dist(p, q) < POST_GAP_MIN:
+                        fail('wave %s: post %s SHARED: %d from another wave post (%d wanted)' % (w['name'], P(p), math.dist(p, q), POST_GAP_MIN))
+                if route_dist(p) < ROUTE_POST[w['phase']]:
+                    fail('wave %s: post %s stands %d from a leg of the way of the crew (%d wanted)' % (w['name'], P(p), route_dist(p), ROUTE_POST[w['phase']]))
                 every_post.append(p)
                 if min(math.dist(p, q) for q in ref) < near:
                     fail('wave %s: post %s is %d from a heister station (%d wanted)' % (w['name'], P(p), min(math.dist(p, q) for q in ref), near))
-                if min(math.dist(p, q) for q in old) < POST_OLD:
-                    fail('wave %s: post %s is within %d of a place of an old squad' % (w['name'], P(p), POST_OLD))
+                if min(math.dist(p, q) for q in old) < (POST_OLD_B if w['phase'] == 'B' else POST_OLD):
+                    fail('wave %s: post %s is within %d of a place of an old squad' % (w['name'], P(p), POST_OLD_B if w['phase'] == 'B' else POST_OLD))
                 if w['phase'] == 'D' and abs(drive.project(p)[1]) < LANE_CLEAR:
                     fail('wave %s: post %s is %d from the van\'s drive (%d wanted)' % (w['name'], P(p), abs(drive.project(p)[1]), LANE_CLEAR))
-            # gating
-            rout = node(w['squad'] + '\\10_Defend')
-            by = [kk for kk in named_by.get(w['squad'] + '\\10_Defend', ())]
-            tm = node(w['timer'])
-            if by != [tm]:
-                fail('wave %s: its rout is named by %s, only by its timer %s is wanted' % (w['name'], [sc.path[x][5:] for x in by], w['timer']))
-            trig = R + (ROLE[WAVE_TRIGGER[w['phase']]] if WAVE_TRIGGER[w['phase']] else PLAZA_BOX)
-            tb = [kk for kk in named_by.get(w['timer'], ())]
-            if tb != [node(trig)]:
-                fail('wave %s: its timer is named by %s, only by the phase\'s trigger %s is wanted' % (w['name'], [sc.path[x][5:] for x in tb], trig))
-            log('  wave %-4s phase %s +%3.0f s: %d men %s; posts %s; start by %s' % (w['name'], w['phase'], w['delay'], len(men),
-                                                                                  ' '.join(P(p) for _k, p in men), ' '.join(P(p) for p in posts), trig[5:][-40:]))
+            # gating: rout <- Go <- (Pace [<- the previous Go or the phase's trigger], Fast [<- the previous squad's 'wiped out' list])
+            rname = w['squad'] + '\\10_Defend'
+            rout = node(rname)
+            for what, path in (('Pace', w['pace']), ('Go', w['go'])) + ((('Fast', w['fast']),) if w.get('fast') else ()):
+                if node(path) is None:
+                    fail('wave %s: its %s node %s is not in the level' % (w['name'], what, path))
+            by = [kk for kk in named_by.get(rname, ())]
+            if by != [node(w['go'])]:
+                fail('wave %s: its rout is named by %s, only by its Go node %s is wanted' % (w['name'], [sc.path[x][5:] for x in by], w['go']))
+            gv = values(sc, node(w['go']), 'TriggerDelay2') if node(w['go']) else None
+            if gv is not None:
+                if abs(gv[0] - GO_DELAY) > 1e-6 or gv[2] >= 0:
+                    fail('wave %s: Go is a delay of %g s with re-arm %g: a one-shot of %g s is wanted' % (w['name'], gv[0], gv[2], GO_DELAY))
+                if w['go'] in gv[4] or rname not in gv[4]:
+                    fail('wave %s: Go\'s list %s names itself or lacks the rout' % (w['name'], [x[-30:] for x in gv[4]]))
+            ph_trig = R + (ROLE[WAVE_TRIGGER[w['phase']]] if WAVE_TRIGGER[w['phase']] else PLAZA_BOX)
+            first = not chains[w['phase']] or chains[w['phase']][0] is w
+            tb = [kk for kk in named_by.get(w['pace'], ())]
+            want_pace = [node(ph_trig)] if first else [node(chains[w['phase']][chains[w['phase']].index(w) - 1]['go'])]
+            if tb != want_pace:
+                fail('wave %s: its Pace is named by %s, only by %s is wanted' % (w['name'], [sc.path[x][5:] for x in tb], 'the trigger ' + ph_trig if first else 'the previous link\'s Go'))
+            pv = values(sc, node(w['pace']), 'TriggerDelay2') if node(w['pace']) else None
+            if pv is not None:
+                if pv[0] < 0.05 or abs(pv[0] - w['gap']) > 1e-6 or pv[2] >= 0 or node(w['go']) not in [x for s_ in pv[4] for x in sc.resolve(s_)]:
+                    fail('wave %s: Pace is %g s (re-arm %g) naming %s: a one-shot delay of %g s naming Go is wanted' % (w['name'], pv[0], pv[2], [x[-20:] for x in pv[4]], w['gap']))
+            if w.get('fast'):
+                fv = values(sc, node(w['fast']), 'TriggerDelay2')
+                prev = chains[w['phase']][chains[w['phase']].index(w) - 1]
+                if abs(fv[0] - LATCH_DELAY) > 1e-6 or fv[4] != [w['go']]:
+                    fail('wave %s: Fast is %g s naming %s: %g s naming Go is wanted' % (w['name'], fv[0], fv[4], LATCH_DELAY))
+                fb = [kk for kk in named_by.get(w['fast'], ())]
+                if fb != [node(prev['squad'])] or values(sc, node(prev['squad']), 'ZSquadScript')[8] != [w['fast']]:
+                    fail('wave %s: the latch: Fast is named by %s, only by the \'wiped out\' list of %s is wanted' % (w['name'], [sc.path[x][5:] for x in fb], prev['name']))
+            elif o.get('waves_latch', True) and chains[w['phase']].index(w) > 0:
+                fail('wave %s: no Fast node although the latch is on' % w['name'])
+            log('  wave %-4s phase %s %+4.0f s (gap %g): %d men %s; posts %s (%s apart)' % (w['name'], w['phase'], w['delay'], w['gap'], len(men),
+                                                                                  ' '.join(P(p) for _k, p in men), ' '.join(P(p) for p in posts), w.get('post_gap')))
+        # ---- the chains as a whole: finite, in order, a delay in every loop of links, a floor of SUPPLY_MIN seconds for the first phase
+        for ph, ch in chains.items():
+            if not ch:
+                continue
+            t = 0.0
+            for i_, w in enumerate(ch):
+                t += w['gap']
+                if abs(t - w['delay']) > 1e-6:
+                    fail('chain %s: wave %s is stored at +%g s, the gaps add up to +%g s' % (ph, w['name'], w['delay'], t))
+                go_ = node(w['go'])
+                nxt_ = ch[i_ + 1] if i_ + 1 < len(ch) else None
+                # reachable from Go: Pace of the next link and nothing else of the chain
+                names_ = [x for s_ in values(sc, go_, 'TriggerDelay2')[4] for x in sc.resolve(s_)] if go_ else []
+                tim_ = [x for x in names_ if sc.cls(x) == 'ZBoxPrimitive' and x != node(w['squad'] + '\\10_Defend')]
+                if nxt_ is None and tim_:
+                    fail('chain %s ends in %s which still names %s: a chain that does not stop' % (ph, w['name'], [sc.path[x][5:] for x in tim_]))
+                if nxt_ is not None and node(nxt_['pace']) not in names_:
+                    fail('chain %s: Go of %s does not arm the Pace of %s' % (ph, w['name'], nxt_['name']))
+            if t > SUPPLY_MAX:
+                fail('chain %s runs %g s: past SUPPLY_MAX (%g s), a chain must end' % (ph, t, SUPPLY_MAX))
+            log('  chain %s: %d links, the first %g s after its trigger, the last %g s, %d men; Pace gaps %s' % (ph, len(ch), ch[0]['delay'], t, sum(len(w['men']) for w in ch), sorted({w['gap'] for w in ch})))
+        if chains['A'] and chains['A'][-1]['delay'] < SUPPLY_MIN:
+            fail('the supply ends at %g s, before SUPPLY_MIN (%g s): chain A alone must outlast a human who takes his time' % (chains['A'][-1]['delay'], SUPPLY_MIN))
+        elif not chains['A']:
+            fail('no chain A: nothing keeps the police coming from the start of the round')
+        # no loop of timers without a delay: every TriggerDelay2 of the clock group has a delay, and no node of the group names a node that comes before it in a chain
+        for k_ in range(1, len(sc.nodes)):
+            if sc.path[k_].startswith(R + CLOCK + '\\') and sc.cls(k_) == 'ZBoxPrimitive' and kl_fa.has(sc, k_, 'TriggerDelay2'):
+                v_ = values(sc, k_, 'TriggerDelay2')
+                if v_[0] < 0.05:
+                    fail('%s: a delay of %g s (a loop of links would run without a delay)' % (sc.path[k_][5:], v_[0]))
+                if sc.path[k_] in v_[4]:
+                    fail('%s names itself' % sc.path[k_][5:])
+                for s_ in v_[4]:
+                    if not sc.resolve(s_):
+                        fail('%s names %s, which is not in the level' % (sc.path[k_][5:], s_))
         log('  waves: %d men in %d squads, %d posts; every man blind from his wave\'s regions (sight shapes), clear of the crew\'s %d stations' % (
             len(every_entry), len(rep['waves']), len(every_post), len(S.places)))
+    # ---- the teller stacks (TELLER_LATE): hidden at the load, off the beat's list, shown by the clock group after the plaza box
+    if o['teller_late'] and rep.get('teller'):
+        ts = node(R + CLOCK + '\\Teller_show')
+        want = teller_stacks(B)
+        have = values(sc, ts, 'ActivateGeom')[1] if ts else []
+        if ts is None or sorted(have) != sorted(want) or not want:
+            fail('TELLER_LATE: Teller_show names %d objects, %d teller stacks are hidden' % (len(have), len(want)))
+        lo = values(sc, node(R + ROLE['loot on']), 'ActivateGeom')[1]
+        if [s_ for s_ in lo if s_ in want]:
+            fail('TELLER_LATE: the loot list of the beat still shows %d teller stack(s)' % len([s_ for s_ in lo if s_ in want]))
+        tt = node(R + CLOCK + '\\Timer_teller')
+        if tt is None or [kk for kk in named_by.get(R + CLOCK + '\\Timer_teller', ())] != [node(R + PLAZA_BOX)]:
+            fail('TELLER_LATE: the teller timer is not named by the plaza box alone')
+        log('  tellers: %d stacks hidden at the load, shown %g s after the plaza box (the crew has crossed the hall), not by the beat' % (len(want), TELLER_SHOW))
     # ---- the van
     if o['van_late']:
         vg = node(R + VAN + '\\' + VAN_GROUP)
@@ -3408,6 +3686,18 @@ def waves_check(folder, log=print):
             tv = node(R + CLOCK + '\\Timer_van')
             if tv is None or [kk for kk in named_by.get(R + CLOCK + '\\Timer_van', ())] != [node(R + PLAZA_BOX)]:
                 fail('VAN_LATE: the van\'s timer is not named by the plaza box alone')
+            tb_ = node(R + CLOCK + '\\Timer_van_b')
+            if tb_ is None or [kk for kk in named_by.get(R + CLOCK + '\\Timer_van_b', ())] != [node(R + ROLE['beat box'])]:
+                fail('VAN_LATE: the backstop timer of the van is not named by the ante-room box alone')
+            elif tv is not None and not values(sc, tv, 'TriggerDelay2')[0] < values(sc, tb_, 'TriggerDelay2')[0]:
+                fail('VAN_LATE: the backstop is not later than the plaza box timer')
+            tc_ = node(R + CLOCK + '\\Timer_van_c')                 # review fault 6: the earlier event, the foyer box
+            if tc_ is None or [kk for kk in named_by.get(R + CLOCK + '\\Timer_van_c', ())] != [node(R + ROLE['speak box'])]:
+                fail('VAN_LATE: the foyer timer of the van is not named by the foyer box alone')
+            elif not values(sc, tc_, 'TriggerDelay2')[4] == [R + CLOCK + '\\Van_show']:
+                fail('VAN_LATE: the foyer timer does not show the van')
+            log('  van: shown by the foyer box + %g s, by the plaza box + %g s, or (backstop) by the ante-room box + %g s: the first of the three, the others do the same again' % (
+                VAN_FOYER, VAN_SHOW, VAN_BACKSTOP))
         # nothing a police behaviour names, before the call: every rout / search box / squad list that names the van or below it
         vn = {R + sc.path[k][5:] if not sc.path[k].startswith(R) else sc.path[k] for k in range(vg, sc.end[vg])}
         bad_by = []
@@ -3480,12 +3770,14 @@ def main():
     a = sys.argv[1:]
     if len(a) >= 2 and a[0] == 'test':
         global DOORS_ANIMATE, VAULT_OPEN, VAULT_DOOR_GOES, GATE_VAULT, CASE, BEAT, NO_AI, ALARM_LIGHTS, VAULT_BLAST, STOCK_ROWS, MUSIC_LAYER4
-        global PLAZA_OUTSIDE, HALL_UP, CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR
+        global PLAZA_OUTSIDE, HALL_UP, CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
         W = '--waves' in a                                  # the waves build: implies the crew fix, its second part, the reset, the late van
         PLAZA_OUTSIDE = '--plaza-outside' in a or '--crew-fix' in a or W   # the crew fix after run V2 (both off = the build of V0 .. V2)
         HALL_UP = '--hall-gallery' in a or '--crew-fix' in a or W
         CREW_FIX2 = '--crew-fix2' in a or W
         TELLER_LATE = '--teller-late' in a or W
+        TELLER_MORE = '--teller-more' in a or (W and '--no-teller-more' not in a)
+        WAVES_LATCH = '--no-waves-latch' not in a
         VAN_LATE = '--van-late' in a or (W and '--no-van-late' not in a)
         VAN_HIDE = '--no-van-hide' not in a
         VAN_NO_TARGET = '--no-van-target-off' not in a
@@ -3493,8 +3785,8 @@ def main():
         WAVES = W
         if '--waves-extra' in a:
             WAVES_EXTRA = int(a[a.index('--waves-extra') + 1])
-            if not 0 <= WAVES_EXTRA <= 31:
-                raise ValueError('--waves-extra: 0 .. 31 (ACTORS_LIVE leaves 31 men)')
+            if not 0 <= WAVES_EXTRA <= WAVES_ACTORS[0] - 68:
+                raise ValueError('--waves-extra: 0 .. %d (WAVES_ACTORS %d less the 68 actors there are)' % (WAVES_ACTORS[0] - 68, WAVES_ACTORS[0]))
         if '--waves-near' in a:
             WAVES_NEAR = float(a[a.index('--waves-near') + 1])
         set_dash()
