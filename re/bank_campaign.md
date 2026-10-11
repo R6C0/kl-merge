@@ -1163,6 +1163,7 @@ was edited and no table of another tool got an entry: the bank's bot data is pas
 Tools as run: the working tree at d560c53 (tools/kl_chars.py carries another session's uncommitted change; it was
 RUN as it stands). Scratch `C:/kl_scratch/bank/f/`: `s/` (chain.sh, checks.sh, blocks.py - copies lie in c_bank),
 `out/` (every output named below); every intermediate archive is deleted.
+Committed as 784df6e (tools/kl_fa_bank.py, this section).
 
 ### F.1 What was changed (one file, `tools/kl_fa_bank.py`)
 
