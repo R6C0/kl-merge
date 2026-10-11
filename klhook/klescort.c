@@ -145,8 +145,8 @@
  *   escort: record 3 released (the vehicle waits, state 3): sent to the boarding place (x, y, z)
  *   escort: record 3 released (you are aboard): back to its route place (x, y, z)
  *   escort: record 3 dropped: its record says dead
- *   board: record 5 (stage 1) at (x, y, z): the vehicle waits (state 3): heist stage set to 3, sent to the boarding
- *          place (x, y, z), the game set (x, y, z)
+ *   board: record 5 (stage 1): the vehicle waits (state 3): heist stage set to 3
+ *   board: record 5 at (x, y, z): sent to the boarding place (x, y, z), the game set (x, y, z); visit 1 of the vehicle
  */
 #ifndef KLESCORT_C
 #define KLESCORT_C
@@ -170,7 +170,7 @@ struct kle_e {
 static struct {
     DWORD rules, state, round_at; int stages, picked, told_you, told_none, told_gate; char used[KLB_NREC];
     struct kle_e e[KLE_MAX];
-    int visit, was_waiting; int all_visit[KLB_NREC]; char all_told[KLB_NREC];      /* BoardAll: the vehicle's visits, who was sent at which */
+    int visit, was_waiting; int all_visit[KLB_NREC]; char all_told[KLB_NREC], all_raised[KLB_NREC];      /* BoardAll: the vehicle's visits, who was sent at which, whose stage this file raised */
 } kle_r;
 
 static float kle_dist(const float a[3], const float b[3])
@@ -388,31 +388,40 @@ static void kle_release(const struct klb_snap *s, int slot, int reason, DWORD no
 }
 
 /* BoardAll: the vehicle waits - every AI heister in play under stage 3 is given stage 3 and the boarding order, once
-   per visit (the key's comment at the top says why). Escorts still held are left to kle_release. */
+   per visit (the key's comment at the top says why). Escorts still held are left to kle_release.
+   The two halves are separate on purpose: the STAGE BYTE is what makes ZLootTactic let go, so it is written as soon as
+   the record is a bot's in play - it must not wait for the test 'does this actor take an order now' (a bot standing in
+   a grab may fail it); the ORDER is tried again every pass until it could be given for this visit. A bot that reached
+   stage 3 by itself is the rules' business (0x8fb04c) and is not touched. */
 static void kle_board_all(const struct klb_snap *s)
 {
     int i, j, k; DWORD actor, soldier; float bp[3], bd[3], got[3]; char w[100]; struct kle_e t;
     if (!kle_boarding(s->rules, bd)) return;
     for (i = 0; i < s->n && i < KLB_NREC; i++) {
         const struct klb_rec *r = &s->r[i];
-        if (!r->used || !(r->flags & 1) || (r->flags & 2) || r->status || r->stage >= 3 || kle_r.all_visit[i] == kle_r.visit) continue;
+        if (!r->used || !(r->flags & 1) || (r->flags & 2) || r->status || kle_r.all_visit[i] == kle_r.visit) continue;
+        if (r->stage >= 3 && !kle_r.all_raised[i]) continue;                  /* there by itself: the rules have sent it */
         for (j = 0; j < kle.n; j++) if (kle_r.e[j].mode == 1 && kle_r.e[j].rec == i) break;
         if (j < kle.n) continue;
+        if (r->stage < 3 && !kle_r.all_raised[i]) {
+            if (kle.all_stage && !kle.dry && !klb_put8(r->at + 0x78, 3, "crew record: heist stage 3 (the vehicle waits; ZLootTactic lets go at stage 3)")) {
+                if (!kle_r.all_told[i]++) klog("board: record %d (stage %u): the stage byte was not written: it is left alone", i, r->stage);
+                continue;
+            }
+            kle_r.all_raised[i] = 1;
+            klog("board: record %d (stage %u): the vehicle waits (state %u): %s", i, r->stage, s->veh,
+                 !kle.all_stage ? "BoardAllStage=0, the stage is left" : kle.dry ? "heist stage WOULD be set to 3 (dry run)" : "heist stage set to 3");
+        }
         if (!kle_bot(s, i, &actor, &soldier, bp, w)) {
-            if (!kle_r.all_told[i]++) klog("board: record %d (stage %u): the vehicle waits but it is not sent: %s", i, r->stage, w);
+            if (!kle_r.all_told[i]++) klog("board: record %d: no order to the boarding place yet: %s (tried again every pass of this visit)", i, w);
             continue;
         }
         kle_r.all_visit[i] = kle_r.visit;
         memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
-        if (kle.all_stage && !kle.dry && !klb_put8(r->at + 0x78, 3, "crew record: heist stage 3 (the vehicle waits; ZLootTactic lets go at stage 3)")) {
-            klog("board: record %d (stage %u): the stage byte was not written: nothing is ordered", i, r->stage);
-            continue;
-        }
         k = kle_order(&t, bd, got, w);
-        if (k) klog("board: record %d (stage %u) at (%.0f, %.0f, %.0f): the vehicle waits (state %u): %s%s to the boarding place (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f)",
-                    i, r->stage, bp[0], bp[1], bp[2], s->veh, kle.all_stage ? (k == 2 ? "heist stage WOULD be set to 3, " : "heist stage set to 3, ") : "", k == 2 ? "WOULD be sent (dry run)" : "sent",
-                    bd[0], bd[1], bd[2], got[0], got[1], got[2]);
-        else klog("board: record %d (stage %u): NOT sent to the boarding place: %s", i, r->stage, w);
+        if (k) klog("board: record %d at (%.0f, %.0f, %.0f): %s to the boarding place (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f); visit %d of the vehicle",
+                    i, bp[0], bp[1], bp[2], k == 2 ? "WOULD be sent (dry run)" : "sent", bd[0], bd[1], bd[2], got[0], got[1], got[2], kle_r.visit);
+        else klog("board: record %d: NOT sent to the boarding place: %s", i, w);
     }
 }
 
