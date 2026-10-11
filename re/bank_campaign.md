@@ -1007,6 +1007,7 @@ sha1 5f11b846..., finished = lightened + briefcases + texts; result.json, log.tx
 van.json). `C:/kl_scratch/bank/l2/build` is deleted. Scratch `C:/kl_scratch/bank/l3/`: `s/` (stockbound.py, stockexit.py,
 sight.py, defs.py, stockesc.py), `out/` (every output named below).
 No other file of the repo was touched; kl_map_escape.py is only called (T2's front end, unchanged).
+Committed as c9c3847 (tools/kl_fa_bank.py, this section).
 
 ### L3.1 What was changed (one file)
 
