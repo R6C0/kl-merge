@@ -204,3 +204,212 @@ and what the last press does once he stands beside a wall or a low box (it is a 
 | S4 a death logged as UP | DONE: `DEAD WHILE GETTING UP`; a changed player object in a get-up gets its own line |
 | S5 the mash carries into Cover | DONE (note, sample, the owner's checks); no data fix |
 | S6 note corrections | DONE: eight get-ups / 21 frames, the blast, the late press, `[actor+0x5cb]`, the input lock |
+
+## 9. The belly flop (track R2, 2026-10-11 afternoon)
+
+Owner, on hearing what sections 0 - 8 built: *'when i go down it does that gun one, i mean the other one where its like a
+full belly flop dive on the floor come on'*. **Offline; the flop has not run in the game.** READ / LOG / FILE (the stock
+and the five tab builds' `.ANM`, read with `tools/kl_anm.py` + `kl_fa_climb.root_keys`) / LIVE (the lead's runs D1, D2
+of track R's form, 13:53 and 13:59) / ASSUMED are marked. Scratch: the session's scratchpad `R2/`.
+
+### 9.0 The short answer
+
+- **'The gun one' is the game's own fall** - and it is ALSO what an NPC's own 'down not dead' plays, so 'like the bots'
+  cannot mean that state. **What the AI heisters do when the police shoot them is die**: the dive is their death clip
+  `/Damage/Death/Die_Forward`. In Arcade no AI heister was ever seen to come back from health 0 (LOG: 235 of 235).
+- **The player can be given that dive by six words of data** (the slot ids his prone movement plays), and a get-up
+  from the stomach the game already has for him (`/Movement/Rise/Rise_From_Stomach`); both clips are in every character
+  set of all five tab builds (FILE). The trigger, the camera, the health rule, the end of the state stay the game's.
+  `[Down] Flop=1` in `klhook/kldown.c`; with `Flop=0` the part is track R's (one exception: 9.6).
+- **What it changes for dying**: the whole dive (2.0 s) costs nothing - by the game's own rule, stretched to the
+  clip's end - where stock's fall is free for 0.72 s; then the get-up costs in full and is LONG (the clip is 8 s at
+  speed 1): hence `FlopTake` and `FlopUpPct`.
+
+### 9.1 What plays what (READ + FILE)
+
+| who | routine | slots | the clips in the files |
+|---|---|---|---|
+| the player's fall and get-up | `ZFFPlayerMovementProne` slot 20 = **0x750900** fills words of M: `+0x898` `Down_Not_Dead_Get_Up`, `+0x89a` `Compact_.._Get_Up`, `+0x89c` `On_Spot_.._Get_Up`, `+0x8b0` `Down_Not_Dead_Get_Down`, `+0x8b2` `Compact_.._Get_Down`, `+0x8b4` `On_Spot_.._Get_Down` (then `Aim_Cycle_UB` at `+0x8c8` and the crawl sets); **the one reader of the six words is 0x5d6060**: state 1 -> `[M + 0x8b0 + 2v]`, state 4 -> `[M + 0x898 + 2v]`, v = `[M+0x8f0]`; a negative id (none) -> the plain one; no plain one -> no clip, and 0x478270 returns without playing | `/Damage/Down_Not_Dead/...` | `Down_Not_Dead_Get_Down` 48 frames, events 5 at 0, 6 at 7, 2 at 18, **root 23 BACKWARD** (forward is -z) and 3 down: he sits back onto his back, gun up - 'the gun one'. `Down_Not_Dead_Get_Up` **37 frames**, event 2 at 20. The two `Compact_.._Get_*` names are in NO file (the level has `Compact_Down_Not_Dead_Up / _Down`): those two words are 'none' in every level. `On_Spot_.._Get_Down` 41 frames, no root motion |
+| an NPC's 'down not dead' | the state graph **0x730be0** (`[0x1549040]`): state `DownNotDead` (word `+0x2c`) from the loop `Down_Not_Dead` and `Get_Down`, `_Crouch`, `_RUN`, `_Walk`, `Get_Up`; started by `ZDownNotDeadNPC@CPPScript` (vtable 0xbcfd24): slot 1 **0x7ea990** = how long he lies (`[T+0x4c]` .. `[T+0x50]` s at random; `[T+0x40]` .. `[T+0x44]` for the one actor `[gamedata+0x4cf0]`, which is what 0x6fd7c0 tests - the campaign's buddy, nobody in Arcade), the level's 'last NPC down' tick, **his health raised to 25 % of his maximum** (0x7eaac0 .. 0x7eab13), byte `[actor+0x64c]`; slot 2 **0x5f4ac0** = the script: the state, wait the time (he can be hit: 0x70e0fe refuses a second flop while his state object is not 0 or 4), **health set to 75 %** (0x5f4d2c), byte `[actor+0x5cb]` = 'has been down once' (the refusal of section 2), back to the state `Stand` | the same names | **`_RUN` and `_Walk` are ALIASES of `Down_Not_Dead_Get_Down`'s data in every set of every stock file** (same data offset): an NPC's flop is the player's fall, clip for clip. Only `_Crouch` differs (`Crouch_impact_to_Down_not_dead`, 29 frames, on the spot) |
+| **an AI heister shot dead** | `ZFFActor` slot 196 = 0x802250 resolves `Die_Forward` (`[actor+0x60c]`), `Die_Backwards` (`+0x60e`), `Die_On_Spot` (`+0x610`), `Impact_01`; **0x72ab60** picks: no ragdoll (vtable +0x300 says no) -> the hit's direction against his forward: **from behind `Die_Forward`**, from the front `Die_Backwards`; no room (0x54a790) or no direction -> `Die_On_Spot`; played whole (vtable +0x204) | `/Damage/Death/...` | **`Die_Forward` 50 frames (2.0 s), no event, full-body, root 88 FORWARD by frame 31, then still: the dive onto the belly.** `Die_Backwards` 61 frames, 119 back. In all 11 character sets of the bank build, 10 / 11 of the other four (the rest of the 34 - 37 sets are weapon sets) |
+| the player's rise | his name table 0x78d9d0 (object `[player+0x2a1c]`): word `+0x22` `Rise_From_Back`, `+0x24` **`Rise_From_Stomach`**, `+0x6a` `Die_Forward`, `+0x6c` `Die_Backwards`, `+0x6e` `Die_On_Spot` | `/Movement/Rise/...` | **`Rise_From_Stomach` = `Special_Moves/Heal_Wounded#Get_Up_From_Stomach`, 202 frames (8.04 s), no event, full-body, root still to frame 153, then 126 forward to the end (on his feet, walking off).** `Rise_From_Back` = `Wounded#Hero_Die_End`, 67 frames, event 8 at 0. Who plays the two in the game was NOT read (ASSUMED: the rise after a ragdoll throw, 0x451170) |
+
+LOG: in the 225 live logs with `[Bots] Log=2` there are 235 lines 'bot ... (0.0 of 252.0)'; in none does the same
+record lose health again in that round, and where a status line follows it says `dead`. So in Arcade an AI heister
+does not go 'down not dead' (why 0x70e0e0 always says no there was not read: `[soldier+0x124]`, the chance
+`[actor+0x804]` and the two pauses are the candidates) - **the flop the owner sees is the death clip.**
+
+### 9.2 The fall and the get-up as the game runs them (READ; the parts section 1 did not have)
+
+- 0x478270(M, 1): clip = 0x5d6060; event 6's frame (none: 0.3 x (frames - 1)) and event 2's (none: 0.5 x (frames - 1); at
+  least event 6's); Play(clip, 1, start, -1, 1.0); **only when `[D+0xf4]` is set** (0x8aad50: a rotation at `D+0xf8`, a
+  place at `D+0x11c` - a fall the game aligns, e.g. out of a cover) AlignTo(rot, place, event 6's frame);
+  `[M+0x8dc]` = now + the frames left / 25 (the clip's end), `[M+0x8e0]` = now + event 2's frame / 25.
+- The fall is over (M 1 -> 2, 0x640c00) at `[M+0x8dc]`. **0x843fa0** = 'D is 2, M is 1, the tick has reached
+  `[M+0x8e0]`, and `[weapon object +0xdc]` is 0': from then on (a) the trigger 0x8da4e0 no longer swallows hits
+  (LIVE, D2: down 14:00:49.87, the first loss 0.75 s later, seven more before he lay at 1.89 s = the clip's end);
+  (b) 0x47cd80 offers GET UP and a press (or `[D+0x29]`) sets `[D+0x21]`; (c) 0x8ee220 may end the fall at once
+  (bit 1 of `[player+0x818]`, `[D+0x34]`, or the weapon object's slot 11: LIVE, D1: 'lying after 0.72 s').
+- **`[D+0x21]` is acted on whenever it is set** (0x47ce56, outside the 'may get up' test): 0x8b1900 - while D is 2 it
+  runs 0x43c360(M): the fall's channel is stopped (vtable +0x1f8), M = 2, the input mask (bits 1 and 0x10) comes off -
+  then D = 3 (0x8c8150) and 0x6373e0 -> 0x478270(M, 4, `[D+0x29]`): the get-up clip in that frame. With a cover's user
+  action on offer (0x744fe0) it is 'get up into the cover' instead.
+- The get-up without event 2: `[M+0x8e0]` = `[M+0x8dc]`, so the stick cannot end it early (0x69a440).
+- **Correction to sections 0, 1, 7:** the get-up clip has **37 frames** (1.44 s), not 21. The 0.80 / 0.81 s of the
+  owner's eight get-ups is event 2 at frame 20 + the pushed stick (0x69a440 + 0x8ee550). LIVE, D2: 'clip of 36 frames,
+  the game's speed 1.00, over at frame 36.0, the stick may end it from frame 20.0; it is played at Base 0.50', then
+  'frame 3.1 .. 6.3 .. 9.4 .. 12.5' a quarter second apart: **track R's speed write works in the game.**
+- **LIVE: a death does not clear D.** D1: lying, three losses (32.5, 27.4, 19.7 of the 80 the game gave) in 0.45 s,
+  `record 0 (you): dead` 0.6 s after he lay; D2 (`DownHealth=200`): 200 gone in 3.4 s on the floor, dead 1.1 s into the
+  get-up at Base 0.5; in both the shoulder log shows D's state unchanged (1 / 3) to the end of the run, and the health
+  object is made new at the death ('the game gave 550'). So `DEAD WHILE GETTING UP` (the 3 -> 0 form) never printed.
+  D3 did not run (D2 ended in a stall at the score page: 'game window in front: no' from 14:00:56 - the lead's rig).
+
+### 9.3 The design (`Flop=1`)
+
+1. **While he is up** (D state 0), once per player object: both slot names looked up in the level's slot table
+   (`klq_slot`, klclimb.c: the game's own binary search over `[player+0x80]`, by reads), the clips THIS body's set has
+   for them listed by reads (the game's 0x5c2f60: table `[player+0x7c]` = {S, S x offset or -1}, the list at
+   `[player+0x78]` + offset = {condition, clip number} pairs to the pair with condition 0, records at `[[0x1546f6c]]`
+   + number x 0x68), each must be a full-body clip (record `+0x28` bit 0x10 clear). M is found among his movements
+   (`[player + 0x630 + 4 n]`: the ZFFPlayerMovementProne whose `+0x8d4` is he; `[D+0xc]` is 0 until his first fall,
+   0x57cfb2). Then the six words: fall x 3 = the id of `FlopFallSlot`, get-up x 3 = the id of `FlopUpSlot`; what
+   stood there is kept and goes back when the part stops acting on that object. Anything missing: one line, nothing
+   written, the game's own fall with track R's mash. Added by the second review (9.7): a clip carrying an event id the
+   game's clip-event routine 0x637060 acts on, other than the stock fall's own 2 / 5 / 6, is refused (`klq_ev_to`,
+   klclimb.c: the game's switch tables by reads); **each of the six words must hold the id of the game's own name for it
+   in this level's slot table (the six names of 0x752e5b .. 0x752f0b through `klq_slot`), or 0xffff, or ours - else
+   `NO BELLY FLOP: word k ... holds n` and nothing is written**; the check is made again when `[player+0x78]`,
+   `[+0x7c]` or `[+0x80]` change (klchar.c's body swap keeps the player object), and a verdict that turns to 'no' puts
+   the game's ids back.
+2. **He goes down** by the game's own trigger (section 1; the six trigger keys mean what they meant) and the game plays
+   the dive itself. The part looks at the clip that plays (`[M+0x8cc]`): only if it is one of the fall slot's is this
+   down 'a flop' for what follows.
+3. **During the dive** `[M+0x8e0]` is held at `[M+0x8dc]`: no press cuts the dive at its half (0.5 x 49 frames is
+   where a clip without event 2 would allow it), and **every hit of the 2.0 s is swallowed by the game's own trigger**
+   (a blast, hit kind 9, costs as ever: 0x458e8f).
+4. **No lying on the back**: two frames before the dive's end the part sets `[D+0x21]` (the byte a press sets; the
+   press's own call 0x8b74d0(`[player+0x274c]`), taken for the copy a session peer is sent, is NOT made: Arcade has no
+   peer - ASSUMED). The game stops the dive's channel and starts the get-up clip in its next frame. Should he lie
+   after all, the byte is set again (at most three times a second) - **only while M is 2**, the game's own
+   precondition (0x47cddb .. 0x47ce2a; 0x6373e0 starts the clip only then). A request the game never took (D ended
+   first) is taken back when D is 0 or he is dead: left standing it would cut the next fall in its first frame.
+   **Beside a cover the game reads the request as 'get up into the cover'** (0x47ce07 .. 0x47cee8, a cover's user
+   action on offer by 0x744fe0): `[D+0x20]` = 1, D ends at once, no get-up clip, no mash, no `FlopUpPct` (the log:
+   `the down state is over ... without a get-up this part drove`). In stock that follows a press; here it happens by
+   itself at the end of every dive beside a cover - and the dive carries him 88 forward, at whatever he faced. Whether
+   a cover's offer can be seen by reads was not looked for (0x744fe0 is a routine): live check F7.
+5. **The get-up is the mash** of section 4.2 on the 202-frame clip, with its own three numbers (`FlopBase` 1.5,
+   `FlopPerPress` 0.6, `FlopTop` 5.0; `Decay` shared): no press 5.4 s, 4 presses a second about 2.6 s, 8 a second
+   about 2.0 s (worked out, not seen). The time bound of 4.2 holds with `FlopBase`. The state ends as the game ends
+   it (M 4 -> 5 at `[M+0x8dc]`). **Which numbers: by the get-up's CLIP alone** (it is one of `FlopUpSlot`'s) - not by
+   whether the fall before it was seen as a flop: the get-up words are the flop's whenever they were written, and the
+   202 frames at track R's `Base` 0.5 would be 16.1 s on the floor.
+6. **Health.** `DownHealth` as before (the game's 80; an NPC's rule is 25 % of the maximum). `FlopTake` = the share
+   of each loss while he lies after a dive / gets up by the flop's clip that stays; the rest is written back into
+   `[H+4]` the next frame (klbalance.c writes the same float). `FlopUpPct` = his health is raised to that share of his
+   maximum when the get-up ends with him alive (an NPC's rule: 75). Both off by default, both follow the clip test of
+   point 5, neither is ever written for a man flagged dead in that down.
+   **`FlopUpPct=75` makes the knock-down a HEAL**: he goes down at 40 % or less and stands at 75 %, again after the
+   10 s cool-down, and the dive adds 2.0 s without any loss. That is 'the flop saves him as it saves a bot' - and a
+   balance decision for the owner, not a default (he says he dies too quickly; `[Balance] Risk=1` is his own answer).
+7. **A dead man is written nothing.** Dead = his health at 0 or his crew record's status 7 or 1; any other status but
+   0 = out of play (4 aboard, 6 escaped). LIVE (D2): the record reads 0 'in-play' all through the fall, the lying and
+   the get-up, 7 at the death. With `[Fed] Player=1` - in the owner's ini - the death is status **1** for the 5 s
+   before the police body (run PT_DM03_die_r2), while D keeps 1 / 3 and the health does not read 0. Once seen, nothing
+   more is written in that down (one line `DEAD / OUT OF PLAY WHILE ...`; the flag goes when D is 0).
+
+**What a bot and the human then have in common:** the clip of the fall, that the dive cannot be interrupted, and -
+with the two keys - the health an NPC's own down state would give. **What not:** the bot is dead and stays down, the
+human gets up; the human's trigger is the game's burst rule under 40 % health, not 'the hit that takes the last
+health' (that is the player's damage routine: code); the human always dives FORWARD whatever side the shot came
+from (a bot shot from the front falls backwards: `FlopFallSlot=/Damage/Death/Die_Backwards` with
+`FlopUpSlot=/Movement/Rise/Rise_From_Back` is that pair, by hand); while he gets up he cannot shoot (the game's state
+3) and takes hits in full (minus `FlopTake`).
+
+### 9.4 Keys (`[Down]`, beside those of section 5)
+
+| key | default | proposed | what |
+|---|---|---|---|
+| `Flop` | 0 | 1 | the belly flop |
+| `FlopBase` / `FlopPerPress` / `FlopTop` | 1.5 / 0.6 / 5.0 | the same (GUESS, for the owner's eyes) | the get-up clip's speed: none, per unit of the meter, ceiling |
+| `FlopTake` | 1.0 | **0.25** (GUESS; the get-up is 5.4 s under fire where stock's is 0.8) | share of a loss in the get-up that stays |
+| `FlopUpPct` | 0 | **the owner decides**: 75 = an NPC's rule = every knock-down heals him from 40 % or less to 75 % | health when up, per cent of the maximum |
+| `FlopFallSlot` / `FlopUpSlot` | `/Damage/Death/Die_Forward` / `/Movement/Rise/Rise_From_Stomach` | - | the two slot names |
+
+Writes added by `Flop=1`: six WORDs of M (while up), `[M+0x8e0]` (during the dive), the byte `[D+0x21]`, with the two
+health keys the float `[H+4]`. No call of a game routine, no patch, no vtable copy; game thread only; Arcade, a level
+that is not stock, a player who is not police - as before. Wiring: none to add - HEAD (5e778ef on) wires kldown.c in
+klhook.c already. **The committed hooks test_w1 / ship_w1 carry track R's kldown.c: the `Flop` keys do nothing until
+this file is committed and a hook is built from it.**
+
+Compile check after the second review's fixes (`git archive HEAD klhook` at f9587ff + this kldown.c, sha1
+b1a486babbb6a3625aa2875bb1f0336f179fe439, in `G:\kl_scratch\R2\fix\src`; no other line changed): 'built
+G:\kl_scratch\R2\fix\test\dinput8.dll (TEST)' sha1 a7f0cb0d60f6e0b1917b14187b28b944279c62af, 'built
+G:\kl_scratch\R2\fix\ship\dinput8.dll (SHIP)' sha1 e1da907a758179a771f5d3d50725d4e5ff59359e (a hash is per build);
+`/W4` names no line of kldown.c (the one warning is klhud.c(188) C4101). Compile only: not for the game folder.
+
+### 9.5 Live checks (the lead; the bank DM03, the owner's balance, `[Shoulder] Log=1`, `[Balance] Log=2` beside each)
+
+The walk of D1 / D2 into the hall. A fall needs a hurt man under a burst: as D1 / D2 got it. **Order: F0 first** (the
+`Flop=0` path is not byte for byte track R's any more: the death test), then F1 (dry: the part's own proof of the six
+words), then F2. F6 before the hook goes to the owner (his ini has the fed on).
+
+| run | keys | script | PASS | FAIL |
+|---|---|---|---|---|
+| F0 | `Enable=1 Flop=0 Log=2 DownHealth=200` | D2's | D2's lines; NEW: `down: DEAD WHILE GETTING UP: ... s after he went down ...; crew status 7, health ... - nothing more is written in this down` at the moment klbot says `record 0 (you): dead`, and no `down: get-up:` line after it | no such line at a death while down; `OUT OF PLAY WHILE ...` with a status other than 4 / 6 while he lives (= a status this part does not know: say which) |
+| F1 | `Enable=1 Dry=1 Flop=1 Log=2` | D1's | `down: flop: Flop=1 - THE BELLY FLOP ...` at start; in the round `down: flop: the fall /Damage/Death/Die_Forward = slot 1780, clip 1 of 1: ... 'anim:Dammage/Die#Die_Forward', 50 frames (1.96 s ...), 0 event(s)`, `down: flop: the get-up /Movement/Rise/Rise_From_Stomach = slot 1755, ... 'anim:Special_Moves/Heal_Wounded#Get_Up_From_Stomach', 202 frames`, **`down: flop: the prone movement ........ holds fall 1847/65535/1850 get-up 1846/65535/1849 ...: Dry=1, it WOULD be written 1780/1780/1780 and 1755/1755/1755`**; at the fall `down: flop: this fall is the game's own (clip ... 'anim:Dammage/Down_Not_Dead#Down_Not_Dead_Get_Down' of 48 frames): Dry=1, nothing was written` | `NO BELLY FLOP on this body: ...` (says which read failed); **`NO BELLY FLOP: word k of the prone movement ... holds n, and <name> is slot m`** = the part's own test of the six words failed (they are not where they were read, or `klq_slot`'s table is not the one the filler's 0x770ba0 searches: ASSUMED the same); no `holds` line and no `NO BELLY FLOP` line = M was not found among his movements (`+0x630`) |
+| F2 | `Enable=1 Flop=1 Log=2 DownHealth=200 FlopTake=0.25 FlopUpPct=75` | D2's, no press | `... holds ...: written 1780/1780/1780 and 1755/1755/1755`; `YOU ARE DOWN`; **`down: flop: THE BELLY FLOP: the fall is clip ... 'anim:Dammage/Die#Die_Forward' of 50 frames (1.96 s)`**; NO `balance: you lost` line for about 1.9 s after it; `down: flop: the dive is over (1.9x s, n tick(s) left): the get-up is asked for`; shoulder `dstate 2->3` (no `2->1`); `down: GETTING UP ...: clip ... of 201 frames, the game's speed 1.00, over at frame 201.0, ... it is played at THE FLOP'S FlopBase 1.50`; `get-up: frame ..` lines climbing by about 9.4 a quarter second; `UP ... the get-up took 5.3 .. 5.5 s`; `down: flop: N health was given back`, `down: flop: up with 301.1 of 401.5 health`; a picture during the dive and one in the get-up: **face down** | a fault (dumps to the track); `this fall is the game's own ... the slot ids were not in place`; `he lies (...)` every 0.3 s without `GETTING UP` (the byte is not taken); `GETTING UP at the game's own speed` / `the end tick does not fit the clip`; `DEAD WHILE ...` (then raise `DownHealth`, lower `FlopTake`); he stands up somewhere else than he fell (root motion: 88 + 126 forward is right) |
+| F3 | F2 | F2's + `tap C 40` / `wait 60` x 60 from the fall on | the dive is NOT cut (`the dive is over (1.9x s`), `UP ... the get-up took` under 2.5 s, presses over 10, `mean speed` over 3 | `the dive is over` well before 1.9 s = a press cut it (the hold of `[M+0x8e0]` did not take) |
+| F4 | F2 on Hot Coffee with a Dead Men body (`[Character]` Char = a Dead Men hero) | - | the `flop:` lines for that body's set, or `NO BELLY FLOP on this body` and the game's own fall. Say which came first in the log, klchar's `body:` line or the first `down: flop:` line: if the flop's came first there must be `down: flop: the player ... has another animation set / slot table ... checked again` after `body:` and a second pair of clip lines | a fault; `body:` after the flop's lines and no `checked again` |
+| F5 | F2, then back to the menu and stock Subway from the Arcade page | - | `down: flop: the prone movement ... has its own 6 slot id(s) again` or no line (the object was gone); on Subway `nothing is written here`, no `flop:` write line | a `flop: ... written` line on the stock level |
+| F6 | F2 + `[Fed] Enable=1 Player=1 Log=1` (the owner's own setting), `DownHealth=80`, `FlopTake=1`, `FlopUpPct=0` so that he dies on the floor (PT_DM03_die_r2's balance keys if he does not) | D2's | ONE `down: DEAD WHILE FALLING / LYING / GETTING UP: ...; crew status 1 ...` at `fed: you: status 0 -> 1`; **no `down:` line that writes after it** (no `get-up:`, no `he lies`, no `given back`, no `up with`), at most `this part's get-up request [D+0x21] was still standing: taken back`; then `fed: YOU ARE A FED` 5 s later as in PT_DM03_die_r2, and the part silent for the police body | any `down: flop:` / `down: get-up:` line between the death and the fed; a corpse that stands up; no fed respawn |
+| F7 | F2, the fall taken beside a low cover (facing it, within a metre or two: the lead picks the place; the bank's hall counters) | - | what is SEEN: either the ordinary flop lines, or `the dive is over ...: the get-up is asked for` followed by `the down state is over after 1.9x s (from state 2 / 3) without a get-up this part drove` = the game took the request as 'into the cover' (9.3 point 4). Both are no fault; the second is for the owner's eyes (does he snap from face down into the cover) | a fault; he stays in D 3 with nothing playing (shoulder `dstate` stuck at 3 for more than the time bound) |
+
+For the owner's eyes after F2: is this the flop he meant; does the get-up start in the pose the dive ends in; is
+5.4 s of slow get-up right or should `FlopBase` go up; what he does when he dives at a wall.
+
+### 9.6 ASSUMED / not done
+
+- ASSUMED: the loader keeps a set's table and pair list in memory in the shape 0x876940 / 0x7c6750 read (the part's
+  list is the same reads); the six words have no reader but 0x5d6060 (searched by displacement: 0x5d6060 and the
+  filler 0x750900 only); 0x750900 runs when the movement is made and not at every fall (if it runs again the part
+  writes again while he is up); `[D+0x21]` written from the hook's tick is seen by 0x47cd80 in the next frame;
+  skipping 0x8b74d0 is harmless in Arcade; writing `[H+4]` up is taken by the game as klbalance.c's writes are.
+- NOT ESTABLISHED: how either clip looks on the player; the pose match between the end of `Die_Forward` and the start
+  of `Get_Up_From_Stomach`; what the first 153 still frames of that clip show; a fall the game aligns (`[D+0xf4]`:
+  logged in the BELLY FLOP line); the dive at a wall; a flop on stairs.
+- CHANGED FOR `Flop=0` TOO (from the live runs): a death while down is now said once (`DEAD / OUT OF PLAY WHILE
+  FALLING / LYING / GETTING UP`, by his health at 0 or his crew record's status not 0 through klbot.c's `klb_read`,
+  read every frame while he is down), and nothing more is written in that down. Everything else of `Flop=0` is track
+  R's code. So `Flop=0` is NOT byte for byte the committed form: F0 runs before F2.
+- ASSUMED, new: a crew status other than 0 never belongs to a man who is down and in play (LIVE for 0 through a whole
+  down in D2; 2, 3 and 5 were never seen and are treated as out of play); `[M+0x8cc]` still names the fall's clip
+  while he lies (only used when the fall was first seen lying; if wrong, the get-up still goes by its own clip).
+- NOTES (second review S9): no writer of `[M+0x8f0]` but the constructor (0x5bd6a6) was found, so the variant 'plain /
+  compact / on the spot' may never change for the player - harmless, all three words of a kind hold the same id; the
+  dive is 88 FORWARD where the stock fall is 23 back: toward the guns he faced; a pause in the dive's last two frames
+  leaves the request standing until the game runs again.
+- NOT RE-READ by anybody: the other four tab builds' clips for events (the bank's were, by the reviewer) - the part
+  now tests each clip's events itself on every level and body.
+- NOT DONE: the AI's own trigger on the human; a flop chosen by the side the shot came from; holding him on the
+  floor until the first press (`FlopBase` low is the nearest); a prompt during the get-up (4.5); an off-game
+  harness for the reads; `[Balance] Risk=1` in the owner's ini (his second sentence: 'the health difficulty probably
+  put to 1 i think im dying too quick now' - the game folder is the lead's; his ini has `Risk=2`).
+
+### 9.7 The second review (re/player_down_review2.md: ACCEPT WITH FIXES) and what was done, 2026-10-11
+
+| point | done |
+|---|---|
+| M1 a dead man is written to under `[Fed] Player=1` (status 1, not 7) | DONE: dead = health 0 or status 1 / 7, any other status but 0 = out of play; latched for the rest of that down; `FlopUpPct` / `FlopTake` never for a man flagged dead; live check F6 |
+| M2 the request while he lies without `ms == 2` | DONE: `ds == 1 && ms == 2` |
+| M3 the 202-frame get-up on track R's numbers | DONE: `fup` by the clip alone; `FlopTake` / `FlopUpPct` follow it; a fall first seen lying is judged by `[M+0x8cc]` (ASSUMED) |
+| S1 prove the six words | DONE: each word must be the game's own name's id, 0xffff or ours, else one line and no write |
+| S2 free-text slots and events | DONE: a clip with an event 0x637060 acts on, other than 2 / 5 / 6, or with unreadable events, is refused |
+| S3 the check is per object, the set is not | DONE: checked again when `[player+0x78]` / `[+0x7c]` / `[+0x80]` change while he is up; F4's PASS line says the order |
+| S4 `[D+0x21]` left set | DONE: taken back when D is 0 after a request of ours, and at a death |
+| S5 the request takes a cover | DOCUMENTED (9.3 point 4, the file's head), live check F7; no data fix (the offer is a routine's answer) |
+| S6 `FlopUpPct=75` is a heal | DONE: said in 9.3 point 6 and 9.4; the proposal is now 'the owner decides' |
+| S7 stale wiring / hashes | DONE: 9.4 (no lines to add; new hashes on HEAD f9587ff) |
+| S8 `Flop=0` is not the committed form | ACCEPTED as the review says; F0 before F2 (9.5) |
+| S9 notes | DONE: 9.6 |
