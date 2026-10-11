@@ -1526,8 +1526,12 @@ static HRESULT WINAPI kd_getdata(KPX *p, DWORD cb, DWORD *rg, DWORD *count, DWOR
     if (p->kind != 2) return hr;
     if (!kla_hooks_on || !kla_exe_ok) {                 /* no scene-load wrapper: a load shows as a pause in the polls
                                                            (the keyboard is not read while a scene loads) and a new name */
-        static DWORD last; DWORD now = GetTickCount(); char sc[128];
-        if (!last || now - last > 3000) {
+        static DWORD last, chk; DWORD now = GetTickCount(); char sc[128];
+        /* the name is also looked at four times a second: a level that loads in under 3 s (the Dead Men maps in slots
+           F01 and F04: 2 s) made no pause long enough, 'waitload' never saw it and the script stood at that line for
+           its whole timeout (runs E3_DM01, B1_DM01, I1_DM01, I4_DM06, PB_DM01 / PB_DM06, 2026-10-11) */
+        if (!last || now - last > 3000 || now - chk >= 250) {
+            chk = now;
             kla_scene(sc, sizeof sc);
             if (sc[0] && _stricmp(sc, kb.done_scene)) {
                 snprintf(kb.scene, sizeof kb.scene, "%s", sc); snprintf(kb.done_scene, sizeof kb.done_scene, "%s", sc); kb.loads++; kb.phase = "running";
