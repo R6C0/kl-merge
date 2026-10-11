@@ -241,3 +241,162 @@ Tree = w_tabQ with `Maps\DM03A` from `q_vault\DM03A_fix`, the owner's hook and k
   16-aligned as stock's are; `check` prints a NOTE for it. None exists in today's builds (the flag: 4 slots, 720 apart).
 - That nothing else in the level holds a byte offset into the .prm (kl_prmgraph: all references are chunk indices;
   the eleven checks agree).
+
+## 7. The SECOND crash (kl2 0x8a040e reading 0x2c, 2026-10-11 20:48:02) - the same fault, another victim
+
+Track W2. The owner's round on the UNFIXED build (the installed `Maps\DM03A\F07_Main.zip` is sha1 `bd94d046` = the
+tree w_tabQ's; `check` on it: `FAIL cloth blob 63165 ... writes 53cf1441 85e606c1 over the first 8 bytes of chunk
+63166`). Kept: `<work>\research\crash_1011_vault2\`. **Dump + exe reading; no new fix is needed: `q_vault\DM03A_fix`
+(section 4) is the fix. NOT RUN IN THE GAME.**
+
+### Triage
+
+Main thread. `0x8a0400` is a render entry's 'gather' (`mov eax,[esi]; mov edx,[eax+0x2c]; call edx` = the entry's
+vtable slot 11, then slot 1): it was called for an entry whose **vtable dword is 0**. Caller `0x496eb0` walks a list
+of render entries (ebx = 0xb8 = 184 of them, the saved index on the stack = 0x89 = 137; edi 0x119 = 281 results
+gathered so far - counters, not slot ids) and sorts the result; its caller `0x679690` is in `0x678da0` =
+ZRenderEntryCameraD3D slot 4, the camera's frame (the routine of the first crash's last frame).
+
+The list (on the stack at 01a7159c, in the dump): 182 good entries (Geom, Light, Bones, BonesRigid, Sprite by RTTI)
+and two dead ones, **#137 `7f32b8e0` and #159 `7f32c210`**, both in the heap run of ZRenderEntryGeomD3D blocks
+(0x1c8 bytes each + a 0x10 header `12345678 next prev base`). What lies over them is 64-byte records with places
+(448.1, .., -13322.0), (992.6, .., -13216.3), (447.2, ..), (958.1, ..) ... = **the particles at the vault's two fire
+places** (992, -13191) and (454, -13330).
+
+The block before the first dead one is the entry `7f32b700`: ZRenderEntryGeomD3D, chunk `[+0x19c]` = **0xf6be =
+63166 = the Vault_Fire sprite**, its kept chunk head `[+0x1c0]` = **`4114cf53 c106e685`** = particle 192 of the plant
+pots' cloth blob (section 2), `[+0x1a8]` = 7f32b8c8 = the entry's own end, and there: `{0x34, 0, 7f32b91c, 1.5, 97.6,
+-24.89, ..}` = a DrawChunk desc of 52 elements with its data inline (`[0xef4d7c]` = 1 in the dump: `+0x1a8` and
+`+0x1c0` are the slots of frame index 1).
+
+A second Geom entry, `7f32e520` (#8 of the list), keeps the broken head too - but it is **NOT an entry of the same
+chunk any more** (review SHOULD 1; read again in the dump): its `[+0x19c]` is `0xda95`, its `+0x1ac` holds
+`00000000 c106e685 0 7 0804c002` (first dword since rewritten), its `+0x1c0` `4114cf53 c106e685 0 7 0804c002` - the
+last three dwords of that lie at `+0x1c8 .. +0x1d0`, PAST the entry -, and `+0x1e4` / `+0x1e8` both hold `0xd54` =
+3,412 = the 52-element draw in both frame indices. So it WAS the fire's entry, went back to the pool (0x5f6ad0 asks
+the pool 0x815f40 before the factories) and was handed to ordinary geometry: the damaged entries are recycled.
+
+`KLHook_2.dmp` and the game's own `kl2_490_crash_2026_10_11T19_48_5C0.mdmp` (review SHOULD 6, `debug/dump.py`): the
+same fault - `0x8a040e` reading 0x2c, the same nine registers, callers `0x496f16 < 0x679690`, main thread.
+
+### The cause
+
+The first crash's, to the byte: the short cloth blob breaks the sprite's header, the sprite factory refuses it, a
+0x1c8-byte ZRenderEntryGeomD3D is made, and DrawChunk's kind-7 branch (0x842e5b) asks 0x926db0 for `0x54 + 64 n`
+bytes, which reads `[entry+0x1dc]` / `[entry+0x1e0]` (spare block, its size) - 0x14 and 0x18 bytes PAST the entry.
+This time the heap had put another render entry right behind it:
+
+```
+entry+0x1dc = 7f32b8dc = the next block's header, field 'base' = 7f32b8c8     -> taken as the spare block
+entry+0x1e0 = 7f32b8e0 = the next entry's VTABLE (INFERRED 0x00b99ed4 = 12,164,820: it is gone from the dump, the
+              block stands in a run of Geom blocks; any render-entry vtable is ~12 million) -> taken as its size: large enough
+0x926dc7..: [entry+0x1dc] = 0, [entry+0x1e0] = 0 (the neighbour's vtable), return 7f32b8c8
+0x842e6a..: 0x54 bytes of desc + 52 x 64 bytes of particles copied to 7f32b8c8 .. 7f32c61c
+```
+
+= 3,412 bytes over the next heap blocks: the neighbour `7f32b8e0` and everything up to `7f32c210` and beyond. The
+camera's next gather calls slot 11 of the neighbour: vtable 0, read of 0x2c. In the first crash the same two reads
+found a float (-24.89) and freed it - and that float, `c1c71aa0`, is THIS dump's desc dword at `7f32b8dc` =
+`entry+0x1dc`: the first crash is this one a single draw later (had the fire been drawn once more before the dead
+neighbour was gathered, 0x926db0 would have freed it), so the first crash had destroyed a neighbour too.
+**So the fault has four faces:**
+
+1. a free of garbage (0x466597);
+2. a destroyed neighbour (0x8a040e);
+3. silent heap damage of `0x54 + 64 n` bytes that shows later as anything - wider than the neighbours, because the
+   damaged entries are recycled into ordinary geometry (`7f32e520` above); n grows with the fire (1 in the first
+   dump, 52 here);
+4. (review SHOULD 4; 0x842d91 .. 0x842db4 read) before it ever reaches 0x926db0, DrawChunk copies five dwords of the
+   chunk head to `entry + 0x1ac + 20 x frame index`. With index 1 that is `+0x1c0 .. +0x1d4`, 12 bytes past a
+   0x1c8-byte Geom entry: head dword 4 (`0804c002`) lands on `+0x1d0` = the next heap block's `12345678` mark. Seen
+   in the dump in `7f32e520`'s tail. Every odd frame of such a draw breaks the neighbour's heap header, whatever
+   0x926db0 then does.
+
+When: the beat ended and bot 2 had the first vault money at 20:47:47.06 (the fire's emitters start with the blast);
+fault 15.9 s later with the owner (money $0 all round) in the hall at about (385, 206, -8100), 50 m from the vault
+and not in it - the particle controller draws every template's buckets for the camera wherever he stands (first
+crash, 0x69d130). So a human does not have to enter the vault.
+
+**What that does NOT show (review SHOULD 2): that every round is at risk.** The score so far, all on builds that
+fail `check`: a MOVING human 2 crashes of 2 rounds that reached the vault loot (6.7 s and 15.9 s after it); an IDLE
+human in the yard 0 of 1 (scripted V1, `bank_vault_noai`: the bots had the blast and the loot 103 s after GO, live
+camera, `state=PASS`, no CRASH line); V2 (full enemies, idle) never reached the vault. Either the pots' cloth had
+not written in V1 or the damage stayed silent - the open condition of section 2 (when a pot's cloth takes its slot)
+is what separates them, and it is still open.
+
+### The suspects of the task
+
+- (a) the knock-down part (kldown.c): OUT. The faulting object is a geometry render entry in the render heap,
+  overwritten by particle records with the vault fire's coordinates through the game's own DrawChunk; nothing of
+  kldown's (animation pair, prone words, prompt element, input mask, shoulder side) is a render entry or lies there.
+  The last down had ended 13 s before ('UP after 2.08 s'); the log says `down D ... state 0` at the fault.
+- (b) the cloth blob: **IN**, by three things in the dump: chunk id 63166 in the entry, the blob's own two floats
+  as its header (the pair `kl_fa_vaultfx.py check` predicts from the files), the fire's particles over the victims.
+- (c) the map's geometry / doors / the drop of 3.4 m, the escort's order, FollowOut / BoardNear, the talk, the fed:
+  OUT - none is on the path; the 3.4 m are stairs (y 547 -> 206 between two escort lines), no fault there.
+
+### Fix, state of the builds
+
+Nothing new to build. `q_vault\DM03A_fix` (archive sha1 `bf869e52..`, unchanged) `check`: PASS; `q_vault\DM03A` and
+the installed archive: FAIL (1); tree `q_vault\w_tabQ`: `gate ... 6 map(s), FAIL (2)` (DM03, DM03A). Of the set being
+built: `r_tab\DM03v` PASS, **`r_tab\DM03` still FAIL** (the same blob over the post-filter chunk 60552) - the tree
+must take DM03v / the padded folders, and `kl_fa_vaultfx.py tree <tree>` must end PASS before any install.
+No patch for a hook file or `kl_fa_bank.py` comes out of this crash.
+
+**WHICH TREE (review MUST 1; all re-run in the fix round, read only):**
+
+| what | last line |
+|---|---|
+| tree `<work>\build\w_tabS\KLExpansion` (`now/mk_stab.py`: DM03 = `r_tab\DM03v`, DM03A = `q_vault\DM03A_fix`) | `gate (vaultfx) ...: 6 map(s), PASS` |
+| tree `q_vault\w_tabQ\KLExpansion` (= what is installed) | `gate (vaultfx) ...: 6 map(s), FAIL (2)` |
+| installed `Maps\DM03A\F07_Main.zip` (sha1 `bd94d046..`) | `check (vaultfx): FAIL (1)` |
+| `q_vault\DM03A_fix`, `q_vault\DM03_fix`, `r_tab\DM03v` | `check (vaultfx): PASS` |
+| `q_vault\DM03A`, `r_tab\DM03` | `check (vaultfx): FAIL (1)` |
+
+- **Only `w_tabS` (or a later tree that passes the gate) may be installed.** A tree `w_tabR` as `now/mk_rtab.py`
+  line 98 would build it (DM03A = the unfixed `q_vault/DM03A`, DM03 = `r_tab\DM03`) must NOT go out; no folder
+  `w_tabR` exists in `<work>\build` at the time of writing.
+- `w_tabS`'s `Maps\DM03A\F07_Main.zip` (sha1 `58c169e1..`; the member names carry F07) is member for member CRC-equal
+  to `q_vault\DM03A_fix\F01_Main.zip` (sha1 `bf869e52..`): 31 of 31.
+- **Until such a tree is installed the owner should not play The Vault** (2 of his 2 rounds that reached the vault
+  loot crashed). Withdrawal on his tab has the same short blob over its post-filter chunk (no crash known).
+- `DM03A_fix` has NEVER BEEN LOADED: one load run before it goes on his tab.
+
+**What proves the fix (review SHOULD 3): the bytes, not the live run.** The padded blob's scratch ends at 0x3508 of
+0x3510 (`check`: FITS), so the write over the sprite's head cannot happen; with a whole head the sprite factory makes
+a sprite entry and DrawChunk's kind-7 fields lie inside it. The live run only shows that the padded level loads and
+plays, and what the vault fire then looks like - `no CRASH for 120 s` was already met by V1 on an unfixed build.
+
+### Live check (adds to section 5)
+
+Reproducible in principle from the log: a round on the unfixed build in which the beat ends (a bot in the ante-room
+starts it, 48 s) while a human camera is live AND moving through the bank (V1's idle human did not crash); which
+face shows depends on the heap. On the gated tree, the owner's hook and keys, in this order:
+
+1. a plain load of `DM03A_fix` (never loaded): the level reaches GO;
+2. the scripted WALKING player (`kl_playtest.py script <tree> DM03A ...`, `PlayerHealth=10`), NOT an idle one, along
+   the owner's route: yard start -> dock -> hall about (385, 206, -8100), standing there through the beat;
+   PASS = no `CRASH` / `FATAL` line for 120 s after the first vault money in a `bots: L1` line and the round goes on;
+3. the same, on into the vault facing both fires (section 5), pictures every 2 s: what the fire looks like.
+
+A PASS says 'loads and plays'; it is not the proof (above). A control on the unfixed build may show either crash
+address or nothing; one clean control run does not clear it.
+
+### Assumed / not established
+
+- That 0x8a0400's `[eax+0x2c]` is 'slot 11 of a render entry' is read from this call alone; what slot 11 answers was
+  not read (not needed for the cause).
+- Whether the neighbour's vtable was zeroed by 0x926dda or by the desc copy (desc dword 6) - both write 0 there.
+- When the pots' cloth takes its slot (section 2) is still open; this round shows it happens in an ordinary round
+  that starts in the yard and never goes to the plaza.
+- The .prm buffer itself is not in the dumps; the broken header is read from the entries' kept copies.
+- What the neighbour `7f32b8e0` was before it was overwritten (a Geom entry by its place only).
+- Why V1 (idle human, blast and loot, unfixed build) did not crash.
+- Whether the black rectangles of the first crash's picture are this fault (section 2).
+
+### Not this track: the owner's request for waves
+
+With the crash report the owner asked: 'i want the vault enemies to keep spawning in like its in waves'. NOTHING was
+done on it here (review SHOULD 7). It is level authoring in `tools/kl_fa_bank.py` (kl-merge-9b's file, uncommitted
+edits in the tree; today 61 enemies / 25 squads in five waves that all come once) and needs its own track from the
+lead.
