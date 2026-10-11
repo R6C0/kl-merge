@@ -626,3 +626,172 @@ rep = E.van_check(E.Level(<written folder>), log, P)                      # rep[
   not this stage's.
 
 (end of Stage T2)
+
+## Stage L1 - the authoring module, first half: a round without enemies (NEW tools/kl_fa_bank.py)
+
+STATE: DONE (2026-10-11 14:45). `tools/kl_fa_bank.py` (1,058 lines) holds the nine names of the interface and builds
+F07 + M03_A with the first half of the layer; every check of the stage passes with TWO known findings, both justified
+below (L1.3). NOTHING RAN IN THE GAME. Kept for the next stage: `C:/kl_scratch/bank/l1/build/F07+M03_A campaign/`
+(201 MB: F01_Main.zip 161,288,648 bytes sha1 d3ad5986..., lightened, briefcases and texts in; result.json, log.txt,
+graft.txt, preflight.json). Scratch `C:/kl_scratch/bank/l1/`: `s/` (f07.py, dm.py, dmloc.py, places.py, bounds.py),
+`out/` (every output named below). No other file of the repo was touched; kl_fa_author.py is only imported.
+
+### L1.1 What the file is
+
+Pattern: kl_fa_author.py (Retomoto). Its small tools are IMPORTED (`import kl_fa_author as A`: place, setv, ctrl_of,
+node_of, rot9 / look9, named, van_path), none of its tables. No new entity, no new controller.
+
+| part | where | what |
+|---|---|---|
+| the measured bank | `START TRAITOR POLICE STAGE_B/C/D SPAWN HENCH_SHIFT` | 8 START in two stacks of four beside the dock door (x 150..450 and 700..1000, y 200, z -4350), 4 TRAITOR (z -4000), 7 AFTER_DEATH on the front street (west x -1750..-1437, east x 2016..2178), every other kind F07 has (UCC 8 + 4 + 7, team 6 + 4 + 4 + 4 + 7) in rows of their own; 16 player groups |
+| loot | `VAULT_LOOT TELLER_LOOT LOOT_REACH GATE_VAULT CASE CASE_SCALE` | 7 in the vault (6 x 300,000 at the deposit-box walls, 500,000 on the trolley's cartons), 4 x 75,000 on the teller counters' public edge = 2,600,000; F07 pool stacks re-used (the last 8 of the 108 + the last 3 of the team 25: 100 + 22 left); radius 125 |
+| doors | `LEAVES VAULT_DOOR VAULT_BODY DOORS_ANIMATE DOOR_DY GLASS_LAST VAULT_OPEN VAULT_DOOR_GOES BEAT DOOR_GONE`, class `Doors`, `doors()` | eleven leaves of five sets + the vault door, by exact path with their stock world place |
+| host layer | `PLACE PARKED ROLE KEEP_MORE VAN VAN_GROUP VAN_WAIT ESCAPE _KEEP` -> `KEEP`, `DROP` | 39 re-placed objects (markers, planes, cameras, stage boxes, jump points, two back bounds), 12 parked bound boxes, 11 objects with a new job |
+| texts | `TITLE TEXTS START_KEY START_FIELDS LINES EXIT_LINE` | 5 .LOC keys of the level's own, 8 briefing / reminder lines, the exit line |
+| the interface | `HOST prepare_host strip KEEP DROP layer_names complete wire campaign_names` | as kl_graft.build's docstring asks; `campaign_names` and `strip` keep / strip nothing yet (`NO_AI = True`) |
+| the written level | `finish(folder)` | lighten (trim, slim) -> briefcase model into dead chunk indices -> texts |
+| checks | `check(folder)`, `inventory(folder)`, `ROUTE_IN ROUTE_VAULT ROUTE_OUT LOOT_WALKS BLOCKS_LIVE KNOWN` | L1.3 |
+| commands | `test <out> [--keep] [flags]`, `finish`, `check`, `inventory` | `test` = build + finish + check in one process |
+
+**The round as wired** (MEASURED: `python tools/kl_fa_bank.py inventory <kept folder>` -> `out/inventory2.txt`, and check()'s
+'chain' line):
+- round start (AIMonitor list 2): F07's `FASpecials!Timer_MissionBriefing` only. wire() WRITES that list: F07's own names
+  five timers of its opening, two of which (`RivalMercVan!Timer`, `TimerVanGo`) are ROLE objects here and must not start
+  with the round.
+- `Gameplay!010_FirstFight!tb_LEFT_TheySpotYou` = the BEAT BOX, at the campaign's own `TB_VbByVault` (460, -714, -12152)
+  half (550, 254, 556), ECPS_FA_MERCONLY, field 15 = 1 -> `RivalMercVan!Timer` (TriggerDelay2 `BEAT` = 48 s) ->
+  `Activator_VanSound` (AIDWrapper 'Activate' -> the vault door's group) + `GeomActivator_TearGas_LEFT` (ActivateGeom ->
+  the 7 hidden loot objects) + `TimerVanGo` (TriggerDelay2 `DOOR_GONE` = 6 s) -> `GeomDeactivator_DriveInVan`
+  (DeactivateGeom -> the door's body `...\SI0102_M03_BankVault_Door_PRE`).
+- `Specials!LevelSpeak!TriggerBox` in the foyer -> its speaker, line `Multiplayer/F04/ExitHeist_01_R` ('Get out on the
+  street! straight ahead!').
+- ENTERS plane 1 m inside the dock door; EXITS plane at the front entrance (M03_FA_A's own ENTERS box there:
+  (303, 974, -9407) half (300, 200, 100)); exit trigger `otrExitLevel` over plaza and street (300, 800, -10300) half
+  (1500, 300, 900): z -11200..-9400, so it begins 50 beyond the entrance's gap.
+- loot marker in the vault, its 11 s box round the START stacks; escape marker at the van's stop (949, 890, -11105), its
+  box = hall, plaza and street from y 650 up (NOT the vault lobby under the hall: floor 240, ceiling 640).
+
+**The doors** (the lead's default). `DOORS_ANIMATE = False`: the eleven leaves (dock roller door, glass doors 1 and 2,
+four airlock leaves, two hall / foyer leaves) are SUNK 2,500 in world y and their key-framed collision placements cut,
+by `Doors` = the study's `G:/kl_scratch/cfa_fill1/build_open.py` as a class: kl_escape.repair / place_entities /
+cut_collision wrapped for one build (both traps of re/campaign_fa.md G1.1 kept: the world move is turned into the parent's
+frame in the .prp and in the .gms separately, and the two world places are held against each other before and after).
+The interface has no place for this, so `prepare_host()` puts the wrappers in (`Doors.arm`) and the last wrapper that
+runs takes them out; `with kl_fa_bank.doors(): ...` is the same for a script. `--doors-animate`: the leaves stay, the
+round-start event sends each 'Activate' through `Activator_OLD_VanGo`, and the four glass leaves store LAST 50.
+THE VAULT DOOR keeps its collision and is the one gate; `--vault-open` sinks it with the others, `--vault-stays` leaves
+out the DeactivateGeom.
+
+**The van.** F07's first van only (`VAN` + `ESCAPE` = kl_map_escape.VAN_KEEP + the exit trigger and the two 'last van'
+objects); vans 2 and 3 are NOT kept (not 'parked as Retomoto parks unused host objects': a van under the map is the
+0x686a66 crash, re/campaign_fa.md 2.1 item 11). Van 1 does not go under the map either: `park_van()` moves its group
+so that the van STANDS at the place it will wait at, `VAN_WAIT` (-3248, 702, -11859) (T2.5), and the exit trigger names
+it alone. Its drive is still F07's baked one - a first-half state: if the exit trigger fires, the van drives F07's
+L-shaped 121 m from there, through whatever stands in the way. The next stage replaces `park_van` by
+`kl_map_escape.van_prepare`.
+
+**Texts.** The start window is a TEXT KEY of the level's .LOC (settings fields 12 / 13 / 14 / 15; MEASURED `python
+tools/kl_loc.py keys F07 AllLevels/Interface/Online/GameStart`: one `Fxx_FA_Start` per stock level). finish() writes
+`AllLevels/Interface/Online/GameStart/M03A_FA_Start / _Team_B_Start / _UCC_Start` and - found while looking for Dead
+Men's style (`python C:/kl_scratch/bank/l1/s/dmloc.py "Menu/Online/Scenarios"`) - Dead Men's own unused menu slots
+`AllLevels/Menu/Online/Scenarios/TitleDL01` = 'The Vault' and `BriefingDL01` (its stock text: 'Briefing DL01 - Bank
+Vault': a vault map that never shipped) = a briefing in the style of its four. Nothing in Dog Days reads those two; they
+are there for the menu page. `TITLE` is the constant the menu stage takes.
+
+### L1.2 The build
+
+```
+python tools/kl_maps.py one "C:/kl_scratch/bank/l1/build" F07 M03_A --campaign --author kl_fa_bank --keep     (40 s, exit 1 = problems not 0)
+python tools/kl_fa_bank.py finish "C:/kl_scratch/bank/l1/build/F07+M03_A campaign"                             (16 s, exit 0)
+python tools/kl_fa_bank.py check  "C:/kl_scratch/bank/l1/build/F07+M03_A campaign"                             (26 s, exit 0)
+```
+or in one process `python tools/kl_fa_bank.py test C:/kl_scratch/bank/l1/build --keep` (85 s, 'RESULT: PASS'; ran so too:
+`out/test3.txt`). Lines of the build (`out/build.txt`):
+- 'F07 systems (413 subtrees, 9638 nodes) + M03_A map (298 subtrees, 10532 nodes)'; 'verified: 20170 entities, 20171
+  nodes, 37054 reachable chunks, 29 room sets, 694 gate / list REF cells, 1866 textures, 1221 materials'
+- 'kl_fa_bank: doors: 11 nodes sunk by 2500 (world y) in the joined .prp; 4 of them stand in a parent frame with another
+  y axis than the world's' / '11 entities moved in the .gms (0 of them hold another local place there than in the .prp;
+  the world places agree); 11 REF ids go to cut_collision' / 'kl_escape: collision of 11 entities taken out of the .HVK
+  (placements by shape type: {4: 11})' / '11 placements ... none is left'
+- 'Heroes! groups placed where M03_A has them: 0' (the module's own placing stands)
+- 'verify: problems: 2'; 'built ... F01_Main.zip, 310 MB, 31 members'
+finish (`out/finish.txt`): 'load weight: 1346 dead model roots; .prm 85.7 -> 44.7 MB ...; .TEX 373.9 -> 195.6 MB';
+'briefcase M01_FA_A root 6380 (DropMoney!KillDrop!Suitcase) -> chunk 70: 18 chunks into dead indices, 0 at the end';
+'7 briefcases in the vault (model 70, x 1.25, its underside 0.3 over its origin); chunk table 64871 entries, as before';
+'5 text keys in 8 languages (the English text in each); settings fields [12, 13, 14, 15] name the start windows'.
+
+### L1.3 The checks (all on the kept, finished build; outputs in `C:/kl_scratch/bank/l1/out/`)
+
+| check | command | result |
+|---|---|---|
+| verify problems | the build's last lines; check()'s 'verify:' lines | **2, both KNOWN**: (1) 'sound: 1 stream clips are not in the merged stream file' = the study's one missing ambience clip (a larger PC_Def.str is the owner's go-ahead); (2) 'FA: BROKEN squads no ZSquadScript: no police' = this half IS a round without enemies. The bare graft has 11 (1 + the 10 findings of a level without a layer): the layer removes the other nine |
+| kl_fa.check | `python tools/kl_fa.py check <archive>` -> `fa.txt` | **0 CRASH, 1 BROKEN** = the same 'no ZSquadScript' (the stage asked for 0 BROKEN and for no squads: the two cannot both hold; the next stage's squads remove it). 1 DEGRADED (no bot squads: a later stage). Counts: settings 1, exit trigger 1, monitor 1, animated vehicle 1, AIMonitor 1, OnlineMoneyCtrl 133 |
+| cover list | `python C:/kl_scratch/bank/t1/s/covers.py <folder>` -> `covers.txt`; check() | 'exactly 1 FFCoverList' on `ROOT\Special!CoverList`; 20,170 nodes, 711 top-level |
+| spawn points | check() (kl_route.stations, near 30) | '79 places, 79 on the mesh part of the START (566 polygons) and on free floor within 30' = 63 ZSpawnPoint + 16 player groups |
+| level bounds | check() | '27 bound and warn boxes; 0 of the 98 spawn points, player groups and stations inside one' (it FOUND five on the first build: the campaign's own west warn box reaches x -1805, the study's west police point is x -1842 - the row now begins at x -1750) |
+| loot | check() (kl_fa_loot's pick-up test as read at kl2 0x783e60, from floors a walk reaches) | '11 objects, 2600000; 11 can be taken', least 107 of reach to spare; the trolley's case from (130, -959, -13150), 54 away |
+| the route as built | `python tools/kl_route.py walk <folder> --from START=250,200,-4350 --via ... --to street=949,702,-11105` -> `route_built.txt` (12 places); check() (18 stations) | 'NOT FREE': the two legs into and out of the vault 'BLOCKED - the thinnest crossing (9 m) goes through' the vault door's body, nothing else; check(): 'route without the vault (yard -> ante-room -> hall -> street), as built: FREE, 208 m' |
+| ... the vault door out | the same `--open SI0102_M03_BankVault_Door_PRE_01` -> `route_open.txt` | 'RESULT: FREE; the mesh way: 1084 samples, all free'; check(): 'FREE, 226 m' |
+| doors | `python tools/kl_route.py doors <folder> ...` -> `route_doors.txt` | '-> 1 closure(s) in 1 set(s); 1 necessary; with all of them out the way is FREE' (T3's forecast) |
+| doors read back | check() | 11 leaves at their stock x / z, 2,500 lower, 0 placements; the vault door at (571, -760, -12509) with 1 |
+| the chain | check() | 'round start -> [Timer_MissionBriefing]; ante-room box -> Timer -> [Activator_VanSound, GeomActivator_TearGas_LEFT, TimerVanGo]'; no dead reference in any ROLE object |
+| FakeTarget | check() (kl_fa_bots_dyn.vision_space / fake_targets) | 'FakeTarget Animation/F07/F07_Escape_Vehicle_01.zip at (-3243, 701, -11843): inside the vision space, kl2's arithmetic gives a record' |
+| chunk table, blocks | check() | 'chunk table: 64871 entries (the tools' line: 69632); .prm 44.0, .fxc 17.8, .ANM 21.6, .WAV 22.9 MB; the five load blocks 139 MB (Retomoto on the tab: 171)' |
+| kl_impact | `python tools/kl_impact.py <archive>` -> `impact.txt` | 'problems: 0' |
+| preflight | `python tools/kl_maps.py preflight <folder>` -> `preflight.txt` | 'preflight: CRASH 1, RISK 2, NOTE 77': CRASH = 'kl_graft.verify reported 2 problems' (the two above); RISK = 'fa:squads' and 'controller LightToggle x22 ... stock Dog Days: 0 in NO LEVEL' (the study's known first-timer). The bare graft: CRASH 2, RISK 10, NOTE 81 |
+| the flags | `python tools/kl_fa_bank.py test <out> --doors-animate --vault-stays` -> `var_animate.txt`; `... --vault-open --loot-shown --loot-bags --beat 30` -> `var_open.txt` | animate: PASS - 12 doors stand, 'route with the 12 standing door(s) out: FREE, 226 m', round start -> + `Activator_OLD_VanGo`, glass leaves LAST 50 (read back). vault-open: PASS - 12 sunk, 'route, 18 stations, the level as built: FREE, 226 m', the loot shown, bags kept, the door's wrapper and DeactivateGeom name nothing (its first run failed on 'five load blocks 181 MB': finish() did not lighten a build that keeps the bags - it always lightens now; run again: 140 MB). Both archives deleted |
+
+check() reads what the BUILD did off the level (a leaf is 'sunk' when it stands 2,500 low), not off the module's flags:
+`check <folder>` is right for any variant.
+
+### L1.4 GUESS / ASSUMED (each marked in the file)
+
+- GUESS: every spawn row (the study's places; MEASURED only that each is on the mesh and on free floor), the camera
+  places (not looked through), the stage boxes, the two back bounds, the loot's places, turns and values, `BEAT` 48 s,
+  `DOOR_GONE` 6 s, the escape box's extent, every wording in `TEXTS`, the choice of `LINES` / `EXIT_LINE`.
+- ASSUMPTION: a body switched off by a DeactivateGeom at run time stops colliding (the vault door's guarantee; stock F07
+  removes its `BlockVisionPlane` so). If not: `--vault-open`.
+- ASSUMPTION: TriggerBox field 15 = 'once' (stock F07's own box -> timer pair has 1, its squad boxes 0): the beat's
+  timer must not be started twice. Not read in kl2.exe.
+- ASSUMPTION: the vault door's 'Activate' plays in Dog Days (frames 0..200, one way; G1.8). If the swing plays, the door
+  vanishes 3.6 s after it stands open - ugly; `--vault-stays` once it has been SEEN.
+- ASSUMPTION carried from the study: a leaf sunk 2,500 under its room does nothing to the room's draw list (G1.6); a
+  key-framed body follows its entity (the van's five placements still stand at F07's place: check()'s note).
+- GUESS: F07's money bag is a fitting prop on a teller counter; the eight other languages show the English text.
+- Not done / not known: nothing was LOOKED AT (no picture of the briefcases or the trolley's case was rendered).
+
+### L1.5 For the next stage
+
+- **Build with `python tools/kl_fa_bank.py test <out> --keep`** from now on: as soon as the van is laid,
+  `kl_map_escape.van_layer` has to wrap the build and the plain `kl_maps.py one` cannot do that. In `test()`:
+  `with E.van_layer(P, log), doors(log): r = kl_maps.one(...)`. (`doors()` is optional there - prepare_host arms it -
+  but tidy.) The plan P needs a BUILT folder for its collision: the kept build of this stage serves
+  (`E.van_plan_points("C:/kl_scratch/bank/l1/build/F07+M03_A campaign", log=log, **ROAD)`), unless the layer puts collision
+  on the square.
+- **The van**: in `prepare_host` replace `park_van(S, log)` by `E.van_prepare(S, P, log)`; in `wire` add
+  `E.van_wire(sc, P, log)`; drop `VAN_WAIT`, `park_van`, check()'s van note. `_KEEP` already holds E.VAN_KEEP. T2 also
+  wants the box with the define `FAEscCameraLAST` brought by the layer. The 9 static placements of `V_Van_Reflection`
+  at F07's origin ((-450, 0, 0) in the bank's world: the back alley, not on the route) are still in this build.
+- **Squads**: `campaign_names()` returns the kept squads + single nodes, `strip()` takes the mini-cutscene controllers
+  off, `NO_AI` becomes a real flag, `KNOWN`'s second entry goes. Starters: the round start (`wire()`: the list `start`)
+  for the dock, the beat timer's list for the reinforcements, a foyer box for the plaza.
+- **The beat**: the rods, the alarm, the music and the reinforcements hang on `ROLE['beat timer']` (48 s) or on further
+  timers started by `ROLE['beat box']`. Free host objects are listed above `KEEP_MORE` in the file: put the name into
+  `KEEP_MORE`, give it a `ROLE`. A ROLE object is automatically kept out of the round-start list.
+- **finish()** is where anything goes that needs chunk numbers or the .LOC; a level finished before is left alone
+  (the vault loot's model is the test). check() is where a new rule goes; it takes no flag.
+- **The vault's own blast** (lead's default: a harmless show) and the PRE -> POST swap are not in this half. The six
+  wall places are 100 in front of their walls because the hidden `Vault_POST` has rubble at the walls' feet: with the
+  swap, re-run check() (its loot test leaves hidden things out; kl_route counts them unless `--hidden-out`).
+- Tables other tools hold per level were NOT touched and nothing of them was needed for this half.
+
+### L1.6 Open
+
+- The 'no ZSquadScript' finding stands until the squads are in; the build command's exit code is 1 until then.
+- Vans 2 and 3 are dropped, van 1 stands in sight at the west end of the street with F07's drive (see 'The van').
+- The loot is not gated on the vault's guards (there are none) - only on the beat's timer.
+- The briefing text and title are in the level's .LOC only; the menu page (kl_expansion's table) is a later stage.
+- Team mode / Undercover Cop spawn sets are placed but nothing of those modes was thought through (cameras, stages: GUESS).
+- `LightToggle` x22 at load, the 28 rooms, the doors' draw state 25 m under the map: the first live load.
+
+(end of Stage L1)
