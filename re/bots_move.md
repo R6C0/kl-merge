@@ -322,3 +322,166 @@ opened yet sours it, and the opening itself re-arms it.
 | S8 state 5 | the denial is decided while the vehicle stands and kept through state 5; nothing is denied in states 0 - 2 |
 | S9 WaitForYou parks the crew in the open | written into the key's text; W1 counts deaths against I3 |
 | S10 sours forgotten on one failed read | the marks are kept; the round's book and the gate survive 3 s without a session; marks still on at a new round are put back if the object is still listed with its state, else dropped |
+
+## 9. BoardReach: a bot goes aboard only where a human can (track N4, 2026-10-11 evening; NOT RUN IN THE GAME)
+
+Owner, after rounds with `BoardNear=1500 FollowOutHold=25 FollowOutSpare=1` (hook ship_w8): 'saw a bot get in the car
+and he was like 30 metres away like even i couldnt get in that point they need to be just as close but some do and
+they sprint for the van'.
+
+### 9.1 Read in kl2.exe
+
+| what | where | says |
+|---|---|---|
+| the box's update | 0x907a50, whole (164 bytes) | Arcade (0x7f6850), rules = 0x508ef0 (`[[0x168e9e4]+0x54]`); a box whose node has flag 0x20000000 refreshes its place at `+0x4c` (0x7b3020); then ONE LOOP over all crew records (count = rules vtable +0x50, asked every time round; record = `[rules+0x348] + 0x7c * i`, 0x7fd930): AI bit `+0x79 & 1`, actor `+4`, status `+0x10 == 0`, inside (0x758cb0) -> 0x74d7f0(i). **Everybody inside goes aboard in the one call: there is no per-record hook point** |
+| inside | 0x758cb0, whole | the actor's node origin through the box node's world-to-local (0x873dd0), then the box ENTITY's vtable +0x170 with margin 0.0; if not, a second point (the actor node's floats +0x30 / +0x34 / +0x38) the same way |
+| the box test | ZBoxPrimitive vtable 0xb9f424 slot 92 = 0x4aca80, whole | `abs(local[k]) <= [entity + 0x14 + 4k] (+ margin)`: the three size values are **HALF extents** |
+| aboard | 0x74d7f0, whole | rules vtable +0xb4 (0x6840a0) with the record's actor and 0 |
+| the boarding rule | 0x6840a0, whole (again) | session state 0x19; vehicle state 3 / 4, or 5 while `[tuning+0x630] - timer < 1.0`; actor branch 0x6841fd: record by 0x78f470, status 0 -> 4, score flag 0x20 (0x47cf50), 0x89c890(actor), `[actor+0x8f0] = 1`, the announcement 0x69d4d0, and the wait timer 0 when nobody is left in play. No distance, no stage |
+| where a HUMAN boards | `PlayerAction` 'EnterVehicle' (UA_FA_ESCAPE) on the box node the vehicle controller names = `[rules+0x1e0]`; registration 0x4c4de0 | the action's entry is made by 0x7be580 with radius **-1.0** (0xb3e980): no radius, the zone is the box entity itself (live run ESC3 / re/playtest.md: 'E inside the boarding box'). NOT READ: what the 50.0 (0xbaf9e0) and the two tuning floats `+0x320 / +0x324` of the entry do, and the player-side test itself |
+
+### 9.2 The boxes of the six maps (builds `p_tab\DM01..DM09`, `q_vault\DM03A`; scratch scripts `n4\boxes.py`, `reach.py`, `poly.py`)
+
+Every `AllyEscapeBox` is a `ZBoxPrimitive` with half extents **350 x 416 x 350**, not turned (local x = world x): it
+reaches 4.95 m from its middle in the plan. Distances are in the plan, to the middle of the human's boarding box at
+the vehicle's stop (`bots.json` plan `van.board`; the park: the node).
+
+| map | escape box, middle | human's boarding box (half extents) at | box middle / nearest / FARTHEST corner from it | mesh under the boarding box | crew's box on the boarding box's own polygon |
+|---|---|---|---|---|---|
+| Hot Coffee (F01) | (6004, 200, 20211) | van doors 95 x 135 x 80 at (6164, 0, 20691) | 5.1 / 2.3 / **9.7 m** | yes, the crew's part | 149 of 324 grid points |
+| Late Night Opening (F02) | (-821, 200, -8400) | van doors at (-621, 0, -8719) | 3.8 / 1.5 / **8.7 m** | yes | 262 of 324 |
+| Withdrawal (F03) | (2210, 216, -320) | van doors at (2970, 0, 39) | 8.4 / 4.1 / **13.2 m** | yes, part 3 (the street) | 6 of 229 |
+| Withdrawal, the drop | (-1707, 420, -900) | the same | 47.7 / 43.7 / **51.9 m** | another mesh part (the yard): only the drop link joins them | 0 |
+| A Walk in the Park (F04) | (-1687, 420, -6542) | helicopter pad **400 x 200 x 300**, turned 20 degrees, at (-1687, 133, -6542) | 0 / - / 4.95 m = inside or within 1 m of the human's own box | yes | 83 of 251 |
+| Retomoto Tower (F06) | (2430, 19801, 510) = **in the tower**, beside the tower car (kl_fa_bots_rt's fall-back when the join is off) | van 01's doors at the street stop | 198 m below it and about 90 m off in the plan: nobody in it is ever near the van | yes (the street part); the box is on the tower's part | - |
+| The Vault (F07) | (316, 900, -11071) | van doors at (636, 700, -11230) | 3.6 / 1.9 / **8.4 m** | yes | 324 of 324 |
+
+The human: on the five van maps he must be INSIDE the 1.9 x 1.6 m box at the rear doors (`V_Van_00\BoardingTrigger`,
+3.37 m behind the van's middle) = at most 1.24 m from its middle. The BOARDS trigger `BoardingCar` of the van is a
+10 x 10 x 10 box at the origin there: it is fired by the action, nobody stands in it. On the park the action box is the
+pad itself and a second box (`Triggers!BoardingGameplayTrigger`, 343 x 400 x 297) is the BOARDS trigger.
+
+So with `BoardNear=1500` (the test is on the box's CENTRE: 4.9 m on the bank) a bot is 'aboard' as soon as it crosses
+the near box's edge: up to **13.2 m from the doors on the bank**, 8.4 - 9.7 m on the other van maps - six to ten times
+the human's distance.
+
+### 9.3 The owner's bank round, 20:33 - 20:38 (KLHook.log)
+
+| time | line | reading |
+|---|---|---|
+| 20:36:17.3 | `follow: record 7 (stage 3, $370000) at (-924, 143, -347), 10.4 m from the boarding place` | the 'boarding place' of that line rides on the van, still driving in; from the doors at the stop he is **39 m** away |
+| 20:36:21.8 | `the vehicle waits: ... nearest 18.4 m` | record 7, about 23 m from the doors |
+| 20:36:25.4 | `bots: record 7 (bot): aboard` | 3.6 s later. The near box's west edge is x 1860 = 11.1 .. 11.8 m from the doors, 12 - 13 m of running from where he was: **he vanished at the box's edge, 11 - 13 m from the doors** (the far box was denied: 'asked 2752 time(s)'). No place line exists for the moment itself |
+| 20:37:28.2 -> 29.6 / 31.5 / 32.7 | `nearest 10.7 m`, then records 3, 4, 5 aboard | the same box, the same edge, in a row |
+
+No line of that round puts a bot 30 m off at the moment it boards; what the game allowed was 13.2 m at most (the box)
+- and the owner had seen record 7 some 39 m off eight seconds before. 'Some do sprint for the van' = the stage-3 bots
+on their board tactic / FollowOut's order; they too vanish at the box's edge on the way.
+
+### 9.4 The key (`klhook/klmove.c` section 4)
+
+`[Bots] BoardReach=<units>` (100 = 1 m; 0 = off; least 50): while the vehicle stands (states 3 / 4, kept through 5)
+the private slot 25 **does the box's update itself** - the calls of 9.1 with the same arguments in the same order, in
+the place of the stock call - and leaves out `0x74d7f0` for a record whose actor's node is farther than BoardReach
+from the human's BOARDING BOX (distance to the box's SURFACE, 0 inside it; `[rules+0x1e0]`'s node frame and its half
+extents; an object that is no ZBoxPrimitive counts as a point, one line says so). Nothing is written to hide a bot.
+Why not 'call the stock update and hide the far ones': that needs a write into each far record (the AI bit or the
+status) for the length of the call, and 0x6840a0's 'nobody left in play' count walks the same records.
+Guards: the 164 bytes of 0x907a50 and the first 16 of 0x758cb0, 0x74d7f0, 0x7b3020, 0x7f6850, 0x508ef0, 0x4aca80
+and of the rule 0x6840a0 (which must also be what the rules vtable holds at +0xb4) are compared first ('reach: ...
+is not the one this build knows: BoardReach does nothing' - then no line of the part follows, in a dry run
+neither); a record of another rules object than the tick's, or a bot whose place cannot be read, is handled as stock.
+
+**WHEN the private update acts (fix round, review M1).** The first form was switched on by the tick (every 250 ms)
+once it saw state 3: until then the stock update ran and took everybody who ALREADY stood in the escape box - the
+usual case on Hot Coffee, Late Night Opening and The Vault, at every visit. Now the update is armed through the
+whole round (on a level that is not stock, from the round's first tick) and reads in ITS OWN frame: the vehicle's
+state `[rules+0x1dc]` (0 / 1 / 2 / 6 / 7: the stock update, the rule takes nobody), in 3 / 4 the boarding box
+(`klmv_frame`, reads only; unreadable = the stock update, one line by the tick), in 5 the box it kept from the wait.
+The tick hands it single words only (the rules object, the reach, 'as stock from this visit on'); the kept box is
+the update's own, under a sequence count (S7). What is left of the hole: a tick pass that cannot read the session
+disarms the update until the next pass that can (as BoardNear).
+
+- `BoardReachDoors=1` (default): the same update also takes a CALLED bot (heist stage 3) that is within BoardReach
+  - **and never more than 3 m, whatever the key (S3)** - of the boarding box and outside the escape box being
+  updated; every wrapped box does it (S4; the rule sets status 4 at once, nobody is taken twice). Reason: the escape
+  boxes stand beside the doors, not on them (nearest corner 1.5 - 4.1 m off), and the board tactic's test 0x4faf60
+  asks 'a path of more than one node' - four maps park the crew on the boarding object's own mesh polygon (table
+  above; that a node is a polygon is a GUESS). A level with NO escape box has no doors path (one line says so).
+- `BoardReachOrder=1` (default): a called bot that stands a second, more than BoardReach and less than 30 m from the
+  boarding box, gets ONE order a visit to the boarding object's place (the tactic's own goal; `kle_order2`, the
+  soldier's own routine 0x760e50). Not a traitor (`kle_bot`), not an escort klescort.c still holds.
+- a bot under stage 3 in a box beyond the reach gets stage 3 (`BoardNearStage=1`, the same code as for a denied box).
+- `BoardReachVisits=N`: from visit N on the boxes work as in stock (**default 3**, as `BoardNearVisits`; 0 = never),
+  and **the round's last vehicle (`[rules+0xe8a]`) always works as in stock** (S2): nobody is stranded for the
+  whole round. What the owner sees with the default: a bot nothing can walk to the doors stands in the box for two
+  visits and vanishes from 4 - 13 m at the third.
+- `MoveDry=1`: nothing wrapped; the `reach:` lines say who would not be taken (this file's own inside test).
+- **Refused and moved by nothing of this file (S5)** - stock's box took all three: a TRAITOR (no order by design,
+  no stage write), a bot at heist STAGE 0 (`klmv_stage3` asks stage >= 1, BoardAll's rule), a bot MORE THAN 30 m
+  from the boarding box (no order). The refused line says which; they board by their own tactics, or from visit
+  `BoardReachVisits` on / at the last vehicle.
+- **A police human (S8 c):** the key acts then too (FollowOut and its hold do not): the crew has to reach the doors
+  in the vehicle's own 8 s a visit, with nobody holding it; from visit 3 the boxes work again.
+
+**`BoardNear` is not needed with it** (leave it 0): the bank's box at the drop and Retomoto's in the tower take nobody
+within any reach, the near boxes only who stands at the doors. Both set: a box BoardNear denies takes nobody.
+
+**Proposed for the owner: `BoardReach=100 BoardNear=0`**, with his `FollowOutHold=25 FollowOutSpare=1` (S1). The
+human must stand INSIDE the 1.9 x 1.6 m box (at most 1.65 m from its middle, at a corner); BoardReach is measured
+from the box's SURFACE and from any side, so 100 lets a bot go aboard up to 1 m outside it (about 2.65 m from the
+middle at a corner, also beside the van's flank), 200 up to 3.65 m. Neither is literally 'just as close'; 50 is the
+least the code takes. BUT the game's own board tactic takes a WALKING stage-3 bot within 3 m of the box's node
+(0x82fa35) whatever the key says - the key cannot make that shorter; it only decides for a bot that stands in an
+escape box or at the doors without a running tactic. If seven do not get aboard at 100 (R1), try 200. On the park
+the crew's box lies on the pad itself: nothing changes there.
+
+**The lead's question on `BoardNear=300`** (in the owner's ini for his next start: no box works). Can the board
+tactic alone take the crew? The mesh is under the boarding box on all six maps, on the part the crew's last places
+are on - EXCEPT a bot in the bank's yard (the drop link must carry it; live run H0 saw it taken) and one left in
+Retomoto's tower (the join carries it). THE RISK is the tactic's 'more than one node': on Hot Coffee, Late Night
+Opening, The Vault and the park the crew waits on the boarding object's own polygon, 3.6 - 5.1 m from the doors, and
+may stand there until visit 3 (`BoardNearVisits=3`: every box works again, so nobody is stranded for good - but the
+owner would see them wait two visits and then vanish from 4 - 10 m). NOT KNOWN from a run: no round with no box has
+been played. `BoardReach` is the answer to both; until it has run, `BoardNear=1500` is the safer of the two.
+
+### 9.5 Builds, wiring
+
+No new file, no new wiring line (klmove.c is wired at HEAD: `#include "klmove.c"`, `klmv_init();`,
+`klmv_tick(game_thread);`). Compile check from `git archive HEAD klhook` + this klmove.c in `G:\kl_scratch\N4\src2`
+(fix round): TEST and SHIP build. A build carries its build time: the sha1 of a rebuild differs, the sha1s in the
+track's report are of those two files only (`G:\kl_scratch\N4\test2`, `ship2`).
+
+### 9.6 Live checks (the lead; `[Bots] Enable=1 Log=1 MoveLog=2 FollowOut=1 FollowOutHold=25 FollowOutSpare=1`)
+
+| # | keys | map | PASS = these lines |
+|---|---|---|---|
+| R0 | `BoardReach=100 MoveDry=1` | the bank, the board script (`PB_DM03_board_hp`) | `reach: on; BoardReach=100 ... DRY RUN`; `near: 2 ZAllyEscapeBox object(s) found ...; DRY RUN: nothing is wrapped`; **no** `reach: ... is not the one this build knows`; at the first wait `reach: visit 1: the vehicle's boarding box (where YOU get in) is 95 x 135 x 80 (half extents) round (about 2970, 121, 40)` - **those three numbers and that place = the frame and the extents are read right** ('is not a box this file knows' = FAIL, say so); `reach: visit 1: record N ... stands in an escape box 4 .. 13 m from the boarding box ...: the box WOULD not take it`; the round as without the key |
+| R1 | `BoardReach=100` | the bank, the same script | the scan line ends `(BoardReach: a box takes an AI heister aboard only when THAT BOT is within reach ...)`; the boarding-box line as R0; for every bot that comes: `reach: ... stands in an escape box N m ...: the box does not take it`, then EITHER nothing (its tactic walks it) OR `reach: ... sent to the doors`, then `reach: record N (stage 3) is taken aboard AT THE DOORS: it stood X m from the boarding box` with **X <= 1.0** (the place is up to 0.25 s old: a runner can read a little more), or a plain `bots: record N (bot): aboard` whose last `follow:` / place line is within 3 m of the doors; `reach: visit 1 is over: ... the doors K time(s); M time(s) a box was asked ...` with M > 0. **M1's check: in the FIRST SECOND of every wait (from klbot's vehicle-state 3 line) no `bots: record N (bot): aboard` of a bot whose `reach: ... stands in an escape box ... does not take it` line follows or whose last place was more than 3 m from the doors - a bot that stood in the box at the arrival must get the refused line, not 'aboard'.** **PASS for the owner = no 'aboard' of a bot more than 3 m from the doors, and of the seven as many aboard as in N3c (seven) within the 25 s hold.** Pictures every 2 s at the van: the bots run to the rear doors |
+| R2 | `BoardReach=100 BoardReachOrder=0` | Late Night Opening or The Vault (the crew parks on the doors' polygon), the script | does the tactic alone move them? `stands in an escape box` lines and then 'aboard' WITHOUT a `sent to the doors` line = the 'one node' guess is wrong and the order is not needed; bots that stand the whole visit = it is right (then R2b with the default `BoardReachOrder=1` must bring them to `AT THE DOORS`) |
+| R3 | `BoardReach=100` | the park, the script | the boarding-box line reads `400 x 200 x 300`; the crew boards as in I4 (seven of seven), mostly `an escape box took an AI heister within reach` > 0 |
+| R4 | `BoardReach=100` | Retomoto (gates build), the script through the join | one box found at (2430, 19801, 510); nobody is taken by it; on the street every 'aboard' is `AT THE DOORS` or the tactic's. The doors path is run by that ONE box in the tower: if no `AT THE DOORS` line ever comes on Retomoto while bots stand at the doors, its controller is not updated with the crew in the street (not known) - then only the tactic boards there (S4) |
+| R6 | none (stock boarding; the rig) | the bank, the scripted human walked toward the rear doors in 10-unit steps from 3 m out along the van's axis and from the side, `[Bots] Log=2` | where the 'get in' prompt first shows / E first boards against the box line of R0 (95 x 135 x 80 round its middle): inside the box only = the human's zone is the box; earlier = what the action's 50.0 / tuning +0x320 / +0x324 add (S6: NOT READ; this measurement settles it and BoardReach's proposed value with it) |
+| R5 | R1's keys | leave the level in the middle of a wait, load another | no fault (the update of the next level's boxes runs as stock until its own first wait) |
+
+Order: R0, R1, R2, then R3 / R4. FAIL of R1 on 'as many aboard' = look at who stood where in the `near: visit N: the
+vehicle leaves ...` line, then try `BoardReach=200` (the tactic's own 3 m) before giving the key up.
+With the default `BoardReachVisits=3` every scripted check must look at visits 1 and 2: from visit 3 the line is
+`reach: visit 3: BoardReachVisits: from this visit on: every escape box works as in stock`.
+
+### 9.7 Assumed, and not done
+
+ASSUMED: `[rules+0x1e0]` is the box entity with the `PlayerAction` (the vtable +0x170 test at run time says if not);
+the human's zone is that box and no more (the action entry's 50.0 was not read: it may add 0.5 m; live check R6
+measures it); a box controller's update runs on the thread the tick runs on (not needed any more for the boarding
+box: the update keeps its own copy under a sequence count, the tick hands it single words, the bits are
+interlocked); `[rules+0xe8a]` is set while the round's last vehicle stands (BoardNear relies on the same); the
+board tactic's goal can be walked to as a defend order (the van's body stands beside it, 3.37 m off);
+an order to a called bot whose board tactic IS running only restarts that walk (what Restless (b) relies on).
+FIX ROUND (review `re/bots_board_reach_review.md`): M1 the update armed for the whole round and reading the state
+itself; S1 proposal 100 and what it means; S2 default `BoardReachVisits=3` + the last vehicle; S3 the doors path
+capped at 3 m; S4 every wrapped box does the doors pass; S5 the refused line says who is moved by nothing; S7 the
+sequence count; S8 a / b / c / d. S6 is NOT done offline (R6).
+NOT DONE: the player-side test of the action read to the end; a run; anything in klescort.c (its `follow:` lines still
+measure to the rules' place 5 m beside the doors); the bots builds' own boxes moved onto the doors (level data, the
+bots tools are other tracks'); online (the Arcade gate 0x7f6850 is the stock update's own).

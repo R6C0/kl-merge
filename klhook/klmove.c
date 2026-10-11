@@ -165,6 +165,49 @@
  *    entries the tick writes); what a bot in a denied box does whose stage-3 board tactic finds no path (it stands;
  *    from the third visit the box takes it).
  *
+ * 4. BoardReach - A BOT GOES ABOARD ONLY WHERE A HUMAN CAN (track N4, 2026-10-11; re\bots_move.md 9)
+ *    Owner, after playing BoardNear=1500: 'saw a bot get in the car and he was like 30 metres away like even i couldnt
+ *    get in that point they need to be just as close but some do and they sprint for the van'.
+ *    MEASURED. BoardNear tests a box's CENTRE. Every bots build has one box of 350 x 416 x 350 HALF extents (the box
+ *    entity's 'point inside' is ZBoxPrimitive's vtable +0x170 = 0x4aca80: |local| <= the three floats at entity
+ *    +0x14) beside the vehicle's stop; its far corner is 8.4 .. 13.2 m from where the human boards (the bank: 13.2).
+ *    The human boards at the node with PlayerAction 'EnterVehicle' = [rules+0x1e0], on the van maps the box
+ *    V_Van_00\BoardingTrigger, half extents 95 x 135 x 80 at the rear doors (he is at most 1.24 m from its middle);
+ *    the park's helicopter: 400 x 200 x 300. The action is registered with NO radius (0x4c4ee0: -1.0), so its zone is
+ *    that box (live ESC3: E inside it; what the 50.0 of 0x4c4efa adds was not read).
+ *    THE RULE. The stock update 0x907a50 boards EVERYBODY inside in one call (its loop 0x907ab0..0x907aee: record by
+ *    0x7fd930, AI bit +0x79, actor +4, status +0x10, inside 0x758cb0, then 0x74d7f0), so a per-bot test cannot be
+ *    put in front of it: with BoardReach the private slot 25 DOES THE UPDATE ITSELF - the same calls with the same
+ *    arguments in the same order, where the stock one would have run - and leaves out 0x74d7f0 for a record whose
+ *    actor's node is farther than BoardReach from the boarding BOX (0 inside it). Nothing is written to hide anybody.
+ *    The whole update (164 bytes), the head of each routine called and of the rule 0x6840a0 are compared with what was
+ *    read before the key does anything.
+ *    WHEN (fix round, review M1): the private update is armed through the WHOLE round and reads the vehicle's state
+ *    [rules+0x1dc] and the boarding box ITSELF, in the frame it runs in (the first form waited for the tick, up to
+ *    250 ms after state 3: the stock update took everybody who already stood in the box). States 0 / 1 / 2 / 6 / 7:
+ *    the stock update (the rule takes nobody). 3 / 4: the box is read and kept; 5: the kept one (the object drives
+ *    off). From visit BoardReachVisits on (default 3) and at the round's last vehicle ([rules+0xe8a]): the stock update.
+ *    AT THE DOORS (BoardReachDoors=1, default): the same update also takes a CALLED bot (heist stage 3, what the board
+ *    tactic asks) that is within BoardReach - and never more than 3 m (KLMV_DOORS_MAX) - of the boarding box and
+ *    outside the escape box that is being updated (every wrapped box does it) - the escape boxes stand 3.6 ..
+ *    8.4 m to the side of the doors, and the board tactic's test (0x4faf60) wants a path of more than one node: on Hot
+ *    Coffee, Late Night Opening, The Vault and half of the park's box the crew's last places are on the boarding
+ *    object's OWN mesh polygon (measured; that 'node' = polygon is a GUESS). Without this a bot there would stand.
+ *    WHO IS NOT TAKEN: gets heist stage 3 if it has less (BoardNearStage, as g) and, if it then stands a second within
+ *    30 m of the boarding box, ONE order a visit to the boarding object's place (BoardReachOrder=1; the board
+ *    tactic's own goal, by the soldier's own routine as klescort.c calls it). A traitor and a held escort get no order.
+ *    MOVED BY NOTHING OF THIS FILE (stock's box took all three): a traitor, a bot at heist stage 0, a bot more than
+ *    30 m off. They board by their own tactics, or from visit BoardReachVisits on / at the last vehicle.
+ *    THE KEY ALSO ACTS WHEN THE HUMAN IS POLICE (FollowOut does not): the crew then has to reach the doors with
+ *    nobody holding the vehicle.
+ *    BoardReach is measured from the boarding box's SURFACE and from any side (the human must be INSIDE the box);
+ *    the game's own board tactic takes a walking stage-3 bot within 3 m of the box's node whatever this key says.
+ *    BoardNear IS NOT NEEDED WITH IT: the bank's box at the drop is 44 m off and takes nobody within any sane reach.
+ *    The cost is BoardNear's (h): the walk to the doors takes longer than the vehicle's 8 s - use FollowOutHold /
+ *    FollowOutSpare. The board tactic itself (within 3 m of the boarding object's node) is the game's and stays.
+ *    NOT ESTABLISHED: the thread of a controller's update (the update keeps its own copy of the boarding box under a
+ *    sequence count; what the tick hands it is single words).
+ *
  * KLHook.ini
  *   [Bots]
  *   Enable=1              klbot.c must be on (the crew records are read through it)
@@ -185,7 +228,14 @@
  *                         Use it with FollowOutHold or FollowOutSpare: who is left in play when you are driven out is shot
  *   BoardNearVisits=3     from this visit of a vehicle on every box works again (0 = never again)
  *   BoardNearStage=1      a bot under stage 3 at a denied box gets stage 3 (so that its board tactic walks it)
- *   MoveDry=0             1 = every line, NOTHING written or called (the boxes are not wrapped either)
+ *   BoardReach=0          a box takes an AI heister aboard only when THAT BOT is within this of the vehicle's boarding
+ *                         box - where you get in (100 = 1 m from the box's surface; 0 = off; least 50; proposed 100).
+ *                         BoardNear is not needed with it
+ *   BoardReachDoors=1     a called bot (stage 3) within BoardReach (3 m at most) of the boarding box is taken there
+ *   BoardReachOrder=1     a called bot that stands within 30 m of the boarding box is sent to the doors, once a visit
+ *   BoardReachVisits=3    from this visit of a vehicle on the boxes work as in stock again (0 = never; the round's
+ *                         last vehicle always works as in stock)
+ *   MoveDry=0           1 = every line, NOTHING written or called (the boxes are not wrapped either)
  *   MoveLog=1             2 = also every order and every bot that holds a meant wait
  *
  * LOG (the lines the live checks look for)
@@ -203,6 +253,12 @@
  *   near: record 5 (stage 2) at (x, y, z) stands at a denied box: heist stage set to 3 - it has to walk to the vehicle
  *   near: visit 1 is over: the denied box at (x, y, z) was asked 212 time(s)
  *   near: visit 1: the vehicle leaves WITH YOU ABOARD: 3 AI heister(s) still in play (record, metres from the boarding place: 3 44 m 4* 12 m 5* 9 m), 2 of them (*) stood at a denied box on this visit - THE RULES SHOOT THEM NOW ...
+ *   reach: on; BoardReach=200 Visits=0 Doors=1 Order=1 Stage=1: ...
+ *   reach: visit 1: the vehicle's boarding box (where YOU get in) is 95 x 135 x 80 (half extents) round (x, y, z): an AI heister goes aboard only within 2.0 m of that box ...
+ *   reach: visit 1: record 7 (bot, stage 3) at (x, y, z) stands in an escape box 9.6 m from the boarding box, over BoardReach 2.0 m: the box does not take it - it has to walk to the doors
+ *   reach: visit 1: record 7 (stage 3) stood 9.6 m from the boarding box at (x, y, z): sent to the doors (x, y, z), the game set (x, y, z)
+ *   reach: record 7 (stage 3) is taken aboard AT THE DOORS: it stood 1.4 m from the boarding box, outside the escape box that asked
+ *   reach: visit 1 is over: an escape box took an AI heister within reach 0 time(s), the doors 5 time(s); 1310 time(s) a box was asked for one beyond BoardReach and did not take it
  */
 #ifndef KLMOVE_C
 #define KLMOVE_C
@@ -218,16 +274,30 @@
 #define KLMV_OFF        300.0f                /* farther than this from its defend place = not at it (the game's own 'he is there' is 250) */
 #define KLMV_TOTAL      6                     /* orders of (b) for ONE place of its chain, wherever the bot stood; then it is left */
 #define KLMV_BOXR       500.0f               /* a bot within this of a box's node stands 'at' the box (a box is 350 x 416 x 350). GUESS */
+/* BoardReach (section 4): what the stock update 0x907a50 calls, in its order */
+#define KLMV_SESSION    0x0168e598            /* the session object (0x907a53) */
+#define KLMV_HOLDER     0x0168e9e4            /* [this + 0x54] = the Arcade rules object (0x907a66 -> 0x508ef0) */
+#define KLMV_ARCADE     0x007f6850            /* char __thiscall (session): the session is an Arcade one */
+#define KLMV_RULESOF    0x00508ef0            /* rules * __thiscall (holder): [holder + 0x54] in Arcade, else 0 */
+#define KLMV_NODEPOS    0x007b3020            /* void __thiscall (node, float v[3]): v through the node and its parents into the world */
+#define KLMV_INSIDE     0x00758cb0            /* char __thiscall (box controller, actor): the actor's node (or its second point) inside the box entity */
+#define KLMV_BOARD1     0x0074d7f0            /* void __thiscall (rules, char index): rules vtable +0xb4 (0x6840a0) with that record's actor */
+#define KLMV_BOX_IN     0x004aca80            /* ZBoxPrimitive vtable +0x170: |local| <= the three floats at entity +0x14 (+ a margin) = HALF extents */
+#define KLMV_SENT       3000.0f               /* BoardReachOrder: only a bot within this of the boarding box is sent to the doors. GUESS */
+
+/* a box entity in the world: its node's place, its three axes, its half extents (box = 0: not a ZBoxPrimitive, a point) */
+struct klmv_fr { float T[3], ax[3][3], half[3]; int box; };
 
 static struct {
     int any, dry, log;
     DWORD restless, loot, back, hold; float pace, loot_near;
     int wait, wait_stage; DWORD wait_max, wait_floor; float wait_hold;
     float near_; int near_visits, near_stage;
+    float reach; int reach_visits, reach_doors, reach_order;
 } klmv;
 
 struct klmv_b {
-    DWORD actor, since, money, order_at, hit_at, look_obj, look_at; int seen, have_anchor, have_target, tries, total, phase, paced, beside, look_amount; BYTE told;
+    DWORD actor, since, money, order_at, hit_at, look_obj, look_at; int seen, have_anchor, have_target, tries, total, phase, paced, beside, look_amount, reach_visit; BYTE told;      /* told: 16 = a box did not take it on this visit, 32 = sent to the doors on this visit */
     float pos[3], hp, anchor[3], anchor0[3], target[3], try_pos[3];      /* anchor = the place its chain ordered; anchor0 = where the count 'total' began */
 };
 static struct {
@@ -235,7 +305,21 @@ static struct {
     struct klmv_b b[KLB_NREC];
     int visit, was_waiting, scanned; BYTE was_veh; float near_bd[3]; DWORD gate_ready; int gate_told;
     int hold_visit, hold_told, h_comes; float hold_used, h_d; DWORD h_at;
+    int rc_visit, rc_told; DWORD rc_wait_at;      /* BoardReach: the visit the boarding box was read for, its line said, when this wait began */
 } klmv_r;
+
+/* BoardReach: what the tick decides and the boxes' update reads (section 4). armed = 1 through the WHOLE round on a
+   level this file may act on (review M1: the tick comes up to 250 ms after the vehicle's state 3, and in that time the
+   stock update took everybody who stood in the box) - the update itself reads the vehicle's state and the boarding box
+   in the frame it runs in. Each field the tick writes is one word. fr = the UPDATE's own copy of the boarding box for
+   state 5 (the object drives off with the vehicle), written and read by the update only, under seq (odd = being
+   written; review S7: the update's thread is not established). far / took = one bit per crew record, set by the
+   update, taken by the tick */
+#define KLMV_DOORS_MAX  300.0f                /* the doors path never reaches farther than this from the boarding box, whatever BoardReach (review S3: stock has no box there at all; 3 m = the board tactic's own distance) */
+#define KLMV_RULE       0x006840a0            /* rules vtable +0xb4: the boarding rule 0x74d7f0 calls */
+static struct { volatile LONG armed, relax, seq, fr_ok; DWORD rules, fr_rules; struct klmv_fr fr; float reach, door_reach; int doors; } klmv_rc;
+static volatile LONG klmv_rc_far, klmv_rc_took, klmv_rc_refused, klmv_rc_box, klmv_rc_door;
+static int klmv_reach_ok;                     /* 1 = the routines of section 4 are the ones this file read, -1 = not */
 
 /* what outlives a round's bookkeeping: bytes this file has written into objects of the level */
 static DWORD klmv_gate_rules;                 /* the rules object whose +0x1ee this file set (0 = none) */
@@ -333,6 +417,114 @@ static int klmv_make_sour(DWORD rules, int o, DWORD now, DWORD *secs, int *times
 
 /* ---------------------------------------------------------------- BoardNear: the ZAllyEscapeBox objects */
 
+/* a box entity's frame: kle_node's walk (0x6be1c0: x' = x*m6 + y*m3 + z*m0 ..., the place at +0x24, the parent at
+   +0x50) for the origin and the three axes; the half extents only from an entity whose 'point inside' is ZBoxPrimitive's
+   (0x4aca80) and whose axes are of length 1 and square to each other - else it is a POINT (box = 0) */
+static int klmv_frame(DWORD ent, struct klmv_fr *f)
+{
+    float v[4][3] = { { 0, 0, 0 }, { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } }, m[12], t[3]; DWORD node, vt; int depth, k, j;
+    memset(f, 0, sizeof *f);
+    if (!ent || !(node = klh_rd32(ent + 4))) return 0;
+    for (depth = 0; node && depth < 32; depth++) {
+        if (!klh_rd(node, m, sizeof m)) return 0;
+        for (k = 0; k < 4; k++) {
+            for (j = 0; j < 3; j++) t[j] = v[k][0] * m[6 + j] + v[k][1] * m[3 + j] + v[k][2] * m[j] + (k ? 0 : m[9 + j]);
+            memcpy(v[k], t, sizeof t);
+        }
+        node = klh_rd32(node + 0x50);
+    }
+    if (node) return 0;
+    for (k = 0; k < 4; k++) if (!kle_ok3(v[k])) return 0;
+    memcpy(f->T, v[0], 12); memcpy(f->ax, v[1], 36);
+    vt = klh_rd32(ent);
+    if (vt > img_lo && vt < img_hi && klh_rd32(vt + 0x170) == KLMV_BOX_IN && klh_rd(ent + 0x14, f->half, 12) && kle_ok3(f->half)
+        && f->half[0] > 0 && f->half[1] > 0 && f->half[2] > 0 && f->half[0] < 1e5f && f->half[1] < 1e5f && f->half[2] < 1e5f) {
+        f->box = 1;
+        for (k = 0; k < 3; k++) {
+            float l = f->ax[k][0] * f->ax[k][0] + f->ax[k][1] * f->ax[k][1] + f->ax[k][2] * f->ax[k][2], *o = f->ax[(k + 1) % 3];
+            if (l < 0.96f || l > 1.04f || fabs(f->ax[k][0] * o[0] + f->ax[k][1] * o[1] + f->ax[k][2] * o[2]) > 0.02f) f->box = 0;      /* scaled or sheared: its extents are not world lengths */
+        }
+    }
+    return 1;
+}
+
+/* how far p is from the box (0 = inside it); from its node when it is a point */
+static float klmv_fr_dist(const struct klmv_fr *f, const float p[3])
+{
+    float d[3], q, s = 0; int j;
+    d[0] = p[0] - f->T[0]; d[1] = p[1] - f->T[1]; d[2] = p[2] - f->T[2];
+    if (!f->box) return (float)sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    for (j = 0; j < 3; j++) { q = (float)fabs(d[0] * f->ax[j][0] + d[1] * f->ax[j][1] + d[2] * f->ax[j][2]) - f->half[j]; if (q > 0) s += q * q; }
+    return (float)sqrt(s);
+}
+
+static void klmv_bit(volatile LONG *at, int i)
+{
+    LONG o;
+    do o = *at; while (InterlockedCompareExchange(at, o | (LONG)(1u << i), o) != o);
+}
+
+/* BoardReach: the stock update 0x907a50 DONE HERE, call for call (section 4), with ONE test more per record: the bot
+   itself must be within BoardReach of the vehicle's boarding box. Runs where the stock update runs (it is called in
+   its place). What it touches is what the stock one touches: the box's own place cache at +0x4c (0x907a87) and, through
+   0x74d7f0 -> 0x6840a0, the record that goes aboard. It reads the crew records and the actor's node besides. */
+static void klmv_ally_reach(void *box)
+{
+    DWORD rules, ent, node, recs, actor, mine = klmv_rc.rules, obj; BYTE *rec, veh = 0, last = 0; float p[3], d = 0; int idx, inside, where, have = 0;
+    struct klmv_fr fr; LONG q;
+    /* WHAT THIS FRAME IS (review M1: read HERE, in the frame the rule 0x6840a0 would board in, not by the tick).
+       Outside states 3 / 4 / 5 the rule takes nobody: the stock update. From BoardReachVisits on and at the round's
+       last vehicle ([rules+0xe8a]): the stock update. States 3 / 4: the boarding box is read now (klmv_frame: reads
+       only) and kept for state 5; it cannot be read = the stock update, as before */
+    if (!mine || klh_rd32(mine) != KLB_RULES_VT || !klh_rd(mine + 0x1dc, &veh, 1) || veh < 3 || veh > 5) { klmv_rc.fr_ok = 0; goto stock; }
+    klh_rd(mine + 0xe8a, &last, 1);
+    if (klmv_rc.relax || last) goto stock;
+    if (veh != 5) {
+        if ((obj = klh_rd32(mine + 0x1e0)) != 0 && klmv_frame(obj, &fr)) {
+            have = 1;
+            InterlockedIncrement(&klmv_rc.seq); klmv_rc.fr = fr; klmv_rc.fr_rules = mine; klmv_rc.fr_ok = 1; InterlockedIncrement(&klmv_rc.seq);
+        } else klmv_rc.fr_ok = 0;
+    } else if (klmv_rc.fr_ok && klmv_rc.fr_rules == mine) {
+        q = klmv_rc.seq; fr = klmv_rc.fr;
+        if ((q & 1) || q != klmv_rc.seq) return;                               /* being written by another thread: nobody is taken by this box in this frame */
+        have = 1;
+    }
+    if (!have) goto stock;
+    if (!((char (__fastcall *)(void *, void *))(DWORD_PTR)KLH_VA(KLMV_ARCADE))((void *)(DWORD_PTR)klh_rd32((DWORD_PTR)KLH_VA(KLMV_SESSION)), 0)) return;      /* 0x907a53 */
+    rules = ((DWORD (__fastcall *)(void *, void *))(DWORD_PTR)KLH_VA(KLMV_RULESOF))((void *)(DWORD_PTR)klh_rd32((DWORD_PTR)KLH_VA(KLMV_HOLDER)), 0);            /* 0x907a66 */
+    if (!rules) return;
+    ent = *(DWORD *)((BYTE *)box + 0x24); node = *(DWORD *)(DWORD_PTR)(ent + 4);                                  /* 0x907a78: a box that moves keeps its place at +0x4c */
+    if (*(DWORD *)(DWORD_PTR)(node + 0x3c) & 0x20000000) {
+        float *v = (float *)((BYTE *)box + 0x4c);
+        v[0] = v[1] = v[2] = 0;
+        ((void (__fastcall *)(void *, void *, float *))(DWORD_PTR)KLH_VA(KLMV_NODEPOS))((void *)(DWORD_PTR)node, 0, v);
+    }
+    for (idx = 0; idx < (int)(*(char (__fastcall **)(void *, void *))(DWORD_PTR)(*(DWORD *)(DWORD_PTR)rules + 0x50))((void *)(DWORD_PTR)rules, 0); idx++) {      /* 0x907a9a / 0x907adf: the count is asked every time round */
+        recs = *(DWORD *)(DWORD_PTR)(rules + 0x348); rec = (BYTE *)(DWORD_PTR)(recs + 0x7c * (DWORD)(idx & 0xff));      /* 0x7fd930 */
+        if (!(rec[0x79] & 1) || !(actor = *(DWORD *)(rec + 4)) || rec[0x10]) continue;                            /* an AI member, with an actor, in play */
+        inside = ((char (__fastcall *)(void *, void *, void *))(DWORD_PTR)KLH_VA(KLMV_INSIDE))(box, 0, (void *)(DWORD_PTR)actor) != 0;
+        /* THE TEST MORE: where = 1 within BoardReach of the boarding box, 2 beyond it, 0 not known (then as stock) */
+        where = 0;
+        if (rules == mine && (node = klh_rd32(actor + 4)) != 0 && kle_node(node, p, 0)) { d = klmv_fr_dist(&fr, p); where = d <= klmv_rc.reach ? 1 : 2; }
+        if (inside) {
+            if (where == 2) { if (idx < 32) klmv_bit(&klmv_rc_far, idx); InterlockedIncrement(&klmv_rc_refused); continue; }
+            InterlockedIncrement(&klmv_rc_box);
+        } else {
+            /* AT THE DOORS: outside THIS escape box, but as near the boarding box as BoardReach asks (3 m at most:
+               KLMV_DOORS_MAX), and called (heist stage 3: what the board tactic asks, 0x4fb064). By EVERY wrapped box
+               that is updated (review S4: the rule sets status 4 at once and the test above skips the record for the
+               next box, so nobody is taken twice) */
+            if (!klmv_rc.doors || where != 1 || d > klmv_rc.door_reach || rec[0x78] < 3) continue;
+            if (idx < 32) klmv_bit(&klmv_rc_took, idx);
+            InterlockedIncrement(&klmv_rc_door);
+        }
+        ((void (__fastcall *)(void *, void *, int))(DWORD_PTR)KLH_VA(KLMV_BOARD1))((void *)(DWORD_PTR)rules, 0, idx);      /* 0x907ad7 */
+    }
+    return;
+stock:
+    ((void (__fastcall *)(void *, void *))(DWORD_PTR)KLH_VA(KLMV_ALLY_TICK))(box, 0);
+}
+
 /* slot 25 of the private vtable (game code calls it as the box's update: __thiscall, no argument) */
 static void __fastcall klmv_ally_tick(void *box, void *unused)
 {
@@ -343,6 +535,7 @@ static void __fastcall klmv_ally_tick(void *box, void *unused)
             if (klmv_box[i].deny) { InterlockedIncrement(&klmv_box[i].asked); return; }
             break;
         }
+    if (klmv_rc.armed) { klmv_ally_reach(box); return; }
     ((void (__fastcall *)(void *, void *))(DWORD_PTR)KLH_VA(KLMV_ALLY_TICK))(box, 0);
 }
 
@@ -361,6 +554,28 @@ static void klmv_scan(DWORD rules)
         klmv_vt_ok = 1;
     }
     if (klmv_vt_ok < 0) return;
+    if (klmv.reach > 0 && !klmv_reach_ok) {   /* BoardReach does the stock update itself: every byte of it, and the head of each routine it calls, must be what was read */
+        static const BYTE whole[0xa4] = {
+            0x55, 0x8b, 0xe9, 0x8b, 0x0d, 0x98, 0xe5, 0x68, 0x01, 0xe8, 0xf2, 0xed, 0xee, 0xff, 0x84, 0xc0, 0x0f, 0x84, 0x8c, 0x00, 0x00, 0x00, 0x8b, 0x0d, 0xe4, 0xe9, 0x68, 0x01, 0x56, 0xe8, 0x7e, 0x14,
+            0xc0, 0xff, 0x8b, 0xf0, 0x85, 0xf6, 0x74, 0x79, 0x8b, 0x45, 0x24, 0x8b, 0x48, 0x04, 0xf7, 0x41, 0x3c, 0x00, 0x00, 0x00, 0x20, 0x74, 0x13, 0xd9, 0xee, 0x8d, 0x45, 0x4c, 0xd9, 0x50, 0x08, 0x50,
+            0xd9, 0x50, 0x04, 0xd9, 0x18, 0xe8, 0x86, 0xb5, 0xea, 0xff, 0x8b, 0x16, 0x8b, 0x42, 0x50, 0x57, 0x8b, 0xce, 0x33, 0xff, 0xff, 0xd0, 0x84, 0xc0, 0x7e, 0x46, 0x8d, 0x9b, 0x00, 0x00, 0x00, 0x00,
+            0x57, 0x8b, 0xce, 0xe8, 0x78, 0x5e, 0xef, 0xff, 0xf6, 0x40, 0x79, 0x01, 0x74, 0x21, 0x8b, 0x48, 0x04, 0x85, 0xc9, 0x74, 0x1a, 0x80, 0x78, 0x10, 0x00, 0x75, 0x14, 0x51, 0x8b, 0xcd, 0xe8, 0xdd,
+            0x11, 0xe5, 0xff, 0x84, 0xc0, 0x74, 0x08, 0x57, 0x8b, 0xce, 0xe8, 0x11, 0x5d, 0xe4, 0xff, 0x8b, 0x16, 0x8b, 0x42, 0x50, 0x8b, 0xce, 0x47, 0xff, 0xd0, 0x0f, 0xbe, 0xc8, 0x3b, 0xf9, 0x7c, 0xc0,
+            0x5f, 0x5e, 0x5d, 0xc3 };
+        static const struct { DWORD va; BYTE b[16]; } head[7] = {
+            { KLMV_RULE,    { 0x56, 0x8b, 0xf1, 0x8b, 0x0d, 0x98, 0xe5, 0x68, 0x01, 0xe8, 0x72, 0x29, 0x26, 0x00, 0x83, 0xf8 } },
+            { KLMV_INSIDE,  { 0x83, 0xec, 0x10, 0xd9, 0xee, 0x56, 0x57, 0xd9, 0x54, 0x24, 0x14, 0x8b, 0x7c, 0x24, 0x1c, 0xd9 } },
+            { KLMV_BOARD1,  { 0x0f, 0xbe, 0x54, 0x24, 0x04, 0x8b, 0x01, 0x6b, 0xd2, 0x7c, 0x8b, 0x80, 0xb4, 0x00, 0x00, 0x00 } },
+            { KLMV_NODEPOS, { 0x56, 0x57, 0x8b, 0x7c, 0x24, 0x0c, 0x8b, 0xf1, 0x8b, 0xd6, 0x8b, 0xcf, 0xe8, 0x8f, 0xb1, 0xf0 } },
+            { KLMV_ARCADE,  { 0x8b, 0x0d, 0x98, 0xe5, 0x68, 0x01, 0x8b, 0x41, 0x54, 0x83, 0xf8, 0x03, 0x77, 0x07, 0xff, 0x24 } },
+            { KLMV_RULESOF, { 0x56, 0x8b, 0xf1, 0x8b, 0x0d, 0x98, 0xe5, 0x68, 0x01, 0x83, 0x79, 0x5c, 0x04, 0x75, 0x0e, 0xe8 } },
+            { KLMV_BOX_IN,  { 0x8b, 0x54, 0x24, 0x04, 0xd9, 0x02, 0xd9, 0xe1, 0xd9, 0x5c, 0x24, 0x04, 0xd9, 0x44, 0x24, 0x04 } } };
+        BYTE now_[sizeof whole];
+        klmv_reach_ok = klh_rd((DWORD_PTR)KLH_VA(KLMV_ALLY_TICK), now_, sizeof now_) && !memcmp(now_, whole, sizeof whole) ? 1 : -1;
+        for (i = 0; i < 7 && klmv_reach_ok > 0; i++) if (!klb_same_code(head[i].va, head[i].b, 16)) klmv_reach_ok = -1;
+        if (klh_rd32((DWORD_PTR)KLH_VA(KLB_RULES_VT + 0xb4)) != KLMV_RULE) klmv_reach_ok = -1;      /* what 0x74d7f0 calls (review S8 d) */
+        if (klmv_reach_ok < 0) klog("reach: ZAllyEscapeBox's update or a routine it calls is not the one this build knows: BoardReach does nothing");
+    }
     while ((DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
         if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
             SIZE_T o, j;
@@ -387,10 +602,110 @@ static void klmv_scan(DWORD rules)
         else klmv_box[i].at = 0;                                                /* not ours: its stock update runs, nothing is denied */
     }
     klog("near: %d ZAllyEscapeBox object(s) found in %lu ms (the game stood still that long; looked for anew at every round's start):%s; %s", klmv_nbox, GetTickCount() - t0, klmv_nbox ? line : " none - only the board tactic takes an AI heister aboard on this level",
-         klmv.dry ? "DRY RUN: nothing is wrapped" : wrapped == klmv_nbox ? "slot 25 wrapped (a box farther than BoardNear from the boarding place takes nobody aboard)" : "NOT every one could be wrapped");
+         klmv.dry ? "DRY RUN: nothing is wrapped" : wrapped != klmv_nbox ? "NOT every one could be wrapped" : klmv.reach > 0 && klmv_reach_ok > 0 ? "slot 25 wrapped (BoardReach: a box takes an AI heister aboard only when THAT BOT is within reach of the vehicle's boarding box)"
+         : "slot 25 wrapped (a box farther than BoardNear from the boarding place takes nobody aboard)");
 }
 
-static void klmv_deny_none(void) { int i; for (i = 0; i < KLMV_NBOX; i++) klmv_box[i].deny = 0, klmv_box[i].would = 0; }
+static void klmv_deny_none(void) { int i; klmv_rc.armed = 0; for (i = 0; i < KLMV_NBOX; i++) klmv_box[i].deny = 0, klmv_box[i].would = 0; }
+
+/* the stage byte BoardAll writes, with BoardAll's tests (no traitor, in play, not this round's escort, the record
+   looked at again before the write), so that the bot's board tactic walks it (0x4fb064 asks stage 3). what = where it stands */
+static void klmv_stage3(const struct klb_snap *s, int i, const char *what)
+{
+    const struct klb_rec *r = &s->r[i]; struct klmv_b *b = &klmv_r.b[i]; BYTE fl = 0, st = 0, cur = 3;
+    if (!klmv.near_stage || (r->flags & 2) || kle_r.used[i] || r->stage < 1 || r->stage >= 3 || (b->told & 4)) return;      /* the escort is klescort.c's: it releases it to the boarding place when the vehicle waits */
+    if (klmv.dry) { b->told |= 4; klog("near: record %d (stage %u) at (%.0f, %.0f, %.0f) stands %s: heist stage WOULD be set to 3 (dry run)", i, r->stage, b->pos[0], b->pos[1], b->pos[2], what); return; }
+    if (!klb_still(s, i, &fl, &st) || st || (fl & 2) || !klh_rd(r->at + 0x78, &cur, 1)) return;      /* gone, aboard, dead or turned since the snapshot: looked at again */
+    b->told |= 4;
+    if (cur < 3 && !klb_put8(r->at + 0x78, 3, "crew record: heist stage 3 (an escape box does not take it: it has to walk to the vehicle)")) { klog("near: record %d: the stage byte was NOT written", i); return; }
+    klog("near: record %d (stage %u) at (%.0f, %.0f, %.0f) stands %s: heist stage set to 3 - it has to walk to the vehicle (its board tactic takes it aboard within 3 m)", i, r->stage, b->pos[0], b->pos[1], b->pos[2], what);
+}
+
+/* 4. BoardReach, the tick's half: the boarding box is read while the vehicle stands and handed to the boxes' update;
+   who the update did not take is said, gets stage 3 if it has less, and - if it stands - the order to the doors */
+static void klmv_reach_pass(const struct klb_snap *s, DWORD now)
+{
+    struct klmv_fr fr, bf[KLMV_NBOX]; int i, j, waiting = s->veh == 3 || s->veh == 4, relax, have = 0, nb = 0, first = 0; DWORD obj, actor, soldier; LONG beyond = 0, took = 0;
+    float d, bp[3], got[3]; char w[100]; struct kle_e t; BYTE last = 0;
+    if (klmv_reach_ok <= 0) { klmv_rc.armed = 0; return; }      /* also in a dry run (review S8 a): no 'WOULD' line for an update that would never be used */
+    /* THE UPDATE IS ARMED FOR THE WHOLE ROUND (review M1): it reads the vehicle's state and the boarding box itself,
+       in its own frame. The tick only says for which rules object, how far, and whether the boxes work as in stock
+       from this visit on - for the visit that stands or drives off, else for the NEXT one (the visit count is the
+       tick's and comes up to 250 ms after the vehicle's state 3) */
+    klh_rd(s->rules + 0xe8a, &last, 1);
+    relax = klmv.reach_visits && klmv_r.visit >= klmv.reach_visits;
+    klmv_rc.rules = s->rules; klmv_rc.reach = klmv.reach; klmv_rc.door_reach = klmv.reach < KLMV_DOORS_MAX ? klmv.reach : KLMV_DOORS_MAX; klmv_rc.doors = klmv.reach_doors;
+    klmv_rc.relax = klmv.reach_visits && klmv_r.visit + (waiting || s->veh == 5 ? 0 : 1) >= klmv.reach_visits;
+    klmv_rc.armed = !klmv.dry;
+    if (last) relax = 1;                      /* the round's last vehicle: nobody is stranded for good (review S2; the update reads the byte itself) */
+    if (waiting && !relax && (obj = klh_rd32(s->rules + 0x1e0)) != 0 && klmv_frame(obj, &fr)) have = 1;
+    if (!have) {
+        if (waiting && klmv_r.rc_told != klmv_r.visit) {
+            klmv_r.rc_told = klmv_r.visit;
+            klog("reach: visit %d: %s: every escape box works as in stock", klmv_r.visit, last ? "the round's last vehicle" : relax ? "BoardReachVisits: from this visit on" : "the vehicle's boarding object ([rules+0x1e0]) cannot be read");
+        }
+    } else {
+        for (i = 0; i < klmv_nbox; i++) if (klmv_box[i].at && !klmv_box[i].deny) { first = 1; break; }
+        if (klmv_r.rc_visit != klmv_r.visit) {
+            /* the counts are NOT zeroed here: what the update counted in this wait's first 250 ms belongs to it (they are
+               zeroed when the visit's line is said, below) */
+            klmv_r.rc_visit = klmv_r.visit; klmv_r.rc_wait_at = KLB_T(now);
+            if (fr.box) klog("reach: visit %d: the vehicle's boarding box (where YOU get in) is %.0f x %.0f x %.0f (half extents) round (%.0f, %.0f, %.0f): an AI heister goes aboard only within %.1f m of that box%s%s%s", klmv_r.visit,
+                             fr.half[0], fr.half[1], fr.half[2], fr.T[0], fr.T[1], fr.T[2], klmv.reach / 100, klmv.reach_doors ? klmv.reach > KLMV_DOORS_MAX ? " - in an escape box or, called (stage 3), within 3.0 m of it at the doors" : " - in an escape box or, called (stage 3), at the doors" : " and inside an escape box",
+                             first ? "" : "; NO escape box of this level runs this file's update: only the board tactic takes a bot aboard", klmv.dry ? " (DRY RUN: nothing is wrapped, the lines say what would be)" : "");
+            else klog("reach: visit %d: the vehicle's boarding object at (%.0f, %.0f, %.0f) is not a box this file knows: BoardReach %.1f m is measured from its node%s", klmv_r.visit, fr.T[0], fr.T[1], fr.T[2], klmv.reach / 100, klmv.dry ? " (DRY RUN)" : "");
+        }
+    }
+    beyond = InterlockedExchange(&klmv_rc_far, 0); took = InterlockedExchange(&klmv_rc_took, 0);
+    if (!waiting && klmv_r.was_waiting) {
+        LONG nb_ = InterlockedExchange(&klmv_rc_box, 0), nd = InterlockedExchange(&klmv_rc_door, 0), nr = InterlockedExchange(&klmv_rc_refused, 0);
+        if (klmv_r.rc_visit == klmv_r.visit && klmv.log)
+            klog("reach: visit %d is over: an escape box took an AI heister within reach %ld time(s), the doors %ld time(s); %ld time(s) a box was asked for one beyond BoardReach and did not take it (who it did not take and who has no stage 3, is a traitor or stood more than 30 m off was moved by nothing of this file)", klmv_r.visit, (long)nb_, (long)nd, (long)nr);
+    }
+    if (!have) return;
+    if (klmv.dry) for (i = 0; i < klmv_nbox; i++) if (klmv_box[i].at && !klmv_box[i].would && klmv_frame(klh_rd32(klmv_box[i].at + 0x24), &bf[nb]) && bf[nb].box) nb++;      /* a dry run: this file's own 'inside' */
+    for (i = 0; i < s->n && i < KLB_NREC; i++) {
+        const struct klb_rec *r = &s->r[i]; struct klmv_b *b = &klmv_r.b[i]; int out;
+        if (!r->used || !(r->flags & 1)) continue;
+        if (i < 32 && (took >> i & 1) && klmv.log) klog("reach: record %d (stage %u) is taken aboard AT THE DOORS: it stood %.1f m from the boarding box, outside the escape box that asked", i, r->stage, b->seen ? klmv_fr_dist(&fr, b->pos) / 100 : 0.0);
+        if (r->status || !b->seen) continue;
+        d = klmv_fr_dist(&fr, b->pos);
+        out = i < 32 && (beyond >> i & 1);
+        if (klmv.dry && d > klmv.reach) for (j = 0; j < nb && !out; j++) out = klmv_fr_dist(&bf[j], b->pos) <= 0;
+        if (out) {
+            b->told |= 16;                                                     /* for the line at the departure */
+            if (b->reach_visit != klmv_r.visit) {
+                b->reach_visit = klmv_r.visit;
+                klog("reach: visit %d: record %d (%s, stage %u) at (%.0f, %.0f, %.0f) stands in an escape box %.1f m from the boarding box, over BoardReach %.1f m: the box %s - %s", klmv_r.visit, i,
+                     r->flags & 2 ? "TRAITOR" : kle_r.used[i] ? "an escort" : "bot", r->stage, b->pos[0], b->pos[1], b->pos[2], d / 100, klmv.reach / 100, klmv.dry ? "WOULD not take it (dry run)" : "does not take it",
+                     /* who is refused and moved by nothing of this file (review S5) */
+                     r->flags & 2 ? "a traitor gets no order and no stage write: only its own tactics move it"
+                     : kle_r.used[i] ? "klescort.c releases it to the boarding place"
+                     : r->stage < 1 ? "heist stage 0: no stage write (BoardAll's rule) and no order - nothing of this file moves it"
+                     : d > KLMV_SENT ? "it has to walk to the doors (more than 30 m off: no order from this file)" : "it has to walk to the doors");
+            }
+            klmv_stage3(s, i, "in an escape box beyond BoardReach");
+        }
+        /* THE ORDER TO THE DOORS. A called bot (stage 3) near the vehicle that does not move: its board tactic is off
+           (its test 0x4faf60 asks a path of MORE THAN ONE node: a bot on the boarding object's own mesh polygon has
+           none - GUESS that this is what holds it; four of the six maps park the crew on that polygon) or has no path.
+           It gets the tactic's own goal - the boarding object's place - as its order, once a visit, by the soldier's
+           own routine (klescort.c). There the doors take it. Not a traitor, not a held escort: kle_bot / below */
+        if (!klmv.reach_order || r->stage < 3 || (r->flags & 2) || d <= klmv.reach || d > KLMV_SENT || (b->told & 32)) continue;
+        if (now - b->since < 1000 || now - klmv_r.rc_wait_at < 1000) continue;  /* it stands, a second into the wait */
+        for (j = 0; j < KLE_MAX; j++) if (kle_r.e[j].mode == 1 && kle_r.e[j].rec == i) break;
+        if (j < KLE_MAX) continue;                                              /* klescort.c holds it beside the human */
+        b->told |= 32;
+        if (!kle_bot(s, i, &actor, &soldier, bp, w)) { if (klmv.log) klog("reach: record %d stands %.1f m from the boarding box and gets no order to the doors: %s", i, d / 100, w); continue; }
+        if (kle_dist(bp, fr.T) <= 260.0f) continue;                             /* the game would take it as 'he is there already' (soft): a waiting step of its chain would end */
+        memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
+        j = kle_order2(&t, fr.T, got, w, klmv.dry);
+        if (!j) { klog("reach: record %d NOT sent to the doors: %s", i, w); continue; }
+        b->order_at = KLB_T(now); b->since = now;
+        klog("reach: visit %d: record %d (stage %u) stood %.1f m from the boarding box at (%.0f, %.0f, %.0f): %s to the doors (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f)", klmv_r.visit, i, r->stage, d / 100, bp[0], bp[1], bp[2],
+             j == 2 ? "WOULD be sent (dry run)" : "sent", fr.T[0], fr.T[1], fr.T[2], got[0], got[1], got[2]);
+    }
+}
 
 static void klmv_boxes(const struct klb_snap *s, DWORD now)
 {
@@ -415,11 +730,11 @@ static void klmv_boxes(const struct klb_snap *s, DWORD now)
             klog("near: visit %d is over: the denied box at (%.0f, %.0f, %.0f) was asked %ld time(s)", klmv_r.visit, klmv_box[i].pos[0], klmv_box[i].pos[1], klmv_box[i].pos[2], (long)klmv_box[i].asked);
         if (s->veh == 5 && !last) { if (klmv_box[i].would) any = 1; continue; }  /* as decided while it stood */
         d = have_bd ? kle_dist(klmv_box[i].pos, bd) : 0; klmv_box[i].d = d;
-        if (have_bd && !last && d > klmv.near_ && (!klmv.near_visits || klmv_r.visit < klmv.near_visits)) deny = 1;
+        if (klmv.near_ > 0 && have_bd && !last && d > klmv.near_ && (!klmv.near_visits || klmv_r.visit < klmv.near_visits)) deny = 1;
         klmv_box[i].would = (int)deny;
         if (!klmv.dry) klmv_box[i].deny = deny;
         if (deny) any = 1;
-        if (waiting && klmv_box[i].told_visit != klmv_r.visit) {
+        if (klmv.near_ > 0 && waiting && klmv_box[i].told_visit != klmv_r.visit) {
             klmv_box[i].told_visit = klmv_r.visit; klmv_box[i].asked = 0;
             if (deny) klog("near: visit %d: the box at (%.0f, %.0f, %.0f) is %.1f m from the boarding place (%.0f, %.0f, %.0f), over BoardNear %.1f m: it %s", klmv_r.visit, klmv_box[i].pos[0], klmv_box[i].pos[1], klmv_box[i].pos[2],
                            d / 100, bd[0], bd[1], bd[2], klmv.near_ / 100, klmv.dry ? "WOULD take nobody aboard (dry run)" : "takes nobody aboard");
@@ -440,25 +755,19 @@ static void klmv_boxes(const struct klb_snap *s, DWORD now)
             if (b->seen && k < (int)sizeof list - 40) k += snprintf(list + k, sizeof list - k, " %d%s %.0f m", i, b->told & 16 ? "*" : "", kle_dist(b->pos, klmv_r.near_bd) / 100);
         }
         spare = (BYTE)(kle.fo_spare != 0);
-        klog("near: visit %d: the vehicle leaves %s: %d AI heister(s) still in play (record, metres from the boarding place:%s), %d of them (*) stood at a denied box on this visit%s", klmv_r.visit, hab ? "WITH YOU ABOARD" : "without you", left, left ? list : " none",
+        klog("near: visit %d: the vehicle leaves %s: %d AI heister(s) still in play (record, metres from the boarding place:%s), %d of them (*) stood at a denied box or in a box beyond BoardReach on this visit%s", klmv_r.visit, hab ? "WITH YOU ABOARD" : "without you", left, left ? list : " none",
              denied, !left ? "" : !hab ? " - it comes again for them" : spare ? " - FollowOutSpare is on: nobody is shot" : " - THE RULES SHOOT THEM NOW (stock Arcade: every AI heister left in play when the human is driven out); FollowOutHold / FollowOutSpare are the keys against it");
         for (i = 0; i < KLB_NREC; i++) klmv_r.b[i].told &= (BYTE)~16;
     }
     if (!any || !waiting) return;                                              /* only while it STANDS */
-    /* g. a bot under stage 3 at a denied box: the stage byte BoardAll writes, with BoardAll's tests (no traitor, in play,
-       not this round's escort, the record looked at again before the write), so that its board tactic walks it */
+    /* g. a bot under stage 3 at a denied box: the stage byte BoardAll writes, with BoardAll's tests (klmv_stage3) */
     for (i = 0; i < s->n && i < KLB_NREC; i++) {
-        const struct klb_rec *r = &s->r[i]; struct klmv_b *b = &klmv_r.b[i]; BYTE fl = 0, st = 0, cur = 3;
+        const struct klb_rec *r = &s->r[i]; struct klmv_b *b = &klmv_r.b[i];
         if (!r->used || !(r->flags & 1) || r->status || !b->seen) continue;
         for (j = 0; j < klmv_nbox; j++) if (klmv_box[j].at && klmv_box[j].would && klmv_h(b->pos, klmv_box[j].pos) <= KLMV_BOXR && fabs(b->pos[1] - klmv_box[j].pos[1]) <= 400.0f) break;
         if (j >= klmv_nbox) continue;
         b->told |= 16;                                                         /* for the line at the departure */
-        if (!klmv.near_stage || (r->flags & 2) || kle_r.used[i] || r->stage < 1 || r->stage >= 3 || (b->told & 4)) continue;      /* the escort is klescort.c's: it releases it to the boarding place when the vehicle waits */
-        if (klmv.dry) { b->told |= 4; klog("near: record %d (stage %u) at (%.0f, %.0f, %.0f) stands at a denied box: heist stage WOULD be set to 3 (dry run)", i, r->stage, b->pos[0], b->pos[1], b->pos[2]); continue; }
-        if (!klb_still(s, i, &fl, &st) || st || (fl & 2) || !klh_rd(r->at + 0x78, &cur, 1)) continue;      /* gone, aboard, dead or turned since the snapshot: looked at again */
-        b->told |= 4;
-        if (cur < 3 && !klb_put8(r->at + 0x78, 3, "crew record: heist stage 3 (at a denied escape box: it has to walk to the vehicle)")) { klog("near: record %d: the stage byte was NOT written", i); continue; }
-        klog("near: record %d (stage %u) at (%.0f, %.0f, %.0f) stands at a denied box: heist stage set to 3 - it has to walk to the vehicle (its board tactic takes it aboard within 3 m)", i, r->stage, b->pos[0], b->pos[1], b->pos[2]);
+        klmv_stage3(s, i, "at a denied box");
     }
     (void)now;
 }
@@ -711,7 +1020,7 @@ static void klmv_tick(int game_thread)
     klmv_fail_at = 0;
     for (i = 0; i < s.n; i++) if (s.r[i].used) stages += s.r[i].stage;
     if (s.rules != klmv_r.rules || (s.state == KLB_ROUND && klmv_r.state != KLB_ROUND) || stages < klmv_r.stages) {      /* a new round: as klbot.c's klb_act */
-        memset(&klmv_r, 0, sizeof klmv_r); klmv_r.rules = s.rules; klmv_r.round_at = KLB_T(now);
+        memset(&klmv_r, 0, sizeof klmv_r); klmv_r.rules = s.rules; klmv_r.round_at = KLB_T(now); klmv_rc.armed = 0; klmv_rc.rules = 0; klmv_rc.relax = 0;
         if (game_thread)                      /* what is still sour is from before this round (the round's end puts them back; these outlived a pass that could not read): back if it still is that object, else forgotten */
             for (i = 0; i < KLMV_NSOUR; i++) if (klmv_sour[i].on) { if (klmv_sour[i].rules == s.rules) klmv_sweeten(i, "a new round"); else klmv_sour[i].on = 0; }
     }
@@ -730,11 +1039,12 @@ static void klmv_tick(int game_thread)
     criminal = kle_criminal();
     human_in = h && h->status == 0 && kle_human(&player, hp, hn);
     waiting = s.veh == 3 || s.veh == 4;
-    if (waiting && !klmv_r.was_waiting) klmv_r.visit++;
+    if (waiting && !klmv_r.was_waiting) { klmv_r.visit++; for (i = 0; i < KLB_NREC; i++) klmv_r.b[i].told &= (BYTE)~(16 | 32); }
     if (klmv_r.last_pass && now - klmv_r.last_pass > 1500) for (i = 0; i < KLB_NREC; i++) klmv_r.b[i].seen = 0;      /* the round stood still (the window was not in front): every clock starts again */
     klmv_r.last_pass = KLB_T(now);
     klmv_track(&s, now);
-    if (klmv.near_ > 0) klmv_boxes(&s, now);
+    if (klmv.near_ > 0 || klmv.reach > 0) klmv_boxes(&s, now);
+    if (klmv.reach > 0) klmv_reach_pass(&s, now);
     klmv_r.was_waiting = waiting;
     if (klmv.wait) { klmv_gate(&s, now, h, criminal); klmv_driver(&s, now, h, human_in, criminal, hp); }
     if (klmv.restless || klmv.loot) {
@@ -767,11 +1077,15 @@ static void klmv_init(void)
     klmv.near_ = klb_inif("BoardNear", "0"); if (!klb_finite(klmv.near_) || klmv.near_ < 0) klmv.near_ = 0;
     klmv.near_visits = klb_pos("BoardNearVisits", 3, 100);
     klmv.near_stage = GetPrivateProfileIntA("Bots", "BoardNearStage", 1, klh_ini) != 0;
+    klmv.reach = klb_inif("BoardReach", "0"); if (!klb_finite(klmv.reach) || klmv.reach < 0) klmv.reach = 0; if (klmv.reach > 0 && klmv.reach < 50) klmv.reach = 50;
+    klmv.reach_visits = klb_pos("BoardReachVisits", 3, 100);      /* default 3 as BoardNearVisits (review S2: a bot nothing can walk to the doors is not stranded for the whole round) */
+    klmv.reach_doors = GetPrivateProfileIntA("Bots", "BoardReachDoors", 1, klh_ini) != 0;
+    klmv.reach_order = GetPrivateProfileIntA("Bots", "BoardReachOrder", 1, klh_ini) != 0;
     klmv.dry = GetPrivateProfileIntA("Bots", "MoveDry", 0, klh_ini) != 0;
     klmv.log = klb_pos("MoveLog", 1, 2);
-    klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0;
+    klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0 || klmv.reach > 0;
     if (!klmv.any) return;
-    if (!klb.on) { klog("move / wait / near: [Bots] Restless, WaitForYou or BoardNear is set but [Bots] Enable is 0: they need klbot.c's crew records, nothing is done"); klmv.any = 0; return; }
+    if (!klb.on) { klog("move / wait / near / reach: [Bots] Restless, WaitForYou, BoardNear or BoardReach is set but [Bots] Enable is 0: they need klbot.c's crew records, nothing is done"); klmv.any = 0; return; }
     if (klmv.restless || klmv.loot)
         klog("move: on; Restless=%lu s Loot=%lu s (back %lu s, near %.0f) Hold=%lu s Pace=%.0f%s: an AI heister that stands that long without moving 1 m or earning - on a money object that pays nothing: the object is no loot candidate for a while (one byte of it; you can still take it); more than 3 m from the place its chain ordered: that order again (the soldier's own order %08x)%s; Arcade only, on a level that is not the stock one of its slot",
              klmv.restless / 1000, klmv.loot / 1000, klmv.back / 1000, klmv.loot_near, klmv.hold / 1000, klmv.pace, klmv.dry ? " DRY RUN (MoveDry=1: nothing is written or called)" : "", KLE_ORDER,
@@ -783,6 +1097,12 @@ static void klmv_init(void)
         klog("near: on; BoardNear=%.0f Visits=%d Stage=%d%s: a ZAllyEscapeBox farther than that from the escape vehicle's boarding place takes no AI heister aboard (a private vtable copy on the level's box objects, slot 25); Arcade only, on a level that is not the stock one of its slot. FollowOutHold=%.0f FollowOutSpare=%d%s",
              klmv.near_, klmv.near_visits, klmv.near_stage, klmv.dry ? " DRY RUN" : "", kle.fo_hold, kle.fo_spare,
              kle.fo_hold > 0 || kle.fo_spare ? "" : ": NEITHER IS ON - an AI heister a far box no longer takes is shot by the rules when the vehicle leaves with you aboard");
+    if (klmv.reach > 0)
+        klog("reach: on; BoardReach=%.0f Visits=%d Doors=%d Order=%d Stage=%d%s: while the escape vehicle stands, a ZAllyEscapeBox takes an AI heister aboard only when THAT BOT is within that distance of the vehicle's boarding box - the box YOU get in at (the boxes' update done by this file, record by record, with the game's own calls; a private vtable copy on the level's box objects, slot 25)%s%s; Arcade only, on a level that is not the stock one of its slot.%s FollowOutHold=%.0f FollowOutSpare=%d%s",
+             klmv.reach, klmv.reach_visits, klmv.reach_doors, klmv.reach_order, klmv.near_stage, klmv.dry ? " DRY RUN" : "",
+             klmv.reach_doors ? "; a called bot (stage 3) that near is taken there, in a box or not" : "", klmv.reach_order ? "; a called bot that stands within 30 m of it is sent to the doors once a visit" : "",
+             klmv.near_ > 0 ? " BoardNear is set too: a box it denies takes nobody whatever BoardReach says (BoardReach alone is enough)." : "", kle.fo_hold, kle.fo_spare,
+             kle.fo_hold > 0 || kle.fo_spare ? "" : ": NEITHER IS ON - an AI heister who does not reach the doors in the vehicle's 8 s is shot by the rules when it leaves with you aboard");
 }
 
 #endif /* KLMOVE_C */
