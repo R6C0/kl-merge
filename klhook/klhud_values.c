@@ -185,7 +185,7 @@
    ink / 4c0c0c0d when lost'). klhud.c has no width of a text, so the name's width is ESTIMATED from its length: every
    number here is a named GUESS until a picture has shown the row (live check L2b). */
 #define KLUV_SKULL_PIC   178                   /* HUD picture 'Kill', 32 x 32 (re\hud_layout.md, re\hud_data.md) */
-#define KLUV_SKULL_SIZE  12.0f
+#define KLUV_SKULL_SIZE  15.0f                 /* run V3: 'far too small' at 12 (picture 178's ink fills little of its 32 x 32) */
 #define KLUV_SKULL_GAP   2.0f                  /* between two skulls */
 #define KLUV_SKULL_LEAD  8.0f                  /* after the name (the layout's '+ 8') */
 #define KLUV_NAME_CHARW  9.0f                  /* GUESS: the mean width of one character of a name in the row's font */

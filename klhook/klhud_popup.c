@@ -99,9 +99,10 @@
  *   LootRing=0        1 = the loot ring (default = [HUD] Draft)
  *   PopupFrame=0      1 = leave the stock background frame drawn under ours
  *   PopupMeasure=1    0 = size the bar from the string's length, never from the text object
- *   PopupPadX=62 PopupPadY=12 PopupDY=0     the bar = the text + this much (the draft: text + 62, 34 high); DY moves
+ *   PopupPadX=61.4 PopupPadY=14.1 PopupDY=0 the bar = the text + 61.4 wide, 33.6 + 14.1 = 47.7 high (the draft's .toast); DY moves
  *                     the BAR ALONE (to seat it on the letters)
- *   PopupY=-1         bar AND letters: the text's top in virtual pixels (the draft: 520); -1 = the game's 480
+ *   PopupY=523        the BAR'S MIDDLE in virtual pixels (the draft's .toast: bottom 547, middle 523); the letters' capitals are centred on it
+ *                     by the baked metric (see the 1:1 block). -1 = the game's own text top (480) + half a capital
  *   PopupTraitor=1    how the traitor message is told (section 2): 1 its string, 2 string or flag, 0 flag alone
  *   PopupLayer=23     the bar's layer byte (0x17 = the stock frame's; the text is 0x19, its shadow 0x18)
  *   PopupTest=0       TEST: 1 = every 8 s the tick shows a sample message through the game's own 0x468430, in turn a
@@ -123,6 +124,7 @@
 #define KLPU_E_END       0x30                 /* the announcement: float, the clock / 1024 at which it ends (section 1) */
 #define KLPU_T_STRING    0xa4                 /* ZCHAROBJ: -> string object, the characters at +0xc (0x489649 .. 0x48965a) */
 #define KLPU_T_RGB       0x14                 /* ZCHAROBJ: the colour dword */
+#define KLPU_T_STYLE     0x84                 /* ZCHAROBJ: the style byte SetStyle keeps (re\hud.md 191) */
 #define KLPU_T_ALPHA     0x86                 /* ZCHAROBJ: the alpha byte SetAlpha keeps */
 #define KLPU_T_GEOM      0x04                 /* ZCHAROBJ: -> the object whose +0x40 / +0x44 are the text's half extents */
 #define KLPU_R_LOOT      0x15                 /* crew record: loot state byte */
@@ -144,9 +146,9 @@
 #define KLPU_RING_DY     (-64.0f)
 #define KLPU_RING_X0     640.0f               /* without that element */
 #define KLPU_RING_Y0     545.0f
-#define KLPU_RING_N      20                   /* re\hud_layout.md: 20 dabs on r = 26, disc and thin ring 40, dollar 34 */
+#define KLPU_RING_N      32                   /* re\hud_layout.md: 20 dabs on r = 26, disc and thin ring 40, dollar 34 */
 #define KLPU_RING_R      26.0f
-#define KLPU_DAB_W       6.0f
+#define KLPU_DAB_W       9.0f
 #define KLPU_DAB_H       8.0f
 #define KLPU_DISC        40.0f
 #define KLPU_DOLLAR      34.0f
@@ -159,6 +161,15 @@
 #define KLPU_SCALE       0x00cee050u          /* float: the stock frame's scale (EXE 0x4896c7) */
 #define KLPU_LOOT_PERSON 3                    /* crew record +0x15: the human takes money off a person (section 3) */
 #define KLPU_MSG         128
+/* 2026-10-11 1:1 round (owner: texts in the white boxes sit off the middle; draft = hud_mockup.html .toast). The review
+   (re/hud_1to1_review.md MUST 1 / 2) refuted the style-0x44 way: the 3 px offset was measured on the STOCK font, and the new bake has
+   other metrics. Now the stock top-aligned style stays and the letters are placed by the baked metric, as the crew rows are:
+   kl_hud.py bakes header[9] = -cap, so the capitals of a text drawn at y span y .. y + cap (cap = [HUD] Cap0, the NAME font's).
+   The draft's size 22.4 px has no slot of its own (H1 serves the total), so while a bar shows the two texts take the NAME font
+   (H2, SetFont +0x23c, the original put back like the colour) and their top is bar centre - cap / 2.
+   The bar's height is the draft's constant, not a measure: .toast = line-height 1.5 x 22.4 px = 33.6 + 2 x .55 cqw (14.1). */
+#define KLPU_T_FONT      0xac                 /* ZCHAROBJ: the font object SetFont keeps (re\hud.md 3.1) */
+#define KLPU_BAR_LINE    33.6f                /* the draft's one line of the bar: line-height 1.5 x font 22.4 px */
 
 static struct { int popups, ring, frame, measure, layer, test, ringmode, traitor; float padx, pady, dy, y, ringx, ringy; } klpu;
 
@@ -223,11 +234,30 @@ static void klpu_colour(DWORD text, DWORD rgb)
         ((klpu_set1_t)(DWORD_PTR)KLH_VA(KLPU_SETCOLOUR))((void *)(DWORD_PTR)text, 0, rgb);
 }
 
+static float klpu_top;                         /* render thread only: the text top the last bar asked for */
+static DWORD klpu_font_obj[2], klpu_font_orig[2], klpu_font_set[2];
+static void klpu_font(DWORD obj, int slot, int on)
+{   /* on = 1: the text takes the NAME font (the object's own SetFont); 0: back to the font it had, if it still holds ours */
+    DWORD cur, want;
+    if (!obj) return;
+    cur = klh_rd32(obj + KLPU_T_FONT);
+    if (on) {
+        want = klu.fontset ? klu_r.fonts[KLU_FNT_NAME] : 0;
+        if (!want || !cur || cur == want) return;
+        klpu_font_obj[slot] = obj; klpu_font_orig[slot] = cur; klpu_font_set[slot] = want;
+        klu_set(obj, KLU_VT_FONT, want);
+    } else if (klpu_font_obj[slot] == obj) {
+        if (cur == klpu_font_set[slot] && klpu_font_orig[slot]) klu_set(obj, KLU_VT_FONT, klpu_font_orig[slot]);
+        klpu_font_obj[slot] = 0;
+    }
+}
+
 static void klpu_restore(DWORD text, DWORD shadow)
 {   /* section 2: nothing of ours is left on the stock objects when we do not draw */
     DWORD rgb = *(const DWORD *)(DWORD_PTR)(text + KLPU_T_RGB) & 0xffffff;
     if (rgb == (KLU_C_INK & 0xffffff) || rgb == (KLU_C_ORANGE & 0xffffff)) klpu_colour(text, KLPU_STOCK_RGB);
     klpu_shadow(shadow, 1);
+    klpu_font(text, 0, 0); klpu_font(shadow, 1, 0);
     klpu_dirty = 0;
 }
 
@@ -252,7 +282,7 @@ static int klpu_popup(DWORD e, void *ctx)
 {
     DWORD text = *(const DWORD *)(DWORD_PTR)(e + 0x28), shadow = *(const DWORD *)(DWORD_PTR)(e + 0x2c), sys, geom;
     LONG endbits = *(const LONG *)(DWORD_PTR)(e + KLPU_E_END), frame = 0; float end = klpu_f(endbits), ext[2] = { 0, 0 };
-    float x, y, w, h, ew, eh, bw, bh, x0, y0; char s[KLPU_MSG]; const char *p; void *clock; DWORD str;
+    float x, y, w, h, ew, eh, bw, bh, x0, y0, cap; char s[KLPU_MSG]; const char *p; void *clock; DWORD str;
     int showing, n, lines = 1, cur = 0, longest = 0, traitor = 0, byflag = 0, withflag = 0, same, measured = 0, bar, drew = 0;
     if (!(end > 0) && klpu_dirty != e) return 0;                     /* no message and nothing of ours on it: no guarded read at all (review N2) */
     if (!text || klh_rd32(text) != KLU_TEXT_VT) return 0;
@@ -274,17 +304,21 @@ static int klpu_popup(DWORD e, void *ctx)
     { LONG at = klpu_traitor_at; withflag = at && (DWORD)(klpu_seen_at - (DWORD)at + KLPU_TRAITOR_EARLY) < KLPU_TRAITOR_EARLY + KLPU_TRAITOR_LATE; }
     if (same) traitor = 1;
     else if (withflag && (klpu.traitor != 1 || !klpu_traitor_ok)) traitor = byflag = 1;
+    if (klu.fontset) { klpu_dirty = e; klpu_font(text, 0, 1); klpu_font(shadow, 1, 1); }      /* the NAME font first: the measure below is of the text in it */
     /* how large (section 2): the object's own half extents, else from the string as the stock frame is sized */
     ew = longest * KLPU_CHAR_W; eh = KLPU_LINE_H + KLPU_LINE_STEP * (lines - 1);
     geom = *(const DWORD *)(DWORD_PTR)(text + KLPU_T_GEOM);
     if (klpu.measure && geom && klh_rd(geom + 0x40, ext, 8) && ext[0] > 2.0f && ext[0] < 600.0f && ext[1] > 2.0f && ext[1] < 120.0f) measured = 1;
     w = measured ? 2.0f * ext[0] : ew; h = measured ? 2.0f * ext[1] : eh;
-    x = *(const float *)(DWORD_PTR)(e + 0x14); y = klpu.y >= 0 ? klpu.y : *(const float *)(DWORD_PTR)(e + 0x18);     /* PopupY: the caller gives the stock Render the same y */
-    bw = w + klpu.padx; bh = h + klpu.pady;
-    x0 = x - bw * 0.5f;                                              /* GUESS (section 1): style 0x14 centres the text on x ... */
-    y0 = y + h * 0.5f - bh * 0.5f + klpu.dy;                         /* ... and y is the text's top */
+    cap = klu.fontset ? klu_cap_of(KLU_FNT_NAME) : 15.0f;
+    x = *(const float *)(DWORD_PTR)(e + 0x14);
+    y = klpu.y >= 0 ? klpu.y : *(const float *)(DWORD_PTR)(e + 0x18) + cap * 0.5f;     /* the bar's middle: PopupY, else the game's own text top + half a capital */
+    bw = w + klpu.padx; bh = KLPU_BAR_LINE + klpu.pady + KLPU_LINE_STEP * (float)(lines - 1);      /* the draft: text + 61.4 wide, 33.6 + 14.1 = 47.7 high */
+    x0 = x - bw * 0.5f;                                              /* the low style nibble 4 centres the text on x */
+    y0 = y + KLPU_LINE_STEP * (float)(lines - 1) * 0.5f - bh * 0.5f + klpu.dy;       /* a block of several lines: the bar's middle follows the block's */
+    klpu_top = (float)floor(y - cap * 0.5f + 0.5f);                   /* the capitals span klpu_top .. + cap (header[9] = -cap): their middle is the bar's middle (+ 0.5 px at most) */
     if (traitor) {
-        klpu_dirty = e; klpu_colour(text, KLU_C_ORANGE); klpu_shadow(shadow, 1);
+        klpu_dirty = e; klpu_colour(text, KLU_C_ORANGE); klpu_shadow(shadow, 1); klpu_font(text, 0, 1); klpu_font(shadow, 1, 1);
         if (klu_r.handle[181]) drew |= klu_pic(clock, ctx, KLU_NPIC, 181, x0, y0, bw, bh, KLPU_C_BOXFILL, klpu.layer - 1);
         if (klu_r.handle[118]) drew |= klu_pic(clock, ctx, KLU_NPIC, 118, x0 - KLPU_BOX_GROW, y0 - KLPU_BOX_GROW, bw + 2 * KLPU_BOX_GROW, bh + 2 * KLPU_BOX_GROW, KLU_C_ORANGE, klpu.layer);
         else if (klu_r.handle[181]) {                                /* no painted box in this level: four plain bars */
@@ -295,7 +329,7 @@ static int klpu_popup(DWORD e, void *ctx)
         }
         if (drew) InterlockedIncrement(&klpu_n_box);
     } else {
-        klpu_dirty = e; klpu_colour(text, KLU_C_INK); klpu_shadow(shadow, 0);
+        klpu_dirty = e; klpu_colour(text, KLU_C_INK); klpu_shadow(shadow, 0); klpu_font(text, 0, 1); klpu_font(shadow, 1, 1);
         drew = klu_pic(clock, ctx, KLU_NPIC, bar, x0, y0, bw, bh, KLU_C_CHALK, klpu.layer);
         if (drew) InterlockedIncrement(&klpu_n_bar);
     }
@@ -313,19 +347,19 @@ static int klpu_popup(DWORD e, void *ctx)
 
 static void klpu_ring_draw(void *ctx)
 {   /* section 3; re\hud_layout.md 'loot ring' */
-    void *clock; float cx, cy, frac; int k, n;
+    void *clock; float cx, cy, frac; int k, n, drew = 0;
     if (!klpu_ring_on || !klu_draw_on || !klu_r.handle[113] || !(clock = klpu_clock())) return;
     cx = klpu_f(klpu_ring_cx); cy = klpu_f(klpu_ring_cy); frac = klpu_f(klpu_ring_frac);
     if (!(frac >= 0)) frac = 0; if (frac > 1.0f) frac = 1.0f;
-    if (klu_r.handle[114]) klu_pic(clock, ctx, KLU_NPIC, 114, cx - KLPU_DISC * 0.5f, cy - KLPU_DISC * 0.5f, KLPU_DISC, KLPU_DISC, KLPU_C_DISC, klu.layer - 2);
+    if (klu_r.handle[114]) drew |= klu_pic(clock, ctx, KLU_NPIC, 114, cx - KLPU_DISC * 0.5f, cy - KLPU_DISC * 0.5f, KLPU_DISC, KLPU_DISC, KLPU_C_DISC, klu.layer - 2);
     if (klu_r.handle[115]) klu_pic(clock, ctx, KLU_NPIC, 115, cx - KLPU_DISC * 0.5f, cy - KLPU_DISC * 0.5f, KLPU_DISC, KLPU_DISC, KLPU_C_THIN, klu.layer - 1);
     if (klu_r.handle[116]) klu_pic(clock, ctx, KLU_NPIC, 116, cx - KLPU_DOLLAR * 0.5f, cy - KLPU_DOLLAR * 0.5f, KLPU_DOLLAR, KLPU_DOLLAR, KLPU_C_DOLLAR, klu.layer - 1);
     n = (int)(frac * KLPU_RING_N + 0.5f); if (n < 1) n = 1;          /* the first dab stands as soon as he loots */
     for (k = 0; k < n && k < KLPU_RING_N; k++) {                     /* dab k at 2 pi k / N clockwise from the top: the FILLED part */
         float a = 6.2831853f * (float)k / (float)KLPU_RING_N;
-        klu_pic(clock, ctx, KLU_NPIC, 113, cx + KLPU_RING_R * (float)sin(a) - KLPU_DAB_W * 0.5f, cy - KLPU_RING_R * (float)cos(a) - KLPU_DAB_H * 0.5f, KLPU_DAB_W, KLPU_DAB_H, KLU_C_CHALK, klu.layer);
+        drew |= klu_pic(clock, ctx, KLU_NPIC, 113, cx + KLPU_RING_R * (float)sin(a) - KLPU_DAB_W * 0.5f, cy - KLPU_RING_R * (float)cos(a) - KLPU_DAB_H * 0.5f, KLPU_DAB_W, KLPU_DAB_H, KLU_C_CHALK, klu.layer);
     }
-    InterlockedIncrement(&klpu_n_ring);
+    if (drew) InterlockedIncrement(&klpu_n_ring);
 }
 
 /* slot 2 (Render(ctx, cam), thiscall ret 8) of the private vtable of the announcement element */
@@ -341,10 +375,8 @@ static char __fastcall klpu_render_ann(void *el, void *edx, void *ctx, void *cam
                    shadow are drawn whatever the float says */
                 old = InterlockedExchange((volatile LONG *)(DWORD_PTR)(e + KLPU_E_END), KLPU_GONE); swapped = 1;
             }
-            if (klpu.y >= 0) {                                       /* PopupY: the letters go where the bar went */
-                newy = klpu_bits(klpu.y);
-                oldy = InterlockedExchange((volatile LONG *)(DWORD_PTR)(e + 0x18), newy); moved = 1;
-            }
+            newy = klpu_bits(klpu_top);                               /* the letters go where the bar's middle wants them */
+            oldy = InterlockedExchange((volatile LONG *)(DWORD_PTR)(e + 0x18), newy); moved = 1;
         }
     } else if (klpu_dirty == e) klpu_restore_el(e);                  /* ... THE PUT-BACK DOES NOT (review M1; section 2) */
     r = ((klu_render_t)(DWORD_PTR)KLH_VA(KLPU_ANN_RENDER))(el, 0, ctx, cam);
@@ -415,8 +447,8 @@ static void klpu_forget(void)
 static void klpu_ring_tick(DWORD osd, const struct klb_snap *s, int have, DWORD now)
 {
     DWORD at, obj = 0, uel; BYTE st = 0; long left = 0; float part = 0, frac = 0, pos[2] = { 0, 0 }, cx, cy; int looting = 0;
-    if (klpu.test) {                                                 /* TEST: a turn every 4 s */
-        frac = (float)(now % 4000) / 4000.0f; looting = 1;
+    if (klpu.test) {                                                 /* TEST: the ring at 60 % in the third 4 s of every 12 (klpu_test_tick shows the two messages before it) */
+        if ((now % 12000) >= 8000) { frac = 0.6f; looting = 1; }
     } else if (have && s->state == 0x19 && s->human >= 0 && (at = s->r[s->human].at) != 0 && klh_rd(at + KLPU_R_LOOT, &st, 1) && (st == 1 || st == 2) &&
                klh_rd(at + KLPU_R_OBJ, &obj, 4) && obj && klh_rd32(obj) == KLPU_MONEY_VT && klh_rd(obj + KLPU_M_LEFT, &left, 4) && klh_rd(at + KLPU_R_PART, &part, 4)) {
         looting = 1;
@@ -456,15 +488,20 @@ static void klpu_ring_tick(DWORD osd, const struct klb_snap *s, int have, DWORD 
 }
 
 static void klpu_test_tick(DWORD now)
-{   /* TEST [HUD] PopupTest=1: a message every 8 s through the game's own routine (the game thread, between two frames):
-       a plain one, then the level's traitor string - both looks without a traitor round */
-    const char *msg;
+{   /* TEST [HUD] PopupTest=1, a round of 12 s on the wall clock so ONE idle run shows all three looks in pictures taken every
+       2 s: 0-4 s a plain message (chalk bar, ink letters), 4-8 s the traitor message (orange letters, painted box), 8-12 s the
+       loot ring at 60 % (klpu_ring_tick). The messages go through the game's own 0x468430 (game thread, between frames) and last 3.8 s. */
+    const char *msg; DWORD ph = (now % 12000) / 4000;
     if (!klpu_r.ann || klh_rd32(klpu_r.ann) != (DWORD)(DWORD_PTR)&klpu_evt[1] || !klu_draw_on) return;
-    if (klpu_r.test_at && now - klpu_r.test_at < 8000) return;
-    klpu_r.test_at = now | 1;
-    msg = (klpu_r.test_n++ & 1) && klpu_traitor_ok ? klpu_traitor : "Looting has started. Trust no-one";
-    ((void (__fastcall *)(void *, void *, const char *, float))(DWORD_PTR)KLH_VA(KLPU_ANNOUNCE))((void *)(DWORD_PTR)klpu_r.ann, 0, msg, 5.0f);
-    if (klu.log) klog("hud: popup: TEST message '%s' shown through 0x468430", msg);
+    if (ph > 1) { klpu_r.test_n = 0; return; }                       /* the ring's phase: the next round's messages may go again */
+    if (klpu_r.test_n == (int)ph + 1000) return;                     /* this phase's message is out already */
+    klpu_r.test_n = (int)ph + 1000; klpu_r.test_at = now | 1;
+    if (ph == 1 && !klpu_traitor_ok) {                               /* the level's text lookup gave nothing: the draft's own words stand in, the box is told by the string */
+        strcpy(klpu_traitor, "You're now a traitor."); InterlockedExchange(&klpu_traitor_ok, 1);
+    }
+    msg = ph == 1 ? klpu_traitor : "Looting has started. Trust no-one";
+    ((void (__fastcall *)(void *, void *, const char *, float))(DWORD_PTR)KLH_VA(KLPU_ANNOUNCE))((void *)(DWORD_PTR)klpu_r.ann, 0, msg, 3.8f);
+    if (klu.log) klog("hud: popup: TEST message '%s' shown through 0x468430 (phase %d of 3: plain / traitor / ring at 60 %%)", msg, (int)ph);
 }
 
 static void klpu_tick(int game_thread)
@@ -525,9 +562,9 @@ static void klpu_init(void)
     klpu.frame = klu_inii("PopupFrame", 0, 0, 1); klpu.measure = klu_inii("PopupMeasure", 1, 0, 1);
     klpu.layer = klu_inii("PopupLayer", 0x17, 2, 0x18); klpu.test = klu_inii("PopupTest", 0, 0, 1); klpu.ringmode = klu_inii("RingMode", 1, 1, 2);
     klpu.traitor = klu_inii("PopupTraitor", 1, 0, 2);
-    klpu.padx = klu_inif("PopupPadX", "62"); klpu.pady = klu_inif("PopupPadY", "12"); klpu.dy = klu_inif("PopupDY", "0"); klpu.y = klu_inif("PopupY", "-1");
+    klpu.padx = klu_inif("PopupPadX", "61.4"); klpu.pady = klu_inif("PopupPadY", "14.1"); klpu.dy = klu_inif("PopupDY", "0"); klpu.y = klu_inif("PopupY", "523");
     klpu.ringx = klu_inif("RingX", "-1"); klpu.ringy = klu_inif("RingY", "-1");
-    if (!(klpu.padx >= 0 && klpu.padx <= 400)) klpu.padx = 62; if (!(klpu.pady >= 0 && klpu.pady <= 200)) klpu.pady = 12;
+    if (!(klpu.padx >= 0 && klpu.padx <= 400)) klpu.padx = 61.4f; if (!(klpu.pady >= 0 && klpu.pady <= 200)) klpu.pady = 14.1f;
     if (!(klpu.dy >= -200 && klpu.dy <= 200)) klpu.dy = 0;
     if (!(klpu.y >= 40 && klpu.y <= 680)) klpu.y = -1;
     if (!(klpu.ringx <= 1280)) klpu.ringx = -1; if (!(klpu.ringy <= 720)) klpu.ringy = -1;

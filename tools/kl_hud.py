@@ -259,11 +259,11 @@ def _chip(ink, w, h, seed, px, amount):
     return rows
 
 
-def build_font(chunk, tex, face, weight=600, scale=1.0, log=print, caps=False, chip=0.0):
+def build_font(chunk, tex, face, weight=600, scale=1.0, log=print, caps=False, chip=0.0, px=None, track=0.0, baseline=False):
     """-> (new chunk, {texture id: new entry}, report). Page-0 records are re-rasterized with `face`; page-1
     records (private characters) are kept."""
     h, recs, tail = parse(chunk)
-    px = max(1, int(round(h[2] * scale)))
+    px = max(1, int(px)) if px else max(1, int(round(h[2] * scale)))
     page0 = max(r[1] for r in recs)                      # the 4096 + id ref
     keep = [r for r in recs if r[1] != page0]
     todo = [r for r in recs if r[1] == page0]
@@ -275,6 +275,8 @@ def build_font(chunk, tex, face, weight=600, scale=1.0, log=print, caps=False, c
         if caps and ch.islower() and len(ch.upper()) == 1 and ord(ch.upper()) < 0x530:
             ch = ch.upper()                              # the game's own strings stay; lower case is DRAWN as capitals
         adv, xo, yo, w, hh, ink = gd.glyph(ch)
+        if track and r[0] > 32:
+            adv += int(round(track))                      # letter-spacing: extra pen advance after every glyph
         if chip and ink:
             ink = _chip(ink, w, hh, r[0], px, chip)
         glyphs.append((r, adv, xo, yo, w, hh, ink))
@@ -300,18 +302,50 @@ def build_font(chunk, tex, face, weight=600, scale=1.0, log=print, caps=False, c
     for i, (r, adv, xo, yo, w, hh, _ink) in enumerate(glyphs):
         x0, y0 = place[i]
         new.append((r[0], r[1], x0, y0, x0 + w, y0 + hh, w, hh, xo, yo, adv, r[11], r[12], r[13]))
+    cap = 0
+    if baseline:                                         # centring (2026-10-11): the cap height of THIS bake; the header's ascent offset becomes -cap,
+        for (r, adv, xo, yo, w, hh, _ink) in glyphs:     # so the capitals' top lies at the y given to Draw (the baseline is at y - header[9]: seen live, own row of V3)
+            if r[0] == ord('H'):
+                cap = hh
+        if cap:
+            h = h[:5] + (int(round(cap * 1.3)) + 2,) + h[6:9] + (-cap,)
     rgba = bytearray(b'\xff\xff\xff\0' * (tw * th))
     rgba[3::4] = atlas
     recs2 = []
     it = iter(new)
     for r in recs:                                       # stock order kept (page-1 records in place)
         recs2.append(r if r[1] != page0 else next(it))
-    rep = {'face': face, 'px': px, 'glyphs': len(todo), 'kept': len(keep), 'page rows used': y + shelf + PAD,
+    rep = {'face': face, 'px': px, 'cap': cap, 'track': track, 'glyphs': len(todo), 'kept': len(keep), 'page rows used': y + shelf + PAD,
            'ascent': gd.ascent, 'descent': gd.descent}
     return pack(h, recs2, tail), {tid: tex_replace(entry, rgba)}, rep
 
 
-def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, only=None, log=print, pictures=False, caps=False, chip=0.0, extras=False):
+# THE DRAFT'S TYPE (2026-10-11, hud_mockup.html): --display Anton (Dead Men's heavy capitals, NOT installed here -> Impact, the
+# closest installed face), --label Montserrat 800 spaced caps (NOT installed -> Segoe UI Black). Sizes are the draft's px at
+# 1280 wide (1 cqw = 12.8 px) times 0.9 (the draft's Anton and Impact differ in cap height; the 0.9 was already the look's scale).
+# A text takes ONE font object by SetFont and the HUD can reach four of them ([osd+0xd48/50/54/58], klhud.c); which slot
+# name sits at which offset is ASSUMED from the elements' registrations (re/hud.md 2.2: d50 = the headline / ammo font = H1,
+# d54 = the FA list / names = H2, d58 = tracker / text display = H3, d48 = the fourth = DebugText) - klhud.c's [HUD] Font*
+# keys can re-point a role without a rebuild. face, weight, px, tracking px, chips, role (what klhud.c draws with it)
+DRAFT_SPECS = {
+    # 1:1 round (2026-10-11). The hook reaches four fonts: H1 = osd+0xd50, H2 = +0xd54, H3 = +0xd58, DebugText = +0xd5c (the property
+    # order of re/hud_data.md: [0] template +0xd4c, [1..4] H1 H2 H3 DebugText; +0xd5c as DebugText is read from that order, NOT seen live).
+    # DebugText is drawn by nothing stock, so it carries the LABEL face (Segoe UI Black standing in for Montserrat 800, tracked) without
+    # side effects; H3 (stock: subtitles, the tracker's distance) becomes a small DISPLAY face so those stay readable; H2 serves names,
+    # money rows, the weapon dial's count AND (hook SetFont) the pop-up bar; H1 the total. Sizes: draft px x ~0.9 (Impact is wider and
+    # heavier than Anton, which is NOT installed: a GUESS). Letter-spacing of the draft (.03-.06em) as 1 px of track on the big ones.
+    'H2':        ('Impact', 400, 19, 1, True,  'names, crew rows, money rows, weapon count, pop-up  (draft 1.6cqw = 20.5 px; pop-up 22.4)'),
+    'DebugText': ('Segoe UI Black', 400, 13, 3, False, 'LABELS: DEAD MEN, ROUND, TOTAL, LOOT, gun name  (draft Montserrat 800 .9cqw = 11.5 px, .32em)'),
+    'H3':        ('Impact', 400, 15, 0, False, 'cash, count, reserve, off-gun count; stock: subtitles, tracker distance  (draft 1.25cqw = 16 px; tracker 20.5)'),
+    'H1':        ('Impact', 400, 30, 1, True,  'the total  (draft 2.6cqw = 33 px)'),
+    'Button':    ('Impact', 400, 16, 0, False, 'stock: button prompts'),
+    'Text':      ('Impact', 400, 19, 1, True,  'stock: general text'),
+    'Menu':      ('Impact', 400, 19, 1, True,  'stock: menus in the level'),
+    'Header':    ('Impact', 400, 25, 0, True,  'stock: headers'),
+}
+
+
+def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, only=None, log=print, pictures=False, caps=False, chip=0.0, extras=False, specs=None):
     """A build (folder or zip) -> folder `dst` with the fonts replaced. Files beside the archive are copied."""
     zp, order, files, ext = open_level(src)
     fonts = fonts_of(files, ext)
@@ -321,12 +355,16 @@ def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, onl
     for name, ci in sorted(fonts.items(), key=lambda kv: kv[1]):
         if only and name not in only:
             continue
-        chunk, entries, rep = build_font(p.chunks[ci], tex, face, weight, scale, log, caps, chip)
+        if specs and name in specs:
+            f_, w_, px_, tr_, ch_, _role = specs[name]
+            chunk, entries, rep = build_font(p.chunks[ci], tex, f_, w_, 1.0, log, True, chip if ch_ else 0.0, px=px_, track=tr_, baseline=True)
+        else:
+            chunk, entries, rep = build_font(p.chunks[ci], tex, face, weight, scale, log, caps, chip)
         p.chunks[ci] = chunk
         for tid, e in entries.items():
             tex.tex[tid] = T.Texture(e, tex.tex[tid].faces, tex.tex[tid].cube, tex.tex[tid].frames, tex.tex[tid].group)
         reps[name] = rep
-        log('font %-10s chunk %d: %s %d px, %d glyphs on page 0 (%d rows), ascent %d' % (name, ci, rep['face'], rep['px'], rep['glyphs'], rep['page rows used'], rep['ascent']))
+        log('font %-10s chunk %d: %s %d px, track %s, cap %s, %d glyphs on page 0 (%d rows), ascent %d' % (name, ci, rep['face'], rep['px'], rep['track'], rep['cap'], rep['glyphs'], rep['page rows used'], rep['ascent']))
     files[ext['.prm']] = G.write(p)
     files[ext['.TEX']] = T.write_tex(tex)
     if pictures:
@@ -346,7 +384,7 @@ def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, onl
     return out, reps
 
 
-def check(src, dst, log=print, pictures=False, extras=False):
+def check(src, dst, log=print, pictures=False, extras=False, draft=False):
     """The two builds differ only in the font chunks and their page-0 textures; every record's rectangle lies
     on its page, every char is still there. -> list of problems."""
     _z, o1, f1, e1 = open_level(src); _z2, o2, f2, e2 = open_level(dst)
@@ -395,8 +433,12 @@ def check(src, dst, log=print, pictures=False, extras=False):
         bad.append('textures other than the fonts / plates changed: %s' % other[:5])
     for name, ci in fonts.items():
         h1, r1, tl1 = parse(p1.chunks[ci]); h2, r2, tl2 = parse(p2.chunks[ci])
-        if h1 != h2 or tl1 != tl2 or len(r1) != len(r2):
+        if h1[:5] != h2[:5] or h1[6:9] != h2[6:9] or tl1 != tl2 or len(r1) != len(r2):      # line height [5] and ascent offset [9] are the baked ones
             bad.append('%s: header / tail / count changed' % name)
+        if draft and name in DRAFT_SPECS:                  # baked with baseline=True: ascent offset = -cap, line height = round(1.3 cap) + 2 (the hook's Cap0..3 rely on it)
+            cap_ = -h2[9]
+            if not (4 <= cap_ <= 60) or h2[5] != int(round(cap_ * 1.3)) + 2:
+                bad.append('%s: header[9] %d / line height %d are not the draft bake:  (-cap, round(1.3 cap) + 2)' % (name, h2[9], h2[5]))
         for a, b in zip(r1, r2):
             if a[:2] != b[:2] or a[11:] != b[11:]:
                 bad.append('%s: record for char %d changed identity' % (name, a[0])); break
@@ -764,6 +806,90 @@ def preview(src, font, text, out, log=print):
     log('wrote %s (%dx%d, font %s %d px)' % (out, W_ * S, H_ * S, font, h[2]))
 
 
+def preview_hud(src, out, log=print):
+    """A quick offline look (2026-10-11): the crew list, round line, money box and weapon-dial texts drawn with a baked level's own
+    atlases at the HOOK'S layout (klhud.c with [HUD] Draft=1 Fonts=1: crew 33, 38, 211 wide, 30 px rows, block 28 high from y - 5; money box
+    right edge 1247; weapon dial middle 1177, 598) on a dark 1280 x 720 background, 1:1 pixels. The pen's baseline lies at y - header[9]
+    (the game's rule, seen live), exactly what the hook relies on. Roles: names = H2, big = H1, labels = DebugText, small = H3.
+    Pictures other than the own row's block, the strike and three skull dots are NOT drawn."""
+    _zp, _o, files, ext = open_level(src)
+    fonts = fonts_of(files, ext)
+    p = G.read(files[ext['.prm']], 'dd'); tex = T.read_tex(files[ext['.TEX']])
+    W_, H_ = 1280, 720
+    img = bytearray(W_ * H_ * 3)
+    for y in range(H_):
+        c = int(36 - 22 * y / H_)
+        img[3 * y * W_: 3 * (y + 1) * W_] = bytes((c, c + 1, c + 3)) * W_
+    def rect(x0, y0, w, h, col, a=1.0):
+        for y in range(max(0, int(y0)), min(H_, int(y0 + h))):
+            for x in range(max(0, int(x0)), min(W_, int(x0 + w))):
+                q = 3 * (y * W_ + x)
+                for k in range(3):
+                    img[q + k] = int(col[k] * a + img[q + k] * (1 - a))
+    cache = {}
+    def font(name):
+        if name not in cache:
+            h, recs, _t = parse(p.chunks[fonts[name]])
+            pg = {}
+            for r in recs:
+                if r[1] not in pg: pg[r[1]] = tex_page(tex, r[1])
+            cache[name] = (h, {r[0]: r for r in recs}, pg)
+        return cache[name]
+    def width(name, text):
+        h, by, _pg = font(name); return sum(by[ord(c)][10] for c in text if ord(c) in by)
+    def text(name, s, x, ytop, col, align='l', centre=False):
+        """ytop = the y given to Draw. align l / r / c."""
+        h, by, pg = font(name)
+        wid = width(name, s)
+        pen = x if align == 'l' else x - wid if align == 'r' else x - wid / 2.0
+        base = ytop - h[9]
+        for ch in s:
+            r = by.get(ord(ch))
+            if r is None: continue
+            _tid, tw, th, px, _e = pg[r[1]]
+            for yy in range(r[7]):
+                for xx in range(r[6]):
+                    i = 4 * ((r[3] + yy) * tw + r[2] + xx); a = px[i + 3] / 255.0
+                    X, Y = int(pen + r[8] + xx), int(base + r[9] + yy)
+                    if a and 0 <= X < W_ and 0 <= Y < H_:
+                        q = 3 * (Y * W_ + X)
+                        for k in range(3):
+                            img[q + k] = int(col[k] * a + img[q + k] * (1 - a))
+            pen += r[10]
+    CAP = {n: -font(n)[0][9] for n in ('H1', 'H2', 'H3', 'DebugText')}      # header[9] = -cap (the hook's Cap0..3)
+    LAB, SM = 'DebugText', 'H3'                                              # labels = DebugText (+0xd5c), small figures = H3 (+0xd58)
+    TRK = 3                                                                  # the hook adds the label font's tracking back for right / centre alignment
+    import math
+    def cen(c, name): return math.floor(c - CAP[name] / 2.0 + .5)
+    def leg(y, name): return y + 13 - CAP[name]
+    CHALKc, CORALc, GREEN, GREENHI, INK, ORANGE, DEAD = (243, 240, 234), (240, 71, 90), (79, 143, 73), (99, 166, 91), (12, 12, 13), (232, 131, 31), (140, 49, 56)
+    cx, cy, cw = 33, 38, 211
+    text(LAB, 'DEAD MEN', cx, leg(cy, LAB), CORALc); text(SM, '6 / 8', cx + cw, leg(cy, SM), CHALKc, 'r')
+    rows = [('R6KXO', '$550K', 'you'), ('TOMMY', '$100K', ''), ('PIERRE', '$0', 'traitor'), ('LIAM', '$20K', ''), ('JEAN', '$0', ''), ('ELWOOD', '$0', 'dead'), ('BUD', '$0', ''), ('MITCHEL', '$0', 'dead')]
+    for i, (nm, cash, kind) in enumerate(rows):
+        y = cy + 34 + 30 * i; rc = y + 9
+        if kind in ('you', 'traitor'): rect(cx - 4, y - 5, cw + 8, 28, CHALKc if kind == 'you' else ORANGE)
+        col = INK if kind in ('you', 'traitor') else DEAD if kind == 'dead' else CHALKc
+        text('H2', nm + ('  TRAITOR' if kind == 'traitor' else ''), cx + 8, cen(rc, 'H2'), col)
+        text(SM, cash, cx + cw - 8, cen(rc, SM), (31, 74, 29) if kind == 'you' else INK if kind == 'traitor' else (95, 42, 47) if kind == 'dead' else GREENHI, 'r')
+        if kind == 'dead': rect(cx + 2, rc - 2, width('H2', nm) + 12, 4, DEAD)
+        if kind == 'you':
+            sx = cx + 8 + width('H2', nm) + 8
+            for k in range(3): rect(sx + 17 * k, rc - 7.5, 15, 15, INK, 1.0 if k < 2 else .3)
+    mx = 1247
+    text(LAB, 'ROUND 1 OF 10', mx + TRK, leg(108, LAB), CHALKc, 'r')
+    for k, (lab, val) in enumerate((('TOTAL', '$550,000'), ('LOOT', '$550,000'), ('REWARDS', '$0'))):
+        y = 136 + (0 if k == 0 else 40 + 24 * (k - 1))
+        text(LAB, lab, mx - 211, leg(y, LAB), CORALc)
+        f = 'H1' if k == 0 else 'H2'
+        text(f, val, mx, leg(y, f), GREENHI if k == 0 else GREEN, 'r')
+    wx, wy = 1177, 598
+    text('H2', '30', wx - 7, leg(wy - 32, 'H2'), CHALKc, 'r'); text(SM, '150', wx - 5, leg(wy + 20, SM), (169, 165, 157), 'r')
+    text(LAB, 'ZASTAVA M85 . 270', wx + TRK / 2.0, leg(wy + 88, LAB), CORALc, 'c')
+    _png(out, W_, H_, img)
+    log('wrote %s (1280x720, 1:1)' % out)
+
+
 def dump(src, log=print):
     _zp, _o, files, ext = open_level(src)
     fonts = fonts_of(files, ext)
@@ -784,6 +910,8 @@ def main():
         dump(a[1])
     elif cmd == 'preview':
         preview(a[1], a[2], a[3], a[4])
+    elif cmd == 'preview-hud':
+        preview_hud(a[1], a[2])
     elif cmd == 'pictures':
         png = a[a.index('--png') + 1] if '--png' in a else None
         apply_pictures(a[1], a[2], png)
@@ -798,10 +926,12 @@ def main():
             elif k == '--caps': kw['caps'] = True
             elif k == '--chip': kw['chip'] = float(rest.pop(0))
             elif k == '--look' and rest.pop(0) == 'deadmen':      # the owner's look of 2026-10-11
-                kw.update(face='Impact', weight=400, scale=.9, caps=True, chip=.6, extras=True)
+                kw.update(face='Impact', weight=400, scale=.9, caps=True, chip=.6, extras=True, specs=DRAFT_SPECS)
             else: raise SystemExit('unknown option ' + k)
-        apply(a[1], a[2], pictures=True, **kw)
-        bad = check(a[1], a[2], pictures=True, extras=kw.get('extras', False))
+        _out, _reps = apply(a[1], a[2], pictures=True, **kw)
+        if kw.get('specs'):
+            print('hook roles (osd+0xd54 names, +0xd50 big, +0xd5c labels, +0xd58 small): [HUD] Cap0=%s Cap1=%s Cap2=%s Cap3=%s (klhud.c default)' % tuple(_reps[n]['cap'] for n in ('H2', 'H1', 'DebugText', 'H3')))
+        bad = check(a[1], a[2], pictures=True, extras=kw.get('extras', False), draft=bool(kw.get('specs')))
         print('check:', 'PASS' if not bad else 'FAIL ' + '; '.join(bad))
     elif cmd == 'extras':                                   # only the extra pictures, as PNGs to look at
         zp, order, files, ext = open_level(a[1])

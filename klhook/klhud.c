@@ -229,12 +229,35 @@
 #define KLU_C_INKCASH   0xff1f4a1du           /* own cash on the chalk block */
 #define KLU_C_BLUE      0xff6ea3d6u           /* own row without plates, a fed */
 
+/* TYPE (2026-10-11, the owner: 'its all that one font ... 1:1 with the draft'; tools/kl_hud.py DRAFT_SPECS bakes them). The HUD reaches
+   four of the level's eight fonts by REF in the OSD: +0xd54 (the FA font), +0xd50 (the headline font), +0xd58, +0xd48. WHICH
+   baked slot name sits behind which offset is ASSUMED (re/hud.md 2.2: d50 = ammo / announcements = H1, d54 = list / names = H2,
+   d58 = tracker / text display = H3, d48 = DebugText); [HUD] FontName / FontBig / FontLabel / FontSmall re-point a role to
+   another offset without a rebuild. A text's font decides its SIZE (the bake) and its face; fnt: 0 names, 1 big, 2 labels, 3 small. */
+/* 1:1 ROUND (2026-10-11): the roles are H2 = names / money rows / weapon count (+0xd54), H1 = the total (+0xd50), LABEL = DebugText
+   (+0xd5c: nothing stock draws with it, so Segoe UI Black labels have no side effect), SMALL = H3 (+0xd58: cash, counts; stock:
+   subtitles, tracker). +0xd5c AS DebugText is read from re/hud_data.md's property order, NOT seen live; when it is not a font object
+   the label role takes the SMALL font (logged). The label font's tracking (KLU_TRACK) is added back for right / centre alignment. */
+#define KLU_TRACK       3.0f
+#define KLU_NFONT       4
+#define KLU_FNT_NAME    0
+#define KLU_FNT_BIG     1
+#define KLU_FNT_LABEL   2
+#define KLU_FNT_SMALL   3
+/* CENTRING: the game puts a text's baseline at y - header[9] (the ascent offset; LIVE: row 1 of V3, Draw y 102, stock H2 header -13, the
+   capitals ran from y - 1.5 to y + 13). kl_hud.py bakes header[9] = -cap, so with fonts baked by DRAFT_SPECS the capitals' TOP lies at the y
+   given to Draw and their height is cap (default {16, 24, 9, 13} = what DRAFT_SPECS gave in the 1:1 round, kl_hud.py prints the line; [HUD] Cap0..Cap3). A text with cen = 0 keeps the
+   baseline the stock font gave it (y + 13); cen = 1: y is the top of its capitals (klu_cen). */
+#define KLU_BASE_OLD    13.0f
+static float klu_cap_of(int f);
 static const int klu_sweep[8] = { 0x11, 0x14, 0x21, 0x41, 0x01, 0x10, 0x42, 0x24 };
-struct klu_text { DWORD obj, shadow; float x, y; int on, style, big, plain, noshadow; DWORD colour, want_colour; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
+struct klu_text { DWORD obj, shadow; float x, y; int on, style, big, plain, noshadow, fnt, cen; DWORD colour, want_colour; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
 struct klu_picq { int n; float x, y, w, h; DWORD argb; int layer; };
 
 static struct {
     int left;                                 /* LeftStyle */
+    int fontset;                              /* Fonts: the four roles (names / big / labels / small) take their own fonts; the level must be baked by kl_hud.py --look deadmen from 2026-10-11 on */
+    float cap[KLU_NFONT]; DWORD fofs[KLU_NFONT];      /* Cap0..3, FontName / FontBig / FontLabel / FontSmall */
     int extraflags;                           /* ExtraFlags: give the eight extra pictures a stock picture's chunk flags */
     int weapon;                               /* Weapon: the weapon dial (klhud_weapon.c) */
     int draft;                                /* Draft: the defaults of every part of the draft are 1 */
@@ -246,6 +269,7 @@ static struct {
 
 static struct {
     DWORD osd, elem, tmpl, font, bigfont, parent, rules; char scene[160];
+    DWORD fonts[KLU_NFONT];                   /* the four font objects a text may take (klu_font_of): 0 names, 1 big, 2 labels, 3 small - each the FA font when its REF is not usable */
     DWORD handle[200];                        /* the sprite handle of every HUD picture whose chunk is type 5, else 0 (section 3; klu_pic_prep) */
     float clock_max; int watch;               /* Dials: the longest round clock seen this round; 1 = the watch stands for the stock clock's digits */
     int made, fault, hid, inset_done, told_stock, pic_done;
@@ -357,10 +381,12 @@ static void klu_draw_ours(void *el, void *ctx, void *cam, DWORD n_before, DWORD 
             const struct klu_text *t = &klu_r.t[i]; DWORD a; int ok;
             if (!t->on || !t->obj) continue;
             a = *cnt;
-            if (klu.draw == 2) ok = klu_draw_stock(el, ctx, cam, t->obj, t->shadow, t->x, t->y);
+            float ty = t->y + (klu.fontset && !t->cen ? KLU_BASE_OLD - klu_cap_of(t->fnt) : 0.0f);      /* the baseline stays where it was; cen: y is the capitals' top */
+            float tx = t->x + (klu.fontset && t->fnt == KLU_FNT_LABEL && !t->plain ? ((t->style & 15) == 2 ? KLU_TRACK : (t->style & 15) == 4 ? KLU_TRACK * 0.5f : 0.0f) : 0.0f);      /* the baked tracking follows the LAST letter too */
+            if (klu.draw == 2) ok = klu_draw_stock(el, ctx, cam, t->obj, t->shadow, tx, ty);
             else {
-                if (klu.shadow && t->shadow && !t->noshadow) klu_draw_one(t->shadow, ctx, cam, t->x + 2.0f, t->y + 2.0f);     /* 0xbbe4ec / 0xbbe4f0 = 2.0 */
-                ok = klu_draw_one(t->obj, ctx, cam, t->x, t->y);
+                if (klu.shadow && t->shadow && !t->noshadow) klu_draw_one(t->shadow, ctx, cam, tx + 2.0f, ty + 2.0f);     /* 0xbbe4ec / 0xbbe4f0 = 2.0 */
+                ok = klu_draw_one(t->obj, ctx, cam, tx, ty);
             }
             if (ok) InterlockedIncrement(&klu_n_draw); else InterlockedIncrement(&klu_n_refused);
             if (want && first_text && ok) { DWORD b = *cnt; first_text = 0; klu_pr.nours = (LONG)(b - a); if (b > a) klu_inst(ctx, b - 1, klu_pr.ours); }   /* the last one appended = the text itself (the shadow comes first with Draw=1) */
@@ -458,6 +484,19 @@ static void klu_set(DWORD obj, DWORD off, DWORD v)
     ((klu_set1_t)(DWORD_PTR)fn)((void *)(DWORD_PTR)obj, 0, v);
 }
 
+static float klu_cap_of(int f) { return f >= 0 && f < KLU_NFONT ? klu.cap[f] : klu.cap[0]; }
+
+static DWORD klu_font_of(const struct klu_text *t)
+{   /* the font object of a text: its role's (Fonts=1), else the old rule (TotalFont: the headline font) */
+    if (klu.fontset) return klu_r.fonts[t->fnt >= 0 && t->fnt < KLU_NFONT ? t->fnt : 0];
+    return t->big && klu_r.bigfont ? klu_r.bigfont : klu_r.font;
+}
+
+static float klu_cen(float centre, int f)
+{   /* the y to give a text of font f so that its capitals' middle lies on `centre` (whole pixels: the ink spans y .. y + cap) */
+    return (float)floor(centre - klu_cap_of(f) * 0.5f + 0.5f);
+}
+
 static DWORD klu_make_obj(DWORD tmpl, DWORD font, int style, DWORD colour, int layer, char why[160])
 {
     DWORD obj, vt = 0;
@@ -491,7 +530,7 @@ static void klu_layout(void)
         klu_r.t[KLU_T_CASH(i)].x = x1 - klu.padx; klu_r.t[KLU_T_CASH(i)].y = y; klu_r.t[KLU_T_CASH(i)].style = KLU_STYLE_RIGHT;
     }
     klu_r.t[KLU_T_ROUND].x = klu_r.mx; klu_r.t[KLU_T_ROUND].y = klu_r.ry; klu_r.t[KLU_T_ROUND].style = KLU_STYLE_RIGHT;
-    if (klu.draft) klu_r.t[KLU_T_ROUND].want_colour = KLU_C_CORAL;                     /* S5: the draft's round line is coral */
+    if (klu.draft) klu_r.t[KLU_T_ROUND].want_colour = klu.fontset ? KLU_C_CHALK : KLU_C_CORAL;      /* the draft's CSS: .clock .round { color: chalk } (S5 had coral) */
     for (k = 0; k < 3; k++) {
         y = klu_r.my + (k == 0 ? 0.0f : 40.0f + 24.0f * (k - 1));            /* TOTAL, the bar at +26 .. +34, LOOT +40, REWARDS +64 */
         klu_r.t[KLU_T_MLABEL(k)].x = klu_r.mx - klu.money_w; klu_r.t[KLU_T_MLABEL(k)].y = y; klu_r.t[KLU_T_MLABEL(k)].want_colour = KLU_C_CORAL;
@@ -499,6 +538,18 @@ static void klu_layout(void)
         klu_r.t[KLU_T_MVALUE(k)].want_colour = k == 0 ? KLU_C_GREENHI : KLU_C_GREEN;
     }
     klu_r.t[KLU_T_MVALUE(0)].big = klu.totalfont;
+    if (klu.fontset) {                                   /* TYPE: which font each text takes (see the block at KLU_NFONT) */
+        for (i = 0; i < KLU_NTEXT; i++) klu_r.t[i].fnt = KLU_FNT_NAME;
+        klu_r.t[KLU_T_HEAD].fnt = KLU_FNT_LABEL; klu_r.t[KLU_T_COUNT].fnt = KLU_FNT_SMALL; klu_r.t[KLU_T_ROUND].fnt = KLU_FNT_LABEL;
+        for (i = 0; i < KLU_ROWS; i++) {                 /* the row's text is centred on its block's middle (the block: y - blockup, blockh high) */
+            float rc = klu_r.cy + klu.yoff + klu.row * i + klu.blockh * 0.5f - klu.blockup;
+            klu_r.t[KLU_T_NAME(i)].fnt = KLU_FNT_NAME; klu_r.t[KLU_T_CASH(i)].fnt = KLU_FNT_SMALL;
+            klu_r.t[KLU_T_NAME(i)].cen = klu_r.t[KLU_T_CASH(i)].cen = 1;
+            klu_r.t[KLU_T_NAME(i)].y = klu_cen(rc, KLU_FNT_NAME); klu_r.t[KLU_T_CASH(i)].y = klu_cen(rc, KLU_FNT_SMALL);
+        }
+        for (k = 0; k < 3; k++) { klu_r.t[KLU_T_MLABEL(k)].fnt = KLU_FNT_LABEL; klu_r.t[KLU_T_MVALUE(k)].fnt = k == 0 ? KLU_FNT_BIG : KLU_FNT_NAME; }
+        klu_r.t[KLU_T_WEAP + 0].fnt = KLU_FNT_NAME; klu_r.t[KLU_T_WEAP + 1].fnt = KLU_FNT_SMALL;      /* the draft's dial: on-gun count 1.6cqw = 20.5 px (the NAME font), off-gun 1.15cqw */ klu_r.t[KLU_T_WEAP + 2].fnt = KLU_FNT_LABEL;
+    }
     klu_r.t[KLU_T_WEAP + 0].style = klu_r.t[KLU_T_WEAP + 1].style = KLU_STYLE_RIGHT; klu_r.t[KLU_T_WEAP + 2].style = KLU_STYLE_CENTRE;      /* klhud_weapon.c: the counts right-aligned, the label centred under the disc */
     {   /* the Grid labels: their style is fixed when the object is made (klu_grid fills the same order) */
         int gs[KLU_NGRID] = { KLU_STYLE_LEFT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_LEFT, KLU_STYLE_RIGHT, KLU_STYLE_LEFT, KLU_STYLE_RIGHT };
@@ -541,16 +592,32 @@ static int klu_make_all(DWORD osd)
     klu_r.parent = (DWORD)(DWORD_PTR)((void *(__fastcall *)(void *, void *))(DWORD_PTR)KLH_VA(KLU_PARENT))((void *)(DWORD_PTR)klh_rd32(tmpl + 4), 0);
     if (!klu_r.parent) { klog("hud: osd %08lx: the template %08lx has no parent node (0x598460 gave 0): nothing is made", osd, tmpl); return 0; }
     klu_r.tmpl = tmpl; klu_r.font = font; klu_r.bigfont = big;
+    for (i = 0; i < KLU_NFONT; i++) klu_r.fonts[i] = font;
+    if (klu.fontset) {                           /* the four roles: each REF must resolve to an object of the FA font's class, else that role keeps the FA font */
+        for (i = 0; i < KLU_NFONT; i++) {
+            DWORD ref = 0, obj = 0, ovt = 0;
+            if (klu.fofs[i] && klh_rd(osd + klu.fofs[i], &ref, 4) && ref) obj = (DWORD)(DWORD_PTR)((void *(__cdecl *)(DWORD))(DWORD_PTR)KLH_VA(KLU_REFOBJ))(ref);
+            if (obj && klh_rd(obj, &ovt, 4) && ovt == fvt) klu_r.fonts[i] = obj;
+            else if (klu.log) klog("hud: osd %08lx: font role %d (+0x%lx REF %08lx -> %08lx, vtable %08lx against %08lx) is not usable: the FA font", osd, i, (DWORD)klu.fofs[i], ref, obj, ovt, fvt);
+        }
+        if (klu_r.fonts[KLU_FNT_LABEL] == font && klu_r.fonts[KLU_FNT_SMALL] != font) {      /* +0xd5c is no font here: the labels take the small figures' */
+            klu_r.fonts[KLU_FNT_LABEL] = klu_r.fonts[KLU_FNT_SMALL]; klu.cap[KLU_FNT_LABEL] = klu.cap[KLU_FNT_SMALL];
+            klog("hud: fonts: the label role (+0x%lx) is no font object: labels take the small role's font, cap %.0f", (DWORD)klu.fofs[KLU_FNT_LABEL], klu.cap[KLU_FNT_LABEL]);
+        }
+        for (i = 0; i < KLU_NFONT; i++) for (k = i + 1; k < KLU_NFONT; k++)
+            if (klu_r.fonts[i] == klu_r.fonts[k]) klog("hud: fonts: WARNING roles %d and %d resolve to ONE object %08lx: their baked sizes cannot differ (a role offset is wrong, or this level's fonts are the stock ones)", i, k, klu_r.fonts[i]);
+        if (klu.log) klog("hud: fonts: names %08lx (+0x%lx), big %08lx (+0x%lx), labels %08lx (+0x%lx), small %08lx (+0x%lx); caps %.0f %.0f %.0f %.0f", klu_r.fonts[0], (DWORD)klu.fofs[0], klu_r.fonts[1], (DWORD)klu.fofs[1], klu_r.fonts[2], (DWORD)klu.fofs[2], klu_r.fonts[3], (DWORD)klu.fofs[3], klu.cap[0], klu.cap[1], klu.cap[2], klu.cap[3]);
+    }
     klu_layout();
     for (i = 0; i < KLU_NTEXT; i++) {
         struct klu_text *t = &klu_r.t[i];
         if (i >= KLU_T_GRID && i < KLU_T_WEAP && !klu.grid) continue;
         if (i >= KLU_T_WEAP && !klu.weapon) continue;
         t->colour = t->want_colour;
-        if (!(t->obj = klu_make_obj(tmpl, t->big && big ? big : font, t->style, t->colour, klu.layer, why))) { klog("hud: osd %08lx: text %d: %s; the HUD stands down for this level", osd, i, why); return 0; }
+        if (!(t->obj = klu_make_obj(tmpl, klu_font_of(t), t->style, t->colour, klu.layer, why))) { klog("hud: osd %08lx: text %d: %s; the HUD stands down for this level", osd, i, why); return 0; }
         n++;
         if (klu.shadow && (!t->plain || klu.draw == 2)) {      /* Draw=2: the stock Render draws a pair, so the Grid labels get a shadow too */
-            if (!(t->shadow = klu_make_obj(tmpl, t->big && big ? big : font, t->style, KLU_SHADOW_RGB, klu.layer - 1, why))) { klog("hud: osd %08lx: shadow %d: %s; the HUD stands down for this level", osd, i, why); return 0; }
+            if (!(t->shadow = klu_make_obj(tmpl, klu_font_of(t), t->style, KLU_SHADOW_RGB, klu.layer - 1, why))) { klog("hud: osd %08lx: shadow %d: %s; the HUD stands down for this level", osd, i, why); return 0; }
             ns++;
         }
     }
@@ -619,7 +686,7 @@ static void klu_dials(const struct klb_snap *s)
     if (clock > 60.0f && klu_r.clock_max > 60.0f) {
         float left = clock / klu_r.clock_max, a = 6.2831853f * (1.0f - left);
         klu_addpic(114, cx - 34.5f, cy - 34.5f, 69.0f, 69.0f, 0x9c080809u, klu.layer - 2);
-        klu_ring(cx, cy, 29.0f, 40, left, 8.0f, 8.0f, KLU_C_CHALK, klu.layer);       /* run V2: 24 dabs read as beads - 40 overlap into a painted ring */
+        klu_ring(cx, cy, 29.0f, 40, left, 11.0f, 9.0f, KLU_C_CHALK, klu.layer);       /* run V3: still beads - the dab's ink is only 0.59 x 0.74 of its picture, so 8 px dabs gave 4.7 px blobs 4.5 px apart; 11 x 9 gives 6.5 px (the draft's stroke) and overlaps */
         for (i = 1; i <= 5; i++)                                   /* the hand: five small dabs from the hub to the ring's edge of 'now' */
             klu_addpic(113, cx + 4.4f * i * (float)sin(a) - 2.5f, cy - 4.4f * i * (float)cos(a) - 2.5f, 5.0f, 5.0f, KLU_C_CHALK, klu.layer);
         klu_addpic(113, cx - 4.0f, cy - 4.0f, 8.0f, 8.0f, KLU_C_CHALK, klu.layer);
@@ -630,7 +697,7 @@ static void klu_dials(const struct klb_snap *s)
     if ((s->veh == 3 || s->veh == 4 || klu.grid == 2) && klu_r.handle[i]) {
         float ex = cx - 75.0f, ey = cy + 5.0f, left = klu.grid == 2 ? 0.35f : s->timer / 8.0f;
         klu_addpic(114, ex - 27.5f, ey - 27.5f, 55.0f, 55.0f, 0x9c080809u, klu.layer - 2);
-        klu_ring(ex, ey, 23.0f, 32, left, 7.0f, 7.0f, KLU_C_ORANGE, klu.layer);
+        klu_ring(ex, ey, 23.0f, 32, left, 10.0f, 8.5f, KLU_C_ORANGE, klu.layer);
         klu_addpic(i, ex - 15.0f, ey - 15.0f, 30.0f, 30.0f, KLU_C_CHALK, klu.layer);
     }
 }
@@ -661,7 +728,7 @@ static void klu_row(int row, const char *name, long money, int kind)
         if (klu.draft) {                                           /* M2, the draft: (name width + 12) x 4 from x 33 + 2, centred on the row (name y + 7) */
             const unsigned char *c; float w = 0;
             for (c = (const unsigned char *)name; *c; c++) if ((*c & 0xc0) != 0x80) w += KLUV_NAME_CHARW;
-            klu_addpic(klu_r.handle[112] ? 112 : 181, klu_r.cx + 2.0f, y + 7.0f, w + 12.0f, 4.0f, KLU_C_DEAD, klu.layer);
+            klu_addpic(klu_r.handle[112] ? 112 : 181, klu_r.cx + 2.0f, y + klu.blockh * 0.5f - klu.blockup - 2.0f, w + 12.0f, 4.0f, KLU_C_DEAD, klu.layer);      /* 4 high, on the block's middle (2026-10-11: was y + 7, two pixels above it) */
         } else klu_addpic(klu_r.handle[112] ? 112 : 181, klu_r.cx + 2.0f, y + 6.0f, klu.crew_w * 0.62f, klu_r.handle[112] ? 8.0f : 3.0f, KLU_C_DEAD, klu.layer);       /* the strike-through, over the name: 112 = the dry stroke */
     }       /* the strike-through, over the name: 112 = the dry stroke */
 }
@@ -670,7 +737,7 @@ static void klu_row(int row, const char *name, long money, int kind)
    width is an estimate and every number a named guess in klhud_values.c (a) until a picture has shown the row */
 static void klu_lives_row(int row, const char *name, int lives, int block)
 {
-    float y = klu_r.cy + klu.yoff + klu.row * row + (klu.draft ? 3.0f : kluv_skull_y(klu.row)); int k;      /* the draft: the block's middle (28 high, 5 above the text) */
+    float y = klu_r.cy + klu.yoff + klu.row * row + (klu.draft ? klu.blockh * 0.5f - klu.blockup - KLUV_SKULL_SIZE * 0.5f : kluv_skull_y(klu.row)); int k;      /* the draft: centred on the block's middle */      /* the draft: the block's middle (28 high, 5 above the text) */
     if (!klu.crew || klu.lives != 1 || !klu_r.handle[KLUV_SKULL_PIC]) return;
     for (k = 0; k < KLUV_LIVES_MAX; k++)
         klu_addpic(KLUV_SKULL_PIC, klu_r.cx + kluv_skull_x(name, klu.crew_w, k), y, KLUV_SKULL_SIZE, KLUV_SKULL_SIZE, kluv_skull_argb(k, lives, block), klu.layer);
@@ -1124,6 +1191,15 @@ static void klu_init(void)
     klu.lives = klu_inii("Lives", klu.draft, 0, 3);              /* 0 none, 1 three skull pictures (178) in your row - 'LIVES n' in the round line when the level has no such picture -, 2 TEST: skull glyphs after your name (the stock way), 3 'LIVES n' in the round line */
     klu.roundof = klu_inii("RoundOf", klu.draft, 0, 1);  /* 1 = 'ROUND n OF m' with the game's own m (10 in Arcade; whether a session ends there is not established) */
     klu.plates = klu_inii("Plates", klu.draft, 0, 1); klu.anchor = klu_inii("PicAnchor", 1, 0, 1); klu.left = klu_inii("LeftStyle", 0x11, 0, 255); klu.extraflags = klu_inii("ExtraFlags", 1, 0, 1); klu.pictest = klu_inii("PicTest", 0, 0, 1);
+    klu.fontset = klu_inii("Fonts", klu.draft, 0, 1);       /* TYPE: roles -> fonts and the centring (needs a level baked by kl_hud.py --look deadmen from 2026-10-11) */
+    {   static const char *kn[KLU_NFONT] = { "FontName", "FontBig", "FontLabel", "FontSmall" }; static const char *dflt[KLU_NFONT] = { "0xd54", "0xd50", "0xd5c", "0xd58" };
+        static const char *cn[KLU_NFONT] = { "Cap0", "Cap1", "Cap2", "Cap3" }; static const char *cd[KLU_NFONT] = { "16", "24", "9", "13" }; int fi;
+        for (fi = 0; fi < KLU_NFONT; fi++) {
+            char t[32]; GetPrivateProfileStringA("HUD", kn[fi], dflt[fi], t, sizeof t, klh_ini); klu.fofs[fi] = (DWORD)strtoul(t, 0, 0);
+            if (klu.fofs[fi] < 0xd40 || klu.fofs[fi] > 0xd5c || (klu.fofs[fi] & 3)) klu.fofs[fi] = (DWORD)strtoul(dflt[fi], 0, 0);
+            klu.cap[fi] = klu_inif(cn[fi], cd[fi]); if (!(klu.cap[fi] >= 4 && klu.cap[fi] <= 60)) klu.cap[fi] = (float)atof(cd[fi]);
+        }
+    }
     klu.grid = klu_inii("Grid", 0, 0, 2); klu.probe = klu_inii("Probe", 0, 0, 1);
     klu.layer = klu_inii("Layer", 0xd, 3, 15);
     klu.rows = klu_inii("Rows", KLU_ROWS, 1, KLU_ROWS);

@@ -350,3 +350,41 @@ PopupY=520
 The loader's type 5 / flags 0x10 default for slots 111..118 (V1 log); the name width (9 px a character) behind the skulls and the
 strike; the draft's skull y (name y + 3) and the rule's 112 stroke height; whether DrawChunk's instance array has room for the
 frame (V1 prints the largest count); 'OF 10'; the weapon dial layout; the popup parts of re/hud_popup.md 10.
+
+## 11. 1:1 with the draft (2026-10-11 night; owner: 'its all that one font, i want it to be 1:1 with the draft ... texts in the white gritty boxes were offset, they need to be in the middle'; review re/hud_1to1_review.md; builds compile, NOTHING OF IT HAS RUN)
+
+### 11.1 Type table (kl_hud.py DRAFT_SPECS; draft px at 1280 wide, 1 cqw = 12.8 px; baked = about 0.9 x draft: Anton is NOT installed, Impact is wider and heavier, so the 0.9 is a GUESS)
+| baked font | face, px, track, cap | hook role (osd offset) | draws | draft |
+|---|---|---|---|---|
+| H2 | Impact 19, 1, 16 | NAME (+0xd54) | names, money rows, weapon dial's active count, the POP-UP (SetFont swap) | names 20.5, money rows 23, count 20.5, pop-up 22.4 |
+| H1 | Impact 30, 1, 24 | BIG (+0xd50) | the total | 33 |
+| H3 | Impact 15, 0, 13 | SMALL (+0xd58) | cash, crew count, reserve, off-gun count; stock: subtitles, tracker distance | cash 16, count 16, tracker 20.5 |
+| DebugText | Segoe UI Black 13, 3, 9 | LABEL (+0xd5c) | DEAD MEN, ROUND, TOTAL / LOOT / REWARDS, gun name | Montserrat 800, 11.5 px, .32em |
+| Button, Text, Menu, Header | Impact 16 / 19 / 19 / 25 | - | stock only | - |
+Why this assignment (review MUST 3 / 4): H1 used to serve total, ammo and pop-up at 26 (draft 33 / 48.6 / 22.4). The ammo number is the weapon dial's count in
+the agreed draft (1.6cqw = 20.5 px), so it moves to H2; the pop-up moves to H2 as well (draft 22.4, baked 19 = 0.85); H1 is now the total's alone (30 = 0.91).
+The label face moved from H3 to DebugText because stock draws with H3 (subtitles, tracker: tracked Segoe Black 13 px would have made them small and wide)
+and nothing stock draws with DebugText. +0xd5c AS DebugText is read from re/hud_data.md's property order ([0] template at +0xd4c, [1..4] H1 H2 H3 DebugText =
++0xd50 .. +0xd5c), not seen live: if it is no font object the hook logs it and the labels take the SMALL font (Impact). All four roles are checked for the FA font's
+vtable and a log line warns when two roles resolve to ONE object (a wrong offset, or a level baked before this round).
+`kl_hud.py check` now asserts header[9] = -cap and line height = round(1.3 cap) + 2 for every DRAFT_SPECS font (--look deadmen), and `all` prints the
+`[HUD] Cap0..Cap3` line (16 24 9 13 = klhud.c's defaults). An archive baked BEFORE this round (hud_x2, an owner map not rebuilt) mis-places text 2 - 8 px: rebuild it.
+
+### 11.2 Centring (computed; the rule is the one the crew rows already used)
+The game puts a text's baseline at y - header[9]; the bake sets header[9] = -cap, so the capitals of a text drawn at y span y .. y + cap.
+- Row: block middle rc = row top + 9 (block y - 5 .. y + 23). name y = floor(rc - 8 + .5) = rc - 8 (cap 16), cash y = floor(rc - 6.5 + .5) = rc - 6 (cap 13): ink centres rc and rc + .5, equal within half a pixel. Left and right padding 12 / 8 as built.
+- Labels: the tracking (3 px) is baked after the LAST letter too, so right-aligned labels get x + 3 and centred ones x + 1.5 in the draw loop (klhud.c KLU_TRACK); the preview does the same.
+- POP-UP (klhud_popup.c): the stock top-aligned style is kept (no SetStyle any more); while a bar or box shows, text and shadow take the NAME font (SetFont +0x23c, the font read from +0xac and put back with the colour). Bar middle = PopupY (default 523 = the draft's .toast: bottom 547, 47.7 high), letters' top = floor(PopupY - 16 / 2 + .5) = 515, so the capitals' middle lies on the bar's middle within 0.5 px by the baked metric. Bar = text width (the object's own half extents) + 61.4, height 33.6 + 14.1 = 47.7 (the draft's constant, no longer 1.6 x a measured extent). Several lines: + 30 a line, the bar's middle follows the block's. The traitor message uses the same rule, its box 5 px outside.
+- Loot ring: 40 dabs on r = 26 (unchanged); not shown to fail by the log (klpu_n_ring counts draws); PopupTest (below) shows it.
+
+### 11.3 Live check T1 (TEST hook <work>\build\klhook\hud_v11_test, archive <work>\build\hud_x3\DM03 through the bank's slot; the owner away; the monitor on)
+KLHook.ini: `[HUD] Enable=1 Draft=1 Log=2 PopupTest=1` (+ the owner's PopupY 520 is fine). Pictures every 2 s from GO + 15 s for 40 s. Lines to find, in order:
+1. `hud: fonts: names ..., big ..., labels ..., small ...; caps 16 24 9 13` - four DIFFERENT object addresses; any `WARNING roles N and M resolve to ONE object` or `the label role (+0xd5c) is no font object` is the answer to the role question (report, do not fix live).
+2. A picture of the crew rows: names and cash centred in the chalk block (own row) and in the orange traitor block, the label face visibly different from the numbers (heavy tracked Segoe against Impact).
+3. PopupTest, 12 s cycle on the wall clock: 0 - 4 s the chalk bar with 'LOOTING HAS STARTED. TRUST NO-ONE' in Impact on the bar's middle, bar 47.7 high; 4 - 8 s the traitor box, orange letters; 8 - 12 s the loot ring at 60 %. Log: `hud: popup: TEST message ...`, then the per-message line with the bar size (expect bh 47.7, bw = text + 61.4).
+4. A stock subtitle / tracker distance and the round-over page (H3 is now a 15 px Impact: small caps, not the wide tracked face) - one picture each; the top-right: TOTAL (H1 30) against the 'ROUND n OF m' line (4 px clear in the preview).
+Pass = no fault, no ONE-object warning, the pop-up letters' middle on the bar's middle (measure the picture), loot ring visible in phase 3.
+
+### 11.4 Guesses left
+Anton's real cap height (the 0.9); +0xd5c as DebugText; SetFont on the stock announcement text (+0xac holds the font; its width is read from the same frame's layout, one frame stale at worst); H1 on the stock announcement element is replaced only while OUR bar shows; the old baseline 13 of non-centred texts (the total, the weapon counts) - unmeasured; the draw-instance budget (up to 168 ring dabs + rows; klu_n_maxinst logs the peak); everything is baked for the 1280 x 720 virtual screen (soft at 1440p).
+Decision for the owner: a real Anton / Montserrat would need installing the two fonts on the baking PC only (OFL; the glyphs are baked into the level) - previously declined; without them the display face stays Impact and reads as one face.

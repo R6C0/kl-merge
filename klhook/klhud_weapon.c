@@ -141,9 +141,9 @@
 #define KLWD_D           141.0f                /* the disc's diameter */
 #define KLWD_FROM_BOTTOM 86.0f                 /* the middle stands this far above the inset line (720 - 36 - 86 = 598) */
 #define KLWD_RING_R      62.0f
-#define KLWD_RING_N      48                    /* run V2: 32 read as beads */
+#define KLWD_RING_N      64                    /* run V2: 32 read as beads; V3: 48 still did (dab ink 0.59 x 0.74 of the picture) */
 #define KLWD_DAB_W       12.0f
-#define KLWD_DAB_H       16.0f
+#define KLWD_DAB_H       10.0f
 #define KLWD_ACT_NUM_DX  (-7.0f)               /* the first gun's count: RIGHT-aligned at cx - 7, top at cy - 32 */
 #define KLWD_ACT_NUM_DY  (-32.0f)
 #define KLWD_ACT_PIC_DX  28.0f                 /* its picture's MIDDLE */
