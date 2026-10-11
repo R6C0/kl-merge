@@ -186,7 +186,7 @@
 #define KLU_T_GRID      25
 #define KLU_NGRID       10
 #define KLU_NTEXT       (KLU_T_GRID + KLU_NGRID)
-#define KLU_NPIC        48
+#define KLU_NPIC        224                   /* rings are drawn dab by dab (Dials) */
 #define KLU_TEXTLEN     64
 #define KLU_STYLE_LEFT  0x44
 #define KLU_STYLE_RIGHT 0x12
@@ -209,15 +209,16 @@ struct klu_text { DWORD obj, shadow; float x, y; int on, style, big, plain, nosh
 struct klu_picq { int n; float x, y, w, h; DWORD argb; int layer; };
 
 static struct {
-    int on, log, stock, crew, money, round, hide, shadow, tags, cashshort, totalfont, draw, plates, anchor, pictest, grid, probe, layer, rows;
+    int on, log, stock, crew, money, round, hide, shadow, tags, cashshort, totalfont, draw, plates, anchor, pictest, grid, probe, layer, rows, dials;
     float inset, crew_x, crew_y, crew_w, row, money_x, money_y, money_w, round_y;
 } klu;
 
 static struct {
     DWORD osd, elem, tmpl, font, bigfont, parent, rules; char scene[160];
-    DWORD h181, h170;                         /* the sprite handles of pictures 181 / 170 when their chunk is type 5, else 0 (section 3) */
+    DWORD handle[200];                        /* the sprite handle of every HUD picture whose chunk is type 5, else 0 (section 3; klu_pic_prep) */
+    float clock_max; int watch;               /* Dials: the longest round clock seen this round; 1 = the watch stands for the stock clock's digits */
     int made, fault, hid, inset_done, told_stock, pic_done;
-    float cx, cy, mx, my, ry;                 /* the layout of this level (the keys, or the inset) */
+    float cx, cy, mx, my, ry, wy;             /* the layout of this level (the keys, or the inset) */
     struct klu_text t[KLU_NTEXT];
     struct klu_picq pic[KLU_NPIC]; int npic;
 } klu_r;
@@ -275,7 +276,7 @@ static int klu_pic(void *el, void *ctx, int slot, int n, float x, float y, float
        No system call here (section 5b): el is the clock element the game is rendering in this very call and ctx its
        argument; the handle is the one klu_pic_prep read and type-checked in the tick (0 = that picture is not drawn),
        which also checked ZDrawBufferSimple's slot 5 */
-    DWORD e = (DWORD)(DWORD_PTR)el, T = *(const DWORD *)(DWORD_PTR)(e + 0xc), handle = n == 181 ? klu_r.h181 : n == 170 ? klu_r.h170 : 0;
+    DWORD e = (DWORD)(DWORD_PTR)el, T = *(const DWORD *)(DWORD_PTR)(e + 0xc), handle = n >= 0 && n < 200 ? klu_r.handle[n] : 0;
     DWORD desc[13]; float *rec, in[2], out[3] = { 0, 0, 0 }; const float *t;
     float xform[9] = { 0, 0, 1.0f, 0, 1.0f, 0, 1.0f, 0, 0 };
     if (slot < 0 || slot >= KLU_NPIC + 3 || !T || !handle || !ctx || *(const DWORD *)ctx != KLU_CTX_VT) return 0;
@@ -349,11 +350,27 @@ static void klu_draw_ours(void *el, void *ctx, void *cam, DWORD n_before, DWORD 
 }
 
 /* slot 2 (Render(ctx, cam), thiscall ret 8) of the private vtable of the clock element: runs inside 0x8bf300's element loop */
+static void klu_clock_face(void *el)
+{   /* Dials. The clock's Update has just written this frame's digits into its text and shadow (elem+0x28 / +0x2c); the
+       hijack test of run H1l showed a SetText here, right before the stock Render, is what gets drawn. Only while our
+       HUD draws (klu_draw_on) and only on the element this part wrapped. */
+    DWORD e = (DWORD)(DWORD_PTR)el, a, b;
+    if (!klu.dials || !klu_draw_on || e != klu_r.elem) return;
+    a = *(const DWORD *)(DWORD_PTR)(e + KLU_E_TEXT); b = *(const DWORD *)(DWORD_PTR)(e + KLU_E_TEXT + 4);
+    if (!a || klh_rd32(a) != KLU_TEXT_VT) return;
+    if (klu_r.watch) {
+        ((klu_set1_t)(DWORD_PTR)KLH_VA(0x896e50))((void *)(DWORD_PTR)a, 0, (DWORD)(DWORD_PTR)" ");
+        if (b && klh_rd32(b) == KLU_TEXT_VT) ((klu_set1_t)(DWORD_PTR)KLH_VA(0x896e50))((void *)(DWORD_PTR)b, 0, (DWORD)(DWORD_PTR)" ");
+    } else if ((*(const DWORD *)(DWORD_PTR)(a + 0x14) & 0xffffff) != (KLU_C_CORAL & 0xffffff))
+        ((klu_set1_t)(DWORD_PTR)KLH_VA(0x8a0a30))((void *)(DWORD_PTR)a, 0, KLU_C_CORAL);
+}
+
 static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam)
 {
     char r; DWORD n0, n1; (void)edx;
     InterlockedIncrement(&klu_n_call);
     n0 = ctx ? ((const DWORD *)ctx)[1] : 0;       /* the stock Render reads the same object two instructions on */
+    klu_clock_face(el);
     r = ((klu_render_t)(DWORD_PTR)KLH_VA(KLU_TIME_RENDER))(el, 0, ctx, cam);
     n1 = ctx ? ((const DWORD *)ctx)[1] : 0;
     klu_draw_ours(el, ctx, cam, n0, n1);
@@ -421,8 +438,9 @@ static void klu_layout(void)
     klu_r.cx = klu.crew_x >= 0 ? klu.crew_x : 1280.0f * inset;
     klu_r.cy = klu.crew_y >= 0 ? klu.crew_y : 720.0f * inset;
     klu_r.mx = klu.money_x >= 0 ? klu.money_x : 1280.0f - 1280.0f * inset;
-    klu_r.ry = klu.round_y >= 0 ? klu.round_y : 720.0f * inset + 58.0f;      /* under the clock's two lines (y, y + 28) */
-    klu_r.my = klu.money_y >= 0 ? klu.money_y : 720.0f * inset + 87.0f;      /* 123 at the game's inset = the draft's 9.6 % of the width */
+    klu_r.wy = 720.0f * inset + 30.0f;                                       /* Dials: the watch's middle (66 at the game's inset) */
+    klu_r.ry = klu.round_y >= 0 ? klu.round_y : 720.0f * inset + (klu.dials ? 72.0f : 58.0f);      /* under the clock's two lines (y, y + 28), or under the watch */
+    klu_r.my = klu.money_y >= 0 ? klu.money_y : 720.0f * inset + (klu.dials ? 100.0f : 87.0f);     /* 123 at the game's inset = the draft's 9.6 % of the width */
     for (i = 0; i < KLU_NTEXT; i++) { klu_r.t[i].style = KLU_STYLE_LEFT; klu_r.t[i].want_colour = KLU_C_CHALK; }
     x0 = klu_r.cx; x1 = klu_r.cx + klu.crew_w;
     klu_r.t[KLU_T_HEAD].x = x0; klu_r.t[KLU_T_HEAD].y = klu_r.cy; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;
@@ -529,6 +547,49 @@ static void klu_outline(float x, float y, float w, float h, DWORD argb, int laye
     klu_addpic(181, x, y, 1.0f, h, argb, layer); klu_addpic(181, x + w - 1.0f, y, 1.0f, h, argb, layer);
 }
 
+/* DIALS ([HUD] Dials=1; re\hud_layout.md; NOT RUN IN THE GAME). A ring that empties is n brush dabs (picture 113) on a
+   circle: dab k stands at 2 pi k / n clockwise from the top, and only the dabs of the part that is LEFT are drawn - the
+   empty part begins at the top and grows clockwise, as on the owner's draft. */
+static void klu_ring(float cx, float cy, float r, int n, float left, float dw, float dh, DWORD argb, int layer)
+{
+    int k, first;
+    if (!klu_r.handle[113]) return;
+    if (!(left > 0)) return;
+    if (left > 1.0f) left = 1.0f;
+    first = (int)((1.0f - left) * n + 0.5f);
+    for (k = first; k < n; k++) {
+        float a = 6.2831853f * (float)k / (float)n;
+        klu_addpic(113, cx + r * (float)sin(a) - dw * 0.5f, cy - r * (float)cos(a) - dh * 0.5f, dw, dh, argb, layer);
+    }
+}
+
+static void klu_dials(const struct klb_snap *s)
+{
+    float clock = 0, cx = klu_r.mx - 35.0f, cy = klu_r.wy; int i;
+    klu_r.watch = 0;
+    if (!klu.dials || !klu_r.handle[113] || !klu_r.handle[114]) return;
+    /* the round watch: [rules+0x200] = the round clock in seconds, counting down (klfed.c: slot 192 0x5dff40) */
+    if (klu.grid == 2) { clock = 219.0f; klu_r.clock_max = 360.0f; }
+    else if (!klh_rd(s->rules + 0x200, &clock, 4) || !(clock >= 0 && clock < 36000.0f)) clock = 0;
+    if (clock > klu_r.clock_max) klu_r.clock_max = clock;
+    if (clock > 60.0f && klu_r.clock_max > 60.0f) {
+        float left = clock / klu_r.clock_max, a = 6.2831853f * (1.0f - left);
+        klu_addpic(114, cx - 34.5f, cy - 34.5f, 69.0f, 69.0f, 0x9c080809u, klu.layer - 2);
+        klu_ring(cx, cy, 29.0f, 24, left, 9.0f, 11.0f, KLU_C_CHALK, klu.layer);
+        for (i = 1; i <= 5; i++)                                   /* the hand: five small dabs from the hub to the ring's edge of 'now' */
+            klu_addpic(113, cx + 4.4f * i * (float)sin(a) - 2.5f, cy - 4.4f * i * (float)cos(a) - 2.5f, 5.0f, 5.0f, KLU_C_CHALK, klu.layer);
+        klu_addpic(113, cx - 4.0f, cy - 4.0f, 8.0f, 8.0f, KLU_C_CHALK, klu.layer);
+        klu_r.watch = 1;                                           /* the render slot blanks the stock clock's digits while this is set */
+    }
+    /* the escape dial: the vehicle waits (state 3 / 4), [rules+0x1d8] = the seconds it still waits, 8 s a visit (klbot.c) */
+    if ((s->veh == 3 || s->veh == 4 || klu.grid == 2) && klu_r.handle[170]) {
+        float ex = cx - 75.0f, ey = cy + 5.0f, left = klu.grid == 2 ? 0.35f : s->timer / 8.0f;
+        klu_addpic(114, ex - 27.5f, ey - 27.5f, 55.0f, 55.0f, 0x9c080809u, klu.layer - 2);
+        klu_ring(ex, ey, 23.0f, 24, left, 7.0f, 9.0f, KLU_C_ORANGE, klu.layer);
+        klu_addpic(170, ex - 15.0f, ey - 15.0f, 30.0f, 30.0f, KLU_C_CHALK, klu.layer);       /* the car icon; a helicopter map still shows the car (the vehicle's kind is a virtual call: not read here) */
+    }
+}
+
 /* one crew row: kind 0 crew, 1 you, 2 traitor, 3 dead, 4 escaped, 5 fed */
 static void klu_row(int row, const char *name, long money, int kind)
 {
@@ -548,8 +609,8 @@ static void klu_row(int row, const char *name, long money, int kind)
     default: tn->want_colour = KLU_C_CHALK; tc->want_colour = KLU_C_GREENHI; break;
     }
     if (!klu.plates || !klu.crew) return;
-    if (block) klu_addpic(181, klu_r.cx - 2.0f, y - 3.0f, klu.crew_w + 4.0f, klu.row - 2.0f, kind == 1 ? KLU_C_CHALK : KLU_C_ORANGE, klu.layer - 2);
-    if (kind == 3) klu_addpic(181, klu_r.cx + 4.0f, y + 8.0f, klu.crew_w * 0.65f, 3.0f, KLU_C_DEAD, klu.layer);       /* the strike-through, over the name */
+    if (block) klu_addpic(klu_r.handle[111] ? 111 : 181, klu_r.cx - 4.0f, y - 4.0f, klu.crew_w + 8.0f, klu.row, kind == 1 ? KLU_C_CHALK : KLU_C_ORANGE, klu.layer - 2);   /* 111 = the painted stroke (kl_hud extras) */
+    if (kind == 3) klu_addpic(klu_r.handle[112] ? 112 : 181, klu_r.cx + 2.0f, y + 6.0f, klu.crew_w * 0.62f, klu_r.handle[112] ? 8.0f : 3.0f, KLU_C_DEAD, klu.layer);       /* the strike-through, over the name: 112 = the dry stroke */
 }
 
 static void klu_grid(void)
@@ -638,6 +699,7 @@ static int klu_compose(int *state_ok)
             klu_addpic(181, x - 2.0f, y - 2.0f, klu.money_w * f, 12.0f, KLU_C_CHALK, klu.layer - 2);
         }
     }
+    klu_dials(&s);
     if (klu.grid) klu_grid();
     return 1;
 }
@@ -730,9 +792,20 @@ static void klu_pic_prep(DWORD el)
         chunk = (h[i] & 0x80000000u) ? (h[i] & 0x7fffffffu) : klh_rd32((DWORD_PTR)KLH_VA(KLU_CHUNKTAB) + 4 * h[i]);      /* 0x842d22 .. 0x842d2e */
         type[i] = chunk ? klh_rd32(chunk + 0xc) : 0;
     }
-    klu_r.h181 = type[0] == KLU_PICTYPE ? h[0] : 0; klu_r.h170 = type[1] == KLU_PICTYPE ? h[1] : 0;
+    memset(klu_r.handle, 0, sizeof klu_r.handle);
+    {   /* every slot: the same two reads and the same type test (the extras 111..118 of tools/kl_hud.py, the weapon
+           pictures, the icons) */
+        int k, extra = 0;
+        for (k = 0; k < 200; k++) {
+            DWORD hk = 0, ck;
+            if (!klh_rd(tbl + 12 * (DWORD)k, &hk, 4) || !hk) continue;
+            ck = (hk & 0x80000000u) ? (hk & 0x7fffffffu) : klh_rd32((DWORD_PTR)KLH_VA(KLU_CHUNKTAB) + 4 * hk);
+            if (ck && klh_rd32(ck + 0xc) == KLU_PICTYPE) { klu_r.handle[k] = hk; if (k >= 111 && k <= 118) extra++; }
+        }
+        if (klu.log) klog("hud: pictures: %d of the 8 extra pictures (slots 111..118, tools/kl_hud.py --look deadmen) are in this level%s", extra, extra == 8 ? "" : " - plates fall back to UI_White, rings are not drawn");
+    }
     if (klu.log) klog("hud: pictures: 181 (UI_White) handle %08lx chunk type %lu, 170 (the car icon) handle %08lx chunk type %lu; type %d = the 40-byte record this part writes%s%s",
-                      h[0], type[0], h[1], type[1], KLU_PICTYPE, klu_r.h181 ? "" : " - 181 IS NOT DRAWN (no plates, bars, outlines)", klu_r.h170 ? "" : " - 170 is not drawn");
+                      h[0], type[0], h[1], type[1], KLU_PICTYPE, klu_r.handle[181] ? "" : " - 181 IS NOT DRAWN (no plates, bars, outlines)", klu_r.handle[170] ? "" : " - 170 is not drawn");
 }
 
 static int klu_fa_shown(DWORD osd)
@@ -894,7 +967,7 @@ static void klu_tick(int game_thread)
     LeaveCriticalSection(&klu_cs);
     if (klu_r.fault || !show) klu_stand_down(osd);
     if (klu_r.fault) return;
-    if (klu_r.made && (klu.plates || klu.pictest) && !klu_r.pic_done) klu_pic_prep(klu_r.elem);      /* before the first frame that draws */
+    if (klu_r.made && (klu.plates || klu.pictest || klu.dials) && !klu_r.pic_done) klu_pic_prep(klu_r.elem);      /* before the first frame that draws */
     InterlockedExchange(&klu_draw_on, show);
     if (show && klu.hide && klu.crew) klu_hide_tick(osd, 1);
     if (klu.probe && klu_probe_ready) {
@@ -942,6 +1015,7 @@ static void klu_init(void)
     klu.draw = klu_inii("Draw", 1, 1, 2);
     klu.shadow = klu_inii("Shadow", 1, 0, 1); if (klu.draw == 2) klu.shadow = 1;     /* the stock Render draws a pair */
     klu.tags = klu_inii("Tags", 1, 0, 1); klu.cashshort = klu_inii("CashShort", 1, 0, 1); klu.totalfont = klu_inii("TotalFont", 0, 0, 1);
+    klu.dials = klu_inii("Dials", 0, 0, 1);              /* the round watch + the escape dial (needs the level's extra pictures 113 / 114) */
     klu.plates = klu_inii("Plates", 0, 0, 1); klu.anchor = klu_inii("PicAnchor", 1, 0, 1); klu.pictest = klu_inii("PicTest", 0, 0, 1);
     klu.grid = klu_inii("Grid", 0, 0, 2); klu.probe = klu_inii("Probe", 0, 0, 1);
     klu.layer = klu_inii("Layer", 0xd, 3, 15);
