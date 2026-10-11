@@ -34,6 +34,10 @@
  *   klhop.c        x     x    an AI heister that stands at a place the mesh does not carry it over is put beyond it
  *                             ([CrewHop], KLJoin.ini; calls 0x62a900 through klcrew_rt.c's functions, with Reorder
  *                             0x760e50; no data, no code). OFF by default
+ *   klhud.c        x     x    the expansion's FA / Arcade HUD, Version 1 ([HUD]): crew list + money box drawn with the game's
+ *                             own ZCHAROBJ texts from a private copy of the OSD's vtable (slot 55 wrapped, as klchar.c
+ *                             wraps the option object); calls 0x8ccde0, 0x598460, 0x817810 and ZCHAROBJ slots on the
+ *                             main thread; one data byte hides the stock top-left block. OFF by default, NOT RUN
  *   klmem.c klnudge.c x  x    address space reserve ([Memory]); the loader's cursor nudge ([Load])
  *   klauto.c             x    scripted input, breadcrumb detours, [Auto] options, result file, watchdog
  *   mkoverlay.py              builds KLExpansion\Overlay\Patch01.zip (the menu page of the expansion maps)
@@ -159,6 +163,7 @@
  *   [Join] [Join.2] .. [Join.8]                             kljoin.c (also KLJoin.ini beside a level archive)
  *   [CrewJoin] [Crew] [Talk]                                klcrew_rt.c, klcrew.c, kltalk.c - each OFF unless its key is set
  *   [CrewHop]                                               klhop.c (also [CrewHop] in the KLJoin.ini beside a level archive) - OFF unless Enable=1
+ *   [HUD]                                                   klhud.c - OFF unless Enable=1
  *   [Auto] [Engine] [Script]                                klauto.c (TEST)
  *
  * BUILD: cl 19.4x x86, /O2 /LD /W3, export DirectInput8Create=_DirectInput8Create@20 (build.bat, build_auto.bat).
@@ -569,6 +574,7 @@ static void klh_tick(int game_thread);
 #include "klescort.c"
 #include "klhop.c"
 #include "klbalance.c"
+#include "klhud.c"
 #include "klshoulder.c"
 #include "klfed.c"
 #include "klsteam.c"
@@ -614,6 +620,7 @@ static void klh_tick(int game_thread)
     klb_tick(game_thread);
     kle_tick(game_thread);                            /* klescort.c: after klb_tick; one game call per order, game thread only */
     klr_tick(game_thread);                            /* klbalance.c: one damage scale for player, police and crew */
+    klu_tick(game_thread);                            /* klhud.c: the crew list / money box texts (game thread only) */
     klo_tick(game_thread);                            /* klshoulder.c: log only */
     klp_tick(game_thread);                            /* klfed.c: come back as a fed (data writes only) */
     klg_tick();
@@ -783,6 +790,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kle_init();
     klv_init();
     klr_init();
+    klu_init();
     klo_init();
     klp_init();
     klg_init();
