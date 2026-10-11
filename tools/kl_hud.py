@@ -15,6 +15,8 @@ stock face; it is kept, so a few pairs may kern slightly wrong for the new face)
     python tools/kl_hud.py dump <build dir or zip>                                   # the fonts a level has
     python tools/kl_hud.py pictures <build dir or zip> <out dir> [--png <dir>]        # restyled HUD plates (see PLATES)
     python tools/kl_hud.py all <build dir or zip> <out dir> [font options]            # fonts + pictures
+    python tools/kl_hud.py all <build> <out> --look deadmen       # THE OWNER'S LOOK (2026-10-11): Impact capitals (lower
+                                                                  # case drawn as capitals), light chipping, brush-kit bars
 
 PLATES: the stock plates (re/hud_data.md 2: slot 107/108 Weapon_BG 256x128, 169 Meter_BG 256x64, 161..164 GameplayTracker
 256x64, 109/193 the AmmoCount tick 32x32, 0/1 the borders 128x32) are light grey rounded boxes the code draws with its own
@@ -209,7 +211,37 @@ def tex_replace(entry, rgba):
 
 
 # ------------------------------------------------------------------ build a font
-def build_font(chunk, tex, face, weight=600, scale=1.0, log=print):
+def _chip(ink, w, h, seed, px, amount):
+    """Light damage on one glyph, after the Dead Men title lettering: at most two small chips bitten out of the ink
+    and, rarely, one hairline crack. Deterministic per character. amount 0..1 scales how often."""
+    import random
+    if w < 4 or h < 6 or amount <= 0:
+        return ink
+    rnd = random.Random(seed * 7919 + px * 31)
+    rows = [bytearray(r) for r in ink]
+    solid = [(x, y) for y in range(h) for x in range(w) if rows[y][x] > 160]
+    if len(solid) < 12:
+        return ink
+    roll = rnd.random()
+    chips = 2 if roll < .10 * amount else 1 if roll < .50 * amount else 0
+    for _ in range(chips):
+        cx, cy = rnd.choice(solid)
+        rad = .7 + rnd.random() * (.5 + px / 45.0)
+        for y in range(max(0, int(cy - rad - 1)), min(h, int(cy + rad + 2))):
+            for x in range(max(0, int(cx - rad - 1)), min(w, int(cx + rad + 2))):
+                d = ((x - cx) ** 2 + (y - cy) ** 2) ** .5
+                if d < rad + .6:
+                    rows[y][x] = int(rows[y][x] * max(0.0, min(1.0, d - rad + .4)))
+    if rnd.random() < .09 * amount and h >= 10:           # a hairline crack, a few pixels long, slanted
+        x, y = rnd.choice(solid); dx = rnd.choice((-1, 1)) * (.35 + rnd.random() * .4)
+        for k in range(rnd.randint(3, max(4, h // 3))):
+            xi, yi = int(x + dx * k), y + k
+            if 0 <= xi < w and 0 <= yi < h:
+                rows[yi][xi] = rows[yi][xi] // 5
+    return rows
+
+
+def build_font(chunk, tex, face, weight=600, scale=1.0, log=print, caps=False, chip=0.0):
     """-> (new chunk, {texture id: new entry}, report). Page-0 records are re-rasterized with `face`; page-1
     records (private characters) are kept."""
     h, recs, tail = parse(chunk)
@@ -222,7 +254,11 @@ def build_font(chunk, tex, face, weight=600, scale=1.0, log=print):
     glyphs = []
     for r in todo:
         ch = chr(r[0])
+        if caps and ch.islower() and len(ch.upper()) == 1 and ord(ch.upper()) < 0x530:
+            ch = ch.upper()                              # the game's own strings stay; lower case is DRAWN as capitals
         adv, xo, yo, w, hh, ink = gd.glyph(ch)
+        if chip and ink:
+            ink = _chip(ink, w, hh, r[0], px, chip)
         glyphs.append((r, adv, xo, yo, w, hh, ink))
     gd.close()
     # shelf packing, tallest first
@@ -257,7 +293,7 @@ def build_font(chunk, tex, face, weight=600, scale=1.0, log=print):
     return pack(h, recs2, tail), {tid: tex_replace(entry, rgba)}, rep
 
 
-def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, only=None, log=print, pictures=False):
+def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, only=None, log=print, pictures=False, caps=False, chip=0.0):
     """A build (folder or zip) -> folder `dst` with the fonts replaced. Files beside the archive are copied."""
     zp, order, files, ext = open_level(src)
     fonts = fonts_of(files, ext)
@@ -267,7 +303,7 @@ def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, onl
     for name, ci in sorted(fonts.items(), key=lambda kv: kv[1]):
         if only and name not in only:
             continue
-        chunk, entries, rep = build_font(p.chunks[ci], tex, face, weight, scale, log)
+        chunk, entries, rep = build_font(p.chunks[ci], tex, face, weight, scale, log, caps, chip)
         p.chunks[ci] = chunk
         for tid, e in entries.items():
             tex.tex[tid] = T.Texture(e, tex.tex[tid].faces, tex.tex[tid].cube, tex.tex[tid].frames, tex.tex[tid].group)
@@ -342,49 +378,62 @@ PLATE_SLOTS = {107: 'plate', 108: 'plate', 169: 'meter', 161: 'bar0', 162: 'bar1
                109: 'tick', 193: 'tick', 0: 'border', 1: 'border_red'}
 
 
+CHALK = (243, 240, 234)           # the kit's brush white
+CORAL = (240, 71, 90)             # the kit's red
+
+
 def _plate_pixels(kind, w, h):
-    """ABGR pixels of a plate of w x h, stored R G B A (run F1_DM03 drew a B G R A amber bar BLUE)."""
+    """ABGR pixels of a HUD picture of w x h in the owner's brush-kit look (2026-10-11: solid chalk strokes with a
+    hand-cut edge and small breaks, thin outlined bars with a painted fill), stored R G B A (run F1_DM03)."""
+    import random
+    rnd = random.Random(w * 1009 + h * 17 + sum(map(ord, kind)))
     px = bytearray(4 * w * h)
 
     def put(x, y, rgb, a):
         if 0 <= x < w and 0 <= y < h:
             i = 4 * (y * w + x); px[i], px[i + 1], px[i + 2], px[i + 3] = rgb[0], rgb[1], rgb[2], a
 
-    def box(x0, y0, x1, y1, rgb, a, r=2):
+    def stroke(x0, y0, x1, y1, rgb, a=0xff, breaks=True):
+        """A solid painted bar: each row's ends and each column's top / bottom wander by a pixel or two; a few
+        one-pixel vertical breaks and chips in the paint."""
+        top = [y0 + rnd.choice((0, 0, 0, 1)) for _ in range(x1 - x0)]
+        bot = [y1 - rnd.choice((0, 0, 0, 1)) for _ in range(x1 - x0)]
+        gaps = set()
+        if breaks:
+            for _ in range(max(1, (x1 - x0) // 38)):
+                gaps.add(rnd.randrange(x0 + 2, max(x0 + 3, x1 - 2)))
         for y in range(y0, y1):
-            for x in range(x0, x1):
-                cx = min(x - x0, x1 - 1 - x); cy = min(y - y0, y1 - 1 - y)
-                if cx + cy < r - 1:                        # 2 px chamfered corners
+            lo = x0 + rnd.choice((0, 0, 1, 2)); hi = x1 - rnd.choice((0, 0, 1, 2))
+            for x in range(lo, hi):
+                if x in gaps and rnd.random() < .8:
                     continue
-                put(x, y, rgb, a)
-        for x in range(x0 + r, x1 - r):                    # top highlight, bottom shade
-            put(x, y0, EDGE_RGB, 0x38); put(x, y1 - 1, (0, 0, 0), 0xd0)
-        for y in range(y0 + r, y1 - r):
-            put(x0, y, EDGE_RGB, 0x20); put(x1 - 1, y, (0, 0, 0), 0xa0)
+                if top[x - x0] <= y < bot[x - x0]:
+                    put(x, y, rgb, a if rnd.random() > .012 else a // 4)
 
-    if kind == 'plate':                                    # the ammo panel: the stock art fills the picture with a margin
-        box(8, 8, w - 8, h - 8, PLATE_RGB, PLATE_A)
-        for x in range(24, w - 24):                        # the stock plate's magazine slot line, as a hairline
-            put(x, h // 2 + 4, EDGE_RGB, 0x28)
+    def frame(x0, y0, x1, y1, rgb=CHALK, a=0xe6):
+        for x in range(x0, x1):
+            put(x, y0, rgb, a); put(x, y1 - 1, rgb, a)
+        for y in range(y0, y1):
+            put(x0, y, rgb, a); put(x1 - 1, y, rgb, a)
+
+    if kind == 'plate':                                    # behind the stock weapon panel: a torn dark smear, no box
+        for y in range(8, h - 8):
+            lo = 8 + rnd.choice((0, 1, 2, 3, 4)); hi = w - 8 - rnd.choice((0, 1, 2, 3, 4))
+            for x in range(lo, hi):
+                put(x, y, (8, 8, 9), 0x8c)
+        frame(33, h // 2 - 3, w - 34, h // 2 + 12)         # the thin outlined bar the magazine ticks are painted into
     elif kind == 'meter':
-        box(4, 12, w - 4, h - 12, PLATE_RGB, PLATE_A)
-    elif kind.startswith('bar'):                           # tracker bar: a dark trough with the bar at 4/4 .. 1/4
+        frame(4, 16, w - 4, h - 16)
+    elif kind.startswith('bar'):                           # tracker bar: outlined bar, painted fill at 4/4 .. 1/4
         k = int(kind[3])
-        box(4, 20, w - 4, h - 20, PLATE_RGB, PLATE_A)
-        for y in range(h // 2 - 3, h // 2 + 3):
-            for x in range(8, 8 + (w - 16) * (4 - k) // 4):
-                put(x, y, AMBER, 0xff)
-    elif kind == 'tick':                                   # one magazine tick: the code draws the WHOLE cell as one thin
-        for y in range(h):                                 # tall bar (stock = a full grey gradient square; run F1 showed a
-            for x in range(w):                             # 6 x 20 bar inside the cell as a dot), so the cell is filled
-                f = 1.0 - 0.25 * y / h
-                put(x, y, tuple(int(c * f) for c in AMBER), 0xff)
-    elif kind.startswith('border'):
-        rgb = (216, 70, 60) if kind == 'border_red' else EDGE_RGB
-        for x in range(w):
-            put(x, 0, rgb, 0xff); put(x, h - 1, rgb, 0xff)
+        frame(4, 20, w - 4, h - 20)
+        stroke(4, 18, 4 + (w - 8) * (4 - k) // 4, h - 18, CHALK)
+    elif kind == 'tick':                                   # one magazine tick: the code scales the whole cell to one thin bar
         for y in range(h):
-            put(0, y, rgb, 0xff); put(w - 1, y, rgb, 0xff)
+            for x in range(w):
+                put(x, y, CHALK, 0xff if rnd.random() > .03 else 0x60)
+    elif kind.startswith('border'):
+        frame(0, 0, w, h, CORAL if kind == 'border_red' else CHALK, 0xff)
     return px
 
 
@@ -543,6 +592,10 @@ def main():
             if k == '--face': kw['face'] = rest.pop(0)
             elif k == '--weight': kw['weight'] = int(rest.pop(0))
             elif k == '--scale': kw['scale'] = float(rest.pop(0))
+            elif k == '--caps': kw['caps'] = True
+            elif k == '--chip': kw['chip'] = float(rest.pop(0))
+            elif k == '--look' and rest.pop(0) == 'deadmen':      # the owner's look of 2026-10-11
+                kw.update(face='Impact', weight=400, scale=.9, caps=True, chip=.6)
             else: raise SystemExit('unknown option ' + k)
         apply(a[1], a[2], pictures=True, **kw)
         bad = check(a[1], a[2], pictures=True)
