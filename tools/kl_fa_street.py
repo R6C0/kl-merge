@@ -576,6 +576,16 @@ def place_escape(S, log=print):
                 grp = next(j for j in range(top, sc.end[top]) if sc.names[j] == 'EscapeVehicle_Animation_F07')
                 t = trans(S, grp)
                 au.place(S, grp, (t[0], t[1] + au.PARK[1], t[2]))
+                # THE 0x686a66 CRASH (re/crash_686a66.md): a FakeTarget 600 m under the road registers outside the vision
+                # grid (cell 0xff) and its update then writes 16 bytes behind ZCheckVisible's table every frame. The parked
+                # vans keep the 'Mercenary' FakeTarget of their body: take the controller off every node of the parked group.
+                n_ft = 0
+                for j in range(grp, sc.end[grp]):
+                    ctrls = sc.nodes[j]['ctrls']
+                    keep = [(nm, b) for nm, b in ctrls if sc.p.key(nm) != 'FakeTarget']
+                    n_ft += len(ctrls) - len(keep)
+                    ctrls[:] = keep
+                log('  kl_fa_street: escape: %s parked under the road, %d FakeTarget controller(s) taken off it' % (name, n_ft))
     log('  kl_fa_street: escape: van %d of %d is called; stop (%d, %d, %d), heading (%.2f, %.2f), boarding box at (%d, %d, %d); '
         'exit box z %d..%d; the others %s' % (VAN + 1, 1 if ONE_VAN else 3, *at, *head, *board, z0, z1,
                                               'listed too' if not ONE_VAN else 'parked under the road' if PARK_OTHERS else 'left standing'))
