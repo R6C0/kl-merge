@@ -13,6 +13,9 @@ stock face; it is kept, so a few pairs may kern slightly wrong for the new face)
                            [--weight 600] [--scale 1.0] [--only H1,H2,H3,...]
     python tools/kl_hud.py preview <build dir or zip> <font name> "text" <out.png>   # how a line looks
     python tools/kl_hud.py dump <build dir or zip>                                   # the fonts a level has
+    python tools/kl_hud.py fonts <tree>/Overlay/Scenes/kaneandlynch.zip <out dir> --look deadmen
+                                                                  # THE MENUS' lettering: the front-end scene has its own
+                                                                  # eight fonts (same format); only they and their pages change
     python tools/kl_hud.py pictures <build dir or zip> <out dir> [--png <dir>]        # restyled HUD plates (see PLATES)
     python tools/kl_hud.py all <build dir or zip> <out dir> [font options]            # fonts + pictures
     python tools/kl_hud.py all <build> <out> --look deadmen       # THE OWNER'S LOOK (2026-10-11): Impact capitals (lower
@@ -152,6 +155,9 @@ def open_level(path):
         order = z.namelist()
         files = {n: z.read(n) for n in order}
     ext = {n.rsplit('_Main', 1)[1]: n for n in order if '_Main' in n}
+    if '.gms' not in ext:                                  # the menu scene (Scenes/kaneandlynch.*): members by their stem
+        stem = next(n for n in order if n.lower().endswith('.gms'))[:-4]
+        ext = {n[len(stem):]: n for n in order if n.startswith(stem)}
     return zp, order, files, ext
 
 
@@ -790,9 +796,11 @@ def main():
             elif k == '--weight': kw['weight'] = int(rest.pop(0))
             elif k == '--scale': kw['scale'] = float(rest.pop(0))
             elif k == '--only': kw['only'] = rest.pop(0).split(',')
+            elif k == '--look' and rest.pop(0) == 'deadmen':      # the lettering alone (the menu scene has no HUD pictures)
+                kw.update(face='Impact', weight=400, scale=.9, caps=True, chip=.6)
             else: raise SystemExit('unknown option ' + k)
-        apply(a[1], a[2], **kw)
-        bad = check(a[1], a[2])
+        out, _reps = apply(a[1], a[2], **kw)
+        bad = check(a[1], out)
         print('check:', 'PASS' if not bad else 'FAIL ' + '; '.join(bad))
     else:
         raise SystemExit('unknown command ' + cmd)
