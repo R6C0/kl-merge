@@ -6,12 +6,12 @@ objects, offline, on the pattern of kl_fa_author.py (Retomoto Tower). The study:
 re/campaign_fa_bank.md 4.3 / 8.3 / 8.4; the build stage by stage, every check with its output and the list of
 what only a live run can settle: re/bank_campaign.md. Nothing here installs anything or starts the game.
 
-    python kl_fa_bank.py test <out> [--keep] [options]    build F07 + M03_A with the layer into <out> (kl_maps.one),
-                                                          finish() on the written level, check(); exit 1 if a problem
-                                                          is left that is not in KNOWN
-    python kl_fa_bank.py finish <built folder>            what needs the WRITTEN level, on a folder built by
-                                                          'kl_maps.py one <out> F07 M03_A --campaign --author kl_fa_bank
-                                                          --keep': the vault loot's briefcases, the level's own texts
+    python kl_fa_bank.py test <out> [--keep] [options]    build F07 + M03_A with the layer into <out> (build(): the
+                                                          van's plan on a bare graft, then kl_maps.one inside
+                                                          kl_map_escape.van_layer), finish() on the written level,
+                                                          check(); exit 1 if a problem is left that is not in KNOWN
+    python kl_fa_bank.py finish <built folder>            what needs the WRITTEN level, on a folder build() made: the
+                                                          vault loot's briefcases, the level's own texts
     python kl_fa_bank.py check <built folder>             every check of this layer on a built folder
     python kl_fa_bank.py inventory <built folder>         the layer with world places read back from the level
     options of 'test' (one flag each for the live runs):
@@ -31,8 +31,10 @@ what only a live run can settle: re/bank_campaign.md. Nothing here installs anyt
       --blast-real      the vault's blast with the campaign's own reach and damage (default: a harmless show)
       --no-blast        the vault stays intact: no blast, no swap to the blown vault
       --dead-men-rows   the campaign's soldiers keep Dead Men's rows (default: stock rows by weapon class)
+      --plan FILE       the van's plan from a file (the van.json beside an earlier build, or 'kl_map_escape.py
+                        van-plan <bare graft> --points ... --json'): no bare graft is built for it (60 s less)
 
-THE ROUND (the van's drive is a later stage's: kl_map_escape.van_plan_points / van_prepare)
+THE ROUND
   START   roped down in the secure yard, two stacks of four beside the loading dock's roller door.
   IN      dock -> vault lobby -> two flights down -> the vault's ante-room. Six door sets stand in series on the
           way in and out (re/campaign_fa_bank.md 8.3): five of them are open from the load, the vault door is the beat.
@@ -47,8 +49,13 @@ THE ROUND (the van's drive is a later stage's: kl_map_escape.van_plan_points / v
   LOOT    seven briefcases in the vault (six at the deposit-box walls, one in the middle of the room), four
           stacks on the teller counters of the banking hall.
   OUT     up the airlock stairs into the hall; the foyer box brings the plaza's seven squads (20 men, two SWAT
-          fours with rifles); out of the front entrance, to the street: the exit box calls the van. F07's first
-          van only stands where it will wait, so that the exit trigger has a vehicle to name.
+          fours with rifles); out of the front entrance, onto the plaza: the exit box calls the van.
+  ESCAPE  F07's first key-framed van on ROAD (kl_map_escape's way-point front end): it waits at the west end of
+          the front square on the designers' own in-road, drives 48 m in 7.2 s to its stop in front of the plaza
+          (nose east-north-east; its rear doors are 18 - 20 m from the front entrance), and leaves east along their away
+          road, 71 m in 8.48 s, passing the campaign's east level bound 26 m after the stop as every stock van
+          passes one. Boarding box, kill box, path blocker, in-van and fixed camera are the van's own, moved with
+          it; F07's second and third van are not in the level (VAN).
 
 HOW (as kl_fa_author: no new entity, no new controller - every object is a stock one, re-placed and re-wired)
   The nine names of kl_graft.AUTHOR_NAMES: HOST, prepare_host(S), strip(M), KEEP, DROP, layer_names(Jn),
@@ -59,6 +66,10 @@ HOW (as kl_fa_author: no new entity, no new controller - every object is a stock
      them out again; 'with doors(): ...' does the same from a script.
   2. finish(folder), on the written level (chunk numbers and the .LOC exist only then): the briefcase model
      (kl_fa_loot.case_model, into dead chunk indices), and the level's own texts (.LOC keys, settings fields).
+  3. THE VAN (build()): its plan needs the collision of a BUILT level without the layer, and its collision
+     placements are set in kl_hvk.join, which no name of the interface reaches - so build() makes a bare graft
+     for the plan, hands it to prepare_host() / wire() (lay_van) and wraps the build in kl_map_escape.van_layer.
+     'kl_maps.py one ... --author kl_fa_bank' alone therefore stops in prepare_host with a line that says so.
 
 GUESS = a value that is not copied from a stock object or measured in the levels; ASSUMPTION = fits the
 evidence, not proven. Every table entry carries its source. Rotation, box and 'hidden' facts: kl_fa_author's
@@ -70,6 +81,7 @@ sys.path.insert(0, HERE)
 import kl_graft, kl_fa, kl_maps, kl_gms, kl_scene, kl_escape, kl_hvk
 import kl_prpjoin as J
 import kl_fa_author as A                # the small tools only (place, setv ...); none of Retomoto's tables
+import kl_map_escape as ESC             # the van: plan from way points, F07's keys laid on it, its check
 from kl_prp import units
 
 HOST, LEVEL = 'F07', 'M03_A'
@@ -197,13 +209,14 @@ PLACE = {
     'FASpecials!POI!POI_TheLootArea': ((400, -800, -13000), None, None, 'the vault\'s middle, 160 over its floor'),
     'FASpecials!PIP!EnterLootArea': ((560, 380, -4800), None, (250, 230, 50), 'GUESS: a plane 1 m inside the dock\'s roller door (doorway x 385..735, z -4706)'),
     'FASpecials!PIP!ExitLootArea': ((303, 974, -9407), None, (300, 200, 100), 'the front entrance: M03_FA_A\'s own ENTERS box there (Triggers!EnterBankTrigger_01), same world'),
-    'FASpecials!POI!POI_TheEscapeArea': ((949, 890, -11105), None, None, 'the van\'s stop (re/bank_campaign.md T2.5), 190 over the road as on Retomoto'),
+    'FASpecials!POI!POI_TheEscapeArea': ((949, 890, -11105), None, None, 'ROAD\'s stop, ESC_POI_UP over the road as on Retomoto; prepare_host() puts it over the PLAN\'s stop'),
     'FASpecials!POI!Trigger_POI_TheEscapeArea': ((300, 1075, -8600), None, (1500, 425, 2900), 'GUESS: hall, plaza and street, y 650..1500 (floors 800 / 700) - not the vault lobby under the hall (floor 240, ceiling 640)'),
     'FASpecials!POI!Trigger_POI_TheEscapeAreaCP_OffenseOnlyRespawn': ((300, 1075, -8600), None, (1500, 425, 2900), 'as above'),
     'FASpecials!POI!Trigger_POI_TheEscapeAreaFA_RespawnOnly': ((300, 1075, -8600), None, (1500, 425, 2900), 'as above'),
     # the beat's box and the exit
     'Gameplay!010_FirstFight!tb_LEFT_TheySpotYou': ((460.4, -714.0, -12151.8), None, (550.2, 254.0, 556.1), 'the campaign\'s own box GamePlay!4_Vault_Part!...\\TB_VbByVault: place and half extents'),
-    'Gameplay!EscapeSetup!otrExitLevel': ((300, 800, -10300), None, (1500, 300, 900), 'GUESS (the study): plaza and street in front of the entrance, z -11200..-9400'),
+    'Gameplay!EscapeSetup!otrExitLevel': ((300, 800, -10550), None, (1500, 300, 1150), 'GUESS (the study): plaza and street in front of the entrance, from 50 beyond its gap: z -11700..-9400 - carried '
+                                          '500 farther south than the study\'s, so that it holds the van\'s stop AND its boarding place as the box of every stock level does (12 vans of F01 F04 F05 F07)'),
     'Specials!LevelSpeak!TriggerBox': ((300, 930, -5650), None, (300, 180, 150), 'GUESS: the foyer, where the crew comes up into the hall (campaign Jump#120 (309, 803, -5624))'),
     'Specials!LevelSpeak!OnlineSpeakTrigger_01': ((300, 930, -5650), None, None, 'with its trigger box'),
     # spawn cameras (camera, look-at): all GUESS
@@ -278,14 +291,35 @@ ROLE.update(('rod %d' % (i + 1), FF + n) for i, n in enumerate((                
 # wire() writes the monitor's list, so that a ROLE object is started only by what this file names.
 KEEP_MORE = ()
 # the escape: F07's first van, its relay, the exit trigger and the two 'last van' objects (the monitor is kept by
-# kl_fa.host_keep). The van's stage: KEEP_MORE gets nothing new for it - this is kl_map_escape.VAN_KEEP already -
-# and VAN_WAIT goes: prepare_host() calls kl_map_escape.van_prepare(S, plan, log) instead of park_van().
+# kl_fa.host_keep) = kl_map_escape.VAN_KEEP + three. F07's SECOND AND THIRD VAN ARE NOT KEPT: a van without a use
+# cannot be parked under the map as Retomoto's street layer did (its ZFakeTarget outside the rooms' bounds is the
+# 0x686a66 crash, re/crash_686a66.md), and a level with ONE van is the form the three car maps on the owner's tab
+# run (re/map_escape.md 10). The exit trigger names the one van in field 2 and nothing in 3..5.
 VAN = 'Animation/F07/F07_Escape_Vehicle_01.zip'
 VAN_GROUP = 'EscapeVehicle_Animation_F07'       # everything of the van with a place is below it (kl_fa_author.place_vans)
-VAN_WAIT = (-3248.0, 702.0, -11859.0)   # where the van will wait (re/bank_campaign.md T2.5: the passing plan). Until the
-                                        # van's stage lays its drive, the van only STANDS there: F07's own baked drive starts
-                                        # from that place if the exit trigger calls it. Not under the map: its ZFakeTarget
-                                        # must stay inside the rooms' bounds (the 0x686a66 crash, re/campaign_fa.md 2.1 item 11)
+# THE VAN'S ROAD (re/bank_campaign.md T2.4: 'the passing plan'; kl_map_escape.van_plan_points makes the plan of it
+# against the map's collision - keys, boarding box, camera, bounds - and van_prepare lays F07's keys on it):
+#   arrive  the first three points of the designers' own in-road on the front square: the van waits at the first,
+#           43 m west of the stop (48 m of drive), beyond the campaign's west bound - and IN SIGHT of the plaza: the
+#           square is open (re/bank_campaign.md L3.4)
+#   stop    in front of the plaza, the origin of the standing van. MEASURED: the lane is clear 220, 260 and 320 wide;
+#           the first agent's stop (250, 707, -10700) has 4 m of lane (T2.4). The heading is the curve's (67: nose
+#           east-north-east, the rear doors west-south-west); heading 90 passes too - taste, not chosen
+#   leave   the designers' away road, and from its end (3958, 713, -11173) the same line carried on east to x 8600.
+#           GUESS that it looks like a road out there: MEASURED are the collision floor (y 700.0, unbroken) and the
+#           furniture beside it (out to x 8000); without the extension the drive away is 24 m, under MIN_OUT
+#   cam     None = kl_map_escape.cam_spot's eye (GUESS: 18 m behind the stop, 330 over the square)
+ROAD = dict(arrive=[(-3248, 710, -11859), (-1917, 712, -12126), (-231, 707, -12332)], stop=(949, 704, -11105),
+            leave=[(2473, 705, -11177), (3958, 713, -11173), (8600, 705, -11173)], at='origin', heading=None, cam=None)
+PLAN = None                             # the plan of ROAD (lay_van): prepare_host() and wire() lay the van on it
+BOARD_NEAR = 30.0                       # the boarding place is a station of the round: on the START's mesh part and on free
+                                        # floor within this (the measure of the spawn points)
+LANE_CLEAR = 250.0                      # no spawn point, player body or squad's man nearer than this to the van's drive
+                                        # (the lane that is tested is 110 either side). GUESS
+BOUND_AFTER = 1000.0                    # a level bound on the drive away at least this far after the stop: every stock
+                                        # Dog Days van passes one with its passengers, the nearest 10.9 m after the stop
+                                        # (F01; F07's own 18.6 .. 39.8 m; MEASURED C:/kl_scratch/bank/l3/s/stockbound.py)
+ESC_POI_UP = 188.0                      # the escape marker over the standing van's origin (F07: 190 over its road; Retomoto's)
 ESCAPE = ('Gameplay!EscapeSetup!otrExitLevel', 'Gameplay!EscapeSetup!RelayDestroyedEsc_01',
           'Gameplay!EscapeSetup!OnScreenMSG_LastEscapeVan', 'Gameplay!EscapeSetup!Timer_OSM_LastEscape')
 _KEEP = ('FASpecials!', 'Specials!', VAN) + ESCAPE + tuple(v for v in ROLE.values() if v.startswith('Gameplay!0'))
@@ -542,16 +576,40 @@ def world_of(e):
 
 
 # ------------------------------------------------------------------ 1. the host level before the graft
-def park_van(S, log=print):
-    """F07's first van stands at VAN_WAIT: its group gets the move that puts the first position of its baked drive
-    there (no turn). UNTIL THE VAN'S STAGE - the drive itself is still F07's; see VAN_WAIT."""
-    sc = S.prp
-    top = A.node_of(sc, VAN)
-    main, _all, _stop = A.van_path(S, top)
-    grp = next(k for k in range(top, sc.end[top]) if sc.names[k] == VAN_GROUP)
-    t = tuple(VAN_WAIT[a] - main[0][a] for a in range(3))
-    A.place(S, grp, t)
-    log('  kl_fa_bank: %s stands at (%d, %d, %d) (its group moved by (%d, %d, %d)); its drive is still F07\'s' % (VAN, *VAN_WAIT, *t))
+def van_plan(src, log=print):
+    """The plan of ROAD (kl_map_escape.van_plan_points) against the collision of a BUILT F07 + M03_A folder WITHOUT
+    the layer (a bare 'kl_maps.py one <out> F07 M03_A --campaign --keep': on a build that has the van, the planner
+    takes the van's own camera for a designer's and lists it to be left out). A fault of the plan is an error."""
+    P = ESC.van_plan_points(src, log=log, **ROAD)
+    if P['faults']:
+        raise ValueError('kl_fa_bank: no van on ROAD: %s' % '; '.join(P['faults']))
+    return P
+
+
+def plan_of(path):
+    """A plan from a file: the JSON 'kl_map_escape.py van-plan ... --json' prints, or the van.json test() writes
+    beside a build (the plan is its 'plan')."""
+    import json
+    with open(path, encoding='utf-8') as f:
+        P = json.load(f, object_pairs_hook=collections.OrderedDict)
+    P = P.get('plan', P)
+    lack = [k for k in ('path', 'lin', 'lout', 'wait', 'stop', 'end', 'board', 'cam', 'points') if k not in P]
+    if lack or P.get('faults'):
+        raise ValueError('%s is no plan of the van without a fault (lacks %s; faults %s)' % (path, lack, P.get('faults')))
+    road = {k: [list(map(float, p)) for p in v] if k in ('arrive', 'leave') else list(map(float, v)) if k == 'stop' else v for k, v in ROAD.items()}
+    if any(P['points'].get(k) != v for k, v in road.items()):
+        raise ValueError('%s is a plan of other way points than ROAD: %s' % (path, {k: P['points'].get(k) for k in road if P['points'].get(k) != road[k]}))
+    return P
+
+
+def lay_van(P):
+    """The plan the next build lays the van on (prepare_host, wire). -> P."""
+    global PLAN
+    PLAN = P
+    return P
+
+
+def van_path():
     return R + VAN + '\\' + VAN_GROUP
 
 
@@ -642,8 +700,15 @@ def prepare_host(S, log=print):
     total = sum(v for _p, _y, v in VAULT_LOOT) + sum(v for _p, v in TELLER_LOOT)
     log('  kl_fa_bank: loot: %d in the vault (%s), %d at the tellers, %d in all' % (
         len(VAULT_LOOT), 'hidden until the beat\'s timer ends' if GATE_VAULT else 'shown', len(TELLER_LOOT), total))
-    # escape: the one van where it will wait, the exit trigger names it alone (kl2 0x6c3f90 loops until one field is set)
-    van = park_van(S, log)
+    # escape: the one van laid on the plan of ROAD - F07's own keys re-written in place, the boxes beside its drive
+    # and its camera moved with it (kl_map_escape.van_prepare; the van's nodes must still stand where F07 has them) -
+    # the marker over its stop; the exit trigger names it alone (kl2 0x6c3f90 loops until one field is set)
+    if PLAN is None:
+        raise ValueError('kl_fa_bank: the van has no plan: build with \'kl_fa_bank.py test <out>\' or kl_fa_bank.build() (the plan is made on a '
+                         'bare graft and kl_map_escape.van_layer has to stand round the build; \'kl_maps.py one ... --author kl_fa_bank\' can do neither)')
+    S.van = ESC.van_prepare(S, PLAN, log)
+    put(S, 'FASpecials!POI!POI_TheEscapeArea', (PLAN['stop'][0], PLAN['stop'][1] + ESC_POI_UP, PLAN['stop'][2]))
+    van = van_path()
     k = A.node_of(sc, ROLE['exit'])
     kl_fa.edit(sc, k, A.ctrl_of(sc, k, kl_fa.EXIT), lambda us: [A.setv(sc, us, 2 + j, s) for j, s in enumerate((van, '', ''))])
     S.authored = {'loot': loot, 'van': van, 'hall': [] if NO_AI else place_hall(S, log)}
@@ -905,6 +970,13 @@ def wire(sc, log=print):
     # seven squads: the police are outside when a criminal comes up into the hall
     lists('speak box', 'TriggerBox', f14='ECPS_FA_MERCONLY', f17=[R + ROLE['speak']] + stage['plaza'])
     lists('speak', 'OnlineSpeakPlayer', f1=EXIT_LINE)
+    # ---- the escape: every exit trigger of the level (there is F07's one) calls the van - field 0 false, field 2
+    # the van's group, 1 and 3..5 empty, the form the three car maps on the tab have (kl_map_escape.van_wire). The
+    # rest of the round's last stage is F07's own and stays as the graft left it: the vehicle monitor's lists
+    # (2 the escape sounds, 3 the relay of this van, 8 the 'last van' message and its timer)
+    if PLAN is None:
+        raise ValueError('kl_fa_bank: wire() without a plan of the van (see prepare_host)')
+    ESC.van_wire(sc, PLAN, log)
     for k, i, v in kl_fa.controllers(sc, kl_fa.SETTINGS):
         if len(v) != 340:
             raise ValueError('the settings object has %d fields' % len(v))
@@ -1257,7 +1329,7 @@ def inventory(folder, log=print):
             if sc.cls(k) == 'ZFFActor':
                 v = values(sc, k, 'ZSoldier')
                 log('        man %s %-24s %s %g / %g' % (at(k), arms.get(k) or 'unarmed', v[3], v[4], v[7]))
-    log('ESCAPE (the van only stands: a later stage lays its drive)')
+    log('ESCAPE (the van at its waiting place; its boarding box, kill box and target ride on it: check() says where it stops)')
     for k in range(1, len(sc.nodes)):
         names = [sc.p.key(nm) for nm, _b in sc.nodes[k]['ctrls']]
         if any(n in names for n in (kl_fa.EXIT, kl_fa.MONITOR, 'OnlineEscAnimatedVehicle', 'FakeTarget')) or sc.names[k] == 'V_Van_00' and 'Reflection' not in sc.path[k]:
@@ -1329,13 +1401,8 @@ def check(folder, log=print, problems=None):
         fail('the eleven leaves are not all in one state: %s' % sorted(n.split('\\')[-1] for n, low in state.items() if low))
     lv = kl_route.load(folder)
     path_of = {e.ref: sc.path[k + 1] for k, e in enumerate(ents)}
-    van = [ref for ref, _far in lv.moved() if path_of.get(ref, '').startswith(R + VAN + '\\')]
-    for ref, far in lv.moved():
-        if ref not in van:
-            fail('REF %d (%s): its collision placement stands %d from its entity' % (ref, path_of.get(ref, '?')[-60:], far))
-    if van:                                             # until the van's stage: the van's group is moved, its key-framed bodies' placements are not
-        log('  note: %d key-framed placements of the van still stand at F07\'s place (the van only stands at VAN_WAIT; Retomoto\'s vans '
-            'drove so: ASSUMPTION that a key-framed body follows its entity). kl_map_escape.van_layer lays them in the stage that brings the drive' % len(van))
+    for ref, far in lv.moved():                         # the van's five key-framed bodies too: kl_map_escape.van_hvk puts them where it waits
+        fail('REF %d (%s): its collision placement stands %d from its entity' % (ref, path_of.get(ref, '?')[-60:], far))
     # ---- every spawn point, player group and loot place: on the START's mesh part, on free floor
     pts, names = [START[1]], ['START']
     for k in range(1, len(sc.nodes)):
@@ -1586,18 +1653,118 @@ def check(folder, log=print, problems=None):
     log('  people: %d ZFFActor in %d squads + 16 player bodies (ran live: %d actors, %d squads)' % (len(actors), len(squads), ACTORS_LIVE[0], ACTORS_LIVE[1]))
     if len(actors) > ACTORS_LIVE[0] or len(squads) > ACTORS_LIVE[1]:
         fail('%d actors in %d squads: more than has run live (%d / %d)' % (len(actors), len(squads), *ACTORS_LIVE))
+    # ---- the escape: the one key-framed van on its road. kl_map_escape.van_check reads the WRITTEN files: who the
+    # exit trigger calls, the keys against the road's height, the lane (five rays, every 20), the boxes at the stop,
+    # the camera's eye and sight, the collision file; held against the plan in van.json when test() wrote one
+    VL = ESC.Level(folder)
+    plan, pj = None, os.path.join(folder, 'van.json')
+    if os.path.isfile(pj):
+        try:
+            plan = plan_of(pj)
+        except ValueError as x:
+            fail('the van\'s plan beside the build: %s' % x)
+    else:
+        log('  van: no van.json beside the build: the drive is tested as the level has it, not against a plan')
+    rep = ESC.van_check(VL, lambda s: log('  ' + s), plan)
+    for x in rep['faults']:
+        fail('van: ' + x)
+    stop = wait = None
+    if 'stop' not in rep:
+        fail('van: %s' % '; '.join(rep['notes']))
+    else:
+        if any('FAEscCameraLAST' in x for x in rep['notes']):   # MEASURED: no such define in stock F07, F02, F05 either
+            log('    (the stock form: no Dog Days Fragile Alliance level has that define - it is Dead Men\'s box, which the three car maps kept)')
+        vans, fakes = kl_fa.controllers(sc, 'OnlineEscAnimatedVehicle'), kl_fa.controllers(sc, 'FakeTarget')
+        N = ESC._van_nodes(sc, sc.top[vans[0][0]])
+        ends_ = sorted({o for e in VL.ents for _p, oo in kl_graft.keys_tracks(e.raw) for o in oo} | {len(VL.scene.head)})
+        K = ESC.VanKeys(VL.scene.head, VL.ents[N['V_Van_00'] - 1].raw, ends_, kl_graft.keys_tracks)
+        drive = K.pos[:K.drive()]
+        wait, stop, end, board = drive[0], drive[K.f2p[ESC._leg_frames(sc, N['F07_Escape_Vehicle_01'])['Activate_Enter'][1]]], drive[-1], tuple(rep['board'])
+        # the road under the standing van (its origin stands VAN_UP over it)
+        g = VL.G.under(stop[0], stop[1] + 20.0, stop[2])
+        log('  van: the stop: origin y %.1f, the road under it y %s (%s); keys at most %.1f off the road\'s height on the whole drive; drive in %.0f m, away %.0f m' % (
+            stop[1], '%.1f' % g[0] if g else '-', VL.name(g[1]) if g else 'NO GROUND', rep['height_off'], rep['length_in'] / 100.0, rep['length_out'] / 100.0))
+        if g is None or abs(stop[1] - ESC.VAN_UP - g[0]) > 3.0:
+            fail('van: the standing van\'s origin (y %.1f) is not %.0f over the road (%s)' % (stop[1], ESC.VAN_UP, '%.1f' % g[0] if g else 'no ground'))
+        # the boarding place (the box rides on the van: in the file it stands at the waiting place): a station of the
+        # round - on the START's mesh part, on free floor - and reached in the collision from the banking hall
+        rows4 = kl_route.stations(lv, [START[1], board, tuple(stop)], opened=gates, near=BOARD_NEAR)
+        b4 = rows4[1]
+        out_way = [p for n, p in ROUTE_OUT if n in ('hall', 'front entrance', 'plaza')] + [board]
+        walk = kl_route.route(lv, out_way, opened=gates)
+        log('  van: boarding place at the stop (%d, %d, %d): mesh %s, part %s (the START\'s: %s), free floor within %d: %s; the van\'s stop: mesh %s, part %s; '
+            'hall -> front entrance -> plaza -> boarding place in the collision: %s' % (*board, b4['mesh'], b4['part'], part, BOARD_NEAR, b4['reached'],
+                                                                                     rows4[2]['mesh'], rows4[2]['part'], say(walk)))
+        if not (b4['mesh'] and b4['part'] == part and b4['reached']):
+            fail('van: the boarding place (%d, %d, %d) is no station of the round: mesh %s, part %s, reached %s (gap %s)' % (*board, b4['mesh'], b4['part'], b4['reached'], b4.get('gap')))
+        if not walk['free']:
+            fail('van: no free way from the banking hall to the boarding place: crossed %s' % [n for _r, n in crossing(walk)])
+        # the van's own path blocker (eToggle: it blocks where the van STANDS): the boarding place must be outside it
+        inside = lambda k, p, up=0.0: all(abs(sum(VL.frame(k)[0][a][b] * ((p[a] + (up if a == 1 else 0.0)) - VL.frame(k)[1][a]) for a in range(3)))
+                                          <= VL.values(k)['ZBoxPrimitive[%d]' % b] for b in range(3))
+        pb = N['PathBlockerVan']
+        log('  van: PathBlockerVan at (%d, %d, %d) half %s: the boarding place is %s it' % (
+            *VL.place(pb), tuple(round(VL.values(pb)['ZBoxPrimitive[%d]' % b]) for b in range(3)), 'INSIDE' if inside(pb, board, 50.0) else 'outside'))
+        if inside(pb, board, 50.0):
+            fail('van: the boarding place lies inside the van\'s path blocker: an AI heister cannot be sent there')
+        # the exit box calls the van: entered on the plaza, on the way to the boarding place - not from inside the bank
+        ex = [k for k, _i, _v in kl_fa.controllers(sc, kl_fa.EXIT)]
+        where = {n: [inside(k, p, 50.0) for k in ex] for n, p in ROUTE_OUT if n in ('hall', 'front entrance', 'plaza')}
+        # (and, the stock form: the box holds the van's stop and its boarding place - 12 of 12 stock vans of F01 F04 F05 F07)
+        at_van = [any(inside(k, p, 50.0) for k in ex) for p in (stop, board)]
+        log('  van: exit trigger(s) %s: holds the hall %s, the front entrance %s, the plaza %s, the van\'s stop %s, the boarding place %s; drive in %.1f s' % (
+            [sc.names[k].split('!')[-1] for k in ex], *[any(where[n]) for n in ('hall', 'front entrance', 'plaza')], *at_van, rep['seconds'][0]))
+        if len(ex) != 1 or any(where['hall']) or not any(where['plaza']) or not all(at_van):
+            fail('van: %d exit trigger(s); the hall inside one: %s, the plaza: %s, the van\'s stop: %s, the boarding place: %s (wanted: one, no, yes, yes, yes)' % (
+                len(ex), any(where['hall']), any(where['plaza']), *at_van))
+        # level bounds: neither the stop nor the boarding place in a bound or warn box; a bound on the drive AWAY is
+        # the stock form (every stock van passes one with its passengers aboard: BOUND_AFTER), not at the stop itself
+        hold = [(n, b) for n, p in (('the van\'s stop', stop), ('the boarding place', board)) for b, lo, hi in boxes
+                if all(lo[a] <= (p[a] + (50 if a == 1 else 0)) <= hi[a] for a in range(3))]
+        for n, b in hold:
+            fail('van: %s lies inside %s' % (n, b))
+        for nm, a, b in rep['bounds']:
+            ok = b < 0 or a >= BOUND_AFTER
+            log('  van: the drive passes the level bound %s %.1f .. %.1f m %s the stop: %s' % (
+                nm.split('!')[-2] if '!' in nm else nm, abs(a) / 100.0, abs(b) / 100.0, 'before' if b < 0 else 'after',
+                'the van is empty there' if b < 0 else 'players aboard - the stock form (stock vans: 10.9 .. 105 m after their stops)' if ok else 'TOO NEAR THE STOP'))
+            if not ok:
+                fail('van: the level bound %s lies on the drive %d .. %d from the stop (after it: at least %d)' % (nm, a, b, BOUND_AFTER))
+        # nobody starts in the lane: spawn points, player bodies, the squads' men (at the street's height: the
+        # ante-room lies under the square)
+        P2 = ESC.Poly([tuple(p) for p in drive])
+        near_ = sorted((abs(P2.project(p)[1]) if 0.0 < P2.project(p)[0] < P2.len else min(math.dist(p, drive[0]), math.dist(p, drive[-1])), n, p)
+                       for n, p in list(zip(names, pts))[1:] + [(sc.path[k][5:][-50:], pos[ents[k - 1]]) for k in men] if abs(p[1] - stop[1]) < 400.0)
+        log('  van: of %d spawn points, player bodies and men at the street\'s height the nearest to the drive is %s' % (
+            len(near_), '%s, %d from it' % (near_[0][1], near_[0][0]) if near_ else '-'))
+        for d, n, p in near_:
+            if d < LANE_CLEAR:
+                fail('van: %s at (%d, %d, %d) stands %d from the van\'s drive (%d wanted)' % (n, *p, d, LANE_CLEAR))
+        # is the waiting van seen from where the crew comes out? (said, not a rule: 'out of sight' is the lead's wish)
+        eyes = [(n, (p[0], p[1] + 160.0, p[2])) for n, p in ROUTE_OUT if n in ('front entrance', 'plaza')] + [('the boarding place', (board[0], board[1] + 160.0, board[2]))]
+        solid = lambda e: [VL.name(r) for _d, r in VL.G.between(e, (wait[0], wait[1] + 100.0, wait[2])) if 'ColiObj' not in VL.name(r)]   # a ColiObj is not drawn
+        seen = ['%s: %s' % (n, 'hidden by %s' % solid(e)[0] if solid(e) else 'SEEN (%d m)' % (math.dist(e, wait) / 100.0)) for n, e in eyes]
+        log('  van: waits at (%d, %d, %d), %.0f m from its stop; from %s' % (*wait, math.dist(wait, stop) / 100.0, '; from '.join(seen)))
+        if len(vans) != 1 or len(fakes) != 1:
+            fail('van: %d OnlineEscAnimatedVehicle and %d FakeTarget in the level (one van, with its one target, is wanted: an unused van\'s target is the 0x686a66 crash)' % (len(vans), len(fakes)))
     # ---- the van's ZFakeTarget: inside the vision space, by kl_fa_bots_dyn's rule (the 0x686a66 crash: a target that
-    # cannot register writes behind ZCheckVisible's table every frame; re/crash_686a66.md)
+    # cannot register writes behind ZCheckVisible's table every frame; re/crash_686a66.md). The rule is for the place
+    # at the LOAD; where the drive takes it is said beside it ('a registered target that later leaves the grid is
+    # harmless': the note's section on 0x79bae0)
     try:
         import kl_fa_bots as FB, kl_fa_bots_dyn as D
         B = FB.Built(folder)
         space = D.vision_space(B)
+        log('  ' + D.space_words(space)[:330])
         for f in D.fake_targets(B, space):
             good = space is not None and f['out'] is None and f['cell'][1] and f['cell_sure'][1]
             log('  FakeTarget %s at (%d, %d, %d): %s' % (f['path'].split('\\')[0], *f['at'], 'inside the vision space, kl2\'s arithmetic gives a record'
                                                       if good else 'OUTSIDE the vision space (%s)' % (f['out'],)))
             if not good:
                 fail('FakeTarget %s at (%d, %d, %d) cannot register (outside by %s)' % (f['path'].split('\\')[0], *f['at'], f['out']))
+            if stop is not None and space is not None:
+                later = [(n, D.outside(space, tuple(f['at'][a] + p[a] - wait[a] for a in range(3)))) for n, p in (('the stop', stop), ('the end of the drive', end))]
+                log('    on the drive: %s' % '; '.join('at %s %s' % (n, 'inside' if o is None else 'outside by (%d, %d, %d)' % o) for n, o in later))
     except (ImportError, AttributeError) as x:
         log('  FakeTarget: NOT CHECKED (%s: %s)' % (type(x).__name__, x))
     # ---- texts
@@ -1631,15 +1798,46 @@ def check(folder, log=print, problems=None):
     return bad
 
 
-def test(out, keep=False, log=print):
-    """Build the level with the layer into <out>, finish it, check it. -> 0 or 1."""
-    with doors(log):
-        r = kl_maps.one(out, HOST, LEVEL, keep=True, campaign=True, tag=' campaign', author='kl_fa_bank')
+def build(out, log=print, plan=None):
+    """F07 + M03_A with the layer into <out>/F07+M03_A campaign -> (kl_maps.one's result, that folder, the van's
+    plan, kl_map_escape's report of what it did to the van). plan: a plan of ROAD (plan_of / van_plan); None = made
+    here, on a BARE graft of the two levels built into <out>/_bare (60 s, 310 MB) and deleted again - the plan
+    needs a built level's collision and must not see the layer's own van (van_plan)."""
+    import shutil
+    name = '%s+%s campaign' % (HOST, LEVEL)
+    if plan is None:
+        bare = os.path.join(out, '_bare')
+        r = kl_maps.one(bare, HOST, LEVEL, keep=True, campaign=True, tag=' campaign')
+        try:
+            if not r.get('ok'):
+                raise ValueError('kl_fa_bank: the bare graft for the van\'s plan did not build: %s at %s' % (r.get('error'), r.get('where')))
+            plan = van_plan(os.path.join(bare, name), log)
+        finally:
+            shutil.rmtree(bare, ignore_errors=True)
+    lay_van(plan)
+    r, st = {}, {}
+    try:
+        with ESC.van_layer(plan, log) as st, doors(log):
+            r = kl_maps.one(out, HOST, LEVEL, keep=True, campaign=True, tag=' campaign', author='kl_fa_bank')
+    except ValueError:                                  # van_layer: 'a step of the van did not run'. After a build that
+        if r.get('ok') or not r:                        # failed (r says why) that is no news; after one that did not, it is
+            raise
+    return r, os.path.join(out, name), plan, {k: st.get(k) for k in ('van', 'wired', 'hvk')}
+
+
+def test(out, keep=False, log=print, plan=None):
+    """Build the level with the layer into <out>, finish it, check it. -> 0 or 1. Beside the archive: van.json
+    (the van's plan, what was done to F07's van, kl_map_escape.van_check's report: kl_map_escape.van_build's form)."""
+    import json
+    r, folder, plan, did = build(out, log, plan)
     if not r.get('ok'):
         log('BUILD FAILED: %s at %s' % (r.get('error'), r.get('where')))
         return 1
-    folder = os.path.join(out, '%s+%s campaign' % (HOST, LEVEL))
     late = finish(folder, log)
+    L = ESC.Level(folder)
+    with open(os.path.join(folder, 'van.json'), 'w', encoding='utf-8') as f:
+        json.dump(collections.OrderedDict(tag=LEVEL, plan=plan, van=did['van'], wired=did['wired'], hvk=did['hvk'], check=ESC.van_check(L, lambda *a: None, plan)),
+                  f, indent=1, default=str)
     bad = check(folder, log, r['problems']) + late
     log('level: %d entities, %d rooms, %.0f MB' % (r['entities'], r['rooms'], r['archive_mb']))
     if not keep:
@@ -1666,7 +1864,8 @@ def main():
         CASE = None if '--loot-bags' in a else CASE
         if '--beat' in a:                               # OPTION, seconds from the ante-room box to the vault door
             BEAT = float(a[a.index('--beat') + 1])
-        sys.exit(test(a[1], '--keep' in a))
+        plan = plan_of(a[a.index('--plan') + 1]) if '--plan' in a else None
+        sys.exit(test(a[1], '--keep' in a, plan=plan))
     elif len(a) == 2 and a[0] == 'finish':
         sys.exit(1 if finish(a[1]) else 0)
     elif len(a) == 2 and a[0] == 'check':

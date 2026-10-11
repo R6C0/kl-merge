@@ -995,3 +995,158 @@ Variant archives are deleted; only the default build is kept.
 - `check()`'s FakeTarget test still leans on kl_fa_bots_dyn (another session's file).
 
 (end of Stage L2)
+
+## Stage L3 - the escape (tools/kl_fa_bank.py: F07's van on stage T2's way-point plan)
+
+STATE: DONE (2026-10-11 16:10). Built on stage L2's module state (c3a1f82). `tools/kl_fa_bank.py` lays F07's first
+key-framed van on the passing plan of T2.4, and check() has a block 'the escape'; every check of the stage passes and
+all of L1's / L2's still do ('RESULT: PASS', the same one known verify finding) - with ONE wish of the stage NOT met:
+the waiting van is not out of sight (L3.4). NOTHING RAN IN THE GAME (the owner was playing). Kept = 'the bare map' the
+finishing stage starts from: `C:/kl_scratch/bank/l3/build/F07+M03_A campaign/` (217 MB: F01_Main.zip 178,157,778 bytes
+sha1 5f11b846..., finished = lightened + briefcases + texts; result.json, log.txt, graft.txt, preflight.json, NEW
+van.json). `C:/kl_scratch/bank/l2/build` is deleted. Scratch `C:/kl_scratch/bank/l3/`: `s/` (stockbound.py, stockexit.py,
+sight.py, defs.py, stockesc.py), `out/` (every output named below).
+No other file of the repo was touched; kl_map_escape.py is only called (T2's front end, unchanged).
+
+### L3.1 What was changed (one file)
+
+| part | where | what |
+|---|---|---|
+| the road | `ROAD` (replaces `VAN_WAIT`) | T2.4's passing plan as way points: `arrive` = the first three points of the designers' in-road, `stop` (949, 704, -11105) at = origin, `leave` = their away road + its line carried on to x 8600; heading and camera not forced |
+| the plan | `van_plan(src)`, `plan_of(file)`, `lay_van(P)`, `PLAN` | `kl_map_escape.van_plan_points(src, **ROAD)`, a fault is an error; a plan from a file is refused when its way points are not ROAD's |
+| the build | NEW `build(out, log, plan=None)` | bare graft into `<out>/_bare` (60 s, 310 MB, deleted again) -> plan -> `with kl_map_escape.van_layer(plan), doors(): kl_maps.one(...)`; -> (result, folder, plan, what was done to the van) |
+| the layer | `prepare_host()` | `park_van()` is gone: `kl_map_escape.van_prepare(S, PLAN, log)` (F07's 563 position and 550 rotation keys rewritten in place, 19 objects moved with the drive); the escape marker `POI_TheEscapeArea` is put `ESC_POI_UP` = 188 over the PLAN's stop |
+| | `wire()` | `kl_map_escape.van_wire(sc, PLAN, log)`: the exit trigger's field 0 false, field 2 the van's group, 1 and 3..5 empty |
+| | `PLACE['Gameplay!EscapeSetup!otrExitLevel']` | the box carried 500 farther south: (300, 800, -10550) half (1500, 300, 1150) = z -11700..-9400 (L3.3: it did not hold the boarding place) |
+| test | `test(out, keep, log, plan)`, `--plan FILE` | writes `van.json` beside the archive (kl_map_escape.van_build's form: tag, plan, van, wired, hvk, check) |
+| check | check(): 'the escape'; `BOARD_NEAR LANE_CLEAR BOUND_AFTER` | L3.2 |
+
+`python tools/kl_maps.py one <out> F07 M03_A --campaign --author kl_fa_bank` ALONE NO LONGER BUILDS: it stops in
+prepare_host with "kl_fa_bank: the van has no plan: build with 'kl_fa_bank.py test <out>' or kl_fa_bank.build() ..."
+(`out/one.txt`): the plan needs a built level without the layer, and the van's collision placements are set in
+kl_hvk.join, which no name of the module interface reaches. From Python: `kl_fa_bank.build(out)`.
+
+**The van as built** (MEASURED: `van.json`, the build's lines in `out/test_final.txt`, check()'s lines in `out/check.txt`):
+- plan = T2's to the last digit, all 594 path points too (`C:/kl_scratch/bank/t2/out/plan_through.json` against this
+  build's van.json): waits (-3248, 702, -11859) heading 101.6 -> 48.05 m in 7.2 s -> stops (949.1, 702.0, -11105.0)
+  heading 67.3 -> 70.68 m in 8.48 s -> ends (8000, 702, -11172.9) heading 90; 0 faults, lane empty on the first pass;
+  camera eye (-711.5, 1030, -11799.6) (cam_spot: GUESS).
+- 'kl_map_escape: ... 563 position and 550 rotation keys rewritten in place (391 of them the drive, stop at key 159);
+  drive in 5063 -> 4805 (x 0.95), away 7019 -> 7068 (x 1.01); crash pieces -120..120 to the side; 19 objects moved:
+  PathBlockerVan, CameraTrigger_InVan, CamPos_InVan_FocusPoint, TriggerBox_RearDoors_Open, CameraTrigger01, CamPos01,
+  EscCamera01_01, V_Van_00, V_Van_Reflection, 8 Smear_*, 2 ShadowCaster_Van*' (the last eleven are the loose pieces,
+  put at y -60000; none carries a controller). Speed away 8.3 m/s mean, 14.8 top (stock F07: 14.7).
+- 'exit trigger Gameplay!EscapeSetup!otrExitLevel calls Animation/F07/F07_Escape_Vehicle_01.zip\EscapeVehicle_Animation_F07'
+- '.HVK: 9 static placements of the van's subtree cut, 5 key-framed placements of the van put at its waiting place'
+  (.HVK 3,697,040 -> 3,260,320 bytes: L1's and L2's builds still had the reflection template's placements and their
+  filler copies). No collision placement stands away from its entity any more; check() fails any that does, the van's
+  included (L1's note about the van's five is gone).
+- THE ROUND'S LAST STAGE is F07's own, as the graft leaves it (MEASURED `python C:/kl_scratch/bank/l3/s/stockesc.py F07`
+  -> `out/stock_f07_esc.txt`, against the build): `OnlineEscVehicleMonitor` list 2 `Specials!Audio!EscSoundHandling!Activate`,
+  list 3 `RelayDestroyedEsc_01` (stock: _01.._03), list 8 the 'last van' message and its 4 s timer, the others empty as
+  in stock; `OnlineEscAnimatedVehicle` field for field stock's (its boarding box, the six messages, 7.2 / 8.0 / 8.48 /
+  6.0). The car maps on the tab have the same exit-trigger form (`out/zfinal_m03_esc.txt`: field 2 the van, 3..5 empty).
+- F07's SECOND AND THIRD VAN ARE NOT IN THE LEVEL (L1's decision, kept: 'parked safely' = not there, the form of the
+  three car maps): one `OnlineEscAnimatedVehicle`, one `FakeTarget`; check() fails any other count.
+- Against L2's build (`python C:/kl_scratch/bank/t1/s/manifest.py diff out/l2.manifest.json out/l3.manifest.json` ->
+  `out/l2_l3_diff.txt`): 27 of 31 archive members equal by name, size and CRC; `.HVK`, `.buf` (the keys), `.gms`,
+  `.prp` differ; every file beside the archive equal but log.txt / result.json, + van.json.
+
+### L3.2 The checks (all on the kept build; outputs in `C:/kl_scratch/bank/l3/out/`)
+
+| check | command | result |
+|---|---|---|
+| build + finish + check | `python tools/kl_fa_bank.py test C:/kl_scratch/bank/l3/final --keep` -> `test_final.txt` (150 - 210 s: bare graft, plan, build, finish, check; on the file as committed) | **'RESULT: PASS'**, exit 0; 20,643 entities, 28 rooms, 'verify: problems: 1' (the known stream clips). Its archive = the kept build's member for member ('31 members / 31 members, 31 equal', the same 178,157,778 bytes; the kept one was built with `--plan out/van1.json`: `test2.txt`); deleted |
+| check alone | `python tools/kl_fa_bank.py check <kept>` -> `check.txt` | 'PASS', exit 0 |
+| van-check | `python tools/kl_map_escape.py van-check <kept>` -> `van_check.txt`; inside check() with the plan | **'0 fault(s)'**: 'keys 0.0 off the road height at most, largest step 59, nose up to 1.1 degrees off the tangent (7.2 if a key is held, not interpolated), crash pieces up to 120 to the side; lane (5 rays, every 20, 350 before and 600 beyond): clear'; 'boarding box at the stop: (636, 702, -11230); key-framed placements 5, at most 1.1 from their entities'; '.HVK 3260320 bytes'; wait / stop / end within 25 of the plan's. One note: 'no define FAEscCameraLAST' = the STOCK form (L3.3) |
+| the lane | the plan's own test on the bare graft (`test_final.txt`, 'van plan for ...') and van_check's on the layered, finished build | both clear, plan faults 0. Nothing of the layer stands near it: 'of 61 spawn points, player bodies and men at the street's height the nearest to the drive is ...SpawnPoint_TEAM_Police#06, 971 from it' (`LANE_CLEAR` 250) |
+| fake-test | `python tools/kl_fa_bots_dyn.py fake-test <work>/build/z_route/M01 <work>/build/rt_full6/retomoto_full <kept>` -> `fake_test.txt` | **'RESULT (fake-test): PASS (grid control 1, parked control 1, lattice 3)'**; the bank: 'FakeTarget Animation/F07/F07_Escape_Vehicle_01.zip at (-3264.2, 702.0, -11855.6): inside; kl2's arithmetic: cell (8, 0, 3) (a record)', the only FakeTarget of the level; vision space x -21046..11362, y -960..5589, z -16592..5011. check(): the same at the load, and 'on the drive: at the stop inside; at the end of the drive inside' |
+| the boarding place | check() (`kl_route.stations` near 30, `kl_route.route`); `python tools/kl_route.py stations <kept> START=250,200,-4350 "boarding place=636,702,-11231" "van stop=949,702,-11105" "van waits=-3248,702,-11859" --near 30 --open SI0102_M03_BankVault_Door_PRE_01` -> `route_stations.txt` | 'boarding place at the stop (636, 702, -11231): mesh True, part 0 (the START's: 0), free floor within 30: True; the van's stop: mesh True, part 0; hall -> front entrance -> plaza -> boarding place in the collision: FREE, 25 m'. stations: '4 of 4 on the mesh, on 1 part(s)'; the WAITING place is 'NOT reached ... behind REF 12341 Body\Body_Main [KEYFRAMED ...]' (exit 1 for that): the van's own body stands there in the file, as it should |
+| the whole round to the van | `python tools/kl_route.py walk <kept> --from START=250,200,-4350 --via vault=399,-960,-12818 --via hall=377,801,-8423 --via "front entrance=300,800,-9350" --to "boarding place=636,702,-11231" --open SI0102_M03_BankVault_Door_PRE_01` -> `route_open.txt`; the same places with `doors` -> `route_doors.txt` | 'RESULT: FREE; the mesh way: 1064 samples, all free' (front entrance -> boarding place: 'FREE, 18 m of cells, floor y 700..800', mesh way 20 m, narrowest shared edge 310); doors: 'RESULT: 1 closures in 1 sets, 1 necessary' (the vault door) |
+| stop height | check() | 'the stop: origin y 702.0, the road under it y 700.0 (S00701_M03_Square_PlaneA_02); keys at most 0.0 off the road's height on the whole drive; drive in 48 m, away 71 m' (the origin stands `VAN_UP` = 2 over its road, as F07's) |
+| path blocker | check() | 'PathBlockerVan at (952, 817, -11100) half (101, 130, 250): the boarding place is outside it' (stock: outside on 12 of 12 vans, `out/stockexit.txt`) |
+| exit box | check(); `python C:/kl_scratch/bank/l3/s/stockexit.py F07 F01 F04 F05` -> `stockexit.txt` | 'exit trigger(s) ['otrExitLevel']: holds the hall False, the front entrance False, the plaza True, the van's stop True, the boarding place True; drive in 7.2 s' (L3.3) |
+| the bound at x 3763 | check(); `python C:/kl_scratch/bank/l3/s/stockbound.py F07 F01 F04 F05 F09` -> `stockbound.txt` | 'the drive passes the level bound LevelBound_Outside_Left 26.1 .. 30.4 m after the stop: players aboard - the stock form'; '... LevelBound_Outside_Right 46.3 .. 41.3 m before the stop: the van is empty there'; neither the stop nor the boarding place in one of the 27 bound and warn boxes (L3.3) |
+| the camera | `python tools/kl_map_escape.py check <kept>` -> `escape_check.txt` | '0 fault(s)': 'EscCamera01_01 ... mode eFMM_LookFromPos ... Dog Days' eye: (-711, 1030, -11799), 330 over S00701_M03_Square_PlaneA_02; looks at the player' - F07's own camera IS in the mode kl_map_escape.fix_cameras gives a Dead Men one, so there is nothing to repair; the in-van camera eFMM_LookAtPos as stock. Clear sight to the stop; it does not see the end of the drive (T2.4) |
+| is the waiting van out of sight | check(); `python C:/kl_scratch/bank/l3/s/sight.py <kept>` -> `sight.txt` | **NO**: 'waits at (-3248, 702, -11859), 43 m from its stop; from front entrance: hidden by SI0102_M03_Column_A_01...; from plaza: SEEN (41 m); from the boarding place: SEEN (39 m)' (L3.4) |
+| L1's / L2's checks | check() on the kept build | all as L2.3: verify 1 known; 79 spawn places on the mesh; 27 bound boxes, 0 of 98 places inside; loot 11 / 2,600,000 takable in both vaults; route as built crossed = the vault door alone, 'FREE, 226 m' with it out and after the blast; 22 + 3 squads, 61 of 61 men on the mesh; staging; beat chain; police who come back 214 clear; 61 actors in 25 squads; chunk table 65,640 entries, 23,690 dead; five load blocks 149 MB |
+| kl_fa.check | `python tools/kl_fa.py check <archive>` -> `fa.txt` | exit 0: 0 CRASH, 0 BROKEN, 1 DEGRADED (no bot squads) |
+| kl_impact / kl_arms / cover list | `kl_impact.py <archive>`, `kl_arms.py check <archive>`, `C:/kl_scratch/bank/t1/s/covers.py <kept>` -> `impact.txt`, `arms.txt`, `covers.txt` | 'problems: 0 in 1 levels'; '0 findings'; '1 FFCoverList' |
+| preflight | `python tools/kl_maps.py preflight <kept>` -> `preflight.txt` | 'preflight: CRASH 1, RISK 0, NOTE 78' (CRASH = 'kl_graft.verify reported 1 problems', the known one): as L2 |
+| the flags | `python tools/kl_fa_bank.py test <out> --no-ai --plan out/van1.json` -> `var_noai.txt`; `... --alarm-lights --music-layer4 --blast-real --doors-animate --vault-stays --plan ...` -> `var_all.txt`; `... --no-blast --vault-open --loot-shown --loot-bags --beat 30 --dead-men-rows --plan ...` -> `var_plain.txt` | 'RESULT: PASS' three times, exit 0; archives deleted |
+
+### L3.3 What the stage found beside laying the van
+
+- **THE BOUND ON THE DRIVE AWAY IS THE STOCK FORM** (re/campaign_fa.md 5 item 9 and re/map_escape.md V5 had it open).
+  MEASURED on the stock levels' own files (`stockbound.py`: each stock van's keys against its level's `LevelBound`
+  boxes, 100 over the key): every one of the 15 vans of F01 F04 F05 F07 F09 passes one bound box on its drive in and
+  ANOTHER on its drive away, 10.9 m (F01) .. 105 m (F09) after its stop, F07's own three 18.6 .. 39.8 m - with its
+  passengers aboard. The bank's 26.1 .. 30.4 m is inside that. Nothing is moved; `BOUND_AFTER` = 1000 is check()'s
+  rule (a bound nearer the stop than the nearest stock one would be new ground). What a bound does to a player on
+  foot is still not read.
+- **THE EXIT BOX DID NOT HOLD THE BOARDING PLACE.** STOCK (`stockexit.py`): the exit trigger's box holds the stop AND
+  the boarding box (at the stop) of every van, 12 of 12 on F01 F04 F05 F07 (boxes 65 - 90 m long). L1's box ended at
+  z -11200, the boarding place is at z -11231: the first build of this stage said 'the boarding place False'
+  (`test1.txt`). The box now reaches z -11700; check() fails a build where it does not hold both. What the trigger
+  does with a player inside it beyond calling the van was not read - this follows stock.
+- **NO DEFINE `FAEscCameraLAST` IS THE STOCK FORM**, not a gap (T2.5 asked the layer to bring the box): MEASURED - the
+  .prp of stock F07, F02 and F05 hold no such string. It is Dead Men's box, which the three car maps kept with their
+  maps. Nothing is brought; kl_map_escape.van_check's note stays (that tool's) and check() prints the reason under it.
+- A registered FakeTarget that leaves the grid is harmless (re/crash_686a66.md: 0x79bae0), and here it does not even
+  leave it: the stop and the end of the drive (x 8000) are inside the vision space (x up to 11362).
+
+### L3.4 GUESS / ASSUMED (each marked in the file), and the one wish not met
+
+- **NOT MET: 'out of sight'.** The van waits in plain sight at the west end of the front square, 41 m from the plaza
+  (as the Fragile Alliance bank's van waits 'up the road', which the owner has played). MEASURED (`sight.py`: six eyes
+  - front entrance, plaza, steps, kerb, boarding place, stop - to the van 60 and 200 over the road; a 'ColiObj' is not
+  drawn and does not count): the square is OPEN. Farther back on the in-road's own line the floor runs on (ground y
+  700 at 6, 12, 20 and 30 m; a planter at 40), and at none of the five distances is the van hidden from all six eyes:
+  planters and palm trunks hide its lower part from more and more of them (at 30 m: from all but the steps, which
+  still see its roof), nothing hides the whole of it. kl_map_escape's `LIMIT_IN` (60 m of drive in for the 7.2 s of
+  F07's keys, a GUESS itself) allows 12 m more. So 'out of sight' is not to be had on this square by a longer in-road;
+  it would take a blind (a parked truck, a kept campaign car) or another way in. The lead's call; nothing was tried.
+- GUESS (T2's, now the map's): the leave leg's extension east to x 8600 (collision floor and furniture MEASURED; what
+  is DRAWN in the lane out there was not looked at), the camera's eye (cam_spot), the stop's heading 67 (the curve's).
+- GUESS: `LANE_CLEAR` 250, `BOUND_AFTER` 1000, `BOARD_NEAR` 30 (the spawn points' measure).
+- GUESS (L1's, moved): the exit box's extent. It begins 50 beyond the entrance's gap: the van is called the moment a
+  criminal steps onto the plaza and stands 7.2 s later; the kerb is 18 - 20 m from the entrance.
+- ASSUMPTION (kl_map_escape's, unchanged): a key-framed body moves with its entity (the file is right either way);
+  the Catmull-Rom curve; the engine interpolates rotation keys (the nose is 1.1 degrees off the tangent if so, 7.2 if
+  a key is held).
+- NOT KNOWN: the waiting van stands ON the navigation mesh (part 0) and its path blocker stands at the STOP: nothing
+  tells the AI about the van's body at the waiting place. Whether stock vans wait on the mesh was not measured.
+
+### L3.5 For the next stage
+
+- **Build**: `python tools/kl_fa_bank.py test <out> --keep [flags] [--plan <van.json>]`; from Python
+  `r, folder, plan, did = kl_fa_bank.build(out)`, then `finish(folder)`, `check(folder)`.
+  `--plan "C:/kl_scratch/bank/l3/build/F07+M03_A campaign/van.json"` saves the bare graft (60 s) as long as ROAD is
+  unchanged (plan_of refuses the plan of another road).
+- **Whoever copies the build folder copies van.json with it**: check() holds the drive against its plan (without the
+  file the drive is tested as the level has it, and a line says so).
+- **Bots** (kl_fa_bots): the boarding place at the stop is (636, 702, -11231) (`van.json` 'check' 'board'; the plan's:
+  (638.3, 700, -11235.3)); in the FILE the box rides on the van at the waiting place (re/map_escape.md 12 / 15).
+  van.json has kl_map_escape.van_build's keys ('plan' has 'points'; 'car' None, 'drop' and 'exits' empty): the bot,
+  talk and tune tools that read a van_build folder's van.json were NOT run on it.
+- **Anything a later stage puts on the square** (cover boxes, bot stations, a kept car): run check() again -
+  van_check's lane sees collision under 'Locations/' and convex bodies, `LANE_CLEAR` sees spawn points, player bodies
+  and squads' men only.
+- Still not wired (L2.7): the squads' retreat routs and F07's police ring at the van's call; the vehicle monitor's list
+  4 is empty (the Fragile Alliance bank has four squad routs there: `out/zfinal_m03_esc.txt`).
+- The first live questions of this stage: does the van show at the west end and drive in when the plaza is entered;
+  'Get in' at the rear doors; the in-van view, then the fixed camera; the east bound 26 m into the drive away; the
+  score page.
+
+### L3.6 Open
+
+- Nothing ran in the game.
+- 'Out of sight' (L3.4): the lead's call.
+- What is drawn east of x 3958 along z -11173 (the leave leg's extension) was not looked at: a render (tools/kl_view.py)
+  or the first live run shows it.
+- The escape camera's picture.
+- The `LightToggle`, door-animation and blast questions of L1.6 / L2.7 are untouched.
+- check()'s FakeTarget test still leans on kl_fa_bots / kl_fa_bots_dyn (another session's files; it prints 'NOT
+  CHECKED' if their names change - then run the fake-test command of L3.2).
+
+(end of Stage L3)
