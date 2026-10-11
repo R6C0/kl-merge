@@ -30,7 +30,8 @@
  *   clip is played at speed 1.0 (2.5 when [D+0x29], the game's own 'fast' flag) - Play's last argument, stored in the
  *   channel as frames a second (0x4da57d: [channel+0x10] = speed x 25; the update 0x50af2c adds dt x that).
  *   AN AI HEISTER goes down another way (0x70e0e0, from his damage routine 0x847968): at the hit that takes his LAST
- *   health, in place of dying, unless the hit is worth 500,000 or more (the 'left behind' kill is 1,000,000), by the
+ *   health, in place of dying, unless the hit is worth 1,000 or more (500,000 only for the campaign's buddy, the one
+ *   actor 0x6fd7c0 names - track R4; the 'left behind' kill is 1,000,000, a point-blank step 100 bullets), by the
  *   squad's EDownNotDeadModifier, a level-wide pause since the last man went down ([T+0x54] / [T+0x58]) and his own
  *   chance [actor+0x804] per cent.
  *
@@ -132,6 +133,18 @@
  *   aligned to a place ([D+0xf4], made for a fall BACKWARD) does with a dive FORWARD (logged), what he does at a wall
  *   (the collision is on: he slides on the spot).
  *
+ * THE AI HEISTERS ([Down] Bots=1; default 0; its own switch, Enable=0 or 1; track R4, re\player_down.md 11)
+ *   The owner after the live flop: 'do you not have the animations on the dog days npcs that are heisting??'. The
+ *   game's NPC 'down not dead' (0x70e0e0 -> ZDownNotDeadNPC) has no test that excludes an AI heister, yet 267 of 267
+ *   died in the live logs. WHY is not established (the level-wide pause is refuted as the whole cause; the two
+ *   candidates that can be systematic - a hit animation playing, the 16 mesh probes - are in a test no key touches).
+ *   kld_bots (its comment has the whole reading): prints at every AI heister's death the readable inputs of the game's
+ *   test and his place, and - unless BotsDry - sets his modifier [soldier+0x124] to 1 (force), clears his 'was down
+ *   once' byte BotsMax - 1 times, may set how long he lies and for how long no hit costs him. NOT SHOWN that Bots=1
+ *   makes one go down: live check B1 decides. Their clip is the game's NPC one (the stock fall), not the belly flop.
+ *   AND: the belly flop of Flop=1 (Hero_Torso_Back) IS DEAD MEN'S OWN knock-down - the same clip data, byte for
+ *   byte, in kaneandlynch's M03_FA_A and in every Dog Days level.
+ *
  * NOT DONE HERE, AND WHY (re\player_down.md 4)
  *   - the same trigger as the AI's exactly (down at the killing hit): that needs the player's damage routine, code
  *   - a prompt 'tap to get up faster' while he gets up: the game's own GET UP prompt (user action 0xc / 0xd, offered by
@@ -161,6 +174,14 @@
  *   down: flop: the knock-down's clip is through ...: the fall's input mask a: v -> w, movement state 5 is written
  *   down: flop: UP after t s: ...; the input mask a holds v (the fall's bits 0x11 are off)
  *   down: flop: THE TIME BOUND (OF THE WHOLE KNOCK-DOWN) ...          the part gave the fall back to the game
+ *   down: bots: on ...                                                 Bots=1, at start
+ *   down: bots: record i (actor, soldier): health, modifier, chance, was down once; the level's pauses
+ *   down: bots: record i: the modifier [soldier+0x124] 0 -> 1 (force ...)
+ *   down: bots: record i DIED at health 0 without going down at (x, y, z) ... ONE PASS BEFORE: ... NOW: ... -> <which test, or 'g MAY have'>
+ *   down: bots: record i IS DOWN, NOT DEAD (n of max) at (x, y, z): ...; he lies until ...; your word [score+0x1b8] ...
+ *   down: bots: record i IS UP after t s at (x, y, z): health ..., heist stage, [soldier+0x4fc]
+ *   down: bots: record i DIED ON THE FLOOR t s after he went down / WENT DOWN AND DIED ON THE FLOOR between two passes
+ *   down: bots: record i: the 'no damage' bit is taken off (the vehicle drives out / out of play)      Log=2
  *
  * WIRING (klhook.c; nothing else of the hook changes)
  *   #include "kldown.c"          after  #include "klfed.c"
@@ -765,12 +786,269 @@ static void kld_flop_one(DWORD pl, DWORD d, DWORD ds, DWORD now, float hp)
     klh_data((void *)(DWORD_PTR)(m + 0x8e0), &ne, 4, "the prone movement: the fall's event tick, held with its end");
 }
 
+/* ---- the AI heisters ([Down] Bots=1; track R4, re\player_down.md 11) ------------------------------------------- */
+/* READ (kl2 0x8473a0, 0x688190, 0x70e0e0, 0x70f330, 0x7ea990, 0x5f4ac0, 0x803530; all whole):
+   An NPC's damage routine asks, at the hit that takes his last health (0x847937 .. 0x847968; not asked while word
+   [[actor+0x54]+0x3a] is not 0 = he takes no damage at all, 0x8477ae), soldier slot 51 (0x688190: never for a dog) ->
+   0x70e0e0. YES = he goes 'down not dead' instead of dying. It says NO when
+     a. byte [actor+0x64c] is set (he is down already), or his ZWounded state [[soldier+0x4b4]+8] is not 0 / 4
+     b. 0x70f330 (his ZDownNotDeadNPC = [soldier+0x4b8]) refuses, in this order:
+          - 0x619d10: his bone 2 is within 20 of [actor+0x46c] (node flag 0x1000)
+          - [actor+0x774] is not 0: somebody holds him
+          - 0x75a2e0: he sits in a seat - THREE parts: [actor+0x88c] and [seat+0x18] not 0 and [seat+0x40] == 0
+          - 0x4a05f0: the task at [soldier+0xa4] runs (its state +8 is not 0 / 4). That object is his ZHitAnimTask
+            (vtable 0xbcf87c, made by the constructor at 0x7cfc79): NO DOWN WHILE A HIT ANIMATION PLAYS
+          - 0x86a150 / 0x86f0c0: the object he is attached to, [actor+0x5b4], is a ZLNKOBJ (type pair 0x153a898) AND a
+            ZHavokLnkObj (type pair 0x168cddc) - both by its vtable slot 12, so the hook can only print the vtable
+          - 16 probes of 100 units around him on the navigation mesh (PF4::ZData slot 41, 0x4dd5f0): ALL must pass =
+            one metre of mesh free in every direction
+     c. byte [actor+0x5cb] is set = HE WAS DOWN ONCE (set by the down's script at its start, 0x5f4b56; never cleared)
+     d. the hit was in the head (bone body part 2 / 3 -> record +0x30, 0x61a9f0) from nearer than [T+0x5c] = 1500
+     e. the hit's damage [rec+0x28] is MORE THAN 1,000 (0x70e1c7 jumps on C0 only: exactly 1,000 passes)
+     f. his EDownNotDeadModifier [soldier+0x124] is 2 (prevent) - 1 (force) says YES here, whatever g says. It is 0 from
+        the constructor (0x7cfb3b) and written only by a SquadModifierBehaviour's field 13 (0x803530: 1, 2, 3 -> 0)
+     g. modifier 0 (0x70e206 .. 0x70e29c; [gamedata+0x4d04] = the tick of the level's last NPC down, set by every
+        down's start 0x7eaab9, a policeman's too; 0 = none yet skips the first test):
+          last down less than [T+0x54] = 5 s ago   -> NO
+          last down less than [T+0x58] = 20 s ago  -> yes only by his chance [actor+0x804] per cent (= ZFFActor's
+                                                      level field 15: 50.0 on every AI heister, stock and ours)
+          later                                    -> YES, no draw
+        So g CANNOT refuse every time: the first heister at health 0 after 20 quiet seconds goes down if a .. e pass.
+   No test of the team, of Arcade, of the squad's kind: by the code an AI heister CAN go down.
+   LOG: 267 of 267 AI heisters at health 0 in the live logs are dead (177 of them by an ordinary bullet; 7 of 7 on
+   the stock Subway copy). WHICH test said no each time is NOT ESTABLISHED. g is refuted as the whole cause (above);
+   the two that CAN be systematic are both in b and NEITHER IS PROVEN: the ZHitAnimTask (a heister dies under some
+   hundred small hits at about 3 a second) and the 16 mesh probes (the bots stand at cover, walls, corridors). No key
+   here touches b. The 'DIED ...' line prints the readable inputs and his place; it CANNOT tell g from b / d / e
+   (the game asks a .. e first) - the run that decides is the one with the modifier forced (B1): a death that still
+   says 'the modifier was 1' is b / d / e.
+   THE DOWN ITSELF (0x7ea990, 0x5f4ac0): he lies [T+0x4c] .. [T+0x50] = 1.5 .. 3.0 s by a random number (the tick is
+   [dnd+0x14]), is given 25 % of his maximum if he has less, fires from the floor at his target (the soldier's own
+   slots +0x1c4 / +0x164), takes hits in full (a second health 0 kills: a), then 75 % of his maximum, state Stand.
+   The clips: the state graph 0x730be0's DownNotDead state = /Damage/Down_Not_Dead/... - the stock human's own fall
+   ('the gun one'), NOT the belly flop.
+   WHEN HE IS UP, in Arcade, for team Ally / Mercenary (0x5f4dd8 .. 0x5f4dfc): byte [soldier+0x4fc] = 1. That byte
+   makes his squad's ZDefendBehaviourRout count him as ARRIVED (0x686c77; re\boardall_review_code.md): the Defend
+   step his chain is WAITING in ends and its NEXT fires although he did not reach the place; his next order puts the
+   byte back (0x760efe). So every down can SKIP one step of his route - a hold, a loot stop, a Retomoto gate. Not a
+   write of this part: the game's own. The 'IS UP' line prints the byte; the live check is his stage 1 -> 2 -> 3.
+   A HUMAN WHO FLOORS HIM: at health 0 with a player attacker the damage routine calls rules slot 131 (0x8477fd ->
+   0x7cc270, read whole: the attacker's word [score+0x1b8+2*index] += word [T+0x700] or [T+0x6fc] by slot 107's
+   answer) BEFORE the down is asked - so it is added at the floor AND again at the real kill. What that word shows
+   was not read; the 'IS DOWN' line prints it for the human (now and one pass before).
+   WHAT THIS PART WRITES (data, per AI crew record in play; each only by its key):
+     Bots=1       [soldier+0x124] 0 -> 1 (force): tests f / g answer yes; a .. e stay the game's. Put back to 0.
+     BotsMax=n    (default 2; the game's own is 1) byte [actor+0x5cb] 1 -> 0 once he is up again, n - 1 times
+     BotsLie=s    (default 0 = the game's 1.5 .. 3.0) [dnd+0x14] = the down's first tick + s
+     BotsFree=s   (default 0.75 = the stock human's free fall) for s seconds of a down bit 0x800 of the word
+                  [[actor+0x54]+0x3a] is held set - the bit the game itself sets for 0.1 s at a down's start (0x70e2d7 ->
+                  0x6c75c0) and for 7 s on the campaign's buddy (0x5f4d82): while the word is not 0 no hit costs him -
+                  NO hit: the health is not written (0x8477ae) and the death is skipped (0x847945), so the game's kill
+                  of the crew left behind (1,000,000 a step while the vehicle drives out) and a point-blank step are
+                  swallowed too. Therefore the bit is never held once the vehicle's state is 5 or more, and a long
+                  BotsFree is a long immortality: keep it short.
+                  ASSUMED harmless for the word's other readers (20 `cmp word [+0x3a]`; read: 0x8477ae, 0x847945,
+                  0x828735, 0x4d83bb; the other 16 NOT read: re\player_down_review4.md S2) for those seconds - the
+                  FIRST live run goes without it (BotsFree=0). 0 = none. The game takes a timed bit off by its own mask
+                  [+0x40] at the tick [+0x3c] and then zeroes both (0x638e2e .. 0x638e5c), and the down's script clears
+                  0x800 once at its start (0x5f4bb5 -> 0x6f48a9): this part sets the bit again in its next pass
+     BotsUpPct=p  (default 0 = the game's 75) his health when he is up, per cent of the maximum that stands in his
+                  health object - klgrudge.c's ([Bots] CrewHealth) if that part wrote one. No fight between the two:
+                  klgrudge writes the health only when it changes the MAXIMUM, and then keeps his share
+     BotsNear=d   (default: not written) [T+0x5c]: 0 = a head hit from near floors him too. EVERY NPC of the level.
+   BotsDry=1 (or Dry=1): nothing is written, the lines say what would be. No call, no patch. */
+#define KLD_SOLDIER_VT 0x00bd0954             /* CPPScript::ZSoldier (its only vtable; klescort.c) */
+static struct {
+    int on, dry, force, max; float lie, freet, uppct, near_;
+} kld_bk;
+static struct kld_bot {
+    DWORD actor, soldier, t_down, tick_down, lie_tick; float hp, hmax; BYTE down, cnt, put124, shield, said, dead;
+    DWORD age; float chance; DWORD mod, ws, as, holder, seat, seat18, seat40, att, attvt; WORD inv; BYTE was;      /* the readable inputs of 0x70e0e0 as they stood one pass before */
+} kld_b[KLB_NREC];
+static DWORD kld_brules; static float kld_near0; static int kld_nearput;
+static WORD kld_kw; static int kld_kwok;      /* the human's word [score+0x1b8+2*index] one pass before (rules slot 131 adds to it when he takes an NPC's last health) */
+
+static int kld_bot_ok(DWORD actor, DWORD *soldier)
+{
+    DWORD s;
+    if (!actor || klh_rd32(actor) != KLB_ACTOR_VT) return 0;
+    if (!(s = klh_rd32(actor + 0x77c)) || klh_rd32(s) != KLD_SOLDIER_VT || klh_rd32(s + 0x40) != actor) return 0;
+    *soldier = s;
+    return 1;
+}
+
+/* the bit of BotsFree: on = hold 0x800 set, off = take it off if it stands (never the word's other bits) */
+static void kld_bot_shield(struct kld_bot *b, int on)
+{
+    DWORD o = klh_rd32(b->actor + 0x54); WORD w = 0, n;
+    if (!o || !klh_rd(o + 0x3a, &w, 2)) return;
+    n = on ? (WORD)(w | 0x800) : (WORD)(w & ~0x800);
+    if (n != w && !klh_data((void *)(DWORD_PTR)(o + 0x3a), &n, 2, "an AI heister's 'takes no damage' word: the down-not-dead bit 0x800")) return;
+    b->shield = (BYTE)on;
+}
+
+/* everything of ours off one bot (he is gone, the part stops, another round) */
+static void kld_bot_back(struct kld_bot *b, const char *why, int i)
+{
+    DWORD s = 0, m = 0, zero = 0;
+    if (b->actor && kld_bot_ok(b->actor, &s) && s == b->soldier) {
+        if (b->shield) kld_bot_shield(b, 0);
+        if (b->put124 && klh_rd(s + 0x124, &m, 4) && m == 1 && klh_data((void *)(DWORD_PTR)(s + 0x124), &zero, 4, "an AI heister's EDownNotDeadModifier: back to 0"))
+            { if (kld.log >= 2) klog("down: bots: record %d: the modifier [soldier+0x124] is 0 again (%s)", i, why); }
+    }
+    memset(b, 0, sizeof *b);
+}
+
+static void kld_bots(int act, DWORD now)
+{
+    struct klb_snap sn; DWORD gd, clock, tun, tick = 0, last = 0; float t54 = 5.0f, t58 = 20.0f, t5c = 1500.0f; int i, ok = 1, wr, kwok = 0; WORD kw = 0;
+    if (!kld_bk.on) return;
+    if (act) act = klb_read(&sn) && sn.state == KLB_ROUND;
+    if (!act || sn.rules != kld_brules) {      /* the round is over / another rules object: nothing of ours stays in a live soldier */
+        for (i = 0; i < KLB_NREC; i++) if (kld_b[i].actor) kld_bot_back(&kld_b[i], "the round is over", i);
+        if (kld_nearput && (tun = klh_rd32((DWORD_PTR)KLH_VA(KLD_TUNING))) != 0 && klh_data((void *)(DWORD_PTR)(tun + 0x5c), &kld_near0, 4, "tuning: the distance under which a head hit kills an NPC outright, back"))
+            klog("down: bots: BotsNear: [T+0x5c] is %.0f again", kld_near0);
+        kld_nearput = 0; kld_kwok = 0;
+        kld_brules = act ? sn.rules : 0;
+        if (!act) return;
+    }
+    wr = !kld.dry && !kld_bk.dry;
+    if (sn.human >= 0 && sn.human < KLB_NREC && klh_rd(sn.score + 0x1b8 + 2 * sn.human, &kw, 2)) kwok = 1;
+    if (!kld_kwok) kld_kw = kw;                /* first pass of the round: no 'before' yet */
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLD_GAMEDATA))) || !(clock = klh_rd32((DWORD_PTR)KLH_VA(KLD_CLOCK))) || !klh_rd(clock + 0x48, &tick, 4) || !klh_rd(gd + 0x4d04, &last, 4)) return;
+    if ((tun = klh_rd32((DWORD_PTR)KLH_VA(KLD_TUNING))) != 0) {
+        float a = kld_rdf(tun + 0x54, &ok), b = kld_rdf(tun + 0x58, &ok), c = kld_rdf(tun + 0x5c, &ok);
+        if (ok && a >= 0 && a < 1000 && b >= 0 && b < 1000 && c >= 0 && c < 1e6f) {
+            t54 = a; t58 = b; t5c = c;
+            if (kld_bk.near_ >= 0 && wr && !kld_nearput && KLD_ABS(c - kld_bk.near_) > 0.01f) {
+                kld_near0 = c;
+                if (klh_data((void *)(DWORD_PTR)(tun + 0x5c), &kld_bk.near_, 4, "tuning: the distance under which a head hit kills an NPC outright")) {
+                    kld_nearput = 1; klog("down: bots: BotsNear: [T+0x5c] %.0f -> %.0f (a head hit from nearer than this kills an NPC outright - EVERY NPC of the level, the police too)", c, kld_bk.near_);
+                }
+            }
+        }
+    }
+    for (i = 0; i < sn.n && i < KLB_NREC; i++) {
+        const struct klb_rec *r = &sn.r[i]; struct kld_bot *b = &kld_b[i];
+        DWORD s = 0, h, mod = 0, wo, ao, ws = 0, as = 0, dnd, holder = 0, seat = 0, seat18 = 0, seat40 = 0, att = 0, attvt = 0, o54; BYTE dn = 0, was = 0; WORD inv = 0; float hp, hmax, chance, pos[3] = { 0, 0, 0 }; int hok = 1;
+        if (!r->used || !(r->flags & 1) || !kld_bot_ok(r->actor, &s)) { if (b->actor) kld_bot_back(b, "its record is gone", i); continue; }
+        if (b->actor != r->actor || b->soldier != s) { if (b->actor) kld_bot_back(b, "another actor in its record", i); b->actor = r->actor; b->soldier = s; }
+        if (!(h = klh_rd32(r->actor + 0x5fc)) || klh_rd32(h + 0x24) != r->actor) continue;
+        hp = kld_rdf(h + 4, &hok); hmax = kld_rdf(h + 8, &hok);
+        if (!hok || hmax < 1 || !klh_rd(r->actor + 0x64c, &dn, 1) || !klh_rd(r->actor + 0x5cb, &was, 1) || !klh_rd(s + 0x124, &mod, 4) || mod > 3) continue;
+        chance = kld_rdf(r->actor + 0x804, &hok);
+        if ((wo = klh_rd32(s + 0x4b4)) != 0) klh_rd(wo + 8, &ws, 4);
+        if ((ao = klh_rd32(s + 0xa4)) != 0) klh_rd(ao + 8, &as, 4);
+        klh_rd(r->actor + 0x774, &holder, 4); klh_rd(r->actor + 0x88c, &seat, 4);
+        if (seat) { klh_rd(seat + 0x18, &seat18, 4); klh_rd(seat + 0x40, &seat40, 4); }      /* 0x75a2e0: seated = all three */
+        if (klh_rd(r->actor + 0x5b4, &att, 4) && att) klh_rd(att, &attvt, 4);                 /* b's fifth test: what he is attached to (its class only by the vtable) */
+        if ((o54 = klh_rd32(r->actor + 0x54)) != 0) klh_rd(o54 + 0x3a, &inv, 2);
+        dnd = klh_rd32(s + 0x4b8);
+        if (b->dead && r->status == 0 && hp > 0.01f && !dn) {      /* the same actor lives again (another round on the same rules object): a new count */
+            if (kld.log >= 2) klog("down: bots: record %d lives again (health %.1f): its downs are counted anew", i, hp);
+            b->dead = 0; b->down = 0; b->cnt = 0; b->hp = hp;
+        }
+        if (!b->said) {
+            b->said = 1; b->hp = hp; b->down = dn;
+            if (r->status == 7 || hp <= 0.01f) b->dead = 1;        /* first seen dead: nothing to say about how */
+            if (kld.log) klog("down: bots: record %d (actor %08lx, soldier %08lx): health %.1f of %.1f, modifier [soldier+0x124] %lu (0 not set, 1 force, 2 prevent), his chance [actor+0x804] %.0f %%, was down once [actor+0x5cb] %u; the level's pauses [T+0x54] %.1f s / [T+0x58] %.1f s, head-hit distance [T+0x5c] %.0f",
+                              i, r->actor, s, hp, hmax, mod, chance, was, t54, t58, t5c);
+        }
+        /* --- he is dead: at health 0 with the 'down' byte clear the game's test said NO (or was not asked) */
+        if (!b->dead && (r->status == 7 || (hp <= 0.01f && !dn && b->hp > 0.01f))) {
+            b->dead = 1;
+            kle_node(klh_rd32(r->actor + 4), pos, 0);
+            if (b->down) klog("down: bots: record %d DIED ON THE FLOOR %.2f s after he went down (down %u of %d) at (%.0f, %.0f, %.0f): a second health 0 kills (0x70e0f8); down byte now %u, crew status %u; your word [score+0x1b8] %u (one pass before %u)", i, (now - b->t_down) / 1000.0f, b->cnt, kld_bk.max, pos[0], pos[1], pos[2], dn, r->status, kw, kld_kw);
+            else if (dn) {                         /* the down byte and the death arrived in ONE pass: the game's test said YES - not a refusal */
+                b->cnt++;
+                klog("down: bots: record %d WENT DOWN AND DIED ON THE FLOOR between two passes of the hook (down %u of %d) at (%.0f, %.0f, %.0f): the down byte [actor+0x64c] is %u now and was 0 one pass before, health %.1f -> %.1f, crew status %u - the game's test said YES; count it as a down, not as a refusal",
+                     i, b->cnt, kld_bk.max, pos[0], pos[1], pos[2], dn, b->hp, hp, r->status);
+            } else if (kld.log) {
+                /* the inputs as they stood ONE PASS BEFORE (the hit came between two passes), named in the GAME's order a, b, c, f, g.
+                   d / e (the hit record) and three of b's tests (bone 2, the attachment's class, the 16 mesh probes) cannot be read
+                   from here, and they are asked BEFORE f / g: a 'g' below is never more than 'g may have' */
+                float age = b->age ? (float)(long)(tick - b->age) / 1024.0f : -1.0f; int seated = b->seat && b->seat18 && !b->seat40; const char *no =
+                    b->inv ? "he took no damage at all ([+0x3a] not 0): the test was not asked" :
+                    b->ws != 0 && b->ws != 4 ? "a: his ZWounded state ran" :
+                    b->holder ? "b: somebody held him" : seated ? "b: he sat in a seat ([actor+0x88c], [seat+0x18] set, [seat+0x40] 0)" :
+                    b->as != 0 && b->as != 4 ? "b: HIS ZHitAnimTask RAN ([soldier+0xa4], state not 0 / 4): a hit animation was playing one pass before - no down while it plays (0x4a05f0)" :
+                    b->was ? "c: HE WAS DOWN ONCE ([actor+0x5cb])" :
+                    b->mod == 2 ? "f: the modifier is 2 (prevent) - unless b / d / e refused first" :
+                    b->mod == 1 ? "NOT f / g (the modifier was 1 = force) and none of the readable a / b / c: so b's unreadable part (a hit animation started by this very hit, the 16 probes of 1 m on the mesh, his bone 2 low, attached to a ZHavokLnkObj) or the hit itself (d: the head from nearer than [T+0x5c]; e: more than 1,000). Lay his place on the mesh - say so to the track" :
+                    age >= 0 && age < t54 ? "g MAY have refused (an NPC - a policeman counts - went down less than [T+0x54] s ago), BUT a .. e are asked first and are NOT excluded (b's hit animation / mesh probes, d the head, e): this line does not decide - the run with the modifier forced does" :
+                    age >= 0 && age < t58 ? "g MAY have refused by his chance (an NPC went down less than [T+0x58] s ago), BUT a .. e are asked first and are NOT excluded: this line does not decide - the run with the modifier forced does" :
+                    "NOT g (no NPC went down in the last [T+0x58] s: g says yes without a draw) and none of the readable a / b / c / f: so b's unreadable part (a hit animation started by this very hit, the 16 mesh probes, bone 2, a ZHavokLnkObj) or the hit itself (d / e). Lay his place on the mesh - say so to the track";
+                klog("down: bots: record %d DIED at health 0 without going down at (%.0f, %.0f, %.0f) (lost %.1f; crew status %u; down byte [actor+0x64c] now %u). ONE PASS BEFORE: modifier %lu, was down once %u, the last NPC of the level went down %s%.1f s ago, his chance %.0f %%, ZWounded state %lu, ZHitAnimTask [soldier+0xa4] state %lu, holder %08lx, seat %08lx ([+0x18] %08lx, [+0x40] %08lx), attached to [actor+0x5b4] %08lx (vtable %08lx: refused if that class is a ZHavokLnkObj), word [+0x3a] %04x. NOW: ZWounded %lu, ZHitAnimTask %lu, word %04x -> %s",
+                     i, pos[0], pos[1], pos[2], b->hp, r->status, dn, b->mod, b->was, b->age ? "" : "never / ", age < 0 ? 0.0f : age, b->chance, b->ws, b->as, b->holder, b->seat, b->seat18, b->seat40, b->att, b->attvt, b->inv, ws, as, inv, no);
+            }
+            if (b->shield) kld_bot_shield(b, 0);
+        }
+        /* the 'no damage' bit swallows EVERY kill (0x8477ae, 0x847945): never held while the vehicle drives out (state 5 on: the
+           game's own kill of the crew left behind, re\bots_follow_out.md) or on a record that is no longer in play */
+        if (b->shield && (sn.veh >= 5 || r->status != 0)) {
+            kld_bot_shield(b, 0);
+            if (kld.log >= 2) klog("down: bots: record %d: the 'no damage' bit is taken off (%s)", i, sn.veh >= 5 ? "the vehicle drives out: the game's kill of those left behind must reach him" : "its record is out of play");
+        }
+        /* --- he goes down / he is up */
+        if (!b->dead && dn && !b->down) {
+            b->down = 1; b->cnt++; b->t_down = now; b->tick_down = tick; b->lie_tick = 0;
+            kle_node(klh_rd32(r->actor + 4), pos, 0);
+            klog("down: bots: record %d IS DOWN, NOT DEAD (%u of %d this round) at (%.0f, %.0f, %.0f): health %.1f of %.1f (the game gives him 25 %% if he has less), modifier %lu; he lies until tick %ld = %.2f s from now (the game's 1.5 .. 3.0 s by a random number); your word [score+0x1b8] %u (one pass before %u: a step = rules slot 131 counted this floor for you, and will count his real death again)%s",
+                 i, b->cnt, kld_bk.max, pos[0], pos[1], pos[2], hp, hmax, mod, dnd ? (long)klh_rd32(dnd + 0x14) : 0L, dnd ? (float)(long)(klh_rd32(dnd + 0x14) - tick) / 1024.0f : 0.0f, kw, kld_kw, wr ? "" : " (Dry: nothing is written for him)");
+        } else if (!b->dead && !dn && b->down) {
+            BYTE arr = 0;
+            b->down = 0;
+            if (b->shield) kld_bot_shield(b, 0);
+            klh_rd(s + 0x4fc, &arr, 1);
+            kle_node(klh_rd32(r->actor + 4), pos, 0);
+            klog("down: bots: record %d IS UP after %.2f s at (%.0f, %.0f, %.0f): health %.1f of %.1f (the game's script gives 75 %%), was-down byte %u, heist stage %u; [soldier+0x4fc] %u (1 = the game's own get-up line 0x5f4dfc: his squad's waiting Defend step counts him as ARRIVED and its next step fires - watch his stage go on to 3)", i, (now - b->t_down) / 1000.0f, pos[0], pos[1], pos[2], hp, hmax, was, r->stage, arr);
+            if (wr && kld_bk.uppct > 0 && hp > 0.01f && KLD_ABS(hp - hmax * kld_bk.uppct / 100.0f) > 0.5f) {
+                float nh = hmax * kld_bk.uppct / 100.0f;
+                if (klh_data((void *)(DWORD_PTR)(h + 4), &nh, 4, "an AI heister's health: what he has when he is up from his down (BotsUpPct)")) { klog("down: bots: record %d: up with %.1f of %.1f health (BotsUpPct=%.0f; the game gave %.1f)", i, nh, hmax, kld_bk.uppct, hp); hp = nh; }
+            }
+        }
+        if (!b->dead && wr && r->status == 0) {
+            if (b->down) {
+                /* BotsLie: the tick his script waits for. Slot 1 of his down (0x7ea990) writes its own when the goal starts - a frame
+                   or more after 0x70e0e0 set the byte we saw - so ours is written until it stands (a fixed tick: bounded) */
+                if (kld_bk.lie > 0 && dnd) {
+                    DWORD cur = klh_rd32(dnd + 0x14);
+                    if (!b->lie_tick) b->lie_tick = b->tick_down + (DWORD)(kld_bk.lie * 1024.0f);
+                    if (cur != b->lie_tick && (long)(b->lie_tick - tick) > 0 && klh_rd32(dnd + 4) == s &&
+                        klh_data((void *)(DWORD_PTR)(dnd + 0x14), &b->lie_tick, 4, "an AI heister's down-not-dead: the tick he lies until (BotsLie)") && kld.log >= 2)
+                        klog("down: bots: record %d: he lies until tick %ld (BotsLie=%.1f; the game had %ld)", i, (long)b->lie_tick, kld_bk.lie, (long)cur);
+                }
+                /* BotsFree: no hit costs him for the first seconds of the down */
+                if (kld_bk.freet > 0 && sn.veh < 5 && (long)(tick - b->tick_down) < (long)(kld_bk.freet * 1024.0f)) kld_bot_shield(b, 1);
+                else if (b->shield) kld_bot_shield(b, 0);
+            } else {
+                /* BotsMax: the game's own limit is one down a life (c). He may go down again while he has downs left */
+                if (was && b->cnt && b->cnt < kld_bk.max && hp > 0.01f) {
+                    BYTE zero = 0;
+                    if (klh_data((void *)(DWORD_PTR)(r->actor + 0x5cb), &zero, 1, "an AI heister's 'was down once' byte (BotsMax)") && kld.log >= 2) klog("down: bots: record %d: the 'was down once' byte is cleared (down %u of %d)", i, b->cnt, kld_bk.max);
+                    was = 0;
+                }
+                /* Bots: the squad's modifier as its SquadModifierBehaviour would write 'force' (0x8035d5) */
+                if (kld_bk.force && mod == 0) {
+                    DWORD one = 1;
+                    if (klh_data((void *)(DWORD_PTR)(s + 0x124), &one, 4, "an AI heister's EDownNotDeadModifier: 1 = force")) {
+                        b->put124 = 1; mod = 1;
+                        if (kld.log) klog("down: bots: record %d: the modifier [soldier+0x124] 0 -> 1 (force: the level-wide pause and his chance no longer say no)", i);
+                    }
+                }
+            }
+        }
+        b->hp = hp; b->hmax = hmax; b->age = last; b->chance = chance; b->mod = mod; b->ws = ws; b->as = as; b->holder = holder; b->seat = seat; b->seat18 = seat18; b->seat40 = seat40; b->att = att; b->attvt = attvt; b->inv = inv; b->was = was;
+    }
+    kld_kw = kw; kld_kwok = kwok;
+}
+
 static void kld_tick(int game_thread)
 {
     static DWORD toldrules; static char toldwhy[200];
     DWORD gd, pl, d, m, h, ho = 0, rules, state, now, tick = 0, clock, chans; int level, act, ok = 1, hpok, i = 0, st = -1;
     BYTE idx = 0xff, police = 0, flag = 0, btn = 0; DWORD ds = 0, ms = 0; float hp = 0, max = 0, pos[3] = { 0, 0, 0 }, dt = 0; char why[200];
-    if (!kld.on || !klh_exe_ok) return;
+    if ((!kld.on && !kld_bk.on) || !klh_exe_ok) return;
     if (!game_thread) return;                  /* every write here is a live object of the round: only between two frames of the game.
                                                   The mash is counted by frames too: nothing of this part runs on the fallback thread */
     now = GetTickCount();
@@ -779,9 +1057,13 @@ static void kld_tick(int game_thread)
         act = klb_level(why);                  /* asked every pass: the verdict changes when the archive is opened */
         if (rules != toldrules || strcmp(why, toldwhy)) {
             toldrules = rules; strcpy(toldwhy, why);
-            klog("down: %s: %s", why, act ? kld.dry ? "Dry=1 - the part only logs this round" : "the part acts on this round" : "nothing is written here (the part acts only on a level that is not stock)");
+            klog("down: %s: %s", why, !act ? "nothing is written here (the part acts only on a level that is not stock)" :
+                 !kld.on ? (kld_bk.dry ? "Enable=0, Bots=1, BotsDry=1 - only the AI heisters' part runs this round, and it only logs" : "Enable=0, Bots=1 - only the AI heisters' part acts on this round") :
+                 kld.dry ? "Dry=1 - the part only logs this round" : "the part acts on this round");
         }
     }
+    kld_bots(act, now);                        /* the AI heisters: whatever the human is (alive, dead, police) */
+    if (!kld.on) return;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLD_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || (signed char)idx < 0 || idx > 31 ||
         !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLD_PLAYER_VT || !klh_rd(pl + 0x2723, &police, 1)) pl = 0;
     if (!pl || police) act = 0;                /* a fed is left to the game */
@@ -1002,6 +1284,20 @@ static void kld_init(void)
     }
     if (kld.on) klog("down: on%s; the get-up is played at Base %.2f + PerPress %.2f x the mash meter (one a press of the game's own GET UP button, - Decay %.1f a second), at most Top %.2f; the trigger:%s; Log=%d. Arcade on a level that is not stock, not for a police player; data writes only (re\\player_down.md)",
                      kld.dry ? " (Dry=1: NOTHING is written, the log says what would be)" : "", kld.base, kld.per, kld.decay, kld.top, n ? t : " the game's own (no key set)", kld.log);
+    /* the AI heisters (track R4): its own switch - works with Enable=0 too */
+    memset(kld_b, 0, sizeof kld_b); kld_brules = 0; kld_nearput = 0;
+    kld_bk.on = GetPrivateProfileIntA("Down", "Bots", 0, klh_ini) != 0;
+    kld_bk.dry = GetPrivateProfileIntA("Down", "BotsDry", 0, klh_ini) != 0;
+    kld_bk.force = GetPrivateProfileIntA("Down", "BotsForce", 1, klh_ini) != 0;
+    kld_bk.max = (int)GetPrivateProfileIntA("Down", "BotsMax", 2, klh_ini);       /* 2: the task's GUESS; the game's own is 1 */
+    if (kld_bk.max < 1) kld_bk.max = 1; if (kld_bk.max > 20) kld_bk.max = 20;
+    kld_bk.lie = kld_inif("BotsLie", "0"); kld_bk.freet = kld_inif("BotsFree", "0.75"); kld_bk.uppct = kld_inif("BotsUpPct", "0"); kld_bk.near_ = kld_inif("BotsNear", "-1");
+    if (!kld_fin(kld_bk.lie) || kld_bk.lie < 0.5f || kld_bk.lie > 15.0f) kld_bk.lie = 0;      /* 15 s: klescort.c's BoardAll takes a bot that stood 15 s for 'held' */
+    if (!kld_fin(kld_bk.freet) || kld_bk.freet < 0 || kld_bk.freet > 15.0f) kld_bk.freet = 0.75f;
+    if (!kld_fin(kld_bk.uppct) || kld_bk.uppct < 1 || kld_bk.uppct > 100.0f) kld_bk.uppct = 0;
+    if (!kld_fin(kld_bk.near_) || kld_bk.near_ < 0 || kld_bk.near_ > 100000.0f) kld_bk.near_ = -1.0f;
+    if (kld_bk.on) klog("down: bots: on%s - the AI heisters' 'down, not dead' by the game's own NPC rule (0x70e0e0; NOT SHOWN that it makes one go down: only tests f / g are taken away, a .. e stay the game's): BotsForce=%d (1 = each one's modifier [soldier+0x124] 0 -> 1: the level-wide pause and his 50 %% chance no longer refuse), BotsMax=%d downs a bot a round (the game's own: 1), BotsLie=%.1f s (0 = the game's 1.5 .. 3.0), BotsFree=%.2f s without damage from the down's start, BotsUpPct=%.0f (0 = the game's 75), BotsNear=%.0f (-1 = [T+0x5c] not written). Arcade, a level that is not stock, the round running; data writes only (re\\player_down.md 11)",
+                        kld.dry || kld_bk.dry ? " (Dry: NOTHING is written; every AI heister's death prints the readable inputs of the game's test and his place)" : "", kld_bk.force, kld_bk.max, kld_bk.lie, kld_bk.freet, kld_bk.uppct, kld_bk.near_);
     if (kld.on && kld.flop == 1) klog("down: flop: Flop=1 - DOG DAYS' OWN KNOCK-DOWN, ONE CLIP: he goes down by %s (thrown down, lying, up over a knee: the whole clip is played in the game's fall; no press cuts it, no hit of it costs), from the landing on at FlopBase %.2f + FlopPerPress %.2f x the mash meter, at most FlopTop %.2f; FlopBelly=%d (1 = every draw of the slot is the clip thrown forward, onto the belly); FlopUpPct=%.0f (health he is given when up; 0 = none). Flop=2 = the earlier pair (a death clip + the rise from the stomach)",
                                       kld.fallslot, kld.fbase, kld.fper, kld.ftop, kld.belly, kld.uppct);
     if (kld.on && kld.flop == 2) klog("down: flop: Flop=2 - THE BELLY FLOP, two clips: he goes down by %s and gets up by %s (slot ids written into his prone movement while he is up; the game plays them itself), the get-up at FlopBase %.2f + FlopPerPress %.2f x the meter, at most FlopTop %.2f; FlopTake=%.2f (the share of a loss in the get-up that stays), FlopUpPct=%.0f (health he is given when up; 0 = none)",

@@ -620,3 +620,221 @@ knock-down that costs nothing what he wants.
 | S4 the three owner decisions | DONE: 10.2 'THREE DECISIONS FOR THE OWNER', and the report |
 | S5 G1's FAIL list: a non-zero event queue | DONE: 10.4 G1 |
 | S6 `Flop=1` changed meaning | DONE: note at section 9's head; F1 / F2 of 9.5 say `Flop=2` (F3 .. F7 are 'F2 + ...') |
+
+## 11. The AI heisters' own down, and Dead Men's own (track R4, 2026-10-11 ~17:00)
+
+Owner, after the live flop (run G1_DM03_flop 16:18: `THE KNOCK-DOWN: the fall is clip ... '#Hero_Torso_Back' of 186 frames`,
+PASS): *'the belly flop worked but there was the dead men one no? do you not have the animations on the dog days npcs that
+are heisting??'*. **Offline; nothing of this section has run in the game.** READ = kl2.exe 0490, each routine named
+read whole; FILE = the `.ANM` of Dead Men's `M03_FA_A` and of stock Dog Days F01 / F07 (`tools/kl_anm.py`); LOG = the 899
+logs in `<work>\build\klhook\live` + the owner's `KLHook.log`. Scratch: the session's scratchpad `R4/`.
+
+### 11.0 The short answer
+
+- **'The Dead Men one' is the flop he just saw.** Dead Men has no 'down not dead' at all (no such name in
+  kaneandlynch.exe or its levels); its knock-down is the **Wounded** family, and its hero slot
+  `/Damage/Wounded/Hero_Torso_F` holds the same three pairs as Dog Days' (`Hero_Torso_Back` twice, `Hero_Torso_Front`
+  once). **`Hero_Torso_Back` is byte for byte the same clip data in both games** (FILE: 186 frames, 37,228 bytes, sha1
+  0737fdfe40..; events 31 at 1, 0 at 39, 7 at 46, 8 at 116; root 66 forward). Dog Days took the family over whole.
+  Nothing has to be carried; `Flop=1` already plays Dead Men's.
+- **The AI heisters have the down in their set and by the code may go into it - and never do.** 267 of 267 AI heisters
+  at health 0 in the logs are dead (177 by an ordinary bullet; 7 of 7 on the stock Subway copy T01, so it is not our
+  maps, bots or mesh). WHICH of the game's tests refuses each time is **NOT ESTABLISHED** (11.2): the level-wide
+  pause is refuted as the whole cause, and the two candidates that can be systematic sit in a test no key touches.
+  `Bots=1` takes away the two refusals data can (f / g). **It is NOT SHOWN that `Bots=1` makes an AI heister go
+  down** - live check B1 decides; until it has printed an `IS DOWN` line nothing of this goes into the owner's ini.
+- **Their down clip is not the belly flop**: an NPC's down state plays the stock fall onto the side ('the gun one').
+- **But the AI heisters DO have the 'shot' animations and play them alive** (11.1a, added in the fix round): the
+  run-stumble-fall-and-up clips of his pictures are an NPC's full-body HIT reaction, played when he is hit while a
+  task holds his mode `[soldier+0x98]` at 2 - running to a place while shooting, leaning out of corner cover, a close
+  attack, firing in the open. That is game behaviour on every map already; no key of ours.
+
+### 11.1 The NPC's down, read whole
+
+| what | where | facts |
+|---|---|---|
+| when it is asked | soldier's damage routine 0x8473a0 (ZSoldier slot 96) | the new health is written (0x84789d) unless word `[[actor+0x54]+0x3a]` is not 0 (= he takes no damage: 0x8477ae; the word is a set of 'no damage' bits - bit 1 a player's, **bit 0x800 the down's own**, set for 0.1 s by 0x6c75c0 at a down's start; a timed bit is taken off by the mask `[+0x40]` at the tick `[+0x3c]`, 0x638e2e); at health 0, with that word 0: slot 51 (0x847968) = 0x688190 = no for a dog (`[[soldier+0x6d8]]` = ESoldierStyle 6), else **0x70e0e0**(soldier, hit record, 0); yes -> return, he lives |
+| 0x70e0e0, the refusals in order | | **a.** `[actor+0x64c]` set (down already: actor slot 405 = 0x410a30), or ZWounded `[[soldier+0x4b4]+8]` not 0 / 4. **b.** 0x70f330 on his ZDownNotDeadNPC `[soldier+0x4b8]`, in order: 0x619d10 (node flag 0x1000 and bone 2 within 20 of `[actor+0x46c]`); `[actor+0x774]` (somebody holds him); 0x75a2e0 (he sits in a seat - three parts: `[actor+0x88c]` and `[seat+0x18]` not 0 and `[seat+0x40]` == 0); 0x4a05f0 (the task at `[soldier+0xa4]` has state `+8` not 0 / 4 - that object is his **ZHitAnimTask**, vtable 0xbcf87c by RTTI, made by the soldier's constructor at 0x7cfc79: **no down while a hit animation plays**); 0x86a150 / 0x86f0c0 (the object he is attached to, `[actor+0x5b4]`, is a ZLNKOBJ - type pair 0x153a898 - AND a ZHavokLnkObj - type pair 0x168cddc -, each by its vtable slot 12); then **16 probes of 100 units around him on the navigation mesh** (0x70f3d1 .. 0x70f437, PF4::ZData slot 41 = 0x4dd5f0): **all 16 must pass** = one metre of mesh free in every direction. **c.** `[actor+0x5cb]` set and he is not the buddy: **he was down once** (0x70e13f; set by the down's script at its START, 0x5f4b56; cleared nowhere). **d.** the hit has an attacker, flag `[rec+0x30]` and kind `[rec+8]` not 1, from NEARER than `[T+0x5c]` = **1500**: `[rec+0x30]` is 'the bone's body part is 2 or 3' (0x61a9f0: the head - tools/kl_impact.py) - **a head hit from within 15 m kills**. **e.** damage `[rec+0x28]` **more than 1,000** (0x70e1c7 jumps on C0 only: exactly 1,000 passes; 500,000 for the buddy). **f.** modifier `[soldier+0x124]`: 1 = yes at once; 2 = no. **g.** else (0; 0x70e206 .. 0x70e29c, the constant 0xb39f70 is -1024.0 so the compares read 'now >= last + n s'): `[gamedata+0x4d04]` = the tick of the level's last NPC down (written by every non-buddy NPC's down start 0x7eaab9 - a policeman's too; 0 at a level's load, and 0 jumps past the first test, 0x70e22c). Last down less than `[T+0x54]` = **5 s** ago: NO. Less than `[T+0x58]` = **20 s** ago: yes only when a random number is under `[actor+0x804]` / 100. Later: **YES, no draw** (0x70e273) |
+| the buddy | 0x6fd7c0 | `[gamedata+0x4cf0] == actor`: the campaign's one. Nobody in Arcade (section 9.1) |
+| `[actor+0x804]` | ZFFActor's property records (info 0xd115a0; a record's offset is 4 under the actor's: field 10 = `+0x7f0`, field 15 = `+0x804`) | **level field 15 of the ZFFActor: 50.0 on all seven AI heisters of stock F01 / F07 and of ours** (census `R4/census.py`) |
+| the modifier | `[soldier+0x124]` | 0 from the constructor (0x7cfb3b); ONE writer: 0x803530, the SquadModifierBehaviour's field 13 (`EDownNotDeadModifier`: 1 force -> 1, 2 prevent -> 2, 3 default -> 0; its debug strings 'SquadModifier: SetDownNotDeadModifier (force DND)' ..). **No stock FA level and none of ours sets it** (F07: 45 modifiers, F01 30, the bank 28: all `eDND_NotSet`) |
+| the start | 0x70e29e .. 0x70e2f6 | 0x4860e0 (who floored him), the goal pushed (0x6cabf0, 0x30dac), `[actor+0x64c]` = 1, the 0.1 s 'no damage' bit |
+| slot 1 = 0x7ea990 | | the tick he lies until `[dnd+0x14]` = now + `[T+0x4c]` .. `[T+0x50]` = **1.5 .. 3.0 s** by a random number (3 .. 9 s for the buddy); the level's 'last down' tick; **health raised to 25 % of his maximum if he has less** |
+| slot 2 = 0x5f4ac0, the script | | 0x70f330 again; `[actor+0x5cb]` = 1; the state `DownNotDead` of the graph 0x730be0; clears the 0x800 bit (0x5f4bb5); **while he lies he fires from the floor** at his target (`[soldier+0xb0]`, the soldier's own slots +0x1c4 / +0x164 - `[actor+0x77c]`, not his weapon's) and **takes hits in full** - a second health 0 kills (a); then **health = 75 % of his maximum** (0x5f4d23), actor state 1, the state `Stand`; **in Arcade, for team Ally / Mercenary: `[soldier+0x4fc]` = 1** (0x5f4dd8 .. 0x5f4dfc) |
+| **what that byte does to his route** | 0x686c77 (re-read; re/boardall_review_code.md, re/boardall_review_exe.md) | `[soldier+0x4fc]` makes his squad's ZDefendBehaviourRout count him as **arrived**: the Defend step his chain is WAITING in ends and its NEXT fires although he did not reach the place. His next order puts the byte back (0x760efe). **So every down can skip one step of his route - a hold, a loot stop, a Retomoto gate step** - with `BotsMax=2` twice a bot a round. The game's own write, not the hook's; whether he still loots / boards after it is a live question (11.4 B1, B6) |
+| a human who floors him | 0x8477c1 .. 0x847886; rules slot 131 = **0x7cc270** (read whole), slot 128 = 0x741320 | at health 0 with a PLAYER attacker the damage routine calls rules slot 131 and, for a police player, slot 128 **before** the down is asked. Slot 131: for a valid record index in use, the attacker's word `[score+0x1b8+2*index]` += word `[T+0x700]` (when rules slot 107 says yes for him) or `[T+0x6fc]`. **So a bot the human floors is counted for him at the floor and again at the real death.** What that word shows on the score page was not read; the hook prints it in the `IS DOWN` line. Slot 128 is `ret 0x10` for Heist (re/fed_kit.md) |
+| his clips | section 9.1 | `/Damage/Down_Not_Dead/Down_Not_Dead_Get_Down` (48 frames) and its `_RUN` / `_Walk` aliases, `_Crouch`, the loop, `Get_Up` (37 frames): the stock human's own fall, onto his side. NOT a Wounded clip |
+
+### 11.1a The AI heisters' own 'shot' clips: when a living one plays the full-body fall (fix round; READ in part)
+
+The owner's pictures (flat on the belly, up over a knee) on an NPC are either his DEATH (ZWounded) or a full-body
+HIT he lives through. The second: ZSoldier's slot 22 (0x531af0) is a plain jump to ZGeneric's 0x4aba20, which plays
+`/Damage/Impact/FB/<stance>/...` (the run-stumble-fall-and-up clips of section 10 / re/anim_shot.md) only when
+**`[soldier+0x98]` is 2** (0x4abaf6) and the clip's root movement has room. That dword is 1 from the soldier's
+constructor (0x7cfae9). Its writers, found by displacement and each named by its vtable (the routines were NOT read
+whole - only the writes and the lines around them):
+
+| who | writes |
+|---|---|
+| `ZRunToPosShootingTask` | slot 1 (0x8b7940, the start): **2**; its script 0x4a7e60: 0 / 1 / 2 by phase; slot 3 (0x558d90, the end): 1 |
+| `ZAttackFromCornerCover` | script 0x45fca0: **2** while he is out of the corner (11 writes), 0 while behind it; slot 3 (0x4935c0): 1 |
+| `ZCloseAttackTactic` | slot 2 (0x6764c0): 1, then **2**; slot 3 (0x4ac050): 1 |
+| `ZFireWeaponTask` | script 0x7c02b0 at 0x7c0411: **2** after a loop of 20 tries succeeded (what it tries was not read) |
+| `ZCloseCombat` | slot 3 (0x66e1b0): 1 |
+
+So an AI heister plays the full-body fall-and-get-up **alive, with the stock game's own rule, on our maps too**, when
+a hit lands while he runs to a place shooting, leans out of a corner, closes in or fires in the open - and the short
+upper-body flinch otherwise (mode 0 / 1: in cover, idle). No level field and no key is in that path. NOT ESTABLISHED:
+how often our bots are in those tasks (their routes are Defend orders: the loot / board walks may never be a
+'run to position shooting'), and which of the clips each of his three pictures is (re/anim_shot.md has the sheets).
+A multiplayer human plays `Hero_Torso_F` when he dies.
+
+### 11.2 Why none goes down: what is known (corrected in the fix round - review M1)
+
+Read: no test of the team, of Arcade, of the squad's kind (`eHeistOnly`) in the path; level data the same as stock.
+
+- **g is refuted as the whole cause.** By 0x70e206 .. 0x70e29c a first down after 20 quiet seconds is an
+  unconditional YES; only 5 .. 20 s after another NPC's down is the 50 % draw, and under 5 s a no. The first heister
+  to reach health 0 after 20 quiet seconds goes down for certain if a .. e pass. 0 of 177 (and 7 of 7 on T01) cannot
+  come from g.
+- **Two candidates that CAN be systematic, both inside b, both untouched by `BotsForce`, NEITHER PROVEN:**
+  - the **ZHitAnimTask** (`[soldier+0xa4]`): the down is refused while a hit animation plays, and a heister dies under
+    250 .. 550 small hits at about 3 a second (whether the killing hit's own animation is started before the down is
+    asked was not read);
+  - the **16 mesh probes**: one metre of mesh free in every direction, where the bots stand at cover boxes, walls and
+    in corridors.
+- d (the head from within 15 m) and e (the 60 left-behind kills and the point-blank steps: 86 of the 267 lost 100 or
+  more in one step) explain a part, not all.
+- **What the hook's `DIED` line can and cannot say.** The game asks a .. e BEFORE f / g; d, e and three of b's tests
+  (bone 2, the attachment's class, the probes) cannot be read from the tick. So the line names a readable a / b / c
+  if one stood one pass before, and otherwise says **'g MAY have refused ... a .. e are not excluded'** whenever a
+  policeman fell within 5 / 20 s - in a fire fight nearly always. **A count of B0's reasons does not answer the
+  question.** The run that decides is **B1 (the modifier forced)**: there f / g are out, and a death that says
+  'NOT f / g (the modifier was 1 = force)' is b / d / e; its place (printed) can be laid on the mesh offline, and
+  the ZHitAnimTask state is printed for one pass before and for now.
+
+### 11.3 `[Down] Bots=1` (`kld_bots` in `klhook/kldown.c`)
+
+Its own switch (works with `Enable=0`). Arcade, a level that is not stock, session state 0x19, AI crew records in play
+(mask 1 of `+0x79`; a traitor too), the actor a ZFFActor whose `[+0x77c]` is its ZSoldier (vtable 0xbd0954,
+`[soldier+0x40]` the actor). Game thread only. No call, no patch.
+
+| key | default | what is written |
+|---|---|---|
+| `Bots` | 0 | the part |
+| `BotsDry` | 0 | 1 = nothing is written (also with `Dry=1`); the log lines stay |
+| `BotsForce` | 1 | `[soldier+0x124]` 0 -> 1 (never over a 2 a level set); back to 0 when the round is over / the record is gone. Takes **f / g** away; a .. e stay the game's |
+| `BotsMax` | 2 (the task's GUESS; the game's own is 1) | byte `[actor+0x5cb]` 1 -> 0 once he is up again, while he has downs left |
+| `BotsLie` | 0 = the game's 1.5 .. 3.0 s | `[dnd+0x14]` = the down's first tick + s (0.5 .. 15), written until it stands (slot 1 writes its own a frame later) |
+| `BotsFree` | 0.75 (the stock human's free fall) | bit 0x800 of `[[actor+0x54]+0x3a]` held set for s seconds of a down, then taken off (never another bit). **While it stands NOTHING kills him**: the routine writes no health (0x8477ae) and skips the death (0x847945) - the left-behind 1,000,000 and a point-blank step too. So the bit is **never held at vehicle state 5 or more** (taken off in the same pass, a `Log=2` line) nor on a record out of play. Of the word's 20 readers 4 are read (0x8477ae, 0x847945, 0x828735, 0x4d83bb); the other 16 are listed in re/player_down_review4.md S2. For it: the game itself holds this bit `[T+0x48]` seconds on the buddy (0x5f4d9d). **First live run: `BotsFree=0`** |
+| `BotsUpPct` | 0 = the game's 75 | his health `[[actor+0x5fc]+4]` when he is up, per cent of the maximum that stands. `klgrudge.c` (`[Bots] CrewHealth` / `BackstabHealth`) writes the same object, but only when it changes the MAXIMUM, keeping his share: with both, the per cent is of klgrudge's maximum, and neither undoes the other |
+| `BotsNear` | -1 = not written | `[T+0x5c]`; 0 = a head hit from near floors too - for EVERY NPC, the police as well; put back |
+
+**Against the human's rule** (the owner: 'so the ai heisters are 1:1 with you'):
+
+| | the human (`Flop=1`) | an AI heister (`Bots=1`) |
+|---|---|---|
+| trigger | under a burst at 40 % health or less, the hit swallowed | the hit that takes his last health, in place of dying |
+| what he has on the floor | at least `DownHealth` | 25 % of his maximum |
+| free of damage | the whole knock-down | `BotsFree` seconds (0.75) |
+| on the floor | 7.0 s with no press, about 2.7 s mashing; cannot shoot | 1.5 .. 3.0 s (`BotsLie`); FIRES from the floor |
+| up with | what he had (`FlopUpPct`) | 75 % (`BotsUpPct`) |
+| how often | every 10 s (`Cooldown`) | once a life (`BotsMax` 2) |
+| the clip | the belly flop | the stock fall onto his side |
+
+**Two decisions for the owner.** (1) With the defaults a bot is far harder to kill: 252 + 189 + 189 health a round
+and 25 % given at each fall. `BotsMax=1 BotsUpPct=25` is the lean form (one extra quarter of health, once). (2) The
+bots' clip: the belly flop on them needs the NPC state graph's `DownNotDead` words (0x730be0, shared with the
+police: every NPC would flop) - not read whole, not built.
+
+**klescort.c (not edited: another track's file).** A bot that lies takes no order by `kle_bot`'s own `[actor+0x576]`
+test only if the down changes that byte - not read. The patch, after the `b576` line of `kle_bot`:
+
+    { BYTE dn = 0; if (klh_rd(actor + 0x64c, &dn, 1) && dn) { strcpy(why, "it is down, not dead ([actor+0x64c] set): no order until it is up"); kle_later = 1; return 0; } }
+
+(`kle_later = 1`: an escort is not dropped for it.) BoardAll's 'held' test (15 s without moving 1 m or earning) is not
+met by a down of 1.5 .. 3 s; `BotsLie` is bounded at 15 for that reason - keep it under 10. FollowOut's stage byte
+on a lying bot is harmless (he boards when he is up). A bot that goes down beside the waiting vehicle misses it.
+The patch is needed only if `[actor+0x576]` stays 1 during a down (not read).
+
+Compile check, fix round (`git archive HEAD klhook` at 431be33 + this kldown.c, sha1
+271b8b48981f7bee55d77594140e2a57a344031d, in `G:\kl_scratch\R4fix\src`; HEAD wires kldown.c, no line of klhook.c
+changed): 'built G:\kl_scratch\R4fix\test\dinput8.dll (TEST)' sha1 5dccf85fb02afe037caf53b4d85f7b063fe8d3fc, 'built
+G:\kl_scratch\R4fix\ship\dinput8.dll (SHIP)' sha1 0223622fa97dd3407a91678ce79a58b76b11566b; the one warning
+is klhud.c(285) C4101. Compile only. (First round: 98564f7 + fbf5ca54.., TEST 8e8b60b4.., SHIP 73288206..)
+
+### 11.4 Live checks (the lead; the bank DM03, the owner's balance, `[Bots] Log=2`; the player idle or scripted)
+
+**Nothing of `Bots` goes into the owner's ini, and he is not told 'the bots go down now', before B1 has shown an
+`IS DOWN` line and B6 has run.** B0 is an input check, not the answer to 'why' (11.2).
+
+| run | `[Down]` keys | PASS | FAIL |
+|---|---|---|---|
+| B0 | `Bots=1 BotsDry=1 Log=1` | `down: bots: on (Dry: ...`; the round line `Enable=0, Bots=1, BotsDry=1 - only the AI heisters' part runs this round, and it only logs`; per bot `down: bots: record N (actor .., soldier ..): health 252.0 of 252.0, modifier [soldier+0x124] 0 ..., his chance [actor+0x804] 50 %, was down once [actor+0x5cb] 0; the level's pauses [T+0x54] 5.0 s / [T+0x58] 20.0 s, head-hit distance [T+0x5c] 1500`; at every death beside klbot's `lost .. (0.0 of 252.0)`: `down: bots: record N DIED at health 0 without going down at (x, y, z) ... ONE PASS BEFORE: ... ZHitAnimTask [soldier+0xa4] state S ... NOW: ... -> <text>`. **Use of it:** (1) the inputs read (chance 50, pauses 5 / 20); (2) how many deaths have ZHitAnimTask state not 0 / 4 one pass before or now (`b: HIS ZHitAnimTask RAN`) - that candidate can show here; (3) any `NOT g (no NPC went down in the last ...)` line = a death g cannot explain; (4) the places, to lay on the mesh offline. Do NOT count the `g MAY have refused` lines as a cause | no `record N (actor` line (the soldier is not at `[actor+0x77c]`); a chance that is not 50 or pauses that are not 5 / 20 (the offsets are another block: say so); `IS DOWN` in a dry run = the game did it by itself (then say how often) |
+| B1 **(the run that decides)** | `Bots=1 Log=2 BotsMax=1 BotsFree=0` (no shield, one down: only the modifier is written) | `the modifier [soldier+0x124] 0 -> 1` seven times; **`down: bots: record N IS DOWN, NOT DEAD (1 of 1) at (..): health .. of 252.0 ..; he lies until .. = 1.5 .. 3.0 s from now`**; klbot shows no `dead` for him; `IS UP after 3 .. 5 s at (..): health 189.0 of 252.0 ..., heist stage S; [soldier+0x4fc] 1`; **after `IS UP` the same record's klbot lines still go `heist stage 1 -> 2 -> 3` and `aboard`** (M2: the skipped Defend step must not strand him or send him off without loot); a second health 0 = dead (`DIED at health 0 ... c: HE WAS DOWN ONCE`); back at the menu no fault. A PICTURE of a bot on the floor (he lies on his side and fires) | a fault; **no `IS DOWN` at all and the deaths say `NOT f / g (the modifier was 1 = force)`** = `Bots=1` does not do it: the refusal is b / d / e - report the ZHitAnimTask states and the places, then B3 for d; a bot that stays down for good (`IS UP` never comes); a bot that is up and then never changes stage while the others board; `WENT DOWN AND DIED ... between two passes` is a down, not a refusal |
+| B2 | B1 + `BotsMax=2 BotsLie=4 BotsFree=4` (the shield, first time) | `(1 of 2)` then `(2 of 2)` for one record; `he lies until tick .. (BotsLie=4.0 ..)`; NO `bots: record N (bot): lost` line of klbot within 4 s of his `IS DOWN`; `IS UP after 5 .. 7 s`; after each `IS UP` his stage goes on and he boards; if the vehicle drives out while one lies: `the 'no damage' bit is taken off (the vehicle drives out ...)` and he is killed like the others left behind | losses inside the free time (the bit does not hold: say so); `DIED ON THE FLOOR` inside it; a bot alive in play after the vehicle has left with the human; any fault (16 readers of the word are unread) |
+| B3 | B1 + `BotsNear=0` (only if B1 points at d) | `BotsNear: [T+0x5c] 1500 -> 0`; more `IS DOWN`; at the menu `[T+0x5c] is 1500 again` | - |
+| B4 | B1 with `[Bots] Escort=1 BoardAll=1 FollowOut=1`, the scripted human to the vehicle | no `escort:` / `board:` order line for a record between its `IS DOWN` and `IS UP` (after the klescort patch); the escort is not dropped | an order to a lying bot followed by a fault |
+| B5 | B1 on stock Subway | `nothing is written here`; no `bots:` write line | any |
+| B6 | B1's keys on **DM09 Retomoto** (the gates build), idle player, before any owner setting | every bot that had an `IS UP` still passes the gates in order (the escort's route-place lines / klbot stages) and the crew comes down the tower as in run G2; no bot left standing on a floor whose gate has opened | a bot that is up and stays behind a gate, or walks on past a hold alone (the skipped Defend step) |
+| B7 | B1 with the scripted human SHOOTING a bot to the floor (`[Fed] Player=1` off, then on after a death) | `IS DOWN ... your word [score+0x1b8] N (one pass before M)`: say whether N > M, and what the score page shows for a bot floored and then killed (S5: a kill credited twice?) | - |
+
+### 11.5 Dead Men's own (FILE: `M03_FA_A` set `PlayerCharacter`, against stock F07; `R4/dmclips.py`, `R4/same.py`)
+
+Dead Men floors a hero by the Wounded family and gets him up by a mate's adrenaline (`ZWoundedDisplay`,
+`ZWoundedFilter`, 'Adrenalin' strings in kaneandlynch.exe; how its Fragile Alliance uses it was NOT read in that exe).
+
+| Dead Men slot | clip | frames | in Dog Days |
+|---|---|---|---|
+| `/Damage/Wounded/Hero_Torso_F` | `Hero_Torso_Back` x 2, `Hero_Torso_Front` | 186 / 255 | **the same data, byte for byte; the same three pairs** |
+| `/Movement/Rise/Rise_From_Stomach` | `Heal_Wounded#Get_Up_From_Stomach` | 202 | the same data |
+| `/Movement/Rise/Rise_From_Back` | `Wounded#Hero_Die_End` | 67 | the same data |
+| `/Special_moves/Heal_wounded` (+ `_Low`) | `Heal_Wounded_01` (the mate's injection) | 55 | the same frames, keyed again; plus Dog Days' own `Heal_Down_no_dead` (19) |
+| `/Damage/Wounded/Crawl` | `Crawl_Forward_01 .. 04` (0.3 .. 1.4 m a cycle) | 66 / 58 / 133 / 106 | the same frames, keyed again |
+| `/Damage/Wounded/Dragged` / `Dragging` | a mate drags the wounded man, 1.66 m a cycle | 17 | the same frames, keyed again |
+| `/Damage/Wounded/Stand_To_Crouch_Wounded`, `Crouch_To_..` | sinks to the floor on the spot | 115 | the same data |
+| `/Movement/Stand/Wounded_M01`, `/Movement/Walk/Forward_Wounded` | the limp | 301 / 135 | the same frames |
+| `/Movement/Run/Forward_Wounded` | `Run#Forward_Wounded_M01`, a wounded run | 37 | **Dead Men only** (9 KB; the one clip `kl_fa_climb`'s merge would have to carry) |
+| `/Damage/Death/Die_Forward` / `Backwards` / `On_Spot` | 46 / 25 / 61 frames | | Dog Days has other clips under these names (50 / 61 / 40) |
+
+For the owner, two lines each:
+- **The knock-down** - thrown forward onto the belly, lies, pushes up over one knee, stands: it is `Flop=1`, live since
+  16:18. Dead Men's and Dog Days' are one clip.
+- **Dead Men's long form** - the same fall, but he STAYS down (and can crawl on his belly) until he is got up, then the
+  slow 8 s rise from the stomach: every clip is in the Dog Days levels already; it needs the hook to cut the fall at
+  the landing and hold him (10.5: not adapted). No level build.
+- **The wounded run** - the only Dead Men-only clip: a limping run for a hurt man. A merge of 9 KB per map and a
+  place to play it; not asked for.
+
+### 11.6 ASSUMED / not done
+
+- ASSUMED: writing `[soldier+0x124]` from the tick is taken as the SquadModifier's own write is (one reader, 0x70e1e8);
+  a 0x800 bit held in the 'no damage' word for seconds harms none of the word's other readers; `[dnd+0x14]` has no
+  reader but the script's two compares; clearing `[actor+0x5cb]` after the down has no other meaning (ONE reader by
+  displacement: 0x70e142; writers 0x5f4b56, the constructor 0x830445 and the stream routine 0x6ccccf, both 0); a record's actor that lives again in the next round is the same
+  object (then its count starts anew).
+- NOT ESTABLISHED: which test refuses (11.2) - and so **whether `Bots=1` makes any AI heister go down**; whether the
+  killing hit's own hit animation is started before the down is asked; what the police do to a lying bot (the target
+  choice was not read); what his own squad chain does while he lies (his Defend step waits: ASSUMED) and after the
+  game's `[soldier+0x4fc]` = 1 at the get-up (one step of his route may be skipped: 11.1); `[actor+0x576]` during a
+  down; what the word `[score+0x1b8+2*index]` shows (rules slot 131 adds to it at the floor and at the death); 16 of
+  the 20 readers of the 'no damage' word; how often our bots are in a task that sets `[soldier+0x98]` = 2 (11.1a).
+- NOT RE-READ: 0x6fd7c0, 0x4860e0, 0x6cabf0, the state graph 0x730be0, rules slot 16, kaneandlynch.exe.
+- NOT DONE: `tools/kl_fa_bots_down.py` - the level form is one SquadModifierBehaviour with field 13 =
+  `eDND_ForceDownNotDead` at the START of each bot squad's chain; it gives `BotsForce` only, on five maps to build and
+  load, where the hook's one dword does it on the installed tab: not written. The belly flop on bots. The AI's trigger
+  on the human. Dead Men's long form. kaneandlynch.exe's own wounded state.
+
+### 11.7 The review (re/player_down_review4.md: ACCEPT WITH FIXES) and what was done, 2026-10-11 fix round
+
+| point | done |
+|---|---|
+| M1 the 'why' is open, g refuted, B0's count misleads | 0x70e206 .. 0x70e29c re-read: holds. 11.0 / 11.2 / the code comment rewritten (g refuted as the whole cause; the ZHitAnimTask and the 16 probes named as unproven candidates in b). The `DIED` line: reasons in the game's order a, b, c, f, g; `g MAY have refused ... a .. e are not excluded`; the ZHitAnimTask named, its state one pass before AND now; the bot's place. 11.4: B1 decides, B0 is an input check |
+| M2 `[soldier+0x4fc]` = 1 at the get-up | 0x5f4dfc and 0x686c77 re-read: holds. Row in 11.1, the code comment, the ini; `IS UP` prints the byte, the stage and the place; B1 / B2 PASS now ask for stage 1 -> 2 -> 3 and `aboard` after `IS UP`; new run B6 on DM09 |
+| S1 B1 stacks unproven writes | B1 = `BotsMax=1 BotsFree=0`; the shield first in B2. The default of `BotsFree` stays 0.75 (the key is off with `Bots=0`; the ini says the first run goes with 0) |
+| S2 `BotsFree` swallows every kill | the bit is not set at vehicle state >= 5 and is taken off in the same pass there and on a record out of play; the ini's 'BotsLie + 2' advice is gone; the cost and the 16 unread readers are said |
+| S3 a death on the floor seen in one pass | new line `WENT DOWN AND DIED ON THE FLOOR between two passes` (counted as a down); every death line prints the down byte now |
+| S4 b read short | the seat test's three parts are read and tested (`[seat+0x18]`, `[seat+0x40]`); `[actor+0x5b4]` and its vtable are in the snapshot and the line (its class cannot be asked from the tick: the game calls vtable slot 12) |
+| S5 a human who floors a bot | rules slot 131 = 0x7cc270 read whole (row in 11.1): the attacker's score word is added to at the floor and again at the death. Not prevented (it is the game's call before the down is asked); `IS DOWN` prints the word now and one pass before; run B7 |
+| S6 the owner's question | 11.1a: who writes `[soldier+0x98]` = 2 - four tasks, by displacement and vtable, the routines not read whole. The answer to him: the bots have the shot clips and the game plays them on a living bot in those tasks |
+| S7 small | e 'more than 1,000'; the round line under `Enable=0`; the slots are the soldier's; klgrudge / `BotsUpPct` said in the key table |
