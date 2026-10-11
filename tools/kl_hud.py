@@ -13,6 +13,14 @@ stock face; it is kept, so a few pairs may kern slightly wrong for the new face)
                            [--weight 600] [--scale 1.0] [--only H1,H2,H3,...]
     python tools/kl_hud.py preview <build dir or zip> <font name> "text" <out.png>   # how a line looks
     python tools/kl_hud.py dump <build dir or zip>                                   # the fonts a level has
+    python tools/kl_hud.py pictures <build dir or zip> <out dir> [--png <dir>]        # restyled HUD plates (see PLATES)
+    python tools/kl_hud.py all <build dir or zip> <out dir> [font options]            # fonts + pictures
+
+PLATES: the stock plates (re/hud_data.md 2: slot 107/108 Weapon_BG 256x128, 169 Meter_BG 256x64, 161..164 GameplayTracker
+256x64, 109/193 the AmmoCount tick 32x32, 0/1 the borders 128x32) are light grey rounded boxes the code draws with its own
+tint / alpha (NOT established how: re/hud.md). The restyle writes dark plates with 2 px corners, a 1 px top highlight and
+the alpha baked in, as uncompressed ABGR records of the same size under the same ids; `--png` also writes them as PNGs.
+ASSUMPTION: the code's tint is light (white-ish), so a dark picture comes out dark; if it comes out black, lighten PLATE_RGB.
 
 Record fields (established on F07, proven by `preview` of the stock H1): char (u32), atlas ref (u32: 4096 + id
 for page 0, the bare id for page 1), x0 y0 x1 y1 (u16, page pixels), w h (i16), xoff yoff (i16: pen-relative ink
@@ -232,7 +240,7 @@ def build_font(chunk, tex, face, weight=600, scale=1.0, log=print):
     return pack(h, recs2, tail), {tid: tex_replace(entry, rgba)}, rep
 
 
-def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, only=None, log=print):
+def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, only=None, log=print, pictures=False):
     """A build (folder or zip) -> folder `dst` with the fonts replaced. Files beside the archive are copied."""
     zp, order, files, ext = open_level(src)
     fonts = fonts_of(files, ext)
@@ -250,6 +258,8 @@ def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, onl
         log('font %-10s chunk %d: %s %d px, %d glyphs on page 0 (%d rows), ascent %d' % (name, ci, rep['face'], rep['px'], rep['glyphs'], rep['page rows used'], rep['ascent']))
     files[ext['.prm']] = G.write(p)
     files[ext['.TEX']] = T.write_tex(tex)
+    if pictures:
+        apply_pictures(None, None, None, log, _files=(zp, order, files, ext))
     os.makedirs(dst, exist_ok=True)
     if os.path.abspath(dst) == os.path.abspath(os.path.dirname(zp)):
         raise ValueError('the output folder is the build\'s own')
@@ -263,7 +273,7 @@ def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, onl
     return out, reps
 
 
-def check(src, dst, log=print):
+def check(src, dst, log=print, pictures=False):
     """The two builds differ only in the font chunks and their page-0 textures; every record's rectangle lies
     on its page, every char is still there. -> list of problems."""
     _z, o1, f1, e1 = open_level(src); _z2, o2, f2, e2 = open_level(dst)
@@ -280,7 +290,15 @@ def check(src, dst, log=print):
     changed = [i for i in range(1, len(p1.chunks)) if p1.chunks[i] != p2.chunks[i]]
     if set(changed) - set(fonts.values()):
         bad.append('chunks other than fonts changed: %s' % sorted(set(changed) - set(fonts.values()))[:5])
-    t2 = T.read_tex(f2[e2['.TEX']])
+    t1, t2 = T.read_tex(f1[e1['.TEX']]), T.read_tex(f2[e2['.TEX']])
+    if set(t1.tex) != set(t2.tex):
+        bad.append('texture ids differ')
+    allowed = set(tex_page(t1, max(r[1] for r in parse(p1.chunks[ci])[1]))[0] for ci in fonts.values())
+    if pictures:
+        allowed |= set(tid for slot, tid in hud_slots(f1, e1).items() if slot in PLATE_SLOTS)
+    other = [i for i in t1.tex if t1.tex[i].entry != t2.tex[i].entry and i not in allowed]
+    if other:
+        bad.append('textures other than the fonts / plates changed: %s' % other[:5])
     for name, ci in fonts.items():
         h1, r1, tl1 = parse(p1.chunks[ci]); h2, r2, tl2 = parse(p2.chunks[ci])
         if h1 != h2 or tl1 != tl2 or len(r1) != len(r2):
@@ -296,6 +314,134 @@ def check(src, dst, log=print):
             if not (0 <= b[2] <= b[4] <= tw and 0 <= b[3] <= b[5] <= th and b[4] - b[2] == b[6] and b[5] - b[3] == b[7]):
                 bad.append('%s: char %d rectangle %s off its page' % (name, b[0], b[2:8])); break
     return bad
+
+
+# ------------------------------------------------------------------ plates (pictures)
+PLATE_RGB = (22, 22, 26)          # the plate fill
+PLATE_A = 0xb4                    # its alpha (0xb4 = 70 %)
+EDGE_RGB = (255, 255, 255)        # 1 px top highlight
+AMBER = (224, 150, 46)
+PLATE_SLOTS = {107: 'plate', 108: 'plate', 169: 'meter', 161: 'bar0', 162: 'bar1', 163: 'bar2', 164: 'bar3',
+               109: 'tick', 193: 'tick', 0: 'border', 1: 'border_red'}
+
+
+def _plate_pixels(kind, w, h):
+    """ABGR pixels (stored B G R A, as kl_portraits found for 'ABGR') of a plate of w x h."""
+    px = bytearray(4 * w * h)
+
+    def put(x, y, rgb, a):
+        if 0 <= x < w and 0 <= y < h:
+            i = 4 * (y * w + x); px[i], px[i + 1], px[i + 2], px[i + 3] = rgb[2], rgb[1], rgb[0], a
+
+    def box(x0, y0, x1, y1, rgb, a, r=2):
+        for y in range(y0, y1):
+            for x in range(x0, x1):
+                cx = min(x - x0, x1 - 1 - x); cy = min(y - y0, y1 - 1 - y)
+                if cx + cy < r - 1:                        # 2 px chamfered corners
+                    continue
+                put(x, y, rgb, a)
+        for x in range(x0 + r, x1 - r):                    # top highlight, bottom shade
+            put(x, y0, EDGE_RGB, 0x38); put(x, y1 - 1, (0, 0, 0), 0xd0)
+        for y in range(y0 + r, y1 - r):
+            put(x0, y, EDGE_RGB, 0x20); put(x1 - 1, y, (0, 0, 0), 0xa0)
+
+    if kind == 'plate':                                    # the ammo panel: the stock art fills the picture with a margin
+        box(8, 8, w - 8, h - 8, PLATE_RGB, PLATE_A)
+        for x in range(24, w - 24):                        # the stock plate's magazine slot line, as a hairline
+            put(x, h // 2 + 4, EDGE_RGB, 0x28)
+    elif kind == 'meter':
+        box(4, 12, w - 4, h - 12, PLATE_RGB, PLATE_A)
+    elif kind.startswith('bar'):                           # tracker bar: a dark trough with the bar at 4/4 .. 1/4
+        k = int(kind[3])
+        box(4, 20, w - 4, h - 20, PLATE_RGB, PLATE_A)
+        for y in range(h // 2 - 3, h // 2 + 3):
+            for x in range(8, 8 + (w - 16) * (4 - k) // 4):
+                put(x, y, AMBER, 0xff)
+    elif kind == 'tick':                                   # one magazine tick: a 6 x 20 amber bar in the 32 x 32 cell
+        for y in range(6, 26):
+            for x in range(13, 19):
+                put(x, y, AMBER, 0xff)
+    elif kind.startswith('border'):
+        rgb = (216, 70, 60) if kind == 'border_red' else EDGE_RGB
+        for x in range(w):
+            put(x, 0, rgb, 0xff); put(x, h - 1, rgb, 0xff)
+        for y in range(h):
+            put(0, y, rgb, 0xff); put(w - 1, y, rgb, 0xff)
+    return px
+
+
+def build_pictures(tex, slots_ids, log=print):
+    """slots_ids: {slot: texture id} -> {id: (new entry, kind, w, h, pixels)} for the slots in PLATE_SLOTS. The
+    record keeps the stock words except fourcc (ABGR), mips (1), the animated flag, size and pixels."""
+    out = {}
+    for slot, tid in sorted(slots_ids.items()):
+        kind = PLATE_SLOTS.get(slot)
+        if kind is None or tid not in tex.tex or tid in out:
+            continue
+        e = tex.tex[tid].entry
+        size, f1, _f2, _id, th, tw, mips, fl, sc, x20 = struct.unpack_from('<I4s4sIHHIIfI', e, 0)
+        q = e.index(b'\0', 36) + 1
+        px = _plate_pixels(kind, tw, th)
+        body = struct.pack('<4s4sIHHIIfI', b'ABGR', b'ABGR', _id, th, tw, 1, fl & ~0x100, sc, x20) + e[36:q] + struct.pack('<I', len(px)) + bytes(px)
+        out[tid] = (struct.pack('<I', len(body) + 4) + body, kind, tw, th, px)
+        log('picture slot %3d id %4d %-10s %dx%d %s -> ABGR' % (slot, tid, kind, tw, th, f1[::-1].decode('latin1')))
+    return out
+
+
+def hud_slots(files, ext):
+    """{slot: texture id} of the first ZOnScreenDisplay2's 200-entry list."""
+    import kl_prpjoin as J, kl_rtp
+    raw = kl_gms.unpack(files[ext['.gms']]); buf = files[ext['.buf']]
+    names, tids = ['ROOT'], [kl_rtp.ROOT_TYPE]
+    for decl, tid, _prio in kl_gms.entities(raw):
+        o = struct.unpack_from('<I', raw, 4 * (decl & 0xffffff))[0]
+        names.append(buf[o:buf.index(b'\0', o)].decode('latin1')); tids.append(tid)
+    sc = J.Scene(Prp(files[ext['.prp']]), names, tids, 'dd')
+    for k in range(1, len(sc.nodes)):
+        if sc.cls(k) == 'ZOnScreenDisplay2':
+            for _h, lab, u in J.fields(sc, k):
+                if lab == 'ZOnScreenDisplay2[7]':
+                    v = [struct.unpack('<I', t[1])[0] for t in u if t[0] in (0x04, 0x09)]
+                    ids = v[1:] if v[0] == len(v) - 1 else v
+                    return {i: t for i, t in enumerate(ids) if t}
+    return {}
+
+
+def _png_rgba(path, w, h, rgba):
+    raw = b''.join(b'\0' + bytes(rgba[y * w * 4:(y + 1) * w * 4]) for y in range(h))
+
+    def ch(t, d):
+        return struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
+    open(path, 'wb').write(b'\x89PNG\r\n\x1a\n' + ch(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)) + ch(b'IDAT', zlib.compress(raw, 6)) + ch(b'IEND', b''))
+
+
+def apply_pictures(src, dst, png=None, log=print, _files=None):
+    """A build -> folder `dst` with the plate pictures restyled (fonts untouched). png: also write PNGs there.
+    _files: (zp, order, files, ext) of a build already open -> edits files in place and returns the new entries."""
+    zp, order, files, ext = open_level(src) if _files is None else _files
+    tex = T.read_tex(files[ext['.TEX']])
+    new = build_pictures(tex, hud_slots(files, ext), log)
+    for tid, (e, kind, tw, th, px) in new.items():
+        t = tex.tex[tid]
+        tex.tex[tid] = T.Texture(e, t.faces, t.cube, t.frames, t.group)
+        if png:
+            os.makedirs(png, exist_ok=True)
+            rgba = bytearray(px); rgba[0::4], rgba[2::4] = px[2::4], px[0::4]
+            _png_rgba(os.path.join(png, '%d_%s.png' % (tid, kind)), tw, th, rgba)
+    files[ext['.TEX']] = T.write_tex(tex)
+    if _files is not None:
+        return new
+    os.makedirs(dst, exist_ok=True)
+    if os.path.abspath(dst) == os.path.abspath(os.path.dirname(zp)):
+        raise ValueError("the output folder is the build's own")
+    import kl_graft
+    out = kl_graft.write_zip(os.path.join(dst, os.path.basename(zp)), [(n, files[n]) for n in order])
+    for f in os.listdir(os.path.dirname(zp)):
+        q = os.path.join(os.path.dirname(zp), f)
+        if os.path.isfile(q) and not os.path.samefile(q, zp):
+            shutil.copyfile(q, os.path.join(dst, f))
+    log('wrote %s (%d pictures)' % (out, len(new)))
+    return out
 
 
 # ------------------------------------------------------------------ preview
@@ -368,6 +514,21 @@ def main():
         dump(a[1])
     elif cmd == 'preview':
         preview(a[1], a[2], a[3], a[4])
+    elif cmd == 'pictures':
+        png = a[a.index('--png') + 1] if '--png' in a else None
+        apply_pictures(a[1], a[2], png)
+    elif cmd == 'all':
+        kw = {}
+        rest = a[3:]
+        while rest:
+            k = rest.pop(0)
+            if k == '--face': kw['face'] = rest.pop(0)
+            elif k == '--weight': kw['weight'] = int(rest.pop(0))
+            elif k == '--scale': kw['scale'] = float(rest.pop(0))
+            else: raise SystemExit('unknown option ' + k)
+        apply(a[1], a[2], pictures=True, **kw)
+        bad = check(a[1], a[2], pictures=True)
+        print('check:', 'PASS' if not bad else 'FAIL ' + '; '.join(bad))
     elif cmd == 'fonts':
         kw = {}
         rest = a[3:]
