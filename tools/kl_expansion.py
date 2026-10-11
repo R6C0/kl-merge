@@ -662,6 +662,8 @@ def ini_block(entries):
     L += ['%s=%s' % (e['slot'], e['id']) for e in entries]
     L += ['', '; AI heisters are enabled for the adopted FA maps; the hook still gates behavior to non-stock levels.',
           '[Bots]', 'Enable=1', 'Log=1',
+          '; one AI heister stays beside the player (klescort.c; seen live 2026-10-11 with a standing player only); 0 = off, 2 = two',
+          'Escort=1',
           '; random AI heister looks from the wardrobe, no body twice, never the one the player wears (klcrew.c; seen live 2026-10-10)',
           '[Crew]', 'Random=1',
           '', '[Page.%d]' % PAGE, 'Title=' + PAGE_TITLE] + ['%s=%s' % (e['slot'], e['name']) for e in entries]
