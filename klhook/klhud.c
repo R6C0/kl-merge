@@ -694,11 +694,11 @@ static void klu_dials(const struct klb_snap *s)
     }
     /* the escape dial: the vehicle waits (state 3 / 4), [rules+0x1d8] = the seconds it still waits, 8 s a visit (klbot.c) */
     i = kluv_vehicle_pic(s) == KLUV_PIC_CHOPPER && klu_r.handle[KLUV_PIC_CHOPPER] ? KLUV_PIC_CHOPPER : KLUV_PIC_CAR;      /* a ZHeli: the helicopter (171); both kinds of car: 170 (klhud_values.c e) */
-    if ((s->veh == 3 || s->veh == 4 || klu.grid == 2) && klu_r.handle[i]) {
-        float ex = cx - 75.0f, ey = cy + 5.0f, left = klu.grid == 2 ? 0.35f : s->timer / 8.0f;
+    if ((s->veh == 3 || s->veh == 4 || s->veh == 5 || klu.grid == 2) && klu_r.handle[i]) {      /* 5 = it drives out with its own countdown (run T2: 'van 5 8.5s'): the dial stays, emptying again */
+        float ex = cx - 75.0f, ey = cy + 5.0f, left = klu.grid == 2 ? 0.35f : s->timer / 8.5f;
         klu_addpic(114, ex - 27.5f, ey - 27.5f, 55.0f, 55.0f, 0x9c080809u, klu.layer - 2);
         klu_ring(ex, ey, 23.0f, 32, left, 10.0f, 8.5f, KLU_C_ORANGE, klu.layer);
-        klu_addpic(i, ex - 15.0f, ey - 15.0f, 30.0f, 30.0f, KLU_C_CHALK, klu.layer);
+        klu_addpic(i, ex - 21.0f, ey - 21.0f, 42.0f, 42.0f, KLU_C_CHALK, klu.layer);      /* run T2: at 30 the icon's own margin left a 14 px car */
     }
 }
 
