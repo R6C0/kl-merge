@@ -11,7 +11,8 @@ written: kl_graft.out_dir is replaced for the length of a build. Spec and result
     python kl_maps.py m09  <out> [-j N]                   F07 + M09_A, F07 + M09_B, raw and with the
                                                           campaign pre-pass (story levels)
     python kl_maps.py chain <out> F07 M09_B M09_A         THREE sources: S + M1, then that + M2
-                                                          (--author: with kl_fa_author's FA layer = Retomoto Tower)
+                                                          (--author: with kl_fa_author's FA layer = Retomoto Tower;
+                                                          --author <module>: with that module's, see 'one')
     python kl_maps.py table <out>                         the table of everything built in <out>
     python kl_maps.py what M06_FA_A                       what a level is: title, rooms, extent, names
     python kl_maps.py sides M09_A                         how kl_graft splits a level's subtrees and
@@ -40,6 +41,11 @@ written: kl_graft.out_dir is replaced for the length of a build. Spec and result
                                    then deleted - a build is 0.3 .. 0.4 GB)
                      --campaign    the campaign pre-pass (campaign_drop) for a story level
                      --heroes      S's Heroes! groups at the level's HERO_AT markers
+                     --author [module]   an authored Fragile Alliance layer (kl_graft.build's `author`, where
+                                   the module's interface is written down): alone = kl_fa_author (Retomoto
+                                   Tower), with a name = that module of tools/, e.g. 'one <out> F07 M03_A
+                                   --campaign --author kl_fa_bank --keep'. With --campaign the module's
+                                   campaign_names() stay out of the pre-pass. The name follows the option directly
                      --flat ZEnvSampler   load that Dead Men class as its base class (FLAT)
                      kl_graft's own: --silent --no-loc --no-fa --stock-anm --light X
                      --m-drop A,B  --m-add A,B
@@ -69,7 +75,8 @@ CAMPAIGN PRE-PASS (--campaign; a story level has no Fragile Alliance layer)
   the music triggers, the co-op airlocks, the rappel. campaign_drop() names what must not come:
   every top-level map subtree that is not geometry (Locations/*, CloneGroup_Locations, a
   backdrop), not the level's ambience (Locations/<L>/<L>_Audio.zip!*), not an effect template
-  (Effects/*) and not a passive marker (PASSIVE: cover and level-bound boxes without a script).
+  (Effects/*) and not a passive marker (PASSIVE: cover and level-bound boxes without a script,
+  and the level's cover list where it sits in a campaign subtree).
   Clone groups follow their template (kl_graft.picks_of). The names go to Select(m_drop=...).
 
 THREE SOURCES (chain): kl_graft.build takes one S and one M. Two maps go through it as
@@ -94,14 +101,29 @@ SLOT = 'F01'
 # escape vehicles and 299 'DopeBag' loot objects
 TITLES = {'M01_FA_A': ('Title00', 'Briefing00'), 'M02_FA_A': ('Title01', 'Briefing01'),
           'M03_FA_A': ('Title02', 'Briefing02'), 'M06_FA_A': ('Title03', 'Briefing03')}
-# controllers that only mark a place (cover, bounds): a campaign subtree made of them stays
-PASSIVE = {'PlayerCoverCollision', 'NoCoverBox', 'LevelBound'}
+# controllers that only mark a place (cover, bounds): a campaign subtree made of them stays.
+# FFCoverList is the level's cover list itself (one ZLIST node, no field, names nothing; the game makes
+# a cover of every '*coverbox*' object through it at load). Most levels have it as the top-level
+# 'CoverList', which is never a candidate here; M03_A (Special!CoverList), M06_A, M12_A, M13_B
+# (Specials!CoverPoints!CoverControl) and M07_A (Special!CoverPoints!CoverControl) keep it in a campaign
+# subtree, and without this entry the pre-pass dropped their ONLY list: M03_A's 118 and M06_A's 225
+# kept cover boxes were covers for nobody (re/campaign_fa_tooling.md 5.5; nothing else changes on any
+# of the 20 levels: re/bank_campaign.md T1.2). A layer that keeps the host's Specials! must drop the
+# host's list then (kl_fa_author.DROP): a second FFCoverList is an assert, and verify() counts them.
+PASSIVE = {'PlayerCoverCollision', 'NoCoverBox', 'LevelBound', 'FFCoverList'}
 # Where S's Heroes! groups go when a story level is the map (--heroes; a direct boot puts the
 # player at a Heroes! group). The markers are the campaign's own checkpoint positions:
 # M09_A CP_02 = inside the boardroom (re/retomoto.md 3.1), M09_B CP_01 = see 'sides M09_B'.
+# M03_A (the bank the campaign way): the secure yard the round starts in. The yard holds ONE
+# top-level marker of the level, the developers' jump point behind the rappel, (-313, 205, -4398):
+# on the yard's part of the navigation mesh (4 above its polygon), 6 m west of the study's START
+# place (300, 200, -4350) (re/campaign_fa_bank.md 1.3, 4.3; re/bank_campaign.md T1.3). one() takes
+# its JumpPoint controller off with the retyping. The yard is shut by the dock's roller door: a bare
+# direct boot stands locked in there until that door is opened. No second marker: Hero_02 stays at F07's place.
 # ASSUMPTION: these are places a player can stand; nobody has stood there in Dog Days yet.
 HERO_AT = {'M09_A': {'Markup!CP_02_PosP1': 'Heroes!Hero_01', 'Markup!CP_02_PosP2': 'Heroes!Hero_02'},
-           'M09_B': {'Checkpoints!CP_01_PosP1': 'Heroes!Hero_01', 'Checkpoints!CP_01_PosP2': 'Heroes!Hero_02'}}
+           'M09_B': {'Checkpoints!CP_01_PosP1': 'Heroes!Hero_01', 'Checkpoints!CP_01_PosP2': 'Heroes!Hero_02'},
+           'M03_A': {'Special!JumpPoints!Jump#060': 'Heroes!Hero_01'}}
 PSEUDO = {}                             # level name -> folder with <name>_Main.zip and the files beside it
 # Dead Men maps that have run live under F07 (kl_graft's run log: B-4 / M01c, and F1 .. RN6 with a
 # whole Arcade round). What a map has beyond these the game meets for the first time: first_timers.
@@ -357,7 +379,9 @@ def measure(folder, slot=SLOT):
 
 
 def one(out, s_name, m_name, keep=False, campaign=False, heroes=False, slot=SLOT, tag='', nav_base=None, flat=(), **opt):
-    """Build S + M into <out>/<S>+<M><tag>/ and write result.json. -> the result dict."""
+    """Build S + M into <out>/<S>+<M><tag>/ and write result.json. -> the result dict.
+    opt: kl_graft.build's own arguments. author (True = kl_fa_author, a module's name, or a module:
+    kl_graft.author_module) is also asked here which campaign subtrees the pre-pass must leave in."""
     import kl_graft, kl_gms, kl_prpjoin as J
     redirect()
     folder = os.path.join(out, '%s+%s%s' % (s_name, m_name, tag))
@@ -367,6 +391,8 @@ def one(out, s_name, m_name, keep=False, campaign=False, heroes=False, slot=SLOT
         lines.append(str(s)); print(s, flush=True)
     res = {'S': s_name, 'M': m_name, 'ok': False, 'options': {k: (list(v) if isinstance(v, tuple) else v) for k, v in opt.items()},
            'campaign': campaign, 'heroes': heroes, 'tag': tag, 'flat': list(flat)}
+    if 'author' in opt:                                 # a module handed in goes into result.json by its name
+        res['options']['author'] = getattr(opt['author'], '__name__', opt['author'])
     real_out, real_verify, real_dm = kl_graft.out_dir, kl_graft.verify, kl_graft.DeadMen
     kl_graft.out_dir = lambda _slot: folder             # never <work>/build/install
 
@@ -436,9 +462,10 @@ def one(out, s_name, m_name, keep=False, campaign=False, heroes=False, slot=SLOT
         m_drop = tuple(opt.pop('m_drop', ()))
         if campaign:
             names, gone, stay = campaign_drop(m_name)
-            if opt.get('author'):                       # the authored layer keeps squads and helpers of the campaign
-                import glob, kl_fa_author
-                leave = {glob.escape(n) for n in kl_fa_author.campaign_names(m_name)}
+            au = kl_graft.author_module(opt.get('author'))
+            if au:                                      # the authored layer keeps squads and helpers of the campaign
+                import glob
+                leave = {glob.escape(n) for n in au.campaign_names(m_name)}
                 names = [n for n in names if n not in leave]
             m_drop += tuple(names)
             res['campaign_dropped'], res['campaign_kept'] = gone, stay
@@ -1572,7 +1599,9 @@ def main():
         if flag('--no-fa'): opt['fa'] = False
         if flag('--stock-anm'): opt['anim'] = False
         if flag('--geometry'): opt['geometry'] = True
-        if flag('--author'): opt['author'] = True
+        if '--author' in a:                             # alone: kl_fa_author (True); '--author kl_fa_bank': that module
+            import kl_graft
+            opt['author'] = kl_graft.author_arg(a)
         if '--flat' in a:
             i = a.index('--flat'); opt['flat'] = tuple(a[i + 1].split(',')); del a[i:i + 2]
         keep, campaign, heroes = flag('--keep'), flag('--campaign'), flag('--heroes')

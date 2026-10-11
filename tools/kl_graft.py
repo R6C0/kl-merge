@@ -26,8 +26,10 @@ archive in a slot. Milestone A = two stock Dog Days levels (no Dead Men data): p
                                                (default: bone ids and animation bone numbers rewritten, kl_chars)
                        ... --no-arms           Dead Men map: its characters' weapons by dm_rename's old guess ('one of
                                                S's whose name starts alike') instead of kl_arms' table (re/combat.md)
-                       ... --author            the authored FA layer of kl_fa_author.py (Retomoto Tower; the
-                                               two-part level is built by 'kl_maps.py chain ... --author')
+                       ... --author [module]   an authored FA layer. Alone: kl_fa_author.py's (Retomoto Tower; the
+                                               two-part level is built by 'kl_maps.py chain ... --author'). With a
+                                               name: that module of tools/ ('--author kl_fa_bank'; the name follows
+                                               the option directly). What such a module holds: build()'s docstring
                        ... --load trim,slim    packing / weight options (load_options(); also the environment
                                                variable KL_GRAFT_LOAD, for builds made through kl_maps): trim = S's
                                                dead vertex data emptied always, slim = S's dead map textures down to
@@ -1040,6 +1042,42 @@ def dm_rename(Jn, S, log=print, anim=True, arms=True):
     return out
 
 
+# ------------------------------------------------------------------ the authored layer: a module
+AUTHOR = 'kl_fa_author'                 # the layer '--author' alone / author=True means: Retomoto Tower
+AUTHOR_NAMES = ('HOST', 'prepare_host', 'strip', 'KEEP', 'DROP', 'layer_names', 'complete', 'wire', 'campaign_names')
+
+
+def author_module(author):
+    """build()'s `author` as a module, or None for no layer: True = AUTHOR, a name = that module of
+    tools/ (imported here, late: an authoring module imports this file), a module = itself. It must
+    hold AUTHOR_NAMES - build()'s docstring says what each is; one that is missing is an error here,
+    before anything is built. kl_maps.one asks the same module for campaign_names()."""
+    if not author:
+        return None
+    if author is True:
+        author = AUTHOR
+    if isinstance(author, str):
+        import importlib
+        author = importlib.import_module(author)
+    lack = [n for n in AUTHOR_NAMES if not hasattr(author, n)]
+    if lack:
+        raise ValueError('authoring module %s lacks %s (kl_graft.build\'s docstring: author)' % (getattr(author, '__name__', author), ', '.join(lack)))
+    return author
+
+
+def author_arg(a):
+    """'--author [module]' taken out of the argument list a -> build()'s `author`: False without the
+    option, True for the option alone, else the module's name = the argument that follows it when
+    that is not an option itself (so the name stands directly behind '--author', before any slot)."""
+    if '--author' not in a:
+        return False
+    i = a.index('--author')
+    named = i + 1 < len(a) and not a[i + 1].startswith('--')
+    author = a[i + 1] if named else True
+    del a[i:i + 1 + named]
+    return author
+
+
 # ------------------------------------------------------------------ the graft
 def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True, light='stock', anim=True, fa=True,
           postfilter=True, ao=0.5, escape=True, author=False, bones=True, load=None, arms=True, arms_seed=None):
@@ -1056,9 +1094,37 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
     0..1 of Dead Men's light map baked into the vertex colours (kl_light.bake_ao); 0 = not baked.
     Both are on by default since the live runs LK0 - LK2 (re/lighting.md, second pass, outcome).
     escape: kl_escape's repairs of a Dead Men map's way to the escape vehicle (re/escape.md; needs fa).
-    author: the authored Fragile Alliance layer of kl_fa_author (Retomoto Tower, re/retomoto_fa.md):
-    host F07's own FA layer is re-placed before the graft and kept, the campaign squads that stay lose
-    their mini-cutscene controllers, and once both parts are in the scene the layer is wired.
+    author: an authored Fragile Alliance layer, as a MODULE (author_module()): True = kl_fa_author
+    (Retomoto Tower, re/retomoto_fa.md), a name = that module of tools/ (the bank the campaign way:
+    'kl_fa_bank'), or a module. With kl_fa_author: host F07's own FA layer is re-placed before the graft
+    and kept, the campaign squads that stay lose their mini-cutscene controllers, and once both parts are
+    in the scene the layer is wired. THE INTERFACE is nine names (AUTHOR_NAMES), each read off the module
+    at the moment it is used - kl_fa_street / kl_fa_blast replace kl_fa_author's from outside, and its KEEP
+    is a module __getattr__ - so a module may be a thin one that hands on another's:
+      HOST                   name of the systems level the layer is written for ('F07'). prepare_host runs
+                             only when S is that level: the second step of a chain (S = the pseudo level
+                             of step one) is not prepared again
+      prepare_host(S, log)   on the stock Level S, before the subtrees are chosen: places (.prp ZGEOM[1] /
+                             [2] and the .gms record of the same entity), box extents, values of S's own
+                             objects. S.prp's nodes and S.ents stay paired by index
+      strip(M, log)          on each converted Dead Men part M (DeadMen; not called for a Dog Days map),
+                             before the join, where nothing goes by controller index yet: controllers off
+                             nodes that stay, map nodes re-placed
+      KEEP                   tuple of names / patterns (Select.match: fnmatch on the name and its family)
+                             of S's MAP subtrees that stay, on top of kl_fa.host_keep's
+      DROP                   tuple of patterns of S's map subtrees that go although KEEP names them (the
+                             host's cover list when the map brings its own: a second one is an assert)
+      layer_names(Jn)        -> the top-level names of the layer in the joined scene Jn: what
+                             kl_fa.repair's prune may cut dead references from
+      complete(Jn)           -> True once every part of the map is in Jn (one map: always; a chain: in
+                             its last step only). Then, once:
+      wire(Jn, log)          every reference list that names a map node. Values of existing controllers
+                             only: it runs after kl_fa.repair, before anything goes by controller index
+      campaign_names(level)  -> the top-level names of Dead Men level `level` that the campaign pre-pass
+                             must leave in (asked by kl_maps.one(campaign=True); exact names, and () for a
+                             level the layer does not know)
+    layer_names / complete / wire run only with fa. What needs the WRITTEN level (chunk numbers, new
+    entities: kl_fa_author.FINISH) is the module's own step after the build; nothing here calls it.
     bones: the skeletons that came with M's models are renumbered to the joined level (kl_chars.reid /
     rebind, re/characters_graft.md); False = left as M had them (the builds up to 2026-10-09 12:40).
     arms: a Dead Men map's characters get their weapons from kl_arms' table by class, depth and seed
@@ -1071,9 +1137,8 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
         if sch.types[t]['load'] != load:
             raise ValueError('re/kl2.json was rebuilt: type handler %d is no longer the sound reference' % t)
     S, M = Level(s_name), (DeadMen(m_name, log, ao) if m_name.startswith('M') else Level(m_name))
-    au = None
-    if author:                                          # imported here: kl_fa_author imports this file
-        import kl_fa_author as au
+    au = author_module(author)                          # None, kl_fa_author, or the module named / handed in
+    if au:
         if s_name == au.HOST:
             au.prepare_host(S, log)                     # before picks_of: positions and values on the stock Level
         if M.dm:
@@ -1087,7 +1152,7 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
     if kept or au:
         sel = Select(sel.geometry, sel.m_add, sel.m_drop, tuple(sel.s_keep) + tuple(kept) +
                      tuple(x for x in (au.KEEP if au else ()) if x not in sel.s_keep),
-                     tuple(sel.s_drop) + (au.DROP if au else ()))
+                     tuple(sel.s_drop) + tuple(au.DROP if au else ()))
     picks, dropped = picks_of(S, M, sel)
     s_tops = {t for sc, t in picks if sc is S.prp}
     m_tops = [t for sc, t in picks if sc is M.prp]
@@ -1170,7 +1235,7 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
         S.prp.p.settings = base_settings
     esc = None
     if fa:                                              # before anything goes by controller index
-        kl_fa.repair(Jn, tuple(kept) + (au.layer_names(Jn) if au else ()), log)
+        kl_fa.repair(Jn, tuple(kept) + tuple(au.layer_names(Jn) if au else ()), log)
         if au and au.complete(Jn):                      # both parts are in: every list that names a map node
             au.wire(Jn, log)
         if escape and M.dm:                             # re/escape.md: the wall Dead Men's players climb is opened,
@@ -1793,8 +1858,7 @@ if __name__ == '__main__':
             i = a.index('--ao'); ao = float(a[i + 1]); del a[i:i + 2]
         flags = ('--geometry', '--silent', '--no-loc', '--stock-anm', '--no-fa', '--no-postfilter', '--no-escape', '--no-bones', '--no-arms')
         g, quiet, noloc, noanm, nofa, pf, noesc, nobones, noarms = (f in a for f in flags)
-        author = '--author' in a
-        a = [x for x in a if x != '--author']
+        author = author_arg(a)                          # False, True (kl_fa_author) or a module's name
         load = None
         if '--load' in a:
             i = a.index('--load'); load = a[i + 1]; del a[i:i + 2]
