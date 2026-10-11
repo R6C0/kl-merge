@@ -133,7 +133,7 @@
 struct klu_text { DWORD obj, shadow; float x, y; int on, style, style_done; DWORD colour, want_colour; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
 
 static struct {
-    int on, log, crew, money, hide, shadow, layer, rows, before, borrow, hijack, reuse; float inset, crew_x, crew_y, money_x, money_y, row;
+    int on, log, crew, money, hide, shadow, layer, rows, before, borrow, hijack, reuse, probe; float inset, crew_x, crew_y, money_x, money_y, row;
 } klu;
 
 static struct {
@@ -183,10 +183,71 @@ static int klu_evt_ready;
 
 static void klu_draw_ours(void *el, void *ctx, void *cam);
 
+/* PROBE ([HUD] Probe=1, with Reuse=0; 2026-10-11): why does nothing the hook draws reach the frame, when the same object
+   drawn by the stock code does (runs H1c .. H1n)? DrawChunk (0x842d00) takes a render instance for the chunk (0x5f6ad0),
+   gives it the matrix / place / layer and appends it to the draw buffer: [ctx+8][[ctx+4]++] = instance. So per frame:
+     n0 -> stock Render -> n1                      what the game's own timer draw appends
+     E1 our Draw of the TIMER'S text at (64, 200) -> n2
+     E2 the STOCK Render called again with the element's place moved to (640, 200) -> n3
+     E3 the STOCK Render called with OUR text 8 + shadow in the element's two slots, at (640, 300) -> n4
+     E4 our Draw of OUR text 8 at (640, 400) -> n5
+   and every 5 s one block of lines: the counts, and the first instance each step appended (head and +0x180..+0x1c0).
+   On the frame: a second clock at (640, 200) = the stock routine draws wherever it is told (E2); 'TOTAL ...' at
+   (640, 300) = it draws our objects too (E3). */
+static void klu_hex(char *out, DWORD at, int n)
+{
+    BYTE b[0x60]; int k;
+    out[0] = 0;
+    if (n > (int)sizeof b || !at || !klh_rd(at, b, n)) { strcpy(out, "unreadable"); return; }
+    for (k = 0; k < n; k++) sprintf(out + 2 * k, "%02x", b[k]);
+}
+
+static char klu_probe_frame(void *el, void *ctx, void *cam)
+{
+    static DWORD said; DWORD now = GetTickCount(), e = (DWORD)(DWORD_PTR)el, c = (DWORD)(DWORD_PTR)ctx, n[6], inst[5], base, tobj, a, b;
+    float keep[2], *pos = (float *)(DWORD_PTR)(e + 0x14); DWORD *slot = (DWORD *)(DWORD_PTR)(e + 0x28), s0, s1; char r; int k;
+    char h1[200], h2[200];
+    n[0] = klh_rd32(c + 4);
+    r = ((char (__fastcall *)(void *, void *, void *, void *))(DWORD_PTR)KLH_VA(KLU_TIME_RENDER))(el, 0, ctx, cam);
+    n[1] = klh_rd32(c + 4);
+    tobj = klh_rd32(e + 0x28);
+    if (tobj) klu_draw_one(tobj, ctx, cam, 64.0f, 200.0f);                                   /* E1 */
+    n[2] = klh_rd32(c + 4);
+    keep[0] = pos[0]; keep[1] = pos[1];
+    pos[0] = 640.0f; pos[1] = 200.0f;                                                         /* E2 */
+    ((char (__fastcall *)(void *, void *, void *, void *))(DWORD_PTR)KLH_VA(KLU_TIME_RENDER))(el, 0, ctx, cam);
+    n[3] = klh_rd32(c + 4);
+    a = klu_r.t[KLU_ROWS].obj; b = klu_r.t[KLU_ROWS].shadow;
+    if (klu_r.made && a && b && klh_rd32(a) == KLU_TEXT_VT && klh_rd32(b) == KLU_TEXT_VT) {
+        s0 = slot[0]; s1 = slot[1];
+        slot[0] = a; slot[1] = b; pos[0] = 640.0f; pos[1] = 300.0f;                           /* E3 */
+        ((char (__fastcall *)(void *, void *, void *, void *))(DWORD_PTR)KLH_VA(KLU_TIME_RENDER))(el, 0, ctx, cam);
+        slot[0] = s0; slot[1] = s1;
+    }
+    n[4] = klh_rd32(c + 4);
+    pos[0] = keep[0]; pos[1] = keep[1];
+    if (klu_r.made && a) klu_draw_one(a, ctx, cam, 640.0f, 400.0f);                           /* E4 */
+    n[5] = klh_rd32(c + 4);
+    if (now - said >= 5000) {
+        said = now;
+        base = klh_rd32(c + 8);
+        for (k = 0; k < 5; k++) inst[k] = n[k + 1] > n[k] ? klh_rd32(base + 4 * n[k]) : 0;
+        klog("hud: probe2: ctx %08lx (vtable %08lx) count %lu -> stock +%lu, E1 our Draw of the timer's text +%lu, E2 stock Render moved +%lu, E3 stock Render with our text +%lu, E4 our Draw of our text +%lu; timer text %08lx ours %08lx / %08lx made %d",
+             c, klh_rd32(c), n[0], n[1] - n[0], n[2] - n[1], n[3] - n[2], n[4] - n[3], n[5] - n[4], tobj, a, b, klu_r.made);
+        for (k = 0; k < 5; k++) {
+            if (!inst[k]) { klog("hud: probe2: step %d appended nothing", k); continue; }
+            klu_hex(h1, inst[k], 0x60); klu_hex(h2, inst[k] + 0x180, 0x50);
+            klog("hud: probe2: step %d instance %08lx head %s | +0x180 %s", k, inst[k], h1, h2);
+        }
+    }
+    return r;
+}
+
 static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam)
 {
     char r; int i; (void)edx;
     InterlockedIncrement(&klu_n_call);
+    if (klu.probe && klu.reuse != 2 && klu_draw_on && (DWORD)(DWORD_PTR)el == klu_r.elem) return klu_probe_frame(el, ctx, cam);
     if (klu.reuse == 2) {                                  /* STOCK DRAWS (run H1n: every Draw the hook issues is invisible; a string put into a
                                                               stock object right before the stock draw shows, H1l): the wrapped element is the
                                                               PLAYER LIST itself, shown; its five text + shadow pairs get our rows' strings and
@@ -664,6 +725,7 @@ static void klu_init(void)
     klu.reuse = (int)GetPrivateProfileIntA("HUD", "Reuse", 2, klh_ini);            /* 2 = the shown player list's pairs get our strings, the stock code draws (default); 1 = borrowed objects drawn by the hook (invisible, H1n); 0 = own objects (invisible) */
     if (klu.reuse == 2) klu.hide = 0;            /* the player list must stay shown: its own Render draws our rows (run H1p: this line stood before the Reuse read and never fired) */
     if (klu.reuse) klu.shadow = 0;            /* 1 = borrow the hidden player list's text objects (default); 0 = create our own (never drew) */
+    klu.probe = (int)GetPrivateProfileIntA("HUD", "Probe", 0, klh_ini);            /* 1 = the five-step draw probe (with Reuse=0) */
     klu.hijack = (int)GetPrivateProfileIntA("HUD", "Hijack", 0, klh_ini);          /* 1 = the timer's own text gets our string 3 s in 10 (test) */
     klu.borrow = (int)GetPrivateProfileIntA("HUD", "Borrow", 0, klh_ini);          /* 1 = text 8 draws with the timer text's desc[2] (test) */
     klu.before = (int)GetPrivateProfileIntA("HUD", "Before", 0, klh_ini);          /* 1 = our texts before the stock timer's draw (test) */
