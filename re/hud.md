@@ -364,3 +364,25 @@ Render called again by the hook with the element's place moved +2 and VISIBLE (a
 Render with OUR created text + shadow in the element's slots +2 and VISIBLE ('TOTAL $145,000' in our colour at (640, 300):
 picture research/watch/20261011_160216/0029_1895s.jpg). So objects made mid-level by the hook are fine; section 3.1's
 Draw signature is (ctx, cam, &xform9, &pos3) with that xform. Corrects 3.1 / 6.3 ('zeroes with [+0x18] = 1.0').
+
+## 10. Additions of track V (2026-10-11 evening; static, with what the logs show)
+
+- **Corrections to read with the sections above**: 3.1's `Draw(ctx, cam, &pos3, &xform)` is `Draw(ctx, cam, &xform9,
+  &pos3)` (0x81e0f7 pushes the place first, then the xform, cam, ctx) and the xform is section 9's; 6.1's `osd =
+  [0x154da50]` is wrong (that global is the class's static property pair, run H1_stock).
+- **The OSD as the game reaches it**: `hold = [gamedata + 0x15dc]` (`gamedata = [0xdd265c]`), `osd = [hold]` when byte
+  `hold+4` is not 0xff (0x588680, 0x4ddae0). klfedkit.c 7 walks it in the owner's game (KLHook.log 18:57:40 'the player
+  list's cross-fade cut'); klhud.c takes it first and keeps the vtable scan as the fall-back.
+- **ZFATimeDisplay::Render 0x81e090, whole**: returns unless the session is Arcade / FA (0x863a60 or 0x7f6850) and its
+  state (0x8e6a20) is 0x19; `xform = 0x7f07a0`; `[elem+0x28]->Draw` at `(elem+0x14, +0x18, +0x1c)`, `[elem+0x2c]->Draw`
+  at (+2, +2); then ONLY IF byte `elem+0xbc` != 0 and the rules object exists: the escape line pair `[elem+0x30]` /
+  `[elem+0x34]` at (x + [0xb17340], y + 28), the vehicle icon (picture 170 car when rules vt+0x17c gives 3, else 171) at
+  (x - 70, y + 36) through 0x5a3e90 and DrawChunk layer 0xf, a second picture after it at (+[0xbbe4f4], +[0xbbe4f8]).
+  So with `elem+0xbc` = 0 the routine is a 'draw this text + shadow pair at this place' call: klhud.c's `Draw=2`.
+- **The picture desc**: `elem+0x40`, 0x34 bytes; `[+0] = 1`, `[+8] = &record`; the 40-byte record lies inside it at
+  desc+0xc (= `elem+0x4c`), so the record's ARGB at +0x24 IS desc+0x30 = `elem+0x70`, which the Render writes every
+  frame from `elem+0x3c` (0x81e24e / 0x81e255). 3.2's argument order `(chunk, &desc, &pos2, &xform, ...)` is `(chunk,
+  &desc, &xform9, &pos3, layer, 1, 0)` (0x81e25c pushes the place, then the xform) - section 8 has it right.
+- **The score object's columns the HUD can show** (`score = [rules+0x5f8]`): `+0x150 + 4 i` cash carried, `+0x184 + 4 i`
+  rewards, `+0x1d4 + 4 i` flags (1 traitor, 8 police; klfedkit.c), `+0x44` lives shown, `+0x45` round, `+0x38` the total
+  of the rounds before, `+0x04 .. +0x30` the round's lines.
