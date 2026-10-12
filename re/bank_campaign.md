@@ -2842,3 +2842,39 @@ Folders: C:/kl_build/c_bank9_fx: bank_vault = bank_vault_wavslim zip **404f47c8*
 3. The crew out through the hall with its money (W12: $755,000 .. $1,185,000, four dead, nobody out) and the van. A bot above y 900 is the stairwell case of A.1 bot 6: not fixed, only shown not to be our leg.
 4. Expected: the flights' side room fires across the corridor on the way out; if bots die there, move those squads to the cross corridor's room.
 GUESS: every pocket point, the behaviour of leashed men, WAKE_EARLIEST 75 s, the flights room's effect, a rout with two places on one point.
+
+## After runs W10-W12, SECOND FIX (the skeptic of fd97578; tools/kl_fa_bank.py and this note only; OFFLINE, NOT RUN IN THE GAME; sets C:/kl_build/c_bank9_fx and c_bank9_music_fx REBUILT, built from the scratch tool copy C:/kl_scratch/vault_garrison/tools)
+Labels: MEASURED (the built folders, the exact ray, the real evaluator), READ (code), GUESS. **Section A.2 / A.3 / A.4 / A.5 above are the FIRST form; where they differ, this section counts.**
+
+### B.1 The three faults, reproduced
+1. **StayUpstairs row on the real walk: CONFIRMED (MEASURED).** `crew_ways` on the first c_bank9: W12's bot 4 death (450, 336, -6714) is **313** from the nearest stand-in leg (not on leg 1>2, as A.1 said) and the four StayUpstairs men stood at (350..550, 240, -6650..-6700), **109 / 115 / 152 / 152** from it - inside the point-blank reach 160; the first form's pocket cut (320 from the stand-in legs) was below the deviation of a real walk. The new garrison-check (below) FAILS that folder: (b) 6 places within 160, (a) 72 places.
+2. **Way-out fire rose: CONFIRMED (MEASURED).** pressure_rows on the first c_bank9: leg 5>6 **20** guns against c_bank8's 13 (the flights' side room x 750..900, y -160 across the corridor), and pressure-check only printed OVER.
+3. **Bot 6's climb to the gallery: NOT FIXED, REJECTED as fixable here.** Stand-in legs stop at y 812; the game's own path went to y 1144 / 1220 and **why is NOT established** (the hook logs no bot places; the hall's gallery police are the owner's design). Check (e) now says in a NOTED line that it proves only the stand-in; the two spots are in `OBSERVED_STRAY` and not a rule (the gallery RunToCover place of 030_FinancialAlleyExitStreet_Left is 117 from the second spot).
+
+### B.2 What changed in tools/kl_fa_bank.py
+* `OBSERVED_PLACES` (the three ONE STEP deaths of W12 are holds of the crew's own in garrison-check; the two gallery spots are NOTED only), `OBSERVED_DEV` 313.
+* Margins: inside the vault lobby (`in_lobby`: z -8400 .. -5900, y 90 .. 390) a garrison place keeps `GARRISON_OPEN` **425** from every hold, leg sample and observed place. 473 (= 160 + 313) leaves the lobby's three no place on the mesh; the only quiet strip is the west wall (x -450, 431 .. 445 from the diagonal leg 1>2): **KNOWN RISK, GUESS** that a walk does not wander 265+ west of that leg. Outside the lobby GARRISON_HOLD 400 / LEG 300 as before (no deviation measured there).
+* `pressure_check` FAILS a --garrison build when a way-out station or stretch has more guns than c_bank8 (`WAY_OUT_BASE_AT`, matched by PLACE because the station list changes with the squads' places: hold/leg 3/13 at (405, -774, -11228), 11/15 at (394, 240, -7876), 9/9 at (1546, 240, -6970); a station inserted on a stretch takes that stretch's worst).
+* `GARRISON_PLACES` re-planned (same 76 keys): StayUpstairs (4) and 01b (2) at the dock's upper west level / the lobby's west wall; the lobby's three unchanged at x -450; **Guards_Reinforcement_01a, Guards_01, Guards_02 to the dock's west level** (they are woken by the ante-room / flights events and leashed, so they never reach the corridor), the beat's police (Police_02, _03, Teargas x2, Vault_01 .. _03) to the flights' side room (x 750 .. 900, y -160) and the cross corridor (y -560). Chosen by a local search on the REAL evaluator (pressure_rows with the men moved: 17 s a step) over candidates that pass the margins above, no exact ray to a START row or to START / dock door / dock, within 400 of cover, 50 apart.
+* garrison-check prints each failing place of (a) and the NOTED gallery lines.
+
+### B.3 Tables (MEASURED; guns with a clear exact ray, worst of the seven bots, stand-in legs; plan of the delivered folder)
+| way out | c_bank8 | first c_bank9 | now |
+|---|---|---|---|
+| leg to the stairs top (405, -774, -11228) -> (400, -160, -9577)* | 13 | 20 | 4 |
+| hold (400, -160, -9577)* | (11) | 10 | 2 |
+| leg -> (394, 240, -7876) | 15 | 11 | 5 |
+| hold (394, 240, -7876) | 11 | 6 | 5 |
+| leg -> (1546, 240, -6970) | 9 / 9 | 15 / 6 | 10 |
+| hold (1546, 240, -6970) | 9 | 6 | 6 |
+(* the plan has a station here that c_bank8's did not: the stretch is split.) The hall (hold 11: 0, stretch 12: 9) and the square (36) are unchanged. Way in: hold 1: 0, leg 4, hold 2: 3, leg 3, ante-room 3 / 3, loot 0 / 3: as c_bank8.
+START rows over the whole round, exact ray, hunters counted: 0 guns at 0 / 11 / 30 / 60 / 75 / 90 / 120 / 180 / 240 / 300 / 360 s (c_bank8: 0 until +60, then 23). Nearest start or place of a kept squad to a hold or leg (garrison squads / the other kept squads): c_bank8 **4** (58 places within 160, 79 within 400) / 272; first c_bank9 **109** (6 within 160) / 272; now **332** to a leg, 411 to a hold (0 within 160, 25 within 400) / 272. Nearest garrison place to W12's deaths: bot 4 949, bot 1 861, bot 7 837 (c_bank8: 142, 5, 153).
+Hunters: none (0 squads Unleash / Alert, 0 hunts named); remaining hunters by design are the waves, Police_OutSide_SWAT and the alley squads.
+**Side effect, unexplained:** the delivered folders hold 14 more entities (21,171 nodes against 21,157): `032_DefendBehaviour_out_hall` + `Pos#01` in each of the seven bot squads, the HALL gate's hold step, which the c_bank8 / first c_bank9 squads did not contain although their plan names it. 100 ZFFActors, nobody removed; rooms-check 3 gates, 15 men; timetable slack 37 s; every checker passes. The hall gate (the gallery's eight, 30 s clock) now holds the crew for real at (1461, 800, -6330).
+
+### B.4 Folders (all checkers PASS except the known preflight CRASH 1 / audit FAIL 2 = the 16 stream clips; music set: all PASS, noai the known)
+C:/kl_build/c_bank9_fx: bank_vault = bank_vault_wavslim zip **d6c50820** (d6c50820781d66b27d43fd3210f00c3e6b0bcdc3), bank_vault_noai ddd5d908, bank_vault_bare 051d57e2 (copied from c_bank8). C:/kl_build/c_bank9_music_fx: bank_vault = wavslim **7864d8e2** (7864d8e2f2d4e57c4f4f131614bc59d78f482e54), noai 62cda999, bare 749dbfb1. Blocks as before (.prm 72.2, five blocks 161.4 / 151.4 MB, table 65,852).
+
+### B.5 What the next run must show (add `[CrewHop] Dry=1 Log=2` to the level's KLJoin.ini: W10-W12 have no bot places)
+1. The idle human at START takes no hit. 2. No ONE STEP on a bot; a death's place against `garrison-check` (the lobby's west wall is the weak spot, 431 .. 445 from leg 1>2). 3. Bots above y 900 (bot 6's stairwell): log where the game's path goes. 4. The crew holds at the hall gate's hold (1461, 800, -6330) up to 30 s. 5. The flights corridor and the dock's west level are now quiet: if the crew then walks through unopposed that is the cost; pressure left is the lobby's three, 01b, the hall's eight, the waves and the square.
+GUESS: every pocket point, leashed men do not hunt (kl2 0x85f89f only selects a tactic list), the 425 in the lobby, WAKE_EARLIEST 75 s.

@@ -2701,97 +2701,129 @@ def man_bears(S, nav, m, p, rng, rules=('exact',), dy=HOLD_GUN_DY):
 GARRISON = False
 GARRISON_PLACES = collections.OrderedDict([
     # Guards_Reinforcement_StayUpstairs#01: 3 men, pocket of 3 points
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs#01\\Guard_01#03', (-450, 240, -7100)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs#01\\Guard_01#01', (-400, 240, -7050)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs#01\\Guard_01#02', (-450, 240, -7000)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs#01\\10_DefendBehaviour\\Pos#01', (-450, 240, -7100)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs#01\\Guard_01#03', (-450, 240, -7200)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs#01\\Guard_01#01', (-450, 240, -7300)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs#01\\Guard_01#02', (-450, 240, -7100)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs#01\\10_DefendBehaviour\\Pos#01', (-450, 240, -7200)),
     # PatrolGuards_01a: 2 men, pocket of 2 points
-    ('GamePlay!3_Garage_Part!PatrolGuards_01a\\Guard_01', (-1000, 240, -4800)),
-    ('GamePlay!3_Garage_Part!PatrolGuards_01a\\Guard_01#01', (-950, 240, -4750)),
-    ('GamePlay!3_Garage_Part!PatrolGuards_01a\\10_DefendBehaviour\\Pos#01', (-1000, 240, -4800)),
-    ('GamePlay!3_Garage_Part!PatrolGuards_01a\\30_DefendBehaviour\\Pos#01', (-950, 240, -4750)),
-    # Guards_Reinforcement_01b: 2 men, pocket of 3 points
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\Guard_01#01', (-950, 240, -4850)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\Guard_01#02', (-900, 240, -4800)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\40_DefendBehaviour_Moveback\\Pos#01', (-950, 240, -4850)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\40_DefendBehaviour_Moveback\\Pos#03', (-900, 240, -4800)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\40_DefendBehaviour_Moveback\\Pos#02', (-1000, 240, -4800)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\10_DefendBehaviour\\Pos#02', (-900, 240, -4800)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\10_DefendBehaviour\\Pos#01', (-1000, 240, -4800)),
-    # Guards_Reinforcement_01a: 2 men, pocket of 3 points
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\Guard_01#01', (750, -160, -9500)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\Guard_01#02', (800, -160, -9450)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\40_DefendBehaviour_Moveback\\Pos#01', (750, -160, -9500)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\40_DefendBehaviour_Moveback\\Pos#03', (800, -160, -9450)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\40_DefendBehaviour_Moveback\\Pos#02', (750, -160, -9400)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\10_DefendBehaviour\\Pos#02', (800, -160, -9450)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\10_DefendBehaviour\\Pos#01', (750, -160, -9400)),
+    ('GamePlay!3_Garage_Part!PatrolGuards_01a\\Guard_01', (-400, 200, -3400)),
+    ('GamePlay!3_Garage_Part!PatrolGuards_01a\\Guard_01#01', (-300, 200, -3700)),
+    ('GamePlay!3_Garage_Part!PatrolGuards_01a\\10_DefendBehaviour\\Pos#01', (-400, 200, -3400)),
+    ('GamePlay!3_Garage_Part!PatrolGuards_01a\\30_DefendBehaviour\\Pos#01', (-400, 200, -3400)),
     # Guards_Reinforcement_StayUpstairs: 4 men, pocket of 4 points
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\Guard_01#04', (350, 240, -6650)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\Guard_01#03', (400, 240, -6700)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\Guard_01#01', (450, 240, -6650)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\Guard_01#02', (550, 240, -6650)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\10_DefendBehaviour\\Pos#02', (350, 240, -6650)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\10_DefendBehaviour\\Pos#01', (400, 240, -6700)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\Guard_01#04', (-950, 240, -4850)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\Guard_01#03', (-1050, 240, -4800)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\Guard_01#01', (-900, 240, -4800)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\Guard_01#02', (-950, 240, -4750)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\10_DefendBehaviour\\Pos#02', (-950, 240, -4850)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\10_DefendBehaviour\\Pos#01', (-1050, 240, -4800)),
+    # Guards_Reinforcement_01b: 2 men, pocket of 3 points
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\Guard_01#01', (-450, 240, -7400)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\Guard_01#02', (-450, 240, -7000)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\40_DefendBehaviour_Moveback\\Pos#01', (-450, 240, -7400)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\40_DefendBehaviour_Moveback\\Pos#03', (-450, 240, -7000)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\40_DefendBehaviour_Moveback\\Pos#02', (-450, 240, -7400)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\10_DefendBehaviour\\Pos#02', (-450, 240, -7400)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\10_DefendBehaviour\\Pos#01', (-450, 240, -7000)),
+    # Guards_Reinforcement_01a: 2 men, pocket of 3 points
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\Guard_01#01', (-900, 240, -4750)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\Guard_01#02', (-950, 240, -4800)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\40_DefendBehaviour_Moveback\\Pos#01', (-900, 240, -4750)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\40_DefendBehaviour_Moveback\\Pos#03', (-950, 240, -4800)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\40_DefendBehaviour_Moveback\\Pos#02', (-1050, 240, -4750)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\10_DefendBehaviour\\Pos#02', (-900, 240, -4750)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\10_DefendBehaviour\\Pos#01', (-950, 240, -4800)),
     # Guards_01: 2 men, pocket of 3 points
-    ('GamePlay!4_Vault_Part!Guards_01\\Guard_01', (750, -160, -9400)),
-    ('GamePlay!4_Vault_Part!Guards_01\\Guard_01#01', (800, -160, -9350)),
-    ('GamePlay!4_Vault_Part!Guards_01\\20_DefendBehaviour\\Pos#02', (750, -160, -9400)),
-    ('GamePlay!4_Vault_Part!Guards_01\\20_DefendBehaviour\\Pos#01', (800, -160, -9350)),
-    ('GamePlay!4_Vault_Part!Guards_01\\10_DefendBehaviour\\Pos#03', (800, -160, -9350)),
-    ('GamePlay!4_Vault_Part!Guards_01\\10_DefendBehaviour\\Pos#02', (800, -160, -9450)),
-    ('GamePlay!4_Vault_Part!Guards_01\\10_DefendBehaviour\\Pos#01', (750, -160, -9400)),
+    ('GamePlay!4_Vault_Part!Guards_01\\Guard_01', (-1000, 240, -4750)),
+    ('GamePlay!4_Vault_Part!Guards_01\\Guard_01#01', (-1050, 240, -4750)),
+    ('GamePlay!4_Vault_Part!Guards_01\\20_DefendBehaviour\\Pos#02', (-1000, 240, -4750)),
+    ('GamePlay!4_Vault_Part!Guards_01\\20_DefendBehaviour\\Pos#01', (-1050, 240, -4750)),
+    ('GamePlay!4_Vault_Part!Guards_01\\10_DefendBehaviour\\Pos#03', (-1000, 240, -4750)),
+    ('GamePlay!4_Vault_Part!Guards_01\\10_DefendBehaviour\\Pos#02', (-1050, 240, -4750)),
+    ('GamePlay!4_Vault_Part!Guards_01\\10_DefendBehaviour\\Pos#01', (-1000, 240, -4800)),
     # Police_Reinforcement_02: 2 men, pocket of 3 points
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\Police_01', (750, -160, -9300)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\Police_02', (800, -160, -9250)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\40_DefendBehaviour_Moveback\\Pos#01', (750, -160, -9300)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\40_DefendBehaviour_Moveback\\Pos#03', (800, -160, -9250)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\40_DefendBehaviour_Moveback\\Pos#02', (800, -160, -9350)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\10_DefendBehaviour\\Pos#01', (800, -160, -9250)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\Police_01', (750, -160, -8900)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\Police_02', (800, -160, -8900)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\40_DefendBehaviour_Moveback\\Pos#01', (750, -160, -8900)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\40_DefendBehaviour_Moveback\\Pos#03', (800, -160, -8900)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\40_DefendBehaviour_Moveback\\Pos#02', (750, -160, -8950)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\10_DefendBehaviour\\Pos#01', (750, -160, -8900)),
     # Police_Reinforcement_03: 4 men, pocket of 4 points
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\Police_01', (800, -160, -8900)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\Police_01', (800, -160, -9000)),
     ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\Police_02', (750, -160, -8950)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\Police_04', (850, -160, -8950)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\Police_03', (800, -160, -9000)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\40_DefendBehaviour_Moveback\\Pos#01', (800, -160, -8900)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\Police_04', (900, -160, -8900)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\Police_03', (750, -160, -9000)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\40_DefendBehaviour_Moveback\\Pos#01', (800, -160, -9000)),
     ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\40_DefendBehaviour_Moveback\\Pos#03', (750, -160, -8950)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\40_DefendBehaviour_Moveback\\Pos#02', (850, -160, -8950)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\10_DefendBehaviour\\Pos#02', (750, -160, -8950)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\10_DefendBehaviour\\Pos#01', (850, -160, -8950)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\40_DefendBehaviour_Moveback\\Pos#02', (900, -160, -8900)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\10_DefendBehaviour\\Pos#02', (800, -160, -9000)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\10_DefendBehaviour\\Pos#01', (750, -160, -8950)),
     # Guards_02: 2 men, pocket of 2 points
-    ('GamePlay!4_Vault_Part!Guards_02\\Guard_01', (750, -560, -10700)),
-    ('GamePlay!4_Vault_Part!Guards_02\\Guard_01#01', (800, -560, -10650)),
-    ('GamePlay!4_Vault_Part!Guards_02\\DefendBehaviour\\Pos#02', (750, -560, -10700)),
-    ('GamePlay!4_Vault_Part!Guards_02\\DefendBehaviour\\Pos#01', (800, -560, -10650)),
+    ('GamePlay!4_Vault_Part!Guards_02\\Guard_01', (-1000, 240, -4800)),
+    ('GamePlay!4_Vault_Part!Guards_02\\Guard_01#01', (-1000, 240, -4700)),
+    ('GamePlay!4_Vault_Part!Guards_02\\DefendBehaviour\\Pos#02', (-1000, 240, -4800)),
+    ('GamePlay!4_Vault_Part!Guards_02\\DefendBehaviour\\Pos#01', (-1000, 240, -4700)),
     # Police_Reinforcement_Teargas_01: 1 men, pocket of 3 points
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01\\Police_01', (750, -560, -10600)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01\\40_DefendBehaviour_Moveback\\Pos#01', (750, -560, -10600)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01\\40_DefendBehaviour_Moveback\\Pos#03', (800, -560, -10650)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01\\40_DefendBehaviour_Moveback\\Pos#02', (800, -560, -10550)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01\\Police_01', (900, -160, -9300)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01\\40_DefendBehaviour_Moveback\\Pos#01', (900, -160, -9300)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01\\40_DefendBehaviour_Moveback\\Pos#03', (850, -160, -8900)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01\\40_DefendBehaviour_Moveback\\Pos#02', (900, -160, -9100)),
     # Police_Reinforcement_Teargas_01#01: 1 men, pocket of 3 points
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01#01\\Police_01', (750, -560, -10500)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01#01\\20_DefendBehaviour\\Pos#03', (750, -560, -10500)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01#01\\20_DefendBehaviour\\Pos#02', (800, -560, -10550)),
-    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01#01\\20_DefendBehaviour\\Pos#01', (750, -560, -10600)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01#01\\Police_01', (850, -160, -8900)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01#01\\20_DefendBehaviour\\Pos#03', (850, -160, -8900)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01#01\\20_DefendBehaviour\\Pos#02', (900, -160, -9100)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01#01\\20_DefendBehaviour\\Pos#01', (900, -160, -8950)),
     # Vault_Reinforcement_Police_01: 2 men, pocket of 2 points
-    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_01\\Police_01', (800, -560, -10550)),
-    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_01\\Police_02', (850, -560, -10600)),
-    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_01\\20_DefendBehaviour\\Pos#01', (800, -560, -10550)),
-    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_01\\20_DefendBehaviour\\Pos#02', (850, -560, -10600)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_01\\Police_01', (850, -160, -8950)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_01\\Police_02', (900, -160, -8950)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_01\\20_DefendBehaviour\\Pos#01', (850, -160, -8950)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_01\\20_DefendBehaviour\\Pos#02', (900, -160, -8950)),
     # Vault_Reinforcement_Police_02: 2 men, pocket of 3 points
-    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_02\\Police_01', (850, -560, -10700)),
-    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_02\\Police_02', (900, -560, -10650)),
-    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_02\\10_DefendBehaviour\\Pos#03', (850, -560, -10700)),
-    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_02\\10_DefendBehaviour\\Pos#02', (900, -560, -10650)),
-    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_02\\10_DefendBehaviour\\Pos#01', (800, -560, -10650)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_02\\Police_01', (900, -160, -9100)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_02\\Police_02', (900, -160, -9050)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_02\\10_DefendBehaviour\\Pos#03', (900, -160, -9100)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_02\\10_DefendBehaviour\\Pos#02', (900, -160, -9050)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_02\\10_DefendBehaviour\\Pos#01', (900, -160, -9000)),
     # Vault_Reinforcement_Police_03: 2 men, pocket of 3 points
-    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_03\\Police_01', (850, -560, -10500)),
-    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_03\\Police_02', (900, -560, -10550)),
-    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_03\\20_DefendBehaviour\\Pos#03', (850, -560, -10500)),
-    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_03\\20_DefendBehaviour\\Pos#02', (900, -560, -10550)),
-    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_03\\20_DefendBehaviour\\Pos#01', (800, -560, -10550)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_03\\Police_01', (900, -560, -10700)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_03\\Police_02', (900, -560, -10600)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_03\\20_DefendBehaviour\\Pos#03', (900, -560, -10700)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_03\\20_DefendBehaviour\\Pos#02', (900, -560, -10600)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_03\\20_DefendBehaviour\\Pos#01', (900, -560, -10500)),
 ])
-GARRISON_HOLD, GARRISON_LEG = 400.0, 300.0     # a garrison place is this far from every hold (every station of the seven bots) and from every leg of their walk and of the human's route. GUESS: the task's numbers
+GARRISON_HOLD, GARRISON_LEG = 400.0, 300.0     # outside the vault lobby (the first form; inside it GARRISON_OPEN). GUESS: the task's numbers
+# SECOND FIX (skeptic of the first garrison build). (1) The stand-in legs are NOT where a real bot walks: W12's bot 4 died at (450, 336, -6714), 313 from the nearest stand-in leg of its own plan (MEASURED on c_bank9: w2/r1.py), the
+# flights' StayUpstairs row of the first build stood 109 from that place. So a garrison place keeps the point-blank reach (ROOM_LINE_CLEAR) plus that measured deviation from every leg and every hold, and the five places
+# where a real bot was shot in W12 are holds of their own (OBSERVED_PLACES; the three ONE STEP deaths and the two gallery spots of bot 6). (2) The way out is not made worse: WAY_OUT_BASE_AT = c_bank8's guns on the way-out
+# stations / stretches (MEASURED, pressure-check), a --garrison build FAILS above them.
+OBSERVED_DEV = 313.0                    # MEASURED: the largest distance of a real death from the stand-in legs (W12 bot 4); a pocket also keeps ROOM_LINE_CLEAR from the place of a real walk
+OBSERVED_PLACES = (('W12 bot 4 ONE STEP (way in)', (450.0, 336.0, -6714.0)), ('W12 bot 1 ONE STEP (way out)', (433.0, 249.0, -8211.0)),
+                   ('W12 bot 7 ONE STEP (way out)', (340.0, 335.0, -7660.0)), ('W12 bot 6 stairwell', (1520.0, 1144.0, -5780.0)), ('W12 bot 6 gallery', (1284.0, 1220.0, -6488.0)))
+OBSERVED_STRAY = ('W12 bot 6 stairwell', 'W12 bot 6 gallery')          # the two spots of bot 6 up the stairwell: said in (e), not a rule (the hall's gallery police are the owner's design and the climb is not explained)
+# c_bank8's way-out stations as pressure-check printed them (MEASURED, run W12's build): place -> (guns on a hold, guns on the stretch to the next station). The plan's station list is built from the squads' places
+# (the rooms' holds), so the check matches by PLACE, not by index: a station within 150 of one of these takes its numbers; a station between two lies on the earlier one's stretch and takes that stretch's worst for both.
+WAY_OUT_BASE_AT = (((405.0, -774.0, -11228.0), 3, 13), ((394.0, 240.0, -7876.0), 11, 15), ((1546.0, 240.0, -6970.0), 9, 9))
+
+
+def way_out_base(rows):
+    """{('hold'|'leg', i): c_bank8's guns} for the way-out rows of pressure_rows that WAY_OUT_BASE_AT covers (the stations from the first of its places on, up to the hall)."""
+    out, last = {}, None
+    for r in rows:
+        hit = [b for b in WAY_OUT_BASE_AT if math.dist(b[0], r['at']) < 150.0]
+        if hit:
+            last = hit[0]
+            out[('hold', r['i'])], out[('leg', r['i'])] = last[1], last[2]
+        elif last is not None and r['kind'] == 'way' and r['at'][1] < 300.0 and r['at'][2] > -11500.0:       # a station inserted between two of them, on the stairs / corridors below the lobby
+            out[('hold', r['i'])], out[('leg', r['i'])] = last[2], last[2]        # a point of the old stretch: the old stretch's worst (c_bank8 had no station there)
+    return out
+GARRISON_OPEN = 425.0                   # in the vault lobby (in_lobby) a garrison place keeps this from every hold and leg sample and from the places W12 shot bots. The reach is 160 and the deviation of a real walk from the stand-in leg was
+                                        # MEASURED once at 313 (W12 bot 4, the lobby's EAST half): 473 would leave the lobby's three no place on the mesh; the only quiet strip is the west wall (x -450, 431 .. 445 from the diagonal leg 1>2)
+                                        # and 425 is what it allows. KNOWN RISK, GUESS: that a walk does not wander 265+ to the west of that leg. Outside the lobby the first form's GARRISON_HOLD / GARRISON_LEG stay (no deviation was measured there)
+LOBBY_BOX = (-8400.0, -5900.0, 90.0, 390.0)       # z from, z to, y from, y to: the vault lobby's floor and its stairs
+
+
+def in_lobby(p):
+    return LOBBY_BOX[0] <= p[2] <= LOBBY_BOX[1] and LOBBY_BOX[2] <= p[1] <= LOBBY_BOX[3]
 WAKE_EARLIEST = {'lobby': 30.0, 'flights': 45.0, 'ante': 75.0}    # s after the GO: the earliest a gate's event can fire with the fastest crew seen (the beat box: GO + 70 .. 85 s in W10 - W12 from the idle human's first hit at +91 / +134 / +100 s less the garrison's walk). GUESS
 YARD_GUNS = 3                           # guns that may bear on a START row at any time (the fed respawn and late bots stand there; HOLD_GUNS)
 YARD_TIMES = (0.0, 11.0, 30.0, 60.0, 75.0, 90.0, 120.0, 180.0, 240.0, 300.0, 360.0)
@@ -2942,7 +2974,9 @@ def garrison_check(folder, log=print):
     set_wake_built(ex)
     log('  garrison: %s' % STAGE2_NOTE)
     legs, holds = crew_ways(B, P, nav)
-    flat = [(lab, q) for lab, ss in legs for q in ss]
+    obs = [(lab, q) for lab, q in OBSERVED_PLACES if lab not in OBSERVED_STRAY]
+    holds = holds + obs                                              # SECOND FIX: where a real bot was shot on its planned way in W12 is a place of the crew's own
+    flat = [(lab, q) for lab, ss in legs for q in ss] + obs
     hunted = hunted_squads(sc)
     rows = garrison_rows(B, hunted)
     strict = garrison_squads()
@@ -2964,8 +2998,10 @@ def garrison_check(folder, log=print):
             worst[key] = (d, '%s %s at (%d, %d, %d): %d from %s' % (r['kind'], r['what'], *r['at'], d, ll if dl <= dh else lh))
         if d < ROOM_LINE_CLEAR:
             near.append((d, r, ll if dl <= dh else lh))
-        if r['squad'] in strict and (dh < GARRISON_HOLD or dl < GARRISON_LEG):
-            sever.append((min(dh - GARRISON_HOLD, dl - GARRISON_LEG), r, ll if dl <= dh else lh))
+        lob_ = in_lobby(r['at'])
+        wh_, wl_ = (GARRISON_OPEN, GARRISON_OPEN) if lob_ else (GARRISON_HOLD, GARRISON_LEG)        # SECOND FIX: the vault lobby is where a real walk was MEASURED to leave the stand-in leg (313)
+        if r['squad'] in strict and (dh < wh_ or dl < wl_):
+            sever.append((min(dh - wh_, dl - wl_), r, ll if dl <= dh else lh))
     log('  garrison: %d places (%d men, %d rout places) of %d squads; hunts named: %d squads %s' % (
         len(rows), sum(r['kind'] == 'man' for r in rows), sum(r['kind'] == 'place' for r in rows), len({r['squad'] for r in rows}), len(hunted), sorted(h.split('!')[-1] for h in hunted)[:6]))
     near.sort(key=lambda t: t[0])
@@ -2977,8 +3013,10 @@ def garrison_check(folder, log=print):
             len(near), len({r['squad'] for _d, r, _l in near}), ROOM_LINE_CLEAR, near[0][0], near[0][1]['squad'].split('!')[-1], near[0][1]['what']))
     if sever:
         sever.sort(key=lambda t: t[0])
-        fail('(a) %d places of the garrison / beat squads are nearer than %d to a hold or %d to a leg (worst: %s %s at (%d, %d, %d), %d from %s)' % (
-            len(sever), GARRISON_HOLD, GARRISON_LEG, sever[0][1]['squad'].split('!')[-1], sever[0][1]['what'], *sever[0][1]['at'], min(sever[0][1]['dhold'], sever[0][1]['dleg']), sever[0][2]))
+        for d_, r_, lab_ in sever[:40]:
+            log('    (a) %s %s %s at (%d, %d, %d): %d from %s' % (r_['squad'].split('!')[-1], r_['kind'], r_['what'], *r_['at'], min(r_['dhold'], r_['dleg']), lab_))
+        fail('(a) %d places of the garrison / beat squads are nearer than %d (in the vault lobby; %d to a hold and %d to a leg elsewhere) to a hold or a leg (worst: %s %s at (%d, %d, %d), %d from %s)' % (
+            len(sever), GARRISON_OPEN, GARRISON_HOLD, GARRISON_LEG, sever[0][1]['squad'].split('!')[-1], sever[0][1]['what'], *sever[0][1]['at'], min(sever[0][1]['dhold'], sever[0][1]['dleg']), sever[0][2]))
     lt = [r for r in rows if r['squad'] == three]
     if lt:
         dd = min(math.dist(r['at'], q) for r in lt for q in lobby_holds)
@@ -2996,9 +3034,14 @@ def garrison_check(folder, log=print):
     if hunted:
         fail('(b) the campaign\'s hunt is named for %d squads (the search box is in the vault: a hunt path IS the crew\'s line): %s' % (len(hunted), ', '.join(sorted(h.split('!')[-1] for h in hunted))[:160]))
     # (e) the gallery
-    ymax = max([q[1] for _l, ss in legs for q in ss] + [q[1] for _l, q in holds])
+    ymax = max([q[1] for _l, ss in legs for q in ss] + [q[1] for _l, q in holds if not _l.startswith('W12')])
     gal = [r for r in rows if r['stage'] == 'hall' and r['at'][1] > 1100 and r['kind'] == 'man']
     log('  garrison (e): the highest point of any leg or hold of the crew is y %d (the hall floor %d, the gallery %d with %d of the hall\'s police)' % (ymax, HALL_Y, GAL_Y, len(gal)))
+    for lab_, q_ in OBSERVED_PLACES:
+        if lab_ in OBSERVED_STRAY:
+            near_ = min(((math.dist(q_, r['at']), r['squad'].split('!')[-1], r['what']) for r in rows if r['stage'] == 'hall'), default=(1e9, '-', '-'))
+            log('  garrison (e) NOTED, not a rule: %s (%d, %d, %d) is %d from the hall squad place %s %s; the stand-in legs never go there (y <= %d), the own path of the game did in W12 and why is NOT established; '
+                'log the places of the bots with [CrewHop] in the next run' % (lab_, *q_, near_[0], near_[1], near_[2], ymax))
     if ymax > HALL_Y + 300:
         fail('(e) a leg or hold of the crew goes up to y %d, the gallery\'s police stand at y %d' % (ymax, GAL_Y))
     # (c) the START rows over the whole round
@@ -3754,6 +3797,7 @@ def pressure_check(folder, log=print):
              for r_, h in zip(rows, rows_h) if h['hold_worst'] > r_['hold_worst'] or (h.get('leg_worst') or 0) > (r_.get('leg_worst') or 0)]
     log('  HUNTERS (reach %d m, said only): %s' % (HUNT_REACH / 100, ', '.join(worse) if worse else 'no station or stretch gains a gun'))
     i_loot = max(i for i, s in enumerate(P['stations']) if s['kind'] == 'loot')
+    base_out = way_out_base(rows)
     for r in rows:
         for kind, n, cap in (('hold', r['hold_worst'], HOLD_GUNS), ('leg', r.get('leg_worst') or 0, LEG_GUNS)):
             if n <= cap:
@@ -3764,6 +3808,9 @@ def pressure_check(folder, log=print):
                 log('      KNOWN %s %d: %d guns (%d wanted; %s)' % (kind, r['i'], n, cap, known[1]))
             elif STAGING and way_in:
                 bad.append('%s %d (%s): %d guns bear (%d wanted)' % (kind, r['i'], r['what'].strip(), n, cap))
+                log('  FAIL ' + bad[-1])
+            elif GARRISON and not way_in and (kind, r['i']) in base_out and n > base_out[(kind, r['i'])]:
+                bad.append('%s %d (way out): %d guns bear, more than c_bank8 had (%d) (SECOND FIX, skeptic: a garrison that rises the way-out fire is no cure)' % (kind, r['i'], n, base_out[(kind, r['i'])]))
                 log('  FAIL ' + bad[-1])
             else:
                 log('      OVER %s %d: %d guns (%d wanted)%s' % (kind, r['i'], n, cap, '' if way_in else ' - not the way in'))
