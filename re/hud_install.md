@@ -112,6 +112,10 @@ OPTIONAL and separate: install BOTH files together into `<DD>\KLExpansion\Overla
   maps are back to the older look (or whatever the build folder had), while the hook keeps drawing - the hook then falls back as in 4.
 - The ini is safe: `ini_merge` leaves `[HUD]` alone (it is not one of the sections the block owns); `dinput8.dll` is replaced only when the
   install is run with the hook (`--no-hook` keeps it).
+- **WATCH LOOK (2026-10-12, 54ceb35; re/hud_cloud_review.md W1):** `kl_hud_tab.py` / `kl_hud.py` now bake the WATCH look by default (`--watch 1`)
+  while the hook's `[HUD] WatchStyle` defaults to 0 (the old look). Until the owner's ini carries `WatchStyle=1`, every rebake for his game must be
+  `kl_hud_tab.py build ... --watch 0`; a `--watch 1` archive under a WatchStyle=0 hook draws the wear texture as strikes / rules and the bezel as
+  track rings (no crash, visibly wrong). Ship `--watch 1` maps and `WatchStyle=1` TOGETHER, never one alone.
 - Remedy, in order of cost: (a) after any install re-run `kl_hud_tab.py build` + copy the zips (the whole chain is 2 minutes of CPU, 1.7 GB);
   (b) build the tree FROM baked folders: bake the build folder (`kl_hud.py all <build> <out> --look deadmen`, the build's zip carries the F01
   name, that is fine) and pass `--prebuilt DM03=<out>` (adopt() renames to the slot) - untested for a bake output, and the DM03A / DM05A

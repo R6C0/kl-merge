@@ -1,6 +1,6 @@
 # Splitting klhud.c - PROPOSAL ONLY (cloud session, 2026-10-12; nothing moved, nothing built)
 
-klhud.c is 1,331 lines with 49 functions; with its parts the HUD is 4,775 lines in nine files, all compiled as ONE translation unit
+klhud.c was 1,331 lines with 49 functions at ebe4d72 (the line numbers below are that commit's; 54ceb35 added the watch look, about +110 lines, `klu_watch_look` / `klu_escape_look` / `klu_dial_base` / `klu_hand` / `klu_track_f`, which belong in `klhud_watch.c` with `klu_dials`); with its parts the HUD is 4,775 lines in nine files, all compiled as ONE translation unit
 (klhook.c `#include`s them, lines 584-591, and klhud.c itself includes klhud_weapon.c at its line 806). The split below keeps that unity
 build (no new linkage, no header-guard games beyond what the parts already use) and changes NO behaviour. Do it only in a local session
 that can build and run the harnesses, one step a commit.

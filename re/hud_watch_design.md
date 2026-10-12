@@ -1,5 +1,8 @@
 # The round watch, reworked: a dial with watch hands and light wear - DESIGN ONLY (cloud session, 2026-10-12)
 
+**SUPERSEDED** by the local session's commit 54ceb35 (re/hud_hook.md 14, re/hud_watch_review.md), which landed while this was written.
+Kept only for its review checklist (section 8), applied in re/hud_cloud_review.md section 5.
+
 No code. Nothing built, baked or run. Written because no 'WatchStyle' commit (re/hud_hook.md section 14) was on `rtp-schemas` at
 ebe4d72 / 44661c6; a local session was building one when the task was written. IF THAT WORK LANDS, IT WINS: use this note only as a
 checklist to review it against (section 8).
