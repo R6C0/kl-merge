@@ -882,6 +882,7 @@ static int klu_compose(int *state_ok)
         if (row >= klu.rows) continue;
         name[0] = 0;
         if ((blk = klh_rd32(r->at)) != 0 && klh_rd(blk + 8, &str, 4) && str) klh_rdstr(str, name, sizeof name);     /* [[record]+8]: 0x841e50 */
+        klnm_name(r->at, name, sizeof name);                  /* klhud_names.c: the character this record wears (falls back to the game's name) */
         if (!name[0]) snprintf(name, sizeof name, r->flags & 1 ? "Heister %d" : "You", i);
         kind = kluv_kind(&s, i);                              /* klhud_values.c g: THE row decision (dead / waiting, escaped, fed before traitor, traitor, you, crew) */
         if (i == human && (kind == KLUV_K_YOU || kind == KLUV_K_TRAITOR)) {

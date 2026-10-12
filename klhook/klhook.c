@@ -581,6 +581,7 @@ static void klh_tick(int game_thread);
 #include "klrappel.c"                                    /* klrappel.c: off unless [Rappel] Enable */
 #include "klbalance.c"
 #include "klgrudge.c"
+#include "klhud_names.c"                              /* the crew list's character names + initials as tags ([HUD] Names / NameTags) */
 #include "klhud_values.c"                             /* the HUD's readers (reads only): BEFORE klhud.c, AFTER klbot.c */
 #include "klhud.c"                                    /* includes klhud_weapon.c inside itself */
 #include "klhud_popup.c"                              /* AFTER klhud.c: pop-ups + loot ring (uses its klu / klu_r / klu_pic) */
@@ -639,6 +640,7 @@ static void klh_tick(int game_thread)
     kle_tick(game_thread);                            /* klescort.c: after klb_tick; one game call per order, game thread only */
     klmv_tick(game_thread);                           /* klmove.c: Restless / WaitForYou / BoardNear (all off unless set) */
     klr_tick(game_thread);                            /* klbalance.c: one damage scale for player, police and crew */
+    klnm_tick(game_thread);
     kly_tick(game_thread);                            /* klgrudge.c: the crew answers your bullets (off unless [Bots] Grudge) */
     klu_tick(game_thread);                            /* klhud.c: the crew list / money box texts (game thread only) */
     klesc_tick(game_thread);                          /* klhud_escape.c: the escape-vehicle panel (off unless [HUD] Escape / Draft) */
@@ -813,6 +815,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klt_init();
     klc_init();
     klw_init();
+    klnm_init();
     klk_init();
     klb_init();
     kle_init();
