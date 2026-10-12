@@ -783,13 +783,14 @@ def opts_now():
     return collections.OrderedDict(crew_fix2=CREW_FIX2, teller_late=TELLER_LATE, van_late=VAN_LATE, van_hide=VAN_HIDE, van_no_target=VAN_NO_TARGET,
                                    van_show=VAN_SHOW, reset=RESET, waves=WAVES, waves_extra=WAVES_EXTRA, waves_near=WAVES_NEAR,
                                    plaza_outside=PLAZA_OUTSIDE, hall_up=HALL_UP, no_ai=NO_AI, teller_more=TELLER_MORE, waves_latch=WAVES_LATCH,
-                                   waves2=WAVES2, voice=VOICE, teller_foyer=TELLER_FOYER, room_gates=ROOM_GATES, room_on=list(ROOM_ON), room_hide=ROOM_HIDE, staging=STAGING)
+                                   waves2=WAVES2, voice=VOICE, teller_foyer=TELLER_FOYER, room_gates=ROOM_GATES, room_on=list(ROOM_ON), room_hide=ROOM_HIDE, staging=STAGING, garrison=GARRISON)
 
 
 def apply_opts(o):
     """Set the module's flags from a dict (opts_now's form). -> o"""
     global CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, VAN_SHOW, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
-    global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING
+    global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING, GARRISON
+    GARRISON = bool(o.get('garrison', False))
     ROOM_GATES, ROOM_HIDE = bool(o.get('room_gates', False)), bool(o.get('room_hide', True))
     STAGING = bool(o.get('staging', False))
     ROOM_ON = tuple(o.get('room_on', ROOM_ON))
@@ -1174,6 +1175,7 @@ def strip(M, log=print):
     snap_men(M, keep, log)
     beat_men(M, keep, log)
     clear_men(M, keep, log)
+    garrison_men(M, keep, log)
     if PLAZA_OUTSIDE:
         plaza_places(M, keep, log)
     # the music's fourth layer (MUSIC_LAYER4): without the flag its nine fades lose their controller
@@ -1267,8 +1269,12 @@ def wire(sc, log=print):
             raise ValueError('%s: ZSquadScript field %d is %r' % (n, SQUAD_ACTIVE, values(sc, k, 'ZSquadScript')[SQUAD_ACTIVE]))
         put_(k, 'ZSquadScript', **{'f%d' % SQUAD_ACTIVE: 0})
     hunt = [R + n + '\\' + HUNT for n in plan if sc.resolve(R + n + '\\' + HUNT)]
+    if GARRISON:                                        # the campaign's hunt (search box in the vault) is not named: the garrison keeps its places
+        hunt = []
     hall = [] if NO_AI else must([R + n + '\\' + HALL_START for n in HALL])
     armed = soldier_rows(sc, plan, log) if STOCK_ROWS else {}
+    if GARRISON:
+        garrison_modes(sc, plan, log)
 
     # ---- round start: AIMonitor list 2 (event 2, kl2 0x8b5f60; it comes when the countdown begins). F07's own
     # list names five timers of its opening; what is a ROLE object here must not be started by it. Two timers of
@@ -2135,15 +2141,19 @@ def check(folder, log=print, problems=None):
         for k in men:
             r = role_of[STAGE[top_of(k)]] if top_of(k) in STAGE else 'beat timer'
             p = pos[ents[k - 1]]
-            close += [(math.dist(p, q), sc.path[k][5:][-60:], n, p) for n, q in ahead.get(r, ()) if abs(p[1] - q[1]) < 400.0]
+            close += [(math.dist(p, q), sc.path[k][5:][-60:], n, p, top_of(k)) for n, q in ahead.get(r, ()) if abs(p[1] - q[1]) < 400.0]
+        if GARRISON:                                    # the garrison's pockets are out of sight of every station of the way in (garrison_check (g), the exact ray): the distance rule does not apply to them
+            close = [c for c in close if c[4] not in garrison_squads()]
         close.sort()
         log('  enemies: of the %d men who come after the round\'s start the nearest to a station that lies before his squad\'s trigger: %s' % (
             sum(top_of(k) not in STAGE or STAGE[top_of(k)] not in ('start', 'down') for k in men),
             '%s, %d from \'%s\'' % (close[0][1], close[0][0], close[0][2]) if close else '-'))
-        for d, who, n, p in close:
+        for d, who, n, p, _sq in close:
             if d < BEAT_CLEAR:
                 fail('%s at (%d, %d, %d) comes into the world %d from the station \'%s\', which the crew passes before his squad is started (%d wanted)' % (who, *p, d, n, BEAT_CLEAR))
         hunts = sum(1 for s in beat if s.endswith('\\' + HUNT))
+        if GARRISON and hunts:
+            fail('GARRISON: the beat timer names %d hunts' % hunts)
         rows_ = collections.Counter((values(sc, k, 'ZSoldier')[3], values(sc, k, 'ZSoldier')[4], values(sc, k, 'ZSoldier')[7]) for k in men if top_of(k) in STAGE)
         stock = sum(n for (skill, _a, _h), n in rows_.items() if skill == 'eCustom')
         log('  enemies: started by: %s; %d hunts at the beat\'s end; soldier rows of the campaign\'s men (skill, accuracy, health): %s' % (
@@ -2326,6 +2336,11 @@ def check(folder, log=print, problems=None):
     if os.path.isfile(os.path.join(folder, 'extras.json')):
         for b in waves_check(folder, lambda *a: None):
             fail('extras: ' + b[:240])
+    # ---- the garrison (--garrison): the hard rules of garrison_check, on a folder the chain has given its bots (bots.json)
+    log('  note: ' + STAGE2_NOTE)
+    if GARRISON and os.path.isfile(os.path.join(folder, 'bots.json')):
+        for b_ in garrison_check(folder, lambda *a: None):
+            fail('garrison: ' + b_[:240])
     # ---- the voice (--voice): Dog Days cannot read IMA ADPCM speech from the stream file (re/luvsic_pass.md 1.1)
     left = streamed_singles(folder)
     log('  voice: %d streamed single IMA ADPCM record(s) in the built .WHD%s' % (len(left), '' if VOICE else ' (--voice is off in this build: reported, not judged)'))
@@ -2672,6 +2687,351 @@ def man_bears(S, nav, m, p, rng, rules=('exact',), dy=HOLD_GUN_DY):
         if (dy is None or abs(q[1] - p[1]) < dy) and math.dist(q, p) <= rng and S.sees_by(q, tuple(p[:3]), rules):
             return True
     return False
+
+
+# ---- THE GARRISON (after runs W10 / W11 / W12, 2026-10-12; '--garrison', needs '--gates'; re/bank_campaign.md 'After runs W10-W12'). W12 (c_bank8, idle human, [CrewHop] Dry): four of seven bots
+# dead - 'lost 237 / 136 / 138 ... ONE STEP' in the vault lobby at GO + 67 / + 141 / + 193 s, one at the banking hall's gallery GO + 233 s - and the idle human at the START shot for 140 s from GO + 100 s. READ in the built
+# folder: the campaign's guards DEFEND PLACES lie on the crew's own way (the vault lobby (398, 243, -7469) / (395, 242, -7523) / (398, 242, -7554) / (400, 243, -7903): 5 .. 37 from a leg of the way in AND out, shared
+# by FIVE squads; the flights (407, -158, -9308) .. (410, -158, -9540): 7 .. 25), the dock garrison, the patrol and the beat's police are 'eLM_Unleash' / 'eALM_Alert' hunters and the beat's end names the campaign's
+# hunt (49_SquadMod -> 50_HuntBehaviour, search box IN the vault) for five of them: a man who WALKS the crew's line is inside the point-blank reach (160) of it, whatever the table of standing guns says.
+# So: (1) every man of the way in / down / the beat is put with every place of his squad's routs into a POCKET off the crew's line (GARRISON_PLACES: the dock's upper west level for 11 squads, the lobby's east corner for the lobby's three, one side
+# room of the flights for Guards_01 and Police_Reinforcement_02; each point MEASURED on the built level: on the mesh, >= 350 from every leg and 450 from every hold of the seven bots, a wall >= 20 away, an exact ray to no START row and - the squads that come in with the ante-room's event - to no station of the way in, within 400 of a cover box);
+# (2) the squads KEEP their places: ZSquadScript attitude eStayBack, every SquadModifierBehaviour eLM_Unleash -> eLM_Leash (soldier+0x6fc: 'unleashed = no longer tied to the defend position', kl2 0x85f89f) and
+# eALM_Alert -> eALM_NotSet; the campaign's hunt is NOT named at the beat's end. The way-out pressure then comes from the lobby's three, the hall's eight, the plaza and the waves (chain B, D).
+GARRISON = False
+GARRISON_PLACES = collections.OrderedDict([
+    # Guards_Reinforcement_StayUpstairs#01: 3 men, pocket of 3 points
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs#01\\Guard_01#03', (-450, 240, -7100)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs#01\\Guard_01#01', (-400, 240, -7050)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs#01\\Guard_01#02', (-450, 240, -7000)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs#01\\10_DefendBehaviour\\Pos#01', (-450, 240, -7100)),
+    # PatrolGuards_01a: 2 men, pocket of 2 points
+    ('GamePlay!3_Garage_Part!PatrolGuards_01a\\Guard_01', (-1000, 240, -4800)),
+    ('GamePlay!3_Garage_Part!PatrolGuards_01a\\Guard_01#01', (-950, 240, -4750)),
+    ('GamePlay!3_Garage_Part!PatrolGuards_01a\\10_DefendBehaviour\\Pos#01', (-1000, 240, -4800)),
+    ('GamePlay!3_Garage_Part!PatrolGuards_01a\\30_DefendBehaviour\\Pos#01', (-950, 240, -4750)),
+    # Guards_Reinforcement_01b: 2 men, pocket of 3 points
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\Guard_01#01', (-950, 240, -4850)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\Guard_01#02', (-900, 240, -4800)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\40_DefendBehaviour_Moveback\\Pos#01', (-950, 240, -4850)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\40_DefendBehaviour_Moveback\\Pos#03', (-900, 240, -4800)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\40_DefendBehaviour_Moveback\\Pos#02', (-1000, 240, -4800)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\10_DefendBehaviour\\Pos#02', (-900, 240, -4800)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\10_DefendBehaviour\\Pos#01', (-1000, 240, -4800)),
+    # Guards_Reinforcement_01a: 2 men, pocket of 3 points
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\Guard_01#01', (750, -160, -9500)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\Guard_01#02', (800, -160, -9450)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\40_DefendBehaviour_Moveback\\Pos#01', (750, -160, -9500)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\40_DefendBehaviour_Moveback\\Pos#03', (800, -160, -9450)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\40_DefendBehaviour_Moveback\\Pos#02', (750, -160, -9400)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\10_DefendBehaviour\\Pos#02', (800, -160, -9450)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\10_DefendBehaviour\\Pos#01', (750, -160, -9400)),
+    # Guards_Reinforcement_StayUpstairs: 4 men, pocket of 4 points
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\Guard_01#04', (350, 240, -6650)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\Guard_01#03', (400, 240, -6700)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\Guard_01#01', (450, 240, -6650)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\Guard_01#02', (550, 240, -6650)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\10_DefendBehaviour\\Pos#02', (350, 240, -6650)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\10_DefendBehaviour\\Pos#01', (400, 240, -6700)),
+    # Guards_01: 2 men, pocket of 3 points
+    ('GamePlay!4_Vault_Part!Guards_01\\Guard_01', (750, -160, -9400)),
+    ('GamePlay!4_Vault_Part!Guards_01\\Guard_01#01', (800, -160, -9350)),
+    ('GamePlay!4_Vault_Part!Guards_01\\20_DefendBehaviour\\Pos#02', (750, -160, -9400)),
+    ('GamePlay!4_Vault_Part!Guards_01\\20_DefendBehaviour\\Pos#01', (800, -160, -9350)),
+    ('GamePlay!4_Vault_Part!Guards_01\\10_DefendBehaviour\\Pos#03', (800, -160, -9350)),
+    ('GamePlay!4_Vault_Part!Guards_01\\10_DefendBehaviour\\Pos#02', (800, -160, -9450)),
+    ('GamePlay!4_Vault_Part!Guards_01\\10_DefendBehaviour\\Pos#01', (750, -160, -9400)),
+    # Police_Reinforcement_02: 2 men, pocket of 3 points
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\Police_01', (750, -160, -9300)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\Police_02', (800, -160, -9250)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\40_DefendBehaviour_Moveback\\Pos#01', (750, -160, -9300)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\40_DefendBehaviour_Moveback\\Pos#03', (800, -160, -9250)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\40_DefendBehaviour_Moveback\\Pos#02', (800, -160, -9350)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_02\\10_DefendBehaviour\\Pos#01', (800, -160, -9250)),
+    # Police_Reinforcement_03: 4 men, pocket of 4 points
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\Police_01', (800, -160, -8900)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\Police_02', (750, -160, -8950)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\Police_04', (850, -160, -8950)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\Police_03', (800, -160, -9000)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\40_DefendBehaviour_Moveback\\Pos#01', (800, -160, -8900)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\40_DefendBehaviour_Moveback\\Pos#03', (750, -160, -8950)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\40_DefendBehaviour_Moveback\\Pos#02', (850, -160, -8950)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\10_DefendBehaviour\\Pos#02', (750, -160, -8950)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_03\\10_DefendBehaviour\\Pos#01', (850, -160, -8950)),
+    # Guards_02: 2 men, pocket of 2 points
+    ('GamePlay!4_Vault_Part!Guards_02\\Guard_01', (750, -560, -10700)),
+    ('GamePlay!4_Vault_Part!Guards_02\\Guard_01#01', (800, -560, -10650)),
+    ('GamePlay!4_Vault_Part!Guards_02\\DefendBehaviour\\Pos#02', (750, -560, -10700)),
+    ('GamePlay!4_Vault_Part!Guards_02\\DefendBehaviour\\Pos#01', (800, -560, -10650)),
+    # Police_Reinforcement_Teargas_01: 1 men, pocket of 3 points
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01\\Police_01', (750, -560, -10600)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01\\40_DefendBehaviour_Moveback\\Pos#01', (750, -560, -10600)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01\\40_DefendBehaviour_Moveback\\Pos#03', (800, -560, -10650)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01\\40_DefendBehaviour_Moveback\\Pos#02', (800, -560, -10550)),
+    # Police_Reinforcement_Teargas_01#01: 1 men, pocket of 3 points
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01#01\\Police_01', (750, -560, -10500)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01#01\\20_DefendBehaviour\\Pos#03', (750, -560, -10500)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01#01\\20_DefendBehaviour\\Pos#02', (800, -560, -10550)),
+    ('GamePlay!4_Vault_Part!Police_Reinforcement_Teargas_01#01\\20_DefendBehaviour\\Pos#01', (750, -560, -10600)),
+    # Vault_Reinforcement_Police_01: 2 men, pocket of 2 points
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_01\\Police_01', (800, -560, -10550)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_01\\Police_02', (850, -560, -10600)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_01\\20_DefendBehaviour\\Pos#01', (800, -560, -10550)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_01\\20_DefendBehaviour\\Pos#02', (850, -560, -10600)),
+    # Vault_Reinforcement_Police_02: 2 men, pocket of 3 points
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_02\\Police_01', (850, -560, -10700)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_02\\Police_02', (900, -560, -10650)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_02\\10_DefendBehaviour\\Pos#03', (850, -560, -10700)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_02\\10_DefendBehaviour\\Pos#02', (900, -560, -10650)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_02\\10_DefendBehaviour\\Pos#01', (800, -560, -10650)),
+    # Vault_Reinforcement_Police_03: 2 men, pocket of 3 points
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_03\\Police_01', (850, -560, -10500)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_03\\Police_02', (900, -560, -10550)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_03\\20_DefendBehaviour\\Pos#03', (850, -560, -10500)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_03\\20_DefendBehaviour\\Pos#02', (900, -560, -10550)),
+    ('GamePlay!4_Vault_Part!Vault_Reinforcement_Police_03\\20_DefendBehaviour\\Pos#01', (800, -560, -10550)),
+])
+GARRISON_HOLD, GARRISON_LEG = 400.0, 300.0     # a garrison place is this far from every hold (every station of the seven bots) and from every leg of their walk and of the human's route. GUESS: the task's numbers
+WAKE_EARLIEST = {'lobby': 30.0, 'flights': 45.0, 'ante': 75.0}    # s after the GO: the earliest a gate's event can fire with the fastest crew seen (the beat box: GO + 70 .. 85 s in W10 - W12 from the idle human's first hit at +91 / +134 / +100 s less the garrison's walk). GUESS
+YARD_GUNS = 3                           # guns that may bear on a START row at any time (the fed respawn and late bots stand there; HOLD_GUNS)
+YARD_TIMES = (0.0, 11.0, 30.0, 60.0, 75.0, 90.0, 120.0, 180.0, 240.0, 300.0, 360.0)
+GARRISON_SCOPE = ('start', 'down', 'beat', 'hall')      # the stages whose men and places the hard rule counts (the plaza's twenty are the shootout on the square; their places lie beside the van's lane by design)
+STAGE2_NOTE = ('heist stage 2 comes only at the front exit (ExitLootArea at the hall\'s south end): a bot that loots the vault and the hall stays at heist stage 1 until then - normal here '
+               '(W12: $755,000 .. $1,185,000 at stage 1)')
+
+
+def garrison_squads():
+    """The squads (names under ROOT\\) that GARRISON_PLACES moves: they hold the stricter rule (GARRISON_HOLD / GARRISON_LEG)."""
+    return {rel.split('\\')[0] for rel in GARRISON_PLACES}
+
+
+def garrison_men(M, keep, log=print):
+    """GARRISON, on the converted level M in strip(), after clear_men: every man and every rout place of GARRISON_PLACES to its pocket (man_to checks that each stands on the navigation mesh). -> [(path, from, to)]"""
+    import kl_route
+    if not GARRISON or not keep:
+        return []
+    sc = M.prp
+    mesh = kl_route.load(LEVEL).mesh()
+    moved = []
+    for rel, new in GARRISON_PLACES.items():
+        hit = sc.resolve(R + rel)
+        if len(hit) != 1 or sc.cls(hit[0]) not in ('ZGROUP', 'ZBoxPrimitive') or sc.names[sc.top[hit[0]]] not in keep:
+            raise ValueError('kl_fa_bank: GARRISON_PLACES names %s: %d nodes (a ZGROUP or a place of a kept squad wanted)' % (rel, len(hit)))
+        was = world_of(M.ents[hit[0] - 1])[0]
+        man_to(M, hit[0], tuple(float(v) for v in new), mesh)
+        moved.append((rel, was, new))
+    log('  kl_fa_bank: GARRISON: %d men and %d rout places of %d squads put into pockets off the crew\'s line: %s' % (
+        sum('\\Guard_01' in r.split('\\', 1)[1] and 'Defend' not in r for r, _w, _t in moved), sum('Defend' in r for r, _w, _t in moved), len(garrison_squads()),
+        ', '.join('%s %d' % (r.split('!')[-1].split('\\')[0], math.dist(w, t)) for r, w, t in moved[::6])))
+    return moved
+
+
+def garrison_modes(sc, plan, log=print):
+    """GARRISON, in wire() on the joined scene: the squads of the way in / down / the beat KEEP their places - ZSquadScript attitude eStayBack, SquadModifierBehaviour eLM_Unleash -> eLM_Leash and eALM_Alert -> eALM_NotSet
+    (the leash: soldier+0x6fc, kl2 0x85f89f). -> dict of counts"""
+    scope = {n for n in plan if STAGE.get(n) in ('start', 'down', 'beat')}
+    n_att = n_unl = n_alert = 0
+    for n in sorted(scope):
+        k = A.node_of(sc, n)
+        if values(sc, k, 'ZSquadScript')[0] != 'eStayBack':
+            kl_fa.edit(sc, k, A.ctrl_of(sc, k, 'ZSquadScript'), lambda us: A.setv(sc, us, 0, 'eStayBack'))
+            n_att += 1
+    for k, i, v in kl_fa.controllers(sc, 'SquadModifierBehaviour'):
+        if sc.path[sc.top[k]][len(R):] not in scope:
+            continue
+        ch = {}
+        if v[0] == 'eLM_Unleash':
+            ch[0] = 'eLM_Leash'; n_unl += 1
+        if v[6] == 'eALM_Alert':
+            ch[6] = 'eALM_NotSet'; n_alert += 1
+        if ch:
+            kl_fa.edit(sc, k, i, lambda us, ch=ch: [A.setv(sc, us, f, val) for f, val in ch.items()])
+    log('  kl_fa_bank: GARRISON modes: %d squads; attitude eStayBack on %d, eLM_Unleash -> eLM_Leash on %d modifiers, eALM_Alert -> eALM_NotSet on %d; the campaign\'s hunt is not named' % (len(scope), n_att, n_unl, n_alert))
+    return dict(squads=len(scope), attitude=n_att, unleash=n_unl, alert=n_alert)
+
+
+def crew_ways(B, P, nav, step=50.0):
+    """The ways of the crew: ([(label, [points of one leg])], [(label, station place)]). A leg is the stand-in mesh path of one bot from one of its places to the next, sampled every `step`; the human's route
+    (ROUTE_IN, ROUTE_VAULT, ROUTE_OUT) is walked the same way. The stations are the seven bots' places, one per station of the plan."""
+    import kl_fa_bots_rt as RT
+    legs, holds = [], []
+    for n, b in P['bots'].items():
+        pl = [tuple(q[:3]) for q in b['places']]
+        holds += [('bot %s station %d' % (n, j), q) for j, q in enumerate(pl)]
+        for j, (a, c) in enumerate(zip(pl, pl[1:])):
+            got = RT.way_samples(nav, a, c, step)
+            legs.append(('bot %s leg %d>%d' % (n, j, j + 1), [tuple(q[:3]) for q in got[0]] if got else [a, c]))
+    hum = [(nm, tuple(q)) for nm, q in ROUTE_IN + ROUTE_VAULT + ROUTE_OUT]
+    for (na, a), (nb, c) in zip(hum, hum[1:]):
+        got = RT.way_samples(nav, a, c, step)
+        legs.append(('human %s>%s' % (na, nb), [tuple(q[:3]) for q in got[0]] if got else [a, c]))
+    for n, b in P['bots'].items():              # the other ways down from the dock floor to the lobby's upper floor (ROOM_ALT_VIA, rooms_check's line): a -> via -> b for each via
+        pl = [tuple(q[:3]) for q in b['places']]
+        for j, (a_, c_) in enumerate(zip(pl, pl[1:])):
+            if a_[1] < 225.0 <= c_[1] and c_[2] < -5900.0:
+                for vi, v in enumerate(ROOM_ALT_VIA):
+                    h = nav.at(v[0], v[1], v[2], dy=200.0)
+                    if not h:
+                        continue
+                    s1, s2 = RT.way_samples(nav, a_, (v[0], h[1], v[2]), step), RT.way_samples(nav, (v[0], h[1], v[2]), c_, step)
+                    if s1 and s2:
+                        legs.append(('bot %s alt way %d via %d' % (n, j, vi), [tuple(q[:3]) for q in s1[0] + s2[0]]))
+    return legs, holds
+
+
+def hunted_squads(sc):
+    """The squads whose campaign hunt (49_SquadMod, 50_HuntBehaviour) is named by something outside the squad -> set of squad names (under ROOT\\)."""
+    tops = {sc.path[t][len(R):]: t for t in sc.tops()}
+    out = set()
+    for j in range(1, len(sc.nodes)):
+        for s in A.named(sc, j):
+            if s.endswith('\\' + HUNT) or s.endswith('\\50_HuntBehaviour'):
+                sq = s[len(R):].rsplit('\\', 1)[0]
+                if sq in tops and sc.top[j] != tops[sq]:
+                    out.add(sq)
+    return out
+
+
+def garrison_rows(B, hunted):
+    """Every man's start and every place of a rout of the squads in GARRISON_SCOPE -> [dict(squad, stage, kind, what, at)]. A hunt rout's search box counts only for a squad whose hunt is named (`hunted`)."""
+    sc, rows = B.sc, []
+    for t in sc.tops():
+        st = squad_stage(sc, t)
+        if st not in GARRISON_SCOPE:
+            continue
+        nm = sc.path[t][len(R):]
+        for k in range(t + 1, sc.end[t]):
+            if sc.cls(k) == 'ZFFActor':
+                rows.append(dict(squad=nm, stage=st, kind='man', what=sc.path[sc.parent[k]].split('\\')[-1], at=B.at(k)))
+        for j in rout_places(sc, t):
+            rout = sc.path[sc.parent[j]].split('\\')[-1]
+            if rout.endswith('HuntBehaviour') and nm not in hunted:
+                continue
+            rows.append(dict(squad=nm, stage=st, kind='place', what=rout + ' ' + sc.path[j].split('\\')[-1], at=B.at(j)))
+    return rows
+
+
+def garrison_check(folder, log=print):
+    """'kl_fa_bank.py garrison-check <folder>': THE HARD RULES after runs W10 - W12, on any folder of the bank (the flags are read from bank_opts.json; a build without --garrison is MEASURED, not exempt):
+    (b) no man's start, no place of any rout and no hunt path of the squads of the way in, down, the beat and the hall within ROOM_LINE_CLEAR (160, the point-blank reach 1.6 m with margin) of a hold (a station of
+        any of the seven bots) or a leg of the crew's way, in or out - the squad's men stand or walk there at some time (every squad can be awake); the plaza's twenty are the square's shootout and are left out;
+    (a) the garrison and the beat (GARRISON_PLACES' squads, the lobby's three among them) keep GARRISON_HOLD from every hold and GARRISON_LEG from every leg, have no exact ray to a START row, keep their places
+        (no eLM_Unleash / eALM_Alert modifier, attitude eStayBack) and have no hunt named; the lobby's three are out of reach of the lobby gate's holds (d);
+    (c) the START rows over the WHOLE round: no gun of an old squad at any time of YARD_TIMES (the squads of the ante-room's event from WAKE_EARLIEST on, hunters counted), and never more than YARD_GUNS of all men;
+    (e) no leg or hold of the crew goes up to the hall's gallery (y > HALL_Y + 300), where the eight gallery police stand;
+    (g) a squad that comes into the world later has no exact ray from its men and places to the stations the crew passes before his event.
+    -> list of faults"""
+    import json
+    import kl_fa_bots as F
+    bad = []
+
+    def fail(s):
+        bad.append(s)
+        log('  FAIL ' + s)
+    o = read_opts(folder)
+    P = json.load(open(os.path.join(folder, 'bots.json'), encoding='utf-8')).get('plan') or {}
+    if not P.get('stations'):
+        log('  garrison: bots.json has no plan: not checked')
+        return bad
+    B = F.Built(folder)
+    sc = B.sc
+    nav = F.Nav(B.scene.nav)
+    S = Sight(folder, B, lambda *a: None)
+    pj = os.path.join(folder, 'extras.json')
+    ex = json.load(open(pj)) if os.path.isfile(pj) else None
+    set_wake_built(ex)
+    log('  garrison: %s' % STAGE2_NOTE)
+    legs, holds = crew_ways(B, P, nav)
+    flat = [(lab, q) for lab, ss in legs for q in ss]
+    hunted = hunted_squads(sc)
+    rows = garrison_rows(B, hunted)
+    strict = garrison_squads()
+    three = G4 + 'Guards_Reinforcement_StayUpstairs#01'
+    lobby_holds = [q for lab, q in holds if lab.endswith('station 1')]
+
+    def nearest(p):
+        dl, ll = min(((math.dist(p, q), lab) for lab, q in flat), default=(1e9, '-'))
+        dh, lh = min(((math.dist(p, q), lab) for lab, q in holds), default=(1e9, '-'))
+        return dl, ll, dh, lh
+    worst = collections.defaultdict(lambda: (1e9, None))
+    near, sever = [], []
+    for r in rows:
+        dl, ll, dh, lh = nearest(r['at'])
+        r['dleg'], r['dhold'] = dl, dh
+        d = min(dl, dh)
+        key = (r['squad'].split('!')[-1], r['stage'])
+        if d < worst[key][0]:
+            worst[key] = (d, '%s %s at (%d, %d, %d): %d from %s' % (r['kind'], r['what'], *r['at'], d, ll if dl <= dh else lh))
+        if d < ROOM_LINE_CLEAR:
+            near.append((d, r, ll if dl <= dh else lh))
+        if r['squad'] in strict and (dh < GARRISON_HOLD or dl < GARRISON_LEG):
+            sever.append((min(dh - GARRISON_HOLD, dl - GARRISON_LEG), r, ll if dl <= dh else lh))
+    log('  garrison: %d places (%d men, %d rout places) of %d squads; hunts named: %d squads %s' % (
+        len(rows), sum(r['kind'] == 'man' for r in rows), sum(r['kind'] == 'place' for r in rows), len({r['squad'] for r in rows}), len(hunted), sorted(h.split('!')[-1] for h in hunted)[:6]))
+    near.sort(key=lambda t: t[0])
+    for d, r, lab in near:
+        who = r['squad'].split('!')[-1]
+        log('    within %3d of %s: %s (%s) %s %s at (%d, %d, %d)' % (d, lab, who, r['stage'], r['kind'], r['what'], *r['at']))
+    if near:
+        fail('(b) %d places of %d squads lie within %d of a hold or a leg of the crew (nearest %d: %s %s)' % (
+            len(near), len({r['squad'] for _d, r, _l in near}), ROOM_LINE_CLEAR, near[0][0], near[0][1]['squad'].split('!')[-1], near[0][1]['what']))
+    if sever:
+        sever.sort(key=lambda t: t[0])
+        fail('(a) %d places of the garrison / beat squads are nearer than %d to a hold or %d to a leg (worst: %s %s at (%d, %d, %d), %d from %s)' % (
+            len(sever), GARRISON_HOLD, GARRISON_LEG, sever[0][1]['squad'].split('!')[-1], sever[0][1]['what'], *sever[0][1]['at'], min(sever[0][1]['dhold'], sever[0][1]['dleg']), sever[0][2]))
+    lt = [r for r in rows if r['squad'] == three]
+    if lt:
+        dd = min(math.dist(r['at'], q) for r in lt for q in lobby_holds)
+        log('  garrison (d): the lobby gate\'s %d holds are %d from the nearest of the lobby\'s three (their %d places); wanted >= %d' % (len(lobby_holds), dd, len(lt), GARRISON_HOLD))
+        if dd < GARRISON_HOLD:
+            fail('(d) the lobby gate\'s holds are %d from the lobby\'s three (%d wanted)' % (dd, GARRISON_HOLD))
+    # modes: nobody who hunts
+    hunters = hunter_squads(sc)
+    sq = {r['squad'] for r in rows if r['stage'] in ('start', 'down', 'beat')}
+    att = [n for n in sq if values(sc, A.node_of(sc, n), 'ZSquadScript')[0] != 'eStayBack']
+    bad_modes = sorted((hunters & sq) | set(att))
+    log('  garrison: %d squads of the way in / down / the beat; %d hunt (Unleash / Alert / attitude): %s' % (len(sq), len(bad_modes), ', '.join(n.split('!')[-1] for n in bad_modes)[:200]))
+    if bad_modes:
+        fail('(b) %d squads hunt (eLM_Unleash / eALM_Alert / attitude eUnleashed), so their men walk the crew\'s line: %s' % (len(bad_modes), ', '.join(n.split('!')[-1] for n in bad_modes)[:160]))
+    if hunted:
+        fail('(b) the campaign\'s hunt is named for %d squads (the search box is in the vault: a hunt path IS the crew\'s line): %s' % (len(hunted), ', '.join(sorted(h.split('!')[-1] for h in hunted))[:160]))
+    # (e) the gallery
+    ymax = max([q[1] for _l, ss in legs for q in ss] + [q[1] for _l, q in holds])
+    gal = [r for r in rows if r['stage'] == 'hall' and r['at'][1] > 1100 and r['kind'] == 'man']
+    log('  garrison (e): the highest point of any leg or hold of the crew is y %d (the hall floor %d, the gallery %d with %d of the hall\'s police)' % (ymax, HALL_Y, GAL_Y, len(gal)))
+    if ymax > HALL_Y + 300:
+        fail('(e) a leg or hold of the crew goes up to y %d, the gallery\'s police stand at y %d' % (ymax, GAL_Y))
+    # (c) the START rows over the whole round
+    men = start_men(B, ex, bool(o.get('waves2')), earliest=True)
+    res = start_pressure(S, men, times=YARD_TIMES, rules=('exact',), nav=nav)
+    line = []
+    for T, r in res.items():
+        old = [n for n in r['bear']['exact'] if not any(m['name'] == n and m['kind'] == 'wave' for m in men)]
+        line.append('+%g s %d' % (T, len(r['bear']['exact'])))
+        if old:
+            fail('(c) GO + %g s: %d guns of the old squads bear on a START row: %s' % (T, len(old), ' '.join(old)[:140]))
+        elif len(r['bear']['exact']) > YARD_GUNS:
+            fail('(c) GO + %g s: %d guns bear on a START row (%d allowed): %s' % (T, len(r['bear']['exact']), YARD_GUNS, ' '.join(r['bear']['exact'])[:140]))
+    log('  garrison (c): guns on the START rows (exact ray, hunters counted, the ante-room squads from GO + %g s): %s' % (WAKE_EARLIEST['ante'], '  '.join(line)))
+    # (g) spawn-in unseen
+    later = [r for r in rows if r['stage'] in ('beat',) or (r['stage'] in ('start', 'down') and (WAKE_BUILT or WAKE_SQUADS).get(r['squad']) == 'ante')]
+    stations = [(n, q) for n, q in ROUTE_IN[:3]]       # START, the dock door, the dock: where an idle human or a straggler stands. The flights' stations are NOTED below (a side room off the corridor sees it)
+    seen, noted = [], 0
+    for r in later:
+        if r['squad'] not in strict:
+            continue
+        for n, q in stations:
+            if abs(r['at'][1] - q[1]) < 400.0 and math.dist(r['at'], q) <= PRESSURE_RANGE and S.sees_by(r['at'], tuple(q), ('exact',)):
+                seen.append((r['squad'].split('!')[-1], r['what'], n))
+                break
+    for r in later:
+        if r['squad'] in strict and any(abs(r['at'][1] - q[1]) < 400.0 and math.dist(r['at'], q) <= PRESSURE_RANGE and S.sees_by(r['at'], tuple(q), ('exact',)) for _n, q in ROUTE_IN[3:-1]):
+            noted += 1
+    log('  garrison (g): %d of %d later-comers' % (len(seen), sum(r['squad'] in strict for r in later)) + ' (the ante-room event) have an exact ray to the START / dock door / dock stations: %s; NOTED: %d have one to a station of the vault lobby / flights' % (seen[:3], noted))
+    if seen:
+        fail('(g) %d places of later-comers are in view of a station of the way in: %s' % (len(seen), seen[:3]))
+    log('kl_fa_bank.garrison_check %s: %s' % (folder, 'PASS' if not bad else '%d FAILED' % len(bad)))
+    return bad
 
 
 BEAT_GONE_T = 5.5                       # the beat's 14 police leave their posts for the ante-room when the beat box fires: counted at their posts only until here (their later places are unknown)
@@ -4325,7 +4685,7 @@ def streamed_singles(folder):
                   if r['fmt'] & kl_whd.STREAMED and not r['fmt'] & kl_whd.LANGFILE and not r['fmt'] >> 24 and r['fmt'] & 0xffff == 0x11)
 
 
-def start_men(B, rep=None, waves2=False):
+def start_men(B, rep=None, waves2=False, earliest=False):
     """Every man of the level that can fire on the start yard in the first minute -> [dict(kind, name, t_in, places, post)]. t_in is in seconds after the
     round-start event: the old squads of stage 'start' and 'down' come at SQUADS_AT, a wave at its chain's trigger plus its delay (chain A: the round-start
     timer; with WAVES2 the dock box, ENTER_AT + GO_AFTER_EVENT after the event at the earliest). `places` are the points a man may stand at (his
@@ -4333,12 +4693,16 @@ def start_men(B, rep=None, waves2=False):
     sc, out = B.sc, []
     hunt = hunter_squads(sc)
     for t in sc.tops():
-        if STAGE.get(sc.names[t]) in ('start', 'down'):
+        if STAGE.get(sc.names[t]) in ('start', 'down') or (earliest and STAGE.get(sc.names[t]) == 'beat'):
             acts = [B.at(k) for k in range(t, sc.end[t]) if sc.cls(k) == 'ZFFActor']
             posts = [B.at(k) for k in range(t + 1, sc.end[t]) if sc.cls(k) == 'ZBoxPrimitive' and sc.names[k].startswith('Pos#')]
             for i, a in enumerate(acts):
                 ev = wake_map().get(sc.path[t][len(R):]) if STAGING else None
-                out.append(dict(kind='old', name='%s#%d' % (sc.names[t].split('!')[-1], i + 1), t_in=WAKE_EVENTS[ev]['go'] + GO_AFTER_EVENT if ev else SQUADS_AT, places=[a] + posts, post=None,
+                if earliest:                    # the garrison rule: the earliest a gate's event can fire (WAKE_EARLIEST), the beat's police with the ante-room's
+                    t_old = WAKE_EARLIEST[ev or 'ante'] + GO_AFTER_EVENT if (ev or STAGE.get(sc.names[t]) == 'beat') else SQUADS_AT
+                else:
+                    t_old = WAKE_EVENTS[ev]['go'] + GO_AFTER_EVENT if ev else SQUADS_AT
+                out.append(dict(kind='old', name='%s#%d' % (sc.names[t].split('!')[-1], i + 1), t_in=t_old, places=[a] + posts, post=None,
                             hunter=sc.path[t][len(R):] in hunt))
     for w in (rep or {}).get('waves', ()):
         base = 0.0
@@ -5308,7 +5672,10 @@ def main():
     if len(a) >= 2 and a[0] == 'test':
         global DOORS_ANIMATE, VAULT_OPEN, VAULT_DOOR_GOES, GATE_VAULT, CASE, BEAT, NO_AI, ALARM_LIGHTS, VAULT_BLAST, STOCK_ROWS, MUSIC_LAYER4
         global PLAZA_OUTSIDE, HALL_UP, CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
-        global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING
+        global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING, GARRISON
+        GARRISON = '--garrison' in a                        # the garrison and the beat's police in pockets off the crew's line, holding their places (GARRISON_PLACES); needs --gates and --staging
+        if GARRISON and not ('--gates' in a and '--staging' in a):
+            raise ValueError('--garrison needs --gates and --staging')
         STAGING = '--staging' in a                          # the squads of the way in sleep and are woken room by room (WAKE_SQUADS); needs --gates and enemies
         if STAGING and '--gates' not in a:
             raise ValueError('--staging needs --gates (the gates lists wake the next room)')
@@ -5368,6 +5735,8 @@ def main():
     elif len(a) == 3 and a[0] == 'dyn':
         out, _rep = dyn(a[1], a[2])
         sys.exit(1 if any(x == 'FAIL' for x, _t in out) else 0)
+    elif len(a) == 2 and a[0] == 'garrison-check':
+        sys.exit(1 if garrison_check(a[1]) else 0)
     elif len(a) == 2 and a[0] == 'pressure-check':
         sys.exit(1 if pressure_check(a[1]) else 0)
     elif len(a) == 2 and a[0] == 'dyn-check':
