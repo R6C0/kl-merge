@@ -191,6 +191,21 @@ static int klnm_name(DWORD at, char *out, int cap)
     return 0;
 }
 
+/* THE TAG'S INITIALS for the record at 'at' without writing anything (klhud_tags.c: the hook draws the tag itself, the record keeps its full
+   name for the kill feed and the score page). -> 1 and the initials in out; 0 = unknown (the caller falls back to the record's own string) */
+static int klnm_tag_ini(DWORD at, char *out, int cap)
+{
+    int i;
+    if (cap < 2 || !klnm_refresh()) return 0;
+    for (i = 0; i < KLW_NREC; i++) {
+        const struct klnm_rec *q = &klnm_r.r[i];
+        if (!q->used || q->at != at || q->human || !q->ini[0]) continue;
+        snprintf(out, (size_t)cap, "%s", q->ini);
+        return 1;
+    }
+    return 0;
+}
+
 /* the game's two steps (kl2 0x588980 / 0x8f5f99 as klcrew.c's klw_rename): a string of its heap from the text, handed (and given up)
    to the record's client block. Game thread only. -> 1 when the record now holds the text */
 static int klnm_write(struct klnm_rec *q, const char *want)
@@ -247,7 +262,10 @@ static void klnm_init(void)
     int draft = (int)GetPrivateProfileIntA("HUD", "Draft", 0, klh_ini), v;
     memset(&klnm, 0, sizeof klnm); memset(&klnm_r, 0, sizeof klnm_r);
     v = (int)GetPrivateProfileIntA("HUD", "Names", draft, klh_ini); klnm.on = v < 0 ? 0 : v > 1 ? 1 : v;
-    v = (int)GetPrivateProfileIntA("HUD", "NameTags", draft, klh_ini); klnm.tags = v < 0 ? 0 : v > 2 ? 2 : v;       /* M1: not 'Tags' (klhud.c's TRAITOR text key) */
+    /* 2026-10-12: with [HUD] HeadTags (klhud_tags.c) the hook draws the initials itself and the record keeps its full name (kill feed, score
+       page): NameTags then defaults to 0. Without HeadTags under Draft it stays 1 (the rename). A key that is set still wins. */
+    v = (int)GetPrivateProfileIntA("HUD", "HeadTags", draft, klh_ini);
+    v = (int)GetPrivateProfileIntA("HUD", "NameTags", draft && v == 0, klh_ini); klnm.tags = v < 0 ? 0 : v > 2 ? 2 : v;       /* M1: not 'Tags' (klhud.c's TRAITOR text key) */
     v = (int)GetPrivateProfileIntA("HUD", "OwnName", 0, klh_ini); klnm.own = v != 0;
     klnm.log = (int)GetPrivateProfileIntA("HUD", "Log", 1, klh_ini);
     if (klnm.tags && !klnm.on) { klnm.on = 1; klog("names: [HUD] NameTags is on, so the list shows the character's name too (Names=0 cannot be kept: the list would show the initials)"); }      /* S4 */

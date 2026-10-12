@@ -586,6 +586,7 @@ static void klh_tick(int game_thread);
 #include "klhud.c"                                    /* includes klhud_weapon.c inside itself */
 #include "klhud_popup.c"                              /* AFTER klhud.c: pop-ups + loot ring (uses its klu / klu_r / klu_pic) */
 #include "klhud_escape.c"                             /* AFTER klhud_popup.c: the escape-vehicle panel in the new look (uses klu / klu_r / klu_pic) */
+#include "klhud_tags.c"                              /* AFTER klhud_escape.c: the tags over the heisters' heads (uses klu / klu_r / klu_cs / klnm_tag_ini) */
 #include "klshoulder.c"
 #include "klvis.c"
 #include "klnet.c"

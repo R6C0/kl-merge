@@ -428,6 +428,12 @@ static void klu_draw_ours(void *el, void *ctx, void *cam, DWORD n_before, DWORD 
     LeaveCriticalSection(&klu_cs);
 }
 
+/* klhud_tags.c (included after klhud_escape.c): the head tags; its render step runs after ours, its tick after the hide tick, its init at the end of klu_init */
+static void klht_render(void *el, void *ctx, void *cam);
+static void klht_tick(DWORD osd, const struct klb_snap *s, int show);
+static void klht_init(void);
+static void klht_reset(void);
+
 /* slot 2 (Render(ctx, cam), thiscall ret 8) of the private vtable of the clock element: runs inside 0x8bf300's element loop */
 static void klu_clock_face(void *el)
 {   /* Dials. The clock's Update has just written this frame's digits into its text and shadow (elem+0x28 / +0x2c); the
@@ -461,6 +467,7 @@ static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam
         r = ((klu_render_t)(DWORD_PTR)KLH_VA(KLU_TIME_RENDER))(el, 0, ctx, cam);
     n1 = ctx ? ((const DWORD *)ctx)[1] : 0;
     klu_draw_ours(el, ctx, cam, n0, n1);
+    klht_render(el, ctx, cam);                      /* klhud_tags.c: the tags over the heisters' heads (the stock element's first loop, run by the hook) */
     return r;
 }
 
@@ -1084,6 +1091,7 @@ static void klu_reset(const char *why, DWORD osd)
     InterlockedExchange(&klu_draw_on, 0);
     EnterCriticalSection(&klu_cs);
     klwd_reset();                                              /* S1: inside the lock, the render slot walks klwd_r under it */
+    klht_reset();                                              /* M1 of the tags review: klht_r holds pointers into the scene that just ended */
     memset(&klu_r, 0, sizeof klu_r);
     klu_r.osd = osd;
     LeaveCriticalSection(&klu_cs);
@@ -1234,6 +1242,7 @@ static void klu_tick(int game_thread)
     InterlockedExchange(&klu_draw_on, show);
     klwd_show(show);
     if (show && klu.hide && klu.crew) klu_hide_tick(osd, 1);
+    klht_tick(osd, have ? &pre : 0, show);                    /* klhud_tags.c: after the hide (it acts only while klu_r.hid says the stock element is hidden by us) */
     if (klu.probe && klu_probe_ready) {
         const float *a = klu_pr.stock, *b = klu_pr.ours, *p = klu_pr.pic; int same = klu_pr.nours > 0 && b[0] == a[0] && b[2] == a[2] && b[4] == a[4] && b[9] == a[9] && a[0] != 0;
         klu_probe_ready = 0;
@@ -1305,6 +1314,7 @@ static void klu_init(void)
     if (!(klu.crew_x <= 1280)) klu.crew_x = -1; if (!(klu.crew_y <= 720)) klu.crew_y = -1; if (!(klu.money_x <= 1280)) klu.money_x = -1;
     if (!(klu.money_y <= 720)) klu.money_y = -1; if (!(klu.round_y <= 720)) klu.round_y = -1;
     if (!(klu.crew_w >= 80 && klu.crew_w <= 640)) klu.crew_w = 211; if (!(klu.money_w >= 80 && klu.money_w <= 640)) klu.money_w = 211;
+    klht_init();                                              /* klhud_tags.c: [HUD] HeadTags / HeadShadow / HeadLine */
     klog("hud: on (Version 3: the draft's crew list, round line, money box + the parts: values, weapon dial, pop-ups; Draft=%d Dials=%d Weapon=%d Lives=%d RoundOf=%d); Stock=%d Log=%d Crew=%d Money=%d Round=%d HideStock=%d Draw=%d (1 own Draw with the 16:34 xform, 2 through the stock clock's Render) Shadow=%d Tags=%d CashShort=%d TotalFont=%d Plates=%d PicAnchor=%d PicTest=%d Grid=%d Probe=%d Layer=%d Rows=%d Inset=%.3f; Arcade only; VERSION 2 HAS NOT RUN IN THE GAME",
          klu.draft, klu.dials, klu.weapon, klu.lives, klu.roundof, klu.stock, klu.log, klu.crew, klu.money, klu.round, klu.hide, klu.draw, klu.shadow, klu.tags, klu.cashshort, klu.totalfont, klu.plates, klu.anchor, klu.pictest, klu.grid, klu.probe, klu.layer, klu.rows, klu.inset);
 }
