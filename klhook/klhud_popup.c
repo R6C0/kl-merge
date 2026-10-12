@@ -352,13 +352,12 @@ static void klpu_ring_draw(void *ctx)
     cx = klpu_f(klpu_ring_cx); cy = klpu_f(klpu_ring_cy); frac = klpu_f(klpu_ring_frac);
     if (!(frac >= 0)) frac = 0; if (frac > 1.0f) frac = 1.0f;
     if (klu_r.handle[114]) drew |= klu_pic(clock, ctx, KLU_NPIC, 114, cx - KLPU_DISC * 0.5f, cy - KLPU_DISC * 0.5f, KLPU_DISC, KLPU_DISC, KLPU_C_DISC, klu.layer - 2);
-    if (klu_r.handle[115]) klu_pic(clock, ctx, KLU_NPIC, 115, cx - KLPU_DISC * 0.5f, cy - KLPU_DISC * 0.5f, KLPU_DISC, KLPU_DISC, KLPU_C_THIN, klu.layer - 1);
+    klu_track(clock, ctx, cx, cy, KLPU_DISC * 0.5f, KLPU_C_THIN, klu.layer - 1);                 /* 115 = the thin ring at the disc's rim (re-baked 2026-10-12 at 0.40 of its square) */
     if (klu_r.handle[116]) klu_pic(clock, ctx, KLU_NPIC, 116, cx - KLPU_DOLLAR * 0.5f, cy - KLPU_DOLLAR * 0.5f, KLPU_DOLLAR, KLPU_DOLLAR, KLPU_C_DOLLAR, klu.layer - 1);
-    n = (int)(frac * KLPU_RING_N + 0.5f); if (n < 1) n = 1;          /* the first dab stands as soon as he loots */
-    for (k = 0; k < n && k < KLPU_RING_N; k++) {                     /* dab k at 2 pi k / N clockwise from the top: the FILLED part */
-        float a = 6.2831853f * (float)k / (float)KLPU_RING_N;
-        drew |= klu_pic(clock, ctx, KLU_NPIC, 113, cx + KLPU_RING_R * (float)sin(a) - KLPU_DAB_W * 0.5f, cy - KLPU_RING_R * (float)cos(a) - KLPU_DAB_H * 0.5f, KLPU_DAB_W, KLPU_DAB_H, KLU_C_CHALK, klu.layer);
-    }
+    if (frac < 0.012f) frac = 0.012f;                                 /* a stub stands as soon as he loots */
+    (void)n; (void)k;
+    klu_arc(clock, ctx, cx, cy, KLPU_RING_R, 0, 0.0f, frac, KLU_C_CHALK, klu.layer);     /* 2026-10-12: ONE painted stroke (klhud.c klu_arc, family A), the FILLED part from the top clockwise */
+    drew = 1;
     if (drew) InterlockedIncrement(&klpu_n_ring);
 }
 

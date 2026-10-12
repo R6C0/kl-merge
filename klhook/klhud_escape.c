@@ -242,11 +242,10 @@ static void klesc_paint(void *ctx)
 static DWORD klesc_class_rgb(DWORD rgb)
 {   /* the stock icon colour -> ours: green arriving, coral leaving, orange else (waiting / white) */
     int r = (rgb >> 16) & 255, g = (rgb >> 8) & 255, b = rgb & 255;
-    if (g > r + 64 && g > b + 64) return KLU_C_GREENHI;
-    if (r > g + 64 && r > b + 64 && g < 96) return KLU_C_CORAL;
-    return KLU_C_ORANGE;
+    (void)r; (void)g; (void)b;
+    return KLU_C_ORANGE;                         /* 2026-10-12: the draft's escape colour whatever the state (was green arriving / coral leaving) */
 }
-
+#define KLESC_ICON_INK   0.47f               /* the stock icon pictures' ink is about this part of their square (run S1: a 30 px picture showed a 14 px car) */
 /* -> 1 = our look is prepared for this call (the writes of section 3 are made; klesc_after puts them back) */
 static struct { DWORD e; DWORD iconc, iconc_new, shc, shc_new, barc, barc_new; DWORD px, py, qx, qy; int pos_set; } klesc_w;
 
@@ -275,6 +274,7 @@ static int klesc_prep(DWORD e)
     if (klesc.prompts) {
         klesc_style_text(2, share, 1, KLU_C_CHALK, klesc.centre ? KLESC_STYLE_CENTRE : 0, 0, 1);
         klesc_style_text(3, hold, 1, KLU_C_CHALK, klesc.centre ? KLESC_STYLE_CENTRE : 0, 0, 1);
+        /* review M1: the stock Render sets the prompts' alpha itself on every call (0xff usable, 0x3f dimmed); a write here was overwritten at once, so the dimmed look is the game's own and stays */
     }
     /* the numbers of the pictures */
     if (klh_rd(klh_rd32(time + KLESC_T_GEOM) + 0x40, ext, 8) && ext[0] > 2.0f && ext[0] < 300.0f) tw = 2.0f * ext[0]; else tw = 5.0f * KLESC_CHAR_W;
@@ -282,7 +282,7 @@ static int klesc_prep(DWORD e)
     klesc_p.cx = ax + dx + klesc.dx; klesc_p.mid = mid;
     klesc_p.bw = tw + 2.0f * klesc.padx; if (klesc_p.bw < 64.0f) klesc_p.bw = 64.0f;
     klesc_p.bh = cap + 2.0f * klesc.pady;
-    klesc_p.ix = klesc_p.cx - klesc_p.bw * 0.5f - 6.0f - (float)klesc.icon; klesc_p.iy = mid - (float)klesc.icon * 0.5f;
+    klesc_p.ix = klesc_p.cx - klesc_p.bw * 0.5f - 6.0f - (float)klesc.icon * (0.5f + 0.5f * KLESC_ICON_INK); klesc_p.iy = mid - (float)klesc.icon * 0.5f;      /* the INK's right edge 6 px from the bar */
     klesc_p.bwid = klesc.barw > 0 ? (float)klesc.barw : klesc_p.bw; klesc_p.bhgt = (float)klesc.barh;
     klesc_p.bx = klesc_p.cx - klesc_p.bwid * 0.5f; klesc_p.by = mid + klesc_p.bh * 0.5f + (float)klesc.bargap;
     iconp = klh_rd32(e + KLESC_E_ICONP); iconc = klh_rd32(e + KLESC_E_ICONC); barc = klh_rd32(e + KLESC_E_BARC);
@@ -398,7 +398,7 @@ static void klesc_init(void)
     if (!klu.on) return;
     klesc.on = klu_inii("Escape", klu.draft, 0, 1);
     if (!klesc.on) return;
-    klesc.icon = klu_inii("EscapeIcon", 30, 8, 80); klesc.layer = klu_inii("EscapeLayer", 11, 2, 13);
+    klesc.icon = klu_inii("EscapeIcon", 62, 8, 120); klesc.layer = klu_inii("EscapeLayer", 11, 2, 13);
     klesc.prompts = klu_inii("EscapePrompts", 1, 0, 1); klesc.centre = klu_inii("EscapeCentre", 1, 0, 1);
     klesc.barw = klu_inii("EscapeBarW", 0, 0, 400); klesc.barh = klu_inii("EscapeBarH", 9, 4, 30); klesc.bargap = klu_inii("EscapeBarGap", 5, 0, 60);
     klesc.padx = klu_inif("EscapePadX", "18"); klesc.pady = klu_inif("EscapePadY", "7"); klesc.dx = klu_inif("EscapeDX", "0"); klesc.dy = klu_inif("EscapeDY", "0");

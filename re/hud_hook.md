@@ -413,3 +413,22 @@ Pictures must show:
 3. Aboard (escape): NO dark stock plate; a chalk bar with the time in DARK letters (M1: not grey), orange icon left of it, a framed health bar below with an orange fill, both prompts chalk and centred under the bar. If the stock red icon / bar still shows, an alpha-0 picture draws (the main guess); if the time and the bar disagree vertically, style 0x14's anchor (S6) -> EscapeDY moves the pictures.
 4. Last: the knock-down prompt, intro countdown and round-over page if they come up (S5) - small but readable.
 Fall-back to compare: same run with `Escape=0`.
+
+## 13. Rings as a stroke (2026-10-12; owner: 'i dont want the circles to have that circle circle' - the rings were strings of round dabs, then a dotted thin track)
+How it is built (tools/kl_hud.py ARC_*, klhud.c klu_arc / klu_dabs / klu_track, mirrored number for number in `preview-hud`):
+- A ring = 3 baked slices of 120 degrees, clockwise from the top; each is a square texture holding the WHOLE ring's bounding square with only its slice painted
+  (centre-line radius 0.40 of the side), so slices drawn at the ring's square join. Family A (stroke 0.23 of the radius; watch, escape dial, loot ring) = slots
+  123 / 124 / 125, 128 px; family B (0.12; weapon dial) = 126 / 185 / 190, 256 px (each drawn at most ~2x smaller: review S3, no mips are known). The slots are the
+  17 that no stock row names (re/hud_rings_review.md). Slice 0 has the round cap at 0, slice 2 at 360.
+- The part of a ring that is left = the slices wholly inside it + ONE run of dabs (113) at its moving end, step 0.4 of the stroke and at most 2.5 px, dab size x 0.97
+  (S1 / S2). A level baked without the slices (hud_x2 .. x5) draws the whole stroke as dabs (S4).
+- The thin track (slot 115) is now 128 px, an UNBROKEN line 2.7 texels wide (was 512 px, 5.6 texels, six breaks = the dotted circle; M2), under the stroke at the same radius.
+- Review M1: klesc_full_alpha is gone (the stock Render rewrites the prompts' alpha every call: 0xff usable, 0x3f dimmed; the faint prompts are the game's own dimmed state).
+  S5: small-font shadow 0x40 -> 0x60. Weapon circle KLWD_S 0.85 -> 0.76 (owner: 'could shrink the weapon one slightly').
+- Worst case a frame about 205 pictures (weapon 45, watch 50, escape 28, loot 25, the rest of the HUD); the queue is 288, the draw list held 280.
+- Level `<work>/build/hud_x6/DM03` (kl_hud.py all <hud_new/_src/DM03> <out> --look deadmen, check PASS), preview `<work>/build/hud_x6/preview.png`; hooks `build/klhook/hud_v17_test` / `hud_v17_ship`.
+### 13.1 Live check R1 (owner away; hook hud_v17_test, archive hud_x6/DM03 swapped in for the run)
+Ini `[HUD] Enable=1 Draft=1 Log=2`; the whole heist on the bank, pictures every 2 s. Look at: watch (top right), escape dial (aboard, left of the watch), weapon circle (smaller, ring
+one smooth stroke, no dots), the thin track an even line. Log lines: `hud: on (Version 3: ...`, the escape lines of 12.3, no `stands down`. If the rings are broken into dashes the textures
+are minified without mips: bake the slices at the drawn size.
+R1p: the same, idle player, `PopupTest=1` added: the loot ring (dark disc, unbroken thin ring, stroke filling from the top, green dollar) and both pop-ups.

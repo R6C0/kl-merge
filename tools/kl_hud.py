@@ -1158,11 +1158,11 @@ EXTRAS = (            # slot, name, width, height
 
     (112, 'dry', 256, 32),        # the same, streaked: strike-through, bar tails
 
-    (113, 'dab', 32, 32),         # one brush dab: rings are drawn as dabs on a circle and empty dab by dab
+    (113, 'dab', 32, 32),         # one round brush dab (ink 0.9 of the picture): the moving end of a ring stroke, the watch's hand
 
     (114, 'disc', 128, 128),      # a filled disc with a rough rim: dial backs
 
-    (115, 'ring', 128, 128),      # a thin broken ring: the loot ring's inner circle, dial rims
+    (115, 'ring', 128, 128),      # a thin UNBROKEN track ring at the arcs' centre-line radius (0.40 of the square; 128 px, 1.5-3 texel line: drawn at most 2.3x smaller, review M2): under a dial's stroke, the loot ring's inner circle
 
     (116, 'dollar', 128, 128),    # '$' dragged sideways with streaks rubbed out: the loot ring
 
@@ -1170,13 +1170,124 @@ EXTRAS = (            # slot, name, width, height
 
     (118, 'box', 256, 64),        # an outlined box: the traitor pop-up
 
+    (123, 'arcA0', 128, 128),     # ring family A (stroke 0.23 of the radius: watch, escape dial, loot ring), slice 0..2 of 3
+
+    (124, 'arcA1', 128, 128),
+
+    (125, 'arcA2', 128, 128),
+
+    (126, 'arcB0', 256, 256),     # family B (0.12: weapon dial)
+
+    (185, 'arcB1', 256, 256),
+
+    (190, 'arcB2', 256, 256),     # slots 123..126, 185, 190: 0 in the two 200-entry lists of every stock level (checked 2026-10-12)
+
 )
 
 
 
 
 
+# ---- painted rings as arc pictures (2026-10-12; the owner: 'i dont want the circles to have that circle circle')
+# A ring that empties was a string of round dabs and read as beads. It is now ONE stroke: a ring is cut into ARC_N slices of
+# 360 / ARC_N degrees (clockwise from the top), each baked as a square texture that holds the whole ring's bounding square with
+# only that slice painted, so the slices drawn at the ring's square join into a ring. The slice that holds the moving end of
+# the stroke is made of tightly overlapping round dabs (picture 113, spacing <= 1.5 px) so its end can stand anywhere.
+# Two families (stroke width / centre-line radius): A (watch, escape dial, loot ring) and B (weapon dial). klhud.c klu_arc mirrors
+# every number here (ARC_*). Round caps only at 0 degrees (slice 0 start) and 360 degrees (last slice end).
+ARC_N = 3
+ARC_KR = 0.40                      # centre-line radius / the square's side
+ARC_FAM = {'A': (128, 0.23, 123, 124, 125), 'B': (256, 0.12, 126, 185, 190)}      # texture side, stroke / centre-line radius, slots
+RING_STROKE = 0.021                # the thin track ring (slot 115), stroke / the square's side
+
+
+def _arc_pixels(fam, idx):
+    import math
+    S, ratio, _a, _b, _c = ARC_FAM[fam]
+    rc = ARC_KR * S; hw0 = 0.5 * ratio * rc
+    a = bytearray(S * S)
+    TAU = 2 * math.pi
+    th0, th1 = TAU * idx / ARC_N, TAU * (idx + 1) / ARC_N
+    ovl = math.radians(0.7)
+    hs = (th1 - th0) / 2 + (0 if idx == 0 else ovl) / 2; he = (th1 - th0) / 2 + (0 if idx == ARC_N - 1 else ovl) / 2
+    # the stroke's wobble: a function of the GLOBAL angle so that neighbouring slices meet exactly; subtle (about 4 % of the width)
+    def hwo(t, ph):
+        return hw0 * (1 + 0.035 * math.sin(5 * t + ph) + 0.025 * math.sin(13 * t + ph * 1.7) + 0.012 * math.sin(31 * t + ph * 0.6))
+    # a few small nicks on the edges ('light breaks only'): (angle, side, radius as a part of the half width)
+    nicks = [(0.55, 1, 0.20), (1.90, -1, 0.17), (2.75, 1, 0.22), (3.65, -1, 0.15), (4.55, 1, 0.19), (5.60, -1, 0.16)]
+    cxy = (S - 0.0) / 2.0
+    cap0 = (idx == 0); cap1 = (idx == ARC_N - 1)
+    p0 = (0.0, -rc)
+    lim = hw0 * 1.12 + 2
+    for y in range(S):
+        dy = y + 0.5 - cxy
+        for x in range(S):
+            dx = x + 0.5 - cxy
+            r = math.hypot(dx, dy)
+            if abs(r - rc) > lim and not ((cap0 or cap1) and math.hypot(dx - p0[0], dy - p0[1]) < lim):
+                continue
+            t = math.atan2(dx, -dy)
+            if t < 0: t += TAU
+            ri = rc - hwo(t, 1.1); ro = rc + hwo(t, 3.3)
+            sd = min(r - ri, ro - r)
+            phi = t - (th0 + th1) / 2
+            if phi > math.pi: phi -= TAU
+            if phi < -math.pi: phi += TAU
+            sa = min(r * (phi + hs), r * (he - phi))
+            sdb = min(sd, sa)
+            if cap0 or cap1:                                              # the round cap at 0 / 360 degrees (the same point)
+                sdb = max(sdb, hw0 * 0.95 - math.hypot(dx - p0[0], dy - p0[1]))
+            for (nt, side, nr) in nicks:
+                nd = math.hypot(dx - (rc + side * hw0) * math.sin(nt), dy + (rc + side * hw0) * math.cos(nt)) - nr * hw0
+                if nd < sdb: sdb = nd
+            v = int(255 * max(0.0, min(1.0, sdb + 0.5)))
+            if v: a[y * S + x] = v
+    return a
+
+
+def _track_pixels(S):
+    import math
+    rc = ARC_KR * S; hw = max(1.0, 0.5 * RING_STROKE * S)
+    a = bytearray(S * S); cxy = S / 2.0; TAU = 2 * math.pi
+    nicks = [(0.4, 0.5), (1.35, 0.4), (2.2, 0.5), (3.3, 0.4), (4.1, 0.5), (5.2, 0.4)]
+    for y in range(S):
+        dy = y + 0.5 - cxy
+        for x in range(S):
+            dx = x + 0.5 - cxy
+            r = math.hypot(dx, dy)
+            if abs(r - rc) > hw + 2: continue
+            sd = hw - abs(r - rc)                                      # one clean unbroken line (the owner: no 'circle circle'; review M2)
+            v = int(255 * max(0.0, min(1.0, sd + 0.5)))
+            if v: a[y * S + x] = v
+    return a
+
+
+def _dab_pixels(w):
+    import math
+    a = bytearray(w * w); c = w / 2.0; R = w * 0.45
+    for y in range(w):
+        for x in range(w):
+            d = math.hypot(x + 0.5 - c, y + 0.5 - c)
+            r = R * (1 + 0.025 * math.sin(math.atan2(y + 0.5 - c, x + 0.5 - c) * 3 + 0.8))
+            v = int(255 * max(0.0, min(1.0, r - d + 0.5)))
+            if v: a[y * w + x] = v
+    return a
+
+
+def _white_alpha(a):
+    px = bytearray(b'\xff\xff\xff\0' * len(a))
+    px[3::4] = a
+    return px
+
+
 def _extra_pixels(kind, w, h):
+
+    if kind.startswith('arc'):
+        return _white_alpha(_arc_pixels(kind[3], int(kind[4:])))
+    if kind == 'ring':
+        return _white_alpha(_track_pixels(w))
+    if kind == 'dab':
+        return _white_alpha(_dab_pixels(w))
 
     import random, math
 
@@ -1714,6 +1825,50 @@ def preview_hud(src, out, log=print):
 
                     img[q + k] = int(col[k] * a + img[q + k] * (1 - a))
 
+    # the REAL baked arc pictures (2026-10-12): the level's own textures 3000.. sampled the way the game's sprite draw would (area
+    # average), and klhud.c's klu_arc / klu_dabs / klu_track mirrored number for number
+    def texa(tid):
+        e = tex.tex[tid].entry; q = e.index(b'\0', 36) + 1
+        _s, _a, _b, _i, th, tw = struct.unpack_from('<I4s4sIHH', e, 0)
+        n = struct.unpack_from('<I', e, q)[0]
+        return tw, th, e[q + 4:q + 4 + n]
+    TA = {}
+    def pic(slot, x0, y0, dw, dh, col, a=1.0):
+        tid = EXTRA_ID + [s for s, *_ in EXTRAS].index(slot)
+        if tid not in TA: TA[tid] = texa(tid)
+        tw, th, px = TA[tid]
+        ss = max(1, int(tw / max(dw, 1.0) + 0.999)); ss = min(ss, 8)
+        for y in range(max(0, int(y0)), min(H_, int(y0 + dh) + 1)):
+            for x in range(max(0, int(x0)), min(W_, int(x0 + dw) + 1)):
+                acc = 0.0
+                for j in range(2):
+                    for i in range(2):
+                        u = ((x + (i + .5) / 2 - x0) / dw) * tw; v = ((y + (j + .5) / 2 - y0) / dh) * th
+                        if 0 <= u < tw and 0 <= v < th:
+                            acc += px[4 * (int(v) * tw + int(u)) + 3]
+                al = acc / 4 / 255.0 * a
+                if al > 0:
+                    q = 3 * (y * W_ + x)
+                    for k in range(3):
+                        img[q + k] = int(col[k] * al + img[q + k] * (1 - al))
+    SLOTS = ((123, 124, 125), (126, 185, 190)); RATIO = (ARC_FAM['A'][1], ARC_FAM['B'][1])
+    def dabs(cx_, cy_, r, ta, tb, stroke, col):
+        size = stroke / 0.9 * 0.97; step = min(2.5, stroke * .4); ln = max(0.0, r * 2 * math.pi * (tb - ta)); n = int(ln / step) + 1
+        for k in range(n + 1):
+            a = 2 * math.pi * (ta + (tb - ta) * k / n)
+            pic(113, cx_ + r * math.sin(a) - size / 2, cy_ - r * math.cos(a) - size / 2, size, size, col)
+    def arc(cx_, cy_, r, fam, t0, t1, col):
+        D = r / ARC_KR; stroke = RATIO[fam] * r; cur = t0
+        if t1 <= t0: return
+        for j in range(ARC_N):
+            a, b = j / ARC_N, (j + 1) / ARC_N
+            if t0 <= a + 1e-4 and t1 >= b - 1e-4:
+                if cur < a - 1e-4: dabs(cx_, cy_, r, cur, a, stroke, col)
+                pic(SLOTS[fam][j], cx_ - D / 2, cy_ - D / 2, D, D, col); cur = b
+        if cur < t1 - 1e-4: dabs(cx_, cy_, r, cur, t1, stroke, col)
+    def track(cx_, cy_, r, col):
+        D = r / ARC_KR; pic(115, cx_ - D / 2, cy_ - D / 2, D, D, col)
+    TRACKC = (74, 72, 68)
     cache = {}
 
     def font(name):
@@ -1855,19 +2010,13 @@ def preview_hud(src, out, log=print):
     # round watch + escape dial (klu_dials): rings of dabs
 
     wcx, wcy = 1212, 66
-
-    disc(wcx, wcy, 34.5, (8, 8, 9), .61); ring(wcx, wcy, 29, 40, .6, 11, 9, CHALKc)
-
-    a_ = 2 * math.pi * .4
-
-    for i in range(1, 6): rect(wcx + 4.4 * i * math.sin(a_) - 2.5, wcy - 4.4 * i * math.cos(a_) - 2.5, 5, 5, CHALKc)
-
-    disc(wcx, wcy, 4, CHALKc)
-
+    left = .6; a_ = 2 * math.pi * (1 - left)
+    disc(wcx, wcy, 34.5, (8, 8, 9), .61); track(wcx, wcy, 29, TRACKC); arc(wcx, wcy, 29, 0, 1 - left, 1.0, CHALKc)
+    hs = 3.9 / .9
+    for k in range(1, int(21 / 1.1) + 1): pic(113, wcx + math.sin(a_) * 1.1 * k - hs / 2, wcy - math.cos(a_) * 1.1 * k - hs / 2, hs, hs, CHALKc)
+    pic(113, wcx - 4.3, wcy - 4.3, 8.6, 8.6, CHALKc)
     ex, ey = wcx - 75, wcy + 5
-
-    disc(ex, ey, 27.5, (8, 8, 9), .61); ring(ex, ey, 23, 32, .65, 10, 8.5, ORANGE); rect(ex - 9, ey - 5, 18, 10, CHALKc)         # a car, as a block
-
+    disc(ex, ey, 27.5, (8, 8, 9), .61); track(ex, ey, 23, TRACKC); arc(ex, ey, 23, 0, 1 - .65, 1.0, ORANGE); rect(ex - 9, ey - 5, 18, 10, CHALKc)         # a car, as a block
     mx = 1247
 
     text(LAB, 'ROUND 1 OF 10', mx + TRK, leg(108, LAB), CHALKc, 'r')
@@ -1888,26 +2037,15 @@ def preview_hud(src, out, log=print):
 
         text(f, val, mx, leg(y, f), GREENHI if k == 0 else GREEN, 'r')
 
-    wx, wy = 1177, 598
-
-    disc(wx, wy, 70.5, (8, 8, 9), .61); ring(wx, wy, 62, 64, .7, 12, 10, CHALKc)
-
-    rect(wx - 43, wy + 2, 87, 2, CHALKc, .29)                                 # the divider
-
-    text('H2', '30', wx - 7, leg(wy - 36, 'H2'), CHALKc, 'r'); text(SM, '150', wx - 5, leg(wy + 18, SM), (169, 165, 157), 'r')
-
-    text(LAB, 'ZASTAVA M85 . 270', wx + TRK / 2.0, leg(wy + 88, LAB), CORALc, 'c')
-
+    wx, wy = 1177, 598; S85 = 0.85                                            # klhud_weapon.c KLWD_S: the whole circle x 0.76 about its centre
+    disc(wx, wy, 70.5 * S85, (8, 8, 9), .61); track(wx, wy, 62 * S85, TRACKC); arc(wx, wy, 62 * S85, 1, 0.0, .7, CHALKc)
+    rect(wx - 43.5 * S85, wy + 2 * S85, 87 * S85, 2, CHALKc, .29)                                 # the divider
+    text('H2', '30', wx - 7 * S85, leg(wy - 36 * S85, 'H2'), CHALKc, 'r'); text(SM, '150', wx - 5 * S85, leg(wy + 18 * S85, SM), (169, 165, 157), 'r')
+    text(LAB, 'ZASTAVA M85 . 270', wx + TRK / 2.0, leg(wy + 88 * S85, LAB), CORALc, 'c')
     # the loot ring (a third of it filled) and the pop-up bar + the traitor box
 
     lx, ly = 640, 470
-
-    disc(lx, ly, 17, (15, 16, 15)); ring(lx, ly, 22, 32, 1.0, 8, 7, CHALKc) if False else None
-
-    for k in range(11):
-
-        a = 2 * math.pi * k / 32; rect(lx + 22 * math.sin(a) - 2.4, ly - 22 * math.cos(a) - 2.6, 4.7, 5.2, CHALKc)
-
+    disc(lx, ly, 17, (15, 16, 15)); track(lx, ly, 17, (141, 137, 130)); arc(lx, ly, 22, 0, 0.0, .34, CHALKc)
     text(SM, '$', lx - 3, cen(ly, SM), GREENHI)
 
     msg = 'YOU BAGGED $50,000'; bw = width('H1', msg) + 48; bh = 38; byc = 523

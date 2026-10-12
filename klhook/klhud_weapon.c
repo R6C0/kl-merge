@@ -138,31 +138,34 @@
 /* THE LAYOUT, virtual 1280 x 720 pixels, all relative to the dial's middle (cx, cy). re\hud_layout.md's numbers were
    written for the draft's own margin (middle 1177, 598); here the middle follows the game's inset. NOTHING OF IT HAS
    BEEN SEEN: change the numbers here, not in the code. */
-#define KLWD_D           141.0f                /* the disc's diameter */
+#define KLWD_S           0.85f                 /* 2026-10-12, the owner: 'could shrink the weapon one slightly' (0.85, then once more 0.76 on 'sixes mostly right, shrink the weapon one slightly'): the whole circle about its centre (ring, disc, gun pictures, divider, counts' places, label) x 0.85 */
+#define KLWD_D0          141.0f                /* the old disc's diameter: the CENTRE stays where it was (it follows the inset by this) */
+#define KLWD_D           (KLWD_D0 * KLWD_S)    /* the disc's diameter */
 #define KLWD_FROM_BOTTOM 86.0f                 /* the middle stands this far above the inset line (720 - 36 - 86 = 598) */
-#define KLWD_RING_R      62.0f
+#define KLWD_RING_R      (62.0f * KLWD_S)      /* the ring's centre line: the baked family B (klu_arc) */
 #define KLWD_RING_N      64                    /* run V2: 32 read as beads; V3: 48 still did (dab ink 0.59 x 0.74 of the picture) */
 #define KLWD_DAB_W       12.0f
 #define KLWD_DAB_H       10.0f
-#define KLWD_ACT_NUM_DX  (-7.0f)               /* the first gun's count: RIGHT-aligned at cx - 7, top at cy - 32 */
-#define KLWD_ACT_NUM_DY  (-36.0f)               /* quiet round: the count is cap 11 (was 19) and keeps its middle: its baseline y + 13 lies at cy - 23 (was -19) */
-#define KLWD_ACT_PIC_DX  28.0f                 /* its picture's MIDDLE */
-#define KLWD_ACT_PIC_DY  (-26.0f)
-#define KLWD_ACT_PIC     64.0f                 /* its picture's size (the texture is 128 x 128) */
-#define KLWD_CUT_W       87.0f                 /* the divider */
+#define KLWD_ACT_NUM_DX  (-7.0f * KLWD_S)               /* the first gun's count: RIGHT-aligned at cx - 7, top at cy - 32 */
+#define KLWD_ACT_NUM_DY  (-36.0f * KLWD_S)               /* quiet round: the count is cap 11 (was 19) and keeps its middle: its baseline y + 13 lies at cy - 23 (was -19) */
+#define KLWD_ACT_PIC_DX  (28.0f * KLWD_S)                 /* its picture's MIDDLE */
+#define KLWD_ACT_PIC_DY  (-26.0f * KLWD_S)
+#define KLWD_ACT_PIC     (64.0f * KLWD_S)                 /* its picture's size (the texture is 128 x 128) */
+#define KLWD_CUT_W       (87.0f * KLWD_S)                 /* the divider */
 #define KLWD_CUT_H       2.0f
-#define KLWD_CUT_DY      2.0f
-#define KLWD_OTH_NUM_DX  (-5.0f)               /* the other gun's count: right-aligned at cx - 5, top at cy + 20 */
-#define KLWD_OTH_NUM_DY  18.0f                  /* quiet round: cap 10 (was 15), the same middle */
-#define KLWD_OTH_PIC_DX  21.0f
-#define KLWD_OTH_PIC_DY  24.0f
-#define KLWD_OTH_PIC     36.0f
+#define KLWD_CUT_DY      (2.0f * KLWD_S)
+#define KLWD_OTH_NUM_DX  (-5.0f * KLWD_S)               /* the other gun's count: right-aligned at cx - 5, top at cy + 20 */
+#define KLWD_OTH_NUM_DY  (18.0f * KLWD_S)                  /* quiet round: cap 10 (was 15), the same middle */
+#define KLWD_OTH_PIC_DX  (21.0f * KLWD_S)
+#define KLWD_OTH_PIC_DY  (24.0f * KLWD_S)
+#define KLWD_OTH_PIC     (36.0f * KLWD_S)
 #define KLWD_LABEL_DX    0.0f                  /* the label: CENTRED under the disc (style 0x44 = KLU_STYLE_CENTRE, seen live in run H1_DM03_hud; set by the WIRING in klu_layout) */
-#define KLWD_LABEL_DY    88.0f                 /* its top */
+#define KLWD_LABEL_DY    (88.0f * KLWD_S)      /* 88 -> 75: up with the circle; its glyphs end 684 = the inset line */
+#define KLWD_UNUSED_LABEL_DY 88.0f                 /* its top */
 #define KLWD_SEP         " . "                 /* between the name and the reserve (the draft's middle dot is not in the baked fonts for sure) */
-#define KLWD_ARROW_DX    (-86.0f)              /* the pick-up arrow's MIDDLE: left of the disc (OUR place, a GUESS at the look), at the row it means */
-#define KLWD_ARROW_ACT_DY (-26.0f)
-#define KLWD_ARROW_OTH_DY 24.0f
+#define KLWD_ARROW_DX    (-86.0f * KLWD_S)              /* the pick-up arrow's MIDDLE: left of the disc (OUR place, a GUESS at the look), at the row it means */
+#define KLWD_ARROW_ACT_DY (-26.0f * KLWD_S)
+#define KLWD_ARROW_OTH_DY (24.0f * KLWD_S)
 #define KLWD_ARROW_SIZE  20.0f                 /* when the picture table's own size of picture 110 does not read as 4 .. 64 */
 
 #define KLWD_C_BACK      0x9c080809u           /* the disc (re\hud_layout.md 'back') */
@@ -485,7 +488,7 @@ static void klwd_compose(void)
         if (!klwd_r.scaled) klwd_text_setup();
         klh_rd((DWORD_PTR)KLH_VA(KLU_INSET), &inset, 4);
         if (!(inset >= 0 && inset < 0.25f)) inset = 0.05f;
-        cx = klwd.x >= 0 ? klwd.x : 1280.0f - 1280.0f * inset - KLWD_D * 0.5f;
+        cx = klwd.x >= 0 ? klwd.x : 1280.0f - 1280.0f * inset - KLWD_D0 * 0.5f;      /* the centre of the old circle: the shrink is about it */
         cy = klwd.y >= 0 ? klwd.y : 720.0f - 720.0f * inset - KLWD_FROM_BOTTOM;
         if (klu.log >= 2 && now - said >= 1000) {
             said = now;
@@ -529,12 +532,11 @@ static void klwd_compose(void)
             if (a->shown) {
                 /* the ring: dabs 0 .. m - 1 from the top clockwise = what is LEFT; the gap is the last part (the
                    draft's weapon dial; klu_ring runs the other way). At least one dab while a round is in */
-                m = r.frac > 0 ? (int)(r.frac * KLWD_RING_N + 0.5f) : 0;
-                if (m > KLWD_RING_N) m = KLWD_RING_N;
-                if (m < 1 && (a->rounds > 0 || r.frac > 0)) m = 1;
-                for (k = 0; k < m; k++) {
-                    float ang = 6.2831853f * (float)k / (float)KLWD_RING_N;
-                    klu_addpic(113, cx + KLWD_RING_R * (float)sin(ang) - KLWD_DAB_W * 0.5f, cy - KLWD_RING_R * (float)cos(ang) - KLWD_DAB_H * 0.5f, KLWD_DAB_W, KLWD_DAB_H, warn ? KLU_C_CORAL : KLU_C_CHALK, klu.layer - 1);
+                {   /* 2026-10-12: one painted stroke (klhud.c klu_arc, family B), the part that is LEFT from the top clockwise; the track under it */
+                    float f = r.frac > 1.0f ? 1.0f : r.frac;
+                    klu_track(NULL, NULL, cx, cy, KLWD_RING_R, KLU_TRACK_C, klu.layer - 2);
+                    if (f < 0.012f && (a->rounds > 0 || r.frac > 0)) f = 0.012f;        /* a round in = at least a stub */
+                    if (f > 0) klu_arc(NULL, NULL, cx, cy, KLWD_RING_R, 1, 0.0f, f, warn ? KLU_C_CORAL : KLU_C_CHALK, klu.layer - 1);
                 }
                 n0 = a->rounds >= 0 ? a->rounds : a->total;
                 if (a->rounds < 0 && !klwd_r.told_nocount) {       /* review S7: the big number means something else then - said once a level */

@@ -209,12 +209,13 @@
 #define KLU_T_WEAP      (KLU_T_GRID + KLU_NGRID)      /* klhud_weapon.c: the first gun's count, the other gun's, the label */
 #define KLU_NWEAP       3
 #define KLU_NTEXT       (KLU_T_WEAP + KLU_NWEAP)      /* LAST: every part that adds texts goes before this line (klhud_values.c / klhud_popup.c add none) */
-#define KLU_NPIC        224                   /* rings are drawn dab by dab (Dials) */
+#define KLU_NPIC        288                   /* the queue; the rings are baked arcs + a run of dabs (klu_arc): about 230 a frame at worst; the draw list holds 280 without trouble (run S1), keep it under ~320 */
 #define KLU_TEXTLEN     64
 #define KLU_STYLE_LEFT  (klu.left)        /* [HUD] LeftStyle: 0x44 turned out CENTRED at x (run H1_DM03_hud); 0x11 is a GUESS until the sweep of Grid shows it */
 #define KLU_STYLE_CENTRE 0x44
 #define KLU_STYLE_RIGHT 0x12
 #define KLU_SHADOW_RGB  0x80000000u
+#define KLU_SHADOW_SMALL 0x60000000u          /* about half as dark for the labels, names and small figures (GUESS: the top byte is the shadow's alpha, as 0x80 of the stock shadow) */
 
 /* the draft's colours (its CSS variables) */
 #define KLU_C_CHALK     0xfff3f0eau
@@ -405,7 +406,7 @@ static void klu_draw_ours(void *el, void *ctx, void *cam, DWORD n_before, DWORD 
             float tx = t->x + (klu.fontset && t->fnt == KLU_FNT_LABEL && !t->plain ? ((t->style & 15) == 2 ? KLU_TRACK : (t->style & 15) == 4 ? KLU_TRACK * 0.5f : 0.0f) : 0.0f);      /* the baked tracking follows the LAST letter too */
             if (klu.draw == 2) ok = klu_draw_stock(el, ctx, cam, t->obj, t->shadow, tx, ty);
             else {
-                if (klu.shadow && t->shadow && !t->noshadow) klu_draw_one(t->shadow, ctx, cam, tx + 2.0f, ty + 2.0f);     /* 0xbbe4ec / 0xbbe4f0 = 2.0 */
+                if (klu.shadow && t->shadow && !t->noshadow) { float so = t->fnt == KLU_FNT_BIG ? 2.0f : 1.0f; klu_draw_one(t->shadow, ctx, cam, tx + so, ty + so); }     /* 0xbbe4ec / 0xbbe4f0 = 2.0 (the stock offset): 2 px for the big font only, 1 px for the small ones (2026-10-12: the black drops were heavy at the small sizes) */
                 ok = klu_draw_one(t->obj, ctx, cam, tx, ty);
             }
             if (ok) InterlockedIncrement(&klu_n_draw); else InterlockedIncrement(&klu_n_refused);
@@ -637,7 +638,7 @@ static int klu_make_all(DWORD osd)
         if (!(t->obj = klu_make_obj(tmpl, klu_font_of(t), t->style, t->colour, klu.layer, why))) { klog("hud: osd %08lx: text %d: %s; the HUD stands down for this level", osd, i, why); return 0; }
         n++;
         if (klu.shadow && (!t->plain || klu.draw == 2)) {      /* Draw=2: the stock Render draws a pair, so the Grid labels get a shadow too */
-            if (!(t->shadow = klu_make_obj(tmpl, klu_font_of(t), t->style, KLU_SHADOW_RGB, klu.layer - 1, why))) { klog("hud: osd %08lx: shadow %d: %s; the HUD stands down for this level", osd, i, why); return 0; }
+            if (!(t->shadow = klu_make_obj(tmpl, klu_font_of(t), t->style, t->fnt == KLU_FNT_BIG ? KLU_SHADOW_RGB : KLU_SHADOW_SMALL, klu.layer - 1, why))) { klog("hud: osd %08lx: shadow %d: %s; the HUD stands down for this level", osd, i, why); return 0; }
             ns++;
         }
     }
@@ -678,20 +679,79 @@ static void klu_outline(float x, float y, float w, float h, DWORD argb, int laye
     klu_addpic(181, x, y, 1.0f, h, argb, layer); klu_addpic(181, x + w - 1.0f, y, 1.0f, h, argb, layer);
 }
 
-/* DIALS ([HUD] Dials=1; re\hud_layout.md; NOT RUN IN THE GAME). A ring that empties is n brush dabs (picture 113) on a
-   circle: dab k stands at 2 pi k / n clockwise from the top, and only the dabs of the part that is LEFT are drawn - the
-   empty part begins at the top and grows clockwise, as on the owner's draft. */
-static void klu_ring(float cx, float cy, float r, int n, float left, float dw, float dh, DWORD argb, int layer)
+/* RINGS AS ONE PAINTED STROKE (2026-10-12; the owner after run S1: 'i dont want the circles to have that circle circle' - the
+   rings were strings of round dabs). Every number here is tools/kl_hud.py's (ARC_N, ARC_KR, ARC_FAM, RING_STROKE). A ring is
+   KLU_ARC_N = 3 baked slices of 120 degrees, clockwise from the top: each is a square texture that holds the WHOLE ring's bounding
+   square with only its slice painted (centre-line radius 0.40 of the side, stroke 0.23 of that radius in family A = pictures
+   123 / 124 / 125: watch, escape dial, loot ring; 0.12 in family B = 126 / 185 / 190: weapon dial), so the slices drawn at the
+   ring's square join into one ring; slice 0 has a round cap at 0 degrees and slice 2 at 360. What is left of the stroke at
+   its MOVING end (the slice it stands in) is a run of overlapping round dabs (picture 113, ink 0.9 of its picture, spaced at
+   most 1.5 px and a quarter of the stroke): a ring that is partly empty = the slices wholly inside the part that is left + ONE run of
+   dabs, so the end can stand anywhere and the stroke has no gaps. Picture 115 = the thin track ring at the same radius.
+   Worst case a frame (review S1, step 0.4 of the stroke, at most 2.5 px): the weapon ring about 45 (one dab run under 1/3 of a circle + its slices), the
+   watch about 50 with its hand of 20 + hub, the escape dial about 28, the loot ring about 25 (drawn from the render slot, not queued): about 205 pictures a frame in all. */
+#define KLU_ARC_N        3
+#define KLU_ARC_KR       0.40f
+#define KLU_DAB_PIC      113
+#define KLU_DAB_INK      0.90f
+#define KLU_TRACK_PIC    115
+#define KLU_DAB_MAXSTEP  2.5f                 /* review S1: 0.4 of the stroke, at most 2.5 px (was 0.25 / 1.5): worst case ~200 pictures a frame */
+static const int klu_arc_slot[2][KLU_ARC_N] = { { 123, 124, 125 }, { 126, 185, 190 } };
+static const float klu_arc_ratio[2] = { 0.23f, 0.12f };
+#define KLU_TRACK_C      0xff4a4844u          /* the draft's faint track (#55524d on the dark disc), a touch darker */
+
+static int klu_sink(void *clk, void *ctx, int n, float x, float y, float w, float h, DWORD argb, int layer)
+{   /* clk NULL: the tick's queue; else the render slot's own call (the shared record slot KLU_NPIC) */
+    if (!clk) { klu_addpic(n, x, y, w, h, argb, layer); return 1; }
+    return klu_pic(clk, ctx, KLU_NPIC, n, x, y, w, h, argb, layer);
+}
+
+static int klu_arc_ok(int fam)
 {
-    int k, first;
-    if (!klu_r.handle[113]) return;
-    if (!(left > 0)) return;
-    if (left > 1.0f) left = 1.0f;
-    first = (int)((1.0f - left) * n + 0.5f);
-    for (k = first; k < n; k++) {
-        float a = 6.2831853f * (float)k / (float)n;
-        klu_addpic(113, cx + r * (float)sin(a) - dw * 0.5f, cy - r * (float)cos(a) - dh * 0.5f, dw, dh, argb, layer);
+    int j;
+    if (!klu_r.handle[KLU_DAB_PIC]) return 0;
+    for (j = 0; j < KLU_ARC_N; j++) if (!klu_r.handle[klu_arc_slot[fam][j]]) return 0;
+    return 1;
+}
+
+static void klu_dabs(void *clk, void *ctx, float cx, float cy, float r, float ta, float tb, float stroke, DWORD argb, int layer)
+{   /* overlapping round dabs on the circle of radius r from fraction ta to tb (clockwise from the top), both ends included */
+    float size = stroke / KLU_DAB_INK * 0.97f, len = r * 6.2831853f * (tb - ta), step = stroke * 0.4f; int k, n;      /* 0.97: soft edges compound, the dabs read fatter than the baked slices (review S2) */
+    if (step > KLU_DAB_MAXSTEP) step = KLU_DAB_MAXSTEP;
+    if (!(len > 0)) len = 0;
+    n = (int)(len / step) + 1;
+    for (k = 0; k <= n; k++) {
+        float a = 6.2831853f * (ta + (tb - ta) * (float)k / (float)n);
+        klu_sink(clk, ctx, KLU_DAB_PIC, cx + r * (float)sin(a) - size * 0.5f, cy - r * (float)cos(a) - size * 0.5f, size, size, argb, layer);
     }
+}
+
+static void klu_arc(void *clk, void *ctx, float cx, float cy, float r, int fam, float t0, float t1, DWORD argb, int layer)
+{   /* the part of the ring from fraction t0 to t1 (clockwise from the top; 0 .. 1) as one stroke */
+    float D = r / KLU_ARC_KR, stroke = klu_arc_ratio[fam] * r, cur; int j;
+    if (t0 < 0) t0 = 0;
+    if (t1 > 1.0f) t1 = 1.0f;
+    if (!(t1 > t0)) return;
+    if (!klu_arc_ok(fam)) {                                    /* review S4: a level baked without the slices (hud_x2 .. x5): the whole stroke as dabs, if there are dabs */
+        if (klu_r.handle[KLU_DAB_PIC]) klu_dabs(clk, ctx, cx, cy, r, t0, t1, stroke, argb, layer);
+        return;
+    }
+    cur = t0;
+    for (j = 0; j < KLU_ARC_N; j++) {
+        float a = (float)j / KLU_ARC_N, b = (float)(j + 1) / KLU_ARC_N;
+        if (t0 <= a + 1e-4f && t1 >= b - 1e-4f) {              /* the slice lies wholly in the part: its picture */
+            if (cur < a - 1e-4f) klu_dabs(clk, ctx, cx, cy, r, cur, a, stroke, argb, layer);
+            klu_sink(clk, ctx, klu_arc_slot[fam][j], cx - D * 0.5f, cy - D * 0.5f, D, D, argb, layer);
+            cur = b;
+        }
+    }
+    if (cur < t1 - 1e-4f) klu_dabs(clk, ctx, cx, cy, r, cur, t1, stroke, argb, layer);
+}
+
+static void klu_track(void *clk, void *ctx, float cx, float cy, float r, DWORD argb, int layer)
+{   /* the thin track ring at the same radius (picture 115) */
+    float D = r / KLU_ARC_KR;
+    if (klu_r.handle[KLU_TRACK_PIC]) klu_sink(clk, ctx, KLU_TRACK_PIC, cx - D * 0.5f, cy - D * 0.5f, D, D, argb, layer);
 }
 
 static void klu_dials(const struct klb_snap *s)
@@ -706,18 +766,23 @@ static void klu_dials(const struct klb_snap *s)
     if (clock > 60.0f && klu_r.clock_max > 60.0f) {
         float left = clock / klu_r.clock_max, a = 6.2831853f * (1.0f - left);
         klu_addpic(114, cx - 34.5f, cy - 34.5f, 69.0f, 69.0f, 0x9c080809u, klu.layer - 2);
-        klu_ring(cx, cy, 29.0f, 40, left, 11.0f, 9.0f, KLU_C_CHALK, klu.layer);       /* run V3: still beads - the dab's ink is only 0.59 x 0.74 of its picture, so 8 px dabs gave 4.7 px blobs 4.5 px apart; 11 x 9 gives 6.5 px (the draft's stroke) and overlaps */
-        for (i = 1; i <= 5; i++)                                   /* the hand: five small dabs from the hub to the ring's edge of 'now' */
-            klu_addpic(113, cx + 4.4f * i * (float)sin(a) - 2.5f, cy - 4.4f * i * (float)cos(a) - 2.5f, 5.0f, 5.0f, KLU_C_CHALK, klu.layer);
-        klu_addpic(113, cx - 4.0f, cy - 4.0f, 8.0f, 8.0f, KLU_C_CHALK, klu.layer);
+        klu_track(NULL, NULL, cx, cy, 29.0f, KLU_TRACK_C, klu.layer - 1);
+        klu_arc(NULL, NULL, cx, cy, 29.0f, 0, 1.0f - left, 1.0f, KLU_C_CHALK, klu.layer);       /* the draft: the empty part begins at the top and grows clockwise */
+        {   /* the hand: a short painted line from the hub to the stroke's start (the draft: 3.2 wide, 18 of the radius 24 long, x 1.2 here) */
+            float hs = 3.9f / KLU_DAB_INK, dx = (float)sin(a), dy = -(float)cos(a); int k, n = (int)(21.0f / 1.1f);
+            for (k = 1; k <= n; k++) klu_addpic(KLU_DAB_PIC, cx + dx * 1.1f * k - hs * 0.5f, cy + dy * 1.1f * k - hs * 0.5f, hs, hs, KLU_C_CHALK, klu.layer);
+            klu_addpic(KLU_DAB_PIC, cx - 4.3f, cy - 4.3f, 8.6f, 8.6f, KLU_C_CHALK, klu.layer);
+        }
         klu_r.watch = 1;                                           /* the render slot blanks the stock clock's digits while this is set */
     }
     /* the escape dial: the vehicle waits (state 3 / 4), [rules+0x1d8] = the seconds it still waits, 8 s a visit (klbot.c) */
     i = kluv_vehicle_pic(s) == KLUV_PIC_CHOPPER && klu_r.handle[KLUV_PIC_CHOPPER] ? KLUV_PIC_CHOPPER : KLUV_PIC_CAR;      /* a ZHeli: the helicopter (171); both kinds of car: 170 (klhud_values.c e) */
     if ((s->veh == 3 || s->veh == 4 || s->veh == 5 || klu.grid == 2) && klu_r.handle[i]) {      /* 5 = it drives out with its own countdown (run T2: 'van 5 8.5s'): the dial stays, emptying again */
         float ex = cx - 75.0f, ey = cy + 5.0f, left = klu.grid == 2 ? 0.35f : s->timer / 8.5f;
+        if (left > 1.0f) left = 1.0f;
         klu_addpic(114, ex - 27.5f, ey - 27.5f, 55.0f, 55.0f, 0x9c080809u, klu.layer - 2);
-        klu_ring(ex, ey, 23.0f, 32, left, 10.0f, 8.5f, KLU_C_ORANGE, klu.layer);
+        klu_track(NULL, NULL, ex, ey, 23.0f, KLU_TRACK_C, klu.layer - 1);
+        klu_arc(NULL, NULL, ex, ey, 23.0f, 0, 1.0f - left, 1.0f, KLU_C_ORANGE, klu.layer);
         klu_addpic(i, ex - 21.0f, ey - 21.0f, 42.0f, 42.0f, KLU_C_CHALK, klu.layer);      /* run T2: at 30 the icon's own margin left a 14 px car */
     }
 }
@@ -867,6 +932,8 @@ static int klu_compose(int *state_ok)
             if (klu.grid == 2) f = 0.16f;
             else if (kluv_loot_total(&s) > 0) f = kluv_loot_share(&s);
             if (f > 1.0f) f = 1.0f;
+            if (klu.grid != 2 && total <= 0) f = 0.0f;           /* 2026-10-12 (run S1: a stub of fill at TOTAL $0): no money, no fill */
+            if (f * klu.money_w < 1.5f) f = 0.0f;
             klu_outline(x, y, klu.money_w, bh, KLU_C_CHALK, klu.layer - 2);
             klu_addpic(181, x - 2.0f, y - 2.0f, klu.money_w * f, bh + 4.0f, KLU_C_CHALK, klu.layer - 2);
         }
@@ -954,6 +1021,12 @@ static void klu_inset_back(void)
 
 /* section 3: the sprite handles of pictures 181 (UI_White) and 170 (the car icon), once a level; a picture whose chunk
    is not the 40-byte-record type is not drawn */
+static int klu_extra_slot(int k)
+{   /* the picture slots tools/kl_hud.py's EXTRAS fill: 111..118 and the ring arcs 123..126, 185, 190 (0 in every stock level's lists) */
+    return (k >= 111 && k <= 118) || (k >= 123 && k <= 126) || k == 185 || k == 190;
+}
+#define KLU_NEXTRA 14
+
 static void klu_pic_prep(DWORD el)
 {
     static const int num[2] = { 181, 170 }; DWORD tbl = klh_rd32(el + 8), T = klh_rd32(el + 0xc), h[2] = { 0, 0 }, type[2] = { 0, 0 }; int i;
@@ -975,8 +1048,8 @@ static void klu_pic_prep(DWORD el)
             DWORD hk = 0, ck;
             if (!klh_rd(tbl + 12 * (DWORD)k, &hk, 4) || !hk) continue;
             ck = (hk & 0x80000000u) ? (hk & 0x7fffffffu) : klh_rd32((DWORD_PTR)KLH_VA(KLU_CHUNKTAB) + 4 * hk);
-            if (ck && klh_rd32(ck + 0xc) == KLU_PICTYPE) { klu_r.handle[k] = hk; if (k >= 111 && k <= 118) extra++; }
-            if (k >= 111 && k <= 118 && ck && klh_rd32(ck + 0xc) == KLU_PICTYPE && klh_rd32(ck + 0x10) == 0x10 && klu.extraflags) {
+            if (ck && klh_rd32(ck + 0xc) == KLU_PICTYPE) { klu_r.handle[k] = hk; if (klu_extra_slot(k)) extra++; }
+            if (klu_extra_slot(k) && ck && klh_rd32(ck + 0xc) == KLU_PICTYPE && klh_rd32(ck + 0x10) == 0x10 && klu.extraflags) {
                 /* run V1 (2026-10-11): the eight extras load and DRAW NOTHING. The game's per-slot table (0xcee058) has
                    no row for 111..118, so 0x5e3810 loads them with flags 0x10 alone; every stock HUD picture has
                    0x60200 (or 0x60002) | 0x10 at chunk+0x10. A DATA write on the level's own chunk: the flags of
@@ -989,8 +1062,8 @@ static void klu_pic_prep(DWORD el)
             }
             if (klu.log > 1 && ((k >= 108 && k <= 120) || k == 181)) klog("hud: pictures: slot %d: handle %08lx chunk %08lx type %lu, head %08lx %08lx %08lx %08lx", k, hk, ck, ck ? klh_rd32(ck + 0xc) : 0, ck ? klh_rd32(ck) : 0, ck ? klh_rd32(ck + 4) : 0, ck ? klh_rd32(ck + 8) : 0, ck ? klh_rd32(ck + 0x10) : 0);
         }
-        if (klu.draft && extra < 8) klog("hud: draft: this level has %d of the 8 extra pictures: Draft=1 falls back to plain bars, no rings, no dials, no weapon dial (the level needs the archive of tools/kl_hud.py all, build/hud_x2)", extra);
-        if (klu.log) klog("hud: pictures: %d of the 8 extra pictures (slots 111..118, tools/kl_hud.py --look deadmen) are in this level%s", extra, extra == 8 ? "" : " - plates fall back to UI_White, rings are not drawn");
+        if (klu.draft && extra < KLU_NEXTRA) klog("hud: draft: this level has %d of the 14 extra pictures: Draft=1 falls back to plain bars, no rings, no dials, no weapon dial (the level needs the archive of tools/kl_hud.py all, build/hud_x2)", extra);
+        if (klu.log) klog("hud: pictures: %d of the 14 extra pictures (slots 111..118, 123..126, 185, 190, tools/kl_hud.py --look deadmen) are in this level%s", extra, extra == KLU_NEXTRA ? "" : " - plates fall back to UI_White, rings are not drawn");
     }
     if (klu.log) klog("hud: pictures: 181 (UI_White) handle %08lx chunk type %lu, 170 (the car icon) handle %08lx chunk type %lu; type %d = the 40-byte record this part writes%s%s",
                       h[0], type[0], h[1], type[1], KLU_PICTYPE, klu_r.handle[181] ? "" : " - 181 IS NOT DRAWN (no plates, bars, outlines)", klu_r.handle[170] ? "" : " - 170 is not drawn");
