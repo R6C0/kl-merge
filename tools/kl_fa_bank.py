@@ -2606,13 +2606,13 @@ WAKE_DELAY = 0.3                        # s the relay Wake_<event> waits before 
 WAKE_EVENTS = collections.OrderedDict([
     ('lobby', dict(gate=None, box=((-100.0, 241.0, -6125.0), (900.0, 80.0, 275.0)), go=70.0, what='the west corridor\'s south end (ROOMS lobby\'s box)')),
     ('flights', dict(gate='lobby', box=((400.0, 241.0, -7325.0), (500.0, 80.0, 175.0)), go=100.0, what='the vault lobby end before the glass door (ROOMS flights\' box)')),
-    ('ante', dict(gate='flights', box=None, go=150.0, what='the ante-room box (the beat box)'))])
+    ('ante', dict(gate=None, box=None, go=180.0, what='the ante-room box (the beat box)'))])      # SECOND FIX (skeptic): no gate - the flights gate would wake the 12 men while the crew still stands on the flights holds
 WAKE_SQUADS = collections.OrderedDict([
     (G4 + 'Guards_Reinforcement_StayUpstairs#01', 'lobby'),
     (G4 + 'Guards_03', 'flights'),
     (G4 + 'Guards_Reinforcement_StayUpstairs', 'ante'), (G4 + 'Guards_Reinforcement_01b', 'ante'), (G4 + 'Guards_Reinforcement_01a', 'ante'),
     (G4 + 'Guards_02', 'ante'), (G4 + 'Guards_01', 'ante')])
-EVENT_T = {'lobby': 0.9, 'flights': 1.0, 'ante': 2.0}          # the earliest time index (station j = j, a stretch j -> j + 1 = j .. j + 1) at which the event can fire: the gate fires with the crew at its hold
+EVENT_T = {'lobby': 0.9, 'flights': 1.0, 'ante': 2.9}          # the earliest time index (station j = j, a stretch j -> j + 1 = j .. j + 1) at which the event can fire: the gate fires with the crew at its hold
 LEG_GUNS = 4                            # guns that may bear on a stretch between two stations (kl_fa_club.LEG_GUNS: Withdrawal's heist legs, exact ray, squads in the world)
 WAKE_KNOWN = {('leg', 2): (5, "the flights landing on the way down: wave A's four posts (wave_plan: 400 from every station) and one of Guards_01's two men; Guards_01 cannot be moved out of the leg's line "
                               "(C:/kl_scratch/vault_pressure/mv.py: 8 -> 6 rows seen at best); what it needs: wave A's four posts off the landing"),
@@ -3217,6 +3217,15 @@ def stage_men(B, ex=None):
             if sc.cls(k) == 'ZFFActor':
                 out.append(dict(name='%s %s' % (sc.names[t].split('!')[-1], sc.path[sc.parent[k]].split(chr(92))[-1]), squad=sc.path[t][len(R):], group=sc.path[sc.parent[k]],
                                 stage=st, at=B.at(k)))
+    if STAGING:                                         # SECOND FIX (skeptic): a woken man WALKS to his Defend places (the vault lobby for the dock garrison): each defend place of a staged squad counts as a man from the wake event on
+        for t in sc.tops():
+            nm = sc.path[t][len(R):]
+            if nm not in WAKE_SQUADS:
+                continue
+            for k in range(t + 1, sc.end[t]):
+                if sc.cls(k) == 'ZBoxPrimitive' and 'DefendBehaviour' in sc.path[k]:
+                    out.append(dict(name='%s %s' % (sc.names[t].split('!')[-1], sc.path[k].split(chr(92))[-1] + ' of ' + sc.path[sc.parent[k]].split(chr(92))[-1]), squad=nm,
+                                    group=None, stage=squad_stage(sc, t), at=B.at(k), walker=True))
     for w in (ex or {}).get('waves', ()):
         for j, (_e, q) in enumerate(w['men']):
             out.append(dict(name='%s_%d' % (w['name'], j + 1), squad=w['name'], group=None, stage='wave' + w['phase'], at=tuple(float(v) for v in q)))
@@ -3448,7 +3457,7 @@ def staging_check(folder, log=print):
             pts += [tuple(P['bots'][n]['places'][hold_st][:3]) for n in P['bots']]
         seen = []
         for m in men:
-            if m['squad'] in squads:
+            if m['squad'] in squads and not m.get('walker'):
                 for p in pts:
                     if abs(m['at'][1] - p[1]) < HOLD_GUN_DY and math.dist(m['at'], p) <= HOLD_GUN_RANGE * 1.5 and S.sees_by(m['at'], p, ('exact',)):
                         seen.append((m['name'], tuple(round(c) for c in p)))
@@ -3456,7 +3465,7 @@ def staging_check(folder, log=print):
         if seen:
             fail('%s: %d man/men would appear in sight of the criminals who wake them: %s' % (ev, len(seen), seen[:4]))
         log('  wake %-8s %d squads (%d men) by %s + %s, the backstop at GO + %g s; %d lattice points checked' % (
-            ev, len(squads), sum(1 for m in men if m['squad'] in squads), ('the gate ' + spec['gate']) if spec['gate'] else 'no gate (the dock gate is off)',
+            ev, len(squads), sum(1 for m in men if m['squad'] in squads and not m.get('walker')), ('the gate ' + spec['gate']) if spec['gate'] else 'no gate (' + ('the dock gate is off' if ev == 'lobby' else 'the box and the backstop only') + ')',
             ('the box %s' % (spec['box'][0],)) if spec['box'] else 'the beat box', spec['go'], len(pts)))
     log('kl_fa_bank.stage_check %s: %s' % (folder, 'PASS' if not bad else '%d FAILED' % len(bad)))
     return bad
