@@ -7,6 +7,13 @@ Nothing here writes into the game folder. It READS <DD>/KLExpansion/Maps/<id>/ (
     python tools/kl_hud_tab.py plan [--deep]       # table: id, slot, installed archive, sha1, source build, output
     python tools/kl_hud_tab.py build <out root> [ids ...]   # bake into <out root>/<id>/, check, manifest.json
     python tools/kl_hud_tab.py verify <out root> [ids ...]  # against the installed folders
+    python tools/kl_hud_tab.py menu <hud root> <out root> [ids ...]   # LEVEL-SIDE PAGES on top of a `build` (below)
+
+`menu` (2026-10-12): the round-over / status / death pages are XML inside each LEVEL archive (Menu/online.xml), and `build`
+does NOT touch them. `menu` runs `kl_hud_menu.py level <hud root>/<id> <out root>/<id>` (row-pitch fix FA_Status_GeomSpace
+16 -> 10, coral totals labels; no --board), copies the side files unchanged and runs `check-level` against the `build`'s
+archive. One map at a time: it needs the archive's size free again (~0.2 GB each). The scoreboard hook part
+(klhud_board2.c) needs NOTHING from this step: it uses the pictures `build` already adds.
 
 THE SOURCE OF EVERY BAKE IS THE INSTALLED ARCHIVE ITSELF ("the builds as they are installed"). That is safe because
 `kl_hud.py all --look deadmen` is idempotent (measured 2026-10-12, DM01): baking the installed archive twice gives
@@ -181,8 +188,41 @@ def cmd_verify(root, ids):
     return bad_all
 
 
+def cmd_menu(hroot, root, ids):
+    bad = 0
+    os.makedirs(root, exist_ok=True)
+    for mid, slot in MAPS:
+        if ids and mid not in ids:
+            continue
+        src = os.path.join(hroot, mid)
+        zs = [f for f in os.listdir(src) if f.lower().endswith('_main.zip')] if os.path.isdir(src) else []
+        if not zs:
+            print('%s: no baked archive in %s (run build first)' % (mid, src)); bad += 1; continue
+        need = os.path.getsize(os.path.join(src, zs[0]))
+        if free_gb(root) * 1e9 < need * 1.2 + 0.5e9:
+            print('%s: NOT BUILT - %.2f GB needed, %.2f GB free' % (mid, need * 1.2 / 1e9, free_gb(root))); bad += 1; continue
+        out = os.path.join(root, mid)
+        if os.path.isdir(out):
+            shutil.rmtree(out)
+        os.makedirs(out)
+        p = subprocess.run([sys.executable, os.path.join(HERE, 'kl_hud_menu.py'), 'level', src, out], capture_output=True, text=True)
+        if p.returncode != 0:
+            print('%s: level FAILED: %s' % (mid, (p.stdout + p.stderr).strip().splitlines()[-1:])); bad += 1; continue
+        for f in side_files(src):
+            if not os.path.exists(os.path.join(out, f)):
+                shutil.copyfile(os.path.join(src, f), os.path.join(out, f))
+        oz = [f for f in os.listdir(out) if f.lower().endswith('_main.zip')]
+        c = subprocess.run([sys.executable, os.path.join(HERE, 'kl_hud_menu.py'), 'check-level', os.path.join(out, oz[0]), os.path.join(src, zs[0])], capture_output=True, text=True)
+        tail = (c.stdout + c.stderr).strip().splitlines()[-1:]
+        print('%s: check-level rc=%d %s' % (mid, c.returncode, tail))
+        bad += c.returncode != 0
+    return bad
+
+
 def main():
     a = sys.argv[1:]
+    if a and a[0] == 'menu':
+        sys.exit(1 if cmd_menu(a[1], a[2], a[3:]) else 0)
     if not a or a[0] not in ('plan', 'build', 'verify'):
         print(__doc__); return
     if a[0] == 'plan':

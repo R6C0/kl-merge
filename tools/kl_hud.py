@@ -28,6 +28,8 @@ stock face; it is kept, so a few pairs may kern slightly wrong for the new face)
 
     python tools/kl_hud.py dump <build dir or zip>                                   # the fonts a level has
 
+    python tools/kl_hud.py preview-board <build dir or zip> <out.png> <board_case.txt>...   # the round-over scoreboard's layout (klhook/klsb_test.exe writes the txt files)
+
     python tools/kl_hud.py fonts <tree>/Overlay/Scenes/kaneandlynch.zip <out dir> --look deadmen
 
                                                                   # THE MENUS' lettering: the front-end scene has its own
@@ -2088,6 +2090,118 @@ def dump(src, log=print):
 
 
 
+def preview_board(src, out, dumps, log=print):
+    """THE ROUND-OVER SCOREBOARD offline (2026-10-12; klhook/klhud_board2.c): draws the layout the C code composed - klhook/klsb_test.exe <folder> writes
+    board_<case>.txt, one line a text ("T idx x y fnt align colour 'text'") and one a picture ("P slot x y w h argb layer") - with the level's own baked
+    fonts and extra pictures (3000..) on a faux street, 1280 x 720, 1:1. The pen's baseline lies at y - header[9] (the game's rule, seen live), the label
+    font's tracking is added back for right / centre alignment as the hook does. Pictures: slots 111 .. 125 are the level's real textures sampled by area;
+    181 (UI_White) is a flat rectangle; 178 (the stock skull) is a stand-in drawn by hand (NOT the game's picture). NOT the game's renderer: the file's
+    order is the draw order (no layer sort), no real world behind the plate.
+    out = the main file (the first dump); every other case goes beside it as <out>_<case>.png and a side-by-side sheet of the plates as <out>_sheet.png."""
+    import re
+    _zp, _o, files, ext = open_level(src)
+    fonts = fonts_of(files, ext)
+    p = G.read(files[ext['.prm']], 'dd'); tex = T.read_tex(files[ext['.TEX']])
+    W_, H_ = 1280, 720
+    cache = {}; TA = {}
+
+    def font(name):
+        if name not in cache:
+            h, recs, _t = parse(p.chunks[fonts[name]])
+            pg = {}
+            for r in recs:
+                if r[1] not in pg: pg[r[1]] = tex_page(tex, r[1])
+            cache[name] = (h, {r[0]: r for r in recs}, pg)
+        return cache[name]
+
+    def width(name, text):
+        h, by, _pg = font(name); return sum(by[ord(c)][10] for c in text if ord(c) in by)
+
+    def texa(tid):
+        e = tex.tex[tid].entry; q = e.index(b'\0', 36) + 1
+        _s, _a, _b, _i, th, tw = struct.unpack_from('<I4s4sIHH', e, 0)
+        n = struct.unpack_from('<I', e, q)[0]
+        return tw, th, e[q + 4:q + 4 + n]
+
+    ROLE = {0: 'H2', 1: 'H1', 2: 'DebugText', 3: 'H3'}          # klhud.c: names / big / labels / small
+    TRK = 3.0
+
+    def argb(v): return ((v >> 16) & 255, (v >> 8) & 255, v & 255), (v >> 24) / 255.0
+
+    def render(path):
+        img = bytearray(W_ * H_ * 3)
+        for y in range(H_):                                         # a faux street: sky, buildings, road
+            if y < 250: c = (60 + y // 6, 70 + y // 6, 80 + y // 8)
+            elif y < 420: c = (88, 84, 78)
+            else: c = (50 + (y - 420) // 10, 52 + (y - 420) // 10, 54 + (y - 420) // 12)
+            img[3 * y * W_: 3 * (y + 1) * W_] = bytes(c) * W_
+        for x0, y0, w, h, c in ((60, 180, 180, 250, (120, 110, 96)), (980, 140, 220, 290, (70, 78, 90)), (250, 300, 90, 130, (150, 140, 120)), (820, 380, 330, 40, (190, 170, 60))):
+            for y in range(y0, y0 + h):
+                img[3 * (y * W_ + x0): 3 * (y * W_ + x0 + w)] = bytes(c) * w
+
+        def blend(X, Y, col, a):
+            if 0 <= X < W_ and 0 <= Y < H_ and a > 0:
+                q = 3 * (Y * W_ + X)
+                for k in range(3): img[q + k] = int(col[k] * a + img[q + k] * (1 - a))
+
+        def rect(x0, y0, w, h, col, a=1.0):
+            for y in range(max(0, int(y0)), min(H_, int(y0 + h))):
+                for x in range(max(0, int(x0)), min(W_, int(x0 + w))): blend(x, y, col, a)
+
+        def pic(slot, x0, y0, dw, dh, col, a):
+            if slot == 181: rect(x0, y0, dw, dh, col, a); return
+            if slot == 178:                                         # a stand-in skull
+                rect(x0 + dw * .1, y0, dw * .8, dh * .7, col, a); rect(x0 + dw * .25, y0 + dh * .7, dw * .5, dh * .3, col, a)
+                rect(x0 + dw * .22, y0 + dh * .3, dw * .2, dh * .2, (12, 12, 13), a); rect(x0 + dw * .58, y0 + dh * .3, dw * .2, dh * .2, (12, 12, 13), a); return
+            tid = EXTRA_ID + [e[0] for e in EXTRAS].index(slot)
+            if tid not in TA: TA[tid] = texa(tid)
+            tw, th, px = TA[tid]
+            for y in range(max(0, int(y0)), min(H_, int(y0 + dh) + 1)):
+                for x in range(max(0, int(x0)), min(W_, int(x0 + dw) + 1)):
+                    acc = 0.0
+                    for j in range(2):
+                        for i in range(2):
+                            u = ((x + (i + .5) / 2 - x0) / dw) * tw; v = ((y + (j + .5) / 2 - y0) / dh) * th
+                            if 0 <= u < tw and 0 <= v < th: acc += px[4 * (int(v) * tw + int(u)) + 3]
+                    blend(x, y, col, acc / 4 / 255.0 * a)
+
+        def text(fnt, align, s_, x, ytop, col):
+            name = ROLE[fnt]; h, by, pg = font(name)
+            if fnt == 2: x += TRK if align == 1 else TRK * .5 if align == 2 else 0
+            wid = width(name, s_); pen = x if align == 0 else x - wid if align == 1 else x - wid / 2.0; base = ytop - h[9]
+            for ch in s_:
+                r = by.get(ord(ch))
+                if r is None: continue
+                _tid, tw, th, px, _e = pg[r[1]]
+                for yy in range(r[7]):
+                    for xx in range(r[6]):
+                        i = 4 * ((r[3] + yy) * tw + r[2] + xx); a = px[i + 3] / 255.0
+                        if a: blend(int(pen + r[8] + xx), int(base + r[9] + yy), col, a)
+                pen += r[10]
+
+        lines = open(path, encoding='utf-8').read().splitlines()
+        for line in lines:
+            m = re.match(r"P (\d+) (\S+) (\S+) (\S+) (\S+) ([0-9a-f]{8}) (\d+)", line)
+            if m:
+                col, a = argb(int(m.group(6), 16)); pic(int(m.group(1)), float(m.group(2)), float(m.group(3)), float(m.group(4)), float(m.group(5)), col, a)
+        for line in lines:                                          # texts last (the hook draws the pictures first, the texts over them)
+            m = re.match(r"T (\d+) (\S+) (\S+) (\d) (\d) ([0-9a-f]{8}) '(.*)'", line)
+            if m:
+                col, a = argb(int(m.group(6), 16)); text(int(m.group(4)), int(m.group(5)), m.group(7), float(m.group(2)), float(m.group(3)), col)
+        return img
+
+    base, ext_ = os.path.splitext(out); crops = []
+    for i, (name, path) in enumerate(dumps):
+        img = render(path); o = out if i == 0 else '%s_%s%s' % (base, name, ext_)
+        _png(o, W_, H_, img); log('wrote %s (%s, 1280x720)' % (o, name))
+        crops.append(bytes(b''.join(bytes(img[3 * (y * W_ + 300): 3 * (y * W_ + 980)]) for y in range(130, 560))))
+    if len(crops) > 1:
+        cw, ch = 680, 430; sheet = bytearray()
+        for y in range(ch): sheet += b''.join(c[3 * y * cw: 3 * (y + 1) * cw] for c in crops)
+        _png('%s_sheet%s' % (base, ext_), cw * len(crops), ch, sheet); log('wrote %s_sheet%s' % (base, ext_))
+
+
+
 def main():
 
     a = sys.argv[1:]
@@ -2109,6 +2223,10 @@ def main():
     elif cmd == 'preview-hud':
 
         preview_hud(a[1], a[2])
+
+    elif cmd == 'preview-board':
+
+        preview_board(a[1], a[2], [(os.path.basename(x)[6:-4], x) for x in a[3:]])
 
     elif cmd == 'pictures':
 

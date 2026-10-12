@@ -672,9 +672,18 @@ static void klu_cash(char *out, int cap, long v)
     else snprintf(out, cap, "%s$%luK", v < 0 ? "-" : "", u / 1000);
 }
 
+/* klhud_board2.c (the round-over scoreboard) lends the tick's picture helpers (klu_outline / klu_arc / klu_dabs) its own queue: while klu_addpic_q is set, klu_addpic writes there (main thread only, set and cleared around the calls) */
+static struct klu_picq *klu_addpic_q; static int *klu_addpic_n, klu_addpic_cap;
+
 static void klu_addpic(int n, float x, float y, float w, float h, DWORD argb, int layer)
 {
     struct klu_picq *p;
+    if (klu_addpic_q) {
+        if (*klu_addpic_n >= klu_addpic_cap || w <= 0 || h <= 0) return;
+        p = &klu_addpic_q[(*klu_addpic_n)++];
+        p->n = n; p->x = x; p->y = y; p->w = w; p->h = h; p->argb = argb; p->layer = layer;
+        return;
+    }
     if (klu_r.npic >= KLU_NPIC || w <= 0 || h <= 0) return;
     p = &klu_r.pic[klu_r.npic++];
     p->n = n; p->x = x; p->y = y; p->w = w; p->h = h; p->argb = argb; p->layer = layer;
