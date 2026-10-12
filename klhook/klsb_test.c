@@ -202,6 +202,13 @@ int main(int argc, char **argv)
     reset_counters(); klsb_r.valid = 0; ok = klsb_render(el_mem, 0, ctx_mem, 0); CHECK(ok == 7 && stock_calls == 1 && text_draws == 0 && chunk_draws == 0); klsb_r.valid = 1;
     reset_counters(); klsb_r.state = 0x20; klsb_render(el_mem, 0, ctx_mem, 0); CHECK(stock_calls == 1 && chunk_draws == 0); klsb_r.state = 0x1f;
     reset_counters(); fake_sys[0x48 / 4] = 10486; klsb_render(el_mem, 0, ctx_mem, 0); CHECK(stock_calls == 1 && chunk_draws == 0); fake_sys[0x48 / 4] = 1000;      /* deadline passed */
+    {   /* review B1 (re\hud_cloud_review.md): a round over after 32 min of game clock - the deadline is 1963.1 units, over the old bound of 1000. NOT BUILT, NOT RUN */
+        float late = (2000000.0f + 10240.0f) / 1024.0f;
+        reset_counters(); memcpy((BYTE *)el_mem + KLSB_E_DEADLINE, &late, 4); fake_sys[0x48 / 4] = 2000000;
+        klsb_render(el_mem, 0, ctx_mem, 0); CHECK(stock_calls == 0 && chunk_draws == klsb_r.npic);
+        fake_sys[0x48 / 4] = 2010241; reset_counters(); klsb_render(el_mem, 0, ctx_mem, 0); CHECK(stock_calls == 1 && chunk_draws == 0);     /* and it still passes */
+        fake_sys[0x48 / 4] = 1000; memcpy((BYTE *)el_mem + KLSB_E_DEADLINE, &end, 4);
+    }
     reset_counters(); { float z = -1.0f; memcpy((BYTE *)el_mem + KLSB_E_DEADLINE, &z, 4); } klsb_render(el_mem, 0, ctx_mem, 0); CHECK(stock_calls == 1 && chunk_draws == 0); memcpy((BYTE *)el_mem + KLSB_E_DEADLINE, &end, 4);
     reset_counters(); klsb_r.pics_cached = 0; klsb_render(el_mem, 0, ctx_mem, 0); CHECK(stock_calls == 1 && chunk_draws == 0 && text_draws == 0); klsb_r.pics_cached = 1;      /* no picture: stock (TextOnly=0) */
     reset_counters(); klsb.textonly = 1; klsb_r.pics_cached = 0; klsb_render(el_mem, 0, ctx_mem, 0); CHECK(stock_calls == 0 && chunk_draws == 0 && text_draws > 20); klsb.textonly = 0; klsb_r.pics_cached = 1;

@@ -206,7 +206,11 @@ static int klsb_ours(DWORD e, void *ctx, void *cam)
     if (klsb_r.valid && klsb_r.made && klsb_r.state == 0x1f && klsb_alive()) {
         end_bits = *(const DWORD *)(DWORD_PTR)(e + KLSB_E_DEADLINE); memcpy(&end, &end_bits, 4);
         sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF));
-        if (end > 0 && end < 1000.0f && sys && klh_rd(sys + 0x48, &frame, 4) && frame < (LONG)(end * 1024.0f)) {
+        /* the deadline is the GAME clock in 1/1024 s units + 10 s ([[0xdd2640]+0x48], re\climb.md: raw clock + offset, held in a pause; whether it
+           restarts at a level load is NOT established): the old bound 1000 (= 1024 s of game clock) sent every round-over after ~17 min of that clock
+           back to the stock panel (re\hud_cloud_review.md B1).
+           2.0e6 units = 23 days; end * 1024 stays below 2^31 so the LONG cast cannot overflow. NOT BUILT, NOT RUN. */
+        if (end > 0 && end < 2.0e6f && sys && klh_rd(sys + 0x48, &frame, 4) && frame < (LONG)(end * 1024.0f)) {
             int pics = klsb_r.pics_cached && *(const DWORD *)(DWORD_PTR)(e + 0xc) == klsb_r.T && *(const DWORD *)(DWORD_PTR)(e + 8) == klsb_r.tbl && (klu_r.handle[111] || klu_r.handle[181]);
             if (pics || klsb.textonly) {
                 if (pics) for (i = 0; i < klsb_r.npic; i++) {
@@ -228,7 +232,7 @@ static void klsb_testdraw(DWORD e, void *ctx, void *cam)
     if (klsb_r.state < 0x1f || !klsb_r.made) return;
     (void)e; sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF)); if (!sys || !klh_rd(sys + 0x48, &frame, 4)) return;
     if (!TryEnterCriticalSection(&klsb_cs)) return;
-    if (klsb_alive() && klsb_r.pics_cached) {
+    if (klsb_alive() && klsb_r.pics_cached && *(const DWORD *)(DWORD_PTR)(e + 0xc) == klsb_r.T && *(const DWORD *)(DWORD_PTR)(e + 8) == klsb_r.tbl) {      /* review B2: the same transform / table test as klsb_ours (e is the element the game renders now) */
         klsb_pic2(ctx, 181, x, y, KLSB_PW, 1.0f, KLU_C_CORAL, klu.layer); klsb_pic2(ctx, 181, x, y + KLSB_PH - 1.0f, KLSB_PW, 1.0f, KLU_C_CORAL, klu.layer);
         klsb_pic2(ctx, 181, x, y, 1.0f, KLSB_PH, KLU_C_CORAL, klu.layer); klsb_pic2(ctx, 181, x + KLSB_PW - 1.0f, y, 1.0f, KLSB_PH, KLU_C_CORAL, klu.layer);
         klsb_pic2(ctx, klu_r.handle[111] ? 111 : 181, x + 40.0f, y + 300.0f, 160.0f, 24.0f, 0xff0c0c0du, klsb_ly(1));
