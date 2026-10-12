@@ -1573,3 +1573,44 @@ holds), (c) accept the gates' 30 s as the bots' fight and read C6. `PRESSURE_KNO
 
 Checks on all eight: the same known findings as c_club3 (preflight CRASH 1 / audit on the silent set = the stream clips; chars glow30.fx; escape 217; guns on the bare folder), everything else PASS, including `bots_gate` (rooms_check with the pressure table) on `club` and
 `club_wavslim`, `bots_dyn` through dyncheck.py, `club_check`, `reverify`, `impact`, `vaultfx` (`python tools/kl_fa_vaultfx.py check` PASS on all eight). Rebuild: `sh C:/kl_scratch/club_pressure/deliver.sh <root> silent|music` (bare build, noai chain, full chain, checks).
+
+## Pressure, second fix (2026-10-12) - after the skeptic's four faults on c_club4 (tools/kl_fa_club.py; sets `C:/kl_build/c_club4` and `c_club4_music` REBUILT in place; scratch `C:/kl_scratch/club_pressure/fix/`)
+
+Built on a scratch copy of HEAD's `tools/` (`C:/kl_scratch/club_pressure/h`) + this `kl_fa_club.py`, because `kl_chars.py` is modified in the working tree by another session. Nothing has run in the game.
+
+### Q.1 The four faults, one by one
+
+1. **The yardstick is not met in four of five rooms - CONFIRMED, NOT CLOSABLE IN `kl_fa_club.py`.** Recounted on the rebuilt folder: holds 0 / 5 / 5 / 5 / 3, walks 0 / 7 / 8 / 10 / 5 (caps 3 / 4). `PRESSURE_KNOWN` is a regression guard, not a proof, and this note and the check's wording now say so. What stays awake from the load: 15 men (Dance#01 3, Surprise2 2, On_Dancefloor#02 3, Dancefloor02a#01/#02/#03 6, FatBouncer 1);
+   the nine squads that can be staged already are (21 men). The six squads that cannot (no start child) need a graft change; Dance#01 / Surprise2 count as awake although a box wakes them (conservative). Measured this round (`fix/exp.py`): moving the deck's four from gate 4 to gate 5 changes none of the five rows. The honest reading: **C6 is a measurement run**, not a proof that seven bots survive past floor2.
+   The levers left are the lead's: fewer men awake at once in the halls (a graft: start children for the four modifier-less squads, reloc5 says that alone is not enough), or fewer men. Nobody was removed.
+2. **The wake fires from the first bot's gate and a laggard meets the woken men - CONFIRMED (MEASURED, skeptic's `lag.py`: floor1s walk 10 -> 12 guns at (-1360, 40, 2083)), FIXED.** The cause is three men of the deck over dance floor 2's south wall (YokoGuards Guard#01 at (0, 364, 2050), WaitingRoom Guard#02 (200, 368, 2250), Guard#01 (475, 363, 2275)):
+   woken by floor1s's TriggerActorsDead they see its walk through the deck's rail (43 of its samples). Two changes: (a) `YokoGuards` and `WaitingRoom` are now awake at gate 5 = woken by the LAST gate (stairs) and named by no gate (`room_men`: a man woken by the last gate belongs to no room; `WAKE_AT` w = len(ROOMS)); (b) the check:
+   `gun_table` adds `lag_worst` / `lag_at` = the most guns bearing on any leg sample or hold of gate k with the men THIS gate wakes counted (wake k + 1), the last gate also on the walk from its holds to the seal hold; `pressure_check` FAILS when it exceeds max(hold_worst, leg_worst), and the 'appear' rule now covers the last gate's holds too (`range(1, len(gates) + 1)`).
+   Result: laggard case equals the plan at every gate (0, 7, 8, 10, 5); skeptic's `lag.py` on the new folder prints 10 at floor1s. The deck's four now come when the stairs fight is won - a human running ahead meets them last.
+3. **club_bare differs from c_club3's - CONFIRMED, intended.** It carries the 13 moved men (`PRESSURE_MEN`) and the wake staging (`squads_now`: field 3 = 0 for the nine squads). This round's `club_bare` is byte for byte c_club4's first (sha1 `075c7848...`): the second fix changes only the chain's `wake` step, which acts after the bare build. `club_noai` is still c_club3's.
+4. **The wake path is an assumption that never ran, and `dyncheck.py` was widened for it - CONFIRMED, NOT CHANGED.** A fallback timer or human box that wakes the nine squads when the gate chain does not would fire in the working case too and so defeat the staging; a fallback that fires only when the chain failed cannot be told from the data. `dyncheck.py` lets through exactly the planned (gate, child) pairs, nothing else: it is
+   the stock rule with the one planned exception. Run C6 decides (P.8 / Q.3): if no man of a gate squad ever shows, the assumption failed and the club is 21 men emptier; the fix then is to wake them from a TriggerDelay2 / box, which the 'office' stage has already used.
+
+### Q.2 Table (MEASURED, `hold-guns`; holds worst of 7 / walk worst; laggard case in the check)
+
+| gate | holds | walk | laggard | awake |
+|---|---|---|---|---|
+| walkway | 0 | 0 | 0 | 15 |
+| floor2 | 5 | 7 | 7 | 15 |
+| floor1n | 5 | 8 | 8 | 15 |
+| floor1s | 5 | 10 | 10 (12 before) | 18 |
+| stairs | 3 | 5 | 5 | 33 (37 before: the deck's four now wake after it) |
+
+### Q.3 What C6 must show beyond P.8
+
+The deck's four (YokoGuards, WaitingRoom) appear only after the stairs gate has opened; a hit from one of them on a bot before that = wiring wrong. Set ONE `[Bots]` section with `MoveLog=1`. The first death after GO+60 s, and the rooms floor2 / floor1n / floor1s as the casualty rooms - if the crew passes them, the caps were stricter than needed; if it dies there at 5..10 guns, the lead's choice in Q.1 (1) is what is left.
+
+### Q.4 Delivered folders (sha1 of `F01_Main.zip`; checks in each folder's `checks/summary.txt`)
+
+| folder | silent `c_club4` | music `c_club4_music` |
+|---|---|---|
+| `club` / `club_wavslim` (one archive) | `d809a1bfed7afab9824303ba9e0c69a3c7712576` | `d6bdb13d3a45e1d7e28aa9ad6e77f146a0e8a2cd` |
+| `club_noai` | `e7754c1f...` (unchanged) | `b1c31429...` (unchanged) |
+| `club_bare` | `075c7848...` (unchanged) | `c6699230...` (unchanged) |
+
+Checks: the same known findings as before (preflight / audit stream clips on the silent set, chars glow30.fx, escape 217, guns.json on the bare folder); `bots_gate` (rooms_check with the laggard rule), `bots_dyn` (dyncheck.py), `club_check`, `reverify`, `impact`, `vaultfx` PASS on all eight; the music set's `stream_whd` PASS. Rebuild: `sh C:/kl_scratch/club_pressure/deliver.sh <root> silent|music` after removing `club*` (not `club_noai`) from the root.

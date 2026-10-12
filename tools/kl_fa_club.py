@@ -2914,7 +2914,7 @@ LEG_STEP = 300.0                        # the walk between two holds is sampled 
 # squad (short name) -> (the gate at whose hold it is awake, its start child). The gate before it wakes it. GUESS: that a TriggerActorsDead's list
 # starts a SquadModifierBehaviour as the TriggerDelay2 of the 'office' stage does; if it does not, these squads never come (an emptier club).
 WAKE_AT = collections.OrderedDict([
-    ('YokoGuards', (4, 'SquadModifier')), ('WaitingRoom', (4, 'Alert')),            # the four on the deck over dance floor 2's south wall: asleep until the crew has left floor1s - from floor1n's holds 5 of 7 see them (MEASURED: woken at floor1n or floor1s the squads plop out in view of the seven)
+    ('YokoGuards', (5, 'SquadModifier')), ('WaitingRoom', (5, 'Alert')),            # the four on the deck over dance floor 2's south wall: asleep until the crew has left the stairs' room (SECOND FIX, skeptic's fault 2: woken by floor1s's gate they see its walk through the deck's rail, 10 -> 12 guns while a laggard is still on it; from floor1n's holds 5 of 7 see them). W = len(ROOMS) = woken by the LAST gate, named by no gate
     ('Dance#02', (3, 'Alert')),                                                    # dance floor 1's second run: floor1s
     ('Lounge#01', (4, 'Alert')), ('Lounge#02', (4, 'Alert')), ('Rave#01', (4, 'Alert')), ('Rave#02', (4, 'Alert')),   # the upper floors, over the stairs' room
     ('SurpriseStairs', (4, 'Alert')), ('Entrance', (4, 'SquadModifier'))])
@@ -3077,12 +3077,21 @@ def gun_table(B, P, fire, log=None):
                 n = fire.bearing(q, gi)
                 if len(n) > worst_leg[0]:
                     worst_leg = (len(n), tuple(round(v) for v in q[:3]), n)
+        lag_pts = leg_pts + holds                           # SECOND FIX (skeptic's fault 2): the men woken by THIS gate's TriggerActorsDead (wake gi + 1) are in the world while a bot that has not
+        if gi == len(P['club_gates']) - 1:                  # yet arrived (any of the seven copies fires the wake) is still on the leg or at the hold; the last gate's also on the walk to the seal hold
+            seal = [tuple(P['bots'][n]['places'][idx + 1]) for n in bots_]
+            for b, h in enumerate(holds):
+                got = RT.way_samples(nav, h, seal[b], LEG_STEP)
+                lag_pts += list(got[0]) if got else []
+            lag_pts += seal
+        lag_n = [(len(fire.bearing(q, gi + 1)), q) for q in lag_pts]
+        lag_w = max(lag_n, key=lambda x: x[0])
         dead = {x for g_ in P['club_gates'][:gi] for x in g_['groups']}            # the men the gates before this one name: dead (or their gate's 30 s have run)
         k_hold = max(len(fire.bearing(h, gi, dead)) for h in holds) if dead else max(len(x) for x in hold_n)
         rows.append(dict(name=g['name'], holds=[len(x) for x in hold_n], hold_worst=max(len(x) for x in hold_n), leg_worst=worst_leg[0], leg_at=worst_leg[1], hold_dead=k_hold,
                          leg_dead=max([len(fire.bearing(q, gi, dead)) for q in leg_pts] or [0]) if dead else worst_leg[0],
                          who_hold=sorted(set(m['man'] for x in hold_n for _d, m in x)), who_leg=sorted(m['man'] for _d, m in worst_leg[2]),
-                         hold_at=[tuple(round(v) for v in h) for h in holds], samples=len(seen_pts)))
+                         hold_at=[tuple(round(v) for v in h) for h in holds], samples=len(seen_pts), lag_worst=lag_w[0], lag_at=tuple(round(v) for v in lag_w[1][:3])))
         prev = holds
     return rows
 
@@ -3200,7 +3209,7 @@ def room_men(B):
                 short = sc.path[t][len(R):].split('!')[-1]
                 if room and PRESSURE and short in WAKE_AT:      # a man who sleeps until a later room's hold belongs to THAT room's gate (the deck over floor1n wakes at floor1s)
                     names = [r_['name'] for r_ in ROOMS]
-                    room = names[max(names.index(room), min(WAKE_AT[short][0], len(names) - 1))]
+                    room = names[max(names.index(room), WAKE_AT[short][0])] if WAKE_AT[short][0] < len(names) else None      # (woken by the last gate: no gate waits for him)
                 if room:
                     out[room].append((t, sc.parent[k], B.at(k)))
     return out
@@ -3408,6 +3417,9 @@ def pressure_check(folder, B, P, tad, fail, log):
         log('    gate %-8s guns on the 7 holds %s (worst %d; %d if the men the gates before named are dead); the walk to them: worst %d at %s (%d; %d samples); awake men %d of %d%s' % (
             r['name'], r['holds'], r['hold_worst'], r['hold_dead'], r['leg_worst'], r['leg_at'], r['leg_dead'], r['samples'], sum(1 for m in fire.men if m['wake'] <= gi), len(fire.men),
             '; %s' % g['fire'] if g.get('fire') else ''))
+        log('      laggard case (the men this gate wakes in the world while a bot is still on its leg / hold%s): worst %d at %s' % (', or on the walk to the seal hold' if gi == len(gates) - 1 else '', r['lag_worst'], r['lag_at']))
+        if r['lag_worst'] > max(r['hold_worst'], r['leg_worst']):
+            fail('hold-guns: gate %s: the men its opening wakes add guns on a bot still arriving: %d at %s against %d without them' % (r['name'], r['lag_worst'], r['lag_at'], max(r['hold_worst'], r['leg_worst'])))
         known_h, known_l = PRESSURE_KNOWN.get(r['name'], (HOLD_GUNS, LEG_GUNS))
         if r['hold_worst'] > max(HOLD_GUNS, known_h):
             fail('hold-guns: gate %s: %d guns bear on a hold (%d wanted at most, %d known): %s' % (r['name'], r['hold_worst'], HOLD_GUNS, max(HOLD_GUNS, known_h), ', '.join(r['who_hold'][:8])))
@@ -3424,7 +3436,7 @@ def pressure_check(folder, B, P, tad, fail, log):
             fail('pressure: %s is awake at gate %s by the scene, WAKE_AT wants %s (named by the gate of %s)' % (short, w, WAKE_AT[short][0], order_[WAKE_AT[short][0] - 1]))
         if short not in WAKE_AT and SQUADS.get(n, ('',))[0] != 'open' and w == 99:
             fail('pressure: %s is waiting and nothing wakes it' % short)
-    for gi in range(1, len(gates)):                     # (3) the squads woken when gate gi-1 opens are not in sight of that gate's holds
+    for gi in range(1, len(gates) + 1):                 # (3) the squads woken when gate gi-1 opens are not in sight of that gate's holds
         for m in fire.men:
             if m['wake'] == gi:
                 seen = [h for h in rows[gi - 1]['hold_at'] if math.dist(m['at'], h) <= GUN_RANGE and abs(m['at'][1] - h[1]) < GUN_FLOOR and fire.sees(m['at'], h)]
