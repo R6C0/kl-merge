@@ -337,6 +337,39 @@ def restyle_data(xml, member):
     return xml, count
 
 
+# ------------------------------------------------------------------ the round-over page of a LEVEL (re\hud_board.md)
+BOARD_GEOM_TEMPLATE = 'FA_Status_GeomSpace'   # the row pitch of every status / round-over table = the Text font's line + this gap
+BOARD_GEOM_NEW = 10                            # stock 16. READ off the picture G2_DM03_tags_184s: the level bake's Text font has ascent 19 where the stock one
+                                               # has 13 (kl_hud.parse header[9]: -19 / -13), the rows came 38 apart instead of the 32 the page's lines and the two
+                                               # Header-font rows (Y 232 / 275) were drawn for, so the 7th row (TOTAL) sat on ROUND SCORE. 16 - (19 - 13) = 10 gives 32 again.
+BOARD_PAGE_WINDOWS = ('HeistStatus', 'HeistStatusLeaderboard', 'HeistStatus_EndGame', 'HeistStatusLeaderboard_EndGame')
+BOARD_LABELS = {'HeistRoundPoints', 'HeistTotalPoints', 'HeistBonusRound', 'HeistPenaltyRound'}      # the totals' labels: coral, the draft's spaced labels
+
+
+def board_page(xml, member, log=print):
+    """Round-over page fixes that only make sense in a LEVEL archive (its Text font is the level bake's): the row pitch and the totals' labels.
+    Attribute values only (GeomSpace of one template, ColorSet of four TextBlocks per window): no table entry moves."""
+    if member != ONLINE:
+        return xml, 0
+    have = set(colorsets(xml)); n = [0, 0]
+
+    def fn(t, text):
+        a = dict(t.attrs)
+        if t.name == 'Template' and a.get('Name') == BOARD_GEOM_TEMPLATE and a.get('GeomSpace') not in (None, str(BOARD_GEOM_NEW)):
+            # review SHOULD 1 (considered, kept): the template also feeds FAWaitForOtherPlayersMenu (18 uses). It is drawn for the same stock Text font
+            # (pitch 32), so the new pitch returns it to its design too; a per-window split would have to drop Template= from the groups, and
+            # signature() counts the template name per element (instancing may add table entries): not worth that risk. Look at it in B1 / B2.
+            n[0] += 1
+            return set_attr(text, 'GeomSpace', BOARD_GEOM_NEW)
+        if t.name == 'GuiElement' and t.window in BOARD_PAGE_WINDOWS and a.get('Type') == 'TextBlock' and a.get('Text') in BOARD_LABELS and 'Header' in have                 and a.get('ColorSet') != 'Header':
+            n[1] += 1
+            return set_attr(text, 'ColorSet', 'Header')
+        return None
+    xml, _k = rewrite(xml, fn)
+    log('  %s: round-over page: %d row-pitch template(s) (GeomSpace -> %d), %d total label(s) coral' % (member, n[0], BOARD_GEOM_NEW, n[1]))
+    return xml, n[0] + n[1]
+
+
 # ------------------------------------------------------------------ --board
 def board(xml, log=print):
     """The crew on the Arcade round-over pages: two columns of four rows, name / fate / score. The fate blocks are
@@ -375,11 +408,13 @@ def board(xml, log=print):
     return xml, added
 
 
-def restyle_xml(xml, member, do_board=False, log=print, body=False):
+def restyle_xml(xml, member, do_board=False, log=print, body=False, page=False):
     xml, n1 = restyle_colorsets(xml)
     xml, cnt = restyle_data(xml, member)
     if body:
         xml, _n = repoint_body(xml, member, log)
+    if page:
+        xml, _n = board_page(xml, member, log)
     nb = 0
     if do_board and member == ONLINE:
         xml, nb = board(xml, log)
@@ -797,7 +832,7 @@ def level(src, out, do_board=False, log=print, bars='kit'):
     new = {}
     i = _member(z, ONLINE)
     if i is not None:
-        new[i.filename.lower()] = restyle_xml(z.read(i).decode('latin-1'), ONLINE, do_board, log).encode('latin-1')
+        new[i.filename.lower()] = restyle_xml(z.read(i).decode('latin-1'), ONLINE, do_board, log, page=True).encode('latin-1')
     else:
         log('  %s has no %s: pictures only' % (zp, ONLINE))
     data, done = repaint(z, stem, log, bars)
