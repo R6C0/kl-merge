@@ -139,3 +139,55 @@ then the game's 25 % as a RISE (not logged). Nothing to change.
   maximum - the reserve would have to be stripped before every down. **A wrapped damage routine** (ZSoldier slot 96 on a private
   vtable copy): six parts identify a soldier by `[soldier] == 0xbd0954`. **'cannot die' flags**: the only one found is the 'no damage'
   word (all damage, forever) and the buddy's rule (0x6fd7c0, the campaign's one actor; `[gamedata+0x4cf0]`): neither gives a floor.
+
+## 9. First live runs (B1_DM09 Retomoto, B2_T01 stock Subway) and the mesh probes read (2026-10-12)
+
+**What the runs showed:** on stock Subway (T01) the hook's ask is answered YES at try 1 (record 3 at 36 of 252), the game also did a
+down by itself at health 0 (record 5) - so the mechanism is right; on Retomoto 1 YES (record 4) and many NOs, 78 x hit animation,
+136 x "mesh probes". Bots then died at health 0 inside the pending window (the floor of 15 did not hold against one frame of
+police fire at police -> crew 1.0).
+
+**The probes, read whole** (0x70f330 -> PF4::ZData slot 41 = 0x4dd5f0, vtable 0xb9b17c): for i = 0..15 a vector of 100 units
+(constant 0xb5c050) at angle 2 pi i / 16 from his place (actor slot 0x568 = 0x598710, the node's world place). The slot: (1) locates his
+place - `[vtbl+0x80]` = 0x68bef0 -> 0x55e6e0 - and returns NO when he is **off the mesh**; (2) a zero vector passes; (3) `[vtbl+0xa8]`
+= 0x82b950 walks the segment polygon to polygon (edge records: neighbour, vertex; a vertex is 5 floats = x, z, height, 2-D normal),
+returning the fraction reached; **below 1.0 (0xb58418) = NO**; (4) locates the end point (slot 0x80 again), off the mesh = NO.
+So a probe fails when a mesh EDGE WITHOUT A NEIGHBOUR (the rim of the mesh: a wall, a cover box, a hole) lies within 1 m of his place
+in that direction. Mesh coordinates are (x, z, height); a bot's (X, Y, Z) of the logs is (X, Z) at height Y.
+
+**Offline reproduction** (`tools/kl_pf4_probe.py`, a 2-D model; the game's height tolerance for the locate is not read, 250 is used):
+- the model predicts the live answers: B2_T01 - the two asks that were answered YES stand where 0 of 16 probes fail; the two NOs with a
+  place stand where 5 and 6 fail; B1_DM09 - the YES (record 4) 0 of 16, the NOs 3, 10, 7, 8, 8; one place is off the mesh by the model.
+  So the model is good enough to LAY A PLACE ON THE MESH offline.
+- **It is not a conversion fault.** Share of polygon centres that pass all 16 probes, by polygon / by area: stock F01 38 / 86 %, F02 56 / 93,
+  F03 49 / 95, F04 30 / 73, F05 41 / 83, F06 38 / 87, F07 39 / 84, F08 35 / 85, F09 45 / 85 - and the converted Dead Men meshes (r_tab)
+  DM01 47 / 97, DM02 47 / 94, DM03 40 / 91, DM06 48 / 91, DM09(x) 44 / 93. Same range. kl_pf4.py needs no change; nothing to rebuild.
+- **Why the bots fail anyway:** the mesh is mostly open (90 % of the AREA passes) but the places the crew STANDS - route holds, cover boxes,
+  doorways - are by design at the rim; a bot at a hold fails, a bot walking in the open passes. That fits "267 of 267 on our maps" and
+  "7 of 7 on T01" (open Subway). The 267 were not all mesh: 78 refusals in B1 were the hit animation too.
+- Not read: bone 2 (0x619d10) and the locate's height tolerance (0x55e6e0).
+
+**Changes made after the runs** (klbotdown.c; harness ALL PASS):
+1. `PreShield=1` (default): while the game is asked, bit 0x800 of the no-damage word is held - the same bit and the same code as
+   FreeSeconds (the game ORs it in itself for 0.1 s at every down, 0x70e2f6; no hit costs health or kills while it stands, 0x8477ae /
+   0x847945). It ends the pass the asking ends: on YES (FreeSeconds takes over), on giving up after `RefuseMs` (now 4000), when healthy,
+   at vehicle state 5, when the record leaves play, and with the part. Safe? The hit animation still starts (so b's ZHitAnimTask still
+   refuses for its length, ~a second) but the bot cannot die of it; the cost is a bot that cannot be hurt for at most RefuseMs
+   (4 s) in the worst case. The floor (FloorPct) stays as a second line when PreShield=0.
+2. `DownPct` 20 -> 30: asked earlier, one frame must now take 76 of 252 to kill from the threshold.
+3. The refusal line now says: ZHitAnimTask state, the game's own b test (0x70f330 called on the ZDownNotDeadNPC, read-only), and a verdict
+   that names "within 1 m of the edge of the navigation mesh / off it" when b says NO and nothing readable does.
+4. Log fixes: the IS DOWN line printed `[dnd+0x14]` right after the call (it is written by the goal's start a frame later: 0 on T01, a
+   stale tick on Retomoto) - no longer printed (the `he lies until tick` line follows); the IS UP line said "the game's script gives
+   75 %": **observed 252 of 252 twice on T01** (the constant 0.75 in the script is applied to slot 0x678, which is not the maximum
+   health, or something else restores it) - the text says so; `UpPct` still sets a number.
+
+**What would make the ask succeed more often on Retomoto** (not built): ask where he WALKS - the holds are at the rim, the walks between
+them are in the open; with PreShield the ask can run for 4 s while he moves on; a longer RefuseMs (8000) covers a whole leg of his route.
+The alternative, moving the holds off the rim in the level data (kl_fa_bots_dyn / kl_fa_bots_rt: a hold more than 1 m from every
+mesh edge, checkable with `kl_pf4_probe.py at`), makes the stock game's own down work too.
+
+**Run next:** B1 again on Retomoto and T01 with `[BotDown] Enable=1 Log=2` (PreShield and DownPct 30 are the defaults); look for
+`the game said NO at try 1 ... b test NO ... within 1 m of the edge`, the number of YES per bot that was asked, and that no
+`DIED while a down was pending` follows an ask inside RefuseMs. Then B1 with `RefuseMs=8000`. Compare with `python
+tools/kl_pf4_probe.py at <zip> x y z` at the printed places.

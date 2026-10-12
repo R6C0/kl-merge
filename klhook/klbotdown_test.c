@@ -74,6 +74,8 @@ static int fake_call(DWORD soldier, DWORD hit, int force)
     return 1;
 }
 #define KLBD_CALL(soldier) fake_call((DWORD)(soldier), 0, 1)
+static int g_btest = 1, g_nb;
+#define KLBD_BTEST(dnd) (g_nb++, g_btest)
 
 #include "klbotdown.c"
 
@@ -118,7 +120,7 @@ static void world(void)
     tick = 100000; W32(CLOCK + 0x48, tick);
     memset(&klbd, 0, sizeof klbd);
     klbd.on = 1; klbd.log = 1; klbd.downs_max = 2; klbd.traitors = 1; klbd.down_pct = 20; klbd.floor_pct = 6; klbd.refuse = 3000; klbd.lie = 6; klbd.free_t = 0.75f;
-    klbd.attr = 1.5f; klbd.watch = 8;
+    klbd.attr = 1.5f; klbd.watch = 8; klbd.preshield = 0; g_btest = 1; g_nb = 0;
     memset(klbd_r, 0, sizeof klbd_r); memset(&klbd_g, 0, sizeof klbd_g);
     g_accept = 1; g_ncalls = 0; g_goal_never = 0; g_code_ok = 1; nlog = 0; logbuf[0] = 0; nwrites = 0;
 }
@@ -175,7 +177,7 @@ int main(void)
     printf("--- scenario 3: refused\n"); world(); g_accept = 0;
     W32(SOL(2) + 0xa4, 0x00a00000); W32(0x00a00000 + 8, 2);        /* his ZHitAnimTask runs */
     WF(HO(2) + 4, 10); pass(16);
-    CHECK(g_ncalls == 1 && has("the game said NO at try 1") && has("ZHitAnimTask RUNS"), "refused: first try, the reason names the hit animation");
+    CHECK(g_ncalls == 1 && has("the game said NO at try 1") && has("(RUNS: no down while a hit animation plays)"), "refused: first try, the reason names the hit animation");
     CHECK(RF(HO(2) + 4) >= 15.1f, "held at the FloorPct 6 % = 15.1 while it is refused (he was at 10)");
     WF(HO(2) + 4, 3); pass(16);
     CHECK(RF(HO(2) + 4) >= 15.1f, "a lower health is lifted to the floor again");
