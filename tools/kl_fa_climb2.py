@@ -14,6 +14,7 @@ differs: re/climb2.md). The two forms are independent; this one needs no hook pa
     python kl_fa_climb2.py list                            the other climbs our maps want (places only, nothing built)
     options   --spacing N   centre distance of the spots along a stretch (default 400)
               --npcs        also give the NPC sets their climb clips (kl_fa_climb's default; the AI does not use them here)
+              --tele        (variant, live Y1..Y3) the clip is shown at the face (start 47 off, on the floor) and a second act WITHOUT a clip, started when the first is done, places the player on the wall's top
               --end-act     (variant) a second act with its own PosObject at the predicted landing: the end no longer rests on root motion alone
 
 WHAT A SPOT IS (one per ~400 units of the measured stretch; kl_fa_climb's walk() decides where Dead Men's own rule holds)
@@ -78,6 +79,9 @@ MAX_SPOTS = 12
 #   player drops that far when the collision comes back; ending under the top would put him INTO the wall).
 FAR_MARGIN = 10.0
 END_BIAS = 5.0
+ROUT2, POS_TOP = 'Climb_Top', 'PosObject_Climb_Top'    # --chain: the second rout and its PosObject
+STANDOFF = 47.0          # --tele: where the climb clip starts off the face (Dead Men's stand-off for High is 47); the root motion is NOT applied by this form (live Y1..Y3), so the clip is only shown
+TOP_LIFT = 2.0           # --tele: the teleport puts the player this far over the top surface (he drops when the collision comes back)
 
 # The other climbs our maps want, places only (nothing built). Source: re/climb.md, re/campaign_fa_*.md, re/escape.md,
 # luvsic's notes (third_party/anp/docs/HANDOFF.md 'Next steps'). Coordinates are Dead Men's own where a name is given.
@@ -127,7 +131,7 @@ def clip_ends(anm, setname):
     return out
 
 
-def plan_spots(L, G, level, ends, spacing=SPACING, log=print):
+def plan_spots(L, G, level, ends, spacing=SPACING, log=print, probe=(0.0, 0.0), tele=False):
     """The measured stretches of kl_fa_climb.walk (Dead Men's rule on the build's collision) cut into spots. `ends` = clip_ends() of
     the players' set: the clip's own root motion decides where the PosObject goes (see FAR_MARGIN / END_BIAS above).
     -> [dict(section, k, face (x, z), n (x, z), floor, top, slot, stand, depth, width, rise, fwd, back, lift, start (x, y, z), end (x, y, z))]"""
@@ -146,59 +150,84 @@ def plan_spots(L, G, level, ends, spacing=SPACING, log=print):
         h = s['a'][1] - s['floor']
         back = min(max(fwd - (s['depth'] - FAR_MARGIN), 0.0), BOX_BACK + BOX_DEPTH - 10.0)     # how far from the face the clip starts
         lift = max(h - rise + END_BIAS, 0.0)
+        if tele:        # live Y1..Y3: the start placement works, the clip's root motion is not applied: show the clip at the face, then place him on the top
+            back, lift = STANDOFF, 0.0
         for k in range(cnt):
             t = w * (k + 0.5)
             face = (a[0] + u[0] * t, a[2] + u[1] * t)
-            st = (face[0] + n[0] * back, s['floor'] + lift, face[1] + n[1] * back)
+            st = (face[0] + n[0] * back + u[0] * probe[0], s['floor'] + lift + probe[1], face[1] + n[1] * back + u[1] * probe[0])    # probe (dx along the wall, dy up) = DIAGNOSTIC builds only
             end = (st[0] - n[0] * fwd + u[0] * side, st[1] + rise, st[2] - n[1] * fwd + u[1] * side)
-            out.append(dict(section=si, k=k, face=face, n=n, floor=s['floor'], top=s['a'][1], slot=s['slot'], stand=s['stand'], clip=cname,
+            tele_end = (face[0] - n[0] * (s['depth'] / 2.0), s['a'][1] + TOP_LIFT, face[1] - n[1] * (s['depth'] / 2.0))      # the middle of the wall's top
+            out.append(dict(section=si, k=k, tele_end=tele_end, face=face, n=n, floor=s['floor'], top=s['a'][1], slot=s['slot'], stand=s['stand'], clip=cname,
                             depth=s['depth'], width=w, tangent=u, rise=rise, fwd=fwd, back=back, lift=lift, start=st, end=end))
     if len(out) > MAX_SPOTS:
         raise ValueError('%d spots: more than MAX_SPOTS %d (use a larger --spacing)' % (len(out), MAX_SPOTS))
     return out
 
 
-def script_for(slot, posname=POS, endpos=None):
+def script_for(slot, posname=POS, endpos=None, tele=False):
     """luvsic's script_for (third_party/anp/tools/climbs.py) for ONE step; the player's head 'Lynch' = the player in gamedata slot 0
     (ZMiniPlayerActTask, re/climb.md row 'the mini cutscene')."""
     act = '(act| ((subt| 1)| (anim| %s)| (weaponhdl| Holster)| (lefthandik| 0)| (startpos| %s)| (blend| 1)| (_dep| ())))' % (slot, posname)
-    if endpos:           # luvsic's pattern: every act has its own startpos (his van steps teleport at each act), so the landing no longer rests on root motion
+    if endpos and tele:  # a second act with NO clip: ZMiniPlayerActTask (0x8e8d00) places the player by its startpos and, with no clip to play, ends at once (0x8e8fb1); it starts when act 0 is done
+        act += '| (act| ((subt| 1)| (startpos| %s)| (blend| 1)| (_dep| %s)))' % (endpos, '()' if tele == 'nodep' else '((0| 0| done))')
+    elif endpos:           # luvsic's pattern: every act has its own startpos (his van steps teleport at each act), so the landing no longer rests on root motion
         act += '| (act| ((subt| 1)| (anim| %s)| (lefthandik| 0)| (startpos| %s)| (blend| 1)| (_dep| ())))' % (END_ANIM, endpos)
     return '((Lynch| Lynch| (%s))| (Options| Options| ((mode| unbreakable))))' % act
 
 
+def script_top(slot=None, posname=POS_TOP):
+    """One act, its startpos on the wall's top. slot None = no clip (--chain's second rout: the placement is all it does)."""
+    anim = '(anim| %s)| (weaponhdl| Holster)| ' % slot if slot else ''
+    return '((Lynch| Lynch| ((act| ((subt| 1)| %s(lefthandik| 0)| (startpos| %s)| (blend| 1)| (_dep| ())))))| (Options| Options| ((mode| unbreakable))))' % (anim, posname)
+
+
 # ------------------------------------------------------------------ writing
-def build_nodes(M, B, spots, end_act=False):
+def build_nodes(M, B, spots, end_act=False, tele=False, mode=None):
     """The made tree: the top group and its children -> (top node, [(squad, rout, pos, use) per spot])."""
     gk = CV.group_form(B)
     top = CV._node(M, B, gk, GROUP)
     M.place(top, (0.0, 0.0, 0.0))
-    made = []
+    made, extra = [], []
     for i, sp in enumerate(spots):
         sq = top.add(M.clone(*DONOR['squad'], name=SQUAD_FMT % (i + 1)))
         M.place(sq, (0.0, 0.0, 0.0))
         ro = sq.add(M.clone(*DONOR['rout'], name=ROUT))
         M.place(ro, (0.0, 0.0, 0.0))
         po = ro.add(M.clone(*DONOR['pos'], name=POS))
-        M.place(po, sp['start'], F.rot9(*sp['n']))          # faces the wall: look9(-n) = rot9(n)
+        M.place(po, sp['tele_end'] if mode == 'top' else sp['start'], F.rot9(*sp['n']))          # faces the wall: look9(-n) = rot9(n)
         us = top.add(M.clone(*DONOR['use'], name=USE_FMT % (i + 1)))
         nx, nz = sp['n']
         c = (sp['face'][0] + nx * (BOX_BACK + BOX_DEPTH / 2.0), sp['floor'] + BOX_HEIGHT / 2.0, sp['face'][1] + nz * (BOX_BACK + BOX_DEPTH / 2.0))
         M.place(us, c, F.rot9(nx, nz))
         M.set(us, None, {'ZBoxPrimitive[0]': sp['width'] / 2.0 - GAP / 2.0, 'ZBoxPrimitive[1]': BOX_HEIGHT / 2.0, 'ZBoxPrimitive[2]': BOX_DEPTH / 2.0})
         rout_path = R_ + GROUP + '\\' + SQUAD_FMT % (i + 1) + '\\' + ROUT
-        M.set(ro, 'MiniCutsceneRout', {0: script_for(sp['slot'], POS, POS_END if end_act else None), 1: []})
+        ro2 = po2 = None
+        if mode == 'chain':        # the second rout (its own act 0 places him on the top) is started by the first rout's end list
+            ro2 = sq.add(M.clone(*DONOR['rout'], name=ROUT2))
+            M.place(ro2, (0.0, 0.0, 0.0))
+            po2 = ro2.add(M.clone(*DONOR['pos'], name=POS_TOP))
+            M.place(po2, sp['tele_end'], F.rot9(*sp['n']))
+            M.set(ro2, 'MiniCutsceneRout', {0: script_top(None), 1: []})
+            M.set(po2, 'MiniCutPosObject', {0: ''})
+            M.set(ro, 'MiniCutsceneRout', {0: script_for(sp['slot'], POS), 1: [R_ + GROUP + chr(92) + SQUAD_FMT % (i + 1) + chr(92) + ROUT2]})
+        elif mode == 'top':
+            M.set(ro, 'MiniCutsceneRout', {0: script_top(sp['slot'], POS), 1: []})
+        else:
+            M.set(ro, 'MiniCutsceneRout', {0: script_for(sp['slot'], POS, POS_END if end_act else None, tele), 1: []})
         M.set(po, 'MiniCutPosObject', {0: ''})
         if end_act:
             pe = ro.add(M.clone(*DONOR['pos'], name=POS_END))
-            M.place(pe, (sp['end'][0], sp['end'][1] - END_BIAS, sp['end'][2]), F.rot9(*sp['n']))      # on the top surface, facing on
+            M.place(pe, sp['tele_end'] if tele else (sp['end'][0], sp['end'][1] - END_BIAS, sp['end'][2]), F.rot9(*sp['n']))      # on the top surface, facing on
             M.set(pe, 'MiniCutPosObject', {0: ''})
         M.set(us, 'PlayerAction', {1: [rout_path], 8: 1})
-        for n in ((sq, ro, po, us) + ((pe,) if end_act else ())):
+        for n in ((sq, ro, po, us) + ((pe,) if end_act else ()) + ((ro2, po2) if ro2 else ())):
             if n.links is not None or n.model:
                 raise ValueError('%s: a donor with a list or a model' % n.name)
         made.append((sq, ro, po, us))
-    return top, made
+        if ro2:
+            extra.append(ro2)
+    return top, made, extra
 
 
 def _write_ent(A, n, parent, nxt, made):
@@ -223,7 +252,8 @@ def _same_ends(anm, players):
     return first
 
 
-def apply(src, dst, spacing=SPACING, npcs=False, log=print, end_act=False):
+def apply(src, dst, spacing=SPACING, npcs=False, log=print, end_act=False, probe=(0.0, 0.0), tele=False, mode=None):
+    end_act = (end_act or tele) and not mode
     """The build of `src` written to the NEW folder `dst` with the climb -> report dict. Raises before anything is written when a
     proof fails (after the archive is written, only the checks at the end can fail: they say FAIL)."""
     import kl_map_escape as E
@@ -259,7 +289,7 @@ def apply(src, dst, spacing=SPACING, npcs=False, log=print, end_act=False):
         raise ValueError('%d .SND members' % len(snds))
     new_anm, arep = C.merge(B[('.ANM')], players, npc, say, snd=B.files[snds[0]])
     ends = _same_ends(kl_anm.Anm(new_anm), players)
-    spots = plan_spots(L, G, level, ends, spacing)
+    spots = plan_spots(L, G, level, ends, spacing, probe=probe, tele=tele or bool(mode))
     for i, s in enumerate(spots):
         say('  spot %d: face (%g, %g) out of it (%g, %g); %s (top %g over the floor %g = %.1f) with %s: root rise %.1f, forward %.1f; the start is %.1f off the face and %.1f OVER '
             'the floor (%g, %g, %g), the clip ends at (%.1f, %.1f, %.1f) = %.1f over the top, %.1f inside the far edge; prompt box %g wide' % (
@@ -277,7 +307,7 @@ def apply(src, dst, spacing=SPACING, npcs=False, log=print, end_act=False):
     octx, rmi, rmc = O.Oct.parse(B['.oct']), O.RoomIndex.parse(B['.rmi']), O.RoomIndex.parse(B['.rmc'])
     pre = F.room_sets_check(B.scene, octx, rmi, rmc)
     M = F.Maker()
-    top, made = build_nodes(M, B, spots, end_act)
+    top, made, extra = build_nodes(M, B, spots, end_act, tele, mode)
     q, order = M.scene([top])
     Jn = J.join(sc, [(sc, t) for t in sc.tops()] + [(q, t) for t in q.tops()], 'climb2')
     prp = Jn.p.serialize()
@@ -311,6 +341,8 @@ def apply(src, dst, spacing=SPACING, npcs=False, log=print, end_act=False):
         lo = tuple(p[a] - 10.0 for a in range(3))
         hi = tuple(p[a] + (10.0 if a != 1 else 190.0) for a in range(3))
         items += [(slot1[ents_made[id(sq)]] + 2, lo, hi), (slot1[ents_made[id(ro)]] + 2, lo, hi)]
+        if extra:
+            items.append((slot1[ents_made[id(extra[i])]] + 2, lo, hi))
     allp = [po.pos for _s, _r, po, _u in made]
     lo = tuple(min(p[a] for p in allp) - 10.0 for a in range(3))
     hi = tuple(max(p[a] for p in allp) + (10.0 if a != 1 else 190.0) for a in range(3))
@@ -388,10 +420,12 @@ def apply(src, dst, spacing=SPACING, npcs=False, log=print, end_act=False):
     with open(os.path.join(dst, 'graft.txt'), 'a') as fh:
         fh.write('kl_fa_climb2: %d level-data climb spots (squad + MiniCutscene + PosObject + use prompt) on %s from %s; players\' sets %s\n' % (
             len(spots), level, B.folder, ', '.join(players)))
-    report = collections.OrderedDict(source=B.folder, out=dst, level=level, spots=[dict(s, face=list(s['face']), n=list(s['n']), start=list(s['start']),
+    report = collections.OrderedDict(source=B.folder, out=dst, level=level, probe=list(probe), mode=mode or ('tele' if tele else None), spots=[dict(s, face=list(s['face']), n=list(s['n']), start=list(s['start']),
                                      tangent=list(s['tangent'])) for s in spots], players_sets=players, anm=arep, members_changed=changed,
                                      entities_added=len(order), ref_ids='%d..%d' % (ref0, nxt - 1), slot_ids_moved=moved, groups_listed_in_root_tree_3=listed,
                                      slot_id_faults_before=pre, slot_id_faults_after=post, big_before=before, big_after=after)
+    with open(os.path.join(dst, 'climb2.json'), 'w') as fh:
+        json.dump(report, fh, indent=1)
     with open(os.path.join(dst, 'climb2.json'), 'w') as fh:
         json.dump(report, fh, indent=1)
     say('')
@@ -427,6 +461,99 @@ def _val(sc, k, ctrl, idx):
 from kl_prp import units
 
 
+def _spot_alt(say, B, sc, L, G, anm, cmode, tag, i, sq, rk, uses):
+    """Per-spot check of --top-only ('top': one act, startpos on the wall top) and --chain (act 0 at the face + a second rout, own act 0, on the top)."""
+    BS = chr(92)
+    want_n = 2 if cmode == 'chain' else 1
+    names = sorted(sc.names[j] for j in rk)
+    if len(rk) != want_n or any([sc.p.key(nm) for nm, _b in sc.nodes[j]['ctrls']] != ['MiniCutsceneRout'] for j in rk):
+        say('FAIL', '%s: the squad holds %s, not %d MiniCutsceneRout(s)' % (tag, names, want_n))
+        return
+    ro = next((j for j in rk if sc.names[j] == ROUT), None)
+    ro2 = next((j for j in rk if sc.names[j] == ROUT2), None)
+    if ro is None:
+        say('FAIL', '%s: no rout named %s' % (tag, ROUT))
+        return
+    bad = []
+    script = (_val(sc, ro, 'MiniCutsceneRout', 0) or [''])[0]
+    ma = re.search(r'\(anim\| (/Movement/Climb/Up/\w+)\)', script)
+    if not ma:
+        say('FAIL', '%s: no climb clip in the script %s' % (tag, script[:160]))
+        return
+    slot = ma.group(1)
+    if slot not in anm.slots:
+        bad.append('the .ANM has no slot %s' % slot)
+    path2 = R_ + GROUP + BS + sc.names[sq] + BS + ROUT2
+    if cmode == 'top':
+        if script != script_top(slot, POS):
+            bad.append('the script is not the one this step writes')
+        if _val(sc, ro, 'MiniCutsceneRout', 1) != [0]:
+            bad.append("the rout's end list is %s" % _val(sc, ro, 'MiniCutsceneRout', 1))
+        pos_rout, pos_name = ro, POS
+    else:
+        if script != script_for(slot, POS):
+            bad.append('act 0 is not the plain climb script')
+        if _val(sc, ro, 'MiniCutsceneRout', 1) != [1, path2]:
+            bad.append("the first rout's end list is %s, not [1, %s]" % (_val(sc, ro, 'MiniCutsceneRout', 1), path2))
+        elif sc.resolve(path2) != [ro2]:
+            bad.append('the end list names %s, which does not resolve to the second rout' % path2)
+        if (_val(sc, ro2, 'MiniCutsceneRout', 0) or [''])[0] != script_top(None):
+            bad.append("the second rout's script is not the clip-less placement")
+        if _val(sc, ro2, 'MiniCutsceneRout', 1) != [0]:
+            bad.append("the second rout's end list is %s" % _val(sc, ro2, 'MiniCutsceneRout', 1))
+        pos_rout, pos_name = ro2, POS_TOP
+    pk = [j for j in range(len(sc.nodes)) if sc.parent[j] == pos_rout]
+    if [sc.names[j] for j in pk] != [pos_name if cmode == 'chain' else POS]:
+        bad.append('the PosObject children of the placing rout are %s' % [sc.names[j] for j in pk])
+    if cmode == 'chain':
+        p0 = [j for j in range(len(sc.nodes)) if sc.parent[j] == ro]
+        if [sc.names[j] for j in p0] != [POS]:
+            bad.append("the first rout's children are %s" % [sc.names[j] for j in p0])
+    us = [u for u in uses if sc.names[u] == USE_FMT % (i + 1)]
+    if len(us) != 1:
+        say('FAIL', '%s: no prompt named %s' % (tag, USE_FMT % (i + 1)))
+        return
+    u = us[0]
+    want = R_ + GROUP + BS + sc.names[sq] + BS + ROUT
+    if _val(sc, u, 'PlayerAction', 1) != [1, want] or (_val(sc, u, 'PlayerAction', 8) or [None])[0] != 1:
+        bad.append('the prompt does not name %s / is not enabled' % want)
+    if bad or not pk:
+        say('FAIL', '%s: %s' % (tag, '; '.join(bad)))
+        return
+    bc = B.at(u)
+    floor = bc[1] - BOX_HEIGHT / 2.0
+    R, _t = B.fr[B.ents[pk[0] - 1]]
+    fw = (-R[0][2], -R[2][2])
+    ln = math.hypot(*fw) or 1.0
+    fw = (fw[0] / ln, fw[1] / ln)
+    n = (round(-fw[0], 4) + 0.0, round(-fw[1], 4) + 0.0)
+    fp = (bc[0] - n[0] * (BOX_BACK + BOX_DEPTH / 2.0), bc[2] - n[1] * (BOX_BACK + BOX_DEPTH / 2.0))
+    r = C.sample(L, G, fp, n, floor)
+    if not r['ok'] or r['slot'] != slot:
+        say('FAIL', '%s: the rule at the face (%g, %g): %s' % (tag, fp[0], fp[1], r.get('why') or r.get('slot')))
+        return
+    T = B.at(pk[0])
+    past = (T[0] - fp[0]) * fw[0] + (T[2] - fp[1]) * fw[1]
+    over = T[1] - r['top']
+    surf = [h for h in G.hits(T[0], T[2]) if abs(h[0] - r['top']) <= 2.0]
+    if not (8.0 <= past <= r['depth'] - 5.0):
+        bad.append('the top PosObject is %.1f past the face on a %g thick top (8 .. %g)' % (past, r['depth'], r['depth'] - 5.0))
+    if not (0.0 <= over <= 6.0):
+        bad.append('the top PosObject is %.1f over the top surface %g (0 .. 6)' % (over, r['top']))
+    if not surf:
+        bad.append('no top surface under the top PosObject')
+    if cmode == 'chain':
+        S = B.at(next(j for j in range(len(sc.nodes)) if sc.parent[j] == ro))
+        back = (S[0] - fp[0]) * n[0] + (S[2] - fp[1]) * n[1]
+        if not B.in_box(u, S):
+            bad.append('the use box does not hold the start')
+        if not (30.0 <= back <= 70.0) or abs(S[1] - floor) > 3.0:
+            bad.append('the clip starts %.1f off the face and %.1f over the floor (30 .. 70, 0)' % (back, S[1] - floor))
+    say('FAIL' if bad else 'PASS', '%s: %s, %s: PosObject on the top at (%g, %g, %g), %.1f past the face, %.1f over the top %g (%g thick), surface under it %s%s' % (
+        tag, slot.rsplit('/', 1)[1], 'one act placed on the top' if cmode == 'top' else 'act 0 at the face, the second rout places him on the top',
+        T[0], T[1], T[2], past, over, r['top'], r['depth'], bool(surf), ('. PROBLEMS: ' + '; '.join(bad)) if bad else ''))
+
+
 def check(folder, source=None, log=print):
     """Read-only. -> [(severity, text)]; FAIL = the build must not be handed on as a climb build."""
     import kl_map_escape as E
@@ -437,6 +564,17 @@ def check(folder, source=None, log=print):
         log('%-5s %s' % (sev, text))
     B = F.Built(folder)
     sc = B.sc
+    try:
+        probe = any(json.load(open(os.path.join(folder, 'climb2.json'))).get('probe') or [])
+    except (OSError, ValueError):
+        probe = False
+    try:
+        cmode = json.load(open(os.path.join(folder, 'climb2.json'))).get('mode')
+    except (OSError, ValueError):
+        cmode = None
+    cmode = cmode if cmode in ('top', 'chain') else None
+    if probe:
+        say('NOTE', 'DIAGNOSTIC PROBE build (--probe-dx / --probe-dy): the start is moved off the computed place on purpose; its geometry findings are NOTEs')
     tops = sc.resolve(R_ + GROUP)
     if len(tops) != 1:
         say('FAIL', '%s: %d top-level groups of that name' % (GROUP, len(tops)))
@@ -471,6 +609,9 @@ def check(folder, source=None, log=print):
             say('FAIL', '%s: the squad has controllers %s' % (tag, ctr))
             continue
         rk = [j for j, n in enumerate(sc.nodes) if sc.parent[j] == sq]
+        if cmode:
+            _spot_alt(say, B, sc, L, G, anm, cmode, tag, i, sq, rk, uses)
+            continue
         if len(rk) != 1 or [sc.p.key(nm) for nm, _b in sc.nodes[rk[0]]['ctrls']] != ['MiniCutsceneRout']:
             say('FAIL', '%s: the squad does not hold exactly one MiniCutsceneRout (%s)' % (tag, [sc.names[j] for j in rk]))
             continue
@@ -479,7 +620,10 @@ def check(folder, source=None, log=print):
         script = (_val(sc, ro, 'MiniCutsceneRout', 0) or [''])[0]
         ma, mp = re.search(r'\(anim\| (/Movement/Climb/Up/\w+)\)', script), re.search(r'\(startpos\| (\w+)\)', script)
         endp = POS_END if '(startpos| %s)' % POS_END in script else None          # the --end-act variant
-        m = ma and mp and script == script_for(ma.group(1), mp.group(1), endp)
+        tele = bool(endp) and END_ANIM not in script          # the --tele variant: the second act has no clip
+        if tele and '(blend| 1)| (_dep| ()))' in script.split('| (act|')[-1]:
+            tele = 'nodep'                                    # --tele-nodep: the second act without a dependency (luvsic's form)
+        m = ma and mp and script == script_for(ma.group(1), mp.group(1), endp, tele)
         if not m:
             say('FAIL', '%s: the script is not the one this step writes: %s' % (tag, script[:200]))
             continue
@@ -556,7 +700,7 @@ def check(folder, source=None, log=print):
         if not rows:
             bad.append('no clip ends known for %s' % slotname)
         pred = []
-        for fl, cn, rise, fwd, side in rows:
+        for fl, cn, rise, fwd, side in ([] if tele else rows):
             ex, ey, ez = S[0] + fw[0] * fwd - fw[1] * side * 0.0, S[1] + rise, S[2] + fw[1] * fwd
             past = (ex - fp[0]) * fw[0] + (ez - fp[1]) * fw[1]          # how far past the face the clip's root ends
             over = ey - r['top'] if r['ok'] else 0.0
@@ -568,7 +712,18 @@ def check(folder, source=None, log=print):
                 bad.append('%s (%#x) ends %.1f past the face on a %g thick top (8 .. %g)' % (cn, fl, past, r['depth'], r['depth'] - 5.0))
             if r['ok'] and not tops:
                 bad.append('%s (%#x): no top surface under its end (%.1f, %.1f)' % (cn, fl, ex, ez))
-        if endp and not bad:         # the end PosObject: where the clip is predicted to land, on the top
+        if tele and r['ok'] and not bad:      # the teleport act: the end PosObject is in the middle of the wall's top, TOP_LIFT over it, facing on
+            E2 = B.at(pk[1])
+            past = (E2[0] - fp[0]) * fw[0] + (E2[2] - fp[1]) * fw[1]
+            if not (8.0 <= past <= r['depth'] - 5.0):
+                bad.append('the end PosObject is %.1f past the face on a %g thick top (8 .. %g)' % (past, r['depth'], r['depth'] - 5.0))
+            if not (0.0 <= E2[1] - r['top'] <= 6.0):
+                bad.append('the end PosObject is %.1f over the top surface %g (0 .. 6)' % (E2[1] - r['top'], r['top']))
+            if not [h for h in G.hits(E2[0], E2[2]) if abs(h[0] - r['top']) <= 2.0]:
+                bad.append('no top surface under the end PosObject')
+            if back < 30.0 or back > 70.0:
+                bad.append('the clip starts %.1f off the face (30 .. 70: Dead Men stands 47 off)' % back)
+        elif endp and not bad:         # the end PosObject: where the clip is predicted to land, on the top
             E2 = B.at(pk[1])
             pr = rows and [x for x in rows if x[0] == 0]
             if pr:
@@ -580,7 +735,7 @@ def check(folder, source=None, log=print):
                 bad.append('the end PosObject is %.1f from the top surface %g' % (E2[1] - r['top'], r['top']))
             if r['ok'] and not [h for h in G.hits(E2[0], E2[2]) if abs(h[0] - r['top']) <= 2.0]:
                 bad.append('no top surface under the end PosObject')
-        say('FAIL' if bad else 'PASS', '%s: %s from (%g, %g, %g) facing (%.2f, %.2f): %.1f off the face (%g, %g) and %.1f over the floor; the use box %g x %g x %g holds the start; '
+        say(('NOTE' if probe else 'FAIL') if bad else 'PASS', '%s: %s from (%g, %g, %g) facing (%.2f, %.2f): %.1f off the face (%g, %g) and %.1f over the floor; the use box %g x %g x %g holds the start; '
             'predicted end of the %d clips (the root alone, no alignment): %s%s' % (
                 tag, slotname.rsplit('/', 1)[1], S[0], S[1], S[2], fw[0], fw[1], back, fp[0], fp[1], lift, box[0] * 2, box[1] * 2, box[2] * 2, len(rows),
                 '; '.join('%s %.1f past the face, %.1f over the top' % (cn, pa, ov) for cn, _fl, pa, ov, _t in pred[:1] + pred[-1:]) if pred else 'none',
@@ -595,7 +750,7 @@ def check(folder, source=None, log=print):
             rk = [x for x, n in enumerate(sc.nodes) if sc.parent[x] == sq]
             pk = [x for x, n in enumerate(sc.nodes) if sc.parent[x] == rk[0]] if rk else []
             if pk and B.in_box(u, B.at(pk[0])):
-                say('FAIL', 'the prompt of spot %d holds the start of spot %d' % (i + 1, j + 1))
+                say('NOTE' if probe else 'FAIL', 'the prompt of spot %d holds the start of spot %d' % (i + 1, j + 1))
     # the .ANM: kl_fa_climb's own checks (event ids, +0x2C, bones) on this folder
     sub = C.check(folder, lambda *a, **k: None)
     fails = [t for s, t in sub if s == 'FAIL']
@@ -683,7 +838,7 @@ def main():
         sys.exit(1 if any(s == 'FAIL' for s, _t in check(a[1], a[2] if len(a) == 3 else None)) else 0)
     elif a[:1] == ['apply'] and len(a) >= 3:
         opt = a[3:]
-        sp, npcs, i, end_act = SPACING, False, 0, False
+        sp, npcs, i, end_act, probe, tele, mode = SPACING, False, 0, False, [0.0, 0.0], False, None
         while i < len(opt):
             if opt[i] == '--spacing' and i + 1 < len(opt):
                 sp = float(opt[i + 1]); i += 2
@@ -691,11 +846,21 @@ def main():
                 npcs = True; i += 1
             elif opt[i] == '--end-act':
                 end_act = True; i += 1
+            elif opt[i] == '--tele':
+                tele = True; i += 1
+            elif opt[i] in ('--top-only', '--chain'):
+                mode = {'--top-only': 'top', '--chain': 'chain'}[opt[i]]; i += 1
+            elif opt[i] == '--tele-nodep':
+                tele = 'nodep'; i += 1
+            elif opt[i] == '--probe-dx' and i + 1 < len(opt):
+                probe[0] = float(opt[i + 1]); i += 2
+            elif opt[i] == '--probe-dy' and i + 1 < len(opt):
+                probe[1] = float(opt[i + 1]); i += 2
             else:
                 sys.exit('unknown option %s' % opt[i])
         had = os.path.isdir(a[2]) and bool(os.listdir(a[2]))
         try:
-            rep = apply(a[1], a[2], sp, npcs, end_act=end_act)
+            rep = apply(a[1], a[2], sp, npcs, end_act=end_act, probe=tuple(probe), tele=tele, mode=mode)
         except (ValueError, KeyError) as e:
             left = not had and os.path.isdir(a[2]) and bool(os.listdir(a[2]))
             sys.exit('kl_fa_climb2: NOT applied: %s%s' % (e.args[0] if e.args else e, ' - %s HOLDS WHAT WAS WRITTEN BEFORE THAT: not a build, do not use it' % a[2] if left else ' - nothing was written'))
