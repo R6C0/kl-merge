@@ -913,6 +913,10 @@ def check(src, dst, log=print, pictures=False, extras=False, draft=False):
             if hid != tid or (tw_, th_) != (w, h) or sz != len(t.entry):
 
                 bad.append('extra %s: the .TEX record header (id %d, %dx%d, size %d) does not match' % (kind, hid, tw_, th_, sz))
+            else:                                          # the pixels are the bake of the chosen look: a level baked with the other look (or hand-edited) fails here
+                q_ = t.entry.index(bytes(1), 36) + 1; n_ = struct.unpack_from('<I', t.entry, q_)[0]
+                if t.entry[q_ + 4:q_ + 4 + n_] != _extra_pixels(kind, w, h):
+                    bad.append('extra %s (slot %d): the pixels are not the bake of watch look %d (--watch)' % (kind, slot, WATCH))
 
     allowed = set(tex_page(t1, max(r[1] for r in parse(p1.chunks[ci])[1]))[0] for ci in fonts.values())
 
@@ -1154,7 +1158,7 @@ def build_pictures(tex, slots_ids, log=print):
 
 EXTRA_ID = 3000
 
-EXTRAS = (            # slot, name, width, height
+EXTRAS_OLD = (            # slot, name, width, height (watch look 0 = the look of 2026-10-12 morning)
 
     (111, 'stroke', 256, 32),     # a solid painted bar, hand-cut edge, small breaks: row blocks, pop-up bars, rules
 
@@ -1186,6 +1190,22 @@ EXTRAS = (            # slot, name, width, height
 
 )
 
+# THE WATCH LOOK (2026-10-12, re/hud_hook.md section 14): 112 / 114 / 115 become wear / worn dial / bezel (all 128 x 128, tools/kl_hud_watch.py);
+# the others are the same. A level carries ONE of the two sets: kl_hud.py all --look deadmen --watch 0|1 (default 1) and the hook's [HUD] WatchStyle
+# must agree. Slot 112's old users (strike-through, bar tails, rules) draw slot 111 thinner under the new look.
+WATCH = 1
+EXTRAS_NEW = tuple(((112, 'wear', 128, 128) if e[0] == 112 else (114, 'disc', 128, 128) if e[0] == 114 else (115, 'bezel', 128, 128) if e[0] == 115 else e) for e in EXTRAS_OLD)
+EXTRAS = EXTRAS_NEW
+
+
+def set_watch(w):
+    """choose the look (1 = the watch look, 0 = the old one) for everything below: EXTRAS, ARC_FAM and the pixels"""
+    global WATCH, EXTRAS, ARC_FAM
+    WATCH = 1 if w else 0
+    EXTRAS = EXTRAS_NEW if WATCH else EXTRAS_OLD
+    ARC_FAM = ARC_FAM_NEW if WATCH else ARC_FAM_OLD
+
+
 
 
 
@@ -1199,18 +1219,20 @@ EXTRAS = (            # slot, name, width, height
 # every number here (ARC_*). Round caps only at 0 degrees (slice 0 start) and 360 degrees (last slice end).
 ARC_N = 3
 ARC_KR = 0.40                      # centre-line radius / the square's side
-ARC_FAM = {'A': (128, 0.23, 123, 124, 125), 'B': (256, 0.12, 126, 185, 190)}      # texture side, stroke / centre-line radius, slots
+ARC_FAM_OLD = {'A': (128, 0.23, 123, 124, 125), 'B': (256, 0.12, 126, 185, 190)}
+ARC_FAM_NEW = {'A': (128, 0.13, 123, 124, 125, 0.6), 'B': (256, 0.10, 126, 185, 190, 0.9)}      # the watch look (re/hud_hook.md 14): thinner strokes; side, ratio, slots, overlap in degrees
+ARC_FAM = ARC_FAM_NEW      # texture side, stroke / centre-line radius, slots
 RING_STROKE = 0.021                # the thin track ring (slot 115), stroke / the square's side
 
 
 def _arc_pixels(fam, idx):
     import math
-    S, ratio, _a, _b, _c = ARC_FAM[fam]
+    S, ratio = ARC_FAM[fam][:2]
     rc = ARC_KR * S; hw0 = 0.5 * ratio * rc
     a = bytearray(S * S)
     TAU = 2 * math.pi
     th0, th1 = TAU * idx / ARC_N, TAU * (idx + 1) / ARC_N
-    ovl = math.radians(0.7)
+    ovl = math.radians(ARC_FAM[fam][5] if len(ARC_FAM[fam]) > 5 else 0.7)
     hs = (th1 - th0) / 2 + (0 if idx == 0 else ovl) / 2; he = (th1 - th0) / 2 + (0 if idx == ARC_N - 1 else ovl) / 2
     # the stroke's wobble: a function of the GLOBAL angle so that neighbouring slices meet exactly; subtle (about 4 % of the width)
     def hwo(t, ph):
@@ -1282,7 +1304,20 @@ def _white_alpha(a):
     return px
 
 
+_PX_CACHE = {}
+
+
 def _extra_pixels(kind, w, h):
+    k = (WATCH, kind, w, h)
+    if k not in _PX_CACHE:
+        _PX_CACHE[k] = bytes(_extra_pixels_raw(kind, w, h))
+    return _PX_CACHE[k]
+
+
+def _extra_pixels_raw(kind, w, h):
+    if WATCH and kind in ('disc', 'wear', 'bezel'):
+        import kl_hud_watch as _W
+        return _W.pixels(kind, w, h)
 
     if kind.startswith('arc'):
         return _white_alpha(_arc_pixels(kind[3], int(kind[4:])))
@@ -2011,14 +2046,20 @@ def preview_hud(src, out, log=print):
 
     # round watch + escape dial (klu_dials): rings of dabs
 
-    wcx, wcy = 1212, 66
-    left = .6; a_ = 2 * math.pi * (1 - left)
-    disc(wcx, wcy, 34.5, (8, 8, 9), .61); track(wcx, wcy, 29, TRACKC); arc(wcx, wcy, 29, 0, 1 - left, 1.0, CHALKc)
-    hs = 3.9 / .9
-    for k in range(1, int(21 / 1.1) + 1): pic(113, wcx + math.sin(a_) * 1.1 * k - hs / 2, wcy - math.cos(a_) * 1.1 * k - hs / 2, hs, hs, CHALKc)
-    pic(113, wcx - 4.3, wcy - 4.3, 8.6, 8.6, CHALKc)
-    ex, ey = wcx - 75, wcy + 5
-    disc(ex, ey, 27.5, (8, 8, 9), .61); track(ex, ey, 23, TRACKC); arc(ex, ey, 23, 0, 1 - .65, 1.0, ORANGE); rect(ex - 9, ey - 5, 18, 10, CHALKc)         # a car, as a block
+    if WATCH:
+        import kl_hud_wprev as _P, kl_hud_watch as _WM
+        _cv = _P.Canvas(sys.modules[__name__], src, W_, H_, 1, img=img)
+        _WM.draw_watch(_cv, 1212, 66, 219.0, 13); log('watch: %d pictures' % _cv.count); _c0 = _cv.count
+        _WM.draw_escape(_cv, 1150, 66, .35, 13, 170); log('escape dial: %d pictures' % (_cv.count - _c0))
+    else:
+        wcx, wcy = 1212, 66
+        left = .6; a_ = 2 * math.pi * (1 - left)
+        disc(wcx, wcy, 34.5, (8, 8, 9), .61); track(wcx, wcy, 29, TRACKC); arc(wcx, wcy, 29, 0, 1 - left, 1.0, CHALKc)
+        hs = 3.9 / .9
+        for k in range(1, int(21 / 1.1) + 1): pic(113, wcx + math.sin(a_) * 1.1 * k - hs / 2, wcy - math.cos(a_) * 1.1 * k - hs / 2, hs, hs, CHALKc)
+        pic(113, wcx - 4.3, wcy - 4.3, 8.6, 8.6, CHALKc)
+        ex, ey = wcx - 75, wcy + 5
+        disc(ex, ey, 27.5, (8, 8, 9), .61); track(ex, ey, 23, TRACKC); arc(ex, ey, 23, 0, 1 - .65, 1.0, ORANGE); rect(ex - 9, ey - 5, 18, 10, CHALKc)         # a car, as a block
     mx = 1247
 
     text(LAB, 'ROUND 1 OF 10', mx + TRK, leg(108, LAB), CHALKc, 'r')
@@ -2039,15 +2080,19 @@ def preview_hud(src, out, log=print):
 
         text(f, val, mx, leg(y, f), GREENHI if k == 0 else GREEN, 'r')
 
-    wx, wy = 1177, 598; S85 = 0.85                                            # klhud_weapon.c KLWD_S: the whole circle x 0.76 about its centre
-    disc(wx, wy, 70.5 * S85, (8, 8, 9), .61); track(wx, wy, 62 * S85, TRACKC); arc(wx, wy, 62 * S85, 1, 0.0, .7, CHALKc)
-    rect(wx - 43.5 * S85, wy + 2 * S85, 87 * S85, 2, CHALKc, .29)                                 # the divider
-    text('H2', '30', wx - 7 * S85, leg(wy - 36 * S85, 'H2'), CHALKc, 'r'); text(SM, '150', wx - 5 * S85, leg(wy + 18 * S85, SM), (169, 165, 157), 'r')
-    text(LAB, 'ZASTAVA M85 . 270', wx + TRK / 2.0, leg(wy + 88 * S85, LAB), CORALc, 'c')
+    if WATCH:
+        _WM.draw_weapon(_cv, 1199, 598, 0.8, 24, 9, 90, 65, 13)
+        _WM.draw_label(_cv, 'ZASTAVA M85', '222', _WM.LABEL_CW)
+    else:
+        wx, wy = 1177, 598; S85 = 0.85                                            # klhud_weapon.c KLWD_S: the whole circle x 0.76 about its centre
+        disc(wx, wy, 70.5 * S85, (8, 8, 9), .61); track(wx, wy, 62 * S85, TRACKC); arc(wx, wy, 62 * S85, 1, 0.0, .7, CHALKc)
+        rect(wx - 43.5 * S85, wy + 2 * S85, 87 * S85, 2, CHALKc, .29)                                 # the divider
+        text('H2', '30', wx - 7 * S85, leg(wy - 36 * S85, 'H2'), CHALKc, 'r'); text(SM, '150', wx - 5 * S85, leg(wy + 18 * S85, SM), (169, 165, 157), 'r')
+        text(LAB, 'ZASTAVA M85 . 270', wx + TRK / 2.0, leg(wy + 88 * S85, LAB), CORALc, 'c')
     # the loot ring (a third of it filled) and the pop-up bar + the traitor box
 
     lx, ly = 640, 470
-    disc(lx, ly, 17, (15, 16, 15)); track(lx, ly, 17, (141, 137, 130)); arc(lx, ly, 22, 0, 0.0, .34, CHALKc)
+    disc(lx, ly, 17, (15, 16, 15)); (arc(lx, ly, 17, 0, 0.0, 1.0, (74, 72, 68)) if WATCH else track(lx, ly, 17, (141, 137, 130))); arc(lx, ly, 22, 0, 0.0, .34, CHALKc)      # the watch look: the track is a dim full ring of the stroke's family (115 is the bezel)
     text(SM, '$', lx - 3, cen(ly, SM), GREENHI)
 
     msg = 'YOU BAGGED $50,000'; bw = width('H1', msg) + 48; bh = 38; byc = 523
@@ -2224,6 +2269,9 @@ def main():
 
         preview_hud(a[1], a[2])
 
+    elif cmd == 'preview-dials':                          # the watch look's dial board at 1x / 2x / 4x with the picture count of every element (tools/kl_hud_wprev.py)
+        import kl_hud_wprev
+        kl_hud_wprev.preview_dials(sys.modules[__name__], a[1], a[2])
     elif cmd == 'preview-board':
 
         preview_board(a[1], a[2], [(os.path.basename(x)[6:-4], x) for x in a[3:]])
@@ -2251,6 +2299,7 @@ def main():
             elif k == '--scale': kw['scale'] = float(rest.pop(0))
 
             elif k == '--caps': kw['caps'] = True
+            elif k == '--watch': set_watch(int(rest.pop(0)))      # 1 (default) = the watch look, 0 = the look before 2026-10-12 noon
 
             elif k == '--chip': kw['chip'] = float(rest.pop(0))
 

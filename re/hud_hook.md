@@ -432,3 +432,82 @@ Ini `[HUD] Enable=1 Draft=1 Log=2`; the whole heist on the bank, pictures every 
 one smooth stroke, no dots), the thin track an even line. Log lines: `hud: on (Version 3: ...`, the escape lines of 12.3, no `stands down`. If the rings are broken into dashes the textures
 are minified without mips: bake the slices at the drawn size.
 R1p: the same, idle player, `PopupTest=1` added: the loot ring (dark disc, unbroken thin ring, stroke filling from the top, green dollar) and both pop-ups.
+
+## 14. The watch (2026-10-12; owner / JC on the draft: 'black bar bottom right to make gun name more pronounced and a / to distinguish between gun name and ammo reserve', 'clock needs a rehaul and the circle on the gun', 'make the clock more like a watch like rolex hands and a bit more wear n tear'; builds compile, preview rendered, NOTHING OF IT HAS RUN IN THE GAME)
+
+Chosen from three previews: A's watch (bezel, 60 pips, a triangle at 12, batons, Mercedes hour hand, sword minute hand, worn dial) with C's economy (no seconds hand by default) and C's weapon
+circle (a stroke on a dim track, a big count, a hairline, a dim second gun) and A's label (a black bar, a coral slash, a dimmer chalk reserve). Wear is alpha only and LIGHT; no new picture slot.
+The model is `tools/kl_hud_watch.py` (picture lists, number for number what klhud.c queues) with `tools/kl_hud_wprev.py` (a canvas that draws them with a baked level's real textures and fonts);
+the hook's constants are `KLW_*` / `KLWD_LB_*` in klhud.c / klhud_weapon.c.
+
+### 14.1 Textures (tools/kl_hud.py `--watch 1`, default; EXTRAS_NEW; all alpha, tinted at draw time; `check` regenerates every extra and compares the pixels, so a level baked with the other look FAILS)
+| slot | was | now | size | content |
+|---|---|---|---|---|
+| 114 `disc` | plain disc | worn dial | 128 | hand-cut rim (+-0.3 px), low-frequency mottling (alpha 228..248), 15 hairline scratches (alpha -36..-62), 26 specks, 3 rim bites; disc radius 0.46875 of the side |
+| 112 `wear` | dry stroke 256x32 | wear | 128 | 14 light scratches, one 36 degree arc scuff at 0.30, 70 dust specks, a soft glare wedge 292..346 degrees; drawn in chalk at alpha 0.30 |
+| 115 `bezel` | thin track ring | bezel | 128 | 60 minute pips out to 0.47 of the side (every 5th long 0.065, short 0.035; 4 shortened, 2 missing), a triangle at 12 on the bezel (apex inward), 12 batons at 0.245..0.305 (one nicked), a triangle at 12 on the face |
+| 123..125 | ring slices A | stroke 0.13 of the radius (was 0.23), overlap 0.6 degrees | 128 | |
+| 126, 185, 190 | ring slices B | stroke 0.10 (was 0.12), overlap 0.9 degrees | 256 (kept; the spec said 224) | |
+| 111 `stroke`, 113 `dab`, 116..118 | | unchanged | | 111 = row blocks, label bar, rules, strikes (thinner, 5 px, in place of 112) |
+`kl_hud.py all <src> <out> --look deadmen [--watch 0|1]`, `kl_hud_tab.py build|verify ... [--watch 0|1]`; `--watch 0` bakes the look of the morning (old 112 / 114 / 115 and strokes). The hook's `[HUD] WatchStyle`
+must be the same number (a mismatch = rings of the wrong width, no pips; it is not detected). Idempotent: a level baked either way can be baked again.
+
+### 14.2 The round watch (centre (1212, 66) = [HUD] money right edge - 35, y = inset + 30; ~66..103 pictures)
+Layers (call order never decreases in layer): case 114 (r 36.2, tint 07080A a 0.91; layer-4), face 114 (r 34, 14161A a 0.86; -3), wear 112 (chalk 0.30; -3), bezel 115 (pips out to r 33, chalk 0.70; -2),
+time-left stroke (family A, centre line r 26 = inside the pips; grey 9A9A97; -1), hour hand, sword hand, optional seconds hand, hub (layer 0).
+- hour hand = minutes left x 30 degrees (fractional: a 6 minute round starts at 6 o'clock, ends at 12); Mercedes: a shaft of dabs 3.0 wide at step 1.0, 19 long, 3.6 counter-tail, tapering to 0.8 over the last fifth,
+  a ring at 62 % (chalk dab 7.0 + the dial's colour dab 3.7 over it); ~26 pictures.
+- sword hand = seconds left in the minute x 6 degrees, whole seconds (ticks); 29 long, 5 tail, widest 3.4 at 55 %, 1.4 at the tip, step 1.2; ~29 pictures. Both hands run clockwise and meet at the triangle at 12 when time is up.
+- stroke = from the sword tip clockwise to 12 (the time left): slices wholly inside + one dab run, round caps at both ends.
+- last minute (60 s or less): stroke and sword hand turn red E8303F; the stock red digits show (they are blanked above 60 s as before; WatchLast=1 blanks them always). They were not placed under the new dial: they will overlap it (an offset is owed if W1 shows it).
+- `WatchSeconds=1`: a thin coral seconds hand at 6 degrees a second, 30.4 long (+~34 pictures).
+Round clock source unchanged ([rules+0x4c]); the length is only used as a sanity guard now (no dial before the round has a clock).
+
+### 14.3 The escape dial (centre = the watch's x - 62 = (1150, 66), 50 px across; ~31..48 pictures)
+The watch's base at scale 22.5 / 33 (case, face, wear, pips at 0.5 alpha), an orange stroke = the wait that is left (empties from the top as before), the car / helicopter icon 26 px in the middle, no hands.
+
+### 14.4 The weapon circle (centre (1199, 598) = WeaponX default 1199 under Draft, KLWD_S 0.76 -> disc 107, ring r 47.1; ~13..64 pictures)
+Case + face + wear as the watch; a DIM FULL RING of family B slices (2B2C2E) under the magazine stroke (family B, chalk, coral at a quarter of the magazine or less (size over 3) or when the game says the gun is low); the count big
+in the upper left (coral on the same rule); the active gun's picture upper right; a 1 px hairline across the middle (picture 181: 111 breaks up at 1 px); the other gun's count and picture below, dim. No pips, no needle.
+
+### 14.5 The label bar (right edge = circle centre + 48 = 1247, y 654..675; 1 picture + 3 texts)
+Black bar (slot 111 painted, 070707 at 0.90; `LabelBar=2` = plain 181, `0` = none), then 'NAME / reserve': the name chalk E9E6DF, the slash coral, the reserve C9C5BD (coral when low). Three text objects (right-aligned, capitals centred on
+the bar's middle, no shadow): KLU_NWEAP is 5 now. No text metrics in the hook: the bar's left edge and the slash use an ESTIMATE of 11.6 px a letter, 0.93 of that a digit ([HUD] LabelCharW; the preview measures the baked label
+font at 11.9 a capital and 10.7 a digit: the estimate is within 3 px of the real text for four names). `LabelSlash=0` draws no slash. A gun without a count shows the name alone.
+
+### 14.6 Keys (all `[HUD]`, read at start-up)
+`WatchStyle=1` (0 = the look of the morning for the watch, escape dial, weapon circle, label and the ring strokes), `WatchSeconds=0`, `WatchWear=1`, `WatchLast=0`, `LabelBar=1`, `LabelSlash=1`, `LabelCharW=11.6` (10.5 under WatchStyle=0).
+Slot 112 users (strike-through, rules, the scoreboard's lines) draw 111 under WatchStyle=1 (`KLU_DRY()`); the loot ring's and the scoreboard continue ring's track is a dim full ring of family A (115 is the bezel).
+KLU_NPIC 288 -> 300.
+
+### 14.7 Pictures a frame (the model's count; the old look in brackets)
+Typical: watch 84 (50 + hands), escape 46 (28), weapon 39 + bar (45) = about 170 against 123. WORST each, at the same time (never really): watch 103, escape 48, weapon 64 = 215 against about 123, so with the crew list,
+money box, pop-ups and loot ring about 280 of the queue's 300 (the draw list was tested to ~320). The spec's '+5' counted typical frames; the queue drops silently over 300. WatchSeconds=1: watch up to 137.
+A cheaper cut if W1 shows dropped pictures: WatchWear=0 (-3 pictures), a larger dab step on the weapon stroke (KLU_DAB_MAXSTEP), or no pips on the escape dial.
+
+### 14.8 Guesses / open risks
+- Hands are runs of dabs: soft edges at 1x (1.3..3.7 px), the hub's dial-coloured dab and the Mercedes ring's hole rely on CALL ORDER inside one layer (the model draws in call order).
+- The preview samples bilinear without mips; if the game minifies differently the 128 px bezel (70 px drawn) may alias (the pips are 2..3.6 texels wide).
+- The face / case alphas (0.86 / 0.91), the dim ring colour, the wear alpha are my choices from the previews.
+- The gun and car pictures in the preview are stand-ins; the stock icons may not suit the dark disc.
+- Stroke widths 0.13 / 0.10 come from the spec (measured from a JPEG by track C).
+- Last-minute digits (above). A level and a hook with different WatchStyle (above).
+
+### 14.9 Live check W1 (owner away; hook `<work>\build\klhook\hud_v29_test`, level `<work>\build\hud_x10\DM03` swapped into the bank's slot for the run)
+`[HUD] Enable=1 Draft=1 Log=2` (WatchStyle default 1), pictures every 2 s through the whole heist on the bank: look at (1) the watch: pips, the stroke from the sword tip to the 12 triangle, both hands move (the sword in whole seconds),
+the hub / hole drawn OVER the hand, red in the last minute (play on or set the round short); (2) the escape dial aboard; (3) the weapon circle: dim ring, the stroke empties from the top, coral at a quarter, count, hairline,
+second gun; (4) the black bar under it: 'NAME / reserve' fits the bar (compare the left edge with the text; adjust LabelCharW); (5) the loot ring (dim full ring, no pips) and the scoreboard's continue ring; (6) strike-through of a dead heister
+(111) and the crew rules; (7) the log for dropped pictures ('hud: ... pictures' counts; none over 300). Then the same with `WatchSeconds=1` and with `WatchStyle=0` on a `--watch 0` level.
+Level: kl_hud.py all hud_tab/DM03 -> hud_x10/DM03 --look deadmen (check PASS), preview hud_x10/preview.png, dials hud_x10/dials*.png (python tools/kl_hud.py preview-dials <level> <out dir>).
+
+### 14.10 Review round (2026-10-12; re/hud_watch_review.md) - hooks hud_v30_test 925a750f / hud_v30_ship c4747b19 (built from HEAD klhook + the working klhud*.c)
+- MUST 1 done: both hands run CLOCKWISE. hour = 360 - minutes_left * 30, sword = (60 - seconds_left_in_minute) * 6 (whole seconds), the seconds hand (WatchSeconds, off) too.
+  Stroke = hour tip -> 12 (minutes left, drains over the round) while more than 60 s remain; sword tip -> 12 (seconds left, 360 -> 0) in the last minute. At 1:00 the stroke
+  goes from 30 to 360 degrees ON PURPOSE (red last minute begins): the review's "no jump at 1:00" cannot hold with two different quantities - GUESS the owner accepts it; the
+  alternative is the hour stroke all round (30 -> 0, tiny in the last minute). Model: kl_hud_watch.watch_angles / stroke_start / draw_watch, same numbers.
+- MUST 2 done: [HUD] WatchStyle defaults to 0. Set WatchStyle=1 in the ini ONLY together with maps baked by kl_hud.py --watch 1 (hud_x10 / kl_hud_tab build). The hook cannot tell the textures apart (a marker file is not done).
+- SHOULD 3 done: WatchLast defaults to 1 (stock red digits blanked in the last minute). SHOULD 4 done: the first dropped picture logs 'hud: the picture queue is full (300)' once; keep WatchSeconds=0.
+- SHOULD 5 done (guess): the weapon gun picture sits 3 px further left in the watch look (DX 25 instead of 28); check with the real icons. A thinner weapon stroke (0.08) NOT done: it is baked into the ring slices (rebake of every map). 
+- SHOULD 6 done: the label bar's left edge gets 4 px more. LabelBar=2 stays the clean option. SHOULD 7 not touched (guesses: alphas, icon corners).
+- The baked textures did not change, so hud_x10/DM03 needs no rebake (kl_hud preview-dials / preview-hud re-run: hud_x10/dials*.png, preview.png; 5:30, 2:10, 0:40 read right).
+- Live check W1 addition: rounds at 5:30 / 2:10 / 1:00 / 0:40 / 0:05 (stroke = time left, hands clockwise, red last minute, no stock digits); one start with an OLD-baked map under WatchStyle=1 only to see it, never for play.

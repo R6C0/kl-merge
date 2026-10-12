@@ -207,9 +207,9 @@
 #define KLU_NSWEEP      8                     /* Grid: one label per candidate style byte */
 #define KLU_NGRID       (10 + KLU_NSWEEP)
 #define KLU_T_WEAP      (KLU_T_GRID + KLU_NGRID)      /* klhud_weapon.c: the first gun's count, the other gun's, the label */
-#define KLU_NWEAP       3
+#define KLU_NWEAP       5                     /* the first gun's count, the other gun's, the label (the name, or the whole text in the old look), the slash, the reserve */
 #define KLU_NTEXT       (KLU_T_WEAP + KLU_NWEAP)      /* LAST: every part that adds texts goes before this line (klhud_values.c / klhud_popup.c add none) */
-#define KLU_NPIC        288                   /* the queue; the rings are baked arcs + a run of dabs (klu_arc): about 230 a frame at worst; the draw list holds 280 without trouble (run S1), keep it under ~320 */
+#define KLU_NPIC        300                   /* the queue; the rings are baked arcs + a run of dabs (klu_arc): about 230 a frame at worst; the draw list holds 280 without trouble (run S1), keep it under ~320 */
 #define KLU_TEXTLEN     64
 #define KLU_STYLE_LEFT  (klu.left)        /* [HUD] LeftStyle: 0x44 turned out CENTRED at x (run H1_DM03_hud); 0x11 is a GUESS until the sweep of Grid shows it */
 #define KLU_STYLE_CENTRE 0x44
@@ -284,9 +284,11 @@ static struct {
     int draft;                                /* Draft: the defaults of every part of the draft are 1 */
     int lives, roundof;                       /* Lives, RoundOf (klhud_values.c) */
     int on, log, stock, crew, money, round, hide, shadow, tags, cashshort, totalfont, draw, plates, anchor, pictest, grid, probe, layer, rows, dials;
+    int wstyle, wseconds, wwear, wlast, labelbar, labelslash;   /* the watch look (section 14 of re\hud_hook.md): WatchStyle (1 = new, 0 = the old textures and sizes), WatchSeconds, WatchWear, WatchLast, LabelBar (0 text only, 1 painted bar, 2 plain), LabelSlash */
     float inset, crew_x, crew_y, crew_w, row, money_x, money_y, money_w, round_y;
     float yoff, blockup, blockh, padx;        /* the rows: the text's y under the head, the block's rise above it, its height, the text's side margin (the draft: 34 / 5 / 28 / 8) */
 } klu;
+#define KLU_DRY()        (klu.wstyle ? 111 : 112)      /* the 'dry stroke' of the old look is gone: slot 112 became the dial's wear */
 
 static struct {
     DWORD osd, elem, tmpl, font, bigfont, parent, rules; char scene[160];
@@ -578,7 +580,8 @@ static void klu_layout(void)
         for (k = 0; k < 3; k++) { klu_r.t[KLU_T_MLABEL(k)].fnt = KLU_FNT_LABEL; klu_r.t[KLU_T_MVALUE(k)].fnt = k == 0 ? KLU_FNT_BIG : KLU_FNT_NAME; }
         klu_r.t[KLU_T_WEAP + 0].fnt = KLU_FNT_NAME; klu_r.t[KLU_T_WEAP + 1].fnt = KLU_FNT_SMALL;      /* the draft's dial: on-gun count 1.6cqw = 20.5 px (the NAME font), off-gun 1.15cqw */ klu_r.t[KLU_T_WEAP + 2].fnt = KLU_FNT_LABEL;
     }
-    klu_r.t[KLU_T_WEAP + 0].style = klu_r.t[KLU_T_WEAP + 1].style = KLU_STYLE_RIGHT; klu_r.t[KLU_T_WEAP + 2].style = KLU_STYLE_CENTRE;      /* klhud_weapon.c: the counts right-aligned, the label centred under the disc */
+    klu_r.t[KLU_T_WEAP + 0].style = klu_r.t[KLU_T_WEAP + 1].style = KLU_STYLE_RIGHT; klu_r.t[KLU_T_WEAP + 2].style = klu.wstyle ? KLU_STYLE_RIGHT : KLU_STYLE_CENTRE;
+    klu_r.t[KLU_T_WEAP + 3].style = klu_r.t[KLU_T_WEAP + 4].style = KLU_STYLE_RIGHT; klu_r.t[KLU_T_WEAP + 3].fnt = klu_r.t[KLU_T_WEAP + 4].fnt = KLU_FNT_LABEL;      /* klhud_weapon.c: the counts right-aligned, the label centred under the disc */
     {   /* the Grid labels: their style is fixed when the object is made (klu_grid fills the same order) */
         int gs[KLU_NGRID] = { KLU_STYLE_LEFT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_RIGHT, KLU_STYLE_LEFT, KLU_STYLE_RIGHT, KLU_STYLE_LEFT, KLU_STYLE_RIGHT };
         for (i = 0; i < KLU_NSWEEP; i++) gs[10 + i] = klu_sweep[i];
@@ -684,7 +687,11 @@ static void klu_addpic(int n, float x, float y, float w, float h, DWORD argb, in
         p->n = n; p->x = x; p->y = y; p->w = w; p->h = h; p->argb = argb; p->layer = layer;
         return;
     }
-    if (klu_r.npic >= KLU_NPIC || w <= 0 || h <= 0) return;
+    if (klu_r.npic >= KLU_NPIC) {              /* review 2026-10-12 SHOULD 4: say it once, the late parts (weapon label, pop-ups) are what is lost */
+        static int said; if (!said && w > 0 && h > 0) { said = 1; klog("hud: the picture queue is full (%d): later pictures are dropped this frame", KLU_NPIC); }
+        return;
+    }
+    if (w <= 0 || h <= 0) return;
     p = &klu_r.pic[klu_r.npic++];
     p->n = n; p->x = x; p->y = y; p->w = w; p->h = h; p->argb = argb; p->layer = layer;
 }
@@ -714,6 +721,7 @@ static void klu_outline(float x, float y, float w, float h, DWORD argb, int laye
 #define KLU_DAB_MAXSTEP  2.5f                 /* review S1: 0.4 of the stroke, at most 2.5 px (was 0.25 / 1.5): worst case ~200 pictures a frame */
 static const int klu_arc_slot[2][KLU_ARC_N] = { { 123, 124, 125 }, { 126, 185, 190 } };
 static const float klu_arc_ratio[2] = { 0.23f, 0.12f };
+static const float klu_arc_ratio_w[2] = { 0.13f, 0.10f };   /* the watch look's strokes (tools/kl_hud.py ARC_FAM_NEW) */
 #define KLU_TRACK_C      0xff4a4844u          /* the draft's faint track (#55524d on the dark disc), a touch darker */
 
 static int klu_sink(void *clk, void *ctx, int n, float x, float y, float w, float h, DWORD argb, int layer)
@@ -744,7 +752,7 @@ static void klu_dabs(void *clk, void *ctx, float cx, float cy, float r, float ta
 
 static void klu_arc(void *clk, void *ctx, float cx, float cy, float r, int fam, float t0, float t1, DWORD argb, int layer)
 {   /* the part of the ring from fraction t0 to t1 (clockwise from the top; 0 .. 1) as one stroke */
-    float D = r / KLU_ARC_KR, stroke = klu_arc_ratio[fam] * r, cur; int j;
+    float D = r / KLU_ARC_KR, stroke = (klu.wstyle ? klu_arc_ratio_w[fam] : klu_arc_ratio[fam]) * r, cur; int j;
     if (t0 < 0) t0 = 0;
     if (t1 > 1.0f) t1 = 1.0f;
     if (!(t1 > t0)) return;
@@ -764,11 +772,105 @@ static void klu_arc(void *clk, void *ctx, float cx, float cy, float r, int fam, 
     if (cur < t1 - 1e-4f) klu_dabs(clk, ctx, cx, cy, r, cur, t1, stroke, argb, layer);
 }
 
-static void klu_track(void *clk, void *ctx, float cx, float cy, float r, DWORD argb, int layer)
-{   /* the thin track ring at the same radius (picture 115) */
+static void klu_track_f(void *clk, void *ctx, float cx, float cy, float r, int fam, DWORD argb, int layer)
+{   /* the track under a ring's stroke: the old look = the thin ring at the same radius (picture 115); the watch look = a DIM FULL RING of the same family's slices (115 is the bezel there and must not be drawn as a track) */
     float D = r / KLU_ARC_KR;
+    if (klu.wstyle) { klu_arc(clk, ctx, cx, cy, r, fam, 0.0f, 1.0f, argb, layer); return; }
     if (klu_r.handle[KLU_TRACK_PIC]) klu_sink(clk, ctx, KLU_TRACK_PIC, cx - D * 0.5f, cy - D * 0.5f, D, D, argb, layer);
 }
+static void klu_track(void *clk, void *ctx, float cx, float cy, float r, DWORD argb, int layer)
+{   /* family A (the escape dial's, the loot ring's, the scoreboard's) */
+    klu_track_f(clk, ctx, cx, cy, r, 0, argb, layer);
+}
+
+/* ================================================================ THE WATCH LOOK (2026-10-12; re\hud_hook.md section 14; the model is tools/kl_hud_watch.py,
+   whose numbers these are; the preview draws that model with the level's real textures). [HUD] WatchStyle=1 (default) = this look, 0 = the look
+   of the morning (the old textures: 112 dry stroke, 114 plain disc, 115 thin ring - the level must be baked with kl_hud.py --watch to match).
+   Baked textures (alpha only, tinted here): 114 = the worn dial (disc radius 0.46875 of its side), 112 = wear, 115 = the bezel (pips out to 0.47 of
+   its side, batons, the triangles at 12), 123..125 / 126 185 190 = the ring slices (stroke 0.13 / 0.10 of the centre-line radius). NOTHING OF IT
+   HAS RUN IN THE GAME: the hands are runs of round dabs (113), bilinear, edges soft; the call order inside one layer is what lays hub over hand. */
+#define KLW_DISC_K       0.46875f
+#define KLW_BEZ_OUT      0.470f
+#define KLW_R_CASE       36.2f
+#define KLW_R_FACE       34.0f
+#define KLW_R_BEZEL      33.0f
+#define KLW_R_STROKE     26.0f                /* the time-left stroke's centre line, inside the pips' band */
+#define KLW_ESC_K        (22.5f / 33.0f)      /* the escape dial is the watch at this scale (50 px across) */
+#define KLW_ESC_DX       62.0f                /* its centre = the watch's - 62 (1150 beside the watch at 1212) */
+#define KLW_C_CASE       0xe807080au
+#define KLW_C_FACE       0xdc14161au
+#define KLW_C_WEAR       0x4de9e6dfu
+#define KLW_C_PIPS       0xb2e9e6dfu
+#define KLW_C_PIPS_ESC   0x80e9e6dfu
+#define KLW_C_CHALK      0xffe9e6dfu
+#define KLW_C_BEZEL      0xff9a9a97u
+#define KLW_C_RED        0xffe8303fu
+#define KLW_C_ORANGE     0xffff8a2au
+#define KLW_C_FACEDAB    0xff14161au
+#define KLW_C_COUNTDOWN  0xfff0475au          /* the optional seconds hand: coral */
+
+static void klu_dab_at(float x, float y, float ink, DWORD argb, int layer)
+{   /* one round dab of ink diameter `ink` (picture 113's ink is 0.9 of the picture) */
+    float s = ink / KLU_DAB_INK;
+    klu_addpic(KLU_DAB_PIC, x - s * 0.5f, y - s * 0.5f, s, s, argb, layer);
+}
+
+static void klu_hand(float cx, float cy, float deg, float len, float tail, float w_tail, float w_base, float w_mid, float pos, float w_tip, float step, DWORD argb, int layer)
+{   /* a hand as a run of overlapping dabs from -tail to len along `deg` (clockwise from 12); width (ink): w_tail behind the hub, w_base -> w_mid up to pos * len, -> w_tip */
+    float t = deg * 0.017453293f, dx = (float)sin(t), dy = -(float)cos(t); int k, n = (int)((len + tail) / step + 0.5f);
+    if (n < 1) n = 1;
+    for (k = 0; k <= n; k++) {
+        float s = -tail + (len + tail) * (float)k / (float)n, w;
+        if (s < 0) w = w_tail;
+        else if (s <= pos * len) w = w_base + (w_mid - w_base) * s / (pos * len);
+        else w = w_mid + (w_tip - w_mid) * (s - pos * len) / (len * (1.0f - pos));
+        klu_dab_at(cx + dx * s, cy + dy * s, w, argb, layer);
+    }
+}
+
+static void klu_dial_base(float cx, float cy, float k, DWORD pips, int layer)
+{   /* case, face, wear, bezel pips; layers never decrease with the call order (layer - 4 .. layer - 2) */
+    float s;
+    klu_addpic(114, cx - KLW_R_CASE * k / KLW_DISC_K * 0.5f, cy - KLW_R_CASE * k / KLW_DISC_K * 0.5f, KLW_R_CASE * k / KLW_DISC_K, KLW_R_CASE * k / KLW_DISC_K, KLW_C_CASE, layer - 4);
+    s = KLW_R_FACE * k / KLW_DISC_K;
+    klu_addpic(114, cx - s * 0.5f, cy - s * 0.5f, s, s, KLW_C_FACE, layer - 3);
+    if (klu.wwear && klu_r.handle[112]) klu_addpic(112, cx - s * 0.5f, cy - s * 0.5f, s, s, KLW_C_WEAR, layer - 3);
+    if (klu_r.handle[115]) { s = KLW_R_BEZEL * k / KLW_BEZ_OUT; klu_addpic(115, cx - s * 0.5f, cy - s * 0.5f, s, s, pips, layer - 2); }
+}
+
+static void klu_watch_look(float cx, float cy, float clock)
+{   /* the round watch: the hour hand = the minutes left (30 degrees a minute), the sword hand = the seconds of the minute (6 a second, whole seconds),
+       the stroke = from the sword's tip to 12 (the time left), both hands and the stroke red in the last minute */
+    /* review 2026-10-12 MUST 1: both hands run CLOCKWISE (the angle is the time PLAYED): hour = 360 - minutes_left * 30, sword = (60 - seconds_left_in_minute) * 6;
+       the stroke runs from the hour tip to 12 (= the minutes left, draining) while more than 60 s remain, from the sword tip to 12 (= the seconds left, 360 -> 0) in the last minute.
+       At 1:00 the stroke goes from 30 to 360 degrees on purpose (the switch to the red last minute); GUESS that the owner accepts it. */
+    float hdeg, sdeg, t0; int red = clock <= 60.0f, sl; DWORD sc;
+    hdeg = (float)fmod(360.0f - clock / 60.0f * 30.0f + 720.0f * 100.0f, 360.0f);
+    sl = (int)floor(clock); if (!red) sl %= 60;
+    sdeg = (float)fmod((60 - sl) * 6.0f, 360.0f);
+    if (red) t0 = (60 - sl) * 6.0f / 360.0f;                    /* 60 s -> 0 (a full ring), 1 s -> 354 degrees in */
+    else { t0 = 1.0f - clock / 60.0f * 30.0f / 360.0f; if (t0 < 0.0f) t0 = 0.0f; }
+    klu_dial_base(cx, cy, 1.0f, KLW_C_PIPS, klu.layer);
+    sc = red ? KLW_C_RED : KLW_C_BEZEL;
+    klu_arc(NULL, NULL, cx, cy, KLW_R_STROKE, 0, t0, 1.0f, sc, klu.layer - 1);
+    klu_hand(cx, cy, hdeg, 19.0f, 3.6f, 2.6f, 3.0f, 3.0f, 0.8f, 0.8f, 1.0f, KLW_C_CHALK, klu.layer);                 /* the Mercedes hand: a shaft ... */
+    {   float t = hdeg * 0.017453293f, rx = cx + (float)sin(t) * 19.0f * 0.62f, ry = cy - (float)cos(t) * 19.0f * 0.62f;
+        klu_dab_at(rx, ry, 7.0f, KLW_C_CHALK, klu.layer);                                                            /* ... a ring at 62 % of it: a chalk dab ... */
+        klu_dab_at(rx, ry, 3.7f, KLW_C_FACEDAB, klu.layer); }                                                        /* ... with the dial's colour over it */
+    klu_hand(cx, cy, sdeg, 29.0f, 5.0f, 2.2f, 2.2f, 3.4f, 0.55f, 1.4f, 1.2f, red ? KLW_C_RED : KLW_C_CHALK, klu.layer);   /* the sword hand */
+    if (klu.wseconds) klu_hand(cx, cy, (float)fmod(360.0f - (float)fmod(clock, 60.0f) * 6.0f, 360.0f), 30.4f, 6.0f, 1.1f, 1.1f, 1.1f, 0.5f, 1.1f, 1.1f, KLW_C_COUNTDOWN, klu.layer);
+    klu_dab_at(cx, cy, 5.6f, KLW_C_CHALK, klu.layer);                                                                /* the hub */
+    klu_dab_at(cx, cy, 2.2f, KLW_C_FACEDAB, klu.layer);
+}
+
+static void klu_escape_look(float cx, float cy, float left, int icon)
+{
+    float k = KLW_ESC_K;
+    klu_dial_base(cx, cy, k, KLW_C_PIPS_ESC, klu.layer);
+    klu_arc(NULL, NULL, cx, cy, KLW_R_STROKE * k, 0, 1.0f - left, 1.0f, KLW_C_ORANGE, klu.layer - 1);
+    klu_addpic(icon, cx - 13.0f, cy - 13.0f, 26.0f, 26.0f, KLU_C_CHALK, klu.layer);
+}
+
 
 static void klu_dials(const struct klb_snap *s)
 {
@@ -779,7 +881,12 @@ static void klu_dials(const struct klb_snap *s)
        (klhud_values.c f); a clock above the length (something set a longer time) is measured against left + played */
     if (klu.grid == 2) { clock = 219.0f; klu_r.clock_max = 360.0f; }
     else { clock = kluv_round_left(s); klu_r.clock_max = kluv_round_len(s); if (clock > klu_r.clock_max) klu_r.clock_max = clock + kluv_round_played(s); }
-    if (clock > 60.0f && klu_r.clock_max > 60.0f) {
+    if (klu.wstyle) {
+        if (clock > 0.0f && klu_r.clock_max > 0.0f) {
+            klu_watch_look(cx, cy, clock);
+            klu_r.watch = clock > 60.0f || klu.wlast;                 /* the render slot blanks the stock clock's digits while this is set; in the last minute the stock red digits show (WatchLast=1: never) */
+        }
+    } else if (clock > 60.0f && klu_r.clock_max > 60.0f) {
         float left = clock / klu_r.clock_max, a = 6.2831853f * (1.0f - left);
         klu_addpic(114, cx - 34.5f, cy - 34.5f, 69.0f, 69.0f, 0x9c080809u, klu.layer - 2);
         klu_track(NULL, NULL, cx, cy, 29.0f, KLU_TRACK_C, klu.layer - 1);
@@ -796,6 +903,7 @@ static void klu_dials(const struct klb_snap *s)
     if ((s->veh == 3 || s->veh == 4 || s->veh == 5 || klu.grid == 2) && klu_r.handle[i]) {      /* 5 = it drives out with its own countdown (run T2: 'van 5 8.5s'): the dial stays, emptying again */
         float ex = cx - 75.0f, ey = cy + 5.0f, left = klu.grid == 2 ? 0.35f : s->timer / 8.5f;
         if (left > 1.0f) left = 1.0f;
+        if (klu.wstyle) { klu_escape_look(cx - KLW_ESC_DX, cy, left, i); return; }
         klu_addpic(114, ex - 27.5f, ey - 27.5f, 55.0f, 55.0f, 0x9c080809u, klu.layer - 2);
         klu_track(NULL, NULL, ex, ey, 23.0f, KLU_TRACK_C, klu.layer - 1);
         klu_arc(NULL, NULL, ex, ey, 23.0f, 0, 1.0f - left, 1.0f, KLU_C_ORANGE, klu.layer);
@@ -829,8 +937,8 @@ static void klu_row(int row, const char *name, long money, int kind)
         if (klu.draft) {                                           /* M2, the draft: (name width + 12) x 4 from x 33 + 2, centred on the row (name y + 7) */
             const unsigned char *c; float w = 0;
             for (c = (const unsigned char *)name; *c; c++) if ((*c & 0xc0) != 0x80) w += KLUV_NAME_CHARW;
-            klu_addpic(klu_r.handle[112] ? 112 : 181, klu_r.cx + 2.0f, y + klu.blockh * 0.5f - klu.blockup - KLU_D_STRIKE_H * 0.5f, w + KLU_D_STRIKE_PAD, KLU_D_STRIKE_H, KLU_C_DEAD, klu.layer);      /* KLU_D_STRIKE_H high (was 4), on the block's middle */
-        } else klu_addpic(klu_r.handle[112] ? 112 : 181, klu_r.cx + 2.0f, y + 6.0f, klu.crew_w * 0.62f, klu_r.handle[112] ? 8.0f : 3.0f, KLU_C_DEAD, klu.layer);       /* the strike-through, over the name: 112 = the dry stroke */
+            klu_addpic(klu_r.handle[KLU_DRY()] ? KLU_DRY() : 181, klu_r.cx + 2.0f, y + klu.blockh * 0.5f - klu.blockup - KLU_D_STRIKE_H * 0.5f, w + KLU_D_STRIKE_PAD, KLU_D_STRIKE_H, KLU_C_DEAD, klu.layer);      /* KLU_D_STRIKE_H high (was 4), on the block's middle */
+        } else klu_addpic(klu_r.handle[KLU_DRY()] ? KLU_DRY() : 181, klu_r.cx + 2.0f, y + 6.0f, klu.crew_w * 0.62f, klu_r.handle[KLU_DRY()] ? (klu.wstyle ? 5.0f : 8.0f) : 3.0f, KLU_C_DEAD, klu.layer);       /* the strike-through, over the name: 112 = the dry stroke */
     }       /* the strike-through, over the name: 112 = the dry stroke */
 }
 
@@ -917,7 +1025,7 @@ static int klu_compose(int *state_ok)
         strcpy(klu_r.t[KLU_T_HEAD].want, "DEAD MEN"); klu_r.t[KLU_T_HEAD].on = 1; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;
         snprintf(klu_r.t[KLU_T_COUNT].want, KLU_TEXTLEN, "%d / %d", alive, used); klu_r.t[KLU_T_COUNT].on = 1;
         if (klu.plates) {                                     /* the painted rule: the draft's pic 112, 211 x 5, centre y 22 under the head */
-            if (klu.draft) klu_addpic(klu_r.handle[112] ? 112 : 181, klu_r.cx, klu_r.cy + KLU_D_RULE_Y, klu.crew_w, KLU_D_RULE_H, KLU_C_CHALK, klu.layer - 2);
+            if (klu.draft) klu_addpic(klu_r.handle[KLU_DRY()] ? KLU_DRY() : 181, klu_r.cx, klu_r.cy + KLU_D_RULE_Y, klu.crew_w, KLU_D_RULE_H, KLU_C_CHALK, klu.layer - 2);
             else klu_addpic(181, klu_r.cx, klu_r.cy + 22.0f, klu.crew_w, 3.0f, KLU_C_CHALK, klu.layer - 2);
         }
     }
@@ -1298,6 +1406,8 @@ static void klu_init(void)
     klu.shadow = klu_inii("Shadow", 1, 0, 1); if (klu.draw == 2) klu.shadow = 1;     /* the stock Render draws a pair */
     klu.tags = klu_inii("Tags", 1, 0, 1); klu.cashshort = klu_inii("CashShort", 1, 0, 1); klu.totalfont = klu_inii("TotalFont", 0, 0, 1);
     klu.draft = klu_inii("Draft", 0, 0, 1);              /* the whole draft: the defaults of Plates, Dials, Weapon, RoundOf (and klhud_popup.c's Popups, LootRing) become 1; a key that is set still wins */
+    klu.wstyle = klu_inii("WatchStyle", 0, 0, 1);       /* review MUST 2: default 0 (old extras on the installed maps); set 1 ONLY with maps baked by kl_hud.py --watch 1 */ klu.wseconds = klu_inii("WatchSeconds", 0, 0, 1); klu.wwear = klu_inii("WatchWear", 1, 0, 1); klu.wlast = klu_inii("WatchLast", 1, 0, 1);       /* review SHOULD 3: blank the stock red digits in the last minute (they would sit on the hands) */
+    klu.labelbar = klu_inii("LabelBar", 1, 0, 2); klu.labelslash = klu_inii("LabelSlash", 1, 0, 1);      /* the watch look (re\hud_hook.md 14): the level must be baked with kl_hud.py --watch <the same 0 / 1> */
     klu.dials = klu_inii("Dials", klu.draft, 0, 1);      /* the round watch + the escape dial (needs the level's extra pictures 113 / 114) */
     klu.weapon = klu_inii("Weapon", klu.draft, 0, 1); klwd_init();      /* the weapon dial (klhud_weapon.c; needs 113 / 114 too) */
     klu.lives = klu_inii("Lives", klu.draft, 0, 3);              /* 0 none, 1 three skull pictures (178) in your row - 'LIVES n' in the round line when the level has no such picture -, 2 TEST: skull glyphs after your name (the stock way), 3 'LIVES n' in the round line */

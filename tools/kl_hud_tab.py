@@ -8,6 +8,8 @@ Nothing here writes into the game folder. It READS <DD>/KLExpansion/Maps/<id>/ (
     python tools/kl_hud_tab.py build <out root> [ids ...]   # bake into <out root>/<id>/, check, manifest.json
     python tools/kl_hud_tab.py verify <out root> [ids ...]  # against the installed folders
     python tools/kl_hud_tab.py menu <hud root> <out root> [ids ...]   # LEVEL-SIDE PAGES on top of a `build` (below)
+    ... build / verify take  --watch 0|1  (default 1): the WATCH LOOK of the HUD's dials (kl_hud.py --watch; re/hud_hook.md 14). The hook's [HUD]
+    WatchStyle must be the same number: a level baked with 0 under a hook with 1 (or the reverse) draws rings of the wrong width and no pips.
 
 `menu` (2026-10-12): the round-over / status / death pages are XML inside each LEVEL archive (Menu/online.xml), and `build`
 does NOT touch them. `menu` runs `kl_hud_menu.py level <hud root>/<id> <out root>/<id>` (row-pitch fix FA_Status_GeomSpace
@@ -29,6 +31,7 @@ that lies beside the archive) are copied unchanged; only the _Main.zip is replac
 import sys, os, json, hashlib, shutil, subprocess, zipfile, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+WATCH_STYLE = 1                                  # --watch
 sys.path.insert(0, HERE)
 
 DD = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
@@ -110,7 +113,7 @@ def cmd_plan(deep):
 
 def run_hud(src_dir, out_dir):
     """kl_hud.py all <src> <out> --look deadmen  (the same command as by hand); -> (log text, 'PASS' or the problems)"""
-    p = subprocess.run([sys.executable, os.path.join(HERE, 'kl_hud.py'), 'all', src_dir, out_dir, '--look', 'deadmen'],
+    p = subprocess.run([sys.executable, os.path.join(HERE, 'kl_hud.py'), 'all', src_dir, out_dir, '--look', 'deadmen', '--watch', str(WATCH_STYLE)],
                        capture_output=True, text=True)
     log = p.stdout + p.stderr
     res = next((l[len('check:'):].strip() for l in log.splitlines() if l.startswith('check:')), None)
@@ -178,6 +181,7 @@ def cmd_verify(root, ids):
         for n in changed:
             if not n.lower().endswith(allowed):
                 probs.append('unexpected member changed: ' + n)
+        H.set_watch(WATCH_STYLE)
         chk = H.check(zi, out, pictures=True, extras=True, draft=True, log=lambda *_: None)
         probs += ['kl_hud.check: ' + c for c in chk]
         print('%s: %s; members changed: %s; side files identical: %d' % (mid, 'OK' if not probs else 'PROBLEMS', ', '.join(n.rsplit('.', 1)[1] for n in changed), len(a & b) - sum(1 for p in probs if p.startswith('side file differs'))))
@@ -220,7 +224,10 @@ def cmd_menu(hroot, root, ids):
 
 
 def main():
+    global WATCH_STYLE
     a = sys.argv[1:]
+    if '--watch' in a:
+        i = a.index('--watch'); WATCH_STYLE = int(a[i + 1]); del a[i:i + 2]
     if a and a[0] == 'menu':
         sys.exit(1 if cmd_menu(a[1], a[2], a[3:]) else 0)
     if not a or a[0] not in ('plan', 'build', 'verify'):

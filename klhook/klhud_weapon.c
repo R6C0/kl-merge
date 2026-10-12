@@ -138,7 +138,7 @@
 /* THE LAYOUT, virtual 1280 x 720 pixels, all relative to the dial's middle (cx, cy). re\hud_layout.md's numbers were
    written for the draft's own margin (middle 1177, 598); here the middle follows the game's inset. NOTHING OF IT HAS
    BEEN SEEN: change the numbers here, not in the code. */
-#define KLWD_S           0.85f                 /* 2026-10-12, the owner: 'could shrink the weapon one slightly' (0.85, then once more 0.76 on 'sixes mostly right, shrink the weapon one slightly'): the whole circle about its centre (ring, disc, gun pictures, divider, counts' places, label) x 0.85 */
+#define KLWD_S           (klu.wstyle ? 0.76f : 0.85f)                 /* 2026-10-12, the owner: 'could shrink the weapon one slightly' (0.85, then once more 0.76 on 'sixes mostly right, shrink the weapon one slightly'): the whole circle about its centre (ring, disc, gun pictures, divider, counts' places, label) x 0.85 */
 #define KLWD_D0          141.0f                /* the old disc's diameter: the CENTRE stays where it was (it follows the inset by this) */
 #define KLWD_D           (KLWD_D0 * KLWD_S)    /* the disc's diameter */
 #define KLWD_FROM_BOTTOM 86.0f                 /* the middle stands this far above the inset line (720 - 36 - 86 = 598) */
@@ -148,11 +148,11 @@
 #define KLWD_DAB_H       10.0f
 #define KLWD_ACT_NUM_DX  (-7.0f * KLWD_S)               /* the first gun's count: RIGHT-aligned at cx - 7, top at cy - 32 */
 #define KLWD_ACT_NUM_DY  (-36.0f * KLWD_S)               /* quiet round: the count is cap 11 (was 19) and keeps its middle: its baseline y + 13 lies at cy - 23 (was -19) */
-#define KLWD_ACT_PIC_DX  (28.0f * KLWD_S)                 /* its picture's MIDDLE */
+#define KLWD_ACT_PIC_DX  ((klu.wstyle ? 25.0f : 28.0f) * KLWD_S) /* review 2026-10-12 SHOULD 5: 3 px left in the watch look (the stand-in touched the magazine stroke) */                /* its picture's MIDDLE */
 #define KLWD_ACT_PIC_DY  (-26.0f * KLWD_S)
 #define KLWD_ACT_PIC     (64.0f * KLWD_S)                 /* its picture's size (the texture is 128 x 128) */
 #define KLWD_CUT_W       (87.0f * KLWD_S)                 /* the divider */
-#define KLWD_CUT_H       2.0f
+#define KLWD_CUT_H       (klu.wstyle ? 1.0f : 2.0f)
 #define KLWD_CUT_DY      (2.0f * KLWD_S)
 #define KLWD_OTH_NUM_DX  (-5.0f * KLWD_S)               /* the other gun's count: right-aligned at cx - 5, top at cy + 20 */
 #define KLWD_OTH_NUM_DY  (18.0f * KLWD_S)                  /* quiet round: cap 10 (was 15), the same middle */
@@ -175,7 +175,9 @@
 
 #define KLWD_T_ACT       (KLU_T_WEAP + 0)      /* klhud.c's text objects this part uses (WIRING: KLU_T_WEAP, KLU_NWEAP = 3) */
 #define KLWD_T_OTH       (KLU_T_WEAP + 1)
-#define KLWD_T_LABEL     (KLU_T_WEAP + 2)
+#define KLWD_T_LABEL     (KLU_T_WEAP + 2)      /* the old look: the whole label; the watch look: the NAME */
+#define KLWD_T_SLASH     (KLU_T_WEAP + 3)
+#define KLWD_T_RES       (KLU_T_WEAP + 4)
 
 struct klwd_gun { int item, pic, total, rounds, reserve; DWORD weapon, colour, handle; BYTE alpha, talpha; int shown; };
 struct klwd_raw {
@@ -439,6 +441,56 @@ static void klwd_text(int i, float x, float y, DWORD colour, const char *s)
     snprintf(t->want, sizeof t->want, "%s", s);
 }
 
+
+/* THE LABEL BAR of the watch look (re\hud_hook.md 14): a black bar under the circle, right edge = the circle's centre + 48 (1247 at the draft's 1199), 21 high,
+   'NAME / reserve' in it - the name chalk, the slash coral, the reserve a dimmer chalk (coral when the game says the gun is low). The hook has no text
+   metrics: the bar's left edge and the slash are put by an ESTIMATED advance per character ([HUD] LabelCharW, 11.6 = what tools/kl_hud.py's preview
+   measures for the baked label font); the right edge of the reserve is exact (right-aligned), the slash follows the reserve's estimated width, the
+   name is right-aligned to the slash. tools/kl_hud_watch.py label_layout() is the model. */
+#define KLWD_LB_RIGHT    48.0f
+#define KLWD_LB_Y0       56.0f
+#define KLWD_LB_H        21.0f
+#define KLWD_LB_PAD      8.0f
+#define KLWD_C_LBAR      0xe6070707u
+#define KLWD_C_LRES      0xffc9c5bdu
+#define KLWD_C_LNAME     0xffe9e6dfu
+#define KLWD_C_TRACKB    0xff2b2c2eu
+
+static void klwd_textc(int i, float x, float centre, DWORD colour, const char *s)
+{   /* a label text: right-aligned at x, its capitals centred on `centre`, no shadow (it stands on a black bar) */
+    struct klu_text *t = &klu_r.t[i];
+    t->x = x; t->y = klu_cen(centre, KLU_FNT_LABEL); t->want_colour = colour; t->on = 1; t->noshadow = 1; t->cen = 1;
+    snprintf(t->want, sizeof t->want, "%s", s);
+}
+
+static void klwd_label(float cx, float cy, const char *name, int n0, int low)
+{
+    float cw = klwd.labelw, right = cx + KLWD_LB_RIGHT, y0 = cy + KLWD_LB_Y0, mid = y0 + KLWD_LB_H * 0.5f, res_r = right - KLWD_LB_PAD, x0, name_r = 0, slash_r = 0;
+    char res[16]; int hasname = name[0] != 0, hasres = n0 >= 0;
+    res[0] = 0;
+    if (hasres) snprintf(res, sizeof res, "%d", n0);
+    if (!hasname && !hasres) return;
+    if (hasname && hasres) {
+        slash_r = res_r - (float)strlen(res) * cw * 0.93f - cw * 0.43f;
+        name_r = slash_r - cw * 0.78f - cw * 0.43f;
+        x0 = name_r - (float)strlen(name) * cw - KLWD_LB_PAD;
+    } else if (hasname) { name_r = res_r; x0 = res_r - (float)strlen(name) * cw - KLWD_LB_PAD; }
+    else x0 = res_r - (float)strlen(res) * cw - KLWD_LB_PAD;
+    x0 -= 4.0f;                                /* review SHOULD 6: the width is an estimate (+-3 px); the bar gets a few px of safety on the left */
+    if (klu.labelbar) klu_addpic(klu.labelbar == 2 || !klu_r.handle[111] ? 181 : 111, x0, y0, right - x0, KLWD_LB_H, KLWD_C_LBAR, klu.layer - 1);
+    if (hasname) klwd_textc(KLWD_T_LABEL, name_r, mid, KLWD_C_LNAME, name);
+    if (hasname && hasres && klu.labelslash) klwd_textc(KLWD_T_SLASH, slash_r, mid, KLU_C_CORAL, "/");
+    if (hasres) klwd_textc(KLWD_T_RES, res_r, mid, low ? KLU_C_CORAL : KLWD_C_LRES, res);
+}
+
+static void klwd_base(float cx, float cy)
+{   /* the watch look's circle: case, face, wear (the label bar is separate) */
+    float rc = KLWD_D * 0.5f, rf = rc - 2.3f, sc = rc / KLW_DISC_K, sf = rf / KLW_DISC_K;
+    klu_addpic(114, cx - sc * 0.5f, cy - sc * 0.5f, sc, sc, KLW_C_CASE, klu.layer - 4);
+    klu_addpic(114, cx - sf * 0.5f, cy - sf * 0.5f, sf, sf, KLW_C_FACE, klu.layer - 3);
+    if (klu.wwear && klu_r.handle[112]) klu_addpic(112, cx - sf * 0.5f, cy - sf * 0.5f, sf, sf, KLW_C_WEAR, klu.layer - 3);
+}
+
 static int klwd_queue(DWORD el, int slot, int pic, float x, float y, float w, float h, float scale, DWORD argb)
 {   /* one type-6 picture into the render slot's queue: the handle and a copy of the element's own record of gun
        `slot` (the centred unit quad). -> 0 = that picture cannot be drawn by this part */
@@ -525,16 +577,18 @@ static void klwd_compose(void)
             }
         }
         warn = low || lowclip;
+        if (klu.wstyle && a->shown && r.msize > 3 && r.frac >= 0 && r.frac <= 0.25f) warn = 1;      /* the watch look: the stroke and the count turn coral at a quarter of the magazine */
         /* nothing at all for a player without a gun and without the stock plate (byte +0x122b): the stock panel is empty
            then too. In the close-combat hold the plate flag stands, and so does the empty disc */
         if (klwd_r.ok && (a->shown || o->shown || r.f122b)) {
-            klu_addpic(114, cx - KLWD_D * 0.5f, cy - KLWD_D * 0.5f, KLWD_D, KLWD_D, KLWD_C_BACK, klu.layer - 2);
+            if (klu.wstyle) klwd_base(cx, cy);
+            else klu_addpic(114, cx - KLWD_D * 0.5f, cy - KLWD_D * 0.5f, KLWD_D, KLWD_D, KLWD_C_BACK, klu.layer - 2);
             if (a->shown) {
                 /* the ring: dabs 0 .. m - 1 from the top clockwise = what is LEFT; the gap is the last part (the
                    draft's weapon dial; klu_ring runs the other way). At least one dab while a round is in */
                 {   /* 2026-10-12: one painted stroke (klhud.c klu_arc, family B), the part that is LEFT from the top clockwise; the track under it */
                     float f = r.frac > 1.0f ? 1.0f : r.frac;
-                    klu_track(NULL, NULL, cx, cy, KLWD_RING_R, KLU_TRACK_C, klu.layer - 2);
+                    klu_track_f(NULL, NULL, cx, cy, KLWD_RING_R, 1, klu.wstyle ? KLWD_C_TRACKB : KLU_TRACK_C, klu.layer - 2);
                     if (f < 0.012f && (a->rounds > 0 || r.frac > 0)) f = 0.012f;        /* a round in = at least a stub */
                     if (f > 0) klu_arc(NULL, NULL, cx, cy, KLWD_RING_R, 1, 0.0f, f, warn ? KLU_C_CORAL : KLU_C_CHALK, klu.layer - 1);
                 }
@@ -552,6 +606,8 @@ static void klwd_compose(void)
                 n0 = -1;
                 if (a->rounds >= 0 && a->total >= 0) { if (a->total < 999 && a->total >= a->rounds) n0 = a->total - a->rounds; }
                 else if (a->rounds >= 0 && a->reserve >= 0 && a->reserve + a->rounds < 999) n0 = a->reserve;
+                if (klu.wstyle) klwd_label(cx, cy, klwd_name(a->pic), n0, low);
+                else {
                 if (n0 >= 0 && klwd_name(a->pic)[0]) snprintf(label, sizeof label, "%s" KLWD_SEP "%d", klwd_name(a->pic), n0);
                 else if (n0 >= 0) snprintf(label, sizeof label, "%d", n0);
                 else snprintf(label, sizeof label, "%s", klwd_name(a->pic));
@@ -562,9 +618,10 @@ static void klwd_compose(void)
                     if (klwd.labelright > 0 && lx + hw > klwd.labelright) lx = klwd.labelright - hw;
                     klwd_text(KLWD_T_LABEL, lx, cy + KLWD_LABEL_DY, KLU_C_CORAL, label);
                 }
+                }
             }
             if (o->shown) {
-                klu_addpic(klu_r.handle[112] ? 112 : 181, cx - KLWD_CUT_W * 0.5f, cy + KLWD_CUT_DY - KLWD_CUT_H * 0.5f, KLWD_CUT_W, KLWD_CUT_H, KLWD_C_CUT, klu.layer - 1);
+                klu_addpic(klu.wstyle ? 181 : klu_r.handle[112] ? 112 : 181, cx - KLWD_CUT_W * 0.5f, cy + KLWD_CUT_DY - KLWD_CUT_H * 0.5f, KLWD_CUT_W, KLWD_CUT_H, KLWD_C_CUT, klu.layer - 1);
                 klwd_queue(r.el, 1, o->pic, cx + KLWD_OTH_PIC_DX, cy + KLWD_OTH_PIC_DY, KLWD_OTH_PIC, KLWD_OTH_PIC, r.scale, KLWD_C_DIM);      /* without a type-6 chunk the other gun has its number only */
                 n0 = klwd.other && o->rounds >= 0 ? o->rounds : o->total >= 0 ? o->total : o->rounds;
                 if (n0 >= 0) { snprintf(num, sizeof num, "%d", n0); klwd_text(KLWD_T_OTH, cx + KLWD_OTH_NUM_DX, cy + KLWD_OTH_NUM_DY, KLWD_C_DIM, num); }
@@ -616,13 +673,13 @@ static void klwd_init(void)
 {
     char t[32];
     if (!klu.weapon) return;
-    GetPrivateProfileStringA("HUD", "WeaponX", klu.draft ? "1177" : "-1", t, sizeof t, klh_ini); klwd.x = (float)atof(t);
+    GetPrivateProfileStringA("HUD", "WeaponX", klu.draft ? (klu.wstyle ? "1199" : "1177") : "-1", t, sizeof t, klh_ini); klwd.x = (float)atof(t);
     GetPrivateProfileStringA("HUD", "WeaponY", "-1", t, sizeof t, klh_ini); klwd.y = (float)atof(t);
     GetPrivateProfileStringA("HUD", "WeaponSmall", "0.8", t, sizeof t, klh_ini); klwd.small_size = (float)atof(t);
     klwd.other = GetPrivateProfileIntA("HUD", "WeaponOther", 0, klh_ini) != 0;
     if (!(klwd.x <= 1280)) klwd.x = -1; if (!(klwd.y <= 720)) klwd.y = -1;
     if (!(klwd.small_size >= 0 && klwd.small_size <= 2.0f)) klwd.small_size = 0.8f;
-    GetPrivateProfileStringA("HUD", "LabelCharW", "10.5", t, sizeof t, klh_ini); klwd.labelw = (float)atof(t); if (!(klwd.labelw >= 4 && klwd.labelw <= 30)) klwd.labelw = 10.5f;      /* v22 */
+    GetPrivateProfileStringA("HUD", "LabelCharW", klu.wstyle ? "11.6" : "10.5", t, sizeof t, klh_ini); klwd.labelw = (float)atof(t); if (!(klwd.labelw >= 4 && klwd.labelw <= 30)) klwd.labelw = 10.5f;      /* v22 */
     GetPrivateProfileStringA("HUD", "LabelRight", "1256", t, sizeof t, klh_ini); klwd.labelright = (float)atof(t); if (!(klwd.labelright >= 0 && klwd.labelright <= 1280)) klwd.labelright = 1256.0f;      /* 0 = no clamp */
     klog("hud: weapon: on (the weapon dial; the stock ammo panel's Render is skipped while it stands); WeaponX=%.0f WeaponY=%.0f (-1 = from the inset) WeaponSmall=%.2f WeaponOther=%d; needs the level's pictures 113 / 114; NOT RUN IN THE GAME",
          klwd.x, klwd.y, klwd.small_size, klwd.other);
