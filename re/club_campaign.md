@@ -1248,3 +1248,139 @@ also: the van appears 2 s after the seal opens (100 s after the round-start even
 four men on the upper deck of dance floor 2 (they appear at GO+1.2 s, not in view of the START rows); (b) the van never leaves state 3 for 6; the police stand on the slab's east half;
 (c) ROUND 2 IN THE SAME PROCESS: the seal stands at GO of round 2 (the first bot position in the lane before GO+91 s) and the van is away until the seal opens again. Then C3
 `club_wavslim`, and the SAME order against `c_club2_music` after the stream file is installed (look for: the music at GO; 'stream' lines of the hook; the guard lines audible).
+
+
+## Gates, after runs C3-C4 (2026-10-12) - the seven hold at cover in each room until its men are dead (tools/kl_fa_club.py, sets `C:/kl_build/c_club3` and `c_club3_music`)
+
+Written by the gates workflow's builder. OFFLINE; nothing was installed, the game was not started, nothing under the Dog Days folder, KL_PortBackup, any `w_tab*` /
+`q_*` tree, `c_club2*`, `v_club` or `c_bank*` was written. Files: `tools/kl_fa_club.py` (2,872 -> 3349 lines) and this note; `kl_fa_bots_rt.py`, `kl_fa_bots_dyn.py`, `kl_fa_bots.py` and
+`kl_fa_bank.py` were IMPORTED and called, not edited. The Vault's session had `tools/kl_fa_bank.py` (and `kl_chars.py`) modified in the working tree, so every build used a scratch copy of
+HEAD's `tools/` + this commit's `kl_fa_club.py` (`C:/kl_scratch/club_gates/h/tools`, `KL_TOOLS` in the re-pathed scripts). `<work>` = `G:/SteamLibrary/steamapps/common/Kane and Lynch Dead Men/KL_PortTools`.
+Labels: MEASURED = computed on the built level or read from the live logs; READ = read in logs / notes / the exe notes; ASSUMED / GUESS as everywhere in this file.
+
+### G.1 What C4 showed (MEASURED, `<work>/build/klhook/live/C4_club_full.log`; GO = 01:51:34.5)
+
+All seven AI heisters dead GO+27 .. 73 s, every one at heist stage 1 (nobody reached stage 2), 271 'lost' lines, no 'ONE STEP' (the office-door fix holds). Per bot, first hit .. last hit,
+hits, where (x, z; floor in brackets):
+
+| record | hit GO+ | hits | route of the hits | worst 5 s |
+|---|---|---|---|---|
+| 1 | 24.2 .. 27.1 | 18 | (1284, 3106) walkway top -> (735, 2697) the walkway's foot | 15 hits |
+| 5 | 26.9 .. 34.2 | 11 | (1273, 3176) -> (798, 2671), stood there while 8 hits landed in 1 s | 8 |
+| 2 | 27.3 .. 39.2 | 32 | (1111, 3138) -> (729, 2835) stood 3 s -> (470, 2217) dance floor 2 | 20 |
+| 7 | 26.9 .. 51.7 | 53 | (736, 2825) -> (-904, 2418) -> (-978, 1673) dance floor 2 west / 1 north | 16 |
+| 3 | 26.4 .. 60.5 | 50 | (1004, 2917) -> (-3, 3054) -> (122, 2715) -> (-441, 1713) -> (-102, 1612) | 22 |
+| 6 | 27.2 .. 64.6 | 55 | (843, 2910) -> (-1152, 2805) -> (-1240, 2074) -> (179, 1411) -> (213, 1403) dance floor 1 | 35 (7 a second) |
+| 4 | 26.3 .. 73.2 | 52 | (1229, 3276) -> (662, 3481) -> (-292, 1013) -> (510, 931) | 29 |
+
+So all seven were first hit within 3 s of each other at the walkway (GO+24..27, the first men they see are the walkway's: Surprise2, FatBounceronWalkway, Dance#01's first man, all 6..12 m
+from the path), and then ran the route through the 36 awake men without stopping - the last died on dance floor 1 (the south bar), nobody reached the stairs.
+
+WHO STANDS WHERE in the built level (MEASURED, 21 squads: 17 campaign squads with 40 men + 4 arriving police squads; ZSquadScript field 3 = 1 'in the world from the load': FatBouncer,
+Dancefloor02a#01/#02/#03, On_Dancefloor#02, SurpriseStairs, Entrance; staged by `tb_LEFT_TheySpotYou` = WALK_BOX (2380, 3320): Surprise2, Dance#01; by `tb_RIGHT_TheySpotYou` = FLOOR_BOX (1000, 2900):
+Dance#02, Lounge#01/#02, Rave#01/#02; by the round's timer OFFICE_AT 10 s: YokoGuards, WaitingRoom (the four on the upper deck over dance floor 2's south wall, (0..475, 364, 2050..2275)); by the beat's
+gate: Hunters). Not one of the 38 campaign squads' men has a rout: they STAND at their posts and fire (enemy_posts: 'start' only; the Hunters have a search box). By room, with the posts
+before this stage:
+
+| room | men | posts (x, y, z) |
+|---|---|---|
+| walkway (y 320..380) | 4 | Surprise2 (947, 381, 2740), (834, 381, 2866); FatBouncer (988, 382, 2916); Dance#01 #1 (623, 322, 2902) |
+| dance floor 2 east | 5 | Dancefloor02a#03 (956, 42, 2643); Dancefloor02a#01 (-1099, 41, 2809), (-221, 42, 2784), (-722, 43, 3618); Dance#01 #2 (-340, 44, 2708) |
+| dance floor 2 west / 1 north | 7 | the deck: YokoGuards (0, 364, 2050), (350, 362, 2050), WaitingRoom (475, 363, 2275), (200, 368, 2250); Dance#01 #3 (-1302, 26, 1868); On_Dancefloor#02 (448, 61, 1926); Dancefloor02a#02 (-1171, 40, 2012) |
+| dance floor 1 | 5 | Dance#02 (-1323, 22, 1355), (-345, 22, 1089), (627, 63, 1148); On_Dancefloor#02 (23, 61, 1246); Dancefloor02a#02 (-1132, 25, 1176) |
+| stair landing, wardrobe | 2 | On_Dancefloor#02 (488, 161, 582); Entrance (-106, 182, -386) |
+| queue lane (beyond the seal) | 2 | Entrance (-65, 21, -1307), (134, 29, -2398) |
+| overlooking (y 460 .. 866: lounge, rave bar, rave gallery, the stairs' balcony, the hunters' room) | 15 | Rave#01/#02, Lounge#01/#02, SurpriseStairs, Hunters |
+
+WHAT THE SQUAD AS BUILT DID between the office and the first dance floor (MEASURED in the C3-delivered `c_club2/club`'s `dyn.txt`; READ in kl_fa_bots_dyn): after the 18 s loot wait it walked
+2 way stations (1,840, 362, 3,339) -> (569, 40, 3,234) and on across dance floor 2 with holds of the DYNAMIC step: 0..6 per bot (4 s the point man, 6..12 s the others) at a cover box that step chose
+by distance and side with NO knowledge of where the men stand; 63..84 s of timers in all (mostly the 63 s seal hold at the end); no wait on any fight and no stop that depended on the men. The
+seal hold in the entrance hall, the only place the plan made on purpose, was never reached by anybody.
+
+### G.2 What Retomoto's gates are (READ in `kl_fa_bots_rt.py`, `re/retomoto_bots_rooms.md`, its review), and how the bank's and the club's bot steps differ
+
+Retomoto: `gates_plan` cuts the way from the table to the car into legs; each leg ends at a HOLD of seven places at cover boxes (`hold_spots`: 70..230 from a box, inside the gate's box, on a flat polygon of the
+START part, 35 from a wall, in none of the trigger boxes that wake a LATER fight, 300 from every post of a man who may be alive), one step with ONE place (the pathfinder finds the way; no
+way stations, no sprint), and `Street.gate_nodes` puts after every hold step a `TriggerActorsDead` cloned from stock F07's Squad#02 (`{0: the actor groups, 1: 0, 2: the next step}`). READ in kl2 (0x4afb80 / 0x8def80): it
+sends its list when every named group is dead OR 0x7800 ticks = 30 s after the hold step called its place reached (within 10 m in 3D, 0x686c4c) - the clock is built in, which is why
+a gate cannot leave a bot waiting for good (and why a group WITHOUT an actor has no clock: `kl_fa_bots.check` fails it). Review round: a hold must not lie in the box of a later fight (D3), a bot must not
+walk past a man its gate waits for (D4), and the dynamic step must put no hold or timer between two gates (D1/D2; kl_fa_bots_dyn.last_loot_wait). The bank's step (kl_fa_bank.py) has the old shape: the seven walk
+the way as stations with dyn holds and ONE seal-style hold; the club's was a copy of it (`bots_gate`: the seal hold of 63 s, `GATE_NAME`), and so had NO gate on any fight.
+
+### G.3 What was built (flag `ROOM_GATES`, default on; `--no-gates`; `--legacy` and `--no-ai` switch it off)
+
+1. THE PLANNER IS RETOMOTO'S, imported: `bots_gates(B, P)` calls `kl_fa_bots_rt.gates_plan` with this level's table inside `rt_for_club` (sets GATES, EN_, POST_KEEP 400 - the default of its `near_post` is bound at import, so
+   that is wrapped too -, GATE_MAX, pick_holds, hold_spots, wake_map for the call and puts them back). The table `ROOMS` has five rooms in the order of the way: `walkway` (the front office's west end, box x 1350..2300 z 3000..3500, y 360),
+   `floor2` (the walkway's foot, x 250..950 z 2950..3500, y 40; it crosses `tb_RIGHT_TheySpotYou`, which the stair ends in), `floor1n` (dance floor 2 west, x -1500..-500 z 2350..3000), `floor1s` (dance floor 1 north-west,
+   x -1500..-600 z 1500..2000, y 20), `stairs` (dance floor 1 south, x -900..1000 z 400..1100, y 40, +-60). The seal hold of the entrance hall is the planner's last leg ('car'), the seal gate that was there
+   (`040_Timer_seal_opens`, a plain timer from arrival) follows it unchanged, then exit, level-exit and park stations (`050_..._out`, sprinting as before).
+2. THE MEN OF A ROOM are the men whose POST lies in it (`room_of`), named one by one (a squad spans rooms: Dance#01 stands on the walkway, dance floor 2 and dance floor 1): the TriggerActorsDead names their
+   groups (4 / 5 / 7 / 5 / 2 groups, at most 9 a list). The upper floors (y >= 420: 15 men) and the lane (2 men) are waited for by NOBODY - they overlook or lie beyond the seal; the planner's `wake_map` is told that no squad is
+   'known' (the club's 'load' squads are the fight, so its 'not woken by any box' notes are meaningless and not logged). The ways between the holds cross `tb_LEFT_TheySpotYou` (walkway) and `tb_RIGHT_TheySpotYou`
+   (floor2, a stair ends in it): both wake squads of later rooms, as the campaign's own wiring does.
+3. `pick_holds_club`: the planner's own pick packs a cover box's places along a line and gives up at the walkway's mouth, where ONE cover box has 24 places in a 4 m strip. The club's pick: seven places >= 80 apart
+   (110, 100, 90, 80 asked in turn), as many different cover boxes as there are, behind the box and clearance as tie-breaks, 400 tries of a fixed seed.
+4. `dyn` (new command, the chain's dynamic step): `kl_fa_bots_dyn.build` with `PERS.out_holds` False and `last_loot_wait` told the chain is cut off behind the table, for the call. WITHOUT this the step took the LAST TriggerActorsDead of the squad's last chain for 'the last
+   loot wait' and put 31 .. 35 `Timer_hold` (4 .. 8 s) with covers of ITS choosing between the gates, 37 of them (first run of `rooms_check`: 37 FAILED). What it still adds behind the gates: the stagger at the start and the
+   RandomTrigger forks (another corridor of the mesh between two places; a way, not a wait). `chain.sh` of the new sets calls `kl_fa_club.py dyn` in the two 7_dyn lines (the only other change).
+5. MEN MOVED (`CLEAR_MEN`, 5): of the 15 men within 250 of a place the crew walks (holds, stations, the mesh path between them, every 50), the five that have a post in the SAME room, at cover (70..230 from a box), 4 m from every hold and
+   station, 2.6 m from the path, on the START's mesh part: Surprise2 #2 (834, 2866) -> (634, 375, 2546); Dancefloor02a#01 #4 (-1099, 2809) -> (-1699, 40, 2569); Dancefloor02a#01 #3 (-221, 2784) -> (-21, 40, 2704);
+   Dancefloor02a#02 #3 (-1171, 2012) -> (-611, 40, 2172); Dance#02 #9 (-345, 1089) -> (-905, 20, 809). The other TEN STAY (`ROOM_STAY`, printed by `rooms_check`): the walkway's four (the fight itself - the gate waits for them), Dance#01 #3
+   (any post in dance floor 1's north is within 2.6 m of the way down), the stair landing's two (the landing is 3 m wide), Dance#01 #2, Dance#02 #10 and Dancefloor02a#02 #4 (the south bar: the way passes it), the queue lane's two (a 3 m corridor;
+   they are the seal's other side). The other tries moved men to another room or onto the street (`C:/kl_scratch/club_gates/moves.py`): refused. GUARDS AWAKE ONLY WHEN THEIR ROOM'S GATE IS REACHED: not
+   changed - the 'walk' and 'floor' squads (Surprise2, Dance#01, Dance#02, Lounge, Rave) already wake by the campaign's own Alert boxes at the walkway, and the 'load' squads have no child that could be sent a message (squad plan
+   `SQUADS`: `None`), so there is nothing to wire a gate to; making them sleep would need new nodes (a SquadModifierBehaviour per squad) - not done.
+6. TIMETABLE (`gates_timetable`, from the plan; GUESS: the speeds 400 / 200 units a second, 12 s a room for the quickest crew): the seal hold is made for the QUICKEST crew (every room won in 12 s) so that it leaves no sooner than the seal's clock
+   (SEAL_AT 100 s): hold = max(10, ceil(100 - 10 - 5 - 7,283/400 - 5 x 12)) = 10 s (the minimum); the quickest crew leaves it at 103 s.
+
+### G.4 The worst-case timetable (after the round-start event; GO is about 8.5 s later; every clock is the 30 s of the game's own TriggerActorsDead)
+
+A crew that wins nothing: bots start +10 s (the stagger adds 0..8), loot wait <= 18 s -> 28; walk to the walkway hold 2,221 / 200 = 11 s -> 39 s there, the gate runs out -> 69; floor2: 2,686 -> 13 s, 82 -> 112; floor1n: 1,759 -> 9 s, 121 -> 151;
+floor1s: 1,504 -> 8 s, 159 -> 189; stairs: 2,800 -> 14 s, 203 -> 233; the seal hold at about 241 s (+ the 10 s hold timer, the seal opened at 100 s long ago) leaves at 251; the walk out
+3,659 x 1.3 / 200 = about 19 s -> the exit trigger (the van is called there) at 270 s of the round's 360: 90 s of margin for the van (7.2 s in, 8 s waiting, `ROOM_VAN_MARGIN` 75). `rooms_check` FAILS a build
+whose worst case is later than 285 s or whose quickest crew would leave the seal hold before the clock. The quickest crew (every room won at once): at the walkway hold 28 + 11, ... seal hold about 93 s, leaves 103 s. The seal opens at 100 s by
+its clock or earlier by the beat (both dance-floor squads dead: the floor2 / floor1 gates name those men too, so a crew that wins them opens the seal and the gates together).
+
+### G.5 The checks (`rooms_check`, run by `bots-check`, so by `checks.sh` on every folder)
+
+FAILS: a squad without a gate's TriggerActorsDead / one that names other groups than the plan / a group that does not exist or has no actor (no 30 s clock) / a man named by two gates (the second would wait for a man who is dead) /
+TAD field 1 not 0 / more than 9 groups; the seven holds of a room not seven places 80 apart, a hold 60..240 from NO cover box, a hold equal to an earlier gate's; a hold or the loot place within 400 of a post of a man who may be alive (not named by an
+EARLIER gate) on its floor; any TriggerDelay2 / loot wait between the first gate and the seal hold (a RandomTrigger fork is a way and passes); the quickest crew leaving the seal hold before the clock; a held-in-every-room crew at the exit trigger later than 285 s; a CLEAR_MEN man
+not at his post. REPORTED per room: the men in the 0x20 line of sight of a hold (`Sight`: eye 160 to head or chest on the level's collision), the men of other rooms on that floor within 25 m that see a hold, the pairs hold / earlier-room man under 4 m (only if that gate ran out).
+RESULT on the finished sets (`checks.sh` on all 8 folders, `summary.txt` in each): `rooms_check` / `bots-check` PASS on `club` and `club_wavslim` of both sets (5 rooms; seal hold 10 s, the quickest crew leaves it at 103 s; worst case at the exit trigger 270 s,
+90 s of margin); `club_noai` and `club_bare` have no gates (`--no-ai` switches ROOM_GATES off; `club_bare` has no squad of AI heisters) - `club_noai` is byte for byte the c_club2 one (sha1 `e7754c1f...` / music `b1c31429...`).
+Per room (`bots_gate.txt`): walkway 4 men, 2 in the 0x20 line of sight of a hold; floor2 5 of 5; floor1n 7, 4; floor1s 5, 4; stairs 2, 1. Every other checker as in c_club2: the known three (`chars` glow30.fx, `escape` 217 = the plain tool
+without the drawn pavement, `guns` on `club_bare`), `preflight` / `audit` with their one known finding on the silent set and CRASH 0 / PASS on the music set (`club_noai` keeps its 2-3 = 'no police'); `club_check` (which carries
+the existing GUARDS / VAN / RESET / voice rules and the Sight rules for the five moved men), `reverify`, `impact`, `vaultfx`, `van`, `fake`, `routes`, `voice`, `stream_whd` PASS. `bots_dyn` PASS with 6 NOTEs ('10 .. 15 s of timers (stock bots: 16 .. 85 s)')
+- the dynamic step's holds are gone behind the loot, on purpose. The first run of `rooms_check` on a build WITHOUT the `dyn` command FAILED 37 times (the step's `Timer_hold`s between the gates): that rule is what found the need for it.
+
+### G.6 GUESS / ASSUMED / NOT DONE
+
+1. ASSUMED (Retomoto's, live there): a TriggerActorsDead in an 'in'-leg chain behaves as in the 'out' chain it was proven in; a gate arms when the hold step has called its place reached (within 10 m in 3D) - so a bot that never comes within 10 m of its hold has no clock.
+2. The men who stand on the upper floors (15) overlook dance floor 1 and shoot down; nobody waits for them and the crew cannot reach them. Lounge#01's three stand 4.4 m over dance floor 1's east end and the south bar: expect hits from above in the `floor1s` and `stairs` rooms.
+3. The walkway's hold does not see all of its men (the walkway's four, 2 in a straight line): the gate may run its 30 s; that is the cost of a hold 4 m from every post.
+4. GUESS: every box and direction of ROOMS, ROOM_G_MIN 12, the speeds 400 / 200, CLEAR_MEN's posts, ROOM_POST_CLEAR 400. MEASURED: the holds (printed per room by the planner, kept in `bots.json` 'club_gates').
+5. NOT OPTIMISED: 'out of the room's sight where the mesh allows'. The holds are chosen by cover, trigger boxes and posts, not by what sees them: `rooms_check` reports 2 / 1 / 7 / 6 / 7 men of other rooms on the same floor within 25 m that see a hold of
+   walkway / floor2 / floor1n / floor1s / stairs (floor1n and stairs: the deck over the south wall and the south bar look into them). A view score in `pick_holds_club` is the next step if C5 shows bots dying at a hold.
+6. NOT DONE: the 'hold' at the lane (two men beyond the seal stay as the campaign has them); sleeping squads that a gate wakes; the fed.
+
+### G.7 What the next live run must show (hook = the newest ship / test; `[Bots] Log=2` MoveLog=1; settings of C4: FollowOut=1 FollowOutShield=3)
+
+Per gate the time it OPENED and WHY: a bot's `MoveLog` position stops within 10 m of the room's hold place (listed in `bots.json` 'club_gates'; `show.py` prints them) and starts again - by the men's death (the 'lost'/'dead' lines of the men do not exist
+in the log, so read it from the bot: the first movement after the stop is earlier than arrival + 30 s) or exactly arrival + 30 s +- 1 s (the clock). Nobody dead before which second: the idle-human C4 setting should give the first death after GO+60 s
+(Retomoto's was GO+175 s, but its crew came to the first gate at GO+60); a death in the walkway room before its gate has opened = the hold is in the line of fire (look at the 'lost' positions against the hold places); every bot at the seal hold by GO+240 s and the van called by GO+270 s
+(the worst case above, from the round-start event). ONE JOINED RUN is not needed (the club has no join). If the bots stand 30 s at the walkway and then die in dance floor 2: the rooms' men are not seen from the holds (see 'in the 0x20 line of sight' above) - move the holds nearer
+(ROOM_POST_CLEAR 300).
+
+### G.8 The delivered folders (checks in each folder's `checks/summary.txt`; `chain.sh` / `checks.sh` / `routes.py` / `blocks.py` beside them; KL_TOOLS-aware; `chain.sh` differs from c_club2's in the two 7_dyn lines only)
+
+| folder | silent (`C:/kl_build/c_club3/`, against the installed stream file) | with the music (`C:/kl_build/c_club3_music/`, against `C:/kl_build/v_club/PC_Def.str`) |
+|---|---|---|
+| `club` | `09da62c45f905b1e983ffb566431ac622b7d1f1a` 179,257,632 | `3f13a27e21a4044b17dbba0c763a5444fe567e27` |
+| `club_wavslim` | the same archive as `club`, slim .WAV | the same archive as `club` of that set |
+| `club_noai` | `e7754c1f0a2330aa439c5a32a6c39be4545dfa47` 165,319,955 (= c_club2's) | `b1c31429f9b238ae5e8a0eab436a0855b11fd947` (= c_club2_music's) |
+| `club_bare` | `b1e90c8dce0eb189ff2741f17b9d2f854f24c58a` 150,071,963 (the five men moved; the control is `--legacy`) | `366d0f1f7ed0cf7a173fc19d45b94bea76983162` |
+
+`python tools/kl_fa_club.py test <out> --legacy --keep --plan <c_club2>/club_bare/van.json` gives `a4d024f38ba279c7e5e8584f1fd880011505bd1d` again (MEASURED, with this commit's file). `test --no-ai` builds and passes ('RESULT: PASS', 26,598 entities).
+`python tools/kl_fa_vaultfx.py check` PASS on all 8 folders. Rebuild: `test <out> --keep [--str FILE] --plan <c_club2>/club_bare/van.json`, `sh <c_club3>/chain.sh`, `sh <c_club3>/checks.sh` (`STREAM_FILE` set for the music set); the music set's stream
+file is the one of X.5 (nothing changed there). The Vault's session was editing `tools/kl_fa_bank.py`: the builds ran on a scratch copy of HEAD's `tools/` + this `kl_fa_club.py`.

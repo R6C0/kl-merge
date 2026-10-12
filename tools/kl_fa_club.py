@@ -10,6 +10,12 @@ live run can settle: re/club_campaign.md. Nothing here installs anything or star
 THE ENEMIES, THE BEAT (stage L2) AND THE ESCAPE (stage L3: F07's van on ROAD) ARE IN. '--no-ai' builds the round
 without enemies of stage L1.
 
+THE ROOM GATES (2026-10-12, after live runs C3 / C4; NOT RUN IN THE GAME): the seven AI heisters hold at distinct cover places in front of each
+of five rooms of the way out (walkway, dance floor 2 east / west, dance floor 1 north-west, the stairs' foot) and go on through a
+TriggerActorsDead that names the room's men (dead, or the game's own 30 s) - Retomoto's gates (kl_fa_bots_rt.gates_plan, imported) with this
+level's table; five men moved off the way (CLEAR_MEN); the dynamic step adds no hold behind them (`dyn` command). `--no-gates` / `--legacy` /
+`--no-ai` leave them out. See ROOMS, bots_gates, rooms_check and re/club_campaign.md 'Gates, after runs C3-C4'.
+
     python kl_fa_club.py test <out> [--keep] [options]    build F07 + M05_A with the layer into <out> (build():
                                                           a bare graft first, for the van's plan, then the level
                                                           inside kl_map_escape.van_layer), finish() on the written
@@ -546,7 +552,7 @@ STOCK_ROWS = True                       # False ('--dead-men-rows'): Dead Men's 
 LEGACY = False
 GUARDS_OFF, POLICE_EAST, VAN_LATE, RESET, VOICE = True, True, True, True, True
 LOOT_SECONDS = 18
-LEGACY_FLAGS = {'SEAL_AT': 120.0, 'GUARDS_OFF': False, 'POLICE_EAST': False, 'VAN_LATE': False, 'RESET': False, 'VOICE': False, 'LOOT_SECONDS': 30}
+LEGACY_FLAGS = {'SEAL_AT': 120.0, 'GUARDS_OFF': False, 'POLICE_EAST': False, 'VAN_LATE': False, 'RESET': False, 'VOICE': False, 'LOOT_SECONDS': 30, 'ROOM_GATES': False}
 FRONT_SQUADS = (E1 + 'Backroom!WaitingRoom', E2 + 'YokoGuards')
 # the four posts: x, y, z on the navigation mesh part of the START, the dance floor 2's upper deck west of the stairs. MEASURED
 # (C:/kl_scratch/club_fix/explore.py on the built level): each >= 400 from the doors, from every place of the way in (ROUTE_IN every 100)
@@ -682,9 +688,12 @@ def set_roles():
 def men_table():
     """MEN, with the four front-office guards on the upper deck (FRONT_MEN) while GUARDS_OFF."""
     if not GUARDS_OFF:
-        return MEN
-    t = collections.OrderedDict((k, v) for k, v in MEN.items() if k not in FRONT_MEN)
-    t.update(FRONT_MEN)
+        t = collections.OrderedDict(MEN)
+    else:
+        t = collections.OrderedDict((k, v) for k, v in MEN.items() if k not in FRONT_MEN)
+        t.update(FRONT_MEN)
+    if ROOM_GATES:
+        t.update(CLEAR_MEN)                     # the five men the room gates move off the crew's way (CLEAR_MEN)
     return t
 
 
@@ -2562,6 +2571,8 @@ def bots_gate(B, P, log=print):
     then the way out. (Review round 1: the first form left out the loot wait. The hold's timer starts when a bot ARRIVES, so the
     bots leave spread out: the quickest not before SEAL_AT, the slowest GATE_LATE s after SEAL_AT + GATE_MORE at most - bots_check says
     so with the plan's own numbers, written to the report as plan['gate'].) With SEAL_OPEN there is no seal: the hold is GATE_MIN."""
+    if ROOM_GATES:
+        return bots_gate_rooms(B, P, log)
     loot = [i for i, s in enumerate(P['stations']) if s['kind'] == 'loot']
     if len(loot) != 1 or len(P['waits']) != 1 or P['waits'][0]['cases'] or not P['waits'][0]['loot']:
         raise ValueError('kl_fa_club.bots_gate: the plan has %d loot stations and %d waits (wanted: one stop with loot, no case)' % (len(loot), len(P['waits'])))
@@ -2611,12 +2622,36 @@ def bots(src, dst, log=print):
     """The seven AI heisters into a COPY of a finished build of this level: kl_fa_bots.build with BOT_OPT and the seal gate
     (bots_gate) -> (kl_fa_bots' findings, its report). The dynamic step, guns and the rest are the other tools' own commands."""
     import kl_fa_bots as F
-    plan0 = F.plan
+    plan0, apply0 = F.plan, F.apply
     F.plan = lambda B, opt=None, log=print: bots_gate(B, plan0(B, opt, log), log)
+    if ROOM_GATES:                              # the rooms' TriggerActorsDead nodes: kl_fa_bots_rt.Street's gate_nodes, called by apply (its `more`)
+        import kl_fa_bots_rt as RT
+        F.apply = lambda B, P, dst_, log_=print, more=None: apply0(B, P, dst_, log_, more=RT.Street(None, None, P['club_gates']))
     try:
         return F.build(src, dst, dict(BOT_OPT, loot_seconds=LOOT_SECONDS), log)
     finally:
-        F.plan = plan0
+        F.plan, F.apply = plan0, apply0
+
+
+def dyn(src, dst, log=print):
+    """kl_fa_bots_dyn.build (the chain's dynamic step) with ONE difference while ROOM_GATES: no bot gets a hold at cover or a hold timer behind the
+    last loot wait (kl_fa_bots_dyn.PERS' out_holds False for the seven, for the call only). Behind the loot the chain is the rooms' gates, each a
+    hold of the planner's choosing (against the trigger boxes and the men), and a hold of the dynamic step - a cover of ITS choosing and a timer of 4 .. 8 s - between two
+    gates would be a second wait for a bot that has just been let go (kl_fa_bots_rt's review, D3; the Retomoto builds have none). What the step
+    still adds behind the gates: the stagger at the start, the forks (RandomTrigger between the places of a leg: another corridor of the mesh).
+    -> (findings, report) as kl_fa_bots_dyn.build."""
+    import kl_fa_bots_dyn as D
+    saved, llw = D.PERS, D.last_loot_wait
+    if ROOM_GATES:
+        # (kl_fa_bots_dyn takes the LAST TriggerActorsDead of a squad's last chain for 'the last loot wait' - its reading of --wait-guards - so with
+        # the rooms' gates everything up to the last gate would be 'the way in' and get holds. For the call the chain is read as one that has a
+        # table and is cut off behind it: only the table's loot wait counts, the rooms are the way out, and out_holds False gives it no hold.)
+        D.PERS = {n: p._replace(out_holds=False) for n, p in saved.items()}
+        D.last_loot_wait = lambda flat, cut_off, timers=True: llw(flat, True, timers)
+    try:
+        return D.build(src, dst, None, log)
+    finally:
+        D.PERS, D.last_loot_wait = saved, llw
 
 
 def bots_check(folder, log=print):
@@ -2663,6 +2698,8 @@ def bots_check(folder, log=print):
     if not g or 'start' not in g:
         log('  NOTE bots.json holds no timing of the gate (a build before review round 1): when the bots leave the hold is NOT CHECKED')
         window = None
+    elif g.get('rooms'):
+        window = None                                   # the room gates' timetable is rooms_check's (below)
     else:
         quick = g['start'] + GATE_LOOT_MIN + g['straight'] / GATE_SPEED + longest
         slow = g['start'] + g['loot_cap'] + g['straight'] / GATE_SLOW + longest
@@ -2716,8 +2753,443 @@ def bots_check(folder, log=print):
                 *park, len(pts), what, d / 100.0, who[-50:], want / 100.0))
             if d < want:
                 fail('the park place of the bots lies %.1f m from the place %s of the %s police (%.0f m wanted)' % (d / 100.0, who, what, want / 100.0))
+    bad += rooms_check(folder, log)
     log('kl_fa_club.bots_check %s: %d squads, %d with the seal gate (%s, longest %g s; seal clock %g s; leaving %s): %s' % (
         folder, len(tops), n_gate, GATE_NAME, longest, SEAL_AT, '%d..%d s' % window if window else 'not checked', 'PASS' if not bad else '%d FAILED' % len(bad)))
+    return bad
+
+
+# ------------------------------------------------------------------ THE ROOM GATES (after runs C3 - C4; NOT RUN IN THE GAME)
+# Run C4 (the full map, idle human): all seven AI heisters dead GO+27..73 s, every one at stage 1, 271 'lost' lines, no ONE STEP; they ran the
+# route into the club's 40 men without stopping anywhere and fell along it from the walkway across both dance floors. What took Retomoto's
+# crew from 'six dead by GO+79..122 s' to 'nobody dead before GO+175 s' (kl_fa_bots_rt GATES; re/retomoto_bots_rooms.md, its review) is built here:
+# the way from the loot to the entrance hall is cut into ROOMS by the men that defend them; before each room the seven HOLD at distinct
+# cover places at its mouth, and the chain goes on only through a TriggerActorsDead that names that room's men (stock F07's own form: kl2
+# 0x4afb80 / 0x8def80 - it sends its list when every named group is dead OR 0x7800 ticks = 30 s after the hold step called its place
+# reached, whichever comes first). THE PLANNER IS Retomoto's: kl_fa_bots_rt.gates_plan (holds, ways, posts, trigger boxes) is IMPORTED and
+# called with this level's table, through a context manager that sets four of that module's names for the call and puts them back
+# (rt_for_club); kl_fa_bots_rt.py is not edited. What is different from Retomoto:
+#   - the men are named ONE BY ONE (a squad spans rooms: Dance#01 stands on the walkway, dance floor 2 and dance floor 1): the table gives
+#     only the room's box, floor and direction, the men of a room are those whose post lies in it (room_of) and the TAD names their groups;
+#   - the planner is told that no squad is 'known' (wake_map's second map is {}): the club's 'load' squads are awake from the load and ARE
+#     the fight, in Retomoto only the boardroom was; its 'not woken by any box' notes are therefore meaningless here and not logged;
+#   - the gate table has the seal hold as its LAST leg: the 'car' leg of gates_plan is the hold in the entrance hall, and the seal gate that
+#     was already there (GATE_NAME, a plain timer) follows it unchanged; the exit, level-exit and park stations follow that;
+#   - the floors' holds are picked by pick_holds_club (the planner's own picks seven from one cover box only when the mesh round it is 4 m
+#     wide - the walkway's mouth has ONE cover box): 7 places >= 80 apart, as many different cover boxes as there are, best first;
+#   - POST_KEEP 400 (Retomoto 300): no hold within 4 m of a post of a man who may be alive.
+# THE TIMETABLE (every number a GUESS; bots_check prints it from the plan): the seal's clock counts from the round-start event; the quickest crew
+# (every room won at once, ROOM_G_MIN s a room) reaches the entrance hall at start + GATE_LOOT_MIN + walk/400 + rooms * ROOM_G_MIN and waits
+# the seal hold until SEAL_AT (the hold is made for that bot); a crew that wins NOTHING loses WAIT_S = 30 s a room: start 10 + loot 18 + the
+# mesh path / 200 + rooms * 30 + the hold, then the walk out - ROOM_LATEST is where it must still be at the van call.
+ROOM_GATES = True                       # False ('--no-gates', '--legacy'): the way as C3 / C4 had it, and the men where they stood
+ROOM_G_MIN = 12.0                       # s the quickest crew is taken to spend in a room (arrive, shoot, the men fall). GUESS
+ROOM_WAIT_S = 30.0                      # TriggerActorsDead's own limit (READ in kl2, 0x7800 ticks); kl_fa_bots_rt.WAIT_S
+ROUND_CLOCK = 360.0                     # the round's six minutes, counted here from the round-start event (8.5 s before GO: 8.5 s of margin it does not need)
+ROOM_VAN_MARGIN = 75.0                  # s the van call (the exit trigger) must still come before the round's end: the van drives in (7.2 s), waits 8 s, leaves
+ROOM_POST_CLEAR = 400.0                 # no hold, no station up to the seal hold within this of a post of a man who may be alive (the task's crew-check rule)
+ROOM_HOLD_RING = (60.0, 240.0)          # a hold lies this far from the middle of a cover box (kl_fa_bots_rt.HOLD_RING 70..230, with a tolerance for rounding)
+ROOM_HOLD_SEP = 80.0                    # two holds of one room at least this far apart (kl_fa_bots.check's own number)
+# the rooms, in the order of the way: name, what, box (x0, x1, z0, z1) and y of the hold places, the direction the men are in (plan), the trigger boxes
+# of a LATER fight the way to the hold cannot go round (bots_rt's 'cross'; the campaign's walkway box is the stair's end). GUESS: every box and
+# direction; MEASURED: the holds they give (check prints them) are on the START's mesh part, at cover boxes, 4 m and more from every living post.
+ROOMS = (
+    dict(name='walkway', what='the front office\'s west end, before the walkway (the bouncers of the walkway top, Yoko\'s second door)',
+         box=(1350.0, 2300.0, 3000.0, 3500.0), y=360.0, enemy=(-1.0, -0.6)),
+    dict(name='floor2', what='the foot of the walkway, dance floor 2\'s east end (the floor\'s bouncers, the bar)',
+         box=(250.0, 950.0, 2950.0, 3500.0), y=40.0, enemy=(-1.0, -0.3), cross=('Gameplay!010_FirstFight!tb_RIGHT_TheySpotYou',)),
+    dict(name='floor1n', what='dance floor 2\'s west end (the floor\'s west, the deck over the south wall)',
+         box=(-1500.0, -500.0, 2350.0, 3000.0), y=40.0, enemy=(0.0, -1.0)),
+    dict(name='floor1s', what='the north-west of dance floor 1 (the second run\'s dancers, the south bar)',
+         box=(-1500.0, -600.0, 1500.0, 2000.0), y=20.0, enemy=(0.0, -1.0)),
+    dict(name='stairs', what='the south of dance floor 1 at the stairs\' foot (the stair landing, the wardrobe)',
+         box=(-900.0, 1000.0, 400.0, 1100.0), y=40.0, enemy=(0.0, -1.0), dy=60.0))
+EN_CLUB = 'AI_Players!Enemies!'
+
+
+def room_of(p):
+    """The room (a ROOMS name) whose men stand at post p = (x, y, z), or None: the upper floors (y >= 420: the lounge, the rave gallery, the
+    stairs' balcony; they overlook, nobody reaches them) and the lane (z < -1000: the two entrance men, beyond the seal) are waited for by nobody.
+    The deck over dance floor 2's south wall (y 300..420, z < 2500: the four office bodyguards of FRONT_MEN) belongs to floor1n, which they overlook."""
+    x, y, z = p
+    if y >= 420.0 or z < -1000.0:
+        return None
+    if y >= 300.0:
+        return 'floor1n' if z < 2500.0 else 'walkway'
+    if z >= 2550.0:
+        return 'floor2'
+    if z >= 1500.0:
+        return 'floor1n'
+    if y >= 130.0 or z < 700.0:
+        return 'stairs'
+    return 'floor1s'
+
+
+# MEN MOVED (ROOM_GATES; computed by C:/kl_scratch/club_gates/moves.py on the finished club: of the 15 men within 250 of a place the crew walks
+# - the holds, the stations and the mesh path between them - the five that have a post in the SAME room at cover (70..230 from a cover box), 4 m and more from every hold and
+# station, 2.6 m from the path, on the mesh part of the START). The other ten stay (ROOM_STAY below). GUESS: the posts; MEASURED: on the mesh.
+CLEAR_MEN = collections.OrderedDict([
+    (E1 + 'Surprise2\\Guard#02', (634, 375, 2546)),
+    (E1 + 'DanceFloor02!Dancefloor02a#01\\Guard#04', (-1699, 40, 2569)),
+    (E1 + 'DanceFloor02!Dancefloor02a#01\\Guard#03', (-21, 40, 2704)),
+    (E1 + 'DanceFloor02!Dancefloor02a#02\\Guard#03', (-611, 40, 2172)),
+    (E2 + 'Dance#02\\Guard#09', (-905, 20, 809))])
+# the ten that stay within 250 of the way, and why (printed by check; each is the design of the room the crew fights through):
+ROOM_STAY = ('Dance#01 Guard#01 (623, 322, 2902) on the ramp: the walkway fight itself - the hold waits for him',
+             'Dance#01 Guard#10 (-1302, 26, 1868): any post in dance floor 1\'s north is within 2.6 m of the way down to the south',
+             'Surprise2 Guard#01 (947, 381, 2740) on the walkway: the walkway fight',
+             'FatBounceronWalkway (988, 382, 2916): the walkway fight',
+             'On_Dancefloor#02 Guard#01 (488, 161, 582) and Entrance Guard#02 (-106, 182, -386): the stairs\' fight (the landing is 3 m wide)',
+             'Dance#01 Guard#08 (-340, 44, 2708): his only posts in floor2 at cover lie on the way',
+             'Dance#02 Guard#10 (627, 63, 1148) and Dancefloor02a#02 Guard#04 (-1132, 25, 1176): the south bar, the way passes it',
+             'Entrance Guard#03 (-65, 21, -1307) and Guard#01 (134, 29, -2398): the queue lane, 3 m wide: no post is 4 m from its way; they are the seal\'s other side')
+
+
+@contextlib.contextmanager
+def rt_for_club(gates):
+    """kl_fa_bots_rt with this level's table for one call of gates_plan: GATES, EN_ (the squads are named in full), POST_KEEP, pick_holds,
+    hold_spots (the floor filter ROOMS' dy), wake_map (no squad 'known') - put back afterwards."""
+    import kl_fa_bots_rt as RT
+    saved = {k: getattr(RT, k) for k in ('GATES', 'EN_', 'POST_KEEP', 'GATE_MAX', 'pick_holds', 'hold_spots', 'wake_map', 'near_post')}
+    spots0, wake0, near0 = RT.hold_spots, RT.wake_map, RT.near_post
+
+    def spots(B, nav, home, covers, g, *rest):
+        out = spots0(B, nav, home, covers, g, *rest)
+        return [s for s in out if abs(s[1] - g['y']) <= g.get('dy', 150.0)]
+    RT.GATES, RT.EN_, RT.POST_KEEP = tuple(gates), '', ROOM_POST_CLEAR
+    RT.GATE_MAX = 99                            # the planner names whole squads; the TADs name the room's men (bots_gates), at most 9 of them (rooms_check)
+    RT.pick_holds, RT.hold_spots = pick_holds_club, spots
+    RT.wake_map = lambda B, squads=None: (wake0(B, squads)[0], {})
+    RT.near_post = lambda p, posts, among, keep=ROOM_POST_CLEAR: near0(p, posts, among, keep)      # (the default of the original is bound at import: 300)
+    try:
+        yield RT
+    finally:
+        for k, v in saved.items():
+            setattr(RT, k, v)
+
+
+def pick_holds_club(spots, n=7, seps=(110.0, 100.0, 90.0, ROOM_HOLD_SEP), tries=400):
+    """Seven of the places kl_fa_bots_rt.hold_spots found -> (places, the separation asked for); ([], 0) when there are not seven. The widest
+    separation of `seps` for which a set exists; among the sets tried (a fixed order first, then shuffles of a fixed seed) the one with the
+    most different cover boxes, then the most places behind their box, then the most clearance. The planner's own pick packs one box's places
+    along a line and gives up where a box has 24 places in a 4 m strip (the walkway's mouth)."""
+    import random
+    if len(spots) < n:
+        return [], 0.0
+    hd = lambda a, b: math.hypot(a[0] - b[0], a[2] - b[2])
+    key = lambda s: (not s[5], abs(s[7] - 130.0), -s[6])
+    rng = random.Random(7)
+    for sep in seps:
+        best = None
+        for t in range(tries):
+            order = sorted(spots, key=key) if t == 0 else rng.sample(spots, len(spots))
+            got, used = [], collections.Counter()
+            for rnd in (0, 1):
+                for s in order:
+                    if len(got) < n and not (rnd == 0 and used[s[4]]) and all(hd(s, o) >= sep for o in got):
+                        got.append(s)
+                        used[s[4]] += 1
+            if len(got) >= n:
+                score = (len(used), sum(1 for g in got if g[5]), min(g[6] for g in got))
+                if best is None or score > best[0]:
+                    best = (score, got[:n])
+        if best:
+            return best[1], sep
+    return [], 0.0
+
+
+def room_men(B):
+    """{room: [(squad node, group node, post)]} of the built level B: every man of the kept campaign squads by the room of his post."""
+    import kl_fa_bots_rt as RT
+    sc, out = B.sc, collections.OrderedDict((r['name'], []) for r in ROOMS)
+    for t, groups in RT.enemy_squads(B).items():
+        if sc.path[t][len(R):].startswith(('Gameplay!', BK.BOT_SQUAD)):
+            continue                                # the police that arrive (ARRIVE) and the bots are not the club's men
+        for k in range(t + 1, sc.end[t]):
+            if sc.cls(k) == 'ZFFActor' and sc.parent[k] in groups:
+                room = room_of(B.at(k))
+                if room:
+                    out[room].append((t, sc.parent[k], B.at(k)))
+    return out
+
+
+def bots_gates(B, P, log=print):
+    """The room gates into plan P (kl_fa_bots.plan of B, already through the first part of bots_gate): loot -> holds of the rooms ->
+    the seal hold -> the exit stations. P's stations, steps and every bot's places are rewritten behind the loot station; the gate
+    list goes to P['club_gates'] (kl_fa_bots_rt.Street's form: name, step, wait, groups, holds ...). -> the index of the seal hold."""
+    import copy
+    import kl_fa_bots as F
+    sc = B.sc
+    nav = F.Nav(B.scene.nav)
+    S = F.stations(B, nav)
+    st = P['stations']
+    i_loot = max(i for i, s in enumerate(st) if s['kind'] == 'loot')
+    ways = [i for i, s in enumerate(st) if s['kind'] == 'way' and i > i_loot]
+    if not ways:
+        raise ValueError('kl_fa_club.bots_gates: no way station behind the loot')
+    mid = lambda i: [sum(p[k] for p in st[i]['places']) / 7.0 for k in range(3)]
+    i_seal = min(ways, key=lambda i: math.dist(mid(i), GATE_AT))
+    men = room_men(B)
+    table, named = [], {}
+    for r in ROOMS:
+        ms = men[r['name']]
+        if not ms:
+            log('  kl_fa_club: room %s: no man stands in it - no gate' % r['name'])
+            continue
+        squads = tuple(dict.fromkeys(sc.names[t] for t, _g, _p in ms))
+        table.append(dict(r, squads=squads))
+        named[r['name']] = [R + sc.path[g][len(R):] for _t, g, _p in ms]
+    seal = dict(st[i_seal], kind='park')
+    P2 = {'stations': copy.deepcopy(st[:i_loot + 1]) + [seal],
+          'steps': [s for s in P['steps'] if s['leg'] == 'in' and s.get('stop', 0) == 0],
+          'bots': {N: {'places': list(P['bots'][N]['places'][:i_loot + 1]) + [P['bots'][N]['places'][i_seal]]} for N in F.BOTS}}
+    with rt_for_club(table) as RT:
+        gates = RT.gates_plan(B, nav, S, P2, {'gate_names': None}, lambda s: log(s) if s.lstrip().startswith(('gate', 'to the car')) else None)
+    for g in gates:
+        g['groups'] = named[g['name']]
+        g['men'] = len(g['groups'])
+        g['wait'] = '%03d_TriggerActorsDead_%s' % (30 + [x['name'] for x in gates].index(g['name']), g['name'])
+        g['seconds'] = ROOM_WAIT_S
+    n_new = len(P2['stations']) - 1 - (i_loot + 1)              # the holds (WAY_EVERY is 0: no way stations)
+    # ---- the plan: stations
+    seal_st = dict(st[i_seal])
+    seal_st['what'] = 'the seal hold in the entrance hall until the seal is open'
+    tail = st[i_seal + 1:]
+    off = len(P2['stations']) - 1 - i_seal                       # tail station k -> k + off
+    P['stations'] = P2['stations'][:-1] + [seal_st] + tail
+    for N in F.BOTS:
+        pl = P['bots'][N]['places']
+        P['bots'][N]['places'] = P2['bots'][N]['places'][:-1] + [pl[i_seal]] + list(pl[i_seal + 1:])
+    # ---- the plan: steps (the rooms' steps and the hold in front of the seal are the second stop's walk, 'in' leg, so the seal timer follows them)
+    first = [s for s in P['steps'] if s['leg'] == 'in' and s.get('stop', 0) == 0]
+    steps = [dict(s) for s in first]
+    for s in P2['steps']:
+        if s.get('gate'):
+            steps.append({'name': s['name'], 'leg': 'in', 'stop': 1, 'stations': s['stations'], 'gate': s['gate']})
+    out_idx = [i + off for s in P['steps'] if s['leg'] == 'out' for i in s['stations'] if i > i_seal]
+    for m, k in enumerate(range(0, len(out_idx), 3)):
+        steps.append({'name': '%03d_DefendBehaviour_out' % (50 + m), 'leg': 'out', 'stop': None, 'stations': out_idx[k:k + 3]})
+    P['steps'] = steps
+    for g in gates:
+        g['step'] = next(s['name'] for s in steps if s.get('gate') == g['name'])
+    P['club_gates'] = gates
+    return i_loot + 1 + n_new
+
+
+def gates_timetable(P):
+    """Seconds after the round-start event, from the plan: the quickest crew's and the slowest crew's times at the seal hold and at the
+    van call -> dict. quick = every room won at once (ROOM_G_MIN); slow = every room runs its WAIT_S out and every walk is the mesh path at GATE_SLOW."""
+    gates = P.get('club_gates') or []
+    n = len(gates)
+    start = float(P['options'].get('start_delay', 10.0))
+    cap = float(P['options'].get('loot_seconds', 20))
+    st = P['stations']
+    b0 = P['bots'][next(iter(P['bots']))]['places']
+    i_loot = max(i for i, s in enumerate(st) if s['kind'] == 'loot')
+    i_seal = i_loot + n + 1
+    pts = [b0[i_loot]] + [b0[i_loot + 1 + k] for k in range(n)] + [b0[i_seal]]
+    straight = sum(math.dist(a, b) for a, b in zip(pts, pts[1:]))
+    path = sum(g['path'] for g in gates) + math.dist(pts[-2], pts[-1]) * 1.3
+    to_van = [b0[i] for i in range(i_seal, len(st))]
+    exit_walk = sum(math.dist(a, b) for a, b in zip(to_van, to_van[1:])) * 1.3
+    return dict(rooms=n, start=start, loot_cap=cap, straight=straight, path=path, exit_walk=exit_walk, quick_arrive=start + GATE_LOOT_MIN + straight / GATE_SPEED + n * ROOM_G_MIN,
+                slow_arrive=start + cap + path / GATE_SLOW + n * ROOM_WAIT_S)
+
+
+def bots_gate_rooms(B, P, log=print):
+    """bots_gate with ROOM_GATES: kl_fa_bots' plan P of built level B -> P with the rooms' gates (bots_gates) in front of the seal gate. The seal's
+    hold is the last leg of the rooms and keeps its plain timer (GATE_NAME) of the seconds that make the QUICKEST crew leave it no sooner than SEAL_AT
+    (a crew that has won every room in ROOM_G_MIN s each); slower crews arrive later and wait less long for the same clock, but a crew that is held
+    in every room still waits this timer: its worst case is gates_timetable's 'slow_leave'."""
+    import kl_fa_bots as F
+    loot = [i for i, s in enumerate(P['stations']) if s['kind'] == 'loot']
+    if len(loot) != 1 or len(P['waits']) != 1 or P['waits'][0]['cases'] or not P['waits'][0]['loot']:
+        raise ValueError('kl_fa_club.bots_gate: the plan has %d loot stations and %d waits (wanted: one stop with loot, no case)' % (len(loot), len(P['waits'])))
+    bots_gates(B, P, log)
+    tt = gates_timetable(P)
+    seconds = GATE_MIN if SEAL_OPEN else max(GATE_MIN, math.ceil(SEAL_AT + GATE_MORE - tt['quick_arrive']))
+    i_seal = loot[0] + len(P['club_gates']) + 1
+    P['waits'] = [P['waits'][0], collections.OrderedDict(name=GATE_NAME, stop=1, seconds=seconds, loot=[], worth=0, timer='038_Timer_at_cases',
+                                                       relays=[], cases={})]
+    P['stations'][i_seal]['what'] = 'the seal hold in the entrance hall until the seal is open (%g s)' % seconds
+    P['gate'] = {'station': i_seal, 'seconds': seconds, 'straight': round(tt['straight']), 'seal_at': SEAL_AT, 'seal_open': SEAL_OPEN, 'start': tt['start'],
+                 'loot_cap': tt['loot_cap'], 'places': P['stations'][i_seal]['places'], 'rooms': tt['rooms'], 'path': round(tt['path']),
+                 'exit_walk': round(tt['exit_walk']), 'room_g_min': ROOM_G_MIN, 'room_wait': ROOM_WAIT_S}
+    note = ('THE ROOM GATES: %d rooms (%s) between the loot and the seal hold; each is a hold of seven at cover and a TriggerActorsDead on the room\'s men '
+            '(30 s at most); the seal hold (station %d, %g s) follows. Timetable after the round-start event: quickest crew at the hold %d s, slowest %d s '
+            '(+ the hold, + the walk out %d s)' % (tt['rooms'], ', '.join(g['name'] for g in P['club_gates']), i_seal + 1, seconds, tt['quick_arrive'], tt['slow_arrive'],
+                                                   tt['exit_walk'] / GATE_SLOW))
+    P['notes'].append(note)
+    log('  NOTE ' + note)
+    log('steps: %s' % [(s['name'], s['stations']) for s in P['steps']])
+    return P
+
+
+def rooms_check(folder, log=print):
+    """The room gates of a finished folder (before or after the dynamic step) -> list of faults. Reads bots.json's 'club_gates' (a folder of the
+    first delivery has none: nothing to check, said). FAILS: a gate whose TriggerActorsDead is missing from a squad, names other groups than
+    planned, names a group that does not exist, has a group without an actor (no 30 s clock then), names a man a gate before it named, or has
+    field 1 other than 0; the seven holds of a room not at seven distinct places (80 apart) or a hold not 60..240 from a cover box; a hold or a
+    station up to the seal hold within ROOM_POST_CLEAR of a post of a man who may be alive (not named by an earlier gate) on its floor; any
+    timer or loot wait between the first gate and the seal hold (the dynamic step's rally, a TriggerDelay2); the timetable (quick / slow)."""
+    import json
+    import kl_fa_bots as F
+    import kl_fa_bots_rt as RT
+    bad = []
+
+    def fail(s):
+        bad.append(s)
+        log('  FAIL ' + s)
+    try:
+        with open(os.path.join(folder, 'bots.json'), encoding='utf-8') as f:
+            P = json.load(f).get('plan') or {}
+    except (OSError, ValueError):
+        P = {}
+    gates = P.get('club_gates')
+    if not gates:
+        log('  rooms: bots.json has no room gates (a build made with --no-gates / --legacy, or before 2026-10-12): not checked')
+        return bad
+    B = F.Built(folder)
+    sc = B.sc
+    tops = [t for t in sc.tops() if sc.names[t].startswith(BK.BOT_SQUAD + 'Squad#')]
+    tad = {k: v for k, _i, v in kl_fa.controllers(sc, 'TriggerActorsDead')}
+    defend = {k: v for k, _i, v in kl_fa.controllers(sc, 'DefendBehaviourRout')}
+    NEXT = {'DefendBehaviourRout': 7, 'TriggerActorsDead': 2, 'TriggerDelay2': 4, 'TriggerLootDepleted': 4, 'TriggerCounter': 4}
+    nxt = {k: [j for s in v[NEXT[cn]] for j in sc.resolve(s)] for cn in NEXT for k, _i, v in kl_fa.controllers(sc, cn)}
+    kind = {k: cn for cn in NEXT for k, _i, v in kl_fa.controllers(sc, cn)}
+    for k, _i, v in kl_fa.controllers(sc, 'RandomTrigger'):     # the dynamic step's fork (kl_fa_bots_dyn: fields 5..7 = the first step of each way): a way, not a wait
+        kind[k] = 'RandomTrigger'
+        nxt[k] = [j for x in v[5:8] for s in (x if isinstance(x, list) else [x]) if isinstance(s, str) and s for j in sc.resolve(s)]
+    covers = RT.cover_boxes(B)
+    named_before, posts_all = set(), {}
+    sq = RT.enemy_squads(B)
+    posts = RT.enemy_posts(B, sq)
+    men = []                                           # (post, group path, squad name): the club's own men
+    for t, groups in sq.items():
+        if sc.path[t][len(R):].startswith('Gameplay!'):
+            continue
+        for k in range(t + 1, sc.end[t]):
+            if sc.cls(k) == 'ZFFActor' and sc.parent[k] in groups:
+                men.append((B.at(k), sc.path[sc.parent[k]], sc.names[t]))
+    holds_seen, seal_hold = [], None
+    rows = []
+    import kl_route
+    sight = Sight(kl_route.load(folder))
+    for gi, g in enumerate(gates):
+        found, ends = [], []
+        for t in tops:
+            hit = [k for k in range(t, sc.end[t]) if sc.names[k] == g['wait'] and k in tad]
+            if len(hit) != 1:
+                fail('%s: %d TriggerActorsDead %s (wanted 1)' % (sc.names[t], len(hit), g['wait']))
+                continue
+            v = tad[hit[0]]
+            found.append(v)
+            want = [s.lower() for s in g['groups']]
+            if sorted(s.lower() for s in v[0]) != sorted(want):
+                fail('%s: %s names %d groups, the plan %d (%s)' % (sc.names[t], g['wait'], len(v[0]), len(want), [s.split('!')[-1] for s in v[0]][:4]))
+            if v[1] != 0:
+                fail('%s: %s field 1 is %s (stock: 0)' % (sc.names[t], g['wait'], v[1]))
+            before = [k for k, d in defend.items() if t < k < sc.end[t] and any(hit[0] == j for s in d[7] for j in sc.resolve(s))]
+            if not before:
+                fail('%s: no step leads into %s' % (sc.names[t], g['wait']))
+            for k in before:
+                if defend[k][1]:
+                    ends.append(B.at(sc.resolve(defend[k][1][-1])[0]))
+        if len({tuple(v[0]) for v in found}) > 1:
+            fail('gate %s: the seven squads name different groups' % g['name'])
+        for s in (found[0][0] if found else []):
+            hits = sc.resolve(s)
+            if len(hits) != 1 or not any(sc.cls(c) == 'ZFFActor' and sc.parent[c] == hits[0] for c in range(hits[0], sc.end[hits[0]])):
+                fail('gate %s names %s: %s' % (g['name'], s, 'no such group' if not hits else 'a group without an actor (a TriggerActorsDead then has no 30 s clock)'))
+            if s.lower() in named_before:
+                fail('gate %s names %s, which a gate before it already waited for (its man is dead or its clock has run)' % (g['name'], s.split('\\')[-1]))
+            named_before.add(s.lower())
+        if len(found[0][0] if found else []) > 9:
+            fail('gate %s names more than 9 groups (stock: 9 at most)' % g['name'])
+        # ---- the seven holds: distinct places, at cover
+        if len(ends) != 7 or any(math.dist(a, b) < ROOM_HOLD_SEP for i, a in enumerate(ends) for b in ends[i + 1:]):
+            fail('gate %s: %d hold places, %s apart at least (wanted 7, %g)' % (g['name'], len(ends), round(min([math.dist(a, b) for i, a in enumerate(ends) for b in ends[i + 1:]] or [0])), ROOM_HOLD_SEP))
+        ring = []
+        for h in ends:
+            d, ck = min((RT.hdist(h, c), k) for k, c in covers if abs(c[1] - h[1]) <= 260.0) if covers else (1e9, None)
+            ring.append(d)
+            if not (ROOM_HOLD_RING[0] <= d <= ROOM_HOLD_RING[1]):
+                fail('gate %s: a hold at (%d, %d, %d) is %d from the nearest cover box (wanted %d..%d)' % (g['name'], *h, d, *ROOM_HOLD_RING))
+        for h in ends:
+            if any(math.dist(h, o) < 1.0 for o in holds_seen):
+                fail('gate %s: a hold at (%d, %d, %d) is the place of a hold of an earlier gate' % (g['name'], *h))
+        holds_seen += ends
+        # ---- no living man within 4 m of a hold (men not named by a gate before this one)
+        alive = [(p, n_) for p, gp, n_ in men if gp.lower() not in {x for g_ in gates[:gi] for x in map(str.lower, g_['groups'])}]
+        close = [(round(RT.hdist(h, p)), n_.split('!')[-1], tuple(round(c) for c in p)) for h in ends for p, n_ in alive if abs(p[1] - h[1]) <= RT.FLOOR_DY and RT.hdist(h, p) < ROOM_POST_CLEAR]
+        if close:
+            fail('gate %s: %d hold(s) within %d of a post of a man who may be alive, e.g. %s' % (g['name'], len(close), ROOM_POST_CLEAR, close[0]))
+        dead_close = sum(1 for h in ends for p, gp, n_ in men if gp.lower() in {x for g_ in gates[:gi] for x in map(str.lower, g_['groups'])}
+                         and abs(p[1] - h[1]) <= RT.FLOOR_DY and RT.hdist(h, p) < ROOM_POST_CLEAR)
+        # ---- who of the room can be hit from the holds (the 0x20 line on the mesh, kl_fa_bots_rt.mesh_line) - said, not failed
+        mine = {x.lower() for x in g['groups']}
+        room = [p for p, gp, _n in men if gp.lower() in mine]
+        seen = sum(1 for p in room if any(sight.seen(h, p) for h in ends))
+        foreign = sum(1 for p, gp, _n in men if gp.lower() not in mine and abs(p[1] - ends[0][1]) <= RT.FLOOR_DY and any(RT.hdist(h, p) < 2500.0 and sight.seen(h, p) for h in ends))
+        rows.append((g['name'], len(room), seen, round(min(ring)), round(max(ring)), dead_close, [tuple(round(c) for c in h) for h in ends][:2], foreign))
+    for name, n_, seen, lo, hi, dc, hs, foreign in rows:
+        log('  room %-8s %d men, %d of them in the 0x20 line of sight of a hold (eye 160 to head or chest, kl_fa_club.Sight), %d men of other rooms on the floor within 25 m see a hold; holds %d..%d from a cover box; %d hold/earlier-man pairs under %d (only if that gate ran out); e.g. %s'
+            % (name, n_, seen, foreign, lo, hi, dc, ROOM_POST_CLEAR, hs[0]))
+    # ---- the stations up to the seal hold: the loot place against every man
+    st = P['stations']
+    i_loot = max(i for i, s in enumerate(st) if s['kind'] == 'loot')
+    for p in st[i_loot]['places']:
+        near = [(round(RT.hdist(p, q)), n_.split('!')[-1]) for q, _gp, n_ in men if abs(q[1] - p[1]) <= RT.FLOOR_DY and RT.hdist(p, q) < ROOM_POST_CLEAR]
+        if near:
+            fail('the loot place (%d, %d, %d) is within %d of a man of %s' % (*p, *near[0]))
+    # ---- a timer or a loot wait between the first gate and the seal hold
+    for t in tops:
+        first = next((k for k in range(t, sc.end[t]) if sc.names[k] == gates[0]['wait']), None)
+        if first is None:
+            continue
+        seen, todo, stop = set(), [first], 0
+        while todo:
+            k = todo.pop()
+            if k in seen:
+                continue
+            seen.add(k)
+            if sc.names[k] == GATE_NAME:
+                stop += 1
+                continue
+            if kind.get(k) not in ('DefendBehaviourRout', 'TriggerActorsDead', 'RandomTrigger'):
+                fail('%s: %s (%s) stands between the first gate and the seal hold - a timer behind a gate: a bot that arrives early waits again' % (sc.names[t], sc.names[k], kind.get(k)))
+                continue
+            todo += nxt.get(k, [])
+        if not stop:
+            fail('%s: the chain behind the first gate never reaches %s' % (sc.names[t], GATE_NAME))
+    # ---- the timetable
+    tt = {k: P['gate'].get(k) for k in ('start', 'loot_cap', 'straight', 'path', 'exit_walk', 'seconds', 'rooms')}
+    longest = float(tt['seconds'])
+    quick = tt['start'] + GATE_LOOT_MIN + tt['straight'] / GATE_SPEED + tt['rooms'] * P['gate'].get('room_g_min', ROOM_G_MIN) + longest
+    slow_arrive = tt['start'] + tt['loot_cap'] + tt['path'] / GATE_SLOW + tt['rooms'] * P['gate'].get('room_wait', ROOM_WAIT_S)
+    slow_leave = slow_arrive + longest
+    at_van = slow_leave + tt['exit_walk'] / GATE_SLOW
+    if not P['gate'].get('seal_open') and quick < SEAL_AT + GATE_MORE - 0.1:
+        fail('the quickest crew leaves the seal hold %.0f s after the round-start event, the seal\'s clock is at %g s' % (quick, SEAL_AT))
+    if at_van > ROUND_CLOCK - ROOM_VAN_MARGIN:
+        fail('a crew held in every room is at the exit trigger %.0f s after the round-start event; the round ends at %g and the van needs %g' % (at_van, ROUND_CLOCK, ROOM_VAN_MARGIN))
+    log('  timetable (s after the round-start event, GO is about 8.5 later): the quickest crew (every room %g s) leaves the seal hold at %d s (clock %g s); '
+        'a crew that wins nothing (30 s a room) reaches the hold at %d s, leaves it at %d s and is at the exit trigger at %d s of the round\'s %g (the van is called there: %g s of margin)'
+        % (P['gate'].get('room_g_min', ROOM_G_MIN), quick, SEAL_AT, slow_arrive, slow_leave, at_van, ROUND_CLOCK, ROUND_CLOCK - at_van))
+    # ---- the men that moved are where CLEAR_MEN puts them
+    for path, post in CLEAR_MEN.items():
+        try:
+            g_ = A.node_of(sc, path)
+        except Exception:
+            g_ = None
+        if g_ is None:
+            fail('CLEAR_MEN: %s is not in the level' % path)
+            continue
+        k = next((c for c in range(g_, sc.end[g_]) if sc.cls(c) == 'ZFFActor'), None)
+        if k is None or math.dist(B.at(k)[::2], (post[0], post[2])) > 60.0:
+            fail('CLEAR_MEN: %s stands at %s, not at %s' % (path, tuple(round(c) for c in B.at(k)) if k else None, post))
+    log('  rooms: 10 men (%d lines) stay within 250 of the way by the design of their room (ROOM_STAY), 5 were moved (CLEAR_MEN): %s' % (len(ROOM_STAY), '; '.join(s.split(':')[0] for s in ROOM_STAY)))
+    log('kl_fa_club.rooms_check %s: %d rooms, %s' % (folder, len(gates), 'PASS' if not bad else '%d FAILED' % len(bad)))
     return bad
 
 
@@ -2726,7 +3198,7 @@ def bots_check(folder, log=print):
 # with the defaults.
 FLAG_NAMES = ('DOORS_ANIMATE', 'SEAL_OPEN', 'SEAL_PLANE', 'SEAL_AT', 'LIGHT_SHOW', 'BEAT_ANIM', 'FAN_DAMAGE', 'CASE', 'NO_AI', 'SQUADS_AWAKE',
               'POLICE_ARRIVE', 'POLICE_ON_SLAB', 'STOCK_ROWS', 'OFFICE_AT', 'STREAM',
-              'GUARDS_OFF', 'POLICE_EAST', 'VAN_LATE', 'RESET', 'VOICE', 'LOOT_SECONDS')
+              'GUARDS_OFF', 'POLICE_EAST', 'VAN_LATE', 'RESET', 'VOICE', 'LOOT_SECONDS', 'ROOM_GATES')
 STREAM = None                           # '--str FILE': the merged stream file the clips are resolved against (review round 2: it travels in van.json)
 
 
@@ -2787,13 +3259,14 @@ def main():
     if len(a) >= 2 and a[0] == 'test':
         global DOORS_ANIMATE, SEAL_OPEN, SEAL_PLANE, SEAL_AT, LIGHT_SHOW, BEAT_ANIM, FAN_DAMAGE, CASE
         global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, POLICE_ON_SLAB, STOCK_ROWS, OFFICE_AT, STREAM
-        global GUARDS_OFF, POLICE_EAST, VAN_LATE, RESET, VOICE, LOOT_SECONDS, LEGACY
+        global GUARDS_OFF, POLICE_EAST, VAN_LATE, RESET, VOICE, LOOT_SECONDS, LEGACY, ROOM_GATES
         LEGACY = '--legacy' in a                        # the first delivery's build: every flag of the fix after run C2 off, the old numbers
         GUARDS_OFF = not LEGACY and '--no-guards-off' not in a
         POLICE_EAST = not LEGACY and '--no-police-east' not in a
         VAN_LATE = not LEGACY and '--no-van-late' not in a
         RESET = not LEGACY and '--no-reset' not in a
         VOICE = not LEGACY and '--no-voice' not in a
+        ROOM_GATES = not LEGACY and '--no-gates' not in a and '--no-ai' not in a
         LOOT_SECONDS = 30 if LEGACY else LOOT_SECONDS
         if LEGACY:
             SEAL_AT = LEGACY_FLAGS['SEAL_AT']
@@ -2846,6 +3319,10 @@ def main():
         load_flags(a[1])
         res = bots(a[1], a[2])
         print('kl_fa_club.bots: %s' % (res[0] if isinstance(res, tuple) else res))
+    elif len(a) == 3 and a[0] == 'dyn':
+        load_flags(a[1])
+        out, _rep = dyn(a[1], a[2])
+        sys.exit(1 if any(x == 'FAIL' for x, _t in out) else 0)
     elif len(a) == 2 and a[0] == 'bots-check':
         load_flags(a[1])
         sys.exit(1 if bots_check(a[1]) else 0)
