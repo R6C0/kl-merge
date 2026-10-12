@@ -12,6 +12,7 @@
 #include <stdarg.h>
 
 #define KLH_VA(x) (x)
+#define KL2_SYSIF 0x6000
 static BYTE mem[0x20000];
 static char logbuf[1 << 18]; static int nlog;
 static char klh_ini_buf[MAX_PATH]; static const char *klh_ini = klh_ini_buf;
@@ -62,7 +63,7 @@ static void world(void)
     setf(NODE + 36, 5998); setf(NODE + 40, 22767); setf(NODE + 44, -160);
     set32(ANM + 0x1c, CLIP); setf(ANM + 0x1c + 4, 0.0f); set32(ANM + 0x30, 0x8001);
     for (i = 1; i < 16; i++) set32(ANM + 0x30 + 0x38 * i, 4);
-    mem[CLIP + 2] = 105;
+    mem[CLIP + 2] = 105; set32(0x6000, 0x7000);
 }
 static void ini(const char *extra, const char *prof)
 {
@@ -76,7 +77,7 @@ static void ini(const char *extra, const char *prof)
 static int fails;
 #define CHECK(c, msg) do { if (!(c)) { fails++; printf("FAIL %s\n", msg); } else printf("ok   %s\n", msg); } while (0)
 static const char *PROF = "0 20 80 190 330 500 670 810 920 980 1000";
-static void frame(float t) { setf(ANM + 0x1c + 4, t); }
+static void frame(float t) { DWORD c = klh_rd32(0x7048); set32(0x7048, c + 40); setf(ANM + 0x1c + 4, t); }
 
 int main(void)
 {

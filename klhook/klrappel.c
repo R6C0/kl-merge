@@ -63,7 +63,7 @@ static struct {                               /* the level's [Rappel] */
     char key[64], file[MAX_PATH]; FILETIME ft; int ok, frames, n; float start[3], land[3], prof[KLRP_PROFILE];
 } klrp_lv;
 static struct {                               /* the descent that runs (player != 0) */
-    DWORD player, chan, clip, began, last_log; float rot[12], placed[3], t_last; int gamemoves, first, nplaced;
+    DWORD player, chan, clip, began, last_log, clock; float rot[12], placed[3], t_last; int gamemoves, first, nplaced, have_clock;
 } klrp_r;
 static struct { DWORD gone_at, told_code, told_lv; int armed; } klrp_w;
 
@@ -150,6 +150,19 @@ static float klrp_share(float s)
     return klrp_lv.prof[i] + (klrp_lv.prof[i + 1] - klrp_lv.prof[i]) * x;
 }
 
+/* WHERE THE BODY REALLY IS (first live run R0: the node moved as placed, the picture never did): the character proxy
+   ([[[player+0x7d0]+0x30]+0x18]+0x30, Havok metres x 100), the navigation feet +0x460, the collision count +0x7b4, the current
+   action's vtable ([[player+0x19c]+4]) and the player's own address. Reads only. */
+static void klrp_diag(DWORD pl, char *out, int cap)
+{
+    DWORD p = klh_rd32(pl + 0x7d0), ph = p ? klh_rd32(p + 0x30) : 0, m = ph ? klh_rd32(ph + 0x18) : 0, disp = klh_rd32(pl + 0x19c), act = 0, cnt = 0;
+    float v[3] = { 0, 0, 0 }, ft[3] = { 0, 0, 0 }; int hp = m && klh_rd(m + 0x30, v, 12) && klb_finite(v[0]) && klb_finite(v[1]) && klb_finite(v[2]);
+    if (disp) klh_rd(disp + 4, &act, 4);
+    klh_rd(pl + 0x7b4, &cnt, 4); klh_rd(pl + 0x460, ft, 12);
+    snprintf(out, cap, "player %08lx: proxy %s(%.0f, %.0f, %.0f), +0x460 (%.0f, %.0f, %.0f), collision count %lu, action %08lx (vtable %08lx)",
+             pl, hp ? "" : "NOT READ ", v[0] * 100.0f, v[1] * 100.0f, v[2] * 100.0f, ft[0], ft[1], ft[2], cnt, act, act ? klh_rd32(act) : 0);
+}
+
 static void klrp_place(DWORD pl, const float at[3], const char *what)
 {
     float p[4];
@@ -166,6 +179,13 @@ static void klrp_end(DWORD now, const char *why)
     klog("rappel: %s after %lu ms by the clock, %d placement(s), last frame %.1f of %d: node (%.1f, %.1f, %.1f)", why, now - klrp_r.began, klrp_r.nplaced, klrp_r.t_last, klrp_lv.frames, nd[0], nd[1], nd[2]);
     memset(&klrp_r, 0, sizeof klrp_r);
     klrp_w.gone_at = now; klrp_w.armed = 0;
+}
+
+/* the game's clock, 1024 a second (klclimb.c's klq_clock) */
+static int klrp_clock(DWORD *t)
+{
+    DWORD sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF));
+    return sys && klh_rd(sys + 0x48, t, 4);
 }
 
 /* is player pl's channel i the descent's? -> the channel's address, else 0 */
@@ -185,7 +205,7 @@ static DWORD klrp_chan(DWORD pl, int frames, DWORD want_clip)
 
 static void klrp_run(DWORD now)
 {
-    DWORD pl = klrp_r.player; float t = -1.0f, nd[3], bk[3], s, sh, at[3], lastf; int i;
+    DWORD pl = klrp_r.player, c = 0; float t = -1.0f, nd[3], bk[3], s, sh, at[3], lastf; int i;
     if (klh_rd32(pl) != KLRP_PLAYER_VT) { klrp_end(now, "OVER: the player object is gone"); return; }
     if (now - klrp_r.began > (DWORD)(klrp_lv.frames / 25.0 * 2000.0 + 2000.0)) { klrp_end(now, "GAVE UP: longer than twice the clip"); return; }
     if (klrp_chan(pl, klrp_lv.frames, klrp_r.clip) != klrp_r.chan || !klh_rd(klrp_r.chan + 4, &t, 4) || !klb_finite(t)) {
@@ -213,10 +233,15 @@ static void klrp_run(DWORD now)
         return;
     }
     if (klrp_r.gamemoves) return;
-    if (now - klrp_r.last_log >= 500 || klrp.log >= 2) {
+    if (now - klrp_r.last_log >= 500 || klrp.log >= 3) {
+        char dg[300];
         klrp_r.last_log = now;
+        klrp_diag(pl, dg, sizeof dg);
+        if (klrp.log >= 1) klog("rappel: %s", dg);
         if (klrp.log >= 1) klog("rappel: frame %.1f of %d (%.0f %%): node (%.1f, %.1f, %.1f) -> (%.1f, %.1f, %.1f)%s", t, klrp_lv.frames, sh * 100.0f, nd[0], nd[1], nd[2], at[0], at[1], at[2], klrp.dry ? " - DRY RUN" : "");
     }
+    if (klrp_r.have_clock && klrp_clock(&c) && c == klrp_r.clock) return;      /* one placement for each step of the game's clock, not one for every tick of the hook (run R0: 920 a second) */
+    if (klrp_clock(&c)) { klrp_r.have_clock = 1; klrp_r.clock = c; }
     klrp_place(pl, at, "descent");
 }
 
@@ -248,6 +273,7 @@ static void klrp_tick(int game_thread)
     v3[0] = bk[0]; v3[1] = 0.0f; v3[2] = bk[2];                             /* the cut put him on the PosObject facing as the START rows do: the back vector, level */
     KLRP_MATRIX_CALL(klrp_r.rot, v3);
     klrp_w.armed = 0; klrp_w.told_lv = 0;
+    { char dg[300]; klrp_diag(pl, dg, sizeof dg); klog("rappel: at the start: %s", dg); }
     klog("rappel: begun%s: the human's node is at (%.1f, %.1f, %.1f), %.1f from Start, back (%.2f, %.2f, %.2f); %d-frame clip %08lx in channel %08lx; the descent follows the profile to Land (%.0f, %.0f, %.0f)",
          klrp.dry ? " (DRY RUN: nothing is placed)" : "", nd[0], nd[1], nd[2], d, bk[0], bk[1], bk[2], klrp_lv.frames, klrp_r.clip, chan, klrp_lv.land[0], klrp_lv.land[1], klrp_lv.land[2]);
 }
