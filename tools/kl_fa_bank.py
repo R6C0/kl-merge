@@ -60,11 +60,12 @@ what only a live run can settle: re/bank_campaign.md. Nothing here installs anyt
                         floor the crew has to cross (default: on the floor, in a row before the front entrance)
       --crew-fix        both (what <work>/build/c_bank2 is built with; its chain then runs 'hall-dash')
       THE WAVES BUILD (2026-10-11 night; re/bank_campaign.md 'Waves'; every flag off = the crew-fix build byte for byte):
-      --waves           police that keep coming: three CHAINS of parked squads (WAVE_TABLE: A 11 waves from the round's start, B 2 from the
+      --waves           police that keep coming: three CHAINS of parked squads (WAVE_TABLE: A 11 waves from the round's start, B 5 single men from the
                         ante-room box, D 8 from the plaza box; 54 men on top of the 61, one link every 24 .. 35 s, the floor
                         SUPPLY_MIN = 360 s); implies --crew-fix --crew-fix2 --teller-late --teller-more --van-late --reset
       --waves-extra N   men on top of the 61 (0 .. 79, default 54; a chain is cut from its end)   --waves-near M   the softer crew line (250)
-      --no-waves-latch  the chains are plain timer chains (without the 'wiped out' latch that brings the next wave earlier)
+      --waves-latch     add the 'wiped out' latch (ZSquadScript field 8 names the next wave's Fast node) - OFF by default: field 8 for a PARKED squad
+                        is unproven and could start every wave at the load (second skeptic, fault 2); the chains are plain timer chains
       --crew-fix2       review points (a) DASH_BOX's north edge at the foyer door and (c) the hold timers of the dash steps
       --teller-late     the teller stacks lie hidden until the plaza box + TELLER_SHOW (20 s)      --reset  the round-restart objects
       --teller-more     (on with --waves, --no-teller-more) six stacks of 100,000 on the counters instead of four of 75,000
@@ -778,7 +779,7 @@ def opts_now():
 def apply_opts(o):
     """Set the module's flags from a dict (opts_now's form). -> o"""
     global CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, VAN_SHOW, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
-    TELLER_MORE, WAVES_LATCH = bool(o.get('teller_more')), bool(o.get('waves_latch', True))
+    TELLER_MORE, WAVES_LATCH = bool(o.get('teller_more')), bool(o.get('waves_latch', False))
     CREW_FIX2, TELLER_LATE, VAN_LATE = bool(o.get('crew_fix2')), bool(o.get('teller_late')), bool(o.get('van_late'))
     VAN_HIDE, VAN_NO_TARGET, VAN_SHOW = bool(o.get('van_hide', True)), bool(o.get('van_no_target', True)), float(o.get('van_show', VAN_SHOW))
     RESET, WAVES, WAVES_EXTRA, WAVES_NEAR = bool(o.get('reset')), bool(o.get('waves')), int(o.get('waves_extra', 54)), float(o.get('waves_near', 250.0))
@@ -2941,7 +2942,7 @@ BLIND_OUT = ('hall', 'airlock', 'plaza')
 #     Go_<name>    0.1 s, one-shot: starts the wave      -> [the squad's Defend rout, Pace of the next link]
 #     Fast_<name>  LATCH_DELAY s (ASSUMED, see below)    -> Go_<name>        named by the 'wiped out' list (ZSquadScript field 8) of the PREVIOUS wave
 # Go is the only node that starts a wave and it fires once, so the timer and the latch can both reach it and the first one wins. The latch
-# only ever brings a wave EARLIER (the crew has killed the last one); without it (--no-waves-latch) the chain is the plain timer chain.
+# only ever brings a wave EARLIER (the crew has killed the last one); WITHOUT it (the default since the second skeptic: --waves-latch adds it) the chain is the plain timer chain.
 # ASSUMED, never seen: that field 8 fires for a squad whose men all died (nothing in this level uses it; Retomoto's street chain was
 # never watched). If it fired for a parked squad at the load, every Fast would run LATCH_DELAY after its Go: the supply would then
 # take LATCH_DELAY a link, not the gap - which is why the floor (SUPPLY_MIN) is tested on the Pace chain alone and LATCH_DELAY is 12 s.
@@ -2949,10 +2950,10 @@ BLIND_OUT = ('hall', 'airlock', 'plaza')
 # THE FLOOR: chain A alone runs SUPPLY_MIN seconds from the start of the round, whatever the crew does (a human who takes his time in the
 # dock, the lobby or the vault still has police arriving); B and D add pressure where the crew is. Nothing cancels an armed timer, the
 # chains are finite (the last link names no timer) and end before SUPPLY_MAX; the round ends with the vehicle's departure.
-# Totals (default table): A 11 waves / 25 men, B 2 / 5, D 8 / 24 = 21 squads of 2 .. 3 men and 54 men: actors 68 + 54 = 122 and squads
-# 32 + 21 = 53, against 12 men a squad (engine), 500 squads (engine), the largest stock STORY level 147 actors, and what has run live in the
+# Totals (default table): A 11 waves / 25 men, B 5 / 5, D 8 / 24 = 24 squads of 1 .. 3 men and 54 men: actors 68 + 54 = 122 and squads
+# 32 + 24 = 56, against 12 men a squad (engine), 500 squads (engine), the largest stock STORY level 147 actors, and what has run live in the
 # game: Retomoto on the tab 99 actors / 55 squads - the actors are past that and under 147 (WAVES_ACTORS; --waves-extra thins it).
-LATCH_DELAY, SUPPLY_MIN, SUPPLY_MAX, WAVES_LATCH, GO_DELAY = 12.0, 360.0, 600.0, True, 0.1
+LATCH_DELAY, SUPPLY_MIN, SUPPLY_MAX, WAVES_LATCH, GO_DELAY = 12.0, 360.0, 600.0, False, 0.1
 WAVES_ACTORS = (147, 500)              # ZFFActor / squads the waves may bring the level to (check()): the largest stock story level, the engine's squad limit
 SQUAD_MEN_MAX = 12
 E_YARD_E = (1800, 2350, -3500, -1500, 190, 215)        # the yard's east lane (A1 of the first build)
@@ -2968,17 +2969,17 @@ P_PLAZA_L = (-3600, -700, -11800, -9900, 695, 710)
 P_PLAZA_R = (1000, 3900, -11800, -9900, 695, 710)
 
 
-def chain_table(a_links=11, b_links=2, d_links=8):
+def chain_table(a_links=11, b_links=5, d_links=8):
     """The default supply as WAVE_TABLE rows: (name, phase, GAP s since the chain's previous link (the first: since its trigger), men,
     regions it must be blind from, entry box, post box, template). Chain A: 12 s then every 35 s (11 links: the last at 362 s); chain B:
-    22 s then 24 s; chain D: 3 s then every 25 s."""
+    22 s then every 30 s, ONE man a link (second skeptic, fault 1: the lobby takes 5 men at 3 m (MEASURED, cap.py), so the same 5 are spread over 142 s instead of 46 s); chain D: 3 s then every 25 s."""
     rows = []
     A_POSTS = ((P_DOCK, P_YARD), (P_YARD, P_DOCK), (P_ARMOURY, P_DOCK, P_YARD))
     for i in range(a_links):
         rows.append(('A%02d' % (i + 1), 'A', 12.0 if i == 0 else 35.0, 3 if i < 3 else 2, BLIND_WAY + BLIND_OUT, (E_YARD_E, E_YARD_W)[i % 2],
                      A_POSTS[i % 3], G4 + 'Guards_Reinforcement_01a'))
     for i in range(b_links):
-        rows.append(('B%02d' % (i + 1), 'B', 22.0 if i == 0 else 24.0, (3, 2)[i % 2], BLIND_WAY, E_AIRLOCK, P_LOBBY, G4 + 'Police_Reinforcement_02'))
+        rows.append(('B%02d' % (i + 1), 'B', 22.0 if i == 0 else 30.0, 1, BLIND_WAY, E_AIRLOCK, P_LOBBY, G4 + 'Police_Reinforcement_02'))
     for i in range(d_links):
         rows.append(('D%02d' % (i + 1), 'D', 3.0 if i == 0 else 25.0, 3, ('hall', 'airlock', 'plaza'), (E_RECESS_L, E_RECESS_R)[i % 2],
                      (P_PLAZA_L, P_PLAZA_R)[i % 2], CO + ('Police_OutSide_SWAT_02', 'Police_OutSide_SWAT_03')[i % 2]))
@@ -3615,7 +3616,7 @@ def waves_check(folder, log=print):
                 fb = [kk for kk in named_by.get(w['fast'], ())]
                 if fb != [node(prev['squad'])] or values(sc, node(prev['squad']), 'ZSquadScript')[8] != [w['fast']]:
                     fail('wave %s: the latch: Fast is named by %s, only by the \'wiped out\' list of %s is wanted' % (w['name'], [sc.path[x][5:] for x in fb], prev['name']))
-            elif o.get('waves_latch', True) and chains[w['phase']].index(w) > 0:
+            elif o.get('waves_latch', False) and chains[w['phase']].index(w) > 0:
                 fail('wave %s: no Fast node although the latch is on' % w['name'])
             log('  wave %-4s phase %s %+4.0f s (gap %g): %d men %s; posts %s (%s apart)' % (w['name'], w['phase'], w['delay'], w['gap'], len(men),
                                                                                   ' '.join(P(p) for _k, p in men), ' '.join(P(p) for p in posts), w.get('post_gap')))
@@ -3777,7 +3778,7 @@ def main():
         CREW_FIX2 = '--crew-fix2' in a or W
         TELLER_LATE = '--teller-late' in a or W
         TELLER_MORE = '--teller-more' in a or (W and '--no-teller-more' not in a)
-        WAVES_LATCH = '--no-waves-latch' not in a
+        WAVES_LATCH = '--waves-latch' in a
         VAN_LATE = '--van-late' in a or (W and '--no-van-late' not in a)
         VAN_HIDE = '--no-van-hide' not in a
         VAN_NO_TARGET = '--no-van-target-off' not in a
