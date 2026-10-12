@@ -51,7 +51,7 @@ slot -> `klht_render`, `klu_reset` -> `klwd_reset` / `klht_reset`), so include o
 
 ## 4. Warnings to clear while moving
 
-- klhud_weapon.c `klwd_compose` (line 481): locals `k` and `m` are declared and never used (`m` appears only in a comment) - the C4101
+- klhud_weapon.c `klwd_compose` (line 481 at ebe4d72, 533 after 54ceb35): locals `k` and `m` are declared and never used (`m` appears only in a comment) - the C4101
   warnings the local builds report (re/hud_board.md 5). Remove both. (Found here by a text scan, not by a compiler; the local /W4 build
   is the judge.)
 - klhud_board2.c `klsb_compose`: `rm` and `lost` are silenced with `(void)`; `lost` is an out-parameter of `kluv_result` and is needed,
