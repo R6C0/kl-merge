@@ -370,7 +370,7 @@ def draw_weapon(cv, cx, cy, frac, rounds, other_total, pic_act, pic_oth, layer, 
         f = 0.012
     if f > 0:
         cv.arc(cx, cy, WEAP_RING_R, 1, 0.0, f, col, layer - 1)
-    cv.gun(pic_act, cx + 28 * S, cy - 26 * S, 64 * S, argb(C_CORAL if gun_low else C_CHALK), layer)
+    cv.gun(pic_act, cx + 25 * S, cy - 26 * S, 64 * S, argb(C_CORAL if gun_low else C_CHALK), layer)      # 25 = klhud_weapon.c KLWD_ACT_PIC_DX under WatchStyle=1 (watch review SHOULD 5; the model still said 28)
     cv.text('H2', '%d' % rounds, cx - 7 * S, cy - 36 * S, col, 'r', False)
     cv.pic(181, cx - 87 * S / 2, cy + 2 * S - 0.5, 87 * S, 1.0, 0x49f3f0ea, layer - 1)           # the hairline across the middle (181 = the game's own white: a 1 px line must be clean; 111 breaks up at 1 px)
     cv.gun(pic_oth, cx + 21 * S, cy + 24 * S, 36 * S, argb(0x6f6c66), layer)

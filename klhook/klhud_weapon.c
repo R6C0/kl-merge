@@ -530,7 +530,7 @@ static void klwd_text_setup(void)
 static void klwd_compose(void)
 {
     static DWORD said; DWORD now = GetTickCount(), red_a, red_b; struct klwd_raw r; struct klwd_gun *a = &r.g[0], *o = &r.g[1];
-    float inset = 0.05f, cx, cy; char num[24], label[KLU_TEXTLEN]; int low = 0, lowclip = 0, warn, n0, k, m, demo = klu.grid == 2, npic0 = klu_r.npic;
+    float inset = 0.05f, cx, cy; char num[24], label[KLU_TEXTLEN]; int low = 0, lowclip = 0, warn, n0, demo = klu.grid == 2, npic0 = klu_r.npic;
     klwd_r.ok = 0; klwd_r.nq = 0; klwd_r.why = 0;
     if (!klu.weapon || !klu_r.osd || !klu_r.pic_done) return;       /* pic_done: klu_pic_prep runs after the first compose of a level */
     if (!klu_r.t[KLWD_T_ACT].obj || !klu_r.t[KLWD_T_OTH].obj || !klu_r.t[KLWD_T_LABEL].obj) klwd_r.why = "klhud.c made no text objects for the dial";

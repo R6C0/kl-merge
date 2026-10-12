@@ -54,6 +54,7 @@ static int kle_human(DWORD *player, float feet[3], float nodepos[3]) { *player =
 static struct { int on, flop; } kld;
 static struct { int up, fnow, fdone, idu; DWORD t_land; float meter; } kld_s;
 static struct { int on; } kld_bk;
+static int klbd_by(int record) { (void)record; return -1; }      /* klbotdown.c export (added to kladren.c after this harness): -1 = klbotdown knows nobody, as with [BotDown] off */
 
 #include "kladren.c"
 

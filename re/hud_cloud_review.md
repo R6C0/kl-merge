@@ -76,3 +76,27 @@ default of WatchStyle, the last-minute digits, the queue overflow log, the gun p
 | W4 | NOTE | klhud.c `klu_hand` | One step for the whole hand (1.0 for the Mercedes hand, 1.2 sword, 1.1 seconds) while the width tapers: at the Mercedes tip (0.8) and along the seconds hand (1.1) the step is at or above the dab's ink size, so the tip and the seconds hand may read as beads at 2x (1440p). A step of 0.5 x the local width (min 0.6) keeps them solid and also halves the shaft's dabs (3.0 wide at 1.0 -> 1.5). | Look in W1 at 1440p; only if beaded. |
 | W5 | NOTE | `WatchLast=1` | The draft says the watch becomes a RED TIMER (digits) in the last minute; the new default blanks the stock digits and shows red hands / stroke instead. A deviation from the draft that the owner has not seen. | Owner's call after W1. |
 | W6 | NOTE | re/hud_watch_design.md | Written by this session before 54ceb35 was visible; superseded by it. Its section 8 checklist was applied above: no new slot (but 112 / 114 / 115 change meaning: W1 / W2), hands continuous except W4, wear only in the bake with WatchWear, no brand mark, queue overflow logged, Draft does not switch it on, preview mirrors the C numbers (kl_hud_watch.py). | - |
+
+## 6. Tests RUN in the cloud session (2026-10-12 evening; MinGW i686 + Wine 9 on Linux - the hook's harnesses, NOT the game)
+
+How: `tools/run_harness_linux.sh <harness> [args]` builds a klhook harness with i686-w64-mingw32-gcc and runs it under Wine (32-bit);
+`tools/run_harness_linux.sh --check-hook` type-checks the WHOLE hook (SHIP and TEST) with GCC from a scratch copy whose MSVC naked
+`__asm` forwarders (klsteam.c KLX_FWD) are stubbed - so the real dinput8.dll is still an MSVC-only build.
+
+| what | result |
+|---|---|
+| klsb_test (scoreboard, incl. the two new late-deadline cases of B1) | 93 checks, 0 failed |
+| B1 mutation: the old `end < 1000` put back | 1 FAIL - exactly the new case (a round over after 32 min of game clock draws the stock panel). So the harness now catches the bug, and HEAD fixes it |
+| kladren_test | did not LINK: kladren.c calls `klbd_by` (klbotdown.c's export, added after the harness was written). Stub added to the harness (returns -1 = [BotDown] off); then ALL PASS |
+| klbotdown_test, klmem_test, klrappel_test | ALL PASS / PASS / ALL PASS |
+| whole hook, GCC type check, SHIP + TEST | 0 errors. Warnings: klhud_weapon.c `k`, `m` unused (REMOVED), kldown.c 2473 `need` unused (not this session's file), klhook.c 755 no return in `klh_ticker` (an endless loop: harmless) |
+| NEW klhook/klwatch_test.c + tools/kl_hud_watch_check.py compare: every picture `klu_watch_look` / `klu_escape_look` queue at ten round times (with and without WatchSeconds) and four escape-dial states, against tools/kl_hud_watch.py | 24 of 24 cases MATCH (slot, place, size, tint, layer) after one fix: the escape dial's car icon was tinted with the HUD chalk f3f0ea in C, the watch chalk e9e6df in the model the previews were judged on -> C now uses KLW_C_CHALK |
+| model vs C, weapon circle | the model still put the gun picture at cx + 28 S; C moved it to 25 S in the watch review -> model fixed |
+| picture budget, real C, whole round in 0.1 s steps | watch worst 103 (at 3:59.9), 137 with WatchSeconds=1; escape dial worst 49; weapon circle (model) worst 65; label bar 1 -> about 218 for the dials, under the queue's 300 |
+| render: the hook's own picture lists drawn with the baked `--watch 1` textures (`kl_hud_watch_check.py render`) | reads as a dive watch at 1x and 2x on dark and light ground; wear light. SEEN: (a) at 0:59 the stroke becomes a FULL saturated red ring - the loudest thing on the HUD for the whole last minute, against the owner's 'quiet' rule (the review's acknowledged 1:00 jump, now visible); (b) WatchSeconds=1's coral hand lies ON the sword hand (both show seconds left): a red-white beaded double line - as designed it adds nothing; (c) at 2:10 the hands merge (known); (d) the sword tip is slightly scalloped at 6x (W4), not visible at 1x / 2x |
+| tools/kl_hud.py preview-hud (watch look, the default) / preview-dials | import `kl_hud_wprev`, which is NOT in the repository: both fail on any clone but the local session's. Commit it |
+
+Proposals from the render (NOT applied - the owner decides the look): (a) keep the bezel stroke on the HOUR quantity all round, so it
+drains to nothing at 0:00 with no jump, and make the last minute red by the sword hand alone (the review's own alternative); or dim the
+red stroke to the bezel grey's weight. (b) If a seconds hand is wanted, let it sweep REAL seconds (game clock) instead of the time left,
+or drop the key.

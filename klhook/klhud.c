@@ -868,7 +868,7 @@ static void klu_escape_look(float cx, float cy, float left, int icon)
     float k = KLW_ESC_K;
     klu_dial_base(cx, cy, k, KLW_C_PIPS_ESC, klu.layer);
     klu_arc(NULL, NULL, cx, cy, KLW_R_STROKE * k, 0, 1.0f - left, 1.0f, KLW_C_ORANGE, klu.layer - 1);
-    klu_addpic(icon, cx - 13.0f, cy - 13.0f, 26.0f, 26.0f, KLU_C_CHALK, klu.layer);
+    klu_addpic(icon, cx - 13.0f, cy - 13.0f, 26.0f, 26.0f, KLW_C_CHALK, klu.layer);      /* the watch chalk, as tools/kl_hud_watch.py draw_escape (C vs model check, cloud 2026-10-12) */
 }
 
 
