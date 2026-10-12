@@ -1614,3 +1614,103 @@ The deck's four (YokoGuards, WaitingRoom) appear only after the stairs gate has 
 | `club_bare` | `075c7848...` (unchanged) | `c6699230...` (unchanged) |
 
 Checks: the same known findings as before (preflight / audit stream clips on the silent set, chars glow30.fx, escape 217, guns.json on the bare folder); `bots_gate` (rooms_check with the laggard rule), `bots_dyn` (dyncheck.py), `club_check`, `reverify`, `impact`, `vaultfx` PASS on all eight; the music set's `stream_whd` PASS. Rebuild: `sh C:/kl_scratch/club_pressure/deliver.sh <root> silent|music` after removing `club*` (not `club_noai`) from the root.
+
+
+## Wake, after run C8 (2026-10-12) - do the nine staged squads ever come into the world? (tools/kl_fa_club.py; sets `C:/kl_build/c_club5` and `c_club5_music`; scratch `C:/kl_scratch/club_wake/`)
+
+Labels: MEASURED = run on the files / logs, READ = read in kl2.exe (debug/dasm.py, debug/vtfuncs.py), ASSUMED / GUESS as said. NOT RUN IN THE GAME.
+
+### W.1 What C8 shows (MEASURED: `C:/kl_scratch/club_wake/c8hits.py`, `c8rooms.py`; log `live/C8_club_staged.log`, GO = state 0x19 at 06:05:48.2)
+
+- The log has no line that tells a squad came into the world: the hook logs the seven bots' health only (`lost ... at x y z`), no gate, no squad, no actor list. The pictures (`C8_club_staged_100s .. 400s`; read: 160 s and 220 s) are the idle human's view in the front office ('Loot area', the ammo panel, a plant and a balcony): no staged man is in them, and they say nothing about the rooms the crew was in.
+- The 199 `lost` lines by room (room_of): walkway GO+53..57 s (23), floor2 GO+55..123 (31), floor1n GO+121..152 (68), floor1s GO+149..183 (73), stairs none, lane 4 at GO+217..218 (the pavement). So the crew was in floor1n at about GO+120 and in floor1s at about GO+150.
+- Which man could have hit each of them: every hit was tested against the exact ray (Fire: eyes 160, 60 m, same floor) from all 40 men of the club. 195 of 199 have a line from at least one man who is awake from the load, 1 from nobody of the club (police), and the 3 left (bot 6 at (232, 30, -2850) .. (109, 30, -2846), GO+217 s) have a line from the Entrance squad's lane men (Guard#01 at (134, 29, -2398), 4.5 m) AND from nobody else of the club - but it is the pavement where the police arrive (they are not in the club's men), so it proves nothing. **No hit of C8 is attributable to a staged man alone. Whether the nine squads ever woke is NOT shown by C8, in either direction.** (C7, when the Entrance squad was awake from the load, has the same picture: its 7 lost lines at z < -300 are all on the pavement at z -2690 .. -2660, none in the lane itself.)
+
+### W.2 What starts a parked squad (READ in kl2.exe)
+
+| step | routine | what was read |
+|---|---|---|
+| the squad is parked | `ZSquadScript` slot 4 0x8b2120 inverts field 3 into `[this+0x58]`; slot 16 0x787a10 (phase 5) hides the members once (`0x8d2e20`) | field 3 = 0 -> the men exist but are hidden and not in the actor tables (re/retomoto_spawns.md 1). All nine have field 3 = 0 in c_club5 (MEASURED `wake_check`) |
+| the sender | `ZTriggerActorsDead` 0x8def80 (only in session state 0x19): at its deadline or when its groups are dead it sends message [0x168ccf0] = 'AITrigger' to every entry of its list (field 2); `ZTriggerBox` and `ZTriggerDelay2` send the same word to theirs (fields 17 / 4) | the same name string in three .cpp files = one message id; the gates' own steps (DefendBehaviourRout) are started by exactly this and ran live on Retomoto |
+| the receiver | `ZSquadModifierBehaviour` and `ZDefendBehaviourRout` share slot 26 = 0x4ebed0: message [0x168d804] ('AITrigger') runs slot 34 unless `[+0x41]` (set by 'AIBlocker', sent by nothing here) or (`[+0x42]` = field 8 and `[+0x40]` = started before). Field 8 is 1 on all nine modifiers, so the second and third copy of the message are no-ops | `[+0x42]` is the last-but-one field of the modifier: MEASURED 1 on all nine (`dump3.py`); idempotent for the seven bot squads' seven copies, which was ASSUMED in P.7 and is now READ |
+| slot 34 of the modifier | 0x833830 -> `0x791090(rout, [rout+0xb0])` (the Defend rout's slot 34 is 0x457720 -> the same 0x791090 with `[rout+0x60]`) | 0x833830 skips only when the session is a game-mode-3 client (`[rules+0x54]` = 3: 0x4b0a40 true AND 0x863a60 true; the latter is 0 for any mode above 3); the log of every run says 'game mode 4' |
+| the goal | 0x791090 proceeds when `[goal+8]` is 0 or 4: the modifier's goal is the 0x1c-byte object of slot 14 (0x681210), its constructor 0x68eab0 sets `[+8]` = 0 | then, unless `[squad+0xbc]` is set (the last bool of a rout; it is 0 on all nine), `0x7f6750(squad, goal)` |
+| the show | 0x7f6750: for a squad that is not a mode-3 client it runs 0x706fc0(1) and, with members counted (`[squad+0x8c]` / `+0x90`), `0x7c0d50(squad, 0)` unless `[[squad+0x19c]+0x20d]` | `0x7c0d50` shows and enters again every member whose node has the hidden bit (re/retomoto_spawns.md 1). **The modifier is a first goal of any kind: it brings a parked squad into the world by the same path as a Defend rout.** |
+
+So the answer to 'does the gate's message reach 0x7c0d50' is **yes, READ**. It has not been seen to work in OUR level: (1) no build of ours has had a squad that only a modifier starts shown by a trigger (the 'office', 'walk' and 'floor' stages started squads this way too, but C8 and its log cannot say they showed); (2) what stock does: the campaign's own 'Alert' children (eAM_Activate, six of the nine) are the only thing Dead Men names these squads by (MEASURED `dump6.py`: the club has no DefendBehaviourRout under `AI_Players!`; the campaign's static men wake by modifiers), stock FA F08 names a parked squad's modifier from a TriggerDelay2 (its `Gameplay!20_Guard_Office_A\30_SquadModifier`, eAM_NotSet; MEASURED `f08.py`, `census.py`: 2 of 12 parked squads of F08 have ONLY a modifier named from outside), and the 18 modifiers F07 names from a timer; the story levels do the eAM_Activate form 19 times.
+
+### W.3 Per squad - what the gate's list names, and the verdict
+
+The gate is the bots' `TriggerActorsDead` of the room before the squad's own (WAKE_AT), in each of the seven bot squads (7 copies per squad, MEASURED `dump4.py` on c_club4/club and `wake_plan_check` on c_club5/club). Class of every start child: ZGROUP node with one `SquadModifierBehaviour` controller (field 4 eAM_Activate, field 6 eALM_Alert; SurpriseStairs also eEM_FireAtWill), message 'AITrigger'.
+
+| squad (men) | named node | named by (c_club4, before this round) | verdict from the reading |
+|---|---|---|---|
+| Dance#02 (3) | `\Alert` | floor1n's gate; floor1s's gate names its Guard#01 / #09 as men to wait for (not a start); the squad's own 'wiped out' list (field 8) names F07's `FollowPlayers!TriggerCounter` | wakes (READ) |
+| Rave#02 (3), Rave#01 (2), Lounge#02 (2), Lounge#01 (3) | `\Alert` each | floor1s's gate | wakes (READ) |
+| SurpriseStairs (2) | `\Alert` | floor1s's gate | wakes (READ) |
+| Entrance (3) | `\SquadModifier` (its own ZSquadScript field 4 list names it too) | floor1s's gate; the stairs gate waits for its Guard#02 | wakes (READ) |
+| YokoGuards (2) | `\SquadModifier` | the stairs gate | wakes (READ) |
+| WaitingRoom (2) | `\Alert` (its `\VisionAdjust`, eAM_NotSet, is named by nothing: it is not needed and was left) | the stairs gate | wakes (READ) |
+
+Nothing else names any of the nine (MEASURED `dump4.py`: the only referrers are the gates' TriggerActorsDead lists; in particular no campaign box or timer survived the conversion). **The weak point was not the message but the SENDER: the gates fire only when a bot has reached the hold of the room before** (`TriggerActorsDead` is armed by the bots' step; a human who runs ahead arms nothing, and a crew that dies in room k never wakes the rooms after it: the squads then sleep for good). The pictures of C8 and the log cannot tell whether a gate fired.
+
+### W.4 What was built (flag `WAKE_MORE`, default ON with PRESSURE; `--no-wake-boxes`; off with `--no-pressure`, `--no-gates`, `--legacy`, `--no-ai`; the flag travels in van.json)
+
+Each staged squad's start child is now named by THREE objects (any one wakes it; the others are no-ops by field 8):
+
+1. the gate of the room before (unchanged: the `wake` chain step);
+2. **a criminals-only TriggerBox** (field 0 = 1, field 14 ECPS_FA_MERCONLY, field 15 = 0 = fires once; the walk / floor boxes' form) on the hold area of THAT room (the room whose gate names the squad; it is `WAKE_BOX`: the seven holds of the plan + 100 on each side, y from 40 under the lowest hold to 170 over the highest). The human who runs ahead of the bots meets the guards when he reaches the place where the bots would hold. Three boxes, one per wake group: floor1n (Dance#02), floor1s (the upper floors, SurpriseStairs, Entrance: 15 men), stairs (YokoGuards, WaitingRoom: 4 men). They are three free single objects of F07 (WAKE_NEW: `tbExitLoot`, `tbExitFinancialAlley`, `tbEscapeAI`; named by nothing in F07, MEASURED `f07.py`);
+3. **a backstop TriggerDelay2** per group (WAKE_NEW: `RandomizeFight!Timer_LEFT` / `_RIGHT`, `RivalMercVan!Timer_PFBlocker`), started by the AIMonitor's round-start list like the seal's clock: floor1n 166 s, floor1s 204 s, stairs 246 s after the round-start event (= GO+157.5, +195.5, +237.5 s). Each is the slowest crew's arrival at the room (10 s start + 18 s loot + the path at GATE_SLOW 200 / s + 30 s for every room before) + the gate's 30 s + `WAKE_DELAY` 3 s, so it never comes before the slowest crew's own gate (`wake_plan_check` fails below it) and sits before the van's margin (360 - 75 s): no squad sleeps for good.
+
+NOT done, and why: **no DefendBehaviourRout was added to the squads.** A rout is a CHILD of its squad (every stock rout is, and the bank's waves put theirs under their own new squad): giving the nine existing squads one needs children inside existing subtrees of the .prp / .gms, or the squads re-made as new tops with cloned men - a graft change nobody has made on this level, with slot-id renumbering of the room trees, and nothing in W.2 says it would wake the men where the modifier does not (both end in 0x791090 -> 0x7f6750). If C9 shows the men do NOT come, that is the next step (the waves' form: `kl_fa_bank.extras_make`).
+
+The PLANNER (kl_fa_bots_rt.gates_plan) keeps every hold and way out of a box that wakes a later room's men (`keep_out`); the first attempt at this build failed there ('gate floor1n: only 0 hold places': the room has two cover boxes and both lie in the new box), and `cross` is refused for a box that is not unavoidable. So `rt_for_club` now hands the planner every box of F07's except the three wake boxes (`wake_map` filter): bots may hold in them. The consequence is exactly the one the planner guarded against, bounded: the first bot (or the human) in the hold area wakes the next room's squads up to the gate's 30 s earlier than the gate would. The checks that carry it: `appear` (no man the gate wakes has a line to a hold), the laggard rule (the men woken while a bot is still on its leg / hold add no guns), and the new `wake_check` (no man a box wakes has a line to a mesh point of the box). ASSUMED: that a bot counts as a criminal for ECPS_FA_MERCONLY (if not, the box is the human's alone and only the gates and the backstops wake the squads for the bots: nothing is worse).
+
+### W.5 New checks (in `check()` and `rooms_check`; MEASURED to fail on a wrong build, `negtest.py`, `neg2.py`)
+
+- `wake_check` (every folder with the fix, bare too): each box and each timer of WAKE_NEW exists with the numbers of WAKE_BOX; the box's list = exactly the group's start children; fields 0 / 15 / 14; its centre and half-sizes as WAKE_BOX; inside the room's box +150; the timer's seconds, its list, a negative re-arm field (once), in the AIMonitor's round-start list and between 100 s and 285 s; every squad of the group parked and a SquadModifierBehaviour; **none of the group's men has an exact-ray line to a mesh point of the box** (100 apart, mesh heights, 60 m, not from another floor). The first try with a box moved onto Dance#02's men fails with 'has a free line to 14 of its 14 mesh points'.
+- `wake_plan_check` (folders with the gates): the box holds at least 5 of the room's seven holds (the first bot fires it; all 7 in c_club5), the backstop is later than the slowest crew's gate + `WAKE_DELAY`, and **per squad one line** 'gate of X x7, box of X, backstop of X' with a FAIL if the squad is named by another gate, by fewer than seven copies, by another box or timer (a deliberately wrong WAKE_AT is refused with both messages).
+- The existing 'round start names ...' rule of check() takes the three backstops as starters.
+
+### W.6 The pressure is as before (MEASURED, `hold-guns` on c_club5/club; the same rows as P.5 / Q.2)
+
+| gate | guns on the holds (worst) | on the walk (worst) | laggard (worst) |
+|---|---|---|---|
+| walkway | 0 | 0 | 0 |
+| floor2 | 5 | 7 | 7 |
+| floor1n | 5 | 8 | 8 |
+| floor1s | 5 | 10 | 10 |
+| stairs | 3 | 5 | 5 |
+
+`PRESSURE_KNOWN` unchanged ((5, 7) (5, 8) (5, 10) (3, 5): the guard, not the yardstick). The boxes change who is awake WHEN only for a bot that is first in the hold area, and the exact-ray tests above hold for it.
+
+### W.7 Delivered folders (sha1 of `F01_Main.zip`; checks in each folder's `checks/summary.txt`)
+
+Built on a scratch copy of HEAD's `tools/` (`C:/kl_scratch/club_wake/h`) with this commit's `kl_fa_club.py` (`kl_fa_bank.py`, `kl_chars.py`, `kl_expansion.py` are modified in the shared working tree by other sessions). Rebuild: `sh C:/kl_scratch/club_wake/deliver.sh C:/kl_build/c_club5 silent` / `C:/kl_build/c_club5_music music` (Windows-style root: the voice check opens it from python).
+
+| folder | silent `c_club5` | music `c_club5_music` |
+|---|---|---|
+| `club` / `club_wavslim` (one archive) | `3a1cb5283fc90bae927a28be6e991ed0c47ea14c` | `08e1320a80dc0cdb41ed4bd904b488548bd2cfba` |
+| `club_noai` | `e7754c1f0a2330aa439c5a32a6c39be4545dfa47` (= c_club4's, byte for byte) | `b1c31429f9b238ae5e8a0eab436a0855b11fd947` (= c_club4_music's) |
+| `club_bare` | `a919665cbc15b8c74cce535ea9a58a28e43ea63a` | `50dd40a7dbf07b748a107dd460a8fa827f77b279` |
+
+Against c_club4/club only the scene members differ (`.prp`, `.gms`, `.buf`, `.oct`, `.rmi`, `.rmc`: six objects of F07 kept, three of them boxes, 26,830 -> 26,836 nodes); every other member is byte for byte. Checks: the same known findings as c_club4 (preflight / audit stream clips on the silent set, chars glow30.fx, escape 217, guns.json on the bare folder, `fa` DEGRADED: **4 of 21** squads named by no object in the bare folder - it was 12: the nine staged squads are now named by the boxes and timers), everything else PASS on all eight: `bots_gate` (rooms_check with the laggard rule and the wake lines), `bots_dyn` (dyncheck.py), `club_check` (with `wake_check`), `reverify`, `impact`, `vaultfx`.
+
+### W.8 What run C9 must show (hook = the newest, `[Bots] Log=2 MoveLog=1` in the ini's ONE [Bots] section, the club's `club` folder of c_club5 / c_club5_music; GO = the line `session: state 0x18 -> 0x19`)
+
+The hook cannot see the squads. What it can see is the seven bots' `lost ... at x y z`. The places below are where, at that gate, ONLY a staged man has a line (MEASURED `excl.py` on c_club5/club, the exact ray, men awake at that gate by the scene's wake table):
+
+| squad | where only it can hit, and when | a hit there proves | no hit there BEFORE |
+|---|---|---|---|
+| Dance#02 (3) | the stairs holds (-365, 20, 805), (-365, 20, 685), (448, 96, 782): 2 / 2 / 3 guns, all Dance#02; its posts (-423, 37, 1355), (-535, 32, 1429), (627, 63, 1148) | a `lost` line within 2 m of one of the three after the crew reaches the stairs room (C8: the crew was in floor1s at GO+150 s, so GO+180 .. 200 s) is a Dance#02 man | any line there before the crew is in the stairs room (the holds of the earlier rooms are 8 m and more from them) |
+| Entrance (3) | the queue lane between the stairs landing and the street: Guard#02 on the landing (-106, 182, -386), Guard#03 (-65, 21, -1307), Guard#01 (134, 29, -2398); the police arrive only on the pavement (z < -2500) | a `lost` line at z between -300 and -2400 (C7 and C8: none) is an Entrance man; a line at z < -2500 is ambiguous (police) | - |
+| SurpriseStairs (2), Lounge#01 / #02, Rave#01 / #02 | none by design (no line to a hold or the walk: P.5); they are on the balcony over the stairs (y 480 .. 865) | only the PICTURES (below) | - |
+| YokoGuards (2), WaitingRoom (2) | none by design: the deck over dance floor 2 (y 362 .. 368, z 2050 .. 2275) is awake only after the stairs gate; nothing of the crew's way is in their sight | only the pictures, or a human on dance floor 2 after the stairs gate | - |
+
+For the five squads with no exclusive place the proof is a PICTURE: `C9b` = a human (the owner, 2 minutes; the scripted rig has no script for this map) walks the way in and stands 5 s in each wake box, with pictures every 2 s (kl_watch): box floor1n (centre (-1050, 105, 2730), half 260 x 105 x 280) -> at once after it Dance#02's three at their posts above are awake (look south-east across dance floor 1 from the doorway at (-1350, 30, 2000)); box floor1s (centre (-1306, 96, 1884), half 258 x 116 x 202; GO+about 100 s for a human who does not stop) -> the balcony over the stairs: SurpriseStairs at (-69, 504, 883) and (76, 504, 936) and Lounge#01 at (-102, 479, 1510) are looking about / shooting; box stairs (centre (-201, 123, 878), half 749 x 143 x 292) -> the deck over dance floor 2 (the four at (0, 364, 2050), (350, 362, 2050), (475, 363, 2275), (200, 368, 2250)) - visible from dance floor 2 after the human has been through the stairs box. **A man who is awake and has a line to the human shoots at once; a human who never sees them proves nothing: say it in the verdict.**
+
+Seconds (after GO): a human who runs ahead wakes floor1n's group about GO+50 .. 90 s, floor1s's about GO+80 .. 110 s, the stairs' about GO+110 .. 140 s (GUESS: a run at 5 m / s; the hook's C8 log has no position of a human who walks); the bots' gates fire GO+120 .. 150 s (floor1n; C8), GO+150 .. 180 s (floor1s), after GO+183 s (stairs: C8 never logged a hit in the stairs room); the backstops are GO+157.5, GO+195.5 and GO+237.5 s. A squad that is not awake by its backstop + 5 s is a wake that did not work: then the sender is not the cause (all three senders reach the same receiver) and the receiver is: the next step is the waves' form (a DefendBehaviourRout per squad, W.4).
+
+Said honestly: a hook probe that logs the hidden bit (`[node+0x3c] >> 10 & 1`) of the 21 men every second would settle every row above without a picture; it is a klhook change and not part of this round.
+
+Files of this round (scratch, `C:/kl_scratch/club_wake/`): `dump1..6.py` (the nine squads, their controllers and referrers), `census.py` / `f08.py` / `f07.py` (stock), `c8hits.py` / `c8rooms.py` (C8), `boxes.py` / `blind.py` / `mesh_map.py` (the box places), `excl.py`, `negtest.py` / `neg2.py`, `deliver.sh`, `zipdiff.py`.

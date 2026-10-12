@@ -22,6 +22,10 @@ a walk, counted by the exact ray over the men of the squads that are in the worl
 back after the dynamic step), the holds are picked for the fewest guns (rt_for_club.spots), 13 men stand elsewhere in their rooms (PRESSURE_MEN), and the check `hold-guns` (rooms_check) counts. Four rooms stay over the yardstick:
 PRESSURE_KNOWN. `--no-pressure` / `--no-gates` / `--legacy` / `--no-ai` leave it out. re/club_campaign.md 'Pressure, after run C5'.
 
+THE WAKE FIX (2026-10-12, after live run C8; NOT RUN IN THE GAME): the nine staged squads were woken by the bots' gates alone. READ in kl2.exe that a named SquadModifierBehaviour shows a parked squad (0x4ebed0 -> 0x833830 -> 0x791090 -> 0x7f6750 -> 0x7c0d50);
+each squad is now ALSO named by a criminals-only TriggerBox on the hold area of the room whose gate names it and by a backstop TriggerDelay2 (six free F07 objects: WAKE_NEW; WAKE_BOX holds the numbers). check() / rooms_check prove per squad
+a gate, a box and a backstop, and that no man a box wakes has an exact-ray line to a mesh point of it. `--no-wake-boxes` leaves the boxes out. re/club_campaign.md 'Wake, after run C8'.
+
     python kl_fa_club.py test <out> [--keep] [options]    build F07 + M05_A with the layer into <out> (build():
                                                           a bare graft first, for the van's plan, then the level
                                                           inside kl_map_escape.van_layer), finish() on the written
@@ -415,6 +419,14 @@ ROLE_NEW = {'van on': FF + 'Shutters!GeomActivator_TearGas_LEFT',            # A
             'reset hide': FF + 'RivalMercs!DisableVisionBlocker!GeomDeactivator'}   # DeactivateGeom -> the van's group again (RESET)
 LATE_ROLES = ('van on', 'van timer', 'van timer b')
 RESET_ROLES = ('reset show', 'reset hide')
+# THE WAKE FIX (2026-10-12, after run C8; NOT RUN IN THE GAME): the nine staged squads were woken by the bots' gates ALONE (TriggerActorsDead lists), i.e. only when a bot has
+# reached the hold of the room before theirs. Six more free objects of F07 (none is named by anything in F07: MEASURED C:/kl_scratch/club_wake/f07.py) carry the second and the
+# third trigger of each wake group: three TriggerBox (criminals only, once) and three TriggerDelay2 (the backstops, started by the round-start list). In ROLE only while WAKE_MORE
+# is on (set_roles); WAKE_BOX (below) holds the numbers. re/club_campaign.md 'Wake, after run C8'.
+WAKE_MORE = True
+WAKE_NEW = collections.OrderedDict([
+    ('wake box 1', 'Gameplay!020_Loot!tbExitLoot'), ('wake box 2', 'Gameplay!030_AfterLoot!tbExitFinancialAlley'), ('wake box 3', 'Gameplay!040_Escape!tbEscapeAI'),
+    ('wake timer 1', FF + 'RivalMercs!RandomizeFight!Timer_LEFT'), ('wake timer 2', FF + 'RivalMercs!RandomizeFight!Timer_RIGHT'), ('wake timer 3', FF + 'RivalMercVan!Timer_PFBlocker')])
 # Free single top-level objects of F07 this file does not touch yet (add the name to KEEP_MORE, give it a ROLE):
 # trigger boxes Gameplay!020_Loot!tbExitLoot, ...!FollowPlayers!tbCountPlayers, Gameplay!030_AfterLoot!
 # tbExitFinancialAlley, Gameplay!040_Escape!tbEscapeAI, Gameplay!RunToEscape!tbRunToEscape / tbRunToEscape1Player;
@@ -560,7 +572,7 @@ STOCK_ROWS = True                       # False ('--dead-men-rows'): Dead Men's 
 LEGACY = False
 GUARDS_OFF, POLICE_EAST, VAN_LATE, RESET, VOICE = True, True, True, True, True
 LOOT_SECONDS = 18
-LEGACY_FLAGS = {'SEAL_AT': 120.0, 'GUARDS_OFF': False, 'POLICE_EAST': False, 'VAN_LATE': False, 'RESET': False, 'VOICE': False, 'LOOT_SECONDS': 30, 'ROOM_GATES': False, 'PRESSURE': False}
+LEGACY_FLAGS = {'SEAL_AT': 120.0, 'GUARDS_OFF': False, 'POLICE_EAST': False, 'VAN_LATE': False, 'RESET': False, 'VOICE': False, 'LOOT_SECONDS': 30, 'ROOM_GATES': False, 'PRESSURE': False, 'WAKE_MORE': False}
 FRONT_SQUADS = (E1 + 'Backroom!WaitingRoom', E2 + 'YokoGuards')
 # the four posts: x, y, z on the navigation mesh part of the START, the dance floor 2's upper deck west of the stairs. MEASURED
 # (C:/kl_scratch/club_fix/explore.py on the built level): each >= 400 from the doors, from every place of the way in (ROUTE_IN every 100)
@@ -691,6 +703,11 @@ def set_roles():
             ROLE[k] = v
         else:
             ROLE.pop(k, None)
+    for k, v in WAKE_NEW.items():                       # the wake fix: the objects of the second and third trigger of the staged squads
+        if WAKE_MORE:
+            ROLE[k] = v
+        else:
+            ROLE.pop(k, None)
 
 
 def men_table():
@@ -717,7 +734,7 @@ def police():
 
 def __getattr__(name):
     if name == 'KEEP':                  # kl_graft.build reads kl_fa_club.KEEP at the moment of use
-        keep = _KEEP + tuple(v for k, v in ROLE_NEW.items() if k in ROLE) + tuple(police())
+        keep = _KEEP + tuple(v for k, v in ROLE_NEW.items() if k in ROLE) + tuple(v for k, v in WAKE_NEW.items() if k in ROLE) + tuple(police())
         return keep + tuple(x for x in KEEP_MORE if x not in keep)
     raise AttributeError(name)
 
@@ -925,7 +942,7 @@ def prepare_host(S, log=print):
     if PLAN is None:
         raise ValueError(NO_PLAN)
     Doors.arm(log)                                      # the build that follows opens the doors (see Doors)
-    for name, (pos, face, half, _why) in PLACE.items():
+    for name, (pos, face, half, _why) in place_now().items():
         put(S, name, pos, face, half)
     for name in PARKED:
         put(S, name, PARK)
@@ -1213,6 +1230,15 @@ def wire(sc, log=print):
     # not for every criminal: kl_fa_bank.BOX_PER_MAN, the census of review round 1), criminals only
     lists('walk box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['walk'])
     lists('floor box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['floor'])
+    wake_timers = []
+    if WAKE_MORE:                                       # THE WAKE FIX: the second and third trigger of each wake group (a box on the room's hold area, a backstop timer)
+        for room, mods_ in wake_groups(plan).items():
+            i = list(WAKE_BOX).index(room)
+            lists('wake box %d' % (i + 1), 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=must(mods_))
+            lists('wake timer %d' % (i + 1), 'TriggerDelay2', f0=WAKE_BOX[room]['backstop'], f4=mods_)
+            wake_timers.append(R + ROLE['wake timer %d' % (i + 1)])
+        if len(wake_timers) != len(WAKE_BOX):
+            raise ValueError('kl_fa_club: %d wake groups, WAKE_BOX has %d' % (len(wake_timers), len(WAKE_BOX)))
     van_t = [R + ROLE['van timer']] if VAN_LATE else []           # VAN_LATE: whichever opens the seal also starts the van's timer
     lists('floors counter', 'TriggerCounter', f0=max(len(beat), 1), f4=([R + ROLE['seal off']] if seal and beat else []) + ([ways[0]] if beat else []) + (van_t if beat else []))
 
@@ -1223,7 +1249,7 @@ def wire(sc, log=print):
     k = node(ROLE['monitor'])
     mine = {R + v for v in ROLE.values()}
     have = [s for s in values(sc, k, 'AIMonitor')[2] if sc.resolve(s) and s not in mine]
-    start = [R + ROLE['seal timer']] + ([R + ROLE['office timer']] if stage['office'] else []) + [R + ROLE['doors timer'] if DOORS_ANIMATE else R + ROLE['muffle']]
+    start = [R + ROLE['seal timer']] + ([R + ROLE['office timer']] if stage['office'] else []) + [R + ROLE['doors timer'] if DOORS_ANIMATE else R + ROLE['muffle']] + wake_timers
     # RESET: two stock objects FIRST in the list put round 2 back as round 1 was at the load (the Vault's reset: re/bank_campaign.md W.5). Show
     # again what the round switched OFF (the seal's pieces), hide again what it switched ON (the late van). Both are no-ops in round 1
     reset = ([R + ROLE['reset show']] if seal else []) + ([R + ROLE['reset hide']] if VAN_LATE else []) if RESET else []
@@ -1841,6 +1867,7 @@ def check(folder, log=print, problems=None):
     mon = named('monitor')
     starters = {R + ROLE['seal timer'], R + ROLE['doors timer'] if animate else R + ROLE['muffle']} | ({R + ROLE['office timer']} if named('office timer') else set())
     starters |= {R + ROLE[r] for r in RESET_ROLES if r in ROLE and named(r)}      # RESET: the objects that put round 1's state back, first in the list
+    starters |= {R + ROLE[r] for r in WAKE_NEW if r.startswith('wake timer') and r in ROLE}   # THE WAKE FIX: the three backstops
     if {s for s in mon if s[5:] in ROLE.values() and not any(s[5:] == ROLE[r] for r in LATE_ROLES if r in ROLE)} != starters:
         fail('the round start names %s of this layer\'s objects, wanted %s' % (sorted(s for s in mon if s[5:] in ROLE.values()), sorted(starters)))
     delay = lambda role: values(sc, A.node_of(sc, ROLE[role]), 'TriggerDelay2')[0]
@@ -1965,6 +1992,7 @@ def check(folder, log=print, problems=None):
             v = values(sc, A.node_of(sc, ROLE[role]), 'TriggerBox')
             if v[0] != 1 or v[BK.BOX_PER_MAN] != 0 or v[14] != 'ECPS_FA_MERCONLY':
                 fail('%s: TriggerBox fields 0 / %d / 14 are %s / %s / %s (1, 0 = once, criminals only wanted)' % (ROLE[role], BK.BOX_PER_MAN, v[0], v[BK.BOX_PER_MAN], v[14]))
+        wake_check(folder, sc, lv.mesh(), world_box, fail, log)          # THE WAKE FIX: each staged squad's box and backstop, none woken in sight of the box that wakes him
         # the beat's fast way: the two squads' 'wiped out' lists -> the counter of two -> the seal off and the gate's first path
         cnt = A.node_of(sc, ROLE['floors counter'])
         cv = values(sc, cnt, 'TriggerCounter')
@@ -2454,7 +2482,7 @@ def inventory(folder, log=print):
         elif sc.parent[k] == 0 and sc.names[k].startswith('Heroes!'):
             row(k)
     log('PLACED HOST OBJECTS (PLACE; source of each number in the table)')
-    for name, (_p, _f, _h, why) in PLACE.items():
+    for name, (_p, _f, _h, why) in place_now().items():
         row(A.node_of(sc, name), '<- ' + why)
     log('KILL BOXES (the campaign\'s, re-placed)')
     for name, (_p, _h, why) in KILL.items():
@@ -2936,6 +2964,45 @@ PRESSURE_MEN[E1 + 'DanceFloor02!Dancefloor02a#02\\Guard#03'] = (889, 40, 2172)
 PRESSURE_MEN[E1 + 'DanceFloor02!FatBounceronWalkway\\Guard#02'] = (1138, 363, 3066)
 
 
+# ---- THE WAKE FIX (2026-10-12, after run C8; NOT RUN IN THE GAME). READ in kl2.exe (re/club_campaign.md 'Wake, after run C8'): a TriggerActorsDead / TriggerBox / TriggerDelay2 that names a
+# SquadModifierBehaviour sends it 'AITrigger'; the rout's slot 26 (0x4ebed0) runs its slot 34 (0x833830 -> 0x791090), which hands the modifier's goal (kind 0) to the squad (0x7f6750);
+# for a squad that is not an online client that shows every hidden member (0x7c0d50). That is the path of a Defend rout too (0x457720 -> 0x791090), and the campaign's own
+# 'Alert' children of these squads are the only thing that wakes them in Dead Men. Each staged squad is now started by THREE objects, any one of which is enough (the modifier is
+# 'start once': +0x42 = field 8 = 1, so the others are no-ops):
+#   1. the gate before its room (the bots' TriggerActorsDead of the plan, put there by the wake step: unchanged),
+#   2. a criminals-only TriggerBox on the hold area of THAT room (the room whose gate names the squad: the human who runs ahead of the bots meets the guards when he reaches the
+#      place where the bots would hold; a bot that arrives first fires it too: ASSUMED that a bot counts as a criminal for ECPS_FA_MERCONLY, which only moves the wake to the bot's
+#      arrival, up to 30 s before the gate's list - the laggard rule of rooms_check already covers that),
+#   3. a backstop TriggerDelay2 that the round-start list starts: later than the slowest crew's gate (rooms_check: wake_min), so nobody sleeps for good.
+# room (the gate whose list names the group) -> the box (centre, half-sizes: the seven holds of c_club4's plan + 100 each side, y from 40 under the lowest hold to 170 over the highest;
+# found by C:/kl_scratch/club_wake/boxes.py, proved by check(): none of the group's men has an exact-ray line to a mesh point of the box) and the backstop (s after the round-start
+# event: the slowest crew's arrival at that room's hold + the gate's 30 s + 3 s; rooms_check computes the minimum from the plan and fails below it).
+WAKE_BOX = collections.OrderedDict([
+    ('floor1n', dict(centre=(-1050.0, 105.0, 2730.0), half=(260.0, 105.0, 280.0), backstop=166.0)),      # wakes Dance#02 (awake at floor1s)
+    ('floor1s', dict(centre=(-1306.5, 96.0, 1883.5), half=(258.5, 116.0, 201.5), backstop=204.0)),       # wakes the upper floors, SurpriseStairs and Entrance (awake at the stairs)
+    ('stairs', dict(centre=(-201.0, 123.0, 877.5), half=(749.0, 143.0, 292.5), backstop=246.0))])        # wakes the front office's deck: YokoGuards and WaitingRoom (awake at the last hold)
+WAKE_DELAY = 3.0                        # the backstop is this many seconds after the slowest crew's gate could have fired (GUESS)
+
+
+def place_now():
+    """PLACE with the wake fix's three boxes (WAKE_BOX) while WAKE_MORE is on."""
+    t = collections.OrderedDict(PLACE)
+    if WAKE_MORE:
+        for i, (room, w) in enumerate(WAKE_BOX.items()):
+            t[ROLE['wake box %d' % (i + 1)]] = (w['centre'], None, w['half'], 'GUESS: the hold area of the %s room (the seven holds of c_club4 + 100): the criminal who reaches it wakes the squads that are awake at the room after it' % room)
+    return t
+
+
+def wake_groups(plan):
+    """{room: [path of the child that starts each squad, ...]} of the squads WAKE_AT stages, by the room whose gate names them (plan: squad_plan()[0])."""
+    out = collections.OrderedDict((r['name'], []) for r in ROOMS)
+    for n, (first, _a, _s, _k) in plan.items():
+        short = n.split('!')[-1]
+        if short in WAKE_AT and first:
+            out[ROOMS[WAKE_AT[short][0] - 1]['name']].append(first)
+    return collections.OrderedDict((r, v) for r, v in out.items() if v)
+
+
 def squads_now():
     """SQUADS as the build wants them: with PRESSURE the squads of WAKE_AT are stage 'gate' (waiting, named by the gate before their room) with their
     start child; without it the table of the gates fix. -> OrderedDict name -> (stage, child)."""
@@ -3142,7 +3209,11 @@ def rt_for_club(gates, men=None):
     RT.GATES, RT.EN_, RT.POST_KEEP = tuple(gates), '', ROOM_POST_CLEAR
     RT.GATE_MAX = 99                            # the planner names whole squads; the TADs name the room's men (bots_gates), at most 9 of them (rooms_check)
     RT.pick_holds, RT.hold_spots = pick_holds_club, spots
-    RT.wake_map = lambda B, squads=None: (wake0(B, squads)[0], {})
+    # THE WAKE FIX: the three wake boxes stand ON the holds' area by design (the first criminal there wakes the room after, at most the gate's 30 s before its own list would); the
+    # planner keeps holds and ways out of every box that wakes a LATER room's men, which would leave floor1n two cover boxes, none of them free. So they are not boxes to it
+    # (rooms_check proves instead that no man they wake has a line to the holds or the walk, and wake_check that none sees the box: NOTHING is hidden from the checks).
+    wake_boxes = {R + v for k, v in WAKE_NEW.items() if k.startswith('wake box')}
+    RT.wake_map = lambda B, squads=None: ({k: v for k, v in wake0(B, squads)[0].items() if B.sc.path[k] not in wake_boxes}, {})
     RT.near_post = lambda p, posts, among, keep=ROOM_POST_CLEAR: near0(p, posts, among, keep)      # (the default of the original is bound at import: 300)
     try:
         yield RT
@@ -3445,6 +3516,141 @@ def pressure_check(folder, B, P, tad, fail, log):
                         m['man'], gates[gi - 1]['name'], *[round(v) for v in m['at']], len(seen), gates[gi - 1]['name'], *seen[0]))
 
 
+def wake_nodes_of(sc):
+    """{room: ([node of each staged squad's start child], [squad short names])} read off the scene: the squads of WAKE_AT by the room whose gate names them."""
+    out = collections.OrderedDict()
+    for k, _i, _v in kl_fa.controllers(sc, 'ZSquadScript'):
+        name = sc.path[k][len(R):]
+        short = name.split('!')[-1]
+        if short not in WAKE_AT:
+            continue
+        child = WAKE_AT[short][1]
+        j = sc.resolve(R + name + '\\' + child)
+        room = ROOMS[WAKE_AT[short][0] - 1]['name']
+        e = out.setdefault(room, ([], []))
+        e[0].extend(j)
+        e[1].append(short)
+    return collections.OrderedDict((r['name'], out[r['name']]) for r in ROOMS if r['name'] in out)
+
+
+def wake_check(folder, sc, mesh, box_of, fail, log):
+    """THE WAKE FIX's proofs on a folder (called by check(); a folder without the fix is said and left): every staged squad (WAKE_AT) is parked (ZSquadScript field 3 = 0)
+    and its start child (a SquadModifierBehaviour: the node the exe's 'AITrigger' path wakes) is named by (1) a TriggerBox that fires for criminals only, once, standing
+    where WAKE_BOX says, (2) a TriggerDelay2 of the backstop's seconds that the round-start list starts, and - in a folder with the bots' gates - (3) the gate of the room
+    before its own (rooms_check). NONE of a group's men has an exact-ray line (Fire: eyes 160, within GUN_RANGE, not from another floor) to a mesh point of the box that
+    wakes him (a criminal standing in it must not see him appear). box_of(k) -> (lo, hi) of a ZBoxPrimitive. Faults go to `fail`."""
+    import kl_fa_bots as F
+    if not any(sc.resolve(R + v) for v in WAKE_NEW.values()):
+        log('  wake: no wake boxes / backstops in this folder (a build of before 2026-10-12 or with --no-wake-boxes / --no-pressure / --legacy / --no-ai): the squads wake by the gates of the bots only')
+        return
+    groups = wake_nodes_of(sc)
+    if list(groups) != list(WAKE_BOX):
+        fail('wake: the staged squads form the groups %s, WAKE_BOX has %s' % (list(groups), list(WAKE_BOX)))
+        return
+    mon = {h for s in values(sc, A.node_of(sc, ROLE['monitor']), 'AIMonitor')[2] for h in sc.resolve(s)}
+    B = F.Built(folder)
+    fire = Fire(B, {})
+    rows = []
+    for i, (room, w) in enumerate(WAKE_BOX.items()):
+        mods, shorts = groups[room]
+        want = set(mods)
+        bx, tm = A.node_of(sc, ROLE['wake box %d' % (i + 1)]), A.node_of(sc, ROLE['wake timer %d' % (i + 1)])
+        v = values(sc, bx, 'TriggerBox')
+        if v[0] != 1 or v[BK.BOX_PER_MAN] != 0 or v[14] != 'ECPS_FA_MERCONLY':
+            fail('wake box %s: TriggerBox fields 0 / %d / 14 are %s / %s / %s (1, 0 = once, criminals only wanted)' % (room, BK.BOX_PER_MAN, v[0], v[BK.BOX_PER_MAN], v[14]))
+        got = {h for s in v[17] for h in sc.resolve(s)}
+        if got != want or len(v[17]) != len(want):
+            fail('wake box %s names %d objects, the group is %d squads (%s): %s' % (room, len(v[17]), len(want), ', '.join(shorts), [s.split('!')[-1] for s in v[17]][:4]))
+        lo, hi = box_of(bx)
+        ctr = [(lo[a] + hi[a]) / 2 for a in range(3)]
+        if any(abs(ctr[a] - w['centre'][a]) > 1.0 or abs((hi[a] - lo[a]) / 2 - w['half'][a]) > 1.0 for a in range(3)):
+            fail('wake box %s stands at %s, half %s: WAKE_BOX wants %s, %s' % (room, [round(c) for c in ctr], [round((hi[a] - lo[a]) / 2) for a in range(3)], w['centre'], w['half']))
+        tv = values(sc, tm, 'TriggerDelay2')
+        if abs(tv[0] - w['backstop']) > 0.01 or {h for s in tv[4] for h in sc.resolve(s)} != want or len(tv[4]) != len(want) or tv[2] >= 0:
+            fail('wake timer %s: TriggerDelay2 %s s (%s), names %d objects (%d wanted), re-arm field %s (a negative one wanted: once)' % (room, tv[0], w['backstop'], len(tv[4]), len(want), tv[2]))
+        if tm not in mon:
+            fail('wake timer %s is not in the round-start list of the AIMonitor: nothing starts it' % room)
+        if not (100.0 <= tv[0] <= ROUND_CLOCK - ROOM_VAN_MARGIN):
+            fail('wake timer %s: %g s after the round-start event is outside 100 .. %g' % (room, tv[0], ROUND_CLOCK - ROOM_VAN_MARGIN))
+        rm = next(r for r in ROOMS if r['name'] == room)
+        if not (rm['box'][0] - 150.0 <= lo[0] and hi[0] <= rm['box'][1] + 150.0 and rm['box'][2] - 150.0 <= lo[2] and hi[2] <= rm['box'][3] + 150.0):
+            fail('wake box %s (x %d..%d, z %d..%d) is not in the %s room (x %d..%d, z %d..%d, 150 allowed)' % (room, lo[0], hi[0], lo[2], hi[2], room, *rm['box'][:2], *rm['box'][2:]))
+        for h in want:                                  # every squad of the group: parked
+            t = sc.top[h]
+            if values(sc, t, 'ZSquadScript')[SQUAD_ACTIVE] != 0:
+                fail('wake: %s is not parked (ZSquadScript field %d = %s): nothing would be left to wake' % (sc.names[t].split('!')[-1], SQUAD_ACTIVE, values(sc, t, 'ZSquadScript')[SQUAD_ACTIVE]))
+            if not kl_fa.has(sc, h, 'SquadModifierBehaviour'):
+                fail('wake: %s is not a SquadModifierBehaviour, the object the exe\'s AITrigger path wakes a squad by' % sc.path[h][-60:])
+        pts = []
+        for x in range(int(lo[0]), int(hi[0]) + 1, 100):
+            for z in range(int(lo[2]), int(hi[2]) + 1, 100):
+                hit = mesh.at(float(x), (lo[1] + hi[1]) / 2, float(z), dy=(hi[1] - lo[1]) / 2)
+                if hit:
+                    pts.append((float(x), hit[1], float(z)))
+        men = [m for m in fire.men if m['squad'].split('!')[-1] in shorts]
+        seen = [(m['man'], p) for m in men for p in pts if math.dist(m['at'], p) <= GUN_RANGE and abs(m['at'][1] - p[1]) < GUN_FLOOR and fire.sees(m['at'], p)]
+        if not pts:
+            fail('wake box %s: no mesh point inside it (nobody can stand in it)' % room)
+        if seen:
+            fail('wake box %s: %s (woken by it) has a free line to %d of its %d mesh points, the first (%d, %d, %d)' % (room, seen[0][0], len({s[1] for s in seen}), len(pts), *seen[0][1]))
+        rows.append((room, len(mods), len(men), len(pts), len({s[1] for s in seen}), w['backstop'], [round(c) for c in ctr], [round(w['half'][a]) for a in range(3)]))
+    for room, ns, nm, npts, nseen, back, ctr, half in rows:
+        log('  wake %-8s: %d staged squads (%d men; the gate before the room names them in a folder with the bots: rooms_check), by a criminals-only box at %s half %s (%d mesh points inside, %d of them in the exact-ray '
+            'sight of a man it wakes) and by the backstop %g s after the round-start event' % (room, ns, nm, ctr, half, npts, nseen, back))
+
+
+def wake_plan_check(folder, B, P, gates, tad, fail, log):
+    """THE WAKE FIX against the plan of a folder with the bots' gates (called by rooms_check): the box of a group holds at least 5 of the seven holds of the room whose gate names the
+    group (a bot that holds there fires it; the human on the way meets it), and its backstop is later than the SLOWEST crew's gate (wake_min: the quickest-out arrival at that room
+    after every room before it has run its 30 s + the room's own 30 s) by WAKE_DELAY and sooner than the van's margin. A squad of WAKE_AT is named by the gate of its room's TAD
+    in all seven bot squads (already proved by pressure_check) AND by the box AND by the backstop: said as one line per group."""
+    import kl_fa_bots as F
+    sc = B.sc
+    if not any(sc.resolve(R + v) for v in WAKE_NEW.values()):
+        return
+    start, cap = float(P['gate']['start']), float(P['gate']['loot_cap'])
+    wait = float(P['gate'].get('room_wait', ROOM_WAIT_S))
+    names = [g['name'] for g in gates]
+    for i, (room, w) in enumerate(WAKE_BOX.items()):
+        if room not in names:
+            fail('wake: %s has no gate in the plan' % room)
+            continue
+        k = names.index(room)
+        arrive = start + cap + sum(g['path'] for g in gates[:k + 1]) / GATE_SLOW + k * wait
+        wake_min = arrive + wait
+        g = gates[k]
+        bx = A.node_of(sc, ROLE['wake box %d' % (i + 1)])
+        c, hf = B.at(bx), kl_fa.node_values(sc, bx)[8:11]
+        inside = [h for h in g['holds'] if all(abs(h[a] - c[a]) <= hf[a] for a in range(3))]
+        if len(inside) < 5:
+            fail('wake box %s holds %d of the 7 holds of its room (5 wanted): the first bot would not fire it' % (room, len(inside)))
+        if w['backstop'] < wake_min + WAKE_DELAY - 0.01:
+            fail('wake timer %s: %g s is before the slowest crew\'s gate (%.1f s + %g): it would wake the men on top of a crew that is still on its way' % (room, w['backstop'], wake_min, WAKE_DELAY))
+        log('  wake %-8s plan: the box holds %d of the 7 holds; the slowest crew arrives at the room at %.0f s and its gate fires by %.0f s; the backstop is at %g s (round %g, van margin %g)' % (
+            room, len(inside), arrive, wake_min, w['backstop'], ROUND_CLOCK, ROOM_VAN_MARGIN))
+    # ---- every staged squad: its start child is named by the gate of the room before its own in each of the seven bot squads, by its group's box and by its group's backstop - and by nothing else
+    refs = collections.defaultdict(lambda: collections.defaultdict(list))
+    for cn, field in (('TriggerActorsDead', 2), ('TriggerBox', 17), ('TriggerDelay2', 4)):
+        for k, _i, v in kl_fa.controllers(sc, cn):
+            for s in v[field]:
+                for h in sc.resolve(s):
+                    refs[h][cn].append(k)
+    boxes_ = {A.node_of(sc, ROLE['wake box %d' % (i + 1)]): room for i, room in enumerate(WAKE_BOX)}
+    timers_ = {A.node_of(sc, ROLE['wake timer %d' % (i + 1)]): room for i, room in enumerate(WAKE_BOX)}
+    order_ = [r['name'] for r in ROOMS]
+    for room, (mods, shorts) in wake_nodes_of(sc).items():
+        for h, short in zip(mods, shorts):
+            gate = order_[WAKE_AT[short][0] - 1]
+            tads = [sc.names[k] for k in refs[h]['TriggerActorsDead'] if sc.path[k][len(R):].startswith(BK.BOT_SQUAD)]
+            want_ = [g['wait'] for g in gates if g['name'] == gate]
+            got_b = [boxes_.get(k) for k in refs[h]['TriggerBox']]
+            got_t = [timers_.get(k) for k in refs[h]['TriggerDelay2']]
+            ok = len(tads) == len(F.BOTS) and set(tads) == set(want_) and got_b == [room] and got_t == [room]
+            log('  wake %-15s: gate of %s %s x%d, box of %s %s, backstop of %s %s%s' % (short, gate, sorted(set(tads)), len(tads), room, got_b, room, got_t, '' if ok else '  <- NOT AS WANTED'))
+            if not ok:
+                fail('wake: %s (%s) is named by gates %s x%d, boxes %s, timers %s - wanted gate %s x%d, box %s, timer %s' % (short, sc.path[h][-40:], sorted(set(tads)), len(tads), got_b, got_t, gate, len(F.BOTS), [room], [room]))
+
+
 def rooms_check(folder, log=print):
     """The room gates of a finished folder (before or after the dynamic step) -> list of faults. Reads bots.json's 'club_gates' (a folder of the
     first delivery has none: nothing to check, said). FAILS: a gate whose TriggerActorsDead is missing from a squad, names other groups than
@@ -3599,6 +3805,8 @@ def rooms_check(folder, log=print):
     # ---- THE PRESSURE FIX: who is awake when, and the guns bearing (hold-guns)
     if PRESSURE:
         pressure_check(folder, B, P, tad, fail, log)
+    if WAKE_MORE:
+        wake_plan_check(folder, B, P, gates, tad, fail, log)
     # ---- the timetable
     tt = {k: P['gate'].get(k) for k in ('start', 'loot_cap', 'straight', 'path', 'exit_walk', 'seconds', 'rooms')}
     longest = float(tt['seconds'])
@@ -3635,7 +3843,7 @@ def rooms_check(folder, log=print):
 # with the defaults.
 FLAG_NAMES = ('DOORS_ANIMATE', 'SEAL_OPEN', 'SEAL_PLANE', 'SEAL_AT', 'LIGHT_SHOW', 'BEAT_ANIM', 'FAN_DAMAGE', 'CASE', 'NO_AI', 'SQUADS_AWAKE',
               'POLICE_ARRIVE', 'POLICE_ON_SLAB', 'STOCK_ROWS', 'OFFICE_AT', 'STREAM',
-              'GUARDS_OFF', 'POLICE_EAST', 'VAN_LATE', 'RESET', 'VOICE', 'LOOT_SECONDS', 'ROOM_GATES', 'PRESSURE')
+              'GUARDS_OFF', 'POLICE_EAST', 'VAN_LATE', 'RESET', 'VOICE', 'LOOT_SECONDS', 'ROOM_GATES', 'PRESSURE', 'WAKE_MORE')
 STREAM = None                           # '--str FILE': the merged stream file the clips are resolved against (review round 2: it travels in van.json)
 
 
@@ -3696,7 +3904,7 @@ def main():
     if len(a) >= 2 and a[0] == 'test':
         global DOORS_ANIMATE, SEAL_OPEN, SEAL_PLANE, SEAL_AT, LIGHT_SHOW, BEAT_ANIM, FAN_DAMAGE, CASE
         global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, POLICE_ON_SLAB, STOCK_ROWS, OFFICE_AT, STREAM
-        global GUARDS_OFF, POLICE_EAST, VAN_LATE, RESET, VOICE, LOOT_SECONDS, LEGACY, ROOM_GATES, PRESSURE
+        global GUARDS_OFF, POLICE_EAST, VAN_LATE, RESET, VOICE, LOOT_SECONDS, LEGACY, ROOM_GATES, PRESSURE, WAKE_MORE
         LEGACY = '--legacy' in a                        # the first delivery's build: every flag of the fix after run C2 off, the old numbers
         GUARDS_OFF = not LEGACY and '--no-guards-off' not in a
         POLICE_EAST = not LEGACY and '--no-police-east' not in a
@@ -3705,6 +3913,7 @@ def main():
         VOICE = not LEGACY and '--no-voice' not in a
         ROOM_GATES = not LEGACY and '--no-gates' not in a and '--no-ai' not in a
         PRESSURE = ROOM_GATES and '--no-pressure' not in a
+        WAKE_MORE = PRESSURE and '--no-wake-boxes' not in a
         LOOT_SECONDS = 30 if LEGACY else LOOT_SECONDS
         if LEGACY:
             SEAL_AT = LEGACY_FLAGS['SEAL_AT']
@@ -3793,6 +4002,7 @@ def main():
         load_flags(a[1])
         sys.exit(1 if check(a[1]) else 0)
     elif len(a) == 2 and a[0] == 'inventory':
+        load_flags(a[1])
         inventory(a[1])
     elif len(a) == 2 and a[0] == 'reverify':
         bad = BK.reverify(a[1])
