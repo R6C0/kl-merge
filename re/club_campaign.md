@@ -5,6 +5,9 @@ re/campaign_fa_club.md (its section 8 and the notes 'corrected after the critic'
 re/campaign_fa.md 4.2 and G1.3 / G1.8, re/campaign_fa_tooling.md 11 - 12. Each stage appends a section here.
 `<work>` = `G:/SteamLibrary/steamapps/common/Kane and Lynch Dead Men/KL_PortTools`.
 
+**LATER (2026-10-12): the section 'Fix after runs C0-C2' at the END of this file supersedes D1's folders (new set `C:/kl_build/c_club2` and `c_club2_music`),
+the seal clock (100 s) and the bots' loot wait (18 s); read it after DELIVERY.**
+
 **START AT THE SECTION 'DELIVERY' just below (D0 what was built, D1 the folders and every checker, D2 the round as
 built and the flags, D3 guesses by cost, D4 the live order, D5 packaging, D6 not done). The stage sections after it
 (T, L1, L2, L3, F, review rounds 1 and 2) are the record.**
@@ -1103,3 +1106,145 @@ S.1 THE FINDINGS
 
 S.2 CHECKS (delivered folders): club_check PASS x3, bots_gate PASS x3 ('leaving 121..168 s'; clocks line; park lines), reverify problems 0 x3, impact 0, bots_dyn PASS (0 FAIL, 6 NOTE), fake PASS, van 0 faults on the drawn pavement (escape 217 = the plain tool, by design), routes built NOT FREE / open FREE / doors 1 closure. Known: preflight CRASH 1 and audit FAIL 2 (3 on noai) = the stream-clip finding; chars = the glow30.fx materials; fa DEGRADED unnamed squads (heuristic). New archives (sha1 prefix of F01_Main.zip): club / club_wavslim 1380209c, club_noai bbfddbbd, club_bare a4d024f3 (unchanged). The bank regression was not re-run: no shared file was edited.
 S.3 NEXT: live order unchanged (club_noai, club, club_wavslim, then one `--police-strip` build).
+
+## Fix after runs C0-C2 (2026-10-12) - the front office, the van, round 2, the voice lines, the music file
+
+Written by the fix workflow's builder. OFFLINE; nothing was installed, the game was not started, no file under the Dog Days
+folder, KL_PortBackup, any `w_tab*` / `q_*` / `r_*` tree, `c_club`, `c_bank*` or `v_vault` was written. Files: `tools/kl_fa_club.py`
+(2,597 -> about 2,800 lines), NEW `tools/kl_club_str.py`; nothing else of the repository was edited. The Vault's session was editing
+`tools/kl_fa_bank.py` while this ran, so every build used a scratch copy of HEAD's `tools/` (`C:/kl_scratch/club_fix/h/tools`, HEAD
+`kl_fa_bank.py` + this commit's `kl_fa_club.py` / `kl_club_str.py`, byte for byte) - `KL_TOOLS` in the re-pathed `chain.sh` / `checks.sh`.
+`<work>` = `G:/SteamLibrary/steamapps/common/Kane and Lynch Dead Men/KL_PortTools`. Labels: MEASURED = computed on the built level or
+the live logs; READ = read in the logs / notes / exe notes; INFERRED = follows from those; ASSUMED / GUESS as everywhere in this file.
+
+### X.1 The diagnosis of runs C0 - C2 (logs `<work>/build/klhook/live/C0_club_bare.log`, `C1_club_noai.log`, `C2_club_full.log`)
+
+All three load and play with no fault. C1 (no enemies): all seven AI heisters escape with 60,000 .. 735,000 (the route, the seal's clock
+and F07's van on the slab work). C2 (40 guards, then police, idle human, Risk=1 Tough=1.5, test hook without FollowOutShield):
+1. FOUR heisters dead GO+33 .. 38 s (READ from the log; GO = 23:55:47.8): record 7 at the inner office door, records 4 and 3 each 'lost
+   246.0 (0.0 of 252.0) ... ONE STEP' in the front office at (2137..2145, 444, 3358..3444), record 1 on the walkway. MEASURED against the
+   built level: Yoko's two guards start at (2300, 361, 3200) and (2300, 361, 3300), the waiting-room pair at (2085, 354, 3178) and
+   (1995, 362, 3464) - in a room 2.2 .. 3.2 m wide the crew's every line crosses; the guard at (2300, 361, 3300) is 10 .. 42 from
+   every heister's line and has a clear 0x20 ray to the inner door (this file's `third_party/anp/scripts/hvk_ray.py`: 3 of the 4 old posts see
+   the door, none sees a START place). INFERRED: the 246 is the point-blank rule of re/melee_damage.md (100 bullets x CopToCrew 0.05 x 1.2),
+   the 85 / 88 hits are a guard in range; five bots entered the room within 3.6 s of each other (the single loot-depleted trigger).
+2. TWO heisters dead in ONE tick (23:58:52.466) while ABOARD: the bots line goes 'van 3 3.0s' -> 'van 6'. READ in re/bots_behaviour.md and
+   the N3 notes: state 6 = the vehicle DESTROYED (rules slot 94 grade 2), everybody aboard dies. Not read: who fired (the log has no shooter).
+   MEASURED: the van carries ONE ZFakeTarget of faction 'Mercenary' (on its Body_Main; the level's only one), stood in the world from the
+   load at x -5300 in sight of the west police 42 m away, and the ten arriving police stood 3 .. 5 m from its drive (the west six) and
+   8 .. 30 m from its stop. The second visit of the same van (nobody aboard) was not shot - so the cause is not shown; the three layers
+   below do not rely on one guess.
+3. Round 2 (nobody ran one): the seal (`HeroColi`) is switched off by the clock or the counter and nothing switches it back; the owner
+   reported it for the Vault ('after the first round the vault door is open'). The club has the same one-way switch. READ in
+   re/fa_round.md 4, 6: a later round is not a level load.
+4. The voice lines: 55 streamed single IMA ADPCM lines (police one-liners, the Japanese guards' hurt / grace / no-access lines, two coughs)
+   in `club` / `club_wavslim` / `club_bare`, 1 in `club_noai` (MEASURED with kl_whd). Per re/luvsic_pass.md 1.1 Dog Days cannot read IMA
+   ADPCM speech from the stream file (silent or noise); the in-memory form plays (kl_snd.merge `inmem`, kl_voice.stream_clip). The club's
+   build never set `kl_snd.VOICE` (kl_maps.ready_one does for the READY maps).
+
+### X.2 What changed in `tools/kl_fa_club.py` (flags, all ON by default; `--legacy` = the first delivery)
+
+| flag (module name / command line) | what | where |
+|---|---|---|
+| `GUARDS_OFF` / `--no-guards-off` | the four front-office bodyguards (YokoGuards 2, WaitingRoom 2) stand on the upper deck of dance floor 2 west of the stairs, at (0, 364, 2050), (350, 362, 2050), (475, 363, 2275), (200, 368, 2250) (`FRONT_MEN`; `strip_squads` takes `men_table()`); nobody removed (40 guards in 17 squads) | strip |
+| `POLICE_EAST` / `--no-police-east` | the ten arriving police start EAST of the van's stop (`ARRIVE_EAST`): a north row at z -2655 (the house fronts) and a south row at z -3400, x 1030 .. 1780, 150 .. 250 apart; the two west squads' cover and defend points move with them (x 1100 .. 1450) | place_police |
+| `VAN_LATE` / `--no-van-late` | the van's group is HIDDEN from the load and its FakeTarget (the level's only one) is taken off; F07's own ActivateGeom 'van on' shows it `VAN_AFTER` 2 s after the seal opens (named by the seal's clock AND the beat's counter, through the timer 'van timer') and `VAN_EARLY` 1 s after the wardrobe's box (speak box, 'van timer b'). Nobody can call the van before the seal opens, so it is in the world before any call | prepare_host, wire |
+| `RESET` / `--no-reset` | the round-start event (AIMonitor list 2) names, FIRST, 'reset show' (ActivateGeom: the seal again) and 'reset hide' (DeactivateGeom: the van's group again); both are no-ops in round 1 | wire |
+| `VOICE` / `--no-voice` | `kl_snd.VOICE = True` around `kl_maps.one`: the streamed single ADPCM lines become records in the level's .WAV (LIP block skipped by `kl_voice.stream_clip`); cost +1.97 MB of .WAV (`club` .WAV 21.4 -> 22.6 MB, five blocks 149.1 -> 150.2 MB, under the 171 that loaded) | build |
+| `LOOT_SECONDS` 18 (was 30), `SEAL_AT` 100 (was 120) | the AI heisters wait at most 18 s at the office loot and the gate hold before the lane shrinks from 83 to 63 s ('less standing still, that's a big one'). GUESS: both numbers | bots |
+| `--legacy` | every flag above off, `LOOT_SECONDS` 30, `SEAL_AT` 120: the control | main |
+
+Five F07 objects join `ROLE` while their flags are on (`ROLE_NEW`, `set_roles()`; kept by `KEEP` only then): `van on`
+(Shutters/GeomActivator_TearGas_LEFT), `van timer` (RivalMercs/DisableVisionBlocker/Timer), `van timer b` (.../TimerInputAI), `reset show`
+(Shutters/GeomActivator_TearGas_RIGHT), `reset hide` (.../DisableVisionBlocker/GeomDeactivator) - the same five objects The Vault uses for
+its late van and reset; no entity was added. The flags travel in `van.json` ('flags'); a folder of the first delivery has none and is read
+as `--legacy` (`load_flags`), so `check` / `bots-check` on an old folder judge it as built.
+
+New rules in `check()` (`fix_check`, they FAIL what they guard; a folder built with a flag off is only reported):
+- GUARDS: each of the four 'office' men at least `FRONT_CLEAR` 400 from the office doors, from every place of the way in (`way_views` of
+  `ROUTE_IN`, every 100) and from every AI-heister place after the front office (bots.json), at least 250 apart; the other 36 campaign
+  men near the way are COUNTED, not judged (12 of 36 within 250: the walkway's and the dance floors' guards stand on the way by the map's design).
+- POLICE: no arriving man west of x 0, no two under 150 apart (the existing rules still hold: lane clear, 100 from a returning place,
+  10 m from BOT_PARK, on the START's mesh part and free floor).
+- VAN: group hidden at the load, 'van on' names only the van, the van's timer is named by the seal's clock and the counter (and nothing else),
+  the early timer by the wardrobe's box alone, no FakeTarget (the old 'exactly one' rule now wants `0 if VAN_LATE`), no squad names the van.
+- RESET: the round start's list begins with the reset objects; EVERY geometry switch of the layer (the ActivateGeom / DeactivateGeom of the ROLE
+  nodes and of the kept squads' subtrees) is covered by them and by nothing else (a node that is switched and not reset FAILS); the rest is the
+  list `RESET_CANNOT` (printed by check).
+- VOICE: no streamed single IMA ADPCM line is left but `VOICE_KNOWN` (see X.6).
+
+### X.3 Proofs
+
+- Control: `python tools/kl_fa_club.py test <out> --legacy --keep --plan <c_club>/club_bare/van.json` gives `F01_Main.zip`
+  sha1 `a4d024f38ba279c7e5e8584f1fd880011505bd1d` again (MEASURED; the delivered bare archive).
+- `python tools/kl_fa_vaultfx.py check` on all 8 folders: PASS ('0 cloth blob(s)': the club has no cloth, so the Vault's crash cannot occur here).
+- Guards, MEASURED with the 0x20 rule (hvk_ray, eye +160, on the built level): old posts - clear line to the inner door from 3 of 4, to no
+  START place; new posts - clear line to NO START place and NOT to the inner door. check()'s own `Sight` also says 'nobody in sight' for the stage 'office'
+  (4 men, nearest to a START place 2,177). The 4 posts: nearest door 1,437, nearest place of the way in 422, nearest AI-heister place 952 (400 wanted), 250 apart.
+- Silent set `C:/kl_build/c_club2` and music set `C:/kl_build/c_club2_music`: `checks.sh` on all 8 folders. Every checker is as in D1 (the
+  known three: `chars` glow30.fx, `escape` 217 = the plain tool without the drawn pavement, `guns` on club_bare = no gun looks there) except:
+  the two sets' `club_check`, `reverify`, `bots-check` ('7 squads, 7 with the seal gate, longest 63 s; seal clock 100 s; leaving 101..136 s'), `vaultfx`,
+  `voice` and `bots_dyn` PASS. WITH THE MUSIC FILE `preflight` is `CRASH 0` and `audit` `PASS (0 findings that must be 0, 4 known)` on `club_bare`,
+  `club` and `club_wavslim` (the one finding of D1 is gone); `club_noai` keeps its 2 (= 'no police', what that build is).
+
+### X.4 The delivered folders (checks in each folder's `checks/summary.txt`; `chain.sh` / `checks.sh` / `routes.py` / `blocks.py` beside them, KL_TOOLS-aware)
+
+| folder | silent (`C:/kl_build/c_club2/`, against the installed stream file) | with the music (`C:/kl_build/c_club2_music/`, against `C:/kl_build/v_club/PC_Def.str`) |
+|---|---|---|
+| `club` | `896f493c592c2ebd7b83aa2bf8a4fd41157f2fd4` 179,258,996 | `0351dd76c6f367a60c071288a60038b2a99a4a7d` 179,259,528 |
+| `club_wavslim` | the same archive; .WAV 12.5 MB (whole 22.6) | the same archive as `club` of that set |
+| `club_noai` | `e7754c1f0a2330aa439c5a32a6c39be4545dfa47` 165,319,955 | `b1c31429f9b238ae5e8a0eab436a0855b11fd947` 165,320,461 |
+| `club_bare` | `867a15ab50b5c3d4aa71abf5283af6fdce8b8a4c` 150,070,509 (the --crew-fix-style bare of the fix; the control is `--legacy`) | `3155984f067092f2b80bfe3993cc2eaba2401c11` 150,071,045 |
+
+Five large blocks (blocks.py): club 150.2 MB, wavslim 140.2, noai 141.3, bare 139.9 (line 171; chunk tables 54,085 / 53,122 / 53,873).
+The music set's folders carry `stream.json` (needs 1,840,263,056 bytes of the stream file).
+
+### X.5 THE STREAM FILE `C:/kl_build/v_club/PC_Def.str` (NEW `tools/kl_club_str.py`; kl_vault_str.py was not edited)
+
+`python tools/kl_club_str.py build <base> <out>` = `kl_vault_str.py`'s build with the club's level (`V.LEVEL = 'M05_A'`) and clip list:
+7 Dead Men blocks = the two interleaved music sets (`M05_A_Club_Layers` 32,435,600 bytes, `M05_A_Club_2_Layers` 49,547,800 bytes; whole, with
+the unnamed fourth layer `M05_A_Club_2_Muffled_3D`) + five ambience beds. Base = `<work>/build/v_vault/PC_Def.str` (READ ONLY, untouched).
+RESULT (MEASURED, `proof` PASS): **1,841,996,798 bytes (1.715 GiB; 305,486,850 under 2 GB), sha1 `95040ec922bd9ec08836b99b0fa8213d92eaf759`**,
++88,526,853 bytes = 84.43 MB, 10,232 clips in 7,883 blocks; the data of the base (bytes 0x38 .. 0x68696900) is the same sha1
+`1408dfb9...`; all 10,217 old index entries stand with the same id, name, offset, size, format, lip word, layer; all 2,086 old map entries
+keep their offset; the .bain.json is carried byte for byte; account: every byte claimed. The Vault's four music folders
+(`<work>/build/c_bank2_music_fx/*`) still resolve block for block (`kl_club_str.py tab`: 0 / 0 / 0 on all four) and so do the club's four; the club's
+13 records name new blocks only; `kl_club_str.py levels` PASS (the 6 Dead Men levels the tab's maps are made from). `<v_club>/tab.txt`.
+NEVER TRIED PAST 2 GB; this is 1.84 GB (the Vault's was 1.75). The previous files are untouched; `<work>/build/PC_Def.str` was not replaced.
+
+INSTALL (game holder, game closed - same as re/bank_campaign.md M.3 / M.6, whose points 1, 3, 4b, 5 and 6 apply unchanged; the stream file BEFORE any music folder):
+1. `python tools/kl_club_str.py installed "C:/kl_build/v_club/PC_Def.str" "<DD>"` (read only; kl_vault_str's, must end `INSTALLED: PASS` after step 2).
+2. `python tools/kl_club_str.py put "C:/kl_build/v_club/PC_Def.str" "<DD>" --kept "<work>/build/v_vault/PC_Def.str"` (refuses while a kl2.exe has a thread,
+   while an overlay copy is another file, when a sound bank under the game folder names a block the source lacks, with less than size + 1 GB free; copies beside, reads
+   back size 1,841,996,798 and sha1 above, swaps by two renames; `--kept` only if `<DD>/PC_Def.str` IS the Vault's file, sha1 `80e53495...`). The club's file is a
+   SUPERSET of the Vault's, so the Vault's folders and every tab map keep working. NEVER an overlay copy, NEVER `kl_expansion` without `--no-stream`.
+3. Then the map from `C:/kl_build/c_club2_music/club_noai` first (both music sets and the beds, no guard lines), then `club`, then `club_wavslim`.
+4. Back: `put` the Vault's file (`--kept` the club's); `put` refuses while a club music folder is anywhere under the game folder.
+
+### X.6 GUESS / ASSUMED / NOT DONE (sorted by cost)
+
+1. ASSUMED (the Vault's too): police aim at a van because of its FakeTarget; a hidden keyed vehicle runs its keys unseen and boards normally once shown. If the
+   van is shot anyway, C3's `FollowOutShield=3` (hook ship_w10) is the second layer; the third (police 30 m from the van, out of its line of sight) is
+   IMPOSSIBLE on a slab 8 m wide - the ten police stand 4.5 m (north row) and 3 m (south row) from the drive's line, 13 m and more east of the stop (the old west six stood in the van's path).
+2. The police still come into the world IN SIGHT of the lane's mouth (the east row sees it; check counts it as the cost of the slab default) and the slab
+   has no cover: 'strictly find cover' needs `--police-strip` (unproven: an AI on bare mesh) or cover objects the level does not have.
+3. Not changed: the walkway's and the dance floors' guards stand on the way by the map's design (12 of 36 within 250 of a place of the way; the 'walk' squads' second
+   death site, record 1 at the walkway, is theirs). The five-bots-in-3.6-s convoy is not staggered by data (the single loot-depleted trigger; kl_fa_bots_dyn's
+   0 / 3 / 5 / 8 s stagger is at the START only): with the guards off the door the volley is no longer a point-blank one.
+4. Holds: only the gate hold and the loot wait were shortened (X.2); the gate hold is a plain timer in the entrance hall (cover places of the dynamic step), 63 s
+   for the quickest bot. The long way: `--seal-open` (no gate at all) is C5.
+5. RESET cannot put back by data: the squads' in-the-world state, the floors counter and the two stage boxes, the GatePath lists, the van's key-framed
+   animation, the loot (RESET_CANNOT, printed by check). ASSUMED re-armed by the rules' round start, as in the Vault; a hook would have to write the squads' flag.
+6. VOICE_KNOWN: `CellPhoneChitChat_001_JapaneseMale` (a civilians' line, 663,552 bytes) stays streamed - 5 of its 648 blocks fail the ADPCM header test (step index 152 / 207 / 211 at blocks 160,
+   161, ...), kl_voice.stream_clip refuses it (right: it would play noise). The club has no civilians. Everything else of the 55 is in the .WAV now.
+7. The numbers FRONT_CLEAR 400, the four posts, ARRIVE_EAST, VAN_AFTER 2 / VAN_EARLY 1, LOOT_SECONDS 18, SEAL_AT 100 are GUESSES (MEASURED only against the mesh, the rays and the logs).
+8. The hook was not touched: a van health line in C3's `[Bots]` log (who destroys the van) is a hook request, not done here.
+
+### X.7 What the next live run must show (the order of D4; hook = the newest ship / test with `[Bots] FollowOutShield=3`)
+
+C0 `club_bare` (load; the van is NOT in the picture at GO: a hidden group must not be seen from the slab or the lane), C1 `club_noai` (same as before: seven escape - NOW
+also: the van appears 2 s after the seal opens (100 s after the round-start event, GO+91 s) or 1 s after a bot steps into the wardrobe's box; boards;
+'vehicle state' 1 -> 3 -> 5 -> 7), C2 `club` with Escort=1: (a) no 'ONE STEP' in the first minute at (2137..2145, 444, 3358..3444); the front office EMPTY of guards at GO+2 s,
+four men on the upper deck of dance floor 2 (they appear at GO+1.2 s, not in view of the START rows); (b) the van never leaves state 3 for 6; the police stand on the slab's east half;
+(c) ROUND 2 IN THE SAME PROCESS: the seal stands at GO of round 2 (the first bot position in the lane before GO+91 s) and the van is away until the seal opens again. Then C3
+`club_wavslim`, and the SAME order against `c_club2_music` after the stream file is installed (look for: the music at GO; 'stream' lines of the hook; the guard lines audible).

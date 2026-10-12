@@ -55,6 +55,12 @@ without enemies of stage L1.
       --str FILE        Dead Men's streamed clips are resolved against FILE and FILE.map.json instead of the
                         work folder's merged PC_Def.str (kl_fa_bank.use_stream): for the build against a stream
                         file that holds the club's music (MUSIC_CLIPS; the extension is a later step)
+      --legacy          the first delivery's build (the fix after runs C0 - C2 off: the control, sha1 a4d024f3 of the bare archive)
+      --no-guards-off   the front office's four guards stay in the front office (GUARDS_OFF, see 'THE FIX AFTER RUNS C0 - C2')
+      --no-police-east  the arriving police start at both ends of the slab (POLICE_EAST)
+      --no-van-late     the van stands in the world from the load with its target (VAN_LATE)
+      --no-reset        round 2 is not put back by the round-start event (RESET)
+      --no-voice        the streamed single ADPCM lines stay streamed (VOICE)
       --plan FILE       the van's plan from a file (the van.json beside an earlier build) instead of a new one:
                         saves the bare graft (35 s). Refused when its way points are not ROAD's
 
@@ -254,7 +260,7 @@ EN = IN + 'M05_A_Inside_Entrance_01a\\'
 SEAL = [(EN + 'HeroColi', (131, 0, -2478), 'the seal: hollow box'), (EN + 'Plane01', (94, 230, -2537), 'the seal: plane')]
 SEAL_PLANE = False
 SEAL_OPEN = False
-SEAL_AT = 120.0                         # s from the round-start event (about 111 s after GO) to the seal's end: nobody is ever
+SEAL_AT = 100.0                         # (was 120 until the fix after run C2: '--legacy') s from the round-start event (about 91 s after GO) to the seal's end: nobody is ever
                                         # locked in. '--seal S'. GUESS. The study's and stage L1's 75 s were set for a round
                                         # without enemies; with 40 guards on 80 m of way to dance floor 1 a clock of 66 s after
                                         # GO would nearly always come before the two squads are dead, and the beat be no beat
@@ -386,6 +392,15 @@ ROLE = {'monitor': 'Gameplay!AIMonitor',
         'floor box': FF + 'tb_RIGHT_TheySpotYou',                        # TriggerBox on the walkway -> dance floor 1's and the upstairs squads
         'floors counter': 'Gameplay!020_Loot!FollowPlayers!TriggerCounter',  # TriggerCounter 2 <- the two dance-floor squads' 'wiped out' lists
         'gate': 'Gameplay!RunToEscape!RunToEscapeGate'}                  # GateGroup + two GatePath: the first of counter / clock lets the enemies in
+# the fix after runs C0 - C2 (VAN_LATE, RESET): five more free objects of F07, kept like the rest (a kind each, none was in use here).
+# They are in ROLE (and so in KEEP) only while their flag is on: set_roles()
+ROLE_NEW = {'van on': FF + 'Shutters!GeomActivator_TearGas_LEFT',            # ActivateGeom -> the van's group (VAN_LATE)
+            'van timer': FF + 'RivalMercs!DisableVisionBlocker!Timer',       # TriggerDelay2 VAN_AFTER, named by the seal's clock and counter
+            'van timer b': FF + 'RivalMercs!DisableVisionBlocker!TimerInputAI',   # TriggerDelay2 VAN_EARLY, named by the wardrobe's box
+            'reset show': FF + 'Shutters!GeomActivator_TearGas_RIGHT',       # ActivateGeom -> the seal again (RESET), first in the round-start list
+            'reset hide': FF + 'RivalMercs!DisableVisionBlocker!GeomDeactivator'}   # DeactivateGeom -> the van's group again (RESET)
+LATE_ROLES = ('van on', 'van timer', 'van timer b')
+RESET_ROLES = ('reset show', 'reset hide')
 # Free single top-level objects of F07 this file does not touch yet (add the name to KEEP_MORE, give it a ROLE):
 # trigger boxes Gameplay!020_Loot!tbExitLoot, ...!FollowPlayers!tbCountPlayers, Gameplay!030_AfterLoot!
 # tbExitFinancialAlley, Gameplay!040_Escape!tbEscapeAI, Gameplay!RunToEscape!tbRunToEscape / tbRunToEscape1Player;
@@ -504,6 +519,44 @@ MEN = collections.OrderedDict([
 MAN_OFF, MAN_IN = 60.0, 15.0            # a man this far beside the mesh at most is put this far inside it (kl_fa_bank's). GUESS
 STOCK_ROWS = True                       # False ('--dead-men-rows'): Dead Men's soldier rows stay (kl_fa_bank.STOCK_ROWS' note:
                                         # as converted the guards have health 50 and a skill NAME; stock police 100 / 175)
+
+# ------------------------------------------------------------------ THE FIX AFTER RUNS C0 - C2 (2026-10-12; NOT RUN IN THE GAME)
+# The first live runs (C0 bare, C1 no enemies, C2 full) loaded and played without a fault; C1: all seven AI heisters escaped.
+# C2 (40 guards, then police, an idle human): four heisters dead 21 .. 26 s after GO in the front office / on the walkway (two
+# 'ONE STEP' = the point-blank rule of re/melee_damage.md: a soldier that fires within 160 units lands 100 bullets) and two dead
+# in one tick while ABOARD (the van went from state 3 to 6 = destroyed). Every flag below is ON by default; '--legacy' puts
+# the build of the first delivery back (the control: `test --legacy` gives the archive a4d024f3 again).
+#   GUARDS_OFF    the four bodyguards of the front office (YokoGuards, WaitingRoom) stand on the dance floor's upper deck
+#                 (FRONT_MEN), 4 - 6 m from the route, out of sight of the START rows, out of the 160-unit point-blank ring of
+#                 every place of the way (FRONT_CLEAR 400 from the office doors and from the way). Nobody is removed: 40 guards.
+#                 check(): no man of the 'office' stage nearer than FRONT_CLEAR to a door, the way or an AI heister's place.
+#   POLICE_EAST   the ten arriving police start on the slab EAST of the van's stop (ARRIVE_EAST): the west six stood 3 - 5 m
+#                 from the drive and 8 m from the stop, the van came through their places; every man has a post of his own
+#                 (>= 150, mostly 200+, apart), 10 m or more from BOT_PARK, in two rows 250 / 300 from the van's line.
+#   VAN_LATE      the van is NOT in the world until the crew is close: its group is hidden from the load, its FakeTarget (the
+#                 thing the police aim at) is taken off, and an ActivateGeom of F07's own ('van on') shows it VAN_AFTER s after
+#                 the seal opens (counter or clock - nobody can call the van before) and VAN_EARLY s after the wardrobe's box.
+#   RESET         round 2 starts as round 1: the round-start event names, FIRST, two stock objects that show again what the round
+#                 switched off (the seal) and hide again what it switched on (the late van). check(): every node of this layer that
+#                 switches geometry is covered, or is in RESET_CANNOT.
+#   VOICE         kl_snd.VOICE = True for the build: the 55 streamed single IMA ADPCM lines (police one-liners, guard lines) become
+#                 records in the level's .WAV (Dog Days cannot read them from the stream file: re/luvsic_pass.md 1.1, re/voice.md 6.2)
+#   LOOT_SECONDS  the bots' wait at the office loot 30 -> 18 s and SEAL_AT 120 -> 100 s: the owner, 'less standing still, that's a big
+#                 one' (the gate hold: 83 s in the entrance hall, now about 55 s). GUESS: both numbers.
+LEGACY = False
+GUARDS_OFF, POLICE_EAST, VAN_LATE, RESET, VOICE = True, True, True, True, True
+LOOT_SECONDS = 18
+LEGACY_FLAGS = {'SEAL_AT': 120.0, 'GUARDS_OFF': False, 'POLICE_EAST': False, 'VAN_LATE': False, 'RESET': False, 'VOICE': False, 'LOOT_SECONDS': 30}
+FRONT_SQUADS = (E1 + 'Backroom!WaitingRoom', E2 + 'YokoGuards')
+# the four posts: x, y, z on the navigation mesh part of the START, the dance floor 2's upper deck west of the stairs. MEASURED
+# (C:/kl_scratch/club_fix/explore.py on the built level): each >= 400 from the doors, from every place of the way in (ROUTE_IN every 100)
+# and from every AI heister place after the front office (the best set of four: 422 from the nearest), and in sight of none of the eight START
+# places. >= 250 apart (the deck is 550 x 250)
+FRONT_MEN = collections.OrderedDict([
+    (E2 + 'YokoGuards\\Guard#01', (0, 364, 2050)), (E2 + 'YokoGuards\\Guard#02', (350, 362, 2050)),
+    (E1 + 'Backroom!WaitingRoom\\Guard#01', (475, 363, 2275)), (E1 + 'Backroom!WaitingRoom\\Guard#02', (200, 368, 2250))])
+FRONT_CLEAR = 400.0                     # an office-stage man this far from the doors, the way in and the heisters' places (the Vault's CREW_CLEAR)
+VAN_AFTER, VAN_EARLY = 2.0, 1.0         # s after the seal opens / after the wardrobe's box that the van is shown. GUESS
 # F07'S POLICE THAT ARRIVE when the seal opens (the owner, of the bank's square: 'should be a big shootout'; the
 # study's weakness 7: 'nothing ever arrives'). Four of F07's own squads, ten men, each a ZGROUP + ZSquadScript whose
 # children's places are offsets (kl_fa_bank.place_hall's reading): squad -> (anchor, the men's places, the points of
@@ -536,8 +589,17 @@ ARRIVE_SLAB = {G30 + '030_FinancialAlleyExit_Left': [(-1150, -2700), (-1050, -27
                G30 + '030_FinancialAlleyExitStreet_Left': [(-1150, -3400), (-1050, -3400)],               # places, at the slab's ends
                G30 + '030_FinancialAlleyExit_Right': [(1750, -2700), (1750, -2800), (1750, -3400)],
                G30 + '030_FinancialAlleyExitStreet_Right': [(1650, -3400), (1550, -3400)]}
+# POLICE_EAST (the fix after run C2): all ten start EAST of the van's stop. The west six stood 3 - 5 m from the drive and 8 m from the stop (the
+# van drove through their places). Two rows: the north one at the house fronts (z -2655: 105 from the AFTER_DEATH points at z -2760, which
+# stay where they are - FED_CLEAR keeps them 10 m from the boarding place), the south one at the kerb (z -3400); 150 / 200 apart in a row,
+# each >= 1000 from BOT_PARK. squad -> (men, cover points, the defend point), (x, z). MEASURED by check(): each man and cover point on
+# the START's mesh part, 250 / 300 from the van's line, 100 from a returning policeman's place, 10 m from BOT_PARK
+ARRIVE_EAST = {G30 + '030_FinancialAlleyExit_Left': ([(1030, -3400), (1180, -3400), (1150, -2655)], [(1250, -2720), (1300, -3380), (1200, -3400)], (1200, -2780)),
+               G30 + '030_FinancialAlleyExitStreet_Left': ([(1330, -3400), (1350, -2655)], [(1450, -2850), (1100, -3400)], (1350, -2850)),
+               G30 + '030_FinancialAlleyExit_Right': ([(1480, -3400), (1630, -3400), (1550, -2655)], None, None),
+               G30 + '030_FinancialAlleyExitStreet_Right': ([(1780, -3400), (1750, -2655)], None, None)}      # None: the squad's own (ARRIVE)
 ARRIVE_START = '10_RunToCover'
-ARRIVE_Y = SLAB[2] + 1.0                # a man's height on the pavement (F07's stand 1 over their floor)
+ARRIVE_Y = SLAB[2] + 1.0               # a man's height on the pavement (F07's stand 1 over their floor)
 POLICE_ARRIVE = True                    # False ('--no-police'): none of the four squads is kept
 POLICE_ON_SLAB = True                   # False ('--police-strip'): the mesh strip, see ARRIVE
 LANE_CLEAR = 250.0                      # kl_fa_bank's: no spawn point, player body, man, cover point, escape marker or station of
@@ -607,6 +669,28 @@ PLACE[ROLE['walk box']] = (WALK_BOX[0], None, WALK_BOX[1], 'GUESS: the front off
 PLACE[ROLE['floor box']] = (FLOOR_BOX[0], None, FLOOR_BOX[1], 'GUESS: the walkway\'s upper half, x 700..1300, z 2550..3250')
 
 
+def set_roles():
+    """ROLE holds the fix's five objects (ROLE_NEW) while their flags are on: VAN_LATE -> LATE_ROLES, RESET -> RESET_ROLES. Called at
+    the end of the module and by everything that sets a flag."""
+    for k, v in ROLE_NEW.items():
+        if (k in LATE_ROLES and VAN_LATE) or (k in RESET_ROLES and RESET):
+            ROLE[k] = v
+        else:
+            ROLE.pop(k, None)
+
+
+def men_table():
+    """MEN, with the four front-office guards on the upper deck (FRONT_MEN) while GUARDS_OFF."""
+    if not GUARDS_OFF:
+        return MEN
+    t = collections.OrderedDict((k, v) for k, v in MEN.items() if k not in FRONT_MEN)
+    t.update(FRONT_MEN)
+    return t
+
+
+set_roles()
+
+
 def police():
     """The squads of F07 that arrive in this build."""
     return ARRIVE if POLICE_ARRIVE and not NO_AI else {}
@@ -614,7 +698,7 @@ def police():
 
 def __getattr__(name):
     if name == 'KEEP':                  # kl_graft.build reads kl_fa_club.KEEP at the moment of use
-        keep = _KEEP + tuple(police())
+        keep = _KEEP + tuple(v for k, v in ROLE_NEW.items() if k in ROLE) + tuple(police())
         return keep + tuple(x for x in KEEP_MORE if x not in keep)
     raise AttributeError(name)
 
@@ -757,8 +841,9 @@ def place_police(S, log=print):
         for k in own:
             by['men' if any(sc.cls(c) == 'ZFFActor' for c in range(k, sc.end[k])) else sc.names[sc.parent[k]]].append(k)
         at = y3(anchor)
-        want = {'men': [y3(p) for p in (ARRIVE_SLAB[name] if POLICE_ON_SLAB else men)], ARRIVE_START: [y3(p) for p in cover],
-                '10_Defend': [y3(defend)], '40_RunToEscape': [at]}      # (nothing names the last two: kl_fa_bank.HALL's note)
+        e_men, e_cover, e_defend = ARRIVE_EAST[name] if POLICE_EAST and POLICE_ON_SLAB else (None, None, None)
+        want = {'men': [y3(p) for p in (e_men or (ARRIVE_SLAB[name] if POLICE_ON_SLAB else men))], ARRIVE_START: [y3(p) for p in (e_cover or cover)],
+                '10_Defend': [y3(e_defend or defend)], '40_RunToEscape': [at]}      # (nothing names the last two: kl_fa_bank.HALL's note)
         if {k: len(v) for k, v in by.items()} != {k: len(v) for k, v in want.items()}:
             raise ValueError('%s: placed children %s, the table has %s' % (name, {k: len(v) for k, v in by.items()}, {k: len(v) for k, v in want.items()}))
         A.place(S, top, at)
@@ -871,6 +956,18 @@ def prepare_host(S, log=print):
     # the exit trigger names it alone (kl2 0x6c3f90 loops until one field is set). The escape marker stays where
     # PLACE has it, beside the lane: held against this plan's drive here (check() does it again on the written level)
     S.van = ESC.van_prepare(S, PLAN, log)
+    if VAN_LATE:
+        # THE OWNER, about the Vault's police: 'they shoot the van straight away'; run C2: the van went from waiting to state 6 (destroyed)
+        # with two heisters aboard. The van is NOT in the world until the crew is close (wire(): the seal opening / the wardrobe's box show
+        # it) and carries nothing a policeman aims at (its FakeTarget, faction 'Mercenary', the level's only one). ASSUMPTIONS: police aim
+        # at a van because of that target (kl_fa_bank's, unproven); a hidden keyed vehicle runs its keys unseen and boards normally once shown
+        vg = A.node_of(sc, van_path()[len(R):])
+        gone = [k for k in range(vg, sc.end[vg]) if any(sc.p.key(c[0]) == 'FakeTarget' for c in sc.nodes[k]['ctrls'])]
+        for k in gone:
+            sc.nodes[k]['ctrls'] = [c for c in sc.nodes[k]['ctrls'] if sc.p.key(c[0]) != 'FakeTarget']
+        A.place(S, vg, hidden=True)
+        log('  kl_fa_club: VAN_LATE: the van\'s FakeTarget (%d) is taken off and its group is hidden from the load; %s shows it' % (
+            len(gone), 'the seal\'s opening (+%g s) and the wardrobe\'s box (+%g s)' % (VAN_AFTER, VAN_EARLY)))
     off = abs(ESC.Poly([tuple(p) for p in PLAN['path']]).project(ESC_AT)[1])
     if off < LANE_CLEAR:
         raise ValueError('kl_fa_club: the escape marker\'s place %s is %d from the van\'s drive (%d wanted)' % (ESC_AT, off, LANE_CLEAR))
@@ -928,7 +1025,7 @@ def strip_squads(M, log=print):
                     props += 1
     mesh = kl_route.load(LEVEL).mesh()
     placed = []
-    for path, hint in MEN.items():
+    for path, hint in men_table().items():
         g = A.node_of(sc, path)
         if sc.names[sc.top[g]] not in keep or not any(sc.cls(c) == 'ZFFActor' and sc.parent[c] == g for c in range(g, sc.end[g])):
             raise ValueError('kl_fa_club: MEN: %s is not a man\'s group of a kept squad' % path)
@@ -1097,7 +1194,8 @@ def wire(sc, log=print):
     # not for every criminal: kl_fa_bank.BOX_PER_MAN, the census of review round 1), criminals only
     lists('walk box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['walk'])
     lists('floor box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['floor'])
-    lists('floors counter', 'TriggerCounter', f0=max(len(beat), 1), f4=([R + ROLE['seal off']] if seal and beat else []) + ([ways[0]] if beat else []))
+    van_t = [R + ROLE['van timer']] if VAN_LATE else []           # VAN_LATE: whichever opens the seal also starts the van's timer
+    lists('floors counter', 'TriggerCounter', f0=max(len(beat), 1), f4=([R + ROLE['seal off']] if seal and beat else []) + ([ways[0]] if beat else []) + (van_t if beat else []))
 
     # ---- round start: AIMonitor list 2 (event 2, kl2 0x8b5f60; it comes when the countdown begins). F07's own
     # list names five timers of its opening; what is a ROLE object here must not be started by it. This layer's:
@@ -1107,7 +1205,16 @@ def wire(sc, log=print):
     mine = {R + v for v in ROLE.values()}
     have = [s for s in values(sc, k, 'AIMonitor')[2] if sc.resolve(s) and s not in mine]
     start = [R + ROLE['seal timer']] + ([R + ROLE['office timer']] if stage['office'] else []) + [R + ROLE['doors timer'] if DOORS_ANIMATE else R + ROLE['muffle']]
-    lists('monitor', 'AIMonitor', f2=have + start)
+    # RESET: two stock objects FIRST in the list put round 2 back as round 1 was at the load (the Vault's reset: re/bank_campaign.md W.5). Show
+    # again what the round switched OFF (the seal's pieces), hide again what it switched ON (the late van). Both are no-ops in round 1
+    reset = ([R + ROLE['reset show']] if seal else []) + ([R + ROLE['reset hide']] if VAN_LATE else []) if RESET else []
+    if RESET:
+        if seal:
+            lists('reset show', 'ActivateGeom', f0='AITrigger', f1=seal)
+        else:
+            lists('reset show', 'ActivateGeom', f0='AITrigger', f1=[])
+        lists('reset hide', 'DeactivateGeom', f0='AITrigger', f1=[van_path()] if VAN_LATE else [])
+    lists('monitor', 'AIMonitor', f2=reset + have + start)
     # ---- the doors (DOORS_ANIMATE): the timer -> 'Activate' to the four leaves, the muffle switch with them
     lists('doors timer', 'TriggerDelay2', f0=DOORS_AT, f4=[R + ROLE['doors'], R + ROLE['muffle']] if DOORS_ANIMATE else [])
     lists('doors', 'AIDWrapper', f0=leaves if DOORS_ANIMATE else [], f1='Activate')
@@ -1121,11 +1228,15 @@ def wire(sc, log=print):
     # same DeactivateGeom from its 'both dance-floor squads dead' counter: whichever comes first opens the lane
     # The fast way is the counter's (above): both name the DeactivateGeom themselves, and each its own path of the
     # gate, which lets the hunters and the police in for whichever comes first
-    lists('seal timer', 'TriggerDelay2', f0=SEAL_AT, f4=([R + ROLE['seal off']] if seal else []) + ([ways[1]] if enemies_in else []))
+    lists('seal timer', 'TriggerDelay2', f0=SEAL_AT, f4=([R + ROLE['seal off']] if seal else []) + ([ways[1]] if enemies_in else []) + van_t)
     lists('seal off', 'DeactivateGeom', f0='AITrigger', f1=seal)
 
     # ---- the way out: F07's 'exit heist' box in the wardrobe, with a line that fits a front door
-    lists('speak box', 'TriggerBox', f14='ECPS_FA_MERCONLY', f17=[R + ROLE['speak']])
+    lists('speak box', 'TriggerBox', f14='ECPS_FA_MERCONLY', f17=[R + ROLE['speak']] + ([R + ROLE['van timer b']] if VAN_LATE else []))
+    if VAN_LATE:                                        # the van is shown VAN_AFTER s after the seal opens / VAN_EARLY s after the wardrobe's box (idempotent)
+        lists('van on', 'ActivateGeom', f0='AITrigger', f1=[van_path()])
+        lists('van timer', 'TriggerDelay2', f0=VAN_AFTER, f4=[R + ROLE['van on']])
+        lists('van timer b', 'TriggerDelay2', f0=VAN_EARLY, f4=[R + ROLE['van on']])
     lists('speak', 'OnlineSpeakPlayer', f1=EXIT_LINE)
     # ---- the escape: every exit trigger of the level (there is F07's one) calls the van - field 0 false, field 2
     # the van's group, 1 and 3..5 empty, the form the three car maps on the tab have (kl_map_escape.van_wire). The
@@ -1710,7 +1821,8 @@ def check(folder, log=print, problems=None):
                 fail('%s names %s, which is no node' % (n, s))
     mon = named('monitor')
     starters = {R + ROLE['seal timer'], R + ROLE['doors timer'] if animate else R + ROLE['muffle']} | ({R + ROLE['office timer']} if named('office timer') else set())
-    if {s for s in mon if s[5:] in ROLE.values()} != starters:
+    starters |= {R + ROLE[r] for r in RESET_ROLES if r in ROLE and named(r)}      # RESET: the objects that put round 1's state back, first in the list
+    if {s for s in mon if s[5:] in ROLE.values() and not any(s[5:] == ROLE[r] for r in LATE_ROLES if r in ROLE)} != starters:
         fail('the round start names %s of this layer\'s objects, wanted %s' % (sorted(s for s in mon if s[5:] in ROLE.values()), sorted(starters)))
     delay = lambda role: values(sc, A.node_of(sc, ROLE[role]), 'TriggerDelay2')[0]
     off_ = named('seal off')
@@ -1907,8 +2019,9 @@ def check(folder, log=print, problems=None):
     # ---- the escape of this half: one van, standing; the exit box on the slab; the marker on the slab
     vans, fakes = kl_fa.controllers(sc, 'OnlineEscAnimatedVehicle'), kl_fa.controllers(sc, 'FakeTarget')
     ex = [k for k, _i, _v in kl_fa.controllers(sc, kl_fa.EXIT)]
-    if len(vans) != 1 or len(fakes) != 1 or len(ex) != 1:
-        fail('%d OnlineEscAnimatedVehicle, %d FakeTarget, %d exit triggers (one each is wanted: an unused van\'s target is the 0x686a66 crash)' % (len(vans), len(fakes), len(ex)))
+    want_fakes = 0 if VAN_LATE else 1                   # VAN_LATE: the police have nothing to aim at (the 0x686a66 rule cannot bite with none)
+    if len(vans) != 1 or len(fakes) != want_fakes or len(ex) != 1:
+        fail('%d OnlineEscAnimatedVehicle, %d FakeTarget, %d exit triggers (1, %d, 1 wanted: an unused van\'s target is the 0x686a66 crash)' % (len(vans), len(fakes), len(ex), want_fakes))
     else:
         lo, hi = world_box(ex[0])
         ev = values(sc, ex[0], kl_fa.EXIT)
@@ -1942,7 +2055,7 @@ def check(folder, log=print, problems=None):
                                                        '' if not odd else '; AND %d OTHER' % len(odd)))
         for x in odd:
             fail('van (the plain tool): ' + x)
-    if stop_at_all := (len(vans) == 1 and len(fakes) == 1 and len(ex) == 1 and 'stop' in rep):
+    if stop_at_all := (len(vans) == 1 and len(fakes) == want_fakes and len(ex) == 1 and 'stop' in rep):
         if any('FAEscCameraLAST' in x for x in rep['notes']):   # MEASURED (kl_fa_bank): no such define in stock F07, F02, F05 either
             log('    (the stock form: no Dog Days Fragile Alliance level has that define - it is Dead Men\'s box, which the three car maps kept)')
         N = ESC._van_nodes(sc, sc.top[vans[0][0]])
@@ -2154,11 +2267,154 @@ def check(folder, log=print, problems=None):
         dead, WARDROBE_CHUNKS, '; KLWardrobe.ini is there - the wardrobe is in' if worn else ''))
     if size['entries'] > kl_impact.CHUNK_SAFE or (dead < WARDROBE_CHUNKS and not worn):
         fail('chunk table %d entries (line %d) with %d dead indices (the wardrobe wants %d)' % (size['entries'], kl_impact.CHUNK_SAFE, dead, WARDROBE_CHUNKS))
+    # ---- THE FIX AFTER RUNS C0 - C2: guards off the doors, the late van, the reset, the voice lines, the police's posts
+    fix_check(folder, sc, ents, pos, lv, squads, men, top_of, named, fail, log)
     # ---- kl_graft.verify's cross-references on the level AS WRITTEN (the build's own verify ran before finish())
     for b in BK.reverify(folder, log):
         fail('written level: ' + b[:200])
     log('kl_fa_club.check %s: %s' % (folder, 'PASS' if not bad else '%d FAILED' % len(bad)))
     return bad
+
+
+# ------------------------------------------------------------------ the checks of the fix after runs C0 - C2
+FRONT_GAP = 250.0                       # the four front-office men are at least this far apart (their deck is 550 x 250). GUESS
+POST_GAP_MIN = 150.0                    # two arriving policemen at least this far apart (kl_fa_bank.POST_GAP_MIN: a man is 0.5 m wide)
+POINT_BLANK = 160.0                     # re/melee_damage.md: a firing soldier within this lands 100 bullets
+RESET_CANNOT = ('the music\'s muffle switch (an AIDWrapper that sends \'%s\' at every round start: idempotent, nothing to put back); the squads\' '
+                'own state (ZSquadScript field 3 / SquadModifierBehaviour: a hook would have to write the squads\' in-the-world flag, or the rules\' '
+                'round start must re-arm them - ASSUMED, as the Vault); the floors counter and the two stage boxes (TriggerBox field 15 = 0 fires once: '
+                'ASSUMED re-armed per round); the GatePath lists (one-shot, ASSUMED); the van\'s key-framed animation (re-runs at every visit: seen in C1 / C2); '
+                'the loot (the rules\' money objects restart per round)' % MUFFLE_MESSAGE)
+
+
+VOICE_KNOWN = ('Dialog/AllLevels/Oneliners/Japanese/Civilians/ChitChat/CellPhoneChitChat_001_JapaneseMale.wav',)
+                                        # MEASURED: 5 of this clip's 648 blocks fail the ADPCM header test (step index 152 / 207 / 211 at blocks 160, 161, ...:
+                                        # kl_voice.stream_clip refuses it, as it must - it would play noise). A civilians' cell-phone line; the club has no civilians.
+                                        # It stays streamed (the same one club_noai had)
+
+
+def streamed_singles(folder):
+    """The streamed single IMA ADPCM records (0x11, one clip, not a language file's) of the folder's built .WHD -> sorted names."""
+    import kl_whd, kl_snd
+    f = [x for x in os.listdir(folder) if x.lower().endswith('_main.whd')]
+    if not f:
+        return []
+    b = open(os.path.join(folder, f[0]), 'rb').read()
+    return sorted(kl_snd.cs(b, r['name']).decode('latin1').replace('\\', '/') for r in kl_whd.records('dd', b).values()
+                  if r['fmt'] & kl_whd.STREAMED and not r['fmt'] & kl_whd.LANGFILE and not r['fmt'] >> 24 and r['fmt'] & 0xffff == 0x11)
+
+
+def fix_check(folder, sc, ents, pos, lv, squads, men, top_of, named, fail, log):
+    """The rules that fail what the fix after runs C0 - C2 guards (each as the flag decides; a folder built with --legacy is judged as that):
+    GUARDS_OFF the front office's four stand FRONT_CLEAR from the doors, the way in and the AI heisters' places; VAN_LATE the van is hidden at the
+    load, carries no target, and is shown by the seal's timer and the wardrobe's box; RESET the round start names the reset objects first and
+    they cover every geometry switch of this layer (or the switch is in RESET_CANNOT); VOICE no streamed single ADPCM line is left;
+    POLICE_EAST the arriving men are east of the stop, POST_GAP_MIN apart."""
+    import json
+    at = lambda k: pos[ents[k - 1]]
+    # ---- the guards
+    if squads:
+        mesh = lv.mesh()
+        route = way_views(mesh, [p for _n, p in ROUTE_IN], 100.0)
+        bst = []
+        try:
+            with open(os.path.join(folder, 'bots.json'), encoding='utf-8') as f:
+                bst = [tuple(p) for i, s in enumerate(json.load(f)['plan']['stations']) if i >= 2 for p in s['places']]
+        except (OSError, ValueError, KeyError):
+            pass
+        doors = [a for _p, a, _w in LEAVES]
+        front = [k for k in men if top_of(k) in FRONT_SQUADS]
+        dist = lambda p, pts: min(math.dist(p, q) for q in pts) if pts else 9e9
+        rows = [(k, dist(at(k), doors), dist(at(k), route), dist(at(k), bst)) for k in front]
+        log('  guards: the %d men of the front office\'s two squads: nearest door %s, nearest place of the way in %s, nearest place of an AI heister %s (%d wanted)%s' % (
+            len(front), '%d' % min(r[1] for r in rows), '%d' % min(r[2] for r in rows), '%d' % min(r[3] for r in rows) if bst else '- (no bots.json)', FRONT_CLEAR,
+            '' if GUARDS_OFF else ' - GUARDS_OFF is off in this build: reported, not judged'))
+        if GUARDS_OFF:
+            if len(front) != 4:
+                fail('guards: %d men in the front office\'s two squads, 4 wanted' % len(front))
+            for k, dd, dr, db in rows:
+                for what, d in (('a door of the offices', dd), ('the way in', dr), ('a place of an AI heister', db)):
+                    if d < FRONT_CLEAR:
+                        fail('guards: %s at (%d, %d, %d) is %d from %s (%d wanted: the point-blank ring is %d)' % (sc.path[k][5:][-50:], *at(k), d, what, FRONT_CLEAR, POINT_BLANK))
+            gap = min([math.dist(at(a), at(b)) for i, a in enumerate(front) for b in front[i + 1:]] or [9e9])
+            log('  guards: the four stand %d apart at least (%d wanted)' % (gap, FRONT_GAP))
+            if gap < FRONT_GAP:
+                fail('guards: two of the front office\'s men stand %d apart (%d wanted)' % (gap, FRONT_GAP))
+        rest = [k for k in men if top_of(k) in SQUADS and top_of(k) not in FRONT_SQUADS]
+        ring = [k for k in rest if dist(at(k), route) < POINT_BLANK + 90.0]
+        log('  guards: %d of the other %d campaign men stand within %d of a place of the way in (reported, not judged: the walkway\'s and the dance floors\' men '
+            'stand on the way by the map\'s design)' % (len(ring), len(rest), POINT_BLANK + 90.0))
+    # ---- the police's posts
+    pol = [k for k in men if top_of(k) in ARRIVE]
+    if pol:
+        gap = min([math.dist(at(a), at(b)) for i, a in enumerate(pol) for b in pol[i + 1:]] or [9e9])
+        west = [k for k in pol if at(k)[0] < 0.0]
+        log('  police: %d arriving men, %d west of x 0, the nearest two %d apart (%d wanted)%s' % (len(pol), len(west), gap, POST_GAP_MIN,
+                                                                                              '' if POLICE_EAST else ' - POLICE_EAST is off in this build: reported, not judged'))
+        if POLICE_EAST and POLICE_ON_SLAB and (west or gap < POST_GAP_MIN):
+            fail('police: %d men west of x 0 (the van\'s drive), the nearest two %d apart (%d wanted)' % (len(west), gap, POST_GAP_MIN))
+    # ---- the late van
+    named_by = collections.defaultdict(list)
+    for kk in range(1, len(sc.nodes)):
+        for s_ in A.named(sc, kk):
+            named_by[s_].append(kk)
+    van = van_path()
+    vg = sc.resolve(van)[0] if sc.resolve(van) else None
+    if VAN_LATE and vg is not None:
+        hidden = bool(ents[vg - 1].flags & HIDDEN)
+        if not hidden:
+            fail('VAN_LATE: the van\'s group is not hidden at the load')
+        von, t1, t2 = (A.node_of(sc, ROLE[r]) for r in LATE_ROLES)
+        if values(sc, von, 'ActivateGeom')[1] != [van]:
+            fail('VAN_LATE: \'van on\' names %s, not the van\'s group' % values(sc, von, 'ActivateGeom')[1])
+        seal_named = [named_by.get(R + ROLE['van timer'], [])]
+        starters = set(named_by.get(R + ROLE['van timer'], ()))
+        want = {A.node_of(sc, ROLE['seal timer'])} | ({A.node_of(sc, ROLE['floors counter'])} if squads else set())
+        if starters != want:
+            fail('VAN_LATE: the van\'s timer is named by %s, wanted the seal\'s clock%s' % (sorted(sc.names[x] for x in starters), ' and the beat\'s counter' if squads else ''))
+        if set(named_by.get(R + ROLE['van timer b'], ())) != {A.node_of(sc, ROLE['speak box'])}:
+            fail('VAN_LATE: the early timer is not named by the wardrobe\'s box alone')
+        if values(sc, t1, 'TriggerDelay2')[4] != [R + ROLE['van on']] or values(sc, t2, 'TriggerDelay2')[4] != [R + ROLE['van on']]:
+            fail('VAN_LATE: a van timer does not name \'van on\'')
+        if any(sc.names[sc.top[x]].startswith(tuple(SQUADS) + tuple(ARRIVE)) for x in named_by.get(van, ())):
+            fail('VAN_LATE: a squad names the van')
+        log('  van: hidden at the load (%s), no FakeTarget, shown %g s after the seal opens (clock%s) or %g s after the wardrobe\'s box; nothing of a squad names it' % (
+            hidden, VAN_AFTER, ' / counter' if squads else '', VAN_EARLY))
+    elif not VAN_LATE:
+        log('  van: VAN_LATE is off in this build: the van stands in the world from the load with its target')
+    # ---- the reset
+    if RESET:
+        mon = values(sc, A.node_of(sc, ROLE['monitor']), 'AIMonitor')[2]
+        first = [R + ROLE[r] for r in RESET_ROLES]
+        shown = [x for x in first if x in mon]
+        if mon[:len(shown)] != shown or len(shown) != (2 if (VAN_LATE and gate()) else 1 if (VAN_LATE or gate()) else 0):
+            fail('RESET: the round start\'s list begins %s, wanted %s first' % ([s[5:].split('!')[-1] for s in mon[:3]], [s.split('!')[-1] for s in first]))
+        mod = [A.node_of(sc, ROLE[r]) for r in ROLE if r not in RESET_ROLES]
+        for t in sc.tops():
+            if sc.names[t] in SQUADS or sc.names[t] in ARRIVE:
+                mod += list(range(t, sc.end[t]))
+        off, on = [], []
+        for kind, into in (('DeactivateGeom', off), ('ActivateGeom', on)):
+            for kk, _i, v in kl_fa.controllers(sc, kind):
+                if kk in mod:
+                    into += [s for s in v[1] if s not in into]
+        got_show = values(sc, A.node_of(sc, ROLE['reset show']), 'ActivateGeom')[1]
+        got_hide = values(sc, A.node_of(sc, ROLE['reset hide']), 'DeactivateGeom')[1]
+        miss = [s for s in off if s not in got_show] + [s for s in on if s not in got_hide]
+        extra = [s for s in got_show if s not in off] + [s for s in got_hide if s not in on]
+        if miss or extra or [s for s in got_show if s in got_hide]:
+            fail('RESET: the layer switches %d objects off and %d on; the reset shows %d and hides %d; not covered %s, not switched %s, both ways %s' % (
+                len(off), len(on), len(got_show), len(got_hide), [s.split('\\')[-1] for s in miss], [s.split('\\')[-1] for s in extra], [s for s in got_show if s in got_hide]))
+        log('  reset: the round start names %s first; it shows %d again (%s) and hides %d again (%s); every geometry switch of the layer is covered'
+            % ([s.split('!')[-1] for s in shown], len(got_show), ', '.join(s.split('\\')[-1] for s in got_show) or '-', len(got_hide), ', '.join(s.split('\\')[-1] for s in got_hide) or '-'))
+        log('  CANNOT BE RESET BY DATA: ' + RESET_CANNOT)
+    else:
+        log('  reset: RESET is off in this build: round 2 starts with the seal gone')
+    # ---- the voice
+    left = [n for n in streamed_singles(folder) if n not in VOICE_KNOWN]
+    log('  voice: %d streamed single IMA ADPCM line(s) left in the built .WHD%s' % (len(left), '' if VOICE else ' - VOICE is off in this build: reported, not judged'))
+    if VOICE and left:
+        fail('voice: %d streamed single IMA ADPCM lines are left (Dog Days cannot read them from the stream file): %s' % (len(left), left[:3]))
 
 
 def inventory(folder, log=print):
@@ -2240,6 +2496,8 @@ def build(out, log=print, plan=None):
     for c in lent:
         kl_maps.FLAT[c] = IK[1]
     r, st = {}, {}
+    import kl_snd
+    kl_snd.VOICE = True if VOICE else None              # the speech repairs of re/voice.md (kl_maps.ready_one's way): streamed single ADPCM lines -> the .WAV
     try:
         with ESC.van_layer(plan, log) as st, doors(log):
             r = kl_maps.one(out, HOST, LEVEL, keep=True, campaign=True, tag=' campaign', author='kl_fa_club', m_drop=M_DROP, flat=flat)
@@ -2247,6 +2505,7 @@ def build(out, log=print, plan=None):
         if r.get('ok') or not r:                        # failed (r says why) that is no news; after one that did not, it is
             raise
     finally:
+        kl_snd.VOICE = None
         for c in lent:
             del kl_maps.FLAT[c]
     return r, os.path.join(out, name), plan, {k: st.get(k) for k in ('van', 'wired', 'hvk')}
@@ -2355,7 +2614,7 @@ def bots(src, dst, log=print):
     plan0 = F.plan
     F.plan = lambda B, opt=None, log=print: bots_gate(B, plan0(B, opt, log), log)
     try:
-        return F.build(src, dst, dict(BOT_OPT), log)
+        return F.build(src, dst, dict(BOT_OPT, loot_seconds=LOOT_SECONDS), log)
     finally:
         F.plan = plan0
 
@@ -2466,7 +2725,8 @@ def bots_check(folder, log=print):
 # so the flags a variant was built with are kept in van.json ('flags') and read back by load_flags. A folder without them is a build
 # with the defaults.
 FLAG_NAMES = ('DOORS_ANIMATE', 'SEAL_OPEN', 'SEAL_PLANE', 'SEAL_AT', 'LIGHT_SHOW', 'BEAT_ANIM', 'FAN_DAMAGE', 'CASE', 'NO_AI', 'SQUADS_AWAKE',
-              'POLICE_ARRIVE', 'POLICE_ON_SLAB', 'STOCK_ROWS', 'OFFICE_AT', 'STREAM')
+              'POLICE_ARRIVE', 'POLICE_ON_SLAB', 'STOCK_ROWS', 'OFFICE_AT', 'STREAM',
+              'GUARDS_OFF', 'POLICE_EAST', 'VAN_LATE', 'RESET', 'VOICE', 'LOOT_SECONDS')
 STREAM = None                           # '--str FILE': the merged stream file the clips are resolved against (review round 2: it travels in van.json)
 
 
@@ -2487,8 +2747,12 @@ def load_flags(folder, log=print):
     if not fl:
         return False
     g = globals()
+    fl = dict(fl)
+    for k, v in LEGACY_FLAGS.items():                   # a folder of the first delivery has none of the fix's flags: it IS the legacy build
+        fl.setdefault(k, v)
     changed = {k: v for k, v in fl.items() if k in FLAG_NAMES and g[k] != v}
     g.update({k: v for k, v in fl.items() if k in FLAG_NAMES})
+    set_roles()
     if g['STREAM']:
         BK.use_stream(g['STREAM'])
     if changed:
@@ -2523,6 +2787,17 @@ def main():
     if len(a) >= 2 and a[0] == 'test':
         global DOORS_ANIMATE, SEAL_OPEN, SEAL_PLANE, SEAL_AT, LIGHT_SHOW, BEAT_ANIM, FAN_DAMAGE, CASE
         global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, POLICE_ON_SLAB, STOCK_ROWS, OFFICE_AT, STREAM
+        global GUARDS_OFF, POLICE_EAST, VAN_LATE, RESET, VOICE, LOOT_SECONDS, LEGACY
+        LEGACY = '--legacy' in a                        # the first delivery's build: every flag of the fix after run C2 off, the old numbers
+        GUARDS_OFF = not LEGACY and '--no-guards-off' not in a
+        POLICE_EAST = not LEGACY and '--no-police-east' not in a
+        VAN_LATE = not LEGACY and '--no-van-late' not in a
+        RESET = not LEGACY and '--no-reset' not in a
+        VOICE = not LEGACY and '--no-voice' not in a
+        LOOT_SECONDS = 30 if LEGACY else LOOT_SECONDS
+        if LEGACY:
+            SEAL_AT = LEGACY_FLAGS['SEAL_AT']
+        set_roles()
         NO_AI = '--no-ai' in a
         SQUADS_AWAKE = '--squads-awake' in a
         POLICE_ARRIVE = '--no-police' not in a
