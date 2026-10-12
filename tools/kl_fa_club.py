@@ -17,11 +17,18 @@ level's table; six men moved off the way (CLEAR_MEN); the dynamic step adds no h
 `--no-ai` leave them out. See ROOMS, bots_gates, rooms_check and re/club_campaign.md 'Gates, after runs C3-C4' and 'Gates, second fix'
 (no fork between the first gate and the seal hold; no hold within 300 of a man of an earlier room; a gate names only the men a hold can see).
 
+THE PRESSURE FIX (2026-10-12, after live run C5; NOT RUN IN THE GAME): C5 lost the seven at the walkway gate where 5 .. 8 of the 40 awake men had a clear exact ray to them. The yardstick is Withdrawal's (at most 3 guns on a hold, 4 on
+a walk, counted by the exact ray over the men of the squads that are in the world): nine squads sleep until the gate before their room opens (WAKE_AT, the gates' TriggerActorsDead name their squad modifiers; command `wake` puts the names
+back after the dynamic step), the holds are picked for the fewest guns (rt_for_club.spots), 13 men stand elsewhere in their rooms (PRESSURE_MEN), and the check `hold-guns` (rooms_check) counts. Four rooms stay over the yardstick:
+PRESSURE_KNOWN. `--no-pressure` / `--no-gates` / `--legacy` / `--no-ai` leave it out. re/club_campaign.md 'Pressure, after run C5'.
+
     python kl_fa_club.py test <out> [--keep] [options]    build F07 + M05_A with the layer into <out> (build():
                                                           a bare graft first, for the van's plan, then the level
                                                           inside kl_map_escape.van_layer), finish() on the written
                                                           level, check(); exit 1 if a problem is left that is not
                                                           in KNOWN. Beside the archive: van.json
+    python kl_fa_club.py hold-guns <built folder> ...     the guns bearing on every gate's seven holds and on the walk to them, the wake table read off the scene
+    python kl_fa_club.py wake <built folder>              (chain step after the dynamic step) the squads each gate wakes back into its TriggerActorsDead
     python kl_fa_club.py van-check <built folder>         kl_map_escape.van_check on a built folder WITH THE DRAWN
                                                           PAVEMENT AS THE ROAD (Pavement: the plain 'kl_map_escape.py
                                                           van-check' faults every key of the drive that has no
@@ -553,7 +560,7 @@ STOCK_ROWS = True                       # False ('--dead-men-rows'): Dead Men's 
 LEGACY = False
 GUARDS_OFF, POLICE_EAST, VAN_LATE, RESET, VOICE = True, True, True, True, True
 LOOT_SECONDS = 18
-LEGACY_FLAGS = {'SEAL_AT': 120.0, 'GUARDS_OFF': False, 'POLICE_EAST': False, 'VAN_LATE': False, 'RESET': False, 'VOICE': False, 'LOOT_SECONDS': 30, 'ROOM_GATES': False}
+LEGACY_FLAGS = {'SEAL_AT': 120.0, 'GUARDS_OFF': False, 'POLICE_EAST': False, 'VAN_LATE': False, 'RESET': False, 'VOICE': False, 'LOOT_SECONDS': 30, 'ROOM_GATES': False, 'PRESSURE': False}
 FRONT_SQUADS = (E1 + 'Backroom!WaitingRoom', E2 + 'YokoGuards')
 # the four posts: x, y, z on the navigation mesh part of the START, the dance floor 2's upper deck west of the stairs. MEASURED
 # (C:/kl_scratch/club_fix/explore.py on the built level): each >= 400 from the doors, from every place of the way in (ROUTE_IN every 100)
@@ -695,6 +702,8 @@ def men_table():
         t.update(FRONT_MEN)
     if ROOM_GATES:
         t.update(CLEAR_MEN)                     # the five men the room gates move off the crew's way (CLEAR_MEN)
+    if ROOM_GATES and PRESSURE:
+        t.update(PRESSURE_MEN)                  # ... and the men the pressure fix puts out of the holds' and legs' line of fire (PRESSURE_MEN)
     return t
 
 
@@ -888,7 +897,7 @@ def squad_plan():
             if name not in SQUADS:
                 left[name] = 'not a squad of this round'
                 continue
-            stage, child = SQUADS[name]
+            stage, child = squads_now()[name]
             actors = sum(sc.cls(k) == 'ZFFActor' for k in range(t, sc.end[t]))
             odd = sorted(set(ctrl) - A.PLAIN - STRIP)
             if odd or not actors or ctrl['ZSoldier'] != actors:
@@ -1168,7 +1177,7 @@ def wire(sc, log=print):
     stage, quiet = collections.defaultdict(list), 0
     for n, (first, _actors, _strip, kind) in plan.items():
         k = node(n)
-        st = SQUADS[n][0]
+        st = squads_now()[n][0]
         if values(sc, k, 'ZSquadScript')[SQUAD_ACTIVE] not in (0, 1):
             raise ValueError('%s: ZSquadScript field %d is %r' % (n, SQUAD_ACTIVE, values(sc, k, 'ZSquadScript')[SQUAD_ACTIVE]))
         put_(k, 'ZSquadScript', **{'f%d' % SQUAD_ACTIVE: 1 if st == 'load' or SQUADS_AWAKE else 0})
@@ -1265,7 +1274,7 @@ def wire(sc, log=print):
         else 'starts no door (the leaves are open at build time) and sends the music\'s muffle switch \'%s\'' % MUFFLE_MESSAGE, len(LINES), EXIT_LINE))
     men = sum(a for _f, a, _s, _k in plan.values())
     if plan:
-        by = collections.Counter(SQUADS[n][0] for n in plan)
+        by = collections.Counter(squads_now()[n][0] for n in plan)
         log('  kl_fa_club: enemies: %d campaign squads (%d men): %d in the world from the load%s; round start + %.0f s -> %d (front office); the box at the inner '
             'office door -> %d; the box on the walkway -> %d; the gate -> %d hunt + %d of F07\'s police squads; %d dead entries cut from the squads\' message '
             'lists; soldier rows: %s' % (len(plan), men, len(plan) if SQUADS_AWAKE else by['load'], ' (SQUADS_AWAKE: all of them)' if SQUADS_AWAKE else '',
@@ -1933,14 +1942,14 @@ def check(folder, log=print, problems=None):
                     'floor': {h for s in named('floor box') for h in sc.resolve(s)}, 'open': ways[0] if ways else set()}
         by, mods = collections.Counter(), 0
         for t in camp_sq:
-            st, child = SQUADS[sc.names[t]]
+            st, child = squads_now()[sc.names[t]]
             by[st] += 1
             want = 1 if st == 'load' or awake else 0
             if f3[t] != want:
                 fail('%s: ZSquadScript field %d is %s, stage \'%s\' wants %d' % (sc.names[t], SQUAD_ACTIVE, f3[t], st, want))
             if child:
                 j = A.node_of(sc, sc.names[t] + '\\' + child)
-                if j not in named_by[st]:
+                if st != 'gate' and j not in named_by[st]:          # (a gate-staged squad is named by a TriggerActorsDead of the bots step: rooms_check)
                     fail('%s\\%s is not named by the object of stage \'%s\'' % (sc.names[t], child, st))
                 if kl_fa.has(sc, j, 'SquadModifierBehaviour'):
                     mods += 1
@@ -1987,7 +1996,7 @@ def check(folder, log=print, problems=None):
         views = {'office': starts, 'walk': starts + way_views(mesh, way_in[:2]) + box_views('walk box'),
                  'floor': starts + way_views(mesh, way_in[:4]) + box_views('walk box') + box_views('floor box'),
                  'open': way_views(mesh, way_in) + LANE_VIEWS}
-        late = [(k, SQUADS[top_of(k)][0]) for k in men if top_of(k) in SQUADS and SQUADS[top_of(k)][0] != 'load' and not awake] \
+        late = [(k, SQUADS[top_of(k)][0]) for k in men if top_of(k) in SQUADS and squads_now()[top_of(k)][0] not in ('load', 'gate') and not awake] \
             + [(k, 'open') for k in men if top_of(k) in ARRIVE]
         worst, in_sight = collections.defaultdict(lambda: (9e9, 0)), []
         for k, st in late:
@@ -2627,11 +2636,38 @@ def bots(src, dst, log=print):
     F.plan = lambda B, opt=None, log=print: bots_gate(B, plan0(B, opt, log), log)
     if ROOM_GATES:                              # the rooms' TriggerActorsDead nodes: kl_fa_bots_rt.Street's gate_nodes, called by apply (its `more`)
         import kl_fa_bots_rt as RT
-        F.apply = lambda B, P, dst_, log_=print, more=None: apply0(B, P, dst_, log_, more=RT.Street(None, None, P['club_gates']))
+        F.apply = lambda B, P, dst_, log_=print, more=None: apply0(B, P, dst_, log_, more=club_street(RT, P['club_gates']))
     try:
         return F.build(src, dst, dict(BOT_OPT, loot_seconds=LOOT_SECONDS), log)
     finally:
         F.plan, F.apply = plan0, apply0
+
+
+def club_street(RT, gates):
+    """kl_fa_bots_rt.Street for the club's gates; with PRESSURE a gate's TriggerActorsDead also names (next list, field 2) the squad modifiers of the squads
+    that are awake at the NEXT room's hold (g['wake']): the gate before a room wakes its men. Idempotent for the seven bot squads' seven copies (ASSUMED)."""
+    from kl_prp import units
+
+    class ClubStreet(RT.Street):
+        def gate_nodes(self, M, tops):
+            super().gate_nodes(M, tops)
+            if not PRESSURE:
+                return
+            n = 0
+            for top in tops:
+                for kid in top.kids:
+                    g = next((g_ for g_ in self.gates if g_['wait'] == kid.name), None)
+                    i = next((i for i, (nm, _b) in enumerate(kid.ctrls) if M.p.key(nm) == 'TriggerActorsDead'), None)
+                    if g is None or i is None or not g.get('wake'):
+                        continue
+                    nxt = [M.p.key(tok) for tok in [list(u) for u in units(kid.ctrls[i][1][1:-1])][2][1:]]
+                    M.set(kid, 'TriggerActorsDead', {2: nxt + [w for w in g['wake'] if w not in nxt]})
+                    n += 1
+            import kl_fa_bots as F
+            want = len([g for g in self.gates if g.get('wake')]) * len(F.BOTS)
+            if n != want:
+                raise ValueError('kl_fa_club.club_street: %d TriggerActorsDead lists got the squads of their rooms, wanted %d' % (n, want))
+    return ClubStreet(None, None, gates)
 
 
 def dyn(src, dst, log=print):
@@ -2670,6 +2706,52 @@ def dyn(src, dst, log=print):
         return D.build(src, dst, None, log)
     finally:
         D.PERS, D.last_loot_wait, D.Routes.forks = saved, llw, forks0
+
+
+def wake_step(folder, log=print):
+    """THE PRESSURE FIX, last step of the chain (`kl_fa_club.py wake <folder>` = wake_step, after the dynamic step): the dynamic step rewrites a gate's TriggerActorsDead
+    next list to the one step that follows and drops the squad modifiers `bots` had put into it (kl_fa_bots_dyn keeps only what its chain walk reaches), so
+    the plan's wake lists (bots.json, club_gates[*]['wake']) are put back into the next list of the gate's TriggerActorsDead of each of the seven bot squads.
+    Only the .prp member of the archive changes. -> 0 (1 if a gate has no TriggerActorsDead in a bot squad)."""
+    import json
+    import kl_fa_bots as F
+    import kl_graft
+    from kl_prp import Prp
+    load_flags(folder)
+    if not (PRESSURE and ROOM_GATES):
+        log('kl_fa_club.wake %s: no pressure fix in this build: nothing to do' % folder)
+        return 0
+    with open(os.path.join(folder, 'bots.json'), encoding='utf-8') as f:
+        P = json.load(f).get('plan') or {}
+    gates = {g['wait']: g for g in P.get('club_gates', ()) if g.get('wake')}
+    B = F.Built(folder)
+    sc = B.sc
+    done = collections.Counter()
+    for k, i, v in kl_fa.controllers(sc, 'TriggerActorsDead'):
+        g = gates.get(sc.names[k])
+        if g is None or not sc.path[k][len(R):].startswith(BK.BOT_SQUAD):
+            continue
+        have = list(v[2])
+        add = [w for w in g['wake'] if w not in have]
+        if add:
+            kl_fa.edit(sc, k, i, lambda us, have=have, add=add: us.__setitem__(2, kl_fa._refs(sc, have + add)))
+        done[g['name']] += 1
+    bad = [n for n in gates.values() if done[n['name']] != len(F.BOTS)]
+    if bad:
+        log('kl_fa_club.wake: gate(s) %s have a TriggerActorsDead in %s of the %d bot squads' % ([g['name'] for g in bad], [done[g['name']] for g in bad], len(F.BOTS)))
+        return 1
+    prp = sc.p.serialize()
+    back = Prp(prp)
+    if back.serialize() != prp or len(back.nodes()) != len(sc.nodes):
+        raise ValueError('kl_fa_club.wake: the new .prp does not round-trip')
+    new = dict(B.files)
+    new[B.ext['.prp']] = prp
+    tmp = B.zp + '.wake'
+    kl_graft.write_zip(tmp, [(n, new[n]) for n in B.order])
+    os.replace(tmp, B.zp)
+    log('kl_fa_club.wake %s: %d TriggerActorsDead lists of the seven bot squads name the squads of the next room (%s); the .prp changed, nothing else' % (
+        folder, sum(done.values()), ', '.join('%s -> %d squad(s)' % (n, len(g['wake'])) for n, g in gates.items())))
+    return 0
 
 
 def bots_check(folder, log=print):
@@ -2811,6 +2893,69 @@ ROOM_NAME_SEEN = True                   # the TriggerActorsDead names only the m
 ROOM_AFTER_CLEAR = 300.0                # no hold within this of a man of an EARLIER room (he may have outlived his gate's 30 s); the other men: ROOM_POST_CLEAR
 ROOM_STEP_CLEAR = 200.0                 # every place of every step between the first gate and the seal hold at least this far from every man on its floor (the holds: ROOM_POST_CLEAR)
 ROOM_HOLD_SEP = 80.0                    # two holds of one room at least this far apart (kl_fa_bots.check's own number)
+# ---- THE PRESSURE FIX (2026-10-12, after run C5; NOT RUN IN THE GAME). Run C5 lost all seven AI heisters GO+26..112 s, four of them within a few metres
+# of each other at the walkway's gate where five to eight of the 40 awake men had a clear line to them (re/club_campaign.md 'Pressure, after run C5').
+# The yardstick is the tab's Withdrawal, on which the same crew at the same dial escapes: counted with the exact ray (hvk_ray: a part blocks when
+# flags & 0x20), men of the squads that are in the world at that moment, within GUN_RANGE, never more than HOLD_GUNS at a station of the heist
+# and LEG_GUNS on a stretch between two (its worst, with the police there: 5). So the club is held to the same numbers:
+#  1. the rooms' squads are STAGED as stock stages its squads: WAKE_AT = the gate whose hold the squad is awake at; the TriggerActorsDead of the gate
+#     BEFORE it names the squad's SquadModifierBehaviour (field 4 eAM_Activate, as the 'walk' / 'floor' stages) in its next list;
+#  2. the men that bear on a hold or a leg beyond the numbers, and the men that would come into the world in sight of the previous hold, stand
+#     elsewhere in their room (PRESSURE_MEN, found by C:/kl_scratch/club_pressure/reloc2.py, kept here as data; rooms_check proves them);
+#  3. the holds are chosen BY FIRE (rt_for_club.spots): a place with more than HOLD_GUNS guns bearing is no hold while seven others exist; where
+#     they do not, the seven take the least fire and rooms_check says so.
+# `--no-pressure`, `--no-gates`, `--legacy` and `--no-ai` leave all three out.
+PRESSURE = True
+HOLD_GUNS = 3                           # guns that may bear on a hold of the seven (Withdrawal's heist stations: 0..2, 0..3 counting every place a rout goes by)
+LEG_GUNS = 4                            # ... on any stretch of the walk between two holds (Withdrawal's heist legs: 4; its worst with the police: 5)
+GUN_RANGE = 6000.0                      # a gun bears within 60 m with an exact ray free (kl_fa_bank.PRESSURE_RANGE; GUESS: the AI's fire is hardly aimed beyond)
+GUN_FLOOR = 1200.0                      # ... and not from a floor 12 m or more away
+LEG_STEP = 300.0                        # the walk between two holds is sampled every 3 m ... 3 m: WALK_SAMPLE
+# squad (short name) -> (the gate at whose hold it is awake, its start child). The gate before it wakes it. GUESS: that a TriggerActorsDead's list
+# starts a SquadModifierBehaviour as the TriggerDelay2 of the 'office' stage does; if it does not, these squads never come (an emptier club).
+WAKE_AT = collections.OrderedDict([
+    ('YokoGuards', (4, 'SquadModifier')), ('WaitingRoom', (4, 'Alert')),            # the four on the deck over dance floor 2's south wall: asleep until the crew has left floor1s - from floor1n's holds 5 of 7 see them (MEASURED: woken at floor1n or floor1s the squads plop out in view of the seven)
+    ('Dance#02', (3, 'Alert')),                                                    # dance floor 1's second run: floor1s
+    ('Lounge#01', (4, 'Alert')), ('Lounge#02', (4, 'Alert')), ('Rave#01', (4, 'Alert')), ('Rave#02', (4, 'Alert')),   # the upper floors, over the stairs' room
+    ('SurpriseStairs', (4, 'Alert')), ('Entrance', (4, 'SquadModifier'))])
+PRESSURE_KNOWN = {'floor2': (5, 7), 'floor1n': (5, 8), 'floor1s': (5, 10), 'stairs': (3, 5)}                                     # gate name -> (guns on a hold, guns on a walk) that the delivered build is KNOWN to exceed the yardstick by (rooms_check fails above them: a regression guard, not a pass)
+PRESSURE_MEN = collections.OrderedDict()               # man's group path -> (x, y, z): the men moved by the pressure fix (found by C:/kl_scratch/club_pressure/reloc4.py on the built c_club3 club: each in his own room (room_of),
+                                                        # on the START's mesh part, 90 off his floor at most, 250 from every other man, 400 from every hold, not in the front office or the entrance; kept here as data, proved by rooms_check)
+PRESSURE_MEN[E2 + 'Dance#01\\Guard#08'] = (1160, 40, 3008)
+PRESSURE_MEN[E2 + 'Dance#01\\Guard#10'] = (1008, 40, 2148)
+PRESSURE_MEN[E2 + 'Dance#02\\Guard#01'] = (-423, 48, 1355)
+PRESSURE_MEN[E2 + 'Dance#02\\Guard#09'] = (-535, 43, 1429)
+PRESSURE_MEN[E1 + 'DanceFloor01!On_Dancefloor#02\\Guard#01'] = (38, 204, 432)
+PRESSURE_MEN[E1 + 'DanceFloor01!On_Dancefloor#02\\Guard#07'] = (1223, 5, 796)
+PRESSURE_MEN[E1 + 'DanceFloor01!On_Dancefloor#02\\Guard#08'] = (1048, 40, 2226)
+PRESSURE_MEN[E1 + 'DanceFloor02!Dancefloor02a#03\\Guard#02'] = (1256, 40, 3393)
+PRESSURE_MEN[E1 + 'DanceFloor02!Dancefloor02a#01\\Guard#04'] = (-349, 40, 2569)
+PRESSURE_MEN[E1 + 'DanceFloor02!Dancefloor02a#01\\Guard#03'] = (579, 40, 2554)
+PRESSURE_MEN[E1 + 'DanceFloor02!Dancefloor02a#01\\Guard#02'] = (28, 40, 3768)
+PRESSURE_MEN[E1 + 'DanceFloor02!Dancefloor02a#02\\Guard#03'] = (889, 40, 2172)
+PRESSURE_MEN[E1 + 'DanceFloor02!FatBounceronWalkway\\Guard#02'] = (1138, 363, 3066)
+
+
+def squads_now():
+    """SQUADS as the build wants them: with PRESSURE the squads of WAKE_AT are stage 'gate' (waiting, named by the gate before their room) with their
+    start child; without it the table of the gates fix. -> OrderedDict name -> (stage, child)."""
+    if not (PRESSURE and ROOM_GATES):
+        return SQUADS
+    out = collections.OrderedDict(SQUADS)
+    for n in SQUADS:
+        short = n.split('!')[-1]
+        if short in WAKE_AT:
+            out[n] = ('gate', WAKE_AT[short][1])
+    return out
+
+
+def wake_gate(name):
+    """The gate at whose hold the squad (full path without ROOT) is awake: 0 = from the start / its box, WAKE_AT's for a gate-staged squad, 99 never (the hunters)."""
+    short = name.split('!')[-1]
+    if PRESSURE and ROOM_GATES and short in WAKE_AT:
+        return WAKE_AT[short][0]
+    return 99 if SQUADS.get(name, ('',))[0] == 'open' else 0
+
 # the rooms, in the order of the way: name, what, box (x0, x1, z0, z1) and y of the hold places, the direction the men are in (plan), the trigger boxes
 # of a LATER fight the way to the hold cannot go round (bots_rt's 'cross'; the campaign's walkway box is the stair's end). GUESS: every box and
 # direction; MEASURED: the holds they give (check prints them) are on the START's mesh part, at cover boxes, 4 m and more from every living post.
@@ -2866,11 +3011,88 @@ ROOM_STAY = ('Dance#01 Guard#01 (623, 322, 2902) on the ramp: the walkway fight 
              'Entrance Guard#03 (-65, 21, -1307) and Guard#01 (134, 29, -2398): the queue lane, 3 m wide: no post is 4 m from its way; they are the seal\'s other side')
 
 
+class Fire:
+    """Guns bearing on a place: the exact ray of third_party/anp/scripts/hvk_ray.py (a part of the level's collision blocks when flags & 0x20: MEASURED against
+    five live rays) from the eyes of each man of the campaign's squads (160 over his post) to a place's chest or head (120 / 175 over its floor), within
+    GUN_RANGE and not from another floor (GUN_FLOOR). A man counts when his squad is awake at the gate asked for: wake_gate (the plan) or `wake` {squad: gate}."""
+
+    def __init__(self, B, wake=None):
+        sys.path.insert(0, os.path.join(os.path.dirname(HERE), 'third_party', 'anp', 'scripts'))
+        import hvk_ray
+        import kl_fa_bots_rt as RT
+        self.B, self.col, self.men, self.cache = B, hvk_ray.Collision(B.zp), [], {}
+        sc = B.sc
+        for t, groups in RT.enemy_squads(B).items():
+            name = sc.path[t][len(R):]
+            if name.startswith(('Gameplay!', BK.BOT_SQUAD)):
+                continue                                # the police that arrive and the bots are not the club's men
+            for k in range(t + 1, sc.end[t]):
+                if sc.cls(k) == 'ZFFActor' and sc.parent[k] in groups:
+                    self.men.append(dict(squad=name, group=sc.path[sc.parent[k]], man='%s %s' % (name.split('!')[-1], sc.path[sc.parent[k]].split(chr(92))[-1]), at=B.at(k),
+                                         wake=(wake or {}).get(name, wake_gate(name))))
+
+    def sees(self, o, p):
+        k = (round(o[0]), round(o[1]), round(o[2]), round(p[0]), round(p[1]), round(p[2]))
+        v = self.cache.get(k)
+        if v is None:
+            e = (o[0], o[1] + 160.0, o[2])
+            v = self.cache[k] = any(self.col.ray(e, (p[0] - e[0], p[1] + dy - e[1], p[2] - e[2]), 0x20) is None for dy in (120.0, 175.0))
+        return v
+
+    def bearing(self, p, gate, dead=()):
+        """-> [(distance, man)] of the men awake at `gate` (and not in `dead`, a set of group paths) who have a free line to place p within GUN_RANGE."""
+        out = []
+        for m in self.men:
+            if m['wake'] <= gate and m['group'] not in dead:
+                d = math.dist(m['at'], p[:3])
+                if d <= GUN_RANGE and abs(m['at'][1] - p[1]) < GUN_FLOOR and self.sees(m['at'], p[:3]):
+                    out.append((d, m))
+        return out
+
+
+def gun_table(B, P, fire, log=None):
+    """The table of the pressure fix for plan P of built level B -> list of per-gate dicts: the guns bearing on each of the seven holds, on the walk to it
+    (every LEG_STEP along the mesh path of each bot from the place before to its hold), and who they are. `fire`: a Fire."""
+    import kl_fa_bots as F
+    import kl_fa_bots_rt as RT
+    nav = F.Nav(B.scene.nav)
+    st = P['stations']
+    i_loot = max(i for i, s_ in enumerate(st) if s_['kind'] == 'loot')
+    bots_ = list(P['bots'])
+    prev = [tuple(P['bots'][n]['places'][i_loot]) for n in bots_]
+    rows = []
+    for gi, g in enumerate(P['club_gates']):
+        idx = i_loot + 1 + gi
+        holds = [tuple(P['bots'][n]['places'][idx]) for n in bots_]
+        hold_n = [fire.bearing(h, gi) for h in holds]
+        worst_leg, seen_pts, leg_pts = (0, None, []), set(), []
+        for b, h in enumerate(holds):
+            got = RT.way_samples(nav, prev[b], h, LEG_STEP)
+            for q in (got[0] if got else []):
+                key = (round(q[0] / 100), round(q[1] / 100), round(q[2] / 100))
+                if key in seen_pts:
+                    continue
+                seen_pts.add(key)
+                leg_pts.append(q)
+                n = fire.bearing(q, gi)
+                if len(n) > worst_leg[0]:
+                    worst_leg = (len(n), tuple(round(v) for v in q[:3]), n)
+        dead = {x for g_ in P['club_gates'][:gi] for x in g_['groups']}            # the men the gates before this one name: dead (or their gate's 30 s have run)
+        k_hold = max(len(fire.bearing(h, gi, dead)) for h in holds) if dead else max(len(x) for x in hold_n)
+        rows.append(dict(name=g['name'], holds=[len(x) for x in hold_n], hold_worst=max(len(x) for x in hold_n), leg_worst=worst_leg[0], leg_at=worst_leg[1], hold_dead=k_hold,
+                         leg_dead=max([len(fire.bearing(q, gi, dead)) for q in leg_pts] or [0]) if dead else worst_leg[0],
+                         who_hold=sorted(set(m['man'] for x in hold_n for _d, m in x)), who_leg=sorted(m['man'] for _d, m in worst_leg[2]),
+                         hold_at=[tuple(round(v) for v in h) for h in holds], samples=len(seen_pts)))
+        prev = holds
+    return rows
+
+
 @contextlib.contextmanager
 def rt_for_club(gates, men=None):
     """kl_fa_bots_rt with this level's table for one call of gates_plan: GATES, EN_ (the squads are named in full), POST_KEEP, pick_holds,
     hold_spots (the floor filter ROOMS' dy), wake_map (no squad 'known') - put back afterwards."""
     import kl_fa_bots_rt as RT
+    PICK.update(gate=None, room=None, picked={}, note={}, guns={})
     saved = {k: getattr(RT, k) for k in ('GATES', 'EN_', 'POST_KEEP', 'GATE_MAX', 'pick_holds', 'hold_spots', 'wake_map', 'near_post')}
     spots0, wake0, near0 = RT.hold_spots, RT.wake_map, RT.near_post
 
@@ -2883,6 +3105,31 @@ def rt_for_club(gates, men=None):
         # 30 s with its men alive. So no hold within ROOM_AFTER_CLEAR of a man of an EARLIER room, whatever gate named him (the other men: the planner's 400)
         prior = [p for r in order[:order.index(g['name'])] for _t, _g, p in (men or {}).get(r, ())]
         return [s for s in out if not any(abs(p[1] - s[1]) <= RT.FLOOR_DY and RT.hdist(s, p) < ROOM_AFTER_CLEAR for p in prior)]
+    if PRESSURE:
+        _spots_plain = spots
+        fires = {}
+
+        def spots(B, nav, home, covers, g, *rest):             # THE PRESSURE FIX 3: holds by fire
+            out = _spots_plain(B, nav, home, covers, g, *rest)
+            if not out:
+                return out
+            if B not in fires:
+                fires[B] = Fire(B)
+            gi = order.index(g['name'])
+            cnt = [(len(fires[B].bearing(s, gi)), s) for s in out]
+            PICK['gate'], PICK['room'] = g['name'], gi
+            for n, s_ in cnt:                       # (a place the men woken when THIS gate opens can see counts 3 more each: they would plop out in view of the seven)
+                PICK['guns'][gun_key(s_)] = n + 3 * sum(1 for _d, m in fires[B].bearing(s_, gi + 1) if m['wake'] == gi + 1)
+            ok = [s_ for n, s_ in cnt if n <= HOLD_GUNS]
+            back = [s_ for s_ in (PICK['picked'].get(order[gi - 1], ()) if gi else ()) if s_ not in out]
+            for s_ in back:                         # the seven of the room before, as places of this one (one room back): their fire at THIS gate
+                PICK['guns'][gun_key(s_)] = len(fires[B].bearing(s_, gi))
+            back = [s_ for s_ in back if PICK['guns'][gun_key(s_)] <= HOLD_GUNS]
+            low = min(n for n, _s in cnt)
+            PICK['note'][g['name']] = ('fire: %d of %d places have %d guns or fewer bearing%s (the fewest: %d); the seven are picked for the least fire' % (
+                len(ok), len(out), HOLD_GUNS, ', %d one room back' % len(back) if len(ok) < 7 and back else '', low)) if len(ok) >= 7 or back else (
+                'FIRE: only %d places with %d guns or fewer bearing (the fewest: %d)' % (len(ok), HOLD_GUNS, low))
+            return list(out) + (back if len(ok) < 7 else [])
     RT.GATES, RT.EN_, RT.POST_KEEP = tuple(gates), '', ROOM_POST_CLEAR
     RT.GATE_MAX = 99                            # the planner names whole squads; the TADs name the room's men (bots_gates), at most 9 of them (rooms_check)
     RT.pick_holds, RT.hold_spots = pick_holds_club, spots
@@ -2895,6 +3142,13 @@ def rt_for_club(gates, men=None):
             setattr(RT, k, v)
 
 
+PICK = {'gate': None, 'room': None, 'picked': {}, 'note': {}, 'guns': {}}      # what the fire filter of rt_for_club and pick_holds_club tell each other (one process, one build)
+
+
+def gun_key(s):
+    return (round(s[0]), round(s[1]), round(s[2]))
+
+
 def pick_holds_club(spots, n=7, seps=(110.0, 100.0, 90.0, ROOM_HOLD_SEP), tries=400):
     """Seven of the places kl_fa_bots_rt.hold_spots found -> (places, the separation asked for); ([], 0) when there are not seven. The widest
     separation of `seps` for which a set exists; among the sets tried (a fixed order first, then shuffles of a fixed seed) the one with the
@@ -2904,12 +3158,18 @@ def pick_holds_club(spots, n=7, seps=(110.0, 100.0, 90.0, ROOM_HOLD_SEP), tries=
     if len(spots) < n:
         return [], 0.0
     hd = lambda a, b: math.hypot(a[0] - b[0], a[2] - b[2])
-    key = lambda s: (not s[5], abs(s[7] - 130.0), -s[6])
+    gun = lambda s: PICK['guns'].get(gun_key(s), 0)         # THE PRESSURE FIX: fewest guns first (0 for all while PRESSURE is off: the old order)
+    key = lambda s: (gun(s), not s[5], abs(s[7] - 130.0), -s[6])
     rng = random.Random(7)
     for sep in seps:
         best = None
         for t in range(tries):
-            order = sorted(spots, key=key) if t == 0 else rng.sample(spots, len(spots))
+            if t == 0:
+                order = sorted(spots, key=key)
+            elif not PICK['guns']:
+                order = rng.sample(spots, len(spots))
+            else:                               # mostly by fire, mixed within a band so that other sets of boxes are tried (the fire of a place is a few guns)
+                order = sorted(spots, key=lambda s: gun(s) + rng.uniform(0.0, 1.5 if t % 2 else 0.6))
             got, used = [], collections.Counter()
             for rnd in (0, 1):
                 for s in order:
@@ -2917,10 +3177,12 @@ def pick_holds_club(spots, n=7, seps=(110.0, 100.0, 90.0, ROOM_HOLD_SEP), tries=
                         got.append(s)
                         used[s[4]] += 1
             if len(got) >= n:
-                score = (len(used), sum(1 for g in got if g[5]), min(g[6] for g in got))
+                score = (-max(gun(g) for g in got), -sum(gun(g) for g in got), len(used), sum(1 for g in got if g[5]), min(g[6] for g in got))
                 if best is None or score > best[0]:
                     best = (score, got[:n])
         if best:
+            if PICK['gate']:
+                PICK['picked'][PICK['gate']] = best[1]
             return best[1], sep
     return [], 0.0
 
@@ -2935,9 +3197,18 @@ def room_men(B):
         for k in range(t + 1, sc.end[t]):
             if sc.cls(k) == 'ZFFActor' and sc.parent[k] in groups:
                 room = room_of(B.at(k))
+                short = sc.path[t][len(R):].split('!')[-1]
+                if room and PRESSURE and short in WAKE_AT:      # a man who sleeps until a later room's hold belongs to THAT room's gate (the deck over floor1n wakes at floor1s)
+                    names = [r_['name'] for r_ in ROOMS]
+                    room = names[max(names.index(room), min(WAKE_AT[short][0], len(names) - 1))]
                 if room:
                     out[room].append((t, sc.parent[k], B.at(k)))
     return out
+
+
+def RT_enemy_squads(B):
+    import kl_fa_bots_rt as RT
+    return RT.enemy_squads(B)
 
 
 def bots_gates(B, P, log=print):
@@ -2992,6 +3263,28 @@ def bots_gates(B, P, log=print):
         g['men'] = len(g['groups'])
         g['wait'] = '%03d_TriggerActorsDead_%s' % (30 + [x['name'] for x in gates].index(g['name']), g['name'])
         g['seconds'] = ROOM_WAIT_S
+    if PRESSURE:                                                # THE PRESSURE FIX 1: the gate before a room's hold wakes the squads that are awake at it
+        by_room = {g['name']: gi for gi, g in enumerate(gates)}
+        order_ = [r['name'] for r in ROOMS]
+        for g in gates:
+            g['wake'] = []
+        for t, _groups in RT_enemy_squads(B).items():
+            name = sc.path[t][len(R):]
+            short = name.split('!')[-1]
+            if short not in WAKE_AT:
+                continue
+            w, child = WAKE_AT[short]
+            room = order_[w - 1]                                # the gate whose opening wakes it: the room before the one it is awake at
+            if room not in by_room:
+                raise ValueError('kl_fa_club.bots_gates: %s wakes at gate %d (%s), which has no gate' % (short, w, room))
+            gates[by_room[room]]['wake'].append(sc.path[t] + chr(92) + child)
+        for g in gates:
+            log('  gate %-8s opens -> wakes %s' % (g['name'], ', '.join(x.split('!')[-1].split(chr(92))[0] for x in g['wake']) or 'nobody'))
+        for name, note in PICK['note'].items():
+            log('  gate %-8s %s' % (name, note))
+            for g in gates:
+                if g['name'] == name:
+                    g['fire'] = note
     n_new = len(P2['stations']) - 1 - (i_loot + 1)              # the holds (WAY_EVERY is 0: no way stations)
     # ---- the plan: stations
     seal_st = dict(st[i_seal])
@@ -3065,6 +3358,79 @@ def bots_gate_rooms(B, P, log=print):
     log('  NOTE ' + note)
     log('steps: %s' % [(s['name'], s['stations']) for s in P['steps']])
     return P
+
+
+def scene_wake(B, P, tad):
+    """{campaign squad name: the gate at whose hold it is awake}, READ OFF THE BUILT SCENE: 0 for a squad in the world from the load (ZSquadScript field 3 = 1) or
+    started by a box / the round's timer, k + 1 for a squad whose SquadModifierBehaviour the TriggerActorsDead of gate k names (any of the seven bot squads'
+    copies), 99 for a waiting squad nothing of the gates names (the hunters: the beat's gate)."""
+    import kl_fa_bots_rt as RT
+    sc = B.sc
+    gates = P.get('club_gates') or []
+    f3 = {t: v[SQUAD_ACTIVE] for t, _i, v in kl_fa.controllers(sc, 'ZSquadScript')}
+    named = {}                                          # squad node -> the lowest gate index that names a node of it
+    for k, v in tad.items():
+        for gi, g in enumerate(gates):
+            if sc.names[k] == g['wait']:
+                for ref in v[2]:
+                    for h in sc.resolve(ref):
+                        if sc.top[h] in f3:
+                            named[sc.top[h]] = min(named.get(sc.top[h], 99), gi)
+    out = {}
+    boxes, other = RT.wake_map(B)
+    for t in RT.enemy_squads(B):
+        name = sc.path[t][len(R):]
+        if name.startswith(('Gameplay!', BK.BOT_SQUAD)):
+            continue
+        if f3.get(t) == 1:
+            out[name] = 0
+        elif t in named:
+            out[name] = named[t] + 1
+        elif any(t in hit for hit in boxes.values()) or other.get(t) == 'timer':
+            out[name] = 0
+        else:
+            out[name] = 99
+    return out
+
+
+def pressure_check(folder, B, P, tad, fail, log):
+    """THE PRESSURE FIX's proofs on a folder with room gates (called by rooms_check): (1) every squad of WAKE_AT is waiting and named by the TriggerActorsDead
+    of the gate before its room, by no other (the wake table is READ OFF THE SCENE); (2) hold-guns: on the exact ray, at most HOLD_GUNS men awake at the gate bear
+    on a hold place and at most LEG_GUNS on any stretch (every LEG_STEP) of a bot's way to it; (3) nobody is woken in sight of the previous room's holds (no
+    'plopping out'). The table is logged; faults go to `fail`."""
+    gates = P.get('club_gates') or []
+    wake = scene_wake(B, P, tad)
+    fire = Fire(B, wake)
+    rows = gun_table(B, P, fire)
+    log('  hold-guns (exact ray, within %d m, men of the squads awake at the gate; yardstick Withdrawal: holds 0..3, walks 1..4, with the police 4..7; caps HOLD_GUNS %d, LEG_GUNS %d):'
+        % (GUN_RANGE / 100, HOLD_GUNS, LEG_GUNS))
+    for gi, (g, r) in enumerate(zip(gates, rows)):
+        log('    gate %-8s guns on the 7 holds %s (worst %d; %d if the men the gates before named are dead); the walk to them: worst %d at %s (%d; %d samples); awake men %d of %d%s' % (
+            r['name'], r['holds'], r['hold_worst'], r['hold_dead'], r['leg_worst'], r['leg_at'], r['leg_dead'], r['samples'], sum(1 for m in fire.men if m['wake'] <= gi), len(fire.men),
+            '; %s' % g['fire'] if g.get('fire') else ''))
+        known_h, known_l = PRESSURE_KNOWN.get(r['name'], (HOLD_GUNS, LEG_GUNS))
+        if r['hold_worst'] > max(HOLD_GUNS, known_h):
+            fail('hold-guns: gate %s: %d guns bear on a hold (%d wanted at most, %d known): %s' % (r['name'], r['hold_worst'], HOLD_GUNS, max(HOLD_GUNS, known_h), ', '.join(r['who_hold'][:8])))
+        elif r['hold_worst'] > HOLD_GUNS:
+            log('      NOTE KNOWN over the yardstick: %d guns on a hold (%d wanted; PRESSURE_KNOWN)' % (r['hold_worst'], HOLD_GUNS))
+        if r['leg_worst'] > max(LEG_GUNS, known_l):
+            fail('hold-guns: gate %s: %d guns bear on the walk to it at %s (%d wanted at most, %d known): %s' % (r['name'], r['leg_worst'], r['leg_at'], LEG_GUNS, max(LEG_GUNS, known_l), ', '.join(r['who_leg'][:8])))
+        elif r['leg_worst'] > LEG_GUNS:
+            log('      NOTE KNOWN over the yardstick: %d guns on the walk (%d wanted; PRESSURE_KNOWN)' % (r['leg_worst'], LEG_GUNS))
+    order_ = [r['name'] for r in ROOMS]
+    for n, w in wake.items():
+        short = n.split('!')[-1]
+        if short in WAKE_AT and w != WAKE_AT[short][0]:
+            fail('pressure: %s is awake at gate %s by the scene, WAKE_AT wants %s (named by the gate of %s)' % (short, w, WAKE_AT[short][0], order_[WAKE_AT[short][0] - 1]))
+        if short not in WAKE_AT and SQUADS.get(n, ('',))[0] != 'open' and w == 99:
+            fail('pressure: %s is waiting and nothing wakes it' % short)
+    for gi in range(1, len(gates)):                     # (3) the squads woken when gate gi-1 opens are not in sight of that gate's holds
+        for m in fire.men:
+            if m['wake'] == gi:
+                seen = [h for h in rows[gi - 1]['hold_at'] if math.dist(m['at'], h) <= GUN_RANGE and abs(m['at'][1] - h[1]) < GUN_FLOOR and fire.sees(m['at'], h)]
+                if seen:
+                    fail('appear: %s (woken when gate %s opens) stands at (%d, %d, %d) in sight of %d of the seven holds of %s, the first (%d, %d, %d)' % (
+                        m['man'], gates[gi - 1]['name'], *[round(v) for v in m['at']], len(seen), gates[gi - 1]['name'], *seen[0]))
 
 
 def rooms_check(folder, log=print):
@@ -3159,7 +3525,7 @@ def rooms_check(folder, log=print):
             if not (ROOM_HOLD_RING[0] <= d <= ROOM_HOLD_RING[1]):
                 fail('gate %s: a hold at (%d, %d, %d) is %d from the nearest cover box (wanted %d..%d)' % (g['name'], *h, d, *ROOM_HOLD_RING))
         for h in ends:
-            if any(math.dist(h, o) < 1.0 for o in holds_seen):
+            if any(math.dist(h, o) < 1.0 for o in holds_seen) and 'one room back' not in (g.get('fire') or ''):       # (the pressure fix's fallback: some of the seven stay at the room before's holds)
                 fail('gate %s: a hold at (%d, %d, %d) is the place of a hold of an earlier gate' % (g['name'], *h))
         holds_seen += ends
         # ---- no living man within 4 m of a hold (men not named by a gate before this one)
@@ -3188,6 +3554,7 @@ def rooms_check(folder, log=print):
         if near:
             fail('the loot place (%d, %d, %d) is within %d of a man of %s' % (*p, *near[0]))
     # ---- a timer or a loot wait between the first gate and the seal hold
+    wake_nodes = {h for g in gates for ref in g.get('wake', ()) for h in sc.resolve(ref)} if PRESSURE else set()
     for t in tops:
         first = next((k for k in range(t, sc.end[t]) if sc.names[k] == gates[0]['wait']), None)
         if first is None:
@@ -3209,12 +3576,17 @@ def rooms_check(folder, log=print):
                     nr = [(round(RT.hdist(q, p_)), n_.split('!')[-1]) for p_, _gp, n_ in men if abs(p_[1] - q[1]) <= RT.FLOOR_DY and RT.hdist(q, p_) < ROOM_STEP_CLEAR]
                     if nr:
                         fail('%s: %s has a place (%d, %d, %d) %d from a living man (%s) - under %d' % (sc.names[t], sc.names[k], *q, *nr[0], ROOM_STEP_CLEAR))
+            if k in wake_nodes:                         # a squad modifier a gate wakes (the pressure fix): a side of the gate, not a link of the chain
+                continue
             if kind.get(k) not in ('DefendBehaviourRout', 'TriggerActorsDead', 'RandomTrigger'):
                 fail('%s: %s (%s) stands between the first gate and the seal hold - a timer behind a gate: a bot that arrives early waits again' % (sc.names[t], sc.names[k], kind.get(k)))
                 continue
             todo += nxt.get(k, [])
         if not stop:
             fail('%s: the chain behind the first gate never reaches %s' % (sc.names[t], GATE_NAME))
+    # ---- THE PRESSURE FIX: who is awake when, and the guns bearing (hold-guns)
+    if PRESSURE:
+        pressure_check(folder, B, P, tad, fail, log)
     # ---- the timetable
     tt = {k: P['gate'].get(k) for k in ('start', 'loot_cap', 'straight', 'path', 'exit_walk', 'seconds', 'rooms')}
     longest = float(tt['seconds'])
@@ -3230,7 +3602,7 @@ def rooms_check(folder, log=print):
         'a crew that wins nothing (30 s a room) reaches the hold at %d s, leaves it at %d s and is at the exit trigger at %d s of the round\'s %g (the van is called there: %g s of margin)'
         % (P['gate'].get('room_g_min', ROOM_G_MIN), quick, SEAL_AT, slow_arrive, slow_leave, at_van, ROUND_CLOCK, ROUND_CLOCK - at_van))
     # ---- the men that moved are where CLEAR_MEN puts them
-    for path, post in CLEAR_MEN.items():
+    for path, post in (dict(CLEAR_MEN, **PRESSURE_MEN) if PRESSURE else CLEAR_MEN).items():
         try:
             g_ = A.node_of(sc, path)
         except Exception:
@@ -3251,7 +3623,7 @@ def rooms_check(folder, log=print):
 # with the defaults.
 FLAG_NAMES = ('DOORS_ANIMATE', 'SEAL_OPEN', 'SEAL_PLANE', 'SEAL_AT', 'LIGHT_SHOW', 'BEAT_ANIM', 'FAN_DAMAGE', 'CASE', 'NO_AI', 'SQUADS_AWAKE',
               'POLICE_ARRIVE', 'POLICE_ON_SLAB', 'STOCK_ROWS', 'OFFICE_AT', 'STREAM',
-              'GUARDS_OFF', 'POLICE_EAST', 'VAN_LATE', 'RESET', 'VOICE', 'LOOT_SECONDS', 'ROOM_GATES')
+              'GUARDS_OFF', 'POLICE_EAST', 'VAN_LATE', 'RESET', 'VOICE', 'LOOT_SECONDS', 'ROOM_GATES', 'PRESSURE')
 STREAM = None                           # '--str FILE': the merged stream file the clips are resolved against (review round 2: it travels in van.json)
 
 
@@ -3312,7 +3684,7 @@ def main():
     if len(a) >= 2 and a[0] == 'test':
         global DOORS_ANIMATE, SEAL_OPEN, SEAL_PLANE, SEAL_AT, LIGHT_SHOW, BEAT_ANIM, FAN_DAMAGE, CASE
         global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, POLICE_ON_SLAB, STOCK_ROWS, OFFICE_AT, STREAM
-        global GUARDS_OFF, POLICE_EAST, VAN_LATE, RESET, VOICE, LOOT_SECONDS, LEGACY, ROOM_GATES
+        global GUARDS_OFF, POLICE_EAST, VAN_LATE, RESET, VOICE, LOOT_SECONDS, LEGACY, ROOM_GATES, PRESSURE
         LEGACY = '--legacy' in a                        # the first delivery's build: every flag of the fix after run C2 off, the old numbers
         GUARDS_OFF = not LEGACY and '--no-guards-off' not in a
         POLICE_EAST = not LEGACY and '--no-police-east' not in a
@@ -3320,6 +3692,7 @@ def main():
         RESET = not LEGACY and '--no-reset' not in a
         VOICE = not LEGACY and '--no-voice' not in a
         ROOM_GATES = not LEGACY and '--no-gates' not in a and '--no-ai' not in a
+        PRESSURE = ROOM_GATES and '--no-pressure' not in a
         LOOT_SECONDS = 30 if LEGACY else LOOT_SECONDS
         if LEGACY:
             SEAL_AT = LEGACY_FLAGS['SEAL_AT']
@@ -3376,9 +3749,29 @@ def main():
         load_flags(a[1])
         out, _rep = dyn(a[1], a[2])
         sys.exit(1 if any(x == 'FAIL' for x, _t in out) else 0)
+    elif len(a) == 2 and a[0] == 'wake':
+        sys.exit(wake_step(a[1]))
     elif len(a) == 2 and a[0] == 'bots-check':
         load_flags(a[1])
         sys.exit(1 if bots_check(a[1]) else 0)
+    elif len(a) >= 2 and a[0] == 'hold-guns':           # the pressure table of finished folders (the numbers, the wake table read off the scene; no checking)
+        import json
+        import kl_fa_bots as F
+        for fo in a[1:]:
+            load_flags(fo)
+            with open(os.path.join(fo, 'bots.json'), encoding='utf-8') as f:
+                P = json.load(f).get('plan') or {}
+            if not P.get('club_gates'):
+                print('hold-guns %s: no room gates in this folder (a build with --no-ai / --no-gates / --legacy): nothing to count' % fo)
+                continue
+            B = F.Built(fo)
+            tad = {k: v for k, _i, v in kl_fa.controllers(B.sc, 'TriggerActorsDead')}
+            wake = scene_wake(B, P, tad)
+            fire = Fire(B, wake)
+            print('hold-guns %s: wake table (the gate at whose hold a squad is awake): %s' % (fo, {n.split('!')[-1]: w for n, w in wake.items()}))
+            for r in gun_table(B, P, fire):
+                print('  gate %-8s guns on the 7 holds %s worst %d (%d with the men of earlier gates dead) | the walk: worst %d at %s (%d with them dead; %d samples) | holds: %s | walk: %s' % (
+                    r['name'], r['holds'], r['hold_worst'], r['hold_dead'], r['leg_worst'], r['leg_at'], r['leg_dead'], r['samples'], ', '.join(r['who_hold'][:6]), ', '.join(r['who_leg'][:6])))
     elif len(a) == 2 and a[0] == 'strays':
         BK.seal(a[1])                   # kl_fa_bank.seal: stray room-list entries (not this level's entrance SEAL)
     elif len(a) == 2 and a[0] == 'finish':

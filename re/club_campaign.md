@@ -1441,3 +1441,135 @@ bare folder, `preflight` / `audit` on the silent set; `club_noai` unchanged byte
 Per bot: arrival at each hold (within 10 m) and the leave time, so the 30 s clock and the men's deaths can be told apart; a death before GO+60 s is a hold in somebody's line of fire. OPEN: the 15 upper-floor men and
 the two lane men are waited for by nobody; Dance#02 Guard#10 and Dancefloor02a#02 Guard#04 (the south bar) are only 301 .. 400 from the stairs holds; the stairs gate will probably run its 30 s (its two men cannot
 be hit from y 20); no bound on a bot that fights on or never reaches its hold (it has no clock); the two moved men's new posts are GUESSES checked on the mesh and for cover only.
+
+
+## Pressure, after run C5 (2026-10-12) - how many guns the seven can stand under (tools/kl_fa_club.py; sets `C:/kl_build/c_club4` and `c_club4_music`)
+
+OFFLINE. The game was not started; nothing under the Dog Days folder, KL_PortTools, another session's trees, `c_club3*`, `c_club2*`, `v_club` or `c_bank*` was written; intermediates in
+`C:/kl_scratch/club_pressure/` (the analysis scripts are in the session's scratchpad: `lib.py`, `press.py`, `reloc3.py`). Only `tools/kl_fa_club.py` and this note were edited. Labels: MEASURED = computed on
+the built level (`C:/kl_build/c_club3/club`) or read from the live log `<work>/build/klhook/live/C5_club_gates.log`; READ = from the notes / code; GUESS / ASSUMED as everywhere.
+Line of sight everywhere below = third_party/anp/scripts/hvk_ray.py, a part of the level's collision blocks when flags & 0x20 (eye 160 over the post, target 120 and 175 over the floor), a gun
+bears within 60 m (GUN_RANGE; kl_fa_bank.PRESSURE_RANGE's GUESS) and from the same floor (12 m).
+
+### P.1 C5 against the level (MEASURED; GO = 03:43:04.5; the log has NO 'move:' lines: `MoveLog=1` is in the ini's first [Bots] section and no line came - the hook of the run, test_w10, or the doubled [Bots] section; places below are the 'lost' lines')
+
+| bot | first .. last hit | hits | hits a second | stood at (x, y, z) when hit | guns with a clear ray to that place (distance m, squad, weapon) |
+|---|---|---|---|---|---|
+| 5 | GO+22.9 .. 25.9 | 19 | 6.4 | (1519, 360, 3344), the whole time | 5: FatBouncer 7 pistol; Dance#01 #01 10 SMG; Surprise2 #02 12 pistol; WaitingRoom #02 17 pistol; YokoGuards #01 20 SMG |
+| 6 | 28.8 .. 34.7 | 18 | 3.0 | (1539, 350, 3425) -> (1535, 350, 3430) | 8: FatBouncer 8; Surprise2 #01 9 rifle; Dance#01 #01 11; Surprise2 #02 13; WaitingRoom #01 16, #02 18; YokoGuards #02 18, #01 21 |
+| 2 | 30.0 .. 41.2 | 40 | 3.6 | (1521, 360, 3317), the whole time (bot 4 on the same spot) | 1: Dance#01 #01 10 SMG (the rest in the lines of sight of the next spot only) |
+| 4 | 30.6 .. 112.3 | 66 | 0.8 | (1521, 363, 3317) until GO+41, then on the way across floor 2 to (-582, 40, 2813) | at the end 9: Dance#01 #08 3, Dancefloor02a#03 6, Dance#01 #10 7, ... |
+| 1 | 34.8 .. 40.7 | 21 | 3.6 | walking: (1112, 379, 3054) -> (676, 379, 2568) | at the first hit 10: FatBouncer 2, Surprise2 4 and 7, Dance#01 #01 5, WaitingRoom 10 and 12, YokoGuards 13 and 15, Dancefloor02a#02 19, #04 29 |
+| 7 | 43.0 .. 56.2 | 36 | 2.7 | (1532, 351, 3341) -> (1336, 379, 3283) | 5 .. 8, as bot 5 |
+| 3 | 52.8 .. 63.6 | 19 | 1.8 | walking: (1237, 376, 3229) -> (933, 379, 2679) | 9 .. 10: the same eight of the walkway and the deck, one man of floor 2 at 20 m |
+
+Damage a hit 3 .. 29 (mean 6 .. 14): rifle / SMG / pistol bullets, nothing but bullets (no 'ONE STEP', the point-blank rule of re/melee_damage.md did not fire). Four of the seven stood still on
+the walkway gate's west end for 3 .. 11 s each and were shot dead there: they were at 5 .. 8 guns at once (3 .. 6 hits a second = 252 health gone in 4 .. 11 s at the 0.05 dial).
+THE HEIGHT QUESTION: the hits are at y 350 .. 379 = the planned floor (the gate's holds are at y 362). The y of 446 .. 475 that the task read is only the 'dead' line (`lost 1.0 (0.0 of 252.0) ... - DOWN`,
+e.g. bot 5 (1522, 452, 3346)): the position of the body when it goes down, 90 above the feet; they did not stand elsewhere than planned.
+WHERE THE FIRST GATE'S SEVEN WERE PLANNED: holds (1708, 3111) (1628, 3191) (1628, 3111) (1668, 3311) (1508, 3351) (1588, 3351) (1708, 3191), y 362: the four east ones have NO gun on them by the exact ray,
+the three west ones 8 / 1 / 5 (MEASURED, `hold-guns` below). The bots that died stood at the two west places and at (1521, 3317), 13 .. 19 m west of the others: they did not stand where the plan
+put them (cause not established without the move lines; GUESS: the game's own cover search sends a bot that is shot to the nearest cover point, and the cover box of that room, CoverBoxH_01 at
+(1508, 360, 3151), is the only one in the front office).
+
+### P.2 Guns bearing, gate by gate, on the build C5 ran (c_club3/club; `python tools/kl_fa_club.py hold-guns C:/kl_build/c_club3/club`; the wake table is READ OFF THE SCENE and puts every squad a box or
+a timer starts at gate 0, so it is an upper bound for the 'walk' / 'floor' squads)
+
+| gate | guns on the 7 holds | worst on the walk to them (every 3 m of each bot's mesh path) | who |
+|---|---|---|---|
+| walkway | 0 0 0 0 8 1 0 | 5 at (1548, 362, 3360) | FatBouncer, Surprise2 x2, Dance#01 #01, WaitingRoom x2, YokoGuards |
+| floor2 | 5 4 9 9 9 8 2 | 10 at (1043, 372, 3053) | + Dance#01 #08 #10, Dancefloor02a#01 x3 |
+| floor1n | 11 10 9 11 13 10 11 | 14 at (-847, 40, 3068) | + Dance#02 #01 #09 |
+| floor1s | 6 7 8 10 12 7 6 | 16 at (-1265, 40, 2417) | |
+| stairs | 4 4 4 4 4 5 5 | 10 at (-1465, 21, 1890) | |
+
+### P.3 The yardstick: what a crew survives at this dial (MEASURED with the same code on the tab's Withdrawal build `z_cover3/M03` = the bank of the tab (w_tab* DM03 is the same plan plus the HUD / car steps), and on Retomoto's gates)
+
+THE NUMBER: **a seven-bot crew stands at most 2 guns (3 counting every place a rout of a man goes by) on a station of the heist and 3 (4) on a stretch between two, with a clear ray inside 60 m** -
+that is Withdrawal, on which the seven escape (series I, C3_DM03: 'nobody dies, all seven escape') at the same Risk=2 / CopToCrew 0.05. Taken over its 16 stations and 251 samples every 2 m of the mesh path
+(the first bot's way; the 9 arriving police of the exit leg are left out: they are not in the world until the escape is called): stations 0 .. 2 guns (rout places: 0 .. 3), stretches 1 .. 3 (1 .. 4);
+with the arriving police on the way out 4 .. 7. The bank has SIX men of its own (BankMainSquad_01..03, LoadingDockSquad_01) and all of its squads are started by boxes the crew trips, none stands awake
+from the load; the club has 40, 21 of which can see the route. Caps used here: **HOLD_GUNS = 3, LEG_GUNS = 4** (the upper numbers, because the club's men do not move and a rout place counts the same as a
+post).
+Retomoto's gates (z_rooms/retomoto_full, where the crew goes down a tower in 5 minutes, one death a minute in G1): 2 .. 6 guns on a hold, 4 .. 15 on the walks - not a yardstick for survival.
+
+### P.4 What changed in `tools/kl_fa_club.py` (flag `PRESSURE`, default ON; `--no-pressure`; off with `--no-gates`, `--legacy`, `--no-ai`; the flag travels in van.json; `club_noai` is byte for byte c_club3's: sha1 `e7754c1f...`)
+
+1. THE MEASURE (`Fire`, `gun_table`, command `hold-guns <folder>...`): the exact ray of hvk_ray (a part blocks when flags & 0x20; eye 160, target 120 and 175), GUN_RANGE 60 m, GUN_FLOOR 12 m, for the men of the squads that are
+   awake at a gate; the wake table is READ OFF THE SCENE (`scene_wake`: field 3 = 1 or a box / timer = gate 0, named by the TriggerActorsDead of gate k = awake at gate k + 1, 99 = nothing wakes it).
+   The table counts every awake man alive (the yardstick's measure) and, beside it, with the men that earlier gates name dead.
+2. STAGING (`WAKE_AT`, `squads_now`, `club_street`, command `wake`): nine squads (YokoGuards, WaitingRoom, Dance#02, Lounge#01/#02, Rave#01/#02, SurpriseStairs, Entrance = 21 men) are stage 'gate': ZSquadScript field 3 = 0 and their
+   SquadModifierBehaviour (field 4 eAM_Activate, as the 'walk' / 'floor' stages) named by the TriggerActorsDead of the gate BEFORE the room they are awake at (all seven bot squads' copies). Dance#02 at floor1s (3), the deck's four
+   and the upper floors' squads at the stairs (4). The 15 men of the squads without a modifier child (Dancefloor02a#01/#02/#03, On_Dancefloor#02: 9 men) cannot be staged - a new node under an existing squad is a graft change nobody
+   here has made - and stay awake from the load, like FatBouncer (a 3-modifier squad of his own wiring) and the 'walk' squads (Surprise2, Dance#01). THE DYNAMIC STEP DROPS THE NAMES (it rewrites a gate's next list to the one step that
+   follows), so a chain step `wake` (c_club4/chain.sh `7_wake`, `7_wake_wav`) puts them back; only the .prp changes. kl_fa_bots_dyn.check faults any extra target of a chain element ('also starts ...'): `c_club4/dyncheck.py` runs the
+   same check and lets through exactly the (gate, child) pairs of the plan, nothing else (checks.sh calls it in place of the plain command).
+3. HOLDS BY FIRE (`rt_for_club.spots`, `pick_holds_club`): each place of a room scored by the guns that bear on it at that gate (+3 for each man woken when THIS gate opens that sees it: he would plop out in view); the seven are picked for
+   the fewest guns first (then the old order: different cover boxes, behind the box, clearance). Where fewer than seven places stay under HOLD_GUNS the seven of the room before are offered as places of this one (floor2: three bots stay
+   at the walkway's holds, which have 0 guns: 'one room back'; rooms_check lets a repeated hold through only then). A man who sleeps until a later room belongs to THAT room's gate (`room_men`).
+4. MEN MOVED (`PRESSURE_MEN`, 13 men; found by the scratch optimiser `reloc4.py`, proved by the checks): Dance#01 #08 (-339, 2708) -> (1160, 3008), #10 (-342, 2148) -> (1008, 2148); Dance#02 #01 -> (-423, 1355), #09 -> (-535, 1429);
+   On_Dancefloor#02 #01 -> (38, 204, 432), #07 -> (1223, 5, 796), #08 -> (1048, 2226); Dancefloor02a#03 #02 -> (1256, 3393), #01 #04 -> (-349, 2569), #03 -> (579, 2554), #02 -> (28, 3768), #02 #03 -> (889, 2172); FatBouncer -> (1138, 363, 3066).
+   Each stays in his own room (room_of), on the START's mesh part, within 90 of his floor, 250 from every other man, 400 from every hold, 18 m of his old post at most. The front office's four were NOT moved (their placement is held by the FRONT_*
+   rules: 400 from the way in, 250 apart; the optimiser's choice for two of them broke both: 397 and 77) - they sleep instead.
+5. THE NEW CHECK (`pressure_check` inside `rooms_check`, so inside `bots-check` and `checks.sh`): (1) the wake table of the scene equals WAKE_AT, no waiting squad (hunters excepted) that nothing wakes; (2) hold-guns: at most HOLD_GUNS 3 men on a
+   hold and LEG_GUNS 4 on any stretch (every 3 m of each bot's mesh path from its place before) - above them the check FAILS unless the gate is in `PRESSURE_KNOWN` (the delivered build's own ceilings, see P.6: a regression guard, NOT a pass);
+   (3) appear: nobody woken when gate k-1 opens stands in the exact-ray sight of that gate's seven holds. `club_check` takes the 'gate' stage (no Sight rule for it: appear is its rule). The chain's and the checks' scripts are c_club4's (chain.sh +2 lines, checks.sh 2 lines, dyncheck.py new).
+
+### P.5 The table: guns bearing on the seven holds / on the walk to them (MEASURED, `hold-guns`; worst of the 7 holds / worst of the ~20-45 samples; in brackets: the men that earlier gates name taken dead)
+
+| gate | C5's build (c_club3, upper bound) | THIS build (c_club4/club) | awake men | caps | rooms_check |
+|---|---|---|---|---|---|
+| walkway | 8 / 5 | **0 / 0** (all seven holds, all 23 samples) | 15 of 40 | 3 / 4 | PASS |
+| floor2 | 9 / 10 | 5 (4) / 7 (5): holds 0 0 4 5 5 0 3 (three of them the walkway's) | 15 | 3 / 4 | KNOWN over |
+| floor1n | 13 / 14 | 5 (3) / 8 (3): holds 3 5 4 4 4 5 2 | 15 | 3 / 4 | KNOWN over |
+| floor1s | 12 / 16 | 5 (5) / 10 (5): holds 3 3 4 5 4 3 5 | 18 | 3 / 4 | KNOWN over |
+| stairs | 5 / 10 | 3 (1) / 5 (1): holds 3 3 2 3 2 3 3 | 37 | 3 / 4 | holds PASS, walk KNOWN over |
+
+THE FIRST GATE, where C5 lost the crew, has NO gun on any of its seven holds (21 of the room's 24 places had 3 or fewer; the picks have none) and none on the walk: the deck's four sleep (they were up to 4 of the 8 guns at the west holds) and the holds are the east ones. Worst case timetable after the round-start event
+(rooms_check): the quickest crew leaves the seal hold at 103 s (clock 100 s); a crew that wins no room is at the exit trigger at 277 s of 360 (83 s of margin; 262 s before: the 'one room back' holds are further from the next ones).
+
+### P.6 Why the yardstick (HOLD_GUNS 3, LEG_GUNS 4) is NOT met in four of the five rooms - the experiments (MEASURED with `reloc2/3/4/5.py`, the optimiser moves one man at a time by the exact ray, the objective = guns over the caps summed over every sample)
+
+| run | what was allowed | result |
+|---|---|---|
+| reloc2 (holds of c_club3 fixed, caps 2 / 4) | any man within 13 m, his room, stage table of the fix | 17 moves, still holds 5 / 5 / 6 / 3 and walks 6 / 6 / 9 / 6 over the caps (floor2 .. stairs) |
+| reloc3 (caps 3 / 4, holds re-picked each round) | any man within 22 m, ANY room | caps MET (E = 1) - by sending 7 men out of their rooms: four into the entrance hall (one on the seal hold's place), one into the front office 6 .. 9 m from the START rows, two across the club. REFUSED: that is removing the fight, not tuning it |
+| reloc4 (used) | his room, 18 m, not in the front office / entrance | 15 moves, E 727 -> 231: holds 5 .. 7, walks 7 .. 10 over the caps |
+| reloc5 | as reloc4 AND the four squads without a modifier staged too | E 265 at the second round (reloc4: 297): no better. Staging the nine unstageable men would not close the gap |
+
+The cause is the club's geometry: 23 men stand in four open halls (the dance floors, 8 .. 40 m across) and a seven-bot crew crosses them on foot. A man placed where none of the 7 holds and 3 m samples of his hall can see him is placed outside the
+hall. Withdrawal gets its numbers with SIX men of its own (and the police that arrive after the exit). To meet the yardstick the lead has three choices: (a) fewer men awake at once in the halls (nine more squads staged by a graft change that
+puts a SquadModifierBehaviour child into Dancefloor02a#01/#02/#03 and On_Dancefloor#02 - reloc5 says it is not enough alone), (b) the men that no hold sees stay and the rest wait in the galleries (nobody removed, but a smaller fight at the
+holds), (c) accept the gates' 30 s as the bots' fight and read C6. `PRESSURE_KNOWN` carries (5, 7) (5, 8) (5, 10) (3, 5) as ceilings: rooms_check fails when a rebuild is worse than C6's build, not when it is over the yardstick.
+
+### P.7 GUESS / ASSUMED / NOT DONE
+
+1. ASSUMED: a TriggerActorsDead's next list starts a SquadModifierBehaviour the way a TriggerDelay2 / TriggerBox list does (the 'office', 'walk' and 'floor' stages are the same message from other senders; none of the three has been seen to work in
+   a live club round - C5's log has no line that tells). If it does not, the nine gate squads never come and the club is emptier by 21 men; the gates still open by their 30 s.
+2. ASSUMED: the seven copies of the message (one per bot squad's TAD) are idempotent.
+3. THE HUMAN: the front office's four, Dance#02, the upper floors and the entrance's squad no longer stand awake from the start. A human who runs ahead of the bots meets none of them until the gate before their room has opened (a bot dies
+   before it = they never come).
+4. GUESS: GUN_RANGE 60 m (kl_fa_bank.PRESSURE_RANGE's), the two caps (the Withdrawal's upper numbers: its own posts alone give 2 / 3), the +3 for a man who would appear in view, ROOM_G_MIN, the model without kills (the table says both).
+5. NOT ESTABLISHED: why four bots stood on the walkway's west end (the log has no 'move:' lines: `MoveLog=1` is in the first of the ini's two [Bots] sections and the hook of the run wrote none). Run C6 needs them.
+6. NOT DONE: a graft step that gives the four modifier-less squads a start child; stock F07's yardstick (its bot squads are routs, not places - the Withdrawal build was used); a second optimiser pass on the delivered holds (the holds of
+   reloc4 were c_club3's; this build's holds differ for floor2 .. floor1s); the `fa` check's DEGRADED note on club_bare ('12 of 21 squads are named by no object': the gate squads are named by the bots step, the bare folder has none).
+
+### P.8 What run C6 must show (hook = the newest; `[Bots] Log=2 MoveLog=1` in the ini's ONE [Bots] section; the club's folder `club` of c_club4 or c_club4_music, idle human, 0.05 dial as before)
+
+- The walkway gate: no 'lost' line before GO+60 s (C5: first hit GO+22.9 s, four dead at the walkway by GO+43 s). The bots' own positions in the 'move:' lines (this is the only way to learn where the seven stood and why the four stood at x 1520).
+- Per gate the time it opened and why (a bot's positions stop within 10 m of the hold and start again before arrival + 30 s = the men died; at arrival + 30 s +- 1 s = the clock). A gate that always runs the clock names men nobody hits.
+- That the gate squads COME: a picture at each gate (every 2 s) with men on the deck / upper floors after the floor1s gate opens; a hit on a bot from a man of a gate squad (the 'lost' place against WAKE_AT) before that gate's opening = the wiring is
+  wrong. No such man ever = assumption 1 failed.
+- The first death after GO+60 s (Retomoto's gates: GO+175 s); the casualty per gate against the table above: floor2 / floor1n / floor1s are the rooms 5 .. 10 guns bear on.
+
+### P.9 Delivered folders (checks in each folder's `checks/summary.txt`; `chain.sh` / `checks.sh` / `dyncheck.py` / `routes.py` / `blocks.py` beside them; KL_TOOLS-aware; the builds ran on a scratch copy of HEAD's `tools/` + this commit's `kl_fa_club.py`: `C:/kl_scratch/club_pressure/h`, because `kl_fa_bank.py`, `kl_chars.py` and `kl_expansion.py` were modified in the working tree by other sessions)
+
+| folder | silent (`C:/kl_build/c_club4/`, against the installed stream file) | with the music (`C:/kl_build/c_club4_music/`, against `C:/kl_build/v_club/PC_Def.str`) |
+|---|---|---|
+| `club` | `22177f4fac075124fe3599de443e762ae6aa128f` 179,251,298 | `69649165c0a735e46a56ba16672c87f344e30b98` |
+| `club_wavslim` | the same archive, slim .WAV | the same archive of that set |
+| `club_noai` | `e7754c1f0a2330aa439c5a32a6c39be4545dfa47` (= c_club3's, unchanged) | `b1c31429f9b238ae5e8a0eab436a0855b11fd947` (= c_club3_music's, unchanged) |
+| `club_bare` | `075c78480d4ac904a9a225c7d01525524ca6aa41` | `c6699230541be0278f6e6b39cd1c60485ac1d798` |
+
+Checks on all eight: the same known findings as c_club3 (preflight CRASH 1 / audit on the silent set = the stream clips; chars glow30.fx; escape 217; guns on the bare folder), everything else PASS, including `bots_gate` (rooms_check with the pressure table) on `club` and
+`club_wavslim`, `bots_dyn` through dyncheck.py, `club_check`, `reverify`, `impact`, `vaultfx` (`python tools/kl_fa_vaultfx.py check` PASS on all eight). Rebuild: `sh C:/kl_scratch/club_pressure/deliver.sh <root> silent|music` (bare build, noai chain, full chain, checks).
