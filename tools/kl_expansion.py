@@ -48,6 +48,8 @@ for them, a manifest, and install / uninstall. Spec, layout, what is proven and 
                                                              of 2026-10-11 are seen live). A tree whose menu scene
                                                              already holds some of the pictures gets only the missing
                                                              ones added: the entities that are there stay as they are
+                                                             --only DM05A,..: only these maps get an entity (the others
+                                                             keep the picture the page shows now)
     python kl_expansion.py install [<tree>] [--game <Dog Days>] [--keep-slot] [--no-hook] [--no-stream] [--link]
                                    [--replace]
     python kl_expansion.py uninstall [--game <Dog Days>] [--restore-all]
@@ -72,8 +74,13 @@ LAYOUT (what klhook\klslot.c reads; <DD> = the folder of kl2.exe)
   from Maps\<id> while menu page 2 is chosen ([Redirect.2]). Entry k of a page loads slot F01 F02 F03 F04 F06 F07 F05
   F08 F09 [k] (kl2 0x746570); F05, F08 and F09 are the paid DLC slots and stay untouched, so a page has six free
   entries and the five maps take the first five (MAPS); the sixth, F07, is The Vault's when it is asked for (EXTRA).
-  With it page 2 is FULL: a seventh map needs page 3 (PAGE is one number here; mkoverlay.py has buttons for pages 2..5 - 2..4 with the
-  Heister button -, klslot.c takes [Redirect.2] .. [Redirect.9]).
+  With it page 2 is FULL. PAGES (2026-10-12): a map names its page (m['page'], manifest entry 'page'; default PAGE = 2); PAGES gives
+  the button's title (3 = 'Dead Men campaign', the club 'Last Call' = DM05A, EXTRA, slot F01 = entry 0 of page 3, so the stock
+  Subway is not touched: only [Redirect.3] names F01 and only while page 3 is open). Per page the tool writes [Redirect.N] / [Page.N]
+  in the ini block, the window HeistPlayMenuN + Arcade button (mkoverlay.py: buttons for pages 2..5, but only FOUR free rows beside
+  Heister and Guns = pages 2 and 3), manifest 'pages', and menu_check / overlay_kept / map_pictures run per page. A page picture
+  is keyed pk(page, slot) ('F01' for page 2, 'P3.F01' for page 3). Pages 2 and 3 are the most this menu holds with the Heister AND
+  the Guns button.
 
 WHAT INSTALL DOES, IN ORDER (uninstall undoes each step; both refuse while a kl2.exe with a thread exists)
     1. the tree is checked against its manifest;
@@ -103,8 +110,29 @@ STATE = '_installed'
 BACKUP = 'KL_PortBackup'
 ORDER = [1, 2, 3, 4, 6, 7, 5, 8, 9]            # menu entry k -> slot number (kl2 0x746570; klhook\mkoverlay.py)
 DLC = (5, 8, 9)                                # slots the game unlocks by ownership (re\fa_slots.md 1): never redirected here
-PAGE = 2                                       # the stock page sets the option 'Dummy' to 1, ours to 2 (klslot.c)
+PAGE = 2                                       # the stock page sets the option 'Dummy' to 1, ours to 2 (klslot.c); the FIRST expansion page
 PAGE_TITLE = 'Dead Men maps'
+# EXPANSION PAGES (2026-10-12): a map names its page (m['page'], default PAGE). Page N is the Arcade button + the window
+# HeistPlayMenuN + [Redirect.N] / [Page.N] of the ini block; entry k of EVERY page loads slot ORDER[k], so one slot name
+# (F01) is used by one map per page. Page 2 = the five Fragile Alliance maps + The Vault (full); page 3 = maps made from
+# CAMPAIGN levels, the club 'Last Call' first. mkoverlay.py has room for TWO pages beside the Heister and Guns buttons
+# (four free rows on the Arcade page: ICONS) - a third page needs the Guns or Heister button to go.
+PAGES = {2: PAGE_TITLE, 3: 'Dead Men campaign'}
+
+
+def page_of(m):
+    """The menu page of a map dict or a manifest entry (entries of trees built before pages existed have no 'page')."""
+    return m.get('page', PAGE)
+
+
+def page_title(n):
+    return PAGES.get(n, 'Expansion maps %d' % n)
+
+
+def pk(page, slot):
+    """Key of a page picture in the dicts build() / ini_block() pass around: the slot name on the first page (as before
+    pages existed), 'P<n>.<slot>' on another page - the slot name repeats from page to page."""
+    return slot if page == PAGE else 'P%d.%s' % (page, slot)
 JOIN_NAME = '06_Exit'                          # Retomoto: the jump point the join box sends to (kl_fa_author: Specials!JumpPoints!06_Exit)
 SYSTEMS = 'F07'                                # the only systems level a Dead Men map has run under (re\maps.md 3, 10)
 SIDE = ('KLJoin.ini', 'KLWardrobe.ini', 'KLGuns.ini', 'KLTalk.ini')      # the hook's per-map files: read beside the archive that is opened (kljoin.c, klchar.c, klgun.c)
@@ -174,6 +202,16 @@ EXTRA = [
          known_re=((r'sound: (\d+) stream clips are not in the merged stream file \(kl_audio\.merge\)', 10),),
          live='NOTHING: the map has never been loaded in the game (re/bank_campaign.md D4: L0 .. L3 on the F01 test slot come first; '
               'then M0 .. M3 of re/expansion.md 11 under slot F07)'),
+    # PAGE 3 (2026-10-12): 'Last Call' = the campaign club M05_A (tools\kl_fa_club.py, re\club_campaign.md D5, 'Gates'). Entry 0 of page 3
+    # = slot F01: the stock Subway is untouched (only [Redirect.3] names F01, and only while page 3 is open). Same rules as The Vault.
+    # known_re: the build's one finding is '5 stream clips are not in the merged stream file' (12 clip names: two music sets and
+    # five ambience beds) - the map is SILENT in them until a stream file holds them (C:/kl_build/v_club/PC_Def.str, kl_club_str.py).
+    # picture: Dead Men's frontend entity LevelPicture_M05 (the campaign chapter's picture; it exists, see pictures()).
+    dict(id='DM05A', slot='F01', page=3, title='Last Call', build='prebuilt', sources=['M05_A'], picture='LevelPicture_M05', bones_live=False,
+         audit=True, known=('stream clips are not in the merged stream file',),
+         known_re=((r'sound: (\d+) stream clips are not in the merged stream file \(kl_audio\.merge\)', 5),),
+         live='NOTHING: the map has never been loaded in the game (re/club_campaign.md D4 / C0 .. C5 on the F01 test slot come first; '
+              'then page 3 of the menu, entry 0)'),
 ]
 
 
@@ -486,42 +524,49 @@ def scene_names(path):
     return names
 
 
-def overlay_kept(ref_patch, new_patch):
+def overlay_kept(ref_patch, new_patch, pages=None):
     r"""The overlay the tree gets against one that is in use (--overlay-from): -> (findings, notes). Holds when every
-    window but the Arcade page (one more button) and the new map page is the reference's character for character -
-    so the Heister and the Guns page are exactly what was installed - and the rest of the file differs only by the
-    map page's gamepad template."""
+    window but the Arcade page (one more button per page the reference lacks) and the map pages is the reference's
+    character for character - so the Heister and the Guns page are exactly what was installed - and the rest of the
+    file differs only by the gamepad templates of the pages the reference lacks. pages: the page numbers of the tree
+    (default: PAGE); a page the reference has already may differ in its entries and pictures."""
+    pages = sorted(pages or [PAGE])
     a = zipfile.ZipFile(ref_patch).read('menu/frontend.xml').decode('latin-1')
     b = zipfile.ZipFile(new_patch).read('menu/frontend.xml').decode('latin-1')
     wa, wb = windows(a), windows(b)
-    name, bad = 'HeistPlayMenu%d' % PAGE, []
-    if name in wa:
-        # the reference is itself a tree's overlay (a 'mappics' variant, the overlay that is installed): then nothing
-        # but the map page may differ from it - the Arcade page, the Heister and Guns pages and everything outside the
-        # windows must be the reference's - and the note says whether the page itself is the reference's too
-        diff = sorted(k for k in set(wa) | set(wb) if wa.get(k) != wb.get(k))
-        if [k for k in diff if k != name]:
-            bad.append('windows that differ from the reference overlay: %s (only %s may)' % (diff, name))
-        strip = lambda t: re.sub(r'<Window Name="[^"]+"[^>]*>.*?</Window>', '', t, flags=re.S)
-        if strip(a) != strip(b):
-            bad.append('outside the windows the overlay differs from the reference overlay')
-        return bad, ['overlay kept from %s (it has the map page already): every other window and everything outside the windows as there; '
-                     'the map page %s' % (ref_patch, 'is the reference\'s character for character' if name not in diff else
-                                          'differs from the reference\'s (other entries or pictures)')]
+    names = ['HeistPlayMenu%d' % n for n in pages]
+    have, fresh = [n for n in pages if 'HeistPlayMenu%d' % n in wa], [n for n in pages if 'HeistPlayMenu%d' % n not in wa]
+    bad = []
     for k in MENU_EXTRA:
         if k in wa and wa[k] != wb.get(k):
             bad.append('window %s is not the one of %s' % (k, ref_patch))
     diff = sorted(k for k in set(wa) | set(wb) if wa.get(k) != wb.get(k))
-    if diff != sorted(['HeistModeMenu', name]):
-        bad.append('windows that differ from the reference overlay: %s (only HeistModeMenu and %s may)' % (diff, name))
+    allowed = set(names) | ({'HeistModeMenu'} if fresh else set())
+    if [k for k in diff if k not in allowed]:
+        bad.append('windows that differ from the reference overlay: %s (only %s may)' % (diff, ', '.join(sorted(allowed))))
+    if fresh and not set(['HeistModeMenu'] + ['HeistPlayMenu%d' % n for n in fresh]) <= set(diff):
+        bad.append('the new page(s) %s or their Arcade button are not in the overlay: windows that differ %s' % (fresh, diff))
     strip = lambda t: re.sub(r'<Window Name="[^"]+"[^>]*>.*?</Window>', '', t, flags=re.S)
-    norm = lambda t: re.sub(r'\s+', ' ', re.sub(r'<!--.*?-->', '', t, flags=re.S))
-    ra, rb = norm(strip(a)), norm(strip(b))
-    rb2 = re.sub(r'<Template Name="BottomFrameHeistBackStartGameButtons_P%d">.*?</Template> ?' % PAGE, '', rb, flags=re.S)
-    if rb2 == rb or ra != rb2:
-        bad.append('outside the windows more than the map page\'s gamepad template differs from the reference overlay')
-    return bad, ['overlay kept from %s: %s as there; changed: HeistModeMenu (one more button); new: %s and its gamepad template' % (
-        ref_patch, ', '.join(k for k in MENU_EXTRA if k in wa) or 'no extra window', name)]
+    if fresh:
+        norm = lambda t: re.sub(r'\s+', ' ', re.sub(r'<!--.*?-->', '', t, flags=re.S))
+        ra, rb = norm(strip(a)), norm(strip(b))
+        rb2 = rb
+        for n in fresh:
+            rb2 = re.sub(r'<Template Name="BottomFrameHeistBackStartGameButtons_P%d">.*?</Template> ?' % n, '', rb2, flags=re.S)
+        if rb2 == rb or ra != rb2:
+            bad.append('outside the windows more than the gamepad template(s) of page(s) %s differ from the reference overlay' % fresh)
+    elif strip(a) != strip(b):
+        bad.append('outside the windows the overlay differs from the reference overlay')
+    if have:
+        same = [n for n in names if wa.get(n) == wb.get(n)]
+        note = ('overlay kept from %s (it has page(s) %s already): every other window and everything outside the windows as there%s; '
+                'map page(s) %s' % (ref_patch, have, '; new: page(s) %s, one more Arcade button each and their gamepad template' % fresh if fresh else '',
+                                    ', '.join('%s %s' % (n, "is the reference's character for character" if n in same else "differs from the reference's (other entries or pictures)") for n in names if n not in
+                                              ['HeistPlayMenu%d' % x for x in fresh])))
+    else:
+        note = ('overlay kept from %s: %s as there; changed: HeistModeMenu (one more button per page); new: %s and their gamepad template' % (
+            ref_patch, ', '.join(k for k in MENU_EXTRA if k in wa) or 'no extra window', ', '.join(names)))
+    return bad, [note]
 
 
 def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share_too=True, pictures_too=True, bones=True, hook_make=True, log=print,
@@ -564,8 +609,8 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
                 shutil.rmtree(x); log('%s: not asked for (no --prebuilt %s=...): %s removed from the tree' % (m['id'], m['id'], os.path.relpath(x, tree)))
     for a in MAPS + extra:                              # one slot, one map
         for b in MAPS + extra:
-            if a is not b and a['slot'] == b['slot']:
-                raise SystemExit('%s and %s both want slot %s' % (a['id'], b['id'], a['slot']))
+            if a is not b and a['slot'] == b['slot'] and page_of(a) == page_of(b):
+                raise SystemExit('%s and %s both want slot %s of page %d' % (a['id'], b['id'], a['slot'], page_of(a)))
     maps = [m for m in MAPS if not only or m['id'] in only] + extra_do
     t0 = time.time()
     # ---- the maps, each in a process of its own, `par` at a time (a build takes 40 .. 90 s and about 3 GB of memory)
@@ -672,7 +717,7 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
             if aud.get('prm_entries'):
                 numbers['prm_chunks'] = aud['prm_entries'] - 1
         entries.append({
-            'id': m['id'], 'name': m['title'], 'slot': m['slot'], 'menu_entry': ORDER.index(int(m['slot'][1:])), 'folder': 'Maps/' + m['id'],
+            'id': m['id'], 'name': m['title'], 'slot': m['slot'], 'page': page_of(m), 'menu_entry': ORDER.index(int(m['slot'][1:])), 'folder': 'Maps/' + m['id'],
             'scene': 'Locations/%s/%s_Main' % (m['slot'], m['slot']), 'systems_level': SYSTEMS, 'source_levels': m['sources'],
             'build': m['build'] + (' (kl_maps.one, kl_graft defaults)' if m['build'] == 'one' else ' (campaign pre-pass + kl_fa_author layer)' if m['build'] == 'chain' else
                                    ' (a finished folder only: tools\\kl_fa_bank.py + c_bank\\chain.sh, re/bank_campaign.md D2)'),
@@ -720,8 +765,8 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
     page_pics = {}
     if ref_scene and map_pics:
         have = scene_names(ref_scene)
-        page_pics = {e['slot']: MAP_PIC % e['id'] for e in entries if MAP_PIC % e['id'] in have}
-        lack = [e['id'] for e in entries if e['slot'] not in page_pics]
+        page_pics = {pk(e['page'], e['slot']): MAP_PIC % e['id'] for e in entries if MAP_PIC % e['id'] in have}
+        lack = [e['id'] for e in entries if pk(e['page'], e['slot']) not in page_pics]
         if page_pics:
             log('map pictures of the reference scene named on the page: %s%s' % (
                 ', '.join('%s %s' % (s, n) for s, n in sorted(page_pics.items())),
@@ -735,7 +780,7 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
     if page_pics:
         menu['map_pictures'] = page_pics
     if ref_patch and not r.returncode:
-        kb, kn = overlay_kept(ref_patch, os.path.join(tree, 'Overlay', 'Patch01.zip'))
+        kb, kn = overlay_kept(ref_patch, os.path.join(tree, 'Overlay', 'Patch01.zip'), sorted({e['page'] for e in entries}))
         carried = []
         for rel in files_under(ref):                    # Scenes\kaneandlynch.zip: the picture entities the Heister page names
             if rel.lower() in ('patch01.zip', 'pc_def.str'):
@@ -808,6 +853,7 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
     man = {
         'format': 1, 'name': 'Kane & Lynch: Dead Men maps for Dog Days', 'built': time.strftime('%Y-%m-%d %H:%M:%S'),
         'tools': tool_state(), 'root': ROOT, 'page': {'number': PAGE, 'title': PAGE_TITLE, 'option': 'Dummy'},
+        'pages': [{'number': n, 'title': page_title(n), 'maps': [e['id'] for e in entries if e['page'] == n]} for n in sorted({e['page'] for e in entries})],
         'needs': {'kl2.exe': {'sha1': sha1(exe), 'bytes': os.path.getsize(exe)},
                   'systems_level': {SYSTEMS + '_Main.zip': sha1(stock_file(dd, os.path.join('Scenes', 'Locations', SYSTEMS, SYSTEMS + '_Main.zip')))},
                   'stream_file': stream_info, 'hook': hook_info or 'not in the tree: the game folder must hold a klslot build with menu pages'},
@@ -845,13 +891,19 @@ def build(out=None, only=None, par=2, reuse=False, hook=None, stream=True, share
 
 
 def ini_block(entries, pics=None):
-    """The sections klslot.c and mkoverlay.py read. Only [Redirect.<PAGE>]: no rule for 'every page', so the stock
-    page and a direct boot load the stock levels ([Expansion] Page=2 forces the page for a direct-boot test).
-    pics: {slot: entity of the menu scene} -> '<slot>.Picture=' lines at the end of [Page.<PAGE>], in the form and
-    place map_pictures() writes them (mkoverlay.py reads them; klslot.c reads only Title of that section)."""
-    L = ['[Expansion]', 'Enable=1', 'Root=' + ROOT, 'Overlay=1', 'Fallback=1', 'Log=1', '',
-         '; menu page %d = the Arcade button "%s": <stock slot> = <folder under %s\\Maps>' % (PAGE, PAGE_TITLE, ROOT), '[Redirect.%d]' % PAGE]
-    L += ['%s=%s' % (e['slot'], e['id']) for e in entries]
+    """The sections klslot.c and mkoverlay.py read. Per page that has a map: [Redirect.<N>] (no rule for 'every page', so
+    the stock page and a direct boot load the stock levels; [Expansion] Page=N forces the page for a direct-boot test)
+    and [Page.<N>]. Entries without a 'page' belong to PAGE. With maps on page 2 only the text is what it was before
+    page 3 existed.
+    pics: {pk(page, slot): entity of the menu scene} -> '<slot>.Picture=' lines at the end of that page's [Page.<N>],
+    in the form and place map_pictures() writes them (mkoverlay.py reads them; klslot.c reads only Title of that
+    section)."""
+    nums = sorted({page_of(e) for e in entries}) or [PAGE]
+    on = lambda n: [e for e in entries if page_of(e) == n]
+    L = ['[Expansion]', 'Enable=1', 'Root=' + ROOT, 'Overlay=1', 'Fallback=1', 'Log=1']
+    for n in nums:
+        L += ['', '; menu page %d = the Arcade button "%s": <stock slot> = <folder under %s\\Maps>' % (n, page_title(n), ROOT), '[Redirect.%d]' % n]
+        L += ['%s=%s' % (e['slot'], e['id']) for e in on(n)]
     L += ['', '; AI heisters are enabled for the adopted FA maps; the hook still gates behavior to non-stock levels.',
           '[Bots]', 'Enable=1', 'Log=1',
           '; one AI heister stays beside the player (klescort.c; seen live 2026-10-11 with a standing player only); 0 = off, 2 = two',
@@ -870,10 +922,27 @@ def ini_block(entries, pics=None):
           'Tune=1',
           'Backstab=35',
           '; random AI heister looks from the wardrobe, no body twice, never the one the player wears (klcrew.c; seen live 2026-10-10)',
-          '[Crew]', 'Random=1',
-          '', '[Page.%d]' % PAGE, 'Title=' + PAGE_TITLE] + ['%s=%s' % (e['slot'], e['name']) for e in entries]
-    L += ['%s.Picture=%s' % (e['slot'], pics[e['slot']]) for e in entries if pics and e['slot'] in pics]
+          '[Crew]', 'Random=1']
+    for n in nums:
+        L += ['', '[Page.%d]' % n, 'Title=' + page_title(n)] + ['%s=%s' % (e['slot'], e['name']) for e in on(n)]
+        L += ['%s.Picture=%s' % (e['slot'], pics[pk(n, e['slot'])]) for e in on(n) if pics and pk(n, e['slot']) in pics]
     return '\n'.join(L) + '\n'
+
+
+def ini_add_lines(text, section, lines):
+    """text with `lines` appended to the end of [section] (before the next header or the end of the text)."""
+    out, ins, at = text.split('\n'), None, None
+    for i, l in enumerate(out):
+        m = re.match(r'\s*\[([^\]]+)\]', l)
+        if m and ins is not None:
+            break
+        if m and m.group(1).strip().lower() == section.lower():
+            ins = i
+        if ins is not None and l.strip():
+            at = i
+    if ins is None:
+        raise SystemExit('the ini has no [%s]' % section)
+    return '\n'.join(out[:at + 1] + list(lines) + out[at + 1:])
 
 
 # ------------------------------------------------------------------ the menu page against re\menus.md
@@ -914,15 +983,16 @@ def menu_check(tree, stock_patch, entries, dd, log=print, scene=None):
             bad.append('%s is not the stock member' % n)
     a, b = old.read('menu/frontend.xml').decode('latin-1'), new.read('menu/frontend.xml').decode('latin-1')
     wa, wb = windows(a), windows(b)
-    name = 'HeistPlayMenu%d' % PAGE
+    pages = sorted({page_of(e) for e in entries}) or [PAGE]
+    name = 'HeistPlayMenu%d' % pages[0]
     for k, v in wb.items():
         if len(v) > len(wa.get(k, [])) and len(v) > 1:  # stock itself holds three names twice (console alternatives)
             bad.append('window name %s is used %d times' % (k, len(v)))
     # mkoverlay.py also adds the Heister page and the Guns page unless the ini turns them off (its own check() covers
     # their rows); what this check is strict about is the MAP page and that nothing else is new
     extra = sorted((set(wb) - set(wa)) & set(MENU_EXTRA))
-    if set(wb) - set(wa) - set(MENU_EXTRA) != {name}:
-        bad.append('new windows %s, expected %s and at most %s' % (sorted(set(wb) - set(wa)), name, ', '.join(MENU_EXTRA)))
+    if set(wb) - set(wa) - set(MENU_EXTRA) != {'HeistPlayMenu%d' % n for n in pages}:
+        bad.append('new windows %s, expected %s and at most %s' % (sorted(set(wb) - set(wa)), ', '.join('HeistPlayMenu%d' % n for n in pages), ', '.join(MENU_EXTRA)))
     if extra:
         note.append('windows beside the map page (klhook\\mkoverlay.py): ' + ', '.join(extra))
     changed = [k for k in wa if k in wb and wa[k] != wb[k]]
@@ -936,63 +1006,67 @@ def menu_check(tree, stock_patch, entries, dd, log=print, scene=None):
             bad.append('the overlay\'s menu scene lacks %d entities of the stock scene' % len(names - more))
         note.append('menu scene of the overlay: %d entities more than the stock scene (%s)' % (len(more - names), own))
         names = names | more
-    want = {int(e['slot'][1:]): e for e in entries}
-    if name in wb:
-        try:
-            w = ET.fromstring(wb[name][0])
-        except ET.ParseError as x:
-            w = None; bad.append('%s is not well-formed: %s' % (name, x))
-        if w is not None:
-            sel = [e for e in w.iter('GuiElement') if e.get('Type') == 'MercsLevelSelectorHeist']
-            if len(sel) != 1 or sel[0].get('Option') != 'Heist_SelectedLevel':
-                bad.append('%s: %d level selectors' % (name, len(sel)))
-            else:
-                texts = [t.get('Text') for t in sel[0].findall('Text')]
-                if len(texts) != 9:
-                    bad.append('%s: the selector has %d entries; nine is what the code is built for (re\\menus.md 4.3)' % (name, len(texts)))
-                for k, t in enumerate(texts[:9]):
-                    slot = ORDER[k]
-                    exp = '%' + want[slot]['name'] if slot in want else '/Menu/Online/Scenarios/Title%02d' % slot
-                    if t != exp:
-                        bad.append('%s entry %d (slot F%02d): text %r, expected %r' % (name, k, slot, t, exp))
-                    if slot in want and slot in DLC:
-                        bad.append('%s: slot F%02d is a DLC slot and must keep its stock level' % (name, slot))
-                    if slot in want and (not t[1:].isascii() or any(c in t for c in '&"<>') or len(t) > 48):
-                        bad.append('%s entry %d: title %r breaks the literal-text rule' % (name, k, t))
-                recv = (sel[0].get('ToggleReceivers') or '').split(',')
-                togg = [e for e in w.iter('GuiElement') if e.get('Type') == 'ToggleImages' and e.get('Name') in recv]
-                if len(togg) != 1 or len(togg[0].findall('Graphic')) != 9:
-                    bad.append('%s: the picture toggler does not have nine pictures' % name)
-                elif {g.get('Graphic') for g in togg[0].findall('Graphic')} - {e.get('Name') for e in w.iter('GuiElement')}:
-                    bad.append('%s: the picture toggler names an element the page does not have' % name)
-            if any(e.get('TagName') == 'HeistBriefing' for e in w.iter('GuiElement')):
-                bad.append('%s still shows the stock map\'s briefing' % name)
-            for e in w.iter('GuiElement'):
-                g = e.get('Graphic')
-                if g and e.get('Type') == 'Graphic' and g not in names:
-                    bad.append('%s: Graphic="%s" is no entity of the frontend scene' % (name, g))
-            used = collections.Counter(e.get('Name') for e in w.iter('GuiElement') if e.get('Name'))
-            dup = [k for k, v in used.items() if v > 1]
-            if dup:
-                bad.append('%s: element names used twice: %s' % (name, dup))
-            pics = {e.get('Name'): e.get('Graphic') for e in w.iter('GuiElement') if e.get('Type') == 'Graphic' and e.get('Template') == 'LevelPicture_T'}
-            note.append('pictures of the page: ' + ', '.join('F%02d %s' % (s, pics.get('H%02d_LevelPicture_P%d' % (s, PAGE), pics.get('H%02d_LevelPicture' % s)))
-                                                             for s in ORDER if s in want))
+    for pn in pages:
+        name = 'HeistPlayMenu%d' % pn
+        want = {int(e['slot'][1:]): e for e in entries if page_of(e) == pn}
+        if name in wb:
+            try:
+                w = ET.fromstring(wb[name][0])
+            except ET.ParseError as x:
+                w = None; bad.append('%s is not well-formed: %s' % (name, x))
+            if w is not None:
+                sel = [e for e in w.iter('GuiElement') if e.get('Type') == 'MercsLevelSelectorHeist']
+                if len(sel) != 1 or sel[0].get('Option') != 'Heist_SelectedLevel':
+                    bad.append('%s: %d level selectors' % (name, len(sel)))
+                else:
+                    texts = [t.get('Text') for t in sel[0].findall('Text')]
+                    if len(texts) != 9:
+                        bad.append('%s: the selector has %d entries; nine is what the code is built for (re\\menus.md 4.3)' % (name, len(texts)))
+                    for k, t in enumerate(texts[:9]):
+                        slot = ORDER[k]
+                        exp = '%' + want[slot]['name'] if slot in want else '/Menu/Online/Scenarios/Title%02d' % slot
+                        if t != exp:
+                            bad.append('%s entry %d (slot F%02d): text %r, expected %r' % (name, k, slot, t, exp))
+                        if slot in want and slot in DLC:
+                            bad.append('%s: slot F%02d is a DLC slot and must keep its stock level' % (name, slot))
+                        if slot in want and (not t[1:].isascii() or any(c in t for c in '&"<>') or len(t) > 48):
+                            bad.append('%s entry %d: title %r breaks the literal-text rule' % (name, k, t))
+                    recv = (sel[0].get('ToggleReceivers') or '').split(',')
+                    togg = [e for e in w.iter('GuiElement') if e.get('Type') == 'ToggleImages' and e.get('Name') in recv]
+                    if len(togg) != 1 or len(togg[0].findall('Graphic')) != 9:
+                        bad.append('%s: the picture toggler does not have nine pictures' % name)
+                    elif {g.get('Graphic') for g in togg[0].findall('Graphic')} - {e.get('Name') for e in w.iter('GuiElement')}:
+                        bad.append('%s: the picture toggler names an element the page does not have' % name)
+                if any(e.get('TagName') == 'HeistBriefing' for e in w.iter('GuiElement')):
+                    bad.append('%s still shows the stock map\'s briefing' % name)
+                for e in w.iter('GuiElement'):
+                    g = e.get('Graphic')
+                    if g and e.get('Type') == 'Graphic' and g not in names:
+                        bad.append('%s: Graphic="%s" is no entity of the frontend scene' % (name, g))
+                used = collections.Counter(e.get('Name') for e in w.iter('GuiElement') if e.get('Name'))
+                dup = [k for k, v in used.items() if v > 1]
+                if dup:
+                    bad.append('%s: element names used twice: %s' % (name, dup))
+                pics = {e.get('Name'): e.get('Graphic') for e in w.iter('GuiElement') if e.get('Type') == 'Graphic' and e.get('Template') == 'LevelPicture_T'}
+                note.append('pictures of the page: ' + ', '.join('F%02d %s' % (s, pics.get('H%02d_LevelPicture_P%d' % (s, pn), pics.get('H%02d_LevelPicture' % s)))
+                                                                 for s in ORDER if s in want))
     if 'HeistModeMenu' in wb:
         try:
             w = ET.fromstring(wb['HeistModeMenu'][0])
             btn = [e for e in w.iter('GuiElement') if e.get('Type') == 'OpenWindow' and (e.get('Window') or '').startswith('HeistPlayMenu')]
             vals = sorted((e.get('Window'), e.get('Option'), e.get('OptionValue')) for e in btn)
-            if vals != [('HeistPlayMenu', 'Dummy', '1'), (name, 'Dummy', str(PAGE))]:
+            if vals != sorted([('HeistPlayMenu', 'Dummy', '1')] + [('HeistPlayMenu%d' % n, 'Dummy', str(n)) for n in pages]):
                 bad.append('HeistModeMenu: map-page buttons %s' % vals)
-            ours = [e.get('FocusGraphic') for e in btn if e.get('Window') == name]
-            fg = [e.get('FocusGraphic') for e in w.iter('GuiElement') if e.get('FocusGraphic')]
-            bars = [e.get('Name') for e in w.iter('GuiElement') if e.get('Template') == 'HM_FocusBar']
-            if len(ours) != 1 or fg.count(ours[0]) != 1 or bars.count(ours[0]) != 1:
-                bad.append('HeistModeMenu: the new button needs a focus bar of its own (%s)' % ours)
-            ys = [e.get('Y') for e in w.iter('GuiElement') if e.get('Template') == 'HM_Button']
-            if len(ours) == 1 and ys.count(next(e.get('Y') for e in btn if e.get('Window') == name)) != 1:
-                bad.append('HeistModeMenu: the new button stands on another button')
+            for pn in pages:
+                name = 'HeistPlayMenu%d' % pn
+                ours = [e.get('FocusGraphic') for e in btn if e.get('Window') == name]
+                fg = [e.get('FocusGraphic') for e in w.iter('GuiElement') if e.get('FocusGraphic')]
+                bars = [e.get('Name') for e in w.iter('GuiElement') if e.get('Template') == 'HM_FocusBar']
+                if len(ours) != 1 or fg.count(ours[0]) != 1 or bars.count(ours[0]) != 1:
+                    bad.append('HeistModeMenu: the new button of page %d needs a focus bar of its own (%s)' % (pn, ours))
+                ys = [e.get('Y') for e in w.iter('GuiElement') if e.get('Template') == 'HM_Button']
+                if len(ours) == 1 and ys.count(next(e.get('Y') for e in btn if e.get('Window') == name)) != 1:
+                    bad.append('HeistModeMenu: the new button of page %d stands on another button' % pn)
             for e in w.iter('GuiElement'):
                 if e.get('Template') == 'HM_FocusBar' and e.get('Graphic') not in names:
                     bad.append('HeistModeMenu: focus bar graphic %s is no entity of the frontend scene' % e.get('Graphic'))
@@ -1004,14 +1078,17 @@ def menu_check(tree, stock_patch, entries, dd, log=print, scene=None):
     tags = lambda t: len(re.findall(r'<(?:Window|GuiElement|ColorSet|ButtonGraphic)\b', t))
     n0, n1, no = tags(a), tags(b), tags(online)
     n_extra = {k: sum(tags(t) for t in wb[k]) for k in extra}
-    if n1 - n0 - sum(n_extra.values()) > 100:
-        bad.append('the map page adds %d elements; more than 100 was never meant' % (n1 - n0 - sum(n_extra.values())))
-    out = {'ok': not bad, 'findings': bad, 'notes': note, 'window': name, 'extra_windows': n_extra, 'elements_added': n1 - n0,
+    if n1 - n0 - sum(n_extra.values()) > 100 * len(pages):
+        bad.append('the map page(s) add %d elements; more than 100 a page was never meant' % (n1 - n0 - sum(n_extra.values())))
+    p0 = pages[0]
+    want0 = {int(e['slot'][1:]): e for e in entries if page_of(e) == p0}
+    out = {'ok': not bad, 'findings': bad, 'notes': note, 'window': 'HeistPlayMenu%d' % p0, 'windows_of_pages': ['HeistPlayMenu%d' % n for n in pages],
+           'entries_by_page': {str(n): ['%s%s' % (e['name'], ' [DLC slot]' if int(e['slot'][1:]) in DLC else '') if True else '' for e in entries if page_of(e) == n] for n in pages}, 'extra_windows': n_extra, 'elements_added': n1 - n0,
            'tags_stock_frontend': n0, 'tags_frontend': n1,
            'tags_online_xml': no, 'element_table': 5096, 'windows': len(wb), 'frontend_xml_sha1': hashlib.sha1(b.encode('latin-1')).hexdigest(),
-           'entries': ['%s%s' % (want[s]['name'] if s in want else '(stock F%02d)' % s, ' [DLC slot]' if s in DLC else '') for s in ORDER]}
+           'entries': ['%s%s' % (want0[s]['name'] if s in want0 else '(stock F%02d)' % s, ' [DLC slot]' if s in DLC else '') for s in ORDER]}
     log('menu page %s: %s; %d tags added to %d (frontend.xml) + %d (online.xml); table 5096, headroom not established' % (
-        name, 'rules hold' if not bad else '%d FINDINGS' % len(bad), n1 - n0, n0, no))
+        ' + '.join('HeistPlayMenu%d' % n for n in pages), 'rules hold' if not bad else '%d FINDINGS' % len(bad), n1 - n0, n0, no))
     for x in bad:
         log('   MENU: ' + x)
     for x in note:
@@ -1023,7 +1100,7 @@ def menu_check(tree, stock_patch, entries, dd, log=print, scene=None):
 MAP_PIC = 'LevelPicture_%s'                   # entity name of a map's picture in the menu scene: LevelPicture_DM01 ...
 
 
-def map_pictures(tree, dest, log=print):
+def map_pictures(tree, dest, log=print, only=None):
     r"""A VARIANT of the tree's overlay in which the map page shows Dead Men's own picture of each map
     (re\expansion.md 4.2 'NOT DONE - the entity', done here; NOT SEEN IN THE GAME):
         <dest>\Overlay\Scenes\kaneandlynch.zip   the tree's menu scene (the one with the Heister pictures; without one
@@ -1061,6 +1138,8 @@ def map_pictures(tree, dest, log=print):
     # owner's game) gets only the MISSING ones: the entities, textures and chunks that are there are not written again,
     # so what was seen in the game stays exactly what it was. `every` = all maps of the page, `pics` = the new ones.
     every = [(MAP_PIC % e['id'], e) for e in man['maps']]
+    if only:                                            # only these maps get a picture; the others keep what the page shows now
+        every = [(n, e) for n, e in every if e['id'] in only or n in have]
     kept = [n for n, _e in every if n in have]
     pics = []
     for name, e in every:
@@ -1134,7 +1213,8 @@ def map_pictures(tree, dest, log=print):
     # ---- the page: the tree's ini block with the pictures named, through mkoverlay.py exactly as the tree's was made
     ini = os.path.join(dest, 'KLHook.expansion.ini')
     text = ''.join(l + '\n' for l in open(os.path.join(tree, 'KLHook.expansion.ini')).read().splitlines() if not re.match(r'F0\d\.Picture=', l))
-    text = text.rstrip('\n') + '\n' + ''.join('%s.Picture=%s\n' % (e['slot'], n) for n, e in every)
+    for pn in sorted({page_of(e) for _n, e in every}):  # the lines go to the end of their own page's section
+        text = ini_add_lines(text.rstrip('\n'), 'Page.%d' % pn, ['%s.Picture=%s' % (e['slot'], n) for n, e in every if page_of(e) == pn]) + '\n'
     with open(ini, 'w', newline='\r\n') as f:
         f.write(text)
     tpatch = os.path.join(tree, 'Overlay', 'Patch01.zip')
@@ -1146,20 +1226,21 @@ def map_pictures(tree, dest, log=print):
     a = zipfile.ZipFile(tpatch).read('menu/frontend.xml').decode('latin-1')
     b = zipfile.ZipFile(os.path.join(dest, 'Overlay', 'Patch01.zip')).read('menu/frontend.xml').decode('latin-1')
     wa, wb = windows(a), windows(b)
-    page = 'HeistPlayMenu%d' % PAGE
+    pages = sorted({page_of(e) for e in man['maps']})
+    pnames = ['HeistPlayMenu%d' % n for n in pages]
     diff = sorted(k for k in set(wa) | set(wb) if wa.get(k) != wb.get(k))
-    if diff != [page]:
-        bad.append('windows that differ from the tree\'s overlay: %s (only %s may)' % (diff, page))
+    if [k for k in diff if k not in pnames] or not diff:
+        bad.append('windows that differ from the tree\'s overlay: %s (only %s may)' % (diff, ', '.join(pnames)))
     strip = lambda t: re.sub(r'<Window Name="[^"]+"[^>]*>.*?</Window>', '', t, flags=re.S)
     if strip(a) != strip(b):
         bad.append('the overlay differs from the tree\'s outside the windows')
     now = {e.name.decode('latin1') for e in kl_scene.read(zipfile.ZipFile(path), 'Scenes/kaneandlynch').entities()}
-    used = re.findall(r'Template="LevelPicture_T" Graphic="([^"]+)"', wb[page][0])
+    used = [g for pn in pnames for g in re.findall(r'Template="LevelPicture_T" Graphic="([^"]+)"', wb[pn][0])]
     for n, e in every:
         if used.count(n) != 1:
-            bad.append('%s is used %d times on the page' % (n, used.count(n)))
+            bad.append('%s is used %d times on the page(s)' % (n, used.count(n)))
     pic = r'<GuiElement\b[^>]*Template="LevelPicture_T"[^>]*\bGraphic="([^"]+)"'       # the picture elements; a <Graphic Graphic=> child names an ELEMENT
-    for g in sorted(set(re.findall(pic, wb[page][0]) + re.findall(pic, wb.get('KLHeister', [''])[0]))):
+    for g in sorted(set([x for pn in pnames for x in re.findall(pic, wb[pn][0])] + re.findall(pic, wb.get('KLHeister', [''])[0]))):
         if g not in now:
             bad.append('Graphic="%s" is no entity of the variant\'s menu scene' % g)
     with open(os.path.join(dest, 'variant.json'), 'w') as f:
@@ -1635,9 +1716,96 @@ def ini_without_ours(text):
     return '\n'.join(keep) + ('\n' if keep else '')
 
 
-def ini_merge(text, block):
+BLOCK_RE = r'(?ms)^%s.*?^%s[^\n]*\n?' % (re.escape(BEGIN), re.escape(END))
+
+
+def ini_key(line):
+    """The key of an ini line 'Key=Value' (None for comments, headers, blanks)."""
+    m = re.match(r'\s*([^;#=\[\s][^=]*?)\s*=', line)
+    return m.group(1) if m else None
+
+
+def ini_merge(text, block, old_default=None, kept=None):
+    r"""The game's KLHook.ini with the tree's block (between the marker lines) and nothing the player wrote lost.
+    What the tool owns and rewrites whole: the sections klslot.c reads (OURS: Expansion, Redirect.N, Page.N, Slots).
+    What it does NOT own: every other section - [Bots], [Crew] and whatever the file holds ([Down], [Balance], [Fed],
+    [HUD], [Shoulder] ...). Until 2026-10-12 the old block went away whole, so a key the player had added to [Bots]
+    INSIDE it (BoardReach, Restless, FollowOutShield, BoardNear, FollowOutHold, FollowOutSpare, MoveLog) was lost at
+    every install. Now, for each section the new block writes that is not OURS ([Bots], [Crew]):
+        - the keys of that section that stand OUTSIDE the block, and those inside the old block that are not just the
+          old tree's own default (old_default = the KLHook.expansion.ini the earlier install put in KLExpansion; none =
+          every key of the old block counts as the player's), are the PLAYER'S: their values win over the new block's
+          defaults and the keys the block lacks are added at the end of the section ('kept from the file');
+        - the player's section is folded into the block's (one section [Bots], not two: Windows' profile calls read
+          the first section of a name only - an [Bots] outside plus one in the block would shadow each other).
+    Sections of the old block that the new block does not write, and the player's sections outside it, stay (the first
+    are moved out of the block). kept: list that receives (section, key, value, differs_from_block_default) lines."""
+    m = re.search(BLOCK_RE, text)
+    outside = text[:m.start()] + text[m.end():] if m else text
+    old_body = m.group(0) if m else ''
+    ours_new = ini_sections(block)
+    names = {n.lower() for n, _l in ours_new if n and not OURS.match(n)}
+    dflt = {}
+    for n, lines in ini_sections(old_default or ''):
+        for l in lines:
+            k = ini_key(l)
+            if n and k:
+                dflt.setdefault(n.lower(), {}).setdefault(k.lower(), l.split('=', 1)[1].strip())
+    user = collections.OrderedDict()                    # lower section name -> {lower key: (key, line)}
+    from_block = collections.OrderedDict()              # sections of the old block the new one does not write
+    for src, in_block in ((outside, False), (old_body, True)):
+        for n, lines in ini_sections(src):
+            if not n or OURS.match(n):
+                continue
+            if in_block and n.lower() not in names:
+                from_block[n] = lines
+                continue
+            if n.lower() not in names:
+                continue
+            d = user.setdefault(n.lower(), collections.OrderedDict())
+            for l in lines[1:]:
+                k = ini_key(l)
+                if not k or k.lower() in d:
+                    continue
+                if in_block and old_default is not None and dflt.get(n.lower(), {}).get(k.lower()) == l.split('=', 1)[1].strip():
+                    continue                            # the old tree's own default: the new block says what it says
+                d[k.lower()] = (k, l)
     rest = ini_without_ours(text)
-    return rest + ('\n' if rest else '') + BEGIN + '\n' + block.rstrip('\n') + '\n' + END + '\n'
+    rest_secs = [(n, l) for n, l in ini_sections(rest) if not (n and n.lower() in names)]
+    rest = '\n'.join(l for _n, ls in rest_secs for l in ls)
+    while rest.endswith('\n\n'):
+        rest = rest[:-1]
+    rest = rest.rstrip('\n') + ('\n' if rest.strip() else '')
+    for n, lines in from_block.items():                 # a section the player added inside the old block: it leaves the block, whole
+        body = list(lines)
+        while body and not body[-1].strip():
+            body.pop()
+        rest += ('\n' if rest else '') + '\n'.join(body) + '\n'
+    out = []
+    for n, lines in ours_new:
+        lines = list(lines)
+        d = user.get(n.lower()) if n else None
+        if d:
+            have = {}
+            for i, l in enumerate(lines):
+                k = ini_key(l)
+                if k:
+                    have[k.lower()] = i
+            last = max(have.values()) if have else 0
+            for kl, (k, l) in d.items():
+                if kl in have:
+                    old = lines[have[kl]].split('=', 1)[1].strip()
+                    if kept is not None:
+                        kept.append((n, k, l.split('=', 1)[1].strip(), old != l.split('=', 1)[1].strip()))
+                    lines[have[kl]] = l
+            extra = [l for kl, (k, l) in d.items() if kl not in have]
+            if extra:
+                lines[last + 1:last + 1] = ['; kept from the KLHook.ini that was there (kl_expansion.py install)'] + extra
+                if kept is not None:
+                    kept.extend((n, k, l.split('=', 1)[1].strip(), True) for kl, (k, l) in d.items() if kl not in have)
+        out.extend(lines)
+    block2 = '\n'.join(out)
+    return rest + ('\n' if rest else '') + BEGIN + '\n' + block2.rstrip('\n') + '\n' + END + '\n'
 
 
 def put_dll(src, dst, log=print):
@@ -1664,6 +1832,8 @@ def install(tree=None, game=None, keep_slot=False, use_hook=True, use_stream=Tru
     if refused:
         raise SystemExit('maps %s were not accepted by the build: not installed' % ', '.join(refused))
     dst, st = os.path.join(game, ROOT), os.path.join(game, ROOT, STATE)
+    old_exp = os.path.join(dst, 'KLHook.expansion.ini')     # the block the earlier install wrote (before the tree's files replace it): its defaults are not the player's keys
+    old_default = open(old_exp, encoding='latin-1', newline='').read().replace('\r\n', '\n') if os.path.isfile(old_exp) and os.path.isfile(os.path.join(st, 'install.json')) else None
     state = {'installed': time.strftime('%Y-%m-%d %H:%M:%S'), 'manifest_built': man['built'], 'files': [], 'aside': None, 'ini': None, 'dll': None, 'slot': [], 'linked': 0}
     old = json.load(open(os.path.join(st, 'install.json'))) if os.path.isfile(os.path.join(st, 'install.json')) else None
     if os.path.isdir(dst) and not old:
@@ -1727,10 +1897,14 @@ def install(tree=None, game=None, keep_slot=False, use_hook=True, use_stream=Tru
         state['ini'] = {'existed': had, 'before': sha1(ini) if had else None}
         if had:
             shutil.copyfile(ini, os.path.join(st, 'KLHook.ini.before'))
-    merged = ini_merge(text, open(os.path.join(tree, 'KLHook.expansion.ini'), encoding='latin-1', newline='').read().replace('\r\n', '\n'))
+    kept = []
+    merged = ini_merge(text, open(os.path.join(tree, 'KLHook.expansion.ini'), encoding='latin-1', newline='').read().replace('\r\n', '\n'), old_default, kept)
     with open(ini, 'w', encoding='latin-1', newline='\r\n') as f:
         f.write(merged)
     state['ini']['after'] = sha1(ini)
+    if kept:
+        log('KLHook.ini: kept from the file that was there (%d key(s), %d differ from the block\'s default): %s' % (
+            len(kept), sum(1 for k in kept if k[3]), ', '.join('[%s] %s=%s%s' % (n, k, v, '' if d else ' (= the default)') for n, k, v, d in kept)))
     gone = [n for n, _l in ini_sections(re.sub(r'(?ms)^%s.*?^%s[^\n]*\n?' % (re.escape(BEGIN), re.escape(END)), '', text)) if n and OURS.match(n)]
     log('KLHook.ini: the expansion\'s block %s%s' % ('added' if had else 'written (the file did not exist)',
                                                      '; its own sections %s were replaced (the file as it was: %s\\%s\\KLHook.ini.before)' % (gone, ROOT, STATE) if gone else ''))
@@ -1739,7 +1913,7 @@ def install(tree=None, game=None, keep_slot=False, use_hook=True, use_stream=Tru
         state['slot'] = restore_stock(game, False, log)
     with open(os.path.join(st, 'install.json'), 'w') as f:
         json.dump(state, f, indent=1)
-    log('installed. In the game: Arcade Mode -> "%s". Remove with: python tools\\kl_expansion.py uninstall' % man['page']['title'])
+    log('installed. In the game: Arcade Mode -> %s. Remove with: python tools\\kl_expansion.py uninstall' % ' / '.join('"%s"' % q['title'] for q in man.get('pages') or [man['page']]))
     log('NOTE: ' + man['steam'])
     return state
 
@@ -1766,6 +1940,25 @@ def uninstall(game=None, everything=False, log=print):
         else:
             text = open(ini, encoding='latin-1', newline='').read().replace('\r\n', '\n')
             rest = re.sub(r'(?ms)^%s.*?^%s[^\n]*\n?' % (re.escape(BEGIN), re.escape(END)), '', text)
+            # the keys the player put into the block's [Bots] / [Crew] (what the tree's own block does not say) stay: a block
+            # taken out whole used to take BoardNear, FollowOutHold ... with it
+            blk, tdef = re.search(BLOCK_RE, text), os.path.join(dst, 'KLHook.expansion.ini')
+            if blk and os.path.isfile(tdef):
+                dflt = {(n.lower(), ini_key(l).lower()): l.split('=', 1)[1].strip() for n, ls in ini_sections(open(tdef, encoding='latin-1').read().replace('\r\n', '\n')) for l in ls if n and ini_key(l)}
+                have = {n.lower() for n, _l in ini_sections(rest) if n}
+                for n, ls in ini_sections(blk.group(0)):
+                    if not n or OURS.match(n):
+                        continue
+                    mine = [l for l in ls if ini_key(l) and dflt.get((n.lower(), ini_key(l).lower())) != l.split('=', 1)[1].strip()]
+                    if mine and n.lower() in have:
+                        mine = [l for l in mine if ini_key(l).lower() not in {ini_key(x).lower() for _n2, lx in ini_sections(rest) if _n2 and _n2.lower() == n.lower() for x in lx if ini_key(x)}]
+                        if mine:
+                            rest = ini_add_lines(rest.rstrip('\n'), n, mine) + '\n'
+                    elif mine:
+                        rest = rest.rstrip('\n') + ('\n' if rest.strip() else '') + '[%s]\n' % n + '\n'.join(mine) + '\n'
+                        have.add(n.lower())
+                    if mine:
+                        log('KLHook.ini: [%s] %s stay (the player\'s, not the tree\'s default)' % (n, ', '.join(ini_key(l) for l in mine)))
             if rest.strip() or state['ini']['existed']:
                 with open(ini, 'w', encoding='latin-1', newline='\r\n') as f:
                     f.write(rest)
@@ -1829,7 +2022,7 @@ def status(game=None, log=print):
         bad = [r for r in state['files'] if r != 'manifest.json' and (not os.path.isfile(os.path.join(dst, r)) or sha1(os.path.join(dst, r)) != man['files'][r]['sha1'])]
         log('expansion installed %s (built %s): %d files, %s' % (state['installed'], man['built'], len(state['files']), 'all as built' if not bad else '%d DIFFER or are missing: %s' % (len(bad), bad[:5])))
         for e in man['maps']:
-            log('  %s %-20s Arcade page "%s" entry %d (slot %s), build id %s' % (e['id'], e['name'], man['page']['title'], e['menu_entry'], e['slot'], e['build_id'][:12]))
+            log('  %s %-20s Arcade page "%s" (page %d) entry %d (slot %s), build id %s' % (e['id'], e['name'], page_title(page_of(e)), page_of(e), e['menu_entry'], e['slot'], e['build_id'][:12]))
     elif os.path.isdir(dst):
         log('%s exists but is not an install of this tool: %s' % (ROOT, ', '.join(files_under(dst)[:6])))
     else:
@@ -1996,10 +2189,12 @@ def selftest(scratch=None, log=print):
     shutil.copytree(tree, tree6)
     entries6 = list(entries)
     for m in EXTRA:
+        if page_of(m) != PAGE:
+            continue
         d = 'Maps/%s/%s_Main' % (m['id'], m['slot'])
         put(tree6, d + '.zip', b'archive of ' + m['id'].encode() * 9000); put(tree6, d + '.WAV', b'wav of ' + m['id'].encode())
         put(tree6, 'Maps/%s/KLWardrobe.ini' % m['id'], b'[Wardrobe] of ' + m['id'].encode()); put(tree6, 'BuildInfo/%s/result.json' % m['id'], '{}')
-        entries6.append({'id': m['id'], 'name': m['title'], 'slot': m['slot'], 'menu_entry': ORDER.index(int(m['slot'][1:])), 'accepted': True, 'build_id': 'x' * 40, 'bytes': 1})
+        entries6.append({'id': m['id'], 'name': m['title'], 'slot': m['slot'], 'page': page_of(m), 'menu_entry': ORDER.index(int(m['slot'][1:])), 'accepted': True, 'build_id': 'x' * 40, 'bytes': 1})
     put(tree6, 'KLHook.expansion.ini', ini_block(entries6).replace('\n', '\r\n'))
     man6 = dict(man, maps=entries6)
     man6['files'] = {r: {'sha1': sha1(os.path.join(tree6, r)), 'bytes': os.path.getsize(os.path.join(tree6, r))} for r in files_under(tree6) if r != 'manifest.json'}
@@ -2021,6 +2216,77 @@ def selftest(scratch=None, log=print):
        line6 not in t and x0['title'] not in t and t.count(BEGIN) == 1 and all('%s=%s' % (m['slot'], m['id']) in t for m in MAPS))
     uninstall(game, log=quiet)
     ok('uninstall after six -> five leaves no trace', snap(game) == now)
+
+    log('7. two menu pages: page 3 carries the club (slot F01 again, beside page 2\'s F01), then the update back to one page')
+    tree7 = os.path.join(scratch, 'out7', ROOT)
+    shutil.copytree(tree6, tree7)
+    entries7 = list(entries6)
+    for m in EXTRA:
+        if page_of(m) != 3:
+            continue
+        d = 'Maps/%s/%s_Main' % (m['id'], m['slot'])
+        put(tree7, d + '.zip', b'archive of ' + m['id'].encode() * 9000); put(tree7, d + '.WAV', b'wav of ' + m['id'].encode())
+        put(tree7, 'Maps/%s/KLWardrobe.ini' % m['id'], b'[Wardrobe] of ' + m['id'].encode()); put(tree7, 'BuildInfo/%s/result.json' % m['id'], '{}')
+        entries7.append({'id': m['id'], 'name': m['title'], 'slot': m['slot'], 'page': 3, 'menu_entry': ORDER.index(int(m['slot'][1:])), 'accepted': True, 'build_id': 'x' * 40, 'bytes': 1})
+    club = entries7[-1]
+    pics7 = {pk(2, 'F01'): 'LevelPicture_DM01', pk(3, 'F01'): 'LevelPicture_DM05A'}
+    blk7 = ini_block(entries7, pics7)
+    sec7 = [n for n, _l in ini_sections(blk7) if n]
+    ok('ini_block: [Redirect.2] and [Redirect.3] side by side, [Page.2] and [Page.3] at the end: %s' % sec7,
+       sec7 == ['Expansion', 'Redirect.2', 'Redirect.3', 'Bots', 'Crew', 'Page.2', 'Page.3'])
+    p3 = blk7[blk7.index('[Page.3]'):]
+    ok('[Page.3] holds the club\'s title and its own picture, [Page.2] its F01 picture', p3.split('\n')[:4] == ['[Page.3]', 'Title=' + PAGES[3], '%s=%s' % (club['slot'], club['name']), 'F01.Picture=LevelPicture_DM05A']
+       and blk7[blk7.index('[Page.2]'):blk7.index('[Page.3]')].count('F01.Picture=LevelPicture_DM01') == 1)
+    ok('[Redirect.3] names F01=%s and nothing else; [Redirect.2] still has F01=DM01' % club['id'],
+       blk7[blk7.index('[Redirect.3]'):blk7.index('[Bots]')].split('\n')[:2] == ['[Redirect.3]', 'F01=' + club['id']] and 'F01=DM01' in blk7[blk7.index('[Redirect.2]'):blk7.index('[Redirect.3]')])
+    ok('ini_block of the page-2 maps alone has no page 3 at all', 'Redirect.3' not in ini_block(entries6) and 'Page.3' not in ini_block(entries6))
+    ok('ini_add_lines puts a line at the end of its own section', ini_add_lines('[A]\nx=1\n\n[B]\ny=2\n', 'A', ['z=3']) == '[A]\nx=1\nz=3\n\n[B]\ny=2\n')
+    put(tree7, 'KLHook.expansion.ini', blk7.replace('\n', '\r\n'))
+    man7 = dict(man, maps=entries7, pages=[{'number': 2, 'title': PAGES[2]}, {'number': 3, 'title': PAGES[3]}])
+    man7['files'] = {r: {'sha1': sha1(os.path.join(tree7, r)), 'bytes': os.path.getsize(os.path.join(tree7, r))} for r in files_under(tree7) if r != 'manifest.json'}
+    put(tree7, 'manifest.json', json.dumps(man7))
+    install(tree7, game, log=quiet)
+    t = open(os.path.join(game, 'KLHook.ini'), newline='').read()
+    ok('two-page tree installed: page 3\'s map is there, [Redirect.3] / [Page.3] are in KLHook.ini, the block once',
+       os.path.isfile(os.path.join(dst, 'Maps', club['id'], club['slot'] + '_Main.zip')) and 'F01=' + club['id'] in t and '[Page.3]' in t and t.count(BEGIN) == 1)
+    ok('page 2\'s maps are the tree\'s, byte for byte', all(sha1(os.path.join(dst, r)) == v['sha1'] for r, v in man6['files'].items() if r.startswith('Maps/')))
+    ok('the stock files of slot F01 are untouched by a map on page 3 (it lives under KLExpansion\\Maps only)',
+       open(os.path.join(game, 'Scenes/Locations/F01/F01_Main.zip'), 'rb').read() == b'STOCK F01 archive')
+    install(tree, game, log=quiet)                      # the update from two pages to the first five (and no page 3)
+    t = open(os.path.join(game, 'KLHook.ini'), newline='').read()
+    ok('update two pages -> one page: every file of %s is gone, no [Redirect.3] / [Page.3] / its line, the five whole' % club['id'],
+       not [r for r in files_under(dst) if ('/' + club['id'] + '/') in r] and 'Redirect.3' not in t and 'Page.3' not in t and 'F01=' + club['id'] not in t
+       and all(sha1(os.path.join(dst, r)) == v['sha1'] for r, v in man['files'].items() if not r.startswith('Hook/')))
+    uninstall(game, log=quiet)
+    ok('uninstall after two pages -> one leaves no trace', snap(game) == now)
+
+    log('8. the player\'s own keys: [Bots] keys written into the block, keys outside it, sections the tool does not know - all stay across an install')
+    install(tree7, game, log=quiet)
+    t = open(os.path.join(game, 'KLHook.ini'), newline='').read().replace('\r\n', '\n')
+    t = t.replace('Escort=1\n', 'Escort=2\nBoardNear=300\nFollowOutHold=25\nFollowOutSpare=1\nMoveLog=1\n', 1)         # the player edits INSIDE the block (what dropped them before)
+    t = t.replace(END, '[Down]\nEnable=1\nFlop=3\n' + END, 1)                                                          # a section of his own inside it
+    t = '[Balance]\nRisk=1\n[Bots]\nBoardReach=1\n' + t                                                              # and outside it, with a [Bots] of its own
+    with open(os.path.join(game, 'KLHook.ini'), 'w', encoding='latin-1', newline='\r\n') as f:
+        f.write(t)
+    new_ini = open(os.path.join(tree7, 'KLHook.expansion.ini'), newline='').read().replace('Backstab=35', 'Backstab=20')     # the next tree moves a default
+    put(tree7, 'KLHook.expansion.ini', new_ini)
+    man7['files'] = {r: {'sha1': sha1(os.path.join(tree7, r)), 'bytes': os.path.getsize(os.path.join(tree7, r))} for r in files_under(tree7) if r != 'manifest.json'}
+    put(tree7, 'manifest.json', json.dumps(man7))
+    install(tree7, game, log=quiet)
+    t = open(os.path.join(game, 'KLHook.ini'), newline='').read().replace('\r\n', '\n')
+    secs = [n for n, _l in ini_sections(t) if n]
+    keys8 = ('Escort=2', 'BoardNear=300', 'FollowOutHold=25', 'FollowOutSpare=1', 'MoveLog=1', 'BoardReach=1')
+    ok('every key of [Bots] the player had survives: %s' % [k for k in keys8 if k in t], all(k in t for k in keys8) and 'Escort=1' not in t)
+    ok('[Bots] is ONE section (his outside one is folded into the block\'s): %s' % secs, secs.count('Bots') == 1 and secs.count('Crew') == 1)
+    ok('sections the tool does not write stay: [Balance] Risk=1, [Down] Flop=3', 'Risk=1' in t and 'Flop=3' in t and secs.count('Balance') == 1 and secs.count('Down') == 1)
+    ok('a default the tree moved (Backstab 35 -> 20) is the tree\'s: it was the old block\'s default, not the player\'s', 'Backstab=20' in t and 'Backstab=35' not in t)
+    ok('the block once, the tool\'s own sections rewritten whole (Redirect.2, Redirect.3, Page.2, Page.3)', t.count(BEGIN) == 1 and all(s in secs for s in ('Redirect.2', 'Redirect.3', 'Page.2', 'Page.3')))
+    with open(os.path.join(game, 'KLHook.ini'), 'a', newline='\r\n') as f:
+        f.write('[Extra]\nA=1\n')
+    uninstall(game, log=quiet)
+    t = open(os.path.join(game, 'KLHook.ini'), newline='').read().replace('\r\n', '\n') if os.path.isfile(os.path.join(game, 'KLHook.ini')) else ''
+    ok('uninstall of an ini edited after the install takes the block out and leaves the player\'s keys (BoardNear, FollowOutHold, [Down], [Extra])',
+       BEGIN not in t and all(k in t for k in ('BoardNear=300', 'FollowOutHold=25', 'Flop=3', 'A=1', 'Risk=1')) and 'Redirect' not in t and 'Page.' not in t)
 
     running = real_running
     log('selftest in %s: %d checks failed' % (scratch, len(fails)))
@@ -2053,6 +2319,7 @@ def main():
     cmd = a.pop(0) if a else ''
     game, out, only, par, hook = opt('--game'), opt('--out'), opt('--maps'), int(opt('-j', 2)), opt('--hook')
     pre, ready_dir, overlay_from = {}, opt('--ready'), opt('--overlay-from')
+    only_ids = (opt('--only') or '').split(',') if '--only' in a else None      # mappics: only these maps get a picture
     if ready_dir:
         pre.update({i: os.path.join(ready_dir, t) for i, t in READY.items()})
     while '--prebuilt' in a:
@@ -2078,8 +2345,8 @@ def main():
         pictures(a[0] if a else None, maps=MAPS + EXTRA)
     elif cmd == 'mappics':
         if len(a) != 2:
-            raise SystemExit('mappics <tree> <folder for the variant>')
-        sys.exit(1 if map_pictures(a[0], a[1]) else 0)
+            raise SystemExit('mappics <tree> <folder for the variant> [--only DM05A,...]')
+        sys.exit(1 if map_pictures(a[0], a[1], only=only_ids) else 0)
     elif cmd == 'install':
         install(tree, game, f['keep-slot'], not f['no-hook'], not f['no-stream'], f['link'], f['replace'])
     elif cmd == 'uninstall':
