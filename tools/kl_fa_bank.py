@@ -2989,12 +2989,27 @@ P_PLAZA_R = (1000, 3900, -11800, -9900, 695, 710)
 # point-blank reach is 1.6 m: re/melee_damage.md) and A is four single-man links (MEASURED: a fifth finds no post, with 2 m from the crew's legs), not the first build's eleven links of 25 men.
 DOCK_BOX_AT = ((560.0, 380.0, -4800.0), (250.0, 230.0, 50.0))   # = FASpecials!PIP!EnterLootArea (the dock door's plane: z -4850 .. -4750, the doorway is at z -4706)
 DOCK_DOOR_Z = -4706.0
-A_BACKSTOP = 80.0                       # s after the start timer (the round-start event + SQUADS_AT 10 s = GO + 1.5 s): chain A starts by itself, should nobody pass the box (a crew that went round: none can). GUESS
+A_BACKSTOP = 80.0                       # s after the start timer (the round-start event + SQUADS_AT 10 s = GO + 1.5 s, so the backstop fires at GO + 81.5 s and the first backstopped man comes at GO + 111.5 s): chain A starts by itself, should nobody pass the box (a crew that went round: none can). GUESS
 POST_STATION = (400.0, 300.0, 250.0)    # a post of chain A is this far from every heister station: the first the mesh allows for the whole wave
 POST_STATION_MIN = 250.0
 POST_ROUTE_MIN = 200.0                  # ... and never nearer than 2 m to a leg of the crew's way (the 3 m route rule is relaxed at cover, not dropped: re/melee_damage.md's point-blank reach is 1.6 m)
 POST_COVER = 400.0                      # ... and this near a cover box's middle (a box is ~2 m wide)
 START_CLEAR = 1500.0                    # no wave man's post, entry or walk within 15 m of a START row, none with a line to one
+# SECOND SKEPTIC (after the second fix): chains B and D stood where the mesh allowed, not at cover, and one of B's posts on a heister station. So with --waves2
+# EVERY chain's posts are at cover and POST_STATION from the heister stations; where the mesh has no such place the cover distance widens in COVER_LADDER
+# steps (chain A stays at POST_COVER: MEASURED enough spots), and chain D's men of one squad stand D_GAPS apart (the first build's 3 m was 'bunched up').
+# The radii a wave was planned with are stored in extras.json (post_cover, post_station) and waves-check tests each wave against ITS OWN.
+COVER_LADDER = (400.0, 600.0, 800.0)
+POST_GAPS_V2 = {'A': (300.0, 220.0, 150.0), 'B': (300.0, 220.0, 150.0), 'D': (500.0, 400.0, 300.0)}
+RULES_X = ('sight', 'ray', 'hero', 'exact')    # the module's grid, hvk_ray's rule 0x20, 0x28, and hvk_ray's exact cast: a line under ANY of them counts
+# The ENTRIES of chains A and B (E_AIRLOCK) are out of sight of the crew's way IN (BLIND_WAY), and since the second skeptic also of the stations of the
+# way OUT (ROUTE_OUT): men must not 'plop out' in view of a crew that comes back up.
+# The entries of chains A and B under --waves2 (the second skeptic: E_AIRLOCK has a free line to the 'stairs' station of the way OUT, 7.5 m away, at every
+# one of its 246 spots). MEASURED (C:/kl_scratch/vault_tune/ent_scan2.py): on the whole mesh of the building's floors the spots blind from the way in AND the way out,
+# 15 m from the START rows, 3 m from the way and 2.5 m from every heister station are 8: two small clusters in the armoury / security side. The men are
+# single-man links 30 s and more apart, so one cluster each is enough (an entry may be reused after ENTRY_REUSE s).
+E_ARM_A = (-1050, -950, -5520, -5400, 225, 255)
+E_ARM_B = (-680, -620, -5660, -5600, 225, 255)
 P_LAND1 = (-100, 900, -9400, -8800, -175, -145)         # the flights' upper landing (floor y -160)
 P_LAND2 = (0, 800, -10800, -10300, -580, -540)          # the lower landing (floor y -560)
 P_CROSS = (-300, 300, -10800, -9300, -580, -140)        # the cross corridor between
@@ -3010,12 +3025,12 @@ def chain_table(a_links=11, b_links=5, d_links=8, v2=False):
     rows = []
     A_POSTS = ((P_DOCK, P_YARD), (P_YARD, P_DOCK), (P_ARMOURY, P_DOCK, P_YARD))
     for i in range(4 if v2 else 0):
-        rows.append(('A%02d' % (i + 1), 'A', 30.0 if i == 0 else 45.0, 1, BLIND_WAY, E_AIRLOCK, P_IN, G4 + 'Guards_Reinforcement_01a'))
+        rows.append(('A%02d' % (i + 1), 'A', 30.0 if i == 0 else 45.0, 1, BLIND_WAY, E_ARM_A, P_IN, G4 + 'Guards_Reinforcement_01a'))
     for i in range(0 if v2 else a_links):
         rows.append(('A%02d' % (i + 1), 'A', 12.0 if i == 0 else 35.0, 3 if i < 3 else 2, BLIND_WAY + BLIND_OUT, (E_YARD_E, E_YARD_W)[i % 2],
                      A_POSTS[i % 3], G4 + 'Guards_Reinforcement_01a'))
-    for i in range(b_links):
-        rows.append(('B%02d' % (i + 1), 'B', 22.0 if i == 0 else 30.0, 1, BLIND_WAY, E_AIRLOCK, P_LOBBY, G4 + 'Police_Reinforcement_02'))
+    for i in range(min(b_links, 4) if v2 else b_links):          # v2: the lobby has cover for four men (MEASURED: a fifth finds no post within 8 m of cover and 2.5 m off a station)
+        rows.append(('B%02d' % (i + 1), 'B', 22.0 if i == 0 else 30.0, 1, BLIND_WAY, E_ARM_B if v2 else E_AIRLOCK, P_LOBBY, G4 + 'Police_Reinforcement_02'))
     for i in range(d_links):
         rows.append(('D%02d' % (i + 1), 'D', 3.0 if i == 0 else 25.0, 3, ('hall', 'airlock', 'plaza'), (E_RECESS_L, E_RECESS_R)[i % 2],
                      (P_PLAZA_L, P_PLAZA_R)[i % 2], CO + ('Police_OutSide_SWAT_02', 'Police_OutSide_SWAT_03')[i % 2]))
@@ -3137,12 +3152,32 @@ class Sight:
         e = (o[0], o[1] + 160.0, o[2])
         return self.ray(e, (p[0], p[1] + 120.0, p[2])) or self.ray(e, (p[0], p[1] + 175.0, p[2]))
 
+    def exact(self):
+        """third_party/anp/scripts/hvk_ray.Collision of the folder's archive (the exact cast of a player's ray; loaded on first use)."""
+        if getattr(self, '_exact', None) is None:
+            import glob
+            sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'third_party', 'anp', 'scripts'))
+            import hvk_ray
+            z = sorted(glob.glob(os.path.join(self.B.folder, '*_Main.zip')))
+            self._exact = hvk_ray.Collision(z[0])
+        return self._exact
+
+    def sees_exact(self, e, q):
+        """True when hvk_ray's cast from e to q is free under mask 0x20 or 0x28 (a part blocks when flags & mask). The module's grid over-blocks around thin or
+        round shapes (second skeptic: ShatterPillar_09 blocked B04's line to the row at x 450, the exact ray passes beside it)."""
+        C = self.exact()
+        seg = (q[0] - e[0], q[1] - e[1], q[2] - e[2])
+        return any(C.ray(e, seg, m) is None for m in (0x20, 0x28))
+
     def sees_by(self, o, p, rules=('sight', 'ray', 'hero')):
-        """The rules (of RULES) under which a man at o sees a man at p (eye 160 over the feet, target 120 and 175, SIGHT_FAR)."""
+        """The rules (of RULES, and 'exact' = hvk_ray's cast) under which a man at o sees a man at p (eye 160 over the feet, target 120 and 175, SIGHT_FAR)."""
         if math.dist(o, p) > SIGHT_FAR:
             return []
         e = (o[0], o[1] + 160.0, o[2])
-        return [r for r in rules if self.ray(e, (p[0], p[1] + 120.0, p[2]), r) or self.ray(e, (p[0], p[1] + 175.0, p[2]), r)]
+        out = [r for r in rules if r != 'exact' and (self.ray(e, (p[0], p[1] + 120.0, p[2]), r) or self.ray(e, (p[0], p[1] + 175.0, p[2]), r))]
+        if 'exact' in rules and any(self.sees_exact(e, (p[0], p[1] + dy, p[2])) for dy in (120.0, 175.0)):
+            out.append('exact')
+        return out
 
     def seen_by(self, p, regions):
         """-> (region, observer) of the first crew place of the regions that sees the point p, else None."""
@@ -3291,7 +3326,12 @@ def seg_dist(p, a, b):
 def start_ok(S, p):
     """A wave man's entry or post keeps START_CLEAR from every START row and has no line to one under any of the three sight rules (run W2's fault)."""
     rows = [tuple(q) for q in START]
-    return all(math.dist(p, r) >= START_CLEAR for r in rows) and not any(S.sees_by(p, r) for r in rows)
+    return all(math.dist(p, r) >= START_CLEAR for r in rows) and not any(S.sees_by(p, r, RULES_X) for r in rows)
+
+
+def way_out_sees(S, p):
+    """The stations of the crew's way OUT (ROUTE_OUT) that see a man standing at p, under any rule of RULES_X -> [names]."""
+    return [n for n, q in ROUTE_OUT if S.sees_by(tuple(q), p, RULES_X)]
 
 
 def cover_dist(B, p, _cache={}):
@@ -3341,7 +3381,7 @@ def wave_plan(B, S, o, log=print):
             if not far(p) or route_dist(p) < ROUTE_ENTRY[phase] or any(math.dist(p, q) < WAVE_GAP for q in [e for e, ph, dl in used_e if ph == phase and abs(dl - delay) < ENTRY_REUSE] + ents):
                 continue
             tries += 1
-            if S.seen_by(p, blind) or (v2 and not start_ok(S, p)):
+            if S.seen_by(p, blind) or (v2 and (not start_ok(S, p) or (phase in 'AB' and way_out_sees(S, p)))):
                 continue
             ents.append(p)
             if len(ents) == n:
@@ -3349,41 +3389,51 @@ def wave_plan(B, S, o, log=print):
         if len(ents) < n:
             raise ValueError('kl_fa_bank.wave_plan: wave %s found %d of %d entries unseen from %s in %s (%d tried)' % (name, len(ents), n, blind, ebox, tries))
         mid = tuple(sum(e[a] for e in ents) / n for a in range(3))
-        at_cover = v2 and phase == 'A'
-        posts, station = [], None
+        at_cover = v2                                # every chain's posts are at cover (the second skeptic: B and D were not)
+        posts, station, got_cover, got_gap = [], None, None, None
         boxes = pbox if isinstance(pbox[0], tuple) else (pbox,)          # a tuple of boxes: the first is preferred, the others take over when it is full
         pool = [c for b_ in boxes for c in sorted(lattice(b_, 50), key=(lambda c: route_dist(c[:3])) if phase in 'AB' else (lambda c: math.dist(c[:3], mid)))]
-        for stn in (POST_STATION if at_cover else (None,)):
-            for gap in POST_GAPS[phase]:
-                posts = []
-                for x, y, z, dy in pool:
-                    hit = nav.at(x, y, z, dy, S.home)
-                    if hit is None or nav.clearance(x, hit[1], z) < POST_WALL:
-                        continue
-                    p = (x, hit[1], z)
-                    if at_cover:
-                        if cover_dist(B, p) > POST_COVER or min(math.dist(p, q) for q in S.places) < stn or route_dist(p) < POST_ROUTE_MIN:
+        covers = (POST_COVER,) if (phase == 'A' or not v2) else COVER_LADDER
+        gaps = POST_GAPS_V2[phase] if v2 else POST_GAPS[phase]
+        found = False
+        for cov in covers if at_cover else (None,):
+            for stn in (POST_STATION if at_cover else (None,)):
+                for gap in gaps:
+                    posts = []
+                    for x, y, z, dy in pool:
+                        hit = nav.at(x, y, z, dy, S.home)
+                        if hit is None or nav.clearance(x, hit[1], z) < POST_WALL:
                             continue
-                    elif not far(p) or route_dist(p) < ROUTE_POST[phase]:
-                        continue
-                    if any(math.dist(p, q) < (POST_OLD_B if phase == 'B' else POST_OLD) for q in old) or any(math.dist(p, q) < gap for q in used_p + posts):
-                        continue
-                    if abs(drive.project(p)[1]) < LANE_CLEAR and phase == 'D':
-                        continue
-                    if v2 and not start_ok(S, p):
-                        continue
-                    posts.append(p)
+                        p = (x, hit[1], z)
+                        if at_cover:
+                            if cover_dist(B, p) > cov or min(math.dist(p, q) for q in S.places) < stn or route_dist(p) < POST_ROUTE_MIN:
+                                continue
+                            if phase != 'A' and (not far(p) or route_dist(p) < ROUTE_POST[phase]):
+                                continue
+                        elif not far(p) or route_dist(p) < ROUTE_POST[phase]:
+                            continue
+                        if any(math.dist(p, q) < (POST_OLD_B if phase == 'B' else POST_OLD) for q in old) or any(math.dist(p, q) < gap for q in used_p + posts):
+                            continue
+                        if abs(drive.project(p)[1]) < LANE_CLEAR and phase == 'D':
+                            continue
+                        if v2 and not start_ok(S, p):
+                            continue
+                        posts.append(p)
+                        if len(posts) == n:
+                            break
                     if len(posts) == n:
+                        found = True
                         break
-                if len(posts) == n:
-                    got_gap = gap
+                if found:
                     break
-            if len(posts) == n:
-                station = stn
+            if found:
+                station, got_cover, got_gap = stn, cov, gap
                 break
-        if len(posts) < n:
+        if len(posts) < n or not found:
             raise ValueError('kl_fa_bank.wave_plan: wave %s found %d of %d posts in %s (%d from the crew, %d from old places, %d from each other, %d from the way%s)' % (
-                name, len(posts), n, pbox, near, POST_OLD, POST_GAP_MIN, ROUTE_POST[phase], '; at cover within %d and %d from a heister station' % (POST_COVER, POST_STATION_MIN) if at_cover else ''))
+                name, len(posts), n, pbox, near, POST_OLD, POST_GAP_MIN, ROUTE_POST[phase], '; at cover within %s and %d from a heister station' % (covers, POST_STATION_MIN) if at_cover else ''))
+        if at_cover and got_cover != POST_COVER:
+            log('  waves: %s: NO post at %d from cover for %d men: the ladder went to %d' % (name, POST_COVER, n, got_cover))
         gap = got_gap
         log('  waves: %s posts %d apart%s, %d..%d from the way of the crew' % (name, gap, ', %d from every heister station' % station if station else '', min(route_dist(q) for q in posts), max(route_dist(q) for q in posts)))
         # a man to the nearest free post (greedy), so that nobody crosses another's way
@@ -3395,7 +3445,7 @@ def wave_plan(B, S, o, log=print):
                 d_ = min(seg_dist(r, e, q) for r in START)
                 if d_ < START_CLEAR:
                     raise ValueError('kl_fa_bank.wave_plan: wave %s: the walk %s -> %s passes %d from a START row (%d wanted)' % (name, tuple(map(round, e)), tuple(map(round, q)), d_, START_CLEAR))
-        plan.append(dict(name=name, phase=phase, delay=delay, gap=gap_s, template=template, blind=list(blind), men=pairs, post_gap=gap, post_station=station))
+        plan.append(dict(name=name, phase=phase, delay=delay, gap=gap_s, template=template, blind=list(blind), men=pairs, post_gap=gap, post_station=station, post_cover=got_cover))
         used_e += [(e, phase, delay) for e in ents]; used_p += posts; men += n
         log('  waves: %s (phase %s, +%.0f s): %d men in %s, %s' % (name, phase, delay, n, 'x %d..%d z %d..%d' % tuple(ebox[:4]), '; '.join(
             '(%d,%d,%d)->(%d,%d,%d) %d m' % (*e, *q, math.dist(e, q) / 100.0) for e, q in pairs)))
@@ -3530,7 +3580,7 @@ def extras_make(B, o, plan, show, hide, stacks=()):
         if i == 0 and not (o.get('waves2') and w['phase'] == 'A'):
             rep['timers'][w['phase']].append(pace)
         rep['waves'].append(dict(name=w['name'], phase=w['phase'], squad=me, timer=pace, pace=pace, go=go, fast=fast, delay=w['delay'], gap=w['gap'], template=w['template'],
-                                 post_gap=w.get('post_gap'), men=[[list(map(round, e)), list(map(round, q))] for e, q in w['men']]))
+                                 post_gap=w.get('post_gap'), post_station=w.get('post_station'), post_cover=w.get('post_cover'), men=[[list(map(round, e)), list(map(round, q))] for e, q in w['men']]))
         tops.append(top)
     if o.get('waves2') and by_phase.get('A'):       # chain A starts when the crew is inside: a box behind the dock door (+ the backstop timer)
         pace = cp('Pace_' + by_phase['A'][0]['name'])
@@ -3804,9 +3854,13 @@ def waves_check(folder, log=print):
                 # run W2's fault: nobody comes into the world with a line to the START rows (where the human and the crew stand at the GO) or within 15 m of them
                 if min(math.dist(p, r) for r in START) < START_CLEAR:
                     fail('wave %s: %s comes into the world at %s, %d from a START row (%d wanted)' % (w['name'], nm, P(p), min(math.dist(p, r) for r in START), START_CLEAR))
-                lines = sorted({rl for r in START for rl in S.sees_by(p, tuple(r))})
+                lines = sorted({rl for r in START for rl in S.sees_by(p, tuple(r), RULES_X)})
                 if lines:
                     fail('wave %s: %s comes into the world at %s WITH A LINE to a START row (%s)' % (w['name'], nm, P(p), ' '.join(lines)))
+                if o.get('waves2') and w['phase'] in 'AB':
+                    wo_ = way_out_sees(S, p)
+                    if wo_:
+                        fail('wave %s: %s comes into the world at %s IN SIGHT of the way out of the crew (%s): men would plop out in front of a returning crew' % (w['name'], nm, P(p), ', '.join(wo_)))
                 for q, ph, dl, wn in every_entry:
                     if ph == w['phase'] and abs(dl - w['delay']) < ENTRY_REUSE and math.dist(p, q) < WAVE_GAP:
                         fail('wave %s: %s at %s is %d from the entry of a man of wave %s that comes at the same time' % (w['name'], nm, P(p), math.dist(p, q), wn))
@@ -3820,19 +3874,22 @@ def waves_check(folder, log=print):
                 for q in every_post:
                     if math.dist(p, q) < POST_GAP_MIN:
                         fail('wave %s: post %s SHARED: %d from another wave post (%d wanted)' % (w['name'], P(p), math.dist(p, q), POST_GAP_MIN))
-                v2a = bool(o.get('waves2')) and w['phase'] == 'A'
-                if route_dist(p) < ROUTE_POST[w['phase']] and not v2a:
+                v2a = bool(o.get('waves2')) and w.get('post_cover') is not None            # every chain of a --waves2 build is at cover (the second skeptic)
+                if route_dist(p) < ROUTE_POST[w['phase']] and not (v2a and w['phase'] == 'A'):
                     fail('wave %s: post %s stands %d from a leg of the way of the crew (%d wanted)' % (w['name'], P(p), route_dist(p), ROUTE_POST[w['phase']]))
                 if v2a:                        # the route rule is relaxed ONLY at cover and POST_STATION_MIN from every heister station
-                    if cover_dist(B, p) > POST_COVER:
-                        fail('wave %s: post %s is %d from a cover box (%d wanted: chain A stands at cover)' % (w['name'], P(p), cover_dist(B, p), POST_COVER))
+                    if cover_dist(B, p) > w['post_cover'] + 1:
+                        fail('wave %s: post %s is %d from a cover box (%d wanted: every chain stands at cover)' % (w['name'], P(p), cover_dist(B, p), w['post_cover']))
+
                     if route_dist(p) < POST_ROUTE_MIN - 1:
                         fail('wave %s: post %s stands %d from a leg of the way of the crew (%d wanted even at cover: the point-blank reach is 160)' % (w['name'], P(p), route_dist(p), POST_ROUTE_MIN))
                     if min(math.dist(p, q) for q in S.places) < POST_STATION_MIN - 1:
                         fail('wave %s: post %s is %d from a heister station (%d wanted)' % (w['name'], P(p), min(math.dist(p, q) for q in S.places), POST_STATION_MIN))
+                    if w['phase'] != 'A' and route_dist(p) < ROUTE_POST[w['phase']] - 1:
+                        fail('wave %s: post %s stands %d from a leg of the way of the crew (%d wanted)' % (w['name'], P(p), route_dist(p), ROUTE_POST[w['phase']]))
                 if min(math.dist(p, r) for r in START) < START_CLEAR:
                     fail('wave %s: post %s is %d from a START row (%d wanted)' % (w['name'], P(p), min(math.dist(p, r) for r in START), START_CLEAR))
-                lines = sorted({rl for r in START for rl in S.sees_by(p, tuple(r))})
+                lines = sorted({rl for r in START for rl in S.sees_by(p, tuple(r), RULES_X)})
                 if lines:
                     fail('wave %s: post %s has a LINE to a START row (%s): the man would fire on the human at the GO' % (w['name'], P(p), ' '.join(lines)))
                 every_post.append(p)
@@ -3884,6 +3941,8 @@ def waves_check(folder, log=print):
                     fail('wave %s: the latch: Fast is named by %s, only by the \'wiped out\' list of %s is wanted' % (w['name'], [sc.path[x][5:] for x in fb], prev['name']))
             elif o.get('waves_latch', False) and chains[w['phase']].index(w) > 0:
                 fail('wave %s: no Fast node although the latch is on' % w['name'])
+            if o.get('waves2') and w.get('post_cover') and w['phase'] != 'A' and w['post_cover'] > POST_COVER:
+                log('  note: wave %s stands within %d of cover, not %d: the mesh has no place nearer for its men' % (w['name'], w['post_cover'], POST_COVER))
             log('  wave %-4s phase %s %+4.0f s (gap %g): %d men %s; posts %s (%s apart)' % (w['name'], w['phase'], w['delay'], w['gap'], len(men),
                                                                                   ' '.join(P(p) for _k, p in men), ' '.join(P(p) for p in posts), w.get('post_gap')))
         # ---- the chains as a whole: finite, in order, a delay in every loop of links, a floor of SUPPLY_MIN seconds for the first phase
