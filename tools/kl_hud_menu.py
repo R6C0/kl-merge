@@ -375,9 +375,11 @@ def board(xml, log=print):
     return xml, added
 
 
-def restyle_xml(xml, member, do_board=False, log=print):
+def restyle_xml(xml, member, do_board=False, log=print, body=False):
     xml, n1 = restyle_colorsets(xml)
     xml, cnt = restyle_data(xml, member)
+    if body:
+        xml, _n = repoint_body(xml, member, log)
     nb = 0
     if do_board and member == ONLINE:
         xml, nb = board(xml, log)
@@ -600,6 +602,115 @@ def repaint(z, stem, log=print, bars='kit'):
     return T.write_tex(tex), done
 
 
+# ------------------------------------------------------------------ the menu scene's fonts (2026-10-12, the final look)
+# The menu scene (Scenes/kaneandlynch.zip) holds eight ZTTFONT entities; the XML names them by Font=. READ in the three XML
+# files + the scene's own guielems.xml / windows.xml (which name no font): what each slot is used for in the front end -
+#   Header    page headlines (HeadlinePos, TextHeader*, CreditLarge) and the lobby's level-name line   -> display, large
+#   Menu      the lobby's focus lines (LobbyFocusElement), error-screen menu lines                      -> display, medium
+#   Text      EVERYTHING else: list / table / leaderboard / lobby / status cells, profile numbers, tips,
+#             help, legal, credits, the briefing blocks, error text (168 + 35 + 26 uses; templates HelpText_GT ...)
+#   Button    footer prompts (GenericButton*), the tip line FAGTTipTemplate's key hints                  -> display, small
+#   H1 H2 H3 DebugText  named by NO element of the three files (the HUD's slots in a level; in the menu scene nothing
+#             found asks for them)
+# One font object per Font= name, so rows and paragraphs share 'Text'. The look wants capitals for rows and the
+# label face for tips: the paragraph templates / elements below are therefore pointed at H3 in the MENU's own XML files
+# (frontend.xml, the scene's online.xml) - never in ingame.xml or a level's online.xml: inside a level H3 is the HUD's
+# small font (Anton ~11 px, tools/kl_hud.py DRAFT_SPECS_ANTON). Attribute VALUES change only: no table entry moves.
+# Sizes: px = GDI character height (the stock FOUNMB 28 px has 19 px capitals, 20 px has 14). MENUS STAY READABLE: every
+# capital is at least as tall as the stock's (the HUD's came down to 10-11 px; these do not). Baseline NOT moved
+# (kl_hud.build_font baseline=False): the stock header's ascent stays, so XML positions keep their baselines.
+# face, weight, px, tracking px, caps (lower case DRAWN as capitals), chips (the light hand-cut nicks, big sizes only)
+MENU_SPECS = {
+    'Header':    ('Anton', 400, 28, 1, True, 0.5),
+    'H1':        ('Anton', 400, 28, 1, True, 0.5),
+    'Menu':      ('Anton', 400, 20, 1, True, 0.3),
+    'Text':      ('Anton', 400, 19, 1, True, 0.0),
+    'H2':        ('Anton', 400, 19, 1, True, 0.0),
+    'Button':    ('Anton', 400, 17, 1, True, 0.0),
+    'DebugText': ('Montserrat', 800, 15, 3, True, 0.0),
+    'H3':        ('Montserrat', 600, 17, 0, False, 0.0),
+}
+MENU_SPECS_STANDIN = {'Anton': 'Impact', 'Montserrat': 'Segoe UI Black'}     # <work>\fonts holds neither: the installed look-alikes
+STOCK_CAP = {'Button': 12, 'Text': 14, 'DebugText': 12, 'Menu': 14, 'Header': 19, 'H3': 14, 'H2': 14, 'H1': 19}      # READ: 'H' of the stock scene
+BODY_FONT = 'H3'
+# paragraph templates (long wrapping text: tips, help, legal, credits, messages) and elements of Type TextBlock / the
+# tips element with a wide TextWidth: their Font="Text" / "Menu" becomes BODY_FONT. Short cells and rows stay capitals.
+BODY_TEMPLATES = ('FAGTTipTemplate', 'FAGameTipTemplate', 'HelpText_GT', 'HelpTextCenter_GT', 'Copyright', 'LegalText_T',
+                  'QuitGameText_T', 'IngameText_T', 'BuyWeaponDialogText_T', 'Credit_LT', 'ErrorText', 'MercsObjInfo')
+BODY_MIN_WIDTH = 430                           # a TextBlock at least this wide (TextWidth) wraps paragraphs
+BODY_TYPES = ('TextBlock', 'MercsShowInfoGameTips')
+BODY_FILES = (FRONT, ONLINE)                   # NOT ingame.xml, NOT a level's online.xml (see above)
+
+
+def repoint_body(xml, member, log=print):
+    """Paragraph text -> BODY_FONT, by the Font= attribute of the template or element. -> (xml, count)."""
+    if member not in BODY_FILES:
+        return xml, 0
+
+    def fn(t, text):
+        a = dict(t.attrs)
+        if a.get('Font') not in ('Text', 'Menu'):
+            return None
+        if t.name == 'Template' and a.get('Name') in BODY_TEMPLATES:
+            return set_attr(text, 'Font', BODY_FONT)
+        if t.name == 'GuiElement' and a.get('Type') in BODY_TYPES:
+            try:
+                w = int(float(a.get('TextWidth', '0')))
+            except ValueError:
+                w = 0
+            if BODY_MIN_WIDTH <= w < 5000 and 'TagName' not in a:       # 16000 = the infocast ticker: a one-line crawl, left alone
+                return set_attr(text, 'Font', BODY_FONT)
+        return None
+    xml, n = rewrite(xml, fn)
+    log('  %s: %d paragraph fonts -> %s' % (member, n, BODY_FONT))
+    return xml, n
+
+
+def menu_specs():
+    """MENU_SPECS with the draft's faces, or the installed stand-ins when <work>\\fonts lacks them."""
+    import kl_hud
+    g = kl_hud._Gdi()
+    return {k: ((v[0] if g.has(v[0]) else MENU_SPECS_STANDIN[v[0]],) + v[1:]) for k, v in MENU_SPECS.items()}
+
+
+def font_chunks(z, stem):
+    """{font name: chunk index} of a scene archive."""
+    import kl_hud
+    ext = {e: stem + e for e in ('.gms', '.buf', '.prp')}
+    return kl_hud.fonts_of({n: z.read(n) for n in ext.values()}, ext)
+
+
+def bake_fonts(z, stem, tex_bytes, log=print):
+    """-> (new .prm bytes, new .TEX bytes, {font: report}). Page-0 glyphs of the eight fonts re-rasterized with MENU_SPECS;
+    private characters (the button icons on page 1) kept; the .prm's chunk table and every other chunk untouched."""
+    import kl_hud, kl_prmgraph as G, kl_texmat as T
+    fonts = font_chunks(z, stem)
+    p = G.read(z.read(stem + '.prm'), 'dd'); tex = T.read_tex(tex_bytes)
+    specs = menu_specs(); reps = {}
+    for name, ci in sorted(fonts.items(), key=lambda kv: kv[1]):
+        face, weight, px, track, caps, chip = specs[name]
+        chunk, entries, rep = kl_hud.build_font(p.chunks[ci], tex, face, weight, 1.0, log, caps, chip, px=px, track=track, baseline=False)
+        p.chunks[ci] = chunk
+        for tid, e in entries.items():
+            tex.tex[tid] = T.Texture(e, tex.tex[tid].faces, tex.tex[tid].cube, tex.tex[tid].frames, tex.tex[tid].group)
+        _h, recs, _t = kl_hud.parse(chunk)
+        rep['cap'] = next((r[7] for r in recs if r[0] == ord('H')), 0)                # the capital H's ink height, as the stock's 14 / 19
+        reps[name] = rep
+        log('  font %-9s chunk %d: %s %d px w%d, track %s, capitals %s px (stock %s), %d glyphs (%d kept), page rows used %s'
+            % (name, ci, rep['face'], rep['px'], weight, rep['track'], rep['cap'], STOCK_CAP.get(name, '?'), rep['glyphs'], rep['kept'], rep['page rows used']))
+    return G.write(p), T.write_tex(tex), reps
+
+
+def font_pages(z, stem):
+    """The set of texture ids that are the menu fonts' glyph pages."""
+    import kl_hud, kl_prmgraph as G
+    p = G.read(z.read(stem + '.prm'), 'dd'); out = set()
+    for ci in font_chunks(z, stem).values():
+        _h, recs, _t = kl_hud.parse(p.chunks[ci])
+        out |= {r[1] & 0xfff for r in recs}
+    return out
+
+
 # ------------------------------------------------------------------ archives
 def _member(z, name):
     return next((i for i in z.infolist() if i.filename.lower() == name.lower()), None)
@@ -632,7 +743,7 @@ def _sha(path):
     return hashlib.sha1(open(path, 'rb').read()).hexdigest()[:8]
 
 
-def apply(src, dst, look='deadmen', do_board=False, online_in_patch=False, pictures=True, log=print, bars='kit'):
+def apply(src, dst, look='deadmen', do_board=False, online_in_patch=False, pictures=True, log=print, bars='kit', fonts=False):
     if do_board:
         raise SystemExit('--board is refused on an overlay: its online.xml is loaded at the MENU, and from Patch01.zip in every level '
                          'of the game; 48 more table entries there with the live count unknown (budget 5000) = the 14:24 crash class. '
@@ -651,19 +762,24 @@ def apply(src, dst, look='deadmen', do_board=False, online_in_patch=False, pictu
         i = _member(zp, member)
         if i is None:
             raise SystemExit('%s has no %s' % (ps, member))
-        new_p[i.filename.lower()] = restyle_xml(zp.read(i).decode('latin-1'), member, do_board, log).encode('latin-1')
+        new_p[i.filename.lower()] = restyle_xml(zp.read(i).decode('latin-1'), member, do_board, log, body=fonts).encode('latin-1')
     i = _member(zs, ONLINE)
     if i is None:
         raise SystemExit('%s has no %s' % (ss, ONLINE))
-    online = restyle_xml(zs.read(i).decode('latin-1'), ONLINE, do_board, log).encode('latin-1')
+    j = _member(zp, ONLINE)
+    # the body font H3 is the menu's only: an online.xml that goes into Patch01.zip would reach every level (H3 = the HUD's small font there)
+    online = restyle_xml(zs.read(i).decode('latin-1'), ONLINE, do_board, log, body=fonts and j is None and not online_in_patch).encode('latin-1')
     new_s = {i.filename.lower(): online}
+    stem = next(n for n in zs.namelist() if n.lower().endswith('.gms'))[:-4]
     if pictures:
-        stem = next(n for n in zs.namelist() if n.lower().endswith('.gms'))[:-4]
         data, done = repaint(zs, stem, log, bars)
         new_s[(stem + '.TEX').lower()] = data
         log('  pictures: %d textures repainted (%d bars, %d lines)' % (len(done), sum(1 for v in done.values() if v[0] == 'bar'), sum(1 for v in done.values() if v[0] == 'line')))
+    if fonts:
+        prm, tex2, _reps = bake_fonts(zs, stem, new_s.get((stem + '.TEX').lower()) or zs.read(stem + '.TEX'), log)
+        new_s[(stem + '.prm').lower()] = prm
+        new_s[(stem + '.TEX').lower()] = tex2
     extra = {}
-    j = _member(zp, ONLINE)
     if j is not None:
         new_p[j.filename.lower()] = online
     elif online_in_patch:
@@ -762,6 +878,8 @@ def check(folder, ref=None, log=print, count=None):
             if miss:
                 (fails if rx is not None else notes).append('%s: %s not defined: %s' % (member, what, miss[:8]))
         f_new = used(ts, 'Font') - (used(rts, 'Font') if rx is not None else used(ts, 'Font'))
+        if member in BODY_FILES:
+            f_new -= {BODY_FONT}                                    # the paragraph font of the menu (repoint_body); in ingame.xml it stays a FAIL
         if f_new:
             fails.append('%s: fonts the reference does not use: %s' % (member, sorted(f_new)))
         fonts_seen |= used(ts, 'Font')
@@ -824,8 +942,22 @@ def check(folder, ref=None, log=print, count=None):
             fails.append('scene archive: the member list differs from the reference')
         else:
             import kl_texmat as T
+            stem = next(n for n in za.namelist() if n.lower().endswith('.gms'))[:-4]
+            try:
+                fpages = font_pages(zb, stem); fchunks = set(font_chunks(zb, stem).values())
+            except Exception as e:
+                fpages, fchunks = set(), set(); notes.append('font chunks not read (%s): a .prm difference will FAIL' % e)
             for n in za.namelist():
                 if n.lower() == ONLINE.lower() or za.read(n) == zb.read(n):
+                    continue
+                if n.lower() == (stem + '.prm').lower():            # only the eight font chunks may differ: same chunk table, same count
+                    import kl_prmgraph as G
+                    pa_, pb_ = G.read(za.read(n), 'dd'), G.read(zb.read(n), 'dd')
+                    moved = [i for i in range(len(pb_.chunks)) if i >= len(pa_.chunks) or pa_.chunks[i] != pb_.chunks[i]]
+                    if len(pa_.chunks) != len(pb_.chunks) or pa_.refs != pb_.refs or set(moved) - fchunks:
+                        fails.append('scene archive: .prm differs beyond the font chunks %s' % sorted(set(moved) - fchunks)[:6])
+                    else:
+                        log('  scene archive: .prm: %d font chunks differ, the chunk table and every other chunk are the reference own' % len(moved))
                     continue
                 if not n.lower().endswith('.tex'):
                     fails.append('scene archive: %s differs from the reference' % n); continue
@@ -833,11 +965,17 @@ def check(folder, ref=None, log=print, count=None):
                 if sorted(ta.tex) != sorted(tb.tex):
                     fails.append('scene archive: the texture ids differ from the reference'); continue
                 ch = [t for t in ta.tex if ta.tex[t].entry != tb.tex[t].entry]
+                nf = 0
                 for t in ch:
+                    if t in fpages:                                 # a glyph page: same entry length (size, format, mips), pixels differ
+                        nf += 1
+                        if len(ta.tex[t].entry) != len(tb.tex[t].entry):
+                            fails.append('scene archive: glyph page %d changed size' % t)
+                        continue
                     wa, ha, pa = tex_pixels(ta.tex[t].entry); wb, hb, _pb = tex_pixels(tb.tex[t].entry)
                     if (wa, ha) != (wb, hb) or pa is None:
                         fails.append('scene archive: texture %d changed size or is not readable' % t)
-                log('  scene archive: %d textures differ from the reference, same ids and sizes; every other member identical' % len(ch))
+                log('  scene archive: %d textures differ from the reference (%d of them font pages), same ids and sizes; every other member identical' % (len(ch), nf))
         pa, pb = zipfile.ZipFile(os.path.join(folder, PATCH_ZIP)), zipfile.ZipFile(os.path.join(ref, PATCH_ZIP))
         more = [n for n in pa.namelist() if n not in pb.namelist()]
         if [n for n in pb.namelist() if n not in pa.namelist()]:
@@ -973,6 +1111,12 @@ def diff(a, b, log=print):
             ta, tb = T.read_tex(za.read(n)), T.read_tex(zb.read(n))
             ch = sorted(t for t in tb.tex if t not in ta.tex or ta.tex[t].entry != tb.tex[t].entry)
             log('%s: %d textures differ: %s' % (n, len(ch), ' '.join(map(str, ch))))
+        elif n.lower().endswith('.prm') and n in za.namelist() and za.read(n) != zb.read(n):
+            import kl_prmgraph as G
+            stem = n[:-4]; fa = font_chunks(zb, stem)
+            pa_, pb_ = G.read(za.read(n), 'dd'), G.read(zb.read(n), 'dd')
+            log('%s: %d chunks differ - the fonts %s' % (n, sum(1 for i in range(len(pb_.chunks)) if pa_.chunks[i] != pb_.chunks[i]),
+                                                          ' '.join(k for k, i in sorted(fa.items(), key=lambda kv: kv[1]) if pa_.chunks[i] != pb_.chunks[i])))
         elif n in za.namelist() and za.read(n) != zb.read(n) and n.lower() != ONLINE.lower():
             log('%s: differs' % n)
 
@@ -1003,6 +1147,63 @@ def sheet(folder, out, log=print):
         y0 += h + 4
     png_write(out, W, H, img)
     log('%s: %d textures (%s)' % (out, len(rows), ' '.join(str(r[0]) for r in rows)))
+
+
+FONT_SAMPLES = (                               # what each slot shows in the front end (strings of the pages named in the notes)
+    ('Header', 'Arcade Mode - Dead Men Maps'), ('Menu', 'Lobby: Withdrawal / Late Night Opening'),
+    ('Text', 'Leaderboards     Hot Coffee     $1,260,000     Rank 4'), ('Button', 'Select      Back      Ready'),
+    ('H3', 'Heist the bank with up to eight players. A heister can be picked once per round; the one who leaves with the loot wins.'),
+    ('DebugText', 'Lobby - 5 / 8'))
+
+
+def fontsheet(ref, new, out, log=print, scale=2):
+    """Each font of the scene, stock above and baked below, drawn the way the records say (pen advance, ink at pen + offsets,
+    baseline at the header's ascent), `scale` times enlarged on dark grey. ref / new = overlay folders."""
+    import kl_hud, kl_prmgraph as G, kl_texmat as T
+    from kl_portraits import png_write
+    rows = []
+    for folder in (ref, new):
+        z = zipfile.ZipFile(os.path.join(folder, SCENE_ZIP))
+        stem = next(n for n in z.namelist() if n.lower().endswith('.gms'))[:-4]
+        fonts = font_chunks(z, stem); p = G.read(z.read(stem + '.prm'), 'dd'); tex = T.read_tex(z.read(stem + '.TEX'))
+        rows.append((fonts, p, tex))
+    W_ = 1280; blocks = []
+    for name, text in FONT_SAMPLES:
+        for k, (fonts, p, tex) in enumerate(rows):
+            h, recs, _t = kl_hud.parse(p.chunks[fonts[name]]); by = {r[0]: r for r in recs}
+            blocks.append((name, 'stock' if k == 0 else 'new', h, by, tex, text))
+    heights = [(2 * b[2][2] + 16) for b in blocks]
+    H_ = sum(heights) + 20
+    img = bytearray(bytes((28, 30, 34)) * (W_ * H_)); pages = {}; y0 = 10
+    for (name, kind, h, by, tex, text), bh in zip(blocks, heights):
+        pen, base = 8, y0 + h[2] + 4 - h[9] - h[2] // 4 + (h[2] // 4)
+        base = y0 + int(1.1 * h[2]) + 4
+        for c in text:
+            r = by.get(ord(c))
+            if r is None:
+                continue
+            if r[1] not in pages:
+                pages[r[1]] = (tex, kl_hud.tex_page(tex, r[1]))
+            _tid, tw, th, px, _e = kl_hud.tex_page(tex, r[1])
+            sc = tw / kl_hud.PAGE if r[1] < 4096 else 1
+            for yy in range(r[7]):
+                for xx in range(r[6]):
+                    sx, sy = int((r[2] + xx) * sc), int((r[3] + yy) * sc); i = 4 * (sy * tw + sx); a = px[i + 3] / 255
+                    X, Y = pen + r[8] + xx, base + r[9] + yy
+                    if 0 <= X < W_ and 0 <= Y < H_:
+                        q = 3 * (Y * W_ + X)
+                        for kk in range(3):
+                            img[q + kk] = int(236 * a + img[q + kk] * (1 - a)) if kind == 'new' else int((200, 200, 205)[kk] * a + img[q + kk] * (1 - a))
+            pen += r[10]
+        y0 += bh
+    # integer enlargement
+    S = scale; big = bytearray(W_ * S * H_ * S * 3)
+    for y in range(H_ * S):
+        row = img[3 * (y // S) * W_: 3 * (y // S + 1) * W_]
+        big[3 * y * W_ * S: 3 * (y + 1) * W_ * S] = b''.join(bytes(row[3 * (x // S): 3 * (x // S) + 3]) * S for x in range(W_))
+    rgba = bytearray(len(big) // 3 * 4); rgba[0::4] = big[0::3]; rgba[1::4] = big[1::3]; rgba[2::4] = big[2::3]; rgba[3::4] = bytes([255]) * (len(big) // 3)
+    png_write(out, W_ * S, H_ * S, bytes(rgba))
+    log('%s: %d lines, 1:%d (stock grey, baked white)' % (out, len(blocks), S))
 
 
 def abi(exe, folder, log=print):
@@ -1037,7 +1238,7 @@ def main():
     look, bars = val.get('--look', 'deadmen'), val.get('--bars', 'kit')
     num = lambda k: int(val[k], 0) if k in val else None
     if len(a) == 3 and a[0] == 'apply':
-        apply(a[1], a[2], look, '--board' in opt, '--online-in-patch' in opt, '--no-pictures' not in opt, bars=bars)
+        apply(a[1], a[2], look, '--board' in opt, '--online-in-patch' in opt, '--no-pictures' not in opt, bars=bars, fonts='--fonts' in opt)
     elif len(a) == 3 and a[0] == 'level':
         level(a[1], a[2], '--board' in opt, bars=bars)
     elif (len(a) in (2, 3) and a[0] == 'check') or (len(a) == 3 and a[0] == 'check-level'):
@@ -1055,6 +1256,8 @@ def main():
         diff(a[1], a[2])
     elif len(a) == 3 and a[0] == 'sheet':
         sheet(a[1], a[2])
+    elif len(a) == 4 and a[0] == 'fontsheet':
+        fontsheet(a[1], a[2], a[3])
     elif len(a) == 3 and a[0] == 'abi':
         abi(a[1], a[2])
     else:

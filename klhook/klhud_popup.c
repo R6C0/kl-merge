@@ -171,7 +171,7 @@
 #define KLPU_T_FONT      0xac                 /* ZCHAROBJ: the font object SetFont keeps (re\hud.md 3.1) */
 #define KLPU_BAR_LINE    27.0f                /* the draft's one line of the bar: line-height 1.5 x font 22.4 px */
 
-static struct { int popups, ring, frame, measure, layer, test, ringmode, traitor; float padx, pady, dy, y, ringx, ringy; } klpu;
+static struct { int popups, ring, frame, measure, layer, test, ringmode, traitor; float padx, pady, dy, y, ringx, ringy, liftgap; int lift; } klpu;
 
 static struct {
     DWORD osd, ann;                           /* the level this part holds, its wrapped announcement element */
@@ -317,6 +317,10 @@ static int klpu_popup(DWORD e, void *ctx)
     x0 = x - bw * 0.5f;                                              /* the low style nibble 4 centres the text on x */
     y0 = y + KLPU_LINE_STEP * (float)(lines - 1) * 0.5f - bh * 0.5f + klpu.dy;       /* a block of several lines: the bar's middle follows the block's */
     klpu_top = (float)floor(y - cap * 0.5f + 0.5f);                   /* the capitals span klpu_top .. + cap (header[9] = -cap): their middle is the bar's middle (+ 0.5 px at most) */
+    if (klpu.lift && klpu_ring_on) {                                  /* v22 (audit P1): the loot ring sits under the bar's lower edge (R1p 111 s): lift bar + letters clear of it */
+        float rt = klpu_f(klpu_ring_cy) - KLPU_RING_R - KLPU_DAB_H - klpu.liftgap, lift = y0 + bh - rt;
+        if (lift > 0 && lift < 90.0f) { lift = (float)floor(lift + 0.5f); y -= lift; y0 -= lift; klpu_top -= lift; }
+    }
     if (traitor) {
         klpu_dirty = e; klpu_colour(text, KLU_C_ORANGE); klpu_shadow(shadow, 1); klpu_font(text, 0, 1); klpu_font(shadow, 1, 1);
         if (klu_r.handle[181]) drew |= klu_pic(clock, ctx, KLU_NPIC, 181, x0, y0, bw, bh, KLPU_C_BOXFILL, klpu.layer - 1);
@@ -561,6 +565,7 @@ static void klpu_init(void)
     klpu.frame = klu_inii("PopupFrame", 0, 0, 1); klpu.measure = klu_inii("PopupMeasure", 1, 0, 1);
     klpu.layer = klu_inii("PopupLayer", 0x17, 2, 0x18); klpu.test = klu_inii("PopupTest", 0, 0, 1); klpu.ringmode = klu_inii("RingMode", 1, 1, 2);
     klpu.traitor = klu_inii("PopupTraitor", 1, 0, 2);
+    klpu.lift = klu_inii("PopupLift", 1, 0, 1); klpu.liftgap = klu_inif("PopupLiftGap", "6");      /* v22: lift the bar while the ring shows */
     klpu.padx = klu_inif("PopupPadX", "48"); klpu.pady = klu_inif("PopupPadY", "11"); klpu.dy = klu_inif("PopupDY", "3");   /* run T1: the letters sat 4 px under the bar's middle - the BAR goes 4 down */ klpu.y = klu_inif("PopupY", "523");
     klpu.ringx = klu_inif("RingX", "-1"); klpu.ringy = klu_inif("RingY", "-1");
     if (!(klpu.padx >= 0 && klpu.padx <= 400)) klpu.padx = 48.0f; if (!(klpu.pady >= 0 && klpu.pady <= 200)) klpu.pady = 11.0f;

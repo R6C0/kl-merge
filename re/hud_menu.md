@@ -1,6 +1,6 @@
 # The menu pages and the round-over board in the new look (track M, 2026-10-11; review round the same day)
 
-Tool: `tools/kl_hud_menu.py` (apply / level / check / check-level / diff / sheet / abi). Builds: `<work>\build\hud_menu2\`.
+Tool: `tools/kl_hud_menu.py` (apply / level / check / check-level / diff / sheet / abi). Builds: `<work>\build\hud_menu2\`. SECTION 11 (2026-10-12) = menu fonts + the pair rebuilt from the installed overlay: `<work>\build\hud_menu3\`.
 NOTHING HERE HAS RUN IN THE GAME and nothing is installed. Words: READ = read in kl2.exe (debug\dasm.py, tools/kl_exe.py
 + capstone) or in the files as stated; RAN = the tool was run offline; ASSUMED / GUESS = not established.
 The review is `re/hud_menu_review.md`; what was done about each finding: section 9.
@@ -359,3 +359,100 @@ For a new map on the tab the build chain gains one step after `kl_hud.py all ...
   level's online.xml;
 - the board's positions; that `[rules+0x1d4]` is set when the round-over page shows; the two row limits agreeing;
 - how the constructor colours a set without `DisableColor`.
+
+## 11. The final look: fonts, paragraph text, a rebuilt pair (2026-10-12; RAN offline, NOTHING INSTALLED, NEVER LOADED)
+
+Tool: `tools/kl_hud_menu.py` gained `apply --fonts`, `fontsheet` and a stricter `check` (scene .prm / glyph pages); `kl_hud.py` was
+NOT edited (its `build_font` is imported). Build: `<work>\build\hud_menu3\` = made from THE CURRENTLY INSTALLED overlay
+(`<DD>\KLExpansion\Overlay`, read 2026-10-12 14:00; byte copy kept in `hud_menu3\installed_0612`):
+
+| File | Installed now | New (`hud_menu3\Overlay`) |
+|---|---|---|
+| `Patch01.zip` | 270be320 (92,358 B, 09:28) | feeb24bd (92,474 B) |
+| `Scenes\kaneandlynch.zip` | a39517e0 (32,384,571 B, 04:27; stock fonts, map pictures, the six Dead Men map entries) | ff39ccb4 (32,403,674 B) |
+
+Command: `python tools/kl_hud_menu.py apply "<DD>\KLExpansion\Overlay" "<work>\build\hud_menu3\Overlay" --fonts` (5 s, same bytes every run).
+`check <new> <installed>`: PASS, 0 fails, 0 notes (table layout identical in all three XML files: 4377 / 1593 / 1889
+table-making tags; 30 textures differ = 22 bars / lines + 8 font pages, same ids and sizes; the .prm differs in the eight font
+chunks only, chunk table and every other chunk the installed one's). `diff`: `hud_menu3\diff.txt`. Pictures looked at:
+`hud_menu3\fontsheet.png` (every font stock above, baked below, the pages' own strings; fs_a / fs_b are crops), `hud_menu3\sheet.png` (the bars and lines).
+Disk used: 32 MB (overlay) + 32 MB (the byte copy of the installed pair) + 4 small PNGs; G: had 4.4 GB left.
+
+### 11.1 What each menu font slot is for (READ in the three XML files and the scene's guielems.xml / windows.xml, which name no font)
+
+| Slot (stock FOUNMB) | Used by | Now | Capital height (stock) |
+|---|---|---|---|
+| `Header` 28 px | page headlines (HeadlinePos, TextHeader*, CreditLarge), the lobby's level line | Anton, caps, 28 px, 1 px tracking, light chips (0.5) | 25 (19) |
+| `Menu` 20 | the lobby's focus lines, error-screen menu lines | Anton, caps, 20 px, chips 0.3 | 18 (14) |
+| `Text` 20 | every row / cell / leaderboard / lobby / status / profile number (168 + 35 + 26 uses) | Anton, caps, 19 px, no chips | 17 (14) |
+| `Button` 18 | footer prompts, the tip line's key hints | Anton, caps, 17 px | 15 (12) |
+| `H3` 20 | named by NO element of the three files (a level's HUD slot) | Montserrat 600, MIXED case, 17 px = THE BODY FACE (11.2) | 12.5 (14) |
+| `DebugText` 20 (MorSCCB) | named by no element | Montserrat 800, caps, 15 px, 3 px tracking = the spaced label face; NOTHING USES IT YET | 11 (12) |
+| `H1` / `H2` | named by no element | = Header / Text, so any code path that asks for them looks the same | 25 / 17 |
+
+MENUS ARE NOT SHRUNK: every capital is at least as tall as the stock's, except the two slots nothing uses (and the body face,
+12.5 against 14, which has a larger x-height than the stock face). The HUD's own fonts came down to 10-11 px; those are the
+LEVEL's copies and are left as `kl_hud.py all --look deadmen` made them. The glyph baselines are NOT moved
+(`build_font(baseline=False)`: the stock header's ascent stays), so every XML position keeps its baseline; only the cap tops
+rise. The 26 private glyphs of page 1 (button icons) are kept. Faces come from `<work>\fonts` (Anton-Regular.ttf,
+Montserrat-VF.ttf, private to the process); without them the stand-ins are Impact / Segoe UI Black (`menu_specs`). Glyph
+coverage of the 333 baked characters in Anton / Montserrat was NOT checked (no fontTools here): a missing one is drawn by GDI's
+fallback face. Worth a look: any accented name in the lobby.
+
+### 11.2 The body face (the one XML change besides colours)
+
+One font object per `Font=` name, so a row and a paragraph that share `Text` cannot differ. The draft's tips and long texts are
+in the label face and its rows in the display capitals, so `repoint_body` points the PARAGRAPH templates and elements at `H3`:
+templates FAGTTipTemplate, FAGameTipTemplate, HelpText_GT, HelpTextCenter_GT, Copyright, LegalText_T, QuitGameText_T, IngameText_T,
+BuyWeaponDialogText_T, Credit_LT, ErrorText, MercsObjInfo, and any TextBlock / tips element 430..4999 wide (the briefing blocks,
+disclaimers, save messages; the 16000-wide infocast crawl is left). 30 attributes in frontend.xml, 2 templates in the scene's
+online.xml. Attribute values only: the table and every element id are untouched (`check`).
+NOT done in `ingame.xml`, a level's `online.xml`, or `--online-in-patch`'s copy: inside a level `H3` is the HUD's small font
+(Anton ~11 px), so a paragraph there would shrink - `check` FAILS an `H3` in ingame.xml (tested). In-level pages (pause, shop,
+round over, death) therefore keep `Text` = the level's Anton capitals at 21 px (`kl_hud.py`'s level bake): readable, but
+paragraphs there are capitals.
+
+### 11.3 Colours, bars, lines against the final HUD look
+
+Colour sets already equal the draft's tokens (chalk f3f0ea, ink 0c0c0d, coral f0475a, orange e8831f, green 4f8f49 / 63a65b, dead
+8c3138, mute 8d8982; checked against `hud_mockup.html`). Kept: focus bar = solid chalk brush stroke with ink text; headings coral;
+money green; penalties coral; the traitor line orange. Bars: the `kit` painter stays the default - the HUD's own stroke
+(picture 111) reads as a 'barcode' at 32 px bar height (`--bars hud` still builds it for comparison); both share the look of
+solid chalk, hand-cut ends and dry streaks. DIFFERENCES FROM THE DRAFT that XML cannot do: the draft's death line colour
+(a8383f) is the coral `Header` set here; a bar behind a headline, the framed map picture on stock pages, painted sliders /
+switches, locked guns dimmed by state, the traitor / own ROW painted, fate text and the continue ring are code or new elements
+(sections 4-5).
+
+### 11.4 What the owner will see, page by page (a guess until M1 / M2 have run)
+
+| Page | Changes | Stays stock (drawn by code) |
+|---|---|---|
+| Main menu, Arcade, maps, Heister, Guns | headline in Anton capitals about a third taller; entries in Anton capitals; focused entry on a chalk brush bar with ink text; dry-brush separator lines; hint line in capitals | the Dead Men logo, the icons, the map pictures (the installed ones), the infocast ticker (now Anton caps) |
+| Lobby / waiting | rows and focus lines in capitals; rank, trust, style columns | player arrows, avatars |
+| Briefing / Heister and Guns notes / tips / help / legal / save messages | paragraphs in Montserrat mixed case (wider than the stock face: more lines in a block; the 400-high briefing block may need a line more) | - |
+| Leaderboards, profile, status | capitals; money columns green | the numbers' source |
+| Options, key assignment | capitals; chalk focus bar; sliders in chalk | sliders and switches are code |
+| Round over (`HeistStatus*`, in a level) | colours only from this pair (bars / lines of a level need `level` on its archive); capitals at the level font's size | the heister list of the draft (`level --board` or hook code), the continue ring |
+| Shop, pause, death | as above | stat bars, lock state, rings |
+Not changed: the loading screen, subtitles, the HUD.
+
+### 11.5 Risks
+
+1. Capitals are wider than the stock lowercase in long rows (leaderboard names, lobby rows with fixed columns): a long name may run into the next column. First thing M1 looks at (Leaderboards, lobby, Heister).
+2. Anton headlines are 6 px taller: a headline that sat close to a line above may touch it (the baseline is unchanged, so only upward).
+3. `H3` / `DebugText` / `H1` / `H2` are named by nothing found; code that asks for one by another route is not excluded (it would show Montserrat / Anton).
+4. A level archive built by `kl_hud.py all --look deadmen` carries its own copy of every font: the pages in a level do NOT get these menu fonts (11.2).
+5. Everything of section 6 still holds (scope: Patch01.zip's frontend.xml / ingame.xml also reach the campaign and multiplayer pages; ABGR bars; additive lines assumed).
+6. The K0 log line of section 8 (menu table count) is NOT in the committed `klhook.c` (HEAD 73e0794): the 14:24 crash class is covered by `check` (table identical, so the count cannot have changed) but its live proof is missing.
+7. `fontsheet.png` draws the records' own geometry with the baseline at 1.1 x size: widths and shapes, not the game's exact vertical placement.
+
+### 11.6 Live checks (owner away; pictures every 2 s; no hook change needed)
+
+| Run | Set-up | PASS shows |
+|---|---|---|
+| M1 | the new pair in `<DD>\KLExpansion\Overlay` (BOTH files), menu only: main menu -> Arcade -> Dead Men maps -> back -> Heister -> Guns -> Leaderboards -> Options -> key assignment -> lobby if reachable; the mouse over entries, a map picture and the page background for 30 s | no fault; capitals in the rows; headlines not touching lines; tips / briefing in Montserrat and not overflowing; no empty or garbled glyph; chalk bars as in `sheet.png` |
+| M2 | the same pair, then one Arcade round on a Dead Men map to the round-over page, Ready, Buy weapons | pages in the level (fonts = the level's own, so that map's archive must carry `kl_hud.py all --look deadmen`) coloured, no fault; for the bars inside the level run `kl_hud_menu.py level` on that archive first (section 7, M3) |
+
+Install: close the game; copy `hud_menu3\Overlay\Patch01.zip` and `hud_menu3\Overlay\Scenes\kaneandlynch.zip` over the two files
+of `<DD>\KLExpansion\Overlay` (BOTH, always together). Back out: copy the two files of `hud_menu3\installed_0612` back
+(sha1 270be320 / a39517e0). `Menu/online.xml` is the scene's copy only (no `--online-in-patch`).

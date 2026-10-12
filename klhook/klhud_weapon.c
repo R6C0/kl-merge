@@ -187,7 +187,7 @@ struct klwd_raw {
 struct klwd_q { DWORD handle; float x, y, w, h, scale; DWORD argb; int layer; float rec[0x74 / 4]; };
 
 #define KLWD_NQ 3                              /* two guns and the arrow */
-static struct { float x, y, small_size; int other; } klwd;
+static struct { float x, y, small_size, labelw, labelright; int other; } klwd;
 static struct {
     DWORD elem; int wrapped, ok, scaled, told_nocount, told_arrow; const char *why, *said_why;
     struct klwd_q q[KLWD_NQ]; int nq;
@@ -555,7 +555,13 @@ static void klwd_compose(void)
                 if (n0 >= 0 && klwd_name(a->pic)[0]) snprintf(label, sizeof label, "%s" KLWD_SEP "%d", klwd_name(a->pic), n0);
                 else if (n0 >= 0) snprintf(label, sizeof label, "%d", n0);
                 else snprintf(label, sizeof label, "%s", klwd_name(a->pic));
-                if (label[0]) klwd_text(KLWD_T_LABEL, cx + KLWD_LABEL_DX, cy + KLWD_LABEL_DY, KLU_C_CORAL, label);
+                if (label[0]) {
+                    /* v22 (audit W1): centred under the circle, but the long names ('ZASTAVA M85 . 270' = 17 letters) ended at 1268 of 1280, past the
+                       inset: the centre is pulled in until the estimated right end (letters x LabelCharW, GUESS 10.5 from run G2's picture) fits LabelRight. */
+                    float lx = cx + KLWD_LABEL_DX, hw = 0.5f * klwd.labelw * (float)strlen(label);
+                    if (klwd.labelright > 0 && lx + hw > klwd.labelright) lx = klwd.labelright - hw;
+                    klwd_text(KLWD_T_LABEL, lx, cy + KLWD_LABEL_DY, KLU_C_CORAL, label);
+                }
             }
             if (o->shown) {
                 klu_addpic(klu_r.handle[112] ? 112 : 181, cx - KLWD_CUT_W * 0.5f, cy + KLWD_CUT_DY - KLWD_CUT_H * 0.5f, KLWD_CUT_W, KLWD_CUT_H, KLWD_C_CUT, klu.layer - 1);
@@ -616,6 +622,8 @@ static void klwd_init(void)
     klwd.other = GetPrivateProfileIntA("HUD", "WeaponOther", 0, klh_ini) != 0;
     if (!(klwd.x <= 1280)) klwd.x = -1; if (!(klwd.y <= 720)) klwd.y = -1;
     if (!(klwd.small_size >= 0 && klwd.small_size <= 2.0f)) klwd.small_size = 0.8f;
+    GetPrivateProfileStringA("HUD", "LabelCharW", "10.5", t, sizeof t, klh_ini); klwd.labelw = (float)atof(t); if (!(klwd.labelw >= 4 && klwd.labelw <= 30)) klwd.labelw = 10.5f;      /* v22 */
+    GetPrivateProfileStringA("HUD", "LabelRight", "1256", t, sizeof t, klh_ini); klwd.labelright = (float)atof(t); if (!(klwd.labelright >= 0 && klwd.labelright <= 1280)) klwd.labelright = 1256.0f;      /* 0 = no clamp */
     klog("hud: weapon: on (the weapon dial; the stock ammo panel's Render is skipped while it stands); WeaponX=%.0f WeaponY=%.0f (-1 = from the inset) WeaponSmall=%.2f WeaponOther=%d; needs the level's pictures 113 / 114; NOT RUN IN THE GAME",
          klwd.x, klwd.y, klwd.small_size, klwd.other);
 }
