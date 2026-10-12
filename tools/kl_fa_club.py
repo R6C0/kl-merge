@@ -10,6 +10,14 @@ live run can settle: re/club_campaign.md. Nothing here installs anything or star
 THE ENEMIES, THE BEAT (stage L2) AND THE ESCAPE (stage L3: F07's van on ROAD) ARE IN. '--no-ai' builds the round
 without enemies of stage L1.
 
+VERSION 2 (2026-10-12, 'Last Call v2', after the owner's round C10; NOT RUN IN THE GAME; the default, '--v1' is the round of c_club5 and gives its archives byte for byte): the crew
+STARTS ON THE PAVEMENT in front of the entrance (START_V2: two rows of four east of the lane mouth, the TRAITOR row west of it), runs IN through the queue lane, the hall, the stairs, both dance floors
+and the walkway to Yoko's office (the loot is where it was), and fights OUT again through the five gated rooms to F07's van on the slab. Nothing is sealed (SEAL_OPEN: the seal pieces are out at build
+time). The first criminal through the inner office door is the ALARM: 25 s later (ALARM_DELAY; or 200 s after the round start whatever a bot counts as, ALARM_BACKSTOP) the hunters and F07's police
+come in, the van is shown (the 'van bug' of C10: its show hung on the seal's clock, which a sprinting crew beat) and the exit line is spoken. The exit box is the slab's south-west corner round the
+boarding place (EXIT_V2). THE WAY IN HAS NO GATE (10 men of 'load' squads are awake along it: inleg_table, 6 guns at worst; the squads with a start child sleep until their out-gate). NOT BUILT: the
+crowd (campaign civilians and clones), the roof stage and the helicopter (re/club_campaign.md 'Version 2'). '--exit van-slab' is the only exit this file builds.
+
 THE ROOM GATES (2026-10-12, after live runs C3 / C4; NOT RUN IN THE GAME): the seven AI heisters hold at distinct cover places in front of each
 of five rooms of the way out (walkway, dance floor 2 east / west, dance floor 1 north-west, the stairs' foot) and go on through a
 TriggerActorsDead that names the room's men (dead, or the game's own 30 s) - Retomoto's gates (kl_fa_bots_rt.gates_plan, imported) with this
@@ -26,7 +34,9 @@ THE WAKE FIX (2026-10-12, after live run C8; NOT RUN IN THE GAME): the nine stag
 each squad is now ALSO named by a criminals-only TriggerBox on the hold area of the room whose gate names it and by a backstop TriggerDelay2 (six free F07 objects: WAKE_NEW; WAKE_BOX holds the numbers). check() / rooms_check prove per squad
 a gate, a box and a backstop, and that no man a box wakes has an exact-ray line to a mesh point of it. `--no-wake-boxes` leaves the boxes out. re/club_campaign.md 'Wake, after run C8'.
 
-    python kl_fa_club.py test <out> [--keep] [options]    build F07 + M05_A with the layer into <out> (build():
+    python kl_fa_club.py test <out> [--keep] [--v1] [--exit van-slab] [options]
+                                                          (--v1: the round of c_club5; V2 is the default)
+                                                          build F07 + M05_A with the layer into <out> (build():
                                                           a bare graft first, for the van's plan, then the level
                                                           inside kl_map_escape.van_layer), finish() on the written
                                                           level, check(); exit 1 if a problem is left that is not
@@ -187,6 +197,22 @@ TRAITOR = [(float(x), OFFICE, 2290.0) for x in (2940, 3020, 3100, 3180)]
 # either side of its line free of spawn points. Stage L3 moved the four that stood at x -900..-600 east: the van
 # stops WEST of the mouth and its rear doors are at x -637 - a policeman must not come back beside them
 # (FED_CLEAR; check()). GUESS: the points
+# ---- VERSION 2 (2026-10-12, the owner's 'spawn at the entrance of the club ... you run in and take the money from the office'): the crew
+# starts on the pavement slab in front of the entrance, runs IN to Yoko's office and OUT again to the van on the slab. V2 = True is the
+# default; '--v1' is the round of c_club5 (the archive of that set is reproduced byte for byte). set_v2() puts the tables below into START,
+# TRAITOR, SPAWN and PLACE IN PLACE. START_V1 / TRAITOR_V1 are the office rows (also the mesh-part reference of check()).
+V2 = True
+START_V1 = list(START)
+TRAITOR_V1 = list(TRAITOR)
+START_REF = START_V1[1]                 # a point of the START's mesh part (the slab is on the same part: 401 of 437 polygons): the reference of check()
+# Both rows on the slab (z -3450..-2650, y 30), 90 and 190 from its house edge, EAST of the lane mouth (118, 20, -2623) and facing it; row 2 is 260 from
+# the van's line z -3100 (LANE_CLEAR 250). WHY EAST: kl_fa_bots puts each bot 110..420 from the nearest START point and FAILS a bot that starts inside a level exit box
+# (the box calls the van), and every way into the club passes the lane mouth, so the exit box (EXIT_V2) is the slab's south-west corner round the van's boarding place
+# and no START point is within 420 of it (MEASURED by the bots step: 'is inside level exit box ... after 0 of path' was the first form's fault, rows at x -300..120).
+# The TRAITOR row lies west of the lane mouth, z -2790, 110 .. 400 from the START rows, outside the box.
+START_V2 = [(float(x), SLAB[2], z) for z, xs in ((-2740.0, (160, 280, 400, 520)), (-2840.0, (220, 340, 460, 580))) for x in xs]
+TRAITOR_V2 = [(float(x), SLAB[2], -2790.0) for x in (-340, -240, -140, -40)]
+TEAM_MERC_V2 = [(float(x), SLAB[2], z) for z in (-2700.0, -2780.0) for x in (-800, -740, -680, -620)]    # (team mode only; not Arcade)
 POLICE = [(float(x), SLAB[2], -2760.0) for x in (900, 1000, 1100, 1200, 1300, 1400, 1500)]
 # the eight police bodies (Heroes!Henchmen_0n) beside those points. GUESS
 BODIES = [(p[0], p[1], p[2] - 70.0) for p in POLICE] + [(1600.0, SLAB[2], -2830.0)]
@@ -196,20 +222,28 @@ STAGE_C = [(-4.0, 180.0, -240.0), (96.0, 180.0, -240.0), (196.0, 180.0, -240.0),
 STAGE_D = [(-450.0, 100.0, -600.0), (-350.0, 100.0, -600.0), (-450.0, 100.0, -680.0), (-350.0, 100.0, -680.0)]
 WEST, SOUTH = (-1.0, 0.0), (0.0, -1.0)
 # ZSpawnPoint type -> (points, shift so that two kinds never share a point, facing: (dx, dz), or a place looked at)
-SPAWN = {'eSPAWN_TYPE_FRAGILE_ALLIANCE_START': (START, (0, 0, 0), DOOR_IN),
-         'eSPAWN_TYPE_FRAGILE_ALLIANCE_TRAITOR': (TRAITOR, (0, 0, 0), DOOR_IN),
-         'eSPAWN_TYPE_FRAGILE_ALLIANCE_AFTER_DEATH': (POLICE, (0, 0, 0), LANE_MOUTH),
-         # the other modes' criminals stand in the office too, in rows of their own (it is 46 m2 of mesh: the rows are near)
-         'eSPAWN_TYPE_FRAGILE_ALLIANCE_UCC': (START, (-50, 0, -35), DOOR_IN),
-         'eSPAWN_TYPE_FRAGILE_ALLIANCE_UCC_MERC': (START, (-50, 0, -35), DOOR_IN),
-         'eSPAWN_TYPE_FRAGILE_ALLIANCE_UCC_TRAITOR': (TRAITOR, (0, 0, -45), DOOR_IN),
-         'eSPAWN_TYPE_FRAGILE_ALLIANCE_UCC_POLICE': (POLICE, (50, 0, -35), LANE_MOUTH),
-         'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_MERC': ([(float(x), OFFICE, float(z)) for z in (2750, 2850, 2950, 3050) for x in (2650, 2750)], (0, 0, 0), DOOR_IN),
-         'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_MERC1': (STAGE_B, (0, 0, 0), WEST),
-         'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_MERC2': (STAGE_C, (0, 0, 0), SOUTH),
-         'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_MERC3': (STAGE_D, (0, 0, 0), SOUTH),
-         'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_MERC4': (STAGE_D, (50, 0, 40), SOUTH),
-         'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_POLICE': (POLICE, (-50, 0, -35), LANE_MOUTH)}
+def _spawn(v2):
+    """ZSpawnPoint type -> (points, shift so that two kinds never share a point, facing). v2: the criminals' kinds on the slab facing the lane mouth."""
+    S_, T_, face = (START_V2, TRAITOR_V2, LANE_MOUTH) if v2 else (START_V1, TRAITOR_V1, DOOR_IN)
+    tm = TEAM_MERC_V2 if v2 else [(float(x), OFFICE, float(z)) for z in (2750, 2850, 2950, 3050) for x in (2650, 2750)]
+    u = (60, 0, 20) if v2 else (-50, 0, -35)          # (V2: row 2 + (0, 0, -35) would stand 225 from the van line)
+    return {'eSPAWN_TYPE_FRAGILE_ALLIANCE_START': (S_, (0, 0, 0), face),
+            'eSPAWN_TYPE_FRAGILE_ALLIANCE_TRAITOR': (T_, (0, 0, 0), face),
+            'eSPAWN_TYPE_FRAGILE_ALLIANCE_AFTER_DEATH': (POLICE, (0, 0, 0), LANE_MOUTH),
+            # the other modes' criminals stand in the office too, in rows of their own (it is 46 m2 of mesh: the rows are near)
+            'eSPAWN_TYPE_FRAGILE_ALLIANCE_UCC': (S_, u, face),
+            'eSPAWN_TYPE_FRAGILE_ALLIANCE_UCC_MERC': (S_, u, face),
+            'eSPAWN_TYPE_FRAGILE_ALLIANCE_UCC_TRAITOR': (T_, (0, 0, -45), face),
+            'eSPAWN_TYPE_FRAGILE_ALLIANCE_UCC_POLICE': (POLICE, (50, 0, -35), LANE_MOUTH),
+            'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_MERC': (tm, (0, 0, 0), face),
+            'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_MERC1': (STAGE_B, (0, 0, 0), WEST),
+            'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_MERC2': (STAGE_C, (0, 0, 0), SOUTH),
+            'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_MERC3': (STAGE_D, (0, 0, 0), SOUTH),
+            'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_MERC4': (STAGE_D, (50, 0, 40), SOUTH),
+            'eSPAWN_TYPE_FRAGILE_ALLIANCE_TEAM_POLICE': (POLICE, (-50, 0, -35), LANE_MOUTH)}
+
+
+SPAWN = _spawn(False)           # (set_v2() makes it the round's: V2 or V1)
 
 # ------------------------------------------------------------------ the loot
 # Briefcases on the PUBLIC side of each counter (four of the study's nine prop ORIGINS lie over 1 m off the mesh:
@@ -572,7 +606,7 @@ STOCK_ROWS = True                       # False ('--dead-men-rows'): Dead Men's 
 LEGACY = False
 GUARDS_OFF, POLICE_EAST, VAN_LATE, RESET, VOICE = True, True, True, True, True
 LOOT_SECONDS = 18
-LEGACY_FLAGS = {'SEAL_AT': 120.0, 'GUARDS_OFF': False, 'POLICE_EAST': False, 'VAN_LATE': False, 'RESET': False, 'VOICE': False, 'LOOT_SECONDS': 30, 'ROOM_GATES': False, 'PRESSURE': False, 'WAKE_MORE': False}
+LEGACY_FLAGS = {'SEAL_AT': 120.0, 'GUARDS_OFF': False, 'POLICE_EAST': False, 'VAN_LATE': False, 'RESET': False, 'VOICE': False, 'LOOT_SECONDS': 30, 'ROOM_GATES': False, 'PRESSURE': False, 'WAKE_MORE': False, 'V2': False}
 FRONT_SQUADS = (E1 + 'Backroom!WaitingRoom', E2 + 'YokoGuards')
 # the four posts: x, y, z on the navigation mesh part of the START, the dance floor 2's upper deck west of the stairs. MEASURED
 # (C:/kl_scratch/club_fix/explore.py on the built level): each >= 400 from the doors, from every place of the way in (ROUTE_IN every 100)
@@ -726,6 +760,43 @@ def men_table():
 
 set_roles()
 
+# ------------------------------------------------------------------ VERSION 2: what differs from the round of c_club5 (set_v2)
+# The place names of the V2 camera / box objects are the host's (PLACE); V2_PLACE overrides PLACE while V2 is on.
+ALARM_BACKSTOP = 200.0                  # s after the round-start event: the alarm whatever a bot counts as (the slowest crew is at the office about 100 s; GUESS)
+ALARM_DELAY = 25.0                      # s after the first criminal passes the inner office door (WALK_BOX: the end of the way IN) to the alarm: the gate that lets the
+                                        # hunters and F07's police in, the van's show and the exit line. (V1: SEAL_AT from the round start.) GUESS
+EXIT_V2 = ((-725, 200, -3175), (425, 250, 275))       # the exit box and the escape-area triggers of V2: the slab's SOUTH-WEST corner (x -1150..-300, z -3450..-2900), so that nobody who starts on the
+                                                      # slab starts inside them (START rows z -2740 / -2840, TRAITOR -2790). MEASURED: still on the van's boarding place (-637, -3100)
+V2_PLACE = {
+    'Gameplay!EscapeSetup!otrExitLevel': (EXIT_V2[0], None, EXIT_V2[1], 'V2: the slab\'s south-west corner round the boarding place (the crew starts on the slab: the box holds no START point and no way into the club)'),
+    'FASpecials!POI!Trigger_POI_TheEscapeArea': ((EXIT_V2[0][0], 250, EXIT_V2[0][2]), None, (EXIT_V2[1][0], 300, EXIT_V2[1][2]), 'V2: as the exit box'),
+    'FASpecials!POI!Trigger_POI_TheEscapeAreaCP_OffenseOnlyRespawn': ((EXIT_V2[0][0], 250, EXIT_V2[0][2]), None, (EXIT_V2[1][0], 300, EXIT_V2[1][2]), 'V2: as above'),
+    'FASpecials!POI!Trigger_POI_TheEscapeAreaFA_RespawnOnly': ((EXIT_V2[0][0], 250, EXIT_V2[0][2]), None, (EXIT_V2[1][0], 300, EXIT_V2[1][2]), 'V2: as above'),
+    # spawn cameras of the criminals' first stage: over the kerb, looking at the START rows. GUESS (none looked through)
+    'FASpecials!SpawnPoint!TeamMode!SpawnCam_000_A!Camera_000_A': ((420, 230, -3330), None, None, 'V2 GUESS: over the kerb, behind the START rows'),
+    'FASpecials!SpawnPoint!TeamMode!SpawnCam_000_A!CameraLookAt_000_A': ((380, 90, -2790), None, None, 'V2: the START rows'),
+    'Specials!JumpPoints!01_Start': ((380, SLAB[2], -2790), WEST, None, 'V2: the slab, between the START rows'),
+}
+_PLACE_V1 = {}
+
+
+def set_v2():
+    """Put the tables of the round into place for V2 / V1: START, TRAITOR (in place), SPAWN, the PLACE overrides, the seal (V2: out at build time).
+    Called at every place that sets a flag; idempotent."""
+    START[:] = START_V2 if V2 else START_V1
+    TRAITOR[:] = TRAITOR_V2 if V2 else TRAITOR_V1
+    SPAWN.clear()
+    SPAWN.update(_spawn(V2))
+    for k in V2_PLACE:
+        _PLACE_V1.setdefault(k, PLACE[k])
+        PLACE[k] = V2_PLACE[k] if V2 else _PLACE_V1[k]
+    for k, v in TEXTS_V2.items() if 'TEXTS' in globals() else ():
+        _TEXTS_V1.setdefault(k, TEXTS[k])
+        TEXTS[k] = v if V2 else _TEXTS_V1[k]
+
+
+set_v2()
+
 
 def police():
     """The squads of F07 that arrive in this build."""
@@ -758,6 +829,13 @@ TEXTS = {START_KEY % 'FA': 'Grab the cases and fight your way down through the c
          'above the dance floor. We are already in there with the safe open when her bodyguards catch on. We grab the cases, shoot our way down across '
          'both dance floors and leave through the front entrance, where our getaway van will pick us up on the street.'}
 START_FIELDS = {12: 'FA', 13: 'FA', 14: 'Team_B', 15: 'UCC'}
+TEXTS_V2 = {START_KEY % 'FA': 'Run into the club and take the cases from the office at the back. Then fight your way out again: the van picks you up on the street.',
+            START_KEY % 'UCC': 'Run into the club and take the cases from the office at the back. Then fight your way out again: the van picks you up on the street.',
+            'AllLevels/Menu/Online/Scenarios/BriefingDL04': 'The Mizuki is the hottest night club in Tokyo, and the owner\'s daughter keeps the takings in her office '
+            'above the dance floor. We hit it from the front: in past the queue, up across both dance floors while the bouncers are still looking at the door, '
+            'the cases from her desk - and back out the way we came, to the van that waits on the street.'}
+_TEXTS_V1 = {}
+set_v2()                                # (again: TEXTS exists now)
 # the briefing and reminder lines: stock F07's speak of a data theft. Lines of other stock levels that fit cash in
 # the hand and a fight on the way out, all in F07's bank with their eight voices (kl_fa_bank.LINES; re/bots_voice.md
 # 6.2). settings field -> line. GUESS: the choice
@@ -960,7 +1038,7 @@ def prepare_host(S, log=print):
             seen[kind] += 1
         elif sc.names[t].startswith('Heroes!'):
             crook = sc.names[t].startswith('Heroes!Hero_0')
-            pts, face = (START, DOOR_IN) if crook else (BODIES, LANE_MOUTH)
+            pts, face = (START, SPAWN['eSPAWN_TYPE_FRAGILE_ALLIANCE_START'][2]) if crook else (BODIES, LANE_MOUTH)
             p = pts[seen[crook, 'hero'] % len(pts)]
             A.place(S, t, p, facing(p, face))           # ... a player group along local -Z
             seen[crook, 'hero'] += 1
@@ -1228,7 +1306,10 @@ def wire(sc, log=print):
     lists('office timer', 'TriggerDelay2', f0=OFFICE_AT, f4=stage['office'])
     # TriggerBox field 0 = 1 (in use from the load: F07 switches these two on by a timer), field 15 = 0 (fires once,
     # not for every criminal: kl_fa_bank.BOX_PER_MAN, the census of review round 1), criminals only
-    lists('walk box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['walk'])
+    # V2: the first criminal through the inner office door is the END of the way in: the alarm. The box also starts 'van timer b' (ALARM_DELAY: the gate that lets the hunters and the
+    # police in, the van's show, the exit line), and the clock of the round start ('seal timer', ALARM_BACKSTOP) does the same whether or not a bot counts as a criminal for the box
+    alarm = [R + ROLE['van timer b']] if V2 and VAN_LATE else []
+    lists('walk box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['walk'] + alarm)
     lists('floor box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['floor'])
     wake_timers = []
     if WAKE_MORE:                                       # THE WAKE FIX: the second and third trigger of each wake group (a box on the room's hold area, a backstop timer)
@@ -1249,7 +1330,7 @@ def wire(sc, log=print):
     k = node(ROLE['monitor'])
     mine = {R + v for v in ROLE.values()}
     have = [s for s in values(sc, k, 'AIMonitor')[2] if sc.resolve(s) and s not in mine]
-    start = [R + ROLE['seal timer']] + ([R + ROLE['office timer']] if stage['office'] else []) + [R + ROLE['doors timer'] if DOORS_ANIMATE else R + ROLE['muffle']] + wake_timers
+    start = [R + ROLE['seal timer']] + ([R + ROLE['office timer']] if stage['office'] else []) + ([R + ROLE['doors timer']] if DOORS_ANIMATE else [] if V2 else [R + ROLE['muffle']]) + wake_timers
     # RESET: two stock objects FIRST in the list put round 2 back as round 1 was at the load (the Vault's reset: re/bank_campaign.md W.5). Show
     # again what the round switched OFF (the seal's pieces), hide again what it switched ON (the late van). Both are no-ops in round 1
     reset = ([R + ROLE['reset show']] if seal else []) + ([R + ROLE['reset hide']] if VAN_LATE else []) if RESET else []
@@ -1273,15 +1354,24 @@ def wire(sc, log=print):
     # same DeactivateGeom from its 'both dance-floor squads dead' counter: whichever comes first opens the lane
     # The fast way is the counter's (above): both name the DeactivateGeom themselves, and each its own path of the
     # gate, which lets the hunters and the police in for whichever comes first
-    lists('seal timer', 'TriggerDelay2', f0=SEAL_AT, f4=([R + ROLE['seal off']] if seal else []) + ([ways[1]] if enemies_in else []) + van_t)
+    if V2:
+        lists('seal timer', 'TriggerDelay2', f0=ALARM_BACKSTOP, f4=([ways[1]] if enemies_in else []) + van_t + [R + ROLE['speak']])
+    else:
+        lists('seal timer', 'TriggerDelay2', f0=SEAL_AT, f4=([R + ROLE['seal off']] if seal else []) + ([ways[1]] if enemies_in else []) + van_t)
     lists('seal off', 'DeactivateGeom', f0='AITrigger', f1=seal)
 
     # ---- the way out: F07's 'exit heist' box in the wardrobe, with a line that fits a front door
-    lists('speak box', 'TriggerBox', f14='ECPS_FA_MERCONLY', f17=[R + ROLE['speak']] + ([R + ROLE['van timer b']] if VAN_LATE else []))
+    if V2:                                              # the wardrobe's box is passed on the way IN too: it says nothing and shows nothing in V2 (the alarm does); it sends the music's muffle switch (the crew is inside the club's doors)
+        lists('speak box', 'TriggerBox', f14='ECPS_FA_MERCONLY', f17=[R + ROLE['muffle']] if not DOORS_ANIMATE else [])
+    else:
+        lists('speak box', 'TriggerBox', f14='ECPS_FA_MERCONLY', f17=[R + ROLE['speak']] + ([R + ROLE['van timer b']] if VAN_LATE else []))
     if VAN_LATE:                                        # the van is shown VAN_AFTER s after the seal opens / VAN_EARLY s after the wardrobe's box (idempotent)
         lists('van on', 'ActivateGeom', f0='AITrigger', f1=[van_path()])
         lists('van timer', 'TriggerDelay2', f0=VAN_AFTER, f4=[R + ROLE['van on']])
-        lists('van timer b', 'TriggerDelay2', f0=VAN_EARLY, f4=[R + ROLE['van on']])
+        if V2:
+            lists('van timer b', 'TriggerDelay2', f0=ALARM_DELAY, f4=[R + ROLE['van on']] + ([ways[1]] if enemies_in else []) + [R + ROLE['speak']])
+        else:
+            lists('van timer b', 'TriggerDelay2', f0=VAN_EARLY, f4=[R + ROLE['van on']])
     lists('speak', 'OnlineSpeakPlayer', f1=EXIT_LINE)
     # ---- the escape: every exit trigger of the level (there is F07's one) calls the van - field 0 false, field 2
     # the van's group, 1 and 3..5 empty, the form the three car maps on the tab have (kl_map_escape.van_wire). The
@@ -1481,13 +1571,14 @@ def finish(folder, log=print):
 # ------------------------------------------------------------------ the checks
 # the round's way, for tools/kl_route.py: the stations of re/campaign_fa_club.md 4.3 (the AI heisters' row), each
 # MEASURED on the mesh. ROUTE_IN ends where the seal begins; ROUTE_OUT is what the seal gates
-ROUTE_IN = [('START', START[1]), ('inner office door', (2600, 347, 3313)), ('front office', (2000, 354, 3300)), ('walkway', (780, 371, 2747)),
+ROUTE_IN = [('START', START_REF), ('inner office door', (2600, 347, 3313)), ('front office', (2000, 354, 3300)), ('walkway', (780, 371, 2747)),
             ('dance floor 2', (-864, 40, 2491)), ('dance floor 1', (-1100, 20, 1150)), ('stair landing', (-55, 160, 320)),
             ('wardrobe', (-4, 180, -240)), ('entrance hall', (-414, 100, -604)), ('queue lane, club end', (105, 20, -1500))]
 ROUTE_OUT = [('queue lane, street end', (105, 20, -2600)), ('pavement', ESC_AT)]
+BOARD_AT = (-637.0, 30.0, -3100.0)     # the van's boarding place at its stop (ROAD): the rear doors; MEASURED by van-check
 # the walk test of the loot's pick-up: (box x0, x1, z0, z1; places the route test reaches) for the office, dance floor 1
 # and the wardrobe / entrance. GUESS: the three boxes (each room with a margin); the places are stations of ROUTE_IN
-LOOT_WALKS = (((2300.0, 3400.0, 2000.0, 3600.0), [START[1]]), ((-2000.0, 100.0, 400.0, 1700.0), [(-1100.0, 20.0, 1150.0)]),
+LOOT_WALKS = (((2300.0, 3400.0, 2000.0, 3600.0), [START_REF]), ((-2000.0, 100.0, 400.0, 1700.0), [(-1100.0, 20.0, 1150.0)]),
               ((-800.0, 700.0, -1700.0, 400.0), [(-4.0, 180.0, -240.0), (105.0, 20.0, -1500.0)]))
 BLOCKS_LIVE = BK.BLOCKS_LIVE            # the five large load blocks of the build that loaded seven times in one process: 171 MB
 # the chunk table: 69,632 entries is the tools' line (kl_impact.CHUNK_SAFE). The wardrobe and the gun looks come into
@@ -1728,7 +1819,7 @@ def check(folder, log=print, problems=None):
         fail('REF %d (%s): its collision placement stands %d from its entity' % (ref, path_of.get(ref, '?')[-60:], far))     # bodies too: van_hvk)
     # ---- every spawn point and player group: on the START's mesh part, on free floor (the gates taken out: the
     # police who come back stand beyond the seal)
-    pts, names = [START[1]], ['START']
+    pts, names = [START_REF], ['START']
     for k in range(1, len(sc.nodes)):
         if sc.cls(k) == 'ZSpawnPoint' or sc.parent[k] == 0 and sc.names[k].startswith('Heroes!'):
             pts.append(pos[ents[k - 1]]); names.append(sc.names[k])
@@ -1831,8 +1922,8 @@ def check(folder, log=print, problems=None):
     inside = lambda p: all(lo[a] <= p[a] + (50 if a == 1 else 0) <= hi[a] for a in range(3))
     office = [pos[ents[k - 1]] for k, v in loot if v[1] == LOOT[0][2]]
     log('  ENTERS box x %d..%d, y %d..%d, z %d..%d: %d of the 8 START points and %d of the office\'s %d cases inside' % (
-        lo[0], hi[0], lo[1], hi[1], lo[2], hi[2], sum(inside(p) for p in START), sum(inside(p) for p in office), len(office)))
-    if not all(inside(p) for p in START) or not all(inside(p) for p in office) or len(office) != 6:
+        lo[0], hi[0], lo[1], hi[1], lo[2], hi[2], sum(inside(p) for p in START_V1), sum(inside(p) for p in office), len(office)))
+    if not all(inside(p) for p in START_V1) or not all(inside(p) for p in office) or len(office) != 6:
         fail('the ENTERS box does not hold every START point and the six cases of the office')
     # ---- the route in the built collision, nothing removed at test time; what still stands is the round's gate
     crossing = lambda r: sorted({(o['ref'], o['name']) for leg in r['legs'] for c in leg.get('crossed') or () for o in c['objects']})
@@ -1865,7 +1956,7 @@ def check(folder, log=print, problems=None):
             if not sc.resolve(s):
                 fail('%s names %s, which is no node' % (n, s))
     mon = named('monitor')
-    starters = {R + ROLE['seal timer'], R + ROLE['doors timer'] if animate else R + ROLE['muffle']} | ({R + ROLE['office timer']} if named('office timer') else set())
+    starters = {R + ROLE['seal timer']} | ({R + ROLE['doors timer']} if animate else set() if V2 else {R + ROLE['muffle']}) | ({R + ROLE['office timer']} if named('office timer') else set())
     starters |= {R + ROLE[r] for r in RESET_ROLES if r in ROLE and named(r)}      # RESET: the objects that put round 1's state back, first in the list
     starters |= {R + ROLE[r] for r in WAKE_NEW if r.startswith('wake timer') and r in ROLE}   # THE WAKE FIX: the three backstops
     if {s for s in mon if s[5:] in ROLE.values() and not any(s[5:] == ROLE[r] for r in LATE_ROLES if r in ROLE)} != starters:
@@ -1917,7 +2008,7 @@ def check(folder, log=print, problems=None):
         on_slab = lambda p: SLAB[0][0] <= p[0] <= SLAB[0][1] and SLAB[1][0] <= p[2] <= SLAB[1][1]
         # every man on the START's mesh part and on free floor - but a policeman on the strip beside the slab stands on
         # mesh alone: there is no collision floor there (ARRIVE's ASSUMPTION; '--police-slab' has all ten on the slab)
-        rows2 = kl_route.stations(lv, [START[1]] + [at(k) for k in men], opened=gates, near=30)
+        rows2 = kl_route.stations(lv, [START_REF] + [at(k) for k in men], opened=gates, near=30)
         strip_men = [k for k in men if top_of(k) in ARRIVE and at(k)[2] < LANE_MOUTH[2] and not on_slab(at(k))]
         off_mesh = [(k, r) for k, r in zip(men, rows2[1:]) if not (r['mesh'] and r['part'] == part and (r['reached'] or k in strip_men))]
         log('  enemies: %d campaign squads (%d men) + %d of F07\'s police squads (%d men); %d of the %d men on the mesh part of the START and on free floor '
@@ -1935,7 +2026,7 @@ def check(folder, log=print, problems=None):
                     for h in sorted({h for s in A.named(sc, j) for h in sc.resolve(s)} | {c for c in range(j + 1, sc.end[j]) if sc.parent[c] == j}):
                         if sc.top[h] == t and sc.cls(h) in ('ZBoxPrimitive', 'ZSTDOBJ') and all(sc.p.key(nm) == 'RunToCoverPosInfoRout' for nm, _b in sc.nodes[h]['ctrls']):
                             pts2.append(at(h)); own.append((h, t in pol_sq, sc.names[j] == ARRIVE_START))
-        rows3 = kl_route.stations(lv, [START[1]] + pts2, opened=gates, near=30) if pts2 else [None]
+        rows3 = kl_route.stations(lv, [START_REF] + pts2, opened=gates, near=30) if pts2 else [None]
         away = [(h, r) for (h, _m, _c), r in zip(own, rows3[1:]) if not (r['mesh'] and r['part'] == part)]
         log('  enemies: %d places their behaviour routs go by; %d not on the START\'s mesh part%s' % (len(pts2), len(away), ''.join(
             '\n          %s (%d, %d, %d): %s off the mesh' % (sc.path[h][5:][-74:], *r['at'], r['off']) for h, r in away[:8])))
@@ -2049,8 +2140,11 @@ def check(folder, log=print, problems=None):
     else:
         log('  enemies: none (a build without squads); the seal opens by its clock')
         for role, kind, f in (('office timer', 'TriggerDelay2', 4), ('walk box', 'TriggerBox', 17), ('floor box', 'TriggerBox', 17), ('floors counter', 'TriggerCounter', 4)):
-            if values(sc, A.node_of(sc, ROLE[role]), kind)[f]:
-                fail('no squad is in the level, but %s names %s' % (ROLE[role], values(sc, A.node_of(sc, ROLE[role]), kind)[f]))
+            named_ = values(sc, A.node_of(sc, ROLE[role]), kind)[f]
+            if V2 and role == 'walk box':               # V2: the box is the alarm too: it starts the van's timer (the show of the van, the gate, the exit line)
+                named_ = [x for x in named_ if x != R + ROLE['van timer b']]
+            if named_:
+                fail('no squad is in the level, but %s names %s' % (ROLE[role], named_))
     if more:
         log('  enemies: squads that are not this file\'s: %s' % more[:8])
     # police who come back: the eight bodies (re/fed_respawn.md: 8 police bodies a level load) and their points, clear of the squads' men
@@ -2077,7 +2171,9 @@ def check(folder, log=print, problems=None):
         on_slab = SLAB[0][0] <= lo[0] and hi[0] <= SLAB[0][1] and SLAB[1][0] <= lo[2] and hi[2] <= SLAB[1][1]
         log('  exit box x %d..%d, z %d..%d: on the slab %s; holds the pavement station %s, the lane\'s street end %s; it names %s; the escape marker at (%d, %d, %d)' % (
             lo[0], hi[0], lo[2], hi[2], on_slab, in_exit(ESC_AT), in_exit(ROUTE_OUT[0][1]), [s.split('\\')[-1] for s in ev[2:6] if s], *mark))
-        if not on_slab or not in_exit(ESC_AT) or in_exit(ROUTE_OUT[0][1]) or [s for s in ev[2:6] if s] != [R + VAN + '\\' + VAN_GROUP] \
+        # V2: the crew STARTS on the slab, so the box is its south part: it holds the boarding place, no START / TRAITOR point and not the lane's street end (the marker may lie beside it)
+        marker_ok = in_exit(ESC_AT) if not V2 else (in_exit(BOARD_AT) and not any(in_exit(p) for p in START + TRAITOR))
+        if not on_slab or not marker_ok or in_exit(ROUTE_OUT[0][1]) or [s for s in ev[2:6] if s] != [R + VAN + '\\' + VAN_GROUP] \
                 or math.dist(mark, (ESC_AT[0], ESC_AT[1] + ESC_POI_UP, ESC_AT[2])) > 1.0:
             fail('the exit box / escape marker are not as this file places them (on the slab, beyond the seal, naming the one van)')
         # ---- the van on its road. kl_map_escape.van_check reads the WRITTEN files - who the exit trigger calls, the keys
@@ -2146,7 +2242,7 @@ def check(folder, log=print, problems=None):
             log('  van: what is drawn in its lane: NOT CHECKED (%s: %s)' % (type(x).__name__, x))
         # the boarding place (the box rides on the van: in the file it stands at the waiting place): a station of the
         # round - on the START's mesh part, on free floor - and reached in the collision from the queue lane
-        rows4 = kl_route.stations(lv, [START[1], board, tuple(stop)], opened=gates, near=BOARD_NEAR)
+        rows4 = kl_route.stations(lv, [START_REF, board, tuple(stop)], opened=gates, near=BOARD_NEAR)
         b4 = rows4[1]
         walk = kl_route.route(lv, [ROUTE_OUT[0][1], board], opened=gates)
         on_slab_ = lambda p, pad=0.0: SLAB[0][0] + pad <= p[0] <= SLAB[0][1] - pad and SLAB[1][0] + pad <= p[2] <= SLAB[1][1] - pad
@@ -2240,7 +2336,7 @@ def check(folder, log=print, problems=None):
         solid = lambda e: [VL.name(r) for _d, r in VL.G.between(e, (wait[0], wait[1] + 100.0, wait[2])) if 'ColiObj' not in VL.name(r) and 'HeroColi' not in VL.name(r)]
         seen = ['%s: %s' % (n, 'hidden by %s' % solid(e)[0] if solid(e) else 'SEEN (%d m)' % (math.dist(e, wait) / 100.0)) for n, e in eyes]
         log('  van: waits at (%d, %d, %d), %.0f m from its stop, %s the navigation mesh; from %s' % (
-            *wait, math.dist(wait, stop) / 100.0, 'ON' if kl_route.stations(lv, [START[1], tuple(wait)], opened=gates, near=BOARD_NEAR)[1]['mesh'] else 'off', '; from '.join(seen)))
+            *wait, math.dist(wait, stop) / 100.0, 'ON' if kl_route.stations(lv, [START_REF, tuple(wait)], opened=gates, near=BOARD_NEAR)[1]['mesh'] else 'off', '; from '.join(seen)))
         # the camera: F07's own fixed escape camera, moved with the drive (cam_spot's eye)
         cam = rep.get('camera') or {}
         if cam.get('eye'):
@@ -2419,9 +2515,10 @@ def fix_check(folder, sc, ents, pos, lv, squads, men, top_of, named, fail, log):
         want = {A.node_of(sc, ROLE['seal timer'])} | ({A.node_of(sc, ROLE['floors counter'])} if squads else set())
         if starters != want:
             fail('VAN_LATE: the van\'s timer is named by %s, wanted the seal\'s clock%s' % (sorted(sc.names[x] for x in starters), ' and the beat\'s counter' if squads else ''))
-        if set(named_by.get(R + ROLE['van timer b'], ())) != {A.node_of(sc, ROLE['speak box'])}:
-            fail('VAN_LATE: the early timer is not named by the wardrobe\'s box alone')
-        if values(sc, t1, 'TriggerDelay2')[4] != [R + ROLE['van on']] or values(sc, t2, 'TriggerDelay2')[4] != [R + ROLE['van on']]:
+        early = {A.node_of(sc, ROLE['walk box'])} if V2 else {A.node_of(sc, ROLE['speak box'])}      # (V2: the alarm = the first criminal through the inner office door)
+        if set(named_by.get(R + ROLE['van timer b'], ())) != early:
+            fail('VAN_LATE: the early timer is not named by %s alone' % ('the box at the inner office door' if V2 else 'the wardrobe box'))
+        if [R + ROLE['van on']] != values(sc, t1, 'TriggerDelay2')[4] or R + ROLE['van on'] not in values(sc, t2, 'TriggerDelay2')[4]:
             fail('VAN_LATE: a van timer does not name \'van on\'')
         if any(sc.names[sc.top[x]].startswith(tuple(SQUADS) + tuple(ARRIVE)) for x in named_by.get(van, ())):
             fail('VAN_LATE: a squad names the van')
@@ -2911,6 +3008,7 @@ def bots_check(folder, log=print):
 # the seal hold until SEAL_AT (the hold is made for that bot); a crew that wins NOTHING loses WAIT_S = 30 s a room: start 10 + loot 18 + the
 # mesh path / 200 + rooms * 30 + the hold, then the walk out - ROOM_LATEST is where it must still be at the van call.
 ROOM_GATES = True                       # False ('--no-gates', '--legacy'): the way as C3 / C4 had it, and the men where they stood
+ROOM_TYPICAL = 20.0                     # V2: s a typical crew is taken to spend in a room (the men fall in 20 s; the quickest 12, the clock 30). GUESS
 ROOM_G_MIN = 12.0                       # s the quickest crew is taken to spend in a room (arrive, shoot, the men fall). GUESS
 ROOM_WAIT_S = 30.0                      # TriggerActorsDead's own limit (READ in kl2, 0x7800 ticks); kl_fa_bots_rt.WAIT_S
 ROUND_CLOCK = 360.0                     # the round's six minutes, counted here from the round-start event (8.5 s before GO: 8.5 s of margin it does not need)
@@ -3407,8 +3505,15 @@ def gates_timetable(P):
     path = sum(g['path'] for g in gates) + math.dist(pts[-2], pts[-1]) * 1.3
     to_van = [b0[i] for i in range(i_seal, len(st))]
     exit_walk = sum(math.dist(a, b) for a, b in zip(to_van, to_van[1:])) * 1.3
-    return dict(rooms=n, start=start, loot_cap=cap, straight=straight, path=path, exit_walk=exit_walk, quick_arrive=start + GATE_LOOT_MIN + straight / GATE_SPEED + n * ROOM_G_MIN,
-                slow_arrive=start + cap + path / GATE_SLOW + n * ROOM_WAIT_S)
+    # V2: the bots START on the slab, the way IN to the loot is walked first (no gate on it): the straight line through the stations at GATE_SPEED, the path 1.3 x that at GATE_SLOW
+    in_straight = 0.0
+    if V2:
+        first = P['bots'][next(iter(P['bots']))]['start']
+        walk_in = [first] + [b0[i] for i in range(i_loot + 1)]
+        in_straight = sum(math.dist(a, b) for a, b in zip(walk_in, walk_in[1:]))
+    return dict(rooms=n, start=start, loot_cap=cap, straight=straight, path=path, exit_walk=exit_walk, in_straight=in_straight,
+                quick_arrive=start + in_straight / GATE_SPEED + GATE_LOOT_MIN + straight / GATE_SPEED + n * ROOM_G_MIN,
+                slow_arrive=start + in_straight * 1.3 / GATE_SLOW + cap + path / GATE_SLOW + n * ROOM_WAIT_S)
 
 
 def bots_gate_rooms(B, P, log=print):
@@ -3428,7 +3533,7 @@ def bots_gate_rooms(B, P, log=print):
                                                        relays=[], cases={})]
     P['stations'][i_seal]['what'] = 'the seal hold in the entrance hall until the seal is open (%g s)' % seconds
     P['gate'] = {'station': i_seal, 'seconds': seconds, 'straight': round(tt['straight']), 'seal_at': SEAL_AT, 'seal_open': SEAL_OPEN, 'start': tt['start'],
-                 'loot_cap': tt['loot_cap'], 'places': P['stations'][i_seal]['places'], 'rooms': tt['rooms'], 'path': round(tt['path']),
+                 'loot_cap': tt['loot_cap'], 'places': P['stations'][i_seal]['places'], 'rooms': tt['rooms'], 'path': round(tt['path']), 'in_straight': round(tt['in_straight']),
                  'exit_walk': round(tt['exit_walk']), 'room_g_min': ROOM_G_MIN, 'room_wait': ROOM_WAIT_S}
     note = ('THE ROOM GATES: %d rooms (%s) between the loot and the seal hold; each is a hold of seven at cover and a TriggerActorsDead on the room\'s men '
             '(30 s at most); the seal hold (station %d, %g s) follows. Timetable after the round-start event: quickest crew at the hold %d s, slowest %d s '
@@ -3473,6 +3578,37 @@ def scene_wake(B, P, tad):
     return out
 
 
+INLEG_KNOWN = 6                        # V2: guns that bear on a stretch of the way IN (MEASURED on the first V2 build: 5 for bot 1, 6 for bot 2, on dance floor 2 and the ramp); a guard, not a yardstick
+INLEG_STEP = 300.0
+
+
+def inleg_table(B, P, fire):
+    """V2: the guns on the way IN (the bots' places from their start to the loot station, sampled every 3 m on the straight lines between them; the exact ray; the men of the squads
+    that are in the world from the load: stage 'load' of squads_now) -> (worst, [(metres along the way, place, [men])] of the samples with 2 or more, bot name, the way's length in units)."""
+    sq = squads_now()
+    men = [m for m in fire.men if sq.get(m['squad'], ('',))[0] == 'load']
+    st = P['stations']
+    i_loot = max(i for i, x in enumerate(st) if x['kind'] == 'loot')
+    worst, rows, who, length = 0, [], None, 0.0
+    for N in sorted(P['bots']):
+        b = P['bots'][N]
+        pts = [b['start']] + [b['places'][i] for i in range(i_loot + 1)]
+        run, rr, w = 0.0, [], 0
+        for a, c in zip(pts, pts[1:]):
+            d = math.dist(a, c)
+            n = max(1, int(d / INLEG_STEP))
+            for k in range(n):
+                p_ = tuple(a[j] + (c[j] - a[j]) * k / n for j in range(3))
+                g = [m for m in men if math.dist(m['at'], p_) <= GUN_RANGE and abs(m['at'][1] - p_[1]) < GUN_FLOOR and fire.sees(m['at'], p_)]
+                w = max(w, len(g))
+                if len(g) >= 2:
+                    rr.append((round((run + d * k / n) / 100), tuple(round(v) for v in p_), sorted({m['man'] for m in g})))
+            run += d
+        if w > worst or who is None:
+            worst, rows, who, length = w, rr, N, run
+    return worst, rows, who, length, len(men)
+
+
 def pressure_check(folder, B, P, tad, fail, log):
     """THE PRESSURE FIX's proofs on a folder with room gates (called by rooms_check): (1) every squad of WAKE_AT is waiting and named by the TriggerActorsDead
     of the gate before its room, by no other (the wake table is READ OFF THE SCENE); (2) hold-guns: on the exact ray, at most HOLD_GUNS men awake at the gate bear
@@ -3500,6 +3636,12 @@ def pressure_check(folder, B, P, tad, fail, log):
             fail('hold-guns: gate %s: %d guns bear on the walk to it at %s (%d wanted at most, %d known): %s' % (r['name'], r['leg_worst'], r['leg_at'], LEG_GUNS, max(LEG_GUNS, known_l), ', '.join(r['who_leg'][:8])))
         elif r['leg_worst'] > LEG_GUNS:
             log('      NOTE KNOWN over the yardstick: %d guns on the walk (%d wanted; PRESSURE_KNOWN)' % (r['leg_worst'], LEG_GUNS))
+    if V2 and P.get('gate', {}).get('in_straight'):       # THE WAY IN has no gate: the guns of the squads that are in the world from the load bear on it
+        worst, rows_in, who_in, length_in, n_men = inleg_table(B, P, fire)
+        log('  way in (no gate; %d men awake from the load): %d m for bot %s, worst %d guns on a stretch (%d known) at %s' % (
+            n_men, length_in / 100, who_in, worst, INLEG_KNOWN, ', '.join('%d m %s: %s' % (m, pl, '+'.join(x.split(' ')[0] + x.split('Guard')[-1] for x in g)) for m, pl, g in rows_in if len(g) == worst)[:300]))
+        if worst > INLEG_KNOWN:
+            fail('way in: %d guns bear on a stretch of the way in (%d known)' % (worst, INLEG_KNOWN))
     order_ = [r['name'] for r in ROOMS]
     for n, w in wake.items():
         short = n.split('!')[-1]
@@ -3810,13 +3952,25 @@ def rooms_check(folder, log=print):
     # ---- the timetable
     tt = {k: P['gate'].get(k) for k in ('start', 'loot_cap', 'straight', 'path', 'exit_walk', 'seconds', 'rooms')}
     longest = float(tt['seconds'])
-    quick = tt['start'] + GATE_LOOT_MIN + tt['straight'] / GATE_SPEED + tt['rooms'] * P['gate'].get('room_g_min', ROOM_G_MIN) + longest
-    slow_arrive = tt['start'] + tt['loot_cap'] + tt['path'] / GATE_SLOW + tt['rooms'] * P['gate'].get('room_wait', ROOM_WAIT_S)
+    in_s = float(P['gate'].get('in_straight', 0.0) or 0.0)
+    quick = tt['start'] + in_s / GATE_SPEED + GATE_LOOT_MIN + tt['straight'] / GATE_SPEED + tt['rooms'] * P['gate'].get('room_g_min', ROOM_G_MIN) + longest
+    slow_arrive = tt['start'] + in_s * 1.3 / GATE_SLOW + tt['loot_cap'] + tt['path'] / GATE_SLOW + tt['rooms'] * P['gate'].get('room_wait', ROOM_WAIT_S)
     slow_leave = slow_arrive + longest
     at_van = slow_leave + tt['exit_walk'] / GATE_SLOW
+    # V2: the TYPICAL crew (every room ROOM_TYPICAL s: the men fall in 20 s, the walks at GATE_SPEED), judged; the crew held in every room's 30 s is a NOTE (it cannot fit:
+    # the way in takes ~100 s and the five gates are TriggerActorsDead's own 30 s) and the round's clock ends the round with it still in the club
+    typical = tt['start'] + in_s / GATE_SPEED + tt['loot_cap'] + tt['straight'] / GATE_SPEED + tt['rooms'] * ROOM_TYPICAL + longest + tt['exit_walk'] / GATE_SPEED
     if not P['gate'].get('seal_open') and quick < SEAL_AT + GATE_MORE - 0.1:
         fail('the quickest crew leaves the seal hold %.0f s after the round-start event, the seal\'s clock is at %g s' % (quick, SEAL_AT))
-    if at_van > ROUND_CLOCK - ROOM_VAN_MARGIN:
+    if V2:
+        log('  timetable V2 (s after the round-start event): the TYPICAL crew (way in %d m at %d u/s, loot %g s, every room %g s, the hold %g s) is at the exit trigger at %d s of %g (the van needs %g)' % (
+            in_s / 100, GATE_SPEED, tt['loot_cap'], ROOM_TYPICAL, longest, typical, ROUND_CLOCK, ROOM_VAN_MARGIN))
+        if typical > ROUND_CLOCK - ROOM_VAN_MARGIN:
+            fail('the typical crew is at the exit trigger %.0f s after the round-start event; the round ends at %g and the van needs %g' % (typical, ROUND_CLOCK, ROOM_VAN_MARGIN))
+        if at_van > ROUND_CLOCK - ROOM_VAN_MARGIN:
+            log('  NOTE KNOWN: a crew held in every room (30 s each) is at the exit trigger %.0f s after the round-start event, past %g: the round clock ends the round with it in the club (V2 cannot fit that case: '
+                'the way in alone is %d m)' % (at_van, ROUND_CLOCK - ROOM_VAN_MARGIN, in_s / 100))
+    elif at_van > ROUND_CLOCK - ROOM_VAN_MARGIN:
         fail('a crew held in every room is at the exit trigger %.0f s after the round-start event; the round ends at %g and the van needs %g' % (at_van, ROUND_CLOCK, ROOM_VAN_MARGIN))
     log('  timetable (s after the round-start event, GO is about 8.5 later): the quickest crew (every room %g s) leaves the seal hold at %d s (clock %g s); '
         'a crew that wins nothing (30 s a room) reaches the hold at %d s, leaves it at %d s and is at the exit trigger at %d s of the round\'s %g (the van is called there: %g s of margin)'
@@ -3843,7 +3997,7 @@ def rooms_check(folder, log=print):
 # with the defaults.
 FLAG_NAMES = ('DOORS_ANIMATE', 'SEAL_OPEN', 'SEAL_PLANE', 'SEAL_AT', 'LIGHT_SHOW', 'BEAT_ANIM', 'FAN_DAMAGE', 'CASE', 'NO_AI', 'SQUADS_AWAKE',
               'POLICE_ARRIVE', 'POLICE_ON_SLAB', 'STOCK_ROWS', 'OFFICE_AT', 'STREAM',
-              'GUARDS_OFF', 'POLICE_EAST', 'VAN_LATE', 'RESET', 'VOICE', 'LOOT_SECONDS', 'ROOM_GATES', 'PRESSURE', 'WAKE_MORE')
+              'GUARDS_OFF', 'POLICE_EAST', 'VAN_LATE', 'RESET', 'VOICE', 'LOOT_SECONDS', 'ROOM_GATES', 'PRESSURE', 'WAKE_MORE', 'V2')
 STREAM = None                           # '--str FILE': the merged stream file the clips are resolved against (review round 2: it travels in van.json)
 
 
@@ -3870,6 +4024,7 @@ def load_flags(folder, log=print):
     changed = {k: v for k, v in fl.items() if k in FLAG_NAMES and g[k] != v}
     g.update({k: v for k, v in fl.items() if k in FLAG_NAMES})
     set_roles()
+    set_v2()
     if g['STREAM']:
         BK.use_stream(g['STREAM'])
     if changed:
@@ -3904,8 +4059,9 @@ def main():
     if len(a) >= 2 and a[0] == 'test':
         global DOORS_ANIMATE, SEAL_OPEN, SEAL_PLANE, SEAL_AT, LIGHT_SHOW, BEAT_ANIM, FAN_DAMAGE, CASE
         global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, POLICE_ON_SLAB, STOCK_ROWS, OFFICE_AT, STREAM
-        global GUARDS_OFF, POLICE_EAST, VAN_LATE, RESET, VOICE, LOOT_SECONDS, LEGACY, ROOM_GATES, PRESSURE, WAKE_MORE
+        global GUARDS_OFF, POLICE_EAST, VAN_LATE, RESET, VOICE, LOOT_SECONDS, LEGACY, ROOM_GATES, PRESSURE, WAKE_MORE, V2
         LEGACY = '--legacy' in a                        # the first delivery's build: every flag of the fix after run C2 off, the old numbers
+        V2 = not LEGACY and '--v1' not in a            # VERSION 2 (entrance start): the default; --v1 is the round of c_club5
         GUARDS_OFF = not LEGACY and '--no-guards-off' not in a
         POLICE_EAST = not LEGACY and '--no-police-east' not in a
         VAN_LATE = not LEGACY and '--no-van-late' not in a
@@ -3913,11 +4069,12 @@ def main():
         VOICE = not LEGACY and '--no-voice' not in a
         ROOM_GATES = not LEGACY and '--no-gates' not in a and '--no-ai' not in a
         PRESSURE = ROOM_GATES and '--no-pressure' not in a
-        WAKE_MORE = PRESSURE and '--no-wake-boxes' not in a
+        WAKE_MORE = PRESSURE and not V2 and '--no-wake-boxes' not in a     # (V2: the boxes would wake the sleepers on the way IN)
         LOOT_SECONDS = 30 if LEGACY else LOOT_SECONDS
         if LEGACY:
             SEAL_AT = LEGACY_FLAGS['SEAL_AT']
         set_roles()
+        set_v2()
         NO_AI = '--no-ai' in a
         SQUADS_AWAKE = '--squads-awake' in a
         POLICE_ARRIVE = '--no-police' not in a
@@ -3931,6 +4088,10 @@ def main():
                 return cast(a[i])
             except ValueError:
                 sys.exit('kl_fa_club: %s: "%s" is not a %s' % (name, a[i], cast.__name__))
+        if '--exit' in a and value('--exit') != 'van-slab':
+            sys.exit('kl_fa_club: --exit %s: only \'van-slab\' is built (the roof stage and the helicopter are not: re/club_campaign.md \'Version 2\')' % value('--exit'))
+        if '--v1' in a and '--exit' in a:
+            sys.exit('kl_fa_club: --exit belongs to Version 2; --v1 is the round of c_club5')
         if '--seal-open' in a and ('--seal-plane' in a or '--seal' in a):
             sys.exit('kl_fa_club: --seal-open (no seal at all) contradicts --seal-plane and --seal S')
         if '--no-ai' in a and ('--squads-awake' in a or '--dead-men-rows' in a or '--office' in a):
@@ -3945,7 +4106,7 @@ def main():
         if '--office' in a:                             # OPTION, seconds from the round-start event to the front office's guards
             OFFICE_AT = value('--office', float)
         DOORS_ANIMATE = '--doors-animate' in a
-        SEAL_OPEN = '--seal-open' in a
+        SEAL_OPEN = '--seal-open' in a or V2             # V2: nothing is sealed (the crew starts outside)
         SEAL_PLANE = '--seal-plane' in a
         LIGHT_SHOW = '--light-show' in a
         BEAT_ANIM = '--beat-anim' in a

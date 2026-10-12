@@ -1714,3 +1714,100 @@ Seconds (after GO): a human who runs ahead wakes floor1n's group about GO+50 .. 
 Said honestly: a hook probe that logs the hidden bit (`[node+0x3c] >> 10 & 1`) of the 21 men every second would settle every row above without a picture; it is a klhook change and not part of this round.
 
 Files of this round (scratch, `C:/kl_scratch/club_wake/`): `dump1..6.py` (the nine squads, their controllers and referrers), `census.py` / `f08.py` / `f07.py` (stock), `c8hits.py` / `c8rooms.py` (C8), `boxes.py` / `blind.py` / `mesh_map.py` (the box places), `excl.py`, `negtest.py` / `neg2.py`, `deliver.sh`, `zipdiff.py`.
+
+
+## Version 2: entrance, crowd, office, roof (2026-10-12; tools/kl_fa_club.py; sets `C:/kl_build/c_club6` and `c_club6_music`; scratch `C:/kl_scratch/club_v2/`)
+
+Written after the owner's own round on c_club5 (C10, 14:08): 'club van doesnt spawn and idk i think we should rework it to spawn at the entrance of the club with a bunch of npcs dancing and you run
+in and take the money from the office then you go to the roof like at the end of the campaign mission for a helicopter there would be better'. NOTHING OF THIS HAS RUN IN THE GAME. The build is the FALL-BACK
+the design names: the crew starts at the entrance, runs in, takes the office money and fights back out to F07's van on the slab. The crowd, the roof stage and the helicopter are NOT built (V.6). Labels:
+MEASURED = computed on the built files or the checkers' output; READ = read in code or notes; ASSUMED / GUESS as in the file.
+
+### V.1 The five asks, as built
+
+| ask | state |
+|---|---|
+| 1. start at the club's entrance | **IN, in part.** The 8 START points (and the TRAITOR, UCC and team-mode rows) stand on the pavement slab in front of the entrance, facing the lane mouth. NOT the queue lane (it is 1 m wide) and no crowd stands round them. |
+| 2. a crowd dancing inside | **NOT BUILT.** See V.6: Dog Days has no dance clip for a civilian, the HFlow crowd needs a head-blob relocator, and the campaign's 17 civilians run on MiniCutsceneRouts that never ran in a Fragile Alliance round. The club is as empty of civilians as c_club5. |
+| 3. run in, take the money from the office | **IN.** The loot (11 cases, 2.2 M, six on Yoko's desk and sofa table) and the ENTERS box are where they were; the way in is 118 m on the mesh from bot 3's first place (MEASURED, `inleg_table`), walked by the seven AI heisters too (kl_fa_bots plans START -> ENTERS -> loot -> five gated rooms -> exit by itself). |
+| 4. up to the roof | **NOT BUILT.** The crew goes back OUT through the five gated rooms to the slab (the c_club5 way out). |
+| 5. a helicopter | **NOT BUILT.** F07's van on the slab is the escape (`--exit van-slab`, the only exit the file builds; any other value is refused with a message). The fit test of the design (step 3) was not run: step 4 needs an edit of tools/kl_hvk.py (not allowed in this round) and the way up has no gates, holds or wake plan (V.6). |
+| the van bug | **Explained (V.2) and fixed for V2.** |
+
+### V.2 The van bug of C10 (READ in the hook log of the owner's round by the research; the arithmetic MEASURED in the file's constants)
+
+In c_club5 the van's group is hidden from the load and shown by `van on` (ActivateGeom), which only two things start: the SEAL's clock (SEAL_AT 100 s after the round-start event = about GO+91.5 s, +2 s) or the counter of
+the two dance-floor squads, and one second after the wardrobe's box. The owner reached the street at GO+65 s: stage 2 GO+63.2 s, stage 3 and 'THE CREW IS CALLED' GO+65.4 s, the van's state 3 (waiting) GO+76.4 s, left GO+84.2 s after
+one wait of 8 s - about 7 s BEFORE the clock would have shown it. He saw an empty street. The hidden van was driving all the time (the state machine does not care): 'it did not spawn' = it was not drawn. The seal did not stop
+him either (he stood 1.2 m beyond its far wall 2 s before the exit trigger: the heroes-only collision does not stop a Fragile Alliance human - the old note 'stops a FA human' was an ASSUMPTION). INFERRED from the log
+and the clock; never SEEN (the hook logs neither the group's hidden bit nor the counter; the watch took no picture between 14:09:10 and 14:09:54). In V2 there is no seal and the van's show hangs on the ALARM (V.3), which
+comes when the crew is in the office, 100 s before it can be at the van. `--v1` keeps the old form. A weaker unexplained sign: 'the vehicle's health object cannot be read (state 3)' at the first visit in every club run.
+
+### V.3 The round as built (V2; every number is a constant of tools/kl_fa_club.py, V2 block after TRAITOR / set_v2)
+
+- **START** (`START_V2`, y 30, on the slab z -3450..-2650): row 1 z -2740 x 160, 280, 400, 520; row 2 z -2840 x 220, 340, 460, 580; they face the lane mouth (118, 20, -2623). **TRAITOR** (`TRAITOR_V2`): z -2790, x -340, -240, -140, -40.
+  UCC / team-mode rows: the START rows shifted (60, 0, 20) / `TEAM_MERC_V2` x -800..-620 z -2700, -2780. AFTER_DEATH (the police who come back) stay at x 900..1500, z -2760. Spawn camera and the jump point `01_Start` over the START rows.
+  WHY EAST OF THE MOUTH (MEASURED, the first form failed): kl_fa_bots puts each bot 110..420 from the nearest START point and FAILS a bot that begins inside a level exit box ('is inside level exit box ... after 0 of path ... it
+  calls the escape vehicle on the way in'); rows at x -300..120 gave six such FAILs. Every way into the club passes the lane mouth, so the exit box had to leave it and the rows had to be 420+ from the box.
+- **Nothing is sealed** (`SEAL_OPEN`: both seal pieces out at build time; the office leaves were already open). The `route_in` walk (`routes.py`, START slab -> lane -> hall -> wardrobe -> landing -> dance floors -> walkway -> office, 753 samples) is FREE.
+- **The way in has no gate.** 10 men of 'load' squads (Dancefloor02a#01/#02/#03, On_Dancefloor#02, FatBounceronWalkway) are awake along it; the 22 men of the squads with a start child (Entrance, SurpriseStairs, Dance#02, the upper floors, YokoGuards, WaitingRoom) sleep until their out-gate as in c_club5;
+  Surprise2 and Dance#01 (the 'walk' stage, 5 men) wake at the ALARM. MEASURED (`inleg_table`, exact ray): at most **6 guns** bear on a stretch of the way in (bot 3, 92 m along, on dance floor 2's ramp (267, 204, 2978));
+  the out gates' known numbers over the same floors are 7..10 on a walk (PRESSURE_KNOWN: floor2 7, floor1n 8, floor1s 10). `INLEG_KNOWN = 6` is a regression guard, not a yardstick (Withdrawal: 4).
+- **The ALARM** = the first criminal through the inner office door (WALK_BOX, the end of the way in; ASSUMED that a bot counts as a criminal for `ECPS_FA_MERCONLY`). It starts `van timer b` (ALARM_DELAY 25 s) which shows the van, lets the hunters and the ten police in (GatePath of the gate) and
+  speaks the exit line; the round-start clock `seal timer` (ALARM_BACKSTOP 200 s) does the same whatever a bot counts as. The counter of the two dance floors' squads still opens the gate too. The wardrobe's box says nothing now and sends the music's muffle switch (the crew is inside).
+- **Exit**: the exit box and the three escape-area triggers are the slab's south-west corner x -1150..-300, z -3450..-2900 (`EXIT_V2`) - the van's boarding place (-637, 30, -3100) is inside, no START / TRAITOR point and neither the lane's street end is.
+- **Wake boxes and backstops are OFF** (`WAKE_MORE` False under V2: they would wake the sleepers on the way in). The nine gate-staged squads wake only at their gate; a human who runs ahead of the bots meets them asleep.
+- Texts: the start window and the briefing say 'run in ... fight your way out'. Everything else as c_club5: 40 guards in 17 squads, 10 police, 7 AI heisters (57 actors in 21 squads + 16 bodies, live precedent 99 / 55), the 160 rule, the room gates by fire, round-2 reset lists, voice lines in memory, the cloth check.
+
+### V.4 Proofs (MEASURED)
+
+- `--v1` is c_club5: the bare archive of `test --v1 --plan c_club2/club_bare/van.json` = `a919665cbc15b8c74cce535ea9a58a28e43ea63a` = c_club5's `club_bare` (built with a scratch copy of HEAD's tools; the same without `--v1` takes 2 min). The whole chain of `--v1` (bare -> `chain.sh`) gives `club` = `club_wavslim` = `3a1cb5283fc90bae927a28be6e991ed0c47ea14c`, c_club5's, byte for byte (run on the final file).
+- V2 `club_check`: PASS on all four folders (spawn points: 79 places on the START's mesh part and free floor; the exit box holds the boarding place and no START point; the late-van chain; the reset covers the layer). `reverify` problems 0, `impact` 0, `bots_dyn` PASS, `bots_gate` PASS, `fake` PASS, `vaultfx` PASS, `voice` 0 left.
+  Known and unchanged against c_club5: preflight `CRASH 1` / audit `FAIL 2` (the stream clips, silent set), `chars` (glow30.fx), `escape` 217 (the plain van-check, 211 'no ground under it'; `van-check` with the drawn pavement: 0), `guns` on the bare folder (no guns.json), noai audit 3.
+- Timetable (rooms_check, after the round-start event; GO is about 8.5 s later): the TYPICAL crew (way in 120 m at 400 u/s, loot 18 s, every room 20 s, the 10 s hold) is at the exit trigger at **201 s** of 360 (the van needs 75); the quickest leaves the seal hold at 133 s.
+  The crew held in every room's 30 s is at the trigger at **366 s - past the round's end, KNOWN** (the check logs it as a NOTE for V2 and judges the typical crew; V1 judged the slow one). Not fixable by data: the 30 s is TriggerActorsDead's own limit and the way in alone is 120 m.
+
+### V.5 What the next live run must show (hook = the newest; `[Bots] Log=2 MoveLog=1`; in the ini's ONE [Bots] section; the expansion block drops `BoardNear`, `FollowOutHold=25`, `FollowOutSpare=1`: put them back; check `[Guns] Enable=1`, Escort=1, [Crew] Random=1, Risk=2)
+
+1. **R0 `club_bare`** by direct boot, a scripted or real human, no enemies, no bots: START on the slab (look at the picture: eight bodies on the pavement, facing the lane?), the lane walk (1 m wide), the hall, the way up to the office (stage 0 -> 1 in the ENTERS box), pick up the cases, walk back; at the lane mouth stage 2 (ExitLootArea) and 3 in the exit box in the SW corner ('THE CREW IS CALLED'), the van shown and arriving. ASSUMED, and avoided by the layout: a criminal inside the exit box before stage 2 would call the van; no START or TRAITOR point and no way into the club lies in the box (south-west corner), so only a player who walks there on purpose does.
+2. **R1 `club_noai`** from the menu: the seven AI heisters: do they walk in single file through the lane and the 0.4-0.5 m corridors (ASSUMED), loot at the desk, come back through the five gates, call the van and board? Hook lines: 'record N heist stage 0 -> 1 / 1 -> 2 / 2 -> 3', 'aboard', 'over'. Read the time of stage 1 against the typical timetable (about 100 s after the round start).
+3. **R2 `club`**: the alarm. Look for: the ten police on the slab ends ~25 s after a criminal passes the inner office door (or 200 s after the round start), the van shown by then, the hunters coming down from the lounge, Surprise2 / Dance#01 awake on the walkway; the guns on the way in (`lost` lines of the bots on dance floor 2 / the ramp). A probe line for the group's hidden bit would settle the van; it is a hook change (not made).
+4. `club_wavslim`: same archive, slim .WAV (listen).
+
+### V.6 NOT built, why, and what it takes (the design's 'not_in_this_build', confirmed or extended)
+
+- **Dancing / the crowd.** Dog Days' civilian set has no dance clip; the real Dance_01..06 clips sit inside the HFlow crowd's own database (22 clips, not the .ANM layout, undecoded). The campaign's 17 civilians run on MiniCutsceneRout + MiniCutPosObject (phoners, kissers, bartenders, coat check, ticket booth, the queue
+  of 5 standing IN the 1 m lane) - a controller kind this file strips from the guards (STRIP) and which has never run in a Fragile Alliance round; keeping them needs `campaign_names` to keep `AI_Players!Civilians!*`, the Queue moved out of the lane (nine PosObjects), the .ANM join (+41 clips, 75 nodes, +740 chunks MEASURED by the
+  research trial) and a live look at what the bots do with civilians in the way. The HFlow crowd (a): ZHFlow field 4 and ZHFlowLnkObj fields 1 / 2 are .buf head offsets the graft leaves stale, the cells hold absolute pointers: a head relocator and a one-flow load test in the T01 slot (research, not done).
+  Not started this round because a never-loaded civilian script set could stop the whole map from loading, and the three never-run pieces cannot be told apart in one live run.
+- **Roof stage and helicopter.** From the research (not re-measured): the way from the office to the low-roof pad (x -3600..-2200, z 3500..4300, y 859, free air above) is one free mesh walk of 256 m (roof door (-3479, 861, 3822), checkpoint 10 (-2378, 867, 4229)); three closures (storage `Firedoor_03` REF 21773, storage `HeroColi` REF 21820,
+  roof `Firedoor_02` REF 21775) are to be sunk at build; the glass roof is not on it. The donor chosen: Dead Men's park chopper (M06 `EscapeSetup!EscapeChopper`, +86 nodes, the only helicopter that ran live under an F07 host: 7 of 7 bots escaped) as a third source through `kl_maps.chain`; it needs the **one-time edit of
+  `tools/kl_hvk.py` `join`** (pad only if the part has a filler; take `h.lists` only if it keeps a static placement - unedited the donor join refuses with a TypeError; a monkey-patch in a new file would do too), F07's van and monitor removed (one `OnlineEscVehicleMonitor`), the 11- and 17-point splines rewritten in the node's frame (turned 25 degrees about y), the boarding and call boxes and four camera nodes moved,
+  the AllyEscapeBox step. And the WAY UP: bots, gates, holds and the wake plan for the 256 m through the lounge, the third floor, the rave, the storage and the L-hallway (0.4-0.5 m) do not exist - `rt_for_club` / WAKE_AT / PRESSURE_MEN are written for the way OUT down to the slab. That is the larger half; nothing of it was started, so the helicopter would have been a
+  prop with no round leading to it.
+- **Gates on the way in** (design: three rooms, 20 s). Not built: the squads that could be staged have no start child (the 'load' squads Dancefloor02a#01/#02/#03 and On_Dancefloor#02 have NO child at all - MEASURED `sq.py`), so the only thing a gate could do is make the seven stand 20 s three times (60 s of the 360) in front of at most 6 guns; the typical timetable has 84 s of margin only.
+  If the live run R1 loses the crew on dance floor 2 the next step is `kl_fa_bots_rt.gates_plan` on a synthetic plan START -> ENTERS with `ROOMS_IN`; if R1 shows them standing, the way in stays as it is.
+- Round clock: the 360 s is the tool's constant (the game's own value unfound); not changed.
+- Entrance men off the lane axis: not needed - they sleep (Entrance is gate-staged, awake at the stairs gate).
+
+### V.7 GUESS / ASSUMED (sorted by what a wrong value costs)
+
+1. The exit trigger acts only for a criminal at stage 2 (not read; the layout keeps every start and every way in out of the box). 2. A bot counts as a criminal for the walk box (`ECPS_FA_MERCONLY`): if not, the alarm is the 200 s backstop and the van is shown late again (the C10 bug) - raise nothing, read the log.
+3. A TriggerBox / TriggerDelay2 'AITrigger' starts the other TriggerDelay2 (`van timer b`) and the GatePath named twice by two timers is harmless (ASSUMED, as the counter's and clock's two paths already were). 4. Seven bots pass the 1 m lane and the 0.4-0.5 m corridors in single file. 5. START rows 90 / 190 from the slab's house edge are inside the bounds (MEASURED: the warn boxes are 5.5+ m west).
+6. ALARM_DELAY 25 s, ALARM_BACKSTOP 200 s, ROOM_TYPICAL 20 s, INLEG_KNOWN 6: GUESS. 7. The spawn camera (420, 230, -3330) looks at the START rows: never looked through. 8. Round 2: the walk box fires once per level (RESET_CANNOT): in round 2 the alarm is the backstop only.
+
+### V.8 Delivered folders (sha1 of `F01_Main.zip`; checks in each folder's `checks/summary.txt`; `chain.sh`, `checks.sh`, `routes.py` (now also walks the way IN), `dyncheck.py`, `blocks.py` beside them)
+
+| folder | silent `c_club6` | music `c_club6_music` | archive bytes (silent) |
+|---|---|---|---|
+| `club` | `9cf623381e5f4b2818a8a9cac300cde238c913ca` | `8171b17ba24e1dc81ebb828b3c979bfbba4a30dc` | 179,266,541 |
+| `club_wavslim` | `9cf623381e5f4b2818a8a9cac300cde238c913ca` | `8171b17ba24e1dc81ebb828b3c979bfbba4a30dc` | 179,266,541 |
+| `club_noai` | `8f9ac4a9f447e3187a9993d2d900c415db20f760` | `1b55868afd7af4dc90662faef696d1b280a7f7aa` | 165,332,704 |
+| `club_bare` | `4e93df6cbd63626a3234685b6404dd5b991ad60a` | `abab66fd75aa0c9c4750854d39b81975baabd0dd` | 150,072,464 |
+
+(`club` and `club_wavslim` share one archive; the slim .WAV differs beside it.) Checks of the music set: the same rows plus `stream_whd` PASS on all four (the club's 12 clips resolve against `C:/kl_build/v_club/PC_Def.str`, stamped by `kl_club_str.py stamp`); preflight and audit lose the stream findings on `club_bare`, `club` and `club_wavslim`.
+
+
+Rebuild (a scratch copy of HEAD's `tools/` + `re/*.json` + `third_party/` with this commit's `kl_fa_club.py`; the shared tree has other sessions' edits): `sh C:/kl_scratch/club_v2/build/deliver.sh C:/kl_build/c_club6 silent` / `C:/kl_build/c_club6_music music`.
+One V1 build: `python tools/kl_fa_club.py test <out> --keep --v1 --plan C:/kl_build/c_club2/club_bare/van.json`.
+Stream clips the music set needs that the stream file lacks: none new (no crowd, no helicopter); the club's own 12 clips are in `C:/kl_build/v_club/PC_Def.str` (X.5).
