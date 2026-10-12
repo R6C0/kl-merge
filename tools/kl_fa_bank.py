@@ -78,9 +78,9 @@ what only a live run can settle: re/bank_campaign.md. Nothing here installs anyt
                                                           step has been through (check() runs it too)
       THE ROOM GATES (2026-10-12, after run W4; re/bank_campaign.md 'Gates, after run W4'; no flag = every build before, byte for byte):
       --gates           'test': eleven men (and one defend place) put off the crew's line (CLEAR_MEN); then 'bots' plans the gates (the planner of
-                        kl_fa_bots_rt): before each of dock / lobby / flights (the way in) and hall (the way out) the seven hold at distinct cover places 1 m inside
+                        kl_fa_bots_rt): before each of lobby / flights (the way in) and hall (the way out; the dock only with --gate-rooms) the seven hold at distinct cover places 1 m inside
                         the mesh until the room's men are dead or the game's 30 s are out; written to bank_opts.json, read by every later step
-      --gate-rooms L    comma list of ROOMS to gate (default ROOM_ON = dock,lobby,flights,hall; 'airlock', 'front' are in the table; the timetable refuses
+      --gate-rooms L    comma list of ROOMS to gate (default ROOM_ON = lobby,flights,hall - the dock is in the table and OFF since the second fix; 'airlock', 'front' too; the timetable refuses
                         past the round's budget)      --gates-seen  holds in sight at cover instead of hidden (ROOM_HIDE off)
     python kl_fa_bank.py bots <folder> <out> [--gates --gate-rooms L --gates-seen]   the seven AI heisters (+ the vault gate, + the room gates)
     python kl_fa_bank.py dyn <folder> <out>               kl_fa_bots_dyn.build, with room gates: no hold or timer of its own behind a gate, no fork between gates
@@ -2527,7 +2527,7 @@ def bots_check(folder, log=print):
 # reach of re/melee_damage.md) from the crew's line - the stand-in path through the stations AND the places bots were hit in W4 - goes to the nearest place that is on the START's mesh part,
 # at cover (70 .. 230 from a cover box), 200 or more from the line and 150 from the other men (C:/kl_scratch/vault_gates/finder.py).
 ROOM_GATES = False                      # '--gates': the delivered flag set has it
-ROOM_ON = ('dock', 'lobby', 'flights', 'hall')      # the rooms gated: the budget above
+ROOM_ON = ('lobby', 'flights', 'hall')      # the rooms gated: the budget above. SECOND FIX: the dock is OFF (no place in its hall is out of the line of 6 .. 8 of its nine men: re/bank_campaign.md G2.1)
 ROOM_HIDE = True                        # holds prefer places no man of the room sees (the task's 'out of the room's sight where the mesh allows'); False ('--gates-seen'): in sight at cover
 ROOM_WAIT_S = 30.0                      # TriggerActorsDead's own limit (READ in kl2, 0x7800 ticks); kl_fa_bots_rt.WAIT_S
 ROUND_CLOCK = 360.0                     # the round's six minutes, from the round-start event
@@ -2537,11 +2537,17 @@ NOAI_CALL = 164.1                       # s after the GO: the slowest 'heist sta
 ROOM_POST_CLEAR = 400.0                 # no hold and no station within this of a post (start place) of a man who may be alive, on his floor
 ROOM_AFTER_CLEAR = 300.0                # ... of a man of an EARLIER room (he may have outlived his gate's 30 s): the planner's rule is the 400 above, this the least
 ROOM_LINE_CLEAR = 160.0                 # no man's start within this of the crew's line (the point-blank reach 1.6 m, with margin: re/melee_damage.md)
-ROOM_LINE_WANT = 200.0                  # a man that is moved is put at least this far from the line
+ROOM_LINE_WANT = 165.0                  # a man that is moved is put at least this far from every bot's line and from the other way down from the dock (second fix: the dock hall leaves no 200: f7.py). GUESS: 5 over the point-blank reach
 ROOM_HOLD_RING = (60.0, 240.0)          # a hold lies this far from the middle of a cover box (kl_fa_bots_rt.HOLD_RING 70 .. 230 with a tolerance for rounding)
 ROOM_HOLD_SEP = 80.0                    # two holds of one room at least this far apart
 ROOM_SIGHT = ('sight', 'ray', 'hero')   # the rules a hold is hidden under in the planner (fast); the check also casts the exact ray
 ROOM_MESH_MIN = 1.0                     # every one of the 16 probes of the game's 'down' test (kl_pf4_probe) must reach a full 1.0 = 1 m of free mesh round a hold
+HOLD_GUNS = 3                           # guns that may bear on a hold of the seven (kl_fa_club.HOLD_GUNS: Withdrawal's heist stations 0..3, exact ray, squads in the world). A target the planner is asked for
+HOLD_GUNS_MAX = 5                       # ... and the least rooms_check FAILS at (the skeptic: 'do not ship a hold with 6 or more guns'); between the two it NOTES (HOLD_GUNS_KNOWN)
+HOLD_GUN_RANGE = 4000.0                 # a gun bears within 40 m on its floor with a free exact ray (kl_fa_club uses 60 m; the dock/lobby/flights of this map are 10 .. 25 m long). GUESS
+HOLD_GUN_DY = 120.0
+HOLD_GUNS_KNOWN = {'lobby': 4}          # MEASURED (rooms_check, b/t3): 4 dock men with a free exact ray to five of the lobby's seven holds; the dock hall leaves no place out of the ramp's view for the rest. gate name -> guns on its worst hold that the delivered build has over HOLD_GUNS (rooms_check says them)
+ROOM_ALT_VIA = ((-450.0, 240.0, -5000.0), (398.0, 213.0, -5885.0))      # the two ways from the dock floor to the lobby's upper floor: the west stair (W4's hits lie there) and the south ramp: the line check walks both
 ROOM_NAME_SEEN = True                   # the TriggerActorsDead names the men a hold can see; where none is seen it names every man of the room (the clock is then the gate)
 # the rooms, in the order of the way. name; leg ('in' / 'out'); what; box (x0, x1, z0, z1) and y of the hold places; the direction the men are in (plan); dy: floor tolerance.
 # GUESS: every box and direction; MEASURED: the holds they give (rooms_check prints them) are on the START's mesh part, at cover boxes, 1 m inside the mesh, 4 m and more from every
@@ -2561,17 +2567,19 @@ ROOMS = (
          box=(-900.0, 1300.0, -9350.0, -8650.0), y=802.0, enemy=(0.0, -1.0), dy=60.0))
 # the men moved (finder.py on the delivered bare folder; key = the man's group path, value = the place). GUESS: the places; MEASURED: on the mesh, at cover, off the line
 CLEAR_MEN = collections.OrderedDict([
-    ('GamePlay!3_Garage_Part!PatrolGuards_01a\\Guard_01', (-918, 240, -5208)),
-    ('GamePlay!3_Garage_Part!PatrolGuards_01a\\Guard_01#01', (-38, 200, -5376)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs#01\\Guard_01#03', (366, 240, -6814)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\Guard_01#02', (261, 212, -5725)),
+    ('GamePlay!3_Garage_Part!PatrolGuards_01a\\Guard_01', (-968, 240, -4908)),     # second fix (f6.py): the stair top's patrol to the upper west level's pocket, 293 / 479 from every line (the first fix's places were 7 and 86 from a line once all seven bots and the west stair were walked)
+    ('GamePlay!3_Garage_Part!PatrolGuards_01a\\Guard_01#01', (-1038, 240, -4726)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs#01\\Guard_01#03', (-334, 240, -7164)),     # second fix (f4.py): 20 exact-ray lines to the flights' holds and zone -> 1, 308 from every bot's line
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\Guard_01#02', (761, 200, -5375)),     # (-39, 203, -5775) was tried: within 400 of the lobby's holds
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\Guard_01#04', (384, 200, -5223)),      # second fix (f7.py): out of the ramp's line to the lobby's holds (8 lines -> 0), 166 from every line
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\Guard_01#01', (-334, 240, -5132)),     # the upper west level, out of the ramp's line (7 -> 0)
     ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\Guard_01#01', (325, 200, -5366)),
     ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\Guard_01#02', (497, 240, -6684)),
     ('GamePlay!4_Vault_Part!Guards_02\\Guard_01', (602, -560, -10623)),
     ('GamePlay!4_Vault_Part!Guards_02\\Guard_01#01', (748, -560, -10548)),
-    ('GamePlay!4_Vault_Part!Guards_03\\Guard_01', (100, -960, -12445)),         # the ante-room's two guards to its south-west pocket (x 75 .. 225, z -12450 .. -12340): the vault gate's hold
-    ('GamePlay!4_Vault_Part!Guards_03\\Guard_01#01', (225, -960, -12340)),      # (the mesh's north half, z >= -11900) is 400 from them, the crew's line (x 400) 175. Their defend place goes with them
-    ('GamePlay!4_Vault_Part!Guards_03\\DefendBehaviour\\Pos#01', (160, -960, -12395)),
+    ('GamePlay!4_Vault_Part!Guards_03\\Guard_01', (100, -960, -12445)),         # the ante-room's two guards to its south-west pocket (x 100, z -12450 .. -12200, against the west wall; second fix: 200 and more from every bot's vault walk, the first form's x 225 was 162 from it): the vault gate's hold
+    ('GamePlay!4_Vault_Part!Guards_03\\Guard_01#01', (100, -960, -12200)),      # (the mesh's north half, z >= -11900) is 400 from them, the crew's line (x 400) 175. Their defend place goes with them
+    ('GamePlay!4_Vault_Part!Guards_03\\DefendBehaviour\\Pos#01', (100, -960, -12330)),
     ('GamePlay!4_Vault_Part!Guards_01\\Guard_01', (628, -160, -9365)),
     ('GamePlay!4_Vault_Part!Guards_01\\Guard_01#01', (632, -160, -9045))])
 # men that stay within ROOM_LINE_CLEAR of a place the crew may walk, and why (rooms_check says them): none yet
@@ -2646,8 +2654,19 @@ def pick_holds_bank(spots, n=7, seps=(110.0, 100.0, 90.0, ROOM_HOLD_SEP), tries=
     import random
     if len(spots) < n:
         return [], 0.0
+    if ROOM_HIDE:                               # second fix: a set of seven under HOLD_GUNS guns each, where one exists (the widest separation of `seps` for which it does), before any other
+        low = [s for s in spots if len(s) > 8 and s[8] <= HOLD_GUNS]
+        if len(low) >= n:
+            got, sep = pick_holds_bank_all(low, n, seps, tries)
+            if got:
+                return got, sep
+    return pick_holds_bank_all(spots, n, seps, tries)
+
+
+def pick_holds_bank_all(spots, n, seps, tries):
+    import random
     hd = lambda a, b: math.hypot(a[0] - b[0], a[2] - b[2])
-    guns = lambda s: s[8] if len(s) > 8 and ROOM_HIDE else 0               # how many of the room's men have a free line to the place (0 = hidden)
+    guns = lambda s: s[8] if len(s) > 8 and ROOM_HIDE else 0               # how many men in the world have a free exact line to the place (0 = hidden)
     key = lambda s: (guns(s), not s[5], abs(s[7] - 130.0), -s[6])
     rng = random.Random(7)
     for sep in seps:
@@ -2699,6 +2718,8 @@ def rt_for_bank(gates, men, B, sight, probe, stats=None):
     stats = stats if stats is not None else {}
     by_name = {B.sc.names[t]: t for t in RT.enemy_squads(B)}
     stage_of = {t: squad_stage(B.sc, t) for t in by_name.values()}
+    esq = RT.enemy_squads(B)
+    all_men = [(stage_of[t], B.at(k)) for t in by_name.values() if stage_of[t] for k in range(t + 1, B.sc.end[t]) if B.sc.cls(k) == 'ZFFActor' and B.sc.parent[k] in esq[t]]
     cur = {'free': set(), 'world': ('start', 'down')}
 
     def near(p, posts, among, keep=ROOM_POST_CLEAR):
@@ -2709,7 +2730,10 @@ def rt_for_bank(gates, men, B, sight, probe, stats=None):
         return near0(p, {t: ([x for x in v if x[2] == 'start'] if t in cur['free'] else v) for t, v in posts.items() if stage_of.get(t) in cur['world']}, among, keep)
 
     def spots(B_, nav, home, covers, g, *rest):
-        cur['free'] = {by_name[n] for r in gates[:order.index(g['name']) + 1] for n in r['squads'] if n in by_name}
+        # the squads that count by their start place only: those of every room up to this gate's in the table's order, GATED OR NOT (second fix: with the dock off, its squads are no gate's
+        # and the planner took every place their routs walk to for a post: no hold was left on the flights)
+        upto = [r['name'] for r in ROOMS][:[r['name'] for r in ROOMS].index(g['name']) + 1]
+        cur['free'] = {by_name[n] for r in gates[:order.index(g['name']) + 1] for n in r['squads'] if n in by_name} | {t for rm in upto for t, _g, _p in men.get(rm, ())}
         cur['world'] = ('start', 'down') if g['leg'] == 'in' else ('start', 'down', 'beat', 'hall')
         # a lattice four times as fine: the planner's step of 40 leaves a cover box's ring (HOLD_RING) with a few places only, and 1 m inside the mesh (the probes) is the
         # outer part of the ring (the box itself is a hole in the mesh) - so the covers are laid 20 aside in turn and the distance and the side are taken from the true box
@@ -2732,10 +2756,12 @@ def rt_for_bank(gates, men, B, sight, probe, stats=None):
         n2 = len(out)
         prior = [p for r in order[:order.index(g['name'])] for _t, _g, p in men.get(r, ())]
         out = [s for s in out if not any(abs(p[1] - s[1]) <= RT.FLOOR_DY and RT.hdist(s, p) < ROOM_AFTER_CLEAR for p in prior)]
-        mine = [p for _t, _g, p in men.get(g['name'], ())]
+        # the 9th member = GUNS: the men of every squad that is in the world at this gate (not only the gate's room: second fix, the skeptic's fault 2) with a free EXACT ray to the place
+        # within HOLD_GUN_RANGE on its floor - the number the check hold-guns counts (HOLD_GUNS)
+        world_ = [p for stg, p in all_men if stg in cur['world']]
         tagged = []
         for s in out:
-            n_seen = sum(1 for p in mine if math.dist(p, s[:3]) < SIGHT_FAR and sight.sees_by(tuple(s[:3]), p, ROOM_SIGHT))
+            n_seen = sum(1 for p in world_ if abs(p[1] - s[1]) < HOLD_GUN_DY and math.dist(p, s[:3]) < HOLD_GUN_RANGE and sight.sees_by(tuple(s[:3]), p, ('exact',)))
             tagged.append(tuple(s) + (n_seen,))
         stats[g['name']] = dict(planner=n0, on_floor=n1, inside_mesh=n2, after_clear=len(out), hidden=sum(1 for s in tagged if s[8] == 0),
                                 fewest_guns=min([s[8] for s in tagged] or [0]))
@@ -2833,12 +2859,18 @@ def rooms_plan(B, P, log=print):
     gstep = lambda g, k, leg, stop: {'name': '%03d_DefendBehaviour_out_%s' % (30 + gates.index(g), g['name']), 'leg': leg, 'stop': stop, 'stations': [k], 'gate': g['name']}
     if g_in:
         # [first gate's hold] [enter] [the other holds] [ante-room hold] [loot]: the stage-1 box is the dock's door, behind the first gate
-        ks = [put(s_new=h) for h in h_in]
-        k_enter = put(s_old=st[i_enter], i_old=i_enter)
+        door_first = g_in[0]['name'] == 'dock'  # the dock's hold lies at the door, BEFORE the stage-1 station; any other first gate (no dock gate, second fix) comes after it
+        if door_first:
+            ks = [put(s_new=h) for h in h_in]
+            k_enter = put(s_old=st[i_enter], i_old=i_enter)
+        else:
+            k_enter = put(s_old=st[i_enter], i_old=i_enter)
+            steps.append({'name': '010_DefendBehaviour_to_loot', 'leg': 'in', 'stop': 0, 'stations': [k_enter]})
+            ks = [put(s_new=h) for h in h_in]
         for n_, (g, k) in enumerate(zip(g_in, ks)):
             steps.append(gstep(g, k, 'in', 0))
             g['step'] = steps[-1]['name']
-            if n_ == 0:
+            if n_ == 0 and door_first:
                 steps.append({'name': '010_DefendBehaviour_to_loot', 'leg': 'in', 'stop': 0, 'stations': [k_enter]})
         k_ante = put(s_old=st[i_ante], i_old=i_ante)
         steps.append({'name': '011_DefendBehaviour_to_loot', 'leg': 'in', 'stop': 0, 'stations': [k_ante]})
@@ -2990,6 +3022,7 @@ def rooms_check(folder, log=print):
     probe = _Probe(folder)
     sight = Sight(folder, B, lambda *a: None)
     named_before, holds_seen, rows = set(), [], []
+    ends_of = {}
     rank = {g['name']: i for i, g in enumerate(gates)}
     rank_room = {r['name']: i for i, r in enumerate(ROOMS)}
     for gi, g in enumerate(gates):
@@ -3044,6 +3077,7 @@ def rooms_check(folder, log=print):
             if any(math.dist(h, o) < 1.0 for o in holds_seen):
                 fail('gate %s: a hold at (%d, %d, %d) is the place of a hold of an earlier gate' % (g['name'], *h))
         holds_seen += ends
+        ends_of[g['name']] = ends
         lim = lambda p, rm: ROOM_AFTER_CLEAR if (rm in rank_room and g['name'] in rank_room and rank_room[rm] < rank_room[g['name']]) else ROOM_POST_CLEAR
         close = [(round(RT.hdist(h, p)), r.split('!')[-1], tuple(round(c) for c in p)) for h in ends for p, _gp, r, stg in men
                  if abs(p[1] - h[1]) <= RT.FLOOR_DY and RT.hdist(h, p) < lim(p, room_of(stg, p))]
@@ -3068,24 +3102,57 @@ def rooms_check(folder, log=print):
             near = [(round(RT.hdist(p, q)), r.split('!')[-1]) for q, r in who if abs(q[1] - p[1]) <= RT.FLOOR_DY and RT.hdist(p, q) < ROOM_POST_CLEAR]
             if near:
                 fail('station %d (%s) place (%d, %d, %d) is within %d of a man of %s' % (i, s['kind'], *p, *near[0]))
-    # ---- the men: no start within ROOM_LINE_CLEAR of the line (said: the line is the stand-in path through the plan's holds and stations)
-    lines = []
-    b0 = P['bots'][next(iter(P['bots']))]['places']
+    # ---- the men: no start within ROOM_LINE_CLEAR of the line. Second fix (the skeptic's faults 3 and 4): the line is the stand-in path of EVERY one of the seven bots through its places
+    # (not the first bot's alone) and, for a leg from the dock floor to the lobby's upper floor, both ways the game's pathfinder may take (ROOM_ALT_VIA); a man that CLEAR_MEN moved
+    # must be ROOM_LINE_WANT from all of them
+    lines, alts = [], []
     nav = F.Nav(B.scene.nav)
-    for a, b in zip(b0, b0[1:]):
-        got = RT.way_samples(nav, tuple(a), tuple(b))
-        if got:
-            lines.append(got[0])
+    snap = lambda p: (lambda h: (p[0], h[1], p[2]) if h else None)(nav.at(p[0], p[1], p[2], dy=200.0))
+    for N_, b_ in P['bots'].items():
+        pl_ = b_['places']
+        for a, b in zip(pl_, pl_[1:]):
+            got = RT.way_samples(nav, tuple(a), tuple(b))
+            if got:
+                lines.append(got[0])
+            if a[1] < 225.0 <= b[1] and b[2] < -5900.0:
+                for v in (snap(V) for V in ROOM_ALT_VIA):
+                    s1, s2 = (RT.way_samples(nav, tuple(a), v), RT.way_samples(nav, v, tuple(b))) if v else (None, None)
+                    if s1 and s2:
+                        alts.append(s1[0] + s2[0])
+    def dline_(p, ls):
+        return min([seg_dist(p, a, b) for pl in ls for a, b in zip(pl, pl[1:]) if abs(a[1] - p[1]) < 150] or [1e9])
+    moved_at = {k.lower(): v for k, v in CLEAR_MEN.items()}
     near_line = []
     for p, gp, r, stg in men:
         if stg not in ('start', 'down'):
             continue
-        d = min([seg_dist(p, a, b) for pl in lines for a, b in zip(pl, pl[1:]) if abs(a[1] - p[1]) < 150] or [1e9])
+        d = dline_(p, lines)
         if d < ROOM_LINE_CLEAR:
             near_line.append((round(d), gp.split('!')[-1], tuple(round(c) for c in p)))
+        if gp[len(R):].lower() in moved_at or gp.lower() in moved_at:
+            d2 = min(d, dline_(p, alts))
+            if d2 < ROOM_LINE_WANT - 1.0:
+                fail('%s was moved to %s and stands %d from a bot\'s line or the other way down from the dock (%d wanted)' % (gp.split('!')[-1], tuple(round(c) for c in p), d2, ROOM_LINE_WANT))
     for d, gp, p in near_line:
         if gp not in ROOM_STAY:
             fail('%s starts at %s, %d from the crew\'s line (the point-blank reach: %d)' % (gp, p, d, ROOM_LINE_CLEAR))
+    log('  lines: %d legs of the seven bots, %d other ways down from the dock floor' % (len(lines), len(alts)))
+    # ---- HOLD-GUNS (second fix, the skeptic's faults 1 and 2): men of every squad in the world at a gate (all start / down men; the beat's and the hall's for the way out) with a free exact
+    # ray to a hold, within HOLD_GUN_RANGE on its floor - the earlier rooms' men too, not the gate's room alone
+    for g in gates:
+        world = ('start', 'down') if g['name'] in ('dock', 'lobby', 'flights') else ('start', 'down', 'beat', 'hall')
+        cnt, who = [], []
+        for h in ends_of[g['name']]:
+            w_ = [(round(math.dist(h, p) / 100), gp.split('!')[-1], r_.split('!')[-1]) for p, gp, r_, stg in men if stg in world and abs(p[1] - h[1]) < HOLD_GUN_DY
+                  and math.dist(h, p) < HOLD_GUN_RANGE and sight.sees_by(tuple(h), p, ('exact',))]
+            cnt.append(len(w_))
+            who.append(w_)
+        worst = max(cnt or [0])
+        log('  hold-guns %-8s %s (exact ray, %d m, %d men in the world; wanted %d, fails at %d)' % (g['name'], cnt, HOLD_GUN_RANGE / 100, sum(1 for _p, _g, _r, stg in men if stg in world), HOLD_GUNS, HOLD_GUNS_MAX + 1))
+        if worst > HOLD_GUNS_MAX:
+            fail('hold-guns: gate %s: %d guns bear on a hold (at most %d): %s' % (g['name'], worst, HOLD_GUNS_MAX, '; '.join('%d m %s' % (d, n) for d, n, _r in who[cnt.index(worst)][:8])))
+        elif worst > HOLD_GUNS:
+            log('      NOTE KNOWN over the yardstick: %d guns on a hold (%d wanted; HOLD_GUNS_KNOWN %s)' % (worst, HOLD_GUNS, HOLD_GUNS_KNOWN.get(g['name'], '-')))
     # ---- no dynamic hold behind a gate: the step's hold timers are named '..._Timer_hold' (kl_fa_bots_dyn); with ROOM_GATES the step adds none (dyn above)
     for t in tops:
         holds_t = [sc.names[k] for k in range(t, sc.end[t]) if kind.get(k) == 'TriggerDelay2' and 'Timer_hold' in sc.names[k]]
