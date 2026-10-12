@@ -783,14 +783,15 @@ def opts_now():
     return collections.OrderedDict(crew_fix2=CREW_FIX2, teller_late=TELLER_LATE, van_late=VAN_LATE, van_hide=VAN_HIDE, van_no_target=VAN_NO_TARGET,
                                    van_show=VAN_SHOW, reset=RESET, waves=WAVES, waves_extra=WAVES_EXTRA, waves_near=WAVES_NEAR,
                                    plaza_outside=PLAZA_OUTSIDE, hall_up=HALL_UP, no_ai=NO_AI, teller_more=TELLER_MORE, waves_latch=WAVES_LATCH,
-                                   waves2=WAVES2, voice=VOICE, teller_foyer=TELLER_FOYER, room_gates=ROOM_GATES, room_on=list(ROOM_ON), room_hide=ROOM_HIDE)
+                                   waves2=WAVES2, voice=VOICE, teller_foyer=TELLER_FOYER, room_gates=ROOM_GATES, room_on=list(ROOM_ON), room_hide=ROOM_HIDE, staging=STAGING)
 
 
 def apply_opts(o):
     """Set the module's flags from a dict (opts_now's form). -> o"""
     global CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, VAN_SHOW, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
-    global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE
+    global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING
     ROOM_GATES, ROOM_HIDE = bool(o.get('room_gates', False)), bool(o.get('room_hide', True))
+    STAGING = bool(o.get('staging', False))
     ROOM_ON = tuple(o.get('room_on', ROOM_ON))
     TELLER_MORE, WAVES_LATCH = bool(o.get('teller_more')), bool(o.get('waves_latch', False))
     WAVES2, VOICE, TELLER_FOYER = bool(o.get('waves2')), bool(o.get('voice')), bool(o.get('teller_foyer'))
@@ -2111,11 +2112,16 @@ def check(folder, log=print, problems=None):
             v = values(sc, pbox[0], 'TriggerBox')
             if (v[0], v[14], v[BOX_PER_MAN]) != (1, 'ECPS_FA_MERCONLY', 0) or lists_['speak box'] & set(plaza_sq):
                 fail('PLAZA_OUTSIDE: %s has fields 0 / 14 / %d = %s, or the foyer box still names a plaza squad' % (PLAZA_BOX, BOX_PER_MAN, (v[0], v[14], v[BOX_PER_MAN])))
+        wake_named = set()                              # STAGING: the squads of WAKE_SQUADS are named by the relays of their events (stage-check proves the rest)
+        if STAGING:
+            for ev in WAKE_EVENTS:
+                for w in sc.resolve(R + CLOCK + '\\Wake_' + ev):
+                    wake_named |= {sc.top[h] for s in A.named(sc, w) for h in sc.resolve(s)}
         by = collections.Counter()
         for t in camp_sq + hall_sq:
             r = role_of[STAGE[sc.names[t]]] if sc.names[t] in STAGE else 'beat timer'
             by[r] += 1
-            if t not in lists_[r]:
+            if t not in lists_[r] and t not in wake_named:
                 fail('%s is not named by %s' % (sc.names[t], ROLE.get(r, PLAZA_BOX)))
             if values(sc, t, 'ZSquadScript')[SQUAD_ACTIVE]:
                 fail('%s is in the world from the load (ZSquadScript field %d)' % (sc.names[t], SQUAD_ACTIVE))
@@ -2574,7 +2580,7 @@ CLEAR_MEN = collections.OrderedDict([
     ('GamePlay!4_Vault_Part!Guards_Reinforcement_StayUpstairs\\Guard_01#04', (384, 200, -5223)),      # second fix (f7.py): out of the ramp's line to the lobby's holds (8 lines -> 0), 166 from every line
     ('GamePlay!4_Vault_Part!Guards_Reinforcement_01b\\Guard_01#01', (-334, 240, -5132)),     # the upper west level, out of the ramp's line (7 -> 0)
     ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\Guard_01#01', (325, 200, -5366)),
-    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\Guard_01#02', (497, 240, -6684)),
+    ('GamePlay!4_Vault_Part!Guards_Reinforcement_01a\\Guard_01#02', (-603, 240, -5584)),     # STAGING (pressure fix): was (497, 240, -6684), in sight of four of the seven places of the flights' hold and of the stretch below it, so his squad could not be woken by the flights gate; (-603, 240, -5584) is the upper west level by the stair top and sees no hold or stretch of the way in (C:/kl_scratch/vault_pressure/mv2.py: 52 candidates, the nearest with 0 rows seen), 181 from a cover box
     ('GamePlay!4_Vault_Part!Guards_02\\Guard_01', (602, -560, -10623)),
     ('GamePlay!4_Vault_Part!Guards_02\\Guard_01#01', (748, -560, -10548)),
     ('GamePlay!4_Vault_Part!Guards_03\\Guard_01', (100, -960, -12445)),         # the ante-room's two guards to its south-west pocket (x 100, z -12450 .. -12200, against the west wall; second fix: 200 and more from every bot's vault walk, the first form's x 225 was 162 from it): the vault gate's hold
@@ -2584,6 +2590,37 @@ CLEAR_MEN = collections.OrderedDict([
     ('GamePlay!4_Vault_Part!Guards_01\\Guard_01#01', (632, -160, -9045))])
 # men that stay within ROOM_LINE_CLEAR of a place the crew may walk, and why (rooms_check says them): none yet
 ROOM_STAY = collections.OrderedDict()
+# ---- STAGING (after run W6; '--staging', needs '--gates'; re/bank_campaign.md 'Pressure and staging'). The yardstick is the tab's Withdrawal (kl_fa_club's, MEASURED the same way): at most 3 guns with a clear
+# exact ray on a station of the heist (HOLD_GUNS) and 4 on a stretch between two (LEG_GUNS), counting the men of the squads that are in the world at that moment. The way in of the delivered
+# c_bank6 build was 6 / 4 / 2 on the stations and 6 / 6 / 5 on the stretches (the dock's garrison in the open from GO + 1.5 s, START 7 guns at GO + 11 s: run W4). So the squads of the way in SLEEP
+# (ZSquadScript field 3 = 0: 'not in the world until one of its routs is named', the form every squad of this module has) and are woken as stock wakes a parked squad, by NAMING THE SQUAD'S START
+# ROUT: from the list of the gate before (TriggerActorsDead field 2, in all seven bots' copies), from a criminals-only box on the way into the room, and from a backstop timer. The three go through ONE relay
+# per event (Wake_<event>, a TriggerDelay2 whose list is the routs; the proven form of the waves' Pace / Go links). WAKE_SQUADS was chosen by a search (C:/kl_scratch/vault_pressure/plan5.py: for every
+# squad the latest event before any of its men can see the crew, at which none of its men sees the criminals who wake him - the box's floor on a 3 m lattice, the holds of the gate that wakes him - and
+# the counts on the stations and stretches of the way in stay within the yardstick; a squad wakes as a whole, so its latest man decides). MEASURED: START rows 0 guns at GO / + 11 / + 30 / + 60 s (was 7);
+# the way in 0 / 0 / 2 / 2 on the stations, 0 / 3 / 5 / 2 on the stretches (the flights' 5 = the four men of wave A on the landing + one of Guards_01: WAKE_KNOWN).
+STAGING = False
+WAKE_DELAY = 0.3                        # s the relay Wake_<event> waits before it names the routs (the relay is named by up to nine sources, TriggerDelay2 form of Pace_ / Go_). GUESS
+# event -> dict(gate = the gate whose TriggerActorsDead list names the relay (None: no gate before it: the dock gate is off), box = (place, half extents) of the criminals-only box (None: the beat box, which exists),
+# go = the backstop, seconds after the GO: the slowest crew of W3 / W4 reached the room at about GO + 35 / + 75 / + 130 s (GUESS: the backstop is a minute past that)
+WAKE_EVENTS = collections.OrderedDict([
+    ('lobby', dict(gate=None, box=((-100.0, 241.0, -6125.0), (900.0, 80.0, 275.0)), go=70.0, what='the west corridor\'s south end (ROOMS lobby\'s box)')),
+    ('flights', dict(gate='lobby', box=((400.0, 241.0, -7325.0), (500.0, 80.0, 175.0)), go=100.0, what='the vault lobby end before the glass door (ROOMS flights\' box)')),
+    ('ante', dict(gate='flights', box=None, go=150.0, what='the ante-room box (the beat box)'))])
+WAKE_SQUADS = collections.OrderedDict([
+    (G4 + 'Guards_Reinforcement_StayUpstairs#01', 'lobby'),
+    (G4 + 'Guards_03', 'flights'),
+    (G4 + 'Guards_Reinforcement_StayUpstairs', 'ante'), (G4 + 'Guards_Reinforcement_01b', 'ante'), (G4 + 'Guards_Reinforcement_01a', 'ante'),
+    (G4 + 'Guards_02', 'ante'), (G4 + 'Guards_01', 'ante')])
+EVENT_T = {'lobby': 0.9, 'flights': 1.0, 'ante': 2.0}          # the earliest time index (station j = j, a stretch j -> j + 1 = j .. j + 1) at which the event can fire: the gate fires with the crew at its hold
+LEG_GUNS = 4                            # guns that may bear on a stretch between two stations (kl_fa_club.LEG_GUNS: Withdrawal's heist legs, exact ray, squads in the world)
+WAKE_KNOWN = {('leg', 2): (5, "the flights landing on the way down: wave A's four posts (wave_plan: 400 from every station) and one of Guards_01's two men; Guards_01 cannot be moved out of the leg's line "
+                              "(C:/kl_scratch/vault_pressure/mv.py: 8 -> 6 rows seen at best); what it needs: wave A's four posts off the landing"),
+              ('leg', 5): (5, 'the same landing on the way back'), ('leg', 6): (6, "the vault lobby on the way out: wave B's three posts and the lobby squad's men taken ALIVE (they are the lobby gate's men)"),
+              ('hold', 7): (4, 'the airlock station: the same men'), ('leg', 11): (9, "the square: wave D (the owner's shootout on the square)"),
+              ('hold', 12): (9, 'the square'), ('hold', 13): (36, 'the square'), ('hold', 14): (36, 'the square'), ('leg', 12): (36, 'the square'), ('leg', 13): (36, 'the square')}
+BEAT_GONE_T = 5.5                       # the beat's 14 police leave their posts for the ante-room when the beat box fires: counted at their posts only until here (their later places are unknown)
+T_FROM = {'start': 0.0, 'down': 0.0, 'waveA': 0.5, 'beat': 3.0, 'waveB': 3.0, 'hall': 4.0, 'plaza': 11.0, 'waveD': 11.0}      # time index from which a man of that stage is in the world (the plan's station index)
 
 
 def clear_men(M, keep, log=print):
@@ -3139,7 +3176,7 @@ def rooms_check(folder, log=print):
     log('  lines: %d legs of the seven bots, %d other ways down from the dock floor' % (len(lines), len(alts)))
     # ---- HOLD-GUNS (second fix, the skeptic's faults 1 and 2): men of every squad in the world at a gate (all start / down men; the beat's and the hall's for the way out) with a free exact
     # ray to a hold, within HOLD_GUN_RANGE on its floor - the earlier rooms' men too, not the gate's room alone
-    for g in gates:
+    for g in ([] if STAGING else gates):                # (with STAGING pressure_check counts the men awake at each time instead)
         world = ('start', 'down') if g['name'] in ('dock', 'lobby', 'flights') else ('start', 'down', 'beat', 'hall')
         cnt, who = [], []
         for h in ends_of[g['name']]:
@@ -3165,6 +3202,263 @@ def rooms_check(folder, log=print):
         tt['rooms'], ROOM_WAIT_S, tt['call'], NOAI_CALL, tt['latest'], tt['slack']))
     log('kl_fa_bank.rooms_check %s: %d gates, %d men in them, %d men started within %d of the line (%d said): %s' % (
         folder, len(gates), sum(r[6] for r in rows), len(near_line), ROOM_LINE_CLEAR, len(ROOM_STAY), 'PASS' if not bad else '%d FAILED' % len(bad)))
+    return bad
+
+
+def stage_men(B, ex=None):
+    """Every man of the level that can fire on the crew -> [dict(name, squad, group, stage, at)]: the kept campaign squads (stage by squad_stage) and, from extras.json's report `ex`, the waves' men at their posts
+    (stage 'wave' + phase). The bots are not these."""
+    sc, out = B.sc, []
+    for t in sc.tops():
+        st = squad_stage(sc, t)
+        if not st:
+            continue
+        for k in range(t + 1, sc.end[t]):
+            if sc.cls(k) == 'ZFFActor':
+                out.append(dict(name='%s %s' % (sc.names[t].split('!')[-1], sc.path[sc.parent[k]].split(chr(92))[-1]), squad=sc.path[t][len(R):], group=sc.path[sc.parent[k]],
+                                stage=st, at=B.at(k)))
+    for w in (ex or {}).get('waves', ()):
+        for j, (_e, q) in enumerate(w['men']):
+            out.append(dict(name='%s_%d' % (w['name'], j + 1), squad=w['name'], group=None, stage='wave' + w['phase'], at=tuple(float(v) for v in q)))
+    return out
+
+
+def man_from(m):
+    """The time index (the plan's station index; a stretch j -> j + 1 is j .. j + 1) from which man m is in the world: the event of WAKE_SQUADS (STAGING) or his stage's T_FROM."""
+    if STAGING and m['squad'] in WAKE_SQUADS:
+        return EVENT_T[WAKE_SQUADS[m['squad']]]
+    return T_FROM[m['stage']]
+
+
+def pressure_rows(B, P, S, men, log=None, step=300.0):
+    """The guns table of plan P on built level B: for every station i (the seven bots' places there) and every stretch i -> i + 1 (the mesh path of each bot sampled every `step`) the men awake at that time
+    (man_from) with a free EXACT ray (hvk_ray, Sight.sees_by 'exact') from their eyes to a place's chest or head, within HOLD_GUN_RANGE * 1.5 = 60 m on its floor (HOLD_GUN_DY). The beat's police count at their
+    posts only until BEAT_GONE_T. -> [dict(i, kind, what, at, hold = [guns on each of the seven], hold_worst, who_hold, leg_worst, leg_at, leg_who)]"""
+    import kl_fa_bots as F
+    import kl_fa_bots_rt as RT
+    nav = F.Nav(B.scene.nav)
+    st, bots = P['stations'], list(P['bots'])
+    rng = HOLD_GUN_RANGE * 1.5
+
+    def bear(p, t):
+        out = []
+        for m in men:
+            if man_from(m) > t + 1e-9 or (m['stage'] == 'beat' and t > BEAT_GONE_T):
+                continue
+            if abs(m['at'][1] - p[1]) < HOLD_GUN_DY and math.dist(m['at'], p) <= rng and S.sees_by(m['at'], tuple(p[:3]), ('exact',)):
+                out.append(m)
+        return out
+    rows = []
+    for j, s in enumerate(st):
+        hs = [tuple(P['bots'][n]['places'][j][:3]) for n in bots]
+        cnt = [bear(h, float(j)) for h in hs]
+        row = dict(i=j, kind=s['kind'], what=(s.get('what') or '')[:44], at=tuple(round(v) for v in hs[0]), hold=[len(c) for c in cnt], hold_worst=max(len(c) for c in cnt),
+                   who_hold=sorted({m['name'] for c in cnt for m in c}))
+        if j + 1 < len(st):
+            seen, worst = set(), (0, None, [])
+            for n in bots:
+                got = RT.way_samples(nav, tuple(P['bots'][n]['places'][j]), tuple(P['bots'][n]['places'][j + 1]), step)
+                ss = got[0] if got else []
+                for q_i, q in enumerate(ss):
+                    key = (round(q[0] / 100), round(q[1] / 100), round(q[2] / 100))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    c = bear(q[:3], j + (q_i + 0.5) / (len(ss) + 1.0))
+                    if len(c) > worst[0]:
+                        worst = (len(c), tuple(round(v) for v in q[:3]), c)
+            row.update(leg_worst=worst[0], leg_at=worst[1], leg_who=sorted(m['name'] for m in worst[2]))
+        rows.append(row)
+        if log:
+            log('    %2d %-5s %-44s %s holds %s worst %d | leg to %d: %s at %s' % (j, row['kind'], row['what'], row['at'], row['hold'], row['hold_worst'], j + 1, row.get('leg_worst'), row.get('leg_at')))
+    return rows
+
+
+def pressure_check(folder, log=print):
+    """'kl_fa_bank.py pressure-check <folder>': the guns table (pressure_rows) of a finished folder with its gates, and the START rows at GO / + 11 / + 30 / + 60 s. FAILS a station above HOLD_GUNS or a stretch above
+    LEG_GUNS on the way IN (up to the loot) unless WAKE_KNOWN lists it with its number; the way out and the square are said, and listed as known where WAKE_KNOWN has them. -> list of faults"""
+    import json
+    import kl_fa_bots as F
+    bad = []
+    try:
+        P = json.load(open(os.path.join(folder, 'bots.json'), encoding='utf-8')).get('plan') or {}
+    except (OSError, ValueError):
+        P = {}
+    if not P.get('vault_gates'):
+        log('  pressure: bots.json has no room gates: not checked')
+        return bad
+    o = read_opts(folder)
+    B = F.Built(folder)
+    S = Sight(folder, B, lambda *a: None)
+    pj = os.path.join(folder, 'extras.json')
+    ex = json.load(open(pj)) if os.path.isfile(pj) else None
+    men = stage_men(B, ex)
+    log('  pressure: %d men (%s); STAGING %s' % (len(men), ', '.join('%s %d' % (k, v) for k, v in collections.Counter(m['stage'] for m in men).items()), 'on' if STAGING else 'off'))
+    sp = start_pressure(S, start_men(B, ex, bool(o.get('waves2'))), times=(0.0, 11.0, 30.0, 60.0), rules=('exact',))
+    for T, r in sp.items():
+        log('  START rows, GO + %3.0f s: %2d men in the world, %d with a clear exact ray within %d m%s' % (T, r['in_world'], len(r['bear']['exact']), PRESSURE_RANGE / 100,
+                                                                                                           ': ' + ' '.join(r['bear']['exact'])[:160] if r['bear']['exact'] else ''))
+        if r['bear']['exact'] and STAGING:
+            bad.append('START rows: %d guns at GO + %g s' % (len(r['bear']['exact']), T))
+            log('  FAIL ' + bad[-1])
+    rows = pressure_rows(B, P, S, men, log)
+    i_loot = max(i for i, s in enumerate(P['stations']) if s['kind'] == 'loot')
+    for r in rows:
+        for kind, n, cap in (('hold', r['hold_worst'], HOLD_GUNS), ('leg', r.get('leg_worst') or 0, LEG_GUNS)):
+            if n <= cap:
+                continue
+            known = WAKE_KNOWN.get((kind, r['i']))
+            way_in = r['i'] < i_loot if kind == 'leg' else r['i'] <= i_loot
+            if known and n <= known[0]:
+                log('      KNOWN %s %d: %d guns (%d wanted; %s)' % (kind, r['i'], n, cap, known[1]))
+            elif STAGING and way_in:
+                bad.append('%s %d (%s): %d guns bear (%d wanted)' % (kind, r['i'], r['what'].strip(), n, cap))
+                log('  FAIL ' + bad[-1])
+            else:
+                log('      OVER %s %d: %d guns (%d wanted)%s' % (kind, r['i'], n, cap, '' if way_in else ' - not the way in'))
+    log('kl_fa_bank.pressure_check %s: %s' % (folder, 'PASS' if not bad else '%d FAILED' % len(bad)))
+    return bad
+
+
+def dyn_check(folder, log=print):
+    """'kl_fa_bank.py dyn-check <folder>': kl_fa_bots_dyn.check on a finished folder. With STAGING the gates' TriggerActorsDead lists name the relays Wake_<event> besides the chain's next step, which that checker
+    (not this module's) does not know as a side item of a chain link; the check is run on the scene as it was before the staging step - the relay names are taken out of those lists IN MEMORY (F.Built is
+    wrapped for the length of the call, nothing is written) - and stage-check proves the relays. -> list of faults"""
+    import kl_fa_bots as F
+    import kl_fa_bots_dyn as D
+    read_opts(folder)
+    orig = F.Built
+    taken = []
+
+    class Stripped(orig):
+        def __init__(self, *a, **k):
+            orig.__init__(self, *a, **k)
+            if not STAGING:
+                return
+            sc = self.sc
+            for k_, i_, v_ in list(kl_fa.controllers(sc, 'TriggerActorsDead')):
+                keep = [x for x in v_[2] if not x.lower().startswith((R + CLOCK + '\\Wake_').lower())]
+                if len(keep) != len(v_[2]):
+                    taken.append(sc.names[k_])
+                    kl_fa.edit(sc, k_, i_, lambda us, keep=keep, sc=sc: us.__setitem__(2, kl_fa._refs(sc, keep)))
+    F.Built = Stripped
+    try:
+        out, _facts = D.check(folder, log)
+    finally:
+        F.Built = orig
+    bad = [t for sev, t in out if sev == 'FAIL']
+    if taken:
+        log('  dyn-check: the relay names of %d gate lists (STAGING) were left out of the scene the checker saw (stage-check proves them)' % (len(taken) // 2 or len(taken)))
+    log('kl_fa_bank.dyn_check %s: %s' % (folder, 'PASS' if not bad else '%d FAILED' % len(bad)))
+    return bad
+
+
+def staging_check(folder, log=print):
+    """'kl_fa_bank.py stage-check <folder>': a build with STAGING: every squad of WAKE_SQUADS is parked (field 3 = 0) and its start rout is named by NOTHING but its event's relay Wake_<event> (not by the start
+    timer); the relay is named by the backstop timer (which the start timer starts), by the box (the beat box for 'ante') and, where an event has a gate, by that gate's TriggerActorsDead in each of the seven bots'
+    squads; no man of an event's squads has an exact line to the box's floor (a 3 m lattice) or to the seven holds of the gate that wakes him; the backstop comes after the nominal arrival.
+    -> list of faults"""
+    import json
+    import kl_fa_bots as F
+    bad = []
+
+    def fail(s):
+        bad.append(s)
+        log('  FAIL ' + s)
+    read_opts(folder)
+    if not STAGING:
+        log('  stage: no staging in this build: nothing to check')
+        return bad
+    P = json.load(open(os.path.join(folder, 'bots.json'), encoding='utf-8')).get('plan') or {}
+    B = F.Built(folder)
+    sc = B.sc
+    S = Sight(folder, B, lambda *a: None)
+    nav = F.Nav(B.scene.nav)
+    cp = lambda n: R + CLOCK + '\\' + n
+    nxt = {}
+    for cn, fld in (('TriggerDelay2', 4), ('TriggerBox', 17), ('TriggerActorsDead', 2)):
+        for k, _i, v in kl_fa.controllers(sc, cn):
+            nxt.setdefault(k, []).extend(s.lower() for s in v[fld])
+    named_by = collections.defaultdict(list)
+    for k, names in nxt.items():
+        for s in names:
+            named_by[s].append(k)
+    tops = [t for t in sc.tops() if sc.names[t].startswith(BOT_SQUAD + 'Squad#')]
+    gates = {g['name']: g['wait'] for g in P['vault_gates']}
+    sq_node = {sc.path[t][len(R):]: t for t in sc.tops()}
+    men = stage_men(B)
+    start_k = sc.resolve(R + ROLE['start timer'])[0]
+    for ev, spec in WAKE_EVENTS.items():
+        squads = [s for s, e in WAKE_SQUADS.items() if e == ev]
+        found = sc.resolve(cp('Wake_' + ev))
+        if len(found) != 1:
+            fail('%s: no relay Wake_%s' % (ev, ev))
+            continue
+        wk = found[0]
+        listed = nxt.get(wk, [])
+        for sq in squads:
+            t = sq_node.get(sq)
+            if t is None:
+                fail('%s: squad %s is not in the level' % (ev, sq))
+                continue
+            if values(sc, t, 'ZSquadScript')[SQUAD_ACTIVE] != 0:
+                fail('%s: %s is not parked (ZSquadScript field %d is %r)' % (ev, sq, SQUAD_ACTIVE, values(sc, t, 'ZSquadScript')[SQUAD_ACTIVE]))
+            routs = [s for s in listed if s.startswith((R + sq + '\\').lower())]
+            if len(routs) != 1:
+                fail('%s: the relay names %d routs of %s (1 wanted)' % (ev, len(routs), sq))
+                continue
+            by = [k for k in named_by.get(routs[0], [])]
+            if by != [wk]:
+                fail('%s: the rout of %s is named by %s, by the relay only wanted' % (ev, sq, [sc.names[b] for b in by]))
+        by = named_by.get(sc.path[wk].lower(), [])
+        timer = [k for k in by if sc.names[k] == 'Timer_wake_' + ev]
+        box = [k for k in by if sc.names[k] == 'Box_wake_' + ev] if spec['box'] else [k for k in by if sc.path[k] == R + ROLE['beat box']]
+        if len(timer) != 1:
+            fail('%s: %d backstop timer(s) name the relay' % (ev, len(timer)))
+        elif sc.path[timer[0]].lower() not in nxt.get(start_k, []):
+            fail('%s: the backstop timer is not started by the start timer' % ev)
+        if len(box) != 1:
+            fail('%s: %d box(es) name the relay (the %s)' % (ev, len(box), 'box of its own' if spec['box'] else 'beat box'))
+        if spec['gate']:
+            tad = [k for k in by if sc.path[k][len(R):].startswith(BOT_SQUAD) and sc.names[k] == gates[spec['gate']]]
+            if len(tad) != len(tops):
+                fail('%s: %d of the %d bots\' TriggerActorsDead %s name the relay' % (ev, len(tad), len(tops), gates[spec['gate']]))
+        if spec['go'] < {'lobby': 40.0, 'flights': 70.0, 'ante': 110.0}[ev]:
+            fail('%s: the backstop at GO + %g s is before the nominal arrival' % (ev, spec['go']))
+        if spec['go'] > rooms_timetable(P)['latest']:
+            fail('%s: the backstop at GO + %g s is after the van-call budget (GO + %g s)' % (ev, spec['go'], rooms_timetable(P)['latest']))
+        # nobody woken sees the criminals who wake him: the box's floor on a 3 m lattice (the beat box: the ante-room hold), the seven holds of the gate that names the relay
+        pts = []
+        if spec['box']:
+            (cx, cy, cz), (hx, _hy, hz) = spec['box']
+            x = cx - hx
+            while x <= cx + hx:
+                z = cz - hz
+                while z <= cz + hz:
+                    h = nav.at(x, cy, z, dy=60.0)
+                    if h:
+                        pts.append((x, h[1], z))
+                    z += 300.0
+                x += 300.0
+        else:
+            pts += [tuple(P['bots'][n]['places'][P['gate']['station']][:3]) for n in P['bots']]
+        if spec['gate']:
+            gi = [g['name'] for g in P['vault_gates']].index(spec['gate'])
+            hold_st = [i for i, s in enumerate(P['stations']) if s['kind'] == 'hold'][gi]
+            pts += [tuple(P['bots'][n]['places'][hold_st][:3]) for n in P['bots']]
+        seen = []
+        for m in men:
+            if m['squad'] in squads:
+                for p in pts:
+                    if abs(m['at'][1] - p[1]) < HOLD_GUN_DY and math.dist(m['at'], p) <= HOLD_GUN_RANGE * 1.5 and S.sees_by(m['at'], p, ('exact',)):
+                        seen.append((m['name'], tuple(round(c) for c in p)))
+                        break
+        if seen:
+            fail('%s: %d man/men would appear in sight of the criminals who wake them: %s' % (ev, len(seen), seen[:4]))
+        log('  wake %-8s %d squads (%d men) by %s + %s, the backstop at GO + %g s; %d lattice points checked' % (
+            ev, len(squads), sum(1 for m in men if m['squad'] in squads), ('the gate ' + spec['gate']) if spec['gate'] else 'no gate (the dock gate is off)',
+            ('the box %s' % (spec['box'][0],)) if spec['box'] else 'the beat box', spec['go'], len(pts)))
+    log('kl_fa_bank.stage_check %s: %s' % (folder, 'PASS' if not bad else '%d FAILED' % len(bad)))
     return bad
 
 
@@ -3951,7 +4245,8 @@ def start_men(B, rep=None, waves2=False):
             acts = [B.at(k) for k in range(t, sc.end[t]) if sc.cls(k) == 'ZFFActor']
             posts = [B.at(k) for k in range(t + 1, sc.end[t]) if sc.cls(k) == 'ZBoxPrimitive' and sc.names[k].startswith('Pos#')]
             for i, a in enumerate(acts):
-                out.append(dict(kind='old', name='%s#%d' % (sc.names[t].split('!')[-1], i + 1), t_in=SQUADS_AT, places=[a] + posts, post=None))
+                ev = WAKE_SQUADS.get(sc.path[t][len(R):]) if STAGING else None
+                out.append(dict(kind='old', name='%s#%d' % (sc.names[t].split('!')[-1], i + 1), t_in=WAKE_EVENTS[ev]['go'] + GO_AFTER_EVENT if ev else SQUADS_AT, places=[a] + posts, post=None))
     for w in (rep or {}).get('waves', ()):
         base = 0.0
         if w['phase'] == 'A' and waves2:
@@ -4301,6 +4596,26 @@ def extras_make(B, o, plan, show, hide, stacks=()):
         M.place(bn, DOCK_BOX_AT[0])
         M.set(bn, None, {'ZBoxPrimitive[0]': DOCK_BOX_AT[1][0], 'ZBoxPrimitive[1]': DOCK_BOX_AT[1][1], 'ZBoxPrimitive[2]': DOCK_BOX_AT[1][2]})
         out['late'] = single('start timer', 'Timer_A_late', 'TriggerDelay2', {0: float(A_BACKSTOP), 4: [pace]})
+    if o.get('staging') and not o.get('no_ai'):
+        # STAGING: the squads of WAKE_SQUADS leave the start timer's list; each event gets a relay (Wake_<event>: names the routs), a backstop timer (started by the start timer) and, except 'ante' (the beat box),
+        # a criminals-only box of its own. The gates' TriggerActorsDead lists and the beat box name the relay in extras().
+        have = list(values(sc, node(R + ROLE['start timer']), 'TriggerDelay2')[4])
+        staged = collections.OrderedDict()
+        for ev, spec in WAKE_EVENTS.items():
+            squads = [s_ for s_, e in WAKE_SQUADS.items() if e == ev]
+            routs = [x for x in have if any(x.startswith(R + s_ + '\\') for s_ in squads)]
+            if len(routs) != len(squads):
+                raise ValueError('kl_fa_bank.extras: STAGING %s: the start timer names %d routs of its %d squads (%s)' % (ev, len(routs), len(squads), routs))
+            w = single('start timer', 'Wake_' + ev, 'TriggerDelay2', {0: WAKE_DELAY, 4: routs})
+            t_ = single('start timer', 'Timer_wake_' + ev, 'TriggerDelay2', {0: float(spec['go'] + GO_AFTER_EVENT - SQUADS_AT), 4: [w]})
+            b_ = None
+            if spec['box']:
+                b_ = single('speak box', 'Box_wake_' + ev, 'TriggerBox', {0: 1, 14: 'ECPS_FA_MERCONLY', BOX_PER_MAN: 0, 17: [w]})
+                bn = made['Box_wake_' + ev]
+                M.place(bn, spec['box'][0])
+                M.set(bn, None, {'ZBoxPrimitive[0]': spec['box'][1][0], 'ZBoxPrimitive[1]': spec['box'][1][1], 'ZBoxPrimitive[2]': spec['box'][1][2]})
+            staged[ev] = dict(wake=w, timer=t_, box=b_, routs=routs, gate=spec['gate'], go=spec['go'])
+        out['staged'] = staged
     rep['timers'] = dict(rep['timers'])
     rep.update(out)
     return M, tops, rep
@@ -4369,6 +4684,30 @@ def extras(src, dst, log=print):
             wired['teller'] = add_to(R + PLAZA_BOX, 'TriggerBox', 17, [rep['teller']])
     if 'late' in rep:
         wired['late'] = add_to(R + ROLE['start timer'], 'TriggerDelay2', 4, [rep['late']])
+    if 'staged' in rep:                                 # STAGING: the routs leave the start timer, its list gains the backstops; the gates' lists and the beat box name the relays
+        sk = Jn.resolve(R + ROLE['start timer'])[0]
+        gone = {x for v in rep['staged'].values() for x in v['routs']}
+        keep = [x for x in values(Jn, sk, 'TriggerDelay2')[4] if x not in gone]
+        kl_fa.edit(Jn, sk, A.ctrl_of(Jn, sk, 'TriggerDelay2'), lambda us: A.setv(Jn, us, 4, keep))
+        wired['staged_routs_off_the_start_timer'] = len(gone)
+        wired['staged_backstops'] = add_to(R + ROLE['start timer'], 'TriggerDelay2', 4, [v['timer'] for v in rep['staged'].values()])
+        with open(os.path.join(src, 'bots.json'), encoding='utf-8') as f:
+            vg = (json.load(f).get('plan') or {}).get('vault_gates') or []
+        wait = {g['name']: g['wait'] for g in vg}
+        tads = 0
+        for ev, v in rep['staged'].items():
+            if v['gate']:
+                if v['gate'] not in wait:
+                    raise ValueError('kl_fa_bank.extras: STAGING %s: the gate %s is not in the build (bots.json has %s)' % (ev, v['gate'], list(wait)))
+                for t in Jn.tops():
+                    if Jn.names[t].startswith(BOT_SQUAD + 'Squad#'):
+                        hit = [k for k in range(t, Jn.end[t]) if Jn.names[k] == wait[v['gate']]]
+                        if len(hit) != 1:
+                            raise ValueError('kl_fa_bank.extras: STAGING %s: %d TriggerActorsDead %s in %s' % (ev, len(hit), wait[v['gate']], Jn.names[t]))
+                        tads += add_to(Jn.path[hit[0]], 'TriggerActorsDead', 2, [v['wake']])
+            if v['box'] is None:
+                wired['staged_beat_box'] = wired.get('staged_beat_box', 0) + add_to(R + ROLE['beat box'], 'TriggerBox', 17, [v['wake']])
+        wired['staged_gate_lists'] = tads
     if 'reset' in rep:
         wired['reset'] = add_to(R + ROLE['monitor'], 'AIMonitor', 2, rep['reset'], first=True)
     prp = Jn.p.serialize()
@@ -4857,7 +5196,10 @@ def main():
     if len(a) >= 2 and a[0] == 'test':
         global DOORS_ANIMATE, VAULT_OPEN, VAULT_DOOR_GOES, GATE_VAULT, CASE, BEAT, NO_AI, ALARM_LIGHTS, VAULT_BLAST, STOCK_ROWS, MUSIC_LAYER4
         global PLAZA_OUTSIDE, HALL_UP, CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
-        global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE
+        global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING
+        STAGING = '--staging' in a                          # the squads of the way in sleep and are woken room by room (WAKE_SQUADS); needs --gates and enemies
+        if STAGING and '--gates' not in a:
+            raise ValueError('--staging needs --gates (the gates lists wake the next room)')
         ROOM_GATES = '--gates' in a                       # the room gates of run W4's fix (the delivered flag set has it)
         ROOM_HIDE = '--gates-seen' not in a
         if '--gate-rooms' in a:
@@ -4914,6 +5256,12 @@ def main():
     elif len(a) == 3 and a[0] == 'dyn':
         out, _rep = dyn(a[1], a[2])
         sys.exit(1 if any(x == 'FAIL' for x, _t in out) else 0)
+    elif len(a) == 2 and a[0] == 'pressure-check':
+        sys.exit(1 if pressure_check(a[1]) else 0)
+    elif len(a) == 2 and a[0] == 'dyn-check':
+        sys.exit(1 if dyn_check(a[1]) else 0)
+    elif len(a) == 2 and a[0] == 'stage-check':
+        sys.exit(1 if staging_check(a[1]) else 0)
     elif len(a) == 2 and a[0] == 'rooms-check':
         sys.exit(1 if rooms_check(a[1]) else 0)
     elif len(a) == 2 and a[0] == 'bots-check':
