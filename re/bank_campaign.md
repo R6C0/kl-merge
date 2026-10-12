@@ -2497,3 +2497,136 @@ CONTROL: `kl_fa_bank.py test <out> --keep --plan <c_bank>/bank_vault_bare/van.js
 | 5 | bare folder = old bare, no reset/waves | CONFIRMED, by design | `bank_vault_bare` is the plain `--crew-fix` build for L0 load tests: no reset (round 2 shows the open vault), no waves, no `extras.json` |
 
 **W.11 rebuild (MEASURED).** Same driver (`C:/kl_scratch/vault_waves2/scripts/all.sh`), both sets on C: (`c_bank4_fx`, `c_bank4_music_fx`, replaced). 267 entities added (24 squads, 56 single switches, no Fast node: `grep Fast extras.json` = 0, `bank_opts.json` `waves_latch: false`); chunk table unchanged. Zip sha1: silent bank_vault = wavslim 50bfbb82, noai 411fc312, bare c3fd8eb6; music bank_vault = wavslim 52a0c915, noai 7dc5a565, bare 4ddf9883. `waves-check`, `crew-check`, `kl_fa_vaultfx.py check` PASS on all full/noai folders; the known findings (stream clips; noai 'no police'; bare guns/talk) unchanged; music full/bare preflight CRASH 0. CONTROL `test` with no flag: b7e48d31 again. LIVE CHECK ORDER for round 2 now starts with: does A01 come at +12 s in round 2 (one-shot nodes re-armed, parked squads back)?
+
+
+## Waves, after run W2 (2026-10-12; OFFLINE: built and checked, NOT RUN IN THE GAME, nothing installed)
+
+Folders (third round): `C:/kl_build/c_bank5_fx` (silent, against the installed stream file) and `C:/kl_build/c_bank5_music_fx` (with `--music-layer4 --str
+<work>/build/v_vault/PC_Def.str`), the four names each, every one padded by `kl_fa_vaultfx.py apply` (`check` PASS). On C: because G: is full. `c_bank4*` (the
+build run W2 tested) and every older set are untouched. Driver: `C:/kl_scratch/vault_tune/scripts/` (`all.sh` -> `run_all.sh`, `final.sh`; the second round's
+scripts re-pathed; changed: the flags of the three `test` calls, the bare folder's `extras` + `seal`, two lines in `checks.sh` - `start_guns`, and `waves` for a
+folder without a chain). This section is: the diagnosis of run W2 (W2.1), the change (W2.2), the supply as built (W2.3), the new check rules and the proof that
+they would have caught W2 (W2.4), the registers (W2.5), the voice (W2.6), the delivered bare folder (W2.7), the rebuild (W2.8), GUESS / ASSUMED / what the next live
+run must show (W2.9). Labels: MEASURED = read off a log or a built level; READ = read in code / a note; ASSUMED; GUESS.
+
+### W2.1 The diagnosis of run W2 (idle human dead GO + 32.6 s, three bots dead GO + 14 / + 25 / + 27 s)
+MEASURED (log `W2_vault_waves.log`, GO = the line 'session: state 0x18 -> 0x19'):
+- THE DIAL WAS NOT THE ONE OF V2. W2's `[Balance]` is `Risk=2 CopToCrew=0.05` (the task text said Risk=1 / Tough=1.5: the ini and the log say Risk=2, 'Tough x1.00'):
+  'balance: on; ... police->crew 0.05 crew->police 1.00 police->you 1.00 ... crew off your stage x 1.00; your health x 0.73' = 401.5 health. V2 had NO balance line (the dial
+  was off, re/bank_campaign.md X.1): stock Arcade level 1 = police->crew 0.01, police->you 0.10, off-stage x 0.5. So per bullet W2 hurts a bot 5 - 10 times as much and the
+  human 10 times. The hits on the bots show it: median hit GO+12..25 s V2 2.0 / W2 12.0; GO+25..35 s 3.0 / 8.0; GO+35..60 s 2.0 / 10.5 (script `C:/kl_scratch/vault_tune/hits.py`).
+  The NUMBER of hits is not higher in W2 (GO+12..25: 15 in V2, 21 in W2; GO+25..35: 97 / 57); the hits in the yard and the dock (z > -5300) before GO+35 are 9 of 117 in V2 and 26 of
+  86 in W2. NOTHING CAN BE CONCLUDED FROM A COMPARISON OF W2 WITH V2 ALONE - the dial differs by an order of magnitude. The log has NO shooter ids (klbot.c logs the victim and its place).
+- Bot 5, the first dead (GO + 14.3 s), died at (461, 307, -4952) after seven hits of 12 - 17 in a second ('ONE STEP - DOWN' at 158 of 252) - 2.0 m from the first post of wave A01
+  ((600, 200, -5100)), 4.9 m from its second ((0, 200, -4850)). Bot 7 (GO+25.2 s) died at (-762, 331, -5221) (the security side), bot 2 (GO+26.7 s) in the lobby (55, 336, -6983).
+READ / MEASURED on the built level (`kl_fa_bank.py start-guns`, new; men in the world at a time T, each at every place he may stand = an UPPER BOUND, the same for both builds;
+a wave man on the straight line from his entry to his post at 3 m/s; a gun BEARS when it is within 60 m of a START row with a free line under any of the three sight rules):
+| build | GO+12 s | GO+25 s | GO+35 s | GO+60 s | within 15 m with a line (12 / 25 / 35 / 60 s) | nearest |
+|---|---|---|---|---|---|---|
+| c_bank2 (the 61 enemies, no waves: the form the owner has; 19 men of stage start / down) | 8 | 8 | 8 | 8 | 6 / 6 / 6 / 6 | 13.3 m (Guards_Reinforcement_StayUpstairs#4 to the row at x 700) |
+| c_bank4 (W2's build; + chain A from the round-start timer) | 9 | 10 | 10 | 13 | 7 / 8 / 8 / 11 | 1.1 m at GO+12 s (A01_2 crossing the yard), 7.6 m at +25 s, 2.5 m at +60 s (A02_3) |
+| c_bank5 (this round) | 8 | 8 | 8 | 8 | 6 / 6 / 6 / 6 | as c_bank2 |
+- Chain A's first link was started by the round-start timer 12 s after the event = GO + 3.5 s (the event is 8.5 s before GO). Its three men ENTER from the yard's east lane
+  (2080, 200, -2500) and walk to posts 7.5 .. 12 m from the START rows ((600, -5100), (0, -4850), (600, -5500); START is at z -4350): their straight lines pass 23, 9 and 124 cm from
+  a START row (`waves-check` on c_bank4_fx: 'the walk ... passes 9 from a START row'), i.e. THROUGH the group of the humans, inside the point-blank reach (160) of re/melee_damage.md,
+  at GO + 10 .. 12 s. The next wave's posts (A02, entering GO+38.5 s) are 2.5 - 7 m from the START rows with a line. At the post itself A01 has NO line to the row at x 900 (the dock
+  wall) - the exposure is the WALK across the yard and the next waves' posts, not A01's posts. The 8 men of the 61 that bear on the START rows (c_bank2 row of the table) have NO
+  line to the row at x 900 (the idle human's row in W2: 'pos t30: me #2 (900, 200, -4350)').
+- WHY THE RULES LET IT THROUGH (READ in `wave_plan`): a post only had to be 250 from 'a heister station of the regions the wave names' and 300 from a leg of the way; the START rows are
+  stations of the dock region, so a post 2.5 m from them passed; nothing tested a post's or a walk's line to the START rows; the entries were tested blind but not the walk.
+- CONCLUSION (what is established and what is not): ESTABLISHED - chain A put three, then three more, armed men into the yard / dock at GO+3.5 s and GO+38.5 s, walking through the
+  START group; nothing in the checks forbade it. NOT ESTABLISHED - which gun killed the human: the dial alone (10 x the stock police->you on a 401-health body) could have done it
+  with the 61 enemies, none of whom bears on his row, so the waves are the likely cause but the log cannot say. The fix removes the waves from the yard and the first minute either way.
+
+### W2.2 The change (tools/kl_fa_bank.py only; `--waves2`; every older flag keeps its meaning; no flag = the byte-identical bare archive b7e48d31, see W2.8)
+1. `--waves2` (implies `--waves`): `WAVES2`, in `bank_opts.json` as `waves2`. `chain_table(v2=True)`.
+2. CHAIN A DOES NOT RUN FROM THE ROUND START. Its first Pace is named by a new TriggerBox of the clock group, `Box_in`, cloned from the foyer box (criminals only, fires once,
+   field 15 = 0), placed on the dock door's plane (`DOCK_BOX_AT` = EnterLootArea's: (560, 380, -4800), half (250, 230, 50): z -4850 .. -4750, the doorway is at z -4706 - the box lies
+   wholly beyond the door, i.e. a criminal has left the yard), and by a backstop `Timer_A_late` (A_BACKSTOP 80 s after the start timer = GO + 71 s) named by the start timer, for a
+   crew that never passes the box. Pace_A01 is a one-shot, so whichever comes first wins. ASSUMED: that a TriggerBox cloned into the clock group fires for an AI heister like the
+   beat box does (the beat box and the foyer box are the same kind of node and fired in V2 / W1 / W2) - NOT SEEN for a new node.
+3. ITS MEN ARE NOT THE YARD'S. Four single-man links (gaps 30, then 45 s: at +30, +75, +120, +165 s after the box), entering at the airlock corridor (E_AIRLOCK, blind from the way,
+   as chain B's) and standing AT COVER (a cover box within `POST_COVER` 400 of the post) on the flights' two landings: the lower landing (floor y -560) twice, the upper (y -160) twice.
+   The 3 m route rule is relaxed ONLY here, and only to `POST_ROUTE_MIN` 200 from a leg; the station rule is `POST_STATION` 400, then 300, then `POST_STATION_MIN` 250 from every heister
+   station (the planner takes the first the mesh allows for the whole wave). MEASURED (`C:/kl_scratch/vault_tune/explore.py`, `cap2.py` on c_bank4_fx/bank_vault; mesh part of the
+   START, 45 from a wall, at cover, 15 m from and blind from every START row under all three sight rules, 1.5 m from an old place): with 4 m from every heister station the dock has 0
+   posts, the security side 0, the lobby 0, the airlock corridor 0, the upper landing 0, the lower landing 29 spots (3 .. 4 men at 2.2 .. 3 m apart), the cross corridor 1; with 3 m the
+   lobby gets 15 spots (3 men at 3 m), with 2.5 m the lobby 38 (5 men), the upper landing 4, the lower 33. So the interior CANNOT take a supply of more than a handful: the first build's
+   eleven links of 25 men do not fit; four fit. THE LEAD'S 4 m WAS NOT KEPT FOR TWO OF THE FOUR (A03 and A04 stand 2.5 m from a station): at 4 m there are three spots. The lobby
+   'underneath' stays chain B's five single men (22 s, then every 30 s after the ante-room box), which already stood there. The floor of chain A is `SUPPLY_MIN2` 150 s (the last link at 165 s),
+   not 360 s: the yard that made 360 s possible is the thing that is out.
+4. `wave_plan`: with WAVES2 every entry, every post and every walk keeps `START_CLEAR` 1500 from every START row and has no line to one under any of the three rules (`start_ok`, `seg_dist`);
+   a wave that finds no place is still an ERROR. `Sight.sees_by`: the module's own rule (flag 0x10), the player ray of third_party/anp/scripts/hvk_ray.py (0x20) and the same with the hero-only
+   walls (0x28) - kl_route's grids 'sight', 'npc', 'hero'. MEASURED: they give the SAME answer for all 1,744 (post, START row) pairs sampled in the yard, the dock, the security side, the lobby
+   and the airlock corridor (`rules.py`): no difference on this level, so the module's assumption (0x10) did not hide a line; the three are used together (a wave man must be blind under all).
+   WHERE THEY CAN DIFFER: hvk_ray models the player's ray at the game's own heights; the module casts 160 -> 120 / 175; neither models doors or moving bodies.
+5. `Box_in`, `Timer_A_late` and the registers' timers are clone nodes of the build itself (kl_fa_fed.clone_built) - no new model, no new chunk (chunk table unchanged: 65,852).
+
+### W2.3 The supply as built (MEASURED by `waves-check`; GUESS: every box, gap, number)
+| chain: trigger | links | first after the trigger | then every | last | men a wave | entries -> posts |
+|---|---|---|---|---|---|---|
+| A: the dock box (or the backstop) | 4 | 30 s | 45 s | 165 s | 1 | the corridor behind the airlock (1580, 240, -6560) -> the flights' landings at cover: (600, -559, -10550), (800, -559, -10650), (650, -160, -8950), (850, -160, -9200) |
+| B: the ante-room box (once) | 5 | 22 s | 30 s | 142 s | 1 | as before (lobby posts) |
+| D: the plaza box (once) | 8 | 3 s | 25 s | 178 s | 3 | as before (the plaza) |
+33 men in 17 squads (was 54 in 24): 61 + 7 + 33 = **101 actors / 49 squads** (c_bank4: 122 / 56; what ran live: Retomoto 99 / 55; the engine 147 / 500); 179 entities added (c_bank4: 267).
+The A men walk the crew's own way from behind (the airlock stairs, the lobby, the flights): they are the 'police coming down behind the crew' the beat already has. They also stand on the way
+BACK UP: the returning crew meets whoever of A is alive on the landings (4 men, in cover) plus the beat's 14 - the same trade as chain B had in the lobby.
+
+### W2.4 The new check rules (all in `waves_check`, run by `check()` and `checks.sh`) and the proof that they catch W2
+1. every wave man's ENTRY and POST: `START_CLEAR` (1500) from every START row and no line under any rule; every WALK entry -> post at least `START_CLEAR` from every START row;
+2. WAVES2 chain A's posts: at cover (`POST_COVER`), `POST_ROUTE_MIN` from a leg, `POST_STATION_MIN` from every station;
+3. NO WAVE BEFORE THE CREW HAS LEFT THE YARD: without WAVES2 the check FAILS 'chain A starts from the round-start timer'; with it the dock box must lie wholly beyond the door (z + half < -4726), fire
+   for criminals only, once, name only Pace_A01, and the backstop timer must be >= 60 s and named by the start timer alone; the floor is `SUPPLY_MIN2`;
+4. GUNS ON THE START ROWS: for GO+12 / 25 / 35 / 60 s the waves add no gun that bears on a START row and none within 15 m with a line to those of the 61 enemies alone (`start_pressure`).
+PROOF (MEASURED): `waves-check C:/kl_build/c_bank4_fx/bank_vault` (W2's build, read-only) now reports 76 FAILs - 25 posts 250 .. 1,484 cm from a START row, 19 posts with a line to one, one man entering the world with a line (A02_3), 25 walks passing 9 .. 1,101 cm
+from one (A01's at 23 / 9 / 124 cm) - and 'chain A starts from the round-start timer'; the same command on `c_bank5_fx/bank_vault` is PASS with 'guns on the START rows ... with the
+waves 8/8/8/8, the 61 enemies alone 8/8/8/8'.
+
+### W2.5 The cash registers (the owner's wish outweighs the bots' detour)
+`--teller-foyer` (on with `--waves2`; `--no-teller-foyer` gives the plaza-box form of the second round back): the six teller stacks (100,000 each, hidden from the load) are shown
+`TELLER_FOYER_S` 2 s after the FOYER box (the hall's north end, (300, 930, -5650), where the crew comes up); the plaza box shows them 1 s after it too (backstop; `Teller_show` is an ActivateGeom, twice is
+idempotent). A human who holds the front is paid for the men he stops, and the stacks are there while the 8 police on the gallery and the plaza's squads are in play.
+WHAT THE BOTS WILL DO (READ / GUESS): a loot-tactic candidate is one of the five nearest untaken money objects within 800 (horizontal) / 400 (vertical) (re/bots_loot.md); the aisles the AI heisters use
+(x -500 and x 1100) are 2.7 m from the stacks (x -765 and 1367), so EVERY bot that arrives in the hall's south half while they are shown turns to the nearest stack and stays until it is taken (the loot
+wait, 30 s at the longest) before it dashes - under the eight police on the gallery. This is the V2 grave with 600,000 as bait. It is the owner's word against that finding (W.10 finding 4); if the next run
+shows the crew dying at the counters, `--no-teller-foyer` is one flag.
+
+### W2.6 The voice
+`--voice` (not implied by `--waves2`; every folder of this round was built with it): `kl_snd.VOICE = True` around the graft (kl_fa_club's way), so that `kl_snd.merge(inmem=kl_voice.stream_clip)` turns
+every streamed single IMA ADPCM record into an in-memory record. READ in `kl_voice.stream_clip`: the 0x1000-byte 'LIP ' block at a record's start is skipped (the read moves behind it); a record that is not
+mono, not 0x400-byte blocks or too long stays streamed (counted by `check()`: FAILS when any is left under `--voice`). MEASURED (`kl_whd` on the written .WHD, `streamed_singles`): streamed single IMA ADPCM
+records, silent set: c_bank4_fx bank_vault / bare 66 (noai 0 - no guards), c_bank5_fx 0 on all four; music set: c_bank4_music_fx bank_vault 75 (the nine added guard lines), c_bank5_music_fx see W2.8.
+WHAT IT ADDS: the .WAV block bank_vault 23.3 -> 24.8 MB (+1.5 MB), bare 23.1 -> 24.6 MB, noai unchanged (23.1; no guards); the wavslim .WAV 13.3 -> 14.8 MB; the five load blocks 159.9 -> 161.4 MB (full), 149.8 -> 151.4
+(wavslim); the chunk table, .prm, .fxc, .ANM do not change. By-product: the audit's known finding 'stream clips are not in the merged stream file' goes from 10 clips to 1 in the silent set. NOT HEARD: ears.
+
+### W2.7 The delivered bare folder
+`bank_vault_bare` = `--crew-fix --reset --van-late --voice` + the step `extras` + `seal` (it was `--crew-fix` alone): the round-2 reset and the late van ARE in it, with ONE FLAG PLUS TWO COMMANDS in `run_all.sh`
+(the reset objects and the van's show are made by `extras`, and `extras` needs a group to clone for the clock: the bare folder has no AI heisters yet, so it takes the dock patrol's squad group
+(`extras_make`: `src_`). No waves, no tellers hidden, no chain (no `bots.json`): the load test of the vault, the beat, the van and round 2. `waves_check` PASS on it; the checks `guns` / `talk` do not
+apply (as in the delivery). The van is shown by the foyer box + 6 s, the plaza box + 1 s, or the ante-room box + 120 s: a lone human triggers the foyer box.
+
+### W2.8 The rebuild and the checks (MEASURED)
+Driver `C:/kl_scratch/vault_tune/scripts/all.sh` (one build at a time; about 40 min a set): `test <out> --keep --waves2 --voice [--music-layer4 --str ...] --plan <c_bank>/bank_vault_bare/van.json` (the chain's input),
+the same with `--no-ai`, `test <out> --keep --crew-fix --reset --van-late --voice` (the bare folder) + `extras` + `seal`, then `chain.sh` (the delivery's: lighten, wardrobe, bots, guns, talk, fxc, dyn, hall-dash, extras, seal)
+on the first two, `kl_fa_vaultfx.py apply` (check PASS on all eight), `checks.sh` (the second round's + `start_guns`).
+Folders (zip sha1 first 8; the full map and the wav-slim share a zip; chunk table 65,852 / 65,083 noai / 65,640 bare of 69,632; blocks 161.4 / 151.4 wavslim / 150.1 noai / 150.6 bare MB):
+silent `C:/kl_build/c_bank5_fx`: bank_vault = bank_vault_wavslim d00f4c4f, bank_vault_noai ddd5d908, bank_vault_bare 051d57e2; music `C:/kl_build/c_bank5_music_fx`: bank_vault = wavslim 877379a3, noai 62cda999,
+bare 749dbfb1. EVERY CHECKER PASSES (bank_check, waves, crew, crew_route, bots_dyn, bots_gate, reverify, van, escape, fake, impact, arms, chars, guns, route_walk / route_built FREE, stream_whd for the music set,
+`kl_fa_vaultfx.py check`) except the known: the silent set's `preflight` CRASH 1 / `audit` FAIL 2 (noai 3) = the stream-clip finding, now ONE clip (was 10); the noai folders' 'no police' (music noai: preflight
+CRASH 1, RISK 1, audit FAIL 2); the bare folders' `guns` / `talk` (no such step there). The music full / wavslim / bare folders: preflight and audit exit 0 (CRASH 0 / no finding that must be 0; the RISK count of the second round, the eLayer4 risk, was not read again). Disk: C: 32 GB free before the two sets.
+CONTROL: `kl_fa_bank.py test <out> --keep --plan <c_bank>/bank_vault_bare/van.json` WITHOUT any flag gives `F01_Main.zip` sha1 **b7e48d31634c9c33cf19a7e8cc315eb65bbcf0af** again (20,643 entities, RESULT PASS, MEASURED after the last edit).
+`tools/kl_fa_club.py` still imports the module (`import kl_fa_bank, kl_fa_club`).
+
+### W2.9 GUESS / ASSUMED / NOT BUILT, and what the next live run (V3 on `c_bank5_fx/bank_vault`, owner away; the ini first: one `[Balance]`, one `[Bots]`, `Escort=0`) must show
+- ASSUMED, never seen: that the new TriggerBox `Box_in` fires for an AI heister (log: 'wave A01' comes in the airlock corridor GO + ~12 s + 30 s after the first bot passes the dock door; if nothing comes by GO + 71 + 30 s the box
+  did not fire and the backstop did - the latter is the same log line); that a cloned node of the clock group is updated outside the group's listed bound (the group's bound is the union of its kids' places, as for the other tops).
+- GUESS: A_BACKSTOP 80 s, the gaps 30 / 45 s, `START_CLEAR` 15 m, `POST_COVER` 4 m, `POST_ROUTE_MIN` 2 m, `POST_STATION` 4 / 3 / 2.5 m, `PRESSURE_RANGE` 60 m, `ENTER_AT` 12 s (MEASURED in three runs: 'heist stage 0 -> 1' at GO+12 .. 19 s), the 3 m/s walk of
+  the pressure model (a wave man's real way is the mesh's, much longer than the straight line: A01 needs 60 .. 90 s from the corridor to the landing).
+- `start_pressure` is a MODEL: old men at every place they may stand, wave men on a straight line, no real AI sight / hearing, no cover use; it counts lines to the eight START rows, not to a moving player. It would have shown W2's
+  difference (9 / 10 / 10 / 13 against 8) and the crossing of the yard; it does not say who would shoot first.
+- NOT BUILT: more men in the building. The interior takes four wave men at the lead's constraints (W2.2 item 3); to put more there the heisters' own stations must thin out (the dynamic step's places are every 3 m of the route) or the
+  rule `POST_STATION_MIN` must go under 2.5 m (point-blank reach 1.6 m). The 13 'start' men are still all in the garage part (`--distribute-start`, W.8): the owner's 'they all spawn in the garage part' is about THEM, not about the supply.
+- TO SEE LIVE: (1) the first minute is the 61-enemy build's again: the human idle at START is not shot before GO + 60 s, the first bot dies later than GO + 33 s (V2) at the dial of W2 (not to be compared with W2's 14 s: the dial); no 'wave' squad
+  in the yard or the dock; (2) A01 comes into the world at the airlock corridor, walks down behind the crew and stands at cover on the lower landing, A02 the same, A03 / A04 on the upper landing; B in the lobby, D on the plaza as before;
+  (3) 'tellers: shown' 2 s after the foyer box: do the bots turn to the stacks (loot lines in `[Bots] Log=2` 'record N ... $100000' at z -7200 .. -8000) and how many die there; (4) the voice: the guards' and SWAT lines are heard (66 lines were silent);
+  (5) round 2: the vault door's body back, the intact vault shown, the late van hidden until the foyer box, A01 comes again (the one-shot nodes re-armed: ASSUMED); (6) `bank_vault_bare` (L0, the load test) now has the reset and the late van.

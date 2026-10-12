@@ -773,13 +773,17 @@ def set_dash():
 def opts_now():
     return collections.OrderedDict(crew_fix2=CREW_FIX2, teller_late=TELLER_LATE, van_late=VAN_LATE, van_hide=VAN_HIDE, van_no_target=VAN_NO_TARGET,
                                    van_show=VAN_SHOW, reset=RESET, waves=WAVES, waves_extra=WAVES_EXTRA, waves_near=WAVES_NEAR,
-                                   plaza_outside=PLAZA_OUTSIDE, hall_up=HALL_UP, no_ai=NO_AI, teller_more=TELLER_MORE, waves_latch=WAVES_LATCH)
+                                   plaza_outside=PLAZA_OUTSIDE, hall_up=HALL_UP, no_ai=NO_AI, teller_more=TELLER_MORE, waves_latch=WAVES_LATCH,
+                                   waves2=WAVES2, voice=VOICE, teller_foyer=TELLER_FOYER)
 
 
 def apply_opts(o):
     """Set the module's flags from a dict (opts_now's form). -> o"""
     global CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, VAN_SHOW, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
+    global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE
     TELLER_MORE, WAVES_LATCH = bool(o.get('teller_more')), bool(o.get('waves_latch', False))
+    WAVES2, VOICE, TELLER_FOYER = bool(o.get('waves2')), bool(o.get('voice')), bool(o.get('teller_foyer'))
+    WAVE_TABLE = chain_table(v2=WAVES2)
     CREW_FIX2, TELLER_LATE, VAN_LATE = bool(o.get('crew_fix2')), bool(o.get('teller_late')), bool(o.get('van_late'))
     VAN_HIDE, VAN_NO_TARGET, VAN_SHOW = bool(o.get('van_hide', True)), bool(o.get('van_no_target', True)), float(o.get('van_show', VAN_SHOW))
     RESET, WAVES, WAVES_EXTRA, WAVES_NEAR = bool(o.get('reset')), bool(o.get('waves')), int(o.get('waves_extra', 54)), float(o.get('waves_near', 250.0))
@@ -2304,6 +2308,11 @@ def check(folder, log=print, problems=None):
     if os.path.isfile(os.path.join(folder, 'extras.json')):
         for b in waves_check(folder, lambda *a: None):
             fail('extras: ' + b[:240])
+    # ---- the voice (--voice): Dog Days cannot read IMA ADPCM speech from the stream file (re/luvsic_pass.md 1.1)
+    left = streamed_singles(folder)
+    log('  voice: %d streamed single IMA ADPCM record(s) in the built .WHD%s' % (len(left), '' if VOICE else ' (--voice is off in this build: reported, not judged)'))
+    if VOICE and left:
+        fail('voice: %d streamed single IMA ADPCM records are left (Dog Days cannot read them from the stream file; kl_voice.stream_clip refused them): %s' % (len(left), left[:3]))
     log('kl_fa_bank.check %s: %s' % (folder, 'PASS' if not bad else '%d FAILED' % len(bad)))
     return bad
 
@@ -2969,13 +2978,40 @@ P_PLAZA_L = (-3600, -700, -11800, -9900, 695, 710)
 P_PLAZA_R = (1000, 3900, -11800, -9900, 695, 710)
 
 
-def chain_table(a_links=11, b_links=5, d_links=8):
+# THE SECOND TUNING (--waves2, after run W2; re/bank_campaign.md 'Waves, after run W2'). Chain A no longer comes from the round-start timer: the
+# parked squads' first Pace is named by a box just inside the dock door (DOCK_BOX_AT: 'the crew is inside'), plus a backstop timer for a crew that never
+# passes it. Its men are not the yard's: they come into the world in the corridor behind the airlock (E_AIRLOCK, blind from the way) and stand at COVER
+# on the flights' two landings and in the vault lobby, the rooms 'underneath' that the owner asked for. MEASURED (C:/kl_scratch/vault_tune/explore.py on
+# c_bank4_fx/bank_vault, mesh + cover boxes + 3 sight rules): a post that is on the START's mesh part, 45 from a wall, within 4 m of a cover box, 15 m and blind
+# from every START row and 1.5 m from every old place, and 4 m from every heister station, exists NOWHERE in the dock, the security side, the lobby, the airlock
+# corridor or the upper landing, and 29 times on the lower landing + 1 in the cross corridor (3 .. 4 men at 2.2 .. 3 m apart); with 3 m from a station the lobby
+# gets 15 spots, with 2.5 m the lobby 38, the upper landing 4, the lower landing 33. So the planner tries 4 m, then 3 m, then POST_STATION_MIN 2.5 m (a policeman's
+# point-blank reach is 1.6 m: re/melee_damage.md) and A is four single-man links (MEASURED: a fifth finds no post, with 2 m from the crew's legs), not the first build's eleven links of 25 men.
+DOCK_BOX_AT = ((560.0, 380.0, -4800.0), (250.0, 230.0, 50.0))   # = FASpecials!PIP!EnterLootArea (the dock door's plane: z -4850 .. -4750, the doorway is at z -4706)
+DOCK_DOOR_Z = -4706.0
+A_BACKSTOP = 80.0                       # s after the start timer (the round-start event + SQUADS_AT 10 s = GO + 1.5 s): chain A starts by itself, should nobody pass the box (a crew that went round: none can). GUESS
+POST_STATION = (400.0, 300.0, 250.0)    # a post of chain A is this far from every heister station: the first the mesh allows for the whole wave
+POST_STATION_MIN = 250.0
+POST_ROUTE_MIN = 200.0                  # ... and never nearer than 2 m to a leg of the crew's way (the 3 m route rule is relaxed at cover, not dropped: re/melee_damage.md's point-blank reach is 1.6 m)
+POST_COVER = 400.0                      # ... and this near a cover box's middle (a box is ~2 m wide)
+START_CLEAR = 1500.0                    # no wave man's post, entry or walk within 15 m of a START row, none with a line to one
+P_LAND1 = (-100, 900, -9400, -8800, -175, -145)         # the flights' upper landing (floor y -160)
+P_LAND2 = (0, 800, -10800, -10300, -580, -540)          # the lower landing (floor y -560)
+P_CROSS = (-300, 300, -10800, -9300, -580, -140)        # the cross corridor between
+P_IN = (P_LAND2, P_CROSS, P_LAND1)
+SUPPLY_MIN2 = 150.0                     # the second tuning: chain A runs this long at least after its trigger (the eleven links of the first needed the yard)
+
+
+def chain_table(a_links=11, b_links=5, d_links=8, v2=False):
     """The default supply as WAVE_TABLE rows: (name, phase, GAP s since the chain's previous link (the first: since its trigger), men,
     regions it must be blind from, entry box, post box, template). Chain A: 12 s then every 35 s (11 links: the last at 362 s); chain B:
-    22 s then every 30 s, ONE man a link (second skeptic, fault 1: the lobby takes 5 men at 3 m (MEASURED, cap.py), so the same 5 are spread over 142 s instead of 46 s); chain D: 3 s then every 25 s."""
+    22 s then every 30 s, ONE man a link (second skeptic, fault 1: the lobby takes 5 men at 3 m (MEASURED, cap.py), so the same 5 are spread over 142 s instead of 46 s); chain D: 3 s then every 25 s.
+    v2 (WAVES2): chain A is four single-man links, 30 s then every 45 s after the dock box (the last at 165 s), entries E_AIRLOCK, posts P_IN."""
     rows = []
     A_POSTS = ((P_DOCK, P_YARD), (P_YARD, P_DOCK), (P_ARMOURY, P_DOCK, P_YARD))
-    for i in range(a_links):
+    for i in range(4 if v2 else 0):
+        rows.append(('A%02d' % (i + 1), 'A', 30.0 if i == 0 else 45.0, 1, BLIND_WAY, E_AIRLOCK, P_IN, G4 + 'Guards_Reinforcement_01a'))
+    for i in range(0 if v2 else a_links):
         rows.append(('A%02d' % (i + 1), 'A', 12.0 if i == 0 else 35.0, 3 if i < 3 else 2, BLIND_WAY + BLIND_OUT, (E_YARD_E, E_YARD_W)[i % 2],
                      A_POSTS[i % 3], G4 + 'Guards_Reinforcement_01a'))
     for i in range(b_links):
@@ -3002,8 +3038,9 @@ def link_times(rows):
     return out
 
 
-WAVE_TRIGGER = {'A': 'start timer', 'B': 'beat box', 'D': None}          # D: PLAZA_BOX (not a ROLE)
+WAVE_TRIGGER = {'A': 'start timer', 'B': 'beat box', 'D': None}          # D: PLAZA_BOX (not a ROLE); WAVES2: A is the dock box of the clock group (DOCK_BOX) + the backstop
 WAVE_LIST = {'A': ('TriggerDelay2', 4), 'B': ('TriggerBox', 17), 'D': ('TriggerBox', 17)}
+DOCK_BOX, DOCK_LATE = CLOCK + '\\Box_in', CLOCK + '\\Timer_A_late'
 RESET_CANNOT = ('MatPosAnim end poses: the vault door, the six rods (and the leaves with --doors-animate); the alarm lamps\' glow (VertAnim, '
                 'AIDWrapper \'Activate\'); the Explode of the blast (one-shot); the music layers (PlayMusic: the round-start list starts them again)')
 
@@ -3030,6 +3067,7 @@ class Sight:
         self.bisect, self.route = bisect, kl_route
         self.B, self.nav = B, F.Nav(B.scene.nav)
         self.g = kl_route.load(folder).grid('sight')
+        self.grids = {'sight': self.g}                  # the other two rules are made where they are asked for (sees_by): 'ray' = flags & 0x20, 'hero' = flags & 0x28
         self.home = self.nav.part[self.nav.at(250, 200, -4350)[0]]
         sc = B.sc
         obs = []
@@ -3064,8 +3102,16 @@ class Sight:
             return 'lobby'
         return 'hall' if z > -9450 else 'plaza'
 
-    def ray(self, a, b):
-        g, CELL = self.g, self.route.CELL
+    def grid_of(self, rule):
+        """The collision grid of a sight rule: 'sight' = the module's own (flag 0x10 blocks, ASSUMED from shape names), 'ray' = third_party/anp/
+        scripts/hvk_ray.py's rule for a player's ray (a part blocks when flags & 0x20: MEASURED against five live rays), 'hero' = the same with the
+        hero-only walls (flags & 0x28)."""
+        if rule not in self.grids:
+            self.grids[rule] = self.route.load(self.B.folder).grid({'ray': 'npc', 'hero': 'hero'}[rule])
+        return self.grids[rule]
+
+    def ray(self, a, b, rule='sight'):
+        g, CELL = (self.g if rule == 'sight' else self.grid_of(rule)), self.route.CELL
         dx, dy, dz = b[0] - a[0], b[1] - a[1], b[2] - a[2]
         n = int(math.sqrt(dx * dx + dy * dy + dz * dz) / 6.0) + 1
         k0 = min(n // 2, 5)
@@ -3091,6 +3137,13 @@ class Sight:
         e = (o[0], o[1] + 160.0, o[2])
         return self.ray(e, (p[0], p[1] + 120.0, p[2])) or self.ray(e, (p[0], p[1] + 175.0, p[2]))
 
+    def sees_by(self, o, p, rules=('sight', 'ray', 'hero')):
+        """The rules (of RULES) under which a man at o sees a man at p (eye 160 over the feet, target 120 and 175, SIGHT_FAR)."""
+        if math.dist(o, p) > SIGHT_FAR:
+            return []
+        e = (o[0], o[1] + 160.0, o[2])
+        return [r for r in rules if self.ray(e, (p[0], p[1] + 120.0, p[2]), r) or self.ray(e, (p[0], p[1] + 175.0, p[2]), r)]
+
     def seen_by(self, p, regions):
         """-> (region, observer) of the first crew place of the regions that sees the point p, else None."""
         for r in regions:
@@ -3111,15 +3164,159 @@ def lattice(box, step):
         x += step
 
 
+# ------------------------------------------------------------------ guns on the START rows (run W2's diagnosis, and a check)
+# Run W2 (2026-10-12): the idle human was dead 35 s after GO in the start yard and three AI heisters were dead at GO + 14 / + 25 / + 27 s; with the
+# 61 enemies alone (run V2) the human lived the whole run. MEASURED on the built level (start_pressure): chain A's first wave stood its three
+# posts 7.5 .. 12 m from the START rows (A01: (600, 200, -5100), (0, 200, -4850), (600, 200, -5500); the START rows are at z -4350) and the next
+# wave's posts 2.5 .. 7 m from them: the wave posts were only kept 2.5 m from 'a heister station', and the START rows are stations of the
+# dock region of S.places but the post rule `far` only tests the stations of the regions the wave names. start_pressure counts, for a time T after
+# the GO, the men that are in the world and bear on a START row (distance <= PRESSURE_RANGE and a line free under the module's sight rule, the
+# player ray 0x20 or the player ray with hero-only walls 0x28).
+GO_AFTER_EVENT = 8.5                    # s from the round-start event to the GO (kl_fa_author.BLAST_DELAY's note: 8.4 .. 8.8). READ
+MEN_SPEED = 300.0                       # a walking man, cm/s. ASSUMED (the module's)
+ENTER_AT = 12.0                         # s after the GO at which the first criminal passes the dock door (MEASURED, runs V2 / W1 / W2: 'heist stage 0 -> 1' at GO + 12 .. 19 s)
+PRESSURE_RANGE = 6000.0                 # a gun is said to bear on a row within 60 m (the research: the AI's fire is hardly aimed beyond that). GUESS
+PRESSURE_TIMES = (12.0, 25.0, 35.0, 60.0)
+VOICE = False                           # '--voice': the build is made with kl_snd.VOICE on: every streamed single IMA ADPCM line becomes an in-memory record (re/luvsic_pass.md 1.1)
+TELLER_FOYER, TELLER_FOYER_S = False, 2.0       # '--teller-foyer' (WAVES2): the teller stacks are shown TELLER_FOYER_S after the FOYER box, not 20 s after the plaza box
+WAVES2 = False                          # '--waves2': the second tuning (chain A from the dock box, inside posts, registers from the foyer): see the section 'Waves, after run W2'
+
+
+def streamed_singles(folder):
+    """The streamed single IMA ADPCM records (0x11, one clip, not a language file's) of the folder's built .WHD -> sorted names (kl_fa_club's way of counting)."""
+    import kl_whd, kl_snd
+    f = [x for x in os.listdir(folder) if x.lower().endswith('_main.whd')]
+    if not f:
+        return []
+    b = open(os.path.join(folder, f[0]), 'rb').read()
+    return sorted(kl_snd.cs(b, r['name']).decode('latin1').replace('\\', '/') for r in kl_whd.records('dd', b).values()
+                  if r['fmt'] & kl_whd.STREAMED and not r['fmt'] & kl_whd.LANGFILE and not r['fmt'] >> 24 and r['fmt'] & 0xffff == 0x11)
+
+
+def start_men(B, rep=None, waves2=False):
+    """Every man of the level that can fire on the start yard in the first minute -> [dict(kind, name, t_in, places, post)]. t_in is in seconds after the
+    round-start event: the old squads of stage 'start' and 'down' come at SQUADS_AT, a wave at its chain's trigger plus its delay (chain A: the round-start
+    timer; with WAVES2 the dock box, ENTER_AT + GO_AFTER_EVENT after the event at the earliest). `places` are the points a man may stand at (his
+    start and every defend place of his squad: the upper bound), `post` None for an old man, (entry, post) for a wave man."""
+    sc, out = B.sc, []
+    for t in sc.tops():
+        if STAGE.get(sc.names[t]) in ('start', 'down'):
+            acts = [B.at(k) for k in range(t, sc.end[t]) if sc.cls(k) == 'ZFFActor']
+            posts = [B.at(k) for k in range(t + 1, sc.end[t]) if sc.cls(k) == 'ZBoxPrimitive' and sc.names[k].startswith('Pos#')]
+            for i, a in enumerate(acts):
+                out.append(dict(kind='old', name='%s#%d' % (sc.names[t].split('!')[-1], i + 1), t_in=SQUADS_AT, places=[a] + posts, post=None))
+    for w in (rep or {}).get('waves', ()):
+        base = 0.0
+        if w['phase'] == 'A' and waves2:
+            base = ENTER_AT + GO_AFTER_EVENT
+        elif w['phase'] == 'B':
+            base = 40.0 + GO_AFTER_EVENT            # the ante-room box: 'some 35 - 40 s after GO' (the beat's own note)
+        elif w['phase'] == 'D':
+            base = 190.0 + GO_AFTER_EVENT
+        for j, (e, q) in enumerate(w['men']):
+            out.append(dict(kind='wave', name='%s_%d' % (w['name'], j + 1), t_in=base + w['delay'], places=[tuple(e), tuple(q)], post=(tuple(e), tuple(q)), phase=w['phase']))
+    return out
+
+
+def start_pressure(S, men, times=PRESSURE_TIMES, rules=('sight', 'ray', 'hero'), rng=PRESSURE_RANGE):
+    """For each time T (s after the GO): the men in the world that bear on a START row -> {T: dict(in_world, bear: {rule: [names]}, any: [names], near15: n within
+    15 m with a line, nearest: (dist, name, row))}. A man who walks (a wave man before he arrives) is taken on the straight line from his entry to his post; an old
+    man at every place he may stand (an upper bound, the same for both builds)."""
+    rows = [tuple(p) for p in START]
+    res = collections.OrderedDict()
+    for T in times:
+        te = T + GO_AFTER_EVENT
+        inw, bear, anyn, near, nearest = 0, {r: [] for r in rules}, [], 0, None
+        for m in men:
+            if te < m['t_in']:
+                continue
+            inw += 1
+            if m['post']:
+                e, q = m['post']
+                arr = m['t_in'] + math.dist(e, q) / MEN_SPEED
+                f = 1.0 if te >= arr else max(0.0, (te - m['t_in']) * MEN_SPEED / max(math.dist(e, q), 1.0))
+                where = [tuple(e[a] + (q[a] - e[a]) * f for a in range(3))]
+            else:
+                where = m['places']
+            hit, close = set(), False
+            for o in where:
+                for r in rows:
+                    d = math.dist(o, r)
+                    if d > rng:
+                        continue
+                    see = S.sees_by(o, r, rules)
+                    if see:
+                        hit.update(see)
+                        if nearest is None or d < nearest[0]:
+                            nearest = (round(d), m['name'], tuple(round(x) for x in r))
+                        close = close or d <= 1500.0
+            for r_ in hit:
+                bear[r_].append(m['name'])
+            if hit:
+                anyn.append(m['name'])
+            near += 1 if close else 0
+        res[T] = dict(in_world=inw, bear=bear, any=anyn, near15=near, nearest=nearest)
+    return res
+
+
+def start_guns(folders, log=print):
+    """'kl_fa_bank.py start-guns <folder> [<folder> ...]': start_pressure on each built folder (waves taken from its extras.json)."""
+    import json, kl_fa_bots as KB
+    out = {}
+    for fo in folders:
+        B = KB.Built(fo)
+        pj = os.path.join(fo, 'extras.json')
+        rep = json.load(open(pj)) if os.path.isfile(pj) else None
+        o = read_opts(fo)
+        S = Sight(fo, B, lambda *a: None)
+        men = start_men(B, rep, bool(o.get('waves2')))
+        res = start_pressure(S, men)
+        out[fo] = res
+        log('start_guns %s (%d old men, %d wave men; waves2 %s):' % (fo, sum(m['kind'] == 'old' for m in men), sum(m['kind'] == 'wave' for m in men), bool(o.get('waves2'))))
+        for T, r in res.items():
+            log('  GO+%3.0f s: %3d men in the world; bearing on a START row within %d m: sight %d, ray(0x20) %d, ray+hero(0x28) %d; any rule %d (%s); within 15 m with a line: %d; nearest %s' % (
+                T, r['in_world'], PRESSURE_RANGE / 100, len(r['bear']['sight']), len(r['bear']['ray']), len(r['bear']['hero']), len(r['any']),
+                ' '.join(r['any'])[:140], r['near15'], r['nearest']))
+    return out
+
+
+def seg_dist(p, a, b):
+    """3D distance of the point p to the segment a-b."""
+    ab = [b[i] - a[i] for i in range(3)]
+    L2 = sum(x * x for x in ab)
+    t = 0.0 if L2 < 1e-9 else max(0.0, min(1.0, sum((p[i] - a[i]) * ab[i] for i in range(3)) / L2))
+    return math.dist(p, tuple(a[i] + ab[i] * t for i in range(3)))
+
+
+def start_ok(S, p):
+    """A wave man's entry or post keeps START_CLEAR from every START row and has no line to one under any of the three sight rules (run W2's fault)."""
+    rows = [tuple(q) for q in START]
+    return all(math.dist(p, r) >= START_CLEAR for r in rows) and not any(S.sees_by(p, r) for r in rows)
+
+
+def cover_dist(B, p, _cache={}):
+    """Distance of p to the nearest shown cover box of the level on about its floor (kl_fa_bots_dyn.cover_boxes)."""
+    import kl_fa_bots_dyn as KD
+    key = id(B)
+    if key not in _cache:
+        _cache.clear()
+        _cache[key] = [c['at'] for c in KD.cover_boxes(B) if not c['hidden']]
+    return min([math.dist(p, c) for c in _cache[key] if abs(c[1] - p[1]) < 200] or [1e9])
+
+
 def wave_plan(B, S, o, log=print):
     """The waves as built: [dict(name, phase, delay, template, men=[(entry, post)])] chosen in WAVE_TABLE's boxes, in table order
     while the men fit WAVES_EXTRA. An entry: on the START's mesh part, WAVE_WALL from a wall, blind from the wave's regions
     (Sight), WAVES_NEAR (phase D: CREW_CLEAR) from every crew place, WAVE_GAP from every entry chosen. A post: on the mesh,
     WAVE_WALL from a wall, that far from the crew's places, POST_OLD from an existing squad's place, POST_GAP from every post
     chosen, LANE_CLEAR from the van's drive. Nobody is taken out of the 61 already there. A wave that finds no place for
-    its men is an ERROR (the tool does not build a smaller wave unasked)."""
+    its men is an ERROR (the tool does not build a smaller wave unasked).
+    WAVES2 (the second tuning, after run W2): every entry, post and walk also keeps START_CLEAR from the START rows and has no line to one (start_ok);
+    chain A's posts are AT COVER (POST_COVER from a cover box) and, in place of the 3 m route rule, POST_STATION from every heister station (the first
+    of 4 m, 3 m, 2.5 m the mesh allows for the whole wave)."""
     import kl_fa_bots as F
     sc, nav = B.sc, S.nav
+    v2 = bool(o.get('waves2'))
     old = [B.at(k) for t in sc.tops() if STAGE.get(sc.names[t]) or sc.names[t] in HALL
            for k in range(t + 1, sc.end[t]) if sc.cls(k) in ('ZFFActor', 'ZBoxPrimitive')]
     drive = ESC.Poly([tuple(p) for p in (PLAN or plan_of(os.path.join(B.folder, 'van.json')))['path']])
@@ -3144,7 +3341,7 @@ def wave_plan(B, S, o, log=print):
             if not far(p) or route_dist(p) < ROUTE_ENTRY[phase] or any(math.dist(p, q) < WAVE_GAP for q in [e for e, ph, dl in used_e if ph == phase and abs(dl - delay) < ENTRY_REUSE] + ents):
                 continue
             tries += 1
-            if S.seen_by(p, blind):
+            if S.seen_by(p, blind) or (v2 and not start_ok(S, p)):
                 continue
             ents.append(p)
             if len(ents) == n:
@@ -3152,32 +3349,53 @@ def wave_plan(B, S, o, log=print):
         if len(ents) < n:
             raise ValueError('kl_fa_bank.wave_plan: wave %s found %d of %d entries unseen from %s in %s (%d tried)' % (name, len(ents), n, blind, ebox, tries))
         mid = tuple(sum(e[a] for e in ents) / n for a in range(3))
-        for gap in POST_GAPS[phase]:
-            posts = []
-            boxes = pbox if isinstance(pbox[0], tuple) else (pbox,)          # a tuple of boxes: the first is preferred, the others take over when it is full
-            for x, y, z, dy in [c for b_ in boxes for c in sorted(lattice(b_, 50), key=(lambda c: route_dist(c[:3])) if phase in 'AB' else (lambda c: math.dist(c[:3], mid)))]:
-                hit = nav.at(x, y, z, dy, S.home)
-                if hit is None or nav.clearance(x, hit[1], z) < POST_WALL:
-                    continue
-                p = (x, hit[1], z)
-                if not far(p) or route_dist(p) < ROUTE_POST[phase] or any(math.dist(p, q) < (POST_OLD_B if phase == 'B' else POST_OLD) for q in old) or any(math.dist(p, q) < gap for q in used_p + posts):
-                    continue
-                if abs(drive.project(p)[1]) < LANE_CLEAR and phase == 'D':
-                    continue
-                posts.append(p)
+        at_cover = v2 and phase == 'A'
+        posts, station = [], None
+        boxes = pbox if isinstance(pbox[0], tuple) else (pbox,)          # a tuple of boxes: the first is preferred, the others take over when it is full
+        pool = [c for b_ in boxes for c in sorted(lattice(b_, 50), key=(lambda c: route_dist(c[:3])) if phase in 'AB' else (lambda c: math.dist(c[:3], mid)))]
+        for stn in (POST_STATION if at_cover else (None,)):
+            for gap in POST_GAPS[phase]:
+                posts = []
+                for x, y, z, dy in pool:
+                    hit = nav.at(x, y, z, dy, S.home)
+                    if hit is None or nav.clearance(x, hit[1], z) < POST_WALL:
+                        continue
+                    p = (x, hit[1], z)
+                    if at_cover:
+                        if cover_dist(B, p) > POST_COVER or min(math.dist(p, q) for q in S.places) < stn or route_dist(p) < POST_ROUTE_MIN:
+                            continue
+                    elif not far(p) or route_dist(p) < ROUTE_POST[phase]:
+                        continue
+                    if any(math.dist(p, q) < (POST_OLD_B if phase == 'B' else POST_OLD) for q in old) or any(math.dist(p, q) < gap for q in used_p + posts):
+                        continue
+                    if abs(drive.project(p)[1]) < LANE_CLEAR and phase == 'D':
+                        continue
+                    if v2 and not start_ok(S, p):
+                        continue
+                    posts.append(p)
+                    if len(posts) == n:
+                        break
                 if len(posts) == n:
+                    got_gap = gap
                     break
             if len(posts) == n:
+                station = stn
                 break
         if len(posts) < n:
-            raise ValueError('kl_fa_bank.wave_plan: wave %s found %d of %d posts in %s (%d from the crew, %d from old places, %d from each other, %d from the way)' % (
-                name, len(posts), n, pbox, near, POST_OLD, POST_GAP_MIN, ROUTE_POST[phase]))
-        log('  waves: %s posts %d apart, %d..%d from the way of the crew' % (name, gap, min(route_dist(q) for q in posts), max(route_dist(q) for q in posts)))
+            raise ValueError('kl_fa_bank.wave_plan: wave %s found %d of %d posts in %s (%d from the crew, %d from old places, %d from each other, %d from the way%s)' % (
+                name, len(posts), n, pbox, near, POST_OLD, POST_GAP_MIN, ROUTE_POST[phase], '; at cover within %d and %d from a heister station' % (POST_COVER, POST_STATION_MIN) if at_cover else ''))
+        gap = got_gap
+        log('  waves: %s posts %d apart%s, %d..%d from the way of the crew' % (name, gap, ', %d from every heister station' % station if station else '', min(route_dist(q) for q in posts), max(route_dist(q) for q in posts)))
         # a man to the nearest free post (greedy), so that nobody crosses another's way
         pairs, free = [], list(posts)
         for e in ents:
             q = min(free, key=lambda q: math.dist(e, q)); free.remove(q); pairs.append((e, q))
-        plan.append(dict(name=name, phase=phase, delay=delay, gap=gap_s, template=template, blind=list(blind), men=pairs, post_gap=gap))
+        if v2:
+            for e, q in pairs:
+                d_ = min(seg_dist(r, e, q) for r in START)
+                if d_ < START_CLEAR:
+                    raise ValueError('kl_fa_bank.wave_plan: wave %s: the walk %s -> %s passes %d from a START row (%d wanted)' % (name, tuple(map(round, e)), tuple(map(round, q)), d_, START_CLEAR))
+        plan.append(dict(name=name, phase=phase, delay=delay, gap=gap_s, template=template, blind=list(blind), men=pairs, post_gap=gap, post_station=station))
         used_e += [(e, phase, delay) for e in ents]; used_p += posts; men += n
         log('  waves: %s (phase %s, +%.0f s): %d men in %s, %s' % (name, phase, delay, n, 'x %d..%d z %d..%d' % tuple(ebox[:4]), '; '.join(
             '(%d,%d,%d)->(%d,%d,%d) %d m' % (*e, *q, math.dist(e, q) / 100.0) for e, q in pairs)))
@@ -3237,16 +3455,21 @@ def extras_make(B, o, plan, show, hide, stacks=()):
     sc = B.sc
     M = KB.Maker()
     node = lambda path: sc.resolve(path)[0]
-    clock = FED.clone_built(M, B, node(R + KB.SQUAD + 'Squad#02'), CLOCK)    # a plain group: a heister squad's group less its script (a build without enemies has it too)
+    # a plain group: a heister squad's group less its script (a build without enemies has it too); the delivered bare folder has no AI heisters yet
+    # (it is the round-2 reset + late van only, no chain): the dock patrol's group is the same kind of node (ZGROUP + ZSquadScript, cleared here)
+    src_ = sc.resolve(R + KB.SQUAD + 'Squad#02') or sc.resolve(R + next(iter(STAGE)))
+    clock = FED.clone_built(M, B, src_[0], CLOCK)
     clock.ctrls = []
     M.place(clock, (0.0, 0.0, 0.0))
     tops = [clock]
     rep = collections.OrderedDict(timers=collections.defaultdict(list), waves=[], singles=[])
+    made = {}
     def single(role, name, ctrl, fields):
         n = clock.add(FED.clone_built(M, B, node(R + ROLE[role]), name))
         M.place(n, (0.0, 0.0, 0.0))
         M.set(n, ctrl, fields)
         rep['singles'].append(name)
+        made[name] = n
         return R + CLOCK + '\\' + name
     out = {}
     if o.get('reset'):
@@ -3259,7 +3482,11 @@ def extras_make(B, o, plan, show, hide, stacks=()):
         out['van_c'] = single('start timer', 'Timer_van_c', 'TriggerDelay2', {0: float(VAN_FOYER), 4: [v]})
     if stacks:
         t = single('loot on', 'Teller_show', 'ActivateGeom', {0: 'AITrigger', 1: list(stacks)})
-        out['teller'] = single('start timer', 'Timer_teller', 'TriggerDelay2', {0: float(TELLER_SHOW), 4: [t]})
+        if o.get('teller_foyer'):           # the owner's wish (hold the front, get paid): shown from the FOYER box; the plaza box is the backstop
+            out['teller'] = single('start timer', 'Timer_teller', 'TriggerDelay2', {0: float(TELLER_FOYER_S), 4: [t]})
+            out['teller_c'] = single('start timer', 'Timer_teller_c', 'TriggerDelay2', {0: 1.0, 4: [t]})
+        else:
+            out['teller'] = single('start timer', 'Timer_teller', 'TriggerDelay2', {0: float(TELLER_SHOW), 4: [t]})
     sq2 = lambda tail='': R + KB.SQUAD + 'Squad#02' + tail
     form = '\\020_DefendBehaviour_rout_merc_fight_left'
     cp = lambda n: R + CLOCK + '\\' + n
@@ -3300,11 +3527,18 @@ def extras_make(B, o, plan, show, hide, stacks=()):
         fast = None
         if i > 0 and o.get('waves_latch', WAVES_LATCH):
             fast = single('start timer', 'Fast_' + w['name'], 'TriggerDelay2', {0: LATCH_DELAY, 4: [go]})
-        if i == 0:
+        if i == 0 and not (o.get('waves2') and w['phase'] == 'A'):
             rep['timers'][w['phase']].append(pace)
         rep['waves'].append(dict(name=w['name'], phase=w['phase'], squad=me, timer=pace, pace=pace, go=go, fast=fast, delay=w['delay'], gap=w['gap'], template=w['template'],
                                  post_gap=w.get('post_gap'), men=[[list(map(round, e)), list(map(round, q))] for e, q in w['men']]))
         tops.append(top)
+    if o.get('waves2') and by_phase.get('A'):       # chain A starts when the crew is inside: a box behind the dock door (+ the backstop timer)
+        pace = cp('Pace_' + by_phase['A'][0]['name'])
+        out['dock'] = single('speak box', 'Box_in', 'TriggerBox', {17: [pace]})
+        bn = made['Box_in']
+        M.place(bn, DOCK_BOX_AT[0])
+        M.set(bn, None, {'ZBoxPrimitive[0]': DOCK_BOX_AT[1][0], 'ZBoxPrimitive[1]': DOCK_BOX_AT[1][1], 'ZBoxPrimitive[2]': DOCK_BOX_AT[1][2]})
+        out['late'] = single('start timer', 'Timer_A_late', 'TriggerDelay2', {0: float(A_BACKSTOP), 4: [pace]})
     rep['timers'] = dict(rep['timers'])
     rep.update(out)
     return M, tops, rep
@@ -3366,7 +3600,13 @@ def extras(src, dst, log=print):
         ci = A.ctrl_of(Jn, k, 'ActivateGeom')
         keep = [x for x in values(Jn, k, 'ActivateGeom')[1] if x not in stacks]
         kl_fa.edit(Jn, k, ci, lambda us: A.setv(Jn, us, 1, keep))
-        wired['teller'] = add_to(R + PLAZA_BOX, 'TriggerBox', 17, [rep['teller']])
+        if 'teller_c' in rep:
+            wired['teller'] = add_to(R + ROLE['speak box'], 'TriggerBox', 17, [rep['teller']])
+            wired['teller_c'] = add_to(R + PLAZA_BOX, 'TriggerBox', 17, [rep['teller_c']])
+        else:
+            wired['teller'] = add_to(R + PLAZA_BOX, 'TriggerBox', 17, [rep['teller']])
+    if 'late' in rep:
+        wired['late'] = add_to(R + ROLE['start timer'], 'TriggerDelay2', 4, [rep['late']])
     if 'reset' in rep:
         wired['reset'] = add_to(R + ROLE['monitor'], 'AIMonitor', 2, rep['reset'], first=True)
     prp = Jn.p.serialize()
@@ -3561,6 +3801,12 @@ def waves_check(folder, log=print):
                     fail('wave %s: %s at %s is %d from a heister station (%d wanted)' % (w['name'], nm, P(p), near_, near))
                 if route_dist(p) < ROUTE_ENTRY[w['phase']]:
                     fail('wave %s: %s comes into the world at %s, %d from a leg of the way of the crew (%d wanted)' % (w['name'], nm, P(p), route_dist(p), ROUTE_ENTRY[w['phase']]))
+                # run W2's fault: nobody comes into the world with a line to the START rows (where the human and the crew stand at the GO) or within 15 m of them
+                if min(math.dist(p, r) for r in START) < START_CLEAR:
+                    fail('wave %s: %s comes into the world at %s, %d from a START row (%d wanted)' % (w['name'], nm, P(p), min(math.dist(p, r) for r in START), START_CLEAR))
+                lines = sorted({rl for r in START for rl in S.sees_by(p, tuple(r))})
+                if lines:
+                    fail('wave %s: %s comes into the world at %s WITH A LINE to a START row (%s)' % (w['name'], nm, P(p), ' '.join(lines)))
                 for q, ph, dl, wn in every_entry:
                     if ph == w['phase'] and abs(dl - w['delay']) < ENTRY_REUSE and math.dist(p, q) < WAVE_GAP:
                         fail('wave %s: %s at %s is %d from the entry of a man of wave %s that comes at the same time' % (w['name'], nm, P(p), math.dist(p, q), wn))
@@ -3574,8 +3820,21 @@ def waves_check(folder, log=print):
                 for q in every_post:
                     if math.dist(p, q) < POST_GAP_MIN:
                         fail('wave %s: post %s SHARED: %d from another wave post (%d wanted)' % (w['name'], P(p), math.dist(p, q), POST_GAP_MIN))
-                if route_dist(p) < ROUTE_POST[w['phase']]:
+                v2a = bool(o.get('waves2')) and w['phase'] == 'A'
+                if route_dist(p) < ROUTE_POST[w['phase']] and not v2a:
                     fail('wave %s: post %s stands %d from a leg of the way of the crew (%d wanted)' % (w['name'], P(p), route_dist(p), ROUTE_POST[w['phase']]))
+                if v2a:                        # the route rule is relaxed ONLY at cover and POST_STATION_MIN from every heister station
+                    if cover_dist(B, p) > POST_COVER:
+                        fail('wave %s: post %s is %d from a cover box (%d wanted: chain A stands at cover)' % (w['name'], P(p), cover_dist(B, p), POST_COVER))
+                    if route_dist(p) < POST_ROUTE_MIN - 1:
+                        fail('wave %s: post %s stands %d from a leg of the way of the crew (%d wanted even at cover: the point-blank reach is 160)' % (w['name'], P(p), route_dist(p), POST_ROUTE_MIN))
+                    if min(math.dist(p, q) for q in S.places) < POST_STATION_MIN - 1:
+                        fail('wave %s: post %s is %d from a heister station (%d wanted)' % (w['name'], P(p), min(math.dist(p, q) for q in S.places), POST_STATION_MIN))
+                if min(math.dist(p, r) for r in START) < START_CLEAR:
+                    fail('wave %s: post %s is %d from a START row (%d wanted)' % (w['name'], P(p), min(math.dist(p, r) for r in START), START_CLEAR))
+                lines = sorted({rl for r in START for rl in S.sees_by(p, tuple(r))})
+                if lines:
+                    fail('wave %s: post %s has a LINE to a START row (%s): the man would fire on the human at the GO' % (w['name'], P(p), ' '.join(lines)))
                 every_post.append(p)
                 if min(math.dist(p, q) for q in ref) < near:
                     fail('wave %s: post %s is %d from a heister station (%d wanted)' % (w['name'], P(p), min(math.dist(p, q) for q in ref), near))
@@ -3602,6 +3861,13 @@ def waves_check(folder, log=print):
             first = not chains[w['phase']] or chains[w['phase']][0] is w
             tb = [kk for kk in named_by.get(w['pace'], ())]
             want_pace = [node(ph_trig)] if first else [node(chains[w['phase']][chains[w['phase']].index(w) - 1]['go'])]
+            if first and w['phase'] == 'A' and o.get('waves2'):             # the dock box and the backstop timer, no one else
+                want_pace = sorted(x for x in (node(R + DOCK_BOX), node(R + DOCK_LATE)) if x)
+                tb = sorted(tb)
+            for e_, q_ in w['men']:                                          # the walk from the entry to the post keeps 15 m from the START rows
+                dd_ = min(seg_dist(r, e_, q_) for r in START)
+                if dd_ < START_CLEAR:
+                    fail('wave %s: the walk %s -> %s passes %d from a START row (%d wanted)' % (w['name'], tuple(e_), tuple(q_), dd_, START_CLEAR))
             if tb != want_pace:
                 fail('wave %s: its Pace is named by %s, only by %s is wanted' % (w['name'], [sc.path[x][5:] for x in tb], 'the trigger ' + ph_trig if first else 'the previous link\'s Go'))
             pv = values(sc, node(w['pace']), 'TriggerDelay2') if node(w['pace']) else None
@@ -3641,10 +3907,45 @@ def waves_check(folder, log=print):
             if t > SUPPLY_MAX:
                 fail('chain %s runs %g s: past SUPPLY_MAX (%g s), a chain must end' % (ph, t, SUPPLY_MAX))
             log('  chain %s: %d links, the first %g s after its trigger, the last %g s, %d men; Pace gaps %s' % (ph, len(ch), ch[0]['delay'], t, sum(len(w['men']) for w in ch), sorted({w['gap'] for w in ch})))
-        if chains['A'] and chains['A'][-1]['delay'] < SUPPLY_MIN:
-            fail('the supply ends at %g s, before SUPPLY_MIN (%g s): chain A alone must outlast a human who takes his time' % (chains['A'][-1]['delay'], SUPPLY_MIN))
+        floor = SUPPLY_MIN2 if o.get('waves2') else SUPPLY_MIN
+        if chains['A'] and chains['A'][-1]['delay'] < floor:
+            fail('the supply ends at %g s, before the floor (%g s): chain A alone must outlast a human who takes his time' % (chains['A'][-1]['delay'], floor))
         elif not chains['A']:
             fail('no chain A: nothing keeps the police coming from the start of the round')
+        # ---- run W2's two other faults. (1) NO WAVE BEFORE THE CREW HAS LEFT THE YARD: chain A is named by the dock box (behind the door, criminals only, once) and
+        # by a backstop of A_BACKSTOP s after the start timer - not by the round-start timer itself, which put three men among the START rows at GO + 3.5 s
+        if chains['A']:
+            first_ = chains['A'][0]
+            by_ = sorted(sc.path[x][5:] for x in named_by.get(first_['pace'], ()))
+            if not o.get('waves2'):
+                fail('chain A starts from the round-start timer (%s): a wave comes into the yard while the crew stands in it (run W2); build with --waves2' % by_)
+            else:
+                bk = node(R + DOCK_BOX)
+                bv = values(sc, bk, 'TriggerBox') if bk else None
+                if bv is None:
+                    fail('chain A: the dock box %s is not in the level' % DOCK_BOX)
+                else:
+                    bp, bh = B.at(bk), kl_fa.node_values(sc, bk)[8:11]
+                    if bv[17] != [first_['pace']] or bv[14] != 'ECPS_FA_MERCONLY' or bv[BOX_PER_MAN] != 0:
+                        fail('chain A: the dock box fires %r for %r (once = %r): only %s, criminals only, once, is wanted' % (bv[17], bv[14], bv[BOX_PER_MAN], first_['pace']))
+                    if bp[2] + bh[2] >= DOCK_DOOR_Z - 20:
+                        fail('chain A: the dock box reaches z %d, the dock door is at z %d: it must lie wholly beyond the door (the crew has left the yard)' % (bp[2] + bh[2], DOCK_DOOR_Z))
+                    lt = node(R + DOCK_LATE)
+                    lv_ = values(sc, lt, 'TriggerDelay2') if lt else None
+                    if lv_ is None or lv_[4] != [first_['pace']] or lv_[0] < 60.0 or [sc.path[x][5:] for x in named_by.get(R + DOCK_LATE, ())] != [sc.path[node(R + ROLE['start timer'])][5:]]:
+                        fail('chain A: the backstop timer is missing, under 60 s, or not named by the start timer alone')
+                    log('  chain A: starts when a criminal passes the dock box (%d, %d, %d) half %s, or at the latest %g s after the start timer; first wave %g s later' % (*[round(v) for v in bp], tuple(round(v) for v in bh), A_BACKSTOP, first_['gap']))
+        # (2) GUNS ON THE START ROWS in the first minute: the waves add none to the 61 enemies' (start_pressure, the three sight rules)
+        men_ = start_men(B, rep, bool(o.get('waves2')))
+        all_ = start_pressure(S, men_)
+        old_ = start_pressure(S, [m_ for m_ in men_ if m_['kind'] == 'old'])
+        for T_ in all_:
+            extra_ = [n_ for n_ in all_[T_]['any'] if n_ not in old_[T_]['any']]
+            if extra_ or all_[T_]['near15'] > old_[T_]['near15']:
+                fail('GO+%g s: the waves add %d gun(s) bearing on a START row (%s) and %d within 15 m with a line: the 61 enemies alone bear %d (%d within 15 m)' % (
+                    T_, len(extra_), ' '.join(extra_[:4]), all_[T_]['near15'] - old_[T_]['near15'], len(old_[T_]['any']), old_[T_]['near15']))
+        log('  guns on the START rows (any of the three sight rules, within %d m): GO+%s s: with the waves %s, the 61 enemies alone %s' % (
+            PRESSURE_RANGE / 100, '/'.join('%g' % T_ for T_ in all_), '/'.join(str(len(all_[T_]['any'])) for T_ in all_), '/'.join(str(len(old_[T_]['any'])) for T_ in old_)))
         # no loop of timers without a delay: every TriggerDelay2 of the clock group has a delay, and no node of the group names a node that comes before it in a chain
         for k_ in range(1, len(sc.nodes)):
             if sc.path[k_].startswith(R + CLOCK + '\\') and sc.cls(k_) == 'ZBoxPrimitive' and kl_fa.has(sc, k_, 'TriggerDelay2'):
@@ -3669,9 +3970,18 @@ def waves_check(folder, log=print):
         if [s_ for s_ in lo if s_ in want]:
             fail('TELLER_LATE: the loot list of the beat still shows %d teller stack(s)' % len([s_ for s_ in lo if s_ in want]))
         tt = node(R + CLOCK + '\\Timer_teller')
-        if tt is None or [kk for kk in named_by.get(R + CLOCK + '\\Timer_teller', ())] != [node(R + PLAZA_BOX)]:
-            fail('TELLER_LATE: the teller timer is not named by the plaza box alone')
-        log('  tellers: %d stacks hidden at the load, shown %g s after the plaza box (the crew has crossed the hall), not by the beat' % (len(want), TELLER_SHOW))
+        if o.get('teller_foyer'):
+            tc = node(R + CLOCK + '\\Timer_teller_c')
+            if tt is None or tc is None or [kk for kk in named_by.get(R + CLOCK + '\\Timer_teller', ())] != [node(R + ROLE['speak box'])] \
+                    or [kk for kk in named_by.get(R + CLOCK + '\\Timer_teller_c', ())] != [node(R + PLAZA_BOX)]:
+                fail('TELLER_FOYER: the teller timer is not named by the foyer box alone, or its backstop by the plaza box alone')
+            elif abs(values(sc, tt, 'TriggerDelay2')[0] - TELLER_FOYER_S) > 1e-6 or values(sc, tt, 'TriggerDelay2')[4] != [R + CLOCK + '\\Teller_show']:
+                fail('TELLER_FOYER: the foyer timer is not %g s naming Teller_show' % TELLER_FOYER_S)
+            log('  tellers: %d stacks hidden at the load, shown %g s after the FOYER box (the crew is in the hall then: a human who holds the front is paid), or 1 s after the plaza box' % (len(want), TELLER_FOYER_S))
+        else:
+            if tt is None or [kk for kk in named_by.get(R + CLOCK + '\\Timer_teller', ())] != [node(R + PLAZA_BOX)]:
+                fail('TELLER_LATE: the teller timer is not named by the plaza box alone')
+            log('  tellers: %d stacks hidden at the load, shown %g s after the plaza box (the crew has crossed the hall), not by the beat' % (len(want), TELLER_SHOW))
     # ---- the van
     if o['van_late']:
         vg = node(R + VAN + '\\' + VAN_GROUP)
@@ -3734,12 +4044,16 @@ def build(out, log=print, plan=None):
             shutil.rmtree(bare, ignore_errors=True)
     lay_van(plan)
     r, st = {}, {}
+    import kl_snd
+    kl_snd.VOICE = True if VOICE else None              # the speech repairs of re/voice.md (kl_maps.ready_one's way; kl_fa_club's): streamed single ADPCM lines -> the .WAV
     try:
         with ESC.van_layer(plan, log) as st, doors(log):
             r = kl_maps.one(out, HOST, LEVEL, keep=True, campaign=True, tag=' campaign', author='kl_fa_bank')
     except ValueError:                                  # van_layer: 'a step of the van did not run'. After a build that
         if r.get('ok') or not r:                        # failed (r says why) that is no news; after one that did not, it is
             raise
+    finally:
+        kl_snd.VOICE = None
     return r, os.path.join(out, name), plan, {k: st.get(k) for k in ('van', 'wired', 'hvk')}
 
 
@@ -3772,7 +4086,12 @@ def main():
     if len(a) >= 2 and a[0] == 'test':
         global DOORS_ANIMATE, VAULT_OPEN, VAULT_DOOR_GOES, GATE_VAULT, CASE, BEAT, NO_AI, ALARM_LIGHTS, VAULT_BLAST, STOCK_ROWS, MUSIC_LAYER4
         global PLAZA_OUTSIDE, HALL_UP, CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
-        W = '--waves' in a                                  # the waves build: implies the crew fix, its second part, the reset, the late van
+        global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE
+        W = '--waves' in a or '--waves2' in a               # the waves build: implies the crew fix, its second part, the reset, the late van
+        WAVES2 = '--waves2' in a                            # the second tuning (after run W2): chain A from the dock box, inside posts, registers from the foyer
+        TELLER_FOYER = WAVES2 and '--no-teller-foyer' not in a
+        VOICE = '--voice' in a
+        WAVE_TABLE = chain_table(v2=WAVES2)
         PLAZA_OUTSIDE = '--plaza-outside' in a or '--crew-fix' in a or W   # the crew fix after run V2 (both off = the build of V0 .. V2)
         HALL_UP = '--hall-gallery' in a or '--crew-fix' in a or W
         CREW_FIX2 = '--crew-fix2' in a or W
@@ -3826,6 +4145,8 @@ def main():
         extras(a[1], a[2])
     elif len(a) == 2 and a[0] == 'waves-check':
         sys.exit(1 if waves_check(a[1]) else 0)
+    elif len(a) >= 2 and a[0] == 'start-guns':
+        start_guns(a[1:])
     elif len(a) == 2 and a[0] == 'crew-check':
         sys.exit(1 if crew_check(a[1]) else 0)
     elif len(a) == 2 and a[0] == 'reverify':
