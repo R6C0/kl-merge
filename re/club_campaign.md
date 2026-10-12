@@ -1384,3 +1384,60 @@ in the log, so read it from the bot: the first movement after the stop is earlie
 `python tools/kl_fa_club.py test <out> --legacy --keep --plan <c_club2>/club_bare/van.json` gives `a4d024f38ba279c7e5e8584f1fd880011505bd1d` again (MEASURED, with this commit's file). `test --no-ai` builds and passes ('RESULT: PASS', 26,598 entities).
 `python tools/kl_fa_vaultfx.py check` PASS on all 8 folders. Rebuild: `test <out> --keep [--str FILE] --plan <c_club2>/club_bare/van.json`, `sh <c_club3>/chain.sh`, `sh <c_club3>/checks.sh` (`STREAM_FILE` set for the music set); the music set's stream
 file is the one of X.5 (nothing changed there). The Vault's session was editing `tools/kl_fa_bank.py`: the builds ran on a scratch copy of HEAD's `tools/` + this `kl_fa_club.py`.
+
+
+## Gates, second fix (2026-10-12) - after the skeptic's four faults (tools/kl_fa_club.py; sets `C:/kl_build/c_club3` and `c_club3_music` REBUILT in place)
+
+OFFLINE; nothing in the game, nothing under the Dog Days folder, KL_PortBackup, other trees, `c_club2*`, `v_club`, `c_bank*`. Builds ran on the scratch copy of HEAD's `tools/` + this `kl_fa_club.py`
+(`C:/kl_scratch/club_gates/h/tools`; the Vault's session had `kl_fa_bank.py` / `kl_chars.py` modified in the working tree). Only `tools/kl_fa_club.py` and this note were edited. Labels as above.
+
+### H.1 The four faults, reproduced (MEASURED on the first c_club3/club with `skeptic/ways.py`, `holds.py` and a new search)
+
+1. FORKS (wrong): CONFIRMED. The dynamic step's RandomTrigger forks inside the gated legs put way places (`way_b` / `way_c`) on the deck 34 .. 145 from YokoGuards / WaitingRoom guards that no gate had
+   named yet (the floor2 leg, via `031_RandomTrigger_way`), and 244 .. 246 from Dancefloor02a#02 Guard#03. `rooms_check` let a RandomTrigger pass ("a way, not a wait"). FIXED (H.2 a).
+2. HOLDS NEXT TO SURVIVORS (wrong): CONFIRMED. The seven floor1s holds were 75 / 120 / 124 / 154 / 160 / 165 / 175 from Dance#01 Guard#10 (-1302, 26, 1868), a floor1n man; four stairs holds 145 .. 284 from
+   Dance#02 Guard#10 (627, 63, 1148) and one 266 from Guard#09 (-905, 20, 809). The planner calls a squad an earlier gate waited for dead, but a squad spans rooms here and a gate runs out its 30 s with its men
+   alive; the check assumed the same. FIXED (H.2 b, c).
+3. GATES THAT WAIT FOR MEN NO HOLD CAN SEE (minor): CONFIRMED (the builder said so). FIXED as far as data goes (H.2 d).
+4. THE TIMETABLE IS A MODEL (minor): CONFIRMED, the arithmetic is right (re-derived: bots start 10, loot 28, 5 x 30 s of gates, hold 10 s) but a bot that fights or never comes within 10 m of its hold has no bound.
+   NOT CHANGED in the build: a level-wide timer behind the gates would be a timer between two gates (what rooms_check forbids and Retomoto's review asked for). C5 must log arrival / leave per bot (H.5).
+
+### H.2 What changed in `tools/kl_fa_club.py`
+
+a. `dyn()` now wraps `kl_fa_bots_dyn.Routes.forks` for the call: every fork mark in a leg after the table's loot wait and before the final leg (a leg = the Defend steps between two kept elements:
+   the gates' TriggerActorsDead, the seal timer) is removed. The exit leg after the seal timer keeps its forks (as in c_club2). `rooms_check` now FAILS any RandomTrigger between the first gate and the seal hold
+   and any place of any step there within `ROOM_STEP_CLEAR` (200) of a man on its floor. Result on the rebuilt `club`: no fork there, the holds are the only places.
+b. `rt_for_club(gates, men)`: the hold finder's spots are filtered by `ROOM_AFTER_CLEAR` (300): no hold within 300 of a man whose post lies in an EARLIER room (`room_of`), whatever gate named him. The planner's
+   own 400 from the men who may be alive stays. (A first try with every post of every squad as 'alive' at 400 left floor1s with no spot at all: 59 places, all within 250 of Dance#01 Guard#10, who stands in the
+   way down; the planner's ways to the other places were refused because it takes a squad's start post for a man the gate waits for.)
+c. `CLEAR_MEN` 5 -> 6 men: Dance#01 Guard#10 -> (-342, 40, 2148) (found by a nav-mesh search: floor1n, 70..230 from a cover box, 400 from every hold and station, 260 from the route, 250 from every other man)
+   and Dance#02 Guard#09 -> (-1585, 21, 1129) (was (-905, 20, 809); without this move the stairs have 15 hold places and fail). Dance#02 Guard#10 (627, 63, 1148) stays: no post exists for him, and the stairs
+   holds now lie at x -890 .. -325, z 645 .. 1070, 815+ from him. `rooms_check` fails a hold within 400 of any man (own and later rooms) or within 300 of a man of an earlier room. The closest earlier-room
+   man is 301 from a stairs hold ((-850, 20, 1070) and Dancefloor02a#02 Guard#04). `ROOM_STAY` has 7 lines now.
+d. `ROOM_NAME_SEEN` (default on): the room's TriggerActorsDead names only the men the 0x20 line of sight (`Sight`: eye 160 to head or chest) reaches from at least one of the seven holds; when no man of the
+   room is seen all are named (the clock is then the gate). Named / of the room: walkway 2 / 4, floor2 5 / 5, floor1n 4 / 7, floor1s 4 / 5, stairs 2 / 2 (neither stairs man is seen: the landing men are at
+   y 161 / 182, the holds at y 20). The unnamed men stay alive in `rooms_check`'s clearance rules. `bots.json` 'club_gates' carries `room_men` and `unnamed`. GUESS: that opening on the seen men is better
+   than waiting 30 s for men nobody shoots; with the unseen men alive the crew meets them on the way, as before.
+
+### H.3 The rebuilt timetable and checks (MEASURED, `bots_gate.txt`)
+
+Worst case (every gate runs 30 s): the seal hold at 234 s, left at 244 s, at the exit trigger 262 s of the round's 360 (97 s of margin; the first build said 270). The quickest crew leaves the seal hold at 103 s
+(clock 100). Per room (men named / of the room, named men in sight, other-room men on the floor within 25 m that see a hold): walkway 2/4, 2, 2; floor2 5/5, 5, 2; floor1n 4/7, 4, 8; floor1s 4/5, 4, 5; stairs 2/2, 0, 5.
+`rooms_check` / `bots-check` PASS; `bots_dyn` PASS (6 NOTE as before); `club_check` PASS; `skeptic/ways.py` on the new `club`: the only places under 400 from a living man are the EXIT leg's (050, after the seal:
+196 .. 245 from Entrance Guard#03 in the queue lane, as in c_club2, by the design in ROOM_STAY); none in a gated leg. All other checkers as in c_club3 (known: `chars` glow30.fx, `escape` 217, `guns` on the
+bare folder, `preflight` / `audit` on the silent set; `club_noai` unchanged byte for byte). `python tools/kl_fa_vaultfx.py check` PASS on all 8 folders. `test --legacy` still gives `a4d024f38ba279c7e5e8584f1fd880011505bd1d`.
+
+### H.4 Delivered folders
+
+| folder | silent (`C:/kl_build/c_club3/`) | music (`C:/kl_build/c_club3_music/`) |
+|---|---|---|
+| `club` | `e727a2f0011158b4851f1818c241dac5a0d92887` 179,251,508 | `fce0cb54862aa23c7c8d2b7bd22ff7fedb90b958` |
+| `club_wavslim` | the same archive | the same archive |
+| `club_noai` | `e7754c1f0a2330aa439c5a32a6c39be4545dfa47` (= c_club2, unchanged) | `b1c31429f9b238ae5e8a0eab436a0855b11fd947` (unchanged) |
+| `club_bare` | `b82d9a3444ee18367fed260d9c5c46fdda6249d9` | `a95cd6175233ecf730b85991a559b20c0fa055bd` |
+
+### H.5 What C5 must show, and what is still open
+
+Per bot: arrival at each hold (within 10 m) and the leave time, so the 30 s clock and the men's deaths can be told apart; a death before GO+60 s is a hold in somebody's line of fire. OPEN: the 15 upper-floor men and
+the two lane men are waited for by nobody; Dance#02 Guard#10 and Dancefloor02a#02 Guard#04 (the south bar) are only 301 .. 400 from the stairs holds; the stairs gate will probably run its 30 s (its two men cannot
+be hit from y 20); no bound on a bot that fights on or never reaches its hold (it has no clock); the two moved men's new posts are GUESSES checked on the mesh and for cover only.

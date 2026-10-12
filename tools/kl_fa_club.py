@@ -13,8 +13,9 @@ without enemies of stage L1.
 THE ROOM GATES (2026-10-12, after live runs C3 / C4; NOT RUN IN THE GAME): the seven AI heisters hold at distinct cover places in front of each
 of five rooms of the way out (walkway, dance floor 2 east / west, dance floor 1 north-west, the stairs' foot) and go on through a
 TriggerActorsDead that names the room's men (dead, or the game's own 30 s) - Retomoto's gates (kl_fa_bots_rt.gates_plan, imported) with this
-level's table; five men moved off the way (CLEAR_MEN); the dynamic step adds no hold behind them (`dyn` command). `--no-gates` / `--legacy` /
-`--no-ai` leave them out. See ROOMS, bots_gates, rooms_check and re/club_campaign.md 'Gates, after runs C3-C4'.
+level's table; six men moved off the way (CLEAR_MEN); the dynamic step adds no hold behind them (`dyn` command). `--no-gates` / `--legacy` /
+`--no-ai` leave them out. See ROOMS, bots_gates, rooms_check and re/club_campaign.md 'Gates, after runs C3-C4' and 'Gates, second fix'
+(no fork between the first gate and the seal hold; no hold within 300 of a man of an earlier room; a gate names only the men a hold can see).
 
     python kl_fa_club.py test <out> [--keep] [options]    build F07 + M05_A with the layer into <out> (build():
                                                           a bare graft first, for the van's plan, then the level
@@ -2648,10 +2649,27 @@ def dyn(src, dst, log=print):
         # table and is cut off behind it: only the table's loot wait counts, the rooms are the way out, and out_holds False gives it no hold.)
         D.PERS = {n: p._replace(out_holds=False) for n, p in saved.items()}
         D.last_loot_wait = lambda flat, cut_off, timers=True: llw(flat, True, timers)
+    forks0 = D.Routes.forks
+    if ROOM_GATES:
+        def forks(self, q, flats, pers, opt, log=print):
+            # second fix (skeptic's fault 1): no fork between the loot wait and the seal hold. A fork's other way is a corridor / a moved copy of the build's way that
+            # the planner never looked at: 13 of its places lay under 160 from a living guard (point-blank reach), the deck's way_b ones 34 .. 90 from men not yet named.
+            # The legs BEHIND the last gate (the exit, after the seal timer: the final leg of a chain) keep their forks. A `leg` of flat_chain is the run of Defend
+            # steps between two kept elements (a TriggerActorsDead gate, a timer), so the legs after the loot wait but before the final one are the gated ways.
+            rep = forks0(self, q, flats, pers, opt, log)
+            for flat in flats:
+                last = llw(flat, True)
+                n_leg = [i for i, (kind, _x) in enumerate(flat) if kind == 'leg']
+                for i, (kind, leg) in enumerate(flat):
+                    if kind == 'leg' and i > last and i != n_leg[-1]:
+                        for pl in leg:
+                            pl.pop('fork', None)
+            return rep
+        D.Routes.forks = forks
     try:
         return D.build(src, dst, None, log)
     finally:
-        D.PERS, D.last_loot_wait = saved, llw
+        D.PERS, D.last_loot_wait, D.Routes.forks = saved, llw, forks0
 
 
 def bots_check(folder, log=print):
@@ -2789,6 +2807,9 @@ ROUND_CLOCK = 360.0                     # the round's six minutes, counted here 
 ROOM_VAN_MARGIN = 75.0                  # s the van call (the exit trigger) must still come before the round's end: the van drives in (7.2 s), waits 8 s, leaves
 ROOM_POST_CLEAR = 400.0                 # no hold, no station up to the seal hold within this of a post of a man who may be alive (the task's crew-check rule)
 ROOM_HOLD_RING = (60.0, 240.0)          # a hold lies this far from the middle of a cover box (kl_fa_bots_rt.HOLD_RING 70..230, with a tolerance for rounding)
+ROOM_NAME_SEEN = True                   # the TriggerActorsDead names only the men a hold can see (--name-all: every man of the room)
+ROOM_AFTER_CLEAR = 300.0                # no hold within this of a man of an EARLIER room (he may have outlived his gate's 30 s); the other men: ROOM_POST_CLEAR
+ROOM_STEP_CLEAR = 200.0                 # every place of every step between the first gate and the seal hold at least this far from every man on its floor (the holds: ROOM_POST_CLEAR)
 ROOM_HOLD_SEP = 80.0                    # two holds of one room at least this far apart (kl_fa_bots.check's own number)
 # the rooms, in the order of the way: name, what, box (x0, x1, z0, z1) and y of the hold places, the direction the men are in (plan), the trigger boxes
 # of a LATER fight the way to the hold cannot go round (bots_rt's 'cross'; the campaign's walkway box is the stair's end). GUESS: every box and
@@ -2833,29 +2854,35 @@ CLEAR_MEN = collections.OrderedDict([
     (E1 + 'DanceFloor02!Dancefloor02a#01\\Guard#04', (-1699, 40, 2569)),
     (E1 + 'DanceFloor02!Dancefloor02a#01\\Guard#03', (-21, 40, 2704)),
     (E1 + 'DanceFloor02!Dancefloor02a#02\\Guard#03', (-611, 40, 2172)),
-    (E2 + 'Dance#02\\Guard#09', (-905, 20, 809))])
+    (E2 + 'Dance#02\\Guard#09', (-1585, 21, 1129)),                 # (second fix: was (-905, 20, 809), 266 from a stairs hold; found by a search on the nav mesh, 70..230 from a cover box, 400 from every hold)
+    (E2 + 'Dance#01\\Guard#10', (-342, 40, 2148))])                  # (second fix: stood at (-1302, 26, 1868), 75 .. 175 from the seven floor1s holds)
 # the ten that stay within 250 of the way, and why (printed by check; each is the design of the room the crew fights through):
 ROOM_STAY = ('Dance#01 Guard#01 (623, 322, 2902) on the ramp: the walkway fight itself - the hold waits for him',
-             'Dance#01 Guard#10 (-1302, 26, 1868): any post in dance floor 1\'s north is within 2.6 m of the way down to the south',
              'Surprise2 Guard#01 (947, 381, 2740) on the walkway: the walkway fight',
              'FatBounceronWalkway (988, 382, 2916): the walkway fight',
              'On_Dancefloor#02 Guard#01 (488, 161, 582) and Entrance Guard#02 (-106, 182, -386): the stairs\' fight (the landing is 3 m wide)',
              'Dance#01 Guard#08 (-340, 44, 2708): his only posts in floor2 at cover lie on the way',
-             'Dance#02 Guard#10 (627, 63, 1148) and Dancefloor02a#02 Guard#04 (-1132, 25, 1176): the south bar, the way passes it',
+             'Dance#02 Guard#10 (627, 63, 1148) and Dancefloor02a#02 Guard#04 (-1132, 25, 1176): the south bar, the way passes it (the stairs holds keep 300 from them: ROOM_AFTER_CLEAR)',
              'Entrance Guard#03 (-65, 21, -1307) and Guard#01 (134, 29, -2398): the queue lane, 3 m wide: no post is 4 m from its way; they are the seal\'s other side')
 
 
 @contextlib.contextmanager
-def rt_for_club(gates):
+def rt_for_club(gates, men=None):
     """kl_fa_bots_rt with this level's table for one call of gates_plan: GATES, EN_ (the squads are named in full), POST_KEEP, pick_holds,
     hold_spots (the floor filter ROOMS' dy), wake_map (no squad 'known') - put back afterwards."""
     import kl_fa_bots_rt as RT
     saved = {k: getattr(RT, k) for k in ('GATES', 'EN_', 'POST_KEEP', 'GATE_MAX', 'pick_holds', 'hold_spots', 'wake_map', 'near_post')}
     spots0, wake0, near0 = RT.hold_spots, RT.wake_map, RT.near_post
 
+    order = [r['name'] for r in ROOMS]
+
     def spots(B, nav, home, covers, g, *rest):
         out = spots0(B, nav, home, covers, g, *rest)
-        return [s for s in out if abs(s[1] - g['y']) <= g.get('dy', 150.0)]
+        out = [s for s in out if abs(s[1] - g['y']) <= g.get('dy', 150.0)]
+        # second fix (skeptic's fault 2): the planner counts a squad an earlier gate waited for as dead, but a squad spans rooms here and a gate may run out its
+        # 30 s with its men alive. So no hold within ROOM_AFTER_CLEAR of a man of an EARLIER room, whatever gate named him (the other men: the planner's 400)
+        prior = [p for r in order[:order.index(g['name'])] for _t, _g, p in (men or {}).get(r, ())]
+        return [s for s in out if not any(abs(p[1] - s[1]) <= RT.FLOOR_DY and RT.hdist(s, p) < ROOM_AFTER_CLEAR for p in prior)]
     RT.GATES, RT.EN_, RT.POST_KEEP = tuple(gates), '', ROOM_POST_CLEAR
     RT.GATE_MAX = 99                            # the planner names whole squads; the TADs name the room's men (bots_gates), at most 9 of them (rooms_check)
     RT.pick_holds, RT.hold_spots = pick_holds_club, spots
@@ -2943,10 +2970,25 @@ def bots_gates(B, P, log=print):
     P2 = {'stations': copy.deepcopy(st[:i_loot + 1]) + [seal],
           'steps': [s for s in P['steps'] if s['leg'] == 'in' and s.get('stop', 0) == 0],
           'bots': {N: {'places': list(P['bots'][N]['places'][:i_loot + 1]) + [P['bots'][N]['places'][i_seal]]} for N in F.BOTS}}
-    with rt_for_club(table) as RT:
+    with rt_for_club(table, men) as RT:
         gates = RT.gates_plan(B, nav, S, P2, {'gate_names': None}, lambda s: log(s) if s.lstrip().startswith(('gate', 'to the car')) else None)
+    sight = None
+    if ROOM_NAME_SEEN:
+        import kl_route
+        sight = Sight(kl_route.load(B.folder))
     for g in gates:
-        g['groups'] = named[g['name']]
+        every = named[g['name']]
+        g['groups'] = every
+        g['room_men'] = len(every)
+        if sight is not None:
+            # second fix (skeptic's fault 3): a gate that waits for a man no hold can hit waits for the 30 s clock; name the men the seven can SEE from at least one hold
+            # (Sight: the 0x20 line from eye to head or chest); where none is seen the room's men are all named (the clock is then the gate)
+            ends = [tuple(h[:3]) for h in g['holds']] if g.get('holds') else []
+            at = {R + sc.path[gp][len(R):]: p for _t, gp, p in men[g['name']]}
+            seen = [x for x in every if any(sight.seen(h, at[x]) for h in ends)] if ends else []
+            if seen:
+                g['groups'] = seen
+            g['unnamed'] = [x for x in every if x not in g['groups']]
         g['men'] = len(g['groups'])
         g['wait'] = '%03d_TriggerActorsDead_%s' % (30 + [x['name'] for x in gates].index(g['name']), g['name'])
         g['seconds'] = ROOM_WAIT_S
@@ -3072,6 +3114,7 @@ def rooms_check(folder, log=print):
             if sc.cls(k) == 'ZFFActor' and sc.parent[k] in groups:
                 men.append((B.at(k), sc.path[sc.parent[k]], sc.names[t]))
     holds_seen, seal_hold = [], None
+    rank = {r['name']: i for i, r in enumerate(ROOMS)}
     rows = []
     import kl_route
     sight = Sight(kl_route.load(folder))
@@ -3120,10 +3163,12 @@ def rooms_check(folder, log=print):
                 fail('gate %s: a hold at (%d, %d, %d) is the place of a hold of an earlier gate' % (g['name'], *h))
         holds_seen += ends
         # ---- no living man within 4 m of a hold (men not named by a gate before this one)
-        alive = [(p, n_) for p, gp, n_ in men if gp.lower() not in {x for g_ in gates[:gi] for x in map(str.lower, g_['groups'])}]
-        close = [(round(RT.hdist(h, p)), n_.split('!')[-1], tuple(round(c) for c in p)) for h in ends for p, n_ in alive if abs(p[1] - h[1]) <= RT.FLOOR_DY and RT.hdist(h, p) < ROOM_POST_CLEAR]
+        # (second fix, skeptic's fault 2: EVERY man, also the ones an earlier gate names - a gate may run out its 30 s with them alive)
+        alive = [(p, n_) for p, gp, n_ in men]
+        lim = lambda p: ROOM_AFTER_CLEAR if (room_of(p) in rank and rank[room_of(p)] < rank.get(g['name'], 0)) else ROOM_POST_CLEAR
+        close = [(round(RT.hdist(h, p)), n_.split('!')[-1], tuple(round(c) for c in p)) for h in ends for p, n_ in alive if abs(p[1] - h[1]) <= RT.FLOOR_DY and RT.hdist(h, p) < lim(p)]
         if close:
-            fail('gate %s: %d hold(s) within %d of a post of a man who may be alive, e.g. %s' % (g['name'], len(close), ROOM_POST_CLEAR, close[0]))
+            fail('gate %s: %d hold(s) within %d (a man of an earlier room: %d) of a post of a man who may be alive, e.g. %s' % (g['name'], len(close), ROOM_POST_CLEAR, ROOM_AFTER_CLEAR, close[0]))
         dead_close = sum(1 for h in ends for p, gp, n_ in men if gp.lower() in {x for g_ in gates[:gi] for x in map(str.lower, g_['groups'])}
                          and abs(p[1] - h[1]) <= RT.FLOOR_DY and RT.hdist(h, p) < ROOM_POST_CLEAR)
         # ---- who of the room can be hit from the holds (the 0x20 line on the mesh, kl_fa_bots_rt.mesh_line) - said, not failed
@@ -3131,10 +3176,10 @@ def rooms_check(folder, log=print):
         room = [p for p, gp, _n in men if gp.lower() in mine]
         seen = sum(1 for p in room if any(sight.seen(h, p) for h in ends))
         foreign = sum(1 for p, gp, _n in men if gp.lower() not in mine and abs(p[1] - ends[0][1]) <= RT.FLOOR_DY and any(RT.hdist(h, p) < 2500.0 and sight.seen(h, p) for h in ends))
-        rows.append((g['name'], len(room), seen, round(min(ring)), round(max(ring)), dead_close, [tuple(round(c) for c in h) for h in ends][:2], foreign))
-    for name, n_, seen, lo, hi, dc, hs, foreign in rows:
-        log('  room %-8s %d men, %d of them in the 0x20 line of sight of a hold (eye 160 to head or chest, kl_fa_club.Sight), %d men of other rooms on the floor within 25 m see a hold; holds %d..%d from a cover box; %d hold/earlier-man pairs under %d (only if that gate ran out); e.g. %s'
-            % (name, n_, seen, foreign, lo, hi, dc, ROOM_POST_CLEAR, hs[0]))
+        rows.append((g['name'], len(room), seen, round(min(ring)), round(max(ring)), dead_close, [tuple(round(c) for c in h) for h in ends][:2], foreign, g.get('room_men', len(room))))
+    for name, n_, seen, lo, hi, dc, hs, foreign, all_ in rows:
+        log('  room %-8s %d of its %d men named (the rest no hold can see), %d of the named in the 0x20 line of sight of a hold (eye 160 to head or chest, kl_fa_club.Sight), %d men of other rooms on the floor within 25 m see a hold; holds %d..%d from a cover box; %d hold/earlier-man pairs under %d (only if that gate ran out); e.g. %s'
+            % (name, n_, all_, seen, foreign, lo, hi, dc, ROOM_POST_CLEAR, hs[0]))
     # ---- the stations up to the seal hold: the loot place against every man
     st = P['stations']
     i_loot = max(i for i, s in enumerate(st) if s['kind'] == 'loot')
@@ -3156,6 +3201,14 @@ def rooms_check(folder, log=print):
             if sc.names[k] == GATE_NAME:
                 stop += 1
                 continue
+            if kind.get(k) == 'RandomTrigger':
+                fail('%s: %s - a fork between the first gate and the seal hold: its other ways are places nobody checked against the men (second fix)' % (sc.names[t], sc.names[k]))
+            elif kind.get(k) == 'DefendBehaviourRout':
+                for ps in defend[k][1]:
+                    q = B.at(sc.resolve(ps)[0])
+                    nr = [(round(RT.hdist(q, p_)), n_.split('!')[-1]) for p_, _gp, n_ in men if abs(p_[1] - q[1]) <= RT.FLOOR_DY and RT.hdist(q, p_) < ROOM_STEP_CLEAR]
+                    if nr:
+                        fail('%s: %s has a place (%d, %d, %d) %d from a living man (%s) - under %d' % (sc.names[t], sc.names[k], *q, *nr[0], ROOM_STEP_CLEAR))
             if kind.get(k) not in ('DefendBehaviourRout', 'TriggerActorsDead', 'RandomTrigger'):
                 fail('%s: %s (%s) stands between the first gate and the seal hold - a timer behind a gate: a bot that arrives early waits again' % (sc.names[t], sc.names[k], kind.get(k)))
                 continue
@@ -3188,7 +3241,7 @@ def rooms_check(folder, log=print):
         k = next((c for c in range(g_, sc.end[g_]) if sc.cls(c) == 'ZFFActor'), None)
         if k is None or math.dist(B.at(k)[::2], (post[0], post[2])) > 60.0:
             fail('CLEAR_MEN: %s stands at %s, not at %s' % (path, tuple(round(c) for c in B.at(k)) if k else None, post))
-    log('  rooms: 10 men (%d lines) stay within 250 of the way by the design of their room (ROOM_STAY), 5 were moved (CLEAR_MEN): %s' % (len(ROOM_STAY), '; '.join(s.split(':')[0] for s in ROOM_STAY)))
+    log('  rooms: the men that stay within 250 of the way by the design of their room (%d lines, ROOM_STAY), %d were moved (CLEAR_MEN): %s' % (len(ROOM_STAY), len(CLEAR_MEN), '; '.join(s.split(':')[0] for s in ROOM_STAY)))
     log('kl_fa_club.rooms_check %s: %d rooms, %s' % (folder, len(gates), 'PASS' if not bad else '%d FAILED' % len(bad)))
     return bad
 
