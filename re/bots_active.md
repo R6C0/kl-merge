@@ -157,3 +157,49 @@ Order of trust: RestlessHop (an existing, run order; new only in its choice of p
   other floor / other gate / no hold near -> none).
 - Interaction: after a Hunted/RestlessHop order the defend block holds the hop place; klmove's Restless takes it for a new place of the chain (re-anchors,
   'a new place' resets its counts) and a bot at a hop is again 'at its place': it can hop from there after RestlessHop seconds.
+
+## 7. Second round (2026-10-12 15:30, after the owner's first round with it: ship_w15, 15:00-15:06)
+
+### 7.1 What that round showed (KLHook.log from '14:59:18.905 ==== KLHook loaded')
+- '34 hop place(s) at 49 hold(s) of 7 gate(s)' loaded; ONLY 8 'hops from its hold' against 53 'given again'; longest stand 14.0 s (28.0 s before). He was through the
+  tower fast (stage 1 15:00:56, lobby exit 15:03:00), so the gates opened early and the standing that is left is ON THE STREET, which had no hop places.
+- Records 5 and 6 were sent to the SAME hop in one tick (15:01:52.766).
+- Fed (back 15:05:23 on the street): 20 'hunted: ... lost' lines, 41 .. 77 m from him, all beyond HuntedRange 4500, none ordered; the street had no [Hops].
+  The last four bots died within 65 s of his respawn.
+
+### 7.2 Built
+1. STREET HOPS (tools/kl_fa_bots_rt.py `street_hops`, run by `hops`, on by default): from the finished build's bots.json
+   (plan.rt.street.lanes) the place each step of every bot's program ends at, every way of every fork, places under 60 apart kept once: 161 places (lobby, timed way,
+   lane holds, rally, stop; x -5640 .. 5600, z -7162 .. 10583). ONE group 'street': its holds and its hops are the same list, so a bot standing at any of them may shift to another
+   within 18 m on its floor. Every one of the 161 has at least one other within 3 .. 18 m (median 15, min 2). They were laid by the lanes' rules (clear of parked vehicles, off the
+   police posts); the way BETWEEN two of them is not checked (ASSUMED walkable; the stations of a lane are 5 .. 24 m apart). [Hops] now: Gates=8, 49 tower holds + 161 street
+   places, 34 + 161 = 195 hops (hook capacity raised to 320 / 320 / 24 gates).
+2. RESERVATION (klmove.c): a hop one bot was sent to is no hop for another bot for 10 s (KLMV_HOP_KEEP); `klmv_hop_pick(anchor, bp, last, who, away, out)`, `klmv_hop_take(k, who)`;
+   used by RestlessHop and Hunted alike. Harness (G:\kl_scratch\active\hoptest) PASS: bot 2 gets none right after bot 1's take, the hop after 10 s. (First version had a wrap bug
+   in the time test; found by the harness, fixed.)
+3. HUNTED at street distances (klfedkit.c section 8): HuntedRange default 9000 (90 m); with no hop near (or all taken) a FALLBACK: a step of HuntedPace (500) to a random side, a
+   place 3 m or more away - needs no level data. New `HuntedFire=1` (default 0): the bot that was HIT is ordered TOWARDS the fed, HuntedStep (1500) along the line, until it is HuntedNear
+   (2500) from him; the bots alerted with it take a cover place / the step aside. Log: 'is ordered TOWARDS YOU' / 'to a cover place of [Hops]' / 'a step aside to'.
+
+### 7.3 What a stock soldier does when hit (read, not finished) and why HuntedFire does not hand over a target
+The NPC's damage routine (0x61a980) takes soldier = [actor+0x77c], scales the hit by [soldier+0x704] (0x61acd9 ff.) and builds a message with 0x404ef0 (a 0x18c-byte frame, called at
+0x61abb6 / 0x61b064) before it settles health - that message is how the soldier is told. I did NOT follow 0x404ef0 or the soldier's reaction slot, found no routine of the form 'add this
+actor to the soldier's targets', and klgrudge.c does not call one either (it only writes the damage sums the target test 0x882470 reads: DATA, no call - the brief's 'sense-manager call'
+is klbot's record mask 2 + 0x4322f0 for a traitor). So the hook cannot hand a bot its attacker; HuntedFire is the order call only: a bot that walks at the fed meets his line of sight
+and fights by its own tactics. ASSUMED. Whether the bots 41 .. 77 m away did not turn because they did not SEE him (sight range [0x168d7c0]+0xc0 x vision factor; the dyn build gives the
+crew x2) or because their tactics held them is not known. If HuntedFire fails, the next step is to follow 0x404ef0 and the soldier's slot for that message.
+
+### 7.4 Ini lines for the owner
+```
+[Bots]
+Restless=5
+RestlessHop=6
+[Fed]
+Hunted=1                ; HuntedRange=9000 (default now)
+HuntedFire=1            ; the hit bot walks at you (HuntedStep=1500, HuntedNear=2500); HuntedPace=500 for the step aside
+```
+### 7.5 Live checks (extra)
+- H3 the street: 'move: ... 195 hop place(s) at 210 hold(s) of 8 gate(s)'; on the street 'hops from its hold ... a cover place of the level's [Hops]' for bots standing 6 s; two bots never to the
+  same place within 10 s (compare the places in a tick).
+- F2 as a fed on the street with HuntedFire=1: 'hunted: record N is ordered TOWARDS YOU' 0.25 s after a hit, then the bot's position closer to him (watch pictures) and, the real question,
+  'you lost' lines (Balance Log=2) from heisters or the owner's eyes: do they shoot back. HuntedDry=1 first.

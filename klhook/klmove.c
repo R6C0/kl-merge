@@ -302,11 +302,13 @@ static struct {
    Gate.g.Holds=<n>, Gate.g.Hold.j=x y z, Gate.g.Hops=<n>, Gate.g.Hop.j=x y z. A bot is at gate g when its chain's place lies
    within 150 of one of g's holds on its floor; it hops only to g's own places (a place of another gate may lie in a box that
    wakes men its gate did not mean to wake). Read again when kljoin.c's file changes. */
-#define KLMV_NHOP 96
-#define KLMV_NHOLD 64
+#define KLMV_NHOP 320
+#define KLMV_NHOLD 320
+#define KLMV_HOP_KEEP 10000       /* a hop one bot was sent to is no hop for another for this many ms (two bots in one tick went to the same place, 15:01:52) */
 static float klmv_hops[KLMV_NHOP][3]; static int klmv_hop_g[KLMV_NHOP], klmv_nhop;
 static float klmv_holds[KLMV_NHOLD][3]; static int klmv_hold_g[KLMV_NHOLD], klmv_nhold;
 static float klmv_hop_dmax = 1800.0f;
+static DWORD klmv_hop_at[KLMV_NHOP]; static int klmv_hop_user[KLMV_NHOP];
 static char klmv_hop_key[64], klmv_hop_file[MAX_PATH]; static FILETIME klmv_hop_ft;
 
 struct klmv_b {
@@ -904,14 +906,14 @@ static void klmv_hops_load(void)
     snprintf(key, sizeof key, "%s", klj_map_key); snprintf(file, sizeof file, "%s", klj_map_file); ft = klj_map_ft;
     LeaveCriticalSection(&klj_cs);
     if (!strcmp(key, klmv_hop_key) && !_stricmp(file, klmv_hop_file) && !CompareFileTime(&ft, &klmv_hop_ft)) return;
-    klmv_nhop = 0; klmv_nhold = 0; snprintf(klmv_hop_key, sizeof klmv_hop_key, "%s", key); snprintf(klmv_hop_file, sizeof klmv_hop_file, "%s", file); klmv_hop_ft = ft;
+    klmv_nhop = 0; klmv_nhold = 0; memset(klmv_hop_at, 0, sizeof klmv_hop_at); memset(klmv_hop_user, 0, sizeof klmv_hop_user); snprintf(klmv_hop_key, sizeof klmv_hop_key, "%s", key); snprintf(klmv_hop_file, sizeof klmv_hop_file, "%s", file); klmv_hop_ft = ft;
     klmv_hop_dmax = 1800.0f;
     if (!key[0] || !file[0]) return;
     ng = (int)GetPrivateProfileIntA("Hops", "Gates", 0, file);
     if (ng <= 0) return;
     GetPrivateProfileStringA("Hops", "Max", "1800", t, sizeof t, file);
     klmv_hop_dmax = (float)atof(t); if (!klb_finite(klmv_hop_dmax) || klmv_hop_dmax < 300) klmv_hop_dmax = 300; if (klmv_hop_dmax > 4000) klmv_hop_dmax = 4000;
-    for (g = 1; g <= ng && g <= 16; g++) {
+    for (g = 1; g <= ng && g <= 24; g++) {
         snprintf(name, sizeof name, "Gate.%d.Holds", g); nh = (int)GetPrivateProfileIntA("Hops", name, 0, file);
         for (j = 1; j <= nh && klmv_nhold < KLMV_NHOLD; j++) {
             snprintf(name, sizeof name, "Gate.%d.Hold.%d", g, j);
@@ -945,12 +947,14 @@ static int klmv_hop_gate(const float anchor[3])
    list's Max of the anchor and on its floor (300), at least KLMV_OFF (3 m) from where the bot stands, and not `last` (index + 1 of
    the one it hopped to the time before). away != 0: the one FARTHEST from that point (the shooter: cover from him); else one drawn
    by klb_seed. -> the index, -1 = none; out = its place. */
-static int klmv_hop_pick(const float anchor[3], const float bp[3], int last, const float *away, float out[3])
+static int klmv_hop_free(int j, int who, DWORD now) { return !klmv_hop_user[j] || klmv_hop_user[j] - 1 == who || (LONG)(now - klmv_hop_at[j]) >= KLMV_HOP_KEEP; }      /* user = who + 1, 0 = nobody */
+static void klmv_hop_take(int j, int who) { if (j >= 0 && j < klmv_nhop) { klmv_hop_at[j] = GetTickCount(); klmv_hop_user[j] = who + 1; } }
+static int klmv_hop_pick(const float anchor[3], const float bp[3], int last, int who, const float *away, float out[3])
 {
-    int j, k = -1, n = 0, pick, g = klmv_hop_gate(anchor); float best = -1.0f;
+    int j, k = -1, n = 0, pick, g = klmv_hop_gate(anchor); float best = -1.0f; DWORD now = GetTickCount();
     if (!g) return -1;
     for (j = 0; j < klmv_nhop; j++) {
-        if (klmv_hop_g[j] != g || j + 1 == last || klmv_h(anchor, klmv_hops[j]) > klmv_hop_dmax || fabs(anchor[1] - klmv_hops[j][1]) > 300.0f || klmv_h(bp, klmv_hops[j]) < KLMV_OFF) continue;
+        if (klmv_hop_g[j] != g || j + 1 == last || !klmv_hop_free(j, who, now) || klmv_h(anchor, klmv_hops[j]) > klmv_hop_dmax || fabs(anchor[1] - klmv_hops[j][1]) > 300.0f || klmv_h(bp, klmv_hops[j]) < KLMV_OFF) continue;
         if (away) { float d = klmv_h(away, klmv_hops[j]); if (d > best) { best = d; k = j; } }
         n++;
     }
@@ -958,7 +962,7 @@ static int klmv_hop_pick(const float anchor[3], const float bp[3], int last, con
     klb_seed = klb_seed * 1103515245u + 12345u;
     pick = (int)((klb_seed >> 16) % (unsigned)n);
     for (j = 0; j < klmv_nhop; j++) {
-        if (klmv_hop_g[j] != g || j + 1 == last || klmv_h(anchor, klmv_hops[j]) > klmv_hop_dmax || fabs(anchor[1] - klmv_hops[j][1]) > 300.0f || klmv_h(bp, klmv_hops[j]) < KLMV_OFF) continue;
+        if (klmv_hop_g[j] != g || j + 1 == last || !klmv_hop_free(j, who, now) || klmv_h(anchor, klmv_hops[j]) > klmv_hop_dmax || fabs(anchor[1] - klmv_hops[j][1]) > 300.0f || klmv_h(bp, klmv_hops[j]) < KLMV_OFF) continue;
         if (pick-- == 0) { memcpy(out, klmv_hops[j], 12); return j; }
     }
     return -1;
@@ -1049,7 +1053,7 @@ static void klmv_restless(const struct klb_snap *s, DWORD now, int human_in, con
         hopk = -1;
         if (klmv.hop && klmv_nhop && stood >= klmv.hop && !(s->veh >= 1 && s->veh <= 5)) {      /* RestlessHop: cover to cover (section 5) */
             for (j = 0; j < klmv_nbox; j++) if (klmv_box[j].at && klmv_h(b->anchor, klmv_box[j].pos) <= KLMV_BOXR) break;
-            if (j >= klmv_nbox && kle_bot(s, i, &actor, &soldier, bp, w)) hopk = klmv_hop_pick(b->anchor, bp, b->hop_k, 0, want);
+            if (j >= klmv_nbox && kle_bot(s, i, &actor, &soldier, bp, w)) hopk = klmv_hop_pick(b->anchor, bp, b->hop_k, i, 0, want);
         }
         if (hopk < 0) {
             if (!klmv.hold) { if (klmv.log >= 2 && !(b->told & 8)) { b->told |= 8; klog("move: record %d holds its place (%.0f, %.0f, %.0f) for %.0f s: a meant wait, left alone (RestlessHold=0%s; said once per bot)", i, b->anchor[0], b->anchor[1], b->anchor[2], stood / 1000.0, klmv.hop ? ", no hop place near" : ""); } continue; }
@@ -1070,7 +1074,7 @@ static void klmv_restless(const struct klb_snap *s, DWORD now, int human_in, con
         k = kle_order2(&t, want, got, w, klmv.dry);
         b->order_at = KLB_T(now); b->since = now;
         if (!k) continue;
-        if (hopk >= 0) b->hop_k = hopk + 1;
+        if (hopk >= 0) { b->hop_k = hopk + 1; klmv_hop_take(hopk, i); }
         if (k == 1) { memcpy(b->target, got, 12); b->have_target = 1; b->paced = 1; b->beside = 0; }
         if (klmv.log) klog("move: record %d %s its hold (%.0f, %.0f, %.0f) after %.1f s: to (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f)%s", i,
                           hopk >= 0 ? (k == 2 ? "WOULD hop (dry run) from" : "hops from") : (k == 2 ? "WOULD shift (dry run) round" : "shifts round"),

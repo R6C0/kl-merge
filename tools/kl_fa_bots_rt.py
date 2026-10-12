@@ -3439,6 +3439,39 @@ def build(src, dst, opt=None, log=print):
     return out + out2, rep
 
 
+def street_hops(folder, dedup=60.0):
+    """THE STREET HALF (2026-10-12): hop places for the lobby and the street, from the finished build's own plan (bots.json, plan.rt.street.lanes):
+    the place each step of every bot's program ends at (the place the bot defends: the lanes' holds at cover boxes, the timed way's
+    stations, the rally, the stop), every way of every fork, places less than `dedup` apart kept once. They were laid by the lanes'
+    rules (clear of the parked vehicles, POST_WALL from a wall post of the police, POST_KEEP_ST from a post, on the mesh part of the
+    street). ONE group: its holds and its hops are the same list - a bot that stands at one of them may shift to another within the
+    hook's Max (18 m) and on its floor. ASSUMED: walkable between them (the stations of one lane are 5 .. 24 m apart; across the
+    road the way is not checked). -> a gate dict {'name', 'holds', 'hops'} or None."""
+    bj = os.path.join(folder, 'bots.json')
+    if not os.path.isfile(bj):
+        return None
+    lanes = (((json.load(open(bj)).get('plan') or {}).get('rt') or {}).get('street') or {}).get('lanes') or {}
+    pts = []
+
+    def walk(items):
+        for it in items:
+            if it['kind'] == 'step' and it.get('places'):
+                pts.append(tuple(it['places'][-1]))
+            elif it['kind'] == 'fork':
+                for w in it['ways']:
+                    walk(w['items'])
+    for b in (lanes.get('bots') or {}).values():
+        walk(b.get('program') or [])
+    out = []
+    for q in pts:
+        if all(math.hypot(q[0] - o[0], q[2] - o[2]) >= dedup or abs(q[1] - o[1]) > 200 for o in out):
+            out.append(q)
+    if not out:
+        return None
+    pl = [[round(v, 1) for v in q[:3]] for q in out]
+    return collections.OrderedDict(name='street', holds=pl, hops=pl, places_refused={})
+
+
 def hops_command(src, final, opt):
     """`hops <the bots build's SOURCE folder> <a finished build's folder> [--hops N]`: the gates' hop places (pick_hops) planned on the
     source build (the tower half only: the same plan, the same holds - they are compared with the finished build's bots.json) and
@@ -3457,6 +3490,11 @@ def hops_command(src, final, opt):
             if was.get(g['name']) != g['holds']:
                 bad.append(g['name'])
         print('holds against %s: %s' % (bj, 'THE SAME in all %d gates' % len(gates) if not bad else 'DIFFER in %s' % ', '.join(bad)))
+    if opt.get('street', True):
+        sg = street_hops(final)
+        if sg:
+            gates = list(gates) + [sg]
+            print('street: %d place(s) that are holds and hops at once' % len(sg['holds']))
     n = write_hops(final, gates)
     for g in gates:
         print('  gate %-9s %d hop(s): %s   [places %s, hop ways refused %s]' % (g['name'], len(g['hops']), ' '.join('(%d,%d)' % (h[0], h[2]) for h in g['hops']),
