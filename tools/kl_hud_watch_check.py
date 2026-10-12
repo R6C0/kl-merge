@@ -56,6 +56,7 @@ def model(kind, sec, val):
     import kl_hud_watch as W
     cv = Cv()
     if kind == 'watch': W.draw_watch(cv, 1212.0, 66.0, val, 13, seconds=bool(sec))
+    elif kind == 'bar': W.draw_money_bar(cv, 1036.0, 121.0, 211.0, val, 11)
     else: W.draw_escape(cv, 1150.0, 66.0, val, 13, 170)
     return cv.p
 

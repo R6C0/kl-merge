@@ -118,6 +118,16 @@ int main(int argc, char **argv)
         printf("look: %d checks, %d failed\n", n, fails);
         return fails != 0;
     }
+    if (argc > 1 && !strcmp(argv[1], "bar")) {        /* the money bar of the watch look (klu_money_bar) at four shares, for kl_hud_watch_check.py compare */
+        static const float fs[] = { 0.0f, 0.05f, 0.38f, 1.0f };
+        klu_r.handle[117] = 0x1000u + 117u;
+        for (c = 0; c < 4; c++) {
+            klu_r.npic = 0; klu_money_bar(1036.0f, 121.0f, 211.0f, fs[c], 11);
+            printf("CASE bar 0 %.2f %d\n", fs[c], klu_r.npic);
+            for (i = 0; i < klu_r.npic; i++) printf("P %d %.3f %.3f %.3f %.3f %08lx %d\n", klu_r.pic[i].n, klu_r.pic[i].x, klu_r.pic[i].y, klu_r.pic[i].w, klu_r.pic[i].h, (unsigned long)klu_r.pic[i].argb, klu_r.pic[i].layer);
+        }
+        return 0;
+    }
     if (argc > 1 && !strcmp(argv[1], "sweep")) {
         int worst[2] = { 0, 0 }; float at[2] = { 0, 0 }, t;
         for (k = 0; k < 2; k++) { klu.wseconds = k; for (t = 360.0f; t > 0.05f; t -= 0.1f) { klu_r.npic = 0; klu_watch_look(1212.0f, 66.0f, t); if (klu_r.npic > worst[k]) { worst[k] = klu_r.npic; at[k] = t; } } }

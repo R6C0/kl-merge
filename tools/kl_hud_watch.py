@@ -234,6 +234,41 @@ def bezel_pixels(w):
     return a
 
 
+MFILL_STREAKS = (3, 4)          # dry streaks ALONG the body (the draft's #dry filter: thin horizontal runs of missing paint)
+MFILL_STREAK_A = 0.42           # paint left in such a streak at its thinnest
+MFILL_EDGE = (0, 1, 1, 2)       # the long edges wander a little more than a menu bar's (the draft's fill overhangs the frame raggedly)
+
+
+def mfill_pixels(w, h):
+    """117 'mfill' (the watch look, 2026-10-12, cloud session): the PAINTED FILL of the money bar under TOTAL, as the draft's
+    `.money .frame .fill` (chalk, url(#dry)): the menus' kit stroke (tools/kl_hud_menu.py _stroke_kit, the bars the owner approved:
+    solid chalk, edges held over runs, slanted hand-cut ends, dry streaks at the ends) over the whole picture, plus a few light dry
+    streaks along the body. Alpha only; the hook tints it chalk and stretches it to the fill's width (it is drawn 2 px above and below
+    the frame, as the draft's fill overhangs its frame). Deterministic. NOT SEEN IN THE GAME."""
+    import random
+    import kl_hud_menu as M
+    rnd = random.Random(117 * 7919 + w * 31 + h)
+    saved = M.BAR_EDGE
+    M.BAR_EDGE = MFILL_EDGE
+    try:
+        a = M._stroke_kit(w, h, True, True, rnd)
+    finally:
+        M.BAR_EDGE = saved
+    rows = rnd.sample(range(5, h - 5), min(rnd.randint(*MFILL_STREAKS), h - 10))
+    for y in rows:
+        x = rnd.randint(w // 6, w // 3)
+        while x < w - 12:
+            n = rnd.randint(18, 60)
+            for k in range(n):
+                xx = x + k
+                if xx >= w or not a[y * w + xx]:
+                    continue
+                t = abs(2.0 * k / n - 1.0)                       # thinnest in the middle of the streak, rejoining the paint at its ends
+                a[y * w + xx] = int(a[y * w + xx] * (MFILL_STREAK_A + (1 - MFILL_STREAK_A) * t * t))
+            x += n + rnd.randint(30, 90)
+    return a
+
+
 def pixels(kind, w, h):
     """-> RGBA bytes for the textures of the new look, or None (kl_hud's own generators handle the rest)"""
     if kind == 'disc':
@@ -242,6 +277,8 @@ def pixels(kind, w, h):
         a = wear_pixels(w)
     elif kind == 'bezel':
         a = bezel_pixels(w)
+    elif kind == 'mfill':
+        a = mfill_pixels(w, h)
     else:
         return None
     px = bytearray(b'\xff\xff\xff\0' * (w * h))
@@ -344,6 +381,20 @@ def draw_watch(cv, cx, cy, left, layer, seconds=False, wear=True):
     if seconds:
         sec_hand(cv, cx, cy, (360.0 - (left % 60.0) * 6.0) % 360.0, argb(C_CORAL), layer)
     hub(cv, cx, cy, argb(FACE_RGB), hand_col, layer)
+
+
+MBAR_H, MBAR_OVER, MBAR_OUT = 8.0, 2.0, 1.5      # klhud.c KLU_W_BAR_H / KLU_W_FILL_OVER / KLU_W_FILL_OUT
+
+
+def draw_money_bar(cv, x, y, w, f, layer):
+    """the money bar under TOTAL in the watch look (klhud.c klu_money_bar): a 1 px chalk frame of 181, w x 8, and the painted fill 117
+    2 px above / below and 1.5 px left of it, its width the share f of the inside"""
+    for (bx, by, bw, bh) in ((x, y, w, 1.0), (x, y + MBAR_H - 1.0, w, 1.0), (x, y, 1.0, MBAR_H), (x + w - 1.0, y, 1.0, MBAR_H)):
+        cv.pic(181, bx, by, bw, bh, argb(0xf3f0ea), layer)
+    if not f > 0:
+        return
+    f = min(f, 1.0)
+    cv.pic(117, x - MBAR_OUT, y - MBAR_OVER, MBAR_OUT + (w - 1.0) * f, MBAR_H + 2 * MBAR_OVER, argb(0xf3f0ea), layer)
 
 
 def draw_escape(cv, cx, cy, left, layer, icon, wear=True):

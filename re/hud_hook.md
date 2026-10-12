@@ -518,3 +518,16 @@ Level: kl_hud.py all hud_tab/DM03 -> hud_x10/DM03 --look deadmen (check PASS), p
 - The escape dial's icon is tinted KLW_C_CHALK (the model's), `[HUD] Layer` minimum 4, the tag drawer gets only objects that pass a vtable read.
 - `klwatch_test.c` + `tools/kl_hud_watch_check.py compare|render`: the hook's queued pictures equal the model's (24/24), rendered with the baked textures.
 - Live check W1 addition: one start with an OLD-baked map under WatchStyle=1 must log the 'baked with the OLD look' line and draw the old dials.
+
+### 14.12 The money bar as the draft (cloud session, 2026-10-12 evening; owner: 'need you to sort the bar check the 4th draft we did i want it to look good like' + the draft's picture; NOT BUILT WITH MSVC, NOT RUN IN THE GAME)
+- Before: a 1 px frame 6 high and a FLAT 181 block as the fill (2 px over the left / top / bottom). The draft (`.money .frame` / `.fill`): a thin solid
+  chalk frame (12 high at the draft's scale) and a chalk fill painted with its dry filter, overhanging the frame above, below and on the left.
+- Now, in the WATCH look only (the bake with `--watch 1`, told by slot 112 as in 14.11): `klu_money_bar` (klhud.c) = the 181 frame 8 high (the draft's
+  12 at the quiet scale), 1 px line, crisp; the fill = picture 117 'mfill' (tools/kl_hud.py EXTRAS_NEW; painted by tools/kl_hud_watch.py
+  `mfill_pixels`: the menus' approved kit stroke - solid chalk, edges held over runs, slanted hand-cut ends, dry streaks at the ends - plus 3-4
+  light dry streaks along the body), 2 px above and below the frame, 1.5 px left of it, width = the share f of the inside. LOOT / REWARDS move 3 px
+  down (KLU_W_MLINE0 37) to keep the taller bar clear. The old look and a level without 117 keep the old bar.
+- Slot 117 was the old 'frame' picture, drawn by nobody. A level baked with `--watch 1` BEFORE this change has the frame picture in 117: under a
+  hook from this HEAD its fill would be an outline box - rebake such levels (hud_x10/DM03, a test level) before using them.
+- Tested: `klwatch_test bar` vs `kl_hud_watch.draw_money_bar` 4/4; render (the hook's picture list with the baked texture, stand-in font)
+  scratchpad money_bar.png. Known: at a small share the 256-wide texture is squeezed, so its streaks bunch up at the left (12 % in the render).

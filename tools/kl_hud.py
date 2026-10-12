@@ -1194,7 +1194,8 @@ EXTRAS_OLD = (            # slot, name, width, height (watch look 0 = the look o
 # the others are the same. A level carries ONE of the two sets: kl_hud.py all --look deadmen --watch 0|1 (default 1) and the hook's [HUD] WatchStyle
 # must agree. Slot 112's old users (strike-through, bar tails, rules) draw slot 111 thinner under the new look.
 WATCH = 1
-EXTRAS_NEW = tuple(((112, 'wear', 128, 128) if e[0] == 112 else (114, 'disc', 128, 128) if e[0] == 114 else (115, 'bezel', 128, 128) if e[0] == 115 else e) for e in EXTRAS_OLD)
+EXTRAS_NEW = tuple(((112, 'wear', 128, 128) if e[0] == 112 else (114, 'disc', 128, 128) if e[0] == 114 else (115, 'bezel', 128, 128) if e[0] == 115
+                   else (117, 'mfill', 256, 32) if e[0] == 117 else e) for e in EXTRAS_OLD)      # 117: the money bar's painted fill (cloud 2026-10-12; the old 'frame' was drawn by nobody)
 EXTRAS = EXTRAS_NEW
 
 
@@ -1315,7 +1316,7 @@ def _extra_pixels(kind, w, h):
 
 
 def _extra_pixels_raw(kind, w, h):
-    if WATCH and kind in ('disc', 'wear', 'bezel'):
+    if WATCH and kind in ('disc', 'wear', 'bezel', 'mfill'):
         import kl_hud_watch as _W
         return _W.pixels(kind, w, h)
 

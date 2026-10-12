@@ -269,7 +269,13 @@
 #define KLU_D_MLINE      18.0f                /* LOOT -> REWARDS */
 #define KLU_D_BAR_Y      22.0f                /* the framed bar under TOTAL */
 #define KLU_D_BAR_H      6.0f                 /* its frame; the fill is 4 higher, 2 above and below the frame */
-#define KLU_D_MONEY_H    66.0f                /* the Grid box of the money lines */
+#define KLU_D_MONEY_H    66.0f
+#define KLU_MFILL_PIC    117                  /* the watch look's painted fill of the money bar (tools/kl_hud.py EXTRAS_NEW 'mfill') */
+#define KLU_W_BAR_Y      22.0f                /* the watch look: the frame's top under the TOTAL's y (as KLU_D_BAR_Y) */
+#define KLU_W_BAR_H      8.0f                 /* its height: the draft's 12 at the quiet scale (was 6) */
+#define KLU_W_FILL_OVER  2.0f                 /* the fill stands this far above and below the frame (the draft: 1.4 of 12) */
+#define KLU_W_FILL_OUT   1.5f                 /* ... and this far left of it */
+#define KLU_W_MLINE0     37.0f                /* LOOT's y under the TOTAL's in the watch look: the taller bar's fill ends at +32, LOOT's capitals start 5 below (was 34 / 2) */                /* the Grid box of the money lines */
 static float klu_cap_of(int f);
 static const int klu_sweep[8] = { 0x11, 0x14, 0x21, 0x41, 0x01, 0x10, 0x42, 0x24 };
 struct klu_text { DWORD obj, shadow; float x, y; int on, style, big, plain, noshadow, fnt, cen; DWORD colour, want_colour; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
@@ -563,7 +569,7 @@ static void klu_layout(void)
     klu_r.t[KLU_T_ROUND].x = klu_r.mx; klu_r.t[KLU_T_ROUND].y = klu_r.ry; klu_r.t[KLU_T_ROUND].style = KLU_STYLE_RIGHT;
     if (klu.draft) klu_r.t[KLU_T_ROUND].want_colour = klu.fontset ? KLU_C_CHALK : KLU_C_CORAL;      /* the draft's CSS: .clock .round { color: chalk } (S5 had coral) */
     for (k = 0; k < 3; k++) {
-        y = klu_r.my + (k == 0 ? 0.0f : klu.draft ? KLU_D_MLINE0 + KLU_D_MLINE * (k - 1) : 40.0f + 24.0f * (k - 1));            /* TOTAL, the bar under it, LOOT, REWARDS (the quiet draft: +0 / +34 / +52; stock-font layout +0 / +40 / +64) */
+        y = klu_r.my + (k == 0 ? 0.0f : klu.draft ? (klu.wstyle ? KLU_W_MLINE0 : KLU_D_MLINE0) + KLU_D_MLINE * (k - 1) : 40.0f + 24.0f * (k - 1));            /* TOTAL, the bar under it, LOOT, REWARDS (the quiet draft: +0 / +34 / +52; stock-font layout +0 / +40 / +64) */
         klu_r.t[KLU_T_MLABEL(k)].x = klu_r.mx - klu.money_w; klu_r.t[KLU_T_MLABEL(k)].y = y; klu_r.t[KLU_T_MLABEL(k)].want_colour = KLU_C_CORAL;
         klu_r.t[KLU_T_MVALUE(k)].x = klu_r.mx; klu_r.t[KLU_T_MVALUE(k)].y = y; klu_r.t[KLU_T_MVALUE(k)].style = KLU_STYLE_RIGHT;
         klu_r.t[KLU_T_MVALUE(k)].want_colour = k == 0 ? KLU_C_GREENHI : KLU_C_GREEN;
@@ -901,6 +907,22 @@ static void klu_escape_look(float cx, float cy, float left, int icon)
 }
 
 
+/* THE MONEY BAR in the watch look (cloud session 2026-10-12; the owner: 'sort the bar ... i want it to look good like' the draft; tested off-game by
+   klwatch_test.c 'bar' against tools/kl_hud_watch.py draw_money_bar). The draft's `.money .frame` = a thin solid chalk frame, and its `.fill` = chalk
+   painted with the dry filter, overhanging the frame above, below and on the left. Here: the frame = four bars of 181 (UI_White: crisp, proven), 8 high
+   (the quiet scale of the draft's 12), 1 px line; the fill = picture 117 'mfill' (tools/kl_hud.py --watch 1: the menus' approved kit stroke + light dry
+   streaks), 2 px above and below the frame and 1.5 px left of it, its width the share f of the frame's inside. Without picture 117 (a level baked before
+   this) the old flat bar is drawn instead (klu_compose). f = 0: the frame alone. */
+static void klu_money_bar(float x, float y, float w, float f, int layer)
+{
+    float fw;
+    klu_outline(x, y, w, KLU_W_BAR_H, KLU_C_CHALK, layer);
+    if (!(f > 0)) return;
+    if (f > 1.0f) f = 1.0f;
+    fw = KLU_W_FILL_OUT + (w - 1.0f) * f;
+    klu_addpic(KLU_MFILL_PIC, x - KLU_W_FILL_OUT, y - KLU_W_FILL_OVER, fw, KLU_W_BAR_H + 2.0f * KLU_W_FILL_OVER, KLU_C_CHALK, layer);
+}
+
 static void klu_dials(const struct klb_snap *s)
 {
     float clock = 0, cx = klu_r.mx - 35.0f, cy = klu_r.wy; int i;
@@ -1088,8 +1110,11 @@ static int klu_compose(int *state_ok)
             if (f > 1.0f) f = 1.0f;
             if (klu.grid != 2 && total <= 0) f = 0.0f;           /* 2026-10-12 (run S1: a stub of fill at TOTAL $0): no money, no fill */
             if (f * klu.money_w < 1.5f) f = 0.0f;
-            klu_outline(x, y, klu.money_w, bh, KLU_C_CHALK, klu.layer - 2);
-            klu_addpic(181, x - 2.0f, y - 2.0f, klu.money_w * f, bh + 4.0f, KLU_C_CHALK, klu.layer - 2);
+            if (klu.wstyle && klu.draft && klu_r.handle[KLU_MFILL_PIC]) klu_money_bar(x, klu_r.my + KLU_W_BAR_Y, klu.money_w, f, klu.layer - 2);
+            else {
+                klu_outline(x, y, klu.money_w, bh, KLU_C_CHALK, klu.layer - 2);
+                klu_addpic(181, x - 2.0f, y - 2.0f, klu.money_w * f, bh + 4.0f, KLU_C_CHALK, klu.layer - 2);
+            }
         }
     }
     if (klu.log >= 2) kluv_dump(&s, human);                   /* 'hud: values: ...': looked at once a second, said when a value other than the clock changed */
