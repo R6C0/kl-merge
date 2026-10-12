@@ -11,6 +11,9 @@ OFFLINE: nothing here installs anything or starts a game.
     python kl_fa_rappel.py joins                 the MEASURED answer to 'can the three drops be chained': end pose of one clip
                                                  against the start pose of the next (L07's own .ANM), heading drift, root travel
     python kl_fa_rappel.py plan <clip> X Y Z [yaw]  where a PosObject must stand so that clip lands the feet at (X, Y, Z)
+    python kl_fa_rappel.py build <folder> <out> [--land X Y Z] [--delay S]   (2026-10-12) apply's clips PLUS the cut for the local human: a squad + a
+                                                 one-act 'Lynch' MiniCutsceneRout + a PosObject 17.6 m over the landing + a TriggerDelay2 started by the
+                                                 round-start event + a [Rappel] section in KLJoin.ini for klhook/klrappel.c; re/rappel.md 8
     python kl_fa_rappel.py apply <folder> <out>  the build with Dog Days' OWN rappel clips (L07, 'Repelling_01..03' and
                                                  the two one-frame pose clips) added to the animation sets of the
                                                  people a Fragile Alliance level has; exit 1 on a FAIL
@@ -359,6 +362,9 @@ def check(folder, log=print):
             d['frames'], d['seconds'], d['travel_units'] / 100.0, (ROPE_TOP[1] - BALCONY_Y) / 100.0))
         j = joins(a, lambda _s: None)
         say('NOTE', 'chain of the added clips: best join %.1f, worst %.1f degrees mean (> 5 = a snap); same numbers as L07\'s own file' % (min(j.values()), max(j.values())))
+    if os.path.isfile(os.path.join(folder, 'KLJoin.ini')) and b'[Rappel]' in open(os.path.join(folder, 'KLJoin.ini'), 'rb').read():
+        for x in check_cut(folder, log):
+            out.append(x)
     n_fail = sum(s == 'FAIL' for s, _t in out)
     log('RESULT (kl_fa_rappel): %s (%d FAIL)' % ('PASS' if not n_fail else 'FAIL', n_fail))
     return out
@@ -437,6 +443,323 @@ def apply(src, dst, log=print):
     return report
 
 
+# ------------------------------------------------------------------ build: the cut (round two, 2026-10-12)
+GROUP, SQUAD, ROUT, POS, TIMER = 'KL_Rappel!', 'Rappel_Squad', 'Rappel', 'PosObject_Rappel', 'Rappel_Timer'
+CLIP = 'Repelling_01'
+SLOT = '/Level_Specific/L07/Situations/L07_Repelling_Enemies/Repelling_01'
+LAND = (6100.0, 21011.0, -100.0)        # the balcony row: floor y 21011 from x 5850 to 6150 (Ground.under, 2026-10-12), a gap between the spawn rows z -690 and 530
+FACE = (-1.0, 0.0)                      # he faces the facade (-x); the START rows face -x as well
+DELAY = 2.0                             # GUESS: seconds after the round-start event (the clip is 4.2 s; GO is 8.4 - 8.8 s after the event, the blast 16.5 s)
+RT_TALK = 'rt_full6/retomoto_full/KLTalk.ini'
+TIMER_DONOR = ('F07', 'ROOT\\Gameplay!merc_bot_squad!Timer_start_bots')
+STEP = 4                                # profile sample step in frames (104 / 4 = 26 intervals -> 27 values)
+
+
+def world_net(net, face):
+    """The clip's root travel (clip frame: x right, y up, z BACK; he looks along local -z) in the world, for a body facing `face` (x, z).
+    ASSUMPTION (sign conventions, re/rappel.md 8.3): local -z is `face`, local +x is its right-hand side:
+    x' = x * fz - z * fx,  z' = x * fx - z * fz  (face (-1, 0): x' = z, z' = -x)."""
+    fx, fz = face
+    return (net[0] * fz - net[2] * fx, net[1], net[0] * fx - net[2] * fz)
+
+
+def profile(a, clip=CLIP):
+    """The clip's vertical root path as thousandths of the drop at every STEP-th frame -> (frames, net, [ints])."""
+    c = clips_of(a)[clip]
+    g = [c.local('GROUND', f)[1] for f in range(c.frames)]
+    net = tuple(g[-1][i] - g[0][i] for i in range(3))
+    if not (net[1] < -500.0):
+        raise ValueError('%s: the root does not drop (%r)' % (clip, net))
+    out = [int(round(1000.0 * (g[0][1] - g[min(f, c.frames - 1)][1]) / -net[1])) for f in range(0, c.frames - 1 + STEP, STEP)]
+    out = [max(0, min(1000, v)) for v in out]
+    out[0], out[-1] = 0, 1000
+    for i in range(1, len(out)):
+        out[i] = max(out[i], out[i - 1])
+    return c.frames, net, out
+
+
+def rappel_ini(frames, start, land, prof, slot=SLOT):
+    return ('\n[Rappel]\n; written by tools\\kl_fa_rappel.py build for klhook\\klrappel.c ([Rappel] Enable=1 in KLHook.ini): the human\'s rope descent.\n'
+            '; Start = the PosObject of the cut (the node is put there by the game), Land = the balcony row, Profile = the clip\'s vertical root path\n'
+            '; in thousandths at every %d-th frame (the game does not apply the root motion of that cut: re\\rappel.md 8).\n'
+            'Clip=%s\nFrames=%d\nStart=%.1f %.1f %.1f\nLand=%.1f %.1f %.1f\nProfile=%s\n') % (
+        STEP, slot, frames, start[0], start[1], start[2], land[0], land[1], land[2], ' '.join(str(v) for v in prof))
+
+
+def build(src, dst, land=LAND, face=FACE, delay=DELAY, log=print):
+    """The build `src` written to the NEW folder `dst`: the L07 rappel clips in the .ANM (apply's merge), ONE cut for the local human
+    (squad + MiniCutsceneRout with a 'Lynch' head and one act + a PosObject 17.6 m over `land`), a TriggerDelay2 `delay` seconds after the
+    round-start event (AIMonitor list 2) that starts it, and a [Rappel] section in the KLJoin.ini for klhook\\klrappel.c."""
+    import kl_fa_climb2 as C2
+    import kl_fa, kl_gms
+    import kl_prpjoin as J
+    import kl_octree as O
+    import kl_fa_bots as F
+    import kl_fa_cover as CV
+    import kl_graft, kl_maps
+    B = F.Built(src)
+    zp = B.zp
+    if os.path.abspath(dst) == os.path.abspath(B.folder):
+        raise ValueError('the out folder is the build itself')
+    if os.path.isdir(dst) and os.listdir(dst):
+        raise ValueError('%s exists and is not empty: a build folder is never written into' % dst)
+    sc = B.sc
+    if sc.resolve(F.R_ + GROUP):
+        raise ValueError('the build already has %s' % GROUP)
+    lines = []
+
+    def say(s=''):
+        log(s)
+        lines.append(s)
+    say('kl_fa_rappel build: %s -> %s' % (zp, dst))
+    before = F.sizes(B.folder)
+    # ---- the clips
+    anm_name, snd_name = _anm_snd(B.order)
+    new_anm, arep = merge(B.files[anm_name], B.files[snd_name], say)
+    a_new = kl_anm.Anm(new_anm)
+    frames, net, prof = profile(a_new)
+    wnet = world_net(net, face)
+    start = tuple(land[i] - wnet[i] for i in range(3))
+    say('  %s: %d frames = %.1f s; root travel in the clip frame (%.0f, %.0f, %.0f) -> in the world for a body facing (%g, %g): (%.0f, %.0f, %.0f); '
+        'PosObject (the start) at (%.0f, %.0f, %.0f), landing (%.0f, %.0f, %.0f); profile %d values' % (
+            CLIP, frames, frames / FPS, net[0], net[1], net[2], face[0], face[1], wnet[0], wnet[1], wnet[2],
+            start[0], start[1], start[2], land[0], land[1], land[2], len(prof)))
+    # ---- the nodes
+    same = J.join(sc, [(sc, t) for t in sc.tops()], 'same')
+    if J.fingerprints(same)[0] != J.fingerprints(sc)[0] or J.text(same, same.p.settings) != J.text(sc, sc.p.settings):
+        raise ValueError('kl_prpjoin.join does not reproduce the build\'s .prp')
+    F._roundtrip(B)
+    octx, rmi, rmc = O.Oct.parse(B['.oct']), O.RoomIndex.parse(B['.rmi']), O.RoomIndex.parse(B['.rmc'])
+    pre = F.room_sets_check(B.scene, octx, rmi, rmc)
+    M = F.Maker()
+    gk = CV.group_form(B)
+    top = CV._node(M, B, gk, GROUP)
+    M.place(top, (0.0, 0.0, 0.0))
+    sq = top.add(M.clone(*C2.DONOR['squad'], name=SQUAD))
+    M.place(sq, (0.0, 0.0, 0.0))
+    ro = sq.add(M.clone(*C2.DONOR['rout'], name=ROUT))
+    M.place(ro, (0.0, 0.0, 0.0))
+    po = ro.add(M.clone(*C2.DONOR['pos'], name=POS))
+    M.place(po, start, F.rot9(-face[0], -face[1]))              # he looks along face; rot9(n) holds look9(-n) (re/climb2.md): n is OUT of the wall
+    tm = top.add(M.clone(*TIMER_DONOR, name=TIMER))
+    M.place(tm, (0.0, 0.0, 0.0))
+    M.set(ro, 'MiniCutsceneRout', {0: C2.script_for(SLOT, POS), 1: []})
+    M.set(po, 'MiniCutPosObject', {0: ''})
+    rout_path = F.R_ + GROUP + '\\' + SQUAD + '\\' + ROUT
+    timer_path = F.R_ + GROUP + '\\' + TIMER
+    M.set(tm, 'TriggerDelay2', {0: float(delay), 1: 0.0, 2: -1.0, 3: 0, 4: [rout_path]})
+    for n in (sq, ro, po, tm):
+        if n.links is not None or n.model:
+            raise ValueError('%s: a donor with a list or a model' % n.name)
+    q, order = M.scene([top])
+    Jn = J.join(sc, [(sc, t) for t in sc.tops()] + [(q, t) for t in q.tops()], 'rappel')
+    mon = Jn.resolve(F.R_ + 'Gameplay!AIMonitor')
+    if len(mon) != 1:
+        raise ValueError('%d Gameplay!AIMonitor nodes: nothing to start the cut from' % len(mon))
+    mi = next(i for i, (nm, _b) in enumerate(Jn.nodes[mon[0]]['ctrls']) if Jn.p.key(nm) == 'AIMonitor')
+
+    def fn(us):
+        have = [Jn.p.key(t) for t in us[2][1:]]
+        if timer_path.lower() not in [h.lower() for h in have]:
+            us[2] = kl_fa._refs(Jn, have + [timer_path])
+    kl_fa.edit(Jn, mon[0], mi, fn)
+    prp = Jn.p.serialize()
+    back = F.Prp(prp)
+    if back.serialize() != prp or len(back.nodes()) != len(Jn.nodes):
+        raise ValueError('the new .prp does not round-trip')
+    A = B.scene
+    slot0 = A.slots()
+    nxt = max([A.ref_slots] + [e.ref + 1 for e in B.ents])
+    ref0, ents_made = nxt, {}
+    nxt = C2._write_ent(A, top, None, nxt, ents_made)
+    A.ref_slots = nxt
+    faults = A.check()
+    if faults:
+        raise ValueError('kl_scene.check: %s' % faults[:3])
+    ents = list(A.entities())
+    if [e.name.decode('latin1') for e in ents] != Jn.names[1:] or [e.tid for e in ents] != Jn.tids[1:]:
+        raise ValueError('the new .gms and .prp disagree on the entities')
+    gms, buf = A.write()
+    slot1 = A.slots()
+    ids = {slot0[e] + 2: slot1[e] + 2 for e in slot0}
+    ids[1] = 1
+    octn, rmin, rmcn = O.remap_ids(octx, ids), O.remap_ids(rmi, ids), O.remap_ids(rmc, ids)
+    moved = sum(1 for x, y in ids.items() if x != y)
+    p = po.pos
+    lo = tuple(p[i] - 10.0 for i in range(3))
+    hi = tuple(p[i] + (10.0 if i != 1 else 190.0) for i in range(3))
+    items = [(slot1[ents_made[id(sq)]] + 2, lo, hi), (slot1[ents_made[id(ro)]] + 2, lo, hi), (slot1[ents_made[id(top)]] + 2, lo, hi)]
+    root3 = octn.rooms[0][3]
+    listed = repointed = 0
+    new_prm = None
+    if root3 is not None:
+        octn.rooms[0][3] = O.join_trees(root3, O.build_tree(items, root3.origin, root3.scale))
+        octn.rooms[0][3].check()
+        listed = len(items)
+        move = {x: y for x, y in zip(octx.record_refs(), octn.record_refs()) if x != y}
+        if move:
+            pm = bytearray(B['.prm'])
+            t, n = struct.unpack_from('<II', pm, 0)
+            old = set(octx.record_refs())
+            for i in range(1, n):
+                o, size = struct.unpack_from('<II', pm, t + 16 * i)
+                if size == 64 and pm[o:o + 4] == b'\0\1\7\0':
+                    v = struct.unpack_from('<I', pm, o + 0x1c)[0]
+                    if v in move:
+                        struct.pack_into('<I', pm, o + 0x1c, move[v]); repointed += 1
+                    elif v and v not in old:
+                        raise ValueError('.prm chunk %d names an .oct record that is not there (%#x)' % (i, v))
+            if not repointed:
+                raise ValueError('%d .oct records moved and no model root names one' % len(move))
+            new_prm = bytes(pm)
+    post = F.room_sets_check(A, octn, rmin, rmcn)
+    if post != pre:
+        raise ValueError('slot ids after the renumbering: %s (before: %s)' % (post, pre))
+    new = dict(B.files)
+    new[B.ext['.prp']], new[B.ext['.gms']], new[B.ext['.buf']] = prp, kl_gms.pack(gms), buf
+    new[B.ext['.oct']], new[B.ext['.rmi']], new[B.ext['.rmc']] = octn.pack(), rmin.pack(), rmcn.pack()
+    new[anm_name] = new_anm
+    if new_prm is not None:
+        new[B.ext['.prm']] = new_prm
+    changed = sorted(e for e, nm in B.ext.items() if new[nm] != B.files[nm])
+    os.makedirs(dst, exist_ok=True)
+    out = kl_graft.write_zip(os.path.join(dst, os.path.basename(zp)), [(nm, new[nm]) for nm in B.order])
+    for x in os.listdir(B.folder):
+        pth = os.path.join(B.folder, x)
+        if os.path.isfile(pth) and pth != zp and not x.startswith(('audit.', 'rappel.')):
+            shutil.copyfile(pth, os.path.join(dst, x))
+    kj = os.path.join(dst, 'KLJoin.ini')
+    if not os.path.isfile(kj):
+        raise ValueError('the build has no KLJoin.ini to carry the [Rappel] section')
+    txt = open(kj, 'rb').read().decode('latin1')
+    if '[Rappel]' in txt:
+        raise ValueError('KLJoin.ini has a [Rappel] section already')
+    with open(kj, 'wb') as fh:
+        fh.write((txt.rstrip('\r\n') + '\n' + rappel_ini(frames, start, land, prof)).encode('latin1'))
+    after = F.sizes(dst)
+    say('written %s: %d entities added (%s), REF ids %d..%d; members changed: %s; %d slot ids renumbered; %d groups listed in the root\'s group tree; %d model roots of the .prm re-pointed; AIMonitor list 2 + %s' % (
+        out, len(order), ', '.join('%s %d' % kv for kv in collections.Counter(J.schema('dd').geoms.get(n.tid) for n in order).items()), ref0, nxt - 1,
+        ' '.join(changed), moved, listed, repointed, TIMER))
+    say('  the four large blocks: ' + ', '.join('%s %d -> %d' % (e, before[e], after[e]) for e in before))
+    if before['.prm'] != after['.prm'] or before['.fxc'] != after['.fxc'] or before['.WAV'] != after['.WAV']:
+        raise ValueError('a large block other than the .ANM changed its size: %s -> %s' % (dict(before), dict(after)))
+    sj = os.path.join(dst, 'steps.json')
+    if os.path.isfile(sj):
+        st = json.load(open(sj))
+        st['rappel'] = changed
+        st['same'] = [e for e in st.get('same', []) if e not in changed]
+        st['final'] = kl_maps.member_ids(dst, os.path.basename(zp)[:-len('_Main.zip')])
+        with open(sj, 'w') as fh:
+            json.dump(st, fh, indent=1)
+    for rj in ('dyn.json', 'fed.json'):
+        pth = os.path.join(dst, rj)
+        if os.path.isfile(pth):
+            d = json.load(open(pth), object_pairs_hook=collections.OrderedDict)
+            big = d.get('big_before')
+            if isinstance(big, dict) and big.get('.ANM') == arep['bytes'][0]:
+                d['big_before_rappel'] = collections.OrderedDict(big)
+                big['.ANM'] = arep['bytes'][1]
+                with open(pth, 'w') as fh:
+                    json.dump(d, fh, indent=1)
+                say('  %s: its record of the large blocks continued (.ANM %d -> %d)' % (rj, arep['bytes'][0], arep['bytes'][1]))
+    for x in os.listdir(B.folder):
+        if x.lower() == 'kltalk.ini':
+            if open(os.path.join(dst, x), 'rb').read() != open(os.path.join(B.folder, x), 'rb').read():
+                raise ValueError('KLTalk.ini differs from the source build')
+            say('  %s is byte-equal to the source build\'s' % x)
+    report = collections.OrderedDict(source=B.folder, out=dst, land=list(land), face=list(face), delay=delay, start=list(start), net=list(net), world_net=list(wnet),
+                                     frames=frames, profile=prof, anm=arep, members_changed=changed, entities_added=len(order), ref_ids='%d..%d' % (ref0, nxt - 1))
+    say('')
+    res = check(dst, say)
+    report['check'] = [list(r) for r in res]
+    with open(os.path.join(dst, 'rappel.json'), 'w') as fh:
+        json.dump(report, fh, indent=1)
+    with open(os.path.join(dst, 'rappel.txt'), 'w') as fh:
+        fh.write('\n'.join(lines) + '\n')
+    return report
+
+
+def check_cut(folder, log=print):
+    """The cut of a `build`: the nodes, the timer, the PosObject, the KLJoin.ini section, the floor under the landing, the talk file."""
+    import configparser
+    import kl_fa
+    import kl_fa_bots as F
+    import kl_fa_climb2 as C2
+    import kl_map_escape as E
+    out = []
+
+    def say(s, t):
+        out.append((s, t))
+        log('  %-4s %s' % (s, t))
+    B = F.Built(folder)
+    sc = B.sc
+    rt = sc.resolve(F.R_ + GROUP + '\\' + SQUAD + '\\' + ROUT)
+    po = sc.resolve(F.R_ + GROUP + '\\' + SQUAD + '\\' + ROUT + '\\' + POS)
+    tm = sc.resolve(F.R_ + GROUP + '\\' + TIMER)
+    if len(rt) != 1 or len(po) != 1 or len(tm) != 1:
+        say('FAIL', 'the cut\'s nodes are missing (rout %d, pos %d, timer %d)' % (len(rt), len(po), len(tm)))
+        return out
+    rt, po, tm = rt[0], po[0], tm[0]
+    ctl = {sc.p.key(nm): [kl_fa.value(sc, u) for u in kl_fa.units(body[1:-1])] for nm, body in sc.nodes[rt]['ctrls']}
+    script = ctl['MiniCutsceneRout'][0]
+    say('PASS' if script == C2.script_for(SLOT, POS) else 'FAIL', 'the rout\'s script is the one-act Lynch form of kl_fa_climb2.script_for: %s' % script[:150])
+    rpath = F.R_ + GROUP + '\\' + SQUAD + '\\' + ROUT
+    tv = [v for k, _i, v in kl_fa.controllers(sc, 'TriggerDelay2') if k == tm][0]
+    say('PASS' if [str(x).lower() for x in tv[4]] == [rpath.lower()] else 'FAIL', 'the timer (%.1f s) names the rout: %r' % (tv[0], tv[4]))
+    mon = [v for k, _i, v in kl_fa.controllers(sc, 'AIMonitor') if sc.names[k] == 'Gameplay!AIMonitor']
+    named = bool(mon) and any(str(x).lower() == (F.R_ + GROUP + '\\' + TIMER).lower() for x in mon[0][2])
+    say('PASS' if named else 'FAIL', 'Gameplay!AIMonitor list 2 (the round-start event) names the timer')
+    start = B.at(po)
+    cp = configparser.RawConfigParser(strict=False)
+    cp.read_string(open(os.path.join(folder, 'KLJoin.ini'), 'rb').read().decode('latin1'))
+    sec = dict(cp.items('Rappel')) if cp.has_section('Rappel') else {}
+    if not sec:
+        say('FAIL', 'KLJoin.ini has no [Rappel] section')
+        return out
+    st = [float(x) for x in sec['start'].split()]
+    ld = [float(x) for x in sec['land'].split()]
+    pr = [int(x) for x in sec['profile'].split()]
+    say('PASS' if max(abs(st[i] - start[i]) for i in range(3)) < 0.05 else 'FAIL', 'the PosObject stands at the ini\'s Start: (%.1f, %.1f, %.1f) / (%.1f, %.1f, %.1f)' % (tuple(start) + tuple(st)))
+    say('PASS' if pr[0] == 0 and pr[-1] == 1000 and all(b >= a for a, b in zip(pr, pr[1:])) and len(pr) == (int(sec['frames']) - 1 + STEP - 1) // STEP + 1 else 'FAIL',
+        'Profile: %d values, 0 .. 1000, never back, one per %d frames of the %s-frame clip' % (len(pr), STEP, sec['frames']))
+    an, _sn = _anm_snd(B.order)
+    a = kl_anm.Anm(B.files[an])
+    fr = clips_of(a)[CLIP].frames
+    say('PASS' if fr == int(sec['frames']) else 'FAIL', 'the .ANM\'s %s has %d frames = Frames=%s' % (CLIP, fr, sec['frames']))
+    drop = ld[1] - st[1]
+    say('PASS' if abs(drop + 1756.0) < 1.0 else 'FAIL', 'Land is %.0f under Start (the clip\'s root drop is 1756)' % -drop)
+    L = E.Level(B.zp)
+    G = E.Ground(L)
+
+    def floor_at(x):
+        u = G.under(x, ld[1] + 5.0, ld[2])
+        return u[0] if u else None
+    f0 = floor_at(ld[0])
+    say('PASS' if f0 is not None and abs(f0 - ld[1]) < 3.0 else 'FAIL', 'a floor under Land: %s (Land y %.0f)' % ('none' if f0 is None else '%.0f' % f0, ld[1]))
+    out_ = [x for x in (20, 40, 60) if floor_at(ld[0] + x) is None or abs(floor_at(ld[0] + x) - ld[1]) > 3.0]
+    say('PASS' if not out_ else 'NOTE', 'floor outside Land (20, 40, 60 units further out): %s' % ('all there' if not out_ else 'ends at %d units' % out_[0]))
+    hit = [h for h in G.hits(st[0], st[2]) if st[1] - 1760.0 < h[0] < st[1] + 20.0]
+    say('NOTE', 'floors or ceilings of the map on the descent\'s vertical line at the start (y %.0f .. %.0f): %s (collision is off during the cut; only the picture can say)' % (
+        st[1] - 1760.0, st[1] + 20.0, ', '.join('%.0f' % h[0] for h in hit[:8]) or 'none'))
+    ref = None
+    here = os.path.abspath(folder)
+    while True:
+        c = os.path.join(here, 'build', RT_TALK.replace('/', os.sep))
+        if os.path.isfile(c):
+            ref = c
+            break
+        up = os.path.dirname(here)
+        if up == here:
+            break
+        here = up
+    mine = os.path.join(folder, 'KLTalk.ini')
+    if ref and os.path.isfile(mine):
+        say('PASS' if open(ref, 'rb').read() == open(mine, 'rb').read() else 'FAIL', 'KLTalk.ini byte-equal to rt_full6\'s (the approved countdown timing)')
+    else:
+        say('NOTE', 'KLTalk.ini not compared (no rt_full6 copy found above %s)' % folder)
+    return out
+
+
 def main():
     a = sys.argv[1:]
     if a == ['facts']:
@@ -445,6 +768,22 @@ def main():
         joins(kl_anm.Anm(kl_anmjoin.stock_anm(SOURCE, 'dd'), 'dd'))
     elif len(a) in (5, 6) and a[0] == 'plan':
         plan(kl_anm.Anm(kl_anmjoin.stock_anm(SOURCE, 'dd'), 'dd'), a[1], tuple(float(x) for x in a[2:5]), float(a[5]) if len(a) == 6 else 0.0)
+    elif len(a) >= 3 and a[0] == 'build':
+        land, delay, i = LAND, DELAY, 3
+        while i < len(a):
+            if a[i] == '--land' and i + 3 < len(a):
+                land = tuple(float(x) for x in a[i + 1:i + 4]); i += 4
+            elif a[i] == '--delay' and i + 1 < len(a):
+                delay = float(a[i + 1]); i += 2
+            else:
+                sys.exit(__doc__)
+        had = os.path.isdir(a[2]) and bool(os.listdir(a[2]))
+        try:
+            rep = build(a[1], a[2], land=land, delay=delay)
+        except (ValueError, KeyError) as e:
+            left = not had and os.path.isdir(a[2]) and bool(os.listdir(a[2]))
+            sys.exit('kl_fa_rappel: NOT built: %s%s' % (e.args[0] if e.args else e, ' - %s HOLDS WHAT WAS WRITTEN BEFORE THAT: not a build, do not use it' % a[2] if left else ' - nothing was written'))
+        sys.exit(1 if any(s == 'FAIL' for s, _t in rep['check']) else 0)
     elif len(a) == 2 and a[0] == 'check':
         sys.exit(1 if any(s == 'FAIL' for s, _t in check(a[1])) else 0)
     elif len(a) == 3 and a[0] == 'apply':

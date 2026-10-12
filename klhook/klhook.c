@@ -578,6 +578,7 @@ static void klh_tick(int game_thread);
 #include "klhop.c"
 #include "klmove.c"
 #include "klclimb.c"
+#include "klrappel.c"                                    /* klrappel.c: off unless [Rappel] Enable */
 #include "klbalance.c"
 #include "klgrudge.c"
 #include "klhud_values.c"                             /* the HUD's readers (reads only): BEFORE klhud.c, AFTER klbot.c */
@@ -630,6 +631,7 @@ static void klh_tick(int game_thread)
     klt_tick(game_thread);                            /* DIRECTLY after klj_tick: it must see kljoin.c's request while it is pending (klcrew_rt.c, EARLY) */
     klv_tick(game_thread);                            /* klhop.c: an AI heister that stands at a [CrewHop] place is put beyond it (one game call a tick) */
     klq_tick(game_thread);                            /* klclimb.c: the player at the foot of a [Climb] edge climbs it (OFF unless [Climb] Enable=1) */
+    klrp_tick(game_thread);                           /* klrappel.c: the descent of the rappel cut */
     klc_tick(game_thread);
     klw_tick(game_thread);                            /* after klc_tick: the player's own body goes first */
     klk_tick(game_thread);                            /* after klw_tick: it reads who wears whom */
@@ -817,6 +819,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klmv_init();
     klv_init();
     klq_init();
+    klrp_init();
     klr_init();
     kly_init();
     klu_init();

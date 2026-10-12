@@ -158,3 +158,90 @@ pre-round question left to the live check. SHOULD 5 (bot class): DONE for the cl
 (form C probe): written down as L-R4, not run. SHOULD 7 (naming): the clip is `Repilling_01` in the file; `clips_of` normalises it
 and `apply` never used the spelling. SHOULD 8 (merge touches Swat_02 / Thug): L-R0 first, not on the tab. FOUND ON THE WAY: re/climb.md
 already has the Lynch-head act for the player, so the first version's 'hook only' for the human was wrong.
+
+## 8. Round two (2026-10-12): a descent that shows - level cut + hook part (track Y3; OFFLINE, NOTHING RUN IN THE GAME)
+Facts taken in from the live runs of the level-data climb (re/climb2.md 10-13): a Lynch-head rout in a Fragile Alliance level starts, the
+placement of act 0's `startpos` works at once, the clip's root motion moves nothing that the log can see (the log reads the proxy), a second act
+never placed, `((0| 0| done))` stalls the section.
+
+### 8.1 A. Why the root motion is not applied (kl2.exe build 0490, read)
+- ZMiniPlayerActTask start 0x8e8d00 (read whole): `vtable+0x2a4(1)`, PlaceAt 0x82cc40(rot, pos, 1, 0, 0), `+0x2a4(0)` (only when the act has a
+  startpos), collision off `vtable+0x560` (always), then the clip through the player's `vtable+0x204` (Play whole clip) with flags 0x20001
+  (`[task+0x6a]` set) or 0x20003, subscribe 0x7f60e0, and asks the clip for events 0x27 and 0x14 only. Nothing in it sets an alignment.
+- The animation update 0x50ac80 takes the full-body channel whose clip has record flag 0x40 (0x760120) and carries ROOT MOTION only for a channel with
+  flag 0x200 (aligned: set by AlignTo 0x80fdc0 alone) or 0x400 (`test ecx, 0x600 / je 0x50b5be` at 0x50b09e: otherwise the movement delta [player+0x44..]
+  is zeroed at 0x50b5be). The delta is handed to 0x84c0d0, which passes it to the movement object ([+0x38c] vtable +0xc / 0x6e2210) - and the climb notes
+  (re/climb.md) already found that the game never carries a player by an animated move WITH THE COLLISION OFF. The act switches the collision off first.
+  The clip's record has 0x40; whether Play sets 0x400 ('moves bone 0x39') for these clips is NOT read - Y3a says the proxy did not move.
+- So no flag of the act, of the clip (0x10c0) or of the rout (0x3200000) turns the carrying on; AlignTo is a code call. DATA CANNOT. What data CAN do is
+  the placement (act 0's startpos) - and that is exactly what the hook repeats once a frame.
+- Stock L07 (how its soldiers go down): ZFFActors (148 in L07, no ZSoldier) in MiniCutsceneRouts, `Actor| <name>` head, one act per rout, the clip from a
+  MiniCutPosObject whose y equals the clip's root drop (POS_Repelling_01 at y 1756, root -1756), rope models (ROPE, ROPE01, ROPE02 ZSTDOBJ) shown by
+  ActivateGeom / DeactivateGeom + a TriggerDelay2. No key-framed node, no ZLNKOBJ attach, no rope physics. The soldiers end on the ground because the
+  ACTOR's movement applies the root of its clip (the design of those PosObjects needs it; the actor movement was NOT read here). A PLAYER is
+  different: the proxy / collision logic above. (Dead Men: section 1, a code-driven rope slide - not reachable from level data.)
+- CAVEAT: the live logs read the proxy (+0x460), not the drawn node. If the node is carried by the root motion and only the proxy stays (reading B of
+  re/climb2.md 11), the body DID descend and the end put him back. The hook detects that (below) and then only sets the landing.
+
+### 8.2 B. klhook/klrappel.c (new; NOT wired; compiled; harness PASS)
+`[Rappel] Enable=0 Dry=0 Log=1 Radius=150 LastFrames=1.5` in KLHook.ini; geometry from a `[Rappel]` section of the level's KLJoin.ini (Frames, Start,
+Land, Profile). While the local human has a state-1/3 full-body channel whose clip has Frames frames AND his node is within Radius of Start, it places
+his node once a frame on `Start + (Land - Start) * P(t / (Frames-1))` (P = the clip's measured vertical root path, linear between 27 samples) by PlaceAt
+0x82cc40 with force = 0 / sendNet = 0 (the cooldown stamp at [player+0x29e0] is only set by a forced call), the rotation he had (0x55f8f0 from his back
+vector, the routine klclimb.c uses); in the last 1.5 frames it puts him on Land and lets go (the act ends itself; its End does the proxy sync and the
+collision). It stops and says so when: the channel's clip changes or stops before the last frames, the node is not where the last placement left it
+(`THE GAME MOVES HIM TOO`: it places nothing more until the landing), 2 x clip length + 2 s pass, the player object changes. The two game routines are
+checked by their first bytes. PlaceAt read whole: with force 0 it checks the stamp, writes the node frame (vtable +0x2a8) unless he is attached to something
+([player+0xd44]), calls the proxy sync 0x4af5b0, the movement object's reset ([player+0x43c] +0x60; movement kind +0x5dc -> +0x34), nothing network.
+Wiring lines (klhook.c; the prefix is klrp_ because klr_ is klbalance.c's):
+    #include "klrappel.c"            (after #include "klclimb.c")
+    klrp_tick(game_thread);          (after klq_tick(game_thread);)
+    klrp_init();                     (after klq_init();)
+Build proof (git archive HEAD klhook + the file + those three lines in G:\kl_scratch\rappel\src): build_auto.bat -> G:\kl_scratch\rappel\test\dinput8.dll
+sha1 3982EE9F7C88E50C61F46BDAE77ACE9D4A7C08C9; build.bat -> G:\kl_scratch\rappel\ship\dinput8.dll sha1 5144A542E164D126B09DB4D608FA284283B8D95A; no warning
+from the file. Harness klhook/klrappel_test.c (fake address space, fake PlaceAt, real ini; G:\kl_scratch\rappel\h): 14 checks PASS - begin, monotone
+descent, exact landing, profile midpoint, the game moving him too, a vanished channel, a far node, Dry, a refused profile, no second start from the held
+last frame of the same cut.
+ASSUMED: a placement every frame is as harmless as the one the cut makes once (PlaceAt also runs the movement reset each time); the hook tick runs about
+once per game frame; the cut has placed him at the PosObject before the hook looks (the same frame); the node IS the drawn body.
+
+### 8.3 C. The level data: `python tools/kl_fa_rappel.py build <r_tab\DM09x> <out> [--land X Y Z] [--delay S]` (new; `apply` stays as it was)
+Built: `<work>\build\y_rappel\DM09r2` from `r_tab\DM09x` (F01_Main.zip sha1 dcb7f94c9e48aa320c591aec6c37d3369dc3e812; KLJoin.ini 1ebeb0aabf67ef05878ab96cb4a7d4305e44c220).
+Members changed: .ANM (+73,804: the L07 clips), .buf .gms .oct .prm .prp .rmc .rmi (5 entities added; slot ids renumbered as every node-adding step does;
+2,628 .prm roots re-pointed; .oct group tree 3 gets the three groups); .prm / .fxc / .WAV sizes unchanged; KLTalk.ini byte-equal to rt_full6's.
+New nodes: `KL_Rappel!` (ZGROUP) > `Rappel_Squad` (ZSquadScript, L03 Squad_OutroCut's form) > `Rappel` (MiniCutsceneRout; script = climb2's one-act Lynch form:
+`anim| /Level_Specific/L07/Situations/L07_Repelling_Enemies/Repelling_01`, `weaponhdl| Holster`, `startpos| PosObject_Rappel`, `mode unbreakable`) >
+`PosObject_Rappel`; `Rappel_Timer` (F07's Timer_start_bots form: ZBoxPrimitive + TriggerDelay2, 2.0 s, field 4 = the rout) named by `Gameplay!AIMonitor`
+list 2 = the round-start event (the list that starts the blast timer and Timer_start_bots). STOCK PRECEDENT for a start without a key: TriggerDelay2[4]
+naming a MiniCutsceneRout 25 times in L02, 13 in L07, 11 in L04, 5 in L03; AIMonitor[2] naming one directly in L07.
+- No key press: the timer starts the rout (not a PlayerAction: the 'fires without the key' byte +0x5f of ZPlayerAction is read at 0x550992 in the HUD prompt
+  code, it changes the prompt, not the start; re/climb2.md 10 names it wrongly for this purpose). ASSUMED: a rout started by a timer binds the Lynch head to the
+  local human as one started by a PlayerAction does (climb2 Y1/Y2: 'Lynch' is him).
+- Geometry: Land (6100, 21011, -100) = the balcony floor (Ground.under: y 21011 from x 5850 to 6150, floor still there 20, 40 and 60 units further out), in the
+  gap between the spawn rows (z -690 and 530); he FACES -x (the facade); PosObject (5940.3, 22766.7, -98.4), rot9(+1, 0). The clip's root net in its own
+  frame is (2, -1756, 160): 160 BACK, so the descent drifts 1.6 m AWAY from the wall and the start is 160 nearer the facade (x 5850) than the landing - 90 from it.
+  `world_net` documents the sign convention (ASSUMED, from 'he looks along local -z'); the hook uses Start / Land from the ini, so a wrong sign would only make the
+  posture look odd, not the place.
+- Timing: the timer is 2.0 s after the round-start event, the clip 4.2 s, GO 8.4 - 8.8 s after the event, the blast 16.5 s: he is down at event + 6.2 s. GUESS
+  `--delay`. ASSUMED: the game places and animates the local human in the pre-round (live check R1).
+- AI heisters: UNCHANGED (they stand on the balcony as today). L07's own form (a rout per bot, `Actor| <group name>` head, the same clip) is the stock way for
+  ZFFActors and the actor's movement applies root motion, but each bot's rout has to be started, seven PosObjects stand on the START rows, and the squad chain that
+  waits for the blast (Timer_start_bots 91.5 s / the gates) must not run before a bot has landed. Not built: see ONE descent first. Chaining routs by a rout's end list
+  has stock precedent (ZMiniCutsceneRout[1] naming MiniCutsceneRouts: 21 in L02, 18 in L04, 10 in L07) but ONE clip needs none.
+- Rope: none. L07's ROPE models are ZSTDOBJ models in L07's .prm; kl_prmgraph extract / closure + append with texture / material maps could move one thin model
+  (an agent-session, not done); Dead Men's ZRopeLnkObj has no model. The picture is a man falling 17.6 m beside the facade on nothing for 4.2 s.
+Checks (`kl_fa_rappel.py check`, now with the cut's lines): RESULT PASS (0 FAIL); kl_impact problems: 0; kl_fa_bots_rt PASS (0 FAIL, 12 NOTE); kl_fa_fedpoints PASS
+(0 FAIL, 8 NOTE; 7 points good); kl_fa_carfx PASS (5 places hold such a mesh, 5 off); KLTalk.ini cmp equal.
+
+### 8.4 Live checks (the lead; owner away; TEST hook with the three wiring lines, `[Rappel] Enable=1 Log=2`, a tree = the tab with DM09 = y_rappel\DM09r2)
+R0. The level loads, GO reached, no fault; at the load `rappel: 105-frame descent from ...KLJoin.ini: Start (5940, 22767, -98) -> Land (6100, 21011, -100)`.
+R1. Pictures every second from the round-start event: the cut starts 2.0 s after it (weapon holstered, camera not the balcony's); he is HIGH; log
+    `rappel: begun: the human's node is at (5940, 22767, -98)`. FAIL readings: a 105-frame clip plays but no `begun` = the line `... is N from Start: not the
+    descent` names why; no cut at all = the rout did not start by timer (try the build with a PlayerAction as climb2 does).
+R2. The fall: `rappel: frame ...` lines (every 0.5 s) with the node y going 22767 -> 21011, `LANDED after ~4200 ms ... node (6100.0, 21011.0, -100.0)`; pictures show
+    him falling in front of the facade and then standing on the row. `THE GAME MOVES HIM TOO` = root motion IS applied (reading B): the hook then only sets the
+    landing. A fall in the pictures with no `begun` line = the game did it all (leave the hook off).
+R3. After it: input back, weapon back, collision on (walk, jump), still on the balcony at GO; Kane's countdown and the blast at the approved times; the bots stood on
+    the balcony the whole time and nobody was pushed.
+R4. `Dry=1` first if wanted: `WOULD place` lines only, the cut alone plays in place at the PosObject (the Y3a picture).
+NOT ON THE OWNER'S TAB: it changes his Retomoto start; a test tree only.
