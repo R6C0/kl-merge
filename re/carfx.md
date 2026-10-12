@@ -280,3 +280,29 @@ the same spot are what to compare.
 | S4 50 instances, not 49 | corrected (note and tool) |
 | S5 the box's orientation | done: section 1, "lie" (the wheel fires give the car's axis; the stored no-rotation matrix) |
 | S6 an alpha-only variant | done: `apply --alpha-only`, `z_carfx\M03_alpha` |
+
+## 6. The club map (DM05A, 2026-10-12): what `check` counts now
+
+The first rule (every Standard/Glass instance in a form no stock level draws) counted **489** places on the club
+(`q_club/DM05A_w`) and `apply` refused ('vertex chunk 46906 of mesh 46910 is also used by meshes [46909]'). The 489:
+- 4 x `HeatShimmer` (the car fires, 4 entities of ONE mesh, material 1016 `Effects/Heat_Shimmer_01`, diffuse alpha 0)
+  = the cars' fault; the club has 7 static cars (Bentleys, Taxi, Civilians) that name `Car_Fire_USA_Sedan_01_Cheap`.
+- 480 x `Shard_N` / `Test02_undefined01` (shards of the dance-floor window `FX_0001_WindowA_SpecA01` and the stairs
+  window `..._SpecB_02`; material 812 `Water_01a_NoScroll_M05`, ADD, group 0x46), 2 x `..._SpecB_N!Window` (material
+  1020) and `..._SpecA01!Window_Glas01` (1077) (`Water_01a_Scroll_M05`, TRANS_ON_OPAQUE 0x41), 1 x
+  `Whole_Railing_A` (812): Dead Men's own glass. The shared vertex chunk was the dance-floor window pane (46910) and
+  its collision mesh (46909, material `_Glacier/Collision`).
+The glass is not the cars' fault: its diffuse texture (`Water_01_M05`) has mean alpha 197 of 255, so the shader's
+lerp (factor = diffuse alpha) draws the lit diffuse texture, not `refr * mask` with the missing mask. Live pictures
+(`C9_club_wake_100s/220s/340s`, `C7_club_gates_botdown_250s`, `P3_DM05A_page3_100s`): the dance-floor window is a
+pale frosted pane with a hard vertical edge, NO dark rectangle; near the tree behind it small white speckled
+fragments with colour fringes hang in the air (possibly shards that stand drawn before the window breaks: seen, NOT
+established, not touched here).
+**Rule now** (`glass_forms`): a Standard/Glass instance in a form stock Dog Days lacks is a fault only when its
+diffuse alpha is under `REFRACTION_LED` = 0.35 x 255 (or it has no readable diffuse); the rest is logged as 'glass
+NOT counted'. Club: 1 mesh / 4 entities (the HeatShimmer); the six older maps give the same result lines as before
+(DM01 1 place, DM02 1, DM03v 1, DM06 1, DM09x 5, DM03A_v2 3; all PASS).
+**`apply` with a shared vertex chunk** (`_own_vertices`, not needed on the club once the rule is right; tested on the
+pane 46910 without writing): the mesh gets its own sub-chunk -> descriptor -> vertex chunk (3 new table entries); the
+other meshes keep the old ones; refcounts of the old chunks are left (ASSUMED harmless). Build
+`q_club/DM05A_cfx`: one chunk changed (50691, the HeatShimmer's vertices), 0 added, only the .prm differs.

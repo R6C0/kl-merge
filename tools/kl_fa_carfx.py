@@ -152,16 +152,45 @@ def bools(e):
     return out
 
 
-def bad_materials(mat):
-    """{slot: (blend, mode, group)} of the Standard/Glass instances in a form no stock Dog Days level has."""
+REFRACTION_LED = 0.35 * 255     # a glass whose diffuse alpha is under this shows the refracted frame (the shader's lerp
+                                # factor is that alpha); 'every stock material whose diffuse alpha is under 0.35 has a
+                                # refraction mask' (above): it is the figure the stock levels themselves keep to.
+
+
+def diffuse_alpha(mat, tex, e):
+    """Mean alpha (0..255) of a glass instance's mapDiffuse texture; None = no texture / not DXT3 / DXT5 / not in the .TEX."""
+    for name, n in T.texture_stages(e):
+        if name == 'mapDiffuse':
+            v = n[3]
+            if v and not v & T.ENGINE_SLOT and v in tex.tex:
+                return texture_alpha(tex.tex[v].entry)
+    return None
+
+
+def glass_forms(mat, tex=None):
+    """{slot: (blend, mode, group, diffuse alpha or None)} of the Standard/Glass instances in a form no stock Dog Days
+    level has. With `tex`, split by what the shader draws (re/carfx.md 6):
+      bad  - the diffuse alpha is under REFRACTION_LED (or unknown): the pane is the refracted frame times a mask
+             texture this material does not have = the kind of the burning cars' HeatShimmer. THE FAULT.
+      kept - the diffuse alpha is high (Dead Men's own windows, shards, railings: Water_01a_*_M05, alpha ~197): the
+             shader draws the lit diffuse texture, which Dog Days draws as it does its own glass (club pictures: a
+             pale pane, no dark box)."""
     import kl_mat
-    out = {}
+    bad, kept = {}, {}
     for s, e in sorted(mat.insts.items()):
         if kl_mat.class_key(mat, e) == GLASS:
             f = glass_form(mat, e)
-            if f not in STOCK_GLASS:
-                out[s] = f
-    return out
+            if f in STOCK_GLASS:
+                continue
+            a = diffuse_alpha(mat, tex, e) if tex is not None else None
+            (kept if a is not None and a >= REFRACTION_LED else bad)[s] = f + (a,)
+    return bad, kept
+
+
+def bad_materials(mat, tex=None):
+    """{slot: (blend, mode, group, diffuse alpha)} that `check` / `apply` take as the fault; without `tex` every
+    Standard/Glass instance in a form stock Dog Days does not have (the first version's rule)."""
+    return glass_forms(mat, tex)[0]
 
 
 def texture_alpha(entry):
@@ -262,7 +291,7 @@ def survey(B):
     """Everything check() and apply() need: the bad materials, the meshes that use them, the entities that hold
     those meshes, the cars, and the emitters' cross-check."""
     sc, prm, mat = B.sc, B.prm, B.mat
-    bad = bad_materials(mat)
+    bad, kept = glass_forms(mat, B.tex)
     roots = G.level_roots(sc.p, sc.tids, B.raw, B.wardrobe_roots())
     kinds, _args = G.walk(prm, roots)
     meshes = {i: prm.u16(i, 0x12) for i, k in kinds.items() if k == 'mesh' and prm.u16(i, 0x12) in bad}
@@ -330,7 +359,8 @@ def survey(B):
             em['no_sprite'][name] += 1
         elif prm.u32(ch, 4) % G.SLOTS['dd'] not in B.tex.tex:
             em['no_texture'][name] += 1
-    return dict(bad=bad, meshes=meshes, users=users, ents=ents, cars=cars, emitters=em, kinds=kinds,
+    kept_n = sum(1 for i, k in kinds.items() if k == 'mesh' and prm.u16(i, 0x12) in kept)
+    return dict(bad=bad, kept=kept, kept_meshes=kept_n, meshes=meshes, users=users, ents=ents, cars=cars, emitters=em, kinds=kinds,
                 smoke=fire_smoke(B, sc, fire_groups))
 
 
@@ -367,6 +397,10 @@ def check(folder, log=print, B=None, cars=False):
     for slot in S['bad']:
         for l in material_lines(B, slot):
             log('  ' + l)
+    if S['kept']:
+        log('  glass NOT counted (a stock-unlike form, but the diffuse alpha is high, so the shader draws the lit texture, not the '
+            'refracted frame): %s; %d mesh(es) use them' % (', '.join('%d %s %s 0x%x alpha %.0f' % (s, B.mat.insts[s].name.split('/')[-1], f[1] or 'off', f[2], f[3])
+                                                                 for s, f in S['kept'].items()), S['kept_meshes']))
     states = {}
     for m in sorted(S['meshes']):
         try:
@@ -478,29 +512,52 @@ def clear_smoke(B, S, log=print):
     return bytes(data), done
 
 
+def _own_vertices(prm, m, vtx, log):
+    """A private copy of mesh m's vertex data, for a vertex chunk that meshes keeping their material also use:
+    the mesh object gets a NEW sub-chunk -> NEW descriptor -> NEW vertex chunk (3 table entries; the old ones stay as
+    they are for the other meshes). -> (new vertex chunk, [chunks of the old table that were edited], [new chunks]).
+    The old chunks' refcounts are left (an over-count only means a chunk the game never frees: ASSUMED harmless)."""
+    sub = prm.u32(m, 0x28)
+    d = prm.u32(sub, 0)
+    nvtx = G.new_chunk(prm, prm.chunks[vtx], prm.refs[vtx])
+    nd = bytearray(prm.chunks[d]); struct.pack_into('<I', nd, 4, nvtx)
+    ndi = G.new_chunk(prm, bytes(nd), prm.refs[d])
+    ns = bytearray(prm.chunks[sub]); struct.pack_into('<I', ns, 0, ndi)
+    nsi = G.new_chunk(prm, bytes(ns), prm.refs[sub])
+    mm = bytearray(prm.chunks[m]); struct.pack_into('<I', mm, 0x28, nsi)
+    prm.chunks[m] = bytes(mm)
+    log('  mesh %d shares vertex chunk %d with other meshes that keep their material: it gets its own copy (chunk %d, '
+        'descriptor %d, sub-chunk %d: 3 new table entries)' % (m, vtx, nvtx, ndi, nsi))
+    return nvtx, [m], [nvtx, ndi, nsi]
+
+
 def switch_off(B, S, log=print, keep_shape=False):
     """Every mesh of a bad material: all vertices to the local origin (not with keep_shape), vertex alpha 0.
-    -> [(mesh, vtx, nv)]."""
-    prm, done, seen = B.prm, [], set()
+    A vertex chunk another, unchanged mesh also uses is copied for this mesh first (_own_vertices).
+    -> ([(mesh, vtx, nv)], [old chunks edited besides the vertex chunks], [new chunks])."""
+    prm, done, seen, edited, added = B.prm, [], {}, [], []
     for m in sorted(S['meshes']):
         vtx, nv = vertices(prm, m)
-        other = S['users'][vtx] - set(S['meshes'])
-        if other:
-            raise ValueError('vertex chunk %d of mesh %d is also used by meshes %s that keep their material' % (vtx, m, sorted(other)[:4]))
-        if vtx in seen:
-            continue
-        seen.add(vtx)
+        if S['users'][vtx] - set(S['meshes']):
+            vtx, e, a = _own_vertices(prm, m, vtx, log)
+            edited += e; added += a
+            fresh = True
+        else:
+            fresh = False
+            if vtx in seen:
+                continue
+            seen[vtx] = m
         v = bytearray(prm.chunks[vtx])
         for j in range(nv):
             if not keep_shape:
                 struct.pack_into('<3f', v, VERTEX * j, 0.0, 0.0, 0.0)
             v[VERTEX * j + ALPHA_AT] = 0
-        if bytes(v) != prm.chunks[vtx]:
+        if bytes(v) != prm.chunks[vtx] or fresh:
             prm.chunks[vtx] = bytes(v)
             done.append((m, vtx, nv))
             log('  mesh %d: its %d vertices (chunk %d, %d bytes) %s, alpha 0' % (
                 m, nv, vtx, len(v), 'keep their places' if keep_shape else 'moved to one point'))
-    return done
+    return done, edited, added
 
 
 def apply(src, dst, log=print, mode='off'):
@@ -533,22 +590,24 @@ def apply(src, dst, log=print, mode='off'):
         raise ValueError('nothing to switch off: check finds no fault in %s' % src)
     S = survey(B)
     old = list(B.prm.chunks)
-    files, textures = dict(B.files), []
+    files, textures, added = dict(B.files), [], []
     if mode == 'smoke':
         data, textures = clear_smoke(B, S, say)
         done, changed = [], []
         if not textures or len(data) != len(B['.TEX']):
             raise ValueError('no smoke texture of the fires could be cleared')
     else:
-        done = switch_off(B, S, say, keep_shape=mode == 'alpha')
+        done, edited, added = switch_off(B, S, say, keep_shape=mode == 'alpha')
         if not done:
             raise ValueError('check names a fault that switching the meshes off does not touch: %s' % before[:2])
         data = G.write(B.prm)
-        if len(data) != len(B['.prm']):
+        if not added and len(data) != len(B['.prm']):
             raise ValueError('the .prm changed its size')
         changed = [i for i in range(1, len(old)) if old[i] != B.prm.chunks[i]]
-        if sorted(changed) != sorted(v for _m, v, _n in done):
-            raise ValueError('chunks other than the vertex chunks changed: %s' % changed[:8])
+        if sorted(changed) != sorted([v for _m, v, _n in done if v < len(old)] + edited):
+            raise ValueError('chunks other than the vertex chunks (and the meshes given a copy) changed: %s' % changed[:8])
+        if len(B.prm.chunks) != len(old) + len(added):
+            raise ValueError('the chunk count grew by other chunks than the copies')
     files[B.ext[member]] = data
     os.makedirs(dst, exist_ok=True)
     out = kl_graft.write_zip(os.path.join(dst, os.path.basename(zp)), [(n, files[n]) for n in B.order])
@@ -562,7 +621,7 @@ def apply(src, dst, log=print, mode='off'):
         if [i.filename for i in ia] != [i.filename for i in ib]:
             raise ValueError('the member list changed')
         diff = [i.filename.rsplit('_Main', 1)[-1] for i, j in zip(ia, ib) if (i.CRC, i.file_size) != (j.CRC, j.file_size)]
-        grown = [i.filename for i, j in zip(ia, ib) if j.file_size > i.file_size]
+        grown = [i.filename for i, j in zip(ia, ib) if j.file_size > i.file_size and not (added and i.filename.endswith('.prm'))]
     if diff != [member] or grown:
         raise ValueError('not exactly the %s differs from the build (%s), or a member grew (%s)' % (member, diff, grown))
     slot = os.path.basename(zp)[:-len('_Main.zip')]
@@ -576,7 +635,7 @@ def apply(src, dst, log=print, mode='off'):
         with open(sj, 'w') as fh:
             json.dump(st, fh, indent=1)
     say('  only the %s member differs from the build (%d members, %d bytes each side%s); %d files beside the '
-        'archive copied%s' % (member, len(B.order), len(data), '' if mode == 'smoke' else ', %d of its %d chunks: %s' % (len(changed), len(old) - 1, changed),
+        'archive copied%s' % (member, len(B.order), len(data), '' if mode == 'smoke' else ', %d of its %d chunks: %s%s' % (len(changed), len(old) - 1, changed, '; %d chunk(s) ADDED: %s' % (len(added), added) if added else ''),
                               len(os.listdir(dst)) - 1, '; steps.json continued (\'%s\')' % step if os.path.isfile(sj) else ''))
     say('')
     after, facts = check(dst, say)
@@ -604,7 +663,7 @@ def apply(src, dst, log=print, mode='off'):
 def material(folder, log=print):
     import kl_light as L
     B = Build(folder)
-    bad = bad_materials(B.mat)
+    bad = bad_materials(B.mat, B.tex)
     have = L.shader_cache(B['.fxc'])
     for slot in bad:
         e = B.mat.insts[slot]
