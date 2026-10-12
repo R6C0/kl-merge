@@ -2510,6 +2510,9 @@ def write_hops(dst, gates, log=print):
         lines.append('; gate %s: its holds (a bot is taken to be at this gate when its chain place is within 150 of one) and the places it may hop to' % g['name'])
         lines += ['Gate.%d.Holds=%d' % (gi, len(g['holds']))] + ['Gate.%d.Hold.%d=%g %g %g' % (gi, j, *h) for j, h in enumerate(g['holds'], 1)]
         lines += ['Gate.%d.Hops=%d' % (gi, len(g['hops']))] + ['Gate.%d.Hop.%d=%g %g %g' % (gi, j, *h) for j, h in enumerate(g['hops'], 1)]
+        if g.get('progress'):
+            lines.append('; gate %s: progress along the route (arc length, 100 = 1 m) of each place, same order as Hold.j / Hop.j: a hop must not be more than Slack behind the bot' % g['name'])
+            lines += ['Gate.%d.HoldS.%d=%g' % (gi, j, s) for j, s in enumerate(g['progress'], 1)] + ['Gate.%d.HopS.%d=%g' % (gi, j, s) for j, s in enumerate(g['progress'], 1)]
     with open(p, 'w', encoding='latin1', newline='\r\n') as f:
         f.write(text.rstrip('\n') + '\n' + '\n'.join(lines) + '\n')
     log('written %s: [Hops] with %d places in %d gate(s)' % (p, n, len(gs)))
@@ -3469,7 +3472,138 @@ def street_hops(folder, dedup=60.0):
     if not out:
         return None
     pl = [[round(v, 1) for v in q[:3]] for q in out]
-    return collections.OrderedDict(name='street', holds=pl, hops=pl, places_refused={})
+    # PROGRESS (2026-10-12, round 3): a hop must never undo progress (the owner's log: 'record 2 hops ... to (4280, 160, -6440)' from
+    # (2797, 131, -6286) = 15 m back towards the doors). The programme's step order IS the route: take bot 2's programme (first way of every fork)
+    # as the reference line and give every place the ARC LENGTH of its nearest point on that line. A bot then hops only to a place whose
+    # progress is at least its own less PROG_SLACK ('level with it across the lane'). The line is the lobby -> street way of one bot; the other
+    # bots' lanes run beside it (same direction), so the projection orders them the same way.
+    ref = []
+
+    def first_way(items):
+        for it in items:
+            if it['kind'] == 'step' and it.get('places'):
+                ref.append(tuple(it['places'][-1]))
+            elif it['kind'] == 'fork':
+                first_way(it['ways'][0]['items'])
+    prog = (lanes.get('bots') or {}).get('2') or next(iter((lanes.get('bots') or {}).values()))
+    first_way(prog.get('program') or [])
+    cum = [0.0]
+    for a_, b_ in zip(ref, ref[1:]):
+        cum.append(cum[-1] + math.dist(a_, b_))
+
+    def progress(q):
+        best, bs = 1e18, 0.0
+        for k in range(len(ref) - 1):
+            a_, b_ = ref[k], ref[k + 1]
+            dx, dz = b_[0] - a_[0], b_[2] - a_[2]
+            L2 = dx * dx + dz * dz
+            u = 0.0 if L2 == 0 else max(0.0, min(1.0, ((q[0] - a_[0]) * dx + (q[2] - a_[2]) * dz) / L2))
+            d = math.hypot(q[0] - (a_[0] + u * dx), q[2] - (a_[2] + u * dz))
+            if d < best:
+                best, bs = d, cum[k] + u * math.sqrt(L2)
+        return round(bs, 1)
+    sp = [progress(q) for q in out]
+    return collections.OrderedDict(name='street', holds=pl, hops=pl, places_refused={}, progress=sp)
+
+
+LOBBY_START = {2: 0.5, 3: 0.5, 4: 1.0, 5: 1.0, 6: 1.5, 8: 1.5, 7: 2.0}     # seconds at the doors before a bot's first bound (was 0.5 / 3.5 / 1.5 / 4.5 / 2.5 / 5.5 / 2.0)
+
+
+def lobby_fix(src, dst, log=print):
+    """`lobby <finished build> <new folder>` (2026-10-12, owner: 'no cover inside they go to they just stand there they dont even rush out the
+    door straight away'). The seven stand at the EXITS_BANK place just inside the glass doors until their own '050_Timer_out_start' has run (the
+    lane stagger: 0.5 / 3.5 / 1.5 / 4.5 / 2.5 / 5.5 / 2.0 s, armed when the step is reached within ARRIVE_3D = 10 m, so on top of the walk from the
+    lift landing) - in a row, in the open. This step shortens the seven timers to LOBBY_START (0.5 .. 2.0 s, the order of the lanes: the south ramp
+    and the north ramp interleaved) and nothing else: the .prp member alone (same method as kl_fa_bots_dyn.fake_fix: kl_prpjoin.join, one field of
+    seven nodes, round-trip proven); bots.json / steps.json follow. The places are not touched (the exit place, the lanes).
+    THE CLOCK STAYS: the timed way must run JOIN_SAFE (31) s or more (check(): a tower wait armed at the join can still fire up to 31 s later and
+    take the bot's street step), and the stagger was part of it. What a bot no longer stands at the doors is therefore put on the
+    '051_Timer_out_NN' timers of its own timed way, share and share alike (a stand of 0.1 .. 0.6 s more at each of its 6 .. 8 stations,
+    which lie at cover boxes / on the way out): the total is the same to the tenth of a second. -> report dict."""
+    import shutil
+    import kl_prpjoin as J
+    import kl_graft
+    B = F.Built(src)
+    sc = B.sc
+    if os.path.abspath(dst) == os.path.abspath(B.folder):
+        raise ValueError('the output folder is the build\'s own')
+    if os.path.isdir(dst) and os.listdir(dst):
+        raise ValueError('%s is there and not empty' % dst)
+    Jn = J.join(sc, [(sc, t_) for t_ in sc.tops()], 'lobby')
+    if J.fingerprints(Jn)[0] != J.fingerprints(sc)[0] or J.text(Jn, Jn.p.settings) != J.text(sc, sc.p.settings):
+        raise ValueError('kl_prpjoin.join does not reproduce the build\'s .prp')
+    done, add_out = {}, {}
+    for N in F.BOTS:
+        hit = Jn.resolve(SQ(N, '\\050_Timer_out_start'))
+        if len(hit) != 1:
+            raise ValueError('squad %d: %d nodes named 050_Timer_out_start' % (N, len(hit)))
+        k = hit[0]
+        i = next(i for i, (nm, _b) in enumerate(Jn.nodes[k]['ctrls']) if Jn.p.key(nm) == 'TriggerDelay2')
+        was = []
+
+        def fn(us, N=N, was=was):
+            if us[0][0][0] != 0x0a or len(us[0]) != 1:
+                raise ValueError('TriggerDelay2 field 0 is not one float')
+            was.append(struct.unpack('<f', us[0][0][1])[0])
+            us[0] = [(0x0a, struct.pack('<f', float(LOBBY_START[N])))]
+        kl_fa.edit(Jn, k, i, fn)
+        delta = was[0] - LOBBY_START[N]
+        outs = sorted(n_ for n_ in range(1, 20) if len(Jn.resolve(SQ(N, '\\051_Timer_out_%02d' % n_))) == 1)
+        share = delta / len(outs) if outs else 0.0
+        for n_ in outs:
+            k2 = Jn.resolve(SQ(N, '\\051_Timer_out_%02d' % n_))[0]
+            i2 = next(i2 for i2, (nm, _b) in enumerate(Jn.nodes[k2]['ctrls']) if Jn.p.key(nm) == 'TriggerDelay2')
+            old2 = []
+
+            def fn2(us, old2=old2, share=share):
+                old2.append(struct.unpack('<f', us[0][0][1])[0])
+                us[0] = [(0x0a, struct.pack('<f', old2[0] + share))]
+            kl_fa.edit(Jn, k2, i2, fn2)
+            add_out.setdefault(N, {})['051_Timer_out_%02d' % n_] = old2[0] + share
+        done[N] = (round(was[0], 2), LOBBY_START[N])
+        log('squad %d: 050_Timer_out_start %.1f s -> %.1f s, the %.2f s put on its %d out timers (+%.2f s each)' % (N, was[0], LOBBY_START[N], delta, len(outs), share))
+    prp = Jn.p.serialize()
+    back = F.Prp(prp)
+    if back.serialize() != prp or len(back.nodes()) != len(Jn.nodes):
+        raise ValueError('the new .prp does not round-trip')
+    new = dict(B.files)
+    new[B.ext['.prp']] = prp
+    os.makedirs(dst, exist_ok=True)
+    zp = kl_graft.write_zip(os.path.join(dst, os.path.basename(B.zp)), [(n, new[n]) for n in B.order])
+    for f in os.listdir(B.folder):
+        pth = os.path.join(B.folder, f)
+        if os.path.isfile(pth) and pth != B.zp and not f.startswith('audit.'):
+            shutil.copyfile(pth, os.path.join(dst, f))
+    before, after = F.sizes(B.folder), F.sizes(dst)
+    bj = os.path.join(dst, 'bots.json')
+    if os.path.isfile(bj):
+        d = json.load(open(bj))
+        L = (((d.get('plan') or {}).get('rt') or {}).get('street') or {}).get('lanes') or {}
+        for N, b in (L.get('bots') or {}).items():
+            b['start_seconds'] = LOBBY_START[int(N)]
+            for it in b.get('program') or []:
+                if it.get('name') == '050_Timer_out_start':
+                    it['seconds'] = LOBBY_START[int(N)]
+                elif it.get('name') in add_out.get(int(N), {}):
+                    it['seconds'] = round(add_out[int(N)][it['name']], 4)
+        with open(bj, 'w') as f:
+            json.dump(d, f, indent=1, default=str)
+    sj = os.path.join(dst, 'steps.json')
+    if os.path.isfile(sj):
+        import kl_maps
+        st = json.load(open(sj))
+        st['bots'] = sorted(set(st.get('bots') or []) | {'.prp'})
+        st['same'] = [e for e in st.get('same', []) if e != '.prp']
+        st['final'] = kl_maps.member_ids(dst)
+        with open(sj, 'w') as f:
+            json.dump(st, f, indent=1)
+    with open(os.path.join(dst, 'graft.txt'), 'a') as f:
+        f.write('kl_fa_bots_rt lobby: the seven 050_Timer_out_start shortened to %s s (was %s); the .prp member alone, nothing else of %s changed\n'
+                % (sorted(LOBBY_START.items()), sorted((n, w) for n, (w, _v) in done.items()), B.folder))
+    log('written %s: the .prp member %d -> %d bytes; the large blocks %s' % (zp, len(B['.prp']), len(prp), 'unchanged' if before == after else 'CHANGED %s -> %s' % (before, after)))
+    if before != after:
+        raise ValueError('a large block changed its size')
+    return done
 
 
 def hops_command(src, final, opt):
@@ -3598,6 +3732,8 @@ def main():
         sys.exit(1 if any(s == 'FAIL' for s, _t in out + out2) else 0)
     elif len(a) == 3 and a[0] == 'diff':
         sys.exit(1 if F.diff(a[1], a[2], also=(JOIN_NAME, ROOM_COUNTER)) else 0)     # (the room gate: the room counter names it)
+    elif len(a) == 3 and a[0] == 'lobby':
+        lobby_fix(a[1], a[2])
     elif len(a) == 3 and a[0] == 'hops':
         hops_command(a[1], a[2], opt)
     elif len(a) == 2 and a[0] == 'standing':

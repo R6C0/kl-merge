@@ -203,3 +203,58 @@ HuntedFire=1            ; the hit bot walks at you (HuntedStep=1500, HuntedNear=
   same place within 10 s (compare the places in a tick).
 - F2 as a fed on the street with HuntedFire=1: 'hunted: record N is ordered TOWARDS YOU' 0.25 s after a hit, then the bot's position closer to him (watch pictures) and, the real question,
   'you lost' lines (Balance Log=2) from heisters or the owner's eyes: do they shoot back. HuntedDry=1 first.
+
+## 8. Third round (2026-10-12 15:45): hops never backwards; the lobby after the lift
+
+### 8.1 The owner, after ship_w16 (15:17-15:24)
+'no cover inside they go to they just stand there they dont even rush out the door straight away, when theyre on the road its pretty good to be fair' (screenshot: five heisters in a row just
+inside the glass doors, weapons down). His log: street hops went BACKWARDS: (2797, 131, -6286) -> (4280, 160, -6440) (15 m towards the doors), (-354, -50, -4046) -> (520, -52, -5400),
+(-4237, -42, -2593) -> (-4040, -44, -3960).
+
+### 8.2 Hops never undo progress
+How 'ahead' is known: the programme's step order IS the route. `street_hops` takes bot 2's programme (bots.json plan.rt.street.lanes.bots.2.program, the first way of every fork), the
+place each step ends at, as a reference polyline (161 places -> 25,276 units long) and gives every street place the ARC LENGTH of its nearest point on that line (`progress`,
+100 = 1 m; the other bots' lanes run beside it in the same direction). Written as `Gate.8.HoldS.j` / `Gate.8.HopS.j`. The hook (klmove.c) takes the progress of the bot's chain place
+(nearest hold/hop within 1.5 m) and refuses a hop whose progress is more than KLMV_PROG_SLACK (300 = 3 m, 'level with it across the lane') BEHIND it; the tower gates carry no progress (-1:
+no ordering, they are rooms, not a route). The owner's three examples: progress 3037 -> 1417, 7004 -> 5558, 10258 -> 9453: all three BLOCKED now. Over the 161 places: of the
+3,208 ordered pairs 3 .. 18 m apart 1,812 stay allowed and 1,396 are blocked; 1 place of 161 has no forward hop (it stays). Harness (G:\kl_scratch\active\hoptest, mk2.py): behind 0 / inside the slack 121
+/ ahead 146 / unordered 133 of 400 picks; PASS. Hunted's cover choice uses the same picker (its fallback step aside and HuntedFire are not ordered by progress).
+
+### 8.3 The lobby, measured
+Plan (bots.json plan.rt.street.lanes): every bot's programme starts `050_DefendBehaviour_street` = the EXITS_BANK place just inside the doors, (5600, 160, -7162) for the south ramp
+(squads 2, 4, 6, 7) or (5600, 160, -6239) for the north ramp (3, 5, 8); then `050_Timer_out_start` = the lane STAGGER (0.5 / 3.5 / 1.5 / 4.5 / 2.5 / 5.5 / 2.0 s for squads 2 .. 8, mean 2.9), armed
+when the step is reached (within 10 m, kl2 0x686c4c), then the first bound. The log agrees: join 15:19:43.455 (the seven put at (5832 .. 5952, 570, -6065 .. -6665) on the lift landing), stage
+1 -> 2 at 44.9 .. 46.5, the first line at 15:19:54.563: record 6 (= Squad#07, start 5.5 s) 'stood 5.8 s at (5591, 160, -7159)' = the exit place, its order is the first bound; record 1 (Squad#02) hops 12 s
+later. So the parade is: the walk from the landing down the ramp to the doors (~5 s) plus the stagger (up to 5.5 s) standing at the doors in the open, guns down (eDM_Loose).
+Why the stagger exists: it is part of the TIMED WAY's clock, and check() FAILS a timed way under JOIN_SAFE = 31 s (a gate wait armed at the join can still fire up to 31 s later and take the
+bot's street step). My first rebuild with only shorter starts FAILED exactly that (4 squads at 28.0 .. 30.9 s) - so:
+
+### 8.4 Changed: `python tools/kl_fa_bots_rt.py lobby <finished build> <new folder>`
+The seven `050_Timer_out_start` become 0.5 / 0.5 / 1.0 / 1.0 / 1.5 / 2.0 / 1.5 s (squads 2 .. 8: the south and the north ramp interleaved, the order of the lanes; mean 1.1 s, longest 2.0 s: was 5.5), and what
+each bot no longer stands at the doors is put on its own `051_Timer_out_NN` timers (the stations of its timed way, 6 .. 8 of them at cover boxes / on the way out), share and share alike
+(squad 3 +0.38 s each, 5 and 7 +0.58, 4 / 8 +0.06, 6 +0.12, 2 none): the timed way keeps its total to the tenth of a second (31.3 .. 33.9 s), the check passes. The .prp member alone changed
+(kl_prpjoin round trip, 58 timer floats (7 starts + 51 out timers); archive members 30, ONLY `Scenes/Locations/F01/F01_Main.prp` differs; the four large blocks unchanged; bots.json follows). The bots now run out
+at once and pause 0.1 .. 0.6 s at each station of the way out instead of standing 6 s at the doors. NOT changed: the [CrewJoin] Place list (the landing, y 570) and the human's jump place;
+cover for the landing was not built: the bots do not stand there, they walk; to place them at ground-floor cover (CoverBoxH_120 / _125 / _130 near the doors) the teleport's heights would have to be
+validated on the mesh (the hook teleports with the mesh height only when Lift=0 says so) - NOT done. The police box (LeaveElevator) is fired by the crew's arrival as before.
+Whether the street's first police wave is worse for a crew that arrives sooner is not known (live check L2).
+Archive changed => `tools/kl_hud_tab.py` must be run on y_active\DM09 before it goes on the owner's tab (the installed archive is the HUD-rebaked one).
+
+### 8.5 Build and checks: `<work>\build\y_active\DM09` (the old DM09 of round 2 was replaced; it differed from y_rappel\DM09r2 in KLJoin.ini only)
+- F01_Main.zip sha1 5b886a835bf167955d131c643ed43c197827d94b (source y_rappel\DM09r2 dcb7f94c ...: ONLY the .prp member differs); KLTalk.ini sha1 6c78c079 = rt_full6's (kl_fa_rappel check 'byte-equal': PASS).
+- [Hops]: Gates=8, 49 tower holds + 161 street places, 34 + 161 hops, progress for the street's 161 (322 lines).
+- kl_fa_bots_rt check PASS (0 FAIL, 12 NOTE); kl_fa_bots_dyn check PASS (0 FAIL, 6 NOTE); kl_impact problems 0; kl_fa_fedpoints PASS (7 good); kl_fa_carfx PASS (0 faults); kl_fa_rappel PASS (0 FAIL).
+
+### 8.6 Ini lines (unchanged from 7.4) and live checks
+```
+[Bots]
+Restless=5
+RestlessHop=6
+[Fed]
+Hunted=1
+HuntedFire=1
+```
+- L1 (after kl_hud_tab): the join; 'crewjoin: 6 moved'; the first 'move: ... stood' / 'hops' lines of the street come ~5 s sooner than 15:19:54 (11 s after the jump), nobody stands over 2 s at (5600, 160, -7162 / -6239);
+  pictures: no row at the doors.
+- L2 the street fight: the police wave that starts at the lift box; do the seven live as long as before (compare deaths per minute with the 15:19-15:24 round).
+- L3 every 'hops from its hold' line on the street: the new place's progress is not behind the old one: compare x (falling) then z (rising) along the route - none like the three above.

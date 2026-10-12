@@ -308,6 +308,8 @@ static struct {
 static float klmv_hops[KLMV_NHOP][3]; static int klmv_hop_g[KLMV_NHOP], klmv_nhop;
 static float klmv_holds[KLMV_NHOLD][3]; static int klmv_hold_g[KLMV_NHOLD], klmv_nhold;
 static float klmv_hop_dmax = 1800.0f;
+static float klmv_hop_s[KLMV_NHOP], klmv_hold_s[KLMV_NHOLD];       /* progress along the route (100 = 1 m), -1 = the gate has none (the tower: no ordering) */
+#define KLMV_PROG_SLACK 300.0f    /* a hop may lie this far behind the bot on the route (level with it across the lane) */
 static DWORD klmv_hop_at[KLMV_NHOP]; static int klmv_hop_user[KLMV_NHOP];
 static char klmv_hop_key[64], klmv_hop_file[MAX_PATH]; static FILETIME klmv_hop_ft;
 
@@ -917,28 +919,35 @@ static void klmv_hops_load(void)
         snprintf(name, sizeof name, "Gate.%d.Holds", g); nh = (int)GetPrivateProfileIntA("Hops", name, 0, file);
         for (j = 1; j <= nh && klmv_nhold < KLMV_NHOLD; j++) {
             snprintf(name, sizeof name, "Gate.%d.Hold.%d", g, j);
-            if (klj_vec("Hops", name, file, klmv_holds[klmv_nhold])) klmv_hold_g[klmv_nhold++] = g;
+            if (klj_vec("Hops", name, file, klmv_holds[klmv_nhold])) {
+                snprintf(name, sizeof name, "Gate.%d.HoldS.%d", g, j); GetPrivateProfileStringA("Hops", name, "", t, sizeof t, file); klmv_hold_s[klmv_nhold] = t[0] ? (float)atof(t) : -1.0f;
+                klmv_hold_g[klmv_nhold++] = g;
+            }
         }
         snprintf(name, sizeof name, "Gate.%d.Hops", g); nh = (int)GetPrivateProfileIntA("Hops", name, 0, file);
         for (j = 1; j <= nh && klmv_nhop < KLMV_NHOP; j++) {
             snprintf(name, sizeof name, "Gate.%d.Hop.%d", g, j);
-            if (klj_vec("Hops", name, file, klmv_hops[klmv_nhop])) klmv_hop_g[klmv_nhop++] = g;
+            if (klj_vec("Hops", name, file, klmv_hops[klmv_nhop])) {
+                snprintf(name, sizeof name, "Gate.%d.HopS.%d", g, j); GetPrivateProfileStringA("Hops", name, "", t, sizeof t, file); klmv_hop_s[klmv_nhop] = t[0] ? (float)atof(t) : -1.0f;
+                klmv_hop_g[klmv_nhop++] = g;
+            }
         }
     }
     klog("move: %d hop place(s) at %d hold(s) of %d gate(s) (cover places a bot may shift to while it waits at a hold of the same gate; at most %.0f from the hold) from %s for level %s", klmv_nhop, klmv_nhold, ng, klmv_hop_dmax, file, key);
 }
 
 /* The gate a bot's chain place belongs to: the gate of the nearest listed hold (or hop) within 150 on its floor (300); 0 = none. */
-static int klmv_hop_gate(const float anchor[3])
+static int klmv_hop_gate(const float anchor[3], float *prog)
 {
     int j, g = 0; float best = 150.0f;
+    *prog = -1.0f;
     for (j = 0; j < klmv_nhold; j++) {
         float d = klmv_h(anchor, klmv_holds[j]);
-        if (d <= best && fabs(anchor[1] - klmv_holds[j][1]) <= 300.0f) { best = d; g = klmv_hold_g[j]; }
+        if (d <= best && fabs(anchor[1] - klmv_holds[j][1]) <= 300.0f) { best = d; g = klmv_hold_g[j]; *prog = klmv_hold_s[j]; }
     }
     for (j = 0; j < klmv_nhop; j++) {                                  /* a place this file sent it to (a hop) counts for its gate too */
         float d = klmv_h(anchor, klmv_hops[j]);
-        if (d <= best && fabs(anchor[1] - klmv_hops[j][1]) <= 300.0f) { best = d; g = klmv_hop_g[j]; }
+        if (d <= best && fabs(anchor[1] - klmv_hops[j][1]) <= 300.0f) { best = d; g = klmv_hop_g[j]; *prog = klmv_hop_s[j]; }
     }
     return g;
 }
@@ -951,10 +960,11 @@ static int klmv_hop_free(int j, int who, DWORD now) { return !klmv_hop_user[j] |
 static void klmv_hop_take(int j, int who) { if (j >= 0 && j < klmv_nhop) { klmv_hop_at[j] = GetTickCount(); klmv_hop_user[j] = who + 1; } }
 static int klmv_hop_pick(const float anchor[3], const float bp[3], int last, int who, const float *away, float out[3])
 {
-    int j, k = -1, n = 0, pick, g = klmv_hop_gate(anchor); float best = -1.0f; DWORD now = GetTickCount();
+    int j, k = -1, n = 0, pick, g; float best = -1.0f, ps; DWORD now = GetTickCount();
+    g = klmv_hop_gate(anchor, &ps);
     if (!g) return -1;
     for (j = 0; j < klmv_nhop; j++) {
-        if (klmv_hop_g[j] != g || j + 1 == last || !klmv_hop_free(j, who, now) || klmv_h(anchor, klmv_hops[j]) > klmv_hop_dmax || fabs(anchor[1] - klmv_hops[j][1]) > 300.0f || klmv_h(bp, klmv_hops[j]) < KLMV_OFF) continue;
+        if (klmv_hop_g[j] != g || j + 1 == last || !klmv_hop_free(j, who, now) || (ps >= 0 && klmv_hop_s[j] >= 0 && klmv_hop_s[j] < ps - KLMV_PROG_SLACK) || klmv_h(anchor, klmv_hops[j]) > klmv_hop_dmax || fabs(anchor[1] - klmv_hops[j][1]) > 300.0f || klmv_h(bp, klmv_hops[j]) < KLMV_OFF) continue;
         if (away) { float d = klmv_h(away, klmv_hops[j]); if (d > best) { best = d; k = j; } }
         n++;
     }
@@ -962,7 +972,7 @@ static int klmv_hop_pick(const float anchor[3], const float bp[3], int last, int
     klb_seed = klb_seed * 1103515245u + 12345u;
     pick = (int)((klb_seed >> 16) % (unsigned)n);
     for (j = 0; j < klmv_nhop; j++) {
-        if (klmv_hop_g[j] != g || j + 1 == last || !klmv_hop_free(j, who, now) || klmv_h(anchor, klmv_hops[j]) > klmv_hop_dmax || fabs(anchor[1] - klmv_hops[j][1]) > 300.0f || klmv_h(bp, klmv_hops[j]) < KLMV_OFF) continue;
+        if (klmv_hop_g[j] != g || j + 1 == last || !klmv_hop_free(j, who, now) || (ps >= 0 && klmv_hop_s[j] >= 0 && klmv_hop_s[j] < ps - KLMV_PROG_SLACK) || klmv_h(anchor, klmv_hops[j]) > klmv_hop_dmax || fabs(anchor[1] - klmv_hops[j][1]) > 300.0f || klmv_h(bp, klmv_hops[j]) < KLMV_OFF) continue;
         if (pick-- == 0) { memcpy(out, klmv_hops[j], 12); return j; }
     }
     return -1;
