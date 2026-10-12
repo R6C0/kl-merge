@@ -511,3 +511,10 @@ Level: kl_hud.py all hud_tab/DM03 -> hud_x10/DM03 --look deadmen (check PASS), p
 - SHOULD 6 done: the label bar's left edge gets 4 px more. LabelBar=2 stays the clean option. SHOULD 7 not touched (guesses: alphas, icon corners).
 - The baked textures did not change, so hud_x10/DM03 needs no rebake (kl_hud preview-dials / preview-hud re-run: hud_x10/dials*.png, preview.png; 5:30, 2:10, 0:40 read right).
 - Live check W1 addition: rounds at 5:30 / 2:10 / 1:00 / 0:40 / 0:05 (stroke = time left, hands clockwise, red last minute, no stock digits); one start with an OLD-baked map under WatchStyle=1 only to see it, never for play.
+
+### 14.11 Cloud session additions (2026-10-12 evening; off-game tests under MinGW + Wine, re/hud_cloud_review.md 6-7; NOT BUILT WITH MSVC, NOT RUN IN THE GAME)
+- `klu_choose_look` (klhud.c, called first in `klu_make_all`): the level's bake decides the look when slot 112 tells (128 x 128 = watch, 256 x 32 = old);
+  `[HUD] WatchStyle` (now kept as `klu.wini`) decides only when it cannot. Log `hud: watch: ...`. Test: `klwatch_test look` 9/9.
+- The escape dial's icon is tinted KLW_C_CHALK (the model's), `[HUD] Layer` minimum 4, the tag drawer gets only objects that pass a vtable read.
+- `klwatch_test.c` + `tools/kl_hud_watch_check.py compare|render`: the hook's queued pictures equal the model's (24/24), rendered with the baked textures.
+- Live check W1 addition: one start with an OLD-baked map under WatchStyle=1 must log the 'baked with the OLD look' line and draw the old dials.

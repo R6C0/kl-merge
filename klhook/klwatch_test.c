@@ -101,6 +101,23 @@ int main(int argc, char **argv)
     int c, i, k;
     klu.wstyle = 1; klu.wwear = 1; klu.wseconds = 0; klu.layer = 13;
     for (i = 0; i < (int)(sizeof have / sizeof have[0]); i++) klu_r.handle[have[i]] = 0x1000u + (DWORD)have[i];
+    if (argc > 1 && !strcmp(argv[1], "look")) {      /* klu_choose_look (cloud review W2): the level's bake wins over [HUD] WatchStyle when slot 112 tells */
+        static BYTE osd[0x1000]; int fails = 0, n = 0, wini, b;
+        static const struct { WORD w, h; DWORD handle; int want0, want1; } t[] = {
+            { 128, 128, 0x1234, 1, 1 },      /* watch bake: watch look whatever the ini says */
+            { 256,  32, 0x1234, 0, 0 },      /* old bake: old look whatever the ini says */
+            {  64,  64, 0x1234, 0, 1 },      /* another size: the ini decides */
+            { 128, 128, 0,      0, 1 } };    /* slot 112 empty: the ini decides */
+        for (i = 0; i < 4; i++) for (wini = 0; wini < 2; wini++) {
+            memset(osd, 0, sizeof osd);
+            memcpy(osd + 0x3ec + 12 * 112, &t[i].handle, 4); memcpy(osd + 0x3ec + 12 * 112 + 4, &t[i].w, 2); memcpy(osd + 0x3ec + 12 * 112 + 6, &t[i].h, 2);
+            klu.wini = wini; klu.wstyle = !wini; klu_choose_look((DWORD)(DWORD_PTR)osd); b = wini ? t[i].want1 : t[i].want0; n++;
+            if (klu.wstyle != b) { fails++; printf("FAIL: slot 112 %ux%u handle %lx, WatchStyle=%d -> look %d, expected %d\n", t[i].w, t[i].h, (unsigned long)t[i].handle, wini, klu.wstyle, b); }
+        }
+        klu.wini = 1; klu_choose_look(0); n++; if (klu.wstyle != 1) { fails++; printf("FAIL: no OSD -> look %d, expected the ini's 1\n", klu.wstyle); }
+        printf("look: %d checks, %d failed\n", n, fails);
+        return fails != 0;
+    }
     if (argc > 1 && !strcmp(argv[1], "sweep")) {
         int worst[2] = { 0, 0 }; float at[2] = { 0, 0 }, t;
         for (k = 0; k < 2; k++) { klu.wseconds = k; for (t = 360.0f; t > 0.05f; t -= 0.1f) { klu_r.npic = 0; klu_watch_look(1212.0f, 66.0f, t); if (klu_r.npic > worst[k]) { worst[k] = klu_r.npic; at[k] = t; } } }

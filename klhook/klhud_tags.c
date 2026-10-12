@@ -197,6 +197,7 @@ static void klht_render(void *el, void *ctx, void *cam)
                     if (q->mon) o[n++] = q->mon;
                     if (klht.tab) { float z[2] = { 0, 0 }; memcpy((void *)(DWORD_PTR)(q->ini + 0x3c), z, 8); }       /* v23 (review SHOULD): a skipped draw leaves 0, not the last tag's place */
                     for (k = 0; k < n; k++) {
+                        if (klh_rd32(o[k]) != KLU_TEXT_VT) continue;                                                       /* cloud review T1: the drawer calls [this]->vt[0x1e8] through OUR object: one checked read first */
                         *(DWORD *)tag = o[k];                                                                                /* the copy's text object = ours; the copy absorbs anything the drawer writes */
                         ((klht_drawtag_t)(DWORD_PTR)KLH_VA(KLHT_DRAWTAG))(tag, 0, a1, node, ctx, cam, a5);
                         if (o[k] == q->ini || o[k] == q->mon) InterlockedIncrement(&klht_n_draw);

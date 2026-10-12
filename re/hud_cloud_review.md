@@ -100,3 +100,13 @@ Proposals from the render (NOT applied - the owner decides the look): (a) keep t
 drains to nothing at 0:00 with no jump, and make the last minute red by the sword hand alone (the review's own alternative); or dim the
 red stroke to the bezel grey's weight. (b) If a seconds hand is wanted, let it sweep REAL seconds (game clock) instead of the time left,
 or drop the key.
+
+## 7. Applied after the tests (cloud session, same evening; each covered by a harness run above; NOT BUILT WITH MSVC, NOT RUN IN THE GAME)
+
+| id | change | test |
+|---|---|---|
+| W2 | `klu_choose_look`: the level's bake (slot 112: 128 x 128 watch / 256 x 32 old, OSD picture table `osd+0x3ec + 12 n` {handle, u16 w, u16 h}, re/hud.md 1) decides the look before the layout; WatchStyle only when it cannot tell. Also covers the mirror case (watch bake under WatchStyle=0 now draws the coherent watch look instead of the broken mix). RELIES ON the table layout of re/hud.md 1 (read from 0x5e3810's writes, the width / height fields not yet read back live: the first live start logs the decision) | `klwatch_test look`: 9 checks PASS; with the detector disabled 2 FAIL |
+| W3 | `[HUD] Layer` minimum 3 -> 4 | GCC type check |
+| T1 | klhud_tags.c: every object handed to the tag drawer passes `klh_rd32(obj) == KLU_TEXT_VT` | GCC type check (no tags harness exists) |
+| - | escape icon tint KLW_C_CHALK; model gun offset 25; unused `k` / `m` removed | `kl_hud_watch_check.py compare` 24/24 |
+W1's operational rule (bake --watch 0 for the owner) stays until a hook from this HEAD is on his game.

@@ -116,6 +116,9 @@ OPTIONAL and separate: install BOTH files together into `<DD>\KLExpansion\Overla
   while the hook's `[HUD] WatchStyle` defaults to 0 (the old look). Until the owner's ini carries `WatchStyle=1`, every rebake for his game must be
   `kl_hud_tab.py build ... --watch 0`; a `--watch 1` archive under a WatchStyle=0 hook draws the wear texture as strikes / rules and the bezel as
   track rings (no crash, visibly wrong). Ship `--watch 1` maps and `WatchStyle=1` TOGETHER, never one alone.
+  UPDATE (cloud, later the same evening; NOT BUILT WITH MSVC, NOT RUN IN THE GAME): klhud.c now reads which look each level was baked with
+  (slot 112's texture size in the OSD's picture table) and draws THAT look when it can tell, logging 'hud: watch: [HUD] WatchStyle=n but this
+  level is baked with the ... look'. Once a hook built from that HEAD is installed, a mismatch is no longer drawn wrong; until then the rule above holds.
 - Remedy, in order of cost: (a) after any install re-run `kl_hud_tab.py build` + copy the zips (the whole chain is 2 minutes of CPU, 1.7 GB);
   (b) build the tree FROM baked folders: bake the build folder (`kl_hud.py all <build> <out> --look deadmen`, the build's zip carries the F01
   name, that is fine) and pass `--prebuilt DM03=<out>` (adopt() renames to the slot) - untested for a bake output, and the DM03A / DM05A

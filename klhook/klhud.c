@@ -284,7 +284,8 @@ static struct {
     int draft;                                /* Draft: the defaults of every part of the draft are 1 */
     int lives, roundof;                       /* Lives, RoundOf (klhud_values.c) */
     int on, log, stock, crew, money, round, hide, shadow, tags, cashshort, totalfont, draw, plates, anchor, pictest, grid, probe, layer, rows, dials;
-    int wstyle, wseconds, wwear, wlast, labelbar, labelslash;   /* the watch look (section 14 of re\hud_hook.md): WatchStyle (1 = new, 0 = the old textures and sizes), WatchSeconds, WatchWear, WatchLast, LabelBar (0 text only, 1 painted bar, 2 plain), LabelSlash */
+    int wstyle, wini, wseconds, wwear, wlast, labelbar, labelslash;   /* wini = [HUD] WatchStyle as set; wstyle = the look THIS level gets (klu_choose_look) */
+      /* the watch look (section 14 of re\hud_hook.md): WatchStyle (1 = new, 0 = the old textures and sizes), WatchSeconds, WatchWear, WatchLast, LabelBar (0 text only, 1 painted bar, 2 plain), LabelSlash */
     float inset, crew_x, crew_y, crew_w, row, money_x, money_y, money_w, round_y;
     float yoff, blockup, blockh, padx;        /* the rows: the text's y under the head, the block's rise above it, its height, the text's side margin (the draft: 34 / 5 / 28 / 8) */
 } klu;
@@ -589,6 +590,33 @@ static void klu_layout(void)
     }
 }
 
+/* WHICH LOOK THIS LEVEL WAS BAKED WITH (cloud session 2026-10-12, re\hud_cloud_review.md W2; tested off-game by klwatch_test.c 'look').
+   tools\kl_hud.py bakes slot 112 as the dry stroke 256 x 32 (--watch 0) or the dial's wear 128 x 128 (--watch 1); the OSD's picture table
+   holds {handle, u16 width, u16 height} per slot at osd+0x3ec + 12 n (re\hud.md 1, filled by 0x5e3810 from the texture's info).
+   When the level tells, ITS look is drawn (a hook and a level that disagree would draw the wear texture as strike-throughs or rings of the
+   wrong width - the watch review's MUST 2); [HUD] WatchStyle decides only when slot 112 is empty or of another size. Called before the
+   layout of the texts, so every part of the level sees one look. -> 1 watch bake, 0 old bake, -1 not known */
+#define KLU_O_PICTAB     0x3ec
+static int klu_baked_look(DWORD osd)
+{
+    DWORD h = 0; WORD wh[2] = { 0, 0 };
+    if (!osd || !klh_rd(osd + KLU_O_PICTAB + 12u * 112u, &h, 4) || !h || !klh_rd(osd + KLU_O_PICTAB + 12u * 112u + 4u, wh, 4)) return -1;
+    if (wh[0] == 128 && wh[1] == 128) return 1;
+    if (wh[0] == 256 && wh[1] == 32) return 0;
+    return -1;
+}
+
+static void klu_choose_look(DWORD osd)
+{
+    static int said = -2; int b = klu_baked_look(osd), now = b >= 0 ? b : klu.wini;
+    if (now != klu.wini || said != b) {
+        if (klu.log && b >= 0 && now != klu.wini) klog("hud: watch: [HUD] WatchStyle=%d but this level is baked with the %s look (slot 112 %s): the %s look is drawn for it", klu.wini, b ? "WATCH" : "OLD", b ? "128 x 128" : "256 x 32", b ? "watch" : "old");
+        else if (klu.log > 1) klog("hud: watch: look %d (WatchStyle=%d, the level's bake %s)", now, klu.wini, b < 0 ? "not told by slot 112" : b ? "watch" : "old");
+        said = b;
+    }
+    klu.wstyle = now;
+}
+
 static int klu_make_all(DWORD osd)
 {
     static const BYTE refobj_code[10] = { 0x8b, 0x44, 0x24, 0x04, 0x8b, 0x0d, 0x90, 0xff, 0xe0, 0x00 };       /* 0x8ccde0 */
@@ -601,6 +629,7 @@ static int klu_make_all(DWORD osd)
     static const struct { DWORD off, fn; } slots[7] = { { KLU_VT_CREATE, 0x817810 }, { KLU_VT_DRAW, KLU_DRAW }, { KLU_VT_COLOUR, 0x8a0a30 },
                                                         { KLU_VT_STYLE, 0x41a470 }, { KLU_VT_LAYER, 0x514720 }, { KLU_VT_FONT, 0x641ba0 }, { KLU_VT_TEXT, 0x896e50 } };
     DWORD tref = 0, fref = 0, bref = 0, tmpl, font, big = 0, tvt = 0, fvt = 0; int i, k, n = 0, ns = 0; char why[160];
+    klu_choose_look(osd);                          /* W2: before the layout reads klu.wstyle */
     if (!klu_same_code(KLU_REFOBJ, refobj_code, sizeof refobj_code) || !klu_same_code(KLU_PARENT, parent_code, sizeof parent_code) ||
         !klu_same_code(KLU_CREATE, create_code, sizeof create_code) || !klu_same_code(0x896e50, text_code, sizeof text_code) || !klu_same_code(KLU_DRAW, draw_code, sizeof draw_code) ||
         !klu_same_code(KLU_TIME_RENDER, render_code, sizeof render_code) || !klu_same_code(KLU_PLACE, place_code, sizeof place_code)) {
@@ -1406,7 +1435,7 @@ static void klu_init(void)
     klu.shadow = klu_inii("Shadow", 1, 0, 1); if (klu.draw == 2) klu.shadow = 1;     /* the stock Render draws a pair */
     klu.tags = klu_inii("Tags", 1, 0, 1); klu.cashshort = klu_inii("CashShort", 1, 0, 1); klu.totalfont = klu_inii("TotalFont", 0, 0, 1);
     klu.draft = klu_inii("Draft", 0, 0, 1);              /* the whole draft: the defaults of Plates, Dials, Weapon, RoundOf (and klhud_popup.c's Popups, LootRing) become 1; a key that is set still wins */
-    klu.wstyle = klu_inii("WatchStyle", 0, 0, 1);       /* review MUST 2: default 0 (old extras on the installed maps); set 1 ONLY with maps baked by kl_hud.py --watch 1 */ klu.wseconds = klu_inii("WatchSeconds", 0, 0, 1); klu.wwear = klu_inii("WatchWear", 1, 0, 1); klu.wlast = klu_inii("WatchLast", 1, 0, 1);       /* review SHOULD 3: blank the stock red digits in the last minute (they would sit on the hands) */
+    klu.wini = klu.wstyle = klu_inii("WatchStyle", 0, 0, 1);       /* review MUST 2: default 0 (old extras on the installed maps); set 1 ONLY with maps baked by kl_hud.py --watch 1 */ klu.wseconds = klu_inii("WatchSeconds", 0, 0, 1); klu.wwear = klu_inii("WatchWear", 1, 0, 1); klu.wlast = klu_inii("WatchLast", 1, 0, 1);       /* review SHOULD 3: blank the stock red digits in the last minute (they would sit on the hands) */
     klu.labelbar = klu_inii("LabelBar", 1, 0, 2); klu.labelslash = klu_inii("LabelSlash", 1, 0, 1);      /* the watch look (re\hud_hook.md 14): the level must be baked with kl_hud.py --watch <the same 0 / 1> */
     klu.dials = klu_inii("Dials", klu.draft, 0, 1);      /* the round watch + the escape dial (needs the level's extra pictures 113 / 114) */
     klu.weapon = klu_inii("Weapon", klu.draft, 0, 1); klwd_init();      /* the weapon dial (klhud_weapon.c; needs 113 / 114 too) */
@@ -1423,7 +1452,7 @@ static void klu_init(void)
         }
     }
     klu.grid = klu_inii("Grid", 0, 0, 2); klu.probe = klu_inii("Probe", 0, 0, 1);
-    klu.layer = klu_inii("Layer", 0xd, 3, 15);
+    klu.layer = klu_inii("Layer", 0xd, 4, 15);      /* min 4 (cloud review W3): the dial case is drawn at layer - 4, and a negative layer is the byte 0xff = on top */
     klu.rows = klu_inii("Rows", KLU_ROWS, 1, KLU_ROWS);
     klu.inset = klu_inif("Inset", "-1"); if (!(klu.inset > 0 && klu.inset < 0.25f)) klu.inset = -1;
     klu.crew_x = klu_inif("CrewX", klu.draft ? "33" : "-1"); klu.crew_y = klu_inif("CrewY", klu.draft ? "38" : "-1"); klu.crew_w = klu_inif("CrewW", "211");
