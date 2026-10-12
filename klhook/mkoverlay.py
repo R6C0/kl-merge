@@ -82,6 +82,7 @@ KLHook.ini (the same file the hook reads):
     Title=Dead Men maps     button and headline (default: 'Expansion maps <N>')
     Icon=Icon_Marketplace   optional: the button's icon
     Pictures=story          optional: 'story' (default) or 'slot' = the stock Arcade picture of each slot
+    Lean=1                  optional: the page without the stock page's extras (lean_page()); needed from the third page on
     F01=Withdrawal          title of the entry (default: the map folder's name)
     F01.Picture=LevelPicture_L09      optional: any LevelPicture_* entity of the frontend scene
 Pages 2..5 (four focus bars, icons and lines are free below the stock rows).
@@ -321,6 +322,35 @@ def guns_window(nl):
     return nl.join(L) + nl
 
 
+def lean_page(p, used, n):
+    r"""[Page.N] Lean=1 (2026-10-12): the copy of the map page WITHOUT what only the stock page needs, so that a further page fits
+    the menu manager's table. WHY: every created <GuiElement>/<Window>/<ColorSet>/<ButtonGraphic> takes one of 5096 slots
+    (kl2 0x7fad55; re\hud_menu.md 1.1); with a third page (+55 tags) the live count passed 5096 by 15: 14 x int3 at 0x7fad8d
+    (element) and one at 0x667e6e (window) at every start of the game (run P3_DM05A_page3, ContinueAsserts) - the entries past the
+    table are the LAST ones loaded (the tail of online.xml). Page 2 is left as it is (Lean off) so that it stays what was seen.
+    Taken out (all display only, nothing a name elsewhere points at): the pictures of the slots the page has no map for (the picture
+    toggler's nine <Graphic> children then all name the first map's picture - the selector keeps its nine entries, as the code wants),
+    the briefing text block, the 'criminal name' block (line, bar, label, group, MercsShowInfo), the two MercsShowInfoFA of the ExcludeIn
+    block (Xbox Live warning, 'level not available') and the arrows group (the selector still answers left / right). About 20 tags."""
+    first = 'H%02d_LevelPicture' % used[0]
+    for s in range(1, 10):
+        if s in used:
+            continue
+        p, k = re.subn(r'[ \t]*<GuiElement Type="Graphic" Name="H%02d_LevelPicture" [^>]*/>[ \t]*\r?\n' % s, '', p)
+        p, j = re.subn(r'<Graphic Graphic="H%02d_LevelPicture"' % s, '<Graphic Graphic="%s"' % first, p)
+        if k != 1 or j != 1:
+            raise SystemExit('Lean page %d: the picture of slot %d was not found once (%d, %d)' % (n, s, k, j))
+    for what, pat in (('the briefing text block', r'[ \t]*<GuiElement Type="TextBlock"\s+Name="HeistBriefingTextBlock"[^>]*/>[ \t]*\r?\n'),
+                      ('the criminal name block', r'[ \t]*<!--criminals name info-->.*?TagName="HeistCriminalName"[^>]*/>\s*</GuiElement>[ \t]*\r?\n'),
+                      ('the ExcludeIn block', r'[ \t]*<ExcludeIn Demo="True" Preview="True">.*?</ExcludeIn>[ \t]*\r?\n'),
+                      ('the arrows group', r'[ \t]*<GuiElement Type="GUIGroup" ShowDebug="True" Name="CenterBoxArrows"[^>]*>.*?</GuiElement>[ \t]*\r?\n')):
+        m = list(re.finditer(pat, p, re.S))
+        if len(m) != 1:
+            raise SystemExit('Lean page %d: %s not found once (%d)' % (n, what, len(m)))
+        p = p[:m[0].start()] + p[m[0].end():]
+    return p
+
+
 def build(xml, pgs, heister=True, pictures=False):
     nl = '\r\n' if '\r\n' in xml else '\n'
     # the stock map page, whole
@@ -346,6 +376,8 @@ def build(xml, pgs, heister=True, pictures=False):
             if pic:
                 g = one(r'(Name="H%02d_LevelPicture" Template="LevelPicture_T" Graphic=)"LevelPicture_H%02d"' % (slot, slot), p, 'the picture of slot %d' % slot)
                 p = p[:g.start()] + g.group(1) + '"%s"' % esc(pic) + p[g.end():]
+        if pg.get('Lean', '0').strip() == '1':
+            p = lean_page(p, sorted(ent), n)
         # the gamepad layout's Back / Accept: the page's own copy of the template (its Accept names the selector)
         u = one(r'<GuiElement Template="%s"\s*/>' % GC_TEMPLATE, p, 'the gamepad bottom frame')
         p = p[:u.start()] + '<GuiElement Template="%s%s"/>' % (GC_TEMPLATE, suffix) + p[u.end():]

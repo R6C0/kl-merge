@@ -924,7 +924,8 @@ def ini_block(entries, pics=None):
           '; random AI heister looks from the wardrobe, no body twice, never the one the player wears (klcrew.c; seen live 2026-10-10)',
           '[Crew]', 'Random=1']
     for n in nums:
-        L += ['', '[Page.%d]' % n, 'Title=' + page_title(n)] + ['%s=%s' % (e['slot'], e['name']) for e in on(n)]
+        # every page after the first is LEAN (mkoverlay.lean_page): the menu manager's table of 5096 is full with three pages of the whole copy
+        L += ['', '[Page.%d]' % n, 'Title=' + page_title(n)] + (['Lean=1'] if n != PAGE else []) + ['%s=%s' % (e['slot'], e['name']) for e in on(n)]
         L += ['%s.Picture=%s' % (e['slot'], pics[pk(n, e['slot'])]) for e in on(n) if pics and pk(n, e['slot']) in pics]
     return '\n'.join(L) + '\n'
 
@@ -2235,7 +2236,7 @@ def selftest(scratch=None, log=print):
     ok('ini_block: [Redirect.2] and [Redirect.3] side by side, [Page.2] and [Page.3] at the end: %s' % sec7,
        sec7 == ['Expansion', 'Redirect.2', 'Redirect.3', 'Bots', 'Crew', 'Page.2', 'Page.3'])
     p3 = blk7[blk7.index('[Page.3]'):]
-    ok('[Page.3] holds the club\'s title and its own picture, [Page.2] its F01 picture', p3.split('\n')[:4] == ['[Page.3]', 'Title=' + PAGES[3], '%s=%s' % (club['slot'], club['name']), 'F01.Picture=LevelPicture_DM05A']
+    ok('[Page.3] holds the club\'s title and its own picture, [Page.2] its F01 picture', p3.split('\n')[:5] == ['[Page.3]', 'Title=' + PAGES[3], 'Lean=1', '%s=%s' % (club['slot'], club['name']), 'F01.Picture=LevelPicture_DM05A']
        and blk7[blk7.index('[Page.2]'):blk7.index('[Page.3]')].count('F01.Picture=LevelPicture_DM01') == 1)
     ok('[Redirect.3] names F01=%s and nothing else; [Redirect.2] still has F01=DM01' % club['id'],
        blk7[blk7.index('[Redirect.3]'):blk7.index('[Bots]')].split('\n')[:2] == ['[Redirect.3]', 'F01=' + club['id']] and 'F01=DM01' in blk7[blk7.index('[Redirect.2]'):blk7.index('[Redirect.3]')])
