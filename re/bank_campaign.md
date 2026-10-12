@@ -2859,14 +2859,12 @@ Labels: MEASURED (the built folders, the exact ray, the real evaluator), READ (c
 * garrison-check prints each failing place of (a) and the NOTED gallery lines.
 
 ### B.3 Tables (MEASURED; guns with a clear exact ray, worst of the seven bots, stand-in legs; plan of the delivered folder)
-| way out | c_bank8 | first c_bank9 | now |
+| way out: station (hold / stretch to the next) | c_bank8 | first c_bank9 | now |
 |---|---|---|---|
-| leg to the stairs top (405, -774, -11228) -> (400, -160, -9577)* | 13 | 20 | 4 |
-| hold (400, -160, -9577)* | (11) | 10 | 2 |
-| leg -> (394, 240, -7876) | 15 | 11 | 5 |
-| hold (394, 240, -7876) | 11 | 6 | 5 |
-| leg -> (1546, 240, -6970) | 9 / 9 | 15 / 6 | 10 |
-| hold (1546, 240, -6970) | 9 | 6 | 6 |
+| (405, -774, -11228) | 3 / 13 | 3 / 20 | 3 / 4 |
+| (400, -160, -9577)* | - | - | 2 / 5 |
+| (394, 240, -7876) | 11 / 15 | 10 / 11 | 5 / 10 |
+| (1546, 240, -6970) | 9 / 9 | 6 / 6 | 6 / 6 |
 (* the plan has a station here that c_bank8's did not: the stretch is split.) The hall (hold 11: 0, stretch 12: 9) and the square (36) are unchanged. Way in: hold 1: 0, leg 4, hold 2: 3, leg 3, ante-room 3 / 3, loot 0 / 3: as c_bank8.
 START rows over the whole round, exact ray, hunters counted: 0 guns at 0 / 11 / 30 / 60 / 75 / 90 / 120 / 180 / 240 / 300 / 360 s (c_bank8: 0 until +60, then 23). Nearest start or place of a kept squad to a hold or leg (garrison squads / the other kept squads): c_bank8 **4** (58 places within 160, 79 within 400) / 272; first c_bank9 **109** (6 within 160) / 272; now **332** to a leg, 411 to a hold (0 within 160, 25 within 400) / 272. Nearest garrison place to W12's deaths: bot 4 949, bot 1 861, bot 7 837 (c_bank8: 142, 5, 153).
 Hunters: none (0 squads Unleash / Alert, 0 hunts named); remaining hunters by design are the waves, Police_OutSide_SWAT and the alley squads.
