@@ -2611,7 +2611,8 @@ WAKE_SQUADS = collections.OrderedDict([
     (G4 + 'Guards_Reinforcement_StayUpstairs#01', 'lobby'),
     (G4 + 'Guards_03', 'flights'),
     (G4 + 'Guards_Reinforcement_StayUpstairs', 'ante'), (G4 + 'Guards_Reinforcement_01b', 'ante'), (G4 + 'Guards_Reinforcement_01a', 'ante'),
-    (G4 + 'Guards_02', 'ante'), (G4 + 'Guards_01', 'ante')])
+    (G4 + 'Guards_02', 'ante'), (G4 + 'Guards_01', 'ante'),
+    (G3 + 'PatrolGuards_01a', 'ante')])             # AFTER RUNS W7 / W8: the dock patrol was the one squad awake from GO + 1.5 s (hunters: see HUNT_REACH); it sleeps with the garrison
 EVENT_T = {'lobby': 0.9, 'flights': 1.0, 'ante': 2.9}          # the earliest time index (station j = j, a stretch j -> j + 1 = j .. j + 1) at which the event can fire: the gate fires with the crew at its hold
 LEG_GUNS = 4                            # guns that may bear on a stretch between two stations (kl_fa_club.LEG_GUNS: Withdrawal's heist legs, exact ray, squads in the world)
 WAKE_KNOWN = {('leg', 2): (5, "the flights landing on the way down: wave A's four posts (wave_plan: 400 from every station) and one of Guards_01's two men; Guards_01 cannot be moved out of the leg's line "
@@ -2619,6 +2620,60 @@ WAKE_KNOWN = {('leg', 2): (5, "the flights landing on the way down: wave A's fou
               ('leg', 5): (5, 'the same landing on the way back'), ('leg', 6): (6, "the vault lobby on the way out: wave B's three posts and the lobby squad's men taken ALIVE (they are the lobby gate's men)"),
               ('hold', 7): (4, 'the airlock station: the same men'), ('leg', 11): (9, "the square: wave D (the owner's shootout on the square)"),
               ('hold', 12): (9, 'the square'), ('hold', 13): (36, 'the square'), ('hold', 14): (36, 'the square'), ('leg', 12): (36, 'the square'), ('leg', 13): (36, 'the square')}
+# ---- HUNTERS (after runs W7 / W8, 2026-10-12). The first pressure table counted a man where he STANDS (and, from the second fix, at the Defend places he walks to). Runs W7 / W8 on c_bank7: the idle human at the
+# START row was shot from GO + 16 s (W8: 'you lost 63.2' then 57.9 .. 64.0 every 0.06 s = one rifle, police -> you 1.0) and dead at GO + 99 s (W7); the table said 0 guns on the START rows at GO / 11 / 30 / 60 s.
+# The only squad of the way in that was NOT staged is the dock patrol (PatrolGuards_01a, 2 men, named by the start timer = in the world from GO + 1.5 s); its modifier is eALM_Alert, the dock garrison's and
+# the hunts' are eLM_Unleash. A man of such a squad does not stay at his place: he goes for what he sees, and the dock floor sees the START (a bot hit on the dock floor at (436, 200, -5240) in W8: START is
+# in the exact ray's view from there, and the patrol's own Defend place (-496, 241, -5083) is 10 m from that floor). So a HUNTER counts at his place AND at every point of his mesh path towards the target
+# up to HUNT_REACH (the nearest place he can reach: the path's first HUNT_REACH cm). HUNT_REACH is a GUESS (25 m; the game's leash length is not read); the evidence is W7 / W8 only.
+HUNT_REACH = 2500.0
+HUNT_STEP = 250.0
+HUNT_ENUMS = (0, 'eLM_Unleash'), (6, 'eALM_Alert')        # SquadModifierBehaviour fields 0 (leash mode) and 6 (alert level): a squad with one of them is a hunter
+_HUNT_CACHE = {}
+
+
+def hunter_squads(sc):
+    """The squads (names under ROOT\\) whose SquadModifierBehaviour sets eLM_Unleash or eALM_Alert -> set."""
+    out = set()
+    for k, _i, v in kl_fa.controllers(sc, 'SquadModifierBehaviour'):
+        if any(len(v) > f and v[f] == e for f, e in HUNT_ENUMS):
+            out.add(sc.path[sc.top[k]][len(R):])
+    return out
+
+
+def hunt_points(nav, o, p):
+    """The points a hunter who stands at o can walk to on the way to p within HUNT_REACH (the stand-in mesh path, one point per HUNT_STEP) -> [(x, y, z)], o first; [] without a path."""
+    import kl_fa_bots_rt as RT
+    key = (id(nav), tuple(round(c) for c in o[:3]), tuple(round(c / 50.0) for c in p[:3]))
+    if key not in _HUNT_CACHE:
+        try:
+            got = RT.way_samples(nav, tuple(o[:3]), tuple(p[:3]), HUNT_STEP)
+        except Exception:
+            got = None
+        pts, run = [], 0.0
+        for q in (got[0] if got else ()):                # (the path's corners come twice; the length run is the sum of the legs)
+            q = tuple(q[:3])
+            if pts:
+                run += math.dist(pts[-1], q)
+            if run > HUNT_REACH:
+                break
+            if not pts or q != pts[-1]:
+                pts.append(q)
+        _HUNT_CACHE[key] = pts
+    return _HUNT_CACHE[key]
+
+
+def man_bears(S, nav, m, p, rng, rules=('exact',), dy=HOLD_GUN_DY):
+    """Does man m (a stage_men entry: 'at', and 'hunter' for the squads of hunter_squads) have a clear ray to the place p from where he stands or, a hunter, from a point of his way towards it?"""
+    cand = [tuple(m['at'][:3])]
+    if m.get('hunter') and nav is not None and math.dist(m['at'], p) <= rng + HUNT_REACH:
+        cand += hunt_points(nav, m['at'], p)
+    for q in cand:
+        if (dy is None or abs(q[1] - p[1]) < dy) and math.dist(q, p) <= rng and S.sees_by(q, tuple(p[:3]), rules):
+            return True
+    return False
+
+
 BEAT_GONE_T = 5.5                       # the beat's 14 police leave their posts for the ante-room when the beat box fires: counted at their posts only until here (their later places are unknown)
 T_FROM = {'start': 0.0, 'down': 0.0, 'waveA': 0.5, 'beat': 3.0, 'waveB': 3.0, 'hall': 4.0, 'plaza': 11.0, 'waveD': 11.0}      # time index from which a man of that stage is in the world (the plan's station index)
 
@@ -3209,6 +3264,7 @@ def stage_men(B, ex=None):
     """Every man of the level that can fire on the crew -> [dict(name, squad, group, stage, at)]: the kept campaign squads (stage by squad_stage) and, from extras.json's report `ex`, the waves' men at their posts
     (stage 'wave' + phase). The bots are not these."""
     sc, out = B.sc, []
+    hunt = hunter_squads(sc)
     for t in sc.tops():
         st = squad_stage(sc, t)
         if not st:
@@ -3216,33 +3272,52 @@ def stage_men(B, ex=None):
         for k in range(t + 1, sc.end[t]):
             if sc.cls(k) == 'ZFFActor':
                 out.append(dict(name='%s %s' % (sc.names[t].split('!')[-1], sc.path[sc.parent[k]].split(chr(92))[-1]), squad=sc.path[t][len(R):], group=sc.path[sc.parent[k]],
-                                stage=st, at=B.at(k)))
+                                stage=st, at=B.at(k), hunter=sc.path[t][len(R):] in hunt))
     if STAGING:                                         # SECOND FIX (skeptic): a woken man WALKS to his Defend places (the vault lobby for the dock garrison): each defend place of a staged squad counts as a man from the wake event on
         for t in sc.tops():
             nm = sc.path[t][len(R):]
-            if nm not in WAKE_SQUADS:
+            if nm not in wake_map():
                 continue
             for k in range(t + 1, sc.end[t]):
                 if sc.cls(k) == 'ZBoxPrimitive' and 'DefendBehaviour' in sc.path[k]:
                     out.append(dict(name='%s %s' % (sc.names[t].split('!')[-1], sc.path[k].split(chr(92))[-1] + ' of ' + sc.path[sc.parent[k]].split(chr(92))[-1]), squad=nm,
-                                    group=None, stage=squad_stage(sc, t), at=B.at(k), walker=True))
+                                    group=None, stage=squad_stage(sc, t), at=B.at(k), walker=True, hunter=nm in hunt))
     for w in (ex or {}).get('waves', ()):
         for j, (_e, q) in enumerate(w['men']):
             out.append(dict(name='%s_%d' % (w['name'], j + 1), squad=w['name'], group=None, stage='wave' + w['phase'], at=tuple(float(v) for v in q)))
     return out
 
 
+WAKE_BUILT = None                       # {squad: event} as the FOLDER under test was built (extras.json 'staged' routs), set by pressure_check / start_guns; None = the module's WAKE_SQUADS
+
+
+def wake_map():
+    return WAKE_SQUADS if WAKE_BUILT is None else WAKE_BUILT
+
+
+def set_wake_built(ex):
+    """Take the staging of a finished folder from its extras.json report (so that a check run on an OLDER folder, c_bank7's, measures what that folder has and not what the module would build now)."""
+    global WAKE_BUILT
+    WAKE_BUILT = None
+    if not ex or not ex.get('staged'):
+        return
+    WAKE_BUILT = collections.OrderedDict()
+    for ev, spec in ex['staged'].items():
+        for x in spec['routs']:
+            WAKE_BUILT[x[len(R):].rsplit(chr(92), 1)[0]] = ev
+
+
 def man_from(m):
     """The time index (the plan's station index; a stretch j -> j + 1 is j .. j + 1) from which man m is in the world: the event of WAKE_SQUADS (STAGING) or his stage's T_FROM."""
-    if STAGING and m['squad'] in WAKE_SQUADS:
-        return EVENT_T[WAKE_SQUADS[m['squad']]]
+    if STAGING and m['squad'] in wake_map():
+        return EVENT_T[wake_map()[m['squad']]]
     return T_FROM[m['stage']]
 
 
-def pressure_rows(B, P, S, men, log=None, step=300.0):
+def pressure_rows(B, P, S, men, log=None, step=300.0, hunters=False):
     """The guns table of plan P on built level B: for every station i (the seven bots' places there) and every stretch i -> i + 1 (the mesh path of each bot sampled every `step`) the men awake at that time
     (man_from) with a free EXACT ray (hvk_ray, Sight.sees_by 'exact') from their eyes to a place's chest or head, within HOLD_GUN_RANGE * 1.5 = 60 m on its floor (HOLD_GUN_DY). The beat's police count at their
-    posts only until BEAT_GONE_T. -> [dict(i, kind, what, at, hold = [guns on each of the seven], hold_worst, who_hold, leg_worst, leg_at, leg_who)]"""
+    posts only until BEAT_GONE_T. hunters=True: the men of hunter squads count at the points of their way towards each place too (HUNT_REACH). -> [dict(i, kind, what, at, hold = [guns on each of the seven], hold_worst, who_hold, leg_worst, leg_at, leg_who)]"""
     import kl_fa_bots as F
     import kl_fa_bots_rt as RT
     nav = F.Nav(B.scene.nav)
@@ -3254,7 +3329,7 @@ def pressure_rows(B, P, S, men, log=None, step=300.0):
         for m in men:
             if man_from(m) > t + 1e-9 or (m['stage'] == 'beat' and t > BEAT_GONE_T):
                 continue
-            if abs(m['at'][1] - p[1]) < HOLD_GUN_DY and math.dist(m['at'], p) <= rng and S.sees_by(m['at'], tuple(p[:3]), ('exact',)):
+            if man_bears(S, nav if hunters else None, m, p, rng):
                 out.append(m)
         return out
     rows = []
@@ -3301,16 +3376,23 @@ def pressure_check(folder, log=print):
     S = Sight(folder, B, lambda *a: None)
     pj = os.path.join(folder, 'extras.json')
     ex = json.load(open(pj)) if os.path.isfile(pj) else None
+    set_wake_built(ex)
     men = stage_men(B, ex)
     log('  pressure: %d men (%s); STAGING %s' % (len(men), ', '.join('%s %d' % (k, v) for k, v in collections.Counter(m['stage'] for m in men).items()), 'on' if STAGING else 'off'))
-    sp = start_pressure(S, start_men(B, ex, bool(o.get('waves2'))), times=(0.0, 11.0, 30.0, 60.0), rules=('exact',))
+    sp = start_pressure(S, start_men(B, ex, bool(o.get('waves2'))), times=(0.0, 11.0, 30.0, 60.0), rules=('exact',), nav=F.Nav(B.scene.nav))
     for T, r in sp.items():
         log('  START rows, GO + %3.0f s: %2d men in the world, %d with a clear exact ray within %d m%s' % (T, r['in_world'], len(r['bear']['exact']), PRESSURE_RANGE / 100,
                                                                                                            ': ' + ' '.join(r['bear']['exact'])[:160] if r['bear']['exact'] else ''))
         if r['bear']['exact'] and STAGING:
-            bad.append('START rows: %d guns at GO + %g s' % (len(r['bear']['exact']), T))
+            bad.append('START rows: %d guns (hunters counted) at GO + %g s: %s' % (len(r['bear']['exact']), T, ' '.join(r['bear']['exact'])[:120]))
             log('  FAIL ' + bad[-1])
     rows = pressure_rows(B, P, S, men, log)
+    # HUNTERS on the stations and stretches: SAID, not failed (the yardstick of 3 / 4 was measured on men who stand; a hunter who may walk 25 m towards every place makes it unreachable for any map with a squad awake).
+    # The START rows above are the rule that fails (runs W7 / W8).
+    rows_h = pressure_rows(B, P, S, men, None, hunters=True)
+    worse = ['%d:%s %d>%d' % (h['i'], 'hold' if h['hold_worst'] > r_['hold_worst'] else 'leg', max(h['hold_worst'], h.get('leg_worst') or 0), max(r_['hold_worst'], r_.get('leg_worst') or 0))
+             for r_, h in zip(rows, rows_h) if h['hold_worst'] > r_['hold_worst'] or (h.get('leg_worst') or 0) > (r_.get('leg_worst') or 0)]
+    log('  HUNTERS (reach %d m, said only): %s' % (HUNT_REACH / 100, ', '.join(worse) if worse else 'no station or stretch gains a gun'))
     i_loot = max(i for i, s in enumerate(P['stations']) if s['kind'] == 'loot')
     for r in rows:
         for kind, n, cap in (('hold', r['hold_worst'], HOLD_GUNS), ('leg', r.get('leg_worst') or 0, LEG_GUNS)):
@@ -4249,13 +4331,15 @@ def start_men(B, rep=None, waves2=False):
     timer; with WAVES2 the dock box, ENTER_AT + GO_AFTER_EVENT after the event at the earliest). `places` are the points a man may stand at (his
     start and every defend place of his squad: the upper bound), `post` None for an old man, (entry, post) for a wave man."""
     sc, out = B.sc, []
+    hunt = hunter_squads(sc)
     for t in sc.tops():
         if STAGE.get(sc.names[t]) in ('start', 'down'):
             acts = [B.at(k) for k in range(t, sc.end[t]) if sc.cls(k) == 'ZFFActor']
             posts = [B.at(k) for k in range(t + 1, sc.end[t]) if sc.cls(k) == 'ZBoxPrimitive' and sc.names[k].startswith('Pos#')]
             for i, a in enumerate(acts):
-                ev = WAKE_SQUADS.get(sc.path[t][len(R):]) if STAGING else None
-                out.append(dict(kind='old', name='%s#%d' % (sc.names[t].split('!')[-1], i + 1), t_in=WAKE_EVENTS[ev]['go'] + GO_AFTER_EVENT if ev else SQUADS_AT, places=[a] + posts, post=None))
+                ev = wake_map().get(sc.path[t][len(R):]) if STAGING else None
+                out.append(dict(kind='old', name='%s#%d' % (sc.names[t].split('!')[-1], i + 1), t_in=WAKE_EVENTS[ev]['go'] + GO_AFTER_EVENT if ev else SQUADS_AT, places=[a] + posts, post=None,
+                            hunter=sc.path[t][len(R):] in hunt))
     for w in (rep or {}).get('waves', ()):
         base = 0.0
         if w['phase'] == 'A' and waves2:
@@ -4269,7 +4353,7 @@ def start_men(B, rep=None, waves2=False):
     return out
 
 
-def start_pressure(S, men, times=PRESSURE_TIMES, rules=('sight', 'ray', 'hero'), rng=PRESSURE_RANGE):
+def start_pressure(S, men, times=PRESSURE_TIMES, rules=('sight', 'ray', 'hero'), rng=PRESSURE_RANGE, nav=None):
     """For each time T (s after the GO): the men in the world that bear on a START row -> {T: dict(in_world, bear: {rule: [names]}, any: [names], near15: n within
     15 m with a line, nearest: (dist, name, row))}. A man who walks (a wave man before he arrives) is taken on the straight line from his entry to his post; an old
     man at every place he may stand (an upper bound, the same for both builds)."""
@@ -4293,14 +4377,19 @@ def start_pressure(S, men, times=PRESSURE_TIMES, rules=('sight', 'ray', 'hero'),
             for o in where:
                 for r in rows:
                     d = math.dist(o, r)
-                    if d > rng:
+                    hunts = nav is not None and m.get('hunter') and d <= rng + HUNT_REACH        # HUNTERS: also from the points of his way towards the row
+                    if d > rng and not hunts:
                         continue
-                    see = S.sees_by(o, r, rules)
-                    if see:
-                        hit.update(see)
-                        if nearest is None or d < nearest[0]:
-                            nearest = (round(d), m['name'], tuple(round(x) for x in r))
-                        close = close or d <= 1500.0
+                    for oo in ([o] + (hunt_points(nav, o, r) if hunts else [])):
+                        d = math.dist(oo, r)
+                        if d > rng:
+                            continue
+                        see = S.sees_by(oo, r, rules)
+                        if see:
+                            hit.update(see)
+                            if nearest is None or d < nearest[0]:
+                                nearest = (round(d), m['name'], tuple(round(x) for x in r))
+                            close = close or d <= 1500.0
             for r_ in hit:
                 bear[r_].append(m['name'])
             if hit:
@@ -4308,6 +4397,9 @@ def start_pressure(S, men, times=PRESSURE_TIMES, rules=('sight', 'ray', 'hero'),
             near += 1 if close else 0
         res[T] = dict(in_world=inw, bear=bear, any=anyn, near15=near, nearest=nearest)
     return res
+
+
+FAILED = []
 
 
 def start_guns(folders, log=print):
@@ -4319,15 +4411,26 @@ def start_guns(folders, log=print):
         pj = os.path.join(fo, 'extras.json')
         rep = json.load(open(pj)) if os.path.isfile(pj) else None
         o = read_opts(fo)
+        set_wake_built(rep)
         S = Sight(fo, B, lambda *a: None)
         men = start_men(B, rep, bool(o.get('waves2')))
-        res = start_pressure(S, men)
+        nav = KB.Nav(B.scene.nav)
+        res = start_pressure(S, men, nav=nav)
         out[fo] = res
         log('start_guns %s (%d old men, %d wave men; waves2 %s):' % (fo, sum(m['kind'] == 'old' for m in men), sum(m['kind'] == 'wave' for m in men), bool(o.get('waves2'))))
         for T, r in res.items():
             log('  GO+%3.0f s: %3d men in the world; bearing on a START row within %d m: sight %d, ray(0x20) %d, ray+hero(0x28) %d; any rule %d (%s); within 15 m with a line: %d; nearest %s' % (
                 T, r['in_world'], PRESSURE_RANGE / 100, len(r['bear']['sight']), len(r['bear']['ray']), len(r['bear']['hero']), len(r['any']),
                 ' '.join(r['any'])[:140], r['near15'], r['nearest']))
+        # the START rule (runs W7 / W8): with the exact ray and the hunters counted, no gun on a START row at GO / + 11 / + 30 / + 60 s in a build with staging
+        ex_ = start_pressure(S, men, times=(0.0, 11.0, 30.0, 60.0), rules=('exact',), nav=nav)
+        for T, r in ex_.items():
+            log('  START rule, GO+%3.0f s: %2d men in the world, exact ray (hunters counted, reach %d m): %d%s' % (T, r['in_world'], HUNT_REACH / 100, len(r['bear']['exact']),
+                                                                                                            ' ' + ' '.join(r['bear']['exact'])[:160] if r['bear']['exact'] else ''))
+            if r['bear']['exact'] and o.get('staging'):
+                FAILED.append('%s: START rows: %d guns at GO + %g s' % (fo, len(r['bear']['exact']), T))
+                log('  FAIL ' + FAILED[-1])
+        log('kl_fa_bank.start_guns %s: %s' % (fo, 'not a staged build: said only' if not o.get('staging') else 'PASS' if not [x for x in FAILED if x.startswith(fo)] else 'FAILED'))
     return out
 
 
@@ -5285,6 +5388,7 @@ def main():
         sys.exit(1 if waves_check(a[1]) else 0)
     elif len(a) >= 2 and a[0] == 'start-guns':
         start_guns(a[1:])
+        sys.exit(1 if FAILED else 0)
     elif len(a) == 2 and a[0] == 'crew-check':
         sys.exit(1 if crew_check(a[1]) else 0)
     elif len(a) == 2 and a[0] == 'reverify':
