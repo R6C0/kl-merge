@@ -1,0 +1,377 @@
+/*
+ * klbotdown.c - THE AI HEISTERS GO 'DOWN, NOT DEAD' (track Y2b, 2026-10-12). Part of KLHook (included by klhook.c
+ * BEFORE kladren.c; its tick runs BEFORE kad_tick). OFF unless [BotDown] Enable=1. NOT RUN IN THE GAME.
+ * Reading and the live checks: re\bots_down.md.
+ *
+ * THE OWNER: 'so the ai heisters are 1:1 with you' (the human is knocked down by police fire, lies, gets up slowly, can be
+ * helped up; re\player_down.md, re\adrenaline.md).
+ *
+ * WHY THE GAME NEVER DID IT (READ, kl2.exe 0490): a soldier's damage routine (ZSoldier slot 96 = 0x8473a0) writes the new
+ * health with the actor's set-health slot (0x84789d -> 0x792bc0 -> 0x61efd0, which clamps to [0, maximum]) and ONLY AT
+ * HEALTH 0 asks for a down: soldier slot 51 (0x847968 = 0x688190, a dog says no, else a plain jump to 0x70e0e0) with the
+ * hit record and 0. 0x70e0e0 then runs a list of refusals (re\player_down.md 11.1): a. already down, b. 0x70f330 (a hit
+ * animation plays, somebody holds him, he sits, the 16 mesh probes of 1 m), c. was down once, d. a head hit within 15 m,
+ * e. damage over 1,000, f/g. the modifier / the level-wide pause. In 267 of 267 logged cases it said no and nobody
+ * established which test. The killing hit is the WORST moment to ask: its own hit animation runs, and c / d / e / g are
+ * all about THAT hit.
+ *
+ * WHAT THIS PART DOES INSTEAD (data reads, ONE game call, no patch, no private vtable):
+ *   1. It never lets him reach 0 by the many small hits that kill the crew (3 a second, 1 .. 21 each): the tick runs once
+ *      a frame (klhook.c: SteamAPI_RunCallbacks in the main loop), so a bot is seen between two hits.
+ *   2. When his health is at or under DownPct of his maximum (default 20 %), the hook ASKS THE DOWN ITSELF, outside the hit:
+ *      the same call the damage routine makes (soldier vtable +0xcc = 0x688190 -> 0x70e0e0), with NO HIT RECORD (the game
+ *      handles a missing record: 0x70e29e .. 0x70e2ab, attacker 0) and the SECOND ARGUMENT 1 (the 'force' flag the routine
+ *      has: [ebp+0xc] <> 0 jumps over c, d, e at 0x70e12d and over f / g at 0x70e1fc to 0x70e29e). What can still refuse is
+ *      a and b only - and b is a property of the bot's situation NOW, not of a hit: the call is repeated every 100 ms for
+ *      RefuseMs (3 s), so it is asked again once his hit animation is over or he has moved.
+ *   3. While it is refused, his health is held at FloorPct (6 %) at least: the next bullet cannot take the last of it. After
+ *      RefuseMs he is let go (he dies like a stock heister at the next hits) and the line says why.
+ *   4. The game's own down does the rest: the goal is pushed (0x6cabf0), byte [actor+0x64c] = 1, 0.1 s without damage,
+ *      the goal's start (slot 1 = 0x7ea990) raises his health to 25 % if he has less and writes the tick he lies until
+ *      ([dnd+0x14], 1.5 .. 3.0 s), the script (0x5f4ac0) lays him down, takes hits in FULL while he lies (a second health
+ *      0 kills him: refusal a - so police CAN finish him), gives him 75 % at the get-up and ends the goal. This part adds
+ *      only DATA to that: LieSeconds (the tick written once the game has written its own), FreeSeconds (bit 0x800 of the
+ *      'no damage' word, never while the vehicle drives out), LiePct / UpPct (health on the floor / when up), NoFire
+ *      (the soldier's target [soldier+0xb0] cleared each pass: the script fires only at a target - ASSUMED).
+ *   5. DownsMax (2) downs a life: his 'was down once' byte [actor+0x5cb] is not looked at (flag 1 skips refusal c).
+ *
+ * KEYS ([BotDown]):
+ *   Enable=0   Dry=0 (1 = log only: nothing is written, nothing is called)   Log=1 (2 = every pass of a down)
+ *   DownPct=20  FloorPct=6  DownsMax=2  RefuseMs=3000  LieSeconds=6 (0 = the game's 1.5 .. 3.0; a GUESS)  FreeSeconds=0.75
+ *   LiePct=0 (0 = the game's 25)  UpPct=0 (0 = the game's 75)  NoFire=0 (ASSUMED safe: live check B3)  Traitors=1
+ *   AttrMs=1500 (a human's hit counts as the cause if his sum on the victim rose this long before the down)
+ *   WatchSeconds=8 (the down byte standing this long after the lie is over = the goal never ran: the byte is cleared)
+ *
+ * EXPORTS for kladren.c (re\bots_down.md 8):  klbd_is_down(record)   klbd_speed(record, rate)   klbd_by(record)
+ *
+ * NOT DONE: the belly-flop dive clip (the game's down plays Down_Not_Dead_Get_Down, onto the side: the state graph 0x730be0
+ * is shared with the police); an attacker for the down (the hit record is not at hand: attacker 0 - the human's share is
+ * read from the rules' sum A[0][victim], klgrudge.c's float, instead); a point-blank step or a left-behind kill from above
+ * the threshold in ONE frame still kills (as stock): [Balance] PointBlankToCrew shrinks the first.
+ */
+#define KLBD_C
+
+#define KLBD_SOLDIER_VT 0x00bd0954
+#define KLBD_SLOT51     0x00688190            /* soldier vtable +0xcc: a dog says no, else a jump to 0x70e0e0 */
+#define KLBD_DOWNFN     0x0070e0e0
+#define KLBD_CLOCK      0x00dd2640            /* +0x48 the game's tick (1/1024 s) */
+#define KLBD_ROUND      0x19
+#define KLBD_NHIT       12                    /* rows of the rules' hit-sum matrix (klgrudge.c KLY_NROW) */
+
+#ifndef KLBD_CALL                             /* the harness replaces the call */
+#define KLBD_CALL(soldier) ((BYTE (__fastcall *)(void *, void *, void *, int))(DWORD_PTR)KLH_VA(KLBD_SLOT51))((void *)(DWORD_PTR)(soldier), 0, 0, 1)
+#endif
+
+static struct {
+    int on, dry, log, downs_max, nofire, traitors;
+    float down_pct, floor_pct, lie, free_t, lie_pct, up_pct, refuse, attr, watch;
+} klbd;
+
+static struct klbd_rec {
+    DWORD actor, soldier;
+    BYTE down, gaveup, shield, lie_done, pct_done, said, dryseen, mine;
+    int downs, tries, by;
+    DWORD tick_down, l0, lie_tick, first_try, last_try, spd_last, a_tick, watch_log;
+    float prevA, hp, hmax;
+} klbd_r[KLB_NREC];
+static struct { DWORD rules; int told_code; } klbd_g;
+
+/* ---------------------------------------------------------------- pure arithmetic (tested off the game) */
+
+/* the threshold in health points: DownPct of the maximum, never under 1 */
+static float klbd_thresh(float hmax, float pct) { float t = hmax * pct / 100.0f; return t < 1.0f ? 1.0f : t; }
+
+/* the floor a pending bot is held at: FloorPct of the maximum, but under the threshold and at least 1 */
+static float klbd_floor(float hmax, float fpct, float thresh)
+{
+    float f = hmax * fpct / 100.0f;
+    if (f > thresh) f = thresh;
+    return f < 1.0f ? 1.0f : f;
+}
+
+/* a downed bot's lie tick pulled earlier (the same arithmetic as kladren.c's kad_lie_step; never earlier than tick + 2,
+   never later than cur; a pass longer than half a second is a stall and gives nothing) */
+static DWORD klbd_lie_step(DWORD cur, DWORD tick, DWORD dt, float rate, DWORD *done)
+{
+    long left = (long)(cur - tick), take, nl;
+    *done = 0;
+    if (left <= 2 || rate <= 1.0f || dt == 0 || dt > 512) return cur;
+    take = (long)((rate - 1.0f) * (float)dt);
+    nl = left - take; if (nl < 2) nl = 2;
+    *done = (DWORD)(left - nl);
+    return tick + (DWORD)nl;
+}
+
+static int klbd_fin(float f) { return f == f && f > -1e9f && f < 1e9f; }
+static float klbd_rdf(DWORD at, int *ok) { float f = 0; if (!klh_rd(at, &f, 4) || !klbd_fin(f)) { *ok = 0; return 0; } return f; }
+
+/* ---------------------------------------------------------------- reading a bot */
+
+static int klbd_bot_ok(DWORD actor, DWORD *soldier)
+{
+    DWORD s;
+    if (!actor || klh_rd32(actor) != KLB_ACTOR_VT) return 0;
+    if (!(s = klh_rd32(actor + 0x77c)) || klh_rd32(s) != KLBD_SOLDIER_VT || klh_rd32(s + 0x40) != actor) return 0;
+    *soldier = s;
+    return 1;
+}
+
+/* is the call this build knows the one the soldier's slot 51 holds? (once per round, said once) */
+static int klbd_callable(void)
+{
+    static const BYTE c51[16] = { 0x55, 0x8b, 0xec, 0x8b, 0x81, 0xd8, 0x06, 0x00, 0x00, 0x83, 0x38, 0x06, 0x75, 0x06, 0x32, 0xc0 };
+    static const BYTE cdn[16] = { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x10, 0x56, 0x8b, 0xf1, 0x8b, 0x4e, 0x40, 0x8b, 0x01, 0x8b, 0x90 };
+    int ok = klh_rd32((DWORD_PTR)KLH_VA(KLBD_SOLDIER_VT + 0xcc)) == KLBD_SLOT51 && klb_same_code(KLBD_SLOT51, c51, sizeof c51) && klb_same_code(KLBD_DOWNFN, cdn, sizeof cdn);
+    if (!ok && !klbd_g.told_code++) klog("botdown: the soldier's down routine (slot 51 = 0x688190 -> 0x70e0e0) is not the one this build knows: nothing is called, nothing is written");
+    return ok;
+}
+
+/* why the game's b may refuse, from what can be read now (the same inputs as kldown.c's line) */
+static void klbd_why(DWORD actor, DWORD soldier, char *out, int n)
+{
+    DWORD wo, ao, ws = 0, as = 0, holder = 0, seat = 0, s18 = 0, s40 = 0, att = 0; BYTE dn = 0;
+    if ((wo = klh_rd32(soldier + 0x4b4)) != 0) klh_rd(wo + 8, &ws, 4);
+    if ((ao = klh_rd32(soldier + 0xa4)) != 0) klh_rd(ao + 8, &as, 4);
+    klh_rd(actor + 0x774, &holder, 4); klh_rd(actor + 0x88c, &seat, 4); klh_rd(actor + 0x5b4, &att, 4); klh_rd(actor + 0x64c, &dn, 1);
+    if (seat) { klh_rd(seat + 0x18, &s18, 4); klh_rd(seat + 0x40, &s40, 4); }
+    snprintf(out, n, "%s",
+        dn ? "a: he is down already" :
+        ws != 0 && ws != 4 ? "a: his ZWounded state runs" :
+        holder ? "b: somebody holds him" :
+        (seat && s18 && !s40) ? "b: he sits in a seat" :
+        as != 0 && as != 4 ? "b: HIS ZHitAnimTask RUNS ([soldier+0xa4] state not 0 / 4): a hit animation plays - asked again" :
+        att ? "b: he is attached to an object (it refuses if that is a ZHavokLnkObj) or the 16 mesh probes of 1 m fail (not readable here)" :
+        "b: the 16 mesh probes of 1 m fail, or bone 2 is low (not readable here) - he is probably against a wall or in a corridor");
+}
+
+/* the bit of FreeSeconds: on = hold 0x800 of the 'takes no damage' word, off = take it off (never another bit) */
+static void klbd_shield(struct klbd_rec *b, int on)
+{
+    DWORD o = klh_rd32(b->actor + 0x54); WORD w = 0, nw;
+    if (!o || !klh_rd(o + 0x3a, &w, 2)) return;
+    nw = on ? (WORD)(w | 0x800) : (WORD)(w & ~0x800);
+    if (nw != w && !klh_data((void *)(DWORD_PTR)(o + 0x3a), &nw, 2, "an AI heister's 'takes no damage' word: the down-not-dead bit 0x800 (botdown)")) return;
+    b->shield = (BYTE)on;
+}
+
+/* everything of ours off one bot */
+static void klbd_back(struct klbd_rec *b)
+{
+    DWORD s = 0;
+    if (b->actor && b->shield && klbd_bot_ok(b->actor, &s) && s == b->soldier) klbd_shield(b, 0);
+    memset(b, 0, sizeof *b);
+}
+
+/* ---------------------------------------------------------------- exports */
+
+static int klbd_is_down(int record)
+{
+    BYTE d = 0;
+    if (!klbd.on || record < 0 || record >= KLB_NREC || !klbd_r[record].actor) return 0;
+    return klh_rd(klbd_r[record].actor + 0x64c, &d, 1) && d;
+}
+
+/* the human record whose bullets took his health shortly before the down, or -1 */
+static int klbd_by(int record) { return (record >= 0 && record < KLB_NREC && klbd.on) ? klbd_r[record].by : -1; }
+
+/* pull a downed bot's lie earlier (a helper stands by): -> 1 when the tick was written. The part's own LieSeconds write yields
+   to it for good. rate 3.0 = three times as fast as time runs. */
+static int klbd_speed(int record, float rate)
+{
+    struct klbd_rec *b; DWORD clock, tick = 0, dnd, cur, nw, done = 0, dt;
+    if (!klbd.on || klbd.dry || record < 0 || record >= KLB_NREC) return 0;
+    b = &klbd_r[record];
+    if (!b->actor || !b->down || !(clock = klh_rd32((DWORD_PTR)KLH_VA(KLBD_CLOCK))) || !klh_rd(clock + 0x48, &tick, 4)) return 0;
+    dt = b->spd_last ? tick - b->spd_last : 0; b->spd_last = tick;
+    if (!(dnd = klh_rd32(b->soldier + 0x4b8)) || klh_rd32(dnd + 4) != b->soldier) return 0;
+    cur = klh_rd32(dnd + 0x14); nw = klbd_lie_step(cur, tick, dt, rate, &done);
+    b->lie_done = 1;
+    return nw != cur && klh_data((void *)(DWORD_PTR)(dnd + 0x14), &nw, 4, "an AI heister's down-not-dead: the tick he lies until (botdown, a helper)");
+}
+
+/* ---------------------------------------------------------------- one pass */
+
+static void klbd_forget(void)
+{
+    int i;
+    for (i = 0; i < KLB_NREC; i++) if (klbd_r[i].actor) klbd_back(&klbd_r[i]);
+    memset(&klbd_g, 0, sizeof klbd_g);
+}
+
+static void klbd_tick(int game_thread)
+{
+    struct klb_snap sn; DWORD rules, state, clock, tick = 0; int level, i; char why[200];
+    if (!klbd.on || !game_thread || !klh_exe_ok) return;
+    if (!(klr_arcade(&rules, &state, &level) && klb_level(why) && state == KLBD_ROUND && klb_read(&sn) && sn.state == KLBD_ROUND)) { if (klbd_g.rules) klbd_forget(); return; }
+    if (sn.rules != klbd_g.rules) {
+        klbd_forget(); klbd_g.rules = sn.rules;
+        klog("botdown: a round runs (Arcade, not the stock level: %s); %d crew record(s); DownPct %.0f %% FloorPct %.0f %% DownsMax %d LieSeconds %.1f FreeSeconds %.2f NoFire %d%s",
+             why, sn.n, klbd.down_pct, klbd.floor_pct, klbd.downs_max, klbd.lie, klbd.free_t, klbd.nofire, klbd.dry ? " - Dry: nothing is called, nothing is written" : "");
+    }
+    if (!(clock = klh_rd32((DWORD_PTR)KLH_VA(KLBD_CLOCK))) || !klh_rd(clock + 0x48, &tick, 4)) return;
+    for (i = 0; i < sn.n && i < KLB_NREC; i++) {
+        const struct klb_rec *r = &sn.r[i]; struct klbd_rec *b = &klbd_r[i];
+        DWORD s = 0, h, dnd; BYTE dn = 0; float hp, hmax, thr, pos[3] = { 0, 0, 0 }; int hok = 1, have;
+        if (!r->used || !(r->flags & 1) || !klbd_bot_ok(r->actor, &s)) { if (b->actor) klbd_back(b); continue; }
+        if (!klbd.traitors && (r->flags & 2)) continue;
+        if (b->actor != r->actor || b->soldier != s) { if (b->actor) klbd_back(b); b->actor = r->actor; b->soldier = s; b->by = -1; b->prevA = r->hit; }
+        if (!(h = klh_rd32(r->actor + 0x5fc)) || klh_rd32(h + 0x24) != r->actor) continue;
+        hp = klbd_rdf(h + 4, &hok); hmax = klbd_rdf(h + 8, &hok);
+        if (!hok || hmax < 1.0f || hmax > 100000.0f || !klh_rd(r->actor + 0x64c, &dn, 1)) continue;
+        thr = klbd_thresh(hmax, klbd.down_pct);
+        /* the human's share of his health taken (klgrudge.c's float, per cent of the maximum): a rise = his bullet */
+        if (i < KLBD_NHIT && klbd_fin(r->hit) && r->hit > b->prevA + 0.001f) b->a_tick = tick;
+        if (i < KLBD_NHIT) b->prevA = r->hit;
+        dnd = klh_rd32(s + 0x4b8); if (dnd && klh_rd32(dnd + 4) != s) dnd = 0;
+        if (!b->said) { b->said = 1; if (klbd.log >= 2) klog("botdown: record %d (actor %08lx): health %.1f of %.1f; a down is asked at %.1f or less, held at %.1f", i, (unsigned long)r->actor, hp, hmax, thr, klbd_floor(hmax, klbd.floor_pct, thr)); }
+        have = kle_node(klh_rd32(r->actor + 4), pos, 0);
+
+        if (r->status != 0) {                                            /* aboard / escaped / dead */
+            if (b->down) { klog("botdown: record %d left play while down (%s) after %.2f s", i, r->status == 7 ? "he DIED" : "status other than in-play", (float)(long)(tick - b->tick_down) / 1024.0f); b->down = 0; }
+            if (b->first_try && !b->down && r->status == 7) klog("botdown: record %d DIED while a down was pending (%d try(s), %s)", i, b->tries, b->gaveup ? "the part had given up" : "one frame took more than the floor held");
+            b->first_try = b->last_try = 0; b->tries = 0;
+            if (b->shield) klbd_shield(b, 0);
+            continue;
+        }
+        /* the vehicle drives out: the game kills the crew left behind (1,000,000 damage) - no new down, no shield */
+        if (b->shield && sn.veh >= 5) { klbd_shield(b, 0); if (klbd.log >= 2) klog("botdown: record %d: the 'no damage' bit is taken off (the vehicle drives out)", i); }
+
+        if (!b->down && dn) {
+            /* ---- he is down (ours or the game's own) */
+            b->down = 1; b->tick_down = tick; b->lie_done = 0; b->pct_done = 0; b->spd_last = 0; b->watch_log = 0;
+            if (!b->mine) b->downs++;
+            b->by = (b->a_tick && (long)(tick - b->a_tick) <= (long)(klbd.attr * 1024.0f) && sn.human >= 0) ? sn.human : -1;
+            klog("botdown: record %d IS DOWN, NOT DEAD (%d of %d) at (%.0f, %.0f, %.0f) - %s; health %.1f of %.1f; he lies until tick %ld = %.2f s from now (the game's own 1.5 .. 3.0 s until its goal starts); put down by %s",
+                 i, b->downs, klbd.downs_max, have ? pos[0] : 0, have ? pos[1] : 0, have ? pos[2] : 0, b->mine ? "the HOOK asked and the game said YES" : "the game did it by itself",
+                 hp, hmax, dnd ? (long)klh_rd32(dnd + 0x14) : 0L, dnd ? (float)(long)(klh_rd32(dnd + 0x14) - tick) / 1024.0f : 0.0f,
+                 b->by >= 0 ? "a human's bullet (his sum on this bot rose just before)" : "nobody known (police, or no rise of the human's sum)");
+            b->l0 = dnd ? klh_rd32(dnd + 0x14) : 0;
+        } else if (b->down && !dn) {
+            /* ---- he is up */
+            b->down = 0; b->mine = 0; b->first_try = b->last_try = 0; b->tries = 0; b->gaveup = 0;
+            if (b->shield) klbd_shield(b, 0);
+            klog("botdown: record %d IS UP after %.2f s at (%.0f, %.0f, %.0f): health %.1f of %.1f (the game's script gives 75 %%), heist stage %u", i, (float)(long)(tick - b->tick_down) / 1024.0f,
+                 have ? pos[0] : 0, have ? pos[1] : 0, have ? pos[2] : 0, hp, hmax, (unsigned)r->stage);
+            if (!klbd.dry && klbd.up_pct > 0 && hp > 0.01f && fabsf(hp - hmax * klbd.up_pct / 100.0f) > 0.5f) {
+                float nh = hmax * klbd.up_pct / 100.0f;
+                if (klh_data((void *)(DWORD_PTR)(h + 4), &nh, 4, "an AI heister's health: what he has when he is up from his down (botdown UpPct)")) { klog("botdown: record %d: up with %.1f of %.1f (UpPct=%.0f; the game gave %.1f)", i, nh, hmax, klbd.up_pct, hp); hp = nh; }
+            }
+            b->by = -1;
+        }
+        if (b->down) {
+            /* ---- he lies */
+            if (klbd.dry) { b->hp = hp; b->hmax = hmax; continue; }
+            if (dnd && !b->lie_done) {
+                DWORD cur = klh_rd32(dnd + 0x14);
+                if (cur != b->l0 || (long)(tick - b->tick_down) > 1024) {      /* slot 1 (0x7ea990) wrote its own tick: ours goes in, once */
+                    if (klbd.lie > 0 && (long)(cur - b->tick_down) >= 1400) {      /* under 1.4 s = a helper (kladren.c) pulled it already: not put back */
+                        DWORD want = b->tick_down + (DWORD)(klbd.lie * 1024.0f);
+                        if ((long)(want - tick) > 0 && cur != want && klh_data((void *)(DWORD_PTR)(dnd + 0x14), &want, 4, "an AI heister's down-not-dead: the tick he lies until (botdown LieSeconds)")) {
+                            b->lie_tick = want; klog("botdown: record %d: he lies until tick %ld (LieSeconds=%.1f; the game had %ld = %.2f s)", i, (long)want, klbd.lie, (long)cur, (float)(long)(cur - b->tick_down) / 1024.0f);
+                        }
+                    }
+                    b->lie_done = 1;
+                }
+            }
+            if (!b->pct_done && (b->lie_done || (long)(tick - b->tick_down) > 1024)) {      /* the game has given him its 25 % by now */
+                b->pct_done = 1;
+                if (klbd.lie_pct > 0 && hp > 0.01f && fabsf(hp - hmax * klbd.lie_pct / 100.0f) > 0.5f) {
+                    float nh = hmax * klbd.lie_pct / 100.0f;
+                    if (klh_data((void *)(DWORD_PTR)(h + 4), &nh, 4, "an AI heister's health on the floor (botdown LiePct)")) { klog("botdown: record %d: %.1f of %.1f on the floor (LiePct=%.0f; the game gave %.1f)", i, nh, hmax, klbd.lie_pct, hp); hp = nh; }
+                }
+            }
+            if (klbd.free_t > 0 && sn.veh < 5 && (long)(tick - b->tick_down) < (long)(klbd.free_t * 1024.0f)) klbd_shield(b, 1);
+            else if (b->shield) klbd_shield(b, 0);
+            if (klbd.nofire) {
+                DWORD tgt = 0, zero = 0;
+                if (klh_rd(s + 0xb0, &tgt, 4) && tgt && klh_data((void *)(DWORD_PTR)(s + 0xb0), &zero, 4, "an AI heister's target, cleared while he lies (botdown NoFire)") && klbd.log >= 2)
+                    klog("botdown: record %d: his target [soldier+0xb0] %08lx cleared (NoFire)", i, (unsigned long)tgt);
+            }
+            /* the watchdog: the goal's script ends at once when 0x70f330 fails at its start - the byte then stays set for good */
+            {
+                float lie = klbd.lie > 0 ? klbd.lie : 3.0f;
+                if ((long)(tick - b->tick_down) > (long)((lie + klbd.watch) * 1024.0f) && (long)(tick - b->tick_down) > 0) {
+                    BYTE zero = 0;
+                    if (klh_data((void *)(DWORD_PTR)(r->actor + 0x64c), &zero, 1, "an AI heister's down byte (botdown watchdog: the goal never ran)"))
+                        klog("botdown: record %d: the down byte stood %.1f s (lie %.1f + WatchSeconds %.1f): the goal's script never ended it - the byte is cleared, he is a plain heister again", i, (float)(long)(tick - b->tick_down) / 1024.0f, lie, klbd.watch);
+                }
+            }
+        } else if (hp <= 0.01f) {
+            /* dead (or about to be) without a down: said once by the klbot line; here only the verdict on this part */
+            if (b->tries || b->first_try) { klog("botdown: record %d DIED at health 0 while a down was pending (%d try(s), %s)", i, b->tries, b->gaveup ? "the part had given up" : "the floor did not hold: one frame took more than the floor"); }
+            b->first_try = b->last_try = 0; b->tries = 0;
+        } else if (hp > thr) {
+            /* healthy again: a new episode */
+            b->first_try = b->last_try = 0; b->tries = 0; b->gaveup = 0; b->dryseen = 0;
+        } else if (!b->gaveup && b->downs < klbd.downs_max && sn.veh < 5 && r->status == 0) {
+            /* ---- at or under the threshold, standing: ask for the down */
+            float fl = klbd_floor(hmax, klbd.floor_pct, thr);
+            if (klbd.dry) {
+                if (!b->dryseen++) klog("botdown: Dry - record %d is at %.1f of %.1f (<= %.1f): the hook WOULD ask the game's down now (soldier %08lx, slot 51, no hit, force 1) and hold his health at %.1f; down %d of %d", i, hp, hmax, thr, (unsigned long)s, fl, b->downs + 1, klbd.downs_max);
+                continue;
+            }
+            if (!b->first_try) { b->first_try = tick; klog("botdown: record %d is at %.1f of %.1f (<= %.1f = DownPct %.0f %%): the game's down is asked (0x70e0e0 through slot 51, no hit record, force 1)", i, hp, hmax, thr, klbd.down_pct); }
+            if (hp < fl) { klh_data((void *)(DWORD_PTR)(h + 4), &fl, 4, "an AI heister's health: held at the floor while his down is asked (botdown FloorPct)"); hp = fl; }
+            if (!b->last_try || (long)(tick - b->last_try) >= 102) {          /* every 100 ms */
+                BYTE ok;
+                if (!klbd_callable()) { b->gaveup = 1; continue; }
+                b->last_try = tick; b->tries++;
+                b->mine = 1;
+                ok = (BYTE)KLBD_CALL(s);
+                klh_rd(r->actor + 0x64c, &dn, 1);
+                if (ok && dn) {
+                    /* the next pass sees the byte and logs the down; the lie tick is read there */
+                    b->downs++;
+                    if (klbd.log >= 2) klog("botdown: record %d: the game said YES at try %d (%.2f s after the first)", i, b->tries, (float)(long)(tick - b->first_try) / 1024.0f);
+                } else {
+                    char w[260]; b->mine = 0;
+                    klbd_why(r->actor, s, w, sizeof w);
+                    if (b->tries == 1 || klbd.log >= 2) klog("botdown: record %d: the game said NO at try %d (returned %u, down byte %u) - %s", i, b->tries, (unsigned)ok, (unsigned)dn, w);
+                    if ((long)(tick - b->first_try) > (long)(klbd.refuse / 1000.0f * 1024.0f)) {
+                        b->gaveup = 1;
+                        klog("botdown: record %d: refused for %.1f s (%d tries): he gets NO down this time and dies like a stock heister at the next hits (last reason: %s)", i, (float)(long)(tick - b->first_try) / 1024.0f, b->tries, w);
+                    }
+                }
+            }
+        }
+        b->hp = hp; b->hmax = hmax;
+    }
+}
+
+/* ---------------------------------------------------------------- init */
+
+static float klbd_inif(const char *key, const char *def, float lo, float hi)
+{
+    char t[40]; float v;
+    GetPrivateProfileStringA("BotDown", key, def, t, sizeof t, klh_ini);
+    v = (float)atof(t);
+    if (!(v == v) || v < lo || v > hi) v = (float)atof(def);
+    return v;
+}
+
+static void klbd_init(void)
+{
+    memset(&klbd, 0, sizeof klbd); memset(klbd_r, 0, sizeof klbd_r); memset(&klbd_g, 0, sizeof klbd_g);
+    klbd.on = GetPrivateProfileIntA("BotDown", "Enable", 0, klh_ini) != 0;
+    if (!klbd.on) return;
+    klbd.dry = GetPrivateProfileIntA("BotDown", "Dry", 0, klh_ini) != 0;
+    klbd.log = GetPrivateProfileIntA("BotDown", "Log", 1, klh_ini);
+    klbd.downs_max = GetPrivateProfileIntA("BotDown", "DownsMax", 2, klh_ini);
+    if (klbd.downs_max < 1) klbd.downs_max = 1; if (klbd.downs_max > 9) klbd.downs_max = 9;
+    klbd.nofire = GetPrivateProfileIntA("BotDown", "NoFire", 0, klh_ini) != 0;
+    klbd.traitors = GetPrivateProfileIntA("BotDown", "Traitors", 1, klh_ini) != 0;
+    klbd.down_pct = klbd_inif("DownPct", "20", 1.0f, 60.0f);
+    klbd.floor_pct = klbd_inif("FloorPct", "6", 0.0f, 30.0f);
+    klbd.refuse = klbd_inif("RefuseMs", "3000", 0.0f, 20000.0f);
+    klbd.lie = klbd_inif("LieSeconds", "6", 0.0f, 15.0f);
+    if (klbd.lie > 0 && klbd.lie < 0.5f) klbd.lie = 0.5f;
+    klbd.free_t = klbd_inif("FreeSeconds", "0.75", 0.0f, 5.0f);
+    klbd.lie_pct = klbd_inif("LiePct", "0", 0.0f, 100.0f);
+    klbd.up_pct = klbd_inif("UpPct", "0", 0.0f, 100.0f);
+    klbd.attr = klbd_inif("AttrMs", "1500", 0.0f, 20000.0f) / 1000.0f;
+    klbd.watch = klbd_inif("WatchSeconds", "8", 3.0f, 60.0f);
+    klog("botdown: on%s; an AI heister at %.0f %% of his health or less is put DOWN, NOT DEAD by the game's own routine (asked from the hook without a hit, force 1; floor %.0f %% while refused for up to %.0f ms), up to %d times a life; lies %s, FreeSeconds %.2f, LiePct %.0f, UpPct %.0f, NoFire %d, Traitors %d. Arcade, a level that is not stock; data writes and ONE game call (re\\bots_down.md)",
+         klbd.dry ? " (Dry=1: nothing is called, nothing is written)" : "", klbd.down_pct, klbd.floor_pct, klbd.refuse, klbd.downs_max,
+         klbd.lie > 0 ? "LieSeconds" : "as long as the game says", klbd.free_t, klbd.lie_pct, klbd.up_pct, klbd.nofire, klbd.traitors);
+    if (klbd.lie > 0) klog("botdown: LieSeconds=%.1f (a GUESS; the game's own is 1.5 .. 3.0)", klbd.lie);
+}

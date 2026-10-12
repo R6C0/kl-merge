@@ -590,6 +590,7 @@ static void klh_tick(int game_thread);
 #include "klfed.c"
 #include "klfedkit.c"
 #include "kldown.c"
+#include "klbotdown.c"                                    /* klbotdown.c: AI heisters down, not dead (off unless [BotDown] Enable) */
 #include "kladren.c"                                      /* kladren.c: adrenaline (off unless [Adrenaline] Enable); its tick runs BEFORE kld_tick */
 #include "klsteam.c"
 #include "klslot.c"
@@ -645,6 +646,7 @@ static void klh_tick(int game_thread)
     klnet_tick(game_thread);                          /* klnet.c: multiplayer log / update numbers (off unless [Net]) */
     klp_tick(game_thread);                            /* klfed.c: come back as a fed (data writes only) */
     klfk_tick(game_thread);                           /* klfedkit.c: the fed can hunt, body, AK (with [Fed] Player=1; Kit=0 = off) */
+    klbd_tick(game_thread);                           /* klbotdown.c: before kladren, which reads its down state */
     kad_tick(game_thread);                            /* kladren.c: raises the mash meter first */
     kld_tick(game_thread);                            /* kldown.c: the mash get-up (off unless [Down] Enable) */
     klg_tick();
@@ -826,6 +828,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klp_init();
     klfk_init();
     kld_init();
+    klbd_init();
     kad_init();
     klg_init();
     klx_init();

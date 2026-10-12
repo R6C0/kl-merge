@@ -286,6 +286,7 @@ static void kad_tick(int game_thread)
                 if (!sn.r[h].used || (sn.r[h].flags & 1) || !kad_g.kwok[h] || !klh_rd(sn.score + 0x1b8 + 2 * h, &w, 2)) continue;
                 if (w != kad_g.kw[h] && kad_g.kw[h] != 0xffff && (WORD)(w - kad_g.kw[h]) < 1000) { by = h; break; }
             }
+            if (by < 0 && klbd_by(i) >= 0) by = klbd_by(i);          /* klbotdown.c: the threshold down never raises the score word */
             k->by = by;
             if (i == sn.human) {
                 klog("adren: YOU ARE DOWN (state %lu) at (%.0f, %.0f, %.0f)%s", ds, havepos[i] ? pos[i][0] : 0, havepos[i] ? pos[i][1] : 0, havepos[i] ? pos[i][2] : 0, kld.on ? "" : " ([Down] is off: the meter cannot be driven)");
