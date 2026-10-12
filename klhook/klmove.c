@@ -294,10 +294,23 @@ static struct {
     int wait, wait_stage; DWORD wait_max, wait_floor; float wait_hold;
     float near_; int near_visits, near_stage;
     float reach; int reach_visits, reach_doors, reach_order;
+    DWORD hop; float hop_max;      /* RestlessHop (section 5): seconds at a hold before a hop to a cover place of the level's [Hops]; 0 = off */
 } klmv;
 
+/* ACTIVE (section 5, 2026-10-12): the level's list of cover places a bot may shift to while it waits at a hold, per GATE of the
+   tower's way out. KLJoin.ini [Hops] (tools\kl_fa_bots_rt.py hops): Max=<most walk from a hold>, Gates=<n>, per gate g:
+   Gate.g.Holds=<n>, Gate.g.Hold.j=x y z, Gate.g.Hops=<n>, Gate.g.Hop.j=x y z. A bot is at gate g when its chain's place lies
+   within 150 of one of g's holds on its floor; it hops only to g's own places (a place of another gate may lie in a box that
+   wakes men its gate did not mean to wake). Read again when kljoin.c's file changes. */
+#define KLMV_NHOP 96
+#define KLMV_NHOLD 64
+static float klmv_hops[KLMV_NHOP][3]; static int klmv_hop_g[KLMV_NHOP], klmv_nhop;
+static float klmv_holds[KLMV_NHOLD][3]; static int klmv_hold_g[KLMV_NHOLD], klmv_nhold;
+static float klmv_hop_dmax = 1800.0f;
+static char klmv_hop_key[64], klmv_hop_file[MAX_PATH]; static FILETIME klmv_hop_ft;
+
 struct klmv_b {
-    DWORD actor, since, money, order_at, hit_at, look_obj, look_at; int seen, have_anchor, have_target, tries, total, phase, paced, beside, look_amount, reach_visit; BYTE told;      /* told: 16 = a box did not take it on this visit, 32 = sent to the doors on this visit */
+    DWORD actor, since, money, order_at, hit_at, look_obj, look_at; int seen, have_anchor, have_target, tries, total, phase, paced, beside, look_amount, reach_visit, hop_k; BYTE told;      /* told: 16 = a box did not take it on this visit, 32 = sent to the doors on this visit */
     float pos[3], hp, anchor[3], anchor0[3], target[3], try_pos[3];      /* anchor = the place its chain ordered; anchor0 = where the count 'total' began */
 };
 static struct {
@@ -882,9 +895,78 @@ static void klmv_track(const struct klb_snap *s, DWORD now)
     }
 }
 
+/* the level's [Hops] (kljoin.c has found and stamped its KLJoin.ini; never a stock archive's). Cheap: a compare of the key,
+   the path and the file time under kljoin.c's lock, the file is read again only when one of them changed. */
+static void klmv_hops_load(void)
+{
+    char key[64], file[MAX_PATH], t[32], name[48]; FILETIME ft; int g, j, ng, nh;
+    EnterCriticalSection(&klj_cs);
+    snprintf(key, sizeof key, "%s", klj_map_key); snprintf(file, sizeof file, "%s", klj_map_file); ft = klj_map_ft;
+    LeaveCriticalSection(&klj_cs);
+    if (!strcmp(key, klmv_hop_key) && !_stricmp(file, klmv_hop_file) && !CompareFileTime(&ft, &klmv_hop_ft)) return;
+    klmv_nhop = 0; klmv_nhold = 0; snprintf(klmv_hop_key, sizeof klmv_hop_key, "%s", key); snprintf(klmv_hop_file, sizeof klmv_hop_file, "%s", file); klmv_hop_ft = ft;
+    klmv_hop_dmax = 1800.0f;
+    if (!key[0] || !file[0]) return;
+    ng = (int)GetPrivateProfileIntA("Hops", "Gates", 0, file);
+    if (ng <= 0) return;
+    GetPrivateProfileStringA("Hops", "Max", "1800", t, sizeof t, file);
+    klmv_hop_dmax = (float)atof(t); if (!klb_finite(klmv_hop_dmax) || klmv_hop_dmax < 300) klmv_hop_dmax = 300; if (klmv_hop_dmax > 4000) klmv_hop_dmax = 4000;
+    for (g = 1; g <= ng && g <= 16; g++) {
+        snprintf(name, sizeof name, "Gate.%d.Holds", g); nh = (int)GetPrivateProfileIntA("Hops", name, 0, file);
+        for (j = 1; j <= nh && klmv_nhold < KLMV_NHOLD; j++) {
+            snprintf(name, sizeof name, "Gate.%d.Hold.%d", g, j);
+            if (klj_vec("Hops", name, file, klmv_holds[klmv_nhold])) klmv_hold_g[klmv_nhold++] = g;
+        }
+        snprintf(name, sizeof name, "Gate.%d.Hops", g); nh = (int)GetPrivateProfileIntA("Hops", name, 0, file);
+        for (j = 1; j <= nh && klmv_nhop < KLMV_NHOP; j++) {
+            snprintf(name, sizeof name, "Gate.%d.Hop.%d", g, j);
+            if (klj_vec("Hops", name, file, klmv_hops[klmv_nhop])) klmv_hop_g[klmv_nhop++] = g;
+        }
+    }
+    klog("move: %d hop place(s) at %d hold(s) of %d gate(s) (cover places a bot may shift to while it waits at a hold of the same gate; at most %.0f from the hold) from %s for level %s", klmv_nhop, klmv_nhold, ng, klmv_hop_dmax, file, key);
+}
+
+/* The gate a bot's chain place belongs to: the gate of the nearest listed hold (or hop) within 150 on its floor (300); 0 = none. */
+static int klmv_hop_gate(const float anchor[3])
+{
+    int j, g = 0; float best = 150.0f;
+    for (j = 0; j < klmv_nhold; j++) {
+        float d = klmv_h(anchor, klmv_holds[j]);
+        if (d <= best && fabs(anchor[1] - klmv_holds[j][1]) <= 300.0f) { best = d; g = klmv_hold_g[j]; }
+    }
+    for (j = 0; j < klmv_nhop; j++) {                                  /* a place this file sent it to (a hop) counts for its gate too */
+        float d = klmv_h(anchor, klmv_hops[j]);
+        if (d <= best && fabs(anchor[1] - klmv_hops[j][1]) <= 300.0f) { best = d; g = klmv_hop_g[j]; }
+    }
+    return g;
+}
+
+/* A hop for a bot that waits at `anchor` (its chain's place) and stands at `bp`: a place of its gate's list that is within the
+   list's Max of the anchor and on its floor (300), at least KLMV_OFF (3 m) from where the bot stands, and not `last` (index + 1 of
+   the one it hopped to the time before). away != 0: the one FARTHEST from that point (the shooter: cover from him); else one drawn
+   by klb_seed. -> the index, -1 = none; out = its place. */
+static int klmv_hop_pick(const float anchor[3], const float bp[3], int last, const float *away, float out[3])
+{
+    int j, k = -1, n = 0, pick, g = klmv_hop_gate(anchor); float best = -1.0f;
+    if (!g) return -1;
+    for (j = 0; j < klmv_nhop; j++) {
+        if (klmv_hop_g[j] != g || j + 1 == last || klmv_h(anchor, klmv_hops[j]) > klmv_hop_dmax || fabs(anchor[1] - klmv_hops[j][1]) > 300.0f || klmv_h(bp, klmv_hops[j]) < KLMV_OFF) continue;
+        if (away) { float d = klmv_h(away, klmv_hops[j]); if (d > best) { best = d; k = j; } }
+        n++;
+    }
+    if (away || n == 0) { if (k >= 0) memcpy(out, klmv_hops[k], 12); return k; }
+    klb_seed = klb_seed * 1103515245u + 12345u;
+    pick = (int)((klb_seed >> 16) % (unsigned)n);
+    for (j = 0; j < klmv_nhop; j++) {
+        if (klmv_hop_g[j] != g || j + 1 == last || klmv_h(anchor, klmv_hops[j]) > klmv_hop_dmax || fabs(anchor[1] - klmv_hops[j][1]) > 300.0f || klmv_h(bp, klmv_hops[j]) < KLMV_OFF) continue;
+        if (pick-- == 0) { memcpy(out, klmv_hops[j], 12); return j; }
+    }
+    return -1;
+}
+
 static void klmv_restless(const struct klb_snap *s, DWORD now, int human_in, const float hp[3])
 {
-    int i, j, k, fire, there; DWORD actor, soldier, stood; float bp[3], cur[3], want[3], got[3], d; char w[100]; struct kle_e t; BYTE grab;
+    int i, j, k, fire, there, hopk; DWORD actor, soldier, stood; float bp[3], cur[3], want[3], got[3], d; char w[100]; struct kle_e t; BYTE grab;
     for (i = 0; i < s->n && i < KLB_NREC; i++) {
         const struct klb_rec *r = &s->r[i]; struct klmv_b *b = &klmv_r.b[i];
         grab = 1;
@@ -964,26 +1046,35 @@ static void klmv_restless(const struct klb_snap *s, DWORD now, int human_in, con
         }
         /* c. at its own place: a meant wait. Only RestlessHold moves it, and only round that place */
         if (b->beside) continue;                                               /* sent beside the human: it stays there until its chain orders another place */
-        if (!klmv.hold) { if (klmv.log >= 2 && !(b->told & 8)) { b->told |= 8; klog("move: record %d holds its place (%.0f, %.0f, %.0f) for %.0f s: a meant wait, left alone (RestlessHold=0; said once per bot)", i, b->anchor[0], b->anchor[1], b->anchor[2], stood / 1000.0); } continue; }
-        if (stood < klmv.hold || (s->veh >= 1 && s->veh <= 5)) continue;
-        for (j = 0; j < klmv_nbox; j++) if (klmv_box[j].at && klmv_h(b->anchor, klmv_box[j].pos) <= KLMV_BOXR) break;
-        if (j < klmv_nbox) continue;                                            /* its place is in an escape box: a step out of it and the box would not take it */
-        if (!kle_bot(s, i, &actor, &soldier, bp, w)) continue;
-        klb_seed = klb_seed * 1103515245u + 12345u;
-        for (j = 0, k = -1; j < 4 && k < 0; j++) {                              /* a side that is 3 m or more from where he stands (never 'soft') */
-            float ang = (float)(((klb_seed >> 16) % 360u) + 90u * (unsigned)(j + b->phase)) * 0.0174533f;
-            want[0] = b->anchor[0] + klmv.pace * (float)cos(ang); want[1] = b->anchor[1]; want[2] = b->anchor[2] + klmv.pace * (float)sin(ang);
-            if (klmv_h(bp, want) >= KLMV_OFF) k = j;
+        hopk = -1;
+        if (klmv.hop && klmv_nhop && stood >= klmv.hop && !(s->veh >= 1 && s->veh <= 5)) {      /* RestlessHop: cover to cover (section 5) */
+            for (j = 0; j < klmv_nbox; j++) if (klmv_box[j].at && klmv_h(b->anchor, klmv_box[j].pos) <= KLMV_BOXR) break;
+            if (j >= klmv_nbox && kle_bot(s, i, &actor, &soldier, bp, w)) hopk = klmv_hop_pick(b->anchor, bp, b->hop_k, 0, want);
         }
-        if (k < 0) continue;
-        b->phase += 2;
+        if (hopk < 0) {
+            if (!klmv.hold) { if (klmv.log >= 2 && !(b->told & 8)) { b->told |= 8; klog("move: record %d holds its place (%.0f, %.0f, %.0f) for %.0f s: a meant wait, left alone (RestlessHold=0%s; said once per bot)", i, b->anchor[0], b->anchor[1], b->anchor[2], stood / 1000.0, klmv.hop ? ", no hop place near" : ""); } continue; }
+            if (stood < klmv.hold || (s->veh >= 1 && s->veh <= 5)) continue;
+            for (j = 0; j < klmv_nbox; j++) if (klmv_box[j].at && klmv_h(b->anchor, klmv_box[j].pos) <= KLMV_BOXR) break;
+            if (j < klmv_nbox) continue;                                            /* its place is in an escape box: a step out of it and the box would not take it */
+            if (!kle_bot(s, i, &actor, &soldier, bp, w)) continue;
+            klb_seed = klb_seed * 1103515245u + 12345u;
+            for (j = 0, k = -1; j < 4 && k < 0; j++) {                              /* a side that is 3 m or more from where he stands (never 'soft') */
+                float ang = (float)(((klb_seed >> 16) % 360u) + 90u * (unsigned)(j + b->phase)) * 0.0174533f;
+                want[0] = b->anchor[0] + klmv.pace * (float)cos(ang); want[1] = b->anchor[1]; want[2] = b->anchor[2] + klmv.pace * (float)sin(ang);
+                if (klmv_h(bp, want) >= KLMV_OFF) k = j;
+            }
+            if (k < 0) continue;
+            b->phase += 2;
+        }
         memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
         k = kle_order2(&t, want, got, w, klmv.dry);
         b->order_at = KLB_T(now); b->since = now;
         if (!k) continue;
+        if (hopk >= 0) b->hop_k = hopk + 1;
         if (k == 1) { memcpy(b->target, got, 12); b->have_target = 1; b->paced = 1; b->beside = 0; }
-        if (klmv.log) klog("move: record %d %s round its hold (%.0f, %.0f, %.0f) after %.1f s: to (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f)", i, k == 2 ? "WOULD shift (dry run)" : "shifts",
-                          b->anchor[0], b->anchor[1], b->anchor[2], stood / 1000.0, want[0], want[1], want[2], got[0], got[1], got[2]);
+        if (klmv.log) klog("move: record %d %s its hold (%.0f, %.0f, %.0f) after %.1f s: to (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f)%s", i,
+                          hopk >= 0 ? (k == 2 ? "WOULD hop (dry run) from" : "hops from") : (k == 2 ? "WOULD shift (dry run) round" : "shifts round"),
+                          b->anchor[0], b->anchor[1], b->anchor[2], stood / 1000.0, want[0], want[1], want[2], got[0], got[1], got[2], hopk >= 0 ? " - a cover place of the level's [Hops]" : "");
     }
 }
 
@@ -1043,6 +1134,7 @@ static void klmv_tick(int game_thread)
     if (klmv_r.last_pass && now - klmv_r.last_pass > 1500) for (i = 0; i < KLB_NREC; i++) klmv_r.b[i].seen = 0;      /* the round stood still (the window was not in front): every clock starts again */
     klmv_r.last_pass = KLB_T(now);
     klmv_track(&s, now);
+    if (klmv.hop) klmv_hops_load();
     if (klmv.near_ > 0 || klmv.reach > 0) klmv_boxes(&s, now);
     if (klmv.reach > 0) klmv_reach_pass(&s, now);
     klmv_r.was_waiting = waiting;
@@ -1068,6 +1160,9 @@ static void klmv_init(void)
     klmv.loot_near = klb_inif("RestlessLootNear", "200"); if (!klb_finite(klmv.loot_near) || klmv.loot_near < 50) klmv.loot_near = 50; if (klmv.loot_near > 600) klmv.loot_near = 600;
     klmv.hold = (DWORD)klb_pos("RestlessHold", 0, 600) * 1000; if (klmv.hold && klmv.hold < 5000) klmv.hold = 5000;
     if (!klmv.restless) klmv.hold = 0;
+    klmv.hop = (DWORD)klb_pos("RestlessHop", 0, 600) * 1000; if (klmv.hop && klmv.hop < 5000) klmv.hop = 5000;
+    if (!klmv.restless) klmv.hop = 0;
+    klmv.hop_max = 1800.0f;
     klmv.pace = klb_inif("RestlessPace", "350"); if (!klb_finite(klmv.pace) || klmv.pace < 300) klmv.pace = 300; if (klmv.pace > 800) klmv.pace = 800;
     klmv.wait = GetPrivateProfileIntA("Bots", "WaitForYou", 0, klh_ini) != 0;
     klmv.wait_stage = klb_pos("WaitForYouStage", 3, 3); if (klmv.wait_stage < 1) klmv.wait_stage = 1;
@@ -1090,6 +1185,8 @@ static void klmv_init(void)
         klog("move: on; Restless=%lu s Loot=%lu s (back %lu s, near %.0f) Hold=%lu s Pace=%.0f%s: an AI heister that stands that long without moving 1 m or earning - on a money object that pays nothing: the object is no loot candidate for a while (one byte of it; you can still take it); more than 3 m from the place its chain ordered: that order again (the soldier's own order %08x)%s; Arcade only, on a level that is not the stock one of its slot",
              klmv.restless / 1000, klmv.loot / 1000, klmv.back / 1000, klmv.loot_near, klmv.hold / 1000, klmv.pace, klmv.dry ? " DRY RUN (MoveDry=1: nothing is written or called)" : "", KLE_ORDER,
              klmv.hold ? "; at its own hold place for Hold seconds: a shift round it" : "; a bot at its own place (a meant wait) is left alone");
+    if (klmv.hop)
+        klog("move: RestlessHop=%lu s: a bot that has stood that long at its own hold place (not under fire, not in an escape box, no vehicle called) is ordered to a cover place of the level's KLJoin.ini [Hops] within that list's Max of the hold (tools/kl_fa_bots_rt.py hops); none near, or none listed: the old shift round the hold when RestlessHold is set, else nothing", klmv.hop / 1000);
     if (klmv.wait)
         klog("wait: on; WaitForYou=1 Stage=%d Floor=%lu s Max=%lu s Hold=%.1f s%s: while you are a heister in play under that heist stage no vehicle is called (rules +0x1ee, a byte the exit trigger asks - and the HUD's round clock: it is RED meanwhile); while a vehicle waits and you come, its timer gets up to 5 s more under 2 s, Hold seconds a visit at most; Arcade only, on a level that is not the stock one of its slot",
              klmv.wait_stage, klmv.wait_floor / 1000, klmv.wait_max / 1000, klmv.wait_hold, klmv.dry ? " DRY RUN" : "");

@@ -35,6 +35,11 @@ kl_fa_bots_rt's) got one addition: a chain that forks is walked once per branch 
       --sixth N         ASSUMPTION, off by default: ZSoldier 16 / 17 = N (the police rows have 800) and eCSS_Enabled on
                         the opening modifier: 'notices anybody within N without seeing him' (re/bots_dynamic.md 4)
       --no-rusher       the point man keeps attitude eStayBack (default: eUnleashed, stock F08's bots)
+      --react NAME      ASSUMPTION, off by default (2026-10-12, re/bots_active.md 3): the seven's ZSoldier fields 5, 13 and 14 (the 'aim settles' range
+                        and the two tuning ranges kl2 0x784330 hands to the soldier at its creation; the crew has 50 50 50, stock's eRegular) set to
+                        the exe's own row for a skill: veteran (60 / 20 / 55) or elite (90 / 0 / 60) - the table kl2 0x46e410 writes for eVeteran /
+                        eElite. Which of them is 'reaction time' is NOT established (field 13 FALLS with skill, 14 and 5 rise: 13 looks like a delay).
+                        Field 4 (accuracy) is the persona's own and is not touched.
       --no-stagger      all seven start with Timer_start_bots, as before
       --no-detour       no bot is sent the other way round (default: Squad#04 where the mesh has a second way);
                         only with --no-routes: with the random routes the other way round is one of a fork's ways
@@ -219,8 +224,9 @@ LOOT_SHORT = 15         # TriggerLootDepleted field 1 of the point man and the r
 LOOT_LONG = (15, 60)    # the looters: the build's own seconds + 15, at most 60
 DETOUR = 'side+'        # the bot (by its cover preference) that takes the other way round where the mesh has one
 DEFAULTS = {'random': True, 'vision': True, 'sixth': 0.0, 'rusher': True, 'stagger': True, 'gap': GAP_IN, 'tree': True, 'detour': True,
-            'routes': True, 'ways': None, 'fork_gap': FORK_GAP, 'fake': True}
+            'routes': True, 'ways': None, 'fork_gap': FORK_GAP, 'fake': True, 'react': None}
 
+REACT = {'veteran': {5: 60.0, 13: 20.0, 14: 55.0}, 'elite': {5: 90.0, 13: 0.0, 14: 60.0}}      # ZSoldier fields, from kl2 0x46e410's table (re/map_ai.md 1)
 NEXT = {'DefendBehaviourRout': 7, 'SquadModifierBehaviour': 26, 'TriggerDelay2': 4, 'TriggerLootDepleted': 4, 'TriggerActorsDead': 2}
 BS = '\\'
 
@@ -1839,6 +1845,8 @@ def make(ctx, P, log=print):
             zs[4] = float(pers.accuracy)
         if opt['sixth']:
             zs[16] = zs[17] = float(opt['sixth'])
+        if opt.get('react'):
+            zs.update(REACT[opt['react']])
         if zs:
             M.set(actor, 'ZSoldier', zs)
 
@@ -2731,7 +2739,7 @@ def check(folder, log=print, base=True):
 def diff(src, dst, log=print):
     """What differs between the bots build and the result -> list of UNEXPECTED differences (must be empty).
     Expected: inside the squad groups the old route steps gone and new ones there; the first-step list of
-    Timer_start_bots; field values of nodes that stay (a wait's NEXT and seconds, ZSquadScript 0, ZSoldier 4 / 16 /
+    Timer_start_bots; field values of nodes that stay (a wait's NEXT and seconds, ZSquadScript 0, ZSoldier 4 / 5 / 13 / 14 (--react) / 16 /
     17); the squad's groups in the root's group tree; slot ids that name the same entities; .oct record offsets in
     the .prm's model roots."""
     A, Bn = F.Built(src), F.Built(dst)
@@ -2814,7 +2822,7 @@ def diff(src, dst, log=print):
     ka = {sa.path[k]: k for k in range(1, len(sa.nodes))}
     kb = {sb.path[k]: k for k in range(1, len(sb.nodes))}
     allowed = {'TriggerDelay2': {4}, 'TriggerLootDepleted': {1, 4}, 'TriggerActorsDead': {2}, 'SquadModifierBehaviour': {26},
-               'ZSquadScript': {0}, 'ZSoldier': {4, 16, 17}, 'TriggerCounter': {4}}       # TriggerCounter: the room-first gate
+               'ZSquadScript': {0}, 'ZSoldier': {4, 5, 13, 14, 16, 17}, 'TriggerCounter': {4}}       # TriggerCounter: the room-first gate
     changed = collections.Counter()
     for p in kept:
         if p in renewed:
@@ -3177,6 +3185,11 @@ def options(a):
                            ('--no-routes', 'routes', False), ('--keep-fake-targets', 'fake', False)):
         if flag in a:
             a.remove(flag); opt[key] = val
+    if '--react' in a:
+        i = a.index('--react')
+        if i + 1 >= len(a) or a[i + 1] not in REACT:
+            raise SystemExit('--react needs one of: %s' % ', '.join(sorted(REACT)))
+        opt['react'] = a[i + 1]; del a[i:i + 2]
     for flag, key in (('--sixth', 'sixth'), ('--gap', 'gap'), ('--ways', 'ways'), ('--fork-gap', 'fork_gap')):
         if flag in a:
             i = a.index(flag)

@@ -749,6 +749,82 @@ static void klfk_fade(int game_thread)
 
 /* ---------------------------------------------------------------- the tick */
 
+/* ---- 8. HUNTED (key Hunted, default 0; 2026-10-12, re\bots_active.md 3). DATA READS + the soldier's own order (klescort.c's kle_order2,
+   the call klescort.c / klmove.c make), from the game's own thread, only while he is a fed in play (everything above holds).
+   The owner, 2026-10-12: 'they kinda feel like bullet sponges when im a fed which isnt bad but they are slow meaning they just let
+   it happen, come on the ai needs to have faster reactions than that'. WHAT IS KNOWN (re\balance.md 11.2, re\bots_active.md 3): kl2
+   0x882470 already makes a police human a target for every crew soldier of team Ally (no list to fill: 'hostile at the respawn' is
+   what the game does), and the crew's ZSoldier rows carry the same numbers as stock's (accuracy 50, field 5 / 13 / 14 = 50 on eCustom).
+   What the logs show is a bot that stays on its hold with the fed shooting it (Restless leaves a bot under fire alone on purpose).
+   WHAT THIS DOES: a crew bot that LOSES HEALTH while the fed is within HuntedRange gets, HuntedDelay ms later, the soldier's own order
+   to one of the level's cover places ([Hops], tools\kl_fa_bots_rt.py hops; the same list klmove.c's RestlessHop uses) within that
+   list's Max of its chain's place - a different cover, not the one the fed is aiming at. Bots within HuntedAlert of it that were not
+   hit follow, 150 ms apart, each to its own place: the squad reacts as one. A bot gets at most one such order per HuntedGap seconds.
+   WHAT IT DOES NOT DO: it does not make a bot shoot faster, and it cannot tell WHO hit the bot (police AI near the bot count too:
+   the log says how far the fed was). It is a GUESS that a cut tactic and a new walk make the soldier's own combat tactics start
+   over sooner (klescort.c 1: 'a running tactic is cut at its yield'); it may also take a bot out of a fight it was winning. The
+   order is the one the escort and Restless already give; a bot that is an escort, a traitor, at stage 3 with a vehicle called,
+   or inside an escape box is left alone. Nothing is written but that call. HuntedDry=1: log what it WOULD do. */
+static struct { int on, dry, away; float range, alert; DWORD delay, gap; } klfk_hu;
+static struct { DWORD actor, hit_at, due, order_at; float hp; int hop_k; } klfk_hb[KLB_NREC];
+static struct { DWORD rules, last; int hits, orders, told_hops, told_thread; } klfk_hr;
+
+static void klfk_hunted(int game_thread, DWORD player, DWORD rules)
+{
+    struct klb_snap s; DWORD now = GetTickCount(), node, ho, actor, soldier; float fp[3], bp[3], bq[3], cur[3], want[3], got[3], raw[0x28 / 4], d; char why[200], w[100];
+    int i, j, k, n_alert; struct kle_e t;
+    if (!klfk_hu.on || now - klfk_hr.last < 250) return;
+    klfk_hr.last = now;
+    if (rules != klfk_hr.rules) { memset(klfk_hb, 0, sizeof klfk_hb); memset(&klfk_hr, 0, sizeof klfk_hr); klfk_hr.rules = rules; klfk_hr.last = now; }
+    if (!klb_read(&s) || s.rules != rules || s.state != KLFK_ROUND || !klb_level(why)) return;
+    if (!klh_rd(player + 0x460, fp, 12) || !kle_ok3(fp)) return;
+    klmv_hops_load();
+    for (i = 0; i < s.n && i < KLB_NREC; i++) {                    /* who lost health since the last look, and how far the fed was */
+        const struct klb_rec *r = &s.r[i];
+        if (!r->used || !(r->flags & 1) || r->status || !r->actor || klh_rd32(r->actor) != KLB_ACTOR_VT) { klfk_hb[i].hp = 0; continue; }
+        if (r->actor != klfk_hb[i].actor) { memset(&klfk_hb[i], 0, sizeof klfk_hb[i]); klfk_hb[i].actor = r->actor; }
+        if (!(ho = klh_rd32(r->actor + 0x5fc)) || !klh_rd(ho, raw, sizeof raw) || ((DWORD *)raw)[0x24 / 4] != r->actor || !klb_finite(raw[1])) continue;
+        if (klfk_hb[i].hp > 0 && raw[1] < klfk_hb[i].hp - 0.05f && (node = klh_rd32(r->actor + 4)) != 0 && kle_node(node, bp, 0)) {
+            d = klmv_h(bp, fp);
+            klfk_hr.hits++;
+            if (klfk.log > 1 || klfk_hr.hits <= 20) klog("fedkit: hunted: record %d lost %.1f (%.1f of %.1f left), %.1f m from you%s", i, klfk_hb[i].hp - raw[1], raw[1], raw[2], d / 100, d <= klfk_hu.range ? "" : " - too far: no reaction");
+            if (d <= klfk_hu.range) {
+                if (!klfk_hb[i].due) klfk_hb[i].due = now + klfk_hu.delay;
+                klfk_hb[i].hit_at = now;
+                n_alert = 0;
+                for (j = 0; j < s.n && j < KLB_NREC && klfk_hu.alert > 0; j++) {
+                    const struct klb_rec *q = &s.r[j]; DWORD nj;
+                    if (j == i || !q->used || !(q->flags & 1) || q->status || !q->actor || klh_rd32(q->actor) != KLB_ACTOR_VT || klfk_hb[j].due) continue;
+                    if ((nj = klh_rd32(q->actor + 4)) != 0 && kle_node(nj, bq, 0) && klmv_h(bp, bq) <= klfk_hu.alert && fabs(bp[1] - bq[1]) <= 300.0f)
+                        klfk_hb[j].due = now + klfk_hu.delay + 150 * (DWORD)(++n_alert);
+                }
+            }
+        }
+        klfk_hb[i].hp = raw[1];
+    }
+    if (!game_thread) { if (!klfk_hr.told_thread++) klog("fedkit: hunted: the tick is not on the game's thread: nothing is ordered"); return; }
+    for (i = 0; i < s.n && i < KLB_NREC; i++) {                    /* the due reactions */
+        const struct klb_rec *r = &s.r[i];
+        if (!klfk_hb[i].due || (LONG)(now - klfk_hb[i].due) < 0) continue;
+        klfk_hb[i].due = 0;
+        if (klfk_hb[i].order_at && now - klfk_hb[i].order_at < klfk_hu.gap) continue;
+        if (kle_r.used[i] || (r->stage >= 3 && s.veh >= 1 && s.veh <= 5)) continue;           /* an escort, or the board tactic's / the rules' bot */
+        if (!kle_bot(&s, i, &actor, &soldier, bp, w)) continue;
+        if (!kle_block(soldier, cur)) memcpy(cur, bp, 12);
+        if (klmv_h(bp, fp) > klfk_hu.range * 1.5f) continue;                                    /* an alerted bot that is far from the fed */
+        if (!klmv_nhop) { if (!klfk_hr.told_hops++) klog("fedkit: hunted: this level has no [Hops] in its KLJoin.ini (tools\\kl_fa_bots_rt.py hops): nothing to move a hit bot to"); continue; }
+        k = klmv_hop_pick(cur, bp, klfk_hb[i].hop_k, klfk_hu.away ? fp : 0, want);
+        if (k < 0) { if (klfk.log > 1) klog("fedkit: hunted: record %d: no cover place of [Hops] within reach of its place (%.0f, %.0f, %.0f)", i, cur[0], cur[1], cur[2]); continue; }
+        memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
+        j = kle_order2(&t, want, got, w, klfk_hu.dry);
+        klfk_hb[i].order_at = now;
+        if (!j) { if (klfk.log > 1) klog("fedkit: hunted: record %d NOT ordered: %s", i, w); continue; }
+        klfk_hb[i].hop_k = k + 1; klfk_hr.orders++;
+        klog("fedkit: hunted: record %d %s to cover place %d of [Hops] (%.0f, %.0f, %.0f) from (%.0f, %.0f, %.0f), %.1f m from you; the game set (%.0f, %.0f, %.0f); order %d of the round", i,
+             j == 2 ? "WOULD be ordered (dry run)" : "is ordered", k + 1, want[0], want[1], want[2], bp[0], bp[1], bp[2], klmv_h(bp, fp) / 100, got[0], got[1], got[2], klfk_hr.orders);
+    }
+}
+
 static void klfk_pass(int game_thread)
 {
     static const BYTE get189[7] = { 0x8a, 0x81, 0x85, 0x02, 0x00, 0x00, 0xc3 };          /* mov al, [ecx+0x285] ; ret */
@@ -802,6 +878,7 @@ static void klfk_pass(int game_thread)
     /* ---- sections 5 - 7: the traitor rule's int held (its flag is taken off every frame: klfk_rule_frame), the HUD's cross-fade cut */
     if ((score = klh_rd32(rules + KLFK_SCORE)) != 0) klfk_rule_pass(score);
     if (klfk.fade) klfk_fade(game_thread);
+    if (klfk_hu.on) klfk_hunted(game_thread, player, rules);          /* section 8 */
     /* ---- sections 1 and 2: two bytes of the rules object, held while he is a fed in play (any thread: single bytes the game only reads here) */
     if (!told_code && (klh_rd32((DWORD_PTR)KLH_VA(KLFK_RULES_VT + 4 * 189)) != KLFK_GET189 || klh_rd32((DWORD_PTR)KLH_VA(KLFK_RULES_VT + 4 * 186)) != KLFK_GET186 ||
                        !klc_same_code(KLFK_GET189, get189, sizeof get189) || !klc_same_code(KLFK_GET186, get186, sizeof get186))) {
@@ -859,6 +936,18 @@ static void klfk_init(void)
     klfk.pay = GetPrivateProfileIntA("Fed", "Pay", 1, klh_ini) != 0 && klfk.notraitor;       /* the game's routine pays only a killer without the traitor flag */
     v = (int)GetPrivateProfileIntA("Fed", "PayKill", 0, klh_ini); klfk.paykill = v < 0 ? 0 : v > 10000000 ? 10000000 : v;
     v = (int)GetPrivateProfileIntA("Fed", "HudFade", 1, klh_ini); klfk.fade = v < 0 ? 0 : v > 2 ? 2 : v;
+    klfk_hu.on = GetPrivateProfileIntA("Fed", "Hunted", 0, klh_ini) != 0;
+    if (klfk_hu.on) {
+        char tb[32];
+        GetPrivateProfileStringA("Fed", "HuntedRange", "4500", tb, sizeof tb, klh_ini); klfk_hu.range = (float)atof(tb); if (!klb_finite(klfk_hu.range) || klfk_hu.range < 500) klfk_hu.range = 500; if (klfk_hu.range > 20000) klfk_hu.range = 20000;
+        GetPrivateProfileStringA("Fed", "HuntedAlert", "1500", tb, sizeof tb, klh_ini); klfk_hu.alert = (float)atof(tb); if (!klb_finite(klfk_hu.alert) || klfk_hu.alert < 0) klfk_hu.alert = 0; if (klfk_hu.alert > 5000) klfk_hu.alert = 5000;
+        v = (int)GetPrivateProfileIntA("Fed", "HuntedDelay", 250, klh_ini); klfk_hu.delay = (DWORD)(v < 0 ? 0 : v > 3000 ? 3000 : v);
+        v = (int)GetPrivateProfileIntA("Fed", "HuntedGap", 4, klh_ini); klfk_hu.gap = (DWORD)(v < 1 ? 1 : v > 60 ? 60 : v) * 1000;
+        klfk_hu.away = GetPrivateProfileIntA("Fed", "HuntedAway", 0, klh_ini) != 0;
+        klfk_hu.dry = GetPrivateProfileIntA("Fed", "HuntedDry", 0, klh_ini) != 0;
+        klog("fedkit: Hunted=1 Range=%.0f Alert=%.0f Delay=%lu ms Gap=%lu s Away=%d%s: while you are a fed, a crew bot that loses health with you within Range is ordered (the soldier's own order, as the escort's) to one of the level's cover places [Hops] after Delay ms, the bots within Alert of it after it; at most one order per bot per Gap; needs [Hops] in the level's KLJoin.ini (kl_fa_bots_rt.py hops); a GUESS that this makes them react faster: re/bots_active.md 3",
+             klfk_hu.range, klfk_hu.alert, klfk_hu.delay, klfk_hu.gap / 1000, klfk_hu.away, klfk_hu.dry ? " DRY RUN (HuntedDry=1: nothing is ordered)" : "");
+    }
     klog("fedkit: on; Hunt=%d Crosshair=%d (two bytes of the Arcade rules object, only while you are a fed in play) Body=%d (the level's [FedBody]) AkChance=%d AkItem=%d KitSettle=%d (game calls, once per fed); only on a level that is not the stock one of its slot",
          klfk.hunt, klfk.cross, klfk.body, klfk.ak, klfk.akitem, klfk.settle);
     klog("fedkit: NoTraitor=%d (your kills of the crew leave no traitor flag and cost nothing) Pay=%d PayKill=%d (0 = multiplayer's own number for a policeman who kills a criminal; kept in your total)%s HudFade=%d (1 = the list and the name block never lie on each other while you are a fed, 2 = for a heister too); data only",

@@ -90,7 +90,7 @@ WHAT IS WRITTEN beyond kl_fa_bots.apply: the street steps (cloned F07 forms, as 
 
 GUESS = a value not copied from a stock object and not measured; ASSUMPTION = fits the evidence, not proven.
 """
-import collections, heapq, json, math, os, struct, sys
+import collections, heapq, json, math, os, re, struct, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -673,6 +673,46 @@ def pick_holds(spots, n=7):
     return [], 0.0
 
 
+HOP_MIN = 100.0         # a hop place lies at least this far (flat) from every hold of its gate (the holds are 110..200 apart: a mate's place is no hop;
+                        # the hook itself sends a bot only to a hop 3 m or more from where it stands, klmove.c KLMV_OFF)
+HOP_MAX = 1800.0        # ... and the hook only sends a bot to a hop within this of its hold (klmove.c RestlessHopMax): 18 m of walk
+HOP_SEP = 150.0         # two hops of one gate are at least this far apart
+HOP_GROW = 600.0        # the gate's box is grown by this on every side for the hop places (the rules that keep a place out of a later fight's box,
+                        # out of the ring of a cover with a side in one, and POST_KEEP from the men still alive, stay)
+HOP_TESTS = 150         # most candidate places tried a gate (each costs a stand-in path per hold within HOP_MAX)
+
+
+def pick_hops(B, nav, spots, holds, boxes, no_way, mine, woken, walks_past, n, tally):
+    """COVER TO COVER. Up to n more places of a gate, from the same list hold_spots() made (HOLD_RING from a cover box, inside the
+    gate's box, flat, HOLD_CLEAR from a wall, in no box of a later fight, POST_KEEP from a post of a man who may be alive), that
+    lie HOP_MIN or more from every hold and from each other, on the holds' floor - and whose way from EVERY hold within HOP_MAX
+    of them (the hook sends a bot from the hold it stands at to a hop within that) goes through no box of a later fight (no_way)
+    and does not walk past a post of this gate's men (the rule the holds are laid by). -> [(x, y, z, polygon, cover node, behind,
+    clearance, distance from the box)], best first. The hook (klmove.c) chooses among them at run time; nothing in the level's
+    nodes names them, so they cannot make a chain wait or fork: they are a list in KLJoin.ini ([Hops])."""
+    quality = lambda s: (not s[5], s[6] < F.CLEAR, abs(s[7] - HOLD_BEST), -s[6])
+    got, tests = [], 0
+    for s in sorted(spots, key=quality):
+        if len(got) >= n or tests >= HOP_TESTS:
+            break
+        if any(hdist(s, h) < HOP_MIN or abs(s[1] - h[1]) > FLOOR_DY for h in holds) or any(hdist(s, o) < HOP_SEP for o in got):
+            continue
+        tests += 1
+        ok = True
+        for h in holds:
+            if hdist(s, h) > HOP_MAX:
+                continue
+            on = boxes_on(B, nav, list(boxes), h, s)
+            if on is None or any(k in no_way for k in on) or walks_past(h, s, mine, woken) is not None:
+                ok = False
+                break
+        if ok:
+            got.append(s)
+        else:
+            tally['hop refused: a way from a hold'] += 1
+    return got
+
+
 def assign(prev, holds):
     """Which bot takes which hold: the pairing with the least sum of plan distances (7! = 5040 orders). A hold on
     ANOTHER floor that lies within ARRIVE_3D of the bot's place before counts 100 m more: the step to it would be
@@ -821,6 +861,13 @@ def gates_plan(B, nav, S, P, opt, log=print):
                 raise ValueError('gate %s: no seven hold places whose ways stay out of the next fight\'s trigger boxes and do not walk past its own men%s'
                                  % (g['name'], ' (the last: %s %s (%d, %d, %d), %d from the way, %d of way left)'
                                     % (name(past[0]).split('!')[-1], past[1], *past[2], past[3], past[4]) if past else ''))
+        # COVER TO COVER (option 'hops', 2026-10-12, re/bots_active.md): more places of this gate a bot may shift to while it waits
+        hops = []
+        if opt.get('hops'):
+            x0_, x1_, z0_, z1_ = g['box']
+            wide = hold_spots(B, nav, home, covers, dict(g, box=(x0_ - HOP_GROW, x1_ + HOP_GROW, z0_ - HOP_GROW, z1_ + HOP_GROW)), no_way, keep_ring, posts, live,
+                              collections.Counter())      # (the gate's own box is too small a room for a second set of covers: the holds took the best places)
+            hops = pick_hops(B, nav, wide, holds, boxes, no_way, mine, woken, walks_past, int(opt.get('hops') or 0), refused)
         # what the ways to the holds wake (the first bot through a box wakes its squads for all)
         met, ends_in = [], []
         for b, h in enumerate(holds):
@@ -872,6 +919,7 @@ def gates_plan(B, nav, S, P, opt, log=print):
             crossed_of_a_later_fight=[name(k) for k in met if k in cross], not_awake=[name(t) for t in asleep],
             woken_not_counted=[name(t) for t in sorted(woken - counted - set(mine) - known)],
             holds=[[round(v, 1) for v in h[:3]] for h in holds], covers=[name(h[4]) for h in holds],
+            hops=[[round(v, 1) for v in h[:3]] for h in hops], hop_covers=[name(h[4]) for h in hops],
             behind_its_box=sum(1 for h in holds if h[5]), from_cover=[round(min(d_cover)), round(max(d_cover))], apart=round(apart),
             clearance=[round(min(h[6] for h in holds)), round(max(h[6] for h in holds))], path=round(length), way_stations=len(ways),
             legs=[round(x) for x in legs], from_a_post=[round(min(d_post)), round(max(d_post))], places_refused=dict(refused),
@@ -2427,6 +2475,47 @@ def write_ini(dst, st, log=print):
     log('written %s: [CrewJoin] with %d places' % (p, len(st['arrive'])))
 
 
+HOPS_HEAD = """
+; ---- [Hops]: written by tools\\kl_fa_bots_rt.py (option --hops, command `hops`). Read by KLHook's klmove.c and klfedkit.c,
+; and only when KLHook.ini has [Bots] RestlessHop=1 (a bot that has stood RestlessHold seconds at its own hold shifts to one
+; of the hop places of ITS gate instead of a random side of it) or [Fed] Hunted=1 (a bot that is hit while the human is a fed moves to
+; one of them). Cover places of the tower's gates (kl_fa_bots_rt.pick_hops: the rules the holds are
+; laid by - a cover box's standing ring, flat, clear of walls, in no box of a later fight, far from the men still alive -
+; and a way from every hold within Max through no box of a later fight and past no post of the gate's men). Max = the most
+; the hook walks a bot from its hold to a hop (100 = 1 m). Nothing in the level's nodes names these places.
+"""
+
+
+def write_hops(dst, gates, log=print):
+    """Append (or replace) the [Hops] section of <dst>/KLJoin.ini: per gate its holds and its hop places."""
+    p = os.path.join(dst, 'KLJoin.ini')
+    if not os.path.isfile(p):
+        raise ValueError('%s: no KLJoin.ini (the build has no join)' % dst)
+    text = open(p, encoding='latin1').read().replace('\r\n', '\n')
+    m = re.search(r'^\[Hops\][ \t]*$', text, re.M)        # (the section's own line: the comment above it says '[Hops]' too)
+    if m:
+        head, rest = text[:m.start()], text[m.end():]
+        mm = re.search(r'^\[', rest, re.M)
+        tail = rest[mm.start():] if mm else ''
+        if '; ---- [Hops]' in head:
+            head = head[:head.rindex('; ---- [Hops]')]
+        text = head.rstrip('\n') + '\n' + ('\n' + tail if tail else '')
+    gs = [g for g in gates if g.get('hops')]
+    n = sum(len(g['hops']) for g in gs)
+    if not n:
+        log('[Hops]: no gate has a hop place - the file is as it was')
+        return 0
+    lines = [HOPS_HEAD.rstrip('\n'), '[Hops]', 'Max=%d' % HOP_MAX, 'Gates=%d' % len(gs)]
+    for gi, g in enumerate(gs, 1):
+        lines.append('; gate %s: its holds (a bot is taken to be at this gate when its chain place is within 150 of one) and the places it may hop to' % g['name'])
+        lines += ['Gate.%d.Holds=%d' % (gi, len(g['holds']))] + ['Gate.%d.Hold.%d=%g %g %g' % (gi, j, *h) for j, h in enumerate(g['holds'], 1)]
+        lines += ['Gate.%d.Hops=%d' % (gi, len(g['hops']))] + ['Gate.%d.Hop.%d=%g %g %g' % (gi, j, *h) for j, h in enumerate(g['hops'], 1)]
+    with open(p, 'w', encoding='latin1', newline='\r\n') as f:
+        f.write(text.rstrip('\n') + '\n' + '\n'.join(lines) + '\n')
+    log('written %s: [Hops] with %d places in %d gate(s)' % (p, n, len(gs)))
+    return n
+
+
 def read_ini(folder):
     """{'join': {...}, 'crew': {...}} of <folder>/KLJoin.ini (plain reading, as GetPrivateProfileString would)."""
     out, sec = collections.defaultdict(dict), None
@@ -3338,6 +3427,8 @@ def build(src, dst, opt=None, log=print):
     rep = F.apply(B, P, dst, say, more=more)
     if st:
         write_ini(dst, st, say)
+    if opt.get('hops'):
+        write_hops(dst, gates, say)
     out, facts = F.check(dst, say)
     out2, facts2 = check(dst, say)
     rep.update(plan=P, check=[list(x) for x in out], facts=facts, check_rt=[list(x) for x in out2], facts_rt=facts2)
@@ -3346,6 +3437,86 @@ def build(src, dst, opt=None, log=print):
     with open(os.path.join(dst, 'bots.txt'), 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines) + '\n')
     return out + out2, rep
+
+
+def hops_command(src, final, opt):
+    """`hops <the bots build's SOURCE folder> <a finished build's folder> [--hops N]`: the gates' hop places (pick_hops) planned on the
+    source build (the tower half only: the same plan, the same holds - they are compared with the finished build's bots.json) and
+    written into the finished build's KLJoin.ini as [Hops]. The archive is not touched. Exit 1 when the holds differ."""
+    opt = dict(DEFAULTS, **(opt or {}))
+    if not opt.get('hops'):
+        opt['hops'] = 6
+    B = F.Built(src)
+    _nav, _S, P = tower_plan(B, opt)
+    gates = P['rt']['gates']
+    bj = os.path.join(final, 'bots.json')
+    bad = []
+    if os.path.isfile(bj):
+        was = {g['name']: g['holds'] for g in ((json.load(open(bj)).get('plan') or {}).get('rt') or {}).get('gates') or []}
+        for g in gates:
+            if was.get(g['name']) != g['holds']:
+                bad.append(g['name'])
+        print('holds against %s: %s' % (bj, 'THE SAME in all %d gates' % len(gates) if not bad else 'DIFFER in %s' % ', '.join(bad)))
+    n = write_hops(final, gates)
+    for g in gates:
+        print('  gate %-9s %d hop(s): %s   [places %s, hop ways refused %s]' % (g['name'], len(g['hops']), ' '.join('(%d,%d)' % (h[0], h[2]) for h in g['hops']),
+                                                                         g['places_refused'].get('places'), g['places_refused'].get('hop refused: a way from a hold', 0)))
+    print('%d hop place(s) in all' % n)
+    sys.exit(1 if bad or not n else 0)
+
+
+def standing_command(folder):
+    """`standing <finished build>`: how long the chain PLANS to make each bot stand, from the build's bots.json. A WAIT is a place where
+    the chain gives no order for a while: the room (until the boardroom's squads are dead, at most room_wait after the blast), the
+    loot wait, every gate's TriggerActorsDead (at most WAIT_S, the game's own limit), the street's holds (stand per hold by lane:
+    LANE_STAND + the timed way's pause) and the rally (street_hold). UPPER BOUNDS - a wait that its men's deaths end early is shorter
+    (the owner's round 14:10 Retomoto: gates 150 s in all). Also the longest single wait: that is what a player sees as 'always
+    stands still'."""
+    d = json.load(open(os.path.join(folder, 'bots.json')))
+    rt = d['plan']['rt']
+    opt = rt['options']
+    gates = rt['gates']
+    tower = {'room (window, until the 3 room squads are dead)': float(opt['room_wait']) + float(opt['after_blast']), 'loot wait (table)': float(opt['loot_seconds'])}
+    for g in gates:
+        tower['gate ' + g['name']] = float(g['seconds'])
+    st = rt.get('street') or {}
+    lanes = st.get('lanes') or {}
+    street = collections.OrderedDict()
+    for N, b in sorted((lanes.get('bots') or {}).items()):
+        holds, timed = 0.0, 0.0
+        def walk(items, lane=None):
+            nonlocal holds, timed
+            for it in items:
+                if it['kind'] == 'timer':
+                    nm = it['name']
+                    if '_Timer_lane_' in nm:
+                        holds += LANE_STAND.get(nm.split('_Timer_lane_')[1][0], 1.5)
+                    elif '_Timer_out_' in nm:
+                        timed += CLOCK_PAUSE
+                elif it['kind'] == 'fork':
+                    ways = it['ways']
+                    # a fork is one way a round: take the mean of its ways
+                    sub = []
+                    for w in ways:
+                        h0, t0 = holds, timed
+                        walk(w['items'])
+                        sub.append((holds - h0, timed - t0))
+                        holds, timed = h0, t0
+                    holds += sum(s[0] for s in sub) / len(sub)
+                    timed += sum(s[1] for s in sub) / len(sub)
+        walk(b.get('program') or [])
+        street[N] = holds + timed + float(opt['street_hold'])
+    t_sum = sum(tower.values())
+    print('PLANNED STANDING (upper bounds, seconds a bot may be held by its chain; %s)' % folder)
+    for k, v in tower.items():
+        print('  tower  %-52s %5.1f' % (k, v))
+    print('  tower  total                                                %5.1f   longest single wait %.0f s' % (t_sum, max(tower.values())))
+    if street:
+        v = sorted(street.values())
+        print('  street per bot (lane holds + timed pauses + the rally %.0f s): %s  mean %.1f' % (float(opt['street_hold']), ' '.join('%.1f' % x for x in v), sum(v) / len(v)))
+    print('  whole round: %.0f s planned standing per bot (tower %.0f + street %.0f)' % (t_sum + (sum(street.values()) / len(street) if street else 0.0), t_sum,
+                                                                                 sum(street.values()) / len(street) if street else 0.0))
+    return t_sum, tower, street
 
 
 def options(a):
@@ -3360,7 +3531,7 @@ def options(a):
         a.remove('--no-gates'); opt['gates'] = False
     if '--no-lanes' in a:
         a.remove('--no-lanes'); opt['lanes'] = False
-    for flag, key, conv in (('--loot-seconds', 'loot_seconds', int), ('--after-blast', 'after_blast', float), ('--street-hold', 'street_hold', float),
+    for flag, key, conv in (('--hops', 'hops', int), ('--loot-seconds', 'loot_seconds', int), ('--after-blast', 'after_blast', float), ('--street-hold', 'street_hold', float),
                             ('--room-wait', 'room_wait', float), ('--gates', 'gate_names', lambda s: [x for x in s.split(',') if x])):
         if flag in a:
             i = a.index(flag)
@@ -3389,6 +3560,10 @@ def main():
         sys.exit(1 if any(s == 'FAIL' for s, _t in out + out2) else 0)
     elif len(a) == 3 and a[0] == 'diff':
         sys.exit(1 if F.diff(a[1], a[2], also=(JOIN_NAME, ROOM_COUNTER)) else 0)     # (the room gate: the room counter names it)
+    elif len(a) == 3 and a[0] == 'hops':
+        hops_command(a[1], a[2], opt)
+    elif len(a) == 2 and a[0] == 'standing':
+        standing_command(a[1])
     elif len(a) == 3 and a[0] == 'lanes':
         got = lanes_of(a[1])
         with open(a[2], 'w') as f:
