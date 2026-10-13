@@ -236,7 +236,7 @@ static void klsb_testdraw(DWORD e, void *ctx, void *cam)
         klsb_pic2(ctx, 181, x, y, KLSB_PW, 1.0f, KLU_C_CORAL, klu.layer); klsb_pic2(ctx, 181, x, y + KLSB_PH - 1.0f, KLSB_PW, 1.0f, KLU_C_CORAL, klu.layer);
         klsb_pic2(ctx, 181, x, y, 1.0f, KLSB_PH, KLU_C_CORAL, klu.layer); klsb_pic2(ctx, 181, x + KLSB_PW - 1.0f, y, 1.0f, KLSB_PH, KLU_C_CORAL, klu.layer);
         klsb_pic2(ctx, klu_r.handle[111] ? 111 : 181, x + 40.0f, y + 300.0f, 160.0f, 24.0f, 0xff0c0c0du, klsb_ly(1));
-        klsb_pic2(ctx, klu_r.handle[112] ? 112 : 181, x + 240.0f, y + 300.0f, 160.0f, 6.0f, KLU_C_CHALK, klu.layer);
+        klsb_pic2(ctx, klu_r.handle[KLU_DRY()] ? KLU_DRY() : 181, x + 240.0f, y + 300.0f, 160.0f, 6.0f, KLU_C_CHALK, klu.layer);
         klsb_pic2(ctx, klu_r.handle[178] ? 178 : 181, x + 440.0f, y + 300.0f, 14.0f, 14.0f, KLU_C_CORAL, klu.layer);
         klsb_text(KLSB_T_TITLE, ctx, cam); klsb_text(KLSB_T_LIVES, ctx, cam); klsb_text(KLSB_T_CONTN, ctx, cam);
     }
@@ -427,12 +427,12 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
         if (dead) {
             const unsigned char *c; float w = 0;
             for (c = (const unsigned char *)name[i]; *c; c++) if ((*c & 0xc0) != 0x80) w += KLUV_NAME_CHARW;
-            klu_addpic(klu_r.handle[112] ? 112 : 181, px + KLSB_COLL - 4.0f, rowc - 1.0f, w + 8.0f, 2.0f, KLU_C_DEAD, klu.layer);
+            klu_addpic(klu_r.handle[KLU_DRY()] ? KLU_DRY() : 181, px + KLSB_COLL - 4.0f, rowc - 1.0f, w + 8.0f, 2.0f, KLU_C_DEAD, klu.layer);
         }
     }
 
     /* ---- the summary ---- */
-    klu_addpic(klu_r.handle[112] ? 112 : 181, px + 20.0f, py + KLSB_Y_SEP, 600.0f, 3.0f, KLU_C_CHALK, klsb_ly(1));
+    klu_addpic(klu_r.handle[KLU_DRY()] ? KLU_DRY() : 181, px + 20.0f, py + KLSB_Y_SEP, 600.0f, 3.0f, KLU_C_CHALK, klsb_ly(1));
     {
         long rs = m.round_score ? m.round_score : m.round_now, tot;
         tot = klsb.total == 0 ? m.banked + rs : klsb.total == 2 ? m.total : m.banked;     /* default 1: +0x38 already holds the rounds before PLUS this one (0x5e0012: +0x38 += +0x30, review M1) */
