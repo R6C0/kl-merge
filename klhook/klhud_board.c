@@ -32,11 +32,17 @@
 static const BYTE klbrd_code[8] = { 0x83, 0xec, 0x58, 0x56, 0x8b, 0xf1, 0x8b, 0x0d };     /* 0x768c40 sub esp,0x58; push esi; mov esi,ecx; mov ecx,[..] */
 static const int klbrd_text_off[] = { 0xac, 0xb0, 0xb4, 0xb8, 0xbc, 0xc0, 0xcc, 0xd0 };
 
-static struct { int on, ink, letters; } klbrd;
+static struct { int on, ink, letters, card; } klbrd;
 static struct { DWORD osd, elem; int told, told_bad; } klbrd_r;
 static int klbrd_code_bad, klbrd_evt_ready;
 static DWORD klbrd_evt[KLBRD_NSLOT + 1];        /* [0] RTTI locator, [1..] the slots (the element's private vtable) */
-static volatile LONG klbrd_n_call, klbrd_n_done;
+static volatile LONG klbrd_n_call, klbrd_n_done, klbrd_n_card;
+static volatile int klbrd_told_place; static float klbrd_place[2];
+#define KLBRD_DX     0.0f                       /* the card's backing against the plate's place: GUESSES until the first picture (the stock panel: 800 wide, about 170 high) */
+#define KLBRD_DY     (-20.0f)
+#define KLBRD_H      170.0f
+#define KLBRD_RULE1  52.0f
+#define KLBRD_RULE2  104.0f
 
 static int klbrd_txt_ok(DWORD obj) { return obj && klh_rd32(obj) == KLU_TEXT_VT; }
 
@@ -47,7 +53,40 @@ static char __fastcall klbrd_render(void *el, void *edx, void *ctx, void *cam)
 {
     DWORD e = (DWORD)(DWORD_PTR)el, plate = 0, plate0 = 0, tx[8], tx0[8]; int i, act = 0; char r; (void)edx;
     InterlockedIncrement(&klbrd_n_call);
-    if (klbrd.on && e == klbrd_r.elem && ctx && *(const DWORD *)ctx == KLU_CTX_VT) {
+    /* 2026-10-13 CARD (BoardCard=1, default; the owner: 'needs new ui / revamp'). Run v37_MENU: the plate's colour did nothing (the grey
+       stayed). Run v38_MENU: klhud.c's HUD is made only when the stock FA set shows (18:29:18), i.e. AFTER this panel (18:29:08 .. :20), so
+       the panel is restyled HERE, in its own Render: the stock plate is left out (its end [el+0xf4] reads 0 for this one call: the stock
+       Render draws the plate only while the clock [[0xdd2640]+0x48] < [el+0xf4] x 1024, 0x768c88 .. 0x768caa), and in its place a dark
+       brush backing and two chalk brush rules, through the clock element's pictures (klu_pic; klbrd_tick makes klu_pic_prep run early);
+       the title text (+0xac) in coral for the call. The texts, the lives' skulls and the stock's thin rules are the stock Render's.
+       Only while the panel stands (that same clock test); the backing's place is the plate's (+0x14 / +0x18, the stock SetSize 800). */
+    if (klbrd.on && klbrd.card && e == klbrd_r.elem && ctx && *(const DWORD *)ctx == KLU_CTX_VT) {
+        LONG endb = *(const LONG *)(DWORD_PTR)(e + 0xf4), clk = 0; float end; DWORD sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF)), title = klh_rd32(e + 0xac), t0 = 0; void *clock = klpu_clock();
+        memcpy(&end, &endb, 4);
+        if (end > 0 && sys && klh_rd(sys + 0x48, &clk, 4) && (float)clk < end * 1024.0f) {
+            float px = *(const float *)(DWORD_PTR)(e + 0x14), py = *(const float *)(DWORD_PTR)(e + 0x18);
+            if (!klbrd_told_place) { klbrd_place[0] = px; klbrd_place[1] = py; klbrd_told_place = 1; }
+            if (clock) {
+                float x0 = px - 400.0f + KLBRD_DX, y0 = py + KLBRD_DY;
+                {   /* run v39_MENU: a round dab (113) stretched to 880 x 230 drew nothing; the painted stroke (111, proven on the HUD's rows) in ink */
+                    int bk = klu_r.handle[111] ? 111 : klu_r.handle[181] ? 181 : -1;
+                    if (bk > 0) klu_pic(clock, ctx, KLU_NPIC, bk, x0 - 20.0f, y0 - 22.0f, 840.0f, KLBRD_H + 34.0f, 0xc80c0c0du, 6);
+                }
+                if (klu_r.handle[111]) {
+                    klu_pic(clock, ctx, KLU_NPIC, 111, x0 + 60.0f, y0 + KLBRD_RULE1, 680.0f, 4.0f, KLU_C_CHALK, 7);
+                    klu_pic(clock, ctx, KLU_NPIC, 111, x0 + 60.0f, y0 + KLBRD_RULE2, 680.0f, 4.0f, KLU_C_CHALK, 7);
+                }
+                InterlockedIncrement(&klbrd_n_card);
+            }
+            if (klbrd_txt_ok(title)) { t0 = klh_rd32(title + KLBRD_T_RGB); klu_set(title, KLU_VT_COLOUR, (t0 & 0xff000000u) | (KLU_C_CORAL & 0x00ffffffu)); }
+            *(volatile LONG *)(DWORD_PTR)(e + 0xf4) = 0;
+            r = ((klu_render_t)(DWORD_PTR)KLH_VA(KLBRD_RENDER))(el, 0, ctx, cam);
+            InterlockedCompareExchange((volatile LONG *)(DWORD_PTR)(e + 0xf4), endb, 0);       /* back, unless the game wrote a new end meanwhile */
+            if (t0 && klbrd_txt_ok(title)) klu_set(title, KLU_VT_COLOUR, (klh_rd32(title + KLBRD_T_RGB) & 0xff000000u) | (t0 & 0x00ffffffu));
+            return r;
+        }
+    }
+    if (klbrd.on && !klbrd.card && e == klbrd_r.elem && ctx && *(const DWORD *)ctx == KLU_CTX_VT) {
         memset(tx, 0, sizeof tx); memset(tx0, 0, sizeof tx0);
         if (klbrd.ink) {
             plate = klh_rd32(e + KLBRD_E_PLATE);
@@ -114,9 +153,11 @@ static void klbrd_tick(int game_thread)
     if (osd != klbrd_r.osd) { klbrd_r.osd = osd; klbrd_r.elem = 0; klbrd_r.told_bad = 0; }
     if (klbrd_code_bad) return;
     klbrd_wrap(osd);
+    if (klbrd.card && klu_r.elem && !klu_r.pic_done) klu_pic_prep(klu_r.elem);      /* the card draws BEFORE klhud.c is made (it reads the handles only then) */
+    if (klbrd_told_place == 1 && klu.log) { klbrd_told_place = 2; klog("hud: board: card: the panel's place (+0x14, +0x18) = (%.1f, %.1f); the backing is drawn from it", klbrd_place[0], klbrd_place[1]); }
     if (klu.log >= 2 && now - said >= 5000) {
         said = now;
-        klog("hud: board: %ld intro calls, %ld restyled (plate ink %d, letters %d)", InterlockedExchange(&klbrd_n_call, 0), InterlockedExchange(&klbrd_n_done, 0), klbrd.ink, klbrd.letters);
+        klog("hud: board: %ld intro calls, %ld restyled (plate ink %d, letters %d), %ld as the card", InterlockedExchange(&klbrd_n_call, 0), InterlockedExchange(&klbrd_n_done, 0), klbrd.ink, klbrd.letters, InterlockedExchange(&klbrd_n_card, 0));
     }
 }
 
@@ -125,6 +166,7 @@ static void klbrd_init(void)
     if (!klu.on) return;
     klbrd.on = klu_inii("Board", 0, 0, 1);
     if (!klbrd.on) return;
+    klbrd.card = klu_inii("BoardCard", 1, 0, 1);      /* 2026-10-13: 1 = the draft's card in place of the stock panel; 0 = the old recolour (it did nothing live) */
     klbrd.ink = klu_inii("BoardInk", 1, 0, 1); klbrd.letters = klu_inii("BoardLetters", 1, 0, 1);
     klog("hud: board: on; plate ink %d, letters chalk %d; the pre-round panel only (the round-over page is XML); NOT RUN IN THE GAME", klbrd.ink, klbrd.letters);
 }

@@ -98,7 +98,7 @@
 #define KLESC_C_FRAME    0xc0f3f0eau          /* its frame: chalk, a little faded */
 #define KLESC_CHAR_W     12.0f                /* the time's width when the object gives none ('00:04' = 5 characters) */
 
-static struct { int on, icon, layer, prompts, centre, barw, barh, bargap; float padx, pady, dx, dy; } klesc;
+static struct { int on, icon, layer, prompts, centre, barw, barh, bargap, card; float padx, pady, dx, dy; } klesc;
 
 static struct { DWORD osd, elem, plate, plate_vt0; int refused, told, told_geo; DWORD refused_at; } klesc_r;
 static int klesc_code_bad;                    /* the Render code is not this build's: for good (S1); every other refusal is retried at the next level */
@@ -221,7 +221,7 @@ static void klesc_plate_back(void)
 static void klesc_paint(void *ctx)
 {
     void *clock = klesc_clock(); float x0; int bar, drew = 0; DWORD fillpic;
-    if (!klesc_p.active || !clock) return;
+    if (!klesc_p.active || !clock || klesc.card) return;          /* EscapeCard: klhud.c draws the van card; nothing here */
     bar = klu_r.handle[111] ? 111 : 181; fillpic = (DWORD)bar;
     x0 = klesc_p.cx - klesc_p.bw * 0.5f;
     /* the chalk bar the time sits on */
@@ -269,8 +269,11 @@ static int klesc_prep(DWORD e)
     /* the texts: ink on the chalk bar, centred; the shadow gone; the prompts chalk, centred */
     cap = klu.fontset ? klu_cap_of(KLU_FNT_NAME) : 15.0f;
     klesc_dirty_e = (LONG)e;
+    if (klesc.card) { klesc_style_text(0, time, 0, 0, 0, 1, 0); klesc_style_text(1, tsh, 0, 0, 0, 1, 0); }     /* EscapeCard: the time is klhud.c's card's */
+    else {
     klesc_style_text(0, time, 1, KLU_C_INK, KLESC_STYLE_CENTRE, 0, 1);
     klesc_style_text(1, tsh, 0, 0, KLESC_STYLE_CENTRE, 1, 1);
+    }
     if (klesc.prompts) {
         klesc_style_text(2, share, 1, KLU_C_CHALK, klesc.centre ? KLESC_STYLE_CENTRE : 0, 0, 1);
         klesc_style_text(3, hold, 1, KLU_C_CHALK, klesc.centre ? KLESC_STYLE_CENTRE : 0, 0, 1);
@@ -292,6 +295,10 @@ static int klesc_prep(DWORD e)
     if (!(bar_a >= 0)) bar_a = 0; if (bar_a > 1.0f) bar_a = 1.0f;
     klesc_p.frac = bar_a; klesc_p.fill_rgb = (barc & 0xffffff) == 0xcc0000 ? KLU_C_CORAL : KLU_C_ORANGE;
     klesc_p.active = 1;
+    if (klesc.card) {                                            /* the van card (klhud.c compose): this frame, the health share, the icon, the time object */
+        InterlockedExchange(&klu_esc_frac, (LONG)klesc_bits(klesc_p.frac)); InterlockedExchange(&klu_esc_slot, (LONG)klesc_p.icon_slot);
+        InterlockedExchange(&klu_esc_time, (LONG)time); InterlockedExchange(&klu_esc_at, (LONG)(GetTickCount() | 1));
+    }
     /* the stock call's own data: the icon and its shadow and the bar become transparent; the prompts' x moves to the centre */
     klesc_w.e = e; klesc_w.iconc = iconc; klesc_w.iconc_new = iconc & 0x00ffffffu;
     klesc_w.shc = klh_rd32(e + KLESC_E_ICONSH); klesc_w.shc_new = 0;
@@ -398,6 +405,7 @@ static void klesc_init(void)
     if (!klu.on) return;
     klesc.on = klu_inii("Escape", klu.draft, 0, 1);
     if (!klesc.on) return;
+    klesc.card = klu_inii("EscapeCard", 1, 0, 1);      /* 2026-10-13: 1 = the van card in the money box column (the owner: the restyled panel 'looks broken'); 0 = the 2026-10-11 restyle */
     klesc.icon = klu_inii("EscapeIcon", 62, 8, 120); klesc.layer = klu_inii("EscapeLayer", 11, 2, 13);
     klesc.prompts = klu_inii("EscapePrompts", 1, 0, 1); klesc.centre = klu_inii("EscapeCentre", 1, 0, 1);
     klesc.barw = klu_inii("EscapeBarW", 0, 0, 400); klesc.barh = klu_inii("EscapeBarH", 9, 4, 30); klesc.bargap = klu_inii("EscapeBarGap", 5, 0, 60);

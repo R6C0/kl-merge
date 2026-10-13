@@ -75,10 +75,10 @@
 #define KLSB_X_S1        16.0f                /* 336 */
 #define KLSB_X_S2        184.0f               /* 504: the label font is wide (cap 10, tracking 3: "ROUND SCORE" is about 135 px) */
 #define KLSB_X_S3        304.0f               /* 624 */
-#define KLSB_X_RING      570.0f               /* 890: the continue ring's middle */
-#define KLSB_Y_RING      347.0f               /* 497 */
+#define KLSB_X_RING      560.0f               /* 880: the continue ring's middle (2026-10-13, the owner: 'the continue is offset' - 570 crowded the right border) */
+#define KLSB_Y_RING      350.0f               /* 500: under the CONTINUE label, beside the values */
 #define KLSB_R_RING      17.0f
-#define KLSB_Y_CONT      320.0f               /* 470: the CONTINUE label's middle, centred over the ring */
+#define KLSB_Y_CONT      328.0f               /* the CONTINUE label: on the summary labels' row (324). The owner's picture (v37/v38, 2026-10-13): placed at 320 it stood at 315.6, on the rule - a centred label reads 4 px high, so 324 + 4 */
 #define KLSB_X_KILLED    160.0f               /* 480: 'KILLED BY name' stands on the result's line, right of it */
 
 /* the text pool: index -> role (font + alignment); the order is the layout above */
@@ -411,7 +411,7 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
         if (!r->used) continue;
         rr = row++;
         flags = kluv_flags(s, i);
-        traitor = ((flags & KLUV_F_TRAITOR) || (r->flags & 2)) != 0;
+        traitor = ((flags & KLUV_F_TRAITOR) || (kluv_early && (r->flags & 2))) != 0;      /* the bot's own mark only with [HUD] TraitorEarly=1 (klhud_values.c) */
         you = i == human;
         fate = klsb_fate(s, i, traitor, &fc, &dead);
         rowc = py + KLSB_Y_ROW0 + KLSB_ROW * rr + KLSB_ROWH * 0.5f;
@@ -451,9 +451,12 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
     {
         float cx = px + KLSB_X_RING, cy = py + KLSB_Y_RING;
         snprintf(num, sizeof num, "%d", (int)ceil(cdv - 0.001f));
-        klsb_put(KLSB_T_CONTN, cx, klu_cen(cy, KLU_FNT_NAME), num, KLU_C_CHALK);
+        klsb_put(KLSB_T_CONTN, cx, klu_cen(cy + 5.5f, KLU_FNT_NAME), num, KLU_C_CHALK);      /* the owner's picture: the count stood 5.5 px above the ring's middle ("the number is still off") */
         klsb_put(KLSB_T_CONTL, cx, klu_cen(py + KLSB_Y_CONT, KLU_FNT_LABEL), "CONTINUE", KLU_C_CORAL);
-        klu_addpic(114, cx - 24.0f, cy - 24.0f, 48.0f, 48.0f, 0x9c080809u, klsb_ly(2));
+        /* 2026-10-13, the owner (a picture of this ring): 'countdown bottom right needs to be fixed' - 114 of the watch bake is the watch FACE
+           (batons), so the watch look takes a plain dark disc of round brush dabs (113) here, as the gun dial */
+        if (klu.wstyle && klu_r.handle[KLU_DAB_PIC]) klu_dab_at(cx, cy, 48.0f, 0x9c080809u, klsb_ly(2));
+        else klu_addpic(114, cx - 24.0f, cy - 24.0f, 48.0f, 48.0f, 0x9c080809u, klsb_ly(2));
         klu_track(NULL, NULL, cx, cy, KLSB_R_RING, KLU_TRACK_C, klsb_ly(1));
         klu_arc(NULL, NULL, cx, cy, KLSB_R_RING, 0, 0.0f, cdt, KLU_C_CHALK, klu.layer);
     }

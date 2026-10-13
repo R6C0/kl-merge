@@ -1016,6 +1016,7 @@ static KCMD kla_cmd[640]; static int kla_ncmd, kla_pc; static DWORD kla_cmd_t, k
 static BYTE kla_held[256]; static DWORD kla_rel_t[256], kla_rel_f[256]; static int kla_taps, kla_started;
 
 static int kla_script_pc(void) { return kla_ncmd ? kla_pc + 1 : 0; }
+static int kla_key_held(int dik) { return dik >= 0 && dik < 256 && kla_held[dik] != 0; }      /* klhud.c klu_tab_held: a scripted Tab counts as held */
 
 /* ---- scripted mouse: relative counts per second, fed through the mouse's GetDeviceState (DIMOUSESTATE2:
    lX +0, lY +4, lZ +8, buttons +12..; the game reads 0x14 bytes once a frame, kl2 0x650840) */

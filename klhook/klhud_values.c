@@ -198,6 +198,11 @@
 
 /* the flag bits of [score+0x1d4 + 4 i] (g) */
 #define KLUV_F_TRAITOR   0x1
+/* 2026-10-13, the owner: 'when they might betray you it lets you know early saying "traitor" ... it should hide that so you cant predict
+   whos going to backstab you'. A crew record's flag 2 is the BOT's own 'turned traitor' mark, set when it DECIDES (the log's 'bots: record N:
+   traitor flag SET' comes seconds before the shot); the stock list never shows it. 0 (default, [HUD] TraitorEarly) = only the game's own
+   traitor flag (score flag 1) makes a traitor row / fate - what the stock list shows; 1 = the old rows (the bot's mark too). */
+static int kluv_early = 0;
 #define KLUV_F_DEAD      0x4
 #define KLUV_F_POLICE    0x8
 #define KLUV_F_ABOARD    0x20
@@ -518,7 +523,7 @@ static int kluv_state(const struct klb_snap *s, int i)
     if (f & KLUV_F_DIRTYCOP) return KLUV_ST_DIRTYCOP;
     if (f & KLUV_F_POLICE) return KLUV_ST_POLICE;
     if (f & KLUV_F_UNDERCOP) return (f & 0x40000) ? KLUV_ST_UNDERCOP2 : KLUV_ST_UNDERCOP;
-    if ((f & KLUV_F_TRAITOR) || (r->flags & 2)) return KLUV_ST_TRAITOR;
+    if ((f & KLUV_F_TRAITOR) || (kluv_early && (r->flags & 2))) return KLUV_ST_TRAITOR;
     if (f & 0x10) return KLUV_ST_WAITING;
     if ((f & KLUV_F_ABOARD) || r->status == 4) return KLUV_ST_ABOARD;
     return KLUV_ST_CREW;

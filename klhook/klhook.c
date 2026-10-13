@@ -585,6 +585,7 @@ static void klh_tick(int game_thread);
 #include "klhud_values.c"                             /* the HUD's readers (reads only): BEFORE klhud.c, AFTER klbot.c */
 #include "klhud.c"                                    /* includes klhud_weapon.c inside itself */
 #include "klhud_popup.c"                              /* AFTER klhud.c: pop-ups + loot ring (uses its klu / klu_r / klu_pic) */
+#include "klhud_kill.c"                              /* AFTER klhud_popup.c: the kill / reward line under REWARDS (uses klpu_str) */
 #include "klhud_escape.c"                             /* AFTER klhud_popup.c: the escape-vehicle panel in the new look (uses klu / klu_r / klu_pic) */
 #include "klhud_tags.c"                              /* AFTER klhud_escape.c: the tags over the heisters' heads (uses klu / klu_r / klu_cs / klnm_tag_ini) */
 #include "klhud_board.c"                             /* AFTER klhud_tags.c: the pre-round panel in the new look ([HUD] Board, default 0) */
@@ -649,6 +650,7 @@ static void klh_tick(int game_thread)
     klesc_tick(game_thread);                          /* klhud_escape.c: the escape-vehicle panel (off unless [HUD] Escape / Draft) */
     klbrd_tick(game_thread);                          /* klhud_board.c: the pre-round panel (off unless [HUD] Board=1) */
     klsb_tick(game_thread);                           /* klhud_board2.c: the round-over scoreboard (off unless [HUD] Scoreboard=1) */
+    klkf_tick(game_thread);                           /* klhud_kill.c: the kill / reward line under REWARDS (off unless [HUD] KillLine / Draft) */
     klpu_tick(game_thread);                           /* klhud_popup.c: centre pop-ups + loot ring (after klu_tick; off unless [HUD] Popups / LootRing / Draft) */
     klo_tick(game_thread);                            /* klshoulder.c: log only */
     klvis_tick();                                     /* klvis.c: log only (the vision grid and its record 0xff) */
@@ -834,6 +836,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klesc_init();                                     /* klhud_escape.c: after klu_init */
     klbrd_init();                                     /* klhud_board.c: after klu_init */
     klsb_init();                                      /* klhud_board2.c: after klu_init */
+    klkf_init();                                      /* klhud_kill.c: after klu_init */
     klpu_init();                                      /* klhud_popup.c: after klu_init, it reads [HUD] with klhud.c's helpers */
     klo_init();
     klvis_init();

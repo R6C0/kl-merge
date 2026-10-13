@@ -208,7 +208,19 @@
 #define KLU_NGRID       (10 + KLU_NSWEEP)
 #define KLU_T_WEAP      (KLU_T_GRID + KLU_NGRID)      /* klhud_weapon.c: the first gun's count, the other gun's, the label */
 #define KLU_NWEAP       5                     /* the first gun's count, the other gun's, the label (the name, or the whole text in the old look), the slash, the reserve */
-#define KLU_NTEXT       (KLU_T_WEAP + KLU_NWEAP)      /* LAST: every part that adds texts goes before this line (klhud_values.c / klhud_popup.c add none) */
+#define KLU_T_KILL      (KLU_T_WEAP + KLU_NWEAP)      /* klhud_kill.c: the kill / reward line under REWARDS (2026-10-13) */
+#define KLU_T_ESC       (KLU_T_KILL + 1)              /* the van card's time (2026-10-13) */
+/* THE TAB CARD (2026-10-13, the owner: 'when you press tab ... optional overview'): [HUD] TabCard=1 - while Tab is held the crew list is
+   drawn as a card in the middle of the screen (an ink stroke, 'CREW', a row a heister: name, a status word, cash) instead of stepping
+   aside for the stock list, which then stays hidden. TabCard=0 (default): the stock list as before (TabList). */
+#define KLU_CARD_W      440.0f
+#define KLU_CARD_Y      196.0f                /* the card's head line */
+#define KLU_CARD_ST     0.62f                 /* the status column's middle, a part of the width */
+#define KLU_CARD_INK    0xd80c0c0du           /* the painted bands */
+#define KLU_CARD_UNDER  0x9c0c0c0du           /* the solid ink under them */
+#define KLU_CARD_BAND   28.0f                 /* a band's height (they overlap by 6) */
+#define KLU_T_TABST(i)  (KLU_T_ESC + 1 + (i))  /* the Tab card's status column, one a row (2026-10-13) */
+#define KLU_NTEXT       (KLU_T_TABST(KLU_ROWS))   /* LAST: every part that adds texts goes before this line (klhud_values.c / klhud_popup.c add none) */
 #define KLU_NPIC        300                   /* the queue; the rings are baked arcs + a run of dabs (klu_arc): about 230 a frame at worst; the draw list holds 280 without trouble (run S1), keep it under ~320 */
 #define KLU_TEXTLEN     64
 #define KLU_STYLE_LEFT  (klu.left)        /* [HUD] LeftStyle: 0x44 turned out CENTRED at x (run H1_DM03_hud); 0x11 is a GUESS until the sweep of Grid shows it */
@@ -290,7 +302,7 @@ static struct {
     int draft;                                /* Draft: the defaults of every part of the draft are 1 */
     int lives, roundof;                       /* Lives, RoundOf (klhud_values.c) */
     int on, log, stock, crew, money, round, hide, shadow, tags, cashshort, totalfont, draw, plates, anchor, pictest, grid, probe, layer, rows, dials;
-    int wstyle, wini, wseconds, wwear, wlast, labelbar, labelslash, mfill;   /* wini = [HUD] WatchStyle as set; wstyle = the look THIS level gets (klu_choose_look) */
+    int wstyle, wini, wseconds, wwear, wlast, labelbar, labelslash, mfill, vanicon, tablist, tabcard;   /* wini = [HUD] WatchStyle as set; wstyle = the look THIS level gets (klu_choose_look) */
       /* the watch look (section 14 of re\hud_hook.md): WatchStyle (1 = new, 0 = the old textures and sizes), WatchSeconds, WatchWear, WatchLast, LabelBar (0 text only, 1 painted bar, 2 plain), LabelSlash */
     float inset, crew_x, crew_y, crew_w, row, money_x, money_y, money_w, round_y;
     float yoff, blockup, blockh, padx;        /* the rows: the text's y under the head, the block's rise above it, its height, the text's side margin (the draft: 34 / 5 / 28 / 8) */
@@ -302,7 +314,7 @@ static struct {
     DWORD fonts[KLU_NFONT];                   /* the four font objects a text may take (klu_font_of): 0 names, 1 big, 2 labels, 3 small - each the FA font when its REF is not usable */
     DWORD handle[200];                        /* the sprite handle of every HUD picture whose chunk is type 5, else 0 (section 3; klu_pic_prep) */
     float clock_max; int watch;               /* Dials: the longest round clock seen this round; 1 = the watch stands for the stock clock's digits */
-    int made, fault, hid, inset_done, told_stock, pic_done;
+    int made, fault, hid, inset_done, told_stock, pic_done, tab, card;     /* card: this compose lays the crew out as the Tab card */
     float cx, cy, mx, my, ry, wy;             /* the layout of this level (the keys, or the inset) */
     struct klu_text t[KLU_NTEXT];
     struct klu_picq pic[KLU_NPIC]; int npic;
@@ -312,6 +324,12 @@ static volatile LONG klu_n_call, klu_n_try, klu_n_draw, klu_n_refused, klu_n_pic
 static volatile LONG klu_probe_want, klu_probe_ready;
 static struct { float stock[14], ours[14], pic[14]; LONG nstock, nours, npic; } klu_pr;
 static CRITICAL_SECTION klu_cs;
+static char klu_kill_txt[64];                 /* klhud_kill.c hands the points pop-up's line here (under klu_cs) ... */
+static LONG klu_kill_at, klu_kill_ms = 3500;
+static volatile LONG klu_esc_at, klu_esc_frac, klu_esc_slot, klu_esc_time;     /* klhud_escape.c (EscapeCard): a frame the stock panel would draw, its health share (float bits), the icon slot, its time text object */
+#define KLU_ESC_GAP     8.0f                  /* the van card: under the kill line */
+#define KLU_ESC_H       30.0f
+#define KLU_ESC_TOFF    (KLU_ESC_H * 0.5f)    /* ... with GetTickCount | 1 when it came; compose shows it klu_kill_ms long */
 static DWORD klu_evt[KLU_ELEM_NSLOT + 1];     /* [0] RTTI locator, [1..] the slots */
 static int klu_evt_ready;
 static float klu_prec[KLU_NPIC + 3][10];      /* the pictures' records (section 3): one a picture, rewritten with the same numbers every frame */
@@ -545,10 +563,27 @@ static DWORD klu_make_obj(DWORD tmpl, DWORD font, int style, DWORD colour, int l
     return obj;
 }
 
+/* the crew list's texts at the list's place (klu_r.cx / cy, klu.crew_w): the corner list, or - while klu_r.card - the Tab card in the
+   middle of the screen (klu_compose moves the place for its call and puts the numbers back; the texts stay where this put them) */
+static void klu_place_crew(void)
+{
+    float x0 = klu_r.cx, x1 = klu_r.cx + klu.crew_w, y; int i;
+    klu_r.t[KLU_T_HEAD].x = x0; klu_r.t[KLU_T_HEAD].y = klu_r.cy;
+    klu_r.t[KLU_T_COUNT].x = x1; klu_r.t[KLU_T_COUNT].y = klu_r.cy;
+    for (i = 0; i < KLU_ROWS; i++) {
+        y = klu_r.cy + klu.yoff + klu.row * i;
+        klu_r.t[KLU_T_NAME(i)].x = x0 + klu.padx; klu_r.t[KLU_T_CASH(i)].x = x1 - klu.padx; klu_r.t[KLU_T_TABST(i)].x = x0 + klu.crew_w * KLU_CARD_ST;
+        if (klu.fontset) {                                   /* centred on the block's middle (the block: y - blockup, blockh high) */
+            float rc = y + klu.blockh * 0.5f - klu.blockup;
+            klu_r.t[KLU_T_NAME(i)].y = klu_cen(rc, KLU_FNT_NAME); klu_r.t[KLU_T_CASH(i)].y = klu_cen(rc, KLU_FNT_SMALL); klu_r.t[KLU_T_TABST(i)].y = klu_cen(rc, KLU_FNT_LABEL);
+        } else klu_r.t[KLU_T_NAME(i)].y = klu_r.t[KLU_T_CASH(i)].y = klu_r.t[KLU_T_TABST(i)].y = y;
+    }
+}
+
 /* the places of every text of this level (1280 x 720 virtual pixels); re\hud_hook.md 3 has the same numbers as a table */
 static void klu_layout(void)
 {
-    float inset = 0.05f, x0, x1, y; int i, k;
+    float inset = 0.05f, y; int i, k;
     klh_rd((DWORD_PTR)KLH_VA(KLU_INSET), &inset, 4);
     if (!(inset >= 0 && inset < 0.25f)) inset = 0.05f;
     klu_r.cx = klu.crew_x >= 0 ? klu.crew_x : 1280.0f * inset;
@@ -558,14 +593,10 @@ static void klu_layout(void)
     klu_r.ry = klu.round_y >= 0 ? klu.round_y : 720.0f * inset + (klu.dials ? 72.0f : 58.0f);      /* under the clock's two lines (y, y + 28), or under the watch */
     klu_r.my = klu.money_y >= 0 ? klu.money_y : 720.0f * inset + (klu.dials ? (klu.draft ? KLU_D_MONEY_DY : 100.0f) : 87.0f);   /* run T1: the 33 px total stood in the round line - 14 lower under Draft */     /* 123 at the game's inset = the draft's 9.6 % of the width */
     for (i = 0; i < KLU_NTEXT; i++) { klu_r.t[i].style = KLU_STYLE_LEFT; klu_r.t[i].want_colour = KLU_C_CHALK; }
-    x0 = klu_r.cx; x1 = klu_r.cx + klu.crew_w;
-    klu_r.t[KLU_T_HEAD].x = x0; klu_r.t[KLU_T_HEAD].y = klu_r.cy; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;
-    klu_r.t[KLU_T_COUNT].x = x1; klu_r.t[KLU_T_COUNT].y = klu_r.cy; klu_r.t[KLU_T_COUNT].style = KLU_STYLE_RIGHT;
-    for (i = 0; i < KLU_ROWS; i++) {
-        y = klu_r.cy + klu.yoff + klu.row * i;
-        klu_r.t[KLU_T_NAME(i)].x = x0 + klu.padx; klu_r.t[KLU_T_NAME(i)].y = y;
-        klu_r.t[KLU_T_CASH(i)].x = x1 - klu.padx; klu_r.t[KLU_T_CASH(i)].y = y; klu_r.t[KLU_T_CASH(i)].style = KLU_STYLE_RIGHT;
-    }
+    klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;
+    klu_r.t[KLU_T_COUNT].style = KLU_STYLE_RIGHT;
+    for (i = 0; i < KLU_ROWS; i++) { klu_r.t[KLU_T_CASH(i)].style = KLU_STYLE_RIGHT; klu_r.t[KLU_T_TABST(i)].style = KLU_STYLE_CENTRE; }
+    klu_place_crew();
     klu_r.t[KLU_T_ROUND].x = klu_r.mx; klu_r.t[KLU_T_ROUND].y = klu_r.ry; klu_r.t[KLU_T_ROUND].style = KLU_STYLE_RIGHT;
     if (klu.draft) klu_r.t[KLU_T_ROUND].want_colour = klu.fontset ? KLU_C_CHALK : KLU_C_CORAL;      /* the draft's CSS: .clock .round { color: chalk } (S5 had coral) */
     for (k = 0; k < 3; k++) {
@@ -575,16 +606,20 @@ static void klu_layout(void)
         klu_r.t[KLU_T_MVALUE(k)].want_colour = k == 0 ? KLU_C_GREENHI : KLU_C_GREEN;
     }
     klu_r.t[KLU_T_MVALUE(0)].big = klu.totalfont;
+    klu_r.t[KLU_T_ESC].x = klu_r.mx - 6.0f; klu_r.t[KLU_T_ESC].style = KLU_STYLE_RIGHT; klu_r.t[KLU_T_ESC].want_colour = KLU_C_CHALK;
+    klu_r.t[KLU_T_KILL].x = klu_r.mx; klu_r.t[KLU_T_KILL].style = KLU_STYLE_RIGHT; klu_r.t[KLU_T_KILL].want_colour = KLU_C_GREEN;
+    klu_r.t[KLU_T_KILL].y = klu_r.my + (klu.draft ? (klu.wstyle ? KLU_W_MLINE0 : KLU_D_MLINE0) + KLU_D_MLINE * 2.0f : 88.0f);      /* one line under REWARDS */
+    klu_r.t[KLU_T_ESC].y = klu_r.t[KLU_T_KILL].y + 18.0f + KLU_ESC_GAP + KLU_ESC_TOFF;      /* the van card's middle; the text is centred on it below */
     if (klu.fontset) {                                   /* TYPE: which font each text takes (see the block at KLU_NFONT) */
         for (i = 0; i < KLU_NTEXT; i++) klu_r.t[i].fnt = KLU_FNT_NAME;
         klu_r.t[KLU_T_HEAD].fnt = KLU_FNT_LABEL; klu_r.t[KLU_T_COUNT].fnt = KLU_FNT_SMALL; klu_r.t[KLU_T_ROUND].fnt = KLU_FNT_LABEL;
-        for (i = 0; i < KLU_ROWS; i++) {                 /* the row's text is centred on its block's middle (the block: y - blockup, blockh high) */
-            float rc = klu_r.cy + klu.yoff + klu.row * i + klu.blockh * 0.5f - klu.blockup;
-            klu_r.t[KLU_T_NAME(i)].fnt = KLU_FNT_NAME; klu_r.t[KLU_T_CASH(i)].fnt = KLU_FNT_SMALL;
-            klu_r.t[KLU_T_NAME(i)].cen = klu_r.t[KLU_T_CASH(i)].cen = 1;
-            klu_r.t[KLU_T_NAME(i)].y = klu_cen(rc, KLU_FNT_NAME); klu_r.t[KLU_T_CASH(i)].y = klu_cen(rc, KLU_FNT_SMALL);
+        for (i = 0; i < KLU_ROWS; i++) {                 /* the row's text is centred on its block's middle (klu_place_crew) */
+            klu_r.t[KLU_T_NAME(i)].fnt = KLU_FNT_NAME; klu_r.t[KLU_T_CASH(i)].fnt = KLU_FNT_SMALL; klu_r.t[KLU_T_TABST(i)].fnt = KLU_FNT_LABEL;
+            klu_r.t[KLU_T_NAME(i)].cen = klu_r.t[KLU_T_CASH(i)].cen = klu_r.t[KLU_T_TABST(i)].cen = 1;
         }
+        klu_place_crew();
         for (k = 0; k < 3; k++) { klu_r.t[KLU_T_MLABEL(k)].fnt = KLU_FNT_LABEL; klu_r.t[KLU_T_MVALUE(k)].fnt = k == 0 ? KLU_FNT_BIG : KLU_FNT_NAME; }
+        klu_r.t[KLU_T_KILL].fnt = KLU_FNT_LABEL; klu_r.t[KLU_T_ESC].fnt = KLU_FNT_NAME; klu_r.t[KLU_T_ESC].cen = 1; klu_r.t[KLU_T_ESC].y = klu_cen(klu_r.t[KLU_T_ESC].y, KLU_FNT_NAME);
         klu_r.t[KLU_T_WEAP + 0].fnt = KLU_FNT_NAME; klu_r.t[KLU_T_WEAP + 1].fnt = KLU_FNT_SMALL;      /* the draft's dial: on-gun count 1.6cqw = 20.5 px (the NAME font), off-gun 1.15cqw */ klu_r.t[KLU_T_WEAP + 2].fnt = KLU_FNT_LABEL;
     }
     klu_r.t[KLU_T_WEAP + 0].style = klu_r.t[KLU_T_WEAP + 1].style = KLU_STYLE_RIGHT; klu_r.t[KLU_T_WEAP + 2].style = klu.wstyle ? KLU_STYLE_RIGHT : KLU_STYLE_CENTRE;
@@ -678,7 +713,8 @@ static int klu_make_all(DWORD osd)
     for (i = 0; i < KLU_NTEXT; i++) {
         struct klu_text *t = &klu_r.t[i];
         if (i >= KLU_T_GRID && i < KLU_T_WEAP && !klu.grid) continue;
-        if (i >= KLU_T_WEAP && !klu.weapon) continue;
+        if (i >= KLU_T_WEAP && i < KLU_T_KILL && !klu.weapon) continue;
+        if (i >= KLU_T_TABST(0) && !klu.tabcard) continue;     /* the Tab card's status column */
         t->colour = t->want_colour;
         if (!(t->obj = klu_make_obj(tmpl, klu_font_of(t), t->style, t->colour, klu.layer, why))) { klog("hud: osd %08lx: text %d: %s; the HUD stands down for this level", osd, i, why); return 0; }
         n++;
@@ -972,6 +1008,13 @@ static void klu_row(int row, const char *name, long money, int kind)
     float y = klu_r.cy + klu.yoff + klu.row * row; int block = klu.plates && (kind == 1 || kind == 2);
     snprintf(tn->want, sizeof tn->want, "%s%s", name, tag);
     klu_cash(tc->want, sizeof tc->want, money);
+    if (klu_r.card) {                                            /* the Tab card: the row's state as a word in its own column */
+        static const char *const word[6] = { "ALIVE", "YOU", "TRAITOR", "DEAD", "ESCAPED", "FED" };
+        static const DWORD col[6] = { KLU_C_OUT, KLU_C_BLUE, KLU_C_ORANGE, KLU_C_DEAD, KLU_C_GREENHI, KLU_C_BLUE };
+        struct klu_text *ts = &klu_r.t[KLU_T_TABST(row)]; int b = klu.plates && (kind == 1 || kind == 2);
+        strcpy(ts->want, word[kind >= 0 && kind < 6 ? kind : 0]);
+        ts->want_colour = b ? KLU_C_INK : col[kind >= 0 && kind < 6 ? kind : 0]; ts->noshadow = b; ts->on = klu.crew;
+    }
     tn->on = tc->on = klu.crew;
     tn->noshadow = tc->noshadow = block;                         /* dark letters on a painted block carry no shadow */
     switch (kind) {
@@ -1034,6 +1077,7 @@ static void klu_grid(void)
 /* -> every text's wanted string and colour and the picture list; 0 = nothing to show (no Arcade round) */
 static int klu_compose(int *state_ok)
 {
+    static float card_save[3]; static int card_tags, card_placed;
     struct klb_snap s; int i, row = 0, human, used = 0, alive = 0; long total = 0, loot = 0, rewards = 0; DWORD cat[0x3c / 4]; char name[56]; int lives = 0, rn = 0, rm = 0;
     *state_ok = 0;
     if (!klb_read(&s)) return 0;                              /* klbot.c 1: Arcade, ZGameRulesHeist, the records */
@@ -1044,6 +1088,22 @@ static int klu_compose(int *state_ok)
     klu_r.npic = 0;
     human = s.human >= 0 ? s.human : 0;
     lives = klu.grid == 2 ? 2 : kluv_lives(&s);               /* byte [score+0x6c]; +0x44 is the number of rounds (klhud_values.c a, c) */
+    if (klu_r.card) {                                         /* the Tab card: the list's place moves to the middle for this compose (put back after the crew part) */
+        int n_ = 0;
+        for (i = 0; i < s.n; i++) n_ += s.r[i].used != 0;
+        if (klu.grid == 2) n_ = KLU_ROWS;
+        if (n_ > klu.rows) n_ = klu.rows;
+        card_save[0] = klu_r.cx; card_save[1] = klu_r.cy; card_save[2] = klu.crew_w; card_tags = klu.tags;
+        klu_r.cx = 640.0f - KLU_CARD_W * 0.5f; klu_r.cy = KLU_CARD_Y; klu.crew_w = KLU_CARD_W; klu.tags = 0;
+        klu_place_crew(); card_placed = 1;
+        if (klu.plates) {                                     /* run v42: ONE stroke (111, 256 x 32) stretched to the card's height read as shreds - a faint solid
+                                                                 ink under painted bands of row height, as the corner list's blocks */
+            float top = klu_r.cy - 18.0f, h = klu.yoff + klu.row * (float)n_ + 30.0f, yb;
+            klu_addpic(181, klu_r.cx - 16.0f, top + 3.0f, KLU_CARD_W + 32.0f, h - 6.0f, KLU_CARD_UNDER, klu.layer - 4);
+            if (klu_r.handle[111]) for (yb = top; yb < top + h - 4.0f; yb += KLU_CARD_BAND - 6.0f)
+                klu_addpic(111, klu_r.cx - 22.0f, yb, KLU_CARD_W + 44.0f, yb + KLU_CARD_BAND > top + h ? top + h - yb : KLU_CARD_BAND, KLU_CARD_INK, klu.layer - 3);
+        }
+    } else if (card_placed) { klu_place_crew(); card_placed = 0; }      /* back in the corner */
     if (klu.grid == 2) {                                    /* the draft's own eight rows: every state on one picture */
         static const struct { const char *n; long m; int kind; } demo[KLU_ROWS] = { { "J.C.", 540000, 1 }, { "KANE", 310000, 0 }, { "LYNCH", 0, 0 }, { "PARKER", 860000, 2 },
                                                                                     { "TOMMY", 120000, 0 }, { "RED", 400000, 4 }, { "MELDAL", 0, 3 }, { "ASHKANAN", 1250000, 3 } };
@@ -1072,14 +1132,41 @@ static int klu_compose(int *state_ok)
         }
         klu_row(row++, name, (long)r->money, kind);
     }
+    /* 2026-10-13, the owner (a picture of the escape panel: a chalk smear left of an orange car box, the time above it, an empty frame):
+       'fix the van symbol like i want it revamped too since it looks broken'. The van card, in the money box's column under the kill
+       line: a dark painted stroke, the vehicle icon in chalk, the time right-aligned, a thin health bar under it (coral when low).
+       klhud_escape.c (EscapeCard=1) keeps the stock panel's prompts and makes its plate, icon, bar and time invisible, and sets
+       klu_esc_at for every frame the stock panel would have drawn. */
+    if (klu_esc_at && GetTickCount() - (DWORD)klu_esc_at < 250 && klu.money) {
+        DWORD tobj = (DWORD)klu_esc_time, str; char tt[32] = ""; float y0 = klu_r.t[KLU_T_KILL].y + 18.0f + KLU_ESC_GAP, w = klu.money_w, x0 = klu_r.mx - w, frac; LONG fb = klu_esc_frac; int slot = (int)klu_esc_slot;
+        memcpy(&frac, &fb, 4); if (!(frac >= 0)) frac = 0; if (frac > 1.0f) frac = 1.0f;
+        if (tobj && klh_rd32(tobj) == KLU_TEXT_VT && (str = klh_rd32(tobj + 0xa4)) != 0) klh_rdstr(str + 0xc, tt, sizeof tt);
+        snprintf(klu_r.t[KLU_T_ESC].want, KLU_TEXTLEN, "%s", tt[0] ? tt : "--:--"); klu_r.t[KLU_T_ESC].on = 1;
+        klu_addpic(klu_r.handle[111] ? 111 : 181, x0 - 8.0f, y0, w + 14.0f, KLU_ESC_H, 0xd80c0c0du, klu.layer - 3);
+        if (slot > 0 && slot < 200 && klu_r.handle[slot]) klu_addpic(slot, x0 + 2.0f, y0 + KLU_ESC_H * 0.5f - 13.0f, 26.0f, 26.0f, KLU_C_CHALK, klu.layer);
+        klu_addpic(181, x0, y0 + KLU_ESC_H + 3.0f, w, 3.0f, 0x6cf3f0eau, klu.layer - 2);
+        if (frac > 0.005f) klu_addpic(181, x0, y0 + KLU_ESC_H + 3.0f, w * frac, 3.0f, frac < 0.3f ? KLU_C_CORAL : KLU_C_CHALK, klu.layer - 1);
+    }
+    /* 2026-10-13, the owner: 'for when u escape / in the van should be an icon to let the person know': while YOUR record is aboard the
+       vehicle or escaped, the level's own car icon (170, the escape panel's) in green on a dark dab, left of the watch. [HUD] VanIcon=0: off */
+    if (klu.vanicon && human >= 0 && klu_r.handle[170]) {
+        int st = kluv_state(&s, human);
+        if (st == KLUV_ST_ABOARD || st == KLUV_ST_ESCAPED) {
+            float ix = klu_r.mx - 35.0f - 66.0f, iy = klu_r.wy;
+            if (klu_r.handle[KLU_DAB_PIC]) klu_dab_at(ix, iy, 46.0f, 0xc80c0c0du, klu.layer - 2);
+            klu_addpic(170, ix - 15.0f, iy - 15.0f, 30.0f, 30.0f, st == KLUV_ST_ESCAPED ? KLU_C_GREENHI : KLU_C_GREEN, klu.layer);
+        }
+    }
     if (klu.crew) {
         strcpy(klu_r.t[KLU_T_HEAD].want, "DEAD MEN"); klu_r.t[KLU_T_HEAD].on = 1; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;
         snprintf(klu_r.t[KLU_T_COUNT].want, KLU_TEXTLEN, "%d / %d", alive, used); klu_r.t[KLU_T_COUNT].on = 1;
+        if (klu_r.card) { strcpy(klu_r.t[KLU_T_HEAD].want, "CREW"); snprintf(klu_r.t[KLU_T_COUNT].want, KLU_TEXTLEN, "%d / %d ALIVE", alive, used); }
         if (klu.plates) {                                     /* the painted rule: the draft's pic 112, 211 x 5, centre y 22 under the head */
             if (klu.draft) klu_addpic(klu_r.handle[KLU_DRY()] ? KLU_DRY() : 181, klu_r.cx, klu_r.cy + KLU_D_RULE_Y, klu.crew_w, KLU_D_RULE_H, KLU_C_CHALK, klu.layer - 2);
             else klu_addpic(181, klu_r.cx, klu_r.cy + 22.0f, klu.crew_w, 3.0f, KLU_C_CHALK, klu.layer - 2);
         }
     }
+    if (klu_r.card) { klu_r.cx = card_save[0]; klu_r.cy = card_save[1]; klu.crew_w = card_save[2]; klu.tags = card_tags; }    /* the numbers back; the texts stay at the card until the next compose */
     /* Total as 0x807520(rules) (EXE): record 0's money when in use, + the score object's dwords +4..+0x10, +0x18..+0x24, +0x2c, + [+0x38] */
     if (klh_rd(s.score + 4, cat, sizeof cat)) {
         static const int add[10] = { 0, 1, 2, 3, 5, 6, 7, 8, 10, 13 };     /* dword indices from +4: +4 +8 +c +10 +18 +1c +20 +24 +2c +38 */
@@ -1095,6 +1182,12 @@ static int klu_compose(int *state_ok)
         for (i = 0; i < 3; i++) {
             strcpy(klu_r.t[KLU_T_MLABEL(i)].want, label[i]); klu_r.t[KLU_T_MLABEL(i)].on = klu.money;
             klu_dollars(klu_r.t[KLU_T_MVALUE(i)].want, KLU_TEXTLEN, v[i]); klu_r.t[KLU_T_MVALUE(i)].on = klu.money;
+        }
+        if (klu_kill_at && (LONG)(GetTickCount() - (DWORD)klu_kill_at) < klu_kill_ms) {      /* klhud_kill.c: the latest kill / reward line, under REWARDS */
+            const char *d = strchr(klu_kill_txt, '$');
+            snprintf(klu_r.t[KLU_T_KILL].want, KLU_TEXTLEN, "%s", klu_kill_txt);
+            klu_r.t[KLU_T_KILL].want_colour = d && d > klu_kill_txt && d[-1] == '-' ? KLU_C_CORAL : KLU_C_GREEN;
+            klu_r.t[KLU_T_KILL].on = klu.money;
         }
         {
             char of[16] = "", lv[16] = "";
@@ -1151,6 +1244,33 @@ static void klu_apply(void)
 }
 
 /* the stock top-left block: hidden while we draw, shown again when we do not (section 5) */
+/* 2026-10-13, the owner: 'when you press tab also in game it shows another scoreboard but the new ui always overwrites it ... make sure the
+   dead men disappears when youre holding tab'. Tab is the game's TriggerPlayerlist / IngameScores (kl2.exe's GameplayInput text); 0x473530
+   sets ZFAPlayerListDisplay +0xed8 by the player's option GamePlayerNames (held / toggle / always). That list is the very element HideStock
+   hides, so: while Tab is HELD with the game window in front, our crew list (DEAD MEN, rows, lives, its pictures) is not drawn and the
+   stock block is shown again; on release ours comes back. The key is read with user32's GetAsyncKeyState (looked up here: the hook links
+   no user32); a TEST build also takes klauto's scripted key. [HUD] TabList=0: off. */
+#ifdef KLHOOK_TEST
+static int kla_key_held(int dik);
+#endif
+static int klu_tab_held(void)
+{
+    static int init; static SHORT (WINAPI *gaks)(int); static HWND (WINAPI *fg)(void); static DWORD (WINAPI *pidof)(HWND, LPDWORD);
+    HWND w; DWORD pid = 0;
+    if (!klu.tablist) return 0;
+#ifdef KLHOOK_TEST
+    if (kla_key_held(0x0f)) return 1;                                  /* DIK_TAB, a scripted key */
+#endif
+    if (!init) {
+        HMODULE u = GetModuleHandleA("user32.dll");
+        init = 1;
+        if (u) { *(FARPROC *)&gaks = GetProcAddress(u, "GetAsyncKeyState"); *(FARPROC *)&fg = GetProcAddress(u, "GetForegroundWindow"); *(FARPROC *)&pidof = GetProcAddress(u, "GetWindowThreadProcessId"); }
+    }
+    if (!gaks || !fg || !pidof || !(w = fg()) || !pidof(w, &pid) || pid != GetCurrentProcessId()) return 0;
+    if ((gaks(0x10) & 0x8000) || (gaks(0x12) & 0x8000)) return 0;       /* run v42: Shift+Tab (the Steam overlay) and Alt+Tab are not the scoreboard key */
+    return (gaks(0x09) & 0x8000) != 0;                                   /* VK_TAB */
+}
+
 static void klu_hide_tick(DWORD osd, int want)
 {
     DWORD el, vt = 0, cl; BYTE h = 0, ch = 0;
@@ -1339,7 +1459,7 @@ static DWORD klu_current_osd(int may_scan)
 static void klu_tick(int game_thread)
 {
     static DWORD last, said; static int toldthread, empty;
-    DWORD now = GetTickCount(), osd, vt = 0; float wh[2] = { 0, 0 }; char scene[160], why[200]; int state_ok = 0, show, data, allowed, have;
+    DWORD now = GetTickCount(), osd, vt = 0; float wh[2] = { 0, 0 }; char scene[160], why[200]; int state_ok = 0, show, data, allowed, have, tab = 0, crew;
     struct klb_snap pre;
     if (!klu.on || !klh_exe_ok || now - last < 100) return;
     last = now;
@@ -1403,7 +1523,12 @@ static void klu_tick(int game_thread)
     if (!klu_r.made && klu_fa_shown(osd) && have && pre.state >= 0x17 && pre.state <= 0x19) {     /* the layout must exist before the first compose (it reads the places) */
         if (klu_make_all(osd)) { klu_r.made = 1; klu_r.rules = pre.rules; } else klu_r.fault = 1;
     }
+    tab = klu_tab_held();
+    klu_r.card = tab && klu.tabcard && klu.crew;
+    if (tab != klu_r.tab) { klu_r.tab = tab; if (klu.log) klog("hud: tab %s: %s", tab ? "HELD" : "released", !tab ? "the crew list is back" : klu_r.card ? "the crew list is drawn as the card in the middle (TabCard=1)" : "the crew list steps aside, the stock list is shown"); }
+    crew = klu.crew; if (tab && !klu_r.card) klu.crew = 0;               /* compose / klu_row / klu_lives_row read klu.crew */
     data = klu_r.made && !klu_r.fault ? klu_compose(&state_ok) : 0;
+    klu.crew = crew;
     show = data && state_ok && klu_fa_shown(osd);
     if (data) klu_apply();                                   /* may latch a fault */
     LeaveCriticalSection(&klu_cs);
@@ -1412,7 +1537,8 @@ static void klu_tick(int game_thread)
     if (klu_r.made && (klu.plates || klu.pictest || klu.dials || klu.weapon) && !klu_r.pic_done) klu_pic_prep(klu_r.elem);      /* before the first frame that draws */
     InterlockedExchange(&klu_draw_on, show);
     klwd_show(show);
-    if (show && klu.hide && klu.crew) klu_hide_tick(osd, 1);
+    if (show && klu.hide && klu.crew && (!tab || klu_r.card)) klu_hide_tick(osd, 1);
+    else if (tab && !klu_r.card && klu_r.hid) klu_hide_tick(osd, 0);                   /* Tab: the stock list shows (its Tick kept it current) */
     klht_tick(osd, have ? &pre : 0, show);                    /* klhud_tags.c: after the hide (it acts only while klu_r.hid says the stock element is hidden by us) */
     if (klu.probe && klu_probe_ready) {
         const float *a = klu_pr.stock, *b = klu_pr.ours, *p = klu_pr.pic; int same = klu_pr.nours > 0 && b[0] == a[0] && b[2] == a[2] && b[4] == a[4] && b[9] == a[9] && a[0] != 0;
@@ -1458,9 +1584,10 @@ static void klu_init(void)
     klu.hide = klu_inii("HideStock", 1, 0, 1);
     klu.draw = klu_inii("Draw", 1, 1, 2);
     klu.shadow = klu_inii("Shadow", 1, 0, 1); if (klu.draw == 2) klu.shadow = 1;     /* the stock Render draws a pair */
+    kluv_early = klu_inii("TraitorEarly", 0, 0, 1);       /* 2026-10-13: 0 = no row / fate shows a bot's planned betrayal (klhud_values.c) */
     klu.tags = klu_inii("Tags", 1, 0, 1); klu.cashshort = klu_inii("CashShort", 1, 0, 1); klu.totalfont = klu_inii("TotalFont", 0, 0, 1);
     klu.draft = klu_inii("Draft", 0, 0, 1);              /* the whole draft: the defaults of Plates, Dials, Weapon, RoundOf (and klhud_popup.c's Popups, LootRing) become 1; a key that is set still wins */
-    klu.wini = klu.wstyle = klu_inii("WatchStyle", 0, 0, 1);       /* review MUST 2: default 0 (old extras on the installed maps); set 1 ONLY with maps baked by kl_hud.py --watch 1 */ klu.wseconds = klu_inii("WatchSeconds", 0, 0, 1); klu.wwear = klu_inii("WatchWear", 1, 0, 1); klu.wlast = klu_inii("WatchLast", 1, 0, 1); klu.mfill = klu_inii("MoneyFill", 1, 0, 1);       /* 2026-10-13: slot 117 is 256 x 32 in BOTH watch bakes (the old 'frame' before 652db0c, 'mfill' after), so the hook cannot tell them apart - MoneyFill=0 keeps the old flat bar on maps baked before 652db0c (the owner's hud_tab_wm set), where 117 would draw an empty outline */       /* review SHOULD 3: blank the stock red digits in the last minute (they would sit on the hands) */
+    klu.wini = klu.wstyle = klu_inii("WatchStyle", 0, 0, 1);       /* review MUST 2: default 0 (old extras on the installed maps); set 1 ONLY with maps baked by kl_hud.py --watch 1 */ klu.wseconds = klu_inii("WatchSeconds", 0, 0, 1); klu.wwear = klu_inii("WatchWear", 1, 0, 1); klu.wlast = klu_inii("WatchLast", 1, 0, 1); klu.mfill = klu_inii("MoneyFill", 1, 0, 1); klu.vanicon = klu_inii("VanIcon", 1, 0, 1); klu.tablist = klu_inii("TabList", 1, 0, 1); klu.tabcard = klu_inii("TabCard", 0, 0, 1);       /* 2026-10-13: slot 117 is 256 x 32 in BOTH watch bakes (the old 'frame' before 652db0c, 'mfill' after), so the hook cannot tell them apart - MoneyFill=0 keeps the old flat bar on maps baked before 652db0c (the owner's hud_tab_wm set), where 117 would draw an empty outline */       /* review SHOULD 3: blank the stock red digits in the last minute (they would sit on the hands) */
     klu.labelbar = klu_inii("LabelBar", 1, 0, 2); klu.labelslash = klu_inii("LabelSlash", 1, 0, 1);      /* the watch look (re\hud_hook.md 14): the level must be baked with kl_hud.py --watch <the same 0 / 1> */
     klu.dials = klu_inii("Dials", klu.draft, 0, 1);      /* the round watch + the escape dial (needs the level's extra pictures 113 / 114) */
     klu.weapon = klu_inii("Weapon", klu.draft, 0, 1); klwd_init();      /* the weapon dial (klhud_weapon.c; needs 113 / 114 too) */

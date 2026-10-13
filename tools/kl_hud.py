@@ -44,6 +44,16 @@ stock face; it is kept, so a few pairs may kern slightly wrong for the new face)
 
                                                                   # case drawn as capitals), light chipping, brush-kit bars
 
+                                                                  # + the world markers in the watch look (tools/kl_hud_marks.py;
+
+                                                                  # --markers 0: stock) and the shop's gun names in the HUD's
+
+                                                                  # wording (tools/kl_hud_shop.py; --shopnames 0: stock)
+
+    python tools/kl_hud.py markers <baked build or zip> <out dir> [--shopnames 0]   # ONLY those two, on a level baked before
+
+                                                                  # (no font bake again)
+
 
 
 PLATES: the stock plates (re/hud_data.md 2: slot 107/108 Weapon_BG 256x128, 169 Meter_BG 256x64, 161..164 GameplayTracker
@@ -803,9 +813,10 @@ def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, onl
         apply_pictures(None, None, None, log, _files=(zp, order, files, ext))
 
     if extras:
-
         add_extras(files, ext, log)
-
+    if SHOPNAMES:
+        import kl_hud_shop
+        kl_hud_shop.apply_level(files, log)
     os.makedirs(dst, exist_ok=True)
 
     if os.path.abspath(dst) == os.path.abspath(os.path.dirname(zp)):
@@ -860,6 +871,12 @@ def check(src, dst, log=print, pictures=False, extras=False, draft=False):
 
             continue
 
+        if SHOPNAMES and n.lower().endswith('.loc') and f1[n] != f2.get(n):      # the shop's names (kl_hud_shop): only Weapon<row> / Weapon<row>Desc leaves
+            import kl_loc as _L, kl_hud_shop as _S
+            a_, b_ = dict(_L.leaves(_L.parse(f1[n]))), dict(_L.leaves(_L.parse(f2[n])))
+            if a_.keys() != b_.keys() or any(a_[k].raw != b_[k].raw and not k.startswith(_S.KEY) for k in a_):
+                bad.append('%s: more than the shop names changed' % n)
+            continue
         if n not in (e1['.prm'], e1['.TEX']) and f1[n] != f2.get(n):
 
             bad.append('member %s changed' % n)
@@ -922,7 +939,7 @@ def check(src, dst, log=print, pictures=False, extras=False, draft=False):
 
     if pictures:
 
-        allowed |= set(tid for slot, tid in hud_slots(f1, e1).items() if slot in PLATE_SLOTS)
+        allowed |= set(tid for slot, tid in hud_slots(f1, e1).items() if slot in picture_slots())
 
     other = [i for i in t1.tex if i in t2.tex and t1.tex[i].entry != t2.tex[i].entry and i not in allowed and i not in new_ids]
 
@@ -985,11 +1002,18 @@ AMBER = (224, 150, 46)
 PLATE_SLOTS = {107: 'plate', 108: 'plate', 169: 'meter', 161: 'bar0', 162: 'bar1', 163: 'bar2', 164: 'bar3',
 
                109: 'tick', 193: 'tick', 0: 'border', 1: 'border_red'}
+SHOPNAMES = False                 # the buy-weapons names in the HUD's wording (tools/kl_hud_shop.py): on with --look deadmen, off with --shopnames 0
+MARKERS = False                   # the world markers (loot '$', escape car / chopper / cash) in the watch look: tools/kl_hud_marks.py;
+                                  # on with --look deadmen, off with --markers 0
 
 
-
-
-
+def picture_slots():
+    """{slot: kind} of the stock pictures the bake restyles"""
+    if not MARKERS:
+        return PLATE_SLOTS
+    import kl_hud_marks as _M
+    d = dict(PLATE_SLOTS); d.update(_M.MARKER_SLOTS)
+    return d
 CHALK = (243, 240, 234)           # the kit's brush white
 
 CORAL = (240, 71, 90)             # the kit's red
@@ -1115,10 +1139,9 @@ def build_pictures(tex, slots_ids, log=print):
     record keeps the stock words except fourcc (ABGR), mips (1), the animated flag, size and pixels."""
 
     out = {}
-
+    slots = picture_slots()
     for slot, tid in sorted(slots_ids.items()):
-
-        kind = PLATE_SLOTS.get(slot)
+        kind = slots.get(slot)
 
         if kind is None or tid not in tex.tex or tid in out:
 
@@ -1130,7 +1153,16 @@ def build_pictures(tex, slots_ids, log=print):
 
         q = e.index(b'\0', 36) + 1
 
-        px = _plate_pixels(kind, tw, th)
+        if kind.startswith('mk_'):                         # a world marker (tools/kl_hud_marks.py); the car / chopper borrow a stock small icon
+            import kl_hud_marks as _M
+            g = _M.GLYPH_SLOTS.get(kind)
+            g = _M.decode(tex.tex[slots_ids[g]].entry) if g in slots_ids and slots_ids[g] in tex.tex else None
+            if kind in _M.GLYPH_SLOTS and g is None:
+                log('picture slot %3d id %4d %s: the stock icon it borrows (slot %d) is missing: kept stock' % (slot, tid, kind, _M.GLYPH_SLOTS[kind]))
+                continue
+            px = _M.marker_pixels(kind, tw, th, g)
+        else:
+            px = _plate_pixels(kind, tw, th)
 
         body = struct.pack('<4s4sIHHIIfI', b'ABGR', b'ABGR', _id, th, tw, 1, fl & ~0x100, sc, x20) + e[36:q] + struct.pack('<I', len(px)) + bytes(px)
 
@@ -1723,6 +1755,40 @@ def apply_pictures(src, dst, png=None, log=print, _files=None):
 
 
 
+def apply_markers(src, dst, shop=True, log=print):
+    """An already baked level (folder or zip) -> folder `dst` with ONLY the world markers restyled (tools/kl_hud_marks.py) and, with
+    shop, the shop's names (tools/kl_hud_shop.py): the upgrade of a level baked before 2026-10-13 without baking its fonts again."""
+    global MARKERS
+    import kl_hud_marks as _M
+    zp, order, files, ext = open_level(src)
+    tex = T.read_tex(files[ext['.TEX']])
+    slots = hud_slots(files, ext)
+    old, MARKERS = MARKERS, True
+    try:
+        new = build_pictures(tex, {k: v for k, v in slots.items() if k in _M.MARKER_SLOTS or k in _M.GLYPH_SLOTS.values()}, log)
+    finally:
+        MARKERS = old
+    for tid, (e, kind, tw, th, px) in new.items():
+        t = tex.tex[tid]
+        tex.tex[tid] = T.Texture(e, t.faces, t.cube, t.frames, t.group)
+    files[ext['.TEX']] = T.write_tex(tex)
+    changed = []
+    if shop:
+        import kl_hud_shop
+        changed = kl_hud_shop.apply_level(files, log)
+    os.makedirs(dst, exist_ok=True)
+    if os.path.abspath(dst) == os.path.abspath(os.path.dirname(zp)):
+        raise ValueError("the output folder is the build's own")
+    import kl_graft
+    out = kl_graft.write_zip(os.path.join(dst, os.path.basename(zp)), [(n, files[n]) for n in order])
+    for f in os.listdir(os.path.dirname(zp)):
+        q = os.path.join(os.path.dirname(zp), f)
+        if os.path.isfile(q) and not os.path.samefile(q, zp):
+            shutil.copyfile(q, os.path.join(dst, f))
+    log('wrote %s (%d marker pictures, %d .LOC member(s) with the shop names)' % (out, len(new), len(changed)))
+    return out
+
+
 # ------------------------------------------------------------------ preview
 
 def _png(path, w, h, rgb):
@@ -2249,7 +2315,7 @@ def preview_board(src, out, dumps, log=print):
 
 
 def main():
-
+    global MARKERS, SHOPNAMES
     a = sys.argv[1:]
 
     if not a:
@@ -2284,8 +2350,8 @@ def main():
         apply_pictures(a[1], a[2], png)
 
     elif cmd == 'all':
-
         kw = {}
+        _mk = _sn = None
 
         rest = a[3:]
 
@@ -2304,7 +2370,10 @@ def main():
 
             elif k == '--chip': kw['chip'] = float(rest.pop(0))
 
+            elif k == '--markers': _mk = int(rest.pop(0))           # 0 = keep the stock world markers under --look deadmen
+            elif k == '--shopnames': _sn = int(rest.pop(0))         # 0 = keep the shop's stock names under --look deadmen
             elif k == '--look' and rest.pop(0) == 'deadmen':      # the owner's look of 2026-10-11
+                MARKERS = SHOPNAMES = True
 
                 _g = _Gdi(); _own = _g.has('Anton') and _g.has('Montserrat')
 
@@ -2313,7 +2382,10 @@ def main():
                 kw.update(face='Anton' if _own else 'Impact', weight=400, scale=.9, caps=True, chip=.6, extras=True, specs=DRAFT_SPECS_ANTON if _own else DRAFT_SPECS)
 
             else: raise SystemExit('unknown option ' + k)
-
+        if _mk == 0:
+            MARKERS = False
+        if _sn == 0:
+            SHOPNAMES = False
         _out, _reps = apply(a[1], a[2], pictures=True, **kw)
 
         if kw.get('specs'):
@@ -2324,6 +2396,8 @@ def main():
 
         print('check:', 'PASS' if not bad else 'FAIL ' + '; '.join(bad))
 
+    elif cmd == 'markers':                                  # an already baked level: only the world markers (+ the shop names unless --shopnames 0)
+        apply_markers(a[1], a[2], shop=not ('--shopnames' in a and a[a.index('--shopnames') + 1] == '0'))
     elif cmd == 'extras':                                   # only the extra pictures, as PNGs to look at
 
         zp, order, files, ext = open_level(a[1])

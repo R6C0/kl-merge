@@ -355,7 +355,9 @@ static void klpu_ring_draw(void *ctx)
     if (!klpu_ring_on || !klu_draw_on || !klu_r.handle[113] || !(clock = klpu_clock())) return;
     cx = klpu_f(klpu_ring_cx); cy = klpu_f(klpu_ring_cy); frac = klpu_f(klpu_ring_frac);
     if (!(frac >= 0)) frac = 0; if (frac > 1.0f) frac = 1.0f;
-    if (klu_r.handle[114]) drew |= klu_pic(clock, ctx, KLU_NPIC, 114, cx - KLPU_DISC * 0.5f, cy - KLPU_DISC * 0.5f, KLPU_DISC, KLPU_DISC, KLPU_C_DISC, klu.layer - 2);
+    if (klu.wstyle && klu_r.handle[KLU_DAB_PIC]) { float d = KLPU_DISC / KLU_DAB_INK;      /* 2026-10-13: 114 of the watch bake is the watch face - the loot ring's disc is a plain dab there */
+        drew |= klu_pic(clock, ctx, KLU_NPIC, KLU_DAB_PIC, cx - d * 0.5f, cy - d * 0.5f, d, d, KLPU_C_DISC, klu.layer - 2); }
+    else if (klu_r.handle[114]) drew |= klu_pic(clock, ctx, KLU_NPIC, 114, cx - KLPU_DISC * 0.5f, cy - KLPU_DISC * 0.5f, KLPU_DISC, KLPU_DISC, KLPU_C_DISC, klu.layer - 2);
     klu_track(clock, ctx, cx, cy, KLPU_DISC * 0.5f, KLPU_C_THIN, klu.layer - 1);                 /* 115 = the thin ring at the disc's rim (re-baked 2026-10-12 at 0.40 of its square) */
     if (klu_r.handle[116]) klu_pic(clock, ctx, KLU_NPIC, 116, cx - KLPU_DOLLAR * 0.5f, cy - KLPU_DOLLAR * 0.5f, KLPU_DOLLAR, KLPU_DOLLAR, KLPU_C_DOLLAR, klu.layer - 1);
     if (frac < 0.012f) frac = 0.012f;                                 /* a stub stands as soon as he loots */
