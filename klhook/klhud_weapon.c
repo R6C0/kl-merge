@@ -138,11 +138,11 @@
 /* THE LAYOUT, virtual 1280 x 720 pixels, all relative to the dial's middle (cx, cy). re\hud_layout.md's numbers were
    written for the draft's own margin (middle 1177, 598); here the middle follows the game's inset. NOTHING OF IT HAS
    BEEN SEEN: change the numbers here, not in the code. */
-#define KLWD_S           (klu.wstyle ? 0.76f : 0.85f)                 /* 2026-10-12, the owner: 'could shrink the weapon one slightly' (0.85, then once more 0.76 on 'sixes mostly right, shrink the weapon one slightly'): the whole circle about its centre (ring, disc, gun pictures, divider, counts' places, label) x 0.85 */
+#define KLWD_S           (klu.wstyle ? klwd.size : 0.85f)    /* 2026-10-13, the owner: 'i want the gun ui to be a bit smaller': [HUD] WeaponSize (watch look; default 0.66, was 0.76 - before that 0.85 on 'could shrink the weapon one slightly') */
 #define KLWD_D0          141.0f                /* the old disc's diameter: the CENTRE stays where it was (it follows the inset by this) */
 #define KLWD_D           (KLWD_D0 * KLWD_S)    /* the disc's diameter */
 #define KLWD_FROM_BOTTOM 86.0f                 /* the middle stands this far above the inset line (720 - 36 - 86 = 598) */
-#define KLWD_RING_R      (62.0f * KLWD_S)      /* the ring's centre line: the baked family B (klu_arc) */
+#define KLWD_RING_R      ((klu.wstyle ? 56.0f : 62.0f) * KLWD_S)      /* the ring's centre line: the baked family B (klu_arc). 2026-10-13 watch look 62 -> 56: 'the white outer circle to be a bit smaller' (the draft's ring sits close round the counts) */
 #define KLWD_RING_N      64                    /* run V2: 32 read as beads; V3: 48 still did (dab ink 0.59 x 0.74 of the picture) */
 #define KLWD_DAB_W       12.0f
 #define KLWD_DAB_H       10.0f
@@ -189,7 +189,7 @@ struct klwd_raw {
 struct klwd_q { DWORD handle; float x, y, w, h, scale; DWORD argb; int layer; float rec[0x74 / 4]; };
 
 #define KLWD_NQ 3                              /* two guns and the arrow */
-static struct { float x, y, small_size, labelw, labelright; int other; } klwd;
+static struct { float x, y, small_size, labelw, labelright, size; int other, grit; } klwd;
 static struct {
     DWORD elem; int wrapped, ok, scaled, told_nocount, told_arrow; const char *why, *said_why;
     struct klwd_q q[KLWD_NQ]; int nq;
@@ -484,11 +484,47 @@ static void klwd_label(float cx, float cy, const char *name, int n0, int low)
 }
 
 static void klwd_base(float cx, float cy)
-{   /* the watch look's circle: case, face, wear (the label bar is separate) */
-    float rc = KLWD_D * 0.5f, rf = rc - 2.3f, sc = rc / KLW_DISC_K, sf = rf / KLW_DISC_K;
-    klu_addpic(114, cx - sc * 0.5f, cy - sc * 0.5f, sc, sc, KLW_C_CASE, klu.layer - 4);
-    klu_addpic(114, cx - sf * 0.5f, cy - sf * 0.5f, sf, sf, KLW_C_FACE, klu.layer - 3);
-    if (klu.wwear && klu_r.handle[112]) klu_addpic(112, cx - sf * 0.5f, cy - sf * 0.5f, sf, sf, KLW_C_WEAR, klu.layer - 3);
+{   /* the watch look's circle. 2026-10-13, the owner: 'gun ui shouldnt have the clock only time related stuff should': picture 114 of the watch
+       bake IS the watch face (batons, rim notches) and 112 its wear, so the gun no longer draws them - a plain dark disc of round brush dabs
+       (113, its own soft uneven rim): case colour, a face-colour one 2.3 px inside. The watch and the escape dial keep 114 / 112 / 115. */
+    float rc = KLWD_D * 0.5f;
+    if (!klu_r.handle[KLU_DAB_PIC]) return;
+    klu_dab_at(cx, cy, rc * 2.0f, KLW_C_CASE, klu.layer - 4);
+    klu_dab_at(cx, cy, (rc - 2.3f) * 2.0f, KLW_C_FACE, klu.layer - 3);
+}
+
+static DWORD klwd_hash(DWORD k)
+{   /* a fixed scatter for the grit: the same every frame, nothing flickers */
+    k ^= k >> 16; k *= 0x7feb352du; k ^= k >> 15; k *= 0x846ca68bu; k ^= k >> 16; return k;
+}
+
+static void klwd_grit(float cx, float cy, float r, float stroke, float f, DWORD ink, int layer)
+{   /* 2026-10-13, the owner: 'the white outer circle ... more gritty how it is in that artifact' - the draft's distressed chalk (specks and
+       short scratches inside the paint, rough edges, not bands). Over the baked stroke (klu_arc, family B) on the SAME layer, after it (the call
+       order inside a layer lays these over it), only along the part drawn (0 .. f), in the face colour: a bite into the inner or outer edge
+       about every 7.5 px, a speck or a short scratch inside the paint at about one place in three, now and then a dry break; a chalk fleck off
+       the edge here and there. Placed by angle, so a ring that empties keeps its marks where they were. About 45 pictures for a full
+       magazine (klhud.c KLU_NPIC 300; the worst frame seen ~230 with the old gun dial's ~10). */
+    float len = r * 6.2831853f, step = 7.5f; int n = (int)(len / step), k, m = (int)((float)n * f);
+    for (k = 0; k < m; k++) {
+        DWORD h = klwd_hash((DWORD)k * 2654435761u + 0x9e37u);
+        float u0 = (float)(h & 255) / 255.0f, u1 = (float)((h >> 8) & 255) / 255.0f, u2 = (float)((h >> 16) & 255) / 255.0f;
+        float t = ((float)k + u0) / (float)n, a, sa, ca, side = (k & 1) ? 1.0f : -1.0f, rr;
+        if (t > f || t < 0.012f) continue;                                  /* past the drawn part; the stroke's head at 12 stays clean */
+        a = 6.2831853f * t; sa = (float)sin(a); ca = (float)cos(a);
+        rr = r + side * (stroke * 0.5f + 0.2f - 0.5f * u1);                 /* the bite's middle a little inside or outside the edge */
+        klu_dab_at(cx + rr * sa, cy - rr * ca, stroke * (0.5f + 0.4f * u2), KLW_C_FACEDAB, layer);
+        switch ((h >> 24) & 15) {
+        case 0: klu_dab_at(cx + r * sa, cy - r * ca, stroke * 0.95f, KLW_C_FACEDAB, layer); break;                    /* a dry break */
+        case 1: case 2: case 3: {                                                                                         /* a short scratch along the stroke */
+            float o = (u1 - 0.5f) * stroke * 0.5f, b = a + 1.6f / r; int q;
+            for (q = 0; q < 2; q++) { float aa = a + (b - a) * (float)q; klu_dab_at(cx + (r + o) * (float)sin(aa), cy - (r + o) * (float)cos(aa), 0.9f, KLW_C_FACEDAB, layer); }
+            break; }
+        case 4: case 5: { float o = (u2 - 0.5f) * stroke * 0.6f; klu_dab_at(cx + (r + o) * sa, cy - (r + o) * ca, 1.0f + u1, KLW_C_FACEDAB, layer); break; }   /* a speck */
+        case 6: { float fr = r + side * (stroke * 0.5f + 1.4f); klu_dab_at(cx + fr * sa, cy - fr * ca, 1.0f + u1 * 0.8f, ink, layer); break; }          /* a fleck */
+        default: break;
+        }
+    }
 }
 
 static int klwd_queue(DWORD el, int slot, int pic, float x, float y, float w, float h, float scale, DWORD argb)
@@ -591,6 +627,7 @@ static void klwd_compose(void)
                     klu_track_f(NULL, NULL, cx, cy, KLWD_RING_R, 1, klu.wstyle ? KLWD_C_TRACKB : KLU_TRACK_C, klu.layer - 2);
                     if (f < 0.012f && (a->rounds > 0 || r.frac > 0)) f = 0.012f;        /* a round in = at least a stub */
                     if (f > 0) klu_arc(NULL, NULL, cx, cy, KLWD_RING_R, 1, 0.0f, f, warn ? KLU_C_CORAL : KLU_C_CHALK, klu.layer - 1);
+                    if (f > 0 && klu.wstyle && klwd.grit && klu_r.handle[KLU_DAB_PIC]) klwd_grit(cx, cy, KLWD_RING_R, klu_arc_ratio_w[1] * KLWD_RING_R, f, warn ? KLU_C_CORAL : KLU_C_CHALK, klu.layer - 1);
                 }
                 n0 = a->rounds >= 0 ? a->rounds : a->total;
                 if (a->rounds < 0 && !klwd_r.told_nocount) {       /* review S7: the big number means something else then - said once a level */
@@ -677,6 +714,8 @@ static void klwd_init(void)
     GetPrivateProfileStringA("HUD", "WeaponY", "-1", t, sizeof t, klh_ini); klwd.y = (float)atof(t);
     GetPrivateProfileStringA("HUD", "WeaponSmall", "0.8", t, sizeof t, klh_ini); klwd.small_size = (float)atof(t);
     klwd.other = GetPrivateProfileIntA("HUD", "WeaponOther", 0, klh_ini) != 0;
+    GetPrivateProfileStringA("HUD", "WeaponSize", "0.66", t, sizeof t, klh_ini); klwd.size = (float)atof(t); if (!(klwd.size >= 0.4f && klwd.size <= 1.2f)) klwd.size = 0.66f;      /* the watch look's scale of the whole circle (2026-10-13; was 0.76) */
+    klwd.grit = GetPrivateProfileIntA("HUD", "WeaponGrit", 1, klh_ini) != 0;      /* 1 = the distressed-chalk marks on the magazine stroke (watch look) */
     if (!(klwd.x <= 1280)) klwd.x = -1; if (!(klwd.y <= 720)) klwd.y = -1;
     if (!(klwd.small_size >= 0 && klwd.small_size <= 2.0f)) klwd.small_size = 0.8f;
     GetPrivateProfileStringA("HUD", "LabelCharW", klu.wstyle ? "11.6" : "10.5", t, sizeof t, klh_ini); klwd.labelw = (float)atof(t); if (!(klwd.labelw >= 4 && klwd.labelw <= 30)) klwd.labelw = 10.5f;      /* v22 */

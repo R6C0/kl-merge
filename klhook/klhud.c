@@ -290,7 +290,7 @@ static struct {
     int draft;                                /* Draft: the defaults of every part of the draft are 1 */
     int lives, roundof;                       /* Lives, RoundOf (klhud_values.c) */
     int on, log, stock, crew, money, round, hide, shadow, tags, cashshort, totalfont, draw, plates, anchor, pictest, grid, probe, layer, rows, dials;
-    int wstyle, wini, wseconds, wwear, wlast, labelbar, labelslash;   /* wini = [HUD] WatchStyle as set; wstyle = the look THIS level gets (klu_choose_look) */
+    int wstyle, wini, wseconds, wwear, wlast, labelbar, labelslash, mfill;   /* wini = [HUD] WatchStyle as set; wstyle = the look THIS level gets (klu_choose_look) */
       /* the watch look (section 14 of re\hud_hook.md): WatchStyle (1 = new, 0 = the old textures and sizes), WatchSeconds, WatchWear, WatchLast, LabelBar (0 text only, 1 painted bar, 2 plain), LabelSlash */
     float inset, crew_x, crew_y, crew_w, row, money_x, money_y, money_w, round_y;
     float yoff, blockup, blockh, padx;        /* the rows: the text's y under the head, the block's rise above it, its height, the text's side margin (the draft: 34 / 5 / 28 / 8) */
@@ -1110,7 +1110,7 @@ static int klu_compose(int *state_ok)
             if (f > 1.0f) f = 1.0f;
             if (klu.grid != 2 && total <= 0) f = 0.0f;           /* 2026-10-12 (run S1: a stub of fill at TOTAL $0): no money, no fill */
             if (f * klu.money_w < 1.5f) f = 0.0f;
-            if (klu.wstyle && klu.draft && klu_r.handle[KLU_MFILL_PIC]) klu_money_bar(x, klu_r.my + KLU_W_BAR_Y, klu.money_w, f, klu.layer - 2);
+            if (klu.wstyle && klu.draft && klu.mfill && klu_r.handle[KLU_MFILL_PIC]) klu_money_bar(x, klu_r.my + KLU_W_BAR_Y, klu.money_w, f, klu.layer - 2);
             else {
                 klu_outline(x, y, klu.money_w, bh, KLU_C_CHALK, klu.layer - 2);
                 klu_addpic(181, x - 2.0f, y - 2.0f, klu.money_w * f, bh + 4.0f, KLU_C_CHALK, klu.layer - 2);
@@ -1460,7 +1460,7 @@ static void klu_init(void)
     klu.shadow = klu_inii("Shadow", 1, 0, 1); if (klu.draw == 2) klu.shadow = 1;     /* the stock Render draws a pair */
     klu.tags = klu_inii("Tags", 1, 0, 1); klu.cashshort = klu_inii("CashShort", 1, 0, 1); klu.totalfont = klu_inii("TotalFont", 0, 0, 1);
     klu.draft = klu_inii("Draft", 0, 0, 1);              /* the whole draft: the defaults of Plates, Dials, Weapon, RoundOf (and klhud_popup.c's Popups, LootRing) become 1; a key that is set still wins */
-    klu.wini = klu.wstyle = klu_inii("WatchStyle", 0, 0, 1);       /* review MUST 2: default 0 (old extras on the installed maps); set 1 ONLY with maps baked by kl_hud.py --watch 1 */ klu.wseconds = klu_inii("WatchSeconds", 0, 0, 1); klu.wwear = klu_inii("WatchWear", 1, 0, 1); klu.wlast = klu_inii("WatchLast", 1, 0, 1);       /* review SHOULD 3: blank the stock red digits in the last minute (they would sit on the hands) */
+    klu.wini = klu.wstyle = klu_inii("WatchStyle", 0, 0, 1);       /* review MUST 2: default 0 (old extras on the installed maps); set 1 ONLY with maps baked by kl_hud.py --watch 1 */ klu.wseconds = klu_inii("WatchSeconds", 0, 0, 1); klu.wwear = klu_inii("WatchWear", 1, 0, 1); klu.wlast = klu_inii("WatchLast", 1, 0, 1); klu.mfill = klu_inii("MoneyFill", 1, 0, 1);       /* 2026-10-13: slot 117 is 256 x 32 in BOTH watch bakes (the old 'frame' before 652db0c, 'mfill' after), so the hook cannot tell them apart - MoneyFill=0 keeps the old flat bar on maps baked before 652db0c (the owner's hud_tab_wm set), where 117 would draw an empty outline */       /* review SHOULD 3: blank the stock red digits in the last minute (they would sit on the hands) */
     klu.labelbar = klu_inii("LabelBar", 1, 0, 2); klu.labelslash = klu_inii("LabelSlash", 1, 0, 1);      /* the watch look (re\hud_hook.md 14): the level must be baked with kl_hud.py --watch <the same 0 / 1> */
     klu.dials = klu_inii("Dials", klu.draft, 0, 1);      /* the round watch + the escape dial (needs the level's extra pictures 113 / 114) */
     klu.weapon = klu_inii("Weapon", klu.draft, 0, 1); klwd_init();      /* the weapon dial (klhud_weapon.c; needs 113 / 114 too) */
