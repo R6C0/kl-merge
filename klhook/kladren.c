@@ -10,7 +10,7 @@
  *   b. A DOWNED crew member is one of
  *        - an AI heister the GAME has put down (byte [actor+0x64c] set: the NPC's 'down not dead', which only happens
  *          with [Down] Bots=1 - re\player_down.md 11), or
- *        - the local human in the game's own knock-down ([D+4] 1 lying / 3 getting up, D = [player+0x2948]).
+ *        - the local human in the game's own knock-down ([D+4] 1 lying / 2 on the floor in kldown.c's fall / 3 getting up, D = [player+0x2948]).
  *      A HELPER is another crew record in play, no traitor, not down itself, within Range (a human helper, optionally
  *      only while he holds Use: NeedUse) or BotRange (an AI heister standing by a downed human - the escort holds
  *      about 3 m from him) of the downed man.
@@ -325,7 +325,7 @@ static void kad_tick(int game_thread)
         if (!r->used) { if (k->actor) memset(k, 0, sizeof *k); continue; }
         if (k->actor != r->actor) { memset(k, 0, sizeof *k); k->actor = r->actor; k->by = -1; }
         if (r->status != 0) continue;           /* aboard / escaped / dead: out of play */
-        if (i == sn.human) { if (i == hs && (ds == 1 || ds == 3)) d = 1; }
+        if (i == sn.human) { if (i == hs && ds >= 1 && ds <= 3) d = 1; }     /* 2 = on the floor in kldown.c's knock-down (live, run v52_RTW2: 'down state 2'): down too */
         else if ((r->flags & 1) && r->actor && klh_rd32(r->actor) == KLB_ACTOR_VT && (s = klh_rd32(r->actor + 0x77c)) != 0 && klh_rd32(s) == KAD_SOLDIER_VT && klh_rd32(s + 0x40) == r->actor) {
             klh_rd(r->actor + 0x64c, &d, 1);
             if (d) { dn_ = klh_rd32(s + 0x4b8); if (dn_ && klh_rd32(dn_ + 4) != s) dn_ = 0; dnd[i] = dn_; }

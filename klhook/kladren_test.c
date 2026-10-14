@@ -222,6 +222,17 @@ int main(void)
     pass(100); W8(ACT(1) + 0x64c, 1); W32(DND(1) + 0x14, tick + 6144); pass(100); Sleep(700); pass(100);
     CHECK(g_orders == 0, "Rush: an escort is not taken from the human for a downed bot");
     memset(&kle_r, 0, sizeof kle_r);
+
+    /* ---- 9 (2026-10-14): the human in kldown.c's fall reads 'down state 2' - he is down, and a bot is sent to him (his escort may go) */
+    printf("--- scenario 9\n"); world(); kad.rush = 1; kad.rushrange = 25.0f; g_orders = 0; kle_r.used[1] = 1;
+    g_feet[0] = 5000; pass(100);                            /* bot 1 (his escort) 10 m off, bot 2 20 m */
+    W32(DD + 4, 2); pass(100);
+    CHECK(kad_r[0].down, "down state 2 = the human is down");
+    Sleep(700); pass(100);
+    CHECK(g_orders == 1 && kad_r[0].rusher == 1 + 1, "Rush: his escort (record 1, nearest) runs to the downed human");
+    W32(DD + 4, 0); pass(100);
+    CHECK(!kad_r[0].down && kad_r[0].rusher == 0, "he is up: the rush ends (the escort takes his own man back)");
+    memset(&kle_r, 0, sizeof kle_r);
     printf("\n%s (%d failure(s))\n", fails ? "FAILED" : "ALL PASS", fails);
     return fails != 0;
 }
