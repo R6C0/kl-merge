@@ -201,14 +201,33 @@ static int klh_exe_ok;                            /* the process image is kl2.ex
 static LONG_PTR klh_delta;                        /* 0 in the game; an off-game harness maps a copy of kl2.exe elsewhere */
 #define KLH_VA(x) ((BYTE *)((DWORD_PTR)(x) + klh_delta))
 
+/* KLHook.log stays OPEN for the whole run (2026-10-14, the owner: 'im getting bad stutters'): it used to be opened, appended to and
+   closed for every line - on the game's threads, several times a second, on a file of 60+ MB - and each close of a changed file
+   lets the virus scanner look at it again. Now one handle (append only, others may read, rename or delete it while the game runs),
+   one WriteFile a line (the line is whole: appends of one call never interleave), no close until the process ends. */
+static HANDLE volatile klog_h;
 static void klog(const char *fmt, ...)
 {
-    char path[MAX_PATH]; snprintf(path, sizeof path, "%s\\KLHook.log", dir);
-    FILE *f = fopen(path, "a"); if (!f) return;
-    SYSTEMTIME t; GetLocalTime(&t);
-    fprintf(f, "%02d:%02d:%02d.%03d ", t.wHour, t.wMinute, t.wSecond, t.wMilliseconds);
-    va_list a; va_start(a, fmt); vfprintf(f, fmt, a); va_end(a);
-    fputc('\n', f); fclose(f);
+    char buf[1536], *line = buf; int n, m; DWORD put; SYSTEMTIME t; va_list a; HANDLE h = klog_h;
+    if (!h) {
+        char path[MAX_PATH]; snprintf(path, sizeof path, "%s\\KLHook.log", dir);
+        h = CreateFileA(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, 0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+        if (h == INVALID_HANDLE_VALUE) return;
+        if (InterlockedCompareExchangePointer((void *volatile *)&klog_h, h, 0) != 0) { CloseHandle(h); h = klog_h; }
+    }
+    GetLocalTime(&t);
+    n = snprintf(buf, sizeof buf, "%02d:%02d:%02d.%03d ", t.wHour, t.wMinute, t.wSecond, t.wMilliseconds);
+    va_start(a, fmt); m = _vsnprintf(buf + n, sizeof buf - n - 2, fmt, a); va_end(a);
+    if (m < 0) {                                              /* longer than the buffer (none so far is over 1200): the heap */
+        int need; va_start(a, fmt); need = _vscprintf(fmt, a); va_end(a);
+        if (need > 0 && (line = (char *)HeapAlloc(GetProcessHeap(), 0, (SIZE_T)n + need + 3)) != 0) {
+            memcpy(line, buf, (size_t)n); va_start(a, fmt); m = _vsnprintf(line + n, (size_t)need + 1, fmt, a); va_end(a);
+        } else { line = buf; m = (int)(sizeof buf - n - 2); }
+        if (m < 0) m = 0;
+    }
+    n += m; line[n++] = '\r'; line[n++] = '\n';
+    WriteFile(h, line, (DWORD)n, &put, 0);
+    if (line != buf) HeapFree(GetProcessHeap(), 0, line);
 }
 
 static volatile LONG klh_reads;              /* klh_rd calls (the perf line; approximate: a plain count from several threads) */
@@ -683,17 +702,26 @@ static void __cdecl klh_w_runcallbacks(void)
         /* [KLHook] Perf=1 (2026-10-14, the owner's '200+ fps'): every 10 s one line - the game's frames (this wrapper runs once a frame
            on the main loop), the time this hook's tick took on the main thread, and its memory reads. The whole-run frames / ms of
            KLHook.result mixes menus and loads (it varied +-40 % between equal runs); this line is the in-game figure. */
-        static LARGE_INTEGER f, t0, a, b; static LONGLONG spent; static LONG frames, reads0; static int perf = -1;
+        static LARGE_INTEGER f, t0, a, b, prev; static LONGLONG spent, dt_max, tick_max; static LONG frames, reads0, hitch; static int perf = -1;
         if (perf < 0) { perf = GetPrivateProfileIntA("KLHook", "Perf", 1, klh_ini); QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0); reads0 = klh_reads; }
         if (perf) QueryPerformanceCounter(&a);
         klh_tick(1);
         if (perf) {
             QueryPerformanceCounter(&b); spent += b.QuadPart - a.QuadPart; frames++;
+            if (b.QuadPart - a.QuadPart > tick_max) tick_max = b.QuadPart - a.QuadPart;
+            if (prev.QuadPart) {                  /* STUTTER: frame to frame (2026-10-14, the owner: 'im getting bad stutters') */
+                LONGLONG dt = a.QuadPart - prev.QuadPart;
+                if (dt > dt_max) dt_max = dt;
+                if (dt * 30 > f.QuadPart) hitch++;  /* a frame over 33 ms */
+            }
+            prev = a;
             if (b.QuadPart - t0.QuadPart >= f.QuadPart * 10) {
                 double secs = (double)(b.QuadPart - t0.QuadPart) / (double)f.QuadPart, ms = (double)spent * 1000.0 / (double)f.QuadPart; LONG rd = klh_reads - reads0;
-                klog("core: perf: %ld frames in %.1f s = %.1f fps; the hook's tick %.2f ms a frame (%.1f %% of the frame time), %ld memory reads a frame",
-                     frames, secs, frames / secs, frames ? ms / frames : 0.0, ms / (secs * 10.0), frames ? rd / frames : 0L);
-                t0 = b; spent = 0; frames = 0; reads0 = klh_reads;
+                klog("core: perf: %ld frames in %.1f s = %.1f fps; the hook's tick %.2f ms a frame (%.1f %% of the frame time, slowest %.1f ms), %ld memory reads a frame; "
+                     "stutter: %ld frame(s) over 33 ms, the longest %.0f ms",
+                     frames, secs, frames / secs, frames ? ms / frames : 0.0, ms / (secs * 10.0), (double)tick_max * 1000.0 / (double)f.QuadPart,
+                     frames ? rd / frames : 0L, hitch, (double)dt_max * 1000.0 / (double)f.QuadPart);
+                t0 = b; spent = 0; frames = 0; reads0 = klh_reads; hitch = 0; dt_max = 0; tick_max = 0;
             }
         }
     }
