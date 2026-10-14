@@ -1011,7 +1011,7 @@ static void klu_row(int row, const char *name, long money, int kind)
     if (klu_r.card) {                                            /* the Tab card: the row's state as a word in its own column */
         static const char *const word[6] = { "ALIVE", "YOU", "TRAITOR", "DEAD", "ESCAPED", "FED" };
         static const DWORD col[6] = { KLU_C_OUT, KLU_C_BLUE, KLU_C_ORANGE, KLU_C_DEAD, KLU_C_GREENHI, KLU_C_BLUE };
-        struct klu_text *ts = &klu_r.t[KLU_T_TABST(row)]; int b = klu.plates && (kind == 1 || kind == 2);
+        struct klu_text *ts = &klu_r.t[KLU_T_TABST(row)]; int b = 0;          /* 2026-10-14 (owner's picture): the word stands beside the painted block, not on it */
         strcpy(ts->want, word[kind >= 0 && kind < 6 ? kind : 0]);
         ts->want_colour = b ? KLU_C_INK : col[kind >= 0 && kind < 6 ? kind : 0]; ts->noshadow = b; ts->on = klu.crew;
     }
@@ -1026,7 +1026,7 @@ static void klu_row(int row, const char *name, long money, int kind)
     default: tn->want_colour = KLU_C_CHALK; tc->want_colour = KLU_C_GREENHI; break;
     }
     if (!klu.plates || !klu.crew) return;
-    if (block) klu_addpic(klu_r.handle[111] ? 111 : 181, klu_r.cx - 4.0f, y - klu.blockup, klu.crew_w + 8.0f, klu.blockh, kind == 1 ? KLU_C_CHALK : KLU_C_ORANGE, klu.layer - 2);   /* 111 = the painted stroke (kl_hud extras) */
+    if (block) klu_addpic(klu_r.handle[111] ? 111 : 181, klu_r.cx - 4.0f, y - klu.blockup, klu_r.card ? klu.crew_w * KLU_CARD_ST - 44.0f : klu.crew_w + 8.0f, klu.blockh, kind == 1 ? KLU_C_CHALK : KLU_C_ORANGE, klu.layer - 2);   /* the Tab card: the block ends before the status column (the cash then reads on ink) */   /* 111 = the painted stroke (kl_hud extras) */
     if (kind == 3) {
         if (klu.draft) {                                           /* M2, the draft: (name width + 12) x 4 from x 33 + 2, centred on the row (name y + 7) */
             const unsigned char *c; float w = 0;

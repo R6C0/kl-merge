@@ -815,6 +815,25 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     }
     if (GetPrivateProfileIntA("KLHook", "Tick", 1, klh_ini)) n += klh_iat("steam_api.dll", "SteamAPI_RunCallbacks", (void *)klh_w_runcallbacks, (void **)&klh_real_runcallbacks);
     klog("core: %d import slot(s) wrapped (ExitProcess %s, SteamAPI_RunCallbacks %s); EndOnFatal=%d", n, klh_real_exitprocess ? "yes" : "no", klh_real_runcallbacks ? "yes" : "no", klh_end_on_fatal);
+    {   /* [Graphics] Look (2026-10-14, the owner: 'have these as different setting options so people can choose how they want their game to
+           look but not impact performance if they dont want it on'): 0 = Off, ReShade is not loaded at all (the stock frame rate; run
+           LOOK2: ~130 fps average with ReShade in the Direct3D 9 path against ~252 without); 1 = KL (ReShadePreset_KL.ini: KL_Look.fx, the
+           cool overcast grade); 2 = LiveLeak (ReShadePreset_LiveLeak.ini: KL_Camcorder.fx). ReShade - and with it the Uplift add-on, F10 -
+           is loaded from ReShade32.dll beside the game (it was d3d9.dll) after its ReShade.ini [GENERAL] PresetPath is pointed at the
+           chosen preset. Read once at start, before the game makes its device: a change needs a restart. [Graphics] ReShade=0 = Look=0. */
+        static const char *const preset[3] = { "", ".\\ReShadePreset_KL.ini", ".\\ReShadePreset_LiveLeak.ini" };
+        static const char *const lname[3] = { "Off", "KL", "LiveLeak" };
+        char rp[MAX_PATH], ri[MAX_PATH]; int look = GetPrivateProfileIntA("Graphics", "Look", 1, klh_ini);
+        if (!GetPrivateProfileIntA("Graphics", "ReShade", 1, klh_ini)) look = 0;
+        if (look < 0 || look > 2) look = 1;
+        snprintf(rp, sizeof rp, "%s\\ReShade32.dll", dir); snprintf(ri, sizeof ri, "%s\\ReShade.ini", dir);
+        if (look && GetFileAttributesA(rp) != INVALID_FILE_ATTRIBUTES) {
+            HMODULE rm;
+            WritePrivateProfileStringA("GENERAL", "PresetPath", preset[look], ri);
+            rm = LoadLibraryA(rp);
+            klog("graphics: look %s: ReShade %s from %s (preset %s)", lname[look], rm ? "loaded" : "FAILED to load", rp, preset[look]);
+        } else klog("graphics: look %s: ReShade not loaded%s", lname[look], look ? " (no ReShade32.dll beside the game)" : "");
+    }
     klm_init();
     kln_init();
     klf_init();
