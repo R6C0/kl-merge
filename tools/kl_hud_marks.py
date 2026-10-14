@@ -17,6 +17,11 @@ NOT LOADED IN THE GAME YET. Which of 53 / 54 is the dropped-bag marker is NOT es
 import math, random, struct
 
 MARKER_SLOTS = {53: 'mk_loot', 54: 'mk_pin', 170: 'mk_car', 171: 'mk_chopper', 172: 'mk_cash'}
+# 2026-10-14 (the owner, a picture of the escape vehicle's marker: 'the van icon on the van ... looks weird with the bar n stuff'): the vehicle
+# marker in the world (ZGameplayTrackerDisplay, osd+0x10f8: icon + time + a progress bar) draws the GameplayTracker bars 161..164 and the
+# Meter_BG frame 169, which the plate restyle (kl_hud.PLATE_SLOTS) had made outlined boxes with a chalk fill. Under the markers they become
+# a quiet thin line: no frame, a faint full-length track and a 3 px chalk fill of 4/4 .. 1/4 of the width.
+MARKER_SLOTS.update({169: 'trk_meter', 161: 'trk_bar0', 162: 'trk_bar1', 163: 'trk_bar2', 164: 'trk_bar3'})
 GLYPH_SLOTS = {'mk_car': 173, 'mk_chopper': 174}          # stock 32 x 32 white silhouettes the escape markers borrow
 
 INK = (12, 12, 13)
@@ -98,9 +103,29 @@ def _glyph_bbox(al):
 
 
 # ---- the markers -------------------------------------------------------------------------------------------------------------
+def tracker_pixels(kind, w, h):
+    """RGBA of the vehicle marker's bar pictures: 'trk_meter' empty; 'trk_barK' a thin chalk line, (4 - K) / 4 of the width"""
+    px = bytearray(4 * w * h)
+    if kind == 'trk_meter':
+        return px
+    k = int(kind[-1]); cy = h // 2; x1 = int((w - 8) * (4 - k) / 4.0) + 4
+    for y in range(cy - 2, cy + 3):
+        for x in range(4, w - 4):
+            j = 4 * (y * w + x)
+            if cy - 1 <= y <= cy + 1 and x < x1:
+                px[j:j + 4] = bytes((CHALK[0], CHALK[1], CHALK[2], 0xf0))
+            elif y == cy + 2 and x < x1:
+                px[j:j + 4] = bytes((INK[0], INK[1], INK[2], 0x90))
+            elif y == cy:
+                px[j:j + 4] = bytes((CHALK[0], CHALK[1], CHALK[2], 0x40))
+    return px
+
+
 def marker_pixels(kind, w, h, glyph=None, dollar=None):
     """RGBA bytes of marker `kind` (MARKER_SLOTS) at w x h. glyph: (w, h, RGBA) of the borrowed stock silhouette (car / chopper).
     dollar: RGBA of picture 116 (128 x 128); default = kl_hud's own bake of it (GDI: Windows only)."""
+    if kind.startswith('trk_'):
+        return tracker_pixels(kind, w, h)
     import kl_hud_watch as W
     import kl_hud as H
     S = min(w, h)

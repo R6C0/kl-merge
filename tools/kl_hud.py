@@ -1153,7 +1153,7 @@ def build_pictures(tex, slots_ids, log=print):
 
         q = e.index(b'\0', 36) + 1
 
-        if kind.startswith('mk_'):                         # a world marker (tools/kl_hud_marks.py); the car / chopper borrow a stock small icon
+        if kind.startswith(('mk_', 'trk_')):               # a world marker (tools/kl_hud_marks.py); the car / chopper borrow a stock small icon
             import kl_hud_marks as _M
             g = _M.GLYPH_SLOTS.get(kind)
             g = _M.decode(tex.tex[slots_ids[g]].entry) if g in slots_ids and slots_ids[g] in tex.tex else None
