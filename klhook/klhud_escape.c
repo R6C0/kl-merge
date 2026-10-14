@@ -228,7 +228,7 @@ static void klesc_paint(void *ctx)
     drew |= klu_pic(clock, ctx, KLU_NPIC, bar, x0, klesc_p.mid - klesc_p.bh * 0.5f, klesc_p.bw, klesc_p.bh, KLU_C_CHALK, klesc.layer);
     /* the vehicle icon, orange (the state's meaning kept) */
     if (klesc_p.icon_slot > 0 && klu_r.handle[klesc_p.icon_slot])
-        drew |= klu_pic(clock, ctx, KLU_NPIC, klesc_p.icon_slot, klesc_p.ix, klesc_p.iy, (float)klesc.icon, (float)klesc.icon, klesc_p.icon_rgb, klesc.layer + 2);
+        drew |= klu_pic(clock, ctx, KLU_NPIC, klesc_p.icon_slot, klesc_p.ix - (float)klesc.icon * (KLU_VDISC - 1.0f) * 0.5f, klesc_p.iy - (float)klesc.icon * (KLU_VDISC - 1.0f) * 0.5f, (float)klesc.icon * KLU_VDISC, (float)klesc.icon * KLU_VDISC, klesc_p.icon_rgb, klesc.layer + 2);      /* KLU_VDISC: the disc is baked smaller inside the picture */
     /* the health bar: dark track, painted fill, frame */
     drew |= klu_pic(clock, ctx, KLU_NPIC, 181 > 0 && klu_r.handle[181] ? 181 : bar, klesc_p.bx, klesc_p.by, klesc_p.bwid, klesc_p.bhgt, KLESC_C_TRACK, klesc.layer);
     if (klesc_p.frac > 0.005f)

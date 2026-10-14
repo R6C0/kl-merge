@@ -13,7 +13,7 @@
  *     back by compare-and-swap) - no ball, no time, no arrow at the screen's edge;
  *   - the scale float is TrackerScale for the length of the call (put back after; the render thread runs the HUD one element at a
  *     time, so no other element sees it).
- * Keys ([HUD], needs Enable=1): Tracker=1 (0 = stock)  TrackerNear=30 (m; 0 = no distance limit)  TrackerScale=0.6 (0.3 .. 1.0)
+ * Keys ([HUD], needs Enable=1): Tracker=1 (0 = stock)  TrackerNear=30 (m; 0 = no distance limit)  TrackerScale=1.0 (0.3 .. 1.0; OFF by default: live v60_TRK the scale float moved the marker's parts apart - a stray piece of its bar - rather than shrinking them; the ball is made smaller in its picture instead, tools/kl_hud_marks.py VEHICLE_DISC)
  */
 #define KLHUD_TRACKER_C
 
@@ -82,7 +82,7 @@ static int kltrk_wrap(DWORD osd)
     if (cur != KLTRK_VT) { if (!kltrk_r.told++) klog("hud: tracker: the element at osd+0x10f8 = %08lx has vtable %08lx, not ZGameplayTrackerDisplay's: the marker stays stock", el, cur); return 0; }
     if (!klh_data((void *)(DWORD_PTR)el, &vt, 4, "the vehicle marker's vtable (private copy, slot 2 wrapped)")) return 0;
     kltrk_r.elem = el;
-    klog("hud: tracker: element %08lx (the vehicle marker) renders through the private vtable: hidden beyond %.0f m, drawn at %.0f %% size", el, kltrk.near_m, kltrk.scale * 100.0f);
+    klog("hud: tracker: element %08lx (the vehicle marker) renders through the private vtable: hidden beyond %.0f m, the scale float at %.0f %% for its call", el, kltrk.near_m, kltrk.scale * 100.0f);
     return 1;
 }
 
@@ -107,6 +107,6 @@ static void kltrk_init(void)
     kltrk.on = klu_inii("Tracker", 1, 0, 1);
     if (!kltrk.on) return;
     kltrk.near_m = klu_inif("TrackerNear", "30"); if (!(kltrk.near_m >= 0 && kltrk.near_m <= 1000)) kltrk.near_m = 30;
-    kltrk.scale = klu_inif("TrackerScale", "0.6"); if (!(kltrk.scale >= 0.3f && kltrk.scale <= 1.0f)) kltrk.scale = 0.6f;
+    kltrk.scale = klu_inif("TrackerScale", "1.0"); if (!(kltrk.scale >= 0.3f && kltrk.scale <= 1.0f)) kltrk.scale = 1.0f;
     klog("hud: tracker: on; the vehicle marker shows within %.0f m only, at %.0f %% of its size", kltrk.near_m, kltrk.scale * 100.0f);
 }

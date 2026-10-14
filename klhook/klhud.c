@@ -219,6 +219,7 @@
 #define KLU_CARD_INK    0xd80c0c0du           /* the painted bands */
 #define KLU_CARD_UNDER  0x9c0c0c0du           /* the solid ink under them */
 #define KLU_CARD_BAND   28.0f                 /* a band's height (they overlap by 6) */
+#define KLU_VDISC       (1.0f / 0.6f)         /* 2026-10-14: picture 170 / 171 (the vehicle disc) is baked with its disc at 0.6 of the picture (tools/kl_hud_marks.py VEHICLE_DISC: the world marker draws it at a fixed size); every place here that draws it grows by this, so it looks as before */
 #define KLU_CARD_STDY   5.0f                  /* the status word lower by this: live (run v45_KL, 80 s) its capitals sat 5 px above the name's (the label font's ascent is not the baked one) */
 #define KLU_T_TABST(i)  (KLU_T_ESC + 1 + (i))  /* the Tab card's status column, one a row (2026-10-13) */
 #define KLU_NTEXT       (KLU_T_TABST(KLU_ROWS))   /* LAST: every part that adds texts goes before this line (klhud_values.c / klhud_popup.c add none) */
@@ -940,7 +941,7 @@ static void klu_escape_look(float cx, float cy, float left, int icon)
     float k = KLW_ESC_K;
     klu_dial_base(cx, cy, k, KLW_C_PIPS_ESC, klu.layer);
     klu_arc(NULL, NULL, cx, cy, KLW_R_STROKE * k, 0, 1.0f - left, 1.0f, KLW_C_ORANGE, klu.layer - 1);
-    klu_addpic(icon, cx - 13.0f, cy - 13.0f, 26.0f, 26.0f, KLW_C_CHALK, klu.layer);      /* the watch chalk, as tools/kl_hud_watch.py draw_escape (C vs model check, cloud 2026-10-12) */
+    klu_addpic(icon, cx - 13.0f * KLU_VDISC, cy - 13.0f * KLU_VDISC, 26.0f * KLU_VDISC, 26.0f * KLU_VDISC, KLW_C_CHALK, klu.layer);      /* the watch chalk, as tools/kl_hud_watch.py draw_escape (C vs model check, cloud 2026-10-12) */
 }
 
 
@@ -995,7 +996,7 @@ static void klu_dials(const struct klb_snap *s)
         klu_addpic(114, ex - 27.5f, ey - 27.5f, 55.0f, 55.0f, 0x9c080809u, klu.layer - 2);
         klu_track(NULL, NULL, ex, ey, 23.0f, KLU_TRACK_C, klu.layer - 1);
         klu_arc(NULL, NULL, ex, ey, 23.0f, 0, 1.0f - left, 1.0f, KLU_C_ORANGE, klu.layer);
-        klu_addpic(i, ex - 21.0f, ey - 21.0f, 42.0f, 42.0f, KLU_C_CHALK, klu.layer);      /* run T2: at 30 the icon's own margin left a 14 px car */
+        klu_addpic(i, ex - 21.0f * KLU_VDISC, ey - 21.0f * KLU_VDISC, 42.0f * KLU_VDISC, 42.0f * KLU_VDISC, KLU_C_CHALK, klu.layer);      /* run T2: at 30 the icon's own margin left a 14 px car */
     }
 }
 
@@ -1144,7 +1145,7 @@ static int klu_compose(int *state_ok)
         if (tobj && klh_rd32(tobj) == KLU_TEXT_VT && (str = klh_rd32(tobj + 0xa4)) != 0) klh_rdstr(str + 0xc, tt, sizeof tt);
         snprintf(klu_r.t[KLU_T_ESC].want, KLU_TEXTLEN, "%s", tt[0] ? tt : "--:--"); klu_r.t[KLU_T_ESC].on = 1;
         klu_addpic(klu_r.handle[111] ? 111 : 181, x0 - 8.0f, y0, w + 14.0f, KLU_ESC_H, 0xd80c0c0du, klu.layer - 3);
-        if (slot > 0 && slot < 200 && klu_r.handle[slot]) klu_addpic(slot, x0 + 2.0f, y0 + KLU_ESC_H * 0.5f - 13.0f, 26.0f, 26.0f, KLU_C_CHALK, klu.layer);
+        if (slot > 0 && slot < 200 && klu_r.handle[slot]) klu_addpic(slot, x0 + 15.0f - 13.0f * KLU_VDISC, y0 + KLU_ESC_H * 0.5f - 13.0f * KLU_VDISC, 26.0f * KLU_VDISC, 26.0f * KLU_VDISC, KLU_C_CHALK, klu.layer);
         klu_addpic(181, x0, y0 + KLU_ESC_H + 3.0f, w, 3.0f, 0x6cf3f0eau, klu.layer - 2);
         if (frac > 0.005f) klu_addpic(181, x0, y0 + KLU_ESC_H + 3.0f, w * frac, 3.0f, frac < 0.3f ? KLU_C_CORAL : KLU_C_CHALK, klu.layer - 1);
     }
@@ -1155,7 +1156,7 @@ static int klu_compose(int *state_ok)
         if (st == KLUV_ST_ABOARD || st == KLUV_ST_ESCAPED) {
             float ix = klu_r.mx - 35.0f - 66.0f, iy = klu_r.wy;
             if (klu_r.handle[KLU_DAB_PIC]) klu_dab_at(ix, iy, 46.0f, 0xc80c0c0du, klu.layer - 2);
-            klu_addpic(170, ix - 15.0f, iy - 15.0f, 30.0f, 30.0f, st == KLUV_ST_ESCAPED ? KLU_C_GREENHI : KLU_C_GREEN, klu.layer);
+            klu_addpic(170, ix - 15.0f * KLU_VDISC, iy - 15.0f * KLU_VDISC, 30.0f * KLU_VDISC, 30.0f * KLU_VDISC, st == KLUV_ST_ESCAPED ? KLU_C_GREENHI : KLU_C_GREEN, klu.layer);
         }
     }
     if (klu.crew) {

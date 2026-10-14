@@ -23,6 +23,10 @@ MARKER_SLOTS = {53: 'mk_loot', 54: 'mk_pin', 170: 'mk_car', 171: 'mk_chopper', 1
 # a quiet thin line: no frame, a faint full-length track and a 3 px chalk fill of 4/4 .. 1/4 of the width.
 MARKER_SLOTS.update({169: 'trk_meter', 161: 'trk_bar0', 162: 'trk_bar1', 163: 'trk_bar2', 164: 'trk_bar3'})
 GLYPH_SLOTS = {'mk_car': 173, 'mk_chopper': 174}          # stock 32 x 32 white silhouettes the escape markers borrow
+# 2026-10-14 (the owner: the van marker's 'states are so big ... definitely smaller'): the escape vehicle's disc (170 / 171) fills this share of
+# its picture. The world marker draws the picture at a fixed size (the HUD scale float moves its parts apart instead of shrinking them, run
+# v60_TRK), so the disc is made smaller INSIDE the picture; klhud_escape.c's EscapeIcon (the van card's icon, the same picture) grows by 1 / this.
+VEHICLE_DISC = 0.6
 
 INK = (12, 12, 13)
 CHALK = (233, 230, 223)
@@ -134,6 +138,8 @@ def marker_pixels(kind, w, h, glyph=None, dollar=None):
     pin = kind == 'mk_pin'
     # the disc's square (in pixels): a pin puts the disc at the top and the point under it
     dr = S * (0.40 if pin else 0.47)
+    if kind in ('mk_car', 'mk_chopper'):
+        dr *= VEHICLE_DISC                                          # 2026-10-14: the van ball in the world, smaller (the picture keeps its size)
     dcx, dcy = w / 2.0, (S * 0.43 if pin else h / 2.0)
     if kind in ('mk_loot', 'mk_pin', 'mk_cash'):
         d = dollar if dollar is not None else H._extra_pixels('dollar', 128, 128)
