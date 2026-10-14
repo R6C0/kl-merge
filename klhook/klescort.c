@@ -389,7 +389,12 @@
 #define KLE_KILL_SLOTS  0xf1c                 /* rules: per slot one byte, the crew record it names (0x8fabfd, 0x74b910) */
 #define KLE_KILL_NEVER  0x7fffffffu           /* a time the loop's signed test (0x74b963 cmp / jg) never reaches */
 #define KLE_HOLD_AT     2.0f                  /* FollowOutHold: the wait timer under this many seconds gets more */
-#define KLE_HOLD_STEP   5.0f                  /* ... this much at a time: what the game's own hold rule adds (0x8b3959, 0xb5a068) */
+/* ... this much at a time. Was 5.0 (what the game's own hold rule adds, 0x8b3959 / 0xb5a068); the owner, 2026-10-14: the van marker's time
+   'keeps flickering and doesnt match' - every 5 s step threw the shown time from under 2 s back up to 7 (a saw-tooth, and the marker's
+   low-time state on and off). Now [Bots] HoldStep=0 (default) gives the whole rest of the hold in ONE step, so the time jumps once and then
+   counts down to the real departure; HoldStep=5 is the old behaviour. Read by klmove.c's WaitForYouHold too. */
+static float kle_hold_step = 60.0f;
+#define KLE_HOLD_STEP   kle_hold_step
 #define KLE_COME        200.0f                /* ... while a called bot COMES: this much nearer to the boarding place than 2 s before. GUESS (a walk is about 3 m/s) */
 #define KLE_BOARD_WIN   2.0f                  /* state 1 / 2 with the timer under this: the board tactic is live for a stage-3 bot (0x4faff7, 0x82f9be; float 0xb5c828) - no order */
 #define KLE_VEH_VT      0x00bcc0b4            /* ZAnimatedVehicle, the class's only vtable (slot 87 = 0x8fa330 its update, slot 89 = 0x87f340 its messages): the escape van's health object */
@@ -1292,6 +1297,7 @@ static void kle_init(void)
     kle.fo_money = (DWORD)klb_pos("FollowOutMoney", 1, 0x7fffffff);
     kle.fo_after = (DWORD)klb_pos("FollowOutAfter", 0, 600) * 1000;
     kle.fo_every = (DWORD)klb_pos("FollowOutEvery", 2, 60) * 1000; if (kle.fo_every < 1000) kle.fo_every = 1000;
+    kle_hold_step = klb_inif("HoldStep", "0"); if (!klb_finite(kle_hold_step) || kle_hold_step <= 0 || kle_hold_step > 60) kle_hold_step = 60.0f;      /* 0 = the whole hold at once */
     kle.fo_hold = klb_inif("FollowOutHold", "0"); if (!klb_finite(kle.fo_hold) || kle.fo_hold < 0) kle.fo_hold = 0; if (kle.fo_hold > 60) kle.fo_hold = 60;
     kle.fo_shield = klb_pos("FollowOutShield", 2, 3);                         /* also klmove.c's WaitForYouHold goes by it */
     if (kle.fo && klb.van && klb.van_left) {

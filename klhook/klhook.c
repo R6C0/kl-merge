@@ -211,9 +211,11 @@ static void klog(const char *fmt, ...)
     fputc('\n', f); fclose(f);
 }
 
+static volatile LONG klh_reads;              /* klh_rd calls (the perf line; approximate: a plain count from several threads) */
 static int klh_rd(DWORD_PTR p, void *out, SIZE_T n)
 {   /* never faults: nothing in this DLL may raise an exception of its own */
     SIZE_T got = 0;
+    klh_reads++;
     return p > 0xffff && ReadProcessMemory(GetCurrentProcess(), (void *)p, out, n, &got) && got == n;
 }
 static DWORD klh_rd32(DWORD_PTR p) { DWORD v = 0; klh_rd(p, &v, 4); return v; }
@@ -587,6 +589,7 @@ static void klh_tick(int game_thread);
 #include "klhud_popup.c"                              /* AFTER klhud.c: pop-ups + loot ring (uses its klu / klu_r / klu_pic) */
 #include "klhud_kill.c"                              /* AFTER klhud_popup.c: the kill / reward line under REWARDS (uses klpu_str) */
 #include "klhud_escape.c"                             /* AFTER klhud_popup.c: the escape-vehicle panel in the new look (uses klu / klu_r / klu_pic) */
+#include "klhud_tracker.c"                           /* AFTER klhud_escape.c: the vehicle marker in the world - smaller, only near ([HUD] Tracker) */
 #include "klhud_tags.c"                              /* AFTER klhud_escape.c: the tags over the heisters' heads (uses klu / klu_r / klu_cs / klnm_tag_ini) */
 #include "klhud_board.c"                             /* AFTER klhud_tags.c: the pre-round panel in the new look ([HUD] Board, default 0) */
 #include "klhud_board2.c"                            /* AFTER klhud_board.c: the round-over scoreboard ([HUD] Scoreboard, default 0) */
@@ -649,6 +652,7 @@ static void klh_tick(int game_thread)
     kly_tick(game_thread);                            /* klgrudge.c: the crew answers your bullets (off unless [Bots] Grudge) */
     klu_tick(game_thread);                            /* klhud.c: the crew list / money box texts (game thread only) */
     klesc_tick(game_thread);                          /* klhud_escape.c: the escape-vehicle panel (off unless [HUD] Escape / Draft) */
+    kltrk_tick(game_thread);                          /* klhud_tracker.c: the vehicle marker */
     klbrd_tick(game_thread);                          /* klhud_board.c: the pre-round panel (off unless [HUD] Board=1) */
     klsb_tick(game_thread);                           /* klhud_board2.c: the round-over scoreboard (off unless [HUD] Scoreboard=1) */
     klkf_tick(game_thread);                           /* klhud_kill.c: the kill / reward line under REWARDS (off unless [HUD] KillLine / Draft) */
@@ -675,7 +679,24 @@ static void __cdecl klh_w_runcallbacks(void)
     DWORD_PTR ra = (DWORD_PTR)_ReturnAddress(); int loop = ra >= (DWORD_PTR)KLH_VA(0x87a930) && ra < (DWORD_PTR)KLH_VA(0x87ab40);
     klh_real_runcallbacks();
     if (loop && klh_main_tid && klh_main_tid != GetCurrentThreadId()) loop = 0;
-    if (loop) klh_tick(1);
+    if (loop) {
+        /* [KLHook] Perf=1 (2026-10-14, the owner's '200+ fps'): every 10 s one line - the game's frames (this wrapper runs once a frame
+           on the main loop), the time this hook's tick took on the main thread, and its memory reads. The whole-run frames / ms of
+           KLHook.result mixes menus and loads (it varied +-40 % between equal runs); this line is the in-game figure. */
+        static LARGE_INTEGER f, t0, a, b; static LONGLONG spent; static LONG frames, reads0; static int perf = -1;
+        if (perf < 0) { perf = GetPrivateProfileIntA("KLHook", "Perf", 1, klh_ini); QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0); reads0 = klh_reads; }
+        if (perf) QueryPerformanceCounter(&a);
+        klh_tick(1);
+        if (perf) {
+            QueryPerformanceCounter(&b); spent += b.QuadPart - a.QuadPart; frames++;
+            if (b.QuadPart - t0.QuadPart >= f.QuadPart * 10) {
+                double secs = (double)(b.QuadPart - t0.QuadPart) / (double)f.QuadPart, ms = (double)spent * 1000.0 / (double)f.QuadPart; LONG rd = klh_reads - reads0;
+                klog("core: perf: %ld frames in %.1f s = %.1f fps; the hook's tick %.2f ms a frame (%.1f %% of the frame time), %ld memory reads a frame",
+                     frames, secs, frames / secs, frames ? ms / frames : 0.0, ms / (secs * 10.0), frames ? rd / frames : 0L);
+                t0 = b; spent = 0; frames = 0; reads0 = klh_reads;
+            }
+        }
+    }
 }
 
 /* ---------------------------------------------------------------- the stall watch (SHIP and TEST)
@@ -863,6 +884,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kly_init();
     klu_init();
     klesc_init();                                     /* klhud_escape.c: after klu_init */
+    kltrk_init();                                     /* klhud_tracker.c: after klu_init */
     klbrd_init();                                     /* klhud_board.c: after klu_init */
     klsb_init();                                      /* klhud_board2.c: after klu_init */
     klkf_init();                                      /* klhud_kill.c: after klu_init */
