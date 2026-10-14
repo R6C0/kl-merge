@@ -18,8 +18,8 @@
  * 257..260). ReShade's own passes draw through its device, not through the slot the game calls, so they keep their filters.
  * Read once at start: a change needs a restart. Off (Textures=0): nothing is wrapped at all.
  *
- * Keys ([Graphics]): Textures=1 (0 = off; 1 steps aside when Neural=1 loads the Uplift add-on: 106 fps with both against 174 with the add-on
- * alone, measured 2026-10-14; 2 = on even then)   TextureLevel=16 (2..16)   TextureSharpen=0 (mip bias added, -1.0 .. 0; e.g. -0.3)
+ * Keys ([Graphics]): Textures=1 (0 = off). With Neural=1 the frame rate varies from run to run (106 .. 178 fps measured 2026-10-14 on the
+ * menu route, with and without this filter alike), so the filter does not step aside for the add-on (an earlier rule that did was wrong).   TextureLevel=16 (2..16)   TextureSharpen=0 (mip bias added, -1.0 .. 0; e.g. -0.3)
  */
 #define KLTEX_C
 
@@ -93,13 +93,6 @@ static void kltx_init(void)
     char b[32]; int lv, tx;
     tx = GetPrivateProfileIntA("Graphics", "Textures", 1, klh_ini);
     if (!tx) { klog("graphics: textures: off (the game's own filtering)"); return; }
-    if (tx == 1 && GetPrivateProfileIntA("Graphics", "Neural", 0, klh_ini) && GetPrivateProfileIntA("Graphics", "Look", 1, klh_ini) &&
-        GetPrivateProfileIntA("Graphics", "ReShade", 1, klh_ini)) {
-        /* measured 2026-10-14 (menu route, 486 s, Look=1): Neural=1 + Textures 106 fps, Neural=1 alone 174, Textures alone 188 - with the
-           Uplift add-on loaded every sampler change the game makes costs far more, so Textures=1 steps aside for it; Textures=2 forces it */
-        klog("graphics: textures: off because Neural=1 (with the Uplift add-on the anisotropic filter costs about 40 %% of the frame rate; Textures=2 forces it)");
-        return;
-    }
     lv = GetPrivateProfileIntA("Graphics", "TextureLevel", 16, klh_ini);
     kltx_level = (DWORD)(lv < 2 ? 2 : lv > 16 ? 16 : lv);
     GetPrivateProfileStringA("Graphics", "TextureSharpen", "0", b, sizeof b, klh_ini);

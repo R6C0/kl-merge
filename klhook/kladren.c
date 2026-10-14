@@ -60,8 +60,8 @@
 #define KAD_M          100.0f                 /* world units a metre */
 
 static struct {
-    int on, dry, log, needuse, humanfast, share_bot, bank, mark, fine, take;
-    float range, brange, rate, meter, minhelp, share;
+    int on, dry, log, needuse, humanfast, share_bot, bank, mark, fine, take, bothelp, rush;
+    float range, brange, rate, meter, minhelp, share, rushrange;
 } kad;
 
 static struct kad_rec {
@@ -75,6 +75,9 @@ static struct kad_rec {
     DWORD sped;                               /* ms of speed-up given (log) */
     int mkn;                                  /* the mark was put on because of him (counted in kad_m[by]) */
     int paid;                                 /* a share was paid for this man this round (review 5: once per man per round; reset with the actor / the round) */
+    int rusher;                               /* Rush: record + 1 of the AI heister sent to him (0 = none) */
+    DWORD rush_at, rush_soldier;              /* when the last order went; that bot's soldier (the order is checked against it) */
+    float rush_back[3]; int rush_have_back;   /* where that bot's defend block was before: he is sent back there when the man is up */
 } kad_r[KLB_NREC];
 
 static struct kad_mark {
@@ -215,6 +218,76 @@ static void kad_mark_off(const struct klb_snap *s, int h, int bot, const char *w
     kad_m[h].on = 0; kad_m[h].fined = 0;
 }
 
+/* ---------------------------------------------------------------- Rush: an AI heister runs to a downed crewmate */
+
+static int kad_rushing(int h)                 /* is record h already sent to somebody? */
+{
+    int i;
+    for (i = 0; i < KLB_NREC; i++) if (kad_r[i].down && kad_r[i].rusher == h + 1) return 1;
+    return 0;
+}
+
+/* a place 0.8 m from the downed man, on the bot's side */
+static void kad_beside(const float man[3], const float bot[3], float out[3])
+{
+    float dx = bot[0] - man[0], dz = bot[2] - man[2], l = (float)sqrt(dx * dx + dz * dz);
+    memcpy(out, man, 12);
+    if (l > 1.0f) { out[0] = man[0] + dx / l * 0.8f * KAD_M; out[2] = man[2] + dz / l * 0.8f * KAD_M; }
+}
+
+static void kad_rush(const struct klb_snap *s, int i, float pos[][3], const int *havepos, const BYTE *dn, DWORD now)
+{
+    struct kad_rec *k = &kad_r[i]; struct kle_e e; float bp[3], want[3], got[3], d; char why[100]; DWORD actor, soldier; int h, best = -1, r; float bd = 0;
+    if (!kad.rush || !havepos[i] || now - k->t_down < 600) return;
+    if (k->rusher) {                                                       /* already sent: again every 2.5 s while he is not there yet */
+        h = k->rusher - 1;
+        if (now - k->rush_at < 2500 || !havepos[h] || dn[h]) return;
+        if (!kle_bot(s, h, &actor, &soldier, bp, why) || soldier != k->rush_soldier) { klog("adren: RUSH - record %d no longer runs to record %d (%s)", h, i, why[0] ? why : "another soldier"); k->rusher = 0; k->rush_have_back = 0; return; }
+        if ((d = kad_dist(bp, pos[i])) <= kad.brange * KAD_M * 0.9f) { k->rush_at = now; return; }
+        memset(&e, 0, sizeof e); e.rec = h; e.actor = actor; e.soldier = soldier;
+        kad_beside(pos[i], bp, want);
+        r = kle_order2(&e, want, got, why, kad.dry); k->rush_at = now;
+        if (kad.log >= 2) klog("adren: RUSH - record %d is %.1f m from record %d: ordered again (%s)", h, d / KAD_M, i, r == 1 ? "called" : r == 2 ? "dry" : why);
+        return;
+    }
+    for (h = 0; h < s->n; h++) {
+        const struct klb_rec *q = &s->r[h];
+        if (h == i || !q->used || !(q->flags & 1) || (q->flags & 2) || q->status != 0 || dn[h] || !havepos[h]) continue;
+        if (kle_r.used[h] && i != s->human) continue;                      /* an escort stays with the human unless the human is the one down */
+        if (kad_rushing(h)) continue;
+        if (fabs(pos[h][1] - pos[i][1]) > 3.0f * KAD_M) continue;          /* another floor: the path may be long */
+        d = kad_dist(pos[h], pos[i]);
+        if (d > kad.rushrange * KAD_M) continue;
+        if (best < 0 || d < bd) { best = h; bd = d; }
+    }
+    if (best < 0) return;
+    if (bd <= kad.brange * KAD_M * 0.9f) return;                          /* somebody is by him already */
+    if (!kle_bot(s, best, &actor, &soldier, bp, why)) { if (kad.log >= 2) klog("adren: RUSH - record %d cannot be sent to record %d: %s", best, i, why); return; }
+    memset(&e, 0, sizeof e); e.rec = best; e.actor = actor; e.soldier = soldier;
+    k->rush_have_back = kle_block(soldier, k->rush_back) && (k->rush_back[0] || k->rush_back[1] || k->rush_back[2]);
+    kad_beside(pos[i], bp, want);
+    r = kle_order2(&e, want, got, why, kad.dry);
+    if (!r) { klog("adren: RUSH - record %d not sent to record %d: %s", best, i, why); k->rush_have_back = 0; return; }
+    k->rusher = best + 1; k->rush_at = now; k->rush_soldier = soldier;
+    klog("adren: RUSH - record %d (%s) runs to record %d (%s), %.1f m away, to (%.0f, %.0f, %.0f)%s", best, kle_r.used[best] ? "your escort" : "bot", i, i == s->human ? "you" : "bot", bd / KAD_M,
+         want[0], want[1], want[2], r == 2 ? " - DRY: not called" : "");
+}
+
+/* the man is up (or gone): the bot that ran to him goes back to where his own orders had him */
+static void kad_rush_end(const struct klb_snap *s, int i, const char *why_)
+{
+    struct kad_rec *k = &kad_r[i]; struct kle_e e; float bp[3], got[3]; char why[100]; DWORD actor, soldier; int h = k->rusher - 1, r;
+    if (!k->rusher) return;
+    k->rusher = 0;
+    if (!k->rush_have_back) { klog("adren: RUSH - record %d is done with record %d (%s); his own orders take him on", h, i, why_); return; }
+    k->rush_have_back = 0;
+    if (kle_r.used[h]) { klog("adren: RUSH - record %d (your escort) is done with record %d (%s): the escort takes him back", h, i, why_); return; }
+    if (!kle_bot(s, h, &actor, &soldier, bp, why) || soldier != k->rush_soldier) { klog("adren: RUSH - record %d is done with record %d (%s); not sent back (%s)", h, i, why_, why); return; }
+    memset(&e, 0, sizeof e); e.rec = h; e.actor = actor; e.soldier = soldier;
+    r = kle_order2(&e, k->rush_back, got, why, kad.dry);
+    klog("adren: RUSH - record %d is done with record %d (%s): sent back to (%.0f, %.0f, %.0f) (%s)", h, i, why_, k->rush_back[0], k->rush_back[1], k->rush_back[2], r == 1 ? "called" : r == 2 ? "dry" : why);
+}
+
 /* ---------------------------------------------------------------- one pass */
 
 static void kad_forget(const char *why)
@@ -270,6 +343,7 @@ static void kad_tick(int game_thread)
         const struct klb_rec *r = &sn.r[i]; struct kad_rec *k = &kad_r[i]; DWORD dt;
         if (!r->used) continue;
         if (r->status != 0 && k->down) {        /* he left play while down (died, was left behind) */
+            kad_rush_end(&sn, i, "he left play");
             k->down = 0;
             if (k->mkn) { kad_m[k->by].keep = 1; }
             klog("adren: record %d left play while down (%s)", i, r->status == 7 ? "he DIED" : "status other than in-play"); continue;
@@ -299,6 +373,7 @@ static void kad_tick(int game_thread)
         } else if (!dn[i] && k->down) {
             /* ---- he is up */
             int best = -1, h; DWORD bm = 0;
+            kad_rush_end(&sn, i, "he is up");
             k->down = 0;
             for (h = 0; h < sn.n; h++) if (k->hm[h] > bm) { bm = k->hm[h]; best = h; }
             klog("adren: record %d IS UP after %.2f s on the floor (he lay %.2f s at go-down; unhelped the game gives 1.5 .. 3.0); helped %lu ms by %s", i, (now - k->t_down) / 1000.0f, k->lie0, (unsigned long)bm, best >= 0 ? (best == sn.human ? "you" : "a bot") : "nobody");
@@ -327,11 +402,13 @@ static void kad_tick(int game_thread)
                     if (kad.needuse && !(h == sn.human && pl && klh_rd(pl + 0xa54, &usedw, 4) && (usedw & 2))) continue;
                     lim[h] = kad.range * KAD_M;
                 } else if (i == sn.human) lim[h] = kad.brange * KAD_M;       /* an AI heister by a downed human */
-                else continue;                                              /* a bot does not help a bot */
+                else if (kad.bothelp) lim[h] = kad.brange * KAD_M;          /* BotHelp: an AI heister by a downed AI heister */
+                else continue;
                 if (fabs(pos[h][1] - pos[i][1]) > 2.0f * KAD_M) continue;    /* another floor */
                 dist[h] = kad_dist(pos[h], pos[i]);
             }
             hp = kad_pick(dist, lim, sn.n);
+            kad_rush(&sn, i, pos, havepos, dn, now);
             if (pl && klh_rd(pl + 0xa54, &usedw, 4)) { use = (BYTE)((usedw & 2) != 0); if (kad.log >= 2 && (usedw != kad_g.use_dw)) { klog("adren: [player+0xa54] %08lx -> %08lx (bit 2, the GUESSED 'use key held': %d)", (unsigned long)kad_g.use_dw, (unsigned long)usedw, use); kad_g.use_dw = usedw; } }
             if (hp < 0) { if (k->fast && pl && i == sn.human) { BYTE z = 0; klh_data((void *)(DWORD_PTR)(D + 0x29), &z, 1, "player: the fast get-up byte back (adrenaline)"); k->fast = 0; } continue; }
             k->hm[hp] += dt * 1000u / 1024u;
@@ -392,8 +469,12 @@ static void kad_init(void)
     kad.meter = kad_inif("Meter", "3.0", 0.0f, 20.0f);
     kad.minhelp = kad_inif("MinHelp", "1.0", 0.0f, 10.0f);
     kad.share = kad_inif("Share", "0.25", 0.0f, 1.0f);
+    kad.bothelp = GetPrivateProfileIntA("Adrenaline", "BotHelp", 1, klh_ini) != 0;
+    kad.rush = GetPrivateProfileIntA("Adrenaline", "Rush", 1, klh_ini) != 0;
+    kad.rushrange = kad_inif("RushRange", "25", 2.0f, 80.0f);
     klog("adren: on%s; a downed crewmate gets up faster with a helper within %.1f m (a bot by a downed human: %.1f m; NeedUse=%d); AI lie x%.1f, your mash meter at least %.1f (HumanFast=%d); the helper gets %.0f %% of what the helped man carries (%s, Take=%d, ShareBot=%d); Mark=%d MarkFine=%d. Arcade on a level that is not stock, not for a police human; data writes only (re\\adrenaline.md)",
          kad.dry ? " (Dry=1: nothing is written)" : "", kad.range, kad.brange, kad.needuse, kad.rate, kad.meter, kad.humanfast, kad.share * 100.0f, kad.bank ? "banked for a human" : "carried", kad.take, kad.share_bot, kad.mark, kad.fine);
+    klog("adren: BotHelp=%d (an AI heister by a downed AI heister helps and earns as a human would), Rush=%d (the nearest free AI heister within %.0f m on the same floor RUNS to a downed crewmate, and goes back to his own place when the man is up)", kad.bothelp, kad.rush, kad.rushrange);
     if (!kld.on) klog("adren: [Down] Enable=0 - the human's knock-down is the game's own plain one: the meter cannot be driven (HumanFast=1 can still ask the fast get-up); an AI heister only lies when [Down] Bots=1 (or the game puts him down)");
     else if (!kld_bk.on) klog("adren: [Down] Bots=0 - no AI heister goes down, so only the human side acts (a bot by a downed human); set [Down] Bots=1 (BotsLie=6 gives the adrenaline something to speed)");
 }

@@ -56,6 +56,15 @@ static struct { int up, fnow, fdone, idu; DWORD t_land; float meter; } kld_s;
 static struct { int on; } kld_bk;
 static int klbd_by(int record) { (void)record; return -1; }      /* klbotdown.c export (added to kladren.c after this harness): -1 = klbotdown knows nobody, as with [BotDown] off */
 
+/* klescort.c exports used by the Rush (2026-10-14) */
+struct kle_e { int rec, mode; DWORD actor, soldier, order_at, log_at; int orders, direct, told_soft, have_target, have_route; float target[3], route[3], d_order; };
+static struct { char used[KLB_NREC]; } kle_r;
+static int g_orders; static float g_order_at[3];
+static int kle_bot(const struct klb_snap *s, int i, DWORD *actor, DWORD *soldier, float pos[3], char why[100])
+{ *actor = s->r[i].actor; *soldier = 0x00500000 + 0x1000 * i; why[0] = 0; return kle_node(0x00700000 + 0x100 * i, pos, 0); }
+static int kle_block(DWORD soldier, float pos[3]) { (void)soldier; pos[0] = 111; pos[1] = 0; pos[2] = 222; return 1; }
+static int kle_order2(struct kle_e *e, const float want[3], float got[3], char why[100], int dry) { (void)e; (void)why; (void)dry; g_orders++; memcpy(g_order_at, want, 12); memcpy(got, want, 12); return 1; }
+
 #include "kladren.c"
 
 /* ---------------------------------------------------------------- the fake world */
@@ -192,6 +201,27 @@ int main(void)
     g_snap.rules = 0x2222; pass(100);
     CHECK(!(R32(SCORE + 0x1d4) & 1), "a new round: the old mark of ours is taken off");
 
+
+    /* ---- 8 (2026-10-14): BotHelp + Rush: bot 1 goes down, bot 2 (10 m off) is sent to him, helps him up, earns the share, goes back */
+    printf("--- scenario 8\n"); world(); kad.bothelp = 1; kad.rush = 1; kad.rushrange = 25.0f; g_orders = 0;
+    g_feet[0] = -9000;                                      /* the human is 150 m off: no human help */
+    pass(100);
+    W8(ACT(1) + 0x64c, 1); W32(DND(1) + 0x14, tick + 6144);
+    pass(100);
+    CHECK(g_orders == 0, "no rush in the first 0.6 s");
+    Sleep(700); pass(100);
+    CHECK(g_orders == 1 && kad_r[1].rusher == 2 + 1, "Rush: the nearest bot (record 2, 10 m) is sent");
+    CHECK(fabs(g_order_at[0] - (6000 + 80)) < 1 && fabs(g_order_at[2]) < 1, "Rush: to 0.8 m beside the downed bot, on the sender's side");
+    WF(NODE(2), 6000 + 120);                                /* bot 2 arrives: 1.2 m away */
+    for (i = 0; i < 10; i++) pass(100);
+    CHECK(kad_r[1].hm[2] >= 900, "BotHelp: bot 2 helps bot 1 (~1 s)");
+    W8(ACT(1) + 0x64c, 0); pass(100);
+    CHECK(R32(SCORE + 0x150 + 8) == 200000 + 25000 && R32(SCORE + 0x150 + 4) == 75000, "BotHelp: bot 2 gets 25 % of bot 1's cut, out of it");
+    CHECK(g_orders == 2 && g_order_at[0] == 111 && g_order_at[2] == 222 && kad_r[1].rusher == 0, "Rush: bot 2 is sent back to its own place when bot 1 is up");
+    world(); kad.rush = 1; kad.rushrange = 25.0f; g_orders = 0; kle_r.used[2] = 1; kle_r.used[3] = 1; g_feet[0] = -9000;   /* both other bots are escorts */
+    pass(100); W8(ACT(1) + 0x64c, 1); W32(DND(1) + 0x14, tick + 6144); pass(100); Sleep(700); pass(100);
+    CHECK(g_orders == 0, "Rush: an escort is not taken from the human for a downed bot");
+    memset(&kle_r, 0, sizeof kle_r);
     printf("\n%s (%d failure(s))\n", fails ? "FAILED" : "ALL PASS", fails);
     return fails != 0;
 }
