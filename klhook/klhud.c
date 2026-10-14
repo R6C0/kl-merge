@@ -219,6 +219,7 @@
 #define KLU_CARD_INK    0xd80c0c0du           /* the painted bands */
 #define KLU_CARD_UNDER  0x9c0c0c0du           /* the solid ink under them */
 #define KLU_CARD_BAND   28.0f                 /* a band's height (they overlap by 6) */
+#define KLU_CARD_STDY   5.0f                  /* the status word lower by this: live (run v45_KL, 80 s) its capitals sat 5 px above the name's (the label font's ascent is not the baked one) */
 #define KLU_T_TABST(i)  (KLU_T_ESC + 1 + (i))  /* the Tab card's status column, one a row (2026-10-13) */
 #define KLU_NTEXT       (KLU_T_TABST(KLU_ROWS))   /* LAST: every part that adds texts goes before this line (klhud_values.c / klhud_popup.c add none) */
 #define KLU_NPIC        300                   /* the queue; the rings are baked arcs + a run of dabs (klu_arc): about 230 a frame at worst; the draw list holds 280 without trouble (run S1), keep it under ~320 */
@@ -575,7 +576,7 @@ static void klu_place_crew(void)
         klu_r.t[KLU_T_NAME(i)].x = x0 + klu.padx; klu_r.t[KLU_T_CASH(i)].x = x1 - klu.padx; klu_r.t[KLU_T_TABST(i)].x = x0 + klu.crew_w * KLU_CARD_ST;
         if (klu.fontset) {                                   /* centred on the block's middle (the block: y - blockup, blockh high) */
             float rc = y + klu.blockh * 0.5f - klu.blockup;
-            klu_r.t[KLU_T_NAME(i)].y = klu_cen(rc, KLU_FNT_NAME); klu_r.t[KLU_T_CASH(i)].y = klu_cen(rc, KLU_FNT_SMALL); klu_r.t[KLU_T_TABST(i)].y = klu_cen(rc, KLU_FNT_LABEL);
+            klu_r.t[KLU_T_NAME(i)].y = klu_cen(rc, KLU_FNT_NAME); klu_r.t[KLU_T_CASH(i)].y = klu_cen(rc, KLU_FNT_SMALL); klu_r.t[KLU_T_TABST(i)].y = klu_cen(rc, KLU_FNT_LABEL) + KLU_CARD_STDY;
         } else klu_r.t[KLU_T_NAME(i)].y = klu_r.t[KLU_T_CASH(i)].y = klu_r.t[KLU_T_TABST(i)].y = y;
     }
 }
