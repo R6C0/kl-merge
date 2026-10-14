@@ -592,6 +592,7 @@ static void klh_tick(int game_thread);
 #include "klhud_board2.c"                            /* AFTER klhud_board.c: the round-over scoreboard ([HUD] Scoreboard, default 0) */
 #include "klshoulder.c"
 #include "klvis.c"
+#include "kltex.c"                                        /* kltex.c: [Graphics] Textures - anisotropic filtering (default on) */
 #include "klnet.c"
 #include "klfed.c"
 #include "klfedkit.c"
@@ -828,12 +829,21 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
         if (look < 0 || look > 2) look = 1;
         snprintf(rp, sizeof rp, "%s\\ReShade32.dll", dir); snprintf(ri, sizeof ri, "%s\\ReShade.ini", dir);
         if (look && GetFileAttributesA(rp) != INVALID_FILE_ATTRIBUTES) {
-            HMODULE rm;
+            HMODULE rm; char ao[MAX_PATH], af[MAX_PATH];
+            /* [Graphics] Neural (2026-10-14): the GITC Uplift add-on (DLSS/DLAA through the neural renderer, F10) is a ReShade add-on that
+               ReShade loads by finding gitc-uplift.addon32 beside it; even switched off (F10 not pressed) it hooks the device. 0 = the add-on
+               file is set aside as gitc-uplift.addon32.off before ReShade loads, so it costs nothing; 1 = it is put back. */
+            int neural = GetPrivateProfileIntA("Graphics", "Neural", 0, klh_ini);
+            snprintf(ao, sizeof ao, "%s\\gitc-uplift.addon32", dir); snprintf(af, sizeof af, "%s\\gitc-uplift.addon32.off", dir);
+            if (neural && GetFileAttributesA(ao) == INVALID_FILE_ATTRIBUTES && GetFileAttributesA(af) != INVALID_FILE_ATTRIBUTES) MoveFileA(af, ao);
+            if (!neural && GetFileAttributesA(ao) != INVALID_FILE_ATTRIBUTES && GetFileAttributesA(af) == INVALID_FILE_ATTRIBUTES) MoveFileA(ao, af);
+            klog("graphics: neural (Uplift add-on) %s: %s", neural ? "on" : "off", GetFileAttributesA(ao) != INVALID_FILE_ATTRIBUTES ? "gitc-uplift.addon32 present" : "add-on set aside or absent");
             WritePrivateProfileStringA("GENERAL", "PresetPath", preset[look], ri);
             rm = LoadLibraryA(rp);
             klog("graphics: look %s: ReShade %s from %s (preset %s)", lname[look], rm ? "loaded" : "FAILED to load", rp, preset[look]);
         } else klog("graphics: look %s: ReShade not loaded%s", lname[look], look ? " (no ReShade32.dll beside the game)" : "");
     }
+    kltx_init();                                   /* after ReShade: the Direct3DCreate9 wrapper sits in front of it */
     klm_init();
     kln_init();
     klf_init();
