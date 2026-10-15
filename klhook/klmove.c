@@ -300,6 +300,7 @@ static struct {
     float reach; int reach_visits, reach_doors, reach_order;
     DWORD hop; float hop_max;      /* RestlessHop (section 5): seconds at a hold before a hop to a cover place of the level's [Hops]; 0 = off */
     int last;                      /* LastVehicle (section 6): 1 = the fallback last vehicle is on (default), 0 = off */
+    DWORD botvan;                  /* BotVan (section 7, v78): ms a loyal AI heister has had stage 3 with no vehicle before the hook calls one; 0 = off */
 } klmv;
 
 /* ACTIVE (section 5, 2026-10-12): the level's list of cover places a bot may shift to while it waits at a hold, per GATE of the
@@ -329,6 +330,7 @@ static struct {
     int hold_visit, hold_told, h_comes; float hold_used, h_d; DWORD h_at;
     int rc_visit, rc_told; DWORD rc_wait_at;      /* BoardReach: the visit the boarding box was read for, its line said, when this wait began */
     int last_done, last_told;                     /* LastVehicle (section 6): 1 = looked at (called or found nothing to do) this round; the 2 s line said */
+    DWORD bv_since, bv_last, bv_trig, bv_veh; int bv_told, bv_calls;      /* BotVan (section 7) */
 } klmv_r;
 
 /* BoardReach: what the tick decides and the boxes' update reads (section 4). armed = 1 through the WHOLE round on a
@@ -698,6 +700,39 @@ static void klmv_last_vehicle(const struct klb_snap *s)
     veh = 0; flagged = 0; klh_rd(s->rules + 0x1dc, &veh, 1); klh_rd(s->rules + 0xe8a, &flagged, 1);
     klog("last: %.2f s left and the game called NO last vehicle (state 0, [rules+0xe8a] 0, kind %u, vehicle %08lx, +0xe80 %08lx): the exit trigger %08lx's vehicle %08lx called as the round's last (0x8154f0, found in %lu ms): state now %u, [rules+0xe8a] %u",
          left, kind, known, e80, trig, v, GetTickCount() - t0, veh, flagged);
+}
+
+/* 7. BotVan (v78, 2026-10-15). Owner: 'the van should spawn for the other ai heisters if they get to the van first on retomoto tower'.
+ *    LOG 22:40:50 (Retomoto, the human a fed): record 4 (bot) took heist stage 3 - it stood in the level exit box, whose routine 0x6c3d50 gives
+ *    the stage and then calls the vehicle through rules slot 44 (0x6cd8e0 -> 0x8154f0) - and the vehicle state stayed 0: no vehicle came for
+ *    the crew. Why slot 44 refused was not read. This part makes the call slot 44 makes, 0x8154f0(rules, vehicle, 0), with the vehicle the
+ *    level's exit trigger names (klmv_exit_vehicle, section 6), when a loyal AI heister in play has had stage 3 for BotVan seconds while the
+ *    vehicle state [rules+0x1dc] is 0, the last vehicle is not flagged ([rules+0xe8a] 0), [rules+0x1ee] is 0 (WaitForYou or the game's own
+ *    'last called' hold the call: then nothing) and the round clock shows more than 20 s. At most once per 25 s. NOT RUN IN THE GAME. */
+static void klmv_bot_van(const struct klb_snap *s, DWORD now)
+{
+    static const BYTE head[16] = { 0x56, 0x8b, 0xf1, 0x80, 0xbe, 0xdc, 0x01, 0x00, 0x00, 0x00, 0x0f, 0x85, 0x9e, 0x00, 0x00, 0x00 };      /* 0x8154f0 */
+    BYTE veh = 1, flagged = 1, hold = 1; float left = 0; int i, who = -1; DWORD v, t0;
+    if (!klh_rd(s->rules + 0x1dc, &veh, 1) || !klh_rd(s->rules + 0xe8a, &flagged, 1) || !klh_rd(s->rules + 0x1ee, &hold, 1) || !klh_rd(s->rules + 0x4c, &left, 4)) return;
+    if (veh || flagged || hold || !klb_finite(left) || left < 20.0f) { klmv_r.bv_since = 0; return; }
+    for (i = 0; i < s->n; i++) {
+        const struct klb_rec *r = &s->r[i];
+        if (i != s->human && r->used && (r->flags & 1) && !(r->flags & 2) && r->status == 0 && r->stage >= 3) { who = i; break; }
+    }
+    if (who < 0) { klmv_r.bv_since = 0; return; }
+    if (!klmv_r.bv_since) { klmv_r.bv_since = KLB_T(now); return; }
+    if (now - klmv_r.bv_since < klmv.botvan || (klmv_r.bv_last && now - klmv_r.bv_last < 25000)) return;
+    klmv_r.bv_last = KLB_T(now);
+    if (klh_rd32(s->rules) != KLB_RULES_VT || !klb_same_code(KLMV_CALLVEH, head, sizeof head)) { if (!klmv_r.bv_told++) klog("botvan: record %d has stage 3 and no vehicle comes, but the rules object or 0x8154f0 is not the one this build knows: nothing done", who); return; }
+    t0 = GetTickCount();
+    if (!klmv_r.bv_veh || klh_rd32(klmv_r.bv_trig) != (DWORD)(DWORD_PTR)KLH_VA(KLMV_EXIT_VT)) klmv_r.bv_veh = klmv_exit_vehicle(&klmv_r.bv_trig);
+    if (!(v = klmv_r.bv_veh)) { if (!klmv_r.bv_told++) klog("botvan: record %d has had stage 3 for %.1f s and no vehicle comes; no ZOnlineExitLevelTrigger naming a vehicle was found (%lu ms): nothing done", who, (now - klmv_r.bv_since) / 1000.0, GetTickCount() - t0); return; }
+    if (klmv.dry) { klog("botvan: record %d has had stage 3 for %.1f s and the vehicle state is 0: DRY RUN - the exit trigger %08lx's vehicle %08lx WOULD be called", who, (now - klmv_r.bv_since) / 1000.0, klmv_r.bv_trig, v); return; }
+    ((void (__fastcall *)(void *, void *, DWORD, int))(DWORD_PTR)KLH_VA(KLMV_CALLVEH))((void *)(DWORD_PTR)s->rules, 0, v, 0);
+    klmv_r.bv_calls++;
+    veh = 0; flagged = 0; klh_rd(s->rules + 0x1dc, &veh, 1); klh_rd(s->rules + 0xe8a, &flagged, 1);
+    klog("botvan: record %d (AI heister, stage 3) has waited %.1f s with no vehicle (state 0, %.1f s on the clock): the exit trigger %08lx's vehicle %08lx CALLED for the crew (0x8154f0, as rules slot 44 does; call %d of the round, %lu ms): state now %u, [rules+0xe8a] %u",
+         who, (now - klmv_r.bv_since) / 1000.0, left, klmv_r.bv_trig, v, klmv_r.bv_calls, GetTickCount() - t0, veh, flagged);
 }
 
 static void klmv_deny_none(void) { int i; klmv_rc.armed = 0; for (i = 0; i < KLMV_NBOX; i++) klmv_box[i].deny = 0, klmv_box[i].would = 0; }
@@ -1234,6 +1269,7 @@ static void klmv_tick(int game_thread)
     klmv_r.last_pass = KLB_T(now);
     klmv_track(&s, now);
     if (klmv.last) klmv_last_vehicle(&s);
+    if (klmv.botvan) klmv_bot_van(&s, now);
     if (klmv.hop) klmv_hops_load();
     if (klmv.near_ > 0 || klmv.reach > 0) klmv_boxes(&s, now);
     if (klmv.reach > 0) klmv_reach_pass(&s, now);
@@ -1280,7 +1316,8 @@ static void klmv_init(void)
     klmv.dry = GetPrivateProfileIntA("Bots", "MoveDry", 0, klh_ini) != 0;
     klmv.log = klb_pos("MoveLog", 1, 2);
     klmv.last = GetPrivateProfileIntA("Bots", "LastVehicle", 1, klh_ini) != 0;
-    klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0 || klmv.reach > 0 || klmv.last;
+    klmv.botvan = (DWORD)klb_pos("BotVan", 4, 120) * 1000;      /* v78: default 4 s; 0 = off */
+    klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0 || klmv.reach > 0 || klmv.last || klmv.botvan;
     if (!klmv.any) return;
     if (!klb.on) { klog("move / wait / near / reach: [Bots] Restless, WaitForYou, BoardNear or BoardReach is set but [Bots] Enable is 0: they need klbot.c's crew records, nothing is done"); klmv.any = 0; return; }
     if (klmv.restless || klmv.loot)
@@ -1290,6 +1327,9 @@ static void klmv_init(void)
     if (klmv.last)
         klog("last: on (LastVehicle=1, the default; 0 = off)%s: in an Arcade round on a level that is not the stock one, when the round clock is at %.2f s and the game has called no vehicle (state 0, [rules+0xe8a] 0: its own last call at 2.0 s found no vehicle - none was called before in this level load), the vehicle the exit trigger names is called as the round's last (0x8154f0, as the game's own)",
              klmv.dry ? " DRY RUN (MoveDry=1)" : "", KLMV_LAST_AT);
+    if (klmv.botvan)
+        klog("botvan: on (BotVan=%lu s, the default 4; 0 = off)%s: when a loyal AI heister in play has had heist stage 3 (it stood in the level exit box) that long and no vehicle was called (state 0, not the last one, nothing holds the call, more than 20 s on the clock), the vehicle the exit trigger names is called for the crew (0x8154f0 with 0, as the box's own call)",
+             klmv.botvan / 1000, klmv.dry ? " DRY RUN (MoveDry=1)" : "");
     if (klmv.hop)
         klog("move: RestlessHop=%lu s: a bot that has stood that long at its own hold place (not under fire, not in an escape box, no vehicle called) is ordered to a cover place of the level's KLJoin.ini [Hops] within that list's Max of the hold (tools/kl_fa_bots_rt.py hops); none near, or none listed: the old shift round the hold when RestlessHold is set, else nothing", klmv.hop / 1000);
     if (klmv.wait)
