@@ -30,7 +30,7 @@ uniform float KL_Fire < source = "KL_Fire"; hidden = 1; nosave = 1; >;
 uniform float KL_Hurt < source = "KL_Hurt"; hidden = 1; nosave = 1; >;
 uniform float KL_Down < source = "KL_Down"; hidden = 1; nosave = 1; >;
 uniform float KL_Speed < source = "KL_Speed"; hidden = 1; nosave = 1; >;
-uniform float KL_CamFX < source = "KL_CamFX"; hidden = 1; nosave = 1; >;   /* the in-game Camera FX row: 1 subtle (x0.55), 2 raw (x1); 0 with the hook = the technique is off anyway */
+uniform float KL_CamFX < source = "KL_CamFX"; hidden = 1; nosave = 1; >;   /* the in-game Camera FX row: 1 light x0.3, 2 medium x0.55, 3 strong x0.8, 4 raw x1; 0 = the technique is off anyway */
 
 uniform float KLC_Timer < source = "timer"; >;
 
@@ -64,7 +64,7 @@ float3 KLX_Fetch(float2 uv) { return tex2Dlod(ReShade::BackBuffer, float4(uv, 0,
 
 float3 PS_KLX_Camera(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
 {
-	float amt = KL_FxAmount * (KL_CamFX > 1.5 ? 1.0 : (KL_CamFX > 0.5 ? 0.55 : 1.0));
+	float amt = KL_FxAmount * (KL_CamFX > 3.5 ? 1.0 : (KL_CamFX > 2.5 ? 0.8 : (KL_CamFX > 1.5 ? 0.55 : (KL_CamFX > 0.5 ? 0.3 : 1.0))));   /* the menu row: 1 light, 2 medium, 3 strong, 4 raw */
 	float f = saturate(max(KL_Fire,  PreviewFire))  * amt;
 	float h = saturate(max(KL_Hurt,  PreviewHurt))  * amt;
 	float d = saturate(max(KL_Down,  PreviewDown))  * amt;

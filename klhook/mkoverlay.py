@@ -285,15 +285,20 @@ GUN_ROWS = (('KLG_Start', 'Starting rifle', 'KLGunStart', ['Zastava M85', 'MP5 (
 #   - 'Adrenaline messages' + 'Hold E for adrenaline' as ONE row 'Adrenaline' of four values (-4): option KLSAdren, klset.c
 #     answers it from / into the same two keys ([Adrenaline] Prompt = bit 0, NeedUse = bit 1).
 # tools: python klhook\mkoverlay.py <ini> <stock Patch01.zip> <out>; the count line at the end says 'table-making tags ... (+0)'.
+# v27c (2026-10-15, the same request): the ninth row 'Neural (Uplift, next start)' = option KLSNeural (klset.c kset_v[7] ->
+# [Graphics] Neural; klhook.c moves the Uplift add-on in / out at the next start). Cost: +4 table entries (the row's ToggleText, its
+# _Data text block, its two arrows); live v27b: 'menu: table 5061 of 5096 ... 35 free' -> v27c 5065, 31 free. 9 rows still fit the
+# window (first row Y 493 - 8 x 34 = 221 >= 220). A tenth row does NOT fit (the guard in guns_window stops the build).
 SETTINGS = True
 SET_TITLE = 'Mod settings'
 SET_ARCADE = False                                    # v26c: True (an Arcade button too); v27: Options only, to make room
 SET_BARS = False                                      # v26c gave the two gun rows focus bars FocusBar_long#07/#08
 SET_ROWS = (('KLS_Look', 'Look', 'KLSLook', ['Off', 'KL', 'LiveLeak']),
-            ('KLS_Cam', 'Camera FX', 'KLSCam', ['Off', 'Subtle', 'Raw']),
+            ('KLS_Cam', 'Camera FX', 'KLSCam', ['Off', 'Light', 'Medium', 'Strong', 'Raw']),
             ('KLS_Glare', 'Lens glare', 'KLSGlare', ['Off', 'On']),
             ('KLS_AA', 'Anti-aliasing', 'KLSAA', ['Off', 'SMAA', 'FXAA']),
             ('KLS_Tex', 'Sharper textures (next start)', 'KLSTex', ['Off', 'On']),
+            ('KLS_Neural', 'Neural (Uplift, next start)', 'KLSNeural', ['Off', 'On']),
             ('KLS_Adren', 'Adrenaline', 'KLSAdren', ['Stand by him', 'Stand by him + messages', 'Hold E', 'Hold E + messages']))
 SET_NOTE = None                                       # v26c had a note text block on the right: dropped for room (see above)
 GUNS_NOTE = ('Looks only: price, rank, stats and sound stay those of the Dog Days gun. Dead Men looks: SG 552 on the FN SCAR, '
@@ -650,7 +655,7 @@ def main():
     print('  Arcade page: rows moved up by %d (group Y %d)' % (ROW * (len(pgs) + h), 110 - ROW * (len(pgs) + h)))
     print('  windows %d -> %d, elements <GuiElement %d -> %d' % (xml.count('<Window '), res.count(b'<Window '), xml.count('<GuiElement'), res.count(b'<GuiElement')))
     t0, t1 = table_tags(xml), table_tags(res.decode('latin-1'))
-    print('  table-making tags of frontend.xml (Window / GuiElement / ColorSet / ButtonGraphic outside comments): %d -> %d (%+d); v26c (installed 2026-10-14 18:37) = 4345 (+159): v27b says 4346 (+1: the KLFocus colour set)' % (t0, t1, t1 - t0))
+    print('  table-making tags of frontend.xml (Window / GuiElement / ColorSet / ButtonGraphic outside comments): %d -> %d (%+d); v26c (installed 2026-10-14 18:37) = 4345 (+159): v27b = 4346 (+1: the KLFocus colour set); v27c says 4350 (+4: the Neural row)' % (t0, t1, t1 - t0))
 
 
 if __name__ == '__main__':

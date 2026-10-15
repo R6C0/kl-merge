@@ -12,7 +12,7 @@
  *   KLSUseE    0 off / 1 on                           -> [Adrenaline] NeedUse  (hold E by a downed crewmate: at once, kset_v[3])
  * 2026-10-15 (the ReShade bridge, klreshade.c; the four new rows are LIVE only with [ReShade] Bridge=1 and ReShade loaded - then Look
  * is live too; klreshade.c klrs_setting says per row what a change does now):
- *   KLSCam     0 off / 1 subtle / 2 raw               -> [Graphics] CameraFX   (uniform KL_CamFX, [ReShade] TechCamFX)
+ *   KLSCam     0 off / 1 light / 2 medium / 3 strong / 4 raw               -> [Graphics] CameraFX   (uniform KL_CamFX, [ReShade] TechCamFX)
  *   KLSGlare   0 off / 1 on                           -> [Graphics] Glare      (uniform KL_Glare, [ReShade] TechGlare)
  *   KLSAA      0 off / 1 SMAA / 2 FXAA                -> [Graphics] AA         (techniques SMAA@SMAA.fx / KL_FXAA@KL_FXAA.fx)
  *   KLSNeural  0 off / 1 on                           -> [Graphics] Neural     (the Uplift add-on: klhook.c at start, next start)
@@ -24,7 +24,8 @@
  * adrenaline rows became ONE row, option KLSAdren (kset_which -> KLS_ADREN): value = Prompt | NeedUse << 1, entries
  *   0 'Stand by him'   1 'Stand by him + messages'   2 'Hold E'   3 'Hold E + messages'
  * read from and written into the same two keys through rows 2 and 3 (kladren.c still reads kset_v[2] / [3]). KLSPrompt / KLSUseE are
- * still answered (an older overlay's rows keep working). No Neural row in the menu (next start only; [Graphics] Neural in the ini).
+ * still answered (an older overlay's rows keep working). mkoverlay.py v27c adds the Neural row (KLSNeural, 'Neural (Uplift, next
+ * start)'; +4 table entries): a change is written to [Graphics] Neural and takes effect at the next start (klrs_setting 7).
  * [Menu] TableLog=1 (default 0, reads only): one line 'menu: table N of 5096 entries ...' whenever the menu manager's count has
  * changed and stood for 2 s (= after each XML load: the main menu, a level) - the LIVE count that every new menu element needs
  * (re\hud_menu.md 7 check K0 / 8, the wiring drafted there and never built; here behind a key). Game thread only, klh_rd only.
@@ -34,7 +35,7 @@
 
 #define KLS_N 8
 static const char *const kset_names[KLS_N] = { "KLSLook", "KLSTex", "KLSPrompt", "KLSUseE", "KLSCam", "KLSGlare", "KLSAA", "KLSNeural" };
-static const int kset_upper[KLS_N] = { 2, 1, 1, 1, 2, 1, 2, 1 };
+static const int kset_upper[KLS_N] = { 2, 1, 1, 1, 4, 1, 2, 1 };      /* KLSCam 0..4 since 2026-10-15 (owner: an intensity option) */
 static const char *const kset_sec[KLS_N] = { "Graphics", "Graphics", "Adrenaline", "Adrenaline", "Graphics", "Graphics", "Graphics", "Graphics" };
 static const char *const kset_key[KLS_N] = { "Look", "Textures", "Prompt", "NeedUse", "CameraFX", "Glare", "AA", "Neural" };
 static const int kset_def[KLS_N] = { 1, 1, 1, 1, 1, 1, 1, 0 };

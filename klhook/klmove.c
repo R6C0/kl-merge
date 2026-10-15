@@ -294,7 +294,7 @@ struct klmv_fr { float T[3], ax[3][3], half[3]; int box; };
 
 static struct {
     int any, dry, log;
-    DWORD restless, loot, back, hold; float pace, loot_near;
+    DWORD restless, loot, back, hold, after; float pace, loot_near;      /* after = RestlessAfter (ms from the round start) */
     int wait, wait_stage; DWORD wait_max, wait_floor; float wait_hold;
     float near_; int near_visits, near_stage;
     float reach; int reach_visits, reach_doors, reach_order;
@@ -1116,6 +1116,7 @@ static void klmv_restless(const struct klb_snap *s, DWORD now, int human_in, con
         d = klmv_h(b->pos, b->anchor);
         /* where this file sent it (a shift round its hold, or beside the human) is its place too, while the block still holds that */
         there = b->have_target && (b->paced || b->beside) && klmv_h(b->pos, b->target) <= KLMV_OFF && fabs(b->pos[1] - b->target[1]) <= 300.0f;
+        if (!there && (d > KLMV_OFF || fabs(b->pos[1] - b->anchor[1]) > 300.0f) && klmv.after && now - klmv_r.round_at < klmv.after) continue;      /* RestlessAfter: an off-place bot is left alone in the first seconds of a round (neither b. nor a hop round a stale hold) */
         if (!there && (d > KLMV_OFF || fabs(b->pos[1] - b->anchor[1]) > 300.0f)) {
             /* b. stuck off its place */
             int beside = 0;
@@ -1253,6 +1254,7 @@ static void klmv_init(void)
     char t[16]; int v;
     memset(&klmv, 0, sizeof klmv); memset(&klmv_r, 0, sizeof klmv_r);
     v = klb_pos("Restless", 0, 600); klmv.restless = (DWORD)v * 1000;
+    klmv.after = (DWORD)klb_pos("RestlessAfter", 0, 600) * 1000;      /* 2026-10-15 (run v74_T13rt2, Retomoto): for ~30 s after the round start the defend place of a bot is still its rappel landing on the balcony while the loot tactic has taken it into the room - b. ordered it back out ("they walk back to the balcony") */
     GetPrivateProfileStringA("Bots", "RestlessLoot", "", t, sizeof t, klh_ini);
     klmv.loot = t[0] ? (DWORD)klb_pos("RestlessLoot", 0, 600) * 1000 : klmv.restless;
     klmv.back = (DWORD)klb_pos("RestlessLootBack", 30, 240) * 1000; if (klmv.back < 5000) klmv.back = 5000;
