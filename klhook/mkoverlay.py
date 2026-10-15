@@ -1,4 +1,4 @@
-r"""mkoverlay.py <KLHook.ini> <stock Patch01.zip> <out folder>   builds <out>\Overlay\Patch01.zip: the menu of the expansion.
+r"""mkoverlay.py (v27, 2026-10-15: Mod settings with the ReShade rows, no new table entry - see THE MOD SETTINGS) <KLHook.ini> <stock Patch01.zip> <out folder>   builds <out>\Overlay\Patch01.zip: the menu of the expansion.
 
 The stock Patch01.zip is only READ. The result goes into <game>\KLExpansion\Overlay\ (copy it there yourself, or give
 <game>\KLExpansion as <out>); klslot.c answers the game's open of Patch01.zip with it, so nothing stock is replaced.
@@ -268,40 +268,81 @@ GUNS_WINDOW = 'KLGuns'
 GUNS = True
 GUN_ROWS = (('KLG_Start', 'Starting rifle', 'KLGunStart', ['Zastava M85', 'MP5 (Dead Men)', 'AK-74']),
             ('KLG_Set', 'Shop guns', 'KLGunSet', ['Dog Days', 'Dead Men looks']))
+# THE MOD SETTINGS (2026-10-14, the owner: 'i want it to be an option within the game's settings like when u click options'): the guns
+# window gets more rows - answered by klhook\klset.c (the entry counts ARE kset_upper + 1) - its headline becomes 'Mod settings', and the
+# stock Options menu gets a button that opens it (PC keyboard block, after the credits). The new rows have NO focus bar: every
+# FocusBar_long#nn entity is taken (an entity stands in one place only); the row's own colour sets (RecCSFocus) show which row has the
+# focus. Off with SETTINGS = False.
+# v27 (2026-10-15, the owner: the ReShade options 'in the Kane & Lynch settings so it's seamless and part of the game'): the rows of
+# klreshade.c's bridge (Camera FX, Lens glare, Anti-aliasing; LIVE with [ReShade] Bridge=1) and Look without '(next start)' (live with
+# the bridge too). THE MENU MANAGER'S TABLE HAS NO ROOM (5,096 slots, budget 5000, re\hud_menu.md 1.1; CLAUDE.md 2026-10-12: margin
+# about 4 after page 3), so v27 adds NOT ONE ENTRY against v26c (the installed overlay of 2026-10-14 18:37): the window's 3 new rows
+# (+12: label, value, two arrows each) are paid for by
+#   - the Arcade page's 'Mod settings' button (button, focus bar, icon, line: -4) - the page is reached from Options (SET_ARCADE),
+#   - the two gun rows' focus bars (-2): no row of the window has one now (they all show the focus by colour, as v26c's four did),
+#   - the headline's own GUIGroup (-1): its three children stand in the body group (both groups are ScreenBaseSize, same frame),
+#   - the note text block (-1): '(next start)' is in the one label that still needs it,
+#   - 'Adrenaline messages' + 'Hold E for adrenaline' as ONE row 'Adrenaline' of four values (-4): option KLSAdren, klset.c
+#     answers it from / into the same two keys ([Adrenaline] Prompt = bit 0, NeedUse = bit 1).
+# tools: python klhook\mkoverlay.py <ini> <stock Patch01.zip> <out>; the count line at the end says 'table-making tags ... (+0)'.
+SETTINGS = True
+SET_TITLE = 'Mod settings'
+SET_ARCADE = False                                    # v26c: True (an Arcade button too); v27: Options only, to make room
+SET_BARS = False                                      # v26c gave the two gun rows focus bars FocusBar_long#07/#08
+SET_ROWS = (('KLS_Look', 'Look', 'KLSLook', ['Off', 'KL', 'LiveLeak']),
+            ('KLS_Cam', 'Camera FX', 'KLSCam', ['Off', 'Subtle', 'Raw']),
+            ('KLS_Glare', 'Lens glare', 'KLSGlare', ['Off', 'On']),
+            ('KLS_AA', 'Anti-aliasing', 'KLSAA', ['Off', 'SMAA', 'FXAA']),
+            ('KLS_Tex', 'Sharper textures (next start)', 'KLSTex', ['Off', 'On']),
+            ('KLS_Adren', 'Adrenaline', 'KLSAdren', ['Stand by him', 'Stand by him + messages', 'Hold E', 'Hold E + messages']))
+SET_NOTE = None                                       # v26c had a note text block on the right: dropped for room (see above)
 GUNS_NOTE = ('Looks only: price, rank, stats and sound stay those of the Dog Days gun. Dead Men looks: SG 552 on the FN SCAR, '
              'M4A1 on the AK-47, P90 on the UMP, Steyr TMP on the MAC-10, USP on the M9 Beretta. Everyone who carries that gun shows it. '
              'Needs a map built with the guns.')
 
 
 def guns_window(nl):
-    """The window KLGuns: the heister page's row pattern (PlayMenu's two rows, at their stock places 392 and 425)."""
-    ys = (392, 425)
-    L = ['  <!-- KLExpansion: the guns page (mkoverlay.py; options answered by klgun.c) -->',
+    """The window KLGuns ('Mod settings'): the heister page's row pattern, rows 34 apart, the last one where v26c's last one was (493)."""
+    rows = (SET_ROWS + GUN_ROWS) if SETTINGS else GUN_ROWS
+    last = 493 if SETTINGS else 425
+    step = ROW
+    ys = tuple(last - step * (len(rows) - 1 - k) for k in range(len(rows)))
+    if ys[0] < 220:
+        raise SystemExit('%d rows do not fit the Mod settings window' % len(rows))
+    bars = not SETTINGS or SET_BARS
+    note = SET_NOTE if SETTINGS else GUNS_NOTE
+    head = ['      <GuiElement Template="HeadlineIcon" Graphic="Icon_Heist"/>',
+            '      <GuiElement Template="HeadlineText" Text="%%%s"/>' % esc(SET_TITLE if SETTINGS else 'Guns'),
+            '      <GuiElement Template="LongLineTop" />']
+    L = ['  <!-- KLExpansion: the guns page (mkoverlay.py; options answered by klgun.c%s) -->' % (' and klset.c: Mod settings' if SETTINGS else ''),
          '  <Window Name="%s" LocaleBasePath="AllLevels/Menu/Heist" Template="WindowDefault">' % GUNS_WINDOW,
-         '    <GuiElement Template="BackgroundTemplate"/>',
-         '    <GuiElement Type="GUIGroup" Template="ScreenBaseSize">',
-         '      <GuiElement Template="HeadlineIcon" Graphic="Icon_Heist"/>',
-         '      <GuiElement Template="HeadlineText" Text="%Guns"/>',
-         '      <GuiElement Template="LongLineTop" />',
-         '    </GuiElement>',
-         '    <GuiElement Type="GUIGroup" Template="ScreenBaseSize">',
-         '      <GuiElement Template="ChapterBackgroundTemplate"/>',
-         '      <GuiElement Type="TextBlock" Name="KLG_Note" Text="%%%s" Font="Text" LineSpace="26" FadeInDelay="0.10" FadeInTime="0.2" AlphaMax="192" X="450" Y="64" AlignH="Left" TextWidth="430" W="300" H="400" />' % esc(GUNS_NOTE),
-         '      <GuiElement Type="GUIGroup" ShowDebug="True" Name="KLG_CenterBox" AlignH="Right" X="-100" Y="-80" W="384" H="576">']
-    for k, (name, label, opt, vals) in enumerate(GUN_ROWS):
-        L.append('        <GuiElement Type="TextBlock" FadeInDelay="%.2f" FadeInTime="0.2" Text="" Name="%s_Data" Y="%d" AlignH="Center" />' % (0.05 + 0.05 * k, name, (472, 506)[k]))
+         '    <GuiElement Template="BackgroundTemplate"/>']
+    if not SETTINGS:                                   # the headline in a group of its own (as the stock pages); v27: in the body group
+        L += ['    <GuiElement Type="GUIGroup" Template="ScreenBaseSize">'] + head + ['    </GuiElement>']
+    L += ['    <GuiElement Type="GUIGroup" Template="ScreenBaseSize">'] + (head if SETTINGS else []) + [
+          '      <GuiElement Template="ChapterBackgroundTemplate"/>']
+    if note:
+        L.append('      <GuiElement Type="TextBlock" Name="KLG_Note" Text="%%%s" Font="Text" LineSpace="26" FadeInDelay="0.10" FadeInTime="0.2" AlphaMax="192" X="450" Y="64" AlignH="Left" TextWidth="430" W="300" H="400" />' % esc(note))
+    L.append('      <GuiElement Type="GUIGroup" ShowDebug="True" Name="KLG_CenterBox" AlignH="Right" X="-100" Y="-80" W="384" H="576">')
+    for k, (name, label, opt, vals) in enumerate(rows):
+        L.append('        <GuiElement Type="TextBlock" FadeInDelay="%.2f" FadeInTime="0.2" Text="" Name="%s_Data" Y="%d" AlignH="Center" />' % (0.05 + 0.03 * k, name, ys[k] + 80))
     L += ['      </GuiElement>',
           '      <GuiElement Type="GUIGroup" ShowDebug="True" Name="KLG_CenterBoxArrows" X="484" Y="-80" W="384" H="576" GeomSpace="2">']
     for msg, tpl in (('Decrease', 'OptionsArrowL_T'), ('Increase', 'OptionsArrowR_T')):
-        for k, (name, label, opt, vals) in enumerate(GUN_ROWS):
-            L.append('        <GuiElement Template="%s" X="0" Message="%s" FocusParent="%s" Receiver="%s" Y="%d"/>' % (tpl, msg, name, name, 464 + ROW * k))
+        for k, (name, label, opt, vals) in enumerate(rows):
+            L.append('        <GuiElement Template="%s" X="0" Message="%s" FocusParent="%s" Receiver="%s" Y="%d"/>' % (tpl, msg, name, name, ys[k] + 72))
     L.append('      </GuiElement>')
-    for k, (name, label, opt, vals) in enumerate(GUN_ROWS):
-        L.append('      <GuiElement Name="KLGfb#%02d" Graphic="FocusBar_long#%02d" Y="%d" X="-122" AlignH="Left" Template="FocusBar" />' % (k + 1, k + 7, 383 + ROW * k))
-    for k, (name, label, opt, vals) in enumerate(GUN_ROWS):
-        L += ['      <GuiElement Type="ToggleText" Text="%%%s" X="-100" Y="%d" Option="%s" FocusGraphic="KLGfb#%02d"' % (esc(label), ys[k], opt, k + 1),
+    if bars:
+        for k, (name, label, opt, vals) in enumerate(rows if SETTINGS else GUN_ROWS):      # v27b: a focus bar for EVERY row (live T12b/T12c: the focused row without a bar did not show at all)
+            L.append('      <GuiElement Name="KLGfb#%02d" Graphic="FocusBar_long#%02d" Y="%d" X="-122" AlignH="Left" Template="FocusBar" />' % (k + 1, 1 if SETTINGS else k + 7, (ys[k] if SETTINGS else ys[rows.index(GUN_ROWS[k])]) - 9))
+    for k, (name, label, opt, vals) in enumerate(rows):
+        g = rows.index(GUN_ROWS[0]) if GUN_ROWS[0] in rows else 0
+        fb = ' FocusGraphic="KLGfb#%02d"' % (k - g + 1) if bars and g <= k < g + len(GUN_ROWS) else ''
+        if SETTINGS:                                  # v27b: no bar, so the focus must show by COLOUR: the stock focus colours are black (made for text on the bar) - live T12b/T12c: the focused row vanished. KLFocus = white, red (the headline red) with the focus
+            fb += ' ColorSet="KLFocus"'
+        L += ['      <GuiElement Type="ToggleText" Text="%%%s" X="-100" Y="%d" Option="%s"%s' % (esc(label), ys[k], opt, fb),
               '          TextReceiver="%s_Data" UseTextReceiverAsFocus="True"' % name,
-              '          RecCSFocus="OnFocus" RecCSDefault="Default" FadeInDelay="%.2f" FadeInTime="0.2" Name="%s"' % (0.05 + 0.05 * k, name),
+              '          RecCSFocus="%s" RecCSDefault="Default" FadeInDelay="%.2f" FadeInTime="0.2" Name="%s"' % ('Header' if SETTINGS else 'OnFocus', 0.05 + 0.03 * k, name),
               '          Template="TextIndentX" AlignV="Left" HelpText="/Menu/Generic/UseLRToSelect" HelpTextBlock="HelpPlay" >']
         L += ['        <Text Text="%%%s" />' % esc(v) for v in vals]
         L.append('      </GuiElement>')
@@ -349,6 +390,14 @@ def lean_page(p, used, n):
             raise SystemExit('Lean page %d: %s not found once (%d)' % (n, what, len(m)))
         p = p[:m[0].start()] + p[m[0].end():]
     return p
+
+
+def icons_for(heister):
+    """The Arcade buttons' icons in order. Without the settings button (v27) its icon moves to the end, so pages 2 and 3 keep theirs."""
+    g = 1 if heister else 0
+    if GUNS and SETTINGS and not SET_ARCADE:
+        return ICONS[:g] + ICONS[g + 1:] + [ICONS[g]]
+    return list(ICONS)
 
 
 def build(xml, pgs, heister=True, pictures=False):
@@ -413,7 +462,8 @@ def build(xml, pgs, heister=True, pictures=False):
     s = one(r'(<GuiElement Type="OpenWindow" Template="HM_Button" Window="HeistPlayMenu" Text="Button_StartHeist"\s+FocusGraphic="HMfbl#01" FadeInDelay="0\.15" Y="220")(/>)', arc, 'the Start button')
     arc = arc[:s.start()] + s.group(1) + ' Option="Dummy" OptionValue="1"' + s.group(2) + arc[s.end():]
     g = one(r'(<GuiElement Type="GUIGroup" Template="ScreenBaseSize" X="130" Y=)"110"(>)', arc, 'the group of the rows')
-    rows = ([(HEISTER, 'Heister', None, None)] if heister else []) + ([(GUNS_WINDOW, 'Guns', None, None)] if GUNS else []) + [('HeistPlayMenu%d' % n, title, pg.get('Icon'), n) for n, title, ent, pg in pgs]
+    rows = ([(HEISTER, 'Heister', None, None)] if heister else []) + ([(GUNS_WINDOW, SET_TITLE if SETTINGS else 'Guns', None, None)] if GUNS and (SET_ARCADE or not SETTINGS) else []) + [('HeistPlayMenu%d' % n, title, pg.get('Icon'), n) for n, title, ent, pg in pgs]
+    icon_list = icons_for(heister)                   # v27: the pages keep the icons they had beside the settings button
     if len(rows) > len(ICONS):
         raise SystemExit('%d added buttons: the Arcade page has room for %d (with the Heister button: pages 2..4)' % (len(rows), len(ICONS)))
     arc = arc[:g.start()] + g.group(1) + '"%d"' % (110 - ROW * len(rows)) + g.group(2) + arc[g.end():]
@@ -423,7 +473,7 @@ def build(xml, pgs, heister=True, pictures=False):
     l5 = one(r'([ \t]*)<GuiElement AnimX="811" Template="Line" Graphic="Line_Short_01#06" AnimY="380" />[ \t]*\r?\n', arc, 'the fifth line')
     ind = f1.group(1); btn = bars = icons = lines = ''
     for i, (win, title, icon, n) in enumerate(rows):
-        k = 6 + i; y = 390 + ROW * i; icon = (icon or ICONS[i]).strip()
+        k = 6 + i; y = 390 + ROW * i; icon = (icon or icon_list[i]).strip()
         btn += (ind + '<GuiElement Type="OpenWindow" Template="HM_Button" Window="%s" Text="%%%s"' % (win, esc(title)) + nl +
                 ind + '            FocusGraphic="HMfbl#%02d" FadeInDelay="0.15" Y="%d"%s/>' % (k, y, ' Option="Dummy" OptionValue="%d"' % n if n else '') + nl + nl)
         bars += ind + '<GuiElement Name="HMfbl#%02d" Y="%d" Graphic="FocusBar_short#%02d" Template="HM_FocusBar" MouseFocusW="239" />' % (k, y - 9, k) + nl
@@ -434,7 +484,22 @@ def build(xml, pgs, heister=True, pictures=False):
         arc = arc[:m.end()] + text + arc[m.end():]
     f1 = one(r'([ \t]*)<GuiElement Name="HMfbl#01" Y="211" [^>]*/>', arc, 'the first focus bar')
     arc = arc[:f1.start()] + ind + '<!-- KLExpansion: one button per expansion page (mkoverlay.py) -->' + nl + btn + arc[f1.start():]
-    return xml[:a.start()] + arc + xml[a.end():]
+    xml = xml[:a.start()] + arc + xml[a.end():]
+    if SETTINGS and GUNS:
+        # the stock Options menu (window OptionsMenu, the PC keyboard block): one button after the credits that opens the Mod settings
+        o = one(r'[ \t]*<Window Name="OptionsMenu" [^>]*>.*?</Window>', xml, 'the window OptionsMenu', re.S)
+        opt = o.group(0)
+        pc = opt.index('<Platform PC_KEYBOARD="True" PC_GC="True">')          # the first such block is the live one (the second is in a comment)
+        c = re.compile(r'([ \t]*)<GuiElement Template="CreditButton" FocusGraphic="OMfbl#08" FadeInDelay="0\.30" />[ \t]*\r?\n').search(opt, pc)
+        if not c or c.start() > opt.index('</Platform>', pc):
+            raise SystemExit('frontend.xml is not the one this script knows: no credits button in the PC block of OptionsMenu')
+        add = c.group(1) + '<GuiElement Template="OptionButton" Window="%s" Text="%%%s" FadeInDelay="0.35" X="-110" />' % (GUNS_WINDOW, esc(SET_TITLE)) + nl
+        opt = opt[:c.end()] + add + opt[c.end():]
+        xml = xml[:o.start()] + opt + xml[o.end():]
+    if SETTINGS and GUNS:                             # v27b: the colour set of the Mod settings rows (+1 table entry: TableLog said 36 free, live T12)
+        cs = one(r'([ \t]*)<ColorSet Name="OnFocus" [^>]*/>[ \t]*\r?\n', xml, 'the OnFocus colour set')
+        xml = xml[:cs.end()] + cs.group(1) + '<ColorSet Name="KLFocus" NormalColor="0xFFffffff" FocusColor="0xffd7373a" DisableColor="0xff888888" />' + nl + xml[cs.end():]
+    return xml
 
 
 def check(stock, res, pgs, heister=True):
@@ -463,7 +528,7 @@ def check(stock, res, pgs, heister=True):
     if wins.get('HeistPlayMenu') != {m.group(1): m.group(0) for m in re.finditer(r'<Window Name="([^"]+)"[^>]*>.*?</Window>', re.sub(r'<!--.*?-->', '', stock, flags=re.S), re.S)}.get('HeistPlayMenu'):
         bad.append('the stock map page changed')
     arc = wins['HeistModeMenu']
-    nrows = len(pgs) + (1 if heister else 0) + (1 if GUNS else 0)
+    nrows = len(pgs) + (1 if heister else 0) + (1 if GUNS and (SET_ARCADE or not SETTINGS) else 0)
     if GUNS:
         w = wins.get(GUNS_WINDOW)
         if not w:
@@ -476,11 +541,13 @@ def check(stock, res, pgs, heister=True):
             for r in sorted({v.strip() for a in REFS for x in re.findall(r'\b%s="([^"]*)"' % a, w) for v in x.split(',') if v.strip()}):
                 if r not in own and r != 'HelpPlay':
                     bad.append('%s refers to %s, which the page does not define' % (GUNS_WINDOW, r))
-            for name, label, opt, vals in GUN_ROWS:
+            for name, label, opt, vals in GUN_ROWS + (SET_ROWS if SETTINGS else ()):
                 t = re.search(r'<GuiElement Type="ToggleText"[^>]*Option="%s"[^>]*>(.*?)</GuiElement>' % opt, w, re.S)
                 if not t or len(re.findall(r'<Text Text=', t.group(1))) != len(vals):
                     bad.append('%s: the row of option %s does not have %d entries' % (GUNS_WINDOW, opt, len(vals)))
             bars = re.findall(r'Graphic="(FocusBar_long#\d+)"', w) + re.findall(r'Graphic="(FocusBar_long#\d+)"', wins.get(HEISTER, ''))
+            if SETTINGS and not SET_ARCADE and 'Window="%s"' % GUNS_WINDOW in arc:
+                bad.append('HeistModeMenu: the Mod settings button is there (SET_ARCADE = False)')
             if len(set(bars)) != len(bars):
                 bad.append('%s and %s use one focus bar entity twice: %s' % (GUNS_WINDOW, HEISTER, bars))
     if heister:
@@ -513,7 +580,19 @@ def check(stock, res, pgs, heister=True):
         v = re.findall(pat, arc)
         if len(set(v)) != len(v):
             bad.append('HeistModeMenu: a %s entity is used twice: %s' % (what, v))
+    if SETTINGS and GUNS:
+        o = wins.get('OptionsMenu', '')
+        if o.count('Window="%s"' % GUNS_WINDOW) != 1:
+            bad.append('OptionsMenu: the Mod settings button is not there once')
     return bad
+
+
+def table_tags(xml):
+    """Tags that take a slot of the menu manager's table (re\hud_menu.md 1.1), comments left out. An UPPER bound of the live entries
+    (a <Platform> block for another platform makes none); the DIFFERENCE between two builds is exact while the change is outside
+    such blocks, which every part of this script is (the Options button stands in the live PC block)."""
+    plain = re.sub(r'<!--.*?-->', '', xml, flags=re.S)
+    return len(re.findall(r'<(?:Window|GuiElement|ColorSet|ButtonGraphic)[\s/>]', plain))
 
 
 def main():
@@ -554,22 +633,24 @@ def main():
     c = zipfile.ZipFile(path); back = c.read(names[MEMBER].filename)
     assert back == res and all(c.read(i.filename) == z.read(i.filename) for i in z.infolist() if i.filename.lower() != MEMBER)
     print('%s: %d members, %s %d -> %d bytes (stock sha1 %s)' % (path, len(c.namelist()), MEMBER, len(raw), len(res), hashlib.sha1(raw).hexdigest()[:12]))
-    h = (1 if heister else 0) + (1 if GUNS else 0)
+    h = (1 if heister else 0) + (1 if GUNS and (SET_ARCADE or not SETTINGS) else 0)
     if GUNS:
-        print('  guns page: Arcade button %d (icon %s) -> window %s; rows %s' % (6 + (1 if heister else 0), ICONS[1 if heister else 0], GUNS_WINDOW, ', '.join('%s (%s, %d entries)' % (r[1], r[2], len(r[3])) for r in GUN_ROWS)))
+        print('  %s page: %s -> window %s; rows %s' % (SET_TITLE if SETTINGS else 'guns', ('Arcade button %d (icon %s)' % (6 + (1 if heister else 0), ICONS[1 if heister else 0])) if (SET_ARCADE or not SETTINGS) else 'Options menu button only', GUNS_WINDOW, ', '.join('%s (%s, %d entries)' % (r[1], r[2], len(r[3])) for r in ((SET_ROWS + GUN_ROWS) if SETTINGS else GUN_ROWS))))
     if heister:
         if pictures:
             print(r'  heister page: WITH PICTURES - needs Overlay\Scenes\kaneandlynch.zip of tools\kl_portraits.py beside it (%s)' % ', '.join('%d for %s' % (len(r[2]), r[1]) for r in HEISTER_PICS))
         print('  heister page: Arcade button 6 (icon %s) -> window %s; rows %s' % (ICONS[0], HEISTER, ', '.join('%s (%s, %d entries)' % (r[1], r[2], len(r[3])) for r in HEISTER_ROWS)))
     for k, (n, title, ent, pg) in enumerate(pgs):
         mode = pg.get('Pictures', 'story').strip().lower()
-        print('  page %d "%s": Arcade button %d (icon %s) -> window HeistPlayMenu%d; selector HeistLevel_P%d; Dummy = %d' % (n, title, 6 + h + k, pg.get('Icon', ICONS[h + k]).strip(), n, n, n))
+        print('  page %d "%s": Arcade button %d (icon %s) -> window HeistPlayMenu%d; selector HeistLevel_P%d; Dummy = %d' % (n, title, 6 + h + k, pg.get('Icon', icons_for(heister)[h + k]).strip(), n, n, n))
         for e, slot in enumerate(ORDER):
             if slot in ent:
                 pic = ent[slot][2] or ('LevelPicture_L%02d' % slot if mode == 'story' else 'LevelPicture_H%02d' % slot)
                 print('     entry %d = slot F%02d: "%s" from Maps\\%s, picture %s' % (e, slot, ent[slot][1], ent[slot][0], pic))
     print('  Arcade page: rows moved up by %d (group Y %d)' % (ROW * (len(pgs) + h), 110 - ROW * (len(pgs) + h)))
     print('  windows %d -> %d, elements <GuiElement %d -> %d' % (xml.count('<Window '), res.count(b'<Window '), xml.count('<GuiElement'), res.count(b'<GuiElement')))
+    t0, t1 = table_tags(xml), table_tags(res.decode('latin-1'))
+    print('  table-making tags of frontend.xml (Window / GuiElement / ColorSet / ButtonGraphic outside comments): %d -> %d (%+d); v26c (installed 2026-10-14 18:37) = 4345 (+159): v27b says 4346 (+1: the KLFocus colour set)' % (t0, t1, t1 - t0))
 
 
 if __name__ == '__main__':

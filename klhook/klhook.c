@@ -750,6 +750,7 @@ static void klh_tick(int game_thread)
     kad_tick(game_thread);                            /* kladren.c: raises the mash meter first */
     kld_tick(game_thread);                            /* kldown.c: the mash get-up (off unless [Down] Enable) */
     klrs_tick(game_thread);                           /* klreshade.c: the numbers the shaders get (reads only; off unless [ReShade] Bridge=1) */
+    kset_tick(game_thread);                           /* klset.c: the menu manager's table count, a log line (reads only; off unless [Menu] TableLog=1) */
     klg_tick();
     klm_tick();
     InterlockedExchange(&klh_tick_busy, 0);

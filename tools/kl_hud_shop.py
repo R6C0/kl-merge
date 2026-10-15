@@ -12,10 +12,19 @@ item (eFF2Item*, tools/dd_enums.json) names the gun; the LOC's old name and desc
 The descriptions keep their words; only the UTF-8 right quote the game's font shows as an accented 'a' ('Mr. Glazer<a>s') becomes an apostrophe, and
 spaces are tidied. All languages: the names are the guns' own (not translated); a language whose leaf is missing is left alone.
 
-NOT DONE: a gun whose LOOK the hook switches ([Guns], tools/kl_guns.py: Zastava as MP5 ...) keeps its Dog Days name, as on the HUD.
+LOOKS (2026-10-15, worker 'shop', the owner: 'shop revamp would be good'): a gun whose Dead Men LOOK the build shows (tools/kl_map_guns.py;
+KLGuns.ini beside the archive, [Gun.n] Item / Shown / Look<k>) is sold under the look's name - the owner's eight maps all show MP5 on the
+Zastava, SG 552 on the FN SCAR, M4A1 on the AK-47, P90 on the Type 05, Steyr TMP on the MAC-10, USP on the M9 Beretta (KLGuns.ini Shown=1
+on every one, read 2026-10-15), yet the shop said ZASTAVA M85 ... . The English description of such a row is a new one in the shop's own
+'Police reg.' manner that ends 'Handles as the <Dog Days gun>.' (price, rank, stats, sound and animations stay the Dog Days gun's: the shop
+table 0xbd1f68 and the templates are not touched); other languages keep their description (the name is the gun's in every language).
+The SILENCED rows (M9 BERETTA SIL, MAC-10 SIL, TYPE 05 SIL) are other items with their own models: no look, their names stay.
+The name is BAKED: a look switched later on the Guns page ([Guns] Start / Set) is not followed here - the HUD dial follows it
+(klhook klhud_weapon.c, [HUD] LookNames=1). No KLGuns.ini, or one without Shown > 0: the names are as before.
+    python kl_hud_shop.py names <build folder | KLGuns.ini>      prints the rows this build's looks rename (reads only)
 NOT LOADED IN THE GAME YET.
 """
-import re
+import configparser, os, re, sys
 import kl_loc as L
 
 KEY = 'AllLevels/Menu/Online/WeaponShop/Weapon'
@@ -37,6 +46,56 @@ STOCK_EN = ('N 77P', 'N 77P Silenced', 'Doretta', 'Doretta Silenced', 'Copper', 
             'Buqiang 800 Scoped', 'TOQ Elite', 'Buqiang 900', 'Buqiang 900 Scoped')
 
 
+# a look's label in KLGuns.ini (tools/kl_map_guns.py LOOKS) -> (the name shown, the English description). The names are klhud_weapon.c's
+# klwd_looks word for word. '%s' = the Dog Days gun's own shop name (ROWS), so the player knows what it handles like.
+LOOKS = {
+    'MP5':       ('MP5', 'Police reg.: 6453-A753\nSubmachine gun. Origin: German. Left behind by The7 after a botched bank job. Handles as the %s.'),
+    'AK-74':     ('AK-74', 'Police reg.: 6453-A754\nAssault rifle. Origin: Russian. Bought off a Serbian fence, no questions asked. Handles as the %s.'),
+    'SG 552':    ('SG 552', 'Police reg.: 9791-A243\nSwiss carbine. Taken from a dead mercenary on a jungle road. Handles as the %s.'),
+    'M4A1':      ('M4A1', 'Police reg.: 1574-A088\nUS carbine. Origin: a Los Angeles police armoury, never reported missing. Handles as the %s.'),
+    'P90':       ('P90', 'Police reg.: 4534-A975\nPersonal defence weapon. Origin: Belgian. Recovered after a prison break. Handles as the %s.'),
+    'Steyr TMP': ('STEYR TMP', 'Police reg.: 1612-D621\nMachine pistol. Origin: Austrian. Found in a Tokyo nightclub after the shooting. Handles as the %s.'),
+    'USP':       ('USP', 'Police reg.: 4962-B092\nHand gun. Origin: German. Confiscated from a Mr. Kane. Handles as the %s.'),
+}
+
+
+# the Dog Days gun in a sentence ('Handles as the Zastava M85.'); a row not here uses its ROWS name
+PLAIN = {8: 'M9 Beretta', 23: 'MAC-10', 27: 'Type 05', 29: 'Zastava M85', 30: 'FN SCAR', 31: 'AK-47'}
+
+
+def read_looks(path, log=print):
+    """KLGuns.ini (or the build folder holding it) -> {shop item: look label} for every gun built to show a look (Shown > 0).
+    {} when there is no file or no such gun; a look label not in LOOKS is left out (logged)."""
+    if path and os.path.isdir(path):
+        path = os.path.join(path, 'KLGuns.ini')
+    if not path or not os.path.isfile(path):
+        return {}
+    cp = configparser.RawConfigParser(strict=False)
+    cp.optionxform = str
+    try:
+        cp.read(path, encoding='latin1')
+        n = cp.getint('Guns', 'Count', fallback=0)
+    except (configparser.Error, ValueError) as e:
+        log('shop names: %s not read (%s) - no look names' % (path, e)); return {}
+    out = {}
+    for i in range(1, n + 1):
+        sec = 'Gun.%d' % i
+        if not cp.has_section(sec):
+            continue
+        try:
+            item, shown = cp.getint(sec, 'Item'), cp.getint(sec, 'Shown', fallback=0)
+        except ValueError:
+            continue
+        if shown <= 0:
+            continue
+        lab = cp.get(sec, 'Look%d' % shown, fallback='').strip()
+        if lab in LOOKS:
+            out[item] = lab
+        else:
+            log('shop names: %s [%s] shows look %d %r, which has no shop name here - left as the Dog Days gun' % (path, sec, shown, lab))
+    return out
+
+
 def _set_text(node, text):
     t, _x, _sid, _rest = L.fields(node)
     e = node.raw.index(b'\0')
@@ -49,29 +108,33 @@ def _tidy(b):
     return b
 
 
-def apply_loc(data, english=False, log=print, tag=''):
+def apply_loc(data, english=False, log=print, tag='', looks=None):
     """one .LOC member -> (new bytes, number of leaves changed). english: check the stock names first (a level whose shop rows read
-    otherwise is left alone, logged)."""
+    otherwise is left alone, logged), and the description of a row in `looks` ({item: look label}, read_looks) is the look's."""
+    looks = looks or {}
     kids = L.parse(data)
     if kids is None:
         return data, 0
     leaves = dict(L.leaves(kids))
     if english:
         have = [L.fields(leaves[KEY + str(r)])[0] if KEY + str(r) in leaves else None for r in range(36)]
-        bad = [r for r in range(36) if have[r] is None or b' '.join(have[r].split()).decode('latin1') != STOCK_EN[r]]
+        ok = lambda r, t: t in (STOCK_EN[r], ROWS[r][1]) or t in [v[0] for v in LOOKS.values()]      # stock, or baked here before
+        bad = [r for r in range(36) if have[r] is None or not ok(r, b' '.join(have[r].split()).decode('latin1'))]
         if bad:
             log('shop names %s: rows %s do not read as the stock shop (first: %r) - names left stock' % (tag, bad[:5], have[bad[0]]))
             return data, 0
     n = 0
-    for r, (_item, name) in enumerate(ROWS):
+    for r, (item, name) in enumerate(ROWS):
+        lab = looks.get(item)
         k = leaves.get(KEY + str(r))
         if k is not None and k.flags & L.TEXT:
-            if L.fields(k)[0] != name.encode('latin1'):
-                _set_text(k, name.encode('latin1')); n += 1
+            shown = LOOKS[lab][0] if lab else name
+            if L.fields(k)[0] != shown.encode('latin1'):
+                _set_text(k, shown.encode('latin1')); n += 1
         d = leaves.get(KEY + str(r) + 'Desc')
         if d is not None and d.flags & L.TEXT:
             t = L.fields(d)[0] or b''
-            t2 = _tidy(t)
+            t2 = (LOOKS[lab][1] % PLAIN.get(item, name)).encode('latin1') if lab and english else _tidy(t)
             if t2 != t:
                 _set_text(d, t2); n += 1
     if not n:
@@ -81,19 +144,34 @@ def apply_loc(data, english=False, log=print, tag=''):
     return out, n
 
 
-def apply_level(files, log=print):
-    """every .LOC member of an open level (kl_hud.open_level's files) in place -> the names of the members changed"""
+def apply_level(files, log=print, guns=None):
+    """every .LOC member of an open level (kl_hud.open_level's files) in place -> the names of the members changed.
+    guns: the build's KLGuns.ini (or its folder): rows of a gun built to show a Dead Men look take the look's name (LOOKS)."""
+    looks = read_looks(guns, log)
     locs = [m for m in files if m.lower().endswith('.loc')]
     en = [m for m in locs if m.lower().endswith('english.loc')]
     if not en:
         log('shop names: the level has no English .LOC - left stock'); return []
-    _o, n_en = apply_loc(files[en[0]], True, log, en[0])
+    _o, n_en = apply_loc(files[en[0]], True, log, en[0], looks)
     if not n_en:
         return []
     changed = []
     for m in locs:
-        new, n = apply_loc(files[m], False, log, m)
+        new, n = apply_loc(files[m], m == en[0], log, m, looks)
         if n:
             files[m] = new; changed.append(m)
     log('shop names: %d weapon names in the HUD\'s wording, descriptions tidied; %d .LOC member(s): %s' % (len(ROWS), len(changed), ', '.join(x.rsplit('/', 1)[-1] for x in changed)))
+    if looks:
+        log('shop names: Dead Men looks sold under their own names: %s' % ', '.join('%s as %s' % (dict(ROWS)[i] if i in dict(ROWS) else i, LOOKS[l][0]) for i, l in sorted(looks.items())))
     return changed
+
+
+if __name__ == '__main__':
+    if len(sys.argv) != 3 or sys.argv[1] != 'names':
+        raise SystemExit(__doc__)
+    lk = read_looks(sys.argv[2])
+    if not lk:
+        print('no gun of %s is built to show a look: the shop keeps the names of ROWS' % sys.argv[2])
+    for r, (item, name) in enumerate(ROWS):
+        if item in lk:
+            print('row %2d item %2d  %-14s -> %-10s  %s' % (r, item, name, LOOKS[lk[item]][0], LOOKS[lk[item]][1].replace('\n', ' | ') % PLAIN.get(item, name)))

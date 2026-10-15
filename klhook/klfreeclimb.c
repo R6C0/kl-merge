@@ -121,6 +121,17 @@ static DWORD klfc_lastPress;
 static SHORT (WINAPI *klfc_key)(int);
 static HWND (WINAPI *klfc_fg)(void);
 static DWORD (WINAPI *klfc_wtp)(HWND, LPDWORD);
+#ifdef KLHOOK_TEST
+/* TEST build only: klauto.c's scripted keys reach the game through DirectInput, which GetAsyncKeyState never sees (and an
+   unattended run's window need not be in front), so a script's 'tap E' / 'down W' could not start a climb. The press,
+   W and LSHIFT also count when klauto holds them (its kla_held[] by DIK code; klhud.c's klu_tab_held reads Tab the same
+   way). klfc_dik = the DIK code of [Climb] Key (user32 MapVirtualKeyA, VK -> scan code; E = 0x12). SHIP: unchanged. */
+static int kla_key_held(int dik);
+static int klfc_dik = 0x12;
+#define KLFC_SCRIPTED(dik) kla_key_held(dik)
+#else
+#define KLFC_SCRIPTED(dik) 0
+#endif
 
 /* ---------------------------------------------------------------- the fault guard */
 
@@ -551,11 +562,11 @@ static int klfc_tick_body(void *unused)
     fw = klfc_fg ? klfc_fg() : 0;
     if (fw && klfc_wtp) klfc_wtp(fw, &pid);
     fg = fw && pid == GetCurrentProcessId();
-    E = fg && (klfc_key(klfc.key) & 0x8000);
+    E = (fg && (klfc_key(klfc.key) & 0x8000)) || KLFC_SCRIPTED(klfc_dik);
     klh_rd(P + 0xb94, &fwd, 4);
-    Wk = (fg && (klfc_key('W') & 0x8000)) || fwd > 0.5f;
+    Wk = (fg && (klfc_key('W') & 0x8000)) || fwd > 0.5f || KLFC_SCRIPTED(0x11);
     klh_rd(P + 0x850, &spr, 1);
-    sprint = spr || (fg && (klfc_key(VK_LSHIFT) & 0x8000));
+    sprint = spr || (fg && (klfc_key(VK_LSHIFT) & 0x8000)) || KLFC_SCRIPTED(0x2a);
     klh_rd(P + 0x5ec, V, 12); klh_rd(P + 0x5f8, &S, 4);
     vxz = (float)sqrt(V[0] * V[0] + V[2] * V[2]);
     blocked = vxz >= 300.0f && S < 0.75f * vxz;
@@ -633,6 +644,14 @@ static void klfc_init(void)
         klfc_fg = (HWND (WINAPI *)(void))GetProcAddress(u, "GetForegroundWindow");
         klfc_wtp = (DWORD (WINAPI *)(HWND, LPDWORD))GetProcAddress(u, "GetWindowThreadProcessId");
     }
+#ifdef KLHOOK_TEST
+    if (u) {
+        UINT (WINAPI *mvk)(UINT, UINT) = (UINT (WINAPI *)(UINT, UINT))GetProcAddress(u, "MapVirtualKeyA");
+        UINT sc = mvk ? mvk((UINT)klfc.key, 0) : 0;                 /* MAPVK_VK_TO_VSC */
+        if (sc > 0 && sc < 0x80) klfc_dik = (int)sc;
+        klog("fclimb: TEST build: klauto's scripted keys count too (press DIK 0x%02x, W 0x11, LSHIFT 0x2a; no foreground needed for them)", klfc_dik);
+    }
+#endif
     if (!klfc_key || !klfc_fg || !klfc_wtp) { klfc.on = 0; klog("fclimb: user32's GetAsyncKeyState / GetForegroundWindow / GetWindowThreadProcessId not found: OFF"); return; }
     klog("fclimb: on; Dry=%d Log=%d Key=0x%02x NeedBlock=%d MinIn=%d Camera=%d Snap=%d; Dead Men's free climb (luvsic's ANP climb.inc): hold W and press the key at a ledge 25 .. 220 high; "
          "plays only where the level's .ANM has /Movement/Climb/Up/* (no stock Dog Days level has them)%s",

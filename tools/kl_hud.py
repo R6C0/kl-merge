@@ -816,7 +816,7 @@ def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, onl
         add_extras(files, ext, log)
     if SHOPNAMES:
         import kl_hud_shop
-        kl_hud_shop.apply_level(files, log)
+        kl_hud_shop.apply_level(files, log, guns=os.path.join(os.path.dirname(zp), 'KLGuns.ini'))      # Dead Men looks sold under their names
     os.makedirs(dst, exist_ok=True)
 
     if os.path.abspath(dst) == os.path.abspath(os.path.dirname(zp)):
@@ -1775,7 +1775,7 @@ def apply_markers(src, dst, shop=True, log=print):
     changed = []
     if shop:
         import kl_hud_shop
-        changed = kl_hud_shop.apply_level(files, log)
+        changed = kl_hud_shop.apply_level(files, log, guns=os.path.join(os.path.dirname(zp), 'KLGuns.ini'))
     os.makedirs(dst, exist_ok=True)
     if os.path.abspath(dst) == os.path.abspath(os.path.dirname(zp)):
         raise ValueError("the output folder is the build's own")
