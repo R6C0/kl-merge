@@ -123,6 +123,28 @@
  *   Log=1       2 = log every blocked / passed write, not only the first per level
  *   State=1     0 = no 'session:' lines
  *   StockRows=1 0 = fail FindOrCreateLeaderboard while the upload is blocked (no stock rows on the score page)
+ *   [KLHook]
+ *   AllMaps=0   1 = THE STOCK LEVELS COUNT AS MODDED IN ARCADE (owner, 2026-10-15: 'I want all of these settings to be
+ *               included in the standard maps ... full overhaul'). See ALLMAPS below.
+ *
+ * ALLMAPS ([KLHook] AllMaps=1, default 0; added 2026-10-15)
+ *   Every gameplay part of this hook asks ONE question before it acts: klx_level_verdict(scene) == 2, 'this level is
+ *   not the stock one of its slot' (directly: klcrew.c, kltalk.c, klfed.c, klfedkit.c, klhud.c; through klbot.c's
+ *   klb_level: klbot, klbalance, kladren, klbotdown, kldown, klescort, klhop, klmove, klclimb, klgrudge,
+ *   klhud_names). The Steam policy above asks the same function. So the switch lives HERE, in that one function:
+ *   klx_level_verdict_raw() is the archive's truth (klstock.h); klx_level_verdict() answers 2 also for a STOCK
+ *   level (raw 1) when AllMaps=1 AND an Arcade session is up - the game's own Arcade test (klbot.c 0, 0x7f6850):
+ *   [0x168e598]+0x5c == 4 and +0x54 neither 2 nor 3 (2 / 3 = a network host / client: online Fragile Alliance,
+ *   Undercover Cop, Cops & Robbers also have +0x5c == 4). Every gate then opens on a stock level, AND the Steam
+ *   policy treats that round exactly as a Dead Men map's: upload blocked, stats and achievements blocked until the
+ *   game is restarted (the 'ran in this process' mark). Additionally, while AllMaps=1 and an Arcade session is up,
+ *   EVERY write is blocked even with no level judged yet (the load, the session end, the score page): the stock
+ *   level's own verdict (1) would otherwise let writes of the gap through.
+ *   NOT touched: an online session (role 2 / 3) gets the raw verdict - a stock level stays stock for every part and
+ *   for Steam; klnet.c (the FA network tune) asks the raw verdict itself. AllMaps without the Steam guard installed
+ *   (klx_on 0) does nothing: every gate already needs klx_on.
+ *   Per-level data (KLJoin.ini, KLTalk.ini, KLWardrobe.ini, KLGuns.ini beside a map archive) does not exist for a
+ *   stock archive (and kljoin.c ignores a KLJoin.ini beside a stock archive): the parts that need it do nothing there.
  *
  * TESTED OFF-GAME (scratch harness `jhook`, sources not in the repo): a stub steam_api.dll whose ISteamUserStats
  * records every call; all 30 slots called through the proxy with marker arguments (stack balance, return values,
@@ -154,6 +176,7 @@ static void **klx_real;                       /* the real ISteamUserStats (point
 static void *klx_vt[KLX_NSLOT];
 static struct { void **vt; } klx_proxy = { klx_vt };
 static int klx_on, klx_log = 1, klx_state_on = 1, klx_stock_rows = 1;
+static int klx_allmaps;                      /* [KLHook] AllMaps: a stock level counts as modded in Arcade (top comment, ALLMAPS) */
 #ifdef KLHOOK_TEST
 static int klx_always = 1;                    /* a TEST build never writes to Steam; not read from the ini */
 #else
@@ -266,10 +289,10 @@ static void klh_level_open(const char *asked, const char *opened)
     SetLastError(err);
 }
 
-/* 0 = the scene is no level (frontend, a loading sequence, none), 1 = stock, 2 = not stock, 3 = not known (its
-   archive was not seen or could not be read: blocks like 2 but never leaves the 'ran in this process' mark);
-   why[200] says which and why */
-static int klx_level_verdict(const char *scene, char *why)
+/* THE ARCHIVE'S TRUTH: 0 = the scene is no level (frontend, a loading sequence, none), 1 = stock, 2 = not stock,
+   3 = not known (its archive was not seen or could not be read: blocks like 2 but never leaves the 'ran in this
+   process' mark); why[200] says which and why. Every gate asks klx_level_verdict below, which adds AllMaps. */
+static int klx_level_verdict_raw(const char *scene, char *why)
 {
     char key[64]; int i, v;
     why[0] = 0;
@@ -283,6 +306,29 @@ static int klx_level_verdict(const char *scene, char *why)
     if (v) snprintf(why, 200, "%s", klx_arch[i].why);
     LeaveCriticalSection(&klx_cs);
     if (!v) { snprintf(why, 200, "its archive %s was not seen being opened", key); return 3; }
+    return v;
+}
+
+/* An Arcade session is up: the game's own test 0x7f6850 (klbot.c 0) - game type [session+0x5c] 4 and the network
+   role [session+0x54] neither 2 (host) nor 3 (client). Online FA / Undercover Cop / Cops & Robbers are type 4 too:
+   the role is what tells them apart. Reads only; any thread. */
+static int klx_arcade_now(void)
+{
+    DWORD sm, sub = 0;
+    if (!klh_exe_ok || !(sm = klh_rd32((DWORD_PTR)KLH_VA(KLX_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x54, &sub, 4)) return 0;
+    return sub != 2 && sub != 3;
+}
+
+/* THE ONE QUESTION EVERY GAMEPLAY PART AND THE STEAM POLICY ASK (top comment, ALLMAPS): the raw verdict, except
+   that with [KLHook] AllMaps=1 a STOCK level (1) in an Arcade session answers 2 - modded for the parts, blocked
+   for Steam. An online session always gets the raw verdict. */
+static int klx_level_verdict(const char *scene, char *why)
+{
+    int v = klx_level_verdict_raw(scene, why);
+    if (v == 1 && klx_allmaps && klx_arcade_now()) {
+        snprintf(why, 200, "the STOCK level of its slot, counted as modded: [KLHook] AllMaps=1 in an Arcade session");
+        return 2;
+    }
     return v;
 }
 
@@ -311,6 +357,10 @@ static int klx_ship_blocked(int kind, char *why)
     if (kind == KLX_STATS && klx_taint[0]) { snprintf(why, 200, "%s: stats stay blocked until the game is restarted", klx_taint); return 1; }
     if (klx_pend[0]) { snprintf(why, 200, "the level archive %s was opened and is not the stock one; its scene is not up yet", klx_pend); return 1; }
     if (v >= 2 || (!v && klx_last_verdict >= 2)) { snprintf(why, 200, "%s", v ? w : klx_last_why); return 1; }
+    if (klx_allmaps && klx_arcade_now()) {                    /* ALLMAPS: no level judged yet (a load, the score page): the session is modded play all the same */
+        strcpy(why, "[KLHook] AllMaps=1 and an Arcade session is up: every Arcade round counts as modded");
+        return 1;
+    }
     strcpy(why, v ? "stock level" : klx_last_verdict ? "frontend, after a stock level" : "no level loaded yet in this process");
     return 0;
 }
@@ -536,6 +586,9 @@ static void klx_init(void)
     klx_log = GetPrivateProfileIntA("Steam", "Log", 1, klh_ini);
     klx_state_on = GetPrivateProfileIntA("Steam", "State", 1, klh_ini);
     klx_stock_rows = GetPrivateProfileIntA("Steam", "StockRows", 1, klh_ini);
+    klx_allmaps = GetPrivateProfileIntA("KLHook", "AllMaps", 0, klh_ini) == 1;
+    if (klx_allmaps) klog("steam: [KLHook] AllMaps=1: in an Arcade session (not online) a STOCK level counts as modded - every gameplay part may act on it "
+                          "and its Steam writes are blocked as for an expansion map (stats until restart); this needs the guard below to be installed");
 #ifndef KLHOOK_TEST
     klx_always = GetPrivateProfileIntA("Steam", "Block", 1, klh_ini) >= 2;
 #endif
@@ -560,6 +613,7 @@ static void klx_init(void)
          "TEST build - every leaderboard upload, stat and achievement write is BLOCKED, on every level"
 #else
          klx_always ? "[Steam] Block=2 - every write is BLOCKED, on every level" :
+         klx_allmaps ? "writes are BLOCKED on a level that is not the stock level of its slot (klstock.h) AND, AllMaps=1, in every Arcade session; stats stay blocked until restart once such a level ran" :
          "writes are BLOCKED on a level that is not the stock level of its slot (klstock.h); stats stay blocked until restart once such a level ran"
 #endif
          , klx_stock_rows ? "" : "; StockRows=0: FindOrCreateLeaderboard fails too while the upload is blocked");

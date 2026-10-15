@@ -980,10 +980,14 @@ static void klmv_track(const struct klb_snap *s, DWORD now)
    the path and the file time under kljoin.c's lock, the file is read again only when one of them changed. */
 static void klmv_hops_load(void)
 {
-    char key[64], file[MAX_PATH], t[32], name[48]; FILETIME ft; int g, j, ng, nh;
+    char key[64], file[MAX_PATH], t[32], name[48], scene[160], cur[64]; FILETIME ft; int g, j, ng, nh;
     EnterCriticalSection(&klj_cs);
     snprintf(key, sizeof key, "%s", klj_map_key); snprintf(file, sizeof file, "%s", klj_map_file); ft = klj_map_ft;
     LeaveCriticalSection(&klj_cs);
+    /* kljoin.c keeps the last level's file until a level with one opens (it drops it only when the SAME key opens
+       without one): on another level - a stock one under [KLHook] AllMaps=1, or an expansion map without a KLJoin.ini -
+       those hop places are not this level's. klhop / klclimb / klrappel / klfedkit compare the key themselves. */
+    if (key[0] && (!klh_scene(scene, sizeof scene) || !klh_level_key(scene, cur, sizeof cur) || strcmp(cur, key))) { key[0] = 0; file[0] = 0; memset(&ft, 0, sizeof ft); }
     if (!strcmp(key, klmv_hop_key) && !_stricmp(file, klmv_hop_file) && !CompareFileTime(&ft, &klmv_hop_ft)) return;
     klmv_nhop = 0; klmv_nhold = 0; memset(klmv_hop_at, 0, sizeof klmv_hop_at); memset(klmv_hop_user, 0, sizeof klmv_hop_user); snprintf(klmv_hop_key, sizeof klmv_hop_key, "%s", key); snprintf(klmv_hop_file, sizeof klmv_hop_file, "%s", file); klmv_hop_ft = ft;
     klmv_hop_dmax = 1800.0f;

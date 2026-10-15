@@ -150,7 +150,8 @@
 #define KLNET_SVC_VT    0x00bd597c            /* ZOnlineServiceSteam */
 #define KLNET_NDS       6
 
-static int klx_level_verdict(const char *scene, char *why);          /* klsteam.c: 0 no level, 1 stock, 2 not stock, 3 not known; why[200] */
+static int klx_level_verdict_raw(const char *scene, char *why);      /* klsteam.c: 0 no level, 1 stock, 2 not stock, 3 not known; why[200]. The RAW one:
+                                                                        [KLHook] AllMaps (Arcade only) never reaches a network session */
 
 static const struct { const char *name; DWORD tol, max, min; int actor; int mul2; } klnet_ds[KLNET_NDS] = {
     { "actor position",  0x0168f1e4, 0x00d34664, 0x00d34668, 1, 2 },
@@ -298,7 +299,7 @@ static void klnet_tick(int game_thread)
         have_svc = 1; priv = (props[8] >> 4) & 1; rank = (props[8] >> 5) & 1;
     }
     /* the level */
-    if (klh_scene(scene, sizeof scene)) verdict = klx_level_verdict(scene, why); else { scene[0] = 0; why[0] = 0; }
+    if (klh_scene(scene, sizeof scene)) verdict = klx_level_verdict_raw(scene, why); else { scene[0] = 0; why[0] = 0; }
     /* the level index of THIS session: the replicated server object's (what both load paths use, 0x6c536f / 0x491fd1);
        a host that has no such object yet has the index it chose itself. Is the scene the engine names that slot? */
     if ((d = klh_rd32(sm + 0x84)) != 0 && klh_rd(d + 0x1b0, &d_idx, 1)) idx = (signed char)(d_idx ^ 0xac);

@@ -138,6 +138,39 @@ static struct {
 } klg_f;
 static struct { DWORD loading, count, root0; LONG start, set; } klg_done;      /* what the last complete pass saw */
 static int klg_told_header;
+/* THE LOOK'S NAME per item, for the HUD dial (klhud_weapon.c, [HUD] LookNames=1; worker 'shop' 2026-10-15). The shop sells the
+   looks under their own names since tools\kl_hud_shop.py read KLGuns.ini (MP5, SG 552 ...); the dial said ZASTAVA M85 for the gun
+   that looks and is sold as an MP5. Two buffers of 64 items x 24 bytes: klg_publish (under klg_cs) fills the one not in use, then
+   switches klg_lk_cur; the render thread reads klg_lk[klg_lk_cur] without a lock. '' = no look: the dial keeps its own name.
+   Which look: the one the last pass wrote (shown), else the one the build was baked to show (KLGuns.ini Shown) - what is on the
+   screen in both cases. With [Guns] off the file is still read for the names when LookNames is on (klg_lknames), nothing is
+   written to the level then: the build shows its baked look and the dial names it. */
+#define KLG_NITEM 64                          /* eFF2ItemCount (tools\kl_guns.py) */
+static char klg_lk[2][KLG_NITEM][24];
+static volatile LONG klg_lk_cur;
+static int klg_lknames;                         /* set by klhud_weapon.c's klwd_init: [HUD] LookNames=1 */
+static void klg_publish(void)                 /* klg_cs held */
+{
+    int nx = !klg_lk_cur, i, w, c; char *d; const char *src;
+    memset(klg_lk[nx], 0, sizeof klg_lk[nx]);
+    for (i = 0; klg_f.on && i < klg_f.n; i++) {
+        w = klg_f.g[i].shown >= 0 ? klg_f.g[i].shown : klg_f.g[i].built;
+        if (w < 1 || w > klg_f.g[i].looks || klg_f.g[i].item < 0 || klg_f.g[i].item >= KLG_NITEM) continue;
+        for (src = klg_f.g[i].label[w - 1], d = klg_lk[nx][klg_f.g[i].item], c = 0; *src && c < 23; src++, c++)
+            d[c] = (char)(*src >= 'a' && *src <= 'z' ? *src - 32 : *src);     /* the dial's capitals: 'Steyr TMP' -> 'STEYR TMP' */
+        d[c] = 0;
+        if (!strcmp(d, "?")) d[0] = 0;
+    }
+    InterlockedExchange(&klg_lk_cur, nx);
+}
+/* the look's name of an item for the dial, or 0 (any thread, no lock) */
+static const char *klg_look_name(int item)
+{
+    const char *n;
+    if (!klg_lknames || item < 0 || item >= KLG_NITEM) return 0;
+    n = klg_lk[klg_lk_cur & 1][item];
+    return n[0] ? n : 0;
+}
 
 static const char *const klg_names[2] = { "KLGunStart", "KLGunSet" };
 static const int klg_upper[2] = { 2, 1 };     /* mkoverlay.py GUN_ROWS has as many entries + 1 */
@@ -177,7 +210,7 @@ static void klg_level_open(const char *key, const char *opened)
 {
     static char lastkey[64], lastfile[MAX_PATH]; static int lastver = -2; static DWORD lastent;
     char file[MAX_PATH], sec[16], k[24], kk[64], *s; int i = 0, j, n, ver, word, bit, fresh; DWORD len, ent;
-    if (!klg_on) return;
+    if (!klg_on && !klg_lknames) return;               /* LookNames alone: the file is read for its names, nothing is written */
     len = GetFullPathNameA(opened, MAX_PATH, file, 0);
     if (!len || len >= MAX_PATH || !(s = strrchr(file, 0x5c)) || (size_t)(s - file) + 12 >= sizeof file) return;
     strcpy(s + 1, "KLGuns.ini");
@@ -216,8 +249,18 @@ static void klg_level_open(const char *key, const char *opened)
         if (i == n) { klg_f.on = 1; klg_f.n = n; strcpy(klg_f.file, file); }
     }
     memset(&klg_done, 0, sizeof klg_done);
+    klg_publish();                                   /* the baked looks' names now; a pass replaces them with what it wrote */
     LeaveCriticalSection(&klg_cs);
     InterlockedExchange(&klg_dirty, 1);
+    if (fresh && klg_lknames && klg_f.on) {
+        char line[200], *p = line; int g;
+        for (g = 0, line[0] = 0; g < klg_f.n && p < line + sizeof line - 40; g++) {
+            const char *nm = klg_look_name(klg_f.g[g].item);
+            if (nm) p += snprintf(p, 40, "%s%d=%s", p == line ? "" : ", ", klg_f.g[g].item, nm);
+        }
+        klog("guns: names for the HUD dial (LookNames=1), item=name: %s", line[0] ? line : "none (no gun of the file shows a look)");
+    }
+    if (!klg_on) return;                             /* guns off: the names only, the lines below belong to the switch */
     if (!fresh) return;
     if (klg_f.on) { if (klg_log) klog("guns: level %s has %d gun(s) with %d look(s) (%s, Version 2: hide bit, for a .prm of %lu chunks)", klg_f.key, klg_f.n, klg_f.nlooks, file, klg_f.entries); }
     else if (ver == 1) klog("guns: %s is Version 1 (looks hidden by a variant byte, which hides nothing on a gun: kl2 0x67cf84): refused, this level shows what its file holds - build it with tools\\kl_map_guns.py", file);
@@ -373,6 +416,7 @@ static void klg_tick(void)
     }
     if (waiting) InterlockedExchange(&klg_dirty, 1);          /* a pointer was still 0: again next tick */
     else { klg_done.count = count; klg_done.root0 = root0; klg_done.start = start; klg_done.set = set; }
+    if (done) klg_publish();                                  /* the dial names what this pass shows */
     if (done && (wrote || dirty) && !waiting && klg_log) {
         for (i = 0, p = line; i < klg_f.n && p < line + sizeof line - 72; i++)
             if (klg_f.g[i].shown >= 0 && klg_f.g[i].since == 0)

@@ -20,7 +20,8 @@
  * Still a model.
  * Written from static reading of kl2.exe build 0490 and kaneandlynch.exe; the account, every address and the live
  * checks K0 .. K8 are in re\climb.md.
- * Off unless KLHook.ini has [Climb] Enable=1. Arcade only (ZGameRulesHeist), never on a stock level, the game's own
+ * Off unless KLHook.ini has [EdgeClimb] Enable=1 (until 2026-10-15 the section was [Climb]; that name now belongs to
+ * klfreeclimb.c, luvsic's free climb, and with [Climb] Enable=1 this file stays off). Arcade only (ZGameRulesHeist), never on a stock level, the game's own
  * thread only. NO data write of the hook's own and no code byte: calls of game routines, and what those routines
  * take for granted of the player is tested before EACH call - at the start and again at the end.
  *
@@ -370,7 +371,7 @@
  *      the front was not read (if it does, the clip jumps with it and ends in that frame: he is back at the foot).
  *
  * KLHook.ini
- *   [Climb]
+ *   [EdgeClimb]        (was [Climb] until 2026-10-15; the KLJoin.ini sections below keep their name)
  *   Enable=0          1 = this file is on
  *   Dry=0             1 = everything is watched and logged, NO game routine is called (live check K1)
  *   Mode=climb        climb | vault
@@ -1337,7 +1338,7 @@ static void klq_tick(int game_thread)
         foot[0] = e->a[0] + e->u[0] * along; foot[1] = e->a[1]; foot[2] = e->a[2] + e->u[1] * along;       /* the point of the edge nearest to him */
         klq_w.told[i] |= 2; why[0] = 0;
         if (!(rise > 25.0f) || cls == 3) { klog("climb: edge %d NOT climbed: its top is %.1f over his feet; Dead Men climbs over 25 and up to 220", i + 1, rise); return; }
-        if (!klq.vault && cls == 0 && !klq.low) { klog("climb: edge %d NOT climbed: its top is %.1f over his feet = Dead Men's Low, whose clip reaches the face only in its last frame (re\\climb.md 2.3): off unless [Climb] Low=1", i + 1, rise); return; }
+        if (!klq.vault && cls == 0 && !klq.low) { klog("climb: edge %d NOT climbed: its top is %.1f over his feet = Dead Men's Low, whose clip reaches the face only in its last frame (re\\climb.md 2.3): off unless [EdgeClimb] Low=1", i + 1, rise); return; }
         if (!klq.vault && cls == 0 && klq.align == 1) { klog("climb: edge %d NOT climbed: its top is %.1f over his feet = Dead Men's Low, and Align=1 is not for that class (its clip lunges 52 forward in its first 3 frames; only the first of Dead Men's two alignments takes that back: he would run through the face at foot level): Align=2", i + 1, rise); return; }
         if (klq.vault && klq.dry) {
             klog("climb: edge %d: WOULD vault from node (%.0f, %.0f, %.0f) onto the top, %.0f up; %d full-body channel(s) of his play NOW (after the dwell; the vault's Play would replace and report each: with one or more the vault is refused at this moment and asked again) - DRY RUN, nothing is called",
@@ -1380,28 +1381,32 @@ static void klq_init(void)
 {
     char t[32]; float ang; int v;
     memset(&klq, 0, sizeof klq); memset(&klq_lv, 0, sizeof klq_lv); memset(&klq_w, 0, sizeof klq_w); memset(&klq_r, 0, sizeof klq_r); memset(&klq_a, 0, sizeof klq_a);
-    klq.on = GetPrivateProfileIntA("Climb", "Enable", 0, klh_ini) != 0;
+    klq.on = GetPrivateProfileIntA("EdgeClimb", "Enable", 0, klh_ini) != 0;
+    if (klq.on && GetPrivateProfileIntA("Climb", "Enable", 0, klh_ini)) {     /* klfreeclimb.c owns [Climb] and the player's actions: never both */
+        klq.on = 0;
+        klog("climb: [EdgeClimb] Enable=1 is IGNORED because [Climb] Enable=1 (klfreeclimb.c, Dead Men's free climb) is on: the two would start actions on the same player");
+    }
     if (!klq.on) return;
-    klq.dry = GetPrivateProfileIntA("Climb", "Dry", 0, klh_ini) != 0;
-    GetPrivateProfileStringA("Climb", "Mode", "climb", t, sizeof t, klh_ini);
+    klq.dry = GetPrivateProfileIntA("EdgeClimb", "Dry", 0, klh_ini) != 0;
+    GetPrivateProfileStringA("EdgeClimb", "Mode", "climb", t, sizeof t, klh_ini);
     klq.vault = !_stricmp(t, "vault");
-    klq.fallback = GetPrivateProfileIntA("Climb", "Fallback", 0, klh_ini) != 0;
-    klq.align = GetPrivateProfileIntA("Climb", "Align", 2, klh_ini) == 1 ? 1 : 2;
-    klq.low = GetPrivateProfileIntA("Climb", "Low", 0, klh_ini) != 0;
-    v = (int)GetPrivateProfileIntA("Climb", "HandFrames", 5, klh_ini); klq.hand = (float)(v < 1 ? 1 : v > 5 ? 5 : v);      /* 5 = 200 ms (second review N2) */
-    klq.key = (int)GetPrivateProfileIntA("Climb", "Key", 0, klh_ini) & 0xff;
+    klq.fallback = GetPrivateProfileIntA("EdgeClimb", "Fallback", 0, klh_ini) != 0;
+    klq.align = GetPrivateProfileIntA("EdgeClimb", "Align", 2, klh_ini) == 1 ? 1 : 2;
+    klq.low = GetPrivateProfileIntA("EdgeClimb", "Low", 0, klh_ini) != 0;
+    v = (int)GetPrivateProfileIntA("EdgeClimb", "HandFrames", 5, klh_ini); klq.hand = (float)(v < 1 ? 1 : v > 5 ? 5 : v);      /* 5 = 200 ms (second review N2) */
+    klq.key = (int)GetPrivateProfileIntA("EdgeClimb", "Key", 0, klh_ini) & 0xff;
     klq_keystate = 0;
     if (klq.key) {
         HMODULE u = GetModuleHandleA("user32.dll");
         if (u) klq_keystate = (SHORT (WINAPI *)(int))GetProcAddress(u, "GetAsyncKeyState");
         if (!klq_keystate) klog("climb: Key=%d is set and user32's GetAsyncKeyState was not found: the key cannot be asked, so NOBODY climbs (Key=0 asks for no key)", klq.key);
     }
-    v = (int)GetPrivateProfileIntA("Climb", "Dwell", 400, klh_ini); klq.dwell = (DWORD)(v < 100 ? 100 : v > 5000 ? 5000 : v);
-    klq.speed = klq_num("Climb", "Speed", "150", klh_ini); if (!klb_finite(klq.speed) || klq.speed < 10.0f) klq.speed = 10.0f;
-    ang = klq_num("Climb", "Angle", "60", klh_ini);
+    v = (int)GetPrivateProfileIntA("EdgeClimb", "Dwell", 400, klh_ini); klq.dwell = (DWORD)(v < 100 ? 100 : v > 5000 ? 5000 : v);
+    klq.speed = klq_num("EdgeClimb", "Speed", "150", klh_ini); if (!klb_finite(klq.speed) || klq.speed < 10.0f) klq.speed = 10.0f;
+    ang = klq_num("EdgeClimb", "Angle", "60", klh_ini);
     if (!klb_finite(ang) || ang <= 0.0f || ang >= 180.0f) ang = 0.0f;
     klq.cosang = ang > 0.0f ? (float)cos(ang * 3.14159265 / 180.0) : -2.0f;      /* -2 = not asked */
-    klq.log = (int)GetPrivateProfileIntA("Climb", "Log", 1, klh_ini);
+    klq.log = (int)GetPrivateProfileIntA("EdgeClimb", "Log", 1, klh_ini);
     klq_w.game_at = GetTickCount();
     klog("climb: on; Mode=%s Fallback=%d Align=%d HandFrames=%.0f Low=%d Key=%d Dwell=%lu Speed=%.0f Angle=%.0f Dry=%d Log=%d; at a [Climb] edge of the level's KLJoin.ini the local player is carried up by %s; Arcade only, on a level that is not the stock one of its slot%s",
          klq.vault ? "vault" : "climb", klq.fallback, klq.align, klq.hand, klq.low, klq.key, klq.dwell, klq.speed, ang, klq.dry, klq.log,

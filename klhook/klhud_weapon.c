@@ -201,8 +201,8 @@ static int klwd_evt_ready;
 
 /* the gun's name by HUD picture index 58 .. 104. The exe's own names of these pictures (table 0xcee058, read in the
    file: 'tex:UserInterface/WeaponsPics/UI_Weapon_01#<name>') are in the comments; the wording shown is OURS, in
-   capitals, letters / digits / '-' only. A gun whose LOOK tools\kl_map_guns.py baked over (Zastava as MP5 ...) still
-   reads its Dog Days name: not handled. */
+   capitals, letters / digits / '-' only. A gun whose LOOK tools\kl_map_guns.py baked over (Zastava as MP5 ...) is named as
+   the look with [HUD] LookNames=1 (klwd_gname below). */
 static const char *const klwd_names[47] = {
     "SW MP45",        /* 58 HG_SW_MP45 */            "TAURUS JUDGE",   /* 59 HG_TaurusJudge */
     "POLICE REVOLVER",/* 60 HG_Revolver_Police */    "SIG 226",        /* 61 HG_SigSauer226 */
@@ -233,6 +233,14 @@ static const char *const klwd_names[47] = {
 static const char *klwd_name(int pic)
 {
     return pic >= 58 && pic <= 104 ? klwd_names[pic - 58] : "";
+}
+
+/* the name under the dial: the Dead Men LOOK's name when the level shows one on this item ([HUD] LookNames=1; klgun.c
+   klg_look_name: MP5 on the Zastava ...; the shop sells it under that name, tools\kl_hud_shop.py), else klwd_name */
+static const char *klwd_gname(const struct klwd_gun *g)
+{
+    const char *n = klg_look_name(g->item);
+    return n ? n : klwd_name(g->pic);
 }
 
 /* ---------------------------------------------------------------- the render slot (whichever thread renders) */
@@ -643,11 +651,11 @@ static void klwd_compose(void)
                 n0 = -1;
                 if (a->rounds >= 0 && a->total >= 0) { if (a->total < 999 && a->total >= a->rounds) n0 = a->total - a->rounds; }
                 else if (a->rounds >= 0 && a->reserve >= 0 && a->reserve + a->rounds < 999) n0 = a->reserve;
-                if (klu.wstyle) klwd_label(cx, cy, klwd_name(a->pic), n0, low);
+                if (klu.wstyle) klwd_label(cx, cy, klwd_gname(a), n0, low);
                 else {
-                if (n0 >= 0 && klwd_name(a->pic)[0]) snprintf(label, sizeof label, "%s" KLWD_SEP "%d", klwd_name(a->pic), n0);
+                if (n0 >= 0 && klwd_gname(a)[0]) snprintf(label, sizeof label, "%s" KLWD_SEP "%d", klwd_gname(a), n0);
                 else if (n0 >= 0) snprintf(label, sizeof label, "%d", n0);
-                else snprintf(label, sizeof label, "%s", klwd_name(a->pic));
+                else snprintf(label, sizeof label, "%s", klwd_gname(a));
                 if (label[0]) {
                     /* v22 (audit W1): centred under the circle, but the long names ('ZASTAVA M85 . 270' = 17 letters) ended at 1268 of 1280, past the
                        inset: the centre is pulled in until the estimated right end (letters x LabelCharW, GUESS 10.5 from run G2's picture) fits LabelRight. */
@@ -716,6 +724,8 @@ static void klwd_init(void)
     klwd.other = GetPrivateProfileIntA("HUD", "WeaponOther", 0, klh_ini) != 0;
     GetPrivateProfileStringA("HUD", "WeaponSize", "0.66", t, sizeof t, klh_ini); klwd.size = (float)atof(t); if (!(klwd.size >= 0.4f && klwd.size <= 1.2f)) klwd.size = 0.66f;      /* the watch look's scale of the whole circle (2026-10-13; was 0.76) */
     klwd.grit = GetPrivateProfileIntA("HUD", "WeaponGrit", 1, klh_ini) != 0;      /* 1 = the distressed-chalk marks on the magazine stroke (watch look) */
+    klg_lknames = GetPrivateProfileIntA("HUD", "LookNames", 0, klh_ini) == 1;       /* 1 = the Dead Men look's name under the dial (klgun.c klg_look_name) */
+    if (klg_lknames) klog("hud: weapon: LookNames=1 - a gun that shows a Dead Men look (KLGuns.ini beside the level) is named as the look, as in the shop");
     if (!(klwd.x <= 1280)) klwd.x = -1; if (!(klwd.y <= 720)) klwd.y = -1;
     if (!(klwd.small_size >= 0 && klwd.small_size <= 2.0f)) klwd.small_size = 0.8f;
     GetPrivateProfileStringA("HUD", "LabelCharW", klu.wstyle ? "11.6" : "10.5", t, sizeof t, klh_ini); klwd.labelw = (float)atof(t); if (!(klwd.labelw >= 4 && klwd.labelw <= 30)) klwd.labelw = 10.5f;      /* v22 */

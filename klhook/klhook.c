@@ -35,8 +35,11 @@
  *                             ([CrewHop], KLJoin.ini; calls 0x62a900 through klcrew_rt.c's functions, with Reorder
  *                             0x760e50; no data, no code). OFF by default
  *   klclimb.c      x     x    the PLAYER climbs a wall edge of the level's KLJoin.ini with Dead Men's climb clip
- *                             ([Climb]; game routines called: the mini animation, AlignTo, the collision switch, the
- *                             proxy; no code). OFF by default. Wired 2026-10-11 after two reviews; NOT RUN IN THE GAME
+ *                             ([EdgeClimb], was [Climb]; game routines called: the mini animation, AlignTo, the collision
+ *                             switch, the proxy; no code). OFF by default. Wired 2026-10-11 after two reviews; NOT RUN IN THE GAME
+ *   klfreeclimb.c  x     x    Dead Men's FREE climb, W + E at any ledge 25 .. 220 high (luvsic's ANP climb.inc, ported): a
+ *                             ZFFActionVaultOver with a vtable copy of this DLL's own; data writes only, every call under
+ *                             a fault guard ([Climb]). OFF by default; needs the climb clips in the level's .ANM. NOT RUN
  *   klhud.c        x     x    the expansion's FA / Arcade HUD, Version 1 ([HUD]): crew list + money box drawn with the game's
  *                             own ZCHAROBJ texts from a private copy of the OSD's vtable (slot 55 wrapped, as klchar.c
  *                             wraps the option object); calls 0x8ccde0, 0x598460, 0x817810 and ZCHAROBJ slots on the
@@ -585,6 +588,7 @@ static void __cdecl klh_w__exit(int code) { klog("exit: _exit(%d)", code); klx_e
 /* ---------------------------------------------------------------- the parts */
 
 static void klh_tick(int game_thread);
+static DWORD_PTR klh_rcb_ra;                          /* the return address of the SteamAPI_RunCallbacks call that runs this tick (klfreeclimb.c acts only at the gameplay one) */
 #include "klmem.c"
 #include "klnudge.c"
 #include "klfix.c"
@@ -600,6 +604,7 @@ static void klh_tick(int game_thread);
 #include "klhop.c"
 #include "klmove.c"
 #include "klclimb.c"
+#include "klfreeclimb.c"                                 /* klfreeclimb.c: Dead Men's free climb, luvsic's port (off unless [Climb] Enable); AFTER klclimb.c (klq_slot) */
 #include "klrappel.c"                                    /* klrappel.c: off unless [Rappel] Enable */
 #include "klbalance.c"
 #include "klgrudge.c"
@@ -622,6 +627,7 @@ static void klh_tick(int game_thread);
 #include "kldown.c"
 #include "klbotdown.c"                                    /* klbotdown.c: AI heisters down, not dead (off unless [BotDown] Enable) */
 #include "kladren.c"                                      /* kladren.c: adrenaline (off unless [Adrenaline] Enable); its tick runs BEFORE kld_tick */
+#include "klreshade.c"                                    /* klreshade.c: the ReShade bridge - live looks from the menu, KL_* uniforms (off unless [ReShade] Bridge=1) */
 #include "klsteam.c"
 #include "klslot.c"
 #ifdef KLHOOK_TEST
@@ -716,7 +722,8 @@ static void klh_tick(int game_thread)
     klj_tick();
     klt_tick(game_thread);                            /* DIRECTLY after klj_tick: it must see kljoin.c's request while it is pending (klcrew_rt.c, EARLY) */
     klv_tick(game_thread);                            /* klhop.c: an AI heister that stands at a [CrewHop] place is put beyond it (one game call a tick) */
-    klq_tick(game_thread);                            /* klclimb.c: the player at the foot of a [Climb] edge climbs it (OFF unless [Climb] Enable=1) */
+    klfc_tick(game_thread);                           /* klfreeclimb.c: W + E at a ledge (OFF unless [Climb] Enable=1; gameplay call only) */
+    klq_tick(game_thread);                            /* klclimb.c: the player at the foot of a KLJoin.ini [Climb] edge climbs it (OFF unless [EdgeClimb] Enable=1) */
     klrp_tick(game_thread);                           /* klrappel.c: the descent of the rappel cut */
     klc_tick(game_thread);
     klw_tick(game_thread);                            /* after klc_tick: the player's own body goes first */
@@ -742,6 +749,7 @@ static void klh_tick(int game_thread)
     klbd_tick(game_thread);                           /* klbotdown.c: before kladren, which reads its down state */
     kad_tick(game_thread);                            /* kladren.c: raises the mash meter first */
     kld_tick(game_thread);                            /* kldown.c: the mash get-up (off unless [Down] Enable) */
+    klrs_tick(game_thread);                           /* klreshade.c: the numbers the shaders get (reads only; off unless [ReShade] Bridge=1) */
     klg_tick();
     klm_tick();
     InterlockedExchange(&klh_tick_busy, 0);
@@ -763,7 +771,9 @@ static void __cdecl klh_w_runcallbacks(void)
         static LARGE_INTEGER f, t0, a, b, prev; static LONGLONG spent, dt_max, tick_max; static LONG frames, reads0, hitch, told; static int perf = -1;
         if (perf < 0) { perf = GetPrivateProfileIntA("KLHook", "Perf", 1, klh_ini); QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0); reads0 = klh_reads; }
         if (perf) QueryPerformanceCounter(&a);
+        klh_rcb_ra = ra;
         klh_tick(1);
+        klh_rcb_ra = 0;
         if (perf) {
             QueryPerformanceCounter(&b); spent += b.QuadPart - a.QuadPart; frames++;
             if (b.QuadPart - a.QuadPart > tick_max) tick_max = b.QuadPart - a.QuadPart;
@@ -1010,20 +1020,26 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     }
     if (GetPrivateProfileIntA("KLHook", "Tick", 1, klh_ini)) n += klh_iat("steam_api.dll", "SteamAPI_RunCallbacks", (void *)klh_w_runcallbacks, (void **)&klh_real_runcallbacks);
     klog("core: %d import slot(s) wrapped (ExitProcess %s, SteamAPI_RunCallbacks %s); EndOnFatal=%d", n, klh_real_exitprocess ? "yes" : "no", klh_real_runcallbacks ? "yes" : "no", klh_end_on_fatal);
+    kset_init();                                      /* klset.c: the menu rows first - klreshade.c reads them for the live preset */
     {   /* [Graphics] Look (2026-10-14, the owner: 'have these as different setting options so people can choose how they want their game to
            look but not impact performance if they dont want it on'): 0 = Off, ReShade is not loaded at all (the stock frame rate; run
            LOOK2: ~130 fps average with ReShade in the Direct3D 9 path against ~252 without); 1 = KL (ReShadePreset_KL.ini: KL_Look.fx, the
            cool overcast grade); 2 = LiveLeak (ReShadePreset_LiveLeak.ini: KL_Camcorder.fx). ReShade - and with it the Uplift add-on, F10 -
            is loaded from ReShade32.dll beside the game (it was d3d9.dll) after its ReShade.ini [GENERAL] PresetPath is pointed at the
-           chosen preset. Read once at start, before the game makes its device: a change needs a restart. [Graphics] ReShade=0 = Look=0. */
+           chosen preset. Read once at start, before the game makes its device: a change needs a restart. [Graphics] ReShade=0 = Look=0.
+           2026-10-15: with [ReShade] Bridge=1 (klreshade.c) ReShade is pointed at the bridge's own live preset instead (made here from
+           the look's preset) and KLHook registers itself as a ReShade add-on after the load: the Mod settings rows then switch live.
+           [ReShade] LoadWhenOff=1 loads ReShade with Look=0 too (every effect off) so that a look can be switched on in the menu. */
         static const char *const preset[3] = { "", ".\\ReShadePreset_KL.ini", ".\\ReShadePreset_LiveLeak.ini" };
         static const char *const lname[3] = { "Off", "KL", "LiveLeak" };
-        char rp[MAX_PATH], ri[MAX_PATH]; int look = GetPrivateProfileIntA("Graphics", "Look", 1, klh_ini);
+        char rp[MAX_PATH], ri[MAX_PATH]; int look = GetPrivateProfileIntA("Graphics", "Look", 1, klh_ini), load;
         if (!GetPrivateProfileIntA("Graphics", "ReShade", 1, klh_ini)) look = 0;
         if (look < 0 || look > 2) look = 1;
+        load = look || (GetPrivateProfileIntA("ReShade", "Bridge", 0, klh_ini) && GetPrivateProfileIntA("ReShade", "LoadWhenOff", 0, klh_ini) &&
+                        GetPrivateProfileIntA("Graphics", "ReShade", 1, klh_ini));
         snprintf(rp, sizeof rp, "%s\\ReShade32.dll", dir); snprintf(ri, sizeof ri, "%s\\ReShade.ini", dir);
-        if (look && GetFileAttributesA(rp) != INVALID_FILE_ATTRIBUTES) {
-            HMODULE rm; char ao[MAX_PATH], af[MAX_PATH];
+        if (load && GetFileAttributesA(rp) != INVALID_FILE_ATTRIBUTES) {
+            HMODULE rm; char ao[MAX_PATH], af[MAX_PATH]; const char *live;
             /* [Graphics] Neural (2026-10-14): the GITC Uplift add-on (DLSS/DLAA through the neural renderer, F10) is a ReShade add-on that
                ReShade loads by finding gitc-uplift.addon32 beside it; even switched off (F10 not pressed) it hooks the device. 0 = the add-on
                file is set aside as gitc-uplift.addon32.off before ReShade loads, so it costs nothing; 1 = it is put back. */
@@ -1032,9 +1048,12 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
             if (neural && GetFileAttributesA(ao) == INVALID_FILE_ATTRIBUTES && GetFileAttributesA(af) != INVALID_FILE_ATTRIBUTES) MoveFileA(af, ao);
             if (!neural && GetFileAttributesA(ao) != INVALID_FILE_ATTRIBUTES && GetFileAttributesA(af) == INVALID_FILE_ATTRIBUTES) MoveFileA(ao, af);
             klog("graphics: neural (Uplift add-on) %s: %s", neural ? "on" : "off", GetFileAttributesA(ao) != INVALID_FILE_ATTRIBUTES ? "gitc-uplift.addon32 present" : "add-on set aside or absent");
-            WritePrivateProfileStringA("GENERAL", "PresetPath", preset[look], ri);
+            live = klrs_prepare(look);                     /* klreshade.c: 0 unless [ReShade] Bridge=1 (then its live preset, written now) */
+            WritePrivateProfileStringA("GENERAL", "PresetPath", live ? live : preset[look ? look : 1], ri);
             rm = LoadLibraryA(rp);
-            klog("graphics: look %s: ReShade %s from %s (preset %s)", lname[look], rm ? "loaded" : "FAILED to load", rp, preset[look]);
+            klog("graphics: look %s: ReShade %s from %s (preset %s)%s", lname[look], rm ? "loaded" : "FAILED to load", rp, live ? live : preset[look ? look : 1],
+                 look ? "" : " - [ReShade] LoadWhenOff=1: every effect starts off");
+            if (rm && live) klrs_attach(rm, (HMODULE)inst);     /* klreshade.c: KLHook as a ReShade add-on; logs and does nothing when it cannot */
         } else klog("graphics: look %s: ReShade not loaded%s", lname[look], look ? " (no ReShade32.dll beside the game)" : "");
     }
     kltx_init();                                   /* after ReShade: the Direct3DCreate9 wrapper sits in front of it */
@@ -1043,7 +1062,6 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klf_init();
     klj_init();
     klt_init();
-    kset_init();
     klc_init();
     klw_init();
     klnm_init();
@@ -1052,6 +1070,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kle_init();
     klmv_init();
     klv_init();
+    klfc_init();
     klq_init();
     klrp_init();
     klr_init();
