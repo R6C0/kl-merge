@@ -217,13 +217,14 @@ float3 PS_KLL2_Grade(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
 	if (ad.w > 0.5)
 		sky = KLL2_DepthSky(uv);
 	else
-		sky = nb.a * smoothstep(0.30, 0.55, l);
+		sky = nb.a * lerp(smoothstep(0.30, 0.55, la), smoothstep(0.22, 0.60, l), 0.35) * smoothstep(0.80, 0.30, uv.y);   /* v2.1: soft edge (mostly the 1/8 mask), upper screen only - bright objects lower down are not re-toned */
 	sky *= SkyControl;
 
 	/* local contrast (not on the sky: its detail is handled below) */
 	{
 		float guard = smoothstep(0.02, 0.15, l) * (1.0 - smoothstep(0.80, 0.98, l)) * (1.0 - sky);
-		float l2 = max(l + (l - la) * LocalContrast * guard, 0.0);
+		float dl = l - la; dl *= 1.0 - smoothstep(0.03, 0.10, abs(dl));   /* v2.2: texture only - near an edge (a lit object on a dark wall, a head against a pillar) the difference is large and the step fades out: no halo, no cut-out look */
+		float l2 = max(l + dl * LocalContrast * guard, 0.0);
 		c *= (l > 1e-4) ? (l2 / l) : 1.0;
 	}
 
@@ -264,7 +265,7 @@ float3 PS_KLL2_Grade(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
 		c = lerp(l.xxx, c, sat);
 
 		float ws = (1.0 - smoothstep(0.02, 0.55, l)) * smoothstep(0.0, 0.03, l);
-		float wh = smoothstep(0.55, 0.95, l) * (1.0 - sky);
+		float wh = smoothstep(0.45, 1.05, la * 0.5 + l * 0.5) * (1.0 - sky);   /* v2.1: follows the neighbourhood too, so one bright object is not tinted apart from its light pool */
 		float3 tint = 1.0 + (ShadowTint - 1.0) * ws * ShadowAmount + (PracticalTint - 1.0) * wh * PracticalAmount;
 		tint /= max(dot(tint, KLL2_LUMA), 1e-3);                 /* hue only, keep brightness */
 		c *= lerp(float3(1.0, 1.0, 1.0), tint, 1.0 - keep);

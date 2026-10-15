@@ -76,6 +76,7 @@ static DWORD klpu_evt[40];
 static volatile LONG kset_v[4] = { 0, 1, 1, 0 };           /* klset.c: Look, Textures, Prompt, NeedUse - the harness helps without E (its human helper scenarios predate the E key) */
 static int klu_same_code(DWORD va, const BYTE *bytes, int n) { (void)va; (void)bytes; (void)n; return 0; }
 
+#define KAD_TEST_NOANIM                 /* the Anim part (klfreeclimb.c's engine calls) is not in this harness */
 #include "kladren.c"
 
 /* ---------------------------------------------------------------- the fake world */
