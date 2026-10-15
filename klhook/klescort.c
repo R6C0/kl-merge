@@ -533,15 +533,25 @@ static int kle_callable(char why[100])
 
 /* ONE call of the game's order (game thread only). want = the place asked; got = what the defend block holds after.
    -> 1 called, 0 not (why says), 2 dry run. */
+/* STUTTER WATCH (2026-10-14): every order this hook gives, when and how long the call took - klhook.c's hitch line names the
+   orders of the half second before a long frame ('orders' = the game's path request is the suspect of the owner's freezes) */
+static volatile DWORD kle_order_at; static volatile LONG kle_order_n; static LARGE_INTEGER kle_order_f; static double kle_order_ms_max;
 static int kle_order2(struct kle_e *e, const float want[3], float got[3], char why[100], int dry)
 {
-    float p[4]; BYTE soft = 0;
+    float p[4]; BYTE soft = 0; LARGE_INTEGER t0, t1; double ms;
     memcpy(got, want, 12);
     if (!kle_ok3(want)) { strcpy(why, "the place is not a number"); return 0; }
     if (!kle_callable(why)) return 0;
     if (dry) return 2;
     p[0] = want[0]; p[1] = want[1]; p[2] = want[2]; p[3] = 0;
+    if (!kle_order_f.QuadPart) QueryPerformanceFrequency(&kle_order_f);
+    QueryPerformanceCounter(&t0);
     ((void (__fastcall *)(void *, void *, const float *, int, int, int))(DWORD_PTR)KLH_VA(KLE_ORDER))((void *)(DWORD_PTR)e->soldier, 0, p, 0, 1, 0);
+    QueryPerformanceCounter(&t1);
+    ms = (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)kle_order_f.QuadPart;
+    kle_order_at = GetTickCount(); InterlockedIncrement(&kle_order_n);
+    if (ms > kle_order_ms_max) kle_order_ms_max = ms;
+    if (ms > 15.0) klog("escort: SLOW ORDER: record %d to (%.0f, %.0f, %.0f) took %.1f ms inside the game's order routine", e->rec, want[0], want[1], want[2], ms);
     if (!kle_block(e->soldier, got)) memcpy(got, want, 12);
     if (klh_rd(e->soldier + 0x4fc, &soft, 1) && soft && !e->told_soft++)
         klog("escort: record %d: the game took an order as 'he is there already' ([soldier+0x4fc] = 1): a waiting step of its route chain ends now (said once per escort)", e->rec);

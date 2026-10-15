@@ -44,6 +44,24 @@
  *
  * EXPORTS for kladren.c (re\bots_down.md 8):  klbd_is_down(record)   klbd_speed(record, rate)   klbd_by(record)
  *
+ * WHILE THE LOCAL HUMAN IS POLICE (klfed.c's fed; 2026-10-14, the owner on Retomoto: 'issues with being able to kill them as a
+ * fed - they take so much damage, but if they're a traitor I can headshot one bullet'). KLHook.log 20:29:47 .. 20:31:37: every
+ * loyal heister the fed fought went down at 30 % (the hook asked), was out of reach of damage while the game refused (PreShield,
+ * up to RefuseMs = 8 s in the owner's ini) and for FreeSeconds (5 s) on the floor, and GOT UP WITH FULL HEALTH (378 of 378)
+ * - twice a life: about three health bars of 378 (Tough 1.5) against a stock 252. The 'traitor' kills (the TRAITOR pay =
+ * the heister who had killed you, records 4 / 3 at 20:37:21 / 20:44:03) went from above 30 % to 0 in ONE frame (no
+ * 'is at' line): a head shot is x 10 on an NPC, so it skips everything this part does - one shot. Not a traitor rule of
+ * this part (Traitors=1: traitors are handled as the loyal are). So while [player+0x2723] is set (klbalance.c's
+ * klr_local_police; 0 in the off-game harness):
+ *   FedDowns=0      downs the HOOK asks in a life while you are police (0 = none: no PreShield, no floor - he dies at 0 like
+ *                   any NPC; the game's own down at health 0 of a body hit can still happen once, as stock)
+ *   FedFree=0       FreeSeconds while you are police (0 = a downed heister takes your hits at once)
+ *   FedUpPct=25     the health a heister gets up with while you are police, per cent of his maximum (0 = the game's full)
+ *   FedHealth=0     per cent of the round's maximum an AI heister has while you are police (0 = 100 / [Balance] Tough, the
+ *                   stock 252 at Tough 1.5; 100 = leave). Written once per bot at the same share (never heals or hurts);
+ *                   put back when you are no longer police or the round ends, if the game has not written another.
+ * As a heister nothing of this acts: every key above is read only while the police byte is set.
+ *
  * NOT DONE: the belly-flop dive clip (the game's down plays Down_Not_Dead_Get_Down, onto the side: the state graph 0x730be0
  * is shared with the police); an attacker for the down (the hit record is not at hand: attacker 0 - the human's share is
  * read from the rules' sum A[0][victim], klgrudge.c's float, instead); a point-blank step or a left-behind kill from above
@@ -69,6 +87,7 @@
 static struct {
     int on, dry, log, downs_max, nofire, traitors;
     float down_pct, floor_pct, lie, free_t, lie_pct, up_pct, refuse, attr, watch; int preshield;
+    int fed_downs; float fed_free, fed_up, fed_health;      /* while the local human is police (klfed.c's fed) */
 } klbd;
 
 static struct klbd_rec {
@@ -77,8 +96,20 @@ static struct klbd_rec {
     int downs, tries, by;
     DWORD tick_down, l0, lie_tick, first_try, last_try, spd_last, a_tick, watch_log;
     float prevA, hp, hmax;
+    BYTE fed_done; DWORD fed_h; float fed_from, fed_to;     /* FedHealth: the health object written and the maximum before / after */
 } klbd_r[KLB_NREC];
-static struct { DWORD rules; int told_code; } klbd_g;
+static struct { DWORD rules; int told_code, fed; } klbd_g;
+
+/* the local human is police (klfed.c's fed): klbalance.c reads the byte; the off-game harness has no klbalance.c */
+#ifndef KLBD_FED
+#ifdef KLBALANCE_C
+#define KLBD_FED() klr_local_police()
+#define KLBD_TOUGH() ((klr.on && klr.tough > 0) ? klr.tough : 1.0f)
+#else
+#define KLBD_FED() 0
+#define KLBD_TOUGH() 1.0f
+#endif
+#endif
 
 /* ---------------------------------------------------------------- pure arithmetic (tested off the game) */
 
@@ -165,11 +196,29 @@ static void klbd_shield(struct klbd_rec *b, int on)
     b->shield = (BYTE)on;
 }
 
+/* FedHealth put back: his maximum as it was, his health at the same share - only when the object is still his and still
+   holds our maximum (another value = the game wrote one: left alone) */
+static void klbd_fed_undo(struct klbd_rec *b, int i, const char *why)
+{
+    DWORD h; int ok = 1; float hp, hmax, nh;
+    if (!b->fed_done) return;
+    b->fed_done = 0;
+    if (!b->actor || klh_rd32(b->actor) != KLB_ACTOR_VT || !(h = klh_rd32(b->actor + 0x5fc)) || h != b->fed_h || klh_rd32(h + 0x24) != b->actor) return;
+    hp = klbd_rdf(h + 4, &ok); hmax = klbd_rdf(h + 8, &ok);
+    if (!ok || fabsf(hmax - b->fed_to) > 0.5f || b->fed_to < 1.0f) { if (klbd.log) klog("botdown: record %d: FedHealth not put back (%s): his maximum is %.1f, not the %.1f written", i, why, hmax, b->fed_to); return; }
+    nh = hp > 0.01f ? hp * b->fed_from / b->fed_to : hp;
+    if (klh_data((void *)(DWORD_PTR)(h + 8), &b->fed_from, 4, "an AI heister's maximum health put back (botdown FedHealth)")) {
+        if (hp > 0.01f) klh_data((void *)(DWORD_PTR)(h + 4), &nh, 4, "an AI heister's health at the same share (botdown FedHealth put back)");
+        if (klbd.log) klog("botdown: record %d: FedHealth put back (%s): maximum %.1f -> %.1f, health %.1f -> %.1f", i, why, b->fed_to, b->fed_from, hp, hp > 0.01f ? nh : hp);
+    }
+}
+
 /* everything of ours off one bot */
 static void klbd_back(struct klbd_rec *b)
 {
     DWORD s = 0;
     if (b->actor && b->shield && klbd_bot_ok(b->actor, &s) && s == b->soldier) klbd_shield(b, 0);
+    if (b->fed_done) klbd_fed_undo(b, (int)(b - klbd_r), "the hook lets go of him");
     memset(b, 0, sizeof *b);
 }
 
@@ -211,7 +260,7 @@ static void klbd_forget(void)
 
 static void klbd_tick(int game_thread)
 {
-    struct klb_snap sn; DWORD rules, state, clock, tick = 0; int level, i; char why[200];
+    struct klb_snap sn; DWORD rules, state, clock, tick = 0; int level, i, fed, downs_max; float free_t, fed_k; char why[200];
     if (!klbd.on || !game_thread || !klh_exe_ok) return;
     if (!(klr_arcade(&rules, &state, &level) && klb_level(why) && state == KLBD_ROUND && klb_read(&sn) && sn.state == KLBD_ROUND)) { if (klbd_g.rules) klbd_forget(); return; }
     if (sn.rules != klbd_g.rules) {
@@ -220,6 +269,19 @@ static void klbd_tick(int game_thread)
              why, sn.n, klbd.down_pct, klbd.floor_pct, klbd.downs_max, klbd.lie, klbd.free_t, klbd.nofire, klbd.dry ? " - Dry: nothing is called, nothing is written" : "");
     }
     if (!(clock = klh_rd32((DWORD_PTR)KLH_VA(KLBD_CLOCK))) || !klh_rd(clock + 0x48, &tick, 4)) return;
+    /* the local human is police: the fed's own rules (header) */
+    fed = KLBD_FED() ? 1 : 0;
+    fed_k = klbd.fed_health > 0 ? klbd.fed_health / 100.0f : 1.0f / KLBD_TOUGH();
+    if (fed_k < 0.05f) fed_k = 0.05f; if (fed_k > 10.0f) fed_k = 10.0f;
+    if (fed != klbd_g.fed) {
+        klbd_g.fed = fed;
+        if (fed) klog("botdown: you are POLICE: the AI heisters get %d down(s) asked by the hook a life (FedDowns; PreShield / floor only for those), FreeSeconds %.2f (FedFree), get up with %s, maximum health x %.3f (FedHealth%s)%s",
+                      klbd.fed_downs, klbd.fed_free, klbd.fed_up > 0 ? "FedUpPct of the maximum" : "the game's (full)", fed_k, klbd.fed_health > 0 ? "" : " = 1 / [Balance] Tough",
+                      klbd.dry ? " - Dry: nothing is written" : "");
+        else klog("botdown: you are no longer police: DownsMax %d, FreeSeconds %.2f, UpPct %.0f again; FedHealth is put back", klbd.downs_max, klbd.free_t, klbd.up_pct);
+    }
+    downs_max = fed ? klbd.fed_downs : klbd.downs_max;
+    free_t = fed ? klbd.fed_free : klbd.free_t;
     for (i = 0; i < sn.n && i < KLB_NREC; i++) {
         const struct klb_rec *r = &sn.r[i]; struct klbd_rec *b = &klbd_r[i];
         DWORD s = 0, h, dnd; BYTE dn = 0; float hp, hmax, thr, pos[3] = { 0, 0, 0 }; int hok = 1, have, pend_now = 0;
@@ -236,6 +298,17 @@ static void klbd_tick(int game_thread)
         dnd = klh_rd32(s + 0x4b8); if (dnd && klh_rd32(dnd + 4) != s) dnd = 0;
         if (!b->said) { b->said = 1; if (klbd.log >= 2) klog("botdown: record %d (actor %08lx): health %.1f of %.1f; a down is asked at %.1f or less, held at %.1f", i, (unsigned long)r->actor, hp, hmax, thr, klbd_floor(hmax, klbd.floor_pct, thr)); }
         have = kle_node(klh_rd32(r->actor + 4), pos, 0);
+        /* FedHealth: once per bot while you are police, at the same share; put back when you are not */
+        if (!fed && b->fed_done) { klbd_fed_undo(b, i, "you are no longer police"); hok = 1; hp = klbd_rdf(h + 4, &hok); hmax = klbd_rdf(h + 8, &hok); if (!hok || hmax < 1.0f) continue; thr = klbd_thresh(hmax, klbd.down_pct); }
+        if (fed && !b->fed_done && !klbd.dry && r->status == 0 && hp > 0.01f && fabsf(fed_k - 1.0f) > 0.001f) {
+            float nmax = hmax * fed_k, nh = hp * fed_k;
+            b->fed_done = 1; b->fed_h = h; b->fed_from = hmax; b->fed_to = nmax;
+            if (klh_data((void *)(DWORD_PTR)(h + 8), &nmax, 4, "an AI heister's maximum health while you are police (botdown FedHealth)") &&
+                klh_data((void *)(DWORD_PTR)(h + 4), &nh, 4, "an AI heister's health at the same share (botdown FedHealth)")) {
+                if (klbd.log) klog("botdown: record %d%s: maximum %.1f -> %.1f, health %.1f -> %.1f (FedHealth x %.3f: you are police)", i, (r->flags & 2) ? " (TRAITOR)" : "", hmax, nmax, hp, nh, fed_k);
+                hp = nh; hmax = nmax; thr = klbd_thresh(hmax, klbd.down_pct);
+            } else { b->fed_done = 0; }
+        }
 
         if (r->status != 0) {                                            /* aboard / escaped / dead */
             if (b->down) { klog("botdown: record %d left play while down (%s) after %.2f s", i, r->status == 7 ? "he DIED" : "status other than in-play", (float)(long)(tick - b->tick_down) / 1024.0f); b->down = 0; }
@@ -263,9 +336,12 @@ static void klbd_tick(int game_thread)
             if (b->shield) klbd_shield(b, 0);
             klog("botdown: record %d IS UP after %.2f s at (%.0f, %.0f, %.0f): health %.1f of %.1f (READ in B2: the game's get-up gave FULL health, 252 of 252, twice - not the 75 %% the script's constant suggests), heist stage %u", i, (float)(long)(tick - b->tick_down) / 1024.0f,
                  have ? pos[0] : 0, have ? pos[1] : 0, have ? pos[2] : 0, hp, hmax, (unsigned)r->stage);
-            if (!klbd.dry && klbd.up_pct > 0 && hp > 0.01f && fabsf(hp - hmax * klbd.up_pct / 100.0f) > 0.5f) {
-                float nh = hmax * klbd.up_pct / 100.0f;
-                if (klh_data((void *)(DWORD_PTR)(h + 4), &nh, 4, "an AI heister's health: what he has when he is up from his down (botdown UpPct)")) { klog("botdown: record %d: up with %.1f of %.1f (UpPct=%.0f; the game gave %.1f)", i, nh, hmax, klbd.up_pct, hp); hp = nh; }
+            {
+                float up = fed ? klbd.fed_up : klbd.up_pct;
+                if (!klbd.dry && up > 0 && hp > 0.01f && fabsf(hp - hmax * up / 100.0f) > 0.5f) {
+                    float nh = hmax * up / 100.0f;
+                    if (klh_data((void *)(DWORD_PTR)(h + 4), &nh, 4, "an AI heister's health: what he has when he is up from his down (botdown UpPct / FedUpPct)")) { klog("botdown: record %d: up with %.1f of %.1f (%s=%.0f; the game gave %.1f)", i, nh, hmax, fed ? "FedUpPct" : "UpPct", up, hp); hp = nh; }
+                }
             }
             b->by = -1;
         }
@@ -291,7 +367,7 @@ static void klbd_tick(int game_thread)
                     if (klh_data((void *)(DWORD_PTR)(h + 4), &nh, 4, "an AI heister's health on the floor (botdown LiePct)")) { klog("botdown: record %d: %.1f of %.1f on the floor (LiePct=%.0f; the game gave %.1f)", i, nh, hmax, klbd.lie_pct, hp); hp = nh; }
                 }
             }
-            if (klbd.free_t > 0 && sn.veh < 5 && (long)(tick - b->tick_down) < (long)(klbd.free_t * 1024.0f)) klbd_shield(b, 1);
+            if (free_t > 0 && sn.veh < 5 && (long)(tick - b->tick_down) < (long)(free_t * 1024.0f)) klbd_shield(b, 1);
             else if (b->shield) klbd_shield(b, 0);
             if (klbd.nofire) {
                 DWORD tgt = 0, zero = 0;
@@ -314,7 +390,7 @@ static void klbd_tick(int game_thread)
         } else if (hp > thr) {
             /* healthy again: a new episode */
             b->first_try = b->last_try = 0; b->tries = 0; b->gaveup = 0; b->dryseen = 0;
-        } else if (!b->gaveup && b->downs < klbd.downs_max && sn.veh < 5 && r->status == 0) {
+        } else if (!b->gaveup && b->downs < downs_max && sn.veh < 5 && r->status == 0) {
             /* ---- at or under the threshold, standing: ask for the down */
             float fl = klbd_floor(hmax, klbd.floor_pct, thr);
             if (klbd.dry) {
@@ -381,13 +457,20 @@ static void klbd_init(void)
     klbd.preshield = GetPrivateProfileIntA("BotDown", "PreShield", 1, klh_ini) != 0;
     klbd.lie = klbd_inif("LieSeconds", "6", 0.0f, 15.0f);
     if (klbd.lie > 0 && klbd.lie < 0.5f) klbd.lie = 0.5f;
-    klbd.free_t = klbd_inif("FreeSeconds", "0.75", 0.0f, 5.0f);
+    klbd.free_t = klbd_inif("FreeSeconds", "0.75", 0.0f, 15.0f);      /* 15 (was 5) = the whole LieSeconds (2026-10-15, run v70_T1E: four downed bots were shot dead 7 .. 12 s into a 15 s lie) */
     klbd.lie_pct = klbd_inif("LiePct", "0", 0.0f, 100.0f);
     klbd.up_pct = klbd_inif("UpPct", "0", 0.0f, 100.0f);
     klbd.attr = klbd_inif("AttrMs", "1500", 0.0f, 20000.0f) / 1000.0f;
     klbd.watch = klbd_inif("WatchSeconds", "8", 3.0f, 60.0f);
+    klbd.fed_downs = GetPrivateProfileIntA("BotDown", "FedDowns", 0, klh_ini);
+    if (klbd.fed_downs < 0) klbd.fed_downs = 0; if (klbd.fed_downs > klbd.downs_max) klbd.fed_downs = klbd.downs_max;
+    klbd.fed_free = klbd_inif("FedFree", "0", 0.0f, 5.0f);
+    klbd.fed_up = klbd_inif("FedUpPct", "25", 0.0f, 100.0f);
+    klbd.fed_health = klbd_inif("FedHealth", "0", 0.0f, 1000.0f);
+    if (klbd.fed_health > 0 && klbd.fed_health < 5.0f) klbd.fed_health = 5.0f;
     klog("botdown: on%s; an AI heister at %.0f %% of his health or less is put DOWN, NOT DEAD by the game's own routine (asked from the hook without a hit, force 1; floor %.0f %% while refused for up to %.0f ms), up to %d times a life; lies %s, FreeSeconds %.2f, LiePct %.0f, UpPct %.0f, NoFire %d, Traitors %d. Arcade, a level that is not stock; data writes and ONE game call (re\\bots_down.md)",
          klbd.dry ? " (Dry=1: nothing is called, nothing is written)" : "", klbd.down_pct, klbd.floor_pct, klbd.refuse, klbd.downs_max,
          klbd.lie > 0 ? "LieSeconds" : "as long as the game says", klbd.free_t, klbd.lie_pct, klbd.up_pct, klbd.nofire, klbd.traitors);
     if (klbd.lie > 0) klog("botdown: LieSeconds=%.1f (a GUESS; the game's own is 1.5 .. 3.0)", klbd.lie);
+    klog("botdown: while you are police (a fed): FedDowns %d, FedFree %.2f, FedUpPct %.0f, FedHealth %s", klbd.fed_downs, klbd.fed_free, klbd.fed_up, klbd.fed_health > 0 ? "set" : "0 = 100 / [Balance] Tough");
 }

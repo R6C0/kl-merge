@@ -437,6 +437,43 @@ static void klp_bots_tick(const struct klp_snap *s, DWORD now)
     }
 }
 
+/* Where a fed stands (w_fedmove, 2026-10-14; the owner on Retomoto: 'fed gets stuck in elevator'). READS ONLY, a log line.
+   The one fed of his evening who came back in the tower (20:16:26, (2605, 19601, -176)) had a crew that had gone down by
+   [CrewHop] meanwhile; he walked 77 s, took the join box (20:17:43) and was dead 1.9 s after the jump - where he stood in
+   those 77 s the log does not say. So, while you are a fed in play:
+   - 'fed: you have stood N s at (x, y, z)': you have not moved 1 m for 10 s (once per spot, again after 30 s more);
+   - 'fed: you are on another level of height than the whole crew': every AI heister in play is more than 5000 above or
+     below you (Retomoto: the tower 19600 .. 21000, the street -50 .. 570) - once a life; and when it ends.
+   The crew's places: [actor + 0x460] (klcrew_rt.c's 'feet', an ASSUMPTION it states; the hop lines read it as the node). */
+static struct { DWORD player, since, said; float at[3]; int apart; } klp_w;
+
+static void klp_where(const struct klp_snap *s)
+{
+    const struct klp_rec *h = s->human >= 0 ? &s->r[s->human] : 0; DWORD now = GetTickCount(); float d2, ft[3], dy, mindy = 1e9f; int i, n = 0, apart;
+    if (!klp.log || s->state != KLP_ROUND || !h || h->status != 0 || !s->player || !s->ppolice || !klp_finite(s->feet[0]) || !klp_finite(s->feet[1]) || !klp_finite(s->feet[2])) { klp_w.player = 0; return; }
+    if (s->player != klp_w.player) { memset(&klp_w, 0, sizeof klp_w); klp_w.player = s->player; klp_w.since = KLP_T(now); memcpy(klp_w.at, s->feet, 12); }
+    d2 = (s->feet[0] - klp_w.at[0]) * (s->feet[0] - klp_w.at[0]) + (s->feet[1] - klp_w.at[1]) * (s->feet[1] - klp_w.at[1]) + (s->feet[2] - klp_w.at[2]) * (s->feet[2] - klp_w.at[2]);
+    if (d2 > 100.0f * 100.0f) {
+        if (klp_w.said) klog("fed: you move again after %.0f s at (%.0f, %.0f, %.0f)", (now - klp_w.since) / 1000.0, klp_w.at[0], klp_w.at[1], klp_w.at[2]);
+        klp_w.since = KLP_T(now); klp_w.said = 0; memcpy(klp_w.at, s->feet, 12);
+    } else if (now - klp_w.since >= 10000 && (!klp_w.said || now - klp_w.said >= 30000)) {
+        klp_w.said = KLP_T(now);
+        klog("fed: you have stood %.0f s at (%.0f, %.0f, %.0f) (within 1 m; local player object %u)", (now - klp_w.since) / 1000.0, s->feet[0], s->feet[1], s->feet[2], s->sel);
+    }
+    for (i = 0; i < s->n; i++) {
+        const struct klp_rec *r = &s->r[i];
+        if (!r->used || !r->ai || r->status || !r->actor || !klh_rd(r->actor + 0x460, ft, 12) || !klp_finite(ft[1]) || (!ft[0] && !ft[1] && !ft[2])) continue;
+        n++; dy = (float)fabs(ft[1] - s->feet[1]); if (dy < mindy) mindy = dy;
+    }
+    apart = n && mindy > 5000.0f;
+    if (apart != klp_w.apart) {
+        if (apart) klog("fed: you are on another level of height than the whole crew: you at (%.0f, %.0f, %.0f), the nearest of %d AI heister(s) in play %.0f above or below (Retomoto: only the join box before the tower car takes you down)",
+                        s->feet[0], s->feet[1], s->feet[2], n, mindy);
+        else if (klp_w.apart == 1) klog("fed: you are at the crew's level of height again: (%.0f, %.0f, %.0f)", s->feet[0], s->feet[1], s->feet[2]);
+        klp_w.apart = apart;
+    }
+}
+
 /* ---------------------------------------------------------------- the tick */
 
 static void klp_round_line(const struct klp_snap *s)
@@ -478,6 +515,7 @@ static void klp_tick(int game_thread)
         }
     }
     klp_player_tick(&s, act, lvwhy, game_thread);
+    klp_where(&s);                                            /* a log line: where a fed stands (reads only) */
     if (klp.bots && act && game_thread && s.state == KLP_ROUND) klp_bots_tick(&s, now);
     if (klp.log >= 2 && now - lastline >= 1000) {
         const struct klp_rec *h = s.human >= 0 ? &s.r[s.human] : 0; DWORD sw = 0xffffffff;

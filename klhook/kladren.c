@@ -48,6 +48,13 @@
  *   Rate=3.0 (a downed AI heister's lie runs this many times faster)   Meter=3.0 (the human's mash meter floor)
  *   HumanFast=0 (ON BREAKS THE OWNER'S RULE 'NEVER FASTER THAN NORMAL')   MinHelp=1.0 (s; review 7: a walk past is not help)   Share=0.25   Take=1   ShareBot=1 (AI helpers earn a share too)   ShareBank=1
  *   Mark=0 (1 = the traitor mark for downing a crewmate: the attribution is ASSUMED, check A4; the bots may not turn on a marked human)   MarkFine=0
+ *   Prompt=1 (2026-10-14, the owner: 'i dont get the option to do an adrenaline on someone and no ai does it on me'): the help was
+ *            there but nothing on screen said so. Now the game's own centre announcement (0x468430, the routine klhud_popup.c uses;
+ *            game thread) tells you: a crewmate is DOWN near you (PromptRange m) and to go to him; that you are giving him adrenaline
+ *            while you stand by him; that an AI heister is coming to get YOU up / is giving you adrenaline; and the share when he is up.
+ *            0 = silent as before.   PromptRange=12 (m)
+ *   NeedUse=1 now (the owner: 'just use e for it like when picking up a gun'): you help only while you HOLD E (UseKey=0x45, a Windows
+ *            virtual-key code, read while the game's window is in front) or the game's own Use bit; the prompt says 'Hold E' in Range.
  */
 #define KLADREN_C
 
@@ -62,6 +69,7 @@
 static struct {
     int on, dry, log, needuse, humanfast, share_bot, bank, mark, fine, take, bothelp, rush;
     float range, brange, rate, meter, minhelp, share, rushrange;
+    int prompt, usekey; float prange;
 } kad;
 
 static struct kad_rec {
@@ -88,7 +96,56 @@ static struct kad_mark {
     BYTE byte2726;                            /* the local player's byte before */
 } kad_m[KLB_NREC];
 
-static struct { DWORD rules, state; WORD kw[KLB_NREC]; BYTE kwok[KLB_NREC]; DWORD nextlog; BYTE use_last; DWORD use_dw; } kad_g;
+static struct { DWORD rules, state; WORD kw[KLB_NREC]; BYTE kwok[KLB_NREC]; DWORD nextlog; BYTE use_last; DWORD use_dw; DWORD said_at, hint_at; int said_key; } kad_g;
+
+/* ---------------------------------------------------------------- Prompt: the game's own centre announcement */
+
+#define KAD_ANNOUNCE   0x00468430u            /* thiscall (ZFAAnnouncementDisplay *, const char *, float seconds), ret 8 (klhud_popup.c) */
+#define KAD_ANN_VT     0x00bbdd34u
+#define KAD_O_ANN      0x10a8                 /* osd + this = the announcement element */
+
+/* the human holds Use: the game's own bit (bit 2 of [player+0xa54], a GUESS of re\hud_popup.md 7.12) OR the UseKey on the keyboard while
+   the game's window is in front (2026-10-14, the owner: 'just use e for it like when picking up a gun') */
+static int kad_use_held(DWORD pl)
+{   /* user32 is the game's own (loaded long before a round): looked up, not linked - this DLL does not link user32 */
+    static HWND (WINAPI *fgw)(void); static DWORD (WINAPI *wtp)(HWND, LPDWORD); static SHORT (WINAPI *aks)(int); static int tried;
+    DWORD dw = 0, pid = 0; HWND fg;
+    if (pl && klh_rd(pl + 0xa54, &dw, 4) && (dw & 2)) return 1;
+    if (!kad.usekey) return 0;
+    if (!tried) {
+        HMODULE u = GetModuleHandleA("user32.dll"); tried = 1;
+        if (u) { fgw = (HWND (WINAPI *)(void))GetProcAddress(u, "GetForegroundWindow"); wtp = (DWORD (WINAPI *)(HWND, LPDWORD))GetProcAddress(u, "GetWindowThreadProcessId"); aks = (SHORT (WINAPI *)(int))GetProcAddress(u, "GetAsyncKeyState"); }
+        if (!fgw || !wtp || !aks) klog("adren: user32's GetForegroundWindow / GetWindowThreadProcessId / GetAsyncKeyState not found: the E key is not read (the game's own Use bit still is)");
+    }
+    if (!fgw || !wtp || !aks || !(fg = fgw())) return 0;
+    wtp(fg, &pid);
+    return pid == GetCurrentProcessId() && (aks(kad.usekey) & 0x8000) != 0;
+}
+
+/* a crewmate's name as the crew list shows it (klhud_names.c), else a plain word */
+static void kad_name(int i, char *out, int cap)
+{
+    const struct klnm_rec *q = (i >= 0 && i < KLW_NREC) ? &klnm_r.r[i] : 0;
+    snprintf(out, cap, "%s", q && q->used && q->chr[0] ? q->chr : q && q->used && q->stock[0] ? q->stock : "your crewmate");
+}
+
+/* one message, at most one every `gap` ms unless the key changes; the element must be the stock class (or klhud_popup.c's copy) */
+static void kad_say(int key, DWORD gap, const char *msg, float secs)
+{
+    static int code = -1; static char buf[160];
+    static const BYTE say_code[8] = { 0x56, 0x57, 0x8b, 0x7c, 0x24, 0x0c, 0x8b, 0xc7 };          /* 0x468430 */
+    DWORD now = GetTickCount(), osd, el, vt = 0;
+    if (!kad.prompt || !kset_v[2] || kad.dry) return;           /* kset_v[2]: the menu's row, at once */
+    if (key == kad_g.said_key && now - kad_g.said_at < gap) return;
+    if (code < 0) { code = klu_same_code(KAD_ANNOUNCE, say_code, sizeof say_code); if (!code) klog("adren: prompt: 0x468430 is not the announcement routine this build knows: no prompts"); }
+    if (!code || !klu.on || !(osd = klu_r.osd) || klu_r.fault || klh_rd32(osd) != KLU_OSD_VT) return;
+    if (!(el = klh_rd32(osd + KAD_O_ANN)) || !klh_rd(el, &vt, 4)) return;
+    if (vt != KAD_ANN_VT && vt != (DWORD)(DWORD_PTR)&klpu_evt[1]) return;
+    snprintf(buf, sizeof buf, "%s", msg);                       /* the element may keep the pointer: a static buffer */
+    ((void (__fastcall *)(void *, void *, const char *, float))(DWORD_PTR)KLH_VA(KAD_ANNOUNCE))((void *)(DWORD_PTR)el, 0, buf, secs);
+    kad_g.said_key = key; kad_g.said_at = now;
+    if (kad.log >= 2) klog("adren: prompt '%s'", buf);
+}
 
 /* ---------------------------------------------------------------- pure arithmetic (tested off the game)  */
 
@@ -312,7 +369,13 @@ static void kad_tick(int game_thread)
     if (sn.rules != kad_g.rules) {            /* a new round / rules object: a mark left over from the last round is taken off, nothing else is carried */
         for (i = 0; i < KLB_NREC; i++) if (kad_m[i].on && !kad_m[i].keep && !kad.dry) { DWORD fl = 0; if (klh_rd(sn.score + 0x1d4 + 4 * i, &fl, 4) && (fl & 1)) { fl &= ~1u; klh_data((void *)(DWORD_PTR)(sn.score + 0x1d4 + 4 * i), &fl, 4, "client flags: a mark of last round (adrenaline)"); } }
         kad_forget("new rules object"); kad_g.rules = sn.rules;
+        kad_g.hint_at = now + 9000;          /* the round's first prompt: once the countdown is over, what the key is for */
         klog("adren: a round runs (Arcade, not the stock level: %s); %d crew record(s); Range %.1f m, BotRange %.1f m, Rate %.1f, Meter %.1f, Share %.2f, Mark %d%s", why, sn.n, kad.range, kad.brange, kad.rate, kad.meter, kad.share, kad.mark, kad.dry ? " - Dry: nothing is written" : "");
+    }
+    if (kad_g.hint_at && (LONG)(now - kad_g.hint_at) >= 0) {
+        kad_g.hint_at = 0;
+        if (kad.prompt && kset_v[3]) { kad_say(1, 0, kad.usekey == 0x45 ? "Crewmate down? Hold E by him: adrenaline gets him up and you get a cut" : "Crewmate down? Hold Use by him: adrenaline gets him up and you get a cut", 5.0f);
+                                         klog("adren: prompt: the round's hint said (%s)", kad_g.said_key == 1 ? "shown" : "NOT shown: no announcement element yet"); }
     }
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KAD_GAMEDATA))) || !(clock = klh_rd32((DWORD_PTR)KLH_VA(KLD_CLOCK))) || !klh_rd(clock + 0x48, &tick, 4)) return;
     /* the local human's knock-down state (D), if he is a criminal in play */
@@ -382,6 +445,7 @@ static void kad_tick(int game_thread)
             k->fast = 0;
             if (best >= 0 && bm >= (DWORD)(kad.minhelp * 1000.0f)) {
                 if (kad.share > 0) { if (k->paid) klog("adren: record %d was helped up before this round: no second share (once per man per round)", i); else { k->paid = 1; kad_pay(&sn, i, best, bm); } }
+                if (kad.prompt && best == sn.human && i != sn.human) { char nm[48], msg[160]; kad_name(i, nm, sizeof nm); snprintf(msg, sizeof msg, "%s is back up - you get a cut of his money", nm); kad_say(500 + i, 0, msg, 3.0f); }
                 if (k->by >= 0 && k->by == best) kad_mark_off(&sn, k->by, i, "he helped him up");
                 else if (k->by >= 0 && k->mkn) klog("adren: record %d (who put record %d down) did not help him up: his mark stays", k->by, i);
             } else if (k->by >= 0 && k->mkn) klog("adren: record %d got up without enough help (%lu ms of %.0f): the mark of record %d stays", i, (unsigned long)bm, kad.minhelp * 1000.0f, k->by);
@@ -399,7 +463,7 @@ static void kad_tick(int game_thread)
                 if (!(q->flags & 1) && h != sn.human) continue;             /* a human that is not the local one: his place is not read here (online later) */
                 if (h == sn.human && police) continue;
                 if (!(q->flags & 1)) {                                       /* a human helper: Range, and Use if asked */
-                    if (kad.needuse && !(h == sn.human && pl && klh_rd(pl + 0xa54, &usedw, 4) && (usedw & 2))) continue;
+                    if (kset_v[3] && !(h == sn.human && kad_use_held(pl))) continue;   /* kset_v[3]: the menu's row */
                     lim[h] = kad.range * KAD_M;
                 } else if (i == sn.human) lim[h] = kad.brange * KAD_M;       /* an AI heister by a downed human */
                 else if (kad.bothelp) lim[h] = kad.brange * KAD_M;          /* BotHelp: an AI heister by a downed AI heister */
@@ -409,6 +473,19 @@ static void kad_tick(int game_thread)
             }
             hp = kad_pick(dist, lim, sn.n);
             kad_rush(&sn, i, pos, havepos, dn, now);
+            if (kad.prompt) {
+                char nm[48], msg[160]; int hu = sn.human;
+                if (i != hu && hu >= 0 && hu < sn.n && !dn[hu] && !police && havepos[hu] && havepos[i] && !(sn.r[i].flags & 2) &&
+                    fabs(pos[hu][1] - pos[i][1]) <= 2.0f * KAD_M) {
+                    float d = kad_dist(pos[hu], pos[i]);
+                    kad_name(i, nm, sizeof nm);
+                    if (hp == hu) { snprintf(msg, sizeof msg, "ADRENALINE: getting %s up - keep holding", nm); kad_say(100 + i, 2500, msg, 2.4f); }
+                    else if (d <= kad.range * KAD_M && kset_v[3]) { snprintf(msg, sizeof msg, "Hold %s - adrenaline for %s", kad.usekey == 0x45 ? "E" : "Use", nm); kad_say(150 + i, 2500, msg, 2.4f); }
+                    else if (d <= kad.prange * KAD_M) { snprintf(msg, sizeof msg, "%s IS DOWN - get to him (%.0f m) for adrenaline and a cut", nm, d / KAD_M); kad_say(200 + i, 4000, msg, 3.0f); }
+                }
+                /* nothing is said while YOU are down (2026-10-14, the owner: 'it says someone is gonna help me but they arent'): the AI
+                   heisters have no revive animation, so a line about one would promise what the screen does not show */
+            }
             if (pl && klh_rd(pl + 0xa54, &usedw, 4)) { use = (BYTE)((usedw & 2) != 0); if (kad.log >= 2 && (usedw != kad_g.use_dw)) { klog("adren: [player+0xa54] %08lx -> %08lx (bit 2, the GUESSED 'use key held': %d)", (unsigned long)kad_g.use_dw, (unsigned long)usedw, use); kad_g.use_dw = usedw; } }
             if (hp < 0) { if (k->fast && pl && i == sn.human) { BYTE z = 0; klh_data((void *)(DWORD_PTR)(D + 0x29), &z, 1, "player: the fast get-up byte back (adrenaline)"); k->fast = 0; } continue; }
             k->hm[hp] += dt * 1000u / 1024u;
@@ -456,7 +533,8 @@ static void kad_init(void)
     if (!kad.on) return;
     kad.dry = GetPrivateProfileIntA("Adrenaline", "Dry", 0, klh_ini) != 0;
     kad.log = GetPrivateProfileIntA("Adrenaline", "Log", 1, klh_ini);
-    kad.needuse = GetPrivateProfileIntA("Adrenaline", "NeedUse", 0, klh_ini) != 0;
+    kad.needuse = GetPrivateProfileIntA("Adrenaline", "NeedUse", 1, klh_ini) != 0;        /* 2026-10-14: hold E (UseKey) by him, as for a gun on the floor */
+    kad.usekey = GetPrivateProfileIntA("Adrenaline", "UseKey", 0x45, klh_ini) & 0xff;      /* a virtual-key code: 0x45 = E; 0 = only the game's own bit */
     kad.humanfast = GetPrivateProfileIntA("Adrenaline", "HumanFast", 0, klh_ini) != 0;
     kad.share_bot = GetPrivateProfileIntA("Adrenaline", "ShareBot", 1, klh_ini) != 0;
     kad.bank = GetPrivateProfileIntA("Adrenaline", "ShareBank", 1, klh_ini) != 0;
@@ -472,8 +550,11 @@ static void kad_init(void)
     kad.bothelp = GetPrivateProfileIntA("Adrenaline", "BotHelp", 1, klh_ini) != 0;
     kad.rush = GetPrivateProfileIntA("Adrenaline", "Rush", 1, klh_ini) != 0;
     kad.rushrange = kad_inif("RushRange", "25", 2.0f, 80.0f);
+    kad.prompt = GetPrivateProfileIntA("Adrenaline", "Prompt", 1, klh_ini) != 0;
+    kad.prange = kad_inif("PromptRange", "12", 2.0f, 60.0f);
     klog("adren: on%s; a downed crewmate gets up faster with a helper within %.1f m (a bot by a downed human: %.1f m; NeedUse=%d); AI lie x%.1f, your mash meter at least %.1f (HumanFast=%d); the helper gets %.0f %% of what the helped man carries (%s, Take=%d, ShareBot=%d); Mark=%d MarkFine=%d. Arcade on a level that is not stock, not for a police human; data writes only (re\\adrenaline.md)",
          kad.dry ? " (Dry=1: nothing is written)" : "", kad.range, kad.brange, kad.needuse, kad.rate, kad.meter, kad.humanfast, kad.share * 100.0f, kad.bank ? "banked for a human" : "carried", kad.take, kad.share_bot, kad.mark, kad.fine);
+    klog("adren: Prompt=%d (the centre announcement says who is down near you, that you are helping, who is coming for you; PromptRange %.0f m)", kad.prompt, kad.prange);
     klog("adren: BotHelp=%d (an AI heister by a downed AI heister helps and earns as a human would), Rush=%d (the nearest free AI heister within %.0f m on the same floor RUNS to a downed crewmate, and goes back to his own place when the man is up)", kad.bothelp, kad.rush, kad.rushrange);
     if (!kld.on) klog("adren: [Down] Enable=0 - the human's knock-down is the game's own plain one: the meter cannot be driven (HumanFast=1 can still ask the fast get-up); an AI heister only lies when [Down] Bots=1 (or the game puts him down)");
     else if (!kld_bk.on) klog("adren: [Down] Bots=0 - no AI heister goes down, so only the human side acts (a bot by a downed human); set [Down] Bots=1 (BotsLie=6 gives the adrenaline something to speed)");

@@ -591,6 +591,7 @@ static void klh_tick(int game_thread);
 #include "kljoin.c"
 #include "klcrew_rt.c"
 #include "klgun.c"
+#include "klset.c"                                        /* klset.c: the Mod settings rows (answered through klchar.c's option vtable) */
 #include "klchar.c"
 #include "klcrew.c"
 #include "kltalk.c"
@@ -639,6 +640,62 @@ static int klh_tick_source = -1;
 static volatile LONG klh_game_ticks;                  /* frames of the main loop: half of the stall watch's heartbeat */
 static DWORD klh_main_tid;                            /* the main loop's thread (its first SteamAPI_RunCallbacks call) */
 
+/* ---------------------------------------------------------------- no UI Automation on the game window (SHIP and TEST)
+
+   WHY (2026-10-14, the hitch probe in the owner's own rounds, 20:25 - 20:44): during nearly every freeze of 50 - 450 ms the main thread
+   stood in win32u.dll's message calls with USER32 -> uiautomationcore.dll on its stack (and gameoverlayrenderer.dll / ReShade32.dll's
+   window procedures under it): another program on the PC (an accessibility / assistive client: Grammarly, a screen reader, a remote-control
+   or 'computer use' tool, Windows' text input host) asks the game's window for its UI Automation tree with WM_GETOBJECT, and answering
+   that in the game's own message pump builds an automation provider for a full-screen D3D9 window - over and over.
+   WHAT: the game's top-level window gets one more window procedure, outermost: WM_GETOBJECT (0x3D) is answered 0 ('no accessible
+   object') at once; every other message goes on to the procedure that was there (CallWindowProc). The window is looked for every 2 s
+   until found and again whenever another subclass has gone over ours (a chain is fine). user32 is looked up, not linked.
+   [KLHook] NoUIA=1 (0 = the game as before). The 10 s perf line says how many such requests were refused. */
+static LONG_PTR klh_uia_old; static HWND klh_uia_wnd; static volatile LONG klh_uia_n;
+static LRESULT (WINAPI *klh_cwp)(WNDPROC, HWND, UINT, WPARAM, LPARAM);
+static LONG_PTR (WINAPI *klh_gwl)(HWND, int); static LONG_PTR (WINAPI *klh_swl)(HWND, int, LONG_PTR);
+static BOOL (WINAPI *klh_uni)(HWND); static HMODULE klh_u;
+static LRESULT CALLBACK klh_uia_proc(HWND h, UINT m, WPARAM w, LPARAM l)
+{
+    if (m == 0x003D) { InterlockedIncrement(&klh_uia_n); return 0; }
+    return klh_cwp((WNDPROC)klh_uia_old, h, m, w, l);
+}
+static BOOL CALLBACK klh_uia_pick(HWND h, LPARAM best)
+{
+    static BOOL (WINAPI *vis)(HWND); static BOOL (WINAPI *rect)(HWND, LPRECT); RECT r; HWND *b = (HWND *)best;
+    if (!vis) { HMODULE u = GetModuleHandleA("user32.dll"); vis = (BOOL (WINAPI *)(HWND))GetProcAddress(u, "IsWindowVisible"); rect = (BOOL (WINAPI *)(HWND, LPRECT))GetProcAddress(u, "GetClientRect"); }
+    if (vis && rect && vis(h) && rect(h, &r) && r.right - r.left >= 640 && r.bottom - r.top >= 400) { *b = h; return FALSE; }
+    return TRUE;
+}
+static void klh_uia_tick(void)
+{
+    static DWORD last; static int on = -1, told; static BOOL (WINAPI *etw)(DWORD, WNDENUMPROC, LPARAM); DWORD now = GetTickCount(); HWND w = 0;
+    if (on < 0) {
+        HMODULE u = GetModuleHandleA("user32.dll");
+        on = GetPrivateProfileIntA("KLHook", "NoUIA", 1, klh_ini) != 0;
+        if (u) { etw = (BOOL (WINAPI *)(DWORD, WNDENUMPROC, LPARAM))GetProcAddress(u, "EnumThreadWindows"); klh_uni = (BOOL (WINAPI *)(HWND))GetProcAddress(u, "IsWindowUnicode"); klh_u = u; }
+        if (on && (!etw || !klh_uni)) { on = 0; klog("noUIA: user32's window functions not found: the game window answers UI Automation as before"); }
+    }
+    if (!on || !klh_main_tid || now - last < 2000) return;
+    last = now;
+    if (klh_uia_wnd && klh_gwl && klh_gwl(klh_uia_wnd, -4) == (LONG_PTR)klh_uia_proc) return;      /* GWL_WNDPROC: ours is still outermost */
+    etw(klh_main_tid, klh_uia_pick, (LPARAM)&w);
+    if (!w) return;
+    {   /* the A or W pair as the window is (a W window subclassed through the A functions would get every text message converted) */
+        int wide = klh_uni(w) ? 1 : 0;
+        klh_cwp = (LRESULT (WINAPI *)(WNDPROC, HWND, UINT, WPARAM, LPARAM))GetProcAddress(klh_u, wide ? "CallWindowProcW" : "CallWindowProcA");
+        klh_gwl = (LONG_PTR (WINAPI *)(HWND, int))GetProcAddress(klh_u, wide ? "GetWindowLongW" : "GetWindowLongA");
+        klh_swl = (LONG_PTR (WINAPI *)(HWND, int, LONG_PTR))GetProcAddress(klh_u, wide ? "SetWindowLongW" : "SetWindowLongA");
+        if (!klh_cwp || !klh_gwl || !klh_swl) return;
+    }
+    {
+        LONG_PTR cur = klh_gwl(w, -4);
+        if (!cur || cur == (LONG_PTR)klh_uia_proc) return;
+        klh_uia_old = cur;
+        if (klh_swl(w, -4, (LONG_PTR)klh_uia_proc)) { klh_uia_wnd = w; if (told++ < 4) klog("noUIA: the game window %p now refuses WM_GETOBJECT (UI Automation) at once; the procedure under it was %08lx", (void *)w, (DWORD)cur); }
+    }
+}
+
 static void klh_tick(int game_thread)
 {
     DWORD now = GetTickCount(); static DWORD armed;
@@ -652,6 +709,7 @@ static void klh_tick(int game_thread)
     }
     klh_ticks++;
     if (now - armed >= 1000) { armed = now; klh_uef_arm(); }
+    if (game_thread) klh_uia_tick();                  /* the game window refuses UI Automation (the hitch probe's finding, 2026-10-14) */
     klf_tick();
     kls_tick();
     klx_tick();
@@ -702,7 +760,7 @@ static void __cdecl klh_w_runcallbacks(void)
         /* [KLHook] Perf=1 (2026-10-14, the owner's '200+ fps'): every 10 s one line - the game's frames (this wrapper runs once a frame
            on the main loop), the time this hook's tick took on the main thread, and its memory reads. The whole-run frames / ms of
            KLHook.result mixes menus and loads (it varied +-40 % between equal runs); this line is the in-game figure. */
-        static LARGE_INTEGER f, t0, a, b, prev; static LONGLONG spent, dt_max, tick_max; static LONG frames, reads0, hitch; static int perf = -1;
+        static LARGE_INTEGER f, t0, a, b, prev; static LONGLONG spent, dt_max, tick_max; static LONG frames, reads0, hitch, told; static int perf = -1;
         if (perf < 0) { perf = GetPrivateProfileIntA("KLHook", "Perf", 1, klh_ini); QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0); reads0 = klh_reads; }
         if (perf) QueryPerformanceCounter(&a);
         klh_tick(1);
@@ -713,15 +771,18 @@ static void __cdecl klh_w_runcallbacks(void)
                 LONGLONG dt = a.QuadPart - prev.QuadPart;
                 if (dt > dt_max) dt_max = dt;
                 if (dt * 30 > f.QuadPart) hitch++;  /* a frame over 33 ms */
+                if (dt * 1000 > f.QuadPart * 120 && dt < f.QuadPart * 3 && told < 6) {     /* each frame of 120 ms .. 3 s (not a load), at most 6 a window */
+                    told++; klog("core: hitch %.0f ms", (double)dt * 1000.0 / (double)f.QuadPart);
+                }
             }
             prev = a;
             if (b.QuadPart - t0.QuadPart >= f.QuadPart * 10) {
                 double secs = (double)(b.QuadPart - t0.QuadPart) / (double)f.QuadPart, ms = (double)spent * 1000.0 / (double)f.QuadPart; LONG rd = klh_reads - reads0;
                 klog("core: perf: %ld frames in %.1f s = %.1f fps; the hook's tick %.2f ms a frame (%.1f %% of the frame time, slowest %.1f ms), %ld memory reads a frame; "
-                     "stutter: %ld frame(s) over 33 ms, the longest %.0f ms",
+                     "stutter: %ld frame(s) over 33 ms, the longest %.0f ms; UI Automation requests refused: %ld",
                      frames, secs, frames / secs, frames ? ms / frames : 0.0, ms / (secs * 10.0), (double)tick_max * 1000.0 / (double)f.QuadPart,
-                     frames ? rd / frames : 0L, hitch, (double)dt_max * 1000.0 / (double)f.QuadPart);
-                t0 = b; spent = 0; frames = 0; reads0 = klh_reads; hitch = 0; dt_max = 0; tick_max = 0;
+                     frames ? rd / frames : 0L, hitch, (double)dt_max * 1000.0 / (double)f.QuadPart, (long)InterlockedExchange(&klh_uia_n, 0));
+                t0 = b; spent = 0; frames = 0; reads0 = klh_reads; hitch = 0; told = 0; dt_max = 0; tick_max = 0;
             }
         }
     }
@@ -790,6 +851,90 @@ static void klh_stall_watch(void)
     if (klh_stall_end_ms && quiet * 100 >= (DWORD)klh_stall_end_ms) {
         klog("STALL: %.0f s of silence reached StallEndMs=%d: the process is ended here", quiet / 10.0, klh_stall_end_ms);
         TerminateProcess(GetCurrentProcess(), 0x57a11);
+    }
+}
+
+/* ---------------------------------------------------------------- the hitch probe (SHIP and TEST)
+
+   WHY (2026-10-14, the owner: 'im still experiencing stutters ... sort them out'). The perf line counts frames over 33 ms
+   (2 .. 18 every 10 s while he moves through Retomoto, 150 .. 450 ms each, none while he stands still) but cannot say WHAT
+   the main thread was doing. This thread looks every 5 ms; when the main loop has given no frame for HitchMs (default 50),
+   it stops the main thread for a moment (SuspendThread / GetThreadContext / ResumeThread - no logging while it is
+   stopped), takes where it stands (EIP) and the first return addresses on its stack that lie in a module, and counts them.
+   Every 10 s with a hitch, one line: the places that were seen most, as module+offset (kl2.exe offsets read in the
+   disassembly; d3d9 / nvd3dum / kernel32 / ReShade say who). A sample every 10 ms of a hitch: a 200 ms hitch is ~20
+   samples. Costs nothing while frames come (one compare every 5 ms). [KLHook] HitchProbe=1 (0 = off) HitchMs=50 */
+#define KLH_HP_N 48
+static struct { DWORD addr; LONG n; } klh_hp_eip[KLH_HP_N], klh_hp_ret[KLH_HP_N];
+static LONG klh_hp_samples, klh_hp_hitches;
+
+static void klh_hp_count(DWORD a, int ret)
+{
+    int i; void *t = ret ? (void *)klh_hp_ret : (void *)klh_hp_eip;
+    struct { DWORD addr; LONG n; } *tab = t;
+    for (i = 0; i < KLH_HP_N; i++) {
+        if (tab[i].addr == a) { tab[i].n++; return; }
+        if (!tab[i].addr) { tab[i].addr = a; tab[i].n = 1; return; }
+    }
+}
+
+static void klh_hp_say(void)
+{
+    int k, j, best; char mod[80], line[1100]; DWORD off; size_t at;
+    if (!klh_hp_samples) return;
+    for (k = 0; k < 2; k++) {
+        struct { DWORD addr; LONG n; } *tab = k ? (void *)klh_hp_ret : (void *)klh_hp_eip;
+        at = (size_t)snprintf(line, sizeof line, "hitch probe: %ld hitch(es), %ld sample(s); %s:", (long)klh_hp_hitches, (long)klh_hp_samples,
+                              k ? "stack return addresses most seen" : "the main thread stood at");
+        for (j = 0; j < 8; j++) {
+            int i; best = -1;
+            for (i = 0; i < KLH_HP_N; i++) if (tab[i].addr && tab[i].n > 0 && (best < 0 || tab[i].n > tab[best].n)) best = i;
+            if (best < 0) break;
+            klh_module(tab[best].addr, mod, sizeof mod, &off);
+            if (at < sizeof line - 60) at += (size_t)snprintf(line + at, sizeof line - at, " %s+0x%lx x%ld", mod, off, (long)tab[best].n);
+            tab[best].n = -tab[best].n;                         /* taken: shown once */
+        }
+        klog("%s", line);
+    }
+    memset(klh_hp_eip, 0, sizeof klh_hp_eip); memset(klh_hp_ret, 0, sizeof klh_hp_ret);
+    klh_hp_samples = 0; klh_hp_hitches = 0;
+}
+
+static int klh_hp_in_code(DWORD a)
+{
+    MEMORY_BASIC_INFORMATION m;
+    return a > 0x10000 && VirtualQuery((void *)(DWORD_PTR)a, &m, sizeof m) && m.Type == MEM_IMAGE && (m.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY));
+}
+
+static DWORD WINAPI klh_hitch_probe(LPVOID unused)
+{
+    int ms = GetPrivateProfileIntA("KLHook", "HitchMs", 50, klh_ini); LONG last = -1; DWORD since = 0, said = GetTickCount(), lastsample = 0; int in_hitch = 0;
+    HANDLE t = 0;
+    (void)unused;
+    if (ms < 20) ms = 20;
+    for (;;) {
+        DWORD now; LONG beat;
+        Sleep(5);
+        if (!klh_tick_seen || !klh_main_tid) continue;
+        if (!t) { t = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, FALSE, klh_main_tid); if (!t) { Sleep(1000); continue; } }
+        now = GetTickCount(); beat = klh_game_ticks;
+        if (beat != last) { last = beat; since = now; in_hitch = 0; }
+        else if (now - since >= (DWORD)ms && now - since < 5000 && now - lastsample >= 10) {   /* a hitch (a load or Alt+Tab of seconds: not counted) */
+            CONTEXT c; DWORD st[256], got = 0; int ok = 0, i, n = 0;
+            memset(&c, 0, sizeof c); c.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
+            if (SuspendThread(t) != (DWORD)-1) {
+                ok = GetThreadContext(t, &c);
+                if (ok) got = klh_rd(c.Esp, st, sizeof st) ? 256 : (klh_rd(c.Esp, st, 64 * 4) ? 64 : 0);
+                ResumeThread(t);
+            }
+            lastsample = now;
+            if (!ok) continue;
+            if (!in_hitch) { in_hitch = 1; klh_hp_hitches++; }
+            klh_hp_samples++;
+            klh_hp_count(c.Eip, 0);
+            for (i = 0; i < (int)got && n < 6; i++) if (klh_hp_in_code(st[i])) { klh_hp_count(st[i], 1); n++; }
+        }
+        if (now - said >= 10000) { said = now; klh_hp_say(); }
     }
 }
 
@@ -898,6 +1043,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klf_init();
     klj_init();
     klt_init();
+    kset_init();
     klc_init();
     klw_init();
     klnm_init();
@@ -936,6 +1082,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
 #endif
     klh_uef_arm();
     CloseHandle(CreateThread(0, 0, klh_ticker, 0, 0, 0));
+    if (GetPrivateProfileIntA("KLHook", "HitchProbe", 1, klh_ini)) CloseHandle(CreateThread(0, 0, klh_hitch_probe, 0, 0, 0));
     return TRUE;
 }
 

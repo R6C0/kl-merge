@@ -283,6 +283,10 @@
 #define KLMV_INSIDE     0x00758cb0            /* char __thiscall (box controller, actor): the actor's node (or its second point) inside the box entity */
 #define KLMV_BOARD1     0x0074d7f0            /* void __thiscall (rules, char index): rules vtable +0xb4 (0x6840a0) with that record's actor */
 #define KLMV_BOX_IN     0x004aca80            /* ZBoxPrimitive vtable +0x170: |local| <= the three floats at entity +0x14 (+ a margin) = HALF extents */
+/* LAST VEHICLE (section 6, 2026-10-14, w_rt): the round's last vehicle when the game's own forced call brought none */
+#define KLMV_EXIT_VT    0x00bc8c1c            /* ZOnlineExitLevelTrigger (RTTI; slot 34 = 0x6c3d50, slot 25 = 0x65dd10) */
+#define KLMV_CALLVEH    0x008154f0            /* void __thiscall (rules, vehicle, char last): what rules slot 44 (0x6cd8e0) and the forced last call (0x81e570) call; ret 8 */
+#define KLMV_LAST_AT    1.75f                 /* s left on the round clock: the game's own forced call is at 2.0 (0x81e570); this is the fallback after it */
 #define KLMV_SENT       3000.0f               /* BoardReachOrder: only a bot within this of the boarding box is sent to the doors. GUESS */
 
 /* a box entity in the world: its node's place, its three axes, its half extents (box = 0: not a ZBoxPrimitive, a point) */
@@ -295,6 +299,7 @@ static struct {
     float near_; int near_visits, near_stage;
     float reach; int reach_visits, reach_doors, reach_order;
     DWORD hop; float hop_max;      /* RestlessHop (section 5): seconds at a hold before a hop to a cover place of the level's [Hops]; 0 = off */
+    int last;                      /* LastVehicle (section 6): 1 = the fallback last vehicle is on (default), 0 = off */
 } klmv;
 
 /* ACTIVE (section 5, 2026-10-12): the level's list of cover places a bot may shift to while it waits at a hold, per GATE of the
@@ -323,6 +328,7 @@ static struct {
     int visit, was_waiting, scanned; BYTE was_veh; float near_bd[3]; DWORD gate_ready; int gate_told;
     int hold_visit, hold_told, h_comes; float hold_used, h_d; DWORD h_at;
     int rc_visit, rc_told; DWORD rc_wait_at;      /* BoardReach: the visit the boarding box was read for, its line said, when this wait began */
+    int last_done, last_told;                     /* LastVehicle (section 6): 1 = looked at (called or found nothing to do) this round; the 2 s line said */
 } klmv_r;
 
 /* BoardReach: what the tick decides and the boxes' update reads (section 4). armed = 1 through the WHOLE round on a
@@ -621,6 +627,77 @@ static void klmv_scan(DWORD rules)
     klog("near: %d ZAllyEscapeBox object(s) found in %lu ms (the game stood still that long; looked for anew at every round's start):%s; %s", klmv_nbox, GetTickCount() - t0, klmv_nbox ? line : " none - only the board tactic takes an AI heister aboard on this level",
          klmv.dry ? "DRY RUN: nothing is wrapped" : wrapped != klmv_nbox ? "NOT every one could be wrapped" : klmv.reach > 0 && klmv_reach_ok > 0 ? "slot 25 wrapped (BoardReach: a box takes an AI heister aboard only when THAT BOT is within reach of the vehicle's boarding box)"
          : "slot 25 wrapped (a box farther than BoardNear from the boarding place takes nobody aboard)");
+}
+
+/* 6. THE ROUND'S LAST VEHICLE WHEN THE GAME BRINGS NONE (LastVehicle=1, the default; 2026-10-14, w_rt).
+ *    Owner: 'there's no final car on Retomoto Tower so time could expire instead of having a vehicle'.
+ *    EXE (read for this section, objdump of kl2.exe 0490): every rules update ends in 0x81e570(dt) (from 0x58b60a). Unless
+ *    [rules+0xe8a] ('the last vehicle was flagged') is set it calls 0x8154f0(vehicle, 1) in the frame the round clock
+ *    [rules+0x4c] crosses 2.0 s - the stock 'last vehicle'. Its vehicle: with the vehicle kind [rules+0x1ec] = 3 the one
+ *    the rules already know (0x6ece90 on [rules+0x1e4], filled only by an earlier call: 0x8154f0 -> [score+0x5c] -> slot 89),
+ *    else [rules+0xe80] (written only by rules slot 31 = 0x7437b0 and cleared by the ctor and the round reset 0x8c7a80; no
+ *    caller of slot 31 was found). So before the FIRST call of a level load there is no vehicle to force.
+ *    LOG (KLHook.log, Retomoto F06, today): rounds 17:48:51, 19:24:47, 20:32:03, 20:38:40 ran the full 360 s + 10 s and
+ *    ended with 'van 0' (no vehicle ever called in that load); round 20:58:53 got the forced one ('van 2' at 21:05:01, clock
+ *    at 2 s) because round 20:51:55 of the same load had called it. Stock maps never show it: there the first crew member
+ *    at the exit calls a van within 2 - 3 minutes; Retomoto's way out (rappel, tower, lift, 100 m of street) is longer.
+ *    WHAT THIS DOES: in a round on a level that is not stock, once per round, when the clock shows KLMV_LAST_AT (1.75) s
+ *    or less (and more than 0), the vehicle state [rules+0x1dc] is 0 and [rules+0xe8a] is 0 - the game's own call at 2.0 s
+ *    did not happen - it calls 0x8154f0(rules, vehicle, 1) itself, from the game thread, with the vehicle the level's
+ *    exit trigger names first (ZOnlineExitLevelTrigger +0x48 .. +0x54 = its fields 2 .. 5, what 0x6c3f90 hands to rules
+ *    slot 44). That is the stock last call with a known vehicle: state 2, [rules+0xe8a] = 1, the 'last van' message
+ *    (0x43ef40), the clock red; the round is held while the vehicle comes, waits and leaves (as 21:05:01 - 21:05:24).
+ *    It never acts where the game acted (state not 0 or 0xe8a set), so stock levels and rounds that worked are untouched.
+ *    The exit trigger is looked for (vtable scan of the private memory, as klmv_scan) only at that moment, once a round.
+ *    NOT RUN IN THE GAME. NOT KNOWN: why the forced call also failed in rounds where the human was a fed (all four rounds
+ *    above): the reading says 'no vehicle known'; if the cause is another, this still calls the vehicle. */
+static DWORD klmv_exit_vehicle(DWORD *trig)
+{
+    static BYTE buf[0x10000]; MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; DWORD vt = (DWORD)(DWORD_PTR)KLH_VA(KLMV_EXIT_VT);
+    *trig = 0;
+    while ((DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
+        if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
+            SIZE_T o, j;
+            for (o = 0; o < mbi.RegionSize; o += sizeof buf) {
+                SIZE_T n = mbi.RegionSize - o < sizeof buf ? mbi.RegionSize - o : sizeof buf;
+                if (!klh_rd((DWORD_PTR)mbi.BaseAddress + o, buf, n)) continue;
+                for (j = 0; j + 4 <= n; j += 4) {
+                    DWORD at, ent, evt, v[4]; int k;
+                    if (*(DWORD *)(buf + j) != vt) continue;
+                    at = (DWORD)((DWORD_PTR)mbi.BaseAddress + o + j);
+                    if (!(ent = klh_rd32(at + 0x24)) || !(evt = klh_rd32(ent)) || evt < img_lo || evt >= img_hi) continue;      /* an object of the game with an entity */
+                    if (!klh_rd(at + 0x48, v, sizeof v)) continue;
+                    for (k = 0; k < 4; k++) if (v[k]) { *trig = at; return v[k]; }
+                }
+            }
+        }
+        a = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
+    }
+    return 0;
+}
+
+static void klmv_last_vehicle(const struct klb_snap *s)
+{
+    static const BYTE head[16] = { 0x56, 0x8b, 0xf1, 0x80, 0xbe, 0xdc, 0x01, 0x00, 0x00, 0x00, 0x0f, 0x85, 0x9e, 0x00, 0x00, 0x00 };      /* 0x8154f0 */
+    float left = 0; BYTE flagged = 0, kind = 0, veh = 0; DWORD known, e80, trig = 0, v, t0;
+    if (klmv_r.last_done || !klh_rd(s->rules + 0x4c, &left, 4) || !klb_finite(left)) return;
+    if (left > 2.5f || left <= 0.0f) return;
+    if (!klh_rd(s->rules + 0xe8a, &flagged, 1) || !klh_rd(s->rules + 0x1ec, &kind, 1) || !klh_rd(s->rules + 0x1dc, &veh, 1)) return;
+    known = klh_rd32(s->rules + 0x1e4); e80 = klh_rd32(s->rules + 0xe80);
+    if (veh || flagged) {                     /* the game called one (its own forced call at 2.0 s, or a call before that is still running): nothing to do */
+        if (!klmv_r.last_told++) klog("last: %.2f s left: a vehicle is under way or the last one is flagged already (state %u, [rules+0xe8a] %u, kind %u, vehicle %08lx, +0xe80 %08lx): nothing done", left, veh, flagged, kind, known, e80);
+        klmv_r.last_done = 1; return;
+    }
+    if (left > KLMV_LAST_AT) return;          /* the game's own call comes at 2.0 s: give it its frame */
+    klmv_r.last_done = 1;
+    if (klh_rd32(s->rules) != KLB_RULES_VT || !klb_same_code(KLMV_CALLVEH, head, sizeof head)) { klog("last: %.2f s left and NO last vehicle, but the rules object or 0x8154f0 is not the one this build knows: nothing done", left); return; }
+    t0 = GetTickCount();
+    if (!(v = klmv_exit_vehicle(&trig))) { klog("last: %.2f s left and NO last vehicle (state 0, [rules+0xe8a] 0, kind %u, vehicle %08lx, +0xe80 %08lx); no ZOnlineExitLevelTrigger naming a vehicle was found (%lu ms): nothing done", left, kind, known, e80, GetTickCount() - t0); return; }
+    if (klmv.dry) { klog("last: %.2f s left and NO last vehicle (kind %u, vehicle %08lx, +0xe80 %08lx): DRY RUN - the exit trigger %08lx's vehicle %08lx WOULD be called as the last one", left, kind, known, e80, trig, v); return; }
+    ((void (__fastcall *)(void *, void *, DWORD, int))(DWORD_PTR)KLH_VA(KLMV_CALLVEH))((void *)(DWORD_PTR)s->rules, 0, v, 1);
+    veh = 0; flagged = 0; klh_rd(s->rules + 0x1dc, &veh, 1); klh_rd(s->rules + 0xe8a, &flagged, 1);
+    klog("last: %.2f s left and the game called NO last vehicle (state 0, [rules+0xe8a] 0, kind %u, vehicle %08lx, +0xe80 %08lx): the exit trigger %08lx's vehicle %08lx called as the round's last (0x8154f0, found in %lu ms): state now %u, [rules+0xe8a] %u",
+         left, kind, known, e80, trig, v, GetTickCount() - t0, veh, flagged);
 }
 
 static void klmv_deny_none(void) { int i; klmv_rc.armed = 0; for (i = 0; i < KLMV_NBOX; i++) klmv_box[i].deny = 0, klmv_box[i].would = 0; }
@@ -1045,7 +1122,10 @@ static void klmv_restless(const struct klb_snap *s, DWORD now, int human_in, con
             }
             if (!kle_bot(s, i, &actor, &soldier, bp, w)) { if (!(b->told & 2)) { b->told |= 2; klog("move: record %d stands at (%.0f, %.0f, %.0f) but gets no order: %s", i, b->pos[0], b->pos[1], b->pos[2], w); } continue; }
             memcpy(want, b->anchor, 12);
-            if (b->tries >= 2 && human_in && kle_dist(bp, hp) > 800.0f) { kle_place(hp, bp, 1, 0, want); beside = 1; }
+            /* beside the human only on HIS floor (2026-10-15, run v69_T1D on Retomoto: bots at the lift (y 19600) and in the lobby (y 560)
+               were sent up to a human still on the balcony (y 21020) and walked the tower back; the owner: 'they walk back to the balcony').
+               And only when he is within 25 m (run v70_T1E: bots in the top-floor offices were sent 45 m back to him on the balcony) */
+            if (b->tries >= 2 && human_in && kle_dist(bp, hp) > 800.0f && kle_dist(bp, hp) <= 2500.0f && fabs(hp[1] - bp[1]) <= 300.0f) { kle_place(hp, bp, 1, 0, want); beside = 1; }
             if (kle_dist(bp, want) <= 260.0f) continue;                        /* the game would take it as 'he is there already' (soft): a waiting step of the chain would end */
             memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
             k = kle_order2(&t, want, got, w, klmv.dry);
@@ -1148,6 +1228,7 @@ static void klmv_tick(int game_thread)
     if (klmv_r.last_pass && now - klmv_r.last_pass > 1500) for (i = 0; i < KLB_NREC; i++) klmv_r.b[i].seen = 0;      /* the round stood still (the window was not in front): every clock starts again */
     klmv_r.last_pass = KLB_T(now);
     klmv_track(&s, now);
+    if (klmv.last) klmv_last_vehicle(&s);
     if (klmv.hop) klmv_hops_load();
     if (klmv.near_ > 0 || klmv.reach > 0) klmv_boxes(&s, now);
     if (klmv.reach > 0) klmv_reach_pass(&s, now);
@@ -1192,13 +1273,17 @@ static void klmv_init(void)
     klmv.reach_order = GetPrivateProfileIntA("Bots", "BoardReachOrder", 1, klh_ini) != 0;
     klmv.dry = GetPrivateProfileIntA("Bots", "MoveDry", 0, klh_ini) != 0;
     klmv.log = klb_pos("MoveLog", 1, 2);
-    klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0 || klmv.reach > 0;
+    klmv.last = GetPrivateProfileIntA("Bots", "LastVehicle", 1, klh_ini) != 0;
+    klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0 || klmv.reach > 0 || klmv.last;
     if (!klmv.any) return;
     if (!klb.on) { klog("move / wait / near / reach: [Bots] Restless, WaitForYou, BoardNear or BoardReach is set but [Bots] Enable is 0: they need klbot.c's crew records, nothing is done"); klmv.any = 0; return; }
     if (klmv.restless || klmv.loot)
         klog("move: on; Restless=%lu s Loot=%lu s (back %lu s, near %.0f) Hold=%lu s Pace=%.0f%s: an AI heister that stands that long without moving 1 m or earning - on a money object that pays nothing: the object is no loot candidate for a while (one byte of it; you can still take it); more than 3 m from the place its chain ordered: that order again (the soldier's own order %08x)%s; Arcade only, on a level that is not the stock one of its slot",
              klmv.restless / 1000, klmv.loot / 1000, klmv.back / 1000, klmv.loot_near, klmv.hold / 1000, klmv.pace, klmv.dry ? " DRY RUN (MoveDry=1: nothing is written or called)" : "", KLE_ORDER,
              klmv.hold ? "; at its own hold place for Hold seconds: a shift round it" : "; a bot at its own place (a meant wait) is left alone");
+    if (klmv.last)
+        klog("last: on (LastVehicle=1, the default; 0 = off)%s: in an Arcade round on a level that is not the stock one, when the round clock is at %.2f s and the game has called no vehicle (state 0, [rules+0xe8a] 0: its own last call at 2.0 s found no vehicle - none was called before in this level load), the vehicle the exit trigger names is called as the round's last (0x8154f0, as the game's own)",
+             klmv.dry ? " DRY RUN (MoveDry=1)" : "", KLMV_LAST_AT);
     if (klmv.hop)
         klog("move: RestlessHop=%lu s: a bot that has stood that long at its own hold place (not under fire, not in an escape box, no vehicle called) is ordered to a cover place of the level's KLJoin.ini [Hops] within that list's Max of the hold (tools/kl_fa_bots_rt.py hops); none near, or none listed: the old shift round the hold when RestlessHold is set, else nothing", klmv.hop / 1000);
     if (klmv.wait)

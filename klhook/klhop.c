@@ -64,7 +64,12 @@
  *   Enable=0          1 = this file is on
  *   Dry=0             1 = everything is watched and logged, NOTHING is called (live check H0)
  *   Reorder=0         1 = 0.5 s after a hop the soldier gets the order it already has once more (0x760e50)
+ *   OrderTo=1         1 = in the tick of the hop the soldier is ordered to its landing place (0x760e50): without it a bot whose
+ *                     order lay behind it went straight back (live 2026-10-14, Retomoto lobby: three of four were back and falling)
  *   Log=1             2 = also, every 5 s, where every AI heister stands against every hop
+ *   Recheck=2         (w_fedmove) 2 s after a hop a bot more than 1000 above / below its landing place by every reading of its place is
+ *                     put on it again (and ordered there with OrderTo=1), at most this many times a hop; 0 = off. Live 2026-10-14
+ *                     Retomoto: 4 of 26 lobby hops read 12,000 .. 16,000 above the landing 2 s later, two stood there 17 / 27 s
  * KLJoin.ini beside the level archive (written by tools\kl_fa_bots.py; up to 4 hops: [CrewHop], [CrewHop.2] ..)
  *   [CrewHop]
  *   From=-1729.3 220 -909.3   the gather place, x y z (y is up)
@@ -76,6 +81,8 @@
  *   Places=7                  To.1 .. To.8 = x y z, feet on the navigation mesh, 100 apart or more (a place nearer
  *   To.1=-1695.4 150 -283.6   to an earlier one, or inside From's own radius and height, is dropped)
  *   Lift=0                    added to the height of every landing place
+ *   Again=0                   (w_fedmove) seconds after which a bot this hop carried may be carried by it once more (0 = once a
+ *                             round; 1 .. 600). For a 'dead spot' hop whose From is a place no bot should ever stand at
  *
  * LOG
  *   hop: on; Dry=0 Reorder=0 Log=1; ...
@@ -93,14 +100,15 @@
 #define KLV_NHOP   4
 #define KLV_NTO    8
 #define KLV_APART  100.0f                     /* the game's own crew jump 0x8f4100 puts its members this far apart (float 0xb5c050) */
+#define KLV_OFF    1000.0f                    /* Recheck: a bot this far above or below its landing place 2 s after the hop did not land (w_fedmove) */
 
-static struct { int on, dry, reorder, log; } klv;
-struct klv_hop { int on, nto, stage, player; DWORD wait; float from[3], radius, height, to[KLV_NTO][3]; };
+static struct { int on, dry, reorder, log, orderto, recheck; } klv;
+struct klv_hop { int on, nto, stage, player; DWORD wait, again; float from[3], radius, height, to[KLV_NTO][3]; };
 static struct { int n; char key[64], file[MAX_PATH]; FILETIME ft; struct klv_hop h[KLV_NHOP]; } klv_lv;
-struct klv_after { int rec, hop, step; DWORD actor, at; };            /* step: 1 = the re-order is due, 2 = the '2 s after' line, 0 = free */
+struct klv_after { int rec, hop, step, to, tries; DWORD actor, at; };            /* step: 1 = the re-order is due, 2 = the '2 s after' line, 0 = free; to = its landing place, tries = Recheck put-backs */
 static struct {
     DWORD rules, state, last_hop, say_at; int stages, told_gate, told_thread, told_code, told_passed[KLV_NHOP], passed[KLV_NHOP], next[KLV_NHOP];
-    DWORD since[KLV_NHOP][KLB_NREC], actor[KLV_NHOP][KLB_NREC], used[KLV_NHOP][KLV_NTO];
+    DWORD since[KLV_NHOP][KLB_NREC], actor[KLV_NHOP][KLB_NREC], used[KLV_NHOP][KLV_NTO], doneat[KLV_NHOP][KLB_NREC];
     char done[KLV_NHOP][KLB_NREC], told[KLV_NHOP][KLB_NREC];
     struct klv_after after[KLB_NREC];
 } klv_r;
@@ -140,6 +148,8 @@ static void klv_source(void)
         h->wait = (DWORD)(lift * 1000.0f);
         st = (int)GetPrivateProfileIntA(sec, "Stage", 2, file); h->stage = st < 0 ? 0 : st > 3 ? 3 : st;
         h->player = GetPrivateProfileIntA(sec, "Player", 0, file) != 0;
+        lift = klv_num(sec, "Again", "0", file); if (!klb_finite(lift) || lift < 0) lift = 0; if (lift > 600) lift = 600;
+        h->again = (DWORD)(lift * 1000.0f);                                 /* 0 = a bot is carried by this hop once a round (as before) */
         lift = klv_num(sec, "Lift", "0", file); if (!klb_finite(lift)) lift = 0;
         n = (int)GetPrivateProfileIntA(sec, "Places", 0, file);
         for (k = 0; k < n && k < KLV_NTO; k++) {
@@ -158,8 +168,8 @@ static void klv_source(void)
     klog("hop: %d hop(s) from %s for level %s", klv_lv.n, file, key);
     for (i = 0; i < KLV_NHOP; i++) if (klv_lv.h[i].on) {
         const struct klv_hop *h = &klv_lv.h[i];
-        klog("hop: hop %d: From (%.0f, %.0f, %.0f) radius %.0f height %.0f, wait %.1f s, stage %d, player %d; %d landing places, To.1 (%.0f, %.0f, %.0f)",
-             i + 1, h->from[0], h->from[1], h->from[2], h->radius, h->height, h->wait / 1000.0, h->stage, h->player, h->nto, h->to[0][0], h->to[0][1], h->to[0][2]);
+        klog("hop: hop %d: From (%.0f, %.0f, %.0f) radius %.0f height %.0f, wait %.1f s, stage %d, player %d, again %.0f s (0 = once a round); %d landing places, To.1 (%.0f, %.0f, %.0f)",
+             i + 1, h->from[0], h->from[1], h->from[2], h->radius, h->height, h->wait / 1000.0, h->stage, h->player, h->again / 1000.0, h->nto, h->to[0][0], h->to[0][1], h->to[0][2]);
     }
 }
 
@@ -239,6 +249,39 @@ static void klv_follow(const struct klb_snap *s, DWORD now)
             got = klv_place(a->actor, nd, ft);
             klog("hop: bot %d is at node (%.0f, %.0f, %.0f), +0x460 (%.0f, %.0f, %.0f)%s 2 s after hop %d, heist stage %u, vehicle state %u", a->rec, nd[0], nd[1], nd[2], ft[0], ft[1], ft[2],
                  got == 3 ? "" : got ? " (one of the two could not be read)" : " (neither could be read)", a->hop + 1, r->stage, s->veh);
+            /* Recheck (w_fedmove, 2026-10-14): on Retomoto four of 26 hops to the lobby left the bot, 2 s later, 12,000 .. 16,000 ABOVE its
+               landing place - (99, 14941, 846), (5765, 15473, -5795), (388, 16521, -95), (5765, 12722, -5795) - and two of them stood there
+               until the human's jump moved them (19:26:54 .. 19:27:11, 21:01:34 .. 21:02:00: 'stood 5.0 s at (5760, 12722, -5794)' x 5).
+               Why is NOT known. A bot that is more than KLV_OFF off its landing place's height, by every reading, is put on it again. */
+            if (klv.recheck && got && a->hop >= 0 && a->hop < KLV_NHOP && a->to >= 0 && a->to < klv_lv.h[a->hop].nto) {
+                const float *to = klv_lv.h[a->hop].to[a->to]; const char *no; DWORD held = 1;
+                int off_n = !(got & 1) || fabs(nd[1] - to[1]) > KLV_OFF, off_f = !(got & 2) || fabs(ft[1] - to[1]) > KLV_OFF;
+                if (off_n && off_f) {
+                    no = klt_refuse(a->actor);
+                    if (!no && (!klh_rd(a->actor + 0x770, &held, 4) || held)) no = "somebody holds it as a human shield";
+                    if (a->tries >= klv.recheck)
+                        klog("hop: bot %d is still %.0f off the height of its landing place To.%d of hop %d: NOT put back again (Recheck=%d done)", a->rec, (got & 1 ? nd[1] : ft[1]) - to[1], a->to + 1, a->hop + 1, klv.recheck);
+                    else if (no)
+                        klog("hop: bot %d is %.0f off the height of its landing place To.%d of hop %d: NOT put back: %s", a->rec, (got & 1 ? nd[1] : ft[1]) - to[1], a->to + 1, a->hop + 1, no);
+                    else if (klv.dry)
+                        klog("hop: bot %d is %.0f off the height of its landing place To.%d of hop %d: WOULD be put back - DRY RUN", a->rec, (got & 1 ? nd[1] : ft[1]) - to[1], a->to + 1, a->hop + 1);
+                    else {
+                        float is_n[3], is_f[3], q[4], set[3] = { 0, 0, 0 }; char why2[100]; int ord = 0;
+                        klt_teleport(a->actor, to);
+                        soldier = klh_rd32(a->actor + 0x77c);
+                        if (klv.orderto && soldier && klh_rd32(soldier) == KLE_SOLDIER_VT && kle_callable(why2)) {
+                            q[0] = to[0]; q[1] = to[1]; q[2] = to[2]; q[3] = 0;
+                            ((void (__fastcall *)(void *, void *, const float *, int, int, int))(DWORD_PTR)KLH_VA(KLE_ORDER))((void *)(DWORD_PTR)soldier, 0, q, 0, 1, 0);
+                            ord = kle_block(soldier, set) ? 2 : 1;
+                        }
+                        klv_place(a->actor, is_n, is_f);
+                        a->tries++; a->step = 2; a->at = KLB_T(now);                /* looked at again 2 s from now */
+                        klog("hop: bot %d did NOT land: %.0f off the height of To.%d of hop %d 2 s after: put back on (%.0f, %.0f, %.0f) (time %d of %d): now node (%.0f, %.0f, %.0f), +0x460 (%.0f, %.0f, %.0f)%s (%.0f, %.0f, %.0f)",
+                             a->rec, (got & 1 ? nd[1] : ft[1]) - to[1], a->to + 1, a->hop + 1, to[0], to[1], to[2], a->tries, klv.recheck, is_n[0], is_n[1], is_n[2], is_f[0], is_f[1], is_f[2],
+                             ord == 2 ? "; ordered there, the game set" : ord ? "; ordered there" : "; NOT ordered there", set[0], set[1], set[2]);
+                    }
+                }
+            }
         }
     }
 }
@@ -278,6 +321,7 @@ static void klv_tick(int game_thread)
         }
         for (i = 0; i < s.n; i++) {
             const struct klb_rec *r = &s.r[i]; float nd[3], ft[3], is_n[3], is_f[3], blk[3] = { 0, 0, 0 }; const char *no; DWORD held = 1, soldier; int got, in, p, have_blk = 0;
+            if (klv_r.done[hi][i] && h->again && klv_r.doneat[hi][i] && now - klv_r.doneat[hi][i] >= h->again) { klv_r.done[hi][i] = 0; klv_r.told[hi][i] = 0; }   /* Again=: it may be carried once more */
             if (!r->used || !(r->flags & 1) || !r->actor || r->status || klv_r.done[hi][i]) { klv_r.since[hi][i] = 0; continue; }
             if (klv_r.actor[hi][i] != r->actor) { klv_r.actor[hi][i] = r->actor; klv_r.since[hi][i] = 0; klv_r.told[hi][i] = 0; }
             got = klv_place(r->actor, nd, ft);
@@ -307,18 +351,29 @@ static void klv_tick(int game_thread)
             }
             if ((p = klv_free(hi, &s, now)) < 0) continue;                    /* every landing place is taken just now */
             if ((soldier = klh_rd32(r->actor + 0x77c)) != 0 && klh_rd32(soldier) == KLE_SOLDIER_VT) have_blk = kle_block(soldier, blk);
-            klv_r.done[hi][i] = 1; klv_r.used[hi][p] = KLB_T(now); klv_r.next[hi] = (p + 1) % h->nto; klv_r.last_hop = KLB_T(now);
+            klv_r.done[hi][i] = 1; klv_r.doneat[hi][i] = KLB_T(now); klv_r.used[hi][p] = KLB_T(now); klv_r.next[hi] = (p + 1) % h->nto; klv_r.last_hop = KLB_T(now);
             if (klv.dry) {
                 klog("hop: bot %d (actor %08lx) hop %d: at From for %.1f s, node (%.0f, %.0f, %.0f): WOULD be put on To.%d (%.0f, %.0f, %.0f) - DRY RUN, nothing is called; its order (%.0f, %.0f, %.0f)%s",
                      i, r->actor, hi + 1, (now - klv_r.since[hi][i]) / 1000.0, nd[0], nd[1], nd[2], p + 1, h->to[p][0], h->to[p][1], h->to[p][2], blk[0], blk[1], blk[2], have_blk ? "" : " = none read");
                 return;
             }
             klt_teleport(r->actor, h->to[p]);
+            if (klv.orderto && soldier && klh_rd32(soldier) == KLE_SOLDIER_VT) {
+                /* OrderTo (2026-10-14, live on Retomoto: bots 4 / 5 / 7 were back at the lobby 2 s after the hop, falling - the soldier still
+                   walked to its old place, which no path reaches from the landing): in the same tick its order becomes the landing place */
+                char why2[100]; float q[4], set[3];
+                if (kle_callable(why2)) {
+                    q[0] = h->to[p][0]; q[1] = h->to[p][1]; q[2] = h->to[p][2]; q[3] = 0;
+                    ((void (__fastcall *)(void *, void *, const float *, int, int, int))(DWORD_PTR)KLH_VA(KLE_ORDER))((void *)(DWORD_PTR)soldier, 0, q, 0, 1, 0);
+                    if (kle_block(soldier, set)) { blk[0] = set[0]; blk[1] = set[1]; blk[2] = set[2]; have_blk = 1; }
+                } else klog("hop: bot %d: its order is NOT moved to the landing place: %s", i, why2);
+            }
             klv_place(r->actor, is_n, is_f);
             klog("hop: bot %d (actor %08lx) hop %d: at From for %.1f s, node (%.0f, %.0f, %.0f) -> To.%d (%.0f, %.0f, %.0f): now node (%.0f, %.0f, %.0f), +0x460 (%.0f, %.0f, %.0f); heist stage %u, vehicle state %u; its order (%.0f, %.0f, %.0f)%s",
                  i, r->actor, hi + 1, (now - klv_r.since[hi][i]) / 1000.0, nd[0], nd[1], nd[2], p + 1, h->to[p][0], h->to[p][1], h->to[p][2], is_n[0], is_n[1], is_n[2], is_f[0], is_f[1], is_f[2],
                  r->stage, s.veh, blk[0], blk[1], blk[2], have_blk ? "" : " = none read");
             klv_r.after[i].rec = i; klv_r.after[i].hop = hi; klv_r.after[i].actor = r->actor; klv_r.after[i].at = KLB_T(now); klv_r.after[i].step = 1;
+            klv_r.after[i].to = p; klv_r.after[i].tries = 0;
             return;                                                           /* one call a tick */
         }
     }
@@ -331,9 +386,13 @@ static void klv_init(void)
     if (!klv.on) return;
     klv.dry = GetPrivateProfileIntA("CrewHop", "Dry", 0, klh_ini) != 0;
     klv.reorder = GetPrivateProfileIntA("CrewHop", "Reorder", 0, klh_ini) != 0;
+    klv.orderto = GetPrivateProfileIntA("CrewHop", "OrderTo", 1, klh_ini) != 0;       /* 1 = at the hop the soldier's order becomes the landing place */
     klv.log = (int)GetPrivateProfileIntA("CrewHop", "Log", 1, klh_ini);
-    klog("hop: on; Dry=%d Reorder=%d Log=%d; an AI heister that stands at a [CrewHop] place of the level's KLJoin.ini is put beyond it by the game's own actor teleport (%08x)%s; Arcade only, on a level that is not the stock one of its slot",
-         klv.dry, klv.reorder, klv.log, KLT_TELEPORT, klv.dry ? " - DRY RUN: nothing is called" : "");
+    klv.recheck = (int)GetPrivateProfileIntA("CrewHop", "Recheck", 2, klh_ini);       /* put-backs of a bot that did not land (0 = off) */
+    if (klv.recheck < 0) klv.recheck = 0;
+    if (klv.recheck > 5) klv.recheck = 5;
+    klog("hop: on; Dry=%d Reorder=%d Log=%d Recheck=%d; an AI heister that stands at a [CrewHop] place of the level's KLJoin.ini is put beyond it by the game's own actor teleport (%08x)%s; Arcade only, on a level that is not the stock one of its slot",
+         klv.dry, klv.reorder, klv.log, klv.recheck, KLT_TELEPORT, klv.dry ? " - DRY RUN: nothing is called" : "");
 }
 
 #endif /* KLHOP_C */

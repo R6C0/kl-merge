@@ -65,6 +65,17 @@ static int kle_bot(const struct klb_snap *s, int i, DWORD *actor, DWORD *soldier
 static int kle_block(DWORD soldier, float pos[3]) { (void)soldier; pos[0] = 111; pos[1] = 0; pos[2] = 222; return 1; }
 static int kle_order2(struct kle_e *e, const float want[3], float got[3], char why[100], int dry) { (void)e; (void)why; (void)dry; g_orders++; memcpy(g_order_at, want, 12); memcpy(got, want, 12); return 1; }
 
+/* klhud.c / klhud_names.c / klhud_popup.c exports used by the Prompt (2026-10-14): the HUD is off here, so no prompt is said */
+#define KLW_NREC 32
+#define KLU_OSD_VT 0x00bbd7acu
+struct klnm_rec { int used, ch, human; char stock[48], chr[32]; };
+static struct { struct klnm_rec r[KLW_NREC]; } klnm_r;
+static struct { int on; } klu;
+static struct { DWORD osd; int fault; } klu_r;
+static DWORD klpu_evt[40];
+static volatile LONG kset_v[4] = { 0, 1, 1, 0 };           /* klset.c: Look, Textures, Prompt, NeedUse - the harness helps without E (its human helper scenarios predate the E key) */
+static int klu_same_code(DWORD va, const BYTE *bytes, int n) { (void)va; (void)bytes; (void)n; return 0; }
+
 #include "kladren.c"
 
 /* ---------------------------------------------------------------- the fake world */

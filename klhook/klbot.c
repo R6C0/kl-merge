@@ -103,6 +103,52 @@
  *       of every level and puts Tune's number back when fewer do (the game clears the flags at the next round start).
  *       A cap PER ROUND, not 'alive at once': a traitor who is dead, aboard or escaped keeps his flag until the round
  *       start and still counts. A soft cap: the tactic can turn two bots between two passes of the hook (100 ms).
+ *    f. TRAITORS ARE EVERYBODY'S ENEMY (2026-10-14, track w_betray; NOT RUN IN THE GAME). The owner: 'AI heisters also
+ *       need to betray each other, and also shoot one if they do become a traitor, so someone could save the player'.
+ *       WHY A MASK-2 BOT FIGHTS ONLY YOU (EXE, read for this): mask 2 is read in ONE kind of place, the soldier's test
+ *       of a PLAYER (0x882470 slot 111: 0x8826b6) and the friendly-player list (0x570a1b). Between two NPCs the game
+ *       compares TEAMS, read live from the actor: dword [[actor+0x54]+4] (0 Mercenary, 1 Enemy = the police,
+ *       2 Ally = the crew, 3 Neutral): 0x5706a0 collects as friends the actors within reach whose team equals the
+ *       soldier's own (0x5707b6 `mov ecx,[esi+0x54] / cmp [ecx+4],eax`), 0x59a5d0 the same for the squad list. A
+ *       traitor bot stays team 2, so the loyal crew sees a friend and he sees friends. LOG (owner, 2026-10-14
+ *       20:29:11): 'BACKSTAB: bot 7 ... turned traitor'; 20:29:41 'YOU ARE DOWN', 'record 0 (you): status1' - nobody
+ *       stopped him; records 1..6 stayed 'bot' and went on with their work.
+ *       TraitorFoe=1: a bot that carries mask 2 (the tactic, Backstab, BackstabCrew below or Bribe) and is IN PLAY
+ *       gets team 1 (Enemy, the police's) written into [[actor+0x54]+4]; the 2 goes back the moment he is dead,
+ *       aboard or anything but in play, when the mask goes, when the round state leaves 0x19 and before anything
+ *       else is done with that record. Only when: the dword reads 2, the actor is a ZFFActor (0xbb3bac), and the
+ *       object at actor+0x54 belongs to him alone (no other crew actor and not the local player point at the same
+ *       one - klbotdown.c writes its per-bot 'no damage' word +0x3a in the same object, live, one bot at a time).
+ *       EXPECTED (a GUESS, settled by check K7): the loyal bots and the escort see an enemy as they see a policeman
+ *       and shoot him; he sees the crew and you as a policeman does (0x882636: a team-1 soldier counts the player
+ *       as a target) and shoots whoever is near, crew with money included; the police leave him alone (he is on
+ *       their team now); your HUD tag of him is red (0x8e9e2c: the crew's view paints team 1 red).
+ *       THE KILL BOOKKEEPING (EXE, read for this - the reason the mark below is NOT optional): a crew member killed
+ *       by a crew member is booked by 0x6706b0 (from slot 16 = 0x485740), for a BOT killer too (0x670779: a ZFFActor
+ *       killer is looked up by 0x78f470). When the victim carries no bit 1 in its score dword ([score+0x1d4+4*i])
+ *       and slot 122 (a yellow card) does not excuse the killer, slot 129 = 0x8fb0d0(killer, victim) runs - and that
+ *       rule marks THE LOCAL PLAYER (0x8fb1b9 .. 0x8fb1ca, 0x70f770: [player+0x2726] = 1, every bot's enemy) unless
+ *       the KILLER already carries bit 1 (0x8fb19c `test byte [score+killer*4+0x1d4],1 / jne` = it returns). So a
+ *       turned bot that kills a loyal one would make YOU the traitor, and a loyal bot that kills the turned one the
+ *       same. Therefore TraitorFoe also sets bit 1 of the turned bot's score dword (what klgrudge.c's BackstabMark
+ *       writes), from the pass that sees the mask: his kills and his death book nobody else (0x6709f4 and
+ *       0x8fb19c). Taken off when the mask goes (the next round start), so it stays on a dead / escaped one to the
+ *       round's end. SIDE EFFECTS, as BackstabMark: an escaped marked bot keeps his own money and is out of the
+ *       split (0x796576); the damage sum 0x4d17f0 counts no more hits of yours on him (Grudge / YouToCrewFar).
+ *       Killing him as the human with the mark on: no traitor flag for you (the point of it).
+ *       NOT KNOWN: whether the AI's knowledge system keeps an old 'friend' entry until the traitor is seen again
+ *       (0x4801a0 refreshes what every knower sees of an entity when a PLAYER turns; nothing such is called here);
+ *       whether a team-1 bot can still loot or board (0x626fb2 / 0x6fb767 test team 2 - probably NOT: a turned bot
+ *       then stays outside, which only matters for a tactic traitor at the vehicle); the damage factors for him
+ *       are the police's (0x7c1bf3 / 0x8b80a3 pick the crew's by team 2: klbalance.c's CopToCrew / player->police).
+ *    g. BackstabCrew=<percent> (needs TraitorFoe=1; AI against AI): once a round, with that chance, ONE bot (not the
+ *       Backstab pick) is picked. When it is in play at BackstabStage or later and ANOTHER loyal bot in play carries
+ *       BackstabMoney or more within BackstabCrewNear (world units, default 1500 = 15 m), for BackstabDelay seconds,
+ *       it turns (b's writes; you need not be in play) and f makes him the crew's enemy: he shoots the one with the
+ *       money - or whoever is nearer: who he aims at is the game's choice. What the victim carried lies where he
+ *       fell as in stock; the hook does NOT hand it to the traitor (a team-1 bot may not be able to pick it up: f).
+ *    A HUMAN TRAITOR needs nothing new: the game's own mark ([player+0x2726], slot 129) makes every bot fight him
+ *    (0x882708); with TraitorFoe the turned bots fight him as well (team 1 against a player).
  *
  * 4. PAY THE DRIVER AND LEAVE WITHOUT YOU
  *    The player's rule is ZGameRulesHeist slot 149 = 0x757510(index): slot 151 (0) -> [rules+0x1b2] = 0;
@@ -207,7 +253,11 @@
  *   Backstab=0          percent per round that one bot is picked; BackstabStage=2 BackstabMoney=250000 BackstabDelay=20
  *                       the turn then waits for BackstabNear=0 (units) / BackstabBehind=0 (by your direction of travel: a guess) /
  *                       BackstabBusy=0, BackstabWait=30 s at most
- *   Bribe=0             percent per bot aboard; BribeMoney=500000 BribeDelay=4
+ *   TraitorFoe=0        1 = a turned bot in play is team Enemy (the crew and the escort shoot him, he shoots them) and carries
+ *                       the score table's traitor bit (section 3 f; a GUESS until K7)
+ *   BackstabCrew=0      percent per round that one bot turns on a crewmate with BackstabMoney within BackstabCrewNear=1500 units
+ *                       (needs TraitorFoe=1; section 3 g)
+ *   Bribe=0            percent per bot aboard; BribeMoney=500000 BribeDelay=4
  *   Leave=0             percent per vehicle; LeaveDistance=4000 LeaveDelay=3
  *   Van=0               0 off, 1 'heavily damaged', 2 destroyed; VanChance=50 VanDelay=5 VanLeftBehind=0
  *   Tune / Backstab / Bribe / Leave / Van act only on a level that is not the stock one of its slot (section 0).
@@ -228,6 +278,14 @@
  *   K5  Leave=100, stay far away while all bots board: 'bots: LEAVE: every bot is aboard and you are N m away ...'
  *   K6  Van=1 VanChance=100 Backstab=100 (a traitor is needed): 'bots: VAN: ... grade 1' and the vehicle leaves;
  *       only then Van=2: '... grade 2', 'returned 1; vehicle state 6', everybody aboard dead.
+ *   K7  TraitorFoe=1 Backstab=100 BackstabDelay=5 BackstabMoney=0 BackstabStage=1 (TraitorsMax=1 with Tune=1, so ONE
+ *       turns): 'bots: BACKSTAB: bot N', then 'bots: FOE: record N (TRAITOR) is team Enemy now ... score bit 1 set'.
+ *       WATCH: do the loyal bots / the escort shoot him (botdown / adren lines 'record N ... IS DOWN' for him; 'bots:
+ *       FOE: ... died' lines), does he shoot them, do the police ignore him. When he is dead: 'FOE: record N: team
+ *       2 back'; NO 'YOU ARE THE TRAITOR' / 'traitor flag' line for record 0. Round over: no 'team ... back' missing.
+ *       If the loyal bots do NOT shoot him: the team is not read live for targets (3 f, NOT KNOWN) - keep TraitorFoe off.
+ *   K8  K7 + BackstabCrew=100 Backstab=0: 'bots: backstab-crew: bot N may turn on a crewmate ...', then 'BACKSTAB-CREW:
+ *       bot N turned on record M ($.., .. m away)' and the FOE lines.
  *   K2..K6 on a STOCK level say 'bots: this level is the STOCK one ...: Tune / Backstab / Bribe / Leave / Van do
  *   nothing here' once and then only the log lines: that is the gate of section 0, not a fault.
  *   Steam write guard on for all of them (klsteam.c; without it nothing but the log runs), do not Quit inside a session.
@@ -258,6 +316,7 @@ static struct {
     int bribe, br_money, br_delay;
     int leave, lv_delay; float lv_dist;
     int van, van_chance, van_delay, van_left;
+    int foe, bs_crew; float bs_crew_near;     /* section 3 f / g: TraitorFoe, BackstabCrew, BackstabCrewNear */
 } klb;
 
 struct klb_rec { int used; DWORD at, actor, money; BYTE status, stage, flags; float hit; };
@@ -271,6 +330,7 @@ static struct {                               /* what the hook remembers of the 
     DWORD wait_since;                         /* section 3 d: BackstabDelay was first over (the wait for the moment runs from here and is NOT started again) */
     BYTE veh; DWORD aboard_at[KLB_NREC]; char rolled[KLB_NREC]; int bribed;
     DWORD leave_since; int leave_rolled; DWORD van_since; int van_rolled;
+    int ccand, cdone; DWORD csince;           /* section 3 g: BackstabCrew's pick (-2 not rolled yet, -1 nobody), done, held since */
 } klb_r;
 static DWORD klb_seed;
 
@@ -576,6 +636,91 @@ static int klb_moment(const struct klb_rec *r, char how[120])
     return near_ && behind && busy;
 }
 
+/* ---------------------------------------------------------------- section 3 f: a turned bot is everybody's enemy */
+
+#define KLB_FOE_TEAM  1                       /* team Enemy, the police's ([[actor+0x54]+4]; bots_dynamic.md / bots_squad.md) */
+#define KLB_SCORE_FL  0x1d4                   /* score: dword per crew index, bit 1 = traitor (slot 114 = 0x771a10) */
+
+static struct {                               /* what TraitorFoe wrote, per record; forgotten (never written) when the rules object changes */
+    DWORD rules;
+    DWORD actor[KLB_NREC], info[KLB_NREC], team0[KLB_NREC];
+    char swapped[KLB_NREC], was[KLB_NREC], marked[KLB_NREC], refused[KLB_NREC]; BYTE st[KLB_NREC];
+} klb_f;
+
+static void klb_foe_back(const struct klb_snap *s, int i, const char *why)
+{
+    DWORD info = 0, t = 0; const struct klb_rec *r = &s->r[i];
+    if (!klb_f.swapped[i]) return;
+    klb_f.swapped[i] = 0;
+    if (r->used && r->actor == klb_f.actor[i] && (info = klh_rd32(r->actor + 0x54)) == klb_f.info[i] && klh_rd(info + 4, &t, 4) && t == KLB_FOE_TEAM &&
+        klh_data((void *)(DWORD_PTR)(info + 4), &klb_f.team0[i], 4, "a turned AI heister's team: his own back (TraitorFoe)"))
+        klog("bots: FOE: record %d: team %lu back (%s)", i, klb_f.team0[i], why);
+    else klog("bots: FOE: record %d: its team is NOT written back (%s): the record or its actor changed (actor %08lx -> %08lx, team object %08lx -> %08lx, team now %lu)",
+              i, why, klb_f.actor[i], r->used ? r->actor : 0, klb_f.info[i], info, t);
+}
+
+static void klb_foe_swap(const struct klb_snap *s, int i)
+{
+    DWORD gd, info, t = 0, one = KLB_FOE_TEAM, avt, pl; BYTE fl, st; int j; char why[100];
+    const struct klb_rec *r = &s->r[i];
+    why[0] = 0;
+    if (!klb_still(s, i, &fl, &st) || !(fl & 2) || st != 0) return;
+    if ((avt = klh_rd32(r->actor)) != KLB_ACTOR_VT) snprintf(why, sizeof why, "its actor's vtable is %08lx, not ZFFActor's", avt);
+    else if (!(info = klh_rd32(r->actor + 0x54)) || !klh_rd(info + 4, &t, 4)) strcpy(why, "its team object cannot be read");
+    else if (t != 2) snprintf(why, sizeof why, "its team reads %lu, not 2 (Ally)", t);
+    else {
+        for (j = 0; j < s->n && !why[0]; j++)
+            if (j != i && s->r[j].used && s->r[j].actor && klh_rd32(s->r[j].actor + 0x54) == info) snprintf(why, sizeof why, "its team object %08lx is record %d's too", info, j);
+        if (!why[0] && (gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) != 0)
+            for (j = 0; j < 4 && !why[0]; j++) if ((pl = klh_rd32(gd + 0x828 + 4 * j)) != 0 && klh_rd32(pl + 0x54) == info) snprintf(why, sizeof why, "its team object %08lx is player slot %d's too", info, j);
+    }
+    if (!why[0] && !klh_data((void *)(DWORD_PTR)(info + 4), &one, 4, "a turned AI heister's team: Enemy (TraitorFoe)")) strcpy(why, "the team dword is not writable");
+    if (why[0]) { klb_f.refused[i] = 1; klog("bots: FOE: record %d (TRAITOR) stays team Ally: %s - nothing written; the crew will not fight him", i, why); return; }
+    klb_f.swapped[i] = klb_f.was[i] = 1; klb_f.actor[i] = r->actor; klb_f.info[i] = info; klb_f.team0[i] = t;
+    klog("bots: FOE: record %d (TRAITOR, actor %08lx, stage %u, $%lu) is team Enemy now (team object %08lx: 2 -> 1): the crew and the escort should shoot him, he shoots them and you", i, r->actor, r->stage, r->money, info);
+}
+
+/* game thread only; every pass while an Arcade round object is up. act: the level may be changed (section 0). */
+static void klb_foe_tick(const struct klb_snap *s, int act)
+{
+    int i, j, round = act && s->state == KLB_ROUND;
+    if (s->rules != klb_f.rules) { memset(&klb_f, 0, sizeof klb_f); klb_f.rules = s->rules; memset(klb_f.st, 0xff, sizeof klb_f.st); }
+    for (i = 0; i < s->n && i < KLB_NREC; i++) {
+        const struct klb_rec *r = &s->r[i]; DWORD fl = 0, at = s->score + KLB_SCORE_FL + 4 * i;
+        /* evidence for K7: a death while a team-Enemy traitor is in play (who killed is not known to the hook) */
+        if (r->used && r->status == 7 && klb_f.st[i] == 0) {
+            float vp[3], tp[3], d, best = -1; int nt = 0, near_ = -1, havev = r->actor && kle_node(klh_rd32(r->actor + 4), vp, 0);
+            for (j = 0; j < s->n && j < KLB_NREC; j++) if (j != i && klb_f.swapped[j] && s->r[j].status == 0) {
+                nt++;
+                if (havev && s->r[j].actor && kle_node(klh_rd32(s->r[j].actor + 4), tp, 0) && klb_finite(d = (float)sqrt((tp[0] - vp[0]) * (tp[0] - vp[0]) + (tp[1] - vp[1]) * (tp[1] - vp[1]) + (tp[2] - vp[2]) * (tp[2] - vp[2]))) && (best < 0 || d < best)) { best = d; near_ = j; }
+            }
+            if (klb_f.swapped[i]) klog("bots: FOE: record %d (TRAITOR, team Enemy) died", i);
+            else if (nt && near_ >= 0) klog("bots: FOE: record %d (%s) died while %d team-Enemy traitor(s) were in play; the nearest, record %d, %.1f m away", i, klb_who(r), nt, near_, best / 100);
+            else if (nt) klog("bots: FOE: record %d (%s) died while %d team-Enemy traitor(s) were in play (distance unknown)", i, klb_who(r), nt);
+        }
+        klb_f.st[i] = r->used ? r->status : 0xff;
+        /* the team */
+        if (klb_f.swapped[i]) {
+            if (!round) klb_foe_back(s, i, "the round is not running");
+            else if (!r->used || r->actor != klb_f.actor[i]) klb_foe_back(s, i, "the record changed");
+            else if (!(r->flags & 2)) klb_foe_back(s, i, "the traitor flag is gone");
+            else if (r->status != 0) klb_foe_back(s, i, r->status == 7 ? "he is dead" : r->status == 4 ? "he is aboard" : "he is out of play");
+        } else if (klb.foe && round && r->used && (r->flags & 3) == 3 && r->status == 0 && r->actor && !klb_f.refused[i]) klb_foe_swap(s, i);
+        /* the score table's traitor bit: on from the swap until the mask goes (the kill bookkeeping, 3 f) */
+        if (!r->used || !(r->flags & 2)) {
+            klb_f.refused[i] = klb_f.was[i] = 0;
+            if (klb_f.marked[i]) {
+                int ours = klb_f.marked[i] == 1;
+                klb_f.marked[i] = 0;
+                if (ours && r->used &&klh_rd(at, &fl, 4) && (fl & 1)) { fl &= ~1u; if (klh_data((void *)(DWORD_PTR)at, &fl, 4, "score table: the traitor bit TraitorFoe gave a bot, off")) klog("bots: FOE: record %d: score bit 1 off (%08lx): the mask is gone", i, fl); }
+            }
+        } else if (klb_f.was[i] && !klb_f.marked[i] && act && klh_rd(at, &fl, 4)) {
+            if (fl & 1) klb_f.marked[i] = 2;  /* somebody's already (the game's, klgrudge.c's BackstabMark): not ours to take off */
+            else { fl |= 1; if (klh_data((void *)(DWORD_PTR)at, &fl, 4, "score table: the traitor bit for a turned bot (TraitorFoe)")) { klb_f.marked[i] = 1; klog("bots: FOE: record %d: score bit 1 set (%08lx): his kills and his death make nobody else a traitor (0x8fb19c / 0x6709f4)", i, fl); } }
+        }
+    }
+}
+
 static void klb_act(const struct klb_snap *s, DWORD now)
 {
     const struct klb_rec *h = s->human >= 0 ? &s->r[s->human] : 0;
@@ -585,12 +730,13 @@ static void klb_act(const struct klb_snap *s, DWORD now)
        round start - for a session whose state stays 0x19 between two rounds, which was not looked at). */
     for (i = 0; i < s->n; i++) if (s->r[i].used) { stages += s->r[i].stage; nb += s->r[i].flags & 1; }
     if (s->rules != klb_r.rules || (s->state == KLB_ROUND && klb_r.state != KLB_ROUND)) {
-        memset(&klb_r, 0, sizeof klb_r); klb_r.rules = s->rules; klb_r.cand = -2; klb_r.veh = s->veh; klb_r.round_at = KLB_T(now);
+        memset(&klb_r, 0, sizeof klb_r); klb_r.rules = s->rules; klb_r.cand = -2; klb_r.ccand = -2; klb_r.veh = s->veh; klb_r.round_at = KLB_T(now);
     } else if (stages < klb_r.stages) {
         /* B5 of the review: only a GUESS at a new round (a record released in the middle of one would look the same).
            The backstab pick starts again; the once-per-vehicle marks (bribed, rolled, leave, van) stay until the
            vehicle itself is a new one (below): no second bribe, no second call of the damage rule for one vehicle. */
         klb_r.cand = -2; klb_r.backstabbed = 0; klb_r.cand_since = 0; klb_r.wait_since = 0; klb_r.round_at = KLB_T(now);
+        klb_r.ccand = -2; klb_r.cdone = 0; klb_r.csince = 0;
     }
     klb_r.stages = stages;
     if (klb_r.cand == -2 && s->state == KLB_ROUND && nb && now - klb_r.round_at >= 3000) {      /* 3 s: the crew has registered */
@@ -601,6 +747,16 @@ static void klb_act(const struct klb_snap *s, DWORD now)
                 for (i = 0; i < s->n; i++) if (s->r[i].used && (s->r[i].flags & 1) && !pick--) { klb_r.cand = i; break; }
                 klog("bots: backstab: this round bot %d may turn (Backstab=%d%%): when it is in play at stage %d or later with $%d or more for %d s", klb_r.cand, klb.backstab, klb.bs_stage, klb.bs_money, klb.bs_delay);
             } else klog("bots: backstab: nobody was picked this round (Backstab=%d%%)", klb.backstab);
+        }
+    }
+    if (klb_r.ccand == -2 && s->state == KLB_ROUND && nb && now - klb_r.round_at >= 3000) {     /* section 3 g: its own roll, after Backstab's */
+        klb_r.ccand = -1;
+        if (klb.bs_crew > 0 && klb.foe) {
+            if (klb_roll(klb.bs_crew)) {
+                int left = nb - (klb_r.cand >= 0), pick = left > 0 ? (int)((klb_seed >> 8) % (DWORD)left) : -1;
+                for (i = 0; i < s->n && pick >= 0; i++) if (s->r[i].used && (s->r[i].flags & 1) && i != klb_r.cand && !pick--) { klb_r.ccand = i; break; }
+                klog("bots: backstab-crew: this round bot %d may turn on a crewmate (BackstabCrew=%d%%): when it is in play at stage %d or later and another bot in play with $%d or more is within %.0f m, for %d s", klb_r.ccand, klb.bs_crew, klb.bs_stage, klb.bs_money, klb.bs_crew_near / 100, klb.bs_delay);
+            } else klog("bots: backstab-crew: nobody was picked this round (BackstabCrew=%d%%)", klb.bs_crew);
         }
     }
     klb_r.state = s->state;
@@ -639,6 +795,25 @@ static void klb_act(const struct klb_snap *s, DWORD now)
                 }
             }
         } else klb_r.cand_since = 0;
+    }
+    /* ---- section 3 g: the picked bot turns on a crewmate who carries money near it (TraitorFoe makes it a fight) */
+    if (klb_r.ccand >= 0 && !klb_r.cdone && klb.foe) {
+        const struct klb_rec *r = &s->r[klb_r.ccand]; int vic = -1; float bp[3], vp[3], best = 0;
+        if (r->used && (r->flags & 3) == 1 && r->status == 0 && r->stage >= klb.bs_stage && r->actor && kle_node(klh_rd32(r->actor + 4), bp, 0))
+            for (i = 0; i < s->n; i++) {
+                const struct klb_rec *v = &s->r[i]; float d;
+                if (i == klb_r.ccand || !v->used || (v->flags & 3) != 1 || v->status != 0 || v->money < (DWORD)klb.bs_money || !v->actor || !kle_node(klh_rd32(v->actor + 4), vp, 0)) continue;
+                d = (float)sqrt((vp[0] - bp[0]) * (vp[0] - bp[0]) + (vp[1] - bp[1]) * (vp[1] - bp[1]) + (vp[2] - bp[2]) * (vp[2] - bp[2]));
+                if (klb_finite(d) && d <= klb.bs_crew_near && (vic < 0 || v->money > s->r[vic].money)) { vic = i; best = d; }      /* the richest within reach */
+            }
+        if (vic < 0) klb_r.csince = 0;
+        else if (!klb_r.csince) klb_r.csince = KLB_T(now);
+        else if (now - klb_r.csince >= (DWORD)klb.bs_delay * 1000) {
+            klb_r.cdone = 1;
+            if (klb_make_traitor(s, klb_r.ccand)) klog("bots: BACKSTAB-CREW: bot %d (actor %08lx, stage %u, $%lu) turned on record %d ($%lu, %.1f m away): record +0x79 |= 2 - TraitorFoe makes it the crew's enemy at the next pass; whom it shoots is the game's choice",
+                                                       klb_r.ccand, r->actor, r->stage, r->money, vic, s->r[vic].money, best / 100);
+            else klog("bots: BACKSTAB-CREW: bot %d could NOT be turned (its record changed or is not writable)", klb_r.ccand);
+        }
     }
     /* ---- H3: a bot aboard pays the driver */
     if (klb.bribe > 0 && waiting && !klb_r.bribed && h && h->status == 0 && klb_finite(s->timer) && s->timer > 0.5f)
@@ -716,7 +891,7 @@ static void klb_tick(int game_thread)
     if (!klb.on || !klh_exe_ok || now - last < 100) return;
     last = now;
     arcade = klb_read(&s);
-    if (arcade && (klb.tune || klb.backstab > 0 || klb.bribe > 0 || klb.leave > 0 || klb.van > 0)) {
+    if (arcade && (klb.tune || klb.backstab > 0 || klb.bribe > 0 || klb.leave > 0 || klb.van > 0 || klb.foe)) {
         act = klb_level(why);                 /* section 0 (B1): asked every pass, the verdict changes when the archive is opened */
         if (s.rules != toldrules || strcmp(why, toldwhy)) {       /* said per round object, and again when the answer changes */
             toldrules = s.rules; strcpy(toldwhy, why);
@@ -732,7 +907,8 @@ static void klb_tick(int game_thread)
     klb_tune_tick(arcade, act, capped);
     if (!arcade) { klb_r.rules = 0; return; }
     if (klb.log) klb_log_tick(&s, now);
-    if (!(klb.backstab > 0 || klb.bribe > 0 || klb.leave > 0 || klb.van > 0)) return;
+    if (klb.foe && game_thread) klb_foe_tick(&s, act);      /* section 3 f: also when act is 0 - then it only puts back */
+    if (!(klb.backstab > 0 || klb.bribe > 0 || klb.leave > 0 || klb.van > 0 || klb.bs_crew > 0)) return;
     if (!act) { klb_r.rules = 0; return; }    /* what was remembered of the round goes with the permission */
     if (!game_thread) {                       /* the round's data is only changed between two frames of the game itself */
         if (s.state == KLB_ROUND && !toldthread++) klog("bots: the tick is not on the game's thread ([KLHook] Tick=0?): backstab / bribe / leave / van do nothing");
@@ -779,6 +955,14 @@ static void klb_init(void)
     if (klb.tr_max || klb.bs_near > 0 || klb.bs_behind || klb.bs_busy)      /* only when one is set: the start-up lines of a hook without them are what they were */
         klog("bots: TraitorsMax=%d a round (0 = no cap; needs Tune=1; dead traitors count); the picked bot's turn waits for: within %.0f units of you (0 = any distance), behind you %d (by your direction of travel), you hurt %d - for BackstabWait=%d s at most, then it turns anyway",
              klb.tr_max, klb.bs_near, klb.bs_behind, klb.bs_busy, klb.bs_wait);
+    /* section 3 f / g (only said when set, as above) */
+    klb.foe = GetPrivateProfileIntA("Bots", "TraitorFoe", 0, klh_ini) != 0;
+    klb.bs_crew = klb_pct("BackstabCrew");
+    klb.bs_crew_near = klb_inif("BackstabCrewNear", "1500"); if (!klb_finite(klb.bs_crew_near) || klb.bs_crew_near <= 0) klb.bs_crew_near = 1500;
+    if (klb.bs_crew > 0 && !klb.foe) { klog("bots: BackstabCrew=%d%% needs TraitorFoe=1 (a turned bot is no enemy of the crew without it): BackstabCrew is OFF", klb.bs_crew); klb.bs_crew = 0; }
+    if (klb.foe)
+        klog("bots: TraitorFoe=1: a turned bot in play is team Enemy (the police's) - the crew and the escort should shoot him, he shoots them and you - and carries the score table's traitor bit (his kills and his death make nobody else a traitor); team 2 back when he is dead / aboard / the round ends; a GUESS until check K7. BackstabCrew=%d%% (stage %d, $%d, within %.0f m, %d s)",
+             klb.bs_crew, klb.bs_stage, klb.bs_money, klb.bs_crew_near / 100, klb.bs_delay);
 }
 
 #endif /* KLBOT_C */
