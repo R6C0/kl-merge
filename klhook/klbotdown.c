@@ -87,6 +87,7 @@
 static struct {
     int on, dry, log, downs_max, nofire, traitors;
     float down_pct, floor_pct, lie, free_t, lie_pct, up_pct, refuse, attr, watch; int preshield;
+    float lie_far, lie_far_at;      /* LieFar / LieFarAt (2026-10-15): the lie when the human is not near (nobody can help) */
     int fed_downs; float fed_free, fed_up, fed_health;      /* while the local human is police (klfed.c's fed) */
 } klbd;
 
@@ -352,9 +353,15 @@ static void klbd_tick(int game_thread)
                 DWORD cur = klh_rd32(dnd + 0x14);
                 if (cur != b->l0 || (long)(tick - b->tick_down) > 1024) {      /* slot 1 (0x7ea990) wrote its own tick: ours goes in, once */
                     if (klbd.lie > 0 && (long)(cur - b->tick_down) >= 1400) {      /* under 1.4 s = a helper (kladren.c) pulled it already: not put back */
-                        DWORD want = b->tick_down + (DWORD)(klbd.lie * 1024.0f);
+                        float lie = klbd.lie, far_m = -1.0f; const char *lkey = "LieSeconds"; DWORD want;
+                        if (klbd.lie_far > 0 && klbd.lie_far < lie) {      /* LieFar: the human is not near him - nobody will come to help, the long lie only costs the crew time */
+                            DWORD hpl = 0; float hf[3], hn[3];
+                            if (have && kle_human(&hpl, hf, hn)) far_m = sqrtf((hf[0] - pos[0]) * (hf[0] - pos[0]) + (hf[1] - pos[1]) * (hf[1] - pos[1]) + (hf[2] - pos[2]) * (hf[2] - pos[2])) / 100.0f;
+                            if (far_m < 0 || far_m > klbd.lie_far_at) { lie = klbd.lie_far; lkey = "LieFar"; }
+                        }
+                        want = b->tick_down + (DWORD)(lie * 1024.0f);
                         if ((long)(want - tick) > 0 && cur != want && klh_data((void *)(DWORD_PTR)(dnd + 0x14), &want, 4, "an AI heister's down-not-dead: the tick he lies until (botdown LieSeconds)")) {
-                            b->lie_tick = want; klog("botdown: record %d: he lies until tick %ld (LieSeconds=%.1f; the game had %ld = %.2f s)", i, (long)want, klbd.lie, (long)cur, (float)(long)(cur - b->tick_down) / 1024.0f);
+                            b->lie_tick = want; klog("botdown: record %d: he lies until tick %ld (%s=%.1f, you %.1f m away (-1 = not in play); the game had %ld = %.2f s)", i, (long)want, lkey, lie, far_m, (long)cur, (float)(long)(cur - b->tick_down) / 1024.0f);
                         }
                     }
                     b->lie_done = 1;
@@ -457,6 +464,8 @@ static void klbd_init(void)
     klbd.preshield = GetPrivateProfileIntA("BotDown", "PreShield", 1, klh_ini) != 0;
     klbd.lie = klbd_inif("LieSeconds", "6", 0.0f, 15.0f);
     if (klbd.lie > 0 && klbd.lie < 0.5f) klbd.lie = 0.5f;
+    klbd.lie_far = klbd_inif("LieFar", "0", 0.0f, 15.0f); if (klbd.lie_far > 0 && klbd.lie_far < 0.5f) klbd.lie_far = 0.5f;      /* 0 = off */
+    klbd.lie_far_at = klbd_inif("LieFarAt", "25", 2.0f, 500.0f);
     klbd.free_t = klbd_inif("FreeSeconds", "0.75", 0.0f, 15.0f);      /* 15 (was 5) = the whole LieSeconds (2026-10-15, run v70_T1E: four downed bots were shot dead 7 .. 12 s into a 15 s lie) */
     klbd.lie_pct = klbd_inif("LiePct", "0", 0.0f, 100.0f);
     klbd.up_pct = klbd_inif("UpPct", "0", 0.0f, 100.0f);
@@ -472,5 +481,6 @@ static void klbd_init(void)
          klbd.dry ? " (Dry=1: nothing is called, nothing is written)" : "", klbd.down_pct, klbd.floor_pct, klbd.refuse, klbd.downs_max,
          klbd.lie > 0 ? "LieSeconds" : "as long as the game says", klbd.free_t, klbd.lie_pct, klbd.up_pct, klbd.nofire, klbd.traitors);
     if (klbd.lie > 0) klog("botdown: LieSeconds=%.1f (a GUESS; the game's own is 1.5 .. 3.0)", klbd.lie);
+    if (klbd.lie_far > 0) klog("botdown: LieFar=%.1f: a bot that goes down more than LieFarAt=%.0f m from you (or while you are not in play) lies only that long - nobody will come to help him (run v71_T3: downed crew lay 15 s each in the street and missed the van)", klbd.lie_far, klbd.lie_far_at);
     klog("botdown: while you are police (a fed): FedDowns %d, FedFree %.2f, FedUpPct %.0f, FedHealth %s", klbd.fed_downs, klbd.fed_free, klbd.fed_up, klbd.fed_health > 0 ? "set" : "0 = 100 / [Balance] Tough");
 }

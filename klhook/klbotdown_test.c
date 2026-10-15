@@ -49,6 +49,7 @@ static int klb_read(struct klb_snap *s) { *s = g_snap; return 1; }
 static int klr_arcade(DWORD *rules, DWORD *state, int *level) { *rules = g_snap.rules; *state = g_snap.state; *level = 1; return 1; }
 static int klb_level(char why[200]) { strcpy(why, "test level"); return 1; }
 static int kle_node(DWORD node, float pos[3], float dir[3]) { (void)dir; if (!node) return 0; klh_rd(node, pos, 12); return 1; }
+static int kle_human(DWORD *player, float feet[3], float nodepos[3]) { (void)player; (void)feet; (void)nodepos; return 0; }      /* no human in the harness: LieFar sees "not in play" */
 static int klb_same_code(DWORD va, const BYTE *bytes, int n) { (void)va; (void)bytes; (void)n; return g_code_ok; }
 
 #define SCORE 0x00300000
