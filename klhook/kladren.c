@@ -58,6 +58,11 @@
  *            AnimFace=1 (turn to him, AnimDist=60 units from him, over AnimAlignFrames=10)  AnimInject=1 (at AnimInjectFrame=30 his lie
  *            ends: he gets up, if your help is MinHelp)  AnimRepeat=0  AnimLog=1 (2 = every refusal)  AnimSlot= (absent: '/Special_moves/
  *            Heal_wounded_DM' = Dead Men's exact clip where kl_fa_syringe.py put it, else Dog Days' '/Special_moves/Heal_wounded')
+ *   BotAnim=1 (2026-10-16, worker aisyr): an AI HEISTER who helps a downed crewmate kneels and plays the same slot (his NPC set: Dead Men's
+ *            Heal_Wounded_NPC) through the NPC graph's empty state; BotAnimNear=2.0 (m) BotAnimFace=1 BotAnimDist=60 BotAnimAlignFrames=9
+ *            BotAnimHold=1 (a downed AI heister waits for the shot) BotAnimInject=1 (BotAnimInjectFrame=44 ends his lie) BotAnimRepeat=0
+ *            BotAnimLog=1 BotAnimSlot=/Special_moves/Heal_wounded BotAnimTest=0 (a test key: every N s the bot nearest to you plays it)
+ *            (section 'BotAnim')
  *   NeedUse=1 now (the owner: 'just use e for it like when picking up a gun'): you help only while you HOLD E (UseKey=0x45, a Windows
  *            virtual-key code, read while the game's window is in front) or the game's own Use bit; the prompt says 'Hold E' in Range.
  */
@@ -652,8 +657,359 @@ static void kad_an_init(void)
     kad_ao.userslot = kad_ao.slot[0] != 0;                          /* absent: Dead Men's exact clip where the build has it, else Dog Days' version */
     if (!kad_ao.slot[0]) strcpy(kad_ao.slot, KAD_AN_SLOT_DEF);
     klog("adren: Anim=1 - you kneel and give a downed AI heister Dead Men's adrenaline shot ('%s'%s, 55 frames in the players' sets); AnimFace=%d AnimDist=%.0f AnimAlignFrames=%d AnimInject=%d (frame %d) AnimRepeat=%d AnimLog=%d. "
-         "The bots do not play it (no NPC route: re\\adrenaline_anim.md)", kad_ao.slot, kad_ao.userslot ? "" : "; first '" KAD_AN_SLOT_DM "' where the build has it", kad_ao.face, kad_ao.dist, kad_ao.alignf, kad_ao.inject, kad_ao.injectf, kad_ao.repeat, kad_ao.log);
+         "An AI heister plays it with [Adrenaline] BotAnim (section BotAnim)", kad_ao.slot, kad_ao.userslot ? "" : "; first '" KAD_AN_SLOT_DM "' where the build has it", kad_ao.face, kad_ao.dist, kad_ao.alignf, kad_ao.inject, kad_ao.injectf, kad_ao.repeat, kad_ao.log);
 }
+/* ---------------------------------------------------------------- BotAnim: an AI heister kneels and gives the shot (worker 'aisyr', 2026-10-16)
+ *
+ * The owner: 'when someone gets revived with adrenaline it should be Dead Men's revive - kneeling and injecting a syringe'. The human
+ * helper does it since v77 (Anim, above); with [Adrenaline] BotAnim=1 an AI HEISTER who helps a downed crewmate (the Rush bot that runs
+ * to him, or any bot standing by him) kneels and plays the same slot '/Special_moves/Heal_wounded' - in an NPC set that is Dead Men's
+ * own NPC clip 'Heal_Wounded_NPC' (73 frames, 2.9 s; Dog Days' copy is byte-identical to Dead Men's, re\adrenaline_anim.md 1): stands
+ * 0-8, KNEELS 9-46, bent 47-61 (the shot), kneels 62-68.
+ *
+ * THE ROUTE (read in kl2.exe 0490 by this worker; Dog Days' own way of playing a free clip on an NPC):
+ *   The NPC animation graph (built at 0x730be0, [0x1549040]) has, besides Stand (word +0), ShootPose (+0x1c), DownNotDead (+0x2c) ...,
+ *   an EMPTY state (word +0x18; 0x569bd0 node, flags 0x10000) that plays whatever the actor is told to play: ZFFActor's Play (vt +0x200
+ *   = 0x71efd0) hands the clip to the state machine [actor+0x8d8] (0x843530) when the actor's state ([[actor+0x7c0]+0x7c]) is that one.
+ *   ZFakeCloseCombat (CPPScript, vtable 0xbd1144) is the stock user: start 0x4e9550 -> 0x671fe0(soldier, [graph+0x18]) (= 0x6270d0
+ *   (state, 1) on [actor+0x7c0]), the clip through vt +0x200 (clip, 0x20001, 0, [0xb3e980], 1) - the same call vt +0x204 (0x6f6830)
+ *   makes with flags 0x20001 - and AlignTo (vt +0x208, 0x80fdc0, the routine the NPC link mover 0x4a5160 uses on actors too); its end
+ *   0x875140 stops the channel (0x5a6ec0 finds it, vt +0x1f8 = 0x63e600 stops it) and gives the graph back Stand (0x83ad90(soldier,
+ *   [graph+0]) = 0x8d41c0(state, 1)). This part makes exactly those calls, in that order, from the game's own thread.
+ *   The clip: the slot id from the level's slot table (klq_slot, the human's table - the ids are the level's), the clip of the BOT's set
+ *   by 0x59d550 (reads [actor+0x84], what the NPC link mover calls).
+ * WHEN: the helper of a downed crewmate (kad_pick, the same test as the help) is an AI heister within BotAnimNear of him (and either
+ *   standing - moved < 25 units for 150 ms - or within 1.2 m: the Rush bot arriving; the AlignTo puts him in place), not down, his graph state not the empty one already (a level script plays him) and not DownNotDead; once
+ *   per downed man and helper (BotAnimRepeat=1: again 0.5 s after the clip while the man still lies). BotAnimFace=1: ONE AlignTo that turns
+ *   him to the man and puts him BotAnimDist units from him over BotAnimAlignFrames frames (the clip's standing phase).
+ * THE SHOT (a downed AI heister; for a downed HUMAN the bot's clip is the picture, his get-up stays kldown.c's): BotAnimHold=1 keeps the
+ *   man lying (his lie tick [dnd+0x14] at least 0.25 s ahead, and no Rate speed-up) until BotAnimInjectFrame (44: the end of the kneel, a
+ *   GUESS from the pose), then BotAnimInject=1 ends his lie (tick + 2: the game's own get-up starts; 44 = the end of the kneel, live the channel
+ *   ended at frame 50 - the bent phase starts at 47) - the bot injects, the man rises.
+ *   The hold never lasts past the clip (+1 s time-out).
+ * WATCHED every pass: the channel still plays our clip (+0 = clip, +4 = frame), the graph state is still the empty one (anything else =
+ *   the AI took him back: nothing is restored, the game's state stands), he is not down, the actor / soldier are the same. At the clip's
+ *   end / a lost channel / the time-out / the round's end: stop the channel, Stand back - only while the state is still the empty one.
+ * SAFETY: every routine is checked first (first bytes of 0x671fe0 / 0x83ad90, ZFFActor's vt +0x1f8 / +0x204 / +0x208 / the code of
+ *   0x5a6ec0 and 0x59d550); any mismatch = BotAnim off with a line, the old behaviour (the bot only stands by) goes on. A fault in any call
+ *   is caught (kad_an_guard), logged, the part is off for the session. No byte of kl2.exe is changed.
+ * NOT DONE: Dead Men's syringe prop (no build carries 'Items_Dynamic/Syringe_01') and its sound (Dead Men's NPC clip names
+ *   'healed_by_adrenaline_01_withdelay' of the Dead Men bank: Dog Days' bank has no such sound; the clip's +0x2C is empty in Dog Days).
+ */
+#define KAD_BA_GRAPH     0x01549040u   /* -> the NPC animation graph: WORD +0 Stand, +0x18 the empty (scripted) state, +0x2c DownNotDead */
+#define KAD_BA_SETSTATE  0x00671fe0u   /* thiscall (soldier; state): -> [[soldier+0x40]+0x7c0] 0x6270d0(state, 1), ret 4 */
+#define KAD_BA_BACKSTATE 0x0083ad90u   /* thiscall (soldier; state): -> [[soldier+0x40]+0x7c0] 0x8d41c0(state, 1), ret 4 */
+#define KAD_BA_FINDCH    0x005a6ec0u   /* thiscall (actor; clip) -> the channel that plays it (0 = none), ret 4 */
+#define KAD_BA_STOPCH    0x0063e600u   /* ZFFActor vt +0x1f8: (channel) stop it, ret 4 */
+#define KAD_BA_PLAY      0x006f6830u   /* ZFFActor vt +0x204: (clip, flags) -> the channel, ret 8 */
+#define KAD_BA_ALIGN     0x0080fdc0u   /* ZFFActor vt +0x208: AlignTo(rot[9], pos[3], float frames) -> al */
+
+static struct { int on, log, face, inject, hold, injectf, alignf, repeat, test, sticky; float near_, dist; char slot[96]; } kad_bo;
+static struct kad_ba {
+    int active, rec, injected, frames, startT; DWORD actor, soldier, clip, began; float from, to, last;
+    WORD scripted, stand, first_other; int reassert, replays, test; const char *why;
+} kad_ba[KLB_NREC];                            /* per HELPER record */
+static struct kad_bw { float p0[3]; DWORD t0, tried; DWORD actor; int rec; int n; } kad_bw[KLB_NREC];   /* the standing check, per helper; n: plays for rec this down */
+static int kad_ba_dead, kad_ba_checked, kad_ba_logs, kad_ba_tests;
+
+static int kad_ba_code(DWORD va, const BYTE *code, int n)
+{
+    BYTE b[24]; return n <= (int)sizeof b && klh_rd((DWORD_PTR)KLH_VA(va), b, n) && !memcmp(b, code, n);
+}
+static int kad_ba_check(void)
+{   /* the routines this part calls are the ones read (build 0490): -> 1 */
+    static const BYTE set_[] = { 0x55, 0x8b, 0xec, 0x8b, 0x45, 0x08, 0x8b, 0x49, 0x40, 0x8b, 0x89, 0xc0, 0x07, 0x00, 0x00, 0x6a, 0x01, 0x50, 0xe8 };
+    static const BYTE fch[] = { 0x56, 0x8b, 0x71, 0x70, 0x57, 0x8b, 0x7c, 0x24, 0x0c };
+    static const BYTE cv[] = { 0x83, 0xec, 0x0c, 0xa1, 0x40, 0x26, 0xdd, 0x00 };
+    DWORD vt = (DWORD)(DWORD_PTR)KLH_VA(KLB_ACTOR_VT);
+    if (kad_ba_checked) return kad_ba_checked > 0;
+    kad_ba_checked = -1;
+    if (!kad_ba_code(KAD_BA_SETSTATE, set_, sizeof set_) || !kad_ba_code(KAD_BA_BACKSTATE, set_, sizeof set_)) { klog("adren: BotAnim OFF - 0x671fe0 / 0x83ad90 are not the state setters this build knows"); return 0; }
+    if (!kad_ba_code(KAD_BA_FINDCH, fch, sizeof fch) || !kad_ba_code(KLFC_CLIPVAR, cv, sizeof cv)) { klog("adren: BotAnim OFF - 0x5a6ec0 / 0x59d550 are not the routines this build knows"); return 0; }
+    if (klh_rd32(vt + 0x1f8) != (DWORD)(DWORD_PTR)KLH_VA(KAD_BA_STOPCH) || klh_rd32(vt + 0x204) != (DWORD)(DWORD_PTR)KLH_VA(KAD_BA_PLAY) || klh_rd32(vt + 0x208) != (DWORD)(DWORD_PTR)KLH_VA(KAD_BA_ALIGN)) {
+        klog("adren: BotAnim OFF - ZFFActor's vtable +0x1f8 / +0x204 / +0x208 are not the ones read"); return 0;
+    }
+    kad_ba_checked = 1;
+    return 1;
+}
+static int kad_ba_state(DWORD actor, WORD *st)
+{
+    DWORD sm = klh_rd32(actor + 0x7c0);
+    return sm && klh_rd(sm + 0x7c, st, 2);
+}
+static int kad_ba_graph(WORD *stand, WORD *scripted, WORD *dnd)
+{
+    DWORD g = klh_rd32((DWORD_PTR)KLH_VA(KAD_BA_GRAPH));
+    return g && klh_rd(g, stand, 2) && klh_rd(g + 0x18, scripted, 2) && klh_rd(g + 0x2c, dnd, 2) && *stand != 0xffff && *scripted != 0xffff;
+}
+static int kad_ba_actor_ok(DWORD actor, DWORD soldier)
+{
+    BYTE d = 1;
+    return actor && klh_rd32(actor) == KLB_ACTOR_VT && soldier && klh_rd32(actor + 0x77c) == soldier && klh_rd32(soldier) == KAD_SOLDIER_VT &&
+           klh_rd32(soldier + 0x40) == actor && klh_rd(actor + 0x64c, &d, 1) && !d;
+}
+
+/* stop our channel (if it still plays our clip) and give the graph Stand back (only while it is still the empty state) */
+static int kad_ba_release_body(void *arg)
+{
+    struct kad_ba *b = (struct kad_ba *)arg; WORD st = 0xffff; DWORD ch;
+    if (!b->actor || klh_rd32(b->actor) != KLB_ACTOR_VT || klh_rd32(b->actor + 0x77c) != b->soldier || klh_rd32(b->soldier) != KAD_SOLDIER_VT) return 2;   /* he is gone: nothing to give back */
+    if (!kad_ba_state(b->actor, &st) || st != b->scripted) return 3;                    /* the game's own state stands */
+    ch = KLFC_CALL(DWORD (__fastcall *)(DWORD, DWORD, DWORD), KAD_BA_FINDCH)(b->actor, 0, b->clip);
+    if (ch && klfc_ok(ch, 0x38)) KLFC_CALL(void (__fastcall *)(DWORD, DWORD, DWORD), KAD_BA_STOPCH)(b->actor, 0, ch);
+    KLFC_CALL(void (__fastcall *)(DWORD, DWORD, DWORD), KAD_BA_BACKSTATE)(b->soldier, 0, (DWORD)b->stand);
+    return 1;
+}
+static void kad_ba_end(int h, const char *why)
+{
+    struct kad_ba *b = &kad_ba[h]; int r = 0; WORD st = 0xffff;
+    if (!b->active) return;
+    if (!kad_ba_dead) {
+        r = kad_an_guard("BotAnim end", kad_ba_release_body, b);
+        if (r < 0) { kad_ba_dead = 1; klog("adren: BotAnim DISABLED for this session (fault at the end); the help without the animation goes on"); }
+    }
+    if (b->actor) kad_ba_state(b->actor, &st);
+    if (kad_bo.log) klog("adren: BotAnim END record %d (by record %d) reason=%s frame=%.1f of %.0f, %.2f s, the AI asked another state %d time(s) (first %d; clip played again %d time(s)), shot=%s; %s (state now %u)", h, b->rec, why, b->last, b->to,
+                         (GetTickCount() - b->began) / 1000.0f, b->reassert, b->reassert ? (int)b->first_other : -1, b->replays,
+                         b->injected == 2 ? "given" : b->injected == 3 ? "nobody to give it to" : b->injected ? "due" : "no",
+                         r == 1 ? "channel stopped, Stand given back" : r == 2 ? "he is gone" : r == 3 ? "the AI had taken him back already" : "fault", (unsigned)st);
+    memset(b, 0, sizeof *b);
+}
+
+struct kad_ba_go { const struct klb_snap *s; int i, h; DWORD pl; float man[3]; int have_at; float at[3]; const char *why; };   /* at: the TEST's kneeling place */
+static int kad_ba_go_body(void *arg)
+{
+    struct kad_ba_go *g = (struct kad_ba_go *)arg; struct kad_ba *b = &kad_ba[g->h]; DWORD actor = g->s->r[g->h].actor, soldier, clip, ch;
+    WORD stand, scripted, dndst, st = 0xffff; int id; float M[9], M2[9], P[3], F[3], dx, dz, l, n;
+    soldier = actor ? klh_rd32(actor + 0x77c) : 0;
+    if (!kad_ba_actor_ok(actor, soldier)) { g->why = "not a standing ZFFActor with its ZSoldier"; return 0; }
+    if (!kad_ba_graph(&stand, &scripted, &dndst)) { g->why = "the NPC animation graph cannot be read"; return 0; }
+    if (!kad_ba_state(actor, &st)) { g->why = "his graph state cannot be read"; return 0; }
+    if (st == scripted) { g->why = "his graph is in the empty state already (a script plays him)"; return 0; }
+    if (st == dndst) { g->why = "his graph is in DownNotDead"; return 0; }
+    id = g->pl ? klq_slot(g->pl, kad_bo.slot) : -1;
+    if (id < 0) id = klq_slot(actor, kad_bo.slot);
+    if (id < 0) { g->why = "the clip's slot is not in this level's .ANM"; return 0; }
+    clip = KLFC_CALL(DWORD (__fastcall *)(DWORD, DWORD, DWORD), KLFC_CLIPVAR)(actor, 0, (DWORD)id);
+    if (!klfc_ok(clip, 0x68)) { g->why = "the slot has no clip in his set"; return 0; }
+    if (!klfc_pose(actor, M, P)) { g->why = "his pose cannot be read"; return 0; }
+    memset(b, 0, sizeof *b);
+    b->actor = actor; b->soldier = soldier; b->clip = clip; b->rec = g->i; b->scripted = scripted; b->stand = stand;
+    b->frames = (int)(klh_rd32(clip + 2) & 0xffff); b->startT = klfc_T(); b->began = GetTickCount();
+    KLFC_CALL(void (__fastcall *)(DWORD, DWORD, DWORD), KAD_BA_SETSTATE)(soldier, 0, (DWORD)scripted);
+    if (!kad_ba_state(actor, &st) || st != scripted) { g->why = "the graph did not take the empty state"; memset(b, 0, sizeof *b); return 0; }
+    b->active = 1;                                                  /* from here on kad_ba_end gives Stand back */
+    ch = KLFC_PTR(DWORD (__fastcall *)(DWORD, DWORD, DWORD, int), klfc_vf(actor, 0x204))(actor, 0, clip, 0x20001);
+    if (!klfc_ok(ch, 0x20) || klh_rd32(ch) != clip) { g->why = "Play gave no channel with the clip"; kad_ba_end(g->h, "no channel"); return 0; }
+    b->from = klfc_f(ch + 8); b->to = klfc_f(ch + 0xc); b->last = klfc_f(ch + 4);
+    if (kad_bo.face) {
+        dx = P[0] - g->man[0]; dz = P[2] - g->man[2]; l = (float)sqrt(dx * dx + dz * dz);
+        memcpy(F, P, 12);
+        if (l > 1.0f) { F[0] = g->man[0] + dx / l * kad_bo.dist; F[2] = g->man[2] + dz / l * kad_bo.dist; }
+        if (g->have_at) { F[0] = g->at[0]; F[2] = g->at[2]; }
+        if (!kad_an_face(M, g->have_at ? F : P, g->man, M2)) memcpy(M2, M, 36);
+        n = (float)kad_bo.alignf;
+        if (n > b->to - b->from - 1.0f) n = b->to - b->from - 1.0f;
+        if (n < 1.0f) n = 1.0f;
+        if (!(KLFC_PTR(BYTE (__fastcall *)(DWORD, DWORD, const float *, const float *, float), klfc_vf(actor, 0x208))(actor, 0, M2, F, n) & 0xff))
+            klog("adren: BotAnim AlignTo refused (record %d) - he kneels where he stands", g->h);
+    }
+    if (kad_bo.log) {
+        char nm[48]; kad_name(g->h, nm, sizeof nm);
+        klog("adren: BotAnim START record %d (%s) kneels by record %d (%s): slot '%s' id %d, clip %08lx (%d frames, channel %08lx from %.0f to %.0f), %.0f units from him, state %u -> %u (the empty state)",
+             g->h, nm, g->i, g->i == g->s->human ? "you" : "bot", kad_bo.slot, id, (unsigned long)clip, b->frames, (unsigned long)ch, b->from, b->to,
+             (float)sqrt((P[0] - g->man[0]) * (P[0] - g->man[0]) + (P[2] - g->man[2]) * (P[2] - g->man[2])), (unsigned)stand, (unsigned)scripted);
+    }
+    return 1;
+}
+
+/* the tick's part: AI heister h is the helper of downed record i this pass */
+static void kad_ba_try(const struct klb_snap *s, int i, int h, const float hp[3], const float man[3], DWORD pl)
+{
+    struct kad_bw *w; struct kad_ba_go g; DWORD now = GetTickCount(); float dx, dz, mv, d; int r;
+    if (!kad_bo.on || kad.dry || kad_ba_dead || h < 0 || h >= KLB_NREC || h == s->human || kad_ba[h].active) return;
+    if (klh_rcb_ra != (DWORD_PTR)KLH_VA(KLFC_RCB_RA)) return;      /* only the main loop's gameplay call */
+    w = &kad_bw[h];
+    if (w->actor != s->r[h].actor || w->rec != i + 1) { memset(w, 0, sizeof *w); w->actor = s->r[h].actor; w->rec = i + 1; memcpy(w->p0, hp, 12); w->t0 = now; }
+    dx = hp[0] - w->p0[0]; dz = hp[2] - w->p0[2]; mv = (float)sqrt(dx * dx + dz * dz);
+    if (mv > 25.0f) { memcpy(w->p0, hp, 12); w->t0 = now; }              /* he moved: the standing clock starts again */
+    dx = hp[0] - man[0]; dz = hp[2] - man[2]; d = (float)sqrt(dx * dx + dz * dz);
+    if (w->n && !kad_bo.repeat) return;
+    if (d > kad_bo.near_ * KAD_M || (now - w->t0 < 150 && d > 1.2f * KAD_M)) {      /* not by him yet: further than Near, or still walking up and more than 1.2 m off */
+        if (kad_bo.log >= 2 && now - w->tried >= 1000) { w->tried = now; klog("adren: BotAnim waits: record %d helps record %d from %.2f m (Near %.1f), standing %lu ms", h, i, d / KAD_M, kad_bo.near_, (unsigned long)(now - w->t0)); }
+        return;
+    }
+    if (now - w->tried < 500) return;
+    for (r = 0; r < KLB_NREC; r++) if (kad_ba[r].active && kad_ba[r].rec == i && !kad_ba[r].test) return;     /* one syringe a man: another bot gives it already (live AISYR6: two knelt by one man) */
+    w->tried = now;
+    if (!kad_ba_check()) { kad_ba_dead = 1; return; }
+    memset(&g, 0, sizeof g); g.s = s; g.i = i; g.h = h; g.pl = pl; memcpy(g.man, man, 12);
+    r = kad_an_guard("BotAnim start", kad_ba_go_body, &g);
+    if (r < 0) { kad_ba_dead = 1; memset(&kad_ba[h], 0, sizeof kad_ba[h]); klog("adren: BotAnim DISABLED for this session (fault at the start); the help without the animation goes on"); return; }
+    if (r == 1) w->n++;
+    else if (kad_ba_logs++ < 12 || kad_bo.log >= 2) klog("adren: BotAnim not started for record %d by record %d: %s", i, h, g.why ? g.why : "?");
+}
+
+/* BotAnimTest=N (a TEST key, 0 = off): every N seconds the AI heister nearest to YOU (in play, not down, within 8 m on your floor) plays
+   the shot towards you as if you lay there - for an autotest that cannot wait for a real down. Logged 'BotAnim TEST'. */
+static void kad_ba_test(const struct klb_snap *s, float pos[][3], const int *havepos, const BYTE *dn, DWORD pl)
+{
+    static DWORD last, first; DWORD now = GetTickCount(); int h, best = -1, r, front = 0; float bd = 0, bs = 1e9f, sc, d, M[9], F[3]; struct kad_ba_go g;
+    if (!kad_bo.on || kad_bo.test <= 0 || kad.dry || kad_ba_dead || s->human < 0 || !havepos[s->human] || dn[s->human]) return;
+    if (klh_rcb_ra != (DWORD_PTR)KLH_VA(KLFC_RCB_RA)) return;
+    if (!first) first = now;
+    if (now - first < 15000) return;                               /* past the round's opening camera */
+    if (last && now - last < (DWORD)kad_bo.test * 1000u) return;
+    front = pl && klfc_pose(pl, M, F);                              /* row 0 = where your back points */
+    for (h = 0; h < s->n; h++) {
+        if (h == s->human || !s->r[h].used || s->r[h].status != 0 || !(s->r[h].flags & 1) || dn[h] || !havepos[h] || kad_ba[h].active) continue;
+        if (fabs(pos[h][1] - pos[s->human][1]) > 2.0f * KAD_M) continue;
+        if ((d = kad_dist(pos[h], pos[s->human])) > 8.0f * KAD_M) continue;
+        sc = d;
+        if (front && d > 1.0f && ((pos[h][0] - pos[s->human][0]) * -M[0] + (pos[h][2] - pos[s->human][2]) * -M[2]) < 0.3f * d) sc += 100.0f * KAD_M;   /* behind you: only when nobody is in front (the picture) */
+        if (sc < bs) { bs = sc; bd = d; best = h; }
+    }
+    last = now;
+    if (best < 0) { klog("adren: BotAnim TEST - no AI heister within 8 m of you"); return; }
+    if (!kad_ba_check()) { kad_ba_dead = 1; return; }
+    memset(&g, 0, sizeof g); g.s = s; g.i = s->human; g.h = best; g.pl = pl; memcpy(g.man, pos[s->human], 12);
+    if (front) {                                                    /* 1.7 m to one side of you (each test the other side), 0.6 m ahead: in the picture, not hidden by your own back */
+        float l = (float)sqrt(M[0] * M[0] + M[2] * M[2]), lx = (float)sqrt(M[6] * M[6] + M[8] * M[8]), side = (kad_ba_tests++ & 1) ? 170.0f : -170.0f;
+        if (l > 1e-3f && lx > 1e-3f) { g.have_at = 1; g.at[0] = pos[s->human][0] - M[0] / l * 60.0f + M[6] / lx * side; g.at[1] = pos[best][1]; g.at[2] = pos[s->human][2] - M[2] / l * 60.0f + M[8] / lx * side; }
+    }
+    klog("adren: BotAnim TEST - record %d, %.1f m from you, plays the shot towards you", best, bd / KAD_M);
+    r = kad_an_guard("BotAnim test", kad_ba_go_body, &g);
+    if (r == 1) kad_ba[best].test = 1;
+    if (r < 0) { kad_ba_dead = 1; memset(&kad_ba[best], 0, sizeof kad_ba[best]); klog("adren: BotAnim DISABLED for this session (fault at the start)"); return; }
+    if (r != 1) klog("adren: BotAnim TEST - not started: %s", g.why ? g.why : "?");
+}
+
+/* is a bot's shot running on downed record i, not yet given? (the Rate speed-up waits for it) */
+static int kad_ba_holding(int i)
+{
+    int h;
+    if (!kad_bo.on || !kad_bo.hold) return 0;
+    for (h = 0; h < KLB_NREC; h++) if (kad_ba[h].active && kad_ba[h].rec == i && !kad_ba[h].injected) return 1;
+    return 0;
+}
+
+struct kad_ba_up { struct kad_ba *b; float cur; const char *end; };
+static int kad_ba_update_body(void *arg)
+{
+    struct kad_ba_up *u = (struct kad_ba_up *)arg; struct kad_ba *b = u->b; WORD st = 0xffff; DWORD ch; BYTE d = 0;
+    if (!b->actor || klh_rd32(b->actor) != KLB_ACTOR_VT || klh_rd32(b->actor + 0x77c) != b->soldier) { u->end = "he is gone"; return 0; }
+    if (klh_rd(b->actor + 0x64c, &d, 1) && d) { u->end = "he went down himself"; return 0; }
+    if (!kad_ba_state(b->actor, &st)) { u->end = "his graph state cannot be read"; return 0; }
+    ch = KLFC_CALL(DWORD (__fastcall *)(DWORD, DWORD, DWORD), KAD_BA_FINDCH)(b->actor, 0, b->clip);
+    if (st == b->scripted && (!ch || !klfc_ok(ch, 0x38) || klh_rd32(ch) != b->clip)) { u->end = "channel over"; return 0; }
+    if (st != b->scripted) {
+        /* his own AI asked another state (Stand, Sneak ...): the graph's change took our channel with it (live, run AISYR4). Sticky: the
+           empty state again and the clip again from the frame it had reached (channel +4), at most BotAnimSticky times a clip. */
+        float at = b->last;
+        if (b->reassert >= kad_bo.sticky) { u->end = "the AI took him back (BotAnimSticky used up)"; return 0; }
+        if (b->injected) { u->end = "the AI took him back after the shot (not held)"; return 0; }
+        if (!b->reassert) b->first_other = st;
+        b->reassert++;
+        KLFC_CALL(void (__fastcall *)(DWORD, DWORD, DWORD), KAD_BA_SETSTATE)(b->soldier, 0, (DWORD)b->scripted);
+        if (!kad_ba_state(b->actor, &st) || st != b->scripted) { u->end = "the AI took him back (the empty state was refused)"; return 0; }
+        if (!ch || !klfc_ok(ch, 0x38) || klh_rd32(ch) != b->clip) {
+            ch = KLFC_PTR(DWORD (__fastcall *)(DWORD, DWORD, DWORD, int), klfc_vf(b->actor, 0x204))(b->actor, 0, b->clip, 0x20001);
+            if (!klfc_ok(ch, 0x20) || klh_rd32(ch) != b->clip) { u->end = "the AI took him back (Play again gave no channel)"; return 0; }
+            if (at > b->from && at < b->to - 1.0f) klh_data((void *)(DWORD_PTR)(ch + 4), &at, 4, "a bot's adrenaline clip: on from the frame it had reached");
+            b->replays++;
+        }
+    }
+    u->cur = klfc_f(ch + 4);
+    return 1;
+}
+static void kad_ba_tick(const struct klb_snap *s, const DWORD *dnd, DWORD tick)
+{
+    int h, r; struct kad_ba_up u;
+    if (!kad_bo.on) return;
+    for (h = 0; h < KLB_NREC; h++) {
+        struct kad_ba *b = &kad_ba[h]; int i;
+        if (!b->active) continue;
+        if (klh_rcb_ra != (DWORD_PTR)KLH_VA(KLFC_RCB_RA)) return;
+        if (kad_ba_dead) { memset(b, 0, sizeof *b); continue; }
+        memset(&u, 0, sizeof u); u.b = b; u.cur = -1.0f;
+        r = kad_an_guard("BotAnim update", kad_ba_update_body, &u);
+        if (r < 0) { kad_ba_dead = 1; memset(b, 0, sizeof *b); klog("adren: BotAnim DISABLED for this session (fault in the update)"); continue; }
+        i = b->rec;
+        if (!r) {                                                   /* over: a clip that got past the kneel (frame 40) still gives the shot */
+            if (kad_bo.inject && !b->injected && b->last >= 40.0f && i >= 0 && i < s->n && i != s->human && kad_r[i].down && dnd[i] && !kad.dry) {
+                DWORD lt = klh_rd32(dnd[i] + 0x14), nw = tick + 2;
+                if ((LONG)(lt - nw) > 0 && klh_data((void *)(DWORD_PTR)(dnd[i] + 0x14), &nw, 4, "an AI heister's down-not-dead: the lie ends (an AI heister's adrenaline shot)"))
+                    klog("adren: BotAnim: THE SHOT - record %d injects record %d at the clip's end (frame %.1f): he gets up now", h, i, b->last);
+                b->injected = 2;
+            }
+            kad_ba_end(h, u.end); continue;
+        }
+        b->last = u.cur;
+        if (!b->injected && !b->test && (i < 0 || i >= s->n || !kad_r[i].down)) { kad_ba_end(h, "the man he kneels by is no longer down (up / dead / gone) before the shot"); continue; }
+        /* the downed man: an AI heister still lying in this pass */
+        if (i >= 0 && i < s->n && i != s->human && kad_r[i].down && dnd[i] && !kad.dry) {
+            DWORD lt = klh_rd32(dnd[i] + 0x14), nw;
+            if (kad_bo.inject && !b->injected && u.cur >= (float)kad_bo.injectf) {
+                nw = tick + 2;
+                if ((LONG)(lt - nw) > 0 && klh_data((void *)(DWORD_PTR)(dnd[i] + 0x14), &nw, 4, "an AI heister's down-not-dead: the lie ends (an AI heister's adrenaline shot)"))
+                    klog("adren: BotAnim: THE SHOT - record %d injects record %d at frame %.1f: he gets up now", h, i, u.cur);
+                b->injected = 2;
+            } else if (kad_bo.hold && !b->injected) {
+                nw = tick + 256;                                        /* 0.25 s ahead: he waits for the shot */
+                if ((LONG)(nw - lt) > 0) klh_data((void *)(DWORD_PTR)(dnd[i] + 0x14), &nw, 4, "an AI heister's down-not-dead: he waits for the shot (adrenaline)");
+            }
+        } else if (kad_bo.inject && !b->injected && u.cur >= (float)kad_bo.injectf) b->injected = (i == s->human) ? 2 : 3;
+        if (u.cur >= b->to - 0.5f) { kad_ba_end(h, "clip end"); continue; }
+        if (klfc_T() - b->startT > b->frames * 1024 / 25 + 1024) { kad_ba_end(h, "timeout"); continue; }
+    }
+}
+static void kad_ba_forget(const char *why)
+{
+    int h;
+    for (h = 0; h < KLB_NREC; h++) if (kad_ba[h].active) kad_ba_end(h, why);
+    memset(kad_bw, 0, sizeof kad_bw);
+}
+static void kad_ba_down(int i)
+{   /* record i went down anew: every helper may give him one shot again */
+    int h;
+    for (h = 0; h < KLB_NREC; h++) if (kad_bw[h].rec == i + 1) kad_bw[h].n = 0;
+}
+static void kad_ba_init(void)
+{
+    memset(&kad_bo, 0, sizeof kad_bo); memset(kad_ba, 0, sizeof kad_ba); memset(kad_bw, 0, sizeof kad_bw); kad_ba_dead = 0; kad_ba_checked = 0; kad_ba_logs = 0;
+    kad_bo.on = GetPrivateProfileIntA("Adrenaline", "BotAnim", 1, klh_ini) != 0;
+    if (!kad_bo.on) { klog("adren: BotAnim=0 - an AI heister who helps only stands by"); return; }
+    kad_bo.log = GetPrivateProfileIntA("Adrenaline", "BotAnimLog", 1, klh_ini);
+    kad_bo.face = GetPrivateProfileIntA("Adrenaline", "BotAnimFace", 1, klh_ini) != 0;
+    kad_bo.inject = GetPrivateProfileIntA("Adrenaline", "BotAnimInject", 1, klh_ini) != 0;
+    kad_bo.hold = GetPrivateProfileIntA("Adrenaline", "BotAnimHold", 1, klh_ini) != 0;
+    kad_bo.repeat = GetPrivateProfileIntA("Adrenaline", "BotAnimRepeat", 0, klh_ini) != 0;
+    kad_bo.injectf = GetPrivateProfileIntA("Adrenaline", "BotAnimInjectFrame", 44, klh_ini);
+    if (kad_bo.injectf < 0) kad_bo.injectf = 0;
+    if (kad_bo.injectf > 200) kad_bo.injectf = 200;
+    kad_bo.alignf = GetPrivateProfileIntA("Adrenaline", "BotAnimAlignFrames", 9, klh_ini);
+    if (kad_bo.alignf < 1) kad_bo.alignf = 1;
+    if (kad_bo.alignf > 60) kad_bo.alignf = 60;
+    kad_bo.dist = kad_inif("BotAnimDist", "60", 0.0f, 250.0f);
+    kad_bo.near_ = kad_inif("BotAnimNear", "2.0", 0.5f, 6.0f);
+    kad_bo.test = GetPrivateProfileIntA("Adrenaline", "BotAnimTest", 0, klh_ini);
+    kad_bo.sticky = GetPrivateProfileIntA("Adrenaline", "BotAnimSticky", 400, klh_ini);
+    if (kad_bo.sticky < 0) kad_bo.sticky = 0;
+    if (kad_bo.test) klog("adren: BotAnimTest=%d - TEST: every %d s the AI heister nearest to you plays the shot towards you", kad_bo.test, kad_bo.test);
+    GetPrivateProfileStringA("Adrenaline", "BotAnimSlot", KAD_AN_SLOT_DEF, kad_bo.slot, sizeof kad_bo.slot, klh_ini);
+    if (!kad_bo.slot[0]) strcpy(kad_bo.slot, KAD_AN_SLOT_DEF);
+    klog("adren: BotAnim=1 - an AI heister who helps a downed crewmate kneels and gives him Dead Men's adrenaline shot ('%s': in an NPC set Dead Men's Heal_Wounded_NPC, 73 frames) through the NPC graph's empty state (ZFakeCloseCombat's calls); "
+         "BotAnimNear=%.1f m BotAnimFace=%d (BotAnimDist=%.0f over %d frames) BotAnimHold=%d BotAnimInject=%d (frame %d) BotAnimRepeat=%d BotAnimLog=%d",
+         kad_bo.slot, kad_bo.near_, kad_bo.face, kad_bo.dist, kad_bo.alignf, kad_bo.hold, kad_bo.inject, kad_bo.injectf, kad_bo.repeat, kad_bo.log);
+}
+#define KAD_BA_TRY(s, i, h, hp, man, pl) kad_ba_try(s, i, h, hp, man, pl)
+#define KAD_BA_TICK(s, dnd, tick) kad_ba_tick(s, dnd, tick)
+#define KAD_BA_HOLDING(i) kad_ba_holding(i)
+#define KAD_BA_FORGET(why) kad_ba_forget(why)
+#define KAD_BA_DOWN(i) kad_ba_down(i)
+#define KAD_BA_INIT() kad_ba_init()
+#define KAD_BA_TEST(s, pos, hv, dn, pl) kad_ba_test(s, pos, hv, dn, pl)
+
 #define KAD_AN_TRY(i, k, pl, to, dnd, sol) kad_an_try(i, k, pl, to, dnd, sol)
 #define KAD_AN_INJECT(s, dnd, tick) kad_an_inject(s, dnd, tick)
 #define KAD_AN_INIT() kad_an_init()
@@ -661,6 +1017,13 @@ static void kad_an_init(void)
 #define KAD_AN_TRY(i, k, pl, to, dnd, sol) ((void)0)
 #define KAD_AN_INJECT(s, dnd, tick) ((void)0)
 #define KAD_AN_INIT() ((void)0)
+#define KAD_BA_TRY(s, i, h, hp, man, pl) ((void)0)
+#define KAD_BA_TICK(s, dnd, tick) ((void)0)
+#define KAD_BA_HOLDING(i) 0
+#define KAD_BA_FORGET(why) ((void)0)
+#define KAD_BA_DOWN(i) ((void)0)
+#define KAD_BA_INIT() ((void)0)
+#define KAD_BA_TEST(s, pos, hv, dn, pl) ((void)0)
 #endif
 
 /* ---------------------------------------------------------------- one pass */
@@ -668,6 +1031,7 @@ static void kad_an_init(void)
 static void kad_forget(const char *why)
 {
     int i; (void)why;
+    KAD_BA_FORGET(why);                                       /* BotAnim: a kneeling bot gets Stand back */
     for (i = 0; i < KLB_NREC; i++) if (kad_r[i].fast) kad_r[i].fast = 0;      /* [D+0x29] is the game's own to reset with D */
     memset(kad_r, 0, sizeof kad_r);
     memset(kad_m, 0, sizeof kad_m);
@@ -736,6 +1100,7 @@ static void kad_tick(int game_thread)
             /* ---- he goes down */
             int by = -1, h;
             k->down = 1; k->t_down = now; k->tick_down = tick; k->by = -1; memset(k->hm, 0, sizeof k->hm); k->sped = 0; k->mkn = 0; k->an_n = 0; k->an_logged = 0; k->an_tried = 0;
+            KAD_BA_DOWN(i);
             if (i != sn.human) for (h = 0; h < sn.n; h++) {       /* a human whose word rose in this pass put him down (ASSUMED reading of re\player_down.md 11.1) */
                 WORD w = 0;
                 if (!sn.r[h].used || (sn.r[h].flags & 1) || !kad_g.kwok[h] || !klh_rd(sn.score + 0x1b8 + 2 * h, &w, 2)) continue;
@@ -810,6 +1175,7 @@ static void kad_tick(int game_thread)
             if (hp < 0) { if (k->fast && pl && i == sn.human) { BYTE z = 0; klh_data((void *)(DWORD_PTR)(D + 0x29), &z, 1, "player: the fast get-up byte back (adrenaline)"); k->fast = 0; } continue; }
             k->hm[hp] += dt * 1000u / 1024u;
             if (hp == sn.human && i != sn.human && dnd[i]) KAD_AN_TRY(i, k, pl, pos[i], dnd[i], klh_rd32(dnd[i] + 4));     /* Anim: the human kneels and gives the shot */
+            if (hp != sn.human && (sn.r[hp].flags & 1)) KAD_BA_TRY(&sn, i, hp, pos[hp], pos[i], pl);                   /* BotAnim: an AI heister kneels and gives it */
             if (kad.log >= 2 && now >= kad_g.nextlog) { kad_g.nextlog = now + 1000; klog("adren: record %d is helped by record %d (%s), %.1f m away, %lu ms so far", i, hp, hp == sn.human ? "you" : "a bot", dist[hp] / KAD_M, (unsigned long)k->hm[hp]); }
             if (kad.dry) continue;
             if (i == sn.human) {
@@ -821,7 +1187,7 @@ static void kad_tick(int game_thread)
                     BYTE one = 1, cur = 0;
                     if (klh_rd(D + 0x29, &cur, 1) && !cur && klh_data((void *)(DWORD_PTR)(D + 0x29), &one, 1, "player: the fast get-up byte (adrenaline)")) { k->fast = 1; klog("adren: HumanFast - [D+0x29] = 1: the game's own fast get-up (speed 2.5) is asked while record %d stands by him", hp); }
                 }
-            } else if (dnd[i]) {
+            } else if (dnd[i] && !KAD_BA_HOLDING(i)) {             /* BotAnimHold: while a bot's shot runs on him the shot ends his lie, not the Rate */
                 DWORD cur = klh_rd32(dnd[i] + 0x14), done = 0, nw = kad_lie_step(cur, tick, dt, kad.rate, &done);
                 if (nw != cur && klh_data((void *)(DWORD_PTR)(dnd[i] + 0x14), &nw, 4, "an AI heister's down-not-dead: the tick he lies until (adrenaline)")) k->sped += done;
             }
@@ -829,6 +1195,8 @@ static void kad_tick(int game_thread)
         }
     }
     if (!kad.dry) KAD_AN_INJECT(&sn, dnd, tick);           /* Anim: the shot lands at AnimInjectFrame */
+    KAD_BA_TEST(&sn, pos, havepos, dn, pl);                /* BotAnimTest (a test key, off): the nearest bot plays it towards you */
+    KAD_BA_TICK(&sn, dnd, tick);                           /* BotAnim: the kneeling bots - their shot, their end */
     /* a crewmate that DIED (status 7) while a mark of ours stands: the mark is the game's from now on */
     for (i = 0; i < sn.n; i++) if (sn.r[i].used && sn.r[i].status == 7 && !kad_r[i].down)
         for (j = 0; j < KLB_NREC; j++) if (kad_m[j].on && !kad_m[j].keep) { kad_m[j].keep = 1; klog("adren: record %d died while the mark of record %d stands: the mark is the game's to keep now", i, j); }
@@ -875,6 +1243,7 @@ static void kad_init(void)
     kad.prompt = GetPrivateProfileIntA("Adrenaline", "Prompt", 1, klh_ini) != 0;
     kad.prange = kad_inif("PromptRange", "30", 2.0f, 60.0f);      /* 30 (was 12) since 2026-10-15: the owner never saw a downed crewmate prompt */
     KAD_AN_INIT();
+    KAD_BA_INIT();
     klog("adren: on%s; a downed crewmate gets up faster with a helper within %.1f m (a bot by a downed human: %.1f m; NeedUse=%d); AI lie x%.1f, your mash meter at least %.1f (HumanFast=%d); the helper gets %.0f %% of what the helped man carries (%s, Take=%d, ShareBot=%d); Mark=%d MarkFine=%d. Arcade on a level that is not stock, not for a police human; data writes only (re\\adrenaline.md)",
          kad.dry ? " (Dry=1: nothing is written)" : "", kad.range, kad.brange, kad.needuse, kad.rate, kad.meter, kad.humanfast, kad.share * 100.0f, kad.bank ? "banked for a human" : "carried", kad.take, kad.share_bot, kad.mark, kad.fine);
     klog("adren: Prompt=%d (the centre announcement says who is down near you, that you are helping, who is coming for you; PromptRange %.0f m)", kad.prompt, kad.prange);
