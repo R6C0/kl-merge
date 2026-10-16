@@ -500,9 +500,13 @@ def settings_keys(sc):
     return out
 
 
-def pools(leaves, taken, log=print):
+def pools(leaves, taken, log=print, spell=None):
     """POOLS against a build's .LOC ({lower key: sound id}) and the keys its settings already use.
-    -> [(name, who, on, [keys])], with Squad pools spelled out per voice and unusable keys left out (said aloud)."""
+    -> [(name, who, on, [keys])], with Squad pools spelled out per voice and unusable keys left out (said aloud).
+    spell: {lower key: the key as the .LOC spells it}. The game's look-up 0x828fa0 is CASE-SENSITIVE (LIVE, KLHook.log
+    2026-10-15: every lower-case squad key 'is not in this level's .LOC', every mixed-case key was said), so the Squad
+    keys, which come out of the lower-cased dict, are written in the .LOC's own spelling."""
+    spell = spell or {}
     out = []
     for name, who, on, keys in POOLS:
         if who == 'Squad':
@@ -511,7 +515,7 @@ def pools(leaves, taken, log=print):
                 for pat in keys:
                     pre = pat[:-1].lower()
                     ks += sorted(k for k, sid in leaves.items() if k.startswith(pre) and k.endswith(tail) and sid)[:SQUAD_MAX // len(keys) + 1]
-                out.append(('%s%s' % (name, voice[-1]), voice, on, ks[:SQUAD_MAX]))
+                out.append(('%s%s' % (name, voice[-1]), voice, on, [spell.get(k, k) for k in ks[:SQUAD_MAX]]))
             continue
         ok = []
         for k in keys:
@@ -637,8 +641,9 @@ def build(src, dst, name, adpcm='memory', str_path=None, blast=None, log=print, 
         added = n
     # ---- pools and pairs against the new English .LOC
     eng = next(n for l, n in kl_loc.members(zipfile.ZipFile(zp)).items() if l == 'English')
-    leaves = {p.lower(): kl_loc.fields(n)[2] or 0 for p, n in kl_loc.leaves(kl_loc.parse(locs[eng]))}
-    pl = pools(leaves, settings_keys(sc), log)
+    eng_leaves = list(kl_loc.leaves(kl_loc.parse(locs[eng])))
+    leaves = {p.lower(): kl_loc.fields(n)[2] or 0 for p, n in eng_leaves}
+    pl = pools(leaves, settings_keys(sc), log, spell={p.lower(): p for p, _n in eng_leaves})
     pairs = [p for p in PAIRS if leaves.get(p[1].lower()) and leaves.get(p[3].lower())]
     for p in PAIRS:
         if p not in pairs:
@@ -759,11 +764,14 @@ def check(folder, str_path=None, log=print, slot=SLOT):
     with zipfile.ZipFile(zp) as z:
         langs = {lang: kl_loc.parse(z.read(n)) for lang, n in kl_loc.members(z).items()}
     per = {lang: {p.lower(): kl_loc.fields(n)[2] or 0 for p, n in kl_loc.leaves(t)} for lang, t in langs.items() if t is not None}
+    exact = {p for p, _n in kl_loc.leaves(langs['English'])} if langs.get('English') is not None else None
     state, secs = collections.Counter(), {}
 
     def one(key, what):
         """A plain key the way the exe finds it; -> seconds of its clip or None"""
         k = key.lower()
+        if exact is not None and key not in exact and k in leaves:
+            fail('%s: %s is spelled otherwise in the .LOC - the game\'s look-up is case-sensitive (LIVE 2026-10-15)' % (what, key))
         st, rec = kl_voice._clip(S, recs, leaves, k, clips)
         state[st] += 1
         if rec is None:

@@ -72,6 +72,14 @@
  *   MinIn=30      the end place lies at least this far past the face where that is safe (0 = Dead Men exact, 0 .. 100)
  *   Camera=1      the vault camera's settings (0x798d00: 67, 40, 0.5) during the climb
  *   Snap=1        after a completed clip more than 25 from the end place, one unforced teleport there
+ *   Early=0       1 = probe on the frame of the press itself (rope, 2026-10-16). Dead Men probes one frame LATER; in the live logs
+ *                 (owner's Retomoto rounds 10-15) the presses at walls ended 'press ignored (action running)' on that next frame:
+ *                 Dog Days had started an action of its own for the same key (the line now names its class). Early=1 starts the
+ *                 climb before Dog Days can, and only when a ledge with a clip is found; otherwise the press stays Dog Days'.
+ *
+ * LEVEL CHECK (rope): once per player object the tick logs whether the level's .ANM has the climb slots ('fclimb: level: ...');
+ * the KL Merge maps get them from tools\kl_fa_climb.py apply (build\rope\<map>, with Dead Men's hand-on-wall / footstep foley
+ * in clip record +0x2C, carried into the level's bank by build\rope's rope_snd.py).
  */
 #ifndef KLFREECLIMB_C
 #define KLFREECLIMB_C
@@ -99,7 +107,8 @@
 #define KLFC_CLIPVAR     0x0059d550u          /* (player; u16 slot) -> clip record (draws one number of the game's generator) */
 #define KLFC_SYNC        0x004af5b0u          /* (player): the proxy is put at the node */
 
-static struct { int on, dry, log, key, needblock, minin, cam, snap; } klfc;
+static struct { int on, dry, log, key, needblock, minin, cam, snap, early; } klfc;
+static DWORD klfc_lvlP;                       /* the player object whose level was checked for the climb slots */
 static struct {                               /* the climb that runs (act != 0) */
     int active, startT, did560, reached, e5, e6, frames, animEndLogs;
     DWORD act, P, clip, anim, anim0; int animId; float from, to, h;
@@ -523,6 +532,7 @@ static void klfc_go(DWORD P, const struct klfc_probe *r, int T)
 
 /* ---------------------------------------------------------------- the tick */
 
+static char klfc_actname[96];
 static const char *klfc_precond(DWORD P, int T)
 {   /* Dead Men's 'may he climb now', as luvsic reads it on Dog Days' player; 0 = yes */
     DWORD sys, db, ph, cw, fl = 0; BYTE b = 0; int id, havok = 0;
@@ -530,8 +540,8 @@ static const char *klfc_precond(DWORD P, int T)
     if (klfc_c.active) return "climbing";
     if (klh_rd32(P + 0x6b0) != P + 0xdb0) return "movement table (MiniScene?)";
     id = klfc_movid(P);
-    if (id != 2 && id != 3) return "movement not Stand/BaseMove";
-    if (klfc_cur_act(P)) return "action running";                   /* the dispatcher's current action (his vt +0x388) */
+    if (id != 2 && id != 3) { _snprintf(klfc_actname, sizeof klfc_actname - 1, "movement %d", id); return "movement not Stand/BaseMove"; }
+    if (klfc_cur_act(P)) { klfc_rtti(klfc_cur_act(P), klfc_actname, sizeof klfc_actname); return "action running"; }                   /* the dispatcher's current action (his vt +0x388) */
     if (T - (int)klh_rd32(P + 0x2c48) < 512) return "< 0.5 s since the last action";
     if (klh_rd(P + 0xd29, &b, 1) && b) return "use action running";
     if (klh_rd(P + 0xed0, &fl, 4) && (fl & 0x80)) return "input blocked";
@@ -555,6 +565,12 @@ static int klfc_tick_body(void *unused)
     T = (int)klh_rd32(sys + 0x48);
     if (T == klfc_lastT) return 0;                                  /* paused */
     klfc_lastT = T;
+    if (P != klfc_lvlP) {
+        int lo = klq_slot(P, "/Movement/Climb/Up/Low"), me = klq_slot(P, "/Movement/Climb/Up/Medium"), hi = klq_slot(P, "/Movement/Climb/Up/High");
+        klfc_lvlP = P;
+        if (lo >= 0 && me >= 0 && hi >= 0) klog("fclimb: level: the climb clips are here (slots Low %d Medium %d High %d): hold W and press the key at a ledge 25 .. 220 high", lo, me, hi);
+        else klog("fclimb: level: NO climb clips in this level's .ANM (Low %d Medium %d High %d): presses here do nothing - install the build\\rope map", lo, me, hi);
+    }
     if (klfc_c.active) {
         if (klfc_c.P != P || klfc_cur_act(P) != klfc_c.act) { klog("fclimb: record dropped (the action is gone)"); memset(&klfc_c, 0, sizeof klfc_c); }
         return 0;
@@ -577,7 +593,7 @@ static int klfc_tick_body(void *unused)
         why = klfc_precond(P, T);
         if (!why && !Wk) why = "W not held";
         if (!why && klfc.needblock && !blocked) why = "not blocked";
-        if (why) { if (klfc.log) klog("fclimb: press ignored (%s)", why); return 0; }
+        if (why) { int nm = !strcmp(why, "action running") || !strcmp(why, "movement not Stand/BaseMove"); if (klfc.log) klog("fclimb: press ignored (%s%s%s)", why, nm ? ": " : "", nm ? klfc_actname : ""); return 0; }
         res = klfc_probe(P, &r);
         if (res <= 0) { if (klfc.log) klog("fclimb: RESULT %s%s h=%.1f at (%.1f,%.1f,%.1f)", res < 0 ? "called off: " : "none: ", r.why, r.h, r.Pf[0], r.Pf[1], r.Pf[2]); return 0; }
         clipOk = klfc_clip(P, &r, sprint);
@@ -595,7 +611,21 @@ static int klfc_tick_body(void *unused)
         why = klfc_precond(P, T);
         if (why) {
             if (klfc.log && (strcmp(why, "stock vault available") && strcmp(why, "action running") && strcmp(why, "use action running"))) klog("fclimb: press ignored (%s)", why);
-            else if (klfc.log >= 2) klog("fclimb: press left to Dog Days (%s)", why);
+            else if (klfc.log >= 2) klog("fclimb: press left to Dog Days (%s%s%s)", why, strcmp(why, "action running") ? "" : ": ", strcmp(why, "action running") ? "" : klfc_actname);
+            return 0;
+        }
+        if (klfc.early && Wk) {                                     /* Early=1: the probe now, before Dog Days acts on the same key */
+            res = klfc_probe(P, &r);
+            if (res > 0 && klfc_clip(P, &r, sprint)) {
+                klfc_min_in(&r);
+                if (klfc.log)
+                    klog("fclimb: RESULT OK (early) class=%s h=%.1f feet=(%.1f,%.1f,%.1f) Final=(%.1f,%.1f,%.1f) clip='%s' id=%d frames=%d%s",
+                         klfc_cls[r.cls].name, r.h, r.Pf[0], r.Pf[1], r.Pf[2], r.Final[0], r.Final[1], r.Final[2], r.clipName ? r.clipName : "-", r.id, r.frames,
+                         klfc.dry ? " - DRY: nothing started" : "");
+                if (!klfc.dry) klfc_go(P, &r, T);
+                return 0;
+            }
+            if (klfc.log) klog("fclimb: RESULT (early) %s%s h=%.1f at (%.1f,%.1f,%.1f) - the press is left to Dog Days", res < 0 ? "called off: " : res ? "no clip" : "none: ", res ? (res < 0 ? r.why : "") : r.why, r.h, r.Pf[0], r.Pf[1], r.Pf[2]);
             return 0;
         }
         klfc_armed = 1;
@@ -637,6 +667,8 @@ static void klfc_init(void)
     klfc.minin = (int)GetPrivateProfileIntA("Climb", "MinIn", 30, klh_ini); if (klfc.minin < 0) klfc.minin = 0; if (klfc.minin > 100) klfc.minin = 100;
     klfc.cam = GetPrivateProfileIntA("Climb", "Camera", 1, klh_ini) != 0;
     klfc.snap = GetPrivateProfileIntA("Climb", "Snap", 1, klh_ini) != 0;
+    klfc.early = GetPrivateProfileIntA("Climb", "Early", 0, klh_ini) != 0;
+    klfc_lvlP = 0;
     u = GetModuleHandleA("user32.dll");                             /* the hook does not link user32 (klnudge.c) */
     if (!u) u = LoadLibraryA("user32.dll");
     if (u) {
@@ -653,9 +685,9 @@ static void klfc_init(void)
     }
 #endif
     if (!klfc_key || !klfc_fg || !klfc_wtp) { klfc.on = 0; klog("fclimb: user32's GetAsyncKeyState / GetForegroundWindow / GetWindowThreadProcessId not found: OFF"); return; }
-    klog("fclimb: on; Dry=%d Log=%d Key=0x%02x NeedBlock=%d MinIn=%d Camera=%d Snap=%d; Dead Men's free climb (luvsic's ANP climb.inc): hold W and press the key at a ledge 25 .. 220 high; "
+    klog("fclimb: on; Dry=%d Log=%d Key=0x%02x NeedBlock=%d MinIn=%d Camera=%d Snap=%d Early=%d; Dead Men's free climb (luvsic's ANP climb.inc): hold W and press the key at a ledge 25 .. 220 high; "
          "plays only where the level's .ANM has /Movement/Climb/Up/* (no stock Dog Days level has them)%s",
-         klfc.dry, klfc.log, klfc.key, klfc.needblock, klfc.minin, klfc.cam, klfc.snap, klfc.dry ? " - DRY RUN: probes and logs, starts nothing" : "");
+         klfc.dry, klfc.log, klfc.key, klfc.needblock, klfc.minin, klfc.cam, klfc.snap, klfc.early, klfc.dry ? " - DRY RUN: probes and logs, starts nothing" : "");
 }
 
 #endif /* KLFREECLIMB_C */
