@@ -378,7 +378,7 @@ def guns_window(nl):
 MATCH = False
 MATCH_WINDOW = 'KLMatch'
 MATCH_TITLE = 'Match options'
-MATCH_GUNS = ['Level default'] + ['Shop gun %d' % k for k in range(1, 37)]      # KLMGun 1..KPM_GUNS = a shop row (shop_plan.md); no names in the exe (GUESS: row numbers)
+MATCH_GUNS = ['Level default'] + ['M-77B', 'M-77B SIL', 'M9 BERETTA', 'M9 BERETTA SIL', 'POLICE REVOLVER', 'TT-33', 'SIG 226', 'SW MP45', 'DESERT EAGLE', 'COLT COBRA', 'TAURUS JUDGE', 'HAWK SAWN-OFF', 'REMINGTON 870', 'HAWK POLICE', 'SPAS-12', 'TPS', 'HAWK BULLPUP', 'SP89 SIL', 'MAC-10', 'MAC-10 SIL', 'MPI 69', 'SA61', 'TYPE 05', 'TYPE 05 SIL', 'TYPE 79', 'UMP', 'UMP SIL', 'UMP SBR', 'ZASTAVA M85', 'AK-47', 'AK-74', 'TYPE 88', 'TYPE 88 SCOPE', 'FN SCAR', 'TYPE 95', 'TYPE 95 SCOPE']      # KLMGun 1..36 = shop row 0..35 (tools/kl_hud_shop.py ROWS; the stock names differ, these are the real guns)
 MATCH_PLAY = ['Off', 'In order', 'Random']
 MATCH_MAPS = []                                          # names from maps.ini (main() fills it)
 

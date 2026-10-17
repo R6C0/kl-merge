@@ -6,7 +6,7 @@
  * WHAT IS HERE (first, most feasible step - no network, no game call, no code byte of kl2.exe):
  *   1. Three option names the game does not have, stored in this DLL and in KLHook.ini [Match] (the options object is deleted at every
  *      scene change, the values must outlive it - klchar.c section 1):
- *          KLMGun   0 = the level's own start gun, 1..KPM_GUNS = a shop item   (VALUE ONLY: nothing equips it yet, see NOT DONE)
+ *          KLMGun   0 = the level's own start gun, 1..KPM_GUNS = a shop item   (equipped at the round start by klpm_gun.c; Arcade, local player)
  *          KLMVote  0 = no preference, 1..N = the Nth map of maps.ini         (value only; kpm_tally() turns votes into a map)
  *          KLMPlay  0 = off, 1 = playlist in order, 2 = random without repeats (value only; kpm_next() is the cursor)
  *      The names start with KLM, not KLGun: klgun.c answers anything that starts with 'KLGun' (KLGunStart / KLGunSet).
@@ -21,7 +21,7 @@
  *      with the lobby id, so a restart does not re-roll) and kpm_next() (playlist cursor, sequence or random without repeats).
  *
  * NOT DONE (each is a later step of the build order, re\pm_options.md 6):
- *   - equipping KLMGun: the equip call behind the shop buy (0x7558ce) is not read (B0); this file does not call anything;
+ *   - KLMGun is equipped by klpm_gun.c writing crew-record bytes 3/4 (static reading, NOT run live; re\pm_options.md 8.1a); online unknown;
  *   - applying a tally / the cursor to Heist_SelectedLevel or MP_SelectedLevel, and every Steam lobby part (B2 .. B5);
  *   - KLMVote's upper bound follows the loaded maps.ini, the XML must have as many entries (GUESS: nobody checks the mismatch).
  *
@@ -199,6 +199,20 @@ static int kpm_bundle_maps(const char *file, const char *name, char *out, int ca
     return 0;
 }
 
+/* ---------------------------------------------------------------- B0: the starting gun, pure parts (the game half is klpm_gun.c) */
+
+/* KLMGun value 1..KPM_GUNS = shop row (value-1). Which byte of the crew record the round-start loadout (0x42bc80 -> 0x410710) reads it
+ * from: byte 3 = the pistol slot (default row 0, M-77B), byte 4 = the rifle slot (default row 28, Zastava). Rows 0..10 are the 11 pistols
+ * of the shop table (kl_hud_shop.py ROWS), 11.. the shotguns / SMGs / rifles. GUESS: the loadout accepts any row in either slot
+ * (0x538ec0 takes a row), so this only picks the slot that keeps the other gun. Returns 3 or 4; 0 = not a gun, or the stock default
+ * of that slot (nothing to write). */
+static int kpm_gun_slot(int value)
+{
+    int row = value - 1;
+    if (row < 0 || row >= KPM_GUNS || row == 0 || row == 28) return 0;
+    return row <= 10 ? 3 : 4;
+}
+
 static int kpm_arc_on, kpm_ini_mode, kpm_list[KPM_MAXMAP], kpm_nlist;
 
 /* ---------------------------------------------------------------- the options (hook side) */
@@ -269,7 +283,7 @@ static void kpm_init(void)
         kpm_nlist = t[0] ? kpm_parse_list(t, kpm_list, KPM_MAXMAP) : 0;
         if (!kpm_nlist) for (i = 0; i < kpm_nmap; i++) kpm_list[kpm_nlist++] = i;
     }
-    klog("match: on; %d maps in maps.ini (%s); Gun=%ld Vote=%ld Play=%ld Cursor=%d Seed=%u; Arcade playlist %s: %d map(s), ini mode %d; the gun and the vote are values only", kpm_nmap, file, kpm_v[0], kpm_v[1], kpm_v[2], kpm_cursor, kpm_seed, kpm_arc_on ? "on" : "off", kpm_nlist, kpm_ini_mode);
+    klog("match: on; %d maps in maps.ini (%s); Gun=%ld Vote=%ld Play=%ld Cursor=%d Seed=%u; Arcade playlist %s: %d map(s), ini mode %d; the vote is a value only", kpm_nmap, file, kpm_v[0], kpm_v[1], kpm_v[2], kpm_cursor, kpm_seed, kpm_arc_on ? "on" : "off", kpm_nlist, kpm_ini_mode);
 }
 
 #endif /* KLPM_C */

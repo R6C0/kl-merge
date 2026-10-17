@@ -26,6 +26,10 @@ int main(void)
     { int t[] = { 1, 3 }, k, hit[3] = { 0, 0, 0 };            /* a tie 1 vs 3 is drawn among those two only, both reachable */
       for (k = 0; k < 64; k++) { int w = kpm_tally(t, 2, 3, (unsigned)k); CHECK(w == 0 || w == 2); hit[w]++; }
       CHECK(hit[0] > 0 && hit[2] > 0 && hit[1] == 0); }
+    /* starting gun: slot choice */
+    CHECK(kpm_gun_slot(0) == 0 && kpm_gun_slot(-1) == 0 && kpm_gun_slot(37) == 0);     /* no gun / out of range */
+    CHECK(kpm_gun_slot(1) == 0 && kpm_gun_slot(29) == 0);                              /* the stock defaults (row 0, row 28) */
+    CHECK(kpm_gun_slot(2) == 3 && kpm_gun_slot(11) == 3 && kpm_gun_slot(12) == 4 && kpm_gun_slot(36) == 4);
     /* playlist */
     for (i = 0; i < 12; i++) CHECK(kpm_next(1, list, 5, i, 3) == i % 5);
     CHECK(kpm_next(0, list, 5, 0, 3) == -1 && kpm_next(2, list, 0, 0, 3) == -1 && kpm_next(1, list, 5, -1, 3) == -1);

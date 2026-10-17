@@ -368,3 +368,19 @@ entry (maps.ini `Slot=`, page 1). All log lines start `playlist:`.
    ... written`, and 4 s later `Heist_SelectedLevel reads N`.
 4. Arcade -> the Dead Men maps page: the cursor should stand on the next map. Accept: `expansion: slot F0n: menu page P from now on -> <next id>`.
    Repeat. Report: did the entry move (guess 1), did a different page than the map's also load the right map.
+
+## 8.1a STARTING GUN: the spawn-time reader found (2026-10-18, static reading, NOT run live)
+- Reader of crew-record bytes 3/4/5: 0x42bc80 (call at 0x42bd3c) and 0x74abc0 (call at 0x74ac22). Both take entry 0 of the FA rules' crew table
+  ([[0x168e9e4]+0x54]+0x348, stride 0x7c), follow dword 0 to the client block and call 0x410710(weapons, player, block[3], block[4], block[5])
+  = (pistol-slot row, rifle-slot row, suit row). Defaults: row 0 (M-77B) and row 28 (Zastava).
+- No money check on that path; the shop buy (0x8ea990 / 0x55d3e0) prices, debits and then writes the same bytes. So a data write of the row
+  before the round starts equips with no money taken.
+- Implemented: klhook/klpm_gun.c (`kpm_gun_tick`, behind `[Match] Enable=1`, KLMGun 1..36). Arcade only, offline; refuses with a log line when the
+  weapon pool lacks a free object of the item (int3 at 0x538f02 otherwise); writes once per value, restores the old byte when KLMGun goes back to 0.
+  Slot: rows 0..10 are pistols (byte 3), rows 11..35 byte 4 (`kpm_gun_slot`); rows 0 and 28 are the stock defaults (nothing written).
+- GUESSes: byte 0 of the client block is 0 for the local player; the block exists before the round starts; any row works in either slot; online
+  (other rules vtables, unknown local record index) untouched.
+- Overlay Gun row now shows the real names (mkoverlay.MATCH_GUNS = kl_hud_shop.ROWS).
+- Test steps: set `[Match] Enable=1`, `Gun=<n>` in KLHook.ini, start an Arcade round on a stock map; KLHook.log should show
+  `match: gun: shop row N ... written to crew-record byte S` before the round, and the gun in hand with money unchanged. If it says "round already
+  runs" the first tick came after the loadout (timing GUESS wrong): the next round gets it.
