@@ -75,7 +75,7 @@ def report(recs):
     fr = [(r['kv'].get('f'), r['T']) for r in cams if r['T'] is not None and 'f' in r['kv']]
     if len(fr) > 1 and fr[-1][1] > fr[0][1]:
         L.append('  frame rate estimate (game frames per second): %.1f' % ((fr[-1][0] - fr[0][0]) / (fr[-1][1] - fr[0][1])))
-    hit = sorted((r['kv'].get('rdt', 0), r) for r in evs if r['body'].startswith('HITCH'))
+    hit = sorted(((r['kv'].get('rdt', 0), r) for r in evs if r['body'].startswith('HITCH')), key=lambda x: x[0])
     L.append('  HITCH events (frame time > 0.1 s): %d; worst: %s' % (len(hit), ', '.join('%.2f s at %s' % (h, r['stamp']) for h, r in hit[-10:][::-1]) or 'none'))
     gaps = [r for r in evs if r['body'].startswith('GAP')]
     L.append('  GAP events (wall time between ticks > 0.25 s): %d%s' % (len(gaps), ' (worst %.2f s)' % max(r['kv'].get('wall', 0) for r in gaps) if gaps else ''))
