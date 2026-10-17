@@ -80,7 +80,7 @@ def stock_sizes(level):
     return out
 
 
-def build(level, root=OUT, plates=PLATES, guns=True, start=1, sets=1, log=print):
+def build(level, root=OUT, plates=PLATES, guns=True, start=1, sets=1, log=print, hud=True):
     """One stock level -> <root>/<level> (wardrobe + plates + gun looks). -> report dict; ['ok']."""
     work, final = os.path.join(root, '_work', level), os.path.join(root, level)
     for d in (work, final):
@@ -112,6 +112,15 @@ def build(level, root=OUT, plates=PLATES, guns=True, start=1, sets=1, log=print)
         if rc:
             log('  %s guns check: exit %d  %s' % (level, rc, out[-1][:200] if out else ''))
             return rep
+    if hud:      # the owner's HUD look baked into the archive (2026-10-18): the hook's weapon dial / round dials / crew plates need these pictures (klhud_weapon.c: 'the level has no picture 113 / 114')
+        h = os.path.join(work, '3_hud')
+        rc, out = run(['kl_hud.py', 'all', last, h, '--look', 'deadmen'], logf)
+        tail = [l for l in out if l.startswith('check:')][-1:]
+        rep['steps'].append({'step': 'hud', 'exit': rc, 'last': tail})
+        log('  %s hud: exit %d  %s' % (level, rc, ' | '.join(tail)))
+        if rc or not tail or 'PASS' not in tail[0]:
+            return rep
+        last = h
     shutil.move(last, final)
     rep['sizes'] = sizes(final, level)
     rep['side'] = sorted(f for f in os.listdir(final) if f.lower().endswith(('.ini', '.json')))
@@ -365,7 +374,7 @@ def testslot(level, root, dest, slot='F01', log=print):
 def main():
     a = [x for x in sys.argv[1:] if not x.startswith('--')]
     opt = {x.split('=')[0]: (x.split('=') + [''])[1] for x in sys.argv[1:] if x.startswith('--')}
-    kw = dict(plates=opt.get('--plates', PLATES), guns='--no-guns' not in opt, start=int(opt.get('--start', 1)), sets=int(opt.get('--set', 1)))
+    kw = dict(plates=opt.get('--plates', PLATES), guns='--no-guns' not in opt, hud='--no-hud' not in opt, start=int(opt.get('--start', 1)), sets=int(opt.get('--set', 1)))
     if a[:1] == ['build'] and len(a) >= 2:
         r = build(a[1], a[2] if len(a) > 2 else OUT, **kw)
         print('RESULT: %s' % ('PASS' if r['ok'] else 'FAIL'))

@@ -1147,9 +1147,9 @@ static void klcam_init(void)
     c->utarget = klcam_ini_i("UnstickTarget", 0) != 0;
     c->recover = klcam_ini_i("Recover", 0) != 0;
     c->recoverspeed = klcam_ini_f("RecoverSpeed", 350.0f, 50.0f, 5000.0f);
-    c->shouldercover = klcam_ini_i("ShoulderCover", 1) != 0;
+    c->shouldercover = klcam_ini_i("ShoulderCover", 0) != 0;
     c->scoronline = klcam_ini_i("ShoulderCoverOnline", 0) != 0;
-    c->leanfollow = klcam_ini_i("LeanFollow", 1) != 0;
+    c->leanfollow = klcam_ini_i("LeanFollow", 0) != 0;
     c->leangate = klcam_ini_i("LeanGate", 1) != 0;
     c->cine = klcam_ini_i("Cine", 1) != 0;
     c->cineaim = c->cine && klcam_ini_i("CineAim", 1) != 0;

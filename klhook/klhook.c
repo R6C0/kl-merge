@@ -644,6 +644,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klshoulder.c"
 #include "klcam.c"                                      /* klcam.c: the camera rework ([Camera], default on; Log off) */
 #include "klheliprobe.c"                                  /* klheliprobe.c: read-only chopper probe ([Heli] Probe, default 0); AFTER klescort.c */
+#include "klcensor.c"                                    /* klcensor.c: [Censor] a killing head shot blows the head off (heap data only); AFTER klheliprobe.c */
 #include "klvis.c"
 #include "kltex.c"                                        /* kltex.c: [Graphics] Textures - anisotropic filtering (default on) */
 #include "klnet.c"
@@ -770,7 +771,8 @@ static void klh_tick(int game_thread)
     klo_tick(game_thread);                            /* klshoulder.c: log only */
     klcam_tick(game_thread);                          /* klcam.c: the camera rework (game thread, gameplay site only) */
     klhp_tick(game_thread);                           /* klheliprobe.c: read-only chopper probe (returns at once unless [Heli] Probe) */
-    klvis_tick();                                     /* klvis.c: log only (the vision grid and its record 0xff) */
+    klcn_tick(game_thread);                           /* klcensor.c: pre-arm the head-hit sum so a killing head shot censors */
+    klvis_tick();                                  /* klvis.c: log only (the vision grid and its record 0xff) */
     klnet_tick(game_thread);                          /* klnet.c: multiplayer log / update numbers (off unless [Net]) */
     klp_tick(game_thread);                            /* klfed.c: come back as a fed (data writes only) */
     klfk_tick(game_thread);                           /* klfedkit.c: the fed can hunt, body, AK (with [Fed] Player=1; Kit=0 = off) */
@@ -1115,6 +1117,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klo_init();
     klcam_init();
     klhp_init();                                      /* klheliprobe.c: reads [Heli] Probe, installs nothing */
+    klcn_init();                                      /* klcensor.c: reads [Censor] */
     klvis_init();
     klnet_init();
     klp_init();
