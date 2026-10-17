@@ -2997,3 +2997,16 @@ Build: <work>/build/vault_owner_1018/blow/DM03A (door blow + 14 civilians); door
 Live test: stand in the ante-room, at the beat's end +6 s the door, its hinge arm and collision are gone together with the blast sound and fire; walk through the opening; round 2: door back and solid; civilians flee.
 
 Review fix (2026-10-18): vault_blow wrote bank_opts.json through opts_now(), which reset plaza_outside / hall_up to false (apply_opts does not restore them); it now merges vault_blow into the existing file. The two blow folders' bank_opts.json were corrected by hand (plaza_outside, hall_up true as in the base). Full check() (including the van part, F07 slot) passes: bad = [] on vault_owner_1018/blow and vault_door_1018.
+
+## 2026-10-18 handover: vault civilians got a guard body (offline, NOT run in the game)
+Finding: the 14 `--model auto` civilians of build/vault_owner_1018/blow wear chunk 62596 = the model of 19 of the build's guards (census guard_models {62596: 19, 63017: 10}), i.e. a guard body: looks wrong. Rebuilt with Dog Days' own civilian: `kl_fa_civs.py build vault_door_1018/DM03A F07 vault_owner_1018/blow_f07/DM03A 14 --model F07 --seed 18` (same 14 places, same flee points; vault_door_1018 already holds the vault-blow door). F07 civilian root chunk 65906, 55 chunks appended, .prm 72,157,920 -> 72,725,184 (+567,264; 72.7 MB, under the 90 MB cap).
+Post-passes on the new folder: civs check 0 FAIL; debug/check_passes.py 0 failed (known Shards_Group_A WARN); `kl_fa_bank.py vault-blow` = "nothing to change" (idempotent, zip identical); kl_fa_bank.check PASS (run with Built/ESC.Level patched to slot F07, as the bank CLI hardcodes F01). No tool changed. Only civs.json, graft.txt, MANIFEST differ among side files; other side files (preflight, audit, dyn) are the base's.
+GUESS: the F07 civilian fits the vault's skeleton/animation set (stock F07 body on a level that joins F07 + M03_A; same as the club); trigger half extents; rout-only fleeing; 100+14 actors is past the 99 proven live (limit 147 allowed).
+Build: <work>/build/vault_owner_1018/blow_f07/DM03A, F07_Main.zip md5 ede8d4d9df4f01ebdc4d8adb704d81a7. Supersedes vault_owner_1018/blow. Install the WHOLE folder.
+
+## 2026-10-18 vault post-passes (blow_f07 -> blow_f07_post)
+Folder `build/vault_owner_1018/blow_f07_post/DM03A` (whole folder; F07_Main.zip md5 c8139e64b33a903d0b07b73f8420c9d5). Offline, not run in game.
+1. NEW tools/kl_fa_dmsettings.py (separate step; no builder changed): settings fields 66-71 -> `Multiplayer/Shoot_Off_Money/FA_ShootOffMoney_01`, field 171 -> `Multiplayer/GameEnds/FA_AllDead`; only the .prp changes (round trip proven byte-identical first). 66-71 are flag-1 fields: kl_dmlines makes the K_C1..K_C9 aliases. GUESS: 171 (police All_Dead) takes the criminal-side Dead Men line as asked.
+2. kl_hud.py all --look deadmen: check PASS; extras 111-118,123-126,185,190 + markers 170/171 written (181 is stock UI_White).
+3. kl_dmlines.py: 2 keys grafted, problems none. It writes only zip/WHD/WAV/_LS.SND/KLTalk*.ini, so the other files (civs.json, *_LS_<lang>.*, ...) were copied from the step-2 folder.
+4. Checks: kl_fa_civs check F07: 14 civilians 0 FAIL 1 NOTE (no room sets); debug/check_passes.py 0 failed (known Shards_Group_A WARN); kl_fa_bank.check (SLOT patched to F07, it hardcodes F01): no problems.
