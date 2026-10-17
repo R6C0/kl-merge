@@ -34,6 +34,9 @@ LIMITS (known)
   - Which item uses which picture is taken from NAMES: the picture '#Rifle_FN_SCAR' is the SCAR item's. luvsic's
     DD_ITEM_SLOT says the same for every gun used here; we did not read the exe's table [0x154db68] ourselves (GUESS
     that it is that table for the six look guns, it is their enum names).
+  - The grenade pictures taken from Dead Men (smoke, tear gas, incendiary) keep Dead Men's BLACK markings (colour 0 in
+    the holes of the shape), so they are not pure white; the frag grenade and every gun are white.
+  - install_guns.ps1 -Undo only restores a zip that is still the staged one (a rebuilt map is left alone).
   - The result is judged by the contact sheet only; how the dial's tint looks on it in the game is not seen.
 
 CREDIT: luvsic, a-newer-perspective (github.com/luvsicccc/a-newer-perspective, tools/dmhud.py): tex_info, decode and
