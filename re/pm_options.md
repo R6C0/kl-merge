@@ -304,3 +304,8 @@ the 4353 the current ini gives, i.e. 3 more than the 4350 of the v27c note). Bud
 - `klhook/maps.ini.sample`: 10 expansion maps (pages 2 and 3 of the Arcade list), the 9 stock slots DD01..DD09, 2 bundles.
 - B2 (Arcade playlist) is NOT built: choosing the next map needs a write to the session's selected-level option or a slot rewrite at the
   moment the results screen ends, neither read; stops at B1 as the task allows.
+
+### 8.6 Review of 34b8ba8d (2026-10-18)
+- Staged overlay re-built: the live ini's page 3 names `LevelPicture_M06` / `LevelPicture_FA01`, which the installed `Overlay\Scenes\kaneandlynch.zip` does not hold (only DM05A); a missing Graphic is a boot risk. Overlay now built with those two `Picture=` lines left out (stock L02 / L03 pictures), md5 f9e058ac78340e76844a754998861794. Table estimate unchanged (4373 tags, live 5088 of 5096, 8 free).
+- install_pm.ps1: a second run no longer overwrites `dinput8.dll.before-pm1018` with the already-installed dll.
+- Off by default confirmed: no [Match] Enable=1 -> mkoverlay builds no page, klpm answers -1. Checked: the KLMatch XML follows the Mod settings pattern (names unique, KLFocus guard, 4 rows, entry counts = option ranges).

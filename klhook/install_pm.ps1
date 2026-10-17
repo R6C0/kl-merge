@@ -31,7 +31,7 @@ if ($Undo) {
   }
   exit 0
 }
-$want = @{ $ovl = '7419c574c5bc4ee7171e350ebb8e628a'; $maps = '' }
+$want = @{ $ovl = 'f9e058ac78340e76844a754998861794'; $maps = '' }
 foreach ($t in $plan.Keys) {
   $s = $plan[$t]
   if (-not (Test-Path -LiteralPath $s)) { "ABORT: missing $s"; exit 4 }
@@ -50,7 +50,6 @@ foreach ($t in @($plan.Keys) + $ini) {
 }
 foreach ($t in $plan.Keys) {
   $s = $plan[$t]
-  if ($t -eq $dll) { Copy-Item -LiteralPath $dll "$dll$tag" -ErrorAction SilentlyContinue }
   Copy-Item -LiteralPath $s $t -Force
   if ((md5 $t) -ne (md5 $s)) { "copy FAILED md5 check: $t (run with -Undo)"; exit 5 }
 }
