@@ -17,6 +17,9 @@ Spec, the measurements and every table: re/map_ai.md.
     python kl_map_ai.py apply <build folder> <out folder> [options]     the step: a FINISHED build (kl_maps ready)
                                                                        -> a copy with the AI changes. Only the .prp
                                                                        member of the archive changes
+    python kl_map_ai.py retomoto-style <build> <out>                    any finished build (no plan needed): rows by
+                                                                       weapon class + fall-back chains + spawnfix --auto
+                                                                       (run order: apply, then spawnfix). NOT RUN IN THE GAME
     python kl_map_ai.py check <before> <after>                          the before / after table of one map
     python kl_map_ai.py all <z_maps folder> <out folder> [M02 ...] [options]   apply + check + kl_maps.audit on M01 M02
                                                                        M03 M06 (or the ones named)
@@ -122,7 +125,7 @@ THE LIST RULES (after re/map_tune_review.md, 2026-10-10; faults() must be empty 
   F3  ... nor anything inside another squad that comes by car: its orders belong to its drive's end list
   order_faults() walks the written level, not the plan, so a by-passed exit node or a timer one step away counts.
 """
-import collections, json, math, os, random, shutil, struct, sys, zipfile
+import collections, json, math, os, random, re, shutil, struct, sys, zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -803,18 +806,97 @@ def escape(sc, plan, log=print):
     return ['vehicle called (monitor field %d) -> %s' % (MON_CALLED, ', '.join(names))]
 
 
-def apply(src, dst, parts=('strength', 'waves', 'chains', 'escape'), presets=False, log=print, car_exit=False):
+GATED = ('Wave', 'Reinforcement', 'Teargas', 'Garrison', 'Staged', 'COOP', 'merc_bot', 'bank_waves', 'Escort', 'Gate')
+RUSH_ROUTS = ('HuntBehaviour', 'FlankingBehaviour', 'DefendBehaviour')
+
+
+def _natkey(p):
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', p)]
+
+
+def autoplan(sc):
+    """A plan for a map nobody wrote one for (The Vault, or any finished build). Three parts, all from the build:
+      chains   squads of one parent group in natural path order (Squad_2 before Squad_10); when one is wiped out
+               its list names the NEIGHBOUR'S behaviour rout (Hunt, else Flanking, else Defend: the rout's own
+               children, as the hand plans do), not the squad node, so the neighbour moves. Squads that already
+               have a list keep it; vehicle squads, Allies and gated spawns (GATED) are left out.
+      arms     a squad whose path says SWAT/Assault gets rifles (kl_arms 'rifle'). GUESS: Retomoto's FORCE gave the
+               rushers pistols and the holders SMG / rifle by role; the path names are the only role there is.
+      unleash  an eStayBack squad of mostly pistol carriers that owns a Hunt or Flanking rout becomes eUnleashed
+               (stock has 3..13 a level; Retomoto unleashes its rushers). GUESS: pistol men are the rushers.
+    GUESS: path order is neighbour order (the Dead Men authors numbered squads along the route)."""
+    by = collections.OrderedDict()
+    arms, unleash = {}, []
+    ff = kl_arms.fields()
+    for k in range(1, len(sc.nodes)):
+        cs = [n for _i, n, _v in ctrls(sc, k)]
+        if 'ZSquadScript' not in cs or any('Vehicle' in n for n in cs):
+            continue
+        men = [c for c in range(k + 1, sc.end[k]) if sc.cls(c) == 'ZFFActor' and any(n == 'ZSoldier' for _i, n, _v in ctrls(sc, c))]
+        if not men or any(sc.cls(c) == 'ZFFActor' and kl_fa.node_values(sc, c)[J.labels('dd', 'ZFFActor').index('ZFFActor[0]')] == 'Ally' for c in men):
+            continue
+        if any(w.lower() in sc.path[k].lower() for w in GATED):
+            continue      # timed / gated spawns carry their own wiring
+        _i, _n, v = ctrl(sc, k, 'ZSquadScript')
+        routs = {}
+        for c in range(k + 1, sc.end[k]):
+            leaf = sc.path[c].rsplit(chr(92), 1)[-1]
+            for r in RUSH_ROUTS:
+                if r in leaf and r not in routs:
+                    routs[r] = sc.path[c]
+        wc = collections.Counter(weapon_class(kl_fa.node_values(sc, c)[ff[0]].rsplit(chr(92), 1)[-1]) for c in men)
+        low = sc.path[k].lower()
+        if 'swat' in low or 'assault' in low:
+            arms[sc.path[k]] = 'rifle'
+        if v[0] == 'eStayBack' and (routs.get('HuntBehaviour') or routs.get('FlankingBehaviour'))                 and wc.get('pistol', 0) * 2 > len(men):
+            unleash.append(sc.path[k])
+        if v[SQUAD_DEAD]:
+            continue
+        target = routs.get('HuntBehaviour') or routs.get('FlankingBehaviour') or routs.get('DefendBehaviour')
+        if target:
+            by.setdefault(sc.path[k].rsplit(chr(92), 1)[0], []).append((sc.path[k], target))
+    chain = {}
+    for _g, sq in by.items():
+        sq.sort(key=lambda t: _natkey(t[0]))
+        for (a, _ta), (_b, tb) in zip(sq, sq[1:]):
+            chain[a] = [tb]
+    return {'what': 'auto plan: %d chains, %d SWAT squads to rifles, %d unleashed' % (len(chain), len(arms), len(unleash)),
+            'arms': arms, 'unleash': unleash, 'timers': {}, 'counters': {}, 'start': None, 'chains': chain, 'escape': []}
+
+
+def retomoto_style(src, dst, log=print):
+    """Retomoto's police pattern on any finished build: soldier rows by weapon class (floors), the auto plan's
+    arms / unleash / fall-back chains, then spawnfix --auto (squads in the world from the load, men posted at
+    cover points). Refuses dst == src and a dst that already holds something; the stage-1 folder is removed."""
+    dst = dst.rstrip('/' + chr(92))
+    if os.path.abspath(dst) == os.path.abspath(src.rstrip('/' + chr(92))):
+        raise ValueError('the output folder is the source')
+    if os.path.isdir(dst) and os.listdir(dst):
+        raise ValueError('%s exists and is not empty: not overwritten' % dst)
+    tmp = dst + '_stage1'
+    if os.path.isdir(tmp):
+        raise ValueError('%s is left from an earlier run: delete it first' % tmp)
+    try:
+        rep = apply(src, tmp, parts=('strength', 'waves', 'chains'), log=log, auto=True)
+        sf = spawnfix(tmp, dst, {'auto': True, 'posts': True, 'asleep': (), 'active': None}, log)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return rep, sf
+
+
+def apply(src, dst, parts=('strength', 'waves', 'chains', 'escape'), presets=False, log=print, car_exit=False, auto=False):
     """A finished build folder -> folder dst: the archive with a new .prp member, every other member and every
     file beside it copied. -> report dict (also written to <dst>/map_ai.json and map_ai.txt)."""
     import kl_graft
     zp = archive_of(src)
-    m_name = map_of(src)
-    if m_name not in PLANS:
+    m_name = map_of(src) or ('auto' if auto else None)
+    if m_name not in PLANS and not auto:
         raise ValueError('%s: no plan for %r (plans: %s)' % (src, m_name, ', '.join(PLANS)))
     if os.path.abspath(dst) == os.path.abspath(os.path.dirname(zp)):
         raise ValueError('the output folder is the build\'s own')
-    plan = PLANS[m_name]
     order, files, ext, sc, _live, _hud = kl_graft.open_built(zp)
+    # auto: the hand plans are the campaign-FA maps' own (a Vault is M03_A, not M03_FA_A)
+    plan = autoplan(sc) if auto else PLANS[m_name]
     data, bad, _paths, _names = J.check(sc, log=lambda *_a: None)
     if data != files[ext['.prp']] or bad:
         raise ValueError('the build\'s .prp does not re-serialise byte for byte (%d misfits): not changed' % len(bad))
@@ -823,11 +905,11 @@ def apply(src, dst, parts=('strength', 'waves', 'chains', 'escape'), presets=Fal
         lines.append(str(s)); log(s)
     say('kl_map_ai: %s (%s): %s' % (m_name, zp, plan['what']))
     rep = collections.OrderedDict(map=m_name, source=zp, parts=list(parts), presets=presets, car_exit=car_exit, health_scale=HEALTH_SCALE,
-                                  plan=plan_id(m_name))
+                                  plan='auto' if auto else plan_id(m_name))
     if 'strength' in parts:
         rep['strength'] = strength(sc, files[ext['.ANM']], plan, say, presets)
     if 'waves' in parts:
-        rep['cars'] = cars(sc, m_name, car_exit, say)
+        rep['cars'] = cars(sc, m_name, car_exit, say) if m_name in PLANS else []
         rep['waves'] = waves(sc, plan, say)
     if 'chains' in parts:
         rep['chains'] = chains(sc, plan, say)
@@ -1993,6 +2075,9 @@ def main():
             sys.exit(1 if spawnfix(a[1], a[2], so)['problems'] else 0)
         else:
             print(__doc__)
+    elif len(a) == 3 and a[0] == 'retomoto-style':
+        _r, sf = retomoto_style(a[1], a[2])
+        sys.exit(1 if sf['problems'] else 0)
     elif len(a) == 3 and a[0] == 'spawndiff':
         sys.exit(0 if spawndiff(a[1], a[2]) else 1)
     elif len(a) == 3 and a[0] == 'check':

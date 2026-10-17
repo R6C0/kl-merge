@@ -228,11 +228,12 @@ static int klt_move(DWORD rules)
         if (!klh_rd(inuse + i, &u, 1) || u || !klh_rd(at + 0x79, &fl, 1) || !(fl & 1) || !(actor = klh_rd32(at + 4))) continue;
         if (!klh_rd(at + 0x10, &status, 1) || status) continue;                 /* aboard, dead: not in play, takes no place */
         if (n >= klt_lv.nplace) { if (klt.log) klog("crewjoin: bot %d NOT moved: the level has %d places", i, klt_lv.nplace); continue; }
-        memcpy(pos, klt_lv.place[n], sizeof pos); pos[1] += klt_lv.lift; n++;
+        memcpy(pos, klt_lv.place[n], sizeof pos); pos[1] += klt_lv.lift;
         klh_rd(actor + 0x460, was, 12);                                         /* ASSUMPTION: the feet, as a player's +0x460 (same base class); for the log and the Near test only */
         why = klt_refuse(actor);
         if (!why && fabs(was[0] - klt_lv.target[0]) < klt_lv.near_ && fabs(was[2] - klt_lv.target[2]) < klt_lv.near_ && fabs(was[1] - klt_lv.target[1]) < 1000) why = "it is at the entry already";
         if (why) { if (klt.log) klog("crewjoin: bot %d (actor %08lx) NOT moved: %s", i, actor, why); continue; }
+        n++;                                                                    /* v82: a place is used up only by a bot that takes it (a bot left at the entry no longer leaves a hole in the ring) */
         klt_teleport(actor, pos);
         klh_rd(actor + 0x460, is, 12); moved++;
         if (klt.log) klog("crewjoin: bot %d (actor %08lx) at (%.0f, %.0f, %.0f) -> place %d (%.0f, %.0f, %.0f): now at (%.0f, %.0f, %.0f)", i, actor, was[0], was[1], was[2], n, pos[0], pos[1], pos[2], is[0], is[1], is[2]);

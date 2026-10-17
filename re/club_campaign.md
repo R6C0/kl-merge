@@ -1811,3 +1811,28 @@ comes when the crew is in the office, 100 s before it can be at the van. `--v1` 
 Rebuild (a scratch copy of HEAD's `tools/` + `re/*.json` + `third_party/` with this commit's `kl_fa_club.py`; the shared tree has other sessions' edits): `sh C:/kl_scratch/club_v2/build/deliver.sh C:/kl_build/c_club6 silent` / `C:/kl_build/c_club6_music music`.
 One V1 build: `python tools/kl_fa_club.py test <out> --keep --v1 --plan C:/kl_build/c_club2/club_bare/van.json`.
 Stream clips the music set needs that the stream file lacks: none new (no crowd, no helicopter); the club's own 12 clips are in `C:/kl_build/v_club/PC_Def.str` (X.5).
+
+## Version 2, second fix (2026-10-12) - after the skeptic's six faults on the first c_club6 (tools/kl_fa_club.py; sets c_club6 and c_club6_music REBUILT in place)
+
+### Y.1 Fault by fault (each reproduced in the source before the change)
+1. **"Not what the owner asked"** - ACCEPTED, nothing to build in this round: c_club6 is the ENTRANCE-START FALL-BACK of the van round. Of the five asks only ask 3 (office money) is whole and ask 1 is in part. Crowd, roof way and helicopter are NOT built (V.6). Do not call it Last Call v2 complete.
+2. **Round 2 van (the alarm fires once a level)** - ACCEPTED, FIXED. READ in `wire()`: `walk box` has BOX_PER_MAN 0 (fires once a level, in RESET_CANNOT), so the alarm that showed the van could not show it again in round 2 and only the 200 s backstop was left. Now `van timer` (TriggerDelay2, `VAN_SHOW_V2` 30 s, GUESS) is named by the AIMonitor round-start list (which runs in EVERY round; `reset hide` hides the van again first) and shows the van; the alarm and the backstop still show it too (idempotent) and still let the police in. `check()` now wants `van timer` named by the monitor alone in V2. The log of the van's hidden bit is NOT added (the hook is not in this round's files): the C10 reading stays INFERRED.
+3. **ENTERS check tested START_V1** - ACCEPTED, FIXED: in V2 the check now FAILS if any START_V2 point is inside the ENTERS box (the crew must ENTER by walking), and logs the V2 count (0 of 8).
+4. **Stale route outputs** - ACCEPTED, FIXED in `routes.py` (all folders): route_built / route_doors start at 'office (the way OUT starts here; V1 START)', not 'START'. They are the way OUT; the way in is route_in. Fake-test: the first blocks of fake.txt are the two control levels; the club block is the last (see Y.3).
+5. **AI stiffness, cover, plopping squads** - NOT ADDRESSED, a separate job; the 10 'load' men on the way in are awake and cannot be staged (no start child, V.6). Not claimed.
+6. **Ten live-only assumptions** - ACCEPTED as stated; V.7 stands. First live run: club_bare, then club_noai, then club.
+
+### Y.2 What the next live run must show beyond V.5
+The van group visible about 30 s after the round-start event in BOTH rounds (before the walk box is crossed in round 2); a human at the van by GO+65 s finds it there.
+
+## Z. Track "Last Call as the campaign", 2026-10-17 (V2 rebuilt with the van timer; the roof and helicopter stage is a PLAN, not built)
+
+Status: BUILT OFFLINE, NOT LOADED LIVE. The V2 round (entrance start, office loot, van at the slab corner) was rebuilt from the working tree's tools/kl_fa_club.py (VAN_SHOW_V2 = 30 s GUESS, the `van timer` named by the AIMonitor round-start list, the V2 START/ENTERS check) in a scratch copy (`C:/kl_scratch/club_1017`, `deliver.sh`, silent set). Delivered: `<work>/build/club_1017/DM05A/{club,club_bare,club_noai,club_wavslim}`. The music set was NOT built.
+
+Sha1 of F01_Main.zip: club and club_wavslim 91bc9e3357ffa93629e0019643a6a1147af8a5fe (179,266,524 bytes); club_bare 13ab136efc73cfe9436382221aeddafcce1d8996 (150,072,455); club_noai f0db067033fda7f7afcbe44faebc39581f175065 (165,332,690).
+
+Checks (each folder's `checks/summary.txt`): impact 0, arms 0, van-check 0 faults, fake PASS, vaultfx PASS, voice 0, reverify 0, club_check PASS, routes FREE on all four; guns, bots_dyn, bots_gate, hold_guns PASS on club, club_wavslim, club_noai (club_bare has no guns.json, so guns exits 1 as expected). Known unchanged findings: preflight CRASH 1, audit FAIL 2 (3 on club_noai) = silent stream clips, chars glow30.fx, plain escape 217 = ground under a spline van.
+
+Not proven live: that the van shows in round 2 by `van timer` (the C10 reading of the van's hidden bit is INFERRED); VAN_SHOW_V2 = 30 s is a GUESS.
+
+The helicopter exit is OPTIONAL and behind a flag: `--exit heli-roof` makes main() stop with a message pointing here; `--exit van-slab` (default) is the delivered round. The plan (V.6, not re-measured, GUESS): park donor M06 EscapeSetup!EscapeChopper as a third source via kl_maps.chain; join its .HVK with a monkey-patch module around kl_hvk.join (pad only with a filler, take h.lists only for a static placement) instead of editing kl_hvk.py; remove F07's van, keep one OnlineEscVehicleMonitor; re-frame the 11- and 17-point splines (25 degrees about y); move boarding/call boxes and four camera nodes; AllyEscapeBox step; sink Firedoor_03 (REF 21773), HeroColi (21820), roof Firedoor_02 (21775); a `heli timer` in the round-start list for round 2 (the reset is unproven). Roof way: office to low-roof pad (y 859) is one free mesh walk of 256 m; it needs 2-3 route squads with holds and WAKE_AT points (not designed). Crowd: a STATIC civilian crowd is the feasible form (no dance clip in Dog Days); not built.

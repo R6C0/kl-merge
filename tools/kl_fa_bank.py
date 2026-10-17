@@ -35,6 +35,7 @@ what only a live run can settle: re/bank_campaign.md. Nothing here installs anyt
       --doors-animate   the eleven door leaves of the route stay where the level has them and get 'Activate' at
                         the round start (default: they are OPEN AT BUILD TIME - sunk, their collision cut)
       --vault-open      the vault door is sunk at build time too (a first load in which no door can stop anybody)
+      --door-early      hall police + hunt at the beat's end (old order); default: when the door's swing is over (DOOR_GONE)
       --vault-stays     the vault door is not switched off after its swing (default: it goes away DOOR_GONE s later)
       --loot-shown      the vault's loot lies there from the start (default: hidden until the beat's timer ends)
       --loot-bags       the vault's loot keeps F07's money bags (finish() leaves the models alone)
@@ -273,6 +274,7 @@ VAULT_OPEN = False
 VAULT_DOOR_GOES = True                  # False ('--vault-stays'): once the swing has been SEEN to play and to let people in
 BEAT = 48.0                             # s from the ante-room box to the door. GUESS: six rods at 8 s steps (the study)
 BOX_PER_MAN = 15                        # TriggerBox field: 1 = fires for every criminal that enters, 0 = once (wire(): the census)
+DOOR_WAIT = True                        # hall police + hunt go on the DOOR timer (swing over, body off), not on the beat's end: nobody is sent through a door that still swings / collides (owner 2026-10-17; '--door-early' = the old order)
 DOOR_GONE = 6.0                         # s after the door's 'Activate'. GUESS: the swing is at its 100 degrees after 2.4 s
 
 # ------------------------------------------------------------------ the host's layer
@@ -1315,14 +1317,14 @@ def wire(sc, log=print):
     fades = lambda names: [p for p in must([music + '\\' + n for n in names]) if kl_fa.has(sc, sc.resolve(p)[0], 'PlayMusicLayerFade')]
     rise = fades(MUSIC_RISE)                            # without MUSIC_LAYER4 the fourth layer's fades hold no controller: not named
     gone = VAULT_DOOR_GOES and not VAULT_OPEN
-    late = gone or bool(VAULT_BLAST)                    # the door timer has something to do
+    late = gone or bool(VAULT_BLAST) or (DOOR_WAIT and not VAULT_OPEN)   # the door timer has something to do
     lists('beat box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BOX_PER_MAN: 0},
           f17=[R + ROLE['beat timer']] + [R + ROLE['rod timer %d' % (i + 1)] for i in range(len(rods))] + stage['beat'] + rise)
     # ... when it ends: the door's swing and its sound, the loot, the alarm (sound, lamps), the music's change, the
     # hall's police, the hunt; DOOR_GONE later the door's body goes and the vault blows
     alarm = [camp['alarm sound'], camp['alarm lamps']] + ([camp['lights off']] if ALARM_LIGHTS else [])
     fade = fades(MUSIC_FADE)
-    lists('beat timer', 'TriggerDelay2', f0=BEAT, f4=[R + ROLE['door'], camp['door sound'], R + ROLE['loot on']] + alarm + fade + [out] + hall + hunt
+    lists('beat timer', 'TriggerDelay2', f0=BEAT, f4=[R + ROLE['door'], camp['door sound'], R + ROLE['loot on']] + alarm + fade + [out] + ([] if DOOR_WAIT and not VAULT_OPEN else hall + hunt)
           + ([R + ROLE['door timer']] if late else []))
     lists('door', 'AIDWrapper', f0=[] if VAULT_OPEN else [door], f1='Activate')
     lamps = values(sc, sc.resolve(camp['alarm lamps'])[0], 'AIDWrapper')
@@ -1354,7 +1356,7 @@ def wire(sc, log=print):
         log('  kl_fa_bank: the vault\'s blast (%s): %d Explode%s, %d objects on (the blown vault, fire, smoke), %d off; of the campaign\'s lists %d / %d '
             'entries are not in the build' % (VAULT_BLAST, len(boom), ' with reach 1' if VAULT_BLAST == 'show' else ' as the campaign has them', len(on), len(off),
                                               len(got['post on']) - len(on), len(got['pre off']) - len(off)))
-    lists('door timer', 'TriggerDelay2', f0=DOOR_GONE, f4=([R + ROLE['door off']] if gone else []) + (
+    lists('door timer', 'TriggerDelay2', f0=DOOR_GONE, f4=([R + ROLE['door off']] if gone else []) + (hall + hunt if DOOR_WAIT and not VAULT_OPEN else []) + (
         boom + [camp['blast sound'], R + ROLE['post on'], R + ROLE['pre off']] if VAULT_BLAST else []))
     lists('door off', 'DeactivateGeom', f0='AITrigger', f1=[body] if gone else [])
     put_(sc.resolve(camp['blast sound'])[0], 'AIDWrapper', f0=must([R + BLAST_SOUND]) if VAULT_BLAST else [], f1='Activate')
@@ -2113,6 +2115,14 @@ def check(folder, log=print, problems=None):
         # each squad is started by its stage's object and waits for it
         role_of = {'start': 'start timer', 'down': 'start timer', 'beat': 'beat box', 'plaza': 'plaza box' if pbox else 'speak box'}
         lists_ = {r: {sc.top[h] for s in named(r) for h in sc.resolve(s)} for r in ('start timer', 'beat box', 'speak box', 'beat timer')}
+        if DOOR_WAIT and not VAULT_OPEN:                # the hall's police are named by the door's timer now
+            lists_['beat timer'] |= {sc.top[h] for s in named('door timer') for h in sc.resolve(s)}
+            hall_p = {R + n + '\\' + HALL_START for n in HALL}
+            late_n = {x for s_ in named('door timer') for k in sc.resolve(s_) for x in values(sc, k, 'TriggerDelay2')[4]} if not NO_AI else set()
+            beat_n = {x for s_ in named('beat timer') for k in sc.resolve(s_) for x in values(sc, k, 'TriggerDelay2')[4]}
+            miss = sorted(p for p in hall_p if p not in late_n or p in beat_n) if not NO_AI else []
+            if miss:
+                fail('DOOR_WAIT: the hall police must fire from the door timer and not from the beat timer: %s' % miss[:3])
         if pbox:                                        # PLAZA_OUTSIDE: the box is no ROLE object (the default build does not keep it)
             lists_['plaza box'] = {sc.top[h] for s in A.named(sc, pbox[0]) for h in sc.resolve(s)}
             v = values(sc, pbox[0], 'TriggerBox')
@@ -5717,7 +5727,7 @@ def test(out, keep=False, log=print, plan=None):
 def main():
     a = sys.argv[1:]
     if len(a) >= 2 and a[0] == 'test':
-        global DOORS_ANIMATE, VAULT_OPEN, VAULT_DOOR_GOES, GATE_VAULT, CASE, BEAT, NO_AI, ALARM_LIGHTS, VAULT_BLAST, STOCK_ROWS, MUSIC_LAYER4
+        global DOOR_WAIT, DOORS_ANIMATE, VAULT_OPEN, VAULT_DOOR_GOES, GATE_VAULT, CASE, BEAT, NO_AI, ALARM_LIGHTS, VAULT_BLAST, STOCK_ROWS, MUSIC_LAYER4
         global PLAZA_OUTSIDE, HALL_UP, CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
         global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING, GARRISON
         GARRISON = '--garrison' in a                        # the garrison and the beat's police in pockets off the crew's line, holding their places (GARRISON_PLACES); needs --gates and --staging
@@ -5760,6 +5770,7 @@ def main():
         STOCK_ROWS = '--dead-men-rows' not in a
         DOORS_ANIMATE = '--doors-animate' in a
         VAULT_OPEN = '--vault-open' in a
+        DOOR_WAIT = '--door-early' not in a
         VAULT_DOOR_GOES = '--vault-stays' not in a
         GATE_VAULT = '--loot-shown' not in a
         CASE = None if '--loot-bags' in a else CASE

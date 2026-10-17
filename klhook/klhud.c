@@ -292,7 +292,7 @@
 #define KLU_W_MLINE0     37.0f                /* LOOT's y under the TOTAL's in the watch look: the taller bar's fill ends at +32, LOOT's capitals start 5 below (was 34 / 2) */                /* the Grid box of the money lines */
 static float klu_cap_of(int f);
 static const int klu_sweep[8] = { 0x11, 0x14, 0x21, 0x41, 0x01, 0x10, 0x42, 0x24 };
-struct klu_text { DWORD obj, shadow; float x, y; int on, style, big, plain, noshadow, fnt, cen; DWORD colour, want_colour; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
+struct klu_text { DWORD obj, shadow, shcol; float sa; float x, y; int on, style, big, plain, noshadow, fnt, cen; DWORD colour, want_colour; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
 struct klu_picq { int n; float x, y, w, h; DWORD argb; int layer; };
 
 static struct {
@@ -331,6 +331,10 @@ static LONG klu_kill_at, klu_kill_ms = 3500;
 static volatile LONG klu_esc_at, klu_esc_frac, klu_esc_slot, klu_esc_time;     /* klhud_escape.c (EscapeCard): a frame the stock panel would draw, its health share (float bits), the icon slot, its time text object */
 #define KLU_ESC_GAP     8.0f                  /* the van card: under the kill line */
 #define KLU_ESC_H       30.0f
+#define KLU_ESC_HOLD   1000          /* ms the van card stays after the stock panel's last draw */
+#define KLU_ESC_FIN    150
+#define KLU_ESC_FOUT   300
+static DWORD klu_fa(DWORD c, float a) { DWORD al = (DWORD)((float)(c >> 24) * (a < 0 ? 0 : a > 1 ? 1 : a) + 0.5f); return (c & 0x00ffffffu) | (al << 24); }
 #define KLU_ESC_TOFF    (KLU_ESC_H * 0.5f)    /* ... with GetTickCount | 1 when it came; compose shows it klu_kill_ms long */
 static DWORD klu_evt[KLU_ELEM_NSLOT + 1];     /* [0] RTTI locator, [1..] the slots */
 static int klu_evt_ready;
@@ -722,7 +726,7 @@ static int klu_make_all(DWORD osd)
         n++;
         if (klu.shadow && (!t->plain || klu.draw == 2)) {      /* Draw=2: the stock Render draws a pair, so the Grid labels get a shadow too */
             if (!(t->shadow = klu_make_obj(tmpl, klu_font_of(t), t->style, t->fnt == KLU_FNT_BIG ? KLU_SHADOW_RGB : KLU_SHADOW_SMALL, klu.layer - 1, why))) { klog("hud: osd %08lx: shadow %d: %s; the HUD stands down for this level", osd, i, why); return 0; }
-            ns++;
+            t->shcol = t->fnt == KLU_FNT_BIG ? KLU_SHADOW_RGB : KLU_SHADOW_SMALL; ns++;
         }
     }
     if (klu.log) klog("hud: osd %08lx, %d texts + %d shadows made (template %08lx, font %08lx, headline font %08lx, parent %08lx); crew list at (%.0f, %.0f) %.0f wide, %.0f px a row; round line right-aligned at (%.0f, %.0f); money box right edge %.0f, top %.0f, %.0f wide; layer %d; Draw=%d",
@@ -1086,7 +1090,7 @@ static int klu_compose(int *state_ok)
     /* the stock player list's own window (its Tick 0x76db00). Draw=2: the stock clock Render draws nothing outside
        state 0x19 (0x81e0c3), so ours is 'shown' - and the stock block hidden - only there */
     *state_ok = klu.draw == 2 ? s.state == 0x19 : s.state >= 0x17 && s.state <= 0x19;
-    for (i = 0; i < KLU_NTEXT; i++) { klu_r.t[i].on = 0; klu_r.t[i].noshadow = 0; }
+    for (i = 0; i < KLU_NTEXT; i++) { klu_r.t[i].on = 0; klu_r.t[i].noshadow = 0; klu_r.t[i].sa = 1.0f; }
     klu_r.npic = 0;
     human = s.human >= 0 ? s.human : 0;
     lives = klu.grid == 2 ? 2 : kluv_lives(&s);               /* byte [score+0x6c]; +0x44 is the number of rounds (klhud_values.c a, c) */
@@ -1139,24 +1143,40 @@ static int klu_compose(int *state_ok)
        line: a dark painted stroke, the vehicle icon in chalk, the time right-aligned, a thin health bar under it (coral when low).
        klhud_escape.c (EscapeCard=1) keeps the stock panel's prompts and makes its plate, icon, bar and time invisible, and sets
        klu_esc_at for every frame the stock panel would have drawn. */
-    {   /* 2026-10-17: the card drew nothing into the log, so no run could say whether it showed: one line when it appears and one when it goes */
-        static int was; int is = klu_esc_at && GetTickCount() - (DWORD)klu_esc_at < 250 && klu.money;
-        if (klu.log && is != was) {
-            float fy; LONG fb2 = klu_esc_frac; memcpy(&fy, &fb2, 4);
-            if (is) klog("hud: van card ON at (%.0f, %.0f) %.0f wide, icon slot %ld (picture %s), health share %.2f", klu_r.mx - klu.money_w, klu_r.t[KLU_T_KILL].y + 18.0f + KLU_ESC_GAP, klu.money_w, klu_esc_slot, klu_esc_slot > 0 && klu_esc_slot < 200 && klu_r.handle[klu_esc_slot] ? "loaded" : "MISSING", fy);
-            else klog("hud: van card off (%s)", klu.money ? "the stock panel stopped drawing for 250 ms" : "[HUD] Money=0");
+    /* 2026-10-17 (owner: 'fixing how the escape van ones appear'): the card used to live only while the stock panel drew within the last
+       250 ms, so a skipped panel frame made it flicker or come late. Now: the last good time text / health share / icon slot are LATCHED,
+       the card stays KLU_ESC_HOLD ms after the last stock draw, fades in over KLU_ESC_FIN ms and out over KLU_ESC_FOUT ms (alpha of every
+       colour scaled; the plate, icon, bar and text). GUESS: 1 s hold and these fade times are the lead's numbers, not the owner's. */
+    {
+        static DWORD seen, last; static int on, lslot; static float lfrac, alpha; static char ltt[32];
+        DWORD now = GetTickCount(), at = (DWORD)klu_esc_at;
+        int fresh = klu_esc_at && (LONG)(now - at) < 250 && klu.money;
+        float al, dt; int want;
+        dt = last ? (float)(LONG)(now - last) : 0.0f; if (dt < 0.0f || dt > 200.0f) dt = 200.0f; last = now;
+        if (fresh) {
+            DWORD tobj = (DWORD)klu_esc_time, str; LONG fb = klu_esc_frac; float f;
+            if (!on && alpha <= 0.0f) ltt[0] = 0;       /* a new appearance never shows the previous van's time */
+            memcpy(&f, &fb, 4); if (!(f >= 0)) f = 0; if (f > 1.0f) f = 1.0f; lfrac = f; lslot = (int)klu_esc_slot; seen = now ? now : 1;
+            if (tobj && klh_rd32(tobj) == KLU_TEXT_VT && (str = klh_rd32(tobj + 0xa4)) != 0) { char t2[32] = ""; klh_rdstr(str + 0xc, t2, sizeof t2); if (t2[0]) memcpy(ltt, t2, sizeof ltt); }
         }
-        was = is;
-    }
-    if (klu_esc_at && GetTickCount() - (DWORD)klu_esc_at < 250 && klu.money) {
-        DWORD tobj = (DWORD)klu_esc_time, str; char tt[32] = ""; float y0 = klu_r.t[KLU_T_KILL].y + 18.0f + KLU_ESC_GAP, w = klu.money_w, x0 = klu_r.mx - w, frac; LONG fb = klu_esc_frac; int slot = (int)klu_esc_slot;
-        memcpy(&frac, &fb, 4); if (!(frac >= 0)) frac = 0; if (frac > 1.0f) frac = 1.0f;
-        if (tobj && klh_rd32(tobj) == KLU_TEXT_VT && (str = klh_rd32(tobj + 0xa4)) != 0) klh_rdstr(str + 0xc, tt, sizeof tt);
-        snprintf(klu_r.t[KLU_T_ESC].want, KLU_TEXTLEN, "%s", tt[0] ? tt : "--:--"); klu_r.t[KLU_T_ESC].on = 1;
-        klu_addpic(klu_r.handle[111] ? 111 : 181, x0 - 8.0f, y0, w + 14.0f, KLU_ESC_H, 0xd80c0c0du, klu.layer - 3);
-        if (slot > 0 && slot < 200 && klu_r.handle[slot]) klu_addpic(slot, x0 + 15.0f - 13.0f * KLU_VDISC, y0 + KLU_ESC_H * 0.5f - 13.0f * KLU_VDISC, 26.0f * KLU_VDISC, 26.0f * KLU_VDISC, KLU_C_CHALK, klu.layer);
-        klu_addpic(181, x0, y0 + KLU_ESC_H + 3.0f, w, 3.0f, 0x6cf3f0eau, klu.layer - 2);
-        if (frac > 0.005f) klu_addpic(181, x0, y0 + KLU_ESC_H + 3.0f, w * frac, 3.0f, frac < 0.3f ? KLU_C_CORAL : KLU_C_CHALK, klu.layer - 1);
+        want = klu.money && seen && (LONG)(now - seen) < KLU_ESC_HOLD;
+        if (want && !on) { on = 1; if (klu.log) klog("hud: van card ON at (%.0f, %.0f) %.0f wide, icon slot %d (picture %s), health share %.2f, time '%s'%s", klu_r.mx - klu.money_w, klu_r.t[KLU_T_KILL].y + 18.0f + KLU_ESC_GAP, klu.money_w, lslot, lslot > 0 && lslot < 200 && klu_r.handle[lslot] ? "loaded" : "MISSING", lfrac, ltt, ltt[0] ? "" : " (EMPTY: the placeholder shows)"); }
+        if (!want && on) { on = 0; if (klu.log) klog("hud: van card off (%s)", klu.money ? "the stock panel stopped drawing for 1 s" : "[HUD] Money=0"); }
+        /* one alpha that is ramped by the frame time, so a stock draw that returns mid-fade carries on from where the fade stood */
+        if (want) alpha += dt / (float)KLU_ESC_FIN; else alpha -= dt / (float)KLU_ESC_FOUT;
+        if (!klu.money) alpha = 0.0f;
+        if (alpha > 1.0f) alpha = 1.0f; if (alpha < 0.0f) alpha = 0.0f;
+        al = alpha;
+        klu_r.t[KLU_T_ESC].sa = al;
+        if (al > 0.0f) {
+            float y0 = klu_r.t[KLU_T_KILL].y + 18.0f + KLU_ESC_GAP, w = klu.money_w, x0 = klu_r.mx - w; int slot = lslot;
+            snprintf(klu_r.t[KLU_T_ESC].want, KLU_TEXTLEN, "%s", ltt[0] ? ltt : "--:--"); klu_r.t[KLU_T_ESC].on = 1;
+            klu_r.t[KLU_T_ESC].want_colour = klu_fa(KLU_C_CHALK, al);
+            klu_addpic(klu_r.handle[111] ? 111 : 181, x0 - 8.0f, y0, w + 14.0f, KLU_ESC_H, klu_fa(0xd80c0c0du, al), klu.layer - 3);
+            if (slot > 0 && slot < 200 && klu_r.handle[slot]) klu_addpic(slot, x0 + 15.0f - 13.0f * KLU_VDISC, y0 + KLU_ESC_H * 0.5f - 13.0f * KLU_VDISC, 26.0f * KLU_VDISC, 26.0f * KLU_VDISC, klu_fa(KLU_C_CHALK, al), klu.layer);
+            klu_addpic(181, x0, y0 + KLU_ESC_H + 3.0f, w, 3.0f, klu_fa(0x6cf3f0eau, al), klu.layer - 2);
+            if (lfrac > 0.005f) klu_addpic(181, x0, y0 + KLU_ESC_H + 3.0f, w * lfrac, 3.0f, klu_fa(lfrac < 0.3f ? KLU_C_CORAL : KLU_C_CHALK, al), klu.layer - 1);
+        }
     }
     /* 2026-10-13, the owner: 'for when u escape / in the van should be an icon to let the person know': while YOUR record is aboard the
        vehicle or escaped, the level's own car icon (170, the escape panel's) in green on a dark dab, left of the watch. [HUD] VanIcon=0: off */
@@ -1250,6 +1270,10 @@ static void klu_apply(void)
             klu_set(t->obj, KLU_VT_COLOUR, t->want_colour);
             if (klu.log >= 2) klog("hud: text %d ('%s'): colour %08lx -> %08lx", i, t->cur, t->colour, t->want_colour);
             t->colour = t->want_colour;
+        }
+        if (t->shadow && t->sa < 1.0f + 1e-6f) {      /* the shadow fades with its text (only the van card sets sa below 1) */
+            DWORD wc = klu_fa(t->fnt == KLU_FNT_BIG ? KLU_SHADOW_RGB : KLU_SHADOW_SMALL, t->sa);
+            if (wc != t->shcol) { klu_set(t->shadow, KLU_VT_COLOUR, wc); t->shcol = wc; }
         }
     }
 }

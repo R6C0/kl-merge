@@ -763,6 +763,8 @@ set_roles()
 # ------------------------------------------------------------------ VERSION 2: what differs from the round of c_club5 (set_v2)
 # The place names of the V2 camera / box objects are the host's (PLACE); V2_PLACE overrides PLACE while V2 is on.
 ALARM_BACKSTOP = 200.0                  # s after the round-start event: the alarm whatever a bot counts as (the slowest crew is at the office about 100 s; GUESS)
+VAN_SHOW_V2 = 30.0                      # s after EVERY round-start event: the van is shown (the monitor's list runs in round 2 too; the walk box fires once a level, so the alarm alone left round 2 to the
+                                        # 200 s backstop - the skeptic's fault). The alarm still lets the police in. GUESS
 ALARM_DELAY = 25.0                      # s after the first criminal passes the inner office door (WALK_BOX: the end of the way IN) to the alarm: the gate that lets the
                                         # hunters and F07's police in, the van's show and the exit line. (V1: SEAL_AT from the round start.) GUESS
 EXIT_V2 = ((-725, 200, -3175), (425, 250, 275))       # the exit box and the escape-area triggers of V2: the slab's SOUTH-WEST corner (x -1150..-300, z -3450..-2900), so that nobody who starts on the
@@ -1320,7 +1322,7 @@ def wire(sc, log=print):
             wake_timers.append(R + ROLE['wake timer %d' % (i + 1)])
         if len(wake_timers) != len(WAKE_BOX):
             raise ValueError('kl_fa_club: %d wake groups, WAKE_BOX has %d' % (len(wake_timers), len(WAKE_BOX)))
-    van_t = [R + ROLE['van timer']] if VAN_LATE else []           # VAN_LATE: whichever opens the seal also starts the van's timer
+    van_t = [R + ROLE['van timer']] if VAN_LATE and not V2 else []           # VAN_LATE: whichever opens the seal also starts the van's timer
     lists('floors counter', 'TriggerCounter', f0=max(len(beat), 1), f4=([R + ROLE['seal off']] if seal and beat else []) + ([ways[0]] if beat else []) + (van_t if beat else []))
 
     # ---- round start: AIMonitor list 2 (event 2, kl2 0x8b5f60; it comes when the countdown begins). F07's own
@@ -1330,7 +1332,7 @@ def wire(sc, log=print):
     k = node(ROLE['monitor'])
     mine = {R + v for v in ROLE.values()}
     have = [s for s in values(sc, k, 'AIMonitor')[2] if sc.resolve(s) and s not in mine]
-    start = [R + ROLE['seal timer']] + ([R + ROLE['office timer']] if stage['office'] else []) + ([R + ROLE['doors timer']] if DOORS_ANIMATE else [] if V2 else [R + ROLE['muffle']]) + wake_timers
+    start = [R + ROLE['seal timer']] + ([R + ROLE['office timer']] if stage['office'] else []) + ([R + ROLE['doors timer']] if DOORS_ANIMATE else [] if V2 else [R + ROLE['muffle']]) + wake_timers + ([R + ROLE['van timer']] if V2 and VAN_LATE else [])
     # RESET: two stock objects FIRST in the list put round 2 back as round 1 was at the load (the Vault's reset: re/bank_campaign.md W.5). Show
     # again what the round switched OFF (the seal's pieces), hide again what it switched ON (the late van). Both are no-ops in round 1
     reset = ([R + ROLE['reset show']] if seal else []) + ([R + ROLE['reset hide']] if VAN_LATE else []) if RESET else []
@@ -1367,7 +1369,7 @@ def wire(sc, log=print):
         lists('speak box', 'TriggerBox', f14='ECPS_FA_MERCONLY', f17=[R + ROLE['speak']] + ([R + ROLE['van timer b']] if VAN_LATE else []))
     if VAN_LATE:                                        # the van is shown VAN_AFTER s after the seal opens / VAN_EARLY s after the wardrobe's box (idempotent)
         lists('van on', 'ActivateGeom', f0='AITrigger', f1=[van_path()])
-        lists('van timer', 'TriggerDelay2', f0=VAN_AFTER, f4=[R + ROLE['van on']])
+        lists('van timer', 'TriggerDelay2', f0=VAN_SHOW_V2 if V2 else VAN_AFTER, f4=[R + ROLE['van on']])
         if V2:
             lists('van timer b', 'TriggerDelay2', f0=ALARM_DELAY, f4=[R + ROLE['van on']] + ([ways[1]] if enemies_in else []) + [R + ROLE['speak']])
         else:
@@ -1921,10 +1923,12 @@ def check(folder, log=print, problems=None):
     lo, hi = world_box(A.node_of(sc, 'FASpecials!PIP!EnterLootArea'))
     inside = lambda p: all(lo[a] <= p[a] + (50 if a == 1 else 0) <= hi[a] for a in range(3))
     office = [pos[ents[k - 1]] for k, v in loot if v[1] == LOOT[0][2]]
-    log('  ENTERS box x %d..%d, y %d..%d, z %d..%d: %d of the 8 START points and %d of the office\'s %d cases inside' % (
-        lo[0], hi[0], lo[1], hi[1], lo[2], hi[2], sum(inside(p) for p in START_V1), sum(inside(p) for p in office), len(office)))
-    if not all(inside(p) for p in START_V1) or not all(inside(p) for p in office) or len(office) != 6:
-        fail('the ENTERS box does not hold every START point and the six cases of the office')
+    starts_ = START_V2 if V2 else START_V1
+    n_in = sum(inside(p) for p in starts_)
+    log('  ENTERS box x %d..%d, y %d..%d, z %d..%d: %d of the %d START points (%s) and %d of the office\'s %d cases inside' % (
+        lo[0], hi[0], lo[1], hi[1], lo[2], hi[2], n_in, len(starts_), 'V2: none may be - the crew ENTERS by walking in' if V2 else 'V1: all', sum(inside(p) for p in office), len(office)))
+    if (n_in != 0 if V2 else n_in != len(starts_)) or not all(inside(p) for p in office) or len(office) != 6:
+        fail('the ENTERS box %s and the six cases of the office' % ('holds a START point (V2: the crew starts outside it)' if V2 else 'does not hold every START point'))
     # ---- the route in the built collision, nothing removed at test time; what still stands is the round's gate
     crossing = lambda r: sorted({(o['ref'], o['name']) for leg in r['legs'] for c in leg.get('crossed') or () for o in c['objects']})
     say = lambda r: 'FREE, %d m' % r['length'] if r['free'] else 'NOT free; crossed: %s' % [n for _r, n in crossing(r)]
@@ -2512,7 +2516,7 @@ def fix_check(folder, sc, ents, pos, lv, squads, men, top_of, named, fail, log):
             fail('VAN_LATE: \'van on\' names %s, not the van\'s group' % values(sc, von, 'ActivateGeom')[1])
         seal_named = [named_by.get(R + ROLE['van timer'], [])]
         starters = set(named_by.get(R + ROLE['van timer'], ()))
-        want = {A.node_of(sc, ROLE['seal timer'])} | ({A.node_of(sc, ROLE['floors counter'])} if squads else set())
+        want = {A.node_of(sc, ROLE['monitor'])} if V2 else {A.node_of(sc, ROLE['seal timer'])} | ({A.node_of(sc, ROLE['floors counter'])} if squads else set())
         if starters != want:
             fail('VAN_LATE: the van\'s timer is named by %s, wanted the seal\'s clock%s' % (sorted(sc.names[x] for x in starters), ' and the beat\'s counter' if squads else ''))
         early = {A.node_of(sc, ROLE['walk box'])} if V2 else {A.node_of(sc, ROLE['speak box'])}      # (V2: the alarm = the first criminal through the inner office door)
@@ -2522,8 +2526,8 @@ def fix_check(folder, sc, ents, pos, lv, squads, men, top_of, named, fail, log):
             fail('VAN_LATE: a van timer does not name \'van on\'')
         if any(sc.names[sc.top[x]].startswith(tuple(SQUADS) + tuple(ARRIVE)) for x in named_by.get(van, ())):
             fail('VAN_LATE: a squad names the van')
-        log('  van: hidden at the load (%s), no FakeTarget, shown %g s after the seal opens (clock%s) or %g s after the wardrobe\'s box; nothing of a squad names it' % (
-            hidden, VAN_AFTER, ' / counter' if squads else '', VAN_EARLY))
+        log('  van: hidden at the load (%s), no FakeTarget, shown %g s after the seal opens (clock%s) or %g s after the wardrobe\'s box (V2: the van timer also runs %g s after EVERY round start); nothing of a squad names it' % (
+            hidden, VAN_AFTER, ' / counter' if squads else '', VAN_EARLY, VAN_SHOW_V2))
     elif not VAN_LATE:
         log('  van: VAN_LATE is off in this build: the van stands in the world from the load with its target')
     # ---- the reset
@@ -4088,6 +4092,12 @@ def main():
                 return cast(a[i])
             except ValueError:
                 sys.exit('kl_fa_club: %s: "%s" is not a %s' % (name, a[i], cast.__name__))
+        if '--exit' in a and value('--exit') == 'heli-roof':
+            # OPTIONAL stage, behind its own flag, REFUSED until its live proofs exist (reviewer 2026-10-17: the helicopter rests on unverified guesses)
+            sys.exit('kl_fa_club: --exit heli-roof is a PLAN, not a build: it needs the M06 donor chain (kl_maps.chain), a kl_hvk.join monkey-patch '
+                     '(pad with a filler; kl_hvk.py itself is not edited), the spline re-framing, the boarding/call boxes, the AllyEscapeBox step, '
+                     'three closures sunk, roof squads/holds/wake points and a heli timer in the AIMonitor round-start list. None is measured or run: '
+                     're/club_campaign.md section Z. --exit van-slab (the default) is the delivered round.')
         if '--exit' in a and value('--exit') != 'van-slab':
             sys.exit('kl_fa_club: --exit %s: only \'van-slab\' is built (the roof stage and the helicopter are not: re/club_campaign.md \'Version 2\')' % value('--exit'))
         if '--v1' in a and '--exit' in a:

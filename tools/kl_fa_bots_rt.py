@@ -3606,6 +3606,52 @@ def lobby_fix(src, dst, log=print):
     return done
 
 
+SPREAD_R = (500.0, 1400.0)      # v82: the arrival places lie in a fan this far from the jump entry (the old 7 stood in ONE 6 m line, 4 m west of the landing)
+SPREAD_SEP = 220.0              # at least this far apart (check() wants 80; the game's own crew jump uses 100)
+
+
+def spread_command(folder, opt=None, log=print):
+    """`spread <finished build folder>` (2026-10-17): the [CrewJoin] places of the build's KLJoin.ini laid in a FAN (7 targets at angles -90..+90 degrees
+    round the jump entry's facing, radius alternating SPREAD_R) instead of the old line, each snapped to the nearest flat polygon of the street part with
+    mesh clearance; the ini's other [CrewJoin] keys (Near, Radius, ...) stay. The archive is not touched. -> the places."""
+    B = F.Built(folder)
+    nav = F.Nav(B.scene.nav)
+    jp, jpos, face = join_point(B)
+    hit = nav.at(jpos[0], jpos[1], jpos[2], lo=jpos[1] - 300.0, hi=jpos[1] + 100.0)
+    part = nav.part[hit[0]]
+    cands = [q for q in nav.around((jpos[0], hit[1], jpos[2], hit[0]), SPREAD_R[1] + 100.0, part, dy=60.0)
+             if flat(nav, q) and SPREAD_R[0] - 100.0 <= hdist(q, jpos) and nav.clearance(q[0], q[1], q[2]) >= F.CLEAR_MIN]
+    out = []
+    for k in range(7):
+        ang = math.radians(-90.0 + 30.0 * k)
+        r = SPREAD_R[0] + (SPREAD_R[1] - SPREAD_R[0]) * (0.35 if k % 2 else 0.8)
+        fx, fz = face
+        dx, dz = fx * math.cos(ang) - fz * math.sin(ang), fx * math.sin(ang) + fz * math.cos(ang)
+        t = (jpos[0] + dx * r, hit[1], jpos[2] + dz * r)
+        best = None
+        for q in cands:
+            if any(math.hypot(q[0] - o[0], q[2] - o[2]) < SPREAD_SEP for o in out):
+                continue
+            d = math.hypot(q[0] - t[0], q[2] - t[2]) - 0.5 * min(nav.clearance(q[0], q[1], q[2]), 200.0)
+            if best is None or d < best[0]:
+                best = (d, q)
+        if best is None:
+            raise ValueError('no fan place for target %d' % k)
+        out.append(best[1])
+    p = os.path.join(folder, 'KLJoin.ini')
+    text = open(p, encoding='latin1', newline='').read().replace('\r\n', '\n')
+    a = text.index('[CrewJoin]')
+    head, tail = text[:a], text[a:]
+    tail = re.sub(r'^Place\.\d+=.*\n', '', tail, flags=re.M)
+    block = 'Places=7\n' + ''.join('Place.%d=%g %g %g\n' % (n + 1, q[0], q[1], q[2]) for n, q in enumerate(out))
+    tail = re.sub(r'^Places=.*\n', lambda m: block, tail, count=1, flags=re.M)
+    with open(p, 'w', encoding='latin1', newline='\r\n') as f:
+        f.write(head + tail)
+    for i, q in enumerate(out):
+        log('  fan place %d: (%g, %g, %g)  %d from the entry' % (i + 1, q[0], q[1], q[2], hdist(q, jpos)))
+    return out
+
+
 def hops_command(src, final, opt):
     """`hops <the bots build's SOURCE folder> <a finished build's folder> [--hops N]`: the gates' hop places (pick_hops) planned on the
     source build (the tower half only: the same plan, the same holds - they are compared with the finished build's bots.json) and
@@ -3734,6 +3780,8 @@ def main():
         sys.exit(1 if F.diff(a[1], a[2], also=(JOIN_NAME, ROOM_COUNTER)) else 0)     # (the room gate: the room counter names it)
     elif len(a) == 3 and a[0] == 'lobby':
         lobby_fix(a[1], a[2])
+    elif len(a) == 2 and a[0] == 'spread':
+        spread_command(a[1])
     elif len(a) == 3 and a[0] == 'hops':
         hops_command(a[1], a[2], opt)
     elif len(a) == 2 and a[0] == 'standing':
