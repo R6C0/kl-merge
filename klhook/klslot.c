@@ -277,7 +277,7 @@ static int kls_map(const char *in, char *out, const char *api)
         const char *rest = full + (hit - low) + kls_slot[s].keylen; int page;
         if (!_stricmp(rest, kls_slot[s].zip)) {           /* the level's archive: a load of this slot begins (or the game probes for it) */
             page = kls_page_now();
-            if ((r = kpm_override(kls_slot[s].name)) >= 0) page = r;      /* klpm.c: the Arcade playlist names the page of the map it chose for this slot */
+            if (!kl_online() && (r = kpm_override(kls_slot[s].name)) >= 0) page = r;      /* klpm.c: the Arcade playlist names the page of the map it chose for this slot */
             if (InterlockedExchange(&kls_slot[s].page, page) != page) {
                 r = kls_find_rule(s, page); if (r < 0) r = kls_find_rule(s, 0);
                 klog("expansion: slot %s: menu page %d from now on -> %s", kls_slot[s].name, page, r < 0 ? "the stock level" : kls_rule[r].map);

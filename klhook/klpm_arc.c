@@ -88,6 +88,7 @@ static void kpm_arc_tick(void)
                 int mode = kpm_mode_now(), played, next, page = 1, pos; char slot[8], pl[8];
                 inlvl = 0; out_ms_set = 0;
                 strcpy(pl, lvl_slot);
+                if (kl_online()) arc = 0;
                 if (!arc) { klog("playlist: %s ended - not an Arcade match (no map page latched, no start seen): left alone", pl); pend_seen = 0; return; }
                 arc = 0; pend_seen = 0;
                 if ((LONG)(out_at - lvl_at) < 5000) { klog("playlist: %s was in for %ld ms only: not counted", pl, (long)(out_at - lvl_at)); return; }
@@ -116,7 +117,7 @@ static void kpm_arc_tick(void)
     if (!inlvl) {                                                                                 /* a level starts */
         inlvl = 1; lvl_at = now; wrote_pos = -1; readback_due = 0;
         lvl_slot[0] = 'F'; lvl_slot[1] = '0'; lvl_slot[2] = key[2]; lvl_slot[3] = 0;
-        arc = kls_menu_page != 0 || pend_seen;
+        arc = (kls_menu_page != 0 || pend_seen) && !kl_online();      /* never in a network session */
         if (kpm_ovr_page >= 0 && _stricmp(lvl_slot, kpm_ovr_slot)) { klog("playlist: level %s is not the playlist slot %s: override dropped", lvl_slot, kpm_ovr_slot); kpm_ovr_set(0, -1); }
         klog("playlist: level %s started (%s)", lvl_slot, arc ? "from the Arcade page" : "not from the Arcade page");
     }

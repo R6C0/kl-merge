@@ -44,8 +44,9 @@ static int kpg_free(DWORD item)
 static void kpg_restore(void)
 {
     if (kpg.done && kpg.block && kpg.slot) {
-        BYTE cur = 0;
-        if (klh_rd(kpg.block + kpg.slot, &cur, 1) && cur == (BYTE)(kpg.value - 1) &&
+        BYTE cur = 0; DWORD gs, rules, recs;      /* the block may be freed after the round: only write back if the same chain still leads to it */
+        if ((gs = klh_rd32((DWORD_PTR)KLH_VA(KPG_SETTINGS))) && (rules = klh_rd32(gs + 0x54)) && rules == kpg.rules && !kl_online() &&
+            (recs = klh_rd32(rules + 0x348)) && klh_rd32(recs) == kpg.block && klh_rd(kpg.block + kpg.slot, &cur, 1) && cur == (BYTE)(kpg.value - 1) &&
             klh_data((void *)(DWORD_PTR)(kpg.block + kpg.slot), &kpg.prev, 1, "KLMGun: previous crew-record gun row"))
             klog("match: gun: row put back to %u", (unsigned)kpg.prev);
     }
@@ -59,12 +60,13 @@ static void kpm_gun_tick(void)
     if (!kpm_on) return;
     v = kpm_get(0); slot = kpm_gun_slot(v);
     if (kpg.done && (v != kpg.value)) kpg_restore();
-    if (!slot || (kpg.done && kpg.value == v) || kpg.waited > 600) return;
+    if (!slot || kpg.waited > 600) return;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KPG_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x70, &st, 4)) return;   /* Arcade only */
     if (st == KPG_ROUND) { if (!kpg.waited++) klog("match: gun: the round already runs; the next round gets the gun"); return; }
     if (kl_online()) return;
     if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KPG_SETTINGS))) || !(rules = klh_rd32(gs + 0x54)) || klh_rd32(rules) != (DWORD)(DWORD_PTR)KLH_VA(KPG_RULES_VT)) return;
     if (!(recs = klh_rd32(rules + 0x348)) || !(blk = klh_rd32(recs)) || !klh_rd(blk, &b0, 1) || b0) return;      /* GUESS: byte 0 = 0 for the local player */
+    if (kpg.done && kpg.value == v && kpg.block == blk && kpg.rules == rules) return;      /* already written for this block (a NEW round's block gets it again) */
     row = (BYTE)(v - 1);
     if (!(item = klh_rd32((DWORD_PTR)KLH_VA(KPG_SHOP) + 24 * row))) return;
     f1 = kpg_free(item); f2 = kpg_free(klh_rd32((DWORD_PTR)KLH_VA(KPG_SHOP) + 24 * (slot == 3 ? 28 : 0)));
