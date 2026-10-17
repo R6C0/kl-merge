@@ -293,8 +293,11 @@ static void klv_walks(const struct klb_snap *s, DWORD now)
         if (now - w->at >= h->giveup) {
             const char *no = klt_refuse(r->actor); DWORD held = 1;
             if (!no && (!klh_rd(r->actor + 0x770, &held, 4) || held)) no = "somebody holds it as a human shield";
-            if (no) continue;
-            if ((p = klv_free(w->hop - 1, s, now)) < 0) continue;
+            if (no || (p = klv_free(w->hop - 1, s, now)) < 0) {   /* v82c: said once per 10 s (it used to be silent: a bot could walk for ever with no line) */
+                static DWORD said[KLB_NREC];
+                if (now - said[i] >= 10000) { said[i] = now; klog("hop: bot %d (walk of hop %d) is past its %.0f s but is NOT given up: %s", i, w->hop, h->giveup / 1000.0, no ? no : "no free To place"); }
+                continue;
+            }
             w->hop = 0;
             klv_r.used[h - klv_lv.h][p] = KLB_T(now);
             klt_teleport(r->actor, h->to[p]);

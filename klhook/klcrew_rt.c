@@ -111,12 +111,12 @@
 #define KLT_NREC       32
 #define KLT_NPLACE     8
 
-static struct { int on, log, retrigger; } klt;
+static struct { int on, log, retrigger, fedskip; } klt;
 static struct {
     int have, nplace; char key[64], file[MAX_PATH], name[48]; FILETIME ft;
     float target[3], tol, radius, from, near_, lift, place[KLT_NPLACE][3];
 } klt_lv;
-static struct { DWORD rules; int left, done, far_seen, told; } klt_r;
+static struct { DWORD rules; int left, done, far_seen, told, fedtold; } klt_r;
 
 static int klt_same_code(DWORD va, const BYTE *bytes, int n)
 {
@@ -241,6 +241,14 @@ static int klt_move(DWORD rules)
     return moved;
 }
 
+/* v82c: is the local player (the one the jump moves) police? Same bytes as klfed.c (player + 0x2723 'ppolice', and the same KLP_PLAYER_VT vtable check, so a stale slot is never read as police). */
+static int klt_local_police(DWORD gd)
+{
+    BYTE sel = 0xff, pol = 0; DWORD pl;
+    if (!klh_rd(gd + 0x898, &sel, 1) || sel >= 28 || !(pl = klh_rd32(gd + 0x828 + 4 * sel)) || klh_rd32(pl) != 0x00bb45f4 /* KLP_PLAYER_VT, as klfed.c: a stale slot is not read */ || !klh_rd(pl + 0x2723, &pol, 1)) return 0;
+    return pol != 0;
+}
+
 static void klt_tick(int game_thread)
 {
     static const BYTE trig_code[14] = { 0x51, 0x53, 0x8b, 0xd9, 0x83, 0x7b, 0x34, 0x00, 0x74, 0x5d, 0x8b, 0x4b, 0x34, 0x8b };          /* 0x72e0f0 */
@@ -265,6 +273,10 @@ static void klt_tick(int game_thread)
     /* EARLY: kljoin.c's request for this entry is pending - the game has not moved the player yet */
     if (klh_rd((DWORD_PTR)KLH_VA(KLT_REQUEST), &req, 4) && klh_rd(gd + 0x8d4, &pend, 4) && req && pend == e) {
         if (!game_thread) { if (!klt_r.told++) klog("crewjoin: the jump to entry %d is pending but this tick is not on the game's thread: the late form will be tried", e); return; }
+        if (klt.fedskip && klt_local_police(gd)) {   /* v82c: a fed's spawn fires the box 0.57 s after he appears (log 2026-10-17 11:09): the crew was dumped in the street mid-fight; they walk to the lift (CrewHop) instead */
+            if (!klt_r.fedtold++) klog("crewjoin: the jump to entry %d '%s' is the local FED's: the AI heisters are NOT moved (FedSkip=1); they reach the street by the lift hops", e, name);
+            return;
+        }
         klog("crewjoin: the jump to entry %d '%s' is pending: the AI heisters in play are moved first (EARLY)", e, name);
         n = klt_move(rules); klt_r.done = 1;
         klog("crewjoin: %d moved; the game's own jump sends 'AITrigger' to the entry's list next", n);
@@ -278,6 +290,7 @@ static void klt_tick(int game_thread)
         d2 = (feet[0] - klt_lv.target[0]) * (feet[0] - klt_lv.target[0]) + (feet[1] - klt_lv.target[1]) * (feet[1] - klt_lv.target[1]) + (feet[2] - klt_lv.target[2]) * (feet[2] - klt_lv.target[2]);
         if (!(d2 <= klt_lv.from * klt_lv.from)) { klt_r.far_seen = 1; continue; }                                  /* a NaN is far */
         if (!klt_r.far_seen || d2 > klt_lv.radius * klt_lv.radius || !game_thread) continue;
+        if (klt.fedskip && klt_local_police(gd)) { if (!klt_r.fedtold++) klog("crewjoin: LATE: the local FED stands at the entry: the AI heisters are NOT moved (FedSkip=1)"); continue; }
         klog("crewjoin: LATE: player %d is at the entry '%s' (%.0f, %.0f, %.0f), the request was not seen pending: the AI heisters are moved now", i, name, feet[0], feet[1], feet[2]);
         n = klt_move(rules); klt_r.done = 1;
         if (klt.retrigger && n && jp) {
@@ -293,6 +306,7 @@ static void klt_init(void)
     memset(&klt, 0, sizeof klt); memset(&klt_lv, 0, sizeof klt_lv); memset(&klt_r, 0, sizeof klt_r);
     klt.on = GetPrivateProfileIntA("CrewJoin", "Enable", 0, klh_ini) != 0;
     klt.retrigger = GetPrivateProfileIntA("CrewJoin", "Retrigger", 0, klh_ini) != 0;
+    klt.fedskip = GetPrivateProfileIntA("CrewJoin", "FedSkip", 1, klh_ini) != 0;      /* v82c, default ON */
     klt.log = (int)GetPrivateProfileIntA("CrewJoin", "Log", 1, klh_ini);
     if (klt.on) klog("crewjoin: on; the AI crew follows the player's jump on a level whose KLJoin.ini has [CrewJoin]; Retrigger=%d%s", klt.retrigger,
                      klj_tick_on ? "" : " - but [KLHook] Join=0: no jump is requested, so nothing is moved");
