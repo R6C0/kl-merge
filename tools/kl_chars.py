@@ -27,6 +27,8 @@ Dead Men character MODELS on Dog Days characters (stage 2 groundwork; nothing he
                                                 <base> = a stock level or a FINISHED BUILD FOLDER (its side files -
                                                 KLJoin.ini ... - go along); --armour=0,3 leaves two body meshes
                                                 out (about 6.5 MB of .prm less); pictures: kl_view.py
+    python kl_chars.py plates <wardrobe build> <out folder> [--plates=wolf,dallas,chains,hoxton] [--slot=F01]
+                                                add Payday 2 plates without rerunning the wardrobe conversion
     python kl_chars.py looks [M01_FA_A ...]     the 24 variants of each Dead Men hero, part by part, and whether
                                                 the eight models are the same in every map
     install (a later LIVE agent, not this tool): python kl_graft.py install F01 --from <folder>
@@ -1720,6 +1722,12 @@ if __name__ == '__main__':
                 os.remove(os.path.join(a[2], f))
         print('built %s, problems: %d (the base\'s own included)' % (path, len(bad)))
         sys.exit(1 if bad else 0)
+    elif a[:1] == ['plates'] and len(a) > 2:
+        import kl_add_plates
+        names = next((x.split('=', 1)[1].split(',') for x in sys.argv[1:] if x.startswith('--plates=')),
+                     ['wolf', 'dallas', 'chains', 'hoxton'])
+        slot = next((x.split('=', 1)[1] for x in sys.argv[1:] if x.startswith('--slot=')), 'F01')
+        kl_add_plates.build(a[1], a[2], slot, names)
     elif a[:1] == ['check'] and len(a) > 1:
         lv = Lv(a[1])
         sys.exit(1 if check(lv, extra=wardrobe_roots(lv)) else 0)

@@ -328,10 +328,12 @@ static struct { float stock[14], ours[14], pic[14]; LONG nstock, nours, npic; } 
 static CRITICAL_SECTION klu_cs;
 static char klu_kill_txt[64];                 /* klhud_kill.c hands the points pop-up's line here (under klu_cs) ... */
 static LONG klu_kill_at, klu_kill_ms = 3500;
+static volatile LONG klu_esc_rst;   /* 2026-10-17 review: set by klu_reset (scene change): the van card block drops its latched state, no ghost card in the next level */
 static volatile LONG klu_esc_at, klu_esc_frac, klu_esc_slot, klu_esc_time;     /* klhud_escape.c (EscapeCard): a frame the stock panel would draw, its health share (float bits), the icon slot, its time text object */
 #define KLU_ESC_GAP     8.0f                  /* the van card: under the kill line */
 #define KLU_ESC_H       30.0f
-#define KLU_ESC_HOLD   1000          /* ms the van card stays after the stock panel's last draw */
+#define KLU_ESC_HOLD   2500          /* ms the van card stays after the stock panel's last draw. 2026-10-17: the owner's v81 log showed the stock panel skipping up to 1.64 s while the van was there, so 1 s was too short; 2.5 s covers it. GUESS: no longer gap was seen, not proven. */
+#define KLU_ESC_LOGGAP 1000          /* ms: van card ON/off log lines at most this often (the log reached 29 MB); the skipped ones are counted */
 #define KLU_ESC_FIN    150
 #define KLU_ESC_FOUT   300
 static DWORD klu_fa(DWORD c, float a) { DWORD al = (DWORD)((float)(c >> 24) * (a < 0 ? 0 : a > 1 ? 1 : a) + 0.5f); return (c & 0x00ffffffu) | (al << 24); }
@@ -1148,20 +1150,21 @@ static int klu_compose(int *state_ok)
        the card stays KLU_ESC_HOLD ms after the last stock draw, fades in over KLU_ESC_FIN ms and out over KLU_ESC_FOUT ms (alpha of every
        colour scaled; the plate, icon, bar and text). GUESS: 1 s hold and these fade times are the lead's numbers, not the owner's. */
     {
-        static DWORD seen, last; static int on, lslot; static float lfrac, alpha; static char ltt[32];
+        static DWORD seen, last, loglast; static int on, lslot, logskip; static float lfrac, alpha; static char ltt[32];
         DWORD now = GetTickCount(), at = (DWORD)klu_esc_at;
-        int fresh = klu_esc_at && (LONG)(now - at) < 250 && klu.money;
-        float al, dt; int want;
-        dt = last ? (float)(LONG)(now - last) : 0.0f; if (dt < 0.0f || dt > 200.0f) dt = 200.0f; last = now;
+        int fresh; float al, dt; int want;
+        if (InterlockedExchange(&klu_esc_rst, 0)) { seen = 0; alpha = 0.0f; on = 0; last = 0; ltt[0] = 0; at = 0; }
+        fresh = at && (DWORD)(now - at) < 250 && klu.money;    /* unsigned: a signed compare turned true again after 24.9 days */
+        dt = last ? (float)(LONG)(now - last) : 0.0f; if (dt < 0.0f || dt > 200.0f) { if (dt > 200.0f && !fresh) alpha = 0.0f; dt = 200.0f; } last = now;   /* compose paused (menu, pause): no stale half-faded card on return */
         if (fresh) {
             DWORD tobj = (DWORD)klu_esc_time, str; LONG fb = klu_esc_frac; float f;
             if (!on && alpha <= 0.0f) ltt[0] = 0;       /* a new appearance never shows the previous van's time */
             memcpy(&f, &fb, 4); if (!(f >= 0)) f = 0; if (f > 1.0f) f = 1.0f; lfrac = f; lslot = (int)klu_esc_slot; seen = now ? now : 1;
             if (tobj && klh_rd32(tobj) == KLU_TEXT_VT && (str = klh_rd32(tobj + 0xa4)) != 0) { char t2[32] = ""; klh_rdstr(str + 0xc, t2, sizeof t2); if (t2[0]) memcpy(ltt, t2, sizeof ltt); }
         }
-        want = klu.money && seen && (LONG)(now - seen) < KLU_ESC_HOLD;
-        if (want && !on) { on = 1; if (klu.log) klog("hud: van card ON at (%.0f, %.0f) %.0f wide, icon slot %d (picture %s), health share %.2f, time '%s'%s", klu_r.mx - klu.money_w, klu_r.t[KLU_T_KILL].y + 18.0f + KLU_ESC_GAP, klu.money_w, lslot, lslot > 0 && lslot < 200 && klu_r.handle[lslot] ? "loaded" : "MISSING", lfrac, ltt, ltt[0] ? "" : " (EMPTY: the placeholder shows)"); }
-        if (!want && on) { on = 0; if (klu.log) klog("hud: van card off (%s)", klu.money ? "the stock panel stopped drawing for 1 s" : "[HUD] Money=0"); }
+        want = klu.money && seen && (DWORD)(now - seen) < KLU_ESC_HOLD;
+        if (want && !on) { on = 1; if (klu.log && (LONG)(now - loglast) >= KLU_ESC_LOGGAP) { loglast = now; if (logskip) { klog("hud: van card: %d on/off lines skipped", logskip); logskip = 0; } klog("hud: van card ON at (%.0f, %.0f) %.0f wide, icon slot %d (picture %s), health share %.2f, time '%s'%s", klu_r.mx - klu.money_w, klu_r.t[KLU_T_KILL].y + 18.0f + KLU_ESC_GAP, klu.money_w, lslot, lslot > 0 && lslot < 200 && klu_r.handle[lslot] ? "loaded" : "MISSING", lfrac, ltt, ltt[0] ? "" : " (EMPTY: the placeholder shows)"); } else if (klu.log) logskip++; }
+        if (!want && on) { on = 0; if (klu.log && (LONG)(now - loglast) >= KLU_ESC_LOGGAP) { loglast = now; klog("hud: van card off (%s)", klu.money ? "the stock panel stopped drawing for 2.5 s" : "[HUD] Money=0"); } else if (klu.log) logskip++; }
         /* one alpha that is ramped by the frame time, so a stock draw that returns mid-fade carries on from where the fade stood */
         if (want) alpha += dt / (float)KLU_ESC_FIN; else alpha -= dt / (float)KLU_ESC_FOUT;
         if (!klu.money) alpha = 0.0f;
@@ -1419,6 +1422,7 @@ static void klu_reset(const char *why, DWORD osd)
     klwd_reset();                                              /* S1: inside the lock, the render slot walks klwd_r under it */
     klht_reset();                                              /* M1 of the tags review: klht_r holds pointers into the scene that just ended */
     memset(&klu_r, 0, sizeof klu_r);
+    InterlockedExchange(&klu_esc_at, 0); InterlockedExchange(&klu_esc_rst, 1);
     klu_r.osd = osd;
     LeaveCriticalSection(&klu_cs);
 }

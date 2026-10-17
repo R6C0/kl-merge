@@ -210,7 +210,9 @@ def tex_record(tid, name, fourcc, w, h, mips, normal_map=False):
 def add_texture(tex, name, dds_bytes, normal_map=False, group=None):
     """-> the new texture id."""
     fourcc, w, h, mips = dds_mips(dds_bytes)
-    tid = next(i for i in range(128, tex.slots) if i not in tex.tex)
+    tid = next((i for i in range(128, tex.slots) if i not in tex.tex), None)
+    if tid is None:
+        raise ValueError('the .TEX has no free texture id (limit %d)' % tex.slots)
     tex.tex[tid] = T.Texture(tex_record(tid, name, fourcc, w, h, mips, normal_map), group=group or 0)
     return tid
 
