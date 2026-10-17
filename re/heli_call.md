@@ -71,3 +71,22 @@ Addresses kl2.exe 0490. No game run. Verdicts after the second, hostile disassem
 | residual risk "speed 55 vs stock 150" | PROVEN as a number | stock DD incoming: F03 / F06 / F08 150, F02 175 or 80; Dead Men M06 uses 55 and flies there |
 
 Which flies: heli and heli_origin are identical in every field the start reads; they differ only in the type-3 placement (REF 20041). Neither can be separated statically. heli_origin is marginally more likely, because stock M06_FA_A / F03 / F06 keep that placement at the origin and fly; low confidence. Test heli_origin first, then heli. The proof is a live run.
+
+## Handover: HELI4 grep recipe (read-only probe, 2026-10-17, NOT RUN in the game)
+`klhook/klheliprobe.c`, ini `[Heli] Probe=0` (default). `Probe=1` logs `heli:` lines; `Probe=2` adds a bounded heap scan for the rout if the entity table has none.
+No code patch, no import slot, no write: the hook point is the existing `klh_tick(game_thread)` (`klhp_tick`, after `klcam_tick`). With Probe=0 `klhp_init` only reads
+the key; `klhp_tick` returns at `if (!klhp.on) return;` before any read or log, so the DLL behaves as HEAD (the SHIP sha1 differs only by that dead code).
+Offsets marked EXE are from the static read above; GUESS: the ZHeli's `[obj+4]` is a scene node (as for actors), the ZHeli control dwords +0x7d8 / +0x7dc mean
+anything (printed hex), and `[rout+0x38]` (the "squad") and the "actor" of 0x791090 are the SAME pointer (printed once as `sq=`, with its +0x8c `a8c`, +0x90 `a90`,
++0xbc byte `a_bc`, +0x154 `a154`). Whether the routs are table entities at all is a GUESS (`probe scan:` line says so; use Probe=2 if it finds 0).
+
+Run: set `Probe=1` (2 if needed), play the heli build (HELI4), have the call happen (exit box, or the v82e last-vehicle fallback), then in `KLHook.log`:
+- `grep "heli: probe"`  -> `probe scan: N ZHeliFlyBehaviourRout, M ZHeli`. N=0 and Probe=1: rerun with Probe=2.
+- `grep "heli: t=" KLHook.log | grep CHANGE` -> every change, in order. Fields: `goal=` (0 = the rout has no goal: init slot 0x815aa0 failed at load), `goal8=` (must be 0 or 4,
+  else 0x80dcd0 returns), `sq=` (0 = 0x791090 exits at 0x7910af), `a_bc=` (must be 0), `a8c=` / `a90=` (both 0 = 0x7f6750 never stores the goal), `a154=` (becomes = goal
+  when the store ran), `started=` (rout+0x40: 1 after AITrigger), `blocked=` (rout+0x41), `veh1dc=` (must be 0 at the call, then moves), `kind=` (2 = ZHeli),
+  `ctl7d8` / `ctl7dc` (control state), `pos=(x, y, z)` (the body).
+- Verdicts: no `started=1` ever -> the call never reached the rout (AITrigger/RESET wiring). `started=1` and `goal=00000000` -> goal not built. `goal8` not 0/4 -> early-out 1.
+  `sq=00000000` -> early-out 2. `a_bc=1` before the start -> early-out 3. `a154` stays 0 with started=1 and a8c=a90=0 -> the add-goal store (0x7f680e) is skipped. All
+  fine and `pos=` constant -> the goal exists but nothing feeds the body (next read: ZHeliFlyBehaviour -> ZHeliFlyGoal at ZHeli+0x8c). `pos=` moves -> it flies; compare to the spline.
+- Volume: one line a second per object while anything is found, plus changes (at most 5 a second), 3000 lines a process.
