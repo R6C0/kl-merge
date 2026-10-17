@@ -15,7 +15,8 @@ import os, re, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE); sys.path.insert(0, os.path.join(HERE, '..', 'tools'))
 HEAD = re.compile(r'(\d\d:\d\d:\d\d\.\d+) (.*)')
-KEEP = ('otrace:', 'heli:', 'LOAD ', 'script ', 'bots: ', 'botvan:', 'hud: van card', 'cam', '====')
+KEEP = ('otrace:', 'heli:', 'LOAD ', 'script ', 'bots: ', 'botvan:', 'hud: van card', 'cam', '====',
+        'steam: level ')                # the SHIP hook has no klauto LOAD lines: klsteam's archive / level lines stand in
 FLIP_S = 30.0
 
 try:                                   # the crash markers live in log.py; a short copy is the fallback
@@ -55,8 +56,14 @@ def secs(t):
 # ---------------------------------------------------------------- (a) loads
 def loads(S):
     out = ['(a) LOADS']
-    cur = None; done = []; ev = []
+    cur = None; done = []; ev = []; arch = {}; ship = []
     for t, r, i in S:
+        m = re.match(r'steam: level archive (\S+) opened from (.*?): ', r)
+        if m:
+            arch[m.group(1).lower()] = os.path.basename(os.path.dirname(m.group(2))); continue
+        m = re.match(r"steam: level '([^']*)'(?:: its archive (\S+))?", r)
+        if m:                          # SHIP hook: the level started (it got past the load)
+            ship.append(dict(scene=m.group(1), t0=t, end=t, info='', name=arch.get((m.group(2) or '').lower(), ''))); continue
         m = re.match(r"LOAD start scene='([^']*)'", r)
         if m:
             cur = dict(scene=m.group(1), t0=t, end=None, info='', name=''); done.append(cur); continue
@@ -74,6 +81,9 @@ def loads(S):
                 state = 'in %s' % os.path.basename(cur['scene'] or '?') if cur and not cur['end'] else \
                         ('after %s' % os.path.basename(cur['scene']) if cur else 'before any load')
                 ev.append((t, k, r, state, cur)); break
+    if not done and ship:
+        out.append('  no LOAD start/end lines (SHIP hook): levels that started, from klsteam lines (a crash during a load shows only as a missing entry)')
+        done = ship
     if not done:
         out.append('  no LOAD start/end lines (is this the hook log of a run? or an old log)')
     for c in done:
