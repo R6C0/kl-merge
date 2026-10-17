@@ -752,6 +752,46 @@ def campaign_names(level):
     return tuple(squad_plan()[0])
 
 
+def _tpl_key(path):
+    # '!' and '/' both separate path parts: a template is named 'Effects!010_X!Artillery!Group', its clone group 'CloneGroup_ROOT/Effects/010_X/Artillery/Group'
+    return path.lower().replace('\\', '/').replace('!', '/')
+
+
+def orphan_clones(level, sc=None, log=print):
+    """Top-level clone groups ('CloneGroup_*') holding ZAllocMany copies for which the scene has no template (a ZAllocMany OUTSIDE the clone groups whose
+    path, '!' read as '/', ends in the group's path). kl_prpjoin.templates() only reads '/', and kl_maps.campaign_drop drops the '!' templates of
+    Effects! / scripting but leaves their clone groups as 'map': the copies' template pointer (ZAllocMany +0x58) stays 0 and the first copy's
+    ZParticleEmitter crashes at kl2 0x4c63f2 (M11B, 2026-10-17: Artillery_Impact_Group). -> [glob-escaped top names], on the Dead Men level LEVEL
+    (before the join; names then match the m_drop rule) or, given sc, on any joined scene."""
+    import glob
+    if sc is None:
+        if level != LEVEL:
+            return ()
+        sc = J.Scene.load(level, 'dm')
+    tops = [t for t in sc.tops() if sc.names[t].startswith('CloneGroup_')]
+    inside = set()
+    if sc.label == level:                       # the source level: what the campaign pre-pass drops (squads it must keep excepted) holds no template either
+        import fnmatch
+        drop = [n for n in kl_maps.campaign_drop(level)[0] if n not in {glob.escape(x) for x in campaign_names(level)}]
+        for t in sc.tops():
+            if any(fnmatch.fnmatchcase(sc.names[t], d) for d in drop):
+                inside.update(range(t, sc.end[t]))
+    for t in tops:
+        inside.update(range(t, sc.end[t]))
+    have = [_tpl_key(sc.path[k]) for k in range(1, len(sc.nodes)) if sc.cls(k) == 'ZAllocMany' and k not in inside]
+    out = []
+    for t in tops:
+        if not any(sc.cls(k) == 'ZAllocMany' for k in range(t, sc.end[t])):
+            continue
+        x = sc.names[t][11:].lower()
+        x = x[5:] if x.startswith('root/') else x
+        if not any(h == x or h.endswith('/' + x) for h in have):
+            out.append(glob.escape(sc.names[t]))
+    if out:
+        log('  kl_fa_hasta_layer: %d clone group(s) without a template: %s' % (len(out), ', '.join(o.split('/')[-1] for o in out)))
+    return tuple(out)
+
+
 def strip(M, log=print):
     """On the converted Dead Men level, before the join: the kept squads lose STRIP's kinds; every man who stands beside the mesh goes onto it."""
     import kl_route
@@ -980,7 +1020,7 @@ def build(out, log=print, plan=None):
         bare = os.path.join(out, '_bare')
         try:
             with doors(log):
-                r = kl_maps.one(bare, HOST, LEVEL, keep=True, campaign=True, tag=' campaign', m_drop=M_DROP)
+                r = kl_maps.one(bare, HOST, LEVEL, keep=True, campaign=True, tag=' campaign', m_drop=M_DROP + orphan_clones(LEVEL))
             if not r.get('ok'):
                 raise ValueError('kl_fa_hasta_layer: the bare graft for the van\'s plan did not build: %s at %s' % (r.get('error'), r.get('where')))
             plan = van_plan(os.path.join(bare, name), log)
@@ -991,7 +1031,7 @@ def build(out, log=print, plan=None):
     kl_snd.VOICE = True if VOICE else None
     try:
         with ESC.van_layer(plan, log) as st, doors(log):
-            r = kl_maps.one(out, HOST, LEVEL, keep=True, campaign=True, tag=' campaign', author='kl_fa_hasta_layer', m_drop=M_DROP)
+            r = kl_maps.one(out, HOST, LEVEL, keep=True, campaign=True, tag=' campaign', author='kl_fa_hasta_layer', m_drop=M_DROP + orphan_clones(LEVEL))
     except ValueError:
         if r.get('ok') or not r:
             raise
@@ -1037,6 +1077,9 @@ def check(folder, log=print, problems=None):
     log('  cover lists (FFCoverList): %d' % ncov)
     if ncov != 1:
         fail('%d cover lists (a level needs exactly one)' % ncov)
+    # ---- clone groups: every group of ZAllocMany copies needs its template (else the first copy's emitter crashes at kl2 0x4c63f2)
+    for g in orphan_clones(LEVEL, sc, lambda *a: None):
+        fail('clone group %s holds ZAllocMany copies and no template exists (copy +0x58 stays 0: crash at kl2 0x4c63f2 at load)' % g)
     # ---- the doors: the sunk switches sit 4,000 lower (read back by name against the campaign level), nothing of the wreck is left in the lane
     names = [e.name.decode('latin1') for e in ents]
     for nm, _anc, what in SWITCHES:
