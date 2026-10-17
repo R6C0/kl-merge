@@ -299,6 +299,8 @@
 #define KLB_RULES_VT  0x00bd3514              /* ZGameRulesHeist */
 #define KLB_DAMAGE    0x006a1100              /* its slot 94 (grade) */
 #define KLB_ACTOR_VT  0x00bb3bac              /* ZFFActor (its only vtable; slot 12 = 0x557ba0, a no-argument class getter) */
+#define KLB_RULES_SV  0x00bd2eb4              /* ZGameRulesFragileAllianceSv (online host) */
+#define KLB_RULES_CL  0x00bd31e4              /* ZGameRulesFragileAllianceCl (online client) */
 #define KLB_NREC      32                      /* the money array at score+0x150 has room for 33 */
 #define KLB_NLEVEL    11
 #define KLB_ROUND     0x19
@@ -323,6 +325,7 @@ struct klb_rec { int used; DWORD at, actor, money; BYTE status, stage, flags; fl
 struct klb_snap {
     DWORD rules, score, state, vehicle; int n, level, human; BYTE veh; float timer;
     struct klb_rec r[KLB_NREC];
+    int online;                               /* 1 = filled by klb_read_hud() from an ONLINE rules object (host/client): rules + state only, n = 0, score = 0 */
 };
 
 static struct {                               /* what the hook remembers of the round and of the vehicle now waiting */
@@ -366,6 +369,34 @@ static int klb_read(struct klb_snap *s)
         klh_rd(s->score + 0x150 + 4 * i, &r->money, 4); klh_rd(s->rules + 0x884 + 4 * i, &r->hit, 4);
         if (!(r->flags & 1) && s->human < 0) s->human = i;
     }
+    return 1;
+}
+
+/* 2026-10-18, TASK B (re/hud_online.md): [HUD] Online. The owner's HUD may run in a network FA round (private match / online), but ONLY its local,
+   cosmetic parts. klb_read stays what it was (Arcade: the AI, balance, fed, crew parts all ask it and must stay Arcade-only). klb_read_hud is
+   klb_read, and where that says no, an ONLINE snapshot: the net role 2 (host) / 3 (client), game type 4, a rules object whose vtable is
+   ...FragileAllianceSv / Cl. It carries ONLY what the base class ZGameRulesFragileAlliance holds (offsets < 0x334: Sv adds its own from 0x334, Cl
+   adds none - ctors 0x79acc0 / 0x6fe090): rules, the session state and the vehicle bytes. n = 0, score = 0: every Heist-only reader (records
+   at rules+0x348, ZHeistScore at +0x5f8) then answers 'nothing' by its own vtable test. Reads only. klb_hud_online is set from [HUD] Online by klhud.c. */
+static int klb_hud_online;
+static int klb_online_session(void)
+{
+    DWORD sm, role = 0;
+    if (!klb_hud_online || !(sm = klh_rd32((DWORD_PTR)KLH_VA(KLB_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x54, &role, 4)) return 0;
+    return role == 2 || role == 3;
+}
+
+static int klb_read_hud(struct klb_snap *s)
+{
+    DWORD sm, gs, vt;
+    if (klb_read(s)) return 1;
+    memset(s, 0, sizeof *s); s->human = -1;
+    if (!klb_online_session()) return 0;
+    sm = klh_rd32((DWORD_PTR)KLH_VA(KLB_SESSION));
+    if (!klh_rd(sm + 0x70, &s->state, 4)) return 0;       /* GUESS: the multiplayer session manager keeps its state at +0x70 like the single-player one (0x6c53db pushes state 0x12 for the load) */
+    if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLB_SETTINGS))) || !(s->rules = klh_rd32(gs + 0x54)) || !klh_rd(s->rules, &vt, 4)) { s->rules = 0; return 0; }
+    if (vt != KLB_RULES_SV && vt != KLB_RULES_CL) { s->rules = 0; return 0; }
+    s->level = 1; s->online = 1;                          /* veh 0, timer 0, n 0, score 0: the escape dial and every record reader stay silent */
     return 1;
 }
 

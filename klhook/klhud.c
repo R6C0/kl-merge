@@ -975,7 +975,14 @@ static void klu_dials(const struct klb_snap *s)
     /* the round watch: the float the stock clock prints, [rules+0x4c], against the round's length [score+0x3c]
        (klhud_values.c f); a clock above the length (something set a longer time) is measured against left + played */
     if (klu.grid == 2) { clock = 219.0f; klu_r.clock_max = 360.0f; }
-    else { clock = kluv_round_left(s); klu_r.clock_max = kluv_round_len(s); if (clock > klu_r.clock_max) klu_r.clock_max = clock + kluv_round_played(s); }
+    else if (s->online) {                                  /* [HUD] Online: [rules+0x4c] is the base class's (slot 73 = 0x61d070 is ONE function for Heist, Sv and Cl). The length is not
+                                                              known online (the score object is Heist's): GUESS = the largest time seen since the round began, so the first sample of the round sets it */
+        static DWORD lrules; static float lmax;
+        if (!klh_rd(s->rules + KLUV_R_LEFT, &clock, 4) || !kluv_secs(clock)) clock = 0.0f;
+        if (s->rules != lrules || s->state != 0x19) { lrules = s->rules; lmax = 0.0f; }
+        if (clock > lmax) lmax = clock;
+        klu_r.clock_max = lmax;
+    } else { clock = kluv_round_left(s); klu_r.clock_max = kluv_round_len(s); if (clock > klu_r.clock_max) klu_r.clock_max = clock + kluv_round_played(s); }
     if (klu.wstyle) {
         if (clock > 0.0f && klu_r.clock_max > 0.0f) {
             klu_watch_look(cx, cy, clock);
@@ -1088,7 +1095,15 @@ static int klu_compose(int *state_ok)
     static float card_save[3]; static int card_tags, card_placed;
     struct klb_snap s; int i, row = 0, human, used = 0, alive = 0; long total = 0, loot = 0, rewards = 0; DWORD cat[0x3c / 4]; char name[56]; int lives = 0, rn = 0, rm = 0;
     *state_ok = 0;
-    if (!klb_read(&s)) return 0;                              /* klbot.c 1: Arcade, ZGameRulesHeist, the records */
+    if (!klb_read_hud(&s)) return 0;                          /* klbot.c 1: Arcade, ZGameRulesHeist, the records; [HUD] Online: the online rules' snapshot (no records) */
+    if (s.online) {                                           /* local, cosmetic parts only: the watch and the weapon dial. No crew list, money, rows, tags: their data is Heist's */
+        *state_ok = klu.draw == 2 ? s.state == 0x19 : s.state >= 0x17 && s.state <= 0x19;
+        for (i = 0; i < KLU_NTEXT; i++) { klu_r.t[i].on = 0; klu_r.t[i].noshadow = 0; klu_r.t[i].sa = 1.0f; }
+        klu_r.npic = 0;
+        klu_dials(&s);
+        klwd_compose();
+        return 1;
+    }
     /* the stock player list's own window (its Tick 0x76db00). Draw=2: the stock clock Render draws nothing outside
        state 0x19 (0x81e0c3), so ours is 'shown' - and the stock block hidden - only there */
     *state_ok = klu.draw == 2 ? s.state == 0x19 : s.state >= 0x17 && s.state <= 0x19;
@@ -1519,7 +1534,7 @@ static void klu_tick(int game_thread)
         klu_scan_fails = 0; klu_scan_t = 0; klu_wait_t = 0;
         klu_inset_back();
     }
-    have = klb_read(&pre);                    /* klbot.c 1: an Arcade session with its rules object, whatever the state */
+    have = klb_read_hud(&pre);                /* klbot.c 1: an Arcade session with its rules object, whatever the state ([HUD] Online: or an online one) */
     /* section 5b: a new round under the same scene name, or at the same address. The round's rules object is another
        one, or the session is before the countdown: what we hold belongs to a level that is over. The stock block is
        shown again first, in case that level still stands: klu_hide_tick writes its one byte only into an element that
@@ -1531,7 +1546,7 @@ static void klu_tick(int game_thread)
         snprintf(klu_r.scene, sizeof klu_r.scene, "%s", scene);
     }
     /* section 4 / 6: a level that is not stock, or any level with Stock=1 */
-    allowed = scene[0] && (klu.stock || (klx_on && klx_level_verdict(scene, why) == 2));
+    allowed = scene[0] && (klu.stock || klb_online_session() || (klx_on && klx_level_verdict(scene, why) == 2));       /* online: any level (cosmetic only; Steam stays blocked by klsteam.c as before) */
     if (scene[0] && !allowed) {
         if (!klu_r.told_stock && have && pre.state == 0x19) { klu_r.told_stock = 1; if (klu.log) klog("hud: this level is stock or not judged ([Expansion] %s): nothing is drawn (Stock=1 draws here too)", klx_on ? "on" : "off"); }
         klu_stand_down(klu_r.osd);
@@ -1563,7 +1578,7 @@ static void klu_tick(int game_thread)
         if (klu_make_all(osd)) { klu_r.made = 1; klu_r.rules = pre.rules; } else klu_r.fault = 1;
     }
     tab = klu_tab_held();
-    klu_r.card = tab && klu.tabcard && klu.crew;
+    klu_r.card = tab && klu.tabcard && klu.crew && !pre.online;
     if (tab != klu_r.tab) { klu_r.tab = tab; if (klu.log) klog("hud: tab %s: %s", tab ? "HELD" : "released", !tab ? "the crew list is back" : klu_r.card ? "the crew list is drawn as the card in the middle (TabCard=1)" : "the crew list steps aside, the stock list is shown"); }
     crew = klu.crew; if (tab && !klu_r.card) klu.crew = 0;               /* compose / klu_row / klu_lives_row read klu.crew */
     data = klu_r.made && !klu_r.fault ? klu_compose(&state_ok) : 0;
@@ -1576,7 +1591,7 @@ static void klu_tick(int game_thread)
     if (klu_r.made && (klu.plates || klu.pictest || klu.dials || klu.weapon) && !klu_r.pic_done) klu_pic_prep(klu_r.elem);      /* before the first frame that draws */
     InterlockedExchange(&klu_draw_on, show);
     klwd_show(show);
-    if (show && klu.hide && klu.crew && (!tab || klu_r.card)) klu_hide_tick(osd, 1);
+    if (show && klu.hide && klu.crew && !pre.online && (!tab || klu_r.card)) klu_hide_tick(osd, 1);      /* online the stock list is the only one with data: never hidden */
     else if (tab && !klu_r.card && klu_r.hid) klu_hide_tick(osd, 0);                   /* Tab: the stock list shows (its Tick kept it current) */
     klht_tick(osd, have ? &pre : 0, show);                    /* klhud_tags.c: after the hide (it acts only while klu_r.hid says the stock element is hidden by us) */
     if (klu.probe && klu_probe_ready) {
@@ -1619,6 +1634,7 @@ static void klu_init(void)
     if (!klu.on) return;
     klu.log = klu_inii("Log", 1, 0, 2);
     klu.stock = klu_inii("Stock", 0, 0, 1);
+    klb_hud_online = klu_inii("Online", 0, 0, 1);         /* 2026-10-18: the local, cosmetic parts in a network FA round (klbot.c klb_read_hud; re/hud_online.md). Default 0: never run online */
     klu.crew = klu_inii("Crew", 1, 0, 1); klu.money = klu_inii("Money", 1, 0, 1); klu.round = klu_inii("Round", 1, 0, 1);
     klu.hide = klu_inii("HideStock", 1, 0, 1);
     klu.draw = klu_inii("Draw", 1, 1, 2);
