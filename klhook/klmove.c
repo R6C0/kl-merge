@@ -288,6 +288,7 @@
 #define KLMV_CALLVEH    0x008154f0            /* void __thiscall (rules, vehicle, char last): what rules slot 44 (0x6cd8e0) and the forced last call (0x81e570) call; ret 8 */
 #define KLMV_LAST_AT    1.75f                 /* s left on the round clock: the game's own forced call is at 2.0 (0x81e570); this is the fallback after it */
 #define KLMV_LAST_NOVEH 2.5f                  /* s left: with NO vehicle known to the rules the game's own call at 2.0 cannot happen (0x81e5aa), so there is nothing to give a frame to (v82d) */
+#define KLMV_CLOCK_LEAD_GUESS 10.0f           /* v82e GUESS: how many s the HUD clock [rules+0x4c] runs ahead of the END timer [rules+0x200] when the latter cannot be read (HELI3: 10.25 s at the end) */
 #define KLMV_SENT       3000.0f               /* BoardReachOrder: only a bot within this of the boarding box is sent to the doors. GUESS */
 
 /* a box entity in the world: its node's place, its three axes, its half extents (box = 0: not a ZBoxPrimitive, a point) */
@@ -681,37 +682,47 @@ static DWORD klmv_exit_vehicle(DWORD *trig)
 
 /* v82d (2026-10-17, AA step 6): what the clock showed last, so a round that ends WITHOUT the call can say why. NOT reset per round (klmv_r is wiped
    when a crew stage drops): rules says which round it belongs to. */
-static struct { DWORD rules, at; float left; int n, sec, told_end, told_fail, passes; } klmv_lc;
+static struct { DWORD rules, at; float left, endt, rem; int n, sec, told_end, told_fail, passes; } klmv_lc;
+/* v82e (2026-10-17, AA step 7): HELI3 showed the call never fired because the round does NOT end on the HUD clock [rules+0x4c]. kl2 0x5dff40 (rules slot 192)
+   counts [rules+0x200] down from state 0x19 and sets state 0x1f when it is <= 0 (vehicle state 0 or >= 7); the HUD clock ran about 10 s ahead of it, so the game's
+   own 2.0 s crossing on [4c] (0x81e570) never came before the end. The trigger is now the time left on [rules+0x200] ('rem'); the HUD clock is only a fallback. */
 
 /* the round left state 0x19 (or the session could not be read) and the last call has not been made: say what the clock was, once */
 static void klmv_last_end(DWORD rules, DWORD state, int read_failed)
 {
     int *told = read_failed ? &klmv_lc.told_fail : &klmv_lc.told_end; char what[80];
     if (!klmv.last || !klmv_lc.rules || (rules && rules != klmv_lc.rules) || klmv_r.last_done || *told || !klmv_lc.passes) return;
-    if (read_failed && klmv_lc.left > 15.0f) return;
+    if (read_failed && klmv_lc.rem > 15.0f) return;
     *told = 1;
     if (read_failed) strcpy(what, "the session could NOT be read"); else snprintf(what, sizeof what, "the round left state 0x19 (now 0x%lx)", (unsigned long)state);
-    klog("last: %s without the last-vehicle call: the clock was last read %.2f s (%lu ms ago; %d pass(es) in the round, %d of them at 10 s or less) - %s",
-         what, klmv_lc.left, GetTickCount() - klmv_lc.at, klmv_lc.passes, klmv_lc.n,
-         klmv_lc.left > 2.5f ? "no pass saw the clock in the 2.5 s window: it jumped or the round was ended by something else" : klmv_lc.left <= 0.0f ? "the clock read 0 before a pass saw it in the window" : "a pass saw it in the window but did not call (see the lines above)");
+    klog("last: %s without the last-vehicle call: the HUD clock was last read %.2f s, the END timer %.2f s, time left taken as %.2f s (%lu ms ago; %d pass(es) in the round, %d of them within 15 s of the end) - %s",
+         what, klmv_lc.left, klmv_lc.endt, klmv_lc.rem, GetTickCount() - klmv_lc.at, klmv_lc.passes, klmv_lc.n,
+         klmv_lc.rem > 2.5f ? "no pass saw the time left in the 2.5 s window: it jumped or the round was ended by something else" : klmv_lc.rem <= 0.0f ? "the time left read 0 before a pass saw it in the window" : "a pass saw it in the window but did not call (see the lines above)");
 }
 
 static void klmv_last_vehicle(const struct klb_snap *s)
 {
     static const BYTE head[16] = { 0x56, 0x8b, 0xf1, 0x80, 0xbe, 0xdc, 0x01, 0x00, 0x00, 0x00, 0x0f, 0x85, 0x9e, 0x00, 0x00, 0x00 };      /* 0x8154f0 */
-    float left = 0, limit; BYTE flagged = 0, kind = 0, veh = 0; DWORD known, e80, trig = 0, v, t0;
+    float left = 0, endt = 0, rem, limit; int endt_ok, game_frame; BYTE flagged = 0, kind = 0, veh = 0; DWORD known, e80, trig = 0, v, t0;
     if (!klh_rd(s->rules + 0x4c, &left, 4) || !klb_finite(left)) return;
     /* v82d: every pass is noted; from 10 s on each whole second is said once (the clock, and what the game has done), so the next live run shows what the code saw */
     if (klmv_lc.rules != s->rules) { memset(&klmv_lc, 0, sizeof klmv_lc); klmv_lc.rules = s->rules; klmv_lc.sec = 99; }
-    klmv_lc.left = left; klmv_lc.at = GetTickCount(); klmv_lc.passes++; if (left <= 10.0f) klmv_lc.n++;
+    /* v82e: the round's real end is the END timer [rules+0x200] (0x5dff40); where it reads sanely it is the time left, else the HUD clock minus the GUESSed lead */
+    klh_rd(s->rules + 0x200, &endt, 4);
+    endt_ok = klb_finite(endt) && endt > 0.0f && endt <= 700.0f;
+    rem = endt_ok ? endt : left - KLMV_CLOCK_LEAD_GUESS;
+    klmv_lc.left = left; klmv_lc.endt = endt; klmv_lc.rem = rem; klmv_lc.at = GetTickCount(); klmv_lc.passes++; if (rem <= 15.0f) klmv_lc.n++;
     if (klmv_r.last_done) return;
     if (!klh_rd(s->rules + 0xe8a, &flagged, 1) || !klh_rd(s->rules + 0x1ec, &kind, 1) || !klh_rd(s->rules + 0x1dc, &veh, 1)) return;
     known = klh_rd32(s->rules + 0x1e4); e80 = klh_rd32(s->rules + 0xe80);
-    if (left <= 10.0f && left > 0.0f && (int)left < klmv_lc.sec) {
-        klmv_lc.sec = (int)left;
-        klog("last: clock %.2f s (pass %d at 10 s or less): vehicle state %u, [rules+0xe8a] %u, kind %u, vehicle %08lx, +0xe80 %08lx; the call is made at %.2f s or less (%s)", left, klmv_lc.n, veh, flagged, kind, known, e80,
-             (known || e80) ? KLMV_LAST_AT : KLMV_LAST_NOVEH, (known || e80) ? "a vehicle is known: the game's own call at 2.0 s gets its frame" : "NO vehicle known: the game's own call cannot happen");
+    game_frame = (known || e80) && endt_ok && left <= endt + 0.5f;      /* the HUD clock is not ahead of the end timer: the game's own 2.0 s crossing can still come before the end */
+    if (rem <= 15.0f && rem > 0.0f && (int)rem < klmv_lc.sec) {      /* v82e: from 15 s before the end, each whole second once */
+        klmv_lc.sec = (int)rem;
+        klog("last: %.2f s left to the end (END timer %.2f%s, HUD clock %.2f, offset %.2f; pass %d within 15 s): vehicle state %u, [rules+0xe8a] %u, kind %u, vehicle %08lx, +0xe80 %08lx; the call is made at %.2f s left or less (%s)",
+             rem, endt, endt_ok ? "" : " NOT USABLE: HUD clock less the GUESSed lead", left, left - rem, klmv_lc.n, veh, flagged, kind, known, e80,
+             game_frame ? KLMV_LAST_AT : KLMV_LAST_NOVEH, game_frame ? "a vehicle is known and the HUD clock is not ahead: the game's own call at 2.0 s gets its frame" : "no vehicle known, or the HUD clock runs ahead of the end: the game's own call cannot come in time");
     }
+    left = rem;                               /* from here on 'left' is the time to the round's end */
     if (left > 2.5f || left <= 0.0f) return;
     if (veh || flagged) {                     /* the game called one (its own forced call at 2.0 s, or a call before that is still running): nothing to do */
         if (!klmv_r.last_told++) klog("last: %.2f s left: a vehicle is under way or the last one is flagged already (state %u, [rules+0xe8a] %u, kind %u, vehicle %08lx, +0xe80 %08lx): nothing done", left, veh, flagged, kind, known, e80);
@@ -719,7 +730,7 @@ static void klmv_last_vehicle(const struct klb_snap *s)
     }
     /* v82d: the game's own call (0x81e570) needs a vehicle: [rules+0x1e4] / [rules+0xe80] (0x81e5aa 'je' past the call when edi = 0). With none known it will NEVER come,
        so there is no frame to give it: the call is made from 2.5 s on. With one known the game gets its frame at 2.0 s and this follows at 1.75 s. */
-    limit = (known || e80) ? KLMV_LAST_AT : KLMV_LAST_NOVEH;
+    limit = game_frame ? KLMV_LAST_AT : KLMV_LAST_NOVEH;      /* v82e: the frame is given only when the game's 2.0 s crossing on [4c] precedes the end */
     if (left > limit) return;
     klmv_r.last_done = 1;
     if (klh_rd32(s->rules) != KLB_RULES_VT || !klb_same_code(KLMV_CALLVEH, head, sizeof head)) { klog("last: %.2f s left and NO last vehicle, but the rules object or 0x8154f0 is not the one this build knows: nothing done", left); return; }
@@ -1357,7 +1368,7 @@ static void klmv_init(void)
              klmv.restless / 1000, klmv.loot / 1000, klmv.back / 1000, klmv.loot_near, klmv.hold / 1000, klmv.pace, klmv.dry ? " DRY RUN (MoveDry=1: nothing is written or called)" : "", KLE_ORDER,
              klmv.hold ? "; at its own hold place for Hold seconds: a shift round it" : "; a bot at its own place (a meant wait) is left alone");
     if (klmv.last)
-        klog("last: on (LastVehicle=1, the default; 0 = off)%s: in an Arcade round on a level that is not the stock one, when the round clock is at %.2f s and the game has called no vehicle (state 0, [rules+0xe8a] 0: its own last call at 2.0 s found no vehicle - none was called before in this level load), the vehicle the exit trigger names is called as the round's last (0x8154f0, as the game's own)",
+        klog("last: on (LastVehicle=1, the default; 0 = off)%s: in an Arcade round on a level that is not the stock one, v82e: when the END timer [rules+0x200] (what really ends the round, kl2 0x5dff40) shows %.2f s or less and the game has called no vehicle (state 0, [rules+0xe8a] 0: its own last call at 2.0 s found no vehicle - none was called before in this level load), the vehicle the exit trigger names is called as the round's last (0x8154f0, as the game's own)",
              klmv.dry ? " DRY RUN (MoveDry=1)" : "", KLMV_LAST_AT);
     if (klmv.botvan)
         klog("botvan: on (BotVan=%lu s, the default 4; 0 = off)%s: when a loyal AI heister in play has had heist stage 3 (it stood in the level exit box) that long and no vehicle was called (state 0, not the last one, nothing holds the call, more than 20 s on the clock), the vehicle the exit trigger names is called for the crew (0x8154f0 with 0, as the box's own call)",

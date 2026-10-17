@@ -1899,3 +1899,18 @@ AA handover, step 4 (2026-10-17, the way up for the AI heisters; offline, NOT RU
 - v82d (klmove.c only): every pass notes the clock; from 10 s on each whole second one line 'last: clock X s (pass n ...): vehicle state, e8a, kind, vehicle, e80; the call is made at <= 1.75 (vehicle known) or 2.5 s (none known)'; with no vehicle known the call is made from 2.5 s (not 1.75); one line when the round leaves state 0x19 or the session cannot be read (clock <= 15 s) without the call: 'last: ... the clock was last read X s (n ms ago; passes; passes <= 10 s) - <which of the three cases>'. Test hook hud_v82d_test 6f75a924..., ship 61316ee8....
 - Live test plan: any plain round of >= 365 s on the heli build, hook v82d, human alive or fed (no need to enter the box). Expect 'last: clock 10.xx s' .. 'last: clock 1.xx s' lines then 'the exit trigger ...'s vehicle ... called as the round's last' and 'hud: van card ON'. If the clock lines stop before 2.5 s the closing 'last:' line names the case.
 - ASSUMED: the three candidates above are the only ones; ZOnlineExitLevelTrigger scan finds the heli (never run for a ZHeli); calling 0x8154f0 with the chopper starts its Incomming rout.
+
+### AA handover, step 7 (2026-10-17, v82e; static reading of kl2.exe 0490, NOT RUN)
+FINDING (HELI3: GO 17:22:51.785, over at GO+360.1 s, HUD clock last read 10.25 s, no call):
+- The round does not end on the HUD clock [rules+0x4c]. Rules slot 192 (0x5dff40) counts the END timer [rules+0x200] down from state >= 0x19 and, at <= 0 with vehicle
+  state 0 or >= 7, sets state 0x1f through vtable +0x68. A vehicle state 1..6 holds the end.
+- The game's own forced call (0x81e570) acts when [4c] <= 2.0 (float 0xb5c828) and dt + [4c] >= 2.0 (double 0xb62258), needs vtable slot 0x17c == 3 and a known
+  vehicle ([rules+0x1e4], else [rules+0xe80]), then 0x8154f0(rules, vehicle, 1).
+- [200] is reset to 600.0 by 0x8c7a80 and set from the level settings property ([rules+0x2c]+0x2d4, 0x5897f0); [4c] comes from slot 36 (0x7c6d70, 360.0 const
+  0xb2e7fc via 0x6d3130), the state 0x17/0x19 enters (0x5e8816, score +0x3c/+0x40) and slot 41 (0x7f09a0). klfed logged [200] = 360 at GO while [4c] ended 10.25 s.
+  So the HUD clock ran about 10 s AHEAD of the end timer: its 2.0 crossing (and v82d's 1.75/2.5 s window) came only after the round had ended.
+- ASSUMED, not proven: the writer that makes [4c] about 370 while [200] is 360 (likely level settings versus the 0x6d3130 path); the offset may differ per level.
+CHANGE (klmove.c v82e): the trigger is the time left on [rules+0x200] ('rem'), valid when finite, > 0 and <= 700. Otherwise GUESS: rem = HUD clock - 10 (KLMV_CLOCK_LEAD_GUESS).
+The call fires at rem <= 2.5 s (no frame is given unless a vehicle is known AND the HUD clock is not ahead of the end timer, then 1.75 s). The log now says, from 15 s
+before the end, once per whole second: time left, END timer, HUD clock, offset, vehicle state/flags; and the 'last:' closing line carries both timers.
+TEST PLAN: build hud_v82e_test, an Arcade round on Retomoto, read the 'last:' lines; expect a call at about 2.5 s before the end and the van.
