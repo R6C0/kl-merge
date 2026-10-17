@@ -14,7 +14,8 @@ No doors, no seal, no light show, seven bots (bots_step: kl_fa_bots + kl_fa_bots
 This module is the club's author layer (kl_fa_club.py) cut down to what a park needs, with the park's own tables. It holds the nine names
 of kl_graft.AUTHOR_NAMES. Every number marked GUESS is a guess; MEASURED ones come from the real files (re/campaign_v2_plan.md).
 Usage (from tools/):
-  python kl_fa_v2_park.py test <out> [--keep] [--plan plan.json] [--squads-awake] [--no-ai] [--no-police] [--no-music] [--str PC_Def.str]
+  python kl_fa_v2_park.py test <out> [--keep] [--plan plan.json] [--squads-awake] [--no-ai] [--no-police] [--no-music] [--no-civilians] [--str PC_Def.str]
+  python kl_fa_v2_park.py civilians <finished folder> <new folder> [n]   the post-step (after the gun-sound step)
   python kl_fa_v2_park.py plan <bare-folder> <plan.json>      the van's plan from a built bare graft
   python kl_fa_v2_park.py check <folder> | van-check <folder> | finish <folder>
 """
@@ -38,6 +39,7 @@ NO_AI = False                           # True ('--no-ai'): no squad of the camp
 SQUADS_AWAKE = False                    # True ('--squads-awake'): ZSquadScript field 3 = 1 on all seven (fall-back if naming the start child does not wake a squad)
 POLICE_ARRIVE = True                    # False ('--no-police')
 VOICE = True
+CIVILIANS = 20                          # civilians for the POST-STEP civilians_step() (tools/kl_fa_civs.py, kl-merge-e5's; 0 / '--no-civilians' = none)
 STREAM = None
 
 # what the campaign pre-pass drops from M06_A: the level bound at the stairs' bottom (it would punish the way up), the exit cutscene
@@ -896,19 +898,33 @@ def test(out, keep=False, log=print, plan=None):
     return 1 if bad else 0
 
 
+def civilians_step(folder, out, n=None, seed=7, log=print):
+    """POST-STEP on a finished folder (after test() and the gun-sound step): n frightened civilians in Dog Days' own form, with F07's civilian model,
+    into the NEW folder `out` (tools/kl_fa_civs.py add; this module never places a civilian itself). -> kl_fa_civs' report, or None for n == 0.
+    GUESS: places = the biggest part of the navigation mesh, 150 apart, never on a guard's spot."""
+    n = CIVILIANS if n is None else n
+    if not n:
+        return None
+    import kl_fa_civs as C
+    civs = C.plan_places(C.F.Built(folder, 'F01'), n, seed=seed)
+    log('  kl_fa_v2_park: civilians_step: %d of %d placed' % (len(civs), n))
+    return C.add(folder, out, civs, 'F01', C.HOST, max_prm_growth=1 << 21, log=log)
+
+
 def load_plan(folder):
     pj = os.path.join(folder, 'van.json')
     lay_van(plan_of(pj))
 
 
 def main():
-    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, STREAM, MUSIC
+    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, STREAM, MUSIC, CIVILIANS
     a = sys.argv[1:]
     if len(a) >= 2 and a[0] == 'test':
         NO_AI = '--no-ai' in a
         SQUADS_AWAKE = '--squads-awake' in a
         POLICE_ARRIVE = '--no-police' not in a
         MUSIC = '--no-music' not in a
+        CIVILIANS = CIVILIANS if '--no-civilians' not in a else 0
         if '--str' in a:
             STREAM = os.path.abspath(a[a.index('--str') + 1])
             BK.use_stream(STREAM)
@@ -928,6 +944,8 @@ def main():
         for x in rep['faults']:
             print('  ' + str(x))
         sys.exit(1 if rep['faults'] else 0)
+    elif len(a) in (3, 4) and a[0] == 'civilians':
+        civilians_step(a[1], a[2], int(a[3]) if len(a) == 4 else None)
     elif len(a) == 2 and a[0] == 'finish':
         sys.exit(1 if finish(a[1]) else 0)
     elif len(a) == 2 and a[0] == 'check':

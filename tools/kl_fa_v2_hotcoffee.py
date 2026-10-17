@@ -12,12 +12,14 @@ THE ROUND (owner, 2026-10-17: 'the campaign version'; raw, bodycam-like, Heat-st
        donut (speak box)  the diner's north edge (z 24250): the donut shop's squads, THE ALARM (van timer + gate = F07's police squads)
   3. Loot: 12 briefcases, six in the warehouse and six in the diner.
   4. Out: north past the donut shop to the street at z 30800: the van waits there (kl_map_escape plan, stop (2000, 30800)).
-No doors, no seal, no light show, no room gates (bots: bots_step, OFF - the mesh is in islands, see its docstring): the campaign level needs none of them.
+The garage's back wall is blown by the campaign's own blast objects at the round-start event (GARAGE_BLAST, measured with kl_walk2d.py: the crew was
+locked in without it). No other doors, no seal, no light show, no room gates (bots: bots_step, OFF - the mesh is in islands, see its docstring): the campaign level needs none of them.
 
 Holds the nine names of kl_graft.AUTHOR_NAMES. Every number marked GUESS is a guess; MEASURED ones come from the real files (the bare graft
 F07+M01_A: navigation mesh = kl_route.load('M01_A').mesh(), collision floors = kl_map_escape.Ground; re/campaign_v2_plan.md).
 Usage (from tools/):
-  python kl_fa_v2_hotcoffee.py test <out> [--keep] [--plan plan.json] [--squads-awake] [--no-ai] [--no-police] [--str PC_Def.str]
+  python kl_fa_v2_hotcoffee.py test <out> [--keep] [--plan plan.json] [--squads-awake] [--no-ai] [--no-police] [--no-blast] [--no-civilians] [--str PC_Def.str]
+  python kl_fa_v2_hotcoffee.py civilians <finished folder> <new folder> [n]   the post-step (after the gun-sound step)
   python kl_fa_v2_hotcoffee.py plan <bare-folder> <plan.json>      the van's plan from a built bare graft
   python kl_fa_v2_hotcoffee.py check <folder> | van-check <folder> | finish <folder>
 """
@@ -154,8 +156,26 @@ ROLE = {'monitor': 'Gameplay!AIMonitor',
         'van on': FF + 'Shutters!GeomActivator_TearGas_LEFT',            # ActivateGeom -> the van's group (the van is hidden until then)
         'van timer': FF + 'RivalMercs!DisableVisionBlocker!Timer',       # TriggerDelay2 VAN_DELAY -> van on, the speak line
         'reset hide': FF + 'RivalMercs!DisableVisionBlocker!GeomDeactivator',   # DeactivateGeom -> the van's group again (round 2)
+        'pre show': FF + 'Shutters!GeomActivator_TearGas_RIGHT',         # ActivateGeom -> the garage wall's intact pieces again (round 2; GARAGE_BLAST)
         'speak box': 'Specials!LevelSpeak!TriggerBox', 'speak': 'Specials!LevelSpeak!OnlineSpeakTrigger_01',
         'exit': 'Gameplay!EscapeSetup!otrExitLevel'}
+# THE GARAGE WALL (owner 2026-10-17: 'you cant even leave that garage building because its a scripted event'). In the campaign a scripted
+# explosion blows the garage's back wall; the build drops the scripts, so the wall stayed shut and the crew was locked in. MEASURED
+# (tools/kl_walk2d.py on the built level, collision only): with the 15 pieces of the campaign's own 'GeomDeactivator_OnExplosion' list AND the brick
+# wall 'Interior_BrickWallShatter_01' gone, a person walks from the START rows out to the junkyard (22,676 plan cells, the junk piles then
+# bound it); without the brick wall only 5,712 cells (the garage), without the list 4,000. The door GarageDor_A is NOT the exit.
+# So the campaign's own blast objects stay in the level and the round-start event fires them START_AT s after the round starts:
+#   out   DeactivateGeom (campaign list: intact wall, tanks, repair walls, fire box) + the brick wall (added here)
+#   gfx   ActivateGeom   (the blown wall's collision and debris)        fire / dust   ActivateGeom (flames, smoke, flask)   boom   Explode
+# Round 2: the monitor list (round-start event) first shows the intact pieces again (carrier 'pre show') and hides the blown ones ('startup').
+GARAGE_BLAST = True                     # False ('--no-blast'): the wall stays shut as in the first v2 (the crew is locked in the garage)
+# The blast rides on the start timer (START_AT after the round-start event, i.e. before GO): the wall is open when the round begins. GUESS
+GW = 'Specials!GarageWallExplosion!'
+BLAST = collections.OrderedDict([('out', GW + 'GeomDeactivator_OnExplosion'), ('gfx', GW + 'GeomActivator_GFXToTurnOnExplosion'),
+                                 ('fire', GW + 'GeomActivator_StartExplosionPart_01'), ('dust', GW + 'GeomActivator_StartExplosionPart_03'),
+                                 ('boom', GW + 'BigExplosion'), ('startup', GW + 'GeomDeactivator_OnStartup'), ('brick', GW + 'Activator_BrickWallShatter')])
+EXPLODE_REACH = BK.EXPLODE_REACH
+CIVILIANS = 24                          # civilians for the POST-STEP civilians_step() (tools/kl_fa_civs.py, kl-merge-e5's; 0 / '--no-civilians' = none)
 GATE_WAYS = ('Way#01', 'Way#02')
 START_AT = 2.0                          # s from the round-start event to the first squads. GUESS (the event comes 8.4 - 8.8 s before GO)
 BACKSTOP_AT = 420.0                     # s from the round-start event: the police come whatever the crew did. GUESS (the way is long: 290 m)
@@ -447,10 +467,10 @@ def prepare_host(S, log=print):
 
 # ------------------------------------------------------------------ 2. the campaign's own objects
 def campaign_names(level):
-    """Top-level names of M01_A the campaign pre-pass must leave in: the kept squads."""
+    """Top-level names of M01_A the campaign pre-pass must leave in: the kept squads and (GARAGE_BLAST) the garage wall's blast objects."""
     if level != LEVEL:
         return ()
-    return tuple(squad_plan()[0])
+    return tuple(squad_plan()[0]) + (tuple(BLAST.values()) if GARAGE_BLAST else ())
 
 
 def strip(M, log=print):
@@ -564,7 +584,28 @@ def wire(sc, log=print):
         raise ValueError('%s is not a GateGroup with the two GatePath %s' % (ROLE['gate'], GATE_WAYS))
     for w in ways:
         put_(sc.resolve(w)[0], 'GatePath', f0=arrive)
-    lists('start timer', 'TriggerDelay2', f0=START_AT, f4=stage['start'])
+    blast_on, blast_reset = [], []
+    if GARAGE_BLAST:
+        b = {r: node(n) for r, n in BLAST.items()}
+        live = lambda xs: [s for s in xs if sc.resolve(s)]
+        brick = live(values(sc, b['brick'], 'AIDWrapper')[0])
+        pre = live(values(sc, b['out'], 'DeactivateGeom')[1])
+        post, fire = live(values(sc, b['gfx'], 'ActivateGeom')[1]), live(values(sc, b['fire'], 'ActivateGeom')[1])
+        if len(brick) != 1 or len(pre) < 10 or not post or not fire:
+            raise ValueError('kl_fa_v2_hotcoffee: the garage wall\'s blast lists are not whole: brick %s, %d pieces off, %d on, %d fire' % (brick, len(pre), len(post), len(fire)))
+        v = values(sc, b['boom'], 'Explode')
+        if len(v) != 18 or not all(isinstance(v[j], float) for j in EXPLODE_REACH) or values(sc, b['boom'], 'AIDWrapper')[:2] != [[R + BLAST['boom']], 'Activate']:
+            raise ValueError('kl_fa_v2_hotcoffee: %s is not an Explode in the Dog Days layout with a wrapper of its own: %s' % (BLAST['boom'], v))
+        put_(b['boom'], 'Explode', **{'f%d' % j: 1.0 for j in EXPLODE_REACH})      # no harm to the crew (as the vault's blast, kl_fa_bank)
+        put_(b['out'], 'DeactivateGeom', f1=pre + brick)                            # GUESS: the brick wall's body leaves with the intact pieces
+        lists('pre show', 'ActivateGeom', f0='AITrigger', f1=pre + brick)
+        hid = live(values(sc, b['startup'], 'DeactivateGeom')[1])
+        put_(b['startup'], 'DeactivateGeom', f1=hid + [s for s in post + fire if s not in hid])
+        blast_on = [R + BLAST[x] for x in ('out', 'gfx', 'fire', 'dust', 'boom')]
+        blast_reset = [R + BLAST['startup'], R + ROLE['pre show']]
+        log('  kl_fa_v2_hotcoffee: GARAGE_BLAST: round start + %.0f s: %d pieces + the brick wall off, %d on, %d fire/smoke, 1 Explode (reach 1); round 2 shows them again first' % (
+            START_AT, len(pre), len(post), len(fire)))
+    lists('start timer', 'TriggerDelay2', f0=START_AT, f4=stage['start'] + blast_on)
     lists('walk box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['walk'])
     # the warehouse exit: the diner's squads. The ALARM (the van's timer) and the gate (the police on the van's street) are the speak box's, at the diner's north edge
     lists('floor box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['floor'])
@@ -575,7 +616,7 @@ def wire(sc, log=print):
     k = node(ROLE['monitor'])
     mine = {R + v for v in ROLE.values()}
     have = [s for s in values(sc, k, 'AIMonitor')[2] if sc.resolve(s) and s not in mine]
-    lists('monitor', 'AIMonitor', f2=[R + ROLE['reset hide']] + have + [R + ROLE['start timer'], R + ROLE['backstop']])
+    lists('monitor', 'AIMonitor', f2=[R + ROLE['reset hide']] + blast_reset + have + [R + ROLE['start timer'], R + ROLE['backstop']])
     # the speak box (the diner's north edge): the donut shop's squads, the alarm and the gate; the exit line comes from the van's timer, once
     lists('speak box', 'TriggerBox', f14='ECPS_FA_MERCONLY', f17=stage['donut'] + [R + ROLE['van timer'], ways[0]])
     lists('speak', 'OnlineSpeakPlayer', f1=EXIT_LINE)
@@ -865,7 +906,7 @@ def check(folder, log=print, problems=None):
 
 
 def flags_of():
-    return collections.OrderedDict(SQUADS_AWAKE=SQUADS_AWAKE, NO_AI=NO_AI, POLICE_ARRIVE=POLICE_ARRIVE, START_AT=START_AT, BACKSTOP_AT=BACKSTOP_AT, VAN_DELAY=VAN_DELAY)
+    return collections.OrderedDict(SQUADS_AWAKE=SQUADS_AWAKE, NO_AI=NO_AI, POLICE_ARRIVE=POLICE_ARRIVE, START_AT=START_AT, GARAGE_BLAST=GARAGE_BLAST, BACKSTOP_AT=BACKSTOP_AT, VAN_DELAY=VAN_DELAY)
 
 
 def compact_in_place(folder, log=print):
@@ -953,19 +994,35 @@ def test(out, keep=False, log=print, plan=None):
     return 1 if bad else 0
 
 
+def civilians_step(folder, out, n=None, seed=7, log=print):
+    """POST-STEP on a finished folder (after test() and the gun-sound step): n frightened civilians in Dog Days' own form, with F07's civilian model,
+    into the NEW folder `out` (tools/kl_fa_civs.py add; this module never places a civilian itself). -> kl_fa_civs' report, or None for n == 0.
+    GUESS: places = the navigation mesh's biggest part (the street, warehouse, diner), 150 apart; the 332-wide gap to the garage island is why the
+    garage has none."""
+    n = CIVILIANS if n is None else n
+    if not n:
+        return None
+    import kl_fa_civs as C
+    civs = C.plan_places(C.F.Built(folder, 'F01'), n, seed=seed)
+    log('  kl_fa_v2_hotcoffee: civilians_step: %d of %d placed' % (len(civs), n))
+    return C.add(folder, out, civs, 'F01', C.HOST, max_prm_growth=1 << 21, log=log)
+
+
 def load_plan(folder):
     pj = os.path.join(folder, 'van.json')
     lay_van(plan_of(pj))
 
 
 def main():
-    global WITH_BOTS, NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, STREAM
+    global WITH_BOTS, NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, STREAM, GARAGE_BLAST, CIVILIANS
     a = sys.argv[1:]
     if len(a) >= 2 and a[0] == 'test':
         NO_AI = '--no-ai' in a
         WITH_BOTS = '--bots' in a
         SQUADS_AWAKE = '--squads-awake' in a
         POLICE_ARRIVE = '--no-police' not in a
+        GARAGE_BLAST = '--no-blast' not in a
+        CIVILIANS = CIVILIANS if '--no-civilians' not in a else 0
         if '--str' in a:
             STREAM = os.path.abspath(a[a.index('--str') + 1])
             BK.use_stream(STREAM)
@@ -985,6 +1042,8 @@ def main():
         for x in rep['faults']:
             print('  ' + str(x))
         sys.exit(1 if rep['faults'] else 0)
+    elif len(a) in (3, 4) and a[0] == 'civilians':
+        civilians_step(a[1], a[2], int(a[3]) if len(a) == 4 else None)
     elif len(a) == 2 and a[0] == 'finish':
         sys.exit(1 if finish(a[1]) else 0)
     elif len(a) == 2 and a[0] == 'check':
