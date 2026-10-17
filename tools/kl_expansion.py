@@ -212,6 +212,13 @@ EXTRA = [
          known_re=((r'sound: (\d+) stream clips are not in the merged stream file \(kl_audio\.merge\)', 5),),
          live='NOTHING: the map has never been loaded in the game (re/club_campaign.md D4 / C0 .. C5 on the F01 test slot come first; '
               'then page 3 of the menu, entry 0)'),
+    # PAGE 3, entry 2 (2026-10-17): 'A Walk in the Park II' = the campaign park M06_A, F07's systems (tools\kl_fa_v2_park.py, re\campaign_v2_plan.md).
+    # NEW entry beside the installed DM06 (slot F04, page 2): slot F02 (stock Hong Kong Alley's slot; only [Redirect.3] names it, and only while page 3
+    # is open). Same rules as The Vault. known_re: the build has NO finding (verify problems: 0); M06_A's music / ambience beds are
+    # not in the merged stream file (silent until a later stream-file step). NOT RUN IN THE GAME.
+    dict(id='DM06B', slot='F02', page=3, title='A Walk in the Park II', build='prebuilt', sources=['M06_A'], picture='LevelPicture_M06', bones_live=False,
+         audit=True, known=(), known_re=(),
+         live='NOTHING: the map has never been loaded in the game (build/v2_1017/DM06B; the F01 test slot comes first, then page 3 entry 1)'),
 ]
 
 
@@ -2223,7 +2230,7 @@ def selftest(scratch=None, log=print):
     shutil.copytree(tree6, tree7)
     entries7 = list(entries6)
     for m in EXTRA:
-        if page_of(m) != 3:
+        if page_of(m) != 3 or m['id'] != 'DM05A':      # 2026-10-17: the test is about the club alone on page 3 (DM06B, entry 2, is not part of it)
             continue
         d = 'Maps/%s/%s_Main' % (m['id'], m['slot'])
         put(tree7, d + '.zip', b'archive of ' + m['id'].encode() * 9000); put(tree7, d + '.WAV', b'wav of ' + m['id'].encode())
