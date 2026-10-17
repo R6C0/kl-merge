@@ -193,3 +193,41 @@ therefore is: (1) the lobby key `klx_build` keeps stock players out of the searc
 - ISteamFriends use: offsets +0x00 (persona name, 0x869446), +0x1c, +0x0c, +0x4c, +0x50, +0x58 are called at 0x8aec31,
   0x8db740, 0x64c286, 0x55a1f6, 0x5789e6, 0x5e2853, 0x5ffad6 (a re-scan also found 0x418c54, using +0x48 and +0x20..+0x2c); **not mapped to names**, and no rich-presence `connect`
   call was identified.
+
+## 6. Route A implemented: KLHook v82g, `klhook/klmm.c` (2026-10-17, NOT RUN, not installed)
+
+Keys (`KLHook.ini`, `[Net]`, both default 0): `PrivateLobby` 0 / 1 / 2 (2 = Private, Steam type 0; 1 = FriendsOnly, type 1)
+and `BuildKey` 0 / 1. With both 0 **nothing is installed** (the import slot 0xb107d8 is not touched): v82f behaviour. With a
+key set, `klh_iat("steam_api.dll", "SteamMatchmaking", ...)` swaps the slot for an accessor that hands out a proxy object
+(36-slot table: 33 naked tail jumps into the real table, three overrides). The accessor refuses (logs `NOT PROXIED`, the
+game keeps the real interface) unless `steam_api.dll` holds exactly the text `SteamMatchMaking008` and no other
+`SteamMatchMaking0xx`, and all 36 real slots point into code of a loaded module.
+
+| slot | override | does |
+|---|---|---|
+| +0x10 RequestLobbyList | `BuildKey=1` | real +0x14 `AddRequestLobbyListStringFilter("klx_build", id, 0)`, then the real call |
+| +0x30 CreateLobby | `PrivateLobby` != 0 | type -> 1 (key 1) or 0 (key 2); max members as given; 64-bit call handle returned untouched |
+| +0x4c SetLobbyData | `BuildKey=1` | the real call first (result returned), and when its key is `"name"` one more real call with `"klx_build"` = id |
+
+Build id: FNV-1a over the sorted `<dir>\<file>`, size and zip central-directory hash (`klsteam.c` `klx_fingerprint`,
+which holds every member's CRC-32) of every `<game>\<Root>\Maps\*\F*_Main.zip`; 8 hex digits, `none` if there are no maps.
+Write times, `.WHD/.WAV` beside a zip and loose ini files are not in it. GUESS that this set is what a friend has to share.
+Log lines (`mm: ...`, at most 200, never a Steam id): wrapper installed, build id, one per CreateLobby, SetLobbyData `name`
+seen, RequestLobbyList, each with `online=0/1` (what `kl_online()` answered).
+
+**OnlineSafe is not a gate here** (deliberate; see the klmm.c comment): `kl_online()` is probably already true when the host's
+CreateLobby runs, so a gate would disable the feature when needed; these calls change lobby metadata only. The log shows
+`online=` so the first live run tells. Putting `if (kl_online())` before the forward in the three overrides gates it.
+
+### Slots that were GUESS in section 5 and are now PROVEN (static read of `C:\Steam\steamclient.dll`, 2026-10-17)
+- `CAdapterSteamMatchmaking008` has 36 slots; the `ret n` of slots 11..35 are 8 8 8 0x10 8 0x10 0xc 0x10 8 0x1c 0xc 0x14 0x10
+  0x10 0x1c 8 0x18 0x14 0xc 8 0xc 0xc 0xc 0x10: exactly the SDK argument sizes of GetLobbyByIndex .. SetLobbyOwner
+  (a CSteamID is two dwords). The layout without CompatibleMembersFilter is therefore right.
+- Slots 4..10 are tail jumps into the client class (vtable of `IClientMatchmakingMap`, whose methods pop 0 / 0xc / 0xc / 8 /
+  4 / 4 / 4 bytes) and slot 12 into its +0x34 (pops 8). Slot 5 (+0x14) reads arguments 1 and 2 with the string
+  serialiser 0x386280b0 and argument 3 as a 4-byte number: **AddRequestLobbyListStringFilter(key, value, comparison), 12 bytes**.
+  Slot 6 reads argument 1 as a string and 2, 3 as numbers (Numerical), slot 7 pops 8 (NearValue). The order String,
+  Numerical, NearValue is confirmed; the stack effect of the call the proxy makes is exact.
+- Still GUESS: comparison value 0 = Equal for a string filter (same enum as the numeric ones the game pushes 0 for); that the
+  filter accumulates until RequestLobbyList (SDK documentation); FriendsOnly / Private lobbies missing from search results;
+  `kl_online()` at CreateLobby time; the import name `SteamMatchmaking` is PROVEN (present in kl2.exe and exported by steam_api.dll).

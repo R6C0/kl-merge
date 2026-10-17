@@ -18,6 +18,8 @@
  *   klsteam.c      x     x    Steam write guard: a proxy ISteamUserStats behind one import slot; no leaderboard
  *                             upload, stat or achievement from a level that is not the stock level of its slot,
  *                             and none at all from a TEST build; the 'session: state' line
+ *   klmm.c         x     x    [Net] PrivateLobby / BuildKey: a proxy ISteamMatchmaking behind one import slot, installed ONLY when a key
+ *                             is set (friends-only / invite-only Fragile Alliance lobbies, a map-set key on lobby and search); v82g
  *   klstock.h      x     x    GENERATED (mkstock.py): size and directory hash of the 22 stock level archives
  *   kljoin.c       x     x    jump boxes: a two-part level joined by the game's own jump request ([Join], KLJoin.ini)
  *   klcrew_rt.c    x     x    the AI crew follows that jump ([CrewJoin]; calls 0x62a900, 0x72e0f0; no data, no code). OFF by default
@@ -84,6 +86,7 @@
  *   0xb103d0 0xb104b0         MSVCR90 exit, _exit   (the exit line)       ST  import      0 checks      yes  X1 live (as klauto's)
  *   0xb107bc                  steam_api SteamAPI_RunCallbacks (the tick)  ST  import      0 checks      yes  S1 live (+ S2 HK3 J2 J3)
  *   0xb107c8                  steam_api SteamUserStats (klsteam proxy)    ST  import      0 checks      yes  S1 live (+ S2 HK3 J2 J3)
+ *   0xb107d8                  steam_api SteamMatchmaking (klmm proxy)     ST  import      0 checks      only with [Net] PrivateLobby / BuildKey; NOT RUN
  *   [0xdd265c]+0x8d4          jump-list entry to go to   (kljoin)         ST  heap        outside       yes  J2 live (J1b direct boot)
  *   0x156b358                 debug jump request = 1     (kljoin)         ST  .data       0 checks      yes  J2 live (J1b direct boot)
  *   [[[0x168e598]+0x17c]+0x198]+0x31fc   leaderboard row count (klfix)    ST  heap        outside       yes  live (klauto, 6 score pages)
@@ -166,6 +169,7 @@
  *   Join=1              0 = no jump box fires (kljoin.c)
  *   [Expansion] [Redirect] [Redirect.N] [Page.N] [Slots]    klslot.c
  *   [Steam]                                                 klsteam.c (Block, Log, State)
+ *   [Net] PrivateLobby=0/1/2  BuildKey=0/1                  klmm.c (default 0: nothing installed)
  *   [Join] [Join.2] .. [Join.8]                             kljoin.c (also KLJoin.ini beside a level archive)
  *   [CrewJoin] [Crew] [Talk]                                klcrew_rt.c, klcrew.c, kltalk.c - each OFF unless its key is set
  *   [CrewHop]                                               klhop.c (also [CrewHop] in the KLJoin.ini beside a level archive) - OFF unless Enable=1
@@ -647,6 +651,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "kladren.c"                                      /* kladren.c: adrenaline (off unless [Adrenaline] Enable); its tick runs BEFORE kld_tick */
 #include "klreshade.c"                                    /* klreshade.c: the ReShade bridge - live looks from the menu, KL_* uniforms (off unless [ReShade] Bridge=1) */
 #include "klsteam.c"
+#include "klmm.c"                                          /* klmm.c: [Net] PrivateLobby / BuildKey - an ISteamMatchmaking proxy, only when a key is set */
 #include "klslot.c"
 #ifdef KLHOOK_TEST
 #include "klauto.c"
@@ -1111,6 +1116,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kad_init();
     klg_init();
     klx_init();
+    klmm_init();                                      /* klmm.c: installs nothing unless [Net] PrivateLobby or BuildKey is set */
     kls_init(inst);
 #ifdef KLHOOK_TEST
     kla_init(inst);
