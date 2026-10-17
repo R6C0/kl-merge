@@ -13,12 +13,13 @@ THE ROUND (owner, 2026-10-17: 'the campaign version'; raw, bodycam-like, Heat-st
   3. Loot: 12 briefcases, six in the warehouse and six in the diner.
   4. Out: north past the donut shop to the street at z 30800: the van waits there (kl_map_escape plan, stop (2000, 30800)).
 The garage's back wall is blown by the campaign's own blast objects at the round-start event (GARAGE_BLAST, measured with kl_walk2d.py: the crew was
-locked in without it). No other doors, no seal, no light show, no room gates (bots: bots_step, OFF - the mesh is in islands, see its docstring): the campaign level needs none of them.
+locked in without it). No other doors, no seal, no light show, no room gates: the campaign level needs none of them. The AI heisters (bots_step) run on the mesh made whole by nav_bridge_step (NAV_GAPS) with the
+route's closed pieces opened by the blast (ROUTE_OPEN).
 
 Holds the nine names of kl_graft.AUTHOR_NAMES. Every number marked GUESS is a guess; MEASURED ones come from the real files (the bare graft
 F07+M01_A: navigation mesh = kl_route.load('M01_A').mesh(), collision floors = kl_map_escape.Ground; re/campaign_v2_plan.md).
 Usage (from tools/):
-  python kl_fa_v2_hotcoffee.py test <out> [--keep] [--plan plan.json] [--squads-awake] [--no-ai] [--no-police] [--no-blast] [--no-civilians] [--str PC_Def.str]
+  python kl_fa_v2_hotcoffee.py test <out> [--keep] [--plan plan.json] [--squads-awake] [--no-ai] [--no-police] [--no-blast] [--no-route-open] [--no-bots] [--no-civilians] [--str PC_Def.str]
   python kl_fa_v2_hotcoffee.py civilians <finished folder> <new folder> [n]   the post-step (after the gun-sound step)
   python kl_fa_v2_hotcoffee.py plan <bare-folder> <plan.json>      the van's plan from a built bare graft
   python kl_fa_v2_hotcoffee.py check <folder> | van-check <folder> | finish <folder>
@@ -174,8 +175,31 @@ GW = 'Specials!GarageWallExplosion!'
 BLAST = collections.OrderedDict([('out', GW + 'GeomDeactivator_OnExplosion'), ('gfx', GW + 'GeomActivator_GFXToTurnOnExplosion'),
                                  ('fire', GW + 'GeomActivator_StartExplosionPart_01'), ('dust', GW + 'GeomActivator_StartExplosionPart_03'),
                                  ('boom', GW + 'BigExplosion'), ('startup', GW + 'GeomDeactivator_OnStartup'), ('brick', GW + 'Activator_BrickWallShatter')])
+# THE ROUTE'S OTHER CLOSED PIECES (2026-10-18, tools/kl_walk2d.py on the built level, STEP 65, with the blast above already gone). The flood from the START
+# rows stops at the alley's south wall, 800 wide, 66 thick, 265 high (no gap anywhere along it) and, once that is gone, at the warehouse's HERO-ONLY blocker
+# between the two steel doors, then at the closed leaf of the second steel door (x 2840 .. 2960, z 17284 .. 17319). The campaign's scripts open these.
+# They go off with the blast (same list, same reset in round 2). GUESS: nothing else on the way to the van is closed: the flood from the second door
+# reaches z 23,000 of 30,800 (146 of 379 mesh polygons of the main part) and then stops at cells the 40-unit grid cannot judge; not walked further.
+ROUTE_OPEN = ('M01A_Out_Alley_03a\\SO0201_M01_Wall_6mx250cm_01',
+              'M01A_Ins_WarehouseOffice_101a\\ColiObj_HeroOnly_BlockDoor',
+              'M01A_Ins_WarehouseOffice_101a\\SI0103_M01_DoorSteel_A_HEADS_01',
+              'M01A_Ins_Warehouse_101a\\SI0103_M01_DoorSteel_A_TAILS_01')
+ROUTE_OPEN_ON = True                    # False ('--no-route-open'): only the blast; the nav bridges then lead into walls
+
+
+def route_open(sc):
+    """Full paths of the ROUTE_OPEN nodes in the scene sc (each must be exactly one)."""
+    out = []
+    for tail in ROUTE_OPEN:
+        hit = [sc.path[k] for k in range(1, len(sc.names)) if sc.path[k] and sc.path[k].endswith('\\' + tail)]
+        if len(hit) != 1:
+            raise ValueError('kl_fa_v2_hotcoffee: ROUTE_OPEN %s: %d nodes' % (tail, len(hit)))
+        out.append(hit[0])
+    return out
+
+
 EXPLODE_REACH = BK.EXPLODE_REACH
-CIVILIANS = 24                          # civilians for the POST-STEP civilians_step() (tools/kl_fa_civs.py, kl-merge-e5's; 0 / '--no-civilians' = none)
+CIVILIANS = 24                         # civilians for the POST-STEP civilians_step() (tools/kl_fa_civs.py, kl-merge-e5's; 0 / '--no-civilians' = none)
 GATE_WAYS = ('Way#01', 'Way#02')
 START_AT = 2.0                          # s from the round-start event to the first squads. GUESS (the event comes 8.4 - 8.8 s before GO)
 BACKSTOP_AT = 420.0                     # s from the round-start event: the police come whatever the crew did. GUESS (the way is long: 290 m)
@@ -597,14 +621,15 @@ def wire(sc, log=print):
         if len(v) != 18 or not all(isinstance(v[j], float) for j in EXPLODE_REACH) or values(sc, b['boom'], 'AIDWrapper')[:2] != [[R + BLAST['boom']], 'Activate']:
             raise ValueError('kl_fa_v2_hotcoffee: %s is not an Explode in the Dog Days layout with a wrapper of its own: %s' % (BLAST['boom'], v))
         put_(b['boom'], 'Explode', **{'f%d' % j: 1.0 for j in EXPLODE_REACH})      # no harm to the crew (as the vault's blast, kl_fa_bank)
-        put_(b['out'], 'DeactivateGeom', f1=pre + brick)                            # GUESS: the brick wall's body leaves with the intact pieces
-        lists('pre show', 'ActivateGeom', f0='AITrigger', f1=pre + brick)
+        route = route_open(sc) if ROUTE_OPEN_ON else []
+        put_(b['out'], 'DeactivateGeom', f1=pre + brick + route)                    # GUESS: the brick wall's body leaves with the intact pieces
+        lists('pre show', 'ActivateGeom', f0='AITrigger', f1=pre + brick + route)
         hid = live(values(sc, b['startup'], 'DeactivateGeom')[1])
         put_(b['startup'], 'DeactivateGeom', f1=hid + [s for s in post + fire if s not in hid])
         blast_on = [R + BLAST[x] for x in ('out', 'gfx', 'fire', 'dust', 'boom')]
         blast_reset = [R + BLAST['startup'], R + ROLE['pre show']]
-        log('  kl_fa_v2_hotcoffee: GARAGE_BLAST: round start + %.0f s: %d pieces + the brick wall off, %d on, %d fire/smoke, 1 Explode (reach 1); round 2 shows them again first' % (
-            START_AT, len(pre), len(post), len(fire)))
+        log('  kl_fa_v2_hotcoffee: GARAGE_BLAST: round start + %.0f s: %d pieces + the brick wall + %d route pieces off, %d on, %d fire/smoke, 1 Explode (reach 1); round 2 shows them again first' % (
+            START_AT, len(pre), len(route), len(post), len(fire)))
     lists('start timer', 'TriggerDelay2', f0=START_AT, f4=stage['start'] + blast_on)
     lists('walk box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['walk'])
     # the warehouse exit: the diner's squads. The ALARM (the van's timer) and the gate (the police on the van's street) are the speak box's, at the diner's north edge
@@ -936,17 +961,82 @@ def compact_in_place(folder, log=print):
 
 BOT_OPT = {'stops': 2, 'cases': 'off', 'lane': True, 'window': True, 'loot_seconds': 20}
 # GUESS (this file's): briefcases only, two stops (warehouse, diner), a loot wait of 20 s.
-WITH_BOTS = False       # '--bots': the bots step runs. OFF BY DEFAULT: kl_fa_bots.plan REFUSES this level today (below)
+WITH_BOTS = True        # '--no-bots': no bots step (and no nav bridges)
+
+# THE NAVIGATION MESH BRIDGES (kl_nav_bridge.py). The campaign's mesh (kl_route 'M01_A') is three islands: the garage + junkyard (part 0, the START rows),
+# the alley (24) and the main part (15: warehouse, diner, the van's street). The campaign's scripts (the blast, the alley's wall, the warehouse doors)
+# join them at run time; without a way over, kl_fa_bots.plan finds no place on the START part near the van and a bot has no path to the loot.
+# Each gap is crossed by TWO new one-polygon areas with a narrow THROAT between them, so that the string-pulled path of a bot goes through the
+# opening and not along the diagonal through the wall (a single quad between the two border edges is as wide as the wider edge).
+#   gap 1 garage -> alley (332 across, flat y 0): polygon 612 edge 2 (z 11168, x 2716 .. 2965) -> throat z 11400 x 2790 .. 2910 -> polygon 571 edge 4
+#         (z 11664, x 2828 .. 2903). MEASURED (kl_walk2d, STEP 65, the alley's wall off): the lane x 2760 .. 2940 is free from z 11120 to z 11760; west of it
+#         (x 2560 .. 2740, z 11380 .. 11500) stands a junk pile.
+#   gap 2 alley -> warehouse (110 across, flat y 60): polygon 762 edge 1 (z 17235, x 2776 .. 3024) -> throat z 17340 x 2860 .. 2930 -> polygon 1038 edge 3
+#         (z 17345, x 1538 .. 3060). The second steel door stands in the wall between (x 2840 .. 2960, z 17284 .. 17319). GUESS: the throat's x range
+#         (the door's jambs are inside the 40-unit grid's resolution: the flood passes the cells x 2860 and 2900 only).
+# The other 'gap 2' pairs of kl_fa_bots' report (91 across, 25 up) are polygons of the alley's UPPER floor (y 860) against the warehouse floor (y 60): not a way.
+NAV_GAPS = (dict(a=(612, 2), b=(571, 4), zt=11400.0, xt=(2790.0, 2910.0)),
+            dict(a=(762, 1), b=(1038, 3), zt=17340.0, xt=(2860.0, 2930.0)))
+
+
+def nav_bridges(nav):
+    """The bridge list kl_nav_bridge.add_bridges takes, from the mesh nav (kl_fa_bots.Nav) and NAV_GAPS."""
+    out = []
+    for g in NAV_GAPS:
+        (pa, ea), (pb, eb) = g['a'], g['b']
+        for p, e in ((pa, ea), (pb, eb)):
+            if nav.en[p][e] != -1:
+                raise ValueError('kl_fa_v2_hotcoffee: NAV_GAPS: polygon %d edge %d is not a border (neighbour %s)' % (p, e, nav.en[p][e]))
+        a0, a1 = nav.pv[pa][ea], nav.pv[pa][(ea + 1) % len(nav.pv[pa])]
+        b0, b1 = nav.pv[pb][eb], nav.pv[pb][(eb + 1) % len(nav.pv[pb])]
+        # the bridge's edges run the other way round on the old ones: corners [a1, a0, throat left, throat right], then [throat right, throat left, b1, b0]
+        t0, t1 = (g['xt'][0], a0[1], g['zt']), (g['xt'][1], a0[1], g['zt'])
+        n0 = len(out)
+        out.append(dict(corners=[a1, a0, t0, t1], joins={0: ('old', pa, ea), 2: ('new', n0 + 1, 0)}))
+        out.append(dict(corners=[t1, t0, b1, b0], joins={0: ('new', n0, 2), 2: ('old', pb, eb)}))
+    return out
+
+
+def nav_bridge_step(folder, log=print):
+    """Add the NAV_GAPS bridges to the navigation mesh of the finished folder (its .gms / .buf only; every other member as it was). -> list of problems.
+    After finish + compact, BEFORE bots_step (kl_fa_bots.diff compares the mesh of its source with its result)."""
+    import json
+    import kl_fa_bots as F, kl_nav_bridge as NB
+    B = F.Built(folder)
+    nav = F.Nav(B.scene.nav)
+    parts = {nav.part[p] for g in NAV_GAPS for p in (g['a'][0], g['b'][0])}
+    if len(parts) != 3:
+        return ['nav bridges: the gaps no longer join three mesh parts (%s)' % sorted(parts)]
+    bridges = nav_bridges(nav)
+    new, rep = NB.add_bridges(B.scene.nav, bridges, log=lambda *a: None)
+    n2 = F.Nav(new)
+    sizes = sorted(collections.Counter(n2.part).values(), reverse=True)
+    if len({n2.part[p] for g in NAV_GAPS for p in (g['a'][0], g['b'][0])}) != 1:
+        return ['nav bridges: the mesh is still in islands after the bridges (parts %s)' % [n2.part[p] for g in NAV_GAPS for p in (g['a'][0], g['b'][0])]]
+    B.scene.nav = new
+    gms, buf = B.scene.write()
+    files = dict(B.files)
+    files[B.ext['.gms']], files[B.ext['.buf']] = kl_gms.pack(gms), buf
+    zp = kl_graft.write_zip(B.zp, [(n, files[n]) for n in B.order])
+    sj = os.path.join(folder, 'steps.json')
+    if os.path.isfile(sj):
+        st = json.load(open(sj))
+        st['navbridge'] = ['.gms', '.buf']
+        st['same'] = [e for e in st.get('same', []) if e not in ('.gms', '.buf')]
+        st['final'] = kl_maps.member_ids(folder)
+        with open(sj, 'w') as f:
+            json.dump(st, f, indent=1)
+    with open(os.path.join(folder, 'graft.txt'), 'a') as f:
+        f.write('kl_fa_v2_hotcoffee: nav bridges %s (areas %s); mesh parts now %s\n' % (rep['polygons'], rep['areas'], sizes[:4]))
+    log('  nav bridges: polygons %s in areas %s, touched areas %s; mesh parts by size now %s (was %s)' % (
+        rep['polygons'], rep['areas'], rep['touched_areas'], sizes[:4], sorted(collections.Counter(nav.part).values(), reverse=True)[:4]))
+    return []
 
 
 def bots_step(folder, log=print):
     """kl_fa_bots.build with BOT_OPT, then kl_fa_bots_dyn.build, each into a copy, the result copied over the folder's own files.
-    -> list of problems. After finish + compact, before check. NOT LOADED LIVE.
-    WHY IT IS OFF: the campaign level's navigation mesh (kl_route 'M01_A') is split into islands. The START row (garage) is on one part;
-    the alley, the warehouse / diner and the van's street are on others. Same-height gaps between the parts: garage -> alley 332 flat
-    (kl_fa_bots.DROP_MAX across is 240), alley -> main 91 (60 up). kl_fa_bots.plan raises 'no place on the mesh part of the START row
-    within 900 of the van's boarding box ... give --park'. A bot would also have no path to the loot. NEEDED (not done: kl_fa_bots* and the
-    mesh belong to another session): either a mesh repair that adds polygons / links over the two gaps (kl_pf4), or START moved onto the main part."""
+    -> list of problems. After nav_bridge_step (the mesh must be one part: kl_fa_bots.plan refused the level while the START part held no place
+    near the van), before check. NOT LOADED LIVE."""
     import shutil
     import kl_fa_bots as F, kl_fa_bots_dyn as D
     probs = []
@@ -979,6 +1069,7 @@ def test(out, keep=False, log=print, plan=None):
     late = finish(folder, log)
     late += compact_in_place(folder, log)
     if WITH_BOTS and not NO_AI:
+        late += nav_bridge_step(folder, log)
         late += bots_step(folder, log)
     r['problems'] = json.load(open(os.path.join(folder, 'result.json'))).get('problems', r['problems'])
     vrep = van_check(folder, lambda *a: None, plan)[0]
@@ -1014,11 +1105,12 @@ def load_plan(folder):
 
 
 def main():
-    global WITH_BOTS, NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, STREAM, GARAGE_BLAST, CIVILIANS
+    global WITH_BOTS, ROUTE_OPEN_ON, NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, STREAM, GARAGE_BLAST, CIVILIANS
     a = sys.argv[1:]
     if len(a) >= 2 and a[0] == 'test':
         NO_AI = '--no-ai' in a
-        WITH_BOTS = '--bots' in a
+        WITH_BOTS = '--no-bots' not in a
+        ROUTE_OPEN_ON = '--no-route-open' not in a
         SQUADS_AWAKE = '--squads-awake' in a
         POLICE_ARRIVE = '--no-police' not in a
         GARAGE_BLAST = '--no-blast' not in a
