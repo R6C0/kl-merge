@@ -214,17 +214,19 @@ EXTRA = [
               'then page 3 of the menu, entry 0)'),
     # PAGE 3, entry 2 (2026-10-17): 'A Walk in the Park II' = the campaign park M06_A, F07's systems (tools\kl_fa_v2_park.py, re\campaign_v2_plan.md).
     # NEW entry beside the installed DM06 (slot F04, page 2): slot F02 (stock Hong Kong Alley's slot; only [Redirect.3] names it, and only while page 3
-    # is open). Same rules as The Vault. known_re: the build has NO finding (verify problems: 0); M06_A's music / ambience beds are
-    # not in the merged stream file (silent until a later stream-file step). NOT RUN IN THE GAME.
+    # is open). Same rules as The Vault. known_re: the build has NO finding (verify problems: 0); the bank carries NO M06_A music sound
+    # (no root reaches them; MEASURED 2026-10-17: 0 of the 4 retomotoaction_* sounds are in the bank), so the beds are silent for that reason, NOT
+    # for a missing stream block (the stream file would not change this build: tools/kl_v2_str.py, rebuild byte-identical). NOT RUN IN THE GAME.
     dict(id='DM06B', slot='F02', page=3, title='A Walk in the Park II', build='prebuilt', sources=['M06_A'], picture='LevelPicture_M06', bones_live=False,
-         audit=True, known=(), known_re=(),
+         audit=True, gun_step=True, known=(), known_re=(),
          live='NOTHING: the map has never been loaded in the game (build/v2_1017/DM06B; the F01 test slot comes first, then page 3 entry 1)'),
     # PAGE 3, entry 2 (2026-10-17): 'Hot Coffee II' = the campaign level M01_A on F07's systems (tools\kl_fa_v2_hotcoffee.py). Slot F03 (ORDER[2]).
     # Built, then compacted (kl_chars.py compact: 77060 -> 49382 chunks) and given the installed gun sounds (guns_step.py). Known: material 957
-    # (Glass_Grid_01b_M01) has no shader in the .fxc = glass panes not drawn (GUESS: cosmetic); 2 stream clips missing = silent beds.
+    # (Glass_Grid_01b_M01) has no shader in the .fxc = glass panes not drawn (GUESS: cosmetic). The 2 bed clips (M01_A Garage / Street_Alley_Muffled_01)
+    # are in the stream file C:/kl_build/v_v2/PC_Def.str (tools/kl_v2_str.py; rebuilt with --str, 2026-10-17): no stream finding any more.
     # NOT RUN IN THE GAME.
     dict(id='DM01B', slot='F03', page=3, title='Hot Coffee II', build='prebuilt', sources=['M01_A'], picture='LevelPicture_FA01', bones_live=False,
-         audit=True, known=('asks for a shader the .fxc lacks',), known_re=(),
+         audit=True, gun_step=True, known=('asks for a shader the .fxc lacks',), known_re=(),
          live='NOTHING: the map has never been loaded in the game (build/v2_1017/DM01B; the F01 test slot comes first, then page 3 entry 2)'),
 ]
 
@@ -514,6 +516,8 @@ def audit_known(m, res, lines):
         q = re.fullmatch(r'preflight: verify kl_graft\.verify reported (\d+) problems \(result\.json\)', x.strip())
         if x.startswith('verify: ') and known(x[len('verify: '):]):
             ok.append(x)
+        elif m.get('gun_step') and x.strip() == 'sound: stock bytes below the first type table changed':
+            ok.append(x)        # guns_step.py rewrites 13 wave 'seconds' floats below the cut, as the installed DM03A bank has them (reviewed 2026-10-17)
         elif q and probs and int(q.group(1)) == len(probs) and all(known(p) for p in probs):
             ok.append(x)
         else:
