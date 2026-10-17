@@ -1914,3 +1914,19 @@ CHANGE (klmove.c v82e): the trigger is the time left on [rules+0x200] ('rem'), v
 The call fires at rem <= 2.5 s (no frame is given unless a vehicle is known AND the HUD clock is not ahead of the end timer, then 1.75 s). The log now says, from 15 s
 before the end, once per whole second: time left, END timer, HUD clock, offset, vehicle state/flags; and the 'last:' closing line carries both timers.
 TEST PLAN: build hud_v82e_test, an Arcade round on Retomoto, read the 'last:' lines; expect a call at about 2.5 s before the end and the van.
+
+## 2026-10-18 handover: civilians
+tools/kl_fa_civs.py (see re/civilians.md) added to a copy, not to the map tool. Builds in <work>/build:
+club_owner_1018/DM05A/club (30 civilians, F07 model, seed 18) and vault_owner_1018/DM03A (24, F07 model).
+Checks: civs.check 0 FAIL; kl_fa_club.py check PASS (club); kl_fa_bank.py check PASS on the F01-slot copy
+(the bank CLI fails on an F07-slot folder, also on the base); debug/check_passes.py 0 failed (bank keeps the known Shards_Group_A WARN). Not run live.
+
+## Handover 2026-10-18 (kl-merge-c4, offline): Last Call roof + civilians
+Done: build/club_owner_1018/DM05A/heli_civs = club_heli_1017/DM05A/heli + 30 civilians (kl_fa_civs build ... F01 ... 30 --model F07
+--seed 18): 0 FAIL / 1 NOTE (room sets []), debug/check_passes.py PASS (all 6), .prm +567,264 bytes (F07 civilian model appended;
+Club's own live-proven .prm ceiling is unknown, Hasta's was 79.9 MB). NOT RUN IN THE GAME. No tool default changed (no kl_fa_club.py edit).
+NOT done (honest): (1) the roof marker/route fix. Findings: the escape POI (FASpecials!POI) is wired as in stock F07, activated only by
+the pad box, and its tracker has a float 2500 (GUESS: visibility distance) - so the roof is not shown from the start. A flagged
+(default off) change - AITrigger the escape POI from the loot trigger, raise the 2500 - is the next step; the POI handler semantics
+(ZPointOfInterest info 0xcfd578, ZActivateGameplayTrackerDisplay 0xd09714) are not yet read in kl2.exe. (2) a mesh proof start->loot->pad
+for the heli build and the bots' stall at gate g1 (live log) are not worked.

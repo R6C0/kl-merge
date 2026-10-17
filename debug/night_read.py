@@ -214,7 +214,7 @@ def heli(S):
             out.append('  rout %s: %d lines (%d CHANGE), %s .. %s' % (rout, len(L), len(ch), L[0]['_t'], L[-1]['_t']))
             v = []                                                    # the rules, one by one
             if not st:
-                v.append(('started', 'no started=1 ever: the call never reached the rout (AITrigger / RESET wiring)', False))
+                v.append(('started', 'no started=1 ever: EITHER the probe found no rout (the entity-table scan only; Probe=2 adds a heap scan) OR the call was never made; judge by veh1dc: 0 all round = nobody stood in the exit box, the call itself did not fire (not a wiring fault)', False))
             else:
                 after = L[L.index(first):]; last = after[-1]
                 g = N(last, 'goal'); v.append(('goal', 'goal=%08x %s' % (g, 'after the start: NOT BUILT (init 0x815aa0 failed at load)' if g == 0 else 'built'), g != 0))
@@ -242,7 +242,7 @@ def heli(S):
             for k, m, ok in v:
                 out.append('      %-8s %s %s' % (k, 'ok ' if ok else '-- ', m))
             kinds = sorted({N(d, 'kind') for d in L}); out.append('      kind=%s (2 = ZHeli)' % kinds)
-            if not st: verdict = 'call never reached the rout'
+            if not st: verdict = 'no started=1: rout not found by the probe or call not made (check veh1dc / who reached the exit box); NOT proof of broken wiring'
             elif not all(ok for k, m, ok in v if k in ('goal', 'goal8', 'sq', 'a_bc', 'a154')):
                 verdict = 'a guard fails: ' + ', '.join(k for k, m, ok in v if not ok and k in ('goal', 'goal8', 'sq', 'a_bc', 'a154'))
             elif [ok for k, m, ok in v if k == 'pos'] == [False]: verdict = 'all guards fine, pos CONSTANT: goal exists, nothing feeds the body (next: ZHeliFlyBehaviour -> ZHeliFlyGoal at ZHeli+0x8c)'

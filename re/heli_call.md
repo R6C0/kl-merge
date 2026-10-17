@@ -90,3 +90,10 @@ Run: set `Probe=1` (2 if needed), play the heli build (HELI4), have the call hap
   `sq=00000000` -> early-out 2. `a_bc=1` before the start -> early-out 3. `a154` stays 0 with started=1 and a8c=a90=0 -> the add-goal store (0x7f680e) is skipped. All
   fine and `pos=` constant -> the goal exists but nothing feeds the body (next read: ZHeliFlyBehaviour -> ZHeliFlyGoal at ZHeli+0x8c). `pos=` moves -> it flies; compare to the spline.
 - Volume: one line a second per object while anything is found, plus changes (at most 5 a second), 3000 lines a process.
+
+## Handover 2026-10-18 (kl-merge-c4, offline) - the "call never reached the rout" reading was wrong
+Tonight's KLHook.log (heli round 22:22:28-22:25:45): veh1dc stayed 0 all round, the player died at 22:25:24 and the bots sat at
+g0/g1. The probe (klheliprobe.c) scans the ENTITY TABLE only and logged rout=00000000, so started/goal were never read. So the log
+shows two things only: nobody stood in the exit box (-2900,1059,3900), and the probe saw no rout. It does NOT show a broken
+AITrigger/RESET chain; the static chain (heli_call_read.py PASS) and the van rounds still stand. Next live check: Probe=2 (heap
+scan) and a player (or the 365 s last-vehicle fallback) inside the box. debug/night_read.py now words its HELI VERDICT that way.
