@@ -647,6 +647,11 @@ static void klfc_tick(int game_thread)
 {
     if (!klfc.on || klfc_dead || !game_thread || !klh_exe_ok) return;
     if (klh_rcb_ra != (DWORD_PTR)KLH_VA(KLFC_RCB_RA)) return;        /* only the gameplay call of the main loop (his filter) */
+    if (!klfc_c.active && kl_online()) {                              /* [Net] OnlineSafe: this part has no mode test of its own; it moves a body peers see only as position updates. GUESS: a climb already running is let finish */
+        static int toldnet;
+        if (!toldnet++) klog("fclimb: a network session: no climb starts ([Net] OnlineSafe=1)");
+        return;
+    }
     if (klfc_guard("tick", klfc_tick_body, 0) < 0) {
         klfc_disable("tick");
         if (klfc_c.active && klfc_c.P && klfc_guard("cleanup", klfc_cleanup_body, 0) < 0) memset(&klfc_c, 0, sizeof klfc_c);

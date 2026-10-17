@@ -241,6 +241,11 @@ static void klj_tick(void)
         if (sel[klj_after.player] != 0xff && sel[klj_after.player] < 28 && (pl = klh_rd32(gd + 0x828 + 4 * sel[klj_after.player])) != 0 && klh_rd(pl + 0x460, feet, 12))
             klog("join: player %d is at (%.0f, %.0f, %.0f) 500 ms after the request", klj_after.player, feet[0], feet[1], feet[2]);
     }
+    if (act && count && kl_online()) {                        /* [Net] OnlineSafe: the jump request would desync a network session (re/netcode_plan.md 2.1) */
+        static int toldnet;
+        if (!toldnet++) klog("join: a network session: no jump request is written ([Net] OnlineSafe=1)");
+        act = 0;
+    }
     for (i = 0; act && count && i < 2; i++) {
         if (sel[i] == 0xff || sel[i] >= 28 || !(pl = klh_rd32(gd + 0x828 + 4 * sel[i])) || !klh_rd(pl + 0x460, feet, 12)) { for (b = 0; b < KLJ_NBOX; b++) klj_box[b].inside[i] = 0; continue; }
         for (b = 0; b < KLJ_NBOX; b++) {

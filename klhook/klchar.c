@@ -265,6 +265,10 @@ static void klc_level_tick(int game_thread)
     int ch = (int)klc_char, mask = (int)klc_mask, outfit = (int)klc_outfit, i, slot = -1, wardrobe, v;
     char key[64], scene[160];
     if (!ch && !mask && !outfit) return;
+    if (kl_online()) {                                                      /* local-only look: peers see the stock model; harmless, so it is NOT stopped here (re/netcode_plan.md 2.1), only said once */
+        static int toldnet;
+        if (!toldnet++) klog("character: a network session: the choice shows on this machine only, peers see the stock model");
+    }
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLC_SESSION))) || klh_rd32(sm + 0x5c) != 4) return;                    /* Arcade only */
     if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLC_SETTINGS))) || !(rules = klh_rd32(gs + 0x54))) return;
     if (klh_rd32(rules) != KLC_RULES_VT) {

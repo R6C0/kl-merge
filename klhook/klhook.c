@@ -242,6 +242,24 @@ static int klh_rd(DWORD_PTR p, void *out, SIZE_T n)
 }
 static DWORD klh_rd32(DWORD_PTR p) { DWORD v = 0; klh_rd(p, &v, 4); return v; }
 
+/* [Net] OnlineSafe=1 (default 1): kl_online() = 1 when this machine is in a NETWORK session, and then every part that WRITES game state
+   stays out of it (re\netcode_plan.md 2.1). The test is the one the AI parts already make (klbot.c klb_read / klbalance.c klr_arcade):
+   session [0x168e598]: role [+0x54] 2 = SERVER or 3 = CLIENT, or game type [+0x5c] == 4 with a rules object [[0x168e9e4]+0x54] whose
+   vtable is not ZGameRulesHeist 0xbd3514 (online: ...FragileAllianceSv / Cl). No session, a story mode or an unreadable object = 0, so
+   with the key absent (or =0) and offline the answer is always 0 and nothing changes. GUESS: a role of 2 / 3 is only ever set by a
+   network session (klbot.c's reading; not seen live in an online game). Needs no later include: it reads three addresses itself. */
+static int kl_online(void)
+{
+    static int safe = -1; DWORD sm, gs, rules, role = 0, mode = 0;
+    if (safe < 0) safe = GetPrivateProfileIntA("Net", "OnlineSafe", 1, klh_ini) != 0;
+    if (!safe || !klh_exe_ok) return 0;
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598)))) return 0;
+    if (klh_rd(sm + 0x54, &role, 4) && (role == 2 || role == 3)) return 1;
+    if (!klh_rd(sm + 0x5c, &mode, 4) || mode != 4) return 0;
+    if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(0x0168e9e4))) || !(rules = klh_rd32(gs + 0x54))) return 0;
+    return klh_rd32(rules) != 0x00bd3514;
+}
+
 static int klh_rdstr(DWORD_PTR p, char *out, int cap)
 {   /* a NUL-terminated text of the game, at most cap-1 characters; never faults. -> length, 0 = none / not text */
     int n = 0, i;

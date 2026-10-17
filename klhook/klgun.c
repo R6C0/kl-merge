@@ -406,6 +406,7 @@ static void klg_tick(void)
     dirty = klg_dirty;
     if (!dirty && (calls & 63) && klg_done.count == count && klg_done.root0 == root0 && klg_done.start == start && klg_done.set == set) { LeaveCriticalSection(&klg_cs); return; }
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLG_SESSION))) || klh_rd32(sm + 0x5c) != 4) { LeaveCriticalSection(&klg_cs); return; }       /* Arcade only */
+    if (kl_online()) { LeaveCriticalSection(&klg_cs); return; }                                               /* [Net] OnlineSafe: no variant-byte write in a network session */
     InterlockedExchange(&klg_dirty, 0);
     k = klg_file(count, klg_f.g[0].root, root0, &lo, &hi, &ftab);
     for (i = 0; i < klg_f.n; i++) {
