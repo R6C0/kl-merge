@@ -878,6 +878,7 @@ static void klmv_reach_pass(const struct klb_snap *s, DWORD now)
         if (!kle_bot(s, i, &actor, &soldier, bp, w)) { if (klmv.log) klog("reach: record %d stands %.1f m from the boarding box and gets no order to the doors: %s", i, d / 100, w); continue; }
         if (kle_dist(bp, fr.T) <= 260.0f) continue;                             /* the game would take it as 'he is there already' (soft): a waiting step of its chain would end */
         memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
+        kltr_set("move-reach", "BoardReach: to the doors of the waiting vehicle", -1);
         j = kle_order2(&t, fr.T, got, w, klmv.dry);
         if (!j) { klog("reach: record %d NOT sent to the doors: %s", i, w); continue; }
         b->order_at = KLB_T(now); b->since = now;
@@ -1200,6 +1201,7 @@ static void klmv_restless(const struct klb_snap *s, DWORD now, int human_in, con
             }
         }
         if (!klmv.restless || stood < klmv.restless || !b->have_anchor) continue;
+        if (klv_owned(i)) { if (kltr.on) kltr_line(i, "move-restless", "SKIP", b->pos, 0, 0, "WalkExclusive: klhop.c walks this bot"); continue; }      /* v82i GUESS, [Bots] WalkExclusive (default 0): the walk of a hop is the bot's order now */
         if (b->order_at && now - b->order_at < (klmv.restless < 4000 ? 4000 : klmv.restless)) continue;
         if (fire) continue;                                                    /* b and c alike: a bot that fights from where it stands is not pulled out (review S1) */
         d = klmv_h(b->pos, b->anchor);
@@ -1222,6 +1224,7 @@ static void klmv_restless(const struct klb_snap *s, DWORD now, int human_in, con
             if (b->tries >= 2 && human_in && kle_dist(bp, hp) > 800.0f && kle_dist(bp, hp) <= 2500.0f && fabs(hp[1] - bp[1]) <= 300.0f) { kle_place(hp, bp, 1, 0, want); beside = 1; }
             if (kle_dist(bp, want) <= 260.0f) continue;                        /* the game would take it as 'he is there already' (soft): a waiting step of the chain would end */
             memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
+            kltr_set("move-restless", beside ? "b: stuck off its chain place, sent beside the human" : "b: stuck off its chain place, order again", -1);
             k = kle_order2(&t, want, got, w, klmv.dry);
             b->order_at = KLB_T(now); memcpy(b->try_pos, b->pos, 12);
             if (!k) { if (!(b->told & 2)) { b->told |= 2; klog("move: record %d NOT ordered: %s", i, w); } continue; }
@@ -1263,6 +1266,7 @@ static void klmv_restless(const struct klb_snap *s, DWORD now, int human_in, con
             b->phase += 2;
         }
         memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
+        kltr_set("move-restless", hopk >= 0 ? "c: RestlessHop, cover to cover" : "c: RestlessHold, shift round the hold", -1);
         k = kle_order2(&t, want, got, w, klmv.dry);
         b->order_at = KLB_T(now); b->since = now;
         if (!k) continue;
@@ -1314,6 +1318,7 @@ static void klmv_tick(int game_thread)
             for (i = 0; i < KLMV_NSOUR; i++) if (klmv_sour[i].on) { if (klmv_sour[i].rules == s.rules) klmv_sweeten(i, "a new round"); else klmv_sour[i].on = 0; }
     }
     klmv_r.state = s.state; klmv_r.stages = stages;
+    kltr_round(s.rules, now);
     if (!game_thread) {
         if (s.state == KLB_ROUND && !klmv_r.told_thread++) klog("move / wait / near: the tick is not on the game's thread ([KLHook] Tick=0?): nothing is ordered or written");
         return;
@@ -1332,6 +1337,7 @@ static void klmv_tick(int game_thread)
     if (klmv_r.last_pass && now - klmv_r.last_pass > 1500) for (i = 0; i < KLB_NREC; i++) klmv_r.b[i].seen = 0;      /* the round stood still (the window was not in front): every clock starts again */
     klmv_r.last_pass = KLB_T(now);
     klmv_track(&s, now);
+    kltr_poll(&s, now);
     if (klmv.last) klmv_last_vehicle(&s);
     if (klmv.botvan) klmv_bot_van(&s, now);
     if (klmv.hop) klmv_hops_load();

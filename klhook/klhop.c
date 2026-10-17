@@ -116,7 +116,7 @@
 #define KLV_FAST   400.0f                     /* v78: within the first 3 s after a hop: this far above / below the landing = not landed */
 #define KLV_WATCH  3000                       /* v78: ms of the fast landing watch */
 
-static struct { int on, dry, reorder, log, orderto, recheck; } klv;
+static struct { int on, dry, reorder, log, orderto, recheck, walkx; } klv;
 struct klv_hop { int on, nto, stage, player, walk; DWORD wait, again, giveup; float from[3], radius, height, to[KLV_NTO][3], walkto[3]; };
 static struct { int n; char key[64], file[MAX_PATH]; FILETIME ft; struct klv_hop h[KLV_NHOP]; } klv_lv;
 struct klv_after { int rec, hop, step, to, tries; DWORD actor, at, watch; };      /* watch = the fast landing watch runs until this tick (v78) */
@@ -242,6 +242,9 @@ static int klv_free(int hi, const struct klb_snap *s, DWORD now)
     return -1;
 }
 
+/* v82i: 1 = klhop.c walks this record now and [Bots] WalkExclusive=1 asks the other order givers (klfedkit Hunted, klmove Restless) to leave it alone */
+static int klv_owned(int rec) { return klv.on && klv.walkx && rec >= 0 && rec < KLB_NREC && klv_r.walking[rec].hop; }
+
 /* v78: the soldier of an actor ordered to place p (0x760e50, the call OrderTo makes) -> 2 = ordered and set[] read, 1 = ordered, 0 = not (why) */
 static int klv_order(DWORD actor, const float p[3], float set[3], char why[100])
 {
@@ -251,6 +254,7 @@ static int klv_order(DWORD actor, const float p[3], float set[3], char why[100])
     if (!kle_callable(why)) return 0;
     q[0] = p[0]; q[1] = p[1]; q[2] = p[2]; q[3] = 0;
     ((void (__fastcall *)(void *, void *, const float *, int, int, int))(DWORD_PTR)KLH_VA(KLE_ORDER))((void *)(DWORD_PTR)soldier, 0, q, 0, 1, 0);
+    if (kltr.on) { float g2[3]; if (!kle_block(soldier, g2)) memcpy(g2, p, 12); kltr_order(-1, p, g2, 1); }
     return kle_block(soldier, set) ? 2 : 1;
 }
 
@@ -269,7 +273,10 @@ static void klv_putback(struct klv_after *a, const float nd[3], const float ft[3
     {
         float is_n[3], is_f[3], set[3] = { 0, 0, 0 }; char why2[100]; int ord = 0;
         klt_teleport(a->actor, to);
+        kltr_tp(a->rec, "hop-putback", to, when);
+        kltr_set("hop-putback", "the bot did not land: ordered to the landing place again", a->rec);
         if (klv.orderto) ord = klv_order(a->actor, to, set, why2);
+        kltr_set(0, 0, -1);
         klv_place(a->actor, is_n, is_f);
         a->tries++; a->step = 2; a->at = KLB_T(now); a->watch = KLB_T(now + KLV_WATCH);       /* looked at again: every tick for 3 s, and 2 s from now */
         klog("hop: bot %d did NOT land: %.0f off the height of To.%d of hop %d (%s): put back on (%.0f, %.0f, %.0f) (time %d of %d): now node (%.0f, %.0f, %.0f), +0x460 (%.0f, %.0f, %.0f)%s (%.0f, %.0f, %.0f)",
@@ -301,7 +308,10 @@ static void klv_walks(const struct klb_snap *s, DWORD now)
             w->hop = 0;
             klv_r.used[h - klv_lv.h][p] = KLB_T(now);
             klt_teleport(r->actor, h->to[p]);
+            kltr_tp(i, "hop-walk-giveup", h->to[p], "walk not carried in time");
+            kltr_set("hop-walk-giveup", "walk gave up: ordered to the landing place", i);
             k = klv.orderto ? klv_order(r->actor, h->to[p], set, why) : 0;
+            kltr_set(0, 0, -1);
             klog("hop: bot %d walked %.1f s towards (%.0f, %.0f, %.0f) and was not carried: GIVE UP - teleported from (%.0f, %.0f, %.0f) to To.%d (%.0f, %.0f, %.0f)%s",
                  i, (now - w->at) / 1000.0, h->walkto[0], h->walkto[1], h->walkto[2], q[0], q[1], q[2], p + 1, h->to[p][0], h->to[p][1], h->to[p][2], k ? "; ordered there" : "");
             klv_r.after[i].rec = i; klv_r.after[i].hop = (int)(h - klv_lv.h); klv_r.after[i].actor = r->actor; klv_r.after[i].at = KLB_T(now); klv_r.after[i].step = 1;
@@ -310,7 +320,9 @@ static void klv_walks(const struct klb_snap *s, DWORD now)
         }
         if (now - w->order_at >= 8000 && (q[0] - h->walkto[0]) * (q[0] - h->walkto[0]) + (q[2] - h->walkto[2]) * (q[2] - h->walkto[2]) > 300.0f * 300.0f) {
             w->order_at = KLB_T(now);
+            kltr_set("hop-walk", "walk: ordered to the walk's end again (every 8 s while 3 m+ from it)", i);
             k = klv_order(r->actor, h->walkto, set, why);
+            kltr_set(0, 0, -1);
             if (k) w->orders++;
             if (klv.log >= 2 || w->orders <= 2 || !k)
                 klog("hop: bot %d (walk of hop %d) at (%.0f, %.0f, %.0f), %.1f m from the walk's end after %.1f s: %s", i, w->hop, q[0], q[1], q[2],
@@ -350,6 +362,7 @@ static void klv_follow(const struct klb_snap *s, DWORD now)
                 p[0] = blk[0]; p[1] = blk[1]; p[2] = blk[2]; p[3] = 0;
                 ((void (__fastcall *)(void *, void *, const float *, int, int, int))(DWORD_PTR)KLH_VA(KLE_ORDER))((void *)(DWORD_PTR)soldier, 0, p, 0, 1, 0);
                 if (!kle_block(soldier, set)) memcpy(set, blk, 12);
+                kltr_set("hop-reorder", "Reorder: its own order 0.5 s after the hop", a->rec); kltr_order(-1, blk, set, 1);
                 klog("hop: bot %d hop %d: its own order (%.0f, %.0f, %.0f) given again by the soldier's order routine; the game set (%.0f, %.0f, %.0f)", a->rec, a->hop + 1, blk[0], blk[1], blk[2], set[0], set[1], set[2]);
             }
         } else if (now - a->at >= 2000) {
@@ -435,7 +448,7 @@ static void klv_tick(int game_thread)
                 continue;
             }
             if (h->walk) {                                                    /* v78: a WALK hop orders, it does not carry */
-                float set[3]; char why2[100]; int k = klv.dry ? 0 : klv_order(r->actor, h->walkto, set, why2);
+                float set[3]; char why2[100]; int k; kltr_set("hop-walk", "walk hop: at From long enough, first order to the walk's end", i); k = klv.dry ? 0 : klv_order(r->actor, h->walkto, set, why2); kltr_set(0, 0, -1);
                 klv_r.done[hi][i] = 1; klv_r.doneat[hi][i] = KLB_T(now); klv_r.last_hop = KLB_T(now);
                 if (klv.dry) { klog("hop: bot %d hop %d: at From for %.1f s: WOULD be ordered to walk to (%.0f, %.0f, %.0f) - DRY RUN", i, hi + 1, (now - klv_r.since[hi][i]) / 1000.0, h->walkto[0], h->walkto[1], h->walkto[2]); return; }
                 if (!k) { klog("hop: bot %d hop %d: at From for %.1f s but NOT ordered to walk: %s", i, hi + 1, (now - klv_r.since[hi][i]) / 1000.0, why2); return; }
@@ -453,6 +466,7 @@ static void klv_tick(int game_thread)
                 return;
             }
             klt_teleport(r->actor, h->to[p]);
+            kltr_tp(i, "hop", h->to[p], "carried hop: From to landing place To.n");
             if (klv.orderto && soldier && klh_rd32(soldier) == KLE_SOLDIER_VT) {
                 /* OrderTo (2026-10-14, live on Retomoto: bots 4 / 5 / 7 were back at the lobby 2 s after the hop, falling - the soldier still
                    walked to its old place, which no path reaches from the landing): in the same tick its order becomes the landing place */
@@ -461,6 +475,7 @@ static void klv_tick(int game_thread)
                     q[0] = h->to[p][0]; q[1] = h->to[p][1]; q[2] = h->to[p][2]; q[3] = 0;
                     ((void (__fastcall *)(void *, void *, const float *, int, int, int))(DWORD_PTR)KLH_VA(KLE_ORDER))((void *)(DWORD_PTR)soldier, 0, q, 0, 1, 0);
                     if (kle_block(soldier, set)) { blk[0] = set[0]; blk[1] = set[1]; blk[2] = set[2]; have_blk = 1; }
+                    if (kltr.on) { float g3[3]; kltr_set("hop", "OrderTo: its order becomes the landing place", i); kltr_order(-1, q, kle_block(soldier, g3) ? g3 : q, 1); }
                 } else klog("hop: bot %d: its order is NOT moved to the landing place: %s", i, why2);
             }
             klv_place(r->actor, is_n, is_f);
@@ -484,6 +499,7 @@ static void klv_init(void)
     klv.reorder = GetPrivateProfileIntA("CrewHop", "Reorder", 0, klh_ini) != 0;
     klv.orderto = GetPrivateProfileIntA("CrewHop", "OrderTo", 1, klh_ini) != 0;       /* 1 = at the hop the soldier's order becomes the landing place */
     klv.log = (int)GetPrivateProfileIntA("CrewHop", "Log", 1, klh_ini);
+    klv.walkx = GetPrivateProfileIntA("Bots", "WalkExclusive", 0, klh_ini) != 0;      /* v82i GUESS fix, default 0: while klhop.c walks a bot, klfedkit Hunted and klmove Restless give it no order */
     klv.recheck = (int)GetPrivateProfileIntA("CrewHop", "Recheck", 5, klh_ini);         /* v78: default 5 (the fast watch counts too) */       /* put-backs of a bot that did not land (0 = off) */
     if (klv.recheck < 0) klv.recheck = 0;
     if (klv.recheck > 5) klv.recheck = 5;

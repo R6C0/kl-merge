@@ -314,6 +314,7 @@ static void kad_rush(const struct klb_snap *s, int i, float pos[][3], const int 
         if ((d = kad_dist(bp, pos[i])) <= kad.brange * KAD_M * 0.9f) { k->rush_at = now; return; }
         memset(&e, 0, sizeof e); e.rec = h; e.actor = actor; e.soldier = soldier;
         kad_beside(pos[i], bp, want);
+        kltr_set("adren", "RUSH: ordered again beside the downed heister", -1);
         r = kle_order2(&e, want, got, why, kad.dry); k->rush_at = now;
         if (kad.log >= 2) klog("adren: RUSH - record %d is %.1f m from record %d: ordered again (%s)", h, d / KAD_M, i, r == 1 ? "called" : r == 2 ? "dry" : why);
         return;
@@ -334,6 +335,7 @@ static void kad_rush(const struct klb_snap *s, int i, float pos[][3], const int 
     memset(&e, 0, sizeof e); e.rec = best; e.actor = actor; e.soldier = soldier;
     k->rush_have_back = kle_block(soldier, k->rush_back) && (k->rush_back[0] || k->rush_back[1] || k->rush_back[2]);
     kad_beside(pos[i], bp, want);
+    kltr_set("adren", "RUSH: sent to the downed heister", -1);
     r = kle_order2(&e, want, got, why, kad.dry);
     if (!r) { klog("adren: RUSH - record %d not sent to record %d: %s", best, i, why); k->rush_have_back = 0; return; }
     k->rusher = best + 1; k->rush_at = now; k->rush_soldier = soldier;
@@ -353,6 +355,7 @@ static void kad_rush_end(const struct klb_snap *s, int i, const char *why_)
     if (kle_r.used[h]) { klog("adren: RUSH - record %d (your escort) is done with record %d (%s): the escort takes him back", h, i, why_); return; }
     if (!kle_bot(s, h, &actor, &soldier, bp, why) || soldier != k->rush_soldier) { klog("adren: RUSH - record %d is done with record %d (%s); not sent back (%s)", h, i, why_, why); return; }
     memset(&e, 0, sizeof e); e.rec = h; e.actor = actor; e.soldier = soldier;
+    kltr_set("adren", "RUSH done: back to the place it left", -1);
     r = kle_order2(&e, k->rush_back, got, why, kad.dry);
     klog("adren: RUSH - record %d is done with record %d (%s): sent back to (%.0f, %.0f, %.0f) (%s)", h, i, why_, k->rush_back[0], k->rush_back[1], k->rush_back[2], r == 1 ? "called" : r == 2 ? "dry" : why);
 }

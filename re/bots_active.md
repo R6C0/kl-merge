@@ -258,3 +258,24 @@ HuntedFire=1
   pictures: no row at the doors.
 - L2 the street fight: the police wave that starts at the lift box; do the seven live as long as before (compare deaths per minute with the 15:19-15:24 round).
 - L3 every 'hops from its hold' line on the street: the new place's progress is not behind the old one: compare x (falling) then z (rising) along the route - none like the three above.
+
+## Order trace and the DM09 walk conflict (v82i, 2026-10-17; NOT RUN)
+Cause found in the 2026-10-14..16 DM09 log (hop 3 = the walk to (2560, 19601, 740)): two order givers drive one bot.
+- klhop.c walk hop: first order at From + 10 s, then the SAME order again every 8 s while the bot is 3 m+ from the walk's end (klv_walks).
+- klfedkit.c Hunted (human is a fed): a bot that loses health gets a new place every HuntedGap (4 s): 'TOWARDS YOU' / 'a step aside'; it never asks whether klhop walks the bot.
+  Example (01:03:26 .. 01:03:50, bot 1): walk order at x -952; fedkit 'towards you' (4, -895) 4 s later; x -21; walk again; fedkit 'step aside' (767,-658), (130,238), (469,-630);
+  the bot reached x 473 and was at x 89 24 s into a 45 s walk. Every 4 s a new direction, every 8 s the walk's end: the order flip-flops.
+- klmove.c Restless is the third giver: klmv_foreign() covers klfedkit's places, NOT klhop's walk order, so the walk's end is read as 'its chain's place' (anchor) and ordered again after a stand.
+Issuers and periods: klescort (follow every kle.every; release; BoardAllOrder), klmove (reach: once a visit; restless b: 4 s+ after a stand, max 4 tries/spot; c: hold/hop shift), klfedkit Hunted (4 s per bot),
+klhop (walk 8 s; carried hop once; Reorder 0.5 s after; putback up to 5), kladren RUSH (2.5 s). klcrew_rt.c, kljoin.c, klcrew.c order nothing. The game's own chain (ZDefendBehaviourGoal) also re-orders.
+
+### Order trace: [Bots] OrderTrace=1 (default 0; nothing is read or written when 0)
+One 'otrace:' line per order, per klhop teleport, and one 'by=GAME?' line when a bot's defend block changes though no traced order explains it. Cap 2000 lines a round (a line says when reached).
+Format: `otrace: t=<GetTickCount ms> r=<s since round start> rec=<crew record> by=<issuer> <ORDER|ORDER-DRY|TELEPORT|SKIP|BLOCK-CHANGED> (<asked x,y,z>) set=(<what the game set>) why=<reason>`
+(BLOCK-CHANGED: first xyz = block now, `was=` = before.) Issuers: escort, board, move-reach, move-restless, fedkit-hunted, adren, hop, hop-walk, hop-walk-giveup, hop-putback, hop-reorder, GAME?, untagged (= a call site without a tag).
+Read it: `grep "otrace:" KLHook.log | grep "rec=5 "` and look at the sequence for one bot. A flip-flop = alternating `by=` values (hop-walk / fedkit-hunted / GAME?) with targets in different directions inside 10 s.
+Next live DM09 round, with Hunted=1 and a fed (as the earlier rounds): (1) run once with OrderTrace=1 alone: confirm the pair hop-walk vs fedkit-hunted (and see how often GAME? interleaves - that is the chain). (2) run with
+`[Bots] WalkExclusive=1` too: expect `SKIP` lines from fedkit-hunted / move-restless while a bot walks, the walkers' x rising steadily towards 2560 and no 'GIVE UP' lines. The bot's x per 8 s (hop-walk lines) must rise monotonically.
+### [Bots] WalkExclusive=1 (default 0; GUESS)
+While klhop.c walks a record (klv_r.walking), klfedkit Hunted and klmove Restless give it no order (the walk is its order). GUESS: nothing else needs those bots; a hit bot on the walk loses its Hunted reaction. Needs [CrewHop] Enable=1.
+Not fixed: the game's own chain can still re-order a walking bot (GAME? lines will say); if so the next step is a re-order faster than 8 s, which is NOT written.

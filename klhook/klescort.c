@@ -536,13 +536,66 @@ static int kle_callable(char why[100])
 /* STUTTER WATCH (2026-10-14): every order this hook gives, when and how long the call took - klhook.c's hitch line names the
    orders of the half second before a long frame ('orders' = the game's path request is the suspect of the owner's freezes) */
 static volatile DWORD kle_order_at; static volatile LONG kle_order_n; static LARGE_INTEGER kle_order_f; static double kle_order_ms_max;
+
+/* ORDER TRACE (v82i, [Bots] OrderTrace=1, default 0; re\bots_active.md 'Order trace'). One 'otrace:' line per order a module of this hook gives a
+   crew bot, plus one per teleport of klhop.c, plus one when the defend block of a bot CHANGES without any of that (the game's own chain or a
+   tactic: issuer 'GAME?'). OFF: kltr.on is 0 and every function here returns at its first test - no read, no write, no log.
+   Issuers are named by the call site (kltr_set before the call); an order from a site that did not set one is 'untagged'. */
+#define KLTR_CAP 2000
+static struct { int on, rec; LONG n; DWORD rules, round_at, polled, said[KLB_NREC]; const char *who, *why; float last[KLB_NREC][3]; BYTE have[KLB_NREC], told_cap; } kltr;
+static void kltr_set(const char *who, const char *why, int rec) { if (!kltr.on) return; kltr.who = who; kltr.why = why; kltr.rec = rec; }
+static void kltr_round(DWORD rules, DWORD now)
+{
+    if (!kltr.on || rules == kltr.rules) return;
+    kltr.rules = rules; kltr.n = 0; kltr.told_cap = 0; kltr.round_at = KLB_T(now); kltr.polled = 0;
+    memset(kltr.have, 0, sizeof kltr.have); memset(kltr.said, 0, sizeof kltr.said);
+}
+static void kltr_line(int rec, const char *who, const char *kind, const float a[3], const char *blab, const float b[3], const char *why)
+{
+    DWORD now;
+    if (!kltr.on) return;
+    if (kltr.n >= KLTR_CAP) { if (!kltr.told_cap++) klog("otrace: %d lines this round: no more are written until the next round", KLTR_CAP); return; }
+    now = GetTickCount(); kltr.n++;
+    klog("otrace: t=%lu r=%.1f rec=%d by=%s %s (%.0f, %.0f, %.0f)%s(%.0f, %.0f, %.0f) why=%s", now, kltr.round_at ? (double)(LONG)(now - kltr.round_at) / 1000.0 : -1.0, rec, who, kind,
+         a ? a[0] : 0, a ? a[1] : 0, a ? a[2] : 0, b ? blab : " ", b ? b[0] : 0, b ? b[1] : 0, b ? b[2] : 0, why ? why : "-");
+}
+/* res: 1 = called, 2 = dry run. rec < 0 = the hint of kltr_set. */
+static void kltr_order(int rec, const float want[3], const float got[3], int res)
+{
+    const char *who, *why;
+    if (!kltr.on) return;
+    if (rec < 0) rec = kltr.rec;
+    who = kltr.who ? kltr.who : "untagged"; why = kltr.why;
+    kltr.who = 0; kltr.why = 0; kltr.rec = -1;
+    kltr_line(rec, who, res == 2 ? "ORDER-DRY" : "ORDER", want, " set=", got, why);
+    if (res != 2 && rec >= 0 && rec < KLB_NREC) { memcpy(kltr.last[rec], got, 12); kltr.have[rec] = 1; }
+}
+static void kltr_tp(int rec, const char *who, const float to[3], const char *why) { if (kltr.on) kltr_line(rec, who, "TELEPORT", to, 0, 0, why); }
+/* twice a second: a block that moved and that none of the traced orders explains was set by the game (its chain / a tactic) or by a module that bypasses kle_order2 */
+static void kltr_poll(const struct klb_snap *s, DWORD now)
+{
+    int i; float cur[3];
+    if (!kltr.on || now - kltr.polled < 500) return;
+    kltr.polled = KLB_T(now);
+    for (i = 0; i < s->n && i < KLB_NREC; i++) {
+        const struct klb_rec *r = &s->r[i]; DWORD soldier;
+        if (!r->used || !(r->flags & 1) || r->status || !r->actor || klh_rd32(r->actor) != KLB_ACTOR_VT) { kltr.have[i] = 0; continue; }
+        if (!(soldier = klh_rd32(r->actor + 0x77c)) || klh_rd32(soldier) != KLE_SOLDIER_VT || !kle_block(soldier, cur)) continue;
+        if (!kltr.have[i]) { memcpy(kltr.last[i], cur, 12); kltr.have[i] = 1; continue; }
+        if (kle_dist(cur, kltr.last[i]) > 5.0f) {
+            if (now - kltr.said[i] >= 1000) { kltr.said[i] = KLB_T(now); kltr_line(i, "GAME?", "BLOCK-CHANGED", cur, " was=", kltr.last[i], "block now differs from the last traced order or poll: the game's chain or a tactic (or a module that bypasses kle_order2)"); }
+            memcpy(kltr.last[i], cur, 12);
+        }
+    }
+}
+
 static int kle_order2(struct kle_e *e, const float want[3], float got[3], char why[100], int dry)
 {
     float p[4]; BYTE soft = 0; LARGE_INTEGER t0, t1; double ms;
     memcpy(got, want, 12);
     if (!kle_ok3(want)) { strcpy(why, "the place is not a number"); return 0; }
     if (!kle_callable(why)) return 0;
-    if (dry) return 2;
+    if (dry) { kltr_order(e->rec, want, want, 2); return 2; }
     p[0] = want[0]; p[1] = want[1]; p[2] = want[2]; p[3] = 0;
     if (!kle_order_f.QuadPart) QueryPerformanceFrequency(&kle_order_f);
     QueryPerformanceCounter(&t0);
@@ -551,6 +604,7 @@ static int kle_order2(struct kle_e *e, const float want[3], float got[3], char w
     ms = (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)kle_order_f.QuadPart;
     kle_order_at = GetTickCount(); InterlockedIncrement(&kle_order_n);
     if (ms > kle_order_ms_max) kle_order_ms_max = ms;
+    if (kltr.on) { float g2[3]; if (!kle_block(e->soldier, g2)) memcpy(g2, want, 12); kltr_order(e->rec, want, g2, 1); }
     if (ms > 15.0) klog("escort: SLOW ORDER: record %d to (%.0f, %.0f, %.0f) took %.1f ms inside the game's order routine", e->rec, want[0], want[1], want[2], ms);
     if (!kle_block(e->soldier, got)) memcpy(got, want, 12);
     if (klh_rd(e->soldier + 0x4fc, &soft, 1) && soft && !e->told_soft++)
@@ -630,6 +684,7 @@ static void kle_hold(const struct klb_snap *s, int slot, const float hp[3], cons
         }
     }
     kle_place(hp, bp, slot, direct, want);
+    kltr_set("escort", "follow: keep beside the human", -1);
     r = kle_order(e, want, got, why);
     if (!r) {
         if (!e->log_at || now - e->log_at >= 5000) { e->log_at = KLB_T(now); klog("escort: record %d NOT re-pointed: %s", e->rec, why); }
@@ -660,12 +715,14 @@ static void kle_release(const struct klb_snap *s, int slot, int reason, DWORD no
         if (r->stage >= 3) { klog("escort: record %d released (%s): it is at stage 3, its own board tactic takes it aboard", e->rec, what); return; }
         if (!kle.board) { klog("escort: record %d released (%s): EscortBoard=0, it is left where it is", e->rec, what); return; }
         if (!kle_boarding(s->rules, bd)) { klog("escort: record %d released (%s): the boarding place cannot be read, nothing is called", e->rec, what); return; }
+        kltr_set("escort", "released: to the boarding place", -1);
         k = kle_order(e, bd, got, why);
         if (k) klog("escort: record %d released (%s): %s to the boarding place (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f); it is at stage %u", e->rec, what, k == 2 ? "WOULD be sent (dry run)" : "sent", bd[0], bd[1], bd[2], got[0], got[1], got[2], r->stage);
         else klog("escort: record %d released (%s): NOT sent to the boarding place: %s", e->rec, what, why);
         return;
     }
     if (e->have_target && e->have_route) {
+        kltr_set("escort", "released: back to its route place", -1);
         k = kle_order(e, e->route, got, why);
         if (k) klog("escort: record %d released (%s): %s to its route place (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f)", e->rec, what, k == 2 ? "WOULD go back (dry run)" : "back", e->route[0], e->route[1], e->route[2], got[0], got[1], got[2]);
         else klog("escort: record %d released (%s): NOT sent back to its route place: %s", e->rec, what, why);
@@ -740,6 +797,7 @@ static void kle_board_all(const struct klb_snap *s, DWORD now)
         }
         kle_r.all_visit[i] = kle_r.visit;
         memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;      /* kle_order's 'soft' line is worded for an escort */
+        kltr_set("board", "BoardAllOrder: to the boarding place", -1);
         k = kle_order(&t, bd, got, w);
         if (k) klog("board: record %d at (%.0f, %.0f, %.0f): %s to the boarding place (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f); visit %d of the vehicle",
                     i, bp[0], bp[1], bp[2], k == 2 ? "WOULD be sent (dry run)" : "sent", bd[0], bd[1], bd[2], got[0], got[1], got[2], kle_r.visit);
@@ -1215,6 +1273,7 @@ static void kle_tick(int game_thread)
         if (game_thread && kle_r.rules) kle_shield_off("a new round", now);   /* not at the first pass of this file after the shield was set by klmove.c (kle_r.rules is 0 then) */
         memset(&kle_r, 0, sizeof kle_r); kle_r.rules = s.rules; kle_r.round_at = KLB_T(now);
     }
+    kltr_round(s.rules, now);
     kle_r.state = s.state; kle_r.stages = stages;
     if (s.state != KLB_ROUND) { kle_r.spare_rules = 0; if (game_thread) kle_shield_off("the round is over", now); return; }
     if (!klb_level(why)) {                    /* klbot.c section 0: nothing on a stock level, on an unknown one, or without the Steam guard */
@@ -1263,6 +1322,7 @@ static void kle_tick(int game_thread)
             e->mode = 3;
             if (s.r[e->rec].stage >= 3) continue;                             /* its own board tactic takes it (0x4fb064) */
             if (!kle_boarding(s.rules, bd)) { klog("escort: record %d (released): the vehicle waits but the boarding place cannot be read", e->rec); continue; }
+            kltr_set("escort", "released earlier, the vehicle waits: to the boarding place", -1);
             k = kle_order(e, bd, got, w);
             if (k) klog("escort: record %d (released, stage %u): the vehicle waits: %s to the boarding place (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f)", e->rec, s.r[e->rec].stage, k == 2 ? "WOULD be sent (dry run)" : "sent", bd[0], bd[1], bd[2], got[0], got[1], got[2]);
             else klog("escort: record %d (released): NOT sent to the boarding place: %s", e->rec, w);
@@ -1275,6 +1335,9 @@ static void kle_init(void)
 {
     int v;
     memset(&kle, 0, sizeof kle); memset(&kle_r, 0, sizeof kle_r);
+    memset(&kltr, 0, sizeof kltr); kltr.rec = -1;
+    kltr.on = GetPrivateProfileIntA("Bots", "OrderTrace", 0, klh_ini) != 0;      /* v82i: the only read of this key; 0 = the trace does nothing */
+    if (kltr.on) klog("otrace: ON ([Bots] OrderTrace=1): one 'otrace:' line per order a module of this hook gives a crew bot, per klhop.c teleport, and per change of a defend block that none of them explains (by=GAME?); at most %d lines a round; re/bots_active.md 'Order trace'", KLTR_CAP);
     if (!klb.on) {                            /* [Bots] Enable=0: klbot.c is off, and so is this */
         if (GetPrivateProfileIntA("Bots", "BoardAll", 0, klh_ini) || GetPrivateProfileIntA("Bots", "Escort", 0, klh_ini) > 0
             || GetPrivateProfileIntA("Bots", "FollowOut", 0, klh_ini) || GetPrivateProfileIntA("Bots", "FollowOutSpare", 0, klh_ini))

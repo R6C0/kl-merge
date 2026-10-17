@@ -828,6 +828,7 @@ static void klfk_hunted(int game_thread, DWORD player, DWORD rules)
         klfk_hb[i].due = 0;
         if (klfk_hb[i].order_at && now - klfk_hb[i].order_at < klfk_hu.gap) continue;
         if (kle_r.used[i] || (r->stage >= 3 && s.veh >= 1 && s.veh <= 5)) continue;           /* an escort, or the board tactic's / the rules' bot */
+        if (klv_owned(i)) { if (kltr.on) kltr_line(i, "fedkit-hunted", "SKIP", 0, 0, 0, "WalkExclusive: klhop.c walks this bot"); continue; }      /* v82i GUESS, [Bots] WalkExclusive (default 0) */
         if (!kle_bot(&s, i, &actor, &soldier, bp, w)) continue;
         if (!kle_block(soldier, cur)) memcpy(cur, bp, 12);
         if (klmv_h(bp, fp) > klfk_hu.range * 1.5f) continue;                                    /* an alerted bot that is far from the fed */
@@ -852,6 +853,7 @@ static void klfk_hunted(int game_thread, DWORD player, DWORD rules)
         }
         if (!j) continue;
         memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
+        kltr_set("fedkit-hunted", j == 1 ? "Hunted: hit bot walks at the fed" : j == 2 ? "Hunted: hit/alerted bot to a [Hops] cover place" : "Hunted: hit/alerted bot, a step aside", -1);
         n = kle_order2(&t, want, got, w, klfk_hu.dry);
         klfk_hb[i].order_at = now;
         if (!n) { if (klfk.log > 1) klog("fedkit: hunted: record %d NOT ordered: %s", i, w); continue; }
