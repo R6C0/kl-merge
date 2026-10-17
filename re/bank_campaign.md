@@ -2876,3 +2876,96 @@ C:/kl_build/c_bank9_fx: bank_vault = bank_vault_wavslim zip **d6c50820** (d6c508
 ### B.5 What the next run must show (add `[CrewHop] Dry=1 Log=2` to the level's KLJoin.ini: W10-W12 have no bot places)
 1. The idle human at START takes no hit. 2. No ONE STEP on a bot; a death's place against `garrison-check` (the lobby's west wall is the weak spot, 431 .. 445 from leg 1>2). 3. Bots above y 900 (bot 6's stairwell): log where the game's path goes. 4. The crew holds at the hall gate's hold (1461, 800, -6330) up to 30 s. 5. The flights corridor and the dock's west level are now quiet: if the crew then walks through unopposed that is the cost; pressure left is the lobby's three, 01b, the hall's eight, the waves and the square.
 GUESS: every pocket point, leashed men do not hunt (kl2 0x85f89f only selects a tactic list), the 425 in the lobby, WAKE_EARLIEST 75 s.
+
+## Vault door, closed at the start and opening in play: study and minimal plan (2026-10-17, kl-merge, OFFLINE, nothing built)
+
+READ/MEASURED on the installed build (build/cops_1018/vault/F01_Main.zip) and on the stock levels, with throw-away scripts that
+use kl_fa_bank.read_built / values and J.Scene.load('M03_A','dm'). No tool was changed, no build made.
+
+### S1 What exists already (the owner's premise is half done)
+- `--doors-animate` concerns the ELEVEN OTHER leaves (dock roller door, 4 glass, 4 airlock, 2 hall/foyer), not the vault door. The
+  default sinks those 2,500 and cuts their collision at build time; the flag keeps them and `Activator_OLD_VanGo` (AIDWrapper
+  'Activate') sends each one a plain 'Activate' at the round start (glass leaves get LAST 50, G1.8). It was only built and checked
+  offline (var_animate.txt: PASS); its live step L4 was NEVER run (no live line for it in re/open_work_log.md).
+- THE VAULT DOOR ALREADY works as asked, in every default build, including the installed Vault: it stands closed with its
+  key-framed collision from the load; the ante-room box starts the beat; `beat timer` (48 s, six rods pulled at 2..42 s) sends
+  AIDWrapper 'Activate' (`Activator_VanSound`, re-aimed) to the door GROUP 7084 `M03_A_VaultEntrance_01a/SI0102_M03_BankVault_Door_PRE_01`
+  and activates Dead Men's own 3D sound `Audio!3D!Doors!Vault_Door_Open` (`GeomActivator_PlaysoundVaultOpen`; the clip is not
+  among the 16 missing stream clips); `door timer` (`TimerVanGo`, DOOR_GONE 6 s) then runs `DeactivateGeom` on the child body
+  `.../Door_PRE` (the slab and its collision), the blast, and releases the hall police and the hunts (DOOR_WAIT).
+- Door controller as built (MEASURED): MatPosAnim 'Activate', rate 25, first 0 / last 200, F7 relative = 1, F8 start-at-load = 0, no
+  loop. Clip (G1.8): 100 degrees at frame 60 (2.4 s), rests at 95, ends at frame 200 (8 s). A plain 'Activate' = opens and STAYS.
+  Not yet seen in the game: nobody has a live line or picture of the swing (the owner's 10-11 round: looted, 'door is open' only
+  in round 2 = the body gone and the blown vault shown; S2 ran 20 s of round).
+- Cost of the default: the slab is switched off 6 s after 'Activate', i.e. while the clip is still running (frame 150 of 200): the
+  Dead Men animation is seen for 6 s and the door then vanishes. That, plus never having been SEEN, is the whole gap.
+
+### S2 The Dead Men chain (M03_A, MEASURED with Scene.load('M03_A','dm'))
+`MercSqd_Valutbreaker_OpenVault/MatPosAnimProxy_Rod#06` (frames 1..60 on Rod_F01 + RodLight_F01), at its END, names
+[`GeomDeactivator_RodLight#06`, `TriggerBox_MoveAway`, `GamePlay!4_Vault_Part/VaultDoors_Open`, `Special!Audio!GeomActivator_PlaysoundVaultOpen`].
+`VaultDoors_Open` = MatPosAnimProxy 1..75 on the door group; at ITS end it names [`Blocker_trigger` (Blocker -> TriggerBox_MoveAway),
+`PathBlocker_Vault`]. `PathBlocker_Vault` = PathBlocker ['eUnblock', initial 'eBlocking', list [Special!Audio!20_Signal_from_VaultOpen]],
+box at (401, -911, -12626) half (200, 50, 170), i.e. across the opening: the campaign keeps the AI OUT of the vault until the door
+has finished, by the navigation system, not by the collision alone. Three more `PathBlocker_Vault_Edges_01..03` (eBlock, start
+eNotBlocking) sit in the blast group (the edges after the blast). All of this lives in `GamePlay!4_Vault_Part`, which the build
+drops: the built level has NO PathBlocker_Vault (it has 5 PathBlockers: 4 under the shattering windows, 1 PathBlockerVan).
+The campaign's proxies cannot run for a Fragile Alliance player (story crew), so the build re-aims their effects with plain timers.
+
+### S3 What Dog Days itself does (stock F07, MEASURED): the pattern is already the one used
+Stock F07 loading-bay shutters: round-start AIMonitor list -> `Shutters/TimerShuttersOpen` (TriggerDelay2) -> AIDWrapper 'Activate'
+`Activator_Shutters_RIGHT` (+ the shutter's Audio object in the same list) -> the shutter ZSTDOBJ's own MatPosAnim (key-framed
+collision, handler 0x76c0e0); `TimerShuttersClose` (12 s) -> close wrapper + `PF_Blocker/Timer_PF_*` (4 s) -> `PathBlocker`
+['eBlock','eNotBlocking']. So: event = timer or TriggerBox2 'Activate' -> AIDWrapper 'Activate' -> MatPosAnim, nav = a PathBlocker
+object fired by a TriggerDelay2. Dead Men's own FA bank does the same (re/escape.md: TriggerBox2 'Activate' -> roller-door
+MatPosAnim; OnlineTriggerBox -> Timer -> PathBlocker eUnblock -> sound). Stock F07 also has 8 MatPosAnim on a ZGROUP with children,
+the same shape as the vault door. A plain MatPosAnim sends 'MatPosAnimEnd' only to its owner, so there is no end-of-clip event to
+hang a list on: the follow-up must be a TriggerDelay2 (here the existing `door timer`).
+
+### S4 Navigation while closed, and the 56 s gate
+- PF4 mesh: runs straight through the door (kl_route: 'the mesh way ... all free' with the door out; as built 'NOT free', crossed =
+  the door body alone). Nothing in the mesh knows the door; only the Havok body stops people and cars. AI that is sent through
+  walks into the slab. Nothing carries a PathBlocker for it now.
+- The bots' gate (`bots_gate`, GATE_NAME `020_Timer_vault_opens`): the plan's last station before the loot becomes 7 places in the
+  ante-room (GATE_AT (400,-960,-11900), reach 400, 6 m before the door) and each of the 7 squads gets a plain TriggerDelay2 of
+  beat 48 + door timer 6 + GATE_MORE 2 = 56 s (read off the built level, so a `--beat` or DOOR_GONE change follows). A clock, not
+  the event, on purpose (reasons in F.1): the beat started when the first criminal or bot entered the box (ASSUMED that an
+  AI heister trips the ECPS_FA_MERCONLY box); at +56 s the door has swung and its body is off. With `--vault-stays` the clock is
+  still right (the door timer still runs: blast, police, loot). Price: a late bot waits its own 56 s.
+
+### S5 Minimal plan (smallest change that gives 'closed, opens in play, Dead Men animation and sound, bots/loot/police intact')
+Objects to keep (all already kept): door group 7084 with its MatPosAnim; child body Door_PRE (visual + key-framed placement);
+the 6 rods + RodLight; `GeomActivator_PlaysoundVaultOpen` + `Vault_Door_Open`; the rod sounds. Event: UNCHANGED, `beat timer`
+(48 s from the ante-room box; the only event that exists for an FA player, since the campaign's trigger is the story crew's).
+1. NO CODE: build with `--vault-stays` (only `VAULT_DOOR_GOES = False`: the DeactivateGeom list is empty, the rest of the door
+   timer is unchanged) and do ONE live look: stand at (400,-960,-11900) during the beat, then walk in at +15 s. Answers, with
+   `[Vis] Log=1` pictures every 2 s: (a) does the swing play (ASSUMED: yes, same handler as every stock door); (b) does the
+   key-framed collision follow the slab (ASSUMED: yes, stock shutters/doors use the same body type, but never tested on a
+   GROUP-owned body from Dead Men); (c) does Vault_Door_Open sound. If (b) fails -> the door seals the vault (round-ending): fall
+   back to the shipped default at once (`VAULT_DOOR_GOES=True`).
+2. If (a)+(b) pass: make `--vault-stays` the default for this map, keep the 6 s door timer (blast, police, loot unchanged, so the
+   56 s gate needs no change). If the door must also disappear: set the body switch-off to >= 9 s (clip end is 8 s) instead of 6
+   s on a SEPARATE timer, not DOOR_GONE (DOOR_GONE feeds the blast, DOOR_WAIT and the gate sum).
+3. Optional, behind a new flag: `PathBlocker_Vault` restored as the campaign has it - a ZBoxPrimitive PathBlocker [
+   ['eUnblock', 'eBlocking'] at (401,-911,-12626) half (200,50,170) (copy it from M03_A; the graft's name rules apply) and
+   named by the `door timer` list (6 s after 'Activate'; the swing is done at 2.4 s). Gain: the hall police and hunts cannot
+   path into a closed door; the stock F07 shutters prove the object type and wiring on Dog Days' PF4 (PathBlockerVan ran live on
+   Dead Men's mesh without a fault, re/map_escape.md). Risk: a blocker that stays 'blocking' = AI never enters (round 2: see 4).
+   Do NOT replace the bots' clock gate by it (a blocked path would stall a bot mid-route, not hold it in cover).
+4. Round 2: the door's end pose is not restored by data (W.5; the `reset` step re-shows the body, and a second 'Activate' restarts
+   the clip from frame 0), so round 2 would show an OPEN door until 48 s, then snap shut and swing again. Needs the hook-side
+   MatPosAnim rewind, or accept it. The owner's 'after the first round the vault door is open' is this once the body stays; with
+   the shipped default it showed as the blown vault.
+5. `--doors-animate` (the 11 leaves) is a separate question, independent of this; its live step L4 comes first if the owner also
+   wants the dock/glass/airlock doors to move. If L4 passes, the 56 s gate is unaffected (it starts at the ante-room).
+
+### S6 ASSUMED / unknown (nothing here was seen in the game)
+The swing plays; collision follows a GROUP-owned key-framed body; DeactivateGeom of a key-framed body removes its collision
+(the shipped fallback relies on it; stock F07 uses it only on static pieces); `Vault_Door_Open` is audible; an AI heister trips
+the beat box; PathBlocker 'eUnblock' accepts the TriggerDelay2 activation as the unblock message (the campaign wiring says so;
+F07's own use is 'eBlock' with the same wiring); the hunts' mesh part needs no blocker.
+
+## 2026-10-17 Vault door swing (offline, flag built, NOT run in the game)
+`python tools/kl_fa_bank.py ... --vault-swing [S]` (default 9 s, S >= 8; not with --vault-stays/--vault-open). The door body (door off) is switched off by a free TriggerDelay2 (SWING_TIMER) named by the beat timer, S s after the beat end; the 6 s door timer keeps feeding blast, police and the bots' 56 s gate. Default build byte-identical to HEAD (md5 85adb77b). Build: `<work>/build/vault_door_1017/DM03A` (zip 44058661, MANIFEST.txt there). Checkers: test PASS, debug/check.py, verify, preflight/audit pass except the known stream-clip finding (CRASH 1 / FAIL 2), which the installed build also has.
+Assumptions: the Activate clip plays; collision follows the key-framed body; DeactivateGeom removes it (the timer is the fallback); Vault_Door_Open is audible; an AI heister trips the beat box; S=9 is a GUESS.
+Live test: stand at (400, -960, -11900) during the beat, [Vis] Log=1 pictures every 2 s: door swings from 48 s, collision follows, sound plays, body gone at ~57 s, blast/police at 54 s, bots go at 56 s, loot/police work. If collision does not follow, the vault is sealed only until 57 s.
+Install caveat: the installed DM03A carries later passes; see MANIFEST.txt.
