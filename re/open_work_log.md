@@ -2,6 +2,7 @@
 
 Newest first. Append new dated notes at the TOP. CLAUDE.md keeps only the newest few.
 
+2026-10-17 19:10 - OFFLINE (kl-merge-e5): COMMITTED a7f134a6 hook v82g ([Net] PrivateLobby / BuildKey, an ISteamMatchmaking proxy, default off, NOT RUN) and 89666bf3 v82h ([Fed] NoLoot=1: a fed no longer collects cases or drops; the cause of the Hasta money climb). Park II's climb comes from six 300K cases on the START row (kl-merge-3f is fixing kl_fa_v2_park.py). The OWNER DISLIKED the v82f HUD/shop: their hook 8d3ccf81 is live, so do not install v82e-h without their OK. wf_adf6f1d5-cb0 is porting the fixes onto the owner's look (v82i_owner). The vault door2 build CRASHED at load (0x6ad1c3; 706cfc8d restored). Triage wf_05419952-bc4 (suspect: 6 members mixed with the later passes) -> full folder build/vault_door3_1017.
 2026-10-17 18:35 - OFFLINE (kl-merge-e5), all reviewed, NOT RUN:
 - b4537168 Hasta load crash fixed: an orphan Artillery_Impact_Group clone group had lost its template, so the copy pointer +0x58 was null at 0x4c63f2. Build M11B_fix c23cb618; the add-ons are rebuilt on it (M11B_fix_blast d3291097, M11B_fix_talk cba4e5bd, M11B_full 75c6be55).
 - ceb25469 Hasta --lock-wing.
