@@ -887,6 +887,7 @@ HELI_CH = 'EscapeSetup!EscapeChopper\\'
 HELI_MOVE = (HELI_CH + 'Escape_Chopper', HELI_CH + 'Incomming\\Spline', HELI_CH + 'Escaping\\Spline', HELI_CH + 'CrashSite_Center_01',
              'Triggers!BoardingTrigger_Heli', 'Triggers!BoardingGameplayTrigger', 'PIP_Points!Boarding',
              'EscCameraSetup!CameraTrigger01', 'EscCameraSetup!CamPos01')     # moved with the one motion; EscCamera01 follows CamPos01 (as the van's), OnMap goes to the pad
+HELI_HVK_ORIGIN = False                     # OPT-IN (--hvk-origin): heli_hvk leaves the chopper's vehicle placement where the donor has it (the origin, as in stock M06_FA_A / F03 / F06)
 HELI_ST = {}                                # the motion of the running build (heli_place): 'land', 'c', 's', 'dy', 'refs'
 HELI_STORAGE = IN + 'M05_A_Inside_3rd_Storage_01a\\'
 HELI_SUNK = [HELI_STORAGE + 'SI0108_M05_Firedoor_03\\D03', HELI_STORAGE + 'SI0108_M05_Firedoor_02\\D03', HELI_STORAGE + 'HeroColi']   # the way up (V.6: REF 21773 / 21775 / 21820 of the stock M05_A); sunk like the office doors
@@ -972,6 +973,9 @@ def heli_hvk(hvk, log=print):
     F = HELI_ST
     if not F.get('refs'):
         raise ValueError('kl_fa_club: the collision is joined and heli_place has not run')
+    if HELI_HVK_ORIGIN:
+        log('  kl_fa_club: HELI: .HVK: --hvk-origin, the chopper placement(s) stay where the donor has them (stock: the origin)')
+        return hvk
     mine, n = set(F['refs']), 0
     R = ((F['c'], 0.0, -F['s']), (0.0, 1.0, 0.0), (F['s'], 0.0, F['c']))
     for s in hvk.shapes:
@@ -4385,6 +4389,8 @@ def main():
     if len(a) >= 2 and a[0] == 'test':
         global DOORS_ANIMATE, SEAL_OPEN, SEAL_PLANE, SEAL_AT, LIGHT_SHOW, BEAT_ANIM, FAN_DAMAGE, CASE
         global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, POLICE_ON_SLAB, STOCK_ROWS, OFFICE_AT, STREAM
+        global HELI_HVK_ORIGIN
+        HELI_HVK_ORIGIN = '--hvk-origin' in a           # OPTION (heli build only): keep the chopper's .HVK placement at the donor's pose (the origin, as stock)
         global GUARDS_OFF, POLICE_EAST, VAN_LATE, RESET, VOICE, LOOT_SECONDS, LEGACY, ROOM_GATES, PRESSURE, WAKE_MORE, V2
         LEGACY = '--legacy' in a                        # the first delivery's build: every flag of the fix after run C2 off, the old numbers
         V2 = not LEGACY and '--v1' not in a            # VERSION 2 (entrance start): the default; --v1 is the round of c_club5

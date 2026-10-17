@@ -16,7 +16,7 @@ if not exist "%VCVARS%" (echo Visual Studio C++ tools not found: add "Desktop de
 set "OUT=%~1"
 set PUB=
 if /i "%OUT%"=="--work" goto work
-if "%OUT%"=="" set OUT=%~dp0out
+if "%OUT%"=="" set "OUT=%~dp0out"
 goto build
 :work
 rem the work folder: KL_WORK if set, else what tools\kl_port_check.workdir() answers (needs python on the PATH)
@@ -30,13 +30,15 @@ if not exist "%OUT%" mkdir "%OUT%"
 call "%VCVARS%" x86 >nul 2>nul
 cd /d "%OUT%"
 cl /nologo /O2 /LD /W3 /D_CRT_SECURE_NO_WARNINGS %KLHOOK_CFLAGS% "%~dp0klhook.c" /Fe:dinput8.dll /link /EXPORT:DirectInput8Create=_DirectInput8Create@20 || exit /b 1
-echo built %OUT%\dinput8.dll (SHIP)
+echo built "%OUT%\dinput8.dll" (SHIP)
 if not defined PUB exit /b 0
 rem --work: the folder holds exactly what a run needs - the DLL, its sha1 and an ini; the compiler's by-products go
 del /q dinput8.exp dinput8.lib klhook.obj 2>nul
 set H=
 for /f "skip=1 delims=" %%h in ('certutil -hashfile dinput8.dll SHA1') do if not defined H set "H=%%h"
 set H=%H: =%
-> dinput8.dll.sha1 echo %H%  dinput8.dll  SHIP  built %DATE% %TIME: =0% from %~dp0
+set "SRC=%~dp0"
+setlocal enabledelayedexpansion
+> dinput8.dll.sha1 echo !H!  dinput8.dll  SHIP  built %DATE% %TIME: =0% from !SRC!
 copy /y "%~dp0KLHook.ini" KLHook.ini >nul
 type dinput8.dll.sha1
