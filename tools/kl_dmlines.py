@@ -49,13 +49,13 @@ def slot_of(zf):
     raise ValueError('no _Main.SND in the archive')
 
 
-def pools_text(first, fed=False):
+def pools_text(first, fed=False, core=True, fedpools=True):
     out, n = [], first
-    for name, on, key in POOLS:
+    for name, on, key in (POOLS if core else []):
         for who in WHO:
             out += ['[Pool.%d]' % n, 'Name=dm_%s_%s' % (name, who.lower()), 'Who=%s' % who, 'On=%s' % on, 'Keys=1', 'Key.1=%s' % key]
             n += 1
-    for name, on, ks in (FED_POOLS if fed else []):
+    for name, on, ks in (FED_POOLS if fed and fedpools else []):
         out += ['[Pool.%d]' % n, 'Name=dm_%s' % name, 'Who=Fed', 'On=%s' % on, 'Keys=%d' % len(ks)] + ['Key.%d=%s' % (i + 1, k) for i, k in enumerate(ks)]
         n += 1
     return out, n - 1
@@ -72,9 +72,14 @@ def ini_variant(old, count_of_pools_line=True, fed=False):
     t = old.decode('latin1')
     nums = [int(m) for m in re.findall(r'(?m)^\[Pool\.(\d+)\]', t)]
     first = max(nums or [0]) + 1
-    if first + len(POOLS) * len(WHO) + (len(FED_POOLS) if fed else 0) - 1 > 32:
+    # a file that already carries the Won / Shoot pools (Name=dm_won_*) or the Fed pools (Name=dm_fed*) gets only what it lacks
+    core = 'Name=dm_won_' not in t
+    fedp = 'Name=dm_fedkill' not in t
+    if first + (len(POOLS) * len(WHO) if core else 0) + (len(FED_POOLS) if fed and fedp else 0) - 1 > 32:
         raise ValueError('KLK_NPOOL (32) would be exceeded: %d pools already' % (first - 1))
-    pl, last = pools_text(first, fed)
+    pl, last = pools_text(first, fed, core, fedp)
+    if not pl:
+        return old
     nl = '\r\n' if '\r\n' in t else '\n'
     if not t.endswith('\n'):
         t += nl
