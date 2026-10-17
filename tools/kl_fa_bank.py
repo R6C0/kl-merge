@@ -40,6 +40,9 @@ what only a live run can settle: re/bank_campaign.md. Nothing here installs anyt
       --vault-swing [S] the vault door's swing is played out: its body is switched off S s (default VAULT_SWING_END = 9, the
                         clip ends at 8) after the beat's end by a timer of its own (SWING_TIMER), not by the door timer, which
                         keeps its DOOR_GONE s and its blast / police / gate sum. Not with --vault-stays / --vault-open
+                        With --reset, round 2 also starts with the door closed again (door 'Activate' then 'ForceStopAnim', GUESS)
+      --vault-blocker   the campaign's PathBlocker_Vault stays: blocking from the load, unblocked by the door timer, blocked again at
+                        a round start (--reset). Bots do not path through the closed door. Not with --vault-stays / --vault-open
       --loot-shown      the vault's loot lies there from the start (default: hidden until the beat's timer ends)
       --loot-bags       the vault's loot keeps F07's money bags (finish() leaves the models alone)
       --beat S          seconds from the ante-room box to the vault door (default BEAT)
@@ -281,6 +284,18 @@ VAULT_DOOR_GOES = True                  # False ('--vault-stays'): once the swin
 BEAT = 48.0                             # s from the ante-room box to the door. GUESS: six rods at 8 s steps (the study)
 BOX_PER_MAN = 15                        # TriggerBox field: 1 = fires for every criminal that enters, 0 = once (wire(): the census)
 DOOR_WAIT = True                        # hall police + hunt go on the DOOR timer (swing over, body off), not on the beat's end: nobody is sent through a door that still swings / collides (owner 2026-10-17; '--door-early' = the old order)
+# VAULT_BLOCKER ('--vault-blocker'): the campaign's own PathBlocker_Vault is kept (BLOCKER, a top-level node of the Vault part: ZBoxPrimitive
+# across the opening, PathBlocker ['eUnblock', initial 'eBlocking', list [an audio object the build drops]]). It stands blocking from the load
+# (bots do not path through the closed door), the door timer names it ('Activate' = the configured eUnblock, as the campaign's VaultDoors_Open
+# does at the end of the swing) and a round-start object sends it 'Block' so that round 2 starts closed (AIDWrapper 'Block', kl2 0x710320).
+# GUESS: that 'Activate' from a TriggerDelay2 list unblocks (the campaign wiring says so) and that the AIDWrapper's 'Block' reaches the handler.
+VAULT_BLOCKER = False
+BLOCKER = 'GamePlay!4_Vault_Part!PathBlocker_Vault'
+# VAULT_SWING's round 2: --reset shows the door's body again but the MatPosAnim stays at its end pose (open, ~95 degrees). With the swing flag the
+# round start also sends the door 'Activate' (kl2 0x59dce0 evaluates frame 0 at once = closed) and DOOR_POSE_DELAY s later a wrapper sends it
+# 'ForceStopAnim' (kl2 0x5eacc0), so it stands closed and the clip does not run on. GUESS: the delay (any value < 1 frame-time of the clip's first
+# step would do; 0.05 s = 1 frame at 25 fps is the smallest the timer gives) and that frame 0 is the closed pose with F7 'relative' = 1.
+DOOR_POSE_DELAY = 0.05
 DOOR_GONE = 6.0                         # s after the door's 'Activate'. GUESS: the swing is at its 100 degrees after 2.4 s
 
 # ------------------------------------------------------------------ the host's layer
@@ -792,14 +807,17 @@ def opts_now():
     return collections.OrderedDict(crew_fix2=CREW_FIX2, teller_late=TELLER_LATE, van_late=VAN_LATE, van_hide=VAN_HIDE, van_no_target=VAN_NO_TARGET,
                                    van_show=VAN_SHOW, reset=RESET, waves=WAVES, waves_extra=WAVES_EXTRA, waves_near=WAVES_NEAR,
                                    plaza_outside=PLAZA_OUTSIDE, hall_up=HALL_UP, no_ai=NO_AI, teller_more=TELLER_MORE, waves_latch=WAVES_LATCH,
-                                   waves2=WAVES2, voice=VOICE, teller_foyer=TELLER_FOYER, room_gates=ROOM_GATES, room_on=list(ROOM_ON), room_hide=ROOM_HIDE, staging=STAGING, garrison=GARRISON)
+                                   waves2=WAVES2, voice=VOICE, teller_foyer=TELLER_FOYER, room_gates=ROOM_GATES, room_on=list(ROOM_ON), room_hide=ROOM_HIDE, staging=STAGING, garrison=GARRISON,
+                                   **({'vault_swing': VAULT_SWING_END} if VAULT_SWING_END is not None else {}),
+                                   **({'vault_blocker': True} if VAULT_BLOCKER else {}))
 
 
 def apply_opts(o):
     """Set the module's flags from a dict (opts_now's form). -> o"""
     global CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, VAN_SHOW, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
-    global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING, GARRISON
+    global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING, GARRISON, VAULT_SWING_END, VAULT_BLOCKER
     GARRISON = bool(o.get('garrison', False))
+    VAULT_SWING_END, VAULT_BLOCKER = o.get('vault_swing'), bool(o.get('vault_blocker', False))
     ROOM_GATES, ROOM_HIDE = bool(o.get('room_gates', False)), bool(o.get('room_hide', True))
     STAGING = bool(o.get('staging', False))
     ROOM_ON = tuple(o.get('room_on', ROOM_ON))
@@ -1026,7 +1044,7 @@ def campaign_names(level):
     (re/campaign_fa_bank.md 5, the second agent's note)."""
     if level != LEVEL:
         return ()
-    return tuple(squad_plan()[0]) + tuple(CAMP.values())
+    return tuple(squad_plan()[0]) + tuple(CAMP.values()) + ((BLOCKER,) if VAULT_BLOCKER else ())
 
 
 _dm = {}
@@ -1325,7 +1343,7 @@ def wire(sc, log=print):
     rise = fades(MUSIC_RISE)                            # without MUSIC_LAYER4 the fourth layer's fades hold no controller: not named
     gone = VAULT_DOOR_GOES and not VAULT_OPEN
     swing = gone and VAULT_SWING_END is not None        # the door's body goes on a timer of its own, VAULT_SWING_END s after the beat's end
-    late = (gone and not swing) or bool(VAULT_BLAST) or (DOOR_WAIT and not VAULT_OPEN)   # the door timer has something to do
+    late = (gone and not swing) or bool(VAULT_BLAST) or (DOOR_WAIT and not VAULT_OPEN) or VAULT_BLOCKER   # the door timer has something to do
     lists('beat box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BOX_PER_MAN: 0},
           f17=[R + ROLE['beat timer']] + [R + ROLE['rod timer %d' % (i + 1)] for i in range(len(rods))] + stage['beat'] + rise)
     # ... when it ends: the door's swing and its sound, the loot, the alarm (sound, lamps), the music's change, the
@@ -1368,7 +1386,9 @@ def wire(sc, log=print):
         log('  kl_fa_bank: the vault\'s blast (%s): %d Explode%s, %d objects on (the blown vault, fire, smoke), %d off; of the campaign\'s lists %d / %d '
             'entries are not in the build' % (VAULT_BLAST, len(boom), ' with reach 1' if VAULT_BLAST == 'show' else ' as the campaign has them', len(on), len(off),
                                               len(got['post on']) - len(on), len(got['pre off']) - len(off)))
-    lists('door timer', 'TriggerDelay2', f0=DOOR_GONE, f4=([R + ROLE['door off']] if gone and not swing else []) + (hall + hunt if DOOR_WAIT and not VAULT_OPEN else []) + (
+    if VAULT_BLOCKER:                                   # the kept campaign blocker: its audio list is dead (the build drops it), the door timer unblocks it
+        put_(node(BLOCKER), 'PathBlocker', f2=[])
+    lists('door timer', 'TriggerDelay2', f0=DOOR_GONE, f4=([R + ROLE['door off']] if gone and not swing else []) + ([R + BLOCKER] if VAULT_BLOCKER else []) + (hall + hunt if DOOR_WAIT and not VAULT_OPEN else []) + (
         boom + [camp['blast sound'], R + ROLE['post on'], R + ROLE['pre off']] if VAULT_BLAST else []))
     lists('door off', 'DeactivateGeom', f0='AITrigger', f1=[body] if gone else [])
     put_(sc.resolve(camp['blast sound'])[0], 'AIDWrapper', f0=must([R + BLAST_SOUND]) if VAULT_BLAST else [], f1='Activate')
@@ -2139,8 +2159,8 @@ def check(folder, log=print, problems=None):
         if DOOR_WAIT and not VAULT_OPEN:                # the hall's police are named by the door's timer now
             lists_['beat timer'] |= {sc.top[h] for s in named('door timer') for h in sc.resolve(s)}
             hall_p = {R + n + '\\' + HALL_START for n in HALL}
-            late_n = {x for s_ in named('door timer') for k in sc.resolve(s_) for x in values(sc, k, 'TriggerDelay2')[4]} if not NO_AI else set()
-            beat_n = {x for s_ in named('beat timer') for k in sc.resolve(s_) for x in values(sc, k, 'TriggerDelay2')[4]}
+            late_n = set(named('door timer')) | {x for s_ in named('door timer') for k in sc.resolve(s_) if kl_fa.has(sc, k, 'TriggerDelay2') for x in values(sc, k, 'TriggerDelay2')[4]} if not NO_AI else set()
+            beat_n = set(named('beat timer')) | {x for s_ in named('beat timer') if s_ != R + ROLE['door timer'] for k in sc.resolve(s_) if kl_fa.has(sc, k, 'TriggerDelay2') for x in values(sc, k, 'TriggerDelay2')[4]}
             miss = sorted(p for p in hall_p if p not in late_n or p in beat_n) if not NO_AI else []
             if miss:
                 fail('DOOR_WAIT: the hall police must fire from the door timer and not from the beat timer: %s' % miss[:3])
@@ -5086,6 +5106,13 @@ def extras_make(B, o, plan, show, hide, stacks=()):
     if o.get('reset'):
         out['reset'] = [single('loot on', 'Reset_show', 'ActivateGeom', {0: 'AITrigger', 1: show}),
                         single('door off', 'Reset_hide', 'DeactivateGeom', {0: 'AITrigger', 1: hide})]
+        if o.get('vault_swing') is not None:        # the door's pose: 'Activate' (frame 0 at once), DOOR_POSE_DELAY s later 'ForceStopAnim' (see DOOR_POSE_DELAY, GUESS)
+            door_ = R + VAULT_DOOR
+            stop_ = single('door', 'Reset_door_stop', 'AIDWrapper', {0: [door_], 1: 'ForceStopAnim'})
+            out['reset'] += [single('door', 'Reset_door_closed', 'AIDWrapper', {0: [door_], 1: 'Activate'}),
+                             single('door timer', 'Reset_door_timer', 'TriggerDelay2', {0: float(DOOR_POSE_DELAY), 4: [stop_]})]
+        if o.get('vault_blocker'):                  # round 2 starts with the way blocked again
+            out['reset'] += [single('door', 'Reset_blocker', 'AIDWrapper', {0: [R + BLOCKER], 1: 'Block'})]
     if o.get('van_late') and o.get('van_hide', True):
         v = single('loot on', 'Van_show', 'ActivateGeom', {0: 'AITrigger', 1: [R + VAN + '\\' + VAN_GROUP]})
         out['van'] = single('start timer', 'Timer_van', 'TriggerDelay2', {0: float(o.get('van_show', VAN_SHOW)), 4: [v]})
@@ -5418,6 +5445,35 @@ def waves_check(folder, log=print):
         log('  reset: %d objects shown again, %d hidden again (what the round switches: the vault door\'s body and the intact vault come back; '
             'the blown vault, fire, smoke, the vault\'s loot%s, the sounds and the late van go); cannot be reset by data: %s' % (
                 len(show), len(hide), ', the teller stacks' if o['teller_late'] else '', RESET_CANNOT))
+    # ---- VAULT_SWING's round-2 pose and VAULT_BLOCKER
+    cl = R + CLOCK + '\\'
+    if o['reset'] and o.get('vault_swing') is not None:
+        mon = values(sc, node(R + ROLE['monitor']), 'AIMonitor')[2]
+        op, tm, st = node(cl + 'Reset_door_closed'), node(cl + 'Reset_door_timer'), node(cl + 'Reset_door_stop')
+        if None in (op, tm, st) or cl + 'Reset_door_closed' not in mon or cl + 'Reset_door_timer' not in mon:
+            fail('VAULT_SWING reset: the round start does not name the door pose objects: %s' % [x[-24:] for x in mon[:8]])
+        elif (values(sc, op, 'AIDWrapper')[:2] != [[R + VAULT_DOOR], 'Activate'] or values(sc, st, 'AIDWrapper')[:2] != [[R + VAULT_DOOR], 'ForceStopAnim']
+              or values(sc, tm, 'TriggerDelay2')[4] != [cl + 'Reset_door_stop'] or not 0 < values(sc, tm, 'TriggerDelay2')[0] < 1.0):
+            fail('VAULT_SWING reset: the door pose objects do not send Activate then ForceStopAnim to %s' % VAULT_DOOR)
+        else:
+            log('  vault swing reset: round start -> door Activate -> %.2f s -> ForceStopAnim (round 2 starts with the door closed; GUESS)' % values(sc, tm, 'TriggerDelay2')[0])
+    if o.get('vault_blocker'):
+        pb = node(R + BLOCKER)
+        if pb is None:
+            fail('VAULT_BLOCKER: %s is not in the level' % BLOCKER)
+        else:
+            v = values(sc, pb, 'PathBlocker')
+            if v[:2] != ['eUnblock', 'eBlocking'] or v[2] != [] or sc.cls(pb) != 'ZBoxPrimitive':
+                fail('VAULT_BLOCKER: the blocker is %s %s, want ZBoxPrimitive [eUnblock, eBlocking, []]' % (sc.cls(pb), v[:3]))
+            if R + BLOCKER not in values(sc, node(R + ROLE['door timer']), 'TriggerDelay2')[4]:
+                fail('VAULT_BLOCKER: the door timer does not unblock %s' % BLOCKER)
+            if o['reset']:
+                rb = node(cl + 'Reset_blocker')
+                if rb is None or values(sc, rb, 'AIDWrapper')[:2] != [[R + BLOCKER], 'Block']:
+                    fail('VAULT_BLOCKER: no round-start Block of the blocker')
+            else:
+                log('  VAULT_BLOCKER without --reset: round 2 starts with the way open (no re-block)')
+            log('  vault blocker: %s (eBlocking from the load) unblocked by the door timer at %.1f s after the beat' % (BLOCKER.split('!')[-1], DOOR_GONE))
     # ---- waves
     if rep['waves']:
         S = Sight(folder, B, log)
@@ -5750,7 +5806,7 @@ def main():
     if len(a) >= 2 and a[0] == 'test':
         global DOOR_WAIT, DOORS_ANIMATE, VAULT_OPEN, VAULT_DOOR_GOES, VAULT_SWING_END, GATE_VAULT, CASE, BEAT, NO_AI, ALARM_LIGHTS, VAULT_BLAST, STOCK_ROWS, MUSIC_LAYER4
         global PLAZA_OUTSIDE, HALL_UP, CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
-        global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING, GARRISON
+        global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING, GARRISON, VAULT_BLOCKER
         GARRISON = '--garrison' in a                        # the garrison and the beat's police in pockets off the crew's line, holding their places (GARRISON_PLACES); needs --gates and --staging
         if GARRISON and not ('--gates' in a and '--staging' in a):
             raise ValueError('--garrison needs --gates and --staging')
@@ -5801,6 +5857,9 @@ def main():
             VAULT_SWING_END = float(a[i_]) if i_ < len(a) and not a[i_].startswith('-') and a[i_][:1].isdigit() else SWING_DEFAULT
             if VAULT_SWING_END < 8.0:
                 raise ValueError('--vault-swing: the clip is 8 s long, the body must stay for it')
+        VAULT_BLOCKER = '--vault-blocker' in a
+        if VAULT_BLOCKER and (not VAULT_DOOR_GOES or VAULT_OPEN):
+            raise ValueError('--vault-blocker: the door must go at all (not with --vault-stays or --vault-open); the path opens when it swings')
         GATE_VAULT = '--loot-shown' not in a
         CASE = None if '--loot-bags' in a else CASE
         if '--beat' in a:                               # OPTION, seconds from the ante-room box to the vault door
