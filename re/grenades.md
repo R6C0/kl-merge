@@ -213,3 +213,17 @@ necessary (see 11.3) but nothing in the autonomous tactics starts a throw; the o
   (READ: no such test in 0x6eb170 or 0x53a230); they belong to whoever picks the position.
 - Open: callers of ZSoldier slot 84; whether `ZGrenadeAttackBehaviourScript` (0x559290, which reads the soldier's
   current target at +0xb0 and walks toward it) is what the rout uses instead of the three floats; GUESS either way.
+
+## 12. Throw steps in GR06 (2026-10-17, owner item 19)
+`python tools/kl_grenade.py build <overlay> <out>` now adds, by default, one `GrenadeAttackBehaviourRout` route step for
+the 3 nearest eligible squads (020, 021, 030_cooridor; 010 is excluded: its RunToCover has no starter). `--no-route`
+reproduces the grenade-only build (md5 5ead3e70), `--squads=N`, `--target=x,y,z`. New entities: 1 group + 3 steps
+(`AI_Players!GrenadeSteps\Throw_*`); 19091 slot ids renumbered by the kl_fa_civs procedure, room sets unchanged, .oct
+records unmoved. The squad's RunToCover NEXT list names the step; the step's NEXT is the old RunToCover NEXT.
+Layout [s actor group path, f x, f y, f z, NEXT refs, b, b] from re/kl2.json; no stock level of either game has one.
+GUESSes: the two booleans (1, 0); the 's' field takes the carrier's actor GROUP path; the xyz may be ignored (Run slot
+0x7fdb10 does not read +0x20..0x28; the goal throws at the soldier's CURRENT target), so a squad with no target may do
+nothing; target = mean of F06's NORMAL loot stacks; RunToCover NEXT fires the whole new node.
+Sounds: Dead Men's fragmentation_explosion_01-03 / shot_fragmentation_01 are in the M01_FA_A bank (about offsets
+218000-224800), kl_snd.merge + graft_audio could append them, but a stock-overlay build has no path for it and no pin
+sound was found; NOT grafted, the stand-ins stay.

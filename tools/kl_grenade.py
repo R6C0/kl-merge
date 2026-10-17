@@ -3,7 +3,7 @@
 Grenades for a STOCK Dog Days Fragile Alliance map (owner item 19, 2026-10-17). Spec and findings: re/grenades.md.
 Offline: reads a built overlay folder (tools/kl_stock_mod.py build + gunsnd), writes a new one; touches no game file.
 
-    python kl_grenade.py build <overlay folder with F0n_Main.zip> <out folder> [--n=10]
+    python kl_grenade.py build <overlay folder with F0n_Main.zip> <out folder> [--n=10] [--no-route] [--squads=3]
     python kl_grenade.py check <F0n_Main.zip>                 what the level's grenade chain looks like (read only)
 
 WHAT IT CHANGES (the .prp member only; the .gms / .buf / .oct / .prm / .SND / .ANM are byte for byte the input's)
@@ -16,17 +16,31 @@ WHAT IT CHANGES (the .prp member only; the .gms / .buf / .oct / .prm / .SND / .A
     glowing trail.
   3 N police / SWAT actors (spread over squads, a hash of the seed and the scene path: the same map gives the same build)
     get Weapon\\Grenade_Fragmentation in their first grenade field (ZFFActor[4]).
-WHY NO NEW ENTITIES (stage B of re/grenades.md as written grafts Dead Men's Projectile\\Grenade_* groups): adding an entity to a
+  4 (default on, --no-route skips) a THROW STEP for 2 to 3 of those squads (add_route; re/grenades.md section 12). No tactic of Dog
+    Days starts a throw by itself; the only start is a ZGrenadeAttackBehaviourRout route step [actor ref, x, y, z, NEXT, b, b].
+    Per chosen carrier a new ZGROUP carries one such controller (all under one new top group, so 1 + N entities are added);
+    the squad's RunToCoverBehaviourRout NEXT list (the step that stock triggers start) names it, and its own NEXT list is what
+    the RunToCover's NEXT held before. The new entities go through kl_scene (slot ids renumbered, .oct / .rmi / .rmc remapped),
+    the same procedure as kl_fa_civs.add (which is copied in outline, not edited or imported).
+  4 (default on, --no-route skips) a THROW STEP for 2 to 3 of those squads (add_route; re/grenades.md section 12). No tactic of Dog
+    Days starts a throw by itself; the only start is a ZGrenadeAttackBehaviourRout route step [actor ref, x, y, z, NEXT, b, b].
+    Per chosen carrier one new ZGROUP holds one such controller (all under one new top group: 1 + N entities); the squad's
+    RunToCoverBehaviourRout NEXT list (the step a trigger starts) names it, and its own NEXT list is what the RunToCover's NEXT
+    held before. The new entities go through kl_scene (slot ids renumbered, .oct / .rmi / .rmc remapped), the procedure of
+    kl_fa_civs.add (followed in outline; that module is neither edited nor imported).
+WHY NO NEW ENTITIES (steps 1 to 3 only) (for steps 1 to 3 only) (stage B of re/grenades.md as written grafts Dead Men's Projectile\\Grenade_* groups): adding an entity to a
 stock level moves every slot id after it, and the .oct room trees, .rmi / .rmc and the list pool are keyed by slot id
 (CLAUDE.md, TWO ID SPACES). Controllers and field values live in the .prp only, so reusing an existing projectile node needs
 none of that. The cost: the grenade has no model of its own (the flare's glow) and the Frag shares the flare round's node.
 """
-import copy, os, struct, sys, zipfile
+import collections, copy, math, os, shutil, struct, sys, zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import kl_arms, kl_fa, kl_graft
+import kl_arms, kl_fa, kl_gms, kl_graft, kl_scene
+import kl_fa_bots as F
+import kl_octree as O
 import kl_prpjoin as J
-from kl_prp import units
+from kl_prp import units, Prp
 
 SEED = 2026
 PROJ = 'Projectile\\Projectiles_01\\'
@@ -161,7 +175,174 @@ def patch_level(sc, n_actors=10, seed=SEED, log=print):
     return rep
 
 
-def build(src, dst, n_actors=10, log=print):
+# ------------------------------------------------------------------ step 4: the throw steps (route nodes)
+STEP = 'GrenadeAttackBehaviourRout'
+STEPS_TOP = 'AI_Players!GrenadeSteps'
+MIN_DIST = 1500.0          # a carrier nearer than this to the target would be asked to throw at his own feet
+# GUESS: the two booleans. Every other behaviour rout in Dog Days ends [... 1, 0] (RunToCover [NEXT, 1, 0], Defend 2 / 3 = 1, 0), and
+# no stock object of this class exists (0 of 21 levels, 0 of Dead Men's 20), so there is no real value to copy.
+BOOLS = (1, 0)
+
+
+def loot_centre(B):
+    """-> (x, y, z): the mean place of the level's NORMAL loot stacks (kl_fa_bots.money_objects), the point the heisters pass."""
+    pts = [o['at'] for o in F.money_objects(B) if o['type'] == 'NORMAL']
+    if not pts:
+        raise ValueError('the level has no loot object: pass the throw target with --target=x,y,z')
+    return tuple(sum(p[i] for p in pts) / len(pts) for i in range(3))
+
+
+def _strings(v):
+    if isinstance(v, str):
+        yield v
+    elif isinstance(v, list):
+        for x in v:
+            yield from _strings(x)
+
+
+def pick_steps(B, carriers, target, n):
+    """The carriers (ZFFActor node paths) whose squad has ONE RunToCoverBehaviourRout that something starts (a trigger or a
+    cut-scene names it), one per squad, not nearer than MIN_DIST to the target, nearest first. -> [dict]."""
+    sc, hit, started = B.sc, [], set()
+    for k in range(1, len(sc.nodes)):
+        for nm, body in sc.nodes[k]['ctrls']:
+            for u in units(body[1:-1]):
+                for s in _strings(kl_fa.value(sc, u)):
+                    if '\\' in s:
+                        started.update(sc.resolve(s))
+    seen = set()
+    for cpath in carriers:
+        k = next(j for j in range(1, len(sc.nodes)) if sc.path[j] == cpath)
+        group = sc.parent[k]
+        squad = sc.parent[group]
+        if squad in seen or not kl_fa.has(sc, squad, 'ZSquadScript'):
+            continue
+        rtc = [j for j in range(squad + 1, sc.end[squad]) if sc.parent[j] == squad and kl_fa.has(sc, j, 'RunToCoverBehaviourRout')]
+        if len(rtc) != 1 or rtc[0] not in started:
+            continue
+        p = B.at(k)
+        d = math.hypot(p[0] - target[0], p[2] - target[2])
+        if d < MIN_DIST:
+            continue
+        i = next(i for i, (nm, _b) in enumerate(sc.nodes[rtc[0]]['ctrls']) if sc.p.key(nm) == 'RunToCoverBehaviourRout')
+        old = kl_fa.value(sc, list(units(sc.nodes[rtc[0]]['ctrls'][i][1][1:-1]))[0])
+        seen.add(squad)
+        hit.append(dict(squad=sc.path[squad], rtc=rtc[0], rtc_ctrl=i, old_next=list(old or []), actor=sc.path[group], carrier=cpath, dist=d))
+    hit.sort(key=lambda h: h['dist'])
+    return hit[:n]
+
+
+def _step_tokens(M, actor, target, nxt):
+    keys = M.p
+    return ([(0x02, b''), (0x0c, struct.pack('<I', keys.key_index(actor)))]
+            + [(0x0a, struct.pack('<f', float(v))) for v in target]
+            + [(0x04, struct.pack('<I', len(nxt)))] + [(0x0c, struct.pack('<I', keys.key_index(s))) for s in nxt]
+            + [(0x06, bytes([BOOLS[0]])), (0x06, bytes([BOOLS[1]])), (0x7e, b'')])
+
+
+def add_route(src, dst, carriers, slot, squads=3, target=None, log=print):
+    """Write the throw steps into a copy of the finished level folder `src` in the new, empty folder `dst` -> report dict.
+    carriers: ZFFActor node paths that hold the grenade. target: (x, y, z) or None = loot_centre()."""
+    import kl_fa_bank
+    B = F.Built(src, slot)
+    sc = B.sc
+    if os.path.abspath(dst) == os.path.abspath(B.folder) or (os.path.isdir(dst) and os.listdir(dst)):
+        raise ValueError('%s is the source or not empty' % dst)
+    same = J.join(sc, [(sc, t) for t in sc.tops()], 'same')
+    if J.fingerprints(same)[0] != J.fingerprints(sc)[0] or J.text(same, same.p.settings) != J.text(sc, sc.p.settings):
+        raise ValueError('kl_prpjoin.join does not reproduce the level\'s .prp')
+    F._roundtrip(B)
+    octx, rmi, rmc = O.Oct.parse(B['.oct']), O.RoomIndex.parse(B['.rmi']), O.RoomIndex.parse(B['.rmc'])
+    pre = F.room_sets_check(B.scene, octx, rmi, rmc)
+    target = tuple(target) if target else loot_centre(B)
+    plan = pick_steps(B, carriers, target, squads)
+    if not plan:
+        raise ValueError('no squad with a started RunToCover step among the carriers')
+    if sc.resolve(F.R_ + STEPS_TOP):
+        raise ValueError('%s is already in the level' % STEPS_TOP)
+    # ---- the new nodes (clones of the squad's own RunToCover group: a bare ZGROUP)
+    M = F.Maker()
+    tmpl = plan[0]['squad'] + '\\RunToCover'
+    top = M.clone(slot, tmpl, STEPS_TOP)
+    nm_op = top.ctrls[0][0][0]
+    top.ctrls = []
+    M.place(top, (0.0, 0.0, 0.0))
+    for h in plan:
+        name = 'Throw_' + h['squad'].split('Enemys!')[-1]
+        n = top.add(M.clone(slot, tmpl, name))
+        M.place(n, (0.0, 0.0, 0.0))
+        h['name'] = name
+        h['path'] = F.R_ + STEPS_TOP + '\\' + name
+        n.ctrls = [((nm_op, struct.pack('<I', M.p.key_index(STEP))), _step_tokens(M, h['actor'], target, h['old_next']))]
+    q, order = M.scene([top])
+    Jn = J.join(sc, [(sc, t) for t in sc.tops()] + [(q, t) for t in q.tops()], 'grenade steps')
+    # ---- the earlier step names the new one
+    for h in plan:
+        def fn(us, h=h):
+            us[0] = kl_fa._refs(Jn, [h['path']])
+        kl_fa.edit(Jn, h['rtc'], h['rtc_ctrl'], fn)
+    bad = J.misfits(Jn)
+    if bad:
+        raise ValueError('objects that do not fit their class: %s' % [(Jn.path[k], w, y) for k, w, y in bad[:3]])
+    prp = Jn.p.serialize()
+    back = Prp(prp)
+    if back.serialize() != prp or len(back.nodes()) != len(Jn.nodes):
+        raise ValueError('the new .prp does not round-trip')
+    # ---- the .gms / .buf side
+    A = B.scene
+    slot0 = A.slots()
+    nxt = max([A.ref_slots] + [e.ref + 1 for e in B.ents])
+
+    def ent(n, parent):
+        nonlocal nxt
+        e = kl_scene.Entity()
+        e.name, e.tid, e.flags, e.group, e.model = n.name.encode('latin1'), n.tid, n.flags, n.group, n.model
+        e.rot, e.trans, e.raw, e.aux, e.ref, e.links, e.lkey, e.kids, e.parent = n.rot, n.trans, None, n.aux, nxt, n.links, 0, [], parent
+        nxt += 1
+        (parent.kids if parent else A.roots).append(e)
+        for k in n.kids:
+            ent(k, e)
+    ent(top, None)
+    A.ref_slots = nxt
+    faults = A.check()
+    if faults:
+        raise ValueError('kl_scene.check: %s' % faults[:3])
+    ents = list(A.entities())
+    if [e.name.decode('latin1') for e in ents] != Jn.names[1:] or [e.tid for e in ents] != Jn.tids[1:]:
+        raise ValueError('the new .gms and .prp disagree on the entities')
+    gms, buf = A.write()
+    slot1 = A.slots()
+    ids = {slot0[e] + 2: slot1[e] + 2 for e in slot0}
+    ids[1] = 1
+    octn, rmin, rmcn = O.remap_ids(octx, ids), O.remap_ids(rmi, ids), O.remap_ids(rmc, ids)
+    moved = sum(1 for a, b in ids.items() if a != b)
+    post = F.room_sets_check(A, octn, rmin, rmcn)
+    if post != pre:
+        raise ValueError('slot ids after the renumbering: %s (before: %s)' % (post, pre))
+    new = dict(B.files)
+    new[B.ext['.prp']], new[B.ext['.gms']], new[B.ext['.buf']] = prp, kl_gms.pack(gms), buf
+    new[B.ext['.oct']], new[B.ext['.rmi']], new[B.ext['.rmc']] = octn.pack(), rmin.pack(), rmcn.pack()
+    # the .oct collision records are named by .prm chunks: they must not have moved (no room tree gained an entry)
+    if octn.record_refs() != octx.record_refs():
+        raise ValueError('the .oct records moved: the .prm would have to be re-pointed (not done here)')
+    changed = sorted(e for e, n in B.ext.items() if new[n] != B.files[n])
+    os.makedirs(dst, exist_ok=True)
+    zp = kl_graft.write_zip(os.path.join(dst, os.path.basename(B.zp)), [(n, new[n]) for n in B.order])
+    for f in os.listdir(B.folder):
+        p = os.path.join(B.folder, f)
+        if os.path.isfile(p) and p != B.zp and not os.path.exists(os.path.join(dst, f)):
+            try:
+                os.link(p, os.path.join(dst, f))
+            except OSError:
+                shutil.copyfile(p, os.path.join(dst, f))
+    sealed = kl_fa_bank.seal(dst, log=lambda *_: None)
+    rep = collections.OrderedDict(target=[round(v, 1) for v in target], steps=[{k: v for k, v in h.items() if k != 'rtc_ctrl'} for h in plan],
+                                  entities_added=len(order), slot_ids_moved=moved, members_changed=changed, sealed=sealed, out=zp)
+    log('route: %d throw steps at %s, %d entities added, %d slot ids renumbered; members changed: %s' % (len(plan), rep['target'], len(order), moved, changed))
+    return rep
+
+
+def _build_prp(src, dst, n_actors=10, log=print):
     zp = src if src.lower().endswith('.zip') else next(os.path.join(src, x) for x in sorted(os.listdir(src)) if x.lower().endswith('_main.zip'))
     if os.path.abspath(dst) == os.path.abspath(os.path.dirname(zp)):
         raise ValueError('the output folder is the input\'s own')
@@ -194,17 +375,38 @@ def build(src, dst, n_actors=10, log=print):
     return out, rep
 
 
+def build(src, dst, n_actors=10, route=True, squads=3, target=None, log=print):
+    """Steps 1 to 3 (the .prp edits), then step 4 (the throw steps) unless route is False. -> (zip path, report)."""
+    if not route:
+        return _build_prp(src, dst, n_actors, log)
+    import tempfile
+    stage = tempfile.mkdtemp(prefix='kl_grenade_stage_', dir=os.path.dirname(os.path.abspath(dst)) or None)
+    try:
+        zp1, rep = _build_prp(src, stage, n_actors, log)
+        slot = os.path.basename(zp1).split('_Main')[0]
+        carriers = [p for _s, p in rep['actors']]
+        rr = add_route(stage, dst, carriers, slot, squads, target, log)
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+    rep['route'] = rr
+    rep['members_changed'] = sorted(set(rep['members_changed']) | {os.path.basename(zp1).replace('_Main.zip', '_Main') + e for e in rr['members_changed']})
+    return rr['out'], rep
+
+
 def main():
     a = [x for x in sys.argv[1:] if not x.startswith('--')]
     opt = {x.split('=')[0]: (x.split('=') + [''])[1] for x in sys.argv[1:] if x.startswith('--')}
     if a[:1] == ['build'] and len(a) == 3:
-        out, rep = build(a[1], a[2], int(opt.get('--n', 10) or 10))
+        tg = tuple(float(v) for v in opt['--target'].split(',')) if opt.get('--target') else None
+        out, rep = build(a[1], a[2], int(opt.get('--n', 10) or 10), '--no-route' not in opt, int(opt.get('--squads', 3) or 3), tg)
         print('flare controllers now:')
         for n, v in rep['flare']:
             print('  ', n, v)
         print('actors with a frag grenade (%d):' % len(rep['actors']))
         for s, p in rep['actors']:
             print('  ', s, p.rsplit('\\', 2)[-2])
+        for h in rep.get('route', {}).get('steps', []):
+            print('throw step', h['path'], 'actor', h['actor'].rsplit('\\', 1)[-1], 'from', round(h['dist']), 'away; RunToCover NEXT was', h['old_next'])
         print('RESULT: PASS')
     elif a[:1] == ['check'] and len(a) == 2:
         sc = kl_fa.load(a[1])[0]
