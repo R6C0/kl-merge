@@ -20,6 +20,12 @@ Spec, the measurements and every table: re/map_ai.md.
     python kl_map_ai.py retomoto-style <build> <out>                    any finished build (no plan needed): rows by
                                                                        weapon class + fall-back chains + spawnfix --auto
                                                                        (run order: apply, then spawnfix). NOT RUN IN THE GAME
+    python kl_map_ai.py cops-style <build> <out>                        Retomoto's police pattern WITHOUT spawnfix, for a
+                                                                       finished staged build (Vault, Last Call, Hasta): soldier rows
+                                                                       by weapon class, SWAT-path squads to rifles and the
+                                                                       auto plan's wiped-out chains. Timers, waves, escape, who
+                                                                       is in the world and the posts stay as built. Only the .prp
+                                                                       changes; refuses a non-empty out folder. NOT RUN IN THE GAME
     python kl_map_ai.py check <before> <after>                          the before / after table of one map
     python kl_map_ai.py all <z_maps folder> <out folder> [M02 ...] [options]   apply + check + kl_maps.audit on M01 M02
                                                                        M03 M06 (or the ones named)
@@ -882,6 +888,17 @@ def retomoto_style(src, dst, log=print):
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return rep, sf
+
+
+def cops_style(src, dst, log=print):
+    """retomoto_style without its last step (spawnfix --auto would wake every squad of a staged build): apply with
+    parts strength + chains and the auto plan. -> the apply report. Refuses dst == src and a non-empty dst."""
+    dst = dst.rstrip('/' + chr(92))
+    if os.path.abspath(dst) == os.path.abspath(src.rstrip('/' + chr(92))):
+        raise ValueError('the output folder is the source')
+    if os.path.isdir(dst) and os.listdir(dst):
+        raise ValueError('%s exists and is not empty: not overwritten' % dst)
+    return apply(src, dst, parts=('strength', 'chains'), log=log, auto=True)
 
 
 def apply(src, dst, parts=('strength', 'waves', 'chains', 'escape'), presets=False, log=print, car_exit=False, auto=False):
@@ -2078,6 +2095,8 @@ def main():
     elif len(a) == 3 and a[0] == 'retomoto-style':
         _r, sf = retomoto_style(a[1], a[2])
         sys.exit(1 if sf['problems'] else 0)
+    elif len(a) == 3 and a[0] == 'cops-style':
+        cops_style(a[1], a[2])
     elif len(a) == 3 and a[0] == 'spawndiff':
         sys.exit(0 if spawndiff(a[1], a[2]) else 1)
     elif len(a) == 3 and a[0] == 'check':

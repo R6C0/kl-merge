@@ -1,3 +1,4 @@
+2026-10-18 - kl-merge-e5: cops-style (kl_map_ai) staged outputs for DM03A/DM05A/DM11B in <work>/build/cops_1018; see re/cops_maps.md. Offline, not run in game, not committed.
 2026-10-18 - OFFLINE (kl-merge-c4): Last Call roof marker: NEW tools/kl_club_roof.py, build club_owner_1018/DM05A/heli_roof zip 1bcc46db (POI_TheEscapeArea named by 'van timer b', hide-within 2500 -> 800 GUESS; 2500 is a hide-within radius, read in kl2 0x8e2060). Mesh+collision start->loot->pad proven (17/17, one part, 0 closures). Bot g1 stall = time budget (up to ~372 s vs 360 s round), GUESS, not changed. Not run in game.
 # Open work log (moved out of CLAUDE.md on 2026-10-17)
 
