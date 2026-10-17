@@ -266,3 +266,82 @@ Read only: `C:\Steam\...\Kane & Lynch 2 - Dog Days\kl2.exe` and `steam_api.dll` 
   lobbies from search; `kl_online()` at CreateLobby time; whether the game ever calls InviteUserToLobby (no +0x3c site seen, so
   PrivateLobby=2 would rely on Steam's friends list / overlay invite, not on the game); the 008 slot order is from memory of the SDK
   headers, backed by the 24 ret counts (exact for stack sizes, but two same-sized neighbours could in theory swap).
+
+## 8. How a friend gets into a FriendsOnly / Private lobby: every Steam callback kl2.exe registers (2026-10-17, static only, nothing run, read-only `kl2.exe`)
+Method: `tools/kl_exe.py` + capstone. `SteamAPI_RegisterCallback` = IAT 0xb107d0 (16 call sites, each inside a `CCallbackBase::Register`
+wrapper `[obj+0xc]=this [obj+0x10]=handler [obj+0x14]=0; push id; push obj; call IAT`), `SteamAPI_RegisterCallResult` = IAT 0xb107dc
+(one wrapper, 0x92a930, 7 callers). The id is the immediate pushed in the wrapper. The constructors that stamp the CCallback vtable were read for
+the handler and the owning class (RTTI name of the vtable).
+
+| id | callback | owner class (RTTI) | handler VA | where registered |
+|---|---|---|---|---|
+| 333 | GameLobbyJoinRequested_t | ZOnlineServiceSteam | **0x547950** | service+0x1e0, ctor 0x879d40 (call 0x879dde -> wrapper 0x838c70) |
+| 503 | LobbyInvite_t | ZOnlineServiceSteam | 0x8bf680 = bare `ret 4` | service+0x1c8 (0x879dab -> 0x5fb810) |
+| 505 | LobbyDataUpdate_t | ZAsyncTaskSessionSearchSteam | 0x86b0f0 (row builder) | per search task, 0x43c6b1 -> 0x8da360 |
+| 507 | LobbyChatMsg_t | ZOnlineServiceSteam | 0x8bd520 | service+0x1f8 (0x879e11 -> 0x88ae00) |
+| 507 | LobbyChatMsg_t | ZAsyncStartSessionAndSyncLobby | 0x745c80 (re-verified) | 0x489252 -> 0x88ae00 |
+| 331 | GameOverlayActivated_t | ZOnlineServiceSteam | 0x6ac6c0 | service+0x210 (0x879e44 -> 0x552860) |
+| 331 | GameOverlayActivated_t | ZFFPlayerProfileSteam | **0x70e680** (corrected: 0x7ae680 is the id-304 handler) | 0x7ae429 -> 0x45f220 |
+| 304 | (PersonaStateChange_t by SDK numbering, GUESS) | object with vtable 0xb14930 | 0x7ae680 | 0x7ae3f9 -> 0x4e4af0 |
+| 704 | SteamShutdown_t | ZOnlineServiceSteam | 0x78e8a0 | service+0x228 (0x879e77 -> 0x483640) |
+| 117 | IPCFailure_t | ZOnlineServiceSteam | 0x78e8a0 | service+0x240 (0x879eaa -> 0x535a20) |
+| 1101 | UserStatsReceived_t | ZAsyncTaskReadUserStatsSteam | 0x4341c0 | 0x6ca9e6 -> 0x6a0be0 |
+| 1102 | UserStatsStored_t | ZAsyncTaskWriteUserProfileSteam / ZAchievementsSteam | 0x7f9e70 / 0x5229a0 | 0x53e7dd (wrapper 0x816060), 0x7842ac (wrapper 0x82f730) |
+| 1103 | UserAchievementStored_t | ZAchievementsSteam | 0x5229a0 | 0x7842dc -> 0x7e7c30 |
+| 1203 | P2PSessionConnectFail_t (RTTI name) | Quazal::SteamSocketContext | **0x47a3d0** (corrected; 0x6e2690 is the 1202 handler) | 0x544488 -> 0x76c370 |
+| 1202 | (P2PSessionRequest_t by SDK numbering, GUESS) | same ctor as 1203 (object vtable 0xb36ea4, no RTTI name) | 0x6e2690 | 0x54445b -> 0x706e60 (corrected: it HAS a caller) |
+| 1005 | (DlcInstalled_t by SDK numbering, GUESS) | ZDownloadableContentManagerSteam | 0x845700 | 0x717f7d -> 0x8a2bc0 (corrected: it HAS a caller) |
+
+Call results (`RegisterCallResult`, wrapper 0x92a930): RequestLobbyList 0x424862 (handler 0x749e60); **JoinLobby 0x57203c, handler 0x629980 =
+the LobbyEnter_t (504) completion** (the task ctor 0x4d4bb0 writes 504 at task+0x18, 0x4d4be1); CreateLobby 0x705046 (handler 0x822900);
+four more at 0x5ebe6d, 0x7552a0, 0x78974d, 0x7ef44e (not identified).
+**Not registered as callbacks anywhere: 337 GameRichPresenceJoinRequested_t** (no push of 0x151 in .text), **506 LobbyChatUpdate_t** (the two
+`push 0x1fa` hits, 0x8f63c3 and 0xa4ef1a, are `__LINE__` arguments of assert calls), and **504 LobbyEnter_t as a plain callback** (call result only).
+So 337 is not handled, and the game never sets a `connect` rich-presence key either: SteamFriends is used at 8 sites, vtable offsets
+0x00 (persona name), 0x0c, 0x1c, 0x4c, 0x50, 0x58; nothing at or above 0x5c, so no SetRichPresence and no ActivateGameOverlayInviteDialog
+(SDK-005 numbering, GUESS).
+
+### Correction to section 3
+`service->vtbl+0x30` is **slot 12 = 0x45a950**, which is only `mov [ecx+0x4b4], al` (a "join pending" byte). Both the 333 handler (0x547950)
+and the `+connect_lobby` parse (0x506cc0, stores at 0x506dbf..0x506dcb) store the 64-bit lobby id at service+0x4b5/+0x4b9 and call that setter with 1.
+Slot 11 (0x4a3ca0) is the getter of the byte, slot 13 (0x8925c0) clears it, slot 14 (0x7fc2b0, the "consumer" of section 3) reads the id and builds the
+search task. Chain: handler -> flag + id; a poller (NOT FOUND, see GUESS) -> slot 14 -> RequestLobbyData -> row -> join task -> `JoinLobby` 0x57202b.
+`+connect_lobby` is searched in `[0xdd2640]+0x9f8` (the process command line) only in the main menu, once per process, with `[0x156b3b8]==0`.
+JoinLobby (+0x34) has exactly one call site (0x57202b), so there is no second join route; 0x547950 itself does not call JoinLobby.
+
+### Conclusion
+- Both entry points exist and end in the same pending-join state: Steam delivers **GameLobbyJoinRequested_t (333)** to a running kl2.exe
+  (handler 0x547950), or starts a not-yet-running kl2.exe with **`+connect_lobby <id>`** (parsed in MainMenu). Neither reads the lobby type or any
+  lobby data, and the LobbyEnter completion (0x629980) ignores the response content. LobbyInvite_t (503) is ignored (bare `ret`).
+- Steam UI that produces 333 / `+connect_lobby`: (a) friends-list "Join game" and (b) friend right-click / overlay "Invite to game" are the Steam
+  client's own lobby features (the client knows the user's lobby from CreateLobby/JoinLobby); the game takes no part in either, so for kl2 they are
+  the same path. From SDK documentation (GUESS, not testable offline): FriendsOnly lobbies are joinable by friends ((a) and (b) should work);
+  Private lobbies are joinable by invitation only ((b) only). kl2 never calls InviteUserToLobby, so the inviter is the Steam client.
+- Recommended setting: `PrivateLobby=1` (FriendsOnly). `PrivateLobby=2` (Private) is the one that may leave friends with no working path.
+- Not a path: GameRichPresenceJoinRequested_t (337), LobbyChatUpdate_t (506), the game's own UI (no invite dialog, no rich presence).
+
+### Design (not code): smallest KLHook additions if the first live test shows (a)/(b) missing
+1. **Host-side invite (fixes Private, helps FriendsOnly), in `klmm.c`**: capture the lobby id from the `SetLobbyData` override (slot +0x4c; its first
+   two dwords are the lobby CSteamID, and the host's "name" write is already intercepted). On the first "name" call of a lobby, for each 64-bit id in a new
+   `[Net] InviteSteamIds=` (comma list written by the user; no enumeration of the friends list, no automatic mass invite) call the REAL slot +0x3c
+   `InviteUserToLobby(CSteamID lobby, CSteamID invitee)` (`ret 0x10`, bool in al) with ecx = real object, like the existing forwarders. Steam then shows
+   the friend an invite; accepting raises 333 (game running) or `+connect_lobby` (not running). Log `mm: invite sent=%d`, no ids. Empty = no-op.
+   If "name" is not set for the host (open GUESS, section 7), take the id from the CreateLobby call result (LobbyCreated_t) instead.
+2. **Join without the Steam UI (testing, or when Steam does not raise 333)**: `[Net] JoinLobby=<u64>`; once the active menu is `MainMenu` (condition of
+   0x506d1b..0x506d65), call the game's own handler 0x547950 (`thiscall`, ecx = the ZOnlineServiceSteam from `[0x168e598]` vtbl+0x2c, one stack
+   argument = pointer to `{u64 lobbyId, u64 friendId}`, `ret 4`), i.e. emulate GameLobbyJoinRequested_t. It reuses the game's whole join chain and writes
+   nothing into its objects by hand. Alternative with the same effect: put `+connect_lobby <id>` into the command-line buffer at `[0xdd2640]+0x9f8`
+   before the menu appears (size and ownership of that buffer must be checked first).
+3. A proxy for slot +0x34 (JoinLobby) is NOT needed: it is only the end of the chain and the game never refuses on content.
+Both additions are no-ops with their keys empty, like PrivateLobby=0.
+
+### GUESS list
+- That the Steam friends list shows "Join game" for a friend in a FriendsOnly lobby and that the client's "Invite to game" works for a Private lobby the
+  game made (Steam client behaviour, SDK documentation only; the first live two-account test settles it).
+- Ids 304, 1202, 1005 are named by SDK numbering; 1202/1005 are DLC / P2P-request callbacks, irrelevant to joining (handlers now listed in the table, bodies not read).
+- The **poller** between the pending byte (slot 11 getter) and slot 14 was not located: searches for `[reg+0x38]` calls after the online-manager accessor
+  `[0x168e598]` vtbl+0x2c found only unrelated UI code (0x5b4934 etc.), and the slot-11 callers (0x4809ea, 0x5e2e39, 0x56e15d) gate something else. It may
+  run through a state-machine object that holds the service. So the exact menu/moment in which a pending join is consumed is unknown; a request that
+  arrives mid-match (`[0x156b3b8]==1`) goes to 0x49b990 instead of the pending flag.
+- The `SetLobbyData "name"` call being made for the host (section 7), and `InviteUserToLobby` being slot +0x3c with `ret 0x10` (SDK 008 order plus the
+  section 7 ret-size list; two neighbours of equal size could in theory swap).
