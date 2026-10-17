@@ -327,8 +327,9 @@ def main():
             from kl_port_check import workdir
             live = os.path.join(workdir(), 'build', 'klhook', 'live')
             os.makedirs(live, exist_ok=True)
-            if '--ini' in opt:
-                shutil.copyfile(opt['--ini'], os.path.join(live, tag + '.ini'))
+            keep = os.path.join(live, tag + '.ini')
+            if '--ini' in opt and os.path.abspath(opt['--ini']).lower() != os.path.abspath(keep).lower():
+                shutil.copyfile(opt['--ini'], keep)       # an --ini already at live/<tag>.ini raised SameFileError and skipped the restore below
             if os.path.isfile(os.path.join(dd, 'KLHook.result')):
                 shutil.copyfile(os.path.join(dd, 'KLHook.result'), os.path.join(live, tag + '.result'))
             ini = os.path.join(dd, 'KLHook.ini')               # the hook writes [Character] back into its ini
