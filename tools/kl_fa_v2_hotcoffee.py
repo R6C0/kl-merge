@@ -12,7 +12,7 @@ THE ROUND (owner, 2026-10-17: 'the campaign version'; raw, bodycam-like, Heat-st
        donut (speak box)  the diner's north edge (z 24250): the donut shop's squads, THE ALARM (van timer + gate = F07's police squads)
   3. Loot: 12 briefcases, six in the warehouse and six in the diner.
   4. Out: north past the donut shop to the street at z 30800: the van waits there (kl_map_escape plan, stop (2000, 30800)).
-No doors, no seal, no light show, no bots, no room gates: the campaign level needs none of them.
+No doors, no seal, no light show, no room gates (bots: bots_step, OFF - the mesh is in islands, see its docstring): the campaign level needs none of them.
 
 Holds the nine names of kl_graft.AUTHOR_NAMES. Every number marked GUESS is a guess; MEASURED ones come from the real files (the bare graft
 F07+M01_A: navigation mesh = kl_route.load('M01_A').mesh(), collision floors = kl_map_escape.Ground; re/campaign_v2_plan.md).
@@ -893,6 +893,40 @@ def compact_in_place(folder, log=print):
     return []
 
 
+BOT_OPT = {'stops': 2, 'cases': 'off', 'lane': True, 'window': True, 'loot_seconds': 20}
+# GUESS (this file's): briefcases only, two stops (warehouse, diner), a loot wait of 20 s.
+WITH_BOTS = False       # '--bots': the bots step runs. OFF BY DEFAULT: kl_fa_bots.plan REFUSES this level today (below)
+
+
+def bots_step(folder, log=print):
+    """kl_fa_bots.build with BOT_OPT, then kl_fa_bots_dyn.build, each into a copy, the result copied over the folder's own files.
+    -> list of problems. After finish + compact, before check. NOT LOADED LIVE.
+    WHY IT IS OFF: the campaign level's navigation mesh (kl_route 'M01_A') is split into islands. The START row (garage) is on one part;
+    the alley, the warehouse / diner and the van's street are on others. Same-height gaps between the parts: garage -> alley 332 flat
+    (kl_fa_bots.DROP_MAX across is 240), alley -> main 91 (60 up). kl_fa_bots.plan raises 'no place on the mesh part of the START row
+    within 900 of the van's boarding box ... give --park'. A bot would also have no path to the loot. NEEDED (not done: kl_fa_bots* and the
+    mesh belong to another session): either a mesh repair that adds polygons / links over the two gaps (kl_pf4), or START moved onto the main part."""
+    import shutil
+    import kl_fa_bots as F, kl_fa_bots_dyn as D
+    probs = []
+    cur = folder
+    for name, run in (('bots', lambda s, d: F.build(s, d, dict(BOT_OPT), log)), ('dyn', lambda s, d: D.build(s, d, None, log))):
+        tmp = folder.rstrip('/' + chr(92)) + '_' + name + '_tmp'
+        shutil.rmtree(tmp, ignore_errors=True)
+        os.makedirs(tmp)
+        try:
+            res = run(cur, tmp)
+        except ValueError as e:
+            shutil.rmtree(tmp, ignore_errors=True)
+            return probs + ['%s: %s' % (name, e)]
+        out = res[0] if isinstance(res, tuple) else res
+        probs += ['%s: %s' % (name, x[1] if isinstance(x, (list, tuple)) else x) for x in (out or ()) if (x[0] if isinstance(x, (list, tuple)) else 'FAIL') == 'FAIL']
+        for f in os.listdir(tmp):
+            shutil.copy2(os.path.join(tmp, f), os.path.join(folder, f))
+        shutil.rmtree(tmp, ignore_errors=True)
+    return probs
+
+
 def test(out, keep=False, log=print, plan=None):
     """Build the level with the layer into <out>, finish it, compact it, check it. -> 0 or 1. Beside the archive: van.json.
     NOT DONE HERE: the installed gun sounds (build/v2_1017/DM06B/guns_step.py <out folder>): run it AFTER this, before staging."""
@@ -903,6 +937,8 @@ def test(out, keep=False, log=print, plan=None):
         return 1
     late = finish(folder, log)
     late += compact_in_place(folder, log)
+    if WITH_BOTS and not NO_AI:
+        late += bots_step(folder, log)
     r['problems'] = json.load(open(os.path.join(folder, 'result.json'))).get('problems', r['problems'])
     vrep = van_check(folder, lambda *a: None, plan)[0]
     with open(os.path.join(folder, 'van.json'), 'w', encoding='utf-8') as f:
@@ -923,10 +959,11 @@ def load_plan(folder):
 
 
 def main():
-    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, STREAM
+    global WITH_BOTS, NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, STREAM
     a = sys.argv[1:]
     if len(a) >= 2 and a[0] == 'test':
         NO_AI = '--no-ai' in a
+        WITH_BOTS = '--bots' in a
         SQUADS_AWAKE = '--squads-awake' in a
         POLICE_ARRIVE = '--no-police' not in a
         if '--str' in a:

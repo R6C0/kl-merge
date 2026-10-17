@@ -19,6 +19,7 @@ its own copy of the slot's .WHD/.WAV, so a change has to be written into every b
           Prototype: process the bank's OWN clips (low shelf, saturation, synthetic echo tail) and replace them.
           --tail <s>: length of the synthetic echo (default street 2.6 s, indoor 1.0 s)
           --fit: cut each processed clip back to its stock length (no .WAV growth, every record stays in place)
+    python kl_gunsnd.py repoint <in _Main.zip> <out _Main.zip> <gun> <gun to sound like>   # e.g. rifle_zastavam85 smg_type79
     python kl_gunsnd.py groups   <bank.SND>                   # sound groups and their volume floats
     python kl_gunsnd.py groupvol <bank.SND> <out.SND> sfx_weapons_shot_npc=0.6 [...]   # in-place group volume
     python kl_gunsnd.py selftest <bank.WHD>                   # codec round trip + bank rebuild checks
@@ -473,6 +474,47 @@ def snd_groups(snd):
     return out
 
 
+def snd_sound_objects(snd):
+    """-> {sound object name: object offset} from the type-1 table (the object's +0x14 is its wave object)"""
+    T = struct.unpack_from('<I', snd, 0)[0]; H = T + 0x30
+    cnt = struct.unpack_from('<I', snd, H + 0x10)[0]; tab = struct.unpack_from('<I', snd, H + 0x74)[0]
+    out = {}
+    for i in range(cnt):
+        o = struct.unpack_from('<I', snd, tab + 4 * i)[0]
+        if o + 0x18 > len(snd): continue
+        nm, = struct.unpack_from('<I', snd, o + 8)
+        out[snd[nm:snd.index(NUL, nm)].decode('latin1')] = o
+    return out
+
+
+def repoint_snd(snd, src, dst, parts=('shot_01', 'shot_02', 'shot_03')):
+    """Point the '<src>_<part>#sound' objects' wave pointer (+0x14) at the wave object of '<dst>_<part>#sound'
+    (same size, no layout change; the other fields of the object, e.g. +0x20, stay the gun's own - GUESS: they are
+    per-gun gain / range values). Distant shots are not in `parts` by default. -> (new snd, [(name, old, new)])"""
+    snd = bytearray(snd); so = snd_sound_objects(bytes(snd)); log = []
+    for part in parts:
+        a = [n for n in so if n.endswith('/%s/%s_%s#sound' % (src, src, part))]
+        b = [n for n in so if n.endswith('/%s/%s_%s#sound' % (dst, dst, part))]
+        if len(a) != 1 or len(b) != 1: raise ValueError('%s %s: %d / %d sound objects' % (src, part, len(a), len(b)))
+        old, = struct.unpack_from('<I', snd, so[a[0]] + 0x14); new, = struct.unpack_from('<I', snd, so[b[0]] + 0x14)
+        struct.pack_into('<I', snd, so[a[0]] + 0x14, new); log.append((a[0], old, new))
+    return bytes(snd), log
+
+
+def cmd_repoint(zip_in, zip_out, src, dst):
+    """kl_gunsnd.py repoint <in _Main.zip> <out _Main.zip> <src gun> <dst gun>, e.g. rifle_zastavam85 smg_type79
+    (zastava technique after luvsic, a-newer-perspective: sndimport.py's Dog Days SND records)"""
+    import zipfile; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from kl_hud_menu import _rezip
+    z = zipfile.ZipFile(zip_in)
+    nm = [n for n in z.namelist() if n.upper().endswith('.SND') and not n.upper().endswith('_LS.SND')]
+    if len(nm) != 1: raise SystemExit('expected one .SND, found %r' % nm)
+    new, log = repoint_snd(z.read(nm[0]), src, dst)
+    _rezip(zip_in, zip_out, {nm[0].lower(): new})
+    for n, o, w in log: print('  %s +0x14 %#x -> %#x' % (n, o, w))
+    return nm[0], log
+
+
 def cmd_groups(snd_path):
     for o, n, v, v2 in snd_groups(open(snd_path, 'rb').read()):
         print('%08x %-58s %.3f %.3f' % (o, n, v, v2))
@@ -505,6 +547,7 @@ def main(a):
     elif c == 'heat': cmd_heat(a[1], a[2], a[3], style, snd, tail, fit)
     elif c == 'groupvol': cmd_groupvol(a[1], a[2], a[3:])
     elif c == 'groups': cmd_groups(a[1])
+    elif c == 'repoint': cmd_repoint(*a[1:5])
     elif c == 'selftest': cmd_selftest(a[1])
     else: print(__doc__); return 1
     return 0

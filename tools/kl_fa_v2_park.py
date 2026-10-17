@@ -9,7 +9,7 @@ THE ROUND (owner, 2026-10-17: 'the walk in the park to be like the campaign vers
   3. Loot: briefcases in the pagoda (6) and in the garden - the tea house, the shrines and the four statues (9). 15 in all.
   4. Out: down the garden and up the STAIRS to the ring road; the van waits on the ring (kl_map_escape plan on the ring), F07's police
      come in on the ring when the crew reaches the stairs' foot (or by the clock).
-No doors, no seal, no light show, no bots, no room gates: the campaign level needs none of them (kl_fa_club's machinery, left out).
+No doors, no seal, no light show, seven bots (bots_step: kl_fa_bots + kl_fa_bots_dyn), no room gates: the campaign level needs none of them (kl_fa_club's machinery, left out).
 
 This module is the club's author layer (kl_fa_club.py) cut down to what a park needs, with the park's own tables. It holds the nine names
 of kl_graft.AUTHOR_NAMES. Every number marked GUESS is a guess; MEASURED ones come from the real files (re/campaign_v2_plan.md).
@@ -75,10 +75,12 @@ PAGODA_Y = 636.0                        # the mesh height in the pagoda's inner 
 FLOOR_Y = 625.0                         # the pagoda's collision floor: loot lies on it
 WEST, SOUTH = (-1.0, 0.0), (0.0, -1.0)
 # START: two rows of four in the pagoda's inner room (x 500..1100, z 2260..2460), facing south into the park. GUESS: the rows
-START = [(float(x), PAGODA_Y, z) for z in (2300.0, 2420.0) for x in (560, 660, 940, 1040)]
+START = [(float(x), PAGODA_Y, z) for z in (2300.0, 2420.0) for x in (560, 630, 700, 770)]
+# 2026-10-17: the rows moved to the inner room's west end so the pagoda's cases (east corridor, x 1240) are >= LOOT_CLEAR from every START
+# (before: rows x 560..1040 around cases at x 760-840, inside the pickup reach: a crew at spawn drained them from the pre-round panel).
 # TRAITOR: four on the terrace in front of the pagoda, z 2700. GUESS (y snapped to the mesh at build time; check() reads it back)
 TRAITOR = [(float(x), PAGODA_Y, 2700.0) for x in (700, 780, 860, 940)]
-TEAM_MERC = [(float(x), PAGODA_Y, z) for z in (2330.0, 2390.0) for x in (600, 700, 900, 1000)]
+TEAM_MERC = [(float(x), PAGODA_Y, z) for z in (2330.0, 2390.0) for x in (600, 670, 740, 810)]
 BRIDGE = (814.0, 392.0, -651.0)         # the bridge's landing (MEASURED)
 STAIRS_FOOT = (-1.0, 580.0, -10940.0)   # MEASURED, floor about 574
 STAIRS_TOP = (106.0, 2564.0, -10934.0)  # MEASURED, about radius 10834 from the ring's centre
@@ -111,9 +113,12 @@ def _spawn():
 
 # ------------------------------------------------------------------ the loot: 15 briefcases (where the case's underside lies, degrees, value, what)
 # MEASURED: collision floors (the pagoda 625; the garden's per spot). GUESS: every place, turn and value (pagoda 300,000 each = 1.8 million;
-# garden 150,000 each = 1.35 million). The pagoda's lie between the START rows (the crew starts on them, as the club's did).
+# garden 150,000 each = 1.35 million). The pagoda's lie in the east corridor, far from the START rows (check() fails below LOOT_CLEAR).
 LOOT = [((float(x), FLOOR_Y, float(z)), yaw, 300000, 'the pagoda') for (x, z), yaw in
-        zip([(760, 2290), (840, 2290), (760, 2350), (840, 2350), (760, 2410), (840, 2410)], (4.0, -8.0, 90.0, 85.0, -12.0, 10.0))]
+        zip([(1240, z) for z in (2200, 2270, 2340, 2410, 2480, 2550)], (4.0, -8.0, 90.0, 85.0, -12.0, 10.0))]
+# 2026-10-17: the pagoda's six cases were at x 760-840, z 2290-2410 (between the START rows); now a line down the east corridor (x 1240, on the
+# mesh, inside the EnterLootArea box x 350..1250 z 2160..2560 that the bots' first stage needs). GUESS: the spacing (70) and the turns.
+LOOT_CLEAR = 400.0                      # every case at least this far from every START point (pickup reach is LOOT_REACH + 40; e5's number)
 LOOT += [((float(x), float(y), float(z)), yaw, 150000, what) for (x, z, y), yaw, what in [
     ((802, -2456, 175), 0.0, 'the tea house'), ((122, -1619, 184), 40.0, 'shrine B1'), ((-2020, -6024, 180), -30.0, 'shrine B2'),
     ((-3346, -6454, 188), 70.0, 'shrine A1'), ((1106, -11613, 199), 15.0, 'shrine A2'),
@@ -135,7 +140,7 @@ PLACE_FIXED = {
     'Specials!LevelSpeak!TriggerBox': ((STAIRS_TOP[0], STAIRS_TOP[1] + 80, STAIRS_TOP[2]), None, (300, 150, 200), 'GUESS: the stairs\' top (the crew comes up onto the ring)'),
     'Specials!LevelSpeak!OnlineSpeakTrigger_01': ((STAIRS_TOP[0], STAIRS_TOP[1] + 80, STAIRS_TOP[2]), None, None, 'with its trigger box'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_000_A!Camera_000_A': ((1000, 900, 2900), None, None, 'GUESS: over the terrace'),
-    'FASpecials!SpawnPoint!TeamMode!SpawnCam_000_A!CameraLookAt_000_A': ((800, 650, 2360), None, None, 'the START rows'),
+    'FASpecials!SpawnPoint!TeamMode!SpawnCam_000_A!CameraLookAt_000_A': ((700, 650, 2360), None, None, 'the START rows'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_010_B!Camera_010_B': ((900, 600, -300), None, None, 'GUESS: the bridge'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_010_B!CameraLookAt_010_B': (BRIDGE, None, None, 'GUESS'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_020_C!Camera_020_C': ((200, 900, -10300), None, None, 'GUESS: the stairs\' foot'),
@@ -792,6 +797,14 @@ def check(folder, log=print, problems=None):
             fail('spawn point %s (AFTER_DEATH) is %d from the boarding place (%d wanted)' % (sc.names[t], math.dist(p, PLAN['board']), FED_CLEAR))
         if drive is not None and 'AFTER_DEATH' not in kind and abs(drive.project(p)[1]) < LANE_CLEAR and 'START' in kind:
             fail('spawn point %s is %d from the van\'s drive' % (sc.names[t], abs(drive.project(p)[1])))
+    starts = [pos[ents[t - 1]] for t in sc.tops() if sc.cls(t) == 'ZSpawnPoint' and 'START' in kl_fa.node_values(sc, t)[8]]
+    if starts and loot:
+        near = min((math.dist(pos[ents[k - 1]], q), sc.names[k]) for k, _v in loot for q in starts)
+        log('  loot to START: nearest pair %d apart (%s; %d wanted)' % (near[0], near[1], LOOT_CLEAR))
+        for k, _v in loot:
+            d = min(math.dist(pos[ents[k - 1]], q) for q in starts)
+            if d < LOOT_CLEAR:
+                fail('loot %s is %d from a START point (%d wanted: a crew at spawn would drain it)' % (sc.names[k], d, LOOT_CLEAR))
     log('  spawn points by kind: %s' % {k.replace('eSPAWN_TYPE_FRAGILE_ALLIANCE_', ''): v for k, v in kinds.items()})
     men = [k for k in range(1, len(sc.names)) if sc.cls(k) == 'ZFFActor']
     squads = [k for k, _i, _v in kl_fa.controllers(sc, 'ZSquadScript')]
@@ -831,6 +844,35 @@ def flags_of():
     return collections.OrderedDict(SQUADS_AWAKE=SQUADS_AWAKE, NO_AI=NO_AI, POLICE_ARRIVE=POLICE_ARRIVE, START_AT=START_AT, BACKSTOP_AT=BACKSTOP_AT, VAN_DELAY=VAN_DELAY)
 
 
+BOT_OPT = {'stops': 4, 'cases': 'off', 'lane': True, 'window': True, 'loot_seconds': 20}
+# GUESS (this file's): briefcases only (no glass cases), up to 4 stops (pagoda + garden loot areas), a loot wait of 20 s. Run with
+# kl_fa_bots.STOP_SHARE as it is (0.10); the plan puts the van's AllyEscapeBox PARK_SIDE from the key-framed van line.
+
+
+def bots_step(folder, log=print):
+    """kl_fa_bots.build with BOT_OPT, then kl_fa_bots_dyn.build, each into a copy, the result copied over the folder's own files.
+    -> list of problems. Run it AFTER finish and before check. NOT LOADED LIVE."""
+    import shutil
+    import kl_fa_bots as F, kl_fa_bots_dyn as D
+    probs = []
+    cur = folder
+    for name, run in (('bots', lambda s, d: F.build(s, d, dict(BOT_OPT), log)), ('dyn', lambda s, d: D.build(s, d, None, log))):
+        tmp = folder.rstrip('/' + chr(92)) + '_' + name + '_tmp'
+        shutil.rmtree(tmp, ignore_errors=True)
+        os.makedirs(tmp)
+        try:
+            res = run(cur, tmp)
+        except ValueError as e:
+            shutil.rmtree(tmp, ignore_errors=True)
+            return probs + ['%s: %s' % (name, e)]
+        out = res[0] if isinstance(res, tuple) else res
+        probs += ['%s: %s' % (name, x[1] if isinstance(x, (list, tuple)) else x) for x in (out or ()) if (x[0] if isinstance(x, (list, tuple)) else 'FAIL') == 'FAIL']
+        for f in os.listdir(tmp):
+            shutil.copy2(os.path.join(tmp, f), os.path.join(folder, f))
+        shutil.rmtree(tmp, ignore_errors=True)
+    return probs
+
+
 def test(out, keep=False, log=print, plan=None):
     """Build the level with the layer into <out>, finish it, check it. -> 0 or 1. Beside the archive: van.json."""
     import json
@@ -839,6 +881,8 @@ def test(out, keep=False, log=print, plan=None):
         log('BUILD FAILED: %s at %s' % (r.get('error'), r.get('where')))
         return 1
     late = finish(folder, log)
+    if not NO_AI:
+        late += bots_step(folder, log)
     vrep = van_check(folder, lambda *a: None, plan)[0]
     with open(os.path.join(folder, 'van.json'), 'w', encoding='utf-8') as f:
         json.dump(collections.OrderedDict(tag=LEVEL, plan=plan, van=did['van'], wired=did['wired'], hvk=did['hvk'], flags=flags_of(), check=vrep), f, indent=1, default=str)

@@ -7,7 +7,10 @@ folder. Spec and results: re/stock_mod.md.
 
     python kl_stock_mod.py build F02 [<out root>] [--plates=wolf,dallas,chains,hoxton] [--no-guns] [--start=1] [--set=1]
     python kl_stock_mod.py all [<out root>] [F01 F02 ...] [same options]      default: all nine -> G:/kl_scratch/stock_mod
-    python kl_stock_mod.py table [<out root>]                                 what each folder holds and costs
+    python kl_stock_mod.py gunsnd [<out root>] [F01 ...|all] [--no-zastava]   the owner's gun-sound set + Zastava->MP5 shots, in place
+    python kl_stock_mod.py package [<out root>] [F01 ...|all] [--dest=<dir>] [--copy]   Maps/DDnn + BuildInfo/DDnn (hard links unless --copy)
+    python kl_stock_mod.py testslot [<out root>] F06 [--dest=<dir>]   Maps/T06 = Maps/DD06 built for slot F01 (the only slot -o DefaultScene boots)
+    python kl_stock_mod.py table [<out root>]                             what each folder holds and costs
 
 WHAT A MAP GETS (each step is another tool, run as its own command; this file changes none of them)
   1 wardrobe   tools/kl_chars.py wardrobe <Fnn> ... --plates=...   the eight Dead Men heisters as bodies, 8 Dog Days
@@ -121,6 +124,129 @@ def build(level, root=OUT, plates=PLATES, guns=True, start=1, sets=1, log=print)
     return rep
 
 
+# ------------------------------------------------------------------------------------------------ gun sounds (step 3)
+# The owner's gun-sound set (tools/gunsnd_owner/make_v6.py + build_long.py, re/gun_sounds.md), applied to a stock overlay
+# map's own bank (<Fnn>_Main.WHD/.WAV beside the zip, .SND inside it): his M4 recordings on Rifle_AK74_Shot_01..03, MP5 on
+# SMG_Type79, P90 on SMG_MPI69, USP (Dead Men Shot_Usp) on HG_M9Beretta, TMP (stock) on SMG_MAC_10, the two distant layers.
+# Clips = the 17 files the installed DM banks were built from (build/snd11/*/clips, identical in every map; copied once to
+# <root>/gunsnd_clips). LONG ones keep their natural length (record appended to the .WAV, .SND wave seconds rewritten, as
+# build_long.py); SHORT ones and the distant layers are fitted to the record's own stock length (build_long.py fit()).
+# The Zastava M85's three shot sounds are repointed at SMG_Type79's wave objects (kl_gunsnd.repoint_snd, same as
+# build/zast_1017/run.py): the Zastava then uses the MP5 shots.
+CLIPS_SRC = 'G:/SteamLibrary/steamapps/common/Kane and Lynch Dead Men/KL_PortTools/build/snd11/DM01/clips'
+LONG = ['SMG_Type79_Shot_0%d' % i for i in (1, 2, 3)] + ['Rifle_AK74_Shot_0%d' % i for i in (1, 2, 3)] + \
+       ['SMG_MPI69_Shot_0%d' % i for i in (1, 2, 3)] + ['HG_M9Beretta_Shot_0%d' % i for i in (1, 2, 3)]
+SHORT = ['SMG_MAC_10_Shot_0%d' % i for i in (1, 2, 3)]
+DIST = {'Distant_Shot_HandGuns_01': 'SFX/Weapons_KL2_Final/Common/Distant_Shots/HandGuns/Distant_Shot_HandGuns_01.wav',
+        'Distant_Shot_SubMachineGuns_01': 'SFX/Weapons_KL2_Final/Common/Distant_Shots/SubMachineGuns/Distant_Shot_SubMachineGuns_01.wav'}
+
+
+def _fit(y, n, r):
+    import numpy as np
+    y = y[:n].copy(); y = np.pad(y, (0, n - len(y))); fd = min(int(0.3 * n), int(0.12 * r))
+    y[n - fd:] *= 0.5 * (1 + np.cos(np.linspace(0, np.pi, fd))); return y
+
+
+def gunsnd(level, root=OUT, zastava=True, log=print):
+    """Apply the owner's gun-sound set to <root>/<level>. -> report dict (['ok'], md5s, checks). Rewrites the folder's
+    <level>_Main.WHD/.WAV/.zip in place (new files are written beside them, checked, then moved over)."""
+    import hashlib, numpy as np
+    sys.path.insert(0, HERE)
+    import kl_gunsnd as G
+    from kl_hud_menu import _rezip
+    folder = os.path.join(root, level); whdp = os.path.join(folder, level + '_Main.WHD')
+    wavp, zp = whdp[:-4] + '.WAV', os.path.join(folder, level + '_Main.zip')
+    cdir = os.path.join(root, 'gunsnd_clips')
+    if not os.path.isdir(cdir):
+        shutil.copytree(CLIPS_SRC, cdir)
+    whd, wav = open(whdp, 'rb').read(), open(wavp, 'rb').read()
+    z = zipfile.ZipFile(zp)
+    nm = [n for n in z.namelist() if n.upper().endswith('.SND') and not n.upper().endswith('_LS.SND')]
+    assert len(nm) == 1, nm
+    nm = nm[0]; snd = z.read(nm)
+    ws = {w.name.lower(): w for w in G.waves(whd)}
+    recs = {t: 'SFX/Weapons_KL2_Final/%s/%s.wav' % (t.rsplit('_Shot', 1)[0], t) for t in LONG + SHORT}
+    recs.update(DIST)
+    repl, srcs = {}, {}
+    for tag, name in recs.items():
+        w = ws[name.lower()]; r = w.get('rate'); x, rr = G.read_wav(os.path.join(cdir, tag + '.wav')); assert rr == r, (tag, rr, r)
+        y = x[:, 0] if tag in LONG else _fit(x[:, 0], w.get('samples'), r)
+        y16 = G.to_i16(y[:, None]); srcs[w.rec_off] = (w.name, y16[:, 0] / 32768.0)
+        data, ns, pcmb = G.encode_for(w, y16 / 32768.0, r)
+        repl[w.rec_off] = (data, ns, pcmb, ns / w.get('rate'))
+    nwhd, nwav, nsnd = G.rebuild(whd, wav, repl, snd, log=lambda *a: None)
+    zlog = []
+    if zastava:
+        nsnd, zlog = G.repoint_snd(nsnd, 'rifle_zastavam85', 'smg_type79')
+    chk = {}
+    ow, nw = G.waves(whd), G.waves(nwhd)
+    chk['records'] = (len(ow), len(nw)); assert len(ow) == len(nw)
+    assert [w.name for w in ow] == [w.name for w in nw]
+    tgt = set(repl)
+    for a, b in zip(ow, nw):
+        if a.rec_off not in tgt:
+            assert a.f == b.f, a.name                        # untouched records: every field the same
+        else:
+            changed = [k for k in G.F if a.get(k) != b.get(k)]
+            assert set(changed) <= {'off', 'size', 'samples', 'pcm', 'offhi'}, (a.name, changed)
+    assert len(nwhd) == len(whd)
+    diffw = [i for i in range(len(whd)) if whd[i] != nwhd[i]]
+    spans = [(r, r + G.REC) for r in tgt]
+    assert all(any(a <= i < b for a, b in spans) for i in diffw), 'WHD bytes changed outside the target records'
+    olds = [(w.get('off'), w.get('off') + w.get('size')) for w in ow if w.rec_off in tgt]
+    bad = [i for i in range(8, len(wav)) if wav[i] != nwav[i] and not any(a <= i < b for a, b in olds)]
+    assert not bad, 'WAV changed outside the old spans of replaced clips (%d bytes)' % len(bad)
+    cors = []
+    for w in nw:
+        if w.rec_off in tgt:
+            nm_, s = srcs[w.rec_off]; d = G.decode_wave(nwav, w)[:, 0]; n = min(len(d), len(s))
+            c = float(np.corrcoef(d[:n], s[:n])[0, 1]); cors.append((nm_.rsplit('/', 1)[-1], round(c, 5)))
+            assert len(d) == w.get('samples')
+    chk['min_corr'] = min(c for _, c in cors); chk['clips'] = len(cors)
+    assert chk['min_corr'] >= 0.99, cors
+    assert len(nsnd) == len(snd)                              # .SND: only target waves' seconds floats + zastava pointers
+    so = G.snd_wave_objects(snd); allow = set()
+    for ro in tgt:
+        for wo, _ in so.get(ro, []):
+            allow.add(wo + 0x18)
+    zo = {n_: o for n_, o in G.snd_sound_objects(snd).items() if '/rifle_zastavam85/rifle_zastavam85_shot_0' in n_ and n_.endswith('#sound')}
+    if zastava:
+        assert len(zo) == 3; allow |= {o + 0x14 for o in zo.values()}
+    sd = sorted({i & ~3 for i in range(len(snd)) if snd[i] != nsnd[i]})
+    assert set(sd) <= allow, [hex(i) for i in sd if i not in allow][:10]
+    chk['snd_dwords_changed'] = len(sd); chk['zastava_repointed'] = len(zlog)
+    tz = zp + '.new'
+    _rezip(zp, tz, {nm.lower(): nsnd})
+    a, b = zipfile.ZipFile(zp), zipfile.ZipFile(tz)
+    assert [i.filename for i in a.infolist()] == [i.filename for i in b.infolist()]
+    for i in a.infolist():
+        assert a.getinfo(i.filename).compress_type == b.getinfo(i.filename).compress_type
+        if i.filename != nm:
+            assert a.read(i.filename) == b.read(i.filename), i.filename
+    assert b.read(nm) == nsnd
+    a.close(); b.close(); z.close()
+    open(whdp + '.new', 'wb').write(nwhd); open(wavp + '.new', 'wb').write(nwav)
+    for p_ in (whdp, wavp, zp):
+        os.replace(p_ + '.new', p_)
+    md5 = {}
+    for f in (level + '_Main.zip', level + '_Main.WHD', level + '_Main.WAV'):
+        h = hashlib.md5()
+        with open(os.path.join(folder, f), 'rb') as fh:
+            for c in iter(lambda: fh.read(1 << 22), b''):
+                h.update(c)
+        md5[f] = h.hexdigest()
+    rep = {'level': level, 'ok': True, 'md5': md5, 'checks': chk, 'wav_bytes': (len(wav), len(nwav)), 'corr': cors,
+           'zastava': [(n_, hex(o), hex(w)) for n_, o, w in zlog]}
+    sj = os.path.join(folder, 'stock_mod.json')
+    try:
+        j = json.load(open(sj)); j['gunsnd'] = {k: v for k, v in rep.items() if k != 'corr'}; json.dump(j, open(sj, 'w'), indent=1)
+    except Exception:
+        pass
+    log('  %s gunsnd: PASS %d clips, min corr %.4f, WAV %d -> %d, .SND dwords %d, zastava %d, zip %s' % (
+        level, chk['clips'], chk['min_corr'], len(wav), len(nwav), len(sd), len(zlog), md5[level + '_Main.zip']))
+    return rep
+
+
 def table(root=OUT, log=print):
     log('| map | .prm stock -> now (MB) | .TEX | .ANM | .fxc | .WAV | archive (MB) | beside it |')
     log('|---|---|---|---|---|---|---|---|')
@@ -134,6 +260,106 @@ def table(root=OUT, log=print):
         log('| %s | %.1f -> %.1f | %.1f -> %.1f | %.1f | %.1f | %.1f | %.0f -> %.0f | %s |' % (
             lv, s['.prm'] / 1e6, t['.prm'] / 1e6, s['.TEX'] / 1e6, t['.TEX'] / 1e6, t['.ANM'] / 1e6, t['.fxc'] / 1e6, t['.WAV'] / 1e6,
             s['zip'] / 1e6, t['zip'] / 1e6, ', '.join(x for x in r['side'] if x.endswith('.ini'))))
+
+
+# ---------------------------------------------------------------- step 3: the expansion folders (2026-10-17)
+# Overlay map id DDnn = stock Fnn with the mods. The folder is what the hook's [Redirect] reads: KLExpansion\Maps\DDnn\ holds
+# Fnn_Main.zip and every file beside it that the engine or the hook opens. Why this is NOT kl_expansion.adopt()/EXTRA: adopt
+# wants a kl_maps build (result.json), re-packs the zip under another slot name (here the slot is already Fnn: nothing to
+# rename, and a re-pack would change the bytes the gun-sound step just verified) and EXTRA entries become menu-page entries
+# with a title and picture (the DD maps have no page of their own: page-0 [Redirect] serves the STOCK menu page).
+# The notes (chars.json, guns.json, map_guns.json, stock_mod.json) stay in BuildInfo\DDnn, like adopt()'s info folder.
+SIDE_FILES = ('KLWardrobe.ini', 'KLGuns.ini')          # the hook's per-map files this build makes (KLJoin.ini / KLTalk.ini: none exist for a stock map)
+NOTES = ('chars.json', 'guns.json', 'map_guns.json', 'stock_mod.json')
+
+
+def _sha1(path):
+    import hashlib
+    h = hashlib.sha1()
+    with open(path, 'rb') as f:
+        for b in iter(lambda: f.read(1 << 22), b''):
+            h.update(b)
+    return h.hexdigest()
+
+
+def package(level, root, dest, link=True, log=print):
+    r"""root\<level> -> dest\Maps\DD<nn> (files the game opens) + dest\BuildInfo\DD<nn> (notes). Hard links when `link` and
+    the volume allows (no second 250 MB per map on the nearly full G:), else a checked copy. Reads the folder only.
+    Checks: one *_Main.zip named <level>_Main.zip; the zip/.WHD/.WAV md5 equal the gun-sound step's record; KLGuns.ini
+    Version 2 with Entries = the .prm chunk count; KLWardrobe.ini present. -> {file: [bytes, sha1]} of Maps\DDnn."""
+    src = os.path.join(root, level)
+    mid = 'DD' + level[1:]
+    rec = json.load(open(os.path.join(src, 'stock_mod.json')))
+    if not rec.get('ok') or not rec.get('gunsnd', {}).get('ok'):
+        raise SystemExit('%s: stock_mod.json says the build or the gun-sound step is not ok' % src)
+    names = sorted(f for f in os.listdir(src) if f.startswith(level + '_Main') and os.path.isfile(os.path.join(src, f)))
+    if level + '_Main.zip' not in names:
+        raise SystemExit('%s: no %s_Main.zip' % (src, level))
+    for f in SIDE_FILES:
+        if not os.path.isfile(os.path.join(src, f)):
+            raise SystemExit('%s: %s missing' % (src, f))
+    import hashlib
+    for f, want in rec['gunsnd']['md5'].items():
+        h = hashlib.md5()
+        with open(os.path.join(src, f), 'rb') as fh:
+            for b in iter(lambda: fh.read(1 << 22), b''):
+                h.update(b)
+        if h.hexdigest() != want:
+            raise SystemExit('%s: %s is not the file the gun-sound step recorded (md5 %s, expected %s)' % (src, f, h.hexdigest(), want))
+    txt = open(os.path.join(src, 'KLGuns.ini'), encoding='latin-1').read()
+    if 'Version=2' not in txt or not any(l.startswith('Entries=') for l in txt.splitlines()):
+        raise SystemExit('%s: KLGuns.ini is not Version 2 with Entries=' % src)
+    mp, ip = os.path.join(dest, 'Maps', mid), os.path.join(dest, 'BuildInfo', mid)
+    for x in (mp, ip):
+        shutil.rmtree(x, ignore_errors=True); os.makedirs(x)       # these are our own output folders
+    out, linked = {}, 0
+    for f in names + list(SIDE_FILES):
+        s, d = os.path.join(src, f), os.path.join(mp, f)
+        try:
+            if not link:
+                raise OSError
+            os.link(s, d); linked += 1
+        except OSError:
+            shutil.copyfile(s, d)
+        if os.path.getsize(s) != os.path.getsize(d):
+            raise SystemExit('%s: size differs after the copy' % d)
+        out[f] = [os.path.getsize(d), _sha1(d)]
+    for f in NOTES:
+        if os.path.isfile(os.path.join(src, f)):
+            shutil.copyfile(os.path.join(src, f), os.path.join(ip, f))
+    json.dump({'map': mid, 'slot': level, 'from': os.path.abspath(src), 'files': out}, open(os.path.join(ip, 'package.json'), 'w'), indent=1)
+    log('%s <- %s: %d files, %.1f MB, %d hard-linked' % (mid, level, len(out), sum(v[0] for v in out.values()) / 1e6, linked))
+    return out
+
+
+def testslot(level, root, dest, slot='F01', log=print):
+    r"""A copy of Maps\DDnn built for the F01 SLOT, as Maps\T<nn>: the Steam launch options (-o DefaultScene=Locations/F01/F01_Main.gms,
+    never to be changed) boot slot F01 only, so any other stock map can be autotested only as 'F01 = this map'
+    ([Redirect] F01=T<nn>). Same rename as kl_expansion.adopt(): member and file names only (kl_graft.member_name), the
+    members' bytes are untouched (read back: same CRCs, same order). The sound/ini files are hard-linked under the new names.
+    GUESS: nothing inside a level names its slot (adopt()'s docstring; proven for F07-systems grafts, not for a stock level).
+    -> the folder."""
+    import kl_graft, zipfile
+    mp = os.path.join(dest, 'Maps', 'DD' + level[1:])
+    tp = os.path.join(dest, 'Maps', 'T' + level[1:])
+    shutil.rmtree(tp, ignore_errors=True); os.makedirs(tp)
+    with zipfile.ZipFile(os.path.join(mp, level + '_Main.zip')) as z:
+        members = [(kl_graft.member_name(n, level, slot), z.read(n)) for n in z.namelist()]
+        crc = [(i.CRC, i.file_size) for i in z.infolist()]
+    out = kl_graft.write_zip(os.path.join(tp, slot + '_Main.zip'), members, kl_graft.load_options(''))
+    with zipfile.ZipFile(out) as z:
+        if [(i.CRC, i.file_size) for i in z.infolist()] != crc:
+            raise SystemExit('%s: the archive written for slot %s is not the folder\'s' % (level, slot))
+    for f in sorted(os.listdir(mp)):
+        if f == level + '_Main.zip':
+            continue
+        d = os.path.join(tp, slot + f[len(level):] if f.startswith(level + '_Main') else f)
+        try:
+            os.link(os.path.join(mp, f), d)
+        except OSError:
+            shutil.copyfile(os.path.join(mp, f), d)
+    log('T%s <- %s as slot %s: %s' % (level[1:], level, slot, ', '.join(sorted(os.listdir(tp))[:4])) + ' ...')
+    return tp
 
 
 def main():
@@ -153,6 +379,27 @@ def main():
         bad = [r['level'] for r in res if not r['ok']]
         print('RESULT: %s' % ('PASS' if not bad else 'FAIL (%s)' % ', '.join(bad)))
         sys.exit(1 if bad else 0)
+    elif a[:1] == ['gunsnd']:
+        rest = a[1:]
+        root = rest.pop(0) if rest and rest[0] not in LEVELS and rest[0] != 'all' else OUT
+        for lv in (LEVELS if rest in ([], ['all']) else rest):
+            gunsnd(lv, root, zastava='--no-zastava' not in opt)
+        print('RESULT: PASS')
+    elif a[:1] == ['package']:
+        rest = a[1:]
+        root = rest.pop(0) if rest and rest[0] not in LEVELS and rest[0] != 'all' else OUT
+        dest = opt.get('--dest', root)
+        man = {}
+        for lv in (LEVELS if rest in ([], ['all']) else rest):
+            man['DD' + lv[1:]] = package(lv, root, dest, link='--copy' not in opt)
+        json.dump(man, open(os.path.join(dest, 'Maps.manifest.json'), 'w'), indent=1)
+        print('RESULT: PASS')
+    elif a[:1] == ['testslot'] and len(a) >= 2:      # testslot [<root>] F06 : Maps\T06 beside Maps\DD06 (run package first)
+        rest = a[1:]
+        root = rest.pop(0) if rest and rest[0] not in LEVELS else OUT
+        for lv in rest:
+            testslot(lv, root, opt.get('--dest', root))
+        print('RESULT: PASS')
     elif a[:1] == ['table']:
         table(a[1] if len(a) > 1 else OUT)
     else:
