@@ -767,9 +767,7 @@ def campaign_names(level):
     return tuple(squad_plan()[0]) + ((OPENER,) if LOCK_WING else ())
 
 
-def _tpl_key(path):
-    # '!' and '/' both separate path parts: a template is named 'Effects!010_X!Artillery!Group', its clone group 'CloneGroup_ROOT/Effects/010_X/Artillery/Group'
-    return path.lower().replace('\\', '/').replace('!', '/')
+_tpl_key = J.tpl_key
 
 
 def orphan_clones(level, sc=None, log=print):
@@ -783,25 +781,14 @@ def orphan_clones(level, sc=None, log=print):
         if level != LEVEL:
             return ()
         sc = J.Scene.load(level, 'dm')
-    tops = [t for t in sc.tops() if sc.names[t].startswith('CloneGroup_')]
-    inside = set()
+    dropped = set()
     if sc.label == level:                       # the source level: what the campaign pre-pass drops (squads it must keep excepted) holds no template either
         import fnmatch
         drop = [n for n in kl_maps.campaign_drop(level)[0] if n not in {glob.escape(x) for x in campaign_names(level)}]
         for t in sc.tops():
             if any(fnmatch.fnmatchcase(sc.names[t], d) for d in drop):
-                inside.update(range(t, sc.end[t]))
-    for t in tops:
-        inside.update(range(t, sc.end[t]))
-    have = [_tpl_key(sc.path[k]) for k in range(1, len(sc.nodes)) if sc.cls(k) == 'ZAllocMany' and k not in inside]
-    out = []
-    for t in tops:
-        if not any(sc.cls(k) == 'ZAllocMany' for k in range(t, sc.end[t])):
-            continue
-        x = sc.names[t][11:].lower()
-        x = x[5:] if x.startswith('root/') else x
-        if not any(h == x or h.endswith('/' + x) for h in have):
-            out.append(glob.escape(sc.names[t]))
+                dropped.update(range(t, sc.end[t]))
+    out = [glob.escape(sc.names[t]) for t in J.orphan_clone_groups(sc, dropped)]
     if out:
         log('  kl_fa_hasta_layer: %d clone group(s) without a template: %s' % (len(out), ', '.join(o.split('/')[-1] for o in out)))
     return tuple(out)

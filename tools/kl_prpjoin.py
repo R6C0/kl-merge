@@ -148,7 +148,12 @@ class Scene:
     @classmethod
     def load(cls, level, game=None):
         game = game or ('dm' if level.startswith('M') else 'dd')
-        with zipfile.ZipFile(level_zip(level, game)) as zf:
+        return cls.from_zip(level_zip(level, game), game, level)
+
+    @classmethod
+    def from_zip(cls, path, game='dd', label=None):
+        """The Scene of any level archive (a stock one or one of our builds)."""
+        with zipfile.ZipFile(path) as zf:
             prp = [n for n in zf.namelist() if n.lower().endswith('_main.prp')][0]
             p = Prp(zf.read(prp))
             raw = kl_gms.unpack(zf.read(prp[:-4] + '.gms'))
@@ -157,7 +162,7 @@ class Scene:
         for decl, tid, _prio in kl_gms.entities(raw):
             o = struct.unpack_from('<I', raw, 4 * (decl & 0xffffff))[0]
             names.append(buf[o:buf.index(b'\0', o)].decode('latin1')); tids.append(tid)
-        return cls(p, names, tids, game, level)
+        return cls(p, names, tids, game, label or path)
 
     def cls(self, k):
         return schema(self.game).geoms.get(self.tids[k])
@@ -345,6 +350,31 @@ def templates(sc):
             for i in range(1, len(parts)):
                 for t in want.get('/'.join(parts[i:]), ()):
                     out.setdefault(t, k)
+    return out
+
+
+def tpl_key(path):
+    # '!' and '/' both separate path parts: a template is named 'Effects!010_X!Artillery!Group', its clone group 'CloneGroup_ROOT/Effects/010_X/Artillery/Group'
+    return path.lower().replace('\\', '/').replace('!', '/')
+
+
+def orphan_clone_groups(sc, dropped=()):
+    """Top-level 'CloneGroup_*' nodes holding ZAllocMany copies for which the scene has no template: a ZAllocMany outside every clone group (and
+    outside the node indices `dropped`, which will not exist) whose path, '!' read as '/', ends in the group's path. templates() only reads '/'.
+    A copy without its template keeps ZAllocMany +0x58 = 0 and the first ZParticleEmitter crashes at kl2 0x4c63f2. -> [top node indices]"""
+    tops = [t for t in sc.tops() if sc.names[t].startswith('CloneGroup_')]
+    inside = set(dropped)
+    for t in tops:
+        inside.update(range(t, sc.end[t]))
+    have = [tpl_key(sc.path[k]) for k in range(1, len(sc.nodes)) if sc.cls(k) == 'ZAllocMany' and k not in inside]
+    out = []
+    for t in tops:
+        if not any(sc.cls(k) == 'ZAllocMany' for k in range(t, sc.end[t])):
+            continue
+        x = sc.names[t][11:].lower()
+        x = x[5:] if x.startswith('root/') else x
+        if not any(h == x or h.endswith('/' + x) for h in have):
+            out.append(t)
     return out
 
 
