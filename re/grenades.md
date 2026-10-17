@@ -156,3 +156,13 @@ throwing back enemy grenades. `GrenadeAttackBehaviourRout` is DD-only as a contr
 - Missing effect pool refs crash at load (unregistered / empty refs, see CLAUDE.md pool notes): every ref in
   the cloned group must resolve in the target level.
 - Frag damage affects friendlies; FA friendly-fire handling not checked.
+
+## 10. Stage A/B result (2026-10-18, kl-merge agent, OFFLINE, NOT RUN in game)
+- Stage A finding: in the stock FA overlay F06 the Ammo\Grenade_Fragmentation projectile slot is EMPTY (as for all grenades), so stage B was needed.
+- Stage B (tools/kl_grenade.py, .prp-only so no slot renumbering): Ammo\Grenade_Fragmentation projectile -> Projectile\Projectiles_01\Rocket_Flare;
+  that node's ballistic controller gets fuse 3.3 s + eGRENADE_FRAG, plus Explode and ShakeCamera controllers copied from Rocket_RPG7;
+  Explode floats set to Dead Men's frag values (550/200/1000/350, field 13 = 80). 10 Police/Swat_02 actors (spread over squads) get Grenade_Fragmentation in their weapon fields.
+- Build: build/grenade_1018/GR06/F06_Main.zip md5 5ead3e707364bf8ad9ab13881d4ef6d5 (check_passes PASS, kl_fa.check 0 findings, J.check no misfits).
+  Install: "INSTALL grenade test.bat" (F06=GR06 in KLHook.ini, backup KLHook.ini.before-grenade1018) / "UNDO grenade install.bat".
+- GUESS: Explode field 14/16 swap pairing; stand-in effect FX_Grenade_RPG_01 and sound (rpg_explosion_01); fuse 3.3; that police with the grenade ammo throw at all (GrenadeAttack tactic start condition unread, UNKNOWN).
+- Crash risks: Rocket_Flare node reuse (its flare effects now explode), new grenade ammo state on NPCs, friendly fire from the frag.
