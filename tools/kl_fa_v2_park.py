@@ -14,7 +14,7 @@ No doors, no seal, no light show, no bots, no room gates: the campaign level nee
 This module is the club's author layer (kl_fa_club.py) cut down to what a park needs, with the park's own tables. It holds the nine names
 of kl_graft.AUTHOR_NAMES. Every number marked GUESS is a guess; MEASURED ones come from the real files (re/campaign_v2_plan.md).
 Usage (from tools/):
-  python kl_fa_v2_park.py test <out> [--keep] [--plan plan.json] [--squads-awake] [--no-ai] [--no-police] [--str PC_Def.str]
+  python kl_fa_v2_park.py test <out> [--keep] [--plan plan.json] [--squads-awake] [--no-ai] [--no-police] [--no-music] [--str PC_Def.str]
   python kl_fa_v2_park.py plan <bare-folder> <plan.json>      the van's plan from a built bare graft
   python kl_fa_v2_park.py check <folder> | van-check <folder> | finish <folder>
 """
@@ -170,6 +170,19 @@ ROLE = {'monitor': 'Gameplay!AIMonitor',
         'speak box': 'Specials!LevelSpeak!TriggerBox', 'speak': 'Specials!LevelSpeak!OnlineSpeakTrigger_01',
         'exit': 'Gameplay!EscapeSetup!otrExitLevel'}
 GATE_WAYS = ('Way#01', 'Way#02')
+# THE LEVEL'S OWN MUSIC (2026-10-17; Retomoto and The Bank kept theirs the same way): the two PlayMusic groups of M06_A's
+# Specials!Audio (each with its PlayMusicLayerFade boxes) stay and the layer's lists start them; the campaign's trigger
+# chain (00_From_Startup .. 15_From_CutExit) stays out, it hangs on the dropped scripting. Their sounds come along through the
+# sound ids in the PlayMusic nodes; the clips need the stream file that holds them (kl_v2_str.py).
+#   round start (start timer)  ambient set  = the campaign's 'RetoMoto_Ambient_V2' (the FA sibling plays the same loop), calm
+#   the alarm (van timer)      action set    = 'RetoMotoAction' (layers 1 + 2 at -3 dB, layer 3 silent) plus the campaign's own '13_' fades
+#                              (what 13_From_SWAT does when the police come: main -3, bass -6, intense -15 dB) and the ambient's
+#                              '03_Ambient' fade (-100 dB over 20 s). GUESS: a second PlayMusic does not stop the first, so the
+#                              ambient is faded out by hand (the campaign does the same 32 s after the cut scene starts).
+MUSIC = True                            # False ('--no-music'): the build as before, silent
+MUSIC_AMBIENT, MUSIC_ACTION = 'Specials!Audio!PlayMusic_RetoMoto_Ambient_V2', 'Specials!Audio!PlayMusic_RetoMotoAction'
+MUSIC_NAMES = (MUSIC_AMBIENT, MUSIC_ACTION)
+MUSIC_ALARM = (MUSIC_AMBIENT + '\\03_Ambient', MUSIC_ACTION + '\\13_Main', MUSIC_ACTION + '\\13_Bass', MUSIC_ACTION + '\\13_Intense')
 START_AT = 2.0                          # s from the round-start event to the first squads + the windows. GUESS (the event comes 8.4 - 8.8 s before GO)
 BACKSTOP_AT = 240.0                     # s from the round-start event: the police come whatever the crew did. GUESS
 VAN_DELAY = 8.0                         # s from the alarm to the van's show and the police. GUESS
@@ -457,7 +470,7 @@ def campaign_names(level):
     """Top-level names of M06_A the campaign pre-pass must leave in: the kept squads and the pavilion's shatter wrapper."""
     if level != LEVEL:
         return ()
-    return tuple(squad_plan()[0]) + ((SHATTER,) if squad_plan()[0] else ())
+    return tuple(squad_plan()[0]) + ((SHATTER,) if squad_plan()[0] else ()) + (MUSIC_NAMES if MUSIC else ())
 
 
 def strip(M, log=print):
@@ -576,13 +589,23 @@ def wire(sc, log=print):
         raise ValueError('%s is not a GateGroup with the two GatePath %s' % (ROLE['gate'], GATE_WAYS))
     for w in ways:
         put_(sc.resolve(w)[0], 'GatePath', f0=arrive)
-    lists('start timer', 'TriggerDelay2', f0=START_AT, f4=stage['start'] + shatter)
+    tune = [R + MUSIC_AMBIENT] if MUSIC else []
+    alarm = must([R + n for n in (MUSIC_ACTION,) + MUSIC_ALARM]) if MUSIC else []
+    if MUSIC:
+        must(tune)
+        for n in MUSIC_NAMES:
+            if not kl_fa.has(sc, node(n), 'PlayMusic'):
+                raise ValueError('%s is not a PlayMusic' % n)
+        for p in alarm[1:]:
+            if not kl_fa.has(sc, sc.resolve(p)[0], 'PlayMusicLayerFade'):
+                raise ValueError('%s is not a PlayMusicLayerFade' % p)
+    lists('start timer', 'TriggerDelay2', f0=START_AT, f4=stage['start'] + shatter + tune)
     lists('walk box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['walk'])
     # the stairs' foot: the last squads, the alarm (the van's timer) and the gate (the police on the ring)
     lists('floor box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['floor'] + [R + ROLE['van timer'], ways[0]])
     lists('backstop', 'TriggerDelay2', f0=BACKSTOP_AT, f4=[ways[1], R + ROLE['van timer']])
     lists('van on', 'ActivateGeom', f0='AITrigger', f1=[van_path()])
-    lists('van timer', 'TriggerDelay2', f0=VAN_DELAY, f4=[R + ROLE['van on'], R + ROLE['speak']])
+    lists('van timer', 'TriggerDelay2', f0=VAN_DELAY, f4=[R + ROLE['van on'], R + ROLE['speak']] + alarm)
     lists('reset hide', 'DeactivateGeom', f0='AITrigger', f1=[van_path()])
     k = node(ROLE['monitor'])
     mine = {R + v for v in ROLE.values()}
@@ -835,12 +858,13 @@ def load_plan(folder):
 
 
 def main():
-    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, STREAM
+    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, STREAM, MUSIC
     a = sys.argv[1:]
     if len(a) >= 2 and a[0] == 'test':
         NO_AI = '--no-ai' in a
         SQUADS_AWAKE = '--squads-awake' in a
         POLICE_ARRIVE = '--no-police' not in a
+        MUSIC = '--no-music' not in a
         if '--str' in a:
             STREAM = os.path.abspath(a[a.index('--str') + 1])
             BK.use_stream(STREAM)

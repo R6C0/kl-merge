@@ -214,9 +214,11 @@ EXTRA = [
               'then page 3 of the menu, entry 0)'),
     # PAGE 3, entry 2 (2026-10-17): 'A Walk in the Park II' = the campaign park M06_A, F07's systems (tools\kl_fa_v2_park.py, re\campaign_v2_plan.md).
     # NEW entry beside the installed DM06 (slot F04, page 2): slot F02 (stock Hong Kong Alley's slot; only [Redirect.3] names it, and only while page 3
-    # is open). Same rules as The Vault. known_re: the build has NO finding (verify problems: 0); the bank carries NO M06_A music sound
-    # (no root reaches them; MEASURED 2026-10-17: 0 of the 4 retomotoaction_* sounds are in the bank), so the beds are silent for that reason, NOT
-    # for a missing stream block (the stream file would not change this build: tools/kl_v2_str.py, rebuild byte-identical). NOT RUN IN THE GAME.
+    # is open). Same rules as The Vault. known_re: the build has NO finding (verify problems: 0). MUSIC (2026-10-17): the campaign's two PlayMusic groups
+    # (Specials!Audio: RetoMoto_Ambient_V2, RetoMotoAction) now stay in the level and the layer starts them (tools/kl_fa_v2_park.py MUSIC: ambient at
+    # the round start, action set + the '13_' fades + the ambient's fade-out at the alarm), so the bank carries the 4 music sounds and the .WHD their
+    # 4 streamed records. They resolve ONLY against C:/kl_build/v_v2/PC_Def.str (kl_v2_str.py): that stream file must be the INSTALLED one, else the
+    # level is silent again. NOT RUN IN THE GAME.
     dict(id='DM06B', slot='F02', page=3, title='A Walk in the Park II', build='prebuilt', sources=['M06_A'], picture='LevelPicture_M06', bones_live=False,
          audit=True, gun_step=True, known=(), known_re=(),
          live='NOTHING: the map has never been loaded in the game (build/v2_1017/DM06B; the F01 test slot comes first, then page 3 entry 1)'),
