@@ -167,3 +167,49 @@ throwing back enemy grenades. `GrenadeAttackBehaviourRout` is DD-only as a contr
 - GUESS: Explode field 14/16 swap pairing; stand-in effect FX_Grenade_RPG_01 and sound (rpg_explosion_01); fuse 3.3; that police with the grenade ammo throw at all (GrenadeAttack tactic start condition unread, UNKNOWN).
 - Crash risks: Rocket_Flare node reuse (its flare effects now explode), new grenade ammo state on NPCs, friendly fire from the frag.
 - Review 2026-10-17 (adversarial, offline): zip re-checked (check_passes PASS); Ammo projectile field 24 matches every other ammo template; no new InventoryBinding, no new entity or type id, no pool change; the only .SND offsets used (375312, 375392) are the level's own, none from Dead Men. REAL BUG FIXED in install_grenade.ps1: the F06= edit matched the FIRST `F06=` line in KLHook.ini, which is `F06=DM09` in [Redirect.2] (Retomoto Tower, menu page 2), not the stockfa `[Redirect]` line `F06=DD06` (the one for page 1); the install now edits only the `[Redirect]` section, undo restores from the same section of the backup. Also: a second install run overwrote the "created" state so undo no longer removed GR06 (now kept), and a stale GR06 folder is md5-checked instead of trusted. Tested on a copy of the live ini: install, re-install, undo, re-undo give the original ini byte for byte. Remaining: Launcher_HK69A1_Flare ammo shares Rocket_Flare, so a player flare launcher would also explode; page 2/3 F06 slots are NOT redirected (test on menu page 1).
+
+## 11. Do NPCs with grenade ammo throw? (2026-10-18, kl-merge agent, OFFLINE static read of kl2.exe, NOT RUN)
+Answer: NOT on their own, as far as the tactic code shows. Holding Weapon\Grenade_Fragmentation in ZFFActor[4] is
+necessary (see 11.3) but nothing in the autonomous tactics starts a throw; the only start is a scripted
+`GrenadeAttackBehaviourRout` step in the squad route, and no stock level has one.
+- READ: `CPPScript::ZSoldier` slot 17 (0x6ab250) builds, per soldier, the throw machinery: `ZFireThrowWeaponTask`
+  (vtable 0xbd0c34, at soldier+0x578, 0x6ab390), the goal `ZGrenadeAttack` (vtable 0xbd0834, ctor 0x836830, at
+  soldier+0x660, 0x6ab854) and `ZGrenadeAttackBehaviourScript` (0xbd07f4, ctor 0x648260, soldier+0x664). 0x6e49b0
+  registers all 11 such goal objects (soldier+0x638..0x664) with id 0x96. The name string "GrenadeAttack" (0xb62840)
+  is only returned by the goal's slot 7 (0x4cdb00).
+- READ: no tactic class mentions grenades: the autonomous tactics are the `Z*Tactic` classes (AttackFromCover
+  0x680b20, AttackNoCover 0x85ece0, DefendCover 0x84dc90 ...), none is a grenade tactic, and of all `CPPScript::`
+  classes only `ZGrenadeAttack::Run` (slot 2, 0x6eb170) and `ZDefendCoverEval` (0x604190, unrelated use of the same
+  slot number) call soldier vtable +0x170.
+- READ: soldier vtable +0x170 = 0x89eed0 = "start ZFireThrowWeaponTask at a position": it stores the position at task
+  +0x14 and a weapon index at task +0x24 (0x6c5f90). `ZGrenadeAttack::Run` = move to its position A (0x8997a0, goal
+  +0x14), draw a random 0..32767 delay into soldier+0x684, then call +0x170 with its position B (goal +0x20, weapon
+  index 0) and wait. The task body (0x53a230) copies the index into actor+0x608, takes the item from actor+0x608,
+  else actor+0x604 (index 0 = the default throwable = the actor's grenade field), plays the throw action
+  (0x7ddc70) and waits a random time.
+- READ: the entry that starts the goal is `ZSoldier` slot 84 (vtable +0x150, 0x8410d0): it refuses (sets
+  soldier+0x4fc = 1 = "done") when soldier+0x700 is set, or the actor is locked (+0x5c8), or the soldier's mode
+  (+0x6d8) is 6 (the dog); otherwise it loads the goal at +0x660 with (position, arg), clears +0x4fc and runs it.
+  NOT FOUND: any caller of slot 84 in a `CPPScript::` class (searched for call [reg+0x150] in every method of every
+  CPPScript vtable: none). UNKNOWN: callers outside CPPScript (ZFFActor, squad code, the rout controller).
+- READ: `ZGrenadeAttackBehaviourRout` (vtable 0xbcf69c, 7 stored fields): 0 `s` (reference to the actors, read at
+  +0x4c; resolved 0x8ccde0 -> 0x629aa0 -> squad object [+0x77c]), 1..3 `f f f` (x y z of the throw, +0x50..0x58),
+  4 refs (NEXT), 5 b, 6 b. Its slot 14 (0x7d3970) makes `ZGrenadeAttackBehaviourGoal` (0xbcf72c) from them; the
+  goal's body (0x7fdb10) waits until the squad member has arrived, then orders the soldier (vtable +0x13c) to the
+  target's position, and finishes. So a throw exists only as a ROUTE STEP: "these actors throw a grenade at (x,y,z)".
+- MEASURED (this session, all 21 stock levels): zero `GrenadeAttackBehaviourRout` controllers (the "4 in L10" in
+  section 5 / re/bots_dynamic.md belongs to `DownNotDeadBehaviourRout`, not to this one). So no stock squad ever throws.
+- Consequence for the F06 build (build/grenade_1018): the 10 police only carry the item; they will probably NOT
+  throw. The fix needs a step, not an item: append a `GrenadeAttackBehaviourRout` controller [actors, x, y, z, NEXT,
+  b, b] to an existing police route node and reference it from an earlier step's NEXT list (nodes with two
+  behaviour controllers exist in stock: ('MsgForward','HeliFlyBehaviourRout') x 12 in F06, so a second controller on
+  one node is a legal shape; that a NEXT reference fires every controller on the target node is a GUESS). The
+  position would be a fixed world point (loot room / escape), not "the player". NOT implemented: the effect cannot be
+  judged without a live run and a wrong NEXT edit can stall a squad; kl_grenade.py and the installed build
+  (md5 5ead3e70...) are unchanged.
+- 11.3 What an actor needs once a step fires: the grenade in its grenade field (done by kl_grenade.py), a
+  projectile on the Ammo (done), not the dog / not locked / soldier+0x700 clear, an arrival at position A, then the
+  throw runs after a random delay. Distance, cover and "player in the open" are NOT tested by the goal itself
+  (READ: no such test in 0x6eb170 or 0x53a230); they belong to whoever picks the position.
+- Open: callers of ZSoldier slot 84; whether `ZGrenadeAttackBehaviourScript` (0x559290, which reads the soldier's
+  current target at +0xb0 and walks toward it) is what the rout uses instead of the three floats; GUESS either way.
