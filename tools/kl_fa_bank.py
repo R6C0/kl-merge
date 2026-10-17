@@ -36,6 +36,8 @@ what only a live run can settle: re/bank_campaign.md. Nothing here installs anyt
                         the round start (default: they are OPEN AT BUILD TIME - sunk, their collision cut)
       --vault-open      the vault door is sunk at build time too (a first load in which no door can stop anybody)
       --door-early      hall police + hunt at the beat's end (old order); default: when the door's swing is over (DOOR_GONE)
+      vault-blow <folder>  (a post-step, not a flag of test) the vault door is not swung but blown away WHOLE with the blast: group + body + hinge piece
+                        deactivated (VAULT_BLOW's note), switched back on by the round reset. Default builds are unchanged.
       --vault-stays     the vault door is not switched off after its swing (default: it goes away DOOR_GONE s later)
       --vault-swing [S] the vault door's swing is played out: its body is switched off S s (default VAULT_SWING_END = 9, the
                         clip ends at 8) after the beat's end by a timer of its own (SWING_TIMER), not by the door timer, which
@@ -290,6 +292,14 @@ DOOR_WAIT = True                        # hall police + hunt go on the DOOR time
 # does at the end of the swing) and a round-start object sends it 'Block' so that round 2 starts closed (AIDWrapper 'Block', kl2 0x710320).
 # GUESS: that 'Activate' from a TriggerDelay2 list unblocks (the campaign wiring says so) and that the AIDWrapper's 'Block' reaches the handler.
 VAULT_BLOCKER = False
+# VAULT_BLOW ('vault-blow <folder>', a .prp-only post-step; bank_opts.json 'vault_blow'): the owner (2026-10-17) saw the door 'just sit there'.
+# The door is then NOT swung (the beat's 'door' wrapper names nothing) and at the door timer's moment - the one that fires the three Explode
+# and the blast sound - the DeactivateGeom 'door off' switches off the WHOLE door: the animated group, its body (8 meshes, KEYFRAMED
+# collision shape in the .HVK) and the hinge piece Door_Add_PRE_01 (3 meshes, no HVK placement). Stock Dog Days deactivates the animated
+# group itself (trains, vans). ASSUMPTION: the engine drops a key-framed body's collision with its geometry (not seen live).
+# Round 2: the module's Reset_show names all three again (GUESS: ActivateGeom on a group restores its children).
+VAULT_BLOW = False
+VAULT_HINGE = VA + 'M03_A_VaultEntrance_01a\\SI0102_M03_BankVault_Door_Add_PRE_01'
 BLOCKER = 'GamePlay!4_Vault_Part!PathBlocker_Vault'
 # VAULT_SWING's round 2: --reset shows the door's body again but the MatPosAnim stays at its end pose (open, ~95 degrees). With the swing flag the
 # round start also sends the door 'Activate' (kl2 0x59dce0 evaluates frame 0 at once = closed) and DOOR_POSE_DELAY s later a wrapper sends it
@@ -809,13 +819,15 @@ def opts_now():
                                    plaza_outside=PLAZA_OUTSIDE, hall_up=HALL_UP, no_ai=NO_AI, teller_more=TELLER_MORE, waves_latch=WAVES_LATCH,
                                    waves2=WAVES2, voice=VOICE, teller_foyer=TELLER_FOYER, room_gates=ROOM_GATES, room_on=list(ROOM_ON), room_hide=ROOM_HIDE, staging=STAGING, garrison=GARRISON,
                                    **({'vault_swing': VAULT_SWING_END} if VAULT_SWING_END is not None else {}),
-                                   **({'vault_blocker': True} if VAULT_BLOCKER else {}))
+                                   **({'vault_blocker': True} if VAULT_BLOCKER else {}),
+                                   **({'vault_blow': True} if VAULT_BLOW else {}))
 
 
 def apply_opts(o):
     """Set the module's flags from a dict (opts_now's form). -> o"""
     global CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, VAN_SHOW, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
-    global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING, GARRISON, VAULT_SWING_END, VAULT_BLOCKER
+    global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING, GARRISON, VAULT_SWING_END, VAULT_BLOCKER, VAULT_BLOW
+    VAULT_BLOW = bool(o.get('vault_blow', False))
     GARRISON = bool(o.get('garrison', False))
     VAULT_SWING_END, VAULT_BLOCKER = o.get('vault_swing'), bool(o.get('vault_blocker', False))
     ROOM_GATES, ROOM_HIDE = bool(o.get('room_gates', False)), bool(o.get('room_hide', True))
@@ -2042,18 +2054,24 @@ def check(folder, log=print, problems=None):
     if not animate and named('doors'):
         fail('the leaves are sunk, but the round start still sends %d of them \'Activate\'' % len(named('doors')))
     late = named('door timer')
-    if vault_open == bool(named('door')) or (bool(late) and R + ROLE['door timer'] not in beat):
+    if (bool(named('door')) if VAULT_BLOW else vault_open == bool(named('door'))) or (bool(late) and R + ROLE['door timer'] not in beat):
         fail('the vault door is %s, but its wrapper names %s and its timer %s' % ('sunk' if vault_open else 'in its place', named('door'), late))
     # VAULT_SWING: the body goes on SWING_TIMER (named by the beat timer, S >= 8 s after it), not on the door timer
     sw = A.node_of(sc, SWING_TIMER) if sc.resolve(R + SWING_TIMER) else None
     swing = sw is not None and R + SWING_TIMER in beat
     if sw is not None and not swing:
         fail('%s is in the level but the beat timer does not name it' % SWING_TIMER)
-    if swing:
+    if VAULT_BLOW:                                      # vault_blow: the door timer (the blast's moment) switches off group + body + hinge
+        sv = None
+        offs = named('door off')
+        if offs != [R + VAULT_DOOR, R + VAULT_BODY, R + VAULT_HINGE] or R + ROLE['door off'] not in late or not blast:
+            fail('VAULT_BLOW: door off names %s, the door timer names it: %s, blast wired: %s' % ([x[-30:] for x in offs], R + ROLE['door off'] in late, bool(blast)))
+        swing = False
+    elif swing:
         sv = values(sc, sw, 'TriggerDelay2')
         if R + ROLE['door off'] in late or A.named(sc, sw) != [R + ROLE['door off']] or not named('door off') or sv[0] < 8.0:
             fail('the swing timer of the vault door: delay %s, names %s; the door timer also names the body: %s' % (sv[0], A.named(sc, sw), R + ROLE['door off'] in late))
-    elif bool(named('door off')) != (R + ROLE['door off'] in late):
+    elif not VAULT_BLOW and bool(named('door off')) != (R + ROLE['door off'] in late):
         fail('the door\'s DeactivateGeom names %s and the door\'s timer %s it' % (named('door off'), 'names' if R + ROLE['door off'] in late else 'does not name'))
     booms = [camp[r] for r in ('boom 1', 'boom 2', 'boom 3') if camp[r] is not None]
     reach = sorted({tuple(values(sc, k, 'Explode')[j] for j in EXPLODE_REACH) for k in booms})
@@ -2085,7 +2103,7 @@ def check(folder, log=print, problems=None):
         [s.split('!')[-1] for s in mon], ', '.join('%.0f' % x for x in rods), len(box) - 1 - len(rods), delay('beat timer'), len(beat),
         '; -> %.0f s -> %s' % (delay('door timer'), [s.split('!')[-1].split('\\')[-1] for s in late]) if late else ''))
     log('  the beat: vault door %s; blast %s; alarm lamps %d, %s; music: break-in set at %.0f s, way-out set at the beat\'s end (%s)' % (
-        'sunk at build time' if vault_open else 'swings at the beat\'s end' + (', its body off %.0f s later%s' % (sv[0] if swing else delay('door timer'), ' (swing timer)' if swing else '') if named('door off') else ', stays'),
+        'sunk at build time' if vault_open else 'is blown away whole with the blast (VAULT_BLOW)' if VAULT_BLOW else 'swings at the beat\'s end' + (', its body off %.0f s later%s' % (sv[0] if swing else delay('door timer'), ' (swing timer)' if swing else '') if named('door off') else ', stays'),
         'none (the vault stays intact)' if not blast else '%s: Explode reach %s, %d bodies come, %d go' % ('show' if reach == [(1.0, 1.0)] else 'REAL', reach, len(on), len(off)),
         len(lamps), '%d LightToggle' % len(toggles) if toggles else 'no LightToggle in the level, %d lights and %d slave spots hidden' % (len(dark), len(dark_s)),
         delay('music timer'), 'its %d clips have streamed records in the built .WHD: it plays once the stream file of the build is installed' % in_whd if in_whd
@@ -4114,6 +4132,69 @@ def hall_dash(folder, log=print):
     return {'steps': steps, 'timers': timers, 'squads': sorted(squads), 'cover_cut': cut}
 
 
+def vault_blow(folder, log=print):
+    """VAULT_BLOW's note. In place, on a finished folder of a map whose vault door is in place (not --vault-open, not --vault-stays):
+    .prp values only - no entity is added, so no seal and no .prm change. (1) the beat's 'door' wrapper names nothing (the door is not
+    swung), (2) 'door off' (DeactivateGeom) names the animated group, its body and the hinge piece, (3) the door timer - the moment of
+    the three Explode and the blast sound - names 'door off', (4) the round-start Reset_show names the three again. Writes bank_opts.json
+    with vault_blow. A second run changes nothing. -> {'door off': [...], 'changed': [...]}"""
+    import kl_fa_bots as F
+    read_opts(folder)
+    global VAULT_BLOW
+    B = F.Built(folder, os.path.basename(archive_of(folder)).split('_Main')[0])      # the slot of the folder (F01 / F07 ...)
+    sc = B.sc
+    Jn = J.join(sc, [(sc, t) for t in sc.tops()], 'blow')
+    if J.fingerprints(Jn)[0] != J.fingerprints(sc)[0] or J.text(Jn, Jn.p.settings) != J.text(sc, sc.p.settings) or Jn.path != sc.path:
+        raise ValueError('kl_prpjoin.join does not reproduce the build\'s .prp')
+    pieces = [R + VAULT_DOOR, R + VAULT_BODY, R + VAULT_HINGE]
+    for p in pieces:
+        if not Jn.resolve(p):
+            raise ValueError('vault_blow: %s is not in the level' % p)
+    role = lambda r: Jn.resolve(R + ROLE[r])[0]
+    changed = []
+    def ctrl(k, name):
+        return next((i, v) for kk, i, v in kl_fa.controllers(Jn, name) if kk == k)
+    def set_list(role_, cname, field, new, what):
+        k = role(role_)
+        i, v = ctrl(k, cname)
+        if list(v[field]) != list(new):
+            kl_fa.edit(Jn, k, i, lambda us: A.setv(Jn, us, field, list(new)))
+            changed.append('%s: %d -> %d names' % (what, len(v[field]), len(new)))
+    set_list('door', 'AIDWrapper', 0, [], 'door wrapper (no swing)')
+    set_list('door off', 'DeactivateGeom', 1, pieces, 'door off')
+    k = role('door timer')
+    i, v = ctrl(k, 'TriggerDelay2')
+    if R + ROLE['door off'] not in v[4]:
+        kl_fa.edit(Jn, k, i, lambda us: A.setv(Jn, us, 4, list(v[4]) + [R + ROLE['door off']]))
+        changed.append('door timer names door off')
+    rs = Jn.resolve(R + CLOCK + '\\Reset_show')
+    if rs:
+        i, v = ctrl(rs[0], 'ActivateGeom')
+        add = [p for p in pieces if p not in v[1]]
+        if add:
+            kl_fa.edit(Jn, rs[0], i, lambda us: A.setv(Jn, us, 1, list(v[1]) + add))
+            changed.append('Reset_show + %d' % len(add))
+    if changed:
+        prp = Jn.p.serialize()
+        back = F.Prp(prp)
+        if back.serialize() != prp or len(back.nodes()) != len(Jn.nodes):
+            raise ValueError('the new .prp does not round-trip')
+        new = dict(B.files)
+        new[B.ext['.prp']] = prp
+        tmp = B.zp + '.tmp'
+        kl_graft.write_zip(tmp, [(n, new[n]) for n in B.order])
+        os.replace(tmp, B.zp)
+    VAULT_BLOW = True
+    import json                                         # merge into the file: apply_opts does not restore plaza_outside / hall_up, so write_opts would reset them
+    fp = os.path.join(folder, OPTS_FILE)
+    o = json.load(open(fp)) if os.path.isfile(fp) else {}
+    o['vault_blow'] = True
+    with open(fp, 'w') as f:
+        json.dump(o, f, indent=1)
+    log('kl_fa_bank.vault_blow %s: %s' % (folder, '; '.join(changed) or 'nothing to change'))
+    return {'door off': pieces, 'changed': changed}
+
+
 def crew_check(folder, log=print):
     """A folder with the AI heisters' squads (with or without the dynamic step) -> [faults]: no place of a heister
     squad within CREW_CLEAR of where a squad of the hall or the plaza stands or goes - a man's start, a cover
@@ -5897,6 +5978,8 @@ def main():
         seal(a[1])
     elif len(a) == 2 and a[0] == 'hall-dash':
         hall_dash(a[1])
+    elif len(a) == 2 and a[0] == 'vault-blow':
+        vault_blow(a[1])
     elif len(a) == 3 and a[0] == 'extras':
         extras(a[1], a[2])
     elif len(a) == 2 and a[0] == 'waves-check':
