@@ -1930,3 +1930,24 @@ the pad box, and its tracker has a float 2500 (GUESS: visibility distance) - so 
 (default off) change - AITrigger the escape POI from the loot trigger, raise the 2500 - is the next step; the POI handler semantics
 (ZPointOfInterest info 0xcfd578, ZActivateGameplayTrackerDisplay 0xd09714) are not yet read in kl2.exe. (2) a mesh proof start->loot->pad
 for the heli build and the bots' stall at gate g1 (live log) are not worked.
+
+## Handover 2026-10-18 (kl-merge-c4, offline, round 2): Last Call roof marker + route proof
+Built: build/club_owner_1018/DM05A/heli_roof (zip md5 1bcc46db791df152ac03cb0395d6fc93) = heli_civs + `tools/kl_club_roof.py build`
+(NEW tool; no existing tool touched, so every default is unchanged; diff vs heli_civs: only the .prp, only 3 nodes).
+- EXE READ (kl2, ZGameplayTrackerDisplay at HUD +0x10f8, 5 x 0x110 entries, drawn by 0x8e2060): the 2500 of
+  ZActivateGameplayTrackerDisplay field 3 is a HIDE-WITHIN radius for non-vehicle entries (marker not drawn while the player is
+  nearer); the next float (0.0) is a max distance, 0 = unlimited. The earlier note 'visibility distance' was wrong.
+- The roof was never shown because POI_TheEscapeArea has ONE sender, the pad box (as stock F07): marker only once on the pad.
+- Change: POI_TheEscapeArea added to the targets of 'van timer b' (TriggerDelay2 25 s, started by the box at the inner office door =
+  the alarm), and the hide-within radius 2500 -> 800 (GUESS). `--timer 'van timer'` would show it 30 s after the round start but
+  kl_fa_club.check wants that timer to name 'van on' alone (FAIL), so it is not the default.
+- No door/blocker to open: kl_route doors start->pad via loot/gates/lounge/stairs/roof corridor = 0 closures; stations: 17 of 17 places
+  (start, loot, 12 way places, exit, pad, park) reached in the collision and ON ONE nav part (part 7, 401 polygons). So there is no
+  nav island and no blocked door between START, loot and the pad: the walk is free (209 m).
+- Bots 'stall at g1': NOT a mesh problem. The chain's budget is the cause (GUESS): 40330 units of path (~134 s at 300 u/s) + loot 18 s
+  + start delay 10 s + 7 gate waits of up to 30 s each (the game's TriggerActorsDead limit, kl2 0x4afbbd) = up to ~372 s against a 360 s
+  round, so a crew that fights every gate cannot reach the exit box in time; in the 1017 logs 'g' is the stage counter (g1 held ~57 s in
+  the f06 run). Not changed; levers if wanted: fewer gates, or the exit call by a timer. Checked: heli_call_read PASS,
+  kl_fa_club check PASS, kl_fa_civs check 0 FAIL, check_passes PASS. NOT RUN IN THE GAME.
+
+2026-10-18 post-passes (Last Call heli_roof -> build/club_owner_1018/DM05A/heli_roof_post, zip 5f26fd92): kl_fa_dmsettings (fields 66-71, 171 repointed, node 27276), kl_hud all --look deadmen (check PASS), kl_dmlines (2 keys grafted), club check / civs check / check_passes / heli_call_read all PASS. Not run in game.
