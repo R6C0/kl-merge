@@ -421,6 +421,20 @@ Dead Men's FA lines grafted into its .LOC and bank (421 clips are in the stream 
 Glazer's own nine `K_C9` lines and the -6 announcements use the same entry. Not recommended
 before the owner has heard the Dead Men lines on a Dead Men map and wants them.
 
+**6.6a Written 2026-10-18 (klchar.c `klc_voice_swap`, `[Wardrobe] DMVoice=1`, build `C:\kl_build_1018\voice2`)**: the table
+swap above for a Dead Men body in crew slot s (owner item 10). GUESS: the human's player slot is 0. Not run in the game.
+
+**6.6b The fed you come back as (owner item 12) - NOT DONE, finding only.** A policeman player (type 3) is not a
+per-character speaker: ZGameRulesFragileAlliance skips type 3 (characters.md), `rules+0x33e` is read only by 0x421c70
+for per-character lines (1.3), and the police events are plain lines with speaker -3 (1.4), the same entry for every
+policeman. So there is no table byte for the fed to swap; the Dead Men or Dog Days sound of a police line is decided by the
+level's `.LOC` leaves (on Dead Men maps the plain keys are 80 Vorbis / 54 Dead Men PCM, section 3). What is left is his
+bark set (`[player+0x275c]` or field 0 `[player+0x1e8]`, section 2): no stock FA level gives police players one, and who
+fills the police actors' `+0x694` was never traced. Pointing it at a Dead Men definition is the same untested write as
+6.5 (a loaded definition's address = bank base + .SND offset is an ASSUMPTION) and the fed is created on respawn, so it
+cannot be proven offline. Route for later: a kltalk pool event for the fed (Who = a policeman does not exist yet in
+kltalk.c), or 6.5's write on the respawned type-3 player once a live run shows his `+0x1e8`.
+
 ## 7. For the AI heister graft (b-bots / the lead)
 
 1. **Keep the group names** `Glazer_Bodyguard_02 .. _08`, or any name with a digit '1'..'8' at

@@ -258,6 +258,34 @@ static int klc_same_code(DWORD va, const BYTE *bytes, int n)
     return n <= (int)sizeof c && klh_rd((DWORD_PTR)KLH_VA(va), c, n) && !memcmp(c, bytes, n);
 }
 
+/* The line voice of a Dead Men body (re\bots_voice.md 6.6; owner item 10). The game's own slot 137 exchanges the two
+ * table bytes only for the heister model it hands out; a Dead Men model takes the same player slot but the table keeps
+ * the old voice, so a Dead Men body spoke a Dog Days _C<n> line. Here: s = the crew slot the body takes (its voice leaf
+ * K_C<s+1>); find i with rules[0x33e+i] == s, then rules[0x33e+i] = rules[0x33e]; rules[0x33e] = s.
+ * GUESS: the human's player slot is 0 in Arcade (it is what 0x8f5fce writes). Idempotent (once swapped, rules[0x33e]
+ * is s). [Wardrobe] DMVoice=1 in KLHook.ini; 0 leaves the table alone. */
+static int klc_dmvoice = 1;
+
+static void klc_voice_swap(DWORD rules, int s)
+{
+    BYTE t[8]; int i; BYTE a, b;
+    static DWORD lastrules; static int lasts = -1;
+    if (!klc_dmvoice || !rules || s < 0 || s > 7) return;
+    if (!klh_rd(rules + 0x33e, t, sizeof t)) return;
+    if (t[0] == (BYTE)s) {                                            /* already his: say it once per rules object and slot */
+        if ((lastrules != rules || lasts != s) && klc_log) klog("character: voice table already has leaf K_C%d for the human (rules %08lx)", s + 1, rules);
+        lastrules = rules; lasts = s;
+        return;
+    }
+    for (i = 1; i < 8 && t[i] != (BYTE)s; i++) ;
+    if (i == 8) { if (lastrules != rules || lasts != -2 - s) { if (klc_log) klog("character: voice table has no entry %d, left alone", s); lastrules = rules; lasts = -2 - s; } return; }
+    a = t[0]; b = (BYTE)s;
+    if (!klh_data((void *)(DWORD_PTR)(rules + 0x33e + i), &a, 1, "Arcade heister voice table")) return;
+    if (!klh_data((void *)(DWORD_PTR)(rules + 0x33e), &b, 1, "Arcade heister voice table")) return;
+    if (klc_log) klog("character: voice swap: table[%d] %d -> %d, table[0] %d -> %d (the human speaks K_C%d)", i, s, a, a, s, s + 1);
+    lastrules = rules; lasts = s;
+}
+
 static void klc_level_tick(int game_thread)
 {
     static DWORD rules0, player0, since, sig0; static int tries, toldmode, toldnodm, toldthread, toldcode; static LONG lastv = -1, lastbody = -1;
@@ -316,6 +344,7 @@ static void klc_level_tick(int game_thread)
                 model = cur;
             }
         } else if (InterlockedExchange(&lastbody, (LONG)want_root) != (LONG)want_root && klc_log) klog("character: the player wears model %lu (slot %d)", want_root, slot);
+        if (ch > 8 && wardrobe && model == want_root) klc_voice_swap(rules, slot);          /* a Dead Men body: its line voice follows the body */
     }
     /* ---- mask and outfit: the variant of the model the player wears now */
     if (!wardrobe) { if (!mask) return; v = mask == 1 ? 1 : 2; }
@@ -349,6 +378,7 @@ static void klc_init(void)
     klc_log = GetPrivateProfileIntA("Character", "Log", 1, klh_ini);
     klc_settle = GetPrivateProfileIntA("Character", "Settle", 300, klh_ini);
     klc_tries = GetPrivateProfileIntA("Character", "Tries", 3, klh_ini);
+    klc_dmvoice = GetPrivateProfileIntA("Wardrobe", "DMVoice", 1, klh_ini);
     klc_char = (LONG)GetPrivateProfileIntA("Character", "Char", 0, klh_ini); if (klc_char < 0 || klc_char > KLC_NCHAR) klc_char = 0;
     klc_mask = (LONG)GetPrivateProfileIntA("Character", "Mask", 0, klh_ini); if (klc_mask < 0 || klc_mask > KLC_MASKS + 1) klc_mask = 0;
     klc_outfit = (LONG)GetPrivateProfileIntA("Character", "Outfit", 0, klh_ini); if (klc_outfit < 0 || klc_outfit >= KLC_OUTFITS) klc_outfit = 0;
