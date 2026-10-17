@@ -29,7 +29,7 @@
  * Keys: [Censor] Enable=1, Online=0, Log=0 (a line per armed count change, 'censor:').
  */
 #define KLCN_ACTOR_VT 0x00bb3bac              /* ZFFActor */
-#define KLCN_MAX      256
+#define KLCN_MAX      1024                    /* FA maps with many civilians + guards + cops can pass 256 actors (owner wants more civilians) */
 #define KLCN_ARM      0.9995f
 
 static struct {
