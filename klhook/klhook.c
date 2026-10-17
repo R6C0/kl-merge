@@ -641,6 +641,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klhud_board.c"                             /* AFTER klhud_tags.c: the pre-round panel in the new look ([HUD] Board, default 0) */
 #include "klhud_board2.c"                            /* AFTER klhud_board.c: the round-over scoreboard ([HUD] Scoreboard, default 0) */
 #include "klshoulder.c"
+#include "klcam.c"                                      /* klcam.c: the camera rework ([Camera], default on; Log off) */
 #include "klvis.c"
 #include "kltex.c"                                        /* kltex.c: [Graphics] Textures - anisotropic filtering (default on) */
 #include "klnet.c"
@@ -765,6 +766,7 @@ static void klh_tick(int game_thread)
     klkf_tick(game_thread);                           /* klhud_kill.c: the kill / reward line under REWARDS (off unless [HUD] KillLine / Draft) */
     klpu_tick(game_thread);                           /* klhud_popup.c: centre pop-ups + loot ring (after klu_tick; off unless [HUD] Popups / LootRing / Draft) */
     klo_tick(game_thread);                            /* klshoulder.c: log only */
+    klcam_tick(game_thread);                          /* klcam.c: the camera rework (game thread, gameplay site only) */
     klvis_tick();                                     /* klvis.c: log only (the vision grid and its record 0xff) */
     klnet_tick(game_thread);                          /* klnet.c: multiplayer log / update numbers (off unless [Net]) */
     klp_tick(game_thread);                            /* klfed.c: come back as a fed (data writes only) */
@@ -1107,6 +1109,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klkf_init();                                      /* klhud_kill.c: after klu_init */
     klpu_init();                                      /* klhud_popup.c: after klu_init, it reads [HUD] with klhud.c's helpers */
     klo_init();
+    klcam_init();
     klvis_init();
     klnet_init();
     klp_init();
