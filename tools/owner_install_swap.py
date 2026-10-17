@@ -51,10 +51,26 @@ def fed_pools(text):
     return [p for p in parts[1:] if re.search(r'(?m)^On=Fed(Respawn|Kill)\s*$', p)]
 
 
-def add_fed(text, src_text):
+def loc_missing(zpath, keys):
+    """-> keys found in NONE of the zip's English .LOC (a pool naming them is a failed lookup at run time)"""
+    import zipfile
+    with zipfile.ZipFile(zpath) as z:
+        locs = [n for n in z.namelist() if re.search(r'Main_?English\.LOC$', n, re.I)]
+        data = z.read(locs[0]) if locs else b''
+    return [k for k in keys if k.encode('latin1') not in data]
+
+
+def add_fed(text, src_text, zpath=None):
     if re.search(r'(?m)^On=FedKill\s*$', text):
         return text, 0
     blocks = fed_pools(src_text)
+    if zpath:
+        # The Fed pools name stock Dog Days keys, but a converted map's own .LOC has them only if its builder added them
+        # (DM03A's does; the v2final DM01B / DM06B do not): never ship a pool whose keys the level cannot resolve.
+        blocks = [b for b in blocks if not loc_missing(zpath, re.findall(r'(?m)^Key\.\d+=(.*?)\r?$', b))]
+        if not blocks:
+            print("KLTalk: Fed pools NOT appended - their keys are missing from this zip's .LOC")
+            return text, 0
     if not blocks:
         raise SystemExit('--talk-fed-from has no FedRespawn/FedKill pools')
     nl = '\r\n' if '\r\n' in text else '\n'
@@ -77,6 +93,8 @@ def main():
     ap.add_argument('--talk-fed-from'); ap.add_argument('--delete-old', action='store_true'); ap.add_argument('--dry-run', action='store_true')
     a = ap.parse_args()
     mid, owner, staged = a.map, a.owner, a.staged
+    if os.path.normcase(os.path.abspath(owner)).startswith(os.path.normcase(os.path.abspath(a.game))):
+        raise SystemExit('--owner must not be inside the game folder')
     maps = os.path.join(owner, 'Maps')
     mf = os.path.join(owner, 'Install.manifest.json')
     man = json.load(open(mf))
@@ -135,7 +153,7 @@ def main():
     if talk_src:
         t = open(os.path.join(staged, talk_src), 'rb').read().decode('latin1')
         if a.talk_fed_from:
-            t, k = add_fed(t, open(a.talk_fed_from, 'rb').read().decode('latin1'))
+            t, k = add_fed(t, open(a.talk_fed_from, 'rb').read().decode('latin1'), final_zip)
             print('KLTalk: appended %d Fed pool(s)' % k)
         open(os.path.join(build, 'KLTalk.ini'), 'wb').write(t.encode('latin1'))
     for n in sorted(os.listdir(build)):
