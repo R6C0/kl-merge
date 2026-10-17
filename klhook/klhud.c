@@ -1139,6 +1139,15 @@ static int klu_compose(int *state_ok)
        line: a dark painted stroke, the vehicle icon in chalk, the time right-aligned, a thin health bar under it (coral when low).
        klhud_escape.c (EscapeCard=1) keeps the stock panel's prompts and makes its plate, icon, bar and time invisible, and sets
        klu_esc_at for every frame the stock panel would have drawn. */
+    {   /* 2026-10-17: the card drew nothing into the log, so no run could say whether it showed: one line when it appears and one when it goes */
+        static int was; int is = klu_esc_at && GetTickCount() - (DWORD)klu_esc_at < 250 && klu.money;
+        if (klu.log && is != was) {
+            float fy; LONG fb2 = klu_esc_frac; memcpy(&fy, &fb2, 4);
+            if (is) klog("hud: van card ON at (%.0f, %.0f) %.0f wide, icon slot %ld (picture %s), health share %.2f", klu_r.mx - klu.money_w, klu_r.t[KLU_T_KILL].y + 18.0f + KLU_ESC_GAP, klu.money_w, klu_esc_slot, klu_esc_slot > 0 && klu_esc_slot < 200 && klu_r.handle[klu_esc_slot] ? "loaded" : "MISSING", fy);
+            else klog("hud: van card off (%s)", klu.money ? "the stock panel stopped drawing for 250 ms" : "[HUD] Money=0");
+        }
+        was = is;
+    }
     if (klu_esc_at && GetTickCount() - (DWORD)klu_esc_at < 250 && klu.money) {
         DWORD tobj = (DWORD)klu_esc_time, str; char tt[32] = ""; float y0 = klu_r.t[KLU_T_KILL].y + 18.0f + KLU_ESC_GAP, w = klu.money_w, x0 = klu_r.mx - w, frac; LONG fb = klu_esc_frac; int slot = (int)klu_esc_slot;
         memcpy(&frac, &fb, 4); if (!(frac >= 0)) frac = 0; if (frac > 1.0f) frac = 1.0f;
