@@ -114,6 +114,12 @@
  *   talk: said AllLevels/Oneliners/What/What_010_Kane at 71.44 s (Kane = record 0; chatter kane_idle; speech queue 0 -> 1)
  *   talk: NOT said <key> at ... : the game's speech is off (...)     /     talk: key <key> is not in this level's .LOC ...
  *
+ * THE FED (owner item 12, 2026-10-18, NOT RUN): [Pool.n] Who=Fed On=FedRespawn / On=FedKill (only those two words go with Who=Fed). FedRespawn: the local
+ *   player is a ZFFPlayer of type 3 with police byte 1 and his crew record 0 is back in play (status 0) - the 0 -> 1 edge. FedKill: the points pop-up's
+ *   message counter (klhud_kill.c, so it needs [HUD] KillLine or Draft) changes while he is police. Said with speaker -3 (GUESS), 15 s apart per event,
+ *   held up to 10 s while another line runs. Off unless the file has such a pool; an older hook refuses the unknown word (kl_dmlines --fed writes
+ *   the file as KLTalk.newhook.ini). Log: 'talk: fed: ...'.
+ *
  * THE THREE LINES IN klhook.c:  #include "kltalk.c" after klcrew.c;  klk_tick(game_thread) after klw_tick;  klk_init()
  * after klw_init().
  */
@@ -135,10 +141,10 @@
 #define KLK_NENTRY     320
 #define KLK_NSAID      512
 
-enum { KLK_KANE = 1, KLK_LYNCH = 2, KLK_ANY = 3, KLK_SQUAD1 = 4, KLK_SQUAD2 = 5 };
+enum { KLK_KANE = 1, KLK_LYNCH = 2, KLK_ANY = 3, KLK_SQUAD1 = 4, KLK_SQUAD2 = 5, KLK_FED = 6 };
 enum { KLK_N_KANE = 1, KLK_N_LYNCH, KLK_N_BOTH, KLK_N_KANEONLY, KLK_N_LYNCHONLY };
 enum { KLK_W_START = 1, KLK_W_STAGE1, KLK_W_STAGE2, KLK_W_STAGE3, KLK_W_ABOARD, KLK_W_JOIN, KLK_W_BOX };
-enum { KLK_ON_IDLE = 1, KLK_ON_MONEY, KLK_ON_DOWN, KLK_ON_STAGE2, KLK_ON_TRAITOR, KLK_ON_SHOOT, KLK_ON_WON };
+enum { KLK_ON_IDLE = 1, KLK_ON_MONEY, KLK_ON_DOWN, KLK_ON_STAGE2, KLK_ON_TRAITOR, KLK_ON_SHOOT, KLK_ON_WON, KLK_ON_FEDRESPAWN, KLK_ON_FEDKILL };
 static const char *const klk_needs_name[6] = { "?", "Kane", "Lynch", "Both", "KaneOnly", "LynchOnly" };
 
 struct klk_line { int who; float at, len; char key[KLK_KEYLEN]; };
@@ -160,6 +166,7 @@ static struct {                                  /* the round */
     float next_idle, last_scene_line, last_chatter, member_last[KLW_NREC];
     DWORD money[KLW_NREC]; BYTE status[KLW_NREC], stage[KLW_NREC], flags[KLW_NREC]; char known[KLW_NREC];
     DWORD said[KLK_NSAID]; int nsaid, shooting, won;
+    int fed_was; LONG fed_kn; float fed_ev[2], fed_last[2];                       /* the Fed events: was he police last tick, the reward counter, when each was seen (-1 none) / last said */
     struct { int on, who; float at; char key[KLK_KEYLEN]; } reply;
 } klk_r;
 static struct { DWORD rules; char scene[160]; int n, toldfull; struct { DWORD hash; void *entry; int found; } e[KLK_NENTRY]; } klk_gen;      /* entries of this level generation */
@@ -197,8 +204,8 @@ static int klk_word(const char *v, const char *const *names, int n)
 
 static int klk_who_of(const char *v)
 {
-    static const char *const names[6] = { "", "Kane", "Lynch", "Any", "Squad1", "Squad2" };
-    return klk_word(v, names, 6);
+    static const char *const names[7] = { "", "Kane", "Lynch", "Any", "Squad1", "Squad2", "Fed" };      /* Fed: only the pools of the two Fed events (the local player is police) */
+    return klk_word(v, names, 7);
 }
 
 /* "who,key" -> who and key; "who,at,seconds,key" when at is given */
@@ -224,7 +231,7 @@ static int klk_split(const char *v, int *who, float *at, float *len, char key[KL
 static void klk_ini_value(const char *sec, const char *k, const char *v, int *bad)
 {
     static const char *const whens[8] = { "", "Start", "Stage1", "Stage2", "Stage3", "Aboard", "Join", "Box" };
-    static const char *const ons[8] = { "", "Idle", "Money", "Down", "Stage2", "Traitor", "Shoot", "Won" };
+    static const char *const ons[10] = { "", "Idle", "Money", "Down", "Stage2", "Traitor", "Shoot", "Won", "FedRespawn", "FedKill" };
     int n;
     if (!_stricmp(sec, "Talk")) {
         if (!_stricmp(k, "Version")) klk_lv.version = atoi(v);
@@ -262,7 +269,7 @@ static void klk_ini_value(const char *sec, const char *k, const char *v, int *ba
         p = &klk_lv.pool[n - 1]; if (n > klk_lv.npool) klk_lv.npool = n;
         if (!_stricmp(k, "Name")) snprintf(p->name, sizeof p->name, "%s", v);
         else if (!_stricmp(k, "Who")) { if (!(p->who = klk_who_of(v))) (*bad)++; }
-        else if (!_stricmp(k, "On")) { if (!(p->on = klk_word(v, ons, 8))) (*bad)++; }
+        else if (!_stricmp(k, "On")) { if (!(p->on = klk_word(v, ons, 10))) (*bad)++; }
         else if (!_strnicmp(k, "Key.", 4)) {
             int i = atoi(k + 4);
             if (i < 1 || i > KLK_NKEY || strlen(v) >= KLK_KEYLEN - 8) { (*bad)++; return; }
@@ -509,6 +516,67 @@ static int klk_chatter_say(const struct klw_who *w, int i, const char *key, cons
     return klk_say(key, rec, rt, what, rules, scene);
 }
 
+/* ---- the Fed events (owner item 12): the local player is police after his death. Own reader: klfed.c comes after this file,
+   and klw_who_now takes only players 0..3 (a fed is 'object 9': it reads no player and gives type 0). Fields as klfed.c klp_read. */
+#ifndef KLK_PLAYER_VT
+#define KLK_PLAYER_VT 0x00bb45f4                  /* ZFFPlayer */
+#endif
+static volatile LONG klkf_n_new;                  /* klhud_kill.c (included later): counts the points pop-up's new messages, only while [HUD] KillLine / Draft is on */
+
+/* the local player is a policeman AND his crew record is back in play (status 0: the place is set 5 s after death, a read a tick early shows status 1) */
+static int klk_fed_now(const struct klw_who *w)
+{
+    DWORD gd, pl; BYTE sel = 0xff, type = 0, pol = 0;
+    if (w->human < 0 || w->m[w->human].status != 0) return 0;
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x898, &sel, 1) || sel >= 28) return 0;
+    if (!(pl = klh_rd32(gd + 0x828 + 4 * sel)) || klh_rd32(pl) != KLK_PLAYER_VT || !klh_rd(pl + 0x273c, &type, 1) || !klh_rd(pl + 0x2723, &pol, 1)) return 0;
+    return type == 3 && pol == 1;
+}
+
+/* a key of a Who=Fed pool for that event: an unused one when there is one, else any (a fed may come back several times). No `_C<n>`. */
+static int klk_fed_key(int on, char key[KLK_KEYLEN])
+{
+    int p, k, n, pick, any;
+    for (any = 0; any < 2; any++) {
+        for (pick = -1; ; pick = (int)klk_rnd((DWORD)n)) {
+            n = 0;
+            for (p = 0; p < klk_lv.npool; p++) {
+                if (klk_lv.pool[p].who != KLK_FED || klk_lv.pool[p].on != on) continue;
+                for (k = 0; k < klk_lv.pool[p].nkeys; k++) {
+                    if (!klk_lv.pool[p].key[k][0] || (!any && klk_was_said(klk_hash(klk_lv.pool[p].key[k])))) continue;
+                    if (n++ == pick) { strcpy(key, klk_lv.pool[p].key[k]); return 1; }
+                }
+            }
+            if (!n || pick >= 0) break;
+        }
+    }
+    return 0;
+}
+
+/* One tick of the Fed events (session state 0x19 only). A line is held up to 10 s while another is being said. */
+static void klk_fed_tick(const struct klw_who *w, float rt, int busy, const char *scene)
+{
+    static const int ev[2] = { KLK_ON_FEDRESPAWN, KLK_ON_FEDKILL }; static const char *const nm[2] = { "respawn", "kill" };
+    int fed, e; char key[KLK_KEYLEN], what[96];
+    if (!klk.chatter || (!klk_has_pool(KLK_ON_FEDRESPAWN) && !klk_has_pool(KLK_ON_FEDKILL))) return;
+    fed = klk_fed_now(w);
+    if (fed && !klk_r.fed_was) { klk_r.fed_ev[0] = rt; if (klk.log) klog("talk: fed: the local player is police now (record %d back in play) at %.2f s", w->m[w->human].rec, rt); }
+    if (fed && klkf_n_new != klk_r.fed_kn) { klk_r.fed_ev[1] = rt; if (klk.log) klog("talk: fed: a new reward message at %.2f s (klhud_kill.c counter %ld -> %ld)", rt, (long)klk_r.fed_kn, (long)klkf_n_new); }
+    klk_r.fed_kn = klkf_n_new; klk_r.fed_was = fed;
+    for (e = 0; e < 2; e++) {
+        if (klk_r.fed_ev[e] < 0) continue;
+        if (!fed || rt - klk_r.fed_ev[e] > 10.0f) { klk_r.fed_ev[e] = -1; continue; }                 /* gone, or too late to still fit */
+        if (busy || rt - klk_r.fed_last[e] < 15.0f || rt - klk_r.last_scene_line < klk_lv.quiet || rt - klk_r.last_chatter < klk_lv.quiet) continue;
+        if (e == 1 && (int)klk_rnd(100) >= klk_lv.event_chance) { klk_r.fed_ev[e] = -1; continue; }
+        klk_r.fed_ev[e] = -1;
+        if (!klk_fed_key(ev[e], key)) continue;
+        snprintf(what, sizeof what, "the fed (record %d); %s", w->m[w->human].rec, nm[e]);
+        klk_mark_said(klk_hash(key)); klk_r.fed_last[e] = rt;
+        klk_say(key, -3, rt, what, w->rules, scene);                    /* speaker -3 = the police side (GUESS, re/bots_voice.md 1.4); a plain line plays whatever the speaker byte is */
+        return;
+    }
+}
+
 static void klk_new_round(DWORD rules)
 {
     int i;
@@ -519,6 +587,7 @@ static void klk_new_round(DWORD rules)
     for (i = 0; i < KLK_NSCENE; i++) klk_r.box_at[i] = -1;
     for (i = 0; i < KLW_NREC; i++) klk_r.member_last[i] = -1;
     klk_r.last_scene_line = klk_r.last_chatter = -1000;
+    klk_r.fed_ev[0] = klk_r.fed_ev[1] = -1; klk_r.fed_last[0] = klk_r.fed_last[1] = -1000; klk_r.fed_kn = klkf_n_new;
 }
 
 static void klk_tick(int game_thread)
@@ -624,6 +693,9 @@ static void klk_tick(int game_thread)
         if (++klk_r.sc_next[i] >= sc->nlines) klk_r.sc_state[i] = 2;
         break;
     }
+
+    /* ---- the fed (Who=Fed pools; nothing unless the file has them) */
+    if (w.state == KLK_ROUND) klk_fed_tick(&w, rt, busy, scene);
 
     /* ---- chatter */
     if (!klk.chatter || (!klk_lv.npool && !klk_lv.npair)) return;

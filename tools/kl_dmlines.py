@@ -12,6 +12,8 @@ kl_snd.merge maps into the merged stream file):
     Multiplayer/GameEnds/FA_AllDead                  'Got 'em all. Every last one of 'em - bunch of fucking amateurs.'
     Multiplayer/Shoot_Off_Money/FA_ShootOffMoney_01  'Drop the cash or I'll shoot!'
 --extra adds the police-side families (GUESS: nothing says them yet; for e5's field repoints).
+--fed adds PoliceReward_01..06 and CallExitVehiclePolice_01/_02 and, in KLTalk.newhook.ini, two Who=Fed pools
+(On=FedRespawn, On=FedKill): what the local player says as a fed. Needs the hook that knows those words.
 
 Outputs, in <out folder>: <slot>_Main.zip (only .SND and the nine .LOC members differ), .WHD, .WAV,
 KLTalk.ini (UNCHANGED copy, or absent: safe with every installed hook), KLTalk.newhook.ini (the same
@@ -30,6 +32,13 @@ EXTRA = ['Multiplayer/GameEnds/FA_AllEscapedPolice', 'Multiplayer/GameEnds/FA_Ti
          'Multiplayer/GameEnds/FA_TimeOutPolice_02', 'Multiplayer/CallExitVehiclePolice/FA_CallExitVehiclePolice_01',
          'Multiplayer/CallExitVehiclePolice/FA_CallExitVehiclePolice_02', 'Multiplayer/PoliceReward/FA_PoliceReward_02']
 POOLS = [('won', 'Won', CORE[0]), ('shoot', 'Shoot', CORE[1])]
+# --fed: the police side for the local player who came back as a fed (owner item 12; hook kltalk.c On=FedRespawn / On=FedKill, Who=Fed).
+# PoliceReward_01..06 are the take-out lines ('Well done officer, a reward is coming up.': read from the Dead Men .LOC text). GUESS: the
+# respawn has no key of its own; CallExitVehiclePolice_01/_02 ('Don't let the fuckers get away.', 'He's slipping away. Kill him.') are the
+# only police lines with no time, place or vehicle in them (TimeReminderPolice is '1 minute till reinforcements', the briefings name a place).
+FED_RESPAWN = ['Multiplayer/CallExitVehiclePolice/FA_CallExitVehiclePolice_01', 'Multiplayer/CallExitVehiclePolice/FA_CallExitVehiclePolice_02']
+FED_KILL = ['Multiplayer/PoliceReward/FA_PoliceReward_0%d' % i for i in range(1, 7)]
+FED_POOLS = [('fedrespawn', 'FedRespawn', FED_RESPAWN), ('fedkill', 'FedKill', FED_KILL)]
 WHO = ['Kane', 'Lynch', 'Any', 'Squad1', 'Squad2']
 
 
@@ -40,29 +49,32 @@ def slot_of(zf):
     raise ValueError('no _Main.SND in the archive')
 
 
-def pools_text(first):
+def pools_text(first, fed=False):
     out, n = [], first
     for name, on, key in POOLS:
         for who in WHO:
             out += ['[Pool.%d]' % n, 'Name=dm_%s_%s' % (name, who.lower()), 'Who=%s' % who, 'On=%s' % on, 'Keys=1', 'Key.1=%s' % key]
             n += 1
+    for name, on, ks in (FED_POOLS if fed else []):
+        out += ['[Pool.%d]' % n, 'Name=dm_%s' % name, 'Who=Fed', 'On=%s' % on, 'Keys=%d' % len(ks)] + ['Key.%d=%s' % (i + 1, k) for i, k in enumerate(ks)]
+        n += 1
     return out, n - 1
 
 
-def ini_variant(old, count_of_pools_line=True):
+def ini_variant(old, count_of_pools_line=True, fed=False):
     """old: bytes of the installed KLTalk.ini or None -> bytes of the new-hook variant."""
     if old is None:
         head = ['; written by tools/kl_dmlines.py - hook part kltalk, Shoot / Won pools only (Dead Men FA lines)',
                 '[Talk]', 'Version=1', 'Map=DM', 'Kane=0', 'Lynch=0', 'StreamBytes=0',
                 '[Chatter]', 'Gap=40,90', 'MemberGap=25', 'Quiet=8', 'EventChance=100', 'Once=1', 'Speakers=1']
-        pl, _ = pools_text(1)
+        pl, _ = pools_text(1, fed)
         return ('\r\n'.join(head + pl) + '\r\n').encode('latin1')
     t = old.decode('latin1')
     nums = [int(m) for m in re.findall(r'(?m)^\[Pool\.(\d+)\]', t)]
     first = max(nums or [0]) + 1
-    if first + len(POOLS) * len(WHO) - 1 > 32:
+    if first + len(POOLS) * len(WHO) + (len(FED_POOLS) if fed else 0) - 1 > 32:
         raise ValueError('KLK_NPOOL (32) would be exceeded: %d pools already' % (first - 1))
-    pl, last = pools_text(first)
+    pl, last = pools_text(first, fed)
     nl = '\r\n' if '\r\n' in t else '\n'
     if not t.endswith('\n'):
         t += nl
@@ -71,13 +83,13 @@ def ini_variant(old, count_of_pools_line=True):
     return (t + nl.join(pl) + nl).encode('latin1')
 
 
-def run(folder, out, extra=False, log=print):
+def run(folder, out, extra=False, log=print, fed=False):
     folder, out = os.path.abspath(folder), os.path.abspath(out)
     zp = [os.path.join(folder, f) for f in os.listdir(folder) if f.lower().endswith('_main.zip')][0]
     prefix = zp[:-4]
     sname = os.path.basename(zp)[:-4]                      # F07_Main
     os.makedirs(out, exist_ok=True)
-    keys = CORE + (EXTRA if extra else [])
+    keys = CORE + (EXTRA if extra else []) + (FED_RESPAWN + FED_KILL if fed else [])
     with zipfile.ZipFile(zp) as zf:
         snd_name, _slot = slot_of(zf)
         snd = zf.read(snd_name + '.SND')
@@ -137,7 +149,7 @@ def run(folder, out, extra=False, log=print):
     if old is not None:
         shutil.copyfile(ini, os.path.join(out, 'KLTalk.ini'))
     if have_wardrobe or old is not None:
-        open(os.path.join(out, 'KLTalk.newhook.ini'), 'wb').write(ini_variant(old))
+        open(os.path.join(out, 'KLTalk.newhook.ini'), 'wb').write(ini_variant(old, fed=fed))
     log('%s: %d keys grafted, problems %s' % (info['map'], len(want), problems or 'none'))
     return info
 
@@ -146,4 +158,4 @@ if __name__ == '__main__':
     a = [x for x in sys.argv[1:] if not x.startswith('--')]
     if len(a) != 2:
         print(__doc__); sys.exit(2)
-    run(a[0], a[1], '--extra' in sys.argv)
+    run(a[0], a[1], '--extra' in sys.argv, fed='--fed' in sys.argv)

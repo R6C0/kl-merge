@@ -435,6 +435,11 @@ fills the police actors' `+0x694` was never traced. Pointing it at a Dead Men de
 cannot be proven offline. Route for later: a kltalk pool event for the fed (Who = a policeman does not exist yet in
 kltalk.c), or 6.5's write on the respawned type-3 player once a live run shows his `+0x1e8`.
 
+**6.6c Done in the hook, not run (2026-10-18).** The fed's lines are hook events, not a bark set: `klhook/kltalk.c` `Who=Fed` pools with `On=FedRespawn` /
+`On=FedKill`; `tools/kl_dmlines.py --fed` grafts the lines and writes the pools. Texts read from the Dead Men .LOC: PoliceReward_01..06 are the take-out lines
+('Well done officer, a reward is coming up.'), so FedKill uses them. There is NO respawn key; FedRespawn uses CallExitVehiclePolice_01/_02 (GUESS, the only
+generic police lines). Ears: does a plain line sound for a fed; does speaker -3 matter; does the edge fire once; does the reward pop-up show for his own kills.
+
 ## 7. For the AI heister graft (b-bots / the lead)
 
 1. **Keep the group names** `Glazer_Bodyguard_02 .. _08`, or any name with a digit '1'..'8' at
