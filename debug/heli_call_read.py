@@ -413,11 +413,105 @@ def hvk_compare(zpath):
     return out
 
 
+def exe_flight(C):
+    """Flight start (2026-10-17): 0x80dcd0 -> 0x791090, link 0x4aff50, init 0x815aa0. Shape checks on the disassembly; returns False on FAIL."""
+    ok = True
+    def txt(a, n):
+        return ' | '.join('%s %s' % (m, o) for _a, m, o in C.dis(a, n))
+    for what, a, n, need in [
+        ('0x80dcd0 start', 0x80dcd0, 0x30, [r'mov eax, dword ptr \[ecx \+ 0x74\]', r'call 0x791090']),
+        ('0x791090 deliver', 0x791090, 0x200, [r'dword ptr \[edi \+ 0x38\]', r'call 0x81b1f0', r'call 0x48c0f0', r'call 0x7f6750']),
+        ('0x815aa0 init', 0x815aa0, 0x400, [r'0x1535878', r'0x168ce48', r'call 0x469910']),
+        ('0x4aff50 squad link', 0x4aff50, 0x300, [r'call 0x598460'])]:
+        t = txt(a, n)
+        miss = [rx for rx in need if not re.search(rx, t)]
+        if miss:
+            ok = False
+            line('FAIL', what, 'not as read: ' + '; '.join(miss))
+        else:
+            line('PASS', what, 'shape as read')
+    # adversarial pass (2026-10-17): the early-outs the first reading left out, and what the goal object really is
+    t = txt(0x791090, 0x200)
+    for rx, msg in [(r'cmp byte ptr \[eax \+ 0xbc\], 0', '0x791110: exits when [actor+0xbc] != 0 (one-shot flag, set at 0x791138 when [rout+0x43])'),
+                    (r'cmp dword ptr \[eax \+ 0x8c\], 0', '0x7910c1: with 0x81b1f0 true and [actor+0x8c]==0 a goal whose class name != ZVehicleSpecialMoveBehaviour is dropped')]:
+        if re.search(rx, t):
+            line('NOTE', 'extra early-out', msg)
+        else:
+            ok = False
+            line('FAIL', 'extra early-out', 'not as read: ' + msg)
+    t = txt(0x7f6750, 0x100)
+    if re.search(r'cmp dword ptr \[esi \+ 0x8c\], 0', t) and re.search(r'mov dword ptr \[esi \+ 0x154\], edi', t) and re.search(r'je 0x7f682a', t):
+        line('NOTE', 'extra early-out', '0x7f6750 stores [actor+0x154]=goal only if [actor+0x8c] or [actor+0x90] is set OR goal vfunc +0x34 is true (else je 0x7f682a returns)')
+    else:
+        ok = False
+        line('FAIL', 'add-goal shape', '0x7f6750 not as read')
+    vt = 0xbcd65c
+    nm = C.rt.by_vtable.get(vt)
+    s24, s34, s1c = C.e.u32(vt + 0x24), C.e.u32(vt + 0x34), C.e.u32(vt + 0x1c)
+    stub = txt(s24, 4) if s24 else ''
+    if nm and 'ZHeliFlyBehaviour' in str(nm) and s24 == s34 and 'xor al, al' in stub:
+        line('PASS', 'goal class', 'the goal built by 0x469910 is %s (vtable %#x), NOT ZHeliFlyGoal; its vfuncs +0x24/+0x34 return false, so 0x7f6750 relies on [actor+0x8c]/[actor+0x90]' % (nm, vt))
+    else:
+        ok = False
+        line('FAIL', 'goal class', 'vtable %#x is %r, slots %s %s' % (vt, nm, s24, s34))
+    t = txt(0x74a940, 0x60)
+    if 'call 0x78d6e0' in t and '0xbd17ac' in t:
+        line('NOTE', 'ZHeliFlyGoal', 'ZHeliFlyGoal (vtable 0xbd183c) is built by 0x78d6e0 inside the controller ctor 0x74a940 (vtable 0xbd17ac, kept at ZHeli+0x7bc, goal at +0x8c): a member of the heli, not the goal of the rout')
+    else:
+        ok = False
+        line('FAIL', 'ZHeliFlyGoal', '0x74a940 not as read')
+    return ok
+
+
+def flight_data(zpath):
+    """Per build: the inputs the flight start reads (squad controller on the parent, spline child, ZHeli with HeliScriptRout, target refs)."""
+    import kl_fa
+    sc, ents, res = data_side(zpath, 'dd', 'build')
+    mine = [d for d in res if d['path'].startswith(HELI)]
+    if len(mine) != 1:
+        line('UNKNOWN', 'flight data', 'no single chopper group')
+        return
+    d = mine[0]
+    k = d['group']
+    par = sc.parent[k]
+    pc = ctrl_names(sc, par)
+    line('PASS' if 'ZSquadScript' in pc else 'FAIL', 'squad on parent', '%s controllers %s (0x4aff50 needs ZSquadScript/ZMercSquad/ZFusionSquad/ZProxySquad)' % (sc.path[par], pc))
+    for lbl, i in (('Incomming', 0), ('Escaping', 1)):
+        t = d['tnodes'][i]
+        if not t:
+            line('FAIL', lbl, 'field %d does not resolve' % i)
+            continue
+        kids = [sc.cls(c) for c in range(t + 1, sc.end[t]) if sc.parent[c] == t]
+        spl = [c for c in kids if 'Spline' in str(c)]
+        rc = [n for n in ctrl_names(sc, t) if 'HeliFly' in n]
+        line('PASS' if (spl and rc) else 'FAIL', lbl + ' rout group', 'spline child %s, rout %s (0x815aa0 returns with no goal without the spline child)' % (spl, rc))
+        if rc:
+            try:
+                import struct as _st
+                v = [vv for n, vv in sc.nodes[t]['ctrls'] if sc.p.key(n) == 'HeliFlyBehaviourRout'][0]
+                ints = [_st.unpack('<i', b)[0] for ty, b in v if ty == 4]
+                fl = [_st.unpack('<f', b)[0] for ty, b in v if ty == 10]
+                line('NOTE', lbl + ' values', 'floats (speed, ...) %s, ints (two EHeliFacingMode-like enums, 0=FACE_SPLINE, 1=FACE_SPLINE_90DEG_CW) %s; stock DD incoming routs are (0,1) mostly, (1,1) in F02/F06 too' % (fl, ints))
+                spl = [c for c in range(t + 1, sc.end[t]) if sc.parent[c] == t and 'Spline' in str(sc.cls(c))]
+                if spl and (ents[spl[0] - 1].flags & HIDDEN):
+                    line('FAIL', lbl + ' spline flag', '0x815aa0 skips children whose [+0x3c] bit 10 is set: the spline carries 0x400')
+            except Exception:
+                pass
+    heli = [c for c in range(par + 1, sc.end[par]) if str(sc.cls(c)) == 'ZHeli']
+    hs = [c for c in heli if 'HeliScriptRout' in ctrl_names(sc, c)]
+    if heli and any(ents[c - 1].flags & HIDDEN for c in heli):
+        line('FAIL', 'ZHeli flag', '0x815b96 skips a ZHeli whose [+0x3c] bit 10 is set: it carries 0x400')
+    line('PASS' if hs else 'FAIL', 'ZHeli under parent', 'ZHeli nodes %s, with HeliScriptRout %s (0x815aa0 needs the HeliScript object)' % (heli, hs))
+    line('UNKNOWN', 'motion mechanism', 'how ZHeli control state (+0x7d0..0x86c) becomes body motion: not located')
+    line('UNKNOWN', 'HVK start pose', 'consumer of the type-3 placement list (wrapper+0x14c4) not located')
+
+
 def main():
     t0 = time.time()
     arg = sys.argv[sys.argv.index('--build') + 1] if '--build' in sys.argv else None
     C = Code()
     ok_exe = exe_side(C)
+    ok_exe = exe_flight(C) and ok_exe
     zpath = find_zip(arg) if arg else default_build()
     if arg and not zpath:
         line('FAIL', 'build', 'no *_Main.zip under %s' % arg)
@@ -429,6 +523,10 @@ def main():
         except Exception as x:
             line('FAIL', 'build wiring', 'unreadable: %r' % (x,))
         try:
+            flight_data(zpath)
+        except Exception as x:
+            line('NOTE', 'flight data', 'failed: %r' % (x,))
+        try:
             stock_compare()
         except Exception as x:
             line('NOTE', 'stock', 'compare failed: %r' % (x,))
@@ -438,7 +536,7 @@ def main():
             line('NOTE', 'hvk', 'compare failed: %r' % (x,))
     else:
         line('NOTE', 'build', 'no heli build found: only the exe side was proven')
-    line('NOTE', 'still unknown', 'what ZHeliFlyBehaviourRout start (%s) does after AITrigger (goal object at [rout+0x74], 0x791090) was not followed to the flight; '
+    line('NOTE', 'still unknown', 'what ZHeliFlyBehaviourRout start (%s) does after AITrigger (goal object at [rout+0x74], 0x791090) was followed to the goal hand-over (see exe_flight) but not to the first body movement; '
          'a live run is the proof (log lines "hud: van card ON ... picture 171", "van 1+")' % '0x80dcd0')
     print('elapsed %.1f s' % (time.time() - t0))
     if fails:
