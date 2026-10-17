@@ -618,6 +618,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klcrew_rt.c"
 #include "klgun.c"
 #include "klset.c"                                        /* klset.c: the Mod settings rows (answered through klchar.c's option vtable) */
+#include "klpm.c"                                         /* klpm.c: private-match options KLMGun / KLMVote / KLMPlay (off unless [Match] Enable); BEFORE klchar.c */
 #include "klchar.c"
 #include "klcrew.c"
 #include "kltalk.c"
@@ -1091,6 +1092,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klj_init();
     klt_init();
     klc_init();
+    kpm_init();                                       /* klpm.c: [Match] (default off) */
     klw_init();
     klnm_init();
     klk_init();
