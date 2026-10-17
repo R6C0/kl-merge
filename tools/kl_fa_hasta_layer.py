@@ -6,6 +6,7 @@ below the proof: spawns, loot, bounds, van, squads, wiring, finish, check, test)
     python kl_fa_hasta_layer.py test <out> [--keep] [--plan plan.json] [--no-ai] [--no-police] [--squads-awake] [--blast [S]] [--lock-wing] [--lock-show]
         --blast [S]: ALSO the timer-driven corner blast (kl_fa_hasta_blast.py; S s after the round start, default 1.5). Without it nothing of it runs.
         --lock-wing: the loot wing (door block, bunker wall + check block) stays SHUT until the 6 hall squads are wiped out (or the backstop); see LOCK_WING.
+        --corner-floor: show SO0201_M11_CornerBroken_01 from the load, the floor of the corner-hole route; see CORNER_FLOOR.
         --lock-show (with --lock-wing): the beat also plays the campaign's bunker blast (dust / fire / smoke emitters, remains, barrels gone); see LOCK_SHOW.
         F07 + M11_B --campaign with Doors armed AND this module as the authored layer -> <out>/F07+M11_B campaign; finish(),
         check(). kl_fa_hasta.py `build` runs this, then lighten, wardrobe, compact (the MEASURED order, tooling 3.5).
@@ -165,6 +166,16 @@ class Doors:
             st['sink'][k], st['old'][k], st['prp_w'][k] = cls.dy, old, (before, cls.prp_world(sc, k))
             st['tree'][k] = subtree(sc, k)
             st['what'][k] = what
+        st['show'] = []
+        if CORNER_FLOOR:                                # the corner hole's floor piece: shown from the load (see CORNER_FLOOR)
+            for nm in CORNER_FLOOR_NODES:
+                hit = [k for k in range(1, len(sc.names)) if sc.names[k] == nm]
+                if len(hit) != 1:
+                    raise KeyError('%s: %d nodes named %s' % (sc.label, len(hit), nm))
+                k = hit[0]
+                lab = J.labels('dd', sc.cls(k))
+                kl_fa.edit(sc, k, None, lambda us, lab=lab: A.setv(sc, us, lab.index('ZGEOM[3]'), 0))
+                st['show'].append(k)
         log('  kl_fa_hasta_layer: doors: %d nodes sunk by %g (world y) in the joined .prp (matched by name); %d in a parent frame '
             'with another y axis than the world\'s' % (len(st['sink']), -cls.dy, tilted))
         return done
@@ -183,6 +194,8 @@ class Doors:
             Rm = world_of(e.parent)[1] if e.parent is not None else [[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]]
             done['move'][k] = tuple(t[a] + Rm[1][a] * cls.dy for a in range(3))      # place_entities writes it into the record
         refs = set(cls.real[1](sc, ents, done, log))
+        for k in st.get('show', ()):                    # CORNER_FLOOR: the .gms flag 0x400 off as well (the loader reads both)
+            ents[k - 1].flags = ents[k - 1].flags & ~A.HIDDEN
         for k in st['sink']:                            # the node and every descendant: their placements leave the .HVK
             refs |= {ents[j - 1].ref for j in st['tree'][k]}
         st['refs'] = sorted(refs)
@@ -325,6 +338,11 @@ POLICE_ARRIVE = True                    # False ('--no-police')
 BLAST_AT = None                         # seconds ('--blast [S]'): the timer-driven corner blast of kl_fa_hasta_blast.py, S s after the round start (default 1.5). None = off (the build is then unchanged)
 VOICE = True
 M_DROP = ()                             # what the campaign pre-pass drops on top of its own rule (GUESS: nothing; the first build's verify says)
+CORNER_FLOOR = False                    # True ('--corner-floor'): SO0201_M11_CornerBroken_01 is shown from the load. False = build unchanged
+CORNER_FLOOR_NODES = ('SO0201_M11_CornerBroken_01',)
+# CORNER_FLOOR (re/hasta_fa.md, handover 2026-10-18). The corner-hole route (HOLE y ~800 -> street) rests on this piece, which the campaign hides until the corner
+# blast; hidden at load, its collision is probably not in the world, so the crew drops to the street: 'you fall to your death'. Corner_01 (the intact corner) stays sunk.
+# GUESS: the broken piece does not block the hole itself (checked by the route test with hidden collision left out).
 LOCK_WING = False                       # True ('--lock-wing'): the loot wing is LOCKED until the hall squads are dead (or the backstop). False = build unchanged
 # LOCK_WING (re/hasta_fa.md, handover 'locked loot'). The run-time beat the design asked for, made the Retomoto main-room way (kl_fa_author: squads' 'dead' list -> TriggerCounter
 # -> a geometry switch) with the CAMPAIGN's own switch for the bunker: M11_B's top-level `GeomDeactivatorSandbags` (a DeactivateGeom, 'AITrigger') already names the bunker wall
@@ -1324,6 +1342,12 @@ def check(folder, log=print, problems=None):
         for t in sc.tops():
             if sc.cls(t) == 'ZSpawnPoint' and 'START' in kl_fa.node_values(sc, t)[8] and math.dist(pos[ents[t - 1]], b) < 1500:
                 fail('a START spawn point is %d from the boarding place' % math.dist(pos[ents[t - 1]], b))
+    if CORNER_FLOOR and os.path.isdir(folder):      # the corner-hole route must be walkable WITHOUT what is hidden at load (the proof of CORNER_FLOOR)
+        lvl = os.path.join(folder, 'F01_Main.zip')
+        for a_, b_ in ((START[0], HOLE), (HOLE, board())):
+            r_ = kl_route.route(lvl, [a_, b_], hidden=False)
+            if not r_['free']:
+                fail('CORNER_FLOOR: no walk %s -> %s with hidden collision left out' % (a_, b_))
     if HB.present(sc):                      # a level built with --blast: its objects, values and particle groups (read from the folder, not from the flag)
         bad += ['blast: ' + b for b in HB.check(os.path.join(folder, 'F01_Main.zip') if os.path.isdir(folder) else folder, log)]
     return bad
@@ -1334,6 +1358,8 @@ def flags_of():
                                 SINK_DY=SINK_DY)
     if BLAST_AT is not None:
         f['BLAST_AT'] = BLAST_AT
+    if CORNER_FLOOR:
+        f['CORNER_FLOOR'] = True
     if LOCK_WING:
         f['LOCK_WING'] = True
     if LOCK_SHOW:
@@ -1366,7 +1392,7 @@ def load_plan(folder):
 
 
 def main():
-    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, BLAST_AT, LOCK_WING, LOCK_SHOW
+    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, BLAST_AT, LOCK_WING, LOCK_SHOW, CORNER_FLOOR
     a = sys.argv[1:]
     if a[:1] == ['proof']:
         sys.exit(proof(a[1] if len(a) > 1 and not a[1].startswith('--') else 'C:/kl_scratch/hasta', '--keep' in a))
@@ -1376,6 +1402,7 @@ def main():
         POLICE_ARRIVE = '--no-police' not in a
         LOCK_WING = '--lock-wing' in a
         LOCK_SHOW = '--lock-show' in a
+        CORNER_FLOOR = '--corner-floor' in a
         if LOCK_SHOW and not LOCK_WING:
             sys.exit('--lock-show needs --lock-wing')
         if '--blast' in a:
@@ -1390,7 +1417,8 @@ def main():
         print('kl_fa_hasta_layer.plan: %s (stop %s, board %s)' % (a[2], P['stop'], P['board']))
     elif len(a) == 2 and a[0] == 'finish':
         sys.exit(1 if finish(a[1]) else 0)
-    elif len(a) == 2 and a[0] == 'check':
+    elif len(a) >= 2 and a[0] == 'check':
+        CORNER_FLOOR = '--corner-floor' in a
         load_plan(a[1])
         bad = check(a[1])
         print('RESULT: %s' % ('PASS' if not bad else 'FAIL'))

@@ -282,3 +282,30 @@ New code (layer): `LOCK_SHOW`, `SAND_TIMER`, `DUST_TIMER`, `SHOW_NODES`, `beat_f
 Default identical: the layer step (`kl_fa_hasta_layer.py test --keep`) from a HEAD worktree and from the edited tree gives F01_Main.zip md5 36ab6a82 both without a flag, and b66cd37f both with `--lock-wing` (no `--lock-show`). The full default chain from the HEAD worktree gives c23cb618 = M11B_fix; the edited tree's full default chain stopped at 'STOP: 2.9 GB free' (G: nearly full, MIN_FREE_GB 4) before its seal step, so the whole-chain default of the edited tree was NOT compared (steps 2..9 do not read the flags; step 1 is the compared one). The scratch builds were deleted to make room (M11B_fix, M11B_lockwing, M11B_talk/blast, full* untouched).
 Checks: `kl_fa_hasta.py checks` on the folder: impact 0, reverify 0, layer_check PASS (lock-wing + lock-show lines), fa / arms / chars / guns / bots / dyn / mapai ok; van_check 1, audit FAIL 2, preflight CRASH 1 = the known HVK +1,296 bytes / 6 stream-clip lines. `python debug/check_passes.py <folder>`: PASS A (3636 type-7 roots, 2927 .oct records), PASS B (163 clone groups, no orphan), PASS C1 / C2 / C3.
 GUESS: (1) the campaign's timer delays and message ('AITrigger') are right for Dog Days' TriggerDelay / ActivateGeom / DeactivateGeom (same classes, values unchanged); (2) un-hiding the Capitolio_Explosion emitters makes them play in Dog Days (the Retomoto/Hasta blast uses emitters from clone templates; these are the map's own); (3) Broken01 and AFTER01 are NOT hidden at load in the built level (flag and ZGEOM[3] equal to their intact siblings): the campaign evidently shows them from the start, so ActivateGeom's visible effect on them is unknown (may switch collision only); not hidden by this flag; (4) GeomDeactivatorExplosiveStuff removing the barrels / crates is wanted in FA (the campaign's own explosion does it); (5) one dust beat per round: the counter fires once, the backstop may fire it again at 300 s (re-activating emitters again: harmless?); (6) the dust may play at the bunker with the crew still in the hall (the beat is 'six squads dead', not the campaign's SevenDudesDead checkpoint). LIVE TO LOOK AT: wall/dust/smoke at the bunker when the hall is clear, barrels gone, wing open, no crash at load (the new nodes are scripts only; the emitters were in the lockwing build already).
+
+## Handover 2026-10-18 (kl-merge workflow, track 4): the second objective, "you fall to your death"
+
+Owner 2026-10-17: "you cannot reach the second objective point, you fall to your death". Second objective = the van / escape area (`POI_TheEscapeArea`, exit box at (25263, 0, 21800)).
+
+Finding (static, from `kl_route.py walk ... --hidden-out`, NOT yet seen live): the corner-hole route (START row y 800 -> HOLE (32095, 888, 29022) -> street) stands on
+`SO0201_M11_CornerBroken_01` (REF 23930), which the campaign HIDES until its corner blast; `Corner_01` (the intact corner) is sunk by Doors. The default walker counts hidden
+collision, so every earlier route proof passed. With hidden collision left out, the shipped build (`build/hasta_1017/M11B_lockshow/M11B`) has NO WAY on both legs
+(START -> HOLE: floors do not join; HOLE -> van: 93 floors reached) and its mesh way has 18 samples without a floor and 2 in a body column. If hidden collision does not collide in
+the game, the crew drops from y 800 to the street (y 0..20): the fall. GUESS: that is the cause; the game's treatment of hidden collision was not read.
+
+Fix: new flag `--corner-floor` (`kl_fa_hasta_layer.CORNER_FLOOR`; also `kl_fa_hasta.py chain ... --corner-floor`). Doors.repair sets the .prp `ZGEOM[3]=0` of `CORNER_FLOOR_NODES`, Doors.place clears the
+.gms flag 0x400 (both, as `kl_fa_author.place` does). Corner_01 stays sunk. `check()` under the flag (`check <folder> --corner-floor`) walks START -> HOLE -> boarding place with `hidden=False`.
+Proof on the built folder: both legs FREE (29 m + 157 m, floors y 800..873), mesh way 945 samples all free (kl_route walk --hidden-out).
+GUESS to watch live: the shown piece does not close the hole itself (the walk and the mesh way pass through it with 0 blockers).
+
+Builds (C:, G: has < 1 GB free; copy whole to `<work>/build/hasta_owner_1018/M11B_cornerfloor` when space exists):
+- `C:\kl_scratch\hasta_owner_1018\M11B` = `chain --blast --lock-wing --lock-show --corner-floor`; F01_Main.zip md5 ccdde3e86a1816b06566f8c38d1d725a; .prm 83.7 MB (limit 84.0 proven live); layer check PASS,
+  check_passes 0 failed. (3_ward `problems: 1` and 6_guns "6 stream clips" are the known expected lines.)
+- Default unchanged: layer step built from a HEAD worktree and from the edited tree, F01_Main.zip md5 36ab6a823797a3870344bd6e03f860ad both.
+- `kl_fa_hasta.py checks` reports layer_check FAIL on the OLD `hasta_1017/M11B` only (the pre-fix orphan clone groups Shards_Group_A / Artillery_Impact_Group), unrelated.
+
+HELICOPTER escape: NOT built. Plan for the next agent: a Hasta R09 donor (F07 + M06_FA_A chopper tops) via `kl_fa_club.heli_*` globals, exit trigger naming the chopper group,
+no `van_wire`, pad on the square (`SQUARE_Y` 20), bots parked at the pad, behind `--heli`; wiring must use the same fix as Last Call's `Incomming` rout (`re/heli_call.md`), which
+has not reached its rout live. The van is wired into `prepare_host`, `wire`, `build` and `van_check`, so removing it is a larger change than this flag.
+
+Review 2026-10-18 (adversarial): PASS. Copied whole to `<work>/build/hasta_owner_1018/M11B_cornerfloor` (md5 ccdde3e8 verified); default layer step re-built from a fresh HEAD worktree = 36ab6a82 both; CornerBroken shown (ZGEOM[3]=0, flag 0x400 off, HVK placement 23930 present), Corner_01 sunk (placement gone).
