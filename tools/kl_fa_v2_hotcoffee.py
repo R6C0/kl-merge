@@ -35,9 +35,7 @@ TITLE = 'Hot Coffee (campaign)'
 R = 'ROOT\\'
 HIDDEN = 0x400
 put, values, facing, world_of = BK.put, BK.values, BK.facing, BK.world_of
-KNOWN = (('asks for a shader the .fxc lacks', 'GUESS cosmetic: material 957 (Glass_Grid_01b_M01) has no compiled glass.fx MESH_STANDARD in the host .fxc, so those glass panes are not drawn; '
-          'collision is unaffected (not fixed: no donor shader)'),
-         ('stream clips are not in the merged stream file', 'the campaign level\'s music and ambience beds have no record in the installed PC_Def.str '
+KNOWN = (('stream clips are not in the merged stream file', 'the campaign level\'s music and ambience beds have no record in the installed PC_Def.str '
           '(a later stream-file step): those sounds are silent, nothing else'),)
 NO_AI = False                           # True ('--no-ai'): no squad of the campaign stays
 SQUADS_AWAKE = False                    # True ('--squads-awake'): ZSquadScript field 3 = 1 on all (fall-back if naming the start child does not wake a squad)
@@ -606,6 +604,76 @@ def complete(sc):
     return True
 
 
+# ------------------------------------------------------------------ glass: the compiled permutation Dog Days has
+def glass_fix(E, log=print):
+    """Dead Men's glass material (class Standard/Glass: reflection + specular, NO refraction) asks for a glass.fx permutation no Dog Days
+    level compiles: all 53 refraction-capable glass instances of Dog Days have Refraction2DEnabled = 1 and Dog Days' fxc caches hold only
+    glass.fx permutations with REFRACTION2DENABLED (kl_light.fit_shaders can only switch features OFF, so it found no fit). Fix, measured
+    2026-10-17: such an instance gets Refraction2DEnabled = 1 plus Dog Days' most common refraction nodes (mask texture 0, colour white,
+    scale 0.2 0.2 1 1: 29 of 53 stock instances), and the stock permutation that matches (glass.fx MESH_STANDARD with BLEND + REFLECTION + SPECULAR + STDSAMPLERSTATE +
+    USEDEFAULTREFLECTIONMAP + REFRACTION2D; F06's red beacon uses it) is copied into the level's .fxc from the stock level that holds it,
+    when the .fxc does not have it already. GUESS: that a clear pane with a faint 2D refraction (scale 0.2) looks acceptable; NOT SEEN LIVE. An instance
+    that still lacks a shader afterwards is put back as it was. -> [problems]"""
+    import copy, zipfile, kl_light, kl_mat, kl_texmat as T
+    from kl_port_check import find, level_zips, DD_GUESSES, DD_EXE
+    from kl_light import _kid, _bools, shader_cache, shader_needs, missing_shaders
+    bad = []
+    have = shader_cache(E.lv['.fxc'])
+    lack = missing_shaders(E.mat, have)
+    todo = [s for s, l in sorted(lack.items()) if all(x[0] == 'glass.fx' for x in l) and kl_mat.class_key(E.mat, E.mat.insts[s]) == ('Standard', 'Glass')
+            and 'REFRACTION2DENABLED' in _bools(E.mat.insts[s]) and not _bools(E.mat.insts[s])['REFRACTION2DENABLED'][1]]
+    if not todo:
+        log('  kl_fa_v2_hotcoffee: glass: no Standard/Glass instance lacks a shader (%d other lacking: %s)' % (
+            len(lack), [E.mat.insts[s].name for s in lack]))
+        return bad
+    new = {'gm_mapRefraction2DMask': [['ENAB', 2, 1, 1], ['TXID', 2, 1, 0], ['TILU', 1, 6, b'TILED'], ['TILV', 1, 6, b'TILED']],
+           'gm_vRefraction2DColor': [['ENAB', 2, 1, 1], ['VALU', 0, 4, struct.pack('<4f', 1, 1, 1, 1)]],
+           'gm_vRefraction2DScale': [['ENAB', 2, 1, 1], ['VALU', 0, 4, struct.pack('<4f', 0.2, 0.2, 1, 1)]]}
+    saved = {s: (copy.deepcopy(E.mat.insts[s].root), list(E.mat.insts[s].f)) for s in todo}
+    for s in todo:
+        e = E.mat.insts[s]
+        _kid(_bools(e)['REFRACTION2DENABLED'][0], 'VALU')[3] = 1
+        for n in _kid(e.root, 'BIND')[3]:
+            nm = _kid(n, 'NAME')[3].decode('latin1')
+            if nm in new and _kid(n, 'ENAB')[3] == 0 and len(n[3]) == 2:
+                _kid(n, 'ENAB')[3] = 1
+                n[3][1:] = copy.deepcopy(new[nm])
+                n[2] = len(n[3])
+        e.f[2] = kl_mat.feature_flags(e)
+    need = set()
+    for s in todo:
+        need |= {x for x in shader_needs(E.mat, E.mat.insts[s]) if x not in have}
+    dd = find(DD_GUESSES, DD_EXE)
+    got, ver = [], None
+    for z in sorted(level_zips(dd)):
+        if not need:
+            break
+        with zipfile.ZipFile(z) as zf:
+            names = [n for n in zf.namelist() if n.lower().endswith('.fxc')]
+            if not names:
+                continue
+            ver, ent = kl_mat.read_fxc(zf.read(names[0]))
+        for head, blob in ent:
+            d = [n for n, _v in T.fxc_defines(head)]
+            k = (head[0x810:0x850].split(b'\0')[0].decode('latin1').lower(), d[0], frozenset(d[1:]))
+            if k in need:
+                got.append((head, blob)); need.discard(k)
+                log('  kl_fa_v2_hotcoffee: glass: %s %s copied from %s' % (k[0], sorted(k[2]), os.path.basename(z)))
+    if need:
+        for s in todo:
+            E.mat.insts[s].root, E.mat.insts[s].f = saved[s][0], saved[s][1]
+        bad.append('glass: no stock level holds %s: the instances stay as they were' % sorted(need))
+        return bad
+    if got:
+        E.lv['.fxc'] = T.merge_fxc(E.lv['.fxc'], kl_mat.write_fxc(got, ver))
+    after = missing_shaders(E.mat, shader_cache(E.lv['.fxc']), todo)
+    if after:
+        bad.append('glass: still lacking after the fix: %s' % {E.mat.insts[s].name: v for s, v in after.items()})
+    log('  kl_fa_v2_hotcoffee: glass: %d instance(s) got Refraction2DEnabled = 1 (%s); %d fxc entr%s added' % (
+        len(todo), ', '.join(E.mat.insts[s].name for s in todo), len(got), 'y' if len(got) == 1 else 'ies'))
+    return bad
+
+
 # ------------------------------------------------------------------ on the written level
 def finish(folder, log=print):
     """The written level, in place: the lightened level, the briefcases on the loot, the texts. -> [problems]"""
@@ -645,6 +713,7 @@ def finish(folder, log=print):
             len(loot), root, CASE_SCALE, lo[1], n0))
     elif dressed:
         log('  kl_fa_v2_hotcoffee: %s: the loot already shows models of its own: left as it is' % folder)
+    bad += glass_fix(E, log)
     langs = 0
     for ext in sorted(E.lv.ext):
         if not ext.lower().endswith('.loc'):

@@ -223,12 +223,13 @@ EXTRA = [
          audit=True, gun_step=True, known=(), known_re=(),
          live='NOTHING: the map has never been loaded in the game (build/v2_1017/DM06B; the F01 test slot comes first, then page 3 entry 1)'),
     # PAGE 3, entry 2 (2026-10-17): 'Hot Coffee II' = the campaign level M01_A on F07's systems (tools\kl_fa_v2_hotcoffee.py). Slot F03 (ORDER[2]).
-    # Built, then compacted (kl_chars.py compact: 77060 -> 49382 chunks) and given the installed gun sounds (guns_step.py). Known: material 957
-    # (Glass_Grid_01b_M01) has no shader in the .fxc = glass panes not drawn (GUESS: cosmetic). The 2 bed clips (M01_A Garage / Street_Alley_Muffled_01)
+    # Built, then compacted (kl_chars.py compact: 77060 -> 49382 chunks) and given the installed gun sounds (guns_step.py). Material 957
+    # (Glass_Grid_01b_M01) had no glass.fx permutation: kl_fa_v2_hotcoffee.glass_fix switches Refraction2DEnabled on (GUESS, 2026-10-17; no known
+    # finding any more; staged in build/v2_1017/DM01B_fx). The 2 bed clips (M01_A Garage / Street_Alley_Muffled_01)
     # are in the stream file C:/kl_build/v_v2/PC_Def.str (tools/kl_v2_str.py; rebuilt with --str, 2026-10-17): no stream finding any more.
     # NOT RUN IN THE GAME.
     dict(id='DM01B', slot='F03', page=3, title='Hot Coffee II', build='prebuilt', sources=['M01_A'], picture='LevelPicture_FA01', bones_live=False,
-         audit=True, gun_step=True, known=('asks for a shader the .fxc lacks',), known_re=(),
+         audit=True, gun_step=True, known=(), known_re=(),
          live='NOTHING: the map has never been loaded in the game (build/v2_1017/DM01B; the F01 test slot comes first, then page 3 entry 2)'),
 ]
 

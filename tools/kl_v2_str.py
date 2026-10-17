@@ -37,6 +37,13 @@ SETS = {
     'M01_A': ('SFX/Ambiences/M01_A/Inside/Garage.wav', 'SFX/Ambiences/M01_A/Outside/Street_Alley_Muffled_01.wav'),
 }
 
+# Clips that SETS puts in the stream file but that a built map does NOT have to carry a record for. Construction_Site_01 is a M07_A
+# ambience that M06_A's .WHD happens to hold; the Park II build (F02_Main.zip's .SND) has no wave object of that name at all
+# (the other M06_A ambiences, CityTraffic_Medium_mono_02 and UnderBridge_mono, are there with records), so no sound of the map
+# plays it and kl_snd.merge never asks for it. MEASURED: name absent from the built .SND and .WHD. GUESS: it is unreferenced in
+# M06_A itself (not traced through the cue graph). The clip stays in the stream file (harmless 1.4 MB, no rebuild needed).
+WHD_NOT_USED = {'M06_A': ('SFX/Ambiences/M07_A/Outside/Construction_Site_01.wav',)}
+
 
 def need(log=None):
     """{level: {Dead Men block offset: [.WHD names]}} (kl_vault_str.need per level; each interleaved group whole)."""
@@ -108,7 +115,7 @@ def main(a):
         return 1 if build(a[1], a[2]) else 0
     if cmd == 'whd' and len(a) == 4 and a[2] in SETS:
         V.LEVEL = a[2]
-        return 1 if V.whd(a[1], a[3], names=SETS[a[2]]) else 0
+        return 1 if V.whd(a[1], a[3], names=tuple(n for n in SETS[a[2]] if n not in WHD_NOT_USED.get(a[2], ()))) else 0
     if cmd in ('proof', 'stamp', 'levels', 'installed', 'put'):
         return V.main(a)
     print(__doc__)
