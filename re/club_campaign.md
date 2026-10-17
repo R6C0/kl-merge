@@ -1951,3 +1951,20 @@ Built: build/club_owner_1018/DM05A/heli_roof (zip md5 1bcc46db791df152ac03cb0395
   kl_fa_club check PASS, kl_fa_civs check 0 FAIL, check_passes PASS. NOT RUN IN THE GAME.
 
 2026-10-18 post-passes (Last Call heli_roof -> build/club_owner_1018/DM05A/heli_roof_post, zip 5f26fd92): kl_fa_dmsettings (fields 66-71, 171 repointed, node 27276), kl_hud all --look deadmen (check PASS), kl_dmlines (2 keys grafted), club check / civs check / check_passes / heli_call_read all PASS. Not run in game.
+
+## Handover 2026-10-18 (kl-merge-c4, offline): bots' time budget (item 1)
+NEW tool tools/kl_club_budget.py (budget / build / check); no existing tool touched. Folder build/club_owner_1018/DM05A/bots_budget
+(from final_gp; `build --skip-gates default` = empty guard list of the walkway, floor2, third TriggerActorsDead in all 7 squads = 21 nodes, .prp only;
+then kl_gunpics apply on the zip). Zip md5 145ee2eb058e059d2a6eb30e4609b966.
+- GUESS HOLDS AS ARITHMETIC: kl2 0x4afbbd `add ecx, 0x7800` is an immediate (30 s, not a level value; wait cannot be shortened by data), and 0x8def80
+  (0x8defcc jle on a count of 0, bl stays 1, 0x8df010) fires an EMPTY guard list on the first tick. Walk ~134 s + loot 18 + delay 10 + 7x30 + seal 10 = 382 s > 360 s.
+  NOT proven that this alone kept the bots from the exit box (no per-gate live times).
+- Flag: `--skip-gates a,b,c|default` (default set = the three gates that wake nobody). Without it `build` writes a byte-identical zip (md5 88034f64 proved).
+  With the default set: 4 waiting gates, worst case 292 s, slack 68 s. Others: `--round-s`.
+- Checks: budget check vs final_gp: only the .TEX differs (gunpics); kl_club_roof check, kl_fa_club check PASS, debug/check_passes.py 0 failed.
+  kl_fa_bots.py check would FAIL the empty lists (its own 'names 0 groups' rule): do not re-run it on this folder.
+- Caveat: kl_gunpics apply is not idempotent on final_gp (2 pictures change, md5 88034f64 -> 1547fd9d); bots_budget's gunpics was applied to the budget .prp zip.
+- GUESS list: 360 s round; 300 u/s walking speed; bots passing live guards of a skipped gate survive to the next hold; loader accepts a count-0 list here.
+  NOT RUN IN THE GAME. Not committed.
+
+2026-10-18 (kl-merge-e5): bots_budget above was built on final_gp and then had kl_gunpics applied a SECOND time (not idempotent: 2 pictures changed, 88034f64 -> 1547fd9d). Do not use it. The handover build is club_owner_1018/DM05A/bots_budget_fed = kl_club_budget build --skip-gates default on kl-merge-3f's C:\kl_build_1018\fed_e5\DM05A (53ebbcfd: fed lines + gunpics), with no second gunpics pass. Zip a10eec3d. kl_club_budget check (flag) 0 FAIL, check_passes 0 failed, kl_club_roof check: POI hide 800, van timer b sender present. Not run in game.
