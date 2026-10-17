@@ -412,7 +412,7 @@
 static int klx_on;                                                    /* klsteam.c, included after this file */
 static int klx_level_verdict(const char *scene, char *why);           /* 0 no level, 1 stock, 2 not stock, 3 not known; why[200] */
 
-static struct { int on, log, hunt, cross, body, ak, akitem, settle, notraitor, pay, paykill, fade; } klfk;
+static struct { int on, log, hunt, cross, body, ak, akitem, settle, notraitor, pay, paykill, fade, noloot; } klfk;
 static struct {                               /* the level's [FedBody] */
     char key[64], file[MAX_PATH]; FILETIME ft;
     int on, nvar, var[KLFK_NVAR], akitem, akrecord; DWORD entries, root, stock; char name[80];
@@ -423,6 +423,7 @@ static struct {                               /* the fed of this round */
     int rule;                                 /* sections 5 / 6: 0 not looked at, 1 the game's routine is the known one, 2 it is not (said) */
     int line0, amount, clear_n, paid_n, paid_sum, undo_n, told_rule;
     int rew0, kills0, trait_n, other_n;       /* the rewards int and the crew-kill byte of client 0 as the last frame saw them */
+    int cash0, cash_have, cash_n;             /* NoLoot: the carried money [score+0x150] as the fed held it, and how many grabs were undone */
 } klfk_r;
 static struct { DWORD rules; BYTE was; int have; } klfk_cov;       /* [rules+0x283] as the hook found it, to put back */
 static struct { DWORD tun; int was, set, have; } klfk_pen;         /* [tuning+0xc10] as the hook found it and what it wrote, to put back */
@@ -674,6 +675,23 @@ static void klfk_rule_frame(void)
         !klh_rd(player + 0x2723, &pol, 1) || !pol) return;
     if (!(recs = klh_rd32(rules + 0x348)) || !klh_rd(recs + 0x10, &status, 1) || status) return;
     if (!(score = klh_rd32(rules + KLFK_SCORE)) || !klh_rd(score + KLFK_S_FLAGS, &flags, 4)) return;
+    /* NoLoot: a police human is a 'player' to the loot trigger and to rules slot 201 (0x56f6e0: alive, not down -> 0x8e8750), which asks
+       no role, so a fed who stands in a money object's reach (a case, or the stacks a dead bot dropped) is PAID its parts: 50-100K a second
+       in the log (18:41:22 .. 18:41:39, Hasta, fed beside a dead bot's $1.29M; 11:10 the same). Fed rounds pay in the total (Pay) and the round
+       line is zeroed at the end, so the carried money [score+0x150] of a fed is held where it was: a rise is written back every frame. */
+    if (klfk.noloot) {
+        int cash = 0, base;
+        if (klh_rd(score + 0x150, &cash, 4) && cash >= 0 && cash < 100000000) {
+            if (!klfk_r.cash_have) { klfk_r.cash_have = 1; klfk_r.cash0 = cash; }
+            else if (cash < klfk_r.cash0) klfk_r.cash0 = cash;         /* a debit of somebody else's (the adrenaline share) lowers the mark */
+            else if (cash > klfk_r.cash0) {
+                base = klfk_r.cash0;
+                if (klh_data((void *)(DWORD_PTR)(score + 0x150), &base, 4, "Arcade score: the fed's carried money (NoLoot)")) {
+                    if (!klfk_r.cash_n++ || klfk.log > 1) klog("fedkit: noloot: a fed grabbed money (carried %d -> %d): put back to %d (%d of this life; the round's lines of a fed are zeroed at the end anyway)", base, cash, base, klfk_r.cash_n);
+                } else if (!klfk_r.cash_n++) klog("fedkit: noloot: the carried money [score+0x150] could NOT be written");
+            }
+        }
+    }
     klh_rd(player + KLFK_TRAITOR, &tr, 1);
     marked = (flags & 1) != 0;                                /* slot 129 ran since the last frame: it sets the flag in the call that adds to the round line */
     if (marked) {
@@ -954,6 +972,7 @@ static void klfk_init(void)
     v = (int)GetPrivateProfileIntA("Fed", "AkItem", 31, klh_ini); klfk.akitem = v < 1 || v > 63 ? 31 : v;
     v = (int)GetPrivateProfileIntA("Fed", "KitSettle", 300, klh_ini); klfk.settle = v < 100 ? 100 : v > 5000 ? 5000 : v;
     klfk.notraitor = GetPrivateProfileIntA("Fed", "NoTraitor", 1, klh_ini) != 0;
+    klfk.noloot = GetPrivateProfileIntA("Fed", "NoLoot", 1, klh_ini) != 0;                  /* the fed's carried money is held where it was: a fed is no looter */
     klfk.pay = GetPrivateProfileIntA("Fed", "Pay", 1, klh_ini) != 0 && klfk.notraitor;       /* the game's routine pays only a killer without the traitor flag */
     v = (int)GetPrivateProfileIntA("Fed", "PayKill", 0, klh_ini); klfk.paykill = v < 0 ? 0 : v > 10000000 ? 10000000 : v;
     v = (int)GetPrivateProfileIntA("Fed", "HudFade", 1, klh_ini); klfk.fade = v < 0 ? 0 : v > 2 ? 2 : v;
