@@ -635,13 +635,13 @@ static void klk_tick(int game_thread)
     }
     score = klh_rd32(w.rules + 0x5f8);
     for (i = 0; i < w.n; i++) {                                              /* what changed since the last tick -> at most one event line */
-        int rec = w.m[i].rec, ev = 0, self = 1; DWORD money = 0; BYTE st = 0, fl = 0;
+        int rec = w.m[i].rec, ev = 0, self = 1, dead_ev = 0; DWORD money = 0; BYTE st = 0, fl = 0;
         if (rec < 0 || rec >= KLW_NREC) continue;
         if (score) klh_rd(score + 0x150 + 4 * rec, &money, 4);
         klh_rd(w.m[i].at + 0x78, &st, 1); klh_rd(w.m[i].at + 0x79, &fl, 1);
         if (klk_r.known[rec]) {
-            if (w.m[i].status == 7 && klk_r.status[rec] != 7) { ev = KLK_ON_DOWN; self = 0; if (!klk_r.shooting && klk_has_pool(KLK_ON_SHOOT)) ev = KLK_ON_SHOOT; klk_r.shooting = 1; }      /* the first death = shooting has begun (GUESS: no fire flag of the AI is known) */
-            else if ((fl & 2) && !(klk_r.flags[rec] & 2)) { ev = !klk_has_pool(KLK_ON_TRAITOR) && klk_has_pool(KLK_ON_SHOOT) ? KLK_ON_SHOOT : KLK_ON_TRAITOR; self = 0; klk_r.shooting = 1; }
+            if (w.m[i].status == 7 && klk_r.status[rec] != 7) { ev = KLK_ON_DOWN; dead_ev = 1; self = 0; if (!klk_r.shooting && klk_has_pool(KLK_ON_SHOOT)) ev = KLK_ON_SHOOT; }      /* the first death = shooting has begun (GUESS: no fire flag of the AI is known); review: 'shooting' is set only once the line was really chosen, else a quiet-gap or chance skip would use the one chance up */
+            else if ((fl & 2) && !(klk_r.flags[rec] & 2)) { ev = !klk_has_pool(KLK_ON_TRAITOR) && klk_has_pool(KLK_ON_SHOOT) ? KLK_ON_SHOOT : KLK_ON_TRAITOR; self = 0; }
             else if (st >= 2 && klk_r.stage[rec] < 2) ev = KLK_ON_STAGE2;
             else if (money > klk_r.money[rec]) ev = KLK_ON_MONEY;
         }
@@ -653,7 +653,11 @@ static void klk_tick(int game_thread)
             int s0 = (int)klk_rnd((DWORD)w.n), k;
             for (j = -1, k = 0; k < w.n && j < 0; k++) { int c = (s0 + k) % w.n; if (c != i && klk_may_chatter(&w, c, rt)) j = c; }
         }
-        if (j >= 0 && klk_pool_key(&w, j, ev, w.rules, ckey, &pool)) { klk_chatter_say(&w, j, ckey, pool, rt, w.rules, scene, 0); busy = 1; }
+        if (j >= 0) {
+            int got = klk_pool_key(&w, j, ev, w.rules, ckey, &pool);
+            if (!got && ev == KLK_ON_SHOOT && dead_ev) { ev = KLK_ON_DOWN; got = klk_pool_key(&w, j, ev, w.rules, ckey, &pool); }      /* review: the first death must not lose its Down line when no Shoot key fits */
+            if (got) { klk_chatter_say(&w, j, ckey, pool, rt, w.rules, scene, 0); busy = 1; if (ev == KLK_ON_SHOOT) klk_r.shooting = 1; }
+        }
     }
     if (!klk_r.won && w.n >= 2 && klk_has_pool(KLK_ON_WON)) {                 /* everybody who played the round is down: the line of the winners (GUESS: the game may already have left state 0x19) */
         int alive = 0, dead = 0, c = w.human >= 0 ? w.human : 0;
