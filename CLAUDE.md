@@ -189,6 +189,7 @@ and move the oldest note here out so this section stays at about three entries (
 into every session and agent: it grew to 256 KB and made every session thrash).
 
 2026-10-17 19:10 - OFFLINE (kl-merge-e5): COMMITTED a7f134a6 hook v82g ([Net] PrivateLobby / BuildKey, an ISteamMatchmaking proxy, default off, NOT RUN) and 89666bf3 v82h ([Fed] NoLoot=1: a fed no longer collects cases or drops; the cause of the Hasta money climb). Park II's climb comes from six 300K cases on the START row (kl-merge-3f is fixing kl_fa_v2_park.py). The OWNER DISLIKED the v82f HUD/shop: their hook 8d3ccf81 is live, so do not install v82e-h without their OK. wf_adf6f1d5-cb0 is porting the fixes onto the owner's look (v82i_owner). The vault door2 build CRASHED at load (0x6ad1c3; 706cfc8d restored). Triage wf_05419952-bc4 (suspect: 6 members mixed with the later passes) -> full folder build/vault_door3_1017.
+2026-10-17 18:35 - OFFLINE (kl-merge-e5), all reviewed, NOT RUN:
 - b4537168 Hasta load crash fixed: an orphan Artillery_Impact_Group clone group had lost its template, so the copy pointer +0x58 was null at 0x4c63f2. Build M11B_fix c23cb618; the add-ons are rebuilt on it (M11B_fix_blast d3291097, M11B_fix_talk cba4e5bd, M11B_full 75c6be55).
 - ceb25469 Hasta --lock-wing.
 - d1a74499 hook v82e: the heli call is keyed to the END timer [rules+0x200]; the HUD clock runs about 10 s ahead.
@@ -196,7 +197,6 @@ into every session and agent: it grew to 256 KB and made every session thrash).
 - 80c995b9 build.bat quoting / CRLF.
 Queued with kl-merge-3f: M11B_fix load, then HELI4 on v82f. Running: wf_b4149d05-025, private-match research (re/private_match.md).
 2026-10-17 18:10 - OFFLINE (kl-merge-e5): Running: wf_695914ef-7f0, the Hasta M11B load crash (0x4c63f2 null read; triage done, fix in review, M11B_fix not delivered yet), and wf_ae490ad9-199, hook v82e (HELI3: the round ended with the read clock at 10.25 s, so the 1.75 / 2.5 s trigger never fires; it is being made relative to the real round end). Live runs stay with kl-merge-3f (vault door2 next). The Hasta locked-loot work is paused; its partial diff is in the scratchpad.
-2026-10-17 17:35 - LIVE (kl-merge-3f, owner said 'run the live tests'): Hasta M11B (f44a4048, DM05A slot) CRASHED at load start: kl2+0xc63f2 null read (callers 0x7f3bde < 0x88cc11/0x88cba3 recursion < 0x820ed2), still in KaneAndLynch.gms; dumps %TEMP%/kl_triage/20261017_171635; e5 triaging (wf_695914ef-7f0, fix -> build/hasta_1017/M11B_fix); _blast/_talk skipped. HELI3 (heli 376331b9, hook hud_v82d_test): loads, 0 faults, but the round ends while the read clock is 10.25 s, so the 1.75 s last-vehicle call never fires (van 0); sent to e5. COMMITTED e6c1abae Hot Coffee II glass fix (material 957 Refraction2DEnabled on, GUESS look; <work>/build/v2_1017/DM01B_fx/hc_comp 8c74bc20) + kl_v2_str WHD_NOT_USED. Queue running (scratch queue_1017.ps1): vault door2 2 rounds, then Park II + Hot Coffee II with the v_v2 stream file (swap restored in finally). All slots restored, md5 verified.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
