@@ -3,9 +3,10 @@
 HASTA (M11_B) layer. STEP 3a: the doors and the opening (Doors, proof). STEP 3b: the Fragile Alliance layer (author module,
 below the proof: spawns, loot, bounds, van, squads, wiring, finish, check, test). OFFLINE; nothing installed, no game.
 
-    python kl_fa_hasta_layer.py test <out> [--keep] [--plan plan.json] [--no-ai] [--no-police] [--squads-awake] [--blast [S]] [--lock-wing]
+    python kl_fa_hasta_layer.py test <out> [--keep] [--plan plan.json] [--no-ai] [--no-police] [--squads-awake] [--blast [S]] [--lock-wing] [--lock-show]
         --blast [S]: ALSO the timer-driven corner blast (kl_fa_hasta_blast.py; S s after the round start, default 1.5). Without it nothing of it runs.
         --lock-wing: the loot wing (door block, bunker wall + check block) stays SHUT until the 6 hall squads are wiped out (or the backstop); see LOCK_WING.
+        --lock-show (with --lock-wing): the beat also plays the campaign's bunker blast (dust / fire / smoke emitters, remains, barrels gone); see LOCK_SHOW.
         F07 + M11_B --campaign with Doors armed AND this module as the authored layer -> <out>/F07+M11_B campaign; finish(),
         check(). kl_fa_hasta.py `build` runs this, then lighten, wardrobe, compact (the MEASURED order, tooling 3.5).
     python kl_fa_hasta_layer.py check <folder> | finish <folder> | plan <bare-folder> <plan.json>
@@ -333,6 +334,17 @@ LOCKED = ('ColiObj_Obj_Roadblock_01', 'SI0100_M11_BarricadeB_01', 'M11B_OYCHECK_
 LOCK_OPEN = (r'End_Corridor_01a\ColiObj_Obj_Roadblock_01', 'SI0100_M11_BarricadeB_01', 'M11B_OYCHECK_BEFORE01')   # kl_route.stations(opened=): path pieces of the LOCKED nodes (the rooftop's Roadblock is another)
 OPENER = '070_CapitolioInside!Enemies!GeomDeactivatorSandbags'      # the campaign's DeactivateGeom (top level), kept by campaign_names under the flag
 COUNTER = 'Gameplay!020_Loot!FollowPlayers!TriggerCounter'          # F07's spare TriggerCounter (Retomoto's loot counter; single top-level ZBoxPrimitive), kept under the flag
+LOCK_SHOW = False                       # True ('--lock-show', needs LOCK_WING): the beat also plays the campaign's own bunker blast (dust / fire / smoke / debris emitters, the remains, the barrels)
+# LOCK_SHOW (re/hasta_fa.md, handover 'lock-show'). The campaign's checkpoint 'SevenDudesDead' fires two timers: `Timer_SandbagsDeactive` (-> GeomActivatorSandbagsRemains: shows
+# SI0100_M11_BarricadeB_Broken01 + M11B_OYCHECK_AFTER01; -> GeomDeactivatorSandbags = OPENER; -> GeomDeactivatorExplosiveStuff: two barrels + a crate pile go) and `Timer`
+# (-> GeomActivatorDustExplosion: switches on the 18 emitters + the light of the map's `Capitolio_Explosion` group at (38797, 800, 30415), hidden at load). All five are
+# kept AS THEY ARE (top-level scripting, the campaign drop would take them) and the beat names the two timers instead of OPENER alone. BoomBoxDust is NOT kept: an Explode with an
+# EMPTY effect name (see BLAST). No new geometry (the .prm does not grow): the emitters, their templates, the broken pieces are in the map already.
+SAND_TIMER = '070_CapitolioInside!Enemies!Timer_SandbagsDeactive'
+DUST_TIMER = '070_CapitolioInside!Enemies!Timer'
+SHOW_NODES = (SAND_TIMER, DUST_TIMER, '070_CapitolioInside!Enemies!GeomActivatorSandbagsRemains', '070_CapitolioInside!Enemies!GeomDeactivatorExplosiveStuff',
+              '070_CapitolioInside!Enemies!GeomActivatorDustExplosion')
+SHOW_FIRES = (SAND_TIMER, DUST_TIMER)   # what the counter and the backstop name when LOCK_SHOW (SAND_TIMER names OPENER itself)
 
 EAST, WEST, SOUTH = (1.0, 0.0), (-1.0, 0.0), (0.0, -1.0)
 HALL_Y, SQUARE_Y = 800.0, 20.0
@@ -764,7 +776,7 @@ def campaign_names(level):
     """Top-level names of M11_B the campaign pre-pass must leave in: the kept squads. (No shatter wrapper: the corner blast is NOT built, see BLAST.)"""
     if level != LEVEL:
         return ()
-    return tuple(squad_plan()[0]) + ((OPENER,) if LOCK_WING else ())
+    return tuple(squad_plan()[0]) + ((OPENER,) if LOCK_WING else ()) + (SHOW_NODES if LOCK_WING and LOCK_SHOW else ())
 
 
 _tpl_key = J.tpl_key
@@ -910,7 +922,7 @@ def wire(sc, log=print):
     lists('walk box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['walk'])
     # the stair's top: the street squads, the alarm (the van's timer) and the gate (the police on the square)
     lists('floor box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['floor'] + [R + ROLE['van timer'], ways[0]])
-    lists('backstop', 'TriggerDelay2', f0=BACKSTOP_AT, f4=[ways[1], R + ROLE['van timer']] + ([R + OPENER] if LOCK_WING else []))
+    lists('backstop', 'TriggerDelay2', f0=BACKSTOP_AT, f4=[ways[1], R + ROLE['van timer']] + ([R + n for n in beat_fires()] if LOCK_WING else []))
     lists('van on', 'ActivateGeom', f0='AITrigger', f1=[van_path()])
     lists('van timer', 'TriggerDelay2', f0=VAN_DELAY, f4=[R + ROLE['van on'], R + ROLE['speak']])
     lists('reset hide', 'DeactivateGeom', f0='AITrigger', f1=[van_path()])
@@ -940,6 +952,11 @@ def wire(sc, log=print):
     else:
         log('  kl_fa_hasta_layer: ' + BLAST)
     return {'stage': dict(stage), 'arrive': arrive, 'ways': ways}
+
+
+def beat_fires():
+    """What the end of the beat sets off: the OPENER alone, or under LOCK_SHOW the campaign's two timers (the first names OPENER)."""
+    return list(SHOW_FIRES) if LOCK_SHOW else [OPENER]
 
 
 def locked_nodes(sc):
@@ -972,10 +989,52 @@ def lock_wire(sc, first, log=print):
     for k in squads:
         dead = [s for s in values(sc, k, 'ZSquadScript')[A.SQUAD_DEAD] if sc.resolve(s)]
         put_(k, 'ZSquadScript', **{'f%d' % A.SQUAD_DEAD: dead + [R + COUNTER]})
-    put_(kc, 'TriggerCounter', f0=len(squads), f4=[R + OPENER])
+    put_(kc, 'TriggerCounter', f0=len(squads), f4=[R + n for n in beat_fires()])
+    if LOCK_SHOW:
+        show_wire(sc, log)
     log('  kl_fa_hasta_layer: LOCK_WING: %d nodes stay shut (%s); %d hall squads wiped out -> counter -> %s opens them; the %.0f s backstop opens them too' % (
         len(targets), ', '.join(n for _k, n in locked_nodes(sc)), len(squads), OPENER.split('!')[-1], BACKSTOP_AT))
     return {'squads': [sc.names[k] for k in squads], 'targets': targets}
+
+
+def show_wire(sc, log=print):
+    """LOCK_SHOW, on the joined scene: the kept campaign nodes must be the campaign's own, whole and named right. Nothing is rewritten (GUESS: the campaign's values
+    -- timer delays, 'AITrigger' -- are right for Dog Days' controllers, which are the same classes); only the shape is asked, so a changed drop rule fails loudly."""
+    for n in SHOW_NODES:
+        k = A.node_of(sc, n)
+        if sc.parent[k] != 0 or sc.end[k] - k != 1:
+            raise ValueError('%s is not a single top-level node' % n)
+    fault = show_check(sc)
+    if fault:
+        raise ValueError('LOCK_SHOW: ' + '; '.join(fault))
+    log('  kl_fa_hasta_layer: LOCK_SHOW: the counter and the backstop set off %s (campaign nodes kept whole: %d); the dust timer lights the Capitolio_Explosion group' % (
+        ' + '.join(n.split('!')[-1] for n in SHOW_FIRES), len(SHOW_NODES)))
+
+
+def show_check(sc):
+    """-> [faults] of the campaign's bunker blast chain in a joined scene: timer -> (remains, OPENER, barrels) and timer -> dust activator -> the emitters that exist,
+    and the emitters are hidden at load (else the blast would play from the first tick). Resolves every name; none may be dangling."""
+    bad = []
+    got = {n: [s for _h, _f, u in J.fields(sc, A.node_of(sc, n)) for s in J.strings(sc, u)] for n in SHOW_NODES}
+    def has_all(owner, targets):
+        low = {s.lower() for s in got[owner]}
+        miss = [t for t in targets if (R + t).lower() not in low]
+        if miss:
+            bad.append('%s does not name %s' % (owner.split('!')[-1], miss))
+    has_all(SAND_TIMER, [SHOW_NODES[2], OPENER, SHOW_NODES[3]])
+    has_all(DUST_TIMER, [SHOW_NODES[4]])
+    for n, strs in got.items():
+        for s_ in strs:
+            if s_ and (s_.startswith(R) or 'Capitolio_Explosion' in s_ or 'M11B_LOC_Inside' in s_) and not sc.resolve(s_):
+                bad.append('%s names %s, which is not in the level' % (n.split('!')[-1], s_[-60:]))
+    em = [s_ for s_ in got[SHOW_NODES[4]] if 'Capitolio_Explosion' in s_]
+    if len(em) < 10:
+        bad.append('the dust activator names %d emitter/light nodes (the campaign: 19)' % len(em))
+    for s_ in em:
+        r = sc.resolve(s_)
+        if r and not kl_fa.node_values(sc, r[0])[3]:
+            bad.append('%s is not hidden at load' % s_[-40:])
+    return bad
 
 
 def lock_check(sc):
@@ -990,21 +1049,34 @@ def lock_check(sc):
     got = {sc.path[k] for k in firing}
     if got != stage:
         bad.append('the squads that report to the counter are %s, wanted the %d start squads %s' % (sorted(x[-30:] for x in got), len(stage), sorted(x[-30:] for x in stage)))
-    if cv[0] != len(stage) or [s.lower() for s in cv[4]] != [(R + OPENER).lower()]:
-        bad.append('the counter holds %r / %r (wanted %d and only the opener)' % (cv[0], cv[4], len(stage)))
+    show = show_present(sc)
+    fires = [(R + n).lower() for n in (SHOW_FIRES if show else [OPENER])]
+    if cv[0] != len(stage) or [s.lower() for s in cv[4]] != fires:
+        bad.append('the counter holds %r / %r (wanted %d and only %s)' % (cv[0], cv[4], len(stage), 'the two campaign timers' if show else 'the opener'))
+    if show:
+        bad += show_check(sc)
     tg = {sc.path[k].lower() for k, _nm in locked_nodes(sc)}
     if ov[0] != 'AITrigger' or {s.lower() for s in ov[1]} != tg or len(ov[1]) != len(tg):
         bad.append('the opener holds %r, wanted AITrigger on the three locked nodes' % (ov,))
     bs = node(ROLE['backstop'])
-    if (R + OPENER).lower() not in [s.lower() for s in values(sc, bs, 'TriggerDelay2')[4]]:
+    if not set(fires) <= {s.lower() for s in values(sc, bs, 'TriggerDelay2')[4]}:
         bad.append('the backstop timer does not open the wing')
     mine = {(R + OPENER).lower(), (R + COUNTER).lower()}
+    owners = set(firing) | {kc, bs}
+    if show:
+        owners |= {sc.resolve(R + SAND_TIMER)[0]}       # the campaign's own timer names OPENER
+        mine |= {(R + n).lower() for n in SHOW_FIRES}
     for k in range(1, len(sc.nodes)):
         for _h, _f, u in J.fields(sc, k):
             for s_ in J.strings(sc, u):
-                if s_.lower() in mine and k not in firing and k not in (kc, bs):
+                if s_.lower() in mine and k not in owners:
                     bad.append('%s names %s' % (sc.path[k][-60:], s_[-40:]))
     return bad
+
+
+def show_present(sc):
+    """A level built with --lock-show (read from the folder): the campaign's sandbag timer is in it."""
+    return bool(sc.resolve(R + SAND_TIMER))
 
 
 def lock_present(sc):
@@ -1169,6 +1241,8 @@ def check(folder, log=print, problems=None):
             fail('lock-wing: ' + f)
         log('  lock-wing: %d hall squads -> counter -> opener -> %d locked nodes (+ backstop %.0f s); reach / stage checks asked with them OPENED' % (
             sum(1 for _n, (st, _k) in SQUADS.items() if st == 'start'), len(LOCKED), BACKSTOP_AT))
+        if show_present(sc):
+            log('  lock-show: counter + backstop -> sandbag timer (remains, opener, barrels) + dust timer (Capitolio_Explosion emitters, hidden at load): chain read back, no dangling name')
     wreck = [i for i, n in enumerate(names) if n == WRECK]
     if len(wreck) != 1 or pos[ents[wreck[0]]][1] > -2000:
         fail('the wreck group %s: %d entities, not one sunk' % (WRECK, len(wreck)))
@@ -1262,6 +1336,8 @@ def flags_of():
         f['BLAST_AT'] = BLAST_AT
     if LOCK_WING:
         f['LOCK_WING'] = True
+    if LOCK_SHOW:
+        f['LOCK_SHOW'] = True
     return f
 
 
@@ -1290,7 +1366,7 @@ def load_plan(folder):
 
 
 def main():
-    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, BLAST_AT, LOCK_WING
+    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, BLAST_AT, LOCK_WING, LOCK_SHOW
     a = sys.argv[1:]
     if a[:1] == ['proof']:
         sys.exit(proof(a[1] if len(a) > 1 and not a[1].startswith('--') else 'C:/kl_scratch/hasta', '--keep' in a))
@@ -1299,6 +1375,9 @@ def main():
         SQUADS_AWAKE = '--squads-awake' in a
         POLICE_ARRIVE = '--no-police' not in a
         LOCK_WING = '--lock-wing' in a
+        LOCK_SHOW = '--lock-show' in a
+        if LOCK_SHOW and not LOCK_WING:
+            sys.exit('--lock-show needs --lock-wing')
         if '--blast' in a:
             i = a.index('--blast') + 1
             BLAST_AT = float(a[i]) if i < len(a) and not a[i].startswith('--') else HB.BLAST_AT

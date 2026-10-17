@@ -11,7 +11,7 @@ Study: re/campaign_fa.md (Havana rows), re/campaign_v2_plan.md, handovers in re/
         the .prm size and the archive are measured and the previous stage's folder is wiped (only notes stay),
         so at most two archives lie on disk. Default <out> = <work>/build/hasta_1017. Result: <out>/base.json
         and <out>/final/ (the compacted base). --keep-all keeps every stage. --from light|ward|compact resumes.
-    python kl_fa_hasta.py chain <out> [--start N] [--plates] [--armour 0,3] [--blast [S]] [--lock-wing]   (see chain(); S = blast delay in s)
+    python kl_fa_hasta.py chain <out> [--start N] [--plates] [--armour 0,3] [--blast [S]] [--lock-wing] [--lock-show]   (see chain(); S = blast delay in s)
     python kl_fa_hasta.py proof-pair [<out>]
         The compaction proof pair of re/campaign_fa.md (live proof I): fake-fix of x_chunks/retomoto_wardrobe
         and of x_chunks/retomoto_wardrobe_compact -> <out>/proof_pair/{uncompacted,compacted}. The stock
@@ -285,12 +285,13 @@ def _drop(*folders):
             shutil.rmtree(f, ignore_errors=True)
 
 
-def chain(out=OUT, start=1, plates=False, armour='0,3', blast=None, lock=False):
+def chain(out=OUT, start=1, plates=False, armour='0,3', blast=None, lock=False, show=False):
     """bare (doors + layer, KEPT with its side files) -> lighten -> wardrobe (+plates) -> compact -> bots -> gun looks -> fxc again
     -> dynamic bots (LAST: it records the large blocks) -> <out>/M11B. Order is the bank's (re/bank_campaign.md F.2) with the compaction
     after the wardrobe (the bare map is over the 73,728 table). Talk (kl_fa_talk) has no M11 scene table: left out (re/hasta_fa.md 3c).
     BLAST (--blast [S]): step 1 also builds the timer-driven corner blast (kl_fa_hasta_blast.py, S s after the round start, default 1.5); None = off, the chain is as before.
     LOCK (--lock-wing): step 1 builds the loot wing LOCKED until the hall squads are dead (kl_fa_hasta_layer.LOCK_WING); False = as before.
+    SHOW (--lock-show, needs --lock-wing): the beat also plays the campaign's bunker blast (kl_fa_hasta_layer.LOCK_SHOW); False = as before.
     ARMOUR 0,3 (--armour=0,1,2,3 for all four): all four levels MEASURED .prm 90.6 MB (over the 90 MB GUESS edge), 0,3 saves the two middle body meshes.
     PLATES (--plates, 4 Payday-2 style mask plates) MEASURED +18.5 MB .prm: 91.0 MB after compaction, over the 90 MB GUESS edge: off by default.
     kl_hud is the overlay's (menu fonts / plates), not a level step: nothing to do per map. Each step wipes its predecessor."""
@@ -302,7 +303,7 @@ def chain(out=OUT, start=1, plates=False, armour='0,3', blast=None, lock=False):
     bare_root = d('bare')
     bare = os.path.join(bare_root, '%s+%s campaign' % (HOST, LEVEL))
     steps = [
-        ('1_bare', [T('kl_fa_hasta_layer.py'), 'test', bare_root, '--keep'] + ([] if blast is None else ['--blast'] + ([] if blast == '' else [str(blast)])) + (['--lock-wing'] if lock else []), bare, (0, 1)),
+        ('1_bare', [T('kl_fa_hasta_layer.py'), 'test', bare_root, '--keep'] + ([] if blast is None else ['--blast'] + ([] if blast == '' else [str(blast)])) + (['--lock-wing'] if lock else []) + (['--lock-show'] if show else []), bare, (0, 1)),
         ('2_light', [T('kl_graft.py'), 'lighten', bare, d('2_light'), '--load', 'trim,slim,fxc'], d('2_light'), (0,)),
         ('3_ward', [T('kl_chars.py'), 'wardrobe', d('2_light'), d('3_ward'), '--armour=' + armour] + (['--plates=wolf,dallas,chains,hoxton'] if plates else []), d('3_ward'), (0, 1)),
         ('4_compact', [T('kl_chars.py'), 'compact', d('3_ward'), d('4_compact')], d('4_compact'), (0,)),
@@ -411,7 +412,7 @@ def main():
                 pos.remove(nxt)             # the seconds are not the out folder
             except ValueError:
                 blast = ''
-        sys.exit(chain(pos[1] if len(pos) > 1 else OUT, int(opt('--start', 1)), '--plates' in a, opt('--armour', '0,3'), blast, '--lock-wing' in a))
+        sys.exit(chain(pos[1] if len(pos) > 1 else OUT, int(opt('--start', 1)), '--plates' in a, opt('--armour', '0,3'), blast, '--lock-wing' in a, '--lock-show' in a))
     if pos[:1] == ['checks']:
         sys.exit(checks(pos[1] if len(pos) > 1 else None))
     if pos[:1] == ['proof-pair']:
