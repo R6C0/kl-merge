@@ -13,7 +13,7 @@ rem                                    fixed place `kl_autotest.py --hook` takes
 setlocal
 set VCVARS=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat
 if not exist "%VCVARS%" (echo Visual Studio C++ tools not found: add "Desktop development with C++" in the Visual Studio Installer. & exit /b 1)
-set OUT=%~1
+set "OUT=%~1"
 set PUB=
 if /i "%OUT%"=="--work" goto work
 if "%OUT%"=="" set OUT=%~dp0out_auto

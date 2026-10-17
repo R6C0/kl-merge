@@ -1,2 +1,5 @@
 # kept byte for byte: the patch carries CR bytes in its KLHook.ini hunk (core.autocrlf would rewrite them)
 re/melee_damage.patch -text
+# batch files must stay CRLF: cmd.exe mis-finds goto labels in LF files (seen: "cannot find the batch label" when a label straddles a 512-byte boundary)
+*.bat text eol=crlf
+*.cmd text eol=crlf
