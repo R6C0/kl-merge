@@ -231,3 +231,38 @@ CreateLobby runs, so a gate would disable the feature when needed; these calls c
 - Still GUESS: comparison value 0 = Equal for a string filter (same enum as the numeric ones the game pushes 0 for); that the
   filter accumulates until RequestLobbyList (SDK documentation); FriendsOnly / Private lobbies missing from search results;
   `kl_online()` at CreateLobby time; the import name `SteamMatchmaking` is PROVEN (present in kl2.exe and exported by steam_api.dll).
+
+## 7. Static check of the v82g proxy against Dog Days' own files (2026-10-17, handover; nothing run, nothing installed, no source changed)
+Read only: `C:\Steam\...\Kane & Lynch 2 - Dog Days\kl2.exe` and `steam_api.dll` (121,984 bytes), capstone through `tools/kl_exe.py`.
+- **Interface version**: kl2.exe holds no version string, only the import `steam_api!SteamMatchmaking` (IAT 0xb107d8, confirmed by walking
+  the import directory). steam_api.dll holds exactly one `SteamMatchMaking0xx` text, `SteamMatchMaking008` (plus `...Servers002`,
+  which `klmm_has_008` does not match: it compares 17 bytes "SteamMatchMaking0"). Its export is `mov eax,[global]; ret` (a cached
+  pointer filled by SteamAPI_Init, null before it: the wrapper returns 0 then), so the accessor is cdecl, no arguments, stable object.
+- **Slot order (SDK 008, no CompatibleMembersFilter)**: 0..3 favourites, 4 RequestLobbyList, 5 String / 6 Numerical / 7 NearValue /
+  8 SlotsAvailable / 9 Distance / 10 ResultCount filters, 11 GetLobbyByIndex, 12 CreateLobby, 13 JoinLobby, 14 LeaveLobby, 15 Invite,
+  16 GetNumLobbyMembers, 17 GetLobbyMemberByIndex, 18 GetLobbyData, 19 SetLobbyData ... 35 SetLobbyOwner. The 24 `ret n` values of
+  section 5 for slots 12..35 match this list one by one (rechecked: 8 8 8 0x10 8 0x10 0xc 0x10 8 0x1c 0xc 0x14 0x10 0x10 0x1c 8 0x18
+  0x14 0xc 8 0xc 0xc 0xc 0x10). Proxy indices 4 / 5 / 12 / 19 are right.
+- **How kl2 calls it** (every one of the 25 references to 0xb107d8 is `call [slot]` or `mov reg,[slot]` + `call reg`, i.e. through
+  the patched IAT; vtable offsets seen at the call sites): +0x10 RequestLobbyList (0x424846), +0x18 Numerical filter (key "GameType",
+  0x559e6a), +0x2c GetLobbyByIndex, +0x30 CreateLobby (0x705024), +0x34 JoinLobby, +0x38 LeaveLobby, +0x40 / +0x44 GetNumLobbyMembers /
+  GetLobbyMemberByIndex, +0x48 GetLobbyData, +0x4c SetLobbyData (0x86944e, key "name", string at 0xb2e088; the vtable slot address is
+  cached in ebx across calls, harmless: it is the proxy table), +0x64 SendLobbyChatMsg, +0x68 GetLobbyChatEntry, +0x6c RequestLobbyData,
+  +0x88 GetLobbyOwner. All consistent with 008. (The addresses in parentheses are real kl2 VAs of one call site each.)
+- **Calling convention**: thiscall = ecx this, args on the stack, callee pops. `__fastcall(self, edx, args...)` has the same stack
+  layout and callee cleanup, so both the three overrides (ret 0 / 8 / 16) and the outgoing calls through `KLMM_REAL(n)` with ecx = real,
+  edx = 0 are right; 64-bit SteamAPICall_t in edx:eax, `bool` in al, CSteamID as two dwords low first. Argument counts: RequestLobbyList 0,
+  String filter 3 (12 bytes), CreateLobby 2 (8), SetLobbyData 4 dwords (16). The naked forwarders reload ecx from `klmm_real` and jump
+  through the real table, stack untouched. ELobbyType Private 0 / FriendsOnly 1 and ELobbyComparison Equal 0: from the SDK, as coded.
+- **Hooked object**: the only way kl2 reaches the interface is the IAT slot, which `klh_iat("steam_api.dll","SteamMatchmaking")` swaps
+  (kl2.exe is not packed; imports resolved before any DLL entry point; `steam_api.dll` is a static import, so `GetModuleHandle` in
+  `klmm_init` succeeds). Nothing in kl2.exe keeps the interface pointer past a call, only vtable slot addresses of the object it got.
+- **PrivateLobby=0 and BuildKey=0**: `klmm_init` returns right after reading the two ints; no IAT write, no critical section, no log
+  line, `klmm_real` stays null. klhook.c's v82g diff is a comment block, the include and that call: v82f behaviour.
+- **Build**: `klhook\build_auto.bat` (TEST) built clean into `klhook\out_auto\dinput8.dll` (1,102,848 bytes). Run it with its full path
+  (`cmd /c C:\kl-merge\kl-merge\klhook\build_auto.bat`); `build_auto.bat` alone is not found from the tool shell. SHIP build not made.
+- **Fixes**: none needed. **Still GUESS**: comparison 0 = Equal for a string filter; that the game's "name" SetLobbyData is made for
+  the host after creation (one site only, so the build key is written only if it runs); that Steam really hides Private / FriendsOnly
+  lobbies from search; `kl_online()` at CreateLobby time; whether the game ever calls InviteUserToLobby (no +0x3c site seen, so
+  PrivateLobby=2 would rely on Steam's friends list / overlay invite, not on the game); the 008 slot order is from memory of the SDK
+  headers, backed by the 24 ret counts (exact for stack sizes, but two same-sized neighbours could in theory swap).
