@@ -1,0 +1,95 @@
+; maps.ini SAMPLE for klpm.c (re\pm_options.md B1; the format is a GUESS of klpm.c's kpm_maps_load, nothing else reads it).
+; Copy to <Dog Days>\KLExpansion\Maps\maps.ini (or point [Match] Maps= at it). klhook\mkoverlay.py reads the same file for the names on the
+; 'Map vote' row, so the order here IS the order of the menu entries: change this file, regenerate the overlay (KL_MATCH_MAPS=<file>).
+; Id    = the folder name under KLExpansion\Maps (expansion maps) or the stock DD0n folder (KLHook.ini [Redirect]) - GUESS: nothing resolves it yet
+; Name  = the menu text (47 characters at most)
+; Slot  = the stock Fragile Alliance slot the map loads through (re\expansion.md; the stock maps are those slots themselves)
+; Dog Days' own names are not in the exe's text I have read: "Dog Days Fnn" stands for the stock map of that slot (F01 is the Subway).
+; Bundles (the playlist, [Match] Play=1/2): GUESS, kpm_parse_list reads Maps= by Id; no menu row picks a bundle yet.
+
+[Maps]
+Count=19
+
+[Map.1]
+Id=DM01
+Name=Hot Coffee (Dead Men)
+Slot=F01
+[Map.2]
+Id=DM02
+Name=Late Night Opening (Dead Men)
+Slot=F02
+[Map.3]
+Id=DM03
+Name=Withdrawal (Dead Men)
+Slot=F03
+[Map.4]
+Id=DM06
+Name=A Walk in the Park (Dead Men)
+Slot=F04
+[Map.5]
+Id=DM09
+Name=Retomoto Tower (Dead Men)
+Slot=F06
+[Map.6]
+Id=DM03A
+Name=The Vault (Dead Men)
+Slot=F07
+[Map.7]
+Id=DM05A
+Name=Last Call (campaign)
+Slot=F01
+[Map.8]
+Id=DM06B
+Name=A Walk in the Park II (campaign)
+Slot=F02
+[Map.9]
+Id=DM01B
+Name=Hot Coffee II (campaign)
+Slot=F03
+[Map.10]
+Id=DM11B
+Name=Hasta la Vista (campaign)
+Slot=F04
+[Map.11]
+Id=DD01
+Name=Dog Days F01 (Subway)
+Slot=F01
+[Map.12]
+Id=DD02
+Name=Dog Days F02
+Slot=F02
+[Map.13]
+Id=DD03
+Name=Dog Days F03
+Slot=F03
+[Map.14]
+Id=DD04
+Name=Dog Days F04
+Slot=F04
+[Map.15]
+Id=DD05
+Name=Dog Days F05 (DLC)
+Slot=F05
+[Map.16]
+Id=DD06
+Name=Dog Days F06
+Slot=F06
+[Map.17]
+Id=DD07
+Name=Dog Days F07
+Slot=F07
+[Map.18]
+Id=DD08
+Name=Dog Days F08 (DLC)
+Slot=F08
+[Map.19]
+Id=DD09
+Name=Dog Days F09 (DLC)
+Slot=F09
+
+[Bundle.1]
+Name=Dead Men classics
+Maps=DM01,DM02,DM03,DM06,DM09,DM03A
+[Bundle.2]
+Name=Dog Days stock
+Maps=DD01,DD02,DD03,DD04,DD06,DD07

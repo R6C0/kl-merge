@@ -10,7 +10,8 @@
  *          KLMVote  0 = no preference, 1..N = the Nth map of maps.ini         (value only; kpm_tally() turns votes into a map)
  *          KLMPlay  0 = off, 1 = playlist in order, 2 = random without repeats (value only; kpm_next() is the cursor)
  *      The names start with KLM, not KLGun: klgun.c answers anything that starts with 'KLGun' (KLGunStart / KLGunSet).
- *      The XML entry counts of the menu rows are these ranges (klchar.c section 1, re\wardrobe.md 5a): the overlay page is NOT written yet.
+ *      The XML entry counts of the menu rows are these ranges (klchar.c section 1, re\wardrobe.md 5a): the page is mkoverlay.py's window
+ *      KLMatch (B1, 2026-10-18; built when KLHook.ini has [Match] Enable=1; maps.ini.sample gives the map names).
  *   2. maps.ini (GUESS on the format; the file does not exist yet, kpm_maps_load() reads it if present):
  *          [Maps]            Count=3
  *          [Map.1]           Id=DM01   Name=Subway (Dead Men)   Slot=F01
@@ -20,7 +21,6 @@
  *      with the lobby id, so a restart does not re-roll) and kpm_next() (playlist cursor, sequence or random without repeats).
  *
  * NOT DONE (each is a later step of the build order, re\pm_options.md 6):
- *   - the overlay page (mkoverlay.py; the entry 'Match options' in the main menu) - without it the three names are never asked;
  *   - equipping KLMGun: the equip call behind the shop buy (0x7558ce) is not read (B0); this file does not call anything;
  *   - applying a tally / the cursor to Heist_SelectedLevel or MP_SelectedLevel, and every Steam lobby part (B2 .. B5);
  *   - KLMVote's upper bound follows the loaded maps.ini, the XML must have as many entries (GUESS: nobody checks the mismatch).

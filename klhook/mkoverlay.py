@@ -368,6 +368,76 @@ def guns_window(nl):
     return nl.join(L) + nl
 
 
+# THE MATCH OPTIONS PAGE (2026-10-18, pm_options.md B1; NOT SEEN IN THE GAME): a button 'Match options' after 'Mod settings' in the Options
+# menu and a window KLMatch with four rows: Character (klchar.c KLChar, the heister page's own option), Gun (KLMGun), Map vote (KLMVote)
+# and Playlist (KLMPlay), the last three answered by klhook\klpm.c. Built ONLY when KLHook.ini has [Match] Enable=1 (Menu=0 leaves the
+# page out): the table has 31 free slots (v27c), and a row whose option the DLL does not answer is a dead row.
+# LEAN, by the table: no arrows (the keyboard's Left / Right on a ToggleText is the GUESS; the mouse arrows cost 8), no focus bars
+# (the colour set KLFocus shows the focus, as in the Mod settings), no headline icon, no note, no lines. Cost: 19 window tags + 1 Options button = 20 (v27c baseline 4353 -> 4373).
+# The entry counts ARE the option ranges: KLMGun 0..36, KLMVote 0..(maps in maps.ini), KLMPlay 0..2 (klpm.c kpm_upper).
+MATCH = False
+MATCH_WINDOW = 'KLMatch'
+MATCH_TITLE = 'Match options'
+MATCH_GUNS = ['Level default'] + ['Shop gun %d' % k for k in range(1, 37)]      # KLMGun 1..KPM_GUNS = a shop row (shop_plan.md); no names in the exe (GUESS: row numbers)
+MATCH_PLAY = ['Off', 'In order', 'Random']
+MATCH_MAPS = []                                          # names from maps.ini (main() fills it)
+
+
+def match_maps(path):
+    """maps.ini -> the map names in file order ([Map.N] Name=, the order klpm.c kpm_maps_load reads; a map without Id is skipped there too)."""
+    cp = configparser.RawConfigParser(strict=False, delimiters=('=',), comment_prefixes=(';', '#'), interpolation=None)
+    cp.read(path, encoding='latin-1')
+    out = []
+    n = int(cp.get('Maps', 'Count', fallback='0').strip() or 0)
+    for i in range(1, min(32, n) + 1):
+        sec = 'Map.%d' % i
+        if cp.has_section(sec) and cp.get(sec, 'Id', fallback='').strip():
+            out.append(cp.get(sec, 'Name', fallback=cp.get(sec, 'Id')).strip()[:47])
+    return out
+
+
+def match_rows():
+    return (('KLM_Char', 'Character', 'KLChar', CHARACTERS), ('KLM_Gun', 'Gun', 'KLMGun', MATCH_GUNS),
+            ('KLM_Vote', 'Map vote', 'KLMVote', ['No preference'] + MATCH_MAPS), ('KLM_Play', 'Playlist', 'KLMPlay', MATCH_PLAY))
+
+
+def match_window(nl):
+    """The window KLMatch: the Mod settings page's row pattern (ToggleText + _Data text), without arrows, focus bars and icon."""
+    rows = match_rows()
+    ys = (358, 392, 425, 459)
+    L = ['  <!-- KLExpansion: the match options page (mkoverlay.py; KLChar by klchar.c, KLMGun / KLMVote / KLMPlay by klpm.c) -->',
+         '  <Window Name="%s" LocaleBasePath="AllLevels/Menu/Heist" Template="WindowDefault">' % MATCH_WINDOW,
+         '    <GuiElement Template="BackgroundTemplate"/>',
+         '    <GuiElement Type="GUIGroup" Template="ScreenBaseSize">',
+         '      <GuiElement Template="HeadlineText" Text="%%%s"/>' % esc(MATCH_TITLE),
+         '      <GuiElement Template="ChapterBackgroundTemplate"/>',
+         '      <GuiElement Type="GUIGroup" ShowDebug="True" Name="KLM_CenterBox" AlignH="Right" X="-100" Y="-80" W="384" H="576">']
+    for k, (name, label, opt, vals) in enumerate(rows):
+        L.append('        <GuiElement Type="TextBlock" FadeInDelay="%.2f" FadeInTime="0.2" Text="" Name="%s_Data" Y="%d" AlignH="Center" />' % (0.05 + 0.03 * k, name, ys[k] + 80))
+    L.append('      </GuiElement>')
+    for k, (name, label, opt, vals) in enumerate(rows):
+        L += ['      <GuiElement Type="ToggleText" Text="%%%s" X="-100" Y="%d" Option="%s" ColorSet="KLFocus"' % (esc(label), ys[k], opt),
+              '          TextReceiver="%s_Data" UseTextReceiverAsFocus="True"' % name,
+              '          RecCSFocus="Header" RecCSDefault="Default" FadeInDelay="%.2f" FadeInTime="0.2" Name="%s"' % (0.05 + 0.03 * k, name),
+              '          Template="TextIndentX" AlignV="Left" HelpText="/Menu/Generic/UseLRToSelect" HelpTextBlock="HelpPlay" >']
+        L += ['        <Text Text="%%%s" />' % esc(v) for v in vals]
+        L.append('      </GuiElement>')
+    L += ['    </GuiElement>',
+          '    <GuiElement Type="GUIGroup" Template="ScreenBaseSize">',
+          '      <GuiElement Type="GUIGroup" Navigation="Horizontal" ReverseNavigation="True" Template="BottomFramePosSize" ShowDebug="True">',
+          '        <Platform PC_KEYBOARD="True">',
+          '          <GuiElement ReceiveAllInput="False" Template="ButtonBack_INV_GT" />',
+          '          <GuiElement AlignH="Left" Template="BackButtonNoXPos_PC" HelpTextBlock="HelpPlay" HelpText=" " />',
+          '        </Platform>',
+          '        <Platform PC_GC="True">',
+          '          <GuiElement Template="BottomFrameMenuBackButton"/>',
+          '        </Platform>',
+          '      </GuiElement>',
+          '    </GuiElement>',
+          '  </Window>']
+    return nl.join(L) + nl
+
+
 def lean_page(p, used, n):
     r"""[Page.N] Lean=1 (2026-10-12): the copy of the map page WITHOUT what only the stock page needs, so that a further page fits
     the menu manager's table. WHY: every created <GuiElement>/<Window>/<ColorSet>/<ButtonGraphic> takes one of 5096 slots
@@ -459,6 +529,12 @@ def build(xml, pgs, heister=True, pictures=False):
         if GUNS_WINDOW in taken or any(x.startswith('KLG') for x in taken):
             raise SystemExit('names already in frontend.xml: KLG...')
         new += nl + guns_window(nl)
+    if MATCH:
+        if not (SETTINGS and GUNS):
+            raise SystemExit('the Match page uses the colour set KLFocus, which the Mod settings page adds: needs SETTINGS and GUNS')
+        if MATCH_WINDOW in taken or any(x.startswith('KLM') for x in taken):
+            raise SystemExit('names already in frontend.xml: KLM...')
+        new += nl + match_window(nl)
     xml = xml[:w.end()] + new + xml[w.end():]          # the window stands behind the template in the file
     xml = xml[:gt.end()] + tpl + xml[gt.end():]
     # the Arcade page: option on the stock button; per page a button, focus bar, icon and line; all rows moved up
@@ -499,6 +575,8 @@ def build(xml, pgs, heister=True, pictures=False):
         if not c or c.start() > opt.index('</Platform>', pc):
             raise SystemExit('frontend.xml is not the one this script knows: no credits button in the PC block of OptionsMenu')
         add = c.group(1) + '<GuiElement Template="OptionButton" Window="%s" Text="%%%s" FadeInDelay="0.35" X="-110" />' % (GUNS_WINDOW, esc(SET_TITLE)) + nl
+        if MATCH:
+            add += c.group(1) + '<GuiElement Template="OptionButton" Window="%s" Text="%%%s" FadeInDelay="0.40" X="-110" />' % (MATCH_WINDOW, esc(MATCH_TITLE)) + nl
         opt = opt[:c.end()] + add + opt[c.end():]
         xml = xml[:o.start()] + opt + xml[o.end():]
     if SETTINGS and GUNS:                             # v27b: the colour set of the Mod settings rows (+1 table entry: TableLog said 36 free, live T12)
@@ -555,6 +633,26 @@ def check(stock, res, pgs, heister=True):
                 bad.append('HeistModeMenu: the Mod settings button is there (SET_ARCADE = False)')
             if len(set(bars)) != len(bars):
                 bad.append('%s and %s use one focus bar entity twice: %s' % (GUNS_WINDOW, HEISTER, bars))
+    if MATCH:
+        w = wins.get(MATCH_WINDOW)
+        if not w:
+            bad.append('window %s is missing' % MATCH_WINDOW)
+        else:
+            own = defined(w)
+            for nm in own:
+                if first[nm] != MATCH_WINDOW or own.count(nm) != 1:
+                    bad.append('%s: the name %s is defined twice or found in window %s first' % (MATCH_WINDOW, nm, first[nm]))
+            for r in sorted({v.strip() for a in REFS for x in re.findall(r'\b%s="([^"]*)"' % a, w) for v in x.split(',') if v.strip()}):
+                if r not in own and r != 'HelpPlay':
+                    bad.append('%s refers to %s, which the page does not define' % (MATCH_WINDOW, r))
+            for name, label, opt, vals in match_rows():
+                t = re.search(r'<GuiElement Type="ToggleText"[^>]*Option="%s"[^>]*>(.*?)</GuiElement>' % opt, w, re.S)
+                if not t or len(re.findall(r'<Text Text=', t.group(1))) != len(vals):
+                    bad.append('%s: the row of option %s does not have %d entries' % (MATCH_WINDOW, opt, len(vals)))
+            if len(re.findall(r'Option="KLM(?:Gun|Vote|Play)"', w)) != 3:
+                bad.append('%s: KLMGun / KLMVote / KLMPlay not once each' % MATCH_WINDOW)
+        if wins.get('OptionsMenu', '').count('Window="%s"' % MATCH_WINDOW) != 1:
+            bad.append('OptionsMenu: the Match options button is not there once')
     if heister:
         w = wins.get(HEISTER)
         if not w:
@@ -611,6 +709,14 @@ def main():
     heister = not cp.has_section('Character') or (cp.get('Character', 'Enable', fallback='1').strip() != '0' and cp.get('Character', 'Menu', fallback='1').strip() != '0')
     global GUNS
     GUNS = not cp.has_section('Guns') or (cp.get('Guns', 'Enable', fallback='1').strip() != '0' and cp.get('Guns', 'Menu', fallback='1').strip() != '0')
+    global MATCH, MATCH_MAPS
+    MATCH = cp.has_section('Match') and cp.get('Match', 'Enable', fallback='0').strip() != '0' and cp.get('Match', 'Menu', fallback='1').strip() != '0'
+    if MATCH:
+        mp = os.environ.get('KL_MATCH_MAPS') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'maps.ini.sample')
+        MATCH_MAPS = match_maps(mp)
+        if not 1 <= len(MATCH_MAPS) <= 32:
+            raise SystemExit('Match page: %s lists %d maps (1..32 wanted)' % (mp, len(MATCH_MAPS)))
+        print('Match page: %d maps from %s' % (len(MATCH_MAPS), mp))
     if not pgs and not heister:
         raise SystemExit('no [Redirect.2] .. [Redirect.5] section with F01..F09 lines in %s and the heister page is off: nothing to build' % ini)
     z = zipfile.ZipFile(stock)
@@ -641,6 +747,8 @@ def main():
     h = (1 if heister else 0) + (1 if GUNS and (SET_ARCADE or not SETTINGS) else 0)
     if GUNS:
         print('  %s page: %s -> window %s; rows %s' % (SET_TITLE if SETTINGS else 'guns', ('Arcade button %d (icon %s)' % (6 + (1 if heister else 0), ICONS[1 if heister else 0])) if (SET_ARCADE or not SETTINGS) else 'Options menu button only', GUNS_WINDOW, ', '.join('%s (%s, %d entries)' % (r[1], r[2], len(r[3])) for r in ((SET_ROWS + GUN_ROWS) if SETTINGS else GUN_ROWS))))
+    if MATCH:
+        print('  %s page: Options menu button after Mod settings -> window %s; rows %s' % (MATCH_TITLE, MATCH_WINDOW, ', '.join('%s (%s, %d entries)' % (r[1], r[2], len(r[3])) for r in match_rows())))
     if heister:
         if pictures:
             print(r'  heister page: WITH PICTURES - needs Overlay\Scenes\kaneandlynch.zip of tools\kl_portraits.py beside it (%s)' % ', '.join('%d for %s' % (len(r[2]), r[1]) for r in HEISTER_PICS))

@@ -254,3 +254,53 @@ Build order (each step is one session of work and one live check; "N" = a live c
 6. Menu element table headroom (section 1).
 7. The wire strings are short but visible to friends in the lobby; contain no Steam id of ours, only `kl_cast` carries ids the lobby already shows.
 8. Whether a peer with a different hook build and the same files can still enter (`kl_ver` mismatch -> that member is treated as stock; the cast skips it).
+
+## 8. B0 results and B1 state (2026-10-18; static reads of kl2.exe, nothing run; GUESS marks what is inferred)
+
+### 8.1 The equip behind the shop buy (answers 3.3's "step zero")
+- 0x7558ce is NOT the buy. It is the opener of the window FABuyWeaponsNew (MercsFAStatusReady input routine, message 0x81 -> 0x6bee50).
+- 0x7f73d0 is the weapon-row selector input (MercsFASelectorWeapons; options MP_Weapon_Screen / MP_Weapon_PageIndex). Checks in order:
+  already owned (bytes at 0xced638 / 0xced639 = current primary / secondary row), rank (0x8a3e40, 0x6a9d50), DLC (vtbl+0x38 of the object
+  at [0x168f750], "NeedToBuyDLC" / "NeedToHigherRank"), price (0x6a5260(row) against money), availability (0x808220). On success it opens
+  the window BuyWeaponDialog (0x7f7586).
+- 0x76b840 is that dialog's handler. Case 8 (confirm) sends a remote method call through the object's vtbl+0x124 with the RMC id word
+  at [edi+0x88]; that word is ZServer RMCBuyWeaponPack (iPrimaryWeapon, iSecondaryWeapon), registered in 0x6f69e0 at 0x6f6fc3.
+  ZClient also has RMCSetPrimaryWeapon (+0x94), RMCSetSecondaryWeapon (+0x9c), RMCSetProtectionSuit (+0x96) (registered 0x722540).
+- Server side: 0x8ea990 (and the variant 0x55d3e0) price the three rows with 0x6a5260 / 0x8736f0, deduct `sub [money+0x38]`, then write
+  `byte [rec+3] = primary row, [rec+4] = secondary row, [rec+5] = suit row` into the player's 0x7c-byte crew record
+  (table at rules+0x348, stride 0x7c, money field rules+0x5f8). Rows are the 36 shop rows (table 0xbd1f68).
+  Neither has a direct E8 caller (called through the RMC dispatch, i.e. a vtable) - the call chain from RMCBuyWeaponPack to 0x8ea990 is
+  GUESS.
+- CONSEQUENCE for KLMGun: the equip IS "write three row bytes into the crew record of the player" (money check skipped) and the client
+  field m_iPrimaryWeapon / m_iSecondaryWeapon follows through the replication of the record (GUESS: not read). A hook can only do it by
+  a heap write at a known moment (after the record exists, before the spawn reads rec[3..5]; the spawn reader is NOT read) or by calling
+  the RMC handler with a fake price of 0. Neither is safe enough to ship blind: KLMGun stays a VALUE (klpm.c says so); next read: the
+  spawn-time reader of rec[3]/[4] and the vtable that dispatches 0x8ea990.
+
+### 8.2 Steam id -> player slot
+DDL_ZClient property setter 0x8da640 (vtable 0xbd4f7c slot 18) gives the object layout: m_iClientIndex +0xdc, m_iClientSessionState +0xfc,
+m_iOnlineServiceID +0x180 (ZOnlineUserID = uint64[5]; element 0 = the Steam id is GUESS), m_iPrimaryWeapon +0x1dc, m_iProtectionSuit
++0x1fc, m_iRMCPlayerIndex +0x21c, m_iReadyForPlay +0x25c, m_iSecondaryWeapon +0x29c, m_iTeam +0x2bc, m_iUseMask +0x33c, m_szName +0x35c.
+Chain (GUESS): lobby member Steam id == m_iOnlineServiceID of one ZClient -> that client's m_iClientIndex / m_iRMCPlayerIndex is the
+session player number. How the list of ZClient objects is reached from the session (0x817160 is virtual: `[[session+4]->vtbl+0x3c]`)
+is NOT decoded; so 3.2's "cast" and the vote's per-player count stay B4/B6 work, and the solo parts do not need it.
+
+### 8.3 Availability gate
+0x5e1510 returns 1 when 0x87c980 (co-op), else byte `[obj+4+slot]` of the object at [0x168f750]. Its filler (0x7ca830 / 0x73f270) is
+still unread, as before; nothing in B1 relies on it.
+
+### 8.4 Menu element headroom
+Live log (KLHook.log, v27c overlay): `menu: table 5065 of 5096` = 31 free. The Match window costs 20 table entries (19 window tags +
+1 Options button: mkoverlay's `table_tags` 4353 -> 4373), leaving 11 free by that live number (8 if the installed overlay's tag count is
+the 4353 the current ini gives, i.e. 3 more than the 4350 of the v27c note). Budget: lean page, no arrows / focus bars / lines / icon.
+
+### 8.5 B1 as built
+- `klhook/klpm.c` (5a2934b3, 021774a4): options KLMGun 0..36, KLMVote 0..N, KLMPlay 0..2; off unless `[Match] Enable=1`.
+- `klhook/mkoverlay.py`: window KLMatch (Options menu button "Match options" after "Mod settings"), rows Character (KLChar, 17), Gun
+  (KLMGun, 37: "Level default" + "Shop gun 1..36", GUESS: the shop rows have no names in the exe), Map vote (KLMVote, 1 + maps.ini maps),
+  Playlist (KLMPlay, 3). Built only if the ini has `[Match] Enable=1` (Menu=0 leaves it out). Map names from `klhook/maps.ini.sample`
+  (or env KL_MATCH_MAPS). The vote row's entry count must equal the maps.ini count the DLL loads (nobody checks - GUESS).
+  Not seen in the game: keyboard Left / Right on a ToggleText without arrow elements, and the button's place in the Options column, are GUESS.
+- `klhook/maps.ini.sample`: 10 expansion maps (pages 2 and 3 of the Arcade list), the 9 stock slots DD01..DD09, 2 bundles.
+- B2 (Arcade playlist) is NOT built: choosing the next map needs a write to the session's selected-level option or a slot rewrite at the
+  moment the results screen ends, neither read; stops at B1 as the task allows.
