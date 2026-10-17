@@ -48,6 +48,7 @@ if ($Undo) {
     if (Test-Path $bk) { Copy-Item $bk $t -Force; Remove-Item $bk -Force; Write-Host "$($r.File): restored"; continue }
     if (-not (Test-Path $t)) { Write-Host "$($r.File): not there"; continue }
     if ((Get-FileHash $t -Algorithm MD5).Hash.ToLower() -ne $r.New) { Write-Host "$($r.File): changed since install - NOT removed"; continue }
+    if ($r.Was -ne 'ABSENT') { Write-Host "$($r.File): was already there before this install - kept"; continue }
     Remove-Item $t -Force; Write-Host "$($r.File): removed (it was new)"
   }
   if ((Test-Path $dir) -and -not (Get-ChildItem $dir)) { Remove-Item $dir }
@@ -92,7 +93,7 @@ def main():
         before = md5(t) if os.path.isfile(t) else 'ABSENT'
         new = md5(os.path.join(d, f))
         lines.append('%s | %s | %s | %d' % (f, new, before, os.path.getsize(os.path.join(d, f))))
-        rows.append("  @{File='%s'; New='%s'}" % (f, new))
+        rows.append("  @{File='%s'; New='%s'; Was='%s'}" % (f, new, before))
     lines += ['', 'Target folder: %s\\%s. Nothing else is written (no KLHook.ini, no Patch01.zip, no stock file, no other map).' % (DD_MAPS, mid)]
     open(os.path.join(out, 'MANIFEST.txt'), 'w').write('\n'.join(lines) + '\n')
     ps = PS.replace('@ID@', mid).replace('@TITLE@', m['title']).replace('@TAG@', TAG).replace('@MAPS@', DD_MAPS).replace('@ROWS@', ',\n'.join(rows))
