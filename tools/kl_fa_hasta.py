@@ -92,7 +92,7 @@ def run(name, args, logdir):
     return r.returncode
 
 
-def build_base(out=OUT, keep_all=False, start='build'):
+def build_base(out=OUT, keep_all=False, start='build', layer=False):
     out = os.path.abspath(out)
     logs = os.path.join(out, 'logs')
     os.makedirs(logs, exist_ok=True)
@@ -130,7 +130,9 @@ def build_base(out=OUT, keep_all=False, start='build'):
 
     tools = lambda n: os.path.join(HERE, n)
     print('hasta build-base -> %s (%.1f GB free)' % (out, free_gb(out)))
-    ok = stage(0, 'build', [tools('kl_maps.py'), 'one', out, HOST, LEVEL, '--campaign', '--keep'], d_build)
+    first = ([tools('kl_fa_hasta_layer.py'), 'test', out, '--keep'] if layer       # step 3b: doors + layer, finished (briefcases, texts)
+             else [tools('kl_maps.py'), 'one', out, HOST, LEVEL, '--campaign', '--keep'])
+    ok = stage(0, 'build', first, d_build)
     ok = ok and stage(1, 'light', [tools('kl_graft.py'), 'lighten', d_build, d_light, '--load', 'trim,slim,fxc'], d_light, d_build)
     ok = ok and stage(2, 'ward', [tools('kl_chars.py'), 'wardrobe', d_light, d_ward], d_ward, d_light)
     ok = ok and stage(3, 'compact', [tools('kl_chars.py'), 'compact', d_ward, d_comp], d_comp, d_ward)
@@ -270,12 +272,134 @@ def read_design(out=OUT):
     return 0
 
 
+# ---------------------------------------------------------------------------------- STEP 3c: the whole chain, delivery, checks
+DELIV = 'M11B'
+BOTS_ARGS = ['--stops', '1', '--cases', 'glass', '--lane', '--window', '--loot-seconds', '30']   # kl_fa_bank.BOT_OPT (GUESS: no Hasta recipe)
+MAP_JSON = os.path.join(WORK, 'build', 'v_bain', 'over_talk', 'PC_Def.str')
+
+
+def _drop(*folders):
+    for f in folders:
+        if f and os.path.isdir(f):
+            shutil.rmtree(f, ignore_errors=True)
+
+
+def chain(out=OUT, start=1, plates=False, armour='0,3'):
+    """bare (doors + layer, KEPT with its side files) -> lighten -> wardrobe (+plates) -> compact -> bots -> gun looks -> fxc again
+    -> dynamic bots (LAST: it records the large blocks) -> <out>/M11B. Order is the bank's (re/bank_campaign.md F.2) with the compaction
+    after the wardrobe (the bare map is over the 73,728 table). Talk (kl_fa_talk) has no M11 scene table: left out (re/hasta_fa.md 3c).
+    ARMOUR 0,3 (--armour=0,1,2,3 for all four): all four levels MEASURED .prm 90.6 MB (over the 90 MB GUESS edge), 0,3 saves the two middle body meshes.
+    PLATES (--plates, 4 Payday-2 style mask plates) MEASURED +18.5 MB .prm: 91.0 MB after compaction, over the 90 MB GUESS edge: off by default.
+    kl_hud is the overlay's (menu fonts / plates), not a level step: nothing to do per map. Each step wipes its predecessor."""
+    out = os.path.abspath(out)
+    logs = os.path.join(out, 'chain_logs')
+    os.makedirs(logs, exist_ok=True)
+    T = lambda n: os.path.join(HERE, n)
+    d = lambda n: os.path.join(out, n)
+    bare_root = d('bare')
+    bare = os.path.join(bare_root, '%s+%s campaign' % (HOST, LEVEL))
+    steps = [
+        ('1_bare', [T('kl_fa_hasta_layer.py'), 'test', bare_root, '--keep'], bare, (0, 1)),
+        ('2_light', [T('kl_graft.py'), 'lighten', bare, d('2_light'), '--load', 'trim,slim,fxc'], d('2_light'), (0,)),
+        ('3_ward', [T('kl_chars.py'), 'wardrobe', d('2_light'), d('3_ward'), '--armour=' + armour] + (['--plates=wolf,dallas,chains,hoxton'] if plates else []), d('3_ward'), (0, 1)),
+        ('4_compact', [T('kl_chars.py'), 'compact', d('3_ward'), d('4_compact')], d('4_compact'), (0,)),
+        ('5_bots', [T('kl_fa_bots.py'), 'build', d('4_compact'), d('5_bots')] + BOTS_ARGS, d('5_bots'), (0, 1)),
+        ('6_guns', [T('kl_map_guns.py'), 'build', d('5_bots'), d('6_guns'), '--start=1', '--set=1'], d('6_guns'), (0, 1)),
+        ('7_fxc', [T('kl_graft.py'), 'lighten', d('6_guns'), d('7_fxc'), '--load', 'fxc'], d('7_fxc'), (0,)),
+        ('8_dyn', [T('kl_fa_bots_dyn.py'), 'build', d('7_fxc'), d(DELIV)], d(DELIV), (0,)),
+        ('9_seal', [T('kl_fa_bank.py'), 'seal', d(DELIV)], d(DELIV), (0,)),     # bank's generic seal: room lists must not name the new squad nodes
+    ]
+    prev = {'2_light': bare, '3_ward': d('2_light'), '4_compact': d('3_ward'), '5_bots': d('4_compact'),
+            '6_guns': d('5_bots'), '7_fxc': d('6_guns'), '8_dyn': d('7_fxc')}
+    for i, (name, args, folder, okcodes) in enumerate(steps):
+        if i + 1 < start:
+            continue
+        if free_gb(out) < 3.0:
+            print('STOP: %.1f GB free' % free_gb(out)); return 1
+        if name not in ('1_bare', '9_seal'):         # (the seal works IN PLACE on the delivery: dropping it first left nothing to seal)
+            _drop(folder)
+        rc = run(name, args, logs)
+        m = measure(folder if name != '1_bare' else bare)
+        print('           ', m and (m['chunks'], m['prm_mb'], round(m['bytes'] / 1e6)))
+        if rc not in okcodes or m is None:
+            print('CHAIN STOPPED at', name, '- exit', rc, '- see', logs); return 1
+        if name in prev and name != '2_light':
+            _drop(prev[name])
+    print('CHAIN DONE ->', d(DELIV))
+    return 0
+
+
+CHECKS = [   # name, argv after tools/, exit codes that are not a failure
+    ('impact', ['kl_impact.py', '{f}'], (0,)),
+    ('reverify', ['kl_fa_bank.py', 'reverify', '{f}'], (0,)),
+    ('layer_check', ['kl_fa_hasta_layer.py', 'check', '{f}'], (0,)),
+    ('van_check', ['kl_map_escape.py', 'van-check', '{f}'], (0, 1)),      # 1 = the .HVK size line, see re/hasta_fa.md 3c
+    ('audit', ['kl_maps.py', 'audit', '{f}'], (0, 1)),
+    ('preflight', ['kl_maps.py', 'preflight', '{f}'], (0, 1)),
+    ('fa', ['kl_fa.py', 'check', '{f}/F01_Main.zip'], (0,)),
+    ('arms', ['kl_arms.py', 'check', '{f}/F01_Main.zip'], (0,)),
+    ('chars', ['kl_chars.py', 'check', '{f}'], (0,)),
+    ('guns', ['kl_map_guns.py', 'check', '{f}'], (0,)),
+    ('bots', ['kl_fa_bots.py', 'check', '{f}'], (0,)),
+    ('dyn', ['kl_fa_bots_dyn.py', 'check', '{f}'], (0,)),
+    ('mapai', ['kl_map_ai.py', 'table', '{f}'], (0,)),
+]
+
+
+def checks(folder=None):
+    """Every check into <folder>/checks/<name>.txt and checks/summary.txt (exit code, last line, sha1 of the archive)."""
+    import hashlib
+    f = os.path.abspath(folder or os.path.join(OUT, DELIV))
+    cd = os.path.join(f, 'checks')
+    os.makedirs(cd, exist_ok=True)
+    lines, bad = [], 0
+    h = hashlib.sha1()
+    with open(os.path.join(f, 'F01_Main.zip'), 'rb') as fh:
+        for blk in iter(lambda: fh.read(1 << 20), b''):
+            h.update(blk)
+    lines.append('F01_Main.zip sha1 %s  %d bytes' % (h.hexdigest(), os.path.getsize(os.path.join(f, 'F01_Main.zip'))))
+    m = measure(f)
+    lines.append('chunk table %s (limit %d, tools %d), .prm %s MB (GUESS edge %.0f), TEX %s MB' % (m['chunks'], CHUNK_TABLE, CHUNK_SAFE, m['prm_mb'], PRM_LIMIT_MB, m['tex_mb']))
+    for name, argv, ok in CHECKS:
+        cmd = [sys.executable, os.path.join(HERE, argv[0])] + [x.replace('{f}', f) for x in argv[1:]]
+        r = subprocess.run(cmd, capture_output=True, text=True, errors='replace', cwd=HERE)
+        txt = (r.stdout or '') + (r.stderr or '')
+        open(os.path.join(cd, name + '.txt'), 'w', encoding='utf-8').write(txt)
+        last = [x for x in txt.splitlines() if x.strip()][-1:] or ['']
+        flag = 'ok ' if r.returncode in ok else 'BAD'
+        bad += flag == 'BAD'
+        lines.append('%s %-12s exit %d | %s' % (flag, name, r.returncode, last[0].strip()[:200]))
+    # result.json was written by the bare graft: its verify lines (the chunk table of the bare, 74,763) are stale after compaction
+    rj = os.path.join(f, 'result.json')
+    try:
+        res = json.load(open(rj))
+        old = res.get('problems', [])
+        keep = [x for x in old if not x.startswith('.prm: ') or int(x.split()[1]) <= CHUNK_TABLE]
+        if keep != old:
+            res['problems_at_bare'] = old
+            res['problems'] = keep
+            json.dump(res, open(rj, 'w'), indent=1)
+            lines.append('result.json: the bare map chunk-table line dropped (stale after compaction: now %s entries); kept in problems_at_bare' % m['chunks'])
+    except (OSError, ValueError):
+        pass
+    lines.append('%d check(s) with an unexpected exit' % bad)
+    open(os.path.join(cd, 'summary.txt'), 'w').write(chr(10).join(lines) + chr(10))
+    print(chr(10).join(lines))
+    return 1 if bad else 0
+
+
 def main():
     a = sys.argv[1:]
     opt = lambda k, dflt=None: a[a.index(k) + 1] if k in a and a.index(k) + 1 < len(a) else dflt
-    pos = [x for i, x in enumerate(a) if not x.startswith('--') and (i == 0 or a[i - 1] not in ('--from',))]
+    pos = [x for i, x in enumerate(a) if not x.startswith('--') and (i == 0 or a[i - 1] not in ('--from', '--start'))]
     if pos[:1] == ['build-base']:
         sys.exit(build_base(pos[1] if len(pos) > 1 else OUT, '--keep-all' in a, opt('--from', 'build')))
+    if pos[:1] == ['build']:        # step 3b: base -> doors -> layer (kl_fa_hasta_layer.py test), then the same lighten / wardrobe / compact / impact chain
+        sys.exit(build_base(pos[1] if len(pos) > 1 else OUT, '--keep-all' in a, opt('--from', 'build'), layer=True))
+    if pos[:1] == ['chain']:
+        sys.exit(chain(pos[1] if len(pos) > 1 else OUT, int(opt('--start', 1)), '--plates' in a, opt('--armour', '0,3')))
+    if pos[:1] == ['checks']:
+        sys.exit(checks(pos[1] if len(pos) > 1 else None))
     if pos[:1] == ['proof-pair']:
         sys.exit(proof_pair(pos[1] if len(pos) > 1 else OUT))
     if pos[:1] == ['read']:
