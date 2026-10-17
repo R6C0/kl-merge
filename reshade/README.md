@@ -7,6 +7,7 @@ Files in this folder:
 | `KL_Look.fx` | `reshade-shaders\Shaders\` (replaces v1, back it up as `KL_Look.fx.before-v2`) | The "Heat" grade with the adaptive sky. Technique name is still `KL_Look`. |
 | `KL_Glare.fx` | `reshade-shaders\Shaders\` (new) | Stable anamorphic glare on light sources only. |
 | `KL_CameraFX.fx` | `reshade-shaders\Shaders\` (new) | The raw handheld-camera layer, driven by the hook. |
+| `KL_LensCrack.fx` | `reshade-shaders\Shaders\` (new) | The cracked camera lens (up to 3 impact cracks when shot a lot), driven by the hook (needs `[ReShade] Bridge=1`; see `re\lens_crack.md`). |
 | `KL_Camcorder.fx` | `reshade-shaders\Shaders\` (replaces the installed one) | **Bug fix**: the installed file does not compile (see below). |
 | `ReShadePreset_KL.ini` | game folder (back up the old one as `.before-fx`) | SMAA, Uplift, KL_Look, KL_Glare, KL_CameraFX. |
 | `ReShadePreset_LiveLeak.ini` | game folder (back up the old one as `.before-fx`) | SMAA, Uplift, KL_Camcorder, KL_CameraFX (KL_Glare listed but off). |
