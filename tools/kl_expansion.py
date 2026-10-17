@@ -219,6 +219,13 @@ EXTRA = [
     dict(id='DM06B', slot='F02', page=3, title='A Walk in the Park II', build='prebuilt', sources=['M06_A'], picture='LevelPicture_M06', bones_live=False,
          audit=True, known=(), known_re=(),
          live='NOTHING: the map has never been loaded in the game (build/v2_1017/DM06B; the F01 test slot comes first, then page 3 entry 1)'),
+    # PAGE 3, entry 2 (2026-10-17): 'Hot Coffee II' = the campaign level M01_A on F07's systems (tools\kl_fa_v2_hotcoffee.py). Slot F03 (ORDER[2]).
+    # Built, then compacted (kl_chars.py compact: 77060 -> 49382 chunks) and given the installed gun sounds (guns_step.py). Known: material 957
+    # (Glass_Grid_01b_M01) has no shader in the .fxc = glass panes not drawn (GUESS: cosmetic); 2 stream clips missing = silent beds.
+    # NOT RUN IN THE GAME.
+    dict(id='DM01B', slot='F03', page=3, title='Hot Coffee II', build='prebuilt', sources=['M01_A'], picture='LevelPicture_FA01', bones_live=False,
+         audit=True, known=('asks for a shader the .fxc lacks',), known_re=(),
+         live='NOTHING: the map has never been loaded in the game (build/v2_1017/DM01B; the F01 test slot comes first, then page 3 entry 2)'),
 ]
 
 

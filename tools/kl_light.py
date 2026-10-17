@@ -762,17 +762,21 @@ def bake_ao(dm_prm, dd_prm, roots, dm_tex, strength=1.0, log=print):
         raise ValueError('the converted .prm has fewer chunks than its source')
     kinds, _a = G.walk(src, roots)
     tex = kl_texmat.read_tex(dm_tex)
-    maps, users, jobs = {}, collections.defaultdict(set), {}
+    maps, users, jobs, skipped = {}, collections.defaultdict(set), {}, []
     for i, k in kinds.items():
         if k != 'desc':
             continue
         nv, vtx, _n, _idx, lit, lit5 = struct.unpack_from('<6I', src.chunks[i], 0)
         if not vtx:
             continue
+        if lit and (len(src.chunks[vtx]) != (40 * nv + 15 & ~15) or len(src.chunks[lit]) < 8 * nv):
+            # 2026-10-17 (Hot Coffee II, M01_A descriptor 33689): a lit descriptor that is not a 40-byte-vertex mesh with an 8-byte
+            # stream is left AS CONVERTED (not darkened) instead of aborting the whole build; counted and logged below.
+            users[vtx].add((lit, lit5))         # still a USER of the vertex chunk: a shared chunk is cloned, not darkened under it
+            skipped.append(i)
+            continue
         users[vtx].add((lit, lit5) if lit else None)
         if lit:
-            if len(src.chunks[vtx]) != (40 * nv + 15 & ~15) or len(src.chunks[lit]) < 8 * nv:
-                raise ValueError('lit descriptor %d: not a 40-byte-vertex mesh with an 8-byte stream' % i)
             jobs.setdefault((vtx, lit, lit5), []).append((i, nv))
     rep = dict(meshes=0, vertices=0, cloned=0, added=0, mean=1.0, maps={})
     total = 0.0
@@ -806,6 +810,9 @@ def bake_ao(dm_prm, dd_prm, roots, dm_tex, strength=1.0, log=print):
                     raise ValueError('descriptor %d of the converted file does not name vertex chunk %d' % (d, vtx))
                 out.chunks[d] = c[:4] + struct.pack('<I', len(out.chunks) - 1) + c[8:]
     rep['mean'] = round(total / (3 * rep['vertices']), 4) if rep['vertices'] else 1.0
+    rep['skipped'] = len(skipped)
+    if skipped:
+        log('  baked AO: %d lit descriptors skipped (not a 40-byte-vertex mesh with an 8-byte stream): %s' % (len(skipped), sorted(skipped)[:8]))
     log('  baked AO: %d meshes, %d vertices, mean factor %.3f, %d vertex chunks cloned (+%d bytes), light maps %s' % (
         rep['meshes'], rep['vertices'], rep['mean'], rep['cloned'], rep['added'], sorted(rep['maps'].values())))
     return G.write(out), rep
