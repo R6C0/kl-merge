@@ -20,8 +20,8 @@ any log), so everything online below is static reading.
    menu XML.
 2. **The one pattern that makes the menu cheap is already proven live:** a menu row binds to an option by NAME, the names are
    compiled into the game, but the hook swaps the options object's vtable for a private copy and answers extra names itself
-   (`KLChar`, `KLMask`, `KLOutfit`; klchar.c section 1; runs W1 - W6, 2026-10-09). More names (`KLGun`, `KLVote`, `KLPlay`) are
-   the same code. Their `Set` wrapper is also the EVENT that tells the hook the player chose something.
+   (`KLChar`, `KLMask`, `KLOutfit`; klchar.c section 1; runs W1 - W6, 2026-10-09). More names are the same code. (As built in klpm.c they are `KLMGun`, `KLMVote`, `KLMPlay`: klgun.c answers every name that starts
+   with `KLGun`, so `KLGun...` is taken; the later sections still say KLGun / KLVote / KLPlay.) Their `Set` wrapper is also the EVENT that tells the hook the player chose something.
 3. **The pattern that makes the network cheap:** Steam lobby member data and lobby data, polled by the hook. The game never
    checks the build and the Steam-level join checks nothing (private_match.md 3, `0x629980`), so no new game code is needed to
    move a choice from one machine to another. The hook already owns the right interface (klmm.c proxy, 008 layout PROVEN
@@ -162,7 +162,8 @@ options keep working when `PrivateLobby=0` and the proxy is not installed.
 ### 4.2 Authority
 Each peer is the authority for its own `kl_opt`. The HOST is the authority for `kl_cast`, `kl_map`, the vote result and the
 playlist cursor (host = lobby owner = Net-Z server; the "server is always the host" is ASSUMED, netcode.md 6). A client never
-acts on another client's `kl_opt` except through the host's `kl_cast`.
+acts on another client's `kl_opt` except through the host's `kl_cast`. (Review note: 4.1 says every peer polls every member's `kl_opt`;
+that is for display and logging only, to stay consistent with this rule.)
 
 ### 4.3 Version and safety
 - Every value starts with `v1;`. A peer that sees another version, or a member with no `kl_opt`, falls back to "stock behaviour for
@@ -178,6 +179,10 @@ acts on another client's `kl_opt` except through the host's `kl_cast`.
 
 ### 5.1 Vote
 - Row `KLVote` = one of the maps in `maps.ini` (or "no preference"). Published in `kl_opt` (`x=`).
+  **Desync risk (review 2026-10-18):** the stored value is the 1-based INDEX into the local maps.ini, and `kpm_tally` returns an index. Two
+  machines with maps.ini files that differ in order or length would read the same number as different maps (and `KLMVote` is clamped to the
+  local count). Publish the map ID string (`x=DM05A`) and tally on IDs; only the host's `kl_map` result is applied, as an ID. The same
+  holds for the playlist cursor: it indexes the host's list, so only the host may advance it and peers must never run `kpm_next` themselves.
 - The host tallies when it needs a map: when the lobby asks for the map (the host presses Ready) or when everyone has voted, whichever
   comes first. Ties and "no preference" resolve by a seeded draw (seed = lobby id) so a restart does not re-roll. Tally is a
   function of the member data only, so the host's choice is reproducible in a unit test off-game.

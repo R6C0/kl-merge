@@ -15,7 +15,7 @@
  *          [Maps]            Count=3
  *          [Map.1]           Id=DM01   Name=Subway (Dead Men)   Slot=F01
  *          [Bundle.1]        Name=Dead Men classics   Maps=DM01,DM03A,DM05A
- *      Path: [Match] Maps=<file>, default KLExpansion\Maps\maps.ini beside kl2.exe (the dir of the DLL).
+ *      Path: [Match] Maps=<file>, default KLExpansion\Maps\maps.ini beside kl2.exe (kl2.exe's folder, which is also the DLL's).
  *   3. Pure functions with an off-game test (klpm_test.c): kpm_tally() (vote count -> map index; ties and 'no preference' by a draw seeded
  *      with the lobby id, so a restart does not re-roll) and kpm_next() (playlist cursor, sequence or random without repeats).
  *
@@ -167,8 +167,13 @@ static void kpm_init(void)
     GetPrivateProfileStringA("Match", "Maps", "", file, sizeof file, klh_ini);
     if (!file[0] && GetModuleFileNameA(0, file, sizeof file) && (s = strrchr(file, 0x5c)) != 0 && (size_t)(s - file) + 28 < sizeof file)
         strcpy(s + 1, "KLExpansion\\Maps\\maps.ini");
+    else if (file[0] && file[1] != ':' && file[0] != 0x5c) {   /* a RELATIVE [Match] Maps: GetPrivateProfile*A would look in the Windows folder, so anchor it at kl2.exe's folder */
+        char rel[MAX_PATH]; strcpy(rel, file); file[0] = 0;
+        if (GetModuleFileNameA(0, file, sizeof file) && (s = strrchr(file, 0x5c)) != 0 && (size_t)(s - file) + 1 + strlen(rel) < sizeof file) strcpy(s + 1, rel);
+        else file[0] = 0;
+    }
     if (GetFileAttributesA(file) != INVALID_FILE_ATTRIBUTES) kpm_maps_load(file);
-    kpm_cursor = (int)GetPrivateProfileIntA("Match", "Cursor", 0, klh_ini); if (kpm_cursor < 0) kpm_cursor = 0;
+    kpm_cursor = (int)GetPrivateProfileIntA("Match", "Cursor", 0, klh_ini); if (kpm_cursor < 0 || kpm_cursor > 100000) kpm_cursor = 0;   /* kpm_next replays every lap up to the cursor: bound the work */
     kpm_seed = (unsigned)GetPrivateProfileIntA("Match", "Seed", 1, klh_ini);
     for (i = 0; i < KPM_N; i++) {
         int v = (int)GetPrivateProfileIntA("Match", kpm_keys[i], 0, klh_ini);

@@ -9,7 +9,7 @@ Dog Days (DD) kept the grenade ITEMS, the throw ACTIONS, the throw ANIMATIONS, t
 network messages. It removed the grenade PROJECTILE groups (the Ammo template's projectile slot is empty)
 and the grenade effect pools and sounds. So the job is: put Dead Men's (DM) `Projectile\Grenade_*` groups
 into the DD systems subtree, repoint effects and sounds, fill the Ammo slot, and give the player a way to
-hold one. No animation port is needed.
+hold one. No animation port is needed for the throw itself (MEASURED for the 18 generic clips; the Dodge_* clips are NOT CHECKED).
 
 ## 1. Item / weapon templates
 
@@ -131,9 +131,9 @@ throwing back enemy grenades. `GrenadeAttackBehaviourRout` is DD-only as a contr
 ## 8. Staged plan
 
 - Stage A (NPC grenade, offline, small): `kl_arms.arm(grenades=True)` for a few NPCs with the stock DD
-  templates, to exercise GrenadeAttackBehaviour + ZFFActionThrow with the existing animations. It cannot
-  hurt anything until Stage B exists, and without a projectile the throw has nothing to spawn (GUESS: ignores
-  or crashes; test on one actor in the F01 slot under the autotest).
+  templates, to exercise GrenadeAttackBehaviour + ZFFActionThrow with the existing animations. Without a
+  projectile the throw has nothing to spawn: GUESS that the engine ignores it, but a crash is possible (null Ammo
+  projectile ref, never tried), so it is NOT harmless; test on one actor in the F01 slot under the autotest.
 - Stage B (projectile): clone DM `Projectile\Grenade_Fragmentation` (ZGROUP + Ground + 3 controllers) into the
   DD systems subtree with `kl_scene.graft`; convert Explode and FFHavok through `kl_convert.LEVEL_MAPS`
   (Explode +3 fields take the DD most-common value); repoint effect to FX_Grenade_RPG_01 and sound to DD's
