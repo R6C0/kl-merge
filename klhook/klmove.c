@@ -287,6 +287,7 @@
 #define KLMV_EXIT_VT    0x00bc8c1c            /* ZOnlineExitLevelTrigger (RTTI; slot 34 = 0x6c3d50, slot 25 = 0x65dd10) */
 #define KLMV_CALLVEH    0x008154f0            /* void __thiscall (rules, vehicle, char last): what rules slot 44 (0x6cd8e0) and the forced last call (0x81e570) call; ret 8 */
 #define KLMV_LAST_AT    1.75f                 /* s left on the round clock: the game's own forced call is at 2.0 (0x81e570); this is the fallback after it */
+#define KLMV_LAST_NOVEH 2.5f                  /* s left: with NO vehicle known to the rules the game's own call at 2.0 cannot happen (0x81e5aa), so there is nothing to give a frame to (v82d) */
 #define KLMV_SENT       3000.0f               /* BoardReachOrder: only a bot within this of the boarding box is sent to the doors. GUESS */
 
 /* a box entity in the world: its node's place, its three axes, its half extents (box = 0: not a ZBoxPrimitive, a point) */
@@ -678,19 +679,48 @@ static DWORD klmv_exit_vehicle(DWORD *trig)
     return 0;
 }
 
+/* v82d (2026-10-17, AA step 6): what the clock showed last, so a round that ends WITHOUT the call can say why. NOT reset per round (klmv_r is wiped
+   when a crew stage drops): rules says which round it belongs to. */
+static struct { DWORD rules, at; float left; int n, sec, told_end, told_fail, passes; } klmv_lc;
+
+/* the round left state 0x19 (or the session could not be read) and the last call has not been made: say what the clock was, once */
+static void klmv_last_end(DWORD rules, DWORD state, int read_failed)
+{
+    int *told = read_failed ? &klmv_lc.told_fail : &klmv_lc.told_end; char what[80];
+    if (!klmv.last || !klmv_lc.rules || (rules && rules != klmv_lc.rules) || klmv_r.last_done || *told || !klmv_lc.passes) return;
+    if (read_failed && klmv_lc.left > 15.0f) return;
+    *told = 1;
+    if (read_failed) strcpy(what, "the session could NOT be read"); else snprintf(what, sizeof what, "the round left state 0x19 (now 0x%lx)", (unsigned long)state);
+    klog("last: %s without the last-vehicle call: the clock was last read %.2f s (%lu ms ago; %d pass(es) in the round, %d of them at 10 s or less) - %s",
+         what, klmv_lc.left, GetTickCount() - klmv_lc.at, klmv_lc.passes, klmv_lc.n,
+         klmv_lc.left > 2.5f ? "no pass saw the clock in the 2.5 s window: it jumped or the round was ended by something else" : klmv_lc.left <= 0.0f ? "the clock read 0 before a pass saw it in the window" : "a pass saw it in the window but did not call (see the lines above)");
+}
+
 static void klmv_last_vehicle(const struct klb_snap *s)
 {
     static const BYTE head[16] = { 0x56, 0x8b, 0xf1, 0x80, 0xbe, 0xdc, 0x01, 0x00, 0x00, 0x00, 0x0f, 0x85, 0x9e, 0x00, 0x00, 0x00 };      /* 0x8154f0 */
-    float left = 0; BYTE flagged = 0, kind = 0, veh = 0; DWORD known, e80, trig = 0, v, t0;
-    if (klmv_r.last_done || !klh_rd(s->rules + 0x4c, &left, 4) || !klb_finite(left)) return;
-    if (left > 2.5f || left <= 0.0f) return;
+    float left = 0, limit; BYTE flagged = 0, kind = 0, veh = 0; DWORD known, e80, trig = 0, v, t0;
+    if (!klh_rd(s->rules + 0x4c, &left, 4) || !klb_finite(left)) return;
+    /* v82d: every pass is noted; from 10 s on each whole second is said once (the clock, and what the game has done), so the next live run shows what the code saw */
+    if (klmv_lc.rules != s->rules) { memset(&klmv_lc, 0, sizeof klmv_lc); klmv_lc.rules = s->rules; klmv_lc.sec = 99; }
+    klmv_lc.left = left; klmv_lc.at = GetTickCount(); klmv_lc.passes++; if (left <= 10.0f) klmv_lc.n++;
+    if (klmv_r.last_done) return;
     if (!klh_rd(s->rules + 0xe8a, &flagged, 1) || !klh_rd(s->rules + 0x1ec, &kind, 1) || !klh_rd(s->rules + 0x1dc, &veh, 1)) return;
     known = klh_rd32(s->rules + 0x1e4); e80 = klh_rd32(s->rules + 0xe80);
+    if (left <= 10.0f && left > 0.0f && (int)left < klmv_lc.sec) {
+        klmv_lc.sec = (int)left;
+        klog("last: clock %.2f s (pass %d at 10 s or less): vehicle state %u, [rules+0xe8a] %u, kind %u, vehicle %08lx, +0xe80 %08lx; the call is made at %.2f s or less (%s)", left, klmv_lc.n, veh, flagged, kind, known, e80,
+             (known || e80) ? KLMV_LAST_AT : KLMV_LAST_NOVEH, (known || e80) ? "a vehicle is known: the game's own call at 2.0 s gets its frame" : "NO vehicle known: the game's own call cannot happen");
+    }
+    if (left > 2.5f || left <= 0.0f) return;
     if (veh || flagged) {                     /* the game called one (its own forced call at 2.0 s, or a call before that is still running): nothing to do */
         if (!klmv_r.last_told++) klog("last: %.2f s left: a vehicle is under way or the last one is flagged already (state %u, [rules+0xe8a] %u, kind %u, vehicle %08lx, +0xe80 %08lx): nothing done", left, veh, flagged, kind, known, e80);
         klmv_r.last_done = 1; return;
     }
-    if (left > KLMV_LAST_AT) return;          /* the game's own call comes at 2.0 s: give it its frame */
+    /* v82d: the game's own call (0x81e570) needs a vehicle: [rules+0x1e4] / [rules+0xe80] (0x81e5aa 'je' past the call when edi = 0). With none known it will NEVER come,
+       so there is no frame to give it: the call is made from 2.5 s on. With one known the game gets its frame at 2.0 s and this follows at 1.75 s. */
+    limit = (known || e80) ? KLMV_LAST_AT : KLMV_LAST_NOVEH;
+    if (left > limit) return;
     klmv_r.last_done = 1;
     if (klh_rd32(s->rules) != KLB_RULES_VT || !klb_same_code(KLMV_CALLVEH, head, sizeof head)) { klog("last: %.2f s left and NO last vehicle, but the rules object or 0x8154f0 is not the one this build knows: nothing done", left); return; }
     t0 = GetTickCount();
@@ -1236,6 +1266,7 @@ static void klmv_tick(int game_thread)
            good - the next pass that reads a session puts them back or drops them by klmv_listed (the object must still
            be a ZOnlineMoneyCtrl in that rules object's list, with the state it had) */
         klmv_deny_none();
+        klmv_last_end(0, 0, 1);
         if (!klmv_fail_at) klmv_fail_at = KLB_T(now);
         if (now - klmv_fail_at < 3000) return;
         klmv_r.rules = 0;
@@ -1245,6 +1276,7 @@ static void klmv_tick(int game_thread)
     klmv_fail_at = 0;
     for (i = 0; i < s.n; i++) if (s.r[i].used) stages += s.r[i].stage;
     if (s.rules != klmv_r.rules || (s.state == KLB_ROUND && klmv_r.state != KLB_ROUND) || stages < klmv_r.stages) {      /* a new round: as klbot.c's klb_act */
+        if (s.state == KLB_ROUND && klmv_r.state != KLB_ROUND) memset(&klmv_lc, 0, sizeof klmv_lc);      /* v82d: the last-call book starts with the round */
         memset(&klmv_r, 0, sizeof klmv_r); klmv_r.rules = s.rules; klmv_r.round_at = KLB_T(now); klmv_rc.armed = 0; klmv_rc.rules = 0; klmv_rc.relax = 0;
         if (game_thread)                      /* what is still sour is from before this round (the round's end puts them back; these outlived a pass that could not read): back if it still is that object, else forgotten */
             for (i = 0; i < KLMV_NSOUR; i++) if (klmv_sour[i].on) { if (klmv_sour[i].rules == s.rules) klmv_sweeten(i, "a new round"); else klmv_sour[i].on = 0; }
@@ -1254,7 +1286,7 @@ static void klmv_tick(int game_thread)
         if (s.state == KLB_ROUND && !klmv_r.told_thread++) klog("move / wait / near: the tick is not on the game's thread ([KLHook] Tick=0?): nothing is ordered or written");
         return;
     }
-    if (s.state != KLB_ROUND) { klmv_stand_down(s.rules, "the round is over"); return; }
+    if (s.state != KLB_ROUND) { klmv_last_end(s.rules, s.state, 0); klmv_stand_down(s.rules, "the round is over"); return; }
     if (!klb_level(why)) {                    /* klbot.c section 0 */
         if (!klmv_r.told_gate++) klog("move / wait / near: %s: nothing is done here (this part acts only on a level that is not stock)", why);
         klmv_stand_down(s.rules, "this level is stock or not known");
