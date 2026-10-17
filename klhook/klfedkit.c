@@ -839,6 +839,7 @@ static void klfk_hunted(int game_thread, DWORD player, DWORD rules)
         if (!n) { if (klfk.log > 1) klog("fedkit: hunted: record %d NOT ordered: %s", i, w); continue; }
         if (j == 2) { klfk_hb[i].hop_k = k + 1; klmv_hop_take(k, i); }
         klfk_hr.orders++;
+        if (n == 1) klmv_foreign(i, got);                      /* v82f: klmove.c's Restless must not take this place for its chain's */
         klog("fedkit: hunted: record %d %s %s (%.0f, %.0f, %.0f) from (%.0f, %.0f, %.0f), %.1f m from you; the game set (%.0f, %.0f, %.0f); order %d of the round", i,
              n == 2 ? "WOULD be ordered (dry run)" : "is ordered", j == 1 ? "TOWARDS YOU" : j == 2 ? "to a cover place of [Hops]" : "a step aside to",
              want[0], want[1], want[2], bp[0], bp[1], bp[2], klmv_h(bp, fp) / 100, got[0], got[1], got[2], klfk_hr.orders);

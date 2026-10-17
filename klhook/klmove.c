@@ -273,6 +273,8 @@
 #define KLMV_NOBJ       160
 #define KLMV_OFF        300.0f                /* farther than this from its defend place = not at it (the game's own 'he is there' is 250) */
 #define KLMV_TOTAL      6                     /* orders of (b) for ONE place of its chain, wherever the bot stood; then it is left */
+#define KLMV_SAME       3                     /* v82f: orders of (b) to the SAME target, none of them brought the bot 200 closer: the target is dropped (left to its chain / the game) */
+#define KLMV_PROGRESS   200.0f                /* v82f: less than this nearer the target (2 m) since the last order to it = no progress. GUESS (HELI3: 7 and 8.3 m from it at both orders, same z) */
 #define KLMV_BOXR       500.0f               /* a bot within this of a box's node stands 'at' the box (a box is 350 x 416 x 350). GUESS */
 /* BoardReach (section 4): what the stock update 0x907a50 calls, in its order */
 #define KLMV_SESSION    0x0168e598            /* the session object (0x907a53) */
@@ -324,6 +326,7 @@ static char klmv_hop_key[64], klmv_hop_file[MAX_PATH]; static FILETIME klmv_hop_
 struct klmv_b {
     DWORD actor, since, money, order_at, hit_at, look_obj, look_at; int seen, have_anchor, have_target, tries, total, phase, paced, beside, look_amount, reach_visit, hop_k; BYTE told;      /* told: 16 = a box did not take it on this visit, 32 = sent to the doors on this visit */
     float pos[3], hp, anchor[3], anchor0[3], target[3], try_pos[3];      /* anchor = the place its chain ordered; anchor0 = where the count 'total' began */
+    float same_t[3], same_d; int same_n;      /* v82f: the target of the last (b) order, how far the bot was from it then, and how many orders in a row went to it without progress */
 };
 static struct {
     DWORD rules, state, round_at, last_pass, half; int stages, told_gate, told_thread, told_list, told_ready;
@@ -355,6 +358,12 @@ static struct { DWORD at; float pos[3], d; volatile LONG deny; LONG asked; int t
 static int klmv_nbox; static DWORD klmv_box_rules, klmv_vt[KLMV_VT_N + 1]; static int klmv_vt_ok;
 static DWORD klmv_fail_at;                    /* since when klb_read fails (0 = it does not) */
 static struct { DWORD obj; float pos[3]; int amount; BYTE active, state; } klmv_obj[KLMV_NOBJ]; static int klmv_nobj;
+
+/* v82f: a place ANOTHER file ordered (klfedkit.c Hunted: a step TOWARDS the fed, a cover place, a step aside), per record. The block then holds a place
+   that is not the chain's, and (b) below took it for the chain's place: HELI3 17:28:28 - 17:28:48, record 4 was ordered 52.9 m towards the human by
+   klfedkit.c and (b) gave that order again, a fresh count for every new hunt step. klfk_hunted calls klmv_foreign() with what the game set. */
+static float klmv_fo[KLB_NREC][3]; static BYTE klmv_fo_on[KLB_NREC];
+static void klmv_foreign(int rec, const float got[3]) { if (rec >= 0 && rec < KLB_NREC) { memcpy(klmv_fo[rec], got, 12); klmv_fo_on[rec] = 1; } }
 
 static float klmv_h(const float a[3], const float b[3]) { return (float)sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[2] - b[2]) * (a[2] - b[2])); }
 
@@ -1039,7 +1048,7 @@ static void klmv_track(const struct klb_snap *s, DWORD now)
     int i; DWORD node, ho; float p[3], raw[0x28 / 4];
     for (i = 0; i < s->n && i < KLB_NREC; i++) {
         const struct klb_rec *r = &s->r[i]; struct klmv_b *b = &klmv_r.b[i];
-        if (r->used && r->actor != b->actor) { memset(b, 0, sizeof *b); b->actor = r->actor; }      /* another member in this record */
+        if (r->used && r->actor != b->actor) { memset(b, 0, sizeof *b); b->actor = r->actor; if (i < KLB_NREC) klmv_fo_on[i] = 0; }      /* another member in this record */
         if (!r->used || !(r->flags & 1) || r->status || !r->actor || klh_rd32(r->actor) != KLB_ACTOR_VT
             || !(node = klh_rd32(r->actor + 4)) || !kle_node(node, p, 0)) { b->seen = 0; continue; }
         if (!b->seen || kle_dist(p, b->pos) > 100.0f || r->money != b->money) {
@@ -1145,7 +1154,11 @@ static void klmv_restless(const struct klb_snap *s, DWORD now, int human_in, con
         /* the place its chain ordered: whatever the defend block holds that this file did not put there. A place within
            KLE_ROUTE of ours is one of the soldier's own tactics moving it (klescort.c 2, the same GUESS): the centre stays */
         if ((soldier = klh_rd32(r->actor + 0x77c)) != 0 && klh_rd32(soldier) == KLE_SOLDIER_VT && kle_block(soldier, cur) && (cur[0] || cur[1] || cur[2])) {
-            if (b->have_target && kle_dist(cur, b->target) <= KLE_ROUTE) {
+            if (i < KLB_NREC && klmv_fo_on[i] && kle_dist(cur, klmv_fo[i]) <= 50.0f && !(b->have_target && kle_dist(cur, b->target) <= 50.0f)) {
+                /* v82f: a place klfedkit.c ordered, not the chain's: the anchor and its counts stay (the bot is walked back to its chain's place, not kept on the hunt step) */
+                b->have_target = 0; b->paced = 0; b->beside = 0;
+                if (!(b->told & 64) && b->have_anchor) { b->told |= 64; klog("move: record %d: the block holds (%.0f, %.0f, %.0f), a place klfedkit.c ordered: not taken as its chain's place; its chain's place (%.0f, %.0f, %.0f) stays (v82f; said once per bot)", i, cur[0], cur[1], cur[2], b->anchor[0], b->anchor[1], b->anchor[2]); }
+            } else if (b->have_target && kle_dist(cur, b->target) <= KLE_ROUTE) {
                 /* still what this file put there (review S2): the chain's place stays the anchor and no count starts again.
                    Only a plain order-again (to the anchor itself) that is long done hands the block back - the game may
                    have set the place a little off what was asked (FO_J1: asked y 278, set y 150) - and that without a new count */
@@ -1213,6 +1226,14 @@ static void klmv_restless(const struct klb_snap *s, DWORD now, int human_in, con
             b->order_at = KLB_T(now); memcpy(b->try_pos, b->pos, 12);
             if (!k) { if (!(b->told & 2)) { b->told |= 2; klog("move: record %d NOT ordered: %s", i, w); } continue; }
             b->tries++; b->total++; b->since = now;
+            /* v82f: the same target again and the bot no nearer: after KLMV_SAME such orders the target is dropped (b->total is used up: the branch above leaves the bot to its
+               chain and the game until the chain orders another place). It is the way out of any order the bot cannot walk (a point behind a wall, another floor) */
+            if (b->same_n && kle_dist(got, b->same_t) <= 50.0f && b->same_d - klmv_h(bp, got) < KLMV_PROGRESS) b->same_n++; else b->same_n = 1;
+            memcpy(b->same_t, got, 12); b->same_d = klmv_h(bp, got);
+            if (b->same_n >= KLMV_SAME) {
+                b->total = KLMV_TOTAL;
+                if (!(b->told & 128)) { b->told |= 128; klog("move: record %d: %d orders in a row to (%.0f, %.0f, %.0f) and none brought it 2 m nearer (now %.1f m away): the target is DROPPED, it goes on with its chain's next place (v82f; said once per bot)", i, b->same_n, got[0], got[1], got[2], b->same_d / 100); }
+            }
             if (k == 1) { memcpy(b->target, got, 12); b->have_target = 1; b->paced = 0; b->beside = beside; }
             klog("move: record %d (stage %u) stood %.1f s at (%.0f, %.0f, %.0f), %.1f m from its place (%.0f, %.0f, %.0f): %s; the game set (%.0f, %.0f, %.0f); time %d on this spot, %d of %d for this place",
                  i, r->stage, stood / 1000.0, bp[0], bp[1], bp[2], d / 100, b->anchor[0], b->anchor[1], b->anchor[2],
@@ -1288,7 +1309,7 @@ static void klmv_tick(int game_thread)
     for (i = 0; i < s.n; i++) if (s.r[i].used) stages += s.r[i].stage;
     if (s.rules != klmv_r.rules || (s.state == KLB_ROUND && klmv_r.state != KLB_ROUND) || stages < klmv_r.stages) {      /* a new round: as klbot.c's klb_act */
         if (s.state == KLB_ROUND && klmv_r.state != KLB_ROUND) memset(&klmv_lc, 0, sizeof klmv_lc);      /* v82d: the last-call book starts with the round */
-        memset(&klmv_r, 0, sizeof klmv_r); klmv_r.rules = s.rules; klmv_r.round_at = KLB_T(now); klmv_rc.armed = 0; klmv_rc.rules = 0; klmv_rc.relax = 0;
+        memset(&klmv_r, 0, sizeof klmv_r); memset(klmv_fo_on, 0, sizeof klmv_fo_on); klmv_r.rules = s.rules; klmv_r.round_at = KLB_T(now); klmv_rc.armed = 0; klmv_rc.rules = 0; klmv_rc.relax = 0;
         if (game_thread)                      /* what is still sour is from before this round (the round's end puts them back; these outlived a pass that could not read): back if it still is that object, else forgotten */
             for (i = 0; i < KLMV_NSOUR; i++) if (klmv_sour[i].on) { if (klmv_sour[i].rules == s.rules) klmv_sweeten(i, "a new round"); else klmv_sour[i].on = 0; }
     }
