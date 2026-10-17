@@ -151,6 +151,7 @@ import kl_fa_bank as BK                 # the generic parts only (Doors' frames,
 import kl_map_escape as ESC             # the van: the way-point front end, van_prepare / van_wire / van_layer / van_check
 
 HOST, LEVEL = 'F07', 'M05_A'
+HOST_BASE = 'F07'                       # the real systems level; HOST becomes 'R09' (the donor step's pseudo level) for the second step of a heli build
 TITLE = 'Last Call'                     # the map's name (for the menu page: kl_expansion's table, a later stage)
 R = 'ROOT\\'
 IN = 'Locations/M05_A/M05A_Locations.zip\\Locations/M05_A/M05A_LOC_Inside.zip\\'
@@ -755,6 +756,8 @@ def men_table():
         t.update(CLEAR_MEN)                     # the five men the room gates move off the crew's way (CLEAR_MEN)
     if ROOM_GATES and PRESSURE:
         t.update(PRESSURE_MEN)                  # ... and the men the pressure fix puts out of the holds' and legs' line of fire (PRESSURE_MEN)
+    if HELI and ROOM_GATES:
+        t.update(HELI_MEN)                      # ... and, on the way UP, the five men who stand in the corridor itself (HELI_MEN)
     return t
 
 
@@ -807,13 +810,201 @@ def police():
 
 def __getattr__(name):
     if name == 'KEEP':                  # kl_graft.build reads kl_fa_club.KEEP at the moment of use
-        keep = _KEEP + tuple(v for k, v in ROLE_NEW.items() if k in ROLE) + tuple(v for k, v in WAKE_NEW.items() if k in ROLE) + tuple(police())
+        keep = tuple(x for x in _KEEP if not (HELI and x == VAN)) + tuple(v for k, v in ROLE_NEW.items() if k in ROLE) + tuple(v for k, v in WAKE_NEW.items() if k in ROLE) + tuple(police())
         return keep + tuple(x for x in KEEP_MORE if x not in keep)
     raise AttributeError(name)
 
 # F07's cover list goes: M05_A's own top-level 'CoverList' stays through the campaign pre-pass (kl_maps.PASSIVE), and
 # a second FFCoverList is an assert in its init (kl2 0x6682c5; kl_fa_author.DROP)
 DROP = ('Specials!CoverPoints!*',)
+
+# ------------------------------------------------------------------ the helicopter exit (--exit heli-roof; re/club_campaign.md AA)
+# HELI stays False unless main() sets it: every heli change sits behind it, the default build (van-slab) is byte-identical.
+# STEP 1 of the two-step chain = the donor: F07 + M06_FA_A's chopper as pseudo level R09 (kl_maps.PSEUDO). F07's own map is dropped
+# exactly as in the real build (host_keep + KEEP/DROP, KEEP without the van), M06 gives ONLY the wanted tops. MEASURED (scratch
+# prototype, club_heli/donor1.py): the chopper tops alone verify 0 problems; without the two effects zips 6 dangling refs, without the
+# CarExplotion tops 8 unresolved clone paths. The four EscCameraSetup! tops are new here (the camera of the way out; GUESS that they are needed).
+HELI = False
+HELI_DONOR = 'M06_FA_A'
+HELI_GROUP = 'EscapeSetup!EscapeChopper\\Escape_Chopper'   # MEASURED in R09: ZGROUP with OnlineEscHavokCar + OnlineEscVehicleController + VehicleEffects
+HELI_WANT = ('EscapeSetup!EscapeChopper', 'EscapeSetup!ForceNoLoop', 'EscapeSetup!HeliNetSync',
+             'CloneGroup_ROOT/EscapeSetup/EscapeChopper/Escape_Chopper/Shards_Group_A',
+             'Triggers!BoardingTrigger_Heli', 'Triggers!BoardingGameplayTrigger', 'PIP_Points!Boarding',
+             'EscCameraSetup!EscCameraLAST', 'EscCameraSetup!EscCamera01', 'EscCameraSetup!CameraTrigger01', 'EscCameraSetup!CamPos01',
+             'Effects/Hind_Dammage_01.zip', 'Locations/M06_FA_A/M06FAA_Effects.zip',
+             'CloneGroup_Effects/AllocMany/All_level/CarExplotion_AllocMany_01.zip/Car_Explotion_01',
+             'CloneGroup_Effects/AllocMany/All_level/CarExplotion_AllocMany_01.zip/Car_Explotion_01/Particle_Group_ALL',
+             'CloneGroup_ROOT/CloneGroup_Effects/AllocMany/All_level/CarExplotion_AllocMany_01.zip/Car_Explotion_01/Car_Explotion_01/Particle_Group_ALL')
+
+
+# What a donor with no author layer cannot be free of (MEASURED 2026-10-17, 14 of them, d2.log): F07's kept RunToEscape gate path -> a Timer, the
+# TriggerBox[17] of the host's squads (dropped with the map; wire() rewrites them in the real build), the exit trigger's three vans (VAN is not kept in
+# heli mode; prepare_host's exit-trigger edit), and the loot check (the host's money is dropped; the club's author lays the loot).
+HELI_DONOR_EXPECTED = (r'ROOT\Gameplay!RunToEscape!Timer', r'ROOT\Gameplay!010_FirstFight!RivalMercs!', 'FA: CRASH    exit-trigger', 'FA: BROKEN   money')
+
+
+def heli_donor(out, log=print):
+    """STEP 1 of the heli chain: F07 + the chopper of M06_FA_A -> <out>/chain/F07+M06_FA_A as level R09 (kept), PSEUDO['R09'] set.
+    -> kl_maps.one's result dict (ok, problems ...). Offline; the step-2 build (HOST='R09') is not here."""
+    global HELI
+    import kl_graft, kl_maps, kl_hvk_donor
+    want = {n.lower() for n in HELI_WANT}
+    real_sel, real_heli = kl_graft.Select, HELI
+    HELI = True                             # KEEP without the van
+    try:
+        keep, drop = tuple(sys.modules[__name__].KEEP), tuple(DROP)   # KEEP is a module __getattr__
+        class Donor(real_sel):              # kl_graft.build rebuilds its Select by the name kl_graft.Select: it must be this one
+            def __init__(self, geometry=False, m_add=(), m_drop=(), s_keep=(), s_drop=()):
+                super().__init__(geometry, m_add, m_drop, tuple(s_keep) + tuple(x for x in keep if x not in s_keep), tuple(s_drop) + drop)
+            def m(self, name):              # M06: the wanted tops only (exact names)
+                return name.lower() in want
+        kl_graft.Select = Donor
+        mid = os.path.join(out, 'chain')
+        with kl_hvk_donor.patched():
+            r = kl_maps.one(mid, HOST_BASE, HELI_DONOR, keep=True, campaign=False, slot='R09')
+    finally:
+        kl_graft.Select, HELI = real_sel, real_heli
+    if r.get('ok'):                         # F07's kept Gameplay objects still name what the real build's wire() / prepare_host replace (step 2)
+        left = [x for x in r.get('problems', []) if not any(k in x for k in HELI_DONOR_EXPECTED)]
+        r = dict(r, problems_expected=len(r.get('problems', [])) - len(left), problems=left)
+        kl_maps.PSEUDO['R09'] = os.path.join(mid, '%s+%s' % (HOST_BASE, HELI_DONOR))
+        log('heli donor: R09 = %s+%s, %s entities, %s MB, problems %s' % (HOST_BASE, HELI_DONOR, r.get('entities'), r.get('archive_mb'), r.get('problems')))
+    else:
+        log('heli donor FAILED: %s %s' % (r.get('error'), r.get('where')))
+    return r
+
+
+# STEP 3: the chopper on the roof pad (re/club_campaign.md AA, step 3). The chopper's nodes are laid on the club's low-roof pad by ONE rigid
+# motion (a turn about y + a shift) of M06's world: the landing point (the last point of the 'Incomming' spline, which is the chopper's hub
+# when it stands) goes to HELI_PAD, the final approach is turned to HELI_APPROACH, everything is lifted by HELI_PAD y - HELI_GROUND_OLD. The two
+# splines are NOT rewritten: their points are local to their node, so moving and turning the node re-frames them exactly (MEASURED: the
+# node's local landing point maps to (-1535, 368, -6276) in M06's world, 275 from the stock boarding box at (-1686, 133, -6541)).
+HELI_PAD = (-2900.0, 859.0, 3900.0)         # centre of the low-roof pad (x -3600..-2200, z 3500..4300, y 859: re/club_campaign.md V.6, measured by an earlier round)
+HELI_WALK = ((-3479.0, 3822.0), (-2378.0, 4229.0))   # the roof door and checkpoint 10 (x, z): the way the crew arrives (V.6)
+HELI_APPROACH = (HELI_WALK[0][0] - HELI_WALK[1][0], HELI_WALK[0][1] - HELI_WALK[1][1])   # GUESS: the chopper flies in from the east, towards the roof door, over the pad's free air (not checked against the roof's geometry)
+HELI_GROUND_OLD = 0.0                       # GUESS: M06's ground at the landing; the stock boarding box (centre y 133, half 200) says 0 +- 70
+HELI_CH = 'EscapeSetup!EscapeChopper\\'
+HELI_MOVE = (HELI_CH + 'Escape_Chopper', HELI_CH + 'Incomming\\Spline', HELI_CH + 'Escaping\\Spline', HELI_CH + 'CrashSite_Center_01',
+             'Triggers!BoardingTrigger_Heli', 'Triggers!BoardingGameplayTrigger', 'PIP_Points!Boarding',
+             'EscCameraSetup!CameraTrigger01', 'EscCameraSetup!CamPos01')     # moved with the one motion; EscCamera01 follows CamPos01 (as the van's), OnMap goes to the pad
+HELI_ST = {}                                # the motion of the running build (heli_place): 'land', 'c', 's', 'dy', 'refs'
+HELI_STORAGE = IN + 'M05_A_Inside_3rd_Storage_01a\\'
+HELI_SUNK = [HELI_STORAGE + 'SI0108_M05_Firedoor_03\\D03', HELI_STORAGE + 'SI0108_M05_Firedoor_02\\D03', HELI_STORAGE + 'HeroColi']   # the way up (V.6: REF 21773 / 21775 / 21820 of the stock M05_A); sunk like the office doors
+HELI_EXIT = ((HELI_PAD[0], HELI_PAD[1] + 200.0, HELI_PAD[2]), (700.0, 250.0, 500.0))   # the exit box over the whole pad (x -3600..-2200, z 3400..4400). GUESS
+HELI_BOT_PARK = (-3250.0, HELI_PAD[1], 3770.0)   # GUESS: where the AI heisters wait: 400 from the landing towards the roof door, on the pad (kl_fa_bots wants it PARK_SIDE from the boarding action)
+HELI_PLACE = {
+    'Gameplay!EscapeSetup!otrExitLevel': (HELI_EXIT[0], None, HELI_EXIT[1], 'HELI: the pad (the chopper lands in its middle)'),
+    'FASpecials!POI!POI_TheEscapeArea': ((HELI_PAD[0], HELI_PAD[1] + ESC_POI_UP, HELI_PAD[2]), None, None, 'HELI: over the pad'),
+    'FASpecials!POI!Trigger_POI_TheEscapeArea': (HELI_EXIT[0], None, HELI_EXIT[1], 'HELI: the pad'),
+    'FASpecials!POI!Trigger_POI_TheEscapeAreaCP_OffenseOnlyRespawn': (HELI_EXIT[0], None, HELI_EXIT[1], 'HELI: the pad'),
+    'FASpecials!POI!Trigger_POI_TheEscapeAreaFA_RespawnOnly': (HELI_EXIT[0], None, HELI_EXIT[1], 'HELI: the pad'),
+    'FASpecials!PIP!ExitLootArea': ((-3450.0, 900.0, 3680.0), None, (150.0, 120.0, 150.0), 'HELI: GUESS: the box the crew crosses on the third floor before the roof door (path point (-3554, 860, 3621)); the van round has it behind the entrance door'),
+    'Specials!JumpPoints!06_Exit': (HELI_BOT_PARK, SOUTH, None, 'HELI: the pad')}
+
+
+def bot_opt():
+    """kl_fa_bots' options: the van form's, with the AI heisters' waiting place on the pad in heli mode."""
+    return dict(BOT_OPT, park=list(HELI_BOT_PARK)) if HELI else BOT_OPT
+
+
+def _yaw_only(m, name):
+    if abs(m[4] - 1.0) > 1e-3 or any(abs(m[i]) > 1e-3 for i in (1, 3, 5, 7)):
+        raise ValueError('kl_fa_club: %s is not turned about y only: %s' % (name, m))
+
+
+def heli_frame(S):
+    """The motion (see HELI_PAD) read off the donor's 'Incomming' spline in S -> dict(land, c, s, dy, last): the world landing point, cos / sin of the turn
+    in the (x, z) plane, the lift, and the world points of the whole approach (for the report)."""
+    sc = S.prp
+    k = A.node_of(sc, HELI_CH + 'Incomming\\Spline')
+    lab = J.labels('dd', sc.cls(k))
+    v = kl_fa.node_values(sc, k)
+    m, p = [float(x) for x in v[lab.index('ZGEOM[1]')]], [float(x) for x in v[lab.index('ZGEOM[2]')]]
+    _yaw_only(m, sc.path[k])
+    blob = next(x for x in v if isinstance(x, (bytes, bytearray)) and bytes(x[:4]) == b'1TPW')
+    n = struct.unpack_from('<I', blob, 4)[0]
+    pts = [struct.unpack_from('<3f', blob, 12 + 24 * j) for j in range(n)]
+    world = lambda q: tuple(p[a] + q[0] * m[6 + a] + q[1] * m[3 + a] + q[2] * m[a] for a in range(3))   # ZGEOM[1] = [Z', Y', X'] images of the local axes (A.rot9)
+    w = [world(q) for q in pts]
+    land, d = w[-1], (w[-1][0] - w[-2][0], w[-1][2] - w[-2][2])
+    al = math.atan2(HELI_APPROACH[1], HELI_APPROACH[0]) - math.atan2(d[1], d[0])
+    return dict(land=land, c=math.cos(al), s=math.sin(al), dy=HELI_PAD[1] - HELI_GROUND_OLD, deg=math.degrees(al), world=w)
+
+
+def heli_to(F, pt):
+    """A world point of M06 -> its place in the club."""
+    x, z = pt[0] - F['land'][0], pt[2] - F['land'][2]
+    return (HELI_PAD[0] + x * F['c'] - z * F['s'], pt[1] + F['dy'], HELI_PAD[2] + x * F['s'] + z * F['c'])
+
+
+def heli_place(S, log=print):
+    """prepare_host, heli mode: lay the chopper's nodes on the pad (HELI_MOVE + EscCamera01 + OnMap) and remember the motion for the .HVK (heli_hvk)."""
+    sc = S.prp
+    F = heli_frame(S)
+    HELI_ST.clear()
+    HELI_ST.update(F)
+    def geom(name):
+        k = A.node_of(sc, name)
+        lab = J.labels('dd', sc.cls(k))
+        v = kl_fa.node_values(sc, k)
+        return k, [float(x) for x in v[lab.index('ZGEOM[1]')]], tuple(float(x) for x in v[lab.index('ZGEOM[2]')])
+    c0, e0 = geom('EscCameraSetup!CamPos01')[2], geom('EscCameraSetup!EscCamera01')[2]
+    for name in HELI_MOVE:
+        k, m, p = geom(name)
+        _yaw_only(m, name)
+        tz = (m[0] * F['c'] - m[2] * F['s'], m[0] * F['s'] + m[2] * F['c'])      # local +Z of the node, turned
+        A.place(S, k, pos=heli_to(F, p), turn=tz)
+    cam = heli_to(F, c0)
+    A.place(S, 'EscCameraSetup!EscCamera01', pos=tuple(cam[i] + e0[i] - c0[i] for i in range(3)))      # beside CamPos01 as it was (the van's form)
+    A.place(S, HELI_CH + 'EscapeChopper_OnMap', pos=HELI_PAD)
+    ch = A.node_of(sc, HELI_CH + 'Escape_Chopper')
+    HELI_ST['refs'] = sorted({S.ents[j - 1].ref for j in range(ch, sc.end[ch])})
+    st = geom(HELI_CH + 'Escape_Chopper')[2]
+    log('  kl_fa_club: HELI: %d nodes moved to the pad (turn %.1f degrees about y, lift %g); the chopper\'s start pose is (%d, %d, %d), it lands at (%d, %d, %d); %d .HVK REFs follow' % (
+        len(HELI_MOVE) + 2, F['deg'], F['dy'], *st, *heli_to(F, F['land']), len(HELI_ST['refs'])))
+    return F
+
+
+def heli_hvk(hvk, log=print):
+    """On the joined kl_hvk.Hvk: the chopper's key-framed placements get the same motion as its node (kl_map_escape.van_hvk's way: a placement that
+    stays at M06's place would put the body there). ASSUMPTION as there: the placement is the body's pose at load."""
+    import kl_hvk
+    F = HELI_ST
+    if not F.get('refs'):
+        raise ValueError('kl_fa_club: the collision is joined and heli_place has not run')
+    mine, n = set(F['refs']), 0
+    R = ((F['c'], 0.0, -F['s']), (0.0, 1.0, 0.0), (F['s'], 0.0, F['c']))
+    for s in hvk.shapes:
+        if s.type == kl_hvk.STATIC:
+            continue
+        for j, inst in enumerate(s.inst):
+            if kl_hvk.ref(inst) not in mine:
+                continue
+            p, m = struct.unpack_from('<3f', inst, 0), struct.unpack_from('<9f', inst, 12)
+            q = [x / 100.0 for x in heli_to(F, [100.0 * x for x in p])]
+            m2 = [sum(R[i][k] * m[3 * k + b] for k in range(3)) for i in range(3) for b in range(3)]
+            s.inst[j] = struct.pack('<3f9f', *q, *m2) + inst[48:]
+            n += 1
+    log('  kl_fa_club: HELI: .HVK: %d placement(s) of the chopper moved with its node' % n)
+    return hvk
+
+
+@contextlib.contextmanager
+def heli_hvk_layer(log=print):
+    """Around the step-2 build, INSIDE kl_hvk_donor.patched(): the joined .HVK gets heli_hvk. A build in which the join did not run it is an error."""
+    import kl_hvk
+    saved, ran = kl_hvk.join, []
+    def join(*a, **kw):
+        h = heli_hvk(saved(*a, **kw), log)
+        ran.append(1)
+        return h
+    kl_hvk.join = join
+    try:
+        yield
+    finally:
+        kl_hvk.join = saved
+    if not ran:
+        raise ValueError('kl_fa_club: the .HVK join did not run heli_hvk')
 
 # ------------------------------------------------------------------ texts, lines, sound
 # The level's own .LOC keys (finish()). The start window is a text key of the level's .LOC (settings fields 12 / 13
@@ -931,6 +1122,8 @@ def lay_van(P):
 
 
 def van_path():
+    if HELI:                            # the group of the chopper that carries OnlineEscVehicleController (GUESS: what the exit trigger and the show/hide lists name)
+        return R + HELI_GROUP
     return R + VAN + '\\' + VAN_GROUP
 
 
@@ -1019,7 +1212,7 @@ def prepare_host(S, log=print):
     sc = S.prp
     if not BEAT_ANIM and kl_gms.RETYPE.get(IK[1][0]) != IK[1][1]:      # before anything is armed: a caller that goes on in
         raise ValueError(NO_BUILD)                                     # this process must not find kl_escape wrapped
-    if PLAN is None:
+    if PLAN is None and not HELI:
         raise ValueError(NO_PLAN)
     Doors.arm(log)                                      # the build that follows opens the doors (see Doors)
     for name, (pos, face, half, _why) in place_now().items():
@@ -1071,7 +1264,9 @@ def prepare_host(S, log=print):
     # and its camera moved with it (kl_map_escape.van_prepare; the van's nodes must still stand where F07 has them);
     # the exit trigger names it alone (kl2 0x6c3f90 loops until one field is set). The escape marker stays where
     # PLACE has it, beside the lane: held against this plan's drive here (check() does it again on the written level)
-    S.van = ESC.van_prepare(S, PLAN, log)
+    S.van = None if HELI else ESC.van_prepare(S, PLAN, log)     # HELI: no van; the chopper is laid on the pad by heli_place
+    if HELI:
+        heli_place(S, log)
     if VAN_LATE:
         # THE OWNER, about the Vault's police: 'they shoot the van straight away'; run C2: the van went from waiting to state 6 (destroyed)
         # with two heisters aboard. The van is NOT in the world until the crew is close (wire(): the seal opening / the wardrobe's box show
@@ -1084,10 +1279,11 @@ def prepare_host(S, log=print):
         A.place(S, vg, hidden=True)
         log('  kl_fa_club: VAN_LATE: the van\'s FakeTarget (%d) is taken off and its group is hidden from the load; %s shows it' % (
             len(gone), 'the seal\'s opening (+%g s) and the wardrobe\'s box (+%g s)' % (VAN_AFTER, VAN_EARLY)))
-    off = abs(ESC.Poly([tuple(p) for p in PLAN['path']]).project(ESC_AT)[1])
-    if off < LANE_CLEAR:
-        raise ValueError('kl_fa_club: the escape marker\'s place %s is %d from the van\'s drive (%d wanted)' % (ESC_AT, off, LANE_CLEAR))
-    log('  kl_fa_club: the escape marker stands %d from the van\'s drive, %d from the boarding place at the stop' % (off, math.dist(ESC_AT, PLAN['board'])))
+    if not HELI:                                        # (HELI: no van, no drive to keep the marker clear of)
+        off = abs(ESC.Poly([tuple(p) for p in PLAN['path']]).project(ESC_AT)[1])
+        if off < LANE_CLEAR:
+            raise ValueError('kl_fa_club: the escape marker\'s place %s is %d from the van\'s drive (%d wanted)' % (ESC_AT, off, LANE_CLEAR))
+        log('  kl_fa_club: the escape marker stands %d from the van\'s drive, %d from the boarding place at the stop' % (off, math.dist(ESC_AT, PLAN['board'])))
     van = van_path()
     k = A.node_of(sc, ROLE['exit'])
     kl_fa.edit(sc, k, A.ctrl_of(sc, k, kl_fa.EXIT), lambda us: [A.setv(sc, us, 2 + j, s) for j, s in enumerate((van, '', ''))])
@@ -1378,9 +1574,16 @@ def wire(sc, log=print):
     # ---- the escape: every exit trigger of the level (there is F07's one) calls the van - field 0 false, field 2
     # the van's group, 1 and 3..5 empty, the form the three car maps on the tab have (kl_map_escape.van_wire). The
     # rest of the round's last stage is F07's own and stays as the graft left it (kl_fa_bank.wire's note)
-    if PLAN is None:
-        raise ValueError('kl_fa_club: wire() without a plan of the van (see prepare_host)')
-    ESC.van_wire(sc, PLAN, log)
+    if HELI:                                            # no van_wire: the exit trigger names the chopper (GUESS: nothing else of the van's wiring has a chopper form yet)
+        n_ex = 0
+        for k, i, v in kl_fa.controllers(sc, kl_fa.EXIT):
+            kl_fa.edit(sc, k, i, lambda us: [A.setv(sc, us, 2 + j, s) for j, s in enumerate((van_path(), '', ''))])
+            n_ex += 1
+        log('  kl_fa_club: HELI: %d exit trigger(s) name the chopper group %s; no van_wire' % (n_ex, HELI_GROUP))
+    else:
+        if PLAN is None:
+            raise ValueError('kl_fa_club: wire() without a plan of the van (see prepare_host)')
+        ESC.van_wire(sc, PLAN, log)
     for k, i, v in kl_fa.controllers(sc, kl_fa.SETTINGS):
         if len(v) != 340:
             raise ValueError('the settings object has %d fields' % len(v))
@@ -1429,7 +1632,7 @@ class Doors(BK.Doors):
     def sunk(cls):
         """Paths (below ROOT) of the nodes this build takes out."""
         standing = set(gate())
-        return ([] if DOORS_ANIMATE else [p for p, _at, _set in LEAVES]) + [p for p, _at, _set in SEAL if p not in standing]
+        return ([] if DOORS_ANIMATE else [p for p, _at, _set in LEAVES]) + [p for p, _at, _set in SEAL if p not in standing] + (HELI_SUNK if HELI else [])
 
     @classmethod
     def repair(cls, sc, log=print):
@@ -2165,7 +2368,35 @@ def check(folder, log=print, problems=None):
     vans, fakes = kl_fa.controllers(sc, 'OnlineEscAnimatedVehicle'), kl_fa.controllers(sc, 'FakeTarget')
     ex = [k for k, _i, _v in kl_fa.controllers(sc, kl_fa.EXIT)]
     want_fakes = 0 if VAN_LATE else 1                   # VAN_LATE: the police have nothing to aim at (the 0x686a66 rule cannot bite with none)
-    if len(vans) != 1 or len(fakes) != want_fakes or len(ex) != 1:
+    if HELI:                                            # the chopper form: no van, no FakeTarget; ONE exit trigger naming the chopper group; exactly ONE vehicle monitor
+        mons = kl_fa.controllers(sc, kl_fa.MONITOR)
+        hv = [k for k, _i, _v in kl_fa.controllers(sc, 'OnlineEscVehicleController')]
+        if vans or len(mons) != 1 or len(ex) != 1 or len(hv) != 1 or fakes:
+            fail('HELI: %d OnlineEscAnimatedVehicle, %d OnlineEscVehicleMonitor, %d exit triggers, %d OnlineEscVehicleController, %d FakeTarget (0, 1, 1, 1, 0 wanted)' % (
+                len(vans), len(mons), len(ex), len(hv), len(fakes)))
+        else:
+            ev = values(sc, ex[0], kl_fa.EXIT)
+            if [s for s in ev[2:6] if s] != [van_path()]:
+                fail('HELI: the exit trigger names %s, not the chopper group' % [s for s in ev[2:6] if s])
+            log('  heli: 1 chopper (%s), 1 OnlineEscVehicleMonitor, 1 exit trigger naming it; no van' % sc.names[hv[0]])
+            # ---- step 3, read back from the written level: the way up is open, the boarding box and the exit box stand on the pad, the chopper's body follows its node
+            per_h = collections.Counter(kl_hvk.ref(i) for s_ in hvk.shapes for i in s_.inst)
+            for p_ in HELI_SUNK:
+                e_ = ents[A.node_of(sc, p_) - 1]
+                if pos[e_][1] > -300.0 or per_h[e_.ref]:
+                    fail('HELI: %s is not sunk (y %d, %d placements)' % (p_.split(chr(92))[-1], pos[e_][1], per_h[e_.ref]))
+            on_pad = lambda p_: abs(p_[0] - HELI_PAD[0]) <= HELI_EXIT[1][0] + 400.0 and abs(p_[2] - HELI_PAD[2]) <= HELI_EXIT[1][2] + 400.0 and -100.0 < p_[1] - HELI_PAD[1] < 1200.0   # M06's gameplay box stands 420 up, its PIP camera point 1050 up
+            for n_ in ('Triggers!BoardingTrigger_Heli', 'Triggers!BoardingGameplayTrigger', 'PIP_Points!Boarding', HELI_CH + 'EscapeChopper_OnMap', ROLE['exit']):
+                e_ = ents[A.node_of(sc, n_) - 1]
+                if not on_pad(pos[e_]):
+                    fail('HELI: %s stands at (%d, %d, %d), not on the pad (%s)' % (n_, *pos[e_], HELI_PAD))
+            gh = A.node_of(sc, van_path()[len(R):])
+            mine_ = {ents[j - 1].ref for j in range(gh, sc.end[gh])}
+            n_pl = sum(1 for s_ in hvk.shapes if s_.type != kl_hvk.STATIC for i in s_.inst if kl_hvk.ref(i) in mine_)
+            log('  heli: the boarding box, the PIP point, the on-map marker and the exit box are on the pad; %d sunk closures; the chopper has %d key-framed placement(s) (moved with it: see the generic placement check)' % (len(HELI_SUNK), n_pl))
+            if not n_pl:
+                fail('HELI: the chopper has no key-framed .HVK placement')
+    elif len(vans) != 1 or len(fakes) != want_fakes or len(ex) != 1:
         fail('%d OnlineEscAnimatedVehicle, %d FakeTarget, %d exit triggers (1, %d, 1 wanted: an unused van\'s target is the 0x686a66 crash)' % (len(vans), len(fakes), len(ex), want_fakes))
     else:
         lo, hi = world_box(ex[0])
@@ -2202,7 +2433,7 @@ def check(folder, log=print, problems=None):
                                                        '' if not odd else '; AND %d OTHER' % len(odd)))
         for x in odd:
             fail('van (the plain tool): ' + x)
-    if stop_at_all := (len(vans) == 1 and len(fakes) == want_fakes and len(ex) == 1 and 'stop' in rep):
+    if stop_at_all := (not HELI and len(vans) == 1 and len(fakes) == want_fakes and len(ex) == 1 and 'stop' in rep):
         if any('FAEscCameraLAST' in x for x in rep['notes']):   # MEASURED (kl_fa_bank): no such define in stock F07, F02, F05 either
             log('    (the stock form: no Dog Days Fragile Alliance level has that define - it is Dead Men\'s box, which the three car maps kept)')
         N = ESC._van_nodes(sc, sc.top[vans[0][0]])
@@ -2628,6 +2859,8 @@ def build(out, log=print, plan=None):
     van_plan); None = made here, on a BARE graft of the two levels built into <out>/_bare (35 s, 284 MB) and deleted
     again - the plan needs a built level's collision and must not see the layer's own van (van_plan)."""
     import shutil
+    if HELI:
+        return heli_build(out, log)
     name = '%s+%s campaign' % (HOST, LEVEL)
     if plan is None:
         bare = os.path.join(out, '_bare')
@@ -2657,6 +2890,35 @@ def build(out, log=print, plan=None):
         for c in lent:
             del kl_maps.FLAT[c]
     return r, os.path.join(out, name), plan, {k: st.get(k) for k in ('van', 'wired', 'hvk')}
+
+
+def heli_build(out, log=print):
+    """STEP 2 of the heli chain: R09 (the donor step's F07 + the chopper, built here when PSEUDO has no R09) + M05_A with the club's author, HOST = 'R09'
+    (kl_graft runs prepare_host only when S is HOST). No plan of a road, no van_layer, no van-slab pre-pass; kl_hvk_donor.patched() for the .HVK join
+    (the chopper has no static placement). -> (kl_maps.one's result, <out>/R09+M05_A heli, None, {'van': None, 'wired': None, 'hvk': 'donor'})."""
+    global HOST
+    import kl_hvk_donor, kl_snd
+    if 'R09' not in kl_maps.PSEUDO or not os.path.isfile(os.path.join(kl_maps.PSEUDO['R09'], 'R09_Main.zip')):
+        d = heli_donor(out, log)
+        if not d.get('ok') or d.get('problems'):
+            return dict(d, ok=False, error=d.get('error') or 'the donor step left problems: %s' % d.get('problems'), where=d.get('where')), '', None, {}
+    flat = () if BEAT_ANIM else (IK[0],)
+    lent = [c for c in flat if c not in kl_maps.FLAT]
+    for c in lent:
+        kl_maps.FLAT[c] = IK[1]
+    real_host, r = HOST, {}
+    HOST = 'R09'                                        # the author's HOST: the second step's S is the pseudo level
+    kl_snd.VOICE = True if VOICE else None
+    try:
+        with kl_hvk_donor.patched(), heli_hvk_layer(log), doors(log):
+            r = kl_maps.one(out, 'R09', LEVEL, keep=True, campaign=True, tag=' heli', author='kl_fa_club', m_drop=M_DROP, flat=flat,
+                            nav_base=kl_maps.nav_of('R09'))
+    finally:
+        HOST = real_host
+        kl_snd.VOICE = None
+        for c in lent:
+            del kl_maps.FLAT[c]
+    return r, os.path.join(out, 'R09+%s heli' % LEVEL), None, {'van': None, 'wired': None, 'hvk': 'donor'}
 
 
 def van_check(folder, log=print, plan=None):
@@ -2767,7 +3029,7 @@ def bots(src, dst, log=print):
         import kl_fa_bots_rt as RT
         F.apply = lambda B, P, dst_, log_=print, more=None: apply0(B, P, dst_, log_, more=club_street(RT, P['club_gates']))
     try:
-        return F.build(src, dst, dict(BOT_OPT, loot_seconds=LOOT_SECONDS), log)
+        return F.build(src, dst, dict(bot_opt(), loot_seconds=LOOT_SECONDS), log)
     finally:
         F.plan, F.apply = plan0, apply0
 
@@ -3049,6 +3311,9 @@ WAKE_AT = collections.OrderedDict([
     ('Lounge#01', (4, 'Alert')), ('Lounge#02', (4, 'Alert')), ('Rave#01', (4, 'Alert')), ('Rave#02', (4, 'Alert')),   # the upper floors, over the stairs' room
     ('SurpriseStairs', (4, 'Alert')), ('Entrance', (4, 'SquadModifier'))])
 PRESSURE_KNOWN = {'floor2': (5, 7), 'floor1n': (5, 8), 'floor1s': (5, 10), 'stairs': (3, 5)}                                     # gate name -> (guns on a hold, guns on a walk) that the delivered build is KNOWN to exceed the yardstick by (rooms_check fails above them: a regression guard, not a pass)
+# HELI (the way UP): gate name -> (guns on a hold, guns on a walk, laggard case) the heli build is KNOWN to exceed the yardstick by - MEASURED by hold-guns on the step-4 build, NOT fixed: the lounge walk starts at the
+# stairs' head (-6, 460, 850) in sight of SurpriseStairs and Lounge#01 (6 guns, 8 with the men the gate wakes); the third floor's gallery holds Rave#01 / Rave#02 (5). A regression guard, like PRESSURE_KNOWN.
+HELI_KNOWN = {'lounge': (3, 6, 8), 'third': (5, 5, 5)}
 PRESSURE_MEN = collections.OrderedDict()               # man's group path -> (x, y, z): the men moved by the pressure fix (found by C:/kl_scratch/club_pressure/reloc4.py on the built c_club3 club: each in his own room (room_of),
                                                         # on the START's mesh part, 90 off his floor at most, 250 from every other man, 400 from every hold, not in the front office or the entrance; kept here as data, proved by rooms_check)
 PRESSURE_MEN[E2 + 'Dance#01\\Guard#08'] = (1160, 40, 3008)
@@ -3092,6 +3357,8 @@ def place_now():
     if WAKE_MORE:
         for i, (room, w) in enumerate(WAKE_BOX.items()):
             t[ROLE['wake box %d' % (i + 1)]] = (w['centre'], None, w['half'], 'GUESS: the hold area of the %s room (the seven holds of c_club4 + 100): the criminal who reaches it wakes the squads that are awake at the room after it' % room)
+    if HELI:                                            # the exit, its area triggers and the marker are on the pad
+        t.update(HELI_PLACE)
     return t
 
 
@@ -3141,12 +3408,61 @@ ROOMS = (
          box=(-900.0, 1000.0, 400.0, 1100.0), y=40.0, enemy=(0.0, -1.0), dy=60.0))
 EN_CLUB = 'AI_Players!Enemies!'
 
+# ---- THE WAY UP (HELI; AA step 4; NOT RUN IN THE GAME). MEASURED on the heli build (mesh path loot -> pad, scratch club_heli/s4/path.py): the 248 m walk from the
+# office money (2855, 342, 2439) is the van round's own first five rooms (walkway .. floor1s, then the stairs' foot: the same direction), then UP the stairs
+# (7, 160, 360) -> (-13, 460, 950), the y460 corridor west to the ramp (-3837, 460, -222) -> (-2539, 860, -198), the y860 floor south to z 1700, west and
+# north-east to the roof door and the pad (-3125, 860, 3860). So HELI adds two rooms behind 'stairs' (a third, the stair landing y160, has hold places only on the 3 m stair: 21 places in a 6 m strip, never seven 80 apart: its men
+# SurpriseStairs / Lounge#01's east men are the 'stairs' room's): 'lounge' (the stairs' head y460: Lounge#01's third man at (-102, 479, 1510), Rave#01) and 'third' (the ramp's head y860:
+# Rave#02 at (-1536, 866, 495) .. (-1879, 862, 1256), Lounge#02). Which of the planner's holds those rooms get is GUESS until bots_check ran on a build.
+# Nobody lives on the y860 floor beyond z 1300, in the storage, the L-hallway or on the roof (no squad there): no gate after 'third'.
+HELI_UP_Y = 700.0                       # y at and above which a man stands on the third floor (the y860 floor; the y460 corridor is 'lounge' / 'landing')
+HELI_ROOMS = (
+    dict(name='lounge', what='the stairs\' head on the y460 floor: the third man of Lounge#01 and the rave bar (Rave#01)',
+         box=(-2300.0, -300.0, -150.0, 1250.0), y=460.0, enemy=(1.0, 0.7), dy=70.0),
+    dict(name='third', what='the head of the ramp on the third floor (y 860): the rave gallery (Rave#02) and the lounge (Lounge#02)',
+         box=(-2900.0, -1900.0, -450.0, 50.0), y=860.0, enemy=(0.7, 1.0), dy=70.0))
+# squad (short name) -> (woken by gate number, 1-based, i.e. awake at the hold after it; its start child) for HELI. GUESS: the same Alert children as the van round
+HELI_WAKE = collections.OrderedDict([
+    ('Lounge#01', (5, 'Alert')), ('Rave#01', (5, 'Alert')), ('SurpriseStairs', (5, 'Alert')),                      # woken by 'stairs', awake at the 'lounge' hold (SurpriseStairs: 4 in the van round, 5 here because HELI_MEN moves its guards into the lounge, z > 900)
+    ('Rave#02', (6, 'Alert')), ('Lounge#02', (6, 'Alert')),                       # woken by 'lounge', awake at the 'third' hold
+    ('YokoGuards', (6, 'SquadModifier')), ('WaitingRoom', (6, 'Alert'))])         # the office deck's four: later than the van round's 5: awake at the 'third' hold, because at the 'lounge' hold the planner's way past (-142, 460, 1638) is 403 from (0, 363, 2050) and is refused (MEASURED)
+# THE MEN ON THE WAY UP (MEASURED, scratch club_heli/s4/mv.py: distance of each post to the mesh path loot -> pad): Lounge#01 Guard#08 51 from it (the corner at (-48, 460, 1443)),
+# SurpriseStairs Guard#01 60 / Guard#02 87 (the stairs' head), Rave#02 Guard#02 138 / Guard#07 107 (the gallery by the y860 floor). The planner refuses every hold whose way walks past a living man
+# (4 m clear of a post, 'walks past its own men'), so with them in the corridor the lounge has no hold at all. Each goes to the nearest mesh point (grid 40, clearance 60) of his floor that is 600+
+# from the path, in the same floor / part (found by mv.py; the originals' y: 479 / 504 / 864 / 862 -> the floor's 460 / 860). GUESS: that the mesh point is a place a man can stand (it is on the mesh) and
+# that the spot is in his squad's room; the walls and the cover round it are not looked at.
+HELI_MEN = collections.OrderedDict([
+    (E2 + 'Lounge#01\\Guard#08', (538, 460, 1670)),
+    (E1 + 'SurpriseStairs\\Guard#01', (571, 460, 1323)),
+    (E1 + 'SurpriseStairs\\Guard#02', (716, 460, 976)),
+    (E2 + 'Rave#02\\Guard#02', (-1364, 860, 849)),
+    (E2 + 'Rave#02\\Guard#07', (-1319, 860, 976))])
+HELI_GATE_AT = (-3770.0, 860.0, 3500.0)  # GUESS: 130 before the relocated ExitLootArea box (HELI_PLACE), on the path (-3774, 860, 3549); the way station nearest to it is the last hold
+ROOMS_BASE, WAKE_AT_BASE, GATE_AT_BASE = ROOMS, collections.OrderedDict(WAKE_AT), GATE_AT
+
+
+def set_route():
+    """Put ROOMS, WAKE_AT and GATE_AT in place for the van round or the heli round (the way down to the slab / the way up to the pad). Called wherever a flag is set
+    after set_roles(); idempotent. The tables are module names that every function reads at call time."""
+    global ROOMS, GATE_AT
+    ROOMS = ROOMS_BASE + HELI_ROOMS if HELI else ROOMS_BASE
+    GATE_AT = HELI_GATE_AT if HELI else GATE_AT_BASE
+    WAKE_AT.clear()
+    WAKE_AT.update(WAKE_AT_BASE)
+    if HELI:
+        WAKE_AT.update(HELI_WAKE)
+
 
 def room_of(p):
     """The room (a ROOMS name) whose men stand at post p = (x, y, z), or None: the upper floors (y >= 420: the lounge, the rave gallery, the
     stairs' balcony; they overlook, nobody reaches them) and the lane (z < -1000: the two entrance men, beyond the seal) are waited for by nobody.
     The deck over dance floor 2's south wall (y 300..420, z < 2500: the four office bodyguards of FRONT_MEN) belongs to floor1n, which they overlook."""
     x, y, z = p
+    if HELI and z >= -1000.0:                           # HELI: the crew climbs through the upper floors, their men are waited for (HELI_ROOMS)
+        if y >= HELI_UP_Y:
+            return 'third'
+        if y >= 420.0:
+            return 'stairs' if (z < 900.0 and x > -400.0) else 'lounge'
     if y >= 420.0 or z < -1000.0:
         return None
     if y >= 300.0:
@@ -3376,6 +3692,8 @@ def room_men(B):
     for t, groups in RT.enemy_squads(B).items():
         if sc.path[t][len(R):].startswith(('Gameplay!', BK.BOT_SQUAD)):
             continue                                # the police that arrive (ARRIVE) and the bots are not the club's men
+        if HELI and SQUADS.get(sc.path[t][len(R):], ('',))[0] == 'open':
+            continue                                # HELI: the hunters search the whole club on no gate's clock (their men stand on the y460 floor now a room)
         for k in range(t + 1, sc.end[t]):
             if sc.cls(k) == 'ZFFActor' and sc.parent[k] in groups:
                 room = room_of(B.at(k))
@@ -3409,6 +3727,9 @@ def bots_gates(B, P, log=print):
         raise ValueError('kl_fa_club.bots_gates: no way station behind the loot')
     mid = lambda i: [sum(p[k] for p in st[i]['places']) / 7.0 for k in range(3)]
     i_seal = min(ways, key=lambda i: math.dist(mid(i), GATE_AT))
+    if HELI:                                    # the last hold is before the roof door: the exit-area and level-exit stations must still follow it
+        if not any(x['kind'] == 'exit' for x in st[i_seal + 1:]) or math.dist(mid(i_seal), GATE_AT) > 600.0:
+            raise ValueError('kl_fa_club.bots_gates: HELI: the way station nearest %s (%s, %d away) is not before the exit station' % (GATE_AT, [round(v) for v in mid(i_seal)], math.dist(mid(i_seal), GATE_AT)))
     men = room_men(B)
     table, named = [], {}
     for r in ROOMS:
@@ -3629,9 +3950,9 @@ def pressure_check(folder, B, P, tad, fail, log):
             r['name'], r['holds'], r['hold_worst'], r['hold_dead'], r['leg_worst'], r['leg_at'], r['leg_dead'], r['samples'], sum(1 for m in fire.men if m['wake'] <= gi), len(fire.men),
             '; %s' % g['fire'] if g.get('fire') else ''))
         log('      laggard case (the men this gate wakes in the world while a bot is still on its leg / hold%s): worst %d at %s' % (', or on the walk to the seal hold' if gi == len(gates) - 1 else '', r['lag_worst'], r['lag_at']))
-        if r['lag_worst'] > max(r['hold_worst'], r['leg_worst']):
+        if r['lag_worst'] > max(r['hold_worst'], r['leg_worst'], HELI_KNOWN.get(r['name'], (0, 0, 0))[2] if HELI else 0):
             fail('hold-guns: gate %s: the men its opening wakes add guns on a bot still arriving: %d at %s against %d without them' % (r['name'], r['lag_worst'], r['lag_at'], max(r['hold_worst'], r['leg_worst'])))
-        known_h, known_l = PRESSURE_KNOWN.get(r['name'], (HOLD_GUNS, LEG_GUNS))
+        known_h, known_l = (HELI_KNOWN if HELI else PRESSURE_KNOWN).get(r['name'], PRESSURE_KNOWN.get(r['name'], (HOLD_GUNS, LEG_GUNS)))[:2]
         if r['hold_worst'] > max(HOLD_GUNS, known_h):
             fail('hold-guns: gate %s: %d guns bear on a hold (%d wanted at most, %d known): %s' % (r['name'], r['hold_worst'], HOLD_GUNS, max(HOLD_GUNS, known_h), ', '.join(r['who_hold'][:8])))
         elif r['hold_worst'] > HOLD_GUNS:
@@ -3999,7 +4320,7 @@ def rooms_check(folder, log=print):
 # THE BUILD'S FLAGS TRAVEL WITH THE FOLDER (review round 1): bots, bots-check, check and finish run in other processes than the build,
 # so the flags a variant was built with are kept in van.json ('flags') and read back by load_flags. A folder without them is a build
 # with the defaults.
-FLAG_NAMES = ('DOORS_ANIMATE', 'SEAL_OPEN', 'SEAL_PLANE', 'SEAL_AT', 'LIGHT_SHOW', 'BEAT_ANIM', 'FAN_DAMAGE', 'CASE', 'NO_AI', 'SQUADS_AWAKE',
+FLAG_NAMES = ('HELI', 'DOORS_ANIMATE', 'SEAL_OPEN', 'SEAL_PLANE', 'SEAL_AT', 'LIGHT_SHOW', 'BEAT_ANIM', 'FAN_DAMAGE', 'CASE', 'NO_AI', 'SQUADS_AWAKE',
               'POLICE_ARRIVE', 'POLICE_ON_SLAB', 'STOCK_ROWS', 'OFFICE_AT', 'STREAM',
               'GUARDS_OFF', 'POLICE_EAST', 'VAN_LATE', 'RESET', 'VOICE', 'LOOT_SECONDS', 'ROOM_GATES', 'PRESSURE', 'WAKE_MORE', 'V2')
 STREAM = None                           # '--str FILE': the merged stream file the clips are resolved against (review round 2: it travels in van.json)
@@ -4028,6 +4349,7 @@ def load_flags(folder, log=print):
     changed = {k: v for k, v in fl.items() if k in FLAG_NAMES and g[k] != v}
     g.update({k: v for k, v in fl.items() if k in FLAG_NAMES})
     set_roles()
+    set_route()
     set_v2()
     if g['STREAM']:
         BK.use_stream(g['STREAM'])
@@ -4047,7 +4369,7 @@ def test(out, keep=False, log=print, plan=None):
     late = finish(folder, log)
     with open(os.path.join(folder, 'van.json'), 'w', encoding='utf-8') as f:
         json.dump(collections.OrderedDict(tag=LEVEL, plan=plan, van=did['van'], wired=did['wired'], hvk=did['hvk'], flags=flags_of(),
-                                          check=van_check(folder, lambda *a: None, plan)[0]), f, indent=1, default=str)
+                                          check=None if HELI else van_check(folder, lambda *a: None, plan)[0]), f, indent=1, default=str)
     bad = check(folder, log, r['problems']) + late
     log('level: %d entities, %d rooms, %.0f MB' % (r['entities'], r['rooms'], r['archive_mb']))
     if not keep:
@@ -4092,14 +4414,16 @@ def main():
                 return cast(a[i])
             except ValueError:
                 sys.exit('kl_fa_club: %s: "%s" is not a %s' % (name, a[i], cast.__name__))
+        global HELI
         if '--exit' in a and value('--exit') == 'heli-roof':
-            # OPTIONAL stage, behind its own flag, REFUSED until its live proofs exist (reviewer 2026-10-17: the helicopter rests on unverified guesses)
-            sys.exit('kl_fa_club: --exit heli-roof is a PLAN, not a build: it needs the M06 donor chain (kl_maps.chain), a kl_hvk.join monkey-patch '
-                     '(pad with a filler; kl_hvk.py itself is not edited), the spline re-framing, the boarding/call boxes, the AllyEscapeBox step, '
-                     'three closures sunk, roof squads/holds/wake points and a heli timer in the AIMonitor round-start list. None is measured or run: '
-                     're/club_campaign.md section Z. --exit van-slab (the default) is the delivered round.')
-        if '--exit' in a and value('--exit') != 'van-slab':
-            sys.exit('kl_fa_club: --exit %s: only \'van-slab\' is built (the roof stage and the helicopter are not: re/club_campaign.md \'Version 2\')' % value('--exit'))
+            # OPTIONAL stage (AA, step 2): the two-step chain builds and check() runs; the chopper's flight, boxes, camera, roof way are NOT placed (re/club_campaign.md AA)
+            if '--v1' in a or LEGACY:
+                sys.exit('kl_fa_club: --exit heli-roof belongs to Version 2 (not --v1 / --legacy)')
+            HELI = True
+            set_roles()
+            set_route()
+        elif '--exit' in a and value('--exit') != 'van-slab':
+            sys.exit("kl_fa_club: --exit %s: only 'van-slab' and (partial) 'heli-roof' are built" % value('--exit'))
         if '--v1' in a and '--exit' in a:
             sys.exit('kl_fa_club: --exit belongs to Version 2; --v1 is the round of c_club5')
         if '--seal-open' in a and ('--seal-plane' in a or '--seal' in a):
@@ -4126,6 +4450,9 @@ def main():
             SEAL_AT = value('--seal', float)
         plan = plan_of(value('--plan')) if '--plan' in a else None
         sys.exit(test(a[1], '--keep' in a, plan=plan))
+    elif len(a) == 2 and a[0] == 'donor':                # STEP 1 of the heli chain (AA): R09 = F07 + M06's chopper, offline, into <out>/chain
+        r = heli_donor(a[1])
+        sys.exit(0 if r.get('ok') and not r.get('problems') else 1)
     elif len(a) == 2 and a[0] == 'van-check':
         pj = os.path.join(a[1], 'van.json')
         rep, L_, bare = van_check(a[1], print, plan_of(pj) if os.path.isfile(pj) else None)
