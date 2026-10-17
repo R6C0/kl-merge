@@ -11,7 +11,7 @@ Study: re/campaign_fa.md (Havana rows), re/campaign_v2_plan.md, handovers in re/
         the .prm size and the archive are measured and the previous stage's folder is wiped (only notes stay),
         so at most two archives lie on disk. Default <out> = <work>/build/hasta_1017. Result: <out>/base.json
         and <out>/final/ (the compacted base). --keep-all keeps every stage. --from light|ward|compact resumes.
-    python kl_fa_hasta.py chain <out> [--start N] [--plates] [--armour 0,3] [--blast [S]] [--lock-wing] [--lock-show] [--corner-floor]   (see chain(); S = blast delay in s)
+    python kl_fa_hasta.py chain <out> [--start N] [--plates] [--armour 0,3] [--blast [S]] [--lock-wing] [--lock-show] [--corner-floor] [--heli-escape [--heli-hvk-origin]]   (see chain(); S = blast delay in s)
     python kl_fa_hasta.py proof-pair [<out>]
         The compaction proof pair of re/campaign_fa.md (live proof I): fake-fix of x_chunks/retomoto_wardrobe
         and of x_chunks/retomoto_wardrobe_compact -> <out>/proof_pair/{uncompacted,compacted}. The stock
@@ -39,6 +39,7 @@ import zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import kl_port_check as P
+import kl_fa_hasta_heli as HH
 
 WORK = P.workdir()
 OUT = os.path.join(WORK, 'build', 'hasta_1017')
@@ -285,7 +286,7 @@ def _drop(*folders):
             shutil.rmtree(f, ignore_errors=True)
 
 
-def chain(out=OUT, start=1, plates=False, armour='0,3', blast=None, lock=False, show=False, corner=False):
+def chain(out=OUT, start=1, plates=False, armour='0,3', blast=None, lock=False, show=False, corner=False, heli=False, heli_origin=False):
     """bare (doors + layer, KEPT with its side files) -> lighten -> wardrobe (+plates) -> compact -> bots -> gun looks -> fxc again
     -> dynamic bots (LAST: it records the large blocks) -> <out>/M11B. Order is the bank's (re/bank_campaign.md F.2) with the compaction
     after the wardrobe (the bare map is over the 73,728 table). Talk (kl_fa_talk) has no M11 scene table: left out (re/hasta_fa.md 3c).
@@ -293,6 +294,7 @@ def chain(out=OUT, start=1, plates=False, armour='0,3', blast=None, lock=False, 
     LOCK (--lock-wing): step 1 builds the loot wing LOCKED until the hall squads are dead (kl_fa_hasta_layer.LOCK_WING); False = as before.
     SHOW (--lock-show, needs --lock-wing): the beat also plays the campaign's bunker blast (kl_fa_hasta_layer.LOCK_SHOW); False = as before.
     CORNER (--corner-floor): step 1 shows SO0201_M11_CornerBroken_01 from the load (kl_fa_hasta_layer.CORNER_FLOOR); False = as before.
+    HELI (--heli-escape [--heli-hvk-origin]): the helicopter of Last Call is the way out instead of the van (kl_fa_hasta_heli.py; the bare level is R09+M11_B, the bots wait on the pad); False = as before.
     ARMOUR 0,3 (--armour=0,1,2,3 for all four): all four levels MEASURED .prm 90.6 MB (over the 90 MB GUESS edge), 0,3 saves the two middle body meshes.
     PLATES (--plates, 4 Payday-2 style mask plates) MEASURED +18.5 MB .prm: 91.0 MB after compaction, over the 90 MB GUESS edge: off by default.
     kl_hud is the overlay's (menu fonts / plates), not a level step: nothing to do per map. Each step wipes its predecessor."""
@@ -302,13 +304,13 @@ def chain(out=OUT, start=1, plates=False, armour='0,3', blast=None, lock=False, 
     T = lambda n: os.path.join(HERE, n)
     d = lambda n: os.path.join(out, n)
     bare_root = d('bare')
-    bare = os.path.join(bare_root, '%s+%s campaign' % (HOST, LEVEL))
+    bare = os.path.join(bare_root, '%s+%s campaign' % ('R09' if heli else HOST, LEVEL))
     steps = [
-        ('1_bare', [T('kl_fa_hasta_layer.py'), 'test', bare_root, '--keep'] + ([] if blast is None else ['--blast'] + ([] if blast == '' else [str(blast)])) + (['--lock-wing'] if lock else []) + (['--lock-show'] if show else []) + (['--corner-floor'] if corner else []), bare, (0, 1)),
+        ('1_bare', [T('kl_fa_hasta_layer.py'), 'test', bare_root, '--keep'] + ([] if blast is None else ['--blast'] + ([] if blast == '' else [str(blast)])) + (['--lock-wing'] if lock else []) + (['--lock-show'] if show else []) + (['--corner-floor'] if corner else []) + (['--heli-escape'] + (['--heli-hvk-origin'] if heli_origin else []) if heli else []), bare, (0, 1)),
         ('2_light', [T('kl_graft.py'), 'lighten', bare, d('2_light'), '--load', 'trim,slim,fxc'], d('2_light'), (0,)),
         ('3_ward', [T('kl_chars.py'), 'wardrobe', d('2_light'), d('3_ward'), '--armour=' + armour] + (['--plates=wolf,dallas,chains,hoxton'] if plates else []), d('3_ward'), (0, 1)),
         ('4_compact', [T('kl_chars.py'), 'compact', d('3_ward'), d('4_compact')], d('4_compact'), (0,)),
-        ('5_bots', [T('kl_fa_bots.py'), 'build', d('4_compact'), d('5_bots')] + BOTS_ARGS, d('5_bots'), (0, 1)),
+        ('5_bots', [T('kl_fa_bots.py'), 'build', d('4_compact'), d('5_bots')] + BOTS_ARGS + (['--park', ','.join('%g' % x for x in HH.BOT_PARK)] if heli else []), d('5_bots'), (0, 1)),
         ('6_guns', [T('kl_map_guns.py'), 'build', d('5_bots'), d('6_guns'), '--start=1', '--set=1'], d('6_guns'), (0, 1)),
         ('7_fxc', [T('kl_graft.py'), 'lighten', d('6_guns'), d('7_fxc'), '--load', 'fxc'], d('7_fxc'), (0,)),
         ('8_dyn', [T('kl_fa_bots_dyn.py'), 'build', d('7_fxc'), d(DELIV)], d(DELIV), (0,)),
@@ -365,8 +367,9 @@ def checks(folder=None):
     lines.append('F01_Main.zip sha1 %s  %d bytes' % (h.hexdigest(), os.path.getsize(os.path.join(f, 'F01_Main.zip'))))
     m = measure(f)
     lines.append('chunk table %s (limit %d, tools %d), .prm %s MB (GUESS edge %.0f), TEX %s MB' % (m['chunks'], CHUNK_TABLE, CHUNK_SAFE, m['prm_mb'], PRM_LIMIT_MB, m['tex_mb']))
-    checks_ = list(CHECKS)
-    if os.path.isfile(os.path.join(f, 'van.json')) and 'BLAST_AT' in json.load(open(os.path.join(f, 'van.json'))).get('flags', {}):
+    vj = json.load(open(os.path.join(f, 'van.json'))) if os.path.isfile(os.path.join(f, 'van.json')) else {}
+    checks_ = [c for c in CHECKS if not (vj.get('flags', {}).get('HELI_ESCAPE') and c[0] == 'van_check')]     # a heli folder has no van to check
+    if 'BLAST_AT' in vj.get('flags', {}):
         checks_.append(('blast', ['kl_fa_hasta_blast.py', 'check', '{f}'], (0,)))
     for name, argv, ok in checks_:
         cmd = [sys.executable, os.path.join(HERE, argv[0])] + [x.replace('{f}', f) for x in argv[1:]]
@@ -413,7 +416,7 @@ def main():
                 pos.remove(nxt)             # the seconds are not the out folder
             except ValueError:
                 blast = ''
-        sys.exit(chain(pos[1] if len(pos) > 1 else OUT, int(opt('--start', 1)), '--plates' in a, opt('--armour', '0,3'), blast, '--lock-wing' in a, '--lock-show' in a, '--corner-floor' in a))
+        sys.exit(chain(pos[1] if len(pos) > 1 else OUT, int(opt('--start', 1)), '--plates' in a, opt('--armour', '0,3'), blast, '--lock-wing' in a, '--lock-show' in a, '--corner-floor' in a, '--heli-escape' in a, '--heli-hvk-origin' in a))
     if pos[:1] == ['checks']:
         sys.exit(checks(pos[1] if len(pos) > 1 else None))
     if pos[:1] == ['proof-pair']:

@@ -3,10 +3,11 @@
 HASTA (M11_B) layer. STEP 3a: the doors and the opening (Doors, proof). STEP 3b: the Fragile Alliance layer (author module,
 below the proof: spawns, loot, bounds, van, squads, wiring, finish, check, test). OFFLINE; nothing installed, no game.
 
-    python kl_fa_hasta_layer.py test <out> [--keep] [--plan plan.json] [--no-ai] [--no-police] [--squads-awake] [--blast [S]] [--lock-wing] [--lock-show]
+    python kl_fa_hasta_layer.py test <out> [--keep] [--plan plan.json] [--no-ai] [--no-police] [--squads-awake] [--blast [S]] [--lock-wing] [--lock-show] [--corner-floor] [--heli-escape [--heli-hvk-origin]]
         --blast [S]: ALSO the timer-driven corner blast (kl_fa_hasta_blast.py; S s after the round start, default 1.5). Without it nothing of it runs.
         --lock-wing: the loot wing (door block, bunker wall + check block) stays SHUT until the 6 hall squads are wiped out (or the backstop); see LOCK_WING.
         --corner-floor: show SO0201_M11_CornerBroken_01 from the load, the floor of the corner-hole route; see CORNER_FLOOR.
+        --heli-escape: the helicopter of Last Call (kl_fa_hasta_heli.py) is the way out instead of the van; --heli-hvk-origin leaves its .HVK placement at the origin (HELI4's choice).
         --lock-show (with --lock-wing): the beat also plays the campaign's bunker blast (dust / fire / smoke emitters, remains, barrels gone); see LOCK_SHOW.
         F07 + M11_B --campaign with Doors armed AND this module as the authored layer -> <out>/F07+M11_B campaign; finish(),
         check(). kl_fa_hasta.py `build` runs this, then lighten, wardrobe, compact (the MEASURED order, tooling 3.5).
@@ -471,6 +472,11 @@ START_KEY = 'AllLevels/Interface/Online/GameStart/M11B_%s_Start'
 TEXTS = {START_KEY % 'FA': 'The tank shell has opened the Capitol. Take the paintings and cases in the east wing, fight back through the hall and down the side stair, then run the square to the van.',
          START_KEY % 'Team_B': 'Stop the heist and retrieve as many cases as possible.',
          START_KEY % 'UCC': 'The tank shell has opened the Capitol. Take the paintings and cases in the east wing, fight back through the hall and down the side stair, then run the square to the van.'}
+def texts():
+    """TEXTS; with HELI the way out is the helicopter."""
+    return {k: v.replace('to the van.', 'to the helicopter.') for k, v in TEXTS.items()} if HELI else TEXTS
+
+
 START_FIELDS = {12: 'FA', 13: 'FA', 14: 'Team_B', 15: 'UCC'}
 
 # ------------------------------------------------------------------ the van on the square (MEASURED trial: 0 faults, lin 2,200, lout 4,400, stop (25600, 2, 21800))
@@ -480,6 +486,8 @@ ROAD = dict(arrive=[(23400.0, 0.0, 21800.0), (24500.0, 0.0, 21800.0)], stop=(256
             leave=[(29100.0, 0.0, 21800.0), (30600.0, 0.0, 21800.0)], at='origin', heading=None, cam=None)
 # heading None on purpose: with 270 the planner said 'heads 90' (re/hasta_fa.md step 2 item 4; the reason is still unexplained)
 PLAN = None
+HELI = False                            # '--heli-escape': the chopper of Last Call instead of the van (kl_fa_hasta_heli.py); False = the build is as before
+HELI_HVK_ORIGIN = False                # '--heli-hvk-origin' (with --heli-escape): the chopper's .HVK placement stays at the donor's pose (the origin, as in stock M06_FA_A)
 NO_PLAN = 'kl_fa_hasta_layer: the van has no plan: build with \'kl_fa_hasta_layer.py test <out>\' or kl_fa_hasta_layer.build()'
 BOARD_FALLBACK = (25000.0, 20.0, 21800.0)     # about the standing van's rear doors; prepare_host takes PLAN['board'] once there is a plan
 LANE_CLEAR = 250.0                      # no spawn point, man or the marker nearer than this to the van's drive. GUESS (as the park's)
@@ -489,6 +497,9 @@ MAN_OFF, MAN_IN = 60.0, 15.0
 
 
 def board():
+    if HELI:
+        import kl_fa_hasta_heli as HH
+        return HH.PAD
     return PLAN['board'] if PLAN else BOARD_FALLBACK
 
 
@@ -576,6 +587,9 @@ def lay_van(P):
 
 
 def van_path():
+    if HELI:
+        import kl_fa_hasta_heli as HH
+        return R + HH.GROUP
     return R + VAN + '\\' + VAN_GROUP
 
 
@@ -591,6 +605,9 @@ def place_now():
         t[k] = box
     t['FASpecials!POI!POI_TheEscapeArea'] = (mark, None, None, 'beside the boarding place')
     t['Specials!JumpPoints!06_Exit'] = ((b[0], b[1], b[2]), SOUTH, None, 'the boarding place')
+    if HELI:                                        # the exit box, the escape-area triggers and the marker over the pad
+        import kl_fa_hasta_heli as HH
+        t.update(HH.place_table())
     t[ROLE['walk box']] = (WALK_BOX[0], None, WALK_BOX[1], 'GUESS: the wing\'s mouth')
     t[ROLE['floor box']] = (FLOOR_BOX[0], None, FLOOR_BOX[1], 'GUESS: the stair\'s top')
     return t
@@ -617,7 +634,7 @@ def police():
 
 def __getattr__(name):
     if name == 'KEEP':
-        return _KEEP + tuple(x for x in police() if x not in _KEEP) + (HB.KEEP if BLAST_AT is not None else ()) + ((COUNTER,) if LOCK_WING else ())
+        return tuple(x for x in _KEEP if not (HELI and x == VAN)) + tuple(x for x in police() if x not in _KEEP) + (HB.KEEP if BLAST_AT is not None else ()) + ((COUNTER,) if LOCK_WING else ())
     raise AttributeError(name)
 
 
@@ -720,7 +737,7 @@ def prepare_host(S, log=print):
     """Re-place F07's Fragile Alliance layer for Hasta. S: kl_graft.Level('F07'), unedited."""
     import kl_route
     sc = S.prp
-    if PLAN is None:
+    if PLAN is None and not HELI:
         raise ValueError(NO_PLAN)
     mesh = kl_route.load(LEVEL).mesh()
     for tbl in (START, TRAITOR, TEAM_MERC, STAGE_B, STAGE_C, STAGE_D, AFTER_DEATH, BODIES):      # heights from the navigation mesh (the tables hold guesses)
@@ -768,20 +785,28 @@ def prepare_host(S, log=print):
     log('  kl_fa_hasta_layer: loot: %d objects, %d in all (pool: %d ALL + %d TM_ONLY stacks)' % (
         len(LOOT), sum(v for _p, _y, v, _w in LOOT), len(pool['ZMONEYCTRL_GAMEMODE_ALL']), len(pool['ZMONEYCTRL_GAMEMODE_TM_ONLY'])))
     place_police(S, mesh, log)
-    S.van = ESC.van_prepare(S, PLAN, log)
-    # the van is NOT in the world until the alarm (the club's VAN_LATE: no FakeTarget, hidden from the load)
-    vg = A.node_of(sc, van_path()[len(R):])
-    gone = [k for k in range(vg, sc.end[vg]) if any(sc.p.key(c[0]) == 'FakeTarget' for c in sc.nodes[k]['ctrls'])]
-    for k in gone:
-        sc.nodes[k]['ctrls'] = [c for c in sc.nodes[k]['ctrls'] if sc.p.key(c[0]) != 'FakeTarget']
-    A.place(S, vg, hidden=True)
-    log('  kl_fa_hasta_layer: the van\'s FakeTarget (%d) is taken off and its group is hidden from the load; the alarm shows it' % len(gone))
-    off = abs(ESC.Poly([tuple(p) for p in PLAN['path']]).project(place_now()['FASpecials!POI!POI_TheEscapeArea'][0])[1])
-    if off < LANE_CLEAR:
-        raise ValueError('kl_fa_hasta_layer: the escape marker is %d from the van\'s drive (%d wanted)' % (off, LANE_CLEAR))
-    van = van_path()
-    k = A.node_of(sc, ROLE['exit'])
-    kl_fa.edit(sc, k, A.ctrl_of(sc, k, kl_fa.EXIT), lambda us: [A.setv(sc, us, 2 + j, s) for j, s in enumerate((van, '', ''))])
+    if HELI:                    # no van: the chopper of Last Call is laid on the pad (kl_fa_hasta_heli.place); the exit trigger names its group
+        import kl_fa_hasta_heli as HH
+        S.van = None
+        HH.place(S, log)
+        van = van_path()
+        k = A.node_of(sc, ROLE['exit'])
+        kl_fa.edit(sc, k, A.ctrl_of(sc, k, kl_fa.EXIT), lambda us: [A.setv(sc, us, 2 + j, s) for j, s in enumerate((van, '', ''))])
+    else:
+        S.van = ESC.van_prepare(S, PLAN, log)
+        # the van is NOT in the world until the alarm (the club's VAN_LATE: no FakeTarget, hidden from the load)
+        vg = A.node_of(sc, van_path()[len(R):])
+        gone = [k for k in range(vg, sc.end[vg]) if any(sc.p.key(c[0]) == 'FakeTarget' for c in sc.nodes[k]['ctrls'])]
+        for k in gone:
+            sc.nodes[k]['ctrls'] = [c for c in sc.nodes[k]['ctrls'] if sc.p.key(c[0]) != 'FakeTarget']
+        A.place(S, vg, hidden=True)
+        log('  kl_fa_hasta_layer: the van\'s FakeTarget (%d) is taken off and its group is hidden from the load; the alarm shows it' % len(gone))
+        off = abs(ESC.Poly([tuple(p) for p in PLAN['path']]).project(place_now()['FASpecials!POI!POI_TheEscapeArea'][0])[1])
+        if off < LANE_CLEAR:
+            raise ValueError('kl_fa_hasta_layer: the escape marker is %d from the van\'s drive (%d wanted)' % (off, LANE_CLEAR))
+        van = van_path()
+        k = A.node_of(sc, ROLE['exit'])
+        kl_fa.edit(sc, k, A.ctrl_of(sc, k, kl_fa.EXIT), lambda us: [A.setv(sc, us, 2 + j, s) for j, s in enumerate((van, '', ''))])
     if BLAST_AT is not None:
         HB.BLAST_AT = BLAST_AT
         HB.prepare_host(S, log)
@@ -941,18 +966,26 @@ def wire(sc, log=print):
     # the stair's top: the street squads, the alarm (the van's timer) and the gate (the police on the square)
     lists('floor box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['floor'] + [R + ROLE['van timer'], ways[0]])
     lists('backstop', 'TriggerDelay2', f0=BACKSTOP_AT, f4=[ways[1], R + ROLE['van timer']] + ([R + n for n in beat_fires()] if LOCK_WING else []))
-    lists('van on', 'ActivateGeom', f0='AITrigger', f1=[van_path()])
+    # HELI: the chopper is in the world from the load (as in Last Call), so the alarm shows / the reset hides nothing: empty lists. GUESS: an empty list is a valid ActivateGeom / DeactivateGeom
+    lists('van on', 'ActivateGeom', f0='AITrigger', f1=[] if HELI else [van_path()])
     lists('van timer', 'TriggerDelay2', f0=VAN_DELAY, f4=[R + ROLE['van on'], R + ROLE['speak']])
-    lists('reset hide', 'DeactivateGeom', f0='AITrigger', f1=[van_path()])
+    lists('reset hide', 'DeactivateGeom', f0='AITrigger', f1=[] if HELI else [van_path()])
     k = node(ROLE['monitor'])
     mine = {R + v for v in ROLE.values()}
     have = [s for s in values(sc, k, 'AIMonitor')[2] if sc.resolve(s) and s not in mine]
     lists('monitor', 'AIMonitor', f2=[R + ROLE['reset hide']] + have + [R + ROLE['start timer'], R + ROLE['backstop']])
     lists('speak box', 'TriggerBox', f14='ECPS_FA_MERCONLY', f17=[R + ROLE['speak']])
     lists('speak', 'OnlineSpeakPlayer', f1=EXIT_LINE)
-    if PLAN is None:
-        raise ValueError('kl_fa_hasta_layer: wire() without a plan of the van (see prepare_host)')
-    ESC.van_wire(sc, PLAN, log)
+    if HELI:                    # no van_wire: every exit trigger names the chopper group (the club's heli wiring; GUESS: nothing else of the van's wiring has a chopper form)
+        n_ex = 0
+        for k, i, v in kl_fa.controllers(sc, kl_fa.EXIT):
+            kl_fa.edit(sc, k, i, lambda us: [A.setv(sc, us, 2 + j, s) for j, s in enumerate((van_path(), '', ''))])
+            n_ex += 1
+        log('  kl_fa_hasta_layer: HELI: %d exit trigger(s) name the chopper group %s; no van_wire' % (n_ex, van_path()))
+    else:
+        if PLAN is None:
+            raise ValueError('kl_fa_hasta_layer: wire() without a plan of the van (see prepare_host)')
+        ESC.van_wire(sc, PLAN, log)
     for k, i, v in kl_fa.controllers(sc, kl_fa.SETTINGS):
         if len(v) != 340:
             raise ValueError('the settings object has %d fields' % len(v))
@@ -1157,13 +1190,13 @@ def finish(folder, log=print):
         kids = kl_loc.parse(E.lv[ext])
         if kids is None:
             continue
-        for key, text in TEXTS.items():
+        for key, text in texts().items():
             BK.set_text(kids, key, text)
         E.lv[ext] = kl_loc.build(kids)
         langs += 1
     for k, i, _v in kl_fa.controllers(sc, kl_fa.SETTINGS):
         kl_fa.edit(sc, k, i, lambda us: [us.__setitem__(f, [kl_fa._str(sc, START_KEY % w)]) for f, w in START_FIELDS.items()])
-    log('  kl_fa_hasta_layer: %d text keys in %d languages; settings fields %s name the start windows' % (len(TEXTS), langs, sorted(START_FIELDS)))
+    log('  kl_fa_hasta_layer: %d text keys in %d languages; settings fields %s name the start windows' % (len(texts()), langs, sorted(START_FIELDS)))
     E.save(None, log)
     for b in bad:
         log('  PROBLEM: ' + b)
@@ -1175,6 +1208,8 @@ def build(out, log=print, plan=None):
     """F07 + M11_B with the doors AND the layer into <out>/F07+M11_B campaign -> (kl_maps.one's result, that folder, the van's plan, kl_map_escape's report).
     plan None = made here on a BARE graft (doors armed, no layer; <out>/_bare, deleted again)."""
     import kl_snd
+    if HELI:
+        return build_heli(out, log)
     name = '%s+%s campaign' % (HOST, LEVEL)
     free = shutil.disk_usage(out if os.path.isdir(out) else os.path.dirname(os.path.abspath(out))).free / 1e9
     if free < 3.0:
@@ -1201,6 +1236,34 @@ def build(out, log=print, plan=None):
     finally:
         kl_snd.VOICE = None
     return r, os.path.join(out, name), plan, {k: st.get(k) for k in ('van', 'wired', 'hvk')}
+
+
+def build_heli(out, log=print):
+    """--heli-escape: STEP 1 the donor (R09 = F07 + the chopper tops of M06_FA_A, kl_fa_hasta_heli.donor), STEP 2 R09 + M11_B with the doors and this layer,
+    HOST = 'R09' for the length of the build, kl_hvk_donor.patched() for the .HVK join. -> (kl_maps.one's result, <out>/R09+M11_B campaign, None, did)."""
+    global HOST
+    import kl_snd, kl_hvk_donor
+    import kl_fa_hasta_heli as HH
+    free = shutil.disk_usage(out if os.path.isdir(out) else os.path.dirname(os.path.abspath(out))).free / 1e9
+    if free < 3.0:
+        raise SystemExit('only %.1f GB free: stop' % free)
+    if 'R09' not in kl_maps.PSEUDO or not os.path.isfile(os.path.join(kl_maps.PSEUDO['R09'], 'R09_Main.zip')):
+        d = HH.donor(out, sys.modules[__name__], log)
+        if not d.get('ok') or d.get('problems'):
+            return dict(d, ok=False, error=d.get('error') or 'the donor step left problems: %s' % d.get('problems'), where=d.get('where')), '', None, {}
+    real_host, r = HOST, {}
+    HOST = 'R09'                        # the author's HOST: the second step's S is the pseudo level (kl_graft runs prepare_host only when S is HOST)
+    kl_snd.VOICE = True if VOICE else None
+    try:
+        with HH.club_frame(HELI_HVK_ORIGIN), kl_hvk_donor.patched(), HH.hvk_layer(log), doors(log, specs=switches()):
+            r = kl_maps.one(out, 'R09', LEVEL, keep=True, campaign=True, tag=' campaign', author='kl_fa_hasta_layer', m_drop=M_DROP + orphan_clones(LEVEL))
+    except ValueError:
+        if r.get('ok') or not r:
+            raise
+    finally:
+        HOST = real_host
+        kl_snd.VOICE = None
+    return r, os.path.join(out, 'R09+%s campaign' % LEVEL), None, {'van': None, 'wired': None, 'hvk': 'donor'}
 
 
 def van_check(folder, log=print, plan=None):
@@ -1242,6 +1305,9 @@ def check(folder, log=print, problems=None):
         fail('%d cover lists (a level needs exactly one)' % ncov)
     # ---- clone groups: every group of ZAllocMany copies needs its template (else the first copy's emitter crashes at kl2 0x4c63f2)
     for g in orphan_clones(LEVEL, sc, lambda *a: None):
+        if HELI and g.endswith('Car_Explotion_01/Particle_Group_ALL'):
+            log('  note: heli donor clone group %s has no template (GUESS: harmless; Last Call club folders carry the identical orphan)' % g)   # GUESS
+            continue
         fail('clone group %s holds ZAllocMany copies and no template exists (copy +0x58 stays 0: crash at kl2 0x4c63f2 at load)' % g)
     # ---- the doors: the sunk switches sit 4,000 lower (read back by name against the campaign level), nothing of the wreck is left in the lane
     names = [e.name.decode('latin1') for e in ents]
@@ -1334,7 +1400,13 @@ def check(folder, log=print, problems=None):
                 fail('squad %s: field %d is %r' % (n, SQUAD_ACTIVE, values(sc, kk[0], 'ZSquadScript')[SQUAD_ACTIVE]))
     # ---- the exit and the van
     ex = [(k, v) for k, _i, v in kl_fa.controllers(sc, kl_fa.EXIT)]
-    if len(ex) != 1 or ex[0][1][2] != van_path():
+    if HELI:
+        import kl_fa_hasta_heli as HH
+        HH.check(folder, sc, ents, pos, hvk, fail, log)
+        for t in sc.tops():
+            if sc.cls(t) == 'ZSpawnPoint' and 'START' in kl_fa.node_values(sc, t)[8] and math.dist(pos[ents[t - 1]], HH.PAD) < 1500:
+                fail('a START spawn point is %d from the pad' % math.dist(pos[ents[t - 1]], HH.PAD))
+    elif len(ex) != 1 or ex[0][1][2] != van_path():
         fail('the exit trigger: %s, wanted one naming %s' % ([v[2:5] for _k, v in ex], van_path()))
     if PLAN:
         b = PLAN['board']
@@ -1364,6 +1436,10 @@ def flags_of():
         f['LOCK_WING'] = True
     if LOCK_SHOW:
         f['LOCK_SHOW'] = True
+    if HELI:
+        f['HELI_ESCAPE'] = True
+        if HELI_HVK_ORIGIN:
+            f['HELI_HVK_ORIGIN'] = True
     return f
 
 
@@ -1374,7 +1450,7 @@ def test(out, keep=False, log=print, plan=None):
         log('BUILD FAILED: %s at %s' % (r.get('error'), r.get('where')))
         return 1
     late = finish(folder, log)
-    vrep = van_check(folder, lambda *a: None, plan)[0]
+    vrep = None if HELI else van_check(folder, lambda *a: None, plan)[0]
     with open(os.path.join(folder, 'van.json'), 'w', encoding='utf-8') as f:
         json.dump(collections.OrderedDict(tag=LEVEL, plan=plan, van=did['van'], wired=did['wired'], hvk=did['hvk'], flags=flags_of(), check=vrep), f, indent=1, default=str)
     bad = check(folder, log, r['problems']) + late
@@ -1392,7 +1468,7 @@ def load_plan(folder):
 
 
 def main():
-    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, BLAST_AT, LOCK_WING, LOCK_SHOW, CORNER_FLOOR
+    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, BLAST_AT, LOCK_WING, LOCK_SHOW, CORNER_FLOOR, HELI, HELI_HVK_ORIGIN
     a = sys.argv[1:]
     if a[:1] == ['proof']:
         sys.exit(proof(a[1] if len(a) > 1 and not a[1].startswith('--') else 'C:/kl_scratch/hasta', '--keep' in a))
@@ -1403,6 +1479,10 @@ def main():
         LOCK_WING = '--lock-wing' in a
         LOCK_SHOW = '--lock-show' in a
         CORNER_FLOOR = '--corner-floor' in a
+        HELI = '--heli-escape' in a
+        HELI_HVK_ORIGIN = '--heli-hvk-origin' in a
+        if HELI_HVK_ORIGIN and not HELI:
+            sys.exit('--heli-hvk-origin needs --heli-escape')
         if LOCK_SHOW and not LOCK_WING:
             sys.exit('--lock-show needs --lock-wing')
         if '--blast' in a:
@@ -1419,7 +1499,10 @@ def main():
         sys.exit(1 if finish(a[1]) else 0)
     elif len(a) >= 2 and a[0] == 'check':
         CORNER_FLOOR = '--corner-floor' in a
-        load_plan(a[1])
+        vj = os.path.join(a[1], 'van.json')
+        HELI = os.path.isfile(vj) and bool(json.load(open(vj, encoding='utf-8')).get('flags', {}).get('HELI_ESCAPE'))     # a heli folder: its van.json says so
+        if not HELI:
+            load_plan(a[1])
         bad = check(a[1])
         print('RESULT: %s' % ('PASS' if not bad else 'FAIL'))
         sys.exit(1 if bad else 0)
