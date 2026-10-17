@@ -138,7 +138,7 @@
 enum { KLK_KANE = 1, KLK_LYNCH = 2, KLK_ANY = 3, KLK_SQUAD1 = 4, KLK_SQUAD2 = 5 };
 enum { KLK_N_KANE = 1, KLK_N_LYNCH, KLK_N_BOTH, KLK_N_KANEONLY, KLK_N_LYNCHONLY };
 enum { KLK_W_START = 1, KLK_W_STAGE1, KLK_W_STAGE2, KLK_W_STAGE3, KLK_W_ABOARD, KLK_W_JOIN, KLK_W_BOX };
-enum { KLK_ON_IDLE = 1, KLK_ON_MONEY, KLK_ON_DOWN, KLK_ON_STAGE2, KLK_ON_TRAITOR };
+enum { KLK_ON_IDLE = 1, KLK_ON_MONEY, KLK_ON_DOWN, KLK_ON_STAGE2, KLK_ON_TRAITOR, KLK_ON_SHOOT, KLK_ON_WON };
 static const char *const klk_needs_name[6] = { "?", "Kane", "Lynch", "Both", "KaneOnly", "LynchOnly" };
 
 struct klk_line { int who; float at, len; char key[KLK_KEYLEN]; };
@@ -159,7 +159,7 @@ static struct {                                  /* the round */
     char sc_state[KLK_NSCENE], done[KLK_NSCENE]; int sc_next[KLK_NSCENE];              /* state: 0 waits, 1 runs, 2 over; done[] by group */
     float next_idle, last_scene_line, last_chatter, member_last[KLW_NREC];
     DWORD money[KLW_NREC]; BYTE status[KLW_NREC], stage[KLW_NREC], flags[KLW_NREC]; char known[KLW_NREC];
-    DWORD said[KLK_NSAID]; int nsaid;
+    DWORD said[KLK_NSAID]; int nsaid, shooting, won;
     struct { int on, who; float at; char key[KLK_KEYLEN]; } reply;
 } klk_r;
 static struct { DWORD rules; char scene[160]; int n, toldfull; struct { DWORD hash; void *entry; int found; } e[KLK_NENTRY]; } klk_gen;      /* entries of this level generation */
@@ -224,7 +224,7 @@ static int klk_split(const char *v, int *who, float *at, float *len, char key[KL
 static void klk_ini_value(const char *sec, const char *k, const char *v, int *bad)
 {
     static const char *const whens[8] = { "", "Start", "Stage1", "Stage2", "Stage3", "Aboard", "Join", "Box" };
-    static const char *const ons[6] = { "", "Idle", "Money", "Down", "Stage2", "Traitor" };
+    static const char *const ons[8] = { "", "Idle", "Money", "Down", "Stage2", "Traitor", "Shoot", "Won" };
     int n;
     if (!_stricmp(sec, "Talk")) {
         if (!_stricmp(k, "Version")) klk_lv.version = atoi(v);
@@ -262,7 +262,7 @@ static void klk_ini_value(const char *sec, const char *k, const char *v, int *ba
         p = &klk_lv.pool[n - 1]; if (n > klk_lv.npool) klk_lv.npool = n;
         if (!_stricmp(k, "Name")) snprintf(p->name, sizeof p->name, "%s", v);
         else if (!_stricmp(k, "Who")) { if (!(p->who = klk_who_of(v))) (*bad)++; }
-        else if (!_stricmp(k, "On")) { if (!(p->on = klk_word(v, ons, 6))) (*bad)++; }
+        else if (!_stricmp(k, "On")) { if (!(p->on = klk_word(v, ons, 8))) (*bad)++; }
         else if (!_strnicmp(k, "Key.", 4)) {
             int i = atoi(k + 4);
             if (i < 1 || i > KLK_NKEY || strlen(v) >= KLK_KEYLEN - 8) { (*bad)++; return; }
@@ -457,6 +457,8 @@ static int klk_needs_hold(int needs, const struct klk_here *h)
 static int klk_was_said(DWORD h) { int i; for (i = 0; i < klk_r.nsaid; i++) if (klk_r.said[i] == h) return 1; return 0; }
 static void klk_mark_said(DWORD h) { if (klk_r.nsaid < KLK_NSAID && !klk_was_said(h)) klk_r.said[klk_r.nsaid++] = h; }
 
+static int klk_has_pool(int on) { int p; for (p = 0; p < klk_lv.npool; p++) if (klk_lv.pool[p].on == on && klk_lv.pool[p].nkeys) return 1; return 0; }
+
 /* may this member chatter now? (in play, not the human unless Speakers=1, his own gap over) */
 static int klk_may_chatter(const struct klw_who *w, int i, float rt)
 {
@@ -638,8 +640,8 @@ static void klk_tick(int game_thread)
         if (score) klh_rd(score + 0x150 + 4 * rec, &money, 4);
         klh_rd(w.m[i].at + 0x78, &st, 1); klh_rd(w.m[i].at + 0x79, &fl, 1);
         if (klk_r.known[rec]) {
-            if (w.m[i].status == 7 && klk_r.status[rec] != 7) { ev = KLK_ON_DOWN; self = 0; }
-            else if ((fl & 2) && !(klk_r.flags[rec] & 2)) { ev = KLK_ON_TRAITOR; self = 0; }
+            if (w.m[i].status == 7 && klk_r.status[rec] != 7) { ev = KLK_ON_DOWN; self = 0; if (!klk_r.shooting && klk_has_pool(KLK_ON_SHOOT)) ev = KLK_ON_SHOOT; klk_r.shooting = 1; }      /* the first death = shooting has begun (GUESS: no fire flag of the AI is known) */
+            else if ((fl & 2) && !(klk_r.flags[rec] & 2)) { ev = !klk_has_pool(KLK_ON_TRAITOR) && klk_has_pool(KLK_ON_SHOOT) ? KLK_ON_SHOOT : KLK_ON_TRAITOR; self = 0; klk_r.shooting = 1; }
             else if (st >= 2 && klk_r.stage[rec] < 2) ev = KLK_ON_STAGE2;
             else if (money > klk_r.money[rec]) ev = KLK_ON_MONEY;
         }
@@ -652,6 +654,15 @@ static void klk_tick(int game_thread)
             for (j = -1, k = 0; k < w.n && j < 0; k++) { int c = (s0 + k) % w.n; if (c != i && klk_may_chatter(&w, c, rt)) j = c; }
         }
         if (j >= 0 && klk_pool_key(&w, j, ev, w.rules, ckey, &pool)) { klk_chatter_say(&w, j, ckey, pool, rt, w.rules, scene, 0); busy = 1; }
+    }
+    if (!klk_r.won && w.n >= 2 && klk_has_pool(KLK_ON_WON)) {                 /* everybody who played the round is down: the line of the winners (GUESS: the game may already have left state 0x19) */
+        int alive = 0, dead = 0, c = w.human >= 0 ? w.human : 0;
+        for (i = 0; i < w.n; i++) { if (w.m[i].status == 0 || w.m[i].status == 1 || w.m[i].status == 4 || w.m[i].status == 5 || w.m[i].status == 6) alive++; else if (w.m[i].status == 7) dead++; }
+        if (!alive && dead >= 2) {
+            klk_r.won = 1;
+            if (klk_pool_key(&w, c, KLK_ON_WON, w.rules, ckey, &pool)) klk_chatter_say(&w, c, ckey, pool, rt, w.rules, scene, 0);
+            else klog("talk: all down at %.2f s but no Won key fits record %d", rt, w.m[c].rec);
+        }
     }
     if (busy || rt < klk_r.next_idle || rt - klk_r.last_scene_line < klk_lv.quiet || rt - klk_r.last_chatter < klk_lv.quiet) return;
     klk_r.next_idle = rt + klk_lv.gap_lo + (float)klk_rnd((DWORD)((klk_lv.gap_hi - klk_lv.gap_lo) * 10) + 1) / 10;
