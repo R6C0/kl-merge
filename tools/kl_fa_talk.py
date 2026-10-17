@@ -16,7 +16,7 @@ installs anything or starts the game.
                                                         streamed clips of ALL maps' scripts, appended (kl_str.merge:
                                                         nothing the base holds moves) -> <work>\\build\\v_talk\\str
                                                         --verify: only re-read a file made before; exit 1 on a problem
-    python kl_fa_talk.py build <build folder> <out folder> --map retomoto|M01|M02|M03|M06 [options]
+    python kl_fa_talk.py build <build folder> <out folder> --map retomoto|M01|M02|M03|M06|M11 [options]
                                                         the lines into a COPY of the build + KLTalk.ini beside it
       --adpcm memory|stream   Dead Men's streamed IMA ADPCM clips (nearly all of Kane's lines): 'memory' (default)
                               = records in the level's .WAV, the form 643 of F07's 729 in-memory records have and the
@@ -80,6 +80,7 @@ RT_ROOM = (4500.0, 5500.0, 20900.0, 21300.0, -500.0, 400.0)       # GUESS: round
 RT_RECEPTION = (2800.0, 3300.0, 20900.0, 21300.0, -1300.0, 150.0)  # GUESS: kl_fa_author.STAGE_B, the reception on the boardroom's floor
 RT_STREET = (1900.0, 2600.0, -100.0, 900.0, -7300.0, -5700.0)      # GUESS: just outside the front entrance (x 2600, z -7300..-5700; the lobby is x 2600..6109)
 RT_ROAD = (-5700.0, -300.0, -300.0, 600.0, -1500.0, 7000.0)        # the carriageway (kl_fa_author.ROAD_X +- ROAD_HALF, z up to the van stops at 7700)
+HASTA_STAIR = (27190.0, 27890.0, 420.0, 720.0, 29843.0, 30543.0)   # GUESS: kl_fa_hasta_layer.FLOOR_BOX, the side stair's top (STAIR_TOP 27540, 470, 30193 MEASURED; +-350 / y +100..+250 GUESS): the alarm box
 SCRIPTS = {
     'retomoto': dict(source='M09_A', scenes=[
         # the campaign plays 010..040 back to back from a MiniCutsceneRout ('040_MiniCut_Office_Countdown_Kane') and
@@ -145,8 +146,34 @@ SCRIPTS = {
         ('inside', 'Stage1', 4.0, 'Both', {}, [(K, 'M06_PreNegotiation/M06_PreNegotiation_010_Hero', 0.0), (L, 'M06_Negotiation/M06_Negotiation_140_Lynch', None)]),
         ('out', 'Stage2', 1.0, 'Both', {}, [(K, 'M06_LynchShoot/M06_LynchShoot_010_Hero', 0.0), (L, 'M06_Argue02/M06_Argue02_002_Lynch', None)]),
     ]),
+    # Hasta (DM11B, Havana, El Capitol): lines of M11_B, only Dead Men's streamed IMA ADPCM clips (they move into the level's .WAV, so the
+    # installed PC_Def.str serves: StreamBytes=0). The campaign's 'pcm set' lines of Lynch (interleaved, not in the installed stream file) and
+    # the Rific / Thapa / Carlos-directed ones are left out. Which line suits which moment: by the texts (GUESS). Stage1 = the wing is entered
+    # (loot), Stage2 = it is left, Box = the side stair's top (where the layer's alarm box sits), Aboard = the van.
+    'M11': dict(source='M11_B', scenes=[
+        ('start', 'Start', GO + 1.0, 'Both', {}, [
+            (K, 'M11_Intro/M11_Intro_030_Hero', 0.0),                # Just get on your feet! We're moving in NOW!
+            (L, 'M11_Intro/M11_Intro_040_Lynch', None),              # Now?! You're going to get us all killed, you idiot.
+            (K, 'M11_Intro/M11_Intro_050_Hero', None)]),             # I don't give a shit. As long as we get The7.
+        ('start', 'Start', GO + 1.0, 'KaneOnly', {}, [(K, 'M11_StormingElCap/M11_StormingElCap_010_Hero', 0.0)]),     # Now is our chance. Let's move in.
+        ('start', 'Start', GO + 1.0, 'LynchOnly', {}, [(L, 'M11_Intro/M11_Intro_020_Lynch', 0.0)]),                   # Oh Fuck! ... My ears are bleeding!
+        ('inside', 'Stage1', 4.0, 'Both', {}, [
+            (L, 'M11_FightLibrary/M11_FightLibrary_010_Lynch', 0.0),   # Shit... where the hell are Carlos and the brothers?
+            (K, 'M11_FightLibrary/M11_FightLibrary_030_Hero', None)]), # They should be here. They should all have been here!!
+        ('inside', 'Stage1', 4.0, 'KaneOnly', {}, [(K, 'M11_StormingElCap/M11_StormingElCap_020_Hero', 0.0)]),       # Spread out! Spread out! ...
+        ('inside', 'Stage1', 4.0, 'LynchOnly', {}, [(L, 'M11_MeetCarlos/M11_MeetCarlos_110_Lynch', 0.0)]),            # This is stupid. You can't trust him.
+        ('out', 'Stage2', 1.0, 'Both', {}, [
+            (K, 'M11_EntranceSquare02/M11_EntranceSquare02_010_Hero', 0.0),   # We got to scale the barricade.
+            (L, 'M11_Courtyard/M11_Courtyard_010_Lynch', None),               # OK. You lead the way, you're so fucking smart.
+            (K, 'M11_Courtyard/M11_Courtyard_020_Hero', None)]),              # Don't worry Lynch. I will.
+        ('out', 'Stage2', 1.0, 'KaneOnly', {}, [
+            (K, 'M11_EntranceSquare02/M11_EntranceSquare02_010_Hero', 0.0), (K, 'M11_SaveMen02/M11_SaveMen02_070_Hero', None)]),   # ... / Now let's move!
+        ('out', 'Stage2', 1.0, 'LynchOnly', {}, [(L, 'M11_Courtyard/M11_Courtyard_010_Lynch', 0.0)]),
+        ('alarm', 'Box', 0.0, 'Kane', {'box': HASTA_STAIR, 'not_before': 20.0}, [(K, 'M11_OLMortar/M11_OLMortar_010_Hero', 0.0)]),    # MORTAR! Let's move!
+        ('van', 'Aboard', 0.5, 'Kane', {}, [(K, 'M11_SaveMen02/M11_SaveMen02_060_Hero', 0.0)]),                                  # Good. Let's go.
+    ]),
 }
-ALIAS = {'M01_FA_A': 'M01', 'M02_FA_A': 'M02', 'M03_FA_A': 'M03', 'M06_FA_A': 'M06', 'rt': 'retomoto'}
+ALIAS = {'M01_FA_A': 'M01', 'M02_FA_A': 'M02', 'M03_FA_A': 'M03', 'M06_FA_A': 'M06', 'rt': 'retomoto', 'M11_B': 'M11', 'hasta': 'M11', 'DM11B': 'M11'}
 
 # ------------------------------------------------------------------ chatter: lines the FA bank already holds
 # (F07's bank carries Dog Days' story one-liners of Kane, Lynch and the two squad voices as .LOC keys with sound

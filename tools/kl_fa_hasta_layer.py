@@ -3,7 +3,8 @@
 HASTA (M11_B) layer. STEP 3a: the doors and the opening (Doors, proof). STEP 3b: the Fragile Alliance layer (author module,
 below the proof: spawns, loot, bounds, van, squads, wiring, finish, check, test). OFFLINE; nothing installed, no game.
 
-    python kl_fa_hasta_layer.py test <out> [--keep] [--plan plan.json] [--no-ai] [--no-police] [--squads-awake]
+    python kl_fa_hasta_layer.py test <out> [--keep] [--plan plan.json] [--no-ai] [--no-police] [--squads-awake] [--blast [S]]
+        --blast [S]: ALSO the timer-driven corner blast (kl_fa_hasta_blast.py; S s after the round start, default 1.5). Without it nothing of it runs.
         F07 + M11_B --campaign with Doors armed AND this module as the authored layer -> <out>/F07+M11_B campaign; finish(),
         check(). kl_fa_hasta.py `build` runs this, then lighten, wardrobe, compact (the MEASURED order, tooling 3.5).
     python kl_fa_hasta_layer.py check <folder> | finish <folder> | plan <bare-folder> <plan.json>
@@ -301,6 +302,7 @@ import kl_prpjoin as J
 import kl_fa_author as A
 import kl_fa_bank as BK
 import kl_map_escape as ESC
+import kl_fa_hasta_blast as HB
 
 HOST, LEVEL = 'F07', 'M11_B'
 TITLE = 'Hasta (campaign)'
@@ -313,6 +315,7 @@ KNOWN = (('stream clips are not in the merged stream file', 'the campaign level\
 NO_AI = False                           # True ('--no-ai'): no squad of the campaign stays
 SQUADS_AWAKE = False                    # True ('--squads-awake'): ZSquadScript field 3 = 1 on all (fall-back if naming the start child does not wake a squad)
 POLICE_ARRIVE = True                    # False ('--no-police')
+BLAST_AT = None                         # seconds ('--blast [S]'): the timer-driven corner blast of kl_fa_hasta_blast.py, S s after the round start (default 1.5). None = off (the build is then unchanged)
 VOICE = True
 M_DROP = ()                             # what the campaign pre-pass drops on top of its own rule (GUESS: nothing; the first build's verify says)
 
@@ -569,7 +572,7 @@ def police():
 
 def __getattr__(name):
     if name == 'KEEP':
-        return _KEEP + tuple(x for x in police() if x not in _KEEP)
+        return _KEEP + tuple(x for x in police() if x not in _KEEP) + (HB.KEEP if BLAST_AT is not None else ())
     raise AttributeError(name)
 
 
@@ -734,6 +737,9 @@ def prepare_host(S, log=print):
     van = van_path()
     k = A.node_of(sc, ROLE['exit'])
     kl_fa.edit(sc, k, A.ctrl_of(sc, k, kl_fa.EXIT), lambda us: [A.setv(sc, us, 2 + j, s) for j, s in enumerate((van, '', ''))])
+    if BLAST_AT is not None:
+        HB.BLAST_AT = BLAST_AT
+        HB.prepare_host(S, log)
     S.authored = {'loot': loot, 'van': van}
     return S.authored
 
@@ -884,7 +890,11 @@ def wire(sc, log=print):
         'stair\'s top -> %d + the alarm (+%.0f s: the van, the exit line) + the gate (%d police squads); backstop %.0f s; %d dead entries cut; soldier rows: %s' % (
             len(plan), men, START_AT, len(stage['start']), len(stage['walk']), len(stage['floor']), VAN_DELAY, len(arrive), BACKSTOP_AT, quiet,
             dict(armed) or 'Dead Men\'s rows stay'))
-    log('  kl_fa_hasta_layer: ' + BLAST)
+    if BLAST_AT is not None:
+        HB.BLAST_AT = BLAST_AT
+        HB.wire(sc, log)
+    else:
+        log('  kl_fa_hasta_layer: ' + BLAST)
     return {'stage': dict(stage), 'arrive': arrive, 'ways': ways}
 
 
@@ -1114,12 +1124,17 @@ def check(folder, log=print, problems=None):
         for t in sc.tops():
             if sc.cls(t) == 'ZSpawnPoint' and 'START' in kl_fa.node_values(sc, t)[8] and math.dist(pos[ents[t - 1]], b) < 1500:
                 fail('a START spawn point is %d from the boarding place' % math.dist(pos[ents[t - 1]], b))
+    if HB.present(sc):                      # a level built with --blast: its objects, values and particle groups (read from the folder, not from the flag)
+        bad += ['blast: ' + b for b in HB.check(os.path.join(folder, 'F01_Main.zip') if os.path.isdir(folder) else folder, log)]
     return bad
 
 
 def flags_of():
-    return collections.OrderedDict(SQUADS_AWAKE=SQUADS_AWAKE, NO_AI=NO_AI, POLICE_ARRIVE=POLICE_ARRIVE, START_AT=START_AT, BACKSTOP_AT=BACKSTOP_AT, VAN_DELAY=VAN_DELAY,
-                                   SINK_DY=SINK_DY)
+    f = collections.OrderedDict(SQUADS_AWAKE=SQUADS_AWAKE, NO_AI=NO_AI, POLICE_ARRIVE=POLICE_ARRIVE, START_AT=START_AT, BACKSTOP_AT=BACKSTOP_AT, VAN_DELAY=VAN_DELAY,
+                                SINK_DY=SINK_DY)
+    if BLAST_AT is not None:
+        f['BLAST_AT'] = BLAST_AT
+    return f
 
 
 def test(out, keep=False, log=print, plan=None):
@@ -1147,7 +1162,7 @@ def load_plan(folder):
 
 
 def main():
-    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE
+    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, BLAST_AT
     a = sys.argv[1:]
     if a[:1] == ['proof']:
         sys.exit(proof(a[1] if len(a) > 1 and not a[1].startswith('--') else 'C:/kl_scratch/hasta', '--keep' in a))
@@ -1155,6 +1170,9 @@ def main():
         NO_AI = '--no-ai' in a
         SQUADS_AWAKE = '--squads-awake' in a
         POLICE_ARRIVE = '--no-police' not in a
+        if '--blast' in a:
+            i = a.index('--blast') + 1
+            BLAST_AT = float(a[i]) if i < len(a) and not a[i].startswith('--') else HB.BLAST_AT
         plan = plan_of(a[a.index('--plan') + 1]) if '--plan' in a else None
         sys.exit(test(a[1], '--keep' in a, plan=plan))
     elif len(a) == 3 and a[0] == 'plan':
