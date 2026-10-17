@@ -25,9 +25,19 @@
  *   - applying a tally / the cursor to Heist_SelectedLevel or MP_SelectedLevel, and every Steam lobby part (B2 .. B5);
  *   - KLMVote's upper bound follows the loaded maps.ini, the XML must have as many entries (GUESS: nobody checks the mismatch).
  *
+ * B2 (2026-10-18, re\pm_options.md 9): THE ARCADE PLAYLIST. When an Arcade match ends the hook picks the next map (kpm_next) and (a) writes
+ * the Arcade map selector's stored position, the byte of the option Heist_SelectedLevel at 0x154d632, so the map page opens on that entry,
+ * and (b) tells klslot.c which menu page that entry belongs to (kpm_override), so Accept loads the playlist map even if the player opened
+ * another page. The game-facing half is klpm_arc.c (needs klslot.c's tables, so it is included AFTER klslot.c); this file holds the pure
+ * parts: kpm_slot_pos, kpm_advance, kpm_override, the list / bundle parsing. All behind [Match] Enable=1 AND Arcade=1.
+ *
  * KLHook.ini
  *   [Match]
  *   Enable=0        1 = answer KLMGun / KLMVote / KLMPlay
+ *   Arcade=1        (with Enable=1) 1 = apply the playlist after an Arcade match; 0 = the options only
+ *   Mode=           playlist mode when the menu row KLMPlay is 0: off / order / random (or 0 / 1 / 2)
+ *   Playlist=       map Ids from maps.ini, comma separated ('' = Bundle=, else every map of maps.ini)
+ *   Bundle=         name of a [Bundle.N] section of maps.ini
  *   Log=1
  *   Maps=           path of maps.ini ('' = KLExpansion\Maps\maps.ini beside the DLL)
  *   Gun=0 Vote=0 Play=0    the choice; rewritten when the menu changes it
@@ -120,6 +130,77 @@ static void kpm_maps_load(const char *file)
     }
 }
 
+/* ---------------------------------------------------------------- B2: Arcade playlist, pure parts */
+
+/* "F07" -> 6 (0-based slot index), anything else -> -1 */
+static int kpm_slot_idx(const char *s)
+{
+    if (!s || (s[0] != 'F' && s[0] != 'f') || s[1] != '0' || s[2] < '1' || s[2] > '9' || s[3]) return -1;
+    return s[2] - '1';
+}
+
+/* slot index 0..8 -> the Arcade page's menu POSITION (kl2 0x80c9f0's table, read 2026-10-18: 0,1,2,3,6,4,5,7,8; the inverse of 0x746570's
+ * 0,1,2,3,5,6,4,7,8). -1 for another value. */
+static int kpm_slot_pos(int slot)
+{
+    static const signed char t[9] = { 0, 1, 2, 3, 6, 4, 5, 7, 8 };
+    return slot >= 0 && slot < 9 ? t[slot] : -1;
+}
+
+/* After a match: which map is next? list[0..n-1] = map indexes; played = the map index just played (-1 unknown). *cursor = matches played.
+ * Order (mode 1): when 'played' is on the list the next one is the entry after it (so a first map picked by hand joins the sequence);
+ * otherwise the cursor just moves on. Random (mode 2): the cursor moves on. Returns the next map index or -1. */
+static int kpm_advance(int mode, const int *list, int n, int *cursor, unsigned seed, int played)
+{
+    int k;
+    if (n <= 0 || n > KPM_MAXMAP || (mode != 1 && mode != 2) || !cursor) return -1;
+    if (mode == 1 && played >= 0) {
+        for (k = 0; k < n; k++) if (list[k] == played) break;
+        if (k < n) *cursor = k + 1; else (*cursor)++;
+    } else (*cursor)++;
+    if (*cursor < 0 || *cursor > 100000) *cursor = 0;
+    return kpm_next(mode, list, n, *cursor, seed);
+}
+
+/* the playlist override klslot.c asks (kls_map): for the slot with this name (e.g. "F07") which menu page must the load use? -1 = none. */
+static char kpm_ovr_slot[8];
+static volatile LONG kpm_ovr_page = -1;
+static int kpm_override(const char *slotname)
+{
+    LONG p = kpm_ovr_page;
+    if (p < 0 || !slotname || !kpm_ovr_slot[0] || _stricmp(slotname, kpm_ovr_slot)) return -1;
+    return (int)p;
+}
+static void kpm_ovr_set(const char *slotname, int page)
+{
+    if (!slotname || page < 0) { InterlockedExchange(&kpm_ovr_page, -1); return; }
+    strncpy(kpm_ovr_slot, slotname, sizeof kpm_ovr_slot - 1); kpm_ovr_slot[sizeof kpm_ovr_slot - 1] = 0;
+    InterlockedExchange(&kpm_ovr_page, page);
+}
+
+/* [Match] Mode text -> 0 off, 1 order, 2 random */
+static int kpm_mode_text(const char *s)
+{
+    if (!s || !s[0]) return 0;
+    if (!_stricmp(s, "order") || !_stricmp(s, "sequence") || !strcmp(s, "1")) return 1;
+    if (!_stricmp(s, "random") || !strcmp(s, "2")) return 2;
+    return 0;
+}
+
+/* The Maps= text of [Bundle.N] whose Name= is 'name' (case-insensitive); 0 when there is none. */
+static int kpm_bundle_maps(const char *file, const char *name, char *out, int cap)
+{
+    char sec[16], nm[48]; int i;
+    for (i = 1; i <= 16; i++) {
+        snprintf(sec, sizeof sec, "Bundle.%d", i);
+        GetPrivateProfileStringA(sec, "Name", "", nm, sizeof nm, file);
+        if (nm[0] && !_stricmp(nm, name)) { GetPrivateProfileStringA(sec, "Maps", "", out, cap, file); return out[0] != 0; }
+    }
+    return 0;
+}
+
+static int kpm_arc_on, kpm_ini_mode, kpm_list[KPM_MAXMAP], kpm_nlist;
+
 /* ---------------------------------------------------------------- the options (hook side) */
 
 #define KPM_N 3
@@ -175,11 +256,20 @@ static void kpm_init(void)
     if (GetFileAttributesA(file) != INVALID_FILE_ATTRIBUTES) kpm_maps_load(file);
     kpm_cursor = (int)GetPrivateProfileIntA("Match", "Cursor", 0, klh_ini); if (kpm_cursor < 0 || kpm_cursor > 100000) kpm_cursor = 0;   /* kpm_next replays every lap up to the cursor: bound the work */
     kpm_seed = (unsigned)GetPrivateProfileIntA("Match", "Seed", 1, klh_ini);
+    if (!kpm_seed) kpm_seed = GetTickCount() | 1;          /* Seed=0: another order each session */
     for (i = 0; i < KPM_N; i++) {
         int v = (int)GetPrivateProfileIntA("Match", kpm_keys[i], 0, klh_ini);
         kpm_v[i] = (v < 0 || v > kpm_upper(i)) ? 0 : v;
     }
-    klog("match: on; %d maps in maps.ini (%s); Gun=%ld Vote=%ld Play=%ld Cursor=%d Seed=%u; options only, nothing is applied yet", kpm_nmap, file, kpm_v[0], kpm_v[1], kpm_v[2], kpm_cursor, kpm_seed);
+    kpm_arc_on = GetPrivateProfileIntA("Match", "Arcade", 1, klh_ini) != 0;
+    {   char t[200], b[200];
+        GetPrivateProfileStringA("Match", "Mode", "", t, sizeof t, klh_ini); kpm_ini_mode = kpm_mode_text(t);
+        GetPrivateProfileStringA("Match", "Playlist", "", t, sizeof t, klh_ini);
+        if (!t[0]) { GetPrivateProfileStringA("Match", "Bundle", "", b, sizeof b, klh_ini); if (b[0] && !kpm_bundle_maps(file, b, t, sizeof t)) klog("match: Bundle=%s is not in maps.ini; the playlist is every map", b); }
+        kpm_nlist = t[0] ? kpm_parse_list(t, kpm_list, KPM_MAXMAP) : 0;
+        if (!kpm_nlist) for (i = 0; i < kpm_nmap; i++) kpm_list[kpm_nlist++] = i;
+    }
+    klog("match: on; %d maps in maps.ini (%s); Gun=%ld Vote=%ld Play=%ld Cursor=%d Seed=%u; Arcade playlist %s: %d map(s), ini mode %d; the gun and the vote are values only", kpm_nmap, file, kpm_v[0], kpm_v[1], kpm_v[2], kpm_cursor, kpm_seed, kpm_arc_on ? "on" : "off", kpm_nlist, kpm_ini_mode);
 }
 
 #endif /* KLPM_C */

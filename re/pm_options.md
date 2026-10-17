@@ -309,3 +309,62 @@ the 4353 the current ini gives, i.e. 3 more than the 4350 of the v27c note). Bud
 - Staged overlay re-built: the live ini's page 3 names `LevelPicture_M06` / `LevelPicture_FA01`, which the installed `Overlay\Scenes\kaneandlynch.zip` does not hold (only DM05A); a missing Graphic is a boot risk. Overlay now built with those two `Picture=` lines left out (stock L02 / L03 pictures), md5 f9e058ac78340e76844a754998861794. Table estimate unchanged (4373 tags, live 5088 of 5096, 8 free).
 - install_pm.ps1: a second run no longer overwrites `dinput8.dll.before-pm1018` with the already-installed dll.
 - Off by default confirmed: no [Match] Enable=1 -> mkoverlay builds no page, klpm answers -1. Checked: the KLMatch XML follows the Mod settings pattern (names unique, KLFocus guard, 4 rows, entry counts = option ranges).
+
+## 9. B2: the Arcade playlist (2026-10-18; static reads of kl2.exe 0490, built and unit-tested, NOT run in the game)
+
+Code: `klhook/klpm.c` (pure: `kpm_slot_idx`, `kpm_slot_pos`, `kpm_advance`, `kpm_override`, `kpm_bundle_maps`, ini keys), `klhook/klpm_arc.c`
+(game-facing, included after klslot.c, `kpm_arc_tick()` from klhook.c's tick), one line in `klslot.c` `kls_map`. Off unless `[Match] Enable=1`
+and `Arcade=1` (default 1) and a mode is set (menu row `KLMPlay` 1 / 2, or `[Match] Mode=order|random`). Test: `klpm_test.c`, 348 checks.
+
+### 9.1 How the Arcade map is stored (PROVEN statically)
+- The selector `ZMercsLevelSelectorHeist` ("HeistLevel", option `Heist_SelectedLevel`): per-frame update 0x459e90 copies its GetValue (vtbl+0x90)
+  to the global dword `[0xceceec]` (0x459eec) and, when the start-pending byte `[0x156b73a]` is set, calls 0x7e01a0: slot = 0x746570(`[0xceceec]`),
+  session vtbl+0x28(slot), SetMapName, load. (0x4cd02a..0x4cd03a is the same for another selector class, calling 0x65d720.)
+- The option's storage is the plain BYTE `[0x154d632]`. Whole-image search for the address (and for the neighbours 0x154d630/31/33/34): the only
+  code references are Set 0x47251e (`mov [0x154d632], cl`) and Get 0x504c09 (`movzx eax, [0x154d632]`). The options OBJECT (`[0x154d5f4]`) is created
+  at 0x5b2112 and deleted with the menu manager (0x673388 zeroes the pointer) but the byte is not in it: it survives every level load and
+  nothing resets it. So a hook write is exactly the selector's own Set, and "the page opens on the entry played last" (expansion.md 10.2) is why
+  writing it works as a pre-selection.
+- The menu position -> slot table is 0x746570 (0,1,2,3,5,6,4,7,8); slot -> position is 0x80c9f0 (0,1,2,3,6,4,5,7,8) = `kpm_slot_pos` (tested as the
+  inverse).
+
+### 9.2 The safest way (chosen) and the ones not chosen
+Chosen: **write the byte + a per-slot page override**. At the end of an Arcade match: `[0x154d632] = kpm_slot_pos(next slot)` (guarded `klh_data`), and
+`kpm_override("F07") = page` makes klslot's archive-open latch use that page for that slot only. The override is read at the same place the page
+latch is taken (the open of `<slot>_Main.zip`), so no new code site of kl2.exe is touched, no code byte is written, nothing is called in the game.
+Not chosen:
+- Rewriting the redirect target (`kls_rule[].to`) for the slot: the target is keyed by (slot, page); changing the rule would also change what a
+  hand-picked entry loads, and it races the loader. The override only matches the one slot the playlist chose.
+- Writing `[0xceceec]` / calling 0x7e01a0 (auto-start): needs the Arcade page up and session mode 4 (fa_slots.md 8 says not established); the playlist
+  leaves the press of Accept to the player.
+- `[Redirect]` re-pointing per round: one page, one map per slot is the existing table; the override gets the same effect with no file write.
+
+### 9.3 When a match ends, and what it does
+`klpm_arc.c`: a level `Locations\F0n` seen by `klh_scene` + `klh_level_key` (the test kljoin.c / klchar.c use for "in a level"), then a scene that is
+not a level for 2 s, after at least 5 s in the level. Only an Arcade start counts: at the level start `kls_menu_page != 0` (a map page window was
+latched) or the start-pending byte was seen in the frontend; an online FA lobby start has neither (that is R1 / B5, not here).
+Then: played map = klslot's rule for (slot, latched page) (or maps.ini `Slot=` for a stock entry); `kpm_advance` (order: the entry after the played one
+when it is on the list, so a hand-picked first map joins the sequence; random: seeded shuffle without repeats, no repeat across laps); byte write;
+`kpm_ovr_set(slot, page)`; `Cursor=` written to KLHook.ini. The override ends 25 s after the next level started, or at once if that level is another slot.
+Playlist source: `[Match] Playlist=DM01,DM03A,..` (maps.ini Ids), else `Bundle=<name>` of a `[Bundle.N]`, else every map of maps.ini. The playlist
+map's (slot, page) comes from the `[Redirect.N]` line whose folder equals its Id (page 0 = every page -> page 1); a map without a rule is a stock
+entry (maps.ini `Slot=`, page 1). All log lines start `playlist:`.
+
+### 9.4 GUESSes
+1. The selector reads `Heist_SelectedLevel` when its page is built (only evidence: the expansion.md sentence from a live page). If it instead keeps its
+   own copy across the frontend, the entry does not move; the page override still makes Accept load the playlist map ONLY IF the selector is on that
+   slot, so then the playlist degrades to "nothing happens", never to a wrong map. The log line `Heist_SelectedLevel reads N 4 s after` tells which.
+2. `klh_scene` stops naming a level after the match (used by kljoin/klchar to mean frontend; the klslot "drop after a session" path has never run).
+3. A stock-entry target is assumed to need no override beyond page 1; an always-rule `[Redirect]` for that slot would still redirect it.
+4. The Arcade test (latched page or start byte) misses an Arcade start when no `[Redirect.N]` page rule exists AND the tick missed the one frame the
+   start byte is set (the fallback thread ticks every 500 ms). Then the playlist does nothing (logged `not an Arcade match`).
+5. A tie of the first map: a first map picked by hand that is not on the list advances the cursor by one (mode 1).
+
+### 9.5 Owner test (N2: three maps in a row; Dog Days only, Steam offline recommended)
+1. Install a build with these changes, `KLHook.ini`: `[Match] Enable=1`, `Arcade=1`, `Mode=order`, `Playlist=DM01,DM03A,DM05A` (ids that have
+   `[Redirect.2]` lines), `Log=1`; maps.ini in `KLExpansion\Maps\`.
+2. Arcade -> Dead Men maps page -> pick any playlist map -> Accept, play 30 s, quit to the menu.
+3. KLHook.log must show `playlist: level F0n started (from the Arcade page)`, then after the quit `playlist: F0n ended ... next map ... Arcade position N
+   ... written`, and 4 s later `Heist_SelectedLevel reads N`.
+4. Arcade -> the Dead Men maps page: the cursor should stand on the next map. Accept: `expansion: slot F0n: menu page P from now on -> <next id>`.
+   Repeat. Report: did the entry move (guess 1), did a different page than the map's also load the right map.

@@ -54,6 +54,30 @@ int main(void)
     kpm_put(1, 99); CHECK(kpm_get(1) == 3);                   /* clamped to the maps.ini count */
     kpm_put(2, -4); CHECK(kpm_get(2) == 0);
     kpm_put(0, 40); CHECK(kpm_get(0) == KPM_GUNS);
+    /* B2: Arcade playlist, pure parts */
+    CHECK(kpm_slot_idx("F01") == 0 && kpm_slot_idx("f09") == 8 && kpm_slot_idx("F10") == -1 && kpm_slot_idx("F00") == -1 && kpm_slot_idx("X01") == -1 && kpm_slot_idx(0) == -1);
+    { int sl, pos, inv[9]; for (sl = 0; sl < 9; sl++) { pos = kpm_slot_pos(sl); CHECK(pos >= 0 && pos < 9); inv[pos] = sl; }
+      /* the inverse must be kl2 0x746570's position -> slot table 0,1,2,3,5,6,4,7,8 */
+      { static const int t[9] = { 0, 1, 2, 3, 5, 6, 4, 7, 8 }; for (pos = 0; pos < 9; pos++) CHECK(inv[pos] == t[pos]); }
+      CHECK(kpm_slot_pos(-1) == -1 && kpm_slot_pos(9) == -1); }
+    { int cur = 0, l3[3] = { 4, 2, 7 };
+      CHECK(kpm_advance(1, l3, 3, &cur, 1, 2) == 7 && cur == 2);          /* played map 2 is list[1]: next is list[2] */
+      CHECK(kpm_advance(1, l3, 3, &cur, 1, 7) == 4 && cur == 3);          /* wraps (cursor 3 -> position 0) */
+      cur = 5; CHECK(kpm_advance(1, l3, 3, &cur, 1, 99) == l3[6 % 3] && cur == 6);   /* played map not on the list: the cursor moves on */
+      cur = 0; CHECK(kpm_advance(1, l3, 3, &cur, 1, -1) == 2 && cur == 1);
+      cur = 0; CHECK(kpm_advance(2, l3, 3, &cur, 5, 4) == kpm_next(2, l3, 3, 1, 5) && cur == 1);
+      cur = 0; CHECK(kpm_advance(0, l3, 3, &cur, 1, 4) == -1 && kpm_advance(1, l3, 0, &cur, 1, 4) == -1 && kpm_advance(1, l3, 3, 0, 1, 4) == -1);
+      cur = 100000; kpm_advance(2, l3, 3, &cur, 1, -1); CHECK(cur == 0); }   /* bounded: kpm_next replays every lap */
+    CHECK(kpm_override("F07") == -1);                                   /* nothing set */
+    kpm_ovr_set("F07", 2); CHECK(kpm_override("F07") == 2 && kpm_override("f07") == 2 && kpm_override("F01") == -1 && kpm_override(0) == -1);
+    kpm_ovr_set(0, -1); CHECK(kpm_override("F07") == -1);
+    CHECK(kpm_mode_text("order") == 1 && kpm_mode_text("RANDOM") == 2 && kpm_mode_text("2") == 2 && kpm_mode_text("") == 0 && kpm_mode_text("x") == 0 && kpm_mode_text(0) == 0);
+    f = fopen("klpm_test_maps.ini", "w");
+    fputs("[Bundle.1]\nName=Classics\nMaps=DM01,DM03A\n[Bundle.2]\nName=Other\nMaps=DM05A\n", f); fclose(f);
+    { char full[MAX_PATH], m[64]; GetFullPathNameA("klpm_test_maps.ini", MAX_PATH, full, 0);
+      CHECK(kpm_bundle_maps(full, "other", m, sizeof m) && !strcmp(m, "DM05A"));
+      CHECK(kpm_bundle_maps(full, "Classics", m, sizeof m) && !strcmp(m, "DM01,DM03A"));
+      CHECK(!kpm_bundle_maps(full, "none", m, sizeof m)); }
     DeleteFileA("klpm_test_maps.ini"); DeleteFileA("klpm_test.ini");
     printf("%d checks, %d failed\n", checks, fails);
     return fails != 0;

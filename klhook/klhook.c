@@ -657,6 +657,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klsteam.c"
 #include "klmm.c"                                          /* klmm.c: [Net] PrivateLobby / BuildKey - an ISteamMatchmaking proxy, only when a key is set */
 #include "klslot.c"
+#include "klpm_arc.c"                                      /* klpm_arc.c: the Arcade playlist (off unless [Match] Enable + Arcade); AFTER klslot.c */
 #ifdef KLHOOK_TEST
 #include "klauto.c"
 #endif
@@ -745,6 +746,7 @@ static void klh_tick(int game_thread)
     if (game_thread) klh_uia_tick();                  /* the game window refuses UI Automation (the hitch probe's finding, 2026-10-14) */
     klf_tick();
     kls_tick();
+    kpm_arc_tick();                                   /* klpm_arc.c: next Arcade map after a match (off unless [Match] Enable=1) */
     klx_tick();
     klj_tick();
     klt_tick(game_thread);                            /* DIRECTLY after klj_tick: it must see kljoin.c's request while it is pending (klcrew_rt.c, EARLY) */
