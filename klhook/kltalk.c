@@ -521,7 +521,7 @@ static int klk_chatter_say(const struct klw_who *w, int i, const char *key, cons
 #ifndef KLK_PLAYER_VT
 #define KLK_PLAYER_VT 0x00bb45f4                  /* ZFFPlayer */
 #endif
-static volatile LONG klkf_n_new;                  /* klhud_kill.c (included later): counts the points pop-up's new messages, only while [HUD] KillLine / Draft is on */
+static volatile LONG klkf_n_new, klkf_n_total;                  /* klhud_kill.c (included later): counts the points pop-up's new messages, only while [HUD] KillLine / Draft is on */
 
 /* the local player is a policeman AND his crew record is back in play (status 0: the place is set 5 s after death, a read a tick early shows status 1) */
 static int klk_fed_now(const struct klw_who *w)
@@ -561,8 +561,8 @@ static void klk_fed_tick(const struct klw_who *w, float rt, int busy, const char
     if (!klk.chatter || (!klk_has_pool(KLK_ON_FEDRESPAWN) && !klk_has_pool(KLK_ON_FEDKILL))) return;
     fed = klk_fed_now(w);
     if (fed && !klk_r.fed_was) { klk_r.fed_ev[0] = rt; if (klk.log) klog("talk: fed: the local player is police now (record %d back in play) at %.2f s", w->m[w->human].rec, rt); }
-    if (fed && klkf_n_new != klk_r.fed_kn) { klk_r.fed_ev[1] = rt; if (klk.log) klog("talk: fed: a new reward message at %.2f s (klhud_kill.c counter %ld -> %ld)", rt, (long)klk_r.fed_kn, (long)klkf_n_new); }
-    klk_r.fed_kn = klkf_n_new; klk_r.fed_was = fed;
+    if (fed && klkf_n_total != klk_r.fed_kn) { klk_r.fed_ev[1] = rt; if (klk.log) klog("talk: fed: a new reward message at %.2f s (klhud_kill.c counter %ld -> %ld)", rt, (long)klk_r.fed_kn, (long)klkf_n_total); }
+    klk_r.fed_kn = klkf_n_total; klk_r.fed_was = fed;
     for (e = 0; e < 2; e++) {
         if (klk_r.fed_ev[e] < 0) continue;
         if (!fed || rt - klk_r.fed_ev[e] > 10.0f) { klk_r.fed_ev[e] = -1; continue; }                 /* gone, or too late to still fit */
@@ -587,7 +587,7 @@ static void klk_new_round(DWORD rules)
     for (i = 0; i < KLK_NSCENE; i++) klk_r.box_at[i] = -1;
     for (i = 0; i < KLW_NREC; i++) klk_r.member_last[i] = -1;
     klk_r.last_scene_line = klk_r.last_chatter = -1000;
-    klk_r.fed_ev[0] = klk_r.fed_ev[1] = -1; klk_r.fed_last[0] = klk_r.fed_last[1] = -1000; klk_r.fed_kn = klkf_n_new;
+    klk_r.fed_ev[0] = klk_r.fed_ev[1] = -1; klk_r.fed_last[0] = klk_r.fed_last[1] = -1000; klk_r.fed_kn = klkf_n_total; klk_r.fed_was = 0;
 }
 
 static void klk_tick(int game_thread)

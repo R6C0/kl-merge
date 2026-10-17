@@ -53,7 +53,7 @@ static char __fastcall klkf_render(void *el, void *edx, void *ctx, void *cam)
             }
             while (k && o[k - 1] == ' ') k--;
             o[k] = 0;
-            if (k) { memcpy(klu_kill_txt, o, (size_t)k + 1); klu_kill_at = (LONG)GetTickCount() | 1; InterlockedIncrement(&klkf_n_new); }
+            if (k) { memcpy(klu_kill_txt, o, (size_t)k + 1); klu_kill_at = (LONG)GetTickCount() | 1; InterlockedIncrement(&klkf_n_new); InterlockedIncrement(&klkf_n_total); }
             LeaveCriticalSection(&klu_cs);
         }
         InterlockedIncrement(&klkf_n_kept);
