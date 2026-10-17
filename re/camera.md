@@ -267,3 +267,152 @@ reinstall v82e-h; this module must build on the live hook 8d3ccf81, not on v82e/
 - Shoulder swap success = the side bit (bit 10 of [P+0x818]) changed; [P+0x29a0] is resynced by the handler first (0x640142..0x64016d). b84 = -1 if left else +1 from the post-call bit. The cover exit (0x71f3df) forces the side from state+0x104, so whether b84 wins is an ASSUMPTION until the camev lines are read live. Offline only (kl_online() gate; [Camera] ShoulderCoverOnline=1 lifts it for a test).
 - Unstick: cam+0xca0 is a decaying slow-down (0x48ec78..0x48ecbb), never written; only the blend timer cam+0x5a0 -> 0 (when > 0.05). The "cut camera fails the locator test" claim is wrong: the locator test is on the player's own camera. The detector is gated to plain locomotion (movement id 2/3, no cover/seat/climb), 1.0 s.
 - Recover: the apply does not need the latch (cleared by 0x898384 each call); default OFF until Log=1 shows the node equals the eye.
+
+## Round 2 (2026-10-17): measurement and owner test plan (static; nothing run; klcam.c NOT edited, this is the spec)
+Asked: stuck camera / slow follow, shoulder swap in cover and in cover aim, smoother/cinematic. This section = what Log=1 must print so ONE owner
+session answers it, the gaps in the current log code, the owner checklist, and the summary script. Labels: READ = klcam.c or kl2.exe read now;
+GUESS / ASSUMPTION otherwise.
+
+### R2.1 Default keys (READ: the compiled binding string in kl2.exe, 'GameplayInput={...}', right behind SwitchCameraSide; file offset 0x74ed2c region)
+Keyboard + mouse defaults: SwitchCameraSide = HOLD X (pad: right thumb click), TapCover/HoldCover = C, HoldPrecisionAim (aim) = HOLD RIGHT MOUSE
+(pad: left trigger), TapFire = left mouse, HoldSprint = Left Shift or Space, crouch = Left Ctrl, move W A S D. X is also TapPulseCheck/HoldPulseCheck.
+No binding file exists in the Dog Days folder (no input .ini/.xml; Patch01.zip holds only menu/frontend.xml and ingame.xml; the text is compiled in).
+If the owner rebound keys in the options menu, where that is stored was not found: the checklist says "your keys for ...".
+The shoulder hold needs about 0.2 s or more (the key record's 0.08 s timer, see the klcam.c comments).
+
+### R2.2 What the current Log cannot show (READ klcam.c klcam_tick and klcam_cover)
+1. HITCH SIZE IS LOST: `if (dt > 0.1f) dt = 0.1f;` runs BEFORE the log lines, so a 1.8-2.7 s hitch shows as dt 0.1 and one "hitch frame".
+   Part of the "stuck" the owner feels may be a hitch plus catch-up. Needs the raw dt.
+2. SILENT RETURNS: the `[gd+0x4cd8]` gate returns before every log line (one message after 5 s, never an end); klcam_lost() prints "no local player"
+   without WHICH condition failed (gd/idx, P vptr, cam, locator, sys); a failed eye/feet/pivot read, `frame == lastframe` and a bad dt are silent; the tick runs only
+   when `klh_rcb_ra == 0x87aa82`, so a frame without that callback site is invisible (no gap measure). A stuck camera that coincides with any of these leaves no line.
+3. THE STUCK DETECTOR IS NARROW: `alive && loco && vP > 200 && vE < 20` for 1.0 s, loco = movement id 2/3 and not cover/seat/climb/free-climb. It cannot
+   fire in cover, in cover aim, just after cover exit while the movement id is still the cover id, while walking (walk speed may be under 200 cm/s: GUESS),
+   when the player stands and the camera lags a rotation, or after a profile switch. It compares the eye with the PLAYER, but the camera chases the pivot
+   (+0x398). And it only says "stuck", never WHICH field froze.
+4. SHOULDER: `camev: shoulder swapped in cover` prints only when this module fired the key (needs sc_on, cs != 0, kind == 2, cooldown, hold-off).
+   Not logged: every raw press of X and why it did nothing (the gates: [[0x168d7c0]+0x209], [P+0x2720]&2, [P+0xd50], [P+0xed0] bit 7, [H+0x330], cover byte),
+   a press outside cover, a press with ShoulderCover=0 or online, the lean side, the state after leaving cover. `coverside` prints with %u so -1 shows as 255;
+   the generic camev side lines lack bit 10 of [P+0x818], [P+0xb84], [P+0x29a0].
+5. AIM: no input edge (no way to time key -> profile switch -> FOV settled); fov only in the 20 Hz line; profiles are raw pointers (0x154ace8 cover aim,
+   0x154a9b8 aim, 0x154b9a8 FA aim, 0x154b810 FA default, 0x154ab50 cover low: re/firstperson_camera.md) and no achieved timings. The profile timings are
+   printed but not the live smoothing state (+0x560/+0x564 times, +0x568 flags, +0x590/+0x594 constants, +0xca0 slow-down): the real chase speed is missing.
+6. No marker: the owner cannot say "NOW"; the wall clock stamp of klog (hh:mm:ss.mmm, klhook.c:216, READ) is the only anchor.
+
+### R2.3 Additions (read-only through klh_rd, inside the Log=1 gate, game thread, same site 0x87aa82)
+Time base: add `T <sec>` (QueryPerformanceCounter seconds since start; kc.qf exists) and `rdt` (RAW dt) to cam:/camev: lines.
+
+A. Raw dt and wall gap
+ - Keep `rawdt` before the 0.1 clamp. Print `rdt %.4f` in the cam: line. `camev: HITCH rdt %.3f f %ld skipped %ld` whenever rawdt > 0.1 or the frame counter
+   ([[0xdd2640]+0x48]) jumped (skipped = frame - lastframe - 1 > 0). `camev: GAP wall %.3f` when QPC since the previous entered tick > 0.25 s (catches frames without the
+   0x87aa82 call). One new kc field.
+B. Every silent return prints on change (reason code in kc)
+ - NOPLAYER (gd, idx, P vptr value), NOCAM (cam, locator value), NOSYS, GATE4CD8 (print the dword), READFAIL (which of eye/feet/pivot), ZERODT.
+   `camev: SKIP <reason> begins | f T` and `camev: SKIP <reason> ends after %.2f s`. While GATE4CD8 stands, still one `cam:` line per second (eye, pivot, feet, tick counter).
+C. Ungated freeze watch (answers 'what was frozen')
+ - Each frame memcmp against the previous frame: F_P feet [P+0x460]; F_PIV pivot [cam+0x398]; F_B0 [cam+0xb0]; F_EYE [cam+0x508]; F_NODE [geom+0x24];
+   F_BLEND [cam+0x5a0] (when > 0); F_TICK int [cam+0xc54]; F_SIDEB [cam+0xb9c] (while side != camside); F_FOV [node+0x70]. Consecutive-equal counters (time, sum of dt).
+ - "Input active" = any of W A S D down by GetAsyncKeyState (VK 0x57 0x41 0x53 0x44) while the foreground window belongs to this process, or P moved > 1 cm last frame.
+ - Episode STUCK2 begins when (input active OR pivot speed > 100 cm/s) AND the eye moved < 0.5 cm total for 0.25 s of dt AND rawdt < 0.1 for those frames (a hitch is not
+   an episode); ends when the eye moves > 2 cm in a frame. NOT gated by movement id, cover, or the 0x4cd8 flag (its value is printed).
+   LAG2: pivot speed > 100 cm/s, eye moving, but |eye - pivot| exceeds its median of the last 5 s by > 150 cm for > 0.5 s (distance only; the player facing field is not in these reports).
+ - Begin line: `camev: STUCK2 begins frozen=PIV,EYE,.. | f T rdt | P .. piv .. eye .. node .. | mv %d kind %02x a54 %04x d50 %lx d44 %lx | blk cd | blend tick sysb flag4cd8`
+   plus ONE `camdump:` block (raw hex dwords, 16 per line): cam+0x120..0x15f, 0x390..0x3cf, 0x500..0x53f, 0x590..0x5af, 0xb20..0xb5f, 0xc50..0xcaf; player P+0x810..0x81f, P+0x2940..0x297f,
+   P+0xb80..0xb8f. At most 3 dumps a minute. End line: `camev: STUCK2 ends after %.2f s frozen=..` plus the diff list of watched fields that changed in the frame the eye moved again
+   (profile ptr, cover byte, blocked flag, blend timer, side, tick counter, key edge).
+ - F9 mark: edge of VK_F9 prints `camev: MARK n` + the begin-state + a camdump. (F9 is not among the keys in KL_MOD_SETTINGS.txt: F7, F8, #, Home; ASSUMPTION it is free in game; grep klhook.c before wiring.)
+
+D. Live chase constants (the real follow speed)
+ - cam: line adds `t560 %.3f t564 %.3f f568 %08lx k590 %.3f k594 %.3f slow %.3f` from cam+0x560, +0x564, +0x568, +0x590, +0x594, +0xca0 (section 3: 0x48ec00 turns times into constants; +0xca0 is the
+   decaying slow-down; +0x568 bit 0x10 selects +0x560/564). A stuck episode with a tiny k590 or slow far from 1.0 is the cause; if those are normal the cause is upstream (pivot / tick / latch).
+ - `camev: PROFILE old->new (name)` with the name looked up from the pointer list in R2.2 item 5 and the new timings.
+
+E. Timings achieved (derived, no game call)
+ - BLEND: `camev: BLEND start prof .. t a/b/c` when [cam+0x5a0] goes 0 -> > 0 or the profile pointer changes; `camev: BLEND end after %.2f s` when it returns to 0.
+ - FOV: track f = [node+0x70]; after a profile change or an aim key edge: `camev: FOV a -> b settled after %.2f s since <profile|RMB down|RMB up>` (settled = |f - f_final| < 2 % of the step for 5 frames; f_final = value when change per frame < 0.0002 rad for 5 frames).
+ - EYE settle: with P speed < 5 cm/s, time until eye speed < 5 cm/s: `camev: EYE settled after %.2f s`.
+ - SIDEBLEND ([cam+0xb9c], walked by 0x9088c0): `camev: SIDEBLEND %.2f -> %.2f in %.2f s (side %u -> %u, x-off %.1f -> %.1f)` with [P+0x280c] and [cam+0x530]; the achieved flip time (stock 0.2 s, .rdata 0xceb5e0).
+
+F. Input edges (GetAsyncKeyState; the game reads DirectInput only, so no interference)
+ - `camev: KEY X|RMB|LMB|C|LSHIFT|F9 down|up` carrying cs, side bit, want, b84, profile, fov, blend, sideb: the key-to-effect delay is the T difference. A `keys` bit string in the cam: line.
+ - On X down add the stock gate decision: `gates: cfg209 %u k2720&2 %u d50 %lx a54 %04x ed0b7 %u H330 %lx cs %d kind %u fired %u timer %.3f` and `would_toggle=yes|no(<which>)` for the STOCK handler plus
+   `module=fired|skipped(<sc_on, online, cool, cs_s, sc_wait, kind>)`. Closes item 4 above.
+
+G. Cover and lean
+ - cs printed signed (`cs %d`, cast signed char). Every camev and cam: line gets bit818 (bit 10 of [P+0x818]), side [P+0x280c], want [P+0x29a0], b84, camside [cam+0xb40], mv (klfc_movid).
+ - Lean state object: on the first frame with cs != 0 after a cover entry, ONE read-only scan, off = 0..0x3000 step 4: v = klh_rd32(P+off); if v >= 0x10000 and klh_rd32(v) == KLH_VA(0xbb5b6c) (the cover movement vtable, section 4.1), record off.
+   Print `camev: COVERSTATE at P+0x%x obj %08lx` or `not found` (max 5 times a run). 3072 guarded reads once per entry (cost ASSUMED negligible). If found, in-cover cam: lines add `st104 %d st105 %d st29c %d` (state+0x104/0x105/0x29c) and P+0xb50..0xb58 and [P+0x2d6c] hex.
+ - `camev: COVER enter|leave` at cs 0 <-> nonzero with the full side set; then `COVER+1.0s` and `COVER+3.0s` after a leave: the 'after leaving cover' answer (does b84 or the cover exit win).
+ - Each swap: the existing line 294 plus st104/st105 and camside before/after, and a `SWAP+0.5s` line (sideb, x-off, st104): did the camera finish, did the body lean flip.
+ - Cover aim: when RMB down AND cs != 0, a `coveraim` token on cam: lines and on the FOV/EYE/BLEND settle events.
+
+H. Volume: the cam: line is ~600 bytes; 20 Hz = 12 KB/s (43 MB an hour on a log that is already 60 MB). Keep LogHz=20; when nothing moves (vP < 1, vE < 1, no blend, no key) print at 2 Hz.
+   The 10 s summary adds STUCK2 count and seconds per frozen field, LAG2 seconds, frames with rdt > 0.1, swaps and failed swaps, max BLEND / FOV settle / SIDEBLEND.
+Effort: about 150 lines of C in klcam_tick; no game calls, no writes; GetAsyncKeyState needs user32 (check what klhook already imports).
+
+### R2.4 ini for the single owner session
+Measure STOCK behaviour; Blend/Unstick/Recover would change or hide it: `[Camera] Enable=1 Log=1 LogHz=20 Blend=0 Unstick=0 Recover=0 ShoulderCover=1 CineAim=0 Cine=0`
+(Unstick=0 keeps the detector and writes nothing: 'Off-mode' in 3/F1b. ShoulderCover=1 because the stock key is refused in cover, nothing to compare otherwise.)
+Second session, if wanted: defaults (all features on), same checklist; the script compares the two.
+The live hook (8d3ccf81) has no [Camera] section and no klcam; the test dll is built from klcam.c plus the klhook.c wiring and installed by the owner only (do not reinstall v82e-h).
+
+### R2.5 Owner test checklist (about 12 minutes; keyboard and mouse defaults)
+Before: close the game, rename KLHook.log to KLHook.log.old, install the test dinput8.dll and the KLHook.ini lines from R2.4 (a ready script comes with the build).
+1. Start an Arcade Fragile Alliance round on a map with low walls (Subway is fine). Stand still 5 seconds, walk 5 seconds, then sprint (Left Shift) 10 seconds around a corner.
+2. While sprinting, spin the mouse half a turn quickly, 3 times, and run one full circle. Whenever the camera lags or sticks, press F9 at once and stay put for 3 seconds.
+3. At a low wall press C to take cover. Wait 2 seconds. Hold X for half a second (the shoulder swap). Wait 2 seconds. Do the swap 3 times.
+4. In cover hold the right mouse button to aim for 2 seconds, let go, wait 2 seconds. Do it 3 times. Then once: aim (hold right mouse), and while aiming hold X half a second, then let go of both.
+5. In cover swap the shoulder with X once, then leave cover (C again or walk away) and run 3 seconds. Do this 3 times. If you lean out one side while the camera is on the other, press F9.
+6. Out of cover hold X half a second to swap shoulders 3 times, 2 seconds apart, sprinting 3 seconds after each. Aim with the right mouse in the open 3 times, 2 seconds each.
+7. Play normally 3 more minutes (shoot, change covers, get shot). Press F9 every time the camera is wrong (stuck, late, jumps, wrong side) and jot one word on what you were doing ('after reload', 'leaving cover').
+8. Quit through the menu (not Alt+F4). Send KLHook.log (and any new KLHook_*.dmp or kl2_490_crash file if it closed by itself). If you changed the keys from X (hold) shoulder, C cover, right mouse aim, say so.
+
+### R2.6 tools/kl_camlog.py (spec; written once klcam.c has R2.3)
+Usage `python tools/kl_camlog.py KLHook.log [--from HH:MM:SS] [--to HH:MM:SS] [--csv out.csv] [--selftest]`. Reads the log as text (cp1252, errors=replace), keeps lines whose text after the
+`hh:mm:ss.mmm ` stamp starts with `cam:`, `camev:` or `camdump:` (the first `cam: on:` line gives the ini). Parses `key value` pairs by regex (`(\w+) (-?[\d.]+)`, triple fields `t a/b/c`, `eye x y z`),
+tolerant of a missing token (old logs: prints n/a). Time = T when present, else the clock (midnight wrap aware). Prints plain text:
+ 1. Run: first/last stamp, cam: lines, fps estimate (f/T), HITCH events with the 10 worst rdt, GAP events, SKIP reasons with total seconds.
+ 2. Stuck: each STUCK2 / LAG2 (and old `STUCK`) episode: start, duration, frozen fields, what changed at the end, mv/cs/profile/blk/blend/tick/flag4cd8; counts per frozen-field set (the cause table);
+    whether a hitch (rdt > 0.1) lay within 1 s before (hitch versus camera); each F9 MARK with the nearest episode.
+ 3. Chase: per profile, median/max tau = |eye - pivot| / vE during moves, k590/k594/slow values, BLEND durations achieved against the profile times.
+ 4. Shoulder: every X edge and SWAP: stamp, in cover, coveraim, would_toggle verdict, module fired, side bit before -> after, want, st104, camside, SIDEBLEND time, b84; per COVER leave the side/b84 at +0, +1.0, +3.0 s
+    ('snapped back' = side after != side before the leave with no key). Flags: key down but no side change (with the gate reason), side change with no key, camera/body disagreement (st104 side != side bit for > 1 s).
+ 5. Aim: each RMB edge: in cover or open, delay to PROFILE change, BLEND, FOV from -> to and settle time, EYE settle; medians for cover versus open.
+ 6. Verdict sentences ('4 stuck episodes, 3 are frozen=EYE with the pivot moving -> check tick/latch'; 'hitches explain 2 of 7 F9 marks') and a CSV of the cam: samples (one column per token).
+Exit code 0 always; `--selftest` runs on an embedded 60-line synthetic log and asserts the section counts.
+
+## Round 2 (2026-10-17): implementation in klhook/klcam.c (built, NOT run; no install, no commit)
+Test dll built from klcam.c into the scratch folder (see the work note for the md5). Read-only analysis script: `python tools/kl_camlog.py KLHook.log [--csv out.csv] [--selftest]`.
+CORRECTIONS to the round-1 notes: (1) 0xceb5e0 / e4 / e8 (the shoulder flip times 0.2 / 0.1 / 0.8) are in .data, not .rdata (READ the section table), so FlipTime IS
+writable from SHIP. (2) The FOV channel step is per camera at cam+0x7a4 (stock 1/30, alpha at +0x7a8), a heap field, so FovStep is writable too. (3) LeanFollow has a route, below.
+
+### New ini keys (all read once; restart to change)
+LeanFollow=1 (offline only), LeanGate=1, UnstickFilter=1, UnstickGate=0, UnstickTarget=0, LogKeys=1, ShakeKeep=list, FlipTime=0.35, ShakeScale=0.8,
+FovStep=1.8 (CHANGED MEANING: a factor on the stock step interval, range 0.5..6; it was an absolute 0.20 that had no effect).
+
+### Writes (all through klh_data, heap / .data only; each checks the stock value first and refuses otherwise)
+- [P+0xb90] bit 0x20: LeanFollow. Set = lean left. 0x544780 copies it each frame into [P+0x438] bit 10; the decider 0x89fd90 re-seats the cover state. Re-asserted for 0.6 s while SC+0x105 differs, then the original bit is put back; two failures switch it off for the run. Replicated state, so offline and local player only. Validated: [SC]==0xbb5b6c, [SC+0x44]==8, [SC+0x100]==P, [P+0x6b4]==SC, [P+0xb64]==0. LeanGate: [P+0x2d6c] bit 4 = left, bit 8 = right (ASSUMPTION).
+- cam+0x658 / 0x68c / 0x6c0 / 0x6f4 / 0x728 / 0x75c, +0x30 (substep h of the six chasers, stock 0.005): raised to dtavg/8 (0.0075..0.02) while the smoothed frame time is above 0.05 s, put back below 0.04 s. Substeps = trunc(dt/h) clamped 1..10 (0x5a3150), so below 20 fps the camera crawled. GUESS: the coefficients are not cached from h.
+- BYTE [cam+0x30] = 1 and, if [cam+0xc54] <= 0, [cam+0xc54] = 4 (UnstickGate=1 only, off by default; CORRECTED, was dword 1 / 0: READ 0x65016e `cmp byte [esi+0x30],0 / je`, 0x650178 `cmp dword [esi+0xc54],0 / jle`, both to 0x650389 = tick skipped, so 0 would freeze it): only after 1 s of frozen camera with byte 0 or counter <= 0.
+- [cam+0x540] = P (UnstickTarget=1 only, off by default): when the owner pointer is not the local player for 0.5 s.
+- .data 0xceb5e0 (FlipTime) and 0xceb5e4 (0.5 x FlipTime, at most the stock 0.1); 0xceb5e8 left unless FlipTimeSpecial>0 (new key, default 0). CORRECTION: 0xceb5e8 (0.8) REPLACES the time at 0x908926 when owner movement id == 8 (cover) and 0x88c5e0 true and 0x492ff0 false = SC+0xf8 substates 14/15/30/31 (jump tables READ 0x88c604/0x88c60c, 0x493014/0x49301c); those flips take 0.8 s whatever FlipTime says. What the substates are: UNKNOWN. Only when all three read 0.2 / 0.1 / 0.8.
+- cam+0x7a4 (FovStep x 1/30), only when it reads 1/30.
+- S+0x34 .. S+0x34+160 (41 floats of the shaker S = [P+0x2c8c]), scaled by ShakeScale except the ShakeKeep indices, only when two reads 0.5 s apart agree.
+- The round-1 profile floats (Blend, CineAim) are unchanged.
+Not written (no verified route, so no effect): look smoothing, pitch limits, the 0xceb590.. base-offset constants, the +0x124 rest value and the chaser taus.
+
+### Log additions (Log=1)
+`T` and `rdt` (raw frame time before the 0.1 s clamp) in cam: lines; camev: HITCH / GAP / SKIP <reason> begins|ends; STUCK2 and LAG2 episodes with the frozen field set and ONE camdump block (3 a minute);
+KEY edges (X, RMB, LMB, C, Shift) and F9 = MARK n; the stock X gate decision; COVER enter / leave with the +0.5 s, +1 s, +3 s snapshots; BLEND start / end; FOV settle; SIDEBLEND; EYE settled; LEAN lines;
+GATE / TARGET / FILTER lines; the cam: line gains bit818, camside, keys, t560 t564 f568 k590 k594 slow, st104 st105 st10c c2d6c b90, a `coveraim` token and signed `cs`; it prints at 2 Hz when idle.
+The 10 s summary adds STUCK2 / LAG2 counts, frames with rdt > 0.1 s, swaps ok / no change, and the max BLEND / FOV / SIDEBLEND times.
+
+### Owner test (R2.4 ini, R2.5 checklist above; F9 is wired)
+`[Camera] Enable=1 Log=1 Blend=0 Unstick=0 Recover=0 CineAim=0 Cine=0 UnstickFilter=0 ShoulderCover=1 LeanFollow=0` measures stock behaviour; a second session with the defaults compares.
+
+### Review corrections, round 2 (2026-10-17, applied to klhook/klcam.c)
+- Gate remedy fixed (byte 1 / counter 4, see Writes). LeanFollow: offline only (kl_online() in start and tick), polarity check before the write (b90 bit 0x20 and SC+0x105 must both equal the OLD side, else "LEAN skipped"), put-back of b90 bit 0x20 on every failure path (cover state gone, player/camera change, camera lost, online); NOT after a successful LEAN (that would re-seat the state to the old side). [P+0xccc] and [P+0x29a4] are only logged in the LEAN start line (whether they mirror the lean is UNKNOWN; 0x29a4 is a byte written at 0x44f8a9 / 0x44fa51 / 0x808aa5).
+- UnstickFilter: a refusal is per camera and retried every 3 s (5 times); h is put back when the player is down; h never exceeds the real frame time; klcam_lost clears h/fv/fl/sh state. `kc.x.low_s = mv` removed (it broke the EYE-settled log line).
+- GUESS / ASSUMPTION labels: that the cam+0x790 channel (FovStep) is the FOV one; that ShakeScale (table read by 0x510500) also scales the explosion states; the [P+0x2d6c] clearance bits (4 left / 8 right); polarity of b90 bit 0x20.
+- Rejected: guarding the Cine knobs with kl_online() (client-side visual data only, deliberately not gated; the private-match requirement says features must work online too).
+
