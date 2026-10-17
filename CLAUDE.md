@@ -188,15 +188,9 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-17 20:30 - OFFLINE (kl-merge-e5): COMMITTED cc1b8630 debug/check_passes.py (pre-install check: prm->oct offsets, orphan emitter clone groups, gms/prp/rmi counts; about 1 s per map; the crashed vault and pre-fix Hasta FAIL, door3 / M11B_fix / all 18 installed maps pass) and ca9158bf hook v82i ([Bots] OrderTrace + WalkExclusive GUESS for the DM09 walk flip-flop between klhop walk and fedkit Hunted; both default 0; hud_v82i_trace_test eedabc2d, NOT RUN; live recipe sent to kl-merge-3f). Waiting for the owner: vault door3, hook v82h_ship d2a133e1, and the push to main. Running: wf_61d6b5ec-bc3, Hasta locked-loot beat.
 2026-10-17 19:55 - OFFLINE (kl-merge-e5; owner active): COMMITTED 33bf057e: the vault door2 load crash (0x6ad1c3) was a member mix. The installed .prm holds .oct byte offsets (type-7 roots +0x1c) that are 1520 bytes off against door2's .oct. Fix: install whole folders only. build/vault_door3_1017/DM03A (F07_Main.zip 70ad9bc5) = door2 plus the later passes replayed; NOT RUN, needs the owner's OK. Its 7 missing stream clips (vault music + 1 ambience) are SILENT, not a crash; the installed one misses 16. The music needs a chain rebuild with --str v_v2 (waits for the peer's kl_gunsnd). Hook: 8d3ccf81 = hud_v82c_ship (d9b839bc); the HUD/shop source is unchanged up to HEAD, so the candidate is hud_v82h_ship d2a133e1. Running: wf_52946fe8-4e8 debug/check_passes.py (prm->oct offsets, orphan clones), audit of every staged build.
 2026-10-17 19:10 - OFFLINE (kl-merge-e5): COMMITTED a7f134a6 hook v82g ([Net] PrivateLobby / BuildKey, an ISteamMatchmaking proxy, default off, NOT RUN) and 89666bf3 v82h ([Fed] NoLoot=1: a fed no longer collects cases or drops; the cause of the Hasta money climb). Park II's climb comes from six 300K cases on the START row (kl-merge-3f is fixing kl_fa_v2_park.py). The OWNER DISLIKED the v82f HUD/shop: their hook 8d3ccf81 is live, so do not install v82e-h without their OK. wf_adf6f1d5-cb0 is porting the fixes onto the owner's look (v82i_owner). The vault door2 build CRASHED at load (0x6ad1c3; 706cfc8d restored). Triage wf_05419952-bc4 (suspect: 6 members mixed with the later passes) -> full folder build/vault_door3_1017.
-2026-10-17 18:35 - OFFLINE (kl-merge-e5), all reviewed, NOT RUN:
-- b4537168 Hasta load crash fixed: an orphan Artillery_Impact_Group clone group had lost its template, so the copy pointer +0x58 was null at 0x4c63f2. Build M11B_fix c23cb618; the add-ons are rebuilt on it (M11B_fix_blast d3291097, M11B_fix_talk cba4e5bd, M11B_full 75c6be55).
-- ceb25469 Hasta --lock-wing.
-- d1a74499 hook v82e: the heli call is keyed to the END timer [rules+0x200]; the HUD clock runs about 10 s ahead.
-- 731b8edc v82f: the bots no longer adopt klfedkit's Hunted step as their own place (hud_v82f_test f5250593).
-- 80c995b9 build.bat quoting / CRLF.
-Queued with kl-merge-3f: M11B_fix load, then HELI4 on v82f. Running: wf_b4149d05-025, private-match research (re/private_match.md).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
