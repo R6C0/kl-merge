@@ -77,8 +77,8 @@
 #define KAD_M          100.0f                 /* world units a metre */
 
 static struct {
-    int on, dry, log, needuse, humanfast, share_bot, bank, mark, fine, take, bothelp, rush;
-    float range, brange, rate, meter, minhelp, share, rushrange;
+    int on, dry, log, needuse, humanfast, share_bot, bank, mark, fine, take, bothelp, rush, rushvan;
+    float range, brange, rate, meter, minhelp, share, rushrange, rushvanrange;
     int prompt, usekey; float prange;
 } kad;
 
@@ -303,9 +303,16 @@ static void kad_beside(const float man[3], const float bot[3], float out[3])
     if (l > 1.0f) { out[0] = man[0] + dx / l * 0.8f * KAD_M; out[2] = man[2] + dz / l * 0.8f * KAD_M; }
 }
 
+/* RushVan (2026-10-18, 3f's Vault run N1018_L19): while the escape vehicle is called, comes or waits (s->veh 1 .. 5) the crew runs to it;
+   a revive rush pulled the called bots back across the police (7 -> 1, 6 -> 7, 1 -> 6, all four dead 9 - 27 m from the doors) and the
+   rush-back sent record 1 to its old defend place 47 m away in the middle of the wait. RushVan=1: no rush-back then (the follow / reach
+   orders take him on), and a new rush only from a bot within RushVanRange (default 8 m, GUESS). 0 = as before (default). */
+static int kad_vanlive(const struct klb_snap *s) { return kad.rushvan && s->veh >= 1 && s->veh <= 5; }
+
 static void kad_rush(const struct klb_snap *s, int i, float pos[][3], const int *havepos, const BYTE *dn, DWORD now)
 {
     struct kad_rec *k = &kad_r[i]; struct kle_e e; float bp[3], want[3], got[3], d; char why[100]; DWORD actor, soldier; int h, best = -1, r; float bd = 0;
+    float range = kad_vanlive(s) && kad.rushvanrange < kad.rushrange ? kad.rushvanrange : kad.rushrange;
     if (!kad.rush || !havepos[i] || now - k->t_down < 600) return;
     if (k->rusher) {                                                       /* already sent: again every 2.5 s while he is not there yet */
         h = k->rusher - 1;
@@ -326,7 +333,7 @@ static void kad_rush(const struct klb_snap *s, int i, float pos[][3], const int 
         if (kad_rushing(h)) continue;
         if (fabs(pos[h][1] - pos[i][1]) > 3.0f * KAD_M) continue;          /* another floor: the path may be long */
         d = kad_dist(pos[h], pos[i]);
-        if (d > kad.rushrange * KAD_M) continue;
+        if (d > range * KAD_M) continue;
         if (best < 0 || d < bd) { best = h; bd = d; }
     }
     if (best < 0) return;
@@ -352,6 +359,7 @@ static void kad_rush_end(const struct klb_snap *s, int i, const char *why_)
     k->rusher = 0;
     if (!k->rush_have_back) { klog("adren: RUSH - record %d is done with record %d (%s); his own orders take him on", h, i, why_); return; }
     k->rush_have_back = 0;
+    if (kad_vanlive(s)) { klog("adren: RUSH - record %d is done with record %d (%s): NOT sent back - the vehicle is called or waits (state %u, RushVan=1): his own orders take him on", h, i, why_, s->veh); return; }
     if (kle_r.used[h]) { klog("adren: RUSH - record %d (your escort) is done with record %d (%s): the escort takes him back", h, i, why_); return; }
     if (!kle_bot(s, h, &actor, &soldier, bp, why) || soldier != k->rush_soldier) { klog("adren: RUSH - record %d is done with record %d (%s); not sent back (%s)", h, i, why_, why); return; }
     memset(&e, 0, sizeof e); e.rec = h; e.actor = actor; e.soldier = soldier;
@@ -1243,6 +1251,9 @@ static void kad_init(void)
     kad.bothelp = GetPrivateProfileIntA("Adrenaline", "BotHelp", 1, klh_ini) != 0;
     kad.rush = GetPrivateProfileIntA("Adrenaline", "Rush", 1, klh_ini) != 0;
     kad.rushrange = kad_inif("RushRange", "25", 2.0f, 80.0f);
+    kad.rushvan = GetPrivateProfileIntA("Adrenaline", "RushVan", 0, klh_ini) != 0;      /* 0 = off (default); see kad_vanlive */
+    kad.rushvanrange = kad_inif("RushVanRange", "8", 0.0f, 80.0f);                      /* GUESS */
+    if (kad.rushvan) klog("adren: RushVan=1: while the escape vehicle is called or waits, no rush-back and a new rush only within %.0f m", kad.rushvanrange);
     kad.prompt = GetPrivateProfileIntA("Adrenaline", "Prompt", 1, klh_ini) != 0;
     kad.prange = kad_inif("PromptRange", "30", 2.0f, 60.0f);      /* 30 (was 12) since 2026-10-15: the owner never saw a downed crewmate prompt */
     KAD_AN_INIT();
