@@ -6,6 +6,7 @@ installed or started. Data only: the .prp changes (list values and one float), n
 member moves and no seal pass is needed.
 
     python kl_club_roof.py build <folder> <out> [--hide-within N] [--timer 'van timer'|'van timer b'] [--no-hide-change] [--marker-at-start]
+                                                [--heli-stock-action [--heli-stock-trigger]] [--only-stock-action]
     python kl_club_roof.py check <folder>        what the escape marker is wired to, and from where it can be shown
     python kl_club_roof.py diff  <folder> <out>  only the .prp differs, and only in the allowed nodes
 
@@ -28,6 +29,11 @@ WHAT IS CHANGED
      length of the last stretch from the roof door, 580 from the pad centre, so the marker stays on during the walk
      over the roof but is not on top of the player at the pad). `--no-hide-change` leaves 2500.
   The pad box's own message still arrives later and is harmless (the marker is already active).
+  3. (OPT-IN --heli-stock-action, new 2026-10-18, default off: output unchanged) the boarding PlayerAction of
+     Triggers!BoardingTrigger_Heli gets field 9 = '' as every stock heli action has it (kl_fa_club.heli_stock_action;
+     why: the trace of kl2 0x4c4de0 / 0x40ddf0 - E tests the player against the volume named by field 9, which was the
+     chopper group; GUESS, not run). --heli-stock-trigger additionally makes the action's target box arena-sized and
+     empties its PIP reference (stock F02 form; GUESS size).
 GUESS: that the marker is in the chain of 'van timer' in a round (it is a timer the heli build already relies on);
   the unit of the radius (world units, 100 = 1 m: the same unit as every other position in the file); that a second
   activation by the pad box does not hide or reset the marker. NOT RUN IN THE GAME.
@@ -78,7 +84,7 @@ def check(folder, slot='F01', log=print):
     return w
 
 
-def build(src, dst, timer='van timer b', hide=HIDE_DEFAULT, slot='F01', log=print, at_start=False):
+def build(src, dst, timer='van timer b', hide=HIDE_DEFAULT, slot='F01', log=print, at_start=False, stock_action=False, stock_trigger=False, only_action=False):
     B = F.Built(src, slot)
     sc = B.sc
     if os.path.abspath(dst) == os.path.abspath(B.folder):
@@ -92,6 +98,8 @@ def build(src, dst, timer='van timer b', hide=HIDE_DEFAULT, slot='F01', log=prin
     # AIMonitor at every round start), so the roof is shown without the player first entering tb_LEFT_TheySpotYou
     # (the only sender of 'van timer b'). A timer that already names the marker is left alone in this mode.
     names = [timer] + (['van timer'] if at_start and timer != 'van timer' else [])
+    if only_action:                     # --only-stock-action: the marker is already wired (a finished roof build); touch nothing but the boarding action
+        names, hide = [], None
     old = []
     for nm in names:
         t = A.node_of(sc, TIMERS[nm])
@@ -108,6 +116,10 @@ def build(src, dst, timer='van timer b', hide=HIDE_DEFAULT, slot='F01', log=prin
         kl_fa.edit(sc, t, A_ctrl(t, 'TriggerDelay2'), lambda us, cur=cur: A.setv(sc, us, DELAY_LIST, cur + [R + POI]))
     if hide is not None and abs(tr[TRACKER_HIDE] - hide) > 1e-6:
         kl_fa.edit(sc, poi, A_ctrl(poi, 'ActivateGameplayTrackerDisplay'), lambda us: A.setv(sc, us, TRACKER_HIDE, float(hide)))
+    n_sa = 0
+    if stock_action or stock_trigger:
+        import kl_fa_club
+        n_sa = kl_fa_club.heli_stock_action(sc, log, stock_trigger)
     prp = sc.p.serialize()
     import kl_prp
     back = kl_prp.Prp(prp)
@@ -131,8 +143,11 @@ def build(src, dst, timer='van timer b', hide=HIDE_DEFAULT, slot='F01', log=prin
         with open(sj, 'w') as f:
             json.dump(st, f, indent=1)
     with open(os.path.join(dst, 'graft.txt'), 'a') as f:
-        f.write('kl_club_roof: %s names %s (was %d targets%s); hide-within %s -> %s; from %s\n'
-                % (timer, POI, len(old), ', + van timer at round start (marker-at-start)' if at_start else '', tr[TRACKER_HIDE], hide, B.folder))
+        if n_sa:
+            f.write('kl_club_roof: --heli-stock-action%s: %d field(s) of the boarding action changed (GUESS, not run)\n' % (' --heli-stock-trigger' if stock_trigger else '', n_sa))
+        if not only_action:
+            f.write('kl_club_roof: %s names %s (was %d targets%s); hide-within %s -> %s; from %s\n'
+                    % (timer, POI, len(old), ', + van timer at round start (marker-at-start)' if at_start else '', tr[TRACKER_HIDE], hide, B.folder))
     log('written %s: %s now names the escape marker; hide-within %s -> %s' % (dst, timer, tr[TRACKER_HIDE], hide))
     return dst
 
@@ -149,7 +164,8 @@ def diff(src, dst, slot='F01', log=print):
     if len(la.nodes) != len(lb.nodes):
         bad.append('node count differs')
     else:
-        ok = {A.node_of(lb, TIMERS['van timer']), A.node_of(lb, TIMERS['van timer b']), A.node_of(lb, POI)}
+        ok = {A.node_of(lb, TIMERS['van timer']), A.node_of(lb, TIMERS['van timer b']), A.node_of(lb, POI),
+              A.node_of(lb, 'Triggers!BoardingTrigger_Heli'), A.node_of(lb, 'Triggers!BoardingGameplayTrigger')}   # (the last two: only --heli-stock-action edits them)
         for k in range(len(la.nodes)):
             if (la.nodes[k]['props'], la.nodes[k]['ctrls']) != (lb.nodes[k]['props'], lb.nodes[k]['ctrls']) and k not in ok:
                 bad.append('node %d (%s) differs' % (k, la.path[k]))
@@ -176,8 +192,11 @@ def main():
         timer = opt('--timer', 'van timer b')
         hide = None if '--no-hide-change' in a else opt('--hide-within', HIDE_DEFAULT, float)
         at_start = '--marker-at-start' in a
-        a = [x for x in a if x not in ('--no-hide-change', '--marker-at-start')]
-        build(a[0], a[1], timer, hide, at_start=at_start)
+        sa = '--heli-stock-action' in a or '--heli-stock-trigger' in a
+        st = '--heli-stock-trigger' in a
+        only = '--only-stock-action' in a
+        a = [x for x in a if x not in ('--no-hide-change', '--marker-at-start', '--heli-stock-action', '--heli-stock-trigger', '--only-stock-action')]
+        build(a[0], a[1], timer, hide, at_start=at_start, stock_action=sa, stock_trigger=st, only_action=only)
         bad = diff(a[0], a[1])
         for x in bad:
             print('FAIL', x)

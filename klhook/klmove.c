@@ -337,6 +337,7 @@ static struct {
     DWORD reach_repeat;          /* [Bots] BoardReachRepeat (2026-10-18, 3f's DM02 run L14: orders to the doors were overridden by the game's chain within 4-14 s and never sent again; bots in an escape box 2.5-3.1 m off never stood the 1 s): ms after an order to the doors before it may be sent again while the vehicle waits, and a bot in an escape box beyond BoardReach is sent without the stand-still test; 0 = off (default, old behaviour) */
     int skip_down;                 /* [Bots] RestlessSkipDowned (2026-10-18, 3f saw bot 4 ordered while down at 02:09:14): a downed bot gets no order, snap or hop from klmv_restless and its counters stand still; 0 = off (default, old behaviour) */
     DWORD snap_range, snap_human; int snap, snap_cap;      /* RestlessSnap (2026-10-18, audit E2.2): after N orders to one place that did not bring the bot there, the bot is put at its chain's place; 0 = off */
+    int probe;                     /* [Bots] BoardProbe (2026-10-18, L34/L35 human E presses do not board): 1 = every 500 ms while the escape vehicle state is 3/4/5 one 'boardprobe:' line, read-only; 0 = off (default) */
     DWORD botvan;                  /* BotVan (section 7, v78): ms a loyal AI heister has had stage 3 with no vehicle before the hook calls one; 0 = off */
 } klmv;
 
@@ -1372,6 +1373,28 @@ static void klmv_stand_down(DWORD rules, const char *why)
     for (k = 0; k < KLMV_NSOUR; k++) if (klmv_sour[k].on) { if (klmv_sour[k].rules == rules) klmv_sweeten(k, why); else klmv_sour[k].on = 0; }
 }
 
+/* BoardProbe (default off): READ-ONLY. What the human's boarding rule 0x6840a0 tests, per 500 ms while the vehicle waits (state 3/4/5):
+   session state [[0x168e598]+0x70] (0x19 wanted), vehicle state [rules+0x1dc], grace timer [rules+0x1d8], [rules+0x1e0] (owner set by 0x65ee60), [rules+0x1e4],
+   the human record's status byte (+0x10, 0 wanted) and its index, player+0x2723 (0 wanted), the player's feet. NOT logged: the field-[1] trigger's active
+   state and the action's volume at [action+0x88]+4 (their object is not located by this file; GUESS: needs a scan like klmv_scan) */
+static void klmv_probe(const struct klb_snap *s, DWORD now)
+{
+    static DWORD last; DWORD player = 0, e0, e4, sess = 0, sess_obj; BYTE veh = 0, st = 0xff, b23 = 0xff; float tm = 0, hp[3] = { 0, 0, 0 }, hn[3]; int idx = s->human, got = 0;
+    if (now - last < 500) return;
+    if (!klh_rd(s->rules + 0x1dc, &veh, 1) || veh < 3 || veh > 5) return;
+    last = now;
+    e0 = klh_rd32(s->rules + 0x1e0); e4 = klh_rd32(s->rules + 0x1e4); klh_rd(s->rules + 0x1d8, &tm, 4);
+    if ((sess_obj = klh_rd32((DWORD_PTR)KLH_VA(KLMV_SESSION))) != 0) klh_rd(sess_obj + 0x70, &sess, 4);
+    if (idx >= 0) {
+        DWORD recs = klh_rd32(s->rules + 0x348);
+        if (recs) klh_rd(recs + 0x7c * (DWORD)(idx & 0xff) + 0x10, &st, 1);
+        got = kle_human(&player, hp, hn);
+        if (player) klh_rd(player + 0x2723, &b23, 1);
+    }
+    klog("boardprobe: veh=%d grace=%.2f session=0x%x rules1e0=%08x rules1e4=%08x human=%d status10=%d player=%08x p2723=%d feet=%s(%.0f,%.0f,%.0f)",
+         (int)veh, klb_finite(tm) ? tm : -1.0f, sess, e0, e4, idx, st == 0xff ? -1 : (int)st, player, b23 == 0xff ? -1 : (int)b23, got ? "" : "?", hp[0], hp[1], hp[2]);
+}
+
 static void klmv_tick(int game_thread)
 {
     static DWORD last; struct klb_snap s; DWORD now = GetTickCount(), player = 0; char why[200]; float hp[3] = { 0, 0, 0 }, hn[3];
@@ -1421,6 +1444,7 @@ static void klmv_tick(int game_thread)
     klmv_r.last_pass = KLB_T(now);
     klmv_track(&s, now);
     kltr_poll(&s, now);
+    if (klmv.probe) klmv_probe(&s, now);
     if (klmv.last) klmv_last_vehicle(&s);
     if (klmv.botvan) klmv_bot_van(&s, now);
     if (klmv.hop) klmv_hops_load();
@@ -1483,8 +1507,9 @@ static void klmv_init(void)
     klmv.snap_range = (DWORD)klb_pos("RestlessSnapRange", 4000, 20000);      /* GUESS: 40 m */
     klmv.snap_human = (DWORD)klb_pos("RestlessSnapHuman", 1500, 20000);      /* GUESS: 15 m */
     klmv.snap_cap = klb_pos("RestlessSnapMax", 2, 20);
+    klmv.probe = GetPrivateProfileIntA("Bots", "BoardProbe", 0, klh_ini) != 0;      /* 0 = off (default) */
     klmv.botvan = (DWORD)klb_pos("BotVan", 4, 120) * 1000;      /* v78: default 4 s; 0 = off */
-    klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0 || klmv.reach > 0 || klmv.last || klmv.botvan;
+    klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0 || klmv.reach > 0 || klmv.last || klmv.botvan || klmv.probe;
     if (!klmv.any) return;
     if (!klb.on) { klog("move / wait / near / reach: [Bots] Restless, WaitForYou, BoardNear or BoardReach is set but [Bots] Enable is 0: they need klbot.c's crew records, nothing is done"); klmv.any = 0; return; }
     if (klmv.restless || klmv.loot)

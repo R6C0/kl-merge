@@ -966,6 +966,41 @@ def heli_place(S, log=print):
     return F
 
 
+HELI_STOCK_ACTION = False                   # OPT-IN (--heli-stock-action): the boarding PlayerAction in the stock heli form (field 9 empty), see heli_stock_action
+HELI_STOCK_TRIGGER = False                  # OPT-IN (--heli-stock-trigger, with the above): also make the action's target trigger arena-sized with no PIP reference
+HELI_TRIG_HALF = (1000.0, 700.0, 800.0)     # GUESS: stock F02's EnterEscapeArea is the whole arena (half 3238 / 794 / 3541); ours covers the roof around the pad (exit box half 700 / 250 / 500)
+
+
+def heli_stock_action(sc, log=print, trigger=False):
+    """The 'EnterVehicle' PlayerAction of Triggers!BoardingTrigger_Heli in the form of stock F02 / F03 / F06 / F08: field 9 = ''.
+    WHY (static trace of kl2 0x4c4de0 / 0x40ddf0, 2026-10-18, GUESS not run in the game): init resolves action+0x88 from field 9 and falls back
+    to the owner box only when it is empty; the usability test (0x40ddf0) is a point-in-volume test against +0x88. Ours named the chopper group,
+    so a player standing in the boarding box was tested against the chopper's volume: E did nothing (L34, L35). All four stock heli actions say ''.
+    trigger=True also takes the target (field 1, Triggers!BoardingGameplayTrigger) to stock's form: a box over the whole area and an
+    OnlineGamePlayTrigger whose second string (the PIP reference) is empty. -> number of fields changed."""
+    n = 0
+    for k, i, v in kl_fa.controllers(sc, 'PlayerAction'):
+        if len(v) == 21 and v[7] == 'EnterVehicle' and sc.path[k].endswith('Triggers!BoardingTrigger_Heli'):
+            if v[9]:
+                kl_fa.edit(sc, k, i, lambda us: us.__setitem__(9, [kl_fa._str(sc, '')]))
+                n += 1
+            tg = [x for x in v[1] if x]
+            if trigger and tg:
+                t = A.node_of(sc, tg[0][len(R):] if tg[0].startswith(R) else tg[0])
+                lab = J.labels('dd', 'ZBoxPrimitive')
+                def box(us):
+                    for j, h in enumerate(HELI_TRIG_HALF):
+                        A.setv(sc, us, lab.index('ZBoxPrimitive[%d]' % j), float(h))
+                kl_graft.edit(sc.nodes[t], 'props', box)
+                for kk, ii, vv in kl_fa.controllers(sc, 'OnlineGamePlayTrigger'):
+                    if kk == t and len(vv) == 2 and vv[1]:
+                        kl_fa.edit(sc, kk, ii, lambda us: us.__setitem__(1, [kl_fa._str(sc, '')]))
+                        n += 1
+                n += 1
+    log('  kl_fa_club: HELI: --heli-stock-action: %d field(s) of the boarding action%s changed to the stock heli form (GUESS)' % (n, ' / its trigger' if trigger else ''))
+    return n
+
+
 def heli_hvk(hvk, log=print):
     """On the joined kl_hvk.Hvk: the chopper's key-framed placements get the same motion as its node (kl_map_escape.van_hvk's way: a placement that
     stays at M06's place would put the body there). ASSUMPTION as there: the placement is the body's pose at load."""
@@ -1584,6 +1619,8 @@ def wire(sc, log=print):
             kl_fa.edit(sc, k, i, lambda us: [A.setv(sc, us, 2 + j, s) for j, s in enumerate((van_path(), '', ''))])
             n_ex += 1
         log('  kl_fa_club: HELI: %d exit trigger(s) name the chopper group %s; no van_wire' % (n_ex, HELI_GROUP))
+        if HELI_STOCK_ACTION:
+            heli_stock_action(sc, log, HELI_STOCK_TRIGGER)
     else:
         if PLAN is None:
             raise ValueError('kl_fa_club: wire() without a plan of the van (see prepare_host)')
@@ -2383,6 +2420,16 @@ def check(folder, log=print, problems=None):
             if [s for s in ev[2:6] if s] != [van_path()]:
                 fail('HELI: the exit trigger names %s, not the chopper group' % [s for s in ev[2:6] if s])
             log('  heli: 1 chopper (%s), 1 OnlineEscVehicleMonitor, 1 exit trigger naming it; no van' % sc.names[hv[0]])
+            ba = [v_ for k_, _i, v_ in kl_fa.controllers(sc, 'PlayerAction') if v_[7] == 'EnterVehicle' and sc.path[k_].endswith('Triggers!BoardingTrigger_Heli')]
+            if len(ba) != 1:
+                fail('HELI: %d boarding actions on Triggers!BoardingTrigger_Heli (1 wanted)' % len(ba))
+            elif ba[0][9] == '':                        # the stock form (heli_stock_action): the target must be a box that exists, and the action must send to it
+                tg_ = [x for x in ba[0][1] if x]
+                if len(tg_) != 1 or not tg_[0].endswith('Triggers!BoardingGameplayTrigger'):
+                    fail('HELI: stock-form boarding action targets %s, not Triggers!BoardingGameplayTrigger' % tg_)
+                log('  heli: boarding action in the stock form (field 9 empty, target %s)' % tg_)
+            elif HELI_STOCK_ACTION:
+                fail('HELI: --heli-stock-action is set but the boarding action names %s in field 9' % ba[0][9])
             # ---- step 3, read back from the written level: the way up is open, the boarding box and the exit box stand on the pad, the chopper's body follows its node
             per_h = collections.Counter(kl_hvk.ref(i) for s_ in hvk.shapes for i in s_.inst)
             for p_ in HELI_SUNK:
@@ -4391,6 +4438,9 @@ def main():
         global DOORS_ANIMATE, SEAL_OPEN, SEAL_PLANE, SEAL_AT, LIGHT_SHOW, BEAT_ANIM, FAN_DAMAGE, CASE
         global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, POLICE_ON_SLAB, STOCK_ROWS, OFFICE_AT, STREAM
         global HELI_HVK_ORIGIN
+        global HELI_STOCK_ACTION, HELI_STOCK_TRIGGER
+        HELI_STOCK_ACTION = '--heli-stock-action' in a or '--heli-stock-trigger' in a   # OPTION (heli build only), see heli_stock_action
+        HELI_STOCK_TRIGGER = '--heli-stock-trigger' in a
         HELI_HVK_ORIGIN = '--hvk-origin' in a           # OPTION (heli build only): keep the chopper's .HVK placement at the donor's pose (the origin, as stock)
         global GUARDS_OFF, POLICE_EAST, VAN_LATE, RESET, VOICE, LOOT_SECONDS, LEGACY, ROOM_GATES, PRESSURE, WAKE_MORE, V2
         LEGACY = '--legacy' in a                        # the first delivery's build: every flag of the fix after run C2 off, the old numbers
