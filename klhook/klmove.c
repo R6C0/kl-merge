@@ -237,6 +237,14 @@
  *                         escape box beyond BoardReach is then sent without the 1 s stand-still test (0 = off)
  *   BoardReachFlat=0      1 = from a boarding object that is no box (its node stands above the floor) BoardReach
  *                         ignores the height when the bot is within 2.5 m below / above it (0 = off)
+ *   BoardReachSettle=0    cm (0 = off; suggested 200 GUESS, at most 300): a CALLED bot (stage 3) that is within this of the
+ *                         boarding box is taken aboard like one within BoardReach, in an escape box or at the doors.
+ *                         DM02 L18 record 4 stood 1.4-3.3 m off: the game takes the order as 'there already', the doors
+ *                         path wants BoardReach 1.0 m, so it was never taken and never sent again
+ *   BoardReachChase=0     1 = (needs BoardReachRepeat) a called bot that already got an order to the doors this visit and
+ *                         is walking off (the game's chain overrides the order within 250 ms) is sent again every
+ *                         BoardReachRepeat s without the 1 s stand-still test, up to the 30 m limit. DM02 L18 record 5
+ *                         was overridden at once, never stood still, and was out of the 30 m before the test passed
  *   BoardReachVisits=3    from this visit of a vehicle on the boxes work as in stock again (0 = never; the round's
  *                         last vehicle always works as in stock)
  *   MoveDry=0           1 = every line, NOTHING written or called (the boxes are not wrapped either)
@@ -308,6 +316,8 @@ static struct {
     float reach; int reach_visits, reach_doors, reach_order;
     DWORD hop; float hop_max;      /* RestlessHop (section 5): seconds at a hold before a hop to a cover place of the level's [Hops]; 0 = off */
     int last;                      /* LastVehicle (section 6): 1 = the fallback last vehicle is on (default), 0 = off */
+    float reach_settle;            /* [Bots] BoardReachSettle (2026-10-18, DM02 L18 record 4): cm; a called bot within this of the boarding box counts as within BoardReach; 0 = off (default) */
+    int reach_chase;               /* [Bots] BoardReachChase (2026-10-18, DM02 L18 record 5): 1 = a bot that got an order this visit and walks off is re-sent without the stand-still test; 0 = off (default) */
     int reach_flat;                /* [Bots] BoardReachFlat (2026-10-18, DM02 L16): BoardReach from a boarding object that is no box ignores the height within 2.5 m; 0 = off (default, old behaviour) */
     DWORD reach_repeat;          /* [Bots] BoardReachRepeat (2026-10-18, 3f's DM02 run L14: orders to the doors were overridden by the game's chain within 4-14 s and never sent again; bots in an escape box 2.5-3.1 m off never stood the 1 s): ms after an order to the doors before it may be sent again while the vehicle waits, and a bot in an escape box beyond BoardReach is sent without the stand-still test; 0 = off (default, old behaviour) */
     int skip_down;                 /* [Bots] RestlessSkipDowned (2026-10-18, 3f saw bot 4 ordered while down at 02:09:14): a downed bot gets no order, snap or hop from klmv_restless and its counters stand still; 0 = off (default, old behaviour) */
@@ -356,7 +366,7 @@ static struct {
    update, taken by the tick */
 #define KLMV_DOORS_MAX  300.0f                /* the doors path never reaches farther than this from the boarding box, whatever BoardReach (review S3: stock has no box there at all; 3 m = the board tactic's own distance) */
 #define KLMV_RULE       0x006840a0            /* rules vtable +0xb4: the boarding rule 0x74d7f0 calls */
-static struct { volatile LONG armed, relax, seq, fr_ok; DWORD rules, fr_rules; struct klmv_fr fr; float reach, door_reach; int doors; } klmv_rc;
+static struct { volatile LONG armed, relax, seq, fr_ok; DWORD rules, fr_rules; struct klmv_fr fr; float reach, door_reach, settle; int doors; } klmv_rc;
 static volatile LONG klmv_rc_far, klmv_rc_took, klmv_rc_refused, klmv_rc_box, klmv_rc_door;
 static int klmv_reach_ok;                     /* 1 = the routines of section 4 are the ones this file read, -1 = not */
 
@@ -554,7 +564,7 @@ static void klmv_ally_reach(void *box)
         inside = ((char (__fastcall *)(void *, void *, void *))(DWORD_PTR)KLH_VA(KLMV_INSIDE))(box, 0, (void *)(DWORD_PTR)actor) != 0;
         /* THE TEST MORE: where = 1 within BoardReach of the boarding box, 2 beyond it, 0 not known (then as stock) */
         where = 0;
-        if (rules == mine && (node = klh_rd32(actor + 4)) != 0 && kle_node(node, p, 0)) { d = klmv_fr_dist(&fr, p); where = d <= klmv_rc.reach ? 1 : 2; }
+        if (rules == mine && (node = klh_rd32(actor + 4)) != 0 && kle_node(node, p, 0)) { d = klmv_fr_dist(&fr, p); where = d <= klmv_rc.reach ? 1 : 2; if (where == 2 && klmv_rc.settle > 0 && rec[0x78] >= 3 && d <= klmv_rc.settle) where = 1; }      /* BoardReachSettle */
         if (inside) {
             if (where == 2) { if (idx < 32) klmv_bit(&klmv_rc_far, idx); InterlockedIncrement(&klmv_rc_refused); continue; }
             InterlockedIncrement(&klmv_rc_box);
@@ -563,7 +573,7 @@ static void klmv_ally_reach(void *box)
                KLMV_DOORS_MAX), and called (heist stage 3: what the board tactic asks, 0x4fb064). By EVERY wrapped box
                that is updated (review S4: the rule sets status 4 at once and the test above skips the record for the
                next box, so nobody is taken twice) */
-            if (!klmv_rc.doors || where != 1 || d > klmv_rc.door_reach || rec[0x78] < 3) continue;
+            if (!klmv_rc.doors || where != 1 || d > (klmv_rc.settle > klmv_rc.door_reach ? klmv_rc.settle : klmv_rc.door_reach) || rec[0x78] < 3) continue;
             if (idx < 32) klmv_bit(&klmv_rc_took, idx);
             InterlockedIncrement(&klmv_rc_door);
         }
@@ -826,7 +836,7 @@ static void klmv_reach_pass(const struct klb_snap *s, DWORD now)
        tick's and comes up to 250 ms after the vehicle's state 3) */
     klh_rd(s->rules + 0xe8a, &last, 1);
     relax = klmv.reach_visits && klmv_r.visit >= klmv.reach_visits;
-    klmv_rc.rules = s->rules; klmv_rc.reach = klmv.reach; klmv_rc.door_reach = klmv.reach < KLMV_DOORS_MAX ? klmv.reach : KLMV_DOORS_MAX; klmv_rc.doors = klmv.reach_doors;
+    klmv_rc.rules = s->rules; klmv_rc.reach = klmv.reach; klmv_rc.door_reach = klmv.reach < KLMV_DOORS_MAX ? klmv.reach : KLMV_DOORS_MAX; klmv_rc.doors = klmv.reach_doors; klmv_rc.settle = klmv.reach_settle;
     klmv_rc.relax = klmv.reach_visits && klmv_r.visit + (waiting || s->veh == 5 ? 0 : 1) >= klmv.reach_visits;
     klmv_rc.armed = !klmv.dry;
     if (last) relax = 1;                      /* the round's last vehicle: nobody is stranded for good (review S2; the update reads the byte itself) */
@@ -887,8 +897,8 @@ static void klmv_reach_pass(const struct klb_snap *s, DWORD now)
             b->told &= (BYTE)~32;                                               /* BoardReachRepeat: the order may go again on this visit */
             if (klmv.log > 1) klog("reach: visit %d: record %d: %.1f s since its order to the doors, %.1f m from the boarding box: it may be sent again (BoardReachRepeat)", klmv_r.visit, i, (KLB_T(now) - b->order_at) / 1000.0, d / 100);
         }
-        if (!klmv.reach_order || r->stage < 3 || (r->flags & 2) || d <= klmv.reach || d > KLMV_SENT || (b->told & 32)) continue;
-        if ((now - b->since < 1000 && !(klmv.reach_repeat && out)) || now - klmv_r.rc_wait_at < 1000) continue;  /* it stands, a second into the wait (BoardReachRepeat: a bot in an escape box need not stand) */
+        if (!klmv.reach_order || r->stage < 3 || (r->flags & 2) || d <= klmv.reach || (klmv.reach_settle > 0 && d <= klmv.reach_settle) || d > KLMV_SENT || (b->told & 32)) continue;
+        if ((now - b->since < 1000 && !(klmv.reach_repeat && out) && !(klmv.reach_repeat && klmv.reach_chase && b->order_at && b->order_at >= klmv_r.rc_wait_at)) || now - klmv_r.rc_wait_at < 1000) continue;  /* it stands, a second into the wait (BoardReachRepeat: a bot in an escape box need not stand) */
         for (j = 0; j < KLE_MAX; j++) if (kle_r.e[j].mode == 1 && kle_r.e[j].rec == i) break;
         if (j < KLE_MAX) continue;                                              /* klescort.c holds it beside the human */
         b->told |= 32;
@@ -1429,6 +1439,8 @@ static void klmv_init(void)
     klmv.reach_doors = GetPrivateProfileIntA("Bots", "BoardReachDoors", 1, klh_ini) != 0;
     klmv.reach_order = GetPrivateProfileIntA("Bots", "BoardReachOrder", 1, klh_ini) != 0;
     klmv.reach_repeat = (DWORD)klb_pos("BoardReachRepeat", 0, 60) * 1000;      /* 0 = off (default); proposed 3 s GUESS */
+    klmv.reach_settle = (float)GetPrivateProfileIntA("Bots", "BoardReachSettle", 0, klh_ini); if (klmv.reach_settle < 0) klmv.reach_settle = 0; if (klmv.reach_settle > KLMV_DOORS_MAX) klmv.reach_settle = KLMV_DOORS_MAX;      /* 0 = off (default); proposed 200 GUESS */
+    klmv.reach_chase = GetPrivateProfileIntA("Bots", "BoardReachChase", 0, klh_ini) != 0;      /* 0 = off (default) */
     klmv.reach_flat = GetPrivateProfileIntA("Bots", "BoardReachFlat", 0, klh_ini) != 0;      /* 0 = off (default) */
     klmv.dry = GetPrivateProfileIntA("Bots", "MoveDry", 0, klh_ini) != 0;
     klmv.log = klb_pos("MoveLog", 1, 2);
