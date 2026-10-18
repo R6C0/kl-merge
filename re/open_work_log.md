@@ -1,3 +1,10 @@
+2026-10-18 14:11 - kl-merge-e5 (3f owns live runs; owner idle, 3f's queue is running):
+- Hasta police (3a186c93, L73): PASS. The heli survived lift-off, you + 7 aboard. Adopting it is the owner's call; live restored to ce42dcc9.
+- Last Call: new opt-in klmove keys VanCallLast + CrewRouteHopHold (51582eaf, review fix ac127935; TEST out_e5_1018w a58d74ad). L74 PASS, 4 aboard on visit 1 (L72: 0), but the keys did not fire (FollowOut was first). Two causes found:
+  1) The hop deadlocks at [CrewHop] Stage=2 (stage 2 is only given past the hop): kl_club_roof hop-stage 01d2bd86, build hopstage_next/DM05A, now L75.
+  2) Bots carried to the 860 roof stand still and never reach the doors: workflow w7ep6woi3.
+- Retomoto cop rows as post-pass builds (rtcops_next): DM01B 073dd57f (also 4 garage cops get rifles), DM03A 985d7b97, DM06B 7bf368a7, DM11B 568e1786. Only the .prp changes; reviewed CLEAN. Cops get harder, so the owner's call.
+Owner: git push origin rtp-schemas:main.
 2026-10-18 13:35 - OFFLINE (kl-merge-e5; 3f owns live runs): AI heisters: new opt-in klmove [Bots] VanCallNear (f3eb8d3d, reviewed CLEAN). While the van waits, a loyal stage-1/2 bot within N m of the boarding place gets stage 3 once per round, and BoardReach walks it to the doors. The overnight census: 105 stage-1/2 bots still in play when the van left. SHIP build klhook/out_e5_1018t 2fb4170c, TEST twin out_e5_1018u 87e4b58d. It is item 7 of 3f's queue (Hot Coffee II, VanCallNear=40). Owner idle about 90 min at 13:35, so 3f was told the queue can start (zombie kl2 PID 48664 from 10-14, 0 MB, left alone). Owner: git push origin rtp-schemas:main.
 2026-10-18 12:34 - OFFLINE (kl-merge-e5; 3f owns live runs, the owner is testing, so no live runs this hour). More opt-in work, none run in the game:
 - Vault door fallback vault-door-nocol (5d7f80ed): zip 54c2b946, .HVK only. NOT queued: live already opens the doorway (L60/L65).

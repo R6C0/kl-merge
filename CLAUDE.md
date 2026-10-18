@@ -188,6 +188,13 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-18 14:11 - kl-merge-e5 (3f owns live runs; owner idle, 3f's queue is running):
+- Hasta police (3a186c93, L73): PASS. The heli survived lift-off, you + 7 aboard. Adopting it is the owner's call; live restored to ce42dcc9.
+- Last Call: new opt-in klmove keys VanCallLast + CrewRouteHopHold (51582eaf, review fix ac127935; TEST out_e5_1018w a58d74ad). L74 PASS, 4 aboard on visit 1 (L72: 0), but the keys did not fire (FollowOut was first). Two causes found:
+  1) The hop deadlocks at [CrewHop] Stage=2 (stage 2 is only given past the hop): kl_club_roof hop-stage 01d2bd86, build hopstage_next/DM05A, now L75.
+  2) Bots carried to the 860 roof stand still and never reach the doors: workflow w7ep6woi3.
+- Retomoto cop rows as post-pass builds (rtcops_next): DM01B 073dd57f (also 4 garage cops get rifles), DM03A 985d7b97, DM06B 7bf368a7, DM11B 568e1786. Only the .prp changes; reviewed CLEAN. Cops get harder, so the owner's call.
+Owner: git push origin rtp-schemas:main.
 2026-10-18 13:35 - OFFLINE (kl-merge-e5; 3f owns live runs): AI heisters: new opt-in klmove [Bots] VanCallNear (f3eb8d3d, reviewed CLEAN). While the van waits, a loyal stage-1/2 bot within N m of the boarding place gets stage 3 once per round, and BoardReach walks it to the doors. The overnight census: 105 stage-1/2 bots still in play when the van left. SHIP build klhook/out_e5_1018t 2fb4170c, TEST twin out_e5_1018u 87e4b58d. It is item 7 of 3f's queue (Hot Coffee II, VanCallNear=40). Owner idle about 90 min at 13:35, so 3f was told the queue can start (zombie kl2 PID 48664 from 10-14, 0 MB, left alone). Owner: git push origin rtp-schemas:main.
 2026-10-18 12:34 - OFFLINE (kl-merge-e5; 3f owns live runs, the owner is testing, so no live runs this hour). More opt-in work, none run in the game:
 - Vault door fallback vault-door-nocol (5d7f80ed): zip 54c2b946, .HVK only. NOT queued: live already opens the doorway (L60/L65).
@@ -195,12 +202,6 @@ into every session and agent: it grew to 256 KB and made every session thrash).
 - Retomoto kl_rt_joinini --margins (fc03915e): KLJoin.ini only, CrewHop.2 Radius 800, CrewHop.3 Height 250. Item 6 of 3f's queue.
 - AI heisters: workflow w77vrg004 is running (klmove VanCallNear f3eb8d3d, in review).
 3f's idle queue: Vault hide-parts, Park II nvs, Last Call msg, Hasta police, Last Call rtcops, DM09 margins. Owner: git push origin rtp-schemas:main.
-2026-10-18 12:18 - OFFLINE (kl-merge-e5; 3f owns live runs, the owner is testing the applied build): four opt-in test builds, none run in the game, all queued in 3f's idle queue (restore live after each):
-- Vault --van-hide-parts (kl_fa_bank 35d5df2a): bank-stage build e69d7a61 for the visit-1 A/B (EscVisitFix=0, EscVisitProbe=1; expected: 1e4 set at state 1).
-- Last Call --only-escape-msg (kl_club_roof a1ee3024): zip 5b0a025b = df719d34 + the stock escape-area text with the roof marker.
-- Hasta police post-pass (tools/kl_fa_hasta_police.py 702af665): zip 3a186c93 = ce42dcc9 with only 2 of 10 plaza police started, so the heli is not shot down (GUESS: the rest stay passive).
-- Last Call --retomoto-rows (kl_map_ai 66f18056): zip 6903219f, 5 rifles accuracy 55->82.5. It makes the cops HARDER, so applying it is the owner's call.
-All reviewed CLEAN; default outputs byte-identical. Owner: git push origin rtp-schemas:main.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
