@@ -250,6 +250,25 @@ def hop_stage(src, dst, stage=1, log=print):
     return n
 
 
+def roof_gap(src, dst, stage=1, log=print):
+    """OPT-IN (live run L74, Last Call): hop_stage(src, dst, stage) plus KLHook.roofgap.txt, the [Bots] keys for the KLHook.ini
+    (klmove.c BoardReachSent: bots 36-40 m from the doors were past the 30 m limit of the order to the doors, so after the
+    one order they got they stood 45 s). KLJoin.ini differs from src only by the Stage lines. GUESS, not run."""
+    n = hop_stage(src, dst, stage, log)
+    with open(os.path.join(dst, 'KLHook.roofgap.txt'), 'w', newline='') as fh:
+        fh.write('; add to [Bots] of KLHook.ini (build out_e5_1018x or later); GUESS values, not run in the game
+    python kl_club_roof.py roof-gap  <folder> <out> [--stage N]   OPT-IN: hop-stage + KLHook.roofgap.txt (BoardReachSent etc.)
+'
+                 'BoardReachSent=6000
+BoardReachRepeat=5
+BoardReachChase=1
+')
+    with open(os.path.join(dst, 'graft.txt'), 'a') as f:
+        f.write('kl_club_roof: roof-gap: + KLHook.roofgap.txt (BoardReachSent=6000, Repeat=5, Chase=1; GUESS, not run)
+')
+    return n
+
+
 def main():
     a = sys.argv[1:]
     if not a:
@@ -269,6 +288,9 @@ def main():
     if cmd == 'hop-stage':
         st = opt('--stage', 1, int)
         hop_stage(a[0], a[1], st); return 0
+    if cmd == 'roof-gap':
+        st = opt('--stage', 1, int)
+        roof_gap(a[0], a[1], st); return 0
     if cmd == 'build':
         timer = opt('--timer', 'van timer b')
         hide = None if '--no-hide-change' in a else opt('--hide-within', HIDE_DEFAULT, float)
