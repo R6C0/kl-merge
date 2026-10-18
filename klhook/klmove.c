@@ -344,6 +344,7 @@ static struct {
        arrive together; the lead bot runs ahead alone. 0 = off (default, nothing here runs). PER-MAP: the ini is installed per level and nothing
        checks the level's name - the gather point is Hasta's. */
     int gather, gather_n; DWORD gather_radius, gather_timeout; float gather_at[3];
+    int crew_alone;                /* [Bots] CrewRouteAlone (2026-10-18, Park II run N1018_L66: the watch script keeps you in play and never boards, so CrewRouteHold never ran and visit 1 left after its 8 s with 4 bots still on the route): 1 = CrewRouteHold also runs while you are IN PLAY (status 0), not only aboard; 0 = off (default) */
     float crew_hold, crew_range;   /* [Bots] CrewRouteHold (2026-10-18, Vault L61: the crew's walk out of the vault is ~120 m by route and leads AWAY from the van in a straight line, so klescort's 'comes nearer' test never passed and the van left after its 8 s): seconds per visit the van's timer may get while a called bot WALKS (moves 2 m in 2 s, whichever way) within CrewRouteRange m of the boarding place and you are aboard; 0 = off (default, nothing here runs) */
     DWORD gather_lone; int gather_minhp;      /* StairGatherLoneMs (0 = off): ms a held bot may stand with fewer than 2 loyal bots in the radius before it alone is released; StairGatherMinHp (0 = off): percent of the most health it was seen with, below which no hold is started */
 } klmv;
@@ -1121,7 +1122,7 @@ static void klmv_crewhold(const struct klb_snap *s, DWORD now, const struct klb_
     float bd[3], p[3], timer = klb_finite(s->timer) ? s->timer : -1.0f, tnow = 0, add, dnear = -1; BYTE grade = 1, paid = 0, veh2 = 0; const char *no = 0; char gw[200], gn[200];
     int i, nwalk = 0, nplay = 0;
     gw[0] = gn[0] = 0;
-    if (!(s->veh == 3 || s->veh == 4) || !h || h->status != 4 || !criminal || !kle_boarding(s->rules, bd)) { memset(klmv_r.cr_at, 0, sizeof klmv_r.cr_at); return; }
+    if (!(s->veh == 3 || s->veh == 4) || !h || !(h->status == 4 || (klmv.crew_alone && h->status == 0)) || !criminal || !kle_boarding(s->rules, bd)) { memset(klmv_r.cr_at, 0, sizeof klmv_r.cr_at); return; }
     if (klmv_r.cr_visit != klmv_r.visit) { klmv_r.cr_visit = klmv_r.visit; klmv_r.cr_used = 0; klmv_r.cr_told = 0; memset(klmv_r.cr_at, 0, sizeof klmv_r.cr_at); }
     for (i = 0; i < s->n && i < KLB_NREC; i++) {
         const struct klb_rec *r = &s->r[i]; float d;
@@ -1147,7 +1148,7 @@ static void klmv_crewhold(const struct klb_snap *s, DWORD now, const struct klb_
     if (no || klmv.dry) {
         if (!(klmv_r.cr_told & 1)) {
             klmv_r.cr_told |= 1;
-            if (no) klog("crewhold: the vehicle leaves in %.1f s with you aboard and is NOT held: %s (%d in play)", timer, no, nplay);
+            if (no) klog("crewhold: the vehicle leaves in %.1f s with you %s and is NOT held: %s (%d in play)", timer, h->status == 4 ? "aboard" : "in play (CrewRouteAlone)", no, nplay);
             else klog("crewhold: the vehicle would leave in %.1f s and %d of the crew walk, the nearest %.1f m out: its timer WOULD get %.1f s more (dry run); %s", timer, nwalk, dnear / 100, add, gn);
         }
         return;
@@ -1687,6 +1688,7 @@ static void klmv_init(void)
     klmv.wait_floor = (DWORD)klb_pos("WaitForYouFloor", 0, 3600) * 1000;
     klmv.wait_hold = klb_inif("WaitForYouHold", "15"); if (!klb_finite(klmv.wait_hold) || klmv.wait_hold < 0) klmv.wait_hold = 0; if (klmv.wait_hold > 60) klmv.wait_hold = 60;
     klmv.crew_hold = klb_inif("CrewRouteHold", "0"); if (!klb_finite(klmv.crew_hold) || klmv.crew_hold < 0) klmv.crew_hold = 0; if (klmv.crew_hold > 60) klmv.crew_hold = 60;      /* 0 = off (default); GUESS if used: 45 (as FollowOutHold on Last Call) */
+    klmv.crew_alone = GetPrivateProfileIntA("Bots", "CrewRouteAlone", 0, klh_ini) != 0;      /* 0 = off (default) */
     klmv.crew_range = klb_inif("CrewRouteRange", "100"); if (!klb_finite(klmv.crew_range) || klmv.crew_range < 5) klmv.crew_range = 100; if (klmv.crew_range > 300) klmv.crew_range = 300;      /* metres; 100 = GUESS (L61: 20-60 m straight line) */
     klmv.near_ = klb_inif("BoardNear", "0"); if (!klb_finite(klmv.near_) || klmv.near_ < 0) klmv.near_ = 0;
     klmv.near_visits = klb_pos("BoardNearVisits", 3, 100);
@@ -1740,6 +1742,7 @@ static void klmv_init(void)
                            klmv.gather_radius / 100, klmv.gather_at[0], klmv.gather_at[1], klmv.gather_at[2], klmv.gather_n, klmv.gather_timeout / 1000, klmv.dry ? "; MoveDry=1: nothing is ordered" : "");
     if (klmv.gather && (klmv.gather_lone || klmv.gather_minhp)) klog("gather: StairGatherLoneMs=%lu (a held bot with fewer than 2 loyal bots in the radius for that long is released alone, 0 = off), StairGatherMinHp=%d (no hold below that percent of the health it was seen with, 0 = off)", klmv.gather_lone, klmv.gather_minhp);
     if (klmv.crew_hold > 0) klog("crewhold: CrewRouteHold=%.1f s a visit, CrewRouteRange=%.0f m (GUESS limits)%s: with you aboard and the vehicle's timer under %.1f s, a called loyal bot that moves %.0f m in 2 s (either way) within that range of the boarding place holds the driver, same refusals and shield as FollowOutHold; its seconds are counted apart from FollowOutHold's", klmv.crew_hold, klmv.crew_range, klmv.dry ? "; MoveDry=1: nothing is written" : "", KLE_HOLD_AT, KLE_COME / 100);
+    if (klmv.crew_hold > 0 && klmv.crew_alone) klog("crewhold: CrewRouteAlone=1: the hold also runs while you are in play (not aboard). GUESS: a human who is still fighting wants the crew held too");
     if (klmv.skip_down) klog("move: RestlessSkipDowned on: a downed heister gets no restless order, snap or hop and its stand-still clock restarts when it is up");
     if (klmv.snap) klog("move: RestlessSnap on (audit 1018 E2.2, GUESS limits): a bot whose chain place was ordered %d times without arriving is put AT the place (range %lu, human not within %lu, at most %d times per bot and round)%s", KLMV_TOTAL, klmv.snap_range / 100, klmv.snap_human / 100, klmv.snap_cap, klmv.dry ? "; MoveDry=1: never" : "");
     if (klmv.last)
