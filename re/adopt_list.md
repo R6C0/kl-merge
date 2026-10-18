@@ -87,7 +87,11 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   (re/hasta_police.md e255313c: they were never started by design; the heli kill by SMG fire is a GUESS). Queued with 3f as (i).
 - RUN L90 (3f (i), 23:56-00:00, police2 131c8c2b + hook zi): PASS 381 s, you + ALL 7 out on visit 1, 0 dead.
   - INCONCLUSIVE for the 8 late police: the heli lifted off about 38 s after the stair top, long before S=120. The census showed 0 ZFFActor.
-  - Next: S=45 (lift-off + 5 s), building now as hasta_police3. 3f will test it as (p), with a human who waits about 75 s in the plaza.
+  - Next: S=45 (lift-off + 5 s). STAGED, NOT RUN: C:\kl_build_1018\hasta_police3\DM11B F04_Main.zip 43a7c699, KLJoin 437c96ee (= live).
+    - Same recipe as police2 (chain --blast --lock-wing --lock-show --corner-floor --heli-escape --heli-hvk-origin, then post.py and reslot.py), with --rest-late=45.
+    - It differs from 131c8c2b in ONE .prp byte (float 120.0 -> 45.0); every other member and side file is identical.
+    - Layer check, police check, check_passes and klt_audit all PASS.
+    - Queued as 3f (p): script PT_DM11B_p.ini 8b693466 holds the human about 75 s in the plaza.
   - Do not adopt police2.
 - DECISION: swap in 3a186c93 (the plaza police that were passive are the cost), yes or no. Alternative to avoid the cost: none proven.
 
