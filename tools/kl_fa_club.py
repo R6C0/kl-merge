@@ -2804,8 +2804,8 @@ def fix_check(folder, sc, ents, pos, lv, squads, men, top_of, named, fail, log):
         early = {A.node_of(sc, ROLE['walk box'])} if V2 else {A.node_of(sc, ROLE['speak box'])}      # (V2: the alarm = the first criminal through the inner office door)
         if set(named_by.get(R + ROLE['van timer b'], ())) != early:
             fail('VAN_LATE: the early timer is not named by %s alone' % ('the box at the inner office door' if V2 else 'the wardrobe box'))
-        t1l = values(sc, t1, 'TriggerDelay2')[4]      # kl_club_roof --marker-at-start appends the roof marker after 'van on': allowed, nothing else is
-        if t1l[:1] != [R + ROLE['van on']] or any(not x.endswith('POI_TheEscapeArea') for x in t1l[1:]) or R + ROLE['van on'] not in values(sc, t2, 'TriggerDelay2')[4]:
+        t1l = values(sc, t1, 'TriggerDelay2')[4]      # kl_club_roof --marker-at-start appends the roof marker (and with --escape-msg the tutorial check of the escape text) after 'van on': allowed, nothing else is
+        if t1l[:1] != [R + ROLE['van on']] or any(not x.endswith(('POI_TheEscapeArea', 'CheckMPTutorialOption#02')) for x in t1l[1:]) or R + ROLE['van on'] not in values(sc, t2, 'TriggerDelay2')[4]:
             fail('VAN_LATE: a van timer does not name \'van on\'')
         if any(sc.names[sc.top[x]].startswith(tuple(SQUADS) + tuple(ARRIVE)) for x in named_by.get(van, ())):
             fail('VAN_LATE: a squad names the van')

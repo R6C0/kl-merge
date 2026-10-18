@@ -7,6 +7,7 @@ member moves and no seal pass is needed.
 
     python kl_club_roof.py build <folder> <out> [--hide-within N] [--timer 'van timer'|'van timer b'] [--no-hide-change] [--marker-at-start]
                                                 [--heli-stock-action [--heli-stock-trigger]] [--only-stock-action]
+                                                [--escape-msg [--only-escape-msg]]
     python kl_club_roof.py check <folder>        what the escape marker is wired to, and from where it can be shown
     python kl_club_roof.py diff  <folder> <out>  only the .prp differs, and only in the allowed nodes
 
@@ -34,6 +35,14 @@ WHAT IS CHANGED
      why: the trace of kl2 0x4c4de0 / 0x40ddf0 - E tests the player against the volume named by field 9, which was the
      chopper group; GUESS, not run). --heli-stock-trigger additionally makes the action's target box arena-sized and
      empties its PIP reference (stock F02 form; GUESS size).
+  4. (OPT-IN --escape-msg, new 2026-10-18, default off: output unchanged) ALSO names CheckMPTutorialOption#02 in the same timer(s):
+     in stock F07 the pad box sends three things: that check (-> OnScreenMSG_EscapeArea_Timer, 4 s -> the on-screen text of the escape
+     area), GeomDeactivator_TheLootArea and the marker. Our timers send only the marker, so a player walking to the roof gets the
+     marker but never the text that tells him what it is (the loot marker has its own: Timer_POI_TheLootArea names
+     CheckMPTutorialOption#01). The loot marker's deactivator is deliberately NOT added (it would take the loot marker away from a
+     crew that has not looted yet). --only-escape-msg: the finished build already has the marker (e.g. the live df719d34), touch
+     only the two timers' lists. GUESS: the check shows the text in a round (it is gated by the MP-tutorial option, as in stock) and
+     the text is the escape-area one; a repeat message every round is harmless.
 GUESS: that the marker is in the chain of 'van timer' in a round (it is a timer the heli build already relies on);
   the unit of the radius (world units, 100 = 1 m: the same unit as every other position in the file); that a second
   activation by the pad box does not hide or reset the marker. NOT RUN IN THE GAME.
@@ -84,7 +93,10 @@ def check(folder, slot='F01', log=print):
     return w
 
 
-def build(src, dst, timer='van timer b', hide=HIDE_DEFAULT, slot='F01', log=print, at_start=False, stock_action=False, stock_trigger=False, only_action=False):
+MSG = 'FASpecials!POI!CheckMPTutorialOption#02'     # stock: sent by the pad box before the marker; -> OnScreenMSG_EscapeArea_Timer
+
+
+def build(src, dst, timer='van timer b', hide=HIDE_DEFAULT, slot='F01', log=print, at_start=False, stock_action=False, stock_trigger=False, only_action=False, escape_msg=False, only_msg=False):
     B = F.Built(src, slot)
     sc = B.sc
     if os.path.abspath(dst) == os.path.abspath(B.folder):
@@ -98,6 +110,8 @@ def build(src, dst, timer='van timer b', hide=HIDE_DEFAULT, slot='F01', log=prin
     # AIMonitor at every round start), so the roof is shown without the player first entering tb_LEFT_TheySpotYou
     # (the only sender of 'van timer b'). A timer that already names the marker is left alone in this mode.
     names = [timer] + (['van timer'] if at_start and timer != 'van timer' else [])
+    if only_msg:                        # --only-escape-msg: marker already wired; the msg goes into both timers (see below), nothing else
+        names, hide = [], None
     if only_action:                     # --only-stock-action: the marker is already wired (a finished roof build); touch nothing but the boarding action
         names, hide = [], None
     old = []
@@ -114,6 +128,18 @@ def build(src, dst, timer='van timer b', hide=HIDE_DEFAULT, slot='F01', log=prin
             raise ValueError('%s already names the marker' % nm)
         old = cur
         kl_fa.edit(sc, t, A_ctrl(t, 'TriggerDelay2'), lambda us, cur=cur: A.setv(sc, us, DELAY_LIST, cur + [R + POI]))
+    n_msg = 0
+    if escape_msg or only_msg:
+        for nm in (['van timer', 'van timer b'] if only_msg else names + [n for n in ['van timer'] if at_start and n not in names]):
+            t = A.node_of(sc, TIMERS[nm])
+            cur = list(_vals(sc, t, 'TriggerDelay2')[DELAY_LIST])
+            if R + MSG in cur:
+                log('%s already names the escape text check: left alone' % nm)
+                continue
+            if R + POI not in cur and not only_msg:
+                raise ValueError('%s does not name the marker' % nm)
+            kl_fa.edit(sc, t, A_ctrl(t, 'TriggerDelay2'), lambda us, cur=cur: A.setv(sc, us, DELAY_LIST, cur + [R + MSG]))
+            n_msg += 1
     if hide is not None and abs(tr[TRACKER_HIDE] - hide) > 1e-6:
         kl_fa.edit(sc, poi, A_ctrl(poi, 'ActivateGameplayTrackerDisplay'), lambda us: A.setv(sc, us, TRACKER_HIDE, float(hide)))
     n_sa = 0
@@ -137,7 +163,7 @@ def build(src, dst, timer='van timer b', hide=HIDE_DEFAULT, slot='F01', log=prin
     if os.path.isfile(sj):
         import kl_maps
         st = json.load(open(sj))
-        st['roof'] = ['.prp']
+        st['roof'] = ['.prp']      # (also used by --escape-msg: same member)
         st['same'] = [e for e in st.get('same', []) if e != '.prp']
         st['final'] = kl_maps.member_ids(dst)
         with open(sj, 'w') as f:
@@ -145,9 +171,13 @@ def build(src, dst, timer='van timer b', hide=HIDE_DEFAULT, slot='F01', log=prin
     with open(os.path.join(dst, 'graft.txt'), 'a') as f:
         if n_sa:
             f.write('kl_club_roof: --heli-stock-action%s: %d field(s) of the boarding action changed (GUESS, not run)\n' % (' --heli-stock-trigger' if stock_trigger else '', n_sa))
-        if not only_action:
+        if n_msg:
+            f.write('kl_club_roof: --escape-msg: %d van timer(s) also name %s (GUESS, not run)\n' % (n_msg, MSG))
+        if not only_action and not only_msg:
             f.write('kl_club_roof: %s names %s (was %d targets%s); hide-within %s -> %s; from %s\n'
                     % (timer, POI, len(old), ', + van timer at round start (marker-at-start)' if at_start else '', tr[TRACKER_HIDE], hide, B.folder))
+    if only_msg:
+        log('written %s: %d timer(s) now name the escape text check' % (dst, n_msg)); return dst
     log('written %s: %s now names the escape marker; hide-within %s -> %s' % (dst, timer, tr[TRACKER_HIDE], hide))
     return dst
 
@@ -195,8 +225,10 @@ def main():
         sa = '--heli-stock-action' in a or '--heli-stock-trigger' in a
         st = '--heli-stock-trigger' in a
         only = '--only-stock-action' in a
-        a = [x for x in a if x not in ('--no-hide-change', '--marker-at-start', '--heli-stock-action', '--heli-stock-trigger', '--only-stock-action')]
-        build(a[0], a[1], timer, hide, at_start=at_start, stock_action=sa, stock_trigger=st, only_action=only)
+        om = '--only-escape-msg' in a
+        em = '--escape-msg' in a
+        a = [x for x in a if x not in ('--no-hide-change', '--marker-at-start', '--heli-stock-action', '--heli-stock-trigger', '--only-stock-action', '--escape-msg', '--only-escape-msg')]
+        build(a[0], a[1], timer, hide, at_start=at_start, stock_action=sa, stock_trigger=st, only_action=only, escape_msg=em, only_msg=om)
         bad = diff(a[0], a[1])
         for x in bad:
             print('FAIL', x)
