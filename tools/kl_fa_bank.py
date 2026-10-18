@@ -91,7 +91,7 @@ what only a live run can settle: re/bank_campaign.md. Nothing here installs anyt
                         the mesh until the room's men are dead or the game's 30 s are out; written to bank_opts.json, read by every later step
       --gate-rooms L    comma list of ROOMS to gate (default ROOM_ON = lobby,flights,hall - the dock is in the table and OFF since the second fix; 'airlock', 'front' too; the timetable refuses
                         past the round's budget)      --gates-seen  holds in sight at cover instead of hidden (ROOM_HIDE off)
-    python kl_fa_bank.py bots <folder> <out> [--gates --gate-rooms L --gates-seen]   the seven AI heisters (+ the vault gate, + the room gates)
+    python kl_fa_bank.py bots <folder> <out> [--gates --gate-rooms L --gates-seen --loot-seconds N]   the seven AI heisters (+ the vault gate, + the room gates)
     python kl_fa_bank.py dyn <folder> <out>               kl_fa_bots_dyn.build, with room gates: no hold or timer of its own behind a gate, no fork between gates
     python kl_fa_bank.py rooms-check <folder>             the gates of a folder with the squad (bots-check runs it too)
 
@@ -6041,6 +6041,8 @@ def main():
     elif len(a) == 2 and a[0] == 'inventory':
         inventory(a[1])
     elif len(a) >= 3 and a[0] == 'bots':
+        if '--loot-seconds' in a:   # the loot wait of every stop (GUESS; default BOT_OPT 30 unchanged)
+            BOT_OPT['loot_seconds'] = int(a[a.index('--loot-seconds') + 1])
         out, _rep = bots(a[1], a[2], gates=True if '--gates' in a else None, hide=False if '--gates-seen' in a else None,
                          rooms=a[a.index('--gate-rooms') + 1].split(',') if '--gate-rooms' in a else None)       # --gate-rooms: the rooms gated (ROOMS names); the timetable refuses past the budget
         sys.exit(1 if any(x[0] == 'FAIL' for x in out) or bots_check(a[2]) else 0)
