@@ -8,6 +8,7 @@ member moves and no seal pass is needed.
     python kl_club_roof.py build <folder> <out> [--hide-within N] [--timer 'van timer'|'van timer b'] [--no-hide-change] [--marker-at-start]
                                                 [--heli-stock-action [--heli-stock-trigger]] [--only-stock-action]
                                                 [--escape-msg [--only-escape-msg]]
+    python kl_club_roof.py hop-stage <folder> <out> [--stage N]   OPT-IN: KLJoin.ini only, [CrewHop*] Stage= -> N (default 1)
     python kl_club_roof.py check <folder>        what the escape marker is wired to, and from where it can be shown
     python kl_club_roof.py diff  <folder> <out>  only the .prp differs, and only in the allowed nodes
 
@@ -43,7 +44,14 @@ WHAT IS CHANGED
      crew that has not looted yet). --only-escape-msg: the finished build already has the marker (e.g. the live df719d34), touch
      only the two timers' lists. GUESS: the check shows the text in a round (it is gated by the MP-tutorial option, as in stock) and
      the text is the escape-area one; a repeat message every round is harmless.
-GUESS: that the marker is in the chain of 'van timer' in a round (it is a timer the heli build already relies on);
+HOP-STAGE (new 2026-10-18, live run L72, DM05A heli build; OPT-IN, default off: no build is changed). KLJoin.ini's [CrewHop] (y 460 -> y 860)
+  carries a bot only at heist stage >= Stage, and the build wrote Stage=2 (kl_fa_bots.hop_plan: 2 when an 'exit' place precedes the gate in the
+  chain). In the heli build the EXITS_BANK box (stage 2) is ExitLootArea at (-3450, 900, 3680) on the y 860 floor, i.e. BEYOND the hop, so a bot
+  that walks the chain arrives at From with stage 1 and waits there for a stage it can only get on the far side (log 13:54:50 'bot 7 is at From of
+  hop 1 ... heist stage 1; carried over in 10.0 s if it stays and reaches the hop's stage', never carried; 4 of 7 bots still g1 at round end). Only
+  a stage-3 bot (heli called) was carried. `hop-stage` writes Stage=1 (GUESS: a bot at From has been through the chain's loot places first; one that
+  never entered the ENTERS box is still stage 0 and stays). Only KLJoin.ini differs from the source folder. NOT RUN IN THE GAME.
+GUESS: that the marker is in the chain of 'van timer'in a round (it is a timer the heli build already relies on);
   the unit of the radius (world units, 100 = 1 m: the same unit as every other position in the file); that a second
   activation by the pad box does not hide or reset the marker. NOT RUN IN THE GAME.
 """
@@ -202,6 +210,46 @@ def diff(src, dst, slot='F01', log=print):
     return bad
 
 
+def hop_stage(src, dst, stage=1, log=print):
+    """OPT-IN. Copy the build folder src -> dst with ONLY KLJoin.ini changed: every [CrewHop*] section's Stage= is `stage`.
+    -> number of lines changed. Why: see HOP-STAGE in the module docstring (live run L72)."""
+    import re
+    if not 0 <= stage <= 3:
+        raise ValueError('Stage must be 0..3 (klhop.c)')
+    ini = os.path.join(src, 'KLJoin.ini')
+    if not os.path.isfile(ini):
+        raise ValueError('%s has no KLJoin.ini' % src)
+    if os.path.abspath(src) == os.path.abspath(dst):
+        raise ValueError('src and dst are the same folder')
+    os.makedirs(dst, exist_ok=True)
+    for f in os.listdir(src):
+        p = os.path.join(src, f)
+        if os.path.isfile(p) and f != 'KLJoin.ini':
+            shutil.copyfile(p, os.path.join(dst, f))
+    with open(ini, encoding='utf-8', newline='') as fh:
+        text = fh.read()
+    out, sec, n = [], '', 0
+    for ln in text.splitlines(True):
+        m = re.match(r'\s*\[([^\]]*)\]', ln)
+        if m:
+            sec = m.group(1)
+        elif sec.startswith('CrewHop') and re.match(r'\s*Stage\s*=', ln):
+            body = ln.rstrip('\r\n')
+            new = 'Stage=%d%s' % (stage, ln[len(body):])
+            if new != ln:
+                n += 1
+            ln = new
+        out.append(ln)
+    if not n:
+        log('hop-stage: no [CrewHop*] Stage line changed in %s (already %d, or no hop)' % (ini, stage))
+    with open(os.path.join(dst, 'KLJoin.ini'), 'w', encoding='utf-8', newline='') as fh:
+        fh.write(''.join(out))
+    with open(os.path.join(dst, 'graft.txt'), 'a') as f:
+        f.write('kl_club_roof: hop-stage: %d [CrewHop] Stage line(s) -> %d (KLJoin.ini only; GUESS, not run)\n' % (n, stage))
+    log('written %s: %d [CrewHop] Stage line(s) -> %d' % (dst, n, stage))
+    return n
+
+
 def main():
     a = sys.argv[1:]
     if not a:
@@ -218,6 +266,9 @@ def main():
         for x in bad:
             print('FAIL', x)
         print('diff: %d FAIL' % len(bad)); return 1 if bad else 0
+    if cmd == 'hop-stage':
+        st = opt('--stage', 1, int)
+        hop_stage(a[0], a[1], st); return 0
     if cmd == 'build':
         timer = opt('--timer', 'van timer b')
         hide = None if '--no-hide-change' in a else opt('--hide-within', HIDE_DEFAULT, float)
