@@ -87,6 +87,7 @@
  *  F3d FovStep (round 2) The channel at cam+0x790 (0x806d40) divides by its step interval T = [cam+0x7a4] (stock 1/30, set from the
  *               .rdata float 0xb3c404 at 0x6470c1). FovStep = factor on T (1.0 = stock, default 1.8: GUESS); T is a per-camera heap float.
  *               GUESS (not verified): that this channel is the FOV one; nothing here shows what it smooths. The Log's FOV lines tell.
+ *  NanDump / NanRepair (default 0 / 0, 2026-10-18): the non-finite eye of the Vault's slow runs; see the comment above klcam_nan.
  *  NOT DONE: look smoothing and pitch limits (the rig behind 0x653e00 / 0x7d72c0 was not traced: no data route known), the base-offset
  *               constants .data 0xceb590.. (roles only inferred: not written), F1d the smoothing reset (code).
  *  F1d Unstick, round 2 (each behind Unstick, offline only, each with its own camev line):
@@ -127,11 +128,13 @@
 
 struct klcam_cfg {
     int enable, log, loghz, blend, unstick, recover, shouldercover, scoronline, leanfollow, cine, cineaim;
-    int leangate, ufilter, ugate, utarget, logkeys;
+    int leangate, ufilter, ugate, utarget, logkeys, nandump, nanrepair;
     float blendscale, recoverspeed, fliptime, fliptimespecial, shakescale, fovstep;
     BYTE shakekeep[41];
 };
 struct klcam_rest { DWORD at; float orig; };
+#define KLCAM_NR_AT  0x500   /* NanRepair: the snapshot covers cam+0x500 .. 0x790 (the eye 0x508, the six chasers 0x658 .. 0x790) */
+#define KLCAM_NR_LEN 0x290
 /* the extended log's state (round 2) */
 struct klcam_pend { double left; char tag[16]; };
 struct klcam_xs {
@@ -177,6 +180,8 @@ static struct {
     DWORD fv_cam; float fv_orig; int fv_state;
     DWORD sh_obj; float sh_orig[41]; int sh_state, sh_told;
     DWORD cine_check;
+    /* NanDump / NanRepair (2026-10-18) */
+    DWORD nd_cam, nr_cam, nr_scam; int nr_tries, nr_have, nr_told; double nr_t0, nr_last; BYTE nr_snap[KLCAM_NR_LEN];
     struct klcam_xs x;
     /* summary */
     double sum_t, sum_stuck, sum_maxd; long sum_hitch, sum_pull, sum_n; float sum_taumax; double sum_taus; long sum_taun;
@@ -984,6 +989,70 @@ static void klcam_lost(void)
     kc.x.prev_ok = 0; kc.x.ep = 0; kc.x.still_s = 0; kc.x.lag_base = 0; kc.x.lagep = 0; kc.x.lag_s = 0; kc.x.blend_on = 0; kc.x.fov_move = 0; kc.x.sb_move = 0; kc.x.eye_wait_on = 0;
 }
 
+/* ---------------------------------------------------------------- NanDump / NanRepair (2026-10-18)
+   3f's runs L12 / L17 (Vault DM03A): the eye [cam+0x508] is non-finite from the first camera tick all round (the hook's READFAIL bit 1), so
+   Havok's MOPP casts never prune (~0.55 s a frame) and the view is white. It began 260 ms before the hook's first camera write.
+   NanDump (default 0): on the first bit-1 frame of a camera, every non-finite float of cam .. cam+0xc60 (exponent bits all set; a pointer
+   0x7f800000 .. 0x7fffffff / 0xff800000.. reads the same: the raw hex is logged) plus the raw dt, the pivot, the frame, once per camera.
+   NanRepair (default 0, offline only, GUESS): after bit 1 has stood 1 s, every non-finite float of cam+0x500 .. 0x790 (the eye and the six
+   chasers 0x658 .. 0x790) is put back from the last healthy frame of this camera, or 0 without one; the eye, when still non-finite, becomes
+   the pivot + (0, 60, -250) GUESS (with a snapshot: the snapshot's eye), written to cam+0x508 and through 0x7c9030 (the Recover setter).
+   At most once a second, 5 times a camera; the next frames tell whether it held. */
+static int klcam_nanbits(DWORD u) { return (u & 0x7f800000u) == 0x7f800000u; }
+static void klcam_nan_ok(DWORD cam)
+{
+    if (!kc.c.nanrepair) return;
+    if (kc.nr_cam == cam && kc.nr_tries && !kc.nr_told) { kc.nr_told = 1; klog("cam: NanRepair: camera %08lx is finite again after %d repair(s)", cam, kc.nr_tries); }
+    kc.nr_t0 = 0;
+    if (klh_rd(cam + KLCAM_NR_AT, kc.nr_snap, KLCAM_NR_LEN)) { kc.nr_scam = cam; kc.nr_have = 1; }
+}
+static void klcam_nan(DWORD cam, const float *Pv, float rawdt, long frame, int bad)
+{
+    double T = kc.x.T; int i;
+    if (kc.c.nandump && kc.nd_cam != cam) {
+        static DWORD buf[0xc60 / 4]; char b[900]; int n = 0, nb = 0, first = -1;
+        kc.nd_cam = cam;
+        if (klh_rd(cam, buf, sizeof buf)) {
+            for (i = 0; i < (int)(sizeof buf / 4); i++) if (klcam_nanbits(buf[i])) {
+                if (first < 0) first = i * 4;
+                if (n < (int)sizeof b - 24) n += snprintf(b + n, sizeof b - n, " +%03x=%08lx", i * 4, (unsigned long)buf[i]);
+                nb++;
+            }
+            klog("cam: NanDump: camera %08lx f %ld T %.2f raw dt %.4f bad %d pivot %.1f %.1f %.1f: %d non-finite dwords in +0 .. +0xc60 (first +%03x):%s%s",
+                 cam, frame, T, rawdt, bad, (bad & 4) ? 0.0f : Pv[0], (bad & 4) ? 0.0f : Pv[1], (bad & 4) ? 0.0f : Pv[2], nb, first < 0 ? 0 : first, b, n >= (int)sizeof b - 24 ? " ..." : "");
+        } else klog("cam: NanDump: camera %08lx: read of +0 .. +0xc60 failed", cam);
+    }
+    if (!kc.c.nanrepair) return;
+    if (kc.nr_cam != cam) { kc.nr_cam = cam; kc.nr_tries = 0; kc.nr_told = 0; kc.nr_last = 0; kc.nr_t0 = 0; }
+    if (kc.nr_t0 <= 0) { kc.nr_t0 = T; return; }
+    if (T - kc.nr_t0 < 1.0 || (kc.nr_last > 0 && T - kc.nr_last < 1.0) || kc.nr_tries >= 5) return;
+    kc.nr_last = T; kc.nr_tries++; kc.nr_told = 0;
+    {
+        static DWORD cur[KLCAM_NR_LEN / 4]; const DWORD *snap = (kc.nr_have && kc.nr_scam == cam) ? (const DWORD *)kc.nr_snap : 0;
+        int fixed = 0, on = !kl_online(); struct klcam_eye a; float e[3];
+        if (!klh_rd(cam + KLCAM_NR_AT, cur, sizeof cur)) { klog("cam: NanRepair: read failed"); return; }
+        for (i = 0; i < KLCAM_NR_LEN / 4; i++) if (klcam_nanbits(cur[i])) {
+            DWORD v = (snap && !klcam_nanbits(snap[i])) ? snap[i] : 0;
+            if (on) klh_data((void *)(DWORD_PTR)(cam + KLCAM_NR_AT + 4 * i), &v, 4, "camera non-finite float (NanRepair)");
+            fixed++;
+        }
+        if (snap) memcpy(e, (const BYTE *)snap + (0x508 - KLCAM_NR_AT), 12);
+        if (!snap || !klcam_fin(e[0]) || !klcam_fin(e[1]) || !klcam_fin(e[2])) {
+            if (bad & 4) { klog("cam: NanRepair %d/5: %d floats put back, the pivot is non-finite too: no eye written%s", kc.nr_tries, fixed, on ? "" : " (online: log only)"); return; }
+            e[0] = Pv[0]; e[1] = Pv[1] + 60.0f; e[2] = Pv[2] - 250.0f;     /* GUESS offset */
+        }
+        if (on) {
+            BYTE pro[5]; static const BYTE want[5] = { 0x51, 0x8B, 0x54, 0x24, 0x08 };   /* the prologue Recover checks */
+            klh_data((void *)(DWORD_PTR)(cam + 0x508), e, 12, "camera eye (NanRepair)");
+            a.cam = cam; memcpy(a.p, e, 12);
+            if (!klh_rd((DWORD_PTR)KLH_VA(KLCAM_EYEFN), pro, 5) || memcmp(pro, want, 5)) klog("cam: NanRepair: 0x7c9030 is not the setter read (another build): only cam+0x508 written");
+            else if (klfc_guard("eye", klcam_eye_body, &a) < 0) klog("cam: NanRepair: the eye setter faulted");
+        }
+        klog("cam: NanRepair %d/5: camera %08lx f %ld T %.2f: %d non-finite floats in +0x500 .. +0x790 put back (%s), eye -> %.1f %.1f %.1f%s",
+             kc.nr_tries, cam, frame, T, fixed, snap ? "from the last healthy frame" : "no healthy frame: 0", e[0], e[1], e[2], on ? "" : " (online: log only)");
+    }
+}
+
 static void klcam_tick(int game_thread)
 {
     DWORD gd, P, cam, sys; LARGE_INTEGER now; float dt = 0, rawdt = 0, E[3], feet[3], Pv[3], Pv2[3], node[3], cd = 0, blend = 0, sideb = 0, fov = 0; BYTE blocked = 0, side = 0, cs = 0;
@@ -1038,9 +1107,11 @@ static void klcam_tick(int game_thread)
         if (!klcam_v3(cam + 0x508, E)) bad |= 1;
         if (!klcam_v3(P + 0x460, feet)) bad |= 2;
         if (!klcam_v3(cam + 0x398, Pv)) bad |= 4;
+        if (bad & 1) klcam_nan(cam, Pv, rawdt, frame, bad);
         if (bad) { klcam_skip(5, (DWORD)bad, 0); kc.pv = 0; return; }
     }
     klcam_skip(0, 0, 0);
+    klcam_nan_ok(cam);
     klh_rd(cam + 0x394, &blocked, 1); klh_rd(cam + 0x124, &cd, 4); if (!klcam_fin(cd)) cd = 0;
     if (!klcam_v3(cam + 0xb0, Pv2)) Pv2[0] = Pv2[1] = Pv2[2] = 0;
     kc.vE = kc.pv ? klcam_dist(E, kc.peye) / dt : 0; kc.vP = kc.pv ? klcam_dist(feet, kc.pfeet) / dt : 0;
@@ -1146,6 +1217,8 @@ static void klcam_init(void)
     c->ugate = klcam_ini_i("UnstickGate", 0) != 0;
     c->utarget = klcam_ini_i("UnstickTarget", 0) != 0;
     c->recover = klcam_ini_i("Recover", 0) != 0;
+    c->nandump = klcam_ini_i("NanDump", 0) != 0;
+    c->nanrepair = klcam_ini_i("NanRepair", 0) != 0;
     c->recoverspeed = klcam_ini_f("RecoverSpeed", 350.0f, 50.0f, 5000.0f);
     c->shouldercover = klcam_ini_i("ShoulderCover", 0) != 0;
     c->scoronline = klcam_ini_i("ShoulderCoverOnline", 0) != 0;
@@ -1162,10 +1235,10 @@ static void klcam_init(void)
         GetPrivateProfileStringA("Camera", "ShakeKeep", "", t, sizeof t, klh_ini);
         for (p = t; *p; ) { while (*p == ' ' || *p == ',') p++; if (!*p) break; v = atoi(p); if (v >= 0 && v < 41) c->shakekeep[v] = 1; while (*p && *p != ',') p++; }
     }
-    klog("cam: on: Blend %d (x%.2f) Unstick %d (filter %d gate %d target %d) Recover %d (%.0f cm/s) ShoulderCover %d LeanFollow %d (gate %d) Cine %d CineAim %d FlipTime %.2f (special %.2f) ShakeScale %.2f FovStep x%.2f Log %d (%d Hz, keys %d). "
+    klog("cam: on: Blend %d (x%.2f) Unstick %d (filter %d gate %d target %d) Recover %d (%.0f cm/s) ShoulderCover %d LeanFollow %d (gate %d) Cine %d CineAim %d FlipTime %.2f (special %.2f) ShakeScale %.2f FovStep x%.2f Log %d (%d Hz, keys %d) NanDump %d NanRepair %d. "
          "No data route (no effect): look smoothing, pitch limits",
          c->blend, c->blendscale, c->unstick, c->ufilter, c->ugate, c->utarget, c->recover, c->recoverspeed, c->shouldercover, c->leanfollow, c->leangate, c->cine, c->cineaim, c->fliptime, c->fliptimespecial, c->shakescale, c->fovstep,
-         c->log, c->loghz, c->logkeys);
+         c->log, c->loghz, c->logkeys, c->nandump, c->nanrepair);
 }
 
 #endif /* KLCAM_C */
