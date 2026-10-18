@@ -188,6 +188,13 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-18 21:35 - OFFLINE (kl-merge-e5; the owner is back, so 3f's live runs are paused):
+- One-click ADOPT/UNDO scripts are ready in C:\kl_build_1018\adopt_1018 (README.txt; re/adopt_list.md s8). Review CLEAN, dry runs only.
+  - 1: Hasta police 3a186c93.
+  - 2: Last Call L78 zip + KLJoin; its [Bots.DM05A] keys stay inert on the live hook.
+  - 2b: hook 1018zh. Wait for 3f run (h) first.
+- No new workflow: every list item waits on 3f's queue ((a) L82 rerun ... (j) LogCrewHits) or on the owner's calls.
+Owner: git push origin rtp-schemas (4 ahead) and git push origin rtp-schemas:main.
 2026-10-18 20:34 - OFFLINE (kl-merge-e5; the owner is back, so 3f's live runs are paused):
 - Hot Coffee II crew losses (re/hotcoffee2_losses.md ad68f61d, logs only):
   - All 5 L70/L71 deaths were at the diner or between the diner and the donut.
@@ -201,16 +208,6 @@ Owner: git push origin rtp-schemas (1 ahead, 3f pushed the rest) and git push or
 - New opt-in builder flag --rest-late=S (13d72a3b): the 8 start S s after the stair top. Staged C:\kl_build_1018\hasta_police2\DM11B 131c8c2b (S=120), queued as 3f (i), not run.
 - Workflow wdnjjb8nx: Hot Coffee II crew losses (L70/L71 logs), re/hotcoffee2_losses.md.
 Owner: git push origin rtp-schemas:main (68 ahead). Disk C: 11 GB free.
-2026-10-18 18:34 - OFFLINE (kl-merge-e5; owner away, 3f runs the queue):
-- 3f live, both PASS, 0 asserts:
-  - Vault L80 hide-parts 3574538f: visit 1 worked, you + 5 aboard, 1 dead. The van show/hide was the visit-1 cause. Below L65, so keep the live 7cd07d15.
-  - Park II L81 no-van-show d345bc5b: visit-1 cause confirmed, 6 bots aboard. Diagnostic only.
-- Disk: 3f deleted rt_join_next3, hopstage_next and roofgap_next (md5-checked copies kept elsewhere). C: is now 12 GB free.
-- Private match (research): re/private_match_mapsync.md (f66e1e57..2d363502).
-  - The host's start countdown reads every client's map mask each frame (kl2 0x6c4d72).
-  - Whether a joiner's change is sent to the host: GUESS, needs a two-account live test.
-- Workflow wyaa6o04z: Hasta plaza police (why 8 of 10 stay passive in 3a186c93; opt-in build hasta_police2).
-Owner: git push origin rtp-schemas:main.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

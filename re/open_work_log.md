@@ -1,3 +1,10 @@
+2026-10-18 21:35 - OFFLINE (kl-merge-e5; the owner is back, so 3f's live runs are paused):
+- One-click ADOPT/UNDO scripts are ready in C:\kl_build_1018\adopt_1018 (README.txt; re/adopt_list.md s8). Review CLEAN, dry runs only.
+  - 1: Hasta police 3a186c93.
+  - 2: Last Call L78 zip + KLJoin; its [Bots.DM05A] keys stay inert on the live hook.
+  - 2b: hook 1018zh. Wait for 3f run (h) first.
+- No new workflow: every list item waits on 3f's queue ((a) L82 rerun ... (j) LogCrewHits) or on the owner's calls.
+Owner: git push origin rtp-schemas (4 ahead) and git push origin rtp-schemas:main.
 2026-10-18 20:34 - OFFLINE (kl-merge-e5; the owner is back, so 3f's live runs are paused):
 - Hot Coffee II crew losses (re/hotcoffee2_losses.md ad68f61d, logs only):
   - All 5 L70/L71 deaths were at the diner or between the diner and the donut.
