@@ -1580,9 +1580,9 @@ static void klmv_escvisit(const struct klb_snap *s, DWORD now)
     changed = !klmv_r.ev_have || st != klmv_r.ev_st || e0 != klmv_r.ev_e0 || e4 != klmv_r.ev_e4 || h != klmv_r.ev_h;
     if ((st == 1 || st == 2) && klmv_r.ev_st != 1 && klmv_r.ev_st != 2) { klmv_r.ev_visit++; klmv_r.ev_fixed = 0; }
     if (klmv.escprobe && changed)
-        klog("escprobe: %s%u ms: state %u (was %d) 1e0 %08lx (was %08lx) 1e4 %08lx (was %08lx) handle %08lx (was %08lx) visit %d",
+        klog("escprobe: %s%u ms: state %u (was %d) 1e0 %08lx (was %08lx) 1e4 %08lx (was %08lx) handle %08lx (was %08lx) visit %d; 1e0's vtable %08lx",
              klmv_r.ev_have ? "" : "round start, ", now, st, klmv_r.ev_have ? (int)klmv_r.ev_st : -1, e0, klmv_r.ev_have ? klmv_r.ev_e0 : 0, e4, klmv_r.ev_have ? klmv_r.ev_e4 : 0,
-             h, klmv_r.ev_have ? klmv_r.ev_h : 0, klmv_r.ev_visit);
+             h, klmv_r.ev_have ? klmv_r.ev_h : 0, klmv_r.ev_visit, e0 ? klh_rd32(e0) : 0);      /* 2026-10-18 static reading (re/escape_visit1.md): the early non-zero 1e0 is written by 0x65ee60 from ZPlayerAction slot 26 (0x7fdbb0, the 'EnterVehicle' action) = [action+0x24]; its vtable names what that object is */
     klmv_r.ev_have = 1; klmv_r.ev_st = st; klmv_r.ev_e0 = e0; klmv_r.ev_e4 = e4; klmv_r.ev_h = h;
     if (!klmv.escfix || (st != 1 && st != 2) || e4 || !h || klmv_r.ev_fixed) return;
     vt = klh_rd32(rules); slot = klh_rd32(vt + 0x308);
