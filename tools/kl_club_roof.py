@@ -9,6 +9,7 @@ member moves and no seal pass is needed.
                                                 [--heli-stock-action [--heli-stock-trigger]] [--only-stock-action]
                                                 [--escape-msg [--only-escape-msg]]
     python kl_club_roof.py hop-stage <folder> <out> [--stage N]   OPT-IN: KLJoin.ini only, [CrewHop*] Stage= -> N (default 1)
+    python kl_club_roof.py roof-gap  <folder> <out> [--stage N]   OPT-IN: hop-stage + KLHook.roofgap.txt (BoardReachSent etc.)
     python kl_club_roof.py check <folder>        what the escape marker is wired to, and from where it can be shown
     python kl_club_roof.py diff  <folder> <out>  only the .prp differs, and only in the allowed nodes
 
@@ -256,16 +257,10 @@ def roof_gap(src, dst, stage=1, log=print):
     one order they got they stood 45 s). KLJoin.ini differs from src only by the Stage lines. GUESS, not run."""
     n = hop_stage(src, dst, stage, log)
     with open(os.path.join(dst, 'KLHook.roofgap.txt'), 'w', newline='') as fh:
-        fh.write('; add to [Bots] of KLHook.ini (build out_e5_1018x or later); GUESS values, not run in the game
-    python kl_club_roof.py roof-gap  <folder> <out> [--stage N]   OPT-IN: hop-stage + KLHook.roofgap.txt (BoardReachSent etc.)
-'
-                 'BoardReachSent=6000
-BoardReachRepeat=5
-BoardReachChase=1
-')
+        fh.write('; add to [Bots] of KLHook.ini (build out_e5_1018x or later); GUESS values, not run in the game\r\n'
+                 'BoardReachSent=6000\r\nBoardReachRepeat=5\r\nBoardReachChase=1\r\n')
     with open(os.path.join(dst, 'graft.txt'), 'a') as f:
-        f.write('kl_club_roof: roof-gap: + KLHook.roofgap.txt (BoardReachSent=6000, Repeat=5, Chase=1; GUESS, not run)
-')
+        f.write('kl_club_roof: roof-gap: + KLHook.roofgap.txt (BoardReachSent=6000, Repeat=5, Chase=1; GUESS, not run)\n')
     return n
 
 
