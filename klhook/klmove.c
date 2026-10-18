@@ -347,6 +347,7 @@ static struct {
     int crew_alone;                /* [Bots] CrewRouteAlone (2026-10-18, Park II run N1018_L66: the watch script keeps you in play and never boards, so CrewRouteHold never ran and visit 1 left after its 8 s with 4 bots still on the route): 1 = CrewRouteHold also runs while you are IN PLAY (status 0), not only aboard; 0 = off (default) */
     float crew_hold, crew_range;   /* [Bots] CrewRouteHold (2026-10-18, Vault L61: the crew's walk out of the vault is ~120 m by route and leads AWAY from the van in a straight line, so klescort's 'comes nearer' test never passed and the van left after its 8 s): seconds per visit the van's timer may get while a called bot WALKS (moves 2 m in 2 s, whichever way) within CrewRouteRange m of the boarding place and you are aboard; 0 = off (default, nothing here runs) */
     float van_near; DWORD van_delay; int van_min;      /* [Bots] VanCallNear (2026-10-18, overnight census: 105 bot-instances of stage 1/2 were still in play when the van left, 154 of stage 3; e.g. Hot Coffee II L70 record 7 at stage 2 with $680000 stood 6 m from the doors): metres, 0 = off (default) */
+    int van_last; float crew_hop;      /* [Bots] VanCallLast (2026-10-18, Last Call L72: 5 of 7 bots at stage 1, 29-45 m out, when the last van waited): 1 = on the round's last vehicle VanCallNear's distance is ignored; 0 = off (default). CrewRouteHopHold: seconds the CrewRouteHold budget may grow once a visit when it ran out while a stage-3 bot was still closing in (or had within the last 15 s: a hop waits 10 s); 0 = off (default) */
     DWORD gather_lone; int gather_minhp;      /* StairGatherLoneMs (0 = off): ms a held bot may stand with fewer than 2 loyal bots in the radius before it alone is released; StairGatherMinHp (0 = off): percent of the most health it was seen with, below which no hold is started */
 } klmv;
 
@@ -383,7 +384,8 @@ static struct {
     DWORD bv_since, bv_last, bv_trig, bv_veh; int bv_told, bv_calls, flag_told;      /* BotVan (section 7) */
     int ev_have, ev_visit, ev_fixed; DWORD ev_st, ev_e0, ev_e4, ev_h;      /* EscVisitProbe / EscVisitFix: what was last seen, the visit of state 1/2 (counted here), the fix made on it */
     DWORD cr_at[KLB_NREC]; float cr_p[KLB_NREC][3]; BYTE cr_walk[KLB_NREC], cr_told; int cr_visit; float cr_used;      /* CrewRouteHold: per record the time/place of the last 2 s sample and whether it walked; the lines said; the visit; seconds given */
-    DWORD vc_at; int vc_visit, vc_told, vc_n;      /* VanCallNear: when this visit's wait was first seen, its visit, the line said, how many were called */
+    float cr_extra; BYTE cr_xdone; DWORD cr_dat[KLB_NREC], cr_shr[KLB_NREC]; float cr_dd[KLB_NREC];      /* CrewRouteHopHold: seconds added to the budget, given this visit; per record the distance at the last 5 s sample, its time, and when the distance last shrank 1 m */
+    DWORD vc_at; int vc_visit, vc_told, vc_n, vc_last_told;      /* VanCallNear: when this visit's wait was first seen, its visit, the line said, how many were called */
     DWORD g_at, g_first; int g_done;      /* StairGather: last pass, when the first bot was held (0 = none held), 1 = released this round (never again until the next round) */
 } klmv_r;
 
@@ -849,6 +851,7 @@ static void klmv_deny_none(void) { int i; klmv_rc.armed = 0; for (i = 0; i < KLM
 
 /* the stage byte BoardAll writes, with BoardAll's tests (no traitor, in play, not this round's escort, the record
    looked at again before the write), so that the bot's board tactic walks it (0x4fb064 asks stage 3). what = where it stands */
+static int klmv_s3_wrote;      /* set by klmv_stage3 when the stage byte was really written (VanCallNear logs 'called' only then) */
 static void klmv_stage3(const struct klb_snap *s, int i, const char *what)
 {
     const struct klb_rec *r = &s->r[i]; struct klmv_b *b = &klmv_r.b[i]; BYTE fl = 0, st = 0, cur = 3;
@@ -857,6 +860,7 @@ static void klmv_stage3(const struct klb_snap *s, int i, const char *what)
     if (!klb_still(s, i, &fl, &st) || st || (fl & 2) || !klh_rd(r->at + 0x78, &cur, 1)) return;      /* gone, aboard, dead or turned since the snapshot: looked at again */
     b->told |= 4;
     if (cur < 3 && !klb_put8(r->at + 0x78, 3, "crew record: heist stage 3 (an escape box does not take it: it has to walk to the vehicle)")) { klog("near: record %d: the stage byte was NOT written", i); return; }
+    if (cur < 3) klmv_s3_wrote = 1;
     klog("near: record %d (stage %u) at (%.0f, %.0f, %.0f) stands %s: heist stage set to 3 - it has to walk to the vehicle (its board tactic takes it aboard within 3 m)", i, r->stage, b->pos[0], b->pos[1], b->pos[2], what);
 }
 
@@ -1122,26 +1126,36 @@ static void klmv_driver(const struct klb_snap *s, DWORD now, const struct klb_re
 static void klmv_crewhold(const struct klb_snap *s, DWORD now, const struct klb_rec *h, int criminal)
 {
     float bd[3], p[3], timer = klb_finite(s->timer) ? s->timer : -1.0f, tnow = 0, add, dnear = -1; BYTE grade = 1, paid = 0, veh2 = 0; const char *no = 0; char gw[200], gn[200];
-    int i, nwalk = 0, nplay = 0;
+    int i, nwalk = 0, nplay = 0, napp = 0; float budget;
     gw[0] = gn[0] = 0;
     if (!(s->veh == 3 || s->veh == 4) || !h || !(h->status == 4 || (klmv.crew_alone && h->status == 0)) || !criminal || !kle_boarding(s->rules, bd)) { memset(klmv_r.cr_at, 0, sizeof klmv_r.cr_at); return; }
-    if (klmv_r.cr_visit != klmv_r.visit) { klmv_r.cr_visit = klmv_r.visit; klmv_r.cr_used = 0; klmv_r.cr_told = 0; memset(klmv_r.cr_at, 0, sizeof klmv_r.cr_at); }
+    if (klmv_r.cr_visit != klmv_r.visit) { klmv_r.cr_visit = klmv_r.visit; klmv_r.cr_used = 0; klmv_r.cr_told = 0; klmv_r.cr_extra = 0; klmv_r.cr_xdone = 0; memset(klmv_r.cr_at, 0, sizeof klmv_r.cr_at); }
     for (i = 0; i < s->n && i < KLB_NREC; i++) {
         const struct klb_rec *r = &s->r[i]; float d;
         if (!r->used || (r->flags & 3) != 1 || r->status) { klmv_r.cr_at[i] = 0; continue; }
         if (!r->actor || klh_rd32(r->actor) != KLB_ACTOR_VT || !kle_node(klh_rd32(r->actor + 4), p, 0)) { klmv_r.cr_at[i] = 0; continue; }
         nplay++;
         d = kle_dist(p, bd);
-        if (!klmv_r.cr_at[i]) { klmv_r.cr_at[i] = KLB_T(now); memcpy(klmv_r.cr_p[i], p, 12); klmv_r.cr_walk[i] = 0; }
+        if (!klmv_r.cr_at[i]) { klmv_r.cr_at[i] = KLB_T(now); memcpy(klmv_r.cr_p[i], p, 12); klmv_r.cr_walk[i] = 0; klmv_r.cr_dat[i] = 0; klmv_r.cr_shr[i] = 0; }
         else if (now - klmv_r.cr_at[i] >= 2000) { klmv_r.cr_walk[i] = kle_dist(klmv_r.cr_p[i], p) >= KLE_COME; klmv_r.cr_at[i] = KLB_T(now); memcpy(klmv_r.cr_p[i], p, 12); }
+        if (klmv.crew_hop > 0) {      /* CrewRouteHopHold (GUESS limits): 1 m nearer in 5 s counts as closing in; klhop.c's hop state is private there, so a bot carried over a hop (it stands 10 s at From) counts for 15 s after it last closed in */
+            if (!klmv_r.cr_dat[i]) { klmv_r.cr_dat[i] = KLB_T(now); klmv_r.cr_dd[i] = d; }
+            else if (now - klmv_r.cr_dat[i] >= 5000) { if (klmv_r.cr_dd[i] - d >= 100.0f) klmv_r.cr_shr[i] = KLB_T(now); klmv_r.cr_dat[i] = KLB_T(now); klmv_r.cr_dd[i] = d; }
+            if (r->stage >= 3 && klmv_r.cr_shr[i] && now - klmv_r.cr_shr[i] <= 15000 && d <= klmv.crew_range * 100.0f) napp++;
+        }
         if (klmv_r.cr_walk[i] && d <= klmv.crew_range * 100.0f) { nwalk++; if (dnear < 0 || d < dnear) dnear = d; }
     }
     if (!(timer > 0 && timer < KLE_HOLD_AT)) return;
-    if (klmv.crew_hold - klmv_r.cr_used < 0.5f) {
-        if (!(klmv_r.cr_told & 2)) { klmv_r.cr_told |= 2; klog("crewhold: the vehicle leaves in %.1f s: the %.1f s of CrewRouteHold are used", timer, klmv.crew_hold); }
+    budget = klmv.crew_hold + klmv_r.cr_extra;
+    if (budget - klmv_r.cr_used < 0.5f && klmv.crew_hop > 0 && !klmv_r.cr_xdone && napp && !klmv.dry) {      /* CrewRouteHopHold: once a visit */
+        klmv_r.cr_xdone = 1; klmv_r.cr_extra = klmv.crew_hop; budget += klmv.crew_hop;
+        klog("crewhold: the vehicle leaves in %.1f s and the %.1f s of CrewRouteHold are used, but %d stage-3 bot(s) closed in on the boarding place within the last 15 s (mid-hop or walking): CrewRouteHopHold adds up to %.1f s, once this visit", timer, klmv.crew_hold, napp, klmv.crew_hop);
+    }
+    if (budget - klmv_r.cr_used < 0.5f) {
+        if (!(klmv_r.cr_told & 2)) { klmv_r.cr_told |= 2; klog("crewhold: the vehicle leaves in %.1f s: the %.1f s of CrewRouteHold are used", timer, budget); }
         return;
     }
-    add = klmv.crew_hold - klmv_r.cr_used; if (add > KLE_HOLD_STEP) add = KLE_HOLD_STEP;
+    add = budget - klmv_r.cr_used; if (add > KLE_HOLD_STEP) add = KLE_HOLD_STEP;
     if (!nwalk) no = nplay ? "no called crew in play walks within CrewRouteRange of the boarding place (2 m in 2 s)" : "nobody of the crew is left in play";
     else if (!klh_rd(s->score + 0x60, &grade, 1) || grade) no = "the vehicle is damaged and must go";
     else if (!klh_rd(s->rules + 0x1b3, &paid, 1) || paid != 0xff) no = "somebody paid the driver";
@@ -1158,7 +1172,7 @@ static void klmv_crewhold(const struct klb_snap *s, DWORD now, const struct klb_
     tnow += add;
     if (!klh_data((void *)(DWORD_PTR)(s->rules + 0x1d8), &tnow, 4, "escape vehicle wait timer (the driver waits for the walking crew)")) { if (!(klmv_r.cr_told & 1)) { klmv_r.cr_told |= 1; klog("crewhold: the vehicle's timer could NOT be written"); } return; }
     klmv_r.cr_used += add;
-    klog("crewhold: the vehicle would leave in %.1f s and %d of the crew walk (the nearest %.1f m out): timer %.1f -> %.1f s (%.1f of %.1f s used this visit); %s", timer, nwalk, dnear / 100, tnow - add, tnow, klmv_r.cr_used, klmv.crew_hold, gn);
+    klog("crewhold: the vehicle would leave in %.1f s and %d of the crew walk (the nearest %.1f m out): timer %.1f -> %.1f s (%.1f of %.1f s used this visit); %s", timer, nwalk, dnear / 100, tnow - add, tnow, klmv_r.cr_used, budget, gn);
 }
 
 /* ---------------------------------------------------------------- Restless */
@@ -1609,22 +1623,27 @@ static void klmv_escvisit(const struct klb_snap *s, DWORD now)
    GUESSES: that a bot of stage 1 within the range has nothing better to do than leave (it gives up its loot tactic); the height limit; the delay. */
 static void klmv_vancall(const struct klb_snap *s, DWORD now)
 {
-    float bd[3]; int i, called = 0, cand = 0, waiting = s->veh == 3 || s->veh == 4;
+    float bd[3]; int i, called = 0, cand = 0, waiting = s->veh == 3 || s->veh == 4; BYTE lastv = 0;
     if (!waiting || !kle_boarding(s->rules, bd)) { klmv_r.vc_at = 0; return; }
-    if (klmv_r.vc_visit != klmv_r.visit) { klmv_r.vc_visit = klmv_r.visit; klmv_r.vc_at = 0; klmv_r.vc_told = 0; klmv_r.vc_n = 0; }
+    if (klmv_r.vc_visit != klmv_r.visit) { klmv_r.vc_visit = klmv_r.visit; klmv_r.vc_at = 0; klmv_r.vc_told = 0; klmv_r.vc_n = 0; klmv_r.vc_last_told = 0; }
     if (!klmv_r.vc_at) klmv_r.vc_at = KLB_T(now);
     if (KLB_T(now) - klmv_r.vc_at < klmv.van_delay) return;
+    if (klmv.van_last && klh_rd(s->rules + 0xe8a, &lastv, 1) && lastv) {      /* VanCallLast: the round's last vehicle ([rules+0xe8a], as BoardReach reads it): no range, no height limit */
+        if (!klmv_r.vc_last_told) { klmv_r.vc_last_told = 1; klog("vancall: visit %d is the round's last vehicle: VanCallLast=1, every loyal bot at heist stage %d..2 in play is called, wherever it stands", klmv_r.visit, klmv.van_min); }
+    } else lastv = 0;
+    if (!lastv && klmv.van_near <= 0) return;
     for (i = 0; i < s->n && i < KLB_NREC; i++) {
         const struct klb_rec *r = &s->r[i]; struct klmv_b *b = &klmv_r.b[i]; BYTE grab = 1; float dh;
         if (!r->used || !(r->flags & 1) || (r->flags & 2) || r->status || !b->seen || kle_r.used[i] || klmv_downed(r)) continue;
         if (r->stage < klmv.van_min || r->stage >= 3 || (b->told & 4)) continue;
         dh = klmv_h(b->pos, bd);
-        if (dh > klmv.van_near || fabs(b->pos[1] - bd[1]) > 400.0f) continue;
+        if (!lastv && (dh > klmv.van_near || fabs(b->pos[1] - bd[1]) > 400.0f)) continue;
         cand++;
         if (!klh_rd(r->at + 0x15, &grab, 1) || grab) continue;                  /* a grab runs (crew record +0x15): let it end */
         if (klmv.dry) { if (!(b->told & 4)) { b->told |= 4; klog("vancall: visit %d: record %d (stage %u, $%lu) stands %.1f m from the boarding place: heist stage WOULD be set to 3 (dry run)", klmv_r.visit, i, r->stage, r->money, dh / 100); } continue; }
-        klmv_stage3(s, i, "near the waiting vehicle (VanCallNear)");
-        if (b->told & 4) { called++; klog("vancall: visit %d: record %d (stage %u, $%lu) stood %.1f m from the boarding place (VanCallNear %.0f m), %.1f s into the wait: called (stage 3)", klmv_r.visit, i, r->stage, r->money, dh / 100, klmv.van_near / 100, (KLB_T(now) - klmv_r.vc_at) / 1000.0); }
+        klmv_s3_wrote = 0;
+        klmv_stage3(s, i, lastv ? "at the round's last vehicle (VanCallLast)" : "near the waiting vehicle (VanCallNear)");
+        if (klmv_s3_wrote) { called++; klog("vancall: visit %d: record %d (stage %u, $%lu) stood %.1f m from the boarding place (%s), %.1f s into the wait: called (stage 3)", klmv_r.visit, i, r->stage, r->money, dh / 100, lastv ? "VanCallLast, no limit" : "VanCallNear", (KLB_T(now) - klmv_r.vc_at) / 1000.0); }
     }
     klmv_r.vc_n += called;
     if (cand && !called && !klmv_r.vc_told && klmv.log > 1) { klmv_r.vc_told = 1; klog("vancall: visit %d: %d bot(s) of stage %d..2 within range, none called (a grab runs, or klmv_stage3 refused)", klmv_r.visit, cand, klmv.van_min); }
@@ -1690,7 +1709,7 @@ static void klmv_tick(int game_thread)
     if (klmv.wait) { klmv_gate(&s, now, h, criminal); klmv_driver(&s, now, h, human_in, criminal, hp); }
     if (klmv.crew_hold > 0) klmv_crewhold(&s, now, h, criminal);
     if (klmv.gather) klmv_gather(&s, now);
-    if (klmv.van_near > 0) klmv_vancall(&s, now);
+    if (klmv.van_near > 0 || klmv.van_last) klmv_vancall(&s, now);
     if (klmv.restless || klmv.loot) {
         klmv_sour_pass(s.rules, now);
         if (now - klmv_r.half >= 500) {        /* twice a second */
@@ -1741,6 +1760,8 @@ static void klmv_init(void)
     if (klmv.van_near > 0) klmv.van_near *= 100.0f;
     klmv.van_delay = (DWORD)klb_pos("VanCallDelay", 3, 60) * 1000;      /* seconds into the wait; GUESS 3 */
     klmv.van_min = klb_pos("VanCallMinStage", 1, 2); if (klmv.van_min < 1) klmv.van_min = 1;
+    klmv.van_last = GetPrivateProfileIntA("Bots", "VanCallLast", 0, klh_ini) ? 1 : 0;      /* default 0 = unchanged */
+    klmv.crew_hop = klb_inif("CrewRouteHopHold", "0"); if (!klb_finite(klmv.crew_hop) || klmv.crew_hop < 0) klmv.crew_hop = 0; if (klmv.crew_hop > 60) klmv.crew_hop = 60;      /* seconds, 0 = off (default); GUESS if used: 15 */
     klmv.dry = GetPrivateProfileIntA("Bots", "MoveDry", 0, klh_ini) != 0;
     klmv.log = klb_pos("MoveLog", 1, 2);
     klmv.last = GetPrivateProfileIntA("Bots", "LastVehicle", 1, klh_ini) != 0;
@@ -1770,7 +1791,7 @@ static void klmv_init(void)
         if (at[0] && sscanf(at, "%f , %f , %f", &a[0], &a[1], &a[2]) == 3 && klb_finite(a[0]) && klb_finite(a[1]) && klb_finite(a[2])) memcpy(klmv.gather_at, a, 12);
         else if (at[0]) klog("gather: StairGatherAt=%s is not x,y,z: the default (Hasta's stair top) is used", at);
     }
-    klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0 || klmv.reach > 0 || klmv.last || klmv.botvan || klmv.probe || klmv.gather || klmv.escprobe || klmv.escfix || klmv.crew_hold > 0 || klmv.van_near > 0;
+    klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0 || klmv.reach > 0 || klmv.last || klmv.botvan || klmv.probe || klmv.gather || klmv.escprobe || klmv.escfix || klmv.crew_hold > 0 || klmv.van_near > 0 || klmv.van_last;
     if (!klmv.any) return;
     if (!klb.on) { klog("move / wait / near / reach: [Bots] Restless, WaitForYou, BoardNear or BoardReach is set but [Bots] Enable is 0: they need klbot.c's crew records, nothing is done"); klmv.any = 0; return; }
     if (klmv.restless || klmv.loot)
@@ -1782,6 +1803,8 @@ static void klmv_init(void)
     if (klmv.gather && (klmv.gather_lone || klmv.gather_minhp)) klog("gather: StairGatherLoneMs=%lu (a held bot with fewer than 2 loyal bots in the radius for that long is released alone, 0 = off), StairGatherMinHp=%d (no hold below that percent of the health it was seen with, 0 = off)", klmv.gather_lone, klmv.gather_minhp);
     if (klmv.crew_hold > 0) klog("crewhold: CrewRouteHold=%.1f s a visit, CrewRouteRange=%.0f m (GUESS limits)%s: with you aboard and the vehicle's timer under %.1f s, a called loyal bot that moves %.0f m in 2 s (either way) within that range of the boarding place holds the driver, same refusals and shield as FollowOutHold; its seconds are counted apart from FollowOutHold's", klmv.crew_hold, klmv.crew_range, klmv.dry ? "; MoveDry=1: nothing is written" : "", KLE_HOLD_AT, KLE_COME / 100);
     if (klmv.crew_hold > 0 && klmv.crew_alone) klog("crewhold: CrewRouteAlone=1: the hold also runs while you are in play (not aboard). GUESS: a human who is still fighting wants the crew held too");
+    if (klmv.van_last) klog("vancall: VanCallLast=1: on the round's last vehicle every loyal in-play bot at heist stage %d..2 is called whatever its distance (after VanCallDelay %lu s; GUESS)", klmv.van_min, klmv.van_delay / 1000);
+    if (klmv.crew_hop > 0) klog("crewhold: CrewRouteHopHold=%.1f s (GUESS): once a visit, when CrewRouteHold is used up and a stage-3 bot closed 1 m in on the boarding place within 15 s, the budget grows by that", klmv.crew_hop);
     if (klmv.van_near > 0) klog("vancall: on; VanCallNear=%.0f m VanCallDelay=%lu s MinStage=%d%s: while the vehicle waits a loyal bot at heist stage %d..2 within that range of the boarding place gets heist stage 3 (GUESS limits)", klmv.van_near / 100, klmv.van_delay / 1000, klmv.van_min, klmv.dry ? " DRY RUN" : "", klmv.van_min);
     if (klmv.skip_down) klog("move: RestlessSkipDowned on: a downed heister gets no restless order, snap or hop and its stand-still clock restarts when it is up");
     if (klmv.snap) klog("move: RestlessSnap on (audit 1018 E2.2, GUESS limits): a bot whose chain place was ordered %d times without arriving is put AT the place (range %lu, human not within %lu, at most %d times per bot and round)%s", KLMV_TOTAL, klmv.snap_range / 100, klmv.snap_human / 100, klmv.snap_cap, klmv.dry ? "; MoveDry=1: never" : "");
