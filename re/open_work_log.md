@@ -1,3 +1,10 @@
+2026-10-18 20:34 - OFFLINE (kl-merge-e5; the owner is back, so 3f's live runs are paused):
+- Hot Coffee II crew losses (re/hotcoffee2_losses.md ad68f61d, logs only):
+  - All 5 L70/L71 deaths were at the diner or between the diner and the donut.
+  - The killer is not identified: no point-blank step and no down before any death.
+  - Next is 3f's opt-in [Balance] LogCrewHits (2f17dc43, TEST hook out_3f_1018d 3f073ebb), queued as run (j).
+- Workflow wo8s2xb7c writes per-decision ADOPT/UNDO .bat scripts (md5-checked, for the owner to run) in C:\kl_build_1018\adopt_1018: Hasta police 3a186c93 and the Last Call L78 set.
+Owner: git push origin rtp-schemas (1 ahead, 3f pushed the rest) and git push origin rtp-schemas:main (72 ahead). Disk C: 11 GB free.
 2026-10-18 19:34 - OFFLINE (kl-merge-e5; the owner is back, so 3f paused live runs):
 - 3f L82 Park II crew-hop c99c4e11 VOID: hung at the attract video. All restored. Queue: L82 rerun, then (b)-(i).
 - Hasta: 8 of 10 plaza police in 3a186c93 are never started; only the 2 ExitStreet_Left men are left on the start list (re/hasta_police.md e255313c). That SMG fire kills the heli is a GUESS.

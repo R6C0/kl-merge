@@ -188,6 +188,13 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-18 20:34 - OFFLINE (kl-merge-e5; the owner is back, so 3f's live runs are paused):
+- Hot Coffee II crew losses (re/hotcoffee2_losses.md ad68f61d, logs only):
+  - All 5 L70/L71 deaths were at the diner or between the diner and the donut.
+  - The killer is not identified: no point-blank step and no down before any death.
+  - Next is 3f's opt-in [Balance] LogCrewHits (2f17dc43, TEST hook out_3f_1018d 3f073ebb), queued as run (j).
+- Workflow wo8s2xb7c writes per-decision ADOPT/UNDO .bat scripts (md5-checked, for the owner to run) in C:\kl_build_1018\adopt_1018: Hasta police 3a186c93 and the Last Call L78 set.
+Owner: git push origin rtp-schemas (1 ahead, 3f pushed the rest) and git push origin rtp-schemas:main (72 ahead). Disk C: 11 GB free.
 2026-10-18 19:34 - OFFLINE (kl-merge-e5; the owner is back, so 3f paused live runs):
 - 3f L82 Park II crew-hop c99c4e11 VOID: hung at the attract video. All restored. Queue: L82 rerun, then (b)-(i).
 - Hasta: 8 of 10 plaza police in 3a186c93 are never started; only the 2 ExitStreet_Left men are left on the start list (re/hasta_police.md e255313c). That SMG fire kills the heli is a GUESS.
@@ -204,14 +211,6 @@ Owner: git push origin rtp-schemas:main (68 ahead). Disk C: 11 GB free.
   - Whether a joiner's change is sent to the host: GUESS, needs a two-account live test.
 - Workflow wyaa6o04z: Hasta plaza police (why 8 of 10 stay passive in 3a186c93; opt-in build hasta_police2).
 Owner: git push origin rtp-schemas:main.
-2026-10-18 17:34 - OFFLINE (kl-merge-e5; 3f owns live runs, kl2.exe is running, not mine):
-- Per-map [Bots.<F>] hook (d3b6b6cc, 9347d05f): SHIP out_e5_1018zh 916c3c57, TEST zi da0e9d2c. With [Bots] PerMap=1 the six L78 keys can go under [Bots.DM05A] = Last Call only (re/adopt_list.md s7). Queued as 3f (h), last.
-- Online audit re/hook_netcode_audit.md (0573de0b, static, fact-checked):
-  - Top risk: klslot.c picks the map from the local menu page, so a joiner can load another map than the host.
-  - klrappel has no online guard.
-  - Gameplay modules are Arcade-only.
-- Workflow wz9np7zdg: design for host-chosen map + build check (re/private_match_mapsync.md, research only).
-Owner: git push origin rtp-schemas:main (56 ahead). Disk C: 2.7 GB free.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
