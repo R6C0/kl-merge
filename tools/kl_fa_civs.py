@@ -24,6 +24,10 @@ others; 'more gritty and brutal'.
       --avoid-bounds [--bounds-margin M=150]   plan/build: no civilian, flee point or straight run line within M of a LevelBound kill box (2026-10-18:
                                           Last Call's StreetLeft/StreetRight bounds killed the scripted player next to civilians 002/009/004;
                                           M is a GUESS). check --play FAILs a civilian or flee point inside a box, or a straight run through one (margin 0).
+      --start-clear [M=150]               plan/build: no post whose run box (the --alert half extents + M, in x, z and y) would hold a START spawn
+                                          (2026-10-18, run N1018_L7: the 1200 boxes held 8-10 of 10 START spawns, so 20_RunToStreet fired at second 0 and
+                                          nobody was seen; M is a GUESS). check (ALWAYS, no flag; check-only, build outputs unchanged): FAIL when a START
+                                          spawn lies inside any civilian's tbCivRunToGate box (real place and half extents read from the built files).
       --play                              check: also apply the play-area rules (automatic when civs.json has 'play') and print a per-part census.
     python kl_fa_civs.py diff <folder> <out> [slot]        what the step changed; exit 1 if anything but the new nodes
     python kl_fa_civs.py selftest                          builds on a temp copy of a finished build (skips if none)
@@ -296,13 +300,15 @@ def cap_count(c, n, max_actors=CAP_ACTORS, max_squads=CAP_SQUADS):
     return max(0, min(n, max_actors - c['actors'], max_squads - c['squads']))
 
 
-def plan_places(B, n, centre=None, radius=None, seed=1, away=None, sep=SEP, flee=2, play=None, bounds=None):
+def plan_places(B, n, centre=None, radius=None, seed=1, away=None, sep=SEP, flee=2, play=None, bounds=None, start_clear=None, alert=1200.0):
     """n civilians placed on the build's own navigation mesh -> [civ dict] for add(). centre (x, y, z) and radius select
     the area (default radius None: the whole mesh part that holds most polygons, from the polygons' middles); places keep F.CLEAR from walls and `sep` from
     each other and from every actor already in the build (guards, bots).
     play (play_area() dict, new): the play part instead of the largest one, centre default = the start, radius default
     PLAY_RADIUS, places only within play['band'] of the start floor and within the radius of an anchor() (START spawn / guard / bot).
-    bounds (new, --avoid-bounds): a margin; no place and no flee point within it of a LevelBound box (bound_boxes)."""
+    bounds (new, --avoid-bounds): a margin; no place and no flee point within it of a LevelBound box (bound_boxes).
+    start_clear (new, --start-clear): a margin M; no place whose run box (half extents `alert`, + M; y 314 + M about post y + 300)
+    would hold a START spawn (start_points)."""
     rng = random.Random(seed)
     nav = F.Nav(B.scene.nav)
     parts = collections.Counter(nav.part[i] for i in range(len(nav.pv)) if nav.ok[i])
@@ -343,6 +349,7 @@ def plan_places(B, n, centre=None, radius=None, seed=1, away=None, sep=SEP, flee
     taken = [tuple(B.at(k)) for k in range(1, len(B.sc.nodes)) if B.sc.cls(k) == 'ZFFActor']
     near = anchors(B) if play is not None else None
     kill = bound_boxes(B) if bounds is not None else None
+    starts = start_points(B) if start_clear is not None else None
     out = []
     for c in cands:
         if len(out) >= n:
@@ -356,6 +363,9 @@ def plan_places(B, n, centre=None, radius=None, seed=1, away=None, sep=SEP, flee
             continue
         pos = (c[0], c[1], c[2])
         if bounds is not None and in_bound(B, kill, pos, bounds) is not None:
+            continue
+        if starts is not None and any(abs(s_[0] - pos[0]) <= alert + start_clear and abs(s_[2] - pos[2]) <= alert + start_clear
+                                      and abs(s_[1] - (pos[1] + 300.0)) <= 314.0 + start_clear for s_ in starts):
             continue
         if bounds is None:
             fl = flee_points(nav, pos, flee, away=away, rng=rng)
@@ -683,6 +693,7 @@ def check(folder, slot='F01', log=print, play=False):
             fails.append('%s: the run\'s NEXT is not the Deactivate modifier (%s)' % (path, nxt))
         if sum(1 for j in range(t, sc.end[t]) if sc.cls(j) == 'ZFFActor') != CIV_PER_SQUAD:
             fails.append('%s: more than %d actor in the squad' % (path, CIV_PER_SQUAD))
+    least = start_clearance(B, fails, notes)
     if play or rep.get('play'):
         play_check(B, rep, fails, notes)
         kill = bound_boxes(B)                       # LevelBound kill boxes: nobody may stand or flee into one (margin 0 here)
@@ -708,6 +719,36 @@ def check(folder, slot='F01', log=print, play=False):
     for x in notes:
         log('NOTE ' + x)
     return fails, notes
+
+
+def start_clearance(B, fails, notes):
+    """New rule (2026-10-18): no START spawn may lie inside a civilian's tbCivRunToGate box, else 20_RunToStreet fires at second 0.
+    Reads each box's real place and half extents from the built files (every ZBoxPrimitive named tbCivRunToGate). -> least clearance
+    (horizontal distance a START spawn is outside a box, x and z; negative = inside), None without spawns or boxes."""
+    sc = B.sc
+    starts = start_points(B)
+    boxes = []
+    for k in range(1, len(sc.nodes)):
+        if sc.cls(k) == 'ZBoxPrimitive' and sc.names[k] == 'tbCivRunToGate':
+            v = B.values(k)
+            boxes.append((k, tuple(abs(float(v['ZBoxPrimitive[%d]' % i])) for i in range(3))))
+    least = None
+    for k, h in boxes:
+        held = []
+        for s_ in starts:
+            q = B.local(k, s_)
+            d = max(abs(q[i]) - h[i] for i in range(3))
+            dh = max(abs(q[0]) - h[0], abs(q[2]) - h[2])          # the clearance reported is horizontal (y is always inside: 30 vs 0..628)
+            least = dh if least is None or dh < least else least
+            if d <= 0:
+                held.append(s_)
+        if held:
+            fails.append('%s: its run box (half %s, at %s) holds %d of %d START spawns, e.g. %s: the run would fire at second 0' % (
+                sc.path[sc.parent[k]].split('!', 1)[-1], tuple(round(x) for x in h), tuple(round(x) for x in B.at(k)), len(held), len(starts),
+                tuple(round(x) for x in held[0])))
+    if least is not None:
+        notes.append('START clearance: %d spawns, %d run boxes, least horizontal distance outside a box %.0f (negative = inside)' % (len(starts), len(boxes), least))
+    return least
 
 
 def play_check(B, rep, fails, notes):
@@ -841,6 +882,13 @@ def main():
     max_squads = _opt(a, '--max-squads', conv=int, default=CAP_SQUADS)
     play_chk = '--play' in a
     bounds = _opt(a, '--bounds-margin', default=BOUND_MARGIN) if '--avoid-bounds' in a else None
+    start_clear = None
+    if '--start-clear' in a:                            # optional margin: a number right after the flag
+        i = a.index('--start-clear')
+        start_clear = 150.0
+        if i + 1 < len(a) and re.fullmatch(r'-?\d+(\.\d+)?', a[i + 1]):
+            start_clear = float(a[i + 1]); del a[i + 1]
+        del a[i]
     a = [x for x in a if x not in ('--play-part', '--cap', '--play', '--avoid-bounds')]
     if model.isdigit():
         model = int(model)
@@ -852,7 +900,7 @@ def main():
     if cmd == 'plan':
         B = F.Built(a[0], a[1])
         area = play_area(B, F.Nav(B.scene.nav), play_band) if play_part else None
-        for c in plan_places(B, int(a[2]), centre, play_radius if play_part and radius is None else radius, seed, play=area, bounds=bounds):
+        for c in plan_places(B, int(a[2]), centre, play_radius if play_part and radius is None else radius, seed, play=area, bounds=bounds, start_clear=start_clear, alert=alert):
             print(c)
         return 0
     if cmd == 'build':
@@ -874,9 +922,9 @@ def main():
             play = dict(part=area['part'], centre=[round(v, 1) for v in (centre or area['centre'])], radius=play_radius if radius is None else radius,
                         band=play_band, y0=round(area['y0'], 1), source=area['source'])
             print('play area: part %s from %s, centre %s, radius %s, band %s' % (play['part'], play['source'], play['centre'], play['radius'], play_band))
-            civs = plan_places(B, n, centre, play['radius'], seed, play=area, bounds=bounds)
+            civs = plan_places(B, n, centre, play['radius'], seed, play=area, bounds=bounds, start_clear=start_clear, alert=alert)
         else:
-            civs = plan_places(B, n, centre, radius, seed, bounds=bounds)
+            civs = plan_places(B, n, centre, radius, seed, bounds=bounds, start_clear=start_clear, alert=alert)
         if len(civs) < n:
             print('NOTE: %d of %d places found' % (len(civs), n))
         add(src, out, civs, slot, model, alert, tree, max_prm_growth=(1 << 21) if model == HOST else 0, play=play)
