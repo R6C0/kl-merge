@@ -1,3 +1,9 @@
+2026-10-18 12:34 - OFFLINE (kl-merge-e5; 3f owns live runs, the owner is testing, so no live runs this hour). More opt-in work, none run in the game:
+- Vault door fallback vault-door-nocol (5d7f80ed): zip 54c2b946, .HVK only. NOT queued: live already opens the doorway (L60/L65).
+- Private match (ad1cbbf1, re/private_match.md; verify 11 held / 0 refuted): the FA start gate never checks map content for slots F01-F04/F06/F07, so a peer with another or no build loads their own slot silently. Every player needs the identical Maps build.
+- Retomoto kl_rt_joinini --margins (fc03915e): KLJoin.ini only, CrewHop.2 Radius 800, CrewHop.3 Height 250. Item 6 of 3f's queue.
+- AI heisters: workflow w77vrg004 is running (klmove VanCallNear f3eb8d3d, in review).
+3f's idle queue: Vault hide-parts, Park II nvs, Last Call msg, Hasta police, Last Call rtcops, DM09 margins. Owner: git push origin rtp-schemas:main.
 2026-10-18 12:18 - OFFLINE (kl-merge-e5; 3f owns live runs, the owner is testing the applied build): four opt-in test builds, none run in the game, all queued in 3f's idle queue (restore live after each):
 - Vault --van-hide-parts (kl_fa_bank 35d5df2a): bank-stage build e69d7a61 for the visit-1 A/B (EscVisitFix=0, EscVisitProbe=1; expected: 1e4 set at state 1).
 - Last Call --only-escape-msg (kl_club_roof a1ee3024): zip 5b0a025b = df719d34 + the stock escape-area text with the roof marker.

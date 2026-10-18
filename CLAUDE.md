@@ -188,6 +188,12 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-18 12:34 - OFFLINE (kl-merge-e5; 3f owns live runs, the owner is testing, so no live runs this hour). More opt-in work, none run in the game:
+- Vault door fallback vault-door-nocol (5d7f80ed): zip 54c2b946, .HVK only. NOT queued: live already opens the doorway (L60/L65).
+- Private match (ad1cbbf1, re/private_match.md; verify 11 held / 0 refuted): the FA start gate never checks map content for slots F01-F04/F06/F07, so a peer with another or no build loads their own slot silently. Every player needs the identical Maps build.
+- Retomoto kl_rt_joinini --margins (fc03915e): KLJoin.ini only, CrewHop.2 Radius 800, CrewHop.3 Height 250. Item 6 of 3f's queue.
+- AI heisters: workflow w77vrg004 is running (klmove VanCallNear f3eb8d3d, in review).
+3f's idle queue: Vault hide-parts, Park II nvs, Last Call msg, Hasta police, Last Call rtcops, DM09 margins. Owner: git push origin rtp-schemas:main.
 2026-10-18 12:18 - OFFLINE (kl-merge-e5; 3f owns live runs, the owner is testing the applied build): four opt-in test builds, none run in the game, all queued in 3f's idle queue (restore live after each):
 - Vault --van-hide-parts (kl_fa_bank 35d5df2a): bank-stage build e69d7a61 for the visit-1 A/B (EscVisitFix=0, EscVisitProbe=1; expected: 1e4 set at state 1).
 - Last Call --only-escape-msg (kl_club_roof a1ee3024): zip 5b0a025b = df719d34 + the stock escape-area text with the roof marker.
@@ -195,7 +201,6 @@ into every session and agent: it grew to 256 KB and made every session thrash).
 - Last Call --retomoto-rows (kl_map_ai 66f18056): zip 6903219f, 5 rifles accuracy 55->82.5. It makes the cops HARDER, so applying it is the owner's call.
 All reviewed CLEAN; default outputs byte-identical. Owner: git push origin rtp-schemas:main.
 2026-10-18 11:35 - OFFLINE (kl-merge-e5; 3f owns live runs and <DD> writes): HOT COFFEE II WALK-THROUGH DOORS LIVE: e5 built DM01B ea8cbc82 = the live 01749906 + kl_fa_v2_hc_route2 collonly (a post-pass: only the .HVK changes, 8/50/16/14 door triangles sunk; all other members and side files are byte-identical, check_passes 0 fail, klt_audit the same as 01749906); 3f verified and installed it (rollback DM01B.replaced-1018doors). With the overnight stack (hook a57d9ce7, ini ccec94fb) everything decided is live; the owner is testing. VISIT-1 CAUSE (static, re/escape_visit1.md c0125007): our builders' van hide/show is an ActivateGeom on the whole van group, which passes 'Activate' down to BoardingTrigger's EnterVehicle action; L53's no-van-hide build still had that show, so L53 does not refute it. Workflow wsri892nd: an opt-in kl_fa_bank --van-hide-parts (hide/show the van's parts, not the trigger) + Vault test build + review. Owner: git push origin rtp-schemas:main; C: 35G free.
-2026-10-18 12:00 - kl-merge-3f APPLIED LIVE (owner's "apply everything"): HOT COFFEE II walk-through doors installed: DM01B zip ea8cbc82 (e5: the live 01749906 + kl_fa_v2_hc_route2 collonly post-pass; I checked: only the .HVK member differs, every file beside the zip identical, klt_audit as 01749906). Rollback: owner_1018\Maps\DM01B.replaced-1018doors (01749906). With 11:50's hook a57d9ce7 + ini ccec94fb, everything decided overnight is now live; the owner is testing.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
