@@ -4246,6 +4246,46 @@ def vault_blow(folder, log=print):
     return {'door off': pieces, 'changed': changed}
 
 
+# VAULT_DOOR_NOCOL ('vault-door-nocol <folder> [--dry]', a .HVK-only post-step, opt-in, default builds untouched): VAULT_BLOW rests on ONE
+# assumption nobody has seen live (bank_campaign.md B3): that the DeactivateGeom of the door's body also takes its KEYFRAMED collision away.
+# If it does not, the vault is sealed after the blast (round-ending: nobody can loot, the bots cannot get out). This step does not depend on
+# the assumption: the door body's placements are taken out of the .HVK at build time (kl_escape.cut_collision, the way --vault-open and the
+# eleven route doors are), so the doorway can never stay solid. PRICE: the CLOSED door is not solid either (a human can step through the
+# picture of the door before the blast); bots are held by PathBlocker_Vault (nav), the loot stays hidden until the beat's timer, the blast
+# is a harmless show - so what a human gains is standing in the vault early. GUESS: that this is acceptable; use it only if the plain
+# blow build leaves the doorway solid in the game. Nothing else changes (.HVK member only).
+def vault_door_nocol(folder, dry=False, log=print):
+    """-> {'refs': [...], 'placements': n, 'hvk': (old, new bytes)}; writes the folder's zip unless dry. A second run finds no placement."""
+    import kl_fa_bots as F, kl_hvk, kl_escape
+    B = F.Built(folder, os.path.basename(archive_of(folder)).split('_Main')[0])
+    refs = set()
+    for p in (R + VAULT_BODY, R + VAULT_DOOR):
+        r = B.sc.resolve(p)
+        if not r:
+            raise ValueError('vault_door_nocol: %s is not in the level' % p)
+        refs.add(B.ents[r[0] - 1].ref)
+    name = B.ext['.HVK'] if '.HVK' in B.ext else B.ext['.hvk']
+    raw = B.files[name]
+    h = kl_hvk.Hvk(raw)
+    if h.serialize() != raw:
+        raise ValueError('vault_door_nocol: the .HVK does not round-trip; nothing written')
+    n = sum(1 for s in h.shapes for i in s.inst if kl_hvk.ref(i) in refs)
+    if n:
+        kl_escape.cut_collision(h, refs, log)
+        left = sum(1 for s in h.shapes for i in s.inst if kl_hvk.ref(i) in refs)
+        if left:
+            raise ValueError('vault_door_nocol: %d placements left' % left)
+    new = h.serialize() if n else raw
+    if n and not dry:
+        tmp = B.zp + '.tmp'
+        with zipfile.ZipFile(B.zp) as zi, zipfile.ZipFile(tmp, 'w') as zo:
+            for info in zi.infolist():
+                zo.writestr(info, new if info.filename == name else zi.read(info.filename), compress_type=info.compress_type)
+        os.replace(tmp, B.zp)
+    log('kl_fa_bank.vault_door_nocol %s: %d placement(s) under REF %s; .HVK %d -> %d bytes%s' % (folder, n, sorted(refs), len(raw), len(new), ' (dry)' if dry else ''))
+    return {'refs': sorted(refs), 'placements': n, 'hvk': (len(raw), len(new))}
+
+
 # WAVE_FALLBACK ('wave-fallback <src> <dst>', a .prp-only post-step; bank_opts.json 'wave_fallback'): the audit of 2026-10-18 (cops, escape-phase
 # pressure) found that waves B and D start only from boxes (the ante-room box for B, the hall's south-end box for D). A crew that leaves another way, or
 # never gets there (a quiet round, a slow human, a downed crew), meets no push at all. The fallback names Pace_B01 and Pace_D01 from a node that runs on
@@ -6491,6 +6531,8 @@ def main():
         hall_dash(a[1])
     elif len(a) == 2 and a[0] == 'vault-blow':
         vault_blow(a[1])
+    elif len(a) in (2, 3) and a[0] == 'vault-door-nocol':       # <folder> [--dry]: the door body's collision out of the .HVK (VAULT_DOOR_NOCOL)
+        vault_door_nocol(a[1], dry='--dry' in a)
     elif len(a) in (2, 3) and a[0] == 'wave-fallback':      # <src> [<dst>]: waves B and D also from the round clock (WAVE_FALLBACK)
         wave_fallback(a[1], a[2] if len(a) == 3 else None)
     elif len(a) == 4 and a[0] == 'van-nests':                # <src> <dst> off|keep=N: chain D (the street recess police) not started / cut after N waves (VAN_NESTS)
