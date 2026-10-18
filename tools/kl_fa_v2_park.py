@@ -14,7 +14,7 @@ No doors, no seal, no light show, seven bots (bots_step: kl_fa_bots + kl_fa_bots
 This module is the club's author layer (kl_fa_club.py) cut down to what a park needs, with the park's own tables. It holds the nine names
 of kl_graft.AUTHOR_NAMES. Every number marked GUESS is a guess; MEASURED ones come from the real files (re/campaign_v2_plan.md).
 Usage (from tools/):
-  python kl_fa_v2_park.py test <out> [--keep] [--plan plan.json] [--squads-awake] [--no-ai] [--no-police] [--no-music] [--no-civilians] [--no-van-hide] [--keep-faketarget] [--str PC_Def.str]
+  python kl_fa_v2_park.py test <out> [--keep] [--plan plan.json] [--squads-awake] [--no-ai] [--no-police] [--no-music] [--no-civilians] [--no-van-hide [--no-van-show]] [--keep-faketarget] [--str PC_Def.str]
   python kl_fa_v2_park.py civilians <finished folder> <new folder> [n]   the post-step (after the gun-sound step)
   python kl_fa_v2_park.py plan <bare-folder> <plan.json>      the van's plan from a built bare graft
   python kl_fa_v2_park.py check <folder> | van-check <folder> | finish <folder>
@@ -48,6 +48,10 @@ VAN_HIDE = True
 # (Vault, Park, Hot Coffee: [rules+0x1e4] 0) is a van build without it; no code path from it to [rules+0x1e0]
 # was found. The trade-off: the owner had it removed because police shoot at the van.
 KEEP_FAKETARGET = False
+# --no-van-show (only with --no-van-hide): 'van on' gets an empty target list, so nothing ever runs ActivateGeom
+# on the van group. A/B for e5's GUESS (re/escape_visit1.md): ActivateGeom on the whole van group passes
+# 'Activate' to the BoardingTrigger's EnterVehicle action, which sets [rules+0x1e0] at state 0 on visit 1.
+VAN_SHOW = True
 
 # what the campaign pre-pass drops from M06_A: the level bound at the stairs' bottom (it would punish the way up), the exit cutscene
 M_DROP = ('Specials!LevelBound!LevelBound_StairsBottom!*', 'Locations/M06_A/M06A_Exit_Cutsequence_01a.zip')
@@ -623,7 +627,7 @@ def wire(sc, log=print):
     # the stairs' foot: the last squads, the alarm (the van's timer) and the gate (the police on the ring)
     lists('floor box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['floor'] + [R + ROLE['van timer'], ways[0]])
     lists('backstop', 'TriggerDelay2', f0=BACKSTOP_AT, f4=[ways[1], R + ROLE['van timer']])
-    lists('van on', 'ActivateGeom', f0='AITrigger', f1=[van_path()])
+    lists('van on', 'ActivateGeom', f0='AITrigger', f1=[van_path()] if VAN_SHOW else [])
     lists('van timer', 'TriggerDelay2', f0=VAN_DELAY, f4=[R + ROLE['van on'], R + ROLE['speak']] + alarm)
     lists('reset hide', 'DeactivateGeom', f0='AITrigger', f1=[van_path()])
     k = node(ROLE['monitor'])
@@ -929,7 +933,7 @@ def load_plan(folder):
 
 
 def main():
-    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, STREAM, MUSIC, CIVILIANS, VAN_HIDE, KEEP_FAKETARGET
+    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, STREAM, MUSIC, CIVILIANS, VAN_HIDE, KEEP_FAKETARGET, VAN_SHOW
     a = sys.argv[1:]
     if len(a) >= 2 and a[0] == 'test':
         NO_AI = '--no-ai' in a
@@ -939,6 +943,9 @@ def main():
         CIVILIANS = CIVILIANS if '--no-civilians' not in a else 0
         VAN_HIDE = '--no-van-hide' not in a
         KEEP_FAKETARGET = '--keep-faketarget' in a
+        VAN_SHOW = '--no-van-show' not in a
+        if not VAN_SHOW and VAN_HIDE:
+            sys.exit('--no-van-show needs --no-van-hide (a hidden van would never appear)')
         if '--str' in a:
             STREAM = os.path.abspath(a[a.index('--str') + 1])
             BK.use_stream(STREAM)
