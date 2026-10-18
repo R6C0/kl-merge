@@ -464,3 +464,165 @@ Steam allows one instance per account, so a single PC cannot test the netcode. `
 **Logs to compare:** `net: session`, `net: server object` (the level index is `[D+0x1b0]^0xac`), `net: lobby`, `net: level ... NOT stock`, the klslot redirect lines, the klsteam block lines, `KLHook.log`, and any `KLHook_N.dmp` or `kl2_490_crash_*.mdmp`. Note the first desync symptom (a door, loot or vehicle that differs).
 
 **Still open after this plan:** who simulates ZFFActor, where RMCReceiveHit is dispatched, the caller of slot 194 on a client, the id space of the wire refs, the origin of join code 3, host migration, and whether the CEG checks reject a patched exe.
+
+## 2026-10-18: net roles, client escape, hit pricing
+
+Static disassembly of `kl2.exe` only. Nothing was launched and no repo files were written. Each claim from the first draft was re-read against the exe. Corrections are marked **CORRECTED**. Items I could not reproduce are marked **GUESS**.
+
+### 1. Role helpers on `[sm+0x54]` (sm = `[0x168e598]`)
+
+| Helper | Role 0 | Role 1 | Role 2 | Role 3 | Role 4 and up |
+|---|---|---|---|---|---|
+| 0x863a60 | false | false | true | true | false |
+| 0x4b0a40 | false | false | false | true | false |
+| 0x8df480 | `[sm+0x5c]==4` | `[sm+0x5c]==4` | true | false | `[sm+0x5c]==4` |
+| 0x7f6850 | `[sm+0x5c]==4` | `[sm+0x5c]==4` | false | false | `[sm+0x5c]==4` |
+
+- **FACT, tables re-read:**
+  - 0x863a60 uses the jump table at 0x863a78 (roles 0 and 1 go to `xor al,al`, roles 2 and 3 to `mov al,1`). It means "networked".
+  - 0x4b0a40 is `cmp [ecx+0x54],3; sete`.
+  - The 0x8df480 table is at 0x8df4a8. Roles 2 and 3 fall into `cmp [ecx+0x54],2; sete`.
+  - The 0x7f6850 table is at 0x7f6874. Roles 0 and 1 answer yes, roles 2 and 3 answer no.
+- **CORRECTED, 0x8df480 caveat:** its role 2/3 branch compares `[ecx+0x54]`, using the caller's `ecx`, not the `edx` it loaded from the session manager. It is correct only if the caller passes `ecx=sm`. The "role 3 false" cell assumes that.
+- **CORRECTED, "only code that tests role == 2":** this is false.
+  - 0x83da50 is a separate, real helper (`xor eax,eax; cmp [ecx+0x54],2; sete al; ret`). It has 0 direct callers, so it is probably called through vtables or pointers.
+  - 0x8df4a0 is the fall-through inside 0x8df480.
+  - 0x4649a5 only looked like a match. It compares offset 0x254 of another object.
+- **CORRECTED, caller counts.** Direct `call rel32` counts:
+
+  | Helper | Direct callers |
+  |---|---|
+  | 0x863a60 | 350 (not ~480) |
+  | 0x4b0a40 | 59 |
+  | 0x8df480 | 239 |
+  | 0x7f6850 | 291 |
+
+  Any indirect calls would be extra. The statement that role 3 is tested all over the code stands. `re/private_match.md` is wrong to say "nothing ever acts on role 3".
+- **Role setter 0x74b210 (FACT):** `SetNetRole(this=sm, role)`.
+  - It returns early if the role is unchanged.
+  - Role 0 clears `[sm+0x5c]` and `[sm+0x58]`.
+  - Role 1 sets `[sm+0x58]=1`.
+  - Other roles only write `[sm+0x54]`.
+- **CORRECTED, call sites.** There are 26 direct calls. The role argument below is the nearest `push imm` before the call, so treat it as a heuristic.
+
+  | Role | Sites |
+  |---|---|
+  | 0 | 0x4483b8, 0x473b93, 0x700b2c, 0x92a19b |
+  | 1 | 0x4ccf86, 0x627df4, 0x741381, 0x8734ab, 0x8734bf, and 0x7d0c02 (push is far back, unclear) |
+  | 2 | 0x77e309, 0x77e369, 0x7ba9b0, 0x81ff3a, 0x92a260, 0x92a48f |
+  | 3 | 0x43d47f, 0x448216, 0x473b4d, 0x643f79, 0x700a52, 0x80782b |
+
+  - The draft listed only one site for role 2 and four for role 1.
+  - 0x873453 is a direct write `[esi+0x54]=3` in the code that handles the `StartAsClient` string (0xb622c8). It does not go through the setter.
+  - In the same function, the `StartAsCoop`, `EnableCoop` and `StartAsSinglePlayer` strings lead to role 1 (0x8734ab and 0x8734bf).
+- **CORRECTED, `MercsGameMode` function (string 0xb61e38, read at 0x7ba96b):**
+  - A local `ebp==0` pushes 1 and sets role 1, after calling 0x64e4f0 with 1.
+  - `ebp==1` or `ebp==2` sets role 2, after calling 0x64e4f0 with 2 or 3.
+  - 0x64e4f0 compares and sets `[sm+0x58]`, not `[sm+0x5c]`. The draft said this function only sets role 2.
+- **0x700a50 (FACT):** `push 3` followed by `call 0x74b210`. `[sm+0x1a3]=1` is set just before it, and a byte at `+0x1a2` is set through another register just before that (that register is not visibly the same object).
+- **0x905460 (CORRECTED):** this is a membership test on `[sm+0x70]`, not a plain range test. It returns true for states 0x17, 0x18, 0x19, 0x1b to 0x21, 0x28, 0x2a and 0x2b. It returns false for 0x1a, 0x22 to 0x27, 0x29, and anything outside 0x17..0x2b. (Table at 0x905488 and jump table at 0x905480; byte 0 means true.)
+- **GUESS:** the word "host" for role 2 and "local" for roles 0 and 1. The helper semantics are FACT.
+- **GUESS:** treating `[sm+0x5c]==4` as "game type FA". The value 4 is FACT, the name is not.
+
+### 2. FragileAlliance rules slot 194
+
+- **Vtable slots (FACT, found by scanning .rdata):**
+  - 0x5b1410 sits at slot 194 of the FA base class (vtable 0xbd2b9c) and of `ZGameRulesFragileAllianceCl` (vtable 0xbd31e4, entry at 0xbd34ec).
+  - 0x51e390 sits at slot 194 of `ZGameRulesFragileAllianceSv` (vtable 0xbd2eb4).
+  - Sv slot 195 is 0x727610, Cl slot 195 is 0x7a30c0, and Heist slot 195 is 0x55ec70.
+- **0x5b1410 is `SetState(byte)` (FACT).**
+  - It stores the new state in `[rules+0x1dc]`.
+  - State 0 clears `[rules+0x1e0]`.
+  - Otherwise, if `[rules+0x1e0]==0`, it calls slot 89 (+0x164). That is the gate at 0x5b144a.
+  - It then switches on states 0 to 7 (table at 0x5b19c0).
+- **Sv wrapper 0x51e390 (FACT):**
+  - It calls 0x5b1410, then calls 0x4b8960 with `ecx=[rules+0x2c]` and the state byte. 0x4b8960 operates on score+0x38c / +0x390.
+  - It then calls 0x84f030 on the same object with 0 when the state is 0 or 7. The draft missed this.
+  - The only direct `call 0x5b1410` in the exe is at 0x51e398. Every other caller goes through `[vtbl+0x308]`.
+  - **GUESS:** that the score object is the DDL `ZScoreFragileAlliance`.
+- **Sv per-frame update 0x727610 (FACT):** it is the timer driver.
+  - It is skipped while `[0x168ea6c]` is non-zero.
+  - It ticks `[rules+0x1d8]`, switches on `[rules+0x1dc]-1`, and calls `[vtbl+0x308]` at 0x7276d4, 0x727743, 0x7277a4, 0x7277d5 and 0x72782e.
+  - At 0x7276d4 it pushes 3 if the state is 1, otherwise 4.
+- **Cl per-frame update 0x7a30c0 (FACT):** it has the same timer tick and state switch, but contains no `[vtbl+0x308]` call. An exe-wide sweep of `mov reg,[reg+0x308]` found 71 sites, none inside it.
+  - Its state-1 case calls `+0x2fc` and conditionally 0x8830f0 on `[rules+0x1e4]`.
+  - **GUESS:** `+0x2fc` is a warning or HUD tick.
+- **Conclusion (GUESS built on FACT):** a client does not advance the escape state from its own timer. The server drives it and the client gets the state some other way, perhaps through the score object. The client path was not found.
+- **Vtable slots of the other slot-194 callers (CORRECTED).** The draft's "Cl[290]", "Cl[298]", "Cl[207]", "Base[27]" and similar numbers do not exist. The `ZGameRulesFragileAllianceCl` vtable has only about 204 slots, and the higher addresses belong to the `ZGameRulesHeist` vtable at 0xbd3514. Correct entries:
+
+  | Function | Slot | What it does |
+  |---|---|---|
+  | 0x6df7d0 | Heist[86] | `SetState(byte [[this+0x5f8]+0x54])` (FACT) |
+  | 0x6a1100 | Heist[94] | |
+  | 0x4f9f90 | Heist[82] | |
+  | 0x4fb620 | Heist[3] | |
+  | 0x51bbe0 | Heist[4] | |
+  | 0x839380 | Sv[94] | |
+  | 0x508880 | Sv[82] | |
+  | 0x717140 | Sv[3] | |
+  | 0x5b59d0 | FA base[3] | |
+  | 0x8c4df0 | Cl[3] | |
+
+  Each of these contains a `[vtbl+0x308]` call site (0x6df7dc, 0x6a114a, 0x4fa2c8, 0x4fb626, 0x51bc27, 0x8393c8, 0x508eb3, 0x717148, 0x5b59d6 and 0x8c4dfb).
+- **Not re-verified, GUESS:**
+  - The identity of the object at `[this+0x5f8]` is unidentified.
+  - The "pushes 6 in a message handler" readings.
+  - What calls those slots on a client.
+  - "Cl[290] is probably the client's state sync" is withdrawn, because that slot does not exist.
+- **GUESS:** a host-only fix to the "visit 1" bug may not change what a client does. Both sides run the same 0x5b1410 gate.
+
+### 3. RMCReceiveHit
+
+- **Strings (FACT):**
+
+  | String | Address |
+  |---|---|
+  | `RMCReceiveHit` | 0xb6a610 |
+  | `RMCSetDamageDealer` | 0xb5657c |
+  | `RMCReceiveCloseCombat` | 0xb38b70 |
+  | `RMCRemoteShotActivateApplyDamage` | 0xb38cd0 |
+  | `RMCUpdateHitPoints` | 0xb80a34 |
+  | `RMCAnnounceFAEscapeVehicleArrived` | 0xb23850 |
+  | `RMCAnnounceFAEscape` | 0xb65418 |
+  | `RMCHoldEscapeVehicle` | 0xb5ce0c |
+  | `RMCResetEscapeVehicle` | 0xb1e230 |
+  | `RMCAnnounceFALastPlayerEscaped` | 0xb57be8 |
+
+  The `.data` copies are at 0xd24291 and 0xd242aa. The draft's 0xd26029 was not found. Treat the "RTTI-like name copies" description as unverified.
+- **CORRECTED, references to the name:** the `push 0xb6a610` instructions are at 0x4b0fc7, 0x639c8c, 0x71318c and 0x80aa93. The draft listed the operand address, one byte higher. Whether these are the registration and send builders is GUESS. 0x639c8c is confirmed as the sender.
+- **Sender 0x639c80 (CORRECTED):** it has 6 arguments (`ret 0x18`) and one caller, 0x807373.
+  - It writes four fields with 0x950dd0 (sizes 2, 1, 2 and 2), one value with 0x951020, and then sends with 0x953890.
+  - It does not write six fields with 0x950dd0.
+  - The payload is {word, byte, word, int16, byte}.
+- **Wrapper 0x807220 (FACT):** 5 stack arguments, `ret 0x14`.
+  1. It returns doing nothing if `0x905460(sm)` is false or `[sm+0x15d]==0`.
+  2. If 0x9425a0(this) is true, it takes the local path. It rebuilds a hit struct, zeroes the float fields, converts the signed 16-bit argument 4 to a float with `fild`, and calls `[[this+0x2a0]+0x698]`.
+  3. Otherwise it sends `RMCReceiveHit` through 0x639c80. If the send returns 0, it calls 0x89e080 (an error path, GUESS).
+  - Its only direct callers are 0x4b56b1 (inside 0x4b5690) and 0x6821bc. 0x4b5690 calls it with a plain `call`, not a tail call.
+- **0x9425a0 (CORRECTED).**
+  - If the owner id `[this+0x14]` is 0, it returns false. The draft said true.
+  - Otherwise it looks up the local peer id with 0x94bc10. If that lookup yields 0, it returns true. If not, it returns `owner == local`.
+- **Dispatcher 0x69f900 (CORRECTED, more branches than the draft said):**
+  - It has no direct callers (virtual).
+  - If 0x863a60(sm) is false, or `[this+0x821]!=0`, it runs `[vtbl+0x698]` locally.
+  - Otherwise it calls `[vtbl+0x3d0]`. If that is true, it runs the local handler, unless 0x86a150 is true and 0x86f0c0 is also true, in which case it does nothing.
+  - If `[vtbl+0x3d0]` is false, it reads the shooter at `[hit+0]`.
+    - Depending on 0x7aace0 and 0x7de570 checks of the shooter's `[+0x274c]` and of `[this+0x8d8]`, it drops the hit, runs it locally, or sends.
+    - The send goes through 0x4b5690 and then 0x807220, with this packet:
+      - `[hit+0]` and `[hit+0xc]` compressed through 0x6ece90;
+      - bytes `[hit+4]` and `[hit+8]`;
+      - two floats `[hit+0x2c]` and `[hit+0x28]` quantised to 16 bits through 0xa8d330 (the first call also takes the byte `[hit+0x30]`).
+  - What 0x3d0, 0x86a150, 0x86f0c0 and 0x7de570 mean is not decoded.
+- **Where damage is priced: still GUESS, the draft's conclusion is withdrawn.**
+  - FACT: the message carries only one 16-bit signed number that becomes a float in the receiver's hit struct. The other floats are zeroed on the local path.
+  - Neither "victim's owner prices it" nor "shooter prices it" is established. The 16-bit value could be damage or a force.
+  - **GUESS:** the remote handler `[vtbl+0x698]` runs on the machine for which `0x9425a0` is true.
+  - **GUESS:** bot ownership. Probably the host, as the notes already assumed.
+  - Both `private_match.md` claims, "priced on the shooter's machine" and "priced by the victim's owner", stay unproven.
+
+### Next steps
+
+- Decode the `[hit+0x28]`, `[hit+0x2c]` and `[hit+0x30]` meanings by reading what handler 0x698 does with the struct, to learn what the int16 means.
+- Find who calls Heist[86] (0x6df7d0) and what `[this+0x5f8]` is.
+- Find how a client receives the escape state, since its slot-195 update does not advance it. Look at what the score object triggers.
+- `klh_net_role()` can call 0x863a60 and 0x4b0a40 with `ecx=[0x168e598]`. Call 0x8df480 with `ecx=sm` too.
