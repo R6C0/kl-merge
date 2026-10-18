@@ -13,7 +13,15 @@ others; 'more gritty and brutal'.
     python kl_fa_civs.py build <folder> <slot> <out> <N> [--centre x y z --radius R --model auto|F07|<chunk>
                                                           --alert R --no-tree --seed S]
                                                           plan + write + every check of this module; exit 1 on a FAIL
-    python kl_fa_civs.py check <folder> [slot]             this module's rules on a folder made by build; exit 1 on a FAIL
+    python kl_fa_civs.py check <folder> [slot] [--play]    this module's rules on a folder made by build; exit 1 on a FAIL
+    NEW FLAGS (2026-10-18; without them every output is byte-identical to before; GUESS = a value not measured):
+      --play-part [--play-radius R=2000 --play-band H=400]   plan/build: the mesh part of the START spawns (else the part with most
+                                          guards/bots) instead of the largest; centre = the start; places only within R of the centre AND of a
+                                          spawn/guard/bot, within H of the start floor; written to civs.json 'play'. R 1500..2500 is a GUESS.
+                                          Why: the largest part of Last Call is the street network at y~220, not the club (2026-10-18).
+      --cap [--max-actors 99 --max-squads 55]   build: N is cut so actors/squads of the result stay under the caps (each civilian is 1 actor
+                                          and 1 squad); 0 left = nothing written, exit 3. 99/55 is a GUESS (the largest build that ran live).
+      --play                              check: also apply the play-area rules (automatic when civs.json has 'play') and print a per-part census.
     python kl_fa_civs.py diff <folder> <out> [slot]        what the step changed; exit 1 if anything but the new nodes
     python kl_fa_civs.py selftest                          builds on a temp copy of a finished build (skips if none)
 
@@ -159,14 +167,110 @@ def flee_points(nav, post, k=2, lo=FLEE_MIN, hi=FLEE_MAX, away=None, rng=None):
     return [(c[0], c[1], c[2]) for c, _a in out]
 
 
-def plan_places(B, n, centre=None, radius=None, seed=1, away=None, sep=SEP, flee=2):
+# ------------------------------------------------------------------ the play area (flags --play-part / --cap; default builds do not use it)
+PLAY_RADIUS = 2000.0                         # GUESS (1500..2500): how far from the spawn / a guard / a bot a civilian may stand
+PLAY_BAND = 400.0                            # GUESS: half height of the y-band around the start floor (one floor, not the one above)
+CAP_ACTORS, CAP_SQUADS = 99, 55              # GUESS: the largest build that ran live (kl_fa_bank.ACTORS_LIVE); not a measured engine limit
+
+
+def start_points(B):
+    """World places of the ZSpawnPoint nodes of the round's START row (kl_fa.START)."""
+    sc, out = B.sc, []
+    for k in range(1, len(sc.nodes)):
+        if sc.cls(k) == 'ZSpawnPoint' and any(isinstance(x, str) and x == kl_fa.START for x in kl_fa.node_values(sc, k)):
+            out.append(tuple(B.at(k)))
+    return out
+
+
+def anchors(B):
+    """Places a civilian should be near to be seen: the START spawns and every actor that is not a civilian (guards, bots)."""
+    sc = B.sc
+    out = list(start_points(B))
+    for k in range(1, len(sc.nodes)):
+        if sc.cls(k) == 'ZFFActor' and not kl_fa.has(sc, k, 'ZCivilian'):
+            out.append(tuple(B.at(k)))
+    return out
+
+
+def play_area(B, nav, band=PLAY_BAND):
+    """-> dict(part, centre, y0, source): the mesh part of the round's start (the START spawns float ~100 above the floor, as
+    kl_fa_bots.stations looks for it), else the part holding most non-civilian actors. centre = the mean START place (or the
+    mean of those actors), y0 = the floor under it."""
+    starts = start_points(B)
+    parts, floors = collections.Counter(), {}
+    for p in starts:
+        hit = nav.at(p[0], p[1], p[2], lo=p[1] - 260.0, hi=p[1] + 40.0)
+        if hit:
+            parts[nav.part[hit[0]]] += 1
+            floors.setdefault(nav.part[hit[0]], []).append((p, hit[1]))
+    if parts:
+        part = parts.most_common(1)[0][0]
+        pts = [p for p, _h in floors[part]]
+        centre = tuple(sum(p[i] for p in pts) / len(pts) for i in range(3))
+        y0 = sum(h for _p, h in floors[part]) / len(floors[part])
+        return dict(part=part, centre=centre, y0=y0, band=band, source='START spawn')
+    sc, acts = B.sc, []
+    for k in range(1, len(sc.nodes)):
+        if sc.cls(k) == 'ZFFActor' and not kl_fa.has(sc, k, 'ZCivilian'):
+            p = tuple(B.at(k))
+            hit = nav.at(p[0], p[1], p[2], dy=300.0)
+            if hit:
+                acts.append((nav.part[hit[0]], p, hit[1]))
+    if not acts:
+        raise ValueError('no START spawn and no actor stands on the navigation mesh: no play area')
+    part = collections.Counter(a[0] for a in acts).most_common(1)[0][0]
+    pts = [a for a in acts if a[0] == part]
+    centre = tuple(sum(a[1][i] for a in pts) / len(pts) for i in range(3))
+    return dict(part=part, centre=centre, y0=sum(a[2] for a in pts) / len(pts), band=band, source='most actors')
+
+
+def part_census(B, nav, play=None):
+    """-> {part: dict(polygons, actors, civilians, starts)} and, for every civilian, her part and distance to the start."""
+    sc = B.sc
+    rows = collections.defaultdict(lambda: dict(polygons=0, actors=0, civilians=0, starts=0))
+    for i in range(len(nav.pv)):
+        if nav.ok[i]:
+            rows[nav.part[i]]['polygons'] += 1
+    civ = []
+    for k in range(1, len(sc.nodes)):
+        if sc.cls(k) != 'ZFFActor':
+            continue
+        p = tuple(B.at(k))
+        hit = nav.at(p[0], p[1], p[2], dy=300.0)
+        part = nav.part[hit[0]] if hit else None
+        if kl_fa.has(sc, k, 'ZCivilian'):
+            rows[part]['civilians'] += 1
+            civ.append(dict(node=sc.names[sc.parent[k]], part=part, pos=p,
+                            d_start=(math.hypot(p[0] - play['centre'][0], p[2] - play['centre'][2]) if play else None)))
+        else:
+            rows[part]['actors'] += 1
+    for p in start_points(B):
+        hit = nav.at(p[0], p[1], p[2], lo=p[1] - 260.0, hi=p[1] + 40.0)
+        rows[nav.part[hit[0]] if hit else None]['starts'] += 1
+    return dict(rows), civ
+
+
+def cap_count(c, n, max_actors=CAP_ACTORS, max_squads=CAP_SQUADS):
+    """How many of n civilians fit under the caps given census c (each adds one actor and one squad); never negative."""
+    return max(0, min(n, max_actors - c['actors'], max_squads - c['squads']))
+
+
+def plan_places(B, n, centre=None, radius=None, seed=1, away=None, sep=SEP, flee=2, play=None):
     """n civilians placed on the build's own navigation mesh -> [civ dict] for add(). centre (x, y, z) and radius select
     the area (default radius None: the whole mesh part that holds most polygons, from the polygons' middles); places keep F.CLEAR from walls and `sep` from
-    each other and from every actor already in the build (guards, bots)."""
+    each other and from every actor already in the build (guards, bots).
+    play (play_area() dict, new): the play part instead of the largest one, centre default = the start, radius default
+    PLAY_RADIUS, places only within play['band'] of the start floor and within the radius of an anchor() (START spawn / guard / bot)."""
     rng = random.Random(seed)
     nav = F.Nav(B.scene.nav)
     parts = collections.Counter(nav.part[i] for i in range(len(nav.pv)) if nav.ok[i])
-    if centre is None:
+    if play is not None:
+        part = play['part']
+        if centre is None:
+            centre = play['centre']
+        if radius is None:
+            radius = PLAY_RADIUS
+    elif centre is None:
         part = parts.most_common(1)[0][0]
         i = nav.nearest((0, 0, 0), part)
         centre = tuple(nav.mid[i])
@@ -175,6 +279,11 @@ def plan_places(B, n, centre=None, radius=None, seed=1, away=None, sep=SEP, flee
         if not hit:
             raise ValueError('the centre %s is off the mesh' % (centre,))
         part = nav.part[hit[0]]
+    if play is not None:
+        hit = nav.at(centre[0], play['y0'], centre[2], dy=play['band'], part=part)
+        if not hit:
+            raise ValueError('the centre %s is off the play part %s' % (centre, part))
+        centre = (centre[0], hit[1], centre[2])
     if radius is None:                              # the whole part: the polygons' middles and points half way to their corners
         cands = []
         for i in range(len(nav.pv)):
@@ -190,10 +299,14 @@ def plan_places(B, n, centre=None, radius=None, seed=1, away=None, sep=SEP, flee
         cands = nav.around(centre, radius, part, step=100.0, dy=600.0)
     rng.shuffle(cands)
     taken = [tuple(B.at(k)) for k in range(1, len(B.sc.nodes)) if B.sc.cls(k) == 'ZFFActor']
+    near = anchors(B) if play is not None else None
     out = []
     for c in cands:
         if len(out) >= n:
             break
+        if play is not None and (abs(c[1] - play['y0']) > play['band']
+                                 or not any(math.hypot(c[0] - a[0], c[2] - a[2]) <= radius for a in near)):
+            continue
         if nav.clearance(c[0], c[1], c[2]) < F.CLEAR:
             continue
         if any(math.hypot(c[0] - o[0], c[2] - o[2]) < sep for o in taken + [x['pos'] for x in out]):
@@ -305,7 +418,7 @@ def append_model(B, prm_bytes, log=print):
 
 
 # ------------------------------------------------------------------ writing
-def add(src, dst, civs, slot='F01', model='auto', alert=1200.0, tree=True, max_prm_growth=0, seal=True, log=print):
+def add(src, dst, civs, slot='F01', model='auto', alert=1200.0, tree=True, max_prm_growth=0, seal=True, log=print, play=None):
     """Write the civilians into a copy of the finished build `src` in the new folder `dst` -> report dict."""
     import kl_graft, kl_prmgraph as G, kl_texmat as T
     B = F.Built(src, slot)
@@ -453,6 +566,8 @@ def add(src, dst, civs, slot='F01', model='auto', alert=1200.0, tree=True, max_p
     rep = collections.OrderedDict(source=B.folder, out=dst, civilians=facts, model=model, entities_added=len(order), entities=len(ents),
                                   slot_ids_moved=moved, groups_listed_in_root_tree_3=listed, prm_roots_repointed=repointed,
                                   members_changed=changed, prm_growth=growth, big_before=before, big_after=after, model_append=prm_report, sealed=sealed)
+    if play is not None:                                    # only with --play-part: the rules check() then applies
+        rep['play'] = play
     with open(os.path.join(dst, 'civs.json'), 'w') as f:
         json.dump(rep, f, indent=1, default=str)
     log('written %s: %d civilians, %d entities added; members changed: %s; %d slot ids renumbered, %d groups listed, '
@@ -461,7 +576,7 @@ def add(src, dst, civs, slot='F01', model='auto', alert=1200.0, tree=True, max_p
 
 
 # ------------------------------------------------------------------ the check
-def check(folder, slot='F01', log=print):
+def check(folder, slot='F01', log=print, play=False):
     """This module's rules on a folder made by add() -> (fails, notes). Reads civs.json for the civilians' names."""
     fails, notes = [], []
     B = F.Built(folder, slot)
@@ -520,12 +635,48 @@ def check(folder, slot='F01', log=print):
             fails.append('%s: the run\'s NEXT is not the Deactivate modifier (%s)' % (path, nxt))
         if sum(1 for j in range(t, sc.end[t]) if sc.cls(j) == 'ZFFActor') != CIV_PER_SQUAD:
             fails.append('%s: more than %d actor in the squad' % (path, CIV_PER_SQUAD))
+    if play or rep.get('play'):
+        play_check(B, rep, fails, notes)
     log('%d civilians checked: %d FAIL, %d NOTE' % (len(rep['civilians']), len(fails), len(notes)))
     for x in fails:
         log('FAIL ' + x)
     for x in notes:
         log('NOTE ' + x)
     return fails, notes
+
+
+def play_check(B, rep, fails, notes):
+    """The play-area rules (only with check(play=True) or a civs.json made with --play-part): every civilian stands on the
+    play part (the part of the START spawns), within the band of the start floor, within the radius of the centre (the start by
+    default) and of an anchor (START spawn / guard / bot). Adds a per-part census to the notes."""
+    pl = rep.get('play') or {}
+    radius, band = float(pl.get('radius', PLAY_RADIUS)), float(pl.get('band', PLAY_BAND))
+    nav = F.Nav(B.scene.nav)
+    area = play_area(B, nav, band)
+    centre = tuple(pl.get('centre') or area['centre'])
+    rows, civ = part_census(B, nav, dict(area, centre=centre))
+    notes.append('play part %s (from %s), start %s, floor y %.0f, radius %.0f, band %.0f' % (
+        area['part'], area['source'], tuple(round(v) for v in centre), area['y0'], radius, band))
+    for part in sorted(rows, key=lambda q: (q is None, q)):
+        r = rows[part]
+        notes.append('part %s%s: %d polygons, %d actors, %d civilians, %d START spawns' % (
+            part, ' (PLAY)' if part == area['part'] else '', r['polygons'], r['actors'], r['civilians'], r['starts']))
+    near = anchors(B)
+    ds = []
+    for c in civ:
+        p, d = c['pos'], c['d_start']
+        ds.append(d)
+        if c['part'] != area['part']:
+            fails.append('%s: on mesh part %s, the play part is %s' % (c['node'], c['part'], area['part']))
+        if d > radius + 1e-3:
+            fails.append('%s: %.0f from the centre (radius %.0f)' % (c['node'], d, radius))
+        if abs(p[1] - area['y0']) > band + 1e-3:
+            fails.append('%s: y %.0f is %.0f from the start floor (band %.0f)' % (c['node'], p[1], abs(p[1] - area['y0']), band))
+        if not any(math.hypot(p[0] - a[0], p[2] - a[2]) <= radius + 1e-3 for a in near):
+            fails.append('%s: no spawn, guard or bot within %.0f' % (c['node'], radius))
+    if ds:
+        ds.sort()
+        notes.append('civilians: %d, distance to the start min %.0f median %.0f max %.0f' % (len(ds), ds[0], ds[len(ds) // 2], ds[-1]))
 
 
 def diff(src, dst, slot='F01', log=print):
@@ -617,6 +768,14 @@ def main():
     model = _opt(a, '--model', conv=str, default='auto')
     tree = '--no-tree' not in a
     a = [x for x in a if x != '--no-tree']
+    play_part = '--play-part' in a                       # new flags; none given = the old behaviour, byte for byte
+    play_radius = _opt(a, '--play-radius', default=PLAY_RADIUS)
+    play_band = _opt(a, '--play-band', default=PLAY_BAND)
+    cap = '--cap' in a
+    max_actors = _opt(a, '--max-actors', conv=int, default=CAP_ACTORS)
+    max_squads = _opt(a, '--max-squads', conv=int, default=CAP_SQUADS)
+    play_chk = '--play' in a
+    a = [x for x in a if x not in ('--play-part', '--cap', '--play')]
     if model.isdigit():
         model = int(model)
     if cmd == 'census':
@@ -626,17 +785,39 @@ def main():
         return 0
     if cmd == 'plan':
         B = F.Built(a[0], a[1])
-        for c in plan_places(B, int(a[2]), centre, radius, seed):
+        area = play_area(B, F.Nav(B.scene.nav), play_band) if play_part else None
+        for c in plan_places(B, int(a[2]), centre, play_radius if play_part and radius is None else radius, seed, play=area):
             print(c)
         return 0
     if cmd == 'build':
         src, slot, out, n = a[0], a[1], a[2], int(a[3])
-        civs = plan_places(F.Built(src, slot), n, centre, radius, seed)
-        add(src, out, civs, slot, model, alert, tree, max_prm_growth=(1 << 21) if model == HOST else 0)
-        fails, _ = check(out, slot)
+        B = F.Built(src, slot)
+        if cap:
+            c = census(B)
+            m = cap_count(c, n, max_actors, max_squads)
+            print('cap (GUESS: %d actors, %d squads): the build has %d actors / %d squads; %d of %d civilians fit' % (
+                max_actors, max_squads, c['actors'], c['squads'], m, n))
+            if m == 0:
+                print('NOTHING WRITTEN: the build is at or over the cap without any civilian')
+                return 3
+            n = m
+        play = None
+        if play_part:
+            nav = F.Nav(B.scene.nav)
+            area = play_area(B, nav, play_band)
+            play = dict(part=area['part'], centre=[round(v, 1) for v in (centre or area['centre'])], radius=play_radius if radius is None else radius,
+                        band=play_band, y0=round(area['y0'], 1), source=area['source'])
+            print('play area: part %s from %s, centre %s, radius %s, band %s' % (play['part'], play['source'], play['centre'], play['radius'], play_band))
+            civs = plan_places(B, n, centre, play['radius'], seed, play=area)
+        else:
+            civs = plan_places(B, n, centre, radius, seed)
+        if len(civs) < n:
+            print('NOTE: %d of %d places found' % (len(civs), n))
+        add(src, out, civs, slot, model, alert, tree, max_prm_growth=(1 << 21) if model == HOST else 0, play=play)
+        fails, _ = check(out, slot, play=play_chk)
         return 1 if fails else 0
     if cmd == 'check':
-        fails, _ = check(a[0], a[1] if len(a) > 1 else 'F01')
+        fails, _ = check(a[0], a[1] if len(a) > 1 else 'F01', play=play_chk)
         return 1 if fails else 0
     if cmd == 'diff':
         bad = diff(a[0], a[1], a[2] if len(a) > 2 else 'F01')
