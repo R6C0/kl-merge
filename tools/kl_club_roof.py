@@ -51,7 +51,7 @@ HOP-STAGE (new 2026-10-18, live run L72, DM05A heli build; OPT-IN, default off: 
   hop 1 ... heist stage 1; carried over in 10.0 s if it stays and reaches the hop's stage', never carried; 4 of 7 bots still g1 at round end). Only
   a stage-3 bot (heli called) was carried. `hop-stage` writes Stage=1 (GUESS: a bot at From has been through the chain's loot places first; one that
   never entered the ENTERS box is still stage 0 and stays). Only KLJoin.ini differs from the source folder. NOT RUN IN THE GAME.
-GUESS: that the marker is in the chain of 'van timer'in a round (it is a timer the heli build already relies on);
+GUESS: that the marker is in the chain of 'van timer' in a round (it is a timer the heli build already relies on);
   the unit of the radius (world units, 100 = 1 m: the same unit as every other position in the file); that a second
   activation by the pad box does not hide or reset the marker. NOT RUN IN THE GAME.
 """
