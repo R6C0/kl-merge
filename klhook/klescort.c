@@ -337,6 +337,9 @@
  *   FollowOutHoldAlone=0 1 = the hold also runs while YOU ARE IN PLAY, not aboard, when the nearest called bot that
  *                       comes is within FollowOutHoldAloneRange=40 m (GUESS, 1..100) of the boarding place (2026-10-18,
  *                       Vault run N1018_L22: the van left after 8.0 s with four called bots 37-53 m off and coming)
+ *   FollowOutComeMoved=0 1 = a called bot also COMES (for the holds) when it moved 2 m in 3D or 1 m in height in the
+ *                       2 s sample and got no more than 2 m farther (2026-10-18, Vault N1018_L24: the way out of the vault
+ *                       first leads away from the vehicle). GUESS
  *   FollowOutStopPlace=0 1 = once the vehicle has waited this round, later drive-ins order the crew to where it
  *                       waited instead of to the moving vehicle ([rules+0x1e0] is the vehicle itself; L22's orders went
  *                       25-47 m back along its road). GUESS: it parks at the same place each visit
@@ -415,7 +418,7 @@ static struct {
     int n, dry, log, record, refill, until, stage, board; DWORD every; float far_, side, retarget;
     int all, all_stage, all_order; DWORD all_still;      /* BoardAll, BoardAllStage, BoardAllOrder, BoardAllStill in ms */
     int fo, fo_dry, fo_order, fo_spare, fo_shield, fo_crew_money; DWORD fo_after, fo_every, fo_money; float fo_hold;      /* FollowOut..: After / Every in ms, Hold in s; Shield 0 / 1 / 2 */
-    int fo_hold_alone, fo_stop; float fo_hold_alone_m;      /* FollowOutHoldAlone (+ ..Range in m), FollowOutStopPlace (2026-10-18, Vault run N1018_L22) */
+    int fo_hold_alone, fo_stop, fo_come_moved; float fo_hold_alone_m;      /* FollowOutHoldAlone (+ ..Range in m), FollowOutStopPlace (2026-10-18, Vault run N1018_L22) */
 } kle;
 
 /* THE HOLD'S SHIELD (section 3 c2). Not in kle_r: that is cleared at every new round, and a byte of the level's vehicle
@@ -443,7 +446,7 @@ static struct {
        fo_moves = 1 it COMES: fo_d (its distance to the boarding place at the sample of fo_pos_at) fell by KLE_COME over
        the last 2 s sample, fo_near = by how much; 0 it does not; 2 not known yet (no whole sample: counted as no) */
     DWORD fo_since, fo_fired; int fo_over, fo_told, fo_call, fo_was_coming, fo_win_call, fo_hold_visit, fo_hold_told; BYTE fo_veh; float fo_held;
-    int fo_stop_have, fo_stop_told; float fo_stop_at[3];      /* FollowOutStopPlace: the boarding place of the last wait this round (the vehicle parked) */
+    int fo_stop_have, fo_stop_told; float fo_stop_at[3]; float fo_p[KLB_NREC][3];      /* FollowOutComeMoved: the bot's place at the last 2 s sample */      /* FollowOutStopPlace: the boarding place of the last wait this round (the vehicle parked) */
     BYTE fo_did[KLB_NREC]; char fo_moves[KLB_NREC]; int fo_ocall[KLB_NREC], fo_orders[KLB_NREC];
     DWORD fo_actor[KLB_NREC], fo_order_at[KLB_NREC], fo_pos_at[KLB_NREC]; float fo_target[KLB_NREC][3], fo_d[KLB_NREC], fo_near[KLB_NREC];
     /* FollowOutSpare: the rules object whose vehicle state the fast pass watches (0 = none); this departure is dealt
@@ -1220,8 +1223,16 @@ static void kle_follow(const struct klb_snap *s, DWORD now)
            a bot that walks the other way moved too, and held the driver with the human aboard (review S1). Not known
            (no place, no boarding place, no whole sample yet) = no. */
         if (d < 0) { kle_r.fo_moves[i] = 2; kle_r.fo_pos_at[i] = 0; }
-        else if (!kle_r.fo_pos_at[i]) { kle_r.fo_d[i] = d; kle_r.fo_near[i] = 0; kle_r.fo_pos_at[i] = KLB_T(now); kle_r.fo_moves[i] = 2; }
-        else if (now - kle_r.fo_pos_at[i] >= 2000) { kle_r.fo_near[i] = kle_r.fo_d[i] - d; kle_r.fo_moves[i] = kle_r.fo_near[i] >= KLE_COME; kle_r.fo_d[i] = d; kle_r.fo_pos_at[i] = KLB_T(now); }
+        else if (!kle_r.fo_pos_at[i]) { kle_r.fo_d[i] = d; kle_r.fo_near[i] = 0; kle_r.fo_pos_at[i] = KLB_T(now); kle_r.fo_moves[i] = 2; memcpy(kle_r.fo_p[i], p, 12); }
+        else if (now - kle_r.fo_pos_at[i] >= 2000) {
+            kle_r.fo_near[i] = kle_r.fo_d[i] - d; kle_r.fo_moves[i] = kle_r.fo_near[i] >= KLE_COME;
+            /* FollowOutComeMoved (2026-10-18, Vault run N1018_L24, kl-merge-e5's read): the way out of the vault leads AWAY
+               from the vehicle first (vault y -490 -> stairs -> hall y 240 -> y 800 floor -> street); record 4 showed
+               -1.3 / 0.0 / 1.5 m nearer while it climbed 49 -> 12 m. Also COMES: moved KLE_COME in 3D, or 100 cm in
+               height, over the sample. GUESS: a called bot that moves that much is on its way (a fighting bot moves too). */
+            if (kle.fo_come_moved && !kle_r.fo_moves[i] && kle_r.fo_near[i] > -KLE_COME && (kle_dist(kle_r.fo_p[i], p) >= KLE_COME || fabsf(p[1] - kle_r.fo_p[i][1]) >= 100.0f)) kle_r.fo_moves[i] = 1;
+            kle_r.fo_d[i] = d; kle_r.fo_pos_at[i] = KLB_T(now); memcpy(kle_r.fo_p[i], p, 12);
+        }
         if (edge_wait || edge_leave) {        /* the two lines a bot's way during the wait is read from (review S5): place and distance when it began and when it ended */
             if (kle_r.fo_moves[i] == 2) strcpy(mv, "not known yet whether it comes"); else snprintf(mv, sizeof mv, "%s (%.1f m nearer in the last 2 s)", kle_r.fo_moves[i] ? "coming" : "not coming", kle_r.fo_near[i] / 100);
             klog("follow: the vehicle %s (state %u, timer %.1f s, visit %d): record %d%s (stage %u, $%lu) in play at (%.0f, %.0f, %.0f)%s, %s", edge_wait ? "waits" : "leaves", s->veh, timer, kle_r.visit, i, esc, r->stage, r->money, p[0], p[1], p[2], dt, mv);
@@ -1444,6 +1455,8 @@ static void kle_init(void)
     kle.fo_hold_alone = GetPrivateProfileIntA("Bots", "FollowOutHoldAlone", 0, klh_ini) != 0;
     kle.fo_hold_alone_m = klb_inif("FollowOutHoldAloneRange", "40"); if (!klb_finite(kle.fo_hold_alone_m) || kle.fo_hold_alone_m < 1) kle.fo_hold_alone_m = 40; if (kle.fo_hold_alone_m > 100) kle.fo_hold_alone_m = 100;      /* GUESS */
     kle.fo_stop = GetPrivateProfileIntA("Bots", "FollowOutStopPlace", 0, klh_ini) != 0;
+    kle.fo_come_moved = GetPrivateProfileIntA("Bots", "FollowOutComeMoved", 0, klh_ini) != 0;
+    if (kle.fo && kle.fo_come_moved) klog("follow: FollowOutComeMoved=1: a called bot that moved 2 m (or 1 m in height) in 2 s, and got no more than 2 m farther, counts as coming (for the holds)");
     if (kle.fo && kle.fo_hold > 0 && kle.fo_hold_alone) klog("follow: hold: FollowOutHoldAlone=1: the hold also runs while you are in play (not aboard), when the nearest called bot that comes is within %.0f m of the boarding place", kle.fo_hold_alone_m);
     if (kle.fo && kle.fo_stop) klog("follow: FollowOutStopPlace=1: after the vehicle's first wait, a drive-in sends the crew to where it waited, not to the moving vehicle");
     if (kle.fo && klb.van && klb.van_left) {
