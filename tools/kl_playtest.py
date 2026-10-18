@@ -276,6 +276,7 @@ R_TIGHT = 25.0                  # a stop he must stand closer to: when the chord
                                 # four runs; VAN5 205), nothing smaller was tried, and a way point he MISSES is one he then circles. (A stop at 12
                                 # was tried here: it takes 21 of the 35 turns that stay marked on the 35 routes off the list, by making a goto of
                                 # radius 12 of each - the review's replay then circles more of them from a stand, not fewer)
+TIGHT_RUN = 170.0               # a sprint into a stop with a radius under R_MOVE: the last stretch of this length is walked (Script.walk)
 AIM = 15.0                      # from a stand: the goto must also be reached when he starts to walk this many degrees off the line to it
 # ---- places where something that is NOT in the mesh stands: known from live runs only. {map: [(x, z, radius, what was seen)]}. A 'way' place of
 #      the bots inside one is not walked to (the way goes on to the next place over the mesh); a leg that passes one is said so in the print.
@@ -2536,8 +2537,57 @@ FirstChance=1
 PosLogMs=2000
 """
 TO_PAGE = ['waitwin CampaignMenu 180000', 'wait 1500', 'tap ESCAPE', 'waitwin MainMenu 8000', 'wait 1500', 'tap DOWN', 'wait 1200', 'tap RETURN',
-           'waitwin HeistModeMenu 8000', 'wait 3000', 'windows'] + ['tap DOWN', 'wait 500'] * ROWS_DOWN + \
-          ['wait 2500', 'log focus should be on the eighth row, Dead Men maps', 'windows', 'tap RETURN', 'waitwin HeistPlayMenu2 8000', 'wait 3000', 'windows']
+           'waitwin HeistModeMenu 8000', 'wait 3000', 'windows'] + ['tap DOWN', 'wait 500'] * ROWS_DOWN +           ['wait 2500', 'log focus should be on the eighth row, Dead Men maps', 'windows', 'tap RETURN', 'waitwin HeistPlayMenu2 8000', 'wait 3000', 'windows']
+
+# P4 (2026-10-18): the INSTALLED frontend (KLExpansion\Overlay\Patch01.zip menu/frontend.xml, HeistModeMenu) has the rows Start, Rules, Stats, LocalLB,
+# Leaderboards, Heister, Dead Men maps (HeistPlayMenu2), Dead Men campaign (HeistPlayMenu3): 6 DOWN reaches page 2 (read from the XML, not run), 7 DOWN page 3
+# (run live: the N1018 smoke run). The stock-tree default (page 2, ROWS_DOWN) is kept unless a --menu-* option or --installed-menu is given.
+INSTALLED_DOWN = {2: 6, 3: 7}
+INSTALLED_PAGE2 = {'DM01': 0, 'DM02': 1, 'DM03': 2, 'DM06': 3, 'DM09': 4, 'DM03A': 5}                  # entries of "Dead Men maps"
+CAMPAIGN = {'DM05A': (0, 'Last Call', 'F01'), 'DM06B': (1, 'A Walk in the Park II', 'F02'),           # entries of "Dead Men campaign": (entry, name, slot)
+            'DM01B': (2, 'Hot Coffee II', 'F03'), 'DM11B': (3, 'Hasta la Vista', 'F04')}               # (the slot of DM06B is read from the installed v2final build, F02_Main.zip)
+
+
+def to_page(page, down):
+    return TO_PAGE[:11] + ['tap DOWN', 'wait 500'] * down + ['wait 2500', 'log focus should be on the Dead Men row of page %d' % page, 'windows', 'tap RETURN',
+                                                              'waitwin HeistPlayMenu%d 8000' % page, 'wait 3000', 'windows']
+
+
+def menu_entry(o, mid, entry):
+    """The manifest's entry of the map, or one made from the tables above (a map the tree's manifest does not list), with --menu-entry applied.
+    -> (entry dict, True when it was made here)."""
+    made = entry is None
+    if made:
+        if mid in CAMPAIGN:
+            k, name, slot = CAMPAIGN[mid]
+            entry = dict(id=mid, name=o.get('map_name') or name, slot=slot, menu_entry=k, page=3)
+        elif mid in INSTALLED_PAGE2:
+            entry = dict(id=mid, name=o.get('map_name') or mid, slot='F0?', menu_entry=INSTALLED_PAGE2[mid], page=2)
+        else:
+            raise SystemExit('%s: not in the tree manifest and not a map this tool knows (%s %s): give --menu-page, --menu-entry and --build' % (
+                mid, ' '.join(INSTALLED_PAGE2), ' '.join(CAMPAIGN)))
+    elif o.get('installed_menu'):
+        if mid in CAMPAIGN:
+            entry = dict(entry, menu_entry=CAMPAIGN[mid][0], page=3)
+        elif mid in INSTALLED_PAGE2:
+            entry = dict(entry, menu_entry=INSTALLED_PAGE2[mid], page=2)
+    if o.get('menu_entry') is not None:
+        entry = dict(entry, menu_entry=o['menu_entry'])
+    if o.get('menu_page'):
+        entry = dict(entry, page=o['menu_page'])
+    return entry, made
+
+
+def menu_route(o, entry):
+    """-> (page, number of DOWN taps from the first row)."""
+    page = o.get('menu_page') or (entry.get('page') if (o.get('installed_menu') or entry.get('made')) else 2) or 2
+    if o.get('menu_down') is not None:
+        return page, o['menu_down']
+    if o.get('installed_menu') or o.get('menu_page') or entry.get('made'):
+        return page, INSTALLED_DOWN[page]
+    return page, ROWS_DOWN
+
+
 # the scripted player never shoots; at the owner's balance (Risk=2: a police bullet at full weight, 400 health) and even at the stock
 # one he is dead in the first room with guards (runs RN6, RN13, RN14: 10 .. 40 s). So a route script makes him bullet-proof ...
 # ... LIVE (the lead's runs K1_DM03_wall_dry, K2_DM03_wall, K2b_DM03_wall_log of this tool's first wall script, 2026-10-11 09:24 - 09:50): the two
@@ -2694,14 +2744,15 @@ class Script:
         self.stages.append(dict(key=key, re=pattern, what=what, need=need, after_line=after or len(self.lines)))
 
     def menu(self, entry):
-        for s in TO_PAGE:
+        page, down = menu_route(self.o, entry)
+        for s in to_page(page, down):
             self.add(s)
         k = entry['menu_entry']
-        for s in ('sel HeistLevel_P2 0xceceec %d' % k, 'wait 2500', 'expect 0xceceec %d' % k, 'log starting entry %d = %s (slot %s, Maps\\%s)' % (k, entry['name'], entry['slot'], entry['id']),
-                  'msg HeistLevel_P2 StartGame', 'waitload 300000'):
+        for s in ('sel HeistLevel_P%d 0xceceec %d' % (page, k), 'wait 2500', 'expect 0xceceec %d' % k, 'log starting entry %d = %s (slot %s, Maps\\%s)' % (k, entry['name'], entry['slot'], entry['id']),
+                  'msg HeistLevel_P%d StartGame' % page, 'waitload 300000'):
             self.add(s)
         n = self.add('log level loaded: %s' % entry['name'])
-        self.want('script %d: level loaded: %s   [the menu route worked: Arcade -> Dead Men maps -> entry %d -> StartGame]' % (n, entry['name'], k), n)
+        self.want('script %d: level loaded: %s   [the menu route worked: Arcade -> page %d (%d DOWN) -> entry %d -> StartGame]' % (n, entry['name'], page, down, k), n)
         self.secs += 62.0                               # start .. 'level loaded' in tonight's runs: 58 .. 62 s
         self.add('onwin HeistStatusLeaderboard score')
 
@@ -2787,7 +2838,19 @@ class Script:
                 self.want('script %d: goto (%d, %d) reached ...   [--shoot: he FIRES from script %d to %d: the glass door %s is %d from this leg; the AI heisters use the same door]'
                           % (g, round(w['p'][0]), round(w['p'][2]), g - 1, k, *w['glass']), k)
             else:
-                g = self.goto(w, keep=not stop)
+                if w.get('stop') and w['sprint'] and w['r'] < R_MOVE and w.get('from') and w['leg']['len'] > TIGHT_RUN + 100.0:
+                    # P4 (2026-10-18), from the smoke run N1018_SMOKE_DM05A (script 154, wp 77 (-381,-231) r 25 sprint STOP): a sprint at a radius of 25 passed the
+                    # point 43 to the side (a sprint circle is 112), orbited it for the whole 6.5 s timeout, and every goto after it started from the wrong floor
+                    # (he walked down a ramp and stood against a wall for 80 s: 38 of 115 gotos lost). A sprint's last stretch is now a walk on the leg's own
+                    # line: the run goes to TIGHT_RUN short of the point (radius R_MOVE), the last TIGHT_RUN is a walk (circle 67). GUESS that it is enough.
+                    p0 = lerp(w['from'], w['p'], 1.0 - TIGHT_RUN / w['leg']['len'])
+                    self.goto(dict(w, p=p0, r=R_MOVE, kind='approach', stop=False, leg=dict(w['leg'], len=w['leg']['len'] - TIGHT_RUN), rig=None), keep=True)
+                    w0 = w
+                    w = dict(w, sprint=False, leg=dict(w['leg'], len=TIGHT_RUN), rig=None)
+                    g = self.goto(w, keep=not stop)
+                    w0['line'] = g
+                else:
+                    g = self.goto(w, keep=not stop)
                 if w.get('glass'):
                     self.want('script %d: goto (%d, %d) reached ...   [the glass door %s is %d from this leg and he does NOT fire: "reached" = an intact pane does not stop a walking '
                               'player (or the crew had opened it); "goto is stuck" / "NOT reached" here = it does: then run the --shoot script]'
@@ -3166,11 +3229,17 @@ class Script:
 def write_script(tree_folder, mid, out, opt):
     tree, man = find_tree(tree_folder)
     entry = next((e for e in man['maps'] if e['id'].lower() == mid.lower()), None)
-    if entry is None:
-        raise SystemExit('%s: the tree has the maps %s' % (mid, ' '.join(e['id'] for e in man['maps'])))
-    build = opt.get('build')
+    entry, made = menu_entry(opt, mid, entry)
+    entry['made'] = made
+    build, info = opt.get('build'), opt.get('info')
+    if made and not build:
+        build = os.path.join(tree, 'Maps', entry['id'])         # the installed copy of the map; its bots.json must come from --info
+        if not info and not os.path.isfile(os.path.join(tree, 'BuildInfo', entry['id'], 'bots.json')):
+            raise SystemExit('%s: not in the manifest and no BuildInfo: give --build <folder with *_Main.zip and bots.json> (or --info <folder with bots.json> '
+                             'beside the installed Maps\\%s)' % (mid, mid))
+        info = info or os.path.join(tree, 'BuildInfo', entry['id'])
     if build:
-        L = Level(build)
+        L = Level(build, info)
     else:                                               # the tree's own copy of the map: the archive it will load, the plan it was adopted with
         L = Level(os.path.join(tree, 'Maps', entry['id']), os.path.join(tree, 'BuildInfo', entry['id']))
     R = make_route(L, opt)
@@ -3309,6 +3378,8 @@ def options(a):
          'visits': int(take('--visits', '3')), 'out': take('--out'), 'argv': argv,
          'cop': float(take('--cop', str(COP_DIAL))), 'stops': take('--stops', flag=True), 'clear': take('--clear', flag=True), 'fed_walk': take('--fed-walk', flag=True),
          'fed_group': int(take('--fed-group', '1')), 'fed_to': take('--fed-to', 'loot'), 'fed_die': take('--fed-die', flag=True),
+         'menu_page': int(take('--menu-page', '0')), 'menu_down': (lambda v: None if v is None else int(v))(take('--menu-down', None)), 'menu_entry': (lambda v: None if v is None else int(v))(take('--menu-entry', None)),
+         'installed_menu': take('--installed-menu', flag=True), 'info': take('--info'), 'map_name': take('--map-name'),
          'die_wait': float(take('--die-wait', str(DIE_WAIT))), 'rounds': int(take('--rounds', '1')), 'rig3': take('--rig3', flag=True)}
     o['rig2'] = o['rig2'] or o['rig3']
     take('--no-shoot', flag=True)                       # (the default now; the old spelling is taken and means nothing)
