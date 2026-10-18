@@ -58,6 +58,12 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
      not sealed, only timed. GUESS: r ~139 is the vault opening.
   3. Door B lets the human in about 100 s before that opening, so it skips the heist's wait at the vault door. That is a change to the game, not a fix.
   - RECOMMENDATION: keep the live 7cd07d15. Do not adopt B. C (noblocker) and D (both) also aim at the "sealed" cause, which (2) rules out, so drop them unless the owner wants the vault open early.
+- RUN L93 (3f j, Hot Coffee II ea8cbc82, hit-log hook out_3f_1018d 3f073ebb, PT_DM01B_hits): 401 crew hit lines.
+  - Hits: almost all -1; no friendly fire. The +0xac target matches 97 %. Median nearest police: 9.7 m. Point-blank shots: once. botdown worked twice.
+  - Rec 1 DIED at 00:22:17.092 from one 340.0 drop at full health. The nearest soldiers targeting it were 30.9 m or more away.
+    Its block target had moved from (2408, 0, 27240) to (2275, 0, 27263) 14 ms earlier.
+  - GUESS: this is the same instant kill as the 5 L70/L71 deaths (no down first). Candidates: a car, an explosive, a kill volume or a script.
+    Workflow wlhwez0yl is looking offline; output goes to re/hotcoffee2_oneshot.md.
 
 ### Last Call, DM05A [page 3 F01]
 - LIVE: df719d34 + KLJoin dfc29f60 (the "sa" build: EnterVehicle field 9 empty, per 07:10).
