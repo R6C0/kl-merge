@@ -152,6 +152,10 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   L52 with the 0.05 balance lost 6 of 7 (per 08:30); the 0.01 balance is live.
 - STAGED, NOT RUN: rtcops DM01B 073dd57f (also 4 garage cops get rifles, per 14:11).
 - DECISION: turn on [Bots] VanCallNear=40 (hook key, section 4), yes or no.
+- ONE-SHOTS (L93 and L70/L71): bots die from one unscaled 340 drop.
+  - Refuted: gunfire, PointBlankToCrew, van, human, snipers, SM_ scripts (re/hotcoffee2_oneshot.md, re/hotcoffee2_campaign_leftovers.md).
+  - Lead (GUESS): a campaign car with BlowupChanceDefinite stands 1.5..3.5 m from every site.
+  - Staged cars-only 21c6ed49 (C:\kl_build_1019\hc2_nocampaign\DM01B_carsonly). The A/B is queued with 3f: (r) live + LogCrewHitsBig=100, then (t) cars-only.
 
 ### Other installed maps (checked: KLExpansion\Maps; zips md5)
 - Page 2: DM01 [F01] 94dc052b, DM02 [F02] c00d4d07, DM03 [F03] cf1dc436, DM06 [F04] 039dc886, DM09 [F06] (above), DM03A [F07] (above).
