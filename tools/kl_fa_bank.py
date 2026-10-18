@@ -842,7 +842,7 @@ def apply_opts(o):
     global CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, VAN_SHOW, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
     global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING, GARRISON, VAULT_SWING_END, VAULT_BLOCKER, VAULT_BLOW, VAN_HIDE_PARTS
     VAN_HIDE_PARTS = bool(o.get('van_hide_parts', False))
-    VAULT_BLOW =bool(o.get('vault_blow', False))
+    VAULT_BLOW = bool(o.get('vault_blow', False))
     GARRISON = bool(o.get('garrison', False))
     VAULT_SWING_END, VAULT_BLOCKER = o.get('vault_swing'), bool(o.get('vault_blocker', False))
     ROOM_GATES, ROOM_HIDE = bool(o.get('room_gates', False)), bool(o.get('room_hide', True))
