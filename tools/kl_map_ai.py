@@ -826,7 +826,7 @@ def _natkey(p):
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', p)]
 
 
-def autoplan(sc):
+def autoplan(sc, same_part=False):
     """A plan for a map nobody wrote one for (The Vault, or any finished build). Three parts, all from the build:
       chains   squads of one parent group in natural path order (Squad_2 before Squad_10); when one is wiped out
                its list names the NEIGHBOUR'S behaviour rout (Hunt, else Flanking, else Defend: the rout's own
@@ -836,7 +836,10 @@ def autoplan(sc):
                rushers pistols and the holders SMG / rifle by role; the path names are the only role there is.
       unleash  an eStayBack squad of mostly pistol carriers that owns a Hunt or Flanking rout becomes eUnleashed
                (stock has 3..13 a level; Retomoto unleashes its rushers). GUESS: pistol men are the rushers.
-    GUESS: path order is neighbour order (the Dead Men authors numbered squads along the route)."""
+    GUESS: path order is neighbour order (the Dead Men authors numbered squads along the route).
+    same_part (OPTION, default off = unchanged): keep only chains whose two squads sit in one level part, i.e. share the
+    path up to the last '!' (GamePlay!4_Vault_Part!Guards_01 -> ...Guards_02, never 3_Garage_Part -> 4_Vault_Part).
+    On the Vault the two cross-part chains would wake the next part's guards before the door beat. GUESS: that prefix is the part."""
     by = collections.OrderedDict()
     arms, unleash = {}, []
     ff = kl_arms.fields()
@@ -870,7 +873,9 @@ def autoplan(sc):
     chain = {}
     for _g, sq in by.items():
         sq.sort(key=lambda t: _natkey(t[0]))
-        for (a, _ta), (_b, tb) in zip(sq, sq[1:]):
+        for (a, _ta), (b_, tb) in zip(sq, sq[1:]):
+            if same_part and a.rsplit('!', 1)[0] != b_.rsplit('!', 1)[0]:
+                continue
             chain[a] = [tb]
     return {'what': 'auto plan: %d chains, %d SWAT squads to rifles, %d unleashed' % (len(chain), len(arms), len(unleash)),
             'arms': arms, 'unleash': unleash, 'timers': {}, 'counters': {}, 'start': None, 'chains': chain, 'escape': []}
@@ -896,7 +901,7 @@ def retomoto_style(src, dst, log=print):
     return rep, sf
 
 
-def cops_style(src, dst, log=print, strength_only=False):
+def cops_style(src, dst, log=print, strength_only=False, same_part=False, chains_only=False):
     """retomoto_style without its last step (spawnfix --auto would wake every squad of a staged build): apply with
     parts strength + chains and the auto plan. -> the apply report. Refuses dst == src and a non-empty dst."""
     dst = dst.rstrip('/' + chr(92))
@@ -904,10 +909,10 @@ def cops_style(src, dst, log=print, strength_only=False):
         raise ValueError('the output folder is the source')
     if os.path.isdir(dst) and os.listdir(dst):
         raise ValueError('%s exists and is not empty: not overwritten' % dst)
-    return apply(src, dst, parts=('strength',) if strength_only else ('strength', 'chains'), log=log, auto=True)
+    return apply(src, dst, parts=('chains',) if chains_only else ('strength',) if strength_only else ('strength', 'chains'), log=log, auto=True, same_part=same_part)
 
 
-def apply(src, dst, parts=('strength', 'waves', 'chains', 'escape'), presets=False, log=print, car_exit=False, auto=False):
+def apply(src, dst, parts=('strength', 'waves', 'chains', 'escape'), presets=False, log=print, car_exit=False, auto=False, same_part=False):
     """A finished build folder -> folder dst: the archive with a new .prp member, every other member and every
     file beside it copied. -> report dict (also written to <dst>/map_ai.json and map_ai.txt)."""
     import kl_graft
@@ -919,7 +924,7 @@ def apply(src, dst, parts=('strength', 'waves', 'chains', 'escape'), presets=Fal
         raise ValueError('the output folder is the build\'s own')
     order, files, ext, sc, _live, _hud = kl_graft.open_built(zp)
     # auto: the hand plans are the campaign-FA maps' own (a Vault is M03_A, not M03_FA_A)
-    plan = autoplan(sc) if auto else PLANS[m_name]
+    plan = autoplan(sc, same_part) if auto else PLANS[m_name]
     data, bad, _paths, _names = J.check(sc, log=lambda *_a: None)
     if data != files[ext['.prp']] or bad:
         raise ValueError('the build\'s .prp does not re-serialise byte for byte (%d misfits): not changed' % len(bad))
@@ -2104,7 +2109,7 @@ def main():
         _r, sf = retomoto_style(a[1], a[2])
         sys.exit(1 if sf['problems'] else 0)
     elif len(a) == 3 and a[0] == 'cops-style':
-        cops_style(a[1], a[2], strength_only='--strength-only' in o)
+        cops_style(a[1], a[2], strength_only='--strength-only' in o, same_part='--same-part' in o, chains_only='--chains-only' in o)
     elif len(a) == 3 and a[0] == 'spawndiff':
         sys.exit(0 if spawndiff(a[1], a[2]) else 1)
     elif len(a) == 3 and a[0] == 'check':
