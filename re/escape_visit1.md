@@ -113,3 +113,103 @@ Static reading of kl2.exe only. I used a linear capstone sweep, vtable dumps, an
 1. Log the return address of each write to `rules+0x1e0` (a hardware write watch). Expect 0x65ee6d from 0x7fdc9a or 0x7fdd3a, about 1.3 s before state 1.
 2. Log which ZPlayerAction (the one named EnterVehicle) fires, by `[action+0x24]` and by the ids `[0x16891a0]` and `[0x168919c]`. Compare a failing map (Vault) with a working one.
 3. If the action fires early, a cleaner fix than re-running slot 194 is to clear 1e0 at state 0 entry (0x8fa6d0), or to block the event until the first call. Note that a clear at state 0 does not stop a later re-fire.
+
+## 2026-10-18: the EnterVehicle action in the level data
+
+**Escape visit 1: every EnterVehicle ZPlayerAction on Park II, the Vault, Hot Coffee II, Hasta, Last Call and the stock FA levels**
+
+This is a static read of the installed zips under `C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days\KLExpansion\Maps\`. I used `kl_scene`, `kl_prp` and `kl_rtp`. Nothing was run and nothing was written outside the scratchpad. The re-check scripts are `...\scratchpad\ev.py` and `...\scratchpad\rc\chk.py`. The first draft's claims were re-run against the same files. Changes from the draft are marked **(corrected)** or **(downgraded)**.
+
+**Terms and map keys**
+- FACT: ZPlayerAction is a controller (`PlayerAction`) on a node, not a node class. Every node that carries it is a `ZBoxPrimitive`.
+- The failing maps are DM06B Park II (zip `F02`), DM03A Vault (`F07`) and DM01B Hot Coffee II (`F03`).
+- DM11B Hasta (`F04`) and DM05A Last Call (`F01`) are helicopter-escape maps. Their action is `Triggers!BoardingTrigger_Heli`, not a van box.
+- The stock FA levels are the copies under `KLExpansion\Maps\DD01..DD09`.
+
+**What the action looks like**
+- The body of every van-parented action in DM06B, DM03A, DM01B and DD04/DD07 is: `{ s:'' [2: CamPos_InVan, BoardingCar] 0 0 0 0 s:'' s:EnterVehicle b1 <node ref> b0 b1 b1 b0 eIntDest_CtrlPos eIntDir_CtrlDir eONLY_LYNCH eNoFilter UA_FA_ESCAPE b1 b0 }`.
+- FACT: the name string `EnterVehicle` is followed by a bool, which is 1 (active) in all 41 copies.
+- FACT: the node reference after that bool is the `BoardingTrigger` box itself on the vans.
+  - **(corrected)** On the helicopter boxes it is not always a node. DD02, DD03, DD06, DD08 and DM05A have an empty string. DM11B names `EscapeSetup!EscapeChopper\Escape_Chopper`.
+- **(downgraded)** I have not confirmed the "21 level-file fields" figure or that `EnterVehicle` is exactly the 8th field. `re/kl2.json` holds no per-field list for this class, and the token stream does not fix field positions. Treat both as unverified.
+
+**Which field becomes +0x24**
+- GUESS: it is the node-reference string right after the active bool.
+- FACT: `re/bots_move.md:341` says the same ("box node the vehicle controller names = [rules+0x1e0]").
+- No class-layout read confirms which field sits at +0x24.
+- **(added)** The stock helicopter actions have an empty reference and are fine in stock. The "reference becomes +0x24" reading therefore does not hold for helicopter maps. If it is right, it applies to the van path only.
+
+**Every EnterVehicle action found (all `ZBoxPrimitive`)**
+
+| Map | Count | Scene path | Parent |
+|---|---|---|---|
+| DM06B, DM03A, DM01B | 1 each | `Animation/F07/F07_Escape_Vehicle_01.zip/EscapeVehicle_Animation_F07/F07_Escape_Vehicle_01/V_Van_00/BoardingTrigger` | `V_Van_00` (the van) |
+| DM11B Hasta, DM05A Last Call | 1 each | `Triggers!BoardingTrigger_Heli` | none (top-level) |
+| DD04, DD05, DD07 | 3 each | `Animation/Fxx/..._Escape_Vehicle_0{1,2,3}...BoardingTrigger` | `V_Van_00` of each vehicle |
+| DD01 | 3 | `Animation/F01/Escape_Vehicle_0{1,2,3}.zip/.../V_Ambulance_00/BoardingTrigger` | `V_Ambulance_00` |
+| DD09 | 3 | same pattern, Left / Middle / Right | `V_Van_00`, `V_Van_Middle_00`, `V_Van_Right_00` |
+| DD02 | **8** (draft said 7) | `Escape!EscapeHelicopter_01/Incoming_x/BoardingTrigger_Heli..` | `Incoming_A..H` |
+| DD03 | 4 | `Gameplay!99_EscapeHelicopter#01/Incoming_0x/BoardingTrigger_Helicopter_0x` | `Incoming_01..04` |
+| DD06 | **8** (draft said 7) | same as DD02 | `Incoming_A..H` |
+| DD08 | 1 | `Gameplay!99_EscapeHelicopter#01/BoardingTrigger_Helicopter_01` | the helicopter group |
+
+All 41 copies are `PlayerAction` on a `ZBoxPrimitive`.
+
+- FACT: each failing map has exactly one `PlayerAction` carrying `EnterVehicle`. No other controller body in those maps contains the string. I did not check node property blocks.
+- FACT: the entity flags of the van-parented box are 0x200000 in the failing three and in DD07.
+- FACT: the failing three and DD07 have the same box local position `(-1.75, 119.35, -337.14)`.
+  - The size values are `95.09 134.53 80.35`. `re/bots_move.md` calls them half extents.
+- **(corrected)** The van-parented actions are not identical in every stock level.
+  - DD04's boxes are 150 × 150 × 150 and sit at different local positions, for example `(-1.79, 119.36, -399.85)`.
+  - Vehicle 03 in DD04 and DD07 lists `BoardingCar` before `CamPos_InVan`.
+  - DD04 vehicle 03 uses `eOnly_Mercs` in place of `eNoFilter`.
+- FACT: vehicle 01 of DD07 matches the failing maps in every field, enum and flag. The only differences are the box size and the island of vehicles 02 and 03, which the failing maps do not have.
+- FACT: the helicopter boxes use `eBOTH_PLAYERS / eOnly_Mercs`.
+  - Flags are 0x202000 in DM11B and DM05A, and 0x202400 in the DD levels.
+  - They hang off a top-level node or an `Incoming_x` / helicopter group, never off an animated van.
+- FACT: there is no stray or duplicate action in the failing maps.
+
+**Van set-up in the failing three versus stock**
+- FACT: each failing map has one `OnlineEscAnimatedVehicle` controller on `EscapeVehicle_Animation_F07`, one `ZAnimatedVehicle` (`F07_EscapeVan_01`) and one `F07_Escape_Vehicle_01.zip` subtree.
+- FACT: the controller body is identical to DD07 vehicle 01 in every field.
+  - Activate frames are `144 230 355 444`.
+  - Times are `7.2 8 8.48 6`.
+- FACT: `Gameplay!EscapeSetup!OnlineEscapeVehicleMonitor` in the failing three is `0 0 1 <EscSoundHandling!Activate> 1 <RelayDestroyedEsc_01> 0 0 0 0 2 <OnScreenMSG_LastEscapeVan> <Timer_OSM_LastEscape> -1 0 -1 0 -1 0 -1 0`.
+  - The relay list count is 1 (draft: "escape-van count field is 1, not 3", same fact).
+- FACT: stock DD07 has three vans (`_01`, `_02`, `_03`) with different frames. Its monitor has the same layout with 3 relays (`_01`, `_02`, `_03`).
+- **(corrected)** Stock DD04 also has three vans with their own frames (`191 288 502 555`, `0 195 239 348`, `137 245 313 389`).
+  - Its monitor is named `Gameplay!EscapeSetup!EscMonitor` and has a different body: `0 0 0 3 <relay_01..03> 0 0 0 0 2 <Timer_OSM_LastEscape> <OnScreenMSG_LastEscapeVan> ...`.
+  - It has no `Activate` sound reference.
+  - The relays are in the same order. Only the last two entries (Timer and OnScreenMSG) are swapped.
+- FACT: `tools/kl_fa_bank.py` states the one-van design on purpose.
+  - Line 409 reads "The exit trigger names the one van in field 2 and nothing in 3..5".
+  - Line 2349 reads "one van ... an unused van's target is the 0x686a66 crash".
+  - Line 1028 rewrites F07's animation keys in place so the van drives along the map's road.
+- FACT: the `V_Van_00` rest transform differs per map, and the vans' flags match stock (zip group 0x3000000, vehicle group 0x7200000, van 0x3244000, `ZAnimatedVehicle` 0x200000).
+
+| Map | `V_Van_00` rest translation (x, y, z) |
+|---|---|
+| DM06B | (-6264.4, 2388.9, -5459.2) |
+| DM03A | (-3248.0, 702.0, -11859.0) |
+| DM01B | (5360.0, -13.0, 30800.0) |
+| DD07 vehicle 01 | (5933.3, -198.0, 25626.1) |
+
+- **(downgraded)** The draft said DM06B's y of 2389 "is the animation's own height". I did not trace that. Only the rest transform stored in the file is verified. The van's real path is set by the rewritten animation keys.
+
+**What differs between the failing and working maps**
+1. FACT: the failing maps use the stock F07 van animation with a single van whose path was re-keyed. The working van maps (DD01, DD04, DD05, DD07, DD09) have three vans each.
+2. FACT: the working helicopter maps (Hasta, Last Call, DD02/03/06/08) have the action as a top-level or group box, not as a child of an animated van.
+3. FACT: the action itself matches stock DD07 vehicle 01 in every field, enum and flag. The delta is structural:
+   - one van instead of three;
+   - a re-keyed or relocated van path;
+   - a monitor with 1 relay.
+4. GUESS: with the re-keyed path, the van's trigger box overlaps the players, a spawn or the bots at start, or the van's frame-0 position is close to them, so the action fires before the first call. Stock vans 02 and 03 sit where nothing fires.
+   - I did not measure overlaps.
+   - The draft's spawn-distance scan used crude name matching, and I drop it as unreliable.
+5. GUESS: with one van, visit 2 reuses the same action after state 0 or 7 cleared `1e0`. That would explain "visit 2 works".
+6. GUESS: the relay count and van count may feed which handle the rules object finds in slot 89 (DD07 monitor 3 relays versus 1 here). No code path was read.
+
+**Suggested next checks (read-only, unchanged)**
+- Compute the world position of the BoardingTrigger in the failing three. It is the van's rest transform plus local `(-1.75, 119.35, -337.14)`, through the van's rotation. Compare it with the spawn rows and bot parking spots.
+- Use the klmove hardware write-watch on `[rules+0x1e0]` (already proposed in `re/escape_visit1.md`) to see the action's fire time against the van's animation time.
+- Optional A/B: in one failing map, set the PlayerAction's active bool (the bool right after `EnterVehicle`) to 0 at load. If `EscVisitFix` is then not needed, the early fire is confirmed.
