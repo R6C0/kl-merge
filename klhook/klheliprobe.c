@@ -107,9 +107,16 @@ static void klhp_line(DWORD now, int idx, DWORD rout, DWORD heli, DWORD rules, i
     klhp.sig[idx] = sig;
     if (klhp.lines >= KLHP_CAP) return;
     klhp.lines++;
-    klog("heli: t=%lu %s rout=%08lx goal=%08lx goal8=%lu started=%u blocked=%u sq=%08lx a8c=%08lx a90=%08lx a_bc=%u a154=%08lx | rules=%08lx veh1dc=%u kind=%u ref1e4=%08lx | zheli=%08lx pos=%s(%.0f, %.0f, %.0f) ctl7d8=%08lx ctl7dc=%08lx",
-         now, changed ? "CHANGE" : "tick", rout, goal, g8, started, blocked, sq, a8c, a90, a_bc, a154, rules, st, kind, veh, heli,
-         havepos ? "" : "unreadable ", pos[0], pos[1], pos[2], c7d8, c7dc);
+    /* the called vehicle's vtable and place next to the ZHeli's (run N1018_L3: the ZHeli stood still while the call went 1 -> 5):
+       equal vtables and places = ref1e4 IS the heli; a different vtable = the rules called another vehicle */
+    {
+        DWORD vvt = veh ? klh_rd32(veh) : 0, hvt = heli ? klh_rd32(heli) : 0; float vp[3] = { 0, 0, 0 };
+        int hv = veh && kle_node(klh_rd32(veh + 4), vp, 0);
+        klog("heli: t=%lu %s rout=%08lx goal=%08lx goal8=%lu started=%u blocked=%u sq=%08lx a8c=%08lx a90=%08lx a_bc=%u a154=%08lx | rules=%08lx veh1dc=%u kind=%u ref1e4=%08lx vt=%08lx at %s(%.0f, %.0f, %.0f) | zheli=%08lx vt=%08lx pos=%s(%.0f, %.0f, %.0f) ctl7d8=%08lx ctl7dc=%08lx",
+             now, changed ? "CHANGE" : "tick", rout, goal, g8, started, blocked, sq, a8c, a90, a_bc, a154, rules, st, kind, veh, vvt,
+             hv ? "" : "unreadable ", vp[0], vp[1], vp[2], heli, hvt,
+             havepos ? "" : "unreadable ", pos[0], pos[1], pos[2], c7d8, c7dc);
+    }
 }
 
 static void klhp_tick(int game_thread)
