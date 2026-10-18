@@ -1,3 +1,10 @@
+2026-10-18 22:35 - OFFLINE (kl-merge-e5; owner idle 3.8 h, so 3f was told its live queue can resume):
+- A kl2.exe from 14/10 (pid 48664, 700 KB) is still listed: looks like a zombie, left to 3f.
+- Workflow w4ihof82z: Retomoto leaderless crew. Why the bots stall after the human turns fed (FedSkip, hops, GIVE UP), plus an opt-in fix:
+  - if ini keys are enough: a kl_rt_joinini flag, staged at C:\kl_build_1018\rt_leaderless;
+  - otherwise: a klcrew_rt.c proposal for 3f.
+  Output: re/retomoto_leaderless.md.
+Owner: git push origin rtp-schemas (5 ahead) and git push origin rtp-schemas:main.
 2026-10-18 21:35 - OFFLINE (kl-merge-e5; the owner is back, so 3f's live runs are paused):
 - One-click ADOPT/UNDO scripts are ready in C:\kl_build_1018\adopt_1018 (README.txt; re/adopt_list.md s8). Review CLEAN, dry runs only.
   - 1: Hasta police 3a186c93.

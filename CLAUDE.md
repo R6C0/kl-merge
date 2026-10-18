@@ -188,6 +188,13 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-18 22:35 - OFFLINE (kl-merge-e5; owner idle 3.8 h, so 3f was told its live queue can resume):
+- A kl2.exe from 14/10 (pid 48664, 700 KB) is still listed: looks like a zombie, left to 3f.
+- Workflow w4ihof82z: Retomoto leaderless crew. Why the bots stall after the human turns fed (FedSkip, hops, GIVE UP), plus an opt-in fix:
+  - if ini keys are enough: a kl_rt_joinini flag, staged at C:\kl_build_1018\rt_leaderless;
+  - otherwise: a klcrew_rt.c proposal for 3f.
+  Output: re/retomoto_leaderless.md.
+Owner: git push origin rtp-schemas (5 ahead) and git push origin rtp-schemas:main.
 2026-10-18 21:35 - OFFLINE (kl-merge-e5; the owner is back, so 3f's live runs are paused):
 - One-click ADOPT/UNDO scripts are ready in C:\kl_build_1018\adopt_1018 (README.txt; re/adopt_list.md s8). Review CLEAN, dry runs only.
   - 1: Hasta police 3a186c93.
@@ -202,12 +209,6 @@ Owner: git push origin rtp-schemas (4 ahead) and git push origin rtp-schemas:mai
   - Next is 3f's opt-in [Balance] LogCrewHits (2f17dc43, TEST hook out_3f_1018d 3f073ebb), queued as run (j).
 - Workflow wo8s2xb7c writes per-decision ADOPT/UNDO .bat scripts (md5-checked, for the owner to run) in C:\kl_build_1018\adopt_1018: Hasta police 3a186c93 and the Last Call L78 set.
 Owner: git push origin rtp-schemas (1 ahead, 3f pushed the rest) and git push origin rtp-schemas:main (72 ahead). Disk C: 11 GB free.
-2026-10-18 19:34 - OFFLINE (kl-merge-e5; the owner is back, so 3f paused live runs):
-- 3f L82 Park II crew-hop c99c4e11 VOID: hung at the attract video. All restored. Queue: L82 rerun, then (b)-(i).
-- Hasta: 8 of 10 plaza police in 3a186c93 are never started; only the 2 ExitStreet_Left men are left on the start list (re/hasta_police.md e255313c). That SMG fire kills the heli is a GUESS.
-- New opt-in builder flag --rest-late=S (13d72a3b): the 8 start S s after the stair top. Staged C:\kl_build_1018\hasta_police2\DM11B 131c8c2b (S=120), queued as 3f (i), not run.
-- Workflow wdnjjb8nx: Hot Coffee II crew losses (L70/L71 logs), re/hotcoffee2_losses.md.
-Owner: git push origin rtp-schemas:main (68 ahead). Disk C: 11 GB free.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
