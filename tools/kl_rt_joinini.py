@@ -22,6 +22,10 @@ sessions 89/1 and 65/2; 18/1 and 37/1 at the same spot) and no hop covers them. 
 100 s to the street landing places. ALL VALUES ARE GUESSES (Radius 250, Height 200, Wait 100: longer than the longest
 lingering seen outside the wedge, about 85 s, shorter than the wedges seen, 277 s and up).
 
+--giveup N (2026-10-18, L79 finding, re/retomoto_fa.md s14): sets GiveUp (seconds) of the two WALK hops, [CrewHop] (40) and
+[CrewHop.3] (45), to N. In L79 five hop-3 walks hit 45 s while fedkit-hunted kept re-ordering the bots (see below); a longer budget
+only helps if the walk is still progressing. GUESS: 80. The real fix is [Bots] WalkExclusive=1 in KLHook.ini (hook side, not here).
+
 Exit code 0 = written and verified (only the named lines differ), 1 = refused."""
 import sys, os, re, shutil, hashlib, argparse
 
@@ -81,9 +85,15 @@ def main(argv):
     ap.add_argument('--margins', action='store_true')
     ap.add_argument('--set', action='append', default=[])
     ap.add_argument('--rescue-wedge', action='store_true')
+    ap.add_argument('--giveup', type=int, metavar='SECONDS', default=None)
     ap.add_argument('--dry', action='store_true')
     a = ap.parse_args(argv)
-    sets = [parse_set(s) for s in (MARGINS if a.margins else []) + a.set]
+    gu = []
+    if a.giveup is not None:
+        if not 5 <= a.giveup <= 600:
+            raise SystemExit('refused: --giveup must be 5..600 (klhop.c clamps GiveUp to that)')
+        gu = ['CrewHop.GiveUp=%d' % a.giveup, 'CrewHop.3.GiveUp=%d' % a.giveup]
+    sets = [parse_set(s) for s in (MARGINS if a.margins else []) + gu + a.set]
     ini = os.path.join(a.src, 'KLJoin.ini')
     if not os.path.isfile(ini):
         raise SystemExit('refused: no KLJoin.ini in ' + a.src)
