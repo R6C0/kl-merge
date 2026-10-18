@@ -589,6 +589,31 @@ static void kltr_poll(const struct klb_snap *s, DWORD now)
     }
 }
 
+/* ORDER KIND DEBOUNCE (2026-10-18, overnight audit: night_read counted 76 flip-flops in the owner's session 112 - escort / move-restless / fedkit-hunted
+   giving one bot alternating places). Every order of this hook goes through kle_order2. Its caller is told apart by the entry it passes: a held
+   escort's entry lives in kle_r.e[] (class 1 = follow the human); every other caller (klmove.c's Restless / reach, klfedkit.c's Hunted, the
+   release of an escort) builds a temporary entry (class 2). [Bots] OrderGap=<seconds> (default 8, 0 = off): an order of the OTHER class to the
+   same record less than that many seconds after the last one is REFUSED ('why' says so; every caller treats a refusal as 'not ordered now'
+   and tries again on its own timer, no counter of theirs counts it). Not while a vehicle waits (kle_gap_wait: the doors beat everything), not in a dry
+   run, and a released escort (mode 2 / 3) counts as class 2. Same-class orders are as before (their own timers). GUESS: that 8 s is long enough
+   for the game's chain to lose its interest and short enough not to hold a bot back; the key is the lever. Not run in the game. */
+static int kle_gap_s = 8; static volatile int kle_gap_wait;
+static struct { DWORD at; BYTE cls; } kle_gap_last[KLB_NREC];
+static DWORD kle_gap_refused;
+static int kle_gap_check(const struct kle_e *e, char why[100])
+{
+    int cls, rec = e->rec; DWORD now = GetTickCount();
+    if (kle_gap_s <= 0 || kle_gap_wait || rec < 0 || rec >= KLB_NREC) return 1;
+    cls = (e >= kle_r.e && e < kle_r.e + KLE_MAX && e->mode == 1) ? 1 : 2;
+    if (kle_gap_last[rec].at && kle_gap_last[rec].cls != cls && (DWORD)(now - kle_gap_last[rec].at) < (DWORD)kle_gap_s * 1000) {
+        snprintf(why, 100, "debounce: record %d got a %s order %.1f s ago (OrderGap=%d s)", rec, kle_gap_last[rec].cls == 1 ? "escort" : "other", (now - kle_gap_last[rec].at) / 1000.0, kle_gap_s);
+        if (!(kle_gap_refused++ % 20)) klog("order-gap: %s - %lu such refusal(s) so far", why, (unsigned long)kle_gap_refused);
+        return 0;
+    }
+    kle_gap_last[rec].at = KLB_T(now); kle_gap_last[rec].cls = (BYTE)cls;
+    return 1;
+}
+
 static int kle_order2(struct kle_e *e, const float want[3], float got[3], char why[100], int dry)
 {
     float p[4]; BYTE soft = 0; LARGE_INTEGER t0, t1; double ms;
@@ -596,6 +621,7 @@ static int kle_order2(struct kle_e *e, const float want[3], float got[3], char w
     if (!kle_ok3(want)) { strcpy(why, "the place is not a number"); return 0; }
     if (!kle_callable(why)) return 0;
     if (dry) { kltr_order(e->rec, want, want, 2); return 2; }
+    if (!kle_gap_check(e, why)) return 0;
     p[0] = want[0]; p[1] = want[1]; p[2] = want[2]; p[3] = 0;
     if (!kle_order_f.QuadPart) QueryPerformanceFrequency(&kle_order_f);
     QueryPerformanceCounter(&t0);
@@ -1290,7 +1316,7 @@ static void kle_tick(int game_thread)
         kle_r.visit++;
         for (i = 0; i < KLB_NREC; i++) if (kle_r.all_raised[i] == 2) kle_r.all_raised[i] = 0;      /* only looked at (dry / Stage=0): judged again */
     }
-    kle_r.was_waiting = waiting;
+    kle_r.was_waiting = waiting; kle_gap_wait = waiting;
     if (kle.all) {
         static DWORD tracked;                 /* the last pass that got here: the stillness clock is wall time, the round is not */
         if (tracked && now - tracked > 1500) memset(kle_r.all_seen, 0, sizeof kle_r.all_seen);     /* a pass was missing (the window was not in front, the round stood still): every clock starts again */
@@ -1395,6 +1421,8 @@ static void kle_init(void)
     kle.until = GetPrivateProfileIntA("Bots", "EscortUntil", 3, klh_ini) == 1 ? 1 : 3;
     kle.stage = klb_pos("EscortStage", 0, 3);
     kle.board = GetPrivateProfileIntA("Bots", "EscortBoard", 1, klh_ini) != 0;
+    kle_gap_s = klb_pos("OrderGap", 8, 120);
+    if (kle_gap_s) klog("order-gap: OrderGap=%d s: an order of another kind (escort follow / the other order givers) to the same bot within that time is refused (0 = off)", kle_gap_s);
     kle.every = (DWORD)klb_pos("EscortEvery", 2, 60) * 1000; if (kle.every < 1000) kle.every = 1000;
     kle.far_ = klb_inif("EscortFar", "800"); if (!klb_finite(kle.far_) || kle.far_ < 400) kle.far_ = 400;      /* under 4 m the place could come within the game's 250 */
     kle.side = klb_inif("EscortSide", "300"); if (!klb_finite(kle.side) || kle.side < 0) kle.side = 0;

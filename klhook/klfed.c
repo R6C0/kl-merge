@@ -109,6 +109,9 @@
  *   Player=0          1 = the dead player comes back as police (section 2)
  *   MinCrew=1         AI heisters that must be in play for the player's return to be armed
  *   EndSeconds=3      the hook's round end when a police human has nobody left to hunt; 0 = leave it to the clock
+ *   Nudge=1           the fed's OBJECTIVE line in the log (reads only; 0 = off): while you are a fed and have stood NudgeIdle=12 s, or the nearest live AI
+ *                     heister is NudgeFar=6000 units (60 m) away, 'fed: OBJECTIVE: hunt record N ... offset x/y/z' every NudgeEvery=12 s. There is NO on-screen
+ *                     part: that needs the HUD module (klhud*.c, not this file's) - this is the data a marker would use.
  *   Bots=0            0 = the level data alone (a fed at the heister's death AND when he boards), 1 = deaths only,
  *                     2 = muted: no AI fed (section 3)
  *
@@ -166,7 +169,7 @@
 static int klx_on;
 static int klx_level_verdict(const char *scene, char *why);          /* 0 no level, 1 stock, 2 not stock, 3 not known; why[200] */
 
-static struct { int on, log, player, mincrew, bots; float end; } klp;
+static struct { int on, log, player, mincrew, bots, nudge, nudge_idle, nudge_every; float end, nudge_far; } klp;   /* nudge*: section 4 (the fed's objective line) */
 
 struct klp_rec { int used, ai; DWORD at, actor, client, cflags; BYTE status, cam, body, local, index; float wait; };
 struct klp_snap {
@@ -445,7 +448,7 @@ static void klp_bots_tick(const struct klp_snap *s, DWORD now)
    - 'fed: you are on another level of height than the whole crew': every AI heister in play is more than 5000 above or
      below you (Retomoto: the tower 19600 .. 21000, the street -50 .. 570) - once a life; and when it ends.
    The crew's places: [actor + 0x460] (klcrew_rt.c's 'feet', an ASSUMPTION it states; the hop lines read it as the node). */
-static struct { DWORD player, since, said; float at[3]; int apart; } klp_w;
+static struct { DWORD player, since, said, nudged; float at[3]; int apart; } klp_w;
 
 static void klp_where(const struct klp_snap *s)
 {
@@ -460,10 +463,20 @@ static void klp_where(const struct klp_snap *s)
         klp_w.said = KLP_T(now);
         klog("fed: you have stood %.0f s at (%.0f, %.0f, %.0f) (within 1 m; local player object %u)", (now - klp_w.since) / 1000.0, s->feet[0], s->feet[1], s->feet[2], s->sel);
     }
-    for (i = 0; i < s->n; i++) {
-        const struct klp_rec *r = &s->r[i];
-        if (!r->used || !r->ai || r->status || !r->actor || !klh_rd(r->actor + 0x460, ft, 12) || !klp_finite(ft[1]) || (!ft[0] && !ft[1] && !ft[2])) continue;
-        n++; dy = (float)fabs(ft[1] - s->feet[1]); if (dy < mindy) mindy = dy;
+    {   /* section 4: the fed's objective (2026-10-18, overnight audit: 'the fed stands idle 10 to 29 s repeatedly, no clear job'): the nearest LIVE heister */
+        int bi = -1; float bd = 1e9f, bp[3] = {0, 0, 0};
+        for (i = 0; i < s->n; i++) {
+            const struct klp_rec *r = &s->r[i];
+            if (!r->used || !r->ai || r->status || !r->actor || !klh_rd(r->actor + 0x460, ft, 12) || !klp_finite(ft[1]) || (!ft[0] && !ft[1] && !ft[2])) continue;
+            n++; dy = (float)fabs(ft[1] - s->feet[1]); if (dy < mindy) mindy = dy;
+            { float dx = ft[0] - s->feet[0], dz = ft[2] - s->feet[2], dd = (float)sqrt(dx * dx + dy * dy + dz * dz); if (klp_finite(dd) && dd < bd) { bd = dd; bi = i; memcpy(bp, ft, 12); } }
+        }
+        if (klp.nudge && bi >= 0 && (now - klp_w.since >= (DWORD)klp.nudge_idle * 1000 || bd >= klp.nudge_far) && (!klp_w.nudged || now - klp_w.nudged >= (DWORD)klp.nudge_every * 1000)) {
+            float dx = bp[0] - s->feet[0], dz = bp[2] - s->feet[2];      /* world units; which way the camera looks is not read, so the offset is given per axis */
+            klp_w.nudged = KLP_T(now);
+            klog("fed: OBJECTIVE: hunt record %d, the nearest of %d heister(s) still in play: %.0f m away, offset x %+.0f m, y %+.0f m, z %+.0f m, at (%.0f, %.0f, %.0f); %s (stood %.0f s)", bi, n, bd / 100, dx / 100, (bp[1] - s->feet[1]) / 100, dz / 100,
+                 bp[0], bp[1], bp[2], bd >= klp.nudge_far ? "you are far from the crew" : "you are standing still", (now - klp_w.since) / 1000.0);
+        }
     }
     apart = n && mindy > 5000.0f;
     if (apart != klp_w.apart) {
@@ -536,6 +549,10 @@ static void klp_init(void)
     v = (int)GetPrivateProfileIntA("Fed", "Bots", 0, klh_ini); klp.bots = v < 0 ? 0 : v > 2 ? 2 : v;
     GetPrivateProfileStringA("Fed", "EndSeconds", "3", t, sizeof t, klh_ini);
     klp.end = (float)atof(t); if (!klp_finite(klp.end) || klp.end < 0) klp.end = 0; else if (klp.end > 0 && klp.end < 1) klp.end = 1; else if (klp.end > 600) klp.end = 600;
+    v = (int)GetPrivateProfileIntA("Fed", "Nudge", 1, klh_ini); klp.nudge = v != 0;      /* a log line only (reads): on by default */
+    v = (int)GetPrivateProfileIntA("Fed", "NudgeIdle", 12, klh_ini); klp.nudge_idle = v < 3 ? 3 : v > 300 ? 300 : v;
+    v = (int)GetPrivateProfileIntA("Fed", "NudgeEvery", 12, klh_ini); klp.nudge_every = v < 3 ? 3 : v > 300 ? 300 : v;
+    GetPrivateProfileStringA("Fed", "NudgeFar", "6000", t, sizeof t, klh_ini); klp.nudge_far = (float)atof(t); if (!klp_finite(klp.nudge_far) || klp.nudge_far < 500) klp.nudge_far = 6000;
     klog("fed: on; Log=%d Player=%d (MinCrew=%d EndSeconds=%.0f) Bots=%d (%s); data writes only; Arcade only, and everything but the log only on a level that is not the stock one of its slot",
          klp.log, klp.player, klp.mincrew, klp.end, klp.bots, klp.bots == 1 ? "a heister's fed at his death only" : klp.bots == 2 ? "muted: no AI fed" : "the level data alone");
 }

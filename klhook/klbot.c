@@ -147,7 +147,13 @@
  *       it turns (b's writes; you need not be in play) and f makes him the crew's enemy: he shoots the one with the
  *       money - or whoever is nearer: who he aims at is the game's choice. What the victim carried lies where he
  *       fell as in stock; the hook does NOT hand it to the traitor (a team-1 bot may not be able to pick it up: f).
- *    A HUMAN TRAITOR needs nothing new: the game's own mark ([player+0x2726], slot 129) makes every bot fight him
+ *    h. TraitorKillMax=<n> (default 2; 0 = off, the old behaviour; needs TraitorFoe=1; 2026-10-18, overnight audit: Vault round 2, one traitor with $1.28M killed 5
+       crewmates in 22 s and the round was dead for the fed). klb_foe_tick already sees every death of a record that was in play on the pass before; when a team-Enemy
+       traitor was within TraitorKillNear (3000 = 30 m) of a LOYAL AI heister that died, the death is booked to the NEAREST traitor (the killer is not read: a
+       policeman's kill beside him counts too, so the cap errs towards sparing the crew). At n booked deaths that traitor's team goes back to 2 (klb_foe_back, the
+       path that already runs at his death) and TraitorFoe does not swap him again (refused[]); he keeps the mask and the score bit, so the human still fights him
+       and he still fights the human. A new mask (next round) starts at 0. NOT RUN IN THE GAME: log 'TRAITOR CAP:'.
+    A HUMAN TRAITOR needs nothing new: the game's own mark ([player+0x2726], slot 129) makes every bot fight him
  *    (0x882708); with TraitorFoe the turned bots fight him as well (team 1 against a player).
  *
  * 4. PAY THE DRIVER AND LEAVE WITHOUT YOU
@@ -250,6 +256,8 @@
  *   Tune=0              1 = write the traitor tuning: Traitors=1 Limit=6.0 Retaliate=0 (0 = stock) and per level
  *                       Traitors.<1..11>= Limit.<1..11>=
  *                       TraitorsMax=0 (with Tune: at most that many bots turn traitor in a ROUND - dead ones count; 0 = no cap)
+ *   TraitorKillMax=2    (needs TraitorFoe=1; section 3 h) a turned bot booked with that many crew deaths within TraitorKillNear=3000 units goes back to
+ *                       team Ally (he stops shooting the crew; the mask stays, the human is still his target). 0 = no cap (the old behaviour). 2026-10-18.
  *   Backstab=0          percent per round that one bot is picked; BackstabStage=2 BackstabMoney=250000 BackstabDelay=20
  *                       the turn then waits for BackstabNear=0 (units) / BackstabBehind=0 (by your direction of travel: a guess) /
  *                       BackstabBusy=0, BackstabWait=30 s at most
@@ -314,6 +322,7 @@ static struct {
     int on, log, tune, traitors, trl[KLB_NLEVEL + 1]; float limit, liml[KLB_NLEVEL + 1], retaliate;
     int backstab, bs_stage, bs_money, bs_delay;
     int tr_max;                               /* TraitorsMax: 0 = no cap (section 3 e) */
+    int tr_kills; float tr_kill_near;         /* TraitorKillMax / TraitorKillNear (section 3 h) */
     int bs_behind, bs_busy, bs_wait; float bs_near;      /* the moment of the turn (section 3 d); all 0 = as before */
     int bribe, br_money, br_delay;
     int leave, lv_delay; float lv_dist;
@@ -676,6 +685,7 @@ static struct {                               /* what TraitorFoe wrote, per reco
     DWORD rules;
     DWORD actor[KLB_NREC], info[KLB_NREC], team0[KLB_NREC];
     char swapped[KLB_NREC], was[KLB_NREC], marked[KLB_NREC], refused[KLB_NREC]; BYTE st[KLB_NREC];
+    int kills[KLB_NREC]; char spared[KLB_NREC];   /* section 3 h: crew deaths booked to a team-Enemy traitor; 1 = he is back on team Ally for good (this mask) */
 } klb_f;
 
 static void klb_foe_back(const struct klb_snap *s, int i, const char *why)
@@ -726,7 +736,16 @@ static void klb_foe_tick(const struct klb_snap *s, int act)
                 if (havev && s->r[j].actor && kle_node(klh_rd32(s->r[j].actor + 4), tp, 0) && klb_finite(d = (float)sqrt((tp[0] - vp[0]) * (tp[0] - vp[0]) + (tp[1] - vp[1]) * (tp[1] - vp[1]) + (tp[2] - vp[2]) * (tp[2] - vp[2]))) && (best < 0 || d < best)) { best = d; near_ = j; }
             }
             if (klb_f.swapped[i]) klog("bots: FOE: record %d (TRAITOR, team Enemy) died", i);
-            else if (nt && near_ >= 0) klog("bots: FOE: record %d (%s) died while %d team-Enemy traitor(s) were in play; the nearest, record %d, %.1f m away", i, klb_who(r), nt, near_, best / 100);
+            else if (nt && near_ >= 0) {
+                klog("bots: FOE: record %d (%s) died while %d team-Enemy traitor(s) were in play; the nearest, record %d, %.1f m away", i, klb_who(r), nt, near_, best / 100);
+                /* section 3 h: a loyal AI heister's death is booked to the nearest traitor if he was close (the killer is not known: a policeman's kill near him counts too - errs towards sparing the crew) */
+                if (klb.tr_kills > 0 && (r->flags & 1) && !(r->flags & 2) && i != s->human && best <= klb.tr_kill_near && ++klb_f.kills[near_] >= klb.tr_kills && !klb_f.spared[near_]) {
+                    klb_f.spared[near_] = 1;
+                    klog("bots: TRAITOR CAP: traitor record %d is booked with %d crew death(s) (TraitorKillMax=%d): he is team Ally again, he no longer shoots the crew (you stay his target); the mask stays", near_, klb_f.kills[near_], klb.tr_kills);
+                    klb_foe_back(s, near_, "TraitorKillMax reached");
+                    klb_f.refused[near_] = 1;
+                }
+            }
             else if (nt) klog("bots: FOE: record %d (%s) died while %d team-Enemy traitor(s) were in play (distance unknown)", i, klb_who(r), nt);
         }
         klb_f.st[i] = r->used ? r->status : 0xff;
@@ -739,7 +758,7 @@ static void klb_foe_tick(const struct klb_snap *s, int act)
         } else if (klb.foe && round && r->used && (r->flags & 3) == 3 && r->status == 0 && r->actor && !klb_f.refused[i]) klb_foe_swap(s, i);
         /* the score table's traitor bit: on from the swap until the mask goes (the kill bookkeeping, 3 f) */
         if (!r->used || !(r->flags & 2)) {
-            klb_f.refused[i] = klb_f.was[i] = 0;
+            klb_f.refused[i] = klb_f.was[i] = 0; klb_f.kills[i] = 0; klb_f.spared[i] = 0;
             if (klb_f.marked[i]) {
                 int ours = klb_f.marked[i] == 1;
                 klb_f.marked[i] = 0;
@@ -974,6 +993,8 @@ static void klb_init(void)
     }
     klb.backstab = klb_pct("Backstab"); klb.bs_stage = klb_pos("BackstabStage", 2, 3); klb.bs_money = klb_pos("BackstabMoney", 250000, 0x7fffffff); klb.bs_delay = klb_pos("BackstabDelay", 20, 3600);
     klb.tr_max = klb_pos("TraitorsMax", 0, 32);
+    klb.tr_kills = klb_pos("TraitorKillMax", 2, 32);   /* section 3 h: 0 = no cap (the old behaviour); default 2 */
+    klb.tr_kill_near = klb_inif("TraitorKillNear", "3000"); if (!klb_finite(klb.tr_kill_near) || klb.tr_kill_near <= 0) klb.tr_kill_near = 3000;
     klb.bs_near = klb_inif("BackstabNear", "0"); if (!klb_finite(klb.bs_near) || klb.bs_near < 0) klb.bs_near = 0;
     klb.bs_behind = GetPrivateProfileIntA("Bots", "BackstabBehind", 0, klh_ini) != 0; klb.bs_busy = GetPrivateProfileIntA("Bots", "BackstabBusy", 0, klh_ini) != 0;
     klb.bs_wait = klb_pos("BackstabWait", 30, 3600);
@@ -991,6 +1012,7 @@ static void klb_init(void)
     klb.bs_crew = klb_pct("BackstabCrew");
     klb.bs_crew_near = klb_inif("BackstabCrewNear", "1500"); if (!klb_finite(klb.bs_crew_near) || klb.bs_crew_near <= 0) klb.bs_crew_near = 1500;
     if (klb.bs_crew > 0 && !klb.foe) { klog("bots: BackstabCrew=%d%% needs TraitorFoe=1 (a turned bot is no enemy of the crew without it): BackstabCrew is OFF", klb.bs_crew); klb.bs_crew = 0; }
+    if (klb.foe && klb.tr_kills > 0) klog("bots: TraitorKillMax=%d: a turned bot that is booked with that many crew deaths within %.0f m of him goes back to team Ally (he stops shooting the crew; set 0 for the old, uncapped behaviour)", klb.tr_kills, klb.tr_kill_near / 100);
     if (klb.foe)
         klog("bots: TraitorFoe=1: a turned bot in play is team Enemy (the police's) - the crew and the escort should shoot him, he shoots them and you - and carries the score table's traitor bit (his kills and his death make nobody else a traitor); team 2 back when he is dead / aboard / the round ends; a GUESS until check K7. BackstabCrew=%d%% (stage %d, $%d, within %.0f m, %d s)",
              klb.bs_crew, klb.bs_stage, klb.bs_money, klb.bs_crew_near / 100, klb.bs_delay);
