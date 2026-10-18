@@ -5,9 +5,9 @@ its comment says the flood then reaches z 23,000 of 30,800 and "stops at cells t
 the REST, on the finished level, with a finer grid, and says which collision entities stand at the frontier.
 
 This file does NOT edit kl_fa_v2_hotcoffee.py (kl-merge-3f's). Everything here is opt-in:
-  python kl_fa_v2_hc_route2.py walk <finished folder or F01_Main.zip> [--cell 20] [--step 65] [--drop <path substring> ...] [--extra] [--near 400]
+  python kl_fa_v2_hc_route2.py walk <finished folder or F01_Main.zip> [--cell 20] [--step 65] [--drop <path substring> ...] [--extra] [--near 400] [--nocam]
       read-only: floods from the START rows with the blast + ROUTE_OPEN pieces dropped (read from the level's own wiring), prints the extent and the
-      steep pieces that wall each frontier cell (top-level subtree / entity), grouped. --extra also drops EXTRA_OPEN below.
+      steep pieces that wall each frontier cell (top-level subtree / entity), grouped. --extra also drops EXTRA_OPEN below; --nocam ignores camera-only collision (flag 0x40).
   python kl_fa_v2_hc_route2.py test <out> [--keep] [--str PC_Def.str]      the SAME build as 'kl_fa_v2_hotcoffee.py test' with ROUTE_OPEN + EXTRA_OPEN (default build unchanged:
       this runs in-process and sets kl_fa_v2_hotcoffee.ROUTE_OPEN before the build; nothing is written to the module)
 EXTRA_OPEN holds the pieces a walk has named so far (each a GUESS until a walk with --extra reaches the van and a live run agrees).
@@ -25,7 +25,18 @@ VAN_XZ = (2000.0, 30800.0)              # the van's stop
 # the 'z 23,000' the kl_fa_v2_hotcoffee comment names. GUESS: that this node is what the campaign's script removes (it is a 'name!remains' destructible; its sibling
 # '...MainWallB_01!ColiObj_CamColli_01' is camera collision and stays). GUESS: a DeactivateGeom also hides the wall's MESH, so the warehouse would show a 310 x 800
 # hole in its south wall for the whole round (the alley wall and the door leaves of ROUTE_OPEN do the same); a live look decides.
-EXTRA_OPEN = ('M01A_Ins_Warehouse_101a\\SI0103_M01_WareHouse_MainWallB_01!SI0103_M01_WareHouse_MainWallB',)
+# MEASURED (2026-10-18, same level, walk --extra, cell 20, STEP 65): past MainWallB the flood fills the warehouse + the diner (x -30 .. 8010, z up to 23,050 / 23,070) and stops at
+# the diner's FRONT: Entrance_01 (x 5897..6300, z 23080..23100, y 0..320) is a 36-triangle wall piece whose doorway holds the diner's animated glass door,
+# 'PC0901_M01_Dor_Diner_Anim_01' (ZGROUP: MatPosAnim + RelayMessageList; leaves Dor_attach x 6040..6160 y 0..252 [key-framed shape, filter 0x72], Dor_Win_Whole /
+# Dor_Win_Shattered [ShotActivate, 0x66]). It is the door the campaign OPENS (its own animation), so no clean-up of level geometry is needed. WHY dropping it alone 'changed nothing':
+# 'ColiObj_camerablocker_01' (x 4723..6690, z 23078, y -10..396, 2 triangles) closes the whole diner front in the model, but its .HVK filter flags are 0x40, the
+# same word as the 'ColiObj_CAM_Boothcollision*' shapes (their twins 'ColiObj_Hero_Boothcollision*' are 0x108) = camera-only collision. GUESS (names + twin pairs, not the
+# engine's filter table): 0x40 does not stop a player. Walk with --nocam (ignores shapes whose every flag is 0x40) + this door: the flood reaches the van cell
+# (z 31,470 max; van floor y -15). Without --nocam the walk needs --drop ColiObj_camerablocker_01 as well. GUESS: DeactivateGeom also hides the door's mesh and glass, so the
+# diner front shows an open doorway for the whole round (the same cost as the warehouse wall B); a live look decides. Outside the door: Street_02a facade pieces
+# (FacShop_A_0n, GlassA/B_Diner, pillars) did not stop the flood.
+EXTRA_OPEN = ('M01A_Ins_Warehouse_101a\\SI0103_M01_WareHouse_MainWallB_01!SI0103_M01_WareHouse_MainWallB',
+              'M01A_Ins_Diner_101a\\PC0901_M01_Dor_Diner_Anim_01')
 
 
 def _opened(L, extra):
@@ -45,9 +56,27 @@ def _opened(L, extra):
     return sorted(set(paths))      # ROUTE_OPEN is added even when the level predates it (older builds); the set drops duplicates
 
 
-def walk(src, cell=20.0, step=65.0, drop=(), extra=(), near=None, log=print):
-    """-> dict(reached, extent, van_reached, frontier: [(top-level name, entity name, count)])."""
+def _camera_only_ground():
+    """Make kl_walk2d's Ground leave out the shapes whose every .HVK collision flag is 0x40 (camera-only: see EXTRA_OPEN; GUESS)."""
+    import kl_map_escape as ESC, kl_hvk
+
+    Base = ESC.Ground
+
+    class Ground(Base):
+        def __init__(self, L):
+            Base.__init__(self, L)
+            cam = set(kl_hvk.ref(i) for s in L.hvk.shapes if s.sub and all(x[1] == 0x40 for x in s.sub) for i in s.inst)
+            self.tris = [t for t in self.tris if t[3] not in cam]
+            self.boxes = [b for b in self.boxes if b[1] not in cam]
+            self.camera_only = len(cam)
+    ESC.Ground = Ground
+
+
+def walk(src, cell=20.0, step=65.0, drop=(), extra=(), near=None, log=print, nocam=False):
+    """-> dict(reached, extent, van_reached, frontier: [(top-level name, entity name, count)]). nocam: ignore camera-only (flag 0x40) shapes."""
     import kl_walk2d as W
+    if nocam:
+        _camera_only_ground()
     W.CELL, W.STEP = float(cell), float(step)
     import kl_map_escape as ESC
     L = ESC.Level(src)
@@ -116,7 +145,7 @@ def main():
         step = float(a[a.index('--step') + 1]) if '--step' in a else 65.0
         drop = [a[i + 1] for i, v in enumerate(a) if v == '--drop']
         near = float(a[a.index('--near') + 1]) if '--near' in a else None
-        r = walk(a[1], cell, step, drop, EXTRA_OPEN if '--extra' in a else (), near)
+        r = walk(a[1], cell, step, drop, EXTRA_OPEN if '--extra' in a else (), near, nocam='--nocam' in a)
         sys.exit(0 if r['van_reached'] else 1)
     elif len(a) >= 2 and a[0] == 'test':
         import kl_fa_v2_hotcoffee as H
