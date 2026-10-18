@@ -1,3 +1,12 @@
+2026-10-18 15:16 - OFFLINE (kl-merge-e5; 3f owns live runs, owner active so the queue waits):
+- 3f's live results: Last Call L78 (combined route) you + all 7 aboard, 0 dead. Hasta L73 police 3a186c93: the heli survived. Retomoto L79 PASS but no van: the human died early and no bot reached the exit box.
+- Retomoto: L79 no van explained (re/retomoto_fa.md s14, d7910ff9 + 42ba123f). The script quit 0.5 s before LastVehicle's 2.5 s call point (log reading only).
+- New opt-in KLJoin builds, both queued with 3f, not run in the game:
+  - kl_rt_joinini --rescue-wedge (d1258797)
+  - Park II joinini (76ff4f83): two crew hops at the tea house and statue 1, c99c4e11
+- Private-match build check design: re/private_match_buildcheck.md (72a595a8, e7b266e3).
+- Workflow wlas1nmgu: why Retomoto hop-3 walks GIVE UP.
+Owner: git push origin rtp-schemas:main; adopt Hasta police / rtcops / Last Call route?
 2026-10-18 14:40 - kl-merge-3f LIVE (owner idle 13:45-14:27; all restored, live = hook a57d9ce7, ini ccec94fb, maps unchanged): e5's queue, all PASS 0 asserts. Hot Coffee II L71 VanCallNear: 2 stage-1/2 bots called 17 m out, both boarded on visit 1. Last Call L72 escape msg 5b0a025b: text shows; visit 1 took 0 bots (5 stuck at stage 1, hop deadlock per e5). Hasta L73 police 3a186c93: heli survived, you + all 7 out on visit 1. Last Call L74 (hook 1018w VanCallLast/HopHold): 4 of 6; L75 (+ KLJoin hop Stage=1 ea0446c1): you + 6 of 7, 0 dead (best Last Call yet; the keys did not fire, FollowOut called all at the van call; the hop-stage change was not exercised). L76 rtcops 6903219f: 0 crew dead or down, 6 of 7, no measurable difference. L77 roofgap (1018y) VOID: Brave took the foreground at 14:27 (owner input), watchdog stall. Queue paused: L77 rerun, Retomoto margins + HalfGuard (1018za), Vault hide-parts, Park II nvs. Nothing new applied live.
 2026-10-18 14:34 - kl-merge-e5 (3f owns live runs; owner idle, so 3f's queue is running):
 - L75: best Last Call visit 1 so far (you + 6 of 7 bots, 0 dead). FollowOut was first again, so neither the new keys nor hop-stage were exercised.
