@@ -103,6 +103,12 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   - EARLY join at r123: all 7 bots went to the street.
   - The human's goto stuck 13.8 m short, so there was no stage 3 for anyone and no van. Rec 1 turned traitor and died.
   - (l) is rerun as L96 with PT_DM09_fedvan_die 3185b898 (PlayerHealth 0.05).
+- RUN L96 (3f (l): zj + PT_DM09_fedvan_die 3185b898 + KLJoin 0b557e40): PASS 463 s. FIRST RETOMOTO ESCAPE WITH A FED HUMAN: 3 bots aboard.
+  - The human turned fed at r22. Hop 6 carried all 7. Deaths: recs 2, 1 and 3.
+  - Stage 3: rec 5 (traitor); recs 6 and 7 via VanCallLast; rec 4.
+  - The last van waited 53 s: the crewhold took the timer from 1.9 to 46.9 s.
+  - Aboard: recs 6 and 7, and rec 5 (back to loyal). Rec 4 was left about 5 m off in stage 3, which is the BoardReachLast case. It is rerun as (s) with TEST hook out_e5_1019a 043419cb.
+  - Hunted orders: 141, of which 38 went towards the fed.
 - DECISION: WalkExclusive=1 + LastVehicleLead=450 are CANDIDATES (they acted as designed in L83/L84, no harm seen; two runs only); van boarding with a fed human
   waits for (k)/(l).
 
