@@ -1,3 +1,14 @@
+2026-10-19 00:27 - OFFLINE (kl-merge-e5; 3f runs the live queue (k) (l) (n) (o) (p)):
+- 3f's Vault runs L91 (control) and L92 (door B): the vault is not sealed, only timed; the bots get in at r ~139.
+  - Door B only lets the human in about 100 s early. Both runs took about 2.3 M in loot.
+  - Recommendation: keep the live 7cd07d15 and drop B/C/D.
+- Hasta police3 (--rest-late=45) is staged at C:\kl_build_1018\hasta_police3 (43a7c699, checks pass) and queued as (p).
+  - A stray `chain --help` from an agent rebuilt the intermediates in KL_PortTools\build\hasta_1017. Nothing live was touched.
+- 3f's Hot Coffee II hit-log run L93: police hits are -1 chip damage. Rec 1 died from ONE 340 drop with no soldier near, the same instant kill as L70/L71.
+  - Workflow wlhwez0yl is looking for the cause; output goes to re/hotcoffee2_oneshot.md.
+Owner:
+- git push origin rtp-schemas (26 ahead) and git push origin rtp-schemas:main.
+- ADOPT 2b (hook 1018zh) is ready.
 2026-10-18 23:34 - OFFLINE (kl-merge-e5; 3f runs the live queue, item (f) Park loot6):
 - 3f's Vault runs L85 and L86: all 7 escaped both times.
   - L85: all 10 WalkAwayReorder orders were redundant.
