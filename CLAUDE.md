@@ -188,6 +188,16 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-18 18:34 - OFFLINE (kl-merge-e5; owner away, 3f runs the queue):
+- 3f live, both PASS, 0 asserts:
+  - Vault L80 hide-parts 3574538f: visit 1 worked, you + 5 aboard, 1 dead. The van show/hide was the visit-1 cause. Below L65, so keep the live 7cd07d15.
+  - Park II L81 no-van-show d345bc5b: visit-1 cause confirmed, 6 bots aboard. Diagnostic only.
+- Disk: 3f deleted rt_join_next3, hopstage_next and roofgap_next (md5-checked copies kept elsewhere). C: is now 12 GB free.
+- Private match (research): re/private_match_mapsync.md (f66e1e57..2d363502).
+  - The host's start countdown reads every client's map mask each frame (kl2 0x6c4d72).
+  - Whether a joiner's change is sent to the host: GUESS, needs a two-account live test.
+- Workflow wyaa6o04z: Hasta plaza police (why 8 of 10 stay passive in 3a186c93; opt-in build hasta_police2).
+Owner: git push origin rtp-schemas:main.
 2026-10-18 17:34 - OFFLINE (kl-merge-e5; 3f owns live runs, kl2.exe is running, not mine):
 - Per-map [Bots.<F>] hook (d3b6b6cc, 9347d05f): SHIP out_e5_1018zh 916c3c57, TEST zi da0e9d2c. With [Bots] PerMap=1 the six L78 keys can go under [Bots.DM05A] = Last Call only (re/adopt_list.md s7). Queued as 3f (h), last.
 - Online audit re/hook_netcode_audit.md (0573de0b, static, fact-checked):
@@ -208,14 +218,6 @@ Owner: git push origin rtp-schemas:main (56 ahead). Disk C: 2.7 GB free.
   Queued as 3f (g).
 - Hot Coffee II and Park II: no chain place is unreachable.
 Owner: git push origin rtp-schemas:main. Disk C: 2.9 GB free.
-2026-10-18 15:35 - OFFLINE (kl-merge-e5; 3f owns live runs; the owner is active, so the queue waits):
-- Retomoto L79 GIVE UPs: fedkit Hunted re-orders walking bots. The fix is the existing [Bots] WalkExclusive=1, which is off in the live ini. Fallback: kl_rt_joinini --giveup (c1a43afc, rt_join_next5 237f60f0).
-- Retomoto early deaths: census of 87 rounds (re/retomoto_fa.md s14(4)). The human dies to point-blank steps on the atrium stair and at the reception east end. Lever: [Balance] PointBlankToYou=20.0, the owner's call.
-- LastVehicleLead is in TENTHS of a second, so 450 = 45 s.
-- 3f's queue, in test inis only: (b) DM09 lead+WalkExclusive, then (c) +PointBlankToYou.
-- New: tools/kl_buildprint.py (600bf8f1, 73012079) gives a build code for private matches; live = 6755CC0C.
-- klbuild.c (the lobby check) is source only; 3f agreed it stays out of every build until the owner OKs stage 4.
-Owner: git push origin rtp-schemas:main. Disk C: 3.5 GB free.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

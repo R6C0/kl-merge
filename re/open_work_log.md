@@ -1,3 +1,13 @@
+2026-10-18 18:34 - OFFLINE (kl-merge-e5; owner away, 3f runs the queue):
+- 3f live, both PASS, 0 asserts:
+  - Vault L80 hide-parts 3574538f: visit 1 worked, you + 5 aboard, 1 dead. The van show/hide was the visit-1 cause. Below L65, so keep the live 7cd07d15.
+  - Park II L81 no-van-show d345bc5b: visit-1 cause confirmed, 6 bots aboard. Diagnostic only.
+- Disk: 3f deleted rt_join_next3, hopstage_next and roofgap_next (md5-checked copies kept elsewhere). C: is now 12 GB free.
+- Private match (research): re/private_match_mapsync.md (f66e1e57..2d363502).
+  - The host's start countdown reads every client's map mask each frame (kl2 0x6c4d72).
+  - Whether a joiner's change is sent to the host: GUESS, needs a two-account live test.
+- Workflow wyaa6o04z: Hasta plaza police (why 8 of 10 stay passive in 3a186c93; opt-in build hasta_police2).
+Owner: git push origin rtp-schemas:main.
 2026-10-18 17:34 - OFFLINE (kl-merge-e5; 3f owns live runs, kl2.exe is running, not mine):
 - Per-map [Bots.<F>] hook (d3b6b6cc, 9347d05f): SHIP out_e5_1018zh 916c3c57, TEST zi da0e9d2c. With [Bots] PerMap=1 the six L78 keys can go under [Bots.DM05A] = Last Call only (re/adopt_list.md s7). Queued as 3f (h), last.
 - Online audit re/hook_netcode_audit.md (0573de0b, static, fact-checked):
