@@ -65,6 +65,9 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   (two crew hops, with 7fef2733); rtcops 7bf368a7.
 - RUN L81 (3f, 18:17): no-van-show d345bc5b + hook 1018s. PASS, 0 asserts, 416 s. The van's 1e4 was already set at state 1 without EscVisitFix, state 1->3->5 on visit 1;
   6 bots aboard (one traitor); the escort stayed with the scripted human 6 m out, the human did not board. Diagnostic only (EscVisitFix live): nothing to adopt.
+- RUN L82c (3f, 2026-10-18 ~23:00): park_next KLJoin c99c4e11 + TEST hook out_e5_1018zi. PASS, 402 s. ALL 7 AI aboard on visit 1 (one traitor), but
+  the two hops carried NOBODY (From reached 5x, no bot stayed 8 s): every bot walked on its own, so the KLJoin is not what helped. L68 already
+  had all 7 out on visit 1 without it. -> Do NOT adopt c99c4e11 (adds nothing proven); keep the live folder without KLJoin.ini.
 - DECISION: adopt loot6 (3386b972) after 3f's run (f), yes or no. Nothing to do before that run.
 
 ### Hot Coffee II, DM01B [page 3 F03]
