@@ -1963,7 +1963,7 @@ static void klmv_pm_check(DWORD now)
     klmv_pm_folder(f, sizeof f);
     sec[0] = 0;
     if (f[0]) { snprintf(sec, sizeof sec, "Bots.%s", f); if (!GetPrivateProfileSectionA(sec, probe, sizeof probe, klh_ini)) f[0] = sec[0] = 0; }
-    if (!strcmp(f, klmv_pm_cur)) return;
+    if (!_stricmp(f, klmv_pm_cur)) return;      /* case-blind, as Windows reads the section */
     snprintf(klmv_pm_cur, sizeof klmv_pm_cur, "%s", f); snprintf(klmv_pm_sec, sizeof klmv_pm_sec, "%s", sec); klmv_pm_n = 0;
     klmv_read();
     if (f[0]) klog("move: per-map [Bots.%s]: %d keys override [Bots]", f, klmv_pm_n);
