@@ -123,6 +123,8 @@ if __name__ == '__main__':
     if len(a) < 2 or a[0].startswith('--'):
         print(__doc__); sys.exit(2)
     keep = KEEP_DEFAULT
+    if ('--keep-none' in a and '--keep' in a) or a[-1] == '--keep':
+        print(__doc__); sys.exit(2)
     if '--keep-none' in a:
         keep = ()
     elif '--keep' in a:
