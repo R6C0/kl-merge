@@ -1352,6 +1352,8 @@ def hop_text(hops, level=''):
     for i, h in enumerate(hops):
         L += ['[CrewHop%s]' % ('.%d' % (i + 1) if i else ''), 'From=' + g(h['from']), 'Radius=%g' % h['radius'], 'Height=%g' % h['height'],
               'Wait=%g' % h['wait'], 'Stage=%d' % h['stage'], 'Player=%d' % h['player'], 'Places=%d' % len(h['to'])]
+        if h.get('kind'):
+            L.append('Kind=%s' % h['kind'])             # 'lift' (tools/kl_fa_ramp.py): floors the mesh joins by a ramp; klhop.c ignores the key
         L += ['To.%d=%s' % (k + 1, g(t)) for k, t in enumerate(h['to'])]
     return '\r\n'.join(L) + '\r\n'
 
@@ -1419,7 +1421,7 @@ def hop_read(folder):
             continue
         h = {'section': 'CrewHop' if i == 0 else 'CrewHop.%d' % (i + 1), 'from': vec(d.get('from')), 'radius': float(d.get('radius', 300)),
              'height': float(d.get('height', 150)), 'wait': float(d.get('wait', 3)), 'stage': int(d.get('stage', 2)), 'player': int(d.get('player', 0)),
-             'to': []}
+             'kind': d.get('kind', '').lower(), 'to': []}
         for k in range(min(int(d.get('places', 0)), 8)):
             v = vec(d.get('to.%d' % (k + 1)))
             if v is None:
@@ -2567,19 +2569,20 @@ def hop_check(B, lane, exits, links, prev, nxt, bots, fail, note, log, facts):
                     fail('%s [%s]: To.%d and To.%d are %d apart (klhop.c drops a place nearer than %d to an earlier one)'
                          % (HOP_FILE, sec, j + 1, k + 1, math.hypot(t[0] - o[0], t[2] - o[2]), HOP_APART))
             n_exit += bool(in_exit(B, exits, t))
-        if pf in sides:
+        lift = h.get('kind') == 'lift'          # kl_fa_ramp: the floors ARE one mesh part (a ramp), the stacked places are the trouble
+        if pf in sides and not lift:
             fail('%s [%s]: a landing place is on From\'s own mesh part (read without links): nothing to hop over' % (HOP_FILE, sec))
         if len(sides) > 1:
             fail('%s [%s]: the landing places are on %d mesh parts' % (HOP_FILE, sec, len(sides)))
         mine = [(pa, pb) for pa, pb in links if at(pa) and at(pb) and nav0.part[at(pa)[0]] == pf and nav0.part[at(pb)[0]] in sides]
-        if not mine:
+        if not mine and not lift:
             fail('%s [%s]: no drop link of the mesh leads from From\'s mesh part to the landing places\' (%d link(s) in the mesh): the hop '
                  'belongs to no way of the squads' % (HOP_FILE, sec, len(links)))
         for pa, pb in mine:
             if inside(pb):
                 fail('%s [%s]: the link\'s end (%d, %d, %d) is inside From\'s radius and height: a bot the link carried would be hopped as well'
                      % (HOP_FILE, sec, *pb))
-        before = [(nm, p) for nm, p in prev if at(p) and nav0.part[at(p)[0]] == pf]
+        before = [] if lift else [(nm, p) for nm, p in prev if at(p) and nav0.part[at(p)[0]] == pf]
         for nm, p in before:
             if not inside(p):
                 fail('%s [%s]: %s waits before the drop at (%d, %d, %d), outside Radius %g / Height %g of From (%d, %d, %d): the hook never '
@@ -2588,7 +2591,7 @@ def hop_check(B, lane, exits, links, prev, nxt, bots, fail, note, log, facts):
             note('%s [%s]: no squad\'s place before a drop link is on From\'s mesh part' % (HOP_FILE, sec))
         beyond = sorted({q for q in nxt if at(q) and nav0.part[at(q)[0]] in sides})
         lost = 0
-        for t, poly in polys:
+        for t, poly in ([] if lift else polys):
             dist, _p, _a = nav0.dist_map(poly, tuple(t))
             lost += sum(at(q)[0] not in dist for q in beyond)
         if lost:
