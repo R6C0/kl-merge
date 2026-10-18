@@ -1126,7 +1126,7 @@ static void klmv_driver(const struct klb_snap *s, DWORD now, const struct klb_re
 static void klmv_crewhold(const struct klb_snap *s, DWORD now, const struct klb_rec *h, int criminal)
 {
     float bd[3], p[3], timer = klb_finite(s->timer) ? s->timer : -1.0f, tnow = 0, add, dnear = -1; BYTE grade = 1, paid = 0, veh2 = 0; const char *no = 0; char gw[200], gn[200];
-    int i, nwalk = 0, nplay = 0, napp = 0; float budget;
+    int i, nwalk = 0, nplay = 0, napp = 0, nappx = 0; float budget, dapp = -1;
     gw[0] = gn[0] = 0;
     if (!(s->veh == 3 || s->veh == 4) || !h || !(h->status == 4 || (klmv.crew_alone && h->status == 0)) || !criminal || !kle_boarding(s->rules, bd)) { memset(klmv_r.cr_at, 0, sizeof klmv_r.cr_at); return; }
     if (klmv_r.cr_visit != klmv_r.visit) { klmv_r.cr_visit = klmv_r.visit; klmv_r.cr_used = 0; klmv_r.cr_told = 0; klmv_r.cr_extra = 0; klmv_r.cr_xdone = 0; memset(klmv_r.cr_at, 0, sizeof klmv_r.cr_at); }
@@ -1141,7 +1141,7 @@ static void klmv_crewhold(const struct klb_snap *s, DWORD now, const struct klb_
         if (klmv.crew_hop > 0) {      /* CrewRouteHopHold (GUESS limits): 1 m nearer in 5 s counts as closing in; klhop.c's hop state is private there, so a bot carried over a hop (it stands 10 s at From) counts for 15 s after it last closed in */
             if (!klmv_r.cr_dat[i]) { klmv_r.cr_dat[i] = KLB_T(now); klmv_r.cr_dd[i] = d; }
             else if (now - klmv_r.cr_dat[i] >= 5000) { if (klmv_r.cr_dd[i] - d >= 100.0f) klmv_r.cr_shr[i] = KLB_T(now); klmv_r.cr_dat[i] = KLB_T(now); klmv_r.cr_dd[i] = d; }
-            if (r->stage >= 3 && klmv_r.cr_shr[i] && now - klmv_r.cr_shr[i] <= 15000 && d <= klmv.crew_range * 100.0f) napp++;
+            if (r->stage >= 3 && klmv_r.cr_shr[i] && now - klmv_r.cr_shr[i] <= 15000 && d <= klmv.crew_range * 100.0f) { napp++; if (!klmv_r.cr_walk[i]) { nappx++; if (dapp < 0 || d < dapp) dapp = d; } }
         }
         if (klmv_r.cr_walk[i] && d <= klmv.crew_range * 100.0f) { nwalk++; if (dnear < 0 || d < dnear) dnear = d; }
     }
@@ -1151,6 +1151,7 @@ static void klmv_crewhold(const struct klb_snap *s, DWORD now, const struct klb_
         klmv_r.cr_xdone = 1; klmv_r.cr_extra = klmv.crew_hop; budget += klmv.crew_hop;
         klog("crewhold: the vehicle leaves in %.1f s and the %.1f s of CrewRouteHold are used, but %d stage-3 bot(s) closed in on the boarding place within the last 15 s (mid-hop or walking): CrewRouteHopHold adds up to %.1f s, once this visit", timer, klmv.crew_hold, napp, klmv.crew_hop);
     }
+    if (klmv_r.cr_extra > 0 && nappx) { nwalk += nappx; if (dnear < 0 || dapp < dnear) dnear = dapp; }      /* while the CrewRouteHopHold seconds run, a closing-in bot that stands (on a hop) holds the vehicle like a walking one */
     if (budget - klmv_r.cr_used < 0.5f) {
         if (!(klmv_r.cr_told & 2)) { klmv_r.cr_told |= 2; klog("crewhold: the vehicle leaves in %.1f s: the %.1f s of CrewRouteHold are used", timer, budget); }
         return;
