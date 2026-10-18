@@ -248,6 +248,13 @@
  *   BoardReachAim=0       cm (0 = off; suggested 150 GUESS, at most 300): the order to the doors goes to a point this far from the
  *                         boarding object towards the bot, at the bot's own height, not to the object's node. DM02 L21: bots 3-6 m
  *                         off sent to the node (-615, 122, -8712) walked away onto the y 22 deck (a detour) and drifted 10-18 m out
+ *   BoardReachFight=0     1 = a CALLED bot (stage 3) hurt in the last 4 s and within BoardReachFightRange of the boarding box skips the
+ *                         1 s stand-still test and gets the order to the doors (a fighting bot never 'stands'; Vault L24 record 4
+ *                         stalled in a firefight 12 m from the van). Once a visit unless BoardReachRepeat is set. Needs BoardReach;
+ *                         from BoardReachVisits on and at the round's last vehicle the reach code is off, so this is too (0 = off)
+ *   BoardReachFightRange=1500  cm (15 m GUESS) for BoardReachFight, at most 3000
+ *   LastVehicleLead=25    tenths of a s (2.5 s = the old literal, default; at least 25): the no-vehicle fallback of LastVehicle calls the
+ *                         escape vehicle this long before the round's end. Last Call HELI3 missed its window; 150 (15 s) is a GUESS for a test
  *   BoardReachVisits=3    from this visit of a vehicle on the boxes work as in stock again (0 = never; the round's
  *                         last vehicle always works as in stock)
  *   MoveDry=0           1 = every line, NOTHING written or called (the boxes are not wrapped either)
@@ -318,6 +325,9 @@ static struct {
     float near_; int near_visits, near_stage;
     float reach; int reach_visits, reach_doors, reach_order;
     DWORD hop; float hop_max;      /* RestlessHop (section 5): seconds at a hold before a hop to a cover place of the level's [Hops]; 0 = off */
+    float last_lead;               /* [Bots] LastVehicleLead (2026-10-18, Last Call HELI3 missed its window): s before the round's end from which the no-vehicle fallback calls the escape vehicle; 2.5 = the old literal (default) */
+    int reach_fight;               /* [Bots] BoardReachFight (2026-10-18, Vault L24 record 4): 1 = a called, hurt bot within reach_fight_range of the boarding place is sent to the doors without the stand-still test; 0 = off (default) */
+    float reach_fight_range;       /* [Bots] BoardReachFightRange: cm, default 1500 (15 m GUESS) */
     int last;                      /* LastVehicle (section 6): 1 = the fallback last vehicle is on (default), 0 = off */
     float reach_settle;            /* [Bots] BoardReachSettle (2026-10-18, DM02 L18 record 4): cm; a called bot within this of the boarding box counts as within BoardReach; 0 = off (default) */
     float reach_aim;               /* [Bots] BoardReachAim (2026-10-18, DM02 L21): cm; the doors order aims this far from the boarding object towards the bot, at its height; 0 = off (default) */
@@ -759,14 +769,15 @@ static void klmv_last_vehicle(const struct klb_snap *s)
              game_frame ? KLMV_LAST_AT : KLMV_LAST_NOVEH, game_frame ? "a vehicle is known and the HUD clock is not ahead: the game's own call at 2.0 s gets its frame" : "no vehicle known, or the HUD clock runs ahead of the end: the game's own call cannot come in time");
     }
     left = rem;                               /* from here on 'left' is the time to the round's end */
-    if (left > 2.5f || left <= 0.0f) return;
+    if (left > klmv.last_lead || left <= 0.0f) return;      /* LastVehicleLead: 2.5 s unless set */
     if (veh || flagged) {                     /* the game called one (its own forced call at 2.0 s, or a call before that is still running): nothing to do */
+        if (left > KLMV_LAST_NOVEH) return;   /* LastVehicleLead > 2.5: an ordinary visit still running this early may end before 2.5 s; only latch from 2.5 s on, as before (never true by default) */
         if (!klmv_r.last_told++) klog("last: %.2f s left: a vehicle is under way or the last one is flagged already (state %u, [rules+0xe8a] %u, kind %u, vehicle %08lx, +0xe80 %08lx): nothing done", left, veh, flagged, kind, known, e80);
         klmv_r.last_done = 1; return;
     }
     /* v82d: the game's own call (0x81e570) needs a vehicle: [rules+0x1e4] / [rules+0xe80] (0x81e5aa 'je' past the call when edi = 0). With none known it will NEVER come,
        so there is no frame to give it: the call is made from 2.5 s on. With one known the game gets its frame at 2.0 s and this follows at 1.75 s. */
-    limit = game_frame ? KLMV_LAST_AT : KLMV_LAST_NOVEH;      /* v82e: the frame is given only when the game's 2.0 s crossing on [4c] precedes the end */
+    limit = game_frame ? KLMV_LAST_AT : klmv.last_lead;      /* LastVehicleLead replaces KLMV_LAST_NOVEH (same 2.5 by default) */      /* v82e: the frame is given only when the game's 2.0 s crossing on [4c] precedes the end */
     if (left > limit) return;
     klmv_r.last_done = 1;
     if (klh_rd32(s->rules) != KLB_RULES_VT || !klb_same_code(KLMV_CALLVEH, head, sizeof head)) { klog("last: %.2f s left and NO last vehicle, but the rules object or 0x8154f0 is not the one this build knows: nothing done", left); return; }
@@ -832,7 +843,7 @@ static void klmv_stage3(const struct klb_snap *s, int i, const char *what)
 static void klmv_reach_pass(const struct klb_snap *s, DWORD now)
 {
     struct klmv_fr fr, bf[KLMV_NBOX]; int i, j, waiting = s->veh == 3 || s->veh == 4, relax, have = 0, nb = 0, first = 0; DWORD obj, actor, soldier; LONG beyond = 0, took = 0;
-    float d, bp[3], got[3], aim[3]; char w[100]; struct kle_e t; BYTE last = 0;
+    float d, bp[3], got[3], aim[3]; char w[100]; struct kle_e t; BYTE last = 0; int fight;
     if (klmv_reach_ok <= 0) { klmv_rc.armed = 0; return; }      /* also in a dry run (review S8 a): no 'WOULD' line for an update that would never be used */
     /* THE UPDATE IS ARMED FOR THE WHOLE ROUND (review M1): it reads the vehicle's state and the boarding box itself,
        in its own frame. The tick only says for which rules object, how far, and whether the boxes work as in stock
@@ -902,7 +913,8 @@ static void klmv_reach_pass(const struct klb_snap *s, DWORD now)
             if (klmv.log > 1) klog("reach: visit %d: record %d: %.1f s since its order to the doors, %.1f m from the boarding box: it may be sent again (BoardReachRepeat)", klmv_r.visit, i, (KLB_T(now) - b->order_at) / 1000.0, d / 100);
         }
         if (!klmv.reach_order || r->stage < 3 || (r->flags & 2) || d <= klmv.reach || (klmv.reach_settle > 0 && d <= klmv.reach_settle) || d > KLMV_SENT || (b->told & 32)) continue;
-        if ((now - b->since < 1000 && !(klmv.reach_repeat && out) && !(klmv.reach_repeat && klmv.reach_chase && b->order_at && b->order_at >= klmv_r.rc_wait_at)) || now - klmv_r.rc_wait_at < 1000) continue;  /* it stands, a second into the wait (BoardReachRepeat: a bot in an escape box need not stand) */
+        fight = klmv.reach_fight && b->hit_at && now - b->hit_at < 4000 && d <= klmv.reach_fight_range;      /* BoardReachFight: a hurt bot near the doors fights where it is and never 'stands' */
+        if ((now - b->since < 1000 && !fight && !(klmv.reach_repeat && out) && !(klmv.reach_repeat && klmv.reach_chase && b->order_at && b->order_at >= klmv_r.rc_wait_at)) || now - klmv_r.rc_wait_at < 1000) continue;  /* it stands, a second into the wait (BoardReachRepeat: a bot in an escape box need not stand) */
         for (j = 0; j < KLE_MAX; j++) if (kle_r.e[j].mode == 1 && kle_r.e[j].rec == i) break;
         if (j < KLE_MAX) continue;                                              /* klescort.c holds it beside the human */
         b->told |= 32;
@@ -1455,6 +1467,9 @@ static void klmv_init(void)
     klmv.dry = GetPrivateProfileIntA("Bots", "MoveDry", 0, klh_ini) != 0;
     klmv.log = klb_pos("MoveLog", 1, 2);
     klmv.last = GetPrivateProfileIntA("Bots", "LastVehicle", 1, klh_ini) != 0;
+    klmv.last_lead = (float)GetPrivateProfileIntA("Bots", "LastVehicleLead", 25, klh_ini) / 10.0f; if (klmv.last_lead < 2.5f) klmv.last_lead = 2.5f; if (klmv.last_lead > 60.0f) klmv.last_lead = 60.0f;      /* tenths of a s (25 = 2.5 s, the old literal = default); 15 s is a GUESS for a test */
+    klmv.reach_fight = GetPrivateProfileIntA("Bots", "BoardReachFight", 0, klh_ini) != 0;      /* 0 = off (default) */
+    klmv.reach_fight_range = (float)GetPrivateProfileIntA("Bots", "BoardReachFightRange", 1500, klh_ini); if (klmv.reach_fight_range < 0) klmv.reach_fight_range = 0; if (klmv.reach_fight_range > KLMV_SENT) klmv.reach_fight_range = KLMV_SENT;      /* cm; 1500 = 15 m GUESS */
     klmv.snap = klmv.restless ? klb_pos("RestlessSnap", 0, 1) : 0;      /* 0 = off (default) */
     klmv.skip_down = GetPrivateProfileIntA("Bots", "RestlessSkipDowned", 0, klh_ini) != 0;      /* 0 = off (default) */
     klmv.snap_range = (DWORD)klb_pos("RestlessSnapRange", 4000, 20000);      /* GUESS: 40 m */
