@@ -174,4 +174,4 @@ Only Last Call ran: L76, 0 crew dead or down, 6 of 7, "no measurable difference"
 
 ## 8. One-click scripts (2026-10-18 20:5x, C:\kl_build_1018\adopt_1018, README.txt; md5-guarded, refuse while kl2 runs; reviewed CLEAN, never run for real)
 - ADOPT/UNDO 1 Hasta police (3a186c93). ADOPT/UNDO 2 Last Call L78 (zip 5b0a025b + KLJoin ea0446c1 + [Bots.DM05A] keys, inert on the live hook).
-- ADOPT/UNDO 2b hook 1018zh (916c3c57): makes the Last Call keys act. (h) = L89 PASS, all 7 aboard (TEST zi, same source). Use it once (i) shows that Hasta gets no per-map line.
+- ADOPT/UNDO 2b hook 1018zh (916c3c57): makes the Last Call keys act. (h) = L89 PASS, all 7 aboard (TEST zi, same source). L90 (i): DM11B logged 0 per-map lines, so the keys stay on Last Call. 2b is READY for the owner's yes or no.
