@@ -26,6 +26,10 @@ lingering seen outside the wedge, about 85 s, shorter than the wedges seen, 277 
 [CrewHop.3] (45), to N. In L79 five hop-3 walks hit 45 s while fedkit-hunted kept re-ordering the bots (see below); a longer budget
 only helps if the walk is still progressing. GUESS: 80. The real fix is [Bots] WalkExclusive=1 in KLHook.ini (hook side, not here).
 
+--leaderless-hop N (2026-10-18, re/retomoto_leaderless.md): APPENDS [CrewHop.6], a tower-wide catch-all that carries a bot to the
+street places once after it has stayed N s in the tower. Not tied to the human becoming a fed. Refused with --rescue-wedge or
+if [CrewHop.6] exists. GUESS values; N 10..600.
+
 Exit code 0 = written and verified (only the named lines differ), 1 = refused."""
 import sys, os, re, shutil, hashlib, argparse
 
@@ -35,6 +39,17 @@ RESCUE = ["; --rescue-wedge (kl_rt_joinini.py): boardroom-corridor wedge, bots s
           "Places=7", "To.1=6272 570 -5200", "To.2=5872 570 -5585", "To.3=5708 570 -5705", "To.4=5828 570 -6309",
           "To.5=5708 570 -7245", "To.6=5872 570 -7025", "To.7=5952 570 -7770"]
 MARGINS = ['CrewHop.2.Radius=800', 'CrewHop.3.Height=250']
+
+
+def leaderless_lines(n):
+    """--leaderless-hop N (re/retomoto_leaderless.md): a catch-all hop for the whole tower. A bot that has stayed N s inside it
+    (the timer is per bot and restarts when it leaves the circle) is carried to the street places once. It is NOT tied to the
+    human becoming a fed (a hop cannot see that; that needs hook code, see the doc). ALL VALUES ARE GUESSES."""
+    return ["; --leaderless-hop %d (kl_rt_joinini.py): any bot that stays in the tower %d s is carried to the street (once)." % (n, n),
+            "; GUESS: From / Radius / Height cover the tower floors (heights 18500..21500, 6000 around x=2000 z=-500); N is not tested.",
+            "[CrewHop.6]", "From=2000 20000 -500", "Radius=6000", "Height=1500", "Wait=%d" % n, "Stage=0", "Player=0", "Again=0",
+            "Places=7", "To.1=6272 570 -5200", "To.2=5872 570 -5585", "To.3=5708 570 -5705", "To.4=5828 570 -6309",
+            "To.5=5708 570 -7245", "To.6=5872 570 -7025", "To.7=5952 570 -7770"]
 
 
 def md5(p):
@@ -86,8 +101,14 @@ def main(argv):
     ap.add_argument('--set', action='append', default=[])
     ap.add_argument('--rescue-wedge', action='store_true')
     ap.add_argument('--giveup', type=int, metavar='SECONDS', default=None)
+    ap.add_argument('--leaderless-hop', type=int, metavar='SECONDS', default=None)
     ap.add_argument('--dry', action='store_true')
     a = ap.parse_args(argv)
+    if a.leaderless_hop is not None:
+        if not 10 <= a.leaderless_hop <= 600:
+            raise SystemExit('refused: --leaderless-hop must be 10..600 (klhop.c clamps Wait to 1..600)')
+        if a.rescue_wedge:
+            raise SystemExit('refused: --leaderless-hop and --rescue-wedge both add [CrewHop.6]')
     gu = []
     if a.giveup is not None:
         if not 5 <= a.giveup <= 600:
@@ -111,6 +132,13 @@ def main(argv):
         nl = b'\r\n' if b'\r\n' in data else b'\n'
         add = nl.join(x.encode() for x in RESCUE) + nl
         new = new + (b'' if new.endswith(b'\n') else nl) + nl + add
+    if a.leaderless_hop is not None:
+        if re.search(rb'^\s*\[CrewHop\.6\]', data, re.M):
+            raise SystemExit('refused: [CrewHop.6] already exists')
+        nl = b'\r\n' if b'\r\n' in data else b'\n'
+        add = nl.join(x.encode() for x in leaderless_lines(a.leaderless_hop)) + nl
+        new = new + (b'' if new.endswith(b'\n') else nl) + nl + add
+        print('appended [CrewHop.6] catch-all, Wait=%d' % a.leaderless_hop)
     for d in done:
         print('KLJoin.ini [%s] %s: %s -> %s' % d)
     if a.dry:
