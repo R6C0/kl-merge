@@ -130,3 +130,7 @@ Only Last Call ran: L76, 0 crew dead or down, 6 of 7, "no measurable difference"
 - Live check before global adoption: Vault DM03A (sealed ante-room, Sent+Repeat), Hot Coffee II DM01B (VanCallNear already L71 PASS; add Repeat/Sent), Park II DM06B, Retomoto DM09 (hops + WalkExclusive question), Hasta DM11B (heli: all keys GUESS). DM01/02/03/06 equal DM02's L18 case for Repeat only; Sent and VanCall untested there.
 - Safe option: adopt the keys per map (maps.ini / test ini) for Last Call only, and leave them out of the global ini until each van map has one run.
 - How (2026-10-18, 9347d05f + d3b6b6cc, NOT RUN IN THE GAME): hook out_e5_1018zh (SHIP, 916c3c57) reads `[Bots] PerMap=1`; each [Bots] key klmove reads is then looked up first in `[Bots.DM05A]` (folder of the map's KLJoin.ini, case-blind). Put the six L78 keys under `[Bots.DM05A]` and only Last Call gets them. PerMap=0 (default) = today's behaviour. Log: `move: per-map [Bots.DM05A]: 6 keys override [Bots]`. TEST build out_e5_1018zi da0e9d2c.
+
+## 8. One-click scripts (2026-10-18 20:5x, C:\kl_build_1018dopt_1018, README.txt; md5-guarded, refuse while kl2 runs; reviewed CLEAN, never run for real)
+- ADOPT/UNDO 1 Hasta police (3a186c93). ADOPT/UNDO 2 Last Call L78 (zip 5b0a025b + KLJoin ea0446c1 + [Bots.DM05A] keys, inert on the live hook).
+- ADOPT/UNDO 2b hook 1018zh (916c3c57): makes the Last Call keys act. Wait for 3f run (h) first; L78 ran on 1018y.
