@@ -103,7 +103,10 @@ def norm_ini_text(path, drop=()):
     """comments/blank stripped; sections and keys lower-cased; sections sorted (order inside kept)"""
     secs, cur = {}, ""
     with open(path, "rb") as f:
-        txt = f.read().decode("latin-1")
+        raw = f.read()
+    if raw[:3] == bytes((0xEF, 0xBB, 0xBF)):   # a BOM (Windows PowerShell Set-Content) would hide the first [section]
+        raw = raw[3:]
+    txt = raw.decode("latin-1")
     for ln in txt.splitlines():
         ln = ln.strip()
         if not ln or ln[0] in ";#":
@@ -194,7 +197,7 @@ def compute(dd, allfiles=False, quick=False, strict=False):
         digest_size=16).hexdigest()[:16]
     used = {}
     for (pg, sl), f in sorted(red.items()):
-        used.setdefault(f, []).append("%s%s" % (sl, "" if pg == 0 else "@p%d" % pg))
+        used.setdefault(f.lower(), []).append("%s%s" % (sl, "" if pg == 0 else "@p%d" % pg))
     root = os.path.join(dd, "KLExpansion", "Maps")
     nread = 0
     names = sorted(os.listdir(root)) if os.path.isdir(root) else []
@@ -204,9 +207,10 @@ def compute(dd, allfiles=False, quick=False, strict=False):
             continue
         hd, sf, det, nr = map_print(p, allfiles, quick)
         nread += nr
-        res["maps"][n] = {"hard": hd, "soft": sf, "active": used.get(n, []), "detail": det}
-    for f in used:   # a redirect to a folder that does not exist is itself a difference
-        if f not in res["maps"]:
+        res["maps"][n] = {"hard": hd, "soft": sf, "active": used.get(n.lower(), []), "detail": det}
+    have = {k.lower() for k in res["maps"]}
+    for f in used:   # a redirect to a folder that does not exist is itself a difference (Windows: case-blind)
+        if f not in have:
             res["maps"][f] = {"hard": "MISSING", "soft": "MISSING", "active": used[f], "detail": []}
     c = h()
     for k in ("dll", "ini", "patch01", "redirect"):
