@@ -52,7 +52,9 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
 - LIVE: ce42dcc9 + KLJoin 437c96ee.
 - BEST PROVEN: with the live balance, ce42dcc9 gave you + all 7 out in L55/L56/L57 (per 09:40). Police build 3a186c93 (hasta_next, only 2 of 10
   plaza police started, KLJoin 437c96ee): L73 PASS, heli survived, you + all 7 out on visit 1 (per 14:40). The mechanism is a GUESS (per 12:18).
-- STAGED, NOT RUN: rtcops DM11B 568e1786 (section 3).
+- STAGED, NOT RUN: rtcops DM11B 568e1786 (section 3). police2 131c8c2b (C:\kl_build_1018\hasta_police2\DM11B, KLJoin 437c96ee = live; builder
+  --rest-late=120, 13d72a3b): the 2 ExitStreet_Left police start at the stair top as in 3a186c93, the other 8 start 120 s later instead of never
+  (re/hasta_police.md e255313c: they were never started by design; the heli kill by SMG fire is a GUESS). Queued with 3f as (i).
 - DECISION: swap in 3a186c93 (the plaza police that were passive are the cost), yes or no. Alternative to avoid the cost: none proven.
 
 ### A Walk in the Park II, DM06B [page 3 F02]
