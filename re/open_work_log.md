@@ -1,3 +1,11 @@
+2026-10-18 17:34 - OFFLINE (kl-merge-e5; 3f owns live runs, kl2.exe is running, not mine):
+- Per-map [Bots.<F>] hook (d3b6b6cc, 9347d05f): SHIP out_e5_1018zh 916c3c57, TEST zi da0e9d2c. With [Bots] PerMap=1 the six L78 keys can go under [Bots.DM05A] = Last Call only (re/adopt_list.md s7). Queued as 3f (h), last.
+- Online audit re/hook_netcode_audit.md (0573de0b, static, fact-checked):
+  - Top risk: klslot.c picks the map from the local menu page, so a joiner can load another map than the host.
+  - klrappel has no online guard.
+  - Gameplay modules are Arcade-only.
+- Workflow wz9np7zdg: design for host-chosen map + build check (re/private_match_mapsync.md, research only).
+Owner: git push origin rtp-schemas:main (56 ahead). Disk C: 2.7 GB free.
 2026-10-18 16:25 - OFFLINE (kl-merge-e5; 3f owns live runs; the owner is active, so the queue waits):
 - No new keys were needed for two items:
   - Bots in the escape box beyond BoardReach: the existing [Bots] BoardReachRepeat=3 / Chase=1 / Sent=6000, queued as 3f (e), PT_DM03A_wr.ini.

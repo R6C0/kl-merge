@@ -188,6 +188,14 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-18 17:34 - OFFLINE (kl-merge-e5; 3f owns live runs, kl2.exe is running, not mine):
+- Per-map [Bots.<F>] hook (d3b6b6cc, 9347d05f): SHIP out_e5_1018zh 916c3c57, TEST zi da0e9d2c. With [Bots] PerMap=1 the six L78 keys can go under [Bots.DM05A] = Last Call only (re/adopt_list.md s7). Queued as 3f (h), last.
+- Online audit re/hook_netcode_audit.md (0573de0b, static, fact-checked):
+  - Top risk: klslot.c picks the map from the local menu page, so a joiner can load another map than the host.
+  - klrappel has no online guard.
+  - Gameplay modules are Arcade-only.
+- Workflow wz9np7zdg: design for host-chosen map + build check (re/private_match_mapsync.md, research only).
+Owner: git push origin rtp-schemas:main (56 ahead). Disk C: 2.7 GB free.
 2026-10-18 16:25 - OFFLINE (kl-merge-e5; 3f owns live runs; the owner is active, so the queue waits):
 - No new keys were needed for two items:
   - Bots in the escape box beyond BoardReach: the existing [Bots] BoardReachRepeat=3 / Chase=1 / Sent=6000, queued as 3f (e), PT_DM03A_wr.ini.
@@ -208,15 +216,6 @@ Owner: git push origin rtp-schemas:main. Disk C: 2.9 GB free.
 - New: tools/kl_buildprint.py (600bf8f1, 73012079) gives a build code for private matches; live = 6755CC0C.
 - klbuild.c (the lobby check) is source only; 3f agreed it stays out of every build until the owner OKs stage 4.
 Owner: git push origin rtp-schemas:main. Disk C: 3.5 GB free.
-2026-10-18 15:16 - OFFLINE (kl-merge-e5; 3f owns live runs, owner active so the queue waits):
-- 3f's live results: Last Call L78 (combined route) you + all 7 aboard, 0 dead. Hasta L73 police 3a186c93: the heli survived. Retomoto L79 PASS but no van: the human died early and no bot reached the exit box.
-- Retomoto: L79 no van explained (re/retomoto_fa.md s14, d7910ff9 + 42ba123f). The script quit 0.5 s before LastVehicle's 2.5 s call point (log reading only).
-- New opt-in KLJoin builds, both queued with 3f, not run in the game:
-  - kl_rt_joinini --rescue-wedge (d1258797)
-  - Park II joinini (76ff4f83): two crew hops at the tea house and statue 1, c99c4e11
-- Private-match build check design: re/private_match_buildcheck.md (72a595a8, e7b266e3).
-- Workflow wlas1nmgu: why Retomoto hop-3 walks GIVE UP.
-Owner: git push origin rtp-schemas:main; adopt Hasta police / rtcops / Last Call route?
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
