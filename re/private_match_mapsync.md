@@ -180,16 +180,106 @@ Reading rule: `Enable` read once at init (as klbuild.c:886-890), absent = 0. Not
 
 ## 7. kl2.exe addresses still to find
 
+Static pass 2026-10-18 (kl2.exe read by address with `tools/kl_exe.py` + capstone; nothing run, nothing written to the game folder). Tags per
+result: PROVEN = read in the disassembly cited; PARTIAL = the code is read but a link is inferred; GUESS = not read. Addresses are kl2.exe
+virtual addresses (base 0x400000).
+
 1. The widget behind `MP_SelectedLevel` (key `0xb6d6e4`, read at `0x6c4d02..0x6c4d16`) and how the FALobby selector reaches `0x746570`; needed
    only for an in-lobby page chooser (not v1). (buildcheck 5.5)
+   * Result, PARTIAL (the store and its readers/writers PROVEN; which toggler entries exist is not decoded).
+   * `MP_SelectedLevel` is not a widget but a key in a per-menu value store: `[0xdd265c]` (GUI manager) `+0x824` -> store; store vtbl+8 = Get(key,
+     default), vtbl+0x14 = Set(key, value, 0). Read form (0x6c4cfb..0x6c4d16, 0x7dc644..0x7dc665, 0x7dcca3..0x7dccc4):
+     `mov ecx,[ecx+0x824]; mov edx,[ecx]; call [edx+0x14]; ...; push 0; push 0xb6d6e4; call [edx+8]`.
+   * Writers (`push 0; push value; push 0xb6d6e4; call [edx+0x14]`): 0x4798b8..0x4798da (writes only if the toggler byte differs from the stored
+     one, then pokes `LobbyImageToggler` and `LobbyLevelNameToggler` by name), 0x6c9f43..0x6c9f57 (value = byte at `[esp+0x6c]`), 0x7d0c3b..0x7d0c56
+     (pushes `ebx` twice; ebx was compared with the store pointer at 0x7d0c33, so it is probably 0 = a reset; the register's value is not traced). A coop twin exists at 0x479857 (`CoopLobbyLevelNameToggler`, `CoopLobbyBriefingToggler`).
+   * Reader chain in the FALobby selector (class name `ZMercsFASelectorLobby` / slot 10 taken from the earlier pass, not re-checked in the 2nd pass; code 0x7dc5c1..0x7dc693): toggler `LobbyLevelNameToggler` (0x7dc5e4) ->
+     Get(`MP_SelectedLevel`) (0x7dc660) -> 0x746570 (0x7dc676; table 0,1,2,3,5,6,4,7,8 built on the stack at 0x746582..0x7465a9, 0xff -> -1 at 0x7465d3; the bound test is `ja 9`, so input 9 passes it and reads the never-set byte [esp+9]: input 9 is undefined) ->
+     `[0x168e598]` vtbl+0x28(slot) (0x7dc685..0x7dc691) -> 0x7163e0(slot), 0x520c60(slot). A second copy of the body is at 0x7dcc3d..0x7dcce4.
+   * An in-lobby chooser would write the key and let 0x479888 poke the togglers: GUESS, not read.
+
 2. Whether `m_iAvailableLevels` is re-sent after the lobby forms, i.e. whether a joiner-side mask clear reaches the host's gate (the DDL send
    path; buildcheck 8). Decides whether the joiner can refuse by itself.
+   * Result, PARTIAL (local object and setter PROVEN; the send trigger NOT read, so "reaches the host" stays a GUESS).
+   * Declared `m_iAvailableLevels : DDL_UInt16Reliable` (strings at 0xd2f366 / 0xd2f37c). On the local client (`[0x168e598]+0x98`) it is the
+     word-sized value object at `+0xb8`: content at `+4` stored XOR 0xdead, previous content at `+0x1c`, flag byte at `+0x1e`.
+   * Getter 0x431f60: `movzx eax,word [ecx+4]; xor eax,0xdead; ret`. Setter 0x845640: if the flag is set and the new value equals the old, returns
+     0 unchanged; else `mov dx,[ecx+4]; xor eax,0xdead; mov [ecx+4],ax; mov [ecx+0x1c],dx; mov al,1; ret 4` (returns 1, keeps old value at +0x1c):
+     a dataset set with change detection. Gate reader 0x73f270..0x73f289: `add ecx,0xb8; call 0x431f60; mov edx,1; shl edx,cl; test dx,ax; setne al`
+     (via 0x7ca830(client,slot)).
+   * The game rewrites the mask after the lobby exists: the DLC-install callback 0x845700 (jump table 0x845954, ids 0x6d6a..0x6d71) calls 0x845640
+     at 0x845835, 0x845894, 0x84590f on `[[0x168e598]+0x98]`. A mask rewritten mid-session only makes sense if it is sent; that is inference.
+   * NOT found: the code that notices `[+4] != [+0x1c]` and queues the send; it is in the Net-Z library through generic offsets. The word
+     "Reliable" in the type name is the only hint it is sent (GUESS). Live test (section 8) still decides.
+
 3. The time of `0x491f50` (client level name) relative to the first open of `<slot>_Main.zip` and the thread of the call, to prove the table is
    read-only at that moment; and which thread runs the CreateFile wrappers (klslot.c:320-336) during a load.
+   * Result, PARTIAL (both call chains read; that the load request comes AFTER 0x491f50 is an inference from session state numbers, 0xa vs 0x13/0x19..0x22, not from one traced run; "main thread" is an inference, no thread id observed).
+   * 0x491f50 is called once, at 0x5392ec, from the `ZSessionHandlerClient` handler (slot 97, holds 0x53919c): stores the name in `[sm+8]`
+     (copy call 0x4f99e0 at 0x491f89, name from 0x4468a0; `MPMap` is looked up at 0x491f9c (0x793550) and wins if present; only when the game type from 0x83f980 is 4 does it use `levellist->slot15(D.levelIndex)` at 0x491fd1..0x491fe3, game type 2 and others branch at 0x491fe7), calls 0x87c980, returns. It opens no
+     archive. The caller then reads the server DO (0x5392da), sets session state `vtbl+0x68(0xa)` (0x5393ff) and returns 2 (0x539422).
+   * The load request comes later from 0x89fa20 (callers 0x57b205, 0x74c433, 0x827be0, 0x8c58b3, 0x8f8dfa), only in state 0x19 or 0x1f..0x22
+     (0x89fa24..0x89fa3a): `vtbl+0x68(0x13)`; for game type 4 (0x89fa75) the name is again `levellist vtbl+0x3c(byte from 0x8dc7f0(D))`
+     (0x89fa81..0x89fa98), `MPMap` first (0x89fa5d), else D's name via 0x4468a0 (0x89fb10). Both end in 0x86f230(name) (0x89faa1, 0x89fb1e). The host
+     does the same from 0x6c49a0 (0x6c5354, 0x6c53a4, 0x6c53d6).
+   * So a client reads the level index twice, each time through its OWN level list (0x491fd1 early, 0x89fa98 at load); the table must be final
+     before the second. The ack gate of section 5 provides that.
+   * 0x86f230 builds `"%s%s"` (0x86f29c) and calls `[[0xdd2640]+0xac] vtbl+0x74(string)` (0x86f2b5..0x86f2c8), the scene-load request. The loader
+     is `ZEngineDataBase` slot 4 = 0x7f4f90 (vtable 0xb8fa04; virtual, no direct caller): unmounts, mounts `Patch01.zip`, then the scene archive.
+   * Thread: `CreateThread` call sites 0x6a547c, 0x73ba88, 0x7ebe85, 0x83001f, 0x9a70b6, 0x9c8a97 and `_beginthreadex` 0x95acc3 have start
+     procs 0x458750, 0x927e80, 0x561330, 0x64cb80, 0x9a7010, 0x95ac50 (+1 register proc); none is the scene loader (by push sequences and
+     `re/loading.md`, no full call-graph walk). The loader's progress callback (`ZEngineDataBase` slot 3, 0x53ac90 -> 0x48a1e0) runs
+     `SteamAPI_RunCallbacks` and the Windows message pump, and klhook.c:741 logs the tick as driven by the main loop, so the load runs
+     synchronously on the main (window) thread: inference. CreateFileA users 16 call sites ([0xb10270]), CreateFileW 74 ([0xb10204]),
+     CreateFileMappingA 3, ReadFile 7: a worker that only reads an already open archive is not excluded.
+   * Verdict: the table is read after 0x89fa20, which is after 0x491f50; another reader on a worker thread during a load is not excluded (GUESS),
+     which is why section 9 keeps the append-race item.
+
 4. A text-set call for a lobby message (the label that shows `Online/MissingContentPackClient`, `0x6c4e07`) to name the missing map to the
    player.
+   * Result, PARTIAL: the call sequence and key lookup are read (PROVEN); that the entry is a modal pop-up is INFERRED from the table name `ErrorMessages` and key `ErrorOccuredHeader` (the display code 0x54d690 / 0x47c3dd was not read); no lobby label setter found; the free-text case is a GUESS.
+   * The whole sequence runs only when `levellist(0x168f750) vtbl+0x14(level byte [esi+0xbe])` returns false (0x6c4e07..0x6c4e1e), i.e. it is the level-availability refusal on the host side (function around 0x6c49a0).
+   * 0x6c4e07..0x6c4e91 builds three string objects with 0x83e2e0 (ecx = object, push = key): `Online/MissingContentPackClient` (0x6c4e25), the
+     empty string (0xb34850, 0x6c4e35) and `Online/ErrorOccuredHeader` (0x6c4e4e). Then `push &text; push &none; push &header; push 0;
+     mov ecx,0x1686e60; call 0x58bbd0` (0x6c4e67..0x6c4e8b) and `push eax; mov ecx,0x1686e60; call 0x47c260` (0x6c4e90..0x6c4e96). 0x58bbd0 is
+     the stub `xor eax,eax; ret 4` (33 c0 c2 04 00; ICF-folded, also `ZGameRulesHeist` slot 169); it pops the `push 0` and returns 0, and
+     0x47c260 takes the remaining four dwords (`ret 0x10`, 0x47c404). The same sequence is at 0x6c4beb..0x6c4c50, 0x6c5091, 0x6c515d.
+   * 0x47c260 (error-message manager, global 0x1686e60) resolves each key through the table `AllLevels/Menu/ErrorMessages`
+     (`[[0xdd2640]+0xac]+0x94` vtbl[0](0, key char*, 0xb6f2c8) at 0x47c2a2..0x47c318), stores the results at `[mgr+0x18/0x1c/0x20]`, pushes an
+     entry (kind 3) into a 9-dword-stride list at `[mgr+0xe4..]` counted at `[mgr+0x150]` (0x47c321..0x47c341) and shows it (0x54d690, 0x47c3dd).
+     0x47c287..0x47c29c returns when a flagged entry is already open: one message at a time.
+   * Naming a map therefore needs a KEY in the `ErrorMessages` .LOC (Patch01.zip overrides same-named members) or reuse of an existing key. What
+     the lookup returns for a key that is not in the table (raw key, empty, crash) is NOT read: GUESS. A hook calling 0x47c260 itself must build
+     the three objects the same way (0x83e2e0 -> 0x770520). No lobby text-label setter was found.
+
 5. The caller of the `JoinSession` second argument (private/ranked bit on a client, `re/netcode_fa.md` 1.2) so PrivateOnly can be tested on a joiner.
+   * Result, PROVEN for the call sites (three); PARTIAL for the value (two sources found; which one a plain invite uses is NOT read). 2nd-pass correction: on the message path arg2 is the 4-byte read, not the 1-byte one.
+   * `JoinSession` = 0x6d8640 (`ret 8`; arg2 stored at `[S+0x36f]`, 0x6d874c) is `ZOnlineServiceSteam` vtable slot 45 (vtable 0xbd597c, +0xb4).
+     All 80 `+0xb4` call sites were scanned; those with exactly two pushes:
+     1. 0x8d27a9 (`ZOnlineGamePlayTrigger` vtable 0xbc8b8c, slot 34 = 0x8d2740): service getter 0x7bb2a0 (returns `[ecx+0x54]` only if
+        `[0x168e598]+0x5c == 4`), then `mov ecx,[esi+0x44]; push ecx; push edi; call [edx+0xb4]` (0x8d27a4..0x8d27b3). arg2 = `[trigger+0x44]`.
+     2. 0x8649bf (same class, slot 26 = 0x864990): arg2 = `[esi+0x44]` (0x8649ba, 0x8649c5), arg1 = `[esp+0x10]`, guard: argument == `[0x168c510]`.
+     3. 0x619b5c (function 0x619b20, `ret 8`): arg1 = 0x8ee6d0(`[esp+4]`), arg2 = the function's second argument (0x619b56, 0x619b62). Guards:
+        0x905460 true and `byte [[0x168e598]+0x15d] != 0` (0x619b26..0x619b3c). Sole caller 0x71fc0f in 0x71fbd0, which reads a message: two reads
+        via 0x950f20(buf,size,count): first ONE byte (0x71fbe1..0x71fbee, buffer [esp+0xc] at 0x71fc07) which becomes arg1 (`push eax`, 0x71fc0c, after 0x8ee6d0 in 0x619b44), then a DWORD (0x71fbf3..0x71fbfe, buffer [esp+0x14] at 0x71fc03) which is pushed first (`push edx`, 0x71fc0b) and so is arg2; JoinSession stores only its low byte (`mov cl,[esp+0x2c]`, 0x6d8742, 0x6d874c). The earlier text had the two reversed. 0x71fbd0 is called at
+        0x693e0b from a dispatcher that compares a message id with `word [handler+0xb6]` (0x693dfe..0x693e0b).
+   * So arg2 is a property of a `ZOnlineGamePlayTrigger` entity (level/menu object) or the low byte of a dword in a received session message, never read from the
+     lobby's own data. A joiner arriving by invite or `+connect_lobby` cannot be told "private" from this byte (as `re/netcode_fa.md` 1.2 said).
+     NOT read: which of the three paths `+connect_lobby` (0x506cc0) and the invite handler take; so a PrivateOnly test on a joiner still has to use
+     the lobby type (Steam `GetLobbyData`). That `[trigger+0x44]` is the ranked/online flag is a GUESS (schema entry not looked up).
+
 6. `ISteamFriends` GetFriendPersonaName offset to name the mismatched member (buildcheck 8).
+   * Result, PARTIAL: the bytes PROVE a vtable call at `+0x1c` taking a 64-bit id (two pushes) and returning a `char*` that is copied into a 33-byte buffer; that this is GetFriendPersonaName rests on the SteamFriends005 slot order recalled from the SDK header, and that `[0xb107d4]` is the `SteamFriends` accessor was NOT checked (the IAT slot holds a stub address 0x8ce596 in the file image; no import name read). The member-list claim is inferred (the loop compares ids at `[esi+0x84]`, owner of that array not identified).
+   * Call site 0x8aec31..0x8aec48: `call [0xb107d4]` (the `SteamFriends` import), then `mov ecx,[esp+0x14]; mov edx,[eax]; mov edx,[edx+0x1c];
+     push ecx; mov ecx,[esp+0x14]; push ecx; mov ecx,eax; call edx`: two pushes (the 64-bit CSteamID, low and high), returns a `const char*`.
+     0x8aec4a..0x8aec5a: `push 0x20; push eax; lea eax,[esp+0x34]; push 0x21; push eax; call [0xb10390]` (`strncpy_s`, dest 0x21 bytes, max 0x20):
+     the name goes into a 33-byte buffer, and the same function formats the id with `%llu` (0xb674e0, 0x8aec86): the member list's name-and-id
+     builder. The loop before it (0x8aeba5..0x8aebf0) compares 64-bit ids at `[esi+0x84]+8*i`, so the id is a lobby member's.
+   * Cross-checks on the same layout: 0x8db740 `+0xc` with `push 0xffff` = GetFriendCount(all flags); 0x64c286..0x64c298 `+0x4c` with `push 'Friends'`
+     (0xb69138) = ActivateGameOverlay (guarded by `SteamUtils()+0x44`, 0x64c273..0x64c284). The SDK 005 order (0 GetPersonaName, 4 SetPersonaName,
+     8 GetPersonaState, 0xc GetFriendCount, 0x10 GetFriendByIndex, 0x14 GetFriendRelationship, 0x18 GetFriendPersonaState, 0x1c
+     GetFriendPersonaName, ..., 0x4c ActivateGameOverlay) fits all three. Slot names other than these come from the SDK header as remembered
+     (GUESS), not from the exe, which holds no names.
 
 ## 8. Live tests for when stage 4 is OK'd (two Steam accounts, identical tree except where noted; keep `[Net] Log=1`)
 
