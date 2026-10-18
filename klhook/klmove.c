@@ -334,6 +334,7 @@ static struct {
     int last;                      /* LastVehicle (section 6): 1 = the fallback last vehicle is on (default), 0 = off */
     float reach_settle;            /* [Bots] BoardReachSettle (2026-10-18, DM02 L18 record 4): cm; a called bot within this of the boarding box counts as within BoardReach; 0 = off (default) */
     float reach_aim;               /* [Bots] BoardReachAim (2026-10-18, DM02 L21): cm; the doors order aims this far from the boarding object towards the bot, at its height; 0 = off (default) */
+    float reach_aim_h;             /* [Bots] BoardReachAimHeight (2026-10-18, Vault L86: BoardReachAim kept the BOT'S height, so bots on the stair route out of the vault (y -960 .. 240, doors y 822) were sent to points on the floors below the van): metres; a bot more than this above or below the boarding object is sent to the object itself, not to the BoardReachAim point; 0 = off (default, unchanged). GUESS if used: 3 */
     int reach_chase;               /* [Bots] BoardReachChase (2026-10-18, DM02 L18 record 5): 1 = a bot that got an order this visit and walks off is re-sent without the stand-still test; 0 = off (default) */
     int reach_flat;                /* [Bots] BoardReachFlat (2026-10-18, DM02 L16): BoardReach from a boarding object that is no box ignores the height within 2.5 m; 0 = off (default, old behaviour) */
     float reach_sent;            /* [Bots] BoardReachSent (2026-10-18, Last Call L74: bots 36-40 m off stood 45 s): cm, how far from the boarding box a called bot may be and still get the order to the doors; 0 = off (default: KLMV_SENT, 30 m) */
@@ -958,7 +959,7 @@ static void klmv_reach_pass(const struct klb_snap *s, DWORD now)
         memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
         kltr_set("move-reach", "BoardReach: to the doors of the waiting vehicle", -1);
         memcpy(aim, fr.T, 12);
-        if (klmv.reach_aim > 0) {      /* BoardReachAim: a point on the bot's own floor, reach_aim cm from the boarding object towards the bot (GUESS) */
+        if (klmv.reach_aim > 0 && !(klmv.reach_aim_h > 0 && fabs(bp[1] - fr.T[1]) > klmv.reach_aim_h)) {      /* BoardReachAimHeight: off its own floor the bot gets the object's place. BoardReachAim: a point on the bot's own floor, reach_aim cm from the boarding object towards the bot (GUESS) */
             float hx = bp[0] - fr.T[0], hz = bp[2] - fr.T[2], hl = (float)sqrt(hx * hx + hz * hz);
             if (hl > klmv.reach_aim) { aim[0] = fr.T[0] + hx / hl * klmv.reach_aim; aim[2] = fr.T[2] + hz / hl * klmv.reach_aim; aim[1] = bp[1]; }
         }
@@ -1851,6 +1852,7 @@ static void klmv_read(void)
     klmv.reach_order = GetPrivateProfileIntA("Bots", "BoardReachOrder", 1, klh_ini) != 0;
     klmv.reach_repeat = (DWORD)klb_pos("BoardReachRepeat", 0, 60) * 1000;      /* 0 = off (default); proposed 3 s GUESS */
     klmv.reach_settle = (float)GetPrivateProfileIntA("Bots", "BoardReachSettle", 0, klh_ini); if (klmv.reach_settle < 0) klmv.reach_settle = 0; if (klmv.reach_settle > KLMV_DOORS_MAX) klmv.reach_settle = KLMV_DOORS_MAX;      /* 0 = off (default); proposed 200 GUESS */
+    klmv.reach_aim_h = klb_inif("BoardReachAimHeight", "0"); if (!klb_finite(klmv.reach_aim_h) || klmv.reach_aim_h < 0) klmv.reach_aim_h = 0; if (klmv.reach_aim_h > 50) klmv.reach_aim_h = 50; klmv.reach_aim_h *= 100.0f;      /* metres in the ini, units inside; 0 = off (default) */
     klmv.reach_aim = (float)GetPrivateProfileIntA("Bots", "BoardReachAim", 0, klh_ini); if (klmv.reach_aim < 0) klmv.reach_aim = 0; if (klmv.reach_aim > KLMV_DOORS_MAX) klmv.reach_aim = KLMV_DOORS_MAX;      /* 0 = off (default); proposed 150 GUESS */
     klmv.reach_sent = (float)GetPrivateProfileIntA("Bots", "BoardReachSent", 0, klh_ini); if (klmv.reach_sent < 0) klmv.reach_sent = 0; if (klmv.reach_sent > 10000) klmv.reach_sent = 10000;      /* cm; 0 = off (default); GUESS if used: 6000 */
     klmv.reach_chase = GetPrivateProfileIntA("Bots", "BoardReachChase", 0, klh_ini) != 0;      /* 0 = off (default) */
@@ -1912,6 +1914,7 @@ static void klmv_read(void)
     if (klmv.crew_hop > 0) klog("crewhold: CrewRouteHopHold=%.1f s (GUESS): once a visit, when CrewRouteHold is used up and a stage-3 bot closed 1 m in on the boarding place within 15 s, the budget grows by that", klmv.crew_hop);
     if (klmv.van_near > 0) klog("vancall: on; VanCallNear=%.0f m VanCallDelay=%lu s MinStage=%d%s: while the vehicle waits a loyal bot at heist stage %d..2 within that range of the boarding place gets heist stage 3 (GUESS limits)", klmv.van_near / 100, klmv.van_delay / 1000, klmv.van_min, klmv.dry ? " DRY RUN" : "", klmv.van_min);
     if (klmv.half_guard > 0) klog("move: HalfGuard on: a stuck bot whose chain place is more than %.0f units above or below it gets no re-order", klmv.half_guard);
+    if (klmv.reach_aim > 0 && klmv.reach_aim_h > 0) klog("reach: BoardReachAimHeight=%.1f m (GUESS): a bot that far above or below the boarding object is sent to the object itself, not to the BoardReachAim point on its own floor", klmv.reach_aim_h / 100);
     if (klmv.walk_away > 0 && klmv.walk_away_g > 0) klog("move: WalkAwayGoal=%.1f m (GUESS): a bot whose move target is already that near the boarding place gets no WalkAwayReorder order", klmv.walk_away_g / 100);
     if (klmv.walk_away > 0 && klmv.walk_away_h > 0) klog("move: WalkAwayHeight=%.1f m (GUESS): a bot that far above or below the boarding place gets no WalkAwayReorder order", klmv.walk_away_h / 100);
     if (klmv.walk_away > 0) klog("move: WalkAwayReorder=%d (GUESS limits): while the vehicle waits, a called loyal bot within CrewRouteRange (%.0f m) that got 1 m+ farther from the boarding place in %d 2 s samples in a row is ordered to the doors, at most once per 4 s per bot%s", klmv.walk_away, klmv.crew_range, klmv.walk_away, klmv.dry ? "; MoveDry=1: nothing is written" : "");
