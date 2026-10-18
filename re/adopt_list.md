@@ -46,7 +46,16 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   Vans came in only 7 of 72 logged sessions; none in 21 where the human died first (s14(1)).
 - STAGED, NOT RUN: rt_join_next5 KLJoin 237f60f0 (kl_rt_joinini --giveup c1a43afc); rt_join_next3 d4dddd6d (folder deleted 18:2x, superseded by next4/5); --rescue-wedge d1258797 (UNKNOWN
   folder); hook keys in section 4. Also dm09_ini_1018 (KLJoin 3f9ce520 for DM09, 1cf31914 for the DM09RB* variants): purpose UNKNOWN in the notes.
-- DECISION: leave Retomoto as is until 3f runs queue (b) (lead + WalkExclusive) and (c) (+ PointBlankToYou); then adopt the winning ini keys.
+- RUN L83 (3f (b), ~23:10, Lead=450 + WalkExclusive=1, hook za): PASS, no van. Human fed at 70 s, FedSkip kept the crew in the tower, hop 2
+  carried 3 bots, 0 GIVE UP; WalkExclusive works. LastVehicleFlagged called the last van at 45 s left; it waited the stock 8 s and left EMPTY,
+  crew 151-237 m out, stage-2 bots never got stage 3 (FollowOut needs YOUR stage 3). -> fix staged as (l) below.
+- RUN L84 (3f (c), = (b) + PointBlankToYou=20): PASS; the key fires (13 steps scaled 100 -> 20), human lived, crewjoin EARLY moved all 7 to the
+  street. CAVEAT: the test ini also has the survive dials (police->you 0, health x10), so this does NOT show that 20 saves a normally armed
+  human. A fair test needs live CopToYou / health. Still the owner's call.
+- STAGED, NOT RUN: (k) --leaderless-hop KLJoin 0b557e40 (6c7066d1, re/retomoto_leaderless.md); (l) fed-van: TEST hook out_e5_1018zj 40fe1088
+  ([Bots] CrewRouteFed=1, 57f0f13e) + PT_DM09_fedvan.ini e21001ed (VanCallLast=1, LastVehicleLead=600, CrewRouteRange=300), re/retomoto_fedvan.md.
+- DECISION: WalkExclusive=1 + LastVehicleLead=450 are CANDIDATES (they acted as designed in L83/L84, no harm seen; two runs only); van boarding with a fed human
+  waits for (k)/(l).
 
 ### Hasta, DM11B [page 3 F04]
 - LIVE: ce42dcc9 + KLJoin 437c96ee.
