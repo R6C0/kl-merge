@@ -245,6 +245,9 @@
  *                         is walking off (the game's chain overrides the order within 250 ms) is sent again every
  *                         BoardReachRepeat s without the 1 s stand-still test, up to the 30 m limit. DM02 L18 record 5
  *                         was overridden at once, never stood still, and was out of the 30 m before the test passed
+ *   BoardReachAim=0       cm (0 = off; suggested 150 GUESS, at most 300): the order to the doors goes to a point this far from the
+ *                         boarding object towards the bot, at the bot's own height, not to the object's node. DM02 L21: bots 3-6 m
+ *                         off sent to the node (-615, 122, -8712) walked away onto the y 22 deck (a detour) and drifted 10-18 m out
  *   BoardReachVisits=3    from this visit of a vehicle on the boxes work as in stock again (0 = never; the round's
  *                         last vehicle always works as in stock)
  *   MoveDry=0           1 = every line, NOTHING written or called (the boxes are not wrapped either)
@@ -317,6 +320,7 @@ static struct {
     DWORD hop; float hop_max;      /* RestlessHop (section 5): seconds at a hold before a hop to a cover place of the level's [Hops]; 0 = off */
     int last;                      /* LastVehicle (section 6): 1 = the fallback last vehicle is on (default), 0 = off */
     float reach_settle;            /* [Bots] BoardReachSettle (2026-10-18, DM02 L18 record 4): cm; a called bot within this of the boarding box counts as within BoardReach; 0 = off (default) */
+    float reach_aim;               /* [Bots] BoardReachAim (2026-10-18, DM02 L21): cm; the doors order aims this far from the boarding object towards the bot, at its height; 0 = off (default) */
     int reach_chase;               /* [Bots] BoardReachChase (2026-10-18, DM02 L18 record 5): 1 = a bot that got an order this visit and walks off is re-sent without the stand-still test; 0 = off (default) */
     int reach_flat;                /* [Bots] BoardReachFlat (2026-10-18, DM02 L16): BoardReach from a boarding object that is no box ignores the height within 2.5 m; 0 = off (default, old behaviour) */
     DWORD reach_repeat;          /* [Bots] BoardReachRepeat (2026-10-18, 3f's DM02 run L14: orders to the doors were overridden by the game's chain within 4-14 s and never sent again; bots in an escape box 2.5-3.1 m off never stood the 1 s): ms after an order to the doors before it may be sent again while the vehicle waits, and a bot in an escape box beyond BoardReach is sent without the stand-still test; 0 = off (default, old behaviour) */
@@ -828,7 +832,7 @@ static void klmv_stage3(const struct klb_snap *s, int i, const char *what)
 static void klmv_reach_pass(const struct klb_snap *s, DWORD now)
 {
     struct klmv_fr fr, bf[KLMV_NBOX]; int i, j, waiting = s->veh == 3 || s->veh == 4, relax, have = 0, nb = 0, first = 0; DWORD obj, actor, soldier; LONG beyond = 0, took = 0;
-    float d, bp[3], got[3]; char w[100]; struct kle_e t; BYTE last = 0;
+    float d, bp[3], got[3], aim[3]; char w[100]; struct kle_e t; BYTE last = 0;
     if (klmv_reach_ok <= 0) { klmv_rc.armed = 0; return; }      /* also in a dry run (review S8 a): no 'WOULD' line for an update that would never be used */
     /* THE UPDATE IS ARMED FOR THE WHOLE ROUND (review M1): it reads the vehicle's state and the boarding box itself,
        in its own frame. The tick only says for which rules object, how far, and whether the boxes work as in stock
@@ -906,11 +910,16 @@ static void klmv_reach_pass(const struct klb_snap *s, DWORD now)
         if (kle_dist(bp, fr.T) <= 260.0f) continue;                             /* the game would take it as 'he is there already' (soft): a waiting step of its chain would end */
         memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
         kltr_set("move-reach", "BoardReach: to the doors of the waiting vehicle", -1);
-        j = kle_order2(&t, fr.T, got, w, klmv.dry);
+        memcpy(aim, fr.T, 12);
+        if (klmv.reach_aim > 0) {      /* BoardReachAim: a point on the bot's own floor, reach_aim cm from the boarding object towards the bot (GUESS) */
+            float hx = bp[0] - fr.T[0], hz = bp[2] - fr.T[2], hl = (float)sqrt(hx * hx + hz * hz);
+            if (hl > klmv.reach_aim) { aim[0] = fr.T[0] + hx / hl * klmv.reach_aim; aim[2] = fr.T[2] + hz / hl * klmv.reach_aim; aim[1] = bp[1]; }
+        }
+        j = kle_order2(&t, aim, got, w, klmv.dry);
         if (!j) { klog("reach: record %d NOT sent to the doors: %s", i, w); continue; }
         b->order_at = KLB_T(now); b->since = now;
         klog("reach: visit %d: record %d (stage %u) stood %.1f m from the boarding box at (%.0f, %.0f, %.0f): %s to the doors (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f)", klmv_r.visit, i, r->stage, d / 100, bp[0], bp[1], bp[2],
-             j == 2 ? "WOULD be sent (dry run)" : "sent", fr.T[0], fr.T[1], fr.T[2], got[0], got[1], got[2]);
+             j == 2 ? "WOULD be sent (dry run)" : "sent", aim[0], aim[1], aim[2], got[0], got[1], got[2]);
     }
 }
 
@@ -1440,6 +1449,7 @@ static void klmv_init(void)
     klmv.reach_order = GetPrivateProfileIntA("Bots", "BoardReachOrder", 1, klh_ini) != 0;
     klmv.reach_repeat = (DWORD)klb_pos("BoardReachRepeat", 0, 60) * 1000;      /* 0 = off (default); proposed 3 s GUESS */
     klmv.reach_settle = (float)GetPrivateProfileIntA("Bots", "BoardReachSettle", 0, klh_ini); if (klmv.reach_settle < 0) klmv.reach_settle = 0; if (klmv.reach_settle > KLMV_DOORS_MAX) klmv.reach_settle = KLMV_DOORS_MAX;      /* 0 = off (default); proposed 200 GUESS */
+    klmv.reach_aim = (float)GetPrivateProfileIntA("Bots", "BoardReachAim", 0, klh_ini); if (klmv.reach_aim < 0) klmv.reach_aim = 0; if (klmv.reach_aim > KLMV_DOORS_MAX) klmv.reach_aim = KLMV_DOORS_MAX;      /* 0 = off (default); proposed 150 GUESS */
     klmv.reach_chase = GetPrivateProfileIntA("Bots", "BoardReachChase", 0, klh_ini) != 0;      /* 0 = off (default) */
     klmv.reach_flat = GetPrivateProfileIntA("Bots", "BoardReachFlat", 0, klh_ini) != 0;      /* 0 = off (default) */
     klmv.dry = GetPrivateProfileIntA("Bots", "MoveDry", 0, klh_ini) != 0;
