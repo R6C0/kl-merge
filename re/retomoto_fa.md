@@ -886,4 +886,14 @@ Source: `<DD>\KLHook.log` lines 1128309-1139144 (session 15:00:33) against the o
 1. Play the same DM09 route with `kl_playtest.py route ... --until exit --die --linger 90` (or any linger that ends after the score page) so the script is still alive at END timer 0.
 2. Expected (GUESS): at 2.5 s left `last: LastVehicleFlagged ACTS: calling 0x8154f0(vehicle ..., 1)` then `... called as the round's last ... state now 2`, the round is held while the van comes; the crew (in the street, stage 1/2) only boards if VanCallNear (klmove, hook out_e5_1018t) is on: stage 3 is given to bots within N m of the boarding place only. At 2.5 s the bots stood 10 km from the van, so even a successful call would leave them behind; for a useful answer also test `LastVehicleLead=450` (= 45 s; the key is in tenths, klmove.c:1781; TEST ini, not live) so the van is called while the crew can still run.
 3. The better fix is upstream: the early death in the boardroom half. Not touched here.
+
+**(4) Early-death census (workflow ww3wkd0ht, KLHook.log only, 87 DM09 rounds; NOT RUN).** Correction: in L79 the human did NOT die in the boardroom. The `script goto` lines put him on the atrium stair, and he died at (-2007, 20300, -1330): `balance: you lost 3793.1`, then 988.6, after a team-1 `point-blank step` at 86 units, then `fed: you: status 0 -> 1` at 15:03:03.433.
+- Every tower human death with logged damage is a point-blank burst. A soldier within 160 units sends one step worth 100 bullets, and accuracy and the health multipliers do not reduce it.
+- The deaths cluster in two places:
+  - the reception east end / boardroom door (x 2100-2250, 54-72 s);
+  - the atrium gallery / stair (x -2000..-1000, z -1600..-850, 79-101 s).
+  The squads involved are GUESSED from position, because the log has no squad names.
+- 13 rounds also ended in deaths at the spawn at 13-37 s, from the old idle script standing in the 16.5 s blast. That is a test-script issue.
+- Bots rarely die in the tower (`CopToCrew=0.01`, `PointBlankToCrew=5` live). The crew stays behind because the human who leads them is dead.
+- Lever (a GUESS; it changes the human's difficulty, so it is the owner's call): `[Balance] PointBlankToYou=20.0`. The value needs a decimal point (klbalance.c:1075). The key is unset live, so it is 100. With 20.0, the census hits of 750-3800 should drop to about 150-760.
 No commit of game files; no run.
