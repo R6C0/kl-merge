@@ -33,6 +33,7 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   L78 files (3f confirmed 10-18 16:40): zip 5b0a025b (escape msg, C:\kl_build_1018\lastcall_route_next\DM05A) + KLJoin ea0446c1 (hop
   Stage=1) + hook out_e5_1018y (md5 792a9daf, NOT the live hook) + test ini PT_DM05A_roofgap.ini = live keys + [Bots] VanCallNear=40,
   VanCallLast=1, CrewRouteHopHold=15, BoardReachSent=6000, BoardReachRepeat=5, BoardReachChase=1. Adopting L78 = all four, not the zip alone.
+- (18:2x: hopstage_next and roofgap_next folders deleted to free C:, superseded by lastcall_route_next / L78; rebuild from kl_route if needed.)
 - STAGED, NOT RUN: hopstage_next (zip df719d34 + KLJoin ea0446c1, same as L75 ini); roofgap_next (6903219f + ea0446c1; roof gap, BoardReachSent
   442a014d, queued L77 rerun after the 14:27 VOID); rtcops 6903219f ran as L76 (see section 3).
 - DECISION: adopt the L78 set (zip 5b0a025b + KLJoin ea0446c1 + hook 1018y + those six [Bots] keys) in place of df719d34 + dfc29f60, yes or no.
@@ -43,7 +44,7 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
 - BEST PROVEN: no clean win to adopt. L79 (KLJoin e8c41f20 = rt_join_next4 margins + hop 6, hook 1018za): PASS but NO van; the human died on the
   atrium stair (-2007, 20300, -1330) at 82 s; the margins did not matter; 5 hop-3 walks were teleported by GIVE UP (per 15:35 and re/retomoto_fa.md s14).
   Vans came in only 7 of 72 logged sessions; none in 21 where the human died first (s14(1)).
-- STAGED, NOT RUN: rt_join_next5 KLJoin 237f60f0 (kl_rt_joinini --giveup c1a43afc); rt_join_next3 d4dddd6d; --rescue-wedge d1258797 (UNKNOWN
+- STAGED, NOT RUN: rt_join_next5 KLJoin 237f60f0 (kl_rt_joinini --giveup c1a43afc); rt_join_next3 d4dddd6d (folder deleted 18:2x, superseded by next4/5); --rescue-wedge d1258797 (UNKNOWN
   folder); hook keys in section 4. Also dm09_ini_1018 (KLJoin 3f9ce520 for DM09, 1cf31914 for the DM09RB* variants): purpose UNKNOWN in the notes.
 - DECISION: leave Retomoto as is until 3f runs queue (b) (lead + WalkExclusive) and (c) (+ PointBlankToYou); then adopt the winning ini keys.
 
