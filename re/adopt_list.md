@@ -2,7 +2,8 @@
 
 Claims carry "per log note <date time>" (re/open_work_log.md) or "checked" (read in the files today). UNKNOWN = not in any note or file.
 Nothing here was run in the game by this page. Zip ids are the first 8 hex of md5 of the zip. Hook/ini ids written by 3f in the log
-(a57d9ce7, ccec94fb) are NOT md5 of the files now in <DD>: UNKNOWN which hash they are. Checked: live dinput8.dll md5 249ab16a =
+(a57d9ce7, ccec94fb) are SHA1 prefixes (kl_autotest prints sha1; 3f confirmed 10-18 16:40): hook sha1 a57d9ce7 = md5 249ab16a, ini sha1 ccec94fb =
+md5 231cde94, i.e. the same files as live. Checked: live dinput8.dll md5 249ab16a =
 C:\kl_build_1018\owner_1018\hook_apply1018\dinput8.dll; live KLHook.ini md5 231cde94 = KLHook.ini.before-apply1018 + exactly the keys of
 log note 10-18 11:50 (CopToCrew 0.01, DownsMax 3, EscVisitFix, CrewRoute*, BoardReachFlat, LastVehicleFlagged, FollowOutHoldAlone*, ComeMoved).
 Both files were last written 15:07 (end of L79); log note 14:40 says all was restored after each run.
@@ -27,12 +28,13 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
 ### Last Call, DM05A [page 3 F01]
 - LIVE: df719d34 + KLJoin dfc29f60 (the "sa" build: EnterVehicle field 9 empty, per 07:10).
 - BEST PROVEN: L78 "combined route": you + all 7 aboard, 0 dead (per 15:16). L51 full pass on the live zip (per 08:30); L75 you + 6 of 7 (per 14:40).
-  The files for L78 are not named in any note. INFERRED from the folder name only: C:\kl_build_1018\lastcall_route_next\DM05A =
-  zip 5b0a025b (df719d34 + escape-area text with the roof marker; L72 showed the text, per 14:40) + KLJoin ea0446c1 (hop Stage=1, L75).
-  Confirm with 3f before relying on it.
+  L78 files (3f confirmed 10-18 16:40): zip 5b0a025b (escape msg, C:\kl_build_1018\lastcall_route_next\DM05A) + KLJoin ea0446c1 (hop
+  Stage=1) + hook out_e5_1018y (md5 792a9daf, NOT the live hook) + test ini PT_DM05A_roofgap.ini = live keys + [Bots] VanCallNear=40,
+  VanCallLast=1, CrewRouteHopHold=15, BoardReachSent=6000, BoardReachRepeat=5, BoardReachChase=1. Adopting L78 = all four, not the zip alone.
 - STAGED, NOT RUN: hopstage_next (zip df719d34 + KLJoin ea0446c1, same as L75 ini); roofgap_next (6903219f + ea0446c1; roof gap, BoardReachSent
   442a014d, queued L77 rerun after the 14:27 VOID); rtcops 6903219f ran as L76 (see section 3).
-- DECISION: install lastcall_route_next (zip 5b0a025b + KLJoin ea0446c1) in place of df719d34 + dfc29f60, yes or no.
+- DECISION: adopt the L78 set (zip 5b0a025b + KLJoin ea0446c1 + hook 1018y + those six [Bots] keys) in place of df719d34 + dfc29f60, yes or no.
+  The hook and the keys apply to every map, so 3f would check them on the others first (GUESS: one L78 run only).
 
 ### Retomoto Tower, DM09 [page 2 F06]
 - LIVE: bf1dfdb3 + KLJoin b2bb6a2f (= rt_join_next2).
@@ -100,6 +102,6 @@ Only Last Call ran: L76, 0 crew dead or down, 6 of 7, "no measurable difference"
 - Steam is running; no live game run is going (checked), the queue waits while you play.
 
 ## 6. Summary of single decisions
-1 Last Call: install route build 5b0a025b + KLJoin ea0446c1 (confirm files with 3f). 2 Hasta: swap in police build 3a186c93.
+1 Last Call: adopt the L78 set (zip 5b0a025b + KLJoin ea0446c1 + hook 1018y + six [Bots] keys). 2 Hasta: swap in police build 3a186c93.
 3 Park II: adopt loot6 3386b972 after run (f). 4 Vault: keep late110 or pick B/C/D after (g). 5 Retomoto: wait for queue (b)/(c).
 6 Hook keys: PointBlankToYou=20.0, WalkExclusive=1, VanCallNear=40 each yes/no. 7 Cops rtcops on five maps yes/no. 8 Push, disk, find.exe, replaced-*.
