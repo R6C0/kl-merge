@@ -188,6 +188,14 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-18 15:35 - OFFLINE (kl-merge-e5; 3f owns live runs; the owner is active, so the queue waits):
+- Retomoto L79 GIVE UPs: fedkit Hunted re-orders walking bots. The fix is the existing [Bots] WalkExclusive=1, which is off in the live ini. Fallback: kl_rt_joinini --giveup (c1a43afc, rt_join_next5 237f60f0).
+- Retomoto early deaths: census of 87 rounds (re/retomoto_fa.md s14(4)). The human dies to point-blank steps on the atrium stair and at the reception east end. Lever: [Balance] PointBlankToYou=20.0, the owner's call.
+- LastVehicleLead is in TENTHS of a second, so 450 = 45 s.
+- 3f's queue, in test inis only: (b) DM09 lead+WalkExclusive, then (c) +PointBlankToYou.
+- New: tools/kl_buildprint.py (600bf8f1, 73012079) gives a build code for private matches; live = 6755CC0C.
+- klbuild.c (the lobby check) is source only; 3f agreed it stays out of every build until the owner OKs stage 4.
+Owner: git push origin rtp-schemas:main. Disk C: 3.5 GB free.
 2026-10-18 15:16 - OFFLINE (kl-merge-e5; 3f owns live runs, owner active so the queue waits):
 - 3f's live results: Last Call L78 (combined route) you + all 7 aboard, 0 dead. Hasta L73 police 3a186c93: the heli survived. Retomoto L79 PASS but no van: the human died early and no bot reached the exit box.
 - Retomoto: L79 no van explained (re/retomoto_fa.md s14, d7910ff9 + 42ba123f). The script quit 0.5 s before LastVehicle's 2.5 s call point (log reading only).
@@ -198,13 +206,6 @@ into every session and agent: it grew to 256 KB and made every session thrash).
 - Workflow wlas1nmgu: why Retomoto hop-3 walks GIVE UP.
 Owner: git push origin rtp-schemas:main; adopt Hasta police / rtcops / Last Call route?
 2026-10-18 14:40 - kl-merge-3f LIVE (owner idle 13:45-14:27; all restored, live = hook a57d9ce7, ini ccec94fb, maps unchanged): e5's queue, all PASS 0 asserts. Hot Coffee II L71 VanCallNear: 2 stage-1/2 bots called 17 m out, both boarded on visit 1. Last Call L72 escape msg 5b0a025b: text shows; visit 1 took 0 bots (5 stuck at stage 1, hop deadlock per e5). Hasta L73 police 3a186c93: heli survived, you + all 7 out on visit 1. Last Call L74 (hook 1018w VanCallLast/HopHold): 4 of 6; L75 (+ KLJoin hop Stage=1 ea0446c1): you + 6 of 7, 0 dead (best Last Call yet; the keys did not fire, FollowOut called all at the van call; the hop-stage change was not exercised). L76 rtcops 6903219f: 0 crew dead or down, 6 of 7, no measurable difference. L77 roofgap (1018y) VOID: Brave took the foreground at 14:27 (owner input), watchdog stall. Queue paused: L77 rerun, Retomoto margins + HalfGuard (1018za), Vault hide-parts, Park II nvs. Nothing new applied live.
-2026-10-18 14:34 - kl-merge-e5 (3f owns live runs; owner idle, so 3f's queue is running):
-- L75: best Last Call visit 1 so far (you + 6 of 7 bots, 0 dead). FollowOut was first again, so neither the new keys nor hop-stage were exercised.
-- L76 (Last Call with Retomoto cops 6903219f): PASS, no measurable difference with CopToCrew 0.01. Whether the cops feel harder is the owner's call.
-- Bots stood still on the Last Call upper roof (L74). Not a nav gap: they were past klmove's 30 m order-to-doors limit. New opt-in [Bots] BoardReachSent (442a014d) and kl_club_roof roof-gap (85a295b2); TEST out_e5_1018y 792a9daf; queued as L77.
-- Retomoto: new opt-in [Bots] HalfGuard (f75970fa) stops re-orders to a chain place on the other half of the join (1722 such lines). TEST out_e5_1018za 361e3c35; queued with the item 6 margins.
-- Workflow wo01t5gge checks whether those stranded bots are ever rescued.
-Owner: git push origin rtp-schemas:main.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

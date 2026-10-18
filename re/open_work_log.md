@@ -1,3 +1,11 @@
+2026-10-18 15:35 - OFFLINE (kl-merge-e5; 3f owns live runs; the owner is active, so the queue waits):
+- Retomoto L79 GIVE UPs: fedkit Hunted re-orders walking bots. The fix is the existing [Bots] WalkExclusive=1, which is off in the live ini. Fallback: kl_rt_joinini --giveup (c1a43afc, rt_join_next5 237f60f0).
+- Retomoto early deaths: census of 87 rounds (re/retomoto_fa.md s14(4)). The human dies to point-blank steps on the atrium stair and at the reception east end. Lever: [Balance] PointBlankToYou=20.0, the owner's call.
+- LastVehicleLead is in TENTHS of a second, so 450 = 45 s.
+- 3f's queue, in test inis only: (b) DM09 lead+WalkExclusive, then (c) +PointBlankToYou.
+- New: tools/kl_buildprint.py (600bf8f1, 73012079) gives a build code for private matches; live = 6755CC0C.
+- klbuild.c (the lobby check) is source only; 3f agreed it stays out of every build until the owner OKs stage 4.
+Owner: git push origin rtp-schemas:main. Disk C: 3.5 GB free.
 2026-10-18 15:16 - OFFLINE (kl-merge-e5; 3f owns live runs, owner active so the queue waits):
 - 3f's live results: Last Call L78 (combined route) you + all 7 aboard, 0 dead. Hasta L73 police 3a186c93: the heli survived. Retomoto L79 PASS but no van: the human died early and no bot reached the exit box.
 - Retomoto: L79 no van explained (re/retomoto_fa.md s14, d7910ff9 + 42ba123f). The script quit 0.5 s before LastVehicle's 2.5 s call point (log reading only).
