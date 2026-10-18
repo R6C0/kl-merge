@@ -7,7 +7,7 @@ re/bots_squad.md (what a squad is, read in kl2.exe and measured on F01..F09), re
 driver, van, help up), re/bots_voice.md (the heisters' lines). OFFLINE: nothing here installs anything.
 
     python kl_fa_bots.py build <build folder> <out folder> [options]    the squad into a COPY of the build
-    python kl_fa_bots.py check <folder>                                 every check on a finished folder; exit 1 on a FAIL
+    python kl_fa_bots.py check <folder> [slot]                          every check on a finished folder; exit 1 on a FAIL
     python kl_fa_bots.py plan  <build folder> [options]                 only the plan: stations, routes, what is not possible
     python kl_fa_bots.py diff  <build folder> <out folder>              what the step changed, file by file; exit 1 if
                                                                         anything but the squad differs
@@ -3543,8 +3543,8 @@ def main():
     if len(a) == 3 and a[0] == 'build':
         out, _rep = build(a[1], a[2], opt)
         sys.exit(1 if any(s == 'FAIL' for s, _t in out) else 0)
-    elif len(a) == 2 and a[0] == 'check':
-        out, _f = check(a[1])
+    elif len(a) in (2, 3) and a[0] == 'check':
+        out, _f = check(a[1], slot=a[2] if len(a) == 3 else SLOT)      # optional slot (2026-10-18: Hasta is F04; without it the CLI read F01)
         sys.exit(1 if any(s == 'FAIL' for s, _t in out) else 0)
     elif len(a) >= 3 and a[0] == 'owner':
         res = owner(a[1], a[2], a[3:] or None, opt)
