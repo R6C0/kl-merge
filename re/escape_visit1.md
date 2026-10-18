@@ -445,3 +445,20 @@ It needs no code patch. A heap-only vtable swap is allowed under the ship policy
 6. Optional A/B: write 0 to `[obj+0x7c]` until the state is at least 1. If `[1e4]` is then valid at state 1 without EscVisitFix, the early fire is the whole cause.
 
 Files: C:\kl-merge\kl-merge\klhook\klmove.c, C:\kl-merge\kl-merge\klhook\klheliprobe.c, C:\kl-merge\kl-merge\re\escape_visit1.md.
+## 2026-10-18: the ActivateGeom on the van group is OUR van hide/show (code read, not yet tested live)
+All three failing maps hide the van's group (`EscapeVehicle_Animation_F07`) at load, and later show it with an
+ActivateGeom whose target list is that whole group:
+- the Vault: `kl_fa_bank.py` VAN_LATE + VAN_HIDE, `bank_waves!Clock\Van_show` (foyer box + 6 s, plaza box + 1 s, backstop);
+- Park II: `kl_fa_v2_park.py` VAN_HIDE (`A.place(S, vg, hidden=True)`, shown by the alarm);
+- Hot Coffee II: `kl_fa_v2_hotcoffee.py` 'van on' (`lists('van on', 'ActivateGeom', f1=[van_path()])`).
+Stock DD07 never hides its van, and has no geom controller naming that group. In the chain above, ActivateGeom
+-> 0x7f77b0 -> 0x4c4900 broadcasts 'Activate' down the group to `V_Van_00\BoardingTrigger`'s EnterVehicle action,
+and 0x65ee60 stores the boarding object while the state is still 0. That also fits the measured "1e0 written about
+1.3 s before state 1": the van is shown just before the exit trigger calls it. It also explains why the FakeTarget
+looked related: taking it off and hiding the van are both part of VAN_LATE.
+Data-side tests, none built yet (each needs a live A/B on the owner's hook, without EscVisitFix):
+1. `--no-van-hide` (Park II and the Vault already have this flag): if [rules+0x1e4] is set at state 1 on visit 1, the
+   cause is confirmed. Cost: the van stands in sight from the load (with its FakeTarget still off).
+2. Show the van only AFTER the call (state >= 1): slot 89 has then already set 1e0, so the set-if-empty 0x65ee60 does
+   nothing. GUESS: a hidden group can be called and animated, and is shown in time.
+The hook fix (EscVisitFix, which clears 1e0 and re-runs slot 194) stays valid either way.
