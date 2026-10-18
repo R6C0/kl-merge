@@ -42,6 +42,11 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   - The $0 may be a regression of B, or the human's pickup failed. Asked 3f for (g0), a control on 7cd07d15, and (g1) B again,
     both with the human held in the vault to r 200.
   - Do not adopt B.
+- RUN L91 (3f g0, 00:02-00:09, CONTROL live 7cd07d15 + hook zi + hold script PT_DM03A_hold): PASS 399 s, 0 asserts.
+  - The human stayed at $0: the script's goto stops 5-8 m short of the vault and never re-tries. That is the script, not the map.
+  - First bot money: r 83 rec 5 (became a traitor at r 101, then died), r 133-136 recs 3/2/7/6; recs 1 and 4 got $0.
+    Bots stood in the deep vault (z -12830..-13190) from about r 130.
+  - So L88's all-$0 round was too short (it ended at r ~80). It is NOT evidence against door B. g1 (B with the same hold script) is the fair comparison.
 
 ### Last Call, DM05A [page 3 F01]
 - LIVE: df719d34 + KLJoin dfc29f60 (the "sa" build: EnterVehicle field 9 empty, per 07:10).
