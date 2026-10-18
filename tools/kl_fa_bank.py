@@ -4361,6 +4361,84 @@ def van_nests(src, dst=None, mode='off', log=print):
     return {'mode': mode, 'changed': changed}
 
 
+# VAN_QUIET ('van-quiet <src> <dst> <group,group,...>|top'; a .prp-values-only post-step; bank_opts.json 'van_quiet'; default: not run, every other step's output is unchanged).
+# The audit of 2026-10-18 (L19, vault_e7; van-nests 'off' = vault_e8 cut only chain D) named more police on the van route than chain D. Same method as van_nests:
+# the group's entry is unlinked from every TriggerBox list (17) / TriggerDelay2 list (4) that names it, so nothing wakes it. No entity moves, no node is added.
+#   plaza  : the 7 plaza-box squad entries (5_Lobby Teargas_01 / OutSide_01, COOP SWAT_02 / SWAT_03 / both ShieldSupport / Reinforce_Wave1_COOP_03; ~21 men),
+#            cut from tbExitFinancialAlley. The box's Timer_van and Timer_teller_c stay. The squads' own inner links stay (they run only if the squad is awake).
+#   waveb  : Pace_B01 (Wave_B01..B04, 4 men), cut from tb_LEFT_TheySpotYou and Go_A04 (the wave_fallback link).
+#   exit   : the 3 FinancialAlleyExit squads (8 men, y 1221), cut from RivalMercVan\TimerVanGo. The audit rates them low (floor above the route): not in 'top'.
+# 'top' = plaza + waveb (audit ranks 1 and 2). NOT offered: Wave_A (chain A is the supply that waves_check demands), the vault garrison (dead by the van call, GUESS),
+# traitor Squad #03 (starter not traced).
+# GUESS: that the plaza squads and Wave_B were the main killers of the called bots (the audit attributes only point-blank steps within 1.6 m; most kills were unattributed).
+# GUESS: that nothing else wakes these squads (only TriggerBox / TriggerDelay2 lists are scanned; any other starter shows as a remaining name and is refused).
+# Side effect, by design: the plaza stays empty of its stock police for the WHOLE round, not only the van phase (a run-time switch has no .prp form).
+VAN_QUIET_GROUPS = {
+    'plaza': ['gameplay!5_lobby!police_outside_teargas_01\\30_flankingbehaviour', 'gameplay!5_lobby!police_outside_01\\30_flankingbehaviour',
+              'coop!squads_lobby!police_outside_swat_03_shieldsupport\\050_move_in_01', 'coop!squads_lobby!police_outside_swat_02_shieldsupport\\050_move_in_01',
+              'coop!squads_lobby!police_reinforce_wave1_coop_03\\cutscene_moveoutside', 'coop!squads_lobby!police_outside_swat_03\\flankingbehaviour',
+              'coop!squads_lobby!police_outside_swat_02\\flankingbehaviour'],
+    'waveb': ['gameplay!bank_waves!clock\\pace_b01'],
+    'exit': ['gameplay!030_afterloot!030_financialalleyexit_left\\10_runtocover', 'gameplay!030_afterloot!030_financialalleyexit_right\\10_runtocover',
+             'gameplay!030_afterloot!030_financialalleyexitstreet_left\\10_runtocover'],
+}
+VAN_QUIET_TOP = ('plaza', 'waveb')
+
+
+def van_quiet(src, dst=None, groups='top', log=print):
+    """Unlinks the named threat groups (VAN_QUIET_GROUPS keys, comma separated, or 'top') from their starters in a finished waves build. dst: the folder to build (a
+    copy of src with ONE member changed: the .prp); None = in place. Writes bank_opts.json 'van_quiet' (sorted list). A second run changes nothing.
+    -> {'groups': [..], 'changed': [..]}"""
+    import json, shutil, kl_fa_bots as F
+    want = list(VAN_QUIET_TOP) if groups == 'top' else [g for g in groups.split(',') if g]
+    if not want or any(g not in VAN_QUIET_GROUPS for g in want):
+        raise ValueError("van_quiet: groups are %s or 'top', not %r" % (sorted(VAN_QUIET_GROUPS), groups))
+    want = sorted(set(want))
+    if dst:
+        if os.path.exists(dst):
+            raise ValueError('van_quiet: %s exists' % dst)
+        shutil.copytree(src, dst)
+    folder = dst or src
+    o = read_opts(folder)
+    if not o.get('waves'):
+        raise ValueError('van_quiet: %s has no waves build (bank_opts.json waves)' % folder)
+    B = F.Built(folder, os.path.basename(archive_of(folder)).split('_Main')[0])
+    Jn = B.sc                    # edited in place, as van_nests does
+    targets = {(R + t).lower(): g for g in want for t in VAN_QUIET_GROUPS[g]}
+    changed, seen = [], set()
+    for cname, field in (('TriggerBox', 17), ('TriggerDelay2', 4)):
+        for k, i, v in kl_fa.controllers(Jn, cname):
+            gone = [x for x in v[field] if x.lower() in targets]
+            if gone:
+                kl_fa.edit(Jn, k, i, lambda us: A.setv(Jn, us, field, [x for x in v[field] if x.lower() not in targets]))
+                seen.update(x.lower() for x in gone)
+                changed.append('%s no longer names %s' % (Jn.path[k][5:], ', '.join(x.rsplit('\\', 1)[-1] if x.lower().endswith(('pace_b01',)) else x[5:].split('!')[-1] for x in gone)))
+    left = []                    # nothing else may still name a cut entry (reference lists of any class; the squads' own inner links are not starters)
+    for k in range(1, len(Jn.nodes)):
+        for s_ in A.named(Jn, k):
+            if s_.lower() in targets and Jn.cls(k) != 'ZGROUP':        # a squad group naming its own sibling is an inner link, not a starter (GUESS: it runs only once the squad is awake)
+                left.append((Jn.path[k][5:], s_[5:]))
+    if left:
+        raise ValueError('van_quiet: still named by %s' % left)
+    if changed:
+        prp = Jn.p.serialize()
+        back = F.Prp(prp)
+        if back.serialize() != prp or len(back.nodes()) != len(Jn.nodes):
+            raise ValueError('the new .prp does not round-trip')
+        new = dict(B.files)
+        new[B.ext['.prp']] = prp
+        tmp = B.zp + '.tmp'
+        kl_graft.write_zip(tmp, [(n, new[n]) for n in B.order])
+        os.replace(tmp, B.zp)
+    fp = os.path.join(folder, OPTS_FILE)
+    d = json.load(open(fp)) if os.path.isfile(fp) else {}
+    d['van_quiet'] = sorted(set(d.get('van_quiet', [])) | set(want))
+    with open(fp, 'w') as f:
+        json.dump(d, f, indent=1)
+    log('kl_fa_bank.van_quiet %s: %s (groups %s)' % (folder, '; '.join(changed) or 'nothing to change', ', '.join(want)))
+    return {'groups': want, 'changed': changed}
+
+
 def crew_check(folder, log=print):
     """A folder with the AI heisters' squads (with or without the dynamic step) -> [faults]: no place of a heister
     squad within CREW_CLEAR of where a squad of the hall or the plaza stands or goes - a man's start, a cover
@@ -5836,6 +5914,8 @@ def waves_check(folder, log=print):
                 _kn = 0 if o['van_nests'] == 'off' else int(o['van_nests'][5:])
                 if chains['D'].index(w) == _kn:
                     want_pace = []
+            if 'waveb' in o.get('van_quiet', ()) and w['phase'] == 'B' and first:      # VAN_QUIET waveb: Pace_B01 is named by nobody. Without the option this block is not entered
+                want_pace = []
             for e_, q_ in w['men']:                                       # the walk from the entry to the post keeps 15 m from the START rows
                 dd_ = min(seg_dist(r, e_, q_) for r in START)
                 if dd_ < START_CLEAR:
@@ -6164,6 +6244,8 @@ def main():
         wave_fallback(a[1], a[2] if len(a) == 3 else None)
     elif len(a) == 4 and a[0] == 'van-nests':                # <src> <dst> off|keep=N: chain D (the street recess police) not started / cut after N waves (VAN_NESTS)
         van_nests(a[1], a[2], a[3])
+    elif len(a) == 4 and a[0] == 'van-quiet':                # <src> <dst> <plaza,waveb,exit>|top: unlink more van-route police from their starters (VAN_QUIET)
+        van_quiet(a[1], a[2], a[3])
     elif len(a) == 3 and a[0] == 'extras':
         extras(a[1], a[2])
     elif len(a) == 2 and a[0] == 'waves-check':
