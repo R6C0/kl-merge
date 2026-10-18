@@ -99,6 +99,10 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
     Bot 4 was 8 m off; the other bots were 51..92 m off. Nobody escaped.
   - READING: the leaderless hop works as designed. What remains is L83's gap: stage-2 bots get no stage 3 without the human, and the last van waits only 8 s.
     That is what (l) targets. Workflow wk18hv8ig is checking the (l) code paths against L94 (re/retomoto_l94.md).
+- RUN L95b (3f (l) try 1: zj + PT_DM09_fedvan e21001ed + KLJoin 0b557e40): PASS 366 s. NOT a test of (l): the ini inherited god mode from PT_DM09_lead, so the human never turned fed.
+  - EARLY join at r123: all 7 bots went to the street.
+  - The human's goto stuck 13.8 m short, so there was no stage 3 for anyone and no van. Rec 1 turned traitor and died.
+  - (l) is rerun as L96 with PT_DM09_fedvan_die 3185b898 (PlayerHealth 0.05).
 - DECISION: WalkExclusive=1 + LastVehicleLead=450 are CANDIDATES (they acted as designed in L83/L84, no harm seen; two runs only); van boarding with a fed human
   waits for (k)/(l).
 
