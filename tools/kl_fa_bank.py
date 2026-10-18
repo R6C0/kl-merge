@@ -4367,6 +4367,8 @@ def van_nests(src, dst=None, mode='off', log=print):
 #   plaza  : the 7 plaza-box squad entries (5_Lobby Teargas_01 / OutSide_01, COOP SWAT_02 / SWAT_03 / both ShieldSupport / Reinforce_Wave1_COOP_03; ~21 men),
 #            cut from tbExitFinancialAlley. The box's Timer_van and Timer_teller_c stay. The squads' own inner links stay (they run only if the squad is awake).
 #   waveb  : Pace_B01 (Wave_B01..B04, 4 men), cut from tb_LEFT_TheySpotYou and Go_A04 (the wave_fallback link).
+#   wavea4 : Pace_A04 (Wave_A04, 1 man), cut from Go_A03, its only starter (2026-10-18, L24 census: it woke 04:49:04 and stood 10 m from rec 1 at its death;
+#            GUESS: a killer). Go_A04 then never fires, so the wave_fallback link to Pace_B01 dies with it. A01..A03 stay (waves_check's supply). Not in 'top'.
 #   exit   : the 3 FinancialAlleyExit squads (8 men, y 1221), cut from RivalMercVan\TimerVanGo. The audit rates them low (floor above the route): not in 'top'.
 # 'top' = plaza + waveb (audit ranks 1 and 2). NOT offered: Wave_A (chain A is the supply that waves_check demands), the vault garrison (dead by the van call, GUESS),
 # traitor Squad #03 (starter not traced).
@@ -4379,6 +4381,7 @@ VAN_QUIET_GROUPS = {
               'coop!squads_lobby!police_reinforce_wave1_coop_03\\cutscene_moveoutside', 'coop!squads_lobby!police_outside_swat_03\\flankingbehaviour',
               'coop!squads_lobby!police_outside_swat_02\\flankingbehaviour'],
     'waveb': ['gameplay!bank_waves!clock\\pace_b01'],
+    'wavea4': ['gameplay!bank_waves!clock\\pace_a04'],
     'exit': ['gameplay!030_afterloot!030_financialalleyexit_left\\10_runtocover', 'gameplay!030_afterloot!030_financialalleyexit_right\\10_runtocover',
              'gameplay!030_afterloot!030_financialalleyexitstreet_left\\10_runtocover'],
 }
@@ -5916,6 +5919,8 @@ def waves_check(folder, log=print):
                     want_pace = []
             if 'waveb' in o.get('van_quiet', ()) and w['phase'] == 'B' and first:      # VAN_QUIET waveb: Pace_B01 is named by nobody. Without the option this block is not entered
                 want_pace = []
+            if 'wavea4' in o.get('van_quiet', ()) and w['phase'] == 'A' and chains['A'].index(w) == 3:      # VAN_QUIET wavea4: Pace_A04 is named by nobody. Without the option this block is not entered
+                want_pace = []
             for e_, q_ in w['men']:                                       # the walk from the entry to the post keeps 15 m from the START rows
                 dd_ = min(seg_dist(r, e_, q_) for r in START)
                 if dd_ < START_CLEAR:
@@ -5953,6 +5958,8 @@ def waves_check(folder, log=print):
                 nxt_ = ch[i_ + 1] if i_ + 1 < len(ch) else None
                 if ph == 'D' and o.get('van_nests') and o['van_nests'] != 'off' and i_ + 1 == int(o['van_nests'][5:]):
                     nxt_ = None                                       # VAN_NESTS keep=N: the chain ends here, by design
+                if ph == 'A' and 'wavea4' in o.get('van_quiet', ()) and i_ + 1 == 3:
+                    nxt_ = None                                       # VAN_QUIET wavea4: chain A ends at A03, by design
                 # reachable from Go: Pace of the next link and nothing else of the chain
                 names_ = [x for s_ in values(sc, go_, 'TriggerDelay2')[4] for x in sc.resolve(s_)] if go_ else []
                 tim_ = [x for x in names_ if sc.cls(x) == 'ZBoxPrimitive' and x != node(w['squad'] + '\\10_Defend')]
@@ -5967,8 +5974,9 @@ def waves_check(folder, log=print):
                 fail('chain %s runs %g s: past SUPPLY_MAX (%g s), a chain must end' % (ph, t, SUPPLY_MAX))
             log('  chain %s: %d links, the first %g s after its trigger, the last %g s, %d men; Pace gaps %s' % (ph, len(ch), ch[0]['delay'], t, sum(len(w['men']) for w in ch), sorted({w['gap'] for w in ch})))
         floor = SUPPLY_MIN2 if o.get('waves2') else SUPPLY_MIN
-        if chains['A'] and chains['A'][-1]['delay'] < floor:
-            fail('the supply ends at %g s, before the floor (%g s): chain A alone must outlast a human who takes his time' % (chains['A'][-1]['delay'], floor))
+        _lastA = chains['A'][2] if chains['A'] and len(chains['A']) > 3 and 'wavea4' in o.get('van_quiet', ()) else (chains['A'][-1] if chains['A'] else None)   # VAN_QUIET wavea4: A04 never comes
+        if chains['A'] and _lastA['delay'] < floor:
+            fail('the supply ends at %g s, before the floor (%g s): chain A alone must outlast a human who takes his time' % (_lastA['delay'], floor))
         elif not chains['A']:
             fail('no chain A: nothing keeps the police coming from the start of the round')
         # ---- run W2's two other faults. (1) NO WAVE BEFORE THE CREW HAS LEFT THE YARD: chain A is named by the dock box (behind the door, criminals only, once) and
@@ -6244,7 +6252,7 @@ def main():
         wave_fallback(a[1], a[2] if len(a) == 3 else None)
     elif len(a) == 4 and a[0] == 'van-nests':                # <src> <dst> off|keep=N: chain D (the street recess police) not started / cut after N waves (VAN_NESTS)
         van_nests(a[1], a[2], a[3])
-    elif len(a) == 4 and a[0] == 'van-quiet':                # <src> <dst> <plaza,waveb,exit>|top: unlink more van-route police from their starters (VAN_QUIET)
+    elif len(a) == 4 and a[0] == 'van-quiet':                # <src> <dst> <plaza,waveb,wavea4,exit>|top: unlink more van-route police from their starters (VAN_QUIET)
         van_quiet(a[1], a[2], a[3])
     elif len(a) == 3 and a[0] == 'extras':
         extras(a[1], a[2])
