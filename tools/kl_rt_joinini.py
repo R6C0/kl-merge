@@ -16,9 +16,20 @@ Wait=1 s inside the circle), so bots may be carried from a little further away; 
 of the lift lobby is unchecked. 250 only widens the height window of hop 3; hop 3 already worked on the node
 alone. Revert = use the source folder.
 
+--rescue-wedge APPENDS one section [CrewHop.6] (the only mode that adds anything; refused if the section exists):
+a rescue for the boardroom-corridor wedge at (797, 21000, 639), where bots stood motionless 277..287 s (KLHook.log
+sessions 89/1 and 65/2; 18/1 and 37/1 at the same spot) and no hop covers them. It carries a bot standing there for
+100 s to the street landing places. ALL VALUES ARE GUESSES (Radius 250, Height 200, Wait 100: longer than the longest
+lingering seen outside the wedge, about 85 s, shorter than the wedges seen, 277 s and up).
+
 Exit code 0 = written and verified (only the named lines differ), 1 = refused."""
 import sys, os, re, shutil, hashlib, argparse
 
+RESCUE = ["; --rescue-wedge (kl_rt_joinini.py): boardroom-corridor wedge, bots stood 277..287 s (log sessions 89/1, 65/2).",
+          "; GUESS: Radius / Height / Wait are not tested in the game.",
+          "[CrewHop.6]", "From=797 21000 639", "Radius=250", "Height=200", "Wait=100", "Stage=0", "Player=0", "Again=0",
+          "Places=7", "To.1=6272 570 -5200", "To.2=5872 570 -5585", "To.3=5708 570 -5705", "To.4=5828 570 -6309",
+          "To.5=5708 570 -7245", "To.6=5872 570 -7025", "To.7=5952 570 -7770"]
 MARGINS = ['CrewHop.2.Radius=800', 'CrewHop.3.Height=250']
 
 
@@ -69,6 +80,7 @@ def main(argv):
     ap.add_argument('out')
     ap.add_argument('--margins', action='store_true')
     ap.add_argument('--set', action='append', default=[])
+    ap.add_argument('--rescue-wedge', action='store_true')
     ap.add_argument('--dry', action='store_true')
     a = ap.parse_args(argv)
     sets = [parse_set(s) for s in (MARGINS if a.margins else []) + a.set]
@@ -82,6 +94,13 @@ def main(argv):
         raise SystemExit('refused: OUT must not be a game folder')
     data = open(ini, 'rb').read()
     new, done = edit(data, sets)
+    base = new
+    if a.rescue_wedge:
+        if re.search(rb'^\s*\[CrewHop\.6\]', data, re.M):
+            raise SystemExit('refused: [CrewHop.6] already exists')
+        nl = b'\r\n' if b'\r\n' in data else b'\n'
+        add = nl.join(x.encode() for x in RESCUE) + nl
+        new = new + (b'' if new.endswith(b'\n') else nl) + nl + add
     for d in done:
         print('KLJoin.ini [%s] %s: %s -> %s' % d)
     if a.dry:
@@ -105,7 +124,9 @@ def main(argv):
     if diff != (['KLJoin.ini'] if new != data else []):
         raise SystemExit('refused: unexpected differing members %s' % diff)
     # only the named lines differ
-    a_l, b_l = data.split(b'\n'), new.split(b'\n')
+    if not new.startswith(base):
+        raise SystemExit('refused: appended text changed existing bytes')
+    a_l, b_l = data.split(b'\n'), base.split(b'\n')
     nd = sum(1 for x, y in zip(a_l, b_l) if x != y)
     if len(a_l) != len(b_l) or nd != len(done):
         raise SystemExit('refused: %d lines differ, expected %d' % (nd, len(done)))
