@@ -344,3 +344,11 @@ The table reproduces exactly (z 30793). The squad positions are the men and cove
 - The one-way-link question is open.
 
 Scripts: `q1.py` to `q4.py` in `C:\Users\Henri\AppData\Local\Temp\claude\c--kl-merge-kl-merge\d20b026f-6c1c-42c8-8d9e-2f96a87bb38d\scratchpad\`.
+## 2026-10-18: Hot Coffee II L70 (3f, live): BoardReachFlat=1 makes visit-1 boarding work
+HC 0765d90a + hook out_e5_1018s + the L69 ini + `[Bots] BoardReachFlat=1` (BoardReach=100): RESULT PASS, 0 asserts.
+EscVisitFix fired on visit 1 (in state 2; 1e4 set). Rec 6 and traitor rec 4 boarded on visit 1 (L69 without Flat: 0).
+CrewRouteHold held one walker 10.8 m off for 45 s; the van took 8704/9600 health. Of the other five, three were dead
+and two were in play at heist stage 1/2 with $0 (never called). After LastVehicleFlagged every box works as in stock,
+so Flat matters only until then. The full opt-in stack (EscVisitFix + CrewRouteHold 45 / CrewRouteRange 100 +
+CrewRouteAlone + BoardReachFlat) has now passed visit 1 on the Vault (L65), Park II (L68) and Hot Coffee II (L70).
+Adopting it into the owner's hook and ini is the owner's call.
