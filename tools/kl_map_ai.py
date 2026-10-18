@@ -149,6 +149,7 @@ STYLE, SKILL, ACC, AIM, F6, HEALTH, F8, F13, F14, SIGHT, MERC = 0, 3, 4, 5, 6, 7
 PRESET = {'eN00b': (20, 0, 20, 100, 40), 'eAmateur': (35, 20, 10, 70, 45), 'eRegular': (50, 50, 10, 50, 50),
           'eVeteran': (60, 60, 5, 20, 55), 'eElite': (90, 90, 10, 0, 60)}       # kl2 0x46e410: fields 4, 5, 6, 13, 14
 PRESET_FIELDS = (ACC, AIM, F6, F13, F14)
+ACC_CAP = None                                      # --acc-cap=N: no floor above N (accuracy as used); None = off (default, unchanged)
 ACC_FACTOR = 1.1                                    # kl2 0xd19328, for No_Mercenary (0xd19330 = 1.0 for the others)
 
 # (1) class of the weapon carried -> (the skill name whose preset is the FLOOR for accuracy and aim, health floor).
@@ -654,6 +655,8 @@ def strength(sc, anm, plan, log=print, presets=False, seed=kl_arms.SEED):
         floor, hp = STRENGTH[cls]
         fac = ACC_FACTOR if v[MERC] == 'No_Mercenary' else 1.0
         acc, aim = min(PRESET[floor][0] * fac, 100.0), float(PRESET[floor][1])     # accuracy as the game USES it
+        if ACC_CAP is not None:
+            acc = min(acc, ACC_CAP)
         e, new = effective(v), {}
         if e[ACC] < acc - 0.01 or e[AIM] < aim - 0.01:
             # below the floor: the row becomes eCustom, with the preset's numbers where a preset was in force
@@ -890,7 +893,7 @@ def retomoto_style(src, dst, log=print):
     return rep, sf
 
 
-def cops_style(src, dst, log=print):
+def cops_style(src, dst, log=print, strength_only=False):
     """retomoto_style without its last step (spawnfix --auto would wake every squad of a staged build): apply with
     parts strength + chains and the auto plan. -> the apply report. Refuses dst == src and a non-empty dst."""
     dst = dst.rstrip('/' + chr(92))
@@ -898,7 +901,7 @@ def cops_style(src, dst, log=print):
         raise ValueError('the output folder is the source')
     if os.path.isdir(dst) and os.listdir(dst):
         raise ValueError('%s exists and is not empty: not overwritten' % dst)
-    return apply(src, dst, parts=('strength', 'chains'), log=log, auto=True)
+    return apply(src, dst, parts=('strength',) if strength_only else ('strength', 'chains'), log=log, auto=True)
 
 
 def apply(src, dst, parts=('strength', 'waves', 'chains', 'escape'), presets=False, log=print, car_exit=False, auto=False):
@@ -2059,10 +2062,11 @@ def spawndiff(src, dst, log=print):
 
 
 def main():
-    global HEALTH_SCALE
+    global HEALTH_SCALE, ACC_CAP
     a = [x for x in sys.argv[1:] if not x.startswith('--')]
     o = {x for x in sys.argv[1:] if x.startswith('--')}
     HEALTH_SCALE = next((float(x.split('=')[1]) for x in o if x.startswith('--health=')), HEALTH_SCALE)
+    ACC_CAP = next((float(x.split('=')[1]) for x in o if x.startswith('--acc-cap=')), ACC_CAP)
     car = '--car-exit' in o
     parts = tuple(p for p in ('strength', 'waves', 'chains', 'escape') if '--no-' + p not in o)
     if len(a) == 2 and a[0] == 'table':
@@ -2096,7 +2100,7 @@ def main():
         _r, sf = retomoto_style(a[1], a[2])
         sys.exit(1 if sf['problems'] else 0)
     elif len(a) == 3 and a[0] == 'cops-style':
-        cops_style(a[1], a[2])
+        cops_style(a[1], a[2], strength_only='--strength-only' in o)
     elif len(a) == 3 and a[0] == 'spawndiff':
         sys.exit(0 if spawndiff(a[1], a[2]) else 1)
     elif len(a) == 3 and a[0] == 'check':

@@ -4195,6 +4195,85 @@ def vault_blow(folder, log=print):
     return {'door off': pieces, 'changed': changed}
 
 
+# WAVE_FALLBACK ('wave-fallback <src> <dst>', a .prp-only post-step; bank_opts.json 'wave_fallback'): the audit of 2026-10-18 (cops, escape-phase
+# pressure) found that waves B and D start only from boxes (the ante-room box for B, the hall's south-end box for D). A crew that leaves another way, or
+# never gets there (a quiet round, a slow human, a downed crew), meets no push at all. The fallback names Pace_B01 and Pace_D01 from a node that runs on
+# the ROUND CLOCK. No node is added (a new entity would change the .gms / .buf / .oct / .rmi / .rmc and every slot id): the node is the Go of the chain-A
+# link whose WORST-case time (round-start event + start timer + Timer_A_late backstop + the Pace gaps up to it) is nearest WAVE_FALLBACK_S. In the
+# installed Vault (waves2: Pace_A01 30 s, then 45 s a link, Timer_A_late 80 s, start timer 10 s) the four links fall at event + 120 / 165 / 210 / 255 s in
+# the worst case (crew never passes the dock box), earlier by the time the crew needs to reach the box otherwise: Go_A04 is chosen.
+# Pace and Go are one-shots (re-arm -1): whichever of the box and the fallback arrives FIRST starts the chain, the other is a no-op (a re-trigger of a
+# Pace that is still counting down is the one case not seen: GUESS that it is ignored or restarts the same wait, which delays that one wave by <= its gap).
+WAVE_FALLBACK_S = 240.0         # GUESS: s after the round-start event by which a quiet round still gets waves B and D (the first round is 360 s long; the van is called 60 s before its end)
+WAVE_FALLBACK_MAX = 300.0       # the chosen link may not fall later than this in the worst case, else the push comes too late to matter (refused)
+
+
+def wave_fallback(src, dst=None, log=print, target=None):
+    """Names Pace_B01 and Pace_D01 from the Go node of a chain-A link (see WAVE_FALLBACK) in a finished waves build. dst: the folder to build (a copy of src
+    with ONE member changed: the .prp); None = in place. Writes bank_opts.json 'wave_fallback'. A second run changes nothing.
+    -> {'go': path, 'worst_s': float, 'changed': [..]}"""
+    import json, shutil, kl_fa_bots as F
+    target = WAVE_FALLBACK_S if target is None else target
+    if dst:
+        if os.path.exists(dst):
+            raise ValueError('wave_fallback: %s exists' % dst)
+        shutil.copytree(src, dst)
+    folder = dst or src
+    o = read_opts(folder)
+    if not o.get('waves'):
+        raise ValueError('wave_fallback: %s has no waves build (bank_opts.json waves)' % folder)
+    B = F.Built(folder, os.path.basename(archive_of(folder)).split('_Main')[0])
+    sc = B.sc
+    Jn = sc                    # edited in place: B.sc.p.serialize() reproduces the stored .prp byte for byte (J.join does not: it renumbers controller ids)
+    cl = R + CLOCK + '\\'
+    def td(name):
+        k = Jn.resolve(cl + name)
+        return (k[0], values(Jn, k[0], 'TriggerDelay2')) if k else (None, None)
+    for need in ('Pace_B01', 'Pace_D01', 'Pace_A01'):
+        if td(need)[0] is None:
+            raise ValueError('wave_fallback: %s is not in the level' % need)
+    st = values(Jn, Jn.resolve(R + ROLE['start timer'])[0], 'TriggerDelay2')[0]
+    late = td('Timer_A_late')[1]
+    t = st + (late[0] if late is not None and o.get('waves2') else 0.0)       # worst case: Pace_A01 is armed by the backstop
+    links = []
+    for i in range(1, 100):
+        nm = 'A%02d' % i
+        pk, pv = td('Pace_' + nm)
+        gk, gv = td('Go_' + nm)
+        if pk is None or gk is None:
+            break
+        t += pv[0] + gv[0]
+        links.append((abs(t - target), -t, nm, t))
+    if not links:
+        raise ValueError('wave_fallback: no chain-A link')
+    _d, _nt, nm, worst = min(links)
+    if worst > WAVE_FALLBACK_MAX:
+        raise ValueError('wave_fallback: the nearest link %s falls at event + %.0f s in the worst case (> %.0f)' % (nm, worst, WAVE_FALLBACK_MAX))
+    gk, gv = td('Go_' + nm)
+    want = [cl + 'Pace_B01', cl + 'Pace_D01']
+    changed = []
+    add = [x for x in want if x not in gv[4]]
+    if add:
+        kl_fa.edit(Jn, gk, A.ctrl_of(Jn, gk, 'TriggerDelay2'), lambda us: A.setv(Jn, us, 4, list(gv[4]) + add))
+        changed.append('Go_%s names %s' % (nm, ', '.join(x.rsplit('\\', 1)[-1] for x in add)))
+        prp = Jn.p.serialize()
+        back = F.Prp(prp)
+        if back.serialize() != prp or len(back.nodes()) != len(Jn.nodes):
+            raise ValueError('the new .prp does not round-trip')
+        new = dict(B.files)
+        new[B.ext['.prp']] = prp
+        tmp = B.zp + '.tmp'
+        kl_graft.write_zip(tmp, [(n, new[n]) for n in B.order])
+        os.replace(tmp, B.zp)
+    fp = os.path.join(folder, OPTS_FILE)               # merged into the file (vault_blow's way): the module's own flags and opts_now() stay as they were
+    d = json.load(open(fp)) if os.path.isfile(fp) else {}
+    d['wave_fallback'] = {'go': cl + 'Go_' + nm, 'worst_s': round(worst, 1), 'target_s': target}
+    with open(fp, 'w') as f:
+        json.dump(d, f, indent=1)
+    log('kl_fa_bank.wave_fallback %s: %s (worst case event + %.1f s, target %.0f s, GUESS)' % (folder, '; '.join(changed) or 'nothing to change', worst, target))
+    return {'go': cl + 'Go_' + nm, 'worst_s': worst, 'changed': changed}
+
+
 def crew_check(folder, log=print):
     """A folder with the AI heisters' squads (with or without the dynamic step) -> [faults]: no place of a heister
     squad within CREW_CLEAR of where a squad of the hall or the plaza stands or goes - a man's start, a cover
@@ -5663,7 +5742,10 @@ def waves_check(folder, log=print):
             if first and w['phase'] == 'A' and o.get('waves2'):             # the dock box and the backstop timer, no one else
                 want_pace = sorted(x for x in (node(R + DOCK_BOX), node(R + DOCK_LATE)) if x)
                 tb = sorted(tb)
-            for e_, q_ in w['men']:                                          # the walk from the entry to the post keeps 15 m from the START rows
+            if first and w['phase'] in ('B', 'D') and o.get('wave_fallback'):      # WAVE_FALLBACK: the chain-A link's Go also names the first Pace of B and D
+                want_pace = sorted(want_pace + [node(o['wave_fallback']['go'])])
+                tb = sorted(tb)
+            for e_, q_ in w['men']:                                       # the walk from the entry to the post keeps 15 m from the START rows
                 dd_ = min(seg_dist(r, e_, q_) for r in START)
                 if dd_ < START_CLEAR:
                     fail('wave %s: the walk %s -> %s passes %d from a START row (%d wanted)' % (w['name'], tuple(e_), tuple(q_), dd_, START_CLEAR))
@@ -5701,6 +5783,9 @@ def waves_check(folder, log=print):
                 # reachable from Go: Pace of the next link and nothing else of the chain
                 names_ = [x for s_ in values(sc, go_, 'TriggerDelay2')[4] for x in sc.resolve(s_)] if go_ else []
                 tim_ = [x for x in names_ if sc.cls(x) == 'ZBoxPrimitive' and x != node(w['squad'] + '\\10_Defend')]
+                if o.get('wave_fallback') and go_ == node(o['wave_fallback']['go']):         # WAVE_FALLBACK: this Go also names the first Pace of B and D (shot once, they do not chain back)
+                    _cl = o['wave_fallback']['go'].rsplit('\\', 1)[0] + '\\'
+                    tim_ = [x for x in tim_ if x not in (node(_cl + 'Pace_B01'), node(_cl + 'Pace_D01'))]
                 if nxt_ is None and tim_:
                     fail('chain %s ends in %s which still names %s: a chain that does not stop' % (ph, w['name'], [sc.path[x][5:] for x in tim_]))
                 if nxt_ is not None and node(nxt_['pace']) not in names_:
@@ -5980,6 +6065,8 @@ def main():
         hall_dash(a[1])
     elif len(a) == 2 and a[0] == 'vault-blow':
         vault_blow(a[1])
+    elif len(a) in (2, 3) and a[0] == 'wave-fallback':      # <src> [<dst>]: waves B and D also from the round clock (WAVE_FALLBACK)
+        wave_fallback(a[1], a[2] if len(a) == 3 else None)
     elif len(a) == 3 and a[0] == 'extras':
         extras(a[1], a[2])
     elif len(a) == 2 and a[0] == 'waves-check':

@@ -304,6 +304,7 @@ static struct {
     float reach; int reach_visits, reach_doors, reach_order;
     DWORD hop; float hop_max;      /* RestlessHop (section 5): seconds at a hold before a hop to a cover place of the level's [Hops]; 0 = off */
     int last;                      /* LastVehicle (section 6): 1 = the fallback last vehicle is on (default), 0 = off */
+    DWORD snap_range, snap_human; int snap, snap_cap;      /* RestlessSnap (2026-10-18, audit E2.2): after N orders to one place that did not bring the bot there, the bot is put at its chain's place; 0 = off */
     DWORD botvan;                  /* BotVan (section 7, v78): ms a loyal AI heister has had stage 3 with no vehicle before the hook calls one; 0 = off */
 } klmv;
 
@@ -326,6 +327,7 @@ static char klmv_hop_key[64], klmv_hop_file[MAX_PATH]; static FILETIME klmv_hop_
 struct klmv_b {
     DWORD actor, since, money, order_at, hit_at, look_obj, look_at; int seen, have_anchor, have_target, tries, total, phase, paced, beside, look_amount, reach_visit, hop_k; BYTE told;      /* told: 16 = a box did not take it on this visit, 32 = sent to the doors on this visit */
     float pos[3], hp, anchor[3], anchor0[3], target[3], try_pos[3];      /* anchor = the place its chain ordered; anchor0 = where the count 'total' began */
+    int snaps;                                /* RestlessSnap: how often this bot was put at its place this round */
     float same_t[3], same_d; int same_n;      /* v82f: the target of the last (b) order, how far the bot was from it then, and how many orders in a row went to it without progress */
 };
 static struct {
@@ -1214,6 +1216,27 @@ static void klmv_restless(const struct klb_snap *s, DWORD now, int human_in, con
             if (b->tries && kle_dist(b->pos, b->try_pos) > 200.0f) b->tries = 0;      /* another spot */
             if (b->tries >= 4 || b->total >= KLMV_TOTAL) {
                 if (!(b->told & 1)) { b->told |= 1; klog("move: record %d still stands at (%.0f, %.0f, %.0f), %.1f m from its place, after %d order(s) on this spot and %d for this place of its chain: it is left until its chain orders another place", i, b->pos[0], b->pos[1], b->pos[2], d / 100, b->tries, b->total); }
+                /* RestlessSnap (default off): the chain's orders did not bring it (audit 1018, record 7 stood 70..160 s wedged at a
+                   mesh corner 3 cm off the mesh, 24 m from its place). It is put AT its place with the game's own actor teleport
+                   (klt_teleport, the call klcrew_rt.c's jump uses), not past a human who could see it: only when the place is on its floor (300),
+                   within RestlessSnapRange, the human is not within RestlessSnapHuman of the bot or the place, nobody holds it as a shield
+                   and klt_refuse() lets it through. At most RestlessSnapMax times per bot and round. GUESS: the three limits' defaults. */
+                if (klmv.snap && !klmv.dry && b->snaps < klmv.snap_cap && klt_tele_known() && fabs(b->pos[1] - b->anchor[1]) <= 300.0f && klmv_h(b->pos, b->anchor) <= (float)klmv.snap_range) {
+                    int seen_by = human_in && (klmv_h(hp, b->pos) <= (float)klmv.snap_human || klmv_h(hp, b->anchor) <= (float)klmv.snap_human) && fabs(hp[1] - b->pos[1]) <= 600.0f;
+                    const char *why = 0;
+                    if (seen_by) why = "the human is near";
+                    else if (!kle_bot(s, i, &actor, &soldier, bp, w)) why = w;
+                    else if (klh_rd32(actor + 0x770)) why = "it is held as a human shield";
+                    else why = klt_refuse(actor);
+                    if (why) { if (!(b->told & 4)) { b->told |= 4; klog("move: record %d NOT snapped to its place: %s (said once per bot)", i, why); } }
+                    else {
+                        float to[3]; memcpy(to, b->anchor, 12);
+                        kltr_tp(i, "move-restless-snap", to, "RestlessSnap: stuck off its chain place after the orders of this place were used up");
+                        klt_teleport(actor, to);
+                        b->snaps++; b->tries = 0; b->total = 0; b->same_n = 0; b->since = now; b->have_target = 0; b->told &= (BYTE)~(1 | 4 | 128);
+                        klog("move: record %d SNAPPED from (%.0f, %.0f, %.0f) to its chain's place (%.0f, %.0f, %.0f), %.1f m, time %d of %d (RestlessSnap)", i, bp[0], bp[1], bp[2], to[0], to[1], to[2], d / 100, b->snaps, klmv.snap_cap);
+                    }
+                }
                 continue;
             }
             if (!kle_bot(s, i, &actor, &soldier, bp, w)) { if (!(b->told & 2)) { b->told |= 2; klog("move: record %d stands at (%.0f, %.0f, %.0f) but gets no order: %s", i, b->pos[0], b->pos[1], b->pos[2], w); } continue; }
@@ -1386,6 +1409,10 @@ static void klmv_init(void)
     klmv.dry = GetPrivateProfileIntA("Bots", "MoveDry", 0, klh_ini) != 0;
     klmv.log = klb_pos("MoveLog", 1, 2);
     klmv.last = GetPrivateProfileIntA("Bots", "LastVehicle", 1, klh_ini) != 0;
+    klmv.snap = klmv.restless ? klb_pos("RestlessSnap", 0, 1) : 0;      /* 0 = off (default) */
+    klmv.snap_range = (DWORD)klb_pos("RestlessSnapRange", 4000, 20000);      /* GUESS: 40 m */
+    klmv.snap_human = (DWORD)klb_pos("RestlessSnapHuman", 1500, 20000);      /* GUESS: 15 m */
+    klmv.snap_cap = klb_pos("RestlessSnapMax", 2, 20);
     klmv.botvan = (DWORD)klb_pos("BotVan", 4, 120) * 1000;      /* v78: default 4 s; 0 = off */
     klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0 || klmv.reach > 0 || klmv.last || klmv.botvan;
     if (!klmv.any) return;
@@ -1394,6 +1421,7 @@ static void klmv_init(void)
         klog("move: on; Restless=%lu s Loot=%lu s (back %lu s, near %.0f) Hold=%lu s Pace=%.0f%s: an AI heister that stands that long without moving 1 m or earning - on a money object that pays nothing: the object is no loot candidate for a while (one byte of it; you can still take it); more than 3 m from the place its chain ordered: that order again (the soldier's own order %08x)%s; Arcade only, on a level that is not the stock one of its slot",
              klmv.restless / 1000, klmv.loot / 1000, klmv.back / 1000, klmv.loot_near, klmv.hold / 1000, klmv.pace, klmv.dry ? " DRY RUN (MoveDry=1: nothing is written or called)" : "", KLE_ORDER,
              klmv.hold ? "; at its own hold place for Hold seconds: a shift round it" : "; a bot at its own place (a meant wait) is left alone");
+    if (klmv.snap) klog("move: RestlessSnap on (audit 1018 E2.2, GUESS limits): a bot whose chain place was ordered %d times without arriving is put AT the place (range %lu, human not within %lu, at most %d times per bot and round)%s", KLMV_TOTAL, klmv.snap_range / 100, klmv.snap_human / 100, klmv.snap_cap, klmv.dry ? "; MoveDry=1: never" : "");
     if (klmv.last)
         klog("last: on (LastVehicle=1, the default; 0 = off)%s: in an Arcade round on a level that is not the stock one, v82e: when the END timer [rules+0x200] (what really ends the round, kl2 0x5dff40) shows %.2f s or less and the game has called no vehicle (state 0, [rules+0xe8a] 0: its own last call at 2.0 s found no vehicle - none was called before in this level load), the vehicle the exit trigger names is called as the round's last (0x8154f0, as the game's own)",
              klmv.dry ? " DRY RUN (MoveDry=1)" : "", KLMV_LAST_AT);

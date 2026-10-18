@@ -380,7 +380,7 @@ def enemy_squads(B):
 RELAYS = ('TriggerDelay', 'TriggerDelay2', 'TriggerCounter')    # field 4 of each = what it sends 'AITrigger' to
 
 
-def wake_map(B, squads=None):
+def wake_map(B, squads=None, follow_dead=False):
     """-> ({trigger box node: {squad node}}, {squad node: what starts it besides a box}). A box 'wakes' a squad when
     its list (TriggerBox field 17) names the squad or a node of it, directly or through timers / counters. A box
     with field 0 = 0 waits to be switched on and is left out. Squads no box names: 'active' (ZSquadScript field 3 =
@@ -389,6 +389,10 @@ def wake_map(B, squads=None):
     squads = squads if squads is not None else enemy_squads(B)
     of = {k: t for t in squads for k in range(t, sc.end[t])}
     relay = {k: [j for s in v[4] for j in sc.resolve(s)] for cn in RELAYS for k, _i, v in kl_fa.controllers(sc, cn)}
+    if follow_dead:                                     # default off: a TriggerActorsDead [actors, flag, targets] passes on to its targets
+        for k, _i, v in kl_fa.controllers(sc, 'TriggerActorsDead'):
+            if len(v) >= 3:
+                relay.setdefault(k, []).extend(j for s in v[2] for j in sc.resolve(s))
 
     def reach(first):
         todo, seen, hit = list(first), set(), set()
