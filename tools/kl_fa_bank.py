@@ -4287,6 +4287,59 @@ def vault_door_nocol(folder, dry=False, log=print):
     return {'refs': sorted(refs), 'placements': n, 'hvk': (len(raw), len(new))}
 
 
+# VAULT_NOBLOCKER ('vault-noblocker <folder> [--dry]', a .prp-only post-step, opt-in, default builds untouched): the suspect for bots that stall in the
+# ante-room is PathBlocker_Vault (VAULT_BLOCKER). A build without --vault-blocker has no such node; deleting it here would renumber every entity
+# (.gms / .buf / .oct / .rmi / .rmc), so the node stays and is made inert, which is equal in effect for the pathfinder: (1) its initial state
+# 'eBlocking' -> 'eNotBlocking' (the enum has exactly these two values), (2) the door timer no longer names it (no 'Activate' = eUnblock any more),
+# (3) the round-start Reset_blocker ('Block' wrapper, only with --reset) names nothing. Nothing else names the blocker (campaign_names keeps it,
+# the check above 'VAULT_BLOCKER' in apply checks exactly these three). It stays a ZBoxPrimitive with no HVK placement, so it has no collision.
+# Refuses unless the blocker is in the level exactly once and is the PathBlocker ['eUnblock', .., []] the --vault-blocker code writes.
+def vault_noblocker(folder, dry=False, log=print):
+    """-> {'changed': [...]}; writes the folder's zip unless dry. A second run changes nothing."""
+    import kl_fa_bots as F
+    B = F.Built(folder, os.path.basename(archive_of(folder)).split('_Main')[0])
+    sc = B.sc
+    Jn = J.join(sc, [(sc, t) for t in sc.tops()], 'noblocker')
+    if J.fingerprints(Jn)[0] != J.fingerprints(sc)[0] or J.text(Jn, Jn.p.settings) != J.text(sc, sc.p.settings) or Jn.path != sc.path:
+        raise ValueError("kl_prpjoin.join does not reproduce the build's .prp")
+    path = R + BLOCKER
+    if sum(1 for k in range(len(Jn.nodes)) if Jn.path[k] == path) != 1 or len(Jn.resolve(path)) != 1:
+        raise ValueError('vault_noblocker: %s is not in the level exactly once' % BLOCKER)
+    pb = Jn.resolve(path)[0]
+    got = [(i, v) for kk, i, v in kl_fa.controllers(Jn, 'PathBlocker') if kk == pb]
+    if len(got) != 1 or got[0][1][0] != 'eUnblock' or got[0][1][1] not in ('eBlocking', 'eNotBlocking') or got[0][1][2] != [] or Jn.cls(pb) != 'ZBoxPrimitive':
+        raise ValueError('vault_noblocker: the blocker is %s %s, want ZBoxPrimitive PathBlocker [eUnblock, eBlocking|eNotBlocking, []]' % (Jn.cls(pb), [v for _i, v in got]))
+    named = [(kk, i, v) for kk, i, v in kl_fa.controllers(Jn, 'TriggerDelay2') if path in (v[4] or [])]
+    wrap = [(kk, i, v) for kk, i, v in kl_fa.controllers(Jn, 'AIDWrapper') if path in (v[0] or [])]
+    others = [Jn.path[kk] for kk, _i, _v in named if kk != Jn.resolve(R + ROLE['door timer'])[0]] + [Jn.path[kk] for kk, _i, v in wrap if v[1] != 'Block']
+    if others:
+        raise ValueError('vault_noblocker: other objects name the blocker: %s' % others[:3])
+    changed = []
+    i, v = got[0]
+    if v[1] != 'eNotBlocking':
+        kl_fa.edit(Jn, pb, i, lambda us: A.setv(Jn, us, 1, 'eNotBlocking'))
+        changed.append('blocker initial eBlocking -> eNotBlocking')
+    for kk, i, v in named:
+        kl_fa.edit(Jn, kk, i, lambda us: A.setv(Jn, us, 4, [s for s in v[4] if s != path]))
+        changed.append('%s: no longer names the blocker (%d -> %d)' % (Jn.path[kk][-30:], len(v[4]), len(v[4]) - 1))
+    for kk, i, v in wrap:
+        kl_fa.edit(Jn, kk, i, lambda us: A.setv(Jn, us, 0, [s for s in v[0] if s != path]))
+        changed.append('%s: Block names nothing' % Jn.path[kk][-30:])
+    if changed:
+        prp = Jn.p.serialize()
+        back = F.Prp(prp)
+        if back.serialize() != prp or len(back.nodes()) != len(Jn.nodes):
+            raise ValueError('the new .prp does not round-trip')
+        if not dry:
+            new = dict(B.files)
+            new[B.ext['.prp']] = prp
+            tmp = B.zp + '.tmp'
+            kl_graft.write_zip(tmp, [(n, new[n]) for n in B.order])
+            os.replace(tmp, B.zp)
+    log('kl_fa_bank.vault_noblocker %s: %s%s' % (folder, '; '.join(changed) or 'nothing to change', ' (dry)' if dry else ''))
+    return {'changed': changed}
+
+
 # WAVE_FALLBACK ('wave-fallback <src> <dst>', a .prp-only post-step; bank_opts.json 'wave_fallback'): the audit of 2026-10-18 (cops, escape-phase
 # pressure) found that waves B and D start only from boxes (the ante-room box for B, the hall's south-end box for D). A crew that leaves another way, or
 # never gets there (a quiet round, a slow human, a downed crew), meets no push at all. The fallback names Pace_B01 and Pace_D01 from a node that runs on
@@ -6607,6 +6660,8 @@ def main():
         vault_blow(a[1])
     elif len(a) in (2, 3) and a[0] == 'vault-door-nocol':       # <folder> [--dry]: the door body's collision out of the .HVK (VAULT_DOOR_NOCOL)
         vault_door_nocol(a[1], dry='--dry' in a)
+    elif len(a) in (2, 3) and a[0] == 'vault-noblocker':       # <folder> [--dry]: PathBlocker_Vault made inert (VAULT_NOBLOCKER)
+        vault_noblocker(a[1], dry='--dry' in a)
     elif len(a) in (2, 3) and a[0] == 'wave-fallback':      # <src> [<dst>]: waves B and D also from the round clock (WAVE_FALLBACK)
         wave_fallback(a[1], a[2] if len(a) == 3 else None)
     elif len(a) == 4 and a[0] == 'van-nests':                # <src> <dst> off|keep=N: chain D (the street recess police) not started / cut after N waves (VAN_NESTS)
