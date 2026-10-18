@@ -597,7 +597,7 @@ static void kltr_poll(const struct klb_snap *s, DWORD now)
    and tries again on its own timer, no counter of theirs counts it). Not while a vehicle waits (kle_gap_wait: the doors beat everything), not in a dry
    run, and a released escort (mode 2 / 3) counts as class 2. Same-class orders are as before (their own timers). GUESS: that 8 s is long enough
    for the game's chain to lose its interest and short enough not to hold a bot back; the key is the lever. Not run in the game. */
-static int kle_gap_s = 8; static volatile int kle_gap_wait;
+static int kle_gap_s = 8; static volatile int kle_gap_wait, kle_gap_exempt;   /* exempt: BoardAll / FollowOut orders (set around their calls) and a released escort's orders are never refused */
 static struct { DWORD at; BYTE cls; } kle_gap_last[KLB_NREC];
 static DWORD kle_gap_refused;
 static int kle_gap_check(const struct kle_e *e, char why[100])
@@ -605,6 +605,7 @@ static int kle_gap_check(const struct kle_e *e, char why[100])
     int cls, rec = e->rec; DWORD now = GetTickCount();
     if (kle_gap_s <= 0 || kle_gap_wait || rec < 0 || rec >= KLB_NREC) return 1;
     cls = (e >= kle_r.e && e < kle_r.e + KLE_MAX && e->mode == 1) ? 1 : 2;
+    if (kle_gap_exempt || (e >= kle_r.e && e < kle_r.e + KLE_MAX && e->mode != 1)) { kle_gap_last[rec].at = KLB_T(now); kle_gap_last[rec].cls = 2; return 1; }      /* review 2026-10-18: a release (back to its route place / the boarding place) is a one-shot and the vehicle's timer runs: never refused */
     if (kle_gap_last[rec].at && kle_gap_last[rec].cls != cls && (DWORD)(now - kle_gap_last[rec].at) < (DWORD)kle_gap_s * 1000) {
         snprintf(why, 100, "debounce: record %d got a %s order %.1f s ago (OrderGap=%d s)", rec, kle_gap_last[rec].cls == 1 ? "escort" : "other", (now - kle_gap_last[rec].at) / 1000.0, kle_gap_s);
         if (!(kle_gap_refused++ % 20)) klog("order-gap: %s - %lu such refusal(s) so far", why, (unsigned long)kle_gap_refused);
@@ -824,7 +825,7 @@ static void kle_board_all(const struct klb_snap *s, DWORD now)
         kle_r.all_visit[i] = kle_r.visit;
         memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;      /* kle_order's 'soft' line is worded for an escort */
         kltr_set("board", "BoardAllOrder: to the boarding place", -1);
-        k = kle_order(&t, bd, got, w);
+        kle_gap_exempt = 1; k = kle_order(&t, bd, got, w); kle_gap_exempt = 0;
         if (k) klog("board: record %d at (%.0f, %.0f, %.0f): %s to the boarding place (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f); visit %d of the vehicle",
                     i, bp[0], bp[1], bp[2], k == 2 ? "WOULD be sent (dry run)" : "sent", bd[0], bd[1], bd[2], got[0], got[1], got[2], kle_r.visit);
         else klog("board: record %d: NOT sent to the boarding place: %s", i, w);
@@ -1236,7 +1237,7 @@ static void kle_follow(const struct klb_snap *s, DWORD now)
             continue;
         }
         memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;      /* kle_order2's 'soft' line is worded for an escort */
-        k = kle_order2(&t, bd, got, w, dry);
+        kle_gap_exempt = 1; k = kle_order2(&t, bd, got, w, dry); kle_gap_exempt = 0;
         kle_r.fo_order_at[i] = KLB_T(now);
         if (!k) { if (!(*did & 0x20)) { *did |= 0x20; klog("follow: record %d NOT sent to the boarding place: %s", i, w); } continue; }
         kle_r.fo_ocall[i] = kle_r.fo_call; memcpy(kle_r.fo_target[i], got, 12); kle_r.fo_orders[i]++;
