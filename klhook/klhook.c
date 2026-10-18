@@ -645,6 +645,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klcam.c"                                      /* klcam.c: the camera rework ([Camera], default on; Log off) */
 #include "klheliprobe.c"                                  /* klheliprobe.c: read-only chopper probe ([Heli] Probe, default 0); AFTER klescort.c */
 #include "klcensor.c"                                    /* klcensor.c: [Censor] a killing head shot blows the head off (heap data only); AFTER klheliprobe.c */
+#include "klcensus.c"                                    /* klcensus.c: [Census] read-only list of every ZFFActor (place, health); AFTER klcensor.c */
 #include "klvis.c"
 #include "kltex.c"                                        /* kltex.c: [Graphics] Textures - anisotropic filtering (default on) */
 #include "klnet.c"
@@ -776,6 +777,7 @@ static void klh_tick(int game_thread)
     klcam_tick(game_thread);                          /* klcam.c: the camera rework (game thread, gameplay site only) */
     klhp_tick(game_thread);                           /* klheliprobe.c: read-only chopper probe (returns at once unless [Heli] Probe) */
     klcn_tick(game_thread);                           /* klcensor.c: pre-arm the head-hit sum so a killing head shot censors */
+    klcs_tick(game_thread);                           /* klcensus.c: read-only actor list (returns at once unless [Census] Enable) */
     klvis_tick();                                  /* klvis.c: log only (the vision grid and its record 0xff) */
     klnet_tick(game_thread);                          /* klnet.c: multiplayer log / update numbers (off unless [Net]) */
     klp_tick(game_thread);                            /* klfed.c: come back as a fed (data writes only) */
@@ -1122,6 +1124,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klcam_init();
     klhp_init();                                      /* klheliprobe.c: reads [Heli] Probe, installs nothing */
     klcn_init();                                      /* klcensor.c: reads [Censor] */
+    klcs_init();                                      /* klcensus.c: reads [Census] */
     klvis_init();
     klnet_init();
     klp_init();
