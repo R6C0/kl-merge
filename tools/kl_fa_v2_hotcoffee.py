@@ -19,7 +19,7 @@ route's closed pieces opened by the blast (ROUTE_OPEN).
 Holds the nine names of kl_graft.AUTHOR_NAMES. Every number marked GUESS is a guess; MEASURED ones come from the real files (the bare graft
 F07+M01_A: navigation mesh = kl_route.load('M01_A').mesh(), collision floors = kl_map_escape.Ground; re/campaign_v2_plan.md).
 Usage (from tools/):
-  python kl_fa_v2_hotcoffee.py test <out> [--keep] [--plan plan.json] [--squads-awake] [--no-ai] [--no-police] [--no-blast] [--no-route-open] [--no-bots] [--no-civilians] [--str PC_Def.str]
+  python kl_fa_v2_hotcoffee.py test <out> [--keep] [--plan plan.json] [--squads-awake] [--no-ai] [--no-police] [--no-blast] [--no-route-open] [--no-bots] [--no-civilians] [--keep-faketarget] [--str PC_Def.str]
   python kl_fa_v2_hotcoffee.py civilians <finished folder> <new folder> [n]   the post-step (after the gun-sound step)
   python kl_fa_v2_hotcoffee.py plan <bare-folder> <plan.json>      the van's plan from a built bare graft
   python kl_fa_v2_hotcoffee.py check <folder> | van-check <folder> | finish <folder>
@@ -45,6 +45,10 @@ SQUADS_AWAKE = False                    # True ('--squads-awake'): ZSquadScript 
 POLICE_ARRIVE = True                    # False ('--no-police')
 VOICE = True
 STREAM = None
+# --keep-faketarget: leave the van's FakeTarget controller on. GUESS (e5, wm4kkcv6a): every failing visit 1
+# (Vault, Park, Hot Coffee: [rules+0x1e4] 0) is a van build without it; no code path from it to [rules+0x1e0]
+# was found. The trade-off: the owner had it removed because police shoot at the van.
+KEEP_FAKETARGET = False
 
 # what the campaign pre-pass drops from M01_A on top of its own rule. GUESS: nothing (build() reports the bound objects that stayed)
 M_DROP = ()
@@ -474,11 +478,12 @@ def prepare_host(S, log=print):
     S.van = ESC.van_prepare(S, PLAN, log)
     # the van is NOT in the world until the alarm (the club's VAN_LATE: no FakeTarget, hidden from the load)
     vg = A.node_of(sc, van_path()[len(R):])
-    gone = [k for k in range(vg, sc.end[vg]) if any(sc.p.key(c[0]) == 'FakeTarget' for c in sc.nodes[k]['ctrls'])]
+    gone = [] if KEEP_FAKETARGET else [k for k in range(vg, sc.end[vg]) if any(sc.p.key(c[0]) == 'FakeTarget' for c in sc.nodes[k]['ctrls'])]
     for k in gone:
         sc.nodes[k]['ctrls'] = [c for c in sc.nodes[k]['ctrls'] if sc.p.key(c[0]) != 'FakeTarget']
     A.place(S, vg, hidden=True)
-    log('  kl_fa_v2_hotcoffee: the van\'s FakeTarget (%d) is taken off and its group is hidden from the load; the alarm shows it' % len(gone))
+    log('  kl_fa_v2_hotcoffee: the van\'s FakeTarget %s and its group is hidden from the load; the alarm shows it'
+        % ('is KEPT (--keep-faketarget)' if KEEP_FAKETARGET else '(%d) is taken off' % len(gone)))
     off = abs(ESC.Poly([tuple(p) for p in PLAN['path']]).project(place_now()['FASpecials!POI!POI_TheEscapeArea'][0])[1])
     if off < LANE_CLEAR:
         raise ValueError('kl_fa_v2_hotcoffee: the escape marker is %d from the van\'s drive (%d wanted)' % (off, LANE_CLEAR))
@@ -1105,7 +1110,7 @@ def load_plan(folder):
 
 
 def main():
-    global WITH_BOTS, ROUTE_OPEN_ON, NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, STREAM, GARAGE_BLAST, CIVILIANS
+    global WITH_BOTS, ROUTE_OPEN_ON, NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, STREAM, GARAGE_BLAST, CIVILIANS, KEEP_FAKETARGET
     a = sys.argv[1:]
     if len(a) >= 2 and a[0] == 'test':
         NO_AI = '--no-ai' in a
@@ -1115,6 +1120,7 @@ def main():
         POLICE_ARRIVE = '--no-police' not in a
         GARAGE_BLAST = '--no-blast' not in a
         CIVILIANS = CIVILIANS if '--no-civilians' not in a else 0
+        KEEP_FAKETARGET = '--keep-faketarget' in a
         if '--str' in a:
             STREAM = os.path.abspath(a[a.index('--str') + 1])
             BK.use_stream(STREAM)
