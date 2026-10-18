@@ -80,6 +80,8 @@ what only a live run can settle: re/bank_campaign.md. Nothing here installs anyt
       --teller-more     (on with --waves, --no-teller-more) six stacks of 100,000 on the counters instead of four of 75,000
       --van-late        the van hidden until the foyer box + 6 s / the plaza box + 1 s / (backstop) the ante-room box + 120 s,
                         its FakeTarget off (--no-van-hide, --no-van-target-off)
+      --van-hide-parts  with --van-late: hide / show the van's parts, not its group, so the show does not fire the BoardingTrigger's
+                        EnterVehicle (re/escape_visit1.md); default off, bank_opts.json 'van_hide_parts'
     python kl_fa_bank.py extras <folder> <out>            the finishing chain's step that adds the waves, the reset and the
                                                           late van's show (flags: bank_opts.json beside the archive); after
                                                           hall-dash, before seal
@@ -679,7 +681,16 @@ TELLER_LATE = False
 #         it for that reason. The 0x686a66 rule (a FakeTarget outside the vision space) cannot bite with none. A waiting
 #         van that keeps one does so because every stock van has one (12 vans of F01 F04 F05 F07).
 VAN_LATE, VAN_HIDE, VAN_NO_TARGET, VAN_SHOW = False, True, True, 1.0     # shown 1 s after the plaza box (was 4: the review of the waves build measured the box 28 m before the exit trigger, ~5 s of a sprint)
-VAN_BACKSTOP = 120.0                    # ... and, should that box never fire with bots in the crew, 120 s after the ante-room box (the van is no police target: its FakeTarget is off). GUESS
+# VAN_HIDE_PARTS ('--van-hide-parts', in VAN_LATE with the hide; bank_opts.json 'van_hide_parts'; default OFF, every other build is byte for byte unchanged):
+# the van's show / hide lists name the van's PARTS instead of its group. Why (re/escape_visit1.md, 2026-10-18): ActivateGeom -> 0x7f77b0 -> 0x4c4900 sends
+# 'Activate' to its target and a group passes it down to every child (0x41a4a0), so showing the WHOLE group fires V_Van_00\BoardingTrigger's ZPlayerAction
+# 'EnterVehicle' too, and 0x65ee60 stores [rules+0x1e0] while the state is still 0: on visit 1 the escape has no vehicle. Here the group and the nodes on the way
+# down to the PlayerAction node (the group, F07_Escape_Vehicle_01, V_Van_00) stay shown; everything beside that way (van_parts) is hidden at the load and shown by Van_show.
+# GUESS: that a BoardingTrigger shown from the load is harmless (stock DD07 never hides its van, so its trigger is shown from the load too).
+# GUESS: that the hidden state of a part hides its whole subtree (as the hidden group did) and that the shown ancestors (a group, a MatPosAnim dummy) draw nothing.
+# GUESS: that the van still drives (OnlineEscAnimatedVehicle sits on the shown group) with its parts hidden, until they are shown just before the call.
+VAN_HIDE_PARTS = False
+VAN_BACKSTOP = 120.0                   # ... and, should that box never fire with bots in the crew, 120 s after the ante-room box (the van is no police target: its FakeTarget is off). GUESS
 TELLER_SHOW = 20.0                      # TELLER_LATE: the teller stacks are shown this long after the plaza box = once the AI heisters' hall dash is past the registers (review fault 4:
                                         # at 2 s a bot at the box was still inside the loot window, 800, of a stack and was pulled back). GUESS: 20 s = ~60 m of a dash
 # TELLER_MORE ('--teller-more', on with --waves): the owner, 21:45: 'put some money in the cash registers up top so people could hold the swat from coming in and get rewarded'.
@@ -822,14 +833,16 @@ def opts_now():
                                    waves2=WAVES2, voice=VOICE, teller_foyer=TELLER_FOYER, room_gates=ROOM_GATES, room_on=list(ROOM_ON), room_hide=ROOM_HIDE, staging=STAGING, garrison=GARRISON,
                                    **({'vault_swing': VAULT_SWING_END} if VAULT_SWING_END is not None else {}),
                                    **({'vault_blocker': True} if VAULT_BLOCKER else {}),
-                                   **({'vault_blow': True} if VAULT_BLOW else {}))
+                                   **({'vault_blow': True} if VAULT_BLOW else {}),
+                                   **({'van_hide_parts': True} if VAN_HIDE_PARTS else {}))
 
 
 def apply_opts(o):
     """Set the module's flags from a dict (opts_now's form). -> o"""
     global CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, VAN_SHOW, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
-    global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING, GARRISON, VAULT_SWING_END, VAULT_BLOCKER, VAULT_BLOW
-    VAULT_BLOW = bool(o.get('vault_blow', False))
+    global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING, GARRISON, VAULT_SWING_END, VAULT_BLOCKER, VAULT_BLOW, VAN_HIDE_PARTS
+    VAN_HIDE_PARTS = bool(o.get('van_hide_parts', False))
+    VAULT_BLOW =bool(o.get('vault_blow', False))
     GARRISON = bool(o.get('garrison', False))
     VAULT_SWING_END, VAULT_BLOCKER = o.get('vault_swing'), bool(o.get('vault_blocker', False))
     ROOM_GATES, ROOM_HIDE = bool(o.get('room_gates', False)), bool(o.get('room_hide', True))
@@ -929,6 +942,34 @@ def lay_van(P):
 
 def van_path():
     return R + VAN + '\\' + VAN_GROUP
+
+
+def van_parts(sc, vg):
+    """VAN_HIDE_PARTS: (way, parts) of the van group `vg`. way = the nodes from the group down to every node carrying a PlayerAction controller (the
+    BoardingTrigger's 'EnterVehicle'), those included (a PlayerAction node keeps its whole subtree); parts = the direct children of each node on the
+    way that are not on it, in scene order. Hidden together, the parts leave the trigger and its ancestors out of every Activate."""
+    way, parts = [], []
+    carries = lambda k: any(sc.p.key(c[0]) == 'PlayerAction' for c in sc.nodes[k]['ctrls'])
+    has = lambda k: any(carries(j) for j in range(k, sc.end[k]))      # a PlayerAction node in the subtree of k, k included
+    def down(k):
+        way.append(k)
+        j = k + 1
+        while j < sc.end[k]:
+            if carries(j):
+                way.append(j)
+            elif has(j):
+                down(j)
+            else:
+                parts.append(j)
+            j = sc.end[j]
+    down(vg)
+    return way, parts
+
+
+def van_targets(sc, parts):
+    """The paths a van show / hide list names: the van group (parts False) or its parts (VAN_HIDE_PARTS)."""
+    vg = A.node_of(sc, R + VAN + '\\' + VAN_GROUP)
+    return [sc.path[k] for k in van_parts(sc, vg)[1]] if parts else [sc.path[vg]]
 
 
 def place_hall(S, log=print):
@@ -1037,7 +1078,15 @@ def prepare_host(S, log=print):
             for k in gone:
                 sc.nodes[k]['ctrls'] = [c for c in sc.nodes[k]['ctrls'] if sc.p.key(c[0]) != 'FakeTarget']
             log('  kl_fa_bank: VAN_LATE: the van\'s FakeTarget (%d) taken off - the police have nothing to aim at while it waits' % len(gone))
-        if VAN_HIDE:
+        if VAN_HIDE and VAN_HIDE_PARTS:
+            way, parts = van_parts(sc, vg)
+            if len(way) < 2:
+                raise ValueError('kl_fa_bank: VAN_HIDE_PARTS: no PlayerAction (BoardingTrigger) below the van group')
+            for k in parts:
+                A.place(S, k, hidden=True)
+            log('  kl_fa_bank: VAN_LATE: %d parts of the van are hidden from the load (the group and %d nodes down to the BoardingTrigger stay shown); %s shows them %.0f s after the plaza box' % (
+                len(parts), len(way) - 1, 'bank_waves!Clock\\Van_show', VAN_SHOW))
+        elif VAN_HIDE:
             A.place(S, vg, hidden=True)
             log('  kl_fa_bank: VAN_LATE: the van\'s group is hidden from the load; %s shows it %.0f s after the plaza box' % ('bank_waves!Clock\\Van_show', VAN_SHOW))
     off = abs(ESC.Poly([tuple(p) for p in PLAN['path']]).project(ESC_AT)[1])
@@ -5553,9 +5602,9 @@ def reset_lists(sc, o):
     t = target_lists(sc, module_nodes(sc))
     show, hide = list(t['show']), list(t['hide'])
     if o.get('van_late') and o.get('van_hide', True):
-        v = R + VAN + '\\' + VAN_GROUP
-        if v not in hide:
-            hide.append(v)
+        for v in van_targets(sc, o.get('van_hide_parts', False)):
+            if v not in hide:
+                hide.append(v)
     return show, hide, [s for s in show if s in hide]
 
 
@@ -5606,7 +5655,7 @@ def extras_make(B, o, plan, show, hide, stacks=()):
         if o.get('vault_blocker'):                  # round 2 starts with the way blocked again
             out['reset'] += [single('door', 'Reset_blocker', 'AIDWrapper', {0: [R + BLOCKER], 1: 'Block'})]
     if o.get('van_late') and o.get('van_hide', True):
-        v = single('loot on', 'Van_show', 'ActivateGeom', {0: 'AITrigger', 1: [R + VAN + '\\' + VAN_GROUP]})
+        v = single('loot on', 'Van_show', 'ActivateGeom', {0: 'AITrigger', 1: van_targets(sc, o.get('van_hide_parts', False))})
         out['van'] = single('start timer', 'Timer_van', 'TriggerDelay2', {0: float(o.get('van_show', VAN_SHOW)), 4: [v]})
         out['van_b'] = single('start timer', 'Timer_van_b', 'TriggerDelay2', {0: float(VAN_BACKSTOP), 4: [v]})
         out['van_c'] = single('start timer', 'Timer_van_c', 'TriggerDelay2', {0: float(VAN_FOYER), 4: [v]})
@@ -5929,7 +5978,7 @@ def waves_check(folder, log=print):
         hide = values(sc, node(r[1]), 'DeactivateGeom')[1] if node(r[1]) else []
         want = target_lists(sc, module_nodes(sc))
         if o.get('van_late') and o.get('van_hide', True):
-            want['hide'].append(R + VAN + '\\' + VAN_GROUP)
+            want['hide'] += [v for v in van_targets(sc, o.get('van_hide_parts', False)) if v not in want['hide']]
         for key, have, name in (('show', show, 'shown again'), ('hide', hide, 'hidden again')):
             lack = [s for s in want[key] if s not in have]
             if lack:
@@ -6229,11 +6278,29 @@ def waves_check(folder, log=print):
         if o['van_no_target'] and fakes:
             fail('VAN_LATE: the van still carries a FakeTarget (%d)' % len(fakes))
         if o['van_hide']:
-            if not B.ents[vg - 1].flags & HIDDEN:
+            parts_on = bool(o.get('van_hide_parts', False))
+            if parts_on:        # VAN_HIDE_PARTS: the group and the way to the BoardingTrigger stay shown, every part beside it is hidden, and NO show / hide list names the group or the way
+                way, parts = van_parts(sc, vg)
+                if len(way) < 2:
+                    fail('VAN_HIDE_PARTS: no PlayerAction node below the van group')
+                shown_ = [sc.path[k][5:] for k in way if B.ents[k - 1].flags & HIDDEN]
+                if shown_:
+                    fail('VAN_HIDE_PARTS: %d nodes on the way to the BoardingTrigger are hidden at the load: %s' % (len(shown_), shown_[:3]))
+                unhidden = [sc.path[k][5:] for k in parts if not B.ents[k - 1].flags & HIDDEN]
+                if unhidden:
+                    fail('VAN_HIDE_PARTS: %d parts of the van are not hidden at the load: %s' % (len(unhidden), unhidden[:3]))
+                ways_ = {sc.path[k] for k in way}
+                for kind in ('ActivateGeom', 'DeactivateGeom'):
+                    for kk, _i, v in kl_fa.controllers(sc, kind):
+                        hit = [s for s in v[1] if s in ways_]
+                        if hit:
+                            fail('VAN_HIDE_PARTS: %s %s names the van group or a node on the way to the BoardingTrigger: %s' % (kind, sc.path[kk][5:], [h[-60:] for h in hit[:3]]))
+                log('  van: %d parts hidden, %d nodes (group .. BoardingTrigger) shown at the load; no ActivateGeom / DeactivateGeom list names the group or the way' % (len(parts), len(way)))
+            elif not B.ents[vg - 1].flags & HIDDEN:
                 fail('VAN_LATE: the van\'s group is not hidden at the load')
             vs = node(R + CLOCK + '\\Van_show')
-            if vs is None or values(sc, vs, 'ActivateGeom')[1] != [R + VAN + '\\' + VAN_GROUP]:
-                fail('VAN_LATE: no ActivateGeom of the van group in the clock group')
+            if vs is None or values(sc, vs, 'ActivateGeom')[1] != van_targets(sc, parts_on):
+                fail('VAN_LATE: no ActivateGeom of the van %s in the clock group' % ('parts' if parts_on else 'group'))
             tv = node(R + CLOCK + '\\Timer_van')
             if tv is None or [kk for kk in named_by.get(R + CLOCK + '\\Timer_van', ())] != [node(R + PLAZA_BOX)]:
                 fail('VAN_LATE: the van\'s timer is not named by the plaza box alone')
@@ -6326,8 +6393,8 @@ def main():
     if len(a) >= 2 and a[0] == 'test':
         global DOOR_WAIT, DOORS_ANIMATE, VAULT_OPEN, VAULT_DOOR_GOES, VAULT_SWING_END, GATE_VAULT, CASE, BEAT, NO_AI, ALARM_LIGHTS, VAULT_BLAST, STOCK_ROWS, MUSIC_LAYER4
         global PLAZA_OUTSIDE, HALL_UP, CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
-        global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING, GARRISON, VAULT_BLOCKER
-        GARRISON = '--garrison' in a                        # the garrison and the beat's police in pockets off the crew's line, holding their places (GARRISON_PLACES); needs --gates and --staging
+        global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING, GARRISON, VAULT_BLOCKER, VAN_HIDE_PARTS
+        GARRISON ='--garrison' in a                        # the garrison and the beat's police in pockets off the crew's line, holding their places (GARRISON_PLACES); needs --gates and --staging
         if GARRISON and not ('--gates' in a and '--staging' in a):
             raise ValueError('--garrison needs --gates and --staging')
         STAGING = '--staging' in a                          # the squads of the way in sleep and are woken room by room (WAKE_SQUADS); needs --gates and enemies
@@ -6350,6 +6417,9 @@ def main():
         WAVES_LATCH = '--waves-latch' in a
         VAN_LATE = '--van-late' in a or (W and '--no-van-late' not in a)
         VAN_HIDE = '--no-van-hide' not in a
+        VAN_HIDE_PARTS = '--van-hide-parts' in a            # the van's PARTS hidden and shown, not its group (VAN_HIDE_PARTS' note); needs the late van with its hide
+        if VAN_HIDE_PARTS and not (VAN_LATE and VAN_HIDE):
+            raise ValueError('--van-hide-parts needs the late van with its hide (--van-late or --waves, not --no-van-hide)')
         VAN_NO_TARGET = '--no-van-target-off' not in a
         RESET = '--reset' in a or W
         WAVES = W
