@@ -150,6 +150,7 @@ PRESET = {'eN00b': (20, 0, 20, 100, 40), 'eAmateur': (35, 20, 10, 70, 45), 'eReg
           'eVeteran': (60, 60, 5, 20, 55), 'eElite': (90, 90, 10, 0, 60)}       # kl2 0x46e410: fields 4, 5, 6, 13, 14
 PRESET_FIELDS = (ACC, AIM, F6, F13, F14)
 ACC_CAP = None                                      # --acc-cap=N: no floor above N (accuracy as used); None = off (default, unchanged)
+AIM_CAP = None                                      # --aim-cap=N: no aim floor above N (aim as used); None = off (default, unchanged). N=75 for rifles is a GUESS (kl-merge-3f)
 ACC_FACTOR = 1.1                                    # kl2 0xd19328, for No_Mercenary (0xd19330 = 1.0 for the others)
 
 # (1) class of the weapon carried -> (the skill name whose preset is the FLOOR for accuracy and aim, health floor).
@@ -657,6 +658,8 @@ def strength(sc, anm, plan, log=print, presets=False, seed=kl_arms.SEED):
         acc, aim = min(PRESET[floor][0] * fac, 100.0), float(PRESET[floor][1])     # accuracy as the game USES it
         if ACC_CAP is not None:
             acc = min(acc, ACC_CAP)
+        if AIM_CAP is not None:
+            aim = min(aim, AIM_CAP)
         e, new = effective(v), {}
         if e[ACC] < acc - 0.01 or e[AIM] < aim - 0.01:
             # below the floor: the row becomes eCustom, with the preset's numbers where a preset was in force
@@ -2062,11 +2065,12 @@ def spawndiff(src, dst, log=print):
 
 
 def main():
-    global HEALTH_SCALE, ACC_CAP
+    global HEALTH_SCALE, ACC_CAP, AIM_CAP
     a = [x for x in sys.argv[1:] if not x.startswith('--')]
     o = {x for x in sys.argv[1:] if x.startswith('--')}
     HEALTH_SCALE = next((float(x.split('=')[1]) for x in o if x.startswith('--health=')), HEALTH_SCALE)
     ACC_CAP = next((float(x.split('=')[1]) for x in o if x.startswith('--acc-cap=')), ACC_CAP)
+    AIM_CAP = next((float(x.split('=')[1]) for x in o if x.startswith('--aim-cap=')), AIM_CAP)
     car = '--car-exit' in o
     parts = tuple(p for p in ('strength', 'waves', 'chains', 'escape') if '--no-' + p not in o)
     if len(a) == 2 and a[0] == 'table':
