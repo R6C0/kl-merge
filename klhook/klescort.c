@@ -323,6 +323,9 @@
  *   FollowOutDry=0      1 = every line, NOTHING written or called (EscortDry=1 does the same for this part)
  *   FollowOutMoney=1    you must carry this much for the signal to count (a walk through the exit box before any loot
  *                       does not call the crew out); 0 = no condition
+ *   FollowOutCrewMoney=0 1 = the money of the loyal AI heisters in play counts too (2026-10-18, run N1018_L10_DM03A_e56:
+ *                       the bots took every Vault stack, you reached the exit with $0 and the crew with $2M stood idle
+ *                       50 m off while the vehicle came three times)
  *   FollowOutAfter=0    seconds between your stage 3 and the call (a grace for the crew's last grab)
  *   FollowOutOrder=1    0 = the stage byte only (the game's own order comes at the vehicle's next call)
  *   FollowOutEvery=2    seconds between two orders to one bot, at least
@@ -405,7 +408,7 @@ static float kle_hold_step = 60.0f;
 static struct {
     int n, dry, log, record, refill, until, stage, board; DWORD every; float far_, side, retarget;
     int all, all_stage, all_order; DWORD all_still;      /* BoardAll, BoardAllStage, BoardAllOrder, BoardAllStill in ms */
-    int fo, fo_dry, fo_order, fo_spare, fo_shield; DWORD fo_after, fo_every, fo_money; float fo_hold;      /* FollowOut..: After / Every in ms, Hold in s; Shield 0 / 1 / 2 */
+    int fo, fo_dry, fo_order, fo_spare, fo_shield, fo_crew_money; DWORD fo_after, fo_every, fo_money; float fo_hold;      /* FollowOut..: After / Every in ms, Hold in s; Shield 0 / 1 / 2 */
 } kle;
 
 /* THE HOLD'S SHIELD (section 3 c2). Not in kle_r: that is cleared at every new round, and a byte of the level's vehicle
@@ -1096,11 +1099,20 @@ static void kle_follow(const struct klb_snap *s, DWORD now)
     if (!kle_r.fo_fired) {
         int ai = 0; float tun[4] = { 0, 0, 0, 0 }; DWORD tu;
         if (kle_r.fo_over || (h->status != 0 && h->status != 4) || h->stage < 3 || !kle_criminal()) { kle_r.fo_since = 0; return; }
+        if (h->money < kle.fo_money && kle.fo_crew_money) {     /* FollowOutCrewMoney: the loyal crew's money in play counts too */
+            DWORD crew = 0;
+            for (i = 0; i < s->n && i < KLB_NREC; i++) { const struct klb_rec *r = &s->r[i]; if (i != s->human && r->used && (r->flags & 1) && !(r->flags & 2) && r->status == 0) crew += r->money; }
+            if (h->money + crew >= kle.fo_money) {
+                if (!(kle_r.fo_told & 2)) { kle_r.fo_told |= 2; klog("follow: you are at heist stage 3 with $%lu, the loyal crew in play carries $%lu: that counts (FollowOutCrewMoney=1)", h->money, crew); }
+                goto money_ok;
+            }
+        }
         if (h->money < kle.fo_money) {
             if (!(kle_r.fo_told & 1)) { kle_r.fo_told |= 1; klog("follow: you are at heist stage 3 with $%lu, under FollowOutMoney=%lu: the crew is not called yet", h->money, kle.fo_money); }
             kle_r.fo_since = 0;
             return;
         }
+      money_ok:
         if (!kle_r.fo_since) {
             kle_r.fo_since = KLB_T(now);
             if (kle.fo_after) klog("follow: you are at heist stage 3 with $%lu (vehicle state %u): the crew is called in %lu s (FollowOutAfter)", h->money, s->veh, kle.fo_after / 1000);
@@ -1395,6 +1407,7 @@ static void kle_init(void)
     kle.fo_dry = GetPrivateProfileIntA("Bots", "FollowOutDry", 0, klh_ini) != 0;
     kle.fo_order = GetPrivateProfileIntA("Bots", "FollowOutOrder", 1, klh_ini) != 0;
     kle.fo_money = (DWORD)klb_pos("FollowOutMoney", 1, 0x7fffffff);
+    kle.fo_crew_money = GetPrivateProfileIntA("Bots", "FollowOutCrewMoney", 0, klh_ini) != 0;
     kle.fo_after = (DWORD)klb_pos("FollowOutAfter", 0, 600) * 1000;
     kle.fo_every = (DWORD)klb_pos("FollowOutEvery", 2, 60) * 1000; if (kle.fo_every < 1000) kle.fo_every = 1000;
     kle_hold_step = klb_inif("HoldStep", "0"); if (!klb_finite(kle_hold_step) || kle_hold_step <= 0 || kle_hold_step > 60) kle_hold_step = 60.0f;      /* 0 = the whole hold at once */
