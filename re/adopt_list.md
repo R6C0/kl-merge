@@ -85,7 +85,11 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
 - RUN L82c (3f, 2026-10-18 ~23:00): park_next KLJoin c99c4e11 + TEST hook out_e5_1018zi. PASS, 402 s. ALL 7 AI aboard on visit 1 (one traitor), but
   the two hops carried NOBODY (From reached 5x, no bot stayed 8 s): every bot walked on its own, so the KLJoin is not what helped. L68 already
   had all 7 out on visit 1 without it. -> Do NOT adopt c99c4e11 (adds nothing proven); keep the live folder without KLJoin.ini.
-- DECISION: adopt loot6 (3386b972) after 3f's run (f), yes or no. Nothing to do before that run.
+- DECISION: adopt loot6 (3386b972) - still OPEN: run (f) did not answer it.
+- RUN L87 (3f (f), 23:35-23:38, hook zi + PT_DM06B_hop): PASS 424 s, all 7 AI aboard visit 1 (CrewRouteHold 45 s), but INCONCLUSIVE for loot 6.
+  - No bot came within reach of the tea-house case.
+  - Rec 2 was routed there at 23:35:36; the escort re-pointed it to the human 2 s later.
+  - Rerun queued: the same zip and ini with [Bots] Escort=0, sent to 3f as (o).
 
 ### Hot Coffee II, DM01B [page 3 F03]
 - LIVE: ea8cbc82 (walk-through doors; rollback = DM01B.replaced-1018doors, 01749906).
@@ -130,7 +134,7 @@ Only Last Call ran: L76, 0 crew dead or down, 6 of 7, "no measurable difference"
 
 ## 6. Summary of single decisions
 1 Last Call: adopt the L78 set (zip 5b0a025b + KLJoin ea0446c1 + hook 1018y + six [Bots] keys). 2 Hasta: swap in police build 3a186c93.
-3 Park II: adopt loot6 3386b972 after run (f). 4 Vault: keep late110 or pick B/C/D after (g). 5 Retomoto: wait for queue (b)/(c).
+3 Park II: adopt loot6 3386b972 after rerun (o) (L87 was inconclusive). 4 Vault: keep late110 or pick B/C/D after (g). 5 Retomoto: wait for queue (b)/(c).
 6 Hook keys: PointBlankToYou=20.0, WalkExclusive=1, VanCallNear=40 each yes/no. 7 Cops rtcops on five maps yes/no. 8 Push, disk, find.exe, replaced-*.
 
 ## 7. L78 keys on other maps (static reading of klhook/klmove.c; nothing here was run on those maps)
