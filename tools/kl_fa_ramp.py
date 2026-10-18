@@ -20,6 +20,7 @@ must switch it on for the live run. It is NEVER written unless this tool is call
 
   python tools/kl_fa_ramp.py find   <folder> <slot>                      list the lifts (a step place and the next one 300+ above it)
   python tools/kl_fa_ramp.py build  <folder> <slot> <dst> [--wait S] [--min-dy N] [--from-y LO HI]
+                                  [--replace] [--hop-radius R]   (new; --replace rewrites a [CrewHop] the source already has)
 
 Everything chosen here that the game has not shown is marked GUESS."""
 import os, sys, math, shutil, collections
@@ -68,7 +69,7 @@ def lifts(B, min_dy=MIN_DY):
     return out
 
 
-def plan(B, min_dy=MIN_DY, from_y=FROM_Y, wait=WAIT, log=print):
+def plan(B, min_dy=MIN_DY, from_y=FROM_Y, wait=WAIT, log=print, radius=None):
     """-> [hop dicts] for kl_fa_bots.hop_text (one section: every lift that starts on the floor from_y)."""
     ls = [l for l in lifts(B, min_dy) if from_y[0] <= l['frm'][1] <= from_y[1] and (l['path'] is None or l['path'] > 3.0 * max(l['h'], 100.0))]
     if not ls:
@@ -76,6 +77,8 @@ def plan(B, min_dy=MIN_DY, from_y=FROM_Y, wait=WAIT, log=print):
     fr = [l['frm'] for l in ls]
     c = tuple(sum(p[i] for p in fr) / len(fr) for i in range(3))
     rad = max(math.hypot(p[0] - c[0], p[2] - c[2]) for p in fr) + RADIUS_PAD
+    if radius is not None:                               # --hop-radius (new, default off): replaces the computed radius
+        rad = float(radius)
     to = []
     for l in sorted(ls, key=lambda l: (l['squad'], l['to'])):
         t = l['to']
@@ -96,14 +99,14 @@ def plan(B, min_dy=MIN_DY, from_y=FROM_Y, wait=WAIT, log=print):
                                      ('stage', STAGE), ('player', 0), ('kind', 'lift'), ('to', [[round(v, 1) for v in t] for t in to])])]
 
 
-def build(src, slot, dst, min_dy=MIN_DY, from_y=FROM_Y, wait=WAIT, log=print):
+def build(src, slot, dst, min_dy=MIN_DY, from_y=FROM_Y, wait=WAIT, log=print, radius=None, replace=False):
     if os.path.abspath(src) == os.path.abspath(dst):
         raise ValueError('the output folder is the build\'s own')
     B = F.Built(src, slot)
-    hops = plan(B, min_dy, from_y, wait, log)
+    hops = plan(B, min_dy, from_y, wait, log, radius)
     if not hops:
         raise ValueError('no lift from the floor y %s..%s: nothing to hop' % from_y)
-    if F.hop_read(src):
+    if F.hop_read(src) and not replace:   # --replace (new): hop_write swaps the old [CrewHop] sections for the new ones
         raise ValueError('%s already has [CrewHop] sections: not stacked' % os.path.join(src, F.HOP_FILE))
     os.makedirs(dst, exist_ok=True)
     for f in os.listdir(src):
@@ -120,6 +123,10 @@ def build(src, slot, dst, min_dy=MIN_DY, from_y=FROM_Y, wait=WAIT, log=print):
 def main():
     a = sys.argv[1:]
     opt = dict(min_dy=MIN_DY, from_y=FROM_Y, wait=WAIT)
+    if '--replace' in a:
+        a.remove('--replace'); opt['replace'] = True
+    if '--hop-radius' in a:
+        i = a.index('--hop-radius'); opt['radius'] = float(a[i + 1]); del a[i:i + 2]
     for flag, key in (('--wait', 'wait'), ('--min-dy', 'min_dy')):
         if flag in a:
             i = a.index(flag); opt[key] = float(a[i + 1]); del a[i:i + 2]

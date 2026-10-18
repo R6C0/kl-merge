@@ -5,7 +5,7 @@ player already stands on the roof pad. OFFLINE; reads a finished build folder, w
 installed or started. Data only: the .prp changes (list values and one float), no entity is added, so no other
 member moves and no seal pass is needed.
 
-    python kl_club_roof.py build <folder> <out> [--hide-within N] [--timer 'van timer'|'van timer b'] [--no-hide-change]
+    python kl_club_roof.py build <folder> <out> [--hide-within N] [--timer 'van timer'|'van timer b'] [--no-hide-change] [--marker-at-start]
     python kl_club_roof.py check <folder>        what the escape marker is wired to, and from where it can be shown
     python kl_club_roof.py diff  <folder> <out>  only the .prp differs, and only in the allowed nodes
 
@@ -78,24 +78,34 @@ def check(folder, slot='F01', log=print):
     return w
 
 
-def build(src, dst, timer='van timer b', hide=HIDE_DEFAULT, slot='F01', log=print):
+def build(src, dst, timer='van timer b', hide=HIDE_DEFAULT, slot='F01', log=print, at_start=False):
     B = F.Built(src, slot)
     sc = B.sc
     if os.path.abspath(dst) == os.path.abspath(B.folder):
         raise ValueError('the output folder is the build\'s own')
     if os.path.isdir(dst) and os.listdir(dst):
         raise ValueError('%s is there and not empty' % dst)
-    t = A.node_of(sc, TIMERS[timer])
-    tv = _vals(sc, t, 'TriggerDelay2')
-    if not isinstance(tv[DELAY_LIST], list):
-        raise ValueError('%s field %d is not a list: %r' % (timer, DELAY_LIST, tv[DELAY_LIST]))
     poi = A.node_of(sc, POI)
     tr = _vals(sc, poi, 'ActivateGameplayTrackerDisplay')
-    old = list(tv[DELAY_LIST])
-    if R + POI in old:
-        raise ValueError('%s already names the marker' % timer)
     A_ctrl = lambda k, name: A.ctrl_of(sc, k, name)
-    kl_fa.edit(sc, t, A_ctrl(t, 'TriggerDelay2'), lambda us: A.setv(sc, us, DELAY_LIST, old + [R + POI]))
+    # --marker-at-start (new, default off): ALSO name the marker in the 30 s round-start timer 'van timer' (sent by
+    # AIMonitor at every round start), so the roof is shown without the player first entering tb_LEFT_TheySpotYou
+    # (the only sender of 'van timer b'). A timer that already names the marker is left alone in this mode.
+    names = [timer] + (['van timer'] if at_start and timer != 'van timer' else [])
+    old = []
+    for nm in names:
+        t = A.node_of(sc, TIMERS[nm])
+        tv = _vals(sc, t, 'TriggerDelay2')
+        if not isinstance(tv[DELAY_LIST], list):
+            raise ValueError('%s field %d is not a list: %r' % (nm, DELAY_LIST, tv[DELAY_LIST]))
+        cur = list(tv[DELAY_LIST])
+        if R + POI in cur:
+            if at_start:
+                log('%s already names the marker: left alone' % nm)
+                continue
+            raise ValueError('%s already names the marker' % nm)
+        old = cur
+        kl_fa.edit(sc, t, A_ctrl(t, 'TriggerDelay2'), lambda us, cur=cur: A.setv(sc, us, DELAY_LIST, cur + [R + POI]))
     if hide is not None and abs(tr[TRACKER_HIDE] - hide) > 1e-6:
         kl_fa.edit(sc, poi, A_ctrl(poi, 'ActivateGameplayTrackerDisplay'), lambda us: A.setv(sc, us, TRACKER_HIDE, float(hide)))
     prp = sc.p.serialize()
@@ -121,8 +131,8 @@ def build(src, dst, timer='van timer b', hide=HIDE_DEFAULT, slot='F01', log=prin
         with open(sj, 'w') as f:
             json.dump(st, f, indent=1)
     with open(os.path.join(dst, 'graft.txt'), 'a') as f:
-        f.write('kl_club_roof: %s names %s (was %d targets); hide-within %s -> %s; from %s\n'
-                % (timer, POI, len(old), tr[TRACKER_HIDE], hide, B.folder))
+        f.write('kl_club_roof: %s names %s (was %d targets%s); hide-within %s -> %s; from %s\n'
+                % (timer, POI, len(old), ', + van timer at round start (marker-at-start)' if at_start else '', tr[TRACKER_HIDE], hide, B.folder))
     log('written %s: %s now names the escape marker; hide-within %s -> %s' % (dst, timer, tr[TRACKER_HIDE], hide))
     return dst
 
@@ -165,8 +175,9 @@ def main():
     if cmd == 'build':
         timer = opt('--timer', 'van timer b')
         hide = None if '--no-hide-change' in a else opt('--hide-within', HIDE_DEFAULT, float)
-        a = [x for x in a if x != '--no-hide-change']
-        build(a[0], a[1], timer, hide)
+        at_start = '--marker-at-start' in a
+        a = [x for x in a if x not in ('--no-hide-change', '--marker-at-start')]
+        build(a[0], a[1], timer, hide, at_start=at_start)
         bad = diff(a[0], a[1])
         for x in bad:
             print('FAIL', x)
