@@ -188,6 +188,12 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-18 19:34 - OFFLINE (kl-merge-e5; the owner is back, so 3f paused live runs):
+- 3f L82 Park II crew-hop c99c4e11 VOID: hung at the attract video. All restored. Queue: L82 rerun, then (b)-(i).
+- Hasta: 8 of 10 plaza police in 3a186c93 are never started; only the 2 ExitStreet_Left men are left on the start list (re/hasta_police.md e255313c). That SMG fire kills the heli is a GUESS.
+- New opt-in builder flag --rest-late=S (13d72a3b): the 8 start S s after the stair top. Staged C:\kl_build_1018\hasta_police2\DM11B 131c8c2b (S=120), queued as 3f (i), not run.
+- Workflow wdnjjb8nx: Hot Coffee II crew losses (L70/L71 logs), re/hotcoffee2_losses.md.
+Owner: git push origin rtp-schemas:main (68 ahead). Disk C: 11 GB free.
 2026-10-18 18:34 - OFFLINE (kl-merge-e5; owner away, 3f runs the queue):
 - 3f live, both PASS, 0 asserts:
   - Vault L80 hide-parts 3574538f: visit 1 worked, you + 5 aboard, 1 dead. The van show/hide was the visit-1 cause. Below L65, so keep the live 7cd07d15.
@@ -206,18 +212,6 @@ Owner: git push origin rtp-schemas:main.
   - Gameplay modules are Arcade-only.
 - Workflow wz9np7zdg: design for host-chosen map + build check (re/private_match_mapsync.md, research only).
 Owner: git push origin rtp-schemas:main (56 ahead). Disk C: 2.7 GB free.
-2026-10-18 16:25 - OFFLINE (kl-merge-e5; 3f owns live runs; the owner is active, so the queue waits):
-- No new keys were needed for two items:
-  - Bots in the escape box beyond BoardReach: the existing [Bots] BoardReachRepeat=3 / Chase=1 / Sent=6000, queued as 3f (e), PT_DM03A_wr.ini.
-  - VanCallNear/Last never fire: FollowOut already gives every bot stage 3 at the van call (FollowOut=0 would let them act, a trade).
-- Park II loot 6 (tea house) was just out of pickup reach (166 of 165 flat). The post-pass tools/kl_fa_park_loot6.py (2f7e4e5b) moves it 109 flat from the stop; C:\kl_build_1018\park_loot6\DM06B 3386b972, queued as 3f (f).
-- Vault: bots stall in the ante-room because door body 27109 or PathBlocker_Vault seals the inside-vault places; the door event comes early enough. A/B/C/D test builds:
-  - B door-nocol 54c2b946;
-  - C noblocker 1c4b1667 (1f542da0);
-  - D both e6be64a7.
-  Queued as 3f (g).
-- Hot Coffee II and Park II: no chain place is unreachable.
-Owner: git push origin rtp-schemas:main. Disk C: 2.9 GB free.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

@@ -1,3 +1,9 @@
+2026-10-18 19:34 - OFFLINE (kl-merge-e5; the owner is back, so 3f paused live runs):
+- 3f L82 Park II crew-hop c99c4e11 VOID: hung at the attract video. All restored. Queue: L82 rerun, then (b)-(i).
+- Hasta: 8 of 10 plaza police in 3a186c93 are never started; only the 2 ExitStreet_Left men are left on the start list (re/hasta_police.md e255313c). That SMG fire kills the heli is a GUESS.
+- New opt-in builder flag --rest-late=S (13d72a3b): the 8 start S s after the stair top. Staged C:\kl_build_1018\hasta_police2\DM11B 131c8c2b (S=120), queued as 3f (i), not run.
+- Workflow wdnjjb8nx: Hot Coffee II crew losses (L70/L71 logs), re/hotcoffee2_losses.md.
+Owner: git push origin rtp-schemas:main (68 ahead). Disk C: 11 GB free.
 2026-10-18 18:34 - OFFLINE (kl-merge-e5; owner away, 3f runs the queue):
 - 3f live, both PASS, 0 asserts:
   - Vault L80 hide-parts 3574538f: visit 1 worked, you + 5 aboard, 1 dead. The van show/hide was the visit-1 cause. Below L65, so keep the live 7cd07d15.
