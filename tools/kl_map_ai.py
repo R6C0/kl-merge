@@ -26,6 +26,11 @@ Spec, the measurements and every table: re/map_ai.md.
                                                                        auto plan's wiped-out chains. Timers, waves, escape, who
                                                                        is in the world and the posts stay as built. Only the .prp
                                                                        changes; refuses a non-empty out folder. NOT RUN IN THE GAME
+        --health-only                     (apply / cops-style) strength raises the health floors only: accuracy, aim and
+                                          skill names stay as built (default off)
+        --retomoto-rows                   (apply / cops-style) the strength floors are Retomoto's own rows (kl_arms.ROWS:
+                                          rifle/MG/sniper 75/50 hp 175, SMG/shotgun 50/50 hp 175, pistol 50/50 hp 100;
+                                          accuracy x1.1 as used) instead of the eVeteran / eElite ladder (default off)
     python kl_map_ai.py check <before> <after>                          the before / after table of one map
     python kl_map_ai.py all <z_maps folder> <out folder> [M02 ...] [options]   apply + check + kl_maps.audit on M01 M02
                                                                        M03 M06 (or the ones named)
@@ -151,6 +156,8 @@ PRESET = {'eN00b': (20, 0, 20, 100, 40), 'eAmateur': (35, 20, 10, 70, 45), 'eReg
 PRESET_FIELDS = (ACC, AIM, F6, F13, F14)
 ACC_CAP = None                                      # --acc-cap=N: no floor above N (accuracy as used); None = off (default, unchanged)
 AIM_CAP = None                                      # --aim-cap=N: no aim floor above N (aim as used); None = off (default, unchanged). N=75 for rifles is a GUESS (kl-merge-3f)
+HEALTH_ONLY = False                                 # --health-only: strength changes the health floors only; accuracy, aim and skill names stay as built (default off, unchanged)
+RT_ROWS = False                                     # --retomoto-rows: the floors are Retomoto's own rows (kl_arms.ROWS by kl_arms.SKILL: cop 50/50 hp 100, swat 50/50 hp 175, sharp 75/50 hp 175) instead of the eVeteran/eElite ladder (default off, unchanged)
 ACC_FACTOR = 1.1                                    # kl2 0xd19328, for No_Mercenary (0xd19330 = 1.0 for the others)
 
 # (1) class of the weapon carried -> (the skill name whose preset is the FLOOR for accuracy and aim, health floor).
@@ -656,12 +663,15 @@ def strength(sc, anm, plan, log=print, presets=False, seed=kl_arms.SEED):
         floor, hp = STRENGTH[cls]
         fac = ACC_FACTOR if v[MERC] == 'No_Mercenary' else 1.0
         acc, aim = min(PRESET[floor][0] * fac, 100.0), float(PRESET[floor][1])     # accuracy as the game USES it
+        if RT_ROWS:                                     # Retomoto's rows: fields 4, 5 and 7 of kl_arms.ROWS[kl_arms.SKILL[cls]]
+            row = kl_arms.ROWS[kl_arms.SKILL[cls]][1]
+            acc, aim, hp = min(row[0] * fac, 100.0), float(row[1]), row[3]
         if ACC_CAP is not None:
             acc = min(acc, ACC_CAP)
         if AIM_CAP is not None:
             aim = min(aim, AIM_CAP)
         e, new = effective(v), {}
-        if e[ACC] < acc - 0.01 or e[AIM] < aim - 0.01:
+        if not HEALTH_ONLY and (e[ACC] < acc - 0.01 or e[AIM] < aim - 0.01):
             # below the floor: the row becomes eCustom, with the preset's numbers where a preset was in force
             # (they are what the soldier had; a name left in place would write over the new numbers). An
             # eVeteran loses whatever 0x60fd40 does for that name alone (not read)
@@ -2070,12 +2080,14 @@ def spawndiff(src, dst, log=print):
 
 
 def main():
-    global HEALTH_SCALE, ACC_CAP, AIM_CAP
+    global HEALTH_SCALE, ACC_CAP, AIM_CAP, HEALTH_ONLY, RT_ROWS
     a = [x for x in sys.argv[1:] if not x.startswith('--')]
     o = {x for x in sys.argv[1:] if x.startswith('--')}
     HEALTH_SCALE = next((float(x.split('=')[1]) for x in o if x.startswith('--health=')), HEALTH_SCALE)
     ACC_CAP = next((float(x.split('=')[1]) for x in o if x.startswith('--acc-cap=')), ACC_CAP)
     AIM_CAP = next((float(x.split('=')[1]) for x in o if x.startswith('--aim-cap=')), AIM_CAP)
+    HEALTH_ONLY = HEALTH_ONLY or '--health-only' in o
+    RT_ROWS = RT_ROWS or '--retomoto-rows' in o
     car = '--car-exit' in o
     parts = tuple(p for p in ('strength', 'waves', 'chains', 'escape') if '--no-' + p not in o)
     if len(a) == 2 and a[0] == 'table':
