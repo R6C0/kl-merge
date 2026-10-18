@@ -233,6 +233,8 @@
  *                         BoardNear is not needed with it
  *   BoardReachDoors=1     a called bot (stage 3) within BoardReach (3 m at most) of the boarding box is taken there
  *   BoardReachOrder=1     a called bot that stands within 30 m of the boarding box is sent to the doors, once a visit
+ *   BoardReachRepeat=0    s after an order to the doors before it may go again while the vehicle waits; a bot in an
+ *                         escape box beyond BoardReach is then sent without the 1 s stand-still test (0 = off)
  *   BoardReachVisits=3    from this visit of a vehicle on the boxes work as in stock again (0 = never; the round's
  *                         last vehicle always works as in stock)
  *   MoveDry=0           1 = every line, NOTHING written or called (the boxes are not wrapped either)
@@ -304,6 +306,7 @@ static struct {
     float reach; int reach_visits, reach_doors, reach_order;
     DWORD hop; float hop_max;      /* RestlessHop (section 5): seconds at a hold before a hop to a cover place of the level's [Hops]; 0 = off */
     int last;                      /* LastVehicle (section 6): 1 = the fallback last vehicle is on (default), 0 = off */
+    DWORD reach_repeat;            /* [Bots] BoardReachRepeat (2026-10-18, 3f's DM02 run L14: orders to the doors were overridden by the game's chain within 4-14 s and never sent again; bots in an escape box 2.5-3.1 m off never stood the 1 s): ms after an order to the doors before it may be sent again while the vehicle waits, and a bot in an escape box beyond BoardReach is sent without the stand-still test; 0 = off (default, old behaviour) */
     int skip_down;                 /* [Bots] RestlessSkipDowned (2026-10-18, 3f saw bot 4 ordered while down at 02:09:14): a downed bot gets no order, snap or hop from klmv_restless and its counters stand still; 0 = off (default, old behaviour) */
     DWORD snap_range, snap_human; int snap, snap_cap;      /* RestlessSnap (2026-10-18, audit E2.2): after N orders to one place that did not bring the bot there, the bot is put at its chain's place; 0 = off */
     DWORD botvan;                  /* BotVan (section 7, v78): ms a loyal AI heister has had stage 3 with no vehicle before the hook calls one; 0 = off */
@@ -873,8 +876,12 @@ static void klmv_reach_pass(const struct klb_snap *s, DWORD now)
            none - GUESS that this is what holds it; four of the six maps park the crew on that polygon) or has no path.
            It gets the tactic's own goal - the boarding object's place - as its order, once a visit, by the soldier's
            own routine (klescort.c). There the doors take it. Not a traitor, not a held escort: kle_bot / below */
+        if (klmv.reach_repeat && (b->told & 32) && b->order_at && KLB_T(now) - b->order_at >= klmv.reach_repeat) {
+            b->told &= (BYTE)~32;                                               /* BoardReachRepeat: the order may go again on this visit */
+            if (klmv.log > 1) klog("reach: visit %d: record %d: %.1f s since its order to the doors, %.1f m from the boarding box: it may be sent again (BoardReachRepeat)", klmv_r.visit, i, (KLB_T(now) - b->order_at) / 1000.0, d / 100);
+        }
         if (!klmv.reach_order || r->stage < 3 || (r->flags & 2) || d <= klmv.reach || d > KLMV_SENT || (b->told & 32)) continue;
-        if (now - b->since < 1000 || now - klmv_r.rc_wait_at < 1000) continue;  /* it stands, a second into the wait */
+        if ((now - b->since < 1000 && !(klmv.reach_repeat && out)) || now - klmv_r.rc_wait_at < 1000) continue;  /* it stands, a second into the wait (BoardReachRepeat: a bot in an escape box need not stand) */
         for (j = 0; j < KLE_MAX; j++) if (kle_r.e[j].mode == 1 && kle_r.e[j].rec == i) break;
         if (j < KLE_MAX) continue;                                              /* klescort.c holds it beside the human */
         b->told |= 32;
@@ -1414,6 +1421,7 @@ static void klmv_init(void)
     klmv.reach_visits = klb_pos("BoardReachVisits", 3, 100);      /* default 3 as BoardNearVisits (review S2: a bot nothing can walk to the doors is not stranded for the whole round) */
     klmv.reach_doors = GetPrivateProfileIntA("Bots", "BoardReachDoors", 1, klh_ini) != 0;
     klmv.reach_order = GetPrivateProfileIntA("Bots", "BoardReachOrder", 1, klh_ini) != 0;
+    klmv.reach_repeat = (DWORD)klb_pos("BoardReachRepeat", 0, 60) * 1000;      /* 0 = off (default); proposed 3 s GUESS */
     klmv.dry = GetPrivateProfileIntA("Bots", "MoveDry", 0, klh_ini) != 0;
     klmv.log = klb_pos("MoveLog", 1, 2);
     klmv.last = GetPrivateProfileIntA("Bots", "LastVehicle", 1, klh_ini) != 0;
