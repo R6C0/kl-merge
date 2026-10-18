@@ -325,6 +325,7 @@ static struct {
     float near_; int near_visits, near_stage;
     float reach; int reach_visits, reach_doors, reach_order;
     DWORD hop; float hop_max;      /* RestlessHop (section 5): seconds at a hold before a hop to a cover place of the level's [Hops]; 0 = off */
+    DWORD flagok;                  /* [Bots] LastVehicleFlagged (2026-10-18, L29 Last Call: the human's death set [rules+0xe8a] with no vehicle called): 1 = a flag with state 0 and no vehicle does not stop the last-vehicle fallback / BotVan; 0 = off (default) */
     float last_lead;               /* [Bots] LastVehicleLead (2026-10-18, Last Call HELI3 missed its window): s before the round's end from which the no-vehicle fallback calls the escape vehicle; 2.5 = the old literal (default) */
     int reach_fight;               /* [Bots] BoardReachFight (2026-10-18, Vault L24 record 4): 1 = a called, hurt bot within reach_fight_range of the boarding place is sent to the doors without the stand-still test; 0 = off (default) */
     float reach_fight_range;       /* [Bots] BoardReachFightRange: cm, default 1500 (15 m GUESS) */
@@ -368,7 +369,7 @@ static struct {
     int hold_visit, hold_told, h_comes; float hold_used, h_d; DWORD h_at;
     int rc_visit, rc_told; DWORD rc_wait_at;      /* BoardReach: the visit the boarding box was read for, its line said, when this wait began */
     int last_done, last_told;                     /* LastVehicle (section 6): 1 = looked at (called or found nothing to do) this round; the 2 s line said */
-    DWORD bv_since, bv_last, bv_trig, bv_veh; int bv_told, bv_calls;      /* BotVan (section 7) */
+    DWORD bv_since, bv_last, bv_trig, bv_veh; int bv_told, bv_calls, flag_told;      /* BotVan (section 7) */
 } klmv_r;
 
 /* BoardReach: what the tick decides and the boxes' update reads (section 4). armed = 1 through the WHOLE round on a
@@ -770,6 +771,10 @@ static void klmv_last_vehicle(const struct klb_snap *s)
     }
     left = rem;                               /* from here on 'left' is the time to the round's end */
     if (left > klmv.last_lead || left <= 0.0f) return;      /* LastVehicleLead: 2.5 s unless set */
+    if (flagged && !veh && !known && klmv.flagok) {      /* LastVehicleFlagged (GUESS): flag without a vehicle (the kill rule 0x70498c sets it on a human death); 0x8154f0 does not read it on entry */
+        if (!klmv_r.flag_told++) klog("last: %.2f s left: [rules+0xe8a] is %u but the vehicle state is 0 and no vehicle is known (kind %u, +0xe80 %08lx): LastVehicleFlagged=1, treating the flag as unset (it is left as it is)", left, flagged, kind, e80);
+        flagged = 0;
+    }
     if (veh || flagged) {                     /* the game called one (its own forced call at 2.0 s, or a call before that is still running): nothing to do */
         if (left > KLMV_LAST_NOVEH) return;   /* LastVehicleLead > 2.5: an ordinary visit still running this early may end before 2.5 s; only latch from 2.5 s on, as before (never true by default) */
         if (!klmv_r.last_told++) klog("last: %.2f s left: a vehicle is under way or the last one is flagged already (state %u, [rules+0xe8a] %u, kind %u, vehicle %08lx, +0xe80 %08lx): nothing done", left, veh, flagged, kind, known, e80);
@@ -784,6 +789,7 @@ static void klmv_last_vehicle(const struct klb_snap *s)
     t0 = GetTickCount();
     if (!(v = klmv_exit_vehicle(&trig))) { klog("last: %.2f s left and NO last vehicle (state 0, [rules+0xe8a] 0, kind %u, vehicle %08lx, +0xe80 %08lx); no ZOnlineExitLevelTrigger naming a vehicle was found (%lu ms): nothing done", left, kind, known, e80, GetTickCount() - t0); return; }
     if (klmv.dry) { klog("last: %.2f s left and NO last vehicle (kind %u, vehicle %08lx, +0xe80 %08lx): DRY RUN - the exit trigger %08lx's vehicle %08lx WOULD be called as the last one", left, kind, known, e80, trig, v); return; }
+    if (klmv_r.flag_told) klog("last: LastVehicleFlagged ACTS: calling 0x8154f0(vehicle %08lx, 1) although [rules+0xe8a] was already set (state 0, no vehicle under way)", v);
     ((void (__fastcall *)(void *, void *, DWORD, int))(DWORD_PTR)KLH_VA(KLMV_CALLVEH))((void *)(DWORD_PTR)s->rules, 0, v, 1);
     veh = 0; flagged = 0; klh_rd(s->rules + 0x1dc, &veh, 1); klh_rd(s->rules + 0xe8a, &flagged, 1);
     klog("last: %.2f s left and the game called NO last vehicle (state 0, [rules+0xe8a] 0, kind %u, vehicle %08lx, +0xe80 %08lx): the exit trigger %08lx's vehicle %08lx called as the round's last (0x8154f0, found in %lu ms): state now %u, [rules+0xe8a] %u",
@@ -802,6 +808,7 @@ static void klmv_bot_van(const struct klb_snap *s, DWORD now)
     static const BYTE head[16] = { 0x56, 0x8b, 0xf1, 0x80, 0xbe, 0xdc, 0x01, 0x00, 0x00, 0x00, 0x0f, 0x85, 0x9e, 0x00, 0x00, 0x00 };      /* 0x8154f0 */
     BYTE veh = 1, flagged = 1, hold = 1; float left = 0; int i, who = -1; DWORD v, t0;
     if (!klh_rd(s->rules + 0x1dc, &veh, 1) || !klh_rd(s->rules + 0xe8a, &flagged, 1) || !klh_rd(s->rules + 0x1ee, &hold, 1) || !klh_rd(s->rules + 0x4c, &left, 4)) return;
+    if (flagged && !veh && klmv.flagok && klh_rd32(s->rules + 0x1e4) == 0) flagged = 0;      /* LastVehicleFlagged: a flag with no vehicle does not hold the call */
     if (veh || flagged || hold || !klb_finite(left) || left < 20.0f) { klmv_r.bv_since = 0; return; }
     for (i = 0; i < s->n; i++) {
         const struct klb_rec *r = &s->r[i];
@@ -1467,6 +1474,7 @@ static void klmv_init(void)
     klmv.dry = GetPrivateProfileIntA("Bots", "MoveDry", 0, klh_ini) != 0;
     klmv.log = klb_pos("MoveLog", 1, 2);
     klmv.last = GetPrivateProfileIntA("Bots", "LastVehicle", 1, klh_ini) != 0;
+    klmv.flagok = GetPrivateProfileIntA("Bots", "LastVehicleFlagged", 0, klh_ini) ? 1 : 0;      /* default 0 = unchanged */
     klmv.last_lead = (float)GetPrivateProfileIntA("Bots", "LastVehicleLead", 25, klh_ini) / 10.0f; if (klmv.last_lead < 2.5f) klmv.last_lead = 2.5f; if (klmv.last_lead > 60.0f) klmv.last_lead = 60.0f;      /* tenths of a s (25 = 2.5 s, the old literal = default); 15 s is a GUESS for a test */
     klmv.reach_fight = GetPrivateProfileIntA("Bots", "BoardReachFight", 0, klh_ini) != 0;      /* 0 = off (default) */
     klmv.reach_fight_range = (float)GetPrivateProfileIntA("Bots", "BoardReachFightRange", 1500, klh_ini); if (klmv.reach_fight_range < 0) klmv.reach_fight_range = 0; if (klmv.reach_fight_range > KLMV_SENT) klmv.reach_fight_range = KLMV_SENT;      /* cm; 1500 = 15 m GUESS */
