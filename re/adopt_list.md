@@ -23,6 +23,8 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
 - STAGED, NOT RUN (all KLJoin 8a8c4fdd, .HVK/.prp only; rollback = 7cd07d15): B door-nocol 54c2b946, C noblocker 1c4b1667,
   D both e6be64a7 (vault_both), hide-parts e69d7a61 / 3574538f (hideparts, bank-stage). Cause hint: door body 27109 or PathBlocker_Vault
   seals the inside-vault places (per 16:25). Queued as 3f (g).
+- RUN L80 (3f, 18:10): hide-parts 3574538f + hook 1018u, EscVisitFix=0. PASS, 0 asserts. Visit 1 worked (escprobe: 1e4 set at state 1 without the fix);
+  you + 5 aboard, 1 dead, 1 left 13.4 m out. So the van show/hide was the visit-1 cause; the result is below L65 (you + all 7), no reason to switch yet.
 - DECISION: keep late110 and let 3f's queue (g) pick B/C/D; or say "cut" to switch to vault_e9 (UNKNOWN md5 in the folders; ask 3f).
 
 ### Last Call, DM05A [page 3 F01]
