@@ -275,3 +275,72 @@ Units are cm (box half extents 95 x 135 x 80 = the 1.9 x 1.6 m box). Scratch scr
 - GUESS: the early write is the `EnterVehicle` action registering when it is activated, not a box overlap. The rest-position hypothesis alone does not explain it.
 - Still open, and not excluded by this check: a bot or cop walking through the box before the call. The only difference from stock I can show is that the box sits on walkable mesh in the three failing maps and off it on DD07. That would make an early fire possible but needs a walker.
 - Next test (not run): the hardware write-watch on `[rules+0x1e0]` already proposed in `re/escape_visit1.md`. The optional A/B of setting the action's active bool to 0 at load is the other cheap check.
+
+## 2026-10-18: Hot Coffee II van boarding spot vs the nav mesh
+
+Re-checked read-only with `kl_route.load().mesh()` on the installed DM01B `F03_Main.zip`, using the scratchpad scripts q1, q2, q3 and q4. The mesh claims reproduce. The route-walker claims were not reproduced and are downgraded. The proposed STOP at x 3000 has a drawback the first report left out.
+
+### (1) Is the target on the mesh?
+- **FACT, reproduced.** The mesh has 1103 polygons in 43 parts, and part 0 holds 838 of them. START polygon 933 is in part 0.
+- **FACT, reproduced.** (2011, 0, 30793) is inside polygon 301, in part 0, at mesh height 0.0 and distance 0.
+  - y = -15 and y = 107 give the same polygon at distance 0, so the y level does not affect the lookup.
+  - STOP (2000, -13, 30800) and the rear point (2000, -15, 30800) are also in polygon 301.
+- **FACT, reproduced.** Polygon 301 has six vertices and spans x 1481..2512 and z 28567..31049.
+  - The nearest boundary edge (one with no neighbour) is 236 units away, at the north side near z 31030.
+  - The margin to the north edge falls as z increases (z 30900: 129; z 31000: 30).
+  - The south side of 301 is open to z 28567.
+- **NOT REPRODUCED, downgraded to GUESS.** "The street y of -15 is the collision floor" and "at y = 107 the walker finds no floor within 100". These come from the collision walker, which I did not get an answer from.
+
+### (2) Is it connected to where the crew comes from?
+- **FACT, reproduced.** `Mesh.way(933, 301)` routes only if the minimum portal width is 4 or less.
+  - At the default 100, and at 40, 60 and 80, there is no route.
+  - The widest minimum that still routes is 4.
+  - The route is 130 polygons (134 points) and 37,426 units long. That is about 374 m, if 1 unit is 1 cm.
+- **FACT, reproduced.** The 4-wide portals are 571/587 at (2866, 0, 11742) and 587/588 at (2866, 0, 11777).
+  - The next narrowest are 29 at (4655, 0, 22100), 35 at (4093, 0, 21900) and 41 to 43 at (4731, 0, 22100) and (6100, 0, 23055..23155). Several of the route's 29..43-wide portals are in the same area.
+  - All of them are 7 km or more from the van.
+- **FACT, reproduced.** The last stretch is wide: 296/301 is 1877 wide, 301/316 is 894 and 301/298 is 832.
+- **FACT, reproduced.** The z 30800 lane from x -500 to 6500 is all part 0, in polygons 296, 301, 318, 321, 252 and 251.
+- **NOT REPRODUCED.** The claim "no one-way links used". `way(..., links=True)` returns None at the default width, so it was never tested on this route. Downgraded to unknown.
+- **NOT REPRODUCED.** The `kl_route stations` result ("on the mesh, part 0", "NOT reached", the blockers named at 22 to 261 m). My rerun produced no output in 500 s. The collision-walker part, including the named blockers and the closed-door explanation, is unverified. The first report's "not reached" is consistent with closed doors only as a guess.
+- **Still not done.** No collision walk of the last 20 m exists. The `--open` rerun from x 1300 is still needed.
+
+### Verdict on the mesh
+FACT: the mesh does not explain the bots' failure. The target is on a connected, wide, central part-0 area. There is no mesh reason to move the STOP.
+
+### What could explain it (all GUESS, unchanged)
+- The box is about 11 units east of STOP. `re/escape_visit1.md` gives the stopped box at (2000.1, 106.3, 30793.0).
+- With heading -90, the van body spans roughly x 1400..1900. A bot 5 m west of the target is inside that footprint.
+- The van is a dynamic obstacle that is in neither the mesh nor the static collision.
+- An arrival test that needs a closer approach than the body allows would produce the same stall.
+
+### (3) Alternative STOP, only if the van body is the blocker
+The table reproduces exactly (z 30793). The squad positions are the men and cover points of the `ARRIVE` table at `kl_fa_v2_hotcoffee.py:240` (the anchors are not in q4's list; none are nearer to the lane than the men).
+
+| Box x | Polygon / part | Distance to mesh edge | Distance to nearest squad position |
+|---|---|---|---|
+| 1000 | 296 / 0 | 545 | 1416 |
+| 1500 | 296 / 0 | 254 | 1715 |
+| 2000 | 301 / 0 | 235 | 2047 |
+| 2500 | 318 / 0 | 311 | 2116 |
+| 3000 | 321 / 0 | 313 | 1797 |
+| 3250 | 321 / 0 | 314 | 1671 |
+| 3500 | 321 / 0 | 315 | 1559 |
+| 4000 | 321 / 0 | 317 | 1386 |
+
+- **Correction to the x 3000 proposal.** The first report said the margin is "a little better". The margin figure does reproduce (313 against 235), but the mesh around x 2750..3500 is narrower than at x 2000.
+  - For x 2750 to 3500, z 29000 to 30400 is mostly off the mesh, or in small separate parts such as 793..819 and 234.
+  - At x 3000 the walkable strip is only about z 30500..31200, roughly 600 wide. At x 2000 the street is open south down to z 28567.
+  - So x 3000 trades the open south side for a slightly larger north margin. It does not clearly make the van easier to get round.
+  - The proposal stays untested. The road collision east of 2500 has also not been checked.
+- **Cheaper test first.** Keep STOP and move the crew's order point.
+  - Candidates are (2150, 0, 30793), 150 east of the box, or the north side of the lane at z 30950.
+  - 30950 is tighter: the margin there is about 80..130 at x 2011, and about 100 would remain.
+  - (2150, 30793) was not checked here. It lies in polygon 301, because 301 spans to x 2512 at z 30482 and the lane edge at x 2150 is further north than the north polygon edge at z ~31020.
+
+### Not done
+- The final-stretch collision walk (`kl_route walk`/`stations` from x 1300, with `--open` and `ROUTE_OPEN` from `kl_fa_v2_hotcoffee.py`) is not run.
+- The collision-floor heights at y -15 and 107 are not checked.
+- The one-way-link question is open.
+
+Scripts: `q1.py` to `q4.py` in `C:\Users\Henri\AppData\Local\Temp\claude\c--kl-merge-kl-merge\d20b026f-6c1c-42c8-8d9e-2f96a87bb38d\scratchpad\`.
