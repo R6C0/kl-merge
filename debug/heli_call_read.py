@@ -329,7 +329,10 @@ def wiring(zpath):
     fed = [(sc.path[kk], sc.p.key(n), v[0]) for a_ in act for kk in range(1, len(sc.nodes)) for n, b in sc.nodes[kk]['ctrls']
            for v in [[kl_fa.value(sc, u) for u in kl_fa.units(b[1:-1])]]
            if any(isinstance(y, str) and y.lower() == sc.path[a_].lower() for y in flat(v))]
-    if act and fed:
+    hidden = d['hidden_prop'] == 1 or d['hidden_flag']
+    if not hidden:
+        line('NOTE', 'unhide wire', 'group is not hidden at start, so it needs no unhide wire (%d ActivateGeom name it)' % len(act))
+    elif act and fed:
         line('PASS', 'unhide wire', 'ActivateGeom %s shows the group; sent by %s (delay s: %s). The call itself does NOT unhide (Show goes to OnMap)' % (
             [sc.path[x] for x in act], [f[0].split('!')[-1] + ':' + f[1] for f in fed], [f[2] for f in fed]))
     else:

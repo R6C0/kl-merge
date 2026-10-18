@@ -966,7 +966,7 @@ def wire(sc, log=print):
     # the stair's top: the street squads, the alarm (the van's timer) and the gate (the police on the square)
     lists('floor box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['floor'] + [R + ROLE['van timer'], ways[0]])
     lists('backstop', 'TriggerDelay2', f0=BACKSTOP_AT, f4=[ways[1], R + ROLE['van timer']] + ([R + n for n in beat_fires()] if LOCK_WING else []))
-    # HELI: the chopper is in the world from the load (as in Last Call), so the alarm shows / the reset hides nothing: empty lists. GUESS: an empty list is a valid ActivateGeom / DeactivateGeom
+    # HELI: the chopper is in the world from the load (unlike Last Call, which hides it behind an unhide wire; a visible body at its HVK placement near the stair foot is the live-run risk), so the alarm shows / the reset hides nothing: empty lists. GUESS: an empty list is a valid ActivateGeom / DeactivateGeom
     lists('van on', 'ActivateGeom', f0='AITrigger', f1=[] if HELI else [van_path()])
     lists('van timer', 'TriggerDelay2', f0=VAN_DELAY, f4=[R + ROLE['van on'], R + ROLE['speak']])
     lists('reset hide', 'DeactivateGeom', f0='AITrigger', f1=[] if HELI else [van_path()])
