@@ -339,6 +339,7 @@ static struct {
     float reach_sent;            /* [Bots] BoardReachSent (2026-10-18, Last Call L74: bots 36-40 m off stood 45 s): cm, how far from the boarding box a called bot may be and still get the order to the doors; 0 = off (default: KLMV_SENT, 30 m) */
     DWORD reach_repeat;          /* [Bots] BoardReachRepeat (2026-10-18, 3f's DM02 run L14: orders to the doors were overridden by the game's chain within 4-14 s and never sent again; bots in an escape box 2.5-3.1 m off never stood the 1 s): ms after an order to the doors before it may be sent again while the vehicle waits, and a bot in an escape box beyond BoardReach is sent without the stand-still test; 0 = off (default, old behaviour) */
     float half_guard;              /* [Bots] HalfGuard (2026-10-18, e5; default 0 = off): vertical gap in units above which branch b does NOT re-order a bot to a chain place on the other half of a CrewHop join (tower vs street): the order cannot be walked, it only burns the bot's 4 tries and keeps it standing. GUESS: 400 */
+    int walk_away;                 /* [Bots] WalkAwayReorder (2026-10-18, cross-map sweep: stage-3 bots 31-83 m out walk AWAY from the boarding place, 'not coming (-4.5 .. -9 m)'): n = consecutive 2 s samples in which a called loyal bot within CrewRouteRange got 1 m+ FARTHER from the boarding place before it is ordered to the doors again; 0 = off (default, nothing here runs). GUESS: 3 */
     int skip_down;                 /* [Bots] RestlessSkipDowned (2026-10-18, 3f saw bot 4 ordered while down at 02:09:14): a downed bot gets no order, snap or hop from klmv_restless and its counters stand still; 0 = off (default, old behaviour) */
     DWORD snap_range, snap_human; int snap, snap_cap;      /* RestlessSnap (2026-10-18, audit E2.2): after N orders to one place that did not bring the bot there, the bot is put at its chain's place; 0 = off */
     int escprobe, escfix;          /* [Bots] EscVisitProbe / EscVisitFix (2026-10-18, visit 1 never boards on Park II / Vault / Hot Coffee II): 1 = on, 0 = off (default) */
@@ -389,7 +390,8 @@ static struct {
     int ev_have, ev_visit, ev_fixed; DWORD ev_st, ev_e0, ev_e4, ev_h;      /* EscVisitProbe / EscVisitFix: what was last seen, the visit of state 1/2 (counted here), the fix made on it */
     DWORD cr_at[KLB_NREC]; float cr_p[KLB_NREC][3]; BYTE cr_walk[KLB_NREC], cr_told; int cr_visit; float cr_used;      /* CrewRouteHold: per record the time/place of the last 2 s sample and whether it walked; the lines said; the visit; seconds given */
     float cr_extra; BYTE cr_xdone; DWORD cr_dat[KLB_NREC], cr_shr[KLB_NREC]; float cr_dd[KLB_NREC];      /* CrewRouteHopHold: seconds added to the budget, given this visit; per record the distance at the last 5 s sample, its time, and when the distance last shrank 1 m */
-    DWORD vc_at; int vc_visit, vc_told, vc_n, vc_last_told;      /* VanCallNear: when this visit's wait was first seen, its visit, the line said, how many were called */
+    DWORD wa_at[KLB_NREC], wa_ord[KLB_NREC], wa_t0[KLB_NREC], wa_told; float wa_d[KLB_NREC], wa_d0[KLB_NREC]; BYTE wa_n[KLB_NREC]; int wa_visit;      /* WalkAwayReorder: per record the time/distance of the last 2 s sample, of the last order, where the run of growing distances began, how many samples in a row grew; lines said (bit per record); the visit */
+    DWORD vc_at; int vc_visit, vc_told, vc_n, vc_last_told;    /* VanCallNear: when this visit's wait was first seen, its visit, the line said, how many were called */
     DWORD g_at, g_first; int g_done;      /* StairGather: last pass, when the first bot was held (0 = none held), 1 = released this round (never again until the next round) */
 } klmv_r;
 
@@ -1660,6 +1662,49 @@ static void klmv_vancall(const struct klb_snap *s, DWORD now)
     if (cand && !called && !klmv_r.vc_told && klmv.log > 1) { klmv_r.vc_told = 1; klog("vancall: visit %d: %d bot(s) of stage %d..2 within range, none called (a grab runs, or klmv_stage3 refused)", klmv_r.visit, cand, klmv.van_min); }
 }
 
+/* WalkAwayReorder (opt-in). While the vehicle waits, a called loyal bot (stage 3) within CrewRouteRange whose distance to the
+   boarding object grew by 1 m or more on [Bots] WalkAwayReorder consecutive 2 s samples is ordered to the boarding place
+   (the order of BoardReachSent / BoardReach), at most once per 4 s per bot. Not a bot klhop.c walks (WalkExclusive), not a held
+   escort, not a hurt bot (4 s), not across a join (HalfGuard's height). GUESS: the bot's block holds a stale place (the log of
+   Last Call L75 14:14:52.432 shows the game setting a chain place 2 s before the call) - OR the bot walks its route, which
+   leads away first (Vault) or to a hop's From (L75 records 3-5 went to (-870, 460, 1017)); then the order is the same walk
+   the game's path planner would give, and a hop crossing is NOT walkable by it (HalfGuard / klv_owned keep it off those). */
+static void klmv_walkaway(const struct klb_snap *s, DWORD now)
+{
+    float bd[3], p[3], bp[3], got[3], d; int i, j; DWORD actor, soldier; char w[100]; struct kle_e t;
+    if (!(s->veh == 3 || s->veh == 4) || !kle_boarding(s->rules, bd)) { memset(klmv_r.wa_at, 0, sizeof klmv_r.wa_at); memset(klmv_r.wa_n, 0, sizeof klmv_r.wa_n); return; }
+    if (klmv_r.wa_visit != klmv_r.visit) { klmv_r.wa_visit = klmv_r.visit; memset(klmv_r.wa_at, 0, sizeof klmv_r.wa_at); memset(klmv_r.wa_n, 0, sizeof klmv_r.wa_n); memset(klmv_r.wa_ord, 0, sizeof klmv_r.wa_ord); }
+    for (i = 0; i < s->n && i < KLB_NREC; i++) {
+        const struct klb_rec *r = &s->r[i]; struct klmv_b *b = &klmv_r.b[i]; int grew;
+        if (!r->used || !(r->flags & 1) || (r->flags & 2) || r->status || r->stage < 3 || !r->actor || klh_rd32(r->actor) != KLB_ACTOR_VT || !kle_node(klh_rd32(r->actor + 4), p, 0) || klmv_downed(r)) { klmv_r.wa_at[i] = 0; klmv_r.wa_n[i] = 0; continue; }
+        d = kle_dist(p, bd);
+        if (!klmv_r.wa_at[i]) { klmv_r.wa_at[i] = KLB_T(now); klmv_r.wa_d[i] = d; klmv_r.wa_n[i] = 0; continue; }
+        if (now - klmv_r.wa_at[i] < 2000) continue;
+        grew = d - klmv_r.wa_d[i] >= 100.0f;      /* GUESS: 1 m in 2 s (the follow lines show -4.5 .. -9 m) */
+        if (grew) { if (!klmv_r.wa_n[i]) { klmv_r.wa_t0[i] = klmv_r.wa_at[i]; klmv_r.wa_d0[i] = klmv_r.wa_d[i]; } if (klmv_r.wa_n[i] < 250) klmv_r.wa_n[i]++; }
+        else klmv_r.wa_n[i] = 0;
+        klmv_r.wa_at[i] = KLB_T(now); klmv_r.wa_d[i] = d;
+        if (klmv_r.wa_n[i] < klmv.walk_away || d > klmv.crew_range * 100.0f || d <= 300.0f) continue;
+        if (klv_owned(i)) continue;                                                      /* WalkExclusive: klhop.c walks this bot */
+        if (klmv.half_guard > 0 && fabs(p[1] - bd[1]) > klmv.half_guard) continue;        /* the other half of a join: no order can walk there */
+        if (b->hit_at && now - b->hit_at < 4000) continue;                               /* it fights where it is */
+        if ((klmv_r.wa_ord[i] && now - klmv_r.wa_ord[i] < 4000) || (b->order_at && now - b->order_at < 4000)) continue;
+        for (j = 0; j < KLE_MAX; j++) if (kle_r.e[j].mode == 1 && kle_r.e[j].rec == i) break;
+        if (j < KLE_MAX) continue;                                                       /* klescort.c holds it beside the human */
+        klmv_r.wa_ord[i] = KLB_T(now);
+        if (!kle_bot(s, i, &actor, &soldier, bp, w)) { if (i < 32 && !(klmv_r.wa_told >> i & 1)) { klmv_r.wa_told |= 1u << i; klog("move: record %d walks away (+%.1f m in %.1f s) but gets no order: %s (said once per bot)", i, (d - klmv_r.wa_d0[i]) / 100, (now - klmv_r.wa_t0[i]) / 1000.0, w); } continue; }
+        if (kle_dist(bp, bd) <= 260.0f) continue;
+        memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
+        kltr_set("move-walkaway", "WalkAwayReorder: to the doors of the waiting vehicle", -1);
+        j = kle_order2(&t, bd, got, w, klmv.dry);
+        if (!j) { klog("move: record %d walks away (+%.1f m in %.1f s) and was NOT re-ordered: %s", i, (d - klmv_r.wa_d0[i]) / 100, (now - klmv_r.wa_t0[i]) / 1000.0, w); klmv_r.wa_n[i] = 0; continue; }
+        b->order_at = KLB_T(now); b->since = now;
+        klog("move: record %d walks away (+%.1f m in %.1f s): %s to the doors (%.0f, %.0f, %.0f), %.1f m out at (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f)", i, (d - klmv_r.wa_d0[i]) / 100, (now - klmv_r.wa_t0[i]) / 1000.0,
+             j == 2 ? "WOULD be re-ordered (dry run)" : "re-ordered", bd[0], bd[1], bd[2], d / 100, p[0], p[1], p[2], got[0], got[1], got[2]);
+        klmv_r.wa_n[i] = 0;
+    }
+}
+
 static void klmv_tick(int game_thread)
 {
     static DWORD last; struct klb_snap s; DWORD now = GetTickCount(), player = 0; char why[200]; float hp[3] = { 0, 0, 0 }, hn[3];
@@ -1721,6 +1766,7 @@ static void klmv_tick(int game_thread)
     if (klmv.crew_hold > 0) klmv_crewhold(&s, now, h, criminal);
     if (klmv.gather) klmv_gather(&s, now);
     if (klmv.van_near > 0 || klmv.van_last) klmv_vancall(&s, now);
+    if (klmv.walk_away > 0) klmv_walkaway(&s, now);
     if (klmv.restless || klmv.loot) {
         klmv_sour_pass(s.rules, now);
         if (now - klmv_r.half >= 500) {        /* twice a second */
@@ -1783,6 +1829,7 @@ static void klmv_init(void)
     klmv.reach_fight_range = (float)GetPrivateProfileIntA("Bots", "BoardReachFightRange", 1500, klh_ini); if (klmv.reach_fight_range < 0) klmv.reach_fight_range = 0; if (klmv.reach_fight_range > KLMV_SENT) klmv.reach_fight_range = KLMV_SENT;      /* cm; 1500 = 15 m GUESS */
     klmv.snap = klmv.restless ? klb_pos("RestlessSnap", 0, 1) : 0;      /* 0 = off (default) */
     klmv.half_guard = (float)GetPrivateProfileIntA("Bots", "HalfGuard", 0, klh_ini);      /* 0 = off (default) */
+    klmv.walk_away = GetPrivateProfileIntA("Bots", "WalkAwayReorder", 0, klh_ini); if (klmv.walk_away < 0) klmv.walk_away = 0; if (klmv.walk_away > 20) klmv.walk_away = 20;      /* 0 = off (default); GUESS if used: 3 */
     klmv.skip_down = GetPrivateProfileIntA("Bots", "RestlessSkipDowned", 0, klh_ini) != 0;      /* 0 = off (default) */
     klmv.snap_range = (DWORD)klb_pos("RestlessSnapRange", 4000, 20000);      /* GUESS: 40 m */
     klmv.snap_human = (DWORD)klb_pos("RestlessSnapHuman", 1500, 20000);      /* GUESS: 15 m */
@@ -1804,7 +1851,7 @@ static void klmv_init(void)
         if (at[0] && sscanf(at, "%f , %f , %f", &a[0], &a[1], &a[2]) == 3 && klb_finite(a[0]) && klb_finite(a[1]) && klb_finite(a[2])) memcpy(klmv.gather_at, a, 12);
         else if (at[0]) klog("gather: StairGatherAt=%s is not x,y,z: the default (Hasta's stair top) is used", at);
     }
-    klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0 || klmv.reach > 0 || klmv.last || klmv.botvan || klmv.probe || klmv.gather || klmv.escprobe || klmv.escfix || klmv.crew_hold > 0 || klmv.van_near > 0 || klmv.van_last;
+    klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0 || klmv.reach > 0 || klmv.last || klmv.botvan || klmv.probe || klmv.gather || klmv.escprobe || klmv.escfix || klmv.crew_hold > 0 || klmv.van_near > 0 || klmv.van_last || klmv.walk_away > 0;
     if (!klmv.any) return;
     if (!klb.on) { klog("move / wait / near / reach: [Bots] Restless, WaitForYou, BoardNear or BoardReach is set but [Bots] Enable is 0: they need klbot.c's crew records, nothing is done"); klmv.any = 0; return; }
     if (klmv.restless || klmv.loot)
@@ -1820,6 +1867,7 @@ static void klmv_init(void)
     if (klmv.crew_hop > 0) klog("crewhold: CrewRouteHopHold=%.1f s (GUESS): once a visit, when CrewRouteHold is used up and a stage-3 bot closed 1 m in on the boarding place within 15 s, the budget grows by that", klmv.crew_hop);
     if (klmv.van_near > 0) klog("vancall: on; VanCallNear=%.0f m VanCallDelay=%lu s MinStage=%d%s: while the vehicle waits a loyal bot at heist stage %d..2 within that range of the boarding place gets heist stage 3 (GUESS limits)", klmv.van_near / 100, klmv.van_delay / 1000, klmv.van_min, klmv.dry ? " DRY RUN" : "", klmv.van_min);
     if (klmv.half_guard > 0) klog("move: HalfGuard on: a stuck bot whose chain place is more than %.0f units above or below it gets no re-order", klmv.half_guard);
+    if (klmv.walk_away > 0) klog("move: WalkAwayReorder=%d (GUESS limits): while the vehicle waits, a called loyal bot within CrewRouteRange (%.0f m) that got 1 m+ farther from the boarding place in %d 2 s samples in a row is ordered to the doors, at most once per 4 s per bot%s", klmv.walk_away, klmv.crew_range, klmv.walk_away, klmv.dry ? "; MoveDry=1: nothing is written" : "");
     if (klmv.skip_down) klog("move: RestlessSkipDowned on: a downed heister gets no restless order, snap or hop and its stand-still clock restarts when it is up");
     if (klmv.snap) klog("move: RestlessSnap on (audit 1018 E2.2, GUESS limits): a bot whose chain place was ordered %d times without arriving is put AT the place (range %lu, human not within %lu, at most %d times per bot and round)%s", KLMV_TOTAL, klmv.snap_range / 100, klmv.snap_human / 100, klmv.snap_cap, klmv.dry ? "; MoveDry=1: never" : "");
     if (klmv.last)
