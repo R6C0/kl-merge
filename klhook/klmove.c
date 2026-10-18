@@ -257,6 +257,15 @@
  *   BoardReachFightRange=1500  cm (15 m GUESS) for BoardReachFight, at most 3000
  *   LastVehicleLead=25    tenths of a s (2.5 s = the old literal, default; at least 25): the no-vehicle fallback of LastVehicle calls the
  *                         escape vehicle this long before the round's end. Last Call HELI3 missed its window; 150 (15 s) is a GUESS for a test
+ *   BoardReachLast=0      1 = at the round's LAST vehicle ([rules+0xe8a]) the doors code runs for CALLED bots (stage 3) too, instead of
+ *                         the whole reach code being off there: (a) the tick sends a called bot 3 m .. BoardReachSent (30 m) off to the
+ *                         doors, once a visit, as on any vehicle; (b) the box update takes a called bot within BoardReachLastRange
+ *                         aboard at the doors; boxes the bot stands IN work as in stock (no BoardReach refusal), and so does everyone
+ *                         else (stage < 3, traitors). BoardReachVisits still turns it off. L94: a stage-3 bot 8 m from the last van
+ *                         was never walked aboard in its 8 s wait. Needs BoardReach. GUESS that 8 s is enough for the order (0 = off)
+ *   BoardReachLastRange=0 cm (0 = BoardReach's doors range, 3 m at most; GUESS 1000, at most 1000): with BoardReachLast, how near the
+ *                         boarding box a called bot must be for (b) to put it aboard at once. Past 3 m that is a jump aboard, no walk:
+ *                         safe only because it is the last van (nothing is left for the bot to do); only (a) walks it
  *   BoardReachVisits=3    from this visit of a vehicle on the boxes work as in stock again (0 = never; the round's
  *                         last vehicle always works as in stock)
  *   MoveDry=0           1 = every line, NOTHING written or called (the boxes are not wrapped either)
@@ -333,6 +342,8 @@ static struct {
     float reach_fight_range;       /* [Bots] BoardReachFightRange: cm, default 1500 (15 m GUESS) */
     int last;                      /* LastVehicle (section 6): 1 = the fallback last vehicle is on (default), 0 = off */
     float reach_settle;            /* [Bots] BoardReachSettle (2026-10-18, DM02 L18 record 4): cm; a called bot within this of the boarding box counts as within BoardReach; 0 = off (default) */
+    int reach_last;                /* [Bots] BoardReachLast (2026-10-19, L94 Retomoto: a stage-3 bot 8 m from the last van was not walked aboard in its 8 s wait): 1 = at the round's last vehicle the doors order / doors boarding still run for called bots; 0 = off (default, old behaviour: the whole reach code is off there) */
+    float reach_last_range;        /* [Bots] BoardReachLastRange: cm, 0 = the doors range (default); at most 1000. GUESS if used: 1000 */
     float reach_aim;               /* [Bots] BoardReachAim (2026-10-18, DM02 L21): cm; the doors order aims this far from the boarding object towards the bot, at its height; 0 = off (default) */
     float reach_aim_h;             /* [Bots] BoardReachAimHeight (2026-10-18, Vault L86: BoardReachAim kept the BOT'S height, so bots on the stair route out of the vault (y -960 .. 240, doors y 822) were sent to points on the floors below the van): metres; a bot more than this above or below the boarding object is sent to the object itself, not to the BoardReachAim point; 0 = off (default, unchanged). GUESS if used: 3 */
     int reach_chase;               /* [Bots] BoardReachChase (2026-10-18, DM02 L18 record 5): 1 = a bot that got an order this visit and walks off is re-sent without the stand-still test; 0 = off (default) */
@@ -408,7 +419,7 @@ static struct {
    update, taken by the tick */
 #define KLMV_DOORS_MAX  300.0f                /* the doors path never reaches farther than this from the boarding box, whatever BoardReach (review S3: stock has no box there at all; 3 m = the board tactic's own distance) */
 #define KLMV_RULE       0x006840a0            /* rules vtable +0xb4: the boarding rule 0x74d7f0 calls */
-static struct { volatile LONG armed, relax, seq, fr_ok; DWORD rules, fr_rules; struct klmv_fr fr; float reach, door_reach, settle; int doors; } klmv_rc;
+static struct { volatile LONG armed, relax, seq, fr_ok; DWORD rules, fr_rules; struct klmv_fr fr; float reach, door_reach, settle, last_range; int doors, last_doors; } klmv_rc;
 static volatile LONG klmv_rc_far, klmv_rc_took, klmv_rc_refused, klmv_rc_box, klmv_rc_door;
 static int klmv_reach_ok;                     /* 1 = the routines of section 4 are the ones this file read, -1 = not */
 
@@ -571,7 +582,7 @@ static void klmv_bit(volatile LONG *at, int i)
    0x74d7f0 -> 0x6840a0, the record that goes aboard. It reads the crew records and the actor's node besides. */
 static void klmv_ally_reach(void *box)
 {
-    DWORD rules, ent, node, recs, actor, mine = klmv_rc.rules, obj; BYTE *rec, veh = 0, last = 0; float p[3], d = 0; int idx, inside, where, have = 0;
+    DWORD rules, ent, node, recs, actor, mine = klmv_rc.rules, obj; BYTE *rec, veh = 0, last = 0; float p[3], d = 0; int idx, inside, where, have = 0, lastmode;
     struct klmv_fr fr; LONG q;
     /* WHAT THIS FRAME IS (review M1: read HERE, in the frame the rule 0x6840a0 would board in, not by the tick).
        Outside states 3 / 4 / 5 the rule takes nobody: the stock update. From BoardReachVisits on and at the round's
@@ -579,7 +590,8 @@ static void klmv_ally_reach(void *box)
        only) and kept for state 5; it cannot be read = the stock update, as before */
     if (!mine || klh_rd32(mine) != KLB_RULES_VT || !klh_rd(mine + 0x1dc, &veh, 1) || veh < 3 || veh > 5) { klmv_rc.fr_ok = 0; goto stock; }
     klh_rd(mine + 0xe8a, &last, 1);
-    if (klmv_rc.relax || last) goto stock;
+    lastmode = last && klmv_rc.last_doors;      /* BoardReachLast: at the last vehicle only the doors path of a called bot is ours; everything else is as in stock */
+    if (klmv_rc.relax || (last && !lastmode)) goto stock;
     if (veh != 5) {
         if ((obj = klh_rd32(mine + 0x1e0)) != 0 && klmv_frame(obj, &fr)) {
             have = 1;
@@ -608,14 +620,15 @@ static void klmv_ally_reach(void *box)
         where = 0;
         if (rules == mine && (node = klh_rd32(actor + 4)) != 0 && kle_node(node, p, 0)) { d = klmv_fr_dist(&fr, p); where = d <= klmv_rc.reach ? 1 : 2; if (where == 2 && klmv_rc.settle > 0 && rec[0x78] >= 3 && d <= klmv_rc.settle) where = 1; }      /* BoardReachSettle */
         if (inside) {
-            if (where == 2) { if (idx < 32) klmv_bit(&klmv_rc_far, idx); InterlockedIncrement(&klmv_rc_refused); continue; }
+            if (where == 2 && !lastmode) { if (idx < 32) klmv_bit(&klmv_rc_far, idx); InterlockedIncrement(&klmv_rc_refused); continue; }      /* BoardReachLast: a bot in the box is taken as in stock */
             InterlockedIncrement(&klmv_rc_box);
         } else {
             /* AT THE DOORS: outside THIS escape box, but as near the boarding box as BoardReach asks (3 m at most:
                KLMV_DOORS_MAX), and called (heist stage 3: what the board tactic asks, 0x4fb064). By EVERY wrapped box
                that is updated (review S4: the rule sets status 4 at once and the test above skips the record for the
                next box, so nobody is taken twice) */
-            if (!klmv_rc.doors || where != 1 || d > (klmv_rc.settle > klmv_rc.door_reach ? klmv_rc.settle : klmv_rc.door_reach) || rec[0x78] < 3) continue;
+            if (lastmode) { if (!klmv_rc.doors || !where || d > (klmv_rc.last_range > klmv_rc.door_reach ? klmv_rc.last_range : klmv_rc.door_reach) || rec[0x78] < 3) continue; }      /* BoardReachLast: stage 3, position read, within the last-vehicle range (where 1 or 2) */
+            else if (!klmv_rc.doors || where != 1 || d > (klmv_rc.settle > klmv_rc.door_reach ? klmv_rc.settle : klmv_rc.door_reach) || rec[0x78] < 3) continue;
             if (idx < 32) klmv_bit(&klmv_rc_took, idx);
             InterlockedIncrement(&klmv_rc_door);
         }
@@ -888,14 +901,15 @@ static void klmv_reach_pass(const struct klb_snap *s, DWORD now)
     klh_rd(s->rules + 0xe8a, &last, 1);
     relax = klmv.reach_visits && klmv_r.visit >= klmv.reach_visits;
     klmv_rc.rules = s->rules; klmv_rc.reach = klmv.reach; klmv_rc.door_reach = klmv.reach < KLMV_DOORS_MAX ? klmv.reach : KLMV_DOORS_MAX; klmv_rc.doors = klmv.reach_doors; klmv_rc.settle = klmv.reach_settle;
+    klmv_rc.last_doors = klmv.reach_last; klmv_rc.last_range = klmv.reach_last_range;
     klmv_rc.relax = klmv.reach_visits && klmv_r.visit + (waiting || s->veh == 5 ? 0 : 1) >= klmv.reach_visits;
     klmv_rc.armed = !klmv.dry;
-    if (last) relax = 1;                      /* the round's last vehicle: nobody is stranded for good (review S2; the update reads the byte itself) */
+    if (last && !klmv.reach_last) relax = 1;                      /* the round's last vehicle: nobody is stranded for good (review S2; the update reads the byte itself) */
     if (waiting && !relax && (obj = klh_rd32(s->rules + 0x1e0)) != 0 && klmv_frame(obj, &fr)) have = 1;
     if (!have) {
         if (waiting && klmv_r.rc_told != klmv_r.visit) {
             klmv_r.rc_told = klmv_r.visit;
-            klog("reach: visit %d: %s: every escape box works as in stock", klmv_r.visit, last ? "the round's last vehicle" : relax ? "BoardReachVisits: from this visit on" : "the vehicle's boarding object ([rules+0x1e0]) cannot be read");
+            klog("reach: visit %d: %s: every escape box works as in stock", klmv_r.visit, last && !klmv.reach_last ? "the round's last vehicle" : relax ? "BoardReachVisits: from this visit on" : "the vehicle's boarding object ([rules+0x1e0]) cannot be read");
         }
     } else {
         for (i = 0; i < klmv_nbox; i++) if (klmv_box[i].at && !klmv_box[i].deny) { first = 1; break; }
@@ -903,6 +917,7 @@ static void klmv_reach_pass(const struct klb_snap *s, DWORD now)
             /* the counts are NOT zeroed here: what the update counted in this wait's first 250 ms belongs to it (they are
                zeroed when the visit's line is said, below) */
             klmv_r.rc_visit = klmv_r.visit; klmv_r.rc_wait_at = KLB_T(now);
+            if (last && klmv.reach_last) klog("reach: visit %d: the round's last vehicle, BoardReachLast=1 (GUESS): called bots (stage 3) still get the order to the doors (up to %.0f m) and are put aboard within %.1f m of the boarding box; the other boxes work as in stock", klmv_r.visit, (klmv.reach_sent > KLMV_SENT ? klmv.reach_sent : KLMV_SENT) / 100, (klmv.reach_last_range > klmv_rc.door_reach ? klmv.reach_last_range : klmv_rc.door_reach) / 100);
             if (fr.box) klog("reach: visit %d: the vehicle's boarding box (where YOU get in) is %.0f x %.0f x %.0f (half extents) round (%.0f, %.0f, %.0f): an AI heister goes aboard only within %.1f m of that box%s%s%s", klmv_r.visit,
                              fr.half[0], fr.half[1], fr.half[2], fr.T[0], fr.T[1], fr.T[2], klmv.reach / 100, klmv.reach_doors ? klmv.reach > KLMV_DOORS_MAX ? " - in an escape box or, called (stage 3), within 3.0 m of it at the doors" : " - in an escape box or, called (stage 3), at the doors" : " and inside an escape box",
                              first ? "" : "; NO escape box of this level runs this file's update: only the board tactic takes a bot aboard", klmv.dry ? " (DRY RUN: nothing is wrapped, the lines say what would be)" : "");
@@ -1852,6 +1867,8 @@ static void klmv_read(void)
     klmv.reach_order = GetPrivateProfileIntA("Bots", "BoardReachOrder", 1, klh_ini) != 0;
     klmv.reach_repeat = (DWORD)klb_pos("BoardReachRepeat", 0, 60) * 1000;      /* 0 = off (default); proposed 3 s GUESS */
     klmv.reach_settle = (float)GetPrivateProfileIntA("Bots", "BoardReachSettle", 0, klh_ini); if (klmv.reach_settle < 0) klmv.reach_settle = 0; if (klmv.reach_settle > KLMV_DOORS_MAX) klmv.reach_settle = KLMV_DOORS_MAX;      /* 0 = off (default); proposed 200 GUESS */
+    klmv.reach_last = GetPrivateProfileIntA("Bots", "BoardReachLast", 0, klh_ini) != 0;      /* 0 = off (default) */
+    klmv.reach_last_range = (float)GetPrivateProfileIntA("Bots", "BoardReachLastRange", 0, klh_ini); if (klmv.reach_last_range < 0) klmv.reach_last_range = 0; if (klmv.reach_last_range > 1000) klmv.reach_last_range = 1000;      /* cm; 0 = the doors range (default); GUESS if used: 1000 */
     klmv.reach_aim_h = klb_inif("BoardReachAimHeight", "0"); if (!klb_finite(klmv.reach_aim_h) || klmv.reach_aim_h < 0) klmv.reach_aim_h = 0; if (klmv.reach_aim_h > 50) klmv.reach_aim_h = 50; klmv.reach_aim_h *= 100.0f;      /* metres in the ini, units inside; 0 = off (default) */
     klmv.reach_aim = (float)GetPrivateProfileIntA("Bots", "BoardReachAim", 0, klh_ini); if (klmv.reach_aim < 0) klmv.reach_aim = 0; if (klmv.reach_aim > KLMV_DOORS_MAX) klmv.reach_aim = KLMV_DOORS_MAX;      /* 0 = off (default); proposed 150 GUESS */
     klmv.reach_sent = (float)GetPrivateProfileIntA("Bots", "BoardReachSent", 0, klh_ini); if (klmv.reach_sent < 0) klmv.reach_sent = 0; if (klmv.reach_sent > 10000) klmv.reach_sent = 10000;      /* cm; 0 = off (default); GUESS if used: 6000 */
@@ -1914,6 +1931,7 @@ static void klmv_read(void)
     if (klmv.crew_hop > 0) klog("crewhold: CrewRouteHopHold=%.1f s (GUESS): once a visit, when CrewRouteHold is used up and a stage-3 bot closed 1 m in on the boarding place within 15 s, the budget grows by that", klmv.crew_hop);
     if (klmv.van_near > 0) klog("vancall: on; VanCallNear=%.0f m VanCallDelay=%lu s MinStage=%d%s: while the vehicle waits a loyal bot at heist stage %d..2 within that range of the boarding place gets heist stage 3 (GUESS limits)", klmv.van_near / 100, klmv.van_delay / 1000, klmv.van_min, klmv.dry ? " DRY RUN" : "", klmv.van_min);
     if (klmv.half_guard > 0) klog("move: HalfGuard on: a stuck bot whose chain place is more than %.0f units above or below it gets no re-order", klmv.half_guard);
+    if (klmv.reach > 0 && klmv.reach_last) klog("reach: BoardReachLast=1, BoardReachLastRange=%.1f m (GUESS; 0 = the doors range): at the round's last vehicle a called bot still gets the order to the doors and is boarded within that range; everything else works as in stock", klmv.reach_last_range / 100);
     if (klmv.reach_aim > 0 && klmv.reach_aim_h > 0) klog("reach: BoardReachAimHeight=%.1f m (GUESS): a bot that far above or below the boarding object is sent to the object itself, not to the BoardReachAim point on its own floor", klmv.reach_aim_h / 100);
     if (klmv.walk_away > 0 && klmv.walk_away_g > 0) klog("move: WalkAwayGoal=%.1f m (GUESS): a bot whose move target is already that near the boarding place gets no WalkAwayReorder order", klmv.walk_away_g / 100);
     if (klmv.walk_away > 0 && klmv.walk_away_h > 0) klog("move: WalkAwayHeight=%.1f m (GUESS): a bot that far above or below the boarding place gets no WalkAwayReorder order", klmv.walk_away_h / 100);
