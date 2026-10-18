@@ -92,6 +92,13 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   human. A fair test needs live CopToYou / health. Still the owner's call.
 - STAGED, NOT RUN: (k) --leaderless-hop KLJoin 0b557e40 (6c7066d1, re/retomoto_leaderless.md); (l) fed-van: TEST hook out_e5_1018zj 40fe1088
   ([Bots] CrewRouteFed=1, 57f0f13e) + PT_DM09_fedvan.ini e21001ed (VanCallLast=1, LastVehicleLead=600, CrewRouteRange=300), re/retomoto_fedvan.md.
+- RUN L94 (3f (k), leaderless KLJoin 0b557e40 + zi + PT_DM09_die): PASS 392 s, 0 asserts; restored KLJoin b2bb6a2f. r is counted from 'fed: round 2'.
+  - The human was fed at r24. In the join box FedSkip fired and nothing moved.
+  - Hop 6 carried all 7 bots at r181..185, and they reached stage 2 by r188. GIVE UP lines: 0 (L79 had 5).
+  - Only bot 4 reached stage 3 (r264). BotVan called the van at r268, the round's last vehicle. It waited the stock 8 s and left EMPTY.
+    Bot 4 was 8 m off; the other bots were 51..92 m off. Nobody escaped.
+  - READING: the leaderless hop works as designed. What remains is L83's gap: stage-2 bots get no stage 3 without the human, and the last van waits only 8 s.
+    That is what (l) targets. Workflow wk18hv8ig is checking the (l) code paths against L94 (re/retomoto_l94.md).
 - DECISION: WalkExclusive=1 + LastVehicleLead=450 are CANDIDATES (they acted as designed in L83/L84, no harm seen; two runs only); van boarding with a fed human
   waits for (k)/(l).
 
