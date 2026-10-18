@@ -3,13 +3,14 @@
 HASTA (M11_B) layer. STEP 3a: the doors and the opening (Doors, proof). STEP 3b: the Fragile Alliance layer (author module,
 below the proof: spawns, loot, bounds, van, squads, wiring, finish, check, test). OFFLINE; nothing installed, no game.
 
-    python kl_fa_hasta_layer.py test <out> [--keep] [--plan plan.json] [--no-ai] [--no-police] [--squads-awake] [--blast [S]] [--lock-wing] [--lock-show] [--corner-floor] [--floor-late=N] [--heli-escape [--heli-hvk-origin]]
+    python kl_fa_hasta_layer.py test <out> [--keep] [--plan plan.json] [--no-ai] [--no-police] [--squads-awake] [--blast [S]] [--lock-wing] [--lock-show] [--corner-floor] [--floor-late=N] [--rest-late=S] [--heli-escape [--heli-hvk-origin]]
         --blast [S]: ALSO the timer-driven corner blast (kl_fa_hasta_blast.py; S s after the round start, default 1.5). Without it nothing of it runs.
         --lock-wing: the loot wing (door block, bunker wall + check block) stays SHUT until the 6 hall squads are wiped out (or the backstop); see LOCK_WING.
         --corner-floor: show SO0201_M11_CornerBroken_01 from the load, the floor of the corner-hole route; see CORNER_FLOOR.
         --heli-hide (with --heli-escape): the chopper is hidden from the load and shown by an ActivateGeom the escape call sends (OnlineEscVehicleMonitor field 4); the .HVK body stays away from the stair foot with --heli-hvk-origin.
         --heli-escape: the helicopter of Last Call (kl_fa_hasta_heli.py) is the way out instead of the van; --heli-hvk-origin leaves its .HVK placement at the origin (HELI4's choice).
         --floor-late=N: the four stair-side squads wake N s after the crew steps on the stair's top (one-shot delay node) instead of at once; see FLOOR_LATE. Default off.
+        --rest-late=S: only the squad REST_KEEP of the plaza police is started by the stair's top; the other 3 squads (8 men) are started S s later by a one-shot delay; see REST_LATE. Default off. Not with --floor-late.
         --lock-show (with --lock-wing): the beat also plays the campaign's bunker blast (dust / fire / smoke emitters, remains, barrels gone); see LOCK_SHOW.
         F07 + M11_B --campaign with Doors armed AND this module as the authored layer -> <out>/F07+M11_B campaign; finish(),
         check(). kl_fa_hasta.py `build` runs this, then lighten, wardrobe, compact (the MEASURED order, tooling 3.5).
@@ -494,6 +495,15 @@ FLOOR_LATE = None                       # seconds ('--floor-late=N'): the four s
 # GUESS: N = 20 s (the crew is about 10 s from the top of the stair to the nests' arc; a live A/B at 10 / 20 / 30 is wanted). GUESS: a one-shot TriggerDelay2 wakes the squads' entries the way
 # kl_fa_bank's plaza-late does (untested on Hasta). The delay node is F07's own RivalMercVan!TimerVanGo (TriggerDelay2, absent from the Hasta build today, named only by the monitor's list that wire() rewrites).
 FLOOR_DELAY = FF + 'RivalMercVan!TimerVanGo'
+REST_LATE = None                        # seconds ('--rest-late=S'): of the 4 plaza police squads only REST_KEEP is started by the stair's top (Way#01); the other 3 (8 men) are started by Way#02 S s AFTER the crew steps into the floor box
+                                        # (a one-shot TriggerDelay2 naming Way#02) instead of at the 300 s backstop. None = off, the build is byte-identical to a build without the flag
+REST_KEEP = ('ExitStreet_Left',)        # GUESS (as kl_fa_hasta_police.KEEP_DEFAULT): the squad farthest from the pad (23 m west) with the fewest men (2) is the one that stays on Way#01
+# REST_LATE (re/hasta_police.md): build 3a186c93 (kl_fa_hasta_police.py) started only 2 of the 10 plaza police and the chopper survived (L73); the other 8 never start. This flag starts them later instead.
+# It reuses the SAME spare node as FLOOR_LATE (F07's RivalMercVan!TimerVanGo, a one-shot TriggerDelay2), so the two flags exclude each other. The delay is named only by the floor box and names only Way#02;
+# Way#02 is no longer named by the backstop (GUESS: the backstop's only job for the police was the same start, and the delay replaces it; if the crew never reaches the stair's top the 8 men never start).
+# GUESS: S. A first value of 120 s; then set it to (measured call-to-lift-off after the stair's top) + 5 s. GUESS: a TriggerDelay2 naming a GatePath box starts its squads as the floor box and the backstop do (both name the Ways today).
+# GUESS: a squad with active flag 0 is hidden until its start entry fires (re/hasta_police.md s2, a code reading), so before S the 8 men are not in the world.
+# RISKS (GUESS): a slow crew still meets awake police at lift-off; the late squad could kill the human while boarding instead of the heli.
 HELI_HIDE = False                       # '--heli-hide' (with --heli-escape): the chopper group is hidden from the load, shown by the 'van on' ActivateGeom the escape call triggers (the monitor's list 4); False = as before
 HELI_HVK_ORIGIN = False                # '--heli-hvk-origin' (with --heli-escape): the chopper's .HVK placement stays at the donor's pose (the origin, as in stock M06_FA_A)
 NO_PLAN = 'kl_fa_hasta_layer: the van has no plan: build with \'kl_fa_hasta_layer.py test <out>\' or kl_fa_hasta_layer.build()'
@@ -642,7 +652,7 @@ def police():
 
 def __getattr__(name):
     if name == 'KEEP':
-        return tuple(x for x in _KEEP if not (HELI and x == VAN)) + tuple(x for x in police() if x not in _KEEP) + (HB.KEEP if BLAST_AT is not None else ()) + ((COUNTER,) if LOCK_WING else ()) + ((FLOOR_DELAY,) if FLOOR_LATE is not None else ())
+        return tuple(x for x in _KEEP if not (HELI and x == VAN)) + tuple(x for x in police() if x not in _KEEP) + (HB.KEEP if BLAST_AT is not None else ()) + ((COUNTER,) if LOCK_WING else ()) + ((FLOOR_DELAY,) if FLOOR_LATE is not None or REST_LATE is not None else ())
     raise AttributeError(name)
 
 
@@ -933,6 +943,14 @@ BLAST = ('NOT BUILT: the design\'s opening blast at the Capitol corner has no ob
          'tank shell is a T72 group. A blast needs kl_fa_blast-style objects (ShakeCamera + a Dog Days particle template) hung on the start timer: a later step.')
 
 
+def rest_keep(arrive):
+    """-> the ARRIVE_START entries of `arrive` that stay on Way#01 (REST_KEEP substrings, in `arrive` order). Some but not all squads, and every substring must name one."""
+    out = [e for e in arrive if any(s_ in e for s_ in REST_KEEP)]
+    if any(not any(s_ in e for e in arrive) for s_ in REST_KEEP) or not out or len(out) == len(arrive):
+        raise ValueError('kl_fa_hasta_layer: REST_KEEP %r keeps %d of %d police squads (some but not all wanted)' % (REST_KEEP, len(out), len(arrive)))
+    return out
+
+
 def wire(sc, log=print):
     """Every reference of the layer that names a node of the map, and the layer's own chain. sc: the joined scene."""
     node = lambda n: A.node_of(sc, n)
@@ -970,17 +988,25 @@ def wire(sc, log=print):
     ways = must([R + ROLE['gate'] + '\\' + w for w in GATE_WAYS])
     if not kl_fa.has(sc, node(ROLE['gate']), 'GateGroup') or any(not kl_fa.has(sc, sc.resolve(w)[0], 'GatePath') for w in ways):
         raise ValueError('%s is not a GateGroup with the two GatePath %s' % (ROLE['gate'], GATE_WAYS))
-    for w in ways:
-        put_(sc.resolve(w)[0], 'GatePath', f0=arrive)
+    if REST_LATE is None:
+        for w in ways:
+            put_(sc.resolve(w)[0], 'GatePath', f0=arrive)
+    else:       # REST_LATE: Way#01 starts REST_KEEP at the stair's top, Way#02 the other squads when the delay (below) fires
+        kept = rest_keep(arrive)
+        put_(sc.resolve(ways[0])[0], 'GatePath', f0=kept)
+        put_(sc.resolve(ways[1])[0], 'GatePath', f0=[e for e in arrive if e not in kept])
     lists('start timer', 'TriggerDelay2', f0=START_AT, f4=stage['start'])
     lists('walk box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['walk'])
     # the stair's top: the street squads, the alarm (the van's timer) and the gate (the police on the square)
-    if FLOOR_LATE is None:
+    if REST_LATE is not None:
+        put_(node(FLOOR_DELAY), 'TriggerDelay2', f0=REST_LATE, f4=[ways[1]])
+        lists('floor box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['floor'] + [R + ROLE['van timer'], ways[0], R + FLOOR_DELAY])
+    elif FLOOR_LATE is None:
         lists('floor box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['floor'] + [R + ROLE['van timer'], ways[0]])
     else:       # FLOOR_LATE: the box starts the alarm and the gate at once, the four stair squads through a one-shot delay of N s
         put_(node(FLOOR_DELAY), 'TriggerDelay2', f0=FLOOR_LATE, f4=stage['floor'])
         lists('floor box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=[R + FLOOR_DELAY, R + ROLE['van timer'], ways[0]])
-    lists('backstop', 'TriggerDelay2', f0=BACKSTOP_AT, f4=[ways[1], R + ROLE['van timer']] + ([R + n for n in beat_fires()] if LOCK_WING else []))
+    lists('backstop', 'TriggerDelay2', f0=BACKSTOP_AT, f4=([] if REST_LATE is not None else [ways[1]]) + [R + ROLE['van timer']] + ([R + n for n in beat_fires()] if LOCK_WING else []))
     # HELI: the chopper is in the world from the load (unlike Last Call, which hides it behind an unhide wire; a visible body at its HVK placement near the stair foot is the live-run risk), so the alarm shows / the reset hides nothing: empty lists. GUESS: an empty list is a valid ActivateGeom / DeactivateGeom
     # HELI_HIDE: the chopper is hidden from the load; 'van on' shows it when the escape call posts AITrigger to the monitor's list 4 (0x6276e0, event 1, right after the vehicle is called); the alarm timer no longer shows it
     shown = not HELI or HELI_HIDE
@@ -993,7 +1019,7 @@ def wire(sc, log=print):
             raise ValueError('kl_fa_hasta_layer: HELI_HIDE: %d OnlineEscVehicleMonitor (1 wanted)' % len(mons))
         put_(mons[0], kl_fa.MONITOR, f4=[R + ROLE['van on']])
     k = node(ROLE['monitor'])
-    mine = {R + v for v in ROLE.values()} | ({R + FLOOR_DELAY} if FLOOR_LATE is not None else set())
+    mine = {R + v for v in ROLE.values()} | ({R + FLOOR_DELAY} if FLOOR_LATE is not None or REST_LATE is not None else set())
     have = [s for s in values(sc, k, 'AIMonitor')[2] if sc.resolve(s) and s not in mine]
     lists('monitor', 'AIMonitor', f2=[R + ROLE['reset hide']] + have + [R + ROLE['start timer'], R + ROLE['backstop']])
     lists('speak box', 'TriggerBox', f14='ECPS_FA_MERCONLY', f17=[R + ROLE['speak']])
@@ -1444,7 +1470,25 @@ def check(folder, log=print, problems=None):
             r_ = kl_route.route(lvl, [a_, b_], hidden=False)
             if not r_['free']:
                 fail('CORNER_FLOOR: no walk %s -> %s with hidden collision left out' % (a_, b_))
-    if sc.resolve(R + FLOOR_DELAY):         # a level built with --floor-late (read from the folder, not from the flag): the delay holds the stair squads, the box names the delay
+    _fd = sc.resolve(R + FLOOR_DELAY)
+    _w1, _w2 = (R + ROLE['gate'] + '\\' + w_ for w_ in GATE_WAYS)
+    if _fd and [x_.lower() for x_ in values(sc, _fd[0], 'TriggerDelay2')[4]] == [_w2.lower()]:
+        # a level built with --rest-late (read from the folder): the delay names Way#02 alone, the floor box names the delay + Way#01, nobody else names Way#02 or the delay
+        node = lambda n_: A.node_of(sc, n_)
+        dv = values(sc, _fd[0], 'TriggerDelay2')
+        if not dv[0] > 0 or dv[2] >= 0:
+            fail('rest delay: %r s, re-arm %r - a one-shot of > 0 s is wanted' % (dv[0], dv[2]))
+        g1, g2 = (values(sc, sc.resolve(w_)[0], 'GatePath')[0] for w_ in (_w1, _w2))
+        every = [R + n + '\\' + ARRIVE_START for n in ARRIVE_XZ]
+        if sorted(g1 + g2) != sorted(every) or not g1 or not g2:
+            fail('rest delay: Way#01 %r + Way#02 %r are not the %d police squads split in two' % (g1, g2, len(every)))
+        for s_, want_ in ((_w2, [_fd[0]]), (R + FLOOR_DELAY, [node(ROLE['floor box'])])):
+            owners_ = sorted({k_ for k_ in range(1, len(sc.nodes)) for _h, _f, u in J.fields(sc, k_) for x_ in J.strings(sc, u) if x_.lower() == s_.lower()})
+            if owners_ != want_:
+                fail('rest delay: %s is named by %r - wanted %r alone' % (s_[len(R):], [sc.path[k_] for k_ in owners_], [sc.path[k_] for k_ in want_]))
+        if _w1.lower() not in {s_.lower() for s_ in values(sc, node(ROLE['floor box']), 'TriggerBox')[17]}:
+            fail('rest delay: the floor box does not name Way#01')
+    elif _fd:         # a level built with --floor-late (read from the folder, not from the flag): the delay holds the stair squads, the box names the delay
         node = lambda n_: A.node_of(sc, n_)
         fl = node(FLOOR_DELAY)
         want = sorted(squad_plan()[0][n][0] for n in SQUADS if SQUADS[n][0] == 'floor')
@@ -1474,6 +1518,8 @@ def flags_of():
         f['CORNER_FLOOR'] = True
     if FLOOR_LATE is not None:
         f['FLOOR_LATE'] = FLOOR_LATE
+    if REST_LATE is not None:
+        f['REST_LATE'] = REST_LATE
     if LOCK_WING:
         f['LOCK_WING'] = True
     if LOCK_SHOW:
@@ -1512,7 +1558,7 @@ def load_plan(folder):
 
 
 def main():
-    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, BLAST_AT, LOCK_WING, LOCK_SHOW, CORNER_FLOOR, FLOOR_LATE, HELI, HELI_HVK_ORIGIN, HELI_HIDE
+    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, BLAST_AT, LOCK_WING, LOCK_SHOW, CORNER_FLOOR, FLOOR_LATE, REST_LATE, HELI, HELI_HVK_ORIGIN, HELI_HIDE
     a = sys.argv[1:]
     if a[:1] == ['proof']:
         sys.exit(proof(a[1] if len(a) > 1 and not a[1].startswith('--') else 'C:/kl_scratch/hasta', '--keep' in a))
@@ -1524,6 +1570,9 @@ def main():
         LOCK_SHOW = '--lock-show' in a
         CORNER_FLOOR = '--corner-floor' in a
         FLOOR_LATE = next((float(x.split('=', 1)[1]) for x in a if x.startswith('--floor-late=')), None)
+        REST_LATE = next((float(x.split('=', 1)[1]) for x in a if x.startswith('--rest-late=')), None)
+        if REST_LATE is not None and (FLOOR_LATE is not None or not POLICE_ARRIVE or NO_AI or not 1.0 <= REST_LATE <= 600.0):
+            sys.exit('--rest-late=S needs S of 1 .. 600 s, the police squads, and no --floor-late (both reuse the TimerVanGo node)')
         HELI = '--heli-escape' in a
         HELI_HVK_ORIGIN = '--heli-hvk-origin' in a
         HELI_HIDE = '--heli-hide' in a
