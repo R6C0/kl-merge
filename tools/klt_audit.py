@@ -2,7 +2,10 @@
 r"""
 klt_audit.py - KLTalk audit of an owner install (read only).
 
-    python tools/klt_audit.py C:\kl_build_1018\owner_1018 [--json out.json]
+    python tools/klt_audit.py C:\kl_build_1018\owner_1018 [--json out.json] [--percar]
+
+--percar: a Who=Any pool's keys are per-character (the hook appends _C1.._C8): count the key present when all eight exist
+with a sound. Without it those keys are reported missing (false alarm: DM01 pool 9 etc.). Default output unchanged.
 
 Per map folder (Maps\<map>, *.replaced-* skipped): reads KLTalk.ini pools and the archive's English .LOC
 and reports pools whose keys are missing from the .LOC (KLTalk resolves each key in the level's own .LOC,
@@ -47,7 +50,7 @@ def english(zp):
     return {p.lower(): (kl_loc.fields(k)[2] or 0) for p, k in kl_loc.leaves(kl_loc.parse(d))}
 
 
-def audit_map(folder):
+def audit_map(folder, percar=False):
     zps = [f for f in os.listdir(folder) if f.lower().endswith('_main.zip')]
     r = {'zip': zps[0] if zps else None}
     if not zps:
@@ -65,7 +68,14 @@ def audit_map(folder):
     miss, nosnd = [], []
     for p in ps:
         for k in p['keys']:
-            if k.lower() not in leaves:
+            if percar and p['Who'] == 'Any' and k.lower() not in leaves:
+                # Who=Any keys are PER-CHARACTER: the hook appends _C<n> (kl_fa_talk.POOLS, pools()); resolve every n 1..8
+                gone = [n for n in range(1, 9) if k.lower() + '_c%d' % n not in leaves]
+                if gone:
+                    miss.append((p['n'], p['On'], k + ' (no _C%s)' % ',_C'.join(map(str, gone))))
+                elif not all(leaves[k.lower() + '_c%d' % n] for n in range(1, 9)):
+                    nosnd.append((p['n'], p['On'], k))
+            elif k.lower() not in leaves:
                 miss.append((p['n'], p['On'], k))
             elif not leaves[k.lower()]:
                 nosnd.append((p['n'], p['On'], k))
@@ -80,13 +90,13 @@ def audit_map(folder):
     return r
 
 
-def main(owner):
+def main(owner, percar=False):
     md = os.path.join(owner, 'Maps')
     res = {}
     for m in sorted(os.listdir(md)):
         f = os.path.join(md, m)
         if os.path.isdir(f) and '.replaced-' not in m:
-            res[m] = audit_map(f)
+            res[m] = audit_map(f, percar)
     return res
 
 
@@ -94,7 +104,7 @@ if __name__ == '__main__':
     a = [x for x in sys.argv[1:] if not x.startswith('--')]
     if not a:
         print(__doc__); sys.exit(2)
-    res = main(a[0])
+    res = main(a[0], '--percar' in sys.argv)
     print('%-8s %-14s %5s %4s %4s  %-4s %-7s %-5s  LOC(AllDead/Shoot/Fed/FedKill)' % ('map', 'zip', 'pools', 'miss', 'nosn', 'Fed', 'AllDead', 'Shoot'))
     for m, r in res.items():
         if 'error' in r:
