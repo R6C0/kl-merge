@@ -30,6 +30,10 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   harmless here. CrewRouteHopHold not needed. Fix for the false orders staged as (m): hook out_e5_1018zk WalkAwayGoal=8 (71865807).
 - DECISION: keep late110 and let 3f's queue (g) pick B/C/D; or say "cut" to switch to vault_e9 (UNKNOWN md5 in the folders; ask 3f).
   L85's all-7 result came with CrewRouteHold=45 at work; WalkAwayReorder added nothing, so do not adopt it.
+- RUN L86 (3f (e), ~23:31, + BoardReachRepeat=3 / Chase=1 / Sent=6000): PASS, ALL 7 AI escaped, 0 dead. CrewRouteHopHold fired for the first
+  time (+15 s) and got the last 2 bots aboard: CrewRouteHopHold=15 is a CANDIDATE for the Vault. The chase took 12 s longer and its orders kept
+  the bot's own height (BoardReachAim, live 80): sent to floors below the van. Fix staged as (n): hook out_e5_1018zl BoardReachAimHeight=3
+  (7ebc5c79), ini vault_wag\PT_DM03A_wrh.ini 458a5c99. Do not adopt the chase keys before (n).
 
 ### Last Call, DM05A [page 3 F01]
 - LIVE: df719d34 + KLJoin dfc29f60 (the "sa" build: EnterVehicle field 9 empty, per 07:10).
