@@ -134,3 +134,39 @@ as a global hash input. Test order: single machine, log only (create a lobby, re
 - **Table fixes:** 0x86b148 is a `mov` before GetLobbyData (call at 0x86b166), not a filter site. Missing row: 0x749f00 (+0x2c GetLobbyByIndex); the count of 25 stands.
 - **JoinLobby recording is unneeded:** the `GetLobbyOwner` override receives the lobby id as its argument, and return address 0x6299da identifies the join-completion caller.
 - **Thread:** the mask calls (0x634b90, 0x845640) and the Steam polls run only when the tick's `game_thread` flag is true (klhook.c line 669). A ship build must not run game code from its own thread (klslot.c).
+
+## 11. klhook/klbuild.c (written 2026-10-18; NOT in any build, NOT RUN in the game)
+
+Include-style module (prefix `klbld_`; `klb_` is taken by klbot.c). Default off: `[Build] Check=0` makes `klbld_tick` return at once
+(one ini read, no patch, no hook, no write, no thread, no log). Keys: `Check`, `Hold`, `Full`, `NoKeyBlocks` (header of the file).
+
+**What 3f adds to klhook.c (two lines):** `#include "klbuild.c"` right after `#include "klslot.c"` (~line 660), and
+`klbld_tick(game_thread);` right after `kls_tick();` in `klh_tick` (~line 750). No DllMain line: the first game-thread tick runs `klbld_init`
+(the game re-reads the import slot on every call, section 2, so a late wrap misses nothing). No build.bat change.
+
+**Design as built.** One wrapper on import slot `steam_api.SteamMatchmaking` (own 36-slot ISteamMatchmaking008 table, 33 naked tail jumps,
+overrides 14 LeaveLobby, 19 SetLobbyData, 34 GetLobbyOwner; same 008 test as klmm.c). Host = the caller of SetLobbyData key `name`;
+joiner = GetLobbyOwner whose return address is 0x6299da (section 10). Every machine publishes member data `klx_fp` =
+`P=<8hex>;F01=<8hex|->;...;F09=...`, where `Fn` is the member-CRC print (first 8 hex) of the file the ACTIVE redirect rule resolves to
+(`kls_find_rule(slot, kls_page_now())`, page-0 fallback, as `kls_map`), `-` = no rule = stock. The host also sets lobby data `klx`, `klx_slots`
+(same string) and `klx_code` (full build code). A slot differs when the tokens differ (`-` vs token counts); a differing Patch01 print marks every slot that has a rule on
+either side. Members without `klx_fp` count as stock after 3 s. Hold: clear exactly the differing slots' bits in this machine's client mask
+(`0x634b90` read, `0x845640(client+0xb8, mask & ~bits)` write, client = `[session+0x98]`), re-pushed each game-thread tick while held, true mask restored when the set
+empties or the lobby is left. Stock slots are `-` on both sides, so stock Subway is never held.
+
+**Hash parity with tools/kl_buildprint.py.** The same algorithm is re-implemented (BLAKE2b-128, zip print, map hard hash, normalised ini text, redirect table, code =
+first 8 hex of the BLAKE2b over `dll/ini/patch01/redirect` lines plus `<folder>=<hard>` per active map), so the offline code and the in-hook code CAN be identical.
+Measured out of tree: BLAKE2b-128 of "abc", 300 x "a" and "" equal Python's hashlib; `klbld_zip_print` of the live Patch01.zip equals `kl_buildprint.zip_print`
+(30fbc6988bff956910f4690fc1cadf63). The full code (ini/dll/redirect/map composition) was NOT compared end to end: that needs the module running (its `build: code` line vs
+`python tools/kl_buildprint.py`). Strict mode (KLJoin.ini / KLTalk.ini soft hashes) is not implemented.
+
+**Compile.** build.bat's flags (`cl /nologo /O2 /LD /W3 /D_CRT_SECURE_NO_WARNINGS`), a scratch copy of klhook.c with the two lines: 0 warnings, 0 errors; outputs deleted.
+
+**Open GUESSes.**
+1. Non-ASCII zip member names: Python decodes non-UTF-8-flagged names as cp437, this file hashes raw bytes; the file logs a count and a GUESS line when any occur.
+2. No level zip is zip64 (the print then falls back to a whole-file hash here; not checked against the tool's fallback).
+3. ini parsing edge cases (Latin-1 lower-casing beyond A-Z, more than 256 sections) are not identical to Python.
+4. A member without `klx_fp` after 3 s is a stock client (3 s is a guess); a host without keys is only a warning unless `NoKeyBlocks=1`.
+5. Whether pushing the reduced mask through 0x845640 each tick is enough to make the gate (0x6c4cf5..0x6c4d8c) refuse, and whether the server side re-reads it:
+   from static reading only. The 12-client loop bound and the 008 stack sizes (ret counts) are from klmm.c / disassembly, not from a live call.
+6. RequestLobbyData (slot 27) argument shape (lobby id only, ret 8) is taken from klmm.c's header, not re-disassembled.
