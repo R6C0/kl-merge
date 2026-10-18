@@ -90,7 +90,7 @@ Only Last Call ran: L76, 0 crew dead or down, 6 of 7, "no measurable difference"
 - klbuild.c (lobby build check): source only, in no build, stays out until you OK stage 4 (per 15:35). Build code for private matches: live = 6755CC0C (tools/kl_buildprint.py).
 
 ## 5. Open items that need you
-- PUSH: `git push origin rtp-schemas:main`. Checked: HEAD is 48 commits ahead of origin/main; every note since 10-18 asks for it.
+- PUSH: `git push origin rtp-schemas:main`. Checked: HEAD is 50 commits ahead of origin/main (49 before this fact-check commit); every note since 10-18 asks for it.
 - DISK: C: 2.7 GB free (checked; 931 G drive 100 %), G: 11 GB. C:\kl_build_1018 is 49 GB, owner_1018 9.4 GB. 3f's installer needs copy + 2 GB and refused at 2.1 GB (per 11:05).
 - REPLACED-* CLEANUP: 15 folders `C:\kl_build_1018\owner_1018\Maps\*.replaced-*` (rollbacks: DM01B 1018doors/1018flatback/fedv2, DM03A e9late/e9late110,
   DM05A 1018roof/1018sa, DM06B 1018nvhback, DM09 1018dm09r, DM11B 1018back/back2, DM01/DM02/DM06 1018audit, DM03 1018audit3). 3f deleted 34 duplicates before
