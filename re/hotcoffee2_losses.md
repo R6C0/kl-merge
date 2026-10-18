@@ -65,3 +65,6 @@ Both keys are read by klhook/klmove.c (BoardReachFlat, VanCallNear fields). Poin
 not expected to change the death count (see above); do not read a drop as proof. Compare crew dead on the DM01B round
 against L70/L71 (3 and 2 dead). Pair with live zip ea8cbc82 (not re-checked).
 No KLJoin.ini change is needed, so nothing is staged under C:\kl_build_1018\hc2_next.
+
+Next (2026-10-18): 3f's opt-in [Balance] LogCrewHits=1 (2f17dc43, TEST hook out_3f_1018d 3f073ebb, re/crew_hits.md) logs each crew health drop
+with the soldiers targeting the victim; queued as 3f run (j) on live DM01B. Read its 'NO TARGETER' / DIED lines at the diner first.
