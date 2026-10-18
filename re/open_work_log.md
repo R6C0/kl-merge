@@ -1,3 +1,15 @@
+2026-10-18 23:34 - OFFLINE (kl-merge-e5; 3f runs the live queue, item (f) Park loot6):
+- 3f's Vault runs L85 and L86: all 7 escaped both times.
+  - L85: all 10 WalkAwayReorder orders were redundant.
+  - L86: BoardReachAim keeps the bot's own height.
+- New opt-in klmove keys, default 0 = unchanged, none run in the game yet:
+  - CrewRouteFed (hook zj 40fe1088), Retomoto, for when the human turns fed;
+  - WalkAwayGoal and WalkAwayHeight (hook zk f527b044);
+  - BoardReachAimHeight (hook zl 5c466e85).
+  Queued for 3f as (l) and (n).
+- Retomoto leaderless KLJoin 0b557e40 is queued as (k). Candidates for the owner are in re/adopt_list.md.
+- Workflow w2320ln0e: census of the BoardReachAim off-floor orders per map, written to re/reach_aim_census.md.
+Owner: git push origin rtp-schemas (14 ahead) and git push origin rtp-schemas:main.
 2026-10-18 22:35 - OFFLINE (kl-merge-e5; owner idle 3.8 h, so 3f was told its live queue can resume):
 - A kl2.exe from 14/10 (pid 48664, 700 KB) is still listed: looks like a zombie, left to 3f.
 - Workflow w4ihof82z: Retomoto leaderless crew. Why the bots stall after the human turns fed (FedSkip, hops, GIVE UP), plus an opt-in fix:

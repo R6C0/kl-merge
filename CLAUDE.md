@@ -188,6 +188,18 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-18 23:34 - OFFLINE (kl-merge-e5; 3f runs the live queue, item (f) Park loot6):
+- 3f's Vault runs L85 and L86: all 7 escaped both times.
+  - L85: all 10 WalkAwayReorder orders were redundant.
+  - L86: BoardReachAim keeps the bot's own height.
+- New opt-in klmove keys, default 0 = unchanged, none run in the game yet:
+  - CrewRouteFed (hook zj 40fe1088), Retomoto, for when the human turns fed;
+  - WalkAwayGoal and WalkAwayHeight (hook zk f527b044);
+  - BoardReachAimHeight (hook zl 5c466e85).
+  Queued for 3f as (l) and (n).
+- Retomoto leaderless KLJoin 0b557e40 is queued as (k). Candidates for the owner are in re/adopt_list.md.
+- Workflow w2320ln0e: census of the BoardReachAim off-floor orders per map, written to re/reach_aim_census.md.
+Owner: git push origin rtp-schemas (14 ahead) and git push origin rtp-schemas:main.
 2026-10-18 22:35 - OFFLINE (kl-merge-e5; owner idle 3.8 h, so 3f was told its live queue can resume):
 - A kl2.exe from 14/10 (pid 48664, 700 KB) is still listed: looks like a zombie, left to 3f.
 - Workflow w4ihof82z: Retomoto leaderless crew. Why the bots stall after the human turns fed (FedSkip, hops, GIVE UP), plus an opt-in fix:
@@ -202,13 +214,6 @@ Owner: git push origin rtp-schemas (5 ahead) and git push origin rtp-schemas:mai
   - 2b: hook 1018zh. Wait for 3f run (h) first.
 - No new workflow: every list item waits on 3f's queue ((a) L82 rerun ... (j) LogCrewHits) or on the owner's calls.
 Owner: git push origin rtp-schemas (4 ahead) and git push origin rtp-schemas:main.
-2026-10-18 20:34 - OFFLINE (kl-merge-e5; the owner is back, so 3f's live runs are paused):
-- Hot Coffee II crew losses (re/hotcoffee2_losses.md ad68f61d, logs only):
-  - All 5 L70/L71 deaths were at the diner or between the diner and the donut.
-  - The killer is not identified: no point-blank step and no down before any death.
-  - Next is 3f's opt-in [Balance] LogCrewHits (2f17dc43, TEST hook out_3f_1018d 3f073ebb), queued as run (j).
-- Workflow wo8s2xb7c writes per-decision ADOPT/UNDO .bat scripts (md5-checked, for the owner to run) in C:\kl_build_1018\adopt_1018: Hasta police 3a186c93 and the Last Call L78 set.
-Owner: git push origin rtp-schemas (1 ahead, 3f pushed the rest) and git push origin rtp-schemas:main (72 ahead). Disk C: 11 GB free.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
