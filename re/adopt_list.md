@@ -105,3 +105,20 @@ Only Last Call ran: L76, 0 crew dead or down, 6 of 7, "no measurable difference"
 1 Last Call: adopt the L78 set (zip 5b0a025b + KLJoin ea0446c1 + hook 1018y + six [Bots] keys). 2 Hasta: swap in police build 3a186c93.
 3 Park II: adopt loot6 3386b972 after run (f). 4 Vault: keep late110 or pick B/C/D after (g). 5 Retomoto: wait for queue (b)/(c).
 6 Hook keys: PointBlankToYou=20.0, WalkExclusive=1, VanCallNear=40 each yes/no. 7 Cops rtcops on five maps yes/no. 8 Push, disk, find.exe, replaced-*.
+
+## 7. L78 keys on other maps (static reading of klhook/klmove.c; nothing here was run on those maps)
+- Live hook a57d9ce7 (md5 249ab16a) was built at ed4322fb (11:50 note). `git diff ed4322fb 442a014d -- klhook` = klmove.c only, +77/-9: VanCallNear f3eb8d3d,
+  VanCallLast + CrewRouteHopHold 51582eaf/ac127935, BoardReachSent 442a014d (= 1018y). Every key is default 0 = old behaviour, so the hook alone changes nothing; the ini keys do.
+  BoardReachRepeat/Chase (1763efea, 604fc16e) are already in the live hook. The hook (klmove) acts only in Arcade, on a map that is not the stock one of its slot.
+- Stock Dog Days FA maps DD01-DD09 (page 0): no effect of any key (klmove's own gate). Nothing to check there.
+- VanCallNear=40 / VanCallLast=1: call heist stage 3 on stage-1/2 loyal bots (40 m, +-4 m height; Last: any distance) once per bot, after VanCallDelay.
+  FollowOut=1 (live) already gives stage 3 at the van call, so they never fired in L74/L75/L78. Only L71 (Hot Coffee II, no FollowOut effect first): 2 bots called 17 m out, both boarded.
+  Risk: GUESS a stage-1 bot near the van drops loot for the van; a van map where FollowOut does not call (Vault, Park II, Retomoto) is the case to watch. A heli (Hasta) is read the same (veh 3/4): GUESS, never run.
+- CrewRouteHopHold=15: once per visit +15 s to CrewRouteHold (45 s live) if a stage-3 bot closed 1 m in within 15 s; needs CrewRouteHold, human aboard. Worst case van waits 60 s.
+  Only matters where klhop hops exist (Last Call; Retomoto has [CrewHop]). Elsewhere it only adds time while a bot still closes in. Low risk; costs the human waiting.
+- BoardReachSent=6000: a called bot up to 60 m from the boarding box (was 30) gets the order to the doors (klescort order, once per visit). Not for a held escort or a traitor.
+  Risk: it overrides what a bot does mid-fight 60 m out, and a walk over a wall-split route may be longer than the van waits. No effect on the round's last vehicle or from visit 3 on (BoardReachVisits=3: boxes work as stock, `have` false, loop returns). GUESS: so Sent's gain in L78 came before the last vehicle or from the hop; L78 had the combined route too.
+- BoardReachRepeat=5 / Chase=1: the order may go again 5 s after the last, and a bot in an escape box beyond BoardReach needs no 1 s stand-still; Chase re-sends a bot that walks off. Evidence: DM02 L18 (Repeat=3+Flat) 5 of the crew out vs 2 in L16, 1 in L14. Risk: fights the game's own chain (re-order every 5 s up to 60 m, bots may stutter); klescort's OrderGap debounce is the only brake. FollowOut-held escorts are skipped.
+- HalfGuard (default 0, not in L78) and klescort do not interact with these keys; klhop-walked bots are skipped by WalkAwayReorder/Restless only when WalkExclusive=1 (off live), so Repeat/Chase can order a bot klhop is walking: GUESS, Last Call only has hops.
+- Live check before global adoption: Vault DM03A (sealed ante-room, Sent+Repeat), Hot Coffee II DM01B (VanCallNear already L71 PASS; add Repeat/Sent), Park II DM06B, Retomoto DM09 (hops + WalkExclusive question), Hasta DM11B (heli: all keys GUESS). DM01/02/03/06 equal DM02's L18 case for Repeat only; Sent and VanCall untested there.
+- Safe option: adopt the keys per map (maps.ini / test ini) for Last Call only, and leave them out of the global ini until each van map has one run.
