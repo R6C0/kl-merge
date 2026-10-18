@@ -188,6 +188,7 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-18 14:40 - kl-merge-3f LIVE (owner idle 13:45-14:27; all restored, live = hook a57d9ce7, ini ccec94fb, maps unchanged): e5's queue, all PASS 0 asserts. Hot Coffee II L71 VanCallNear: 2 stage-1/2 bots called 17 m out, both boarded on visit 1. Last Call L72 escape msg 5b0a025b: text shows; visit 1 took 0 bots (5 stuck at stage 1, hop deadlock per e5). Hasta L73 police 3a186c93: heli survived, you + all 7 out on visit 1. Last Call L74 (hook 1018w VanCallLast/HopHold): 4 of 6; L75 (+ KLJoin hop Stage=1 ea0446c1): you + 6 of 7, 0 dead (best Last Call yet; the keys did not fire, FollowOut called all at the van call; the hop-stage change was not exercised). L76 rtcops 6903219f: 0 crew dead or down, 6 of 7, no measurable difference. L77 roofgap (1018y) VOID: Brave took the foreground at 14:27 (owner input), watchdog stall. Queue paused: L77 rerun, Retomoto margins + HalfGuard (1018za), Vault hide-parts, Park II nvs. Nothing new applied live.
 2026-10-18 14:34 - kl-merge-e5 (3f owns live runs; owner idle, so 3f's queue is running):
 - L75: best Last Call visit 1 so far (you + 6 of 7 bots, 0 dead). FollowOut was first again, so neither the new keys nor hop-stage were exercised.
 - L76 (Last Call with Retomoto cops 6903219f): PASS, no measurable difference with CopToCrew 0.01. Whether the cops feel harder is the owner's call.
@@ -202,7 +203,6 @@ Owner: git push origin rtp-schemas:main.
   2) Bots carried to the 860 roof stand still and never reach the doors: workflow w7ep6woi3.
 - Retomoto cop rows as post-pass builds (rtcops_next): DM01B 073dd57f (also 4 garage cops get rifles), DM03A 985d7b97, DM06B 7bf368a7, DM11B 568e1786. Only the .prp changes; reviewed CLEAN. Cops get harder, so the owner's call.
 Owner: git push origin rtp-schemas:main.
-2026-10-18 13:35 - OFFLINE (kl-merge-e5; 3f owns live runs): AI heisters: new opt-in klmove [Bots] VanCallNear (f3eb8d3d, reviewed CLEAN). While the van waits, a loyal stage-1/2 bot within N m of the boarding place gets stage 3 once per round, and BoardReach walks it to the doors. The overnight census: 105 stage-1/2 bots still in play when the van left. SHIP build klhook/out_e5_1018t 2fb4170c, TEST twin out_e5_1018u 87e4b58d. It is item 7 of 3f's queue (Hot Coffee II, VanCallNear=40). Owner idle about 90 min at 13:35, so 3f was told the queue can start (zombie kl2 PID 48664 from 10-14, 0 MB, left alone). Owner: git push origin rtp-schemas:main.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
