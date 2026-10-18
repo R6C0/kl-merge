@@ -22,6 +22,13 @@ WHAT IT DOES (reads <DD> only; writes only inside --owner)
      the md5 now in <DD>\KLExpansion\Maps\<map>\<file> (or 'absent') + the old manifest's before list and old md5 for that file
      (so a machine in the previous owner_1018 state still passes the installer's before-md5 guard). The old manifest is saved as
      Install.manifest.json.bak-<tag>. Files the old entry had that the new folder lacks simply drop out.
+  5. KL*.ini Entries (klini_audit.py): the hook ignores KLGuns.ini [Guns] Entries= / KLJoin.ini [FedBody] Entries= that differ from the
+     loaded .prm's chunk count (dword +4 of the .prm), so every swap now rewrites a stale Entries to the staged zip's count (only when
+     the old folder's .prm shows the chunk indices unchanged: same size for every old index, i.e. chunks were only appended; else it
+     refuses) and fails on a KLWardrobe.ini Root at or past the count. A step that appends chunks AFTER the guns build (the fed body)
+     used to leave KLGuns.ini one build behind; this cannot recur silently.
+  --fix-ini repairs ONLY the KL*.ini of --map in place (no --staged; the zip is not touched): rewrites Entries, refreshes the
+     manifest entries (size/md5/sha1, before = md5 in <DD> + old before list + old md5), saves Install.manifest.json.bak-<tag>.
 Nothing is installed in the game folder; run install_owner_1018.ps1 -DryRun afterwards.
 """
 import argparse, hashlib, json, os, re, shutil, subprocess, sys, tempfile
@@ -60,6 +67,110 @@ def loc_missing(zpath, keys):
     return [k for k in keys if k.encode('latin1') not in data]
 
 
+# ---------------------------------------------------------------- KL*.ini Entries (see klini_audit.py)
+INI_ENTRIES = {'KLGuns.ini': 'Guns', 'KLJoin.ini': 'FedBody'}
+
+
+def prm_chunks(zpath, table=False):
+    """-> chunk count (dword +4 of the archive's .prm); table=True -> (count, [size of every chunk]) (table = count x [ofs,size,ref,0] at the file's end)"""
+    import struct, zipfile
+    with zipfile.ZipFile(zpath) as z:
+        nm = [n for n in z.namelist() if n.lower().endswith('.prm')]
+        if not nm:
+            raise SystemExit('FAIL: %s has no .prm' % zpath)
+        if not table:
+            with z.open(nm[0]) as f:
+                return struct.unpack_from('<I', f.read(8), 4)[0]
+        d = z.read(nm[0])
+    to, n = struct.unpack_from('<2I', d)
+    return n, [struct.unpack_from('<I', d, to + 16 * i + 4)[0] for i in range(n)]
+
+
+def append_only(old_zip, new_zip):
+    """True when every chunk index of the old .prm has the same size in the new one and the new one has at least as many
+    (GUESS: same size = same chunk; a changed byte inside, e.g. a remapped texture id, keeps the index)."""
+    n0, s0 = prm_chunks(old_zip, True)
+    n1, s1 = prm_chunks(new_zip, True)
+    return n1 >= n0 and s1[:n0] == s0
+
+
+def section_span(text, sec):
+    m = re.search(r'(?mi)^\[%s\][^\n]*\n' % re.escape(sec), text)
+    if not m:
+        return None
+    e = re.search(r'(?m)^\[', text[m.end():])
+    return m.end(), m.end() + e.start() if e else len(text)
+
+
+def fix_entries(name, text, count, old_zip=None, new_zip=None, allow=False):
+    """-> (new text, note). KLGuns.ini [Guns] / KLJoin.ini [FedBody] Entries= -> count. Refuses (SystemExit) when Entries was for a
+    different chunk table and the old archive does not show the indices unchanged, unless allow. KLWardrobe.ini: only checks Root < count."""
+    if name == 'KLWardrobe.ini':
+        roots = [int(x) for x in re.findall(r'(?m)^Root=(\d+)', text)]
+        bad = [r for r in roots if r >= count]
+        if bad:
+            raise SystemExit('FAIL: KLWardrobe.ini has %d Root(s) >= the .prm chunk count %d (%s)' % (len(bad), count, bad[:5]))
+        return text, 'wardrobe Roots below %d' % count
+    sec = INI_ENTRIES.get(name)
+    if not sec:
+        return text, ''
+    span = section_span(text, sec)
+    if not span:
+        return text, 'no [%s] section' % sec
+    body = text[span[0]:span[1]]
+    m = re.search(r'(?m)^Entries=(\d+)', body)
+    have = int(m.group(1)) if m else None
+    if have == count:
+        return text, 'Entries=%d OK' % count
+    if have is not None and not allow:
+        if not (old_zip and os.path.isfile(old_zip) and append_only(old_zip, new_zip)):
+            raise SystemExit('FAIL: %s [%s] Entries=%d but the .prm has %d chunks, and the chunk indices are not shown to be unchanged '
+                             '(no old archive, or a size differs): build the file again with its tool (kl_map_guns / kl_fa_fedbody apply)' % (name, sec, have, count))
+    if m:
+        body = body[:m.start()] + 'Entries=%d' % count + body[m.end():]
+    else:
+        nl = '\r\n' if '\r\n' in text else '\n'
+        body = body.rstrip('\r\n') + nl + 'Entries=%d' % count + nl
+    return text[:span[0]] + body + text[span[1]:], 'Entries %s -> %d' % (have, count)
+
+
+def fix_ini_in_place(owner, mid, game, tag):
+    maps = os.path.join(owner, 'Maps'); folder = os.path.join(maps, mid)
+    mf = os.path.join(owner, 'Install.manifest.json'); man = json.load(open(mf))
+    zs = [n for n in os.listdir(folder) if re.match(r'^F\d\d_Main\.zip$', n, re.I)]
+    if len(zs) != 1:
+        raise SystemExit('need one *_Main.zip in ' + folder)
+    zp = os.path.join(folder, zs[0]); count = prm_chunks(zp)
+    old_zip = None
+    for d in sorted((d for d in os.listdir(maps) if d.startswith(mid + '.replaced-')), key=lambda d: os.path.getmtime(os.path.join(maps, d)), reverse=True):
+        c = os.path.join(maps, d, zs[0])
+        if os.path.isfile(c):
+            old_zip = c; break
+    changed = []
+    for n in ('KLGuns.ini', 'KLJoin.ini', 'KLWardrobe.ini'):
+        p = os.path.join(folder, n)
+        if not os.path.isfile(p):
+            continue
+        t = open(p, 'rb').read().decode('latin1')
+        t2, note = fix_entries(n, t, count, old_zip, zp)
+        print('%s %-15s %s' % (mid, n, note))
+        if t2 != t:
+            open(p, 'wb').write(t2.encode('latin1')); changed.append(n)
+    if not changed:
+        print('nothing to fix'); return
+    old = {f['name']: f for f in man['files'] if f['map'] == mid}
+    for n in changed:
+        md5, sha1 = hashes(os.path.join(folder, n))
+        e = old[n]
+        inst = os.path.join(game, 'KLExpansion', 'Maps', mid, n)
+        before = set(e['before']); before.add(e['md5'])
+        before.add(hashes(inst)[0] if os.path.isfile(inst) else 'absent')
+        e.update(size=os.path.getsize(os.path.join(folder, n)), md5=md5, sha1=sha1, before=sorted(before))
+    shutil.copyfile(mf, mf + '.bak-' + tag)
+    json.dump(man, open(mf + '.new', 'w'), indent=1); os.replace(mf + '.new', mf)
+    print('fixed %s; manifest updated (backup %s)' % (', '.join(changed), mf + '.bak-' + tag))
+
+
 def add_fed(text, src_text, zpath=None):
     if re.search(r'(?m)^On=FedKill\s*$', text):
         return text, 0
@@ -87,12 +198,16 @@ def add_fed(text, src_text, zpath=None):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--owner', required=True); ap.add_argument('--map', required=True); ap.add_argument('--staged', required=True)
+    ap.add_argument('--owner', required=True); ap.add_argument('--map', required=True); ap.add_argument('--staged'); ap.add_argument('--fix-ini', action='store_true')
     ap.add_argument('--md5'); ap.add_argument('--tag', default='swap'); ap.add_argument('--game', default=DD)
     ap.add_argument('--gunpics', choices=['check', 'apply', 'off'], default='apply')
     ap.add_argument('--talk-fed-from'); ap.add_argument('--delete-old', action='store_true'); ap.add_argument('--dry-run', action='store_true')
     a = ap.parse_args()
     mid, owner, staged = a.map, a.owner, a.staged
+    if a.fix_ini:
+        fix_ini_in_place(owner, mid, a.game, a.tag); return
+    if not staged:
+        raise SystemExit('--staged is required (or --fix-ini)')
     if os.path.normcase(os.path.abspath(owner)).startswith(os.path.normcase(os.path.abspath(a.game))):
         raise SystemExit('--owner must not be inside the game folder')
     maps = os.path.join(owner, 'Maps')
@@ -148,8 +263,18 @@ def main():
     build = os.path.join(tmpd, 'new')
     os.makedirs(build)
     files = {}
+    old_zip = os.path.join(old_dir, zname)
     for n in names:
         shutil.copyfile(final_zip if n == zname else os.path.join(staged, n), os.path.join(build, n))
+    count = prm_chunks(final_zip)
+    for n in ('KLGuns.ini', 'KLJoin.ini', 'KLWardrobe.ini'):
+        bp = os.path.join(build, n)
+        if os.path.isfile(bp):
+            t = open(bp, 'rb').read().decode('latin1')
+            t2, note = fix_entries(n, t, count, old_zip, final_zip)
+            print('%s: %s' % (n, note))
+            if t2 != t:
+                open(bp, 'wb').write(t2.encode('latin1'))
     if talk_src:
         t = open(os.path.join(staged, talk_src), 'rb').read().decode('latin1')
         if a.talk_fed_from:
