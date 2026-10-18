@@ -4251,6 +4251,8 @@ def wave_fallback(src, dst=None, log=print, target=None):
         raise ValueError('wave_fallback: the nearest link %s falls at event + %.0f s in the worst case (> %.0f)' % (nm, worst, WAVE_FALLBACK_MAX))
     gk, gv = td('Go_' + nm)
     want = [cl + 'Pace_B01', cl + 'Pace_D01']
+    if o.get('van_nests') == 'off':           # VAN_NESTS 'off' (van_nests() below): chain D stays out of the fallback too. Without the option this line changes nothing
+        want = want[:1]
     changed = []
     add = [x for x in want if x not in gv[4]]
     if add:
@@ -4272,6 +4274,91 @@ def wave_fallback(src, dst=None, log=print, target=None):
         json.dump(d, f, indent=1)
     log('kl_fa_bank.wave_fallback %s: %s (worst case event + %.1f s, target %.0f s, GUESS)' % (folder, '; '.join(changed) or 'nothing to change', worst, target))
     return {'go': cl + 'Go_' + nm, 'worst_s': worst, 'changed': changed}
+
+
+# VAN_NESTS ('van-nests <src> <dst> off|keep=N'; a .prp-values-only post-step; bank_opts.json 'van_nests'; default: not run, the output of every other step is unchanged).
+# Live run L19 (vault_e7, 2026-10-18 04:14..04:19): only the player escaped; the four loyal bots, called to the van at the boarding place (627, 822, -11233),
+# went down and died 9..27 m from it. The 'nests' that stand in stacks of 3 at (-1500..-1600, 700, -9380..-9480) and (2100..2200, 700, -9420..-9480) are the ENTRY
+# places of chain D (E_RECESS_L / E_RECESS_R): Gameplay!bank_waves!Wave_D01..D08 / Wave_Dnn_0m / Ground, 3 men a wave, ZSquadScript parked until Go_Dnn names the wave's
+# 10_Defend. Chain D starts from the plaza box (tbExitFinancialAlley, list 17: the crew's exit from the hall) 3 s after it fires, then one wave every 25 s, and
+# (wave_fallback) from Go_A04 at the round clock's ~255 s. The census of L19 shows D01 leaving its nest 3 s after the box and D02 25 s later, both walking
+# (-1560, -9440) -> (67, -10921) / (595, 800, -8948): onto the route of the crew's walk to the van; D05..D08 still sat at their nests at the end (dormant:
+# they never shot). The stock street squads (5_Lobby / COOP, slots 9051..9152, also at the recess) were already dead by then (census 04:18:27: 0 of 20).
+# Positions of entities cannot be moved by values alone (the .gms record and .prp ZGEOM are kept equal), so the static, values-only answer is to not start the
+# chain, or to start fewer waves: 'off' = no Pace_D01 in the plaza box's list and none in the fallback's Go node (the stock street squads the box starts are untouched);
+# 'keep=N' = the first N waves (3 men each) only: Go_DN no longer names Pace_D(N+1). GUESS: that nothing else starts a Wave_D*; that fewer waves is what the van phase needs.
+# A run-time answer (switch the nests off once the van is called) needs a node the .prp has no form for: not done.
+VAN_NESTS = None
+
+
+def van_nests(src, dst=None, mode='off', log=print):
+    """Chain D (the plaza police waves D01..D08 that stand at the street recess) in a finished waves build: mode 'off' = never started, 'keep=N' = only the first N
+    waves (N >= 1). dst: the folder to build (a copy of src with ONE member changed: the .prp); None = in place. Writes bank_opts.json 'van_nests'. A second run changes nothing.
+    -> {'mode': ..., 'changed': [..]}"""
+    import json, shutil, kl_fa_bots as F
+    if mode != 'off' and not (isinstance(mode, str) and mode.startswith('keep=') and mode[5:].isdigit() and int(mode[5:]) >= 1):
+        raise ValueError("van_nests: mode is 'off' or 'keep=N' (N >= 1), not %r" % (mode,))
+    if dst:
+        if os.path.exists(dst):
+            raise ValueError('van_nests: %s exists' % dst)
+        shutil.copytree(src, dst)
+    folder = dst or src
+    o = read_opts(folder)
+    if not o.get('waves'):
+        raise ValueError('van_nests: %s has no waves build (bank_opts.json waves)' % folder)
+    B = F.Built(folder, os.path.basename(archive_of(folder)).split('_Main')[0])
+    Jn = B.sc                    # edited in place, as wave_fallback does
+    cl = R + CLOCK + '\\'
+    links = 0
+    while Jn.resolve(cl + 'Go_D%02d' % (links + 1)) and Jn.resolve(cl + 'Pace_D%02d' % (links + 1)):
+        links += 1
+    if not links:
+        raise ValueError('van_nests: no chain-D link in %s' % folder)
+    keep = 0 if mode == 'off' else int(mode[5:])
+    if keep >= links:
+        raise ValueError('van_nests: keep=%d of %d waves is not a cut' % (keep, links))
+    changed = []
+    def cut(k, cname, field, name):
+        for kk, i, v in kl_fa.controllers(Jn, cname):
+            if kk == k and name in v[field]:
+                kl_fa.edit(Jn, k, i, lambda us: A.setv(Jn, us, field, [x for x in v[field] if x != name]))
+                changed.append('%s no longer names %s' % (Jn.path[k][5:], name.rsplit('\\', 1)[-1]))
+    if keep == 0:
+        first = cl + 'Pace_D01'
+        box = Jn.resolve(R + PLAZA_BOX)
+        if not box:
+            raise ValueError('van_nests: %s is not in the level' % PLAZA_BOX)
+        cut(box[0], 'TriggerBox', 17, first)
+        for k, _i, _v in kl_fa.controllers(Jn, 'TriggerDelay2'):
+            if Jn.names[k].startswith('Go_') and not Jn.names[k].startswith('Go_D'):
+                cut(k, 'TriggerDelay2', 4, first)
+    else:
+        cut(Jn.resolve(cl + 'Go_D%02d' % keep)[0], 'TriggerDelay2', 4, cl + 'Pace_D%02d' % (keep + 1))
+    left = []                    # nothing else may start a chain-D wave
+    for cname, field in (('TriggerBox', 17), ('TriggerDelay2', 4)):
+        for k, _i, v in kl_fa.controllers(Jn, cname):
+            if not Jn.names[k].startswith(('Go_D', 'Pace_D')):
+                left += [(Jn.path[k][5:], x) for x in v[field] if '\\Pace_D' in x or '\\Wave_D' in x]
+    if keep == 0 and left:
+        raise ValueError('van_nests: still named from outside the chain: %s' % left)
+    if changed:
+        prp = Jn.p.serialize()
+        back = F.Prp(prp)
+        if back.serialize() != prp or len(back.nodes()) != len(Jn.nodes):
+            raise ValueError('the new .prp does not round-trip')
+        new = dict(B.files)
+        new[B.ext['.prp']] = prp
+        tmp = B.zp + '.tmp'
+        kl_graft.write_zip(tmp, [(n, new[n]) for n in B.order])
+        os.replace(tmp, B.zp)
+    fp = os.path.join(folder, OPTS_FILE)
+    d = json.load(open(fp)) if os.path.isfile(fp) else {}
+    d['van_nests'] = mode
+    with open(fp, 'w') as f:
+        json.dump(d, f, indent=1)
+    log('kl_fa_bank.van_nests %s: %s (chain D: %d waves of 3 men; %s)' % (folder, '; '.join(changed) or 'nothing to change', links,
+        'none starts' if keep == 0 else 'the first %d start' % keep))
+    return {'mode': mode, 'changed': changed}
 
 
 def crew_check(folder, log=print):
@@ -5745,6 +5832,10 @@ def waves_check(folder, log=print):
             if first and w['phase'] in ('B', 'D') and o.get('wave_fallback'):      # WAVE_FALLBACK: the chain-A link's Go also names the first Pace of B and D
                 want_pace = sorted(want_pace + [node(o['wave_fallback']['go'])])
                 tb = sorted(tb)
+            if o.get('van_nests') and w['phase'] == 'D':                  # VAN_NESTS: the cut link is named by nobody (off: the first). Without the option this block is not entered
+                _kn = 0 if o['van_nests'] == 'off' else int(o['van_nests'][5:])
+                if chains['D'].index(w) == _kn:
+                    want_pace = []
             for e_, q_ in w['men']:                                       # the walk from the entry to the post keeps 15 m from the START rows
                 dd_ = min(seg_dist(r, e_, q_) for r in START)
                 if dd_ < START_CLEAR:
@@ -5780,6 +5871,8 @@ def waves_check(folder, log=print):
                     fail('chain %s: wave %s is stored at +%g s, the gaps add up to +%g s' % (ph, w['name'], w['delay'], t))
                 go_ = node(w['go'])
                 nxt_ = ch[i_ + 1] if i_ + 1 < len(ch) else None
+                if ph == 'D' and o.get('van_nests') and o['van_nests'] != 'off' and i_ + 1 == int(o['van_nests'][5:]):
+                    nxt_ = None                                       # VAN_NESTS keep=N: the chain ends here, by design
                 # reachable from Go: Pace of the next link and nothing else of the chain
                 names_ = [x for s_ in values(sc, go_, 'TriggerDelay2')[4] for x in sc.resolve(s_)] if go_ else []
                 tim_ = [x for x in names_ if sc.cls(x) == 'ZBoxPrimitive' and x != node(w['squad'] + '\\10_Defend')]
@@ -6069,6 +6162,8 @@ def main():
         vault_blow(a[1])
     elif len(a) in (2, 3) and a[0] == 'wave-fallback':      # <src> [<dst>]: waves B and D also from the round clock (WAVE_FALLBACK)
         wave_fallback(a[1], a[2] if len(a) == 3 else None)
+    elif len(a) == 4 and a[0] == 'van-nests':                # <src> <dst> off|keep=N: chain D (the street recess police) not started / cut after N waves (VAN_NESTS)
+        van_nests(a[1], a[2], a[3])
     elif len(a) == 3 and a[0] == 'extras':
         extras(a[1], a[2])
     elif len(a) == 2 and a[0] == 'waves-check':
