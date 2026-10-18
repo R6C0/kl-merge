@@ -59,7 +59,7 @@ klbuild.c:705-722, table 893-905). It rides the same wrapper, so MapSync needs `
 | rule loader (folder must exist, plain names) | `kls_rules` (klslot.c:510-540) |
 | "am I online" | `kl_online()` (klhook.c:255-) |
 | tick that cannot call Steam during a load | `klh_tick` switches to the fallback thread while the main loop stands still (klhook.c:741-744) -> the table must be CACHED before the load; no Steam call from `kls_map` (it runs inside CreateFile wrappers, klslot.c:320-336) |
-| build code, offline | `tools/kl_buildprint.py` (compute :184, compare :256), in-hook twin `klbld_full_*` (klbuild.c:511-580) |
+| build code, offline | `tools/kl_buildprint.py` (compute :184, compare :256), in-hook twin `klbld_full_*` (klbuild.c:511-580, `klbld_full_thread` / `klbld_full_start`) |
 
 ## 4. The design
 
@@ -78,7 +78,7 @@ hash of the adopted table>` (joiner), or `-` when it could not adopt.
 
 * New key `[MapSync] HostPage=-1` (default -1 = unchanged: whatever `kls_page_now()` says). `0..9` = the page whose `[Redirect.N]` table
   the host publishes AND uses for its own load. Implementation sketch (not written): `kls_page_now()` (klslot.c:212) returns
-  HostPage while `kls_online_host` is set. This makes the stage-0 `[Expansion] Page=N` unnecessary and does not touch the offline path.
+  HostPage while a NEW flag `kls_online_host` is set (it does not exist yet; it would come from klbuild.c's `klbld_lobby == klbld_host_lobby` test, klbuild.c:686). This makes the stage-0 `[Expansion] Page=N` unnecessary and does not touch the offline path.
 * v1 has no in-lobby map-page UI: the page is a host ini value. A selector inside FALobby needs a menu change (`re/menus.md`, the nine
   slot entries are fixed, TO FIND: the widget behind `MP_SelectedLevel`, key `0xb6d6e4`, buildcheck 5.5). GUESS that it is not worth
   it before the ini route is proven.
@@ -89,10 +89,16 @@ hash of the adopted table>` (joiner), or `-` when it could not adopt.
 * The joiner tick (klbuild.c:815-853) is extended: next to `klx_slots` it reads `klx_maps` (same `RequestLobbyData` retry, same
   `klbld_joiner_tries`) and, when the string is well formed (folder names pass the `kls_plain` rule, klslot.c:483, `<=47` chars, `S=` present),
   stores it in a small table `kls_net_dir[9][48]` with a volatile `kls_net_seq` (written last).
-* `kls_map` is changed (proposed) at klslot.c:286-287: if `[MapSync]` is on, this machine is in a network session (`kl_online()`) and
-  `kls_net_seq != 0`, the rule for slot `s` is NOT `kls_find_rule(s, page)` but the rule whose `.slot` is `s` and `.map` equals
+* `kls_map` is changed (proposed) at klslot.c:279-287 (REVIEW 2026-10-18: the latch update at :279-283 must be bypassed too, else the
+  log line and `kls_slot[s].page` still carry the local page; the offline-only `kpm_override` at :280 stays untouched): if `[MapSync]`
+  is on and `kls_net_seq != 0` (that is the gate; do NOT also require `kl_online()` here: klhook.c:255-264 answers 0 until the session
+  object and rules object exist, and a false answer at the archive open would silently fall back to the local page; `kls_net_seq` is
+  cleared by `klbld_reset_lobby`/`LeaveLobby`, which is what keeps offline Arcade and stock rounds unchanged), the rule for slot `s` is NOT `kls_find_rule(s, page)` but the rule whose `.slot` is `s` and `.map` equals
   `kls_net_dir[s]` (case-blind, as klmm/klbuild compare), or "stock" when the entry is `-`. This is authoritative in both directions:
   a joiner whose own `[Redirect]` page 0 maps F01 to a Dead Men map still loads STOCK F01 when the host says `-`.
+* PREREQUISITE (REVIEW): `kls_on` is set only when `[Expansion] Enable=1` and the root is valid (klslot.c:547-586); with it off `kls_map`
+  answers 0 at its first line (:263), so a joiner with the expansion disabled cannot adopt anything. MapSync must log that, or require
+  the same ini. Slots are also limited to `KLS_SLOTS` 16 (klslot.c:156).
 * Rule lookup by folder needs a rule to exist. Rules are built only from the joiner's own ini (`kls_rules`, klslot.c:510-540, folder must
   exist at init: :521-522). If the joiner has the folder but no ini line for it, v1 adds a runtime rule: from the game-thread tick (not
   from `kls_map`) append to `kls_rule[]` (`KLS_RULES` 64, klslot.c:157; GUESS: lock-free append, bump `kls_nrules` last, is safe on x86 since
@@ -112,8 +118,8 @@ HOST (on a game-made private lobby; `[Net] PrivateLobby=1` is recommended, klmm.
 3. The host plays its own selector as today. The index is the game's.
 4. NEW: before the start gate lets the countdown run, require every member with the hook to carry `klx_ack` equal to the current
    `<seq>:<hash>` (poll at 500 ms, klbuild.c:789-811). A member whose ack is missing or different for longer than a grace (3 s,
-   klbuild.c:91) sets the bit of the slots that are non-stock in the table in `want`, so the existing mask hold stops the countdown
-   (klbuild.c:742-756). A member WITHOUT the hook counts as stock (klbuild.c:803-808): it differs on every non-stock slot, hold as
+   klbuild.c:91) sets the bit of the slots that are non-stock in the table in `want`, so the existing mask hold applies (klbuild.c:742-756). REVIEW: the hold clears bits in THIS machine's client mask only (:738); that it stops the
+   countdown is the GUESS of buildcheck 6/8, not shown. A member WITHOUT the hook counts as stock (klbuild.c:803-808): it differs on every non-stock slot, hold as
    today.
 5. The countdown then runs, the game loads `Locations/Fxx/Fxx_Main` on the host: `kls_map` picks the same table entry.
 
@@ -124,7 +130,7 @@ JOINER:
 3. Compare per slot with `klbld_diff`. A differing slot (file missing, other content, other Patch01) clears that slot's bit in the joiner's own
    mask (klbuild.c:742-756). The game then shows its own "missing content" text for a slot it thinks it does not own
    (`Online/MissingContentPackClient`, kl2 0x6c4bcd / 0x6c4e07, `re/netcode_fa.md` 1.2), which is the only player-visible message this design
-   relies on. The clear is the same trick that is already written; its effect on the HOST's gate (replicated `m_iAvailableLevels`) is a GUESS
+   relies on. The clear is the same trick that is already written (it clears the bit in the JOINER's own mask, klbuild.c:738; it reaches the host's gate only if `m_iAvailableLevels` is re-sent, section 7 item 2); its effect on the HOST's gate (replicated `m_iAvailableLevels`) is a GUESS
    (buildcheck 6, 8).
 4. When the host starts, `kls_map` serves the adopted table. No Steam call happens in `kls_map`.
 
@@ -137,13 +143,13 @@ JOINER:
   `follow` (default 0 = keep today's behaviour and log a warning; 1 = force stock for all nine slots, the safe choice for hook-vs-stock
   games; matches `NoKeyBlocks` in klbuild.c:29-30 in spirit).
 * A stock-client joiner to a hooked host: nothing to adopt; klbuild's existing rule counts it as stock (klbuild.c:803-808) and the host
-  holds the start on any non-stock slot, never on a stock one (klbuild.c:42, 155).
+  holds the start on any non-stock slot, never on a stock one (klbuild.c:40-43 for the token rule, :803-808 and :647-648 for the stock-client case; the earlier cite `:155` was a hash-constant line).
 
 ## 5. Failure cases
 
 | case | detection | reaction |
 |---|---|---|
-| joiner lacks the host's map folder | its `kls_net_dir[s]` has no folder / `klbld_rule_token` = `MISSING` (klbuild.c:592) | log `mapsync: slot F0n: map <dir> not installed`; clear the slot bit (own mask hold); `klx_ack=-` so the host holds. Do NOT let `Fallback=1` (klslot.c:296-297) quietly use the stock file: under MapSync an announced slot with no file is `Fallback=0` (the open fails) in case the hold failed. GUESS: a failed open of the archive ends in a crash or a stuck load; hence the primary defence is the hold |
+| joiner lacks the host's map folder | its `kls_net_dir[s]` has no folder. REVIEW: no rule is made then, and `klbld_rule_token(-1)` returns `-` (klbuild.c:587), the STOCK print, not `MISSING` (that string only appears for an existing rule whose zip vanished, :592). The new code must publish an explicit `MISSING` / `klx_ack=-` for that slot, else only the diff against the host's non-stock token flags it | log `mapsync: slot F0n: map <dir> not installed`; clear the slot bit (own mask hold); `klx_ack=-` so the host holds. Do NOT let `Fallback=1` (klslot.c:296-297) quietly use the stock file: under MapSync an announced slot with no file is `Fallback=0` (the open fails) in case the hold failed. GUESS: a failed open of the archive ends in a crash or a stuck load; hence the primary defence is the hold |
 | joiner has the folder, other build / content | `klx_slots` token differs (klbuild.c:639-651); full code differs (klbuild.c:829-833, log only) | hold the slot (as above); log with the three codes (offline: `kl_buildprint.py --compare`) |
 | other Patch01.zip | `P=` token (klbuild.c:596-603) | every slot with a rule on either side differs (klbuild.c:645-648) |
 | joiner without the hook | no `klx_fp`/`klx_ack` after the grace (klbuild.c:803) | host holds non-stock slots; joiner sees only the game's own text, if any (GUESS) |
@@ -207,7 +213,7 @@ Reading rule: `Enable` read once at init (as klbuild.c:886-890), absent = 0. Not
 ## 9. Unproven (GUESS), in one list
 
 * That role/mode detection (`kl_online()`) is true in the lobby window before the rules object exists; klhook.c answers 0 until then, so MapSync's
-  joiner path must test "lobby seen", not `kl_online()`, to adopt early (klhook.c:263 comment in the audit, section 1).
+  joiner path must test "lobby seen", not `kl_online()`, to adopt early (klhook.c:250-264, comment and code; `re/hook_netcode_audit.md` s1).
 * That the first `GetLobbyData` after join returns the host's keys (else retried, klbuild.c:843-847).
 * That a runtime append to `kls_rule[]` is safe against a concurrent `kls_map` on a loader thread.
 * That clearing a slot bit stops the host's countdown and shows a useful message (buildcheck 6, 8).
