@@ -83,6 +83,8 @@ what only a live run can settle: re/bank_campaign.md. Nothing here installs anyt
     python kl_fa_bank.py extras <folder> <out>            the finishing chain's step that adds the waves, the reset and the
                                                           late van's show (flags: bank_opts.json beside the archive); after
                                                           hall-dash, before seal
+    python kl_fa_bank.py van-target <folder> <out>        the van's stock FakeTarget back on a finished van_late build (a .prp-only step; bank_opts
+                                                          van_no_target false; the same as a rebuild with --no-van-target-off)
     python kl_fa_bank.py waves-check <folder>             sight, posts, gating, reset coverage and the van, on a folder the
                                                           step has been through (check() runs it too)
       THE ROOM GATES (2026-10-12, after run W4; re/bank_campaign.md 'Gates, after run W4'; no flag = every build before, byte for byte):
@@ -4548,6 +4550,62 @@ def van_quiet(src, dst=None, groups='top', log=print):
     return {'groups': want, 'changed': changed}
 
 
+# VAN_TARGET ('van-target <src> <dst>'; a .prp-only post-step; bank_opts.json 'van_no_target' = false; default: not run, every other build is unchanged).
+# Puts the van's FakeTarget (the controller VAN_LATE's VAN_NO_TARGET took off) back on a FINISHED van_late build, whose earlier steps cannot be re-run
+# (the same as a rebuild with '--no-van-target-off'). Why: on the Park, the Vault and Hot Coffee escape visit 1 never boards ([rules+0x1e4] = 0) and the one
+# level-data difference to the maps whose van works is this missing target. GUESS: that the target matters at all (no code path from FakeTarget to
+# [rules+0x1e0] is known); the police may shoot the waiting van again (the reason VAN_NO_TARGET was made).
+def van_target(src, dst=None, log=print):
+    """Restores the stock FakeTarget controller of the van's body in a finished van_late build (copy of src into dst, ONE member changed: the .prp;
+    dst None = in place). The controller is the stock Dog Days F07 one, at its stock place in the node's controller list. A second run changes nothing.
+    -> {'changed': [..]}"""
+    import json, shutil, kl_fa_bots as F
+    if dst:
+        if os.path.exists(dst):
+            raise ValueError('van_target: %s exists' % dst)
+        shutil.copytree(src, dst)
+    folder = dst or src
+    o = read_opts(folder)
+    if not o.get('van_late'):
+        raise ValueError('van_target: %s is no van_late build (bank_opts.json van_late)' % folder)
+    stock, _snd, _loc = kl_fa.load('F07')
+    vgs = A.node_of(stock, R + VAN + '\\' + VAN_GROUP)
+    hits = [(k, i) for k in range(vgs, stock.end[vgs]) for i, c in enumerate(stock.nodes[k]['ctrls']) if stock.p.key(c[0]) == 'FakeTarget']
+    if len(hits) != 1:
+        raise ValueError('van_target: stock F07 has %d FakeTarget in the van group (1 wanted)' % len(hits))
+    ks, i_ = hits[0]
+    B = F.Built(folder, os.path.basename(archive_of(folder)).split('_Main')[0])
+    sc = B.sc
+    k = A.node_of(sc, stock.path[ks])
+    if any(sc.p.key(c[0]) == 'FakeTarget' for c in sc.nodes[k]['ctrls']):
+        changed = []
+    else:
+        def conv(t):                              # string (0x0c) and enum (0x0e) tokens hold an index of the file's own key table
+            return (t[0], struct.pack('<I', sc.p.key_index(stock.p.key(t)))) if t[0] in (0x0c, 0x0e) else t
+        name, body = stock.nodes[ks]['ctrls'][i_]
+        sc.nodes[k]['ctrls'].insert(min(i_, len(sc.nodes[k]['ctrls'])), (conv(name), [conv(t) for t in body]))
+        changed = ['%s gets its FakeTarget back (controller %d of %d)' % (sc.path[k][5:], i_, len(sc.nodes[k]['ctrls']))]
+        prp = sc.p.serialize()
+        back = F.Prp(prp)
+        if back.serialize() != prp or len(back.nodes()) != len(sc.nodes):
+            raise ValueError('the new .prp does not round-trip')
+        new = dict(B.files)
+        new[B.ext['.prp']] = prp
+        tmp = B.zp + '.tmp'
+        kl_graft.write_zip(tmp, [(n, new[n]) for n in B.order])
+        os.replace(tmp, B.zp)
+    fp = os.path.join(folder, OPTS_FILE)
+    d = json.load(open(fp)) if os.path.isfile(fp) else {}
+    d['van_no_target'] = False
+    with open(fp, 'w') as f:
+        json.dump(d, f, indent=1)
+    if changed:
+        with open(os.path.join(folder, 'graft.txt'), 'a') as f:
+            f.write('kl_fa_bank.van_target: the van\'s stock FakeTarget restored (van_no_target false)\n')
+    log('kl_fa_bank.van_target %s: %s' % (folder, '; '.join(changed) or 'nothing to change'))
+    return {'changed': changed}
+
+
 def crew_check(folder, log=print):
     """A folder with the AI heisters' squads (with or without the dynamic step) -> [faults]: no place of a heister
     squad within CREW_CLEAR of where a squad of the hall or the plaza stands or goes - a man's start, a cover
@@ -6369,6 +6427,8 @@ def main():
         van_nests(a[1], a[2], a[3])
     elif len(a) == 4 and a[0] == 'van-quiet':                # <src> <dst> <plaza,waveb,wavea4,exit>|top [+ ',plaza-late[=N s]': the plaza squads start N s after the plaza box]: unlink more van-route police from their starters (VAN_QUIET)
         van_quiet(a[1], a[2], a[3])
+    elif len(a) == 3 and a[0] == 'van-target':               # <src> <dst>: the van's stock FakeTarget back on a finished van_late build (VAN_TARGET; same as --no-van-target-off)
+        van_target(a[1], a[2])
     elif len(a) >= 3 and a[0] == 'cops':                    # <src> <dst> [--same-part] [--strength-only|--chains-only]: Retomoto's police pattern (kl_map_ai.cops_style) on a finished vault build; .prp-only, off unless asked
         import kl_map_ai
         kl_map_ai.cops_style(a[1], a[2], strength_only='--strength-only' in a[3:], same_part='--same-part' in a[3:], chains_only='--chains-only' in a[3:])

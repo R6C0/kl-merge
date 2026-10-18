@@ -337,6 +337,7 @@ static struct {
     DWORD reach_repeat;          /* [Bots] BoardReachRepeat (2026-10-18, 3f's DM02 run L14: orders to the doors were overridden by the game's chain within 4-14 s and never sent again; bots in an escape box 2.5-3.1 m off never stood the 1 s): ms after an order to the doors before it may be sent again while the vehicle waits, and a bot in an escape box beyond BoardReach is sent without the stand-still test; 0 = off (default, old behaviour) */
     int skip_down;                 /* [Bots] RestlessSkipDowned (2026-10-18, 3f saw bot 4 ordered while down at 02:09:14): a downed bot gets no order, snap or hop from klmv_restless and its counters stand still; 0 = off (default, old behaviour) */
     DWORD snap_range, snap_human; int snap, snap_cap;      /* RestlessSnap (2026-10-18, audit E2.2): after N orders to one place that did not bring the bot there, the bot is put at its chain's place; 0 = off */
+    int escprobe, escfix;          /* [Bots] EscVisitProbe / EscVisitFix (2026-10-18, visit 1 never boards on Park II / Vault / Hot Coffee II): 1 = on, 0 = off (default) */
     int probe;                     /* [Bots] BoardProbe (2026-10-18, L34/L35 human E presses do not board): 1 = every 500 ms while the escape vehicle state is 3/4/5 one 'boardprobe:' line, read-only; 0 = off (default) */
     DWORD botvan;                  /* BotVan (section 7, v78): ms a loyal AI heister has had stage 3 with no vehicle before the hook calls one; 0 = off */
     /* [Bots] StairGather (2026-10-18, census of four Hasta runs, F04 / DM11B): the crew survives the 'nest' men of the stair squads only when 5-6 bots
@@ -377,6 +378,7 @@ static struct {
     int rc_visit, rc_told; DWORD rc_wait_at;      /* BoardReach: the visit the boarding box was read for, its line said, when this wait began */
     int last_done, last_told;                     /* LastVehicle (section 6): 1 = looked at (called or found nothing to do) this round; the 2 s line said */
     DWORD bv_since, bv_last, bv_trig, bv_veh; int bv_told, bv_calls, flag_told;      /* BotVan (section 7) */
+    int ev_have, ev_visit, ev_fixed; DWORD ev_st, ev_e0, ev_e4, ev_h;      /* EscVisitProbe / EscVisitFix: what was last seen, the visit of state 1/2 (counted here), the fix made on it */
     DWORD g_at, g_first; int g_done;      /* StairGather: last pass, when the first bot was held (0 = none held), 1 = released this round (never again until the next round) */
 } klmv_r;
 
@@ -1509,6 +1511,38 @@ static void klmv_probe(const struct klb_snap *s, DWORD now)
          (int)veh, klb_finite(tm) ? tm : -1.0f, sess, e0, e4, idx, st == 0xff ? -1 : (int)st, player, b23 == 0xff ? -1 : (int)b23, got ? "" : "?", hp[0], hp[1], hp[2]);
 }
 
+/* EscVisitProbe / EscVisitFix (default off, 2026-10-18). Facts read in kl2.exe: the exit trigger (0x6c3d50) -> rules slot 44 (0x6cd8e0) -> 0x8154f0 stores the
+   vehicle handle at [[rules+0x5f8]+0x5c] and calls slot 194 (0x8fa6d0, thiscall, one stack arg, ret 4) with the state; slot 194 sets [rules+0x1dc] = state, for state 0
+   clears [rules+0x1e0], else calls slot 89 (vtable +0x164, 0x49d170: [rules+0x1e4] = resolve(handle) and 1e0) ONLY while [rules+0x1e0] == 0 (0x8fa705). State 1 with
+   [rules+0x1e4] == 0 skips the drive-in (0x8fa76e). On Park II, Vault and Hot Coffee II visit 1 shows 1e4 = 0 and the van never comes; visit 2 works.
+   GUESS (mechanism of the fix): on those maps [rules+0x1e0] is already non-zero when visit 1's state 1 begins, so slot 89 is skipped. The probe logs the four
+   values on every change (also the first sight of the round) to show whether that is so; the fix clears 1e0 and runs slot 194 again with the same state, once per visit. */
+static void klmv_escvisit(const struct klb_snap *s, DWORD now)
+{
+    static const BYTE head[8] = { 0x83, 0xec, 0x24, 0x53, 0x55, 0x56, 0x8b, 0xf1 };      /* 0x8fa6d0 */
+    DWORD rules = s->rules, st = 0, e0, e4, hp, h, vt, slot; BYTE b = 0xff; int changed;
+    if (!rules || klh_rd32(rules) != KLB_RULES_VT || !klh_rd(rules + 0x1dc, &b, 1)) return;
+    st = b; e0 = klh_rd32(rules + 0x1e0); e4 = klh_rd32(rules + 0x1e4);
+    hp = klh_rd32(rules + 0x5f8); h = hp ? klh_rd32(hp + 0x5c) : 0;
+    changed = !klmv_r.ev_have || st != klmv_r.ev_st || e0 != klmv_r.ev_e0 || e4 != klmv_r.ev_e4 || h != klmv_r.ev_h;
+    if ((st == 1 || st == 2) && klmv_r.ev_st != 1 && klmv_r.ev_st != 2) { klmv_r.ev_visit++; klmv_r.ev_fixed = 0; }
+    if (klmv.escprobe && changed)
+        klog("escprobe: %s%u ms: state %u (was %d) 1e0 %08lx (was %08lx) 1e4 %08lx (was %08lx) handle %08lx (was %08lx) visit %d",
+             klmv_r.ev_have ? "" : "round start, ", now, st, klmv_r.ev_have ? (int)klmv_r.ev_st : -1, e0, klmv_r.ev_have ? klmv_r.ev_e0 : 0, e4, klmv_r.ev_have ? klmv_r.ev_e4 : 0,
+             h, klmv_r.ev_have ? klmv_r.ev_h : 0, klmv_r.ev_visit);
+    klmv_r.ev_have = 1; klmv_r.ev_st = st; klmv_r.ev_e0 = e0; klmv_r.ev_e4 = e4; klmv_r.ev_h = h;
+    if (!klmv.escfix || (st != 1 && st != 2) || e4 || !h || klmv_r.ev_fixed) return;
+    vt = klh_rd32(rules); slot = klh_rd32(vt + 0x308);
+    if (!vt || !slot || !klb_same_code(0x008fa6d0, head, sizeof head) || slot != 0x008fa6d0) { klmv_r.ev_fixed = 1; klog("escfix: visit %d: state %u, 1e4 0, handle %08lx, but rules slot 194 (%08lx) is not 0x8fa6d0 as this build knows: nothing done", klmv_r.ev_visit, st, h, slot); return; }
+    klmv_r.ev_fixed = 1;
+    if (klmv.dry) { klog("escfix: visit %d: DRY RUN - state %u, 1e0 %08lx, 1e4 0, handle %08lx: 1e0 WOULD be cleared and slot 194(%u) re-run", klmv_r.ev_visit, st, e0, h, st); return; }
+    *(DWORD *)(DWORD_PTR)(rules + 0x1e0) = 0;      /* GUESS: slot 194 calls slot 89 only while this is 0 (0x8fa705); the re-run also repeats state 1/2's 0x709ba0(0) call and inc [rules+0x1ed] (no reader of +0x1ed found) */
+    ((void (__fastcall *)(void *, void *, DWORD))(DWORD_PTR)slot)((void *)(DWORD_PTR)rules, 0, st);      /* thiscall, one stack argument, ret 4 (0x8fb072) */
+    klmv_r.ev_e0 = klh_rd32(rules + 0x1e0); klmv_r.ev_e4 = klh_rd32(rules + 0x1e4);
+    b = 0xff; klh_rd(rules + 0x1dc, &b, 1); klmv_r.ev_st = b;
+    klog("escfix: visit %d re-run state %u: 1e0 %08lx -> 0, 1e4 now %08lx (1e0 now %08lx, state now %u, handle %08lx; GUESS mechanism)", klmv_r.ev_visit, st, e0, klmv_r.ev_e4, klmv_r.ev_e0, b, h);
+}
+
 static void klmv_tick(int game_thread)
 {
     static DWORD last; struct klb_snap s; DWORD now = GetTickCount(), player = 0; char why[200]; float hp[3] = { 0, 0, 0 }, hn[3];
@@ -1559,6 +1593,7 @@ static void klmv_tick(int game_thread)
     klmv_track(&s, now);
     kltr_poll(&s, now);
     if (klmv.probe) klmv_probe(&s, now);
+    if (klmv.escprobe || klmv.escfix) klmv_escvisit(&s, now);
     if (klmv.last) klmv_last_vehicle(&s);
     if (klmv.botvan) klmv_bot_van(&s, now);
     if (klmv.hop) klmv_hops_load();
@@ -1622,6 +1657,8 @@ static void klmv_init(void)
     klmv.snap_range = (DWORD)klb_pos("RestlessSnapRange", 4000, 20000);      /* GUESS: 40 m */
     klmv.snap_human = (DWORD)klb_pos("RestlessSnapHuman", 1500, 20000);      /* GUESS: 15 m */
     klmv.snap_cap = klb_pos("RestlessSnapMax", 2, 20);
+    klmv.escprobe = GetPrivateProfileIntA("Bots", "EscVisitProbe", 0, klh_ini) != 0;      /* 0 = off (default) */
+    klmv.escfix = GetPrivateProfileIntA("Bots", "EscVisitFix", 0, klh_ini) != 0;      /* 0 = off (default); GUESS fix, see klmv_escvisit */
     klmv.probe = GetPrivateProfileIntA("Bots", "BoardProbe", 0, klh_ini) != 0;      /* 0 = off (default) */
     klmv.botvan = (DWORD)klb_pos("BotVan", 4, 120) * 1000;      /* v78: default 4 s; 0 = off */
     klmv.gather = GetPrivateProfileIntA("Bots", "StairGather", 0, klh_ini) != 0;      /* 0 = off (default) */
@@ -1637,7 +1674,7 @@ static void klmv_init(void)
         if (at[0] && sscanf(at, "%f , %f , %f", &a[0], &a[1], &a[2]) == 3 && klb_finite(a[0]) && klb_finite(a[1]) && klb_finite(a[2])) memcpy(klmv.gather_at, a, 12);
         else if (at[0]) klog("gather: StairGatherAt=%s is not x,y,z: the default (Hasta's stair top) is used", at);
     }
-    klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0 || klmv.reach > 0 || klmv.last || klmv.botvan || klmv.probe || klmv.gather;
+    klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0 || klmv.reach > 0 || klmv.last || klmv.botvan || klmv.probe || klmv.gather || klmv.escprobe || klmv.escfix;
     if (!klmv.any) return;
     if (!klb.on) { klog("move / wait / near / reach: [Bots] Restless, WaitForYou, BoardNear or BoardReach is set but [Bots] Enable is 0: they need klbot.c's crew records, nothing is done"); klmv.any = 0; return; }
     if (klmv.restless || klmv.loot)
