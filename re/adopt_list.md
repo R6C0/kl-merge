@@ -34,6 +34,14 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   time (+15 s) and got the last 2 bots aboard: CrewRouteHopHold=15 is a CANDIDATE for the Vault. The chase took 12 s longer and its orders kept
   the bot's own height (BoardReachAim, live 80): sent to floors below the van. Fix staged as (n): hook out_e5_1018zl BoardReachAimHeight=3
   (7ebc5c79), ini vault_wag\PT_DM03A_wrh.ini 458a5c99. Do not adopt the chase keys before (n).
+- RUN L88 (3f (g), 23:42-23:46, door B 54c2b946 + hook zi + live keys): PASS 243 s, INCONCLUSIVE.
+  - The human reached stage 3 at r ~80 with $0, so the round ended before r 150.
+  - Nobody earned anything: the human and all 7 bots stayed at $0.
+  - No bot reached the inner vault (z -12830..-13190). They stood at y -960, z -11.7..-12.0k.
+  - Boarded: 1, 2 (traitor), 6 and 5; 3, 4 and 7 were left behind (Spare kept them from being shot).
+  - The $0 may be a regression of B, or the human's pickup failed. Asked 3f for (g0), a control on 7cd07d15, and (g1) B again,
+    both with the human held in the vault to r 200.
+  - Do not adopt B.
 
 ### Last Call, DM05A [page 3 F01]
 - LIVE: df719d34 + KLJoin dfc29f60 (the "sa" build: EnterVehicle field 9 empty, per 07:10).
@@ -134,7 +142,7 @@ Only Last Call ran: L76, 0 crew dead or down, 6 of 7, "no measurable difference"
 
 ## 6. Summary of single decisions
 1 Last Call: adopt the L78 set (zip 5b0a025b + KLJoin ea0446c1 + hook 1018y + six [Bots] keys). 2 Hasta: swap in police build 3a186c93.
-3 Park II: adopt loot6 3386b972 after rerun (o) (L87 was inconclusive). 4 Vault: keep late110 or pick B/C/D after (g). 5 Retomoto: wait for queue (b)/(c).
+3 Park II: adopt loot6 3386b972 after rerun (o) (L87 was inconclusive). 4 Vault: keep late110; B/C/D wait for (g0)/(g1) (L88 inconclusive). 5 Retomoto: wait for queue (b)/(c).
 6 Hook keys: PointBlankToYou=20.0, WalkExclusive=1, VanCallNear=40 each yes/no. 7 Cops rtcops on five maps yes/no. 8 Push, disk, find.exe, replaced-*.
 
 ## 7. L78 keys on other maps (static reading of klhook/klmove.c; nothing here was run on those maps)
