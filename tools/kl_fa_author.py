@@ -35,6 +35,9 @@ settle: re/retomoto_fa.md. Nothing here installs anything or starts the game.
     python kl_fa_author.py plan                  the campaign squads that stay, per part, and why
     python kl_fa_author.py vans                  the three baked van paths fitted to the road
     python kl_fa_author.py inventory <archive>   the inventory of a built level
+    python kl_fa_author.py exitway <installed folder | zip> <out folder>
+                                                 audit aid: a copy whose .prp alone has the seven squads' ExitLootArea
+                                                 places (Pos#01 of 050_DefendBehaviour_street) on the lobby's first ramp (EXIT_WAY)
     python kl_fa_author.py hero <kept build folder> <out folder> x y z [dx dz]
                                                  test aid: a copy of a kept build whose Heroes!Hero_01
                                                  (where a direct boot starts) stands at x y z
@@ -424,6 +427,17 @@ SQUAD_DEAD = 8                          # ZSquadScript field 8: the list sent wh
 
 
 # ------------------------------------------------------------------ small tools
+# `exitway` (2026-10-18, DM09 route audit): the bots' own places of the stage-2 station (ExitLootArea) are the seven
+# 050_DefendBehaviour_street\Pos#01 nodes of Gameplay!merc_bot_squad!Squad#02..08. kl_fa_bots put them on the y 160 ground
+# floor under the deck at x 5600, z -7162 (4 squads) and -6239 (3), 565..1149 off the way: every bot leaves the deck by the
+# first ramp (x 5500..5750, z -5790..-5595, mesh height 568 -> 468) and the route log says 'the bot's own place ... is N of
+# detour ... not walked to', while a live bot is ordered there. The box (PLACE above) is left as it is, so a person who leaves
+# by either ramp still starts stage 2; the places go on the first ramp, on the line the route walks (z -5735), 20 to the
+# lobby's middle of the ramp (mesh clearance 79 / 94; x 5540 and 5660 are 120 apart, SEP 110). Heights are the mesh's there
+# (kl_fa_bots.Nav on the installed DM09 mesh). The i-th distinct old place gets the i-th entry (4 squads / 3 squads kept).
+EXIT_WAY = ((5540.0, 478.3, -5715.0), (5660.0, 543.0, -5715.0))
+
+
 def rot9(turn):
     """ZGEOM[1] of the turn about Y that takes local +Z to (dx, dz): [third, second, first column]."""
     dx, dz = turn
@@ -1100,6 +1114,49 @@ def move_hero(folder, out, pos, face=None, name='Heroes!Hero_01', slot=kl_maps.S
     log('%s: %s (node %d) stands at %s%s' % (out, name, k, tuple(pos), ' facing %s' % (tuple(face),) if face else ''))
 
 
+def exit_way(src, out, log=print):
+    """AUDIT AID (2026-10-18): a copy of an INSTALLED Retomoto archive <src> (a folder holding F0x_Main.zip, or the zip) in
+    <out> whose squads' ExitLootArea places (Squad#0n/050_DefendBehaviour_street/Pos#01) are EXIT_WAY. ONLY the .prp member
+    changes: the .prp and the .gms (the 7 nodes' translation, kept equal as a build does; .buf rewritten by kl_scene), no pass is re-run. -> [(node path, old, new)]."""
+    import shutil
+    zp = src if os.path.isfile(src) else next(os.path.join(src, f) for f in sorted(os.listdir(src)) if f.endswith('_Main.zip'))
+    sc, _snd, _loc = kl_fa.load(zp)
+    BS = chr(92)
+    nodes = [k for k in range(1, len(sc.nodes)) if sc.path[k].endswith(BS + '050_DefendBehaviour_street' + BS + 'Pos#01') and 'merc_bot_squad' in sc.path[k]]
+    if not nodes:
+        raise SystemExit('%s has no Squad#0n/050_DefendBehaviour_street/Pos#01' % zp)
+    with zipfile.ZipFile(zp) as z0:
+        gn = next(n for n in z0.namelist() if n.lower().endswith('_main.gms'))
+        bn = next(n for n in z0.namelist() if n.lower().endswith('_main.buf'))
+        gsc = kl_scene.Scene(kl_gms.unpack(z0.read(gn)), z0.read(bn))
+    lv = type('Built', (), {'prp': sc, 'ents': list(gsc.entities())})
+    olds = sorted({tuple(kl_fa.node_values(sc, k)[2]) for k in nodes})
+    if len(olds) > len(EXIT_WAY):
+        raise SystemExit('%d distinct old places, %d new ones' % (len(olds), len(EXIT_WAY)))
+    out_rows = []
+    for k in nodes:
+        old = tuple(kl_fa.node_values(sc, k)[2])
+        new = EXIT_WAY[olds.index(old)]
+        place(lv, k, new)
+        out_rows.append((sc.path[k], old, new))
+    pn = next(n for n in zipfile.ZipFile(zp).namelist() if n.lower().endswith('_main.prp'))
+    os.makedirs(out, exist_ok=True)
+    dst = os.path.join(out, os.path.basename(zp))
+    g2, buf = gsc.write()
+    gms = kl_gms.pack(g2)
+    with zipfile.ZipFile(zp) as zi, zipfile.ZipFile(dst, 'w') as zo:
+        for info in zi.infolist():
+            data = sc.p.serialize() if info.filename == pn else gms if info.filename == gn else buf if info.filename == bn else zi.read(info.filename)
+            zo.writestr(info, data, compress_type=info.compress_type, compresslevel=6 if info.compress_type == zipfile.ZIP_DEFLATED else None)
+    for f in os.listdir(os.path.dirname(zp)):
+        if f != os.path.basename(zp) and os.path.isfile(os.path.join(os.path.dirname(zp), f)) and not os.path.exists(os.path.join(out, f))                 and '.before-' not in f and '.bak' not in f and not f.endswith('.hti'):
+            shutil.copyfile(os.path.join(os.path.dirname(zp), f), os.path.join(out, f))
+    for path, old, new in out_rows:
+        log('%s: (%.0f, %.0f, %.0f) -> (%.0f, %.0f, %.0f)' % (path.split(BS)[-3], *old, *new))
+    log('%s: %d place(s) moved, .prp + .gms (+.buf rewrite)' % (dst, len(out_rows)))
+    return out_rows
+
+
 def test(out, keep=False, log=print):
     """Build the two-part level with the layer into <out>, verify, check, print the inventory."""
     r = kl_maps.chain(out, HOST, PART_B, PART_A, campaign=True, heroes=False, keep=True, author=True)
@@ -1170,6 +1227,8 @@ def main():
             (dx, dz), x, width, z0, z1 = van_fit(main_, s)
             print('%s: %d positions (%d in the drive, %.0f m), stop (%d %d %d) in F07; best facing (%.2f, %.2f): %d wide, %d before and %d after the stop' % (
                 name, len(every), len(main_), sum(math.dist(p, q) for p, q in zip(main_, main_[1:])) / 100, *s, dx, dz, width, -z0, z1))
+    elif len(a) == 3 and a[0] == 'exitway':
+        exit_way(a[1], a[2])
     elif len(a) == 2 and a[0] == 'inventory':
         inventory(a[1])
     elif len(a) in (6, 8) and a[0] == 'hero':
