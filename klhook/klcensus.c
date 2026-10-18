@@ -16,7 +16,7 @@ static struct { int on, max; DWORD every, at; } klcs;
 
 static void klcs_tick(int game_thread)
 {
-    DWORD p, tab, i, blk[64 * 32], now = GetTickCount(); int n = 0;
+    DWORD p, tab, i, blk[64 * 32], now = GetTickCount(); int n = 0, alive = 0;
     if (!klcs.on || !game_thread || !klx_on) return;
     if (klcs.at && now - klcs.at < klcs.every) return;
     klcs.at = now;
@@ -31,10 +31,11 @@ static void klcs_tick(int game_thread)
             h = klh_rd32(o + 0x5fc); hv = h && klh_rd(h + 4, hp, 8);
             klog("census: #%d slot %lu actor %08lx %s(%.0f, %.0f, %.0f) health %s%.1f of %.1f", n, (unsigned long)(i + k), (unsigned long)o,
                  pv ? "" : "NO PLACE ", pos[0], pos[1], pos[2], hv ? "" : "? ", hp[0], hp[1]);
+            if (hv && hp[0] > 0) alive++;
             n++;
         }
     }
-    klog("census: %d ZFFActor in the entity table", n);
+    klog("census: %d ZFFActor in the entity table, %d alive (health > 0; dead actors stay listed at 0)", n, alive);
 }
 
 static void klcs_init(void)
