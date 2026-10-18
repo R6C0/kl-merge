@@ -868,24 +868,25 @@ static int kle_criminal(void)
    -> 1 = found, 0 = the children were walked and none is one (a helicopter / a car), -1 = something could not be read.
    Reads only. */
 struct kle_veh { DWORD obj; float hp, max; BYTE fx[3], inv, upd; };
+static char kle_veh_err[96];           /* why the last kle_veh_read gave -1 (2026-10-18, Vault L30 visit 1: no reason was logged) */
 static int kle_veh_read(DWORD rules, struct kle_veh *v)
 {
     DWORD g = 0, vt = 0, slot = 0, tab = 0, p, c, o = 0; WORD next = 0; int k; float f[2]; BYTE b[7];
-    memset(v, 0, sizeof *v);
-    if (!klh_rd(rules + 0x1e4, &g, 4) || !g || !klh_rd(g, &vt, 4)) return -1;
+    memset(v, 0, sizeof *v); kle_veh_err[0] = 0;
+    if (!klh_rd(rules + 0x1e4, &g, 4) || !g || !klh_rd(g, &vt, 4)) { _snprintf(kle_veh_err, sizeof kle_veh_err - 1, "[rules+0x1e4] %08lx unreadable", g); return -1; }
     if (vt == KLE_VEH_VT) o = g;
     else {
-        if (!klh_rd(g + 0x40, &slot, 4) || !(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return -1;
+        if (!klh_rd(g + 0x40, &slot, 4) || !(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) { _snprintf(kle_veh_err, sizeof kle_veh_err - 1, "group %08lx (vt %08lx): its first slot / the entity table unreadable", g, vt); return -1; }
         for (k = 0; k < 64; k++) {
-            if (slot < tab || slot - tab >= 0x10000u * 0x80 || ((slot - tab) & 0x7f)) return k ? -1 : 0;      /* no slot of the table: the first = this object has no children as a group has them */
-            if (!klh_rd(slot + 0x60, &c, 4) || !klh_rd(slot + 0x5e, &next, 2)) return -1;
+            if (slot < tab || slot - tab >= 0x10000u * 0x80 || ((slot - tab) & 0x7f)) { _snprintf(kle_veh_err, sizeof kle_veh_err - 1, "group %08lx (vt %08lx): child %d slot %08lx not in the table", g, vt, k, slot); return k ? -1 : 0; }      /* no slot of the table: the first = this object has no children as a group has them */
+            if (!klh_rd(slot + 0x60, &c, 4) || !klh_rd(slot + 0x5e, &next, 2)) { _snprintf(kle_veh_err, sizeof kle_veh_err - 1, "group %08lx: child %d slot %08lx unreadable", g, k, slot); return -1; }
             if (c && klh_rd32(c) == KLE_VEH_VT) { o = c; break; }
             if (!next) return 0;
             slot = tab + (DWORD)next * 0x80 - 0x80;
         }
-        if (!o) return -1;                    /* 64 children and no end: not the list this build knows */
+        if (!o) { _snprintf(kle_veh_err, sizeof kle_veh_err - 1, "group %08lx (vt %08lx): 64 children and no end", g, vt); return -1; }                    /* 64 children and no end: not the list this build knows */
     }
-    if (!klh_rd(o + 0x14, f, sizeof f) || !klh_rd(o + 0x1c, b, sizeof b) || !klb_finite(f[0]) || !klb_finite(f[1]) || !(f[1] > 0) || f[0] < 0 || f[0] > f[1] * 4 + 1) return -1;
+    if (!klh_rd(o + 0x14, f, sizeof f) || !klh_rd(o + 0x1c, b, sizeof b) || !klb_finite(f[0]) || !klb_finite(f[1]) || !(f[1] > 0) || f[0] < 0 || f[0] > f[1] * 4 + 1) { _snprintf(kle_veh_err, sizeof kle_veh_err - 1, "vehicle %08lx: health %.1f / quarter-max %.1f not sane", o, f[0], f[1]); return -1; }
     v->obj = o; v->hp = f[0]; v->max = f[1] * 4; memcpy(v->fx, b, 3); v->inv = b[5]; v->upd = b[6];
     return 1;
 }
@@ -921,7 +922,7 @@ static int kle_hold_guard(const struct klb_snap *s, DWORD now, int dry, char *wh
     why[0] = note[0] = 0;
     if (!kle.fo_shield) { strcpy(note, "NO SHIELD (FollowOutShield=0): a vehicle that stands longer than stock's 8 s can be destroyed with everybody aboard"); return 1; }
     k = kle_veh_read(s->rules, &v);
-    if (k < 0) { strcpy(why, "the vehicle's health object cannot be read, so it cannot be shielded - and an unshielded hold got the vehicle destroyed with everybody aboard (FollowOutShield=0 holds all the same)"); return 0; }
+    if (k < 0) { _snprintf(why, 199, "the vehicle's health object cannot be read (%s), so it cannot be shielded - an unshielded hold got the vehicle destroyed with everybody aboard (FollowOutShield=0 holds all the same)", kle_veh_err); why[199] = 0; return 0; }
     if (!k) {
         /* FAIL CLOSED (the review's point 2). The game's own name for the vehicle's kind is the byte [rules+0x1ec]
            (slot 95 = 0x5822d0; set by 0x42cfb0 from the class of [rules+0x1e4]: 1, 2 = two other vehicle classes, 3 =
