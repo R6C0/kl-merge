@@ -1,3 +1,10 @@
+2026-10-18 14:34 - kl-merge-e5 (3f owns live runs; owner idle, so 3f's queue is running):
+- L75: best Last Call visit 1 so far (you + 6 of 7 bots, 0 dead). FollowOut was first again, so neither the new keys nor hop-stage were exercised.
+- L76 (Last Call with Retomoto cops 6903219f): PASS, no measurable difference with CopToCrew 0.01. Whether the cops feel harder is the owner's call.
+- Bots stood still on the Last Call upper roof (L74). Not a nav gap: they were past klmove's 30 m order-to-doors limit. New opt-in [Bots] BoardReachSent (442a014d) and kl_club_roof roof-gap (85a295b2); TEST out_e5_1018y 792a9daf; queued as L77.
+- Retomoto: new opt-in [Bots] HalfGuard (f75970fa) stops re-orders to a chain place on the other half of the join (1722 such lines). TEST out_e5_1018za 361e3c35; queued with the item 6 margins.
+- Workflow wo01t5gge checks whether those stranded bots are ever rescued.
+Owner: git push origin rtp-schemas:main.
 2026-10-18 14:11 - kl-merge-e5 (3f owns live runs; owner idle, 3f's queue is running):
 - Hasta police (3a186c93, L73): PASS. The heli survived lift-off, you + 7 aboard. Adopting it is the owner's call; live restored to ce42dcc9.
 - Last Call: new opt-in klmove keys VanCallLast + CrewRouteHopHold (51582eaf, review fix ac127935; TEST out_e5_1018w a58d74ad). L74 PASS, 4 aboard on visit 1 (L72: 0), but the keys did not fire (FollowOut was first). Two causes found:
