@@ -213,3 +213,65 @@ All 41 copies are `PlayerAction` on a `ZBoxPrimitive`.
 - Compute the world position of the BoardingTrigger in the failing three. It is the van's rest transform plus local `(-1.75, 119.35, -337.14)`, through the van's rotation. Compare it with the spawn rows and bot parking spots.
 - Use the klmove hardware write-watch on `[rules+0x1e0]` (already proposed in `re/escape_visit1.md`) to see the action's fire time against the van's animation time.
 - Optional A/B: in one failing map, set the PlayerAction's active bool (the bool right after `EnterVehicle`) to 0 at load. If `EscVisitFix` is then not needed, the early fire is confirmed.
+
+## 2026-10-18: where the van's boarding box sits before the call
+
+Units are cm (box half extents 95 x 135 x 80 = the 1.9 x 1.6 m box). Scratch scripts are in the session scratchpad (`ex.py`, `van.py`, `stop.py`, `b.py`, `inb.py`). They use `kl_scene`, `kl_graft.keys_tracks`, `kl_map_escape.VanKeys`, and `kl_fa_bots.Built`, `Nav` and `stations`. Nothing was written to the repo or the game folder.
+
+**Method**
+- FACT: for each map I took `V_Van_00`'s stored translation and the box's local offset `(-1.75, 119.35, -337.14)`.
+- FACT: the stored 3x3 matrix has its axes permuted (determinant -1). Its row 0 is the van's nose (the quaternion's local +Z), and row 2 is local X.
+- FACT: I rotated the offset with the animation's frame-0 quaternion, not the stored matrix. That is the same convention `kl_map_escape.van_prepare` uses.
+- FACT: key 0's position equals the stored translation to 0.1 in all four maps, and its heading equals the matrix's.
+- FACT: the rest transform and frame 0 give the same box position, so (a) = (b).
+- FACT: frame 795 returns to the frame-0 pose. The van sits at that pose until `Activate_Enter` (frames 50..230) drives it in.
+
+**Box centre in world space**
+
+| map | (a) = (b) at rest / frame 0 | at the stop (`Activate_Enter` last frame) | rest to stop, plan |
+|---|---|---|---|
+| DM06B (F02) | (-6498.5, 2508.2, -5216.6) | (-2571.9, 2625.3, -7932.3) | 47.8 m |
+| DM03A (F07) | (-3578.2, 821.3, -11791.1) | (635.5, 821.4, -11228.9) | 42.5 m |
+| DM01B (F03) | (5697.1, 106.3, 30799.7) | (2000.1, 106.3, 30793.0) | 37.0 m |
+| DD07 van 01 (control) | (6024.1, -79.0, 25950.9) | (9257.2, -78.7, 23624.1) | 39.8 m |
+
+**Distances from the rest box, in metres (plan distance; 3D is within 1 m of it except where noted)**
+
+| to | DM06B | DM03A | DM01B | DD07 v01 |
+|---|---|---|---|---|
+| nearest START spawn row | 103.1 | 83.2 | 271.8 | 226.9 |
+| START rows' middle | 104.3 | 85.2 | 272.9 | 228.1 |
+| nearest hero spawn (`Heroes!*\Ground`), 3D | not near | 24.1 (Henchmen_08) | not near | not near |
+| nearest ZSpawnPoint of any kind | 86.1 (Merc FinancialAlley) | 24.6 (TEAM_Police#01) | 62.9 (Dead/Police) | 80.1 |
+| `OnlineExitLevelTrigger` box middle (half extents) | 47.8 (4.5 x 3 x 4.5) | 40.7 (15 x 3 x 11.5) | 37.0 (4.5 x 3 x 4.5) | 48.2 (35 x 9.5 x 36) |
+| escape-area POI box and `AllyEscapeBox` | 47.8 / 48.9 | 40.7 / 39.6 | 37.0 / 37.2 | POI 115, no AllyEscapeBox |
+| nearest guard | 20.4 | 27.3 | 15.0 | 61.5 |
+| nearest loot object | 33.9 | 38.3 | 51.1 | 189 |
+| nearest bot squad place (`merc_bot_squad`) | 46.0 | 36.9 | 10.2 | 31.7 |
+
+- FACT: no entity has a position inside the rest box in any of the four maps. I tested every node, at its feet and 90 above, with the box padded by 0, 1 and 3 m.
+- FACT: the rest box is not inside the exit trigger box in the three Dead Men maps.
+- FACT: DD07 van 02's rest box is inside the huge exit trigger (centre 40.8 m away, half extent 35 m), and that stock map works. Overlap with a trigger is therefore not what separates failing from working maps.
+- GUESS: I treated the `merc_bot_squad` child positions (all squads, every stage) as the AI heister spots. I found no per-map bots ini with spots in `tools/` or in the map folders, only the `bots.json` plan that `re/bots_move.md` mentions.
+- GUESS: the "nearest" figures include the squad Pos boxes, and DM01B's 10.2 m figure is a `Pos#01` box of Squad#04's `050_DefendBehaviour_way_b_b`.
+
+**Reachable on foot before the call**
+
+| | DM06B | DM03A | DM01B | DD07 v01 |
+|---|---|---|---|---|
+| nav points inside the rest box (5x5 grid, any part) | 25 of 25 | 25 of 25 | 25 of 25 | **0** |
+| on the START row's mesh part | yes | yes | yes | n/a |
+| walk from the START rows' middle (nav portal path) | 327 m | 138 m | 354 m | none |
+| nearest walkable polygon middle, plan | 2.5 m | 1.2 m | 2.9 m | 24.9 m |
+| box height above the START rows | +18.7 m | +6.2 m | +1 m | -6 m |
+
+- FACT: in the three Dead Men maps the rest box sits on the START row's mesh, so a walker can stand in it. On stock DD07 it sits off the mesh, about 25 m from the nearest walkable polygon. Vans 02 and 03 are also off the mesh.
+- GUESS: the mesh grid and the portal-path length are approximate. `Nav.dist_map` walks through edge middles and the box grid is coarse.
+- GUESS: the walk distances are far longer than the straight lines (327 m against 104 m on DM06B) because the box is on the elevated road.
+
+**Verdict on the GUESS "the box at rest fires EnterVehicle early"**
+- Static overlap at load: **REFUTED**. Nothing stands in or within 3 m of the box at load. The nearest START row is 83 to 272 m away, and the DD07 control has a similar spread (227 m). Nearest hero row, guard and bot place are all at least 10 m away.
+- The early write of `[rules+0x1e0]` comes about 1.3 s before state 1, when every human is still 83 m or more from the box. That does not fit a human walking into it.
+- GUESS: the early write is the `EnterVehicle` action registering when it is activated, not a box overlap. The rest-position hypothesis alone does not explain it.
+- Still open, and not excluded by this check: a bot or cop walking through the box before the call. The only difference from stock I can show is that the box sits on walkable mesh in the three failing maps and off it on DD07. That would make an early fire possible but needs a walker.
+- Next test (not run): the hardware write-watch on `[rules+0x1e0]` already proposed in `re/escape_visit1.md`. The optional A/B of setting the action's active bool to 0 at load is the other cheap check.
