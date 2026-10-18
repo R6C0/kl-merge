@@ -125,3 +125,12 @@ In order of preference:
 `[Net] BuildCheck=0/1` (default 0, installs nothing): in klmm.c (a) add `klx_slots` and `klx=1`; (b) overrides for +0x34, +0x88 and
 +0x60/+0x5c; (c) a tick `klmm_tick()` (host: poll members; both: apply or clear the mask bit; one log line per state change); (d) Patch01.zip
 as a global hash input. Test order: single machine, log only (create a lobby, read back the keys); then two accounts.
+
+## 10. Review corrections (2026-10-18, adversarial re-check of 72a595a8; every kl2.exe address above held)
+- **Slot test is wrong as written (sections 6, 7).** An expansion map takes over a STOCK slot: klslot.c redirects Fxx to `KLExpansion\Maps\DMxx` via `[Redirect]` / `[Redirect.N]` in KLHook.ini, and `[Redirect.N]` applies only while menu page N is latched (`kls_page_now()`, set by `kls_menu_watch`). Clearing the F01 bit therefore also blocks stock Subway. Apply the mask hold only while a redirect rule is active for the current page, and lift it otherwise. Open questions 3 and 5 are answered by that: the page latch says which slot is expansion, and the widget behind `MP_SelectedLevel` need not be decoded.
+- **Hash the redirect target.** The per-slot fingerprint must be of the file the redirect resolves to, and the redirect table itself belongs in the hash input (no longer a GUESS).
+- **Write times are NOT left out:** the central directory hashed by `klx_fingerprint` holds each member's DOS timestamp, so a rebuild with identical content gives a (safe-side) false mismatch.
+- **Slot numbers:** GetLobbyMemberData is slot 23 (+0x5c), SetLobbyMemberData slot 24 (+0x60); slot 25 is SendLobbyChatMsg.
+- **Table fixes:** 0x86b148 is a `mov` before GetLobbyData (call at 0x86b166), not a filter site. Missing row: 0x749f00 (+0x2c GetLobbyByIndex); the count of 25 stands.
+- **JoinLobby recording is unneeded:** the `GetLobbyOwner` override receives the lobby id as its argument, and return address 0x6299da identifies the join-completion caller.
+- **Thread:** the mask calls (0x634b90, 0x845640) and the Steam polls run only when the tick's `game_thread` flag is true (klhook.c line 669). A ship build must not run game code from its own thread (klslot.c).
