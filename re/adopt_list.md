@@ -61,6 +61,8 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
 - STAGED, NOT RUN: loot6 tea-house case 3386b972 (tools/kl_fa_park_loot6.py 2f7e4e5b; loot was 166 of 165 flat from the stop, queued 3f (f));
   no-van-show d345bc5b (C:/kl_scratch/stage_park_nvs, hide/show A/B for the visit-1 cause, now moot since EscVisitFix is live); park_next KLJoin c99c4e11
   (two crew hops, with 7fef2733); rtcops 7bf368a7.
+- RUN L81 (3f, 18:17): no-van-show d345bc5b + hook 1018s. PASS, 0 asserts, 416 s. The van's 1e4 was already set at state 1 without EscVisitFix, state 1->3->5 on visit 1;
+  6 bots aboard (one traitor); the escort stayed with the scripted human 6 m out, the human did not board. Diagnostic only (EscVisitFix live): nothing to adopt.
 - DECISION: adopt loot6 (3386b972) after 3f's run (f), yes or no. Nothing to do before that run.
 
 ### Hot Coffee II, DM01B [page 3 F03]
