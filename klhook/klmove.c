@@ -343,6 +343,7 @@ static struct {
        arrive together; the lead bot runs ahead alone. 0 = off (default, nothing here runs). PER-MAP: the ini is installed per level and nothing
        checks the level's name - the gather point is Hasta's. */
     int gather, gather_n; DWORD gather_radius, gather_timeout; float gather_at[3];
+    DWORD gather_lone; int gather_minhp;      /* StairGatherLoneMs (0 = off): ms a held bot may stand with fewer than 2 loyal bots in the radius before it alone is released; StairGatherMinHp (0 = off): percent of the most health it was seen with, below which no hold is started */
 } klmv;
 
 /* ACTIVE (section 5, 2026-10-12): the level's list of cover places a bot may shift to while it waits at a hold, per GATE of the
@@ -366,7 +367,7 @@ struct klmv_b {
     float pos[3], hp, anchor[3], anchor0[3], target[3], try_pos[3];      /* anchor = the place its chain ordered; anchor0 = where the count 'total' began */
     int snaps;                                /* RestlessSnap: how often this bot was put at its place this round */
     float same_t[3], same_d; int same_n;      /* v82f: the target of the last (b) order, how far the bot was from it then, and how many orders in a row went to it without progress */
-    int g_held, g_n; DWORD g_order_at; float g_chain[3], g_ord[3];      /* StairGather: held now; orders given while held; when the last was given; the chain's goal it was held from; what the block held after our order */
+    int g_held, g_n; DWORD g_order_at, g_lone; int g_no; float g_hpmax, g_chain[3], g_ord[3];      /* StairGather: held now; orders given while held; when the last was given; the chain's goal it was held from; what the block held after our order */
 };
 static struct {
     DWORD rules, state, round_at, last_pass, half; int stages, told_gate, told_thread, told_list, told_ready;
@@ -1414,6 +1415,7 @@ static void klmv_gather(const struct klb_snap *s, DWORD now)
             continue;
         }
         ok[i] = 1;
+        if (b->hp > b->g_hpmax) b->g_hpmax = b->hp;                            /* the most health this bot was seen with = its 100 % (StairGatherMinHp) */
         if (kle_dist(b->pos, klmv.gather_at) <= (float)klmv.gather_radius) near_n++;
         if (b->g_held) held_n++;
     }
@@ -1421,9 +1423,29 @@ static void klmv_gather(const struct klb_snap *s, DWORD now)
     if (s->veh >= 1 && s->veh <= 5) { if (held_n) klmv_g_release(s, "a vehicle is called", near_n, now); else klmv_r.g_done = 1; return; }      /* the exit phase: never gather after a vehicle is called */
     if (held_n && near_n >= klmv.gather_n) { klmv_g_release(s, "count", near_n, now); return; }
     if (held_n && klmv_r.g_first && now - klmv_r.g_first >= klmv.gather_timeout) { klmv_g_release(s, "timeout", near_n, now); return; }
+    if (klmv.gather_lone && held_n) {                                          /* StairGatherLoneMs: a held bot alone at the point is let go (only it) */
+        for (i = 0; i < s->n && i < KLB_NREC; i++) {
+            struct klmv_b *b = &klmv_r.b[i];
+            if (!b->g_held) continue;
+            if (near_n >= 2) { b->g_lone = 0; continue; }
+            if (!b->g_lone) { b->g_lone = KLB_T(now); continue; }
+            if (now - b->g_lone < klmv.gather_lone) continue;
+            b->g_held = 0; b->g_no = 1; b->g_lone = 0; held_n--;
+            if (!klmv.dry && kle_bot(s, i, &actor, &soldier, bp, w) && kle_block(soldier, cur) && kle_dist(cur, b->g_ord) <= 50.0f) {
+                memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
+                kltr_set("gather", "StairGather lone release: back to the chain's goal", -1);
+                if ((k = kle_order2(&t, b->g_chain, got, w, 0)) == 1) klmv_foreign(i, got);
+            }
+            klog("gather: LONE RELEASE record %d: fewer than 2 loyal bots within %.0f m of the gather point for %lu s (%d held, %d orders given); back to its chain's goal (%.0f, %.0f, %.0f), not held again this round",
+                 i, klmv.gather_radius / 100.0, klmv.gather_lone / 1000, held_n, b->g_n, b->g_chain[0], b->g_chain[1], b->g_chain[2]);
+        }
+        if (!held_n) klmv_r.g_first = 0;
+    }
     for (i = 0; i < s->n && i < KLB_NREC; i++) {
         const struct klb_rec *r = &s->r[i]; struct klmv_b *b = &klmv_r.b[i];
         if (!ok[i]) continue;
+        if (!b->g_held && b->g_no) continue;                                   /* released alone this round */
+        if (!b->g_held && klmv.gather_minhp && b->g_hpmax > 0 && b->hp < b->g_hpmax * klmv.gather_minhp / 100.0f) continue;      /* too hurt to be held (L47 rec 7: 38 %, downed 1.1 s later) */
         if (!b->g_held && (near_n >= klmv.gather_n || kle_dist(b->pos, klmv.gather_at) > (float)klmv.gather_radius)) continue;
         if (!kle_bot(s, i, &actor, &soldier, bp, w) || !kle_block(soldier, cur)) continue;      /* not now (said by the callers elsewhere); asked again next pass */
         if (!b->g_held) {
@@ -1606,6 +1628,8 @@ static void klmv_init(void)
     klmv.gather_n = klb_pos("StairGatherN", 4, 8); if (klmv.gather_n < 2) klmv.gather_n = 2;      /* GUESS: 4 (L36 cleared the nest with 5-6) */
     klmv.gather_radius = (DWORD)klb_pos("StairGatherRadius", 2000, 20000);      /* cm; GUESS: 20 m */
     klmv.gather_timeout = (DWORD)klb_pos("StairGatherTimeout", 30, 600) * 1000;      /* GUESS: 30 s */
+    klmv.gather_lone = (DWORD)klb_pos("StairGatherLoneMs", 0, 600000);      /* 0 = off (default); GUESS if used: the L47 lone hold of rec 3 was harmless for 30 s */
+    klmv.gather_minhp = klb_pos("StairGatherMinHp", 0, 100);      /* percent; 0 = off (default); GUESS if used: 50 (L47 rec 7 was held at 38 % and died; recs 1-3 were held at full health) */
     klmv.gather_at[0] = 27167.0f; klmv.gather_at[1] = 582.0f; klmv.gather_at[2] = 30386.0f;      /* GUESS: Hasta's stair top = the lead bot's chain goal in the census */
     {
         char at[96]; float a[3];
@@ -1622,6 +1646,7 @@ static void klmv_init(void)
              klmv.hold ? "; at its own hold place for Hold seconds: a shift round it" : "; a bot at its own place (a meant wait) is left alone");
     if (klmv.gather) klog("gather: StairGather on (GUESS limits): a loyal AI heister within %lu m of (%.0f, %.0f, %.0f) whose chain goes more than 2 m down is held there until %d loyal bots stand within the radius or %lu s after the first was held; once per round; per-map ini (no level check)%s",
                            klmv.gather_radius / 100, klmv.gather_at[0], klmv.gather_at[1], klmv.gather_at[2], klmv.gather_n, klmv.gather_timeout / 1000, klmv.dry ? "; MoveDry=1: nothing is ordered" : "");
+    if (klmv.gather && (klmv.gather_lone || klmv.gather_minhp)) klog("gather: StairGatherLoneMs=%lu (a held bot with fewer than 2 loyal bots in the radius for that long is released alone, 0 = off), StairGatherMinHp=%d (no hold below that percent of the health it was seen with, 0 = off)", klmv.gather_lone, klmv.gather_minhp);
     if (klmv.skip_down) klog("move: RestlessSkipDowned on: a downed heister gets no restless order, snap or hop and its stand-still clock restarts when it is up");
     if (klmv.snap) klog("move: RestlessSnap on (audit 1018 E2.2, GUESS limits): a bot whose chain place was ordered %d times without arriving is put AT the place (range %lu, human not within %lu, at most %d times per bot and round)%s", KLMV_TOTAL, klmv.snap_range / 100, klmv.snap_human / 100, klmv.snap_cap, klmv.dry ? "; MoveDry=1: never" : "");
     if (klmv.last)
