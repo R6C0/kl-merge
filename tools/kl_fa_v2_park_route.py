@@ -6,6 +6,7 @@ Read-only. Floods (kl_walk2d's model, GUESS: coarse) from START, but keeping the
 each station (loot cases, bridge, stairs foot / top, van stop / boarding place) whether a reached floor lies within 1 step of its height, and names the steep
 collision pieces that wall the frontier cells (top-level subtree / entity), as kl_fa_v2_hc_route2 does.
   python kl_fa_v2_park_route.py mesh <finished folder or F02_Main.zip>     the AI's way over the navigation mesh, leg by leg, sampled against the collision (kl_route.mesh_way)
+  python kl_fa_v2_park_route.py joinini <live folder> <OUT folder>     OPT-IN: OUT = copy of the folder (no *.before-* files) + a KLJoin.ini with two crew hops (see joinini_text)
 --nocam: ignore shapes whose every .HVK flag is 0x40 (camera-only collision, GUESS from Hot Coffee II's twin-name pairs).
 """
 import collections, math, os, sys
@@ -185,8 +186,67 @@ def mesh(src, log=print):
     return legs
 
 
+# ---- joinini: opt-in KLJoin.ini with two CrewHop "stall rescues" (kl-merge-e5, 2026-10-18; NOT RUN IN THE GAME) -------------------------------
+# Evidence (KLHook.log, 3 Park II rounds, klmove 'move: ... stood' lines): bots stand at two exact spots on the early route and are never freed:
+#   tea house  (697,174,-2322): 1.7 m short of the case (802,175,-2456), just past the 165-unit pickup reach; 7 events, 41.6 s, one 'FED UP - nothing was paid'
+#   statue 1   (-547,228,-4313) / (-503,213,-4299): on a 24..60 unit mound, 4.9 m from its order place; 7 events, 43 s, '3 orders none nearer - target DROPPED'
+# Fix: a [CrewHop] each (klhop.c): a bot that stands at From for Wait s at heist stage >= 1 is put on the mesh beside the case by the game's own actor
+# teleport. Landing y 220 = the mesh height at both cases (the cases' own y 175 / 184 lie below it); landings are 70..90 from the case (pickup reach 165). ALL numbers are GUESSES (Radius, Height, Wait, the landing offsets); the landing places are checked on the mesh and the collision here.
+HOPS = [('tea house', (697, 174, -2322), 130, 80, 8, [(847, 220, -2533), (741, 220, -2491)]),
+        ('statue 1', (-525, 220, -4306), 130, 80, 8, [(-539, 220, -4671), (-616, 220, -4786)])]
+
+
+def joinini_text(src=None, log=print):
+    """-> KLJoin.ini text. With src (the finished folder / zip) the landing places are checked on the navigation mesh (kl_route.Mesh.on) and reported."""
+    L = ['; --joinini (kl_fa_v2_park_route.py, kl-merge-e5 2026-10-18): crew hops for the two early-route stalls of Park II. ALL VALUES ARE GUESSES, NOT RUN.',
+         '; Wait 8 s: the 14 stall events averaged 6 s (84 s total, KLHook.log move: ... stood lines), so a hop fires only on the longer ones. GUESS.',
+         '; Stage=1: the round has begun; Player=0: no human needed; Again=0: once a round per hop.']
+    mesh = None
+    if src:
+        import kl_route
+        mesh = kl_route.load(src).mesh()
+    for n, (name, frm, rad, hgt, wait, tos) in enumerate(HOPS):
+        keep = []
+        for t in tos:
+            if mesh is not None:
+                hit = mesh.on(*t)
+                log('  %-9s landing %s: %s' % (name, t, 'on the mesh (height %.0f)' % hit[1] if hit else 'NOT ON THE MESH - dropped'))
+                if not hit:
+                    continue
+            keep.append(t)
+        if not keep:
+            raise SystemExit('refused: no landing place of hop %s is on the mesh' % name)
+        L += ['', '; %s: From = the exact stall spot' % name, '[CrewHop]' if n == 0 else '[CrewHop.%d]' % (n + 1),
+              'From=%d %d %d' % frm, 'Radius=%d' % rad, 'Height=%d' % hgt, 'Wait=%d' % wait, 'Stage=1', 'Player=0', 'Again=0', 'Places=%d' % len(keep)]
+        L += ['To.%d=%d %d %d' % (i + 1, *t) for i, t in enumerate(keep)]
+    return '\r\n'.join(L) + '\r\n'
+
+
+def joinini(src, out, log=print):
+    """Copy the finished folder SRC to OUT (no *.before-* backups) and add KLJoin.ini. Refuses a game-folder OUT or an existing KLJoin.ini."""
+    import shutil, hashlib
+    src, out = os.path.abspath(src), os.path.abspath(out)
+    if 'steamapps' in out.lower() or os.path.exists(os.path.join(src, 'KLJoin.ini')):
+        raise SystemExit('refused: OUT inside a Steam folder, or SRC already has a KLJoin.ini')
+    os.makedirs(out, exist_ok=True)
+    for f in sorted(os.listdir(src)):
+        if '.before-' in f or not os.path.isfile(os.path.join(src, f)):
+            continue
+        shutil.copy2(os.path.join(src, f), os.path.join(out, f))
+    txt = joinini_text(os.path.join(src, 'F02_Main.zip'), log)
+    with open(os.path.join(out, 'KLJoin.ini'), 'wb') as fh:
+        fh.write(txt.encode('ascii'))
+    md = lambda p: hashlib.md5(open(p, 'rb').read()).hexdigest()
+    for f in sorted(os.listdir(out)):
+        o, s = os.path.join(out, f), os.path.join(src, f)
+        log('  %-28s %s %s' % (f, md(o), 'NEW' if not os.path.exists(s) else ('same' if md(o) == md(s) else 'DIFFERS')))
+
+
 def main():
     a = sys.argv[1:]
+    if len(a) >= 3 and a[0] == 'joinini':
+        joinini(a[1], a[2])
+        sys.exit(0)
     if len(a) >= 2 and a[0] == 'walk':
         g = lambda k, d: float(a[a.index(k) + 1]) if k in a else d
         r = walk(a[1], g('--cell', 40.0), g('--step', 65.0), [a[i + 1] for i, v in enumerate(a) if v == '--drop'], g('--near', 600.0),
