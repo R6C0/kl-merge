@@ -213,6 +213,35 @@
  *         the dial acts, the tuning's values back otherwise; a value found there that is neither is left alone.
  *       [Fed] Hunted (asked for in case the AI heisters did not treat a police human as an enemy): NOT BUILT - by the
  *         reading they do; it is OWED if TH shows no 'you lost' line within 30 s in sight of live heisters.
+ *    a9. LOGGING THE CREW'S HITS, key LogCrewHits=1 (2026-10-18; NOT RUN; default 0 = no pass, no line, nothing; needs
+ *       Enable=1 like the rest). Why: re\hotcoffee2_losses.md / re\crew_hits.md - what kills the AI heisters at the Hot
+ *       Coffee II diner (police, a blast or friendly fire)? A READING, not a wrapper: every 50 ms, in any Arcade round (stock
+ *       level or not: nothing is written), the health object of each AI heister ([actor+0x5fc]: current [+4], maximum
+ *       [+8], owner [+0x24]) is compared with the last pass. A drop is one line: record, actor, stage, health before ->
+ *       after, place, your distance and the
+ *       nearest other heister's, down or not, then WHO COULD HAVE DONE IT (a9b below). The killing blow is listed and a death (status 7) gets a line with the last drop and its 'who'. NO health-object ticks or [actor+0x600] are logged: the ticks are a clock minus a delay and +0x600 is the head-hit sum klcensor pre-arms. At
+ *       most 6 lines a second and 400 a round, the rest counted; a sum line (drops, lost per record) when the round ends.
+ *       A rise (regeneration, a get-up) and a change of the maximum (Tough, FedHealth) are no hit. WHAT IT CANNOT SAY:
+ *       the attacker, the weapon or the damage kind, and two hits within one pass are one line. The route to those -
+ *       ZSoldier slot 96 (0x8473a0), hit record +0x00 attacker, +0x08 kind, +0x28 amount - needs a private soldier vtable,
+ *       and seven modules (kladren, klbotdown, kldown, klescort, klhop, klgrudge, klmove) know a crew soldier by the
+ *       stock one: it is NOT built (re\crew_hits.md 5, option A).
+ *    a9b. WHO COULD HAVE DONE IT (2026-10-18; NOT RUN; still zero writes, no wrapper). A soldier's CURRENT TARGET is [soldier+0xac]
+ *       (a pointer to the target's object; for a man it is his ZFFActor), valid while [soldier+0xb0] (a dword, 'has a target') is
+ *       not 0: kl2 0x8c62ec `cmp [eax+0xb0],0` returns at once, 0x8c630c / 0x8c6334 read [S+0xac] as the thing whose distance is
+ *       taken and whose vtable +0x120 receives the ProjectileHit (CERTAIN, re\melee_damage.md 2; klr_pb_step uses +0xac the same
+ *       way). klbotdown.c NoFire clears +0xb0, so +0xac may be STALE then: it is only read while +0xb0 is set. When a drop is
+ *       seen, ONE walk of the entity table (klcensus.c's: 64 slots a read) lists the living soldiers (actor, team, place, target);
+ *       cost only in a pass that wrote a line or saw a death. The line then says: how many soldiers aim at the victim and the
+ *       nearest four (crew record / TRAITOR from the crew record's flag bit 2, Enemy = team 1 'police / guard', distance in
+ *       metres = units / 100), the nearest living non-Ally soldier and whom he aims at, and the nearest Ally aiming at the
+ *       victim (a FRIENDLY-FIRE CANDIDATE). No aimer and more than KLR_CH_BIG (25 %) of the maximum lost in one pass gets
+ *       'NO AIMER ... blast / fall / script?'. GUESSES: that a soldier aiming at the victim is the one who hit him (a soldier
+ *       may aim and not fire, or miss, or the bullet may be a stray from someone aiming at another man); that team 1 is
+ *       police AND guards (no other team separates them); that +0xac is cleared when the soldier loses the target (stale
+ *       values may name a victim for an instant); that the YOU shooter, grenades, fire, vehicles and the helicopter are not
+ *       soldiers and so show only as 'no aimer'. The human (ZFFPlayer) is never listed.
+ *
  *    a4. THE POINT-BLANK RULE, keys PointBlankToYou / PointBlankToCrew / PointBlankToCop (2026-10-11; NOT RUN IN THE
  *       GAME; re\melee_damage.md has the reading and every address). What looks like a guard's melee is a rule of the
  *       soldier's FIRE TASK (kl2 0x8c62e0, called at every step of a burst, 0.1 .. 0.2 s): while his target is within
@@ -316,6 +345,15 @@
 #define KLR_PB_STOCK  100.0f                  /* 0x8c63a1 fld [0xb5c050] / 0x8c63aa fstp [task+0x30] = hit record +0x18 */
 #define KLR_PB_NWHO   3
 #define KLR_PB_LINES  200                     /* Log=2: steps listed per arming; the rest are counted only */
+/* the crew-hit log (section 2 a9) */
+#define KLR_SOLDIER_VT 0x00bd0954             /* ZSoldier: crew and police share it (klbotdown.c KLBD_SOLDIER_VT) */
+#define KLR_CH_CLOCK  0x00dd2640              /* +0x48 the game's tick, 1/1024 s (klbotdown.c KLBD_CLOCK) */
+#define KLR_CH_ROUND  0x19                    /* session state of a round in play (klbotdown.c KLBD_ROUND) */
+#define KLR_CH_PERSEC 6                       /* lines a second */
+#define KLR_CH_ROUND_MAX 400                  /* lines a round; the rest are counted only */
+#define KLR_CH_SOLMAX 256                     /* living soldiers listed in a pass (Hasta's biggest rounds hold ~100 ZFFActors) */
+#define KLR_CH_AIMERS 4                       /* aimers named in a line (the rest are counted) */
+#define KLR_CH_BIG    0.25f                   /* a loss of this part of the maximum in one pass, with no aimer, gets the 'blast / fall / script?' tag */
 
 static int klb_level(char why[200]);          /* klbot.c: 1 only on a level whose archive is NOT the stock one */
 #define KLR_DOWN 2
@@ -917,6 +955,210 @@ static void klr_pb_tick(int act, int game_thread)
              db, mine, stock, (DWORD)KLR_DB_FN, klr_pb_text(0, a), klr_pb_text(1, b), klr_pb_text(2, c));
 }
 
+/* ---------------------------------------------------------------- the crew-hit log (section 2 a9) */
+
+static struct {
+    int on;                                   /* [Balance] LogCrewHits=1 */
+    DWORD rules;                              /* the round being watched (0 = none) */
+    DWORD sec0; int secn;                     /* the one-second window of the rate limit and the lines written in it */
+    LONG drops, listed, skipped, deaths;      /* this round */
+    float lost[KLB_NREC];                     /* health lost by record, this round */
+    struct { DWORD actor; float hp, hmax; BYTE dead; DWORD ltick; float ldelta, ldist; int lmate; char lwho[640]; } r[KLB_NREC];   /* lwho: the last drop's 'who could have' text, for the DIED line */
+    /* the soldiers of ONE pass, built only when a drop was seen in it (klr_ch_sold); nsol < 0 = not built yet this pass */
+    int nsol;
+    struct { DWORD actor, tgt; DWORD team; int rec; BYTE traitor; float pos[3]; } sol[KLR_CH_SOLMAX];
+} klr_ch;
+
+/* the sum line, when the round ends or the session is left (said only when the log was armed in a round) */
+static void klr_ch_sum(const char *why)
+{
+    char by[300]; int i, n = 0;
+    if (!klr_ch.rules) return;
+    by[0] = 0;
+    for (i = 0; i < KLB_NREC && n < 270; i++)
+        if (klr_ch.lost[i] > 0.0f) n += snprintf(by + n, sizeof by - n, "%s record %d %.0f", n ? "," : "", i, klr_ch.lost[i]);
+    klog("balance: crew hits: %s: %ld drop(s) of an AI heister's health seen, %ld listed, %ld not listed (rate limit), %ld death(s); lost by record:%s",
+         why, klr_ch.drops, klr_ch.listed, klr_ch.skipped, klr_ch.deaths, by[0] ? by : " none");
+    klr_ch.rules = 0;
+}
+
+static float klr_ch_dist(const float a[3], const float b[3])
+{
+    return sqrtf((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2]));
+}
+
+/* append to a text, never past its end (_vsnprintf does not terminate a cut text) */
+static void klr_ch_cat(char *o, int sz, const char *fmt, ...)
+{
+    int n = (int)strlen(o); va_list a;
+    if (n >= sz - 1) return;
+    va_start(a, fmt); _vsnprintf(o + n, (size_t)(sz - n - 1), fmt, a); va_end(a);
+    o[sz - 1] = 0;
+}
+
+/* The living soldiers of the scene, once per pass that saw a drop (2 a9b). The entity-table walk of klcensus.c /
+   klcensor.c (64 slots a read, the object at slot+0x60, vtable ZFFActor), then the soldier [actor+0x77c] (vtable
+   0xbd0954, [soldier+0x40] == the actor), alive = health [h+4] > 0. His target: [soldier+0xac] counts only while the
+   'has a target' dword [soldier+0xb0] is not 0 (kl2 0x8c62ec / 0x8c630c: the fire task returns at once without it, and
+   klbotdown.c NoFire clears +0xb0 but leaves +0xac stale). The human is a ZFFPlayer, NOT a soldier: never listed. */
+static void klr_ch_sold(const struct klb_snap *sn)
+{
+    DWORD p, tab, i, blk[64 * 32]; int j;
+    klr_ch.nsol = 0;
+    if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return;
+    for (i = 0; i < 0x10000 && klr_ch.nsol < KLR_CH_SOLMAX; i += 64) {
+        DWORD k;
+        if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) break;
+        for (k = 0; k < 64 && klr_ch.nsol < KLR_CH_SOLMAX; k++) {
+            DWORD o = blk[k * 32 + 0x60 / 4], s, h, info, team = 0xff; float hp = 0;
+            if (o < 0x10000 || klh_rd32(o) != KLR_ACTOR_VT) continue;
+            if (!(s = klh_rd32(o + 0x77c)) || klh_rd32(s) != KLR_SOLDIER_VT || klh_rd32(s + 0x40) != o) continue;
+            if (!(h = klh_rd32(o + 0x5fc)) || !klh_rd(h + 4, &hp, 4) || !klr_finite(hp) || hp <= 0.0f) continue;      /* living only */
+            if (!(info = klh_rd32(o + 0x54)) || !klh_rd(info + 4, &team, 4)) continue;
+            if (!kle_node(klh_rd32(o + 4), klr_ch.sol[klr_ch.nsol].pos, 0)) continue;
+            klr_ch.sol[klr_ch.nsol].actor = o; klr_ch.sol[klr_ch.nsol].team = team;
+            klr_ch.sol[klr_ch.nsol].tgt = klh_rd32(s + 0xb0) ? klh_rd32(s + 0xac) : 0;
+            klr_ch.sol[klr_ch.nsol].rec = -1; klr_ch.sol[klr_ch.nsol].traitor = 0;
+            for (j = 0; j < sn->n && j < KLB_NREC; j++)
+                if (sn->r[j].used && sn->r[j].actor == o) { klr_ch.sol[klr_ch.nsol].rec = j; klr_ch.sol[klr_ch.nsol].traitor = (sn->r[j].flags & 2) != 0; }
+            klr_ch.nsol++;
+        }
+    }
+}
+
+/* "crew record 3", "crew record 3 TRAITOR", "Enemy" ... (team enum: Mercenary 0, Enemy 1, Ally 2, Enemy2 4: re/balance.md) */
+static const char *klr_ch_tm(int k, char t[40])
+{
+    DWORD team = klr_ch.sol[k].team;
+    if (klr_ch.sol[k].rec >= 0) {      /* any soldier with a crew record, whatever his team now (a TraitorFoe traitor is team 1 in play) */
+        if (team == 2) snprintf(t, 40, "crew record %d%s", klr_ch.sol[k].rec, klr_ch.sol[k].traitor ? " TRAITOR" : "");
+        else snprintf(t, 40, "crew %d%s t%lu", klr_ch.sol[k].rec, klr_ch.sol[k].traitor ? " TRAITOR" : "", (unsigned long)team);
+    }
+    else if (team == 2) strcpy(t, "Ally, no crew record");
+    else if (team == 1) strcpy(t, "Enemy (police/guard)");
+    else if (team == 4) strcpy(t, "Enemy2");
+    else if (team == 0) strcpy(t, "Mercenary");
+    else snprintf(t, 40, "team %lu", (unsigned long)team);
+    return t;
+}
+
+/* The 'who could have done it' text of one drop of the victim actor at pos (d lost of hmax); the soldier list is built. */
+static void klr_ch_who(char *out, int sz, DWORD victim, const float pos[3], float d, float hmax, int fatal)
+{
+    int top[KLR_CH_AIMERS], nt = 0, na = 0, k, m, nn = -1, nal = -1, crew; float topd[KLR_CH_AIMERS], q, dn = 0, dal = 0; char t[40];
+    out[0] = 0;
+    for (k = 0; k < klr_ch.nsol; k++) {
+        if (klr_ch.sol[k].actor == victim) continue;
+        q = klr_ch_dist(pos, klr_ch.sol[k].pos);
+        crew = klr_ch.sol[k].team == 2 || klr_ch.sol[k].rec >= 0;      /* a TraitorFoe traitor (team 1 in play) is still crew */
+        if (!crew && (nn < 0 || q < dn)) { nn = k; dn = q; }
+        if (klr_ch.sol[k].tgt != victim) continue;
+        na++;
+        if (crew && (nal < 0 || q < dal)) { nal = k; dal = q; }
+        if (nt == KLR_CH_AIMERS && q >= topd[KLR_CH_AIMERS - 1]) continue;      /* the nearest few are named */
+        for (m = nt < KLR_CH_AIMERS ? nt : KLR_CH_AIMERS - 1; m > 0 && topd[m - 1] > q; m--) { top[m] = top[m - 1]; topd[m] = topd[m - 1]; }
+        top[m] = k; topd[m] = q; if (nt < KLR_CH_AIMERS) nt++;
+    }
+    /* the friendly-fire clause goes FIRST so a cut of the text never loses it */
+    if (nal >= 0) klr_ch_cat(out, sz, "friendly-fire candidate (nearest crew with him as fire-task target): %s %.1f m; ", klr_ch_tm(nal, t), dal / 100.0f);
+    else klr_ch_cat(out, sz, "no crew has him as fire-task target; ");
+    if (!na) klr_ch_cat(out, sz, "no soldier has him as target (fire-task field +0xac, a GUESS that it is the gun target)");
+    else {
+        klr_ch_cat(out, sz, "%d soldier(s) have him as target:", na);
+        for (m = 0; m < nt; m++) klr_ch_cat(out, sz, " [%s %.1f m]", klr_ch_tm(top[m], t), topd[m] / 100.0f);
+        if (na > nt) klr_ch_cat(out, sz, " +%d more", na - nt);
+    }
+    if (nn >= 0) klr_ch_cat(out, sz, "; nearest living non-crew: %s %.1f m, aims at %s", klr_ch_tm(nn, t), dn / 100.0f,
+                            klr_ch.sol[nn].tgt == victim ? "him" : klr_ch.sol[nn].tgt ? "someone else" : "nobody");
+    else klr_ch_cat(out, sz, "; no living non-Ally soldier in the scene");
+    if (!na && fatal) klr_ch_cat(out, sz, " -- fatal hit with no target left at the sample (the killer may have just dropped him as target; blast / fall / YOUR shots also fit)");
+    else if (!na && d > KLR_CH_BIG * hmax) klr_ch_cat(out, sz, " -- NO TARGETER and a big loss (%.0f%% of his maximum in one pass): blast / fall / script? (or YOUR shots: the human is not scanned)", 100.0f * d / hmax);
+}
+
+/* the death line: the last drop seen (this pass's own when the killing blow fell in it) */
+static void klr_ch_died(int i, const struct klb_rec *r, DWORD tick, float hp, float hmax)
+{
+    klr_ch.r[i].dead = 1; InterlockedIncrement(&klr_ch.deaths);
+    if (!klr_ch.r[i].ltick) {
+        klog("balance: crew hit: record %d (actor %08lx) DIED at tick %lu, health %.1f of %.1f; no drop of his health was seen before", i, (unsigned long)r->actor, (unsigned long)tick, hp, hmax);
+        return;
+    }
+    klog("balance: crew hit: record %d (actor %08lx) DIED at tick %lu, health %.1f of %.1f; his last drop was %.1f, %.2f s before, you %.0f units away then, nearest other heister record %d; who could have done it then: %s",
+         i, (unsigned long)r->actor, (unsigned long)tick, hp, hmax, klr_ch.r[i].ldelta, (float)(long)(tick - klr_ch.r[i].ltick) / 1024.0f, klr_ch.r[i].ldist, klr_ch.r[i].lmate, klr_ch.r[i].lwho);
+}
+
+/* One pass of the log, on the game's thread (the caller's 50 ms). Reads only: nothing is written, nothing is called, no
+   code and no vtable is touched, so the hit cannot change. The damage routine itself is NOT wrapped (2 a9). A drop of
+   an AI heister's current health between two passes is a hit; two hits within one pass are one line. */
+static void klr_ch_tick(int arcade, int game_thread)
+{
+    struct klb_snap sn; DWORD clock, tick = 0, now = GetTickCount(); int i; char why[200];
+    if (!klr_ch.on || !game_thread) return;
+    if (!arcade || !klb_read(&sn) || sn.state != KLR_CH_ROUND) {      /* the lobby or the session is gone: the round's sums go out */
+        klr_ch_sum("the round is over (or left)");
+        memset(klr_ch.r, 0, sizeof klr_ch.r);
+        return;
+    }
+    if (!(clock = klh_rd32((DWORD_PTR)KLH_VA(KLR_CH_CLOCK))) || !klh_rd(clock + 0x48, &tick, 4)) return;
+    if (sn.rules != klr_ch.rules) {               /* a new round: forget everything of the last */
+        klr_ch_sum("a new round starts");
+        klb_level(why);                           /* only for the text of this line: stock or not, the log runs (it writes nothing to the game) */
+        klr_ch.rules = sn.rules; klr_ch.drops = klr_ch.listed = klr_ch.skipped = klr_ch.deaths = 0;
+        memset(klr_ch.lost, 0, sizeof klr_ch.lost); memset(klr_ch.r, 0, sizeof klr_ch.r);
+        klog("balance: crew hits: a round runs (%s; the log runs on stock levels too): every drop of an AI heister's health is listed, at most %d lines a second and %d a round; each line says who COULD have done it (the soldiers whose target is the victim, the nearest non-Ally, the nearest Ally aiming at him), not who did", why, KLR_CH_PERSEC, KLR_CH_ROUND_MAX);
+    }
+    klr_ch.nsol = -1;                             /* the soldier list of this pass: built at the first drop that needs it */
+    for (i = 0; i < sn.n && i < KLB_NREC; i++) {
+        const struct klb_rec *r = &sn.r[i];
+        DWORD h, s; float hp = 0, hmax = 0, pos[3] = { 0, 0, 0 }, hpos[3], p2[3], d, q, dh = -1.0f, dm = -1.0f; int have, j, mate = -1, list, fatal; BYTE dn = 0;
+        if (!r->used || !(r->flags & 1) || !r->actor || klh_rd32(r->actor) != KLR_ACTOR_VT || !(s = klh_rd32(r->actor + 0x77c)) || klh_rd32(s) != KLR_SOLDIER_VT) { klr_ch.r[i].actor = 0; continue; }
+        if (!(h = klh_rd32(r->actor + 0x5fc)) || klh_rd32(h + 0x24) != r->actor) continue;
+        if (!klh_rd(h + 4, &hp, 4) || !klh_rd(h + 8, &hmax, 4) || !klr_finite(hp) || !klr_finite(hmax) || hmax < 1.0f || hmax > 100000.0f) continue;
+        if (klr_ch.r[i].actor != r->actor) {      /* a new man in this record (or the first pass): the baseline, no line */
+            memset(&klr_ch.r[i], 0, sizeof klr_ch.r[i]);
+            klr_ch.r[i].actor = r->actor; klr_ch.r[i].hp = hp; klr_ch.r[i].hmax = hmax;
+            continue;
+        }
+        if (r->status != 7) klr_ch.r[i].dead = 0;      /* a record that lives again (the same address reused) may die again */
+        if (hmax != klr_ch.r[i].hmax || (r->status != 0 && r->status != 7)) { klr_ch.r[i].hp = hp; klr_ch.r[i].hmax = hmax; continue; }      /* not in play; or the maximum moved (Tough / FedHealth write it with the health): not a hit */
+        if (hp >= klr_ch.r[i].hp - 0.001f) {      /* the same, or healed / regenerated */
+            klr_ch.r[i].hp = hp;
+            if (r->status == 7 && !klr_ch.r[i].dead) klr_ch_died(i, r, tick, hp, hmax);
+            continue;
+        }
+        d = klr_ch.r[i].hp - hp;
+        fatal = !klr_ch.r[i].dead && (hp <= 0.0f || r->status == 7);      /* the hit that takes him down, not a later one on a dead record */
+        InterlockedIncrement(&klr_ch.drops); klr_ch.lost[i] += d;
+        /* who stands near: you, and the nearest other heister (friendly fire?) - a distance, not an attacker (a policeman is NOT scanned: the log cannot tell friendly fire from police, only where the crew stood) */
+        have = kle_node(klh_rd32(r->actor + 4), pos, 0);
+        if (have && sn.human >= 0 && sn.r[sn.human].actor && kle_node(klh_rd32(sn.r[sn.human].actor + 4), hpos, 0)) dh = klr_ch_dist(pos, hpos);
+        for (j = 0; have && j < sn.n && j < KLB_NREC; j++) {
+            if (j == i || !sn.r[j].used || sn.r[j].status != 0 || !sn.r[j].actor || !kle_node(klh_rd32(sn.r[j].actor + 4), p2, 0)) continue;
+            q = klr_ch_dist(pos, p2);
+            if (dm < 0 || q < dm) { dm = q; mate = j; }
+        }
+        klr_ch.r[i].ltick = tick; klr_ch.r[i].ldelta = d; klr_ch.r[i].ldist = dh; klr_ch.r[i].lmate = mate;
+        if (now - klr_ch.sec0 >= 1000u) { klr_ch.sec0 = now; klr_ch.secn = 0; }
+        list = !(klr_ch.secn >= KLR_CH_PERSEC || klr_ch.listed >= KLR_CH_ROUND_MAX);
+        /* who could have done it (2 a9b): the soldier list is built ONCE this pass, and only for a line that is written or a death (a rate-limited drop costs nothing) */
+        if (!have) strcpy(klr_ch.r[i].lwho, "his place is unknown, so nobody was looked for");
+        else if (list || fatal) {
+            if (klr_ch.nsol < 0) klr_ch_sold(&sn);
+            klr_ch_who(klr_ch.r[i].lwho, sizeof klr_ch.r[i].lwho, r->actor, pos, d, hmax, fatal);
+        } else strcpy(klr_ch.r[i].lwho, "not looked for (rate limit)");
+        if (!list) InterlockedIncrement(&klr_ch.skipped);
+        else {
+            klr_ch.secn++; InterlockedIncrement(&klr_ch.listed);
+            klh_rd(r->actor + 0x64c, &dn, 1);
+            klog("balance: crew hit: record %d (actor %08lx, stage %u%s) health %.1f -> %.1f (-%.1f of %.1f) at (%.0f, %.0f, %.0f), tick %lu; you %.0f units away, nearest other heister record %d at %.0f; %s%s; who could have: %s",
+                 i, (unsigned long)r->actor, (unsigned)r->stage, (r->flags & 2) ? ", TRAITOR" : "", klr_ch.r[i].hp, hp, d, hmax, have ? pos[0] : 0, have ? pos[1] : 0, have ? pos[2] : 0, (unsigned long)tick,
+                 dh, mate, dm, dn ? "he is down" : "on his feet", fatal ? ", THIS HIT KILLED HIM" : "", klr_ch.r[i].lwho);
+        }
+        klr_ch.r[i].hp = hp;
+        if (r->status == 7 && !klr_ch.r[i].dead) klr_ch_died(i, r, tick, hp, hmax);
+    }
+}
+
 static void klr_tick(int game_thread)
 {
     static DWORD last, toldrules; static char toldwhy[200];
@@ -938,6 +1180,7 @@ static void klr_tick(int game_thread)
     klr_head_tick(act);                       /* HeadShot / FedHeadShot (2 a8): the two head floats; the tuning's own back otherwise */
     if (arcade && act) klr_tough_say(now);    /* the proof line: what the game made the AI heisters' health */
     klr_pb_tick(act, game_thread);           /* the point-blank keys: in while the dial acts, the game's own vtable back otherwise */
+    klr_ch_tick(arcade, game_thread);        /* LogCrewHits: reads only; any Arcade round, stock level or not */
     if (arcade) klr_player_tick(act, game_thread, rules);
     else if (klr_p.have) klr_player_tick(0, game_thread, 0);      /* the session ended with the object alive: its own values go back */
 }
@@ -1079,6 +1322,8 @@ static void klr_init(void)
             klog("balance: %s=%s is IGNORED: it must be one number of 0 .. 100 with a decimal point (how many ordinary bullets of his gun one point-blank step is worth; 100 = the game's own), or a negative one to leave that victim alone", klr_pb_key[k], p);
         else if (d >= 0) { klr_pb.want[k] = d > 0 ? (float)d : 0.0f; klr_pb.any = 1; }      /* '-0' is 0 */
     }
+    klr_ch.on = GetPrivateProfileIntA("Balance", "LogCrewHits", 0, klh_ini) != 0;      /* no key: no line, no pass (the hook is what it was) */
+    if (klr_ch.on) klog("balance: LogCrewHits=1: every drop of an AI heister's health in an Arcade round is logged (a sample of his health object every 50 ms, reads only; at most %d lines a second, %d a round, then a sum): who could have shot (the soldiers aiming at him, read from their target field), not who did - the damage routine is not wrapped", KLR_CH_PERSEC, KLR_CH_ROUND_MAX);
     if (kld_pb_key()) klr_pb.any = 1;         /* kldown.c: [Down] DownPointBlank needs the wrapper although no PointBlank key is set */
     if (pbsaid)
         klog("balance: point-blank keys (in place of the game's 100 in the hit a soldier sends at every burst step while his target is within 160 units): %s on you, %s on an AI heister, %s on a policeman / another NPC%s",
