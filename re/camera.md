@@ -416,3 +416,21 @@ The 10 s summary adds STUCK2 / LAG2 counts, frames with rdt > 0.1 s, swaps ok / 
 - GUESS / ASSUMPTION labels: that the cam+0x790 channel (FovStep) is the FOV one; that ShakeScale (table read by 0x510500) also scales the explosion states; the [P+0x2d6c] clearance bits (4 left / 8 right); polarity of b90 bit 0x20.
 - Rejected: guarding the Cine knobs with kl_online() (client-side visual data only, deliberately not gated; the private-match requirement says features must work online too).
 
+
+## The non-finite eye (2026-10-18; static, wf_e3b19273 trace + refute; nothing run)
+Vault DM03A slow runs L12 / L17: [cam+0x508] non-finite from the first camera tick, all round (3f, by the hook's READFAIL bit 1).
+- Per-frame route (READ): 0x87ae38 -> 0x48ec00, 0x87ae44 -> 0x446c40 (the rig): E = (O + [cam+0x5d0]) * M[cam+0x468] + [cam+0x48c],
+  O = the chasers' output at cam+0x524..0x52c; 0x44739c calls 0x4b3160, which stores E into cam+0x508 unchecked (other callers of
+  0x4b3160: 0x55cece 0x5de593 0x5ffc48 0x7076f3). 0x7c9030 (eye setter) is called by the pull-in 0x56e4c0 and the tick 0x650070.
+- M / position: 0x892180 via ZFFPlayer vt[0x278] = 0x688660 -> 0x8dc650 reads [P+0xbd4] +0x1d4 (position: |p| >= 1e6 or NaN -> origin)
+  and +0x1e0 (3x3, copied with NO check).
+- Chasers (6 x 0x34 at cam+0x658..0x790, h at +0x30, velocity +0x0c, dirty byte +0x10): 0x51b430 a = 8d/T^2 (T = 0 -> Inf / NaN,
+  the 'tiny' fix-up only for |a| < 1/8192); 0x5a3150 reloads its state from *out every step, so a NaN state LATCHES for good
+  (x87 'test ah,5 / jp' treats NaN as 'far'; 0x65c160 stores it back). Profile times at cam+0x590 / 0x594 (constructor 0.25 / 1.0).
+- Cinematic branch 0x446eb6 (byte cam+0xc28): O = lerp(cam+0xc2c.., target, t = cam+0xc3c) + cam+0xc40 into *out unchecked;
+  the sanitiser at 0x4470d6 (test 0x41) lets NaN through. When the flag drops the chasers keep the NaN. Fits 'first tick, pre-round'.
+- Low: pull-in ratio 0x56e5b1 (transient only, gated by cam+0x394); dt (ftol clamps 1..10, h constant); normalise 0x72a000 (guarded).
+- Rewriting cam+0x508 alone is cosmetic: 0x4b3160 recomputes it next tick. NanRepair (klcam.c, b640f178) covers the latch
+  (*out and the six chasers in +0x500..0x790) but NOT: dirty bytes / velocities, T = 0 (finite), cam+0x468 / 0x48c, cam+0xc10..0xc4c.
+- The next failing run's NanDump decides: 0x590 <= 0 -> T = 0; *out NaN, 0x468 finite, 0xc2c.. NaN -> the cinematic branch;
+  0x468 NaN -> the pawn matrix (then guard [P+0xbd4]+0x1d4..0x200 or substitute E at the 0x44739c call).
