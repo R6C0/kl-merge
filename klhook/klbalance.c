@@ -221,6 +221,8 @@
  *       after, place, your distance and the
  *       nearest other heister's, down or not, then WHO COULD HAVE DONE IT (a9b below). The killing blow is listed and a death (status 7) gets a line with the last drop and its 'who'. NO health-object ticks or [actor+0x600] are logged: the ticks are a clock minus a delay and +0x600 is the head-hit sum klcensor pre-arms. At
  *       most 6 lines a second and 400 a round, the rest counted; a sum line (drops, lost per record) when the round ends.
+ *       LogCrewHitsBig=N (2026-10-19, default 0 = off; NOT RUN): a drop of N or more in one pass is listed past both limits,
+ *       tagged BIG (L93 hit the 400 at 00:20:24.9, so rec 1's 340 one-shot at 00:22:17 had only its DIED line).
  *       A rise (regeneration, a get-up) and a change of the maximum (Tough, FedHealth) are no hit. WHAT IT CANNOT SAY:
  *       the attacker, the weapon or the damage kind, and two hits within one pass are one line. The route to those -
  *       ZSoldier slot 96 (0x8473a0), hit record +0x00 attacker, +0x08 kind, +0x28 amount - needs a private soldier vtable,
@@ -959,7 +961,8 @@ static void klr_pb_tick(int act, int game_thread)
 
 static struct {
     int on;                                   /* [Balance] LogCrewHits=1 */
-    DWORD rules;                              /* the round being watched (0 = none) */
+    int big;                                  /* [Balance] LogCrewHitsBig=N (default 0 = off): a drop of N or more is listed past both rate limits */
+    DWORD rules;                             /* the round being watched (0 = none) */
     DWORD sec0; int secn;                     /* the one-second window of the rate limit and the lines written in it */
     LONG drops, listed, skipped, deaths;      /* this round */
     float lost[KLB_NREC];                     /* health lost by record, this round */
@@ -1140,6 +1143,7 @@ static void klr_ch_tick(int arcade, int game_thread)
         klr_ch.r[i].ltick = tick; klr_ch.r[i].ldelta = d; klr_ch.r[i].ldist = dh; klr_ch.r[i].lmate = mate;
         if (now - klr_ch.sec0 >= 1000u) { klr_ch.sec0 = now; klr_ch.secn = 0; }
         list = !(klr_ch.secn >= KLR_CH_PERSEC || klr_ch.listed >= KLR_CH_ROUND_MAX);
+        if (!list && klr_ch.big > 0 && d >= (float)klr_ch.big) list = 2;      /* LogCrewHitsBig: a big drop is never lost to the limits (L93: rec 1's 340 one-shot fell after the round's 400) */
         /* who could have done it (2 a9b): the soldier list is built ONCE this pass, and only for a line that is written or a death (a rate-limited drop costs nothing) */
         if (!have) strcpy(klr_ch.r[i].lwho, "his place is unknown, so nobody was looked for");
         else if (list || fatal) {
@@ -1150,8 +1154,8 @@ static void klr_ch_tick(int arcade, int game_thread)
         else {
             klr_ch.secn++; InterlockedIncrement(&klr_ch.listed);
             klh_rd(r->actor + 0x64c, &dn, 1);
-            klog("balance: crew hit: record %d (actor %08lx, stage %u%s) health %.1f -> %.1f (-%.1f of %.1f) at (%.0f, %.0f, %.0f), tick %lu; you %.0f units away, nearest other heister record %d at %.0f; %s%s; who could have: %s",
-                 i, (unsigned long)r->actor, (unsigned)r->stage, (r->flags & 2) ? ", TRAITOR" : "", klr_ch.r[i].hp, hp, d, hmax, have ? pos[0] : 0, have ? pos[1] : 0, have ? pos[2] : 0, (unsigned long)tick,
+            klog("balance: crew hit%s: record %d (actor %08lx, stage %u%s) health %.1f -> %.1f (-%.1f of %.1f) at (%.0f, %.0f, %.0f), tick %lu; you %.0f units away, nearest other heister record %d at %.0f; %s%s; who could have: %s",
+                 list == 2 ? " (BIG, past the rate limit)" : "", i, (unsigned long)r->actor, (unsigned)r->stage, (r->flags & 2) ? ", TRAITOR" : "", klr_ch.r[i].hp, hp, d, hmax, have ? pos[0] : 0, have ? pos[1] : 0, have ? pos[2] : 0, (unsigned long)tick,
                  dh, mate, dm, dn ? "he is down" : "on his feet", fatal ? ", THIS HIT KILLED HIM" : "", klr_ch.r[i].lwho);
         }
         klr_ch.r[i].hp = hp;
@@ -1323,6 +1327,8 @@ static void klr_init(void)
         else if (d >= 0) { klr_pb.want[k] = d > 0 ? (float)d : 0.0f; klr_pb.any = 1; }      /* '-0' is 0 */
     }
     klr_ch.on = GetPrivateProfileIntA("Balance", "LogCrewHits", 0, klh_ini) != 0;      /* no key: no line, no pass (the hook is what it was) */
+    klr_ch.big = (int)GetPrivateProfileIntA("Balance", "LogCrewHitsBig", 0, klh_ini); if (klr_ch.big < 0 || klr_ch.big > 100000) klr_ch.big = 0;
+    if (klr_ch.on && klr_ch.big) klog("balance: LogCrewHitsBig=%d: a drop of that much or more in one 50 ms pass is listed past the %d-a-second and %d-a-round limits (tagged BIG)", klr_ch.big, KLR_CH_PERSEC, KLR_CH_ROUND_MAX);
     if (klr_ch.on) klog("balance: LogCrewHits=1: every drop of an AI heister's health in an Arcade round is logged (a sample of his health object every 50 ms, reads only; at most %d lines a second, %d a round, then a sum): who could have shot (the soldiers aiming at him, read from their target field), not who did - the damage routine is not wrapped", KLR_CH_PERSEC, KLR_CH_ROUND_MAX);
     if (kld_pb_key()) klr_pb.any = 1;         /* kldown.c: [Down] DownPointBlank needs the wrapper although no PointBlank key is set */
     if (pbsaid)
