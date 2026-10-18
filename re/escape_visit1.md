@@ -352,3 +352,96 @@ and two were in play at heist stage 1/2 with $0 (never called). After LastVehicl
 so Flat matters only until then. The full opt-in stack (EscVisitFix + CrewRouteHold 45 / CrewRouteRange 100 +
 CrewRouteAlone + BoardReachFlat) has now passed visit 1 on the Vault (L65), Park II (L68) and Hot Coffee II (L70).
 Adopting it into the owner's hook and ini is the owner's call.
+
+
+## 2026-10-18: what fires EnterVehicle early (static, workflow wajm2i405, verified 19 of 24)
+
+VERIFIED: 19 of 24 claims held
+
+# Who calls ZPlayerAction slot 26 ('EnterVehicle') before escape state 1
+
+Every address below was re-read in the kl2.exe disassembly. GUESS means the code does not show it. NOT RE-READ means it is level data or a scan this pass did not repeat.
+
+## 1. Callers of 0x65ee60 and slot 26 (FACT, re-verified)
+- 0x65ee60 is `if ([ecx+0x1e0]==0) { [ecx+0x1e0]=arg; return 1 } else return 0`. A call scan of .text finds exactly two callers, 0x7fdc9a and 0x7fdd3a. Both are inside 0x7fdbb0. No data pointer to it exists.
+- 0x7fdbb0 is ZPlayerAction slot 26 (vtbl 0xbc29ec, cell 0xbc2a54, `ret 8`). Its only reference is that vtable cell.
+- At both call sites ecx is `0x508ef0([0x168e9e4])`, and the pushed argument is `[esi+0x24]`.
+- 0x508ef0 returns `[[0x168e9e4]+0x54]` only when `[[0x168e598]+0x5c]==4` and 0x7f6850 passes.
+- `[esi+0x24]` is the controller's owner entity in other controller classes. For PlayerAction this is an inference (GUESS).
+- The "454 hits for `call [reg+0x68]`" scan was NOT RE-READ. It adds nothing, because the dispatch chain below is what matters.
+
+## 2. Dispatch path, trigger to action (FACT, re-verified)
+1. ZGROUP and ZBoxPrimitive both have vtbl+0x12c = 0x523310. It resolves the target through 0x796ff0 on `[0xe0ff90]` and calls the target's vtbl+0x130 as (id, extra, sender).
+2. ZBoxPrimitive's 0x130 is 0x7da000, which does `jmp [vtbl+0x120]`. That is 0x787250.
+3. 0x787250 calls vtbl+0x164 and then vtbl+0x11c as 0x446010(0x20, extra, id, sender).
+   - Which function is vtbl+0x164 was not resolved. 0x547000 (`xor eax,eax; ret 8`) is only a guess for it.
+4. 0x446010 first checks `0x758da0([this+4])`. If that fails it returns without delivering.
+   - It then walks controllers via `[0xe0ff88]` and 0x8190b0. It delivers only if `[ctrl+0x20]==0`, `([ctrl+0x18] & mask)!=0` or mask is 0x20, and `[ctrl+0x21]` is in 1..5. It calls the controller's vtbl+0x6c (slot 27).
+5. Slot 27 is 0x617590 for ZPlayerAction, ZActivateGeom, ZDeactivateGeom and ZOnlineEscAnimatedVehicle. For code 0x20 it calls vtbl+0x68 (slot 26) with (id, extra).
+   - Codes 8, 0x10 and 0x1000 go to slots 24, 25 and 31.
+   - The sender is dropped, so the action cannot know who triggered it.
+6. ZGROUP's vtbl+0x130 is 0x41a4a0. It runs its own vtbl+0x120 (the controllers on the group itself). It then walks the child list (`[this+0x40]`, sibling index at +0x5e) and calls each child's vtbl+0x130, so the broadcast reaches the whole subtree.
+7. The level-data statements are NOT RE-READ this pass: the ancestors EscapeVehicle_Animation_F07, F07_Escape_Vehicle_01 and V_Van_00 being ZGROUP, and BoardingTrigger being a ZBoxPrimitive. re/escape_visit1.md has the ZBoxPrimitive part.
+
+## 3. Conditions inside slot 26 (0x7fdbb0) (FACT, corrected)
+- **The `[esi+0x7c]` gate covers all three messages, not only the firing ones.** 0x7fdbb3 does `cmp [esi+0x7c],0; je exit` before any id compare. The constructor sets it to 1 (0x8e934a).
+- Message-id globals, names confirmed from their static registrations:
+  - 0x16891a0 = 'AITrigger' (registered at 0x8e9392).
+  - 0x168919c = 'Activate' (0x8e93b4).
+  - 0x16891f0 = 'AIBlocker' (static object at 0x16891e8, created in 0xaf19c0).
+- 'AIBlocker' clears +0x7c and +0x54. It also writes 0 to byte +0x64 of a table record (`[0xdd265c]+0x15e0 + idx*0x68 + 0x14`) when `[esi+0x98]` is not -1.
+- 'AITrigger' sets +0x54 to (old==0), that is a toggle. 'Activate' sets +0x54=1. Both mirror the value into the same table record.
+- After either message, it fires when all of these hold:
+  - +0x54 is non-zero.
+  - 0x7f6850 passes.
+  - The string at `[[esi+0x50]+0xc]` equals 0xb50920, which is "EnterVehicle".
+  - Then 0x508ef0 and 0x65ee60 run, at 0x7fdc9a for AITrigger and at 0x7fdd3a for Activate.
+- **'Activate' alone is enough.** It fires regardless of the previous +0x54.
+- **0x7f6850 is a session gate, not a pass-through.**
+  - It reads `[0x168e598]+0x54`. Values 2 and 3 return false. Any other value falls through to `[+0x5c]==4`.
+  - 0x508ef0 needs `[+0x5c]==4` as well.
+  - So "nothing checks escape state, the actor or the player" is true for the heist escape state, the actor and the player. It is false in general: the session manager's state must be 4 (the round running).
+  - It is not an obstacle at round start.
+- The constructor does not set +0x54. The "starts active (b1)" claim comes from level data and rests on the field-to-offset pairing, which is not shown (GUESS). If it holds, the first AITrigger turns the action off and the second one fires.
+
+## 4. Candidate senders
+| Candidate | Evidence | Status |
+|---|---|---|
+| ZOnlineEscAnimatedVehicle slot 26 (0x518bf0) | Handles EnterAnimation 0x168c7f8, ExitAnimation 0x168c804, CrashAnimation 0x168c810 and Reset 0x168c834 (names confirmed). It sends the ids at `[esi+0x44]` / `[esi+0x46]` to the entity `[esi+0x60]` via vtbl+0x130 (broadcast). It also sends KILLBOX_ENABLE (0x168c81c) via the owner's vtbl+0x12c, and EnableFrameUpdate (0x168d6c8) via vtbl+0x120 to `[esi+0x68]`. | **The earlier "sends no plain Activate or AITrigger" is not supported.** The ids at +0x44 / +0x46 are level data and may be Activate or AITrigger (GUESS). It only runs on EnterAnimation, which arrives at state 1 or later, so it cannot be the early fire. |
+| Heist slot 194, state 1 (0x8fa75f) | For vehicle kind 3 (`al==3` at 0x8fa78e) it sends Reset (0x168c834) via vtbl+0x130 at 0x8fa796 and EnterAnimation (0x168c7f8) via vtbl+0x120 at 0x8fa7ac. Other kinds send 0x168eb14 (ZMOVEMENT_MSG_RESET). | FACT. Neither message is Activate or AITrigger, and it runs at state 1, so it is ruled out as the early trigger. |
+| ActivateGeom / DeactivateGeom controllers aimed at the van group | Mechanism now read, see below. | **Strongest candidate, upgraded from "mechanism unread".** |
+| Other relays or triggers | The 0x86bc40 list-sender helper reads 0x16891a0 at 0x86bc7b (it sends AITrigger to a list). Owner class unidentified. | GUESS |
+
+Level-data evidence (NOT RE-READ this pass, from the earlier read): ActivateGeom / DeactivateGeom controllers with message AITrigger target `EscapeVehicle_Animation_F07` in DM01B (entities 20617, 20619), DM06B (19071, 19073) and DM03A (21007, 21002). Stock DD07, DD04, DD05 and DD01 have only the OnlineExitLevelTrigger referencing that group.
+
+Mechanism, now read (FACT):
+- ZActivateGeom slot 26 (0x55c9f0) matches the message id against the words at `[esi+0x3a]` and `[esi+0x30]`. For each target in its list (`[esi+0x34]`) it calls 0x8ccde0(handle) and then `[0x168e598]->vtbl+0x20(entity, 0)`.
+- ZDeactivateGeom slot 26 (0x824950) is the same shape. It matches `[esi+0x40]` or `[esi+0x30]` and calls vtbl+0x24 (0x62de80 on the Multiplayer class; not followed further).
+- ZSessionManagerMultiplayer (vtbl 0xbd1ebc) has +0x20 = **0x7f77b0**. 0x7f77b0 calls 0x4c4900(entity, arg2). So 0x7f77b0 IS that slot. The earlier "treat as unrelated" was wrong.
+- 0x4c4900 is also the base ZSessionManager's own +0x20 (vtbl 0xbd3fe4).
+- With arg2 = 0, 0x4c4900 does the following if bit 10 of `[[ent+4]+0x3c]` is set:
+  - It calls entity vtbl+0x58, +0x30 and +0x50(1).
+  - It then **calls entity vtbl+0x130 with the word `[0x168ee34]`, which is 'Activate'** (static object 0xb03ef5).
+- Sending 'Activate' (0x168ee34) to a group broadcasts down to BoardingTrigger's action. The action's slot 26 compares against 0x168919c, a separate registration of the same name. That the two ids are equal is inferred from both coming from the same name lookup (vtbl+0x4c), so GUESS-minus.
+- So ActivateGeom hitting the van group very likely delivers 'Activate' to the EnterVehicle action. That sets +0x54=1, passes the gate and calls 0x65ee60. This is a static chain, still not observed live.
+- Open assumptions:
+  - `[0x168e598]` is the Multiplayer class in FA (constructed at 0x90ab5e under a condition not read). The Singleton class has a different +0x20.
+  - The geom controller's target list contains the van group.
+  - The controller actually fires about 1.3 s before state 1.
+
+Leading hypothesis (GUESS, now mechanically supported): a "show/hide the van" geom controller fires at round start on the van group. That broadcasts 'Activate' and fires the EnterVehicle action early. Stock DD07 does not have the controller.
+
+## 5. ONE opt-in klmove test: `[Bots] EnterVehicleTrace=1`
+It needs no code patch. A heap-only vtable swap is allowed under the ship policy.
+1. Model it on klmv_escvisit (klmove.c:1573) and klhp_scan_heap (klheliprobe.c:62). Once per level, heap-scan with VirtualQuery for dwords equal to 0xbc29ec.
+2. Keep instances whose name is "EnterVehicle" and whose `[this+0x24]` is a ZBoxPrimitive.
+3. Copy the vtable, replace slot 26 (+0x68) with a stub that logs and then jumps to 0x7fdbb0 (ecx and the 2 stack args kept, `ret 8`), and point the instance at the copy.
+4. The stub logs the message id (compare with the globals 0x16891a0 / 0x168919c / 0x16891f0), `[this+0x24]`, `[this+0x54]`, `[this+0x7c]`, `[rules+0x1dc]`, `[rules+0x1e0]`, `[rules+0x1e4]`, and about 24 stack dwords that point into .text and follow a call.
+5. How to read it:
+   - Return addresses inside 0x55c9f0 / 0x4c4900 / 0x7f77b0 mean the Geom path. The fix to test is to retarget or remove those refs to `EscapeVehicle_Animation_F07` in DM01B, DM03A and DM06B.
+   - Frames in 0x518bf0 or 0x8fa6d0 mean a van or heist-side sender.
+   - Because slot 27 drops the sender and the stack is shallow, expect frames from 0x617590, 0x446010 and 0x787250, then the group's 0x41a4a0. The originator may only show in the deeper frames, so scrape deeper than 24 dwords.
+   - An id that is neither AITrigger nor Activate means section 3 is wrong.
+6. Optional A/B: write 0 to `[obj+0x7c]` until the state is at least 1. If `[1e4]` is then valid at state 1 without EscVisitFix, the early fire is the whole cause.
+
+Files: C:\kl-merge\kl-merge\klhook\klmove.c, C:\kl-merge\kl-merge\klhook\klheliprobe.c, C:\kl-merge\kl-merge\re\escape_visit1.md.
