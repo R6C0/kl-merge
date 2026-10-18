@@ -802,3 +802,65 @@ be taken, a fitting prop for the statue loot. `tools/kl_fa_loot.py` works on the
   and 'GUESS: that a stack inside the glass can be reached' of section 2 are measured now (top y 21070;
   every case has a place to stand 91..98 away, reach 190).
 Section 8's steps 6 / 7 (statue loot, the table's six) are to be looked at with re/retomoto_loot.md 6.
+
+## 13. Crew hop and join read from the owner's real DM09 rounds (2026-10-18, OFFLINE; `tools/kl_rt_hopread.py`)
+
+Read-only on `<DD>/KLHook.log` (nothing written to Dog Days, no game run, nothing committed). Run:
+`python tools/kl_rt_hopread.py` (the session that holds the last DM09 hop plan = session 111, KLHook loaded 19:09:56, SHIP build
+Oct 17 12:34:05) or `--session 98` (the 11:09 round), `--all`, `--since/--until`. Coordinates in the log are (x, HEIGHT, z): the tower
+floor is height 19600, the lobby car 560..570, so "z about 190" means the third number. Everything below is counted from log lines;
+GUESSes are marked.
+
+### 13.1 Session 111 (owner, 19:17 - 19:27; hook plan: join box x 2330..3150 / y 19500..19800 / z 0..1100, CrewHop.2 radius 700)
+- Two full rounds (8 and 9). `[CrewHop]` hops 1, 2, 3 and 5 are live; no `did NOT land` / `NOT put back` / `NOT carried` / GIVE UP line.
+- **Round 8**: the join fired at 157 s (player (2475, 19601, 1)). Three bots (1, 5, 7) had been carried by hop 2 at 154..156 s, 4 were
+  moved by the jump: bot 2 and 6 were walking in (257 / 281 from the elevator), bot 4 was 956 away, bot 3 2445 away.
+  **Round 9**: join at 122 s; SIX bots carried by hop 2 at 113..118 s, one moved by the jump (bot 4, 3871 away).
+  The far straggler is the escort bot both times (`escort: record 3` in round 8, `record 4` in round 9: it walks beside the player, so it
+  is the last to reach the lobby gate). It is not a hop problem; it is what the escort is for.
+- **Walk times** (hop 1 walk ordered -> carried by hop 2): 6.0 .. 11.6 s, median 8.1 s, 9 walks; the 40 s GIVE UP never fired.
+  So no bot stalled on the way from the lobby gate to the elevator in these two rounds. Re-orders (`ordered there again`, 8.1 s after
+  the order) came for 3 of the 9, at (1719, 110), (1980, 93), (1697, 121): 9..11 m short of the walk's end, still moving.
+- **Stall radius (the 430 -> 700 GUESS)**: the 11 first sightings in hop 2's place lie 653 .. 697 from its From (median 670), at
+  x 2145..2223, z 131..220: the bots are caught the moment they walk into the circle, not after standing. All 11 are beyond the old 430,
+  so 430 would have caught none of them. BUT the largest is 697 of 700: 3 to
+  spare. The sightings are censored by the radius itself, so this log cannot say where a bot that stalls further out would stand.
+  700 is verified to work; its margin is 3 for one bot in eleven. GUESS: 800 would give the margin back (not checked against the walls round the lift lobby); keep 700 if the owner is happy.
+- **Height (the y 570 GUESS)**: every carry lands at (.., 570, ..); 2 s later the 6 bots still at heist stage 1 stand at node height
+  560 (+0x460: 560 or 570); the 3 at stage 2 are 355..525 = already walking down from the car (the street at the car's foot is 160 in
+  the escort lines). No put-back line. The places' 570 is right to within the engine's own 10 offset.
+- **Hop 3 (atrium) margin**: its sightings are at node height 19730..19746 against From 19600 + Height 150 = dy +130 .. +146, i.e. 4
+  to spare; for the sightings where the two disagree the +0x460 place reads 19817..19825 (dy +217..225, out of Height). klhop.c accepts if EITHER place is inside
+  ("ONLY ONE of the two places is at From: they disagree": 8 of 13 sightings of hop 3, 6 of 12 of hop 1). So hop 3 works by the node
+  alone. GUESS: raise `[CrewHop.3] Height` 150 -> 250 (or From y 19740) so the +0x460 place agrees. Not needed for today's rounds.
+- **Join**: box entered at z 1 and z 1 (the box starts at z 0): the player walks in along its west edge; fine, but z 0 is the floor
+  of the box: a player a few units further south never fires it. The hop after the jump: player at (6411, 570, -6300) 500 ms later.
+
+### 13.2 The fed in the tower (session 98, 11:09) and what is still open
+- 11:09:23.832 `YOU ARE A FED ... at (2609, 19601, -187)`; 11:09:24.320 `YOU STAND at (2555, 19601, -20)`; 11:09:24.390 `join: player 0
+  entered box 9 at (2539, 19601, 0)` -> `crewjoin: 6 moved` from the atrium (-165..-1571, 20300..19870, -1280..-1594) = the whole live crew
+  teleported to the street while the player was police. So the fed point sits 20 .. 187 from the box edge (z 0), and the 500 ms push
+  walks him in. Confirmed from the log, not only from reading.
+- Session 111 has 2 fed appearances, both in the STREET half after the jump (-4545, -40, 10936 and -5510, -40, 9190): no fed in the tower,
+  so `FedSkip` (d9b839bc; hook build of session 111 is 48 s older than the commit: whether it was in the binary is a GUESS) was not
+  exercised, and there is no `is the local FED's` line anywhere in the log.
+- The installed `DM09/KLJoin.ini` is byte-identical to `build/final_1017/DM09/KLJoin.ini` (md5 33cac9d8); FedSkip is a hook key, default ON
+  since v82c, so that file needs no change for it.
+- No `otrace:` line exists for DM09 (only the 00:57 session of another map has them), so the walk-order flip-flop (chain vs klmove) is
+  NOT answered by this log. The run needs `[Bots] OrderTrace=1` in a DM09 round.
+
+### 13.3 Spec for 3f (hook; not done here)
+1. `klhop.c klv_free()` (line ~226) skips a landing place silently when it is used in the last 2 s or a crew member / the human stands
+   within KLV_APART (height < 200). Log it: `hop: hop H To.K skipped: <used 0.8 s ago | bot B stands 140 from it | you stand ...>`,
+   once per place per 10 s (as line 305 does), and `hop: hop H: no free To place (n of n skipped)` when it returns -1. Today a bot that
+   is not carried because all 7 places look busy leaves only `NOT carried: <no>` once per bot.
+2. `klcrew_rt.c`: the `NOT moved` reason already exists; add the place index that was refused and why, same format.
+3. Add the sighting's distance to the log line itself: `hop: bot B is at From of hop H ... (D from From, R radius)` so a stall near the edge
+   shows without a tool. (kl_rt_hopread.py computes it from the plan lines meanwhile.)
+4. A fed spawn in the tower half must not be inside or within 100 of the join box: either move the stock fed points of DM09 away
+   (tools/kl_fa_fedpoints.py, the point at (2609, 19601, -187)) or give the box `z 60..1100`. FedSkip alone fixes the crew teleport but the
+   fed is still jumped to the street by the box (GUESS: he should keep fighting in the tower; not decided with the owner).
+
+### 13.4 For the next owner round (no change needed to read it)
+`python tools/kl_rt_hopread.py` prints the table per round; `python debug/night_read.py` gives the heli / camera parts. Wanted from
+the owner's next DM09 round: one round where the player is killed in the TOWER before the jump (FedSkip + fed point), and `OrderTrace=1`.
