@@ -82,6 +82,7 @@ what only a live run can settle: re/bank_campaign.md. Nothing here installs anyt
                         its FakeTarget off (--no-van-hide, --no-van-target-off)
       --van-hide-parts  with --van-late: hide / show the van's parts, not its group, so the show does not fire the BoardingTrigger's
                         EnterVehicle (re/escape_visit1.md); default off, bank_opts.json 'van_hide_parts'
+    python kl_fa_bank.py van-hide-parts <src> <dst>       --van-hide-parts on a finished van_late build (.prp + .gms flags only; no bank_opts needed)
     python kl_fa_bank.py extras <folder> <out>            the finishing chain's step that adds the waves, the reset and the
                                                           late van's show (flags: bank_opts.json beside the archive); after
                                                           hall-dash, before seal
@@ -4695,6 +4696,79 @@ def van_target(src, dst=None, log=print):
     return {'changed': changed}
 
 
+# VAN_HIDE_PARTS_POST ('van-hide-parts <src> <dst>'; a .prp + .gms post-step; bank_opts.json 'van_hide_parts' = true; default: not run, every other build is unchanged).
+# Does to a FINISHED van_late build (whose earlier steps cannot be re-run) what '--van-hide-parts' does in the bank stage, and only that: the van group's hidden
+# flag goes off (the group and the nodes on the way down to the BoardingTrigger's PlayerAction stay shown), the van's parts (van_parts) are hidden at the
+# load (ZGEOM[3] and the .gms flag, as A.place does), and every ActivateGeom / DeactivateGeom list that names the group names the parts instead, in the group's place.
+# Touches the .prp and .gms (flags only: .buf, tables and every other member stay as they are). A second run changes nothing. GUESSes: those of VAN_HIDE_PARTS.
+def van_hide_parts(src, dst=None, log=print):
+    """-> {'changed': [..], 'parts': n, 'lists': [..]}; dst None = in place, else a copy of src (dst must not exist)."""
+    import json, shutil, types, kl_fa_bots as F
+    if dst:
+        if os.path.exists(dst):
+            raise ValueError('van_hide_parts: %s exists' % dst)
+        shutil.copytree(src, dst)
+    folder = dst or src
+    B = F.Built(folder, os.path.basename(archive_of(folder)).split('_Main')[0])
+    sc = B.sc
+    vg = A.node_of(sc, R + VAN + '\\' + VAN_GROUP)
+    way, parts = van_parts(sc, vg)
+    if len(way) < 2:
+        raise ValueError('van_hide_parts: no PlayerAction (BoardingTrigger) below the van group')
+    gpath, ppaths = sc.path[vg], [sc.path[k] for k in parts]
+    S = types.SimpleNamespace(prp=sc, ents=B.ents)
+    changed, lists = [], []
+    were = sum(1 for k in parts if B.ents[k - 1].flags & HIDDEN)
+    for k in way:                                         # the group and the way down stay shown
+        if B.ents[k - 1].flags & HIDDEN:
+            A.place(S, k, hidden=False)
+            changed.append('%s shown at the load' % sc.path[k][5:][-50:])
+    for k in parts:
+        if not B.ents[k - 1].flags & HIDDEN:
+            A.place(S, k, hidden=True)
+    for kind in ('ActivateGeom', 'DeactivateGeom'):
+        for kk, _i, v in kl_fa.controllers(sc, kind):
+            if gpath in v[1]:
+                ci = A.ctrl_of(sc, kk, kind)
+                have = list(v[1])
+                new = []
+                for s in have:
+                    for t in (ppaths if s == gpath else [s]):
+                        if t not in new:
+                            new.append(t)
+                kl_fa.edit(sc, kk, ci, lambda us, new=new: A.setv(sc, us, 1, new))
+                lists.append('%s %s: group -> %d parts' % (kind, sc.path[kk][5:][-50:], len(ppaths)))
+    if not changed and not lists and were == len(parts):
+        log('kl_fa_bank.van_hide_parts %s: nothing to change' % folder)
+        return {'changed': [], 'parts': len(parts), 'lists': []}
+    if not any(l.startswith('ActivateGeom') for l in lists):
+        raise ValueError('van_hide_parts: no ActivateGeom list names the van group (not a van_late build?)')
+    prp = sc.p.serialize()
+    back = F.Prp(prp)
+    if back.serialize() != prp or len(back.nodes()) != len(sc.nodes):
+        raise ValueError('the new .prp does not round-trip')
+    g, b = B.scene.write()
+    gms = kl_gms.pack(g)
+    if b != B['.buf']:
+        raise ValueError('van_hide_parts: the .buf changed')
+    new = dict(B.files)
+    new[B.ext['.prp']], new[B.ext['.gms']] = prp, gms
+    tmp = B.zp + '.tmp'
+    kl_graft.write_zip(tmp, [(n, new[n]) for n in B.order])
+    os.replace(tmp, B.zp)
+    fp = os.path.join(folder, OPTS_FILE)
+    if os.path.isfile(fp):
+        d = json.load(open(fp))
+        d['van_hide_parts'] = True
+        with open(fp, 'w') as f:
+            json.dump(d, f, indent=1)
+    if os.path.isfile(os.path.join(folder, 'graft.txt')):         # a notes file is appended to, never made (the live DM03A folder has none)
+      with open(os.path.join(folder, 'graft.txt'), 'a') as f:
+        f.write('kl_fa_bank.van_hide_parts: the van group shown, %d parts hidden at the load, %d lists name the parts\n' % (len(parts), len(lists)))
+    log('kl_fa_bank.van_hide_parts %s: %d parts hidden, %d nodes shown (group .. BoardingTrigger); lists: %s' % (folder, len(parts), len(way), '; '.join(lists)))
+    return {'changed': changed, 'parts': len(parts), 'lists': lists}
+
+
 def crew_check(folder, log=print):
     """A folder with the AI heisters' squads (with or without the dynamic step) -> [faults]: no place of a heister
     squad within CREW_CLEAR of where a squad of the hall or the plaza stands or goes - a man's start, a cover
@@ -6541,6 +6615,8 @@ def main():
         van_quiet(a[1], a[2], a[3])
     elif len(a) == 3 and a[0] == 'van-target':               # <src> <dst>: the van's stock FakeTarget back on a finished van_late build (VAN_TARGET; same as --no-van-target-off)
         van_target(a[1], a[2])
+    elif len(a) == 3 and a[0] == 'van-hide-parts':           # <src> <dst>: the van's parts hidden / shown, not its group, on a finished van_late build (VAN_HIDE_PARTS; same as --van-hide-parts)
+        van_hide_parts(a[1], a[2])
     elif len(a) >= 3 and a[0] == 'cops':                    # <src> <dst> [--same-part] [--strength-only|--chains-only]: Retomoto's police pattern (kl_map_ai.cops_style) on a finished vault build; .prp-only, off unless asked
         import kl_map_ai
         kl_map_ai.cops_style(a[1], a[2], strength_only='--strength-only' in a[3:], same_part='--same-part' in a[3:], chains_only='--chains-only' in a[3:])
