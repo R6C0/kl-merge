@@ -146,6 +146,33 @@ def check(folder, sc, ents, pos, hvk, fail, log=print):
     approach_clearance(folder, sc, fail, log)
 
 
+def check_hide(sc, ents, fail, log=print):
+    """--heli-hide read back: the chopper group hidden both ways (.prp ZGEOM[3] = 1, .gms flag 0x400), the monitor's list 4 naming an ActivateGeom
+    that answers AITrigger and lists the group, no other ActivateGeom / timer showing the group."""
+    import kl_fa
+    import kl_fa_author as A
+    import kl_fa_club as C
+    import kl_prpjoin as J
+    R = 'ROOT\\'
+    gh = A.node_of(sc, GROUP)
+    lab = J.labels('dd', sc.cls(gh))
+    z3 = kl_fa.node_values(sc, gh)[lab.index('ZGEOM[3]')]
+    flag = bool(ents[gh - 1].flags & C.HIDDEN) if hasattr(ents[gh - 1], 'flags') else None
+    if z3 != 1 or flag is False:
+        fail('HELI_HIDE: the chopper group is not hidden at start (ZGEOM[3] %r, .gms 0x400 %r)' % (z3, flag))
+    mon = [v for _k, _i, v in kl_fa.controllers(sc, kl_fa.MONITOR)][0]
+    targets = mon[4]
+    shows = []
+    for k, _i, v in kl_fa.controllers(sc, 'ActivateGeom'):
+        if R + GROUP in (v[1] or []):
+            shows.append(sc.path[k])
+            if v[0] != 'AITrigger':
+                fail('HELI_HIDE: %s answers %r, not AITrigger' % (sc.path[k], v[0]))
+    if len(shows) != 1 or [t for t in targets] != shows:
+        fail('HELI_HIDE: monitor list 4 %r, ActivateGeom(s) showing the chopper %r (one, equal, wanted)' % (targets, shows))
+    log('  heli: HELI_HIDE: chopper hidden at start; monitor list 4 -> %s' % shows)
+
+
 def spline_points(sc, name):
     """World points of a chopper spline node (the club's heli_frame reading) -> [(x, y, z)]."""
     import struct

@@ -7,6 +7,7 @@ below the proof: spawns, loot, bounds, van, squads, wiring, finish, check, test)
         --blast [S]: ALSO the timer-driven corner blast (kl_fa_hasta_blast.py; S s after the round start, default 1.5). Without it nothing of it runs.
         --lock-wing: the loot wing (door block, bunker wall + check block) stays SHUT until the 6 hall squads are wiped out (or the backstop); see LOCK_WING.
         --corner-floor: show SO0201_M11_CornerBroken_01 from the load, the floor of the corner-hole route; see CORNER_FLOOR.
+        --heli-hide (with --heli-escape): the chopper is hidden from the load and shown by an ActivateGeom the escape call sends (OnlineEscVehicleMonitor field 4); the .HVK body stays away from the stair foot with --heli-hvk-origin.
         --heli-escape: the helicopter of Last Call (kl_fa_hasta_heli.py) is the way out instead of the van; --heli-hvk-origin leaves its .HVK placement at the origin (HELI4's choice).
         --lock-show (with --lock-wing): the beat also plays the campaign's bunker blast (dust / fire / smoke emitters, remains, barrels gone); see LOCK_SHOW.
         F07 + M11_B --campaign with Doors armed AND this module as the authored layer -> <out>/F07+M11_B campaign; finish(),
@@ -487,6 +488,7 @@ ROAD = dict(arrive=[(23400.0, 0.0, 21800.0), (24500.0, 0.0, 21800.0)], stop=(256
 # heading None on purpose: with 270 the planner said 'heads 90' (re/hasta_fa.md step 2 item 4; the reason is still unexplained)
 PLAN = None
 HELI = False                            # '--heli-escape': the chopper of Last Call instead of the van (kl_fa_hasta_heli.py); False = the build is as before
+HELI_HIDE = False                       # '--heli-hide' (with --heli-escape): the chopper group is hidden from the load, shown by the 'van on' ActivateGeom the escape call triggers (the monitor's list 4); False = as before
 HELI_HVK_ORIGIN = False                # '--heli-hvk-origin' (with --heli-escape): the chopper's .HVK placement stays at the donor's pose (the origin, as in stock M06_FA_A)
 NO_PLAN = 'kl_fa_hasta_layer: the van has no plan: build with \'kl_fa_hasta_layer.py test <out>\' or kl_fa_hasta_layer.build()'
 BOARD_FALLBACK = (25000.0, 20.0, 21800.0)     # about the standing van's rear doors; prepare_host takes PLAN['board'] once there is a plan
@@ -790,6 +792,9 @@ def prepare_host(S, log=print):
         S.van = None
         HH.place(S, log)
         van = van_path()
+        if HELI_HIDE:           # Last Call's way (kl_fa_club VAN_LATE): .prp ZGEOM[3] and the .gms flag 0x400 both, until 'van on' shows it
+            A.place(S, A.node_of(sc, van[len(R):]), hidden=True)
+            log('  kl_fa_hasta_layer: HELI_HIDE: the chopper group %s is hidden from the load' % van)
         k = A.node_of(sc, ROLE['exit'])
         kl_fa.edit(sc, k, A.ctrl_of(sc, k, kl_fa.EXIT), lambda us: [A.setv(sc, us, 2 + j, s) for j, s in enumerate((van, '', ''))])
     else:
@@ -967,9 +972,16 @@ def wire(sc, log=print):
     lists('floor box', 'TriggerBox', f0=1, f14='ECPS_FA_MERCONLY', **{'f%d' % BK.BOX_PER_MAN: 0}, f17=stage['floor'] + [R + ROLE['van timer'], ways[0]])
     lists('backstop', 'TriggerDelay2', f0=BACKSTOP_AT, f4=[ways[1], R + ROLE['van timer']] + ([R + n for n in beat_fires()] if LOCK_WING else []))
     # HELI: the chopper is in the world from the load (unlike Last Call, which hides it behind an unhide wire; a visible body at its HVK placement near the stair foot is the live-run risk), so the alarm shows / the reset hides nothing: empty lists. GUESS: an empty list is a valid ActivateGeom / DeactivateGeom
-    lists('van on', 'ActivateGeom', f0='AITrigger', f1=[] if HELI else [van_path()])
-    lists('van timer', 'TriggerDelay2', f0=VAN_DELAY, f4=[R + ROLE['van on'], R + ROLE['speak']])
-    lists('reset hide', 'DeactivateGeom', f0='AITrigger', f1=[] if HELI else [van_path()])
+    # HELI_HIDE: the chopper is hidden from the load; 'van on' shows it when the escape call posts AITrigger to the monitor's list 4 (0x6276e0, event 1, right after the vehicle is called); the alarm timer no longer shows it
+    shown = not HELI or HELI_HIDE
+    lists('van on', 'ActivateGeom', f0='AITrigger', f1=[van_path()] if shown else [])
+    lists('van timer', 'TriggerDelay2', f0=VAN_DELAY, f4=([R + ROLE['speak']] if HELI and HELI_HIDE else [R + ROLE['van on'], R + ROLE['speak']]))
+    lists('reset hide', 'DeactivateGeom', f0='AITrigger', f1=[van_path()] if shown else [])
+    if HELI and HELI_HIDE:
+        mons = [k_ for k_, _i, _v in kl_fa.controllers(sc, kl_fa.MONITOR)]
+        if len(mons) != 1:
+            raise ValueError('kl_fa_hasta_layer: HELI_HIDE: %d OnlineEscVehicleMonitor (1 wanted)' % len(mons))
+        put_(mons[0], kl_fa.MONITOR, f4=[R + ROLE['van on']])
     k = node(ROLE['monitor'])
     mine = {R + v for v in ROLE.values()}
     have = [s for s in values(sc, k, 'AIMonitor')[2] if sc.resolve(s) and s not in mine]
@@ -1403,6 +1415,8 @@ def check(folder, log=print, problems=None):
     if HELI:
         import kl_fa_hasta_heli as HH
         HH.check(folder, sc, ents, pos, hvk, fail, log)
+        if HELI_HIDE:
+            HH.check_hide(sc, ents, fail, log)
         for t in sc.tops():
             if sc.cls(t) == 'ZSpawnPoint' and 'START' in kl_fa.node_values(sc, t)[8] and math.dist(pos[ents[t - 1]], HH.PAD) < 1500:
                 fail('a START spawn point is %d from the pad' % math.dist(pos[ents[t - 1]], HH.PAD))
@@ -1440,6 +1454,8 @@ def flags_of():
         f['HELI_ESCAPE'] = True
         if HELI_HVK_ORIGIN:
             f['HELI_HVK_ORIGIN'] = True
+        if HELI_HIDE:
+            f['HELI_HIDE'] = True
     return f
 
 
@@ -1468,7 +1484,7 @@ def load_plan(folder):
 
 
 def main():
-    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, BLAST_AT, LOCK_WING, LOCK_SHOW, CORNER_FLOOR, HELI, HELI_HVK_ORIGIN
+    global NO_AI, SQUADS_AWAKE, POLICE_ARRIVE, BLAST_AT, LOCK_WING, LOCK_SHOW, CORNER_FLOOR, HELI, HELI_HVK_ORIGIN, HELI_HIDE
     a = sys.argv[1:]
     if a[:1] == ['proof']:
         sys.exit(proof(a[1] if len(a) > 1 and not a[1].startswith('--') else 'C:/kl_scratch/hasta', '--keep' in a))
@@ -1481,8 +1497,11 @@ def main():
         CORNER_FLOOR = '--corner-floor' in a
         HELI = '--heli-escape' in a
         HELI_HVK_ORIGIN = '--heli-hvk-origin' in a
+        HELI_HIDE = '--heli-hide' in a
         if HELI_HVK_ORIGIN and not HELI:
             sys.exit('--heli-hvk-origin needs --heli-escape')
+        if HELI_HIDE and not HELI:
+            sys.exit('--heli-hide needs --heli-escape')
         if LOCK_SHOW and not LOCK_WING:
             sys.exit('--lock-show needs --lock-wing')
         if '--blast' in a:
@@ -1501,6 +1520,7 @@ def main():
         CORNER_FLOOR = '--corner-floor' in a
         vj = os.path.join(a[1], 'van.json')
         HELI = os.path.isfile(vj) and bool(json.load(open(vj, encoding='utf-8')).get('flags', {}).get('HELI_ESCAPE'))     # a heli folder: its van.json says so
+        HELI_HIDE = HELI and bool(json.load(open(vj, encoding='utf-8')).get('flags', {}).get('HELI_HIDE'))
         if not HELI:
             load_plan(a[1])
         bad = check(a[1])
