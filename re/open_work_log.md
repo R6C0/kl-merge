@@ -1,3 +1,15 @@
+2026-10-18 16:25 - OFFLINE (kl-merge-e5; 3f owns live runs; the owner is active, so the queue waits):
+- No new keys were needed for two items:
+  - Bots in the escape box beyond BoardReach: the existing [Bots] BoardReachRepeat=3 / Chase=1 / Sent=6000, queued as 3f (e), PT_DM03A_wr.ini.
+  - VanCallNear/Last never fire: FollowOut already gives every bot stage 3 at the van call (FollowOut=0 would let them act, a trade).
+- Park II loot 6 (tea house) was just out of pickup reach (166 of 165 flat). The post-pass tools/kl_fa_park_loot6.py (2f7e4e5b) moves it 109 flat from the stop; C:\kl_build_1018\park_loot6\DM06B 3386b972, queued as 3f (f).
+- Vault: bots stall in the ante-room because door body 27109 or PathBlocker_Vault seals the inside-vault places; the door event comes early enough. A/B/C/D test builds:
+  - B door-nocol 54c2b946;
+  - C noblocker 1c4b1667 (1f542da0);
+  - D both e6be64a7.
+  Queued as 3f (g).
+- Hot Coffee II and Park II: no chain place is unreachable.
+Owner: git push origin rtp-schemas:main. Disk C: 2.9 GB free.
 2026-10-18 15:35 - OFFLINE (kl-merge-e5; 3f owns live runs; the owner is active, so the queue waits):
 - Retomoto L79 GIVE UPs: fedkit Hunted re-orders walking bots. The fix is the existing [Bots] WalkExclusive=1, which is off in the live ini. Fallback: kl_rt_joinini --giveup (c1a43afc, rt_join_next5 237f60f0).
 - Retomoto early deaths: census of 87 rounds (re/retomoto_fa.md s14(4)). The human dies to point-blank steps on the atrium stair and at the reception east end. Lever: [Balance] PointBlankToYou=20.0, the owner's call.
