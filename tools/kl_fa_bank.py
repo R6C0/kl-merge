@@ -4387,16 +4387,113 @@ VAN_QUIET_GROUPS = {
 }
 VAN_QUIET_TOP = ('plaza', 'waveb')
 
+# PLAZA-LATE ('van-quiet <src> <dst> waveb,plaza-late[=N]'; a van_quiet mode, bank_opts.json 'plaza_late' = N; default: not run, every build is byte-identical).
+# The MIDDLE GROUND between the intact plaza (vault_e8: 0 of the crew escaped, 6 dead before the van's 2nd visit) and the cut plaza (vault_e9: 3 escaped): the 7 plaza squads
+# are not unlinked, they start N seconds AFTER the plaza box fires. Values only, no node added: the chain-D timer 'Pace_D01' (3 s, field 4 = [Go_D01]; named by nobody once
+# van-nests 'off' cut it) becomes the plaza delay: delay N, field 4 = the 7 plaza entries; the box names Pace_D01 instead of the 7 entries (Timer_van and Timer_teller_c stay).
+# Go_D01 is then named by nobody, so Wave_D01..D08 never run (as with van-nests off). The 7 squads (~21 men) all wake together at box + N, once.
+# Needs: van-nests 'off' in the build, no van_quiet 'plaza' (cut), Pace_D01 unnamed elsewhere (never with wave_fallback unless van-nests off: Go_A04 would name it).
+# GUESS: N = 75 s (a range of 60 .. 90: the crew is called at ~box + 20 .. 30 s and walks 50 .. 80 m at ~3 m/s, the van's 2nd visit is before ~box + 90 s; the plaza's flank points lie
+# ~10 .. 15 m from the boarding place, so the squads need ~10 s more). GUESS: a TriggerDelay2 wakes FlankingBehaviour / Move_In_01 / Cutscene_MoveOutside entries like the box does (the
+# stock Clock\Wake_ante / Wake_lobby already list 10_DefendBehaviour entries, Go_Ann lists 10_Defend: only those two kinds are precedented).
+PLAZA_LATE_DELAY = 75.0
+
+
+def plaza_late_faults(Jn, delay=None):
+    """A finished waves build's scene -> [faults] for PLAZA-LATE: the plaza box names Pace_D01 and none of the 7 plaza entries (it keeps Timer_van / Timer_teller_c); every plaza entry is
+    named ONLY by Pace_D01 (inner links of a ZGROUP apart); Pace_D01 is a one-shot TriggerDelay2 of `delay` s (any >= 1 s when None) naming exactly the 7 entries and not Go_D01; Pace_D01 is named ONLY by
+    the plaza box; Go_D01 is named by nobody (chain D stays dormant)."""
+    bad = []
+    cl = R + CLOCK + '\\'
+    pz = {(R + t).lower() for t in VAN_QUIET_GROUPS['plaza']}
+    named_by = collections.defaultdict(list)
+    for k in range(1, len(Jn.nodes)):
+        for s_ in A.named(Jn, k):
+            named_by[s_.lower()].append(k)
+    box, pace = Jn.resolve(R + PLAZA_BOX), Jn.resolve(cl + 'Pace_D01')
+    if not box or not pace:
+        return ['PLAZA_LATE: %s or Pace_D01 is not in the level' % PLAZA_BOX]
+    bv = values(Jn, box[0], 'TriggerBox')
+    pv = values(Jn, pace[0], 'TriggerDelay2')
+    if bv[0] != 1:
+        bad.append('PLAZA_LATE: the plaza box is not a once-only box (field 0 = %s)' % bv[0])
+    if (cl + 'Pace_D01').lower() not in [x.lower() for x in bv[17]]:
+        bad.append('PLAZA_LATE: the plaza box does not name Pace_D01')
+    if [x for x in bv[17] if x.lower() in pz]:
+        bad.append('PLAZA_LATE: the plaza box still names plaza entries directly: %s' % [x[-40:] for x in bv[17] if x.lower() in pz])
+    for must in ('Timer_van', 'Timer_teller_c'):
+        if Jn.resolve(cl + must) and (cl + must).lower() not in [x.lower() for x in bv[17]]:
+            bad.append('PLAZA_LATE: the plaza box lost %s' % must)
+    if {x.lower() for x in pv[4]} != pz or len(pv[4]) != len(pz):
+        bad.append('PLAZA_LATE: Pace_D01 names %s, exactly the 7 plaza entries are wanted' % [x[-30:] for x in pv[4]])
+    if pv[2] >= 0 or pv[0] < 1.0 or (delay is not None and abs(pv[0] - delay) > 1e-6):
+        bad.append('PLAZA_LATE: Pace_D01 is %g s with re-arm %g: a one-shot of %s s is wanted' % (pv[0], pv[2], delay if delay is not None else '>= 1'))
+    if named_by.get((cl + 'Pace_D01').lower(), []) != [box[0]]:
+        bad.append('PLAZA_LATE: Pace_D01 is named by %s, only by the plaza box is wanted' % [Jn.path[x][5:] for x in named_by.get((cl + 'Pace_D01').lower(), [])])
+    for p_ in sorted(pz):
+        by = [x for x in named_by.get(p_, []) if Jn.cls(x) != 'ZGROUP']          # a squad group naming its own sibling is an inner link, not a starter
+        if by != [pace[0]]:
+            bad.append('PLAZA_LATE: plaza entry %s is named by %s, only by Pace_D01 is wanted' % (p_[-40:], [Jn.path[x][5:] for x in by]))
+    if named_by.get((cl + 'Go_D01').lower()):
+        bad.append('PLAZA_LATE: Go_D01 is named by %s: chain D would run' % [Jn.path[x][5:] for x in named_by[(cl + 'Go_D01').lower()]])
+    return bad
+
+
+def _plaza_late_apply(Jn, delay):
+    """Rewires the plaza box / Pace_D01 of a scene (see PLAZA_LATE) -> [change texts]; nothing to change when it is already so (same delay), an error when not."""
+    cl = R + CLOCK + '\\'
+    first = cl + 'Pace_D01'
+    pz = {(R + t).lower() for t in VAN_QUIET_GROUPS['plaza']}
+    box, pace = Jn.resolve(R + PLAZA_BOX), Jn.resolve(first)
+    if not box or not pace:
+        raise ValueError('van_quiet plaza-late: %s or Pace_D01 is not in the level' % PLAZA_BOX)
+    (_k, bi, bv), = [(k, i, v) for k, i, v in kl_fa.controllers(Jn, 'TriggerBox') if k == box[0]]
+    (_k, pi, pv), = [(k, i, v) for k, i, v in kl_fa.controllers(Jn, 'TriggerDelay2') if k == pace[0]]
+    moved = [x for x in bv[17] if x.lower() in pz]
+    if not moved:
+        bad = plaza_late_faults(Jn, delay)
+        if bad:
+            raise ValueError('van_quiet plaza-late: not applicable (plaza cut, or another delay already): %s' % bad)
+        return []
+    if len(moved) != len(pz):
+        raise ValueError('van_quiet plaza-late: the plaza box names %d of the 7 plaza entries' % len(moved))
+    if [x.lower() for x in pv[4]] != [(cl + 'Go_D01').lower()]:
+        raise ValueError('van_quiet plaza-late: Pace_D01 names %s, only Go_D01 (the stock link) is expected' % pv[4])
+    at = [x.lower() in pz for x in bv[17]].index(True)
+    rest = [x for x in bv[17] if x.lower() not in pz]
+    lst = rest[:at] + [first] + rest[at:]
+    kl_fa.edit(Jn, box[0], bi, lambda us: A.setv(Jn, us, 17, lst))
+    def both(us):
+        A.setv(Jn, us, 0, float(delay))
+        A.setv(Jn, us, 4, list(moved))
+    kl_fa.edit(Jn, pace[0], pi, both)
+    return ['%s names Pace_D01 instead of the %d plaza entries' % (Jn.path[box[0]][5:], len(moved)),
+            'Pace_D01 (%g s, was %g) names the %d plaza entries instead of Go_D01' % (delay, pv[0], len(moved))]
+
 
 def van_quiet(src, dst=None, groups='top', log=print):
     """Unlinks the named threat groups (VAN_QUIET_GROUPS keys, comma separated, or 'top') from their starters in a finished waves build. dst: the folder to build (a
     copy of src with ONE member changed: the .prp); None = in place. Writes bank_opts.json 'van_quiet' (sorted list). A second run changes nothing.
     -> {'groups': [..], 'changed': [..]}"""
     import json, shutil, kl_fa_bots as F
+    late = None                  # PLAZA-LATE: the token 'plaza-late' / 'plaza-late=N' (N s after the plaza box, default PLAZA_LATE_DELAY) is no group
+    if groups != 'top' and 'plaza-late' in groups:
+        _tk = [g for g in groups.split(',') if g]
+        for g in _tk:
+            if g == 'plaza-late' or g.startswith('plaza-late='):
+                late = float(g.split('=', 1)[1]) if '=' in g else PLAZA_LATE_DELAY
+        groups = ','.join(g for g in _tk if not g.startswith('plaza-late'))
+        if not 1.0 <= late <= 600.0 or 'plaza' in groups.split(','):
+            raise ValueError("van_quiet: plaza-late needs a delay of 1 .. 600 s and cannot be combined with the 'plaza' cut")
     want = list(VAN_QUIET_TOP) if groups == 'top' else [g for g in groups.split(',') if g]
-    if not want or any(g not in VAN_QUIET_GROUPS for g in want):
+    if (not want and late is None) or any(g not in VAN_QUIET_GROUPS for g in want):
         raise ValueError("van_quiet: groups are %s or 'top', not %r" % (sorted(VAN_QUIET_GROUPS), groups))
     want = sorted(set(want))
+    if late is not None:
+        _o = read_opts(src)
+        if _o.get('van_nests') != 'off' or 'plaza' in _o.get('van_quiet', ()) or (_o.get('plaza_late') not in (None, late)):
+            raise ValueError("van_quiet: plaza-late needs van-nests 'off', no plaza cut and no other plaza-late delay in %s (bank_opts: van_nests=%r van_quiet=%r plaza_late=%r)" % (
+                src, _o.get('van_nests'), _o.get('van_quiet'), _o.get('plaza_late')))
     if dst:
         if os.path.exists(dst):
             raise ValueError('van_quiet: %s exists' % dst)
@@ -4423,6 +4520,11 @@ def van_quiet(src, dst=None, groups='top', log=print):
                 left.append((Jn.path[k][5:], s_[5:]))
     if left:
         raise ValueError('van_quiet: still named by %s' % left)
+    if late is not None:
+        changed += _plaza_late_apply(Jn, late)
+        _bad = plaza_late_faults(Jn, late)
+        if _bad:
+            raise ValueError('van_quiet plaza-late: self-check failed: %s' % _bad)
     if changed:
         prp = Jn.p.serialize()
         back = F.Prp(prp)
@@ -4435,10 +4537,14 @@ def van_quiet(src, dst=None, groups='top', log=print):
         os.replace(tmp, B.zp)
     fp = os.path.join(folder, OPTS_FILE)
     d = json.load(open(fp)) if os.path.isfile(fp) else {}
-    d['van_quiet'] = sorted(set(d.get('van_quiet', [])) | set(want))
+    if want or 'van_quiet' in d:
+        d['van_quiet'] = sorted(set(d.get('van_quiet', [])) | set(want))
+    if late is not None:
+        d['plaza_late'] = late
     with open(fp, 'w') as f:
         json.dump(d, f, indent=1)
-    log('kl_fa_bank.van_quiet %s: %s (groups %s)' % (folder, '; '.join(changed) or 'nothing to change', ', '.join(want)))
+    log('kl_fa_bank.van_quiet %s: %s (groups %s%s)' % (folder, '; '.join(changed) or 'nothing to change', ', '.join(want),
+                                                       '' if late is None else ', plaza-late %g s' % late))
     return {'groups': want, 'changed': changed}
 
 
@@ -5917,6 +6023,9 @@ def waves_check(folder, log=print):
                 _kn = 0 if o['van_nests'] == 'off' else int(o['van_nests'][5:])
                 if chains['D'].index(w) == _kn:
                     want_pace = []
+            _late_d1 = o.get('plaza_late') is not None and w['phase'] == 'D' and chains['D'].index(w) == 0     # VAN_QUIET plaza-late: Pace_D01 is the plaza delay, named by the plaza box alone
+            if _late_d1:
+                want_pace = [node(R + PLAZA_BOX)]
             if 'waveb' in o.get('van_quiet', ()) and w['phase'] == 'B' and first:      # VAN_QUIET waveb: Pace_B01 is named by nobody. Without the option this block is not entered
                 want_pace = []
             if 'wavea4' in o.get('van_quiet', ()) and w['phase'] == 'A' and chains['A'].index(w) == 3:      # VAN_QUIET wavea4: Pace_A04 is named by nobody. Without the option this block is not entered
@@ -5928,7 +6037,7 @@ def waves_check(folder, log=print):
             if tb != want_pace:
                 fail('wave %s: its Pace is named by %s, only by %s is wanted' % (w['name'], [sc.path[x][5:] for x in tb], 'the trigger ' + ph_trig if first else 'the previous link\'s Go'))
             pv = values(sc, node(w['pace']), 'TriggerDelay2') if node(w['pace']) else None
-            if pv is not None:
+            if pv is not None and not _late_d1:                         # (plaza-late: plaza_late_faults judges Pace_D01 below)
                 if pv[0] < 0.05 or abs(pv[0] - w['gap']) > 1e-6 or pv[2] >= 0 or node(w['go']) not in [x for s_ in pv[4] for x in sc.resolve(s_)]:
                     fail('wave %s: Pace is %g s (re-arm %g) naming %s: a one-shot delay of %g s naming Go is wanted' % (w['name'], pv[0], pv[2], [x[-20:] for x in pv[4]], w['gap']))
             if w.get('fast'):
@@ -5945,6 +6054,12 @@ def waves_check(folder, log=print):
                 log('  note: wave %s stands within %d of cover, not %d: the mesh has no place nearer for its men' % (w['name'], w['post_cover'], POST_COVER))
             log('  wave %-4s phase %s %+4.0f s (gap %g): %d men %s; posts %s (%s apart)' % (w['name'], w['phase'], w['delay'], w['gap'], len(men),
                                                                                   ' '.join(P(p) for _k, p in men), ' '.join(P(p) for p in posts), w.get('post_gap')))
+        if o.get('plaza_late') is not None:                              # VAN_QUIET plaza-late: the 7 plaza squads are named only by Pace_D01, which only the plaza box starts
+            for s_ in plaza_late_faults(sc, o['plaza_late']):
+                fail(s_)
+            if o.get('van_nests') != 'off' or 'plaza' in o.get('van_quiet', ()):
+                fail("PLAZA_LATE: needs van-nests 'off' and no plaza cut (bank_opts: %r, %r)" % (o.get('van_nests'), o.get('van_quiet')))
+            log('  plaza-late: the 7 plaza squads start %g s after the plaza box, by Pace_D01 (GUESS delay); chain D stays dormant' % o['plaza_late'])
         # ---- the chains as a whole: finite, in order, a delay in every loop of links, a floor of SUPPLY_MIN seconds for the first phase
         for ph, ch in chains.items():
             if not ch:
@@ -6252,8 +6367,11 @@ def main():
         wave_fallback(a[1], a[2] if len(a) == 3 else None)
     elif len(a) == 4 and a[0] == 'van-nests':                # <src> <dst> off|keep=N: chain D (the street recess police) not started / cut after N waves (VAN_NESTS)
         van_nests(a[1], a[2], a[3])
-    elif len(a) == 4 and a[0] == 'van-quiet':                # <src> <dst> <plaza,waveb,wavea4,exit>|top: unlink more van-route police from their starters (VAN_QUIET)
+    elif len(a) == 4 and a[0] == 'van-quiet':                # <src> <dst> <plaza,waveb,wavea4,exit>|top [+ ',plaza-late[=N s]': the plaza squads start N s after the plaza box]: unlink more van-route police from their starters (VAN_QUIET)
         van_quiet(a[1], a[2], a[3])
+    elif len(a) >= 3 and a[0] == 'cops':                    # <src> <dst> [--same-part] [--strength-only|--chains-only]: Retomoto's police pattern (kl_map_ai.cops_style) on a finished vault build; .prp-only, off unless asked
+        import kl_map_ai
+        kl_map_ai.cops_style(a[1], a[2], strength_only='--strength-only' in a[3:], same_part='--same-part' in a[3:], chains_only='--chains-only' in a[3:])
     elif len(a) == 3 and a[0] == 'extras':
         extras(a[1], a[2])
     elif len(a) == 2 and a[0] == 'waves-check':
