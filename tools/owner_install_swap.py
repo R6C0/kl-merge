@@ -68,6 +68,7 @@ def loc_missing(zpath, keys):
 
 
 # ---------------------------------------------------------------- KL*.ini Entries (see klini_audit.py)
+GUNPICS_NOISE = 2   # see the gunpics step in main()
 INI_ENTRIES = {'KLGuns.ini': 'Guns', 'KLJoin.ini': 'FedBody'}
 
 
@@ -245,7 +246,14 @@ def main():
             raise SystemExit('FAIL: kl_gunpics rc=%d: %s' % (rc, last))
         ch = int(m.group(1))
         steps.append(dict(step='gunpics', changed_before=ch, last=last[:200]))
-        print('gunpics: %d picture(s) would change -> %s' % (ch, 'already applied' if ch == 0 else 'MISSING'))
+        # kl_gunpics apply is not idempotent: on a zip it already ran on, the lossy re-encode still changes 1..2 pictures.
+        # Applying again then double-encodes them (owner_1018 DM03A/DM05A got that way), so <= GUNPICS_NOISE counts as applied.
+        # GUESS: a zip that never had gunpics changes more than 2.
+        if ch <= GUNPICS_NOISE:
+            print('gunpics: %d picture(s) would change -> already applied (re-encode noise, left alone)' % ch)
+            ch = 0
+        else:
+            print('gunpics: %d picture(s) would change -> MISSING' % ch)
         if ch and a.gunpics == 'apply':
             final_zip = out
             print('gunpics applied; zip is now', hashes(out)[0])
