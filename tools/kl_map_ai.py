@@ -663,7 +663,7 @@ def strength(sc, anm, plan, log=print, presets=False, seed=kl_arms.SEED):
         floor, hp = STRENGTH[cls]
         fac = ACC_FACTOR if v[MERC] == 'No_Mercenary' else 1.0
         acc, aim = min(PRESET[floor][0] * fac, 100.0), float(PRESET[floor][1])     # accuracy as the game USES it
-        if RT_ROWS:                                     # Retomoto's rows: fields 4, 5 and 7 of kl_arms.ROWS[kl_arms.SKILL[cls]]
+        if RT_ROWS:                                     # Retomoto's rows: accuracy, aim, health (_ROW indices 0, 1, 3) of kl_arms.ROWS[kl_arms.SKILL[cls]]
             row = kl_arms.ROWS[kl_arms.SKILL[cls]][1]
             acc, aim, hp = min(row[0] * fac, 100.0), float(row[1]), row[3]
         if ACC_CAP is not None:
