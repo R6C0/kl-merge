@@ -6394,7 +6394,7 @@ def main():
         global DOOR_WAIT, DOORS_ANIMATE, VAULT_OPEN, VAULT_DOOR_GOES, VAULT_SWING_END, GATE_VAULT, CASE, BEAT, NO_AI, ALARM_LIGHTS, VAULT_BLAST, STOCK_ROWS, MUSIC_LAYER4
         global PLAZA_OUTSIDE, HALL_UP, CREW_FIX2, TELLER_LATE, VAN_LATE, VAN_HIDE, VAN_NO_TARGET, RESET, WAVES, WAVES_EXTRA, WAVES_NEAR, TELLER_MORE, WAVES_LATCH
         global WAVES2, VOICE, TELLER_FOYER, WAVE_TABLE, ROOM_GATES, ROOM_ON, ROOM_HIDE, STAGING, GARRISON, VAULT_BLOCKER, VAN_HIDE_PARTS
-        GARRISON ='--garrison' in a                        # the garrison and the beat's police in pockets off the crew's line, holding their places (GARRISON_PLACES); needs --gates and --staging
+        GARRISON = '--garrison' in a                        # the garrison and the beat's police in pockets off the crew's line, holding their places (GARRISON_PLACES); needs --gates and --staging
         if GARRISON and not ('--gates' in a and '--staging' in a):
             raise ValueError('--garrison needs --gates and --staging')
         STAGING = '--staging' in a                          # the squads of the way in sleep and are woken room by room (WAKE_SQUADS); needs --gates and enemies
