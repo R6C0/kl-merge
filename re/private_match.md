@@ -345,3 +345,122 @@ Both additions are no-ops with their keys empty, like PrivateLobby=0.
   arrives mid-match (`[0x156b3b8]==1`) goes to 0x49b990 instead of the pending flag.
 - The `SetLobbyData "name"` call being made for the host (section 7), and `InviteUserToLobby` being slot +0x3c with `ret 0x10` (SDK 008 order plus the
   section 7 ret-size list; two neighbours of equal size could in theory swap).
+
+
+## 2026-10-18: owner-map readiness check (kl-merge-e5, workflow wd7vzdmcy, read-only)
+
+
+Read-only. Nothing was launched, installed or committed. Tags: **FACT** means I re-read it in the code or the exe. **GUESS** means inferred. **CARRIED** means taken from the two reports and not re-checked.
+
+`re/private_match.md` (347 lines) and `re/fa_private_match_blueprint.md` already exist. They cover lobby creation, lobby keys, the friend-join path and the `klmm` proxy. This note should be added as a new section and must not replace them.
+
+### 0. Adversarial check of the two reports
+
+**Re-verified FACT**
+- The role gates exist as stated: `klbot.c:364`, `klbalance.c:378` and `klfed.c:202` all reject `[sm+0x54]` of 2 or 3. `klfedkit.c:881` does the same.
+- `kl_online()` is at `klhook.c:255-265`. The report said 249-266, so the lines are slightly off. Its body matches the report.
+- Vtable slots 7, 89 and 194 match the report's table for all four classes (read from the exe):
+
+  | Class | Slot 7 | Slot 89 | Slot 194 |
+  |---|---|---|---|
+  | Heist (0xbd3514) | 0x74b6d0 | 0x49d170 | 0x8fa6d0 |
+  | FA Sv (0xbd2eb4) | 0x827f00 | 0x70f0a0 | 0x51e390 |
+  | FA Cl (0xbd31e4) | 0x4f27b0 | 0x70f0a0 | 0x5b1410 |
+  | FA base (0xbd2b9c) | 0x5671e0 | 0x70f0a0 | 0x5b1410 |
+
+- 0x5b1410 uses `[rules+0x1dc]`, `+0x1e0` and `+0x1e4` and calls vtable +0x164 (slot 89). So the offsets are shared with the FA base class, not Heist-only.
+- 0x57b2d0 is `add ecx,0x250; jmp 0x962850`, so it reads `m_szVersion`. Its only direct `E8` caller is 0x53919c. Indirect or vtable callers were not scanned.
+- The `klchar.c:298-301` online branch only logs. Lines 302-307 then return unless the type is 4 and the vtable is Heist. The inert-online result is accidental, as the hook report said.
+- The `klslot.c:280` redirect is skipped when `kl_online()` is true. `klgun.c:409` and `kljoin.c:244` are guarded by `kl_online()`.
+- `klmm.c:48-53` is deliberately not gated.
+
+**Corrections and upgrades**
+1. **0x760e50 (orders).** The report says it "returns at once on a network client". The actual test is `0x863a60(sm)` AND `0x4b0a40(sm)`. 0x863a60 is a jump table on `[sm+0x54]` that I did not decode. 0x4b0a40 is exactly `[sm+0x54]==3`. The early return needs both, so it is not an unconditional client test.
+   - This upgrades one GUESS: **role 3 = network client** is now FACT, because the game has a helper named by that test.
+   - Role 2 = server is still unverified directly.
+2. **`klbot.c:391-407` was missed by the hook report.** `klb_online_session()` is a role 2/3 reader. It accepts only Sv/Cl rules, and only when `[HUD] Online=1` (`klhud.c:1637`, default 0). It reads a state from `[sm+0x70]` as a GUESS (`klbot.c:405`). The claim "HUD is low risk" holds, but only by that opt-in default. Also `klhud.c:1549` lets the HUD run on any level online, not only on non-stock levels.
+3. **Slot-availability gate.** The game report calls the 0x6c4cf5 gate content-blind (CARRIED). That makes the redirect-mismatch hazard worse than either report said. A client without the expansion has stock `F01..F07` available, so the gate passes. It then silently loads the stock map while the host loads `DMxx`. No dialog appears.
+4. **`kl_online()` false positive.** With type 4 and a non-Heist vtable it returns 1. During load or menu transitions, `[rules]` may be a stale or different object (GUESS). Online-only code should also demand role 2/3 or an Sv/Cl vtable. It should not rely on "not Heist".
+5. **GUESSes still not settled by either report.**
+   - Who is the simulation station.
+   - Who prices a hit between machines.
+   - Whether a client's rule writes are overwritten.
+   - Host migration.
+   - Join code 3 "Clash".
+   - Whether the CEG scaffolding rejects a patched exe.
+   - What happens on a mismatch.
+   - The wire ref id space.
+
+   Treat all of these as open.
+6. **Not re-verified (CARRIED).** The REF slot table, the 0x6c4cf5 gate, the 0x40a880 resolver, the lobby-key list and the klcrew_rt/klhop line numbers. The REF table is the one to double-check before relying on it.
+
+### 1. What is known
+
+- **Mode.**
+  - The session manager is `sm=[0x168e598]`. `[sm+0x54]` is the net role (3 = client is FACT; 0/1 local and 2 server are GUESS from reading). `[sm+0x5c]==4` covers all FA, Arcade included.
+  - Arcade runs the Heist rules (0xbd3514). Online runs Sv (host) or Cl (client). So every hook module that is gated to Heist is inert online (FACT). That includes bots, escort, balance, down/revive, fed, crew join and the wardrobe.
+- **Maps.**
+  - The host replicates a level slot index, not a name (CARRIED). Each machine maps it to a scene through its own level list.
+  - The `Maps\DMxx` redirect needs the page latch, and that latch is dropped for online (CARRIED).
+  - `m_szVersion` is never compared.
+  - Nothing compares the build, the ini or the map set between peers. `klmm BuildKey=1` is the only mechanism, and it is NOT RUN.
+- **Replication.**
+  - Objects go over the wire by 16-bit scene reference. Any difference in scene order silently breaks doors, loot and hits (the effect is a GUESS, the absence of a check is FACT).
+  - The escape state lives in the score object. It is driven by the shared slot 194 of the FA base class.
+- **AI and privacy.**
+  - Online FA has no AI heisters (strong GUESS from the class split).
+  - Only the host can read the private bit (`klnet.c`).
+
+### 2. Risk table
+
+| Area | Risk | Reason |
+|---|---|---|
+| Different map or ini on the two machines | **High** | Silent desync. No runtime check exists. |
+| Client without the hook or the expansion | **High** | The slot gate passes and it loads the stock map. |
+| `[Expansion] Page=2` with a public lobby or Quick Match | **High** | A Dead Men map is loaded against strangers' stock map. |
+| Teleports (`klcrew_rt`, `klhop`, `kljoin`) from a client | **High if ungated** | 0x62a900 with b=1 replicates (CARRIED). Today they are inert. |
+| Rule-float, heist-byte and money-byte writes (`klmove`) | Medium to high if ungated | Overwritten or divergent. A GUESS. |
+| `klbalance` / `klbotdown` | Medium | Damage is priced on the shooter's machine (GUESS). Inert today. |
+| `kl_online()` false positive on load | Low to medium | See correction 4. |
+| `klnet` Tune on a client | Medium | The client's private status is unverifiable. It is trust-based. |
+| `klmm` | Unknown | NOT RUN. |
+| HUD, wardrobe look, `kltalk`, `klcam`, `klgun`, `klsteam` | Low | Local or cosmetic only. |
+| Escape "visit 1" bug (`1e0` before state 1) | Medium (GUESS) | The gating code is in the shared FA base. |
+| 16-bit refs | Low | Every checked map has a REF count at or below 38,706, under 65,535. Stock F08 (34,369) already exceeds 32,767. |
+
+### 3. Changes before a first private-match test (ordered, each opt-in)
+
+1. **No code.** Test only with the Arcade-only modules off or inert. Do not turn on `[HUD] Online`, `AllMaps`, `CrewJoin` or `BuildKey`.
+2. **Identical installs.** Compare the `KLExpansion` `manifest.json`, the sha1 of every `Maps\DMxx` file, `dinput8.dll` and `KLHook.ini` on both machines. The owner does the install.
+3. **Test-only `[Expansion] Page=2` on both.** Remove it afterwards and never leave it on for public play.
+4. **Log-only fingerprint.** Add `[Net] Log=1`, and log the manifest id, the hook build and the redirect line in `KLHook.log`. No behaviour change.
+5. **Opt-in fingerprint in the lobby.** Extend `klmm` `BuildKey` with the manifest content id. This is the base for refusal. It needs a live run of `klmm` first.
+6. **Opt-in refusal.** Refuse to start on a fingerprint mismatch. Clear the availability byte so the host's countdown stalls (the same route the game uses for a missing level).
+7. **`klh_net_role()` helper.** One function returning local, host or client. Any Sv port is host-only (role 2), and nothing ever acts on role 3.
+8. **Make `klchar`'s online branch return.** Do it truthfully, so safety does not depend on a later check.
+9. **Balance and down online.** Leave off until the damage path is read.
+10. **Hardened `kl_online()`.** Require an Sv/Cl vtable or role 2/3 before treating a non-Heist object as online.
+
+### 4. Two-machine test plan
+
+Steam allows one instance per account, so a single PC cannot test the netcode. `-o StartAsServer/StartAsClient` and System Link are NOT ESTABLISHED as a bench.
+
+**Stage S (one machine).** Create a private game on a stock map with `[Net] Log=1`. Check the `net: session` line, the lobby PRIVATE line and the update numbers.
+
+**Stage 0 (both PCs, friends-only).**
+1. The host picks Airport (F03), which is DM03 on page 2. DM03 is a single-part map and the closest to stock FA.
+2. Check first that both logs show the same slot index and the redirect line before the countdown. If they differ, stop.
+3. Then check that the client loads, spawns and moves. Check doors, loot pickup and a police wave.
+4. Escape: watch the `[rules+0x1dc]` transitions on both machines, and whether the vehicle appears on the client.
+
+**Stage 0b.** Try `-o DisableSyncChange2`. If there is jitter, try `[Net] Tune=1 PlayerMs=50 RefreshMs=300 AngTol=12`.
+
+**Negative control.** Run once with the client on a different map folder (or without the expansion). The expected result is a silent stock load. This confirms risk 1.
+
+**Stage 1 (not built).** Fingerprint in lobby data, the hook clearing the availability byte, and a refused join.
+
+**Order of maps.** DM03 first. Then DM01, DM02, DM06, DM09 and DM03A. Then the page-3 campaign maps. Retomoto and any map with the kljoin jump come last, because the jump fires locally only and AI trigger lists run on the machine that jumped.
+
+**Logs to compare:** `net: session`, `net: server object` (the level index is `[D+0x1b0]^0xac`), `net: lobby`, `net: level ... NOT stock`, the klslot redirect lines, the klsteam block lines, `KLHook.log`, and any `KLHook_N.dmp` or `kl2_490_crash_*.mdmp`. Note the first desync symptom (a door, loot or vehicle that differs).
+
+**Still open after this plan:** who simulates ZFFActor, where RMCReceiveHit is dispatched, the caller of slot 194 on a client, the id space of the wire refs, the origin of join code 3, host migration, and whether the CEG checks reject a patched exe.
