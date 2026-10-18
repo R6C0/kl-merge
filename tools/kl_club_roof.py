@@ -264,6 +264,18 @@ def roof_gap(src, dst, stage=1, log=print):
     return n
 
 
+def route(src, dst, stage=1, log=print):
+    """OPT-IN. One test candidate for the Last Call outside -> office -> roof route: build(only_msg=True) (stock escape-area text
+    with the roof marker) + roof_gap (CrewHop Stage=`stage`, KLHook.roofgap.txt). Each piece is the same as its own command.
+    Default of every other command is unchanged. GUESS values as in those commands; NOT RUN IN THE GAME."""
+    import tempfile
+    tmp = os.path.join(tempfile.mkdtemp(prefix='klroute_'), 'msg')
+    build(src, tmp, only_msg=True, log=log)
+    n = roof_gap(tmp, dst, stage, log)
+    shutil.rmtree(os.path.dirname(tmp), ignore_errors=True)
+    return n
+
+
 def main():
     a = sys.argv[1:]
     if not a:
@@ -286,6 +298,13 @@ def main():
     if cmd == 'roof-gap':
         st = opt('--stage', 1, int)
         roof_gap(a[0], a[1], st); return 0
+    if cmd == 'route':
+        st = opt('--stage', 1, int)
+        route(a[0], a[1], st)
+        bad = diff(a[0], a[1])
+        for x in bad:
+            print('FAIL', x)
+        return 1 if bad else 0
     if cmd == 'build':
         timer = opt('--timer', 'van timer b')
         hide = None if '--no-hide-change' in a else opt('--hide-within', HIDE_DEFAULT, float)
