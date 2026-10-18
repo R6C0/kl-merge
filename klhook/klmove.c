@@ -339,6 +339,10 @@ static struct {
     DWORD snap_range, snap_human; int snap, snap_cap;      /* RestlessSnap (2026-10-18, audit E2.2): after N orders to one place that did not bring the bot there, the bot is put at its chain's place; 0 = off */
     int probe;                     /* [Bots] BoardProbe (2026-10-18, L34/L35 human E presses do not board): 1 = every 500 ms while the escape vehicle state is 3/4/5 one 'boardprobe:' line, read-only; 0 = off (default) */
     DWORD botvan;                  /* BotVan (section 7, v78): ms a loyal AI heister has had stage 3 with no vehicle before the hook calls one; 0 = off */
+    /* [Bots] StairGather (2026-10-18, census of four Hasta runs, F04 / DM11B): the crew survives the 'nest' men of the stair squads only when 5-6 bots
+       arrive together; the lead bot runs ahead alone. 0 = off (default, nothing here runs). PER-MAP: the ini is installed per level and nothing
+       checks the level's name - the gather point is Hasta's. */
+    int gather, gather_n; DWORD gather_radius, gather_timeout; float gather_at[3];
 } klmv;
 
 /* ACTIVE (section 5, 2026-10-12): the level's list of cover places a bot may shift to while it waits at a hold, per GATE of the
@@ -362,6 +366,7 @@ struct klmv_b {
     float pos[3], hp, anchor[3], anchor0[3], target[3], try_pos[3];      /* anchor = the place its chain ordered; anchor0 = where the count 'total' began */
     int snaps;                                /* RestlessSnap: how often this bot was put at its place this round */
     float same_t[3], same_d; int same_n;      /* v82f: the target of the last (b) order, how far the bot was from it then, and how many orders in a row went to it without progress */
+    int g_held, g_n; DWORD g_order_at; float g_chain[3], g_ord[3];      /* StairGather: held now; orders given while held; when the last was given; the chain's goal it was held from; what the block held after our order */
 };
 static struct {
     DWORD rules, state, round_at, last_pass, half; int stages, told_gate, told_thread, told_list, told_ready;
@@ -371,6 +376,7 @@ static struct {
     int rc_visit, rc_told; DWORD rc_wait_at;      /* BoardReach: the visit the boarding box was read for, its line said, when this wait began */
     int last_done, last_told;                     /* LastVehicle (section 6): 1 = looked at (called or found nothing to do) this round; the 2 s line said */
     DWORD bv_since, bv_last, bv_trig, bv_veh; int bv_told, bv_calls, flag_told;      /* BotVan (section 7) */
+    DWORD g_at, g_first; int g_done;      /* StairGather: last pass, when the first bot was held (0 = none held), 1 = released this round (never again until the next round) */
 } klmv_r;
 
 /* BoardReach: what the tick decides and the boxes' update reads (section 4). armed = 1 through the WHOLE round on a
@@ -1362,6 +1368,92 @@ static void klmv_restless(const struct klb_snap *s, DWORD now, int human_in, con
     }
 }
 
+/* ---------------------------------------------------------------- StairGather */
+
+/* [Bots] StairGather=1 (default 0 = nothing here runs). Hasta (F04 / DM11B) census: the crew lives or dies by how many healthy bots reach the stair
+   foot TOGETHER; the lead bot runs ahead alone. Twice a second: a loyal, alive, not-downed AI heister (not an escort) that stands within
+   StairGatherRadius of StairGatherAt and whose chain's goal lies more than 200 below it (it wants to go DOWN) is ordered to the gather point (the
+   same kle_order2 the Restless code uses) and re-ordered when the game's chain puts its own goal back (at most once a second per bot). Released -
+   all together, once per round - when StairGatherN loyal AI heisters in play stand within the radius, or StairGatherTimeout s after the first one
+   was held (or a vehicle is called). At the release each held bot gets ONE order back to the chain goal it was held from (GUESS: the chain would
+   otherwise take a while to re-order it). Our orders are announced to the Restless code with klmv_foreign() so it does not take the gather
+   point for the chain's place. LeashLead (a bot far ahead of the median crew position) is NOT built: 'ahead along the descent' needs a route
+   axis this file does not have, and a hold place for a bot that is already ahead is not defined (GUESS: not simple). MoveDry=1: logs, orders nothing. */
+static int klmv_downed(const struct klb_rec *r) { BYTE dn = 0; return r->actor && klh_rd(r->actor + 0x64c, &dn, 1) && dn; }
+
+static void klmv_g_release(const struct klb_snap *s, const char *why, int near_n, DWORD now)
+{
+    int i, k, n = 0, len = 0; char list[200], w[100]; float cur[3], got[3], bp[3]; DWORD actor, soldier; struct kle_e t;
+    list[0] = 0;
+    for (i = 0; i < s->n && i < KLB_NREC; i++) {
+        struct klmv_b *b = &klmv_r.b[i];
+        if (!b->g_held) continue;
+        b->g_held = 0; n++;
+        if (len < (int)sizeof list - 12) len += snprintf(list + len, sizeof list - len, " %d(%dx)", i, b->g_n);
+        if (klmv.dry || !kle_bot(s, i, &actor, &soldier, bp, w) || !kle_block(soldier, cur)) continue;
+        if (kle_dist(cur, b->g_ord) > 50.0f) continue;                         /* the game already put its own goal back: leave that */
+        memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
+        kltr_set("gather", "StairGather release: back to the chain's goal", -1);
+        if ((k = kle_order2(&t, b->g_chain, got, w, 0)) == 1) klmv_foreign(i, got);
+    }
+    klmv_r.g_done = 1; klmv_r.g_first = 0;
+    klog("gather: RELEASE (%s): %d bot(s) released:%s; %d loyal bot(s) within %.0f m of (%.0f, %.0f, %.0f), %.1f s after the round's start; no gathering again this round",
+         why, n, list, near_n, klmv.gather_radius / 100.0, klmv.gather_at[0], klmv.gather_at[1], klmv.gather_at[2], (now - klmv_r.round_at) / 1000.0);
+}
+
+static void klmv_gather(const struct klb_snap *s, DWORD now)
+{
+    int i, k, near_n = 0, held_n = 0; float cur[3], got[3], bp[3]; DWORD actor, soldier; char w[100]; struct kle_e t; char ok[KLB_NREC];
+    if (!klmv.gather || klmv_r.g_done || now - klmv_r.g_at < 500) return;
+    klmv_r.g_at = KLB_T(now);
+    for (i = 0; i < s->n && i < KLB_NREC; i++) {                               /* who counts: a loyal AI heister in play, up, not an escort */
+        const struct klb_rec *r = &s->r[i]; struct klmv_b *b = &klmv_r.b[i];
+        ok[i] = 0;
+        if (!r->used || !(r->flags & 1) || (r->flags & 2) || r->status || !b->seen || kle_r.used[i] || klmv_downed(r)) {
+            if (b->g_held) { b->g_held = 0; klog("gather: record %d is no longer held (dead, down, aboard, escort or gone)", i); }
+            continue;
+        }
+        ok[i] = 1;
+        if (kle_dist(b->pos, klmv.gather_at) <= (float)klmv.gather_radius) near_n++;
+        if (b->g_held) held_n++;
+    }
+    if (!held_n) klmv_r.g_first = 0;
+    if (s->veh >= 1 && s->veh <= 5) { if (held_n) klmv_g_release(s, "a vehicle is called", near_n, now); else klmv_r.g_done = 1; return; }      /* the exit phase: never gather after a vehicle is called */
+    if (held_n && near_n >= klmv.gather_n) { klmv_g_release(s, "count", near_n, now); return; }
+    if (held_n && klmv_r.g_first && now - klmv_r.g_first >= klmv.gather_timeout) { klmv_g_release(s, "timeout", near_n, now); return; }
+    for (i = 0; i < s->n && i < KLB_NREC; i++) {
+        const struct klb_rec *r = &s->r[i]; struct klmv_b *b = &klmv_r.b[i];
+        if (!ok[i]) continue;
+        if (!b->g_held && (near_n >= klmv.gather_n || kle_dist(b->pos, klmv.gather_at) > (float)klmv.gather_radius)) continue;
+        if (!kle_bot(s, i, &actor, &soldier, bp, w) || !kle_block(soldier, cur)) continue;      /* not now (said by the callers elsewhere); asked again next pass */
+        if (!b->g_held) {
+            if (cur[1] > b->pos[1] - 200.0f) continue;                         /* its chain's goal is not below it: it does not descend */
+            if (r->stage >= 3) continue;                                       /* leaving the level: not ours */
+            memcpy(b->g_chain, cur, 12);
+        } else {
+            if (kle_dist(cur, b->g_ord) <= 50.0f) continue;                    /* still our order */
+            if (klmv.dry) continue;
+            if (b->g_order_at && now - b->g_order_at < 1000) continue;         /* the game puts its goal back within 1 s (Last Call street spot): do not answer faster than 1 s */
+            memcpy(b->g_chain, cur, 12);                                       /* the chain's newest goal is the one to go back to */
+        }
+        memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
+        kltr_set("gather", b->g_held ? "StairGather: held, order again" : "StairGather: held at the gather point", -1);
+        k = kle_order2(&t, klmv.gather_at, got, w, klmv.dry);
+        b->g_order_at = KLB_T(now);
+        if (!k) continue;                                                      /* refused (OrderGap, ...): asked again next pass */
+        if (k == 1) { memcpy(b->g_ord, got, 12); klmv_foreign(i, got); }
+        b->g_n++;
+        if (!b->g_held) {
+            b->g_held = 1; held_n++;
+            if (!klmv_r.g_first) klmv_r.g_first = KLB_T(now);
+            klog("gather: HOLD record %d at (%.0f, %.0f, %.0f), its chain goes to (%.0f, %.0f, %.0f); %d loyal bot(s) within %.0f m of the gather point, %d held, release at %d or %lu s%s",
+                 i, b->pos[0], b->pos[1], b->pos[2], b->g_chain[0], b->g_chain[1], b->g_chain[2], near_n, klmv.gather_radius / 100.0, held_n, klmv.gather_n, klmv.gather_timeout / 1000,
+                 k == 2 ? " (DRY RUN: nothing ordered)" : "");
+        } else if (b->g_n <= 3 || b->g_n % 10 == 0)
+            klog("gather: record %d: the game put its goal (%.0f, %.0f, %.0f) back, ordered to the gather point again (order %d)", i, b->g_chain[0], b->g_chain[1], b->g_chain[2], b->g_n);
+    }
+}
+
 /* ---------------------------------------------------------------- the tick */
 
 /* the round does not run (or not on a level this file may act on): what this file wrote goes back */
@@ -1452,6 +1544,7 @@ static void klmv_tick(int game_thread)
     if (klmv.reach > 0) klmv_reach_pass(&s, now);
     klmv_r.was_waiting = waiting;
     if (klmv.wait) { klmv_gate(&s, now, h, criminal); klmv_driver(&s, now, h, human_in, criminal, hp); }
+    if (klmv.gather) klmv_gather(&s, now);
     if (klmv.restless || klmv.loot) {
         klmv_sour_pass(s.rules, now);
         if (now - klmv_r.half >= 500) {        /* twice a second */
@@ -1509,13 +1602,26 @@ static void klmv_init(void)
     klmv.snap_cap = klb_pos("RestlessSnapMax", 2, 20);
     klmv.probe = GetPrivateProfileIntA("Bots", "BoardProbe", 0, klh_ini) != 0;      /* 0 = off (default) */
     klmv.botvan = (DWORD)klb_pos("BotVan", 4, 120) * 1000;      /* v78: default 4 s; 0 = off */
-    klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0 || klmv.reach > 0 || klmv.last || klmv.botvan || klmv.probe;
+    klmv.gather = GetPrivateProfileIntA("Bots", "StairGather", 0, klh_ini) != 0;      /* 0 = off (default) */
+    klmv.gather_n = klb_pos("StairGatherN", 4, 8); if (klmv.gather_n < 2) klmv.gather_n = 2;      /* GUESS: 4 (L36 cleared the nest with 5-6) */
+    klmv.gather_radius = (DWORD)klb_pos("StairGatherRadius", 2000, 20000);      /* cm; GUESS: 20 m */
+    klmv.gather_timeout = (DWORD)klb_pos("StairGatherTimeout", 30, 600) * 1000;      /* GUESS: 30 s */
+    klmv.gather_at[0] = 27167.0f; klmv.gather_at[1] = 582.0f; klmv.gather_at[2] = 30386.0f;      /* GUESS: Hasta's stair top = the lead bot's chain goal in the census */
+    {
+        char at[96]; float a[3];
+        GetPrivateProfileStringA("Bots", "StairGatherAt", "", at, sizeof at, klh_ini);
+        if (at[0] && sscanf(at, "%f , %f , %f", &a[0], &a[1], &a[2]) == 3 && klb_finite(a[0]) && klb_finite(a[1]) && klb_finite(a[2])) memcpy(klmv.gather_at, a, 12);
+        else if (at[0]) klog("gather: StairGatherAt=%s is not x,y,z: the default (Hasta's stair top) is used", at);
+    }
+    klmv.any = klmv.restless || klmv.loot || klmv.wait || klmv.near_ > 0 || klmv.reach > 0 || klmv.last || klmv.botvan || klmv.probe || klmv.gather;
     if (!klmv.any) return;
     if (!klb.on) { klog("move / wait / near / reach: [Bots] Restless, WaitForYou, BoardNear or BoardReach is set but [Bots] Enable is 0: they need klbot.c's crew records, nothing is done"); klmv.any = 0; return; }
     if (klmv.restless || klmv.loot)
         klog("move: on; Restless=%lu s Loot=%lu s (back %lu s, near %.0f) Hold=%lu s Pace=%.0f%s: an AI heister that stands that long without moving 1 m or earning - on a money object that pays nothing: the object is no loot candidate for a while (one byte of it; you can still take it); more than 3 m from the place its chain ordered: that order again (the soldier's own order %08x)%s; Arcade only, on a level that is not the stock one of its slot",
              klmv.restless / 1000, klmv.loot / 1000, klmv.back / 1000, klmv.loot_near, klmv.hold / 1000, klmv.pace, klmv.dry ? " DRY RUN (MoveDry=1: nothing is written or called)" : "", KLE_ORDER,
              klmv.hold ? "; at its own hold place for Hold seconds: a shift round it" : "; a bot at its own place (a meant wait) is left alone");
+    if (klmv.gather) klog("gather: StairGather on (GUESS limits): a loyal AI heister within %lu m of (%.0f, %.0f, %.0f) whose chain goes more than 2 m down is held there until %d loyal bots stand within the radius or %lu s after the first was held; once per round; per-map ini (no level check)%s",
+                           klmv.gather_radius / 100, klmv.gather_at[0], klmv.gather_at[1], klmv.gather_at[2], klmv.gather_n, klmv.gather_timeout / 1000, klmv.dry ? "; MoveDry=1: nothing is ordered" : "");
     if (klmv.skip_down) klog("move: RestlessSkipDowned on: a downed heister gets no restless order, snap or hop and its stand-still clock restarts when it is up");
     if (klmv.snap) klog("move: RestlessSnap on (audit 1018 E2.2, GUESS limits): a bot whose chain place was ordered %d times without arriving is put AT the place (range %lu, human not within %lu, at most %d times per bot and round)%s", KLMV_TOTAL, klmv.snap_range / 100, klmv.snap_human / 100, klmv.snap_cap, klmv.dry ? "; MoveDry=1: never" : "");
     if (klmv.last)
