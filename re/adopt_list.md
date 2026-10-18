@@ -47,6 +47,17 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   - First bot money: r 83 rec 5 (became a traitor at r 101, then died), r 133-136 recs 3/2/7/6; recs 1 and 4 got $0.
     Bots stood in the deep vault (z -12830..-13190) from about r 130.
   - So L88's all-$0 round was too short (it ended at r ~80). It is NOT evidence against door B. g1 (B with the same hold script) is the fair comparison.
+- RUN L92 (3f g1, door B 54c2b946 + zi + the same hold script): PASS 347 s, 0 asserts.
+  - The human got into the deep vault at r 33 and had $900 k by r 77. In the control, the door kept the human out.
+  - Rec 5 took $1.40 M (it went traitor, then came back and boarded). No other bot went deep or earned anything; all boarded with $0.
+  - Van: called r 174, left r 242, one visit.
+- READING (e5, from the two runs; GUESS where marked):
+  1. The vault's loot ran out. Control: 270 + 380 + 105 + 255 k + rec 5's 1.29 M = about 2.3 M. Door B: you 900 k + rec 5 1.40 M = about 2.3 M.
+     So in L92, rec 5 and the human emptied the vault before the bots' usual r ~139 entry. GUESS: the bots stayed out because no money was left, not because of the door.
+  2. On the live zip the bots DO get into the deep vault (all 4 together at r ~139). So "door body / PathBlocker seals the inside-vault places" (16:25) is answered:
+     not sealed, only timed. GUESS: r ~139 is the vault opening.
+  3. Door B lets the human in about 100 s before that opening, so it skips the heist's wait at the vault door. That is a change to the game, not a fix.
+  - RECOMMENDATION: keep the live 7cd07d15. Do not adopt B. C (noblocker) and D (both) also aim at the "sealed" cause, which (2) rules out, so drop them unless the owner wants the vault open early.
 
 ### Last Call, DM05A [page 3 F01]
 - LIVE: df719d34 + KLJoin dfc29f60 (the "sa" build: EnterVehicle field 9 empty, per 07:10).
@@ -155,7 +166,7 @@ Only Last Call ran: L76, 0 crew dead or down, 6 of 7, "no measurable difference"
 
 ## 6. Summary of single decisions
 1 Last Call: adopt the L78 set (zip 5b0a025b + KLJoin ea0446c1 + hook 1018y + six [Bots] keys). 2 Hasta: swap in police build 3a186c93.
-3 Park II: adopt loot6 3386b972 after rerun (o) (L87 was inconclusive). 4 Vault: keep late110; B/C/D wait for (g0)/(g1) (L88 inconclusive). 5 Retomoto: wait for queue (b)/(c).
+3 Park II: adopt loot6 3386b972 after rerun (o) (L87 was inconclusive). 4 Vault: keep late110 (L91/L92: bots do get in at r ~139; B only opens the vault early for the human). 5 Retomoto: wait for queue (b)/(c).
 6 Hook keys: PointBlankToYou=20.0, WalkExclusive=1, VanCallNear=40 each yes/no. 7 Cops rtcops on five maps yes/no. 8 Push, disk, find.exe, replaced-*.
 
 ## 7. L78 keys on other maps (static reading of klhook/klmove.c; nothing here was run on those maps)
