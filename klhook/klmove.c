@@ -1705,10 +1705,14 @@ static void klmv_walkaway(const struct klb_snap *s, DWORD now)
     }
 }
 
+static int klmv_pm;      /* [Bots] PerMap, see klmv_read */
+static void klmv_pm_check(DWORD now);
+
 static void klmv_tick(int game_thread)
 {
     static DWORD last; struct klb_snap s; DWORD now = GetTickCount(), player = 0; char why[200]; float hp[3] = { 0, 0, 0 }, hn[3];
     const struct klb_rec *h; int i, stages = 0, human_in, criminal, waiting;
+    if (klmv_pm && game_thread && klh_exe_ok) klmv_pm_check(now);      /* PerMap (default 0): a map change re-reads the keys */
     if (!klmv.any || !klb.on || !klh_exe_ok) return;
     if (now - last < 250) return;
     last = now;
@@ -1777,10 +1781,42 @@ static void klmv_tick(int game_thread)
     }
 }
 
-static void klmv_init(void)
+/* PER-MAP [Bots] (2026-10-18, e5; opt-in [Bots] PerMap=1, default 0 = nothing here runs, every key is read from [Bots] exactly as before).
+   Why: [Bots] is global, but the Last Call keys (VanCallNear, VanCallLast, CrewRouteHopHold, BoardReach*) are unproven on the other van maps.
+   Mechanism: when the round's level is a redirected map with folder <F> (the folder of the KLJoin.ini kljoin.c read for the level now loading,
+   e.g. DM05A), every key klmv_read takes from [Bots] is looked up first in [Bots.<F>] of KLHook.ini, then in [Bots]. The keys are re-read when the
+   folder changes (map load); no [Bots.<F>] section (or no key in it) = the values of [Bots]. Only keys this file reads can be overridden.
+   LIMIT (GUESS): the folder is known only for a map with a KLJoin.ini beside its archive (kljoin.c's klj_map_file); klslot.c's rule table is
+   included after this file. A redirected map without KLJoin.ini reads plain [Bots]. */
+static char klmv_pm_sec[48], klmv_pm_cur[40];      /* section being read ("" = [Bots] only); folder the values were read for */
+static char klmv_pm_key[48][40]; static int klmv_pm_n;      /* distinct keys taken from the map section by the last read */
+
+static int klmv_pm_has(const char *sec, const char *key)
+{
+    char t[8]; int i;
+    if (!klmv_pm_sec[0] || strcmp(sec, "Bots")) return 0;
+    GetPrivateProfileStringA(klmv_pm_sec, key, "\x01", t, sizeof t, klh_ini);
+    if (t[0] != 1) {
+        for (i = 0; i < klmv_pm_n && _stricmp(klmv_pm_key[i], key); i++) ;
+        if (i == klmv_pm_n && klmv_pm_n < 48) snprintf(klmv_pm_key[klmv_pm_n++], sizeof klmv_pm_key[0], "%s", key);
+        return 1;
+    }
+    return 0;
+}
+static UINT klmv_pgi(const char *sec, const char *key, INT def, const char *file) { return GetPrivateProfileIntA(klmv_pm_has(sec, key) ? klmv_pm_sec : sec, key, def, file); }
+static DWORD klmv_pgs(const char *sec, const char *key, const char *def, char *out, DWORD cap, const char *file) { return GetPrivateProfileStringA(klmv_pm_has(sec, key) ? klmv_pm_sec : sec, key, def, out, cap, file); }
+static int klmv_pos(const char *key, int def, int top) { int v = (int)klmv_pgi("Bots", key, def, klh_ini); return v < 0 ? 0 : v > top ? top : v; }      /* as klb_pos */
+static float klmv_inif(const char *key, const char *def) { char t[32]; klmv_pgs("Bots", key, def, t, sizeof t, klh_ini); return (float)atof(t); }      /* as klb_inif */
+
+/* klmv_init's reads, repeatable: inside it the profile calls and klb_pos / klb_inif go through the per-map lookup above (with klmv_pm_sec empty they are the plain calls) */
+#define GetPrivateProfileIntA klmv_pgi
+#define GetPrivateProfileStringA klmv_pgs
+#define klb_pos klmv_pos
+#define klb_inif klmv_inif
+static void klmv_read(void)
 {
     char t[16]; int v;
-    memset(&klmv, 0, sizeof klmv); memset(&klmv_r, 0, sizeof klmv_r);
+    memset(&klmv, 0, sizeof klmv);
     v = klb_pos("Restless", 0, 600); klmv.restless = (DWORD)v * 1000;
     klmv.after = (DWORD)klb_pos("RestlessAfter", 0, 600) * 1000;      /* 2026-10-15 (run v74_T13rt2, Retomoto): for ~30 s after the round start the defend place of a bot is still its rappel landing on the balcony while the loot tactic has taken it into the room - b. ordered it back out ("they walk back to the balcony") */
     GetPrivateProfileStringA("Bots", "RestlessLoot", "", t, sizeof t, klh_ini);
@@ -1892,5 +1928,47 @@ static void klmv_init(void)
              klmv.near_ > 0 ? " BoardNear is set too: a box it denies takes nobody whatever BoardReach says (BoardReach alone is enough)." : "", kle.fo_hold, kle.fo_spare,
              kle.fo_hold > 0 || kle.fo_spare ? "" : ": NEITHER IS ON - an AI heister who does not reach the doors in the vehicle's 8 s is shot by the rules when it leaves with you aboard");
 }
+#undef GetPrivateProfileIntA
+#undef GetPrivateProfileStringA
+#undef klb_pos
+#undef klb_inif
+
+static void klmv_init(void)
+{
+    memset(&klmv_r, 0, sizeof klmv_r);
+    klmv_pm = GetPrivateProfileIntA("Bots", "PerMap", 0, klh_ini) != 0;      /* 0 = off (default) */
+    klmv_read();
+    if (klmv_pm) klog("move: PerMap=1: a redirected map with a KLJoin.ini folder <F> reads [Bots.<F>] of KLHook.ini before [Bots] (re-read at each map load)");
+}
+
+/* the folder of the redirected map now loaded ("DM05A"), "" = none known; see the LIMIT above */
+static void klmv_pm_folder(char *f, int cap)
+{
+    char scene[160], key[64], *e, *s; f[0] = 0;
+    if (!klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) return;
+    EnterCriticalSection(&klj_cs);
+    if (klj_map_file[0] && !strcmp(klj_map_key, key) && (e = strrchr(klj_map_file, 0x5c)) != 0) {
+        for (s = e; s > klj_map_file && s[-1] != 0x5c; s--) ;
+        if (e - s > 0 && e - s < cap) { memcpy(f, s, e - s); f[e - s] = 0; }
+    }
+    LeaveCriticalSection(&klj_cs);
+}
+
+/* from klmv_tick on the game's thread (no race with the box hooks): when the map's folder changed and a [Bots.<F>] section exists (or did), read the keys again */
+static void klmv_pm_check(DWORD now)
+{
+    static DWORD at; char f[40], sec[48], probe[8]; int had = klmv_pm_cur[0] != 0;
+    if (now - at < 1000) return;
+    at = now;
+    klmv_pm_folder(f, sizeof f);
+    sec[0] = 0;
+    if (f[0]) { snprintf(sec, sizeof sec, "Bots.%s", f); if (!GetPrivateProfileSectionA(sec, probe, sizeof probe, klh_ini)) f[0] = sec[0] = 0; }
+    if (!strcmp(f, klmv_pm_cur)) return;
+    snprintf(klmv_pm_cur, sizeof klmv_pm_cur, "%s", f); snprintf(klmv_pm_sec, sizeof klmv_pm_sec, "%s", sec); klmv_pm_n = 0;
+    klmv_read();
+    if (f[0]) klog("move: per-map [Bots.%s]: %d keys override [Bots]", f, klmv_pm_n);
+    else if (had) klog("move: per-map: no [Bots.<F>] section for this map any more, [Bots] values read again");
+}
+
 
 #endif /* KLMOVE_C */
