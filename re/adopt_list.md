@@ -34,6 +34,12 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   time (+15 s) and got the last 2 bots aboard: CrewRouteHopHold=15 is a CANDIDATE for the Vault. The chase took 12 s longer and its orders kept
   the bot's own height (BoardReachAim, live 80): sent to floors below the van. Fix staged as (n): hook out_e5_1018zl BoardReachAimHeight=3
   (7ebc5c79), ini vault_wag\PT_DM03A_wrh.ini 458a5c99. Do not adopt the chase keys before (n).
+- RUN L98 (3f (n): zl + PT_DM03A_wrh, live map): PASS 363 s, you + 6 of 7. Rec 1 was DOWNED (botdown) 19 m out until departure, so a down state, not routing.
+  - BoardReachAimHeight=3 did aim the 17 off-floor orders at the van's object (y 822).
+  - The path there runs round via the far ramp: bots first walked up to 30 m AWAY, then back.
+  - The van waited 113 s (L85 50.5 s, L86 62 s); crewhold and then FollowOutHold extended it.
+  - VERDICT: no gain on the Vault, so do NOT adopt BoardReachAimHeight. As the census said (re/reach_aim_census.md), the own-floor aim worked as a stair carrot.
+    The chase keys stay a candidate only on L86's evidence.
 - RUN L88 (3f (g), 23:42-23:46, door B 54c2b946 + hook zi + live keys): PASS 243 s, INCONCLUSIVE.
   - The human reached stage 3 at r ~80 with $0, so the round ended before r 150.
   - Nobody earned anything: the human and all 7 bots stayed at $0.
