@@ -188,6 +188,11 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-19 02:35 - OFFLINE (kl-merge-e5; 3f runs the live queue):
+- Hasta: 3f's L106 = police4 S90 + [Bots] EscortUntil=1: PASS, you + ALL 7 out. The escort boarded the first heli with 19 s to spare; in L105 it was killed walking (re/hasta_idle_bot.md: it was the escort, not idle). [Bots] is global on the live hook; per map needs ADOPT 2b.
+- One-click ADOPT 6 Park II loot6 3386b972 staged and scratch-tested. ADOPT 5 (Hasta police4) is an alternative to ADOPT 1 (same zip), not to ADOPT 3.
+- Workflow wi51gw6tn (stage 4, static only): the open private-match questions, written to re/private_match.md.
+Owner: git push origin rtp-schemas (63 ahead) and git push origin rtp-schemas:main; ADOPT 1-6 in C:\kl_build_1018\adopt_1018 and C:\kl_build_1019\adopt_1019.
 2026-10-19 02:17 - OFFLINE (kl-merge-e5; 3f runs the live queue):
 - Hasta police4 (opt-in --rest-late-direct, 1cc98ffc): 3f's L105 S90 a9ee0ebe PASSED. All 8 late police start at stair top + 90.0 s; you + 6 of 7 out, $3.15M. Staged as one-click ADOPT 5 (an alternative to ADOPT 1, same zip).
 - Hot Coffee II cars-only 21c6ed49: L103/L104 had no one-shots (live map: 4 of 4 runs). Staged as one-click ADOPT 4. re/hotcoffee2_wholehit.md: an unscaled non-bullet hit, a car blast is the best GUESS.
@@ -200,12 +205,6 @@ Owner: git push origin rtp-schemas (56 ahead) and git push origin rtp-schemas:ma
   - The klhop NoHuman gate is on 3f's owner list.
 - re/private_match.md (cae42766): no map/version check exists, the host decides AI; klrappel.c has no online guard (3f's file, stage 4).
 Owner: git push origin rtp-schemas (about 43 ahead) and git push origin rtp-schemas:main.
-2026-10-19 01:19 - OFFLINE (kl-merge-e5; 3f runs the live queue (p) (q) (r) (t)):
-- Retomoto: L97 escaped with a fed human, all 6 living bots, using the new opt-in BoardReachLast (klmove dc41de85). L96 without it: 3.
-- ADOPT 3 is staged in C:\kl_build_1019\adopt_1019 and reviewed (dry runs only): leaderless KLJoin 0b557e40 + [Bots.DM09] L97 keys, plus 3h, SHIP hook b28dd444, never run in the game. Order: 2, then 3; undo 3 before 2.
-- Vault L98 BoardReachAimHeight: do not adopt. Park II L99 loot6 3386b972: a bot takes the moved case, all 7 out; adopt candidate.
-- Hot Coffee II: tools/kl_hc2_strip.py (opt-in) makes the campaign cars not blow up; a cars-only build 21c6ed49 is queued for 3f as (t).
-Owner: git push origin rtp-schemas (about 40 ahead) and git push origin rtp-schemas:main.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

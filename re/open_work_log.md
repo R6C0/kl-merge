@@ -1,3 +1,8 @@
+2026-10-19 02:35 - OFFLINE (kl-merge-e5; 3f runs the live queue):
+- Hasta: 3f's L106 = police4 S90 + [Bots] EscortUntil=1: PASS, you + ALL 7 out. The escort boarded the first heli with 19 s to spare; in L105 it was killed walking (re/hasta_idle_bot.md: it was the escort, not idle). [Bots] is global on the live hook; per map needs ADOPT 2b.
+- One-click ADOPT 6 Park II loot6 3386b972 staged and scratch-tested. ADOPT 5 (Hasta police4) is an alternative to ADOPT 1 (same zip), not to ADOPT 3.
+- Workflow wi51gw6tn (stage 4, static only): the open private-match questions, written to re/private_match.md.
+Owner: git push origin rtp-schemas (63 ahead) and git push origin rtp-schemas:main; ADOPT 1-6 in C:\kl_build_1018\adopt_1018 and C:\kl_build_1019\adopt_1019.
 2026-10-19 02:17 - OFFLINE (kl-merge-e5; 3f runs the live queue):
 - Hasta police4 (opt-in --rest-late-direct, 1cc98ffc): 3f's L105 S90 a9ee0ebe PASSED. All 8 late police start at stair top + 90.0 s; you + 6 of 7 out, $3.15M. Staged as one-click ADOPT 5 (an alternative to ADOPT 1, same zip).
 - Hot Coffee II cars-only 21c6ed49: L103/L104 had no one-shots (live map: 4 of 4 runs). Staged as one-click ADOPT 4. re/hotcoffee2_wholehit.md: an unscaled non-bullet hit, a car blast is the best GUESS.
