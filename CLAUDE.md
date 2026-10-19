@@ -188,6 +188,13 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-19 01:34 - OFFLINE (kl-merge-e5; 3f runs the live queue (r) (t)):
+- 3f's Hasta L100 (police3, S=45): PASS, you + 7 out, but the 8 late police still do not show in the log. Keep ADOPT 1. Workflow wrnkv6kbn is finding out whether they start: re/hasta_late_police.md.
+- 3f's Retomoto L101: with a LIVING slow human, hop 6 of KLJoin 0b557e40 teleports all 7 bots to the street at r~156, and the human dies alone. So ADOPT 3 suits a fast human only.
+  - Workflow w9a7k3tel is designing an ini-only fix (Player=1 plus a fallback hop for a fed human): re/retomoto_hop6_ini.md.
+  - The klhop NoHuman gate is on 3f's owner list.
+- re/private_match.md (cae42766): no map/version check exists, the host decides AI; klrappel.c has no online guard (3f's file, stage 4).
+Owner: git push origin rtp-schemas (about 43 ahead) and git push origin rtp-schemas:main.
 2026-10-19 01:19 - OFFLINE (kl-merge-e5; 3f runs the live queue (p) (q) (r) (t)):
 - Retomoto: L97 escaped with a fed human, all 6 living bots, using the new opt-in BoardReachLast (klmove dc41de85). L96 without it: 3.
 - ADOPT 3 is staged in C:\kl_build_1019\adopt_1019 and reviewed (dry runs only): leaderless KLJoin 0b557e40 + [Bots.DM09] L97 keys, plus 3h, SHIP hook b28dd444, never run in the game. Order: 2, then 3; undo 3 before 2.
@@ -205,18 +212,6 @@ Owner: git push origin rtp-schemas (about 40 ahead) and git push origin rtp-sche
 Owner:
 - git push origin rtp-schemas (26 ahead) and git push origin rtp-schemas:main.
 - ADOPT 2b (hook 1018zh) is ready.
-2026-10-18 23:34 - OFFLINE (kl-merge-e5; 3f runs the live queue, item (f) Park loot6):
-- 3f's Vault runs L85 and L86: all 7 escaped both times.
-  - L85: all 10 WalkAwayReorder orders were redundant.
-  - L86: BoardReachAim keeps the bot's own height.
-- New opt-in klmove keys, default 0 = unchanged, none run in the game yet:
-  - CrewRouteFed (hook zj 40fe1088), Retomoto, for when the human turns fed;
-  - WalkAwayGoal and WalkAwayHeight (hook zk f527b044);
-  - BoardReachAimHeight (hook zl 5c466e85).
-  Queued for 3f as (l) and (n).
-- Retomoto leaderless KLJoin 0b557e40 is queued as (k). Candidates for the owner are in re/adopt_list.md.
-- Workflow w2320ln0e: census of the BoardReachAim off-floor orders per map, written to re/reach_aim_census.md.
-Owner: git push origin rtp-schemas (14 ahead) and git push origin rtp-schemas:main.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

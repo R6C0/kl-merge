@@ -1,3 +1,10 @@
+2026-10-19 01:34 - OFFLINE (kl-merge-e5; 3f runs the live queue (r) (t)):
+- 3f's Hasta L100 (police3, S=45): PASS, you + 7 out, but the 8 late police still do not show in the log. Keep ADOPT 1. Workflow wrnkv6kbn is finding out whether they start: re/hasta_late_police.md.
+- 3f's Retomoto L101: with a LIVING slow human, hop 6 of KLJoin 0b557e40 teleports all 7 bots to the street at r~156, and the human dies alone. So ADOPT 3 suits a fast human only.
+  - Workflow w9a7k3tel is designing an ini-only fix (Player=1 plus a fallback hop for a fed human): re/retomoto_hop6_ini.md.
+  - The klhop NoHuman gate is on 3f's owner list.
+- re/private_match.md (cae42766): no map/version check exists, the host decides AI; klrappel.c has no online guard (3f's file, stage 4).
+Owner: git push origin rtp-schemas (about 43 ahead) and git push origin rtp-schemas:main.
 2026-10-19 01:19 - OFFLINE (kl-merge-e5; 3f runs the live queue (p) (q) (r) (t)):
 - Retomoto: L97 escaped with a fed human, all 6 living bots, using the new opt-in BoardReachLast (klmove dc41de85). L96 without it: 3.
 - ADOPT 3 is staged in C:\kl_build_1019\adopt_1019 and reviewed (dry runs only): leaderless KLJoin 0b557e40 + [Bots.DM09] L97 keys, plus 3h, SHIP hook b28dd444, never run in the game. Order: 2, then 3; undo 3 before 2.
