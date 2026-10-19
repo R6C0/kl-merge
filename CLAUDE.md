@@ -188,6 +188,11 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-19 02:17 - OFFLINE (kl-merge-e5; 3f runs the live queue):
+- Hasta police4 (opt-in --rest-late-direct, 1cc98ffc): 3f's L105 S90 a9ee0ebe PASSED. All 8 late police start at stair top + 90.0 s; you + 6 of 7 out, $3.15M. Staged as one-click ADOPT 5 (an alternative to ADOPT 3, same zip).
+- Hot Coffee II cars-only 21c6ed49: L103/L104 had no one-shots (live map: 4 of 4 runs). Staged as one-click ADOPT 4. re/hotcoffee2_wholehit.md: an unscaled non-bullet hit, a car blast is the best GUESS.
+- Retomoto: no ini-only fix for the fed-human stall; the klhop NoHuman gate (3f's file) is the fix. Workflow w1i7d01bp: why Hasta rec 1 idled at the start in L105 (re/hasta_idle_bot.md).
+Owner: git push origin rtp-schemas (56 ahead) and git push origin rtp-schemas:main; ADOPT 1-5 in C:\kl_build_1018\adopt_1018 and C:\kl_build_1019\adopt_1019.
 2026-10-19 01:34 - OFFLINE (kl-merge-e5; 3f runs the live queue (r) (t)):
 - 3f's Hasta L100 (police3, S=45): PASS, you + 7 out, but the 8 late police still do not show in the log. Keep ADOPT 1. Workflow wrnkv6kbn is finding out whether they start: re/hasta_late_police.md.
 - 3f's Retomoto L101: with a LIVING slow human, hop 6 of KLJoin 0b557e40 teleports all 7 bots to the street at r~156, and the human dies alone. So ADOPT 3 suits a fast human only.
@@ -201,17 +206,6 @@ Owner: git push origin rtp-schemas (about 43 ahead) and git push origin rtp-sche
 - Vault L98 BoardReachAimHeight: do not adopt. Park II L99 loot6 3386b972: a bot takes the moved case, all 7 out; adopt candidate.
 - Hot Coffee II: tools/kl_hc2_strip.py (opt-in) makes the campaign cars not blow up; a cars-only build 21c6ed49 is queued for 3f as (t).
 Owner: git push origin rtp-schemas (about 40 ahead) and git push origin rtp-schemas:main.
-2026-10-19 00:27 - OFFLINE (kl-merge-e5; 3f runs the live queue (k) (l) (n) (o) (p)):
-- 3f's Vault runs L91 (control) and L92 (door B): the vault is not sealed, only timed; the bots get in at r ~139.
-  - Door B only lets the human in about 100 s early. Both runs took about 2.3 M in loot.
-  - Recommendation: keep the live 7cd07d15 and drop B/C/D.
-- Hasta police3 (--rest-late=45) is staged at C:\kl_build_1018\hasta_police3 (43a7c699, checks pass) and queued as (p).
-  - A stray `chain --help` from an agent rebuilt the intermediates in KL_PortTools\build\hasta_1017. Nothing live was touched.
-- 3f's Hot Coffee II hit-log run L93: police hits are -1 chip damage. Rec 1 died from ONE 340 drop with no soldier near, the same instant kill as L70/L71.
-  - Workflow wlhwez0yl is looking for the cause; output goes to re/hotcoffee2_oneshot.md.
-Owner:
-- git push origin rtp-schemas (26 ahead) and git push origin rtp-schemas:main.
-- ADOPT 2b (hook 1018zh) is ready.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
