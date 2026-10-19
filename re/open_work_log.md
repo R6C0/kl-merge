@@ -1,3 +1,6 @@
+2026-10-19 23:50 - pool lifetime, static pass 2 (e5; owner active, no live run): still UNKNOWN.
+- Workflow wfg5gjc7i (re/private_match.md): the scene load path never frees the pool, but DB slot 31 0x41c360 (a per-scene teardown) clears it via slot 11; whether that runs at a map change is unproven (virtual callers). Rule unchanged: both PCs start the session on the same map zip and build. PoolLog (or logging [0xe0ff90] across one map change) settles it live.
+Owner: reboot (zombie kl2 blocks noblow), then INSTALL noblow.bat and INSTALL hook 1019d.bat, then a Hasta run.
 2026-10-19 23:30 - netcode + more guns (3f; static + build, nothing run live, owner at the PC):
 - klinv.c [Inv] Enable (Arcade only, inert online): the 2-gun limit is code (kl2 0x6cc2ef cmp bl,2; hashed). F8 shelves the gun not in hand (entry+8 = 0) so a third can be picked up; F8 again swaps back; restore checks item id + gun vtable (re/weapon_slots.md). Reviewed FIX -> fixed.
 - klnetfix.c [Net] Hold*: no legal receiver cure for spin/float (snap/steer thresholds are in hashed .rdata); only the dead-reckoning end time (3500 ms, .bss policies) - an EXPERIMENT, position keys client-only (re/netcode_receiver.md). Needs two PCs.

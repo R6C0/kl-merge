@@ -866,3 +866,18 @@ Static only (python + capstone on kl2.exe, plus kl_gms on the stock zips). Nothi
 
 ## 2026-10-19: which ADOPT changes the slot order
 - ONLINE (2026-10-19 08:40, tools/kl_netcheck.py, live map vs each ADOPT zip): only ADOPT 5 (Hasta police4 a9ee0ebe) changes the map's slot order (from entity 20014). ADOPT 1 (3a186c93), 2 (Last Call 5b0a025b), 4 (Hot Coffee 21c6ed49) and 6 (Park 3386b972) keep it. So for a private match both PCs need the same Hasta state if ADOPT 5 is used; for the others a same slot order is necessary but not sufficient (the .prp etc. still differ, effect UNKNOWN): safest is that both PCs install the same ADOPTs.
+
+## 2026-10-19 23:50: pool lifetime, static pass 2 (workflow wfg5gjc7i, read only): still UNKNOWN
+- Confirmed: only three code sites write [db+8]: the build at 0x8ad96c (guarded by 0x8ad931), DB vtable (0xb8fa04) slot 11 0x4623e0
+  (virtual delete + zero at 0x46240b) and the DB destructor 0x82e060. Tags are set to 0xFFFF only by pool ctor 0x89bc80 (via 0x4c2eb0,
+  manager in global 0xe0ff90, destroyed by 0x861640); alloc 0x7a39f0 / free 0x8861a0 touch one tag each.
+- The scene load path (DB slot 8 0x820300 -> loader 0x8ad7c0 at 0x820b6c) neither frees nor rebuilds the pool.
+- The open link: DB slot 31 0x41c360 is a heavy per-scene teardown that ends by calling slot 11 (0x41c476), so it CLEARS the pool; it is
+  reached from DB slot 23 0x8d70c0 (0x8d710c), which ZSysInterface (vtable 0xb8f67c) slots 16 0x4f8260 / 9 0x5c36a0 call. Slot 16 sets
+  [sys+0x1348]=1 and the per-frame update 0x583fb0 then re-inits the engine (0x6ee140). Whether slot 16/9/23 runs at a map change is not
+  shown: all callers are virtual and no level-change caller was found (absence of a found caller, not proof).
+- Two tracers said 'survives level change'; the verifier refuted that as unproven (and corrected one tracer: [sys+0x1348] writers are
+  0x4f82b8, 0x583fff, 0x68fc15, 0x68fc50, 0x494f68, 0x6c189b).
+- So the rule stays: both PCs start the session on the same map zip and build. The opt-in PoolLog patch (re/klnet_poollog.patch) settles it
+  live; a cheaper live probe would be to log [0xe0ff90] (or [db+8]) before and after one map change.
+

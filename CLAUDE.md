@@ -188,6 +188,9 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-19 23:50 - pool lifetime, static pass 2 (e5; owner active, no live run): still UNKNOWN.
+- Workflow wfg5gjc7i (re/private_match.md): the scene load path never frees the pool, but DB slot 31 0x41c360 (a per-scene teardown) clears it via slot 11; whether that runs at a map change is unproven (virtual callers). Rule unchanged: both PCs start the session on the same map zip and build. PoolLog (or logging [0xe0ff90] across one map change) settles it live.
+Owner: reboot (zombie kl2 blocks noblow), then INSTALL noblow.bat and INSTALL hook 1019d.bat, then a Hasta run.
 2026-10-19 23:30 - netcode + more guns (3f; static + build, nothing run live, owner at the PC):
 - klinv.c [Inv] Enable (Arcade only, inert online): the 2-gun limit is code (kl2 0x6cc2ef cmp bl,2; hashed). F8 shelves the gun not in hand (entry+8 = 0) so a third can be picked up; F8 again swaps back; restore checks item id + gun vtable (re/weapon_slots.md). Reviewed FIX -> fixed.
 - klnetfix.c [Net] Hold*: no legal receiver cure for spin/float (snap/steer thresholds are in hashed .rdata); only the dead-reckoning end time (3500 ms, .bss policies) - an EXPERIMENT, position keys client-only (re/netcode_receiver.md). Needs two PCs.
@@ -196,7 +199,6 @@ Owner: C:\kl_build_1019\hook_1019d\INSTALL hook 1019d.bat (replaces 1019c; adds 
 - re/hasta_chopper_1019.md: the chopper's VehicleEffects health (kl2 0x412430) <= 15 % forces the early lift-off, 0 with Definite = state 6. Damage source unknown. 12 of 216 departures destroyed, all Hasta. noblow stops state 6, not the early lift-off.
 - KLHook 1019c (b9bc4919, all OFF by default): [Down] Floor, [Bots] FoeSkipWhileFed, [Load] CursorGuard, [Bots] FollowOutHoldUnshielded (default 1); heli probe line shows hp=/max blow=.
 Owner: close the game, run C:\kl_build_1019\noblow\INSTALL noblow.bat and C:\kl_build_1019\hook_1019c\INSTALL hook 1019c.bat; then a Hasta run.
-2026-10-19 13:55 - owner run 13:13-13:37 checked (3f): Hasta escape chopper (Dead Men M06 Escape_Chopper, BlowupChanceDefinite, 2200 hp) was held ~45 s by FollowOutHold WITHOUT a shield (no ZAnimatedVehicle) and shot down, 5 bots aboard died (13:29:27). DM05A and DM06 carry the same chopper. tools/kl_escape_noblow.py sets it to BlowupChanceNone (.prp only, same slot order); staged + INSTALL/UNDO noblow.bat in C:\kl_build_1019\noblow (needs the game closed). GUESS: None alone keeps it out of state 6. Also seen: a 6.5 s ReShade device-reset stall on Hot Coffee round 3; after DM05A only 84 MB largest free block.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
