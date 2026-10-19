@@ -371,7 +371,7 @@ Read-only. Nothing was launched, installed or committed. Tags: **FACT** means I 
 - 0x5b1410 uses `[rules+0x1dc]`, `+0x1e0` and `+0x1e4` and calls vtable +0x164 (slot 89). So the offsets are shared with the FA base class, not Heist-only.
 - 0x57b2d0 is `add ecx,0x250; jmp 0x962850`, so it reads `m_szVersion`. Its only direct `E8` caller is 0x53919c. Indirect or vtable callers were not scanned.
 - The `klchar.c:298-301` online branch only logs. Lines 302-307 then return unless the type is 4 and the vtable is Heist. The inert-online result is accidental, as the hook report said.
-- The `klslot.c:280` redirect is skipped when `kl_online()` is true. `klgun.c:409` and `kljoin.c:244` are guarded by `kl_online()`.
+- (CORRECTED 2026-10-19 Verify: `klslot.c:280` skips only the Arcade PLAYLIST override when `kl_online()` is true; the file redirect itself has no online guard.) `klgun.c:409` and `kljoin.c:244` are guarded by `kl_online()`.
 - `klmm.c:48-53` is deliberately not gated.
 
 **Corrections and upgrades**
@@ -651,3 +651,57 @@ Evidence:
 - Host-only versus every-peer for hook features: this work does not change the earlier finding that the Heist-gated modules are inert in a real FA lobby (role 2/3 uses the Sv/Cl rules classes). It only settles that nothing protects a lobby from mixed builds, so every peer must be given the identical `Maps\DMxx` build by hand.
 
 **Not established (still GUESS/open):** whether the DDL layer really replicates `m_iAvailableLevels` changes made after the lobby forms (netcode.md says the field is replicated; I did not read the DDL send path); what slot is used when the lobby is Quick Match; whether Steam sets 0x6d6a/0x6d71 true for owners of the PC edition at all (the retail PC FA maps F05/F08/F09 are known to be playable, so presumably yes).
+
+## 2026-10-19 - authority, hook sides, what must match (static reading, kl2.exe build 0490; nothing run)
+
+### Findings
+1. Authority. The HOST runs everything; clients replicate. Session manager sm=[0x168e598]: net role [sm+0x54] (2 host, 3 client), game type [sm+0x5c], state [sm+0x70].
+   - Helpers: 0x863a60 networked (roles 2/3); 0x4b0a40 client; 0x8df480 authority (host true, client false, local type 4 true); 0x9425a0 master of a net object.
+   - Squad scripts: ZSquadScript update 0x47e440 skips its loop on a client (call 0x4b0a40 at 0x47e465, jne 0x47e70c). ZSoldier orders (0x760e50) are dropped on a client.
+   - Money, containers, doors, escape vehicles are gated by 0x8df480, so loot and escape are host-decided. (Call sites FACT: ZOnlineMoneyContainer 0x419f80, ZOnlineEscVehicleController 0x6d7d20, ZKickDoorMonitor 0x611430, ZOnlineMoneyCtrl, ZOnlineEscVehicleMonitor 0x84d8f0. "Host-decided" is the reading of those message handlers: GUESS. Other door classes not checked.)
+   - Crew bots exist only under ZGameRulesHeist (vtable 0xbd3514, Arcade) (carried from klbot.c comments, GUESS). Online rules are ZGameRulesFragileAllianceSv (0xbd2eb4) / Cl (0xbd31e4) (FACT, RTTI); "only Sv issues server commands" is GUESS.
+   - Civilians: ZCivilian and ZSoldier slot 17 (0x4f5310 call at 0x4f539c, 0x6ab250 calls at 0x6ac5cc..0x6ac5eb) test networked && game type 2 && client (FACT). So for game type 4 (FA) that branch does nothing; whether FA civilians run on clients: GUESS (not established).
+2. Hook modules are inert online. klbot.c klb_read (line 360-364), klfedkit.c (line ~878), klbalance.c klr_arcade (line 414-418) and klbot-based klmove/klescort/klhop require rules vtable == Heist and `[sm+0x5c]==4` and role not 2/3. klcrew_rt.c:258 and klchar.c:302 test only type 4 + the Heist vtable (no role test), so online they rest on the vtable alone. kljoin.c:244 refuses the jump request when kl_online() ([Net] OnlineSafe).
+   - NOT inert (see Verify): klslot.c (live ini has [Expansion] Enable=1), klrappel.c (no online guard), klcensor.c (default on; blocked by kl_online() unless [Censor] Online=1), [HUD] Online=1 in the live ini.
+   - Arcade-only, host or client: nothing runs online. Per module the sites are those in re/hook_netcode_audit.md.
+   - If a module DID run on a host only: orders and the 0x62a900 teleport (b=1) replicate and are fine for clients; plain data writes (klh_data, private vtable copies, import-slot proxies klh_iat) exist only on that PC and desync from peers that lack them (GUESS on visible effect).
+   - If it ran on a client only: its writes are overwritten by the host or diverge locally. Do not enable.
+   - Included in every build, but NOT all "always on": klsteam.c (stat/achievement proxy, always installed, local only). klmm.c installs nothing unless [Net] PrivateLobby or BuildKey is set (klmm.c:219-224). klnet.c writes nothing unless [Net] Tune=1 (klnet.c:395); Log defaults 0. klslot.c does nothing unless [Expansion] Enable=1, which the live ini HAS. klbuild.c is written but NOT included in klhook.c (include list lines 614-664) and not in build.bat.
+3. Must match between players: the map archive the redirect resolves to (live: KLExpansion\Maps\<dir>\Fxx_Main.zip plus .WHD/.WAV/.hti/_LS.* beside it, chosen by klslot.c; NOT Scenes\Locations\Fxx unless no rule applies), KLExpansion\Overlay\Patch01.zip, KLJoin/KLGuns/KLTalk/KLWardrobe.ini, KLHook.ini and dinput8.dll. Scene entity order must be identical (objects are addressed by 16-bit scene references; GUESS on the failure mode).
+   - Game checks: none FOUND (absence of evidence, not proof). No hash, CRC or version comparison located. 0x53919c calls the m_szVersion getter 0x57b2d0 and does not use the result (FACT); indirect/vtable callers were not scanned. Steam lobby keys carry no build, version or map name (netcode.md:113). The DDL replicates m_szServerMap and m_szVersion strings; their consumers are unknown.
+   - Availability gate (ZDownloadableContentManagerSteam, vtable 0xbd5494, global 0x168f750) is content-blind for F01-F04, F06, F07: a mismatched client silently loads whatever zip it has. Expect a desync or crash, not a refusal.
+   - KLHook.ini keys that matter online (defaults in code; LIVE values in brackets): [Expansion] Enable (default 0; live 1, Overlay=1, page-0 [Redirect] F01..F09 = DD01..DD09, so even the stock FA slots load modded overlays), [Net] Log/Tune/PrivateLobby/BuildKey (live: no [Net] section, all off), [HUD] Online (default 0; live 1), [Censor] Online. The rest are inert online but keep both PCs identical anyway.
+4. Slot maps. A private lobby picks them like stock ones: the client's level index is the DDL byte at [[sm+0x84]+0x1b0] ^ 0xac (0x467ae0 -> 0x5b1400; klnet.c:304 reads the same), mapped to a scene through each side's own list (host 0x6c536f, client 0x491fd1). The Steam lobby key `Scenario` is a number used for search and the row filter. The name travels only with `-o MPMap` (GUESS, MPMap not re-checked). Nothing in the lobby uses a display name or level id we changed; names are local menu XML/LOC. Only 7 of the 9 hard-coded slots are gate-free (above).
+
+### First two-PC test (no new code)
+- Copy to PC2: the same dinput8.dll, KLHook.ini, the four ini files, the whole KLExpansion folder (Maps\<dir> with sidecars, Overlay\Patch01.zip). Never touch KL_PortBackup.
+- Compare with `certutil -hashfile <file> MD5` on both PCs for every file above; they must be identical. Reference values (checked 2026-10-19): live dinput8.dll md5 043419cb (mtime Oct 19 01:25, will change on reinstall); Hasta police3 F04_Main.zip md5 43a7c699 (C:\kl_build_1018\hasta_police3\DM11B). NOTE 7cd07d15 is the Vault map build id in re/adopt_list.md:19, not a hook hash; its live F07 file hashes differently as md5 (unresolved scheme).
+- Host creates a private lobby on the slot, client joins by invite. Keep [Net] Log on; compare KLHook.log on both sides (lobby create/join lines, level index, scene load). Check entity counts and the first loot pickup on both screens.
+- Start with a stock map first to prove the link, then the slot map. With the live ini the "stock" FA map already loads the DDnn overlay on the owner's PC, so PC2 needs the same KLExpansion or the test is not stock.
+- Online the page latch is GUESSED to be 0 (the lobby menus show no map page; klslot.c kls_menu_watch, not run), so a Dead Men map (page 2/3 rule) would not load in a lobby unless a page-0 rule points a slot at it. Not run.
+
+### Smallest KLHook additions to make a mismatch visible (proposals, NOT written)
+Already written but not built: klbuild.c (lobby build check, design re/private_match_buildcheck.md) and klmm.c BuildKey (klx_fingerprint over the Maps\*\F*_Main.zip central directories; off by default). Prefer reviving those over the list below.
+- Hash the loaded slot zip (or its central directory) at level load and log it; send it through klmm.c as a lobby member key and log the peer's value.
+- Log the entity count after the .gms load, and the dinput8 build id, to KLHook.log on both sides.
+- Put the hook build id in a klmm lobby key (BuildKey exists in [Net]) and show a warning line in the log when the peer's differs.
+- Log the role at 0x8df480 / [sm+0x54] when a round starts, so the logs say who was host.
+
+### Verify (2026-10-19, second reader; static only, kl2.exe via tools/kl_exe.py + capstone, klhook sources, read-only look at the live Dog Days ini and hashes)
+Confirmed (FACT, bytes read):
+- Helpers: 0x8df480 (role table 0x8df4a8: roles 0,1 -> type==4; role 2 -> true; role 3 -> false), 0x4b0a40 (role==3), 0x863a60 (roles 2,3), 0x87c980 (type==2).
+- 0x47e440 (ZSquadScript slot 25) skips on client at 0x47e465; 0x760e50 (ZSoldier slot 79) returns when networked && client (0x760e5f..0x760e75 -> 0x760f65).
+- 0x8df480 is called from 239 sites incl. ZOnlineMoneyContainer 0x419f80, ZOnlineEscVehicleController 0x6d7d20, ZKickDoorMonitor 0x611430.
+- RTTI vtables: Heist 0xbd3514, FA Sv 0xbd2eb4, Cl 0xbd31e4, DLC manager Steam 0xbd5494 (slots 5/7/9/28 = 0x5e1510/0x634b90/0x816d80/0x77adf0). Defaults at 0x8468d0 make slots 0-3,5,6 (F01-F04,F06,F07) available; slot names F01..F09 in order at 0x835ff0.
+- Host and client level index loads: 0x6c536f and 0x491fd1 call vtable +0x3c of [0x168f750] with the index from 0x467ae0 (xor 0xac byte in the DDL object).
+- kljoin.c:244, klhook.c include list (614-664) without klbuild.c, no other reference to klbuild.c in klhook/ or build.bat.
+- Hash 43a7c699 = md5 of C:\kl_build_1018\hasta_police3\DM11B\F04_Main.zip.
+Changed:
+- Hash "live hook 7cd07d15" was wrong: it is the Vault map build id (re/adopt_list.md:19). Live dinput8.dll md5 starts 043419cb.
+- klmm.c, klnet.c, klslot.c are NOT always on: off by default (klmm.c:223, klnet.c:395, klslot.c header). The LIVE ini has [Expansion] Enable=1, Overlay=1, [Redirect] F01..F09 = DD01..DD09 and [HUD] Online=1, no [Net] section. So klslot and the HUD online parts are active on the owner's PC.
+- klcrew_rt.c:258 and klchar.c:302 have no role 2/3 test (vtable test only). klrappel.c has no online guard (hook_netcode_audit.md). klcensor is on by default.
+- "Slot zip" is KLExpansion\Maps\<dir>\, not Scenes\Locations\Fxx (live Maps\DD01 F01_Main.zip md5 403d78e7 vs Scenes F01 644fe120).
+- The three claimed hook-addition ideas partly exist: klmm.c BuildKey (zip central-directory fingerprint) and klbuild.c (design in re/private_match_buildcheck.md). Level index source corrected (DDL byte, not the Steam key). Earlier line about klslot.c:280 corrected.
+- "Game checks nothing" and "0x53919c discards m_szVersion" reworded: the getter result is unused there (FACT) but nothing proves no other comparison exists.
+Downgraded to GUESS: crew bots Heist-only; only Sv issues commands; host-decided loot/doors/escape (call sites FACT, meaning inferred); FA civilians on clients; desync vs crash on mismatch; -o MPMap as the only name path; page latch 0 online.
+Could not check: 0x53919c is mid-function (enclosing function start not identified); indirect callers of 0x57b2d0; whether anything else writes DLC manager bytes +4..+0xc; Net-Z/DDL version stamps (exe-level, identical for identical kl2.exe: GUESS); nothing run on two PCs.
