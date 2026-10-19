@@ -109,6 +109,13 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   - The last van waited 53 s: the crewhold took the timer from 1.9 to 46.9 s.
   - Aboard: recs 6 and 7, and rec 5 (back to loyal). Rec 4 was left about 5 m off in stage 3, which is the BoardReachLast case. It is rerun as (s) with TEST hook out_e5_1019a 043419cb.
   - Hunted orders: 141, of which 38 went towards the fed.
+- RUN L97 (3f (s): TEST hook out_e5_1019a 043419cb + the L96 ini + [Bots] BoardReachLast=1, BoardReachLastRange=0 + KLJoin 0b557e40): PASS 463 s.
+  ALL 6 LIVING BOTS ESCAPED on the last van with a fed human. L96, the same setup without the key, got 3.
+  - Doors orders went out once per bot, 0 refused. All 6 boarded 'AT THE DOORS' within 23 s.
+  - crewhold held the van 47 s, and the van left at 00:58:53. Rec 3 died earlier.
+  - Retomoto best proven so far: leaderless KLJoin 0b557e40 + hook 1019a + [Bots] CrewRouteFed=1, VanCallLast=1, CrewRouteRange=300, LastVehicleLead=600, WalkExclusive=1, BoardReachLast=1.
+    The DM09 set is one run only. These are global [Bots] keys; GUESS: put them under [Bots.DM09] (PerMap, L89) so other maps keep the live behaviour.
+  - Still open: (q), the same set with a living human (workflow w8f1muo8a predicts it, re/retomoto_hop6_living.md).
 - DECISION: WalkExclusive=1 + LastVehicleLead=450 are CANDIDATES (they acted as designed in L83/L84, no harm seen; two runs only); van boarding with a fed human
   waits for (k)/(l).
 
