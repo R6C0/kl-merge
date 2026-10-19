@@ -188,6 +188,10 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-19 08:40 - OFFLINE (kl-merge-e5; owner idle 6 h, no live run this hour):
+- re/klnet_poollog.patch (8befbb8f): opt-in KLHook [Net] PoolLog=1 that settles whether the object pool survives a level change. Compile-checked, NOT applied, NOT run. 3f declined (a peer klhook patch, stage 4), so it waits for the owner next to NoHuman (re/adopt_list.md).
+- kl_netcheck, live map vs each ADOPT zip: only ADOPT 5 (Hasta police4) changes the slot order; 1, 2, 4, 6 keep it. For a private match both PCs should install the same ADOPTs (re/private_match.md, START_HERE section 6).
+Owner: git push origin rtp-schemas (80 ahead) and git push origin rtp-schemas:main; NoHuman + PoolLog patches; ADOPT scripts (C:\kl_build_1019\START_HERE_adopt.txt).
 2026-10-19 07:35 - OFFLINE (kl-merge-e5; owner idle 5 h, 3f quiet, no live run this hour):
 - re/private_match.md (28df2546, static; floor + build check re-read by me): pool cap = max(class-table sum + constants, 26624). No map wraps a 16-bit id at round start (largest FA map DM05A); bit-30 ids never go on the wire. Open GUESS: pool rebuilt per level or kept per session. Rule for now: both PCs start the session on the same map zip and build.
 - Workflow wppeublj4: an opt-in KLHook [Net] PoolLog patch for 3f (re/klnet_poollog.patch, compile-checked in a scratch copy, NOT applied, NOT run) + test plan that settles the pool lifetime.
@@ -196,11 +200,6 @@ Owner: git push origin rtp-schemas (76 ahead) and git push origin rtp-schemas:ma
 - tools/kl_netcheck.py (6fc9786f, read-only): 'python tools/kl_netcheck.py a.zip b.zip' says SAME SLOT ORDER or where two map zips part. Same = necessary, not sufficient. The live Hasta and ADOPT 5's differ from entity 20014, so both players need the same ADOPT state.
 - Workflow wx2qvvgam (stage 4, static): is the object pool sized per level or per session, can 16-bit ids overflow, who makes dynamic ids (re/private_match.md).
 Owner: git push origin rtp-schemas (73 ahead) and git push origin rtp-schemas:main; the NoHuman patch; ADOPT scripts (C:\kl_build_1019\START_HERE_adopt.txt).
-2026-10-19 05:35 - OFFLINE (kl-merge-e5; owner idle, 3f quiet, no live run this hour):
-- re/private_match.md (a4cd8b5c, 79b85d66; static, encoder/alloc re-read by me): a net id = slot tag * pool capacity + pool slot index + 1; map-loaded slots have tag 0, +1 per reuse. So both PCs must load the same entity order / cluster table; byte-identical zip is still a GUESS. A mismatched order makes a hit land on the WRONG object, not on none.
-- C:\kl_build_1019\START_HERE_adopt.txt (017cbfda): the owner's one-page sheet for ADOPT 1-6, 2b, 3h (pick 1 or 5, 2b or 3h; 2 before 3). All hashes OK.
-- Workflow wndt361o6: new read-only tools/kl_netcheck.py, a slot-order fingerprint two players can compare.
-Owner: git push origin rtp-schemas (71 ahead) and git push origin rtp-schemas:main; the NoHuman patch; ADOPT scripts.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
