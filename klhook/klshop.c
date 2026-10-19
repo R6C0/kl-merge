@@ -1,6 +1,6 @@
 /*
  * klshop.c - MORE GUNS IN THE FRAGILE ALLIANCE WEAPON SHOP, by SWAPPING WHAT A BOUGHT ROW HANDS OVER (re\shop_more_guns.md, 2026-10-19).
- * Part of KLHook (included by klhook.c after klinv.c; Arcade only, inert online). Off unless KLHook.ini [Shop] Enable=1 and Swap= is set.
+ * Part of KLHook (included by klhook.c after klinv.c; Arcade only, inert online). Off unless KLHook.ini [Shop] Enable=1.
  * NOTHING HERE HAS RUN IN THE GAME. DATA writes and ONE call of the game's own object maker on the game thread; NO code byte, no hashed byte.
  *
  * WHY NOT NEW ROWS (CERTAIN, read in kl2.exe): the shop is 36 rows x 24 bytes at 0xbd1f68 (hashed .rdata, klranges.h); the builder 0x78a8d0 loops
@@ -21,7 +21,11 @@
  * KLHook.ini
  *   [Shop]
  *   Enable=0       1 = on (Arcade only)
- *   Swap=          comma list "row:item" - row 0..35 of re\shop_plan.md, item = eFF2Item value 1..63 (tools\kl_shop_extra.py lists the usable ones)
+ *   Swap=          DEFAULT comma list "row:item" - row 0..35 of re\shop_plan.md, item = eFF2Item value 1..63 (tools\kl_shop_extra.py lists the usable ones)
+ * KLGuns.ini beside a map's archive (2026-10-20, tools\kl_shop_swap.py writes it):
+ *   [Shop]
+ *   Swap=13:52,16:40   this map's set instead of the default; "Swap=" (empty) = no swap on this map; no line = the default above.
+ *   The same line tells tools\kl_shop_swap.py which names/pictures to bake, so hook and bake agree. Read by klshop_level_open (klsteam.c).
  *   (no Log key: the module always logs)
  *
  * CERTAIN: the pool layout, the builder's append recipe (0x78aa14..0x78aa86), the maker's call shape (ret 8, this in ecx), template lookup 0x5d2f50.
@@ -55,7 +59,29 @@ typedef void *(__fastcall *kls_maker_t)(void *self, void *edx, int zero, void *t
 typedef void *(__fastcall *kls_tmpl_t)(void *self, void *edx, int item);
 typedef void *(__cdecl *kls_realloc_t)(void *, size_t);
 
-static struct { int on, log, n; int row[KLS_MAX], item[KLS_MAX]; DWORD made[KLS_MAX][KLS_PER]; int applied[KLS_MAX], told; int wait; } kls;
+static struct { int on, log, n; int row[KLS_MAX], item[KLS_MAX]; DWORD made[KLS_MAX][KLS_PER]; int applied[KLS_MAX], told; int wait; LONG gen; } kls;
+/* the swap set to use, filled by klshop_init (KLHook.ini = default) and klshop_level_open (the map's KLGuns.ini [Shop] Swap, any thread);
+   the game thread copies it into kls when kls_sgen changed. kls_slock is a tiny spin lock (no init needed). */
+static struct { int n; int row[KLS_MAX], item[KLS_MAX]; } kls_def, kls_stg;
+static volatile LONG kls_sgen, kls_slock;
+
+static void kls_lock(void) { while (InterlockedExchange(&kls_slock, 1)) Sleep(0); }
+static void kls_unlock(void) { InterlockedExchange(&kls_slock, 0); }
+
+/* "row:item,row:item" -> set; one replacement per row, row 0..35, item 1..63, at most KLS_MAX */
+static void kls_parse(const char *text, int *n, int *row, int *item, const char *who)
+{
+    const char *p; *n = 0;
+    for (p = text; *p && *n < KLS_MAX;) {
+        int r = -1, it = -1, c = 0, q, dup = 0;
+        if (sscanf(p, "%d:%d%n", &r, &it, &c) >= 2) for (q = 0; q < *n; q++) if (row[q] == r) dup = 1;
+        if (dup) klog("shop: %s: row %d listed twice: second entry ignored", who, r);
+        else if (r >= 0 && r < 36 && it >= 1 && it < 64 && c) { row[*n] = r; item[*n] = it; (*n)++; }
+        else klog("shop: %s: Swap entry near '%s' is not row(0..35):item(1..63): ignored", who, p);
+        while (*p && *p != ',') p++;
+        if (*p == ',') p++;
+    }
+}
 
 static int kls_code_ok(void)
 {   /* the first bytes of the maker and the template lookup in THIS build */
@@ -113,6 +139,11 @@ static void klshop_tick(int game_thread)
 {
     DWORD sm, st = 0; int k, any = 0;
     if (!kls.on || !game_thread || !klh_exe_ok) return;
+    if (kls.gen != kls_sgen) {                                           /* a map announced its set (or the default came back): adopt it, forget the old state */
+        kls_lock(); kls.gen = kls_sgen; kls.n = kls_stg.n; memcpy(kls.row, kls_stg.row, sizeof kls.row); memcpy(kls.item, kls_stg.item, sizeof kls.item); kls_unlock();
+        memset(kls.made, 0, sizeof kls.made); memset(kls.applied, 0, sizeof kls.applied); kls.told = 0; kls.wait = 0;
+    }
+    if (!kls.n) return;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x70, &st, 4)) return;
     if (kl_online()) return;
     { DWORD gs = klh_rd32((DWORD_PTR)KLH_VA(KLS_SETTINGS)), rules = gs ? klh_rd32(gs + 0x54) : 0;
@@ -135,25 +166,35 @@ static void klshop_tick(int game_thread)
     if (!any) kls.wait++;
 }
 
+/* From klsteam.c's klh_level_open (any thread, several times per load): the map's own swap set, "[Shop] Swap=row:item,..." in the
+   KLGuns.ini beside the opened archive. No such line = KLHook.ini's [Shop] Swap (the default); "Swap=" empty = no swap on this map.
+   Reads a file, touches no game memory. Inert unless [Shop] Enable=1. */
+static void klshop_level_open(const char *key, const char *opened)
+{
+    char file[MAX_PATH], buf[200], *s; DWORD len; int n, row[KLS_MAX], item[KLS_MAX], same;
+    if (!kls.on) return;
+    len = GetFullPathNameA(opened, MAX_PATH, file, 0);
+    if (!len || len >= MAX_PATH || !(s = strrchr(file, 0x5c)) || (size_t)(s - file) + 12 >= sizeof file) return;
+    strcpy(s + 1, "KLGuns.ini");
+    GetPrivateProfileStringA("Shop", "Swap", "<none>", buf, sizeof buf, file);
+    if (!strcmp(buf, "<none>")) { n = kls_def.n; memcpy(row, kls_def.row, sizeof row); memcpy(item, kls_def.item, sizeof item); }
+    else kls_parse(buf, &n, row, item, key);
+    kls_lock();
+    same = n == kls_stg.n && !memcmp(row, kls_stg.row, sizeof(int) * n) && !memcmp(item, kls_stg.item, sizeof(int) * n);
+    if (!same) { kls_stg.n = n; memcpy(kls_stg.row, row, sizeof row); memcpy(kls_stg.item, item, sizeof item); InterlockedIncrement(&kls_sgen); }
+    kls_unlock();
+    if (!same) klog("shop: map %s: %d swap(s) from %s (%s)", key, n, strcmp(buf, "<none>") ? "its KLGuns.ini [Shop] Swap" : "KLHook.ini [Shop] Swap", buf);
+}
+
 static void klshop_init(void)
 {
-    char buf[200], *p;
+    char buf[200];
     kls.on = GetPrivateProfileIntA("Shop", "Enable", 0, klh_ini) != 0;
     if (!kls.on) return;
     GetPrivateProfileStringA("Shop", "Swap", "", buf, sizeof buf, klh_ini);
-    for (p = buf; *p && kls.n < KLS_MAX;) {
-        int r = -1, it = -1, c = 0;
-        int q, dup = 0;
-        if (sscanf(p, "%d:%d%n", &r, &it, &c) >= 2) for (q = 0; q < kls.n; q++) if (kls.row[q] == r) dup = 1;   /* one replacement per row */
-        if (dup) klog("shop: row %d listed twice: second entry ignored", r);
-        else if (r >= 0 && r < 36 && it >= 1 && it < 64) { kls.row[kls.n] = r; kls.item[kls.n] = it; kls.n++; }
-        else klog("shop: Swap entry near '%s' is not row(0..35):item(1..63): ignored", p);
-        while (*p && *p != ',') p++;
-        if (*p == ',') p++;
-        (void)c;
-    }
-    if (!kls.n) kls.on = 0;
-    klog("shop: on; %d swap(s); Arcade only, before the round; replaces what a bought row hands over (never adds a row); EXPERIMENT, nothing has run", kls.n);
+    kls_parse(buf, &kls_def.n, kls_def.row, kls_def.item, "KLHook.ini");
+    kls_stg = kls_def; kls_sgen = 1; kls.gen = 0;                        /* the tick adopts it */
+    klog("shop: on; %d default swap(s); a map's KLGuns.ini [Shop] Swap overrides; Arcade only, before the round; replaces what a bought row hands over (never adds a row); EXPERIMENT, nothing has run", kls_def.n);
 }
 
 #endif /* KLSHOP_C */

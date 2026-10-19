@@ -286,6 +286,7 @@ static void klh_level_open(const char *asked, const char *opened)
     klj_level_open(key, opened, v);
     klc_level_open(key, opened);
     klg_level_open(key, opened);
+    klshop_level_open(key, opened);
     SetLastError(err);
 }
 

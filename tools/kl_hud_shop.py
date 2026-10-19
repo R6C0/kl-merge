@@ -22,6 +22,11 @@ The SILENCED rows (M9 BERETTA SIL, MAC-10 SIL, TYPE 05 SIL) are other items with
 The name is BAKED: a look switched later on the Guns page ([Guns] Start / Set) is not followed here - the HUD dial follows it
 (klhook klhud_weapon.c, [HUD] LookNames=1). No KLGuns.ini, or one without Shown > 0: the names are as before.
     python kl_hud_shop.py names <build folder | KLGuns.ini>      prints the rows this build's looks rename (reads only)
+
+SWAPS (2026-10-20, re/shop_swap_names.md): klhook/klshop.c can make a bought shop row hand over ANOTHER gun ([Shop] Swap=row:item, per map
+in KLGuns.ini). The row's name and description are then baked from the handed-over gun (SWAP_ITEMS) so the shop says what you get; its
+price, rank, stars, lock and DLC gate stay the carrier row's (hashed table 0xbd1f68). The picture is baked by tools/kl_shop_swap.py.
+    python kl_hud_shop.py swaps "13:52,16:33"                    prints the rows a swap line renames
 NOT LOADED IN THE GAME YET.
 """
 import configparser, os, re, sys
@@ -57,6 +62,56 @@ LOOKS = {
     'Steyr TMP': ('STEYR TMP', 'Police reg.: 1612-D621\nMachine pistol. Origin: Austrian. Found in a Tokyo nightclub after the shooting. Handles as the %s.'),
     'USP':       ('USP', 'Police reg.: 4962-B092\nHand gun. Origin: German. Confiscated from a Mr. Kane. Handles as the %s.'),
 }
+
+
+# eFF2Item value -> (the name shown, the English description). The first five names are klhud_weapon.c's klwd_names word for word (CERTAIN:
+# they are the HUD's wording); 'TYPE 88 MG' is a GUESS (the HUD has no picture / name for item 40). The 'Police reg.' numbers and the
+# origin lines are INVENTED flavour in the shop's own manner (GUESS, not game data). '%s' = the carrier row's own name (ROWS), because
+# the swapped row keeps that row's price, rank and lock.
+SWAP_ITEMS = {
+    33: ('TYPE 81', 'Police reg.: 2381-T081\nAssault rifle. Origin: Chinese. Plain, rugged and everywhere. Sold in the %s row: same price, same rank.'),
+    40: ('TYPE 88 MG', 'Police reg.: 2388-T088\nLight machine gun. Origin: Chinese. Belt-fed and heavy. Sold in the %s row: same price, same rank.'),
+    47: ('MINIMI', 'Police reg.: 5547-M249\nLight machine gun. Origin: Belgian. Lifted from an army depot. Sold in the %s row: same price, same rank.'),
+    49: ('REM 700', 'Police reg.: 7700-R700\nSniper rifle. Origin: American. A hunting rifle with a long reach. Sold in the %s row: same price, same rank.'),
+    50: ('RPG-7', 'Police reg.: 7007-R007\nRocket launcher. Origin: Russian. Not for the faint-hearted. Sold in the %s row: same price, same rank.'),
+    52: ('HK69', 'Police reg.: 6969-H069\nGrenade launcher. Origin: German. One 40 mm grenade at a time. Sold in the %s row: same price, same rank.'),
+}
+
+
+def parse_swap(text, log=print):
+    """'13:52,16:33' -> {row: item}; the same rules as klshop.c (row 0..35, item 1..63, one per row, at most 8)."""
+    out = {}
+    for part in (text or '').split(','):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            r, it = (int(x) for x in part.split(':'))
+        except ValueError:
+            log('shop swap: %r is not row:item - ignored' % part); continue
+        if not (0 <= r < 36 and 1 <= it < 64) or r in out or len(out) >= 8:
+            log('shop swap: %r is out of range / a repeat of a row / past 8 pairs - ignored (the hook ignores it too)' % part); continue
+        if it not in SWAP_ITEMS:
+            log('shop swap: item %d has no name in SWAP_ITEMS - the hook would still hand it over, the shop would keep the carrier name' % it)
+        out[r] = it
+    return out
+
+
+def read_swaps(path, default=None, log=print):
+    """KLGuns.ini (or its folder) -> ({row: item}, source). The [Shop] Swap line of the file if it has one (empty = no swap on this map),
+    else `default` (the text of KLHook.ini's [Shop] Swap): the order klshop.c uses."""
+    if path and os.path.isdir(path):
+        path = os.path.join(path, 'KLGuns.ini')
+    if path and os.path.isfile(path):
+        cp = configparser.RawConfigParser(strict=False)
+        cp.optionxform = str
+        try:
+            cp.read(path, encoding='latin1')
+            if cp.has_option('Shop', 'Swap'):
+                return parse_swap(cp.get('Shop', 'Swap'), log), 'KLGuns.ini'
+        except configparser.Error as e:
+            log('shop swap: %s not read (%s)' % (path, e))
+    return parse_swap(default, log), 'default'
 
 
 # the Dog Days gun in a sentence ('Handles as the Zastava M85.'); a row not here uses its ROWS name
@@ -108,17 +163,18 @@ def _tidy(b):
     return b
 
 
-def apply_loc(data, english=False, log=print, tag='', looks=None):
+def apply_loc(data, english=False, log=print, tag='', looks=None, swaps=None):
     """one .LOC member -> (new bytes, number of leaves changed). english: check the stock names first (a level whose shop rows read
     otherwise is left alone, logged), and the description of a row in `looks` ({item: look label}, read_looks) is the look's."""
     looks = looks or {}
+    swaps = {r: i for r, i in (swaps or {}).items() if i in SWAP_ITEMS}
     kids = L.parse(data)
     if kids is None:
         return data, 0
     leaves = dict(L.leaves(kids))
     if english:
         have = [L.fields(leaves[KEY + str(r)])[0] if KEY + str(r) in leaves else None for r in range(36)]
-        ok = lambda r, t: t in (STOCK_EN[r], ROWS[r][1]) or t in [v[0] for v in LOOKS.values()]      # stock, or baked here before
+        ok = lambda r, t: t in (STOCK_EN[r], ROWS[r][1]) or t in [v[0] for v in LOOKS.values()] or t in [v[0] for v in SWAP_ITEMS.values()]      # stock, or baked here before
         bad = [r for r in range(36) if have[r] is None or not ok(r, b' '.join(have[r].split()).decode('latin1'))]
         if bad:
             log('shop names %s: rows %s do not read as the stock shop (first: %r) - names left stock' % (tag, bad[:5], have[bad[0]]))
@@ -128,13 +184,16 @@ def apply_loc(data, english=False, log=print, tag='', looks=None):
         lab = looks.get(item)
         k = leaves.get(KEY + str(r))
         if k is not None and k.flags & L.TEXT:
-            shown = LOOKS[lab][0] if lab else name
+            shown = SWAP_ITEMS[swaps[r]][0] if r in swaps else LOOKS[lab][0] if lab else name      # a swap beats a look: the carrier's gun is not what is handed over
             if L.fields(k)[0] != shown.encode('latin1'):
                 _set_text(k, shown.encode('latin1')); n += 1
         d = leaves.get(KEY + str(r) + 'Desc')
         if d is not None and d.flags & L.TEXT:
             t = L.fields(d)[0] or b''
-            t2 = (LOOKS[lab][1] % PLAIN.get(item, name)).encode('latin1') if lab and english else _tidy(t)
+            if r in swaps and english:
+                t2 = (SWAP_ITEMS[swaps[r]][1] % name.title()).encode('latin1')
+            else:
+                t2 = (LOOKS[lab][1] % PLAIN.get(item, name)).encode('latin1') if lab and english else _tidy(t)
             if t2 != t:
                 _set_text(d, t2); n += 1
     if not n:
@@ -144,7 +203,7 @@ def apply_loc(data, english=False, log=print, tag='', looks=None):
     return out, n
 
 
-def apply_level(files, log=print, guns=None):
+def apply_level(files, log=print, guns=None, swaps=None):
     """every .LOC member of an open level (kl_hud.open_level's files) in place -> the names of the members changed.
     guns: the build's KLGuns.ini (or its folder): rows of a gun built to show a Dead Men look take the look's name (LOOKS)."""
     looks = read_looks(guns, log)
@@ -152,21 +211,27 @@ def apply_level(files, log=print, guns=None):
     en = [m for m in locs if m.lower().endswith('english.loc')]
     if not en:
         log('shop names: the level has no English .LOC - left stock'); return []
-    _o, n_en = apply_loc(files[en[0]], True, log, en[0], looks)
+    _o, n_en = apply_loc(files[en[0]], True, log, en[0], looks, swaps)
     if not n_en:
         return []
     changed = []
     for m in locs:
-        new, n = apply_loc(files[m], m == en[0], log, m, looks)
+        new, n = apply_loc(files[m], m == en[0], log, m, looks, swaps)
         if n:
             files[m] = new; changed.append(m)
     log('shop names: %d weapon names in the HUD\'s wording, descriptions tidied; %d .LOC member(s): %s' % (len(ROWS), len(changed), ', '.join(x.rsplit('/', 1)[-1] for x in changed)))
+    if swaps:
+        log('shop names: swapped rows named for the gun they hand over: %s' % ', '.join('row %d -> %s' % (r, SWAP_ITEMS[i][0]) for r, i in sorted(swaps.items()) if i in SWAP_ITEMS))
     if looks:
         log('shop names: Dead Men looks sold under their own names: %s' % ', '.join('%s as %s' % (dict(ROWS)[i] if i in dict(ROWS) else i, LOOKS[l][0]) for i, l in sorted(looks.items())))
     return changed
 
 
 if __name__ == '__main__':
+    if len(sys.argv) == 3 and sys.argv[1] == 'swaps':
+        for r, i in sorted(parse_swap(sys.argv[2]).items()):
+            print('row %2d %-16s -> item %2d %-10s  %s' % (r, ROWS[r][1], i, SWAP_ITEMS[i][0] if i in SWAP_ITEMS else '?', (SWAP_ITEMS[i][1].replace('\n', ' | ') % ROWS[r][1].title()) if i in SWAP_ITEMS else ''))
+        raise SystemExit(0)
     if len(sys.argv) != 3 or sys.argv[1] != 'names':
         raise SystemExit(__doc__)
     lk = read_looks(sys.argv[2])
