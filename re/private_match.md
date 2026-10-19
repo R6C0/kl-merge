@@ -705,3 +705,46 @@ Changed:
 - "Game checks nothing" and "0x53919c discards m_szVersion" reworded: the getter result is unused there (FACT) but nothing proves no other comparison exists.
 Downgraded to GUESS: crew bots Heist-only; only Sv issues commands; host-decided loot/doors/escape (call sites FACT, meaning inferred); FA civilians on clients; desync vs crash on mismatch; -o MPMap as the only name path; page latch 0 online.
 Could not check: 0x53919c is mid-function (enclosing function start not identified); indirect callers of 0x57b2d0; whether anything else writes DLC manager bytes +4..+0xc; Net-Z/DDL version stamps (exe-level, identical for identical kl2.exe: GUESS); nothing run on two PCs.
+
+## 2026-10-19: the open questions (static reading, kl2.exe build 0490; nothing run)
+
+Two readers answered; a third pass re-disassembled the cited addresses (kl_exe + capstone, read-only). FACT = bytes seen by that pass; GUESS = inferred or taken from a reader without re-reading. Of the six items under "Still open after this plan", Q1-Q5 below are answered in part; the CEG check versus a patched exe was not touched.
+
+### Q1. Who simulates a ZFFActor online
+- Answer (GUESS, probable): the peer that OWNS the actor's DDL_ZFFActor net object runs it; every other peer follows replicated, extrapolated state. AI decisions are host-only, so for AI actors the owner is almost certainly the host. Not proven.
+- Evidence, FACT: ZFFActor::Update (0x40ef60) calls 0x899c40([actor+0x8d8]) at 0x40f0ea. That ends in 0x8efe90, which returns at once if [actor+0x2a0]==0 (0x8efe96..0x8efe9d) or if 0x9425a0 says this peer is master (0x8efea3..0x8efeaa). Otherwise it needs byte [0xce7eeb]!=0 (0x8efeb0) and then steers the actor (the steering body 0x70f660 and the session state 0x19 test were NOT re-read: GUESS). 0x9425a0: owner [obj+0x14]==0 -> false; local id from 0x94bc10 equal 0 -> true; else owner compared to local id.
+- Squad scripts (0x47e440) and ZSoldier orders (0x760e50) skip on a client: FACT (earlier verify).
+- Still open: the site that creates and publishes the actor net object; the callers of 0x4fe5e0 (0x466f22, 0x5a8b6b, 0x6ca1c2); whether a client owns the net object of its OWN ZFFPlayer.
+- Test meaning: bot, klmove, klhop and klescort steer actors through orders on the host. The modules are inert online anyway (Heist-vtable and role guards, see the previous section), so the first online run is expected to show NO bots in an FA lobby; that is not a bug. A client must never run actor-steering code: 0x8efe90 would overwrite it with the extrapolated host state.
+
+### Q2. Id space of the wire references
+- Answer (GUESS): the 16-bit scene refs very probably use the run-time loader SLOT index (+1), not the REF label (record +0x30). No encoder or decoder site was shown to do it.
+- Evidence, FACT: 0x6ece90 loads [0xe0ff90] and calls 0x86ca10. Correction to reader 1: 0x86ca10 reads the field [obj+4] of the object (not the pointer itself; null object or null field gives 0), subtracts the pool base [pool+0xc], divides by the page size [pool+4], reads a signed 16-bit page number from the table [pool+0x10] (negative gives 0), and returns page*[pool+8]+rem+1. So it is slot+1 (the file's other notes say slot+2: the offset convention on the wire is a GUESS).
+- Still open: whether any net writer (m_iGeomRef, m_iFFWeaponRef dataset writers) is fed by 0x6ece90. Not traced.
+- Test meaning: fits "identical build of a grafted map". Entity order and the cluster/pool table must match, so both PCs need byte-identical map zips; one entity added or removed shifts every later ref. Compare md5 of the zips first. A mismatch is expected to show as wrong weapons or geometry or a crash, not a refusal (GUESS).
+
+### Q3. Who applies a hit (RMCReceiveHit)
+- Answer: damage is applied on the peer that OWNS the victim ([victim+0x14] equals the local station id); a shooter applies directly if the victim is local to them, otherwise sends the RMC. No host arbitration step was found (absence of evidence).
+- Evidence, FACT: apply-or-send wrappers 0x807220 (ZFFActor) and 0x891490 (ZFFPlayer). Correction to reader 2: each first calls 0x905460 on the session manager (0x807252, 0x8914c2; it is a jump-table state test over session states 0x17 and up, table not decoded) and leaves at once when that fails, then calls 0x9425a0 on the victim (0x807274, 0x8914e4). Master path ends in a vtable call (call eax at 0x80730c, 0x89158f); the other path reaches the senders 0x639c80 (0x807373) and 0x713180 (0x891626). The receive stubs 0x682140 / 0x59f140 and the dispatchers 0x618a70 / 0x658b60 are from reader 2, NOT re-read (GUESS).
+- Still open: ownership assignment (is a client's own character owned by that client?).
+- Test meaning: damage tweaks (hit pricing, armour) must run where the victim is owned: for AI actors probably the host, for players probably each player's own PC (GUESS). Test both bot-shot-by-player and player-shot-by-bot.
+
+### Q4. FragileAlliance rules slot 194 (SetState) on a client
+- Answer (GUESS, reader 2, not re-read): clients receive it. Escape state is replicated through the score object (score+0x38c, xor 0xac; rules+0x2c holds the score pointer) and three RMC receive stubs (0x563b10, 0x7dc000, 0x4d9ce0) apply on the receiver. The decision is host-side (Sv tick 0x727610, Sv wrapper 0x51e390); the Cl tick is 0x7a30c0. Slot 194 = 0x5b1410 in base vtable 0xbd2b9c.
+- Still open: that no client code writes score+0x38c.
+- Test meaning: escape logic of a grafted map (vehicle, rappel exit) must be satisfied on the host; a client only mirrors the result. Test escaping as the CLIENT: it should get the result when the host's zone fires.
+
+### Q5. Join code 3 and host migration
+- Join code 3, FACT (re-checked): the join result handler is 0x8309d0 (slot 98, offset 0x188). It is called from the state function near 0x539060: [esi+0x58] is loaded at 0x5390f2 and the call is `call edx` at 0x539118. The jump table at 0x830fc8 is indexed by code-1: its first entry is 0x830d5e (code 1, ServerFull string 0xb7e944) and entry 3 is 0x830c32, which pushes "Online/JoinSessionFailedNotInGame" (0xb5a524, at 0x830c40). So code 3 = the host says the session is not in game (the joiner arrived while no match was running or loading).
+- Writer of [esi+0x58]: NOT FOUND. GUESS: copied from Net-Z's join result.
+- Host migration: FACT, seen: MigrateStation at 0xbdda37 (Net-Z library name, linked in); "HostDisconnect" is matched at 0x6455bb and sets [esi+0x88]=9 at 0x6455cd; the strings FAStatus_HostDisconnect (0xb1b120) and /Menu/ErrorMessages/Online/HostDisconnected (0xb61908) exist. The other Net-Z names and the UI call sites are from reader 2 (GUESS). Answer: the host leaving ends the match; no hand-over was found. Whether Net-Z migration is enabled at session creation: NOT FOUND (GUESS: off).
+- Test meaning: if the host PC crashes (likely in early graft tests) the client sees "host disconnected"; that is not a client bug. A NotInGame refusal means timing (join after the round started or before it loaded), not a map mismatch.
+
+### What this means for the first two-PC test (AI bots, klmove, rappel, HUD)
+1. Bots, klmove, klescort, klhop: not expected to run online (guards). Do not count absent bots as a failure; do not enable on the client.
+2. Rappel (klrappel.c has no online guard): enable on the host only for the first run; on a client it would move a player against replicated state (GUESS). Watch the second PC's log for rappel lines.
+3. HUD ([HUD] Online=1): local drawing; keep identical KLHook.ini and dinput8.dll on both PCs to remove variables.
+4. Map: byte-identical zip on both PCs (Q2); stock slot first.
+5. Escape and loot: host-decided (Q4); test the client escaping.
+6. Log on both sides ([Net] Log=1) and note which PC hosted; a host disconnect ends the round (Q5).
+7. Still unknown: actor net-object ownership (Q1, Q3) and the CEG checks versus a patched exe.
