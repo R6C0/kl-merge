@@ -1,0 +1,64 @@
+--- a/klhook/klnet.c
++++ b/klhook/klnet.c
+@@ -135,6 +135,7 @@
+  *   PosTol=-1        1..100      AngTol=-1          1..100
+  *   ActorMs=-1       16..500     ActorRefreshMs=-1  100..5000
+  *   ActorPosTol=-1   1..100      ActorAngTol=-1     1..100
++ *   PoolLog=0        1 = log the entity slot pool at each level load / change (read only; re\klnet_poollog.md)
+  *
+  * WIRING (klhook.c; not done):
+  *   #include "klnet.c"            below  #include "klvis.c"
+@@ -169,6 +170,36 @@
+ } klnet;
+ 
+ struct klnet_num { DWORD min, max; float tol2; int ok; };
++
++/* [Net] PoolLog=1: where the slot pool lives and how big it is, said whenever it or the scene changes (re\private_match.md,
++   "pool lifetime"). Chain: M = [0xe0ff90] (the slot manager), P = [M+0xc] (the pool), P+4 = slot size, P+8 = cap in slots,
++   P+0xc = memory block, P+0x10 = table of cap signed 16-bit tags (negative = free). Reads only, every one through klh_rd.
++   Polled (not hooked): a change shorter than the 100 ms poll can be missed, a scene name that changes before the pool does
++   gives two lines - read them as a pair. */
++static int klnet_poollog;
++static void klnet_pool_tick(void)
++{
++    static DWORD last, sig0, seen; static WORD tags[0x20000];
++    DWORD now = GetTickCount(), mgr, pool, sz = 0, cap = 0, blk = 0, tab = 0, sig, k; char scene[160]; int i, live = 0, maxtag = -1, tags_ok = 0;
++    if (now - last < 100) return;
++    last = now;
++    mgr = klh_rd32((DWORD_PTR)KLH_VA(0x00e0ff90));
++    pool = mgr ? klh_rd32(mgr + 0xc) : 0;
++    if (!pool || !klh_rd(pool + 4, &sz, 4) || !klh_rd(pool + 8, &cap, 4) || !klh_rd(pool + 0xc, &blk, 4) || !klh_rd(pool + 0x10, &tab, 4)) sz = cap = blk = tab = 0;
++    if (!klh_scene(scene, sizeof scene)) scene[0] = 0;
++    sig = mgr; sig = sig * 31 + pool; sig = sig * 31 + cap; sig = sig * 31 + sz; sig = sig * 31 + blk;
++    for (i = 0; scene[i]; i++) sig = sig * 31 + (BYTE)scene[i];
++    if (seen && sig == sig0) return;
++    sig0 = sig; k = ++seen;
++    if (cap && cap <= 0x20000 && tab && klh_rd(tab, tags, cap * 2)) {      /* a tag >= 0 is a slot in use, < 0 is free: -1 = never used, -t-2 = freed (0x8861a0) */
++        tags_ok = 1;
++        for (i = 0; i < (int)cap; i++) if ((short)tags[i] >= 0) { live++; if ((short)tags[i] > maxtag) maxtag = (short)tags[i]; }
++    }
++    klog("net: pool #%lu: scene '%s'; manager [0xe0ff90]=%08lx, pool [mgr+0xc]=%08lx, slot size %lu, cap %lu, block %08lx, tags %08lx%s; %s",
++         k, scene, mgr, pool, sz, cap, blk, tab, !mgr ? " (NO MANAGER: the pool is gone, or not built yet)" : !pool ? " (manager without a readable pool)" : "",
++         tags_ok ? "slots with tag >= 0:" : "tags not read");
++    if (tags_ok) klog("net: pool #%lu: %d slot(s) with tag >= 0 (in use; a freed slot is negative), highest tag %d (0 = every slot was handed out once at most); cap*%lu = %lu bytes", k, live, maxtag, sz, cap * sz);
++}
+ static struct { int have; struct klnet_num stock[KLNET_NDS], ours[KLNET_NDS]; int wrote[KLNET_NDS]; } klnet_t;
+ 
+ static const char *klnet_vt_name(DWORD vt)
+@@ -276,6 +307,7 @@
+     char map[72], scene[160], why[200], slot[8], key[64], wantkey[24]; int net, verdict = 0, act = 0, i, idx = -1, slot_ok = 0; struct klnet_num nums[KLNET_NDS];
+     BYTE props[0x20], exists = 0, ranked = 0, d_idx = 0xff; DWORD lob[2] = { 0, 0 }; int have_svc = 0, priv = 0, rank = 0;
+     (void)game_thread;
++    if (klnet_poollog && klh_exe_ok) klnet_pool_tick();
+     if ((!klnet.log && !klnet.tune) || !klh_exe_ok || now - last < 100) return;
+     last = now;
+     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !klh_rd(sm + 0x70, &state, 4)) { klnet_tune(0, 0); return; }
+@@ -392,6 +424,8 @@
+ static void klnet_init(void)
+ {
+     klnet.log = GetPrivateProfileIntA("Net", "Log", 0, klh_ini);
++    klnet_poollog = GetPrivateProfileIntA("Net", "PoolLog", 0, klh_ini) != 0;
++    if (klnet_poollog) klog("net: PoolLog=1: the entity slot pool is logged when it or the scene changes (reads only)");
+     klnet.tune = GetPrivateProfileIntA("Net", "Tune", 0, klh_ini) != 0;
+     klnet.tune_client = GetPrivateProfileIntA("Net", "TuneClient", 0, klh_ini) == 1;
+     klnet.player_ms = klnet_key("PlayerMs", 16, 500); klnet.refresh_ms = klnet_key("RefreshMs", 100, 5000);
