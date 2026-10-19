@@ -1,3 +1,7 @@
+2026-10-19 03:35 - OFFLINE (kl-merge-e5; 3f idle, no live run this hour):
+- re/private_match.md (7b25ff8d, static only): an actor is updated by the owner of its net object; hits are applied on the victim owner's machine; join code 3 = host not in game; no host migration (HostDisconnect ends the match). Wire ids = slot index is a GUESS, so both PCs need a byte-identical map zip.
+- Workflow wc0yrdsje: the Retomoto klhop NoHuman gate as a compiled patch in a scratch copy for 3f (klhop.c is 3f's file) plus an opt-in kl_rt_joinini --leaderless-nohuman KLJoin (re/retomoto_hop6_living.md).
+Owner: git push origin rtp-schemas (65 ahead) and git push origin rtp-schemas:main; ADOPT 1-6 in C:\kl_build_1018\adopt_1018 and C:\kl_build_1019\adopt_1019.
 2026-10-19 02:35 - OFFLINE (kl-merge-e5; 3f runs the live queue):
 - Hasta: 3f's L106 = police4 S90 + [Bots] EscortUntil=1: PASS, you + ALL 7 out. The escort boarded the first heli with 19 s to spare; in L105 it was killed walking (re/hasta_idle_bot.md: it was the escort, not idle). [Bots] is global on the live hook; per map needs ADOPT 2b.
 - One-click ADOPT 6 Park II loot6 3386b972 staged and scratch-tested. ADOPT 5 (Hasta police4) is an alternative to ADOPT 1 (same zip), not to ADOPT 3.

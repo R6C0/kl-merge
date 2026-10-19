@@ -188,6 +188,10 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-19 03:35 - OFFLINE (kl-merge-e5; 3f idle, no live run this hour):
+- re/private_match.md (7b25ff8d, static only): an actor is updated by the owner of its net object; hits are applied on the victim owner's machine; join code 3 = host not in game; no host migration (HostDisconnect ends the match). Wire ids = slot index is a GUESS, so both PCs need a byte-identical map zip.
+- Workflow wc0yrdsje: the Retomoto klhop NoHuman gate as a compiled patch in a scratch copy for 3f (klhop.c is 3f's file) plus an opt-in kl_rt_joinini --leaderless-nohuman KLJoin (re/retomoto_hop6_living.md).
+Owner: git push origin rtp-schemas (65 ahead) and git push origin rtp-schemas:main; ADOPT 1-6 in C:\kl_build_1018\adopt_1018 and C:\kl_build_1019\adopt_1019.
 2026-10-19 02:35 - OFFLINE (kl-merge-e5; 3f runs the live queue):
 - Hasta: 3f's L106 = police4 S90 + [Bots] EscortUntil=1: PASS, you + ALL 7 out. The escort boarded the first heli with 19 s to spare; in L105 it was killed walking (re/hasta_idle_bot.md: it was the escort, not idle). [Bots] is global on the live hook; per map needs ADOPT 2b.
 - One-click ADOPT 6 Park II loot6 3386b972 staged and scratch-tested. ADOPT 5 (Hasta police4) is an alternative to ADOPT 1 (same zip), not to ADOPT 3.
@@ -198,13 +202,6 @@ Owner: git push origin rtp-schemas (63 ahead) and git push origin rtp-schemas:ma
 - Hot Coffee II cars-only 21c6ed49: L103/L104 had no one-shots (live map: 4 of 4 runs). Staged as one-click ADOPT 4. re/hotcoffee2_wholehit.md: an unscaled non-bullet hit, a car blast is the best GUESS.
 - Retomoto: no ini-only fix for the fed-human stall; the klhop NoHuman gate (3f's file) is the fix. Workflow w1i7d01bp: why Hasta rec 1 idled at the start in L105 (re/hasta_idle_bot.md).
 Owner: git push origin rtp-schemas (56 ahead) and git push origin rtp-schemas:main; ADOPT 1-5 in C:\kl_build_1018\adopt_1018 and C:\kl_build_1019\adopt_1019.
-2026-10-19 01:34 - OFFLINE (kl-merge-e5; 3f runs the live queue (r) (t)):
-- 3f's Hasta L100 (police3, S=45): PASS, you + 7 out, but the 8 late police still do not show in the log. Keep ADOPT 1. Workflow wrnkv6kbn is finding out whether they start: re/hasta_late_police.md.
-- 3f's Retomoto L101: with a LIVING slow human, hop 6 of KLJoin 0b557e40 teleports all 7 bots to the street at r~156, and the human dies alone. So ADOPT 3 suits a fast human only.
-  - Workflow w9a7k3tel is designing an ini-only fix (Player=1 plus a fallback hop for a fed human): re/retomoto_hop6_ini.md.
-  - The klhop NoHuman gate is on 3f's owner list.
-- re/private_match.md (cae42766): no map/version check exists, the host decides AI; klrappel.c has no online guard (3f's file, stage 4).
-Owner: git push origin rtp-schemas (about 43 ahead) and git push origin rtp-schemas:main.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
