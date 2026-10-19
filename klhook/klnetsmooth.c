@@ -115,7 +115,7 @@ static void kns_smooth(DWORD pl)
     d = kns_wrap(yaw - kns_st[i].yaw);
     w = 2.0f / (kns.tau > 0.001f ? kns.tau : 0.001f);         /* critically damped spring: acc = w^2 d - 2 w v */
     kns_st[i].vel += (w * w * d - 2.0f * w * kns_st[i].vel) * dt;
-    { float mx = kns.maxdps * 0.0174532925f; if (kns_st[i].vel > mx) kns_st[i].vel = mx; if (kns_st[i].vel < -mx) kns_st[i].vel = -mx; }
+    { float mx = klrigid_remote_cap(fabsf(d), kns.maxdps * 0.0174532925f);   /* klrigid.c: PD2 curve with [Rigid] Remote=1, else this flat cap */ if (kns_st[i].vel > mx) kns_st[i].vel = mx; if (kns_st[i].vel < -mx) kns_st[i].vel = -mx; }
     step = kns_st[i].vel * dt;
     if ((d > 0 && step > d) || (d < 0 && step < d)) { step = d; kns_st[i].vel = 0; }   /* no overshoot */
     kns_st[i].yaw = kns_wrap(kns_st[i].yaw + step);
