@@ -100,3 +100,69 @@ as `hid` (the hidden bit of retomoto_spawns.md 1). That would turn the hidden-at
 3. Reset search: vtable 0xbc3cf4 has one reference (0x451f01); "GateGroup" string one code reference (0x449139). Done.
 4. L100 slots 20254..20289 identical in all 195 lists; 20240/20242 moved from 01:18:51 and died. Done.
 5. Not done: any live run of fix A; the hidden-bit census field; police2 vs police3 identity of L100; the other GatePath builders.
+
+## police4: fix A built as an opt-in flag (2026-10-19, offline, not run in the game)
+
+FACT = measured here. GUESS = not proven.
+
+### Flag
+`python tools/kl_fa_hasta_layer.py test <out> ... --rest-late=S --rest-late-direct` (also `kl_fa_hasta.py chain ... --rest-late=S --rest-late-direct`; the chain only passes the flag on).
+- Only valid with `--rest-late` (exits otherwise). Default off. `van.json` flags gain `REST_LATE_DIRECT: true` only when set.
+- Effect: node 20000 (TimerVanGo, TriggerDelay2) list = the three `10_RunToCover` entries (Exit_Left, Exit_Right, ExitStreet_Right) instead of `[Way#02]`.
+- Way#02 is KEPT unchanged (still holds the same three entries, now named by nobody). Reason: removing or reparenting it changes the node count, the pools (kl_gms.category, CLAUDE.md "Pool category is exact") and every REF/slot id after it; keeping it changes one list inside one node.
+- The layer's own check (`check()`, rest-delay branch) accepts both forms. Direct form: delay f0 > 0 and one-shot, delay list == Way#02's list, no entry also on Way#01, no dangling entry, nobody names Way#02, only the floor box names the delay, floor box names Way#01.
+- Files touched: tools/kl_fa_hasta_layer.py (flag, wire, check, flags_of), tools/kl_fa_hasta.py (chain passthrough only).
+
+### Default unchanged (FACT)
+The chain's `post.py` / `reslot.py` steps (adopt_list line 146) do not exist anywhere in the repo or the work folders, so the full 43a7c699 delivery could not be rebuilt. What was proven instead: the layer step 1 of the police3 recipe
+(`test --keep --blast --lock-wing --lock-show --corner-floor --heli-escape --heli-hvk-origin --rest-late=45`) built with the HEAD tools (git archive) and with the edited tools gives the SAME `F01_Main.zip`, md5 **5c4d108b62dd...**, both RESULT: PASS (20,282 entities, 372 MB). With `--rest-late-direct` the same step gives md5 286407ae1c3b..., PASS. police3 file 43a7c699 itself is untouched.
+
+### Staged (C:\kl_build_1019\hasta_police4\)
+Method: police3 zip with node 20000's list replaced (same mechanism as kl_fa_hasta_police.py; the list equals the one the new flag builds, checked by loading both), rewritten with deflate level 3. Scratch script is not in the repo.
+| folder | S | F04_Main.zip md5 | bytes |
+|---|---|---|---|
+| DM11B | 45 | d49627cf9091... | 219,773,994 |
+| DM11B_S90 | 90 | a9ee0ebe5277... | 219,773,995 |
+- Side files (KLJoin.ini 437c96ee, KLGuns, KLTalk, KLWardrobe, .WHD, .hti, WAV, LS files) copied from police3, identical.
+- Diff vs police3: all 30 members have the same names and content except `Scenes/Locations/F04/F04_Main.prp` (+10 bytes: two more 5-byte references in node 20000's list; bytes differ from offset 3,734,399 on because of the shift). Compressed size is smaller (219.8 MB vs 259.4 MB) because of the zip compression level only. S90 differs from S45 only in the 4-byte float of node 20000 f0.
+- Checks (FACT): debug/check_passes.py PASS (A, B, C1-C3); debug/check.py 0 records with a layout Dog Days never stores; tools/klt_audit.py DM11B pools 12, miss 0, Fed/AllDead/Shoot yes; kl_fa_hasta_police.py check PASS (Way#01 = ExitStreet_Left, Way#02 = the other three, all squads active 0); layer check on the flagged bare build PASS (also with --corner-floor).
+
+### Choose S (GUESS)
+L100: stair top r~120 (floor box starts the delay then), escape call r~197, lift-off r~280. Recommend **S = 90** (delay due r~210): the 8 start about 13 s after the van is called, while the crew is on the plaza and boarding, and about 70 s before lift-off, so they have time to be seen and to fight. S=45 (r~165) would have them awake before the call, when the crew is still on the stair/alley. Staged both; S90 is the recommendation. A slower crew moves everything later: S is a per-run guess. Residual GUESS: a `10_RunToCover` entry answers a delay's message (owner's +0x124) like a GatePath's (+0x120); precedent: stock delays name behaviour routs here and in kl_fa_bank's plaza-late.
+
+### Test recipe for the other session
+Install police4 (S90 first) in slot F04 with KLJoin 437c96ee, hook zi, script PT_DM11B_p. In the census follow slots 20254 20255 20269 20270 20272 20285 20287 20289 (re-derive from the first list by start position: ExitStreet_Right 29000,25600 / 29300,25700; Exit_Right 28300,25200 / 28500,25000 / 28700,25200; Exit_Left 25900,25200 / 26100,25000 / 26300,25200).
+- PASS: their x/z change, or health falls, within a few seconds of stair top + S (stair top = when 20240/20242 first move, ~r120; so about r210 for S90).
+- FAIL: identical to the first list to the end, as in L100 (then the GUESS about the RunToCover answer is wrong; next try fix B).
+- Also watch the heli: the point of police2/3 was the heli is shot down with ~10 police alive (L44-49). If it dies after lift-off with these awake, S is too early or the men are too many.
+
+### Audit: GatePath / GateGroup in other builders (report only, no edits)
+The trap is: two paths of ONE GateGroup given DIFFERENT lists, the second meant to fire after the first. kl2 0x7fd5a0 lets one path through once.
+| builder | gate | Way#01 list | Way#02 list | senders | trap? |
+|---|---|---|---|---|---|
+| kl_fa_hasta_layer.py default | RunToEscapeGate | arrive (4 police squads) | same | floor box -> Way#01; backstop 300 s -> Way#02 | no, identical lists, Way#02 is a fallback |
+| kl_fa_hasta_layer.py --rest-late | same | 1 squad | other 3 | box -> Way#01, delay -> Way#02 | YES (this finding); fixed by --rest-late-direct |
+| kl_fa_hasta_police.py post-pass | same | kept | kept (same list written to both) | as default | no |
+| kl_fa_club.py (1542-1609) | RunToEscapeGate | enemies_in | enemies_in | floors counter -> Way#01; seal timer and van timer b -> Way#02 | no by lists. Behaviour to know: whichever fires first wins; if the beat finishes before the alarm, the police come at the beat and the alarm's Way#02 is dropped (GUESS this is intended: comments say "once") |
+| kl_fa_v2_park.py (611-629) | same | arrive | arrive | floor box -> Way#01; backstop -> Way#02 | no |
+| kl_fa_v2_hotcoffee.py (612-651) | same | arrive | arrive | speak box -> Way#01; backstop -> Way#02 | no |
+| kl_map_ai.py | stock Dead Men gates (e.g. M02 PoliceSwats Gate Way#01) | n/a, read only | | treated as "let an order through once" | no |
+| kl_fa_bank.py | none | | | | no GatePath |
+| M11_A gate squads (campaign_fa_havana.md: 11 on the big square, 1 GateGroup on the market square) | campaign-stock | | | no builder exists yet | not applicable; when one is written, never split lists across paths of one group |
+| club campaign second gate (`SecondRun!Rt\Way#01`) | campaign-stock, not authored | | | | not applicable; re/club_campaign.md B5 is right, the code is read at 0x7fd5a0 |
+No other instance of the trap found. club's comment at kl_fa_club.py line 550 ("GateGroup was not read in kl2.exe") is out of date.
+
+## Verify (police4) (2026-10-19, independent check, offline, nothing run in the game)
+
+FACT = measured here. GUESS = not proven.
+
+- Flag is opt-in (FACT). The diff of tools/kl_fa_hasta_layer.py and tools/kl_fa_hasta.py only changes behaviour under `REST_LATE_DIRECT` (wire line ~1004, check, flags_of; chain passes `--rest-late-direct` only when `rest_late` is set). I rebuilt layer step 1 of the police3 recipe (`--blast --lock-wing --lock-show --corner-floor --heli-escape --heli-hvk-origin --rest-late=45`) with the HEAD tools (git archive + re/*.json) and with the edited tools: both give F04-slot zip md5 5c4d108b62dd, both PASS. With `--rest-late-direct`: 286407ae1c3b, PASS. The full 43a7c699 delivery cannot be rebuilt (no post.py / reslot.py in the repo, C:\kl_build_1018 or C:\kl_scratch: searched), so "default unchanged" is proven at the layer step only. police3's own zip is untouched (md5 still 43a7c69972e8).
+- police4 vs police3 (FACT, both zips decoded, 30 members): same names; only `Scenes/Locations/F04/F04_Main.prp` differs (3,931,392 -> 3,931,402 bytes). Loaded with kl_fa: node 20000 (TimerVanGo, TriggerDelay2) f0 45.0 (S90: 90.0), f1 0, f2 -1, f3 0; f4 = [Exit_Left\10_RunToCover (19977), Exit_Right\10_RunToCover (19960), ExitStreet_Right\10_RunToCover (19946)], police3 had [Way#02]. Way#01 (19993) = [ExitStreet_Left], Way#02 (19992) = the other three, group 19991: all unchanged. KLJoin.ini 437c96ee identical in both folders. S45 and S90 differ only in the f0 float. The size drop (259.4 -> 219.8 MB) is deflate level 3 only.
+- Does the new wiring reach the squads? Partly proven.
+  - FACT: the three targets are RunToCoverBehaviourRout nodes (the same nodes Way#02 reached). Nothing else in the level names them now. In kl2 a delay fires through the owner's +0x124 (this file, section 2), a GatePath through the target's +0x120; both end in the rout's AITrigger handler 0x4ebed0.
+  - FACT (new): a TriggerDelay2 naming RunToCoverBehaviourRout nodes directly is stock Dog Days wiring. Stock F01: `Gameplay!Timer_SwatMoreForward` names `SwatExit#02\12_RunToCover` (1 of 50 delay refs); stock L03: `...TvGuys_Reinforce\RunToCover_OnAlert\Timer_RTC_Delay` (3 of 106). Both are cross-subtree names like this one. Stock F07 has none, so the precedent is other levels, not F07.
+  - GUESS: that the rout, when started this way, shows and sends the squads exactly as it did via Way#01 for ExitStreet_Left (L100 saw that squad move). The census for slots 20254 20255 20269 20270 20272 20285 20287 20289 settles it.
+- Checks on both police4 folders (FACT): debug/check_passes.py PASS (B, C1-C3, A); debug/check.py 0 records with a layout Dog Days never stores (identical output to police3); tools/klt_audit.py (needs a Maps\ layout; run on hardlinks) pools 12, miss 0, Fed/AllDead/Shoot yes; kl_fa_hasta_police.py check PASS.
+- Gate-trap audit (spot-checked FACT): kl_fa_club.py line 1542 and kl_fa_v2_park.py line 614 / kl_fa_v2_hotcoffee.py line 615 write ONE list (`enemies_in` / `arrive`) to every Way, so the one-pass gate loses nothing; only the layer's --rest-late split the lists (lines 995-999). kl_maps.py only mentions GatePath in an owner note. The audit table above stands.
+- Disk: C: 5.7 GB free, G: 6.3 GB free after cleanup. My scratch builds were removed.
+- Remaining risk, unchanged: S is a guess (90 recommended above); the live test decides. If the census shows no movement, next try is fix B (a second GateGroup for Way#02).

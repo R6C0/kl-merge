@@ -11,7 +11,7 @@ Study: re/campaign_fa.md (Havana rows), re/campaign_v2_plan.md, handovers in re/
         the .prm size and the archive are measured and the previous stage's folder is wiped (only notes stay),
         so at most two archives lie on disk. Default <out> = <work>/build/hasta_1017. Result: <out>/base.json
         and <out>/final/ (the compacted base). --keep-all keeps every stage. --from light|ward|compact resumes.
-    python kl_fa_hasta.py chain <out> [--start N] [--plates] [--armour 0,3] [--blast [S]] [--lock-wing] [--lock-show] [--corner-floor] [--floor-late=N] [--rest-late=S] [--heli-escape [--heli-hvk-origin] [--heli-hide]]   (see chain(); S = blast delay in s)
+    python kl_fa_hasta.py chain <out> [--start N] [--plates] [--armour 0,3] [--blast [S]] [--lock-wing] [--lock-show] [--corner-floor] [--floor-late=N] [--rest-late=S [--rest-late-direct]] [--heli-escape [--heli-hvk-origin] [--heli-hide]]   (see chain(); S = blast delay in s)
     python kl_fa_hasta.py proof-pair [<out>]
         The compaction proof pair of re/campaign_fa.md (live proof I): fake-fix of x_chunks/retomoto_wardrobe
         and of x_chunks/retomoto_wardrobe_compact -> <out>/proof_pair/{uncompacted,compacted}. The stock
@@ -286,7 +286,7 @@ def _drop(*folders):
             shutil.rmtree(f, ignore_errors=True)
 
 
-def chain(out=OUT, start=1, plates=False, armour='0,3', blast=None, lock=False, show=False, corner=False, heli=False, heli_origin=False, heli_hide=False, floor_late=None, rest_late=None):
+def chain(out=OUT, start=1, plates=False, armour='0,3', blast=None, lock=False, show=False, corner=False, heli=False, heli_origin=False, heli_hide=False, floor_late=None, rest_late=None, rest_late_direct=False):
     """bare (doors + layer, KEPT with its side files) -> lighten -> wardrobe (+plates) -> compact -> bots -> gun looks -> fxc again
     -> dynamic bots (LAST: it records the large blocks) -> <out>/M11B. Order is the bank's (re/bank_campaign.md F.2) with the compaction
     after the wardrobe (the bare map is over the 73,728 table). Talk (kl_fa_talk) has no M11 scene table: left out (re/hasta_fa.md 3c).
@@ -308,7 +308,7 @@ def chain(out=OUT, start=1, plates=False, armour='0,3', blast=None, lock=False, 
     bare_root = d('bare')
     bare = os.path.join(bare_root, '%s+%s campaign' % ('R09' if heli else HOST, LEVEL))
     steps = [
-        ('1_bare', [T('kl_fa_hasta_layer.py'), 'test', bare_root, '--keep'] + ([] if blast is None else ['--blast'] + ([] if blast == '' else [str(blast)])) + (['--lock-wing'] if lock else []) + (['--lock-show'] if show else []) + (['--corner-floor'] if corner else []) + ([] if floor_late is None else ['--floor-late=%g' % float(floor_late)]) + ([] if rest_late is None else ['--rest-late=%g' % float(rest_late)]) + (['--heli-escape'] + (['--heli-hvk-origin'] if heli_origin else []) + (['--heli-hide'] if heli_hide else []) if heli else []), bare, (0, 1)),
+        ('1_bare', [T('kl_fa_hasta_layer.py'), 'test', bare_root, '--keep'] + ([] if blast is None else ['--blast'] + ([] if blast == '' else [str(blast)])) + (['--lock-wing'] if lock else []) + (['--lock-show'] if show else []) + (['--corner-floor'] if corner else []) + ([] if floor_late is None else ['--floor-late=%g' % float(floor_late)]) + ([] if rest_late is None else ['--rest-late=%g' % float(rest_late)]) + (['--rest-late-direct'] if rest_late_direct and rest_late is not None else []) + (['--heli-escape'] + (['--heli-hvk-origin'] if heli_origin else []) + (['--heli-hide'] if heli_hide else []) if heli else []), bare, (0, 1)),
         ('2_light', [T('kl_graft.py'), 'lighten', bare, d('2_light'), '--load', 'trim,slim,fxc'], d('2_light'), (0,)),
         ('3_ward', [T('kl_chars.py'), 'wardrobe', d('2_light'), d('3_ward'), '--armour=' + armour] + (['--plates=wolf,dallas,chains,hoxton'] if plates else []), d('3_ward'), (0, 1)),
         ('4_compact', [T('kl_chars.py'), 'compact', d('3_ward'), d('4_compact')], d('4_compact'), (0,)),
@@ -418,7 +418,7 @@ def main():
                 pos.remove(nxt)             # the seconds are not the out folder
             except ValueError:
                 blast = ''
-        sys.exit(chain(pos[1] if len(pos) > 1 else OUT, int(opt('--start', 1)), '--plates' in a, opt('--armour', '0,3'), blast, '--lock-wing' in a, '--lock-show' in a, '--corner-floor' in a, '--heli-escape' in a, '--heli-hvk-origin' in a, '--heli-hide' in a, next((float(x.split('=', 1)[1]) for x in a if x.startswith('--floor-late=')), None), next((float(x.split('=', 1)[1]) for x in a if x.startswith('--rest-late=')), None)))
+        sys.exit(chain(pos[1] if len(pos) > 1 else OUT, int(opt('--start', 1)), '--plates' in a, opt('--armour', '0,3'), blast, '--lock-wing' in a, '--lock-show' in a, '--corner-floor' in a, '--heli-escape' in a, '--heli-hvk-origin' in a, '--heli-hide' in a, next((float(x.split('=', 1)[1]) for x in a if x.startswith('--floor-late=')), None), next((float(x.split('=', 1)[1]) for x in a if x.startswith('--rest-late=')), None), '--rest-late-direct' in a))
     if pos[:1] == ['checks']:
         sys.exit(checks(pos[1] if len(pos) > 1 else None))
     if pos[:1] == ['proof-pair']:
