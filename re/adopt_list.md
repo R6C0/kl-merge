@@ -140,6 +140,11 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   - Next: S=45 (lift-off + 5 s). STAGED, NOT RUN: C:\kl_build_1018\hasta_police3\DM11B F04_Main.zip 43a7c699, KLJoin 437c96ee (= live).
     - Same recipe as police2 (chain --blast --lock-wing --lock-show --corner-floor --heli-escape --heli-hvk-origin, then post.py and reslot.py), with --rest-late=45.
     - It differs from 131c8c2b in ONE .prp byte (float 120.0 -> 45.0); every other member and side file is identical.
+- RUN L100 (3f (p), 01:16-01:23, police3 43a7c699 + hook zi, PT_DM11B_p): PASS 441 s, you + all 7 out (rec 7 a traitor).
+  - The heli left with the 7 bots at r~260 and came back; you boarded on visit 2 at r~326 after a plaza hold. No heli damage line.
+  - STILL INCONCLUSIVE for the 8 late police: the alive census fell 43 -> 17 and never rose; there are no police -> crew/you lines, and no
+    balance/hit/fire lines during the hold. The 300/360 s pictures show no police near you. GUESS: they never engaged, or never spawned.
+  - DECISION: no reason yet to adopt police3 over 3a186c93 (ADOPT 1).
     - Layer check, police check, check_passes and klt_audit all PASS.
     - Queued as 3f (p): script PT_DM11B_p.ini 8b693466 holds the human about 75 s in the plaza.
   - Do not adopt police2.
