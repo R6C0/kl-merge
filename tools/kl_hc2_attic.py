@@ -21,6 +21,8 @@ With NO feature flag the output has the same member contents as the input (byte 
                     5 glass emitters (what the stock shot activates). GUESS: that the box (a child of a squad group) ticks, that
                     eTGS_AllInside fires for one merc, what the leaves' animations look like, that Whole stays visible beside Shattered
                     (no Deactivate is sent), whether the door's HVK (y -452..-200) stops anyone. No sound / shake.
+  --door-fx         with --door: Whole is forced off (Dor_attach relays 'ForceTriggerShotActivate' to it), two spare glass-sound ZSNDOBJ move to the
+                    door and join Whole's on-list (offsets FX_SOUNDS), a ShakeCamera (FX_SHAKE) joins the door group. See run().
   --drop-gap2       VARIANT: removes the office->warehouse nav bridge (gap 2) with the exact inverse of kl_nav_bridge (MEASURED: removing and
                     re-adding it gives the live block byte for byte). Then the attic part is cut from the warehouse floor and bots cannot
                     use it as a way down: writes a [CrewHop] block (KLJoin.ini, see --ini) that must carry them. UNPROVEN; the crew
@@ -49,6 +51,8 @@ ATTIC_STOPS = ((2850, 860, 17450), (2850, 860, 17800), (2900, 860, 17700))      
 SPEAK_BOX = 'Specials!LevelSpeak!TriggerBox'
 SPEAK_LIST = 17
 DOOR = 'PC0901_M01_Dor_Diner_Anim_01'
+FX_SOUNDS = (2365088, 440992)   # glass_break_medium_01#set (the stock windows' Window_Shatter, MEASURED) ; glass_shatter_big#set (in the DD-systems bank: playable is a GUESS)
+FX_SHAKE = (0.8, 3000.0)        # strength, radius: GUESS (the rocket 0.5 / 4000, Subway 3.0 / 8000)
 HOP = ('[CrewHop.6]\n; attic -> warehouse floor, ONLY with --drop-gap2 (UNPROVEN vertically). Bots only; no NoHuman: a human can use the stairs\n'
        'From=2800 860 18400\nRadius=250\nHeight=150\nWait=2\nStage=1\nWalkTo=1\nAgain=0\nTo.1=2800 0 19900\nTo.2=2900 0 19900\nTo.3=3000 0 19900\n'
        'To.4=3100 0 19900\nTo.5=3200 0 19900\nTo.6=3300 0 19900\n')
@@ -111,15 +115,16 @@ def move(B, k, pos, log=print):
     sc, e = B.sc, B.ents[k - 1]
     w = B.at(k)
     par = sc.parent[k]
+    world = tuple(pos)
     if par:   # a child of a group placed elsewhere: its own values are LOCAL to the parent (READ kl_fa_bots frames); pos is world
         pos = tuple(round(x, 3) for x in B.local(par, pos))
     lab = J.labels('dd', sc.cls(k))
     kl_graft.edit(sc.nodes[k], 'props', lambda us: A.setv(sc, us, lab.index('ZGEOM[2]'), [float(x) for x in pos]))
     e.trans = struct.pack('<3f', *pos) + e.trans[12:]
-    log('  moved %s: %s -> world %s' % (sc.path[k][-60:], [round(x) for x in w], [round(x, 1) for x in B.at(k)]))
+    log('  moved %s: %s -> world %s (requested; B.at caches frames)' % (sc.path[k][-60:], [round(x) for x in w], [round(x, 1) for x in world]))
 
 
-def run(src, dst, loot=False, stops=False, squad=False, door=False, gap2=False, ini=None, log=print):
+def run(src, dst, loot=False, stops=False, squad=False, door=False, gap2=False, ini=None, log=print, door_fx=False):
     B = F.Built(src, 'F03')
     sc = B.sc
     touched = set()
@@ -166,6 +171,41 @@ def run(src, dst, loot=False, stops=False, squad=False, door=False, gap2=False, 
         def box(f):
             MA.setv(sc, f, 14, 'ECPS_FA_MERCONLY'); MA.setv(sc, f, SPEAK_LIST, tl)
         kl_fa.edit(sc, bx, bci, box)
+        if door_fx:
+            # --door-fx: (a) hide Whole by the stock path: Dor_attach (the box already messages it) gets a RelayMessageList 'AITrigger' ->
+            # 'ForceTriggerShotActivate' on Whole (the forced swap = on-list shown, off-list hidden; READ kl2 0x47f2f4, proven live on Retomoto's
+            # window). Not on the group itself (its RelayMessageList already sends 'Activate'; two of one class on a node never occur, MEASURED).
+            # (b) two unreferenced ZSNDOBJ (GlassA_Diner_01/02!Glass_Break_Sound, MEASURED) move to the door and join Whole's on-list, as stock windows
+            # carry theirs. (c) a ShakeCamera cloned from the rocket's joins the door group, message 'AITrigger'.
+            ga = DOOR + BS + 'Dor_Diner_Anim_Geom_01' + BS
+            wh, at_ = _find(B, ga + 'Dor_Win_Whole'), _find(B, ga + 'Dor_attach')
+            ri2 = [i for i, (nm, _b) in enumerate(sc.nodes[dk]['ctrls']) if sc.p.key(nm) == 'RelayMessageList'][0]
+            nm0, body0 = sc.nodes[dk]['ctrls'][ri2]
+            sc.nodes[at_]['ctrls'].append((nm0, list(body0)))
+            def rel2(f):
+                MA.setv(sc, f, 0, 'AITrigger'); MA.setv(sc, f, 1, 'ForceTriggerShotActivate'); MA.setv(sc, f, 2, [sc.path[wh]])
+            kl_fa.edit(sc, at_, len(sc.nodes[at_]['ctrls']) - 1, rel2)
+            # the box list is NOT trimmed: Whole keeps the box's 'AITrigger' (its MatPosAnim listens to it, MEASURED)
+            snds = []
+            for n, off in (('GlassA_Diner_01', FX_SOUNDS[0]), ('GlassA_Diner_02', FX_SOUNDS[1])):
+                sk = _find(B, n + '!Glass_Break_Sound')
+                if any(sc.path[sk] in str(v) for _k, _i, v in kl_fa.controllers(sc, 'ShotActivate')):
+                    raise SystemExit('sound node %s is referenced' % sc.path[sk])
+                move(B, sk, (6160.0, 100.0, 23090.0), log)
+                sl = J.labels('dd', sc.cls(sk))
+                kl_graft.edit(sc.nodes[sk], 'props', lambda us, off=off: A.setv(sc, us, sl.index('ZSNDOBJ[0]'), off))
+                snds.append(sc.path[sk])
+            wi = [i for i, (nm, _b) in enumerate(sc.nodes[wh]['ctrls']) if sc.p.key(nm) == 'ShotActivate'][0]
+            def addon(f):
+                MA.setv(sc, f, 3, list(kl_fa.value(sc, f[3])) + snds)
+            kl_fa.edit(sc, wh, wi, addon)
+            rk = _find(B, 'Projectile' + BS + 'Projectiles_01' + BS + 'Rocket_RPG7')
+            pat = sc.nodes[rk]['ctrls'][A.ctrl_of(sc, rk, 'ShakeCamera')]
+            sc.nodes[dk]['ctrls'].append((pat[0], list(pat[1])))
+            def shk(f):
+                MA.setv(sc, f, 0, FX_SHAKE[0]); MA.setv(sc, f, 1, 'AITrigger'); MA.setv(sc, f, 2, 0); MA.setv(sc, f, 3, FX_SHAKE[1])
+            kl_fa.edit(sc, dk, len(sc.nodes[dk]['ctrls']) - 1, shk)
+            log('  door-fx: Whole forced off via Dor_attach, sounds %s on the on-list of Whole, shake %s' % (FX_SOUNDS, FX_SHAKE))
         log('  door: box %s -> (6100,100,22900) half (300,200,250), targets %s; door relay -> %d nodes' % (sc.path[bx][-20:], [t.split(BS)[-1] for t in tl], len(turn_on)))
         touched |= {'.prp', '.gms', '.buf'}
     if gap2:
@@ -191,7 +231,10 @@ def main():
         print(__doc__)
         return 2
     ini = a[a.index('--ini') + 1] if '--ini' in a else None
-    run(a[0], a[1], '--loot-attic' in a, '--bot-stops' in a, '--attic-squad' in a, '--door' in a, '--drop-gap2' in a, ini)
+    if '--door-fx' in a and '--door' not in a:
+        print('--door-fx requires --door')
+        return 2
+    run(a[0], a[1], '--loot-attic' in a, '--bot-stops' in a, '--attic-squad' in a, '--door' in a, '--drop-gap2' in a, ini, door_fx='--door-fx' in a)
     return 0
 
 
