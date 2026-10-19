@@ -863,3 +863,6 @@ Static only (python + capstone on kl2.exe, plus kl_gms on the stock zips). Nothi
 
 ### Practical rule for players
 - Both PCs start the session on the same map zip, same build. Do not rely on a second map load in one session until the pool lifetime is settled. Overflow is not a risk at the start of a round.
+
+## 2026-10-19: which ADOPT changes the slot order
+- ONLINE (2026-10-19 08:40, tools/kl_netcheck.py, live map vs each ADOPT zip): only ADOPT 5 (Hasta police4 a9ee0ebe) changes the map's slot order (from entity 20014). ADOPT 1 (3a186c93), 2 (Last Call 5b0a025b), 4 (Hot Coffee 21c6ed49) and 6 (Park 3386b972) keep it. So for a private match both PCs need the same Hasta state if ADOPT 5 is used; for the others a same slot order is necessary but not sufficient (the .prp etc. still differ, effect UNKNOWN): safest is that both PCs install the same ADOPTs.
