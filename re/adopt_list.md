@@ -156,7 +156,7 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
 - L105 (3f, 2026-10-19, hook zi, only the zip swapped to S90 a9ee0ebe, all 25 side files identical to live; restored after to ce42dcc9 / KLJoin 437c96ee / 6755CC0C): PASS, 444 s.
   - Stair top (20240/20242 first move) at r 139. ALL 8 late police first change at r 229 = stair top + 90.0 s. 5 of the 8 killed; 20254, 20255, 20272 lived and moved.
   - They arrive ~18 s after the visit-1 heli waits (not ~13 s after the call as guessed). Visit 1: 5 aboard (2, 4, 5, 6, 7); rec 3 out as traitor; the human out on visit 2. Rec 1 never left the start (stage 0, $0) and died. Loot out $3.15M.
-  - So the wiring is confirmed live. DECISION for the owner: ADOPT 5 = S90 a9ee0ebe, one click: C:\kl_build_1019dopt_1019\ADOPT 5 Hasta police4.bat (UNDO 5 to go back). Zip swap only, KLJoin unchanged; an alternative to ADOPT 3 (same zip; it refuses while ADOPT 3 is in). Scratch-tested.
+  - So the wiring is confirmed live. DECISION for the owner: ADOPT 5 = S90 a9ee0ebe, one click: C:\kl_build_1019\adopt_1019\ADOPT 5 Hasta police4.bat (UNDO 5 to go back). Zip swap only, KLJoin unchanged; an alternative to ADOPT 3 (same zip; it refuses while ADOPT 3 is in). Scratch-tested.
     - Layer check, police check, check_passes and klt_audit all PASS.
     - Queued as 3f (p): script PT_DM11B_p.ini 8b693466 holds the human about 75 s in the plaza.
   - Do not adopt police2.
