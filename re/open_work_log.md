@@ -1,3 +1,4 @@
+2026-10-19 09:35 - OFFLINE (kl-merge-e5): no change since 08:40. Owner idle 7 h, 3f quiet, no workflow running: every list item waits for the owner (push, ADOPT scripts, NoHuman + PoolLog patches, EscortUntil) or for 3f's live runs.
 2026-10-19 08:40 - OFFLINE (kl-merge-e5; owner idle 6 h, no live run this hour):
 - re/klnet_poollog.patch (8befbb8f): opt-in KLHook [Net] PoolLog=1 that settles whether the object pool survives a level change. Compile-checked, NOT applied, NOT run. 3f declined (a peer klhook patch, stage 4), so it waits for the owner next to NoHuman (re/adopt_list.md).
 - kl_netcheck, live map vs each ADOPT zip: only ADOPT 5 (Hasta police4) changes the slot order; 1, 2, 4, 6 keep it. For a private match both PCs should install the same ADOPTs (re/private_match.md, START_HERE section 6).
