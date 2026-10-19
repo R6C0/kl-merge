@@ -188,6 +188,10 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   - Refuted: gunfire, PointBlankToCrew, van, human, snipers, SM_ scripts (re/hotcoffee2_oneshot.md, re/hotcoffee2_campaign_leftovers.md).
   - Lead (GUESS): a campaign car with BlowupChanceDefinite stands 1.5..3.5 m from every site.
   - Staged cars-only 21c6ed49 (C:\kl_build_1019\hc2_nocampaign\DM01B_carsonly). The A/B is queued with 3f: (r) live + LogCrewHitsBig=100, then (t) cars-only.
+  - RUN L102 (r, control: live ea8cbc82, hook f88586e9, PT_DM01B_hits + LogCrewHitsBig=100): PASS 517 s. ONE instant kill, rec 5 at r 54.6, (684, -15, 9215).
+    - Health 167 -> 0 in one drop, after about 3 s of -2 chips from 2 soldiers at 3.3 m. At death an Enemy at 8.3 m was aiming at rec 5.
+    - No explode, blast or car line in the whole log. No BIG line (the hit was under the rate limit). The 2 other deaths were chip deaths.
+    - So this kill is "the rest of the health in one hit" with a soldier close and aiming, not 340 from nowhere. The car lead looks WEAKER (GUESS until L103).
 
 ### Other installed maps (checked: KLExpansion\Maps; zips md5)
 - Page 2: DM01 [F01] 94dc052b, DM02 [F02] c00d4d07, DM03 [F03] cf1dc436, DM06 [F04] 039dc886, DM09 [F06] (above), DM03A [F07] (above).
