@@ -198,6 +198,9 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
     - One death (rec 5, r 336) was a chip death. 4 bots out with $1.085M (L102: 1 out with $0, 3 dead).
     - Score so far: cars live = one-shots in L70, L71, L93, L102; cars-only = 0 in 1 run. It fits the cars, but L102's victim had a soldier aiming at 8.3 m. A second cars-only run is asked of 3f (L104).
     - CANDIDATE (pending L104): 21c6ed49 in place of ea8cbc82. It only stops the 45 campaign cars blowing up (tools/kl_hc2_strip.py --no-snipers).
+  - RUN L104 (cars-only repeat): PASS 465 s, no one-shot, 0 deaths. 5 bots + a traitor out with $1.62M. L103's "1 explode line" was the ShakeScale setting line, so 0.
+    - SCORE: live ea8cbc82 = one-shots in 4 of 4 hit-logged/observed runs (L70, L71, L93, L102); cars-only 21c6ed49 = 0 in 2 (L103, L104).
+    - DECISION: adopt 21c6ed49 for Hot Coffee II (zip only; every side file is identical to live). The mechanism (car blow-up with no log line?) is still being traced (workflow ww3881lpe, re/hotcoffee2_wholehit.md).
 
 ### Other installed maps (checked: KLExpansion\Maps; zips md5)
 - Page 2: DM01 [F01] 94dc052b, DM02 [F02] c00d4d07, DM03 [F03] cf1dc436, DM06 [F04] 039dc886, DM09 [F06] (above), DM03A [F07] (above).
