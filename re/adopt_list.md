@@ -1,5 +1,7 @@
 # Adopt list (2026-10-18, offline; e5 compiled from the logs and a read-only look at <DD> and C:\kl_build_1018)
 
+START HERE (2026-10-19 04:38, workflow w5512swo1, read only): C:\kl_build_1019\START_HERE_adopt.txt is the owner's one-page sheet for all one-click scripts (1-6, 2b, 3h): what each does, pick-one groups (1 or 5; 3 or 3-noWE; 2b or 3h), order (2 before 3; 2b before 3h), undo order, disk space (C: 8.2 GB free: one script at a time). All 8 targets and 9 sources re-hashed OK; nothing applied yet. The kl2 zombie pid 48664 does not trip the guards (they count only kl2 with threads).
+
 Claims carry "per log note <date time>" (re/open_work_log.md) or "checked" (read in the files today). UNKNOWN = not in any note or file.
 Nothing here was run in the game by this page. Zip ids are the first 8 hex of md5 of the zip. Hook/ini ids written by 3f in the log
 (a57d9ce7, ccec94fb) are SHA1 prefixes (kl_autotest prints sha1; 3f confirmed 10-18 16:40): hook sha1 a57d9ce7 = md5 249ab16a, ini sha1 ccec94fb =
