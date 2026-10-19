@@ -1,3 +1,7 @@
+2026-10-19 06:35 - OFFLINE (kl-merge-e5; owner idle 4 h, 3f quiet, no live run this hour):
+- tools/kl_netcheck.py (6fc9786f, read-only): 'python tools/kl_netcheck.py a.zip b.zip' says SAME SLOT ORDER or where two map zips part. Same = necessary, not sufficient. The live Hasta and ADOPT 5's differ from entity 20014, so both players need the same ADOPT state.
+- Workflow wx2qvvgam (stage 4, static): is the object pool sized per level or per session, can 16-bit ids overflow, who makes dynamic ids (re/private_match.md).
+Owner: git push origin rtp-schemas (73 ahead) and git push origin rtp-schemas:main; the NoHuman patch; ADOPT scripts (C:\kl_build_1019\START_HERE_adopt.txt).
 2026-10-19 05:35 - OFFLINE (kl-merge-e5; owner idle, 3f quiet, no live run this hour):
 - re/private_match.md (a4cd8b5c, 79b85d66; static, encoder/alloc re-read by me): a net id = slot tag * pool capacity + pool slot index + 1; map-loaded slots have tag 0, +1 per reuse. So both PCs must load the same entity order / cluster table; byte-identical zip is still a GUESS. A mismatched order makes a hit land on the WRONG object, not on none.
 - C:\kl_build_1019\START_HERE_adopt.txt (017cbfda): the owner's one-page sheet for ADOPT 1-6, 2b, 3h (pick 1 or 5, 2b or 3h; 2 before 3). All hashes OK.
