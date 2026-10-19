@@ -192,6 +192,10 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
     - Health 167 -> 0 in one drop, after about 3 s of -2 chips from 2 soldiers at 3.3 m. At death an Enemy at 8.3 m was aiming at rec 5.
     - No explode, blast or car line in the whole log. No BIG line (the hit was under the rate limit). The 2 other deaths were chip deaths.
     - So this kill is "the rest of the health in one hit" with a soldier close and aiming, not 340 from nowhere. The car lead looks WEAKER (GUESS until L103).
+  - RUN L103 (t, cars-only 21c6ed49, same hook and ini): PASS 519 s, NO instant kill. No drop of 10 or more at all; the BIG path was armed past the 400 limit and stayed silent.
+    - One death (rec 5, r 336) was a chip death. 4 bots out with $1.085M (L102: 1 out with $0, 3 dead).
+    - Score so far: cars live = one-shots in L70, L71, L93, L102; cars-only = 0 in 1 run. It fits the cars, but L102's victim had a soldier aiming at 8.3 m. A second cars-only run is asked of 3f (L104).
+    - CANDIDATE (pending L104): 21c6ed49 in place of ea8cbc82. It only stops the 45 campaign cars blowing up (tools/kl_hc2_strip.py --no-snipers).
 
 ### Other installed maps (checked: KLExpansion\Maps; zips md5)
 - Page 2: DM01 [F01] 94dc052b, DM02 [F02] c00d4d07, DM03 [F03] cf1dc436, DM06 [F04] 039dc886, DM09 [F06] (above), DM03A [F07] (above).
