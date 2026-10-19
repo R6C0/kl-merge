@@ -829,3 +829,37 @@ Re-checked against kl2.exe disassembly (python + capstone, read only). This clos
 - For the first load after a fresh start with a byte-identical map zip, loaded entities get tag 0 and equal ids on both PCs (CHECKED arithmetic, GUESS on contiguity).
 - A second map load in the same session reuses freed slots at tag 1, in FIFO order after the unused ones. cap stays that of the first load (GUESS). Start both PCs fresh for each test and load the same map first.
 - Spawned objects that reuse slots change tag. After 2 reuse cycles the 16-bit wire id can be wrong or alias another entity.
+
+## 2026-10-19: pool lifetime and 16-bit overflow (static)
+Static only (python + capstone on kl2.exe, plus kl_gms on the stock zips). Nothing was run. Re-checked by a second reader; the marks below are the second reader's.
+
+### Pool size (cap)
+- CHECKED: loader 0x8ad7c0 calls DB vtable slot 10 at 0x8ad860 (`mov edx,[edx+0x28]; call edx`). The object is a ZEngineDataBase (RTTI of vtable 0xb8fa04). Slot 10 is 0x545e50, `ret 0x10`.
+- CHECKED: out1 becomes `esi=out1<<7` (0x8ad8de), floored at 0x340000 (0x8ad8f7) and passed to the manager 0x541ae0. So `cap = max(out1, 26624)` slots. The .gms +0x1c heap budget is a different value.
+- CHECKED: out1 = (1 if `[db+0x8c]==0`) + sum of the .gms class-table counts (u32 at header +0x10 is an offset; there a u32 n, then n x {type, count, count2}) + 0xf0 + 0xea6, plus a path term. Path term: scene path contains "_Main" (0xb89a6c) and then "F0" (0xb38154) or "F10" (0xb61de8) gives +0x5dc; "m05_YOU_WILL_NEVER_FIND_ME" (0xb45710) gives +0x8fc instead; neither gives 0. Lookup 0x7472b0 is a substring search (CHECKED); that its haystack `[[0xdd2640]+0x2b0]` is the scene path is a GUESS; case handling not checked.
+- CHECKED on the stock zips (re-computed): F03 27014, F04 27505, F06 27539, F08 29145, L01 39382, L10 48694 (L maps get no +0x5dc). F01, F02, F05, F07, F09, L00 sit under the floor, so 26624.
+- CHECKED correction to the report: the entity count N equals the sum of the CLUSTER-table counts (the 24 per-category dwords per block at gms +0x14), e.g. F01 15871, L10 42915. The CLASS-table sum used for cap is about 1k to 2.8k larger than N (F01 18615).
+- GUESS: the `+1` term ([db+0x8c]==0 at the first load). It moves cap by one only.
+- Expansion rows (DM01 .. DM09, T01 and so on, cap 26624 to 36444) were NOT re-checked by the second reader; they come from the first report.
+
+### Pool lifetime
+- CHECKED: the manager is built only when `[db+8]==0` (0x8ad931). Two code paths destroy it and zero `[db+8]`: DB vtable slot 11 = 0x4623e0 (0x46240b, it also frees `[db+0x8c]`), and the DB destructor 0x82e060 (0x82e10a..119). The manager destructor 0x861640 clears `[0xe0ff90]` (0x86166f); 0x4c2fdc sets it again on build.
+- CHECKED: nothing calls 0x4623e0 directly, and its only data reference is the vtable slot at 0xb8fa30. The caller would be an indirect `call [reg+0x2c]`; there are 220 such sites and none could be tied to this object.
+- GUESS: the pool is rebuilt at each level change (slot 11 called between scenes). Open. A live log of `[[0xe0ff90]+0xc]+8` at each level change would settle it.
+- GUESS: if the pool survives levels, cap comes from the first map of the session.
+
+### Overflow of the 16-bit wire id
+- CHECKED: id = tag*cap + idx + 1; tag-1 ids pass 65535 when idx > 65534-cap; tag-2 when idx > 65534-2*cap. cap 26624: tag 1 above idx 38910, tag 2 above 12286. cap 29445: 36089. cap 34948: 30586. cap 36444: 29090. L10 (cap 48694): tag 1 above 16840.
+- CHECKED (first report, spot-checked): no stock or expansion map has idx above 65535; the largest FA-slot map is DM05A with N=28169, below its own tag-1 limit 29090. Tag-0 ids never wrap.
+- CHECKED: free slots are used in ascending order. Spare tag-0 slots are cap-N: 10753 for F01, 8275 for DM05A. A tag-1 slot appears only after those are used up, so overflow is a late-round risk with very many spawns, not a start-of-round risk.
+- Tag 2 and up wrap for most idx values. Only a slot reused twice gets there (needs a long match).
+- GUESS: a PC that kept a larger or smaller pool from an earlier map gets a different cap. Tag-0 ids still match; ids with tag > 0 do not.
+
+### Bit-30 ids (0x40000000)
+- CHECKED: producers at 0x882d52..61 and 0x4f7349..58 do `field&~7, +0x70, |0x40000000, call 0x40a880`, then store the pointer back with the low 3 flag bits. These are load-time style pointer fix-ups of stored fields (the callers were not traced: GUESS).
+- CHECKED: decoder 0x40a880 turns bit 30 into `base + ((id>>7)&0x7fffff)*slotsize` with no tag check.
+- CHECKED earlier (not redone): encoders 0x86ca10 and 0x902570 never set bit 30, so wire ids do not carry it.
+- Other `or ...,0x40000000` sites are flag ORs on object fields (not re-read).
+
+### Practical rule for players
+- Both PCs start the session on the same map zip, same build. Do not rely on a second map load in one session until the pool lifetime is settled. Overflow is not a risk at the start of a round.
