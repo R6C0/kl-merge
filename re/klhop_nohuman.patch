@@ -1,0 +1,31 @@
+--- a/klhook/klhop.c	2026-10-17 19:41:17.999737500 +0100
++++ b/klhook/klhop.c	2026-10-19 03:35:49.064261100 +0100
+@@ -117,7 +117,7 @@
+ #define KLV_WATCH  3000                       /* v78: ms of the fast landing watch */
+ 
+ static struct { int on, dry, reorder, log, orderto, recheck, walkx; } klv;
+-struct klv_hop { int on, nto, stage, player, walk; DWORD wait, again, giveup; float from[3], radius, height, to[KLV_NTO][3], walkto[3]; };
++struct klv_hop { int on, nto, stage, player, nohuman, walk; DWORD wait, again, giveup; float from[3], radius, height, to[KLV_NTO][3], walkto[3]; };
+ static struct { int n; char key[64], file[MAX_PATH]; FILETIME ft; struct klv_hop h[KLV_NHOP]; } klv_lv;
+ struct klv_after { int rec, hop, step, to, tries; DWORD actor, at, watch; };      /* watch = the fast landing watch runs until this tick (v78) */
+ struct klv_walk { int hop, orders; DWORD actor, at, order_at; };                   /* hop = 1 + the walk hop, 0 = none (v78) */            /* step: 1 = the re-order is due, 2 = the '2 s after' line, 0 = free; to = its landing place, tries = Recheck put-backs */
+@@ -164,6 +164,7 @@
+         h->wait = (DWORD)(lift * 1000.0f);
+         st = (int)GetPrivateProfileIntA(sec, "Stage", 2, file); h->stage = st < 0 ? 0 : st > 3 ? 3 : st;
+         h->player = GetPrivateProfileIntA(sec, "Player", 0, file) != 0;
++        h->nohuman = GetPrivateProfileIntA(sec, "NoHuman", 0, file) != 0;       /* 2026-10-19: 1 = idle (timers 0) while a LIVING human exists */
+         lift = klv_num(sec, "Again", "0", file); if (!klb_finite(lift) || lift < 0) lift = 0; if (lift > 600) lift = 600;
+         h->again = (DWORD)(lift * 1000.0f);                                 /* 0 = a bot is carried by this hop once a round (as before) */
+         h->walk = klj_vec(sec, "WalkTo", file, h->walkto) && klb_finite(h->walkto[0]) && klb_finite(h->walkto[1]) && klb_finite(h->walkto[2]);
+@@ -411,6 +412,11 @@
+     for (hi = 0; hi < KLV_NHOP; hi++) {
+         const struct klv_hop *h = &klv_lv.h[hi];
+         if (!h->on) continue;
++        if (h->nohuman && human) {
++            static DWORD held_at; memset(klv_r.since[hi], 0, sizeof klv_r.since[hi]);
++            if (klv.log && now - held_at >= 30000) { held_at = now; klog("hop: hop %d held (NoHuman=1): a living human is in play", hi + 1); }
++            continue;
++        }
+         if (h->player && !klv_r.passed[hi] && human) {
+             float a = (hf[0] - h->to[0][0]) * (hf[0] - h->to[0][0]) + (hf[1] - h->to[0][1]) * (hf[1] - h->to[0][1]) + (hf[2] - h->to[0][2]) * (hf[2] - h->to[0][2]);
+             float b = (hf[0] - h->from[0]) * (hf[0] - h->from[0]) + (hf[1] - h->from[1]) * (hf[1] - h->from[1]) + (hf[2] - h->from[2]) * (hf[2] - h->from[2]);

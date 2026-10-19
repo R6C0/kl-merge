@@ -32,8 +32,13 @@ if [CrewHop.6] exists. GUESS values; N 10..600.
 
 --leaderless-player (2026-10-19, re/retomoto_hop6_ini.md; needs --leaderless-hop): writes [CrewHop.6] with Player=1 instead of Player=0.
 klhop.c then lets the hop fire only after a LIVING criminal human has stood nearer To.1 than From (sticky). A living human in the
-tower never does, so the crew is not carried away from him. NOTE (from the code, not a guess): a fed or dead human never does either
+tower never does, so the crew is not carried away from them. NOTE (from the code, not a guess): a fed or dead human never does either
 (kle_human is type 2 only), so with this flag the hop never fires for a fed crew. It is the living-human half only.
+
+--leaderless-nohuman (2026-10-19, re/retomoto_hop6_living.md s6; needs --leaderless-hop; needs a klhop.c WITH the NoHuman gate):
+writes NoHuman=1 after Player= in [CrewHop.6]. The hop then idles (its timers stay 0) while a LIVING human exists and counts Wait
+from the moment they are dead or a fed. REFUSED together with --leaderless-player: Player=1 never passes for a fed, so the hop would
+not fire for a fed crew and the gate would be pointless. An OLD hook ignores the unknown key (GetPrivateProfileInt) = the plain hop.
 
 Exit code 0 = written and verified (only the named lines differ), 1 = refused."""
 import sys, os, re, shutil, hashlib, argparse
@@ -46,13 +51,13 @@ RESCUE = ["; --rescue-wedge (kl_rt_joinini.py): boardroom-corridor wedge, bots s
 MARGINS = ['CrewHop.2.Radius=800', 'CrewHop.3.Height=250']
 
 
-def leaderless_lines(n, player=0):
+def leaderless_lines(n, player=0, nohuman=0):
     """--leaderless-hop N (re/retomoto_leaderless.md): a catch-all hop for the whole tower. A bot that has stayed N s inside it
     (the timer is per bot and restarts when it leaves the circle) is carried to the street places once. It is NOT tied to the
     human becoming a fed (a hop cannot see that; that needs hook code, see the doc). ALL VALUES ARE GUESSES."""
     return ["; --leaderless-hop %d (kl_rt_joinini.py): any bot that stays in the tower %d s is carried to the street (once)." % (n, n),
             "; GUESS: From / Radius / Height cover the tower floors (heights 18500..21500, 6000 around x=2000 z=-500); N is not tested.",
-            "[CrewHop.6]", "From=2000 20000 -500", "Radius=6000", "Height=1500", "Wait=%d" % n, "Stage=0", "Player=%d" % player, "Again=0",
+            "[CrewHop.6]", "From=2000 20000 -500", "Radius=6000", "Height=1500", "Wait=%d" % n, "Stage=0", "Player=%d" % player] + (["NoHuman=1"] if nohuman else []) + ["Again=0",
             "Places=7", "To.1=6272 570 -5200", "To.2=5872 570 -5585", "To.3=5708 570 -5705", "To.4=5828 570 -6309",
             "To.5=5708 570 -7245", "To.6=5872 570 -7025", "To.7=5952 570 -7770"]
 
@@ -108,6 +113,7 @@ def main(argv):
     ap.add_argument('--giveup', type=int, metavar='SECONDS', default=None)
     ap.add_argument('--leaderless-hop', type=int, metavar='SECONDS', default=None)
     ap.add_argument('--leaderless-player', action='store_true')
+    ap.add_argument('--leaderless-nohuman', action='store_true')
     ap.add_argument('--dry', action='store_true')
     a = ap.parse_args(argv)
     if a.leaderless_hop is not None:
@@ -117,6 +123,10 @@ def main(argv):
             raise SystemExit('refused: --leaderless-hop and --rescue-wedge both add [CrewHop.6]')
     if a.leaderless_player and a.leaderless_hop is None:
         raise SystemExit('refused: --leaderless-player needs --leaderless-hop N')
+    if a.leaderless_nohuman and a.leaderless_hop is None:
+        raise SystemExit('refused: --leaderless-nohuman needs --leaderless-hop N')
+    if a.leaderless_nohuman and a.leaderless_player:
+        raise SystemExit('refused: --leaderless-nohuman and --leaderless-player cancel out (Player=1 never passes for a fed)')
     gu = []
     if a.giveup is not None:
         if not 5 <= a.giveup <= 600:
@@ -144,9 +154,9 @@ def main(argv):
         if re.search(rb'^\s*\[CrewHop\.6\]', data, re.M):
             raise SystemExit('refused: [CrewHop.6] already exists')
         nl = b'\r\n' if b'\r\n' in data else b'\n'
-        add = nl.join(x.encode() for x in leaderless_lines(a.leaderless_hop, 1 if a.leaderless_player else 0)) + nl
+        add = nl.join(x.encode() for x in leaderless_lines(a.leaderless_hop, 1 if a.leaderless_player else 0, 1 if a.leaderless_nohuman else 0)) + nl
         new = new + (b'' if new.endswith(b'\n') else nl) + nl + add
-        print('appended [CrewHop.6] catch-all, Wait=%d, Player=%d' % (a.leaderless_hop, 1 if a.leaderless_player else 0))
+        print('appended [CrewHop.6] catch-all, Wait=%d, Player=%d%s' % (a.leaderless_hop, 1 if a.leaderless_player else 0, ', NoHuman=1' if a.leaderless_nohuman else ''))
     for d in done:
         print('KLJoin.ini [%s] %s: %s -> %s' % d)
     if a.dry:

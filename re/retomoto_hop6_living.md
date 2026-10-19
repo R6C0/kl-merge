@@ -105,3 +105,61 @@ Changed:
 5. klmove.c was checked as asked: it does nothing before the van (CrewRouteHold / CrewRouteFed run only at a van visit, klmove.c:1143-1181; the live [Bots] ini has CrewRouteHold=45, CrewRouteAlone=1). It neither causes nor prevents the pre-emption, so it does not enter (b) and cannot be the fix (3.2 stands).
 6. Prediction (b) is unchanged and is still a code-only prediction: no log covers a living human at r156. The new log L97 (00:51-00:59, PT_DM09_fedvan_die_brl, hook e5_1019a) is the BoardReachLast run, not (q); its human joined by box 9 at 00:54:25 as a fed.
 7. Caveat added to 3.3: kle_human also returns 0 when the human's node is flagged off (bit 10; aboard, possibly mid-teleport or in the lift; GUESS). With NoHuman a flicker only zeroes the timers, so the failure mode is a hop that fires late, never early.
+
+
+## 6. NoHuman gate, compiled (2026-10-19)
+
+Written in a COPY (`C:\Users\Henri\AppData\Local\Temp\claude\nohuman\klhook`); klhook/ in the repo is untouched (klhop.c is 3f's). Nothing launched, installed or committed. Default `NoHuman=0` leaves every path as before: the new test sits before the existing `Player` block and is false.
+
+Patch (also `...\nohuman\klhop_nohuman.patch`, apply with `patch -p1` from the repo root):
+```diff
+@@ -117,7 +117,7 @@
+-struct klv_hop { int on, nto, stage, player, walk; DWORD wait, ...
++struct klv_hop { int on, nto, stage, player, nohuman, walk; DWORD wait, ...
+@@ -164,6 +164,7 @@  (klv_source, after the Player= line)
++        h->nohuman = GetPrivateProfileIntA(sec, "NoHuman", 0, file) != 0;       /* 2026-10-19: 1 = idle (timers 0) while a LIVING human exists */
+@@ -411,6 +412,11 @@  (klv_tick, after "if (!h->on) continue;")
++        if (h->nohuman && human) {
++            static DWORD held_at; memset(klv_r.since[hi], 0, sizeof klv_r.since[hi]);
++            if (klv.log && now - held_at >= 30000) { held_at = now; klog("hop: hop %d held (NoHuman=1): a living human is in play", hi + 1); }
++            continue;
++        }
+```
+(the first line is abbreviated here; the .patch file has the full context.)
+
+Differences from the 3.3 sketch: the field sits between `player` and `walk`; the reset zeroes the whole `since` row of the hop (as 3.3); one log line `hop: hop N held (NoHuman=1): a living human is in play`, at most once per 30 s (one static shared by all hops; GUESS fine, only hop 6 uses the key); silent under `Log=0`. The gate sits before the `Player` block, so with NoHuman=1 and Player=1 the passed-flag is not updated while a living human exists.
+
+Compile: `klhook\build_auto.bat <out>` (the TEST build with klauto.c; VS2022 x86 cl via vcvarsall, as the out_e5_* folders): no errors, dinput8.dll linked. md5 **604e4dd4ec898dee97e3949658963851** at `...\nohuman\out\dinput8.dll` (not copied anywhere). GUESS: the live a57d9ce7 is also a TEST build; no out_* folder matched that hash, so a build of the unmodified klhop.c would be the fair byte comparison. Not run in the game.
+
+KLJoin: `python tools/kl_rt_joinini.py C:\kl_build_1019\rt_hop6_living\src_b2bb6a2f C:\kl_build_1019\rt_hop6_living\DM09_nohuman --leaderless-hop 150 --leaderless-nohuman`
+- New flag `--leaderless-nohuman` (needs `--leaderless-hop`, refused alone). REFUSED with `--leaderless-player`: Player=1 never passes for a fed, so the combination would hold the hop for a fed crew too and defeat the gate.
+- Default output unchanged (re-run today): `--leaderless-hop 150` = 0b557e406f311803518b2727a4083878; with `--leaderless-player` = fcfc2a7c1defde22427160538884dfbb.
+- Staged: `C:\kl_build_1019\rt_hop6_living\DM09_nohuman\KLJoin.ini` = **79f3c66ead3bcd1934f817188fc9aa56**. Diff vs 0b557e40: one added line, `NoHuman=1` after `Player=0` (line 655); nothing else.
+
+Old hook with this KLJoin: klv_source calls GetPrivateProfileIntA only for the keys it knows (klhop.c:159-172); the section test `GetPrivateProfileStringA(sec, 0, ...)` needs only the section to exist. An unknown key is ignored, so the old hook behaves exactly like 0b557e40 (hop 6 fires at r~156 whatever the human does).
+
+Test plan for 3f (hook = the nohuman build, KLJoin = DM09_nohuman; restore the live b2bb6a2f and hook afterwards):
+1. Living slow human (L101 script, alive in the tower past r156). Expect `grep -c "hop 6: at From for" L.log` = 0 while they live; `grep "hop 6 held (NoHuman=1)"` about every 30 s; no `by=hop TELEPORT` before they leave the tower; the crew stays near them. After an early join the bots stand at y 570 and the hop is inert as before.
+2. Fed human (L97 script, human turns fed at r~22). Expect the held line to stop once kle_human returns 0, the timers to start then, and with Wait=150 the 7 `hop 6: at From for 150.x s` lines 150 s after the fed state (r~172+, LATER than L97's r156; GUESS: a shorter Wait such as 25-60 may be wanted, re-stage with `--leaderless-hop 60 --leaderless-nohuman` if the van is missed). Compare with L97: 6 of 6 out.
+3. Optional: a human who dies in the tower after r156: the 150 s starts at death (GUESS: kle_human is 0 during the death countdown, harmless).
+4. Hops 1-5 (no NoHuman key) must fire exactly as in L97, same wait times.
+
+### 6.1 Review (2026-10-19, adversarial, static)
+
+Confirmed
+- Gate logic against the real klv_tick (klhop.c 387-445): `human = kle_human(...)` is taken once per tick before the hop loop; kle_human is non-zero only for a local player object with type byte +0x273c == 2, readable feet and a node not flagged off (klescort.c:491-500). A fed human is type 3 and a dead one is not type 2 (GUESS for the death countdown), so `NoHuman=1` holds only while a LIVING human exists and releases for a fed or dead one.
+- Resetting `since[hi][*]` cannot starve the hop: while held the row stays 0, and on the first tick after release the existing code sets `since = now` for every bot at From, so Wait counts from the release (fed/death), never from a stale value. A bot that already waited 150 s must wait the full Wait again after release: by design, and the reason to consider a shorter Wait for the fed case.
+- A flicker of kle_human (node bit 10, mid-teleport) can only zero the timers (human=1 tick) or leave them running (human=0 tick); it never makes the hop fire early.
+- Other callers of the hop path: klv_follow / klv_walks / the `after` records act only on bots already carried or on hops with WalkTo; CrewHop.6 has no WalkTo, so nothing bypasses the gate. A future NoHuman hop WITH WalkTo would bypass it (klv_walks is not gated): OPEN, not needed for hop 6.
+- Default 0: `h->nohuman` is 0 from GetPrivateProfileIntA, the added `if` is false, no other line changed (copy vs repo klhop.c differs in exactly the 8 patch lines; the repo diff of the whole file shown by git is only line endings).
+- Builder re-run: `--leaderless-hop 150` = 0b557e406f311803518b2727a4083878, with `--leaderless-player` = fcfc2a7c1defde22427160538884dfbb, with `--leaderless-nohuman` = 79f3c66ead3bcd1934f817188fc9aa56 (equals the staged DM09_nohuman/KLJoin.ini; one added line `NoHuman=1`). `--leaderless-nohuman` alone and with `--leaderless-player` both refuse (exit 1).
+- Repo: git status shows nothing modified under klhook/ (only the untracked out_* folders that were already there).
+- dll md5 604e4dd4ec898dee97e3949658963851 re-checked.
+
+Fixed
+- This doc had mixed CRLF/LF line endings (107 CR); normalised to LF like HEAD. No control characters otherwise; the new text uses they/them (it names no pronoun).
+
+Open
+- `static DWORD held_at` is shared by all hops (log throttle only; harmless).
+- Not run in the game; the live hook a57d9ce7 build type (TEST or not) is still unmatched.
+- Whether kle_human is 0 during a human's death countdown (a held hop would then release at the start of it) is unverified: test plan item 3.
