@@ -126,7 +126,7 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   waits for (k)/(l).
 - ADOPT 3 (staged 2026-10-19, C:\kl_build_1019\adopt_1019, dry-run only): KLJoin b2bb6a2f -> 0b557e40 + PerMap=1 + [Bots.DM09] L97 keys (+ WalkExclusive, global GUESS; a no-WalkExclusive variant exists).
   - ADOPT 3h: SHIP hook b28dd444 (HEAD 3f5737c2; six klhook commits beyond 1018zh, all keys default 0) from 249ab16a or 916c3c57. Without 3h the DM09 keys are inert/partly inert.
-  - Order with ADOPT 2: 2, then 3. DECISION: yes/no on 3 + 3h. Not run for real.
+  - Order with ADOPT 2: 2, then 3; undo 3 before 2 (UNDO 2 drops PerMap; re-running ADOPT 3 repairs it). Review w5k99giuv: md5 guards and byte-exact undo pass on scratch copies; one UNDO 3 PerMap bug fixed. DECISION: yes/no on 3 + 3h. Not run for real.
 
 ### Hasta, DM11B [page 3 F04]
 - LIVE: ce42dcc9 + KLJoin 437c96ee.

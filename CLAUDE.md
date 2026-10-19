@@ -188,6 +188,12 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-19 01:19 - OFFLINE (kl-merge-e5; 3f runs the live queue (p) (q) (r) (t)):
+- Retomoto: L97 escaped with a fed human, all 6 living bots, using the new opt-in BoardReachLast (klmove dc41de85). L96 without it: 3.
+- ADOPT 3 is staged in C:\kl_build_1019\adopt_1019 and reviewed (dry runs only): leaderless KLJoin 0b557e40 + [Bots.DM09] L97 keys, plus 3h, SHIP hook b28dd444, never run in the game. Order: 2, then 3; undo 3 before 2.
+- Vault L98 BoardReachAimHeight: do not adopt. Park II L99 loot6 3386b972: a bot takes the moved case, all 7 out; adopt candidate.
+- Hot Coffee II: tools/kl_hc2_strip.py (opt-in) makes the campaign cars not blow up; a cars-only build 21c6ed49 is queued for 3f as (t).
+Owner: git push origin rtp-schemas (about 40 ahead) and git push origin rtp-schemas:main.
 2026-10-19 00:27 - OFFLINE (kl-merge-e5; 3f runs the live queue (k) (l) (n) (o) (p)):
 - 3f's Vault runs L91 (control) and L92 (door B): the vault is not sealed, only timed; the bots get in at r ~139.
   - Door B only lets the human in about 100 s early. Both runs took about 2.3 M in loot.
@@ -211,13 +217,6 @@ Owner:
 - Retomoto leaderless KLJoin 0b557e40 is queued as (k). Candidates for the owner are in re/adopt_list.md.
 - Workflow w2320ln0e: census of the BoardReachAim off-floor orders per map, written to re/reach_aim_census.md.
 Owner: git push origin rtp-schemas (14 ahead) and git push origin rtp-schemas:main.
-2026-10-18 22:35 - OFFLINE (kl-merge-e5; owner idle 3.8 h, so 3f was told its live queue can resume):
-- A kl2.exe from 14/10 (pid 48664, 700 KB) is still listed: looks like a zombie, left to 3f.
-- Workflow w4ihof82z: Retomoto leaderless crew. Why the bots stall after the human turns fed (FedSkip, hops, GIVE UP), plus an opt-in fix:
-  - if ini keys are enough: a kl_rt_joinini flag, staged at C:\kl_build_1018\rt_leaderless;
-  - otherwise: a klcrew_rt.c proposal for 3f.
-  Output: re/retomoto_leaderless.md.
-Owner: git push origin rtp-schemas (5 ahead) and git push origin rtp-schemas:main.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

@@ -1,3 +1,9 @@
+2026-10-19 01:19 - OFFLINE (kl-merge-e5; 3f runs the live queue (p) (q) (r) (t)):
+- Retomoto: L97 escaped with a fed human, all 6 living bots, using the new opt-in BoardReachLast (klmove dc41de85). L96 without it: 3.
+- ADOPT 3 is staged in C:\kl_build_1019\adopt_1019 and reviewed (dry runs only): leaderless KLJoin 0b557e40 + [Bots.DM09] L97 keys, plus 3h, SHIP hook b28dd444, never run in the game. Order: 2, then 3; undo 3 before 2.
+- Vault L98 BoardReachAimHeight: do not adopt. Park II L99 loot6 3386b972: a bot takes the moved case, all 7 out; adopt candidate.
+- Hot Coffee II: tools/kl_hc2_strip.py (opt-in) makes the campaign cars not blow up; a cars-only build 21c6ed49 is queued for 3f as (t).
+Owner: git push origin rtp-schemas (about 40 ahead) and git push origin rtp-schemas:main.
 2026-10-19 00:27 - OFFLINE (kl-merge-e5; 3f runs the live queue (k) (l) (n) (o) (p)):
 - 3f's Vault runs L91 (control) and L92 (door B): the vault is not sealed, only timed; the bots get in at r ~139.
   - Door B only lets the human in about 100 s early. Both runs took about 2.3 M in loot.
