@@ -1,3 +1,7 @@
+2026-10-19 04:35 - OFFLINE (kl-merge-e5; no live run this hour):
+- Retomoto NoHuman gate (c2422ebd): re/klhop_nohuman.patch (8 lines in klhop.c, default 0 unchanged, compiled in a scratch copy, NOT run) + KLJoin 79f3c66e (kl_rt_joinini --leaderless-nohuman). 3f's permission check refused applying it, so it waits for the owner (re/adopt_list.md, Retomoto).
+- Workflow w5512swo1: cross-checks every one-click ADOPT script (1-6, 2b, 3h) for shared files, order and conflicts; writes C:\kl_build_1019\START_HERE_adopt.txt.
+Owner: git push origin rtp-schemas (68 ahead) and git push origin rtp-schemas:main; the NoHuman patch; ADOPT 1-6.
 2026-10-19 03:35 - OFFLINE (kl-merge-e5; 3f idle, no live run this hour):
 - re/private_match.md (7b25ff8d, static only): an actor is updated by the owner of its net object; hits are applied on the victim owner's machine; join code 3 = host not in game; no host migration (HostDisconnect ends the match). Wire ids = slot index is a GUESS, so both PCs need a byte-identical map zip.
 - Workflow wc0yrdsje: the Retomoto klhop NoHuman gate as a compiled patch in a scratch copy for 3f (klhop.c is 3f's file) plus an opt-in kl_rt_joinini --leaderless-nohuman KLJoin (re/retomoto_hop6_living.md).
