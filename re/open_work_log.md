@@ -1,3 +1,4 @@
+2026-10-19 11:35 - OFFLINE (kl-merge-e5): owner active (idle 74 s), so no live runs. The owner pushed and approved NoHuman; 3f applied it (e5c37c93) and wrote the Hot Coffee II attic/door plan (re/hotcoffee2_attic_door.md, 3f's builder). Nothing new for e5.
 2026-10-19 10:35 - OFFLINE (kl-merge-e5): the owner used the PC about 10:12 (idle 23 min at 10:35), so no live runs. No change otherwise; the owner list is in the 08:40 note.
 2026-10-19 09:35 - OFFLINE (kl-merge-e5): no change since 08:40. Owner idle 7 h, 3f quiet, no workflow running: every list item waits for the owner (push, ADOPT scripts, NoHuman + PoolLog patches, EscortUntil) or for 3f's live runs.
 2026-10-19 08:40 - OFFLINE (kl-merge-e5; owner idle 6 h, no live run this hour):
