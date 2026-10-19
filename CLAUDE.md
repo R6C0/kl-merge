@@ -188,6 +188,10 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-19 07:35 - OFFLINE (kl-merge-e5; owner idle 5 h, 3f quiet, no live run this hour):
+- re/private_match.md (28df2546, static; floor + build check re-read by me): pool cap = max(class-table sum + constants, 26624). No map wraps a 16-bit id at round start (largest FA map DM05A); bit-30 ids never go on the wire. Open GUESS: pool rebuilt per level or kept per session. Rule for now: both PCs start the session on the same map zip and build.
+- Workflow wppeublj4: an opt-in KLHook [Net] PoolLog patch for 3f (re/klnet_poollog.patch, compile-checked in a scratch copy, NOT applied, NOT run) + test plan that settles the pool lifetime.
+Owner: git push origin rtp-schemas (76 ahead) and git push origin rtp-schemas:main; the NoHuman patch; ADOPT scripts (C:\kl_build_1019\START_HERE_adopt.txt).
 2026-10-19 06:35 - OFFLINE (kl-merge-e5; owner idle 4 h, 3f quiet, no live run this hour):
 - tools/kl_netcheck.py (6fc9786f, read-only): 'python tools/kl_netcheck.py a.zip b.zip' says SAME SLOT ORDER or where two map zips part. Same = necessary, not sufficient. The live Hasta and ADOPT 5's differ from entity 20014, so both players need the same ADOPT state.
 - Workflow wx2qvvgam (stage 4, static): is the object pool sized per level or per session, can 16-bit ids overflow, who makes dynamic ids (re/private_match.md).
@@ -197,10 +201,6 @@ Owner: git push origin rtp-schemas (73 ahead) and git push origin rtp-schemas:ma
 - C:\kl_build_1019\START_HERE_adopt.txt (017cbfda): the owner's one-page sheet for ADOPT 1-6, 2b, 3h (pick 1 or 5, 2b or 3h; 2 before 3). All hashes OK.
 - Workflow wndt361o6: new read-only tools/kl_netcheck.py, a slot-order fingerprint two players can compare.
 Owner: git push origin rtp-schemas (71 ahead) and git push origin rtp-schemas:main; the NoHuman patch; ADOPT scripts.
-2026-10-19 04:35 - OFFLINE (kl-merge-e5; no live run this hour):
-- Retomoto NoHuman gate (c2422ebd): re/klhop_nohuman.patch (8 lines in klhop.c, default 0 unchanged, compiled in a scratch copy, NOT run) + KLJoin 79f3c66e (kl_rt_joinini --leaderless-nohuman). 3f's permission check refused applying it, so it waits for the owner (re/adopt_list.md, Retomoto).
-- Workflow w5512swo1: cross-checks every one-click ADOPT script (1-6, 2b, 3h) for shared files, order and conflicts; writes C:\kl_build_1019\START_HERE_adopt.txt.
-Owner: git push origin rtp-schemas (68 ahead) and git push origin rtp-schemas:main; the NoHuman patch; ADOPT 1-6.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
