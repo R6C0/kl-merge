@@ -188,6 +188,11 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-19 05:35 - OFFLINE (kl-merge-e5; owner idle, 3f quiet, no live run this hour):
+- re/private_match.md (a4cd8b5c, 79b85d66; static, encoder/alloc re-read by me): a net id = slot tag * pool capacity + pool slot index + 1; map-loaded slots have tag 0, +1 per reuse. So both PCs must load the same entity order / cluster table; byte-identical zip is still a GUESS. A mismatched order makes a hit land on the WRONG object, not on none.
+- C:\kl_build_1019\START_HERE_adopt.txt (017cbfda): the owner's one-page sheet for ADOPT 1-6, 2b, 3h (pick 1 or 5, 2b or 3h; 2 before 3). All hashes OK.
+- Workflow wndt361o6: new read-only tools/kl_netcheck.py, a slot-order fingerprint two players can compare.
+Owner: git push origin rtp-schemas (71 ahead) and git push origin rtp-schemas:main; the NoHuman patch; ADOPT scripts.
 2026-10-19 04:35 - OFFLINE (kl-merge-e5; no live run this hour):
 - Retomoto NoHuman gate (c2422ebd): re/klhop_nohuman.patch (8 lines in klhop.c, default 0 unchanged, compiled in a scratch copy, NOT run) + KLJoin 79f3c66e (kl_rt_joinini --leaderless-nohuman). 3f's permission check refused applying it, so it waits for the owner (re/adopt_list.md, Retomoto).
 - Workflow w5512swo1: cross-checks every one-click ADOPT script (1-6, 2b, 3h) for shared files, order and conflicts; writes C:\kl_build_1019\START_HERE_adopt.txt.
@@ -196,11 +201,6 @@ Owner: git push origin rtp-schemas (68 ahead) and git push origin rtp-schemas:ma
 - re/private_match.md (7b25ff8d, static only): an actor is updated by the owner of its net object; hits are applied on the victim owner's machine; join code 3 = host not in game; no host migration (HostDisconnect ends the match). Wire ids = slot index is a GUESS, so both PCs need a byte-identical map zip.
 - Workflow wc0yrdsje: the Retomoto klhop NoHuman gate as a compiled patch in a scratch copy for 3f (klhop.c is 3f's file) plus an opt-in kl_rt_joinini --leaderless-nohuman KLJoin (re/retomoto_hop6_living.md).
 Owner: git push origin rtp-schemas (65 ahead) and git push origin rtp-schemas:main; ADOPT 1-6 in C:\kl_build_1018\adopt_1018 and C:\kl_build_1019\adopt_1019.
-2026-10-19 02:35 - OFFLINE (kl-merge-e5; 3f runs the live queue):
-- Hasta: 3f's L106 = police4 S90 + [Bots] EscortUntil=1: PASS, you + ALL 7 out. The escort boarded the first heli with 19 s to spare; in L105 it was killed walking (re/hasta_idle_bot.md: it was the escort, not idle). [Bots] is global on the live hook; per map needs ADOPT 2b.
-- One-click ADOPT 6 Park II loot6 3386b972 staged and scratch-tested. ADOPT 5 (Hasta police4) is an alternative to ADOPT 1 (same zip), not to ADOPT 3.
-- Workflow wi51gw6tn (stage 4, static only): the open private-match questions, written to re/private_match.md.
-Owner: git push origin rtp-schemas (63 ahead) and git push origin rtp-schemas:main; ADOPT 1-6 in C:\kl_build_1018\adopt_1018 and C:\kl_build_1019\adopt_1019.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

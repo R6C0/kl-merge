@@ -1,3 +1,8 @@
+2026-10-19 05:35 - OFFLINE (kl-merge-e5; owner idle, 3f quiet, no live run this hour):
+- re/private_match.md (a4cd8b5c, 79b85d66; static, encoder/alloc re-read by me): a net id = slot tag * pool capacity + pool slot index + 1; map-loaded slots have tag 0, +1 per reuse. So both PCs must load the same entity order / cluster table; byte-identical zip is still a GUESS. A mismatched order makes a hit land on the WRONG object, not on none.
+- C:\kl_build_1019\START_HERE_adopt.txt (017cbfda): the owner's one-page sheet for ADOPT 1-6, 2b, 3h (pick 1 or 5, 2b or 3h; 2 before 3). All hashes OK.
+- Workflow wndt361o6: new read-only tools/kl_netcheck.py, a slot-order fingerprint two players can compare.
+Owner: git push origin rtp-schemas (71 ahead) and git push origin rtp-schemas:main; the NoHuman patch; ADOPT scripts.
 2026-10-19 04:35 - OFFLINE (kl-merge-e5; no live run this hour):
 - Retomoto NoHuman gate (c2422ebd): re/klhop_nohuman.patch (8 lines in klhop.c, default 0 unchanged, compiled in a scratch copy, NOT run) + KLJoin 79f3c66e (kl_rt_joinini --leaderless-nohuman). 3f's permission check refused applying it, so it waits for the owner (re/adopt_list.md, Retomoto).
 - Workflow w5512swo1: cross-checks every one-click ADOPT script (1-6, 2b, 3h) for shared files, order and conflicts; writes C:\kl_build_1019\START_HERE_adopt.txt.
