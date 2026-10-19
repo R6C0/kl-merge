@@ -124,6 +124,9 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   - Still open: (q), the same set with a living human (workflow w8f1muo8a predicts it, re/retomoto_hop6_living.md).
 - DECISION: WalkExclusive=1 + LastVehicleLead=450 are CANDIDATES (they acted as designed in L83/L84, no harm seen; two runs only); van boarding with a fed human
   waits for (k)/(l).
+- ADOPT 3 (staged 2026-10-19, C:\kl_build_1019\adopt_1019, dry-run only): KLJoin b2bb6a2f -> 0b557e40 + PerMap=1 + [Bots.DM09] L97 keys (+ WalkExclusive, global GUESS; a no-WalkExclusive variant exists).
+  - ADOPT 3h: SHIP hook b28dd444 (HEAD 3f5737c2; six klhook commits beyond 1018zh, all keys default 0) from 249ab16a or 916c3c57. Without 3h the DM09 keys are inert/partly inert.
+  - Order with ADOPT 2: 2, then 3. DECISION: yes/no on 3 + 3h. Not run for real.
 
 ### Hasta, DM11B [page 3 F04]
 - LIVE: ce42dcc9 + KLJoin 437c96ee.
@@ -158,6 +161,11 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   - No bot came within reach of the tea-house case.
   - Rec 2 was routed there at 23:35:36; the escort re-pointed it to the human 2 s later.
   - Rerun queued: the same zip and ini with [Bots] Escort=0, sent to 3f as (o).
+- RUN L99 (3f (o): loot6 3386b972 + hook zi + PT_DM06B_noesc, Escort=0): PASS 400 s. A BOT TOOK THE MOVED CASE.
+  - Rec 1, on the game's own loot choice and with no klmove order, walked into the tea house and stood 72 flat from the case.
+    It gained $150,000 there (= the case).
+  - Rec 4 came later to the same spot and got nothing (the case was empty). All 7 bots got out.
+  - loot6 3386b972 is now an ADOPT CANDIDATE (one run). The owner's call.
 
 ### Hot Coffee II, DM01B [page 3 F03]
 - LIVE: ea8cbc82 (walk-through doors; rollback = DM01B.replaced-1018doors, 01749906).
