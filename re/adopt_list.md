@@ -1,5 +1,7 @@
 # Adopt list (2026-10-18, offline; e5 compiled from the logs and a read-only look at <DD> and C:\kl_build_1018)
 
+INSTALLED BY THE OWNER (checked read-only 2026-10-19 19:36, md5 of the live files + the .before-adopt* backups): ADOPT 2 (Last Call 5b0a025b), 3 (Retomoto KLJoin + [Bots.DM09], WalkExclusive=1, PerMap=1), 3h (hook 1019ship b28dd444), 4 (Hot Coffee II cars 21c6ed49), 5 (Hasta police4 a9ee0ebe), 6 (Park II loot6 3386b972). Not used: 1 (5 was taken), 2b (3h includes it). 3f's C:\kl_build_1019\noblow install expects exactly these (DM11B a9ee0ebe, DM05A 5b0a025b) and stacks on top; its undo gives them back.
+
 START HERE (2026-10-19 04:38, workflow w5512swo1, read only): C:\kl_build_1019\START_HERE_adopt.txt is the owner's one-page sheet for all one-click scripts (1-6, 2b, 3h): what each does, pick-one groups (1 or 5; 3 or 3-noWE; 2b or 3h), order (2 before 3; 2b before 3h), undo order, disk space (C: 8.2 GB free: one script at a time). All 8 targets and 9 sources re-hashed OK; nothing applied yet. The kl2 zombie pid 48664 does not trip the guards (they count only kl2 with threads).
 
 Claims carry "per log note <date time>" (re/open_work_log.md) or "checked" (read in the files today). UNKNOWN = not in any note or file.
