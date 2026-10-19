@@ -184,6 +184,7 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
     It gained $150,000 there (= the case).
   - Rec 4 came later to the same spot and got nothing (the case was empty). All 7 bots got out.
   - loot6 3386b972 is now an ADOPT CANDIDATE (one run). The owner's call.
+  - STAGED as one-click ADOPT 6 (2026-10-19): C:\kl_build_1019dopt_1019\ADOPT 6 Park loot6.bat / UNDO 6. Zip swap only (7fef2733 -> 3386b972, backup .before-adopt1019park); every other file of the build folder is identical to live. Source read in place from C:\kl_build_1018\park_loot6\DM06B. Scratch test PENDING (kl2 was running; the running-game guard refused, as designed).
 
 ### Hot Coffee II, DM01B [page 3 F03]
 - LIVE: ea8cbc82 (walk-through doors; rollback = DM01B.replaced-1018doors, 01749906).
