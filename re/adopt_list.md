@@ -200,6 +200,7 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
     - CANDIDATE (pending L104): 21c6ed49 in place of ea8cbc82. It only stops the 45 campaign cars blowing up (tools/kl_hc2_strip.py --no-snipers).
   - RUN L104 (cars-only repeat): PASS 465 s, no one-shot, 0 deaths. 5 bots + a traitor out with $1.62M. L103's "1 explode line" was the ShakeScale setting line, so 0.
     - SCORE: live ea8cbc82 = one-shots in 4 of 4 hit-logged/observed runs (L70, L71, L93, L102); cars-only 21c6ed49 = 0 in 2 (L103, L104).
+    - ADOPT 4 / UNDO 4 Hot Coffee cars.bat in C:\kl_build_1019\adopt_1019. It swaps the zip with an md5 guard and a backup; tested on a scratch copy only.
     - DECISION: adopt 21c6ed49 for Hot Coffee II (zip only; every side file is identical to live). The mechanism (car blow-up with no log line?) is still being traced (workflow ww3881lpe, re/hotcoffee2_wholehit.md).
 
 ### Other installed maps (checked: KLExpansion\Maps; zips md5)
