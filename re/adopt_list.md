@@ -132,6 +132,7 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
   - Waste: rec 2 then got 19 escort orders (every 2 s) aimed at tower height until the human died at r 193.
   - The van came once, as the last vehicle: 2 out with $405k, 5 bots died in the street. The human was fed at r ~198, dead at r ~261.
   - CAVEAT FOR ADOPT 3: with a LIVING human who is slow, 0b557e40 strips them of the whole crew at r ~156. A fix is the NoHuman gate in klhop.c, or counting From time only while the human is also down there. klhop.c is 3f's file; it is on 3f's owner list, not done. Until then ADOPT 3 suits a fast human only.
+  - NoHuman gate READY FOR THE OWNER (2026-10-19, c2422ebd): re/klhop_nohuman.patch (8 lines in klhop.c, default 0 unchanged) + KLJoin C:\kl_build_1019\rt_hop6_living\DM09_nohuman (79f3c66e). Scratch TEST dll 604e4dd4 compiled, NOT run. 3f's permission check refused applying/building it, so it waits for the owner: apply the patch to klhook/klhop.c (or let 3f do it), build, then the s6 test plan in re/retomoto_hop6_living.md.
 
 ### Hasta, DM11B [page 3 F04]
 - LIVE: ce42dcc9 + KLJoin 437c96ee.
