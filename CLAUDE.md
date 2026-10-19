@@ -188,6 +188,10 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-19 23:30 - netcode + more guns (3f; static + build, nothing run live, owner at the PC):
+- klinv.c [Inv] Enable (Arcade only, inert online): the 2-gun limit is code (kl2 0x6cc2ef cmp bl,2; hashed). F8 shelves the gun not in hand (entry+8 = 0) so a third can be picked up; F8 again swaps back; restore checks item id + gun vtable (re/weapon_slots.md). Reviewed FIX -> fixed.
+- klnetfix.c [Net] Hold*: no legal receiver cure for spin/float (snap/steer thresholds are in hashed .rdata); only the dead-reckoning end time (3500 ms, .bss policies) - an EXPERIMENT, position keys client-only (re/netcode_receiver.md). Needs two PCs.
+Owner: C:\kl_build_1019\hook_1019d\INSTALL hook 1019d.bat (replaces 1019c; adds [Inv] Enable=1), noblow; Arcade: hold 2 guns, F8, pick up a third.
 2026-10-19 19:40 - Hasta chopper settled statically + opt-in fixes (3f; nothing run live, owner present):
 - re/hasta_chopper_1019.md: the chopper's VehicleEffects health (kl2 0x412430) <= 15 % forces the early lift-off, 0 with Definite = state 6. Damage source unknown. 12 of 216 departures destroyed, all Hasta. noblow stops state 6, not the early lift-off.
 - KLHook 1019c (b9bc4919, all OFF by default): [Down] Floor, [Bots] FoeSkipWhileFed, [Load] CursorGuard, [Bots] FollowOutHoldUnshielded (default 1); heli probe line shows hp=/max blow=.

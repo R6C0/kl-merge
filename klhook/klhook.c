@@ -649,6 +649,8 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klvis.c"
 #include "kltex.c"                                        /* kltex.c: [Graphics] Textures - anisotropic filtering (default on) */
 #include "klnet.c"
+#include "klnetfix.c"
+#include "klinv.c"
 #include "klfed.c"
 #include "klfedkit.c"
 #include "kldown.c"
@@ -780,6 +782,8 @@ static void klh_tick(int game_thread)
     klcs_tick(game_thread);                           /* klcensus.c: read-only actor list (returns at once unless [Census] Enable) */
     klvis_tick();                                  /* klvis.c: log only (the vision grid and its record 0xff) */
     klnet_tick(game_thread);                          /* klnet.c: multiplayer log / update numbers (off unless [Net]) */
+    klnetfix_tick(game_thread);                       /* klnetfix.c: [Net] Hold* receiver hold times (off unless set) */
+    klinv_tick(game_thread);                          /* klinv.c: [Inv] gun shelf, Arcade only (off unless Enable=1) */
     klp_tick(game_thread);                            /* klfed.c: come back as a fed (data writes only) */
     klfk_tick(game_thread);                           /* klfedkit.c: the fed can hunt, body, AK (with [Fed] Player=1; Kit=0 = off) */
     klbd_tick(game_thread);                           /* klbotdown.c: before kladren, which reads its down state */
@@ -1127,6 +1131,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klcs_init();                                      /* klcensus.c: reads [Census] */
     klvis_init();
     klnet_init();
+    klnetfix_init();
+    klinv_init();
     klp_init();
     klfk_init();
     kld_init();
