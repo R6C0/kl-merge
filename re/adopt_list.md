@@ -151,6 +151,8 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
     balance/hit/fire lines during the hold. The 300/360 s pictures show no police near you. GUESS: they never engaged, or never spawned.
   - DECISION: no reason yet to adopt police3 over 3a186c93 (ADOPT 1).
   - CAUSE FOUND (re/hasta_late_police.md, 30b5c425): police2/police3 can never start the 8. Way#01 and Way#02 share one GateGroup, which passes once (kl2 0x7fd5a0), so the stair top uses it up. L90/L100 tested nothing. Fix A (opt-in, police4) is being built by workflow w1ai9bl73.
+- STAGED, NOT RUN: police4, built with the opt-in --rest-late-direct flag; the delay names the 3 late squads directly. Folder C:\kl_build_1019\hasta_police4: DM11B (S=45, d49627cf), DM11B_S90 (S=90, a9ee0ebe, RECOMMENDED: the 8 start ~13 s after the van call, GUESS). KLJoin 437c96ee (= live).
+  - Only node 20000's list differs from police3. The checks pass. That a delay starts a 10_RunToCover rout is stock wiring (F01 Timer_SwatMoreForward). That the squads then show and move is a GUESS until a run. Queued with 3f as L105.
     - Layer check, police check, check_passes and klt_audit all PASS.
     - Queued as 3f (p): script PT_DM11B_p.ini 8b693466 holds the human about 75 s in the plaza.
   - Do not adopt police2.
