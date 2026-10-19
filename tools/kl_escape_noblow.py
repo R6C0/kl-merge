@@ -3,12 +3,17 @@ writes a copy. Does nothing unless run; no builder imports it. Written 2026-10-1
 
 WHY: on Hasta (DM11B) the escape vehicle is Dead Men M06's 'EscapeSetup!EscapeChopper\\Escape_Chopper' with VehicleEffects
 field 23 = BlowupChanceDefinite and health 2200. KLHook's FollowOutHold kept it waiting ~45 s for the crew but could not shield it
-(the 'Invulnerable' byte exists only on a ZAnimatedVehicle health object, the chopper has none), the police shot it down
-(state 6 = DESTROYED) and the five bots aboard died with it (KLHook.log 13:29:27). DM05A carries the same chopper.
+(the 'Invulnerable' byte exists only on a ZAnimatedVehicle health object, the chopper has none). It left early (state 5
+with ~37 s still on the timer) and was DESTROYED (state 6) 0.4 s after lift-off; the five bots aboard died with it (KLHook.log
+13:29:27). WHAT damaged it is NOT known (no damage line; police fire or a lift-off collision - re/hasta_chopper_1019.md).
+CERTAIN (static, kl2 0x412430 / 0x4127c3 -> 0x877f30 -> 0x594b10 -> rules slot 94 grade 2): state 6 needs the VehicleEffects
+health at 0 AND BlowupChance Definite; the early departure (grade 1, health <= 15 %) is NOT gated by it, so this pass stops
+the destruction but not an early lift-off. 12 of 216 logged departures ended in state 6, all on Hasta; DM05A 0 of 25.
+DM05A and DM06 carry the same chopper.
 WHAT IT CHANGES: VehicleEffects field 23 (enum BlowupChance*, CERTAIN) BlowupChanceDefinite -> BlowupChanceNone on every node
 under an 'EscapeSetup!' path. Only the .prp member differs: no entity added or removed, slot order unchanged (kl_netcheck).
-GUESS: that None alone keeps the vehicle out of state 6 (in Dog Days' own maps 'None' cars - armoured transports - do not blow up;
-whether a helicopter's death path also reads it is not proven).
+GUESS: that no other caller of the blow-up 0x877f30 (0x55f3ca, 0x7a73e1, 0x590480 unchecked) skips the BlowupChance test, and
+that a ZHeli at health 0 with None flies out normally. Not run in the game.
 Usage (from tools/):  python kl_escape_noblow.py <in Fxx_Main.zip> <out Fxx_Main.zip> [--prefix 'EscapeSetup!']
 """
 import os, sys, zipfile

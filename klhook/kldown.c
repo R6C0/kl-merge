@@ -420,10 +420,20 @@ static float kld_inif(const char *key, const char *def)
 }
 
 /* The trigger numbers: kept as found, written while act, put back when not. Game thread only. */
+/* [Down] Floor=1 (2026-10-19, owner run 13:23:03: killed from 3 % by two hits in 4 s, no knock-down - the game's rule wants
+   <= HealthPct AND a burst of Burst x MinHit hits inside Window, and the second hit came too late for it). The hook cannot
+   see a hit before the game applies it (0x8da3b0 / 0x458e7f run inside the game's frame; no code byte is patched here), so
+   the floor is the same thing the keys do, done in time: WHILE he is up, off cooldown and at or under FloorPct per cent of
+   his maximum, the game's own three trigger numbers are written to 'any hit floors him' (HealthPct 100, Burst 1, MinHit 1)
+   and put back the moment he is down, above the line or the part stops acting. The game's rule then runs unchanged and
+   gives him at least DownHealth, as for any knock-down. kld_fl.armed is read by kld_tuning(). */
+static struct { DWORD pl; int armed, was; float hp; DWORD t_arm, last; } kld_fl;
+static int kld_floor_on; static float kld_floor_pct;
+
 static void kld_tuning(int act, float max)      /* max: the player's maximum health, 0 = not known this pass */
 {
     DWORD tun = klh_rd32((DWORD_PTR)KLH_VA(KLD_TUNING)); float cur[KLD_NT]; int k, ok = 1, n = 0; char a[200], b[200]; int na = 0, nb = 0;
-    if (!kld.anykey) return;
+    if (!kld.anykey && !kld_floor_on) return;
     if (!tun) { kld_s.tun = 0; kld_s.tunhave = kld_s.tunput = 0; return; }
     for (k = 0; k < KLD_NT; k++) cur[k] = kld_rdf(tun + kld_t[k].off, &ok);
     if (!ok) return;
@@ -439,6 +449,7 @@ static void kld_tuning(int act, float max)      /* max: the player's maximum hea
     a[0] = b[0] = 0;
     for (k = 0; k < KLD_NT; k++) {
         float want = act && kld.want[k] >= 0 ? kld.want[k] : kld_s.tun0[k];
+        if (act && kld_fl.armed && k <= 2) want = k == 0 ? 100.0f : 1.0f;      /* Floor: HealthPct, Burst, MinHit (GUESS: the low-health variant [T+0x27c] x MinHit = 4 x 1 is left as built) */
         if (act && k == 5 && kld.want[k] >= 0) {                    /* DownHealth: never over his maximum (0x76a75b hands it to 0x61efd0,
                                                                        which was not read for a clamp; klbalance.c sets the maximum) */
             if (max < 1.0f) continue;                               /* maximum not known this pass: what stands there stays */
@@ -2092,6 +2103,29 @@ static void kld_rules(DWORD now)
     }
 }
 
+/* [Down] Floor=1: arm / disarm the floor (see kld_fl) and log every step of his health that is a hit while it matters.
+   Called once a pass with a valid player object d. The ATTACKER'S TEAM IS NOT LOGGED: the hit record is only reachable
+   through a soldier vtable wrapper (klbalance.c's note on slot 96), which this file does not install. */
+static void kld_floor(DWORD pl, DWORD d, DWORD ds, float hp, float max, int hpok, DWORD now)
+{
+    float cd = 0; int ok = 1, want, avail;
+    if (!kld_floor_on) return;
+    if (kld_fl.pl != pl) { memset(&kld_fl, 0, sizeof kld_fl); kld_fl.pl = pl; kld_fl.hp = hp; }
+    cd = kld_rdf(d + 0x38, &ok);
+    avail = ok && cd <= 0.0f;                                       /* [D+0x38] has run out = off cooldown (the game's own test, 0x8da3b0) */
+    want = hpok && ds == 0 && avail && hp > 0.01f && hp / max * 100.0f <= kld_floor_pct;
+    if (hpok && kld_fl.hp - hp >= 1.0f && (kld_fl.armed || want || hp <= 0.01f || kld_fl.was))
+        klog("down: floor: a hit of %.1f health (%.1f -> %.1f of %.1f), %s, cooldown %s%s, down state %lu; the attacker is not known to this part%s",
+             kld_fl.hp - hp, kld_fl.hp, hp, max, kld_fl.armed ? "the floor was armed" : "the floor was NOT armed", ok ? (avail ? "over" : "running") : "unreadable",
+             ok ? "" : " (the pause [D+0x38] could not be read)", ds, hp <= 0.01f && ds == 0 ? ": THIS HIT KILLED HIM without a knock-down" : "");
+    if (want != kld_fl.armed) {
+        kld_fl.armed = want; kld_fl.t_arm = now;
+        klog("down: floor: %s (health %.1f of %.1f, line %.0f %%): %s", want ? "ARMED" : "off", hp, max, kld_floor_pct,
+             want ? "the next hit floors him (HealthPct 100, Burst 1, MinHit 1 written by the tuning pass)" : "the game's trigger numbers go back");
+    }
+    kld_fl.was = want; kld_fl.hp = hp; kld_fl.last = now;
+}
+
 static void kld_tick_main(int game_thread)
 {
     static DWORD toldrules; static char toldwhy[200];
@@ -2122,6 +2156,7 @@ static void kld_tick_main(int game_thread)
     hpok = ok && max >= 1.0f;
     kld_tuning(act, ok ? max : 0.0f);
     if (!act || !pl) {
+        kld_fl.armed = 0; kld_fl.pl = 0;                            /* Floor: the numbers go back in the next tuning pass */
         if (kld_s.player) {
             if (kld.flop) kld_flop_words(kld_s.player, 0, 0);       /* the slot ids of the object we wrote go back while it still lives */
             kld_s.player = 0; kld_drop(); kld_s.dstate = 0; kld_s.nwin = 0; kld_s.fchk = kld_s.fok = kld_s.fhave = kld_s.fput = 0; kld_s.fwf = kld_s.fwu = 0;
@@ -2136,6 +2171,7 @@ static void kld_tick_main(int game_thread)
         kld_s.t_down = kld_s.t_lie = kld_s.t_up = now;
         kld_s.fchk = kld_s.fok = kld_s.fhave = kld_s.fput = 0; kld_s.fwf = kld_s.fwu = 0;
     }
+    kld_floor(pl, d, ds, hp, max, hpok, now);
     if (kld.flop) {                            /* the belly flop: his prone movement's slot ids, while he is up */
         /* review2 S3: klchar.c's body swap keeps the player object and gives it another set - the verdict (full-body, the
            events) is of the set it was made on. Looked at again while he is up when one of the three pointers changed */
@@ -2347,6 +2383,10 @@ static void kld_init(void)
     kld.on = GetPrivateProfileIntA("Down", "Enable", 0, klh_ini) != 0;
     kld.dry = GetPrivateProfileIntA("Down", "Dry", 0, klh_ini) != 0;
     kld.log = GetPrivateProfileIntA("Down", "Log", 1, klh_ini);
+    kld_floor_on = GetPrivateProfileIntA("Down", "Floor", 0, klh_ini) != 0;      /* opt-in: 0 = the game's own rule alone, as before */
+    kld_floor_pct = kld_inif("FloorPct", "50"); if (!kld_fin(kld_floor_pct) || kld_floor_pct < 1.0f || kld_floor_pct > 100.0f) kld_floor_pct = 50.0f;      /* GUESS: where a single hit can kill him */
+    memset(&kld_fl, 0, sizeof kld_fl);
+    if (kld_floor_on && kld.on) klog("down: floor: on (Floor=1, FloorPct=%.0f): at or under that health, while up and off cooldown, any hit floors him; logs every hit then", kld_floor_pct);
     kld.base = kld_inif("Base", "0.5"); kld.per = kld_inif("PerPress", "0.3"); kld.top = kld_inif("Top", "2.0"); kld.decay = kld_inif("Decay", "2.0");
     if (!kld_fin(kld.base) || kld.base < 0.1f || kld.base > 3.0f) kld.base = 0.5f;      /* under 0.1 a get-up would take over 8 s: a stuck player to anybody watching */
     if (!kld_fin(kld.top) || kld.top < kld.base || kld.top > 4.0f) kld.top = kld.base > 2.0f ? kld.base : 2.0f;

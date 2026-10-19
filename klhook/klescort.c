@@ -418,6 +418,7 @@ static struct {
     int n, dry, log, record, refill, until, stage, board; DWORD every; float far_, side, retarget;
     int all, all_stage, all_order; DWORD all_still;      /* BoardAll, BoardAllStage, BoardAllOrder, BoardAllStill in ms */
     int fo, fo_dry, fo_order, fo_spare, fo_shield, fo_crew_money; DWORD fo_after, fo_every, fo_money; float fo_hold;      /* FollowOut..: After / Every in ms, Hold in s; Shield 0 / 1 / 2 */
+    int fo_unshielded;      /* FollowOutHoldUnshielded (default 1): hold a vehicle that has no health object to shield */
     int fo_hold_alone, fo_stop, fo_come_moved; float fo_hold_alone_m;      /* FollowOutHoldAlone (+ ..Range in m), FollowOutStopPlace (2026-10-18, Vault run N1018_L22) */
 } kle;
 
@@ -931,7 +932,17 @@ static int kle_hold_guard(const struct klb_snap *s, DWORD now, int dry, char *wh
            health object this file's walk did not find (a derived class, another tree) is not held. */
         if (!klh_rd(s->rules + KLE_VEH_KIND, &kind, 1)) { strcpy(why, "the vehicle's kind [rules+0x1ec] cannot be read and no health object was found: it cannot be shielded"); return 0; }
         if (kind == 3) { strcpy(why, "the rules say it is the key-framed van (kind 3: a hit can destroy it) but no ZAnimatedVehicle was found under it: it cannot be shielded (FollowOutShield=0 holds all the same)"); return 0; }
-        snprintf(note, 200, "the vehicle has no ZAnimatedVehicle health object and is of kind %u, not 3 (a helicopter or a car: no hit calls 'destroyed' for it, 0x5aec7c): nothing to shield", kind);
+        /* 2026-10-19, live run 13:29:27 (Hasta, Dead Men Escape_Chopper, BlowupChanceDefinite, 2200 hp): the comment above
+           ASSUMED only kind 3 is ever destroyed. DISPROVEN: the held chopper (kind 2, 45 s hold, no shield possible) went to
+           state 6 and the rules killed the 5 bots aboard. No health / damage field of a ZHeli that could stand in for the
+           'Invulnerable' byte was established from kl2.exe, so nothing is written for it (GUESS: one may exist). Fallback:
+           an unshieldable vehicle is NOT held, it leaves on its own timer. [Bots] FollowOutHoldUnshielded=1 = the old
+           behaviour (hold all the same), for a test. */
+        if (!kle.fo_unshielded) {
+            snprintf(why, 199, "hold: vehicle unshieldable, not held (no ZAnimatedVehicle health object, kind %u: a helicopter or a car that takes hits and can be destroyed all the same; FollowOutHoldUnshielded=1 holds it anyway)", kind); why[199] = 0;
+            return 0;
+        }
+        snprintf(note, 200, "the vehicle has no ZAnimatedVehicle health object and is of kind %u, not 3 (a helicopter or a car): nothing to shield, held all the same (FollowOutHoldUnshielded=1)", kind);
         return 1;
     }
     if (!(v.hp > 0)) { strcpy(why, "the vehicle's health is 0: it is destroyed"); return 0; }
@@ -1453,6 +1464,7 @@ static void kle_init(void)
     kle_hold_step = klb_inif("HoldStep", "0"); if (!klb_finite(kle_hold_step) || kle_hold_step <= 0 || kle_hold_step > 60) kle_hold_step = 60.0f;      /* 0 = the whole hold at once */
     kle.fo_hold = klb_inif("FollowOutHold", "0"); if (!klb_finite(kle.fo_hold) || kle.fo_hold < 0) kle.fo_hold = 0; if (kle.fo_hold > 60) kle.fo_hold = 60;
     kle.fo_shield = klb_pos("FollowOutShield", 2, 3);                         /* also klmove.c's WaitForYouHold goes by it */
+    kle.fo_unshielded = GetPrivateProfileIntA("Bots", "FollowOutHoldUnshielded", 1, klh_ini) != 0;      /* DEFAULT 1 = the old behaviour: hold all the same; 0 = an unshieldable vehicle is not held (2026-10-19: Hasta loss still under investigation) */
     kle.fo_hold_alone = GetPrivateProfileIntA("Bots", "FollowOutHoldAlone", 0, klh_ini) != 0;
     kle.fo_hold_alone_m = klb_inif("FollowOutHoldAloneRange", "40"); if (!klb_finite(kle.fo_hold_alone_m) || kle.fo_hold_alone_m < 1) kle.fo_hold_alone_m = 40; if (kle.fo_hold_alone_m > 100) kle.fo_hold_alone_m = 100;      /* GUESS */
     kle.fo_stop = GetPrivateProfileIntA("Bots", "FollowOutStopPlace", 0, klh_ini) != 0;

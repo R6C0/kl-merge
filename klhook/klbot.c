@@ -327,7 +327,7 @@ static struct {
     int bribe, br_money, br_delay;
     int leave, lv_delay; float lv_dist;
     int van, van_chance, van_delay, van_left;
-    int foe, bs_crew; float bs_crew_near;     /* section 3 f / g: TraitorFoe, BackstabCrew, BackstabCrewNear */
+    int foe, foe_fed, bs_crew; float bs_crew_near;     /* section 3 f / g: TraitorFoe, BackstabCrew, BackstabCrewNear */
 } klb;
 
 struct klb_rec { int used; DWORD at, actor, money; BYTE status, stage, flags; float hit; };
@@ -685,8 +685,20 @@ static struct {                               /* what TraitorFoe wrote, per reco
     DWORD rules;
     DWORD actor[KLB_NREC], info[KLB_NREC], team0[KLB_NREC];
     char swapped[KLB_NREC], was[KLB_NREC], marked[KLB_NREC], refused[KLB_NREC]; BYTE st[KLB_NREC];
+    int fed_told;                                 /* FoeSkipWhileFed: the once-per-round line was written (cleared with the rest when the rules object changes) */
     int kills[KLB_NREC]; char spared[KLB_NREC];   /* section 3 h: crew deaths booked to a team-Enemy traitor; 1 = he is back on team Ally for good (this mask) */
 } klb_f;
+
+/* [Bots] FoeSkipWhileFed (2026-10-19, owner run 13:23:18: the human was a fed and crew deaths near the game's own traitor
+   were booked to him by section 3 h). Is the LOCAL human a policeman now? The byte klfed.c makes (ZFFPlayer + 0x2723; klfed.c
+   is included after this file, so it is read here as klbalance.c / kldown.c read it). Unreadable = no. */
+static int klb_human_fed(void)
+{
+    DWORD gd, pl; BYTE idx = 0xff, police = 0;
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || (signed char)idx < 0 || idx > 31 ||
+        !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || !klh_rd(pl + 0x2723, &police, 1)) return 0;
+    return police != 0;
+}
 
 static void klb_foe_back(const struct klb_snap *s, int i, const char *why)
 {
@@ -724,12 +736,14 @@ static void klb_foe_swap(const struct klb_snap *s, int i)
 /* game thread only; every pass while an Arcade round object is up. act: the level may be changed (section 0). */
 static void klb_foe_tick(const struct klb_snap *s, int act)
 {
-    int i, j, round = act && s->state == KLB_ROUND;
+    int i, j, round = act && s->state == KLB_ROUND, fed = klb.foe_fed && round && klb_human_fed();
     if (s->rules != klb_f.rules) { memset(&klb_f, 0, sizeof klb_f); klb_f.rules = s->rules; memset(klb_f.st, 0xff, sizeof klb_f.st); }
     for (i = 0; i < s->n && i < KLB_NREC; i++) {
         const struct klb_rec *r = &s->r[i]; DWORD fl = 0, at = s->score + KLB_SCORE_FL + 4 * i;
         /* evidence for K7: a death while a team-Enemy traitor is in play (who killed is not known to the hook) */
-        if (r->used && r->status == 7 && klb_f.st[i] == 0) {
+        if (fed && r->used && r->status == 7 && klb_f.st[i] == 0) {      /* FoeSkipWhileFed: no booking, no cap, while he is a policeman */
+            if (!klb_f.fed_told) { klb_f.fed_told = 1; klog("bots: FOE: you are a fed: crew deaths are NOT booked to a turned bot and TraitorKillMax does not run while you are one (FoeSkipWhileFed=1; said once a round)"); }
+        } else if (r->used && r->status == 7 && klb_f.st[i] == 0) {
             float vp[3], tp[3], d, best = -1; int nt = 0, near_ = -1, havev = r->actor && kle_node(klh_rd32(r->actor + 4), vp, 0);
             for (j = 0; j < s->n && j < KLB_NREC; j++) if (j != i && klb_f.swapped[j] && s->r[j].status == 0) {
                 nt++;
@@ -1009,6 +1023,7 @@ static void klb_init(void)
              klb.tr_max, klb.bs_near, klb.bs_behind, klb.bs_busy, klb.bs_wait);
     /* section 3 f / g (only said when set, as above) */
     klb.foe = GetPrivateProfileIntA("Bots", "TraitorFoe", 0, klh_ini) != 0;
+    klb.foe_fed = GetPrivateProfileIntA("Bots", "FoeSkipWhileFed", 0, klh_ini) != 0;      /* opt-in: 0 = as before */
     klb.bs_crew = klb_pct("BackstabCrew");
     klb.bs_crew_near = klb_inif("BackstabCrewNear", "1500"); if (!klb_finite(klb.bs_crew_near) || klb.bs_crew_near <= 0) klb.bs_crew_near = 1500;
     if (klb.bs_crew > 0 && !klb.foe) { klog("bots: BackstabCrew=%d%% needs TraitorFoe=1 (a turned bot is no enemy of the crew without it): BackstabCrew is OFF", klb.bs_crew); klb.bs_crew = 0; }
