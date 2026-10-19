@@ -881,3 +881,15 @@ Static only (python + capstone on kl2.exe, plus kl_gms on the stock zips). Nothi
 - So the rule stays: both PCs start the session on the same map zip and build. The opt-in PoolLog patch (re/klnet_poollog.patch) settles it
   live; a cheaper live probe would be to log [0xe0ff90] (or [db+8]) before and after one map change.
 
+## 2026-10-20 01:00: pool lifetime, static pass 3 (workflow w7af8b3iv, read only): still UNKNOWN; static search stopped
+- CONFIRMED: the sys interface is [0xdd2640]; the DB is [[0xdd2640]+0xac] (SetDatabase 0x4bd7b0, sys slot 27, deletes the old DB first).
+  Of the [+0x1348] writers only 0x4f82b8 (set, sys slot 16) and 0x583fff (clear, slot 47) are on the sys object; 0x6ee140 (full re-init,
+  new DB = new pool) has one caller, 0x584014, behind that flag.
+- Scene-change request: 0x6d36b0 reads DefaultSceneChangeName, sets [DB+0xb8]=1 (0x6d3984), then DB slot 29 (0x6d39e0) or session
+  manager (vtable 0xbd1ebc) slot 26 0x74c080 with state 0x28 / 0x1f. Those state-entry handlers (0x74c43d, 0x74c418 -> 0x89fa20) call no
+  DB slot 8/11/23/31/33 and no sys slot 16. 0x6bcc15 resets [DB+0xb8]/[DB+0xbc] and tears down session objects without clearing the pool.
+- Every candidate (DB slots 8, 11, 23, 31, 33; sys slots 9, 16) is reached only by virtual calls; no map-change caller was found
+  (absence, not proof). Not covered: the dispatcher that consumes [DB+0xb8], DB slot 29 handler 0x640640, MPMap / round-end 0x6c5338,
+  0x6c9f06, 0x89fa5d.
+- Next step is live, not static: log [0xe0ff90] and [db+8] before and after one map change (PoolLog, re/klnet_poollog.patch, owner's OK).
+
