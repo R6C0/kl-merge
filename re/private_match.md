@@ -748,3 +748,45 @@ Two readers answered; a third pass re-disassembled the cited addresses (kl_exe +
 5. Escape and loot: host-decided (Q4); test the client escaping.
 6. Log on both sides ([Net] Log=1) and note which PC hosted; a host disconnect ends the round (Q5).
 7. Still unknown: actor net-object ownership (Q1, Q3) and the CEG checks versus a patched exe.
+
+## 2026-10-19: where the wire ids come from (static)
+Second reader re-checked a first report against kl2.exe build 0490 (capstone, read only, nothing run). Result: the 16-bit object id is built from the entity's slot index in the engine's slot pool. It is not the REF label (record +0x30). This replaces the GUESS in Q2 for the encoder and decoder; the producer of the slot tags is still open.
+
+### Pool layout (CHECKED, corrects the first report)
+- The slot manager is the global `[0xe0ff90]`. It is set at 0x4c2fdc. Its pool object is at `[mgr+0xc]`.
+- The pool constructor is 0x89bc80(this, slotSize, count). Fields: `+4` = slot size (the loader passes 0x80), `+8` = capacity in SLOTS (not a page size), `+0xc` = memory block (count * slotSize), `+0x10` = a table of `count` signed 16-bit words, all set to -1 at start (0x89bce0 loop).
+- The capacity is the memory size >> 7 (0x541b12, 0x541b1a). The loader sizes it with a floor of 0x340000 bytes (0x8ad907..0x8ad914), so at least 26,624 slots.
+- So the table is indexed by PHYSICAL slot index. Its word is a per-slot tag (generation), not a page number taken from the address. 0x7f37f0 and 0x7f3838 treat a negative word as a FREE slot (they build the free list from them).
+- The first report said "page = off / [pool+4], rem = off % [pool+4]". That is wrong. In 0x86ca10 the quotient (the slot index) is used and the remainder is thrown away.
+
+### Pointer to id (CHECKED)
+- 0x6ece90 is `mov ecx,[0xe0ff90]; call 0x86ca10`, about 900 callers, so it is the generic "entity to ref" call and is not net-specific.
+- 0x86ca10 returns 0 for a null object or a null `[obj+4]`. Else `idx = ([obj+4] - [pool+0xc]) / [pool+4]`. It reads `tag = word [pool+0x10 + idx*2]` (0x86ca2d). A negative tag gives 0 (0x86ca45). Else the result is `tag*[pool+8] + idx + 1` (0x86ca39..0x86ca3f).
+- 0x902570 is the same arithmetic from a raw slot pointer. Neither function nor 0x40a880 or 0x796ff0 reads record +0x30. CHECKED: the REF label is not on this path.
+- For a slot with tag 0 the id is exactly `slot index + 1`. GUESS: loaded level entities have tag 0. The code that writes tags >= 0 into the table was NOT found (the pool constructor only writes -1; the loader at 0x8adb59 bumps a pointer by 0x80 and never touches the table).
+
+### Id to object (CHECKED)
+- 0x8ccde0 is `mov ecx,[0xe0ff90]; call 0x796ff0`. 0x796ff0 calls 0x40a880 and returns `[slot+0x60]`, the entity object in the slot (0 if the slot is 0).
+- 0x40a880, static branch (bit 0x40000000 clear): `n = id-1`, `q = n / [pool+8]`, `r = n % [pool+8]`. It requires `word [pool+0x10 + r*2] == q` and returns `[pool+0xc] + r*[pool+4]`. Otherwise 0. So the check is on the tag, and a stale id for a slot with another tag gives null, not another entity.
+- Dynamic branch (bit 0x40000000 set): `[pool+0xc] + ((id>>7)&0x7fffff)*[pool+4]`, no tag check. A 16-bit field cannot hold bit 0x40000000. GUESS: run-time spawned objects use another path or a wider field. Not traced.
+- Other direction, CHECKED: 0x883840.. computes a slot from the word at `[obj+0x5e]` as `base + (w<<7) - 0x80`, so that word is a 1-based slot number and the slot size is 0x80.
+
+### Loader link (CHECKED)
+- Loader 0x8ad7c0 at 0x8adb59..0x8adb71: `cat = 0x829b10(record)`, `idx = cat + 8*byte[rec+0x35]`, `slot = [edi+idx*4]`, then `[edi+idx*4] = slot+0x80`. This is the bump allocation from the parent group's block, as in `kl_gms.rebuild_clusters`.
+- 0x883770 (call at 0x8adbb5, slot in esi) creates the entity object IN that slot: type id & 0xf, hash chain at 0x8837f7..0x883812, then `call [eax+0x40]`. With a null slot it allocates a 0x80 heap object (0x8837ac), the dynamic case.
+- Whether the loader's block lies inside the pool block `[pool+0xc]` is consistent with the decoder (it only returns addresses inside that block) but the block hand-out code was not read. GUESS.
+
+### Net side
+- CHECKED: the receive stub 0x682140 reads a 2-byte field (0x950f20 at 0x682160), a 1-byte field, two more 2-byte fields, one more field (0x951230), and calls 0x807220 with five values (0x6821bc).
+- CHECKED: 0x807220 first calls 0x9425a0 (is the object owned by the local station: `[obj+0x14]` compared with the result of 0x94bc10). If yes, it turns two of its word arguments into objects with 0x8ccde0 (0x807292, 0x8072a4) and calls vtable slot 0x698 of `[this+0x2a0]`. If no, it calls the sender 0x639c80 (call at 0x807373). So 16-bit wire fields ARE resolved with the slot decoder above. CHECKED. Ownership is a separate field: the id only picks the object.
+- CHECKED: the hit send 0x69f900 passes `0x6ece90([hit+0])` and `0x6ece90([hit+0xc])` to 0x4b5690 (0x69f9cf, 0x69f9e1, 0x69f9ee), and 0x4b5690 forwards five arguments to 0x807220 (0x4b56b1).
+- CHECKED: 0x639c80 writes its first field with 0x950dd0(src, 2, 1), and 0x950dd0 ends in a memcpy of size*count bytes (0x95eb00), so 2 bytes go on the wire per such field.
+- NOT CONFIRMED (downgraded to GUESS): that the 2 bytes are the low 16 bits of the 32-bit result of 0x6ece90, and which 639c80 argument is which 807220 argument. The pointer arguments pushed at 0x807353..0x807370 are stack locals whose frame offsets I could not resolve by hand. The idea (little-endian low word of the ref) is the natural reading, not proven.
+- GUESS: the DDL dataset writers (m_iGeomRef, m_iFFWeaponRef, m_iRef) use 0x6ece90 too. Not traced.
+
+### Consequence for two PCs
+- CHECKED: an id is `tag*capacity + slot index + 1`. For tag 0 it is the slot index + 1, so both PCs need the same slot assignment: same .gms entity order, same cluster table (pool counts), same category and priority for each entity. One entity added to or removed from a pool shifts every later slot in it.
+- CHECKED: the static decoder rejects an id whose tag does not match (returns null), so some mismatches give a null object, not a different entity. The first report said a stale id "still resolves to some entity"; that holds only when the tag matches, which for tag 0 means any in-range index. Out-of-range or free slots give null.
+- GUESS: the capacity also enters ids for tag > 0, and it depends on the memory size the loader computes (floor 0x340000). Different map data could change it.
+- GUESS (rule, unchanged): use a byte-identical map zip on both PCs. Entity order alone might be enough for the ids, but .prp values, .buf, .oct and .HVK also feed the simulation, and no version or hash check was found. Compare the md5 of the zip first. If a variant must be tested, compare the entity order and cluster table first.
+- Not done: the writer of the slot tags (hence the exact tag of loaded entities), the DDL dataset writers, the producer of dynamic ids, and the exact 639c80 argument mapping.
