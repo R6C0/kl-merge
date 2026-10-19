@@ -127,6 +127,11 @@ Per log note 10-18 12:00: Hot Coffee II walk-through doors (DM01B ea8cbc82). Ini
 - ADOPT 3 (staged 2026-10-19, C:\kl_build_1019\adopt_1019, dry-run only): KLJoin b2bb6a2f -> 0b557e40 + PerMap=1 + [Bots.DM09] L97 keys (+ WalkExclusive, global GUESS; a no-WalkExclusive variant exists).
   - ADOPT 3h: SHIP hook b28dd444 (HEAD 3f5737c2; six klhook commits beyond 1018zh, all keys default 0) from 249ab16a or 916c3c57. Without 3h the DM09 keys are inert/partly inert.
   - Order with ADOPT 2: 2, then 3; undo 3 before 2 (UNDO 2 drops PerMap; re-running ADOPT 3 repairs it). Review w5k99giuv: md5 guards and byte-exact undo pass on scratch copies; one UNDO 3 PerMap bug fixed. DECISION: yes/no on 3 + 3h. Not run for real.
+- RUN L101 (3f (q): hook 1019a, PT_DM09_live_brl_slow, KLJoin 0b557e40, human NOT god mode): PASS 433 s. The prediction in re/retomoto_hop6_living.md holds.
+  - All 7 bots had sat 150 s at hop 6's From and were TELEPORTED to the street at r 155.6-158.9. The human was still alive and holding at the boardroom loot ($300k), carrying the crew's $1.8M share.
+  - Waste: rec 2 then got 19 escort orders (every 2 s) aimed at tower height until the human died at r 193.
+  - The van came once, as the last vehicle: 2 out with $405k, 5 bots died in the street. The human was fed at r ~198, dead at r ~261.
+  - CAVEAT FOR ADOPT 3: with a LIVING human who is slow, 0b557e40 strips them of the whole crew at r ~156. A fix is the NoHuman gate in klhop.c, or counting From time only while the human is also down there. klhop.c is 3f's file; it is on 3f's owner list, not done. Until then ADOPT 3 suits a fast human only.
 
 ### Hasta, DM11B [page 3 F04]
 - LIVE: ce42dcc9 + KLJoin 437c96ee.
