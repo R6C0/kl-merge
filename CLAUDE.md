@@ -189,9 +189,9 @@ and move the oldest note here out so this section stays at about three entries (
 into every session and agent: it grew to 256 KB and made every session thrash).
 
 2026-10-20 01:20 - more guns in the shop PROVEN LIVE (3f; overnight runs S1-S7, owner asleep):
-- KLHook 1020a/b: a bought shop row hands over another gun; set per map in KLGuns.ini [Shop] Swap (kl_shop_swap.py also bakes names + pictures). S7: bought USP row (Swap=2:47) -> round 2 holds the MINIMI. 1020b fix: the round's end frees the parked stock guns again, now re-parked. Open: reserve ammo shows 0 (workflow wsd2cunom).
+- KLHook 1020a/b: a bought shop row hands over another gun; set per map in KLGuns.ini [Shop] Swap (kl_shop_swap.py also bakes names + pictures). S7: bought USP row (Swap=2:47) -> round 2 holds the MINIMI (1020b: the round's end frees the parked stock guns again, now re-parked). S8: 1020c [Shop] ReserveClips=2 gives a gun whose clip swallows the row's ammo a reserve (row ammo is table +4, hashed; reserve written to the object): MINIMI / 300, reload draws from it.
 - Scripted shop route: msg MercsFAStatusReadyHeistLBStatus ZW_SELECT3 opens Buy Weapons (score-page buttons are mouse-only); a row already carried opens no dialog.
-Owner: reboot, then C:\kl_build_1019\hook_1020b\INSTALL hook 1020b.bat ([Shop] Enable=1), C:\kl_build_1019\shopnames\INSTALL shopswap.bat (DM01 names/pictures), noblow.
+Owner: reboot, then C:\kl_build_1019\hook_1020c\INSTALL hook 1020c.bat ([Shop] Enable=1), C:\kl_build_1019\shopnames\INSTALL shopswap.bat (DM01 names/pictures), noblow.
 2026-10-19 23:50 - pool lifetime, static pass 2 (e5; owner active, no live run): still UNKNOWN.
 - Workflow wfg5gjc7i (re/private_match.md): the scene load path never frees the pool, but DB slot 31 0x41c360 (a per-scene teardown) clears it via slot 11; whether that runs at a map change is unproven (virtual callers). Rule unchanged: both PCs start the session on the same map zip and build. PoolLog (or logging [0xe0ff90] across one map change) settles it live.
 Owner: reboot (zombie kl2 blocks noblow), then INSTALL noblow.bat and INSTALL hook 1019d.bat, then a Hasta run.
