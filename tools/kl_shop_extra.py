@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 r"""
 kl_shop_extra.py - which extra guns can klhook\klshop.c hand over in place of a shop row (re\shop_more_guns.md). OFFLINE, read only.
-NOTHING OF THIS HAS RUN IN THE GAME.
+The swaps it suggests ran live 2026-10-20 (S7-S11, re\shop_more_guns.md).
 
     python kl_shop_extra.py rows [kl2.exe]            the 36 shop rows read from the exe: row, item, ammo, price, rank, tier, DLC
     python kl_shop_extra.py check <build folder>      per NON-shop item 1..63: has the build a weapon template (the pool maker needs one),

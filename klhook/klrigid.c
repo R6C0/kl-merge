@@ -1,6 +1,6 @@
 /* klrigid.c - [Rigid]: a heavier, more rigid TURN for the local player (mouse input side) and the shaping functions a
  * remote-player smoother can call. OFF unless [Rigid] Enable=1. Part of KLHook (SHIP and TEST alike). Design and numbers:
- * re\rigid_feel.md. NOTHING HERE HAS RUN IN THE GAME (compile-checked only; the curve maths ran in an off-game harness).
+ * re\rigid_feel.md. LOCAL FILTER RUN LIVE 2026-10-20 (R1/R1b/R2, scripted flicks; the FEEL is untested by a human); remote helpers not run.
  *
  * WHAT IT IS (labels: CERTAIN = read in a file / the exe, GUESS = inference)
  *   1. LOCAL INPUT (the lever re\kl2_rotation.md section 5A found). The game reads its mouse once a frame through

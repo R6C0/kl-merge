@@ -38,6 +38,14 @@
  *   SmoothMs=90           time constant of the damping (smaller = closer to raw)
  *   SnapUnits=300         a body that moved further than this in one frame (respawn, teleport) is not smoothed that frame
  *   Log=0                 1 = log swaps / restores and the first updates
+ *   Probe=0               READ-ONLY self-check, works offline (Arcade) and without Enable: every ProbeMs (1000) for up to
+ *                         ProbeLines (400) lines, each player of the array: vtable, flags [+0x2720], the body chain above,
+ *                         the 12 floats at the transform, the pure-yaw test and its yaw, and the position [P+0x460].
+ *                         Turning the local player (scripted mouse) must turn that yaw if the chain and layout GUESSES hold.
+ *                         N1/N2 2026-10-20: offline [P+0x274c] is 0 (online-only object), so the probe starts at P itself; from P the
+ *                         chain holds (B vtable 0xb9c6cc, [B+4] = the transform, t follows the position, the yaw follows a flick).
+ *   OfflineTest=0         TEST build only: 1 = the smoother runs offline too, on non-local players even with the master flag
+ *                         (the Arcade AI heisters), to exercise the B->vtbl[0x8c] write without two PCs.
  *
  * Wiring (klhook.c, NEW lines only):
  *   #include "klnetsmooth.c"        below  #include "klinv.c"
@@ -54,12 +62,12 @@
 #define KNS_NSLOT       512
 #define KNS_NPL         28
 
-static struct { int on, log; float maxdps, tau, snap; volatile LONG active; int told; } kns;
+static struct { int on, log; float maxdps, tau, snap; volatile LONG active; int told; int probe, probems, probemax, probed; DWORD probet; int offline; } kns;
 static DWORD kns_vt[KNS_NSLOT];                       /* the private vtable */
 static DWORD kns_orig;                                /* the stock slot 393 function */
 static DWORD kns_obj[KNS_NPL];                        /* objects given the private vtable */
 static struct { int have; float yaw, vel, pos[3]; LARGE_INTEGER t; } kns_st[KNS_NPL];
-static LONG kns_n_upd, kns_n_set, kns_n_skip;
+static LONG kns_n_upd, kns_n_set, kns_n_skip, kns_n_rbok, kns_n_rbbad;
 
 static DWORD kns_ours(void) { return (DWORD)(DWORD_PTR)kns_vt; }
 
@@ -78,7 +86,9 @@ static float kns_wrap(float a) { while (a > 3.14159265f) a -= 6.2831853f; while 
 static int kns_body(DWORD pl, DWORD *B, DWORD *xf)
 {
     DWORD r = klh_rd32(pl + 0x274c), p, e, b;
-    if (!r || !(p = klh_rd32(r + 0x540)) || !(e = klh_rd32(p + 4)) || !(e = klh_rd32(e + 0x50)) || !(b = klh_rd32(e + 0x60))) return 0;
+    if (!r && kns.offline) p = pl;                                /* OfflineTest: no replica offline (N1), start at P (N2: holds) */
+    else if (!r || !(p = klh_rd32(r + 0x540))) return 0;
+    if (!(e = klh_rd32(p + 4)) || !(e = klh_rd32(e + 0x50)) || !(b = klh_rd32(e + 0x60))) return 0;
     if (!(*xf = klh_rd32(b + 4))) return 0;
     *B = b; return 1;
 }
@@ -90,20 +100,24 @@ typedef void (__fastcall *kns_set_fn)(void *self, void *edx, float *mat, float *
 
 static void kns_smooth(DWORD pl)
 {
-    DWORD B, xf, me, vt; float m[12]; float c, s, yaw, d, dt = 0, step, w; int i; LARGE_INTEGER now, fq;
+    DWORD B, xf, me, vt; float m[12]; float c, s, yaw, d, dt = 0, step, w; int i, mir; LARGE_INTEGER now, fq;
     if (!kns_local(&me) || pl == me) return;                    /* never the local player */
-    { BYTE fl = 0; if (!klh_rd(pl + 0x2720, &fl, 1) || (fl & 2)) return; }   /* the master branch is not a remote */
+    { BYTE fl = 0; if (!klh_rd(pl + 0x2720, &fl, 1) || ((fl & 2) && !kns.offline)) return; }   /* the master branch is not a remote (OfflineTest: AI heisters are) */
     if (!kns_body(pl, &B, &xf) || !klh_rd(xf, m, sizeof m)) return;
     for (i = 0; i < 12; i++) if (m[i] != m[i]) return;          /* NaN */
-    /* a pure yaw about Y: row 1 / column 1 are the unit Y axis, the 2x2 block is a rotation */
-    if (fabsf(m[4] - 1.0f) > 0.03f || fabsf(m[1]) > 0.03f || fabsf(m[3]) > 0.03f || fabsf(m[5]) > 0.03f || fabsf(m[7]) > 0.03f ||
-        fabsf(m[8] - m[0]) > 0.03f || fabsf(m[6] + m[2]) > 0.03f) { kns_n_skip++; return; }
+    /* a pure yaw about Y: row 1 / column 1 are the unit Y axis. LIVE N2 (2026-10-20, 3808 samples, offline): the body matrix is
+       ALWAYS the mirrored form [c 0 s; 0 1 0; s 0 -c] (determinant -1), never the rotation [c 0 s; 0 1 0; -s 0 c] first assumed;
+       both are accepted and the form is kept on write-back. */
+    if (fabsf(m[4] - 1.0f) > 0.03f || fabsf(m[1]) > 0.03f || fabsf(m[3]) > 0.03f || fabsf(m[5]) > 0.03f || fabsf(m[7]) > 0.03f) { kns_n_skip++; return; }
+    if (fabsf(m[8] + m[0]) <= 0.03f && fabsf(m[6] - m[2]) <= 0.03f) mir = 1;
+    else if (fabsf(m[8] - m[0]) <= 0.03f && fabsf(m[6] + m[2]) <= 0.03f) mir = 0;
+    else { kns_n_skip++; return; }
     i = kns_index(pl); if (i < 0) return;
     yaw = atan2f(m[2], m[0]);
     QueryPerformanceCounter(&now); QueryPerformanceFrequency(&fq);
     if (kns_st[i].have) {
         dt = (float)(now.QuadPart - kns_st[i].t.QuadPart) / (float)fq.QuadPart;
-        if (dt > 0.25f || dt < 0) kns_st[i].have = 0;
+        if (dt > (kns.offline ? 1.0f : 0.25f) || dt < 0) kns_st[i].have = 0;   /* OfflineTest runs from the 250 ms tick */
         else {
             float dx = m[9] - kns_st[i].pos[0], dz = m[11] - kns_st[i].pos[2];
             if (dx * dx + dz * dz > kns.snap * kns.snap) kns_st[i].have = 0;      /* respawn / teleport */
@@ -119,13 +133,21 @@ static void kns_smooth(DWORD pl)
     step = kns_st[i].vel * dt;
     if ((d > 0 && step > d) || (d < 0 && step < d)) { step = d; kns_st[i].vel = 0; }   /* no overshoot */
     kns_st[i].yaw = kns_wrap(kns_st[i].yaw + step);
+    if (kns.offline) kns_st[i].yaw = kns_wrap(yaw + 0.17453293f);  /* OfflineTest (N5: at the 250 ms tick the spring is always caught up): write yaw +10 deg, read it back */
     if (fabsf(kns_wrap(kns_st[i].yaw - yaw)) < 0.0005f) return;                    /* already there: leave the game's matrix */
     c = cosf(kns_st[i].yaw); s = sinf(kns_st[i].yaw);
-    m[0] = c; m[2] = s; m[6] = -s; m[8] = c;
+    m[0] = c; m[2] = s; m[6] = mir ? s : -s; m[8] = mir ? -c : c;
     vt = klh_rd32(B);
     { DWORD fn = vt ? klh_rd32(vt + 0x8c) : 0;
       if (!fn) return;
-      __try { ((kns_set_fn)(DWORD_PTR)fn)((void *)(DWORD_PTR)B, 0, m, m + 9); kns_n_set++; }
+      __try { ((kns_set_fn)(DWORD_PTR)fn)((void *)(DWORD_PTR)B, 0, m, m + 9); kns_n_set++;
+              if (kns.offline) {                                   /* OfflineTest: did the call place what was passed? */
+                  float r[12]; DWORD xf2 = klh_rd32(B + 4);
+                  if (xf2 && klh_rd(xf2, r, sizeof r) && fabsf(r[0] - m[0]) < 0.01f && fabsf(r[2] - m[2]) < 0.01f && fabsf(r[6] - m[6]) < 0.01f &&
+                      fabsf(r[8] - m[8]) < 0.01f && fabsf(r[9] - m[9]) < 1.0f && fabsf(r[11] - m[11]) < 1.0f) kns_n_rbok++;
+                  else { if (kns_n_rbbad++ < 5) klog("netsmooth: read-back differs: wrote %.2f %.2f %.2f %.2f t %.0f %.0f, read %.2f %.2f %.2f %.2f t %.0f %.0f",
+                                                       m[0], m[2], m[6], m[8], m[9], m[11], r[0], r[2], r[6], r[8], r[9], r[11]); }
+              } }
       __except (EXCEPTION_EXECUTE_HANDLER) { kns.on = 0; klog("netsmooth: fault in the body placement call: smoother off"); } }
 }
 
@@ -164,6 +186,36 @@ static int kns_gate(void)
     return act;
 }
 
+/* [NetSmooth] Probe: reads only (klh_rd), never writes; offline-capable check of the body chain / matrix GUESSES */
+static void kns_probe(void)
+{
+    DWORD gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd265c)), me = 0, pl, r, p, e, b, xf; int i; float m[12], pos[3];
+    if (!gd) return;
+    kns_local(&me);
+    for (i = 0; i < KNS_NPL && kns.probed < kns.probemax; i++) {
+        BYTE fl = 0; int yawok;
+        if (!(pl = klh_rd32(gd + 0x828 + 4 * i))) continue;
+        klh_rd(pl + 0x2720, &fl, 1);
+        r = klh_rd32(pl + 0x274c); p = r ? klh_rd32(r + 0x540) : 0;
+        if (!r) p = pl;     /* offline (N1, 2026-10-20: [P+0x274c] is 0 for every player in Arcade): test the rest of the chain from P itself (GUESS [R+0x540] = P) */
+        e = p ? klh_rd32(p + 4) : 0; e = e ? klh_rd32(e + 0x50) : 0;
+        b = e ? klh_rd32(e + 0x60) : 0; xf = b ? klh_rd32(b + 4) : 0;
+        memset(pos, 0, sizeof pos); klh_rd(pl + 0x460, pos, sizeof pos);
+        if (!xf || !klh_rd(xf, m, sizeof m)) {
+            klog("netsmooth probe: #%d %08lx%s vt %08lx fl %02x chain r %08lx p %08lx(=P? %d) b %08lx xf %08lx: no matrix; pos %.0f %.0f %.0f",
+                 i, pl, pl == me ? " ME" : "", klh_rd32(pl), fl, r, p, p == pl, b, xf, pos[0], pos[1], pos[2]);
+        } else {
+            yawok = !(fabsf(m[4] - 1.0f) > 0.03f || fabsf(m[1]) > 0.03f || fabsf(m[3]) > 0.03f || fabsf(m[5]) > 0.03f || fabsf(m[7]) > 0.03f ||
+                      fabsf(m[8] - m[0]) > 0.03f || fabsf(m[6] + m[2]) > 0.03f);
+            klog("netsmooth probe: #%d %08lx%s fl %02x p=P %d b %08lx b.vt %08lx | %.2f %.2f %.2f / %.2f %.2f %.2f / %.2f %.2f %.2f | t %.0f %.0f %.0f | yaw %s %.1f | pos %.0f %.0f %.0f",
+                 i, pl, pl == me ? " ME" : "", fl, p == pl, b, klh_rd32(b), m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11],
+                 yawok ? "ok" : "NOT-pure", atan2f(m[2], m[0]) * 57.2957795f, pos[0], pos[1], pos[2]);
+        }
+        kns.probed++;
+    }
+    if (kns.probed >= kns.probemax) klog("netsmooth probe: %d lines written, probe done", kns.probed);
+}
+
 static void klnetsmooth_tick(int game_thread)
 {
     static DWORD last; DWORD now = GetTickCount(), gd, me, pl; int act, i, n = 0;
@@ -171,8 +223,12 @@ static void klnetsmooth_tick(int game_thread)
        runs or frees player objects. The wrapper kns_update also runs on the game thread, so no lock is needed. */
     if (!game_thread || !klh_exe_ok || now - last < 250) return;
     last = now;
+    if (kns.probe && kns.probed < kns.probemax && now - kns.probet >= (DWORD)kns.probems) { kns.probet = now; kns_probe(); }
     if (!kns.on) { if (kns.active) { kns.active = 0; kns_restore_all("smoother off"); } return; }   /* a fault switched it off */
     act = kns_gate();
+#ifdef KLHOOK_TEST
+    if (kns.offline && !act) { DWORD sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598)), role = 0; if (!sm || (klh_rd(sm + 0x54, &role, 4) && role != 2 && role != 3)) act = 1; }   /* OfflineTest: not in an online session */
+#endif
     if (!act) { if (kns.active) { kns.active = 0; kns_restore_all("not an online unranked session"); } return; }
     gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd265c));
     if (!gd) { kns.active = 0; kns_restore_all("level end"); return; }
@@ -203,6 +259,15 @@ static void klnetsmooth_tick(int game_thread)
         klog("netsmooth: %d remote player object(s) swapped (%d new); updates %ld, placed %ld, skipped (not a pure yaw) %ld", cnt, n, kns_n_upd, kns_n_set, kns_n_skip);
         kns.told = 1;
     }
+#ifdef KLHOOK_TEST
+    if (kns.offline) {                                            /* N4: offline nothing calls slot 393 (replica path); call the smoother from here */
+        for (i = 0; i < KNS_NPL; i++) if (kns_obj[i] && klh_rd32(kns_obj[i]) == kns_ours()) kns_smooth(kns_obj[i]);
+    }
+#endif
+    if (kns.log) {                                                /* a count line every 10 s while anything moves (N3: it was printed only on new swaps) */
+        static DWORD tsum; static LONG lu = -1;
+        if (now - tsum >= 10000 && kns_n_upd + kns_n_set + kns_n_skip != lu) { tsum = now; lu = kns_n_upd + kns_n_set + kns_n_skip; klog("netsmooth: updates %ld, placed %ld (read back ok %ld, differs %ld), skipped (not a pure yaw) %ld", kns_n_upd, kns_n_set, kns_n_rbok, kns_n_rbbad, kns_n_skip); }
+    }
 }
 
 static void klnetsmooth_init(void)
@@ -214,6 +279,14 @@ static void klnetsmooth_init(void)
     GetPrivateProfileStringA("NetSmooth", "SmoothMs", "90", b, sizeof b, klh_ini); kns.tau = (float)atof(b) / 1000.0f;
     GetPrivateProfileStringA("NetSmooth", "SnapUnits", "300", b, sizeof b, klh_ini); kns.snap = (float)atof(b);
     if (kns.maxdps < 30.0f) kns.maxdps = 30.0f;
+#ifdef KLHOOK_TEST
+    kns.offline = GetPrivateProfileIntA("NetSmooth", "OfflineTest", 0, klh_ini) != 0;   /* TEST build only: smooth the Arcade AI heisters */
+    if (kns.offline) klog("netsmooth: OfflineTest=1 (TEST build): the smoother also runs offline, on non-local players with the master flag (Arcade AI heisters)");
+#endif
+    kns.probe = GetPrivateProfileIntA("NetSmooth", "Probe", 0, klh_ini) != 0;
+    kns.probems = GetPrivateProfileIntA("NetSmooth", "ProbeMs", 1000, klh_ini); if (kns.probems < 250) kns.probems = 250;
+    kns.probemax = GetPrivateProfileIntA("NetSmooth", "ProbeLines", 400, klh_ini);
+    if (kns.probe) klog("netsmooth: PROBE on (read-only): every %d ms, up to %d lines, the body chain / matrix of every player", kns.probems, kns.probemax);
     if (kns.on)
         klog("netsmooth: on; MaxTurnDegPerSec=%.0f SmoothMs=%.0f SnapUnits=%.0f Log=%d; private ZFFPlayer vtable for REMOTE players only, online FA not ranked; EXPERIMENT (never run): see re\\netcode_smooth.md",
              kns.maxdps, kns.tau * 1000.0f, kns.snap, kns.log);

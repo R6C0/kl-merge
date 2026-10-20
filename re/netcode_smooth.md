@@ -53,3 +53,17 @@ animation frames 0x600f8f reads); the body class behind slot 0x8c was not identi
 Fixed: tick runs on the game thread only (the fallback ticker could swap/restore while the game thread frees players); the local player
 being unknown now swaps nothing (before, me=0 could swap the local player); a fault that switches the smoother off now hands the vtables back;
 IsBadReadPtr size lowered to 0x2750.
+
+## Live checks offline (2026-10-20, TEST builds 1020e-j, Arcade F01 slot, runs N1-N6, all PASS 0 faults)
+- N1: [P+0x274c] is 0 for all ZFFPlayers in Arcade (an online-only object - the replica); the chain cannot start there offline.
+- N2 (read-only probe, 3808 samples, chain started at P itself): [[[P+4]+0x50]+0x60] = B (vtable 0xb9c6cc), [B+4] = the body
+  transform, t (+0x24) follows the player's position, its yaw follows a scripted mouse flick. The local player of
+  [gd+0x828+4*[gd+0x898]] is right (klauto's `pos` "me" is the wrong one).
+  BUG FOUND: the matrix is ALWAYS the mirrored form [c 0 s; 0 1 0; s 0 -c] (det -1), never the rotation [c 0 s; 0 1 0; -s 0 c]
+  the code tested for - the smoother would have skipped every remote body. Fixed: both forms accepted, the form kept on write.
+- N4: slot 393 (0x506350) is NOT called offline on the swapped objects (updates 0 all run): it is the replica receiver's path.
+  Whether it runs per frame ONLINE is still unproven (needs two PCs).
+- N6 (TEST-only [NetSmooth] OfflineTest=1: from the 250 ms tick, writes yaw +10 deg to each Arcade AI heister through
+  B->vtbl[0x8c](mat, pos) and reads it back): 13,785 placements, 13,785 read back as written, 0 faults. The write path is proven.
+Still GUESS: [R+0x540] = P online (offline the chain from P holds), slot 393 per frame online, the feel.
+Probe for a two-PC session: [NetSmooth] Probe=1 (read-only, SHIP and TEST) logs the online chain.

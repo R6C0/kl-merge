@@ -1,7 +1,7 @@
 /*
  * klshop.c - MORE GUNS IN THE FRAGILE ALLIANCE WEAPON SHOP, by SWAPPING WHAT A BOUGHT ROW HANDS OVER (re\shop_more_guns.md, 2026-10-19).
  * Part of KLHook (included by klhook.c after klinv.c; Arcade only, inert online). Off unless KLHook.ini [Shop] Enable=1.
- * NOTHING HERE HAS RUN IN THE GAME. DATA writes and ONE call of the game's own object maker on the game thread; NO code byte, no hashed byte.
+ * RUN LIVE 2026-10-20 (S7-S11: rows 2, 13, 16, 32 handed over Minimi, HK69, Type 81, Rem 700; re\shop_more_guns.md). DATA writes and ONE call of the game's own object maker on the game thread; NO code byte, no hashed byte.
  *
  * WHY NOT NEW ROWS (CERTAIN, read in kl2.exe): the shop is 36 rows x 24 bytes at 0xbd1f68 (hashed .rdata, klranges.h); the builder 0x78a8d0 loops
  *   exactly that table, the buy is RMCBuyWeaponPack(primaryRow, secondaryRow) and the server and the loadout (0x6a5260, 0x410710) index the
@@ -239,7 +239,7 @@ static void klshop_init(void)
     kls_parse(buf, &kls_def.n, kls_def.row, kls_def.item, "KLHook.ini");
     kls_stg = kls_def; kls_sgen = 1; kls.gen = 0;                        /* the tick adopts it */
     kls.clips = GetPrivateProfileIntA("Shop", "ReserveClips", 2, klh_ini); /* reserve of an extra gun the row's ammo leaves empty, in clips (0 = leave it) */
-    klog("shop: on; %d default swap(s); a map's KLGuns.ini [Shop] Swap overrides; Arcade only, before the round; replaces what a bought row hands over (never adds a row); EXPERIMENT, nothing has run", kls_def.n);
+    klog("shop: on; %d default swap(s); a map's KLGuns.ini [Shop] Swap overrides; Arcade only, before the round; replaces what a bought row hands over (never adds a row); proven live S7-S11", kls_def.n);
 }
 
 #endif /* KLSHOP_C */
