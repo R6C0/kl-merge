@@ -70,3 +70,6 @@ stock maps has the SAME weapon-template set, including all four default DM01 swa
 Usable non-shop items on every stock map: 33 35 38 40-59 62 63. A stock map has no KLGuns.ini, so the swaps come
 from KLHook.ini `[Shop] Swap=16:33,32:49,...`; the shop names/pictures stay stock (shopswap only bakes DM01's).
 Not run live on a stock map (needs a scripted round per map; the shop opens only after a round).
+The KLHook.ini path itself IS live-proven: S10/S11 logged no "shop: map ... KLGuns.ini" line (none was installed in
+the slot), so their swaps came from KLHook.ini [Shop] Swap - exactly what a stock map uses. Remaining stock-map risk:
+only the map's own content, and the templates above match.
