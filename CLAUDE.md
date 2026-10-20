@@ -193,6 +193,7 @@ into every session and agent: it grew to 256 KB and made every session thrash).
 - 03:45 audit workflow (TEST vs SHIP, all modules): no other SHIP-only fault. 1020g adds: NetSmooth logs where an online body chain breaks, vtable copy keeps vt[-1]; N7 offline PASS, SHIP Z9 no crash, SHIP tick on the main loop.
 - 04:47 S13 (TEST 1020l, Shop Swap + ReserveClips + Rigid + NetSmooth Probe in one scripted DM01 run): PASS, 0 faults; round 2 holds REM 700 / 43 (screenshot), Rigid proxies active. All three run together.
 - 05:50 S14/S15 stock F02 (Bridge): swap applied at load and re-parked at the round reset, 0 faults; an idle round ends with $0, so a stock-map BUY is still unproven (needs money / a loot route).
+- 06:55 S16 Bridge scripted route: $1.865M looted, stuck before the road (tunnel blocker REF 1453 not gone), no escape -> no shop money yet. Owner input seen 06:53: live runs stopped (S17 was already started).
 - NetSmooth offline N1-N6: chain from P, mirrored matrix, the write call proven (re/netcode_smooth.md); online still untried. Local commits through bd3be72fa are NOT pushed (push refused).
 Owner: reboot, then C:\kl_build_1019\hook_1020g\INSTALL hook 1020g.bat (NOT 1020c / 1020e with Rigid), shopswap, noblow; then [Rigid] Enable=1 and try the feel.
 2026-10-20 01:55 - [Rigid] mouse filter run live for the first time (3f; scripted R1/R1b/R2, owner asleep): all PASS, 0 faults.

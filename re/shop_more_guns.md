@@ -85,3 +85,9 @@ Weapons offered); the replayed round showed 'ROUND 1 OF 10' and the stock gun: w
 swapped row's hand-over was not reached. At the round reset the hook re-parked the 8 stock objects as on DM01;
 0 faults, PASS. A stock-map BUY needs money first: a scripted loot route per stock map, or the owner's play.
 Scripts: C:\kl_build_1019\live\S14_stockF02.ini, S15_stockF02.ini (menu path to the stock page, entry 1).
+S16 (06:46, stock F02 Bridge, scripted route C:/kl_build_1019/live/S16_bridge.ini, authored offline by workflow
+bridge-route with kl_route): spawn -> 8 train bags -> exit bank all walked; the HUD showed LOOT $1,865,000. Stuck at
+(-190, 5192, -13119) on the way to the road (goto (-80,-13015) not reached; kl_route says the way is FREE once REF 1453
+Tunnel_GHOST_02 is out, so in the game it was not: blast timing/trigger unknown). Not escaped -> round ended ~5 min,
+no money in the shop. 0 faults, PASS. Next: the crew's own escape path (S17 with [NetSmooth] ProbeMs=2000
+ProbeLines=6000 logs every player's position) and the exit trigger.
