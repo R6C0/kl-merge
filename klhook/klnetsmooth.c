@@ -1,5 +1,5 @@
 /* klnetsmooth.c - [NetSmooth]: a receiver-side smoother for the DISPLAYED heading of REMOTE players (online FA, not ranked).
- * OFF unless [NetSmooth] Enable=1. Written statically (nothing here has run in the game). Research: re\netcode_smooth.md.
+ * OFF unless [NetSmooth] Enable=1. Live 2026-10-20: chain, matrix form and write call proven offline (N1-N6); the online run is still untried. Research: re\netcode_smooth.md.
  *
  * WHY. A remote player's heading arrives as an unwrapped int16 (1024 per turn, klnet.c / re\netcode_receiver.md) and the
  * receiver uses it RAW: 0x600eb0 builds the body matrix from it and places the body with B->vtbl[0x8c](mat, pos). Whatever
@@ -288,7 +288,7 @@ static void klnetsmooth_init(void)
     kns.probemax = GetPrivateProfileIntA("NetSmooth", "ProbeLines", 400, klh_ini);
     if (kns.probe) klog("netsmooth: PROBE on (read-only): every %d ms, up to %d lines, the body chain / matrix of every player", kns.probems, kns.probemax);
     if (kns.on)
-        klog("netsmooth: on; MaxTurnDegPerSec=%.0f SmoothMs=%.0f SnapUnits=%.0f Log=%d; private ZFFPlayer vtable for REMOTE players only, online FA not ranked; EXPERIMENT (never run): see re\\netcode_smooth.md",
+        klog("netsmooth: on; MaxTurnDegPerSec=%.0f SmoothMs=%.0f SnapUnits=%.0f Log=%d; private ZFFPlayer vtable for REMOTE players only, online FA not ranked; EXPERIMENT (write path proven offline N6, online untested): see re\\netcode_smooth.md",
              kns.maxdps, kns.tau * 1000.0f, kns.snap, kns.log);
 }
 

@@ -21,13 +21,13 @@
  *      Pass-through (and the backlog is cleared) when there is no local player, the pause / cut flag [gd+0x4cd8] is set
  *      (klcam.c: ASSUMPTION), a frame gap over 250 ms, or the key is off. So menus (the mouse also moves the cursor there)
  *      are left alone as far as those two tests can see. Gamepad input (gc0 in the binding text) is NOT touched.
- *   2. HOW IT HOOKS (no code byte, no .rdata, nothing hashed: re\antitamper.md, klranges.h). The hook is a vtable-POINTER
- *      swap on two HEAP objects of dinput8: the IDirectInput8 object (slot 3 CreateDevice) and then the MOUSE device it
- *      returns (slot 9 GetDeviceState); each gets a private copy of its vtable. It works on top of klauto.c's proxy objects too
- *      (the proxy's vtable pointer is swapped the same way; its functions are called through the copy). klrigid_di8(o) is
- *      called from DirectInput8Create after the real call (and after kla_di8 in a TEST build). The keyboard is never swapped.
- *      Put back: klrigid_tick() writes the stock vtable pointer back into every object that still shows our copy when the
- *      module switches itself off (a fault in the filter, or Enable cleared); the device normally lives until exit.
+ *   2. HOW IT HOOKS (no code byte, no .rdata, nothing hashed: re\antitamper.md, klranges.h). DirectInput8Create hands the
+ *      game a PROXY of the IDirectInput8 object (our own heap object: {vtable, real}); its CreateDevice wraps the MOUSE device
+ *      in a second proxy whose GetDeviceState (slot 9) filters; every other method is passed straight to the real object.
+ *      (Until 1020e it swapped the vtable pointer of dinput8's own objects instead: dinput8 rejects calls through a foreign
+ *      vtable, so SHIP builds crashed at load, kl2+0xfbb90. TEST builds hid it: there the object was klauto.c's proxy.)
+ *      klrigid_di8(o) is called from DirectInput8Create after the real call (after kla_di8 in a TEST build, so it wraps
+ *      klauto's proxy). The keyboard is never wrapped. Off (a fault in the filter): the proxies pass everything through.
  *   3. REMOTE SHAPING (klrigid_remote_cap / klrigid_follow). klnetsmooth.c (receiver-side, remote ZFFPlayer) already does: a
  *      flat MaxTurnDegPerSec cap, a critically damped spring (SmoothMs) and a position snap. It does NOT do: an
  *      ERROR-DEPENDENT cap (PD2's curve), or a body-follows-look deadband (turn-in-place threshold). Those two are provided
@@ -67,7 +67,7 @@
 
 #define KRG_PLAYER_VT 0x00bb45f4u
 #define KRG_NPL       28
-#define KRG_NDEV      4
+
 #define KRG_DEVSLOTS  32
 #define KRG_DISLOTS   11
 
@@ -82,12 +82,6 @@ static struct {
 static struct { float pend, frac; } krg_ax[2];
 static LARGE_INTEGER krg_t; static int krg_have, krg_aim_prev = -1;
 static LONG krg_n_frames, krg_n_active, krg_n_bypass, krg_n_aim, krg_n_clamped; static DWORD krg_sum_t;
-
-typedef HRESULT (WINAPI *krg_create_fn)(void *self, const GUID *g, void **out, void *outer);
-typedef HRESULT (WINAPI *krg_state_fn)(void *self, DWORD cb, BYTE *data);
-
-static struct { DWORD obj, orig_vt, orig_fn; DWORD vt[KRG_DISLOTS]; } krg_di[KRG_NDEV];
-static struct { DWORD obj, orig_vt, orig_fn; DWORD vt[KRG_DEVSLOTS]; } krg_dev[KRG_NDEV];
 
 /* ---------------------------------------------------------------- the maths (no game access) */
 
@@ -182,85 +176,95 @@ static void krg_filter(LONG *xy)
     xy[1] = krg_step(&krg.pit, &krg_ax[1].pend, &krg_ax[1].frac, xy[1], dt);
 }
 
-/* ---------------------------------------------------------------- the DirectInput hook (heap vtable pointers) */
+/* ---------------------------------------------------------------- the DirectInput hook (heap proxy objects) */
 
-static int krg_ptr_set(DWORD obj, DWORD val, const char *what)
-{   /* the first dword of a dinput8 / proxy heap object is its vtable pointer */
-    return klh_data((void *)(DWORD_PTR)obj, &val, 4, what);
+/* Until 1020e this swapped the vtable POINTER of dinput8's own objects. That only ever worked in TEST builds, where the
+   object was klauto.c's proxy: dinput8 checks each call's interface pointer against its own vtables, so the real
+   CreateDevice called through a private copy fails, the game gets no mouse device and reads 0 at kl2+0xfbb90
+   (SHIP runs Z1/Z2/Z6, 2026-10-20). Now every object is a small proxy of our own, as klauto.c does: {vtable, real}; each
+   method calls the real object with the real pointer. Arguments are all DWORDs or pointers, so only their count matters. */
+typedef struct krg_px { const void *vtbl; void *real; } krg_px;
+#define KRG_RV(p, i) ((*(void ***)(p)->real)[i])
+#define KRG_F0(pre, i) static HRESULT WINAPI pre##i(krg_px *p) { return ((HRESULT (WINAPI *)(void *))KRG_RV(p, i))(p->real); }
+#define KRG_F1(pre, i) static HRESULT WINAPI pre##i(krg_px *p, DWORD a) { return ((HRESULT (WINAPI *)(void *, DWORD))KRG_RV(p, i))(p->real, a); }
+#define KRG_F2(pre, i) static HRESULT WINAPI pre##i(krg_px *p, DWORD a, DWORD b) { return ((HRESULT (WINAPI *)(void *, DWORD, DWORD))KRG_RV(p, i))(p->real, a, b); }
+#define KRG_F3(pre, i) static HRESULT WINAPI pre##i(krg_px *p, DWORD a, DWORD b, DWORD c) { return ((HRESULT (WINAPI *)(void *, DWORD, DWORD, DWORD))KRG_RV(p, i))(p->real, a, b, c); }
+#define KRG_F4(pre, i) static HRESULT WINAPI pre##i(krg_px *p, DWORD a, DWORD b, DWORD c, DWORD d) { return ((HRESULT (WINAPI *)(void *, DWORD, DWORD, DWORD, DWORD))KRG_RV(p, i))(p->real, a, b, c, d); }
+#define KRG_F5(pre, i) static HRESULT WINAPI pre##i(krg_px *p, DWORD a, DWORD b, DWORD c, DWORD d, DWORD e) { return ((HRESULT (WINAPI *)(void *, DWORD, DWORD, DWORD, DWORD, DWORD))KRG_RV(p, i))(p->real, a, b, c, d, e); }
+
+static HRESULT WINAPI krg_qi(krg_px *p, DWORD riid, void **out)
+{   /* the proxy stands for the interface it wraps; any other interface is handed out unwrapped */
+    HRESULT hr = ((HRESULT (WINAPI *)(void *, DWORD, void **))KRG_RV(p, 0))(p->real, riid, out);
+    if (SUCCEEDED(hr) && out && *out == p->real) *out = p;
+    return hr;
+}
+static ULONG WINAPI krg_addref(krg_px *p) { return ((ULONG (WINAPI *)(void *))KRG_RV(p, 1))(p->real); }
+static ULONG WINAPI krg_release(krg_px *p)
+{
+    ULONG n = ((ULONG (WINAPI *)(void *))KRG_RV(p, 2))(p->real);
+    if (!n) HeapFree(GetProcessHeap(), 0, p);
+    return n;
 }
 
-/* A slot is LIVE only while its object still shows our private vtable. A freed object whose heap address was reused (the game may
-   recreate its mouse device) leaves a stale entry; without this test a new device at the same address would count as "already
-   wrapped" and stay unfiltered, and stale entries would fill the table. */
-static int krg_dev_live(int i) { return krg_dev[i].obj && klh_rd32(krg_dev[i].obj) == (DWORD)(DWORD_PTR)krg_dev[i].vt; }
-static int krg_di_live(int i) { return krg_di[i].obj && klh_rd32(krg_di[i].obj) == (DWORD)(DWORD_PTR)krg_di[i].vt; }
-static int krg_dev_index(void *self) { int i; for (i = 0; i < KRG_NDEV; i++) if (krg_dev[i].obj == (DWORD)(DWORD_PTR)self) return i; return -1; }
-static int krg_di_index(void *self) { int i; for (i = 0; i < KRG_NDEV; i++) if (krg_di[i].obj == (DWORD)(DWORD_PTR)self) return i; return -1; }
-static int krg_dev_free(void) { int i; for (i = 0; i < KRG_NDEV; i++) if (!krg_dev[i].obj || !krg_dev_live(i)) return i; return -1; }
-static int krg_di_free(void) { int i; for (i = 0; i < KRG_NDEV; i++) if (!krg_di[i].obj || !krg_di_live(i)) return i; return -1; }
-
-static HRESULT WINAPI krg_getstate(void *self, DWORD cb, BYTE *data)
+static void *krg_proxy(void *real, const void *vtbl)
 {
-    int i = krg_dev_index(self); HRESULT hr;
-    if (i < 0) {   /* only registered devices carry our table; if it ever happens, pass through via the stock slot (an object's own orig_vt) */
-        DWORD ovt = 0; int k; for (k = 0; k < KRG_NDEV; k++) if (krg_dev[k].orig_fn && klh_rd32((DWORD_PTR)self) == (DWORD)(DWORD_PTR)krg_dev[k].vt) { ovt = krg_dev[k].orig_fn; break; }
-        return ovt ? ((krg_state_fn)(DWORD_PTR)ovt)(self, cb, data) : E_FAIL;
-    }
-    hr = ((krg_state_fn)(DWORD_PTR)krg_dev[i].orig_fn)(self, cb, data);
+    krg_px *p = (krg_px *)HeapAlloc(GetProcessHeap(), 0, sizeof *p);
+    if (!p) return real;                                   /* no memory: the game gets the real object, unfiltered */
+    p->vtbl = vtbl; p->real = real;
+    return p;
+}
+
+/* IDirectInputDevice8 slots: 3 GetCapabilities 4 EnumObjects 5 GetProperty 6 SetProperty 7 Acquire 8 Unacquire 9 GetDeviceState
+   10 GetDeviceData 11 SetDataFormat 12 SetEventNotification 13 SetCooperativeLevel 14 GetObjectInfo 15 GetDeviceInfo
+   16 RunControlPanel 17 Initialize 18 CreateEffect 19 EnumEffects 20 GetEffectInfo 21 GetForceFeedbackState
+   22 SendForceFeedbackCommand 23 EnumCreatedEffectObjects 24 Escape 25 Poll 26 SendDeviceData 27 EnumEffectsInFile
+   28 WriteEffectToFile 29 BuildActionMap 30 SetActionMap 31 GetImageInfo (argument counts as in klauto.c) */
+KRG_F1(krgd, 3) KRG_F3(krgd, 4) KRG_F2(krgd, 5) KRG_F2(krgd, 6) KRG_F0(krgd, 7) KRG_F0(krgd, 8) KRG_F4(krgd, 10) KRG_F1(krgd, 11)
+KRG_F1(krgd, 12) KRG_F2(krgd, 13) KRG_F3(krgd, 14) KRG_F1(krgd, 15) KRG_F2(krgd, 16) KRG_F3(krgd, 17) KRG_F4(krgd, 18)
+KRG_F3(krgd, 19) KRG_F2(krgd, 20) KRG_F1(krgd, 21) KRG_F1(krgd, 22) KRG_F3(krgd, 23) KRG_F1(krgd, 24) KRG_F0(krgd, 25)
+KRG_F4(krgd, 26) KRG_F4(krgd, 27) KRG_F4(krgd, 28) KRG_F3(krgd, 29) KRG_F3(krgd, 30) KRG_F1(krgd, 31)
+
+static HRESULT WINAPI krg_getstate(krg_px *p, DWORD cb, BYTE *data)
+{
+    HRESULT hr = ((HRESULT (WINAPI *)(void *, DWORD, BYTE *))KRG_RV(p, 9))(p->real, cb, data);
     if (SUCCEEDED(hr) && krg.on && data && cb >= 8 && !IsBadWritePtr(data, 8)) {
         __try { krg_filter((LONG *)data); }
-        __except (EXCEPTION_EXECUTE_HANDLER) { krg.on = 0; krg_reset(); klog("rigid: fault in the mouse filter: input filter off"); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { krg.on = 0; krg_reset(); klog("rigid: fault in the mouse filter: input filter off (the proxy now passes through)"); }
     }
     return hr;
 }
+
+static const void *krg_dev_vt[KRG_DEVSLOTS] = {
+    krg_qi, krg_addref, krg_release, krgd3, krgd4, krgd5, krgd6, krgd7, krgd8, krg_getstate, krgd10, krgd11, krgd12, krgd13, krgd14, krgd15,
+    krgd16, krgd17, krgd18, krgd19, krgd20, krgd21, krgd22, krgd23, krgd24, krgd25, krgd26, krgd27, krgd28, krgd29, krgd30, krgd31 };
 
 static const GUID krg_sysmouse = { 0x6f1d2b60, 0xd5a0, 0x11cf, { 0xbf, 0xc7, 0x44, 0x45, 0x53, 0x54, 0x00, 0x00 } };
 
-static void krg_wrap_device(void *dev)
-{
-    DWORD obj = (DWORD)(DWORD_PTR)dev, vt; int i;
-    if (!dev) return;
-    if ((i = krg_dev_index(dev)) >= 0 && krg_dev_live(i)) return;             /* already ours */
-    if ((i = krg_dev_index(dev)) < 0 && (i = krg_dev_free()) < 0) return;      /* (a stale entry for this address is simply reused) */
-    krg_dev[i].obj = 0;
-    vt = klh_rd32(obj);
-    if (!vt || !klh_rd(vt, krg_dev[i].vt, sizeof krg_dev[i].vt)) return;
-    krg_dev[i].orig_vt = vt; krg_dev[i].orig_fn = krg_dev[i].vt[9];
-    if (!krg_dev[i].orig_fn) return;
-    krg_dev[i].vt[9] = (DWORD)(DWORD_PTR)krg_getstate;
-    krg_dev[i].obj = obj;                                                        /* registered BEFORE the pointer swap: another thread may call at once */
-    if (krg_ptr_set(obj, (DWORD)(DWORD_PTR)krg_dev[i].vt, "mouse device vtable pointer (private copy)"))
-        klog("rigid: mouse device %08lx: GetDeviceState wrapped (stock slot 9 = %08lx)", obj, krg_dev[i].orig_fn);
-    else krg_dev[i].obj = 0;
-}
+/* IDirectInput8 slots: 3 CreateDevice 4 EnumDevices 5 GetDeviceStatus 6 RunControlPanel 7 Initialize 8 FindDevice
+   9 EnumDevicesBySemantics 10 ConfigureDevices */
+KRG_F4(krgi, 4) KRG_F1(krgi, 5) KRG_F2(krgi, 6) KRG_F2(krgi, 7) KRG_F3(krgi, 8) KRG_F5(krgi, 9) KRG_F4(krgi, 10)
 
-static HRESULT WINAPI krg_create(void *self, const GUID *g, void **out, void *outer)
+static HRESULT WINAPI krg_create(krg_px *p, const GUID *g, void **out, void *outer)
 {
-    int i = krg_di_index(self); HRESULT hr;
-    if (i < 0) return E_FAIL;
-    hr = ((krg_create_fn)(DWORD_PTR)krg_di[i].orig_fn)(self, g, out, outer);
-    if (SUCCEEDED(hr) && krg.on && out && *out && !outer && g && !memcmp(g, &krg_sysmouse, sizeof krg_sysmouse)) krg_wrap_device(*out);
+    HRESULT hr = ((HRESULT (WINAPI *)(void *, const GUID *, void **, void *))KRG_RV(p, 3))(p->real, g, out, outer);
+    if (SUCCEEDED(hr) && out && *out && !outer && g && !memcmp(g, &krg_sysmouse, sizeof krg_sysmouse)) {
+        void *real = *out;
+        *out = krg_proxy(real, krg_dev_vt);
+        if (*out != real) klog("rigid: mouse device %p: GetDeviceState wrapped (proxy %p)", real, *out);
+    }
     return hr;
 }
 
-/* DirectInput8Create hook point: o = the IDirectInput8 the game gets (or klauto.c's proxy of it) */
+static const void *krg_di_vt[KRG_DISLOTS] = { krg_qi, krg_addref, krg_release, krg_create, krgi4, krgi5, krgi6, krgi7, krgi8, krgi9, krgi10 };
+
+/* DirectInput8Create hook point: o = the IDirectInput8 the game gets (or klauto.c's proxy of it, which this then wraps) */
 static void klrigid_di8(void **o)
 {
-    DWORD obj, vt; int i;
+    void *real;
     if (!krg.on || !o || !*o) return;
-    obj = (DWORD)(DWORD_PTR)*o;
-    if ((i = krg_di_index(*o)) >= 0 && krg_di_live(i)) return;
-    if (i < 0 && (i = krg_di_free()) < 0) return;
-    krg_di[i].obj = 0;
-    vt = klh_rd32(obj);
-    if (!vt || !klh_rd(vt, krg_di[i].vt, sizeof krg_di[i].vt)) return;
-    krg_di[i].orig_vt = vt; krg_di[i].orig_fn = krg_di[i].vt[3];
-    if (!krg_di[i].orig_fn) return;
-    krg_di[i].vt[3] = (DWORD)(DWORD_PTR)krg_create;
-    krg_di[i].obj = obj;
-    if (krg_ptr_set(obj, (DWORD)(DWORD_PTR)krg_di[i].vt, "IDirectInput8 vtable pointer (private copy)"))
-        klog("rigid: IDirectInput8 %08lx: CreateDevice wrapped (the mouse device only is wrapped further)", obj);
-    else krg_di[i].obj = 0;
+    real = *o;
+    *o = krg_proxy(real, krg_di_vt);
+    if (*o != real) klog("rigid: IDirectInput8 %p: CreateDevice wrapped (proxy %p; the mouse device only is wrapped further)", real, *o);
 }
 
 /* ---------------------------------------------------------------- remote shaping (pure; called by klnetsmooth.c if wired) */
@@ -290,33 +294,13 @@ static float klrigid_follow(float body, int *turning, float look, float dt)
     return body;
 }
 
-/* ---------------------------------------------------------------- put-back, tick, init */
-
-static void krg_restore_all(const char *why)
-{
-    int i, n = 0;
-    for (i = 0; i < KRG_NDEV; i++) {
-        /* the entry is kept unless the stock pointer went back (or the object no longer shows our copy: freed / re-pointed), so a
-           call that still reaches our private table can always find its stock function (a lost entry would make it fail). */
-        if (krg_dev[i].obj) {
-            if (!krg_dev_live(i)) krg_dev[i].obj = 0;
-            else if (krg_ptr_set(krg_dev[i].obj, krg_dev[i].orig_vt, "mouse device vtable pointer (restore)")) { n++; krg_dev[i].obj = 0; }
-        }
-        if (krg_di[i].obj) {
-            if (!krg_di_live(i)) krg_di[i].obj = 0;
-            else if (krg_ptr_set(krg_di[i].obj, krg_di[i].orig_vt, "IDirectInput8 vtable pointer (restore)")) { n++; krg_di[i].obj = 0; }
-        }
-    }
-    if (n) klog("rigid: %d DirectInput object(s) given back their stock vtable (%s)", n, why);
-}
+/* ---------------------------------------------------------------- tick, init */
 
 static void klrigid_tick(int game_thread)
 {
-    static DWORD last; static int was_on; DWORD now = GetTickCount();
+    static DWORD last; DWORD now = GetTickCount();
     if (!game_thread || now - last < 1000) return;
     last = now;
-    if (krg.on) was_on = 1;
-    else if (was_on) { was_on = 0; krg_restore_all("filter off"); return; }
     if (!krg.on || !krg.log) return;
     if (!krg_sum_t) krg_sum_t = now;
     if (now - krg_sum_t >= 10000) {

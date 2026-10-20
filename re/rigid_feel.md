@@ -168,6 +168,16 @@ DirectInput8Create runs once, after DllMain, so the ini is already read.
 - Checked: no hashed byte written (heap objects only, klh_data/klh_may_write), klnetsmooth.c has no dinput code (no clash), SHIP + TEST builds compile with the 4 wiring lines.
 - Still unproven live: that the game creates its mouse via IDirectInput8::CreateDevice with GUID_SysMouse on the object DirectInput8Create returned.
 
+## SHIP crash and the proxy fix (2026-10-20 03:10-03:27)
+- The SHIP build 1020e with [Rigid] Enable=1 crashed at load, kl2.exe+0xfbb90 (read of 0), every time (Z1, Z2, Z4, Z6). The
+  bisect: switches off = OK, NetSmooth only = OK, Rigid only = crash. There was never a "mouse device wrapped" line.
+- Cause: the vtable-pointer swap ran on dinput8's OWN objects in SHIP. dinput8 checks the interface pointer's vtable on
+  each call, so CreateDevice through our copy failed and the game had no mouse. The TEST runs R1/R2 never saw this: there
+  the swapped object was klauto.c's proxy.
+- Fix (1020f SHIP / 1020k TEST): klrigid.c now hands out its own heap proxies ({vtable, real}; every method forwards; only
+  mouse GetDeviceState filters). Z7 (SHIP, Rigid only) and Z8 (SHIP, Z1 = Shop + Rigid + NetSmooth + Probe): no crash, both
+  objects wrapped. R3 (TEST 1020k, R2 script): PASS, 0 faults, the filter active in the round, 754 aim-bypass frames.
+
 ## Live results (2026-10-20, scripted, owner asleep; KLHook TEST 1020d, DM01 in the F01 slot, Arcade)
 Runs R1 (Log=1) and R1b (Log=2), [Rigid] Enable=1 with the defaults above: both PASS, 0 asserts, 0 faults.
 - The wrap works live: `IDirectInput8 ... CreateDevice wrapped`, `mouse device ... GetDeviceState wrapped`, the filter is
