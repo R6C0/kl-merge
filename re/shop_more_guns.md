@@ -95,3 +95,14 @@ S17 (06:55, S16 + ProbeMs=2000 ProbeLines=6000): same stuck point (-190, 5192, -
 move (fixed stand-in bodies, not the Arcade crew), so the probe cannot trace the crew's escape. The score page came
 ~5 min after spawn in S16 and S17 alike (a round timer, not the crew leaving: GUESS). Next, offline: what removes
 REF 1453 (Timer_explosion#01 / Exit_Bank trigger) and the helicopter landing spots, from F02's .prp.
+S18 (07:47, C:/kl_build_1019/live/S18_bridge.ini: S16 without the bank-exit wait, a 12 s wait inside
+TriggerBox_make_the_ramp, then the ramp/highway cells to the call box; route from workflow bridge-escape, READ from
+F02's .prp: REF 1453 is hidden by Timer_explosion#01 at round start, Group_Collapsing_Bridge REF 2275/2276 stays a
+wall until make_the_ramp's swap): the scripted player was KILLED ~45 s into the round at (353, 5247, -16622), at the
+train, before the first bag (bots line 'record 0 (you): dead' 07:48:29). The AI crew had the vehicle called 2 s later
+(van 2 -> 4 -> 5 -> 7), looted $1.1M and left; score page 07:49:12, $0 for you. 0 faults, PASS (script end).
+So the ramp route is still untried. Conclusion: on stock Bridge the crew's vehicle comes within about a minute and the
+round ends ~80 s later; a scripted player cannot loot, cross the ramp (~260 m) and board in that time, and [Balance]
+PlayerHealth / Tough are off on stock levels by design. Stock-map BUY stays unproven by script. Nothing map-specific is
+left open: the swap is applied at load and re-parked at the round reset on F02 (S14/S15), and the hand-over is the same
+code as the four DM01 buys (S7-S11). Left for the owner's own play on a stock map.
