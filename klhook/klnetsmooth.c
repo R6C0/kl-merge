@@ -63,7 +63,8 @@
 #define KNS_NPL         28
 
 static struct { int on, log; float maxdps, tau, snap; volatile LONG active; int told; int probe, probems, probemax, probed; DWORD probet; int offline; } kns;
-static DWORD kns_vt[KNS_NSLOT];                       /* the private vtable */
+static DWORD kns_vtblk[KNS_NSLOT + 1];                /* [0] = the stock vt[-1] (MSVC RTTI locator), then the private vtable */
+#define kns_vt (kns_vtblk + 1)
 static DWORD kns_orig;                                /* the stock slot 393 function */
 static DWORD kns_obj[KNS_NPL];                        /* objects given the private vtable */
 static struct { int have; float yaw, vel, pos[3]; LARGE_INTEGER t; } kns_st[KNS_NPL];
@@ -82,14 +83,21 @@ static int kns_local(DWORD *me)
 
 static float kns_wrap(float a) { while (a > 3.14159265f) a -= 6.2831853f; while (a < -3.14159265f) a += 6.2831853f; return a; }
 
+/* online the chain P -> R -> body is a GUESS (re\netcode_smooth.md): say once where it breaks, so a two-PC run tells either way */
+static void kns_chain_fail(DWORD pl, const char *why)
+{
+    static int n;
+    if (n < 3) { n++; klog("netsmooth: player %08lx: no body (%s) - not smoothed%s", pl, why, n == 3 ? " (not logged again)" : ""); }
+}
+
 /* the body of player P: B (the object whose vtable slot 0x8c places it) and its transform address, or 0 */
 static int kns_body(DWORD pl, DWORD *B, DWORD *xf)
 {
     DWORD r = klh_rd32(pl + 0x274c), p, e, b;
     if (!r && kns.offline) p = pl;                                /* OfflineTest: no replica offline (N1), start at P (N2: holds) */
-    else if (!r || !(p = klh_rd32(r + 0x540))) return 0;
-    if (!(e = klh_rd32(p + 4)) || !(e = klh_rd32(e + 0x50)) || !(b = klh_rd32(e + 0x60))) return 0;
-    if (!(*xf = klh_rd32(b + 4))) return 0;
+    else if (!r || !(p = klh_rd32(r + 0x540))) { kns_chain_fail(pl, r ? "[R+0x540] = 0" : "no replica [P+0x274c]"); return 0; }
+    if (!(e = klh_rd32(p + 4)) || !(e = klh_rd32(e + 0x50)) || !(b = klh_rd32(e + 0x60))) { kns_chain_fail(pl, "[[[p+4]+0x50]+0x60] = 0"); return 0; }
+    if (!(*xf = klh_rd32(b + 4))) { kns_chain_fail(pl, "[B+4] = 0"); return 0; }
     *B = b; return 1;
 }
 
@@ -234,7 +242,7 @@ static void klnetsmooth_tick(int game_thread)
     if (!gd) { kns.active = 0; kns_restore_all("level end"); return; }
     if (!kns_orig) {
         DWORD vt = (DWORD)(DWORD_PTR)KLH_VA(KNS_PLAYER_VT);
-        if (!klh_rd((DWORD_PTR)vt, kns_vt, sizeof kns_vt) || kns_vt[KNS_SLOT] != (DWORD)(DWORD_PTR)KLH_VA(0x506350)) {
+        if (!klh_rd((DWORD_PTR)vt - 4, kns_vtblk, sizeof kns_vtblk) || kns_vt[KNS_SLOT] != (DWORD)(DWORD_PTR)KLH_VA(0x506350)) {
             klog("netsmooth: ZFFPlayer slot %d is %08lx, not 0x506350: this build is not the one read - smoother off", KNS_SLOT, kns_vt[KNS_SLOT]);
             kns.on = 0; return;
         }

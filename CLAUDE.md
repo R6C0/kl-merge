@@ -190,8 +190,9 @@ into every session and agent: it grew to 256 KB and made every session thrash).
 
 2026-10-20 03:30 - [Rigid] crashed every SHIP build at load; fixed in 1020f (3f; live runs Z1-Z8, R3, owner asleep).
 - SHIP + [Rigid] Enable=1 = crash kl2+0xfbb90 (1020c and 1020e alike): dinput8 rejects calls through a swapped vtable, the game got no mouse. TEST hid it (klauto's proxy). Now heap proxies (bd3be72fa). SHIP Z8 (Shop+Rigid+NetSmooth+Probe): no crash; TEST R3 flicks PASS.
+- 03:45 audit workflow (TEST vs SHIP, all modules): no other SHIP-only fault. 1020g adds: NetSmooth logs where an online body chain breaks, vtable copy keeps vt[-1]; N7 offline PASS, SHIP Z9 no crash, SHIP tick on the main loop.
 - NetSmooth offline N1-N6: chain from P, mirrored matrix, the write call proven (re/netcode_smooth.md); online still untried. Local commits through bd3be72fa are NOT pushed (push refused).
-Owner: reboot, then C:\kl_build_1019\hook_1020f\INSTALL hook 1020f.bat (NOT 1020c / 1020e with Rigid), shopswap, noblow; then [Rigid] Enable=1 and try the feel.
+Owner: reboot, then C:\kl_build_1019\hook_1020g\INSTALL hook 1020g.bat (NOT 1020c / 1020e with Rigid), shopswap, noblow; then [Rigid] Enable=1 and try the feel.
 2026-10-20 01:55 - [Rigid] mouse filter run live for the first time (3f; scripted R1/R1b/R2, owner asleep): all PASS, 0 faults.
 - The DirectInput wrap works; scripted flicks measure it (new Log=2 burst lines): 159 deg -> 159 out in 1.0 s, 102 deg/s passes, a 510 deg flick in 0.5 s -> 230 out / 280 dropped (0.30 s backlog), as predicted. Aim byte [cam+0x640] PROVEN: right mouse bypasses the filter (re/rigid_feel.md "Live results").
 - git push was refused by the permission classifier at 01:50: commits 15894b284, 6a37d9594 are local only.
