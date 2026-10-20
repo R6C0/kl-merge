@@ -1,6 +1,7 @@
 2026-10-20 03:30 - [Rigid] crashed every SHIP build at load; fixed in 1020f (3f; live runs Z1-Z8, R3, owner asleep).
 - SHIP + [Rigid] Enable=1 = crash kl2+0xfbb90 (1020c and 1020e alike): dinput8 rejects calls through a swapped vtable, the game got no mouse. TEST hid it (klauto's proxy). Now heap proxies (bd3be72fa). SHIP Z8 (Shop+Rigid+NetSmooth+Probe): no crash; TEST R3 flicks PASS.
 - 03:45 audit workflow (TEST vs SHIP, all modules): no other SHIP-only fault. 1020g adds: NetSmooth logs where an online body chain breaks, vtable copy keeps vt[-1]; N7 offline PASS, SHIP Z9 no crash, SHIP tick on the main loop.
+- 04:47 S13 (TEST 1020l, Shop Swap + ReserveClips + Rigid + NetSmooth Probe in one scripted DM01 run): PASS, 0 faults; round 2 holds REM 700 / 43 (screenshot), Rigid proxies active. All three run together.
 - NetSmooth offline N1-N6: chain from P, mirrored matrix, the write call proven (re/netcode_smooth.md); online still untried. Local commits through bd3be72fa are NOT pushed (push refused).
 Owner: reboot, then C:\kl_build_1019\hook_1020g\INSTALL hook 1020g.bat (NOT 1020c / 1020e with Rigid), shopswap, noblow; then [Rigid] Enable=1 and try the feel.
 2026-10-20 01:55 - [Rigid] mouse filter run live for the first time (3f; scripted R1/R1b/R2, owner asleep): all PASS, 0 faults.

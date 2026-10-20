@@ -73,3 +73,7 @@ Not run live on a stock map (needs a scripted round per map; the shop opens only
 The KLHook.ini path itself IS live-proven: S10/S11 logged no "shop: map ... KLGuns.ini" line (none was installed in
 the slot), so their swaps came from KLHook.ini [Shop] Swap - exactly what a stock map uses. Remaining stock-map risk:
 only the map's own content, and the templates above match.
+
+S13 (2026-10-20 04:47, TEST 1020l, S12_combo.ini): Swap=32:49 + ReserveClips=2 with [Rigid] and [NetSmooth] Probe on
+together: PASS, 0 faults, 2 loads; the round-2 HUD shows REM 700 / 43 after firing (research/shots/S13_combo_372s.png).
+S12 (same ini, 420 s limit) only timed out: the script needed 6.4 min, so the 30 s pass wait ran past the limit.
