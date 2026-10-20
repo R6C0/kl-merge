@@ -62,3 +62,11 @@ Rem700, RPG and HK69 only.
 - Shop route for scripts: score page -> msg MercsFAStatusReadyHeistLBStatus ZW_SELECT3 (its buttons are mouse-only) -> RETURN (Primary)
   -> DOWN per category (Pistols, Shotguns, ...) -> RETURN -> DOWN per row -> RETURN -> msg MercsFASelectorWeaponsPC3 BuyWeapon -> ESC x3
   -> RETURN (Ready). A row already carried opens no dialog. For row 13 no dialog showed, but BuyWeapon bought it anyway.
+
+## Stock FA maps (2026-10-20, static, read-only on the stock zips)
+`python tools/kl_shop_extra.py check <DD>\Scenes\Locations\Fxx\Fxx_Main.zip` for F01..F09: every one of the nine
+stock maps has the SAME weapon-template set, including all four default DM01 swap guns (33 Type 81, 47 Minimi,
+49 Rem 700, 52 HK69, each with its handling clip set). Items 60/61 have no template anywhere (unusable).
+Usable non-shop items on every stock map: 33 35 38 40-59 62 63. A stock map has no KLGuns.ini, so the swaps come
+from KLHook.ini `[Shop] Swap=16:33,32:49,...`; the shop names/pictures stay stock (shopswap only bakes DM01's).
+Not run live on a stock map (needs a scripted round per map; the shop opens only after a round).
