@@ -77,3 +77,11 @@ only the map's own content, and the templates above match.
 S13 (2026-10-20 04:47, TEST 1020l, S12_combo.ini): Swap=32:49 + ReserveClips=2 with [Rigid] and [NetSmooth] Probe on
 together: PASS, 0 faults, 2 loads; the round-2 HUD shows REM 700 / 43 after firing (research/shots/S13_combo_372s.png).
 S12 (same ini, 420 s limit) only timed out: the script needed 6.4 min, so the 30 s pass wait ran past the limit.
+S14 (2026-10-20 05:35, TEST 1020l, stock F02 from the stock map page, KLHook.ini Swap=32:49): the swap is applied at
+load on a STOCK map ("row 32 (item 36) now hands over item 49: 8 objects added, 8 stock parked"), 0 faults, Rigid
+active. The round did not end: an idle player on F02 is not attacked in 240 s, so the shop (round 2) was not reached.
+S15 (05:40, same, 540 s idle): the stock round ends by itself after ~6 min (score page 'BRIDGE ROUND 1', $0, Buy
+Weapons offered); the replayed round showed 'ROUND 1 OF 10' and the stock gun: with $0 nothing can be bought, so the
+swapped row's hand-over was not reached. At the round reset the hook re-parked the 8 stock objects as on DM01;
+0 faults, PASS. A stock-map BUY needs money first: a scripted loot route per stock map, or the owner's play.
+Scripts: C:\kl_build_1019\live\S14_stockF02.ini, S15_stockF02.ini (menu path to the stock page, entry 1).
