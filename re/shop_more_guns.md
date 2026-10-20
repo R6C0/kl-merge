@@ -50,6 +50,10 @@ Rem700, RPG and HK69 only.
 - S8 (1020c): 'MINIMI / 300'; after firing 68 rounds, a reload gave 150 in the clip and 232 in reserve: the reload draws from the written reserve.
 - S9 (1020c, Swap=13:52): Hawk Police (shotgun row 13) -> HK69 launcher: held, 'HK69 / 39' (stock formula 40 - 1); fires and reloads
   with the aiming pose (39 -> 30). GUESS (1) (handling clips) holds for a launcher on a shotgun row.
+- S10 (TEST 1020d, Swap=16:33, route Shotguns -> DOWN x5): Hawk Bullpup (shotgun row 16) -> TYPE 81: held in round 2
+  as 'TYPE 81 / 30', fires, the reload draws the 30 (/ 0). Its clip is below the row's ammo, so the stock formula gave the reserve
+  and ReserveClips correctly stayed out (no log line). PASS, 0 faults. The row was LOCKED (rank 1 Mastermind) in the shop, yet the
+  scripted msg BuyWeapon bought it: the lock is a UI check only. A player still needs the rank to buy it by hand.
 - Shop route for scripts: score page -> msg MercsFAStatusReadyHeistLBStatus ZW_SELECT3 (its buttons are mouse-only) -> RETURN (Primary)
   -> DOWN per category (Pistols, Shotguns, ...) -> RETURN -> DOWN per row -> RETURN -> msg MercsFASelectorWeaponsPC3 BuyWeapon -> ESC x3
   -> RETURN (Ready). A row already carried opens no dialog. For row 13 no dialog showed, but BuyWeapon bought it anyway.
