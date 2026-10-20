@@ -1,6 +1,7 @@
 2026-10-20 01:55 - [Rigid] mouse filter run live for the first time (3f; scripted R1/R1b/R2, owner asleep): all PASS, 0 faults.
 - The DirectInput wrap works; scripted flicks measure it (new Log=2 burst lines): 159 deg -> 159 out in 1.0 s, 102 deg/s passes, a 510 deg flick in 0.5 s -> 230 out / 280 dropped (0.30 s backlog), as predicted. Aim byte [cam+0x640] PROVEN: right mouse bypasses the filter (re/rigid_feel.md "Live results").
 - git push was refused by the permission classifier at 01:50: commits 15894b284, 6a37d9594 are local only.
+- 02:10 shop: S10 (Hawk Bullpup row -> Type 81) and S11 (Type 88 Scope row -> Rem 700) live PASS; all 4 default DM01 swaps proven. The 9 stock FA maps all carry those guns' templates (static); swaps there come from KLHook.ini [Shop] Swap, the path S10/S11 used. Local commits since: f6bcfd44d 7b86506f4 0a1f2b4b9 3628e8ad0 (not pushed).
 Owner: the feel needs you: [Rigid] Enable=1 in KLHook.ini, Arcade, flick / track / aim; tune YawMaxDps 240-360.
 2026-10-20 01:20 - more guns in the shop PROVEN LIVE (3f; overnight runs S1-S7, owner asleep):
 - KLHook 1020a/b: a bought shop row hands over another gun; set per map in KLGuns.ini [Shop] Swap (kl_shop_swap.py also bakes names + pictures). S7: bought USP row (Swap=2:47) -> round 2 holds the MINIMI (1020b: the round's end frees the parked stock guns again, now re-parked). S8: 1020c [Shop] ReserveClips=2 gives a gun whose clip swallows the row's ammo a reserve (row ammo is table +4, hashed; reserve written to the object): MINIMI / 300, reload draws from it.
