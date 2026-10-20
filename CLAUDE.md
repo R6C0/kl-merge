@@ -188,6 +188,10 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-20 01:20 - more guns in the shop PROVEN LIVE (3f; overnight runs S1-S7, owner asleep):
+- KLHook 1020a/b: a bought shop row hands over another gun; set per map in KLGuns.ini [Shop] Swap (kl_shop_swap.py also bakes names + pictures). S7: bought USP row (Swap=2:47) -> round 2 holds the MINIMI. 1020b fix: the round's end frees the parked stock guns again, now re-parked. Open: reserve ammo shows 0 (workflow wsd2cunom).
+- Scripted shop route: msg MercsFAStatusReadyHeistLBStatus ZW_SELECT3 opens Buy Weapons (score-page buttons are mouse-only); a row already carried opens no dialog.
+Owner: reboot, then C:\kl_build_1019\hook_1020b\INSTALL hook 1020b.bat ([Shop] Enable=1), C:\kl_build_1019\shopnames\INSTALL shopswap.bat (DM01 names/pictures), noblow.
 2026-10-19 23:50 - pool lifetime, static pass 2 (e5; owner active, no live run): still UNKNOWN.
 - Workflow wfg5gjc7i (re/private_match.md): the scene load path never frees the pool, but DB slot 31 0x41c360 (a per-scene teardown) clears it via slot 11; whether that runs at a map change is unproven (virtual callers). Rule unchanged: both PCs start the session on the same map zip and build. PoolLog (or logging [0xe0ff90] across one map change) settles it live.
 Owner: reboot (zombie kl2 blocks noblow), then INSTALL noblow.bat and INSTALL hook 1019d.bat, then a Hasta run.
@@ -195,10 +199,6 @@ Owner: reboot (zombie kl2 blocks noblow), then INSTALL noblow.bat and INSTALL ho
 - klinv.c [Inv] Enable (Arcade only, inert online): the 2-gun limit is code (kl2 0x6cc2ef cmp bl,2; hashed). F8 shelves the gun not in hand (entry+8 = 0) so a third can be picked up; F8 again swaps back; restore checks item id + gun vtable (re/weapon_slots.md). Reviewed FIX -> fixed.
 - klnetfix.c [Net] Hold*: no legal receiver cure for spin/float (snap/steer thresholds are in hashed .rdata); only the dead-reckoning end time (3500 ms, .bss policies) - an EXPERIMENT, position keys client-only (re/netcode_receiver.md). Needs two PCs.
 Owner: C:\kl_build_1019\hook_1019d\INSTALL hook 1019d.bat (replaces 1019c; adds [Inv] Enable=1), noblow; Arcade: hold 2 guns, F8, pick up a third.
-2026-10-19 19:40 - Hasta chopper settled statically + opt-in fixes (3f; nothing run live, owner present):
-- re/hasta_chopper_1019.md: the chopper's VehicleEffects health (kl2 0x412430) <= 15 % forces the early lift-off, 0 with Definite = state 6. Damage source unknown. 12 of 216 departures destroyed, all Hasta. noblow stops state 6, not the early lift-off.
-- KLHook 1019c (b9bc4919, all OFF by default): [Down] Floor, [Bots] FoeSkipWhileFed, [Load] CursorGuard, [Bots] FollowOutHoldUnshielded (default 1); heli probe line shows hp=/max blow=.
-Owner: close the game, run C:\kl_build_1019\noblow\INSTALL noblow.bat and C:\kl_build_1019\hook_1019c\INSTALL hook 1019c.bat; then a Hasta run.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
