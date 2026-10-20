@@ -40,3 +40,16 @@ Rem700, RPG and HK69 only.
 3. Round 2: log again "now hands over" (pool rebuilt); a second buy works.
 4. A pair for an item without template: log says skipped, shop unchanged.
 5. Quit mid-shop and re-enter: no crash at int3 0x538f02 (that would mean the pool lost its free objects).
+
+## Live results (scripted, 2026-10-20 night; DM01 in the F01 slot, TEST hooks, all PASS, 0 asserts, 0 faults)
+- S6 (1020a, Swap=2:47): the USP row was bought, but round 2 handed over the stock USP. Cause: the pool survives the round and the
+  round's end marks every gun free again, the parked stock ones included (they come first). 1020b re-parks them before each round.
+- S7 (1020b): bought USP row -> round 2 holds the MINIMI, but with 'MINIMI / 0'.
+- Reserve = ROW ammo (table +4, hashed) - min(clip, row ammo) (0x410710 -> 0x538ec0, 0x538f72..0x538fb4). A 150-round clip on a
+  150-ammo row leaves 0. 1020c [Shop] ReserveClips=2 writes [obj+0xe0] = (2 x rounds) ^ 0xbeebbeeb once per hand-over (heap data).
+- S8 (1020c): 'MINIMI / 300'; after firing 68 rounds, a reload gave 150 in the clip and 232 in reserve: the reload draws from the written reserve.
+- S9 (1020c, Swap=13:52): Hawk Police (shotgun row 13) -> HK69 launcher: held, 'HK69 / 39' (stock formula 40 - 1); fires and reloads
+  with the aiming pose (39 -> 30). GUESS (1) (handling clips) holds for a launcher on a shotgun row.
+- Shop route for scripts: score page -> msg MercsFAStatusReadyHeistLBStatus ZW_SELECT3 (its buttons are mouse-only) -> RETURN (Primary)
+  -> DOWN per category (Pistols, Shotguns, ...) -> RETURN -> DOWN per row -> RETURN -> msg MercsFASelectorWeaponsPC3 BuyWeapon -> ESC x3
+  -> RETURN (Ready). A row already carried opens no dialog. For row 13 no dialog showed, but BuyWeapon bought it anyway.
