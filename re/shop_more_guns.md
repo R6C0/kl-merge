@@ -54,6 +54,11 @@ Rem700, RPG and HK69 only.
   as 'TYPE 81 / 30', fires, the reload draws the 30 (/ 0). Its clip is below the row's ammo, so the stock formula gave the reserve
   and ReserveClips correctly stayed out (no log line). PASS, 0 faults. The row was LOCKED (rank 1 Mastermind) in the shop, yet the
   scripted msg BuyWeapon bought it: the lock is a UI check only. A player still needs the rank to buy it by hand.
+- S11 (TEST 1020d, Swap=32:49, route Assault rifles (DOWN x3) -> DOWN x4): Type 88 Scope (row 32) -> REM 700: held in round 2 as
+  'REM 700 / 45' (row ammo 50 - clip 5, stock formula), fires and reloads (-> 40). PASS, 0 faults. The shop's highlight showed the row
+  above (TYPE 88 description) at that moment, yet the Rem 700 (only row 32 carries it) came out: the description pane is not a reliable
+  read of the cursor in shots. Shop categories by table order: pistols 0-10, shotguns 11-16, SMGs 17-27, rifles 28-35; DOWN x (row - first).
+  With S7 (Minimi on a pistol row) all four guns of the default DM01 line 13:52,16:33,32:49,35:47 are proven to hand over and fire.
 - Shop route for scripts: score page -> msg MercsFAStatusReadyHeistLBStatus ZW_SELECT3 (its buttons are mouse-only) -> RETURN (Primary)
   -> DOWN per category (Pistols, Shotguns, ...) -> RETURN -> DOWN per row -> RETURN -> msg MercsFASelectorWeaponsPC3 BuyWeapon -> ESC x3
   -> RETURN (Ready). A row already carried opens no dialog. For row 13 no dialog showed, but BuyWeapon bought it anyway.
