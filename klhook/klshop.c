@@ -157,7 +157,18 @@ static void klshop_tick(int game_thread)
             DWORD a, n = 0, ents, i; int alive = 0;
             if (kls_vec(&a) && klh_rd(a + 4, &n, 4) && n <= 4096 && (ents = klh_rd32(a + 0x10)))
                 for (i = 0; i < n && !alive; i++) { DWORD e[3]; if (klh_rd(ents + 12 * i, e, 12) && e[0] == kls.made[k][0]) alive = 1; }
-            if (alive) { any = 1; continue; }
+            if (alive) {                                                 /* LIVE 2026-10-20 (S6): the pool survives the round, but the round's end frees
+                                                                            every gun again, the parked stock ones too, and they come first: re-park them */
+                DWORD carrier = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * kls.row[k]); int re = 0;
+                for (i = 0; i < n; i++) {
+                    DWORD e[3]; BYTE zero = 0; int m, ours = 0;
+                    if (!klh_rd(ents + 12 * i, e, 12) || e[1] != carrier || !(e[2] & 0xff)) continue;
+                    for (m = 0; m < KLS_PER; m++) if (e[0] == kls.made[k][m]) ours = 1;
+                    if (!ours) { klh_data((void *)(DWORD_PTR)(ents + 12 * i + 8), &zero, 1, "KLShop: re-park stock gun"); re++; }
+                }
+                if (re) klog("shop: row %d: %d stock object(s) were free again (round reset): parked again", kls.row[k], re);
+                any = 1; continue;
+            }
             memset(kls.made[k], 0, sizeof kls.made[k]); kls.applied[k] = 0;
         }
         if (kls_apply(k) == -1) kls.row[k] = -1;
