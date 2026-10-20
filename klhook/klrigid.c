@@ -48,7 +48,7 @@
  *   DegPerCount=0.17    degrees of turn per mouse count (only for the caps)
  *   AimExempt=1         bypass while aiming ([cam+0x640], ASSUMPTION)
  *   AimByte=0x640       offset of that byte in the camera
- *   Log=0               1 = a line when the filter engages, on aim changes, and a 10 s summary
+ *   Log=0               1 = a line when the filter engages, on aim changes, and a 10 s summary; 2 = also one line per yaw burst
  *   Remote=0            1 = klrigid_remote_cap() answers PD2's curve instead of the caller's flat cap (works without Enable=1)
  *   RemoteMaxDps=300  RemoteMinDps=40  RemoteFullDeg=90
  *   RemoteTurnInPlace=0 1 = klrigid_follow() holds the body until the look is TurnStartDeg away (EXPERIMENT, see the .md)
@@ -139,6 +139,22 @@ static DWORD krg_player(DWORD *camout)
 
 static void krg_reset(void) { krg_ax[0].pend = krg_ax[0].frac = krg_ax[1].pend = krg_ax[1].frac = 0.0f; krg_have = 0; }
 
+/* Log=2: one line per yaw burst (input starts .. input and backlog both quiet for 0.1 s): what the filter took in and passed on */
+static struct { int open; LONG in, out, wout; float t, quiet, peak, wt; } krg_b;   /* peak = best 0.1 s window */
+static void krg_burst(int in, int out, float dt)
+{
+    if (!krg_b.open) { if (!in) return; memset(&krg_b, 0, sizeof krg_b); krg_b.open = 1; }
+    krg_b.in += in; krg_b.out += out; krg_b.t += dt;
+    krg_b.wout += out; krg_b.wt += dt;
+    if (krg_b.wt >= 0.1f) { float r = fabsf((float)krg_b.wout) / krg_b.wt; if (r > krg_b.peak) krg_b.peak = r; krg_b.wout = 0; krg_b.wt = 0.0f; }
+    krg_b.quiet = (in || out || krg_ax[0].pend != 0.0f) ? 0.0f : krg_b.quiet + dt;
+    if (krg_b.quiet >= 0.1f || krg_b.t > 10.0f) {
+        klog("rigid: burst %.0f ms: yaw in %ld counts (%.0f deg), out %ld (%.0f deg), dropped %ld; peak out %.0f deg/s",
+             (krg_b.t - krg_b.quiet) * 1000.0f, krg_b.in, krg_b.in * krg.dpc, krg_b.out, krg_b.out * krg.dpc, krg_b.in - krg_b.out, krg_b.peak * krg.dpc);
+        krg_b.open = 0;
+    }
+}
+
 /* the filter on one DIMOUSESTATE2 (cb >= 8 bytes: lX lY) */
 static void krg_filter(LONG *xy)
 {
@@ -159,7 +175,10 @@ static void krg_filter(LONG *xy)
         krg_n_aim++; return;
     }
     krg_n_active++;
-    xy[0] = krg_step(&krg.yaw, &krg_ax[0].pend, &krg_ax[0].frac, xy[0], dt);
+    {   int in = xy[0];
+        xy[0] = krg_step(&krg.yaw, &krg_ax[0].pend, &krg_ax[0].frac, xy[0], dt);
+        if (krg.log >= 2) krg_burst(in, xy[0], dt);
+    }
     xy[1] = krg_step(&krg.pit, &krg_ax[1].pend, &krg_ax[1].frac, xy[1], dt);
 }
 
@@ -329,7 +348,7 @@ static void klrigid_init(void)
         klog("rigid: remote shaping only (mouse filter off): Remote=%d %.0f..%.0f deg/s full at %.0f deg, turn-in-place %d; used by [NetSmooth]", krg.rem, krg.remmin, krg.remmax, krg.remfull, krg.remturn);
     krg.on = GetPrivateProfileIntA("Rigid", "Enable", 0, klh_ini) != 0;
     if (!krg.on) return;
-    krg.log = GetPrivateProfileIntA("Rigid", "Log", 0, klh_ini) != 0;
+    krg.log = GetPrivateProfileIntA("Rigid", "Log", 0, klh_ini);
     krg.aimex = GetPrivateProfileIntA("Rigid", "AimExempt", 1, klh_ini) != 0;
     GetPrivateProfileStringA("Rigid", "AimByte", "0x640", b, sizeof b, klh_ini); krg.aimoff = strtoul(b, 0, 16); if (krg.aimoff > 0x2000) krg.aimoff = 0x640;
     krg.yaw.maxdps = krg_f("YawMaxDps", "300", 0, 3600);   krg.yaw.mindps = krg_f("YawMinDps", "60", 1, 3600);
@@ -339,7 +358,7 @@ static void klrigid_init(void)
     krg.full = krg_f("CurveFullDeg", "90", 0, 720);
     krg.backlog = krg_f("BacklogSec", "0.30", 0.05f, 3);
     krg.dpc = krg_f("DegPerCount", "0.17", 0.005f, 5);
-    klog("rigid: on; yaw max %.0f deg/s (min %.0f, full at %.0f deg, smooth %.0f ms, mul %.2f), pitch max %.0f (smooth %.0f ms, mul %.2f), backlog %.2f s, %.3f deg/count, aim exempt %d byte +0x%lx, remote %d turn-in-place %d, Log=%d; mouse yaw/pitch counts only, EXPERIMENT (never run): re/rigid_feel.md",
+    klog("rigid: on; yaw max %.0f deg/s (min %.0f, full at %.0f deg, smooth %.0f ms, mul %.2f), pitch max %.0f (smooth %.0f ms, mul %.2f), backlog %.2f s, %.3f deg/count, aim exempt %d byte +0x%lx, remote %d turn-in-place %d, Log=%d; mouse yaw/pitch counts only, EXPERIMENT (filter live-run 2026-10-20): re/rigid_feel.md",
          krg.yaw.maxdps, krg.yaw.mindps, krg.full, krg.yaw.tau * 1000.0f, krg.yaw.mul, krg.pit.maxdps, krg.pit.tau * 1000.0f, krg.pit.mul, krg.backlog, krg.dpc, krg.aimex, krg.aimoff, krg.rem, krg.remturn, krg.log);
 }
 

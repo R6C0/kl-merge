@@ -167,3 +167,22 @@ DirectInput8Create runs once, after DllMain, so the ini is already read.
 - Fixed in klrigid.c: a stale heap address (device recreated) no longer blocks wrapping or fills the 4-slot tables; registry entry set before the vtable-pointer swap (no E_FAIL race); restore keeps the entry unless the stock pointer went back, so GetDeviceState never fails after a restore.
 - Checked: no hashed byte written (heap objects only, klh_data/klh_may_write), klnetsmooth.c has no dinput code (no clash), SHIP + TEST builds compile with the 4 wiring lines.
 - Still unproven live: that the game creates its mouse via IDirectInput8::CreateDevice with GUID_SysMouse on the object DirectInput8Create returned.
+
+## Live results (2026-10-20, scripted, owner asleep; KLHook TEST 1020d, DM01 in the F01 slot, Arcade)
+Runs R1 (Log=1) and R1b (Log=2), [Rigid] Enable=1 with the defaults above: both PASS, 0 asserts, 0 faults.
+- The wrap works live: `IDirectInput8 ... CreateDevice wrapped`, `mouse device ... GetDeviceState wrapped`, the filter is
+  bypassed in menus ("menu/none-bypass") and active in the round. The aim byte [cam+0x640] read 0 throughout (no aiming
+  scripted: the aim exemption is still UNPROVEN).
+- klauto's scripted mouse sits UNDER the filter (its proxy object gets the same vtable swap), so scripted turns measure it.
+  The script's own steering still reached the shop and the round with the filter on.
+- New `Log=2`: one line per yaw burst (counts in / out, dropped, peak rate over 0.1 s windows). Scripted probes in R1b:
+  | probe | in | out | dropped | burst | prediction |
+  |---|---|---|---|---|---|
+  | T0 3000 c/s x 0.3 s | 159 deg | 159 deg | 0 | 1.0 s | 153 deg, nothing dropped, ~0.7 s |
+  | T1 600 c/s x 1.0 s (102 deg/s) | 102 deg | 102 deg | 0 | 1.3 s | passes, ~3 deg behind |
+  | T2 6000 c/s x 0.5 s (1020 deg/s) | 510 deg | 230 deg | 280 deg | 1.2 s | ~240 out, ~270 dropped |
+  So a flick is slowed to the 300 deg/s cap and paid out over ~0.3 s more; a turn faster than cap x backlog loses the rest.
+  (R1b's per-frame peak figure read 338-365 deg/s from whole-count rounding at ~500 fps; the 0.1 s window replaces it.)
+- `pos` heading in klauto reads a wrong player for "me" in these runs (#8 / #10 at y = 0, fixed while the shots show the
+  player moving): not usable for turn measurements.
+- Still for the owner: the FEEL (a script cannot judge it), aiming bypass, and DegPerCount at their sensitivity.
