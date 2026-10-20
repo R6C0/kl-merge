@@ -16,7 +16,7 @@
  *      into degrees with DegPerCount (the test rig measured 0.17 at the owner's sensitivity: GUESS that it still holds, it
  *      only scales the caps, never the amount turned).
  *      Aiming: while the camera's aim byte is set the filter is bypassed (AimExempt=1; the pending backlog is paid out at
- *      once). The byte is [cam+0x640], cam = [P+0xbd8] - klcam.c calls it "the aiming case, ASSUMPTION": Log=1 prints
+ *      once). The byte is [cam+0x640], cam = [P+0xbd8] - klcam.c calls it "the aiming case"; LIVE 2026-10-20 (R2): right mouse sets it within 4 ms, release clears it. Log=1 prints
  *      its changes so it can be checked; a wrong byte only moves the exemption, never breaks input.
  *      Pass-through (and the backlog is cleared) when there is no local player, the pause / cut flag [gd+0x4cd8] is set
  *      (klcam.c: ASSUMPTION), a frame gap over 250 ms, or the key is off. So menus (the mouse also moves the cursor there)
@@ -46,7 +46,7 @@
  *   YawMul=1.0 PitchMul=1.0   plain sensitivity factors (applied first)
  *   BacklogSec=0.30     most pending turn kept, in seconds at the top rate (older counts are dropped)
  *   DegPerCount=0.17    degrees of turn per mouse count (only for the caps)
- *   AimExempt=1         bypass while aiming ([cam+0x640], ASSUMPTION)
+ *   AimExempt=1         bypass while aiming ([cam+0x640], proven live R2)
  *   AimByte=0x640       offset of that byte in the camera
  *   Log=0               1 = a line when the filter engages, on aim changes, and a 10 s summary; 2 = also one line per yaw burst
  *   Remote=0            1 = klrigid_remote_cap() answers PD2's curve instead of the caller's flat cap (works without Enable=1)

@@ -171,8 +171,10 @@ DirectInput8Create runs once, after DllMain, so the ini is already read.
 ## Live results (2026-10-20, scripted, owner asleep; KLHook TEST 1020d, DM01 in the F01 slot, Arcade)
 Runs R1 (Log=1) and R1b (Log=2), [Rigid] Enable=1 with the defaults above: both PASS, 0 asserts, 0 faults.
 - The wrap works live: `IDirectInput8 ... CreateDevice wrapped`, `mouse device ... GetDeviceState wrapped`, the filter is
-  bypassed in menus ("menu/none-bypass") and active in the round. The aim byte [cam+0x640] read 0 throughout (no aiming
-  scripted: the aim exemption is still UNPROVEN).
+  bypassed in menus ("menu/none-bypass") and active in the round.
+- Aim exemption PROVEN (R2): right mouse down -> `aim byte [cam+0x640] = 1 (filter bypassed)` 4 ms later, release -> 0; a
+  510 deg flick while aiming went through unfiltered (747 aim-bypass frames). R2 repeated T0-T2 with the 0.1 s window peak:
+  284 / 104 / 300 deg/s (cap 300). PASS, 0 faults.
 - klauto's scripted mouse sits UNDER the filter (its proxy object gets the same vtable swap), so scripted turns measure it.
   The script's own steering still reached the shop and the round with the filter on.
 - New `Log=2`: one line per yaw burst (counts in / out, dropped, peak rate over 0.1 s windows). Scripted probes in R1b:
@@ -185,4 +187,4 @@ Runs R1 (Log=1) and R1b (Log=2), [Rigid] Enable=1 with the defaults above: both 
   (R1b's per-frame peak figure read 338-365 deg/s from whole-count rounding at ~500 fps; the 0.1 s window replaces it.)
 - `pos` heading in klauto reads a wrong player for "me" in these runs (#8 / #10 at y = 0, fixed while the shots show the
   player moving): not usable for turn measurements.
-- Still for the owner: the FEEL (a script cannot judge it), aiming bypass, and DegPerCount at their sensitivity.
+- Still for the owner: the FEEL (a script cannot judge it) and DegPerCount at their sensitivity.
