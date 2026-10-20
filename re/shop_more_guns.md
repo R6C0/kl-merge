@@ -91,3 +91,7 @@ bridge-route with kl_route): spawn -> 8 train bags -> exit bank all walked; the 
 Tunnel_GHOST_02 is out, so in the game it was not: blast timing/trigger unknown). Not escaped -> round ended ~5 min,
 no money in the shop. 0 faults, PASS. Next: the crew's own escape path (S17 with [NetSmooth] ProbeMs=2000
 ProbeLines=6000 logs every player's position) and the exit trigger.
+S17 (06:55, S16 + ProbeMs=2000 ProbeLines=6000): same stuck point (-190, 5192, -13119); the 16 probed player records never
+move (fixed stand-in bodies, not the Arcade crew), so the probe cannot trace the crew's escape. The score page came
+~5 min after spawn in S16 and S17 alike (a round timer, not the crew leaving: GUESS). Next, offline: what removes
+REF 1453 (Timer_explosion#01 / Exit_Bank trigger) and the helicopter landing spots, from F02's .prp.
