@@ -188,6 +188,10 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-20 03:30 - [Rigid] crashed every SHIP build at load; fixed in 1020f (3f; live runs Z1-Z8, R3, owner asleep).
+- SHIP + [Rigid] Enable=1 = crash kl2+0xfbb90 (1020c and 1020e alike): dinput8 rejects calls through a swapped vtable, the game got no mouse. TEST hid it (klauto's proxy). Now heap proxies (bd3be72fa). SHIP Z8 (Shop+Rigid+NetSmooth+Probe): no crash; TEST R3 flicks PASS.
+- NetSmooth offline N1-N6: chain from P, mirrored matrix, the write call proven (re/netcode_smooth.md); online still untried. Local commits through bd3be72fa are NOT pushed (push refused).
+Owner: reboot, then C:\kl_build_1019\hook_1020f\INSTALL hook 1020f.bat (NOT 1020c / 1020e with Rigid), shopswap, noblow; then [Rigid] Enable=1 and try the feel.
 2026-10-20 01:55 - [Rigid] mouse filter run live for the first time (3f; scripted R1/R1b/R2, owner asleep): all PASS, 0 faults.
 - The DirectInput wrap works; scripted flicks measure it (new Log=2 burst lines): 159 deg -> 159 out in 1.0 s, 102 deg/s passes, a 510 deg flick in 0.5 s -> 230 out / 280 dropped (0.30 s backlog), as predicted. Aim byte [cam+0x640] PROVEN: right mouse bypasses the filter (re/rigid_feel.md "Live results").
 - git push was refused by the permission classifier at 01:50: commits 15894b284, 6a37d9594 are local only.
@@ -197,9 +201,6 @@ Owner: the feel needs you: [Rigid] Enable=1 in KLHook.ini, Arcade, flick / track
 - KLHook 1020a/b: a bought shop row hands over another gun; set per map in KLGuns.ini [Shop] Swap (kl_shop_swap.py also bakes names + pictures). S7: bought USP row (Swap=2:47) -> round 2 holds the MINIMI (1020b: the round's end frees the parked stock guns again, now re-parked). S8: 1020c [Shop] ReserveClips=2 gives a gun whose clip swallows the row's ammo a reserve (row ammo is table +4, hashed; reserve written to the object): MINIMI / 300, reload draws from it.
 - Scripted shop route: msg MercsFAStatusReadyHeistLBStatus ZW_SELECT3 opens Buy Weapons (score-page buttons are mouse-only); a row already carried opens no dialog.
 Owner: reboot, then C:\kl_build_1019\hook_1020c\INSTALL hook 1020c.bat ([Shop] Enable=1), C:\kl_build_1019\shopnames\INSTALL shopswap.bat (DM01 names/pictures), noblow.
-2026-10-19 23:50 - pool lifetime, static pass 2 (e5; owner active, no live run): still UNKNOWN.
-- Workflow wfg5gjc7i (re/private_match.md): the scene load path never frees the pool, but DB slot 31 0x41c360 (a per-scene teardown) clears it via slot 11; whether that runs at a map change is unproven (virtual callers). Rule unchanged: both PCs start the session on the same map zip and build. PoolLog (or logging [0xe0ff90] across one map change) settles it live.
-Owner: reboot (zombie kl2 blocks noblow), then INSTALL noblow.bat and INSTALL hook 1019d.bat, then a Hasta run.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
