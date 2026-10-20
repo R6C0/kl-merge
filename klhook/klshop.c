@@ -22,6 +22,7 @@
  *   [Shop]
  *   Enable=0       1 = on (Arcade only)
  *   Swap=          DEFAULT comma list "row:item" - row 0..35 of re\shop_plan.md, item = eFF2Item value 1..63 (tools\kl_shop_extra.py lists the usable ones)
+ *   ReserveClips=2 reserve ammo, in clips, of an extra gun whose clip swallows the row's whole ammo (Minimi on a pistol row); 0 = leave it
  * KLGuns.ini beside a map's archive (2026-10-20, tools\kl_shop_swap.py writes it):
  *   [Shop]
  *   Swap=13:52,16:40   this map's set instead of the default; "Swap=" (empty) = no swap on this map; no line = the default above.
@@ -59,7 +60,8 @@ typedef void *(__fastcall *kls_maker_t)(void *self, void *edx, int zero, void *t
 typedef void *(__fastcall *kls_tmpl_t)(void *self, void *edx, int item);
 typedef void *(__cdecl *kls_realloc_t)(void *, size_t);
 
-static struct { int on, log, n; int row[KLS_MAX], item[KLS_MAX]; DWORD made[KLS_MAX][KLS_PER]; int applied[KLS_MAX], told; int wait; LONG gen; } kls;
+static struct { int on, log, n; int row[KLS_MAX], item[KLS_MAX]; DWORD made[KLS_MAX][KLS_PER]; BYTE fixed[KLS_MAX][KLS_PER]; int applied[KLS_MAX], told; int wait; LONG gen; int clips; } kls;
+#define KLS_AMMO_KEY 0xbeebbeeb                                        /* ZFFItemWeapon keeps rounds [obj+0xdc] and reserve [obj+0xe0] XORed with it */
 /* the swap set to use, filled by klshop_init (KLHook.ini = default) and klshop_level_open (the map's KLGuns.ini [Shop] Swap, any thread);
    the game thread copies it into kls when kls_sgen changed. kls_slock is a tiny spin lock (no init needed). */
 static struct { int n; int row[KLS_MAX], item[KLS_MAX]; } kls_def, kls_stg;
@@ -123,6 +125,7 @@ static int kls_apply(int k)
         ent[0] = obj; ent[1] = carrier; ent[2] = 1;                      /* object, label, byte+8 = 1 free, byte+9 = 0 */
         klh_data((void *)(DWORD_PTR)(ents + 12 * n), ent, 12, "KLShop: pool entry"); n++;
         kls.made[k][j] = obj;
+        kls.fixed[k][j] = 0;
     }
     if (!j) { klog("shop: object maker returned nothing for item %d: pair %d:%d dropped, stock left alone", kls.item[k], kls.row[k], kls.item[k]); return -1; }   /* never park without a replacement */
     klh_data((void *)(DWORD_PTR)(a + 4), &n, 4, "KLShop: pool count");
@@ -135,19 +138,49 @@ static int kls_apply(int k)
     return 1;
 }
 
+/* RESERVE AMMO of a handed-over extra gun (workflow wsd2cunom, 2026-10-20, read twice): the loadout 0x410710 passes the ROW's ammo
+   (table +4, hashed) to 0x538ec0, which sets rounds = min(clip, ammo) and reserve = ammo - rounds (0x538f72..0x538fb4). A gun whose clip
+   is >= the row's ammo (Minimi 150 on the USP row's 150) gets reserve 0 (live S7: 'MINIMI / 0'). Fix, heap data only: once one of our
+   objects is TAKEN (entry byte +8 == 0) with reserve 0 and rounds >= the row's ammo, its reserve [obj+0xe0] := clips x rounds (KEY-XORed,
+   as the game's setter 0x494180 writes it). Once per hand-over: the mark is cleared when the entry is free again (round reset).
+   GUESS: 0x6020d0 (hashed) gets the same numbers right after and might keep its own copy - a reload in the game tells. */
+static void kls_ammo(void)
+{
+    DWORD a, n = 0, ents, i; int k, m;
+    if (kls.clips <= 0 || !kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || !(ents = klh_rd32(a + 0x10))) return;
+    for (i = 0; i < n; i++) {
+        DWORD e[3];
+        if (!klh_rd(ents + 12 * i, e, 12) || !e[0]) continue;
+        for (k = 0; k < kls.n; k++) for (m = 0; m < KLS_PER; m++) if (kls.applied[k] && kls.made[k][m] == e[0]) {
+            DWORD rounds, res, ammo, r;
+            if (e[2] & 0xff) { if (!(e[2] & 0xff00)) kls.fixed[k][m] = 0; continue; }          /* free again: a later hand-over is fixed anew */
+            if (kls.fixed[k][m] || !klh_rd32(e[0] + 0xc4)) continue;
+            rounds = klh_rd32(e[0] + 0xdc) ^ KLS_AMMO_KEY; res = klh_rd32(e[0] + 0xe0) ^ KLS_AMMO_KEY;
+            ammo = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * kls.row[k] + 4);
+            kls.fixed[k][m] = 1;
+            if (res || !rounds || rounds > 999 || rounds < ammo) continue;                    /* the stock formula already gave a reserve */
+            r = rounds * (DWORD)kls.clips; if (r > 600) r = 600;
+            r ^= KLS_AMMO_KEY;
+            klh_data((void *)(DWORD_PTR)(e[0] + 0xe0), &r, 4, "KLShop: reserve ammo of a swapped gun");
+            klog("shop: row %d's extra gun %08lx handed over with %lu rounds and no reserve (row ammo %lu): reserve set to %lu", kls.row[k], e[0], rounds, ammo, r ^ KLS_AMMO_KEY);
+        }
+    }
+}
+
 static void klshop_tick(int game_thread)
 {
     DWORD sm, st = 0; int k, any = 0;
     if (!kls.on || !game_thread || !klh_exe_ok) return;
     if (kls.gen != kls_sgen) {                                           /* a map announced its set (or the default came back): adopt it, forget the old state */
         kls_lock(); kls.gen = kls_sgen; kls.n = kls_stg.n; memcpy(kls.row, kls_stg.row, sizeof kls.row); memcpy(kls.item, kls_stg.item, sizeof kls.item); kls_unlock();
-        memset(kls.made, 0, sizeof kls.made); memset(kls.applied, 0, sizeof kls.applied); kls.told = 0; kls.wait = 0;
+        memset(kls.made, 0, sizeof kls.made); memset(kls.fixed, 0, sizeof kls.fixed); memset(kls.applied, 0, sizeof kls.applied); kls.told = 0; kls.wait = 0;
     }
     if (!kls.n) return;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x70, &st, 4)) return;
     if (kl_online()) return;
     { DWORD gs = klh_rd32((DWORD_PTR)KLH_VA(KLS_SETTINGS)), rules = gs ? klh_rd32(gs + 0x54) : 0;
       if (!rules || klh_rd32(rules) != (DWORD)(DWORD_PTR)KLH_VA(KLS_RULES_VT)) return; }
+    kls_ammo();                                                          /* also while the round runs: the loadout hands over as it starts */
     if (st >= 0x19) return;                                              /* the round runs: leave the pool alone */
     if (kls.wait > 3000) return;
     if (!kls_code_ok()) { if (!kls.told++) klog("shop: code of the object maker / template lookup is not as read: nothing done"); return; }
@@ -169,7 +202,7 @@ static void klshop_tick(int game_thread)
                 if (re) klog("shop: row %d: %d stock object(s) were free again (round reset): parked again", kls.row[k], re);
                 any = 1; continue;
             }
-            memset(kls.made[k], 0, sizeof kls.made[k]); kls.applied[k] = 0;
+            memset(kls.made[k], 0, sizeof kls.made[k]); memset(kls.fixed[k], 0, sizeof kls.fixed[k]); kls.applied[k] = 0;
         }
         if (kls_apply(k) == -1) kls.row[k] = -1;
         else any = 1;
@@ -205,6 +238,7 @@ static void klshop_init(void)
     GetPrivateProfileStringA("Shop", "Swap", "", buf, sizeof buf, klh_ini);
     kls_parse(buf, &kls_def.n, kls_def.row, kls_def.item, "KLHook.ini");
     kls_stg = kls_def; kls_sgen = 1; kls.gen = 0;                        /* the tick adopts it */
+    kls.clips = GetPrivateProfileIntA("Shop", "ReserveClips", 2, klh_ini); /* reserve of an extra gun the row's ammo leaves empty, in clips (0 = leave it) */
     klog("shop: on; %d default swap(s); a map's KLGuns.ini [Shop] Swap overrides; Arcade only, before the round; replaces what a bought row hands over (never adds a row); EXPERIMENT, nothing has run", kls_def.n);
 }
 
