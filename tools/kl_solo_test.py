@@ -95,7 +95,7 @@ def solo_secs(n):
 
 def main():
     a, opt = sys.argv[1:], {}
-    for key in ('--hook', '--tag', '--secs', '--gap', '--base', '--ini1', '--ini2', '--shots'):
+    for key in ('--hook', '--tag', '--secs', '--gap', '--base', '--ini1', '--ini2', '--shots', '--n'):
         if key in a:
             i = a.index(key); opt[key] = a[i + 1]; del a[i:i + 2]
     force = '--force' in a
@@ -124,7 +124,7 @@ def main():
         print(t, flush=True); out.append(t)
     base = read_ini(opt.get('--base', os.path.join(dd, 'KLHook.ini')))
     inst = []
-    for n in (1, 2):
+    for n in range(1, int(opt.get('--n', 2)) + 1):           # --n 1: one instance (control runs)
         d = os.path.join(root, 'inst%d' % n)
         os.makedirs(d, exist_ok=True)
         for f in ('KLHook.log', 'KLHook.result'):
