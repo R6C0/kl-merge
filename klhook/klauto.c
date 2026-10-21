@@ -476,7 +476,7 @@ static void kla_flush(void)
     EnterCriticalSection(&kla_cs);
     if (kla_len) {
         if (kla_log == INVALID_HANDLE_VALUE) {
-            char path[MAX_PATH]; snprintf(path, sizeof path, "%s\\KLHook.log", dir);
+            char path[MAX_PATH]; snprintf(path, sizeof path, "%s\\KLHook.log", klh_out);
             kla_log = CreateFileA(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, 0, OPEN_ALWAYS, 0, 0);
         }
         if (kla_log != INVALID_HANDLE_VALUE) WriteFile(kla_log, kla_buf, kla_len, &w, 0);
@@ -518,7 +518,7 @@ static int kla_script_pc(void);
 static void kla_result(const char *state, const char *reason, int code)
 {
     char path[MAX_PATH], tmp[MAX_PATH], text[1200]; HANDLE f; DWORD w; int n;
-    snprintf(path, sizeof path, "%s\\KLHook.result", dir); snprintf(tmp, sizeof tmp, "%s\\KLHook.result.tmp", dir);
+    snprintf(path, sizeof path, "%s\\KLHook.result", klh_out); snprintf(tmp, sizeof tmp, "%s\\KLHook.result.tmp", klh_out);
     n = snprintf(text, sizeof text,
         "state=%s\r\nreason=%s\r\nexit=%d\r\npid=%lu\r\nscene=%s\r\nloading=%lu\r\nloads=%lu\r\nlevel_loaded=%d\r\n"
         "stage=%lu\r\npercent=%lu\r\nnode=%lu\r\ntotal=%lu\r\nentity=%s\r\ncontroller=%s\r\nphase=%s\r\n"
@@ -1595,7 +1595,7 @@ static void kla_dump_now(EXCEPTION_POINTERS *ep, const char *name)
     HMODULE h = LoadLibraryA("dbghelp.dll"); MDWD w = h ? (MDWD)GetProcAddress(h, "MiniDumpWriteDump") : 0;
     char path[MAX_PATH]; HANDLE f; MEI mei;
     if (!w) return;
-    snprintf(path, sizeof path, "%s\\%s", dir, name);
+    snprintf(path, sizeof path, "%s\\%s", klh_out, name);
     f = CreateFileA(path, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
     if (f == INVALID_HANDLE_VALUE) return;
     mei.tid = GetCurrentThreadId(); mei.ep = ep; mei.client = FALSE;
@@ -1811,7 +1811,7 @@ static void kla_init(HINSTANCE inst)
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)((BYTE *)(DWORD_PTR)img_lo + ((IMAGE_DOS_HEADER *)(DWORD_PTR)img_lo)->e_lfanew);
     (void)inst;
     InitializeCriticalSection(&kla_cs);
-    snprintf(kla_ini, sizeof kla_ini, "%s\\KLHook.ini", dir);
+    snprintf(kla_ini, sizeof kla_ini, "%s\\KLHook.ini", klh_out);
     kla_on = GetPrivateProfileIntA("Auto", "Enable", 0, kla_ini);
     if (!kla_on) return;
     kla_hooks_on = GetPrivateProfileIntA("Auto", "Hooks", 1, kla_ini);

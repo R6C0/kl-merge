@@ -1,0 +1,90 @@
+# NetSmooth online with one PC: two kl2.exe, one machine (plan, 2026-10-21)
+
+Static reading only; the game was never launched for this. CERTAIN = read in the disassembly (address given) or in code.
+GUESS = inferred or untested. Source notes: scratchpad `solo_twoinst.md`, `solo_forced.md`, `solo_steamfake.md`, `solo_route.md`.
+Goal: a remote ZFFPlayer replica exists in one Fragile Alliance round, so NetSmooth slot 393 / 0x600eb0 runs online.
+
+## 1. Chosen route: System Link (raw UDP), NOT the Steam lobby
+
+Two routes were on the table.
+- Route S (Steam stand-in): fake a second Steam id, an emulated lobby, P2P loopback and callback delivery. About 150 stubs across
+  Matchmaking, Networking, User, Apps, Utils and the callback registry. Big, and every layout is a GUESS.
+- Route U (System Link over WinSock UDP): the game itself skips the Steam transport. Chosen, because it removes the whole shared-Steam-id problem.
+
+Why route U works (CERTAIN, re-read for this doc):
+- 0x5deb50 returns 1 if `[mgr+0x58]==2` or option `MP_RankedGame` (string 0xb41ea0) == 2.
+- Net init 0x7ee0c0 calls it at 0x7ee1cf; `jne 0x7ee20b` skips the allocation and `call 0x409c60`, so the SteamTransportAdapter
+  is not built (from solo_forced: global 0x1690a4c then stays 0 and the Quazal Socket 0x958e80/0x9590e0 binds a plain WinSock UDP socket, bind at 0x958f65).
+- The peer table fed from the lobby (0x4d2a40) only runs when the Steam adapter exists (solo_forced, CERTAIN by its guard).
+- The front end "System Link" create (0x77e220) sets game type 4 via 0x5be510(4), then SetMode(2), SetState(8), with no Steam lobby call.
+- Therefore two processes on one Steam account are two different network stations. No fake Steam id is needed.
+This corrects re/netcode_fa.md lines 342-347 and re/fa_private_match_blueprint.md line 299, which assumed System Link still used SteamSocketDriver.
+
+Why the other routes lose:
+- `-o StartAsServer`: CERTAIN no-op (jumps to 0x8734d7, sets nothing). `-o StartAsClient` sets mode 3 (0x873453) but supplies no target and no key exists for an IP or port. Not a bench by itself.
+- A second Steam account: owner has none that owns the game (GUESS); also does not remove the mutex or fullscreen problems.
+- `+connect_lobby <id>`: needs two distinct Steam ids, so needs route S anyway.
+
+## 2. What still blocks even route U
+
+1. CERTAIN single-instance mutex: 0x47690b `CreateMutexA("KANEANDLYNCH2MUTEX")` through IAT slot 0xb10264; `GetLastError==0xb7` (0x476917) shows a MessageBox and exits.
+2. CERTAIN Steam is still needed at start: WinMain calls `SteamAPI_RestartAppIfNecessary(28000)` at 0x476781 (exits if true), then `SteamAPI_Init`, then
+   `SteamApps()->vtbl[0]` (BIsSubscribed) into byte [0xdd2614]; 0 shows "SteamInitFailed". GUESS: env `SteamAppId=SteamGameId=28000` on a direct launch makes
+   RestartAppIfNecessary return false. GUESS: real Steam lets a second kl2.exe of the same app and account run. This is the biggest unknown.
+3. CERTAIN fullscreen exclusive D3D9 (ReShade.log: Windowed=FALSE). Two exclusive devices cannot coexist. GUESS fix: force windowed from a ReShade create_swapchain handler (klreshade.c); no in-game switch was found.
+4. CERTAIN unfocused stall: main loop 0x87a930, branch 0x87a963-0x87a988 skips the frame when `[sys+0xb10]` (written by wndproc 0x714810) is set. klauto steps the script from the DirectInput poll, so the unfocused instance freezes.
+   The skip is not taken for an online non-Arcade session (0x863a60 && !0x7f6850), so a real round may tick anyway (GUESS for the menu phase). Fix: write 0 to `[sys+0xb10]` every klh_tick.
+5. CERTAIN file collisions: KLHook.ini, .log, .result live in the dinput8.dll folder (klhook.c:1036, klauto.c 479/521), so two instances need two folders; kl_autotest.py is single-instance (aborts if kl2.exe runs, swaps files in the game folder).
+6. GUESS CEG/DRM IPC (`STEAM_DIPC_*`, `Local\SteamStart_SharedMem*`, handshake 0xa8e690) may collide between two processes.
+7. GUESS UDP discovery port 9103 (0x942040 / static init 0xb05ab0) may fail to bind twice (no SO_REUSEADDR found). The listen socket itself (0x96f860) accepts port 0 = ephemeral.
+8. Unknown: the System Link menu path is only read from frontend.xml; the discovery receive handler and reply format (solo_forced "unchecked"). GUESS: round content (FA, ZFFPlayer replicas) is identical on game type 4.
+
+## 3. Build steps (in order, cheapest first)
+
+Step 1 (FIRST THING TO BUILD): a hook module `klhook/klsolo.c`, TEST builds only, opt-in `[Solo] Enable=1`. It does:
+- Wrap IAT slot 0xb10264 (CreateMutexA) with `klh_iat("kernel32.dll","CreateMutexA",...)` (pattern: klsteam.c / klslot import wrappers). If the name is "KANEANDLYNCH2MUTEX", append the PID. Reuse for the other named objects if the IPC step fails (CreateSemaphoreA / CreateFileMappingA names).
+- Each klh_tick: `*(int*)(sys+0xb10)=0` (resolve sys the way the existing klauto/freeze code does; see re/freeze_1009.md 3.2).
+- Force `MP_RankedGame` = 2: hook 0x5deb50 to return 1 (a 3-byte patch `mov eax,1; ret` at 0x5deb50, simplest and covers 0x7ee0c0), instead of changing the option store. Check that other 0x5deb50 callers are fine with it (GUESS: they only select the non-Steam path).
+- Force windowed, 800x600, from the create_swapchain handler in klreshade.c ([Solo] Windowed=1).
+- Log the PID in every KLHook.log line, or run from per-instance folders (below).
+Step 2: a runner `tools/kl_solo_test.py` (do not extend kl_autotest): create `inst1`/`inst2` folders outside the game folder, each with TEST `dinput8.dll` and its own KLHook.ini; launch `kl2.exe` directly with env SteamAppId/SteamGameId=28000 and cwd = game folder (junction alternative: GUESS). Ini per instance: `[Auto] Enable=1 Hooks=0 Unfocused=1 BlockReal=1`, `[Net] Log=1`, `[NetSmooth] Enable=1 Log=1 Probe=1`, distinct `[Auto]` script. Collect two logs/results. Never launched by the agent that wrote this doc; the owner must be away (memory: live runs block input).
+Step 3: first live run is just "does instance 2 start beside instance 1" (mutex and Steam). If Steam refuses it, fall back to a MINIMAL Steam stub (not route S): fake only Init=true, RestartAppIfNecessary=false, SteamApps BIsSubscribed=true, Utils GetAppID=28000, and no-op the rest (CERTAIN need from the 0x476730 gate; the other interfaces are on the lobby path that route U avoids; GUESS that nothing else on the System Link path calls them).
+Step 4: scripted menu route per instance (frontend.xml, CERTAIN where stated in solo_route): `waitwin CampaignMenu`, `tap ESCAPE`, `waitwin MainMenu`, `tap DOWN` x2, `tap RETURN` (Online); the System Link entry sits in the same Online/Play pages (`ZCheckGamerPrivileges Window="SystemLink"`, MP_RankedGame=2; exact key sequence NOT yet read, do a recon run with `windows` / `focus`, because `msg` to an unknown element fails the script). Host: Create. Client: Find, join the listed host.
+Step 5 (if discovery fails): patch the 0x942040 port per instance, then as last fallback inject a station URL `prudp:/address=127.0.0.1;port=P` and start JobConnectStation (0x9422d0) (GUESS, deep).
+
+## 4. Test procedure and pass criteria
+
+Run host first, then client after the host's log shows its session line. Both with `[Net] Log=1`, `[NetSmooth] Enable=1 Log=1 Probe=1`.
+Pass lines: "session: SERVER (role 2)" and "CLIENT (role 3)"; "remote player ... flags" with bit 2 of `[P+0x2720]` clear; `[P+0x274c]` non-zero; `placed` growing, `skipped` low; vtable swap and give-back; 0 faults on both instances.
+Proof that slot 393 runs online: the client sees the host's remote heading follow scripted `mouse` flicks (pos logging). Until then it stays UNPROVEN.
+Stages worth separate logs: (a) both start, (b) both reach FALobby/System Link lobby, (c) round loads on both, (d) remote replica exists, (e) NetSmooth probe lines.
+
+## 5. Risks
+
+- GUESS: second kl2.exe under one Steam account refused, or CEG IPC clash. Mitigation: env vars, then per-process object names, then the minimal stub.
+- GUESS: System Link round differs from the FA lobby (no FA mode, map choice, ready logic). The test only needs a replica; any map suffices.
+- GUESS: a Steam-less start fails CEG checks (nine CEG-named functions exist; IAT slots for Networking, User, Apps, Utils, Friends and callbacks were NOT run through ceg_ranges.py; only UserStats 0xb107c8 and Matchmaking 0xb107d8 were). Do not replace IAT slots beyond the minimal stub without that check.
+- Ranked / stats safety: route U never touches Ranked lobbies (MP_RankedGame=2); keep klx's UserStats write guard active; TEST builds only.
+- Owner constraint: no live runs while the owner plays. Do not run on the owner's monitor at 2560x1440 fullscreen: windowed forcing is mandatory.
+- Not read yet: MPMap readers (0x491f50, 0x6c49a0, 0x6c9c10), JoinWaitTime site 0x4664bd, discovery receive handler, whether the Steam user id is baked into the station identity on the raw-UDP path.
+
+## 6. Live results
+
+### A1 (2026-10-22 00:07, TEST out_3f_1022a_test, `tools/kl_solo_test.py --tag A1`, owner asleep)
+Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
+- PROVEN: two kl2.exe run side by side from one game folder, started directly (env SteamAppId=SteamGameId=28000, no steam://).
+  Mutex renamed (`KANEANDLYNCH2MUTEX_<pid>`), CreateDevice forced windowed (2560x1440 back buffer, 240 Hz -> windowed,
+  immediate) -> S_OK, windows placed at 0,0 and 960,0 (960x540), [sys+0xb10] focus write keeps the unfocused one running,
+  KLHOOK_DIR gives each its own ini / log / result. Both reached MainMenu under script.
+- Corrections to section 3: the focus write is 1 (not 0); per-instance folders come from env KLHOOK_DIR; ForceLan is opt-in (0).
+- MENU ROUTE (CERTAIN, window stack): MainMenu, DOWN x2, RETURN = `OnlineMenu`; then DOWN, RETURN = `SystemLink`.
+  inst1's own DOWN x2 landed on `ShowAchievements` instead (menu cursor differs per window; GUESS: the real mouse pointer
+  hovers over the window at 0,0). The script must check the window name after each step.
+- inst1 crashed at kl2+0x43c785 (read [0x8], callers 0x80308d 0x842feb 0x624867 ...) while idle on ShowAchievements, at the
+  moment inst2 left its CampaignMenu. Not investigated; keep scripts off the Achievements page.
+- BLOCKER: SystemLink opens `SysUIErrorScreen` "This game is blocked by a firewall" (string Online/BlockedByFirewall, 0x51dcd0).
+  Check: GetModuleFileNameA -> 0x5cce20 -> 0x8945d0: CoCreateInstance(NetFwMgr) via 0x7232d0 (import 0xb1079c), LocalPolicy,
+  CurrentProfile; passes when get_FirewallEnabled = FALSE or the exe's AuthorizedApplications entry is enabled. Network profile
+  is Public. Both functions are hashed. A hook-side stand-in for that COM class was REFUSED by the permission classifier
+  (security weakening) and is not built. The way on is the owner's: allow kl2.exe in Windows Firewall (Allow an app through
+  firewall, Private and Public), then rerun with the same script past SystemLink.

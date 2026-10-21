@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""
+Two kl2.exe on one PC: the solo bench for the online code (re/netsmooth_solo.md; hook part klhook/klsolo.c).
+
+    python kl_solo_test.py --hook <TEST build folder> --tag <name> [--secs 300] [--gap 45]
+                           [--base <KLHook.ini>] [--ini1 <extra.ini>] [--ini2 <extra.ini>] [--shots 30-300:30] [--force]
+
+- Puts the TEST dinput8.dll into the game folder for the run and puts the one that was there back afterwards
+  (kl_autotest.snapshot / restore_original). The game folder's KLHook.ini is not touched: each instance reads
+  its own <work>/build/klhook/solo/<tag>/inst<N>/KLHook.ini (env KLHOOK_DIR, TEST builds only) and writes its
+  KLHook.log / KLHook.result / dumps there.
+- Instance ini = --base (default: the game folder's KLHook.ini) + [Solo] Enable=1 X/Y/W/H (side by side) +
+  [Net] Log=1 + [NetSmooth] Enable=1 Log=1 Probe=1, then the sections of --ini1 / --ini2 on top (key by key;
+  a [Script] section there replaces the base's whole [Script]).
+- Starts kl2.exe directly (no steam://, so the Steam launch options are NOT used) with env SteamAppId=SteamGameId=28000
+  and '-o DisableSplashScreens'; instance 2 --gap seconds after instance 1. Ends both after --secs.
+- Refuses while a kl2.exe runs, or while the owner gave input in the last 300 s (--force skips that check).
+Prints per instance: alive at the end?, the solo / net / netsmooth lines of its log, KLHook.result, and a RESULT line.
+"""
+import ctypes, os, re, shutil, subprocess, sys, time
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import kl_autotest as at
+from kl_port_check import find, DD_GUESSES, DD_EXE, workdir
+
+KEEP = ('solo:', 'net:', 'netsmooth', 'FATAL', 'CRASH', 'assert', 'exit:', 'auto:', 'script', 'tick: driven')
+
+
+def idle_s():
+    class L(ctypes.Structure):
+        _fields_ = [('s', ctypes.c_uint), ('t', ctypes.c_uint)]
+    l = L(8, 0)
+    ctypes.windll.user32.GetLastInputInfo(ctypes.byref(l))
+    return ((ctypes.windll.kernel32.GetTickCount() - l.t) & 0xffffffff) // 1000
+
+
+def read_ini(path):
+    """-> [(section, [(key, value) or (None, raw line)])] in file order; keys keep their case."""
+    out, cur = [], None
+    for raw in open(path, encoding='latin-1').read().splitlines():
+        m = re.match(r'\s*\[([^\]]+)\]', raw)
+        if m:
+            cur = (m.group(1), []); out.append(cur); continue
+        if cur is None:
+            cur = ('', []); out.append(cur)
+        k, eq, v = raw.partition('=')
+        cur[1].append((k.strip(), v.strip()) if eq and not raw.lstrip().startswith(';') else (None, raw))
+    return out
+
+
+def merge(base, over):
+    """over's keys win; a [Script] in over replaces base's [Script] entirely."""
+    secs = {s.lower(): (s, items) for s, items in base}
+    order = [s for s, _ in base]
+    for s, items in over:
+        if s.lower() == 'script' or s.lower() not in secs:
+            if s.lower() not in secs:
+                order.append(s)
+            secs[s.lower()] = (s, list(items)); continue
+        _, have = secs[s.lower()]
+        for k, v in items:
+            if k is None:
+                continue
+            for i, (k2, _) in enumerate(have):
+                if k2 is not None and k2.lower() == k.lower():
+                    have[i] = (k, v); break
+            else:
+                have.append((k, v))
+    return [secs[s.lower()] for s in order]
+
+
+def write_ini(path, secs):
+    lines = []
+    for s, items in secs:
+        if s:
+            lines.append('[%s]' % s)
+        lines += [v if k is None else '%s=%s' % (k, v) for k, v in items]      # (None, raw line) keeps the line
+    open(path, 'w', encoding='latin-1').write('\n'.join(lines) + '\n')
+
+
+def solo_secs(n):
+    w, h = 960, 540
+    return [('Solo', [('Enable', '1'), ('Windowed', '1'), ('Focus', '1'), ('X', str((n - 1) * w)), ('Y', '0'), ('W', str(w)), ('H', str(h))]),
+            ('Net', [('Log', '1')]),
+            ('NetSmooth', [('Enable', '1'), ('Log', '1'), ('Probe', '1')])]
+
+
+def main():
+    a, opt = sys.argv[1:], {}
+    for key in ('--hook', '--tag', '--secs', '--gap', '--base', '--ini1', '--ini2', '--shots'):
+        if key in a:
+            i = a.index(key); opt[key] = a[i + 1]; del a[i:i + 2]
+    force = '--force' in a
+    tag, secs, gap = opt.get('--tag', time.strftime('solo_%H%M%S')), int(opt.get('--secs', 300)), int(opt.get('--gap', 45))
+    shots = []
+    for x in opt.get('--shots', '30-%d:30' % secs).split(','):
+        r, _, st = x.partition(':'); lo, _, hi = r.partition('-')
+        shots += range(int(lo), int(hi or lo) + 1, int(st or 30))
+    shots = sorted(set(shots))
+    dd = find(DD_GUESSES, DD_EXE)
+    if not dd or '--hook' not in opt:
+        raise SystemExit('usage: --hook <TEST build> (and Dog Days must be found)')
+    if at.running():
+        raise SystemExit('RESULT: not started - kl2.exe is already running')
+    if not force and idle_s() < 300:
+        raise SystemExit('RESULT: not started - owner input %d s ago' % idle_s())
+    root = os.path.join(workdir(), 'build', 'klhook', 'solo', tag)
+    out = []
+
+    def say(t):
+        print(t, flush=True); out.append(t)
+    base = read_ini(opt.get('--base', os.path.join(dd, 'KLHook.ini')))
+    inst = []
+    for n in (1, 2):
+        d = os.path.join(root, 'inst%d' % n)
+        os.makedirs(d, exist_ok=True)
+        for f in ('KLHook.log', 'KLHook.result'):
+            if os.path.isfile(os.path.join(d, f)):
+                os.remove(os.path.join(d, f))
+        secs_n = merge(base, solo_secs(n))
+        if opt.get('--ini%d' % n):
+            secs_n = merge(secs_n, read_ini(opt['--ini%d' % n]))
+        write_ini(os.path.join(d, 'KLHook.ini'), secs_n)
+        inst.append(d)
+    was = at.snapshot(dd, say)
+    procs, code = [], 1
+    try:
+        src = opt['--hook']; src = os.path.join(src, 'dinput8.dll') if os.path.isdir(src) else src
+        note = at.put(src, os.path.join(dd, 'dinput8.dll'))
+        say('  hook | %s (sha1 %s)%s' % (src, at.sha1(src)[:8], ' - ' + note if note else ''))
+        t0 = time.time()
+        for n, d in enumerate(inst, 1):
+            if n == 2:
+                while time.time() - t0 < gap:
+                    time.sleep(1)
+            env = dict(os.environ, SteamAppId='28000', SteamGameId='28000', KLHOOK_DIR=d)
+            p = subprocess.Popen([os.path.join(dd, 'kl2.exe'), '-o', 'DisableSplashScreens'], cwd=dd, env=env)
+            procs.append(p)
+            say('  start | inst%d pid %d at %+.0f s (%s)' % (n, p.pid, time.time() - t0, d))
+        while time.time() - t0 < secs:
+            time.sleep(2)
+            el = time.time() - t0
+            if shots and el >= shots[0]:
+                s = shots.pop(0)
+                for n, p in enumerate(procs, 1):
+                    if p.poll() is None:
+                        path = os.path.join(root, 'shot_inst%d_%03ds.png' % (n, s))
+                        r = at.shot([p.pid], path)
+                        say('  shot | inst%d %ds %s' % (n, s, path if r else 'no window'))
+            alive = at.running()
+            if procs and not alive and el > gap + 20:
+                break
+        say('  end | %+.0f s; alive: %s; all kl2 pids now: %s' % (time.time() - t0, ['inst%d' % (n + 1) for n, p in enumerate(procs) if p.poll() is None], at.running()))
+        for p in procs:
+            if p.poll() is None:
+                subprocess.run(['taskkill', '/F', '/PID', str(p.pid)], capture_output=True)
+        for pid in at.running():                     # a Steam relaunch would have another pid
+            say('  end | other kl2.exe pid %d (Steam relaunch?) ended' % pid)
+            subprocess.run(['taskkill', '/F', '/PID', str(pid)], capture_output=True)
+        time.sleep(3)
+        verdict = []
+        for n, d in enumerate(inst, 1):
+            log = os.path.join(d, 'KLHook.log')
+            lines = open(log, encoding='latin-1').read().splitlines() if os.path.isfile(log) else []
+            say('  inst%d | exit code %s, %d log lines' % (n, procs[n - 1].returncode if n <= len(procs) else '-', len(lines)))
+            for l in [l for l in lines if any(k in l for k in KEEP)][-40:]:
+                say('    log | ' + l[:220])
+            res = os.path.join(d, 'KLHook.result')
+            if os.path.isfile(res):
+                say('    KLHook.result | ' + ' '.join(open(res, errors='replace').read().split())[:400])
+            verdict.append('inst%d %s' % (n, 'loaded' if lines else 'NO LOG'))
+        say('RESULT: ' + ', '.join(verdict))
+        code = 0
+    finally:
+        for p in procs:
+            if p.poll() is None:
+                subprocess.run(['taskkill', '/F', '/PID', str(p.pid)], capture_output=True)
+        time.sleep(2)
+        if not at.restore_original(dd, say, was):
+            code = 1
+        os.makedirs(root, exist_ok=True)
+        open(os.path.join(root, 'run.txt'), 'w').write('\n'.join(out) + '\n')
+    return code
+
+
+if __name__ == '__main__':
+    sys.exit(main())

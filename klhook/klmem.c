@@ -107,8 +107,8 @@ static void klm_map_file(const char *when, int refused)
     static LONG no, left = 2; static char buf[0x10000];
     char path[MAX_PATH], name[MAX_PATH], *leaf; MEMORY_BASIC_INFORMATION mbi; BYTE *p = (BYTE *)0x10000; HANDLE f; DWORD w, at = 0; SYSTEMTIME t; LONG n;
     if (!klm_maps) return;
-    if (refused) { if (left <= 0) return; left--; n = no; snprintf(path, sizeof path, "%s\\KLHook_map_refused_%ld.txt", dir, 1 - left); }
-    else { left = 2; n = InterlockedIncrement(&no) - 1; snprintf(path, sizeof path, "%s\\KLHook_map_%ld.txt", dir, n & 7); }
+    if (refused) { if (left <= 0) return; left--; n = no; snprintf(path, sizeof path, "%s\\KLHook_map_refused_%ld.txt", klh_out, 1 - left); }
+    else { left = 2; n = InterlockedIncrement(&no) - 1; snprintf(path, sizeof path, "%s\\KLHook_map_%ld.txt", klh_out, n & 7); }
     f = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, 0, CREATE_ALWAYS, 0, 0);
     if (f == INVALID_HANDLE_VALUE) return;
     GetLocalTime(&t);

@@ -199,7 +199,7 @@
 
 typedef HRESULT (WINAPI *DI8Create)(HINSTANCE, DWORD, REFIID, LPVOID *, LPUNKNOWN);
 static DI8Create real_create;
-static char dir[MAX_PATH], klh_ini[MAX_PATH];
+static char dir[MAX_PATH], klh_ini[MAX_PATH], klh_out[MAX_PATH];   /* klh_out: KLHook.ini / .log / dumps = dir, or in TEST the env KLHOOK_DIR (klsolo.c) */
 static int continue_asserts = 1, max_dumps = 4, dumps = 0, max_asserts = 200;
 static DWORD seen[256]; static int nseen;
 static CRITICAL_SECTION cs;
@@ -217,7 +217,7 @@ static void klog(const char *fmt, ...)
 {
     char buf[1536], *line = buf; int n, m; DWORD put; SYSTEMTIME t; va_list a; HANDLE h = klog_h;
     if (!h) {
-        char path[MAX_PATH]; snprintf(path, sizeof path, "%s\\KLHook.log", dir);
+        char path[MAX_PATH]; snprintf(path, sizeof path, "%s\\KLHook.log", klh_out);
         h = CreateFileA(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, 0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
         if (h == INVALID_HANDLE_VALUE) return;
         if (InterlockedCompareExchangePointer((void *volatile *)&klog_h, h, 0) != 0) { CloseHandle(h); h = klog_h; }
@@ -450,7 +450,7 @@ static void write_dump(EXCEPTION_POINTERS *ep, const char *why)
     if (dumps >= max_dumps) return;
     HMODULE h = LoadLibraryA("dbghelp.dll"); if (!h) return;
     MDWD w = (MDWD)GetProcAddress(h, "MiniDumpWriteDump"); if (!w) return;
-    char path[MAX_PATH]; snprintf(path, sizeof path, "%s\\KLHook_%d.dmp", dir, ++dumps);
+    char path[MAX_PATH]; snprintf(path, sizeof path, "%s\\KLHook_%d.dmp", klh_out, ++dumps);
     HANDLE f = CreateFileA(path, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
     if (f == INVALID_HANDLE_VALUE) return;
     MEI mei = { GetCurrentThreadId(), ep, FALSE };
@@ -667,6 +667,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klpm_arc.c"                                      /* klpm_arc.c: the Arcade playlist (off unless [Match] Enable + Arcade); AFTER klslot.c */
 #ifdef KLHOOK_TEST
 #include "klauto.c"
+#include "klsolo.c"                                       /* klsolo.c: [Solo] two kl2.exe on one PC (mutex, windowed, focus); TEST only, off unless Enable=1 */
 #endif
 
 /* ---------------------------------------------------------------- the tick
@@ -797,6 +798,9 @@ static void klh_tick(int game_thread)
     kld_tick(game_thread);                            /* kldown.c: the mash get-up (off unless [Down] Enable) */
     klrs_tick(game_thread);                           /* klreshade.c: the numbers the shaders get (reads only; off unless [ReShade] Bridge=1) */
     kset_tick(game_thread);                           /* klset.c: the menu manager's table count, a log line (reads only; off unless [Menu] TableLog=1) */
+#ifdef KLHOOK_TEST
+    klso_tick(game_thread);                           /* klsolo.c: keeps an unfocused window running (off unless [Solo] Enable=1) */
+#endif
     klg_tick();
     klm_tick();
     InterlockedExchange(&klh_tick_busy, 0);
@@ -868,7 +872,7 @@ static void klh_freeze_dump(void)
 {
     HMODULE h = LoadLibraryA("dbghelp.dll"); MDWD w = h ? (MDWD)GetProcAddress(h, "MiniDumpWriteDump") : 0; char path[MAX_PATH]; HANDLE f;
     if (!w) return;
-    snprintf(path, sizeof path, "%s\\KLHook_freeze.dmp", dir);
+    snprintf(path, sizeof path, "%s\\KLHook_freeze.dmp", klh_out);
     f = CreateFileA(path, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
     if (f == INVALID_HANDLE_VALUE) return;
     if (!w(GetCurrentProcess(), GetCurrentProcessId(), f, 0x1 | 0x40 | 0x1000 | 0x800, 0, 0, 0)) {    /* as write_dump */
@@ -1035,7 +1039,14 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     InitializeCriticalSection(&cs);
     GetModuleFileNameA(inst, dir, MAX_PATH);
     char *s = strrchr(dir, '\\'); if (s) *s = 0;
-    snprintf(klh_ini, sizeof klh_ini, "%s\\KLHook.ini", dir);
+    strcpy(klh_out, dir);
+#ifdef KLHOOK_TEST
+    {   /* klsolo.c: two kl2.exe from one game folder load the same dinput8.dll; each gets its own ini / log / result folder */
+        char e[MAX_PATH]; DWORD k = GetEnvironmentVariableA("KLHOOK_DIR", e, sizeof e), a = k && k < sizeof e ? GetFileAttributesA(e) : INVALID_FILE_ATTRIBUTES;
+        if (a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY)) strcpy(klh_out, e);
+    }
+#endif
+    snprintf(klh_ini, sizeof klh_ini, "%s\\KLHook.ini", klh_out);
     continue_asserts = GetPrivateProfileIntA("KLHook", "ContinueAsserts", 1, klh_ini);
     max_dumps = GetPrivateProfileIntA("KLHook", "MaxDumps", 4, klh_ini);
     max_asserts = GetPrivateProfileIntA("KLHook", "MaxAsserts", 200, klh_ini);
@@ -1105,6 +1116,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
         } else klog("graphics: look %s: ReShade not loaded%s", lname[look], look ? " (no ReShade32.dll beside the game)" : "");
     }
     kltx_init();                                   /* after ReShade: the Direct3DCreate9 wrapper sits in front of it */
+#ifdef KLHOOK_TEST
+    klso_init();                                   /* klsolo.c: AFTER kltx_init, so its Direct3DCreate9 wrapper is the outer one */
+#endif
     klm_init();
     kln_init();
     klf_init();
