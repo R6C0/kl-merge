@@ -82,6 +82,23 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
   hovers over the window at 0,0). The script must check the window name after each step.
 - inst1 crashed at kl2+0x43c785 (read [0x8], callers 0x80308d 0x842feb 0x624867 ...) while idle on ShowAchievements, at the
   moment inst2 left its CampaignMenu. Not investigated; keep scripts off the Achievements page.
+  - 2026-10-22 static triage (e5, workflow w7eeb892u, read only; KLHook_1/_2.dmp + log):
+    CERTAIN: the fault is VA 0x83c785 `mov esi,[edi+8]` on the RENDER thread (thread loop 0x561330), in sprite draw 0x83c320,
+    type-5 case 0x83c74c (jump table 0x83d3e4). The entry is a ZRenderEntrySpriteD3D (vtable 0xb99e9c, at 0x3621a6e0). edi is
+    the entry's buffer slot R: 0x83c753 `mov eax,[0xef4d80]` (R index), 0x83c758 `mov edi,[esi+eax*4+0x1a4]`; 0x42e1f0 is x87
+    only. Slots are filled by the constructor at 0x842eb8 with W=[0xef4d7c]; 0x7c1723..0x7c1728 zeroes slot W of entries with
+    [+4]&4 and 0x7c1958 flips R=old W (function 0x7c1610, ZRenderDrawD3D vtable slot at 0xb99df4). No Steam call on the stack,
+    nothing from Steam in the log 00:08:03..00:08:10: NOT an achievements / stats-callback crash. Dump 2 shows the same entry
+    with new slots, so it is a reused per-frame entry and the dump's R/W say nothing about the moment of the fault.
+    CERTAIN: klso_tick forces [sys+0xb10]=1, while stock 0x87a963 returns early (no frame built) when it is 0, so the unfocused
+    instance ran a state stock never runs (1755 frames in 10 s unfocused). Commit 547708589's klhook/klauto/klmem changes touch
+    no render code; klso_init's Direct3DCreate9 wrapper was not read.
+    GUESS: a main/render-thread double-buffer race (slot R empty for an entry still listed), exposed by the forced-active
+    unfocused window and timed by inst2's first frames (0.45 s after its stall ended). Stock vs hook is UNKNOWN without a control.
+    Way on (no patch): check the window name after each key and back out of ShowAchievements at once; let inst2 finish its stall
+    before touching inst1; control runs: one instance with [Solo] off parked 60 s on ShowAchievements, and [Solo] on with a single
+    process; optional read-only breadcrumb logging [0xef4d7c]/[0xef4d80]. Overlay DLLs in the dump (ReShade32, medal-hook32,
+    nvspcap, GameOverlayRenderer) are not tied to it.
 - BLOCKER: SystemLink opens `SysUIErrorScreen` "This game is blocked by a firewall" (string Online/BlockedByFirewall, 0x51dcd0).
   Check: GetModuleFileNameA -> 0x5cce20 -> 0x8945d0: CoCreateInstance(NetFwMgr) via 0x7232d0 (import 0xb1079c), LocalPolicy,
   CurrentProfile; passes when get_FirewallEnabled = FALSE or the exe's AuthorizedApplications entry is enabled. Network profile
