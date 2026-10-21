@@ -34,6 +34,14 @@ def idle_s():
     return ((ctypes.windll.kernel32.GetTickCount() - l.t) & 0xffffffff) // 1000
 
 
+def firewall_ok(exe):
+    """What kl2's System Link check (0x8945d0) will see: firewall off, or the exe enabled in AuthorizedApplications. Read-only."""
+    ps = ("$p=(New-Object -ComObject HNetCfg.FwMgr).LocalPolicy.CurrentProfile; if(-not $p.FirewallEnabled){'off'} "
+          "else { $a=$p.AuthorizedApplications | ?{ $_.ProcessImageFileName -eq '%s' -and $_.Enabled }; if($a){'allowed'}else{'blocked'} }" % exe.replace("'", "''"))
+    r = subprocess.run(['powershell', '-NoProfile', '-Command', ps], capture_output=True, text=True)
+    return (r.stdout.strip() or 'unknown: ' + r.stderr.strip()[:100])
+
+
 def read_ini(path):
     """-> [(section, [(key, value) or (None, raw line)])] in file order; keys keep their case."""
     out, cur = [], None
@@ -104,6 +112,11 @@ def main():
         raise SystemExit('RESULT: not started - kl2.exe is already running')
     if not force and idle_s() < 300:
         raise SystemExit('RESULT: not started - owner input %d s ago' % idle_s())
+    fw = firewall_ok(os.path.join(dd, 'kl2.exe'))
+    print('  firewall | %s (System Link opens only if off / allowed)' % fw, flush=True)
+    if fw == 'blocked' and '--any-firewall' not in a:
+        raise SystemExit('RESULT: not started - kl2.exe is not allowed by Windows Firewall; System Link would stop at '
+                         'Online/BlockedByFirewall (the owner allows it; --any-firewall runs anyway)')
     root = os.path.join(workdir(), 'build', 'klhook', 'solo', tag)
     out = []
 
