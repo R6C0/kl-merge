@@ -1,3 +1,7 @@
+2026-10-21 06:50 - 19-map sweep: shop swap + Rigid + NetSmooth together PASS on every map (3f; scripted, owner asleep).
+- TEST 1020l (1020g source), owner's ini + [Shop] Swap=32:49 ReserveClips=2 + [Rigid] + [NetSmooth]: 10 Dead Men FA maps (DM01-03, 06, 09, 03A, 05A, 06B, 01B, 11B) and all 9 stock FA maps, two rounds each: clean exit, 0 asserts, 0 faults; every log shows the swap at load, the re-park at the round reset, Rigid on. Table: re/shop_more_guns.md "Map sweep".
+- Still unproven by script: a BUY on a stock map, the Rigid feel, NetSmooth online. Commits are local (push refused).
+Owner: reboot, then C:\kl_build_1019\hook_1020g\INSTALL hook 1020g.bat, shopswap, noblow; [Rigid] Enable=1 and try the feel; push rtp-schemas.
 2026-10-20 03:30 - [Rigid] crashed every SHIP build at load; fixed in 1020f (3f; live runs Z1-Z8, R3, owner asleep).
 - SHIP + [Rigid] Enable=1 = crash kl2+0xfbb90 (1020c and 1020e alike): dinput8 rejects calls through a swapped vtable, the game got no mouse. TEST hid it (klauto's proxy). Now heap proxies (bd3be72fa). SHIP Z8 (Shop+Rigid+NetSmooth+Probe): no crash; TEST R3 flicks PASS.
 - 03:45 audit workflow (TEST vs SHIP, all modules): no other SHIP-only fault. 1020g adds: NetSmooth logs where an online body chain breaks, vtable copy keeps vt[-1]; N7 offline PASS, SHIP Z9 no crash, SHIP tick on the main loop.

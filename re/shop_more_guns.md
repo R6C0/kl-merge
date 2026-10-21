@@ -106,3 +106,25 @@ round ends ~80 s later; a scripted player cannot loot, cross the ramp (~260 m) a
 PlayerHealth / Tough are off on stock levels by design. Stock-map BUY stays unproven by script. Nothing map-specific is
 left open: the swap is applied at load and re-parked at the round reset on F02 (S14/S15), and the hand-over is the same
 code as the four DM01 buys (S7-S11). Left for the owner's own play on a stock map.
+
+## Map sweep (2026-10-21 02:42-06:46, TEST 1020l = 1020g source + klauto, scripted, owner asleep)
+19 maps, one kl_autotest each (C:\kl_build_1019\live\sweep\W*.ini, runner run_sweep.ps1, results sweep_results.txt).
+Config = the owner's KLHook.ini + [Shop] Enable=1 Swap=32:49 ReserveClips=2, [Rigid] Enable=1 Log=1, [NetSmooth] as S14,
+PlayerHealth=10. Script: menu route -> load -> round 1 played ~60 s (walk, fire, reload, flicks) -> score page -> round 2 -> pass.
+Every map: RESULT clean exit, KLHook.result PASS, asserts 0, faults 0, loads 2; log shows "rigid: on", one "row 32 ... now
+hands over item 49" at load, the stock objects re-parked at the round reset, NetSmooth lines (242-274).
+| run | map (menu) | slot | exit | | run | map (menu) | slot | exit |
+|---|---|---|---|---|---|---|---|---|---|
+| W10 | DM01 | F01 | 140 s | | W02 | stock F02 Bridge | F02 | 125 s |
+| W11 | DM02 | F02 | 137 s | | W01 | stock F01 Subway | F01 | 121 s |
+| W12 | DM03 | F03 | 133 s | | W03 | stock F03 | F03 | 127 s |
+| W13 | DM06 | F04 | 131 s | | W04 | stock F04 | F04 | 125 s |
+| W14 | DM09 | F06 | 131 s | | W05 | stock F06 | F06 | 113 s |
+| W15 | DM03A | F07 | 131 s | | W06 | stock F07 | F07 | 131 s |
+| W16 | DM05A | F01 | 131 s | | W07 | stock F05 | F05 | 133 s |
+| W17 | DM06B | F02 | 131 s | | W08 | stock F08 | F08 | 125 s |
+| W18 | DM01B | F03 | 131 s | | W09 | stock F09 | F09 | 133 s |
+| W19 | DM11B | F04 | 139 s | | | | | |
+Not shown by the sweep: a BUY of the swapped row on these maps (round 1 earns no money in 60 s), the Rigid FEEL
+(needs a person), NetSmooth online (needs 2 PCs). Runner note: after each run the PC logged one input 11-66 s before
+the runner's idle check, during the run (game exit / scripted input); the owner gave none (idle 528 s at 05:34).

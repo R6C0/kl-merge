@@ -188,6 +188,10 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-21 06:50 - 19-map sweep: shop swap + Rigid + NetSmooth together PASS on every map (3f; scripted, owner asleep).
+- TEST 1020l (1020g source), owner's ini + [Shop] Swap=32:49 ReserveClips=2 + [Rigid] + [NetSmooth]: 10 Dead Men FA maps (DM01-03, 06, 09, 03A, 05A, 06B, 01B, 11B) and all 9 stock FA maps, two rounds each: clean exit, 0 asserts, 0 faults; every log shows the swap at load, the re-park at the round reset, Rigid on. Table: re/shop_more_guns.md "Map sweep".
+- Still unproven by script: a BUY on a stock map, the Rigid feel, NetSmooth online. Commits are local (push refused).
+Owner: reboot, then C:\kl_build_1019\hook_1020g\INSTALL hook 1020g.bat, shopswap, noblow; [Rigid] Enable=1 and try the feel; push rtp-schemas.
 2026-10-20 03:30 - [Rigid] crashed every SHIP build at load; fixed in 1020f (3f; live runs Z1-Z8, R3, owner asleep).
 - SHIP + [Rigid] Enable=1 = crash kl2+0xfbb90 (1020c and 1020e alike): dinput8 rejects calls through a swapped vtable, the game got no mouse. TEST hid it (klauto's proxy). Now heap proxies (bd3be72fa). SHIP Z8 (Shop+Rigid+NetSmooth+Probe): no crash; TEST R3 flicks PASS.
 - 03:45 audit workflow (TEST vs SHIP, all modules): no other SHIP-only fault. 1020g adds: NetSmooth logs where an online body chain breaks, vtable copy keeps vt[-1]; N7 offline PASS, SHIP Z9 no crash, SHIP tick on the main loop.
@@ -202,10 +206,6 @@ Owner: reboot, then C:\kl_build_1019\hook_1020g\INSTALL hook 1020g.bat (NOT 1020
 - git push was refused by the permission classifier at 01:50: commits 15894b284, 6a37d9594 are local only.
 - 02:10 shop: S10 (Hawk Bullpup row -> Type 81) and S11 (Type 88 Scope row -> Rem 700) live PASS; all 4 default DM01 swaps proven. The 9 stock FA maps all carry those guns' templates (static); swaps there come from KLHook.ini [Shop] Swap, the path S10/S11 used. Local commits since: f6bcfd44d 7b86506f4 0a1f2b4b9 3628e8ad0 (not pushed).
 Owner: the feel needs you: [Rigid] Enable=1 in KLHook.ini, Arcade, flick / track / aim; tune YawMaxDps 240-360.
-2026-10-20 01:20 - more guns in the shop PROVEN LIVE (3f; overnight runs S1-S7, owner asleep):
-- KLHook 1020a/b: a bought shop row hands over another gun; set per map in KLGuns.ini [Shop] Swap (kl_shop_swap.py also bakes names + pictures). S7: bought USP row (Swap=2:47) -> round 2 holds the MINIMI (1020b: the round's end frees the parked stock guns again, now re-parked). S8: 1020c [Shop] ReserveClips=2 gives a gun whose clip swallows the row's ammo a reserve (row ammo is table +4, hashed; reserve written to the object): MINIMI / 300, reload draws from it.
-- Scripted shop route: msg MercsFAStatusReadyHeistLBStatus ZW_SELECT3 opens Buy Weapons (score-page buttons are mouse-only); a row already carried opens no dialog.
-Owner: reboot, then C:\kl_build_1019\hook_1020c\INSTALL hook 1020c.bat ([Shop] Enable=1), C:\kl_build_1019\shopnames\INSTALL shopswap.bat (DM01 names/pictures), noblow.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
