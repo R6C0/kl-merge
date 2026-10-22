@@ -55,6 +55,8 @@ static HWND WINAPI kln_GetForegroundWindow(void)
 {
     static DWORD last, mark; static LONG calls0, passed0; static int front = -1;
     DWORD now = GetTickCount(); HWND h = 0; LONG c = InterlockedIncrement(&kln_calls);
+    if (kln_ms && !last) last = now;                  /* the first call is not passed on either: the timer starts here (E0d: the one
+                                                         nudge a start passed on reset the solo bench's owner-idle check) */
     if (!kln_ms || now - last >= (DWORD)kln_ms) {
         DWORD pid = 0;
         last = now; h = kln_real(); InterlockedIncrement(&kln_passed);
