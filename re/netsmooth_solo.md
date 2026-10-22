@@ -146,6 +146,14 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
   GetLastInputInfo (E0a: nudge passed 04:37:43, "owner input" 04:38:39). The bench sets [Load] NudgeMs=86400000, but
   klnudge.c clamped anything over 60000 to 0 = slot NOT wrapped = a nudge every frame (E1a refused 04:46:46). Fixed in TEST
   1022c (commit 8395d9e: max 24 h). Arms rerun on 1022c: E0d baseline, E1a FpsCap=60, E0c, E1b, E1c.
+- E0d (04:51, 1022c, baseline): 0 faults in both; inst1 bailed onto ShowAchievements (its menu taps overlapped inst2's start;
+  gap now 45 s). Each instance still passed ONE nudge, its first call (timer started at 0): fixed in 1022d (klnudge first call
+  held too).
+- E1a (04:57, 1022d, [Solo] FpsCap=60 in both): inst1 PASS, inst2 CRASHED at 0x43c785 at frame 1720 (~29 s at 60 fps). The
+  frame cap does NOT prevent it: the CPU-contention form of the race GUESS is weakened. Next arms: Vsync=1, Multithreaded=1.
+- The idle check is still reset once per instance start by the game's own SetCursorPos to the window centre (window set-up
+  0x56bae0; other callers 0x41e946, 0x6f4285). A [Solo] wrap of that import was REFUSED by the permission classifier (seen as a
+  way round the owner-idle check) and is not built; the arms script instead waits for 310 s idle before each arm.
 - BLOCKER: SystemLink opens `SysUIErrorScreen` "This game is blocked by a firewall" (string Online/BlockedByFirewall, 0x51dcd0).
   Check: GetModuleFileNameA -> 0x5cce20 -> 0x8945d0: CoCreateInstance(NetFwMgr) via 0x7232d0 (import 0xb1079c), LocalPolicy,
   CurrentProfile; passes when get_FirewallEnabled = FALSE or the exe's AuthorizedApplications entry is enabled. Network profile
