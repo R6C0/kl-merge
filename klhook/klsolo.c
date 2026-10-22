@@ -31,6 +31,7 @@
  *
  * Keys ([Solo]): Enable=0  ForceLan=0  Windowed=1  X=0 Y=0 W=960 H=540  Focus=1
  *   InputFix=1 (needs Focus=1)  FpsCap=0 (0 = off, else max frames/s)  Vsync=0/1  Multithreaded=0/1
+ *   Events=1 (8. below: the render hand-off events get per-process names; the suspected cause of 0x43c785 / 0x3c1dcb)
  */
 #define KLSOLO_C
 
@@ -47,6 +48,48 @@ static klso_createdev_fn klso_real_createdev;
 static klso_reset_fn     klso_real_reset;
 static HWND klso_hwnd;
 static volatile LONG klso_focus_writes;
+
+/* 8. EVENTS (workflow wf_9f76e0ce-f97, 2026-10-22, static): 0x7ebbe0 makes the render hand-off events with CreateEventA and a NAME
+   (stores S+0x11b8.. where S = [[0xdd2640]+0x970]); DrawEnd is manual-reset, the other six auto-reset. Two processes in one session open
+   the SAME kernel events, wake / steal each other's signals, and main resets a command list or sprite slots while its render thread
+   still plays them: the two-process crashes 0x7c1dcb (all-zero command) and 0x83c785 (NULL sprite slot). Import slots 0xb10228 (A)
+   and 0xb101e8 (W) are wrapped (the import page 0xb10000.. is not hashed); only these seven names get "_<pid>" appended, every other
+   name (the Steam stub's events at 0xa8e83d, ...) passes unchanged. */
+static const char *const klso_evnames[] = { "RenderThreadInit", "RenderThreadEnd", "UpdateRenderState", "DrawBegin", "DrawEnd", "DeviceUpdate", "ResetDevice" };
+static HANDLE (WINAPI *klso_real_eva)(LPSECURITY_ATTRIBUTES, BOOL, BOOL, LPCSTR);
+static HANDLE (WINAPI *klso_real_evw)(LPSECURITY_ATTRIBUTES, BOOL, BOOL, LPCWSTR);
+
+static int klso_evname(const char *name)
+{
+    int i;
+    for (i = 0; i < (int)(sizeof klso_evnames / sizeof *klso_evnames); i++) if (!strcmp(name, klso_evnames[i])) return 1;
+    return 0;
+}
+
+static HANDLE WINAPI klso_eva(LPSECURITY_ATTRIBUTES sa, BOOL manual, BOOL initial, LPCSTR name)
+{
+    if (name && klso_evname(name)) {
+        char n[64]; snprintf(n, sizeof n, "%s_%lu", name, (unsigned long)GetCurrentProcessId());
+        klog("solo: event %s renamed to %s (manual reset %d)", name, n, manual);
+        return klso_real_eva(sa, manual, initial, n);
+    }
+    return klso_real_eva(sa, manual, initial, name);
+}
+
+static HANDLE WINAPI klso_evw(LPSECURITY_ATTRIBUTES sa, BOOL manual, BOOL initial, LPCWSTR name)
+{
+    char a[64]; int i;
+    if (name) {
+        for (i = 0; i < 63 && name[i] && name[i] < 0x80; i++) a[i] = (char)name[i];
+        a[i] = 0;
+        if (!name[i] && klso_evname(a)) {
+            WCHAR n[64]; _snwprintf(n, 63, L"%ls_%lu", name, (unsigned long)GetCurrentProcessId()); n[63] = 0;
+            klog("solo: event %s (W) renamed with _%lu", a, (unsigned long)GetCurrentProcessId());
+            return klso_real_evw(sa, manual, initial, n);
+        }
+    }
+    return klso_real_evw(sa, manual, initial, name);
+}
 
 static HANDLE WINAPI klso_mutex(LPSECURITY_ATTRIBUTES sa, BOOL own, LPCSTR name)
 {
@@ -136,6 +179,11 @@ static void klso_init(void)
     klog("solo: InputFix=%d FpsCap=%d Vsync=%d Multithreaded=%d", klso_inputfix_on, klso_fpscap, klso_vsync, klso_mt);
     klog("solo: on (pid %lu, files in %s): Windowed=%d Focus=%d window %d,%d %dx%d", (unsigned long)GetCurrentProcessId(), klh_out, klso_win, klso_focus, klso_x, klso_y, klso_w, klso_h);
     if (!klh_iat("KERNEL32.dll", "CreateMutexA", (void *)klso_mutex, (void **)&klso_real_mutex)) klog("solo: CreateMutexA import NOT wrapped - a second instance will exit");
+    if (GetPrivateProfileIntA("Solo", "Events", 1, klh_ini)) {
+        int a = klh_iat("KERNEL32.dll", "CreateEventA", (void *)klso_eva, (void **)&klso_real_eva) && klso_real_eva;
+        int w = klh_iat("KERNEL32.dll", "CreateEventW", (void *)klso_evw, (void **)&klso_real_evw) && klso_real_evw;
+        klog("solo: Events=1: CreateEventA %s, CreateEventW %s (render hand-off events made per process)", a ? "wrapped" : "NOT wrapped", w ? "wrapped" : "NOT wrapped");
+    }
     if (klso_win && !klh_iat("d3d9.dll", "Direct3DCreate9", (void *)klso_create9, (void **)&klso_real_create9)) klog("solo: Direct3DCreate9 import NOT wrapped - fullscreen");
     if (GetPrivateProfileIntA("Solo", "ForceLan", 0, klh_ini)) {
         static const BYTE expect[6] = { 0x83, 0x79, 0x58, 0x02, 0x74, 0x2a }, put[6] = { 0xb8, 0x01, 0x00, 0x00, 0x00, 0xc3 };   /* cmp [ecx+0x58],2 / je 0x5deb80 */
