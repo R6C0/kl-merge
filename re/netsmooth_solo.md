@@ -128,6 +128,15 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
   (2) inst2 (in front) reached `MainMenu > OnlineMenu > SystemLink > SysUIErrorScreen` and crashed at kl2+0x43c785 3 s
       later (inst1 alive). So 0x43c785 is not an Achievements-only crash: any sprite page with two processes. Workflow
       wf_c4634910-4ea investigates both and builds a [Solo] fix into klhook/out_3f_1022b_test.
+- I1 (2026-10-22 03:50, TEST 1022b = commit 20ad71d2a, same scripts): [Solo] InputFix=1 FIXES (1). inst1 logged
+  'inputfix: [mgr+0x94] was 1, cleared' at 03:51:11, 0.4 s after inst2 came up (mgr = [0xddb958] ZSysInputWintel, byte
+  +0x94 = its disable flag, written by SetEnabled 0x8722d0 on focus loss; the device +0x54 bytes were never 0), and its
+  script went on. Both instances walked to `SystemLink > SysUIErrorScreen` and stopped as scripted (exit 26), 0 faults,
+  each ~15 s on the error page. Crash A/B (E_err.ini: both park 90 s on the error page; arms baseline / FpsCap=60 / Vsync=1
+  / Multithreaded=1, keys in klsolo.c) was refused at 03:55: owner input. Static crash triage (wf_c4634910-4ea): no shared
+  named object or file between processes in the render path, no device Reset logged; GUESS main/render race made likelier by
+  CPU/GPU contention (both run ~2000 fps uncapped).
+- BLOCKER: SystemLink opens
 - BLOCKER: SystemLink opens `SysUIErrorScreen` "This game is blocked by a firewall" (string Online/BlockedByFirewall, 0x51dcd0).
   Check: GetModuleFileNameA -> 0x5cce20 -> 0x8945d0: CoCreateInstance(NetFwMgr) via 0x7232d0 (import 0xb1079c), LocalPolicy,
   CurrentProfile; passes when get_FirewallEnabled = FALSE or the exe's AuthorizedApplications entry is enabled. Network profile
