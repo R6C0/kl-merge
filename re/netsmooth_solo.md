@@ -106,6 +106,9 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
     first frames, 0.45 s before the fault in A1). Not yet tried: [Solo] off control (stock can't run unfocused anyway).
     Bench rule from this: start inst2 and let it reach its menu BEFORE inst1 opens any page with sprites; never park on
     ShowAchievements.
+  - D2 (2026-10-22 02:36, TEST 1022a, two processes, D_idle2.ini: CampaignMenu -> ESCAPE -> park in MainMenu; inst2 started
+    45 s after inst1, i.e. while inst1 was parked): both alive after 240 s, 0 asserts, 0 faults each. Two instances on the
+    menus are stable; the A1 crash needs a sprite-heavy page (Achievements) during the other process's start.
 - BLOCKER: SystemLink opens `SysUIErrorScreen` "This game is blocked by a firewall" (string Online/BlockedByFirewall, 0x51dcd0).
   Check: GetModuleFileNameA -> 0x5cce20 -> 0x8945d0: CoCreateInstance(NetFwMgr) via 0x7232d0 (import 0xb1079c), LocalPolicy,
   CurrentProfile; passes when get_FirewallEnabled = FALSE or the exe's AuthorizedApplications entry is enabled. Network profile
