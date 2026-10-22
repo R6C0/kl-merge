@@ -166,6 +166,10 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
   This explains 'two processes only' and why FpsCap did not help. FIX: [Solo] Events=1 (klsolo.c, TEST 1022e) wraps
   CreateEventA/W (import page, not hashed) and appends _<pid> to exactly those seven names (Steam's own events untouched).
   Rejected: patching 0x7c48f5 / 0x83c785 (hashed), vtable swaps at 0xb97fc8 (hashed). Live proof: arms F0a-F0d.
+- PROVEN LIVE (2026-10-22 05:09-05:30, TEST 1022e, E_err.ini, no cap, gap 45 s): F0a, F0b, F0c, F0d = 8 of 8 instances PASS,
+  0 faults; each log names all seven events '_<pid>' (DrawEnd manual reset 1, as read) and both stood on SysUIErrorScreen
+  together. Same bench without Events (E0a, E0b, E0c, E1a, E0d, earlier H0dry): a crash in 4 of the last 6 runs. [Solo]
+  Events=1 is the default; the bench is stable for host / join once the firewall lets System Link through.
 - BLOCKER: SystemLink opens `SysUIErrorScreen` "This game is blocked by a firewall" (string Online/BlockedByFirewall, 0x51dcd0).
   Check: GetModuleFileNameA -> 0x5cce20 -> 0x8945d0: CoCreateInstance(NetFwMgr) via 0x7232d0 (import 0xb1079c), LocalPolicy,
   CurrentProfile; passes when get_FirewallEnabled = FALSE or the exe's AuthorizedApplications entry is enabled. Network profile
