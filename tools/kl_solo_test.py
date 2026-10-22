@@ -10,7 +10,7 @@ Two kl2.exe on one PC: the solo bench for the online code (re/netsmooth_solo.md;
   its own <work>/build/klhook/solo/<tag>/inst<N>/KLHook.ini (env KLHOOK_DIR, TEST builds only) and writes its
   KLHook.log / KLHook.result / dumps there.
 - Instance ini = --base (default: the game folder's KLHook.ini) + [Solo] Enable=1 X/Y/W/H (side by side) +
-  [Net] Log=1 + [NetSmooth] Enable=1 Log=1 Probe=1, then the sections of --ini1 / --ini2 on top (key by key;
+  [Net] Log=1 + [NetSmooth] Enable=1 Log=1 Probe=1 + [Load] NudgeMs=86400000 (no game-made mouse input), then the sections of --ini1 / --ini2 on top (key by key;
   a [Script] section there replaces the base's whole [Script]).
 - Starts kl2.exe directly (no steam://, so the Steam launch options are NOT used) with env SteamAppId=SteamGameId=28000
   and '-o DisableSplashScreens'; instance 2 --gap seconds after instance 1. Ends both after --secs.
@@ -90,7 +90,11 @@ def solo_secs(n):
     w, h = 960, 540
     return [('Solo', [('Enable', '1'), ('Windowed', '1'), ('Focus', '1'), ('X', str((n - 1) * w)), ('Y', '0'), ('W', str(w)), ('H', str(h))]),
             ('Net', [('Log', '1')]),
-            ('NetSmooth', [('Enable', '1'), ('Log', '1'), ('Probe', '1')])]
+            ('NetSmooth', [('Enable', '1'), ('Log', '1'), ('Probe', '1')]),
+            # The game calls mouse_event(MOVE,0,0) (0x6f4220, klnudge.c) while its window is in front; each one passed on resets
+            # GetLastInputInfo, so the owner-idle check above read the bench's own nudge as owner input (E0a: 04:37:43 / 04:38:43).
+            # 24 h = none passed on during a run: the idle check then sees only real input.
+            ('Load', [('NudgeMs', '86400000')])]
 
 
 def main():
