@@ -172,6 +172,18 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
   0 faults; each log names all seven events '_<pid>' (DrawEnd manual reset 1, as read) and both stood on SysUIErrorScreen
   together. Same bench without Events (E0a, E0b, E0c, E1a, E0d, earlier H0dry): a crash in 4 of the last 6 runs. [Solo]
   Events=1 is the default; the bench is stable for host / join once the firewall lets System Link through.
+- PORTS ON ONE PC (static, workflow wf_7818ce5f-935, 2 readers + verifier, 2026-10-22 05:50): no fix needed IF the host
+  reaches Create Game before the client reaches Find / Join. Discovery socket (ctor 0x968320 -> 0x967ef0) binds UDP 9100 and
+  falls back to an ephemeral port (0x967f30), host and client alike: the FIRST process keeps 9100. Host station socket
+  0x9498d0 -> 0x957370 binds 9103 strictly (failure = error path 0x949937, Create Game error state). Client JoinSession 0x948450
+  -> 0x957b50: 9103, else ephemeral (0x9573e0). Find Game broadcasts to 255.255.255.255:9100 ([0x1691530], word [0xd42600])
+  via 0x9680f0 -> WSASendTo; the 9100 owner answers. Plain bind at 0x958f65, no SO_REUSEADDR (do not add one). Wrong order =
+  silent 'no games found'. GUESS: Windows delivers the local broadcast to the other process; the client does not drop a host
+  with its own IP. Only if order-independence is ever needed: a TEST wrap of the ws2_32 bind slot 0xb106e8 that gives inst2
+  port 0 for 9100 / 9103 (not built).
+  Run once the firewall allows kl2.exe: `python tools/kl_solo_test.py --hook ..\klhook\out_3f_1022e_test --tag H1 --secs 560
+  --gap 45 --base C:\kl_build_1019\live\sweep\W02_stockF02.ini --ini1 C:\kl_build_1019\live\solo\H_host.ini --ini2
+  C:\kl_build_1019\live\solo\J_join.ini --shots 60-540:60` (from tools/).
 - BLOCKER: SystemLink opens `SysUIErrorScreen` "This game is blocked by a firewall" (string Online/BlockedByFirewall, 0x51dcd0).
   Check: GetModuleFileNameA -> 0x5cce20 -> 0x8945d0: CoCreateInstance(NetFwMgr) via 0x7232d0 (import 0xb1079c), LocalPolicy,
   CurrentProfile; passes when get_FirewallEnabled = FALSE or the exe's AuthorizedApplications entry is enabled. Network profile
