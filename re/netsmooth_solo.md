@@ -172,6 +172,9 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
   0 faults; each log names all seven events '_<pid>' (DrawEnd manual reset 1, as read) and both stood on SysUIErrorScreen
   together. Same bench without Events (E0a, E0b, E0c, E1a, E0d, earlier H0dry): a crash in 4 of the last 6 runs. [Solo]
   Events=1 is the default; the bench is stable for host / join once the firewall lets System Link through.
+- G0a / G0b (2026-10-22 06:36-06:45, TEST 1022e, base W02_stockF02.ini, no script override): BOTH instances load stock
+  Bridge offline at once (Arcade, 45 s apart) and play the sweep input (walk, sprint, fire, reload, aim): 4/4 PASS, level_loaded=1,
+  0 asserts, 0 faults. Two processes rendering a 3D level side by side are stable with Events=1.
 - PORTS ON ONE PC (static, workflow wf_7818ce5f-935, 2 readers + verifier, 2026-10-22 05:50): no fix needed IF the host
   reaches Create Game before the client reaches Find / Join. Discovery socket (ctor 0x968320 -> 0x967ef0) binds UDP 9100 and
   falls back to an ephemeral port (0x967f30), host and client alike: the FIRST process keeps 9100. Host station socket
