@@ -120,6 +120,14 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
   binding the System Link UDP port 9103 on one PC.
   Run (after the firewall allows kl2.exe): `kl_solo_test.py --hook ..\klhook\out_3f_1022a_test --tag H1 --secs 560 --gap 30
   --base <W02_stockF02.ini> --ini1 ...\H_host.ini --ini2 ...\J_join.ini --shots 60-540:60`.
+- H0dry (2026-10-22 03:36, TEST 1022a, H_host.ini / J_join.ini, firewall still blocking, --gap 30): both scripts parse
+  (72 / 62 commands), the onwin guard registers. Two NEW problems:
+  (1) INPUT STALL: inst1's script stopped at its first DOWN once inst2's window came up (03:36:38 'window not active');
+      from then 'rigid: frames 0' = the game no longer runs its mouse/keyboard update in the inactive window, though frames
+      continue (~2000 fps). klauto.c's open question 'who clears ZKeyboardWintel +0x54' is now the live blocker.
+  (2) inst2 (in front) reached `MainMenu > OnlineMenu > SystemLink > SysUIErrorScreen` and crashed at kl2+0x43c785 3 s
+      later (inst1 alive). So 0x43c785 is not an Achievements-only crash: any sprite page with two processes. Workflow
+      wf_c4634910-4ea investigates both and builds a [Solo] fix into klhook/out_3f_1022b_test.
 - BLOCKER: SystemLink opens `SysUIErrorScreen` "This game is blocked by a firewall" (string Online/BlockedByFirewall, 0x51dcd0).
   Check: GetModuleFileNameA -> 0x5cce20 -> 0x8945d0: CoCreateInstance(NetFwMgr) via 0x7232d0 (import 0xb1079c), LocalPolicy,
   CurrentProfile; passes when get_FirewallEnabled = FALSE or the exe's AuthorizedApplications entry is enabled. Network profile
