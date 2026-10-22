@@ -109,6 +109,17 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
   - D2 (2026-10-22 02:36, TEST 1022a, two processes, D_idle2.ini: CampaignMenu -> ESCAPE -> park in MainMenu; inst2 started
     45 s after inst1, i.e. while inst1 was parked): both alive after 240 s, 0 asserts, 0 faults each. Two instances on the
     menus are stable; the A1 crash needs a sprite-heavy page (Achievements) during the other process's start.
+- Host / join scripts drafted (2026-10-22 02:44, workflow wf_e36fc046-d86, static from Patch01 menu/frontend.xml + klauto.c's
+  parser; NOT run): C:\kl_build_1019\live\solo\H_host.ini and J_join.ini (outside the repo, live folder).
+  SystemLink buttons (XML order CERTAIN): Join Game (quick join), Find Game, Create Game.
+  Host: SystemLink DOWN DOWN RETURN -> `SystemLinkCreate` RETURN (FA row first: GUESS) -> lobby (`FALobby`: GUESS) -> waits
+  100 s for the client -> RETURN (Ready = ZW_SELECT: GUESS) -> waitload -> mouse flicks + pos logs.
+  Client: SystemLink DOWN RETURN -> `SystemLinkFindGame` RETURN -> `SystemLinkServerBrowser` (15 s discovery) RETURN -> lobby
+  RETURN. Both: `onwin ShowAchievements bail` guard. No Start button exists in the XML: whether Ready alone starts the
+  countdown and whether MinNumPlayers allows 2 is open; map = MP_SelectedLevel (F01 default). Also open: two processes
+  binding the System Link UDP port 9103 on one PC.
+  Run (after the firewall allows kl2.exe): `kl_solo_test.py --hook ..\klhook\out_3f_1022a_test --tag H1 --secs 560 --gap 30
+  --base <W02_stockF02.ini> --ini1 ...\H_host.ini --ini2 ...\J_join.ini --shots 60-540:60`.
 - BLOCKER: SystemLink opens `SysUIErrorScreen` "This game is blocked by a firewall" (string Online/BlockedByFirewall, 0x51dcd0).
   Check: GetModuleFileNameA -> 0x5cce20 -> 0x8945d0: CoCreateInstance(NetFwMgr) via 0x7232d0 (import 0xb1079c), LocalPolicy,
   CurrentProfile; passes when get_FirewallEnabled = FALSE or the exe's AuthorizedApplications entry is enabled. Network profile
