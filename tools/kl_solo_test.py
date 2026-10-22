@@ -93,7 +93,8 @@ def solo_secs(n):
             ('NetSmooth', [('Enable', '1'), ('Log', '1'), ('Probe', '1')]),
             # The game calls mouse_event(MOVE,0,0) (0x6f4220, klnudge.c) while its window is in front; each one passed on resets
             # GetLastInputInfo, so the owner-idle check above read the bench's own nudge as owner input (E0a: 04:37:43 / 04:38:43).
-            # 24 h = none passed on during a run: the idle check then sees only real input.
+            # 24 h = none passed on during a run: the idle check then sees only real input (needs klnudge.c from 1022c on:
+            # before it, values over 60000 counted as 0 = the slot not wrapped, the game nudging every frame - E0b).
             ('Load', [('NudgeMs', '86400000')])]
 
 

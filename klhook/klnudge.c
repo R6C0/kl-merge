@@ -24,7 +24,7 @@
  *
  * KLHook.ini
  *   [Load]
- *   NudgeMs=0     0 = off; 1000 = let one nudge a second through
+ *   NudgeMs=0     0 = off; 1000 = let one nudge a second through (max 86400000; over that = 0)
  *   Count=0       1 = wrap and count without changing anything (control run)
  *   CursorGuard=0 1 = wrap the game's ShowCursor import slot (kl2 0xb10654, read from the PE import table 2026-10-19) so a
  *                 call sequence cannot drive the cursor's display count very negative (below) and a slow sequence is logged
@@ -93,7 +93,7 @@ static int WINAPI kln_ShowCursor(BOOL show)
 
 static void kln_init(void)
 {
-    kln_ms = (int)GetPrivateProfileIntA("Load", "NudgeMs", 0, klh_ini); if (kln_ms < 0 || kln_ms > 60000) kln_ms = 0;
+    kln_ms = (int)GetPrivateProfileIntA("Load", "NudgeMs", 0, klh_ini); if (kln_ms < 0 || kln_ms > 86400000) kln_ms = 0;   /* up to 24 h: the solo bench passes none on (kl_solo_test.py) */
     kln_count = GetPrivateProfileIntA("Load", "Count", 0, klh_ini);
     HMODULE u;
     kln_cg = GetPrivateProfileIntA("Load", "CursorGuard", 0, klh_ini) != 0;      /* opt-in: 0 = the slot is not touched */
