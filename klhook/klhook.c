@@ -650,6 +650,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "kltex.c"                                        /* kltex.c: [Graphics] Textures - anisotropic filtering (default on) */
 #include "klnet.c"
 #include "klnetfix.c"
+#include "kllobby.c"                                      /* kllobby.c: [Lobby] MinPlayers - a hosted FA lobby may start below 4 (off unless set) */
 #include "klinv.c"
 #include "klrigid.c"                                       /* klrigid.c: [Rigid] heavier mouse turn + remote shaping helpers (off unless Enable=1) */
 #include "klaiturn.c"                                      /* klaiturn.c: [Rigid] AiTurnDps - one .data float caps every AI actor's body turn rate (off unless set) */
@@ -787,6 +788,7 @@ static void klh_tick(int game_thread)
     klcs_tick(game_thread);                           /* klcensus.c: read-only actor list (returns at once unless [Census] Enable) */
     klvis_tick();                                  /* klvis.c: log only (the vision grid and its record 0xff) */
     klnet_tick(game_thread);                          /* klnet.c: multiplayer log / update numbers (off unless [Net]) */
+    kllb_tick();                                      /* kllobby.c: [Lobby] MinPlayers (off unless set) */
     klnetfix_tick(game_thread);                       /* klnetfix.c: [Net] Hold* receiver hold times (off unless set) */
     klinv_tick(game_thread);                          /* klinv.c: [Inv] gun shelf, Arcade only (off unless Enable=1) */
     klnetsmooth_tick(game_thread);                    /* klnetsmooth.c: [NetSmooth] remote players turn smoothly (off unless Enable=1) */
@@ -1153,6 +1155,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klcs_init();                                      /* klcensus.c: reads [Census] */
     klvis_init();
     klnet_init();
+    kllb_init();
     klnetfix_init();
     klinv_init();
     klnetsmooth_init();
