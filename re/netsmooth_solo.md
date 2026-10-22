@@ -99,6 +99,13 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
     before touching inst1; control runs: one instance with [Solo] off parked 60 s on ShowAchievements, and [Solo] on with a single
     process; optional read-only breadcrumb logging [0xef4d7c]/[0xef4d80]. Overlay DLLs in the dump (ReShade32, medal-hook32,
     nvspcap, GameOverlayRenderer) are not tied to it.
+  - Controls (2026-10-22, TEST 1022a, `kl_solo_test.py --n 1`, one process, [Solo] on, window unfocused):
+    C1 idled 2 min in OnlineMenu: 0 faults. C2 (C_ach.ini) parked 2 min on ShowAchievements (screenshot at 120 s shows the
+    list), the focus write active ('window not active' logged): 0 asserts, 0 faults, alive at the end. So the forced-active
+    unfocused window plus the Achievements page do NOT crash alone: 0x43c785 needs the SECOND process (its device creation /
+    first frames, 0.45 s before the fault in A1). Not yet tried: [Solo] off control (stock can't run unfocused anyway).
+    Bench rule from this: start inst2 and let it reach its menu BEFORE inst1 opens any page with sprites; never park on
+    ShowAchievements.
 - BLOCKER: SystemLink opens `SysUIErrorScreen` "This game is blocked by a firewall" (string Online/BlockedByFirewall, 0x51dcd0).
   Check: GetModuleFileNameA -> 0x5cce20 -> 0x8945d0: CoCreateInstance(NetFwMgr) via 0x7232d0 (import 0xb1079c), LocalPolicy,
   CurrentProfile; passes when get_FirewallEnabled = FALSE or the exe's AuthorizedApplications entry is enabled. Network profile
