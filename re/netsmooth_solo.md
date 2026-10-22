@@ -93,6 +93,8 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
     CERTAIN: klso_tick forces [sys+0xb10]=1, while stock 0x87a963 returns early (no frame built) when it is 0, so the unfocused
     instance ran a state stock never runs (1755 frames in 10 s unfocused). Commit 547708589's klhook/klauto/klmem changes touch
     no render code; klso_init's Direct3DCreate9 wrapper was not read.
+    SETTLED later the same night (3f, see 'Events=1' below): the race is real; its cause is kl2's NAMED render hand-off events,
+    shared by both processes. The rest of this sub-bullet is the earlier reading.
     GUESS: a main/render-thread double-buffer race (slot R empty for an entry still listed), exposed by the forced-active
     unfocused window and timed by inst2's first frames (0.45 s after its stall ended). Stock vs hook is UNKNOWN without a control.
     Way on (no patch): check the window name after each key and back out of ShowAchievements at once; let inst2 finish its stall
