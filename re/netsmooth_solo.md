@@ -136,7 +136,16 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
   / Multithreaded=1, keys in klsolo.c) was refused at 03:55: owner input. Static crash triage (wf_c4634910-4ea): no shared
   named object or file between processes in the render path, no device Reset logged; GUESS main/render race made likelier by
   CPU/GPU contention (both run ~2000 fps uncapped).
-- BLOCKER: SystemLink opens
+- E0a / E0b (2026-10-22 04:37 / 04:44, TEST 1022b, E_err.ini, baseline arm, no cap): E0a inst1 crashed at 0x43c785 22 s
+  into the park on the error page, inst2 PASS. E0b inst1 crashed at a NEW site, kl2+0x3c1dcb (reading 0), frame 513, still
+  in the menus, the moment inst2 started; inst2 PASS. 0x3c1dcb is in the RENDER THREAD's command-list player 0x7c1c30
+  (caller 0x56139e, loop 0x561330; main thread waits for it at 0x459b1a): the command at ebp=0x1fce8f30 is ALL ZEROS
+  (opcode 0, object [+0xc] = NULL), i.e. a list entry counted but never written. Same family as 0x43c785 (render thread, null
+  object): supports the main/render race GUESS. Guest DLLs in both: ReShade32, GameOverlayRenderer, nvspcap, medal-hook32.
+- Idle check fooled by the game itself: 0x6f4220 calls mouse_event(MOVE,0,0) while its window is in front, which resets
+  GetLastInputInfo (E0a: nudge passed 04:37:43, "owner input" 04:38:39). The bench sets [Load] NudgeMs=86400000, but
+  klnudge.c clamped anything over 60000 to 0 = slot NOT wrapped = a nudge every frame (E1a refused 04:46:46). Fixed in TEST
+  1022c (commit 8395d9e: max 24 h). Arms rerun on 1022c: E0d baseline, E1a FpsCap=60, E0c, E1b, E1c.
 - BLOCKER: SystemLink opens `SysUIErrorScreen` "This game is blocked by a firewall" (string Online/BlockedByFirewall, 0x51dcd0).
   Check: GetModuleFileNameA -> 0x5cce20 -> 0x8945d0: CoCreateInstance(NetFwMgr) via 0x7232d0 (import 0xb1079c), LocalPolicy,
   CurrentProfile; passes when get_FirewallEnabled = FALSE or the exe's AuthorizedApplications entry is enabled. Network profile
