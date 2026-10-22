@@ -176,6 +176,8 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
   Bridge offline at once (Arcade, 45 s apart) and play the sweep input (walk, sprint, fire, reload, aim): 4/4 PASS, level_loaded=1,
   0 asserts, 0 faults. Two processes rendering a 3D level side by side are stable with Events=1.
   G1a (W10_DM01.ini, slot F01) / G1b (W14_DM09.ini, slot F06), 07:36-07:45, same set-up on two Dead Men maps: 4/4 PASS, 0 faults.
+  G2 (08:36-10:09, the other 16 sweep inis W01-W19): 32/32 PASS, level_loaded=1, 0 asserts, 0 faults. So all 19 FA maps (9 stock,
+  10 Dead Men) run in two processes at once.
 - PORTS ON ONE PC (static, workflow wf_7818ce5f-935, 2 readers + verifier, 2026-10-22 05:50): no fix needed IF the host
   reaches Create Game before the client reaches Find / Join. Discovery socket (ctor 0x968320 -> 0x967ef0) binds UDP 9100 and
   falls back to an ephemeral port (0x967f30), host and client alike: the FIRST process keeps 9100. Host station socket
