@@ -154,6 +154,18 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
 - The idle check is still reset once per instance start by the game's own SetCursorPos to the window centre (window set-up
   0x56bae0; other callers 0x41e946, 0x6f4285). A [Solo] wrap of that import was REFUSED by the permission classifier (seen as a
   way round the owner-idle check) and is not built; the arms script instead waits for 310 s idle before each arm.
+- CAUSE FOUND (static, workflow wf_9f76e0ce-f97, two readers + a verifier, 2026-10-22 05:05): 0x7ebbe0 creates the render
+  hand-off events with CreateEventA (slot 0xb10228) and fixed NAMES - RenderThreadInit S+0x11b8, RenderThreadEnd +0x11bc,
+  UpdateRenderState +0x11cc, DrawBegin +0x11c0, DrawEnd +0x11c4 (manual reset), DeviceUpdate +0x11d4, ResetDevice +0x11d0
+  (S = [[0xdd2640]+0x970]). Two kl2.exe in one session share them: one process's render thread SetEvents the other's main
+  thread awake (and auto-reset events swallow signals), so main resets list [renderer+0xa8690-4*sel] (0x7c17e9: count 0,
+  end = begin) and flips the sprite set [0xef4d7c]/[0xef4d80] (0x7c1728 zeroes slots) while its render thread still plays
+  them. The player 0x7c1c30 ends only on ebp == end (0x7c48f5 jne), walks into zeroed memory -> 0x7c1dcb; the sprite draw
+  reads a recycled slot -> 0x83c785. Render loop: 0x561330 Wait(DeviceUpdate) / SetEvent(DrawBegin) / 0x7c1c30 /
+  SetEvent(DrawEnd); 0x7c1c30 SetEvents UpdateRenderState at 0x7c1cad; main waits it at 0x7c17d0 and DrawEnd at 0x459b1a.
+  This explains 'two processes only' and why FpsCap did not help. FIX: [Solo] Events=1 (klsolo.c, TEST 1022e) wraps
+  CreateEventA/W (import page, not hashed) and appends _<pid> to exactly those seven names (Steam's own events untouched).
+  Rejected: patching 0x7c48f5 / 0x83c785 (hashed), vtable swaps at 0xb97fc8 (hashed). Live proof: arms F0a-F0d.
 - BLOCKER: SystemLink opens `SysUIErrorScreen` "This game is blocked by a firewall" (string Online/BlockedByFirewall, 0x51dcd0).
   Check: GetModuleFileNameA -> 0x5cce20 -> 0x8945d0: CoCreateInstance(NetFwMgr) via 0x7232d0 (import 0xb1079c), LocalPolicy,
   CurrentProfile; passes when get_FirewallEnabled = FALSE or the exe's AuthorizedApplications entry is enabled. Network profile
