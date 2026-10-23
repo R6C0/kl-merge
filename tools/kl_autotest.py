@@ -120,13 +120,24 @@ def put(src, dst):
 def snapshot(dd, say=print):
     """Keep the hook pair that is in the game folder NOW (the owner's: since 2026-10-09 17:20 the SHIP build
     and its ini, not the old direct_boot pair) as <work>/build/klhook/live/_before/<name>; -> {name: sha1}.
-    A run with --hook / --ini puts exactly these bytes back afterwards, whatever they are."""
+    A run with --hook / --ini puts exactly these bytes back afterwards, whatever they are.
+    Exception: a dinput8.dll that is one of this repo's TEST builds (klhook/out_*_test) was left by an
+    interrupted run, not installed by the owner; then the copy already kept is the owner's and stays."""
     from kl_port_check import workdir
     keep = os.path.join(workdir(), 'build', 'klhook', 'live', '_before')
     os.makedirs(keep, exist_ok=True)
+    tests = None
     was = {}
     for name in ORIGINAL:
         src = os.path.join(dd, name)
+        kept = os.path.join(keep, name)
+        if name.lower().endswith('.dll') and os.path.isfile(src) and os.path.isfile(kept) and sha1(src) != sha1(kept):
+            if tests is None:
+                tests = {sha1(p) for p in glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'klhook', 'out_*_test', name))}
+            if sha1(src) in tests:
+                was[name] = sha1(kept)
+                say('  before | %s in the game folder is a TEST build left by an interrupted run: keeping the saved %s' % (name, was[name]))
+                continue
         if os.path.isfile(src):
             shutil.copyfile(src, os.path.join(keep, name))
             was[name] = sha1(src)
