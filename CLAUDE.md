@@ -66,6 +66,12 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-23 15:00 (PC clock; 14:00 UTC) - scheduled check-in (cloud; local sessions active 30-50 min before, so nothing launched or
+installed; no new dump, KLHook.result = the known FX1 script FAIL). VOICES ITEM CLOSED by the exe + .LOC files (re/voiceplain_fields.md,
+tools/kl_voice_fields.py, re/voice_fields.json): the flag-0 lines are Glazer / driver / police / UCC plus three heister events Dog Days
+also records once for everybody (PersonalRevenge, DirtyMoney, DropCash); FA_YouEscaped*_R are flag-1 and already swapped. A flag-0 line
+is one recording by CODE: no data-side swap exists, Plain=1 stays a TEST probe. kl_voice.LINES verified against all 302 call sites (0 off).
+
 2026-10-23 14:05 - ALT+F4 / STUTTER: hook 43a17d57e: FastExit (Alt+F4 / close = TerminateProcess), NoInject, LogMaxMB=64 (log rotation).
 SHIP out_3f_1023v 2DCB0FBB, to be installed when the owner closes the game (backup dinput8.dll.before-1023v). Log was 562 MB, now archived + emptied.
 Stutter NOT solved: about 10 frames over 33 ms per 10 s this afternoon vs about 6 per 200 s this morning; hitches inside message-hook calls (PeekMessage/CallNextHookEx).
@@ -74,11 +80,6 @@ PD2 music is off now (e8, 13:52). Close-message test FX2 still to run. re/open_w
 2026-10-23 13:52 - PAYDAY 2 MUSIC IS OPT-IN (owner: it stutters). Live ini md5 E21883D4 = [Music] Enable=0, no pd2 stinger clips
 (backup KLHook.ini.before-pd2music-20261023-135155). ON/OFF: `<work>\build\pd2music_1023\Payday 2 music ON.bat` / `OFF.bat`.
 Never ship a kit or baseline with [Music] Enable=1. Retomoto keeps its engine music. Baseline now dll C7557D81 + ini E21883D4.
-
-2026-10-23 12:28 - VOICES, what is left: radio lines are fixed on every map (11:35/11:52). The FLAG-0 ('plain') lines, FA_YouEscaped*_R
-and the police events, take one stock entry and are never swapped, so Dead Men bodies still speak stock lines there. The voiceplain probe
-is merged (default off) and runs only in TEST with SessionSafe=0 (hashed code); not run live. A shippable fix needs a data-side swap. re/voiceplain_1023.md.
-
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
