@@ -89,6 +89,11 @@ Owner: reboot, then C:\kl_build_1019\hook_1020g\INSTALL hook 1020g.bat, shopswap
 UNTESTED live). tools/kl_dmvoice.py grafts campaign clips as KLVoice/<Name>/<Event> + new KLTalk.ini (Kane+Lynch 13 own exchanges,
 Dead Men pairs, pairs with Dog Days heisters); klhook/klvoice.c ([Voice] Enable=1) swaps the speech manager's per-voice entries
 (data writes); [Talk] StockLevels=1. Who is whom and which clip fits is a GUESS: re/voice_1023.md; staged G:\kl_build_1023\voice_1023.
+2026-10-23 05:40 - .LOC cap is 612,634 for EVERY language (kl_loc.LOC_CAP, strict check_cap; stock Russian is the only
+proven size, live globals at offset 616,344). Our Russian/Japanese .LOC were 616-698 KB: kl_loc_fit swapped subtitles to
+English, all 27 map zips re-installed (undo `<work>\build\locfit_1023_backup\UNDO locfit 1023.bat`; LOCFIT1 clean). Also:
+Last Call civilians proven (CIVS3: still until approached, then flee); traitors rarer (Backstab 20, TraitorsMax 1).
+
 2026-10-23 04:50 - Retomoto lift ride proven live (TEST LIFT4): box 9 no longer throws on entry; the ride waits Delay 2.5 s
 plus up to CarWait 6 s for the car box, then jumps to 06_Exit (lobby car 500 ms later). Leaving the box or going down cancels.
 Hop 6 NoHuman=1 installed (LIFT5): the crew waits in the tower and rides down with the human. Open: the jump with the feet in
@@ -98,11 +103,6 @@ the car box was not reached by script (re/retomoto_lift.md).
 DM01 with voices crashed (kl2+0x526b40): the level .LOC goes into a fixed 600,000-byte buffer; kl_dmvoice keeps it under
 LOC_CAP, and any other tool that grows a .LOC must too. The map-page selector is now held on real maps (klslot kls_page_clamp, PH3).
 Proven live: voices, pair talk, ambience, Payday 2 music, traits. Undo: `C:\kl_build_1019\hook_1023h\UNDO hook 1023h.bat`.
-
-2026-10-23 01:40 - first System Link rounds on the two-process bench (firewall opened by the owner). `[Lobby] MinPlayers=N`
-(klhook/kllobby.c, host only): on the host's Ready with >= N connected the lobby target drops to the number connected, so a
-2-player FA round starts (H4, TEST 1023b: 0.6 s after the host's Ready, 0 faults). NetSmooth now works in System Link
-(H5: 1720 turns of a walking host placed on the client, 0 faults). Both are in hook 1023h (installed, see above); the 1023b pack is superseded.
 
 
 ## Owner's end goal (2026-10-09)
