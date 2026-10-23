@@ -652,6 +652,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klnetfix.c"
 #include "klinv.c"
 #include "klrigid.c"                                       /* klrigid.c: [Rigid] heavier mouse turn + remote shaping helpers (off unless Enable=1) */
+#include "klaiturn.c"                                      /* klaiturn.c: [Rigid] AiTurnDps - one .data float caps every AI actor's body turn rate (off unless set) */
 #include "klnetsmooth.c"
 #include "klshop.c"
 #include "klfed.c"
@@ -1156,6 +1157,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klinv_init();
     klnetsmooth_init();
     klrigid_init();
+    klaiturn_init();                                  /* klaiturn.c: after klrigid_init; one guarded data write at start-up */
     klshop_init();
     klp_init();
     klfk_init();

@@ -74,6 +74,11 @@ Two levers exist, only one is usable.
   for writing it: a live differential (change one candidate on an owner map, watch an actor turn) or finding the property in the
   turn-in-place code at 0x7a43e0 / the callers of 0x429ff0 (the 27 references to 0xb78bc8 in re/kl2_rotation.md section 6 are the next list).
   Heavier AI and heavier body turns are therefore OPEN.
+  SUPERSEDED 2026-10-23: the AI turn rate is ONE .data float, 0xcdea94 = 720 deg/s (re/kl2_rotation.md section A,
+  verified: .data, 720.0, a single reader at 0x814326). klhook/klaiturn.c writes it from [Rigid] AiTurnDps=N
+  (default 0 = off; one guarded write at start-up, only when it still reads 720). Live experiment: kl2_rotation.md D.
+  The player's body turn is a separate path (section B: .rdata curve constants, not patchable; a deadband of four
+  .data floats at 0xce9750..5c is the only player-side knob).
 - ANIMATION side (untried): lengthening the turn-in-place clips in a map's .ANM would slow turn-in-place. The per-clip header is 0x68 bytes in
   Dog Days (CLAUDE.md); root motion and foot sync are baked (GUESS). High effort; not started.
 
