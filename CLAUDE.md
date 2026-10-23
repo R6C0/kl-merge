@@ -85,13 +85,16 @@ Owner: allow kl2.exe in Windows Firewall (Allow an app, Private + Public); then 
 - TEST 1020l (1020g source), owner's ini + [Shop] Swap=32:49 ReserveClips=2 + [Rigid] + [NetSmooth]: 10 Dead Men FA maps (DM01-03, 06, 09, 03A, 05A, 06B, 01B, 11B) and all 9 stock FA maps, two rounds each: clean exit, 0 asserts, 0 faults; every log shows the swap at load, the re-park at the round reset, Rigid on. Table: re/shop_more_guns.md "Map sweep".
 - Still unproven by script: a BUY on a stock map, the Rigid feel, NetSmooth online. Commits are local (push refused).
 Owner: reboot, then C:\kl_build_1019\hook_1020g\INSTALL hook 1020g.bat, shopswap, noblow; [Rigid] Enable=1 and try the feel; push rtp-schemas.
+2026-10-23 01:40 - first System Link rounds on the two-process bench (firewall opened by the owner). `[Lobby] MinPlayers=N`
+(klhook/kllobby.c, host only): on the host's Ready with >= N connected the lobby target drops to the number connected, so a
+2-player FA round starts (H4, TEST 1023b: 0.6 s after the host's Ready, 0 faults). NetSmooth now switches on in System Link
+(Wintel service) but has not placed a turn yet (H5). Owner: SHIP `klhook\out_3f_1023b\dinput8.dll`, `[Lobby] MinPlayers=2`.
+
 2026-10-22 00:30 - solo online bench: two kl2.exe on one PC work (klhook/klsolo.c, `tools/kl_solo_test.py`, TEST 1022e; [Solo] Events=1 gives each process its own render events, which fixed the two-process crashes). All 19 maps run in two processes at once (G0-G2, 0 faults). System Link stops at a Windows Firewall check (0 rules for kl2.exe), so NetSmooth online is untried. 44 local commits unpushed (push refused).
-Owner: allow kl2.exe in Windows Firewall (Allow an app, Private + Public); then host/join scripts in re/netsmooth_solo.md section 6 run.
+(Firewall: opened by the owner 2026-10-22.)
 
 2026-10-21 06:50 - 19-map sweep: shop swap + Rigid + NetSmooth together PASS on every map (TEST 1020l; table in re/shop_more_guns.md "Map sweep"). Unproven by script: a BUY on a stock map, the Rigid feel, NetSmooth online.
 Owner: install hook 1020g (`C:\kl_build_1019\hook_1020g\INSTALL hook 1020g.bat`), shopswap, noblow; try [Rigid] Enable=1.
-
-2026-10-20 03:30 - [Rigid] crashed every SHIP build at load (kl2+0xfbb90, swapped dinput8 vtable); fixed in 1020f with heap proxies. Use 1020g, NOT 1020c / 1020e with Rigid. TEST builds hid it (klauto's proxy), so check SHIP builds too.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
