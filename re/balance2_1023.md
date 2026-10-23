@@ -73,11 +73,29 @@ Log lines that prove it:
 2. In the round: `balance: copfar: last bullet on you came from <actor> at <d> m: police->you x <m>` with m = 1.00 for d <= 12,
    0.60 for d >= 40 and in between linear. Seeing both ends proves the mapping.
 3. The table write is a data write: `down: rules:` lines (when he is down) list `the table holds police -> you ...`; with
-   CopToYou=0.7 on level 1 and a 40+ m shooter it must read 0.42 (0.7 x 0.6), at 12 m or less 0.70.
+   CopToYou=0.7 on level 1 and a 40+ m shooter it must read 0.42 x DownFromCop (0.15 with a Flop: about 0.063) while he is down - `down: rules` prints the cell WITH the down factor; the 0.42 / 0.70 (without the down factor) is in the `Risk=.. written` / `copfar` lines and in the cell while he is up.
 4. Pass criteria: a `RESULT PASS` exit; no `copfar` line with m outside 0.60 .. 1.00; no `copfar` lines at all when
    `CopToYouFar` is removed from the ini (old behaviour); with the key removed the table reads exactly pass 1's values.
 Optional proof of GUESS 1: with Log=2, compare the first `copfar` line after a new shooter's first hit with the next one;
 if the first one carries the previous shooter's range, GUESS 1 is wrong in the "after" direction.
+
+## 7b. Review round (feat/1023-balance2-fix)
+- Review 1 (kldown collision), ACCEPTED: while kldown wants a factor (`kld_factor(2) != 1`) or `kld_moving()` (400 ms around a
+  knock-down), klbalance holds the range factor at what the table has (`cfm = cfwas`) and recomputes only when he is up. So
+  `up[0] x DownFromCop` stays valid and `stand` stays 1. kldown.c is NOT changed (hook change is in klbalance.c only).
+  Residual: a price change in the last pass before the fall (up to 50 ms + a frame) can differ from kldown's capture by one step
+  of 0.02; kld_near tolerates that? UNKNOWN (GUESS). Live check to add: a down with two shooters at different ranges, `down:
+  rules` shows `stand` held (no "do not stand in the table any more" line).
+- Review 2 (log label), ACCEPTED: k == 2 logs "police -> you damage factor by range (CopToYouFar)".
+- Review 3 (shooter flip), PARTLY: a 300 ms hold (KLR_CF_HOLD) keeps the old price for 300 ms after the last change when the attacker
+  pointer changes (anti-flicker). It does not price the first bullet right: the mapping is APPROXIMATE (50 ms pass, one float for all
+  police). "Seeing both ends" proves the mapping function, not per-bullet pricing. A true fix means hooking the damage read.
+- Review 4 (stale attacker), ACCEPTED: a hit = a drop of the health at `[player+0xa48]+4`; no drop for 2 s (KLR_CF_STALE) = x 1.
+  GUESS: all police damage shows as a health drop there (kldown.c reads the same object).
+- Review 5 (message), ACCEPTED: reworded (text and a comma decimal read as 0 and are refused).
+- Review 6 (round reset), ACCEPTED: `att/said/said_at/hp/t_hit/cur` reset when `s.rules` changes; `mult` is now also read by the hold.
+- Review 7 (notes), ACCEPTED: item 3 above corrected.
+- Rejected: none.
 
 ## 8. Open risks
 - No data on the real feel after pass 1; the cuts are on top of a pass that has not been played. If the owner finds
