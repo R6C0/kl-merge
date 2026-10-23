@@ -34,10 +34,7 @@ import kl_snd, kl_loc, kl_voice, kl_talk_chars as tc
 GAME = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
 OUT = r'G:\kl_build_1023\voice_1023'
 SRC_LEVEL = 'M01_FA_A'
-# kl2 0x7fef36 memcpy's the level's .LOC into a static 600,000-byte buffer at 0xe100b8 with no size check (the next global,
-# 0xea2878, is 600,000 bytes on; the job-slot count at 0xeac170 sits 639,160 bytes on). TEST 1023e V1_DM01: a 639,672-byte
-# English .LOC overwrote that count -> crash at kl2+0x526b40 77 s in. Keep 4 KB of margin.
-LOC_CAP = 600000 - 4096
+LOC_CAP = kl_loc.LOC_CAP                             # the game's .LOC buffer limit and why: see kl_loc
 O = 'AllLevels/Oneliners/'
 
 # wardrobe name -> (campaign speaker suffix in the Dead Men key, why). GUESS (re/voice_1023.md 2).

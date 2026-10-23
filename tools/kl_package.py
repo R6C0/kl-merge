@@ -14,6 +14,7 @@ Originals are moved (never deleted) into <Dog Days>/KL_PortBackup/.
 import os, shutil, sys, zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import kl_loc
 from kl_port_check import find, workdir, DM_GUESSES, DD_GUESSES, DM_EXE, DD_EXE
 WORK = workdir()
 
@@ -130,7 +131,9 @@ def build(dm_level, slot, dm=None, dd=None):
         eng = s.read([n for n in s.namelist() if n.endswith('English.LOC')][0])
         for lang in LANGS:
             mine = [n for n in s.namelist() if n.endswith(lang + '.LOC')]
-            put('%s%s.LOC' % (pre, lang), s.read(mine[0]) if mine else eng)
+            loc = s.read(mine[0]) if mine else eng          # the English fallback stands in for a missing language
+            kl_loc.check_cap(lang, len(loc))                # Dead Men's own .LOC goes into Dog Days' buffer just the same
+            put('%s%s.LOC' % (pre, lang), loc)
         # Dog Days UI files and (for now) the slot's own sound definitions
         for n in o.namelist():
             if n.lower().endswith('.xml') or n.endswith('.SND'):

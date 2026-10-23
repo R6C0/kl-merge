@@ -130,6 +130,7 @@ def run(folder, out, extra=False, log=print, fed=False):
         if t is not None:
             kl_loc.aliases(t, want, 9)
             files[lang] = kl_loc.build(t)
+            kl_loc.check_cap(lang, len(files[lang]), len(d), '.LOC (with K_C1..K_C9)')
     nls = kl_snd.ls_bank(ls, kl_snd.u32(nsnd, 0))
     problems, cnt = kl_snd.verify(base, nsnd, nwhd, nwav, nls, omap)
     info.update(counts=dict(st + cnt), problems=problems, sound_ids_without_form=[p for p in want if not omap.get(sids[p])])

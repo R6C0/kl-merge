@@ -199,6 +199,9 @@ def apply_loc(data, english=False, log=print, tag='', looks=None, swaps=None):
     if not n:
         return data, 0
     out = L.build(kids)
+    if len(out) > L.LOC_CAP and len(out) > len(data):          # names never grow a stock file past the game's buffer: keep it stock
+        log('shop names %s: the .LOC would be %d bytes, over %d: names left stock' % (tag, len(out), L.LOC_CAP))
+        return data, 0
     assert L.build(L.parse(out)) == out
     return out, n
 

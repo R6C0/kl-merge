@@ -663,6 +663,7 @@ def build(src, dst, name, adpcm='memory', str_path=None, blast=None, log=print, 
             kl_loc._insert(tab.kids, kl_loc.leaf(leaf, ln['texts'].get(lang, ln['texts'].get('English', b'')), omap[ln['sid']]))
             n += 1
         locs[mname] = kl_loc.build(t)
+        kl_loc.check_cap(lang, len(locs[mname]), len(files[mname]))
         if kl_loc.build(kl_loc.parse(locs[mname])) != locs[mname]:
             raise ValueError('%s: the new .LOC does not round-trip' % lang)
         added = n

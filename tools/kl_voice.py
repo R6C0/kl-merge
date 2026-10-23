@@ -576,6 +576,7 @@ def loc_aliases(files, sc, ks, want):
             out[lang] = d; continue
         n = kl_loc.aliases(t, keys, VARIANTS)
         out[lang] = kl_loc.build(t)
+        kl_loc.check_cap(lang, len(out[lang]), len(d), '.LOC (with K_C1..K_C9)')
     return out, n
 
 

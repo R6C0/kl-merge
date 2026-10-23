@@ -1719,7 +1719,9 @@ def finish(folder, log=print):
             continue
         for key, text in TEXTS.items():
             set_text(kids, key, text)
+        old = len(E.lv[ext])
         E.lv[ext] = kl_loc.build(kids)
+        kl_loc.check_cap(ext, len(E.lv[ext]), old)
         langs += 1
     for k, i, _v in kl_fa.controllers(sc, kl_fa.SETTINGS):
         kl_fa.edit(sc, k, i, lambda us: [us.__setitem__(f, [kl_fa._str(sc, START_KEY % w)]) for f, w in START_FIELDS.items()])

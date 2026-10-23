@@ -29,6 +29,18 @@ sys.path.insert(0, HERE)
 
 LANGS = ['English', 'German', 'French', 'Spanish', 'Italian', 'Dutch', 'Russian', 'Polish', 'Japanese']
 TEXT, LEAF, TABLE, SOUND = 0x01, 0x08, 0x10, 0x20
+# kl2 0x7fef36 memcpy's the level's .LOC into a static 600,000-byte buffer at 0xe100b8 with no size check (the next global,
+# 0xea2878, is 600,000 bytes on; the job-slot count at 0xeac170 sits 639,160 bytes on). TEST 1023e V1_DM01: a 639,672-byte
+# English .LOC overwrote that count -> crash at kl2+0x526b40 77 s in. Keep 4 KB of margin.
+LOC_CAP = 600000 - 4096
+
+
+def check_cap(lang, size, old=0, what='.LOC'):
+    """Refuse a .LOC that the game would copy past its buffer. size: the new length; old: the length it grew from (a stock file
+    already over the cap, Russian, is not made worse by us and passes if it did not grow)."""
+    if size > LOC_CAP and size > old:
+        raise ValueError('%s %s is %d bytes, over the %d-byte cap (kl2 copies it into a fixed buffer, 0x526b40 crash)' % (
+            lang, what, size, LOC_CAP))
 
 
 class Node:
@@ -167,6 +179,7 @@ def graft_level(s_files, m_files, want, sndmap, log=print):
             out[lang] = d; continue
         n = graft(t, parse(src), want, sndmap)
         out[lang] = build(t)
+        check_cap(lang, len(out[lang]), len(d))
         if added not in (None, n):
             log('  .LOC %s: %d leaves added, another language %d' % (lang, n, added))
         added = n
