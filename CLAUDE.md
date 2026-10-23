@@ -87,8 +87,8 @@ Owner: allow kl2.exe in Windows Firewall (Allow an app, Private + Public); then 
 Owner: reboot, then C:\kl_build_1019\hook_1020g\INSTALL hook 1020g.bat, shopswap, noblow; [Rigid] Enable=1 and try the feel; push rtp-schemas.
 2026-10-23 01:40 - first System Link rounds on the two-process bench (firewall opened by the owner). `[Lobby] MinPlayers=N`
 (klhook/kllobby.c, host only): on the host's Ready with >= N connected the lobby target drops to the number connected, so a
-2-player FA round starts (H4, TEST 1023b: 0.6 s after the host's Ready, 0 faults). NetSmooth now switches on in System Link
-(Wintel service) but has not placed a turn yet (H5). Owner: SHIP `klhook\out_3f_1023b\dinput8.dll`, `[Lobby] MinPlayers=2`.
+2-player FA round starts (H4, TEST 1023b: 0.6 s after the host's Ready, 0 faults). NetSmooth now works in System Link
+(H5: 1720 turns of a walking host placed on the client, 0 faults). Owner: `C:\kl_build_1019\hook_1023b\INSTALL hook 1023b.bat`.
 
 2026-10-22 00:30 - solo online bench: two kl2.exe on one PC work (klhook/klsolo.c, `tools/kl_solo_test.py`, TEST 1022e; [Solo] Events=1 gives each process its own render events, which fixed the two-process crashes). All 19 maps run in two processes at once (G0-G2, 0 faults). System Link stops at a Windows Firewall check (0 rules for kl2.exe), so NetSmooth online is untried. 44 local commits unpushed (push refused).
 (Firewall: opened by the owner 2026-10-22.)
