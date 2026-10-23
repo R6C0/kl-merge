@@ -31,6 +31,11 @@ Spec, the measurements and every table: re/map_ai.md.
         --retomoto-rows                   (apply / cops-style) the strength floors are Retomoto's own rows (kl_arms.ROWS:
                                           rifle/MG/sniper 75/50 hp 175, SMG/shotgun 50/50 hp 175, pistol 50/50 hp 100;
                                           accuracy x1.1 as used) instead of the eVeteran / eElite ladder (default off)
+    python kl_map_ai.py pistol-row <installed level zip> <out folder>   2026-10-23 balance: ONLY the .prp member is rebuilt,
+                                                                       pistol / revolver carriers lowered to the stock
+                                                                       guard row (accuracy 55 as used, aim 50); proves
+                                                                       by CRC that no other member differs. (--pistol-row
+                                                                       does the same inside `apply`.)
     python kl_map_ai.py check <before> <after>                          the before / after table of one map
     python kl_map_ai.py all <z_maps folder> <out folder> [M02 ...] [options]   apply + check + kl_maps.audit on M01 M02
                                                                        M03 M06 (or the ones named)
@@ -158,6 +163,8 @@ ACC_CAP = None                                      # --acc-cap=N: no floor abov
 AIM_CAP = None                                      # --aim-cap=N: no aim floor above N (aim as used); None = off (default, unchanged). N=75 for rifles is a GUESS (kl-merge-3f)
 HEALTH_ONLY = False                                 # --health-only: strength changes the health floors only; accuracy, aim and skill names stay as built (default off, unchanged)
 RT_ROWS = False                                     # --retomoto-rows: the floors are Retomoto's own rows (kl_arms.ROWS by kl_arms.SKILL: cop 50/50 hp 100, swat 50/50 hp 175, sharp 75/50 hp 175) instead of the eVeteran/eElite ladder (default off, unchanged)
+PISTOL_ROW = None                                   # --pistol-row: (accuracy as used, aim) a PISTOL / REVOLVER carrier is held to (LOWERED to it, never raised); None = off.
+                                                    # 2026-10-23 (owner: the AI is 'a bit too op'): stock guard row = accuracy 55, aim 50 (re/balance_1023.md)
 ACC_FACTOR = 1.1                                    # kl2 0xd19328, for No_Mercenary (0xd19330 = 1.0 for the others)
 
 # (1) class of the weapon carried -> (the skill name whose preset is the FLOOR for accuracy and aim, health floor).
@@ -698,6 +705,8 @@ def strength(sc, anm, plan, log=print, presets=False, seed=kl_arms.SEED):
             if HEALTH in new:
                 what.append('health %s -> %s' % (_n(v[HEALTH]), _n(new[HEALTH])))
             rep.append((sc.path[k], '%s: %s' % (cls, ', '.join(what))))
+    if PISTOL_ROW:
+        rep += pistol_row(sc, log)
     log('  kl_map_ai: strength: %d changes on %d actors%s' % (len(rep), len({p for p, _t in rep}), ' (PRESETS: Retomoto\'s skill names)' if presets else ''))
     return rep
 
@@ -995,6 +1004,83 @@ def apply(src, dst, parts=('strength', 'waves', 'chains', 'escape'), presets=Fal
         json.dump(rep, fh, indent=1)
     with open(os.path.join(dst, 'map_ai.txt'), 'w', encoding='utf-8') as fh:
         fh.write('\n'.join(lines) + '\n')
+    return rep
+
+
+def pistol_row(sc, log=print, row=None):
+    """Pistol / revolver carriers (not AI heisters, not eDog) are LOWERED to the stock guard row: accuracy as used
+    55, aim 50 (PISTOL_ROW or `row`). Riflemen, SMG and shotgun men are not looked at. A preset skill name becomes
+    eCustom with its preset numbers first (as strength() does), then the two numbers are capped. Health unchanged.
+    -> report rows [(actor, what changed)]."""
+    row = row or PISTOL_ROW
+    acc_t, aim_t = float(row[0]), float(row[1])
+    f, rep = kl_arms.fields(), []
+    for k in range(1, len(sc.nodes)):
+        if sc.cls(k) != 'ZFFActor':
+            continue
+        hit = [(i, v) for i, n, v in ctrls(sc, k) if n == 'ZSoldier']
+        if not hit:
+            continue
+        i, v = hit[0]
+        if len(v) != 23:
+            raise ValueError('%s: ZSoldier is not in the Dog Days layout' % sc.path[k])
+        nv = kl_fa.node_values(sc, k)
+        if nv[J.labels('dd', 'ZFFActor').index('ZFFActor[0]')] == 'Ally':
+            continue
+        cls = weapon_class(nv[f[0]].rsplit('\\', 1)[-1])
+        if cls not in ('pistol', 'revolver') or v[STYLE] == 'eDog':
+            continue
+        fac = ACC_FACTOR if v[MERC] == 'No_Mercenary' else 1.0
+        e, new = effective(v), {}
+        if e[ACC] <= acc_t + 0.01 and e[AIM] <= aim_t + 0.01:
+            continue
+        if v[SKILL] != 'eCustom':
+            new[SKILL] = 'eCustom'
+            for fi, x in zip(PRESET_FIELDS, PRESET[v[SKILL]]):
+                new[fi] = float(x)
+        new[ACC] = min(new.get(ACC, v[ACC]), round(acc_t / fac, 1))
+        new[AIM] = min(new.get(AIM, v[AIM]), aim_t)
+        new = {fi: x for fi, x in new.items() if x != v[fi]}
+        if new:
+            kl_fa.edit(sc, k, i, lambda us, new=new: [setv(sc, us, fi, x) for fi, x in new.items()])
+            after = effective([new.get(fi, x) for fi, x in enumerate(v)])
+            rep.append((sc.path[k], '%s: pistol row: accuracy as used %s -> %s, aim %s -> %s' % (
+                cls, _n(round(e[ACC], 1)), _n(round(after[ACC], 1)), _n(e[AIM]), _n(after[AIM]))))
+    log('  kl_map_ai: pistol row (accuracy %g, aim %g): %d pistol carriers lowered' % (acc_t, aim_t, len(rep)))
+    return rep
+
+
+def pistol_zip(zp, dst, log=print, row=(55, 50)):
+    """An INSTALLED (or any) Dog Days level archive -> folder dst: the same archive with ONLY the .prp member rebuilt,
+    pistol carriers held to the stock guard row. The source is read, never written. Proves per member (CRC, size)
+    that nothing but the .prp differs. -> report dict."""
+    import kl_graft
+    order, files, ext, sc, _live, _hud = kl_graft.open_built(zp)
+    data, bad, _p, _n2 = J.check(sc, log=lambda *_a: None)
+    if data != files[ext['.prp']] or bad:
+        raise ValueError('%s: the .prp does not re-serialise byte for byte (%d misfits): not changed' % (zp, len(bad)))
+    rows = pistol_row(sc, log, row)
+    data, bad, _p, _n2 = J.check(sc, log=lambda *_a: None)
+    if bad:
+        raise ValueError('%d objects do not fit their class after the changes: %s' % (len(bad), bad[:3]))
+    if faults(sc):
+        raise ValueError('reference lists at fault: %s' % faults(sc)[:5])
+    arms = kl_arms.check(sc, files[ext['.ANM']])
+    if any(s == 1 for s, _c, _t in arms):
+        raise ValueError('kl_arms.check: %s' % arms)
+    os.makedirs(dst, exist_ok=True)
+    out = kl_graft.write_zip(os.path.join(dst, os.path.basename(zp)), [(n, data if n == ext['.prp'] else files[n]) for n in order])
+    with zipfile.ZipFile(zp) as a, zipfile.ZipFile(out) as b:
+        ia, ib = a.infolist(), b.infolist()
+        if [i.filename for i in ia] != [i.filename for i in ib]:
+            raise ValueError('member list or order differs')
+        diff = [x.filename for x, y in zip(ia, ib) if (x.CRC, x.file_size) != (y.CRC, y.file_size)]
+    if diff != [ext['.prp']] and not (not rows and diff == []):
+        raise ValueError('more than the .prp differs: %s' % diff)
+    log('kl_map_ai: written %s; members that differ (CRC / size): %s' % (out, diff))
+    rep = {'source': zp, 'out': out, 'changed': rows, 'members differ': diff}
+    with open(os.path.join(dst, 'pistol_row.json'), 'w') as fh:
+        json.dump(rep, fh, indent=1)
     return rep
 
 
@@ -2080,14 +2166,16 @@ def spawndiff(src, dst, log=print):
 
 
 def main():
-    global HEALTH_SCALE, ACC_CAP, AIM_CAP, HEALTH_ONLY, RT_ROWS
-    a = [x for x in sys.argv[1:] if not x.startswith('--')]
+    global HEALTH_SCALE, ACC_CAP, AIM_CAP, HEALTH_ONLY, RT_ROWS, PISTOL_ROW
+    a =[x for x in sys.argv[1:] if not x.startswith('--')]
     o = {x for x in sys.argv[1:] if x.startswith('--')}
     HEALTH_SCALE = next((float(x.split('=')[1]) for x in o if x.startswith('--health=')), HEALTH_SCALE)
     ACC_CAP = next((float(x.split('=')[1]) for x in o if x.startswith('--acc-cap=')), ACC_CAP)
     AIM_CAP = next((float(x.split('=')[1]) for x in o if x.startswith('--aim-cap=')), AIM_CAP)
     HEALTH_ONLY = HEALTH_ONLY or '--health-only' in o
     RT_ROWS = RT_ROWS or '--retomoto-rows' in o
+    if '--pistol-row' in o:
+        PISTOL_ROW = (55, 50)
     car = '--car-exit' in o
     parts = tuple(p for p in ('strength', 'waves', 'chains', 'escape') if '--no-' + p not in o)
     if len(a) == 2 and a[0] == 'table':
@@ -2124,6 +2212,8 @@ def main():
         cops_style(a[1], a[2], strength_only='--strength-only' in o, same_part='--same-part' in o, chains_only='--chains-only' in o)
     elif len(a) == 3 and a[0] == 'spawndiff':
         sys.exit(0 if spawndiff(a[1], a[2]) else 1)
+    elif len(a) == 3 and a[0] == 'pistol-row':
+        pistol_zip(a[1], a[2])
     elif len(a) == 3 and a[0] == 'check':
         compare(a[1], a[2])
     elif len(a) >= 3 and a[0] == 'all':
