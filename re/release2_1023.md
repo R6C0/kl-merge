@@ -43,3 +43,8 @@ the staged `dinput8.dll.sha1` (EE6CCCAA...), it contains the string "stinger:" (
 - The staged copies in `<work>\build\sound3_1023\` and `<work>\build\stinger_1023\` were NOT updated (write refused here): copy `tools/sound3_1023.ps1` and
   `tools/stinger_1023/stinger_1023.ps1` over them before installing. Kit README in `build\release_1023b\` likewise needs `tools/release_1023b/README_release_1023b.txt`.
 - Not run (no fake-DD retest of the edited scripts; syntax by inspection only).
+
+## Rebuilt on rtp-schemas (lead, 11:00)
+Cherry-picked onto rtp-schemas as c9cd2a83b / 2b4726be5. The staged SHIP dll is now `klhook\out_cc6_release_1023b\dinput8.dll` sha1 C7557D81DBD01BDFA8AD24853D76FD294AA0FB8A
+(built at 2b4726be5 with `klhookuild.bat <abs dir>`: stinger + mciwrap clock fix + CEG guard); EE6CCCAA is superseded. TEST twin
+`klhook\out_cc6_release_1023b_test` BC667026 played DM01 (KITB): PASS, 0 faults. Staged sound3/stinger installers refreshed to the fixed versions.
