@@ -75,7 +75,7 @@ Facts the tables rest on (all read from the files, scripts in re/retomoto_fa.md)
 import collections, math, os, struct, sys, zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import kl_graft, kl_fa, kl_maps, kl_gms, kl_scene
+import kl_graft, kl_fa, kl_maps, kl_gms, kl_scene, kl_doorfix
 import kl_prpjoin as J
 from kl_prp import units
 
@@ -769,6 +769,14 @@ def wire(sc, log=print):
         put(k, 'TriggerBox', f17=have + [s for s in must([R + n for n in CAMPAIGN_KEEP[PART_B]]) + step['lobby'] if s not in have])
     else:
         at_blast += step['lobby']
+    # THE LIFT DOORS (2026-10-23): both car proxies name the four keyframed door leaves directly. The
+    # campaign lists the two GROUPS (Ext_A_xx / Int_A_xx); kl2's ZMatPosAnimProxy handler (0x7ed520) fills
+    # its animation array by sending 'GetMatPosAnim' to every listed node (loop 0x409430, callback 0x7477c0),
+    # and a group answers only through a RelayMessageList with delay 0 (0x6e3cb0) - unproven here; live the
+    # doors never opened. Stock proxies (F01 AnimProxy_RearDoors_Open) name the animated leaves. Frames
+    # 0..75 and 'AITrigger' stay. tools/kl_doorfix.py does the same to an already built archive.
+    if all(sc.resolve(R + n) for n in kl_doorfix.PROXIES):
+        kl_doorfix.fix_scene(sc, log)
     for path in QUIET:
         for k in sc.resolve(R + path):
             for i in range(len(sc.nodes[k]['ctrls'])):
