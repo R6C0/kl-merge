@@ -11,7 +11,10 @@
   walked freely (2624,859)->(2723,1044) in 0.7 s; it only timed out because the fight slowed the scripted walk (8 s).
 - Product state: kl_doorfix stays on DM09 (harmless; other DM09-family folders staged in `<work>\build\doorfix_1023`, NOT installed);
   kl_doorfix2 is NOT for the owner (doors open at the blast = part 1 can be skipped). CarWait 6 s + CarFallback carry the ride when a human
-  is slow. Open: one picture of the open doors from the lift floor (route at z 910, face the car).
+  is slow.
+- SEEN OPEN (LIFT13, 09:31): proxies accepted at 09:30:46; the player went down in the hall at (2692, 19601, 881) and lay facing the
+  car: shots LIFT13_201s / 205s show the lit car interior and its patterned wall THROUGH the doorway (LIFT10_196s = the shut steel panels).
+  Not seen: a human stepping into the car box before CarWait ends.
 
 ## THE DOORS (2026-10-23 08:50): still shut with a living mercenary; the scene chain is right on paper
 - kl_doorfix (commit 51798e693, installed on DM09 only, backup `<work>\build\doorfix_1023_backup\DM09`): both MatPosAnimProxy lists name the 4
