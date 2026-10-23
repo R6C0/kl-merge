@@ -5,7 +5,10 @@ The player entered box 9 at (2442, 19601, 1); the ride started and did NOT jump 
 (Delay 2.5 + CarWait 6, the script never reached the car box) CarFallback jumped him from (2608, 19601, 480) to entry 5 '06_Exit'. He was at
 (6411, 570, -6221) 500 ms later. Shots LIFT4_200s (inside the tower car) and LIFT4_203s (the lobby car, the lobby beyond the doors).
 LIFT3 showed the cancel path: a route that left the box (x 2204, more than Slack 150 outside) gave 'CANCELLED', and so did a downed player.
-Not yet seen: the jump from INSIDE the car box (a human walks there in about 3 s; the script was slowed by guards). Hop 6 NoHuman=1 is still not installed.
+Not yet seen: the jump from INSIDE the car box (a human walks there in about 3 s; the script was slowed by guards).
+04:52 hop 6 NoHuman=1 INSTALLED in the live DM09 KLJoin.ini (backup KLJoin.ini.before-1023nohuman). TEST LIFT5: 'hop 6 held (NoHuman=1)'
+every 30 s; at the ride's jump crewjoin moved 6 of the 7 bots from the tower (y 21000) to the lobby places (one was at the entry already), so the crew
+now goes down WITH the human instead of vanishing to the street after 150 s.
 
 ## What the log says (KLHook.log of the game folder, read only, 487 MB, last sessions)
 All 15 `join: player 0 entered box 9` lines of the file sit on the EDGE of the box, never at the car:

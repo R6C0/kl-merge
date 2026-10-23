@@ -91,7 +91,8 @@ Dead Men pairs, pairs with Dog Days heisters); klhook/klvoice.c ([Voice] Enable=
 (data writes); [Talk] StockLevels=1. Who is whom and which clip fits is a GUESS: re/voice_1023.md; staged G:\kl_build_1023\voice_1023.
 2026-10-23 04:50 - Retomoto lift ride proven live (TEST LIFT4): box 9 no longer throws on entry; the ride waits Delay 2.5 s
 plus up to CarWait 6 s for the car box, then jumps to 06_Exit (lobby car 500 ms later). Leaving the box or going down cancels.
-Open: the jump with the feet in the car box was not reached by script; hop 6 NoHuman=1 is staged, not installed (re/retomoto_lift.md).
+Hop 6 NoHuman=1 installed (LIFT5): the crew waits in the tower and rides down with the human. Open: the jump with the feet in
+the car box was not reached by script (re/retomoto_lift.md).
 
 2026-10-23 03:50 - installed for the owner: Dead Men voices on all 27 map folders, hook 1023h (48faf4dd), [Music]/[Traits] ini.
 DM01 with voices crashed (kl2+0x526b40): the level .LOC goes into a fixed 600,000-byte buffer; kl_dmvoice keeps it under
