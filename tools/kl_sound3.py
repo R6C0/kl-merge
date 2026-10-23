@@ -205,39 +205,58 @@ def merge_names(old, new):
     return ';'.join(cur + [x for x in new if x not in cur])
 
 
+MAXLIST = 24      # the hook's per-group file cap
+CUT = []          # (map key, planned, dropped) for every Local list that had to be cut to MAXLIST; `check` reports it
+
+
+def interleave(lists):
+    out = []
+    for i in range(max([len(l) for l in lists] or [0])):
+        out.extend(l[i] for l in lists if i < len(l))
+    return out
+
+
 def ini_text(out=OUT, ini=INI):
+    del CUT[:]
     secs = read_sections(ini); miss = []; L = []
     def emit(name, lines):
         L.append('[%s]' % name); L.extend(l for l in lines if True)
         while L and not L[-1].strip(): L.pop()
         L.append('')
     # --- Ambience: global block gains the Local / Panic timing + the shared Panic list
-    g = list(secs.get('Ambience', []))
+    g = []      # review fix: [Ambience] / [Music] carry ONLY the new keys; the installer merges them key by key into the live ini
     for k, v in (('LocalVol', 50), ('LocalAfter', 10), ('LocalMin', 25), ('LocalMax', 70),
                  ('PanicVol', 50), ('PanicAfter', 20), ('PanicMin', 40), ('PanicMax', 110)): put(g, k, v)
     put(g, 'Panic', ';'.join(f for t in WEST_PANIC for f in lib(out, t)))
-    L.append('; KLHook.ini patch: sound pass 3 (2026-10-23). Made by tools/kl_sound3.py ini. Each [section] below REPLACES the same section of the installed KLHook.ini.')
+    L.append('; KLHook.ini patch: sound pass 3 (2026-10-23). Made by tools/kl_sound3.py ini. [Ambience] and [Music] hold only the new keys and are MERGED key by key')
+    L.append('; (Calm is unioned); every other [section] below REPLACES the same section of the installed KLHook.ini.')
     emit('Ambience', g)
     for key in LOCAL:
         base = list(secs.get('Ambience.' + key, [])); 
-        files = [f for t in LOCAL[key] for f in lib(out, t)]
-        if len(files) > 24: files = files[:24]
+        files = interleave([lib(out, t) for t in LOCAL[key]])        # round-robin over the themes, so a cut drops the tails of every theme
+        if len(files) > MAXLIST:
+            CUT.append((key, len(files), len(files) - MAXLIST)); files = files[:MAXLIST]
         put(base, 'Local', ';'.join(files))
         if key.startswith('DM09'): put(base, 'Panic', ';'.join(f for t in RETO_PANIC for f in lib(out, t)))
         emit('Ambience.' + key, base)
     # --- Music: global block gains the Assault tier; per-map pools gain Assault + a longer Calm
-    m = list(secs.get('Music', []))
-    act = getv(m, 'Action').split(';')
-    put(m, 'Assault', ';'.join(t for t in track_list(GLOBAL_ASSAULT, miss) if t not in act))     # a track in Action is not repeated as Assault
+    gm = list(secs.get('Music', [])); m = []         # gm = the installed global block (read only, for the Action de-dupe); m = the new keys
+    gact = getv(gm, 'Action').split(';')
+    put(m, 'Assault', ';'.join(t for t in track_list(GLOBAL_ASSAULT, miss) if t not in gact))     # a track in Action is not repeated as Assault
     put(m, 'AssaultAfter', ASSAULT_AFTER); put(m, 'AssaultOnDown', 1); put(m, 'AssaultMoney', 0)
-    put(m, 'Calm', merge_names(getv(m, 'Calm'), track_list(GLOBAL_CALM_EXTRA, miss)))
+    put(m, 'Calm', ';'.join(track_list(GLOBAL_CALM_EXTRA, miss)))       # the installer unions this with the live Calm
     emit('Music', m)
     for key in MUSIC_KEYS:
         src = key if key in ASSAULT else 'DD0' + key[2]
         base = list(secs.get('Music.' + key, []))
-        act = (getv(base, 'Action') or getv(m, 'Action')).split(';')
+        act = (getv(base, 'Action') or getv(gm, 'Action')).split(';')
         put(base, 'Assault', ';'.join(t for t in track_list(ASSAULT[src], miss) if t not in act))
         put(base, 'Calm', merge_names(getv(base, 'Calm'), track_list(CALM_EXTRA[src], miss)))
+        emit('Music.' + key, base)
+    for key in ('DM01B', 'DM11B'):      # review fix: owner-tuned maps without a pool of their own: Assault filtered against THEIR Action list
+        base = list(secs.get('Music.' + key, []))
+        act = (getv(base, 'Action') or getv(gm, 'Action')).split(';')
+        put(base, 'Assault', ';'.join(t for t in track_list(GLOBAL_ASSAULT, miss) if t not in act))
         emit('Music.' + key, base)
     if miss: L.insert(1, '; MISSING (dropped): %s' % miss)
     return '\r\n'.join(L) + '\r\n', miss
@@ -246,12 +265,13 @@ def ini_text(out=OUT, ini=INI):
 def check(out=OUT, ini=INI):
     bad = 0; text, miss = ini_text(out, ini)
     if miss: print('MISSING PD2 tracks:', miss); bad += 1
+    for key, planned, dropped in CUT: print('note: Local list of %s cut from %d to %d (round-robin over themes: the tail of every theme is dropped)' % (key, planned, planned - dropped))
     for line in text.split('\r\n'):
         if '=' not in line or line.startswith(';'): continue
         k, v = line.split('=', 1)
         if k in ('Local', 'Panic'):
             fl = [x for x in v.split(';') if x]
-            if len(fl) > 24: print('MORE THAN 24 in', k, line[:50]); bad += 1
+            if len(fl) > MAXLIST: print('MORE THAN 24 in', k, line[:50]); bad += 1
             for f in fl:
                 p = os.path.join(out, f)
                 if not os.path.isfile(p) or os.path.getsize(p) < 1500: print('MISSING/EMPTY', p); bad += 1; continue

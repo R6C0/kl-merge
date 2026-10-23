@@ -107,6 +107,9 @@ rows (`kl_shop_cards.py recut --rows=`, SHOP4 PASS; Hawk Sawn-off keeps 2 stray 
 2026-10-23 09:45 - CamYaw (remote camera-yaw smoothing, [NetSmooth] CamYaw=1, default off) proven live in System Link (H8:
 writes = restores = 1265, 0 faults) and merged (29ca1c8ef). The old join failures were key presses lost in a ~22 s stall after
 CampaignMenu; scripted menus should use klauto `settle` + `tapuntil` (see H8_host.ini). Notes: re/netsmooth_camyaw.md.
+2026-10-23 11:00 - Sound pass 3 (branch feat/1023-sound3-fix, NOT run live): per-map Local/Panic one-shots + PD2 ASSAULT music mood, all opt-in
+(old hook ignores the keys). Hooks klhook/out_sound3_1023 (ship) / _test; INSTALL/UNDO sound3 1023.bat in <work>\build\sound3_1023.
+[Ambience]/[Music] are merged key by key. ASSAULT triggers are guesses; live test steps in re/sound3_1023.md.
 
 2026-10-23 09:20 - Retomoto lift doors: the engine chain works (probe klprobe.c, LIFT9-11: box fires once, also for bots,
 both proxies accept, 5 controllers each). "Shut doors" was the test route hitting the doorway frame. kl_doorfix on DM09 only;

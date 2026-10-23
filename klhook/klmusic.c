@@ -45,6 +45,12 @@
  *   FolderB=          a second folder to look in (the B-Sides)
  *   Calm= Action= Escape= Down= Stinger=   semicolon lists of file names ("01_Mayhem.mp3;02_Master_plan.mp3"); a mood with an
  *                     empty list uses the lower one (ESCAPE -> ACTION -> CALM; CALM -> ACTION); Stinger is a one-shot track
+ *   Assault=          (sound3) list for the ASSAULT mood, played on top of ACTION once a trigger below fires; empty = no ASSAULT mood.
+ *                     There is no police signal, so three stand-in triggers (GUESS), each off by default (0):
+ *   AssaultAfter=0    seconds after ACTION began
+ *   AssaultOnDown=0   1 = a crew record that was not dead at ACTION start gets status 7
+ *   AssaultMoney=0    the crew gained this much since ACTION began
+ *   (StingerOn= also accepts "assault")
  *   StingerOn=down,end   where the Stinger leads: any of action, escape, down, end
  *   ActionAfter=45    seconds after the round began that CALM ends by itself (0 = only loot / stage end it)
  *   Random=1          a mood's list starts at a random track (then in order)
@@ -418,7 +424,12 @@ static void klmu_tick(int game_thread)
        began. GUESS: status 7 is "dead / out of play" for every record, not only yours (klbot.c reads it as "he is dead" in the foe skip).
        Sticky for the rest of the round (ESCAPE and DOWN still win; END ends it). money0 is free to reuse here: it only matters while
        base < ACTION. */
-    if (base == KLMU_ACTION && !klmu.t_action) { klmu.t_action = now ? now : 1; klmu.money0 = money; }
+    if (base == KLMU_ACTION && !klmu.t_action) {
+        klmu.t_action = now ? now : 1; klmu.money0 = money;
+        /* review fix: the dead0 baseline was only taken in the first 8 s, but ACTION can start later (timer 45 s): refresh it now so a
+           heister who died during CALM does not fire AssaultOnDown on the first ACTION tick. */
+        for (i = 0; i < s.n && i < KLB_NREC; i++) klmu.dead0[i] = s.r[i].used && s.r[i].status == 7;
+    }
     if (base == KLMU_ACTION && !klmu.assault && klmu.list[KLMU_ASSAULT].n) {
         int as = klmu.assault_after > 0 && now - klmu.t_action >= (DWORD)klmu.assault_after * 1000u;
         if (!as && klmu.assault_money > 0 && money >= klmu.money0 + (DWORD)klmu.assault_money) as = 1;
