@@ -68,3 +68,28 @@ tests (`klb_rec` itself carries no place). If the owner wants something before A
 4. Live check S1: the bank, idle player in the hall, bots in the side rooms: pictures every 2 s; tags only on bots in view; the log's
    ray counts; no fault. Then a whole heist with HeadSight=1 for the frame budget (rays are main-thread time, not pictures).
 5. If 1-2 cannot be done soon: D as `HeadMaxDist=25` for the owner to try (no game call; a small change in klht_tick).
+
+
+## 5. 2026-10-23 (cloud session, static reading of kl2.exe only; nothing run)
+
+**Option D is written**: `[HUD] HeadMaxDist=N` (metres, 0 = off, default) and `HeadFade=N` (default 5) in klhud_tags.c; the
+arithmetic in klhud_tags_dist.h, checked by klhook/klht_test.c (448 checks, Linux + Wine). The human's feet and the bot's node
+place are read with kle_human / kle_node (klescort.c, proven live); a tag past the limit is not drawn, one inside the fade gets
+the colour's alpha scaled (the same alpha-in-colour GUESS as the outline's 0xd8). The 5 s log line (Log=2) counts "hidden as
+too far / faded". Not run in the game: live check S1 of section 4 applies to it as to A (the alpha byte above all).
+Suggested first try: `HeadMaxDist=25`.
+
+**Option A, step 1 - the premise was wrong.** 0x6e0b20 is NOT a raycast. Read in full: it is the third-person camera's
+pull-in step: `[this+0x3f8] = [0xb5f1e0]` (a constant), then `0x457c00(this, &point)`, which (when `[this+0x504]` = the followed
+object is set) takes vtable slot 0xd4 (the followed object's "model" getter), its `+0xd50` skeleton, finds a bone index with
+0x4a01b0 / 0x88c520, reads that bone's 48-byte matrix (0x78c710 = bone matrices, 0x64ecc0 = matrix -> quaternion) and writes the
+bone's world position into `point` (0x4c34a0 / 0x7566e0 = vector store + transform). So 0x6e0b20 moves the camera's anchor to a
+bone of the followed character and scales `[this+0x468]` toward it (0x7c97a0); the "-750 along +0x468" of section 1 is that
+scaling, not a cast. 0x457c00 ret 4, __thiscall(this, float3 *out); 0x6e0b20 __thiscall(this), no arguments.
+
+**Where the real cast is (not yet read):** Havok's `hkWorldRayCaster` and `hkSimpleWorldRayCaster` are in the exe (RTTI at
+0xd490ab / 0xd49195), and `hkAabbPhantom::linearCast` (0xbe9d7d). The game-side wrapper that the camera's collision walk
+(0x897d60, slot 55) and the AI's ZCheckVisible use has not been identified; nothing else in 0x6e0b20's neighbourhood casts.
+Next static step: find the callers of the hkWorldRayCaster vtable (its vtable address follows the RTTI object locator; the
+caller that builds a hkpWorldRayCastInput {from, to, filter} on the stack is the wrapper), then its convention. Until then
+A stays unwritten and D is the stop-gap.

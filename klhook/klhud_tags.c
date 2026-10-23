@@ -20,6 +20,13 @@
  *   HeadTags=0|1|2     0 none (the tags go with the hidden element, as before), 1 initials, 2 initials + money line.  (default: 1 under Draft, else 0)
  *   HeadShadow=1       a 1 px shadow object under each text (drawn first); a GUESS that SetOffset moves it
  *   HeadLine=N         the money line's distance below the initials in virtual pixels (default: the names font's cap + 5)
+ *   HeadMaxDist=N      option D of re\hud_tags_sight.md (2026-10-23): a tag farther than N metres from the human is not drawn,
+ *                      and fades over the last HeadFade metres before N (alpha of the colour: a GUESS that the text object's colour
+ *                      carries its alpha, as the shadows' 0x60000000 and the outline's 0xd8 do). 0 = off (default). No game call:
+ *                      the human's feet [player+0x460] and the bot's node place (kle_human / kle_node, klescort.c, seen live).
+ *                      Does not know about walls (that is option A, not written); it removes the worst case, initials across a
+ *                      whole floor. NOT RUN IN THE GAME.
+ *   HeadFade=N         metres of fade before HeadMaxDist (default 5; 0 = a hard cut)
  *
  * SHIP rule kept: no code byte of kl2.exe changes; every game read is a checked read except the heap objects the tick validated in
  * the same lock; calls: 0x7b8150 (the game's own, same arguments as its Render), SetText / SetColour / SetOffset of our own objects.
@@ -43,10 +50,13 @@
 struct klht_slot {
     int ok, id, show, made;
     DWORD ini, inis, mon, mons, actor, out[4];
-    char ini_cur[16], mon_cur[24]; DWORD ini_col;
+    char ini_cur[16], mon_cur[24]; DWORD ini_col, want_col; float dist;
 };
 
-static struct { int mode, shadow, outline, font, tab, tabdone; float line, tabpadx, tabpady, tabdy; } klht;
+static struct { int mode, shadow, outline, font, tab, tabdone; float line, tabpadx, tabpady, tabdy, maxdist, fade; } klht;
+static volatile LONG klht_n_far, klht_n_faded;
+
+#include "klhud_tags_dist.h"                          /* HeadMaxDist arithmetic (shared with the harness klht_test.c) */
 static struct { int active, fault, told, shown; DWORD tmpl, pl, recs; int n; struct klht_slot s[KLHT_NSLOT]; } klht_r;
 static volatile LONG klht_n_draw, klht_n_nonode, klht_n_cond, klht_n_flag, klht_n_peak;
 
@@ -131,6 +141,14 @@ static void klht_tick(DWORD osd, const struct klb_snap *s, int show)
         if (klht.mode == 2) klu_cash(mb, sizeof mb, (long)r->money); else mb[0] = 0;
         /* S2 (review): only the SCORE flag turns a world tag orange; the bot's own mark (flags&2) is set before he turns on anyone and the tag has no wall test */
         col = (kind == KLUV_K_TRAITOR && (kluv_flags(s, id) & KLUV_F_TRAITOR)) ? KLU_C_ORANGE : KLU_C_CHALK;
+        q->dist = -1.0f;
+        if (klht.maxdist > 0.0f && q->show) {                                 /* HeadMaxDist (option D): distance human feet -> bot node place */
+            float hp[3], hn[3], bp[3]; DWORD human, bnode; int alpha = 255;
+            if (kle_human(&human, hp, hn) && (bnode = klh_rd32(r->actor + 4)) != 0 && kle_node(bnode, bp, 0)) q->dist = kle_dist(hp, bp);
+            alpha = klht_alpha_at(q->dist, klht.maxdist, klht.fade);
+            if (alpha == 0) { q->show = 0; InterlockedIncrement(&klht_n_far); }
+            else if (alpha < 255) { col = klht_with_alpha(col, alpha); InterlockedIncrement(&klht_n_faded); }
+        }
         if (strcmp(buf, q->ini_cur)) {
             int k;
             klu_set(q->ini, KLU_VT_TEXT, (DWORD)(DWORD_PTR)buf); if (q->inis) klu_set(q->inis, KLU_VT_TEXT, (DWORD)(DWORD_PTR)buf);
@@ -149,7 +167,7 @@ static void klht_tick(DWORD osd, const struct klb_snap *s, int show)
     if (!klht_r.told) { klht_r.told = 1; klog("tags: on (HeadTags=%d): the stock element %08lx stays hidden; its tag loop is run by the hook with our texts (%d entries now)", klht.mode, pl, (int)cnt); }
     if (klu.log >= 2) {
         static DWORD said; DWORD now = GetTickCount();
-        if (now - said >= 5000) { said = now; klog("tags: %ld tag draws, %ld without a node, %ld by the stock conditions, %ld with the drawer's flag clear, %d entries; peak draw instances after the tags %ld (budget: keep under ~320)", InterlockedExchange(&klht_n_draw, 0), InterlockedExchange(&klht_n_nonode, 0), InterlockedExchange(&klht_n_cond, 0), InterlockedExchange(&klht_n_flag, 0), (int)cnt, InterlockedExchange(&klht_n_peak, 0)); }
+        if (now - said >= 5000) { said = now; klog("tags: %ld tag draws, %ld without a node, %ld by the stock conditions, %ld with the drawer's flag clear, %d entries; peak draw instances after the tags %ld (budget: keep under ~320); HeadMaxDist: %ld ticks hidden as too far, %ld faded", InterlockedExchange(&klht_n_draw, 0), InterlockedExchange(&klht_n_nonode, 0), InterlockedExchange(&klht_n_cond, 0), InterlockedExchange(&klht_n_flag, 0), (int)cnt, InterlockedExchange(&klht_n_peak, 0), InterlockedExchange(&klht_n_far, 0), InterlockedExchange(&klht_n_faded, 0)); }
     }
 out:
     LeaveCriticalSection(&klu_cs);
@@ -223,7 +241,9 @@ static void klht_init(void)
     klht.tab = klu_inii("HeadTab", 0, 0, 1);                       /* v22 GUESS: a dark painted tab behind the letters; off until A1 has shown the place it reads */
     klht.tabpadx = klu_inif("HeadTabPadX", "8"); klht.tabpady = klu_inif("HeadTabPadY", "6"); klht.tabdy = klu_inif("HeadTabDY", "0");
     klht.line = klu_inif("HeadLine", "-1"); if (!(klht.line >= 4 && klht.line <= 60)) klht.line = klu_cap_of(klht.font) + 5.0f;
-    if (klht.mode) klog("tags: HeadTags=%d (1 initials, 2 initials + money) HeadShadow=%d HeadLine=%.0f; needs [HUD] HideStock=1 (the stock tags go with the hidden element); NOT RUN IN THE GAME", klht.mode, klht.shadow, klht.line);
+    klht.maxdist = klu_inif("HeadMaxDist", "0"); if (!(klht.maxdist >= 0.0f && klht.maxdist <= 500.0f)) klht.maxdist = 0.0f;      /* metres; 0 = off (option D, re\hud_tags_sight.md) */
+    klht.fade = klu_inif("HeadFade", "5"); if (!(klht.fade >= 0.0f && klht.fade <= klht.maxdist)) klht.fade = klht.maxdist > 0.0f ? (klht.maxdist < 5.0f ? klht.maxdist : 5.0f) : 0.0f;
+    if (klht.mode) klog("tags: HeadTags=%d (1 initials, 2 initials + money) HeadShadow=%d HeadLine=%.0f HeadMaxDist=%.0f m (0 = off) HeadFade=%.0f m; needs [HUD] HideStock=1 (the stock tags go with the hidden element); NOT RUN IN THE GAME", klht.mode, klht.shadow, klht.line, klht.maxdist, klht.fade);
 }
 
 
