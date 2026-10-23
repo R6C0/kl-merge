@@ -4,6 +4,7 @@ Question (owner): can players' rotation be slowed so it feels more rigid? Static
 re/kl2.json schemas, stock F01 level data, existing re/*.md and klhook sources. Nothing was run, nothing written to a game folder.
 Labels: CERTAIN = read in the exe or a file on this PC. RECALL = general knowledge, not checked here. GUESS = my inference.
 Honest summary first: the one place that applies the LOCAL body yaw and any turn-rate constant were NOT found. See section 6.
+(2026-10-23: both were found afterwards, AI and player; see the dated section at the end.)
 
 ## 1. The four places rotation lives
 
@@ -110,3 +111,56 @@ that they exist; how they combine is GUESS). K&L already has the 45/90 turn-in-p
    tau 60 ms). Default off. Measure with the existing klauto rig (TurnDeg per count). Needs the owner at the PC to judge the feel.
 2. To find the facing setter: log writes via a hardware watch on a remote ZFFPlayer's matrix, or trace readers of 0xb78bc8 from the list in section 6.
 3. For remote players, wait for klnetsmooth.c, then compare its hook point with section 3.
+
+## 2026-10-23 cloud static reading: where the turn rate lives (AI found, player found; nothing ran)
+Read in kl2.exe build 0490; member offsets from the RTP records (record +0x10 = member offset, established here). CERTAIN unless
+marked GUESS. Nothing ran.
+
+### A. AI actors (ZFFActor: soldiers, civilians, Arcade AI heisters) - one tuning global in .data
+- ZFFActor slot 400 = 0x62a710 calls the actor move step 0x812b70 every frame. At 0x814326 it loads **float [0xcdea94] = 720.0 (.data,
+  its only code reference)**, multiplies by 1.0 (or 0.2 = .rdata 0xb18700 when the root-motion speed is under 30 units/s, 0xb45350, mode
+  byte [actor+0x4ad] = 0) and by deg2rad (0xb84910), and passes it as the 4th argument of **ZActor slot 396 = 0x660780** (vtable +0x630; its only
+  4-argument caller).
+- 0x660780 turns the body: angle = acos(dot(current, wanted)) (0x925da0; under 2 deg, 0xb46640, counts as 0); step = |[actor+0x578]| x
+  rate x dt, capped at the angle, signed by the cross product; the current direction is rotated by step (0x4f2c50). **[actor+0x578]
+  (float, per actor) is a ramp fraction in [-1, 1]** moving toward clamp(2 x angle / pi, -1, 1) by rate x dt per frame. So an actor turns
+  at min(1, 2 x angle / pi) x 720 deg/s (360 at 45 deg, 72 at 9) and is at full speed after 1/rate = 80 ms. The result reaches the node
+  through actor slot 343 (0x7084c0 -> 0x6d0240 -> node vtable +0x94, GUESS "SetDirection"); every move mode but 5 takes this turn.
+- No serialized property reaches it: 0x812b70 reads no ZSoldierRout member (slot 4 = 0x846340 copies its floats +0xa0..+0xd4 to
+  [rout+0x44..+0x78]; none read here) and no ZFFActor level field.
+
+### B. The local player (ZFFPlayer): deadband in .data, rate in heap + .rdata
+- ZFFPlayer slot 87 = 0x57fae0 runs the steer 0x6d9380 (0x7f8b20: a second copy): acos(dot(wanted move
+  dir, body forward)) at 0x6d9b4d -> [player+0xafc]; **[player+0xaf8] = 0.15708 (9 deg) from .rdata 0xb2f260 every tick**; flag 0x20 / 0x40
+  in [player+0x438] when |cross.y| >= 0.01 (0xbb01b4).
+- ZFFPlayerMovementBaseMove slot 29 = 0x84d790 hands [player+0xaf8] as base step `s` to **0x54d1a0**, the one function that turns the
+  player's body (frames = dt x 60):
+  - moving (anim state id not in {0xe, 0xf, 0x12..0x16}): rotation per frame-unit = s x (0.2 + 0.7 x clamp((angle - 18 deg) / 72 deg, 0, 1)),
+    never overshooting: 108 deg/s for small errors, 486 from 90 deg. Constants 0xb7d8f0, 0xb16850, 0xb53d90, 0xb70260: .rdata.
+  - turn-in-place states (those ids = the Turn_45/90 clips of section 1): the remaining angle is spread over the clip's remaining
+    frames ([state+0x58] -> clip header word +2, [state+0x40] = phase) when 0x6db900 (session +0x54 <= 1, GUESS "not online"). The
+    clip's only speed scalar is its length in the .ANM; no playback-rate field was found (GUESS: none).
+  - deadband: **0x4533a0 returns the threshold T from four .data floats in degrees: 0xce9750 = 90 (default), 0xce9754 = 90 (move flags
+    & 0x400), 0xce9758 = 90 (0x651000: flag 0x40 of [player+0x818] or a state test), 0xce975c = 12.5 (bit 1 of [player+0xa54], GUESS
+    human-shield hold)**. 0x41ad30 (from 0x7a4747) compares T with [player+0xafc] for the turn-in-place entry; in 0x54d1a0 the part
+    beyond T goes at once, inside T the body creeps at 0.028 rad per frame-unit (0xb54e90).
+- ZMovementBaseMove slot 29 (0x63c100, +-5 deg per frame-unit, .rdata) is ZPlayer's state only; ZFFPlayer overrides its factory
+  (slot 405 = 0x5bda20). Remote players are ZFFPlayer: same code (GUESS).
+
+### C. What KLHook may write (re/antitamper.md: no code patch, nothing in .rdata)
+| lever | where | allowed | effect |
+|---|---|---|---|
+| AI turn rate 720 deg/s | float 0xcdea94, .data | YES (ceg_ranges.py 0xcdea94:4 first; .data predicted outside) | every AI actor: top speed and ramp (240 -> 120 deg/s at 45 deg, full after 240 ms) |
+| AI ramp fraction | [actor+0x578], heap | yes, but rewritten every frame by 0x660780: a tick-thread clamp is racy | per-actor cap, second choice |
+| player deadband 90 / 12.5 | 0xce9750 / 54 / 58 / 5c, .data | YES | higher = the body lags the aim longer before a turn clip; 65 = Payday 2 |
+| player base step 9 deg | [player+0xaf8], heap | only from a private-vtable wrapper of ZFFPlayer slot 87 (write after stock 0x57fae0); a tick-thread write loses to 0x6d9bce | scales the moving body turn 108..486 deg/s |
+| 0.2..0.9 curve, 18 / 72 deg, 0.028, 5 deg, 9 deg, 0.2, 2 deg, 0.01 | .rdata | NO | - |
+
+### D. Live experiment for A (the owner's "heavier AI")
+1. TEST hook, `[Rigid] AiTurnDps=240` (0 = off): at init (nothing in the exe writes the global), if klh_may_write allows
+   0xcdea94..+4, `*(float*)0xcdea94 = value`; log `rigid: AI turn 720 -> 240 deg/s`.
+2. Measure: sample each AI heister's node forward ([node+0x24] / [node+0x2c], what 0x51f910 returns) every tick; log the peak heading
+   change in deg/s per bot. Expect peaks near 700 with the key off, none above the key with it on.
+3. Watch a bot pivot at a corner; count `move:` stuck lines against a control round (path overshoot: GUESS). Then 360 and 180.
+4. For B: `[Rigid] BodyTurnDeg=65` writes 0xce9750 / 54 / 58: the Turn_45/90 clips should start at 65 deg of aim lag; log
+   [state+0x1e38] with [player+0xafc] at each change into a turn id.
