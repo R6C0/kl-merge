@@ -657,6 +657,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klaiturn.c"                                      /* klaiturn.c: [Rigid] AiTurnDps - one .data float caps every AI actor's body turn rate (off unless set) */
 #include "klnetsmooth.c"
 #include "klmusic.c"                                      /* klmusic.c: [Music] a winmm MCI jukebox for the FA round (off unless Enable=1); AFTER klmove.c / klbot.c */
+#include "klambience.c"                                  /* klambience.c: [Ambience] a looping bed + timed one-shots (radio, alarm, heli, distant) over winmm MCI (off unless Enable=1); AFTER klmusic.c */
 #include "klshop.c"
 #include "klfed.c"
 #include "klfedkit.c"
@@ -795,6 +796,7 @@ static void klh_tick(int game_thread)
     klnetfix_tick(game_thread);                       /* klnetfix.c: [Net] Hold* receiver hold times (off unless set) */
     klinv_tick(game_thread);                          /* klinv.c: [Inv] gun shelf, Arcade only (off unless Enable=1) */
     klmu_tick(game_thread);                           /* klmusic.c: the jukebox cue (reads only; off unless [Music] Enable=1) */
+    klam_tick(game_thread);                           /* klambience.c: the ambience bed + one-shots (reads only; off unless [Ambience] Enable=1) */
     klnetsmooth_tick(game_thread);                    /* klnetsmooth.c: [NetSmooth] remote players turn smoothly (off unless Enable=1) */
     klrigid_tick(game_thread);                        /* klrigid.c: [Rigid] 10 s summary line (Log=1) */
     klshop_tick(game_thread);                         /* klshop.c: [Shop] Swap= a shop row hands over another gun, Arcade only (off unless Enable=1) */
@@ -1165,6 +1167,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klinv_init();
     klnetsmooth_init();
     klmu_init();                                      /* klmusic.c: [Music] (default off) */
+    klam_init();                                     /* klambience.c: [Ambience] (default off) */
     klrigid_init();
     klaiturn_init();                                  /* klaiturn.c: after klrigid_init; one guarded data write at start-up */
     klshop_init();
