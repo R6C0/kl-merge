@@ -101,13 +101,20 @@ static int klam_open(struct klam_slot *p, const char *al, const char *path, int 
     return 1;
 }
 
+/* a bed open that failed is tried again 1 s later, up to 3 times: the music worker opening its track in the same
+   millisecond made it fail with 264 'not enough memory' (OWN2_DM01, V2_DM01: DM01 got no bed at all) */
+static struct klam_cmd_t klam_retry; static int klam_retry_n; static DWORD klam_retry_at;
+
 static void klam_bedcmd(const struct klam_cmd_t *c)
 {
     klam_master = c->vol; klam_fade = c->fade; klam_bedvol = c->bedvol;
     if (klam_bed.open) klam_setvol(&klam_bed, klam_bedvol);
+    if (c != &klam_retry) klam_retry_n = 0;
     if (!c->bed[0]) { if (klam_bed.open) klam_bed.target = 0; return; }       /* fade out, closed by the stepper */
     if (klam_bed.open && !_stricmp(klam_bed.file, c->bed)) { klam_bed.target = 1000; return; }
-    if (klam_open(&klam_bed, "kamb", c->bed, klam_bedvol, klam_fade, 1) && klam_log) klog("ambience: bed %s (fade %d ms)", klam_base(c->bed), klam_fade);
+    if (klam_open(&klam_bed, "kamb", c->bed, klam_bedvol, klam_fade, 1)) { if (klam_log) klog("ambience: bed %s (fade %d ms)%s", klam_base(c->bed), klam_fade, c == &klam_retry ? " on a retry" : ""); klam_retry_n = 0; }
+    else if (klam_retry_n < 3) { if (c != &klam_retry) klam_retry = *c; klam_retry.stop = 0; klam_retry_n++; klam_retry_at = GetTickCount() + 1000; }
+    else klam_retry_n = 0;                                                    /* 3 retries failed: give up until the next command */
 }
 
 static void klam_shot(const char *path, int vol)
@@ -162,6 +169,7 @@ static DWORD WINAPI klam_thread(void *u)
         if (klam_qh != klam_qt) { snprintf(sf, sizeof sf, "%s", klam_q[klam_qh].f); sv = klam_q[klam_qh].vol; klam_qh = (klam_qh + 1) % KLAM_QN; gotshot = 1; }
         LeaveCriticalSection(&klam_cs);
         if (gotcmd) { if (copy.stop) { int k; for (k = 0; k < KLAM_NSHOT; k++) klam_close(&klam_sh[k]); } klam_bedcmd(&copy); }
+        else if (klam_retry_n && (int)(now - klam_retry_at) >= 0) klam_bedcmd(&klam_retry);
         if (gotshot) klam_shot(sf, sv);
         klam_stepfade(now - last); last = now;
         if (now - lastp >= 250) { lastp = now; klam_poll(now); }
