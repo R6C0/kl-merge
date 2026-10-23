@@ -674,6 +674,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klslot.c"
 #include "klpm_gun.c"                                      /* klpm_gun.c: KLMGun equips the round-start gun (off unless [Match] Enable)  */
 #include "klpm_arc.c"                                      /* klpm_arc.c: the Arcade playlist (off unless [Match] Enable + Arcade); AFTER klslot.c */
+#include "klqol2.c"                                        /* klqol2.c: [QoL2] stuck-AI watchdog, Heister page key, mute when unfocused (off unless set); AFTER klslot.c / klpm_arc.c */
 #ifdef KLHOOK_TEST
 #include "klauto.c"
 #include "klsolo.c"                                       /* klsolo.c: [Solo] two kl2.exe on one PC (mutex, windowed, focus); TEST only, off unless Enable=1 */
@@ -799,6 +800,7 @@ static void klh_tick(int game_thread)
     klvis_tick();                                  /* klvis.c: log only (the vision grid and its record 0xff) */
     klnet_tick(game_thread);                          /* klnet.c: multiplayer log / update numbers (off unless [Net]) */
     klq2_tick(game_thread);                           /* klqol.c: [QoL] (off unless set) */
+    kqb_tick(game_thread);                            /* klqol2.c: [QoL2] (off unless set) */
     kllb_tick();                                      /* kllobby.c: [Lobby] MinPlayers (off unless set) */
     klnetfix_tick(game_thread);                       /* klnetfix.c: [Net] Hold* receiver hold times (off unless set) */
     klinv_tick(game_thread);                          /* klinv.c: [Inv] gun shelf, Arcade only (off unless Enable=1) */
@@ -1172,6 +1174,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klnet_init();
     kllb_init();
     klq2_init();                                      /* klqol.c: [QoL] (default off) */
+    kqb_init();                                       /* klqol2.c: [QoL2] (default off) */
     klnetfix_init();
     klinv_init();
     klnetsmooth_init();
