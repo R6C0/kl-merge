@@ -54,6 +54,14 @@ stock face; it is kept, so a few pairs may kern slightly wrong for the new face)
 
                                                                   # (no font bake again)
 
+    python tools/kl_hud.py all <build> <out_TEST> --look deadmen --test-bake --mark-slots [52,53,127-160]
+
+                                                                  # TEST ONLY (re/hud_killfeed_plan.md K1): every HUD picture (or the
+
+                                                                  # listed slots) stamped with its slot number; needs both flags and an
+
+                                                                  # output folder named ...TEST...; check says FAIL on purpose
+
 
 
 PLATES: the stock plates (re/hud_data.md 2: slot 107/108 Weapon_BG 256x128, 169 Meter_BG 256x64, 161..164 GameplayTracker
@@ -823,6 +831,7 @@ def apply(src, dst, face='Bahnschrift SemiCondensed', weight=600, scale=1.0, onl
 
         raise ValueError('the output folder is the build\'s own')
 
+    apply_marks(files, ext, dst, log)                      # nothing unless --test-bake --mark-slots (after the extras: they get numbers too)
     import kl_graft
 
     out = kl_graft.write_zip(os.path.join(dst, os.path.basename(zp)), [(n, files[n]) for n in order])
@@ -940,6 +949,12 @@ def check(src, dst, log=print, pictures=False, extras=False, draft=False):
     if pictures:
 
         allowed |= set(tid for slot, tid in hud_slots(f1, e1).items() if slot in picture_slots())
+
+    if MARK_SLOTS is not None:                             # the test bake stamped (some of) the list's pictures
+
+        allowed |= set(tid for slot, tid in hud_slots(f2, e2).items() if not MARK_SLOTS or slot in MARK_SLOTS)
+
+        bad.append('TEST BAKE with slot numbers stamped: not for the owner\'s tab')
 
     other = [i for i in t1.tex if i in t2.tex and t1.tex[i].entry != t2.tex[i].entry and i not in allowed and i not in new_ids]
 
@@ -1735,6 +1750,8 @@ def apply_pictures(src, dst, png=None, log=print, _files=None):
 
         raise ValueError("the output folder is the build's own")
 
+    apply_marks(files, ext, dst, log)                      # nothing unless --test-bake --mark-slots
+
     import kl_graft
 
     out = kl_graft.write_zip(os.path.join(dst, os.path.basename(zp)), [(n, files[n]) for n in order])
@@ -1787,6 +1804,123 @@ def apply_markers(src, dst, shop=True, log=print):
             shutil.copyfile(q, os.path.join(dst, f))
     log('wrote %s (%d marker pictures, %d .LOC member(s) with the shop names)' % (out, len(new), len(changed)))
     return out
+
+
+# ------------------------------------------------------------------ TEST BAKE: the slot number stamped on every HUD picture
+# re/hud_killfeed_plan.md step 0 (K1): which of the 200 picture slots is the kill line's skull and which the grey '$' over loot is
+# NOT established, and the code that draws them has not been read. So a test archive stamps each picture with ITS SLOT NUMBER and one
+# run with a kill and a loot pick-up reads the numbers off the screenshots. No hook change.
+# Never for the owner's tab: `--mark-slots` works only with `--test-bake`, and the output folder's name must contain TEST (apply()
+# refuses otherwise, so a library caller such as kl_graft cannot turn it on by accident: MARK_SLOTS is None unless main() set it).
+MARK_SLOTS = None                 # None = off; a set of slot numbers to stamp; an empty set = every slot of the list
+MARK_INK, MARK_CHALK, MARK_EDGE = (12, 12, 13), (243, 240, 234), (240, 71, 90)
+_DIGITS = {                       # 3 x 5 bitmap digits, rows top to bottom
+    '0': ('111', '101', '101', '101', '111'), '1': ('010', '110', '010', '010', '111'), '2': ('111', '001', '111', '100', '111'),
+    '3': ('111', '001', '111', '001', '111'), '4': ('101', '101', '111', '001', '001'), '5': ('111', '100', '111', '001', '111'),
+    '6': ('111', '100', '111', '101', '111'), '7': ('111', '001', '010', '010', '010'), '8': ('111', '101', '111', '101', '111'),
+    '9': ('111', '101', '111', '001', '111')}
+
+
+def parse_slots(s):
+    """'52,53,127-160' -> {52, 53, 127, ..., 160}; '' or 'all' -> set() (= every slot)"""
+    out = set()
+    for part in (s or '').split(','):
+        part = part.strip()
+        if not part or part == 'all':
+            continue
+        a, _, b = part.partition('-')
+        out.update(range(int(a), int(b or a) + 1))
+    if any(not 0 <= k < 200 for k in out):
+        raise ValueError('HUD picture slots are 0..199: %s' % s)
+    return out
+
+
+def stamp_pixels(px, w, h, numbers):
+    """Stamp the slot number(s) into the top-left corner of an RGBA picture of w x h, in place; -> (box width, box height).
+    An ink box with a coral edge and chalk digits, one number per row. The stroke is 2 px on a 32 or 64 px icon (a three-
+    digit number is then 26 x 13 px: most of a 32 px icon's width, as the skull candidates 173..179 are 32 px and the number
+    must read at 1:1), 4 on 128, 9 on 256 (under half the width) so the number reads in a 1280 x 720 screenshot of a picture
+    drawn near its own size; a picture drawn much smaller than it is (the 12 px lives skulls) will not be readable."""
+    s = max(2 if min(w, h) >= 32 else 1, min(w // 26, h // 13))
+    rows = [str(int(n)) for n in numbers]
+    bw = 2 * s + max(len(r) for r in rows) * 4 * s - s
+    bh = 2 * s + len(rows) * 6 * s - s
+    bw, bh = min(bw, w), min(bh, h)
+    for y in range(bh):
+        for x in range(bw):
+            i = 4 * (y * w + x)
+            edge = x == 0 or y == 0 or x == bw - 1 or y == bh - 1
+            px[i:i + 4] = bytes(MARK_EDGE if edge else MARK_INK) + b'\xff'
+    for r, text in enumerate(rows):
+        for c, ch in enumerate(text):
+            for gy, row in enumerate(_DIGITS[ch]):
+                for gx, bit in enumerate(row):
+                    if bit != '1':
+                        continue
+                    for dy in range(s):
+                        for dx in range(s):
+                            x = s + c * 4 * s + gx * s + dx
+                            y = s + r * 6 * s + gy * s + dy
+                            if x < bw - 1 and y < bh - 1:
+                                i = 4 * (y * w + x)
+                                px[i:i + 4] = bytes(MARK_CHALK) + b'\xff'
+    return bw, bh
+
+
+def mark_slots(tex, slots_ids, which=None, log=print):
+    """{slot: texture id} -> {id: (new entry, slot list)}: every listed picture decoded (kl_hud_marks.decode: DXT1 / 3 / 5 or
+    ABGR, first mip), its slot number(s) stamped, written back as an ABGR record of the same size under the same id (the
+    plate bake's record shape). which: the slots to stamp (empty / None = all). A texture in several slots gets every number."""
+    import kl_hud_marks as _M
+    by_id = {}
+    for slot, tid in sorted(slots_ids.items()):
+        if which and slot not in which:
+            continue
+        by_id.setdefault(tid, []).append(slot)
+    out = {}
+    for tid, slots in sorted(by_id.items()):
+        if tid not in tex.tex:
+            log('mark slot %s: texture %d is not in the .TEX: skipped' % (slots, tid))
+            continue
+        e = tex.tex[tid].entry
+        _size, f1, _f2, _id, th, tw, _mips, fl, sc, x20 = struct.unpack_from('<I4s4sIHHIIfI', e, 0)
+        q = e.index(b'\0', 36) + 1
+        try:
+            w, h, px = _M.decode(e)
+        except Exception as ex:                                # a format decode() has no reader for: left as it is
+            log('mark slot %s: texture %d (%s) not decoded (%s): skipped' % (slots, tid, f1[::-1].decode('latin1'), ex))
+            continue
+        stamp_pixels(px, w, h, slots)
+        body = struct.pack('<4s4sIHHIIfI', b'ABGR', b'ABGR', _id, th, tw, 1, fl & ~0x100, sc, x20) + e[36:q] + struct.pack('<I', len(px)) + bytes(px)
+        out[tid] = (struct.pack('<I', len(body) + 4) + body, slots)
+        log('mark slot %-12s id %4d %dx%d %s -> ABGR  %s' % (','.join(map(str, slots)), tid, tw, th, f1[::-1].decode('latin1'), tex.tex[tid].name))
+    return out
+
+
+def apply_marks(files, ext, dst, log=print):
+    """The test-bake step of apply() / apply_pictures(): a no-op (files untouched) unless MARK_SLOTS is set. Edits files in
+    place and writes <dst>/TEST_BAKE_mark_slots.txt (slot -> id -> stock name) for the run's notes. -> {id: slots}"""
+    if MARK_SLOTS is None:
+        return {}
+    if 'TEST' not in os.path.basename(os.path.abspath(dst)):
+        raise ValueError('a bake with the slot numbers stamped (--mark-slots) goes only into a folder whose name contains TEST')
+    tex = T.read_tex(files[ext['.TEX']])
+    slots = hud_slots(files, ext)
+    names = {tid: tex.tex[tid].name for tid in slots.values() if tid in tex.tex}
+    new = mark_slots(tex, slots, MARK_SLOTS, log)
+    for tid, (e, _s) in new.items():
+        t = tex.tex[tid]
+        tex.tex[tid] = T.Texture(e, t.faces, t.cube, t.frames, t.group)
+    files[ext['.TEX']] = T.write_tex(tex)
+    os.makedirs(dst, exist_ok=True)
+    with open(os.path.join(dst, 'TEST_BAKE_mark_slots.txt'), 'w') as f:
+        f.write('TEST BAKE: every HUD picture carries its slot number (kl_hud.py --test-bake --mark-slots). NOT for the owner\'s tab.\n')
+        f.write('K1 (re/hud_killfeed_plan.md 6): read the number on the kill line\'s skull and on the grey $ over loot.\n')
+        for slot in sorted(slots):
+            tid = slots[slot]
+            f.write('%3d  id %4d  %s%s\n' % (slot, tid, names.get(tid, '?'), '' if tid in new else '  (not stamped)'))
+    log('TEST BAKE: %d pictures stamped with their slot numbers (%d slots in the list); not for the owner\'s tab' % (len(new), len(slots)))
+    return {tid: s for tid, (_e, s) in new.items()}
 
 
 # ------------------------------------------------------------------ preview
@@ -2314,6 +2448,26 @@ def preview_board(src, out, dumps, log=print):
 
 
 
+def _test_bake_options(a, out):
+    """Takes `--test-bake` and `--mark-slots [list]` out of the option list `a` (in place) and sets MARK_SLOTS. Both flags
+    and an output folder named ...TEST... are required together: a slot-numbered archive must not reach the owner's tab."""
+    global MARK_SLOTS
+    test = mark = None
+    while '--test-bake' in a:
+        a.remove('--test-bake'); test = True
+    while '--mark-slots' in a:
+        i = a.index('--mark-slots'); del a[i]
+        mark = a.pop(i) if i < len(a) and not a[i].startswith('--') else 'all'
+    if mark is None and test is None:
+        return
+    if mark is None or test is None:
+        raise SystemExit('--mark-slots and --test-bake go together (a test archive with the slot numbers stamped on the HUD pictures)')
+    if 'TEST' not in os.path.basename(os.path.abspath(out)):
+        raise SystemExit('--mark-slots: the output folder name must contain TEST (got %r)' % os.path.basename(os.path.abspath(out)))
+    MARK_SLOTS = parse_slots(mark)
+    print('TEST BAKE: slot numbers stamped on %s HUD picture(s); the archive is for re/hud_killfeed_plan.md K1 only' % ('every' if not MARK_SLOTS else len(MARK_SLOTS)))
+
+
 def main():
     global MARKERS, SHOPNAMES
     a = sys.argv[1:]
@@ -2323,6 +2477,9 @@ def main():
         print(__doc__); return
 
     cmd = a[0]
+
+    if cmd in ('all', 'pictures') and len(a) > 2:
+        _test_bake_options(a, a[2])
 
     if cmd == 'dump':
 

@@ -39,7 +39,9 @@ def _c565(c):
 
 
 def decode(entry):
-    """a .TEX record -> (w, h, RGBA bytearray) of its first mip; DXT5, DXT1 and the uncompressed ABGR / RGBA records"""
+    """a .TEX record -> (w, h, RGBA bytearray) of its first mip; DXT5, DXT3, DXT1 and the uncompressed ABGR / RGBA records
+    (DXT3, the borders in slots 0 / 1: 16-byte blocks, 4-bit alpha per pixel, 4-colour mode always; added 2026-10-23 for the
+    slot-number test bake, kl_hud.mark_slots)"""
     size, f1, _f2, _id, th, tw = struct.unpack_from('<I4s4sIHH', entry, 0)
     q = entry.index(b'\0', 36) + 1
     n = struct.unpack_from('<I', entry, q)[0]
@@ -50,7 +52,8 @@ def decode(entry):
         px[:] = b[:4 * tw * th]
         return tw, th, px
     dxt5 = fmt == b'DXT5' or f1 == b'DXT5'
-    bs = 16 if dxt5 else 8
+    dxt3 = fmt == b'DXT3' or f1 == b'DXT3'
+    bs = 16 if dxt5 or dxt3 else 8
     o = 0
     for by in range(0, th, 4):
         for bx in range(0, tw, 4):
@@ -62,11 +65,14 @@ def decode(entry):
                 else:
                     al = [a0, a1] + [((5 - i) * a0 + i * a1) // 5 for i in range(1, 5)] + [0, 255]
                 c0, c1, bits = struct.unpack_from('<HHI', b, o + 8)
+            elif dxt3:
+                al, ab = None, int.from_bytes(b[o:o + 8], 'little')
+                c0, c1, bits = struct.unpack_from('<HHI', b, o + 8)
             else:
                 al, ab = None, 0
                 c0, c1, bits = struct.unpack_from('<HHI', b, o)
             C0, C1 = _c565(c0), _c565(c1)
-            if dxt5 or c0 > c1:
+            if dxt5 or dxt3 or c0 > c1:
                 cs = [C0, C1, tuple((2 * x + y) // 3 for x, y in zip(C0, C1)), tuple((x + 2 * y) // 3 for x, y in zip(C0, C1))]
             else:
                 cs = [C0, C1, tuple((x + y) // 2 for x, y in zip(C0, C1)), (0, 0, 0)]
@@ -74,7 +80,12 @@ def decode(entry):
                 x, y = bx + i % 4, by + i // 4
                 if x < tw and y < th:
                     k = (bits >> 2 * i) & 3
-                    a = al[(ab >> 3 * i) & 7] if dxt5 else (0 if (not c0 > c1 and k == 3) else 255)
+                    if dxt5:
+                        a = al[(ab >> 3 * i) & 7]
+                    elif dxt3:
+                        a = ((ab >> 4 * i) & 15) * 17
+                    else:
+                        a = 0 if (not c0 > c1 and k == 3) else 255
                     j = 4 * (y * tw + x)
                     px[j:j + 4] = bytes(cs[k]) + bytes((a,))
             o += bs

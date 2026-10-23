@@ -1,6 +1,6 @@
 # Kill lines ("POLICE -$5000" + skull) and the grey "$" loot marker in the new look - PLAN (cloud session, 2026-10-12)
 
-No code, nothing built, baked or run. Facts are from re/hud.md 2.2, re/hud_popup.md 3, re/hud_data.md 2; everything else is marked GUESS.
+No code, nothing built, baked or run (2026-10-23: step 0's bake option exists offline, section 2; still nothing run). Facts are from re/hud.md 2.2, re/hud_popup.md 3, re/hud_data.md 2; everything else is marked GUESS.
 
 ## 1. Which element draws what
 
@@ -17,6 +17,26 @@ colour with its slot number written large in it (same id, same size, same format
 elements' ART is a .TEX record swap by id'). One run on the bank with a kill and a loot pick-up, pictures every 1 s: the number on the
 skull and on the "$" names the slot. No hook change, no element read. This is a test archive only - never for the owner's tab.
 (GUESS: the KillEnemy picture is the skull and 172 or 175 the "$"; the run decides.)
+
+DONE offline 2026-10-23 (cloud, no game files, nothing run): `kl_hud.mark_slots` / `stamp_pixels` / `apply_marks`. It keeps the stock
+picture and stamps the slot number in its top-left corner (an ink box, coral edge, chalk 3 x 5 digits; 2 px strokes on a 32 or 64 px
+picture, 4 on 128, 9 on 256; a texture that sits in two slots, as 109 / 193, gets both numbers stacked), decoded from DXT1 / DXT3 /
+DXT5 / ABGR (kl_hud_marks.decode, DXT3 added) and written back as an ABGR record of the same size under the same id, the plate bake's
+record shape. Test: `python tools/kl_hud_marks_test.py` (synthetic .TEX, 52 checks: stamped in the corner, nothing else in the picture
+changed, unlisted textures and record words byte-identical, the step a no-op when the flag is off, the CLI refusals).
+
+How to run (the bank build the owner's tab was baked from, i.e. the `all --look deadmen` input):
+```
+python tools\kl_hud.py all <build> <work>\build\hud_K1_TEST --look deadmen --test-bake --mark-slots
+python tools\kl_hud.py all <build> <work>\build\hud_K1_TEST --look deadmen --test-bake --mark-slots 52-56,127-160,170-179
+```
+Without a list every slot of the 200-entry list is stamped (the extras 111..118 too), which is the better first run since the
+candidates above are guesses. Guards: `--mark-slots` needs `--test-bake` AND an output folder whose name contains TEST, else the
+tool stops before it writes anything; `check:` prints FAIL with 'TEST BAKE with slot numbers stamped' on purpose, so the install
+habit ('check must PASS') stops it too; the folder gets `TEST_BAKE_mark_slots.txt` (slot -> texture id -> stock name, the key for
+reading the shots). The plain bake (no flags, kl_stock_mod / kl_graft call it that way) does not go through the step.
+What a picture drawn much smaller than its texture (the 12 px lives skulls in the list) shows is a smudge: read the kill line's
+skull, drawn larger, and zoom the shot. Install into the F01 test slot only, as any other test archive.
 
 ## 3. The "$" loot marker: art only (recommended)
 
@@ -67,8 +87,17 @@ elements (re/hud_audit.md lists the red discs as a separate candidate).
 
 ## 6. Live checks (local, owner away; the bank)
 
-- K1 (step 0): the `--mark-slots` test archive; kill a policeman, kill a civilian, pick up loot near a marker; pictures every 1 s. Note the
-  numbers on the skull and on the "$".
+- K1 (step 0): the `--mark-slots` test archive (section 2, the first command: every slot stamped); kill a policeman, kill a civilian,
+  pick up loot near a marker; pictures every 1 s. What to look for in the shots: (a) the number in the corner of the skull beside
+  'POLICE -$5000' (expected 178 'Kill' or one of 127..160 KillEnemy; a number from 173..179 means the small-icons sheet); (b) the
+  number on the grey "$" over a dropped bag and over the loot the marker points at (candidates 52 / 53 / 54, 172, 175; which of 53 / 54
+  is the bag marker is open, tools/kl_hud_marks.py); (c) whether the skull or the "$" shows NO number: then it is not a picture of the 200
+  list at all (a font page-1 glyph, re/hud_data.md 3, or drawn by the element from another texture) and step 3 of section 4 becomes a
+  hook job. Also note the number on the lives skulls in the crew list (178 expected: a repaint of 178 then changes both). Write the
+  three numbers into section 1's table and delete the test folder.
+  Owner: the hud_K1_TEST archive must NOT be installed except for this one check, and never into the owner's tab; it is a test
+  bake with numbers painted over every HUD picture, its `check:` says FAIL by design, and `tools/RESTORE Dog Days originals.bat` or
+  the normal bake puts the F01 slot back.
 - K2: `KillLines=1`, normal archive: the police line coral in the names face, drifting and fading as stock; a reward line green; one
   traitor line orange (Tune=1 run); the announcement pop-up unchanged. Log: wrap line, one line per classified message, no stand-down.
 - K3: the rebaked "$" and skull in the normal bake (after K1), one round; the owner judges.
