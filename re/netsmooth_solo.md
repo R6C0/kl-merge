@@ -314,3 +314,29 @@ Rounds 3, both players "r6kxo", Ready buttons showing. So System Link discovery 
    lobby's level toggler only has the nine stock names and pictures (menus.md 387, klslot.c KNOWN LIMITS). Own
    names and pictures per expansion map = the roadmap's "Custom map previews" (Patch01.zip XML + one picture each):
    separate work, not a bench blocker.
+
+## 9. OWNER 2026-10-23 10:36: "need to test it on custom match too" (the Steam online path)
+
+What the bench has proven so far is System Link (route U, raw UDP): discovery, join, a 2-player lobby. A CUSTOM MATCH is the
+other route: Online -> Create Game, a Steam lobby (CreateLobby +0x30, type from [Net] PrivateLobby: re/private_match.md 7)
+and Steam P2P transport (the adapter 0x7ee0c0 builds when 0x5deb50 says "not System Link"). Different code on both sides
+of the wire, so the LAN result does not cover it. It cannot be done with two kl2.exe on ONE Steam account (section 1,
+route S was rejected for that reason: both instances would be the same station on Steam, GUESS-level risk even if the
+lobby let them in). Three ways to get a second Steam identity, in order of cost:
+
+1. **Two PCs, two accounts (the real thing).** Josh plus one friend, both with the SAME map build (private_match.md
+   2026-10-23: same build of the current round's map; the cap and ids are rebuilt per map). Hook: SHIP build,
+   [Net] PrivateLobby=1 (FriendsOnly: friends see it in the server browser, Public clients do not), [NetSmooth] on,
+   [Net] Log=1 on both. Host: Online -> Create Game -> FA -> the expansion map's slot -> Ready. Joiner: Online -> Find /
+   Join Friend from the Steam overlay. Read: the P2P connect lines (1202 / 1203 callbacks, private_match.md 8), the
+   firewall line (Steam P2P uses UDP too: the new rule covers it), MinPlayers=2 from the hook, and the NetSmooth
+   probe once in the round. This is the test that matters for the Discord group.
+2. **One PC, a second Steam account in Steam Family / a second Steam install.** Steam does not run two clients on one
+   Windows session; a second account needs a second user session (Windows "switch user" with its own Steam) or a VM
+   with its own Steam login: heavy, and Family Sharing locks the game when the owner plays. Not recommended.
+3. **One PC, one account, the Steam stand-in (route S).** The 150-stub emulation the bench rejected. Not worth it
+   while (1) is available.
+
+So: (1). What the cloud / local sessions can prepare without the second PC: the SHIP build with PrivateLobby, a one-page
+sheet for the friend (install the same KLExpansion folder + hook, same build hash: tools/kl_netcheck.py says SAME SLOT
+ORDER for two map zips), and the log lines to collect. Owner: who is the second player, and when.
