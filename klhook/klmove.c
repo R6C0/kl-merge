@@ -133,10 +133,12 @@
  *       timer += min(5, what is left). FollowOutHold's rule with the roles exchanged (there: he is aboard, the crew
  *       comes); the same float, the same amount as the game's own hold.
  *    WALK TO THE CAR (BoardNear=<distance>; 100 = 1 m).
- *    f. Every ZAllyEscapeBox of the level (found at EVERY ROUND'S START by its vtable in the committed private memory,
+ *    f. Every ZAllyEscapeBox of the level (found at the scene's FIRST round's start by its vtable in the committed private
+ *       memory and kept for its later rounds - klmv_box_gen, 2026-10-23; before that at EVERY round's start,
  *       as klhud.c finds the display - once per round and not once per rules address, because a level loaded again
- *       can put its rules object where the last one was (review S6); the game stands still for the scan, HOW LONG IS
- *       NOT MEASURED, the 'near: N ZAllyEscapeBox object(s) found in .. ms' line says it each time (S7)) gets a
+ *       can put its rules object where the last one was (review S6) - the cache answers S6 by the scene name and the
+ *       level archive opens instead; the game stands still for the scan, MEASURED 125 - 140 ms live (2026-10-23),
+ *       the 'near: N ZAllyEscapeBox object(s) found in .. ms' line says it each time (S7)) gets a
  *       private copy of the class's vtable whose slot 25 is this file's: it calls the stock update 0x907a50 unless the
  *       box is DENIED. Denied = the vehicle STANDS (state 3 / 4), its boarding place is known, the box's node is
  *       farther than BoardNear from it, it is not the round's last vehicle ([rules+0xe8a]) and fewer than
@@ -228,6 +230,8 @@
  *                         Use it with FollowOutHold or FollowOutSpare: who is left in play when you are driven out is shot
  *   BoardNearVisits=3     from this visit of a vehicle on every box works again (0 = never again)
  *   BoardNearStage=1      a bot under stage 3 at a denied box gets stage 3 (so that its board tactic walks it)
+ *   BoardScanEveryRound=0 1 = the ZAllyEscapeBox scan (125 - 140 ms standstill) runs at every round's start, as before
+ *                         2026-10-23; 0 = its result is kept while the scene stays and no level archive is opened
  *   BoardReach=0          a box takes an AI heister aboard only when THAT BOT is within this of the vehicle's boarding
  *                         box - where you get in (100 = 1 m from the box's surface; 0 = off; least 50; proposed 100).
  *                         BoardNear is not needed with it
@@ -347,6 +351,7 @@ static struct {
     float reach_aim;               /* [Bots] BoardReachAim (2026-10-18, DM02 L21): cm; the doors order aims this far from the boarding object towards the bot, at its height; 0 = off (default) */
     float reach_aim_h;             /* [Bots] BoardReachAimHeight (2026-10-18, Vault L86: BoardReachAim kept the BOT'S height, so bots on the stair route out of the vault (y -960 .. 240, doors y 822) were sent to points on the floors below the van): metres; a bot more than this above or below the boarding object is sent to the object itself, not to the BoardReachAim point; 0 = off (default, unchanged). GUESS if used: 3 */
     int reach_chase;               /* [Bots] BoardReachChase (2026-10-18, DM02 L18 record 5): 1 = a bot that got an order this visit and walks off is re-sent without the stand-still test; 0 = off (default) */
+    int scan_always;               /* [Bots] BoardScanEveryRound (2026-10-23): 1 = the ZAllyEscapeBox scan runs at every round's start (the old behaviour, 125 - 140 ms standstill each); 0 = off (default): the scan's result is kept for the scene (klmv_box_gen) */
     int reach_flat;                /* [Bots] BoardReachFlat (2026-10-18, DM02 L16): BoardReach from a boarding object that is no box ignores the height within 2.5 m; 0 = off (default, old behaviour) */
     float reach_sent;            /* [Bots] BoardReachSent (2026-10-18, Last Call L74: bots 36-40 m off stood 45 s): cm, how far from the boarding box a called bot may be and still get the order to the doors; 0 = off (default: KLMV_SENT, 30 m) */
     DWORD reach_repeat;          /* [Bots] BoardReachRepeat (2026-10-18, 3f's DM02 run L14: orders to the doors were overridden by the game's chain within 4-14 s and never sent again; bots in an escape box 2.5-3.1 m off never stood the 1 s): ms after an order to the doors before it may be sent again while the vehicle waits, and a bot in an escape box beyond BoardReach is sent without the stand-still test; 0 = off (default, old behaviour) */
@@ -428,6 +433,30 @@ static DWORD klmv_gate_rules;                 /* the rules object whose +0x1ee t
 static struct { DWORD obj, rules, until, at; int amount, count, on; BYTE active, state; } klmv_sour[KLMV_NSOUR];
 static struct { DWORD at; float pos[3], d; volatile LONG deny; LONG asked; int told_visit, would; } klmv_box[KLMV_NBOX];      /* would = denied by the rule (deny stays 0 in a dry run); d = its distance to the boarding place while the vehicle stood */
 static int klmv_nbox; static DWORD klmv_box_rules, klmv_vt[KLMV_VT_N + 1]; static int klmv_vt_ok;
+/* THE SCAN'S CACHE (2026-10-23, debug/notes/2026-10-23-residual-stutter.md: the walk over ALL committed private memory
+   stood the game still 125 - 140 ms at EVERY round's start - with Payday 2 music off the one in-round hitch per round
+   that is the hook's own). The boxes are level entities: they come from the level file and live until the scene is
+   left (GUESS: a round reset creates none anew - the stock reset 0x8c7a80 resets the rules object, not the scene; the
+   three tests below catch a reload either way). The addresses found are KEPT while (a) the scene name has not changed
+   since the scan (every way back to the menu goes through SCENES\KaneAndLynch.gms; the tick samples it once a second),
+   (b) no level archive has been opened since (klmv_level_open, from klsteam.c's klh_level_open), (c) every kept object
+   still carries this file's private vtable (the stock one in a dry run) and its entity and node read, and (d) none was
+   dropped during the last round ('the object is gone' in klmv_boxes). Any test failing = the full scan, as before.
+   A freed block keeps its bytes, so (c) alone would not do: (a) and (b) are what catch a reload of the same map.
+   [Bots] BoardScanEveryRound=1 = the old behaviour (a scan at every round's start). NOT RUN IN THE GAME. */
+static volatile LONG klmv_level_gen;                                   /* +1 per level archive opened (any thread) */
+static LONG klmv_scene_gen; static char klmv_scene_last[160];          /* +1 per scene-name change the tick saw */
+static LONG klmv_box_gen = -1;                                         /* level_gen + scene_gen the kept boxes were found under; -1 = nothing kept */
+static LONG klmv_zero_gen = -1;                                        /* the gen under which a scan last found NO box (none is kept only on the second such scan) */
+static void klmv_level_open(void) { InterlockedIncrement(&klmv_level_gen); }      /* klsteam.c: a level archive is being opened */
+static void klmv_scene_sample(DWORD now)
+{
+    static DWORD at; char scene[160];
+    if (now - at < 1000) return;
+    at = now;
+    if (!klh_scene(scene, sizeof scene)) scene[0] = 0;
+    if (strcmp(scene, klmv_scene_last)) { snprintf(klmv_scene_last, sizeof klmv_scene_last, "%s", scene); klmv_scene_gen++; }
+}
 static DWORD klmv_fail_at;                    /* since when klb_read fails (0 = it does not) */
 static struct { DWORD obj; float pos[3]; int amount; BYTE active, state; } klmv_obj[KLMV_NOBJ]; static int klmv_nobj;
 
@@ -653,11 +682,32 @@ static void __fastcall klmv_ally_tick(void *box, void *unused)
     ((void (__fastcall *)(void *, void *))(DWORD_PTR)KLH_VA(KLMV_ALLY_TICK))(box, 0);
 }
 
+/* the cache (see klmv_box_gen): 1 = the last scan's boxes are kept and re-armed for this round, nothing to look for */
+static int klmv_scan_kept(DWORD rules)
+{
+    DWORD t0 = GetTickCount(), want = klmv.dry ? KLMV_ALLY_VT : (DWORD)(DWORD_PTR)&klmv_vt[1], ent, evt, node; float p[3]; int i, n = 0;
+    LONG gen = klmv_level_gen + klmv_scene_gen;
+    if (klmv.scan_always || klmv_box_gen < 0 || klmv_box_gen != gen || klmv_vt_ok <= 0) return 0;
+    for (i = 0; i < klmv_nbox; i++) {
+        if (!klmv_box[i].at) return 0;                                         /* dropped during the last round: look anew */
+        if (klh_rd32(klmv_box[i].at) != want || !(ent = klh_rd32(klmv_box[i].at + 0x24)) || !(evt = klh_rd32(ent)) || evt < img_lo || evt >= img_hi
+            || !(node = klh_rd32(ent + 4)) || !kle_node(node, p, 0)) return 0;
+        memcpy(klmv_box[i].pos, p, 12);
+        klmv_box[i].d = 0; klmv_box[i].deny = 0; klmv_box[i].asked = 0; klmv_box[i].told_visit = 0; klmv_box[i].would = 0;      /* the round's book, as the scan's memset */
+        n++;
+    }
+    klmv_box_rules = rules;
+    klog("near: %d ZAllyEscapeBox object(s) kept from the last scan, checked in %lu ms (the same scene, no level archive opened since, every object still ours; a scene change or a level load looks for them anew; [Bots] BoardScanEveryRound=1 = a scan at every round's start)", n, GetTickCount() - t0);
+    return 1;
+}
+
 static void klmv_scan(DWORD rules)
 {
     static const BYTE code[16] = { 0x55, 0x8b, 0xe9, 0x8b, 0x0d, 0x98, 0xe5, 0x68, 0x01, 0xe8, 0xf2, 0xed, 0xee, 0xff, 0x84, 0xc0 };      /* 0x907a50 */
     static BYTE buf[0x10000]; MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; DWORD t0 = GetTickCount(), stock = KLMV_ALLY_VT, mine = (DWORD)(DWORD_PTR)&klmv_vt[1];
-    char line[400]; int i, k = 0, wrapped = 0;
+    char line[400]; int i, k = 0, wrapped = 0; LONG gen = klmv_level_gen + klmv_scene_gen;      /* read BEFORE the walk: an open during it makes the result stale */
+    if (klmv_scan_kept(rules)) return;
+    klmv_box_gen = -1;
     klmv_box_rules = rules; klmv_nbox = 0; memset(klmv_box, 0, sizeof klmv_box);
     if (!klmv_vt_ok) {
         if (!klh_rd((DWORD_PTR)KLH_VA(KLMV_ALLY_VT - 4), klmv_vt, sizeof klmv_vt) || klmv_vt[1 + KLMV_ALLY_SLOT] != KLMV_ALLY_TICK || !klb_same_code(KLMV_ALLY_TICK, code, sizeof code)) {
@@ -715,7 +765,18 @@ static void klmv_scan(DWORD rules)
         if (klh_rd32(klmv_box[i].at) == mine || klh_data((void *)(DWORD_PTR)klmv_box[i].at, &mine, 4, "ZAllyEscapeBox vtable (private copy, slot 25 wrapped)")) wrapped++;
         else klmv_box[i].at = 0;                                                /* not ours: its stock update runs, nothing is denied */
     }
-    klog("near: %d ZAllyEscapeBox object(s) found in %lu ms (the game stood still that long; looked for anew at every round's start):%s; %s", klmv_nbox, GetTickCount() - t0, klmv_nbox ? line : " none - only the board tactic takes an AI heister aboard on this level",
+    /* kept for the next rounds of this scene only when every box found is ours (a dry run wraps none and keeps them all).
+       NONE found is kept only once a second scan of the same scene found none too (GUESS guarded: that the boxes exist
+       by the first round's first tick is what every live log showed, but a level that makes them later would be cached
+       as box-less for good by one early scan) */
+    if (!klmv.scan_always && (klmv.dry || wrapped == klmv_nbox)) {
+        if (klmv_nbox) klmv_box_gen = gen;
+        else if (klmv_zero_gen == gen) klmv_box_gen = gen;
+        else klmv_zero_gen = gen;
+    }
+    klog("near: %d ZAllyEscapeBox object(s) found in %lu ms (the game stood still that long; %s):%s; %s", klmv_nbox, GetTickCount() - t0,
+         klmv_box_gen >= 0 ? "kept for this scene's next rounds, looked for anew after a scene change or a level load" : "looked for anew at every round's start",
+         klmv_nbox ? line : " none - only the board tactic takes an AI heister aboard on this level",
          klmv.dry ? "DRY RUN: nothing is wrapped" : wrapped != klmv_nbox ? "NOT every one could be wrapped" : klmv.reach > 0 && klmv_reach_ok > 0 ? "slot 25 wrapped (BoardReach: a box takes an AI heister aboard only when THAT BOT is within reach of the vehicle's boarding box)"
          : "slot 25 wrapped (a box farther than BoardNear from the boarding place takes nobody aboard)");
 }
@@ -1003,7 +1064,7 @@ static void klmv_boxes(const struct klb_snap *s, DWORD now)
     for (i = 0; i < klmv_nbox; i++) {
         LONG deny = 0; DWORD ent; float d;
         if (!klmv_box[i].at) continue;
-        if (klmv.dry ? klh_rd32(klmv_box[i].at) != KLMV_ALLY_VT : klh_rd32(klmv_box[i].at) != mine) { klmv_box[i].deny = 0; klmv_box[i].would = 0; klmv_box[i].at = 0; continue; }      /* the object is gone */
+        if (klmv.dry ? klh_rd32(klmv_box[i].at) != KLMV_ALLY_VT : klh_rd32(klmv_box[i].at) != mine) { klmv_box[i].deny = 0; klmv_box[i].would = 0; klmv_box[i].at = 0; klmv_box_gen = -1; continue; }      /* the object is gone: the next round scans anew */
         if ((ent = klh_rd32(klmv_box[i].at + 0x24)) != 0 && (node = klh_rd32(ent + 4)) != 0 && kle_node(node, p, 0)) memcpy(klmv_box[i].pos, p, 12);
         if (!waiting && klmv_r.was_waiting && klmv_box[i].asked && klmv.log)
             klog("near: visit %d is over: the denied box at (%.0f, %.0f, %.0f) was asked %ld time(s)", klmv_r.visit, klmv_box[i].pos[0], klmv_box[i].pos[1], klmv_box[i].pos[2], (long)klmv_box[i].asked);
@@ -1734,6 +1795,7 @@ static void klmv_tick(int game_thread)
     static DWORD last; struct klb_snap s; DWORD now = GetTickCount(), player = 0; char why[200]; float hp[3] = { 0, 0, 0 }, hn[3];
     const struct klb_rec *h; int i, stages = 0, human_in, criminal, waiting;
     if (klmv_pm && game_thread && klh_exe_ok) klmv_pm_check(now);      /* PerMap (default 0): a map change re-reads the keys */
+    if (game_thread && klh_exe_ok) klmv_scene_sample(now);               /* the box scan's cache: a scene change (the menu between two loads) is what invalidates it */
     if (!klmv.any || !klb.on || !klh_exe_ok) return;
     if (now - last < 250) return;
     last = now;
@@ -1850,6 +1912,7 @@ static void klmv_read(void)
     if (!klmv.restless) klmv.hop = 0;
     klmv.hop_max = 1800.0f;
     klmv.pace = klb_inif("RestlessPace", "350"); if (!klb_finite(klmv.pace) || klmv.pace < 300) klmv.pace = 300; if (klmv.pace > 800) klmv.pace = 800;
+    klmv.scan_always = GetPrivateProfileIntA("Bots", "BoardScanEveryRound", 0, klh_ini) != 0;      /* 0 = off (default): the box scan is cached per scene */
     klmv.wait = GetPrivateProfileIntA("Bots", "WaitForYou", 0, klh_ini) != 0;
     klmv.wait_stage = klb_pos("WaitForYouStage", 3, 3); if (klmv.wait_stage < 1) klmv.wait_stage = 1;
     klmv.wait_max = (DWORD)klb_pos("WaitForYouMax", 150, 3600) * 1000;

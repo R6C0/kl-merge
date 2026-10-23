@@ -102,5 +102,11 @@ What this settles (by code, not run):
    gets 1 - 3 samples; the log then names their site the way it named the music-ON chain.
 3. The hook's own 125 ms `ZAllyEscapeBox` scan at every round start (klhook `near:`) is one in-round hitch per round
    that is the hook's: cache the result per map / level load, or scan on the ticker thread.
+   DONE 2026-10-23 22:00 UTC (scheduled check-in, klmove.c `klmv_box_gen`, type-checked, NOT run): the first round's
+   scan is kept for the scene's later rounds while the scene name stays (sampled once a second), no level archive is
+   opened (klsteam.c -> `klmv_level_open`), every kept object still carries the private vtable and none was dropped;
+   `[Bots] BoardScanEveryRound=1` = the old scan every round. Proof wanted: a 3-round Arcade session's log showing
+   `near: N ZAllyEscapeBox object(s) kept from the last scan, checked in 0 ms` from round 2 on, and a map change
+   followed by `found in .. ms` again.
 4. The music-ON chain stays the 14:30 note's A/B (an MsgWaitForMultipleObjects + PeekMessage drain in the MCI worker
    threads). Today's numbers are the baseline for it: 20 - 32 hitches of 100 ms+ a minute with music ON, 1.5 with it OFF.
