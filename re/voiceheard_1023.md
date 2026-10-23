@@ -85,3 +85,16 @@ Needs: hook above (TEST), the staged DM01 files in the F01 slot (back up with a 
 
 ## 9. Live result (lead, 11:35)
 VH1 on DM01 (TEST 3107ADB8 on rtp-schemas 84454df2c): `voice: on ... RadioFallback=0 PlayedLog=1`; walks `104 per-character lines, 208 entries replaced, 0 without a leaf`; no `no leaf` lines; 0 asserts, 0 faults. `QUEUED` 0, `entry USED` 0 within ~90 s of play (the launch options' AutoExit ends the run; no FA voice event fired). Installed for the owner the same minute with tools/voiceheard_1023 (INSTALL/UNDO bats, md5 guard 82b33bf8, backups *.before-voiceheard). The staged out\DM01\F01_Main.zip was replaced by the grafted one (online.xml, TEX, Russian .LOC from the installed zip).
+
+## 10. voiceheard2: DM02 (lead survey 11:40, built offline, NOT installed)
+Survey: only DM02 was still at the old "no subtitles, no radio" tier (1162 leaves, no `_R`); every other installed map has radio twins.
+Built with `python tools/kl_dmvoice.py build --game <fake root on C:> --maps DM02` from the `*.before-1023voice` files (slot is **F02**, not F01).
+Result: English .LOC 522,749 -> 597,046 (tier 1: no subtitles, with radio), 2418 KLVoice leaves (was 1162), `check` OK, 0 problems, 0 ini problems.
+German 596,830, French 595,416, Spanish 580,724, Italian 607,919, Polish 592,614 (all tier 1). Russian/Japanese: the tool would fit them
+(kl_loc_fit rewrites stock text), so the stage KEEPS the installed Russian and Japanese .LOC (they had no voice leaves before either).
+Graft: the built zip with `Menu/online.xml`, `F02_Main.TEX`, Russian and Japanese .LOC taken from the installed zip. CRC compare against the
+installed zip: only English, German, French, Spanish, Italian, Polish .LOC and F02_Main.SND differ (French/Spanish/Polish keep their size, the clip picks changed).
+Stage: `<work>\build\voiceheard2_1023\out\DM02\` (zip md5 ed1d6f79, WAV 2c15312b, WHD fffe4c08, _LS.SND 4388e101, KLTalk.ini 6cd309b7 = same as installed).
+Guard: installed zip md5 966a1914. Installer: `voiceheard2_1023.ps1 -Map DM02|DM01` (table of slot + md5; DM01 row = voiceheard_1023.ps1 behaviour),
+`INSTALL voiceheard2 DM02.bat` / `UNDO ...`, backups `*.before-voiceheard`. Fake-DD test on C: unknown map, undo-before-install, install,
+second install, md5-guard refusal (changed zip), undo with byte compare: all as expected.
