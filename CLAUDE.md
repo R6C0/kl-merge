@@ -66,6 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-23 12:28 - VOICES, what is left: radio lines are fixed on every map (11:35/11:52). The FLAG-0 ('plain') lines, FA_YouEscaped*_R
+and the police events, take one stock entry and are never swapped, so Dead Men bodies still speak stock lines there. The voiceplain probe
+is merged (default off) and runs only in TEST with SessionSafe=0 (hashed code); not run live. A shippable fix needs a data-side swap. re/voiceplain_1023.md.
+
 2026-10-23 11:35 - VOICEHEARD: DM01 Dead Men radio lines INSTALLED (KLExpansion\Maps\DM01, undo `<work>\build\voiceheard_1023\UNDO voiceheard 1023.bat`).
 The old 600k LOC cap tier had dropped 68 radio lines per voice (272 without a leaf); now 0. Live VH1 PASS 0 faults (TEST 3107ADB8,
 rtp-schemas 84454df2c). 11:52: DM02 too (VH2 PASS, undo `<work>\build\voiceheard2_1023\UNDO voiceheard2 DM02.bat`); every map has them now.
@@ -75,11 +79,6 @@ Game actually playing them: not yet seen in a log (0 QUEUED), owner to judge by 
 (rtp-schemas 2b4726be5: stinger + ambience/music clock fix + CEG guard) + balance pass 2 + QoL, then `OPTIONAL 1 sound3.bat` and
 `OPTIONAL 2 stinger.bat` (11:11); undo in reverse (kit undo refuses while an add-on is in). KITB LIVE PASS on its TEST twin (DM01: stinger, music, ambience, voice swap; 0 faults).
 Supersedes release_1023 (d25393d9). Notes: re/release2_1023.md, re/release_1023.md (Kit b).
-
-2026-10-23 10:35 - LIVE PASS, 0 faults on DM01: SND3 (sound pass 3: Local one-shots every ~10 s, PD2 ASSAULT music 20 s into
-the action; Panic not reached) and STING1 (stinger merged 127b24487: Loud at second 8, Loot at $20000). Both still opt-in:
-`<work>\build\sound3_1023\INSTALL sound3 1023.bat`, `<work>\build\stinger_1023\INSTALL stinger 1023.bat`; they need a hook built
-from rtp-schemas 127b24487 or later (the release kit dll d25393d9 has sound3, not stinger; newest build out_3f_1023t = 493f67589 + CEG guard).
 
 
 ## Owner's end goal (2026-10-09)
