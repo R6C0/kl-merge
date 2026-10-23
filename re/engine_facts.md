@@ -31,6 +31,14 @@ Moved verbatim out of CLAUDE.md on 2026-10-23 to keep the always-loaded brief sm
   (639,160 bytes on) gets text, and 0x926b40 (kl2+0x526b40) faults later (TEST 1023e V1_DM01: 639,672-byte English .LOC,
   crash 77 s in). Stock English is about 457 KB; stock Russian is 612,634 bytes (open: not loaded through here, or Russian
   would crash). `kl_dmvoice.LOC_CAP`, `debug/check.py` print and flag the size.
+  Why a 612,634-byte file survives (dump KLHook_1.dmp of 03:05, debug/notes/2026-10-23-scheduled-triage.md): a capstone
+  sweep of all of .text finds, between 0xea2878 and 0xea6888, only 0xea2878 (the level's surface-table pointer,
+  kl2 0x788cc0, freed at 0x41c360) and the stack-switch scratch 0xea2880/84/88 (written on use by 0x66ac50 / 0x926780);
+  nothing addresses 0xea288c..0xea6887. In the dump [0xea2878] holds a heap pointer INSIDE the copied text, so the
+  pointer is set AFTER the .LOC memcpy: the Russian spill (12,634 bytes, up to 0xea59d2) is overwritten again before
+  it is read. So 600,000 is the block, 612,634 .. 616,400 (0xea6888) is a grey band the stock game lives in, and the
+  first live state a bigger file hits is the stack-switch slots 0xea6888..0xea6894, then the handle allocator
+  (free stack of words 0xea68d6, records 0xea70d8, counters 0xeac158..0xeac174 - 0xeac170 is the count 0x926b20 pops).
 
 ## Exact schemas (2026-10-08, method from HHCHunter/hbm-editor's RTP recovery)
 - `tools/kl_exe.py` (PE by address, RTTI, exports) + `tools/kl_rtp.py`: every class's serialized
