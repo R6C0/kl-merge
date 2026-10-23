@@ -97,11 +97,13 @@ Last Call civilians proven (CIVS3: still until approached, then flee); traitors 
 --row`), installed (undo `<work>\build\acc75_1023_backup\UNDO acc75 1023.bat`; ACC1b on DM03 clean, T01 not run live).
 06:05: Heister-page portraits proven (PIC1/PIC2: all characters + 12 masks draw). Liveliness audit: nothing missing; engine-music maps
 (DM09/03A/05A/06B) get no Payday 2 music by design (Force=1 is the owner's call).
+2026-10-23 07:10 - Shop focus rows readable on all 27 maps (`kl_hud_menu.py shopbar`: dark FocusBar_short tile + ColorSet
+White on the 8 rows over it; SHOP3b PASS on DM01). Undo `<work>\build\shopbar_1023_backup\UNDO shopbar 1023.bat`.
+C: hit 0 bytes free mid-build: stage big zips on G:, not C:\kl_build_1019.
 
-2026-10-23 04:50 - Retomoto lift ride proven live (TEST LIFT4): box 9 no longer throws on entry; the ride waits Delay 2.5 s
-plus up to CarWait 6 s for the car box, then jumps to 06_Exit (lobby car 500 ms later). Leaving the box or going down cancels.
-Hop 6 NoHuman=1 installed (LIFT5): the crew waits in the tower and rides down with the human. Open: the jump with the feet in
-the car box was not reached by script (re/retomoto_lift.md).
+2026-10-23 05:40 - .LOC cap 612,634 for every language (kl_loc.LOC_CAP; kl_loc_fit, all 27 zips, LOCFIT1 clean).
+Traitors rarer (Backstab 20, TraitorsMax 1); DM03/T01 police long guns capped 75/70 (ACC1b clean). Portraits proven
+(PIC1/PIC2). Retomoto lift proven (LIFT4/5; open: the jump with feet in the car box, re/retomoto_lift.md).
 
 2026-10-23 03:50 - installed for the owner: Dead Men voices on all 27 map folders, hook 1023h (48faf4dd), [Music]/[Traits] ini.
 DM01 with voices crashed (kl2+0x526b40): the level .LOC goes into a fixed 600,000-byte buffer; kl_dmvoice keeps it under
