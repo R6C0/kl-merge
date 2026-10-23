@@ -41,7 +41,7 @@
 #include "d3d9on12_decl.h"
 #include "../klnr/klnr_client.h"
 
-#define KLGFX_VERSION "0.3"
+#define KLGFX_VERSION "0.4"
 
 // ------------------------------------------------------------------------------------------ config
 static char g_dir[MAX_PATH];
@@ -516,11 +516,67 @@ public:
     ULONG nr_refs = 0;                     // device references held by the bridge's own surfaces
     unsigned nr_frames = 0, nr_missed = 0, nr_skipped = 0;
     double nr_read_ms = 0, nr_wait_ms = 0, nr_write_ms = 0, nr_helper_ms = 0, nr_network_ms = 0;
+    // The 2026-10-09 game run logged "NR: started" and then nothing for 108 s (no frame stats either, which do not
+    // depend on the bridge), and the helper never received a frame: the game stalled somewhere in the first bridged
+    // frame. The first NR_TRACE_FRAMES frames log every step, so the step before a stall is in the log.
+    unsigned nr_trace_left = 3;
+    char nr_last_step[400] = "";      // the last traced step (the watchdog names it when Present stops)
+    volatile LONG nr_in_frame = 0;    // 1 while nr_frame runs
+    HANDLE watchdog = nullptr;
+    volatile LONG watchdog_stop = 0;
+    void nr_trace(const char *fmt, ...)
+    {
+        char b[400];
+        va_list a;
+        va_start(a, fmt);
+        vsnprintf(b, sizeof b, fmt, a);
+        va_end(a);
+        memcpy(nr_last_step, b, sizeof b);
+        if (nr_trace_left)
+            klog("NR trace: %s", b);
+    }
+    // Logs when the game stops presenting for 20 s (once per stall): whether the stall is inside the bridge's frame
+    // code and which step it reached. A stall outside it is the game's own (a load, a modal, a hang elsewhere).
+    static DWORD WINAPI watchdog_main(void *self)
+    {
+        KLDevice9 *d = (KLDevice9 *)self;
+        bool reported = false;
+        while (!d->watchdog_stop) {
+            Sleep(1000);
+            if (d->watchdog_stop)
+                break;
+            int64_t last = d->last_present;
+            if (!last)
+                continue;
+            double idle = ms_between(last, ticks()) / 1000.0;
+            if (idle >= 20 && !reported) {
+                reported = true;
+                klog("WATCHDOG: no Present for %.0f s after %u frames; %s%s", idle, d->frames,
+                     d->nr_in_frame ? "the bridge's frame code is still running, last step: " : "the bridge is not running (last step: ",
+                     d->nr_last_step[0] ? d->nr_last_step : "none");
+                if (!d->nr_in_frame)
+                    klog("WATCHDOG: ... the stall is outside the bridge)");
+            } else if (idle < 5)
+                reported = false;
+        }
+        return 0;
+    }
 
     KLDevice9(IDirect3DDevice9 *r, KLDirect3D9 *o, const D3DPRESENT_PARAMETERS &p) : real(r), owner(o), pp(p)
     {
         t0 = stats_t0 = ticks();
         nr_split = g_nr.split;
+        if (g_nr.enable)
+            watchdog = CreateThread(nullptr, 0, watchdog_main, this, 0, nullptr);
+    }
+    void stop_watchdog()
+    {
+        if (!watchdog)
+            return;
+        watchdog_stop = 1;
+        WaitForSingleObject(watchdog, 3000);
+        CloseHandle(watchdog);
+        watchdog = nullptr;
     }
 
 #define KLG_WRAP_DEVICE
@@ -549,6 +605,7 @@ public:
     ULONG STDMETHODCALLTYPE Release() override
     {
         if (InterlockedDecrement(&wrapper_refs) == 0) {
+            stop_watchdog();
             nr_free();
             nr.stop();
             ULONG n = real->Release();
@@ -688,6 +745,11 @@ public:
     {
         if (!g_nr.enable || nr_dead)
             return;
+        struct InFrame {
+            volatile LONG *f;
+            InFrame(volatile LONG *x) : f(x) { *f = 1; }
+            ~InFrame() { *f = 0; }
+        } in_frame(&nr_in_frame);
         if (key_edge(g_nr.toggle_key, nr_toggle_down)) {
             nr_on = !nr_on;
             nr_reset_history = true;
@@ -733,6 +795,8 @@ public:
                 nr_off(nr.error().c_str());
             return;
         }
+        nr_trace("helper ready (state %u, model %u, '%s'); back buffer %ux%u format %u", nr.control()->state, nr.control()->model,
+                 nr.control()->message, bd.Width, bd.Height, (unsigned)bd.Format);
         if (!nr_sys || nr_w != bd.Width || nr_h != bd.Height || nr_fmt != bd.Format) {
             if (nr_sys) {
                 nr_sys->Release();
@@ -751,6 +815,7 @@ public:
             nr_h = bd.Height;
             nr_fmt = bd.Format;
             nr_reset_history = true;
+            nr_trace("system-memory surface %ux%u made", nr_w, nr_h);
         }
         if (nr.skip_if_busy()) {   // a late result of an earlier frame is still being written: this one passes
             bb->Release();
@@ -760,7 +825,9 @@ public:
             return;
         }
         int64_t ta = ticks();
+        nr_trace("reading the back buffer (GetRenderTargetData)");
         HRESULT hr = real->GetRenderTargetData(bb, nr_sys);
+        nr_trace("read -> %#lx", hr);
         if (FAILED(hr)) {
             bb->Release();
             nr_reset_history = true;
@@ -774,7 +841,9 @@ public:
         uint8_t *buf = nullptr;
         if (SUCCEEDED(nr_sys->LockRect(&lr, nullptr, D3DLOCK_READONLY))) {
             // nullptr while a late result of an earlier frame is still being written: this frame passes untouched
+            nr_trace("locked, pitch %ld; mapping the shared frame", lr.Pitch);
             buf = nr.frame(nr_w, nr_h, (uint32_t)lr.Pitch);
+            nr_trace("shared frame at %p (%s)", buf, buf ? "copying the pixels in" : nr.error().c_str());
             if (buf)
                 memcpy(buf, lr.pBits, (size_t)lr.Pitch * nr_h);
             nr_sys->UnlockRect();
@@ -797,8 +866,11 @@ public:
         p.paper_white = g_nr.paper_white;
         p.color_strength = g_nr.color_strength;
         p.style = g_nr.style;
+        nr_trace("sending the frame to klnr.exe (request %u)", nr.control()->request + 1);
         bool ok = nr.process(p);
         int64_t tc = ticks();
+        nr_trace("klnr.exe %s after %.1f ms (done %u, state %u)", ok ? "answered" : "gave no result", nr.last_wait_ms, nr.control()->done,
+                 nr.control()->state);
         if (ok) {
             nr_reset_history = false;
             if (SUCCEEDED(nr_sys->LockRect(&lr, nullptr, 0))) {
@@ -807,6 +879,7 @@ public:
             }
             if (nr_direct_update) {
                 hr = real->UpdateSurface(nr_sys, nullptr, bb, nullptr);
+                nr_trace("written back into the back buffer (UpdateSurface) -> %#lx", hr);
                 if (hr == D3DERR_INVALIDCALL) {
                     klog("NR: UpdateSurface into the back buffer refused: through a video-memory surface from now on");
                     nr_direct_update = false;
@@ -823,11 +896,16 @@ public:
                     hr = real->StretchRect(gpu, nullptr, bb, nullptr, D3DTEXF_NONE);
                 if (gpu)
                     gpu->Release();
+                nr_trace("written back through a video-memory surface (UpdateSurface + StretchRect) -> %#lx", hr);
                 if (hr == D3DERR_INVALIDCALL) {
                     bb->Release();
                     nr_off("cannot write the result back");
                     return;
                 }
+            }
+            if (nr_trace_left) {
+                nr_trace("frame %u done; present follows", nr_frames + 1);
+                nr_trace_left--;
             }
             nr_frames++;
             nr_helper_ms += nr.control()->ms_total;

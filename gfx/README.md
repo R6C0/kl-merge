@@ -106,6 +106,12 @@ A run with KLGfx installed is not a clean graft run: remove it before crash tria
 - KLGfx 0.3 + klnr.exe 0.1: built, tested as above (an independent review of 0.2 found the issues fixed in 0.3:
   shader scan past the end of the code, dangling pointers in the capture, wrapper lifetimes, lost device,
   late results racing the next frame, session restart), staged on the PC, not installed.
+- KLGfx 0.4 (2026-10-23): the 2026-10-09 game run (SHIP hook, 2560x1440 full screen, no script) logged "NR: started",
+  then nothing for 108 s - not even the frame statistics, which do not depend on the bridge - and klnr.exe never
+  received a frame before the game ended at 18:40:21. So the game stalled inside the first bridged frame, between
+  "helper ready" and the request, and 0.3 logs none of those steps. 0.4 traces every step of the first three
+  bridged frames ("NR trace:" lines) and runs a watchdog thread that logs, after 20 s without a Present, whether the
+  bridge's frame code is still running and the last step it reached. Nothing else changed; Wine test passes.
 - klnr.exe 0.2 (2026-10-09): a review of the network path, which has never run (no machine here has the
   extensions), against OpenDLSS-NR's demo found what a real NVIDIA GPU would show and lavapipe hid:
   - the frame was read back from the first HOST_VISIBLE | HOST_COHERENT memory type, which on NVIDIA is
