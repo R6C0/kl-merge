@@ -1,5 +1,32 @@
 # Retomoto lift: the jump fires 9 m before the car (2026-10-23)
 
+## THE DOORS SOLVED ON THE ENGINE SIDE (2026-10-23 09:15, TESTS LIFT9-11, probe hook out_3f_1023p_test)
+- `klhook/klprobe.c` (KLHOOK_TEST only; `[KLHook] SessionSafe=0`, `[Probe] DoorProxy=1`) wraps proxy init (0xbc36bc slot 14), the proxy
+  handler (slot 26 = 0x7ed520) and the trigger box's fire (0xbc232c slot 34). Node names print '?' (the name offset is a GUESS).
+- LIFT9: each proxy collects count 5 (the 4 leaves + DrInt_B's second MatPosAnim), not 0. LIFT10: the box fires when the player crosses it
+  (09:00:42), both proxies log 'accepted (own id)'. LIFT11: a BOT fired it (09:11:40): MERCONLY takes AI heisters in FA; it fires once.
+  So box -> AITrigger -> proxies -> leaves works; with kl_doorfix2 (TEST, blast timer also fires them) the same accept lines come at 16.5 s.
+- Why the doors LOOKED shut: the test route, not the scene. The old script goto (2720,760)->(2900,909) crosses x 2793 at z~820 = the doorway
+  frame's corner (doorway z 816..1004); in LIFT8 the player stood at (2704,705) against the wall outside it. LIFT10's aligned route (z 910)
+  walked freely (2624,859)->(2723,1044) in 0.7 s; it only timed out because the fight slowed the scripted walk (8 s).
+- Product state: kl_doorfix stays on DM09 (harmless; other DM09-family folders staged in `<work>\build\doorfix_1023`, NOT installed);
+  kl_doorfix2 is NOT for the owner (doors open at the blast = part 1 can be skipped). CarWait 6 s + CarFallback carry the ride when a human
+  is slow. Open: one picture of the open doors from the lift floor (route at z 910, face the car).
+
+## THE DOORS (2026-10-23 08:50): still shut with a living mercenary; the scene chain is right on paper
+- kl_doorfix (commit 51798e693, installed on DM09 only, backup `<work>\build\doorfix_1023_backup\DM09`): both MatPosAnimProxy lists name the 4
+  leaves (DrExt_A/B_00, DrInt_A/B_00) as stock F01 AnimProxy_RearDoors_Open does. LIFT7 (player died 08:24:04, back as police: MERCONLY box
+  cannot fire for him) and LIFT8 (test ini CopToYou=0.001, PointBlankToYou=0.0: alive the whole route) both exit clean; in LIFT8 the doors are
+  still visibly closed, the player stands against the wall at x~2704 and the CarWait fallback jumps him.
+- Read (workflow wf_e3f89e40, verified): TriggerBox_OpenExitElevator (node 7857, f10=-1 = fires ONCE, f13 eTGS_AllInside, MERCONLY also takes AI
+  heisters in FA) posts 'AITrigger' (slot 34 0x45f5d0) straight to both proxies; proxy fields match stock exactly; leaf MatPosAnim
+  ['Activate',...,loop 0, relative 1, start-at-load 0] = stock. Handler 0x7ed520 returns SILENTLY when [proxy+0x30] (collected count) is 0;
+  init slot 14 (0x4093c0) disables the proxy when it collects nothing; a controller only answers GetMatPosAnim in state [ctrl+0x21] 1..5.
+- Open candidates (not yet separated): the box fires early (a bot spends the single shot) or never; the proxy collects 0 controllers; the play
+  cannot tick (node flag 0x400, missing KEYS); a separate static blocker at x~2700 (the player stops 70-100 units short of the leaves).
+  DrInt_B_00 has a second, start-at-load MatPosAnim. On 10-09 the GROUP form fired from the blast timer showed the doorway open (campaign_fa G1.9).
+- Next: test hook with a probe at 0x4093c0 / 0x7ed520 / 0x45f5d0, and a DM09 variant (kl_doorfix2) that also fires both proxies from the blast.
+
 ## PROVEN LIVE 2026-10-23 04:45 (TEST LIFT4, hook out_3f_1023h_test, installed DM09 KLJoin.ini: Delay=2.5, CarMin/CarMax, CarWait=6)
 The player entered box 9 at (2442, 19601, 1); the ride started and did NOT jump on entry. Re-entries during the ride were ignored. 8.5 s later
 (Delay 2.5 + CarWait 6, the script never reached the car box) CarFallback jumped him from (2608, 19601, 480) to entry 5 '06_Exit'. He was at

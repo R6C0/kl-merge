@@ -676,6 +676,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #ifdef KLHOOK_TEST
 #include "klauto.c"
 #include "klsolo.c"                                       /* klsolo.c: [Solo] two kl2.exe on one PC (mutex, windowed, focus); TEST only, off unless Enable=1 */
+#include "klprobe.c"                                      /* klprobe.c: [Probe] DoorProxy - escape-lift door chain log; TEST only, off unless DoorProxy=1 */
 #endif
 
 /* ---------------------------------------------------------------- the tick
@@ -1187,6 +1188,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kls_init(inst);
 #ifdef KLHOOK_TEST
     kla_init(inst);
+    klpr_init_all();                              /* klprobe.c: reads [Probe] DoorProxy, installs nothing when 0 */
     klh_uef_on = !kla_on;                         /* with [Auto] Enable=1 the test rig's own filter gives the verdict */
 #else
     klh_uef_on = 1;
