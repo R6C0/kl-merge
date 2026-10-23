@@ -16,7 +16,8 @@ param(
     [string]$BackupDir,
     [switch]$Undo,
     [string]$Stamp,
-    [switch]$SkipRunCheck
+    [switch]$SkipRunCheck,
+    [switch]$BalanceOn   # also write [Balance] Enable=1 (default: Enable stays as it is in the live ini)
 )
 $ErrorActionPreference = 'Stop'
 $src = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -43,7 +44,7 @@ if ($Undo) {
     $now = Get-Date -Format 'yyyyMMdd-HHmmss'
     # verify both backups first, so a half undo cannot happen
     foreach ($k in 'dll', 'ini') {
-        if ($m[$k + '_backup'] -ne 'NONE') {
+        if ($m[$k + '_backup'] -ne 'NONE' -and $m[$k + '_backup'] -ne 'SAME') {
             $b = Join-Path $BackupDir $m[$k + '_backup']
             if (-not (Test-Path -LiteralPath $b)) { Fail ('backup missing: ' + $b + ' - nothing was changed.') 3 }
             if ((Md5 $b) -ne $m[$k + '_backup_md5']) { Fail ('backup md5 differs from the manifest: ' + $b + ' - nothing was changed.') 3 }
@@ -52,6 +53,7 @@ if ($Undo) {
     foreach ($k in 'dll', 'ini') {
         $live = if ($k -eq 'dll') { $dllLive } else { $iniLive }
         $nm = Split-Path -Leaf $live
+        if ($m[$k + '_backup'] -eq 'SAME') { Write-Host ($nm + ' was not changed by the install: left as it is.'); continue }
         if (Test-Path -LiteralPath $live) {
             if ((Md5 $live) -ne $m[$k + '_new_md5']) { Write-Host ($nm + ' has changed since the install (or another pass replaced it).') }
             Copy-Item -LiteralPath $live -Destination (Join-Path $BackupDir ($nm + '.undo-' + $now))
@@ -75,16 +77,42 @@ $pkgPatch = Join-Path $src 'KLHook.release1023.patch.ini'
 $pkgPy = Join-Path $src 'kl_ini_patch.py'
 foreach ($p in $pkgDll, $pkgPatch, $pkgPy) { if (-not (Test-Path -LiteralPath $p)) { Fail ('missing in the package: ' + $p) 2 } }
 if (-not (Test-Path -LiteralPath $iniLive)) { Fail ('no KLHook.ini in ' + $Root + ' - nothing to patch.') 2 }
+# the package dll must match dinput8.dll.sha1 (first token of that file), else nothing is installed
+$pkgSha = Join-Path $src 'dinput8.dll.sha1'
+if (-not (Test-Path -LiteralPath $pkgSha)) { Fail ('missing in the package: ' + $pkgSha + ' - cannot verify the dll.') 2 }
+$wantSha = ([System.IO.File]::ReadAllText($pkgSha).Trim() -split '\s+')[0].ToUpper()
+$gotSha = (Get-FileHash -LiteralPath $pkgDll -Algorithm SHA1).Hash.ToUpper()
+if ($gotSha -ne $wantSha) { Fail ('package dinput8.dll sha1 ' + $gotSha + ' differs from dinput8.dll.sha1 (' + $wantSha + ') - nothing was changed.') 3 }
+Write-Host ('package dll sha1 ok: ' + $gotSha)
+if (Test-Path -LiteralPath $dllLive) { Write-Host ('live dll sha1 before the install: ' + (Get-FileHash -LiteralPath $dllLive -Algorithm SHA1).Hash) }
 $py = $null
 foreach ($c in 'python', 'py') { if (Get-Command $c -ErrorAction SilentlyContinue) { $py = $c; break } }
 if (-not $py) { Fail 'python not found on the PATH (needed for kl_ini_patch.py). Nothing was changed.' 2 }
 
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('klrelease1023_' + [guid]::NewGuid().ToString('N') + '.ini')
-$out = & $py $pkgPy $iniLive $pkgPatch -o $tmp
+function IniVal([string]$f, [string]$sec, [string]$key) {
+    $in = $false
+    foreach ($l in [System.IO.File]::ReadAllLines($f)) {
+        $t = $l.Trim()
+        if ($t.StartsWith('[')) { $in = ($t -ieq ('[' + $sec + ']')); continue }
+        if ($in -and $t -match ('^' + $key + '\s*=\s*([^;\s]*)')) { return $Matches[1] }
+    }
+    return '(not set)'
+}
+$usePatch = $pkgPatch
+if ($BalanceOn) {
+    $usePatch = Join-Path ([System.IO.Path]::GetTempPath()) ('klrelease1023_patch_' + [guid]::NewGuid().ToString('N') + '.ini')
+    [System.IO.File]::WriteAllText($usePatch, ([System.IO.File]::ReadAllText($pkgPatch) -replace '(?m)^\[Balance\]',"[Balance]`r`nEnable=1"))
+}
+$out = & $py $pkgPy $iniLive $usePatch -o $tmp
+if ($BalanceOn -and (Test-Path -LiteralPath $usePatch)) { Remove-Item -LiteralPath $usePatch -Force }
 if ($LASTEXITCODE -ne 0) { Fail ("ini patch failed (exit $LASTEXITCODE):`n" + ($out -join "`n") + "`nNothing was changed.") 3 }
 $iniChanges = (Test-Path -LiteralPath $tmp) -and ((Md5 $tmp) -ne (Md5 $iniLive))
 $dllChanges = (-not (Test-Path -LiteralPath $dllLive)) -or ((Md5 $dllLive) -ne (Md5 $pkgDll))
 Write-Host ($out -join "`n")
+$chk = if (Test-Path -LiteralPath $tmp) { $tmp } else { $iniLive }
+Write-Host ('[Balance] after the patch: Enable=' + (IniVal $chk 'Balance' 'Enable') + ' Risk=' + (IniVal $chk 'Balance' 'Risk') + ' Tough=' + (IniVal $chk 'Balance' 'Tough') + ' CopToCrew=' + (IniVal $chk 'Balance' 'CopToCrew') + ' YouToCop=' + (IniVal $chk 'Balance' 'YouToCop') + ' RegenDelay=' + (IniVal $chk 'Balance' 'RegenDelay') + ' RegenTime=' + (IniVal $chk 'Balance' 'RegenTime'))
+if ((IniVal $chk 'Balance' 'Enable') -ne '1') { Write-Host 'NOTE: [Balance] Enable is not 1, so the whole balance module (pass 2 included) does nothing. Re-run with -BalanceOn to switch it on.' }
 if (-not $iniChanges -and -not $dllChanges) {
     if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force }
     Write-Host 'already installed: dinput8.dll and KLHook.ini are as the release wants them. Nothing was changed.'; exit 0
@@ -106,17 +134,8 @@ if ($iniChanges) {
     if ($iniBkMd5 -ne (Md5 $iniLive)) { Fail 'ini backup md5 mismatch - nothing installed.' 3 }
 }
 # unchanged files: undo has nothing to put back, so the manifest names the live file's own md5 and a backup is not needed
-if (-not $dllChanges) { $dllBk = 'SAME' }
-if (-not $iniChanges) { $iniBk = 'SAME' }
-if ($dllBk -eq 'SAME' -or $iniBk -eq 'SAME') {
-    # keep the undo simple and exact: a SAME file is backed up too, so both restores always exist
-    if ($dllBk -eq 'SAME') {
-        if (Test-Path -LiteralPath $dllLive) { $dllBk = 'dinput8.dll.' + $stamp; Copy-Item -LiteralPath $dllLive -Destination (Join-Path $BackupDir $dllBk); $dllBkMd5 = Md5 (Join-Path $BackupDir $dllBk) } else { $dllBk = 'NONE' }
-    }
-    if ($iniBk -eq 'SAME') {
-        $iniBk = 'KLHook.ini.' + $stamp; Copy-Item -LiteralPath $iniLive -Destination (Join-Path $BackupDir $iniBk); $iniBkMd5 = Md5 (Join-Path $BackupDir $iniBk)
-    }
-}
+if (-not $dllChanges) { $dllBk = 'SAME'; $dllBkMd5 = '' }   # SAME = not changed by this install: not backed up, undo skips it
+if (-not $iniChanges) { $iniBk = 'SAME'; $iniBkMd5 = '' }
 try {
     if ($dllChanges) {
         Copy-Item -LiteralPath $pkgDll -Destination $dllLive -Force
@@ -130,8 +149,11 @@ try {
     } else { Write-Host 'KLHook.ini already has every release key.' }
 } catch {
     Write-Host ('FAILED: ' + $_.Exception.Message + ' - putting the backups back.')
-    if ($dllBk -ne 'NONE') { Copy-Item -LiteralPath (Join-Path $BackupDir $dllBk) -Destination $dllLive -Force }
-    if ($iniBk -ne 'NONE') { Copy-Item -LiteralPath (Join-Path $BackupDir $iniBk) -Destination $iniLive -Force }
+    if ($dllChanges) {
+        if ($dllBk -eq 'NONE') { if (Test-Path -LiteralPath $dllLive) { Remove-Item -LiteralPath $dllLive -Force } }   # there was no dll before: remove the new one
+        else { Copy-Item -LiteralPath (Join-Path $BackupDir $dllBk) -Destination $dllLive -Force }
+    }
+    if ($iniChanges -and $iniBk -ne 'NONE') { Copy-Item -LiteralPath (Join-Path $BackupDir $iniBk) -Destination $iniLive -Force }
     exit 3
 } finally { if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force } }
 

@@ -10,7 +10,11 @@ WHAT CHANGES IN THE GAME
    - your health is the game's own 550 (was 495)
    - NEW: police bullets from far away hurt less: full strength inside 12 m, x0.6 from 40 m on, in between smoothly
    Only the early Arcade levels feel it; from level 5 the game's own numbers stand.
-3. Two safe quality-of-life keys ([QoL]):
+   IMPORTANT: the whole [Balance] module does nothing while [Balance] Enable=0 (it is 0 in the current KLHook.ini, with old
+   test values such as Risk=2, CopToCrew=0.01, YouToCop=2.0, RegenDelay/RegenTime=0.5 that this release does NOT change).
+   The installer prints the live Enable/Risk/Tough/... values. To also switch the module on, run the installer with
+   -BalanceOn (adds Enable=1); decide Risk/Tough/CopToCrew/Regen* yourself first, they stay as they are.
+3. Two quality-of-life keys ([QoL]) - the keys are read live, the flash and the cursor release themselves are NOT proven in the game yet:
    - FlashOnReady=1: the game's taskbar button flashes when a level finished loading, when the Fragile Alliance lobby
      countdown starts, and when the round is over, while you are in another window.
    - ReleaseCursor=1: the mouse is freed when you alt-tab out of the game.
@@ -20,6 +24,8 @@ WHAT CHANGES IN THE GAME
 HOW TO INSTALL
  - Close the game (the script refuses while kl2.exe runs).
  - Double-click "INSTALL release 1023.bat" in this folder. Python must be on the PATH (kl_ini_patch.py needs it).
+   (with balance on: powershell -ExecutionPolicy Bypass -File release_1023.ps1 -Root "<DD folder>" -BalanceOn)
+ - The script checks the package dll against dinput8.dll.sha1 and prints the sha1 of the dll it replaces.
  - It copies your current dinput8.dll and KLHook.ini to ..\release_1023_backup with a time stamp, puts the new dll in,
    edits only the lines named above in KLHook.ini (comments, order and every other setting stay), and writes the undo.
  - Running it twice is harmless. Nothing else in the Dog Days folder is touched (not KL_PortBackup, no map zips).

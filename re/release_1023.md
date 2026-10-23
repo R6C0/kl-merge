@@ -17,12 +17,31 @@ the manifest first, saves what is live as `<name>.undo-<time>`, restores byte fo
 ## Ini keys (patch)
 `[Balance]` PointBlankToYou=4.5 CopToYou=0.7 CrewToYou=0.6 PlayerHealth=1.0 CopToYouFar=0.6 CopToYouNearAt=12 CopToYouFarAt=40
 (identical to `balance2_1023\KLHook.balance2.patch.ini`, checked line by line; basis re/balance2_1023.md).
-`[QoL]` FlashOnReady=1 ReleaseCursor=1 BackgroundMs=0 (key names checked against klqol.c lines 117-122; `Ramp` defaults to 1 in klbalance.c:1281).
+`[QoL]` FlashOnReady=1 ReleaseCursor=1 BackgroundMs=0 (key names match klqol.c lines 117-122; the effects are not proven live; `Ramp` defaults to 1 in klbalance.c:1281).
+No `Enable` line: see "Review fixes" 1; use `-BalanceOn`.
 Not written: `[QoL2]` anything, BackgroundMs > 0.
+
+## Review fixes (feat/1023-release-fix)
+1. ACCEPTED. `[Balance] Enable=0` in the live ini (line 46) and `klr_init` returns before reading any [Balance] key: pass 2 is inert unless Enable=1.
+   The owner was not asked (no owner here), so the default stays: the patch does NOT write Enable. New installer switch `-BalanceOn` adds Enable=1;
+   the installer always prints live Enable/Risk/Tough/CopToCrew/YouToCop/RegenDelay/RegenTime and a NOTE when Enable is not 1. Test values left in the live ini
+   that the patch does not touch: Risk=2, Tough=1.0, CopToCrew=0.01, YouToCop=2.0, RegenDelay=0.5, RegenTime=0.5 (owner/lead decides). Live test steps 1 and 3 need Enable=1.
+2. ACCEPTED. Wording changed: key names match klqol.c and are read live; FlashOnReady/ReleaseCursor effects (flash, load detection when not in front, ClipCursor(NULL) sticking) are NOT proven live.
+3. ACCEPTED. Installer verifies the package dll against `dinput8.dll.sha1` (first token) before anything is written. Staged files are now byte copies of the committed kit (line endings identical).
+4. ACCEPTED. Rollback removes the new dll when none existed before (tested on a fake DD without a dll: install, undo removes it).
+5. ACCEPTED. No redundant backups: an unchanged file is `SAME` in the manifest, not backed up, and undo skips it (tested: dll-only/ini-only install, then undo leaves the other file alone).
+6. ACCEPTED. Installer prints the sha1 of the live dll before replacing it. Build reproducibility: MSVC builds are NOT byte-reproducible (rebuilding the same commit gave
+   7C6F86CE... for SHIP and B69F7AF9... for TEST vs the first build's D25393D9.../37CA3A56...). So the sha1 identifies the staged FILE, not a source state. Command:
+   `klhook\build.bat <abs dir>` (SHIP) / `klhook\build_auto.bat <abs dir>` (TEST) at commit eb2deca84 (+ this fix, which changes no C).
+7. ACCEPTED (by grep, no boot test): defaults in the C sources are old-behaviour. `[Music] Enable`, `[Ambience] Enable`, `[Voice] Enable`, `[NetSmooth] Enable` (CamYaw only with Enable=1) all default 0;
+   `[QoL2]` Watchdog/WatchDry/MuteBackground default 0, HeisterKey 0; `[QoL]` FlashOnReady/ReleaseCursor 0, BackgroundMs 0; `[Balance] Enable` 0. The live ini already has `Enable=1` in several other sections,
+   so check that a section of those new modules is not already enabled there. Not boot-tested (no live runs allowed).
 
 ## Builds (from this branch)
 SHIP `klhook/out_release_1023/dinput8.dll` sha1 D25393D96D026840664A4B7547D63D051E646B82 (staged copy equals it)
 TEST `klhook/out_release_1023_test/dinput8.dll` sha1 37CA3A56ECA67468F280FFEBA215388AB9684865 (not staged: tests use it from klhook/)
+Rebuilt on feat/1023-release-fix (no C change): SHIP 7C6F86CEDF21A15B45388F65BC6EB9B2FBF44B7A, TEST B69F7AF9BDF3066E58ABE00248A08DACC8931A7B
+(`klhook/out_release_1023*`, untracked). The STAGED ship dll stays the D25393D9 file (its .sha1 is what the installer checks).
 (`build.bat <abs dir>` / `build_auto.bat <abs dir>`; out dirs are untracked and not committed.)
 
 ## Tested (offline, copies)
