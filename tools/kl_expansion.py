@@ -50,6 +50,8 @@ for them, a manifest, and install / uninstall. Spec, layout, what is proven and 
                                                              ones added: the entities that are there stay as they are
                                                              --only DM05A,..: only these maps get an entity (the others
                                                              keep the picture the page shows now)
+    python kl_expansion.py iconpics <scene zip> <folder>     adds the pictures of DM03A / DM06B / DM01B / DM11B that the scene lacks
+                                                             (<folder>\Overlay\Scenes\kaneandlynch.zip; icon_pictures())
     python kl_expansion.py install [<tree>] [--game <Dog Days>] [--keep-slot] [--no-hook] [--no-stream] [--link]
                                    [--replace]
     python kl_expansion.py uninstall [--game <Dog Days>] [--restore-all]
@@ -1122,7 +1124,7 @@ def menu_check(tree, stock_patch, entries, dd, log=print, scene=None):
 MAP_PIC = 'LevelPicture_%s'                   # entity name of a map's picture in the menu scene: LevelPicture_DM01 ...
 
 
-def map_pictures(tree, dest, log=print, only=None):
+def map_pictures(tree, dest, log=print, only=None, rebuild=True):
     r"""A VARIANT of the tree's overlay in which the map page shows Dead Men's own picture of each map
     (re\expansion.md 4.2 'NOT DONE - the entity', done here; NOT SEEN IN THE GAME):
         <dest>\Overlay\Scenes\kaneandlynch.zip   the tree's menu scene (the one with the Heister pictures; without one
@@ -1232,6 +1234,11 @@ def map_pictures(tree, dest, log=print, only=None):
             bad += ['pictures of the source scene: ' + x for x in P.check(path, None, log)]
     finally:
         P.NAMES = keep
+    if not rebuild:                                     # iconpics (2026-10-23): the scene only; the page is built by the caller
+        log('RESULT: %s' % ('PASS' if not bad else 'FAIL'))
+        for x in bad:
+            log('   ' + x)
+        return bad
     # ---- the page: the tree's ini block with the pictures named, through mkoverlay.py exactly as the tree's was made
     ini = os.path.join(dest, 'KLHook.expansion.ini')
     text = ''.join(l + '\n' for l in open(os.path.join(tree, 'KLHook.expansion.ini')).read().splitlines() if not re.match(r'F0\d\.Picture=', l))
@@ -1402,6 +1409,28 @@ def winpic(sc, prm, tex, name):
         sp = struct.unpack_from('<I', d, 8 + 40 * n + 4 * i)[0]
         out.append((round(cx - w / 2), round(-cy - h / 2), round(w), round(h), tex.tex[prm.u32(sp, 4)].entry))
     return out
+
+
+# ------------------------------------------------------------------ the map thumbnails that were missing (2026-10-23)
+# Dead Men picture entity per map folder that has none in the installed menu scene. The source sheet was chosen by LOOKING at the
+# PNGs (icons_1023\pic): Hot Coffee II = M01 (the street with the van; FA01 is the diner = page 2's Hot Coffee), Park II = M06
+# (Retomoto bridge at night), The Vault = M03A (the bank), Hasta la Vista = M11B (the Capitolio; M11A is a cathedral).
+ICON_MAPS = [dict(id='DM03A', slot='F07', page=2, picture='LevelPicture_M03A'), dict(id='DM06B', slot='F02', page=3, picture='LevelPicture_M06'),
+             dict(id='DM01B', slot='F03', page=3, picture='LevelPicture_M01'), dict(id='DM11B', slot='F04', page=3, picture='LevelPicture_M11B')]
+
+
+def icon_pictures(src_scene, dest, log=print):
+    r"""Picture entities LevelPicture_<id> for ICON_MAPS that the scene <src_scene> (an Overlay\Scenes\kaneandlynch.zip) lacks:
+    PNG + tiles (<dest>\pictures), then map_pictures() on a made-up tree holding a COPY of the scene. The result is
+    <dest>\Overlay\Scenes\kaneandlynch.zip; nothing under the game folder is written. -> problems ([] = none)."""
+    dest = os.path.abspath(dest)
+    tree = os.path.join(dest, 'tree')
+    os.makedirs(os.path.join(tree, 'Overlay', 'Scenes'), exist_ok=True)
+    shutil.copyfile(src_scene, os.path.join(tree, 'Overlay', 'Scenes', 'kaneandlynch.zip'))
+    pictures(dest, log=log, maps=ICON_MAPS)
+    with open(os.path.join(tree, 'manifest.json'), 'w') as f:
+        json.dump({'built': 'icons-1023', 'maps': [dict(id=m['id'], slot=m['slot'], page=m['page']) for m in ICON_MAPS]}, f)
+    return map_pictures(tree, dest, log=log, rebuild=False)
 
 
 def pictures(out=None, log=print, maps=None):
@@ -2369,6 +2398,10 @@ def main():
         if len(a) != 2:
             raise SystemExit('mappics <tree> <folder for the variant> [--only DM05A,...]')
         sys.exit(1 if map_pictures(a[0], a[1], only=only_ids) else 0)
+    elif cmd == 'iconpics':
+        if len(a) != 2:
+            raise SystemExit('iconpics <Overlay\\Scenes\\kaneandlynch.zip> <folder for the result>')
+        sys.exit(1 if icon_pictures(a[0], a[1]) else 0)
     elif cmd == 'install':
         install(tree, game, f['keep-slot'], not f['no-hook'], not f['no-stream'], f['link'], f['replace'])
     elif cmd == 'uninstall':

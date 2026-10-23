@@ -94,7 +94,7 @@ the menu system's element limit (5096, re\menus.md 2.5; a page adds about 75 tag
 KNOWN: the lobby title, the briefing and the Steam leaderboard still belong to the stock map of the slot (klslot.c;
 klsteam.c blocks the upload).
 """
-import configparser, hashlib, os, re, sys, time, zipfile
+import configparser, hashlib, os, re, struct, sys, time, zipfile
 
 ORDER = [1, 2, 3, 4, 6, 7, 5, 8, 9]            # menu entry k -> slot number (kl2 0x746570)
 MEMBER = 'menu/frontend.xml'
@@ -691,18 +691,152 @@ def check(stock, res, pgs, heister=True):
 
 
 def table_tags(xml):
-    """Tags that take a slot of the menu manager's table (re\hud_menu.md 1.1), comments left out. An UPPER bound of the live entries
+    r"""Tags that take a slot of the menu manager's table (re\hud_menu.md 1.1), comments left out. An UPPER bound of the live entries
     (a <Platform> block for another platform makes none); the DIFFERENCE between two builds is exact while the change is outside
     such blocks, which every part of this script is (the Options button stands in the live PC block)."""
     plain = re.sub(r'<!--.*?-->', '', xml, flags=re.S)
     return len(re.findall(r'<(?:Window|GuiElement|ColorSet|ButtonGraphic)[\s/>]', plain))
 
 
+# THE TRIM (2026-10-23, icons track). WHY: the Heister portraits (--pictures, +35 table entries) were switched off after the Mod settings
+# page (v26c / v27) because the menu manager's table had 31 free entries (live 5065 of 5096; hud_menu.md 1.1) - the Character tab has had no
+# pictures since. These windows of the stock frontend.xml are dead weight: nothing opens them. Every one is REFERENCE-CHECKED at build time
+# (trim_windows): the window's name and the names of the elements it defines appear nowhere else in the result, and the window name is not
+# in the stock ingame.xml, kl2.exe (ASCII or UTF-16, and no exe string is a prefix of it = no name built at run time), nor in any member of
+# the menu scene archive (online.xml, windows.xml, guielems.xml, .LOC, .buf ...) except the scene's own copies of the two menu files that
+# Patch01.zip overrides. A name that fails the check stops the build - it is never skipped silently.
+# NOT in the list on purpose: CreditsFA / ControllerLayoutOnline (named by ingame.xml), IOErrorScreen* (exe strings 'IOErrorScreen' are a
+# prefix: a name built at run time is possible), XboxLiveJoin, CreatingSaveGame, AutoSaveMessageMenu (same, shorter prefixes), TooManyPlayersSignedIn
+# (a .LOC key of that name), FACoopLobby / WeekendChallenge / DifficultyScreen (names in the exe).
+TRIM = [('FAGameTipsOld', 'old copy of the game tips page; its name occurs once in stock = its own definition'),
+        ('CheatMenu', 'developer cheat page; no reference anywhere'),
+        ('OptionsLanguageMenu', 'language page; no reference anywhere'),
+        ('OnlineCoopLobby', 'coop lobby copy; no reference anywhere'),
+        ('MustHaveDeviceForSavegame', 'console save-device message; no reference anywhere'),
+        ('PS3NPNetStartCoopPSN', 'PS3 only; no reference anywhere'),
+        ('FAShowRulesAdvanced', 'no reference anywhere'),
+        ('Splash2', 'no reference anywhere (SplashMenu is another window, untouched)')]
+LIVE_OFFSET = 715                                     # live table size minus table_tags of the installed overlay (5065 - 4350, KLHook.log 2026-10-22 21:34); the rest of the table is online.xml
+
+
+def _wb(name):
+    return re.compile(r'(?<![\w#])%s(?![\w#])' % re.escape(name))
+
+
+def trim_sources(stock, scene):
+    """What TRIM is checked against -> {label: (kind, bytes)}; kind 'xml' (names count), 'bin'. Refuses when a source is missing."""
+    exe = os.environ.get('KL_EXE') or os.path.join(os.path.dirname(os.path.abspath(stock)), 'kl2.exe')
+    if not os.path.isfile(exe):
+        raise SystemExit('the trim needs kl2.exe to check names against (looked for %s; set KL_EXE, or --no-trim)' % exe)
+    if not scene or not os.path.isfile(scene):
+        raise SystemExit('the trim needs the menu scene archive (--scene <zip>, or Overlay\\Scenes\\kaneandlynch.zip beside the result; or --no-trim)')
+    src = {'kl2.exe': ('bin', open(exe, 'rb').read())}
+    with zipfile.ZipFile(stock) as z:
+        for i in z.infolist():
+            if i.filename.lower().endswith('.xml') and i.filename.lower() != MEMBER:
+                src['Patch01.zip/' + i.filename] = ('ingame' if i.filename.lower() == 'menu/ingame.xml' else 'xml', z.read(i))
+    with zipfile.ZipFile(scene) as z:
+        for i in z.infolist():
+            low = i.filename.lower()
+            if i.is_dir() or low in ('menu/frontend.xml', 'menu/ingame.xml'):
+                continue                              # the scene's own copies: Patch01.zip's members replace them
+            src['scene/' + i.filename] = ('xml' if low.endswith('.xml') else 'bin', z.read(i))
+    return src
+
+
+def trim_windows(xml, src, trim=None):
+    """Remove the windows of TRIM from frontend.xml text after the reference check described at TRIM. -> (xml, report lines)."""
+    rep = []
+    exe = src['kl2.exe'][1]
+    for name, why in (TRIM if trim is None else trim):
+        plain = re.sub(r'<!--.*?-->', '', xml, flags=re.S)
+        if len(re.findall(r'<Window Name="%s"[\s>]' % re.escape(name), plain)) != 1:
+            raise SystemExit('trim %s: not defined exactly once in frontend.xml' % name)
+        m = one(r'[ \t]*<Window Name="%s"[\s>][^>]*>.*?</Window>[ \t]*\r?\n' % re.escape(name), xml, 'the window ' + name, re.S)
+        own = defined(m.group(0))
+        rest = re.sub(r'<!--.*?-->', '', xml[:m.start()] + xml[m.end():], flags=re.S)
+        why_not = []
+        before = set(defined(re.sub(r'<!--.*?-->', '', xml[:m.start()], flags=re.S)))
+        for n in [name] + own:
+            if n in before:                           # an earlier window defines it too: the game's look-up (first match, 0x4fa730) never reached this one
+                continue
+            if _wb(n).search(rest):
+                why_not.append('%s is named elsewhere in frontend.xml' % n)
+        for label, (kind, data) in sorted(src.items()):
+            names = [name] + (own if kind == 'xml' else [])
+            txt = data.decode('latin-1') if kind in ('xml', 'ingame') else None
+            for n in names:
+                if txt is not None:
+                    if _wb(n).search(re.sub(r'<!--.*?-->', '', txt, flags=re.S)):
+                        why_not.append('%s occurs in %s' % (n, label))
+            if kind != 'ingame' and (name.encode() in data or name.encode('utf-16le') in data):
+                why_not.append('the window name occurs in %s' % label)
+        pre = [name[:j] for j in range(6, len(name)) if b'\0' + name[:j].encode() + b'\0' in exe]
+        if pre:
+            why_not.append('kl2.exe holds the string(s) %s, a prefix of the name (a name built at run time)' % pre)
+        if why_not:
+            raise SystemExit('trim %s refused:\n  %s' % (name, '\n  '.join(sorted(set(why_not)))))
+        flat = re.sub(r'<Platform\b[^>]*>.*?</Platform>', '', m.group(0), flags=re.S)
+        rep.append((name, table_tags(m.group(0)), table_tags(flat), why))
+        xml = xml[:m.start()] + xml[m.end():]
+    return xml, rep
+
+
+def scene_names(scene):
+    """Entity names of a frontend scene archive -> (set, how). The names are NUL-terminated strings in the .buf; the entity table says which."""
+    z = zipfile.ZipFile(scene)
+    low = {i.filename.lower(): i for i in z.infolist()}
+    stem = 'scenes/kaneandlynch'
+    buf = z.read(low[stem + '.buf']); gms = z.read(low[stem + '.gms'])
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tools'))
+        import kl_gms
+        raw = kl_gms.unpack(gms); out = set()
+        for decl, _tid, _prio in kl_gms.entities(raw):
+            o = struct.unpack_from('<I', raw, 4 * (decl & 0xffffff))[0]
+            out.add(buf[o:buf.index(b'\0', o)].decode('latin-1'))
+        return out, 'entity table of the .gms'
+    except ImportError:
+        return {s.decode('latin-1') for s in re.findall(rb'(?<=\0)[A-Za-z0-9_#.!\\]{3,}(?=\0)', buf)}, 'strings of the .buf (tools\\kl_gms.py not found)'
+
+
+def graphic_values(xml):
+    """(Graphic= of the elements -> scene entity names, <Graphic Graphic=> children -> element names), comments left out."""
+    plain = re.sub(r'<!--.*?-->', '', xml, flags=re.S)
+    return (set(re.findall(r'<GuiElement\b[^>]*?\bGraphic="([^"]+)"', plain, re.S)), set(re.findall(r'<Graphic Graphic="([^"]+)"', plain)))
+
+
+def graphic_problems(stock_xml, res_xml, names):
+    """Graphics the RESULT names that no scene entity / element answers to and that the stock file does not already fail on. A missing
+    Graphic= was never tried in the game (a boot risk, pm_options.md 8.6): it must fail the BUILD."""
+    se, sc = graphic_values(stock_xml)
+    re_, rc = graphic_values(res_xml)
+    have = set(defined(res_xml))
+    bad = ['Graphic="%s" is no entity of the menu scene' % g for g in sorted(re_ - names - (se - names))]
+    bad += ['<Graphic Graphic="%s"/> names no element of frontend.xml' % g for g in sorted(rc - have - (sc - set(defined(stock_xml))))]
+    return bad
+
+
 def main():
-    pictures = '--pictures' in sys.argv[1:]
-    if len(sys.argv) - pictures != 4:
+    args = sys.argv[1:]
+    scene = None
+    if '--scene' in args:
+        i = args.index('--scene'); scene = args[i + 1]; del args[i:i + 2]
+    force_pics, no_pics, no_trim = '--pictures' in args, '--no-pictures' in args, '--no-trim' in args
+    args = [a for a in args if a not in ('--pictures', '--no-pictures', '--no-trim')]
+    if len(args) != 3 or (force_pics and no_pics):
         raise SystemExit(__doc__)
-    ini, stock, out = [a for a in sys.argv[1:] if a != '--pictures']
+    ini, stock, out = args
+    # THE PICTURES FOLLOW THE SCENE (2026-10-23): they were off for eight days only because nobody passed the flag. A menu scene beside
+    # the result that holds KLPic_Char01 means the portraits are wanted; --no-pictures is the one way to build without.
+    scene = scene or os.path.join(out, 'Overlay', 'Scenes', 'kaneandlynch.zip')
+    scene = scene if os.path.isfile(scene) else None
+    snames = scene_names(scene) if scene else None
+    pictures = force_pics or (bool(snames) and 'KLPic_Char01' in snames[0] and not no_pics)
+    if pictures:
+        print('PICTURES ON (%s)' % ('--pictures' if force_pics else 'the scene %s holds KLPic_Char01' % scene))
+    else:
+        print('PICTURES OFF - the Heister tab will have NO portraits (%s)' % ('--no-pictures' if no_pics else 'no menu scene with KLPic_Char01 beside the result; pass --scene <zip>'))
     pgs = pages(ini)
     cp = configparser.RawConfigParser(strict=False, delimiters=('=',), comment_prefixes=(';', '#'), interpolation=None)
     cp.read(ini)
@@ -725,7 +859,14 @@ def main():
         raise SystemExit('%s has no %s' % (stock, MEMBER))
     raw = z.read(names[MEMBER]); xml = raw.decode('latin-1')
     new = build(xml, pgs, heister, pictures)
+    trimmed = []
+    if pictures and not no_trim:                       # the portraits need the entries (see TRIM); without them the table overflows
+        new, trimmed = trim_windows(new, trim_sources(stock, scene))
     bad = check(xml, new, pgs, heister)
+    if snames:
+        bad += graphic_problems(xml, new, snames[0])
+    else:
+        print('WARNING: no menu scene given - the check that every Graphic resolves to a scene entity was SKIPPED')
     if bad:
         raise SystemExit('the result breaks its own rules, nothing written:\n  ' + '\n  '.join(bad))
     res = new.encode('latin-1')
@@ -764,6 +905,16 @@ def main():
     print('  windows %d -> %d, elements <GuiElement %d -> %d' % (xml.count('<Window '), res.count(b'<Window '), xml.count('<GuiElement'), res.count(b'<GuiElement')))
     t0, t1 = table_tags(xml), table_tags(res.decode('latin-1'))
     print('  table-making tags of frontend.xml (Window / GuiElement / ColorSet / ButtonGraphic outside comments): %d -> %d (%+d); v26c (installed 2026-10-14 18:37) = 4345 (+159): v27b = 4346 (+1: the KLFocus colour set); v27c says 4350 (+4: the Neural row)' % (t0, t1, t1 - t0))
+    if snames:
+        print('  every Graphic= of the result resolves (%d scene entities, read from the %s)' % (len(snames[0]), snames[1]))
+    for n, up, lo, why in trimmed:
+        print('  TRIM window %-26s frees %3d tags (%3d outside <Platform> blocks): %s' % (n, up, lo, why))
+    if trimmed:
+        up, lo = sum(t[1] for t in trimmed), sum(t[2] for t in trimmed)
+        print('  TRIM total: %d windows, %d tags (at least %d outside <Platform> blocks); tags %d -> %d' % (len(trimmed), up, lo, t1 + up, t1))
+    est = t1 + LIVE_OFFSET
+    print('  ESTIMATED LIVE TABLE (tags + %d, the installed overlay: 4350 tags = 5065 live): %d of 5096 (%s); the log line "menu: table N" gives the truth%s' % (
+        LIVE_OFFSET, est, 'UNDER the 5000 budget' if est <= 5000 else 'over 5000: entry 5000 is a hazard' if est <= 5096 else 'OVER 5096 = ASSERT', '; upper bound if blocks of other platforms are counted' if trimmed else ''))
 
 
 if __name__ == '__main__':
