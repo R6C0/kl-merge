@@ -613,12 +613,16 @@ if ($Mode -eq 'install') {
     elseif ((Md5 $hs) -ne $hookMd5) { Write-Host 'REFUSED: the staged hook is not the one this was built with.'; $bad++ }
     elseif (-not (Test-Path -LiteralPath $hd)) { Write-Host 'REFUSED: no dinput8.dll in the game folder to back up (install the owner hook first).'; $bad++ }
   }
+  $need = 0                                                # backups are moves, so only the new files take space
+  foreach ($r in $rows) { $d = Join-Path $Game ('KLExpansion\Maps\' + $r.rel); if (-not (Test-Path -LiteralPath $d) -or (Md5 $d) -ne $r.md5) { $need += [int64]$r.size } }
+  $free = (Get-PSDrive $Game.Substring(0,1)).Free
+  if ($free -lt $need + 2GB) { Write-Host ('REFUSED: {0:N1} GB needed + 2 GB spare, {1:N1} GB free on the game drive.' -f ($need/1GB), ($free/1GB)); $bad++ }
   if ($bad) { Write-Host "$bad problems: nothing installed."; exit 1 }
   foreach ($r in $rows) {
     $s = Join-Path $Src $r.rel; $d = Join-Path $Game ('KLExpansion\Maps\' + $r.rel)
     if (Test-Path -LiteralPath $d) {
       if ((Md5 $d) -eq $r.md5) { Write-Host ('same ' + $r.rel); continue }
-      if (-not (Test-Path -LiteralPath ($d + $suffix))) { Copy-Item -LiteralPath $d -Destination ($d + $suffix) }
+      if (-not (Test-Path -LiteralPath ($d + $suffix))) { Move-Item -LiteralPath $d -Destination ($d + $suffix) }   # a move: the backup costs no disk space (C: is nearly full)
     }
     Copy-Item -LiteralPath $s -Destination $d -Force
     if ((Md5 $d) -ne $r.md5) { Write-Host "MD5 MISMATCH after copy: $d"; $bad++ } else { Write-Host ('ok  ' + $r.rel) }

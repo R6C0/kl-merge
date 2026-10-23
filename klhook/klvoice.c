@@ -100,6 +100,17 @@ static void kvo_restore_all(const char *why)
     memset(kvo_rec, 0, sizeof kvo_rec); memset(kvo_ix, 0, sizeof kvo_ix); kvo_nrec = 0;
 }
 
+/* 1 the first time this scene + path is asked about: a missing leaf is logged once, not on every walk (V2_DM01 wrote 14,756) */
+static int kvo_first_miss(const char *scene, const char *path)
+{
+    static DWORD seen[1024]; static int nseen; DWORD h = 2166136261u; const char *p; int i;
+    for (p = scene; *p; p++) h = (h ^ (BYTE)*p) * 16777619u;
+    for (p = path; *p; p++) h = (h ^ (BYTE)*p) * 16777619u;
+    for (i = 0; i < nseen; i++) if (seen[i] == h) return 0;
+    if (nseen < 1024) seen[nseen++] = h;
+    return 1;
+}
+
 /* the event leaf of a line: its key text 'Multiplayer/F01/Backstab_01_R_C3' -> 'Backstab_01_R'. 0 = not an event line. */
 static int kvo_leaf(const char *text, char leaf[64])
 {
@@ -182,7 +193,7 @@ static void kvo_tick(int game_thread)
                         if (ln2 > 2 && !strcmp(leaf + ln2 - 2, "_R")) snprintf(path, sizeof path, "KLVoice/%s_R/%.*s", who[slot], (int)(ln2 - 2), leaf);
                         else snprintf(path, sizeof path, "KLVoice/%s/%s", who[slot], leaf);
                         if (ri >= 0 && kvo_rec[ri].active && cur != kvo_rec[ri].ours) { kvo_rec[ri].active = 0; ri = -1; }            /* the game put something else there: ours no more */
-                        if (!(e = kvo_entry(path, w.rules, scene))) { nmiss++; if (kvo.log > 1) klog("voice: %s: no leaf %s", leaf, path); continue; }
+                        if (!(e = kvo_entry(path, w.rules, scene))) { nmiss++; if (kvo.log > 1 && kvo_first_miss(scene, path)) klog("voice: %s: no leaf %s (logged once)", leaf, path); continue; }
                         if ((DWORD)(DWORD_PTR)e == cur) continue;
                         if (ri < 0 && (ri = kvo_find(addr, 1)) < 0) continue;
                         if (!kvo_rec[ri].active) kvo_rec[ri].orig = cur;
