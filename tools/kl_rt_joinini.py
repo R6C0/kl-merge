@@ -62,6 +62,44 @@ def leaderless_lines(n, player=0, nohuman=0):
             "To.5=5708 570 -7245", "To.6=5872 570 -7025", "To.7=5952 570 -7770"]
 
 
+# kl_fa_author.JOIN_BOX_CAR = ((2802, 3142), (19560, 19860), (789, 1029)): the inside of the tower's escape car (x, y up, z)
+CAR_MIN, CAR_MAX = '2802 19560 789', '3142 19860 1029'
+
+
+def add_ride(data, delay, car, fallback):
+    """--delay S (2026-10-23, klhook/kljoin.c 'the ride'): INSERTS keys into the [Join] section (right after its last key line):
+    Delay=S, and with --car CarMin / CarMax (+ CarWait=6, CarFallback=0 with --no-car-fallback). Refused if [Join] already has any of
+    them. Returns (new bytes, [inserted lines as text]). An old hook ignores the unknown keys (GetPrivateProfileInt) = the instant jump."""
+    nl = b'\r\n' if b'\r\n' in data else b'\n'
+    lines = data.split(b'\n')
+    start = None
+    for i, ln in enumerate(lines):
+        if ln.strip() == b'[Join]':
+            start = i
+            break
+    if start is None:
+        raise SystemExit('refused: no [Join] section')
+    end = start + 1
+    last = start
+    while end < len(lines) and not lines[end].strip().startswith(b'['):
+        s = lines[end].strip()
+        if s and not s.startswith(b';'):
+            last = end
+            if re.match(rb'(Delay|Slack|CarMin|CarMax|CarWait|CarFallback)\s*=', s, re.I):
+                raise SystemExit('refused: [Join] already has a ride key: ' + s.decode('latin1'))
+        end += 1
+    add = ['; 2026-10-23 THE RIDE (kl_rt_joinini.py --delay; klhook/kljoin.c): the jump comes %g s after the feet enter the box, if the player is' % delay,
+           '; then alive and still near it%s. An older hook ignores these keys (= the instant jump).' % (' (the jump waits for the car box CarMin/CarMax = kl_fa_author.JOIN_BOX_CAR, 6 s at most%s)' % ('' if fallback else ', no fallback') if car else ''),
+           'Delay=%g' % delay]
+    if car:
+        add += ['CarMin=' + CAR_MIN, 'CarMax=' + CAR_MAX, 'CarWait=6']
+        if not fallback:
+            add.append('CarFallback=0')
+    cr = b'\r' if lines[last].endswith(b'\r') else b''
+    lines[last + 1:last + 1] = [x.encode() + cr for x in add]
+    return b'\n'.join(lines), add
+
+
 def md5(p):
     h = hashlib.md5()
     with open(p, 'rb') as f:
@@ -114,8 +152,18 @@ def main(argv):
     ap.add_argument('--leaderless-hop', type=int, metavar='SECONDS', default=None)
     ap.add_argument('--leaderless-player', action='store_true')
     ap.add_argument('--leaderless-nohuman', action='store_true')
+    ap.add_argument('--delay', type=float, metavar='SECONDS', default=None)
+    ap.add_argument('--car', action='store_true')
+    ap.add_argument('--no-car-fallback', action='store_true')
+    ap.add_argument('--ini-only', action='store_true')
     ap.add_argument('--dry', action='store_true')
     a = ap.parse_args(argv)
+    if a.delay is not None and not 0 < a.delay <= 30:
+        raise SystemExit('refused: --delay must be 0..30 seconds (kljoin.c ignores a Delay outside 0..30)')
+    if (a.car or a.no_car_fallback) and a.delay is None:
+        raise SystemExit('refused: --car / --no-car-fallback need --delay S')
+    if a.no_car_fallback and not a.car:
+        raise SystemExit('refused: --no-car-fallback needs --car')
     if a.leaderless_hop is not None:
         if not 10 <= a.leaderless_hop <= 600:
             raise SystemExit('refused: --leaderless-hop must be 10..600 (klhop.c clamps Wait to 1..600)')
@@ -143,6 +191,12 @@ def main(argv):
         raise SystemExit('refused: OUT must not be a game folder')
     data = open(ini, 'rb').read()
     new, done = edit(data, sets)
+    pre_delay = new
+    ins = []
+    if a.delay is not None:
+        new, ins = add_ride(new, a.delay, a.car, not a.no_car_fallback)
+        for x in ins:
+            print('KLJoin.ini [Join] added: ' + x)
     base = new
     if a.rescue_wedge:
         if re.search(rb'^\s*\[CrewHop\.6\]', data, re.M):
@@ -168,6 +222,8 @@ def main(argv):
         if not os.path.isfile(p):
             continue
         q = os.path.join(a.out, n)
+        if a.ini_only and n != 'KLJoin.ini':
+            continue          # --ini-only: just the file (the map zip is not copied: it is large and unchanged)
         if n == 'KLJoin.ini':
             open(q, 'wb').write(new)
         else:
@@ -175,13 +231,23 @@ def main(argv):
     diff = []
     for n in sorted(os.listdir(a.src)):
         p = os.path.join(a.src, n)
+        if a.ini_only and n != 'KLJoin.ini':
+            continue
         if os.path.isfile(p) and md5(p) != md5(os.path.join(a.out, n)):
             diff.append(n)
     if diff != (['KLJoin.ini'] if new != data else []):
         raise SystemExit('refused: unexpected differing members %s' % diff)
     # only the named lines differ
-    if not new.startswith(base):
+    if not (new.startswith(base) or ins):
         raise SystemExit('refused: appended text changed existing bytes')
+    if ins:       # the added ride keys: removing exactly those lines must give back the file as it was before them
+        if base.replace(b'\r\n', b'\n').split(b'\n') == pre_delay.replace(b'\r\n', b'\n').split(b'\n'):
+            raise SystemExit('refused: --delay added nothing')
+        lines_b = base.split(b'\n')
+        keep = [l for l in lines_b if l.rstrip(b'\r').decode('latin1') not in ins]
+        if b'\n'.join(keep) != pre_delay:
+            raise SystemExit('refused: --delay changed more than its own lines')
+        base = pre_delay
     a_l, b_l = data.split(b'\n'), base.split(b'\n')
     nd = sum(1 for x, y in zip(a_l, b_l) if x != y)
     if len(a_l) != len(b_l) or nd != len(done):
