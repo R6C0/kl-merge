@@ -38,6 +38,11 @@
  *   SmoothMs=90           time constant of the damping (smaller = closer to raw)
  *   SnapUnits=300         a body that moved further than this in one frame (respawn, teleport) is not smoothed that frame
  *   Log=0                 1 = log swaps / restores and the first updates
+ *   CamYaw=0              1 = also smooth the remote CAMERA yaw int16 [R+0xe0] (needs Enable=1; kns_camyaw, re\netsmooth_camyaw.md):
+ *                         written after the stock update, the raw value put back before the next one. Online only, remote players only.
+ *                         VISUAL ONLY, opt-in: code reading [R+0xe0] / [P+0xd74] between our write and the restore sees the smoothed value.
+ *   CamSmoothMs=70        CamYaw time constant     MaxCamDegPerSec=720  CamYaw turn speed cap
+ *   CamSnapDeg=150        a camera error above this (or [R+0x548]==0xff, dt > 0.25 s, a position jump) is followed at once
  *   Probe=0               READ-ONLY self-check, works offline (Arcade) and without Enable: every ProbeMs (1000) for up to
  *                         ProbeLines (400) lines, each player of the array: vtable, flags [+0x2720], the body chain above,
  *                         the 12 floats at the transform, the pure-yaw test and its yaw, and the position [P+0x460].
@@ -62,13 +67,18 @@
 #define KNS_NSLOT       512
 #define KNS_NPL         28
 
-static struct { int on, log; float maxdps, tau, snap; volatile LONG active; int told; int probe, probems, probemax, probed; DWORD probet; int offline; } kns;
+static struct { int on, log; float maxdps, tau, snap; volatile LONG active; int told; int probe, probems, probemax, probed; DWORD probet; int offline;
+               int cy; float cytau, cymaxu, cysnapu; } kns;      /* cy: [NetSmooth] CamYaw; cytau in s, cymaxu in units/s, cysnapu in units (1024 per turn) */
 static DWORD kns_vtblk[KNS_NSLOT + 1];                /* [0] = the stock vt[-1] (MSVC RTTI locator), then the private vtable */
 #define kns_vt (kns_vtblk + 1)
 static DWORD kns_orig;                                /* the stock slot 393 function */
 static DWORD kns_obj[KNS_NPL];                        /* objects given the private vtable */
-static struct { int have; float yaw, vel, pos[3]; LARGE_INTEGER t; } kns_st[KNS_NPL];
+static struct { int have; float yaw, vel, pos[3]; LARGE_INTEGER t;
+               int cy_have, cy_pend, cy_out, cy_raw; DWORD cy_r, cy_log; float cy_s, cy_vel, cy_pos[3]; LARGE_INTEGER cy_t; LONG cy_nw, cy_nr; } kns_st[KNS_NPL];   /* cy_*: CamYaw state (kns_camyaw) */
 static LONG kns_n_upd, kns_n_set, kns_n_skip, kns_n_rbok, kns_n_rbbad;
+static LONG kns_n_cyw, kns_n_cyr, kns_n_cyseen, kns_n_cyask;      /* CamYaw: [R+0xe0] writes, raw puts back, movement saw our write n / asked m */
+
+static void kns_cy_clear(int i) { kns_st[i].cy_have = 0; kns_st[i].cy_pend = 0; kns_st[i].cy_r = 0; }
 
 static DWORD kns_ours(void) { return (DWORD)(DWORD_PTR)kns_vt; }
 
@@ -159,11 +169,103 @@ static void kns_smooth(DWORD pl)
       __except (EXCEPTION_EXECUTE_HANDLER) { kns.on = 0; klog("netsmooth: fault in the body placement call: smoother off"); } }
 }
 
+/* CamYaw (re\netsmooth_camyaw.md): the remote camera yaw is the int16 [R+0xe0] (R = [P+0x274c], 1024 per turn); 0x5d31c0 turns it
+   into the float [P+0x2808] = (short)[R+0xe0] / 162.97. We write a smoothed int16 there AFTER the stock update and put the raw
+   one back BEFORE the next stock update, so 0x519e80 never extrapolates from our number. 0x5d31c0 is not in a vtable (SHIP refuses
+   code patches), so [R+0xe0] is the only write target. GUESS: 0x5d31c0 runs after slot 393 in the frame (the "movement saw our
+   write n / m" counter in the summary line tells; if it stays near 0 the smoothing does nothing visible). */
+static float kns_wrapu(float a) { while (a > 512.0f) a -= 1024.0f; while (a < -512.0f) a += 1024.0f; return a; }
+
+/* put the raw value back if our write is still there; pl = the ZFFPlayer. Safe to call with nothing outstanding. */
+static void kns_cy_undo(DWORD pl, int i)
+{
+    SHORT cur = 0, raw;
+    if (!kns_st[i].cy_pend) return;
+    kns_st[i].cy_pend = 0;
+    if (!kns_st[i].cy_r || klh_rd32(pl + 0x274c) != kns_st[i].cy_r) return;            /* the replica is gone or replaced */
+    if (!klh_rd(kns_st[i].cy_r + 0xe0, &cur, 2) || cur != (SHORT)kns_st[i].cy_out) return;   /* the game wrote it since: nothing to give back */
+    raw = (SHORT)kns_st[i].cy_raw;
+    if (klh_data((void *)(DWORD_PTR)(kns_st[i].cy_r + 0xe0), &raw, 2, "remote camera yaw (raw put back)")) { kns_st[i].cy_nr++; kns_n_cyr++; }
+}
+
+static void kns_cy_pre(DWORD pl)
+{   /* before the stock update: count whether the movement code saw our write, then give the raw value back */
+    int i = kns_index(pl);
+    if (i < 0 || !kns_st[i].cy_pend) return;
+    { DWORD pp = kns_st[i].cy_r ? klh_rd32(kns_st[i].cy_r + 0x540) : 0; float f = 0;
+      if (pp && klh_rd(pp + 0x2808, &f, 4)) { kns_n_cyask++; if (fabsf(f - (float)kns_st[i].cy_out / 162.97f) < 1e-3f) kns_n_cyseen++; } }
+    kns_cy_undo(pl, i);
+}
+
+static void kns_cy_do(DWORD pl, int i)
+{
+    DWORD R = klh_rd32(pl + 0x274c); SHORT raw = 0; BYTE f548 = 0; float pos[3] = {0, 0, 0}, d, dt, w, step, off, o; int reset, out; LARGE_INTEGER now, fq;
+    DWORD me;
+    if (!kns_local(&me) || pl == me) return;                     /* never the local player */
+    { BYTE fl = 0; if (!klh_rd(pl + 0x2720, &fl, 1) || (fl & 2)) return; }
+    if (!R || klh_rd32(R + 0x540) != pl) return;                 /* offline Arcade has no R: nothing is written there */
+    if (!klh_rd(R + 0xe0, &raw, 2)) return;
+    klh_rd(R + 0x548, &f548, 1); klh_rd(pl + 0x460, pos, sizeof pos);
+    QueryPerformanceCounter(&now); QueryPerformanceFrequency(&fq);
+    dt = kns_st[i].cy_have ? (float)(now.QuadPart - kns_st[i].cy_t.QuadPart) / (float)fq.QuadPart : 0;
+    reset = !kns_st[i].cy_have || dt > 0.25f || dt < 0 || f548 == 0xff || kns_st[i].cy_r != R;
+    if (!reset) {
+        float dx = pos[0] - kns_st[i].cy_pos[0], dz = pos[2] - kns_st[i].cy_pos[2];
+        if (dx * dx + dz * dz > kns.snap * kns.snap) reset = 1;                                  /* respawn / teleport */
+        else if (fabsf(kns_wrapu((float)raw - kns_st[i].cy_s)) > kns.cysnapu) reset = 1;         /* a real turn-around: follow at once */
+    }
+    memcpy(kns_st[i].cy_pos, pos, sizeof pos); kns_st[i].cy_r = R;
+    if (reset) { kns_st[i].cy_have = 1; kns_st[i].cy_s = (float)raw; kns_st[i].cy_vel = 0; kns_st[i].cy_t = now; return; }
+    if (dt >= 0.0005f) {                                         /* a second call within 0.5 ms only re-writes the state below */
+        float s = kns_st[i].cy_s, h; int k, nsub = (int)(dt / 0.008f) + 1;
+        kns_st[i].cy_t = now;
+        w = 2.0f / (kns.cytau > 0.001f ? kns.cytau : 0.001f);   /* critically damped spring, as the body yaw above */
+        h = dt / (float)nsub;                                   /* explicit Euler is stable only for 2*w*h < 2: sub-steps of at most 8 ms */
+        for (k = 0; k < nsub; k++) {
+            d = kns_wrapu((float)raw - s);
+            kns_st[i].cy_vel += (w * w * d - 2.0f * w * kns_st[i].cy_vel) * h;
+            if (kns_st[i].cy_vel > kns.cymaxu) kns_st[i].cy_vel = kns.cymaxu;
+            if (kns_st[i].cy_vel < -kns.cymaxu) kns_st[i].cy_vel = -kns.cymaxu;
+            step = kns_st[i].cy_vel * h;
+            if ((d > 0 && step > d) || (d < 0 && step < d)) { step = d; kns_st[i].cy_vel = 0; }       /* no overshoot */
+            s += step;
+        }
+        kns_st[i].cy_s = s;
+    }
+    off = kns_wrapu(kns_st[i].cy_s - (float)raw);
+    kns_st[i].cy_s = (float)raw + off;                           /* stays on raw's int16 branch */
+    o = (float)raw + floorf(off + 0.5f);
+    out = (int)(SHORT)(int)o;                                    /* wrap, not clamp: raw is a free int16 and 65536 is a multiple of 1024 */
+    if (kns.log && GetTickCount() - kns_st[i].cy_log >= 1000) {
+        kns_st[i].cy_log = GetTickCount();
+        klog("netsmooth camyaw: player %08lx raw %d out %d (smoothed %.1f) writes %ld restores %ld", pl, (int)raw, out, kns_st[i].cy_s, kns_st[i].cy_nw, kns_st[i].cy_nr);
+    }
+    if (out == (int)raw) return;                                 /* already there: leave the game's value */
+    { SHORT v = (SHORT)out;
+      if (klh_data((void *)(DWORD_PTR)(R + 0xe0), &v, 2, "remote camera yaw (smoothed)")) {
+          kns_st[i].cy_pend = 1; kns_st[i].cy_out = out; kns_st[i].cy_raw = (int)raw; kns_st[i].cy_nw++; kns_n_cyw++;
+      } }
+}
+
+static void kns_camyaw(DWORD pl)
+{
+    int i = kns_index(pl);
+    if (i < 0) return;
+    __try { kns_cy_do(pl, i); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { kns.cy = 0; klog("netsmooth: fault in the camera yaw step: CamYaw off"); }
+}
+
 static void __fastcall kns_update(void *self, void *edx)
 {
+    if (!IsBadReadPtr(self, 0x2750)) {                           /* give the raw camera yaw back first, whatever the keys say now */
+        __try { kns_cy_pre((DWORD)(DWORD_PTR)self); } __except (EXCEPTION_EXECUTE_HANDLER) { kns.cy = 0; klog("netsmooth: fault in the camera yaw restore: CamYaw off"); }
+    }
     ((kns_fn)(DWORD_PTR)kns_orig)(self, edx);                    /* the stock update first */
     kns_n_upd++;
-    if (kns.on && kns.active && !IsBadReadPtr(self, 0x2750)) kns_smooth((DWORD)(DWORD_PTR)self);
+    if (kns.on && kns.active && !IsBadReadPtr(self, 0x2750)) {
+        kns_smooth((DWORD)(DWORD_PTR)self);
+        if (kns.cy) kns_camyaw((DWORD)(DWORD_PTR)self);
+    }
 }
 
 static void kns_restore_all(const char *why)
@@ -171,11 +273,12 @@ static void kns_restore_all(const char *why)
     int i, n = 0;
     for (i = 0; i < KNS_NPL; i++) {
         if (!kns_obj[i]) continue;
+        kns_cy_undo(kns_obj[i], i);                              /* an outstanding camera yaw write goes back to raw first, whatever the vtable shows */
         if (klh_rd32(kns_obj[i]) == kns_ours()) {                /* freed memory showing our table is not expected */
             DWORD vt = (DWORD)(DWORD_PTR)KLH_VA(KNS_PLAYER_VT);
             if (klh_data((void *)(DWORD_PTR)kns_obj[i], &vt, 4, "ZFFPlayer vtable pointer (restore)")) n++;
         }
-        kns_obj[i] = 0; kns_st[i].have = 0;
+        kns_obj[i] = 0; kns_st[i].have = 0; kns_cy_clear(i);
     }
     if (n && kns.log) klog("netsmooth: %d player object(s) given back the stock vtable (%s)", n, why);
 }
@@ -257,7 +360,7 @@ static void klnetsmooth_tick(int game_thread)
     }
     if (!kns_local(&me) || !me) return;                          /* local player unknown: swap nothing (it must never be swapped) */
     for (i = 0; i < KNS_NPL; i++) {                              /* drop what is gone */
-        if (kns_obj[i] && klh_rd32(kns_obj[i]) != kns_ours()) { kns_obj[i] = 0; kns_st[i].have = 0; }
+        if (kns_obj[i] && klh_rd32(kns_obj[i]) != kns_ours()) { kns_cy_undo(kns_obj[i], i); kns_obj[i] = 0; kns_st[i].have = 0; kns_cy_clear(i); }
     }
     for (i = 0; i < KNS_NPL; i++) {
         pl = klh_rd32(gd + 0x828 + 4 * i);
@@ -266,7 +369,7 @@ static void klnetsmooth_tick(int game_thread)
         { int k; for (k = 0; k < KNS_NPL && kns_obj[k]; k++) ;
           if (k == KNS_NPL) break;
           { DWORD vt = kns_ours();
-            if (klh_data((void *)(DWORD_PTR)pl, &vt, 4, "ZFFPlayer vtable pointer (private copy)")) { kns_obj[k] = pl; n++; kns_st[k].have = 0; } } }
+            if (klh_data((void *)(DWORD_PTR)pl, &vt, 4, "ZFFPlayer vtable pointer (private copy)")) { kns_obj[k] = pl; n++; kns_st[k].have = 0; kns_cy_clear(k); } } }
     }
     kns.active = 1;
     if (kns.log && (n || !kns.told)) {
@@ -281,7 +384,11 @@ static void klnetsmooth_tick(int game_thread)
 #endif
     if (kns.log) {                                                /* a count line every 10 s while anything moves (N3: it was printed only on new swaps) */
         static DWORD tsum; static LONG lu = -1;
-        if (now - tsum >= 10000 && kns_n_upd + kns_n_set + kns_n_skip != lu) { tsum = now; lu = kns_n_upd + kns_n_set + kns_n_skip; klog("netsmooth: updates %ld, placed %ld (read back ok %ld, differs %ld), skipped (not a pure yaw) %ld", kns_n_upd, kns_n_set, kns_n_rbok, kns_n_rbbad, kns_n_skip); }
+        if (now - tsum >= 10000 && kns_n_upd + kns_n_set + kns_n_skip != lu) {
+            tsum = now; lu = kns_n_upd + kns_n_set + kns_n_skip;
+            klog("netsmooth: updates %ld, placed %ld (read back ok %ld, differs %ld), skipped (not a pure yaw) %ld", kns_n_upd, kns_n_set, kns_n_rbok, kns_n_rbbad, kns_n_skip);
+            if (kns.cy) klog("netsmooth camyaw: writes %ld, restores %ld, movement saw our write %ld / %ld", kns_n_cyw, kns_n_cyr, kns_n_cyseen, kns_n_cyask);
+        }
     }
 }
 
@@ -294,6 +401,17 @@ static void klnetsmooth_init(void)
     GetPrivateProfileStringA("NetSmooth", "SmoothMs", "90", b, sizeof b, klh_ini); kns.tau = (float)atof(b) / 1000.0f;
     GetPrivateProfileStringA("NetSmooth", "SnapUnits", "300", b, sizeof b, klh_ini); kns.snap = (float)atof(b);
     if (kns.maxdps < 30.0f) kns.maxdps = 30.0f;
+    kns.cy = kns.on && GetPrivateProfileIntA("NetSmooth", "CamYaw", 0, klh_ini) != 0;       /* opt-in, only with Enable=1 */
+    GetPrivateProfileStringA("NetSmooth", "CamSmoothMs", "70", b, sizeof b, klh_ini); kns.cytau = (float)atof(b) / 1000.0f;
+    GetPrivateProfileStringA("NetSmooth", "MaxCamDegPerSec", "720", b, sizeof b, klh_ini); kns.cymaxu = (float)atof(b);
+    GetPrivateProfileStringA("NetSmooth", "CamSnapDeg", "150", b, sizeof b, klh_ini); kns.cysnapu = (float)atof(b);
+    if (!(kns.cytau >= 0.0f && kns.cytau < 10.0f)) kns.cytau = 0.07f;     /* nan / inf / absurd in the ini */
+    if (!(kns.cymaxu < 100000.0f)) kns.cymaxu = 720.0f;
+    if (!(kns.cysnapu < 100000.0f)) kns.cysnapu = 150.0f;
+    if (!(kns.cymaxu >= 30.0f)) kns.cymaxu = 30.0f;
+    if (kns.cysnapu < 10.0f) kns.cysnapu = 10.0f;
+    if (kns.cysnapu > 180.0f) kns.cysnapu = 180.0f;               /* above half a turn the shortest-path rule cannot tell */
+    kns.cymaxu *= 1024.0f / 360.0f; kns.cysnapu *= 1024.0f / 360.0f;   /* degrees -> yaw units (1024 per turn) */
 #ifdef KLHOOK_TEST
     kns.offline = GetPrivateProfileIntA("NetSmooth", "OfflineTest", 0, klh_ini) != 0;   /* TEST build only: smooth the Arcade AI heisters */
     if (kns.offline) klog("netsmooth: OfflineTest=1 (TEST build): the smoother also runs offline, on non-local players with the master flag (Arcade AI heisters)");
@@ -302,6 +420,9 @@ static void klnetsmooth_init(void)
     kns.probems = GetPrivateProfileIntA("NetSmooth", "ProbeMs", 1000, klh_ini); if (kns.probems < 250) kns.probems = 250;
     kns.probemax = GetPrivateProfileIntA("NetSmooth", "ProbeLines", 400, klh_ini);
     if (kns.probe) klog("netsmooth: PROBE on (read-only): every %d ms, up to %d lines, the body chain / matrix of every player", kns.probems, kns.probemax);
+    if (kns.cy)
+        klog("netsmooth: CamYaw=1 (opt-in) CamSmoothMs=%.0f MaxCamDegPerSec=%.0f CamSnapDeg=%.0f: smoothed int16 [R+0xe0] of remote players, raw put back before each stock update; see re\\netsmooth_camyaw.md",
+             kns.cytau * 1000.0f, kns.cymaxu * 360.0f / 1024.0f, kns.cysnapu * 360.0f / 1024.0f);
     if (kns.on)
         klog("netsmooth: on; MaxTurnDegPerSec=%.0f SmoothMs=%.0f SnapUnits=%.0f Log=%d; private ZFFPlayer vtable for REMOTE players only, online FA not ranked; EXPERIMENT (write path proven offline N6, online untested): see re\\netcode_smooth.md",
              kns.maxdps, kns.tau * 1000.0f, kns.snap, kns.log);
