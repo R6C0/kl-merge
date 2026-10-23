@@ -1,5 +1,12 @@
 # Retomoto lift: the jump fires 9 m before the car (2026-10-23)
 
+## PROVEN LIVE 2026-10-23 04:45 (TEST LIFT4, hook out_3f_1023h_test, installed DM09 KLJoin.ini: Delay=2.5, CarMin/CarMax, CarWait=6)
+The player entered box 9 at (2442, 19601, 1); the ride started and did NOT jump on entry. Re-entries during the ride were ignored. 8.5 s later
+(Delay 2.5 + CarWait 6, the script never reached the car box) CarFallback jumped him from (2608, 19601, 480) to entry 5 '06_Exit'. He was at
+(6411, 570, -6221) 500 ms later. Shots LIFT4_200s (inside the tower car) and LIFT4_203s (the lobby car, the lobby beyond the doors).
+LIFT3 showed the cancel path: a route that left the box (x 2204, more than Slack 150 outside) gave 'CANCELLED', and so did a downed player.
+Not yet seen: the jump from INSIDE the car box (a human walks there in about 3 s; the script was slowed by guards). Hop 6 NoHuman=1 is still not installed.
+
 ## What the log says (KLHook.log of the game folder, read only, 487 MB, last sessions)
 All 15 `join: player 0 entered box 9` lines of the file sit on the EDGE of the box, never at the car:
 (2330, 19601, 257..388) = the west face, or (2475..2715, 19601, 0..1) = the south face. The car is at (2974, 19600, 909) and the box is

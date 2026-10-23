@@ -89,6 +89,10 @@ Owner: reboot, then C:\kl_build_1019\hook_1020g\INSTALL hook 1020g.bat, shopswap
 UNTESTED live). tools/kl_dmvoice.py grafts campaign clips as KLVoice/<Name>/<Event> + new KLTalk.ini (Kane+Lynch 13 own exchanges,
 Dead Men pairs, pairs with Dog Days heisters); klhook/klvoice.c ([Voice] Enable=1) swaps the speech manager's per-voice entries
 (data writes); [Talk] StockLevels=1. Who is whom and which clip fits is a GUESS: re/voice_1023.md; staged G:\kl_build_1023\voice_1023.
+2026-10-23 04:50 - Retomoto lift ride proven live (TEST LIFT4): box 9 no longer throws on entry; the ride waits Delay 2.5 s
+plus up to CarWait 6 s for the car box, then jumps to 06_Exit (lobby car 500 ms later). Leaving the box or going down cancels.
+Open: the jump with the feet in the car box was not reached by script; hop 6 NoHuman=1 is staged, not installed (re/retomoto_lift.md).
+
 2026-10-23 03:50 - installed for the owner: Dead Men voices on all 27 map folders, hook 1023h (48faf4dd), [Music]/[Traits] ini.
 DM01 with voices crashed (kl2+0x526b40): the level .LOC goes into a fixed 600,000-byte buffer; kl_dmvoice keeps it under
 LOC_CAP, and any other tool that grows a .LOC must too. The map-page selector is now held on real maps (klslot kls_page_clamp, PH3).
@@ -98,9 +102,6 @@ Proven live: voices, pair talk, ambience, Payday 2 music, traits. Undo: `C:\kl_b
 (klhook/kllobby.c, host only): on the host's Ready with >= N connected the lobby target drops to the number connected, so a
 2-player FA round starts (H4, TEST 1023b: 0.6 s after the host's Ready, 0 faults). NetSmooth now works in System Link
 (H5: 1720 turns of a walking host placed on the client, 0 faults). Both are in hook 1023h (installed, see above); the 1023b pack is superseded.
-
-2026-10-22 00:30 - solo online bench: two kl2.exe on one PC work (klhook/klsolo.c, `tools/kl_solo_test.py`, TEST 1022e; [Solo] Events=1 gives each process its own render events, which fixed the two-process crashes). All 19 maps run in two processes at once (G0-G2, 0 faults). System Link stops at a Windows Firewall check (0 rules for kl2.exe), so NetSmooth online is untried. 44 local commits unpushed (push refused).
-(Firewall: opened by the owner 2026-10-22.)
 
 
 ## Owner's end goal (2026-10-09)
