@@ -491,12 +491,54 @@ static void kls_page_entries(DWORD mgr, BYTE *m)
     }
 }
 
+/* PAGE CLAMP (2026-10-23, PH2 live run, TEST 1023g): the availability bytes above do NOT stop the selector - page 3 (4 maps) went to
+ * entries 4..6 showing 'Financial' with no picture, page 2 to entry 8. So the selector itself is moved: when its entry (0xceceec, the
+ * index kl_playtest's 'sel HeistLevel_P<n>' steers) is an unused one, 'Increase' / 'Decrease' is sent to the page's HeistLevel_P<n>
+ * element - the message klauto's 'sel' sends (find 0x83faf0, vtbl+0x50) - toward the next map in the direction of travel, or back to
+ * the last map shown when there is none. Game thread only, one message per 120 ms, at most 24 per page visit. */
+#define KLS_SELIDX 0x00ceceec
+typedef void *(__fastcall *KLS_FIND)(void *mgr, void *edx, const char *name);   /* 0x83faf0, thiscall */
+typedef void (__fastcall *KLS_SEND)(void *elem, void *edx, const char **text);  /* vtbl+0x50, thiscall */
+static DWORD klh_main_tid;                                                       /* defined in klhook.c (tentative here) */
+static int kls_pc_page, kls_pc_last = -1, kls_pc_target = -1, kls_pc_sent; static DWORD kls_pc_t;
+
+static int kls_entry_used(int mask, int k) { return k >= 0 && k < 9 && (mask & (1 << (kls_menu_slot[k] - 1))); }
+
+static void kls_page_clamp(void)
+{
+    int page = (int)kls_menu_page, mask = (page >= 2 && page < KLS_PAGES) ? kls_pgmask[page] : 0, v, k, dir;
+    DWORD idx = 0xffffffff, gui, mgr, vt, fn, now = GetTickCount(); void *e; char name[24]; const char *msg;
+    if (page != kls_pc_page) { kls_pc_page = page; kls_pc_last = kls_pc_target = -1; kls_pc_sent = 0; }
+    if (!mask || !klh_main_tid || GetCurrentThreadId() != klh_main_tid) return;
+    if (!klh_rd((DWORD_PTR)KLH_VA(KLS_SELIDX), &idx, 4) || idx > 8) return;       /* not a position: the page is not up */
+    v = (int)idx;
+    if (kls_entry_used(mask, v)) { kls_pc_last = v; kls_pc_target = -1; kls_pc_sent = 0; return; }
+    if (kls_pc_target < 0) {
+        dir = kls_pc_last < 0 || v > kls_pc_last ? 1 : -1;
+        for (k = v + dir; k >= 0 && k < 9 && !kls_entry_used(mask, k); k += dir) ;
+        if (k < 0 || k >= 9) { if (kls_pc_last >= 0) k = kls_pc_last; else for (k = 0; k < 9 && !kls_entry_used(mask, k); k++) ; }
+        if (k >= 9) return;
+        kls_pc_target = k;
+        klog("expansion: page %d: the selector is on entry %d (no map), moved to %d", page, v, k);
+    }
+    if (kls_pc_sent >= 24 || now - kls_pc_t < 120) return;
+    if (!(gui = klh_rd32((DWORD_PTR)KLH_VA(0xdd265c))) || !(mgr = klh_rd32(gui + 0x824))) return;
+    snprintf(name, sizeof name, "HeistLevel_P%d", page);
+    if (!(e = ((KLS_FIND)KLH_VA(0x83faf0))((void *)(DWORD_PTR)mgr, 0, name))) return;
+    vt = klh_rd32((DWORD_PTR)e); fn = vt ? klh_rd32(vt + 0x50) : 0;
+    if (fn < (DWORD)(DWORD_PTR)KLH_VA(0x401000) || fn >= (DWORD)(DWORD_PTR)KLH_VA(0xa00000)) return;  /* not kl2.exe code */
+    msg = v > kls_pc_target ? "Decrease" : "Increase";
+    ((KLS_SEND)(DWORD_PTR)fn)(e, 0, &msg);
+    kls_pc_t = now; if (++kls_pc_sent == 24) klog("expansion: page %d: the selector did not reach entry %d after 24 messages - left alone", page, kls_pc_target);
+}
+
 static void kls_tick(void)
 {   /* from klhook.c's tick: reads, and guarded data writes for renamed slots */
     static BYTE last[18 + KLS_FA * KLS_NAME]; static int lastopt = -2, toldforce; static DWORD calls;
     BYTE now[sizeof last], m[0x260]; DWORD mgr; int i, opt;
     if (!kls_on || !klh_exe_ok) return;
     kls_menu_watch();                             /* every tick: a page may be open for a few frames only */
+    kls_page_clamp();
     if (calls++ & 7) return;
     if (kls_page_force >= 0 && !toldforce) { toldforce = 1; klog("expansion: menu page %d forced by [Expansion] Page: the menu is not looked at", kls_page_force); }
     if (kls_log >= 2 && (opt = kls_option_now()) != lastopt) {
