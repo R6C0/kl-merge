@@ -1041,6 +1041,7 @@ static BYTE kla_held[256]; static DWORD kla_rel_t[256], kla_rel_f[256]; static i
 static DWORD kla_tap_polls = 2;                   /* [Auto] TapPolls: a tap's key stays down for at least this many polls */
 static DWORD kla_gate_n, kla_gate_ms = 100;       /* [Auto] TapSettle / TapSettleMs: taps wait for this many quiet polls */
 static DWORD kla_step_prev, kla_run, kla_thr = 100; /* last poll's tick; run of polls with no gap above kla_thr ms */
+static char kla_tu_src[64];                        /* tapuntil: the window that was on top at the first tap */
 static DWORD kla_tu_t; static int kla_tu_n, kla_st_pc = -1;   /* tapuntil: tick of the last tap, taps sent; settle: line that began it */
 
 static int kla_script_pc(void) { return kla_ncmd ? kla_pc + 1 : 0; }
@@ -1327,6 +1328,7 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
         DWORD gap = kla_step_prev ? now - kla_step_prev : 0;
         kla_step_prev = now; kla_run = gap <= kla_thr ? kla_run + 1 : 0;
         if (gap > 1000) kla_out(1, "script: poll gap %lu ms (line %d)", gap, kla_pc + 1);
+        if (gap > 1000 && kla_tu_n) kla_tu_t = now;     /* a stalled try did not really run: the tapuntil timeout counts from the poll after the stall */
     }
     for (k = 0; kla_taps && k < 256; k++)
         if (kla_rel_f[k] && (int)(now - kla_rel_t[k]) >= 0 && (int)(kla_frames - kla_rel_f[k]) >= 0) { kla_event(rg, count, cap, k, 0); kla_rel_f[k] = 0; kla_taps--; return; }
@@ -1401,11 +1403,17 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
                 kla_out(1, "script %d: window '%s' is on top after %d tap(s), %lu ms; focus: %s", kla_pc + 1, kla_top, kla_tu_n, now - kla_cmd_t, d); kla_tu_n = 0; next = 1; break;
             }
             if (kla_tu_n && now - kla_tu_t < c->n) return;                  /* the last tap's try is still running */
+            if (kla_tu_n && kla_top[0] && kla_tu_src[0] && _stricmp(kla_top, kla_tu_src)) {  /* neither the source nor the target page: a lost DOWN or a stray page; do not tap inside it */
+                char r[300]; snprintf(r, sizeof r, "script line %d: off route: top window is '%s', expected '%s' (tap started on '%s'); not retapping (stack: %.150s)", kla_pc + 1, kla_top, c->text, kla_tu_src, kla_stack);
+                kla_tu_n = 0; kla_where(); kla_finish("FAIL", r, KLA_SCRIPT); return;
+            }
             if (kla_tu_n > (int)c->n2) {                                    /* 1 tap + <retries> more, all unanswered */
                 char r[300]; snprintf(r, sizeof r, "script line %d: window '%s' did not come up after %d tap(s) of %lu ms each (stack: %.150s)", kla_pc + 1, c->text, kla_tu_n, c->n, kla_stack);
                 kla_tu_n = 0; kla_where(); kla_finish("FAIL", r, KLA_SCRIPT); return;
             }
+            if (kla_tu_n && now - kla_tu_t < 3 * (DWORD)c->n && !kla_settled(kla_gate_n > 3 ? kla_gate_n : 3, kla_gate_ms)) return;   /* a retap waits for quiet polls: the window stack may not have caught up */
             if (!kla_tap_ok(now)) return;
+            if (!kla_tu_n) snprintf(kla_tu_src, sizeof kla_tu_src, "%s", kla_top);
             kla_event(rg, count, cap, c->key, 1); kla_rel_t[c->key] = now + 80; kla_rel_f[c->key] = (kla_frames + kla_tap_polls) | 1; kla_taps++;
             kla_tu_n++; kla_tu_t = now;
             kla_out(1, "script %d: tap key 0x%02x for '%s' (try %d of %lu, top is '%s')", kla_pc + 1, c->key, c->text, kla_tu_n, c->n2 + 1, kla_top);
