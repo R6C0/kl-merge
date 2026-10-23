@@ -66,8 +66,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-23 11:00 - OWNER KIT B staged, NOT installed: `<work>\build\release_1023b\INSTALL release 1023b.bat` = SHIP hook C7557D81
-(rtp-schemas 2b4726be5: stinger + ambience/music clock fix + CEG guard) + balance pass 2 + QoL; then optional `OPTIONAL 1 sound3.bat`,
+2026-10-23 11:10 - OWNER KIT B INSTALLED (live dll C7557D81, ini D162C5B0; undo `<work>\build\release_1023b_backup\UNDO release 1023b.bat`) = SHIP hook
+(rtp-schemas 2b4726be5: stinger + ambience/music clock fix + CEG guard) + balance pass 2 + QoL. Add-ons NOT installed yet: `OPTIONAL 1 sound3.bat`,
 `OPTIONAL 2 stinger.bat`; undo in reverse. KITB LIVE PASS on its TEST twin (DM01: stinger, music, ambience, voice swap; 0 faults).
 Supersedes release_1023 (d25393d9). Notes: re/release2_1023.md, re/release_1023.md (Kit b).
 
