@@ -1199,7 +1199,7 @@ static void kld_flop_one(DWORD pl, DWORD d, DWORD ds, DWORD now, float hp)
             return;
         }
         kld_s.meter -= kld.decay * dt; if (kld_s.meter < 0) kld_s.meter = 0;
-        rate = B + P * kld_s.meter; if (rate > T) rate = T; if (rate < 0.05f) rate = 0.05f;
+        rate = B + P * kld_s.meter; if (rate > T) rate = T; rate /= kltr_get(-1, KLTR_REVIVE); if (rate < 0.05f) rate = 0.05f;      /* kltrait.c ReviveTime: x time to get up */
         kld_s.sumr += rate; kld_s.nr++; kld_v.rate = rate;
         if (kld.log >= 2 && now - kld_s.lastline >= 250) { kld_s.lastline = now; klog("down: flop: frame %.1f of %.0f (%s), speed %.2f, meter %.2f, %d press(es)", frame, to, kld_s.f8 >= 0 && frame < kld_s.f8 ? "he lies" : "he rises", rate, kld_s.meter, kld_s.presses); }
         fps = rate * 25.0f;
@@ -2328,7 +2328,7 @@ static void kld_tick_main(int game_thread)
         }
         kld_s.lastf = frame;
         kld_s.meter -= kld.decay * dt; if (kld_s.meter < 0) kld_s.meter = 0;
-        rate = B + P * kld_s.meter; if (rate > T) rate = T; if (rate < 0.05f) rate = 0.05f;
+        rate = B + P * kld_s.meter; if (rate > T) rate = T; rate /= kltr_get(-1, KLTR_REVIVE); if (rate < 0.05f) rate = 0.05f;      /* kltrait.c ReviveTime: x time to get up */
         kld_s.sumr += rate; kld_s.nr++; kld_v.rate = rate;
         if (kld.log >= 2 && now - kld_s.lastline >= 250) { kld_s.lastline = now; klog("down: get-up: frame %.1f of %.1f, speed %.2f, meter %.2f, %d press(es)", frame, kld_s.endf, rate, kld_s.meter, kld_s.presses); }
         if (kld.dry) return;

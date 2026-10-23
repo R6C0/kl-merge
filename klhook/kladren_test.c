@@ -79,6 +79,7 @@ static volatile LONG kset_v[4] = { 0, 1, 1, 0 };           /* klset.c: Look, Tex
 static int klu_same_code(DWORD va, const BYTE *bytes, int n) { (void)va; (void)bytes; (void)n; return 0; }
 
 #define KAD_TEST_NOANIM                 /* the Anim part (klfreeclimb.c's engine calls) is not in this harness */
+enum { KLTR_REVIVE = 4, KLTR_ADREN = 5 }; static float kltr_get(int r, int k) { (void)r; (void)k; return 1.0f; }   /* kltrait.c: no traits in this harness */
 #include "kladren.c"
 
 /* ---------------------------------------------------------------- the fake world */

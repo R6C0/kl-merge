@@ -178,7 +178,7 @@ struct kly_bot {
     DWORD actor; int kind, snap_hits;         /* kind -1 = not drawn yet */
     int have, hostile, good, hits, handed; float wrote, tally; DWORD hit_at, angry_until;      /* the grudge: wrote = the float as last seen / written */
     DWORD hobj; float hmax0, hwrote;          /* health: the game's maximum, ours (0 = nothing of ours is in) */
-    DWORD soldier, dblk; float aim0; int aset;      /* aim: the block, what he had, ours is in */
+    DWORD soldier, dblk; float aim0; int aset; float awrote;      /* aim: the block, what he had, ours is in (awrote = the number we wrote) */
     int marked;                               /* BackstabMark / GrudgeMark: bit 1 of his score dword is ours */
     int turned;                               /* he was held your enemy FOR GOOD at least once this round (GrudgeMark keeps its bit from then on) */
     int esc_told, aim_told;                   /* lines said once: an escort that is not turned, an accuracy block that is shared */
@@ -228,7 +228,7 @@ static void kly_undo(struct kly_bot *b, int i, DWORD rules, DWORD score)
     }
     b->hwrote = 0;
     if (b->aset && b->actor && klh_rd32(b->actor) == KLB_ACTOR_VT && b->soldier && klh_rd32(b->actor + 0x77c) == b->soldier && klh_rd32(b->soldier) == KLY_SOLDIER_VT &&
-        klh_rd32(b->soldier + 0x6d8) == b->dblk && klh_rd(b->dblk + 0x10, &cur, 4) && KLY_ABS(cur - kly.bs_aim) <= 0.01f)
+        klh_rd32(b->soldier + 0x6d8) == b->dblk && klh_rd(b->dblk + 0x10, &cur, 4) && KLY_ABS(cur - b->awrote) <= 0.01f)
         klh_data((void *)(DWORD_PTR)(b->dblk + 0x10), &b->aim0, 4, "an AI heister's accuracy (his own back)");
     b->aset = 0;
     if (b->marked && score && klh_rd(score + KLY_FLAGS + 4 * i, &fl, 4) && (fl & 1)) { fl &= ~1u; klh_data((void *)(DWORD_PTR)(score + KLY_FLAGS + 4 * i), &fl, 4, "score table: the traitor bit this hook gave a bot, off"); }
@@ -249,7 +249,8 @@ static void kly_undo_all(DWORD rules, DWORD score)
 static void kly_health(const struct klb_rec *r, struct kly_bot *b, int i, int act)
 {
     float raw[0x28 / 4], cur, max, wmax, wcur, f = 1; DWORD h;
-    if (kly.crew <= 0 && kly.bs_health <= 0 && b->hwrote == 0) return;
+    float tf = act ? kltr_hp(i) : 1.0f;                       /* kltrait.c: Health / DamageIn of the character he wears (1.0 = none) */
+    if (kly.crew <= 0 && kly.bs_health <= 0 && b->hwrote == 0 && tf == 1.0f) return;
     if (!(h = klh_rd32(r->actor + 0x5fc)) || !klh_rd(h, raw, sizeof raw) || ((DWORD *)raw)[0x24 / 4] != r->actor) return;
     cur = raw[1]; max = raw[2];
     if (!klb_finite(cur) || !klb_finite(max) || max < 1 || max > 100000 || cur > max * 1.01f + 1) return;
@@ -258,6 +259,7 @@ static void kly_health(const struct klb_rec *r, struct kly_bot *b, int i, int ac
     if (act) {
         if (kly.crew > 0) f *= kly.crew;
         if ((r->flags & 2) && kly.bs_health > 0) f *= kly.bs_health;
+        f *= tf;
     }
     wmax = b->hmax0 * f;
     if (KLY_ABS(max - wmax) <= 0.01f || cur <= 0) return;                  /* as wanted; or he is down: a dead man's object is left */
@@ -276,13 +278,14 @@ static void kly_health(const struct klb_rec *r, struct kly_bot *b, int i, int ac
 static void kly_aim(const struct klb_snap *s, const struct klb_rec *r, struct kly_bot *b, int i, int act)
 {
     DWORD sol, d; float cur, want; int k;
-    if (kly.bs_aim < 0 && !b->aset) return;
+    if (kly.bs_aim < 0 && !b->aset && !(act && kltr_aim(i, 50.0f) != 50.0f)) return;      /* kltrait.c: AimSpread / DamageOut move the accuracy too */
     if (!(sol = klh_rd32(r->actor + 0x77c)) || klh_rd32(sol) != KLY_SOLDIER_VT || klh_rd32(sol + 0x40) != r->actor || !(d = klh_rd32(sol + 0x6d8)) ||
         !klh_rd(d + 0x10, &cur, 4) || !klb_finite(cur) || cur < 0 || cur > 100) return;
     if (d != b->dblk || sol != b->soldier) { b->soldier = sol; b->dblk = d; b->aim0 = cur; b->aset = 0; }
     else if (!b->aset) b->aim0 = cur;
-    else if (KLY_ABS(cur - kly.bs_aim) > 0.01f) { b->aim0 = cur; b->aset = 0; }      /* somebody else wrote it since: that is his now */
-    want = act && (r->flags & 2) && kly.bs_aim > b->aim0 ? kly.bs_aim : b->aim0;
+    else if (KLY_ABS(cur - b->awrote) > 0.01f) { b->aim0 = cur; b->aset = 0; }      /* somebody else wrote it since: that is his now */
+    want = act ? kltr_aim(i, b->aim0) : b->aim0;                  /* the character's trait (kltrait.c), then the backstab raise on top */
+    if (act && (r->flags & 2) && kly.bs_aim > want) want = kly.bs_aim;
     if (KLY_ABS(cur - want) <= 0.01f) return;
     if (!b->aset) for (k = 0; k < s->n && k < KLB_NREC; k++) {      /* going in: is the block his alone? */
         DWORD a2 = s->r[k].actor, s2;
@@ -293,8 +296,8 @@ static void kly_aim(const struct klb_snap *s, const struct klb_rec *r, struct kl
         }
     }
     if (!klh_data((void *)(DWORD_PTR)(d + 0x10), &want, 4, "a turned AI heister's accuracy (ZSoldier field 4 as used)")) return;
-    b->aset = KLY_ABS(want - b->aim0) > 0.01f;
-    if (kly.log) klog("grudge: record %d (%s): accuracy %.0f %% -> %.0f %% (%s)", i, klb_who(r), cur, want, b->aset ? "BackstabAim: he has turned" : "his own back");
+    b->aset = KLY_ABS(want - b->aim0) > 0.01f; b->awrote = want;
+    if (kly.log) klog("grudge: record %d (%s): accuracy %.0f %% -> %.0f %% (%s)", i, klb_who(r), cur, want, b->aset ? ((r->flags & 2) && kly.bs_aim > 0 ? "BackstabAim / trait: he has turned" : "his character's AimSpread / DamageOut") : "his own back");
 }
 
 /* 3 c: the score table's traitor bit for a bot that carries the record mask */
@@ -501,7 +504,7 @@ static void kly_init(void)
     kly.good = kly_inif("GrudgeForGood", "60", 0, 100000, 60); kly.forget = kly_inif("GrudgeForget", "45", 0, 36000, 45);
     kly.gmark = kly.grudge && GetPrivateProfileIntA("Bots", "GrudgeMark", 0, klh_ini) != 0;
     kly.snap = (int)GetPrivateProfileIntA("Bots", "GrudgeSnapHits", 0, klh_ini); if (kly.snap < 0 || kly.snap > 50) kly.snap = 0;
-    kly.on = kly.crew > 0 || kly.bs_health > 0 || kly.bs_aim >= 0 || kly.mark || kly.grudge;
+    kly.on = kly.crew > 0 || kly.bs_health > 0 || kly.bs_aim >= 0 || kly.mark || kly.grudge || ktrait.on;      /* ktrait.on: a character's trait needs the tick (kltrait.c; kltr_init runs first) */
     if (!kly.on) return;                      /* no key: no line, no tick - the hook is what it was */
     klog("grudge: on; CrewHealth x %.2f (0 = the game's) BackstabHealth x %.2f BackstabAim %.0f %% (-1 = his own) BackstabMark=%d; Grudge=%d mix ESCALATES %d / SNAPS %d / TAKES IT %d, an answer of %.1f s + %.2f s per %% of his health you took (%.0f s at most), for good at %.0f %% (0 = never), forgotten after %.0f s; GrudgeSnapHits=%d (0 = drawn: 1 or 2) GrudgeMark=%d; Arcade only, only on a level that is not stock, data writes only",
          kly.crew, kly.bs_health, kly.bs_aim, kly.mark, kly.grudge, kly.mix[0], kly.mix[1], kly.mix[2], kly.base, kly.per, kly.max, kly.good, kly.forget, kly.snap, kly.gmark);

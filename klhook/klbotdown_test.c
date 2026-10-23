@@ -78,6 +78,7 @@ static int fake_call(DWORD soldier, DWORD hit, int force)
 static int g_btest = 1, g_nb;
 #define KLBD_BTEST(dnd) (g_nb++, g_btest)
 
+enum { KLTR_REVIVE = 4, KLTR_ADREN = 5 }; static float kltr_get(int r, int k) { (void)r; (void)k; return 1.0f; }   /* kltrait.c: no traits in this harness */
 #include "klbotdown.c"
 
 /* the fake game's own part of a down: slot 1 raises the health to 25 % and writes a lie of 1.5 s (2 s here); the script
