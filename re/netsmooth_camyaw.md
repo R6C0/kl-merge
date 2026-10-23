@@ -48,4 +48,15 @@ GUESS). Tolerance 5 units, 150 ms: jumps there are unlikely to be visible. Consu
   H7b controls with H5's exact hook (1023b TEST) and inis fail the same way, so this is not CamYaw. Common factor: every failing
   run came up at 640x480 / 59 Hz (owner's monitor off). H1, H4 and H5 (2560x1440) joined. In H7b the client never held a UDP
   socket while the host held 9100 + 9103. Rerun H6 when the display is on. Not merged into rtp-schemas until it passes.
+- Static check of that failure (workflow wf_19c4c074-0a8, 2 readers + 2 verifiers, 2026-10-23 04:40). The discovery port is
+  opened ONCE when the network layer is built, not when the browser opens: 0x7ee0c0 (latch byte [gamenet+0x15c] is set to 1 at
+  0x7ee11f before the build) -> new + 0x94b6d0 -> 0x9468b0 -> 0x968320 (gate: static word [0xd42600]=9100 and byte [0xd42602]=1,
+  nothing writes them) -> 0x967ef0 (bind 9100, else port 0; both fail or registration 0x95f2f0 fails -> [disc+0x14]=0 with no log).
+  Find Game (0x968020 / 0x9680f0) returns silently when [disc+0x14]==0. 0x9468b0 aborts before the port when [NetZ+0x10]==0
+  or the product-key check 0x968940 fails. NONE of these read display or D3D state (CERTAIN for the functions read; the
+  port manager behind [[0x779a00()+0x4c]] is unread). Display versus time of night (owner away, 01:39 vs 04:17) is
+  therefore unresolved. There is also no control: no passing run sampled the client's UDP sockets.
+  Next: on a display-on run, sample `netstat -ano -p UDP` for the client every 1 s. If it fails again, add a read-only TEST log
+  of [gamenet+0x15c], [gamenet+0x7c], [NetZ+0x10/+0x18/+0x1c], [disc+0x14/+0x1c] every 2 s (gamenet = [0x168e598], GUESS from
+  the verifier, check it).
 - Open: who consumes [P+0xd74]; the true class of 0x8216c0 / 0x6d90a0; the frame order of slot 393 vs 0x8b28e0.
