@@ -1,6 +1,6 @@
 /* klmciwrap_test.c - off-game regression for the MCI worker clock wrap (mciwrap 1023; see re/mciwrap_1023.md). Silent (volume 0).
-   AMBIENCE: cl /nologo /W3 /D_CRT_SECURE_NO_WARNINGS klmciwrap_test.c            (VS x86 prompt)   run: klmciwrap_test.exe long.mp3
-   MUSIC:    cl /nologo /W3 /D_CRT_SECURE_NO_WARNINGS /DTEST_MUSIC klmciwrap_test.c                  run: klmciwrap_test.exe long.mp3
+   AMBIENCE: cl /nologo /W3 /D_CRT_SECURE_NO_WARNINGS klmciwrap_test.c /Feamb.exe   (VS x86 prompt)   run: amb.exe long.mp3
+   MUSIC:    cl /nologo /W3 /D_CRT_SECURE_NO_WARNINGS /DTEST_MUSIC klmciwrap_test.c /Femus.exe   run: mus.exe long.mp3
    long.mp3 = any mp3 of 20 s or more. The wrap needs a slow MCI 'open' to land in the same worker pass as a 250 ms poll, so each round is
    chance (about open_ms / 250); the test repeats 40 times (about 60 s). Old code: AMBIENCE reports 'closed early', MUSIC reports 'skipped'.
    A fixed worker: exit 0. */

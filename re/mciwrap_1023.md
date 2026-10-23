@@ -19,13 +19,14 @@ No new ini key: this is a bug fix, the old behaviour was the bug. `mciSendString
 ## Changes
 * klhook/klambience.c, klhook/klmusic.c: one re-read `now = GetTickCount();` before the poll / follow call, with a comment. Nothing else.
 * klhook/klmciwrap_test.c: off-game regression (silent, volume 0). Build from a VS x86 prompt in klhook/:
-  `cl /nologo /W3 /D_CRT_SECURE_NO_WARNINGS klmciwrap_test.c winmm.lib /Feamb.exe` and the same with `/DTEST_MUSIC` for music; run `amb.exe long.mp3`
+  `cl /nologo /W3 /D_CRT_SECURE_NO_WARNINGS klmciwrap_test.c /Feamb.exe` (no winmm.lib: the workers load it by GetProcAddress) and `... /DTEST_MUSIC klmciwrap_test.c /Femus.exe` for music; run `amb.exe long.mp3` / `mus.exe long.mp3`
   (any mp3 of 20 s or more; a silent 25 s one is at `<work>\build\mciwrap_1023\long25.mp3`). Result on the old code: ambience `4 of 40 closed early`, exit 1;
   new code: 0 of 40, exit 0. Music: 0 of 40 both (the latent case could not be provoked).
 
 ## Hooks (not installed; GUESS: none, no engine offset touched)
 Built with `klhook\build.bat out_mciwrap_1023` (SHIP) and `build_auto.bat out_mciwrap_1023_test` (TEST), both link clean.
-SHIP sha1 0E921AC5E385D23D9B32FF8498B08ED9A9ED0B90, TEST sha1 2E0C320EB919BBEF3D92E9F6CD6FBF234D574E2F. Staged copy: `<work>\build\mciwrap_1023\ship|test\dinput8.dll`.
+Rebuilt after moving the commit onto rtp-schemas 493f67589 (c71d971e9 tip; the first build was on 127b24487 and is superseded):
+SHIP sha1 D1B7BF08C27E27F7CC0857C827C7D23CE1E6B054, TEST sha1 A97F5CE9D560975EF5CDFB9AA984BBA9E66C9A60. Staged copy: `<work>\build\mciwrap_1023\ship|test\dinput8.dll`.
 Install: copy the SHIP dll over `<DD>\dinput8.dll` (keep the old one as `dinput8.dll.before-mciwrap`; the lead's current hook is d25393d9 plus whatever the other
 branches add: this branch is cut from rtp-schemas, merge it before building the release dll rather than installing this dll on top of a newer one).
 Undo: put the old dll back. No ini change.
