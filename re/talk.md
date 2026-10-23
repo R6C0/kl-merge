@@ -424,3 +424,6 @@ dropped there). `python tools\klt_audit.py "<DD>\KLExpansion" --percar --ini-roo
    By ear: the squad voices come out for the Dead Men bodies, a merc keeps its own voice.
 4. DD map: install, play stock Bridge in the DD02 folder, same log lines (`53 pools`, no scenes, Kane / Lynch pools used only when someone wears those bodies).
 5. Old hook (klhook 1020g): the same files must leave the level silent (an old hook does not read Version=2) and cause no crash.
+
+## 11. Dead Men voices (2026-10-23)
+The six Dead Men pools and their pairs are now written by tools/kl_dmvoice.py with real campaign voices of each character (KLVoice/<Name>/..), Kane + Lynch have 13 own exchanges, and [Talk] StockLevels=1 lets a stock-verdict level talk. See re/voice_1023.md.

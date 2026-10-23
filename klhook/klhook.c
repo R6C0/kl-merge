@@ -29,6 +29,8 @@
  *                             bytes) and 'who wears whom' for kltalk.c (read only). OFF by default
  *   kltalk.c       x     x    Kane / Lynch scenes and chatter ([Talk], KLTalk.ini; calls 0x828fa0, 0x421c70; no data, no
  *                             code). OFF by default
+ *   klvoice.c      x     x    Dead Men voices for the eight Dead Men bodies' Dog Days event lines ([Voice]; calls 0x828fa0; DATA
+ *                             writes only: one heap dword per swapped entry). OFF by default
  *   klbot.c        x     x    the AI crew's log and the backstab / bribe / leave / van rules ([Bots]). OFF by default
  *   klescort.c     x     x    one or two AI heisters stay near the human ([Bots] Escort; calls 0x760e50, the soldier's own
  *                             'defend this place' order; no data, no code) and [Bots] BoardAll (ONE data byte: a bot
@@ -171,7 +173,7 @@
  *   [Steam]                                                 klsteam.c (Block, Log, State)
  *   [Net] PrivateLobby=0/1/2  BuildKey=0/1                  klmm.c (default 0: nothing installed)
  *   [Join] [Join.2] .. [Join.8]                             kljoin.c (also KLJoin.ini beside a level archive)
- *   [CrewJoin] [Crew] [Talk]                                klcrew_rt.c, klcrew.c, kltalk.c - each OFF unless its key is set
+ *   [CrewJoin] [Crew] [Talk] [Voice]                                klcrew_rt.c, klcrew.c, kltalk.c - each OFF unless its key is set
  *   [CrewHop]                                               klhop.c (also [CrewHop] in the KLJoin.ini beside a level archive) - OFF unless Enable=1
  *   [HUD]                                                   klhud.c (+ klhud_values.c, klhud_weapon.c, klhud_popup.c) - OFF unless Enable=1; Draft=1 = the whole draft
  *   [Auto] [Engine] [Script]                                klauto.c (TEST)
@@ -622,6 +624,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klchar.c"
 #include "klcrew.c"
 #include "kltalk.c"
+#include "klvoice.c"                                       /* klvoice.c: Dead Men voices for the eight Dead Men bodies (off unless [Voice] Enable=1); AFTER kltalk.c (klk_hash, klk_ini) */
 #include "klbot.c"
 #include "klescort.c"
 #include "klhop.c"
@@ -771,6 +774,7 @@ static void klh_tick(int game_thread)
     klc_tick(game_thread);
     klw_tick(game_thread);                            /* after klc_tick: the player's own body goes first */
     klk_tick(game_thread);                            /* after klw_tick: it reads who wears whom */
+    kvo_tick(game_thread);                            /* klvoice.c: after klk_tick (OFF unless [Voice] Enable=1; data writes only) */
     kltt_tick(game_thread);                            /* kltrait.c: record -> character -> trait factors (reads only; off unless [Traits] Enable=1) */
     klb_tick(game_thread);
     kle_tick(game_thread);                            /* klescort.c: after klb_tick; one game call per order, game thread only */
@@ -1139,6 +1143,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kltt_init();                                       /* kltrait.c: BEFORE klr_init / kly_init, which read its switch */
     klnm_init();
     klk_init();
+    klvo_init();                                      /* klvoice.c: [Voice] (default off) */
     klb_init();
     kle_init();
     klmv_init();

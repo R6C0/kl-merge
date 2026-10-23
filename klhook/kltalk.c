@@ -164,7 +164,7 @@ struct klk_scene { char name[24]; int when, needs, nlines, has_box, group, cast_
 struct klk_pool { char name[24]; int who, ch, on, nkeys; char key[KLK_NKEY][KLK_KEYLEN]; };
 struct klk_pair { int cwho, rwho, cch, rch; float wait; char call[KLK_KEYLEN], reply[KLK_KEYLEN]; };
 
-static struct { int on, log, chatter, logonly; float start_offset; DWORD seed; } klk;
+static struct { int on, log, chatter, logonly, stock; float start_offset; DWORD seed; } klk;
 static struct {
     int have, tried, version, kane, lynch, nscene, npool, npair, once, speakers, event_chance, pair_chance, skipped;
     unsigned __int64 stream_bytes; float blast, start16, gap_lo, gap_hi, member_gap, quiet, key_gap;
@@ -694,7 +694,12 @@ static void klk_tick(int game_thread)
     if (!klk.on || !klh_exe_ok) return;
     if (!klw_who_now(&w)) return;                                            /* not Arcade, no ZGameRulesHeist object, no level, no crew records */
     if (!klx_on || !klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) return;
-    if ((v = klx_level_verdict(scene, why)) != 2) {                          /* only a level that is not the stock one of its slot */
+    v = klx_level_verdict(scene, why);
+    /* [Talk] StockLevels=1 (default 0, owner 2026-10-23 'even in dog days'): a level the verdict calls STOCK is let through; it
+       talks only if a KLTalk.ini sits beside its archive (klk_source below finds none otherwise), which only
+       tools/kl_dmvoice.py puts there for the KLExpansion\Maps\DD01..DD09 copies. */
+    if (v == 1 && klk.stock) v = 2;
+    if (v != 2) {                                                            /* only a level that is not the stock one of its slot */
         static int toldverdict;
         if (v && (strcmp(scene, toldscene) || v != toldverdict)) { snprintf(toldscene, sizeof toldscene, "%s", scene); toldverdict = v; klog("talk: level '%s' %s (%.150s): nothing is said", scene, v == 1 ? "is the STOCK one of its slot" : "is not known", why); }
         return;
@@ -875,14 +880,15 @@ static void klk_init(void)
     klk.log = (int)GetPrivateProfileIntA("Talk", "Log", 1, klh_ini);
     klk.chatter = GetPrivateProfileIntA("Talk", "Chatter", 1, klh_ini) != 0;
     klk.logonly = GetPrivateProfileIntA("Talk", "LogOnly", 0, klh_ini) != 0;
+    klk.stock = GetPrivateProfileIntA("Talk", "StockLevels", 0, klh_ini) != 0;
     GetPrivateProfileStringA("Talk", "StartOffset", "0", t, sizeof t, klh_ini); klk.start_offset = (float)atof(t);
     if (!(klk.start_offset > -60 && klk.start_offset < 60)) klk.start_offset = 0;
     klk.seed = GetPrivateProfileIntA("Talk", "Seed", 0, klh_ini);
     if (!klk.on) return;
     if (!klk.seed) { QueryPerformanceCounter(&q); klk.seed = GetTickCount() ^ (DWORD)q.LowPart ^ (GetCurrentProcessId() << 12); if (!klk.seed) klk.seed = 1; fresh = 1; }
     klk_rng = klk.seed;
-    klog("talk: on; Kane / Lynch scenes and chatter on a level with a KLTalk.ini beside its archive: Chatter=%d StartOffset=%.2f LogOnly=%d Seed=%lu%s Log=%d; Arcade only, never on a stock level",
-         klk.chatter, klk.start_offset, klk.logonly, klk.seed, fresh ? " (taken new)" : "", klk.log);
+    klog("talk: on; Kane / Lynch scenes and chatter on a level with a KLTalk.ini beside its archive: Chatter=%d StartOffset=%.2f LogOnly=%d Seed=%lu%s Log=%d; Arcade only, %s",
+         klk.chatter, klk.start_offset, klk.logonly, klk.seed, fresh ? " (taken new)" : "", klk.log, klk.stock ? "a stock level too if a KLTalk.ini sits beside it (StockLevels=1)" : "never on a stock level");
     if (!klc_on) klog("talk: [Character] Enable=0, so no KLWardrobe.ini is read and nobody can be told to wear Kane or Lynch: nothing will be said");
 }
 
