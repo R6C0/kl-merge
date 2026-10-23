@@ -668,6 +668,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "kldown.c"
 #include "klbotdown.c"                                    /* klbotdown.c: AI heisters down, not dead (off unless [BotDown] Enable) */
 #include "kladren.c"                                      /* kladren.c: adrenaline (off unless [Adrenaline] Enable); its tick runs BEFORE kld_tick */
+#include "klstinger.c"                                  /* klstinger.c: [Stinger] event-driven one-shot cues over winmm MCI (off unless Enable=1); AFTER kladren.c / klbotdown.c / kldown.c */
 #include "klreshade.c"                                    /* klreshade.c: the ReShade bridge - live looks from the menu, KL_* uniforms (off unless [ReShade] Bridge=1) */
 #include "klsteam.c"
 #include "klmm.c"                                          /* klmm.c: [Net] PrivateLobby / BuildKey - an ISteamMatchmaking proxy, only when a key is set */
@@ -806,6 +807,7 @@ static void klh_tick(int game_thread)
     klinv_tick(game_thread);                          /* klinv.c: [Inv] gun shelf, Arcade only (off unless Enable=1) */
     klmu_tick(game_thread);                           /* klmusic.c: the jukebox cue (reads only; off unless [Music] Enable=1) */
     klam_tick(game_thread);                           /* klambience.c: the ambience bed + one-shots (reads only; off unless [Ambience] Enable=1) */
+    klst_tick(game_thread);                           /* klstinger.c: event stingers (reads only; off unless [Stinger] Enable=1) */
     klnetsmooth_tick(game_thread);                    /* klnetsmooth.c: [NetSmooth] remote players turn smoothly (off unless Enable=1) */
     klrigid_tick(game_thread);                        /* klrigid.c: [Rigid] 10 s summary line (Log=1) */
     klshop_tick(game_thread);                         /* klshop.c: [Shop] Swap= a shop row hands over another gun, Arcade only (off unless Enable=1) */
@@ -1180,6 +1182,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klnetsmooth_init();
     klmu_init();                                      /* klmusic.c: [Music] (default off) */
     klam_init();                                     /* klambience.c: [Ambience] (default off) */
+    klst_init();                                      /* klstinger.c: [Stinger] (default off) */
     klrigid_init();
     klaiturn_init();                                  /* klaiturn.c: after klrigid_init; one guarded data write at start-up */
     klshop_init();
