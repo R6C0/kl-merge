@@ -95,6 +95,8 @@ English, all 27 map zips re-installed (undo `<work>\build\locfit_1023_backup\UND
 Last Call civilians proven (CIVS3: still until approached, then flee); traitors rarer (Backstab 20, TraitorsMax 1).
 05:50: police long guns on DM03 (12) and T01 (43) capped to accuracy 75 / aim 70 (`kl_map_ai pistol-row --row-classes
 --row`), installed (undo `<work>\build\acc75_1023_backup\UNDO acc75 1023.bat`; ACC1b on DM03 clean, T01 not run live).
+06:05: Heister-page portraits proven (PIC1/PIC2: all characters + 12 masks draw). Liveliness audit: nothing missing; engine-music maps
+(DM09/03A/05A/06B) get no Payday 2 music by design (Force=1 is the owner's call).
 
 2026-10-23 04:50 - Retomoto lift ride proven live (TEST LIFT4): box 9 no longer throws on entry; the ride waits Delay 2.5 s
 plus up to CarWait 6 s for the car box, then jumps to 06_Exit (lobby car 500 ms later). Leaving the box or going down cancels.
