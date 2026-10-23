@@ -66,14 +66,13 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-23 13:52 - PAYDAY 2 MUSIC IS OPT-IN (owner: it stutters). Live ini md5 E21883D4 = [Music] Enable=0, no pd2 stinger clips
+(backup KLHook.ini.before-pd2music-20261023-135155). ON/OFF: `<work>\build\pd2music_1023\Payday 2 music ON.bat` / `OFF.bat`.
+Never ship a kit or baseline with [Music] Enable=1. Retomoto keeps its engine music. Baseline now dll C7557D81 + ini E21883D4.
+
 2026-10-23 12:28 - VOICES, what is left: radio lines are fixed on every map (11:35/11:52). The FLAG-0 ('plain') lines, FA_YouEscaped*_R
 and the police events, take one stock entry and are never swapped, so Dead Men bodies still speak stock lines there. The voiceplain probe
 is merged (default off) and runs only in TEST with SessionSafe=0 (hashed code); not run live. A shippable fix needs a data-side swap. re/voiceplain_1023.md.
-
-2026-10-23 11:35 - VOICEHEARD: DM01 Dead Men radio lines INSTALLED (KLExpansion\Maps\DM01, undo `<work>\build\voiceheard_1023\UNDO voiceheard 1023.bat`).
-The old 600k LOC cap tier had dropped 68 radio lines per voice (272 without a leaf); now 0. Live VH1 PASS 0 faults (TEST 3107ADB8,
-rtp-schemas 84454df2c). 11:52: DM02 too (VH2 PASS, undo `<work>\build\voiceheard2_1023\UNDO voiceheard2 DM02.bat`); every map has them now.
-Game actually playing them: not yet seen in a log (0 QUEUED), owner to judge by ear. re/voiceheard_1023.md.
 
 2026-10-23 11:30 - OWNER KIT B + BOTH ADD-ONS INSTALLED (live dll C7557D81, ini 88994B6C; kit undo `<work>\build\release_1023b_backup\UNDO release 1023b.bat`) = SHIP hook
 (rtp-schemas 2b4726be5: stinger + ambience/music clock fix + CEG guard) + balance pass 2 + QoL, then `OPTIONAL 1 sound3.bat` and
