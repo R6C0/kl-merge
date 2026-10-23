@@ -28,7 +28,7 @@ have engine ambience or music: no bed; DM09* also no Spot (a tower). Stock maps 
 - `tools/kl_ambience.py build|ini|music|check`: extract (PC_Def.str streams via kl_audio, in-memory IMA clips via kl_gunsnd from the DD
   banks) -> ffmpeg mp3 -> `<out>/<group>/*.mp3`; writes `KLHook.ambience.patch.ini` and `KLHook.music2.patch.ini`. The per-map bed choice
   (`MAPS`) and music pools (`MUSIC`) are GUESSES from the map names.
-- Staging: `G:\kl_build_1023mbience_1023\` (98 mp3, 22 MB, patch inis, `dll\dinput8.dll` = SHIP out_1023a, `INSTALL ambience 1023.bat`,
+- Staging: `G:\kl_build_1023\ambience_1023\` (98 mp3, 22 MB, patch inis, `dll\dinput8.dll` = SHIP out_1023a, `INSTALL ambience 1023.bat`,
   `UNDO ambience 1023.bat`, `ambience_1023.ps1`). Install refuses while kl2.exe runs, copies the library to `<DD>\KLExpansion\Ambience` with md5 per file,
   appends the ini blocks between `; ambience-1023 block (...)` and `; ambience-1023 block end` (idempotent), widens the global `[Music]` Calm/Action,
   never re-adds `[Music.DM01B]`/`[Music.DM11B]`, and writes one timestamped `KLHook.ini.before-1023amb-<time>` per run (manual recovery only).
