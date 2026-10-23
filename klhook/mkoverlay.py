@@ -448,11 +448,19 @@ def lean_page(p, used, n):
     toggler's nine <Graphic> children then all name the first map's picture - the selector keeps its nine entries, as the code wants),
     the briefing text block, the 'criminal name' block (line, bar, label, group, MercsShowInfo), the two MercsShowInfoFA of the ExcludeIn
     block (Xbox Live warning, 'level not available') and the arrows group (the selector still answers left / right). About 20 tags."""
-    first = 'H%02d_LevelPicture' % used[0]
+    # 2026-10-23: the filler used to be the FIRST map's picture. ToggleImages walks its nine children and sets each one's
+    # visibility (show the chosen index, hide the rest), so the filler children at indexes 6..8 hid the first map's picture again:
+    # entry 0 of every page showed NO picture (seen live, run PG). The filler is now the first UNUSED slot's own element, kept
+    # (one tag per page), so the first map's picture is named once.
+    unused = [s for s in range(1, 10) if s not in used]
+    first = 'H%02d_LevelPicture' % (unused[0] if unused else used[0])
     for s in range(1, 10):
         if s in used:
             continue
-        p, k = re.subn(r'[ \t]*<GuiElement Type="Graphic" Name="H%02d_LevelPicture" [^>]*/>[ \t]*\r?\n' % s, '', p)
+        if s == unused[0]:
+            k = 1
+        else:
+            p, k = re.subn(r'[ \t]*<GuiElement Type="Graphic" Name="H%02d_LevelPicture" [^>]*/>[ \t]*\r?\n' % s, '', p)
         p, j = re.subn(r'<Graphic Graphic="H%02d_LevelPicture"' % s, '<Graphic Graphic="%s"' % first, p)
         if k != 1 or j != 1:
             raise SystemExit('Lean page %d: the picture of slot %d was not found once (%d, %d)' % (n, s, k, j))
