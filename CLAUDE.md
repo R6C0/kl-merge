@@ -66,6 +66,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-23 14:05 - ALT+F4 / STUTTER: hook 43a17d57e: FastExit (Alt+F4 / close = TerminateProcess), NoInject, LogMaxMB=64 (log rotation).
+SHIP out_3f_1023v 2DCB0FBB, to be installed when the owner closes the game (backup dinput8.dll.before-1023v). Log was 562 MB, now archived + emptied.
+Stutter NOT solved: about 10 frames over 33 ms per 10 s this afternoon vs about 6 per 200 s this morning; hitches inside message-hook calls (PeekMessage/CallNextHookEx).
+PD2 music is off now (e8, 13:52). Close-message test FX2 still to run. re/open_work_log.md.
+
 2026-10-23 13:52 - PAYDAY 2 MUSIC IS OPT-IN (owner: it stutters). Live ini md5 E21883D4 = [Music] Enable=0, no pd2 stinger clips
 (backup KLHook.ini.before-pd2music-20261023-135155). ON/OFF: `<work>\build\pd2music_1023\Payday 2 music ON.bat` / `OFF.bat`.
 Never ship a kit or baseline with [Music] Enable=1. Retomoto keeps its engine music. Baseline now dll C7557D81 + ini E21883D4.
@@ -73,11 +78,6 @@ Never ship a kit or baseline with [Music] Enable=1. Retomoto keeps its engine mu
 2026-10-23 12:28 - VOICES, what is left: radio lines are fixed on every map (11:35/11:52). The FLAG-0 ('plain') lines, FA_YouEscaped*_R
 and the police events, take one stock entry and are never swapped, so Dead Men bodies still speak stock lines there. The voiceplain probe
 is merged (default off) and runs only in TEST with SessionSafe=0 (hashed code); not run live. A shippable fix needs a data-side swap. re/voiceplain_1023.md.
-
-2026-10-23 11:30 - OWNER KIT B + BOTH ADD-ONS INSTALLED (live dll C7557D81, ini 88994B6C; kit undo `<work>\build\release_1023b_backup\UNDO release 1023b.bat`) = SHIP hook
-(rtp-schemas 2b4726be5: stinger + ambience/music clock fix + CEG guard) + balance pass 2 + QoL, then `OPTIONAL 1 sound3.bat` and
-`OPTIONAL 2 stinger.bat` (11:11); undo in reverse (kit undo refuses while an add-on is in). KITB LIVE PASS on its TEST twin (DM01: stinger, music, ambience, voice swap; 0 faults).
-Supersedes release_1023 (d25393d9). Notes: re/release2_1023.md, re/release_1023.md (Kit b).
 
 
 ## Owner's end goal (2026-10-09)
