@@ -100,6 +100,10 @@ Last Call civilians proven (CIVS3: still until approached, then flee); traitors 
 2026-10-23 07:10 - Shop focus rows readable on all 27 maps (`kl_hud_menu.py shopbar`: dark FocusBar_short tile + ColorSet
 White on the 8 rows over it; SHOP3b PASS on DM01). Undo `<work>\build\shopbar_1023_backup\UNDO shopbar 1023.bat`.
 C: hit 0 bytes free mid-build: stage big zips on G:, not C:\kl_build_1019.
+2026-10-23 07:50 - Shop on all 27 maps: focus rows readable (`kl_hud_menu.py shopbar`, SHOP3b) and cleaner card cut-outs on 11
+rows (`kl_shop_cards.py recut --rows=`, SHOP4 PASS; Hawk Sawn-off keeps 2 stray fragments). Undo
+`<work>\build\shopbar_1023_backup\UNDO shopbar 1023.bat`, then `<work>\build\shopcut3_1023_backup\UNDO shopcut 1023.bat`
+(run the shopcut undo first). C: hit 0 bytes free mid-build: stage big zips on G:, not C:\kl_build_1019.
 
 2026-10-23 05:40 - .LOC cap 612,634 for every language (kl_loc.LOC_CAP; kl_loc_fit, all 27 zips, LOCFIT1 clean).
 Traitors rarer (Backstab 20, TraitorsMax 1); DM03/T01 police long guns capped 75/70 (ACC1b clean). Portraits proven
