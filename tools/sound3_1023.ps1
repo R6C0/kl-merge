@@ -4,7 +4,7 @@
 #   saves KLHook.ini as KLHook.ini.before-sound3 (once; the undo's source of the old sections); then REPLACES, in KLHook.ini, every
 #   [section] named in KLHook.sound3.patch.ini by the patch's version, except [Ambience] and [Music], which are merged key by key
 #   (only the patch's keys change; Calm is unioned) (sections that do not exist yet are appended).
-#   The hook dinput8.dll is NOT touched: this pass needs the sound3 hook (klhook\out_sound3_1023) for the Local / Panic / Assault keys;
+#   The hook dinput8.dll is NOT touched: this pass needs a hook with the sound3 code (the release 1023b dll has it) for the Local / Panic / Assault keys;
 #   an older hook ignores the new keys and plays as before.
 # UNDO: puts back, section by section, the text those sections had in KLHook.ini.before-sound3 (sections that did not exist then are
 #   removed), so any other edit made to KLHook.ini since stays; deletes <DD>\KLExpansion\Ambience\local and \panic.
@@ -99,6 +99,7 @@ if ($Undo) {
 
 if (-not (Test-Path -LiteralPath $patch)) { Write-Host 'KLHook.sound3.patch.ini is missing next to this script.'; exit 2 }
 # 1. the clips
+$wasInstalled = (Test-Path -LiteralPath (Join-Path $lib 'local')) -or (Test-Path -LiteralPath (Join-Path $lib 'panic'))
 $bad = 0; $cnt = 0
 foreach ($g in 'local', 'panic') {
     $sd = Join-Path $src $g; if (-not (Test-Path -LiteralPath $sd)) { Write-Host ('missing in the package: ' + $g); exit 2 }
@@ -111,6 +112,8 @@ foreach ($g in 'local', 'panic') {
 if ($bad) { Write-Host "$bad file(s) did not copy right - KLHook.ini NOT changed."; exit 3 }
 Write-Host "$cnt clip(s) copied to $lib"
 # 2. the ini
+# a stale backup from an earlier sound3 run (clips folders gone, ini changed since) is refreshed, else undo would restore older text
+if ((Test-Path -LiteralPath $bak) -and -not $wasInstalled -and ((Get-FileHash -LiteralPath $bak -Algorithm MD5).Hash -ne (Get-FileHash -LiteralPath $ini -Algorithm MD5).Hash)) { Copy-Item -LiteralPath $bak -Destination ($bak + '.stale-' + (Get-Date -Format 'yyyyMMdd-HHmmss')); Remove-Item -LiteralPath $bak -Force; Write-Host 'stale KLHook.ini.before-sound3 kept as .stale-<time>, backup refreshed' }
 if (-not (Test-Path -LiteralPath $bak)) { Copy-Item -LiteralPath $ini -Destination $bak; Write-Host ('saved ' + $bak) }
 $live = Read-Blocks $ini; $pat = Read-Blocks $patch
 $whole = New-Object System.Collections.ArrayList
@@ -118,5 +121,5 @@ foreach ($pb in $pat) { if ($null -eq $pb.name) { continue }; if ($mergeNames -c
 Replace-Sections $live $whole
 Write-Blocks $live $ini
 $names = ($pat | Where-Object { $_.name } | ForEach-Object { $_.name }).Count
-Write-Host "KLHook.ini: $names section(s) replaced / added. Install done. Use the sound3 hook (klhook\out_sound3_1023) to hear the new groups."
+Write-Host "KLHook.ini: $names section(s) replaced / added. Install done. Needs a hook with the sound3 code (the release 1023b dll has it) to hear the new groups."
 exit 0

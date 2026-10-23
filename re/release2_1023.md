@@ -30,3 +30,16 @@ None new (no offsets). Inherited: re/balance2_1023.md section 4, re/qol_1023.md,
 - The release dll was never booted in the game after this build (only the installer was exercised on a fake folder).
 - Release undo restores the whole ini (documented; add-ons first).
 - G: has ~1.8 GB free; the add-on packages are referenced by relative path (`..\sound3_1023`, `..\stinger_1023`), so those folders must stay beside the kit.
+
+## Review fixes (branch feat/1023-release2-fix)
+No hook C change, so no rebuild: SHIP EE6CCCAA... and TEST AC68FA06... above stand. Build record: tree rtp-schemas 751c25d20, `klhook\build.bat` into
+`klhook\out_release2_1023` (SHIP) and the TEST variant (`build_auto.bat`) into `klhook\out_release2_1023_test`; both dirs are untracked output. Identify the dll by
+the staged `dinput8.dll.sha1` (EE6CCCAA...), it contains the string "stinger:" (old d25393d9 does not).
+- README: add-on live claim narrowed (earlier dll builds; this exact dll untested until the live run); `[Stinger] Log` note.
+- `stinger_1023.ps1`: refuses with exit 2 if KLHook.ini is missing (before any clip is copied); new switch `-Log` (default: block written with `Log=0`; was `Log=1`).
+  For the live test run it with `-Log` (or set `Log=1` by hand). The OPTIONAL bat is unchanged, so it installs with Log=0.
+- `sound3_1023.ps1`: wording no longer sends the owner to `out_sound3_1023` (the 1023b dll has the sound3 code); a stale `KLHook.ini.before-sound3` from an earlier run
+  (clip folders absent, ini differs) is kept as `.stale-<time>` and refreshed. Documented: DM09* ambience/music sections are replaced whole.
+- The staged copies in `<work>\build\sound3_1023\` and `<work>\build\stinger_1023\` were NOT updated (write refused here): copy `tools/sound3_1023.ps1` and
+  `tools/stinger_1023/stinger_1023.ps1` over them before installing. Kit README in `build\release_1023b\` likewise needs `tools/release_1023b/README_release_1023b.txt`.
+- Not run (no fake-DD retest of the edited scripts; syntax by inspection only).

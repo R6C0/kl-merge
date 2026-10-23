@@ -20,14 +20,17 @@ WHAT CHANGES IN THE GAME
    - ReleaseCursor=1: the mouse is freed when you alt-tab out of the game.
    Left OFF on purpose: BackgroundMs and everything in [QoL2].
 
-OPTIONAL ADD-ONS (more lively: both were played on DM01 on 2026-10-23, 0 faults). They only add clips and ini lines; they never
+OPTIONAL ADD-ONS (more lively: their code ran on DM01 on 2026-10-23, 0 faults, but in EARLIER dll builds; the exact dll this kit installs
+(EE6CCCAA) is untested until the proposed live run). They only add clips and ini lines; they never
 touch dinput8.dll, so they cannot put an older hook back.
  A. Sound pass 3 ("OPTIONAL 1 sound3.bat"): per-map one-shot sounds for Local and Panic moments plus Payday 2 ASSAULT music.
     Clips go to <DD>\KLExpansion\Ambience\local and \panic; it rewrites the [Ambience.*] / [Music.*] sections of KLHook.ini
-    (keeps a copy KLHook.ini.before-sound3 the first time).
+    (keeps a copy KLHook.ini.before-sound3; if an older copy from an earlier sound3 run is found and sound3 is not installed,
+    it is kept as .stale-<time> and a fresh copy is made). It replaces the Retomoto DM09* ambience/music sections whole, too.
  B. Event stingers ("OPTIONAL 2 stinger.bat"): a short music cue when the heist goes loud, loot is taken, someone is down or dead,
     a betrayal, the last 30 seconds, the escape opens, you reach the van. Clips go to <DD>\KLExpansion\Stinger; a [Stinger]
-    block is appended to KLHook.ini between two marker lines.
+    block (Enable=1, Volume=70, Log=0) is appended to KLHook.ini between two marker lines. For a test run add the switch -Log
+    to the installer (or set Log=1 in the ini) so every cue is written to KLHook.log; set it back to 0 afterwards.
  Which clip fits which event was picked from file names; nobody has judged it by ear beyond the one run. Edit the lists in the
  ini [Stinger] block if one sounds wrong.
 

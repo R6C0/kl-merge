@@ -1,5 +1,5 @@
 # stinger_1023.ps1 - installs / removes the 1023 event-stinger pass for Kane & Lynch 2: Dog Days.
-#   powershell -ExecutionPolicy Bypass -File stinger_1023.ps1 -Dd "<DD folder>" [-Undo] [-Dll]
+#   powershell -ExecutionPolicy Bypass -File stinger_1023.ps1 -Dd "<DD folder>" [-Undo] [-Dll] [-Log]
 # INSTALL: (1) refuses while kl2.exe runs; (2) copies the clip folders (loud loot down dead betray last30 open reached) to
 #   <DD>\KLExpansion\Stinger and md5-checks every file; (3) writes a timestamped copy of KLHook.ini (FOR MANUAL RECOVERY ONLY, undo never
 #   uses it); (4) appends the [Stinger] block (KLHook.stinger.patch.ini, Folder= rewritten to the installed library) between a start and an
@@ -8,7 +8,7 @@
 #   The stinger code is inert until the hook that contains klstinger.c is installed AND [Stinger] Enable=1.
 # UNDO (surgical): removes only the marker block this script appended and deletes <DD>\KLExpansion\Stinger. With -Undo -Dll the dll is
 #   put back from its backup, only if the live dll is still the package's.
-param([Parameter(Mandatory = $true)][string]$Dd, [switch]$Undo, [switch]$Dll, [switch]$SkipRunCheck)  # SkipRunCheck: tests on a copy only
+param([Parameter(Mandatory = $true)][string]$Dd, [switch]$Undo, [switch]$Dll, [switch]$Log, [switch]$SkipRunCheck)  # SkipRunCheck: tests on a copy only
 $ErrorActionPreference = 'Stop'
 $src = Split-Path -Parent $MyInvocation.MyCommand.Path
 $tag = '.before-1023stg'
@@ -58,6 +58,7 @@ if ($Dll) {
         if (-not ($okBackup -or $live -eq $pk)) { Write-Host 'refused: the live dinput8.dll is neither the backup nor this package''s dll (another pass or hook is installed). Nothing was changed.'; exit 3 }
     }
 }
+if (-not (Test-Path -LiteralPath $ini)) { Write-Host 'no KLHook.ini - install the release kit first. Nothing was changed.'; exit 2 }
 # 1. the clip library
 New-Item -ItemType Directory -Force -Path $lib | Out-Null
 $bad = 0; $n = 0
@@ -90,6 +91,8 @@ else {
     Copy-Item -LiteralPath $ini -Destination $bk; Write-Host ('ini copy for manual recovery only: ' + $bk)
     $stg = [System.IO.File]::ReadAllText((Join-Path $src 'KLHook.stinger.patch.ini'), [System.Text.Encoding]::Default)
     $stg = $stg -replace '(?m)^Folder=[^\r\n]*', ('Folder=' + $lib)
+    # Log=1 only with -Log (for a test run); by default per-cue logging stays off in normal play
+    if (-not $Log) { $stg = $stg -replace '(?m)^Log=1', 'Log=0' }
     $new = $text.TrimEnd() + "`r`n`r`n" + $marker + "`r`n" + $stg.TrimEnd() + "`r`n" + $markerEnd + "`r`n"
     [System.IO.File]::WriteAllText($ini, $new, [System.Text.Encoding]::Default)
     Write-Host 'KLHook.ini updated: [Stinger] block appended.'
