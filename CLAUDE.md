@@ -68,7 +68,8 @@ Full dated log: `re/open_work_log.md` (newest first).
 
 2026-10-23 10:20 - cloud session, offline, none run in the game: [HUD] HeadMaxDist=N + HeadFade (head tags past N m not drawn;
 owner: try HeadMaxDist=25), own-voice hook side (klc_voice_own, waits for the data side), GCC hook check repaired
-(tools/lint/klhook_gcc_prep.py), KLGfx 0.4 tracing (not installed). Owner added the kl2.exe firewall rules at 10:06.
+(tools/lint/klhook_gcc_prep.py), KLGfx 0.4 tracing (not installed). Owner added the kl2.exe firewall rules at 10:06: VERIFIED
+10:27 (H9fw, TEST 1022e: firewall check 'allowed', client joined the host's FA lobby, 0 faults; no round = 1022e has no MinPlayers).
 
 2026-10-23 10:10 - Owner install kit staged, NOT installed: `<work>\build\release_1023\INSTALL release 1023.bat` = SHIP hook d25393d9
 (rtp-schemas ab08f42b1) + balance pass 2 (BAL2 live PASS: CopToYouFar x0.86 at 21 m) + [QoL] FlashOnReady/ReleaseCursor. Backups +
