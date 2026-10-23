@@ -248,29 +248,114 @@ def classify(rgba):
     return 'photo' if c > 50 else 'flat'
 
 
-def cut_photo(rgba):
-    """stock photo card -> (rgb float (H, W, 3), alpha float (H, W)) of the gun alone over the visible 445x210, or None when no sane gun was found.
-    The backdrop is a light vignetted table: per pixel the 'paper' luminance is a high percentile of a 100 px window (on a 1/4 grid), the gun
-    is what is clearly darker or clearly coloured; then only the main blob (and big neighbours) stays."""
+def _to_full(m_half, shape):
+    """bool half-resolution mask -> bool full-resolution (nearest)"""
     np = _np()
     from PIL import Image
+    return np.asarray(Image.fromarray((m_half * 255).astype(np.uint8), 'L').resize((shape[1], shape[0]), Image.NEAREST)) > 127
+
+
+def _fill_pockets(mask, d, small=1500, big=6000, dmin=28):
+    """fill the background pockets of a bool mask that do not touch the border: every pocket up to `small` half-resolution px (highlights, grip
+    texture, trigger guards of the gun), and bigger ones up to `big` only when they are clearly darker than the table (mean d > dmin). A huge pocket
+    of table (the loop of a cable around a gun) stays empty. d = table luminance minus pixel luminance."""
+    np = _np()
+    half = mask[::2, ::2]; dh = d[::2, ::2]
+    lab, areas = _components(~half)
+    border = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]])).tolist())
+    cnt = np.maximum(np.bincount(lab.ravel(), minlength=len(areas)), 1)
+    md = np.bincount(lab.ravel(), weights=dh.ravel(), minlength=len(areas)) / cnt
+    ok = np.array([(i not in border and i != 0 and (areas[i] <= small or (areas[i] <= big and md[i] > dmin))) for i in range(len(areas))], bool)[lab]
+    return mask | _to_full(ok, mask.shape)
+
+
+def _keep_gun2(mask, rel=0.05, pad=0.10):
+    """keep the largest blob (grown by 4 px first) plus any SOLID blob (area / bbox >= 0.5, so print and wires do not count) of at least `rel` of its
+    area whose centre lies inside its bounding box grown by `pad`; a detached silencer or magazine stays, tags and bank notes go"""
+    np = _np()
+    half = mask[::2, ::2]
+    lab, areas = _components(_dil(half.astype(np.float32), 2) > 0.5)
+    if len(areas) < 2:
+        return mask & False
+    big = max(range(1, len(areas)), key=lambda i: areas[i])
+    ys, xs = np.nonzero(lab == big)
+    H, W = half.shape
+    x0, x1, y0, y1 = xs.min() - pad * W, xs.max() + pad * W, ys.min() - pad * H, ys.max() + pad * H
+    keep = np.zeros(len(areas), bool); keep[big] = True
+    for i in range(1, len(areas)):
+        if areas[i] < rel * areas[big]:
+            continue
+        yy, xx = np.nonzero(lab == i)
+        sol = len(yy) / float((yy.max() - yy.min() + 1) * (xx.max() - xx.min() + 1))
+        if sol >= 0.5 and x0 <= xx.mean() <= x1 and y0 <= yy.mean() <= y1:
+            keep[i] = True
+    return mask & (_dil(_to_full(keep[lab], mask.shape).astype(np.float32), 2) > 0.5)
+
+
+def table_model(lum, iters=10, deg=4, lam=0.02):
+    """the lit table of a stock card as a smooth surface: a ridge-regularised degree-4 polynomial in (x, y) fitted to the UPPER envelope of the
+    luminance (iteratively keeping only pixels at most 1.2 sigma below / 2.5 sigma above the fit, so the dark gun, its shadow and the vignette
+    corners fall out of the fit but the vignette itself is followed). -> float (H, W) table luminance"""
+    np = _np()
+    h, w = lum.shape
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    x = (xx / (w - 1)) * 2 - 1; y = (yy / (h - 1)) * 2 - 1
+    terms = [(i, j) for i in range(deg + 1) for j in range(deg + 1 - i)]
+    A = np.stack([x ** i * y ** j for i, j in terms], -1)
+    As = A[::3, ::3].reshape(-1, len(terms)); ls = lum[::3, ::3].reshape(-1)
+    ok = ls > np.percentile(ls, 25)
+    R = lam * np.eye(len(terms)) * ok.sum() / 100.0
+    for _ in range(iters):
+        Ao = As[ok]
+        co = np.linalg.solve(Ao.T @ Ao + R, Ao.T @ ls[ok])
+        res = ls - As @ co
+        sg = max(6.0, 1.4826 * np.median(np.abs(res[ok])))
+        ok = (res > -1.2 * sg) & (res < 2.5 * sg)
+    return (A.reshape(-1, len(terms)) @ co).reshape(h, w)
+
+
+def _paper_mask(d, thr=-7, min_area=60, hole=600):
+    """sheets of paper, sticky notes and boxes are BRIGHTER than the table (d < 0): big bright blobs, print filled. Used only to veto colour-driven
+    gun evidence (cream and orange print) so a note is not mistaken for a tan gun."""
+    np = _np()
+    pm = (_blur((np.clip(d, -60, 60) + 60) / 120.0, 1.2) * 120 - 60) < thr
+    pm = _ero(_dil(pm.astype(np.float32), 3), 3) > 0.5
+    pm = _dil(_ero(pm.astype(np.float32), 2), 2) > 0.5
+    lab, areas = _components(pm[::2, ::2])
+    keep = np.array([i != 0 and areas[i] >= min_area for i in range(len(areas))], bool)[lab]
+    pm = _dil(_to_full(keep, pm.shape).astype(np.float32), 2) > 0.5
+    return _fill_pockets(pm, np.zeros_like(d), small=hole, big=0)
+
+
+def cut_photo(rgba):
+    """stock photo card -> (rgb float (H, W, 3), alpha float (H, W)) of the gun alone over the visible 445x210, or None when no sane gun was found.
+    v2 (MARK_VERSION 2): d = table model (table_model) minus pixel luminance.
+      core  = very dark (d > 85, or < 50 % of the table where the vignette is dark) or coloured (tan, cyan, orange: chroma + darker than the table,
+              not on paper);
+      dense = core opened by 2 px (the strokes of print, red ink and wires are 2-4 px, gun parts are not) then blurred > 0.5;
+      body  = core near dense, grown 3 px inside the looser 'd > 50' shadow-edge test, closed by 7 px, small pockets filled (_fill_pockets), then
+              the largest blob and solid neighbours only (_keep_gun2); the 1-2 px of soft photo halo go with a 1 px erosion."""
+    np = _np()
     f = rgba[:VIS_H, :VIS_W, :3].astype(np.float32)
     lum = 0.3 * f[:, :, 0] + 0.59 * f[:, :, 1] + 0.11 * f[:, :, 2]
-    mx, mn = f.max(2), f.min(2)
-    sat = (mx - mn) / (mx + 1.0)
-    small = lum[::4, ::4]
-    pad = np.pad(small, 12, mode='edge')
-    win = np.lib.stride_tricks.sliding_window_view(pad, (25, 25))[:small.shape[0], :small.shape[1]]
-    bgs = np.percentile(win.reshape(small.shape[0], small.shape[1], -1), 88, axis=2)
-    bgl = np.asarray(Image.fromarray(bgs.astype(np.float32), 'F').resize((VIS_W, VIS_H), Image.BICUBIC), np.float32)
-    dark = bgl - lum
-    fg = (dark > 62) | ((sat > 0.38) & (dark > 14))
-    fg = _clean(fg)
-    fg = _ero(fg.astype(np.float32), 1) > 0.5                    # the soft shadow halo of the photograph goes with the outermost pixel
-    if fg.mean() < 0.03 or fg.mean() > 0.55:
+    bg = table_model(lum); d = bg - lum
+    chroma = f.max(2) - f.min(2)
+    soft = _blur(np.clip(chroma, 0, 255) / 255.0, 1.5) * 255
+    paper = _paper_mask(d)
+    col = (((chroma > 40) & (d > 25)) | ((soft > 32) & (d > 6))) & ~paper
+    core = (d > 85) | ((lum < 0.5 * bg) & (d > 30)) | col
+    loose = (d > 50) | ((lum < 0.6 * bg) & (d > 20)) | (((chroma > 40) & (d > 15)) & ~paper)
+    co = _dil(_ero(core.astype(np.float32), 2), 2) > 0.5
+    dens = _blur(co.astype(np.float32), 2.5) > 0.5
+    rec = core & (_dil(dens.astype(np.float32), 4) > 0.5)
+    base = ((_dil(rec.astype(np.float32), 3) > 0.5) & loose) | rec
+    base = _ero(_dil(base.astype(np.float32), 7), 7) > 0.5
+    base = _fill_pockets(base, d)
+    m = _keep_gun2(base)
+    m = _ero(m.astype(np.float32), 1) > 0.5
+    if m.mean() < 0.02 or m.mean() > 0.55:
         return None
-    al = _blur(fg.astype(np.float32), 0.8)
-    return f / 255.0, al
+    return f / 255.0, _blur(m.astype(np.float32), 0.8)
 
 
 def cut_flat(rgba):
@@ -340,7 +425,7 @@ BACK_TOP, BACK_BOT = (54, 57, 63), (27, 29, 33)
 BIG_BOX = (24, 20, 421, 172)             # where the gun sits on the 445x210 shown part: same frame on every card
 SMALL_BOX = (2, 38, 126, 86)             # the band the stock small icons use (x 0..127, y 37..86 measured on the 36 stock icons)
 UP_BIG, UP_SMALL = 1.2, 1.5
-MARK_VERSION = 1
+MARK_VERSION = 2          # 2 = the v2 cut-out (table_model segmentation); a v1 card counts as stale but is never re-cut from its own restyled art
 
 
 def lift(rgb, alpha, target):
@@ -424,25 +509,35 @@ def to_rgba_big(out, size, vis, mark):
     return px
 
 
-def marks(item):
+def marks(item, version=None):
     """two 16-bit colour values written into the unseen corner of a restyled big card: [version, item key]"""
-    return [0x07E0 ^ (MARK_VERSION * 0x0101) & 0xFFFF, (0x1357 + 0x0421 * (item + 1)) & 0xFFFF]
+    v = MARK_VERSION if version is None else version
+    return [0x07E0 ^ (v * 0x0101) & 0xFFFF, (0x1357 + 0x0421 * (item + 1)) & 0xFFFF]
 
 
 def marked(rgba):
-    """the item key (int) of a card already restyled by this tool, else None"""
+    """the item key (int) of a card already restyled by THIS version of the tool, else None"""
+    r = marked_any(rgba)
+    return r[1] if r and r[0] == MARK_VERSION else None
+
+
+def marked_any(rgba):
+    """(version, item key) of a card restyled by any known version of this tool, else None"""
     np = _np()
     H_, W_ = rgba.shape[:2]
-    m0 = marks(0)[0]
     p = rgba[H_ - 12:, W_ - 16:, :3].reshape(-1, 3)
-    if not (p == np.array(W._un565(m0), np.uint8)).all():
+    ver = None
+    for v in range(1, MARK_VERSION + 1):
+        if (p == np.array(W._un565(marks(0, v)[0]), np.uint8)).all():
+            ver = v
+    if ver is None:
         return None
     q = rgba[H_ - 12:, W_ - 32:W_ - 16, :3].reshape(-1, 3)
     if not (q == q[0]).all():
         return None
     for item in range(0, 64):
-        if tuple(int(v) for v in q[0]) == tuple(W._un565(marks(item)[1])):
-            return item
+        if tuple(int(v) for v in q[0]) == tuple(W._un565(marks(item, ver)[1])):
+            return ver, item
     return None
 
 
@@ -527,6 +622,14 @@ def _glyph(im, size, ss):
 def restyle_tex(tex_bytes, tiles, swaps, texobj=None, log=print):
     """-> (new .TEX bytes or the old ones, report dict). tiles = shop_tiles(); swaps = {row: item}. Idempotent: a big card carrying this tool's
     signature for the same item is left as it is."""
+    data, expect, rep = bake_tiles(tex_bytes, tiles, swaps, texobj, log)
+    if not data:
+        return tex_bytes, rep
+    return W.patch_pixels(tex_bytes, data, expect), rep
+
+
+def bake_tiles(tex_bytes, tiles, swaps, texobj=None, log=print, glyphs=True):
+    """-> (data {texture id: encoded pixels}, expect {id: (fourcc, w, h)}, report). The pixel work of restyle_tex, without patching anything."""
     import kl_texmat as T
     np = _np()
     tex = texobj or T.read_tex(tex_bytes)
@@ -535,12 +638,13 @@ def restyle_tex(tex_bytes, tiles, swaps, texobj=None, log=print):
         item = swaps.get(r, 0)
         bigid, smallid = tiles['big'][r], tiles['small'][r]
         big, _ = decode_tile(tex, bigid)
-        mk = marked(big)
-        if mk is not None:
-            if mk == item:
+        ma = marked_any(big)
+        if ma is not None:
+            ver, mk = ma
+            if mk == item and ver == MARK_VERSION:
                 rep['kept'].append(r); continue
             if not item:
-                rep['failed'].append((r, 'restyled card carries item %d but the swap line has none: the stock art is gone, start from an archive before the restyle' % mk)); continue
+                rep['failed'].append((r, 'restyled card (v%d) carries item %d but the swap line has none: the stock art is gone, start from an archive before the restyle' % (ver, mk))); continue
         if item:
             alpha_hud = hud_alpha(tex, item)
             if alpha_hud is None:
@@ -559,7 +663,7 @@ def restyle_tex(tex_bytes, tiles, swaps, texobj=None, log=print):
         data[smallid] = P.encode_dxt5(sp); expect[smallid] = ('DXT5', 128, 128)
         rep['rows'][r] = how
     for key, fn in (('star', glyph_star), ('lock', glyph_lock)):
-        for tid in sorted(tiles[key]):
+        for tid in (sorted(tiles[key]) if glyphs else []):
             import kl_gunpics as P
             cur, inf = decode_tile(tex, tid)
             if (inf['fourcc'], inf['w'], inf['h']) != ('DXT5', 32, 32):
@@ -568,10 +672,7 @@ def restyle_tex(tex_bytes, tiles, swaps, texobj=None, log=print):
             enc = P.encode_dxt5(g)
             data[tid] = enc; expect[tid] = ('DXT5', 32, 32)
             rep['rows'][key + str(tid)] = 'glyph'
-    if not data:
-        return tex_bytes, rep
-    new = W.patch_pixels(tex_bytes, data, expect)
-    return new, rep
+    return data, expect, rep
 
 
 def blank_tiles(archive_or_zip):
@@ -670,6 +771,51 @@ def bake_map(mapdir, outdir, swap_text, log=print):
                 tiles_skipped=[[str(y) for y in x] for x in tiles['skipped']])
 
 
+def recut(mapdir, outdir, swap_text=None, source_suffix='.before-1023shop', log=print):
+    """v2 cut-out for an installed map: the cards are re-cut from the pre-restyle archive (<zip><source_suffix>, the stock photos) and ONLY the big
+    card + small icon tiles of the installed .TEX are replaced (star, lock, FocusBar tiles, every other member stay byte for byte as installed).
+    -> report dict with the per-member and per-texture proof. Writes outdir/<zip name>; never touches mapdir."""
+    import kl_hud_shop as S, kl_texmat as T
+    np = _np()
+    zp = next(os.path.join(mapdir, f) for f in sorted(os.listdir(mapdir)) if f.lower().endswith('_main.zip'))
+    srcp = zp + source_suffix
+    assert os.path.isfile(srcp), 'no source archive %s' % srcp
+    ini = os.path.join(mapdir, 'KLGuns.ini')
+    swaps, src = S.read_swaps(ini, swap_text or W.DEFAULT_SWAP, log)
+    zi, zs = zipfile.ZipFile(zp), zipfile.ZipFile(srcp)
+    stem = [n for n in zi.namelist() if n.endswith('.prm')][0][:-4]; texm = stem + '.TEX'
+    ti, ts = shop_tiles(zi, stem), shop_tiles(zs, stem)
+    assert ti['big'] == ts['big'] and ti['small'] == ts['small'], 'tile ids differ between installed and source'
+    data, expect, rep = bake_tiles(zs.read(texm), ts, swaps, log=log, glyphs=False)
+    assert not rep['failed'], rep['failed']
+    inst_tex = zi.read(texm)
+    new_tex = W.patch_pixels(inst_tex, data, expect)
+    os.makedirs(outdir, exist_ok=True)
+    dst = os.path.join(outdir, os.path.basename(zp))
+    if os.path.exists(dst):
+        os.remove(dst)
+    W.rezip_raw_multi(zp, dst, {texm: new_tex})
+    b = zipfile.ZipFile(dst)
+    diff = [i.filename for i in zi.infolist() if (b.getinfo(i.filename).CRC, b.getinfo(i.filename).file_size) != (i.CRC, i.file_size)]
+    assert [i.filename for i in zi.infolist()] == [i.filename for i in b.infolist()], 'member list changed'
+    assert diff == [texm], 'members that differ %s' % diff
+    for i in zi.infolist():                       # CRC32 + size is strong, but the named members get a byte compare as well
+        if i.filename != texm and (i.filename.lower().endswith(('.loc', '.xml')) or 'focusbar' in i.filename.lower()):
+            assert b.read(i.filename) == zi.read(i.filename), i.filename
+    assert b.read(texm) == new_tex
+    # texture by texture: exactly the card / icon tiles we meant to replace may differ (and every one of those did), nothing else
+    texi, texn = T.read_tex(inst_tex), T.read_tex(new_tex)
+    assert len(texi.tex) == len(texn.tex)
+    assert sorted(texi.tex) == sorted(texn.tex)
+    diff_t = [tid for tid in sorted(texi.tex) if bytes(texi.tex[tid].entry) != bytes(texn.tex[tid].entry)]
+    assert set(diff_t) <= set(data), 'textures changed beyond the shop tiles: %s' % sorted(set(diff_t) - set(data))
+    assert len(new_tex) == len(inst_tex)
+    return dict(archive=os.path.basename(zp), dst=dst, source=os.path.basename(srcp), swaps={str(r): i for r, i in sorted(swaps.items())},
+                members=len(zi.infolist()), members_changed=diff, rows=len([r for r in rep['rows']]), kept=rep['kept'],
+                textures_total=len(texi.tex), textures_changed=len(diff_t), textures_planned=len(data),
+                new_md5=W.md5(dst), old_md5=W.md5(zp), rowinfo=rep['rows'])
+
+
 PATCH_INI = ("; KLHook.shop.patch.ini - merge into <Dog Days>\\KLHook.ini by hand (this tool never touches the game folder).\r\n"
              "; The cards and names baked by 'INSTALL shop 1023.bat' say the guns below; the hook hands them over only with these lines.\r\n"
              "; A map whose KLGuns.ini has its own [Shop] Swap line keeps that line (the bake read the same one).\r\n"
@@ -735,6 +881,8 @@ def main(a):
         m = stage_all(pos[1], swap_text=opts.get('swap', W.DEFAULT_SWAP), maps=opts['maps'].split(',') if 'maps' in opts else None)
         bad = [x['map'] for x in m['maps'] if 'error' in x or x.get('failed') or x.get('blank_tiles')]
         print('staged %d maps; maps with problems: %s' % (len(m['maps']), bad or 'none')); return 1 if bad else 0
+    if len(pos) == 3 and pos[0] == 'recut':
+        r = recut(pos[1], pos[2], opts.get('swap')); print(json.dumps(r, indent=1)); return 0
     if len(pos) == 2 and pos[0] == 'scripts':
         write_scripts(pos[1], json.load(open(os.path.join(pos[1], 'manifest.json')))); print('scripts rewritten'); return 0
     if len(pos) == 2 and pos[0] == 'check':

@@ -44,3 +44,16 @@ Also written: `KLHook.shop.patch.ini` ([Shop] Enable=1, Swap, ReserveClips=2; me
 `tools/kl_hud_menu.py check-level` now also runs `kl_shop_cards.blank_tiles` on archives whose source has a healthy shop page (36 + 36 tiles, star,
 lock found and non-uniform), and no longer calls a changed DXT1 texture "unreadable" (size and format are still compared).
 `python tools/kl_shop_cards.py check <archive>` runs the same test alone.
+
+## v2 cut-out (2026-10-23, MARK_VERSION 2)
+`cut_photo` no longer uses a window-percentile background. A ridge-regularised degree-4 polynomial `table_model` is fitted to the UPPER envelope of
+the card luminance (lit table plus vignette); d = table minus pixel. Gun evidence = very dark (d > 85, or under half the table where the vignette is
+dark) or coloured (tan, cyan, orange: chroma plus darker than the table, vetoed on paper = regions BRIGHTER than the table). That core is opened by
+2 px (print, red ink and wires are 2-4 px strokes), blurred into a density, reconstructed, closed by 7 px, small pockets filled (big ones only when
+clearly dark), then the largest blob plus solid neighbours only (`_keep_gun2`). Tag and note text, the table patches and the vignette corners are gone
+on rows 12, 15, 19, 24, 26, 31 and the small tag remnants. Remaining: cable loops stay on a few rows (11, 16, 17, 20, 28), row 10 loses the silver
+cylinder (as bright as the table), row 33 loses a rail sliver, rows 15, 19, 21, 23 keep a small box or note corner, the photo halo is partly kept.
+`marked()` is version aware: a v1 card counts as stale; a v1 photo row can still not be re-cut from its own restyled art (guard kept, 32 refused on
+the installed DD01), swapped rows are re-baked from the HUD silhouette. `python tools/kl_shop_cards.py recut <installed map dir> <outdir>` re-cuts
+from `<zip>.before-1023shop` and replaces ONLY the big card and small icon tiles of the INSTALLED .TEX (everything else byte identical, asserted per
+member and per texture). Staged and previewed for DD01 and DM01 under `<work>\build\shopcut2_1023`; not installed.
