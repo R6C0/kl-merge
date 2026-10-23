@@ -227,3 +227,9 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
   `lobby: host Ready with 2 connected: target players 6 -> 2` -> state 0xd -> 0x12 at 01:36:25.1 (0.6 s) -> both load F01
   and reach 0x19. Both PASS, 0 asserts, 0 faults. NetSmooth swapped 15 remote objects on both again.
   In play: [Lobby] MinPlayers=2 (or 1) in the HOST's KLHook.ini; everyone presses Ready, the host last; the round starts.
+- H5 (2026-10-23 01:39-01:43, TEST 1023b, H5_host.ini: the host holds W while turning, steps 47-59): FIRST ONLINE SMOOTHING.
+  Host `pos` heading 0 -> -85 -> -61 -> -164 -> 14 while walking (a walking body follows the camera). On the client the
+  probe saw the host's remote body at yaw -90 / -104.1 / 58.4 / 97.0 and NetSmooth `placed 1720` (01:41:49-01:42:09, the
+  walk), skipped 0 (every remote matrix was the pure mirrored-yaw form), no chain failure, 0 faults; the host placed 0
+  (the client stood still). Both PASS. Write path through B->vtbl[0x8c] online: PROVEN. Whether it LOOKS better is
+  the owner's call (stills cannot show it).
