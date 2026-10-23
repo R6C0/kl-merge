@@ -98,6 +98,9 @@ Dead Men pairs, pairs with Dog Days heisters); klhook/klvoice.c ([Voice] Enable=
 2026-10-22 00:30 - solo online bench: two kl2.exe on one PC work (klhook/klsolo.c, `tools/kl_solo_test.py`, TEST 1022e; [Solo] Events=1 gives each process its own render events, which fixed the two-process crashes). All 19 maps run in two processes at once (G0-G2, 0 faults). System Link stops at a Windows Firewall check (0 rules for kl2.exe), so NetSmooth online is untried. 44 local commits unpushed (push refused).
 (Firewall: opened by the owner 2026-10-22.)
 
+2026-10-21 06:50 - 19-map sweep: shop swap + Rigid + NetSmooth together PASS on every map (TEST 1020l; table in re/shop_more_guns.md "Map sweep"). Unproven by script: a BUY on a stock map, the Rigid feel, NetSmooth online.
+Owner: install hook 1020g (`C:\kl_build_1019\hook_1020g\INSTALL hook 1020g.bat`), shopswap, noblow; try [Rigid] Enable=1.
+
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
 replacement (testing in the F01 slot is temporary). In order:

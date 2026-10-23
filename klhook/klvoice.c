@@ -18,7 +18,7 @@
  * MECHANISM (kl2.exe build 0490; the layout read from 0x877a30 / 0x4c74b0 / 0x421c70 by disassembly 2026-10-23, NEVER
  * SEEN LIVE - every number below is a GUESS until a log line proves it; [Voice] Log=2 prints what is walked):
  *    manager + g*0x18 (g = 0..93): a group { +4 count (<= 3), +8 capacity, +0x10 data pointer to the line pointers };
- *    manager + 0x8d0 .. +0x93c: 25 single line pointers;
+ *    manager + 0x8d0 .. +0x918: 19 single line pointers (what the loader fills);
  *    a line (0x28 bytes): +0x20 flag (1 = per-character), +8 vector count, +0x14 vector data = the entry pointers,
  *    an ENTRY (0x204): [entry] = what the .LOC lookup found, key text at entry+4.
  *    The voice table: rules + 0x33e + record = the entry number that record speaks with (klw_voices / klc_voice_swap).
@@ -33,7 +33,7 @@
 #define KLVOICE_C
 
 #define KVO_GROUPS     94
-#define KVO_SINGLES    25
+#define KVO_SINGLES    19
 #define KVO_NENTRY     4096
 #define KVO_NREC       4096
 #define KVO_HASH       8192
@@ -42,7 +42,7 @@ static const char *const kvo_names[8] = { "Kane", "Lynch", "Ashkanan", "Meldal",
 
 static struct { int on, stock, log, period; } kvo;
 static struct {                                  /* the entries made for this level generation (never freed: the game may hold them) */
-    DWORD rules; char scene[160]; int n, toldfull;
+    DWORD rules, mgr, lm; char scene[160]; int n, toldfull;
     struct { DWORD hash; void *entry; int found; } e[KVO_NENTRY];
 } kvo_gen;
 static struct { DWORD addr, orig, ours; int active; } kvo_rec[KVO_NREC];
@@ -122,8 +122,14 @@ static void kvo_tick(int game_thread)
     if (!klx_on || !klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) return;
     v = klx_level_verdict(scene, why);
     if (v == 1 && kvo.stock) v = 2;
-    if (v != 2) return;
-    if (kvo_gen.rules != w.rules || strcmp(kvo_gen.scene, scene)) { if (kvo_nrec) kvo_restore_all("a new level generation"); memset(&kvo_gen, 0, sizeof kvo_gen); kvo_gen.rules = w.rules; snprintf(kvo_gen.scene, sizeof kvo_gen.scene, "%s", scene); memset(&kvo_s, 0, sizeof kvo_s); }
+    if (v != 2) { if (kvo_nrec) kvo_restore_all("not a Dead Men level"); return; }
+    if (!(mgr = klh_rd32((DWORD_PTR)KLH_VA(KLK_MANAGER)))) return;
+    { DWORD sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF)), a = sys ? klh_rd32(sys + 0xac) : 0, lm = 0;
+      if (a) klh_rd(a + 0x94, &lm, 4);
+      /* generation = rules object, scene, speech manager and LOC lookup object: any change drops what we replaced (the lines are rebuilt) */
+      if (kvo_gen.rules != w.rules || kvo_gen.mgr != mgr || kvo_gen.lm != lm || strcmp(kvo_gen.scene, scene)) {
+          if (kvo_nrec) kvo_restore_all("a new level generation");
+          memset(&kvo_gen, 0, sizeof kvo_gen); kvo_gen.rules = w.rules; kvo_gen.mgr = mgr; kvo_gen.lm = lm; snprintf(kvo_gen.scene, sizeof kvo_gen.scene, "%s", scene); memset(&kvo_s, 0, sizeof kvo_s); } }
     if (!klh_rd(w.rules + 0x33e, tab, sizeof tab)) return;
 
     /* who speaks with which entry number: want[idx] = the Dead Men name, "" = a body that is not one of the eight (leaves the entry alone) */
@@ -144,7 +150,6 @@ static void kvo_tick(int game_thread)
     sig = sig * 31 + w.rules;
     if (sig == kvo_s.sig && now < kvo_s.next) return;
     kvo_s.sig = sig; kvo_s.next = now + (DWORD)kvo.period;
-    if (!(mgr = klh_rd32((DWORD_PTR)KLH_VA(KLK_MANAGER)))) return;
 
     kvo_s.walks++;
     {
@@ -158,12 +163,17 @@ static void kvo_tick(int game_thread)
                 cnt = KVO_SINGLES; if (!klh_rd(mgr + 0x8d0, lines, sizeof(DWORD) * KVO_SINGLES) ) continue;
             }
             for (lk = 0; lk < cnt; lk++) {
-                DWORD ent[16], vcnt = 0, vdata = 0; BYTE flag = 0; int first = -1;
+                DWORD ent[16], vcnt = 0, vdata = 0, src = 0; BYTE flag = 0;
                 ln = lines[lk];
                 if (!ln || !klh_rd(ln + 0x20, &flag, 1) || flag != 1 || !klh_rd(ln + 8, &vcnt, 4) || vcnt < 8 || vcnt > 16 || !klh_rd(ln + 0x14, &vdata, 4) || !vdata) continue;
                 if (!klh_rd(vdata, ent, vcnt * 4)) continue;
-                for (j = 0; j < 8 && first < 0; j++) if (ent[j]) first = j;
-                if (first < 0 || !klh_rdstr((DWORD_PTR)ent[first] + 4, text, sizeof text) || !kvo_leaf(text, leaf)) continue;
+                /* the leaf comes from a slot that is not ours (ours reads 'KLVoice/..' without _C<n>); a slot of ours is read through the entry it replaced */
+                for (j = 0; j < 8 && !src; j++) {
+                    int rj = kvo_find(vdata + (DWORD)j * 4, 0);
+                    if (rj >= 0 && kvo_rec[rj].active && ent[j] == kvo_rec[rj].ours) src = kvo_rec[rj].orig;
+                    else src = ent[j];
+                }
+                if (!src || !klh_rdstr((DWORD_PTR)src + 4, text, sizeof text) || !kvo_leaf(text, leaf)) continue;
                 nl++;
                 for (slot = 0; slot < 8; slot++) {
                     DWORD addr = vdata + (DWORD)slot * 4, cur = ent[slot]; int ri = kvo_find(addr, 0);

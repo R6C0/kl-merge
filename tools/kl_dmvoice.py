@@ -556,68 +556,94 @@ def review_file(path, plan):
 
 
 PS1 = r'''# written by tools/kl_dmvoice.py - installs / undoes the Dead Men voice files (re/voice_1023.md). Offline: refuses while kl2.exe runs.
-param([string]$Mode, [string]$Game, [string]$Src, [string]$Hook)
+param([string]$Mode, [string]$Game, [string]$Src, [switch]$Hook)
 $ErrorActionPreference = 'Stop'
 $suffix = '.before-1023voice'
+$hookMd5 = '__HOOKMD5__'                                   # the hook this was built with (hook\dinput8.dll); -Hook installs only that file
 if (Get-Process kl2 -ErrorAction SilentlyContinue) { Write-Host 'kl2.exe is running: close the game first.'; exit 1 }
 function Md5($p) { (Get-FileHash -Algorithm MD5 -LiteralPath $p).Hash.ToLower() }
 $rows = Import-Csv -LiteralPath (Join-Path $Src 'voice_1023_files.csv')
 $bad = 0
+$ini = Join-Path $Game 'KLHook.ini'
+$keyfile = $ini + '.1023voice.keys'                        # the ini keys INSTALL set (UNDO removes only those)
+Add-Type -Namespace K -Name P -MemberDefinition '[System.Runtime.InteropServices.DllImport("kernel32",CharSet=System.Runtime.InteropServices.CharSet.Ansi)] public static extern uint GetPrivateProfileString(string s,string k,string d,System.Text.StringBuilder r,uint n,string f); [System.Runtime.InteropServices.DllImport("kernel32",CharSet=System.Runtime.InteropServices.CharSet.Ansi)] public static extern bool WritePrivateProfileString(string s,string k,string v,string f);'
+$hd = Join-Path $Game 'dinput8.dll'; $hs = Join-Path $Src 'hook\dinput8.dll'
 if ($Mode -eq 'install') {
-  foreach ($r in $rows) {                                  # checks first: nothing is touched if one fails
+  foreach ($r in $rows) {                                  # checks first, every run: nothing is touched if one fails
     $s = Join-Path $Src $r.rel; $d = Join-Path $Game ('KLExpansion\Maps\' + $r.rel)
     if (-not (Test-Path -LiteralPath $s)) { Write-Host "missing staged file $s"; $bad++; continue }
     if ((Get-Item -LiteralPath $s).Length -ne [int64]$r.size) { Write-Host "staged file has the wrong size: $s"; $bad++; continue }
-    if ((Test-Path -LiteralPath $d) -and -not (Test-Path -LiteralPath ($d + $suffix))) {
-      if ($r.built_from -ne '' -and (Md5 $d) -ne $r.built_from -and (Md5 $d) -ne $r.md5) { Write-Host "installed file changed since this was built (rebuild with tools/kl_dmvoice.py): $d"; $bad++ }
+    if (Test-Path -LiteralPath $d) {
+      $m = Md5 $d                                          # only the file this was built from, or this very file (already installed)
+      if ($m -ne $r.md5 -and ($r.built_from -eq '' -or $m -ne $r.built_from)) { Write-Host "REFUSED, the installed file is neither the one this was built from nor this one (rebuild with tools/kl_dmvoice.py): $d"; $bad++ }
     }
+  }
+  if ($Hook) {
+    if (-not (Test-Path -LiteralPath $hs)) { Write-Host "missing staged hook $hs"; $bad++ }
+    elseif ((Md5 $hs) -ne $hookMd5) { Write-Host 'REFUSED: the staged hook is not the one this was built with.'; $bad++ }
+    elseif (-not (Test-Path -LiteralPath $hd)) { Write-Host 'REFUSED: no dinput8.dll in the game folder to back up (install the owner hook first).'; $bad++ }
   }
   if ($bad) { Write-Host "$bad problems: nothing installed."; exit 1 }
   foreach ($r in $rows) {
     $s = Join-Path $Src $r.rel; $d = Join-Path $Game ('KLExpansion\Maps\' + $r.rel)
-    if ((Test-Path -LiteralPath $d) -and -not (Test-Path -LiteralPath ($d + $suffix))) { Copy-Item -LiteralPath $d -Destination ($d + $suffix) }
-    elseif (Test-Path -LiteralPath $d) { if ((Md5 $d) -eq $r.md5) { continue } }
+    if (Test-Path -LiteralPath $d) {
+      if ((Md5 $d) -eq $r.md5) { Write-Host ('same ' + $r.rel); continue }
+      if (-not (Test-Path -LiteralPath ($d + $suffix))) { Copy-Item -LiteralPath $d -Destination ($d + $suffix) }
+    }
     Copy-Item -LiteralPath $s -Destination $d -Force
     if ((Md5 $d) -ne $r.md5) { Write-Host "MD5 MISMATCH after copy: $d"; $bad++ } else { Write-Host ('ok  ' + $r.rel) }
   }
-  # the hook (backed up) and the ini keys that are not set yet (KLHook.ini backed up)
-  $hd = Join-Path $Game 'dinput8.dll'; $hs = Join-Path $Src $Hook
-  if (Test-Path -LiteralPath $hs) {
-    if ((Test-Path -LiteralPath $hd) -and -not (Test-Path -LiteralPath ($hd + $suffix))) { Copy-Item -LiteralPath $hd -Destination ($hd + $suffix) }
+  if ($Hook) {                                             # only with -Hook; the default install leaves dinput8.dll alone
+    if (-not (Test-Path -LiteralPath ($hd + $suffix)) -and (Md5 $hd) -ne $hookMd5) { Copy-Item -LiteralPath $hd -Destination ($hd + $suffix) }
     Copy-Item -LiteralPath $hs -Destination $hd -Force
-    if ((Md5 $hd) -ne (Md5 $hs)) { Write-Host 'MD5 MISMATCH: dinput8.dll'; $bad++ } else { Write-Host 'ok  dinput8.dll (hook with klvoice.c)' }
+    if ((Md5 $hd) -ne $hookMd5) { Write-Host 'MD5 MISMATCH: dinput8.dll'; $bad++ } else { Write-Host 'ok  dinput8.dll (hook with klvoice.c)' }
   }
-  $ini = Join-Path $Game 'KLHook.ini'
-  if (Test-Path -LiteralPath $ini) {
-    if (-not (Test-Path -LiteralPath ($ini + $suffix))) { Copy-Item -LiteralPath $ini -Destination ($ini + $suffix) }
-    Add-Type -Namespace K -Name P -MemberDefinition '[System.Runtime.InteropServices.DllImport("kernel32",CharSet=System.Runtime.InteropServices.CharSet.Ansi)] public static extern uint GetPrivateProfileString(string s,string k,string d,System.Text.StringBuilder r,uint n,string f); [System.Runtime.InteropServices.DllImport("kernel32",CharSet=System.Runtime.InteropServices.CharSet.Ansi)] public static extern bool WritePrivateProfileString(string s,string k,string v,string f);'
+  if (Test-Path -LiteralPath $ini) {                       # keys that are not set yet; the keys set are written to $keyfile
+    $set = @(); if (Test-Path -LiteralPath $keyfile) { $set = @(Get-Content -LiteralPath $keyfile) }
     foreach ($kv in @(@('Voice','Enable','1'), @('Voice','StockLevels','1'), @('Voice','Log','2'), @('Talk','Enable','1'), @('Talk','StockLevels','1'))) {
       $sb = New-Object System.Text.StringBuilder 64
       [void][K.P]::GetPrivateProfileString($kv[0], $kv[1], '<unset>', $sb, 64, $ini)
-      if ($sb.ToString() -eq '<unset>') { [void][K.P]::WritePrivateProfileString($kv[0], $kv[1], $kv[2], $ini); Write-Host ('set [{0}] {1}={2}' -f $kv[0], $kv[1], $kv[2]) }
+      if ($sb.ToString() -eq '<unset>') { [void][K.P]::WritePrivateProfileString($kv[0], $kv[1], $kv[2], $ini); $set += ($kv[0] + '|' + $kv[1]); Write-Host ('set [{0}] {1}={2}' -f $kv[0], $kv[1], $kv[2]) }
       else { Write-Host ('kept [{0}] {1}={2}' -f $kv[0], $kv[1], $sb.ToString()) }
     }
+    if ($set.Count) { Set-Content -LiteralPath $keyfile -Value ($set | Select-Object -Unique) }
   }
   if ($bad) { exit 1 }
   Write-Host 'installed. UNDO voice 1023.bat puts every file back.'
 }
 else {
-  $files = @($rows | ForEach-Object { Join-Path $Game ('KLExpansion\Maps\' + $_.rel) }) + (Join-Path $Game 'dinput8.dll') + (Join-Path $Game 'KLHook.ini')
-  foreach ($d in $files) {
-    $b = $d + $suffix
-    if (Test-Path -LiteralPath $b) { Move-Item -LiteralPath $b -Destination $d -Force; Write-Host ('restored ' + $d) }
+  foreach ($r in $rows) {                                  # a file goes back only if it is still the one this installed
+    $d = Join-Path $Game ('KLExpansion\Maps\' + $r.rel); $b = $d + $suffix
+    if (-not (Test-Path -LiteralPath $b)) { continue }
+    if (-not (Test-Path -LiteralPath $d)) { Move-Item -LiteralPath $b -Destination $d; Write-Host ('restored ' + $d); continue }
+    if ((Md5 $d) -eq $r.md5) { Move-Item -LiteralPath $b -Destination $d -Force; Write-Host ('restored ' + $d) }
+    else { Write-Host "WARNING: not restored, the live file is not the one this installed (backup stays): $d" }
   }
-  Write-Host 'undone (files without a .before-1023voice backup were not installed by this and are left alone).'
+  if (Test-Path -LiteralPath ($hd + $suffix)) {
+    if ((Test-Path -LiteralPath $hd) -and (Md5 $hd) -eq $hookMd5) { Move-Item -LiteralPath ($hd + $suffix) -Destination $hd -Force; Write-Host 'restored dinput8.dll' }
+    else { Write-Host 'WARNING: dinput8.dll not restored, the live file is not the hook this installed (backup stays).' }
+  }
+  if (Test-Path -LiteralPath $keyfile) {                   # remove only the keys INSTALL set
+    foreach ($line in @(Get-Content -LiteralPath $keyfile)) {
+      $p = $line -split '\|'
+      if ($p.Count -eq 2 -and (Test-Path -LiteralPath $ini)) { [void][K.P]::WritePrivateProfileString($p[0], $p[1], $null, $ini); Write-Host ('removed [{0}] {1}' -f $p[0], $p[1]) }
+    }
+    Remove-Item -LiteralPath $keyfile
+  }
+  Write-Host 'undone (files without a .before-1023voice backup were not replaced by this and are left alone).'
 }
 '''
 BAT = r'''@echo off
-rem written by tools/kl_dmvoice.py - %MODE% the Dead Men voice files (re/voice_1023.md). Backs up every file first (.before-1023voice).
+rem written by tools/kl_dmvoice.py - %MODE% the Dead Men voice files (re/voice_1023.md). Backs up every replaced file first (.before-1023voice).
+rem The hook (dinput8.dll) is NOT installed unless you pass "hook" as the first argument.
 setlocal
 set "GAME=C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days"
+set "HOOKARG="
+if /i "%~1"=="hook" set "HOOKARG=-Hook"
 tasklist /FI "IMAGENAME eq kl2.exe" 2>nul | find /I "kl2.exe" >nul
 if not errorlevel 1 (echo kl2.exe is running: close the game first. & pause & exit /b 1)
 if not exist "%GAME%\kl2.exe" (echo Dog Days not found at "%GAME%": edit the GAME line of this file. & pause & exit /b 1)
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0voice_1023.ps1" -Mode %MODE% -Game "%GAME%" -Src "%~dp0." -Hook "hook\dinput8.dll"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0voice_1023.ps1" -Mode %MODE% -Game "%GAME%" -Src "%~dp0." %HOOKARG%
 if errorlevel 1 (echo FAILED & pause & exit /b 1)
 pause
 '''
@@ -640,7 +666,9 @@ def make_bats(game, out, maps):
     with open(os.path.join(out, 'voice_1023_files.csv'), 'w', newline='') as f:
         w = csv.writer(f); w.writerow(['rel', 'md5', 'size', 'built_from'])
         w.writerows(rows)
-    open(os.path.join(out, 'voice_1023.ps1'), 'w', encoding='utf-8-sig').write(PS1)
+    hp = os.path.join(out, 'hook', 'dinput8.dll')
+    hmd5 = md5(hp) if os.path.isfile(hp) else 'none'
+    open(os.path.join(out, 'voice_1023.ps1'), 'w', encoding='utf-8-sig').write(PS1.replace('__HOOKMD5__', hmd5))
     for mode, name in (('install', 'INSTALL voice 1023.bat'), ('undo', 'UNDO voice 1023.bat')):
         open(os.path.join(out, name), 'w', newline='').write(BAT.replace('%MODE%', mode).replace('\n', '\r\n'))
 

@@ -48,7 +48,7 @@ per-character flag, the entry at that number is replaced by an entry made (as kl
 the member stops wearing the body, on a new level generation, or when no round is running (only where the pointer is still ours).
 Two bodies on one voice number: nobody gets it. A level without the leaf: the line stays as it was.
 Layout (all disassembled, never seen live): manager `[0x168e958]`; group g at `+g*0x18`, g < 94 (count `+4` <= 3, data `+0x10`);
-25 single lines at `+0x8d0`; line `+0x20` flag 1, vector count `+8`, vector data `+0x14`; entry text `+4`.
+19 single lines at `+0x8d0..+0x918` (what the loader fills; an earlier guess of 25 was wrong); line `+0x20` flag 1, vector count `+8`, vector data `+0x14`; entry text `+4`.
 KLHook.ini: `[Voice] Enable=0, StockLevels=0, Log=1 (2 = every swap), Period=1500`. `[Talk] StockLevels=0` (new): a level the
 verdict calls stock is let through, but it still needs a KLTalk.ini beside its archive.
 
@@ -65,9 +65,7 @@ Limits kept (160 pairs, 160 pools, 512 said keys); `check` runs kl_talk_chars.ch
 
 ## 6. Install / test recipe
 Staged: `G:\kl_build_1023\voice_1023\` (per-map folders, `voice_1023_files.csv` with md5s, `INSTALL voice 1023.bat`,
-`UNDO voice 1023.bat`, `hook\dinput8.dll` SHIP, `hook_test\dinput8.dll` TEST). INSTALL refuses while kl2.exe runs, backs up every
-file as `*.before-1023voice`, md5-checks each copy, installs the hook, and sets the keys that are not yet set in KLHook.ini
-(`[Voice] Enable=1 StockLevels=1 Log=2`, `[Talk] Enable=1 StockLevels=1`; backed up too). UNDO moves every backup back.
+`UNDO voice 1023.bat`, `hook\dinput8.dll` SHIP, `hook_test\dinput8.dll` TEST). INSTALL refuses while kl2.exe runs and checks the md5 of every installed file on every run: only the file this was built from (`built_from`) or this very file is accepted, anything else is refused (nothing is installed). It backs up each replaced file as `*.before-1023voice`, md5-checks each copy, and sets the keys not yet set in KLHook.ini (`[Voice] Enable=1 StockLevels=1 Log=2`, `[Talk] Enable=1 StockLevels=1`), recording them in `KLHook.ini.1023voice.keys`. The hook is NOT installed by default (the merged-tree hook is installed separately); `INSTALL voice 1023.bat hook` / `-Hook` installs `hook\dinput8.dll` only if its md5 is the baked-in one. UNDO moves a backup back only if the live file still has the installed md5 (else a warning, backup stays), restores dinput8.dll the same way, and removes only the ini keys INSTALL set (the ini is never restored whole).
 Test: Arcade, pick a Dead Men body (Wardrobe) on any map (DM01 or DD01), keep `[Wardrobe] DMVoice=1`, `[Crew] Voice=1` (bots),
 `[KLHook] AllMaps=1` (bots on stock maps). KLHook.log must show: `voice: on; ...`, `talk: on; ... a stock level too if ...`,
 `voice: walk 1 ...: N per-character lines, M entries replaced` with N > 0 and M > 0 (`NO per-character line found` = the layout
