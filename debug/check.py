@@ -20,8 +20,18 @@ def problems(rd):
             sg=K.csig(obj)
             if sg not in dd[kind,who]: out.setdefault((label,sg,bool(dd[kind,who])),[0,k,name])[0]+=1
     return out,len(ent)
+LOC_MAX=600000   # kl2 0x7fef36 copies the level .LOC into a static 600,000-byte buffer at 0xe100b8, unchecked (crash 0x526b40, V1_DM01)
+def loc_sizes(src):
+    import zipfile
+    if not src.lower().endswith('.zip'): return
+    with zipfile.ZipFile(src) as z:
+        for n in z.namelist():
+            if n.upper().endswith('ENGLISH.LOC'):
+                s=z.getinfo(n).file_size
+                print('%s: %d bytes%s'%(n,s,' - OVER the %d-byte buffer: the level will crash'%LOC_MAX if s>LOC_MAX else ''))
 if __name__=='__main__':
     src=sys.argv[1] if len(sys.argv)>1 else os.path.join(kl.DD,'Scenes','Locations','F01','F01_Main.zip')
+    loc_sizes(src)
     for label,rd in locate.sources(src):
         if not rd('gms'): sys.exit(label+': no .gms beside it - the classes come from there')
         bad,n=problems(rd); rows=sorted(bad.items(),key=lambda x:x[1][1])

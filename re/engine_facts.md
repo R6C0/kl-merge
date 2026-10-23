@@ -26,6 +26,11 @@ Moved verbatim out of CLAUDE.md on 2026-10-23 to keep the always-loaded brief sm
 - 0x8424a0 fixed array length assert (expected count pushed by caller, e.g. 0xc8).
 - 0x7f779e duplicate slot registration (InventoryBinding by item enum value).
 - 0x8ad7c0 entity loader: 128-byte slots from pool[category + 8*prio] of the parent group's block.
+- 0x7fef36 (also 0x466942) memcpy of the level's .LOC into a STATIC buffer at 0xe100b8, no size check. The next global
+  is 0xea2878 (600,000 bytes on, 68 code refs), so the cap is 600,000 bytes. Past it, the job-slot count at 0xeac170
+  (639,160 bytes on) gets text, and 0x926b40 (kl2+0x526b40) faults later (TEST 1023e V1_DM01: 639,672-byte English .LOC,
+  crash 77 s in). Stock English is about 457 KB; stock Russian is 612,634 bytes (open: not loaded through here, or Russian
+  would crash). `kl_dmvoice.LOC_CAP`, `debug/check.py` print and flag the size.
 
 ## Exact schemas (2026-10-08, method from HHCHunter/hbm-editor's RTP recovery)
 - `tools/kl_exe.py` (PE by address, RTTI, exports) + `tools/kl_rtp.py`: every class's serialized

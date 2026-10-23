@@ -34,6 +34,10 @@ import kl_snd, kl_loc, kl_voice, kl_talk_chars as tc
 GAME = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
 OUT = r'G:\kl_build_1023\voice_1023'
 SRC_LEVEL = 'M01_FA_A'
+# kl2 0x7fef36 memcpy's the level's .LOC into a static 600,000-byte buffer at 0xe100b8 with no size check (the next global,
+# 0xea2878, is 600,000 bytes on; the job-slot count at 0xeac170 sits 639,160 bytes on). TEST 1023e V1_DM01: a 639,672-byte
+# English .LOC overwrote that count -> crash at kl2+0x526b40 77 s in. Keep 4 KB of margin.
+LOC_CAP = 600000 - 4096
 O = 'AllLevels/Oneliners/'
 
 # wardrobe name -> (campaign speaker suffix in the Dead Men key, why). GUESS (re/voice_1023.md 2).
@@ -489,24 +493,50 @@ def build_map(game, m, out, trees, clips, log=print, write=True):
                                           inmem=kl_voice.stream_clip)
     silent = collections.Counter()
     files = {}
+    info['loc_bytes'] = {}
     for lang, d in locs.items():
-        t = ttrees[lang]
-        if t is None:
+        if ttrees[lang] is None:
             files[lang] = d; continue
         s = trees.get(lang) or trees['English']
         sidx = {p: n for p, n in kl_loc.leaves(s)}
-        for who in present:
-            for leaf, (c, radio) in plan.leaves[who].items():
-                key = c.rpath if radio and c.rpath else c.path
-                node = sidx.get(key) or {p: n for p, n in kl_loc.leaves(trees['English'])}[key]
-                text, _x, sid, _l = kl_loc.fields(node)
-                new = omap.get(sid, 0) if sid else 0
-                if lang == 'English' and not new:
-                    silent[who] += 1
-                add_leaf(t, vpath(who, leaf), text, new)
-        files[lang] = kl_loc.build(t)
+        if len(d) > LOC_CAP:                               # already past the cap in the source (Russian): not grown at all, its lines stay stock
+            files[lang] = d
+            info['loc_bytes'][lang] = (len(d), len(d), 'source over the cap: no voice leaves')
+            log('%s: %s .LOC is %d bytes in the source, over %d: left as it is (no KLVoice leaves)' % (m, lang, len(d), LOC_CAP))
+            continue
+        cap = LOC_CAP
+        # tiers until it fits: everything; no subtitle text; no subtitle text and no radio twins (klvoice.c finds no leaf for a
+        # radio line then and leaves that line stock Dog Days)
+        for tier in (0, 1, 2):
+            subs, radios = tier == 0, tier < 2
+            t = kl_loc.parse(d)
+            for who in present:
+                for leaf, (c, radio) in plan.leaves[who].items():
+                    if not radios and leaf.endswith('_R'):
+                        continue
+                    key = c.rpath if radio and c.rpath else c.path
+                    node = sidx.get(key) or {p: n for p, n in kl_loc.leaves(trees['English'])}[key]
+                    text, _x, sid, _l = kl_loc.fields(node)
+                    new = omap.get(sid, 0) if sid else 0
+                    if subs and lang == 'English' and not new:
+                        silent[who] += 1
+                    add_leaf(t, vpath(who, leaf), text if subs else b'', new)
+            files[lang] = kl_loc.build(t)
+            if len(files[lang]) <= cap:
+                break
+            log('%s: %s .LOC %d bytes > %d at tier %d (%s): trying the next' % (m, lang, len(files[lang]), cap, tier,
+                                                                             ('full', 'no subtitles', 'no subtitles, no radio')[tier]))
+        if len(files[lang]) > cap:                         # no tier fits: that language keeps its own .LOC (its lines stay stock)
+            log('%s: %s .LOC %d bytes > %d at every tier: left as it is (no KLVoice leaves)' % (m, lang, len(files[lang]), cap))
+            files[lang] = d
+            info['loc_bytes'][lang] = (len(d), len(d), 'no tier fits: no voice leaves')
+            if lang == 'English':
+                info.setdefault('problems', []).append('English .LOC does not fit LOC_CAP at any tier')
+            continue
+        info['loc_bytes'][lang] = (len(d), len(files[lang]), ('full', 'no subtitles', 'no subtitles, no radio')[tier])
     nls = kl_snd.ls_bank(ls, kl_snd.u32(nsnd, 0))
     problems, cnt = kl_snd.verify(base, nsnd, nwhd, nwav, nls, omap)
+    problems = info.get('problems', []) + problems
     info.update(stats=dict(st + cnt), problems=problems, silent=dict(silent))
     if problems:
         log('%s: VERIFY PROBLEMS %s' % (m, problems[:5]))
@@ -702,7 +732,12 @@ def main():
             pr = tc.check_text(open(ip, 'rb').read().decode('latin1'), loc, ward, m) if os.path.isfile(ip) else []
             nk = sum(1 for k in loc.d if k.startswith('klvoice/'))
             ns = sum(1 for k, (p, s) in loc.d.items() if k.startswith('klvoice/') and not s)
-            print('%-8s %s %d KLVoice leaves, %d without sound, %d ini problems' % (m, 'OK ' if not pr and not ns else 'BAD', nk, ns, len(pr)))
+            with zipfile.ZipFile(os.path.join(od, zp[0])) as zf:
+                en = [zf.getinfo(n).file_size for lang, n in kl_loc.members(zf).items() if lang == 'English']
+            if en and en[0] > LOC_CAP:
+                pr = pr + ['English .LOC %d bytes > %d (LOC_CAP)' % (en[0], LOC_CAP)]
+            print('%-8s %s %d KLVoice leaves, %d without sound, %d ini problems, English .LOC %s bytes'
+                  % (m, 'OK ' if not pr and not ns else 'BAD', nk, ns, len(pr), en[0] if en else '?'))
             for p in pr[:5]:
                 print('    ' + p)
             bad += len(pr) + ns
