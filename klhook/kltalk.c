@@ -114,6 +114,18 @@
  *   talk: said AllLevels/Oneliners/What/What_010_Kane at 71.44 s (Kane = record 0; chatter kane_idle; speech queue 0 -> 1)
  *   talk: NOT said <key> at ... : the game's speech is off (...)     /     talk: key <key> is not in this level's .LOC ...
  *
+ * 5. VERSION 2 (2026-10-23, NOT RUN; re\talk.md 10). A file with [Talk] Version=2 (Version=1 still reads as before) may use, on top of section 4:
+ *      Who= / the speaker of a Line / Call= / Reply=   a character of the level's KLWardrobe.ini by its Name= ('Ashkanan') or number ('Char11'),
+ *                     besides Kane | Lynch | Any | Squad1 | Squad2 | Fed. A name the wardrobe lacks makes that pool / pair unused (counted in the log), never a refusal.
+ *      Idle / event keys: a member's own named pools come first (keys as written, no `_C<n>`); only when they have no key left does the class of his body decide.
+ *      [Chatter] KeyGap=<s>  with Once=0: the same key may not be said again within s seconds (default 0 = no limit). Once=1 is unchanged.
+ *      [Chatter] PairChance=<percent>  of an idle turn that tries a pair (default 33, the old 'one in three').
+ *      [Pair.n] Call= / Reply= between ANY two characters that are there (the old file needed Kane and Lynch); Wait=<s> call -> answer (default 2.9).
+ *      [Scene.n] Cast.Kane= / Cast.Lynch= <name>: the scene's 'Kane' / 'Lynch' lines (Needs, Line.k = Kane|Lynch,...) are said by whoever wears
+ *                     those characters. Scenes of one Name stay alternatives: list the Kane / Lynch one first, the cast ones after it.
+ *    Limits: 96 scenes, 160 pools, 160 pairs, 640 keys said per level generation. An older hook REFUSES nothing of this but reads Version=2 as
+ *    'not mine' and says nothing on the level, so the hook goes in with (or before) the files.
+ *
  * THE FED (owner item 12, 2026-10-18, NOT RUN): [Pool.n] Who=Fed On=FedRespawn / On=FedKill (only those two words go with Who=Fed). FedRespawn: the local
  *   player is a ZFFPlayer of type 3 with police byte 1 and his crew record 0 is back in play (status 0) - the 0 -> 1 edge. FedKill: the points pop-up's
  *   message counter (klhud_kill.c, so it needs [HUD] KillLine or Draft) changes while he is police. Said with speaker -3 (GUESS), 15 s apart per event,
@@ -132,30 +144,30 @@
 #define KLK_SAY        0x00421c70             /* (this, line, other, speaker, last) ret 0x10 */
 #define KLK_LINE_LIST  0x00bc998c             /* what the line constructor 0x667610 writes at +4 */
 #define KLK_ROUND      0x19
-#define KLK_NSCENE     32
+#define KLK_NSCENE     96
 #define KLK_NLINE      8
-#define KLK_NPOOL      32
+#define KLK_NPOOL      160
 #define KLK_NKEY       24
-#define KLK_NPAIR      16
+#define KLK_NPAIR      160
 #define KLK_KEYLEN     100
-#define KLK_NENTRY     320
+#define KLK_NENTRY     640
 #define KLK_NSAID      512
 
-enum { KLK_KANE = 1, KLK_LYNCH = 2, KLK_ANY = 3, KLK_SQUAD1 = 4, KLK_SQUAD2 = 5, KLK_FED = 6 };
+enum { KLK_KANE = 1, KLK_LYNCH = 2, KLK_ANY = 3, KLK_SQUAD1 = 4, KLK_SQUAD2 = 5, KLK_FED = 6, KLK_NAME = 7 };      /* KLK_NAME: Who=<character name> / Char<n> of the level's wardrobe (Version 2 files, section 5) */
 enum { KLK_N_KANE = 1, KLK_N_LYNCH, KLK_N_BOTH, KLK_N_KANEONLY, KLK_N_LYNCHONLY };
 enum { KLK_W_START = 1, KLK_W_STAGE1, KLK_W_STAGE2, KLK_W_STAGE3, KLK_W_ABOARD, KLK_W_JOIN, KLK_W_BOX };
 enum { KLK_ON_IDLE = 1, KLK_ON_MONEY, KLK_ON_DOWN, KLK_ON_STAGE2, KLK_ON_TRAITOR, KLK_ON_SHOOT, KLK_ON_WON, KLK_ON_FEDRESPAWN, KLK_ON_FEDKILL };
 static const char *const klk_needs_name[6] = { "?", "Kane", "Lynch", "Both", "KaneOnly", "LynchOnly" };
 
-struct klk_line { int who; float at, len; char key[KLK_KEYLEN]; };
-struct klk_scene { char name[24]; int when, needs, nlines, has_box, group; float delay, box[6], not_before; struct klk_line l[KLK_NLINE]; };
-struct klk_pool { char name[24]; int who, on, nkeys; char key[KLK_NKEY][KLK_KEYLEN]; };
-struct klk_pair { int cwho, rwho; char call[KLK_KEYLEN], reply[KLK_KEYLEN]; };
+struct klk_line { int who, ch; float at, len; char key[KLK_KEYLEN]; };
+struct klk_scene { char name[24]; int when, needs, nlines, has_box, group, cast_k, cast_l; float delay, box[6], not_before; struct klk_line l[KLK_NLINE]; };      /* cast_k / cast_l: wardrobe characters that play 'Kane' / 'Lynch' in this scene (0 = the file's Kane= / Lynch=) */
+struct klk_pool { char name[24]; int who, ch, on, nkeys; char key[KLK_NKEY][KLK_KEYLEN]; };
+struct klk_pair { int cwho, rwho, cch, rch; float wait; char call[KLK_KEYLEN], reply[KLK_KEYLEN]; };
 
 static struct { int on, log, chatter, logonly; float start_offset; DWORD seed; } klk;
 static struct {
-    int have, tried, version, kane, lynch, nscene, npool, npair, once, speakers, event_chance;
-    unsigned __int64 stream_bytes; float blast, start16, gap_lo, gap_hi, member_gap, quiet;
+    int have, tried, version, kane, lynch, nscene, npool, npair, once, speakers, event_chance, pair_chance, skipped;
+    unsigned __int64 stream_bytes; float blast, start16, gap_lo, gap_hi, member_gap, quiet, key_gap;
     char key[64], file[MAX_PATH], map[32];
     struct klk_scene sc[KLK_NSCENE]; struct klk_pool pool[KLK_NPOOL]; struct klk_pair pair[KLK_NPAIR];
 } klk_lv;
@@ -165,9 +177,9 @@ static struct {                                  /* the round */
     char sc_state[KLK_NSCENE], done[KLK_NSCENE]; int sc_next[KLK_NSCENE];              /* state: 0 waits, 1 runs, 2 over; done[] by group */
     float next_idle, last_scene_line, last_chatter, member_last[KLW_NREC];
     DWORD money[KLW_NREC]; BYTE status[KLW_NREC], stage[KLW_NREC], flags[KLW_NREC]; char known[KLW_NREC];
-    DWORD said[KLK_NSAID]; int nsaid, shooting, won;
+    DWORD said[KLK_NSAID]; float said_at[KLK_NSAID]; float rt_now; int nsaid, shooting, won;      /* said_at: when each key was last said (KeyGap), rt_now: the round clock of this tick */
     int fed_was; LONG fed_kn; float fed_ev[2], fed_last[2];                       /* the Fed events: was he police last tick, the reward counter, when each was seen (-1 none) / last said */
-    struct { int on, who; float at; char key[KLK_KEYLEN]; } reply;
+    struct { int on, rec; float at; char key[KLK_KEYLEN]; } reply;      /* rec = crew record of the one who answers */
 } klk_r;
 static struct { DWORD rules; char scene[160]; int n, toldfull; struct { DWORD hash; void *entry; int found; } e[KLK_NENTRY]; } klk_gen;      /* entries of this level generation */
 static DWORD klk_rng;
@@ -208,14 +220,43 @@ static int klk_who_of(const char *v)
     return klk_word(v, names, 7);
 }
 
+/* a wardrobe character by name ('Ashkanan', case-blind, as KLWardrobe.ini's Name=) or by number ('Char11') -> 1-based number, 0 = none.
+   Reads klc_w, which klk_source has just seen is the wardrobe of this level. */
+static int klk_char_of_name(const char *v)
+{
+    int i, r = 0;
+    while (*v == ' ') v++;
+    if (!_strnicmp(v, "Char", 4) && v[4] >= '0' && v[4] <= '9') {
+        i = atoi(v + 4);
+        EnterCriticalSection(&klc_cs);
+        if (klc_w.on && i >= 1 && i <= klc_w.n) r = i;
+        LeaveCriticalSection(&klc_cs);
+        return r;
+    }
+    EnterCriticalSection(&klc_cs);
+    if (klc_w.on) for (i = 0; i < klc_w.n; i++) if (!_stricmp(v, klc_w.c[i].name)) { r = i + 1; break; }
+    LeaveCriticalSection(&klc_cs);
+    return r;
+}
+
+/* Who= / the speaker word of a line: the six words, else a character of the wardrobe (KLK_NAME + number in *ch). 0 = unknown. */
+static int klk_who_ch(const char *v, int *ch)
+{
+    int w = klk_who_of(v);
+    *ch = 0;
+    if (w) return w;
+    if ((*ch = klk_char_of_name(v)) != 0) return KLK_NAME;
+    return 0;
+}
+
 /* "who,key" -> who and key; "who,at,seconds,key" when at is given */
-static int klk_split(const char *v, int *who, float *at, float *len, char key[KLK_KEYLEN])
+static int klk_split(const char *v, int *who, int *ch, float *at, float *len, char key[KLK_KEYLEN])
 {
     char t[KLK_KEYLEN + 64], *p, *q;
     snprintf(t, sizeof t, "%s", v);
     if (!(p = strchr(t, ','))) return 0;
     *p++ = 0;
-    if (!(*who = klk_who_of(t))) return 0;
+    if (!(*who = klk_who_ch(t, ch))) return 0;
     if (at) {
         if (!(q = strchr(p, ','))) return 0;
         *q++ = 0; *at = (float)atof(p); p = q;
@@ -250,10 +291,12 @@ static void klk_ini_value(const char *sec, const char *k, const char *v, int *ba
         else if (!_stricmp(k, "Needs")) { if (!(s->needs = klk_word(v, klk_needs_name, 6))) (*bad)++; }
         else if (!_stricmp(k, "Delay")) s->delay = (float)atof(v);
         else if (!_stricmp(k, "NotBefore")) s->not_before = (float)atof(v);
+        else if (!_stricmp(k, "Cast.Kane")) { if (!(s->cast_k = klk_char_of_name(v))) (*bad)++; }       /* V4: who plays the 'Kane' of this scene */
+        else if (!_stricmp(k, "Cast.Lynch")) { if (!(s->cast_l = klk_char_of_name(v))) (*bad)++; }
         else if (!_stricmp(k, "Box")) { if (sscanf(v, "%f,%f,%f,%f,%f,%f", &s->box[0], &s->box[1], &s->box[2], &s->box[3], &s->box[4], &s->box[5]) == 6) s->has_box = 1; else (*bad)++; }
         else if (!_strnicmp(k, "Line.", 5)) {
             int i = atoi(k + 5);
-            if (i < 1 || i > KLK_NLINE || !klk_split(v, &s->l[i - 1].who, &s->l[i - 1].at, &s->l[i - 1].len, s->l[i - 1].key) || s->l[i - 1].who > KLK_LYNCH) { (*bad)++; return; }
+            if (i < 1 || i > KLK_NLINE || !klk_split(v, &s->l[i - 1].who, &s->l[i - 1].ch, &s->l[i - 1].at, &s->l[i - 1].len, s->l[i - 1].key) || (s->l[i - 1].who > KLK_LYNCH && s->l[i - 1].who != KLK_NAME)) { (*bad)++; return; }
             if (i > s->nlines) s->nlines = i;
         }
     } else if (!_stricmp(sec, "Chatter")) {
@@ -262,13 +305,15 @@ static void klk_ini_value(const char *sec, const char *k, const char *v, int *ba
         else if (!_stricmp(k, "Quiet")) klk_lv.quiet = (float)atof(v);
         else if (!_stricmp(k, "EventChance")) klk_lv.event_chance = atoi(v);
         else if (!_stricmp(k, "Once")) klk_lv.once = atoi(v);
+        else if (!_stricmp(k, "KeyGap")) klk_lv.key_gap = (float)atof(v);                 /* Once=0: seconds before the same key may be said again */
+        else if (!_stricmp(k, "PairChance")) klk_lv.pair_chance = atoi(v);
         else if (!_stricmp(k, "Speakers")) klk_lv.speakers = atoi(v);
     } else if (!_strnicmp(sec, "Pool.", 5)) {
         struct klk_pool *p;
         if ((n = atoi(sec + 5)) < 1 || n > KLK_NPOOL) { (*bad)++; return; }
         p = &klk_lv.pool[n - 1]; if (n > klk_lv.npool) klk_lv.npool = n;
         if (!_stricmp(k, "Name")) snprintf(p->name, sizeof p->name, "%s", v);
-        else if (!_stricmp(k, "Who")) { if (!(p->who = klk_who_of(v))) (*bad)++; }
+        else if (!_stricmp(k, "Who")) { if (!(p->who = klk_who_ch(v, &p->ch))) klk_lv.skipped++; }      /* a name this wardrobe lacks: the pool never matches */
         else if (!_stricmp(k, "On")) { if (!(p->on = klk_word(v, ons, 10))) (*bad)++; }
         else if (!_strnicmp(k, "Key.", 4)) {
             int i = atoi(k + 4);
@@ -279,8 +324,9 @@ static void klk_ini_value(const char *sec, const char *k, const char *v, int *ba
         struct klk_pair *p;
         if ((n = atoi(sec + 5)) < 1 || n > KLK_NPAIR) { (*bad)++; return; }
         p = &klk_lv.pair[n - 1]; if (n > klk_lv.npair) klk_lv.npair = n;
-        if (!_stricmp(k, "Call")) { if (!klk_split(v, &p->cwho, 0, 0, p->call) || p->cwho > KLK_LYNCH) (*bad)++; }
-        else if (!_stricmp(k, "Reply")) { if (!klk_split(v, &p->rwho, 0, 0, p->reply) || p->rwho > KLK_LYNCH) (*bad)++; }
+        if (!_stricmp(k, "Call")) { if (!klk_split(v, &p->cwho, &p->cch, 0, 0, p->call) || (p->cwho > KLK_LYNCH && p->cwho != KLK_NAME)) { p->cwho = 0; klk_lv.skipped++; } }
+        else if (!_stricmp(k, "Reply")) { if (!klk_split(v, &p->rwho, &p->rch, 0, 0, p->reply) || (p->rwho > KLK_LYNCH && p->rwho != KLK_NAME)) { p->rwho = 0; klk_lv.skipped++; } }
+        else if (!_stricmp(k, "Wait")) p->wait = (float)atof(v);                              /* seconds from the call to the answer (default 2.9) */
     }
 }
 
@@ -344,9 +390,9 @@ static void klk_source(const char *key)
     if (klk_lv.tried == 1 && !strcmp(klk_lv.key, key) && !_stricmp(klk_lv.file, file)) return;
     memset(&klk_lv, 0, sizeof klk_lv);
     klk_lv.tried = 1; snprintf(klk_lv.key, sizeof klk_lv.key, "%s", key); strcpy(klk_lv.file, file);
-    klk_lv.gap_lo = 40; klk_lv.gap_hi = 90; klk_lv.member_gap = 25; klk_lv.quiet = 8; klk_lv.event_chance = 50; klk_lv.once = 1;
+    klk_lv.gap_lo = 40; klk_lv.gap_hi = 90; klk_lv.member_gap = 25; klk_lv.quiet = 8; klk_lv.event_chance = 50; klk_lv.once = 1; klk_lv.pair_chance = 33;
     if (!klk_ini_read(file, &bad)) { klog("talk: level %s has no KLTalk.ini beside its archive (%s): nothing is said", key, file); return; }
-    if (klk_lv.version != 1) { klog("talk: %s has Version=%d, this hook reads 1: nothing is said on this level", file, klk_lv.version); return; }
+    if (klk_lv.version != 1 && klk_lv.version != 2) { klog("talk: %s has Version=%d, this hook reads 1 and 2: nothing is said on this level", file, klk_lv.version); return; }
     if (bad) { klog("talk: %s has %d value(s) this hook cannot read (a scene, pool or pair number over the limit, an unknown When / Needs / Who / On, a key too long): REFUSED, nothing is said on this level", file, bad); return; }
     for (i = 0; i < klk_lv.nscene; i++) {
         struct klk_scene *sc = &klk_lv.sc[i];
@@ -358,7 +404,11 @@ static void klk_source(const char *key)
     if (klk_lv.gap_lo < 5) klk_lv.gap_lo = 5;                                /* never a line every tick, whatever the file says */
     if (klk_lv.gap_hi < klk_lv.gap_lo) klk_lv.gap_hi = klk_lv.gap_lo;
     if (klk_lv.quiet < 1) klk_lv.quiet = 1;
-    klog("talk: level %s: %s Version 1, map %s: Kane = character %d, Lynch = %d, %d scenes, %d pools, %d pairs, blast at %.2f s", key, file, klk_lv.map, klk_lv.kane, klk_lv.lynch, klk_lv.nscene, klk_lv.npool, klk_lv.npair, klk_lv.blast);
+    if (klk_lv.pair_chance < 0) klk_lv.pair_chance = 0;
+    if (klk_lv.key_gap < 0) klk_lv.key_gap = 0;
+    for (i = 0; i < klk_lv.npair; i++) if (klk_lv.pair[i].wait <= 0) klk_lv.pair[i].wait = 2.9f;
+    klog("talk: level %s: %s Version %d, map %s: Kane = character %d, Lynch = %d, %d scenes, %d pools, %d pairs, blast at %.2f s; Once=%d KeyGap=%.0f PairChance=%d", key, file, klk_lv.version, klk_lv.map, klk_lv.kane, klk_lv.lynch, klk_lv.nscene, klk_lv.npool, klk_lv.npair, klk_lv.blast, klk_lv.once, klk_lv.key_gap, klk_lv.pair_chance);
+    if (klk_lv.skipped) klog("talk: %s: %d pool / pair entries name a character or word this build does not know: they are never used", file, klk_lv.skipped);
     if (klk_lv.stream_bytes) {
         if (!klk_stream_size(&have, path)) { klog("talk: the stream file %s cannot be measured and the level needs %I64u bytes of it: REFUSED - nothing is said on this level", path, klk_lv.stream_bytes); return; }
         if (have < klk_lv.stream_bytes && klk.logonly) klog("talk: stream file %s has %I64u bytes, the level needs %I64u: too small, but LogOnly=1 says nothing anyway - the timing run goes on", path, have, klk_lv.stream_bytes);
@@ -434,16 +484,44 @@ static int klk_say(const char *key, int rec, float rt, const char *what, DWORD r
 
 struct klk_here { int kane, lynch, kane_i, lynch_i; };              /* crew record index of who wears him (-1 = nobody) and his place in who.m[] */
 
-static void klk_present(const struct klw_who *w, struct klk_here *h)
+/* who plays the two roles: the characters kch / lch (0 = none) */
+static void klk_present_as(const struct klw_who *w, struct klk_here *h, int kch, int lch)
 {
     int i;
     h->kane = h->lynch = h->kane_i = h->lynch_i = -1;
     for (i = 0; i < w->n; i++) {
         int there = w->m[i].status == 0 || w->m[i].status == 4, hum = i == w->human;
         if (!there || !w->m[i].ch) continue;
-        if (klk_lv.kane && w->m[i].ch == klk_lv.kane && (h->kane < 0 || hum)) { h->kane = w->m[i].rec; h->kane_i = i; }
-        if (klk_lv.lynch && w->m[i].ch == klk_lv.lynch && (h->lynch < 0 || hum)) { h->lynch = w->m[i].rec; h->lynch_i = i; }
+        if (kch && w->m[i].ch == kch && (h->kane < 0 || hum)) { h->kane = w->m[i].rec; h->kane_i = i; }
+        if (lch && w->m[i].ch == lch && (h->lynch < 0 || hum)) { h->lynch = w->m[i].rec; h->lynch_i = i; }
     }
+}
+
+static void klk_present(const struct klw_who *w, struct klk_here *h) { klk_present_as(w, h, klk_lv.kane, klk_lv.lynch); }
+
+/* the roles of one scene: its Cast.Kane= / Cast.Lynch= (V4: the Kane / Lynch scenes with any two characters), else the file's */
+static void klk_scene_here(const struct klw_who *w, const struct klk_scene *sc, const struct klk_here *dflt, struct klk_here *h)
+{
+    if (!sc->cast_k && !sc->cast_l) { *h = *dflt; return; }
+    klk_present_as(w, h, sc->cast_k ? sc->cast_k : klk_lv.kane, sc->cast_l ? sc->cast_l : klk_lv.lynch);
+}
+
+/* member index of a wardrobe character that is there (in play or aboard); the human first. -1 = nobody wears him */
+static int klk_member_ch(const struct klw_who *w, int ch)
+{
+    int i, r = -1;
+    if (ch < 1) return -1;
+    for (i = 0; i < w->n; i++) {
+        if (w->m[i].ch != ch || !(w->m[i].status == 0 || w->m[i].status == 4)) continue;
+        if (r < 0 || i == w->human) r = i;
+    }
+    return r;
+}
+
+/* the member a pair names: Kane / Lynch by the file's numbers, or a character by name */
+static int klk_pair_member(const struct klw_who *w, const struct klk_here *h, int who, int ch)
+{
+    return who == KLK_KANE ? h->kane_i : who == KLK_LYNCH ? h->lynch_i : who == KLK_NAME ? klk_member_ch(w, ch) : -1;
 }
 
 static const char *klk_who_text(const struct klw_who *w, const struct klk_here *h, char out[96])
@@ -462,7 +540,19 @@ static int klk_needs_hold(int needs, const struct klk_here *h)
 }
 
 static int klk_was_said(DWORD h) { int i; for (i = 0; i < klk_r.nsaid; i++) if (klk_r.said[i] == h) return 1; return 0; }
-static void klk_mark_said(DWORD h) { if (klk_r.nsaid < KLK_NSAID && !klk_was_said(h)) klk_r.said[klk_r.nsaid++] = h; }
+static void klk_mark_said(DWORD h)
+{
+    int i;
+    for (i = 0; i < klk_r.nsaid; i++) if (klk_r.said[i] == h) { klk_r.said_at[i] = klk_r.rt_now; return; }
+    if (klk_r.nsaid < KLK_NSAID) { klk_r.said[klk_r.nsaid] = h; klk_r.said_at[klk_r.nsaid++] = klk_r.rt_now; }
+}
+/* may the key not be chosen now? Once=1: said at all this round. Once=0 with KeyGap=s: said within the last s seconds. Once=0, KeyGap=0: never blocked. */
+static int klk_blocked(DWORD h)
+{
+    int i;
+    for (i = 0; i < klk_r.nsaid; i++) if (klk_r.said[i] == h) return klk_lv.once ? 1 : klk_lv.key_gap > 0 && klk_r.rt_now - klk_r.said_at[i] < klk_lv.key_gap;
+    return 0;
+}
 
 static int klk_has_pool(int on) { int p; for (p = 0; p < klk_lv.npool; p++) if (klk_lv.pool[p].on == on && klk_lv.pool[p].nkeys) return 1; return 0; }
 
@@ -491,26 +581,32 @@ static int klk_pool_class(const struct klw_who *w, int i)
 /* one unused key of a pool with that event for the member -> 1 and the final key (with `_C<n>` for Who=Any) + the pool's name */
 static int klk_pool_key(const struct klw_who *w, int i, int on, DWORD rules, char key[KLK_KEYLEN], const char **pool)
 {
-    int cls = klk_pool_class(w, i), p, k, n = 0, pick; BYTE voice = 0xff; char cand[KLK_KEYLEN];
-    if (cls == KLK_ANY && (w->m[i].rec > 7 || !klh_rd(rules + 0x33e + w->m[i].rec, &voice, 1) || voice > 7)) return 0;      /* the table has eight entries, the voices are 0..7 */
-    for (pick = -1; ; pick = (int)klk_rnd((DWORD)n), n = 0) {                 /* pass 1 counts, pass 2 takes number `pick` */
-        for (p = 0; p < klk_lv.npool; p++) {
-            if (klk_lv.pool[p].who != cls || klk_lv.pool[p].on != on) continue;
-            for (k = 0; k < klk_lv.pool[p].nkeys; k++) {
-                if (!klk_lv.pool[p].key[k][0]) continue;
-                if (cls == KLK_ANY) snprintf(cand, sizeof cand, "%s_C%d", klk_lv.pool[p].key[k], voice + 1); else strcpy(cand, klk_lv.pool[p].key[k]);
-                if (klk_lv.once && klk_was_said(klk_hash(cand))) continue;
-                if (n++ == pick) { strcpy(key, cand); *pool = klk_lv.pool[p].name; return 1; }
+    /* V2: pools that name the member's own character (Who=Ashkanan / Char11) come first, keys as written; only when
+       none of them has a key left does the class of his body (Kane / Lynch / Any / Squad) decide, as before. */
+    int cls = klk_pool_class(w, i), ch = w->m[i].ch, named, p, k, n = 0, pick; BYTE voice = 0xff; char cand[KLK_KEYLEN];
+    for (named = ch > 0; named >= 0; named--) {
+        if (!named && cls == KLK_ANY && (w->m[i].rec > 7 || !klh_rd(rules + 0x33e + w->m[i].rec, &voice, 1) || voice > 7)) return 0;      /* the table has eight entries, the voices are 0..7 */
+        for (pick = -1, n = 0; ; pick = (int)klk_rnd((DWORD)n), n = 0) {          /* pass 1 counts, pass 2 takes number `pick` */
+            for (p = 0; p < klk_lv.npool; p++) {
+                if (klk_lv.pool[p].on != on) continue;
+                if (named ? !(klk_lv.pool[p].who == KLK_NAME && klk_lv.pool[p].ch == ch) : klk_lv.pool[p].who != cls) continue;
+                for (k = 0; k < klk_lv.pool[p].nkeys; k++) {
+                    if (!klk_lv.pool[p].key[k][0]) continue;
+                    if (!named && cls == KLK_ANY) snprintf(cand, sizeof cand, "%s_C%d", klk_lv.pool[p].key[k], voice + 1); else strcpy(cand, klk_lv.pool[p].key[k]);
+                    if (klk_blocked(klk_hash(cand))) continue;
+                    if (n++ == pick) { strcpy(key, cand); *pool = klk_lv.pool[p].name; return 1; }
+                }
             }
+            if (!n || pick >= 0) break;
         }
-        if (!n || pick >= 0) return 0;
     }
+    return 0;
 }
 
 static int klk_chatter_say(const struct klw_who *w, int i, const char *key, const char *pool, float rt, DWORD rules, const char *scene, int is_reply)
 {
     char what[160]; int rec = w->m[i].rec;
-    snprintf(what, sizeof what, "%s = record %d; chatter %s", klk_lv.kane && w->m[i].ch == klk_lv.kane ? "Kane" : klk_lv.lynch && w->m[i].ch == klk_lv.lynch ? "Lynch" : i == w->human ? "the player" : "a bot", rec, pool);
+    snprintf(what, sizeof what, "%s = record %d, character %d; chatter %s", klk_lv.kane && w->m[i].ch == klk_lv.kane ? "Kane" : klk_lv.lynch && w->m[i].ch == klk_lv.lynch ? "Lynch" : i == w->human ? "the player" : "a bot", rec, w->m[i].ch, pool);
     klk_mark_said(klk_hash(key));                                            /* also when it was not said: a key the game does not know is not tried again */
     klk_r.member_last[rec] = rt; klk_r.last_chatter = rt; (void)is_reply;
     return klk_say(key, rec, rt, what, rules, scene);
@@ -633,6 +729,7 @@ static void klk_tick(int game_thread)
         klog("talk: round %d: clock starts in session state 0x%x, Start16=%.1f (rules %08lx): %s%s", rounds, w.state, klk_lv.start16, w.rules, klk_who_text(&w, &h, who), w.wardrobe ? "" : " - NO wardrobe");
     }
     rt = (float)(now - klk_r.t0) / 1000.0f;
+    klk_r.rt_now = rt;
 
     /* ---- what the human does: stage, aboard, the join, his feet */
     if (w.human >= 0) {
@@ -647,8 +744,9 @@ static void klk_tick(int game_thread)
     /* ---- scenes that come due: Needs is evaluated NOW (re\crew_talk_review.md 3.3 c) */
     memset(due_group, 0, sizeof due_group);
     for (i = 0; i < klk_lv.nscene; i++) {
-        struct klk_scene *sc = &klk_lv.sc[i]; float trig = -1;
+        struct klk_scene *sc = &klk_lv.sc[i]; float trig = -1; struct klk_here hs;
         if (klk_r.done[sc->group] || klk_r.sc_state[i]) continue;
+        klk_scene_here(&w, sc, &h, &hs);
         switch (sc->when) {
         case KLK_W_START: trig = sc->delay + klk.start_offset; if (trig < 0) trig = 0; break;
         case KLK_W_STAGE1: case KLK_W_STAGE2: case KLK_W_STAGE3: if (klk_r.ev_stage[sc->when - KLK_W_STAGE1 + 1] >= 0) trig = klk_r.ev_stage[sc->when - KLK_W_STAGE1 + 1] + sc->delay; break;
@@ -663,10 +761,10 @@ static void klk_tick(int game_thread)
             break;
         }
         if (trig < 0 || rt < trig) continue;
-        if (!klk_needs_hold(sc->needs, &h)) { due_group[sc->group] = 1; continue; }      /* the next alternative of this Name may hold */
+        if (!klk_needs_hold(sc->needs, &hs)) { due_group[sc->group] = 1; continue; }      /* the next alternative of this Name may hold */
         klk_r.done[sc->group] = 1; due_group[sc->group] = 0;
         klk_r.sc_state[i] = 1; klk_r.sc_t0[i] = rt; klk_r.sc_next[i] = 0;
-        klog("talk: scene %s (Needs=%s) starts at %.2f s: %s", sc->name, klk_needs_name[sc->needs], rt, klk_who_text(&w, &h, who));
+        klog("talk: scene %s (Needs=%s%s) starts at %.2f s: %s", sc->name, klk_needs_name[sc->needs], sc->cast_k || sc->cast_l ? ", cast" : "", rt, klk_who_text(&w, &hs, who));
     }
     for (i = 0; i < klk_lv.nscene; i++) if (due_group[i] && !klk_r.done[i]) {            /* due, and no alternative's Needs hold: over for the round */
         klk_r.done[i] = 1;
@@ -675,18 +773,20 @@ static void klk_tick(int game_thread)
 
     /* ---- the lines of the scenes that run (one line a tick) */
     for (i = 0; i < klk_lv.nscene; i++) {
-        struct klk_scene *sc = &klk_lv.sc[i]; struct klk_line *l; int rec;
+        struct klk_scene *sc = &klk_lv.sc[i]; struct klk_line *l; int rec; struct klk_here hs; char who_nm[24];
         if (klk_r.sc_state[i] != 1) continue;
         busy = 1;
         l = &sc->l[klk_r.sc_next[i]];
         if (rt < klk_r.sc_t0[i] + l->at) continue;
-        rec = l->who == KLK_KANE ? h.kane : h.lynch;
+        klk_scene_here(&w, sc, &h, &hs);
+        if (l->who == KLK_NAME) snprintf(who_nm, sizeof who_nm, "character %d", l->ch); else strcpy(who_nm, l->who == KLK_KANE ? "Kane" : "Lynch");
+        rec = l->who == KLK_KANE ? hs.kane : l->who == KLK_LYNCH ? hs.lynch : (j = klk_member_ch(&w, l->ch)) >= 0 ? w.m[j].rec : -1;
         if (rec < 0) {
             klk_r.sc_state[i] = 2;
-            klog("talk: scene %s dropped at line %d of %d: %s is no longer there", sc->name, klk_r.sc_next[i] + 1, sc->nlines, l->who == KLK_KANE ? "Kane" : "Lynch");
+            klog("talk: scene %s dropped at line %d of %d: %s is no longer there", sc->name, klk_r.sc_next[i] + 1, sc->nlines, who_nm);
             continue;
         }
-        snprintf(what, sizeof what, "%s = record %d; scene %s line %d of %d", l->who == KLK_KANE ? "Kane" : "Lynch", rec, sc->name, klk_r.sc_next[i] + 1, sc->nlines);
+        snprintf(what, sizeof what, "%s = record %d; scene %s line %d of %d", who_nm, rec, sc->name, klk_r.sc_next[i] + 1, sc->nlines);
         klk_say(l->key, rec, rt, what, w.rules, scene);
         klk_mark_said(klk_hash(l->key));
         klk_r.last_scene_line = rt; if (rec < KLW_NREC) klk_r.member_last[rec] = rt;
@@ -700,7 +800,8 @@ static void klk_tick(int game_thread)
     /* ---- chatter */
     if (!klk.chatter || (!klk_lv.npool && !klk_lv.npair)) return;
     if (klk_r.reply.on && rt >= klk_r.reply.at) {                             /* the answer of a pair */
-        int ri = klk_r.reply.who == KLK_KANE ? h.kane_i : h.lynch_i;
+        int ri = -1;
+        for (i = 0; i < w.n; i++) if (w.m[i].rec == klk_r.reply.rec) ri = i;
         klk_r.reply.on = 0;
         if (ri >= 0 && w.m[ri].status == 0 && !busy) klk_chatter_say(&w, ri, klk_r.reply.key, "pair, the reply", rt, w.rules, scene, 1);
         return;
@@ -742,13 +843,16 @@ static void klk_tick(int game_thread)
     }
     if (busy || rt < klk_r.next_idle || rt - klk_r.last_scene_line < klk_lv.quiet || rt - klk_r.last_chatter < klk_lv.quiet) return;
     klk_r.next_idle = rt + klk_lv.gap_lo + (float)klk_rnd((DWORD)((klk_lv.gap_hi - klk_lv.gap_lo) * 10) + 1) / 10;
-    if (klk_lv.npair && h.kane_i >= 0 && h.lynch_i >= 0 && klk_may_chatter(&w, h.kane_i, rt) && klk_may_chatter(&w, h.lynch_i, rt) && klk_rnd(3) == 0) {
+    if (klk_lv.npair && (int)klk_rnd(100) < klk_lv.pair_chance) {              /* a call and an answer between any two characters that are there (V4) */
         int s0 = (int)klk_rnd((DWORD)klk_lv.npair), k;
         for (k = 0; k < klk_lv.npair; k++) {
-            struct klk_pair *p = &klk_lv.pair[(s0 + k) % klk_lv.npair];
-            if (!p->cwho || !p->rwho || p->cwho == p->rwho || (klk_lv.once && (klk_was_said(klk_hash(p->call)) || klk_was_said(klk_hash(p->reply))))) continue;
-            klk_chatter_say(&w, p->cwho == KLK_KANE ? h.kane_i : h.lynch_i, p->call, "pair, the call", rt, w.rules, scene, 0);
-            klk_r.reply.on = 1; klk_r.reply.who = p->rwho; klk_r.reply.at = rt + 2.9f; strcpy(klk_r.reply.key, p->reply);
+            struct klk_pair *p = &klk_lv.pair[(s0 + k) % klk_lv.npair]; int ci, ri;
+            if (!p->cwho || !p->rwho) continue;
+            ci = klk_pair_member(&w, &h, p->cwho, p->cch); ri = klk_pair_member(&w, &h, p->rwho, p->rch);
+            if (ci < 0 || ri < 0 || ci == ri || !klk_may_chatter(&w, ci, rt) || !klk_may_chatter(&w, ri, rt)) continue;
+            if (klk_blocked(klk_hash(p->call)) || klk_blocked(klk_hash(p->reply))) continue;
+            klk_chatter_say(&w, ci, p->call, "pair, the call", rt, w.rules, scene, 0);
+            klk_r.reply.on = 1; klk_r.reply.rec = w.m[ri].rec; klk_r.reply.at = rt + p->wait; strcpy(klk_r.reply.key, p->reply);
             return;
         }
     }
