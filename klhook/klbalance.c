@@ -807,12 +807,12 @@ static void klr_player_tick(int act, int game_thread, DWORD rules)
     if (police && !klr.mirror) act = 0;
     wmax = act && klr.health > 0 ? max0 * klr.health : max0;
     if (act && klr.tough > 0) wmax *= klr.tough;          /* Tough (2 a7): on top of PlayerHealth, hero and fed alike */
-    if (act) wmax *= kltr_hp(-1);                          /* kltrait.c: Health / DamageIn of the character he wears (1.0 = none) */
+    if (act) wmax *= kltt_hp(-1);                          /* kltrait.c: Health / DamageIn of the character he wears (1.0 = none) */
     wasfull = cur >= (over > 0 ? over : max) - 0.5f;      /* whole before the write: a RAISED maximum takes a whole health up with it
                                                              (over: whole = at the maximum this file had written, not the game's new one) */
     wdelay = act && klr.delay > 0 ? klr.delay : delay0;
     wfull = act && klr.full > 0 ? klr.full : full0;
-    if (act && kltr_get(-1, KLTR_REGEN) != 1.0f) { wdelay /= kltr_get(-1, KLTR_REGEN); wfull /= kltr_get(-1, KLTR_REGEN); }      /* kltrait.c Regen: >1 = he comes back sooner */
+    if (act && kltt_get(-1, KLTT_REGEN) != 1.0f) { wdelay /= kltt_get(-1, KLTT_REGEN); wfull /= kltt_get(-1, KLTT_REGEN); }      /* kltrait.c Regen: >1 = he comes back sooner */
     samemax = KLR_ABS(max - wmax) <= 0.01f;
     if (samemax && !over && KLR_ABS(delay - wdelay) <= 0.01f && KLR_ABS(full - wfull) <= 0.01f) return;
     if (!game_thread) return;                 /* a live object of the round: only between two frames of the game itself */

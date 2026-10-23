@@ -229,7 +229,7 @@ static struct {
     int on, solo_block, vol, fade, rnd, action_after, force, enabled, st_on, mood_posted, base, round, down;
     char folder[KLMU_PATH], folderb[KLMU_PATH], engine[200], map[40];
     struct klmu_list list[KLMU_NMOOD], stinger;            /* list[CALM..DOWN]; list[NONE] and [END] unused */
-    DWORD t_round, t_end, t_fail, t_last; DWORD rules0, money0; int told_engine;
+    DWORD t_round, t_end, t_fail, t_last; DWORD rules0, money0; int told_engine; BYTE stage0[KLB_NREC];
 } klmu;
 
 static int klmu_str(const char *sec, const char *key, const char *def, char *out, int cap)
@@ -381,10 +381,16 @@ static void klmu_tick(int game_thread)
         klmu.round = 1; klmu.rules0 = s.rules; klmu.t_round = KLB_T(now); klmu.money0 = money; klmu.base = KLMU_CALM; klmu.down = 0;
         klmu.mood_posted = -1;
     }
+    /* Grace: for the first 8 s the crew records are still filling in and FA rounds start inside the job (stage 1
+       already set by the spawn zones), so money and stage are re-baselined instead of read as cues (review 1023). */
+    if (now - klmu.t_round < 8000u) {
+        klmu.money0 = money;
+        for (i = 0; i < s.n && i < KLB_NREC; i++) klmu.stage0[i] = s.r[i].used ? s.r[i].stage : 0;
+    }
     base = klmu.base;
     if (base < KLMU_ACTION) {
         int act = money > klmu.money0 || (klmu.action_after > 0 && now - klmu.t_round >= (DWORD)klmu.action_after * 1000u);
-        for (i = 0; i < s.n && !act; i++) if (s.r[i].used && s.r[i].stage >= 1) act = 1;
+        for (i = 0; i < s.n && i < KLB_NREC && !act; i++) if (s.r[i].used && s.r[i].stage >= 1 && s.r[i].stage > klmu.stage0[i]) act = 1;
         if (act) base = KLMU_ACTION;
     }
     if (base < KLMU_ESCAPE) {

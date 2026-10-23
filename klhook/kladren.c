@@ -1192,14 +1192,14 @@ static void kad_tick(int game_thread)
             if (i == sn.human) {
                 /* the mash meter: the same condition as kldown.c's press count (a get-up it drives, or a landed Flop fall) */
                 if (kld.on && (kld_s.up || (KLD_ONE && kld_s.fnow && kld_s.t_land && !kld_s.fdone))) {
-                    if (kld_s.meter < kad.meter * kltr_get(hp, KLTR_ADREN)) kld_s.meter = kad.meter * kltr_get(hp, KLTR_ADREN);      /* kltrait.c Adrenaline of the helper's character */
+                    if (kld_s.meter < kad.meter * kltt_get(hp, KLTT_ADREN)) kld_s.meter = kad.meter * kltt_get(hp, KLTT_ADREN);      /* kltrait.c Adrenaline of the helper's character */
                 }
                 if (kad.humanfast && ds == 1 && !k->fast) {
                     BYTE one = 1, cur = 0;
                     if (klh_rd(D + 0x29, &cur, 1) && !cur && klh_data((void *)(DWORD_PTR)(D + 0x29), &one, 1, "player: the fast get-up byte (adrenaline)")) { k->fast = 1; klog("adren: HumanFast - [D+0x29] = 1: the game's own fast get-up (speed 2.5) is asked while record %d stands by him", hp); }
                 }
             } else if (dnd[i] && !KAD_BA_HOLDING(i)) {             /* BotAnimHold: while a bot's shot runs on him the shot ends his lie, not the Rate */
-                DWORD cur = klh_rd32(dnd[i] + 0x14), done = 0, nw = kad_lie_step(cur, tick, dt, 1.0f + (kad.rate - 1.0f) * kltr_get(hp, KLTR_ADREN), &done);      /* kltrait.c Adrenaline of the HELPER's character */
+                DWORD cur = klh_rd32(dnd[i] + 0x14), done = 0, nw = kad_lie_step(cur, tick, dt, 1.0f + (kad.rate - 1.0f) * kltt_get(hp, KLTT_ADREN), &done);      /* kltrait.c Adrenaline of the HELPER's character */
                 if (nw != cur && klh_data((void *)(DWORD_PTR)(dnd[i] + 0x14), &nw, 4, "an AI heister's down-not-dead: the tick he lies until (adrenaline)")) k->sped += done;
             }
             (void)use; (void)j;

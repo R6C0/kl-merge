@@ -57,7 +57,7 @@ Balance vs "the AI is too OP": mean effective health 0.998, mean AimSpread 0.996
 ## Verification (offline)
 
 - Both builds compile with no warnings: `klhook\build.bat` (SHIP) and `build_auto.bat` (TEST).
-- `klbotdown_test.exe`: ALL PASS (0 failures) with a `kltr_get` stub (traits off in that harness).
+- `klbotdown_test.exe`: ALL PASS (0 failures) with a `kltt_get` stub (traits off in that harness).
 - `kladren_test.c` already did not build at the base commit (`kltr_set`, `kle_gap_exempt` from klescort.c are missing in the
   harness); a stub was added for traits but that harness was not fixed here.
 - Not run in the game.

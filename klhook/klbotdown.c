@@ -353,7 +353,7 @@ static void klbd_tick(int game_thread)
                 DWORD cur = klh_rd32(dnd + 0x14);
                 if (cur != b->l0 || (long)(tick - b->tick_down) > 1024) {      /* slot 1 (0x7ea990) wrote its own tick: ours goes in, once */
                     if (klbd.lie > 0 && (long)(cur - b->tick_down) >= 1400) {      /* under 1.4 s = a helper (kladren.c) pulled it already: not put back */
-                        float lie = klbd.lie * kltr_get(i, KLTR_REVIVE), far_m = -1.0f;      /* kltrait.c ReviveTime of the character he wears */ const char *lkey = "LieSeconds"; DWORD want;
+                        float lie = klbd.lie * kltt_get(i, KLTT_REVIVE), far_m = -1.0f;      /* kltrait.c ReviveTime of the character he wears */ const char *lkey = "LieSeconds"; DWORD want;
                         if (klbd.lie_far > 0 && klbd.lie_far < lie) {      /* LieFar: the human is not near him - nobody will come to help, the long lie only costs the crew time */
                             DWORD hpl = 0; float hf[3], hn[3];
                             if (have && kle_human(&hpl, hf, hn)) far_m = sqrtf((hf[0] - pos[0]) * (hf[0] - pos[0]) + (hf[1] - pos[1]) * (hf[1] - pos[1]) + (hf[2] - pos[2]) * (hf[2] - pos[2])) / 100.0f;

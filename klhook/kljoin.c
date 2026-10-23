@@ -105,7 +105,7 @@ static int klj_any, klj_tick_on = 1;
 static char klj_map_key[64], klj_map_file[MAX_PATH]; static FILETIME klj_map_ft;
 static CRITICAL_SECTION klj_cs;
 static struct { DWORD at; int player, armed; } klj_after;
-static struct { int on, player, box, entry; DWORD at; } klj_ride;      /* the one ride in progress (Delay > 0): see klj_ride_step */
+static struct { int on, player, box, entry, told; DWORD at, retry_at; } klj_ride;      /* retry_at: a cancelled ride may restart from inside the box after 2 s */      /* the one ride in progress (Delay > 0): see klj_ride_step */
 static int klj_settle_ms = 1500;              /* the jump list is filled entry by entry while the level loads: it is judged once its length has stood still this long */
 
 static int klj_vec(const char *sec, const char *key, const char *file, float v[3])
@@ -241,6 +241,7 @@ static void klj_ride_end(const char *why, int fired)
 {
     klog("join: ride of player %d in box %d %s after %lu ms%s%s", klj_ride.player, klj_ride.box + 1, fired ? "ended with the jump" : "CANCELLED",
          (unsigned long)(GetTickCount() - klj_ride.at), why[0] ? ": " : "", why);
+    if (!fired) { klj_box[klj_ride.box].inside[klj_ride.player] = 0; klj_ride.retry_at = GetTickCount() + 2000; }      /* still standing in the box = retry (review 1023) */
     klj_ride.on = 0;
 }
 
@@ -258,6 +259,14 @@ static void klj_ride_step(DWORD gd, DWORD lo, int count, const BYTE sel[2], DWOR
     if (!klj_ride.on) return;
     if (!klj_box[b].wasactive) { klj_ride_end("the box is not active any more", 0); return; }
     if (sel[i] == 0xff || sel[i] >= 28 || !(pl = klh_rd32(gd + 0x828 + 4 * sel[i])) || !klh_rd(pl + 0x460, feet, 12)) { klj_ride_end("the player is gone", 0); return; }
+    if (!klj_ride.told) {                              /* the liveness reads are unproven on a live player: log them once per ride */
+        DWORD d0 = klh_rd32(pl + 0x2948), n0 = klh_rd32(pl + 4), ds0 = 0, fl0 = 0, at0 = 0; float hp0 = -1.0f; klj_ride.told = 1;
+        if ((ho = klh_rd32(pl + 0xa48)) != 0) klh_rd(ho + 4, &hp0, 4);
+        if (d0 && klh_rd32(d0) == pl) klh_rd(d0 + 4, &ds0, 4);
+        if (n0) klh_rd(n0 + 0x3c, &fl0, 4);
+        klh_rd(pl + 0xd44, &at0, 4);
+        klog("join: ride of player %d: health %.2f, down state %lu, node flags 0x%lx (bit 10 = off), attached 0x%lx", i, hp0, (unsigned long)ds0, (unsigned long)fl0, (unsigned long)at0);
+    }
     if ((ho = klh_rd32(pl + 0xa48)) != 0 && klh_rd(ho + 4, &hp, 4) && !(hp > 0.01f)) { klj_ride_end("the player is dead (health <= 0)", 0); return; }
     if ((d = klh_rd32(pl + 0x2948)) != 0 && klh_rd32(d) == pl && klh_rd(d + 4, &ds, 4) && ds != 0) { klj_ride_end("the player is down", 0); return; }
     if ((node = klh_rd32(pl + 4)) != 0 && klh_rd(node + 0x3c, &fl, 4) && (fl >> 10 & 1)) { klj_ride_end("the player's node is off (flag bit 10)", 0); return; }
@@ -339,12 +348,13 @@ static void klj_tick(void)
             for (k = 0; k < 3 && feet[k] >= klj_box[b].lo[k] && feet[k] <= klj_box[b].hi[k]; k++) ;      /* a NaN is outside */
             in = k == 3;
             if (!in || klj_box[b].inside[i]) { klj_box[b].inside[i] = (char)in; continue; }
+            if (klj_box[b].delay_ms && klj_ride.retry_at && (int)(now - klj_ride.retry_at) < 0) continue;      /* just cancelled: wait before the retry */
             if (!klh_rd((DWORD_PTR)KLH_VA(KLJ_REQUEST), &req, 4) || !klh_rd(gd + 0x8d4, &pend, 4) || req || pend != -1) continue;    /* a request is pending: next tick */
             klj_box[b].inside[i] = 1;
             if ((e = klj_resolve(b, lo, count, why, name, pos)) < 0) { klog("join: player %d entered box %d at (%.0f, %.0f, %.0f) but NO jump: %s", i, b + 1, feet[0], feet[1], feet[2], why); continue; }
             if (klj_box[b].delay_ms) {                         /* the ride: one at a time; the request itself is written by klj_ride_step */
                 if (klj_ride.on) { klog("join: player %d entered box %d while a ride is in progress: ignored", i, b + 1); continue; }
-                klj_ride.on = 1; klj_ride.player = i; klj_ride.box = b; klj_ride.entry = e; klj_ride.at = now;
+                klj_ride.on = 1; klj_ride.told = 0; klj_ride.player = i; klj_ride.box = b; klj_ride.entry = e; klj_ride.at = now;
                 klog("join: player %d entered box %d at (%.0f, %.0f, %.0f): ride starts, jump to entry %d '%s' in %d ms", i, b + 1, feet[0], feet[1], feet[2], e, name, klj_box[b].delay_ms);
                 continue;
             }

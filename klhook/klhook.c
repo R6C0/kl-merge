@@ -770,7 +770,7 @@ static void klh_tick(int game_thread)
     klc_tick(game_thread);
     klw_tick(game_thread);                            /* after klc_tick: the player's own body goes first */
     klk_tick(game_thread);                            /* after klw_tick: it reads who wears whom */
-    kltr_tick(game_thread);                            /* kltrait.c: record -> character -> trait factors (reads only; off unless [Traits] Enable=1) */
+    kltt_tick(game_thread);                            /* kltrait.c: record -> character -> trait factors (reads only; off unless [Traits] Enable=1) */
     klb_tick(game_thread);
     kle_tick(game_thread);                            /* klescort.c: after klb_tick; one game call per order, game thread only */
     klmv_tick(game_thread);                           /* klmove.c: Restless / WaitForYou / BoardNear (all off unless set) */
@@ -1134,7 +1134,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klc_init();
     kpm_init();                                       /* klpm.c: [Match] (default off) */
     klw_init();
-    kltr_init();                                       /* kltrait.c: BEFORE klr_init / kly_init, which read its switch */
+    kltt_init();                                       /* kltrait.c: BEFORE klr_init / kly_init, which read its switch */
     klnm_init();
     klk_init();
     klb_init();

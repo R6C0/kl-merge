@@ -46,18 +46,18 @@
 #ifndef KLTRAIT_C
 #define KLTRAIT_C
 
-enum { KLTR_HEALTH, KLTR_DMGOUT, KLTR_DMGIN, KLTR_REGEN, KLTR_REVIVE, KLTR_ADREN, KLTR_AIM, KLTR_N };
-static const char *const kltr_key[KLTR_N] = { "Health", "DamageOut", "DamageIn", "Regen", "ReviveTime", "Adrenaline", "AimSpread" };
+enum { KLTT_HEALTH, KLTT_DMGOUT, KLTT_DMGIN, KLTT_REGEN, KLTT_REVIVE, KLTT_ADREN, KLTT_AIM, KLTT_N };
+static const char *const kltt_key[KLTT_N] = { "Health", "DamageOut", "DamageIn", "Regen", "ReviveTime", "Adrenaline", "AimSpread" };
 
-#define KLTR_NSET 40
+#define KLTT_NSET 40
 
-static struct { int on, dry, log; float delta; int nset; struct { char name[32]; int has; float v[KLTR_N]; } set[KLTR_NSET]; } ktrait;
+static struct { int on, dry, log; float delta; int nset; struct { char name[32]; int has; float v[KLTT_N]; } set[KLTT_NSET]; } ktrait;
 static struct {
     DWORD rules, last; int human, n;
     struct { int ch; DWORD actor; int told; char name[32]; int set; } r[KLW_NREC];     /* set = index in ktrait.set, -1 = no trait */
-} kltr_g;
+} kltt_g;
 
-static float kltr_clamp(float v)
+static float kltt_clamp(float v)
 {
     if (!(v == v) || v <= 0) return 1.0f;
     if (v < 1.0f - ktrait.delta) return 1.0f - ktrait.delta;
@@ -66,91 +66,91 @@ static float kltr_clamp(float v)
 }
 
 /* the set of a wardrobe name, read from the ini on first sight; -1 = the ini has no [Trait.<name>] key at all */
-static int kltr_set_of(const char *name)
+static int kltt_set_of(const char *name)
 {
     int i, k, any = 0; char sec[64], t[32], *e;
     for (i = 0; i < ktrait.nset; i++) if (!_stricmp(ktrait.set[i].name, name)) return ktrait.set[i].has ? i : -1;
-    if (ktrait.nset >= KLTR_NSET) return -1;
+    if (ktrait.nset >= KLTT_NSET) return -1;
     i = ktrait.nset++;
     snprintf(ktrait.set[i].name, sizeof ktrait.set[i].name, "%s", name);
     snprintf(sec, sizeof sec, "Trait.%s", name);
-    for (k = 0; k < KLTR_N; k++) {
+    for (k = 0; k < KLTT_N; k++) {
         double d; ktrait.set[i].v[k] = 1.0f;
-        GetPrivateProfileStringA(sec, kltr_key[k], "", t, sizeof t, klh_ini);
+        GetPrivateProfileStringA(sec, kltt_key[k], "", t, sizeof t, klh_ini);
         if (!t[0]) continue;
         d = strtod(t, &e);
         while (*e == ' ' || *e == '\t') e++;
-        if (e == t || (*e && *e != ';')) { klog("trait: [%s] %s=%s is IGNORED: one number with a decimal point (1 = nothing)", sec, kltr_key[k], t); continue; }
-        ktrait.set[i].v[k] = kltr_clamp((float)d); any = 1;
-        if (ktrait.set[i].v[k] != (float)d) klog("trait: [%s] %s=%s is held to %.2f ([Traits] MaxDelta=%.2f)", sec, kltr_key[k], t, ktrait.set[i].v[k], ktrait.delta);
+        if (e == t || (*e && *e != ';')) { klog("trait: [%s] %s=%s is IGNORED: one number with a decimal point (1 = nothing)", sec, kltt_key[k], t); continue; }
+        ktrait.set[i].v[k] = kltt_clamp((float)d); any = 1;
+        if (ktrait.set[i].v[k] != (float)d) klog("trait: [%s] %s=%s is held to %.2f ([Traits] MaxDelta=%.2f)", sec, kltt_key[k], t, ktrait.set[i].v[k], ktrait.delta);
     }
     ktrait.set[i].has = any;
     return any ? i : -1;
 }
 
 /* the factor of a crew record (rec) for one knob; 1.0 = nothing. rec < 0 = the local human. */
-static float kltr_get(int rec, int knob)
+static float kltt_get(int rec, int knob)
 {
     int s;
-    if (!ktrait.on || ktrait.dry || knob < 0 || knob >= KLTR_N) return 1.0f;
-    if (rec < 0) rec = kltr_g.human;
+    if (!ktrait.on || ktrait.dry || knob < 0 || knob >= KLTT_N) return 1.0f;
+    if (rec < 0) rec = kltt_g.human;
     if (rec < 0 || rec >= KLW_NREC) return 1.0f;
-    s = kltr_g.r[rec].set;
-    if (!kltr_g.r[rec].ch || s < 0 || s >= ktrait.nset) return 1.0f;
+    s = kltt_g.r[rec].set;
+    if (!kltt_g.r[rec].ch || s < 0 || s >= ktrait.nset) return 1.0f;
     return ktrait.set[s].v[knob];
 }
 
 /* effective maximum health: Health / DamageIn */
-static float kltr_hp(int rec) { return kltr_get(rec, KLTR_HEALTH) / kltr_get(rec, KLTR_DMGIN); }
+static float kltt_hp(int rec) { return kltt_get(rec, KLTT_HEALTH) / kltt_get(rec, KLTT_DMGIN); }
 
 /* the accuracy % an AI heister of that record is wanted at, from what he has (base); base itself when there is no trait */
-static float kltr_aim(int rec, float base)
+static float kltt_aim(int rec, float base)
 {
-    float a = base, sp = kltr_get(rec, KLTR_AIM), dm = kltr_get(rec, KLTR_DMGOUT);
+    float a = base, sp = kltt_get(rec, KLTT_AIM), dm = kltt_get(rec, KLTT_DMGOUT);
     if (sp == 1.0f && dm == 1.0f) return base;
     a = 100.0f - (100.0f - a) * sp;
     a *= dm;
     return a < 0 ? 0 : a > 100.0f ? 100.0f : a;
 }
 
-static void kltr_tick(int game_thread)
+static void kltt_tick(int game_thread)
 {
     struct klw_who w; struct klw_src src; DWORD hero[8]; int i;
     DWORD now = GetTickCount();
-    if (!ktrait.on || !game_thread || now - kltr_g.last < 500) return;
-    kltr_g.last = now;
+    if (!ktrait.on || !game_thread || now - kltt_g.last < 500) return;
+    kltt_g.last = now;
     if (!klw_who_now(&w) || w.n <= 0) {
-        if (kltr_g.n || kltr_g.rules) { memset(&kltr_g, 0, sizeof kltr_g); kltr_g.human = -1; kltr_g.last = now; }
+        if (kltt_g.n || kltt_g.rules) { memset(&kltt_g, 0, sizeof kltt_g); kltt_g.human = -1; kltt_g.last = now; }
         return;
     }
-    if (w.rules != kltr_g.rules) { memset(&kltr_g, 0, sizeof kltr_g); kltr_g.rules = w.rules; kltr_g.last = now; }
+    if (w.rules != kltt_g.rules) { memset(&kltt_g, 0, sizeof kltt_g); kltt_g.rules = w.rules; kltt_g.last = now; }
     if (!klh_rd(w.rules + 0x208, hero, sizeof hero)) return;
     klw_source(&src, hero, w.key);
-    kltr_g.human = w.human >= 0 && w.human < w.n ? w.m[w.human].rec : -1;
-    kltr_g.n = w.n;
+    kltt_g.human = w.human >= 0 && w.human < w.n ? w.m[w.human].rec : -1;
+    kltt_g.n = w.n;
     for (i = 0; i < w.n; i++) {
         int rec = w.m[i].rec, ch = w.m[i].ch; DWORD actor = w.m[i].actor;
         if (rec < 0 || rec >= KLW_NREC) continue;
-        if (kltr_g.r[rec].ch == ch && kltr_g.r[rec].actor == actor && kltr_g.r[rec].told) continue;
-        kltr_g.r[rec].ch = ch; kltr_g.r[rec].actor = actor; kltr_g.r[rec].told = 1; kltr_g.r[rec].set = -1; kltr_g.r[rec].name[0] = 0;
+        if (kltt_g.r[rec].ch == ch && kltt_g.r[rec].actor == actor && kltt_g.r[rec].told) continue;
+        kltt_g.r[rec].ch = ch; kltt_g.r[rec].actor = actor; kltt_g.r[rec].told = 1; kltt_g.r[rec].set = -1; kltt_g.r[rec].name[0] = 0;
         if (ch < 1 || ch > src.n) { if (ktrait.log) klog("trait: record %d wears no body of the list: no trait", rec); continue; }
-        snprintf(kltr_g.r[rec].name, sizeof kltr_g.r[rec].name, "%s", src.c[ch - 1].name);
-        kltr_g.r[rec].set = kltr_set_of(kltr_g.r[rec].name);
-        if (kltr_g.r[rec].set < 0) { if (ktrait.log) klog("trait: record %d = %s: no [Trait.%s] block, no trait", rec, kltr_g.r[rec].name, kltr_g.r[rec].name); continue; }
+        snprintf(kltt_g.r[rec].name, sizeof kltt_g.r[rec].name, "%s", src.c[ch - 1].name);
+        kltt_g.r[rec].set = kltt_set_of(kltt_g.r[rec].name);
+        if (kltt_g.r[rec].set < 0) { if (ktrait.log) klog("trait: record %d = %s: no [Trait.%s] block, no trait", rec, kltt_g.r[rec].name, kltt_g.r[rec].name); continue; }
         if (ktrait.log) {
-            const float *v = ktrait.set[kltr_g.r[rec].set].v; int human = rec == kltr_g.human;
+            const float *v = ktrait.set[kltt_g.r[rec].set].v; int human = rec == kltt_g.human;
             klog("trait: record %d = %s (%s) Health x%.2f DamageOut x%.2f DamageIn x%.2f Regen x%.2f ReviveTime x%.2f Adrenaline x%.2f AimSpread x%.2f%s%s",
-                 rec, kltr_g.r[rec].name, human ? "human" : "AI heister", v[0], v[1], v[2], v[3], v[4], v[5], v[6],
+                 rec, kltt_g.r[rec].name, human ? "human" : "AI heister", v[0], v[1], v[2], v[3], v[4], v[5], v[6],
                  human ? " - DamageOut and AimSpread are NOT applied to the human" : " - Regen is NOT applied to an AI heister",
                  ktrait.dry ? " - Dry=1: nothing is applied" : "");
         }
     }
 }
 
-static void kltr_init(void)
+static void kltt_init(void)
 {
     char t[32];
-    memset(&kltr_g, 0, sizeof kltr_g); kltr_g.human = -1;
+    memset(&kltt_g, 0, sizeof kltt_g); kltt_g.human = -1;
     if (!GetPrivateProfileIntA("Traits", "Enable", 0, klh_ini)) return;
     ktrait.on = 1;
     ktrait.dry = GetPrivateProfileIntA("Traits", "Dry", 0, klh_ini) != 0;
