@@ -248,6 +248,9 @@ The owner added the Windows Firewall rules at 10:06 and the bench then reached a
 instances: "Players connected: 2 / Waiting for players...", Location Subway, Number of players 6, Heist time 4,
 Rounds 3, both players "r6kxo", Ready buttons showing. So System Link discovery + join WORK on one PC. Two things seen:
 
+   UPDATE 10:36: the local session already has it: the hook logs "lobby: MinPlayers=2 - a hosted FA lobby starts on
+   the host's Ready once that many are connected" (10:28, 10:32, both runs PASS). A data write beats the key stepping
+   below; keep this entry only as the explanation of what the photo showed.
 1. **The round cannot start because "Number of players" is the MINIMUM (re/menus.md 387: the row is
    `MinNumPlayers`), stock 6, and only 2 are connected.** H_host.ini presses Ready without lowering it. The lobby rows
    are stepped by `LobbyArrowL_1..4 / LobbyArrowR_1..4` (menus.md 216); which row index the players count is, and
