@@ -160,6 +160,7 @@ static int kvo_leaf(const char *text, char leaf[64])
  *   the guard ('patch REFUSED'); the data-only parts (probe A, QUEUED, the walk's flag-0 bookkeeping) still work. */
 #define KVO_NF0 1024
 static struct {
+    int primed;                                   /* kvo_played has taken its first sample since the last reset */
     int valid;                                    /* the snapshot below is from the current tick of a Dead Men round */
     BYTE tab[8];                                  /* rules+0x33e: crew record -> voice number */
     int nf0, toldfull, said, nrep, nsite[6];
@@ -184,6 +185,7 @@ static void kvo_f0_note(DWORD ln, char who[8][32], DWORD rules, const char *scen
 {
     DWORD entry = klh_rd32(ln); char text[130], leaf[64]; const char *s; int k, slot; size_t n;
     if (!entry || !klh_rdstr((DWORD_PTR)entry + 4, text, sizeof text)) return;
+    if (kvo_gen.n >= KVO_NENTRY * 3 / 4) { if (!kvo_p.toldfull++ && kvo.log) klog("voice: plain: the key cache is 3/4 full (%d): no more flag-0 lines are looked up, so the flag-1 swaps keep room", kvo_gen.n); return; }   /* review fix 5 */
     if (!kvo_leaf(text, leaf)) {                  /* flag-0 keys carry no _C<n>: the leaf is the whole last path part (GUESS: the data tool names them so, FA_YouEscaped01_R is in voice_review.tsv) */
         s = strrchr(text, '/'); s = s ? s + 1 : text; n = strlen(s);
         if (n < 2 || n >= sizeof leaf) return;
@@ -291,13 +293,13 @@ static void kvo_played(DWORD mgr, DWORD now)
     if (!queue) return;
     if (kvo.playlog && kvo.log >= 2) {
         DWORD cur = klh_rd32(queue + 0xd8), cc = klh_rd32(queue + 0xcc);
-        if (cur && (cur != kvo_p.last_play || cc != kvo_p.last_cc)) {
+        if (kvo_p.primed && cur && (cur != kvo_p.last_play || cc != kvo_p.last_cc)) {
             char key[96]; const char *o = kvo_ours(cur); BYTE spk = 0;
             klh_rd(queue + 0xd4, &spk, 1);
             key[0] = 0; if (!o) klh_rdstr((DWORD_PTR)cur + 4, key, sizeof key);
             klog("voice: PLAYING entry %08lx node %08lx speaker %d (%s %s)", cur, klh_rd32(cur), (int)spk, o ? "ours" : "stock", o ? o : (key[0] ? key : "?"));
         }
-        kvo_p.last_play = cur; kvo_p.last_cc = cc;
+        kvo_p.last_play = cur; kvo_p.last_cc = cc; kvo_p.primed = 1;   /* review fix 2: the first sample after a reset only records (a stale entry of the last level is not a start) */
     }
     if (!kvo.played || kvo.log < 2 || !kvo_gen.n) return;
     if (klh_rd(queue, &cnt, 4) && cnt >= 1 && cnt <= 10) {

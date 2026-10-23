@@ -27,11 +27,12 @@ Branch `feat/1023-voiceplain` (from rtp-schemas). Code: `klhook/klvoice.c` only 
   resolves `KLVoice/<Name>/<leaf>` (`<Name>_R` for `_R`, RadioFallback honoured) for each voice number a Dead Men body wears (entries come from the same cache as the flag-1 swap). In the thunk:
   `rec = speaker low byte (<8)` -> `voice = tab[rec]` (snapshot of the last tick) -> the resolved entry replaces argument 0; no leaf = stock. No lookup, no allocation in the thunk.
   Log: `voice: plain: single-entry line .. event ..` (Log=2), `plain: .. no leaf KLVoice/..` once per path, and the SAY line shows `[Plain: was .. stock ..]`.
-- Install: copy `dinput8.dll` of `klhook/out_cc6_voiceplain_test` over `<DD>\dinput8.dll` (the lead does it). Undo: put the old dll back. The SHIP build has the same code but cannot patch (logs `patch REFUSED`), only PLAYING/QUEUED/Plain bookkeeping run.
+- Install (lead does it): copy `dinput8.dll` of `klhook/out_voiceplain_1023_test` over `<DD>/dinput8.dll` AND set `[KLHook] SessionSafe=0` in the live KLHook.ini (the patch is refused otherwise). Only for a direct-boot run (`-o DefaultScene=..`).
+- Undo: restore the previous (SHIP) dll AND set `SessionSafe=1` (or delete the key). WARNING: TEST dll + `SessionSafe=0` + `PlayLog`/`Plain` on lets the patch into hashed code in ANY boot; a real session then ends in the integrity exit. The SHIP build cannot patch (logs `patch REFUSED`), only PLAYING/QUEUED/Plain bookkeeping run.
 
 ## 3. GUESS / unverified
 - GUESS: arg3 of 0x421c70 is the same crew-record space as `w.m[i].rec` (the flag-1 path proves the index `[rules+0x33e+arg3]`; klvoice's want[] uses the same table).
-- GUESS: flag-0 keys have no `_C<n>`, so the leaf is the whole name. `voice_review.tsv` has `FA_YouEscaped01_R` etc., so the data side has these leaves; other flag-0 events only if the .LOC has them (log shows `no leaf`).
+- GUESS: flag-0 keys have no `_C<n>`, so the leaf is the whole name. UNVERIFIED (`voice_review.tsv` is no evidence: `tools/kl_dmvoice.py` map_events builds leaves only from .LOC keys ending `_C<n>`, so the data side may have NO flag-0 leaf and Plain would log `no leaf` for everything). Check first: grep the staged .LOC for `Multiplayer/*/FA_YouEscaped01_R`; if absent the data tool needs a flag-0 mapping (follow-up).
 - GUESS: site 0x422156's `other` line is among the manager's lines (else Plain leaves it stock). Speaker 0xfe / 0xfa (random) is not mapped (stock).
 - GUESS: `[queue+0xcc]` changes with every start (it is `(now - x + 0x200) * k` stored at start); if it is also touched elsewhere PLAYING may log twice.
 - A thunk taken while the walk is rebuilding is safe (same game thread).
@@ -47,3 +48,10 @@ Proof lines:
 4. Control: set `Plain=0` once; the same event then logs `SAY site 2 ... (stock Multiplayer/..)`.
 Without Plain, SAY site 1/3 lines for flag-1 events with `(ours KLVoice/..)` finally prove (or disprove) that the existing vector swap is what the game plays.
 Risks: the patch sits in hashed code (direct boot only); a thunk fault would be a crash in the speech path (all reads are klh_rd; only a[0] is written).
+
+## 4. Review fixes (feat/1023-voiceplain-fix)
+- Fixed: GCC check (`tools/lint/klhook_gcc_prep.py` rewrites `KVO_THUNK` and `__asm { }` blocks; `run_harness_linux.sh --check-hook` passes SHIP and TEST).
+- Fixed: first `kvo_played` sample after a reset only records (no spurious PLAYING for the previous level's entry).
+- Fixed: Plain stops looking up flag-0 lines once the shared key cache is 3/4 full (logged once), so flag-1 swaps keep room.
+- Fixed: notes (undo + SessionSafe, circular GUESS reworded).
+- Rejected finding 3: `kvo_p.valid` is already zeroed at the top of every tick before any early return; staleness between ticks cannot be fixed from the tick, and the stale rep[] entries are never-freed heap blocks (worst case a wrong clip).
