@@ -185,11 +185,18 @@ static int kns_gate(void)
     DWORD sm, role = 0, mode = 0, state = 0, svc; BYTE ranked = 1; int act;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598))) || !klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !klh_rd(sm + 0x70, &state, 4)) return 0;
     svc = klh_rd32(sm + 0x17c);
-    act = (role == 2 || role == 3) && mode == 4 && state >= 0x13 && state <= 0x1f && svc && klh_rd32(svc) == 0x00bd597c &&
-          klh_rd(svc + 0x36f, &ranked, 1) && !ranked;
+    /* 0xbd597c ZOnlineServiceSteam (online); 0xbd5ad4 ZOnlineServiceWintel, its subclass (RTTI; overrides slots 0, 40, 45 JoinSession,
+       69-71, inherits CreateSession and the +0x36f / +0x370 layout). GUESS: Wintel = System Link - H2 (2026-10-23) ran a System Link
+       round with the Steam-only gate and the smoother never switched on. */
+    act = (role == 2 || role == 3) && mode == 4 && state >= 0x13 && state <= 0x1f && svc &&
+          (klh_rd32(svc) == 0x00bd597c || klh_rd32(svc) == 0x00bd5ad4) && klh_rd(svc + 0x36f, &ranked, 1) && !ranked;
     if (act && role == 2) {
         BYTE props[0x20];
         if (!klh_rd(svc + 0x370, props, sizeof props) || ((props[8] >> 5) & 1)) act = 0;
+    }
+    if (!act && kns.log && (role == 2 || role == 3) && mode == 4 && state >= 0x13 && state <= 0x1f) {
+        static DWORD told; DWORD vt = svc ? klh_rd32(svc) : 0;
+        if (told != vt + 1) { told = vt + 1; klog("netsmooth: session refused: role %lu state 0x%lx service %08lx vtable %08lx ranked byte %u", role, state, svc, vt, ranked); }
     }
     return act;
 }
