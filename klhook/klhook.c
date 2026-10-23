@@ -219,7 +219,16 @@ static void klog(const char *fmt, ...)
 {
     char buf[1536], *line = buf; int n, m; DWORD put; SYSTEMTIME t; va_list a; HANDLE h = klog_h;
     if (!h) {
-        char path[MAX_PATH]; snprintf(path, sizeof path, "%s\\KLHook.log", klh_out);
+        char path[MAX_PATH]; WIN32_FILE_ATTRIBUTE_DATA fa; int cap;
+        snprintf(path, sizeof path, "%s\\KLHook.log", klh_out);
+        /* LogMaxMB (2026-10-23, default 64, 0 = no cap): a log over the cap when the game starts becomes KLHook.old.log (one
+           older run's worth replaced) and a fresh one begins, so it can never grow back to the 562 MB of 10-23. */
+        cap = klh_ini[0] ? (int)GetPrivateProfileIntA("KLHook", "LogMaxMB", 64, klh_ini) : 64;
+        if (cap > 0 && GetFileAttributesExA(path, GetFileExInfoStandard, &fa) &&
+            (fa.nFileSizeHigh || fa.nFileSizeLow > (DWORD)cap * 1048576u)) {
+            char old[MAX_PATH]; snprintf(old, sizeof old, "%s\\KLHook.old.log", klh_out);
+            MoveFileExA(path, old, MOVEFILE_REPLACE_EXISTING);
+        }
         h = CreateFileA(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, 0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
         if (h == INVALID_HANDLE_VALUE) return;
         if (InterlockedCompareExchangePointer((void *volatile *)&klog_h, h, 0) != 0) { CloseHandle(h); h = klog_h; }
@@ -590,6 +599,12 @@ static void klh_uef_arm(void)
 
 static void (WINAPI *klh_real_exitprocess)(UINT);
 static void klx_exit_line(void);
+/* [KLHook] FastExit=1 (default 1; 2026-10-23, owner: 'alt f4 must close the game instead of crashing'): the process is ended with
+   TerminateProcess at once - on Alt+F4 / WM_CLOSE / SC_CLOSE (klh_uia_proc below) and when the game reaches ExitProcess itself
+   (menu Quit). A normal ExitProcess ends every other thread, then runs DLL_PROCESS_DETACH of every loaded DLL under the loader lock
+   (steam_api, gameoverlayrenderer, ReShade32, the audio wrappers): GUESS that one of those, or a thread the game never joins, is what
+   hung or crashed. Nothing on disk needs undoing at exit (klog is unbuffered WriteFile, the Windows cache survives TerminateProcess). */
+static int klh_fastexit = 1;
 static void WINAPI klh_w_exitprocess(UINT code)
 {
     if (code == 0x8000dead)
@@ -597,6 +612,7 @@ static void WINAPI klh_w_exitprocess(UINT code)
              "Patches refused this run: %ld; hashed bytes patched under policy 'direct': %ld", klh_refused, klh_hashed_in);
     else klog("exit: ExitProcess(%lu)", (DWORD)code);
     klx_exit_line();
+    if (klh_fastexit) { klog("exit: FastExit - the process is ended without the DLL detach round"); TerminateProcess(GetCurrentProcess(), code); }
     klh_real_exitprocess(code);
 }
 
@@ -614,6 +630,7 @@ static void __cdecl klh_w__exit(int code) { klog("exit: _exit(%d)", code); klx_e
 static void klh_tick(int game_thread);
 static DWORD_PTR klh_rcb_ra;                          /* the return address of the SteamAPI_RunCallbacks call that runs this tick (klfreeclimb.c acts only at the gameplay one) */
 #include "klmem.c"
+#include "klextpt.c"                                     /* klextpt.c: [KLHook] NoInject - no foreign hook DLLs in the game (stutter fix 2026-10-23); AFTER klog / klh_ini */
 #include "klnudge.c"
 #include "klfix.c"
 #include "kljoin.c"
@@ -706,12 +723,18 @@ static DWORD klh_main_tid;                            /* the main loop's thread 
    until found and again whenever another subclass has gone over ours (a chain is fine). user32 is looked up, not linked.
    [KLHook] NoUIA=1 (0 = the game as before). The 10 s perf line says how many such requests were refused. */
 static LONG_PTR klh_uia_old; static HWND klh_uia_wnd; static volatile LONG klh_uia_n;
+static int klh_nouia = 1;                              /* [KLHook] NoUIA; the subclass is also kept for FastExit */
 static LRESULT (WINAPI *klh_cwp)(WNDPROC, HWND, UINT, WPARAM, LPARAM);
 static LONG_PTR (WINAPI *klh_gwl)(HWND, int); static LONG_PTR (WINAPI *klh_swl)(HWND, int, LONG_PTR);
 static BOOL (WINAPI *klh_uni)(HWND); static HMODULE klh_u;
 static LRESULT CALLBACK klh_uia_proc(HWND h, UINT m, WPARAM w, LPARAM l)
 {
-    if (m == 0x003D) { InterlockedIncrement(&klh_uia_n); return 0; }
+    if (m == 0x003D && klh_nouia) { InterlockedIncrement(&klh_uia_n); return 0; }
+    if (klh_fastexit && (m == 0x0010 /* WM_CLOSE */ || (m == 0x0112 && (w & 0xFFF0) == 0xF060 /* WM_SYSCOMMAND SC_CLOSE */) ||
+                         (m == 0x0104 && w == 0x73 /* WM_SYSKEYDOWN VK_F4 */ && (l & (1 << 29)) /* Alt held */))) {
+        klog("exit: Alt+F4 / close (msg %04x): the process is ended at once", (unsigned)m);
+        TerminateProcess(GetCurrentProcess(), 0);
+    }
     return klh_cwp((WNDPROC)klh_uia_old, h, m, w, l);
 }
 static BOOL CALLBACK klh_uia_pick(HWND h, LPARAM best)
@@ -726,7 +749,8 @@ static void klh_uia_tick(void)
     static DWORD last; static int on = -1, told; static BOOL (WINAPI *etw)(DWORD, WNDENUMPROC, LPARAM); DWORD now = GetTickCount(); HWND w = 0;
     if (on < 0) {
         HMODULE u = GetModuleHandleA("user32.dll");
-        on = GetPrivateProfileIntA("KLHook", "NoUIA", 1, klh_ini) != 0;
+        klh_nouia = GetPrivateProfileIntA("KLHook", "NoUIA", 1, klh_ini) != 0;
+        on = klh_nouia || klh_fastexit;
         if (u) { etw = (BOOL (WINAPI *)(DWORD, WNDENUMPROC, LPARAM))GetProcAddress(u, "EnumThreadWindows"); klh_uni = (BOOL (WINAPI *)(HWND))GetProcAddress(u, "IsWindowUnicode"); klh_u = u; }
         if (on && (!etw || !klh_uni)) { on = 0; klog("noUIA: user32's window functions not found: the game window answers UI Automation as before"); }
     }
@@ -1071,6 +1095,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     max_dumps = GetPrivateProfileIntA("KLHook", "MaxDumps", 4, klh_ini);
     max_asserts = GetPrivateProfileIntA("KLHook", "MaxAsserts", 200, klh_ini);
     klh_end_on_fatal = GetPrivateProfileIntA("KLHook", "EndOnFatal", 1, klh_ini);
+    klh_fastexit = GetPrivateProfileIntA("KLHook", "FastExit", 1, klh_ini) != 0;
     klh_stall_say_ms = GetPrivateProfileIntA("KLHook", "StallSayMs", 3000, klh_ini);
     klh_stall_ms = GetPrivateProfileIntA("KLHook", "StallMs", 30000, klh_ini);
     klh_stall_end_ms = GetPrivateProfileIntA("KLHook", "StallEndMs", 0, klh_ini);
@@ -1140,6 +1165,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klso_init();                                   /* klsolo.c: AFTER kltx_init, so its Direct3DCreate9 wrapper is the outer one */
 #endif
     klm_init();
+    klxp_init();                                   /* klextpt.c: extension points off (hook DLLs of other programs), watcher of foreign modules */
     kln_init();
     klf_init();
     klj_init();
