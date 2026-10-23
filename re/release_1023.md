@@ -67,6 +67,15 @@ Then a scripted Arcade round on a non-stock map (Retomoto f06 or DM03) with the 
 4. Pass: `RESULT PASS` exit, 0 faults, no `qol2:` lines (all off), no `BackgroundMs` sleep line.
 Undo test: run the generated UNDO bat; compare md5 of `<DD>\KLHook.ini` and `dinput8.dll` with `manifest_<stamp>.txt` (`*_backup_md5`).
 
+## What the release dll switches on with the owner's ini (audit 10:55, saved copy sha1 a4de872a, audit + refute pass)
+- Inert (no key in the owner ini, all old-behaviour defaults): [QoL], [QoL2], CopToYouFar (every new path gated on far_>0),
+  [Music] ASSAULT, [Ambience] Local/Panic (no folder scan: the 145 placed clips stay unused until the sound3 ini), [NetSmooth] CamYaw,
+  [HUD] HeadMaxDist/HeadFade. TEST-only, not in SHIP: klprobe.c, klauto.c, klsolo.c.
+- Active and new/changed today: [Music] Enable=1 (8 s round-start grace, jukebox/stinger), [Ambience] Enable=1 (whole module new
+  today, DOOR1 live), [Voice] Enable=1 (guessed speech-manager layout, partly live-tested: the highest risk), [Talk] v2, [Traits],
+  [Lobby] MinPlayers=2, klslot HideUnused (default 1; PH3 PASS). Whether the installed hook already has each of them was not checked.
+- kljoin lift ride keys come from a map's KLJoin.ini (Delay=0 default = no ride); the game-folder KLJoin.ini files were not read.
+
 ## Open risks
 - The installed hook (md5 changes over the day) may be newer than rtp-schemas ab08f42b1 (includes sound3-fix music/ambience): if another branch has merged since, rebuild first.
 - `kl_ini_patch.py` drops a trailing `; comment` on a replaced line (prints the old value). The owner's comments above the lines stay.
