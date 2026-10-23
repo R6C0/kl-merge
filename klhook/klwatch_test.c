@@ -39,8 +39,13 @@ static int klnm_name(DWORD at, char *out, int cap) { (void)at; (void)out; (void)
 #define KLB_NREC 32
 #define KLB_NLEVEL 11
 struct klb_rec { int used; DWORD at, actor, money; BYTE status, stage, flags; float hit; };
-struct klb_snap { DWORD rules, score, state, vehicle; int n, level, human; BYTE veh; float timer; struct klb_rec r[KLB_NREC]; };
+struct klb_snap { DWORD rules, score, state, vehicle; int n, level, human; BYTE veh; float timer; struct klb_rec r[KLB_NREC]; int online; };   /* klbot.c's layout: + online (2026-10-18, [HUD] Online) */
 static int klb_read(struct klb_snap *s) { memset(s, 0, sizeof *s); s->human = -1; return 0; }
+static int klb_hud_online;                             /* klbot.c: set from [HUD] Online by klhud.c's klu_init */
+static int klb_online_session(void) { return 0; }   /* klbot.c: a network FA session (role 2 / 3) - never off-game */
+static int klb_read_hud(struct klb_snap *s) { return klb_read(s); }   /* klbot.c: klb_read, else an online snapshot - never online here */
+static int klg_lknames;                                /* klgun.c: set by klhud_weapon.c's klwd_init ([HUD] LookNames) */
+static const char *klg_look_name(int item) { (void)item; return 0; }   /* klgun.c: no KLGuns.ini off-game: no look name */
 
 /* the game's routines (called through KLH_VA) */
 static int stock_calls, text_draws, chunk_draws, last_draw_n;

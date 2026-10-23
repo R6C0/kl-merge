@@ -17,7 +17,7 @@
 #include <stdint.h>
 #include <string.h>
 
-static char klh_ini[MAX_PATH], dir[MAX_PATH];        /* dir: where klmem.c writes its KLHook_map_<n>.txt */
+static char klh_ini[MAX_PATH], dir[MAX_PATH], klh_out[MAX_PATH];   /* klh_out (= dir, as klhook.c sets it): where klmem.c writes its KLHook_map_<n>.txt */
 static int quiet;
 
 static void klog(const char *fmt, ...)
@@ -80,6 +80,7 @@ int main(int argc, char **argv)
     HANDLE h = GetProcessHeap(); SIZE_T largest, total; BYTE *a; void *p, *q; char num[32];
     int i, n = 0, reserve = argc > 1 ? atoi(argv[1]) : 128, room = argc > 2 ? atoi(argv[2]) : 0;
     GetTempPathA(MAX_PATH, dir); if (dir[0] && dir[strlen(dir) - 1] == '\\') dir[strlen(dir) - 1] = 0;
+    strcpy(klh_out, dir);
     GetTempPathA(MAX_PATH, klh_ini); strcat(klh_ini, "klmem_test.ini");
     DeleteFileA(klh_ini);
     sprintf(num, "%d", reserve); WritePrivateProfileStringA("Memory", "ReserveMB", num, klh_ini);

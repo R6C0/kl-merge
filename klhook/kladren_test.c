@@ -63,6 +63,8 @@ static int g_orders; static float g_order_at[3];
 static int kle_bot(const struct klb_snap *s, int i, DWORD *actor, DWORD *soldier, float pos[3], char why[100])
 { *actor = s->r[i].actor; *soldier = 0x00500000 + 0x1000 * i; why[0] = 0; return kle_node(0x00700000 + 0x100 * i, pos, 0); }
 static int kle_block(DWORD soldier, float pos[3]) { (void)soldier; pos[0] = 111; pos[1] = 0; pos[2] = 222; return 1; }
+static void kltr_set(const char *who, const char *why, int rec) { (void)who; (void)why; (void)rec; }   /* klescort.c order tracer: names the issuer of the next order; nothing traces here */
+static volatile int kle_gap_exempt;                          /* klescort.c (2026-10-18): set around orders OrderGap must never refuse; the stub order below takes every order anyway */
 static int kle_order2(struct kle_e *e, const float want[3], float got[3], char why[100], int dry) { (void)e; (void)why; (void)dry; g_orders++; memcpy(g_order_at, want, 12); memcpy(got, want, 12); return 1; }
 
 /* klhud.c / klhud_names.c / klhud_popup.c exports used by the Prompt (2026-10-14): the HUD is off here, so no prompt is said */
