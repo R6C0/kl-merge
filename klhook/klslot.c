@@ -317,10 +317,24 @@ static void *(__cdecl *kls_real_fopen)(const char *, const char *);
 
 #define KLS_READONLY(acc, disp) ((disp) == OPEN_EXISTING && !((acc) & (GENERIC_WRITE | GENERIC_ALL | FILE_WRITE_DATA | FILE_APPEND_DATA)))
 
+/* 2026-10-23 (debug/notes/2026-10-23-startup-stall.md): Valve CEG's per-frame self-check (0xb0f4a0, first instruction of the
+   main-loop step 0x87a930) opens the game's OWN exe with access 0x81 and flags -1, which includes FILE_FLAG_DELETE_ON_CLOSE.
+   NTFS refuses that on a running image, which is what CEG expects. Such an open passes KLS_READONLY, so the overlay would be
+   consulted: if a build ever put KLExpansion\Overlay\KL2.exe there, the probe would open THAT file, Windows would delete it
+   on close, and the tamper counter [0xdd2608] would start counting. An open with DELETE intent, or of the exe itself, is never
+   redirected. (Kept in the wrapper, not in kls_map: the flags are only known here.) */
+#define KLS_NO_REDIRECT(acc, flags) (((flags) & FILE_FLAG_DELETE_ON_CLOSE) || ((acc) & DELETE))
+
+static int kls_is_own_exe(const char *name)
+{   /* the game's exe by its path tail (the probe passes the full path GetModuleFileNameA gave) */
+    size_t n = name ? strlen(name) : 0;
+    return n >= 7 && !_stricmp(name + n - 7, "kl2.exe") && (n == 7 || name[n - 8] == '\\' || name[n - 8] == '/');
+}
+
 static HANDLE WINAPI kls_CreateFileA(LPCSTR name, DWORD acc, DWORD share, LPSECURITY_ATTRIBUTES sa, DWORD disp, DWORD flags, HANDLE tmpl)
 {
     char to[MAX_PATH]; LPCSTR asked = name;
-    if (KLS_READONLY(acc, disp)) {
+    if (KLS_READONLY(acc, disp) && !KLS_NO_REDIRECT(acc, flags) && !kls_is_own_exe(name)) {
         if (kls_map(name, to, "CreateFileA")) name = to;
         klh_level_open(asked, name);                  /* klsteam.c: which level archive is this, and is it the stock one */
     }
@@ -330,7 +344,7 @@ static HANDLE WINAPI kls_CreateFileA(LPCSTR name, DWORD acc, DWORD share, LPSECU
 static HANDLE WINAPI kls_CreateFileW(LPCWSTR name, DWORD acc, DWORD share, LPSECURITY_ATTRIBUTES sa, DWORD disp, DWORD flags, HANDLE tmpl)
 {
     char a[MAX_PATH], to[MAX_PATH]; WCHAR w[MAX_PATH]; BOOL lossy = FALSE; DWORD err = GetLastError();
-    if (name && KLS_READONLY(acc, disp) && WideCharToMultiByte(CP_ACP, 0, name, -1, a, MAX_PATH, 0, &lossy) && !lossy) {
+    if (name && KLS_READONLY(acc, disp) && !KLS_NO_REDIRECT(acc, flags) && WideCharToMultiByte(CP_ACP, 0, name, -1, a, MAX_PATH, 0, &lossy) && !lossy && !kls_is_own_exe(a)) {
         if (kls_map(a, to, "CreateFileW") && MultiByteToWideChar(CP_ACP, 0, to, -1, w, MAX_PATH)) { name = w; klh_level_open(a, to); }
         else klh_level_open(a, a);
     }
