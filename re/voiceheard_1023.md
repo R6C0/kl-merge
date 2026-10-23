@@ -31,7 +31,12 @@ the only line said in the 60 s was stock `Multiplayer/F07/ExitLootArea_01_R_C4` 
 - `tools/kl_dmvoice.py` `event_theme()`: events named `FA_...` (what a non-radio line is called, most of DM01's plain lines) matched no theme rule
   (`^Backstab` against `FA_Backstab`) and all got "loot". Now `FA_` / `1time_` and trailing digits are stripped, and new rules cover
   CallExitVehicle/ExitVehicle*, PoliceReward, HittingTheScore, AllDead, Team{Leading,Trailing,Draw,WinGame,loseGame,OneMercLeft}, Exit_*.
-  Only `ReachlootArea` / `TeamCashMajority` stay "loot" (by design). The picks of the old themes do not change.
+  Only `ReachlootArea` / `TeamCashMajority` stay "loot" (by design). The picks of the old themes do not change, EXCEPT events with trailing digits not preceded by `_` (`YouEscaped01..03`, `Stage2`):
+  their crc32 base lost the digits, so their clip index differs from a build made before this change (the staged DM01 data already has the new picks).
+  Events that match no rule now print a one-line warning (and still use "loot"). Review fixes (2026-10-23, `feat/1023-voiceheard-fix`): the PlayedLog
+  tick counter and the queued/changed counters are reset per level generation and wrap-safe (GetTickCount > 2^31), `path` of an entry is 128 bytes.
+  With RadioFallback=1 a missing `_R` leaf costs two cache slots (the failed key and the plain key, cap 4096, never freed): accepted, small.
+  The `[Voice]` keys are documented in the `klvoice.c` header and in `klhook/KLHook.ini` (`[Voice]` block added).
 - `klvoice.c` `[Voice] RadioFallback=0` (1: a radio line without its `KLVoice/<Name>_R/..` leaf takes `KLVoice/<Name>/<same event>`). Only helps events
   that have both twins; a stopgap for a map still built at the no-radio tier.
 - `klvoice.c` `[Voice] PlayedLog=1` (acts only with Log=2): see 4.

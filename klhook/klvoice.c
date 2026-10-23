@@ -45,7 +45,8 @@ static const char *const kvo_names[8] = { "Kane", "Lynch", "Ashkanan", "Meldal",
 static struct { int on, stock, log, period, radiofb, played; } kvo;     /* radiofb/played: [Voice] RadioFallback / PlayedLog (2026-10-23 voiceheard) */
 static struct {                                  /* the entries made for this level generation (never freed: the game may hold them) */
     DWORD rules, mgr, lm; char scene[160]; int n, toldfull;
-    struct { DWORD hash; void *entry; int found; DWORD sum, lastq; char path[72]; char chg; } e[KVO_NENTRY];
+    DWORD next_sum; int told_chg, told_q;         /* PlayedLog state: zeroed with the generation (review 1) */
+    struct { DWORD hash; void *entry; int found; DWORD sum, lastq; char path[128]; char chg; } e[KVO_NENTRY];
 } kvo_gen;
 static struct { DWORD addr, orig, ours; int active; } kvo_rec[KVO_NREC];
 static short kvo_ix[KVO_HASH];                   /* hash of addr -> record index + 1 */
@@ -144,7 +145,6 @@ static int kvo_leaf(const char *text, char leaf[64])
  * Runs every game-thread call (cheap: one 204-byte read when the queue is empty; 3 KB of checksums every 250 ms). Log=2 and PlayedLog=1. */
 static void kvo_played(DWORD mgr, DWORD now)
 {
-    static DWORD next_sum; static int told_chg, told_q;
     DWORD queue = klh_rd32(mgr + 0x974), cnt = 0, rec[5]; int i, k;
     if (!kvo.played || kvo.log < 2 || !kvo_gen.n) return;
     if (queue && klh_rd(queue, &cnt, 4) && cnt >= 1 && cnt <= 10) {
@@ -154,21 +154,21 @@ static void kvo_played(DWORD mgr, DWORD now)
                 if (kvo_gen.e[i].found && (DWORD)(DWORD_PTR)kvo_gen.e[i].entry == rec[1]) {
                     if (now - kvo_gen.e[i].lastq > 1500 || !kvo_gen.e[i].lastq) {
                         klog("voice: QUEUED %s for crew record %lu (queue %lu, priority %ld): the game is about to say our entry", kvo_gen.e[i].path, rec[2], cnt, (long)rec[0]);
-                        told_q++;
+                        kvo_gen.told_q++;
                     }
                     kvo_gen.e[i].lastq = now ? now : 1;
                     break;
                 }
         }
     }
-    if ((long)(now - next_sum) < 0) return;
-    next_sum = now + 250;
-    for (i = 0; i < kvo_gen.n && told_chg < 40; i++) {
+    if (kvo_gen.next_sum && (long)(kvo_gen.next_sum - now) > 0) return;     /* wrap-safe: 0 = first call (GetTickCount is above 2^31 after 24.9 days) */
+    kvo_gen.next_sum = (now + 250) ? (now + 250) : 1;
+    for (i = 0; i < kvo_gen.n && kvo_gen.told_chg < 40; i++) {
         BYTE blk[0x204];
         if (!kvo_gen.e[i].found || kvo_gen.e[i].chg || !klh_rd((DWORD_PTR)kvo_gen.e[i].entry, blk, sizeof blk)) continue;
         if (kvo_sum(blk) != kvo_gen.e[i].sum) {
-            kvo_gen.e[i].chg = 1; told_chg++;
-            klog("voice: entry USED? %s changed after the swap (GUESS: the game stamped it while playing it; %d queued so far)", kvo_gen.e[i].path, told_q);
+            kvo_gen.e[i].chg = 1; kvo_gen.told_chg++;
+            klog("voice: entry USED? %s changed after the swap (GUESS: the game stamped it while playing it; %d queued so far)", kvo_gen.e[i].path, kvo_gen.told_q);
         }
     }
 }

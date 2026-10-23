@@ -244,12 +244,20 @@ def need_for(n):
 def event_theme(name):
     base = re.sub(r'_R$', '', name)
     base = re.sub(r'_\d+$', '', base)
-    base = re.sub(r'^FA_(1time_)?', '', base)           # 'FA_Backstab' -> 'Backstab' (voiceheard: they all fell through to 'loot')
+    # NOTE the returned base is what the clip pick hashes (crc32). It is the cleaned name on purpose: it matches the staged DM01 build, and
+    # FA_YouEscaped01/02/03 share one base. A rebuild moves the clip pick only of events with trailing digits not preceded by '_' (YouEscaped0N, Stage2).
+    base = re.sub(r'^(FA_)?(1time_)?', '', base)        # 'FA_Backstab' -> 'Backstab' (voiceheard: they all fell through to 'loot'); review 5: also a bare '1time_'
     base = re.sub(r'\d+$', '', base)                    # 'YouEscaped01' -> 'YouEscaped'
     for rx, th in EVENT_THEME:
         if re.search(rx, base):
             return base, th
+    if base not in _THEME_WARNED:                       # review 5: a name no rule knows silently became 'loot' before
+        _THEME_WARNED.add(base)
+        print('kl_dmvoice: warning: event %r matches no theme rule, using "loot"' % base)
     return base, 'loot'
+
+
+_THEME_WARNED = set()
 
 
 class Plan:
