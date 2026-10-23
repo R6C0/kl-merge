@@ -89,6 +89,10 @@ Owner: reboot, then C:\kl_build_1019\hook_1020g\INSTALL hook 1020g.bat, shopswap
 UNTESTED live). tools/kl_dmvoice.py grafts campaign clips as KLVoice/<Name>/<Event> + new KLTalk.ini (Kane+Lynch 13 own exchanges,
 Dead Men pairs, pairs with Dog Days heisters); klhook/klvoice.c ([Voice] Enable=1) swaps the speech manager's per-voice entries
 (data writes); [Talk] StockLevels=1. Who is whom and which clip fits is a GUESS: re/voice_1023.md; staged G:\kl_build_1023\voice_1023.
+2026-10-23 03:50 - installed for the owner: Dead Men voices on all 27 map folders, hook 1023h (48faf4dd), [Music]/[Traits] ini.
+DM01 with voices crashed (kl2+0x526b40): the level .LOC goes into a fixed 600,000-byte buffer; kl_dmvoice keeps it under
+LOC_CAP, and any other tool that grows a .LOC must too. The map-page selector is now held on real maps (klslot kls_page_clamp, PH3).
+Proven live: voices, pair talk, ambience, Payday 2 music, traits. Undo: `C:\kl_build_1019\hook_1023h\UNDO hook 1023h.bat`.
 
 2026-10-23 01:40 - first System Link rounds on the two-process bench (firewall opened by the owner). `[Lobby] MinPlayers=N`
 (klhook/kllobby.c, host only): on the host's Ready with >= N connected the lobby target drops to the number connected, so a
@@ -98,8 +102,6 @@ Dead Men pairs, pairs with Dog Days heisters); klhook/klvoice.c ([Voice] Enable=
 2026-10-22 00:30 - solo online bench: two kl2.exe on one PC work (klhook/klsolo.c, `tools/kl_solo_test.py`, TEST 1022e; [Solo] Events=1 gives each process its own render events, which fixed the two-process crashes). All 19 maps run in two processes at once (G0-G2, 0 faults). System Link stops at a Windows Firewall check (0 rules for kl2.exe), so NetSmooth online is untried. 44 local commits unpushed (push refused).
 (Firewall: opened by the owner 2026-10-22.)
 
-2026-10-21 06:50 - 19-map sweep: shop swap + Rigid + NetSmooth together PASS on every map (TEST 1020l; table in re/shop_more_guns.md "Map sweep"). Unproven by script: a BUY on a stock map, the Rigid feel, NetSmooth online.
-Owner: install hook 1020g (`C:\kl_build_1019\hook_1020g\INSTALL hook 1020g.bat`), shopswap, noblow; try [Rigid] Enable=1.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
