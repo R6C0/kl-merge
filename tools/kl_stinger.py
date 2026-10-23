@@ -23,6 +23,7 @@ import os, re, subprocess, sys, shutil, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
 DD = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
+# the fallback paths below are the owner's PC (WinGet links); other machines need ffmpeg on the PATH or --ffmpeg
 FFMPEG = shutil.which('ffmpeg') or r'C:\Users\Henri\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe'
 FFPROBE = shutil.which('ffprobe') or r'C:\Users\Henri\AppData\Local\Microsoft\WinGet\Links\ffprobe.exe'
 MAXSEC = 10.0
@@ -153,7 +154,9 @@ def main(a):
     out = OUT; dd = DD; work = WORK; folder = None; dll = None
     for flag in ('--out', '--dd', '--work', '--folder', '--dll', '--ffmpeg'):
         if flag in a:
-            i = a.index(flag); v = a[i + 1]; del a[i:i + 2]
+            i = a.index(flag)
+            if i + 1 >= len(a): print(flag, 'needs a value'); return 1
+            v = a[i + 1]; del a[i:i + 2]
             if flag == '--out': out = v
             elif flag == '--dd': dd = v
             elif flag == '--work': work = v
@@ -164,7 +167,9 @@ def main(a):
     if not a: print(__doc__); return 1
     if a[0] == 'build': return build(out, dd, work)
     if a[0] == 'ini':
-        p = os.path.join(out, 'KLHook.stinger.patch.ini'); open(p, 'w', newline='').write(ini_text(out, folder)); print('wrote', p); return 0
+        p = os.path.join(out, 'KLHook.stinger.patch.ini')
+        with open(p, 'w', newline='') as fh: fh.write(ini_text(out, folder))
+        print('wrote', p); return 0
     if a[0] == 'check': return 1 if check(out) else 0
     if a[0] == 'package': package(out, dll); return 0
     print(__doc__); return 1

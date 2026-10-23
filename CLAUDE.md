@@ -66,6 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-23 10:45 - [Stinger] event cues merged (klstinger.c, all off, NOT run live): short cues on loud / loot / down / dead /
+betray / last 30 s / van open / escape reached. 24 clips + INSTALL/UNDO staged in `<work>\build\stinger_1023` (not installed;
+needs a hook built from this tip). Notes: re/stinger_1023.md.
+
 2026-10-23 10:20 - cloud session, offline, none run in the game: [HUD] HeadMaxDist=N + HeadFade (head tags past N m not drawn;
 owner: try HeadMaxDist=25), own-voice hook side (klc_voice_own, waits for the data side), GCC hook check repaired
 (tools/lint/klhook_gcc_prep.py), KLGfx 0.4 tracing (not installed). Owner added the kl2.exe firewall rules at 10:06: VERIFIED

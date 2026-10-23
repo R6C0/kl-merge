@@ -14,7 +14,7 @@ pattern of klambience.c (own aliases kst0 / kst1, beside kmua/kmub and kamb/kam0
 | Down    | a heister is down | human: [player+0x2948][+4] != 0 (kldown.c); bot: [actor+0x64c] == 1 (GUESS: klbotdown.c says the down goal sets it; if the stock game also uses it for something else a bot cues "down" there) |
 | Dead    | a record's status became 7 | klb_read record (any heister, you too) |
 | Betray  | traitor flag (flags +0x79 bit 2) 0 -> 1 | klb_read record; tactic, Backstab, BackstabCrew, Bribe all set it |
-| Last30  | van waits (rules+0x1dc 3..4) and timer (rules+0x1d8) <= LastSec | GUESS: that timer is the van wait, not a round clock; suppressed if the wait began within LastSec+5 s (would fire with Open) |
+| Last30  | van waits (rules+0x1dc 3..4) and timer (rules+0x1d8) <= LastSec | the timer is the van wait (klbot.c:26, documented; not a GUESS), but Backstab / Bribe write 0.0 to it (klbot.c:162,175,892,909), which can cut Last30 short (never fires that round); suppressed if the wait began within LastSec+5 s (would fire with Open) |
 | Open    | van state < 3 -> 3..5 | rules+0x1dc (klmusic's "escape coming") |
 | Reached | YOU aboard (status 4) or escaped (6) | your klb_read record |
 
@@ -57,7 +57,7 @@ timestamped ini copy for manual recovery only. `-Dll` refuses unless the live di
 Block as shipped: Enable=1 Volume=70 Gap=3 LoudAfter=45 LastSec=30 Log=1, all 8 lists set. A map you do NOT want gets `[Stinger.<key>]` `Enable=0`.
 
 ## Offline checks done
-* Both hooks build with no warnings (SHIP out_stinger_1023 sha1 33C0D99E2B2A759F55D602430104C89CE8A7A38B, TEST out_stinger_1023_test sha1 513D170008408CF025C1C7526A66F6CDE096B29E).
+* Both hooks build with no warnings (SHIP out_stinger_1023 sha1 89A9B475717563295CB03EE0FCE84B21DCD926FA, TEST out_stinger_1023_test sha1 EFE52A8B13DDF3AC517BA3BF8C91521DBF382B91).
 * `klhook/klstinger_test.c` (worker only, volume 0): 3 shots on 2 slots leave 2 open, clips close when they end, a stop closes a cue, 0 MCI errors; 5 of 5 runs pass.
   It found a real bug: the worker computed `now` before a slow `open` and then `now - started` wrapped (a new cue was closed at once). Fixed (now re-read before the poll).
   The same `now - started` pattern may exist in klambience.c (not checked, not my change).
@@ -75,6 +75,13 @@ Block as shipped: Enable=1 Volume=70 Gap=3 LoudAfter=45 LastSec=30 Log=1, all 8 
 ## Open risks
 * Never heard: clip choice, volumes (loudnorm -20 LUFS then 65..80 %) and levels against music/ambience are guesses.
 * Down for bots uses [actor+0x64c] directly (GUESS, klbotdown.c comment is the only source); Loud has no real police signal.
-* Last30 relies on rules+0x1d8 being the van wait in seconds (GUESS).
+* Last30 relies on rules+0x1d8 (van wait seconds, klbot.c:26). A bot's Backstab/Bribe zeroing it part-way down cuts Last30 short; accepted.
 * Same cue may overlap jukebox music: only the volume balances it; the stinger does not duck the jukebox.
 * A `Reached` cue after the round ends relies on the worker thread outliving the round (it does, a process-lifetime thread).
+
+## Review fixes (feat/1023-stinger-fix)
+* Loud/Loot/Open/Last30: klst_cue returns 1 posted / 0 dropped for good (Max, cooldown, chance, no list) / -1 held by the Gap. Only -1 keeps the event pending (retried every pass, cleared at round start); the done flags and money baseline are set as before so a rise is not re-seen.
+* veh0 is left at the round baseline during the 8 s grace, so a van that comes up in it still gives Open; a van already up at the baseline sets open_done (no Open/Last30 that round).
+* Cool and Max clamped >= 0, Chance 0..100. Installer Folder regex keeps CRLF. kl_stinger.py: missing flag value is an error, files closed with `with`; ffmpeg fallback path is the owner's PC (noted).
+* Rejected: auto-skip Last30 when the timer drops > 5 s in one pass (extra behaviour with no evidence; documented instead). Loud design note (finding 5) left as is until the cues are heard.
+* Default behaviour is unchanged (all off); the fixes need no new ini key because they only repair lost cues.

@@ -89,7 +89,7 @@ else {
     $bk = $ini + $tag + '-' + $stamp
     Copy-Item -LiteralPath $ini -Destination $bk; Write-Host ('ini copy for manual recovery only: ' + $bk)
     $stg = [System.IO.File]::ReadAllText((Join-Path $src 'KLHook.stinger.patch.ini'), [System.Text.Encoding]::Default)
-    $stg = $stg -replace '(?m)^Folder=.*$', ('Folder=' + $lib)
+    $stg = $stg -replace '(?m)^Folder=[^\r\n]*', ('Folder=' + $lib)
     $new = $text.TrimEnd() + "`r`n`r`n" + $marker + "`r`n" + $stg.TrimEnd() + "`r`n" + $markerEnd + "`r`n"
     [System.IO.File]::WriteAllText($ini, $new, [System.Text.Encoding]::Default)
     Write-Host 'KLHook.ini updated: [Stinger] block appended.'

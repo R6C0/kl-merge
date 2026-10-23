@@ -22,8 +22,9 @@
  *   Betray   a record's traitor flag (flags +0x79 bit 2) went from 0 to 1 (klbot.c logs the same edge: 'traitor flag SET'): the game's
  *            tactic, Backstab, BackstabCrew and Bribe all set it.
  *   Last30   the escape vehicle waits (rules+0x1dc in 3..4) and its timer (rules+0x1d8, seconds) fell to LastSec (30) or less. Only when
- *            the wait began with more than LastSec + 5 s on the timer (else it would fire together with Open). GUESS: the timer is the
- *            van's wait, not a round clock (no round clock is known).
+ *            the wait began with more than LastSec + 5 s on the timer (else it would fire together with Open). The timer is the van's
+ *            wait (klbot.c:26: 'seconds the escape vehicle still waits, counted down'; not a GUESS). Backstab / Bribe write 0.0 to it (klbot.c:162,
+ *            175, 892, 909): the timer > 0.5 guard stops a Bribe from cueing, but a zeroing part-way down can cut Last30 short (it then never fires).
  *   Open     the escape vehicle state went from < 3 to 3..5 (klmusic.c's "escape coming").
  *   Reached  YOU are aboard (your record's status 4) or escaped (6). The human only.
  *
@@ -164,6 +165,7 @@ static struct {
     int on, vol, gap, loud_after, last_sec, loot_every, enabled, round, lastprio, loot_done, loud_done, last30_done, open_done, stopped;
     char folder[KLST_PATH], map[40];
     struct klst_ev e[KLST_NE];
+    int pend[KLST_NE];                    /* a one-shot event held back by the Gap: its ev value, retried next pass */
     DWORD t_round, t_last, t_fail, rules0, money0, t_cue;
     float timer_open;
     BYTE veh0;
@@ -223,9 +225,9 @@ static void klst_loadmap(void)
         struct klst_ev *E = &klst.e[g]; const char *nm = klst_def[g].name;
         klst_str(nm, "", b, sizeof b); E->n = klst_parse(E->f, b, nm);
         snprintf(k, sizeof k, "%sVol", nm);    E->vol = klst_int(k, klst_def[g].vol); if (E->vol > 100) E->vol = 100; if (E->vol < 0) E->vol = 0;
-        snprintf(k, sizeof k, "%sCool", nm);   E->cool = klst_int(k, klst_def[g].cool);
-        snprintf(k, sizeof k, "%sMax", nm);    E->max = klst_int(k, klst_def[g].max);
-        snprintf(k, sizeof k, "%sChance", nm); E->chance = klst_int(k, klst_def[g].chance);
+        snprintf(k, sizeof k, "%sCool", nm);   E->cool = klst_int(k, klst_def[g].cool); if (E->cool < 0) E->cool = 0;
+        snprintf(k, sizeof k, "%sMax", nm);    E->max = klst_int(k, klst_def[g].max); if (E->max < 0) E->max = 0;
+        snprintf(k, sizeof k, "%sChance", nm); E->chance = klst_int(k, klst_def[g].chance); if (E->chance < 0) E->chance = 0; if (E->chance > 100) E->chance = 100;
         E->fired = 0; E->last = -1; E->t_last = 0;
     }
     klog("stinger: map %s: Loud %d / Loot %d / Down %d / Dead %d / Betray %d / Last30 %d / Open %d / Reached %d clips, volume %d, gap %d s%s",
@@ -253,21 +255,23 @@ static void klst_post(const char *f, int vol)
     SetEvent(klst_ev);
 }
 
-static void klst_cue(int g, DWORD now, const char *why)
+/* returns 1 = posted, 0 = dropped for good (no list, Max, cooldown, chance), -1 = held back by the Gap only: a one-shot event then stays PENDING and is retried */
+static int klst_cue(int g, DWORD now, const char *why)
 {   /* one event happened: apply the per-event and global limits, then post a clip */
-    struct klst_ev *E = &klst.e[g]; int pick; const char *f; const char *drop = 0;
-    if (!E->n) return;                                              /* no list: the event is off */
+    struct klst_ev *E = &klst.e[g]; int pick; const char *f; const char *drop = 0; int gapdrop = 0;
+    if (!E->n) return 0;                                            /* no list: the event is off */
     if (E->max > 0 && E->fired >= E->max) drop = "Max reached";
     else if (E->t_last && now - E->t_last < (DWORD)E->cool * 1000u) drop = "cooldown";
-    else if (klst.t_cue && now - klst.t_cue < (DWORD)klst.gap * 1000u && klst_def[g].prio <= klst.lastprio) drop = "inside the Gap of a cue of equal or higher priority";
+    else if (klst.t_cue && now - klst.t_cue < (DWORD)klst.gap * 1000u && klst_def[g].prio <= klst.lastprio) { drop = "inside the Gap of a cue of equal or higher priority"; gapdrop = 1; }
     else if (E->chance < 100 && klst_rand(100) >= E->chance) drop = "chance";
-    if (drop) { if (klst_log >= 2) klog("stinger: %s dropped (%s; %s)", klst_def[g].name, drop, why); return; }
+    if (drop) { if (klst_log >= 2) klog("stinger: %s dropped (%s; %s)", klst_def[g].name, drop, why); return gapdrop ? -1 : 0; }
     pick = klst_rand(E->n);
     if (E->n > 1 && pick == E->last) pick = (pick + 1 + klst_rand(E->n - 1)) % E->n;       /* never the same clip twice in a row */
     E->last = pick; f = E->f[pick];
     E->fired++; E->t_last = KLB_T(now); klst.t_cue = KLB_T(now); klst.lastprio = klst_def[g].prio;
     klst_post(f, E->vol);
     if (klst_log) klog("stinger: %s %s (%s; map %s, round second %lu)", klst_def[g].name, klst_base(f), why, klst.map, (unsigned long)((KLB_T(now) - klst.t_round) / 1000));
+    return 1;
 }
 
 static int klst_human_down(void)
@@ -306,7 +310,8 @@ static void klst_tick(int game_thread)
     if (!klst.round || s.rules != klst.rules0) {                     /* a round began */
         klst.round = 1; klst.rules0 = s.rules; klst.t_round = KLB_T(now); klst.money0 = money; newround = 1;
         klst.loot_done = klst.loud_done = klst.last30_done = klst.open_done = 0; klst.t_cue = 0; klst.lastprio = 0;
-        klst.veh0 = s.veh; klst.timer_open = 0; klst.stopped = 0;
+        klst.veh0 = s.veh; klst.timer_open = 0; klst.stopped = 0; memset(klst.pend, 0, sizeof klst.pend);
+        if (s.veh >= 3 && s.veh <= 5) klst.open_done = 1;      /* the van is already up at the baseline: no Open (and no Last30, whose timer_open stays 0) this round */
         memset(klst.p, 0, sizeof klst.p);
         for (g = 0; g < KLST_NE; g++) { klst.e[g].fired = 0; klst.e[g].t_last = 0; klst.e[g].last = -1; }
     }
@@ -341,7 +346,9 @@ static void klst_tick(int game_thread)
             klst.timer_open > (float)(klst.last_sec + 5)) { ev[KLST_LAST30] = 1; klst.last30_done = 1; }
     }
     if (ev[KLST_LOUD]) klst.loud_done = 1;
-    klst.veh0 = s.veh;
+    if (!grace) klst.veh0 = s.veh;      /* during the grace veh0 keeps the round baseline, so a van that comes up inside it still gives Open right after */
+    /* a one-shot held back by the Gap earlier is retried (Loud, Loot, Open, Last30 only) */
+    for (g = 0; g < KLST_NE; g++) if (klst.pend[g] && !ev[g]) ev[g] = klst.pend[g];
     /* dispatch, highest priority first: a lower cue in the same pass then falls into the Gap */
     { static const int order[KLST_NE] = { KLST_REACHED, KLST_BETRAY, KLST_OPEN, KLST_LAST30, KLST_DEAD, KLST_DOWN, KLST_LOOT, KLST_LOUD };
       for (i = 0; i < KLST_NE; i++) {
@@ -350,7 +357,8 @@ static void klst_tick(int game_thread)
         if (g == KLST_LOUD && ev[g] < 0) snprintf(why, sizeof why, "after %d s", klst.loud_after);
         else if (g == KLST_LOOT || g == KLST_OPEN || g == KLST_LAST30) snprintf(why, sizeof why, "money $%lu, van %u %.0f s", (unsigned long)money, s.veh, klb_finite(s.timer) ? s.timer : -1.0f);
         else snprintf(why, sizeof why, "record %d", ev[g] - 1);
-        klst_cue(g, now, why);
+        { int rc = klst_cue(g, now, why);
+          if (g == KLST_LOUD || g == KLST_LOOT || g == KLST_OPEN || g == KLST_LAST30) klst.pend[g] = (rc < 0) ? ev[g] : 0; }
       }
     }
 }
