@@ -82,3 +82,6 @@ Needs: hook above (TEST), the staged DM01 files in the F01 slot (back up with a 
 - (b) is a guess; the queue read relies on the kltalk.c layout (read by disassembly, proven only for the talk module's own queue use: `speech queue 1 -> 2`).
 - DM01 English subtitles are off at tier 1 (no text for the lines); the Russian/Japanese .LOC are fitted by kl_loc_fit (subtitles cut).
 - Clip choice per event is a text-based guess (`voice_review.tsv`); the re-themed FA_ events change picks vs the installed build.
+
+## 9. Live result (lead, 11:35)
+VH1 on DM01 (TEST 3107ADB8 on rtp-schemas 84454df2c): `voice: on ... RadioFallback=0 PlayedLog=1`; walks `104 per-character lines, 208 entries replaced, 0 without a leaf`; no `no leaf` lines; 0 asserts, 0 faults. `QUEUED` 0, `entry USED` 0 within ~90 s of play (the launch options' AutoExit ends the run; no FA voice event fired). Installed for the owner the same minute with tools/voiceheard_1023 (INSTALL/UNDO bats, md5 guard 82b33bf8, backups *.before-voiceheard). The staged out\DM01\F01_Main.zip was replaced by the grafted one (online.xml, TEX, Russian .LOC from the installed zip).
