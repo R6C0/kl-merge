@@ -69,7 +69,7 @@ Full dated log: `re/open_work_log.md` (newest first).
 2026-10-23 10:35 - LIVE PASS, 0 faults on DM01: SND3 (sound pass 3: Local one-shots every ~10 s, PD2 ASSAULT music 20 s into
 the action; Panic not reached) and STING1 (stinger merged 127b24487: Loud at second 8, Loot at $20000). Both still opt-in:
 `<work>\build\sound3_1023\INSTALL sound3 1023.bat`, `<work>\build\stinger_1023\INSTALL stinger 1023.bat`; they need a hook built
-from rtp-schemas 127b24487 or later (SHIP klhook\out_3f_1023s, 9c69f740; the release kit dll d25393d9 has sound3, not stinger).
+from rtp-schemas 127b24487 or later (the release kit dll d25393d9 has sound3, not stinger; newest build out_3f_1023t = 493f67589 + CEG guard).
 
 2026-10-23 10:20 - cloud session, offline, none run in the game: [HUD] HeadMaxDist=N + HeadFade (head tags past N m not drawn;
 owner: try HeadMaxDist=25), own-voice hook side (klc_voice_own, waits for the data side), GCC hook check repaired
