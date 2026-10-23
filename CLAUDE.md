@@ -66,6 +66,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-23 23:00 (PC clock; 22:00 UTC) - scheduled check-in (cloud; PC idle since 14:16, read-only: no new dump, KLHook.result = the
+known FX1 script FAIL, nothing launched or installed). OFFLINE PIECE (stutter item 3): klmove.c keeps the ZAllyEscapeBox scan per scene
+(klmv_box_gen) instead of walking all private memory at every round's start (the hook's own 125-140 ms hitch per round): kept while the
+scene name stays (sampled once a second), no level archive is opened (klsteam.c -> klmv_level_open) and every object still carries the
+private vtable; none found is kept only after a second empty scan; [Bots] BoardScanEveryRound=1 = the old behaviour. Type-checked (SHIP +
+TEST), NOT run. Proof wanted from the local sessions: a 3-round Arcade log with `near: N ... kept from the last scan` from round 2 on and
+`found in .. ms` again after a map change. Owner: nothing.
+
 2026-10-23 19:00 (PC clock; 18:00 UTC) - scheduled check-in (cloud; PC idle since 14:16, read-only: no new dump, KLHook.result = the
 known FX1 script FAIL, nothing launched or installed). STUTTER, from today's log + kl2.exe (debug/notes/2026-10-23-residual-stutter.md):
 music ON 20-32 hitches of 100 ms+ a minute, OFF 1.5 - and those sit ONLY at scene transitions, in the zip member extractor kl2 0x593010:
@@ -79,11 +87,6 @@ installed; no new dump, KLHook.result = the known FX1 script FAIL). VOICES ITEM 
 tools/kl_voice_fields.py, re/voice_fields.json): the flag-0 lines are Glazer / driver / police / UCC plus three heister events Dog Days
 also records once for everybody (PersonalRevenge, DirtyMoney, DropCash); FA_YouEscaped*_R are flag-1 and already swapped. A flag-0 line
 is one recording by CODE: no data-side swap exists, Plain=1 stays a TEST probe. kl_voice.LINES verified against all 302 call sites (0 off).
-
-2026-10-23 14:05 - ALT+F4 / STUTTER: hook 43a17d57e: FastExit (Alt+F4 / close = TerminateProcess), NoInject, LogMaxMB=64 (log rotation).
-SHIP out_3f_1023v 2DCB0FBB, to be installed when the owner closes the game (backup dinput8.dll.before-1023v). Log was 562 MB, now archived + emptied.
-Stutter NOT solved: about 10 frames over 33 ms per 10 s this afternoon vs about 6 per 200 s this morning; hitches inside message-hook calls (PeekMessage/CallNextHookEx).
-PD2 music is off now (e8, 13:52). Close-message test FX2 still to run. re/open_work_log.md.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
