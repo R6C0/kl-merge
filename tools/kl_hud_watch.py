@@ -234,38 +234,74 @@ def bezel_pixels(w):
     return a
 
 
-MFILL_STREAKS = (3, 4)          # dry streaks ALONG the body (the draft's #dry filter: thin horizontal runs of missing paint)
-MFILL_STREAK_A = 0.42           # paint left in such a streak at its thinnest
 MFILL_EDGE = (0, 1, 1, 2)       # the long edges wander a little more than a menu bar's (the draft's fill overhangs the frame raggedly)
+# Second form (owner 2026-10-12 'bar needs to be a bit more broken', then the draft's own pictures 'should be clearer'): the draft's fill
+# is NOT split into bands - it is one solid chalk stroke DISTRESSED: short dark vertical scratches across it, dark specks, a few thin
+# horizontal dry lines, a rough right end. Sizes in texels of the 256 x 32 picture (drawn ~182 x 12: one texel is ~0.7 x 0.4 px, so
+# marks are at least 2 texels wide and 3 high to survive).
+MFILL_SCRATCH = (18, 26)        # vertical scratches: count ...
+MFILL_SCRATCH_H = (5, 16)       # ... height ...
+MFILL_SCRATCH_A = (0.0, 0.35)   # ... alpha kept (0 = a hole to the dark face)
+MFILL_SPECK = (28, 40)          # specks: count (2 .. 3 x 3 .. 5 texels, rough)
+MFILL_HLINE = (5, 8)            # thin horizontal dry lines: count (2 texels high, 15 .. 70 long)
+MFILL_END = (6, 20)             # the right end: rows stop this many texels short, in rough steps
 
 
 def mfill_pixels(w, h):
     """117 'mfill' (the watch look, 2026-10-12, cloud session): the PAINTED FILL of the money bar under TOTAL, as the draft's
-    `.money .frame .fill` (chalk, url(#dry)): the menus' kit stroke (tools/kl_hud_menu.py _stroke_kit, the bars the owner approved:
-    solid chalk, edges held over runs, slanted hand-cut ends, dry streaks at the ends) over the whole picture, plus a few light dry
-    streaks along the body. Alpha only; the hook tints it chalk and stretches it to the fill's width (it is drawn 2 px above and below
-    the frame, as the draft's fill overhangs its frame). Deterministic. NOT SEEN IN THE GAME."""
+    `.money .frame .fill` (chalk, url(#dry)). The menus' kit stroke (tools/kl_hud_menu.py _stroke_kit: solid chalk, edges held over
+    runs, slanted hand-cut ends) distressed like the draft's picture: dark vertical scratches, specks, a few horizontal dry lines, a
+    rough right end, small chips on the long edges. Alpha only; the hook tints it chalk and stretches it to the fill's width.
+    Deterministic. NOT SEEN IN THE GAME."""
     import random
     import kl_hud_menu as M
-    rnd = random.Random(117 * 7919 + w * 31 + h)
+    rnd = random.Random(117 * 7919 + w * 31 + h + 3)
     saved = M.BAR_EDGE
     M.BAR_EDGE = MFILL_EDGE
     try:
         a = M._stroke_kit(w, h, True, True, rnd)
     finally:
         M.BAR_EDGE = saved
-    rows = rnd.sample(range(5, h - 5), min(rnd.randint(*MFILL_STREAKS), h - 10))
-    for y in rows:
-        x = rnd.randint(w // 6, w // 3)
-        while x < w - 12:
-            n = rnd.randint(18, 60)
-            for k in range(n):
-                xx = x + k
-                if xx >= w or not a[y * w + xx]:
-                    continue
-                t = abs(2.0 * k / n - 1.0)                       # thinnest in the middle of the streak, rejoining the paint at its ends
-                a[y * w + xx] = int(a[y * w + xx] * (MFILL_STREAK_A + (1 - MFILL_STREAK_A) * t * t))
-            x += n + rnd.randint(30, 90)
+    def cut(x, y, v=0.0):
+        if 0 <= x < w and 0 <= y < h:
+            a[y * w + x] = int(a[y * w + x] * v)
+    # vertical scratches (the draft's most visible mark), a little slanted, ragged
+    for _ in range(rnd.randint(*MFILL_SCRATCH)):
+        x = rnd.uniform(4, w - 12); y0 = rnd.randint(0, h - 4); n = rnd.randint(*MFILL_SCRATCH_H)
+        sl = rnd.uniform(-0.15, 0.15); v = rnd.uniform(*MFILL_SCRATCH_A); wd = rnd.choice((2, 2, 2, 3))
+        for k in range(n):
+            xx = int(x + sl * k + rnd.choice((0, 0, 0, 1)))
+            for t in range(wd):
+                cut(xx + t, y0 + k, v)
+    # specks
+    for _ in range(rnd.randint(*MFILL_SPECK)):
+        x = rnd.randint(0, w - 4); y = rnd.randint(1, h - 4)
+        bw, bh = rnd.randint(2, 3), rnd.randint(3, 5)
+        for yy in range(y, y + bh):
+            for xx in range(x, x + bw):
+                if rnd.random() < 0.85:
+                    cut(xx, yy, rnd.uniform(0.0, 0.3))
+    # thin horizontal dry lines
+    for _ in range(rnd.randint(*MFILL_HLINE)):
+        x = rnd.randint(0, w - 30); y = rnd.randint(4, h - 6); n = rnd.randint(15, 70)
+        for k in range(n):
+            if rnd.random() < 0.9:
+                cut(x + k, y, 0.2); cut(x + k, y + 1, 0.35)
+    # the rough right end: rows stop short in steps of a few rows
+    y = 0
+    while y < h:
+        short = rnd.randint(*MFILL_END); n = rnd.randint(3, 7)
+        for yy in range(y, min(h, y + n)):
+            s0 = short + rnd.randint(0, 2)
+            for k in range(s0):
+                cut(w - 1 - k, yy)
+        y += n
+    # small chips along the long edges
+    for _ in range(w // 12):
+        x = rnd.randint(0, w - 4); top = rnd.random() < 0.5
+        for k in range(rnd.randint(2, 6)):
+            for t in range(rnd.randint(1, 3)):
+                cut(x + k, t if top else h - 1 - t)
     return a
 
 
