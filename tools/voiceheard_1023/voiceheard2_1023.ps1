@@ -15,6 +15,8 @@ if (-not $maps.ContainsKey($Map)) { Fail "unknown map '$Map' (known: $($maps.Key
 $slot = $maps[$Map].Slot
 $M = Join-Path $Root "KLExpansion\Maps\$Map"
 $SRC = Join-Path $PSScriptRoot "out\$Map"
+# DM01's package was staged by voiceheard_1023 (sibling build folder): use it when this folder has none.
+if (-not (Test-Path -LiteralPath $SRC)) { $alt = Join-Path (Split-Path $PSScriptRoot -Parent) "voiceheard_1023\out\$Map"; if (Test-Path -LiteralPath $alt) { $SRC = $alt } }
 $files = "$slot.zip", "$slot.WAV", "$slot.WHD", "${slot}_LS.SND", 'KLTalk.ini'
 if (Get-Process kl2 -ErrorAction SilentlyContinue) { Fail 'close the game first (kl2.exe is running). Nothing was changed.' }
 if (-not (Test-Path -LiteralPath $M)) { Fail "no map folder $M" }
