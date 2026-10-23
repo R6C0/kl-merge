@@ -771,9 +771,11 @@ def bake_map(mapdir, outdir, swap_text, log=print):
                 tiles_skipped=[[str(y) for y in x] for x in tiles['skipped']])
 
 
-def recut(mapdir, outdir, swap_text=None, source_suffix='.before-1023shop', log=print):
+def recut(mapdir, outdir, swap_text=None, source_suffix='.before-1023shop', log=print, rows=None):
     """v2 cut-out for an installed map: the cards are re-cut from the pre-restyle archive (<zip><source_suffix>, the stock photos) and ONLY the big
     card + small icon tiles of the installed .TEX are replaced (star, lock, FocusBar tiles, every other member stay byte for byte as installed).
+    rows: only these shop rows are replaced (the v2 cut is not better on every card: DD01 judged by eye 2026-10-23, re/shop_ui_1023.md);
+    the others keep their installed (v1) card, which the stale-art guard in bake_tiles then refuses to re-bake.
     -> report dict with the per-member and per-texture proof. Writes outdir/<zip name>; never touches mapdir."""
     import kl_hud_shop as S, kl_texmat as T
     np = _np()
@@ -786,6 +788,8 @@ def recut(mapdir, outdir, swap_text=None, source_suffix='.before-1023shop', log=
     stem = [n for n in zi.namelist() if n.endswith('.prm')][0][:-4]; texm = stem + '.TEX'
     ti, ts = shop_tiles(zi, stem), shop_tiles(zs, stem)
     assert ti['big'] == ts['big'] and ti['small'] == ts['small'], 'tile ids differ between installed and source'
+    if rows is not None:
+        ts = dict(ts, big={r: t for r, t in ts['big'].items() if r in rows}, small={r: t for r, t in ts['small'].items() if r in rows})
     data, expect, rep = bake_tiles(zs.read(texm), ts, swaps, log=log, glyphs=False)
     assert not rep['failed'], rep['failed']
     inst_tex = zi.read(texm)
@@ -882,7 +886,8 @@ def main(a):
         bad = [x['map'] for x in m['maps'] if 'error' in x or x.get('failed') or x.get('blank_tiles')]
         print('staged %d maps; maps with problems: %s' % (len(m['maps']), bad or 'none')); return 1 if bad else 0
     if len(pos) == 3 and pos[0] == 'recut':
-        r = recut(pos[1], pos[2], opts.get('swap')); print(json.dumps(r, indent=1)); return 0
+        rows = {int(x) for x in opts['rows'].split(',')} if 'rows' in opts else None
+        r = recut(pos[1], pos[2], opts.get('swap'), rows=rows); print(json.dumps(r, indent=1)); return 0
     if len(pos) == 2 and pos[0] == 'scripts':
         write_scripts(pos[1], json.load(open(os.path.join(pos[1], 'manifest.json')))); print('scripts rewritten'); return 0
     if len(pos) == 2 and pos[0] == 'check':
