@@ -8,6 +8,9 @@ folder. Needs ffmpeg on the PATH (or --ffmpeg). Nothing of the result has run in
     python kl_ambience.py ini    [--out DIR] [--folder INSTALLED_DIR]                                  write <out>/KLHook.ambience.patch.ini (the ini block)
     python kl_ambience.py music  [--out DIR]                                  <out>/KLHook.music2.patch.ini: more Payday 2 tracks per map
     python kl_ambience.py check  [--out DIR]                                  every file the ini block names exists and decodes (ffprobe)
+    python kl_ambience.py ini2   [--out DIR] [--base DIR]                     <out>/KLHook.ambience2.patch.ini: only the sections the 2nd pass changes
+  --only takes group names (bed) or single ids (bed_diner). --base = the first pass's library (default OUT): a list names files of --out
+  and --base, so a second pass can be built into its own folder and still be checked against the whole library.
 
 SOURCES (all of it the games' own sound, nothing from Payday 2 here; the Payday 2 music is [Music], see tools/klmusic_check.py):
   * streams in <DD>\\PC_Def.str  (IOISNDSTREAM; tools/kl_audio.py): the long ambience beds, the police radio lines
@@ -50,6 +53,13 @@ SPEC = [
     ('bed_airport',         'bed',  r'Ambiences/MultiPlayer/F03/Airport_Ambience_01\.wav$'),
     ('bed_bridge',          'bed',  r'Ambiences/MultiPlayer/F02/Bridge_Ambience_Muffled\.wav$'),
     ('bed_rooftop',         'bed',  r'Ambiences/M09_A/Outside/Ambience_Rooftop_M09\.wav$'),
+    # 2nd pass (2026-10-23): interior / exterior beds of the campaign levels the FA maps are built from. Each regex names ONE stream
+    # (a bed regex that matches several keeps the last). Not used: M09_A Atrium/Office/Rooftop and M09_B Lobby (Retomoto's own, BedSkip).
+    ('bed_diner',           'bed',  r'Ambiences/M01_A/Inside/Diner\.wav$'),
+    ('bed_alley_m01',       'bed',  r'Ambiences/M01_A/Outside/Street_Alley_01\.wav$'),
+    ('bed_bank_main',       'bed',  r'Ambiences/M03_A/Inside/Bank_Main_Ambience\.wav$'),
+    ('bed_bank_lobby',      'bed',  r'Ambiences/M03_A/Inside/Ambience_Lobby_M03\.wav$'),
+    ('bed_capatulio',       'bed',  r'Ambiences/M11_B/Outside/Ambience_Outside_Capatulio\.wav$'),
     # police radio (streams, Police01..03 voices) + the F02 bank's radio-com lines (memory)
     ('radio_{n}', 'radio', r'Oneliners/Police/PoliceRadio/PoliceRadio_0[1-5]0_Police0[123]\.wav$'),
     ('radiocom_{n}', 'radio', r'Dialog/AllLevels/PoliceRadioCom/Police_RadioCom_0\d\.wav$'),
@@ -68,18 +78,23 @@ SPEC = [
     ('bird_{n}',  'shot', r'Birds/Warbler/Bird_Warbler_0\d\.wav$'),
     ('ship_{n}',  'shot', r'Vehicles/Ships/Ship_Horn_Distant_Mono_01\.wav$'),
     ('plane_{n}', 'shot', r'Planes/L11/L11_LandingFlight_M\.wav$|Planes_Propeller/Plane_Propeller_02\.wav$'),
+    # Retomoto's Japanese police (2nd pass), kind 'shot' = no radio filter: megaphone shouts (10, ADPCM) and the AllLevels police
+    # warning / order lines (6 + 5, ADPCM). NOT taken, because re/retomoto_audio.md 4.3 already puts them into the DM09 game stream:
+    # EmergencyAnnounce_Japanese_Male_01 and Dialog/M09/.../M09B_OneLiners/PoliceWarning_010..050 (these two regexes cannot match them).
+    ('jpmega_{n}', 'shot', r'SFX/Environment/Japanese Police Megaphone Shouts/Megaphone_0[12]/[^/]+\.wav$'),
+    ('jpwarn_{n}', 'shot', r'Oneliners/Police/(PoliceWarning/PoliceWarning|PoliceOrders/PoliceOrders)_0[1-6]0_JapanesePolice\.wav$'),
 ]
 
 # ---- the per-map plan (GUESS: from the map names; see re/ambience_1023.md) --------------------------------------------------
 # key -> (BedVol, [bed ids], [spot groups]); spot groups: city = dogs + horns, sea = gulls + ship, park = birds + dogs, air = planes
 MAPS = {
     # Dead Men maps (KLExpansion\Maps)
-    'DM01':  (45, ['bed_restaurant', 'bed_street_m01'],                 ['city']),                 # Hot Coffee (diner)
-    'DM01B': (45, ['bed_restaurant', 'bed_street_m01'],                 ['city']),
-    'DM02':  (40, ['bed_backalley', 'bed_crowded_muffled'],             ['city']),                 # Late Night Opening (jewel shop, night)
-    'DM03':  (45, ['bed_parking', 'bed_street_m05', 'bed_big_street'],  ['city']),                 # Withdrawal (bank)
+    'DM01':  (45, ['bed_restaurant', 'bed_street_m01', 'bed_diner', 'bed_alley_m01'], ['city']),   # Hot Coffee (diner)
+    'DM01B': (45, ['bed_restaurant', 'bed_street_m01', 'bed_diner', 'bed_alley_m01'], ['city']),
+    'DM02':  (40, ['bed_backalley', 'bed_crowded_muffled', 'bed_hallways'], ['city']),            # Late Night Opening (jewel shop, night)
+    'DM03':  (45, ['bed_parking', 'bed_street_m05', 'bed_big_street', 'bed_bank_main', 'bed_bank_lobby'], ['city']),   # Withdrawal (bank)
     'DM06':  (40, ['bed_openarea', 'bed_highway'],                      ['park']),                 # A Walk in the Park
-    'DM11B': (45, ['bed_havana'],                                       ['city', 'sea']),          # Hasta (Havana)
+    'DM11B': (45, ['bed_havana', 'bed_capatulio'],                      ['city', 'sea']),          # Hasta (Havana)
     # engine-music / engine-ambience maps: no bed (BedSkip), one-shots only
     # Dog Days stock FA maps (copies DD01..DD09 and the F0x slots): they have their own ambience on F01/F02/F03/F06/F07 (MultiPlayer
     # ambience clips), so a quiet distance layer only; F04/F05/F08/F09 had none of that name (GUESS: thin), so a fuller bed.
@@ -93,6 +108,12 @@ MAPS = {
     'DD08':  (40, ['bed_construction', 'bed_highway'],                  ['city']),
     'DD09':  (40, ['bed_big_street', 'bed_alley'],                      ['city']),
 }
+# Retomoto: no bed, no city Spot; the Radio list is the Japanese police pool instead of the English global one (small pool: long intervals)
+RETOMOTO = ['DM09', 'DM09RB', 'DM09RB2', 'DM09RB3', 'DM09RB4', 'DM09RD', 'DM09RV', 'DM09RV2']
+RETOMOTO_RADIO = ['jpmega', 'jpwarn']
+RETOMOTO_RADIO_MIN, RETOMOTO_RADIO_MAX = 25, 60
+BASE = OUT          # the first pass's library (see --base)
+NEW_MAPS = ['DM01', 'DM01B', 'DM02', 'DM03', 'DM11B']      # maps whose Bed list the 2nd pass changes
 BEDSKIP = ['DM09', 'DM09RB', 'DM09RB2', 'DM09RB3', 'DM09RB4', 'DM09RD', 'DM09RV', 'DM09RV2', 'DM06B', 'DM03A', 'DM05A', 'T01']
 SPOTS = {'city': ['dog', 'horn'], 'sea': ['gull', 'ship'], 'park': ['bird', 'dog'], 'air': ['plane', 'dog']}
 STOCK_SLOTS = {'F01': 'DD01', 'F02': 'DD02', 'F03': 'DD03', 'F04': 'DD04', 'F05': 'DD05', 'F06': 'DD06', 'F07': 'DD07', 'F08': 'DD08', 'F09': 'DD09'}
@@ -172,26 +193,37 @@ def collect(dd, log=print):
 def build(out=OUT, dd=DD, only=None, log=print):
     items, tmp = collect(dd, log)
     try:
+        done = []
         for name in sorted(items):
             src, kind, orig = items[name]
             grp = name.split('_')[0]
-            if only and grp not in only: continue
+            if only and grp not in only and name not in only: continue
             dst = os.path.join(out, grp, name + '.mp3')
-            convert(src, dst, kind)
-        with open(os.path.join(out, 'MANIFEST.txt'), 'w') as f:
-            for name in sorted(items): f.write('%s/%s.mp3\t%s\n' % (name.split('_')[0], name, items[name][2]))
+            convert(src, dst, kind); done.append(name)
+        with open(os.path.join(out, 'MANIFEST.part.txt' if only else 'MANIFEST.txt'), 'w') as f:      # a partial build never overwrites the full list
+            for name in done: f.write('%s/%s.mp3\t%s\n' % (name.split('_')[0], name, items[name][2]))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    log('built %d files below %s' % (len(items), out))
+    log('built %d files below %s' % (len(done), out))
 
 
 def files_of(out, prefix):
-    g = prefix.split('_')[0]; d = os.path.join(out, g)
-    if not os.path.isdir(d): return []
-    return sorted(f for f in os.listdir(d) if f.startswith(prefix) and f.endswith('.mp3'))
+    g = prefix.split('_')[0]; fs = set()
+    for root in dict.fromkeys((out, BASE)):
+        d = os.path.join(root, g)
+        if os.path.isdir(d): fs.update(f for f in os.listdir(d) if f.startswith(prefix) and f.endswith('.mp3'))
+    return sorted(fs)
 
 
-def ini_text(out=OUT, folder=None):
+def where(out, rel):
+    """-> the path of a library file below --out, else below --base"""
+    p = os.path.join(out, rel)
+    return p if os.path.isfile(p) else os.path.join(BASE, rel)
+
+
+def ini_text(out=OUT, folder=None, only=None, retomoto_radio=False):
+    """only = a list of map keys: write just their [Ambience.<key>] sections (the patch of a later pass), no global block.
+    retomoto_radio: the RETOMOTO sections also get the Japanese police Radio list (jpmega + jpwarn) with RETOMOTO_RADIO_MIN/MAX."""
     def lst(prefix, sub=None):
         fs = files_of(out, prefix)
         return ';'.join('%s\\%s' % (f.split('_')[0], f) for f in fs)
@@ -211,11 +243,20 @@ def ini_text(out=OUT, folder=None):
         out_ = []
         for g in groups: out_ += spot[g]
         return ';'.join(dict.fromkeys(out_))
+    if only: L = L[:1]
     for key, (bv, beds, groups) in MAPS.items():
+        if only and key not in only: continue
         L += ['[Ambience.%s]' % key, 'BedVol=%d' % bv, 'Bed=' + ';'.join(lst(b).split(';')[0] for b in beds), 'Spot=' + spots(groups), '']
     # Retomoto and the other engine maps: one-shots only (global lists apply), horns and dogs would sit oddly in a tower: no Spot
-    for key in ('DM09', 'DM09RB', 'DM09RB2', 'DM09RB3', 'DM09RB4', 'DM09RD', 'DM09RV', 'DM09RV2'):
-        L += ['[Ambience.%s]' % key, 'Spot=', '']
+    # (2nd pass: with retomoto_radio their Radio list is the Japanese police pool, rarer because the pool is small; BedSkip is untouched)
+    for key in RETOMOTO:
+        if only and key not in only: continue
+        extra = []
+        if retomoto_radio:
+            jp = [s for p in RETOMOTO_RADIO for s in lst(p).split(';') if s]
+            extra = ['Radio=' + ';'.join(jp), 'RadioMin=%d' % RETOMOTO_RADIO_MIN, 'RadioMax=%d' % RETOMOTO_RADIO_MAX]
+        L += ['[Ambience.%s]' % key, 'Spot='] + extra + ['']
+    if only: return '\r\n'.join(L)
     # the stock slots F01..F09 (the maps that are not redirected) use the DD lists
     for slot, dd in STOCK_SLOTS.items():
         bv, beds, groups = MAPS[dd]
@@ -225,13 +266,17 @@ def ini_text(out=OUT, folder=None):
 
 def check(out=OUT):
     bad = 0
-    for line in ini_text(out).split('\r\n'):
+    for line in (ini_text(out) + '\r\n' + ini_text(out, only=NEW_MAPS + RETOMOTO, retomoto_radio=True)).split('\r\n'):
         if '=' not in line or line.startswith(';'): continue
         k, v = line.split('=', 1)
         if k in ('Bed', 'Radio', 'Alarm', 'Heli', 'Distant', 'Siren', 'Spot'):
             for f in [x for x in v.split(';') if x]:
-                p = os.path.join(out, f)
+                p = where(out, f)
                 if not os.path.isfile(p) or os.path.getsize(p) < 2000: print('MISSING/EMPTY', p); bad += 1
+                elif p.startswith(out):          # files of this pass: decode them (the first pass's files had their own check)
+                    r = subprocess.run([FFMPEG, '-v', 'error', '-i', p, '-f', 'null', '-'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                    if r.returncode or r.stdout.strip(): print('DECODE FAIL', p, r.stdout[-200:]); bad += 1
+            if len([x for x in v.split(';') if x]) > 24: print('MORE THAN 24 in', line[:60]); bad += 1
     print('check: %d problems' % bad); return bad
 
 
@@ -290,12 +335,19 @@ def main(a):
     if '--out' in a: i = a.index('--out'); out = a[i + 1]; del a[i:i + 2]
     folder = None
     if '--folder' in a: i = a.index('--folder'); folder = a[i + 1]; del a[i:i + 2]
+    global BASE
+    if '--base' in a: i = a.index('--base'); BASE = a[i + 1]; del a[i:i + 2]
     if '--dd' in a: i = a.index('--dd'); dd = a[i + 1]; del a[i:i + 2]
     if '--only' in a: i = a.index('--only'); only = a[i + 1].split(','); del a[i:i + 2]
     if not a: print(__doc__); return 1
     if a[0] == 'build': build(out, dd, only)
     elif a[0] == 'ini':
         p = os.path.join(out, 'KLHook.ambience.patch.ini'); open(p, 'w', newline='').write(ini_text(out, folder)); print('wrote', p)
+    elif a[0] == 'ini2':
+        p = os.path.join(out, 'KLHook.ambience2.patch.ini')
+        t = ('; KLHook.ini patch: ambience 2nd pass (only the sections that change; each replaces the same section of the first block). Made by tools/kl_ambience.py ini2.\r\n'
+             + ini_text(out, folder, only=NEW_MAPS + RETOMOTO, retomoto_radio=True).split('\r\n', 1)[1] + '\r\n')
+        open(p, 'w', newline='').write(t); print('wrote', p)
     elif a[0] == 'music':
         t, miss = music_text(); p = os.path.join(out, 'KLHook.music2.patch.ini'); open(p, 'w', newline='').write(t); print('wrote', p, 'missing:', miss)
     elif a[0] == 'check': return 1 if check(out) else 0
