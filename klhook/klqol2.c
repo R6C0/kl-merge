@@ -84,7 +84,7 @@
  *   WatchSeenCm=1500    no teleport within this of a living human heister (bot or place)
  *   WatchMax=3          teleports per bot and round
  *   WatchDry=0          1 = log only
- *   HeisterKey=0        virtual-key code of the shortcut, 0 = none
+ *   HeisterKey=0        virtual-key code of the shortcut, decimal (72) or 0x hex (0x48), 0 = none
  *   HeisterDowns=5      DOWN taps sent
  *   HeisterUps=0        UP taps sent first
  *   MuteBackground=0    1 = mute while another program is in front
@@ -112,7 +112,7 @@ static struct {
 /* ---------------------------------------------------------------- 1. the watchdog */
 
 struct kqb_b {
-    DWORD actor, since, order_at, hit_at; int seen, step, teles; float pos[3], hp; BYTE told;      /* told: 1 meant wait said, 2 refusal said, 4 no place said */
+    DWORD actor, since, order_at, hit_at, retry_at; int seen, step, teles; float pos[3], hp; BYTE told;      /* told: 1 meant wait said, 2 refusal said, 4 no place said, 8 order refusal said */
 };
 static struct { DWORD rules, state, round_at, last; struct kqb_b b[KLB_NREC]; int told_gate; } kqb_r;
 
@@ -120,7 +120,7 @@ static float kqb_h(const float a[3], const float b[3]) { return (float)sqrt((a[0
 
 /* the next place for a bot that stands still and whose own place is no answer: klhop.c's next free landing place (b), else klmove.c's
    nearest cover place (c). -> 1 and *out, 0 = none. */
-static int kqb_other_place(const struct klb_snap *s, const float bp[3], float out[3], DWORD now, const char **how)
+static int kqb_other_place(const struct klb_snap *s, const float bp[3], float out[3], DWORD now, const char **how, int dry)
 {
     int hi, j, best = -1; float bd = 1e30f;
     if (klv.on && klt_tele_known()) {
@@ -139,7 +139,7 @@ static int kqb_other_place(const struct klb_snap *s, const float bp[3], float ou
                     int p = klv_free(bh, s, now);      /* GUESS: klv_free's "free place" test is the one a carried bot needs here too */
                     if (p >= 0) {
                         memcpy(out, klv_lv.h[bh].to[p], 12);
-                        klv_r.used[bh][p] = KLB_T(now); klv_r.next[bh] = (p + 1) % klv_lv.h[bh].nto;      /* klhop.c hands it to nobody else for 2 s */
+                        if (!dry) { klv_r.used[bh][p] = KLB_T(now); klv_r.next[bh] = (p + 1) % klv_lv.h[bh].nto; }      /* klhop.c hands it to nobody else for 2 s; a dry run reserves nothing */
                         *how = "klhop landing place"; return 1;
                     }
                 }
@@ -180,13 +180,16 @@ static void kqb_watch(const struct klb_snap *s, DWORD now, int human_in, const f
             if (!(b->told & 1)) { b->told |= 1; if (kqb.log) klog("qol2: watchdog: record %d stands %.0f s at (%.0f, %.0f, %.0f) within %.1f m of its defend place: a meant wait, left alone (said once per bot)", i, (now - b->since) / 1000.0, bp[0], bp[1], bp[2], kqb_h(bp, cur) / 100); }
             continue;
         }
+        if (b->step == 2) b->step = 0;      /* review 1: it stood still_ms again after a teleport / a dry-run WOULD: judged afresh, so WatchMax and repeats are reachable */
         if (b->step == 0) {
             struct kle_e t;
+            if (b->retry_at && now - b->retry_at < 5000) continue;      /* review 3: a refused order is retried every 5 s, not every tick */
             memcpy(want, cur, 12);
             memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
             k = kle_order2(&t, want, got, w, kqb.wd_dry);
             b->order_at = KLB_T(now);
-            if (!k) { if (kqb.log) klog("qol2: watchdog: record %d stood %.0f s at (%.0f, %.0f, %.0f), %.1f m from its place: NOT ordered: %s (tries again)", i, (now - b->since) / 1000.0, bp[0], bp[1], bp[2], kqb_h(bp, cur) / 100, w); b->order_at = 0; continue; }
+            if (!k) { if (!(b->told & 8) && kqb.log) klog("qol2: watchdog: record %d stood %.0f s at (%.0f, %.0f, %.0f), %.1f m from its place: NOT ordered: %s (tries again every 5 s; said once per bot)", i, (now - b->since) / 1000.0, bp[0], bp[1], bp[2], kqb_h(bp, cur) / 100, w); b->told |= 8; b->order_at = 0; b->retry_at = KLB_T(now); continue; }
+            b->retry_at = 0;
             b->step = 1;
             if (kqb.log) klog("qol2: watchdog: record %d (stage %u) stood %.0f s at (%.0f, %.0f, %.0f), %.1f m from its place (%.0f, %.0f, %.0f): %s (step 1 of 2); the game set (%.0f, %.0f, %.0f); a teleport follows in %.0f s if it still stands",
                               i, r->stage, (now - b->since) / 1000.0, bp[0], bp[1], bp[2], kqb_h(bp, cur) / 100, cur[0], cur[1], cur[2], k == 2 ? "ORDER AGAIN would be given (dry run)" : "ORDER AGAIN", got[0], got[1], got[2], kqb.tele_ms / 1000.0);
@@ -199,7 +202,7 @@ static void kqb_watch(const struct klb_snap *s, DWORD now, int human_in, const f
             else if ((no = klt_refuse(actor)) == 0 && klh_rd32(actor + 0x770)) no = "it is held as a human shield";
             if (!no) {
                 if (kqb_h(bp, cur) <= kqb.range && fabs(bp[1] - cur[1]) <= kqb.height) { memcpy(to, cur, 12); have = 1; }
-                else have = kqb_other_place(s, bp, to, now, &how);
+                else have = kqb_other_place(s, bp, to, now, &how, kqb.wd_dry);
                 if (!have) no = "no place to put it (its defend place is beyond WatchRangeCm / WatchHeightCm and the level has no free hop place near)";
             }
             if (!no && human_in && ((kqb_h(hp, bp) <= kqb.seen && fabs(hp[1] - bp[1]) <= 600.0f) || (kqb_h(hp, to) <= kqb.seen && fabs(hp[1] - to[1]) <= 600.0f))) no = "a human heister is near the bot or the place";
@@ -208,17 +211,17 @@ static void kqb_watch(const struct klb_snap *s, DWORD now, int human_in, const f
                 b->step = 0; b->since = now - (kqb.still_ms > 0 ? kqb.still_ms : 0);      /* judged again next pass: step 1 repeats (the debounce of kle_order2 applies) */
                 continue;
             }
-            if (kqb.wd_dry) { klog("qol2: watchdog: record %d stood %.0f s: WOULD be put on (%.0f, %.0f, %.0f) [%s] - DRY RUN", i, (now - b->since) / 1000.0, to[0], to[1], to[2], how); b->step = 2; continue; }
+            if (kqb.wd_dry) { klog("qol2: watchdog: record %d stood %.0f s: WOULD be put on (%.0f, %.0f, %.0f) [%s] - DRY RUN", i, (now - b->since) / 1000.0, to[0], to[1], to[2], how); b->step = 2; b->since = now; continue; }
             {
-                struct kle_e t; float is[3] = { 0, 0, 0 };
+                struct kle_e t; float is[3] = { 0, 0, 0 }; double stood = (now - b->since) / 1000.0; int isok;
                 klt_teleport(actor, to);
                 kltr_tp(i, "qol2-watchdog", to, "stuck AI heister: put on its next place");
                 memset(&t, 0, sizeof t); t.rec = i; t.actor = actor; t.soldier = soldier; t.told_soft = 1;
                 k = kle_order2(&t, to, got, w, 0);      /* its order becomes the place it stands on (as klhop.c OrderTo); a refusal is only said */
-                if (kle_node(klh_rd32(actor + 4), is, 0)) {}
-                b->teles++; b->step = 2; memcpy(b->pos, is, 12); b->since = now;
+                isok = kle_node(klh_rd32(actor + 4), is, 0);
+                b->teles++; b->step = 2; if (isok) memcpy(b->pos, is, 12); else memcpy(b->pos, to, 12); b->since = now;
                 klog("qol2: watchdog: record %d (stage %u) stood %.0f s at (%.0f, %.0f, %.0f) after its order was given again: TELEPORTED to (%.0f, %.0f, %.0f) [%s], now (%.0f, %.0f, %.0f)%s (time %d of %d)",
-                     i, r->stage, (now - b->since) / 1000.0, bp[0], bp[1], bp[2], to[0], to[1], to[2], how, is[0], is[1], is[2], k ? "; ordered there" : "; NOT ordered there", b->teles, kqb.max_tele);
+                     i, r->stage, stood, bp[0], bp[1], bp[2], to[0], to[1], to[2], how, is[0], is[1], is[2], k ? "; ordered there" : "; NOT ordered there", b->teles, kqb.max_tele);
             }
         }
     }
@@ -256,13 +259,14 @@ static int kqb_top_is_arcade(void)
     return !strcmp(nm, "HeistModeMenu");
 }
 
-static int kqb_front(void)
-{
+static int kqb_front3(void)
+{   /* 1 = a window of this process is in front, 0 = another program, -1 = unknown (no foreground window: alt-tab, UAC) */
     DWORD pid = 0; HWND f = kqb.p_fg();
-    if (!f) return 0;
+    if (!f) return -1;
     kqb.p_tid(f, &pid);
     return pid == GetCurrentProcessId();
 }
+static int kqb_front(void) { return kqb_front3() == 1; }
 
 static void kqb_tap(int down, int up)
 {   /* a scan-code key event: DOWN arrow = 0xD0, UP arrow = 0xC8 with the extended flag; the game reads DirectInput, which sees scan codes (GUESS 1) */
@@ -310,12 +314,15 @@ static DWORD WINAPI kqb_mute_thread(LPVOID unused)
     HRESULT (WINAPI *p_init)(LPVOID, DWORD) = ole ? (HRESULT (WINAPI *)(LPVOID, DWORD))GetProcAddress(ole, "CoInitializeEx") : 0;
     HRESULT (WINAPI *p_create)(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID *) = ole ? (HRESULT (WINAPI *)(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID *))GetProcAddress(ole, "CoCreateInstance") : 0;
     IMMDeviceEnumerator *en = 0; IMMDevice *dev = 0; IAudioSessionManager *mgr = 0; ISimpleAudioVolume *vol = 0;
-    float level = kqb.mute_pct / 100.0f, orig = 1.0f; int muted = 0, first = 1; DWORD retry = 0;
+    float level = kqb.mute_pct / 100.0f, orig = 1.0f; int muted = 0, first = 1, front_prev = 1, nfront = 0; DWORD retry = 0;
     (void)unused;
     if (!p_init || !p_create || FAILED(p_init(0, 0 /* COINIT_MULTITHREADED */))) { klog("qol2: mute: COM could not be started - MuteBackground does nothing"); InterlockedExchange(&kqb_mute_state, -1); return 0; }
     for (;;) {
-        int front = kqb_front();
+        int fs = kqb_front3(), front;
         DWORD now = GetTickCount();
+        /* review 6: no foreground window = unchanged; 'not in front' must hold for 2 polls (500 ms) before the mute */
+        if (fs == 1) { front_prev = 1; nfront = 0; } else if (fs == 0) { if (++nfront >= 2) front_prev = 0; }
+        front = front_prev;
         if (!vol && (!retry || now - retry >= 5000)) {
             retry = KLB_T(now);
             if (SUCCEEDED(p_create(&kqb_CLSID_Enum, 0, CLSCTX_ALL, &kqb_IID_Enum, (LPVOID *)&en)) &&
@@ -324,11 +331,11 @@ static DWORD WINAPI kqb_mute_thread(LPVOID unused)
                 SUCCEEDED(mgr->lpVtbl->GetSimpleAudioVolume(mgr, 0, FALSE, &vol))) {
                 float v = 1.0f;
                 vol->lpVtbl->GetMasterVolume(vol, &v);
-                if (first && front && v < 0.999f && v >= level - 0.005f && v <= level + 0.005f) {      /* left muted by a game closed in the background */
+                if (first && v < 0.999f && v >= level - 0.005f && v <= level + 0.005f) {      /* left muted by a game closed in the background (review 2: front or not; a deliberate per-app volume of MuteLevelPct is forced to 100 %) */
                     vol->lpVtbl->SetMasterVolume(vol, 1.0f, 0); v = 1.0f;
                     klog("qol2: mute: the session volume was found at %.0f %% (a leftover of a muted exit): put back to 100 %%", level * 100);
                 }
-                orig = v; first = 0;
+                orig = v <= level + 0.005f ? 1.0f : v; first = 0;      /* never keep a value at or below the mute level as the one to go back to */
                 klog("qol2: mute: audio session found, volume %.0f %%", v * 100);
             } else {
                 if (mgr) { mgr->lpVtbl->Release(mgr); mgr = 0; }
@@ -338,7 +345,7 @@ static DWORD WINAPI kqb_mute_thread(LPVOID unused)
             }
         }
         if (vol) {
-            if (!front && !muted) { vol->lpVtbl->GetMasterVolume(vol, &orig); vol->lpVtbl->SetMasterVolume(vol, level, 0); muted = 1; InterlockedExchange(&kqb_muted, 1); klog("qol2: mute: game in the background - volume %.0f %% -> %.0f %%", orig * 100, level * 100); }
+            if (!front && !muted) { vol->lpVtbl->GetMasterVolume(vol, &orig); if (orig <= level + 0.005f) orig = 1.0f; vol->lpVtbl->SetMasterVolume(vol, level, 0); muted = 1; InterlockedExchange(&kqb_muted, 1); klog("qol2: mute: game in the background - volume %.0f %% -> %.0f %%", orig * 100, level * 100); }
             else if (front && muted) { vol->lpVtbl->SetMasterVolume(vol, orig, 0); muted = 0; InterlockedExchange(&kqb_muted, 0); klog("qol2: mute: game in front - volume back to %.0f %%", orig * 100); }
         }
         Sleep(250);
@@ -384,7 +391,10 @@ static void kqb_init(void)
     kqb.height = kqb_inif("WatchHeightCm", "600", 100, 3000);
     kqb.seen = kqb_inif("WatchSeenCm", "1500", 0, 10000);
     kqb.max_tele = (int)kqb_inif("WatchMax", "3", 1, 20);
-    kqb.hkey = (int)GetPrivateProfileIntA("QoL2", "HeisterKey", 0, klh_ini);
+    {   /* review 7: decimal or 0x hex (GetPrivateProfileInt takes decimal only) */
+        char t[16]; GetPrivateProfileStringA("QoL2", "HeisterKey", "0", t, sizeof t, klh_ini);
+        kqb.hkey = (int)strtol(t, 0, 0);
+    }
     if (kqb.hkey < 0 || kqb.hkey > 254) kqb.hkey = 0;
     kqb.downs = (int)kqb_inif("HeisterDowns", "5", 1, 12);
     kqb.ups = (int)kqb_inif("HeisterUps", "0", 0, 12);
