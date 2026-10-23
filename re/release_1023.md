@@ -18,14 +18,15 @@ the manifest first, saves what is live as `<name>.undo-<time>`, restores byte fo
 `[Balance]` PointBlankToYou=4.5 CopToYou=0.7 CrewToYou=0.6 PlayerHealth=1.0 CopToYouFar=0.6 CopToYouNearAt=12 CopToYouFarAt=40
 (identical to `balance2_1023\KLHook.balance2.patch.ini`, checked line by line; basis re/balance2_1023.md).
 `[QoL]` FlashOnReady=1 ReleaseCursor=1 BackgroundMs=0 (key names match klqol.c lines 117-122; the effects are not proven live; `Ramp` defaults to 1 in klbalance.c:1281).
-No `Enable` line: see "Review fixes" 1; use `-BalanceOn`.
+No `Enable` line: the owner's ini already has Enable=1 (see "Review fixes" 1); `-BalanceOn` only for an ini where it is not.
 Not written: `[QoL2]` anything, BackgroundMs > 0.
 
 ## Review fixes (feat/1023-release-fix)
-1. ACCEPTED. `[Balance] Enable=0` in the live ini (line 46) and `klr_init` returns before reading any [Balance] key: pass 2 is inert unless Enable=1.
-   The owner was not asked (no owner here), so the default stays: the patch does NOT write Enable. New installer switch `-BalanceOn` adds Enable=1;
-   the installer always prints live Enable/Risk/Tough/CopToCrew/YouToCop/RegenDelay/RegenTime and a NOTE when Enable is not 1. Test values left in the live ini
-   that the patch does not touch: Risk=2, Tough=1.0, CopToCrew=0.01, YouToCop=2.0, RegenDelay=0.5, RegenTime=0.5 (owner/lead decides). Live test steps 1 and 3 need Enable=1.
+1. PREMISE WRONG (lead, 10:10). The reviewer read KLHook.ini while kl-merge-27's BUY test ini was swapped in (Enable=0, CopToYou=0.001,
+   PlayerHealth=10 are test values). The owner's real ini (sha1 a4de872a, restored after every run) has `[Balance] Enable=1`, Risk=2,
+   CopToYou=0.9, PlayerHealth=0.9, PointBlankToYou=6.0, RegenDelay=RegenTime=6 = pass 1, so the plain install turns pass 2 on.
+   Kept from the fix: the installer prints live Enable/Risk/Tough/CopToCrew/YouToCop/RegenDelay/RegenTime and a NOTE when Enable is not 1;
+   `-BalanceOn` adds Enable=1 for that case. Do not run the installer while a test ini is swapped in (a test run in progress).
 2. ACCEPTED. Wording changed: key names match klqol.c and are read live; FlashOnReady/ReleaseCursor effects (flash, load detection when not in front, ClipCursor(NULL) sticking) are NOT proven live.
 3. ACCEPTED. Installer verifies the package dll against `dinput8.dll.sha1` (first token) before anything is written. Staged files are now byte copies of the committed kit (line endings identical).
 4. ACCEPTED. Rollback removes the new dll when none existed before (tested on a fake DD without a dll: install, undo removes it).

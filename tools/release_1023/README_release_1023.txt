@@ -10,10 +10,9 @@ WHAT CHANGES IN THE GAME
    - your health is the game's own 550 (was 495)
    - NEW: police bullets from far away hurt less: full strength inside 12 m, x0.6 from 40 m on, in between smoothly
    Only the early Arcade levels feel it; from level 5 the game's own numbers stand.
-   IMPORTANT: the whole [Balance] module does nothing while [Balance] Enable=0 (it is 0 in the current KLHook.ini, with old
-   test values such as Risk=2, CopToCrew=0.01, YouToCop=2.0, RegenDelay/RegenTime=0.5 that this release does NOT change).
-   The installer prints the live Enable/Risk/Tough/... values. To also switch the module on, run the installer with
-   -BalanceOn (adds Enable=1); decide Risk/Tough/CopToCrew/Regen* yourself first, they stay as they are.
+   Your KLHook.ini already has [Balance] Enable=1 (checked 2026-10-23 10:10, sha1 a4de872a: Risk=2, CopToCrew=0.01,
+   YouToCop=2.0, RegenDelay/RegenTime=6, all left as they are), so the plain INSTALL is enough. The installer prints the
+   live Enable/Risk/... values; only if it shows a NOTE that Enable is not 1, re-run it with -BalanceOn (adds Enable=1).
 3. Two quality-of-life keys ([QoL]) - the keys are read live, the flash and the cursor release themselves are NOT proven in the game yet:
    - FlashOnReady=1: the game's taskbar button flashes when a level finished loading, when the Fragile Alliance lobby
      countdown starts, and when the round is over, while you are in another window.
