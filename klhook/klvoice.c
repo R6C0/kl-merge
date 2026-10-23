@@ -26,7 +26,9 @@
  * are DATA only (klh_data: one dword of a heap array per entry), so a SHIP build may do it. Offline Arcade only
  * (klw_who_now). Game thread only.
  *
- * INI [Voice]:  Enable=0   StockLevels=0 (1 = also on a level the verdict calls stock; the DD01..DD09 copies carry the leaves)
+ * INI [Voice]:  RadioFallback=0 (1: a radio line whose KLVoice/<Name>_R leaf is missing takes the plain KLVoice/<Name> leaf of the same event)
+ *               PlayedLog=1 (with Log=2: 'voice: QUEUED <leaf> ...' / 'voice: entry USED? ...' when the game queues / seems to use an entry we swapped)
+ *               Enable=0   StockLevels=0 (1 = also on a level the verdict calls stock; the DD01..DD09 copies carry the leaves)
  *               Log=1 (0 none, 1 the summary lines, 2 every swap)   Period=1500 (ms between two walks)
  */
 #ifndef KLVOICE_C
@@ -40,10 +42,10 @@
 
 static const char *const kvo_names[8] = { "Kane", "Lynch", "Ashkanan", "Meldal", "Red", "Parker", "Standen", "Hutchison" };
 
-static struct { int on, stock, log, period; } kvo;
+static struct { int on, stock, log, period, radiofb, played; } kvo;     /* radiofb/played: [Voice] RadioFallback / PlayedLog (2026-10-23 voiceheard) */
 static struct {                                  /* the entries made for this level generation (never freed: the game may hold them) */
     DWORD rules, mgr, lm; char scene[160]; int n, toldfull;
-    struct { DWORD hash; void *entry; int found; } e[KVO_NENTRY];
+    struct { DWORD hash; void *entry; int found; DWORD sum, lastq; char path[72]; char chg; } e[KVO_NENTRY];
 } kvo_gen;
 static struct { DWORD addr, orig, ours; int active; } kvo_rec[KVO_NREC];
 static short kvo_ix[KVO_HASH];                   /* hash of addr -> record index + 1 */
@@ -57,6 +59,14 @@ static int kvo_name_of(const char *n)
     return 0;
 }
 
+/* a checksum of an entry's 0x204 bytes (PlayedLog: a change after the swap MAY mean the game used the entry - GUESS) */
+static DWORD kvo_sum(const void *e)
+{
+    const DWORD *d = (const DWORD *)e; DWORD h = 2166136261u; int i;
+    for (i = 0; i < 0x204 / 4; i++) h = (h ^ d[i]) * 16777619u;
+    return h;
+}
+
 /* the entry of a .LOC key, made as kltalk.c's klk_entry makes it (own cache: the talk cache holds 640 and is shared) */
 static void *kvo_entry(const char *key, DWORD rules, const char *scene)
 {
@@ -68,6 +78,7 @@ static void *kvo_entry(const char *key, DWORD rules, const char *scene)
     if (!(e = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, 0x204))) return 0;
     found = (DWORD)(DWORD_PTR)((void *(__fastcall *)(void *, void *, const char *, void *))(DWORD_PTR)KLH_VA(KLK_LOOKUP))((void *)(DWORD_PTR)lm, 0, key, e);
     kvo_gen.e[kvo_gen.n].hash = h; kvo_gen.e[kvo_gen.n].entry = e; kvo_gen.e[kvo_gen.n].found = found && *(DWORD *)e;
+    snprintf(kvo_gen.e[kvo_gen.n].path, sizeof kvo_gen.e[0].path, "%s", key); kvo_gen.e[kvo_gen.n].sum = kvo_sum(e);
     kvo_gen.n++;
     return kvo_gen.e[kvo_gen.n - 1].found ? e : 0;
 }
@@ -123,6 +134,45 @@ static int kvo_leaf(const char *text, char leaf[64])
     return 1;
 }
 
+/* PlayedLog (voiceheard, 2026-10-23): proof that the game USES an entry we swapped in. Two signals, both read-only:
+ *  (a) the speech queue [manager+0x974]: count at [queue] (0..10), records of 20 bytes from queue+4 = { priority, entry,
+ *      speaker, float, last } (kltalk.c section 1: 0x578840 queues a line the channel cannot play at once). A record whose
+ *      entry is one of OURS -> 'voice: QUEUED ...' (what the game is about to say, with the speaker's crew record).
+ *  (b) GUESS: 0x7d0e80 plays an entry at once and the queue never shows it. If the game writes into the 0x204 entry block when
+ *      it plays it (a played-at stamp, a handle), its checksum changes -> 'voice: entry USED? ...' (first change per entry,
+ *      at most 40 lines). Nothing proves the game writes there; if (b) never fires, only (a) counts and a heard clip is by ear.
+ * Runs every game-thread call (cheap: one 204-byte read when the queue is empty; 3 KB of checksums every 250 ms). Log=2 and PlayedLog=1. */
+static void kvo_played(DWORD mgr, DWORD now)
+{
+    static DWORD next_sum; static int told_chg, told_q;
+    DWORD queue = klh_rd32(mgr + 0x974), cnt = 0, rec[5]; int i, k;
+    if (!kvo.played || kvo.log < 2 || !kvo_gen.n) return;
+    if (queue && klh_rd(queue, &cnt, 4) && cnt >= 1 && cnt <= 10) {
+        for (k = 0; k < (int)cnt; k++) {
+            if (!klh_rd(queue + 4 + (DWORD)k * 20, rec, 20)) break;
+            for (i = 0; i < kvo_gen.n; i++)
+                if (kvo_gen.e[i].found && (DWORD)(DWORD_PTR)kvo_gen.e[i].entry == rec[1]) {
+                    if (now - kvo_gen.e[i].lastq > 1500 || !kvo_gen.e[i].lastq) {
+                        klog("voice: QUEUED %s for crew record %lu (queue %lu, priority %ld): the game is about to say our entry", kvo_gen.e[i].path, rec[2], cnt, (long)rec[0]);
+                        told_q++;
+                    }
+                    kvo_gen.e[i].lastq = now ? now : 1;
+                    break;
+                }
+        }
+    }
+    if ((long)(now - next_sum) < 0) return;
+    next_sum = now + 250;
+    for (i = 0; i < kvo_gen.n && told_chg < 40; i++) {
+        BYTE blk[0x204];
+        if (!kvo_gen.e[i].found || kvo_gen.e[i].chg || !klh_rd((DWORD_PTR)kvo_gen.e[i].entry, blk, sizeof blk)) continue;
+        if (kvo_sum(blk) != kvo_gen.e[i].sum) {
+            kvo_gen.e[i].chg = 1; told_chg++;
+            klog("voice: entry USED? %s changed after the swap (GUESS: the game stamped it while playing it; %d queued so far)", kvo_gen.e[i].path, told_q);
+        }
+    }
+}
+
 static void kvo_tick(int game_thread)
 {
     struct klw_who w; char scene[160], key[64], why[200], who[8][32], path[128], text[130], leaf[64], names[8][16];
@@ -141,6 +191,7 @@ static void kvo_tick(int game_thread)
       if (kvo_gen.rules != w.rules || kvo_gen.mgr != mgr || kvo_gen.lm != lm || strcmp(kvo_gen.scene, scene)) {
           if (kvo_nrec) kvo_restore_all("a new level generation");
           memset(&kvo_gen, 0, sizeof kvo_gen); kvo_gen.rules = w.rules; kvo_gen.mgr = mgr; kvo_gen.lm = lm; snprintf(kvo_gen.scene, sizeof kvo_gen.scene, "%s", scene); memset(&kvo_s, 0, sizeof kvo_s); } }
+    kvo_played(mgr, now);
     if (!klh_rd(w.rules + 0x33e, tab, sizeof tab)) return;
 
     /* who speaks with which entry number: want[idx] = the Dead Men name, "" = a body that is not one of the eight (leaves the entry alone) */
@@ -193,7 +244,13 @@ static void kvo_tick(int game_thread)
                         if (ln2 > 2 && !strcmp(leaf + ln2 - 2, "_R")) snprintf(path, sizeof path, "KLVoice/%s_R/%.*s", who[slot], (int)(ln2 - 2), leaf);
                         else snprintf(path, sizeof path, "KLVoice/%s/%s", who[slot], leaf);
                         if (ri >= 0 && kvo_rec[ri].active && cur != kvo_rec[ri].ours) { kvo_rec[ri].active = 0; ri = -1; }            /* the game put something else there: ours no more */
-                        if (!(e = kvo_entry(path, w.rules, scene))) { nmiss++; if (kvo.log > 1 && kvo_first_miss(scene, path)) klog("voice: %s: no leaf %s (logged once)", leaf, path); continue; }
+                        e = kvo_entry(path, w.rules, scene);
+                        if (!e && kvo.radiofb && ln2 > 2 && !strcmp(leaf + ln2 - 2, "_R")) {          /* RadioFallback=1: no radio twin in the .LOC (tier 'no radio' of kl_dmvoice) -> the plain leaf of the same event, if it has one */
+                            char p2[128]; snprintf(p2, sizeof p2, "KLVoice/%s/%.*s", who[slot], (int)(ln2 - 2), leaf);
+                            e = kvo_entry(p2, w.rules, scene);
+                            if (e) snprintf(path, sizeof path, "%s", p2);
+                        }
+                        if (!e) { nmiss++; if (kvo.log > 1 && kvo_first_miss(scene, path)) klog("voice: %s: no leaf %s (logged once)", leaf, path); continue; }
                         if ((DWORD)(DWORD_PTR)e == cur) continue;
                         if (ri < 0 && (ri = kvo_find(addr, 1)) < 0) continue;
                         if (!kvo_rec[ri].active) kvo_rec[ri].orig = cur;
@@ -224,8 +281,10 @@ static void klvo_init(void)
     kvo.stock = GetPrivateProfileIntA("Voice", "StockLevels", 0, klh_ini) != 0;
     kvo.log = (int)GetPrivateProfileIntA("Voice", "Log", 1, klh_ini);
     kvo.period = (int)GetPrivateProfileIntA("Voice", "Period", 1500, klh_ini);
+    kvo.radiofb = GetPrivateProfileIntA("Voice", "RadioFallback", 0, klh_ini) != 0;     /* default 0 = the old behaviour */
+    kvo.played = GetPrivateProfileIntA("Voice", "PlayedLog", 1, klh_ini) != 0;      /* only logs, and only with Log=2 */
     if (kvo.period < 200 || kvo.period > 60000) kvo.period = 1500;
-    if (kvo.on) klog("voice: on; the Dead Men bodies' event lines come from KLVoice/<Name>/<Event> of the level's .LOC (StockLevels=%d Log=%d Period=%d ms); needs [Wardrobe] DMVoice=1 / [Crew] Voice=1 so each body has its own voice number", kvo.stock, kvo.log, kvo.period);
+    if (kvo.on) klog("voice: on; the Dead Men bodies' event lines come from KLVoice/<Name>/<Event> of the level's .LOC (StockLevels=%d Log=%d Period=%d ms RadioFallback=%d PlayedLog=%d); needs [Wardrobe] DMVoice=1 / [Crew] Voice=1 so each body has its own voice number", kvo.stock, kvo.log, kvo.period, kvo.radiofb, kvo.played);
 }
 
 #endif /* KLVOICE_C */

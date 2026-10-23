@@ -64,6 +64,11 @@ EVENT_THEME = [
     (r'^JackPot', 'greed'), (r'^TeamCashMajority', 'loot'), (r'^CashMajority', 'watch'), (r'^ReachlootArea', 'loot'),
     (r'^(ExitLootArea|ExitHeist|MissionBriefing|MissionReminder)', 'go'), (r'^LevelBound', 'bounds'),
     (r'^(AllianceReminder|TeamAlliance|TimeOut)', 'together'),
+    # voiceheard 2026-10-23: the 'FA_' events (what a non-radio line is called) used to match nothing and all got 'loot'.
+    # event_theme() now strips 'FA_' / '1time_', so the rules above work for them; these are the events only they have (GUESS by name):
+    (r'^(CallExitVehicle|ExitVehicleAnd|ExitVehicleDestroyed)', 'esc'), (r'^ExitVehicleHeav', 'shoot'), (r'^ShootExitVehicle', 'hunt'),
+    (r'^(PoliceReward|HittingTheScore)', 'greed'), (r'^(AllDead|TeamloseGame|TeamOneMercLeft)', 'down'),
+    (r'^(TeamLeading|TeamWinGame)', 'win'), (r'^(TeamTrailing|TeamDraw)', 'watch'), (r'^Exit', 'go'),
 ]
 # theme -> category groups (regex on the campaign category below AllLevels/Oneliners/), best first
 THEMES = {
@@ -239,6 +244,8 @@ def need_for(n):
 def event_theme(name):
     base = re.sub(r'_R$', '', name)
     base = re.sub(r'_\d+$', '', base)
+    base = re.sub(r'^FA_(1time_)?', '', base)           # 'FA_Backstab' -> 'Backstab' (voiceheard: they all fell through to 'loot')
+    base = re.sub(r'\d+$', '', base)                    # 'YouEscaped01' -> 'YouEscaped'
     for rx, th in EVENT_THEME:
         if re.search(rx, base):
             return base, th
