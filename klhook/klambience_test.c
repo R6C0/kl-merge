@@ -1,5 +1,5 @@
 /* klambience_test.c - off-game harness for klambience.c's worker: a bed (volume 0 = silent) that must restart when it ends, plus
-   one-shots. Build: cl /nologo /W3 /D_CRT_SECURE_NO_WARNINGS klambience_test.c (VS x86 prompt); run: klambience_test.exe bed.mp3 shot.mp3
+   one-shots. Build: cl /nologo /W3 /D_CRT_SECURE_NO_WARNINGS klambience_test.c (VS x86 prompt); run: klambience_test.exe bed.mp3 shortshot.mp3 [longshot.mp3: stays open, the stop test needs it]
    Expect: bed opens, restarts (log shows MCI ok), 6 shots overflow the 4 slots (2 dropped or queued), all closed at the end. */
 #include <windows.h>
 #include <stdio.h>
@@ -33,5 +33,15 @@ int main(int argc, char **argv)
     printf("--- bed off\n"); bed("", 500); Sleep(1500);
     open = klam_bed.open; for (i = 0; i < KLAM_NSHOT; i++) open += klam_sh[i].open;
     printf("open=%d errors=%d\n", open, klam_nerr);
-    return (!open && !klam_nerr) ? 0 : 1;
+    if (open || klam_nerr) return 1;
+    printf("--- stop flag: bed + 6 long shots (4 open, 2 queued), then one stop command must close every slot and empty the queue\n");
+    bed(argv[1], 100); Sleep(500); for (i = 0; i < 6; i++) shot(argc > 3 ? argv[3] : argv[2]); Sleep(700);
+    open = klam_bed.open; for (i = 0; i < KLAM_NSHOT; i++) open += klam_sh[i].open;
+    printf("before stop: open=%d queued=%d\n", open, (klam_qt - klam_qh + KLAM_QN) % KLAM_QN);
+    EnterCriticalSection(&klam_cs);
+    klam_cmd.stop = 1; klam_qh = klam_qt; klam_cmd.seq++; klam_cmd.fade = 100; klam_cmd.bed[0] = 0;
+    LeaveCriticalSection(&klam_cs); SetEvent(klam_ev); Sleep(1200);
+    open = klam_bed.open; for (i = 0; i < KLAM_NSHOT; i++) open += klam_sh[i].open;
+    printf("after stop: open=%d queued=%d errors=%d\n", open, (klam_qt - klam_qh + KLAM_QN) % KLAM_QN, klam_nerr);
+    return (!open && klam_qt == klam_qh && !klam_nerr) ? 0 : 1;
 }

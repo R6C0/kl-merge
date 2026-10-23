@@ -151,7 +151,6 @@ def collect(dd, log=print):
                 p = kl_audio.export(src_sf, c, os.path.join(tmp, 'str'))
                 n += 1; name = oid.format(n=n) if '{n}' in oid else oid
                 items[name] = (p, kind, c.name)
-            items[name] = (p, kind, c.name)
         # then memory clips: the first bank holding each distinct clip
         for b in banks:
             if kind == 'bed': break

@@ -44,7 +44,7 @@
 typedef DWORD (WINAPI *klam_send_fn)(LPCSTR, LPSTR, UINT, HWND);
 typedef BOOL  (WINAPI *klam_err_fn)(DWORD, LPSTR, UINT);
 
-struct klam_cmd_t { int seq, vol, fade, bedvol; char bed[KLAM_PATH]; };
+struct klam_cmd_t { int seq, vol, fade, bedvol, stop; char bed[KLAM_PATH]; };   /* stop = close every one-shot now */
 static struct klam_cmd_t klam_cmd;                          /* bed command, posted by the game thread, under klam_cs */
 static struct { char f[KLAM_PATH]; int vol; } klam_q[KLAM_QN];  /* one-shot queue (ring), under klam_cs */
 static int klam_qh, klam_qt;
@@ -132,7 +132,7 @@ static void klam_poll(DWORD now)
     for (s = 0; s < KLAM_NSHOT; s++) {
         struct klam_slot *p = &klam_sh[s];
         if (!p->open) continue;
-        if (now - p->started > 90000u) { klam_close(p); continue; }
+        if (now - p->started > 300000u)     /* safety only: the longest one-shot is well under 300 s */ { klam_close(p); continue; }
         if (now - p->started > 400 && klam_mci(r, sizeof r, "status %s mode", p->al) && (!_stricmp(r, "stopped") || !_stricmp(r, "not ready"))) klam_close(p);
     }
 }
@@ -161,7 +161,7 @@ static DWORD WINAPI klam_thread(void *u)
         if (klam_cmd.seq != seen) { copy = klam_cmd; seen = klam_cmd.seq; gotcmd = 1; }
         if (klam_qh != klam_qt) { snprintf(sf, sizeof sf, "%s", klam_q[klam_qh].f); sv = klam_q[klam_qh].vol; klam_qh = (klam_qh + 1) % KLAM_QN; gotshot = 1; }
         LeaveCriticalSection(&klam_cs);
-        if (gotcmd) klam_bedcmd(&copy);
+        if (gotcmd) { if (copy.stop) { int k; for (k = 0; k < KLAM_NSHOT; k++) klam_close(&klam_sh[k]); } klam_bedcmd(&copy); }
         if (gotshot) klam_shot(sf, sv);
         klam_stepfade(now - last); last = now;
         if (now - lastp >= 250) { lastp = now; klam_poll(now); }
@@ -186,7 +186,7 @@ static const struct { const char *name; int min, max, from, after, vol; } klam_g
 struct klam_grp { int n, min, max, from, after, vol, fired; DWORD next; char f[KLAM_MAXF][KLAM_PATH]; };
 
 static struct {
-    int on, vol, bedvol, fade, action_after, enabled, round, bedforce, phase, last_phase, bed_on;
+    int on, vol, bedvol, fade, action_after, enabled, round, bedforce, phase, last_phase, bed_on, shots_live;
     char folder[KLAM_PATH], skip[200], map[40], bed[KLAM_PATH];
     struct klam_grp g[KLAM_NG];
     DWORD t_round, t_last, t_fail, rules0, money0; BYTE stage0[KLB_NREC];
@@ -270,9 +270,10 @@ static void klam_loadmap(void)
          klam.enabled ? "" : " (this map is switched off)");
 }
 
-static void klam_postbed(const char *bed)
+static void klam_postbed(const char *bed, int stop)
 {
     EnterCriticalSection(&klam_cs);
+    klam_cmd.stop = stop; if (stop) klam_qh = klam_qt;                /* drop queued one-shots too */
     klam_cmd.seq++; klam_cmd.vol = klam.vol; klam_cmd.fade = klam.fade; klam_cmd.bedvol = klam.bedvol;
     snprintf(klam_cmd.bed, sizeof klam_cmd.bed, "%s", bed ? bed : "");
     LeaveCriticalSection(&klam_cs);
@@ -292,7 +293,7 @@ static void klam_fire(int g)
 
 static void klam_off(void)
 {   /* no round / silent state: stop the bed once */
-    if (klam.bed_on) { klam.bed_on = 0; klam_postbed(0); }
+    if (klam.bed_on || klam.shots_live) { klam.bed_on = klam.shots_live = 0; klam_postbed(0, 1); }
     klam.round = 0;
 }
 
@@ -314,10 +315,10 @@ static void klam_tick(int game_thread)
     if (s.state != KLB_ROUND) { klam_off(); return; }
     for (i = 0; i < s.n; i++) if (s.r[i].used) money += s.r[i].money;
     if (!klam.round || s.rules != klam.rules0) {                 /* a round began */
-        klam.round = 1; klam.rules0 = s.rules; klam.t_round = KLB_T(now); klam.money0 = money; klam.phase = KLAM_P_CALM;
+        klam.round = 1; klam.rules0 = s.rules; klam.t_round = KLB_T(now); klam.money0 = money; klam.phase = KLAM_P_CALM; klam.last_phase = -1;
         for (g = 0; g < KLAM_NG; g++) { klam.g[g].fired = 0; klam.g[g].next = 0; }
         if (klam.bedlist.n && (!klmu_inlist(klam.skip, klam.map) || klam.bedforce)) snprintf(klam.bed, sizeof klam.bed, "%s", klam.bedlist.f[klam_rand(klam.bedlist.n)]);
-        klam_postbed(klam.bed); klam.bed_on = klam.bed[0] != 0;
+        klam_postbed(klam.bed, 1); klam.bed_on = klam.bed[0] != 0;
     }
     if (now - klam.t_round < 8000u) {                            /* grace: money and stage are re-baselined (as klmusic.c) */
         klam.money0 = money;
@@ -348,7 +349,7 @@ static void klam_tick(int game_thread)
             if (!G->next) G->next = now + 1500;
         } else if (!G->next) G->next = now + (DWORD)(G->min + klam_rand(G->max - G->min + 1)) * 1000u;
         if ((int)(now - G->next) >= 0) {
-            klam_fire(g); G->fired++;
+            klam_fire(g); klam.shots_live = 1; G->fired++;
             G->next = G->max > 0 ? now + (DWORD)(G->min + klam_rand(G->max - G->min + 1)) * 1000u : 0;
         }
       }

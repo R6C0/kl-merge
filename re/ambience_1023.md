@@ -28,12 +28,18 @@ have engine ambience or music: no bed; DM09* also no Spot (a tower). Stock maps 
 - `tools/kl_ambience.py build|ini|music|check`: extract (PC_Def.str streams via kl_audio, in-memory IMA clips via kl_gunsnd from the DD
   banks) -> ffmpeg mp3 -> `<out>/<group>/*.mp3`; writes `KLHook.ambience.patch.ini` and `KLHook.music2.patch.ini`. The per-map bed choice
   (`MAPS`) and music pools (`MUSIC`) are GUESSES from the map names.
-- Staging: `G:\kl_build_1023\ambience_1023\` (98 mp3, 22 MB, patch inis, `dll\dinput8.dll` = SHIP out_1023a, `INSTALL ambience 1023.bat`,
-  `UNDO ambience 1023.bat`, `ambience_1023.ps1`). Install refuses while kl2.exe runs, backs up KLHook.ini and dinput8.dll as `*.before-1023amb`,
-  copies the library to `<DD>\KLExpansion\Ambience` with md5 per file, appends the ini blocks (marker line; idempotent), widens the global
-  `[Music]` Calm/Action, never re-adds `[Music.DM01B]`/`[Music.DM11B]`. Round trip tested on a copy (`-SkipRunCheck`): undo restores the ini byte for byte.
-- ORDER with the voice pass: independent (the only shared file is dinput8.dll). If the voice pass ships a DLL, install it first, merge
-  feat/1023-voice + feat/1023-ambience, rebuild, and use that DLL in `dll\`.
+- Staging: `G:\kl_build_1023mbience_1023\` (98 mp3, 22 MB, patch inis, `dll\dinput8.dll` = SHIP out_1023a, `INSTALL ambience 1023.bat`,
+  `UNDO ambience 1023.bat`, `ambience_1023.ps1`). Install refuses while kl2.exe runs, copies the library to `<DD>\KLExpansion\Ambience` with md5 per file,
+  appends the ini blocks between `; ambience-1023 block (...)` and `; ambience-1023 block end` (idempotent), widens the global `[Music]` Calm/Action,
+  never re-adds `[Music.DM01B]`/`[Music.DM11B]`, and writes one timestamped `KLHook.ini.before-1023amb-<time>` per run (manual recovery only).
+- The hook dll is NOT copied by default (the merged-tree hook is installed separately). `-Dll` copies the package dll: refused unless the live dll's md5
+  equals `dinput8.dll.before-1023amb` or the package dll; `-Undo -Dll` restores it only while the live dll is still the package's.
+- UNDO is surgical: removes only the marker block(s), strips only the exact Calm/Action suffixes, deletes the library folder; it never restores an ini
+  snapshot, so later edits to KLHook.ini survive. Tested on copies (`-SkipRunCheck`): install, re-run (no change), undo with a user section added after the block.
+- Worker: every silencing path (round end, online, map change, map off) posts a stop-shots command: all one-shot slots are closed and the queue emptied.
+  A one-shot slot is force-closed only after 300 s (safety).
+- ORDER with the voice pass: independent (no shared file unless -Dll is used). If the voice pass ships a DLL, merge feat/1023-voice + feat/1023-ambience,
+  rebuild and install that one.
 
 ## Live test recipe
 KLHook.ini after install has `[Ambience] Enable=1 Log=1`. Start a FA round on e.g. Subway and read `KLHook.log`:
