@@ -1007,11 +1007,16 @@ def apply(src, dst, parts=('strength', 'waves', 'chains', 'escape'), presets=Fal
     return rep
 
 
-def pistol_row(sc, log=print, row=None):
+def pistol_row(sc, log=print, row=None, classes=('pistol', 'revolver')):
     """Pistol / revolver carriers (not AI heisters, not eDog) are LOWERED to the stock guard row: accuracy as used
     55, aim 50 (PISTOL_ROW or `row`). Riflemen, SMG and shotgun men are not looked at. A preset skill name becomes
     eCustom with its preset numbers first (as strength() does), then the two numbers are capped. Health unchanged.
     -> report rows [(actor, what changed)]."""
+    # classes (2026-10-23, --row-classes=rifle,smg,... --row=75,70): the same LOWER-only cap for other weapon classes.
+    # Accuracy is the value AS THE GAME USES IT (effective(): preset written over it, x1.1 for No_Mercenary, clamp 100),
+    # so a cap of 75 means 75 in play and the stored number is written as 75/1.1 for a No_Mercenary man. Aim is capped
+    # as stored/preset (no factor). What aim MEANS in play is unproven; an aim cap such as 70 is a GUESS.
+    # Only men above the cap change; Ally (AI heisters) and eDog are never touched.
     row = row or PISTOL_ROW
     acc_t, aim_t = float(row[0]), float(row[1])
     f, rep = kl_arms.fields(), []
@@ -1028,7 +1033,7 @@ def pistol_row(sc, log=print, row=None):
         if nv[J.labels('dd', 'ZFFActor').index('ZFFActor[0]')] == 'Ally':
             continue
         cls = weapon_class(nv[f[0]].rsplit('\\', 1)[-1])
-        if cls not in ('pistol', 'revolver') or v[STYLE] == 'eDog':
+        if cls not in classes or v[STYLE] == 'eDog':
             continue
         fac = ACC_FACTOR if v[MERC] == 'No_Mercenary' else 1.0
         e, new = effective(v), {}
@@ -1044,13 +1049,13 @@ def pistol_row(sc, log=print, row=None):
         if new:
             kl_fa.edit(sc, k, i, lambda us, new=new: [setv(sc, us, fi, x) for fi, x in new.items()])
             after = effective([new.get(fi, x) for fi, x in enumerate(v)])
-            rep.append((sc.path[k], '%s: pistol row: accuracy as used %s -> %s, aim %s -> %s' % (
+            rep.append((sc.path[k], '%s: row: accuracy as used %s -> %s, aim %s -> %s' % (
                 cls, _n(round(e[ACC], 1)), _n(round(after[ACC], 1)), _n(e[AIM]), _n(after[AIM]))))
-    log('  kl_map_ai: pistol row (accuracy %g, aim %g): %d pistol carriers lowered' % (acc_t, aim_t, len(rep)))
+    log('  kl_map_ai: row (accuracy %g, aim %g) for %s: %d men lowered' % (acc_t, aim_t, '/'.join(classes), len(rep)))
     return rep
 
 
-def pistol_zip(zp, dst, log=print, row=(55, 50)):
+def pistol_zip(zp, dst, log=print, row=(55, 50), classes=('pistol', 'revolver')):
     """An INSTALLED (or any) Dog Days level archive -> folder dst: the same archive with ONLY the .prp member rebuilt,
     pistol carriers held to the stock guard row. The source is read, never written. Proves per member (CRC, size)
     that nothing but the .prp differs. -> report dict."""
@@ -1059,7 +1064,7 @@ def pistol_zip(zp, dst, log=print, row=(55, 50)):
     data, bad, _p, _n2 = J.check(sc, log=lambda *_a: None)
     if data != files[ext['.prp']] or bad:
         raise ValueError('%s: the .prp does not re-serialise byte for byte (%d misfits): not changed' % (zp, len(bad)))
-    rows = pistol_row(sc, log, row)
+    rows = pistol_row(sc, log, row, classes)
     data, bad, _p, _n2 = J.check(sc, log=lambda *_a: None)
     if bad:
         raise ValueError('%d objects do not fit their class after the changes: %s' % (len(bad), bad[:3]))
@@ -2213,7 +2218,9 @@ def main():
     elif len(a) == 3 and a[0] == 'spawndiff':
         sys.exit(0 if spawndiff(a[1], a[2]) else 1)
     elif len(a) == 3 and a[0] == 'pistol-row':
-        pistol_zip(a[1], a[2])
+        rc = next((tuple(x.split('=')[1].split(',')) for x in o if x.startswith('--row-classes=')), ('pistol', 'revolver'))
+        rw = next((tuple(float(t) for t in x.split('=')[1].split(',')) for x in o if x.startswith('--row=')), (55, 50))
+        pistol_zip(a[1], a[2], row=rw, classes=rc)
     elif len(a) == 3 and a[0] == 'check':
         compare(a[1], a[2])
     elif len(a) >= 3 and a[0] == 'all':

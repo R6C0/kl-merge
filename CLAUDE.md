@@ -93,6 +93,8 @@ Dead Men pairs, pairs with Dog Days heisters); klhook/klvoice.c ([Voice] Enable=
 proven size, live globals at offset 616,344). Our Russian/Japanese .LOC were 616-698 KB: kl_loc_fit swapped subtitles to
 English, all 27 map zips re-installed (undo `<work>\build\locfit_1023_backup\UNDO locfit 1023.bat`; LOCFIT1 clean). Also:
 Last Call civilians proven (CIVS3: still until approached, then flee); traitors rarer (Backstab 20, TraitorsMax 1).
+05:50: police long guns on DM03 (12) and T01 (43) capped to accuracy 75 / aim 70 (`kl_map_ai pistol-row --row-classes
+--row`), installed (undo `<work>\build\acc75_1023_backup\UNDO acc75 1023.bat`; ACC1b on DM03 clean, T01 not run live).
 
 2026-10-23 04:50 - Retomoto lift ride proven live (TEST LIFT4): box 9 no longer throws on entry; the ride waits Delay 2.5 s
 plus up to CarWait 6 s for the car box, then jumps to 06_Exit (lobby car 500 ms later). Leaving the box or going down cancels.
