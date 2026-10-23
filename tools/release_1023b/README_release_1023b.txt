@@ -54,7 +54,10 @@ HOW TO UNDO (reverse order)
     KLHook.ini back byte for byte (md5 checked) to what they were before step 2 of the install. If you changed KLHook.ini
     after the install, that edited copy is first saved there as KLHook.ini.undo-<time>.
     Note: this puts the WHOLE ini back, so ini lines the add-ons wrote vanish too (their clips stay on disk, unused). That is why
-    the add-ons go first on the way out; if you do it the other way round nothing breaks, the add-on undo just finds nothing to remove.
+    the add-ons go first on the way out. The kit undo now REFUSES (nothing changed) while an add-on is still installed and says
+    which one to undo first; -Force on release_1023b.ps1 -Undo overrides that. A full undo leaves KLHook.ini.before-sound3 and
+    KLHook.ini.before-1023stg-<stamp> in the game folder (spare copies; a reinstall refreshes them). The sound3 undo also
+    removes the KLExpansion\Ambience\local and panic clip folders that were already there before (same clips as the package).
  4. Only the dll or only the ini: copy dinput8.dll.<stamp> / KLHook.ini.<stamp> from release_1023b_backup by hand.
 
 IF YOU ALREADY INSTALLED THE OLD "release 1023" KIT: just run this kit on top. Its backups are then the old kit's state, so its

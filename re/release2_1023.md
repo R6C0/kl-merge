@@ -48,3 +48,6 @@ the staged `dinput8.dll.sha1` (EE6CCCAA...), it contains the string "stinger:" (
 Cherry-picked onto rtp-schemas as c9cd2a83b / 2b4726be5. The staged SHIP dll is now `klhook\out_cc6_release_1023b\dinput8.dll` sha1 C7557D81DBD01BDFA8AD24853D76FD294AA0FB8A
 (built at 2b4726be5 with `klhookuild.bat <abs dir>`: stinger + mciwrap clock fix + CEG guard); EE6CCCAA is superseded. TEST twin
 `klhook\out_cc6_release_1023b_test` BC667026 played DM01 (KITB): PASS, 0 faults. Staged sound3/stinger installers refreshed to the fixed versions.
+
+## Chain rehearsal (11:30) and undo guard
+Offline rehearsal on fake DD folders (workflow, real clips, logs in scratchpad chain_wf): kit -> sound3 -> stinger and the reverse undo end byte-identical; kit twice is a no-op; add-ons before the kit are inert until the dll is in. Hazard CONFIRMED: the kit undo restores the whole ini, so undoing it before the add-ons drops their ini lines and orphans their clips. Fix: release_1023b.ps1 -Undo refuses (exit 4, nothing changed) while KLExpansion\Stinger exists or (Ambience\local AND KLHook.ini.before-sound3) exist; -Force overrides. Tested on a fake DD (stinger in: refused; local only: allowed; sound3 in: refused; -Force: ini restored). Staged copy and the backup folder copy (used by its UNDO bat) updated. README lists the stray before-* files left by a full undo.

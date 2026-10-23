@@ -17,7 +17,8 @@ param(
     [switch]$Undo,
     [string]$Stamp,
     [switch]$SkipRunCheck,
-    [switch]$BalanceOn   # also write [Balance] Enable=1 (default: Enable stays as it is in the live ini)
+    [switch]$BalanceOn,  # also write [Balance] Enable=1 (default: Enable stays as it is in the live ini)
+    [switch]$Force       # undo even while the sound3 / stinger add-ons are still installed
 )
 $ErrorActionPreference = 'Stop'
 $src = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -41,6 +42,13 @@ if ($Undo) {
     if (-not (Test-Path -LiteralPath $mf)) { Fail ('manifest not found: ' + $mf) 2 }
     $m = @{}
     foreach ($l in [System.IO.File]::ReadAllLines($mf)) { $i = $l.IndexOf('='); if ($i -gt 0) { $m[$l.Substring(0, $i)] = $l.Substring($i + 1) } }
+    # the ini restore is a whole-file snapshot: with an add-on still in, its ini lines would vanish and its clips stay orphaned
+    # (chain rehearsal 1023). Each add-on's own undo removes the folder tested here.
+    $addons = @()
+    if (Test-Path -LiteralPath (Join-Path $Root 'KLExpansion\Stinger')) { $addons += 'stinger ("OPTIONAL 2 UNDO stinger.bat")' }
+    # Ambience\local alone can predate sound3 (clips placed earlier); the before-sound3 copy alone outlives its undo: need both
+    if ((Test-Path -LiteralPath (Join-Path $Root 'KLExpansion\Ambience\local')) -and (Test-Path -LiteralPath (Join-Path $Root 'KLHook.ini.before-sound3'))) { $addons += 'sound3 ("OPTIONAL 1 UNDO sound3.bat")' }
+    if ($addons.Count -and -not $Force) { Fail ('add-ons still installed: ' + ($addons -join ', ') + '. Undo them first (stinger, then sound3), then run this again. Nothing was changed.') 4 }
     $now = Get-Date -Format 'yyyyMMdd-HHmmss'
     # verify both backups first, so a half undo cannot happen
     foreach ($k in 'dll', 'ini') {
