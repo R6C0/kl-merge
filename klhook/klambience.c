@@ -20,6 +20,8 @@
  *   Distant  far-off gunfire / explosions   From=action After=10  Min=30  Max=80
  *   Siren    police sirens passing          From=action After=30  Min=60  Max=150
  *   Spot     any city life (dog, horn, birds, voices)  From=calm After=15 Min=45 Max=120
+ *   Local    the map's own sounds (train, phone, ship, tools)  From=calm After=10 Min=25 Max=70      (sound3, empty unless set)
+ *   Panic    distant screams / crowd       From=action After=20 Min=40 Max=110                        (sound3, empty unless set)
  *   Keys per group G (all optional, in [Ambience] or [Ambience.<key>]): G=list  GMin= GMax= (seconds)  GFrom=calm|action|escape|dead
  *   GAfter= (seconds)  GVol=0..100.  The group fires at a random time in Min..Max seconds after its phase is reached, then again.
  * PHASES (same reading as klmusic.c; reads the round only): calm = round runs, action = a heister's stage >= 1 / the crew's money rose /
@@ -30,7 +32,7 @@
  *   [Ambience]
  *   Enable=0   Volume=60 (0..100 master)  Bed volume BedVol=45   Fade=2500   Folder=<folder of the files>   Log=1   SoloPlay=0
  *   ActionAfter=45   BedSkip=DM09,DM06B,DM03A,DM05A
- *   [Ambience.<key>]  Bed= Radio= Alarm= Heli= Distant= Siren= Spot=  (+ timing keys above)  Enable=0  BedForce=1
+ *   [Ambience.<key>]  Bed= Radio= Alarm= Heli= Distant= Siren= Spot= Local= Panic=  (+ timing keys above)  Enable=0  BedForce=1
  * Log lines: 'ambience: map ...', 'ambience: bed ...', 'ambience: <group> <file>'.
  */
 #ifndef KLAMBIENCE_C
@@ -180,7 +182,7 @@ static DWORD WINAPI klam_thread(void *u)
 
 #ifndef KLAMBIENCE_TEST
 
-enum { KLAM_G_RADIO, KLAM_G_ALARM, KLAM_G_HELI, KLAM_G_DISTANT, KLAM_G_SIREN, KLAM_G_SPOT, KLAM_NG };
+enum { KLAM_G_RADIO, KLAM_G_ALARM, KLAM_G_HELI, KLAM_G_DISTANT, KLAM_G_SIREN, KLAM_G_SPOT, KLAM_G_LOCAL, KLAM_G_PANIC, KLAM_NG };
 enum { KLAM_P_CALM, KLAM_P_ACTION, KLAM_P_ESCAPE, KLAM_P_DEAD };
 static const struct { const char *name; int min, max, from, after, vol; } klam_gdef[KLAM_NG] = {
     { "Radio",   40,  90, KLAM_P_ACTION,  60, 55 },
@@ -189,6 +191,10 @@ static const struct { const char *name; int min, max, from, after, vol; } klam_g
     { "Distant", 30,  80, KLAM_P_ACTION,  10, 55 },
     { "Siren",   60, 150, KLAM_P_ACTION,  30, 60 },
     { "Spot",    45, 120, KLAM_P_CALM,    15, 55 },
+    /* sound3 (2026-10-23): two more groups, empty unless a map's section names a list (so the old behaviour is the default).
+       Local = the map's own sounds (trains, phones, ships, tools...), Panic = civilians / crowd once it is loud. */
+    { "Local",   25,  70, KLAM_P_CALM,    10, 55 },
+    { "Panic",   40, 110, KLAM_P_ACTION,  20, 50 },
 };
 
 struct klam_grp { int n, min, max, from, after, vol, fired; DWORD next; char f[KLAM_MAXF][KLAM_PATH]; };
@@ -273,8 +279,8 @@ static void klam_loadmap(void)
         if (G->max < G->min) G->max = G->min;
         G->fired = 0; G->next = 0;
     }
-    klog("ambience: map %s: bed %s, radio %d / alarm %d / heli %d / distant %d / siren %d / spot %d clips, volume %d%s", klam.map[0] ? klam.map : "?",
-         klam.bed[0] ? klam_base(klam.bed) : "none", klam.g[0].n, klam.g[1].n, klam.g[2].n, klam.g[3].n, klam.g[4].n, klam.g[5].n, klam.vol,
+    klog("ambience: map %s: bed %s, radio %d / alarm %d / heli %d / distant %d / siren %d / spot %d / local %d / panic %d clips, volume %d%s", klam.map[0] ? klam.map : "?",
+         klam.bed[0] ? klam_base(klam.bed) : "none", klam.g[0].n, klam.g[1].n, klam.g[2].n, klam.g[3].n, klam.g[4].n, klam.g[5].n, klam.g[6].n, klam.g[7].n, klam.vol,
          klam.enabled ? "" : " (this map is switched off)");
 }
 

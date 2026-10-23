@@ -55,8 +55,8 @@
 #ifndef KLMUSIC_C
 #define KLMUSIC_C
 
-enum { KLMU_NONE, KLMU_CALM, KLMU_ACTION, KLMU_ESCAPE, KLMU_DOWN, KLMU_END, KLMU_NMOOD };
-static const char *const klmu_mname[KLMU_NMOOD] = { "NONE", "CALM", "ACTION", "ESCAPE", "DOWN", "END" };
+enum { KLMU_NONE, KLMU_CALM, KLMU_ACTION, KLMU_ESCAPE, KLMU_DOWN, KLMU_END, KLMU_ASSAULT, KLMU_NMOOD };   /* ASSAULT (sound3, 2026-10-23) sits on top of ACTION: never a "base" */
+static const char *const klmu_mname[KLMU_NMOOD] = { "NONE", "CALM", "ACTION", "ESCAPE", "DOWN", "END", "ASSAULT" };
 #define KLMU_MAXTR  32
 #define KLMU_PATH   260
 
@@ -224,9 +224,11 @@ static DWORD WINAPI klmu_thread(void *u)
 #define KLMU_ST_ESCAPE 2
 #define KLMU_ST_DOWN   4
 #define KLMU_ST_END    8
+#define KLMU_ST_ASSAULT 16
 
 static struct {
     int on, solo_block, vol, fade, rnd, action_after, force, enabled, st_on, mood_posted, base, round, down;
+    int assault, assault_after, assault_down, assault_money; DWORD t_action; BYTE dead0[KLB_NREC];   /* sound3 */
     char folder[KLMU_PATH], folderb[KLMU_PATH], engine[200], map[40];
     struct klmu_list list[KLMU_NMOOD], stinger;            /* list[CALM..DOWN]; list[NONE] and [END] unused */
     DWORD t_round, t_end, t_fail, t_last; DWORD rules0, money0; int told_engine; BYTE stage0[KLB_NREC];
@@ -296,14 +298,21 @@ static void klmu_loadmap(void)
     klmu.action_after = klmu_int("ActionAfter", 45);
     klmu.force = klmu_int("Force", 0) != 0;
     for (m = KLMU_CALM; m <= KLMU_DOWN; m++) { klmu_str("Music", names[m], "", b, sizeof b); klmu_parse(&klmu.list[m], b, names[m]); }
+    /* sound3: the ASSAULT tier. Everything defaults to the old behaviour: no Assault list, or AssaultAfter=0 and AssaultOnDown=0 and
+       AssaultMoney=0, means the mood is never posted. */
+    klmu_str("Music", "Assault", "", b, sizeof b); klmu_parse(&klmu.list[KLMU_ASSAULT], b, "Assault");
+    klmu.assault_after = klmu_int("AssaultAfter", 0);       /* s after ACTION began (0 = off) */
+    klmu.assault_down = klmu_int("AssaultOnDown", 0) != 0;  /* a crew record turning status 7 (dead / swapped to police) */
+    klmu.assault_money = klmu_int("AssaultMoney", 0);       /* $ the crew gained since ACTION began (0 = off) */
     klmu_str("Music", "Stinger", "", b, sizeof b); klmu_parse(&klmu.stinger, b, "Stinger");
     klmu_str("Music", "StingerOn", "down,end", b, sizeof b);
-    klmu.st_on = (klmu_inlist(b, "action") ? KLMU_ST_ACTION : 0) | (klmu_inlist(b, "escape") ? KLMU_ST_ESCAPE : 0) |
+    klmu.st_on = (klmu_inlist(b, "action") ? KLMU_ST_ACTION : 0) | (klmu_inlist(b, "escape") ? KLMU_ST_ESCAPE : 0) | (klmu_inlist(b, "assault") ? KLMU_ST_ASSAULT : 0) |
                  (klmu_inlist(b, "down") ? KLMU_ST_DOWN : 0) | (klmu_inlist(b, "end") ? KLMU_ST_END : 0);
     klmu_str("Music", "EngineMaps", "DM09,DM06B,DM03A,DM05A", klmu.engine, sizeof klmu.engine);
     klmu.told_engine = 0;
-    klog("music: map %s: Calm %d / Action %d / Escape %d / Down %d tracks, stinger %d, volume %d, fade %d ms%s", klmu.map[0] ? klmu.map : "?",
-         klmu.list[KLMU_CALM].n, klmu.list[KLMU_ACTION].n, klmu.list[KLMU_ESCAPE].n, klmu.list[KLMU_DOWN].n, klmu.stinger.n, klmu.vol, klmu.fade,
+    klog("music: map %s: Calm %d / Action %d / Assault %d / Escape %d / Down %d tracks, stinger %d, volume %d, fade %d ms, assault after %d s / on down %d / money %d%s", klmu.map[0] ? klmu.map : "?",
+         klmu.list[KLMU_CALM].n, klmu.list[KLMU_ACTION].n, klmu.list[KLMU_ASSAULT].n, klmu.list[KLMU_ESCAPE].n, klmu.list[KLMU_DOWN].n, klmu.stinger.n, klmu.vol, klmu.fade,
+         klmu.assault_after, klmu.assault_down, klmu.assault_money,
          klmu.enabled ? "" : " (this map is switched off)");
 }
 
@@ -324,6 +333,7 @@ static const struct klmu_list *klmu_pick(int mood)
     case KLMU_ACTION: return L[KLMU_ACTION].n ? &L[KLMU_ACTION] : &L[KLMU_CALM];
     case KLMU_CALM:   return L[KLMU_CALM].n ? &L[KLMU_CALM] : &L[KLMU_ACTION];
     case KLMU_DOWN:   return &L[KLMU_DOWN];
+    case KLMU_ASSAULT: return L[KLMU_ASSAULT].n ? &L[KLMU_ASSAULT] : L[KLMU_ACTION].n ? &L[KLMU_ACTION] : &L[KLMU_CALM];
     }
     return &L[KLMU_CALM];
 }
@@ -336,7 +346,7 @@ static void klmu_post(int mood, int base)
     klmu_cmd.pl.n = 0; klmu_cmd.lead.n = 0;
     if (mood == KLMU_DOWN) { stflag = KLMU_ST_DOWN; pl = klmu.list[KLMU_DOWN].n ? &klmu.list[KLMU_DOWN] : klmu_pick(base); }
     else if (mood == KLMU_END) { stflag = KLMU_ST_END; pl = 0; }
-    else { stflag = mood == KLMU_ACTION ? KLMU_ST_ACTION : mood == KLMU_ESCAPE ? KLMU_ST_ESCAPE : 0; pl = mood == KLMU_NONE ? 0 : klmu_pick(mood); }
+    else { stflag = mood == KLMU_ACTION ? KLMU_ST_ACTION : mood == KLMU_ESCAPE ? KLMU_ST_ESCAPE : mood == KLMU_ASSAULT ? KLMU_ST_ASSAULT : 0; pl = mood == KLMU_NONE ? 0 : klmu_pick(mood); }
     if (pl) klmu_cmd.pl = *pl;
     if ((klmu.st_on & stflag) && klmu.stinger.n) klmu_cmd.lead = klmu.stinger;
     LeaveCriticalSection(&klmu_cs);
@@ -379,13 +389,14 @@ static void klmu_tick(int game_thread)
     for (i = 0; i < s.n; i++) if (s.r[i].used) money += s.r[i].money;
     if (!klmu.round || s.rules != klmu.rules0) {                 /* a round began */
         klmu.round = 1; klmu.rules0 = s.rules; klmu.t_round = KLB_T(now); klmu.money0 = money; klmu.base = KLMU_CALM; klmu.down = 0;
+        klmu.assault = 0; klmu.t_action = 0;
         klmu.mood_posted = -1;
     }
     /* Grace: for the first 8 s the crew records are still filling in and FA rounds start inside the job (stage 1
        already set by the spawn zones), so money and stage are re-baselined instead of read as cues (review 1023). */
     if (now - klmu.t_round < 8000u) {
         klmu.money0 = money;
-        for (i = 0; i < s.n && i < KLB_NREC; i++) klmu.stage0[i] = s.r[i].used ? s.r[i].stage : 0;
+        for (i = 0; i < s.n && i < KLB_NREC; i++) { klmu.stage0[i] = s.r[i].used ? s.r[i].stage : 0; klmu.dead0[i] = s.r[i].used && s.r[i].status == 7; }
     }
     base = klmu.base;
     if (base < KLMU_ACTION) {
@@ -401,6 +412,20 @@ static void klmu_tick(int game_thread)
     }
     klmu.base = base;
     mood = base;
+    /* sound3: ASSAULT = the shooting got serious. There is no police signal (see the header), so three stand-ins, any of which is
+       enough, each off by default: AssaultAfter s since ACTION began; AssaultOnDown = a crew record that was not dead at the baseline now
+       has status 7 (a dead heister, or a traitor swapped to a policeman: klbot.c); AssaultMoney = the crew gained that much since ACTION
+       began. GUESS: status 7 is "dead / out of play" for every record, not only yours (klbot.c reads it as "he is dead" in the foe skip).
+       Sticky for the rest of the round (ESCAPE and DOWN still win; END ends it). money0 is free to reuse here: it only matters while
+       base < ACTION. */
+    if (base == KLMU_ACTION && !klmu.t_action) { klmu.t_action = now ? now : 1; klmu.money0 = money; }
+    if (base == KLMU_ACTION && !klmu.assault && klmu.list[KLMU_ASSAULT].n) {
+        int as = klmu.assault_after > 0 && now - klmu.t_action >= (DWORD)klmu.assault_after * 1000u;
+        if (!as && klmu.assault_money > 0 && money >= klmu.money0 + (DWORD)klmu.assault_money) as = 1;
+        for (i = 0; i < s.n && i < KLB_NREC && !as; i++) if (klmu.assault_down && s.r[i].used && s.r[i].status == 7 && !klmu.dead0[i]) as = 1;
+        if (as) { klmu.assault = 1; klog("music: ASSAULT trigger on %s (%lu s after ACTION began)", klmu.map, (unsigned long)((now - klmu.t_action) / 1000)); }
+    }
+    if (base == KLMU_ACTION && klmu.assault) mood = KLMU_ASSAULT;
     if (s.human >= 0 && s.r[s.human].status == 7 && (klmu.list[KLMU_DOWN].n || ((klmu.st_on & KLMU_ST_DOWN) && klmu.stinger.n))) mood = KLMU_DOWN;
     klmu_want(mood, base);
 }
