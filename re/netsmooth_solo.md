@@ -198,3 +198,23 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
   is Public. Both functions are hashed. A hook-side stand-in for that COM class was REFUSED by the permission classifier
   (security weakening) and is not built. The way on is the owner's: allow kl2.exe in Windows Firewall (Allow an app through
   firewall, Private and Public), then rerun with the same script past SystemLink.
+
+
+## 2026-10-23 10:30 - LIVE: the firewall is open; the lobby waits at "Number of players: 6" (cloud session, from the owner's photo)
+
+The owner added the Windows Firewall rules at 10:06 and the bench then reached a Fragile Alliance LAN lobby in both
+instances: "Players connected: 2 / Waiting for players...", Location Subway, Number of players 6, Heist time 4,
+Rounds 3, both players "r6kxo", Ready buttons showing. So System Link discovery + join WORK on one PC. Two things seen:
+
+1. **The round cannot start because "Number of players" is the MINIMUM (re/menus.md 387: the row is
+   `MinNumPlayers`), stock 6, and only 2 are connected.** H_host.ini presses Ready without lowering it. The lobby rows
+   are stepped by `LobbyArrowL_1..4 / LobbyArrowR_1..4` (menus.md 216); which row index the players count is, and
+   whether LEFT on that row goes 6 -> 5 -> ... -> 2 (or whether 2 is allowed at all: the level property
+   `LobbyMinNumPlayers` at 0xb284d1 and the replicated `m_iMinPlayers` / `m_iMaxPlayers` of netcode.md 581 bound it),
+   is for the next recon run: `windows` / `focus` on the lobby, then LEFT x4 on the row, read the row's text, then
+   Ready on BOTH instances. GUESS: the order of the rows is scenario, players, time, rounds (the XML order of
+   LobbyInfoScenario / MinNumPlayers / TimeLimit / NumberOfRounds), so the players row is the second.
+2. The lobby says "Subway": expected. The redirected map is the Dead Men one (klslot [Redirect] F01 -> DD01) but the
+   lobby's level toggler only has the nine stock names and pictures (menus.md 387, klslot.c KNOWN LIMITS). Own
+   names and pictures per expansion map = the roadmap's "Custom map previews" (Patch01.zip XML + one picture each):
+   separate work, not a bench blocker.
