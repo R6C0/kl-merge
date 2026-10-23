@@ -188,6 +188,12 @@ auto-loaded). Only the newest notes live here. When you add one here, also put i
 and move the oldest note here out so this section stays at about three entries (CLAUDE.md is loaded
 into every session and agent: it grew to 256 KB and made every session thrash).
 
+2026-10-23 10:20 - cloud session (claude.ai, owner's "full perms, mods open items asap"): three offline pieces, all pushed, none run in the game.
+- tools/run_harness_linux.sh --check-hook parses the hook again: MSVC __try/__except and __asm are stubbed by tools/lint/klhook_gcc_prep.py (it had stopped at the first SEH guard). SHIP + TEST 0 errors; all 7 harnesses + the 2 new ones pass under Wine. The check caught one real include-order error in the same hour.
+- Head tags: [HUD] HeadMaxDist=N (metres, default 0 = off) + HeadFade (5): option D of re/hud_tags_sight.md - a tag past N m is not drawn, fades before it (alpha-in-colour GUESS as the outline's). klhud_tags_dist.h + klht_test.c (448 checks). Option A's premise corrected: 0x6e0b20 is the camera's bone anchor, NOT a raycast; the cast is Havok's hkWorldRayCaster (RTTI 0xd490ab), wrapper not found yet (section 5).
+- Wardrobe: Kane's / Lynch's own bark set follows the body (bots_voice.md 6.5 hook side): klc_voice_own in klchar.c, klchar_voice.h + klcv_test.c (67 checks); opt-in by KLWardrobe.ini VoiceKane / VoiceLynch / Material, which the DATA side (kl_voice / kl_snd, needs level banks) has still to write.
+- gfx branch: KLGfx 0.4 traces the first bridged frames + a Present watchdog (the 10-09 stall left no step in the log); in KL_PortTools\KLGfx, not installed.
+Owner: try HeadMaxDist=25 under HeadTags; the firewall rule for kl2.exe (unchanged); the two scheduled check-ins (6 h cloud, 4 h PC-side) run on their own.
 2026-10-22 00:30 - solo online bench: two kl2.exe side by side on this PC WORK; System Link stops at a firewall check (3f; run A1, owner asleep).
 - TEST [Solo] (klhook/klsolo.c) + tools/kl_solo_test.py: mutex renamed, windowed D3D9, unfocused window kept running, per-instance files (env KLHOOK_DIR). Both reach MainMenu. Online = DOWN x2 RETURN, SystemLink = DOWN RETURN (window names, re/netsmooth_solo.md section 6).
 - SystemLink -> "This game is blocked by a firewall" (0x8945d0 asks Windows Firewall via COM; profile Public). A hook stand-in and a firewall-rule script were both REFUSED by the permission classifier. inst1 crashed at kl2+0x43c785 idle on Achievements (open). Commit 547708589 (local).
@@ -200,15 +206,6 @@ Owner: allow kl2.exe in Windows Firewall (Allow an app, Private + Public); then 
 - TEST 1020l (1020g source), owner's ini + [Shop] Swap=32:49 ReserveClips=2 + [Rigid] + [NetSmooth]: 10 Dead Men FA maps (DM01-03, 06, 09, 03A, 05A, 06B, 01B, 11B) and all 9 stock FA maps, two rounds each: clean exit, 0 asserts, 0 faults; every log shows the swap at load, the re-park at the round reset, Rigid on. Table: re/shop_more_guns.md "Map sweep".
 - Still unproven by script: a BUY on a stock map, the Rigid feel, NetSmooth online. Commits are local (push refused).
 Owner: reboot, then C:\kl_build_1019\hook_1020g\INSTALL hook 1020g.bat, shopswap, noblow; [Rigid] Enable=1 and try the feel; push rtp-schemas.
-2026-10-20 03:30 - [Rigid] crashed every SHIP build at load; fixed in 1020f (3f; live runs Z1-Z8, R3, owner asleep).
-- SHIP + [Rigid] Enable=1 = crash kl2+0xfbb90 (1020c and 1020e alike): dinput8 rejects calls through a swapped vtable, the game got no mouse. TEST hid it (klauto's proxy). Now heap proxies (bd3be72fa). SHIP Z8 (Shop+Rigid+NetSmooth+Probe): no crash; TEST R3 flicks PASS.
-- 03:45 audit workflow (TEST vs SHIP, all modules): no other SHIP-only fault. 1020g adds: NetSmooth logs where an online body chain breaks, vtable copy keeps vt[-1]; N7 offline PASS, SHIP Z9 no crash, SHIP tick on the main loop.
-- 04:47 S13 (TEST 1020l, Shop Swap + ReserveClips + Rigid + NetSmooth Probe in one scripted DM01 run): PASS, 0 faults; round 2 holds REM 700 / 43 (screenshot), Rigid proxies active. All three run together.
-- 05:50 S14/S15 stock F02 (Bridge): swap applied at load and re-parked at the round reset, 0 faults; an idle round ends with $0, so a stock-map BUY is still unproven (needs money / a loot route).
-- 06:55 S16 Bridge scripted route: $1.865M looted, stuck before the road (tunnel blocker REF 1453 not gone), no escape -> no shop money yet. Owner input seen 06:53: live runs stopped (S17 was already started).
-- 07:50 S18 Bridge: the ramp route (read from F02's .prp) was never reached - the scripted player was killed at the train ~45 s in, the crew's vehicle came at once, the round ended at ~80 s. A stock-map BUY is left to the owner's play (re/shop_more_guns.md S18); scripted Bridge runs stopped.
-- NetSmooth offline N1-N6: chain from P, mirrored matrix, the write call proven (re/netcode_smooth.md); online still untried. Local commits through bd3be72fa are NOT pushed (push refused).
-Owner: reboot, then C:\kl_build_1019\hook_1020g\INSTALL hook 1020g.bat (NOT 1020c / 1020e with Rigid), shopswap, noblow; then [Rigid] Enable=1 and try the feel.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
