@@ -437,6 +437,60 @@ static void kls_slots_read(void)
     }
 }
 
+/* PAGE ENTRIES (2026-10-23, icons_1023c). WHY: the Arcade selector has nine entries whatever a page lists (UpperBound 8, re\menus.md 4.1);
+ * the entries past a page's last map showed stock names and no picture. The selector skips an entry whose slot the level list reports
+ * unavailable (0x9293ee / 0x929479, vtbl+0x14 = available[idx] of the DLC manager, byte +4+idx). So while an expansion page is latched
+ * (kls_menu_page >= 2) the slots of its UNUSED entries (no F0n key in [Page.N]) are set to 0, and the saved bytes are put back when the page
+ * is left. Also, once per latch, the option byte Heist_SelectedLevel is moved to the page's first entry when it points at an unused one.
+ * GUESSES: that the skip applies to the right step only as the notes say (a page opened ON an unused entry is why the byte is moved),
+ * and that the selector reads the byte when the page is built (klpm_arc.c); not run in the game when written. [Page.N] HideUnused=0 turns it off. */
+#define KLS_HEISTSEL  0x0154d632
+static const BYTE kls_menu_slot[9] = { 1, 2, 3, 4, 6, 7, 5, 8, 9 };      /* menu position -> slot number (kl2 0x746570) */
+static int kls_pgmask[KLS_PAGES];                     /* bit i: the page has a map for slot F0(i+1); 0 = leave the page alone */
+static BYTE kls_pgsaved[KLS_FA]; static int kls_pghid, kls_pgmoved, kls_pganyp;
+
+static void kls_pages_read(void)
+{
+    int p, i; char sec[16], key[8], tmp[8];
+    for (p = 2; p < KLS_PAGES; p++) {
+        snprintf(sec, sizeof sec, "Page.%d", p);
+        if (GetPrivateProfileIntA(sec, "HideUnused", 1, klh_ini) == 0) continue;
+        for (i = 0; i < KLS_FA; i++) {
+            snprintf(key, sizeof key, "F%02d", i + 1);
+            if (GetPrivateProfileStringA(sec, key, "", tmp, sizeof tmp, klh_ini)) kls_pgmask[p] |= 1 << i;
+        }
+        if (kls_pgmask[p]) klog("expansion: page %d hides the entries of the slots without a map (mask %03x: the selector skips them)", p, kls_pgmask[p]);
+    }
+}
+
+static void kls_page_entries(DWORD mgr, BYTE *m)
+{   /* from the tick, the DLC manager read into m */
+    int page = (int)kls_menu_page, i, mask = (page >= 2 && page < KLS_PAGES) ? kls_pgmask[page] : 0;
+    if (mask) {
+        for (i = 0; i < KLS_FA; i++) {
+            BYTE zero = 0;
+            if (mask & (1 << i)) continue;
+            if (!(kls_pghid & (1 << i))) { kls_pgsaved[i] = m[4 + i]; kls_pghid |= 1 << i; }
+            if (m[4 + i] && klh_data((void *)(DWORD_PTR)(mgr + 4 + i), &zero, 1, "FA slot hidden on a page")) m[4 + i] = 0;
+        }
+        if (kls_pgmoved != page) {
+            BYTE cur = 0, nb; int k;
+            kls_pgmoved = page;
+            if (klh_rd((DWORD_PTR)KLH_VA(KLS_HEISTSEL), &cur, 1) && (cur > 8 || !(mask & (1 << (kls_menu_slot[cur] - 1))))) {
+                for (k = 0; k < 9 && !(mask & (1 << (kls_menu_slot[k] - 1))); k++) ;
+                nb = (BYTE)k;
+                if (k < 9 && klh_data((void *)(DWORD_PTR)KLH_VA(KLS_HEISTSEL), &nb, 1, "selected map entry"))
+                    klog("expansion: page %d: the selected entry %d is not on the page, moved to %d", page, cur, k);
+            }
+        }
+        return;
+    }
+    kls_pgmoved = 0;
+    for (i = 0; i < KLS_FA; i++) if (kls_pghid & (1 << i)) {            /* the page was left: put the bytes back */
+        if (klh_data((void *)(DWORD_PTR)(mgr + 4 + i), &kls_pgsaved[i], 1, "FA slot restored")) { m[4 + i] = kls_pgsaved[i]; kls_pghid &= ~(1 << i); }
+    }
+}
+
 static void kls_tick(void)
 {   /* from klhook.c's tick: reads, and guarded data writes for renamed slots */
     static BYTE last[18 + KLS_FA * KLS_NAME]; static int lastopt = -2, toldforce; static DWORD calls;
@@ -449,7 +503,7 @@ static void kls_tick(void)
         if (lastopt != -2 || opt) klog("expansion: menu option 'Dummy' reads %d (information only: the page is taken from the window stack)", opt);
         lastopt = opt;
     }
-    if (!kls_nset && kls_log < 2) return;
+    if (!kls_nset && kls_log < 2 && !kls_pganyp) return;
     mgr = klh_rd32((DWORD_PTR)KLH_VA(KLS_DLCMGR));
     if (!mgr || !klh_rd(mgr, m, sizeof m) || *(DWORD *)m != KLS_DLCMGR_VT) return;
     for (i = 0; i < KLS_FA; i++) {
@@ -465,6 +519,7 @@ static void kls_tick(void)
         }
         if (!m[4 + i] && klh_data((void *)(DWORD_PTR)(mgr + 4 + i), &one, 1, "FA slot available")) m[4 + i] = 1;      /* a renamed slot is ours: keep it selectable */
     }
+    if (kls_pganyp) kls_page_entries(mgr, m);
     if (kls_set[0]) {                             /* the session manager's preset map name is a copy of the F01 literal */
         DWORD sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION)); char cur[KLS_NAME]; BYTE b[KLS_NAME];
         if (sm && klh_rd(sm + 8, cur, KLS_NAME) && !strncmp(cur, kls_stock[0], KLS_NAME)) {
@@ -583,6 +638,8 @@ static void kls_init(HINSTANCE inst)
         if (p && GetPrivateProfileStringA(sec, "Title", "", title, sizeof title, klh_ini)) klog("expansion: menu page %d is '%s'", p, title);
     }
     kls_slots_read();
+    kls_pages_read();
+    { int q; for (q = 2; q < KLS_PAGES; q++) if (kls_pgmask[q]) kls_pganyp = 1; }
     kls_on = 1;
     n  = klh_iat("KERNEL32.dll", "CreateFileA", (void *)kls_CreateFileA, (void **)&kls_real_CreateFileA);
     n += klh_iat("KERNEL32.dll", "CreateFileW", (void *)kls_CreateFileW, (void **)&kls_real_CreateFileW);
