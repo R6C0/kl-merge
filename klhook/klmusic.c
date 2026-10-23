@@ -218,6 +218,10 @@ static DWORD WINAPI klmu_thread(void *u)
         LeaveCriticalSection(&klmu_cs);
         if (c) klmu_apply(c);
         klmu_stepfade(now - last); last = now;
+        /* mciwrap 1023: re-read AFTER klmu_apply. klmu_start (an MCI 'open', slow) stamps p->started with a GetTickCount() later than the 'now' read at the
+           top of this pass, so klmu_follow's now - started < 1500 guard wrapped to ~49 days and let the follow logic run on a track opened this very pass
+           (a 'not ready' status right after the open then skipped it with klmu_next(0)). fades keep the old now. */
+        now = GetTickCount();
         if (now - lastf >= 250) { lastf = now; klmu_follow(now); }
     }
 }

@@ -174,6 +174,10 @@ static DWORD WINAPI klam_thread(void *u)
         else if (klam_retry_n && (int)(now - klam_retry_at) >= 0) klam_bedcmd(&klam_retry);
         if (gotshot) klam_shot(sf, sv);
         klam_stepfade(now - last); last = now;
+        /* mciwrap 1023: re-read AFTER the commands above. klam_open (an MCI 'open', slow: tens to hundreds of ms) stamps p->started with GetTickCount()
+           LATER than the 'now' read at the top of this pass; klam_poll then computed now - started as a negative DWORD (~49 days), which closed every
+           fresh one-shot at once through the 300000 ms safety test (same bug as klstinger.c), and made the bed look 1500 ms old. fades keep the old now. */
+        now = GetTickCount();
         if (now - lastp >= 250) { lastp = now; klam_poll(now); }
     }
 }
