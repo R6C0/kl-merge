@@ -233,3 +233,15 @@ Run folder: `<work>/build/klhook/solo/A1/` (inst1/2 logs, shots, run.txt).
   walk), skipped 0 (every remote matrix was the pure mirrored-yaw form), no chain failure, 0 faults; the host placed 0
   (the client stood still). Both PASS. Write path through B->vtbl[0x8c] online: PROVEN. Whether it LOOKS better is
   the owner's call (stills cannot show it).
+- Static reading (2026-10-23, workflow read + refute, nothing run) of where a remote body's heading comes from:
+  - Receiver 0x600eb0 (via 0x4a1890; R = [P+0x274c], P' = [R+0x540]): on the main path it builds a pure Y rotation from
+    int16 [R+0x60] (m_Angle, /162.97 = 1024 units per turn, refreshed by 0x519e80) and calls B->vtbl[0x8c] at 0x60191e EVERY
+    frame. No call on: [P'+0x2760]>0 or [P'+0xd5c]!=0 (0x601938), vtbl 0x1c8/0x3d0 true, session state not 0x17/18/19/1f,
+    or the far-distance teleport (0x60157a -> 0x5f21c0). Other 0x8c callers: [P'+0xd50] (0x600ff5, animation pose), [P'+0xd58]
+    (0x6011bc). vtbl 0x5d8 == 8 exits only when 0x544fb0 is also true.
+  - Sender 0x6300f0: m_Angle = yaw of the sender's BODY matrix [B+4] (0x429ff0 atan), not the camera. If [P'+0xd50] != 0
+    (0x63014c) it sends only the aim point (R+0x170) and never updates m_Angle.
+  - Camera yaw is a separate dataset m_CamAngle (int16 [R+0xe0]; sender 0x789820 from [P'+0x2808], receiver 0x5d31c0 writes
+    [P'+0x2808] and clears mask 0x08 of [R+0x548]). NetSmooth does not touch it. If the owner still sees "spinning" upper
+    bodies online, that is this path (or the aim point), and it needs its own smoother at 0x5d31c0 or at [P'+0x2808]'s readers.
+  - H5 fits: walking turns the body, so m_Angle changes and slot 393 sees it. Standing players send no heading change.
