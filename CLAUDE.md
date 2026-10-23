@@ -66,9 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-23 10:45 - [Stinger] event cues merged (klstinger.c, all off, NOT run live): short cues on loud / loot / down / dead /
-betray / last 30 s / van open / escape reached. 24 clips + INSTALL/UNDO staged in `<work>\build\stinger_1023` (not installed;
-needs a hook built from this tip). Notes: re/stinger_1023.md.
+2026-10-23 10:35 - LIVE PASS, 0 faults on DM01: SND3 (sound pass 3: Local one-shots every ~10 s, PD2 ASSAULT music 20 s into
+the action; Panic not reached) and STING1 (stinger merged 127b24487: Loud at second 8, Loot at $20000). Both still opt-in:
+`<work>\build\sound3_1023\INSTALL sound3 1023.bat`, `<work>\build\stinger_1023\INSTALL stinger 1023.bat`; they need a hook built
+from rtp-schemas 127b24487 or later (SHIP klhook\out_3f_1023s, 9c69f740; the release kit dll d25393d9 has sound3, not stinger).
 
 2026-10-23 10:20 - cloud session, offline, none run in the game: [HUD] HeadMaxDist=N + HeadFade (head tags past N m not drawn;
 owner: try HeadMaxDist=25), own-voice hook side (klc_voice_own, waits for the data side), GCC hook check repaired
@@ -78,15 +79,6 @@ owner: try HeadMaxDist=25), own-voice hook side (klc_voice_own, waits for the da
 2026-10-23 10:10 - Owner install kit staged, NOT installed: `<work>\build\release_1023\INSTALL release 1023.bat` = SHIP hook d25393d9
 (rtp-schemas ab08f42b1) + balance pass 2 (BAL2 live PASS: CopToYouFar x0.86 at 21 m) + [QoL] FlashOnReady/ReleaseCursor. Backups +
 UNDO bat go to `<work>\build\release_1023_backup`. The owner's ini already has [Balance] Enable=1. Notes: re/release_1023.md.
-
-2026-10-23 09:55 - Sound pass 3 merged (ab08f42b1), NOT run live: per-map Local/Panic one-shots + PD2 ASSAULT music, all opt-in.
-Clips already in `<DD>\KLExpansion\Ambience\local|panic` (145, new folders); ini sections via `<work>\build\sound3_1023\INSTALL sound3 1023.bat`.
-Test ini ready (scratchpad live\SND3_DM01.ini); held because the owner is back (10:02). QoL2 (klqol2.c) merged, all off.
-
-2026-10-23 08:20 - Shop on all 27 maps: readable focus rows (SHOP3b) + v2 card cut-outs on 12 rows with the edge rule (SHOP5 PASS,
-Sawn-off clean). Undo newest first: `<work>\build\shopcut4_1023_undo\UNDO shopcut4 1023.bat` (copies from shopcut3_1023: keep it),
-`shopcut3_1023_backup\UNDO shopcut 1023.bat`, `shopbar_1023_backup\UNDO shopbar 1023.bat`. Ambience pass 2 installed (DOOR1: Japanese
-police radio on DM09; undo `<work>\build\ambience2_1023_backup\UNDO ambience2 1023.bat`). C:/G: are tight: stage big zips on G:.
 
 
 ## Owner's end goal (2026-10-09)
