@@ -42,4 +42,10 @@ GUESS). Tolerance 5 units, 150 ms: jumps there are unlikely to be visible. Consu
 - Test (two-process System Link bench, TEST build, Log=1): the non-host turns the mouse while standing; log raw vs out per
   remote, a "movement saw our write n / m" counter (compare [P'+0x2808] with the written value at next entry), writes ==
   restores, 0 faults; then an Arcade round with no camyaw lines.
+- Built 2026-10-23 on branch feat/1023-camyaw (commit 2e05551f9, TEST out_3f_1023d_test md5 51232608, SHIP out_3f_1023d
+  md5 5dcac8b0; inis C:\kl_build_1019\live\solo\H6_host.ini / J6_join.ini). Live proof NOT yet obtained: H6, H6b, H6c failed
+  before any round. The client's server browser lists nothing and it fails at waitwin FALobby (exit 26, 0 faults). The H7ctl and
+  H7b controls with H5's exact hook (1023b TEST) and inis fail the same way, so this is not CamYaw. Common factor: every failing
+  run came up at 640x480 / 59 Hz (owner's monitor off). H1, H4 and H5 (2560x1440) joined. In H7b the client never held a UDP
+  socket while the host held 9100 + 9103. Rerun H6 when the display is on. Not merged into rtp-schemas until it passes.
 - Open: who consumes [P+0xd74]; the true class of 0x8216c0 / 0x6d90a0; the frame order of slot 393 vs 0x8b28e0.
