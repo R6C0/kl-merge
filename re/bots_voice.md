@@ -400,6 +400,13 @@ follow the **body choice**, and that is the hook's:
   dword, field 0). Any other choice: write 0 back. ASSUMPTION: a loaded definition's address is
   bank base + .SND offset (the check before the write is there because this was not read), and
   that field 0 may change while the level runs (the accessor reads it on every call).
+- HOOK WRITTEN 2026-10-23 (cloud session, not run): `klc_voice_own` in klchar.c, arithmetic in
+  klchar_voice.h, harness klcv_test.c (67 checks). Opt-in by the three KLWardrobe.ini keys; off
+  while any of them is missing. Guards: bank base must be below the material definition; the two
+  head words at base + Voice must be [5][0xcdcdcdcd] or nothing is written and one line says why
+  (that line is the test of the ASSUMPTION above). Writes 0 back for any other body; a set the
+  game itself puts into field 0 after that is left alone. The DATA side (the offsets) is not
+  written: `kl_voice` / `kl_snd` must emit the three keys from the bank merge (needs level files).
 - LIVE: whether a heister barks at all in Arcade (section 2), and whether Kane with only pain /
   death / spotted / panic is worth it. A re-ordered `kane_default` in `lynch_default`'s slot
   order would give him ammo and reload lines too (32 <- 58, 31 <- 59, 34 <- 60, 35 <- 16, 22 / 24

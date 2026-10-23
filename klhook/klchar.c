@@ -187,6 +187,9 @@ static void klc_options_tick(void)
         klog("character: option object %08lx now answers KLChar / KLMask / KLOutfit (private vtable)", obj);
 }
 
+#include "klchar_voice.h"                                 /* 6.5: Kane's / Lynch's own bark set follows the body (opt-in by KLWardrobe.ini keys) */
+static struct klcv_cfg klc_v;                             /* this level's offsets (read with the wardrobe); all 0 = off */
+
 /* ---------------------------------------------------------------- KLWardrobe.ini of the level */
 
 /* From klsteam.c's klh_level_open: the game opens the level archive <key> ("f01\f01_main.zip") from <opened>. */
@@ -199,7 +202,7 @@ static void klc_level_open(const char *key, const char *opened)
     if (!len || len >= MAX_PATH || !(s = strrchr(file, 0x5c)) || (size_t)(s - file) + 16 >= sizeof file) return;
     strcpy(s + 1, "KLWardrobe.ini");
     EnterCriticalSection(&klc_cs);
-    memset(&klc_w, 0, sizeof klc_w);
+    memset(&klc_w, 0, sizeof klc_w); memset(&klc_v, 0, sizeof klc_v);
     snprintf(klc_w.key, sizeof klc_w.key, "%s", key); if ((s = strrchr(klc_w.key, '.')) != 0) *s = 0;
     n = (int)GetPrivateProfileIntA("Wardrobe", "Characters", 0, file);
     ver = (int)GetPrivateProfileIntA("Wardrobe", "Version", 0, file);
@@ -225,6 +228,10 @@ static void klc_level_open(const char *key, const char *opened)
             if (top > 255 || (klc_w.c[i].heads > 1 && klc_w.headbase <= klc_w.step * (klc_w.c[i].bodies - 1) + 2 + klc_w.masks)) break;
         }
         if (i == n && ok) { klc_w.on = 1; klc_w.n = n; strcpy(klc_w.file, file); }
+        klc_v.kane = GetPrivateProfileIntA("Wardrobe", "VoiceKane", 0, file);          /* 6.5: .SND offsets the data side wrote; absent = off */
+        klc_v.lynch = GetPrivateProfileIntA("Wardrobe", "VoiceLynch", 0, file);
+        klc_v.material = GetPrivateProfileIntA("Wardrobe", "Material", 0, file);
+        if (klc_w.on && klcv_enabled(&klc_v)) klog("character: level %s: Kane's / Lynch's own voice offsets %lu / %lu (material %lu): follows KLChar 9 / 10 (NOT RUN IN THE GAME)", klc_w.key, klc_v.kane, klc_v.lynch, klc_v.material);
         else klog("character: %s is not usable (entry %d, Masks=%d, OutfitStep=%d, HeadBase=%d): this level has the stock looks only", file, i + 1, klc_w.masks, klc_w.step, klc_w.headbase);
     } else if (ver) klog("character: %s has Version=%d, this hook reads 1 and 2: this level has the stock looks only", file, ver);
     LeaveCriticalSection(&klc_cs);
@@ -265,6 +272,32 @@ static int klc_same_code(DWORD va, const BYTE *bytes, int n)
  * GUESS: the human's player slot is 0 in Arcade (it is what 0x8f5fce writes). Idempotent (once swapped, rules[0x33e]
  * is s). [Wardrobe] DMVoice=1 in KLHook.ini; 0 leaves the table alone. */
 static int klc_dmvoice = 1;
+
+
+/* Kane's and Lynch's own voice on the player (re\bots_voice.md 6.5, described there, written here 2026-10-23; NOT RUN):
+ * field 0 of the player ([player+0x1e8], the bark set 0x65ca10 falls back to) is pointed at the kane_default / lynch_default
+ * definition the data side put into the bank, when the body choice is Kane (KLChar 9) or Lynch (10); any other choice writes
+ * 0 back (the stock state: no own set, the crew line voice as before). One heap dword, written only when the two head words
+ * at the target say it is a definition. Idempotent: nothing is written when the field already holds the wanted value. */
+static void klc_voice_own(DWORD player, int ch)
+{
+    DWORD want = klcv_want(&klc_v, ch), cur = 0, mat = 0, base, def = 0, head[2];
+    static DWORD lastplayer; static DWORD lastwant = 0xffffffffu; static int toldbad;
+    if (!klcv_enabled(&klc_v) || !player) return;
+    if (!klh_rd(player + 0x1e8, &cur, 4)) return;
+    if (want) {
+        if (!klh_rd(player + 0x238, &mat, 4) || !(base = klcv_base(mat, klc_v.material))) { if (!toldbad++) klog("character: voice: the material definition %08lx / offset %lu give no bank base: Kane's / Lynch's own voice stays off", mat, klc_v.material); return; }
+        if (!klh_rd(base + want, head, 8) || !(def = klcv_def(base, want, head[0], head[1]))) {
+            if (!toldbad++) klog("character: voice: no definition at bank %08lx + %lu (head %08lx %08lx): the ASSUMPTION of bots_voice.md 6.5 does not hold here; own voice stays off", base, want, head[0], head[1]);
+            return;
+        }
+    }
+    if (cur == def) { if (lastplayer != player || lastwant != want) { lastplayer = player; lastwant = want; if (klc_log && def) klog("character: voice: the player already uses the own set at %08lx", def); } return; }
+    if (!def && cur && lastplayer == player && lastwant == 0) return;      /* 0 written once; a set the GAME put there later is left alone */
+    if (!klh_data((void *)(DWORD_PTR)(player + 0x1e8), &def, 4, "player bark set (field 0)")) return;
+    if (klc_log) klog("character: voice: player field 0 %08lx -> %08lx (%s)", cur, def, def ? (ch == KLCV_KANE ? "kane_default" : "lynch_default") : "none: the stock state");
+    lastplayer = player; lastwant = want;
+}
 
 static void klc_voice_swap(DWORD rules, int s)
 {
@@ -345,6 +378,7 @@ static void klc_level_tick(int game_thread)
             }
         } else if (InterlockedExchange(&lastbody, (LONG)want_root) != (LONG)want_root && klc_log) klog("character: the player wears model %lu (slot %d)", want_root, slot);
         if (ch > 8 && wardrobe && model == want_root) klc_voice_swap(rules, slot);          /* a Dead Men body: its line voice follows the body */
+        if (wardrobe && model == want_root) klc_voice_own(player, ch);                      /* 6.5: Kane's / Lynch's own bark set, else 0 back */
     }
     /* ---- mask and outfit: the variant of the model the player wears now */
     if (!wardrobe) { if (!mask) return; v = mask == 1 ? 1 : 2; }
