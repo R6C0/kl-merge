@@ -4,8 +4,8 @@ This replaces the earlier "release 1023" kit. Use ONE of them; 1023b is the newe
 It has its own backup folder (release_1023b_backup), so the two kits' undo files never mix.
 
 WHAT CHANGES IN THE GAME
-1. New hook (dinput8.dll, SHIP build of everything merged on rtp-schemas up to 751c25d20 on 2026-10-23, including the
-   event stingers and sound pass 3 code). New features in it are off unless the ini turns them on.
+1. New hook (dinput8.dll, SHIP build of everything merged on rtp-schemas up to 2b4726be5 on 2026-10-23, including the
+   event stingers, sound pass 3 code, the ambience/music clock fix and the CEG self-open guard). New features in it are off unless the ini turns them on.
 2. Balance pass 2 (KLHook.ini [Balance]; you said the AI felt a bit too strong):
    - a guard at arm's length hits you for 4.5 bullets (was 6.0)
    - police bullets on you x0.7 (was 0.9); AI heister bullets on you x0.6 (new line)
@@ -21,7 +21,7 @@ WHAT CHANGES IN THE GAME
    Left OFF on purpose: BackgroundMs and everything in [QoL2].
 
 OPTIONAL ADD-ONS (more lively: their code ran on DM01 on 2026-10-23, 0 faults, but in EARLIER dll builds; the exact dll this kit installs
-(EE6CCCAA) is untested until the proposed live run). They only add clips and ini lines; they never
+(C7557D81) is untested until the proposed live run). They only add clips and ini lines; they never
 touch dinput8.dll, so they cannot put an older hook back.
  A. Sound pass 3 ("OPTIONAL 1 sound3.bat"): per-map one-shot sounds for Local and Panic moments plus Payday 2 ASSAULT music.
     Clips go to <DD>\KLExpansion\Ambience\local and \panic; it rewrites the [Ambience.*] / [Music.*] sections of KLHook.ini
