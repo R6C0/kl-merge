@@ -414,9 +414,10 @@ def write_zip(path, members, opt=None):
     Every member carries the same fixed time stamp (STAMP), so two builds with equal members are equal
     files (before 2026-10-09 18:00 the build time was stamped in; 'stamp=now' gives that back).
     Method and order are what stock has: deflate, the directory in physical order. 'stored' writes
-    members without compression. ASSUMPTION for 'stored': the game's reader takes method 0 for a
-    member of any size - the 45 stock archives use it only for members of up to 32 bytes
-    (re/loading.md 4), so it is NOT the default and has not been loaded by the game."""
+    members without compression. 'stored': the 45 stock archives use method 0 only for members of up
+    to 32 bytes, but the reader (kl2 0x593010) takes a method-0 member of ANY size as one plain read,
+    while method 8 is inflated on the loading thread in 128 KB chunks with the keep-alive pump after
+    each (re/loading.md 4, read 2026-10-23). Still NOT run in the game, so not the default."""
     opt = opt or load_options()
     stamp = STAMP if opt['stamp'] else time.localtime()[:6]
     with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED, compresslevel=opt['level']) as z:

@@ -66,6 +66,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-23 19:00 (PC clock; 18:00 UTC) - scheduled check-in (cloud; PC idle since 14:16, read-only: no new dump, KLHook.result = the
+known FX1 script FAIL, nothing launched or installed). STUTTER, from today's log + kl2.exe (debug/notes/2026-10-23-residual-stutter.md):
+music ON 20-32 hitches of 100 ms+ a minute, OFF 1.5 - and those sit ONLY at scene transitions, in the zip member extractor kl2 0x593010:
+zlib 1.1.3 inflate on the main thread, 128 KB chunks, the keep-alive pump 0x48a1e0 after each (~1300 per 164 MB map). Method 0 (stored)
+is ONE plain read of any size BY CODE -> `--load stored` (E6) is safe on the reader's side (not run live). In play with music off: only
+40-60 ms frames, 0-8 per 10 s, under the probe's gate - [KLHook] HitchMs=30 for one round would name them. The hook's own 125 ms
+ZAllyEscapeBox scan is one hitch per round start. Owner: nothing; next live runs are the local sessions' (E6 stored, HitchMs=30).
+
 2026-10-23 15:00 (PC clock; 14:00 UTC) - scheduled check-in (cloud; local sessions active 30-50 min before, so nothing launched or
 installed; no new dump, KLHook.result = the known FX1 script FAIL). VOICES ITEM CLOSED by the exe + .LOC files (re/voiceplain_fields.md,
 tools/kl_voice_fields.py, re/voice_fields.json): the flag-0 lines are Glazer / driver / police / UCC plus three heister events Dog Days
@@ -76,10 +84,6 @@ is one recording by CODE: no data-side swap exists, Plain=1 stays a TEST probe. 
 SHIP out_3f_1023v 2DCB0FBB, to be installed when the owner closes the game (backup dinput8.dll.before-1023v). Log was 562 MB, now archived + emptied.
 Stutter NOT solved: about 10 frames over 33 ms per 10 s this afternoon vs about 6 per 200 s this morning; hitches inside message-hook calls (PeekMessage/CallNextHookEx).
 PD2 music is off now (e8, 13:52). Close-message test FX2 still to run. re/open_work_log.md.
-
-2026-10-23 13:52 - PAYDAY 2 MUSIC IS OPT-IN (owner: it stutters). Live ini md5 E21883D4 = [Music] Enable=0, no pd2 stinger clips
-(backup KLHook.ini.before-pd2music-20261023-135155). ON/OFF: `<work>\build\pd2music_1023\Payday 2 music ON.bat` / `OFF.bat`.
-Never ship a kit or baseline with [Music] Enable=1. Retomoto keeps its engine music. Baseline now dll C7557D81 + ini E21883D4.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
