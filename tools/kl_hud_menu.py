@@ -637,6 +637,76 @@ def repaint(z, stem, log=print, bars='kit'):
     return T.write_tex(tex), done
 
 
+# the shop's focus bars (2026-10-23, TEST SHOP1): the 15 WeaponBuyFB bars of a LEVEL's online.xml draw the family
+# FocusBar_short at AlphaMax 255, and their rows' text is chalk (set Default, the last of its two definitions) or white
+# (set White, ingame.xml): chalk on chalk, unreadable. In a level .TEX the family's painted tile is used by no other family
+# (picture_uses; also BuyWeaponDialogFocus #18/#19 and the static WeaponShopFakeBar #01..#06 of the same shop flow).
+# NOT for the menu scene (`apply`): there the hero pages draw FocusBar_short with ink text.
+SHOP_BAR_FAMILY = 'FocusBar_short'
+SHOP_BAR_FILL = (0x4a, 0x47, 0x44)             # warm dark grey: chalk f3f0ea on it ~7:1, still a band over the near-black panel
+
+
+def shopbar_repaint(z, stem, log=print):
+    """-> (new .TEX bytes, [texture ids]). Recolours (RGB only; the brush stroke's alpha is kept) every texture whose uses
+    are all SHOP_BAR_FAMILY. Empty halves (no paint) are left as they are."""
+    import kl_texmat as T
+    tex = T.read_tex(z.read(stem + '.TEX'))
+    done = []
+    for tid, us in sorted(picture_uses(z, stem).items()):
+        if tid not in tex.tex or {f for f, _l, _r in us} != {SHOP_BAR_FAMILY}:
+            continue
+        w, h, px = tex_pixels(tex.tex[tid].entry)
+        if px is None:
+            log('  texture %d: a format not read here, left alone' % tid); continue
+        n = 0
+        for i in range(0, len(px), 4):
+            if px[i + 3] > BAR_ALPHA_MIN:
+                px[i:i + 3] = bytes(SHOP_BAR_FILL); n += 1
+        if not n:
+            continue
+        tex.tex[tid] = T.Texture(tex_abgr(tex.tex[tid].entry, px))
+        done.append(tid)
+        log('  texture %d (%dx%d): %d painted pixels -> #%02x%02x%02x' % ((tid, w, h, n) + SHOP_BAR_FILL))
+    return T.write_tex(tex), done
+
+
+def shopbar_text(xml, log=print):
+    """The rows drawn over a SHOP_BAR_FAMILY bar get ColorSet="White" where they had none or 'Default'. TEST SHOP2: the
+    category rows (no set) take the FIRST 'Default' (focus ink a00c0c0d): ink on the dark bar. The weapon rows already
+    have 'White'. An attribute value only: signature() (the table) does not change."""
+    bars = {dict(t.attrs).get('Name') for t in tags(xml) if t.name == 'GuiElement' and not t.close
+            and re.sub(r'#\d+$', '', dict(t.attrs).get('Graphic', '')) == SHOP_BAR_FAMILY}
+    bars.discard(None)
+
+    def fn(t, text):
+        a = dict(t.attrs)
+        if t.name == 'GuiElement' and a.get('FocusGraphic') in bars and a.get('ColorSet', 'Default') == 'Default':
+            return set_attr(text, 'ColorSet', 'White')
+    new, n = rewrite(xml, fn)
+    if signature(new) != signature(xml):
+        raise SystemExit('shopbar: the table signature changed')
+    log('  online.xml: %d bar element(s), %d row(s) -> ColorSet White' % (len(bars), n))
+    return new
+
+
+def shopbar(src, out, log=print):
+    """A level archive -> a copy in `out` with only the shop's focus-bar texture recoloured (see SHOP_BAR_FAMILY) and its
+    rows' text set to white (shopbar_text)."""
+    z = zipfile.ZipFile(src)
+    stem = next(n for n in z.namelist() if n.lower().endswith('_main.gms'))[:-4]
+    data, done = shopbar_repaint(z, stem, log)
+    if not done:
+        raise SystemExit('%s: no texture of %s only: nothing to do' % (src, SHOP_BAR_FAMILY))
+    new = {(stem + '.TEX').lower(): data}
+    i = _member(z, ONLINE)
+    if i is not None:
+        new[i.filename.lower()] = shopbar_text(z.read(i).decode('latin-1'), log).encode('latin-1')
+    dst = os.path.join(out, os.path.basename(src))
+    _rezip(src, dst, new)
+    log('  %s: %d texture(s), %d bytes, sha1 %s' % (dst, len(done), os.path.getsize(dst), _sha(dst)))
+    return dst
+
+
 # ------------------------------------------------------------------ the menu scene's fonts (2026-10-12, the final look)
 # The menu scene (Scenes/kaneandlynch.zip) holds eight ZTTFONT entities; the XML names them by Font=. READ in the three XML
 # files + the scene's own guielems.xml / windows.xml (which name no font): what each slot is used for in the front end -
@@ -1282,6 +1352,8 @@ def main():
         apply(a[1], a[2], look, '--board' in opt, '--online-in-patch' in opt, '--no-pictures' not in opt, bars=bars, fonts='--fonts' in opt)
     elif len(a) == 3 and a[0] == 'level':
         level(a[1], a[2], '--board' in opt, bars=bars)
+    elif len(a) == 3 and a[0] == 'shopbar':
+        shopbar(a[1], a[2])
     elif (len(a) in (2, 3) and a[0] == 'check') or (len(a) == 3 and a[0] == 'check-level'):
         if a[0] == 'check':
             fails, notes = check(a[1], a[2] if len(a) == 3 else None, count=num('--menu-count'))
