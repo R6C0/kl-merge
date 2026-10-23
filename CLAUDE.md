@@ -114,6 +114,13 @@ CampaignMenu; scripted menus should use klauto `settle` + `tapuntil` (see H8_hos
 2026-10-23 09:20 - Retomoto lift doors: the engine chain works (probe klprobe.c, LIFT9-11: box fires once, also for bots,
 both proxies accept, 5 controllers each). "Shut doors" was the test route hitting the doorway frame. kl_doorfix on DM09 only;
 kl_doorfix2 is a TEST tool (opens at the blast). CarWait 6 + CarFallback carry a slow human. Notes: re/retomoto_lift.md.
+2026-10-23 10:10 - Owner install kit staged, NOT installed: `<work>\build\release_1023\INSTALL release 1023.bat` = SHIP hook d25393d9
+(rtp-schemas ab08f42b1) + balance pass 2 (BAL2 live PASS: CopToYouFar x0.86 at 21 m) + [QoL] FlashOnReady/ReleaseCursor. Backups +
+UNDO bat go to `<work>\build\release_1023_backup`. The owner's ini already has [Balance] Enable=1. Notes: re/release_1023.md.
+
+2026-10-23 09:55 - Sound pass 3 merged (ab08f42b1), NOT run live: per-map Local/Panic one-shots + PD2 ASSAULT music, all opt-in.
+Clips already in `<DD>\KLExpansion\Ambience\local|panic` (145, new folders); ini sections via `<work>\build\sound3_1023\INSTALL sound3 1023.bat`.
+Test ini ready (scratchpad live\SND3_DM01.ini); held because the owner is back (10:02). QoL2 (klqol2.c) merged, all off.
 
 2026-10-23 08:20 - Shop on all 27 maps: readable focus rows (SHOP3b) + v2 card cut-outs on 12 rows with the edge rule (SHOP5 PASS,
 Sawn-off clean). Undo newest first: `<work>\build\shopcut4_1023_undo\UNDO shopcut4 1023.bat` (copies from shopcut3_1023: keep it),
