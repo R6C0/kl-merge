@@ -271,19 +271,22 @@ def _fill_pockets(mask, d, small=1500, big=6000, dmin=28):
 
 def _keep_gun2(mask, rel=0.05, pad=0.10):
     """keep the largest blob (grown by 4 px first) plus any SOLID blob (area / bbox >= 0.5, so print and wires do not count) of at least `rel` of its
-    area whose centre lies inside its bounding box grown by `pad`; a detached silencer or magazine stays, tags and bank notes go"""
+    area whose centre lies inside its bounding box grown by `pad`; a detached silencer or magazine stays, tags and bank notes go. A secondary blob
+    that touches the card edge is never kept: that is a neighbouring prop cut by the photo frame (the box and notes beside the Hawk Sawn-off, the
+    price tag under the bullpup), not a part of the gun"""
     np = _np()
     half = mask[::2, ::2]
     lab, areas = _components(_dil(half.astype(np.float32), 2) > 0.5)
     if len(areas) < 2:
         return mask & False
     big = max(range(1, len(areas)), key=lambda i: areas[i])
+    edge = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]])).tolist())
     ys, xs = np.nonzero(lab == big)
     H, W = half.shape
     x0, x1, y0, y1 = xs.min() - pad * W, xs.max() + pad * W, ys.min() - pad * H, ys.max() + pad * H
     keep = np.zeros(len(areas), bool); keep[big] = True
     for i in range(1, len(areas)):
-        if areas[i] < rel * areas[big]:
+        if areas[i] < rel * areas[big] or i in edge:
             continue
         yy, xx = np.nonzero(lab == i)
         sol = len(yy) / float((yy.max() - yy.min() + 1) * (xx.max() - xx.min() + 1))
