@@ -353,3 +353,74 @@ Not checked by anything offline: that a line is HEARD.
 - The boxes' places (GUESSES from kl_fa_author's numbers; never walked with this script).
 - `rt_ai3\retomoto_ai3` has no AI crew (`kl_fa.py check`: 'no bot squads'); with the Retomoto bots
   (tools\kl_fa_bots_rt.py, another job) the step has to be run again on that build.
+
+## 10. Version 2: who speaks as whom, for every character (2026-10-23, NOT RUN)
+
+Hook part: `klhook\kltalk.c` (branch feat/1023-talk; header comment section 5). Data: `tools\kl_talk_chars.py` -> `C:\kl_build_1019\talk_1023\<map>\KLTalk.ini`
+(27 map folders: DM*, T01, DD01..DD09), installed by `INSTALL talk 1023.bat`. The hook goes in WITH the files: an older hook reads Version=2 as 'not mine'
+and the level is silent. Nothing here was run in the game.
+
+### 10.1 New syntax (`[Talk] Version=2`; Version=1 files read as before)
+
+| where | new | meaning |
+|---|---|---|
+| `Who=` of a pool, speaker word of a `Line.k`, `Call=`, `Reply=` | a character Name from the level's KLWardrobe.ini (`Ashkanan`, case blind) or `Char<n>` (wardrobe number) | that character, wherever he is worn (a crew record whose model is his body). An unknown name makes that pool / pair unused (counted in the log, never a refusal). |
+| `[Chatter] Once=0` + `KeyGap=<s>` | a key may repeat, but not within s seconds | `Once=1` unchanged (once a round) |
+| `[Chatter] PairChance=<percent>` | share of idle turns that try a pair | default 33 (old 'one in three') |
+| `[Pair.n] Call=A,key` / `Reply=B,key` / `Wait=<s>` | A and B may be ANY two characters that are there, not only Kane and Lynch | reply `Wait` seconds after the call (default 2.9) |
+| `[Scene.n] Cast.Kane=<name>` / `Cast.Lynch=<name>` | the scene's Kane / Lynch lines and Needs are about whoever wears that character | list the plain scene first, cast alternatives after it (scenes of one Name are alternatives). The generated files use none. |
+
+Idle / event choice for a member: his own named pools first (keys as written, no `_C<n>`); only when they have no key left the class pools decide as before
+(Kane / Lynch pools for their bodies, `Who=Any` + `_C<slot+1>` for a Dog Days body, Squad1 / Squad2 for any other body). Limits: 96 scenes, 160 pools,
+160 pairs, 24 keys a pool, 100 characters a key, 512 distinct said keys per level generation.
+
+### 10.2 Character -> speaker (the table is a GUESS; `python tools\kl_talk_chars.py list`)
+
+Dead Men's own campaign speakers (Carlos, Rific, Shelly, Thapa, Merc) are in NO installed English .LOC (every map folder's .LOC has Kane 220, Lynch 211,
+Squad 56, Squad02 52, Goon, Police, Civilian clips under AllLevels/Oneliners), so there is no real Dead Men voice to point a Dead Men heister at. The six get
+disjoint slices of Dog Days' two squad voices, which keeps them apart and is what is present:
+
+| wardrobe | character | stand-in voice | idle categories | Stage2 / Down / Money (a third of Advance / ManDown / Exclamation) |
+|---|---|---|---|---|
+| 9 | Kane | his own `*_Kane` lines (existing pools) | existing | existing |
+| 10 | Lynch | his own `*_Lynch` lines (existing pools) | existing | existing |
+| 11 | Ashkanan | Squad | BattleCries | slice 0 |
+| 12 | Meldal | Squad02 | BattleCries | slice 0 |
+| 13 | Red | Squad | EnemySuppress + HeavyFire | slice 1 |
+| 14 | Parker | Squad02 | EnemySuppress + HeavyFire | slice 1 |
+| 15 | Standen | Squad | Alert + EnemySpottedClose | slice 2 |
+| 16 | Hutchison | Squad02 | Alert + EnemySpottedClose | slice 2 |
+| 1..8 | the eight Dog Days mercs (J.C. .. Mitchel) | unchanged: `Who=Any` pools (hook appends `_C<slot+1>`) and explicit `_C<slot+1>` keys in pairs | existing | existing |
+
+Real Dead Men speakers would only replace the keys in `CHARS` of kl_talk_chars.py once their clips are in a map's .LOC (the Dead Men .LOC has 766 of the
+5798 strings; its sound ids index the Dead Men .SND: re/voice.md). The ini cannot do a voice swap by itself: a plain key plays its one recording whatever the
+speaker byte says. THE V5 STEP (writing the speaker voice into the game's crew record so a Dog Days line plays in a Dead Men voice) is NOT done.
+
+### 10.3 Pairs (call -> reply; 118 added per map, all keys checked against that map's .LOC with a sound)
+
+- Dead Men <-> Dead Men: 30 (every ordered pair; call from the caller's Advance slice, answer from the other's Exclamation slice).
+- Kane / Lynch <-> each Dead Men heister: 24 (both directions; Kane / Lynch use their LetsGo / What / FlankCover calls and Direction answers as in the old pairs).
+- Dead Men <-> Dog Days merc: 48 (alternating direction by index; the merc's side is `Multiplayer/F0x/..._R_C<slot+1>`, e.g. `Char3,Multiplayer/F05/ExitHeist_01_R_C3`).
+- Kane / Lynch -> each merc: 16 (mercs answer with `..._R_C<n>`).
+The old Kane <-> Lynch pairs stay (7). So Kane and Lynch pair with everyone, and any two other characters pair when both stand in the round.
+
+### 10.4 The files
+
+Every file: Version=2, `Once=0`, `KeyGap=240`, `PairChance=40`, 53 pools / 125 pairs (DM05A, DM11B 36 / 118: no Kane / Lynch class pools in their old files; T01 41 / 125).
+DM* and T01 keep their own scenes, class pools and Fed / AllDead / ShootOff pools (all untouched). DD01..DD09 (no file before) get DM01's pools and pairs without
+scenes (Dead Men story lines do not belong there), filtered to keys the DD .LOC has (their .LOC lacks the Multiplayer/GameEnds, Shoot_Off_Money and Fed lines, so those pools are
+dropped there). `python tools\klt_audit.py "<DD>\KLExpansion" --percar --ini-root C:\kl_build_1019\talk_1023` -> 0 missing, 0 without sound on all 27 maps;
+`python tools\kl_talk_chars.py check` re-reads the staged files with the hook's rules (names against the map's wardrobe, limits, key spelling) -> `problems: 0`.
+`kl_fa_talk.py check` is NOT used: it refuses any speaker but Kane / Lynch in scenes and pools (Version 1 rules).
+
+### 10.5 Live test (the lead; the hook and the files together)
+
+1. Hook: `C:\kl_build_1019\talk_1023\hook\test\dinput8.dll` (TEST, with klauto) or `...\hook\ship\dinput8.dll` (SHIP), sha1 in the commit notes. Files: `INSTALL talk 1023.bat` (game closed).
+2. KLHook.ini `[Talk] Enable=1 Log=2 Seed=7 LogOnly=0`, `[Character] Enable=1`, map DM01 in the F01 slot, wardrobe as installed; start as Ashkanan (character 11) with bots on.
+   `python tools\kl_autotest.py 420 --tag talk1023 --hook <that dll> --ini <that ini>`.
+3. PASS in `KLHook.log`: `talk: level ...: ...KLTalk.ini Version 2, ... 53 pools, 125 pairs ... Once=0 KeyGap=240 PairChance=40`; no `REFUSED`; no `skipped` line on DM01
+   (a skipped line on a build whose wardrobe lacks a name is expected); `talk: said AllLevels/Oneliners/BattleCries/...Squad at ... (character 11 ...; chatter ashkanan_idle ...)`
+   for the player's body; a pair `Call=Ashkanan` answered by a `Char<n>` or Kane line `Wait` seconds later; the same key not twice within 240 s; no fault line; clean exit.
+   By ear: the squad voices come out for the Dead Men bodies, a merc keeps its own voice.
+4. DD map: install, play stock Bridge in the DD02 folder, same log lines (`53 pools`, no scenes, Kane / Lynch pools used only when someone wears those bodies).
+5. Old hook (klhook 1020g): the same files must leave the level silent (an old hook does not read Version=2) and cause no crash.
