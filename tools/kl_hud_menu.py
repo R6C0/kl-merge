@@ -1062,9 +1062,15 @@ def check_level(arc, src, log=print, count=None):
             ch = [t for t in ta.tex if ta.tex[t].entry != tb.tex[t].entry]
             for t in ch:
                 wa, ha, pa = tex_pixels(ta.tex[t].entry); wb, hb, _pb = tex_pixels(tb.tex[t].entry)
-                if (wa, ha) != (wb, hb) or pa is None:
+                if (wa, ha) != (wb, hb) or (pa is None and ta.tex[t].entry[4:8] != b'1TXD'):     # DXT1 (the shop's big cards, kl_shop_cards) is not decoded here: its size is checked, its picture by kl_shop_cards.blank_tiles below
                     fails.append('%s: texture %d changed size or is not readable' % (n, t))
             log('  %s: %d textures differ from the source, same ids and sizes' % (n, len(ch)))
+            try:                                                 # regression: no blank weapon-shop tile (36 big + 36 small cards, star, lock)
+                import kl_shop_cards as K
+                if not K.blank_tiles(src):                       # only where the source archive has a complete, healthy shop page
+                    fails += ['%s: shop tile %s' % (n, p) for p in K.blank_tiles(arc)]
+            except Exception as e:
+                notes.append('%s: shop tiles not checked (%s)' % (n, e))
         elif low == ONLINE.lower():
             xml, rx = za.read(n).decode('latin-1'), zb.read(n).decode('latin-1')
             if anomalies(xml) != anomalies(rx):
