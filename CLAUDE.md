@@ -104,6 +104,10 @@ C: hit 0 bytes free mid-build: stage big zips on G:, not C:\kl_build_1019.
 rows (`kl_shop_cards.py recut --rows=`, SHOP4 PASS; Hawk Sawn-off keeps 2 stray fragments). Undo
 `<work>\build\shopbar_1023_backup\UNDO shopbar 1023.bat`, then `<work>\build\shopcut3_1023_backup\UNDO shopcut 1023.bat`
 (run the shopcut undo first). C: hit 0 bytes free mid-build: stage big zips on G:, not C:\kl_build_1019.
+2026-10-23 09:20 - Retomoto lift doors: the engine chain works (probe klprobe.c, LIFT9-11: box fires once, also for bots,
+both proxies accept, 5 controllers each). "Shut doors" was the test route hitting the doorway frame. kl_doorfix on DM09 only;
+kl_doorfix2 is a TEST tool (opens at the blast). CarWait 6 + CarFallback carry a slow human. Notes: re/retomoto_lift.md.
+
 2026-10-23 08:20 - Shop on all 27 maps: readable focus rows (SHOP3b) + v2 card cut-outs on 12 rows with the edge rule (SHOP5 PASS,
 Sawn-off clean). Undo newest first: `<work>\build\shopcut4_1023_undo\UNDO shopcut4 1023.bat` (copies from shopcut3_1023: keep it),
 `shopcut3_1023_backup\UNDO shopcut 1023.bat`, `shopbar_1023_backup\UNDO shopbar 1023.bat`. Ambience pass 2 installed (DOOR1: Japanese
@@ -112,11 +116,6 @@ police radio on DM09; undo `<work>\build\ambience2_1023_backup\UNDO ambience2 10
 2026-10-23 05:40 - .LOC cap 612,634 for every language (kl_loc.LOC_CAP; kl_loc_fit, all 27 zips, LOCFIT1 clean).
 Traitors rarer (Backstab 20, TraitorsMax 1); DM03/T01 police long guns capped 75/70 (ACC1b clean). Portraits proven
 (PIC1/PIC2). Retomoto lift proven (LIFT4/5; open: the jump with feet in the car box, re/retomoto_lift.md).
-
-2026-10-23 03:50 - installed for the owner: Dead Men voices on all 27 map folders, hook 1023h (48faf4dd), [Music]/[Traits] ini.
-DM01 with voices crashed (kl2+0x526b40): the level .LOC goes into a fixed 600,000-byte buffer; kl_dmvoice keeps it under
-LOC_CAP, and any other tool that grows a .LOC must too. The map-page selector is now held on real maps (klslot kls_page_clamp, PH3).
-Proven live: voices, pair talk, ambience, Payday 2 music, traits. Undo: `C:\kl_build_1019\hook_1023h\UNDO hook 1023h.bat`.
 
 
 ## Owner's end goal (2026-10-09)
