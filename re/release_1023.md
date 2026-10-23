@@ -81,3 +81,25 @@ Undo test: run the generated UNDO bat; compare md5 of `<DD>\KLHook.ini` and `din
 - `kl_ini_patch.py` drops a trailing `; comment` on a replaced line (prints the old value). The owner's comments above the lines stay.
 - Undo restores the whole ini: later owner edits survive only as the `.undo-<time>` copy.
 - Do not run `INSTALL balance2 1023.bat` as well (same keys, its own undo would restore an older ini).
+
+## Kit b (branch feat/1023-release2, from rtp-schemas 751c25d20; 2026-10-23 ~10:40)
+Why: the first kit's dll (d25393d9, ab08f42b1) has no klstinger.c (string "stinger:" absent; present in the new one). Kit b is a NEW staged folder,
+`<work>\build\release_1023b\` (the 1023 folder is untouched). Source `tools/release_1023b/`; no hook C change (rtp-schemas tip built as it is).
+- Files: `release_1023b.ps1` (the 1023 installer with the names changed: backup `<work>\build\release_1023b_backup`, `UNDO release 1023b.bat`, copy of the
+  script `release_1023b.ps1` there), `INSTALL release 1023b.bat`, `KLHook.release1023.patch.ini` (byte copy of the 1023 patch: balance pass 2 + [QoL]),
+  `README_release_1023b.txt` (plain words: what changes, install order, undo order), `OPTIONAL 1 sound3.bat` / `OPTIONAL 1 UNDO sound3.bat`,
+  `OPTIONAL 2 stinger.bat` / `OPTIONAL 2 UNDO stinger.bat`, plus staged `dinput8.dll`, `dinput8.dll.sha1`, `kl_ini_patch.py`.
+- SHIP dll sha1 EE6CCCAAAFD72FCFFD611099855E957BB4CF0B58 (`klhook/out_release2_1023`, copied to `klhook/out_release_1023b`; staged copy equal).
+  TEST dll AC68FA061D96C22489A67C5067DE471902AB9F58 (`klhook/out_release2_1023_test`, `build_auto.bat`; not staged). MSVC builds are not byte-reproducible.
+- Add-on installers checked (read, then run on a fake DD): both refuse while kl2.exe runs; neither touches dinput8.dll unless the stinger one gets `-Dll`
+  (its package dll is the older 89A9B475 hook: the OPTIONAL bats never pass it; the README says never add it). sound3: clips md5-checked, `KLHook.ini.before-sound3`
+  saved once, [Ambience]/[Music] merged key by key, other sections replaced; undo section by section. stinger: marker block appended, timestamped ini copy
+  "for manual recovery only", undo removes only the block and `KLExpansion\Stinger`. Their undo is by the add-on's own bat (no shared backup folder), so the
+  two kits' undos cannot mix. The OPTIONAL bats call `..\sound3_1023\*.ps1` and `..\stinger_1023\*.ps1` (the already staged packages, not copied: G: is tight).
+- Order: install release 1023b, then add-ons. Undo: add-ons, then release (the release undo restores the whole ini, so add-on ini lines vanish, clips stay).
+- Tested offline on a fake DD in %TEMP% (dummy kl2.exe, the saved owner ini a4de872a, the 1023 dll as the "live" one, `-SkipRunCheck`): install (10 ini lines,
+  dll md5 ok), repeat (already installed, no new backup), sound3 + stinger (dll md5 unchanged, balance keys kept, 1 [Stinger] block), stinger undo, sound3 undo
+  (ini byte-identical to the post-release state, both clip folders gone), release undo (dll D25393D9 and ini A4DE872A back). The wrapper bats were NOT run (they point
+  at the real DD).
+- GUESS / risk: no engine offset touched by the kit. Stinger cue choice and the PD2 clip offsets are unjudged; the stinger and sound3 hook code ran live once (DM01).
+  The release dll was not booted by the installer test (offline); a live run is the lead's (proposed run in re/release2_1023.md).
