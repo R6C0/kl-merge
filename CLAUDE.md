@@ -97,7 +97,7 @@ Proven live: voices, pair talk, ambience, Payday 2 music, traits. Undo: `C:\kl_b
 2026-10-23 01:40 - first System Link rounds on the two-process bench (firewall opened by the owner). `[Lobby] MinPlayers=N`
 (klhook/kllobby.c, host only): on the host's Ready with >= N connected the lobby target drops to the number connected, so a
 2-player FA round starts (H4, TEST 1023b: 0.6 s after the host's Ready, 0 faults). NetSmooth now works in System Link
-(H5: 1720 turns of a walking host placed on the client, 0 faults). Owner: `C:\kl_build_1019\hook_1023b\INSTALL hook 1023b.bat`.
+(H5: 1720 turns of a walking host placed on the client, 0 faults). Both are in hook 1023h (installed, see above); the 1023b pack is superseded.
 
 2026-10-22 00:30 - solo online bench: two kl2.exe on one PC work (klhook/klsolo.c, `tools/kl_solo_test.py`, TEST 1022e; [Solo] Events=1 gives each process its own render events, which fixed the two-process crashes). All 19 maps run in two processes at once (G0-G2, 0 faults). System Link stops at a Windows Firewall check (0 rules for kl2.exe), so NetSmooth online is untried. 44 local commits unpushed (push refused).
 (Firewall: opened by the owner 2026-10-22.)
