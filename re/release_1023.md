@@ -1,4 +1,4 @@
-# Release 1023 install package (branch feat/1023-release, from rtp-schemas e9490bbdd)
+# Release 1023 install package (branch feat/1023-release, from rtp-schemas ab08f42b1 (includes sound3-fix music/ambience))
 
 Offline only. Nothing was launched, nothing written under the Dog Days folder. No hook C change was needed: the hook is
 rtp-schemas' tip built as it is. New behaviour stays behind ini keys with old-behaviour defaults.
@@ -21,8 +21,8 @@ the manifest first, saves what is live as `<name>.undo-<time>`, restores byte fo
 Not written: `[QoL2]` anything, BackgroundMs > 0.
 
 ## Builds (from this branch)
-SHIP `klhook/out_release_1023/dinput8.dll` sha1 531D61485B5D22B0ABFACA466B6B39A082097E0C (staged copy equals it)
-TEST `klhook/out_release_1023_test/dinput8.dll` sha1 EBAEECA59F48994DCE4891142CA9961C2095323D (not staged: tests use it from klhook/)
+SHIP `klhook/out_release_1023/dinput8.dll` sha1 D25393D96D026840664A4B7547D63D051E646B82 (staged copy equals it)
+TEST `klhook/out_release_1023_test/dinput8.dll` sha1 37CA3A56ECA67468F280FFEBA215388AB9684865 (not staged: tests use it from klhook/)
 (`build.bat <abs dir>` / `build_auto.bat <abs dir>`; out dirs are untracked and not committed.)
 
 ## Tested (offline, copies)
@@ -48,7 +48,7 @@ Then a scripted Arcade round on a non-stock map (Retomoto f06 or DM03) with the 
 Undo test: run the generated UNDO bat; compare md5 of `<DD>\KLHook.ini` and `dinput8.dll` with `manifest_<stamp>.txt` (`*_backup_md5`).
 
 ## Open risks
-- The installed hook (md5 changes over the day) may be newer than rtp-schemas e9490bbdd: if another branch has merged since, rebuild first.
+- The installed hook (md5 changes over the day) may be newer than rtp-schemas ab08f42b1 (includes sound3-fix music/ambience): if another branch has merged since, rebuild first.
 - `kl_ini_patch.py` drops a trailing `; comment` on a replaced line (prints the old value). The owner's comments above the lines stay.
 - Undo restores the whole ini: later owner edits survive only as the `.undo-<time>` copy.
 - Do not run `INSTALL balance2 1023.bat` as well (same keys, its own undo would restore an older ini).
