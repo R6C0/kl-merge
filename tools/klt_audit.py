@@ -4,6 +4,7 @@ klt_audit.py - KLTalk audit of an owner install (read only).
 
     python tools/klt_audit.py C:\kl_build_1018\owner_1018 [--json out.json] [--percar]
 
+--ini-root <dir>: read <dir>\<map>\KLTalk.ini instead of the one in the map folder (staged files, e.g. C:\kl_build_1019	alk_1023).
 --percar: a Who=Any pool's keys are per-character (the hook appends _C1.._C8): count the key present when all eight exist
 with a sound. Without it those keys are reported missing (false alarm: DM01 pool 9 etc.). Default output unchanged.
 
@@ -50,7 +51,7 @@ def english(zp):
     return {p.lower(): (kl_loc.fields(k)[2] or 0) for p, k in kl_loc.leaves(kl_loc.parse(d))}
 
 
-def audit_map(folder, percar=False):
+def audit_map(folder, percar=False, ini_dir=None):
     zps = [f for f in os.listdir(folder) if f.lower().endswith('_main.zip')]
     r = {'zip': zps[0] if zps else None}
     if not zps:
@@ -58,7 +59,7 @@ def audit_map(folder, percar=False):
     leaves = english(os.path.join(folder, zps[0]))
     r['loc'] = {n: (k.lower() in leaves) for n, k in (('AllDead', ALLDEAD), ('Shoot', SHOOT), ('Fed', FEDK[0]))}
     r['loc']['FedKill'] = FEDK[1].lower() in leaves
-    ini = os.path.join(folder, 'KLTalk.ini')
+    ini = os.path.join(ini_dir or folder, 'KLTalk.ini')
     if not os.path.isfile(ini):
         r['noini'] = True; r['pools'] = 0; r['missing'] = []; r['nosound'] = []
         r['Fed'] = r['AllDead'] = r['Shoot'] = False
@@ -90,21 +91,21 @@ def audit_map(folder, percar=False):
     return r
 
 
-def main(owner, percar=False):
+def main(owner, percar=False, ini_root=None):
     md = os.path.join(owner, 'Maps')
     res = {}
     for m in sorted(os.listdir(md)):
         f = os.path.join(md, m)
         if os.path.isdir(f) and '.replaced-' not in m:
-            res[m] = audit_map(f, percar)
+            res[m] = audit_map(f, percar, os.path.join(ini_root, m) if ini_root else None)
     return res
 
 
 if __name__ == '__main__':
-    a = [x for x in sys.argv[1:] if not x.startswith('--')]
+    a = [x for i, x in enumerate(sys.argv[1:]) if not x.startswith('--') and (i == 0 or sys.argv[i] not in ('--json', '--ini-root'))]
     if not a:
         print(__doc__); sys.exit(2)
-    res = main(a[0], '--percar' in sys.argv)
+    res = main(a[0], '--percar' in sys.argv, sys.argv[sys.argv.index('--ini-root') + 1] if '--ini-root' in sys.argv else None)
     print('%-8s %-14s %5s %4s %4s  %-4s %-7s %-5s  LOC(AllDead/Shoot/Fed/FedKill)' % ('map', 'zip', 'pools', 'miss', 'nosn', 'Fed', 'AllDead', 'Shoot'))
     for m, r in res.items():
         if 'error' in r:
