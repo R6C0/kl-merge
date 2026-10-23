@@ -2,13 +2,13 @@
 # Build and run a klhook off-game harness on Linux (cloud sessions): MinGW i686 + Wine, no Visual Studio, no game.
 #   tools/run_harness_linux.sh <name> [args...]      e.g.  klsb_test   kladren_test   klwatch_test sweep
 # Needs: apt-get install gcc-mingw-w64-i686 wine wine32:i386 (dpkg --add-architecture i386 first).
-# The DLL itself (klhook.c) cannot be built this way (MSVC naked __asm forwarders in klsteam.c); a type check of it:
-#   tools/run_harness_linux.sh --check-hook        (compiles a scratch copy with those forwarders stubbed; -fsyntax-only)
+# The DLL itself (klhook.c) cannot be built this way (MSVC SEH, __asm and naked forwarders); a type check of it:
+#   tools/run_harness_linux.sh --check-hook        (-fsyntax-only on a scratch copy with those stubbed: tools/lint/klhook_gcc_prep.py)
 set -e
 HERE=$(cd "$(dirname "$0")/.." && pwd); OUT=${TMPDIR:-/tmp}/klhook_harness; mkdir -p "$OUT"
 if [ "$1" = "--check-hook" ]; then
     rm -rf "$OUT/cc"; cp -r "$HERE/klhook" "$OUT/cc"
-    sed -i 's/^#define KLX_FWD(n) .*/#define KLX_FWD(n) static void klx_fwd##n(void) { }   \/* GCC TYPE CHECK ONLY *\//' "$OUT/cc/klsteam.c"
+    python3 "$HERE/tools/lint/klhook_gcc_prep.py" "$OUT/cc"   # MSVC-only constructs (SEH, __asm, naked forwarders) stubbed
     for v in SHIP TEST; do D=; [ $v = TEST ] && D=-DKLHOOK_TEST
         i686-w64-mingw32-gcc -fsyntax-only -Wall -Wno-unused-function -Wno-misleading-indentation -Wno-unknown-pragmas -Wno-parentheses \
             -Wno-sign-compare -Wno-missing-braces -Wno-maybe-uninitialized -Wno-unused-but-set-variable -Wno-format-truncation $D "$OUT/cc/klhook.c" 2>&1 \
