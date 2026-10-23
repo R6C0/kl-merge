@@ -4,6 +4,7 @@ Two kl2.exe on one PC: the solo bench for the online code (re/netsmooth_solo.md;
 
     python kl_solo_test.py --hook <TEST build folder> --tag <name> [--secs 300] [--gap 45]
                            [--base <KLHook.ini>] [--ini1 <extra.ini>] [--ini2 <extra.ini>] [--shots 30-300:30] [--force]
+                           [--netstat SECS]
 
 - Puts the TEST dinput8.dll into the game folder for the run and puts the one that was there back afterwards
   (kl_autotest.snapshot / restore_original). The game folder's KLHook.ini is not touched: each instance reads
@@ -15,6 +16,11 @@ Two kl2.exe on one PC: the solo bench for the online code (re/netsmooth_solo.md;
 - Starts kl2.exe directly (no steam://, so the Steam launch options are NOT used) with env SteamAppId=SteamGameId=28000
   and '-o DisableSplashScreens'; instance 2 --gap seconds after instance 1. Ends both after --secs.
 - Refuses while a kl2.exe runs, or while the owner gave input in the last 300 s (--force skips that check).
+- --netstat SECS: for the first SECS seconds samples 'netstat -ano -p UDP' every 2 s, keeps the rows of the kl2 pids and
+  writes every CHANGE (a socket opened / closed, with the second since the start) into run.txt as 'netstat | ...' lines.
+  A control for the System Link discovery question (re/netsmooth_camyaw.md): does the host hold UDP 9100 / 9103 before the
+  client searches, and which port does the client's search socket use. Both processes' sockets are on one PC, so the
+  rows say who bound what, not whether a broadcast was heard.
 Prints per instance: alive at the end?, the solo / net / netsmooth lines of its log, KLHook.result, and a RESULT line.
 """
 import ctypes, os, re, shutil, subprocess, sys, time
@@ -40,6 +46,17 @@ def firewall_ok(exe):
           "else { $a=$p.AuthorizedApplications | ?{ $_.ProcessImageFileName -eq '%s' -and $_.Enabled }; if($a){'allowed'}else{'blocked'} }" % exe.replace("'", "''"))
     r = subprocess.run(['powershell', '-NoProfile', '-Command', ps], capture_output=True, text=True)
     return (r.stdout.strip() or 'unknown: ' + r.stderr.strip()[:100])
+
+
+def netstat_rows(pids):
+    """-> {(pid, proto, local address)} of 'netstat -ano -p UDP' for those pids ('*:*' foreign column of UDP rows ignored)."""
+    r = subprocess.run(['netstat', '-ano', '-p', 'UDP'], capture_output=True, text=True)
+    rows = set()
+    for l in r.stdout.splitlines():
+        f = l.split()
+        if len(f) >= 4 and f[0] == 'UDP' and f[-1].isdigit() and int(f[-1]) in pids:
+            rows.add((int(f[-1]), f[0], f[1]))
+    return rows
 
 
 def read_ini(path):
@@ -100,7 +117,7 @@ def solo_secs(n):
 
 def main():
     a, opt = sys.argv[1:], {}
-    for key in ('--hook', '--tag', '--secs', '--gap', '--base', '--ini1', '--ini2', '--shots', '--n'):
+    for key in ('--hook', '--tag', '--secs', '--gap', '--base', '--ini1', '--ini2', '--shots', '--n', '--netstat'):
         if key in a:
             i = a.index(key); opt[key] = a[i + 1]; del a[i:i + 2]
     force = '--force' in a
@@ -142,6 +159,22 @@ def main():
         inst.append(d)
     was = at.snapshot(dd, say)
     procs, code = [], 1
+    ns_secs, ns_prev, ns_t = int(opt.get('--netstat', 0)), set(), [0.0]
+
+    def netstat_tick(t0):
+        # every 2 s while inside the first --netstat seconds: log what the kl2 pids bound / let go (changes only)
+        nonlocal ns_prev
+        el = time.time() - t0
+        if not ns_secs or el > ns_secs or el - ns_t[0] < 2 or not procs:
+            return
+        ns_t[0] = el
+        cur = netstat_rows({p.pid for p in procs})
+        names = {p.pid: 'inst%d' % (i + 1) for i, p in enumerate(procs)}
+        for pid, proto, addr in sorted(cur - ns_prev):
+            say('  netstat | %+.0f s %s pid %d %s %s OPEN' % (el, names[pid], pid, proto, addr))
+        for pid, proto, addr in sorted(ns_prev - cur):
+            say('  netstat | %+.0f s %s pid %d %s %s CLOSED' % (el, names[pid], pid, proto, addr))
+        ns_prev = cur
     try:
         src = opt['--hook']; src = os.path.join(src, 'dinput8.dll') if os.path.isdir(src) else src
         note = at.put(src, os.path.join(dd, 'dinput8.dll'))
@@ -151,6 +184,7 @@ def main():
             if n == 2:
                 while time.time() - t0 < gap:
                     time.sleep(1)
+                    netstat_tick(t0)
             env = dict(os.environ, SteamAppId='28000', SteamGameId='28000', KLHOOK_DIR=d)
             p = subprocess.Popen([os.path.join(dd, 'kl2.exe'), '-o', 'DisableSplashScreens'], cwd=dd, env=env)
             procs.append(p)
@@ -158,6 +192,7 @@ def main():
         while time.time() - t0 < secs:
             time.sleep(2)
             el = time.time() - t0
+            netstat_tick(t0)
             if shots and el >= shots[0]:
                 s = shots.pop(0)
                 for n, p in enumerate(procs, 1):
