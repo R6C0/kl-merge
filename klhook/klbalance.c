@@ -545,6 +545,40 @@ static float klr_far_mult(DWORD now)
     return klr_far.mult = m;
 }
 
+/* ---------------------------------------------------------------- CopToYouFar (balance2, 2026-10-23)
+   A range falloff for what a POLICEMAN's bullet costs the human: x 1 within NearAt, x CopToYouFar from FarAt on, linear
+   between, priced for the distance to the man who fired the last bullet that hit you.
+   GUESS 1: the game keeps the last attacker of the player at [player+0x2778] (kldown.c reads it the same way); it is set at
+   the bullet, but whether before or after the hit reads the table is not known, so the FIRST bullet of a new attacker may
+   be priced for the previous one. GUESS 2: team != 2 (Ally) = police / guard (kldown.c's reading). GUESS 3: one float
+   (police->you) is shared by all police, so with several shooters the last one's distance prices all. Default: off. */
+static struct { float far_, near_at, far_at; DWORD att; float mult, said; DWORD said_at; } klr_cf;
+
+static float klr_cop_mult(DWORD now)
+{
+    struct klb_snap s; DWORD gd, pl, att, sc, team = 99; BYTE sel = 0xff, type = 0, police = 0, traitor = 0;
+    float feet[3], bp[3], d, m; DWORD fl = 0;
+    if (klr_cf.far_ <= 0) return 1.0f;
+    if (!klb_read(&s) || s.state != KLB_ROUND || s.human != 0) return klr_cf.mult = 1.0f;
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLR_GAMEDATA))) || !klh_rd(gd + 0x898, &sel, 1) || sel > 3 || !(pl = klh_rd32(gd + 0x828 + 4 * sel)) ||
+        klh_rd32(pl) != KLR_PLAYER_VT || !klh_rd(pl + 0x273c, &type, 1) || type != 2 || !klh_rd(pl + 0x2723, &police, 1) || !klh_rd(pl + 0x2726, &traitor, 1) ||
+        !klh_rd(pl + 0x460, feet, 12) || !klr_finite(feet[0]) || !klr_finite(feet[1]) || !klr_finite(feet[2])) return klr_cf.mult = 1.0f;
+    klh_rd(s.score + 0x1d4, &fl, 4);
+    if (police || traitor || (fl & 1) || s.r[0].status != 0) return klr_cf.mult = 1.0f;
+    att = klh_rd32(pl + 0x2778);                                                   /* GUESS 1 */
+    if (!att || klh_rd32(att) != KLR_ACTOR_VT || !(sc = klh_rd32(att + 0x54)) || !klh_rd(sc + 4, &team, 4) || team == 2) return klr_cf.mult = 1.0f;    /* GUESS 2 */
+    if (!kle_node(klh_rd32(att + 4), bp, 0)) return klr_cf.mult = 1.0f;
+    d = (float)sqrt((bp[0] - feet[0]) * (bp[0] - feet[0]) + (bp[1] - feet[1]) * (bp[1] - feet[1]) + (bp[2] - feet[2]) * (bp[2] - feet[2]));
+    if (!klr_finite(d)) return klr_cf.mult = 1.0f;
+    m = d <= klr_cf.near_at ? 1.0f : d >= klr_cf.far_at ? klr_cf.far_ : 1.0f + (klr_cf.far_ - 1.0f) * (d - klr_cf.near_at) / (klr_cf.far_at - klr_cf.near_at);
+    m = (float)((int)(m * 50.0f + 0.5f)) / 50.0f;                                  /* steps of 0.02: the table is not written at every step */
+    if (klr.log >= 2 && (att != klr_cf.att || KLR_ABS(m - klr_cf.said) >= 0.1f) && now - klr_cf.said_at >= 500) {
+        klr_cf.att = att; klr_cf.said = m; klr_cf.said_at = now;
+        klog("balance: copfar: last bullet on you came from %08lx at %.1f m: police->you x %.2f (CopToYouFar %.2f, from %.0f m to %.0f m)", att, d / 100, m, klr_cf.far_, klr_cf.near_at / 100, klr_cf.far_at / 100);
+    }
+    return klr_cf.mult = m;
+}
+
 /* arcade: the table is looked at (and logged once, on any level); act: and the level is not stock - only then is
    anything written; otherwise what was written goes back. Data of a heap object; any thread (as klbot.c's Tune). */
 static void klr_table_tick(int arcade, int act, int level)
@@ -553,9 +587,10 @@ static void klr_table_tick(int arcade, int act, int level)
     static int offok, toldoff;                /* the seventh: the stock row is the known one; its line was written */
     static int mirwas;                        /* the table stands in the police player's order (section 2 a3) */
     static float farwas = 1.0f;               /* YouToCrewFar (2 a6): the factor the table's +0x14 holds now */
-    struct klr_row cur[KLR_NLEVEL + 1]; DWORD tun; int L, k, n = 0, nfar = 0, off, mir; float offnow, farm = 1.0f;
+    static float cfwas = 1.0f;                /* CopToYouFar: the factor on police->you now */
+    struct klr_row cur[KLR_NLEVEL + 1]; DWORD tun; int L, k, n = 0, nfar = 0, off, mir; float offnow, farm = 1.0f, cfm = 1.0f;
     if (!(tun = klh_rd32((DWORD_PTR)KLH_VA(KLR_TUNING)))) return;
-    if (tun != tun0) { tun0 = tun; have = applied = offok = toldoff = mirwas = 0; farwas = 1.0f; }
+    if (tun != tun0) { tun0 = tun; have = applied = offok = toldoff = mirwas = 0; farwas = cfwas = 1.0f; }
     if (!act) toldoff = 0;                    /* the seventh's line is written once each time the dial starts to act */
     mir = act && klr.mirror && klr_local_police();
     if (!arcade && !applied) return;
@@ -589,6 +624,7 @@ static void klr_table_tick(int arcade, int act, int level)
     /* 2 a6: the range factor on +0x14 - not in the pass that arms the dial (that pass's line counts the dial's own
        values), not for a police player (slot 5 then holds another key; FedToCrew is his number) */
     if (act && applied && !mir && klr_far.far_ > 0) farm = klr_far_mult(GetTickCount());
+    if (act && applied && !mir && klr_cf.far_ > 0) cfm = klr_cop_mult(GetTickCount());      /* CopToYouFar */
     for (L = 1; L <= KLR_NLEVEL; L++) {
         DWORD R = tun + 0x6ac + 0x70 * L;
         for (k = 0; k < KLR_NF; k++) {        /* mir: slot k gets the value the criminal row has for the key a police player reads there -
@@ -599,9 +635,10 @@ static void klr_table_tick(int arcade, int act, int level)
             if (act && mir && k == 3 && klr.fed >= 0) want = klr.fed;       /* FedToCrew (2 a5): the float a police player's bullet on an Ally NPC reads (0x7c1bf0) */
             if (act && mir && k == 2 && klr.tofed >= 0) want = klr.tofed;   /* CrewToFed (2 a8): the float an Ally NPC's bullet on a police player reads (0x8b80a0) */
             if (k == 5 && farm != 1.0f) want *= farm;                      /* YouToCrewFar (2 a6) */
+            if (k == 2 && cfm != 1.0f) want *= cfm;                        /* CopToYouFar (balance2) */
             if (act && !mir && (k == 2 || k == 4)) want *= kld_factor(k);     /* kldown.c: DownFromCop / DownFromCrew while he is knocked down */
             if (want != cur[L].f[k]) {
-                int isfar = act && ((k == 5 && farm != farwas) || (applied && !mir && (k == 2 || k == 4) && kld_moving()));               /* a change of the range factor is not the dial's line */
+                int isfar = act && ((k == 5 && farm != farwas) || (k == 2 && cfm != cfwas) || (applied && !mir && (k == 2 || k == 4) && kld_moving()));               /* a change of the range factor is not the dial's line */
                 int w = klh_data((void *)(DWORD_PTR)(R + 4 * k), &want, 4, isfar ? "you -> crew damage factor by range" : "damage factor per Arcade level");
                 if (isfar) nfar += w; else n += w;
             }
@@ -611,9 +648,9 @@ static void klr_table_tick(int arcade, int act, int level)
             if (KLR_ABS(want - cur[L].off) > 0.000001f) n += klh_data((void *)(DWORD_PTR)(R + KLR_OFF), &want, 4, "off-stage damage factor per Arcade level");
         }
     }
-    farwas = act ? farm : 1.0f;
+    farwas = act ? farm : 1.0f; cfwas = act ? cfm : 1.0f;
     if (act && n) applied = 1;
-    else if (act && !applied && !n && klr_far.far_ > 0 && !nfar) applied = 1;      /* the dial's own values were in already: the range factor may start */
+    else if (act && !applied && !n && (klr_far.far_ > 0 || klr_cf.far_ > 0) && !nfar) applied = 1;      /* the dial's own values were in already: the range factor may start */
     if (act && n && mir == mirwas) {          /* a change of the order alone has its own line below (review S5) */
         offnow = off ? klr_want_off(&stock[level]) : klr_finite(stock[level].off) ? stock[level].off : -1.0f;      /* what stands at +0x1c of this level now */
         klog("balance: Risk=%d written for %d Arcade levels (%d value(s) changed, Ramp=%d); now on level %d: police->crew %.2f  crew->police %.2f  police->you %.2f  you->police %.2f  crew->you %.2f  you->crew %.2f  crew off your stage x %.2f - the stock values come back when the session is not Arcade or the level is stock",
@@ -1211,7 +1248,7 @@ static int klr_number(const char *t, double *d)
 
 static void klr_init(void)
 {
-    int k, offbad = 0, pbsaid = 0, fedbad = 0, farbad = 0, tofedbad = 0, toughbad = 0, headbad = 0; float v; char t[32], p[32], a[24], b[24], c[24], fedt[32], fart[32]; double d;
+    int k, offbad = 0, pbsaid = 0, fedbad = 0, farbad = 0, tofedbad = 0, toughbad = 0, headbad = 0; float v; char t[32], p[32], a[24], b[24], c[24], fedt[32], fart[32], cft[32]; double d; int cfbad = 0;
     char tofedt[32], tought[32], headt[2][32];
     klr.on = GetPrivateProfileIntA("Balance", "Enable", 0, klh_ini) != 0;
     if (!klr.on) return;
@@ -1256,6 +1293,20 @@ static void klr_init(void)
             GetPrivateProfileStringA("Balance", "YouToCrewHold", "4", u, sizeof u, klh_ini); if (!klr_number(u, &hs) || hs < 0.2 || hs > 60) { hs = 4; farbad = 2; }
             if (fa < na + 1) { na = 8; fa = 35; farbad = 2; }
             klr_far.near_at = (float)(na * 100); klr_far.far_at = (float)(fa * 100); klr_far.hold = (DWORD)(hs * 1000);
+        }
+    }
+    /* CopToYouFar (balance2): one number of 0.2 .. 1 and nothing else; 1 or no key = off (the old behaviour). NearAt / FarAt in metres. */
+    memset(&klr_cf, 0, sizeof klr_cf); klr_cf.near_at = 1200; klr_cf.far_at = 4000; cft[0] = 0;
+    GetPrivateProfileStringA("Balance", "CopToYouFar", "", cft, sizeof cft, klh_ini);
+    if (cft[0]) {
+        double na = 12, fa = 40; char u[32];
+        if (!klr_number(cft, &d) || d < 0.2 || d > 1) cfbad = 1;
+        else if (d < 1) {
+            klr_cf.far_ = (float)d; klr.any = 1;
+            GetPrivateProfileStringA("Balance", "CopToYouNearAt", "12", u, sizeof u, klh_ini); if (!klr_number(u, &na) || na < 0 || na > 500) { na = 12; cfbad = 2; }
+            GetPrivateProfileStringA("Balance", "CopToYouFarAt", "40", u, sizeof u, klh_ini); if (!klr_number(u, &fa) || fa < 1 || fa > 1000) { fa = 40; cfbad = 2; }
+            if (fa < na + 1) { na = 12; fa = 40; cfbad = 2; }
+            klr_cf.near_at = (float)(na * 100); klr_cf.far_at = (float)(fa * 100);
         }
     }
     /* CrewToFed (2 a8): as FedToCrew - one number of 0 .. 20, written only while the pairs stand exchanged */
@@ -1313,6 +1364,10 @@ static void klr_init(void)
     else if (klr_far.far_ > 0)                /* said only when the key is set */
         klog("balance: YouToCrewFar=%.2f: your bullet on an AI heister costs him YouToCrew x 1 within %.0f m, x %.2f from %.0f m on, linear between - priced for the heister your last hit was on (for %.1f s), else the nearest that has turned, else the farthest in play; one float for all of them, re-written every pass (an approximation: re\\bots_fight.md 1); not for a police player, not while you are the traitor%s",
              klr_far.far_, klr_far.near_at / 100, klr_far.far_, klr_far.far_at / 100, klr_far.hold / 1000.0, farbad ? " - a NearAt / FarAt / Hold value was not one number in its range (FarAt at least 1 m over NearAt): 8 / 35 / 4 stand for what was wrong" : "");
+    if (cfbad == 1) klog("balance: CopToYouFar=%s is IGNORED: it must be one number of 0.2 .. 1 with a decimal point (what a policeman's bullet on you is multiplied with far away; 1 = off)", cft);
+    else if (klr_cf.far_ > 0)
+        klog("balance: CopToYouFar=%.2f: a policeman's bullet on you costs police->you x 1 within %.0f m, x %.2f from %.0f m on, linear between - priced for the man who fired the last bullet that hit you ([player+0x2778], a GUESS: the first bullet of a new shooter may use the last one's range); one float for all police, re-written every pass; not for a police player, not while you are the traitor%s",
+             klr_cf.far_, klr_cf.near_at / 100, klr_cf.far_, klr_cf.far_at / 100, cfbad ? " - a NearAt / FarAt value was not one number in its range (FarAt at least 1 m over NearAt): 12 / 40 stand for what was wrong" : "");
     if (offbad)                               /* said at any Log level: the user asked for something and does not get it */
         klog("balance: CrewOffStage=%s is IGNORED: it must be one number of 0 .. 20 with a decimal point (0.75, not 0,75), or a negative one for the game's own; what stands is the dial's %.2f (-1 = the game's own)", t, klr.off);
     /* the point-blank keys (section 2 a4): no key or a negative number = that victim is left alone. As the seventh's:
