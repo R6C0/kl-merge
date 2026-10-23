@@ -98,3 +98,7 @@ Stage: `<work>\build\voiceheard2_1023\out\DM02\` (zip md5 ed1d6f79, WAV 2c15312b
 Guard: installed zip md5 966a1914. Installer: `voiceheard2_1023.ps1 -Map DM02|DM01` (table of slot + md5; DM01 row = voiceheard_1023.ps1 behaviour),
 `INSTALL voiceheard2 DM02.bat` / `UNDO ...`, backups `*.before-voiceheard`. Fake-DD test on C: unknown map, undo-before-install, install,
 second install, md5-guard refusal (changed zip), undo with byte compare: all as expected.
+
+## 11. voiceplain (2026-10-23): flag-0 lines and the play path
+Static RE: 5 `call 0x578840` sites in 0x421c70; flag-0 lines (FA_YouEscaped*_R, police events) use the single entry `[line+0]`, which the walk never swaps, so Dead Men bodies spoke stock lines for them. New [Voice] keys (default off): `PlayLog=1` (log every line said: `voice: SAY site N ...`, and `voice: PLAYING ...` from `[queue+0xd8]`), `Plain=1` (flag-0 lines take the body's KLVoice leaf at the call). The call-site patch lies in hashed code: TEST + `[KLHook] SessionSafe=0` (direct boot) only. `entry USED?` removed.
+Live test: ini `[Voice] Enable=1 StockLevels=1 Log=2 PlayLog=1 Plain=1`, `[Crew] Voice=1`, `[Wardrobe] DMVoice=1`; proof = `5 of 5 call sites retargeted`, then `SAY site .. (ours KLVoice/..)` + `PLAYING .. (ours ..)`. Full text: re/voiceplain_1023.md.

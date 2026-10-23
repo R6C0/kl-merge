@@ -27,7 +27,10 @@
  * (klw_who_now). Game thread only.
  *
  * INI [Voice]:  RadioFallback=0 (1: a radio line whose KLVoice/<Name>_R leaf is missing takes the plain KLVoice/<Name> leaf of the same event)
- *               PlayedLog=1 (with Log=2: 'voice: QUEUED <leaf> ...' / 'voice: entry USED? ...' when the game queues / seems to use an entry we swapped)
+ *               PlayedLog=1 (with Log=2: 'voice: QUEUED <leaf> ...' when the game queues an entry we swapped)
+ *               PlayLog=0 (1 + Log=2: retargets the 5 play calls of 0x421c70: 'voice: SAY site N ..' per line said, 'voice: PLAYING ..' on
+ *                          [queue+0xd8] change. CODE PATCH: TEST build with [KLHook] SessionSafe=0 only; see VOICEPLAIN below)
+ *               Plain=0 (1: the flag-0 lines (FA_YouEscaped*_R, police events) speak the body's KLVoice leaf too; needs the call-site patch)
  *               Enable=0   StockLevels=0 (1 = also on a level the verdict calls stock; the DD01..DD09 copies carry the leaves)
  *               Log=1 (0 none, 1 the summary lines, 2 every swap)   Period=1500 (ms between two walks)
  */
@@ -42,11 +45,11 @@
 
 static const char *const kvo_names[8] = { "Kane", "Lynch", "Ashkanan", "Meldal", "Red", "Parker", "Standen", "Hutchison" };
 
-static struct { int on, stock, log, period, radiofb, played; } kvo;     /* radiofb/played: [Voice] RadioFallback / PlayedLog (2026-10-23 voiceheard) */
+static struct { int on, stock, log, period, radiofb, played, playlog, plain; } kvo;     /* radiofb/played: [Voice] RadioFallback / PlayedLog (2026-10-23 voiceheard); playlog/plain: PlayLog / Plain (voiceplain) */
 static struct {                                  /* the entries made for this level generation (never freed: the game may hold them) */
     DWORD rules, mgr, lm; char scene[160]; int n, toldfull;
-    DWORD next_sum; int told_chg, told_q;         /* PlayedLog state: zeroed with the generation (review 1) */
-    struct { DWORD hash; void *entry; int found; DWORD sum, lastq; char path[128]; char chg; } e[KVO_NENTRY];
+    int told_q;                                   /* PlayedLog state: zeroed with the generation (review 1) */
+    struct { DWORD hash; void *entry; int found; DWORD lastq; char path[128]; } e[KVO_NENTRY];
 } kvo_gen;
 static struct { DWORD addr, orig, ours; int active; } kvo_rec[KVO_NREC];
 static short kvo_ix[KVO_HASH];                   /* hash of addr -> record index + 1 */
@@ -60,13 +63,7 @@ static int kvo_name_of(const char *n)
     return 0;
 }
 
-/* a checksum of an entry's 0x204 bytes (PlayedLog: a change after the swap MAY mean the game used the entry - GUESS) */
-static DWORD kvo_sum(const void *e)
-{
-    const DWORD *d = (const DWORD *)e; DWORD h = 2166136261u; int i;
-    for (i = 0; i < 0x204 / 4; i++) h = (h ^ d[i]) * 16777619u;
-    return h;
-}
+/* (voiceplain 2026-10-23: the checksum 'entry USED?' signal was removed - nothing in the game writes into an entry block, so it could not fire.) */
 
 /* the entry of a .LOC key, made as kltalk.c's klk_entry makes it (own cache: the talk cache holds 640 and is shared) */
 static void *kvo_entry(const char *key, DWORD rules, const char *scene)
@@ -79,7 +76,7 @@ static void *kvo_entry(const char *key, DWORD rules, const char *scene)
     if (!(e = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, 0x204))) return 0;
     found = (DWORD)(DWORD_PTR)((void *(__fastcall *)(void *, void *, const char *, void *))(DWORD_PTR)KLH_VA(KLK_LOOKUP))((void *)(DWORD_PTR)lm, 0, key, e);
     kvo_gen.e[kvo_gen.n].hash = h; kvo_gen.e[kvo_gen.n].entry = e; kvo_gen.e[kvo_gen.n].found = found && *(DWORD *)e;
-    snprintf(kvo_gen.e[kvo_gen.n].path, sizeof kvo_gen.e[0].path, "%s", key); kvo_gen.e[kvo_gen.n].sum = kvo_sum(e);
+    snprintf(kvo_gen.e[kvo_gen.n].path, sizeof kvo_gen.e[0].path, "%s", key);
     kvo_gen.n++;
     return kvo_gen.e[kvo_gen.n - 1].found ? e : 0;
 }
@@ -135,19 +132,175 @@ static int kvo_leaf(const char *text, char leaf[64])
     return 1;
 }
 
-/* PlayedLog (voiceheard, 2026-10-23): proof that the game USES an entry we swapped in. Two signals, both read-only:
- *  (a) the speech queue [manager+0x974]: count at [queue] (0..10), records of 20 bytes from queue+4 = { priority, entry,
- *      speaker, float, last } (kltalk.c section 1: 0x578840 queues a line the channel cannot play at once). A record whose
- *      entry is one of OURS -> 'voice: QUEUED ...' (what the game is about to say, with the speaker's crew record).
- *  (b) GUESS: 0x7d0e80 plays an entry at once and the queue never shows it. If the game writes into the 0x204 entry block when
- *      it plays it (a played-at stamp, a handle), its checksum changes -> 'voice: entry USED? ...' (first change per entry,
- *      at most 40 lines). Nothing proves the game writes there; if (b) never fires, only (a) counts and a heard clip is by ear.
- * Runs every game-thread call (cheap: one 204-byte read when the queue is empty; 3 KB of checksums every 250 ms). Log=2 and PlayedLog=1. */
+/* ------------------------------------------------------------------------------------------------------------------
+ * VOICEPLAIN (2026-10-23, re\voiceplain_1023.md). WHAT THE RE FOUND (static, kl2.exe 0490, listings 0x421c70 / 0x578840 / 0x7d0e80):
+ *   Every speech line goes through 0x421c70(ecx = speech manager, line, other, speaker, x) (ret 0x10). It ends in a play call
+ *   `call 0x578840` at FIVE sites, __thiscall: ecx = queue [manager+0x974], stack (entry, priority = [line+0x24], speaker,
+ *   float 0.xx, last = x) and `ret 0x14`. 'speaker' is the 421c70 argument as it came in: a CREW RECORD number (0..7), or 0xfe / 0xfa
+ *   (random). The voice number is rules+0x33e+record (0x6ae750) - exactly what this file's walk uses (tab[w.m[i].rec]).
+ *     0x421e76  flag-1 line, Arcade round : entry = per-voice vector [line+0x14][voice]   (swapped by the walk below)
+ *     0x421ec3  flag-0 line, Arcade round : entry = the single entry [line+0]              (NOT swapped by the walk: PLAIN)
+ *     0x4220b3  flag-1 line, other mode   : entry = vector slot by a game-mode switch
+ *     0x42211b  flag-0 line, other mode   : entry = [line+0]                                (PLAIN)
+ *     0x422156  the 'other' line [arg2]   : entry = [other+0]                               (PLAIN, if the walk knows that entry)
+ *   0x578840 plays at once (0x7d0e80: stores the started entry at [queue+0xd8], the speaker byte at [queue+0xd4], a time float at
+ *   [queue+0xcc]) or queues a 20-byte record.
+ *
+ * PlayLog=1 (with Log=2): the five call sites are retargeted to naked thunks (kvo_t1..kvo_t5 -> kvo_common -> kvo_hook) which log
+ *   'voice: SAY site N entry .. node .. speaker .. (ours <path> | stock <key>)' (rate limited) and jump to 0x578840 with the
+ *   original arguments (Plain=1 may replace the entry argument first). Probe A (data only, works in a SHIP build): when
+ *   [[manager+0x974]+0xd8] (or the time float [queue+0xcc]) changes, 'voice: PLAYING ..'.
+ * Plain=1: the walk (every flag-0 line of the manager, ALL groups) records entry -> event leaf and resolves, for each voice number
+ *   a Dead Men body wears, the entry of KLVoice/<Name>/<leaf> (or <Name>_R for a '_R' event) - kvo_entry, the same cache and
+ *   the same .LOC lookup as the flag-1 path. At the thunk: speaker record -> voice number (snapshot of the last tick) -> the
+ *   resolved entry replaces the entry argument; no leaf = stock stays. No allocation and no lookup in the thunk.
+ * CODE PATCH: this is the one place klvoice.c patches code (5 x 5 bytes). The sites are inside HASHED ranges (0x41e000..0x42a000), so the
+ *   guard (klhook.c) refuses them in a SHIP build and in a TEST build with SessionSafe=1: it takes a TEST build with
+ *   [KLHook] SessionSafe=0, i.e. a direct-boot run (-o DefaultScene=..). Never start a real session with it. Refusals are logged by
+ *   the guard ('patch REFUSED'); the data-only parts (probe A, QUEUED, the walk's flag-0 bookkeeping) still work. */
+#define KVO_NF0 1024
+static struct {
+    int valid;                                    /* the snapshot below is from the current tick of a Dead Men round */
+    BYTE tab[8];                                  /* rules+0x33e: crew record -> voice number */
+    int nf0, toldfull, said, nrep, nsite[6];
+    DWORD last_play, last_cc, ring_e[8], ring_t[8]; int ring_s[8], ring_n;
+    struct { DWORD entry; DWORD rep[8]; char leaf[64]; } f0[KVO_NF0];     /* rep[voice number] = our entry for that body, 0 = stock */
+} kvo_p;
+static int kvo_patched;                           /* 0 not tried, 1 all five sites, -1 refused / failed (tried once) */
+static DWORD kvo_real;                            /* 0x578840 */
+
+/* the path of ours an entry pointer belongs to, or 0 */
+static const char *kvo_ours(DWORD entry)
+{
+    int i;
+    if (!entry) return 0;
+    for (i = 0; i < kvo_gen.n; i++) if (kvo_gen.e[i].found && (DWORD)(DWORD_PTR)kvo_gen.e[i].entry == entry) return kvo_gen.e[i].path;
+    return 0;
+}
+
+/* Plain: the flag-0 line [ln+0] is an entry whose key text is the event ('Multiplayer/F01/FA_YouEscaped01_R', no '_C<n>'); remember the
+   entry -> leaf and resolve the replacement for every voice number a Dead Men body wears. who[v] = name or "". */
+static void kvo_f0_note(DWORD ln, char who[8][32], DWORD rules, const char *scene)
+{
+    DWORD entry = klh_rd32(ln); char text[130], leaf[64]; const char *s; int k, slot; size_t n;
+    if (!entry || !klh_rdstr((DWORD_PTR)entry + 4, text, sizeof text)) return;
+    if (!kvo_leaf(text, leaf)) {                  /* flag-0 keys carry no _C<n>: the leaf is the whole last path part (GUESS: the data tool names them so, FA_YouEscaped01_R is in voice_review.tsv) */
+        s = strrchr(text, '/'); s = s ? s + 1 : text; n = strlen(s);
+        if (n < 2 || n >= sizeof leaf) return;
+        memcpy(leaf, s, n + 1);
+    }
+    for (k = 0; k < kvo_p.nf0; k++) if (kvo_p.f0[k].entry == entry) break;
+    if (k == kvo_p.nf0) {
+        if (k >= KVO_NF0) { if (!kvo_p.toldfull++ && kvo.log) klog("voice: plain: more than %d single-entry lines: the rest speak stock", KVO_NF0); return; }
+        kvo_p.nf0++; kvo_p.f0[k].entry = entry; snprintf(kvo_p.f0[k].leaf, sizeof kvo_p.f0[k].leaf, "%s", leaf);
+        if (kvo.log > 1) klog("voice: plain: single-entry line %08lx entry %08lx event %s", ln, entry, leaf);
+    }
+    for (slot = 0; slot < 8; slot++) {
+        char path[128]; void *e; size_t l2 = strlen(leaf);
+        kvo_p.f0[k].rep[slot] = 0;
+        if (!who[slot][0]) continue;
+        if (l2 > 2 && !strcmp(leaf + l2 - 2, "_R")) snprintf(path, sizeof path, "KLVoice/%s_R/%.*s", who[slot], (int)(l2 - 2), leaf);
+        else snprintf(path, sizeof path, "KLVoice/%s/%s", who[slot], leaf);
+        e = kvo_entry(path, rules, scene);
+        if (!e && kvo.radiofb && l2 > 2 && !strcmp(leaf + l2 - 2, "_R")) {
+            char p2[128]; snprintf(p2, sizeof p2, "KLVoice/%s/%.*s", who[slot], (int)(l2 - 2), leaf);
+            e = kvo_entry(p2, rules, scene); if (e) snprintf(path, sizeof path, "%s", p2);
+        }
+        if (!e) { if (kvo.log > 1 && kvo_first_miss(scene, path)) klog("voice: plain: %s: no leaf %s (logged once)", leaf, path); continue; }
+        kvo_p.f0[k].rep[slot] = (DWORD)(DWORD_PTR)e;
+    }
+}
+
+/* the C side of the five thunks. a = the original stack arguments of 0x578840: a[0] entry, a[1] priority, a[2] speaker (dword, low byte),
+   a[3] float, a[4] last. Game thread. May replace a[0] (Plain). Reads only through klh_rd*. */
+static void __cdecl kvo_hook(int site, DWORD queue, DWORD *a)
+{
+    DWORD entry = a[0], was = entry, node = 0; int rec = (int)(BYTE)a[2], voice = -1, k, dup = 0; char key[96]; const char *o;
+    if (!kvo.on) return;
+    if (site >= 1 && site <= 5) kvo_p.nsite[site]++;
+    if (kvo.plain && kvo_p.valid && rec < 8 && entry) {
+        voice = kvo_p.tab[rec];
+        if (voice < 8)
+            for (k = 0; k < kvo_p.nf0; k++)
+                if (kvo_p.f0[k].entry == entry) { if (kvo_p.f0[k].rep[voice]) { a[0] = kvo_p.f0[k].rep[voice]; kvo_p.nrep++; } break; }
+    }
+    if (!kvo.playlog || kvo.log < 2 || kvo_p.said >= 400) return;
+    { DWORD now = GetTickCount();
+      for (k = 0; k < 8; k++) if (kvo_p.ring_e[k] == entry && kvo_p.ring_s[k] == site && now - kvo_p.ring_t[k] < 800) dup = 1;
+      if (dup) return;
+      kvo_p.ring_e[kvo_p.ring_n & 7] = entry; kvo_p.ring_s[kvo_p.ring_n & 7] = site; kvo_p.ring_t[kvo_p.ring_n & 7] = now; kvo_p.ring_n++; }
+    kvo_p.said++;
+    node = klh_rd32(a[0]);
+    o = kvo_ours(a[0]);
+    key[0] = 0; if (!o) klh_rdstr((DWORD_PTR)a[0] + 4, key, sizeof key);
+    if (a[0] != was) {
+        char wk[96]; wk[0] = 0; klh_rdstr((DWORD_PTR)was + 4, wk, sizeof wk);
+        klog("voice: SAY site %d entry %08lx node %08lx speaker %d (ours %s) [Plain: was %08lx stock %s] queue %08lx", site, a[0], node, rec, o ? o : "?", was, wk, queue);
+    } else if (o) klog("voice: SAY site %d entry %08lx node %08lx speaker %d voice %d (ours %s) queue %08lx", site, entry, node, rec, voice, o, queue);
+    else klog("voice: SAY site %d entry %08lx node %08lx speaker %d voice %d (stock %s) queue %08lx", site, entry, node, rec, voice, key[0] ? key : "?", queue);
+}
+
+/* ONE common body, five tiny entries that push the site number. On entry from the patched `call`: [esp] return address, then the five
+   arguments; ecx = the queue (this). Stack-transparent: ends in a jump to 0x578840, which pops the arguments (ret 0x14). */
+static __declspec(naked) void kvo_common(void)
+{
+    __asm {
+        push ecx                         ; [esp] ecx, +4 site, +8 return, +0xc entry ..
+        lea eax, [esp + 0xc]
+        push eax                         ; a
+        push ecx                         ; queue
+        push dword ptr [esp + 0xc]       ; site
+        call kvo_hook
+        add esp, 0xc
+        pop ecx
+        add esp, 4                       ; the site number
+        jmp dword ptr [kvo_real]
+    }
+}
+#define KVO_THUNK(n) static __declspec(naked) void kvo_t##n(void) { __asm push n __asm jmp kvo_common }
+KVO_THUNK(1) KVO_THUNK(2) KVO_THUNK(3) KVO_THUNK(4) KVO_THUNK(5)
+
+/* retarget the five calls once (a code patch: see the CODE PATCH note above; the guard decides) */
+static void kvo_patch(void)
+{
+    static const DWORD site[5] = { 0x421e76, 0x421ec3, 0x4220b3, 0x42211b, 0x422156 };
+    void (*thunk[5])(void) = { kvo_t1, kvo_t2, kvo_t3, kvo_t4, kvo_t5 };
+    int i, ok = 0;
+    kvo_real = (DWORD)(DWORD_PTR)KLH_VA(0x578840);
+    for (i = 0; i < 5; i++) {
+        BYTE expect[5], put[5]; DWORD rel = 0x578840u - (site[i] + 5), nrel = (DWORD)(DWORD_PTR)thunk[i] - (DWORD)(DWORD_PTR)KLH_VA(site[i] + 5);
+        expect[0] = put[0] = 0xE8; memcpy(expect + 1, &rel, 4); memcpy(put + 1, &nrel, 4);
+        if (klh_poke(KLH_VA(site[i]), expect, 5, put, 5, "voice play call")) ok++;
+    }
+    kvo_patched = ok == 5 ? 1 : -1;
+    klog("voice: play-call probe/plain: %d of 5 call sites retargeted (PlayLog=%d Plain=%d)%s", ok, kvo.playlog, kvo.plain,
+         ok == 5 ? "" : " - the rest was refused (SHIP build, SessionSafe=1, or other bytes there); see 'patch REFUSED' above");
+}
+
+/* PlayedLog (voiceheard, 2026-10-23): the speech queue [manager+0x974]: count at [queue] (0..10), records of 20 bytes from queue+4 =
+ *  { priority, entry, speaker, float, last } (kltalk.c section 1: 0x578840 queues a line the channel cannot play at once). A record
+ *  whose entry is one of OURS -> 'voice: QUEUED ...'. A line played at once never shows here.
+ * Probe A (voiceplain): 0x7d0e80 stores the entry it STARTS at [queue+0xd8], the speaker at [queue+0xd4] and a time float at
+ *  [queue+0xcc]; a change of the entry or the float logs 'voice: PLAYING ...' (data reads only; works in a SHIP build; seen
+ *  as soon as the next tick reads it, so a line started and replaced within one frame can be missed).
+ * The old checksum signal 'entry USED?' was removed (nothing writes into an entry; it could not fire).
+ * Runs every game-thread call. Log=2 and PlayedLog=1 / PlayLog=1. */
 static void kvo_played(DWORD mgr, DWORD now)
 {
     DWORD queue = klh_rd32(mgr + 0x974), cnt = 0, rec[5]; int i, k;
+    if (!queue) return;
+    if (kvo.playlog && kvo.log >= 2) {
+        DWORD cur = klh_rd32(queue + 0xd8), cc = klh_rd32(queue + 0xcc);
+        if (cur && (cur != kvo_p.last_play || cc != kvo_p.last_cc)) {
+            char key[96]; const char *o = kvo_ours(cur); BYTE spk = 0;
+            klh_rd(queue + 0xd4, &spk, 1);
+            key[0] = 0; if (!o) klh_rdstr((DWORD_PTR)cur + 4, key, sizeof key);
+            klog("voice: PLAYING entry %08lx node %08lx speaker %d (%s %s)", cur, klh_rd32(cur), (int)spk, o ? "ours" : "stock", o ? o : (key[0] ? key : "?"));
+        }
+        kvo_p.last_play = cur; kvo_p.last_cc = cc;
+    }
     if (!kvo.played || kvo.log < 2 || !kvo_gen.n) return;
-    if (queue && klh_rd(queue, &cnt, 4) && cnt >= 1 && cnt <= 10) {
+    if (klh_rd(queue, &cnt, 4) && cnt >= 1 && cnt <= 10) {
         for (k = 0; k < (int)cnt; k++) {
             if (!klh_rd(queue + 4 + (DWORD)k * 20, rec, 20)) break;
             for (i = 0; i < kvo_gen.n; i++)
@@ -161,16 +314,6 @@ static void kvo_played(DWORD mgr, DWORD now)
                 }
         }
     }
-    if (kvo_gen.next_sum && (long)(kvo_gen.next_sum - now) > 0) return;     /* wrap-safe: 0 = first call (GetTickCount is above 2^31 after 24.9 days) */
-    kvo_gen.next_sum = (now + 250) ? (now + 250) : 1;
-    for (i = 0; i < kvo_gen.n && kvo_gen.told_chg < 40; i++) {
-        BYTE blk[0x204];
-        if (!kvo_gen.e[i].found || kvo_gen.e[i].chg || !klh_rd((DWORD_PTR)kvo_gen.e[i].entry, blk, sizeof blk)) continue;
-        if (kvo_sum(blk) != kvo_gen.e[i].sum) {
-            kvo_gen.e[i].chg = 1; kvo_gen.told_chg++;
-            klog("voice: entry USED? %s changed after the swap (GUESS: the game stamped it while playing it; %d queued so far)", kvo_gen.e[i].path, kvo_gen.told_q);
-        }
-    }
 }
 
 static void kvo_tick(int game_thread)
@@ -179,6 +322,8 @@ static void kvo_tick(int game_thread)
     int v, i, g, j, slot, nwant = 0; BYTE tab[8]; DWORD mgr, sig = 0, now;
     if (!kvo.on || !klh_exe_ok || !game_thread) return;
     now = GetTickCount();
+    if (!kvo_patched && (kvo.playlog || kvo.plain)) kvo_patch();           /* once; the guard refuses it in SHIP / SessionSafe=1 */
+    kvo_p.valid = 0;                                                       /* set again below once this tick knows who wears which voice */
     if (!klw_who_now(&w)) { if (kvo_nrec) kvo_restore_all("no Arcade round"); kvo_s.had = 0; return; }
     if (!klx_on || !klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) return;
     v = klx_level_verdict(scene, why);
@@ -190,6 +335,7 @@ static void kvo_tick(int game_thread)
       /* generation = rules object, scene, speech manager and LOC lookup object: any change drops what we replaced (the lines are rebuilt) */
       if (kvo_gen.rules != w.rules || kvo_gen.mgr != mgr || kvo_gen.lm != lm || strcmp(kvo_gen.scene, scene)) {
           if (kvo_nrec) kvo_restore_all("a new level generation");
+          memset(&kvo_p, 0, sizeof kvo_p);                 /* the single-entry lines are rebuilt with the level too */
           memset(&kvo_gen, 0, sizeof kvo_gen); kvo_gen.rules = w.rules; kvo_gen.mgr = mgr; kvo_gen.lm = lm; snprintf(kvo_gen.scene, sizeof kvo_gen.scene, "%s", scene); memset(&kvo_s, 0, sizeof kvo_s); } }
     kvo_played(mgr, now);
     if (!klh_rd(w.rules + 0x33e, tab, sizeof tab)) return;
@@ -210,6 +356,7 @@ static void kvo_tick(int game_thread)
     }
     for (i = 0; i < 8; i++) { if (who[i][0]) nwant++; sig = sig * 31 + (DWORD)(who[i][0] ? kvo_name_of(who[i]) : 0) + 1; }
     sig = sig * 31 + w.rules;
+    memcpy(kvo_p.tab, tab, sizeof tab); kvo_p.valid = 1;     /* the thunks (Plain) read this snapshot: crew record -> voice number; the reps below say who wears it */
     if (sig == kvo_s.sig && now < kvo_s.next) return;
     kvo_s.sig = sig; kvo_s.next = now + (DWORD)kvo.period;
 
@@ -227,7 +374,8 @@ static void kvo_tick(int game_thread)
             for (lk = 0; lk < cnt; lk++) {
                 DWORD ent[16], vcnt = 0, vdata = 0, src = 0; BYTE flag = 0;
                 ln = lines[lk];
-                if (!ln || !klh_rd(ln + 0x20, &flag, 1) || flag != 1 || !klh_rd(ln + 8, &vcnt, 4) || vcnt < 8 || vcnt > 16 || !klh_rd(ln + 0x14, &vdata, 4) || !vdata) continue;
+                if (ln && kvo.plain && klh_rd(ln + 0x20, &flag, 1) && flag == 0) { kvo_f0_note(ln, who, w.rules, scene); continue; }      /* Plain: a flag-0 line (the walk never touches it; the thunk does) */
+                if (!ln || !klh_rd(ln + 0x20, &flag, 1) || flag != 1 ||!klh_rd(ln + 8, &vcnt, 4) || vcnt < 8 || vcnt > 16 || !klh_rd(ln + 0x14, &vdata, 4) || !vdata) continue;
                 if (!klh_rd(vdata, ent, vcnt * 4)) continue;
                 /* the leaf comes from a slot that is not ours (ours reads 'KLVoice/..' without _C<n>); a slot of ours is read through the entry it replaced */
                 for (j = 0; j < 8 && !src; j++) {
@@ -283,8 +431,11 @@ static void klvo_init(void)
     kvo.period = (int)GetPrivateProfileIntA("Voice", "Period", 1500, klh_ini);
     kvo.radiofb = GetPrivateProfileIntA("Voice", "RadioFallback", 0, klh_ini) != 0;     /* default 0 = the old behaviour */
     kvo.played = GetPrivateProfileIntA("Voice", "PlayedLog", 1, klh_ini) != 0;      /* only logs, and only with Log=2 */
+    kvo.playlog = GetPrivateProfileIntA("Voice", "PlayLog", 0, klh_ini) != 0;       /* default 0 = off: retargets the 5 play calls (TEST + SessionSafe=0 only) */
+    kvo.plain = GetPrivateProfileIntA("Voice", "Plain", 0, klh_ini) != 0;           /* default 0 = off: flag-0 lines speak the body's KLVoice leaf */
+    memset(&kvo_p, 0, sizeof kvo_p);
     if (kvo.period < 200 || kvo.period > 60000) kvo.period = 1500;
-    if (kvo.on) klog("voice: on; the Dead Men bodies' event lines come from KLVoice/<Name>/<Event> of the level's .LOC (StockLevels=%d Log=%d Period=%d ms RadioFallback=%d PlayedLog=%d); needs [Wardrobe] DMVoice=1 / [Crew] Voice=1 so each body has its own voice number", kvo.stock, kvo.log, kvo.period, kvo.radiofb, kvo.played);
+    if (kvo.on) klog("voice: on; the Dead Men bodies' event lines come from KLVoice/<Name>/<Event> of the level's .LOC (StockLevels=%d Log=%d Period=%d ms RadioFallback=%d PlayedLog=%d PlayLog=%d Plain=%d); needs [Wardrobe] DMVoice=1 / [Crew] Voice=1 so each body has its own voice number", kvo.stock, kvo.log, kvo.period, kvo.radiofb, kvo.played, kvo.playlog, kvo.plain);
 }
 
 #endif /* KLVOICE_C */
