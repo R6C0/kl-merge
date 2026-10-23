@@ -29,7 +29,7 @@ import os, re, sys, zlib, zipfile, collections, hashlib, json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import kl_snd, kl_loc, kl_voice, kl_talk_chars as tc
+import kl_snd, kl_loc, kl_loc_fit, kl_voice, kl_talk_chars as tc
 
 GAME = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
 OUT = r'G:\kl_build_1023\voice_1023'
@@ -496,12 +496,11 @@ def build_map(game, m, out, trees, clips, log=print, write=True):
             files[lang] = d; continue
         s = trees.get(lang) or trees['English']
         sidx = {p: n for p, n in kl_loc.leaves(s)}
-        if len(d) > LOC_CAP:                               # already past the cap in the source (Russian): not grown at all, its lines stay stock
-            files[lang] = d
-            info['loc_bytes'][lang] = (len(d), len(d), 'source over the cap: no voice leaves')
-            log('%s: %s .LOC is %d bytes in the source, over %d: left as it is (no KLVoice leaves)' % (m, lang, len(d), LOC_CAP))
-            continue
         cap = LOC_CAP
+        if len(d) > cap:                                   # the source itself is over the cap: shrink it (fit), never pass it on over the cap
+            d = kl_loc_fit.fit(d, cap, locs.get('English'))
+            log('%s: %s .LOC was over %d in the source: shrunk to %d by kl_loc_fit' % (m, lang, cap, len(d)))
+        first = None
         # tiers until it fits: everything; no subtitle text; no subtitle text and no radio twins (klvoice.c finds no leaf for a
         # radio line then and leaves that line stock Dog Days)
         for tier in (0, 1, 2):
@@ -519,17 +518,21 @@ def build_map(game, m, out, trees, clips, log=print, write=True):
                         silent[who] += 1
                     add_leaf(t, vpath(who, leaf), text if subs else b'', new)
             files[lang] = kl_loc.build(t)
+            first = first or files[lang]
             if len(files[lang]) <= cap:
                 break
             log('%s: %s .LOC %d bytes > %d at tier %d (%s): trying the next' % (m, lang, len(files[lang]), cap, tier,
                                                                              ('full', 'no subtitles', 'no subtitles, no radio')[tier]))
-        if len(files[lang]) > cap:                         # no tier fits: that language keeps its own .LOC (its lines stay stock)
-            log('%s: %s .LOC %d bytes > %d at every tier: left as it is (no KLVoice leaves)' % (m, lang, len(files[lang]), cap))
-            files[lang] = d
-            info['loc_bytes'][lang] = (len(d), len(d), 'no tier fits: no voice leaves')
-            if lang == 'English':
-                info.setdefault('problems', []).append('English .LOC does not fit LOC_CAP at any tier')
-            continue
+        if len(files[lang]) > cap:                         # no tier fits: keep the full build and shorten other text (kl_loc_fit: English subtitles, ...)
+            log('%s: %s .LOC %d bytes > %d at every tier: kl_loc_fit' % (m, lang, len(files[lang]), cap))
+            try:
+                files[lang] = kl_loc_fit.fit(first, cap, locs.get('English'))
+                tier = 0
+            except ValueError as e:                    # cannot happen for a stock source; never ship over the cap, the source (within it) stays
+                files[lang] = d
+                info['loc_bytes'][lang] = (len(d), len(d), 'cannot fit: no voice leaves')
+                info.setdefault('problems', []).append('%s .LOC does not fit LOC_CAP: %s' % (lang, e))
+                continue
         info['loc_bytes'][lang] = (len(d), len(files[lang]), ('full', 'no subtitles', 'no subtitles, no radio')[tier])
     nls = kl_snd.ls_bank(ls, kl_snd.u32(nsnd, 0))
     problems, cnt = kl_snd.verify(base, nsnd, nwhd, nwav, nls, omap)

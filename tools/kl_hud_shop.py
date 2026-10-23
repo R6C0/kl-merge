@@ -199,9 +199,16 @@ def apply_loc(data, english=False, log=print, tag='', looks=None, swaps=None):
     if not n:
         return data, 0
     out = L.build(kids)
-    if len(out) > L.LOC_CAP and len(out) > len(data):          # names never grow a stock file past the game's buffer: keep it stock
-        log('shop names %s: the .LOC would be %d bytes, over %d: names left stock' % (tag, len(out), L.LOC_CAP))
-        return data, 0
+    if len(out) > L.LOC_CAP:                                   # over the game's buffer: keep the input if IT fits, else shrink the result
+        if len(data) <= L.LOC_CAP:
+            log('shop names %s: the .LOC would be %d bytes, over %d: names left stock' % (tag, len(out), L.LOC_CAP))
+            return data, 0
+        import kl_loc_fit
+        try:
+            out = kl_loc_fit.fit(out, L.LOC_CAP)
+        except ValueError as e:
+            log('shop names %s: the input is over the cap (%d) and cannot be shrunk here: %s' % (tag, len(data), e))
+            return data, 0
     assert L.build(L.parse(out)) == out
     return out, n
 

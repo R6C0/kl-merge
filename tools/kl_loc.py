@@ -29,16 +29,21 @@ sys.path.insert(0, HERE)
 
 LANGS = ['English', 'German', 'French', 'Spanish', 'Italian', 'Dutch', 'Russian', 'Polish', 'Japanese']
 TEXT, LEAF, TABLE, SOUND = 0x01, 0x08, 0x10, 0x20
-# kl2 0x7fef36 memcpy's the level's .LOC into a static 600,000-byte buffer at 0xe100b8 with no size check (the next global,
-# 0xea2878, is 600,000 bytes on; the job-slot count at 0xeac170 sits 639,160 bytes on). TEST 1023e V1_DM01: a 639,672-byte
-# English .LOC overwrote that count -> crash at kl2+0x526b40 77 s in. Keep 4 KB of margin.
-LOC_CAP = 600000 - 4096
+# kl2 0x7fef36 memcpy's the selected language's WHOLE level .LOC (file size, no check) into a static 600,000-byte buffer at
+# 0xe100b8. Only the selected language (table 0xcd8dcc, index dword 0xdda79c) is loaded, so ONE cap holds for every language.
+# What lies past the buffer: live engine globals start at 0xea6850 = offset 616,344 (allocator objects, the stack-switch
+# routine); the job-slot free list is at 616,478 and the job-slot count at 639,160 (the proven English crash, kl2+0x526b40,
+# TEST 1023e V1_DM01, a 639,672-byte file). Stock Dog Days ships Russian .LOC files of 612,634 bytes (F01, F02, F04, F05):
+# the largest stock size and the ONLY size proven in shipped play (it spills 12,634 bytes past the buffer, below the live
+# globals at 616,344). So the hard ceiling for every language is 612,634.
+LOC_CAP = 612634
 
 
 def check_cap(lang, size, old=0, what='.LOC'):
-    """Refuse a .LOC that the game would copy past its buffer. size: the new length; old: the length it grew from (a stock file
-    already over the cap, Russian, is not made worse by us and passes if it did not grow)."""
-    if size > LOC_CAP and size > old:
+    """Refuse a .LOC that the game would copy past its buffer: raises whenever size > LOC_CAP (612,634, the largest stock size).
+    old is kept for the callers' signature and is ignored: a file that was already over the cap is not let through either
+    (shrink it with kl_loc_fit.fit)."""
+    if size > LOC_CAP:
         raise ValueError('%s %s is %d bytes, over the %d-byte cap (kl2 copies it into a fixed buffer, 0x526b40 crash)' % (
             lang, what, size, LOC_CAP))
 
