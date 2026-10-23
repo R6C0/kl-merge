@@ -104,6 +104,10 @@ C: hit 0 bytes free mid-build: stage big zips on G:, not C:\kl_build_1019.
 rows (`kl_shop_cards.py recut --rows=`, SHOP4 PASS; Hawk Sawn-off keeps 2 stray fragments). Undo
 `<work>\build\shopbar_1023_backup\UNDO shopbar 1023.bat`, then `<work>\build\shopcut3_1023_backup\UNDO shopcut 1023.bat`
 (run the shopcut undo first). C: hit 0 bytes free mid-build: stage big zips on G:, not C:\kl_build_1019.
+2026-10-23 09:45 - CamYaw (remote camera-yaw smoothing, [NetSmooth] CamYaw=1, default off) proven live in System Link (H8:
+writes = restores = 1265, 0 faults) and merged (29ca1c8ef). The old join failures were key presses lost in a ~22 s stall after
+CampaignMenu; scripted menus should use klauto `settle` + `tapuntil` (see H8_host.ini). Notes: re/netsmooth_camyaw.md.
+
 2026-10-23 09:20 - Retomoto lift doors: the engine chain works (probe klprobe.c, LIFT9-11: box fires once, also for bots,
 both proxies accept, 5 controllers each). "Shut doors" was the test route hitting the doorway frame. kl_doorfix on DM09 only;
 kl_doorfix2 is a TEST tool (opens at the blast). CarWait 6 + CarFallback carry a slow human. Notes: re/retomoto_lift.md.
@@ -112,10 +116,6 @@ kl_doorfix2 is a TEST tool (opens at the blast). CarWait 6 + CarFallback carry a
 Sawn-off clean). Undo newest first: `<work>\build\shopcut4_1023_undo\UNDO shopcut4 1023.bat` (copies from shopcut3_1023: keep it),
 `shopcut3_1023_backup\UNDO shopcut 1023.bat`, `shopbar_1023_backup\UNDO shopbar 1023.bat`. Ambience pass 2 installed (DOOR1: Japanese
 police radio on DM09; undo `<work>\build\ambience2_1023_backup\UNDO ambience2 1023.bat`). C:/G: are tight: stage big zips on G:.
-
-2026-10-23 05:40 - .LOC cap 612,634 for every language (kl_loc.LOC_CAP; kl_loc_fit, all 27 zips, LOCFIT1 clean).
-Traitors rarer (Backstab 20, TraitorsMax 1); DM03/T01 police long guns capped 75/70 (ACC1b clean). Portraits proven
-(PIC1/PIC2). Retomoto lift proven (LIFT4/5; open: the jump with feet in the car box, re/retomoto_lift.md).
 
 
 ## Owner's end goal (2026-10-09)

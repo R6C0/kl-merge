@@ -48,6 +48,17 @@ GUESS). Tolerance 5 units, 150 ms: jumps there are unlikely to be visible. Consu
   H7b controls with H5's exact hook (1023b TEST) and inis fail the same way, so this is not CamYaw. Common factor: every failing
   run came up at 640x480 / 59 Hz (owner's monitor off). H1, H4 and H5 (2560x1440) joined. In H7b the client never held a UDP
   socket while the host held 9100 + 9103. Rerun H6 when the display is on. Not merged into rtp-schemas until it passes.
+- LIVE PROOF H8 (2026-10-23 09:33-09:37, TEST out_3f_1023i_test md5 5f6b7e5b from feat/1023-bench, inis H8_host.ini /
+  J8_join.ini, base W02_stockF02.ini, 2560x1440 on both): PASS on both, 0 faults, 0 asserts. Client joined FALobby 1.95 s
+  after its RETURN; MinPlayers=2 cut the host's target 6 -> 2 and the round started. On the client, the host's yaw went through
+  CamYaw: writes 1265 = restores 1265, movement saw our write 1265 / 1265, raw values between -244 and 183 with out lagging
+  (e.g. raw 110 out 76, raw 120 out 94, raw -41 out -26). The host's copy of the client never moved (raw 0, 0 writes).
+  Merged into rtp-schemas (29ca1c8ef). CamYaw stays default off; not yet judged by eye.
+- The cause of the H6-H7b failures was lost key presses, not the display: right after `waitwin CampaignMenu` the main thread
+  stalls ~22 s (H8: "poll gap 22110 ms" on both games), and presses sent around the stall were dropped (H6e lost ESC at
+  2560x1440; H6/H6d lost a DOWN). The klauto `settle` op now absorbs it (settled after 22219 ms) and `tapuntil` retries.
+  Netstat control (H8): a passing client opens a short-lived UDP port (55582, ~2 s, Find Game) and then two more (52896,
+  56614) once it joins; in H7b it held none, so there discovery never reached the bind.
 - Static check of that failure (workflow wf_19c4c074-0a8, 2 readers + 2 verifiers, 2026-10-23 04:40). The discovery port is
   opened ONCE when the network layer is built, not when the browser opens: 0x7ee0c0 (latch byte [gamenet+0x15c] is set to 1 at
   0x7ee11f before the build) -> new + 0x94b6d0 -> 0x9468b0 -> 0x968320 (gate: static word [0xd42600]=9100 and byte [0xd42602]=1,
