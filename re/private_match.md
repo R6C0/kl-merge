@@ -893,3 +893,22 @@ Static only (python + capstone on kl2.exe, plus kl_gms on the stock zips). Nothi
   0x6c9f06, 0x89fa5d.
 - Next step is live, not static: log [0xe0ff90] and [db+8] before and after one map change (PoolLog, re/klnet_poollog.patch, owner's OK).
 
+
+## 2026-10-23: pool lifetime, static pass 4 (cloud static reading, nothing run): REPLACED at a map change
+Summary (10 lines):
+1. Answer: at a scene change the slot pool is REPLACED, not cleared: the loaded map's manager is parked and a NEW manager + pool (all tags -1) is built for the next map, so its entities get tag 0 and wire id = slot index + 1 as after a fresh start.
+2. The path is the pending-scene request, not DB slot 31: DB slot 29 0x640640 writes the name into the buffer at `[db+0x20]` (0x645820: byte 0 = 1, name from +2); 0x86f230 (host 0x6c49a0, client 0x89fa20, 0x6d36b0) ends there.
+3. Every frame the main loop 0x87a930 calls DB slot 27 0x520b20 on `[sys+0xac]` (0x87a9e3). With byte 0 set and mode 2/3 (bytes 1/2 of the buffer) it jumps to 0x7f4fe0, the scene-change executor (mode 1 = sys slot 7).
+4. 0x7f4fe0 calls DB slot 32 0x5cd220 unconditionally (0x7f50bc, arg = the request buffer). Slot 32, when a scene is loaded (`[db+0x8c]` != 0), moves `[db+8]` (the manager) into the record +0x148 and zeroes `[db+8]`; `[db+0x8c]`, `[db+0xa0]`, `[db+0x24/0x28]` are parked too.
+5. 0x7f4fe0 then mounts the zip and calls DB slot 8 0x820300 (0x7f592e) -> loader 0x8ad7c0, whose guard `cmp [ebx+8],0` (0x8ad931) now passes: 0x541ae0 -> 0x4c2eb0 -> pool ctor 0x89bc80 with the NEW map's cap, `[0xe0ff90]` = the new pool (0x4c2fdc).
+6. The old manager is not destroyed there (no 0x861640), so `[0xe0ff90]` holds the old pool until 0x4c2fdc overwrites it; the parked manager is restored only by DB slot 33 0x43e7d0 (0x43e8b2 `[db+8]` = record+0x148), the scene POP, which first runs slot 31 -> slot 11 on the current scene.
+7. DB slot 31's DB-object callers are exactly two: slot 23 0x8d70c0 (0x8d710c; only from sys slots 16 0x4f8260 and 9 0x5c36a0) and slot 33 (0x43e830). No DB-object caller of slot 33 was found (`[0xdda798]`, whose slot 33 DB slot 34 0x6ea6c0 calls, is the render DLL ZRenderWintelD3DDll, vtable 0xb915fc, not the DB).
+8. So the pool is NOT cleared through slot 31 at a map change; it is swapped out by slot 32 and rebuilt by the loader. `[db+0xb8]` is only a frame countdown (1 at 0x6d3984, 2 by slot 28 0x489c10, decremented by DB slot 5 0x5c7100 at 0x5c718b).
+9. Consequence: cap is recomputed per map (the GUESS "cap stays that of the first load" is withdrawn); tag-0 ids match on both PCs after any number of map changes if both load the same build of the same map. The rule relaxes from "start the session on the same map" to "same map build for the current round".
+10. GUESS open: Ready -> round 2 on the SAME level (fa_round.md) may reset in place without slot 29; then reused slots carry tag 1 and ids follow each PC's own free/alloc order (the decoder 0x40a880 checks the tag: a mismatch gives null, not a wrong object).
+
+Evidence: 0x87a9ba..0x87a9e3 `mov eax,[esi+0xac]; ... mov edx,[eax+0x6c]; call edx`, esi = sys. 0x520b20: byte 1 == 0 -> mode 2, else (byte 2 != 0) * 2 + 1; mode 2/3 -> `jmp 0x7f4fe0` (0x520bb2). 0x7f4fe0: only local null checks before 0x7f50bc `mov edx,[edx+0x80]; push eax; call edx` (eax = `[db+0x20]`). 0x5cd220: 0x5cd272 `cmp [esi+0x8c],ebp; je 0x5cd38b`; rec+0x148 <- `[db+8]` at 0x5cd2ba, zeroed 0x5cd2bd; rec+0x10c <- `[db+0x8c]`, zeroed 0x5cd300. Slot 11 0x4623e0 (delete at 0x46240b) is reached only from slot 31 (0x41c481) and the DB destructor.
+
+Method: linear sweep of .text for `mov r,[v+off]; call r` pairs (offsets 0x7c, 0x84, 0x5c, 0x2c, 0x6c, 0x80, 0x88) with `this` traced to `[0xdd2640]+0xac`, plus the `[db+0x20]` / `[db+0xb8]` readers among the 74 DB vtable functions. A DB pointer passed through a stack slot or field is invisible to it (why slot 33's caller stays open).
+
+Live check, now with a prediction: log `[db+8]`, `[0xe0ff90]` and `[[0xe0ff90]+0xc]+8` before and after one map change (menu -> map A -> map B). Prediction: all three CHANGE at each load and cap = the new map's value ("Pool size" above). If `[db+8]` keeps its value, that change did not go through DB slot 27 / 0x7f4fe0 and this reading is wrong for it.
