@@ -1,3 +1,8 @@
+2026-10-24 17:50 - INSTALLED (owner 'install that version'): Dead Men shop restyle on DM01 only (tools/kl_shop_dm.py, c36f1112a):
+chalk focus bars, steel panels, red headline/name, DMG/ROF/MAG/RNG stat block in the hover text. DM01 F01_Main.zip dcb70db9 -> 011fc9bb,
+backup .before-1024shopdm, undo <work>\build\shop_dm_1024\UNDO shop DM DM01.bat. Texture 1202 = also the pause/end-round focus bar.
+Not live-tested (owner tests). Peer rebuilds its DM01 cover pass on 011fc9bb. Other maps on the owner's OK.
+
 2026-10-24 16:40 - FRAME LIMITER PRESETS (owner: 'have 4 different options: 240fps, 120fps, 60fps, 30fps'): klfps.c klfps_preset():
 auto Fps=0 = the highest of 240/120/60/30 <= the device refresh (144 Hz -> 120); explicit Fps=N still 10..1000. kl_mod_options.py: the
 framelimit row became four exclusive rows fps240/120/60/30 (ticking one unticks the others, none = Enable=0, recommended on = the
