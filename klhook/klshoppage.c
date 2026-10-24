@@ -28,6 +28,13 @@
  *    0x5d2f50, labelled with the carrier's item), but per pair and ONLY for guns a slot actually carries from set B; the desired state is
  *    re-applied every tick before the round (st < 0x19) and undone when the gun is replaced. Rows klshop.c already swaps are skipped.
  *
+ * k43 (2026-10-25) PRE-MAKE + LIVENESS: [ShopPage] PreMake=1 (recommended on): the page B objects of every configured pair are made ONCE while the first
+ * shop is up (session state < 0x19, after the pool builder ran) and parked at once, so a page II buy in the 0x20 shop only flips byte+8 and never calls the
+ * maker 0x710ad0 or reallocs the pool vector (the 10-24 21:30 exit followed such an in-0x20 buy; the log showed a clean exit(0) after focus-loss ShowCursor
+ * stalls: the make is the one heavy thing a page II buy did). PreMake=0 or a failed premake keeps the old make-on-demand in kspg_enforce. Every made[][]
+ * pointer is checked against the pool vector (kspg_sane) before kspg_ammo / kspg_check_pool / kspg_enforce read it, and dropped when the session enters
+ * 0x23..0x25 or 0x16 (the pool is rebuilt there), so a freed object is never read.
+ *
  * GUESSES (also marked in the code): the 5-arg update; the BuyWeapon message name layout; 0xff owned byte; that the shown row / carried
  * rows are bytes at 0x154d80c (dword) / 0xced638,9; that a purchase of the same row from the other set goes through the Voodoo trick.
  * KNOWN LIMITS: pad/mouse cannot toggle (key only); a gun bought in set B shows its B name in the carried slot only for that slot;
@@ -55,7 +62,7 @@ typedef void  (__fastcall *kspg_gfx_t)(void *self, void *edx);
 typedef void  (__fastcall *kspg_msg_t)(void *self, void *edx, DWORD *msg);
 
 static struct {
-    int on, grenades, trick, key, log, clips, hint, keyDown, txtSeen, togglePend;
+    int on, grenades, trick, key, log, clips, hint, keyDown, txtSeen, togglePend, premake, preDone, preTry, sane, st;
     volatile int active, pre, shownB;                 /* active: gate open and wrappers may act; shownB: set B on screen */
     int own[2];                                  /* 0/1: the gun carried in the primary / secondary slot came from set B */
     int carried[2];                              /* last seen carried rows */
@@ -280,18 +287,51 @@ static int kspg_make(int row)
     return 1;
 }
 
+/* k43 liveness guard: made[row][] is dropped (with its parked marks) when ANY of its objects is no longer an entry of the pool vector at its current
+ * count. One read of the entry array per pass (kspg.sane is cleared by the tick), so the three readers below call it for free. */
+static int kspg_ours(int row, DWORD o);
+static void kspg_sane(void)
+{
+    static DWORD tab[4096 * 3]; DWORD a, n = 0, ents, i; int row, m, j;
+    if (kspg.sane) return;
+    kspg.sane = 1;
+    for (row = 0; row < KSPG_ROWS && !kspg.made[row][0]; row++) ;
+    if (row == KSPG_ROWS) return;                                 /* nothing of ours made */
+    if (!kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || !(ents = klh_rd32(a + 0x10)) || !klh_rd(ents, tab, 12 * (SIZE_T)n)) {
+        memset(kspg.made, 0, sizeof kspg.made); kspg.nparked = 0; kspg.preDone = 0; kspg.preTry = 0;      /* pool unreadable: trust nothing */
+        klog("shopPage: the pool vector is unreadable: every extra gun pointer dropped, made again when needed");
+        return;
+    }
+    for (row = 0; row < KSPG_ROWS; row++) {
+        int dead = 0;
+        if (!kspg.made[row][0]) continue;
+        for (m = 0; m < KSPG_PER && kspg.made[row][m] && !dead; m++) {
+            int alive = 0; for (i = 0; i < n && !alive; i++) alive = tab[3 * i] == kspg.made[row][m];
+            if (!alive) dead = 1;
+        }
+        if (!dead) continue;
+        for (j = 0; j < kspg.nparked; ) { int isours = kspg_ours(row, kspg.parked[j]); if (isours) kspg.parked[j] = kspg.parked[--kspg.nparked]; else j++; }
+        memset(kspg.made[row], 0, sizeof kspg.made[row]); kspg.preDone = 0; kspg.preTry = 0;
+        klog("shopPage: row %d: an extra gun is no longer in the pool (rebuilt): pointers dropped, made again when needed", row);
+    }
+}
+
 static int kspg_ours(int row, DWORD o) { int m; for (m = 0; m < KSPG_PER; m++) if (kspg.made[row][m] == o) return 1; return 0; }
 
 static void kspg_enforce(void)
 {   /* only before the round: every entry of a pair's carrier is parked or free as the desired set says (see the header) */
     DWORD a, n = 0, ents, i; int row;
+    kspg_sane();
     if (!kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || !(ents = klh_rd32(a + 0x10))) return;
     for (row = 0; row < KSPG_ROWS; row++) {
         DWORD carrier; int wantB;
         if (!kspg.p[row].ok) continue;
         wantB = kspg_wantB(row);
         if (!wantB && !kspg.made[row][0]) continue;
-        if (wantB && !kspg.made[row][0] && !kspg_make(row)) continue;
+        if (wantB && !kspg.made[row][0]) {                                           /* fallback: PreMake=0, or the premake did not get this pair */
+            if (kspg.log) klog("shopPage: row %d was not premade: the extra guns are made now (fallback)", row);
+            if (!kspg_make(row)) continue;
+        }
         if (!klh_rd(a + 4, &n, 4) || !(ents = klh_rd32(a + 0x10))) return;     /* the make may have grown it */
         carrier = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * row);
         for (i = 0; i < n; i++) {
@@ -314,6 +354,16 @@ static int kspg_gate(void)
     DWORD sm, st = 0, gs, rules;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x70, &st, 4)) return 0;
     if (kl_online()) return 0;
+    /* k43: the pool is rebuilt when the session enters 0x23..0x25 or 0x16: our object pointers are stale from then on, drop them (kspg_sane would find
+       them too, but only once the new pool is readable and a pointer happens to be gone; this is the explicit edge) */
+    if ((int)st != kspg.st) {
+        kspg.st = (int)st;
+        if (st == 0x16 || (st >= 0x23 && st <= 0x25)) {
+            int row, any = 0; for (row = 0; row < KSPG_ROWS; row++) if (kspg.made[row][0]) { any++; memset(kspg.made[row], 0, sizeof kspg.made[row]); }
+            kspg.nparked = 0; kspg.preDone = 0; kspg.preTry = 0;
+            if (any && kspg.log) klog("shopPage: session state 0x%lx: the pool is rebuilt, %d pair(s) of extra guns dropped (made again when needed)", st, any);
+        }
+    }
     gs = klh_rd32((DWORD_PTR)KLH_VA(KLS_SETTINGS)); rules = gs ? klh_rd32(gs + 0x54) : 0;
     if (!rules || klh_rd32(rules) != (DWORD)(DWORD_PTR)KLH_VA(KLS_RULES_VT)) return 0;
     /* 1 = a shop can be open, 2 = otherwise. The session runs 0x16 (first shop) -> 0x18 -> 0x19 (play) -> 0x1f (score) -> 0x20 (the shop
@@ -321,16 +371,29 @@ static int kspg_gate(void)
     return (st < 0x19 || st == 0x20) ? 1 : 2;
 }
 
-/* pool rebuilt (new map)? then forget our objects */
-static void kspg_check_pool(void)
+/* pool rebuilt (new map)? then forget our objects (k43: kspg_sane checks every pointer, not just the first) */
+static void kspg_check_pool(void) { kspg_sane(); }
+
+/* k43 PreMake: the first shop (state < 0x19, the builder has run = the carrier has free stock entries, kls_apply's test) gets every pair's page B objects
+ * made once, parked by kspg_make itself (byte+8 = 0, label = carrier). Retries per tick for ~20 s, then gives up (the make on demand stays the fallback). */
+static void kspg_premake(void)
 {
-    DWORD a, n = 0, ents, i; int row;
-    if (!kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || !(ents = klh_rd32(a + 0x10))) return;
+    DWORD a, n = 0, ents, i; int row, made = 0, wait = 0;
+    if (!kspg.premake || kspg.preDone) return;
+    if (!kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || n < 8 || !(ents = klh_rd32(a + 0x10))) return;
     for (row = 0; row < KSPG_ROWS; row++) {
-        int alive = 0;
-        if (!kspg.made[row][0]) continue;
-        for (i = 0; i < n && !alive; i++) { DWORD e[3]; if (klh_rd(ents + 12 * i, e, 12) && e[0] == kspg.made[row][0]) alive = 1; }
-        if (!alive) { memset(kspg.made[row], 0, sizeof kspg.made[row]); kspg.nparked = 0; klog("shopPage: row %d: the pool was rebuilt, its extra guns are made again when needed", row); }
+        DWORD carrier; int built = 0;
+        if (!kspg.p[row].ok || kspg.made[row][0]) continue;
+        carrier = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * row);
+        if (!carrier) continue;
+        for (i = 0; i < n && !built; i++) { DWORD e[3]; built = klh_rd(ents + 12 * i, e, 12) && e[1] == carrier && e[0] && (e[2] & 0xff); }
+        if (!built) { wait++; continue; }
+        if (kspg_make(row)) { made++; if (!klh_rd(a + 4, &n, 4) || !(ents = klh_rd32(a + 0x10))) return; } else wait++;
+    }
+    if (made && kspg.log) klog("shopPage: premade %d pair(s) in the first shop (parked): a page II buy only flips the pool entries", made);
+    if (!wait || ++kspg.preTry > 80) {
+        kspg.preDone = 1;
+        if (wait) klog("shopPage: premake gave up on %d pair(s): they are made on demand in the shop (fallback)", wait);
     }
 }
 
@@ -338,6 +401,7 @@ static void kspg_check_pool(void)
 static void kspg_ammo(void)
 {
     DWORD a, n = 0, ents, i; int row, m;
+    kspg_sane();
     for (row = 0; row < KSPG_ROWS && !kspg.made[row][0]; row++) ;
     if (row == KSPG_ROWS) return;                                 /* nothing of ours made: nothing to scan */
     if (kspg.clips <= 0 || !kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || !(ents = klh_rd32(a + 0x10))) return;
@@ -394,6 +458,7 @@ static void kspg_init(void)
     kspg.log = GetPrivateProfileIntA("ShopPage", "Log", 1, klh_ini) != 0;
     kspg.hint = GetPrivateProfileIntA("ShopPage", "Hint", 1, klh_ini) != 0;
     kspg.clips = GetPrivateProfileIntA("ShopPage", "ReserveClips", 2, klh_ini);
+    kspg.premake = GetPrivateProfileIntA("ShopPage", "PreMake", 1, klh_ini) != 0;       /* k43 (recommended on): make the page B guns in the first shop */
     kspg.have = kspg_load();
     if (!kspg.have) { klog("shopPage: on, but KLShopPage.ini has no pairs: nothing is done"); kspg.on = 0; return; }
     kspg.carried[0] = kspg.carried[1] = -1;
@@ -439,7 +504,7 @@ static void klshoppage_tick(int game_thread)
         if (!kspg.txtSeen && kspg.log) klog("shopPage: WARNING no shop text was requested in 1.5 s after the toggle: the names may stay as they were until the cursor moves (the game may cache them)");
     }
     if (now - kspg.lastScan < 250) return;
-    kspg.lastScan = now;
+    kspg.lastScan = now; kspg.sane = 0;
     g = kspg_gate();
     kspg.pre = (g == 1);
     if (!g) { kspg.active = 0; kspg.shownB = 0; return; }
@@ -463,7 +528,7 @@ static void klshoppage_tick(int game_thread)
     }
     kspg.active = 1;
     if (now - lastfull > 1500) { lastfull = now; kspg_scan(); }
-    if (g == 1) { kspg_check_pool(); kspg_enforce(); }
+    if (g == 1) { kspg_check_pool(); if (kspg.st < 0x19) kspg_premake(); kspg_enforce(); }
     kspg_ammo();
 }
 

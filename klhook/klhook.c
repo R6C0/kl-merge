@@ -605,8 +605,13 @@ static void klx_exit_line(void);
    (steam_api, gameoverlayrenderer, ReShade32, the audio wrappers): GUESS that one of those, or a thread the game never joins, is what
    hung or crashed. Nothing on disk needs undoing at exit (klog is unbuffered WriteFile, the Windows cache survives TerminateProcess). */
 static int klh_fastexit = 1;
+/* [Log] ExitTrace=1 (k43, recommended on): who ends the game. klh_exit_trace (below, with the window subclass) logs the caller of exit / _exit /
+   ExitProcess, the code, the foreground window (handle, pid, title) and whether the game window still exists; klh_uia_proc logs the close messages. */
+static int klh_exittrace = 1;
+static void klh_exit_trace(const char *what, int code, void *ra);
 static void WINAPI klh_w_exitprocess(UINT code)
 {
+    klh_exit_trace("ExitProcess", (int)code, _ReturnAddress());
     if (code == 0x8000dead)
         klog("INTEGRITY EXIT: ExitProcess(0x8000dead) - kl2.exe's code-integrity check found a changed byte of its image (re\\antitamper.md). "
              "Patches refused this run: %ld; hashed bytes patched under policy 'direct': %ld", klh_refused, klh_hashed_in);
@@ -622,8 +627,8 @@ static void WINAPI klh_w_exitprocess(UINT code)
    start-up code - whose ExitProcess call is MSVCR90's own import. klauto wraps the same two slots on top of
    these when [Auto] is on (its END lines); both chain. */
 static void (__cdecl *klh_real_exit)(int), (__cdecl *klh_real__exit)(int);
-static void __cdecl klh_w_exit(int code) { klog("exit: exit(%d)", code); klx_exit_line(); klh_real_exit(code); }
-static void __cdecl klh_w__exit(int code) { klog("exit: _exit(%d)", code); klx_exit_line(); klh_real__exit(code); }
+static void __cdecl klh_w_exit(int code) { klh_exit_trace("exit", code, _ReturnAddress()); klog("exit: exit(%d)", code); klx_exit_line(); klh_real_exit(code); }
+static void __cdecl klh_w__exit(int code) { klh_exit_trace("_exit", code, _ReturnAddress()); klog("exit: _exit(%d)", code); klx_exit_line(); klh_real__exit(code); }
 
 /* ---------------------------------------------------------------- the parts */
 
@@ -738,8 +743,20 @@ static int klh_nouia = 1;                              /* [KLHook] NoUIA; the su
 static LRESULT (WINAPI *klh_cwp)(WNDPROC, HWND, UINT, WPARAM, LPARAM);
 static LONG_PTR (WINAPI *klh_gwl)(HWND, int); static LONG_PTR (WINAPI *klh_swl)(HWND, int, LONG_PTR);
 static BOOL (WINAPI *klh_uni)(HWND); static HMODULE klh_u;
+static void klh_msg_trace(UINT m, WPARAM w)
+{   /* k43 ExitTrace: each close-type message once per run, with a timestamp. WM_QUIT is posted to the thread queue and never reaches a window procedure,
+       so it cannot be seen here (GUESS: the exit() caller line of klh_exit_trace is the next best); SC_CLOSE is WM_SYSCOMMAND with 0xF060. */
+    static LONG seen; int bit; const char *nm;
+    if (!klh_exittrace) return;
+    if (m == 0x0010) { bit = 1; nm = "WM_CLOSE"; } else if (m == 0x0002) { bit = 2; nm = "WM_DESTROY"; } else if (m == 0x0011) { bit = 4; nm = "WM_QUERYENDSESSION"; }
+    else if (m == 0x0016) { bit = 8; nm = "WM_ENDSESSION"; } else if (m == 0x0112 && (w & 0xFFF0) == 0xF060) { bit = 16; nm = "SC_CLOSE"; }
+    else if (m == 0x0012) { bit = 32; nm = "WM_QUIT"; } else return;
+    if (InterlockedOr(&seen, bit) & bit) return;
+    klog("exit trace: window message %s (%04x, wparam %08lx) at tick %lu", nm, (unsigned)m, (DWORD)w, GetTickCount());
+}
 static LRESULT CALLBACK klh_uia_proc(HWND h, UINT m, WPARAM w, LPARAM l)
 {
+    if (m < 0x20 || m == 0x0112) klh_msg_trace(m, w);
     if (m == 0x003D && klh_nouia) { InterlockedIncrement(&klh_uia_n); return 0; }
     if (klh_fastexit && (m == 0x0010 /* WM_CLOSE */ || (m == 0x0112 && (w & 0xFFF0) == 0xF060 /* WM_SYSCOMMAND SC_CLOSE */) ||
                          (m == 0x0104 && w == 0x73 /* WM_SYSKEYDOWN VK_F4 */ && (l & (1 << 29)) /* Alt held */))) {
@@ -755,13 +772,45 @@ static BOOL CALLBACK klh_uia_pick(HWND h, LPARAM best)
     if (vis && rect && vis(h) && rect(h, &r) && r.right - r.left >= 640 && r.bottom - r.top >= 400) { *b = h; return FALSE; }
     return TRUE;
 }
+static void klh_fgname(HWND f, DWORD *pid, char *title, int cap)
+{   /* the window's pid and title; user32 is looked up, not linked */
+    static DWORD (WINAPI *wtp)(HWND, LPDWORD); static int (WINAPI *gwt)(HWND, LPSTR, int); static int looked;
+    if (!looked) { HMODULE u = GetModuleHandleA("user32.dll"); looked = 1; if (u) { wtp = (DWORD (WINAPI *)(HWND, LPDWORD))GetProcAddress(u, "GetWindowThreadProcessId"); gwt = (int (WINAPI *)(HWND, LPSTR, int))GetProcAddress(u, "GetWindowTextA"); } }
+    *pid = 0; title[0] = 0;
+    if (!f) return;
+    if (wtp) wtp(f, pid);
+    if (gwt) { gwt(f, title, cap); title[cap - 1] = 0; }    /* another process's window: read from the window's own record, no message sent */
+}
+static void klh_exit_trace(const char *what, int code, void *ra)
+{
+    static HWND (WINAPI *fgw)(void); static BOOL (WINAPI *isw)(HWND); static int looked; HWND f; DWORD pid, off = 0; char title[96], mod[80];
+    if (!klh_exittrace) return;
+    if (!looked) { HMODULE u = GetModuleHandleA("user32.dll"); looked = 1; if (u) { fgw = (HWND (WINAPI *)(void))GetProcAddress(u, "GetForegroundWindow"); isw = (BOOL (WINAPI *)(HWND))GetProcAddress(u, "IsWindow"); } }
+    f = fgw ? fgw() : 0; klh_fgname(f, &pid, title, sizeof title);
+    klh_module((DWORD_PTR)ra, mod, sizeof mod, &off);
+    klog("exit trace: %s(%d) called from %p (%s+0x%lx); foreground window %p pid %lu%s title '%s'; game window %p exists %d; tick %lu", what, code, ra, mod, off, (void *)f, pid,
+         pid == GetCurrentProcessId() ? " (the game)" : "", title, (void *)klh_uia_wnd, (klh_uia_wnd && isw) ? (int)isw(klh_uia_wnd) : -1, GetTickCount());
+}
+static void klh_fg_watch(void)
+{   /* k43 ExitTrace: while another window has the focus, who has it - at most every 5 s, 20 lines per run (the 10-24 21:30 exit followed a focus loss) */
+    static HWND (WINAPI *fgw)(void); static int looked, lines; static DWORD last; DWORD now = GetTickCount(), pid; char title[96]; HWND f;
+    if (!klh_exittrace || lines >= 20 || now - last < 5000) return;
+    if (!looked) { HMODULE u = GetModuleHandleA("user32.dll"); looked = 1; if (u) fgw = (HWND (WINAPI *)(void))GetProcAddress(u, "GetForegroundWindow"); }
+    if (!fgw) return;
+    f = fgw(); klh_fgname(f, &pid, title, sizeof title);
+    if (f && pid == GetCurrentProcessId()) return;           /* the game has the focus: nothing to say */
+    last = now; lines++;
+    klog("exit trace: the game is not in the foreground: window %p pid %lu title '%s'%s", (void *)f, pid, title, lines == 20 ? " (last such line)" : "");
+}
 static void klh_uia_tick(void)
 {
+    klh_fg_watch();
     static DWORD last; static int on = -1, told; static BOOL (WINAPI *etw)(DWORD, WNDENUMPROC, LPARAM); DWORD now = GetTickCount(); HWND w = 0;
     if (on < 0) {
         HMODULE u = GetModuleHandleA("user32.dll");
         klh_nouia = GetPrivateProfileIntA("KLHook", "NoUIA", 1, klh_ini) != 0;
-        on = klh_nouia || klh_fastexit;
+        klh_exittrace = GetPrivateProfileIntA("Log", "ExitTrace", 1, klh_ini) != 0;
+        on = klh_nouia || klh_fastexit || klh_exittrace;
         if (u) { etw = (BOOL (WINAPI *)(DWORD, WNDENUMPROC, LPARAM))GetProcAddress(u, "EnumThreadWindows"); klh_uni = (BOOL (WINAPI *)(HWND))GetProcAddress(u, "IsWindowUnicode"); klh_u = u; }
         if (on && (!etw || !klh_uni)) { on = 0; klog("noUIA: user32's window functions not found: the game window answers UI Automation as before"); }
     }
