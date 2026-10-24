@@ -72,7 +72,7 @@ owner to decide (or OK removing old *.before-* map backups). Needs [Voice] Plain
 
 2026-10-24 02:11 - ROUND-START HITCH FIX PROVEN LIVE (SC4, TEST out_3f_1024k27_test 28ae5d69): klmove keeps the ZAllyEscapeBox scan per
 scene (b39e3ae4c): DM02 round 2 'found in 109 ms', round 3 'kept from the last scan, checked in 0 ms'; maps with no boxes keep it after a
-second empty scan (SC3, Retomoto). Not in a SHIP build yet (live SHIP is still 1023v 2DCB0FBB).
+second empty scan (SC3, Retomoto). INSTALLED 02:23: baseline dll SHIP out_3f_1024k27 5AB09E1C + ini 41E998CF (backup dinput8.dll.before-1024k27).
 
 2026-10-24 01:42 - ALT+F4 / CLOSE VERIFIED LIVE (TEST 1023v): Alt+F4 ends kl2 in 551 ms, WM_CLOSE in 165 ms, no dumps. MciPump A/B (music on):
 5 vs 4 hitches, all at load/track open, none in level: 1024a NOT installed, baseline SHIP 1023v 2DCB0FBB stays. Camera preset APPLIED:
