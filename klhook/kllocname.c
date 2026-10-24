@@ -136,6 +136,12 @@ static int kllnm_pin(DWORD vt, DWORD *slot0, int *nslots)
         if (!n) f = v;
     }
     if (n < 1) return 0;
+    /* REVIEW 2026-10-24: the private copy has exactly n slots; the game reads slots beyond n from zeros = call 0 = crash. So the copy must
+       be the WHOLE vtable: refuse when the scan hit the cap, or when it stopped at a NULL slot that has code behind it (a hole, not the end).
+       GUESS: the end of a vtable is the next object's RTTI locator (.rdata, not code) or padding. */
+    if (n >= KLLNM_MAXSLOT) return 0;
+    if (!klh_rd32((DWORD_PTR)KLH_VA(vt + 4 * n)))
+        for (i = 1; i <= 4; i++) if (klh_kind((const void *)KLH_VA(klh_rd32((DWORD_PTR)KLH_VA(vt + 4 * (n + i)))), 4, kind) == 'x') return 0;
     /* GUESS: the function is the lookup: it ends in a 'ret 0xc' (c2 0c 00): three stack arguments popped by the callee. A scan of its first
        KB can match another function's tail, so this is a plausibility check, not a proof. */
     if (!klh_rd((DWORD_PTR)KLH_VA(f), code, sizeof code)) return 0;
@@ -187,7 +193,8 @@ static void kllnm_init(void)
         }
         if (val[0]) {
             char *p; int ok = 1;
-            for (p = val; *p; p++) if ((BYTE)*p < 0x20 || (BYTE)*p > 0x7e) ok = 0;      /* GUESS: 8-bit text; plain ASCII only, so no code page question */
+            for (p = val; *p; p++) if ((BYTE)*p < 0x20 || (BYTE)*p > 0x7e || *p == '%') ok = 0;      /* GUESS: 8-bit text; plain ASCII only, so no code page question. '%' refused (REVIEW: a GUI text may be a printf format) */
+            if (val[0] == '/') ok = 0;                         /* REVIEW GUESS: a leading '/' is a LOC key to the GUI element (0x490730), not a literal */
             if (!ok || strlen(val) >= KLLNM_NAME) { klog("names: the name of %s (%s) is refused: printable ASCII, under %d characters", kls_rule[r].map, val, KLLNM_NAME); continue; }
             memcpy(kllnm_rname[r], val, strlen(val) + 1); nn++;
         }
