@@ -240,3 +240,12 @@ Nothing built or run. Addresses are quoted from repo notes unless marked. Infere
 2. Bot wallet: draw on the human's pool, or an invented per-bot budget (hook-kept)?
 3. Rank: keep the rank gate as the real lock (needs your FA rank read) with price-only as fallback?
 4. Allow `[Menu] TableLog=1` and one DM map load to confirm the 2921 / 2079-free numbers?
+
+### Owner decisions on stage 0 (2026-10-24)
+1. Portraits: text-only Hire list first is OK; B&W pictures follow once a DM01 scene can carry the picture entities.
+2. Bot money = what each bot takes from the heist: a hook-kept per-bot bank that grows by that bot's own escaped take (its carried
+   cash `+0x150+4i` at escape - GUESS that this is the right column; open: does it reset at round start, is it zeroed on death) and pays
+   for its hires. Never the human's pool `+0x38`.
+3. Rank is the real lock (read the owner's FA rank via 0x5103e0), price-only as the fallback if the read fails.
+4. The owner tests himself: no scripted live runs while he does. The TableLog check and the first Hire-window look happen in his own
+   session (ask him to add `[Menu] TableLog=1`, or ship it in the stage-1 test ini).
