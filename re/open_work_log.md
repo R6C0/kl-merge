@@ -1,3 +1,8 @@
+2026-10-24 22:50 - GAME DID NOT LAUNCH on k34: stack overflow c00000fd ~60 ms after "fps: FIRST Present seen, via the swap chain
+(slot 3)". Device and swap chain are ReShade32 proxies; no recursion path found by reading. Live KLHook.ini [FrameLimit] Enable=0
+(.before-1024fpsoff) -> game runs. k36 (SHIP 8dfa5665, TEST 96743746, commit 956f1d383) = TLS depth guard + RECURSION CUT + SwapChain=/Reset=
+keys; staged C:/kl_build_1019/k36_1024g (ini untouched). Test: Enable=1 SwapChain=0 first. Fallback: limit from the ReShade present event.
+
 2026-10-24 22:30 - INSTALLED (owner 'install all'), not live-tested: hook k34 (a22b642b, over v30; backups .before-1024k34); cover3 on 11 maps
 (DM01 rebuilt on live 011fc9bb -> 5522ebcf, C:/kl_build_1024/cover3_dm01); climb3 on DD01..DD09, DM01B, DM05A, DM06B, DM11B; hc2hasta rebuilt on live
 (C:/kl_build_1024/hc2hasta_1024d: DM01B fdef9215 -> badc0bee, DM11B 34d11896 -> ef53c079); club rebuilt (C:/kl_build_1024/club_1024d, DM05A 40

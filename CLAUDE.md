@@ -66,6 +66,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 22:50 - GAME DID NOT LAUNCH on k34: stack overflow c00000fd ~60 ms after "fps: FIRST Present seen, via the swap chain
+(slot 3)". Device and swap chain are ReShade32 proxies; no recursion path found by reading. Live KLHook.ini [FrameLimit] Enable=0
+(.before-1024fpsoff) -> game runs. k36 (SHIP 8dfa5665, TEST 96743746, commit 956f1d383) = TLS depth guard + RECURSION CUT + SwapChain=/Reset=
+keys; staged C:/kl_build_1019/k36_1024g (ini untouched). Test: Enable=1 SwapChain=0 first. Fallback: limit from the ReShade present event.
+
 2026-10-24 22:30 - INSTALLED (owner 'install all'): hook k34 a22b642b; cover3 (all 11 maps, DM01 rebuilt C:/kl_build_1024/cover3_dm01);
 climb3 (13 maps); hc2hasta_1024d (DM01B badc0bee, DM11B ef53c079); club_1024d (DM05A, 40 civilians); blowup_1024d (DM05A 257c7445, DM06
 2faf4742); gun sounds (27 .WAV, .before-1024gunsnd); sky preset (.before-1024sky). Undo zips in reverse: blowup, club, hc2hasta, cover3.
@@ -75,24 +80,6 @@ C: hit 0 bytes mid-climb3 (restored cleanly); deleted vgame, hc2_attic, old clau
 invulnerable all wait, so it burned but never hit 0; now shielded only while somebody is aboard). C:/kl_build_1019/k34_1024e/INSTALL k34.bat
 supersedes k32/k33 (undo rehearsed byte-identical). Chopper data pass <work>/build/blowup_1024 (DM05A + DM06 Definite, 5000 hp; Hasta left
 out: bots died aboard there). Body crouch->run pop: research agent running (re/player_anim_blend.md).
-
-2026-10-24 19:50 - STAGED, NOT INSTALLED: hook k33 (SHIP e1bfca9a, TEST 05e4e945) = k32 + [CamSmooth] StanceMs=280 (crouch/stand/run
-camera-height pop eased; sim 50 cm pop -> 2.2 cm/frame at 240 fps). C:/kl_build_1019/k33_1024d/INSTALL k33.bat supersedes k32 (undo
-rehearsed byte-identical). Body pop NOT fixed: the player has no crouch->run transition clip, the clip swaps in one frame (0x7a43e0 ->
-0x5abbb0); klstance.c (worktree wf_8a23b709-eff-1, guessed offsets) parked. Vehicle never-explodes job running.
-
-2026-10-24 19:05 - STAGED, NOT INSTALLED: combined hook k32 (SHIP 8a99179b, TEST 0a03f965; k31x superseded) = [HUD] HideIdleEscape (van card hidden at 00:00 with no vehicle) + v30 (e8 KeepStock, LIVE since ~18:30) + [Unstick]
-+ [Shield] + klfps swap-chain Present fix + [Censor] Late/Player + [Dying] (you: Dry=1 log only; heisters hold fire) + [CamSmooth] (aim-out
-ease, DtFix) + [ClubCalm] probe (off). C:/kl_build_1019/k32_1024c/INSTALL k32.bat (live must be k29d or v30; undo rehearsed byte-identical).
-Map passes staged separately, md5-chained: cover_1024b (cover3, climb3), C:/kl_build_1024/hc2hasta_1024b (west garage door, Hasta wing 3 squads /
-100 s; collides with cover3 on DM01B/DM11B), club_1024b (50 civilians), gunsnd_1024c (all guns at S&W MP45 loudness). 
-
-2026-10-24 15:55 - INSTALLED (owner 'install all'): white shop on all 27 maps (379ef8622, .before-1024white); rev2_1024 = HC2 garage
-door + NoCoverBox strip on 11 DM maps (.before-1024cover); hook k29b aa912e09 + ini 0fc342a6 with [CarDown] Dry=1 (log only, then
-Dry=0) and [Voice] Announcer=0 (e8's untested change); + cover2_1024 extra cover boxes (.before-1024cover2; wreck cover still
-unsolved). Not live-tested. Staged-only detail (15:30): rev_1024 = HC2 garage door goes with the blast + NoCoverBox
-stripped on 11 DM maps (INSTALL cover nocoverbox.bat, md5-checked) and hook k29b [CarDown] (car blast = revivable down; offsets
-guessed, test Dry=1 first). Wreck cover + more cover boxes running (-> build\cover2_1024). Hire tab: e8's re/shop_hire.md.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
