@@ -686,6 +686,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klmusic.c"                                      /* klmusic.c: [Music] a winmm MCI jukebox for the FA round (off unless Enable=1); AFTER klmove.c / klbot.c */
 #include "klambience.c"                                  /* klambience.c: [Ambience] a looping bed + timed one-shots (radio, alarm, heli, distant) over winmm MCI (off unless Enable=1); AFTER klmusic.c */
 #include "klshop.c"
+#include "klshoppage.c"                           /* AFTER klshop.c: [ShopPage] page II of the weapon shop (key flips set A / B) */
 #include "klfed.c"
 #include "klfedkit.c"
 #include "kldown.c"
@@ -884,6 +885,7 @@ static void klh_tick(int game_thread)
     klst_tick(game_thread);                           /* klstinger.c: event stingers (reads only; off unless [Stinger] Enable=1) */
     klnetsmooth_tick(game_thread);                    /* klnetsmooth.c: [NetSmooth] remote players turn smoothly (off unless Enable=1) */
     klrigid_tick(game_thread);                        /* klrigid.c: [Rigid] 10 s summary line (Log=1) */
+    klshoppage_tick(game_thread);                     /* klshoppage.c: page II of the weapon shop (off unless [ShopPage] Enable=1) */
     klshop_tick(game_thread);                         /* klshop.c: [Shop] Swap= a shop row hands over another gun, Arcade only (off unless Enable=1) */
     klp_tick(game_thread);                            /* klfed.c: come back as a fed (data writes only) */
     klfk_tick(game_thread);                           /* klfedkit.c: the fed can hunt, body, AK (with [Fed] Player=1; Kit=0 = off) */
@@ -1271,6 +1273,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klrigid_init();
     klaiturn_init();                                  /* klaiturn.c: after klrigid_init; one guarded data write at start-up */
     klshop_init();
+    kspg_init();                                      /* klshoppage.c: reads KLShopPage.ini */
     klp_init();
     klfk_init();
     kld_init();

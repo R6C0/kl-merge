@@ -1,0 +1,405 @@
+/* klshoppage.c - "page II" of the between-rounds weapon shop (owner 2026-10-24: 'okay yes do a page 2'). Included by klhook.c AFTER klshop.c
+ * (uses its KLS_* addresses and kls_* maker helpers' recipe; klshop.c itself is not edited).
+ *
+ * WHAT: a key (default F6, [ShopPage] Key=) flips the Arcade weapon shop between the stock set A and set B. In set B every row that has a
+ * pair shows ANOTHER usable gun (items 33 35 38 40..59 62 63 = guns the stock FA maps carry but the shop table never lists): its own
+ * name and description, the picture of the nearest stock gun, and the shop headline / category names get " II". Buying such a row hands
+ * over the set-B gun at the next round (klshop.c's live-proven pool relabel: data writes only). Price, rank, lock and stars are the
+ * CARRIER row's (the table is hashed and cannot change), so tools/kl_shop_sets.py picks carriers by category, price and tier.
+ * The pairs, names and descriptions come from KLShopPage.ini (beside KLHook.ini; written by tools/kl_shop_sets.py).
+ *
+ * HOW (every address read from kl2.exe 0490 on 2026-10-24, static; nothing here ran in the game):
+ *  - TEXT: MercsShowInfoFAWeapons (vtable 0xbbd0ec) and MercsSendMessageWeapons (0xbbd18c) answer a text key through vtable slot 24
+ *    (0x490730, thiscall(this, char* key) -> char*, ret 4). The shop's keys are '/Menu/Online/WeaponShop/Weapon<row>' (name) and
+ *    '.../Weapon<row>Desc'; the result is re-formatted with '%s' into the element's own buffer, so a static ring buffer is a safe return.
+ *    Each such ELEMENT (heap object) gets a private vtable copy (DLL .data) whose slot 24 is ours, the pattern of kllocname.c / klchar.c:
+ *    one data write of the object's first dword, no code byte of the exe touched. Per element (not the LOC object) so this cannot clash
+ *    with kllocname.c's wrap of the LOC object.
+ *  - PICTURE: MercsGraphicFA (0xbbcc84) slot 8 = update 0x58bc50 (tail-jumps to 0x832470 with 5 stack args, ret 0x14; GUESS: it takes 5
+ *    dword args and passes them on, read from the tail jump only). WeaponBig / PrimaryWeapon / SecondaryWeapon show themselves when their
+ *    own PlayerIndex ([obj+0xc4]) equals the selected / carried row (0x58c552, 0x58c55e). The wrapper SWAPS that element-private index
+ *    between row R and the picture row P for the duration of the original call, then puts it back. The global selection is not touched.
+ *  - BUY: MercsFASelectorWeapons (0xbbd494) slot 20 = 0x810b20 (message handler, MSG* with a char* name first, ret 4): 'BuyWeaponDialogVoodoo'
+ *    -> 0x7f73d0 refuses a row already carried; 'BuyWeapon' -> 0x6ddd10 writes the row to 0xced638/9. Our wrapper reads the name, and
+ *    (a) for the Voodoo message, when the carried row of the slot being edited equals the highlighted row but was bought in the OTHER set,
+ *    blanks that carried byte to 0xff for the call and restores it (OwnedTrick=1; GUESS: 0xff reads as 'no gun' in the check; the call is
+ *    on the game thread, restored before it returns), (b) after 'BuyWeapon', records which set the carried gun came from.
+ *  - HAND-OVER: own copy of klshop.c's recipe (park the carrier's stock objects, add 8 extra objects made with 0x710ad0 from the template
+ *    0x5d2f50, labelled with the carrier's item), but per pair and ONLY for guns a slot actually carries from set B; the desired state is
+ *    re-applied every tick before the round (st < 0x19) and undone when the gun is replaced. Rows klshop.c already swaps are skipped.
+ *
+ * GUESSES (also marked in the code): the 5-arg update; the BuyWeapon message name layout; 0xff owned byte; that the shown row / carried
+ * rows are bytes at 0x154d80c (dword) / 0xced638,9; that a purchase of the same row from the other set goes through the Voodoo trick.
+ * KNOWN LIMITS: pad/mouse cannot toggle (key only); a gun bought in set B shows its B name in the carried slot only for that slot;
+ * grenades (55..59) are only used when [ShopPage] Grenades=1 (tool side). Arcade offline only (the klshop.c gate); [ShopPage] Enable=0 default.
+ */
+#ifndef KLSHOPPAGE_C
+#define KLSHOPPAGE_C
+
+#define KSPG_ROWS 36
+#define KSPG_PER 8
+#define KSPG_MAXSLOT 96
+#define KSPG_NCLS 4
+#define KSPG_ROLES 192
+#define KSPG_PARK 2048
+#define KSPG_SHOWN_ROW 0x0154d80c
+#define KSPG_MODE 0x0154d810
+#define KSPG_EDIT 0x00ced63c
+#define KSPG_CARRY 0x00ced638
+
+static const DWORD kspg_cvt[KSPG_NCLS] = { 0x00bbd0ec, 0x00bbd18c, 0x00bbcc84, 0x00bbd494 };    /* ShowInfoFAWeapons, SendMessageWeapons, GraphicFA, SelectorWeapons */
+static const int   kspg_cslot[KSPG_NCLS] = { 24, 24, 8, 20 };
+
+typedef char *(__fastcall *kspg_txt_t)(void *self, void *edx, const char *key);
+typedef void  (__fastcall *kspg_gfx_t)(void *self, void *edx, DWORD a, DWORD b, DWORD c, DWORD d, DWORD e);
+typedef void  (__fastcall *kspg_msg_t)(void *self, void *edx, DWORD *msg);
+
+static struct {
+    int on, grenades, trick, key, log, clips;
+    volatile int active, shownB;                 /* active: gate open and wrappers may act; shownB: set B on screen */
+    int own[2];                                  /* 0/1: the gun carried in the primary / secondary slot came from set B */
+    int carried[2];                              /* last seen carried rows */
+    int have;                                    /* pairs loaded */
+    struct { int ok, row, item, pic; char name[48]; char desc[480]; } p[KSPG_ROWS];
+    DWORD made[KSPG_ROWS][KSPG_PER]; int applied[KSPG_ROWS];
+    DWORD parked[KSPG_PARK]; int nparked;
+    int told, wait, trickOn, trickRow, trickSlot;
+    DWORD lastScan, lastN, lastKey;
+    char ring[8][520]; volatile LONG ri;
+} kspg;
+
+static struct { DWORD stock, orig; int n; DWORD vt[KSPG_MAXSLOT + 1]; } kspg_tab[KSPG_NCLS];       /* vt[0] = RTTI locator, vt[1+i] = slot i */
+static struct { DWORD obj; int role; } kspg_role[KSPG_ROLES]; static int kspg_nrole;
+enum { KR_NONE = 0, KR_OLDPRI = 1, KR_OLDSEC = 2, KR_BIG = 11, KR_PRI = 12, KR_SEC = 13 };
+
+static int kspg_role_of(void *self)
+{
+    int i; for (i = 0; i < kspg_nrole; i++) if (kspg_role[i].obj == (DWORD)(DWORD_PTR)self) return kspg_role[i].role;
+    return KR_NONE;
+}
+
+static int kspg_useB(int role) { return role == KR_OLDPRI ? kspg.own[0] : role == KR_OLDSEC ? kspg.own[1] : kspg.shownB; }
+
+static char *kspg_ring(void) { return kspg.ring[(InterlockedIncrement(&kspg.ri) - 1) & 7]; }
+
+static char *kspg_text(int c, void *self, const char *key)
+{
+    char *res = ((kspg_txt_t)(DWORD_PTR)kspg_tab[c].orig)(self, 0, key), *o; const char *p; int row, role;
+    if (!kspg.active || !key || !res) return res;
+    if ((p = strstr(key, "WeaponShop/Weapon")) != 0) {
+        p += 17; row = 0;
+        if (*p < '0' || *p > '9') return res;
+        while (*p >= '0' && *p <= '9') row = row * 10 + (*p++ - '0');
+        if (row < 0 || row >= KSPG_ROWS || !kspg.p[row].ok) return res;
+        role = kspg_role_of(self);
+        if (!kspg_useB(role)) return res;
+        if (!*p) { o = kspg_ring(); strncpy(o, kspg.p[row].name, 519); o[519] = 0; return o; }
+        if (!strcmp(p, "Desc")) { o = kspg_ring(); strncpy(o, kspg.p[row].desc, 519); o[519] = 0; return o; }
+        return res;
+    }
+    if (kspg.shownB && (strstr(key, "BuyWeapons_Title") || strstr(key, "HeadlinePistol") || strstr(key, "HeadlineShot") ||
+                       strstr(key, "HeadlineSub") || strstr(key, "HeadlineAssaultRifle"))) {
+        size_t n = strlen(res); o = kspg_ring();
+        if (n > 500) return res;
+        memcpy(o, res, n); memcpy(o + n, " II", 4);
+        return o;
+    }
+    return res;
+}
+static char *__fastcall kspg_text0(void *self, void *edx, const char *key) { (void)edx; return kspg_text(0, self, key); }
+static char *__fastcall kspg_text1(void *self, void *edx, const char *key) { (void)edx; return kspg_text(1, self, key); }
+
+/* the picture: swap the element's PlayerIndex R <-> P around the original update */
+static void __fastcall kspg_gfx(void *self, void *edx, DWORD a, DWORD b, DWORD c, DWORD d, DWORD e)
+{
+    int role = kspg.active ? kspg_role_of(self) : 0, R = -99, swapped = 0; DWORD idx = 0, nidx = 0;
+    (void)edx;
+    if (role == KR_BIG && kspg.shownB && klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)) == 2) R = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW));
+    else if (role == KR_PRI && kspg.own[0]) R = kspg.carried[0];
+    else if (role == KR_SEC && kspg.own[1]) R = kspg.carried[1];
+    if (R >= 0 && R < KSPG_ROWS && kspg.p[R].ok && kspg.p[R].pic != R && kspg.p[R].pic >= 0 && kspg.p[R].pic < KSPG_ROWS) {
+        idx = klh_rd32((DWORD_PTR)self + 0xc4);
+        if ((int)idx == R) nidx = (DWORD)kspg.p[R].pic; else if ((int)idx == kspg.p[R].pic) nidx = (DWORD)R; else nidx = idx;
+        if (nidx != idx && klh_data((void *)((DWORD_PTR)self + 0xc4), &nidx, 4, "KLShopPage: picture index (swapped for one update)")) swapped = 1;
+    }
+    ((kspg_gfx_t)(DWORD_PTR)kspg_tab[2].orig)(self, 0, a, b, c, d, e);
+    if (swapped) klh_data((void *)((DWORD_PTR)self + 0xc4), &idx, 4, "KLShopPage: picture index restored");
+}
+
+/* the selector's messages */
+static void kspg_note_buy(int before0, int before1)
+{
+    int now[2], s; now[0] = (int)(signed char)(BYTE)klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY)); now[1] = (int)(signed char)(BYTE)(klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY)) >> 8);
+    for (s = 0; s < 2; s++) {
+        int before = s ? before1 : before0;
+        if (now[s] != before || (kspg.trickOn && kspg.trickSlot == s && kspg.trickRow == now[s])) {
+            kspg.own[s] = kspg.shownB && now[s] >= 0 && now[s] < KSPG_ROWS && kspg.p[now[s]].ok;
+            if (kspg.log) klog("shopPage: slot %d now carries row %d from set %c", s, now[s], kspg.own[s] ? 'B' : 'A');
+        }
+        kspg.carried[s] = now[s];
+    }
+    kspg.trickOn = 0;
+}
+
+static void __fastcall kspg_sel(void *self, void *edx, DWORD *msg)
+{
+    char nm[40]; DWORD w = 0; int edit, slot, hi; BYTE keep = 0, ff = 0xff; int b0, b1, trick = 0;
+    (void)edx;
+    if (!kspg.active || !msg || !klh_rdstr(klh_rd32((DWORD_PTR)msg), nm, sizeof nm)) { ((kspg_msg_t)(DWORD_PTR)kspg_tab[3].orig)(self, 0, msg); return; }
+    w = klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY));
+    b0 = (int)(signed char)(BYTE)w; b1 = (int)(signed char)(BYTE)(w >> 8);
+    if (!strcmp(nm, "BuyWeaponDialogVoodoo")) {
+        edit = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_EDIT)); slot = edit == -6 ? 0 : edit == -5 ? 1 : -1;
+        hi = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW));
+        if (kspg.trick && slot >= 0 && hi >= 0 && hi < KSPG_ROWS && kspg.p[hi].ok && (slot ? b1 : b0) == hi && (kspg.own[slot] != 0) != (kspg.shownB != 0)) {
+            keep = (BYTE)hi; trick = 1;
+            if (klh_data((void *)((DWORD_PTR)KLH_VA(KSPG_CARRY) + slot), &ff, 1, "KLShopPage: owned check blanked for the dialog")) {
+                ((kspg_msg_t)(DWORD_PTR)kspg_tab[3].orig)(self, 0, msg);
+                klh_data((void *)((DWORD_PTR)KLH_VA(KSPG_CARRY) + slot), &keep, 1, "KLShopPage: owned byte restored");
+                kspg.trickOn = 1; kspg.trickRow = hi; kspg.trickSlot = slot;
+                if (kspg.log) klog("shopPage: row %d carried from the other set: owned check blanked for the dialog (slot %d)", hi, slot);
+                return;
+            }
+        }
+        if (!trick) kspg.trickOn = 0;
+    }
+    ((kspg_msg_t)(DWORD_PTR)kspg_tab[3].orig)(self, 0, msg);
+    if (!strcmp(nm, "BuyWeapon")) kspg_note_buy(b0, b1);
+}
+
+/* ---- private vtables ---- */
+static int kspg_pin(int c, DWORD vt)
+{   /* copy the WHOLE vtable: slots up to the first non-code dword; refuse a hole or an oversize table (kllocname.c's rule) */
+    char kind[9]; DWORD v; int n, i;
+    if (klh_kind((const void *)KLH_VA(vt - 4), 8, kind) != 'r') return 0;
+    for (n = 0; n < KSPG_MAXSLOT; n++) { v = klh_rd32((DWORD_PTR)KLH_VA(vt + 4 * n)); if (!v || klh_kind((const void *)KLH_VA(v), 4, kind) != 'x') break; }
+    if (n <= kspg_cslot[c] || n >= KSPG_MAXSLOT) return 0;
+    if (!klh_rd32((DWORD_PTR)KLH_VA(vt + 4 * n)))
+        for (i = 1; i <= 4; i++) if (klh_kind((const void *)KLH_VA(klh_rd32((DWORD_PTR)KLH_VA(vt + 4 * (n + i)))), 4, kind) == 'x') return 0;
+    kspg_tab[c].stock = vt; kspg_tab[c].n = n; kspg_tab[c].orig = klh_rd32((DWORD_PTR)KLH_VA(vt + 4 * kspg_cslot[c]));
+    if (!klh_rd((DWORD_PTR)KLH_VA(vt - 4), kspg_tab[c].vt, 4 * (SIZE_T)(n + 1))) return 0;
+    kspg_tab[c].vt[1 + kspg_cslot[c]] = (DWORD)(DWORD_PTR)(c == 0 ? (void *)kspg_text0 : c == 1 ? (void *)kspg_text1 : c == 2 ? (void *)kspg_gfx : (void *)kspg_sel);
+    return 1;
+}
+
+static void kspg_setrole(DWORD obj, int role)
+{
+    int i; for (i = 0; i < kspg_nrole; i++) if (kspg_role[i].obj == obj) { kspg_role[i].role = role; return; }
+    if (kspg_nrole < KSPG_ROLES) { kspg_role[kspg_nrole].obj = obj; kspg_role[kspg_nrole].role = role; kspg_nrole++; }
+}
+
+static void kspg_scan(void)
+{
+    static struct { DWORD obj, kind; } tab[0x13e8];
+    DWORD gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd265c)), mgr = gd ? klh_rd32(gd + 0x824) : 0, n, k; int c;
+    if (!mgr || klh_rd32(mgr) != (DWORD)(DWORD_PTR)KLH_VA(0x00bb7dc8)) return;
+    n = klh_rd32(mgr + 0x9f48);
+    if (n > 0x13e8 || !klh_rd(mgr + 8, tab, 8 * (SIZE_T)n)) return;
+    kspg.lastN = n;
+    for (k = 0; k < n; k++) {
+        DWORD vt, nv; char tag[40]; int role = KR_NONE;
+        if (tab[k].kind || tab[k].obj < 0x10000 || !(vt = klh_rd32(tab[k].obj))) continue;
+        for (c = 0; c < KSPG_NCLS && vt != kspg_cvt[c]; c++) ;
+        if (c == KSPG_NCLS) continue;
+        if (kspg_tab[c].stock != vt && !kspg_tab[c].stock) { if (!kspg_pin(c, vt)) { if (kspg.told++ < 4) klog("shopPage: vtable %08lx of class %d does not look like the one read: left alone", vt, c); continue; } }
+        if (c == 2 || c == 0) {                                   /* tags: Graphic at [obj+0xb8], ShowInfo at [obj+0xc4] (char*) */
+            klh_rdstr(klh_rd32(tab[k].obj + (c == 2 ? 0xb8 : 0xc4)), tag, sizeof tag);
+            if (c == 2) role = !strcmp(tag, "WeaponBig") ? KR_BIG : !strcmp(tag, "PrimaryWeapon") ? KR_PRI : !strcmp(tag, "SecondaryWeapon") ? KR_SEC : KR_NONE;
+            else role = !strcmp(tag, "OldPrimaryWeapon") ? KR_OLDPRI : !strcmp(tag, "OldSecondaryWeapon") ? KR_OLDSEC : KR_NONE;
+            if (c == 2 && role == KR_NONE) continue;              /* other graphics: not wrapped */
+        }
+        kspg_setrole(tab[k].obj, role);
+        nv = (DWORD)(DWORD_PTR)&kspg_tab[c].vt[1];
+        if (klh_data((void *)(DWORD_PTR)tab[k].obj, &nv, 4, "KLShopPage: element vtable (private copy)") && kspg.log) klog("shopPage: element %08lx (class %d, role %d) wrapped", tab[k].obj, c, role);
+    }
+}
+
+/* ---- pool hand-over ---- */
+static int kspg_isparked(DWORD o) { int i; for (i = 0; i < kspg.nparked; i++) if (kspg.parked[i] == o) return i + 1; return 0; }
+static void kspg_unpark(int i1) { kspg.parked[i1 - 1] = kspg.parked[--kspg.nparked]; }
+
+static int kspg_wantB(int row) { return (kspg.own[0] && kspg.carried[0] == row) || (kspg.own[1] && kspg.carried[1] == row); }
+
+static int kspg_make(int row)
+{   /* the objects of pair `row`, once: same recipe as kls_apply (klshop.c), but they start parked */
+    DWORD a, n = 0, cap = 0, grow = 0, ents; void *tmpl, *self; int j;
+    if (kspg.made[row][0]) return 1;
+    if (!kls_vec(&a) || !klh_rd(a + 4, &n, 4) || !klh_rd(a + 8, &cap, 4) || !klh_rd(a + 0xc, &grow, 4) || n > 4096 || !(ents = klh_rd32(a + 0x10))) return 0;
+    if (!(self = (void *)(DWORD_PTR)klh_rd32(klh_rd32((DWORD_PTR)KLH_VA(KLS_UI)) + 0x15b0))) return 0;
+    tmpl = ((kls_tmpl_t)KLH_VA(KLS_TEMPLATE))(self, 0, kspg.p[row].item);
+    if (!tmpl) { klog("shopPage: item %d has no template in this level: row %d left as it is", kspg.p[row].item, row); kspg.p[row].ok = 0; return 0; }
+    if (cap < n + KSPG_PER + 1) {
+        DWORD ncap = n + KSPG_PER + 8; void *p;
+        if (grow > 64) return 0;
+        p = ((kls_realloc_t)(DWORD_PTR)klh_rd32((DWORD_PTR)KLH_VA(KLS_REALLOC)))((void *)(DWORD_PTR)ents, ncap * 12);
+        if (!p) return 0;
+        ents = (DWORD)(DWORD_PTR)p; cap = ncap;
+        klh_data((void *)(DWORD_PTR)(a + 8), &cap, 4, "KLShopPage: pool capacity"); klh_data((void *)(DWORD_PTR)(a + 0x10), &ents, 4, "KLShopPage: pool array");
+    }
+    {   DWORD carrier = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * row);
+        for (j = 0; j < KSPG_PER; j++) {
+            DWORD obj = (DWORD)(DWORD_PTR)((kls_maker_t)KLH_VA(KLS_MAKER))(self, 0, 0, tmpl), ent[3];
+            if (!obj) break;
+            ent[0] = obj; ent[1] = carrier; ent[2] = 0;                /* label = carrier's item; byte+8 = 0 (parked until wanted) */
+            klh_data((void *)(DWORD_PTR)(ents + 12 * n), ent, 12, "KLShopPage: pool entry"); n++;
+            kspg.made[row][j] = obj;
+            if (kspg.nparked < KSPG_PARK) kspg.parked[kspg.nparked++] = obj;
+        }
+    }
+    if (!j) { klog("shopPage: object maker returned nothing for item %d: row %d left as it is", kspg.p[row].item, row); kspg.p[row].ok = 0; return 0; }
+    klh_data((void *)(DWORD_PTR)(a + 4), &n, 4, "KLShopPage: pool count");
+    klog("shopPage: row %d: %d objects of item %d added to the pool (parked until bought)", row, j, kspg.p[row].item);
+    return 1;
+}
+
+static int kspg_ours(int row, DWORD o) { int m; for (m = 0; m < KSPG_PER; m++) if (kspg.made[row][m] == o) return 1; return 0; }
+
+static void kspg_enforce(void)
+{   /* only before the round: every entry of a pair's carrier is parked or free as the desired set says (see the header) */
+    DWORD a, n = 0, ents, i; int row;
+    if (!kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || !(ents = klh_rd32(a + 0x10))) return;
+    for (row = 0; row < KSPG_ROWS; row++) {
+        DWORD carrier; int wantB;
+        if (!kspg.p[row].ok) continue;
+        wantB = kspg_wantB(row);
+        if (!wantB && !kspg.made[row][0]) continue;
+        if (wantB && !kspg.made[row][0] && !kspg_make(row)) continue;
+        if (!klh_rd(a + 4, &n, 4) || !(ents = klh_rd32(a + 0x10))) return;     /* the make may have grown it */
+        carrier = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * row);
+        for (i = 0; i < n; i++) {
+            DWORD e[3]; int ours, park, pi; BYTE v;
+            if (!klh_rd(ents + 12 * i, e, 12) || e[1] != carrier || !e[0]) continue;
+            ours = kspg_ours(row, e[0]);
+            park = ours ? !wantB : wantB;                                  /* ours are parked while A is wanted, stock ones while B is */
+            pi = kspg_isparked(e[0]);
+            if (park && (e[2] & 0xff)) {                                   /* free but should be parked */
+                v = 0; if (klh_data((void *)(DWORD_PTR)(ents + 12 * i + 8), &v, 1, "KLShopPage: park gun") && !pi && kspg.nparked < KSPG_PARK) kspg.parked[kspg.nparked++] = e[0];
+            } else if (!park && pi && !(e[2] & 0xff)) {                    /* parked by us, wanted again */
+                v = 1; if (klh_data((void *)(DWORD_PTR)(ents + 12 * i + 8), &v, 1, "KLShopPage: unpark gun")) kspg_unpark(pi);
+            } else if (!park && pi && (e[2] & 0xff)) kspg_unpark(pi);
+        }
+    }
+}
+
+static int kspg_gate(void)
+{
+    DWORD sm, st = 0, gs, rules;
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x70, &st, 4)) return 0;
+    if (kl_online()) return 0;
+    gs = klh_rd32((DWORD_PTR)KLH_VA(KLS_SETTINGS)); rules = gs ? klh_rd32(gs + 0x54) : 0;
+    if (!rules || klh_rd32(rules) != (DWORD)(DWORD_PTR)KLH_VA(KLS_RULES_VT)) return 0;
+    return st < 0x19 ? 1 : 2;                                              /* 1 = before the round, 2 = the round runs */
+}
+
+/* pool rebuilt (new map)? then forget our objects */
+static void kspg_check_pool(void)
+{
+    DWORD a, n = 0, ents, i; int row;
+    if (!kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || !(ents = klh_rd32(a + 0x10))) return;
+    for (row = 0; row < KSPG_ROWS; row++) {
+        int alive = 0;
+        if (!kspg.made[row][0]) continue;
+        for (i = 0; i < n && !alive; i++) { DWORD e[3]; if (klh_rd(ents + 12 * i, e, 12) && e[0] == kspg.made[row][0]) alive = 1; }
+        if (!alive) { memset(kspg.made[row], 0, sizeof kspg.made[row]); kspg.nparked = 0; klog("shopPage: row %d: the pool was rebuilt, its extra guns are made again when needed", row); }
+    }
+}
+
+/* reserve ammo of a handed-over extra gun: the recipe of kls_ammo (klshop.c), for our objects */
+static void kspg_ammo(void)
+{
+    DWORD a, n = 0, ents, i; int row, m;
+    if (kspg.clips <= 0 || !kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || !(ents = klh_rd32(a + 0x10))) return;
+    for (i = 0; i < n; i++) {
+        DWORD e[3];
+        if (!klh_rd(ents + 12 * i, e, 12) || !e[0] || (e[2] & 0xff)) continue;           /* only TAKEN objects */
+        for (row = 0; row < KSPG_ROWS; row++) for (m = 0; m < KSPG_PER; m++) if (kspg.made[row][m] == e[0] && !kspg_isparked(e[0])) {
+            DWORD rounds, res, ammo, r;
+            static DWORD done[KSPG_ROWS * KSPG_PER]; int d = row * KSPG_PER + m;
+            if (done[d] == e[0] || !klh_rd32(e[0] + 0xc4)) continue;
+            done[d] = e[0];
+            rounds = klh_rd32(e[0] + 0xdc) ^ KLS_AMMO_KEY; res = klh_rd32(e[0] + 0xe0) ^ KLS_AMMO_KEY;
+            ammo = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * row + 4);
+            if (res || !rounds || rounds > 999 || rounds < ammo) continue;
+            r = rounds * (DWORD)kspg.clips; if (r > 600) r = 600;
+            r ^= KLS_AMMO_KEY;
+            klh_data((void *)(DWORD_PTR)(e[0] + 0xe0), &r, 4, "KLShopPage: reserve ammo");
+        }
+    }
+}
+
+/* ---- ini ---- */
+static int kspg_load(void)
+{
+    char file[MAX_PATH], *s, buf[520], key[16]; int i, n, ok = 0;
+    strncpy(file, klh_ini, MAX_PATH - 20); file[MAX_PATH - 21] = 0;
+    s = strrchr(file, 0x5c); if (!s) s = strrchr(file, '/');
+    if (!s) return 0;
+    strcpy(s + 1, "KLShopPage.ini");
+    n = (int)GetPrivateProfileIntA("Pairs", "Count", 0, file);
+    if (n < 0 || n > KSPG_ROWS) n = 0;
+    for (i = 0; i < n; i++) {
+        int row = -1, item = 0, pic = -1, c = 0; char *q, *d;
+        snprintf(key, sizeof key, "P%d", i);
+        GetPrivateProfileStringA("Pairs", key, "", buf, sizeof buf, file);
+        if (sscanf(buf, "%d|%d|%d|%n", &row, &item, &pic, &c) < 3 || !c || row < 0 || row >= KSPG_ROWS || item < 1 || item > 63) { klog("shopPage: %s %s not row|item|pic|name: skipped", file, key); continue; }
+        q = buf + c; strncpy(kspg.p[row].name, q, 47); kspg.p[row].name[47] = 0;
+        snprintf(key, sizeof key, "D%d", i);
+        GetPrivateProfileStringA("Desc", key, "", buf, sizeof buf, file);
+        for (q = d = buf; *q; q++) { if (q[0] == '\\' && q[1] == 'n') { *d++ = '\n'; q++; } else *d++ = *q; } *d = 0;
+        strncpy(kspg.p[row].desc, buf, 479); kspg.p[row].desc[479] = 0;
+        kspg.p[row].row = row; kspg.p[row].item = item; kspg.p[row].pic = pic; kspg.p[row].ok = 1; ok++;
+    }
+    return ok;
+}
+
+static void kspg_init(void)
+{
+    kspg.on = GetPrivateProfileIntA("ShopPage", "Enable", 0, klh_ini) != 0;
+    if (!kspg.on) return;
+    kspg.key = (int)GetPrivateProfileIntA("ShopPage", "Key", 0x75, klh_ini);
+    if (kspg.key < 1 || kspg.key > 0xfe) kspg.key = 0x75;
+    kspg.trick = GetPrivateProfileIntA("ShopPage", "OwnedTrick", 1, klh_ini) != 0;
+    kspg.log = GetPrivateProfileIntA("ShopPage", "Log", 1, klh_ini) != 0;
+    kspg.clips = GetPrivateProfileIntA("ShopPage", "ReserveClips", 2, klh_ini);
+    kspg.have = kspg_load();
+    if (!kspg.have) { klog("shopPage: on, but KLShopPage.ini has no pairs: nothing is done"); kspg.on = 0; return; }
+    kspg.carried[0] = kspg.carried[1] = -1;
+    klog("shopPage: on; %d pairs from KLShopPage.ini; key 0x%02x flips the shop between set A and set B (Arcade offline only)", kspg.have, kspg.key);
+}
+
+static void klshoppage_tick(int game_thread)
+{
+    DWORD now, w; int g, s, i;
+    static SHORT (WINAPI *gaks)(int); static HWND (WINAPI *fgw)(void); static DWORD (WINAPI *wtp)(HWND, LPDWORD); static int looked;
+    static DWORD lastfull;
+    if (!kspg.on || !game_thread || !klh_exe_ok) return;
+    now = GetTickCount();
+    if (!looked) {
+        HMODULE u = GetModuleHandleA("user32.dll"); looked = 1;
+        if (u) { gaks = (SHORT (WINAPI *)(int))GetProcAddress(u, "GetAsyncKeyState"); fgw = (HWND (WINAPI *)(void))GetProcAddress(u, "GetForegroundWindow"); wtp = (DWORD (WINAPI *)(HWND, LPDWORD))GetProcAddress(u, "GetWindowThreadProcessId"); }
+        if (!gaks || !fgw || !wtp) klog("shopPage: user32's key functions not found: the page key is not read");
+    }
+    /* the key is read on every tick (a short press is missed at 4 Hz); the rest runs 4 times a second */
+    if (kspg.active && gaks && fgw && wtp && (gaks(kspg.key) & 0x8000) && now - kspg.lastKey > 400) {
+        DWORD pid = 0; HWND f = fgw(); if (f) wtp(f, &pid);
+        if (pid == GetCurrentProcessId()) { kspg.lastKey = now; kspg.shownB = !kspg.shownB; if (kspg.log) klog("shopPage: shop now shows set %c", kspg.shownB ? 'B' : 'A'); }
+    }
+    if (now - kspg.lastScan < 250) return;
+    kspg.lastScan = now;
+    g = kspg_gate();
+    if (!g) { kspg.active = 0; kspg.shownB = 0; return; }
+    if (!kls_code_ok()) { if (!kspg.told++) klog("shopPage: code of the object maker / template lookup is not as read: nothing done"); kspg.active = 0; return; }
+    if (kls.on) for (i = 0; i < KSPG_ROWS; i++) if (kspg.p[i].ok) for (s = 0; s < kls.n; s++) if (kls.row[s] == i) { kspg.p[i].ok = 0; klog("shopPage: row %d is swapped by [Shop] Swap: no page II for it", i); }
+    /* carried rows: a change nobody bought (round reset, other mod) resets that slot to set A */
+    w = klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY));
+    for (s = 0; s < 2; s++) {
+        int cur = (int)(signed char)(BYTE)(w >> (8 * s));
+        if (cur != kspg.carried[s]) { if (kspg.own[s] && kspg.log) klog("shopPage: slot %d carried row changed %d -> %d without a purchase seen: set A assumed", s, kspg.carried[s], cur); kspg.own[s] = 0; kspg.carried[s] = cur; }
+    }
+    kspg.active = 1;
+    if (now - lastfull > 1500) { lastfull = now; kspg_scan(); }
+    if (g == 1) { kspg_check_pool(); kspg_enforce(); }
+    kspg_ammo();
+}
+
+#endif /* KLSHOPPAGE_C */

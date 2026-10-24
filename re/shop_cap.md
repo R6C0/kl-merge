@@ -451,3 +451,18 @@ Read:
 - `C:\kl-merge\kl-merge\klhook\klhook.c`
 
 Scratch copy of the F02 online.xml (the only file written, outside the repo): `C:\Users\Henri\AppData\Local\Temp\claude\c--kl-merge-kl-merge\d4c7e4f4-84d7-4249-a418-cad3917427d6\scratchpad\online.xml`
+
+## Page II build (2026-10-24, STAGED, NOT INSTALLED, not run in the game)
+Owner: 'okay yes do a page 2'. `klhook/klshoppage.c` (+3 lines in klhook.c) and `tools/kl_shop_sets.py`; staged in `C:/kl_build_1024/shoppage_1024a/stage`
+(SHIP dll md5 699da84b, TEST 658a59eb; INSTALL/UNDO shoppage.bat rehearsed on a scratch folder, undo byte-identical). Key F6 flips set A / B.
+- Text: per-ELEMENT private vtable of MercsShowInfoFAWeapons (0xbbd0ec) and MercsSendMessageWeapons (0xbbd18c), slot 24 (0x490730, key -> char*, ret 4)
+  wrapped; keys '/Menu/Online/WeaponShop/Weapon<row>' and '...Desc' answered from KLShopPage.ini; BuyWeapons_Title / Headline* get ' II'. Roles from the TagName
+  at [obj+0xc4]: OldPrimaryWeapon / OldSecondaryWeapon follow the set the carried gun was bought in. No clash with kllocname.c (it wraps the LOC object).
+- Picture: MercsGraphicFA (0xbbcc84) slot 8 (0x58bc50, tail-jumps to 0x832470 ret 0x14: GUESS 5 dword args) swaps the element's own PlayerIndex [obj+0xc4]
+  between the selected row and the picture row for the call (WeaponBig in mode 2, Primary/SecondaryWeapon when carried from B). Global selection untouched.
+- Buy: selector (0xbbd494) slot 20 = 0x810b20 wrapped; 'BuyWeaponDialogVoodoo' (0x7f73d0 refuses an owned row) gets the carried byte blanked to 0xff for the call
+  when the row was bought in the other set (OwnedTrick, GUESS); 'BuyWeapon' (0x6ddd10) records the set. Hand-over: own copy of klshop.c's relabel recipe, per pair,
+  8 objects, ONLY for guns a slot carries from B; parked/unparked each tick before the round (st < 0x19); rows klshop.c swaps are skipped.
+- Pairs (20; `kl_shop_sets.py show`; `--grenades` adds 5 thrown items, untried in a gun slot): carriers by category, price, tier, dlc-free first.
+- Open: live test (text on both classes, picture swap, buy of a B row, buy of the other set's gun of the carried row, round hand-over); the 5-arg update;
+  rows without a pair show the stock gun in B; pad/mouse cannot toggle; the built dll comes from the working tree (live dll is a9414890, k37).
