@@ -125,6 +125,93 @@ def pose_run(frames, new, clamp, dE0=0.0, dP0=0.0, drift=1.0, jumpcm=12.0, T=0.2
         E, P = En, Pn
         worst = max(worst, shown_step - raw_step); mxs = max(mxs, shown_step); mxe = max(mxe, abs(e) if act else 0)
     return worst, mxs, mxe, ntrig
+
+# ===================================================================================================================
+# k39: double crouch. Mirrors klcamsmooth.c's stance detector (ramp-aware, 2-frame outlier hold), takeover (merge) and the hard clamp, on the
+# pivot height q (eye = q + 10 cm over the feet, as run()). Inputs: q(t) series. Two kinds: (A) the owner's k37 log 19:52:56-58 (the body
+# pops, STANCE lines of KLHook.log), (B) the body AFTER klstancefix.c (continuous: the reverse clip continues from the mirrored phase).
+# ===================================================================================================================
+def stance39(qfun, T, fps=240, new=True, stancecm=6.0, stancems=280.0, seed=3, busy=False):
+    random.seed(seed)
+    t = 0.0; prev = None; qpv = 0.0; lv = 0.0; hist = []; pend = False; pend_n = 0; pend_dt = 0.0
+    S = Sv = 0.0; sact = False; O = None; Ov = 0.0; Iprev = None; Iv = 0.0; E_prev = None; Ed = None
+    out = []; npop = 0; nout = 0; nmerge = 0; hid = 0.0
+    qlim = stancecm * (2.0 if busy else 1.0)
+    while t < T:
+        dt = 1.0 / fps * random.uniform(0.6, 1.5); t += dt
+        q = qfun(t); pop = False; held = False; qv = q
+        if prev is not None:
+            adt = dt + pend_dt
+            r = abs(q - (prev + qpv * adt))
+            if new and len(hist) >= 3:
+                tt = hist[1][1] + hist[2][1]
+                if tt > 1e-4:
+                    r = min(r, abs(q - (hist[2][0] + (hist[2][0] - hist[0][0]) / tt * adt)))
+                    ptrend = hist[2][0] + (hist[2][0] - hist[0][0]) / tt * adt
+                else: ptrend = prev
+            else: ptrend = prev
+            if new: r = min(r, abs(q - (prev + lv * adt)))                 # third explanation: the last accepted step goes on
+            if new and pend:
+                if r <= qlim * 1.5: pend = False; pend_dt = 0.0; nout += 1
+                else:
+                    pend_n += 1
+                    if pend_n >= 2: pop = True; pend = False; pend_dt = 0.0
+                    else: held = True
+            elif r > qlim:
+                if new and r > 25.0: pend = True; pend_n = 0; held = True
+                else: pop = True
+            if held: pend_dt += dt; qv = ptrend
+        if not held:
+            if pop: qpv = 0.0; hist = []
+            elif prev is not None: qpv += ((q - prev) / dt - qpv) * 0.5
+            lv = (q - prev) / dt if prev is not None else 0.0
+            prev = q
+            if len(hist) >= 3: hist = hist[1:]
+            hist.append((q, dt))
+        I = qv + 10.0
+        if prev is not None and not held and not pop and Iprev is not None: Iv = (I - Iprev) / dt
+        if stancems >= 20:
+            if pop and O is not None:
+                Ip = O + Ov * dt
+                if new and sact: S = Ip - I; nmerge += 1                     # merge: keep Sv
+                else: S = Ip - I; Sv = Ov - Iv; (Sv := 0.0) if Sv * S > 0 else None
+                sact = True; npop += 1
+            if sact:
+                ms = stancems * (1.5 if busy else 1.0)
+                S, Sv = cd(S, Sv, 6.0 / (ms * 1e-3), dt)
+                if abs(S) < 0.05 and abs(Sv) < 1.0: S = Sv = 0.0; sact = False
+            Oc = I + (S if sact else 0.0)
+        else: Oc = I
+        # hard clamp vs the raw eye step
+        Eraw = q + 10.0
+        if E_prev is not None and Ed is not None:
+            lim = abs(Eraw - E_prev) + max(0.8, 300.0 * dt); d = Oc - Ed
+            if abs(d) > lim:
+                hid = max(hid, abs(d) - lim); Oc = Ed + math.copysign(lim, d)
+        if O is not None: Ov = (Oc - O) / dt
+        O = Oc; Iprev = I; E_prev = Eraw; Ed = Oc
+        out.append(Oc)
+    mx = max(abs(b - a) for a, b in zip(out, out[1:]))
+    return mx, npop, nout, nmerge, hid
+
+def owner_double_crouch(t):
+    """pivot height over the feet, from the k37 log STANCE lines 19:52:56.6 .. 19:52:58.4 (t = seconds from 56.6); ramps between logged values are interpolated"""
+    pts = [(0.0, 169.1), (0.195, 169.1), (0.196, 56.7), (0.238, 70.5), (0.239, 180.1), (0.466, 179.4), (0.467, 123.9), (0.666, 126.0), (0.667, 168.4),
+           (1.5, 161.0), (1.563, 161.0), (1.564, 114.9), (1.741, 118.8), (1.742, 161.0), (2.5, 161.0)]
+    for (a, x), (b, y) in zip(pts, pts[1:]):
+        if a <= t <= b: return x + (y - x) * ((t - a) / (b - a) if b > a else 0.0)
+    return 161.0
+
+def fixed_double_crouch(t):
+    """after klstancefix.c: Stand_To_Crouch starts at 0.3 s (0.5 s long, -46 cm), reversed at 0.45 s (phase p = 0.3 mirrored to 0.7, no restart),
+    smooth through the whole move; crouch again at 1.2 s from standing"""
+    def ease(u): u = min(1.0, max(0.0, u)); return u * u * (3 - 2 * u)
+    if t < 0.3: return 161.0
+    if t < 0.45: return 161.0 - 46.0 * ease((t - 0.3) / 0.5)
+    p = ease(0.3)                                          # the pose at the reversal; the reverse clip continues from 1 - p of its own length
+    d0 = 46.0 * p
+    return 161.0 - max(0.0, d0 - 46.0 * (ease((t - 0.45) / 0.5 + 0.0) - 0.0) * 1.0) if t < 0.95 else 161.0
+
 if __name__ == "__main__":
     step = float(sys.argv[1]) if len(sys.argv) > 1 else 50.0
     sm = float(sys.argv[2]) if len(sys.argv) > 2 else 280.0
@@ -176,5 +263,32 @@ if __name__ == "__main__":
     w, ms, me, nt = pose_run(gl, True, True)
     print("  control: smooth glide, 200 frames: shown-raw %.3f, triggers %d (must be 0)" % (w, nt))
     if nt or abs(w) > 1e-6: ok = False
+    print("\n== 3. double crouch (k39): stance detector ramp / outlier / merge, per-frame step of the shown eye (cm)")
+    print("  %-52s | %-14s | %9s %5s %5s %5s %6s" % ("case", "variant", "max step", "pops", "outl", "merge", "hid"))
+    cases = [("owner k37 log 19:52:56.6-58.4 (body pops)", owner_double_crouch, 2.6),
+             ("after StanceFix: continuous mirrored double crouch", fixed_double_crouch, 2.0),
+             ("one-frame read outlier -35 cm at 1.0 s", lambda t: 126.0 if 1.0 <= t < 1.0045 else 161.0, 2.0),
+             ("smooth descent 357 -> 161 cm in 0.15 s @ 85 fps", lambda t: 357.0 - 196.0 * min(1.0, max(0.0, (t - 0.5) / 0.15)), 1.0)]
+    res3 = {}
+    for name, fn, T in cases:
+        for label, new in (("k37", False), ("k39", True)):
+            fps = 85 if "85 fps" in name else 240
+            mx, npop, nout, nmg, hid = stance39(fn, T, fps=fps, new=new)
+            res3[(name, label)] = (mx, npop, nout)
+            print("  %-52s | %-14s | %9.2f %5d %5d %5d %6.1f" % (name[:52], label, mx, npop, nout, nmg, hid))
+    k = res3[(cases[1][0], "k39")]
+    print("  acceptance (continuous double crouch): max shown step %.2f cm (< 8) and stance pops %d (<= 2)" % (k[0], k[1]))
+    if not (k[0] < 8.0 and k[1] <= 2): ok = False; print("  FAIL")
+    o = res3[(cases[2][0], "k39")]
+    print("  acceptance (one-frame outlier ignored): k39 pops %d outliers %d" % (o[1], o[2]))
+    if o[1] != 0 or o[2] < 1: ok = False; print("  FAIL")
+    d = res3[(cases[3][0], "k39")]
+    k37d = res3[(cases[3][0], "k37")]
+    print("  acceptance (constant-velocity descent): k39 pops %d (only its onset and end are real velocity changes; k37 had %d)" % (d[1], k37d[1]))
+    if d[1] > 3 or d[1] >= k37d[1]: ok = False; print("  FAIL")
+    w = res3[(cases[0][0], "k39")]
+    print("  owner log replay (body still popping, i.e. StanceFix off): k39 max shown step %.2f cm (clamp keeps it small), pops %d" % (w[0], w[1]))
+    if w[0] >= 8.0: ok = False; print("  FAIL")
+
     print("\nRESULT: %s" % ("PASS" if ok else "FAIL"))
     sys.exit(0 if ok else 1)

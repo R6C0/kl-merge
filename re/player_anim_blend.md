@@ -56,3 +56,8 @@ read only one), 16-channel pool exhaustion, network/AI sharing of the same Play 
 
 ## Next step (needs a live run, owner approval)
 Log every 0x4da1d0 call (this, clip, flags) around a crouch->run toggle with the hook in log-only mode.
+
+## Addendum 2026-10-25 (static, k39): the player DOES have transition clips; a re-toggle restarts the reverse clip
+- Player transition slots in [mover+0x58]: Stand_To_Crouch 0x1154, Crouch_To_Stand 0x1180, Walk_To_Crouch 0x1128, Walk_To_Stand 0x1078, Run_To_Stand 0x10a4, Sprint_To_Stand 0x10d0, Sneak_To_Crouch 0x10fc. No Run_To_Crouch / Crouch_To_Run (a crouch while running falls back to Sneak/Walk_To_Crouch). This corrects 'no transition clips' above.
+- A second toggle inside a transition: 0x77ed80 (called from 0x5ac7e7; tail 0x77f478..0x77f488) selects the reverse clip, changes [m+0x58], sets [m+0x1eac]=1; 0x757a50 then zeroes [m+0x40] (phase). The crouch transitions do not set the 1eae lock. Visible: the animation cancels and pops.
+- k39 klstancefix.c mirrors the phase (1-p) and clears 1eac when the slot flips inside a pair. GUESSES: [m+0x40] 0..1, tick order vs pose sample, 1eac is a byte. S1 (pin [m+0x1eae]) not built.

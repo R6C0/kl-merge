@@ -142,6 +142,10 @@ feat('camsmooth', G_GFX, 'Smooth camera in animations and when leaving aim (reco
      "klcamsmooth.c: dt-correct camera step, pivot low-pass, no snap on aim out; mouse turning is never filtered; not live-tested; set Dry=1 Log=1 first", [('CamSmooth', 'Enable', 1, 0, 1)])
 feat('camstance', G_GFX, 'Ease the camera when crouching / standing / starting to run (recommended on)', 'on', 'start',
      "klcamsmooth.c StanceMs: a one-frame pivot-height step is eased over 280 ms, critically damped, relative to the feet; mouse turning is never filtered; not live-tested; needs CamSmooth Enable=1", [('CamSmooth', 'StanceMs', 280, 0, 280)])
+feat('stancefix', G_GFX, 'Smooth crouch re-toggle: crouching again mid-way keeps the animation going (recommended on)', 'on', 'start',
+     "klstancefix.c: reversing Stand_To_Crouch / Crouch_To_Stand no longer restarts the clip at frame 0 (mirrors the phase); data writes only; not live-tested; Dry=1 Log=1 first", [('StanceFix', 'Enable', 1, 0, 1)])
+feat('reloadfx', G_GFX, 'Reload camera effects: keep the shot look through a reload (recommended on)', 'on', 'start',
+     "klreshade.c ReloadFx: KL_Fire held at a floor (ReloadFxLevel 0.35) for 3.5 s after the last shot and 0.6 s after the magazine refills, so the picture does not go clean; needs the ReShade bridge; not live-tested", [('ReShade', 'ReloadFx', 1, 0, 1)])
 def screen_hz():
     """The primary screen's refresh rate (GetDeviceCaps VREFRESH), 60 when it cannot be read."""
     try:

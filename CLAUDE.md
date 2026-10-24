@@ -66,6 +66,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-25 - STAGED, NOT INSTALLED: hook k39 (C:/kl_build_1019/k39_1025a/stage, SHIP 31d49594) = [StanceFix] crouch re-toggle mirrors the clip phase + CamSmooth outlier/ramp/merge + [ReShade] ReloadFx. INSTALL/UNDO k39.bat over k37, rehearsed. Live test: StanceFix Dry=1 first (lines 'stancefix:'), then Dry=0; reload in the game with Log>=2.
+
 2026-10-24 23:30 - STAGED, NOT INSTALLED: C:/kl_build_1024/dance_1024r3 = club civilians dance (Female_Stripper clip merged into DD Civilian ANM + 5 MiniCutsceneRout groups on AIMonitor list 2); live b5e45efa -> f12d103d, lastcall2 c563e6bc -> 7ef0404f; INSTALL/UNDO bats rehearsed on scratch only. Live test needed (re/club_crowd.md).
 
 2026-10-25 00:30 - INSTALLED (owner 'install all'), not live-tested: lastcall2 (DM05A c563e6bc: heli at far roof end, 6 yakuza/bodyguard waves,

@@ -192,6 +192,7 @@ static struct {
     char tech[KLRS_NT][96], extra[512], sorting[1024];
     char live[MAX_PATH], liveabs[MAX_PATH], tpl[3][MAX_PATH];
     float fire_per, fire_s, hurt_gain, hurt_s, speed_full;
+    int reload_on; float reload_lvl, reload_hold, reload_tail;   /* k39 [ReShade] ReloadFx / ReloadFxLevel / ReloadFxHold / ReloadFxTail */
     /* the cracked lens (6): settings, then the state (the game thread writes, the present thread reads) */
     int crack_on, crack_hits, crack_max; float crack_win, crack_chance, crack_cool, crack_hp;
     struct { float x, y, size, inten; DWORD birth; } crack[KLRS_NCRACK];
@@ -301,6 +302,13 @@ static const char *klrs_prepare(int look)
     snprintf(klrs.tpl[2], sizeof klrs.tpl[2], "%s\\%s", dir, klrs_base(v));
     klrs.fire_per = klrs_inif("FirePerShot", 0.25f);
     klrs.fire_s = klrs_inif("FireSeconds", 1.5f); if (klrs.fire_s < 0.05f) klrs.fire_s = 0.05f;
+    /* k39 (owner 2026-10-25: 'when you reload it acts like theres no effects'): KL_Fire only rises with rounds leaving the magazine, so a reload
+       (magazine goes UP, nothing leaves it) let every camera effect fade out in 1.5 s and the picture went perfectly clean. ReloadFx keeps KL_Fire at a
+       floor (ReloadFxLevel) from the last shot for ReloadFxHold seconds, and for ReloadFxTail seconds after the magazine count rises (the reload's end). */
+    klrs.reload_on = klrs_inif("ReloadFx", 1.0f) != 0;
+    klrs.reload_lvl = klrs_inif("ReloadFxLevel", 0.35f); if (klrs.reload_lvl < 0) klrs.reload_lvl = 0; if (klrs.reload_lvl > 1) klrs.reload_lvl = 1;
+    klrs.reload_hold = klrs_inif("ReloadFxHold", 3.5f); if (klrs.reload_hold < 0) klrs.reload_hold = 0; if (klrs.reload_hold > 20) klrs.reload_hold = 20;
+    klrs.reload_tail = klrs_inif("ReloadFxTail", 0.6f); if (klrs.reload_tail < 0) klrs.reload_tail = 0; if (klrs.reload_tail > 10) klrs.reload_tail = 10;
     klrs.hurt_gain = klrs_inif("HurtGain", 4.0f);
     klrs.hurt_s = klrs_inif("HurtSeconds", 2.0f); if (klrs.hurt_s < 0.05f) klrs.hurt_s = 0.05f;
     klrs.speed_full = klrs_inif("SpeedFull", 6.0f); if (klrs.speed_full < 0.5f) klrs.speed_full = 0.5f;
@@ -593,7 +601,7 @@ static void klrs_crack_tick(DWORD now, int hit, float health, int clear)
 static void klrs_tick(int game_thread)
 {
     static DWORD last, lastpl, lastw, lasth; static float hp0 = -1, mx0 = -1, pos0[3]; static int rounds0 = -1, havepos;
-    static DWORD logat;
+    static DWORD logat, lastshot, reload_until; static int reloaded;
     DWORD now, gd, pl = 0, h, d, inv, vt, ds = 0, hand = 0, arr = 0, cnt = 0, e[4], w = 0, raw; BYTE idx = 0xff, mode = 0;
     float dt, fire, hurt, speed, health = 1.0f, pos[3], cur, mx; int hit = 0, clear = 0;
     if (!klrs.on || !game_thread || !klh_exe_ok) return;
@@ -637,10 +645,17 @@ static void klrs_tick(int game_thread)
             else if (cnt <= 256) { DWORD i; for (i = 0; i < cnt; i++) if (klh_rd(arr + 16 * i, e, sizeof e) && e[0] == hand) { w = e[2]; break; } }
         }
         if (w && klh_rd(w, &vt, 4) && klu_rdata_ptr(vt) && klh_rd32((DWORD_PTR)KLH_VA(vt + 0x2fc)) == 0x00511f50u && klh_rd(w + 0xdc, &raw, 4) && (raw ^= 0xbeebbeebu) <= 9999) {
-            if (w == lastw && rounds0 >= 0 && (int)raw < rounds0 && rounds0 - (int)raw <= 12) fire += (rounds0 - (int)raw) * klrs.fire_per;
+            if (w == lastw && rounds0 >= 0 && (int)raw < rounds0 && rounds0 - (int)raw <= 12) { fire += (rounds0 - (int)raw) * klrs.fire_per; lastshot = now; }
+            else if (w == lastw && rounds0 >= 0 && (int)raw > rounds0) {
+                /* the magazine went UP on the same gun = a reload finished (GUESS: the count is set at the end of the reload, not rising during it; the
+                   start of a reload is not detected - no state field found - so the floor covers the time after the last shot, see below) */
+                reload_until = now + (DWORD)(klrs.reload_tail * 1000.0f); lastshot = 0; reloaded++;
+                if (klrs.log >= 2) klog("reshade: reload seen (magazine %d -> %d), KL_Fire floor %.2f for %.1f s more", rounds0, (int)raw, klrs.reload_lvl, klrs.reload_tail);
+            }
             rounds0 = (int)raw; lastw = w;
         } else { rounds0 = -1; lastw = 0; }
     }
+    if (klrs.reload_on && pl && w && ((lastshot && now - lastshot <= (DWORD)(klrs.reload_hold * 1000.0f)) || (int)(reload_until - now) > 0) && fire < klrs.reload_lvl) fire = klrs.reload_lvl;
     klrs_crack_tick(now, hit, health, clear);
     klrs_val[KLRS_U_FIRE] = fire > 1 ? 1 : fire;
     klrs_val[KLRS_U_HURT] = hurt > 1 ? 1 : hurt;
