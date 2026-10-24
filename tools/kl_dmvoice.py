@@ -70,6 +70,10 @@ EVENT_THEME = [
     (r'^(CallExitVehicle|ExitVehicleAnd|ExitVehicleDestroyed)', 'esc'), (r'^ExitVehicleHeav', 'shoot'), (r'^ShootExitVehicle', 'hunt'),
     (r'^(PoliceReward|HittingTheScore)', 'greed'), (r'^(AllDead|TeamloseGame|TeamOneMercLeft)', 'down'),
     (r'^(TeamLeading|TeamWinGame)', 'win'), (r'^(TeamTrailing|TeamDraw)', 'watch'), (r'^Exit', 'go'),
+    # plaindata 2026-10-24: single-entry (flag-0) events PD1 found with no leaf (GUESS by name; Human_Shield_Grunts stay stock grunts)
+    (r'^(Boarding|Chopper_response|CriminalEsc|LastEsc)', 'esc'), (r'^(DirtyMoney|TeamMoneyGoneQuit)', 'greed'),
+    (r'^(OneCriminalLeft|TwoCriminalsLeft|TeamLastMerc)', 'down'), (r'^(?i:(One|Two|Three)Min_?left)', 'go'),
+    (r'^PoliceKillPolice', 'payback'),
 ]
 # theme -> category groups (regex on the campaign category below AllLevels/Oneliners/), best first
 THEMES = {
@@ -350,7 +354,11 @@ def map_events(loc_tree, singles=True):
         for radio in (False, True):
             pick_ = sorted((b for b in sing if b.endswith('_R') == radio), key=lambda b: (_theme_known(b), b))
             ev.update(pick_[:SINGLE_MAX])
+            SINGLES.update(pick_[:SINGLE_MAX])
     return sorted(ev)
+
+
+SINGLES = set()      # the single-entry events map_events added (leaf name = event name): build_map's tier 1 drops only their subtitles
 
 
 def add_leaf(tree, path, text, sid):
@@ -544,22 +552,24 @@ def build_map(game, m, out, trees, clips, log=print, write=True):
             d = kl_loc_fit.fit(d, cap, locs.get('English'))
             log('%s: %s .LOC was over %d in the source: shrunk to %d by kl_loc_fit' % (m, lang, cap, len(d)))
         first = None
-        # tiers until it fits: everything; no subtitle text; no subtitle text and no radio twins (klvoice.c finds no leaf for a
-        # radio line then and leaves that line stock Dog Days)
-        for tier in (0, 1, 2):
-            subs, radios = tier == 0, tier < 2
+        # tiers until it fits: everything; no subtitles on the single-entry events (mostly radio / police lines, 2026-10-24);
+        # no subtitle text; no subtitle text and no radio twins (klvoice.c finds no leaf for a radio line then and leaves that line stock Dog Days)
+        TIERS = ('full', 'no single-event subtitles', 'no subtitles', 'no subtitles, no radio')
+        for tier in (0, 1, 2, 3):
+            subs, radios = tier <= 1, tier < 3
             t = kl_loc.parse(d)
             for who in present:
                 for leaf, (c, radio) in plan.leaves[who].items():
                     if not radios and leaf.endswith('_R'):
                         continue
+                    lsubs = subs and not (tier == 1 and leaf in SINGLES)
                     key = c.rpath if radio and c.rpath else c.path
                     node = sidx.get(key) or {p: n for p, n in kl_loc.leaves(trees['English'])}[key]
                     text, _x, sid, _l = kl_loc.fields(node)
                     new = omap.get(sid, 0) if sid else 0
-                    if subs and lang == 'English' and not new:
+                    if lsubs and lang == 'English' and not new:
                         silent[who] += 1
-                    add_leaf(t, vpath(who, leaf), text if subs else b'', new)
+                    add_leaf(t, vpath(who, leaf), text if lsubs else b'', new)
             files[lang] = kl_loc.build(t)
             first = first or files[lang]
             if len(files[lang]) <= cap:
@@ -571,8 +581,7 @@ def build_map(game, m, out, trees, clips, log=print, write=True):
                     break
                 except ValueError:
                     files[lang] = first
-            log('%s: %s .LOC %d bytes > %d at tier %d (%s): trying the next' % (m, lang, len(files[lang]), cap, tier,
-                                                                             ('full', 'no subtitles', 'no subtitles, no radio')[tier]))
+            log('%s: %s .LOC %d bytes > %d at tier %d (%s): trying the next' % (m, lang, len(files[lang]), cap, tier, TIERS[tier]))
         if len(files[lang]) > cap:                         # no tier fits: keep the full build and shorten other text (kl_loc_fit: English subtitles, ...)
             log('%s: %s .LOC %d bytes > %d at every tier: kl_loc_fit' % (m, lang, len(files[lang]), cap))
             try:
@@ -583,7 +592,7 @@ def build_map(game, m, out, trees, clips, log=print, write=True):
                 info['loc_bytes'][lang] = (len(d), len(d), 'cannot fit: no voice leaves')
                 info.setdefault('problems', []).append('%s .LOC does not fit LOC_CAP: %s' % (lang, e))
                 continue
-        info['loc_bytes'][lang] = (len(d), len(files[lang]), ('full', 'no subtitles', 'no subtitles, no radio')[tier])
+        info['loc_bytes'][lang] = (len(d), len(files[lang]), TIERS[tier])
     nls = kl_snd.ls_bank(ls, kl_snd.u32(nsnd, 0))
     problems, cnt = kl_snd.verify(base, nsnd, nwhd, nwav, nls, omap)
     problems = info.get('problems', []) + problems
