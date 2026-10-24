@@ -1,3 +1,10 @@
+2026-10-24 17:10 - HC2 WEST GARAGE DOOR + HASTA WING (owner: 'you opened the wrong garage' / 'lighting issues on hasta and the loot area isnt blown up').
+HC2: k29 opened the EAST roller door (Junkyard GarageDor_A_01, x 170); the garage the heisters start by is the WEST Havok shatter door (SI0120_M01_GarageDorHavok_A_01
+!While_01 + 60 !Shards pieces + Out_Garage GarageDor_A_STATIC_HEADS_01/_02, x -1970, z 4200..6564). kl_walk2d: west of it unreachable, reachable with those dropped
+(5687 -> 9989 cells); bots' navmesh crosses it. tools/kl_hc2_garagedoor.py now --door west (default): 63 leaf paths into the blast + TearGas_RIGHT lists, east entry removed,
+--restore-hvk puts the original east collision back (checked: sink(original) == live). Hasta: the wing walls are fine (walk: x<=38100 shut, to 43220 open); the opener
+needs 6 of 6 hall squads dead (4 are eStayBack) or 300 s, the owner's round ended at ~145 s. NEW tools/kl_hasta_wing.py: count 6 -> 3, backstop 300 -> 100 s (GUESS values).
+Lighting on Hasta: no defect found offline (574 lights, 21 in the wing, 27 in the hall) - UNPROVEN. Staged C:\kl_build_1024\hc2hasta_1024b (G: was full) with INSTALL/UNDO hc2hasta.bat.
 2026-10-24 18:10 - STUCK IN COVER + CLIMB (offline, nothing run in the game; owner 16:50 'put inside the object, stuck for the round / climb on all maps'):
 CAUSE (inferred, no direct log): rev2_1024 stripped NoCoverBox from EVERY box incl. DM hazard markers (NoCover_BugFix, Respawn_HallWay, Stairs, Escalator,
 garage) and cover2 then put KM boxes into those zones (audit: DM01 0/21, DM11B 0/31, DM03 5/40 markers found by name). FIX STAGED: cover3 = hazard markers
