@@ -173,3 +173,25 @@ frees 10 MB on these banks.
 * Group volume semantics (+0x24 vs +0x30) are read from stock values, not traced.
 * The set / sound parameter meanings (distance, randomisation) are not established.
 * Memory: +3 MB for the full set on a 32-bit process already near its limit on some maps.
+
+## 7. Gun sounds matched to the S&W MP45 (2026-10-24, owner: "make the guns wavesound like the sw mp45 ... loudness ... getting distorted")
+
+* The MP45 has no clips of its own: `hg_sw_mp45` plays the **HG_DesertEagle_Shot_01..03** records (re/map_guns.md, in every bank).
+  Measured (head = RMS of the first 250 ms after the onset, 32 kHz decode): head **-2.8 dBFS**, crest 2.8 dB, ~7 % of the samples sit
+  AT the ceiling (hard-clipped at the source), envelope above -7 dB for 250 ms. Others: AK74 -7, Type79 -6.5, MPi69 -8.3, MAC-10 -8.8,
+  silenced SMGs -9..-11.6, M9 -5, distant layers -8..-14, rifles/revolvers -3.3..-4.4. Every stock clip already peaks at 0 dBFS, so the gap is
+  RMS/sustain, not peak.
+* `tools/kl_gunsnd_match.py` (`analyze` / `build` / `verify` / `manifest`): per map bank, every `_Shot_0N`, `Distant_Shot_*` and Hawk police
+  record except the Desert Eagle reference is decoded, gain-driven (bisect, cap +18 dB) into a knee soft clipper (linear to 0.8, tanh above)
+  until its head RMS equals the reference's (silenced and distant layers: reference - 3.7 dB), 30 ms end fade, re-encoded into the SAME
+  record (same sample count, same bytes). WHD, SND, zips and all other records stay byte-identical; only the 61 records' data spans in each
+  `.WAV` change (about 0.26..0.33 MB per map). 27 maps (all KLExpansion banks, so the Dead Men gun clips already written by
+  kl_dmgunsnd_build are included, and the stock DD01-09 copies).
+* The disk was full while building (G: 88 KB, C: 5 GB), so the staging holds SPANS (`Maps/<id>.new` / `.old`, 53 MB total), not 27 WAV copies;
+  the installer patches in place, md5-checks input and output, and UNDO writes the old bytes back (md5-checked).
+* Staged: `<work>\build\gunsnd_1024c\` (`INSTALL gun sounds.bat`, `UNDO gun sounds.bat`, `AB_LIST.txt`, `preview\*_A_before.wav` / `*_B_after.wav`
+  from DM01). That pair IS the on/off ("gunsound", recommended on): no hook part, no ini key. mod_options row to add by hand:
+  `gunsound - Gun fire sounds as loud/driven as the S&W MP45 (recommended on)`, switch = INSTALL / UNDO gun sounds.bat.
+* Not changed: the `.SND` group volumes (`sfx_weapons_shot_player` 0.70 / `_npc` 0.35) - the NPC half-level stays. Not listened to in game.
+* Risk: harder-driven clips (MAC-10 +16 dB, MPi69 +13..15 dB, Type79 +9 dB, AK74 +6..8 dB) also lift their decay tails and ADPCM noise by the
+  same gain; full-auto guns will sound denser. If one is too harsh, lower `MAXGAIN` in the tool and rebuild.
