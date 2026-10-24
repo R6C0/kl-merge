@@ -90,7 +90,7 @@ feat('adrenaline', G_DOWN, 'Help a downed AI heister (stand by him, hold E)', 'o
 feat('fed', G_DOWN, 'Come back as a policeman after you die', 'on', 'start',
      'seen live 2026-10-11 (Withdrawal); once a round', [('Fed', 'Enable', 1, 0, 0), ('Fed', 'Player', 1, 0, 0)])
 feat('cardown', G_DOWN, 'A car blast floors people (revivable) instead of killing', 'off', 'start',
-     'offsets are GUESSED: it is in LOG-ONLY mode (Dry=1) until the log is read; OFF here = log only', [('CarDown', 'Dry', 0, 1, 0)])
+     'offsets are GUESSED: it is in LOG-ONLY mode (Dry=1) until the log is read; OFF here = log only', [('CarDown', 'Dry', 0, 1, 0), ('CarDown', 'Enable', 1, None, 1)])
 
 feat('ambience', G_AV, 'Ambience bed and timed one-shot sounds', 'on', 'start',
      'MCI mp3 worker; the owner kept it when the stutter was found to be the Payday 2 jukebox', [('Ambience', 'Enable', 1, 0, 0)])
@@ -98,6 +98,8 @@ feat('stinger', G_AV, 'Event stingers (cues when the heist goes loud, a betrayal
      'short one-shots; the Payday 2 clips are out of the live lists', [('Stinger', 'Enable', 1, 0, 0)])
 feat('voice', G_AV, 'Dead Men voice lines for the Dead Men heisters', 'on', 'start',
      'owner 2026-10-23; PlainData live-tested 2026-10-24', [('Voice', 'Enable', 1, 0, 0)])
+feat('announcer', G_AV, 'Announcer first: a one-recording Dead Men line stays the stock announcer', 'on', 'start',
+     'owner 2026-10-24 (my character lines play first, needs to be the announcer first); the live ini has 0 at the moment', [('Voice', 'Announcer', 1, 0, 1)])
 feat('music', G_AV, 'Payday 2 music jukebox (needs Payday 2)', 'off', 'start',
      'it made the game stutter (owner 2026-10-23: gone with it off); Retomoto keeps its own music either way', [('Music', 'Enable', 1, 0, 0)])
 
@@ -112,12 +114,12 @@ feat('neural', G_GFX, 'Neural rendering (GITC Uplift DLSS / DLAA, F10)', 'off', 
      'ini note: 188 fps with it set aside against 106 .. 178 with it; needs the add-on files', [('Graphics', 'Neural', 1, 0, 0)])
 feat('rigid', G_GFX, 'Camera turn filter (heavier, smoother turn)', 'off', 'start',
      "owner 2026-10-24: 'camera awful / fps bad' was this filter's lag; aim is exempt either way", [('Rigid', 'Enable', 1, 0, 0)])
-feat('framelimit', G_GFX, 'Frame limiter (RTSS-style, removes frame-time stutter)', 'on', 'dll',
+feat('framelimit', G_GFX, 'Frame limiter (RTSS-style, removes frame-time stutter)', 'on', 'start',
      'owner 2026-10-24: RTSS does the same; klfps.c caps at the refresh rate, timed at presentation (NOT RUN IN THE GAME yet)',
      [('FrameLimit', 'Enable', 1, 0, 1)])
-feat('frontedge', G_GFX, 'Limiter: front edge sync (wait just before Present)', 'on', 'dll',
+feat('frontedge', G_GFX, 'Limiter: front edge sync (wait just before Present)', 'on', 'start',
      'the RTSS setting the owner uses; off = back edge (older picture, not recommended)', [('FrameLimit', 'FrontEdge', 1, 0, 1)])
-feat('passivewait', G_GFX, 'Limiter: passive waiting (Sleep instead of a busy loop)', 'off', 'dll',
+feat('passivewait', G_GFX, 'Limiter: passive waiting (Sleep instead of a busy loop)', 'off', 'start',
      'the RTSS setting the owner uses (false): busy loop = no scheduler jitter, costs one core a few ms a frame', [('FrameLimit', 'PassiveWait', 1, 0, 0)])
 
 feat('flash', G_STAB, 'Flash the taskbar when a load or round ends', 'on', 'start',
@@ -145,6 +147,7 @@ feat('inv', G_EXP, 'Gun shelf: carry more than two guns (F8)', 'off', 'start',
      'research feature, off by default', [('Inv', 'Enable', 1, 0, 0)])
 
 BY_ID = {f['id']: f for f in F}
+assert len(BY_ID) == len(F) and all(f['rec'] in ('on', 'off') for f in F)      # every row is shown with '(recommended on|off)' (rec_text)
 
 
 # ---------------------------------------------------------------- ini text: find / set (mimics GetPrivateProfileInt: first section, first key)
@@ -264,6 +267,8 @@ def apply_writes(path, writes, force=False):
     if not os.path.exists(bak):
         shutil.copy2(path, bak)
     text = read_ini(path)
+    if text[:2] in ('ÿþ', 'þÿ'):                  # latin-1 view of a UTF-16 BOM: the profile API reads those as Unicode, editing bytes would corrupt it
+        raise SystemExit('KLHook.ini is UTF-16: not edited (save it as ANSI first)')
     lines = split_lines(text)
     for sec, key, val in writes:
         set_key(lines, sec, key, val)

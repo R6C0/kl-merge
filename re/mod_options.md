@@ -8,6 +8,8 @@ refuses to save while kl2.exe runs, and only rewrites the lines of features whos
 Takes effect: keys are read by GetPrivateProfileInt at DLL init, so nearly every row applies at the next game start. Rows marked "needs newer DLL"
 are the three `[FrameLimit]` rows: the installed DLL (k29b, md5 aa912e09d2d5d6ca010899d505d70341) was built without klfps.c, so those keys do nothing until a DLL with it is installed (then change `when` to 'start' in the tool).
 
+2026-10-24 review: the three FrameLimit rows are now `when=start` (the k29c DLL has klfps.c; staged in `buildk29c_1024`, install script `tools/k29c_install.ps1`). New rows: `announcer` ([Voice] Announcer, recommended on; live ini has 0), and the `cardown` row also writes [CarDown] Enable=1 when turned on. The tool refuses to edit a UTF-16 ini.
+
 Note: the Recommended button would flip the owner's live Neural from 1 to 0 (the ini notes 188 fps off against 106..178 on), CarDown Dry to off, and Music/Rigid are already off.
 
 ## Inventory
@@ -53,9 +55,9 @@ Note: the Recommended button would flip the owner's live Neural from 1 to 0 (the
 | textures | Sharper textures (anisotropic x16) | [Graphics] Textures=1/0 | on (Textures=1) | on | next start | about 1 % fps |
 | neural | Neural rendering (GITC Uplift DLSS / DLAA, F10) | [Graphics] Neural=1/0 | on (Neural=1) | off | next start | ini note: 188 fps with it set aside against 106 .. 178 with it; needs the add-on files |
 | rigid | Camera turn filter (heavier, smoother turn) | [Rigid] Enable=1/0 | off (Enable=0) | off | next start | owner 2026-10-24: 'camera awful / fps bad' was this filter's lag; aim is exempt either way |
-| framelimit | Frame limiter (RTSS-style, removes frame-time stutter) | [FrameLimit] Enable=1/0 | on (Enable=1, absent = DLL default) | on | needs the newer DLL (not installed yet) | owner 2026-10-24: RTSS does the same; klfps.c caps at the refresh rate, timed at presentation (NOT RUN IN THE GAME yet) |
-| frontedge | Limiter: front edge sync (wait just before Present) | [FrameLimit] FrontEdge=1/0 | on (FrontEdge=1, absent = DLL default) | on | needs the newer DLL (not installed yet) | the RTSS setting the owner uses; off = back edge (older picture, not recommended) |
-| passivewait | Limiter: passive waiting (Sleep instead of a busy loop) | [FrameLimit] PassiveWait=1/0 | off (PassiveWait=0, absent = DLL default) | off | needs the newer DLL (not installed yet) | the RTSS setting the owner uses (false): busy loop = no scheduler jitter, costs one core a few ms a frame |
+| framelimit | Frame limiter (RTSS-style, removes frame-time stutter) | [FrameLimit] Enable=1/0 | on (Enable=1, absent = DLL default) | on | next start (k29c DLL; before it is installed the key does nothing) | owner 2026-10-24: RTSS does the same; klfps.c caps at the refresh rate, timed at presentation (NOT RUN IN THE GAME yet) |
+| frontedge | Limiter: front edge sync (wait just before Present) | [FrameLimit] FrontEdge=1/0 | on (FrontEdge=1, absent = DLL default) | on | next start (k29c DLL; before it is installed the key does nothing) | the RTSS setting the owner uses; off = back edge (older picture, not recommended) |
+| passivewait | Limiter: passive waiting (Sleep instead of a busy loop) | [FrameLimit] PassiveWait=1/0 | off (PassiveWait=0, absent = DLL default) | off | next start (k29c DLL; before it is installed the key does nothing) | the RTSS setting the owner uses (false): busy loop = no scheduler jitter, costs one core a few ms a frame |
 | | **Stability and fixes** | | | | | |
 | flash | Flash the taskbar when a load or round ends | [QoL] FlashOnReady=1/0 | on (FlashOnReady=1) | on | next start | in the owner's live ini (he alt-tabs during the 60..120 s loads) |
 | releasecursor | Release the mouse when the game loses focus | [QoL] ReleaseCursor=1/0 | on (ReleaseCursor=1) | on | next start | in the owner's live ini |
