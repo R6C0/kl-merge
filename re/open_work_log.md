@@ -1,3 +1,5 @@
+2026-10-24 23:59 - r2: [ClubHolster] klclubholster.c (holster lever 0x5e7c60 found; Dry=1; panic = fire tbCivRunToGate boxes) built klhook/out_3f_1024club_r2; dancing blocked (no dance clips in DD or DM05A ANM, only M05_A/Ambient/* guest loops); re/club_crowd.md part 3. Not live-tested.
+
 2026-10-24 23:40 - INSTALLED (owner 'install all'), not live-tested: k36 hook (8dfa5665) + ini [FrameLimit] Enable=1 SwapChain=0
 (.before-1024k36on); gunsnd_1024n (21 banks F01-F09 + L00-L11, .before-1024gunsnd2); hasta_1024n (DM11B 323c13f3: wing opens at 2 squads/30 s,
 3 blocker nodes dropped, M11A_Postfilter grade neutral); lastcall_1024n (DM05A b5e45efa: escape cams moved to pad); spawns_1024n (DM01B
