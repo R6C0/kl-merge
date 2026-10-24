@@ -66,6 +66,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 13:18 - RETOMOTO LIFT AS A HEISTER: the owner's log (12:28:39..12:29:06) shows 3 rides CANCELLED - with the car shut he walked
+the hall (z down to -1434) and left box 9 by more than Slack 150, so CarWait/CarFallback never carried him. INSTALLED DM09 KLJoin.ini
+Slack=1500 (md5 acdc8e12, backup KLJoin.ini.before-1024slack; generator 413a95394). NOT verified live: LIFT14 (= his walk,
+<work>\build\klhook\live\LIFT14.ini) skipped, owner active. Doors still shut for him: cause open (probe hook LIFT10/11 fired fine).
+
 2026-10-24 12:49 - INSTALLED SHIP out_3f_1024k27c B5252D74 + ini 3B27E903 ([Rigid] Enable=0: the owner's 'camera awful / fps bad' was the
 filter's lag; his fps was 210 vs 184 yesterday). k27c: Alt+F4 key-watch thread (KW1 live PASS, 545 ms), MciPump default 0, lift CarStall,
 'coming to get you' only on a real kneel + REVIVE log lines. Undo: <work>\build\camoff_1024\UNDO k27c and camera off.bat. Open: lift doors
@@ -77,10 +82,6 @@ the stock reference) + `--install OUTDIR` (zip rewritten beside itself, backup .
 only) so the F01 slot is compared at last. All 29 zips x 9 languages: DD01-DD09 Russian 248/136 -> 0 blank (back as English subtitles,
 623/354 KLVoice subtitles blanked instead), NEW DM01 Japanese 233 -> 0; everything else clean. Output `<work>\build\locrepair_1024\`.
 Owner / local session: `python tools\kl_loc_fit.py --install <that folder>` (+2.5 GB backups on C:), then `--verify` -> blanked 0 everywhere.
-
-2026-10-24 02:31 - DEAD MEN VOICES ON ONE-LINE EVENTS NOW LIVE for the owner: SHIP 5ab09e1c + KLHook.ini [Voice] PlainData=1 (md5
-CBA52979, undo <work>\build\plaindata_1024\UNDO PlainData voices.bat); data on DD01-DD09. PD4 (TEST twin) PASS 108 lines, 0 faults.
-DM maps + T01 voice data built on G: but NOT installed (+4.5 GB on C:): owner's call. [Names] stays off.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
