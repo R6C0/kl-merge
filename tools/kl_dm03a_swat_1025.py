@@ -562,7 +562,7 @@ def check(zp, log=print):
 # ------------------------------------------------------------------ installer (kl_dm02_assault_1025's, renamed)
 PS1 = AS.PS1.replace('assault.json', 'swat.json').replace('assault.ps1', 'swat.ps1').replace("'%s'" % AS.TAG, "'%s'" % TAG).replace(
     'SWAT shutter assault (tools/kl_dm02_assault_1025.py, 2026-10-25)', 'DM03A SWAT kick-door squad + gas canisters (tools/kl_dm03a_swat_1025.py, 2026-10-25)').replace(
-    'DM02 mall', 'DM03A bank').replace('Chained on shops A: the live md5 must be exactly the pinned one.', 'Chained on the installed kick doors / extinguishers: the live md5 must be exactly the pinned one.')
+    'DM02 mall', 'DM03A bank').replace('Chained on shops A: the live md5 must be exactly the pinned one.', 'Chained on the installed kick doors / extinguishers: the live md5 must be exactly the pinned one.').replace('Maps'+chr(92)+'DM02'+chr(92)+'F02_Main.zip', 'Maps'+chr(92)+'DM03A'+chr(92)+'F07_Main.zip').replace('F02_Main.zip.before-1024shops', 'F07_Main.zip'+TAG)
 BAT = AS.BAT.replace('assault.ps1', 'swat.ps1')
 
 

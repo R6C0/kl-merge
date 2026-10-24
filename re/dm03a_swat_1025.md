@@ -11,3 +11,8 @@ Stage `C:/kl_build_1024/dm03aswat_1025a`: F07_Main.zip 3d4ae43a -> 7852abd9, INS
   Budget unchanged: 106 actors / 54 squads. Doors 2..5 are on a cut-off nav island: not wired.
 - Unproven: an Enemy-team squad using KickDoorBehaviourRout on a grafted door (F03 proof is for its own bots), PosInfo placement, the 75 s timer
   (no alarm node exists), the nav mesh is open through the closed door (cops may just walk through), gas explosion in game, silent-lights guess.
+
+Adversarial verify (2026-10-25): READY. Semantic diff vs live: only Wave_D08 removed, KL_SWAT/KL_Gas added, AIMonitor start list +1 (T_Start), Go_D08 list cut; no existing node moved.
+Map facts for the owner: KL_Door_1 is E-W at z -6041 between the N-S corridor strip (x -1010..-910) and the room; the strip ALSO joins the room by an open
+60 cm connector at z -6120..-6180, so the door is not the only way (cops may walk round). The parked cells (z -6243/-6283) are 100+ cm south of that connector
+behind a wall edge: hidden from the room, visible only from the junction at x < -900. F03's PosInfo sits 26-30 cm from ArrowBack toward ArrowFront; ours is ON the arrow (kept: the offset cell falls off the mesh edge).
