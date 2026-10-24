@@ -26,6 +26,11 @@ back + 'doubtful' KM boxes renamed off (tools/kl_cover_restore.py, kl_cover_add2
 hook k30cov = klunstick.c [Unstick] (F7 or auto after 4 s held still in cover -> back to last free place; offsets GUESSed). CLIMB: only maps with the
 .ANM slots /Movement/Climb/Up/* work; DD01..DD09, DM01B, DM05A, DM06B, DM11B lacked them -> tools/kl_climb_stage.py (players-only, DM01B/05A/06B/11B
 built on the cover3 zips). Staged in <work>\build\cover_1024b (INSTALL/UNDO cover3.bat, climb\INSTALL/UNDO climb3.bat, hook\INSTALL hook k30cov.bat), md5-checked, rehearsed on scratch.
+2026-10-24 18:05 - INSTALLED (owner 'install the fix'): hook v30 SHIP e90d42c0 (k29d + klvoice KeepStock, 9f8d8ac69) over k29d e02300df,
+backup <DD>\dinput8.dll.before-v30. Ini unchanged (dd063022, Announcer=1). Expect 'voice: <leaf> is an announcement: left stock' lines;
+briefing/escape/AllDead no longer '-> KLVoice/..'. Open: whether a human cop hears FA_AllDead when the crew dies (unverified);
+DD01-09 'amateurs' wording needs stock-map edits (owner OK).
+
 2026-10-24 17:50 - INSTALLED (owner 'install that version'): Dead Men shop restyle on DM01 only (tools/kl_shop_dm.py, c36f1112a):
 chalk focus bars, steel panels, red headline/name, DMG/ROF/MAG/RNG stat block in the hover text. DM01 F01_Main.zip dcb70db9 -> 011fc9bb,
 backup .before-1024shopdm, undo <work>\build\shop_dm_1024\UNDO shop DM DM01.bat. Texture 1202 = also the pause/end-round focus bar.
