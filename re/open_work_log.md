@@ -1,3 +1,13 @@
+2026-10-24 19:50 - STAGED, NOT INSTALLED: hook k33 (SHIP e1bfca9a5ee0290d58a042eca85f8ab8, TEST 05e4e9453a09b920993e5ca20520c93f) = k32 + CamSmooth stance stage
+(87625b6a0, 1ffa99436): owner 'one second hes crouched, next frame hes just straight running'. klcamsmooth's pose detector watches eye-over-pivot,
+which does not change when the PIVOT pops 15-55 cm; the 60 ms pivot follower still moved 10-26 cm/frame. New last stage: feet-relative pivot step
+> StanceCm=6 -> critically damped takeover over StanceMs=280 (tools/sim_camsmooth.py: 50 cm pop -> 2.2/3.9/6.2 cm per frame at 240/144/60 fps; no
+lag while running). C:/kl_build_1019/k33_1024d (installer adds StanceMs/StanceCm to [CamSmooth]; undo rehearsed on copies, byte-identical). Body
+pop (static RE): ZFFPlayer has no crouch->run transition clip (Crouch_To_Run ids used only by ZFFActor AI); ZFFPlayerMovementBaseMove::update
+0x7a43e0 commits the gait after a 1-frame debounce (0xce977c=1) and clip selector 0x5abbb0 writes the new loop into [+0x58] at 0x5ac802, no
+crossfade found. Our hook does not cause it. klstance.c (camera only, guessed [P+0x6b4] offsets, would double-smooth) parked on worktree branch
+worktree-wf_8a23b709-eff-1 (72d8928c9).
+
 2026-10-24 19:05 - STAGED, NOT INSTALLED: combined hook k32 (SHIP 8a99179b, TEST 0a03f965; k31x superseded) = [HUD] HideIdleEscape (van card hidden at 00:00 with no vehicle) + v30 (e8 KeepStock, LIVE since ~18:30) + [Unstick]
 + [Shield] + klfps swap-chain Present fix + [Censor] Late/Player + [Dying] (you: Dry=1 log only; heisters hold fire) + [CamSmooth] (aim-out
 ease, DtFix) + [ClubCalm] probe (off). C:/kl_build_1019/k32_1024c/INSTALL k32.bat (live must be k29d or v30; undo rehearsed byte-identical).

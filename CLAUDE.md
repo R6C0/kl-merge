@@ -66,6 +66,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 19:50 - STAGED, NOT INSTALLED: hook k33 (SHIP e1bfca9a, TEST 05e4e945) = k32 + [CamSmooth] StanceMs=280 (crouch/stand/run
+camera-height pop eased; sim 50 cm pop -> 2.2 cm/frame at 240 fps). C:/kl_build_1019/k33_1024d/INSTALL k33.bat supersedes k32 (undo
+rehearsed byte-identical). Body pop NOT fixed: the player has no crouch->run transition clip, the clip swaps in one frame (0x7a43e0 ->
+0x5abbb0); klstance.c (worktree wf_8a23b709-eff-1, guessed offsets) parked. Vehicle never-explodes job running.
+
 2026-10-24 19:05 - STAGED, NOT INSTALLED: combined hook k32 (SHIP 8a99179b, TEST 0a03f965; k31x superseded) = [HUD] HideIdleEscape (van card hidden at 00:00 with no vehicle) + v30 (e8 KeepStock, LIVE since ~18:30) + [Unstick]
 + [Shield] + klfps swap-chain Present fix + [Censor] Late/Player + [Dying] (you: Dry=1 log only; heisters hold fire) + [CamSmooth] (aim-out
 ease, DtFix) + [ClubCalm] probe (off). C:/kl_build_1019/k32_1024c/INSTALL k32.bat (live must be k29d or v30; undo rehearsed byte-identical).
