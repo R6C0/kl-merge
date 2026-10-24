@@ -58,6 +58,7 @@
  * PRESETS (owner 2026-10-24 'have 4 different options: 240fps, 120fps, 60fps, 30fps'): auto takes the highest of 240 / 120 / 60 / 30
  * that is <= the refresh rate (klfps_preset); tools\kl_mod_options.py offers exactly those four. Fps=N by hand still takes any 10 .. 1000.
  * Keys ([FrameLimit]):  Enable=1 (recommended on; 0 = nothing is wrapped)   Fps=0 (0 = auto, see above; 10 .. 1000)
+ *   Adaptive=0 (k30fps; 1 = pacing follows the machine's own frame time, see klfps_pace; experimental, not recommended)
  *   FrontEdge=1 (recommended on)   PassiveWait=0 (recommended off = busy loop)   Log=0 (1 = a line every 10 s: presents, fps,
  *   frametime avg / min / max, count over 33 ms, share of the frame spent waiting)
  * Read once at start. NOT RUN IN THE GAME: compiled and type-checked only.
@@ -72,12 +73,27 @@ typedef HRESULT (WINAPI *klfps_present_fn)(void *self, const RECT *src, const RE
 static klfps_create9_fn   klfps_real_create9;
 static klfps_createdev_fn klfps_real_createdev;
 static klfps_present_fn   klfps_real_present;
+typedef HRESULT (WINAPI *klfps_present_sc_fn)(void *self, const RECT *src, const RECT *dst, HWND wnd, const void *dirty, DWORD flags);
+static klfps_present_sc_fn klfps_real_present_sc;
+static int klfps_seen;                          /* the first Present was logged */
 static int  klfps_enable = 1, klfps_fps_ini, klfps_front = 1, klfps_passive, klfps_log;
 static int  klfps_target;                       /* frames per second now enforced; 0 = timing only */
 static int  klfps_auto_hz, klfps_vsync;         /* what the device said */
 static LONGLONG klfps_freq, klfps_period, klfps_rem, klfps_acc, klfps_deadline;
 static LONGLONG klfps_last_present, klfps_t0, klfps_sum, klfps_min, klfps_max, klfps_wait_sum;
 static long klfps_n, klfps_over33;
+/* k30fps (2026-10-24, owner: 'framerate doesnt feel exactly smooth'). The owner's game free-runs at 153 .. 251 fps with a 240 cap:
+ * the cap only binds on the fast frames, so the SPREAD stays. ADAPTIVE PACING: pace = a running estimate of how long the game needs
+ * per frame (rises fast, falls slowly); a frame is never presented earlier than pace after the previous one, so the screen sees an even
+ * rhythm just below what the machine can do, instead of 150 / 250 / 160 / 240. SIMULATED RESULT (tools\sim_pace.py): frame spread -7 %, average -7 % fps - a small gain for a real cost, so it is OFF by default and NOT
+ * recommended; the per-frame jitter of a free-running game cannot be pacing-corrected without queueing frames (latency). Kept as an experiment. GUESS:
+ * the 0.05 / 0.01 gains and the 1.5x hitch clamp are chosen by an offline simulation (tools\sim_pace.py), not from a play test. */
+static int  klfps_adaptive;                     /* [FrameLimit] Adaptive (code default 0 = off, not recommended, see above) */
+static int  klfps_in;                           /* reentrancy guard: Present called from inside our own Present */
+static LONGLONG klfps_pace, klfps_ret, klfps_pace_sum;
+static long klfps_pace_n, klfps_wd, klfps_resets;
+typedef HRESULT (WINAPI *klfps_reset_fn)(void *self, void *pp);
+static klfps_reset_fn klfps_real_reset;
 
 /* owner 2026-10-24: four presets 240 / 120 / 60 / 30; auto = the highest one the screen shows (144 Hz -> 120, 75 Hz -> 60) */
 static int klfps_preset(int hz)
@@ -97,13 +113,16 @@ static void klfps_set_target(void)
     klfps_acc = 0; klfps_deadline = 0;
 }
 
-/* wait (busy, optional coarse sleep) until QPC >= until; returns the counter then */
+/* wait (busy, optional coarse sleep) until QPC >= until; returns the counter then. WATCHDOG: never longer than 200 ms in one call
+ * (a corrupt deadline after a clock jump or a Reset must not freeze the render thread); counted in klfps_wd and logged. */
 static LONGLONG klfps_spin(LONGLONG until)
 {
-    LARGE_INTEGER n;
+    LARGE_INTEGER n; LONGLONG cap = 0;
     for (;;) {
         QueryPerformanceCounter(&n);
         if (n.QuadPart >= until) return n.QuadPart;
+        if (!cap) cap = n.QuadPart + klfps_freq / 5;
+        if (n.QuadPart >= cap) { klfps_wd++; klfps_deadline = 0; return n.QuadPart; }
         if (klfps_passive && (until - n.QuadPart) * 1000 > klfps_freq * 5 / 2) Sleep(1);
         else YieldProcessor();
     }
@@ -115,7 +134,23 @@ static LONGLONG klfps_step(void)
     LONGLONG p = klfps_period;
     klfps_acc += klfps_rem;
     if (klfps_acc >= klfps_target) { klfps_acc -= klfps_target; p++; }
+    if (klfps_adaptive && klfps_pace > p) p = klfps_pace;          /* never faster than the machine's own rhythm */
     return p;
+}
+
+/* adaptive pacing: feed the time the game needed for the frame that is arriving (previous Present's return -> this Present's entry).
+ * Rises with gain 0.05, falls with 0.01; one sample is clamped to 1.5x the current estimate (a 50 ms hitch must not set the rhythm);
+ * the estimate lives between the cap's period and 1/30 s. Integer arithmetic only. */
+static void klfps_pace_feed(LONGLONG work)
+{
+    LONGLONG lo = klfps_period, hi = klfps_freq / 30, ref = klfps_pace > lo ? klfps_pace : lo;
+    if (work > ref * 3 / 2) work = ref * 3 / 2;
+    if (!klfps_pace) klfps_pace = work > lo ? work : lo;
+    else if (work > klfps_pace) klfps_pace += (work - klfps_pace) * 5 / 100;
+    else klfps_pace -= (klfps_pace - work) * 1 / 100;
+    if (klfps_pace < lo) klfps_pace = lo;
+    if (klfps_pace > hi) klfps_pace = hi;
+    klfps_pace_sum += klfps_pace; klfps_pace_n++;
 }
 
 /* hold until the slot; called before (front edge) or after (back edge) the original Present */
@@ -127,7 +162,7 @@ static void klfps_wait(void)
     if (!klfps_deadline) klfps_deadline = t;
     if (t < klfps_deadline) { LONGLONG w0 = t; t = klfps_spin(klfps_deadline); klfps_wait_sum += t - w0; }
     klfps_deadline += klfps_step();
-    if (t > klfps_deadline) klfps_deadline = t + klfps_period;     /* arrived more than one period after its slot (the new D is already past): resync, no burst */
+    if (t > klfps_deadline) klfps_deadline = t + (klfps_adaptive && klfps_pace > klfps_period ? klfps_pace : klfps_period);     /* arrived more than one period after its slot (the new D is already past): resync, no burst */
 }
 
 static void klfps_stat(LONGLONG now)
@@ -143,22 +178,60 @@ static void klfps_stat(LONGLONG now)
     if (!klfps_t0) klfps_t0 = now;
     if (klfps_log && now - klfps_t0 >= klfps_freq * 10 && klfps_n) {
         double secs = (double)(now - klfps_t0) / (double)klfps_freq, ms = 1000.0 / (double)klfps_freq;
-        klog("fps: limiter: %ld presents in %.1f s = %.1f fps (target %d%s); frametime avg %.2f min %.2f max %.2f ms; %ld over 33 ms; waiting %.1f %% of the time",
+        klog("fps: limiter: %ld presents in %.1f s = %.1f fps (target %d%s); frametime avg %.2f min %.2f max %.2f ms; %ld over 33 ms; waiting %.1f %% of the time; adaptive %s pace %.2f ms; watchdog %ld resets %ld",
              klfps_n, secs, klfps_n / secs, klfps_target, klfps_target ? "" : " = off, timing only",
              (double)klfps_sum * ms / klfps_n, (double)klfps_min * ms, (double)klfps_max * ms, klfps_over33,
-             100.0 * (double)klfps_wait_sum / (double)(now - klfps_t0));
+             100.0 * (double)klfps_wait_sum / (double)(now - klfps_t0),
+             klfps_adaptive ? "on" : "off", klfps_pace_n ? (double)klfps_pace_sum * ms / klfps_pace_n : 0.0, klfps_wd, klfps_resets);
+        klfps_pace_sum = 0; klfps_pace_n = 0;
         klfps_t0 = now; klfps_n = 0; klfps_sum = klfps_min = klfps_max = 0; klfps_over33 = 0; klfps_wait_sum = 0;
     }
 }
 
+/* the two halves of one Present, shared by the device route (slot 17) and the swap chain route (slot 3). klfps_pre returns 0 when this is a
+ * nested call (the guard): then nothing is timed and the caller just forwards. */
+static int klfps_pre(const char *route)
+{
+    LARGE_INTEGER n;
+    if (klfps_in) return 0;                                   /* reentrancy: someone below called back up a vtable */
+    klfps_in = 1;
+    if (!klfps_seen) { klfps_seen = 1; klog("fps: FIRST Present seen, via the %s route", route); }
+    QueryPerformanceCounter(&n);
+    if (klfps_adaptive && klfps_target > 0 && klfps_ret) klfps_pace_feed(n.QuadPart - klfps_ret);
+    if (klfps_front) klfps_wait();                            /* FRONT EDGE: the delay is the last thing before the original Present */
+    QueryPerformanceCounter(&n);
+    klfps_stat(n.QuadPart);                                   /* frametime at PRESENTATION */
+    return 1;
+}
+
+static void klfps_post(void)
+{
+    LARGE_INTEGER n;
+    if (!klfps_front) klfps_wait();                           /* back edge: the same wait after Present returned */
+    QueryPerformanceCounter(&n); klfps_ret = n.QuadPart;
+    klfps_in = 0;
+}
+
 static HRESULT WINAPI klfps_present(void *self, const RECT *src, const RECT *dst, HWND wnd, const void *dirty)
 {
-    HRESULT r; LARGE_INTEGER n;
-    if (klfps_front) klfps_wait();                    /* FRONT EDGE: the delay is the last thing before the original Present */
-    QueryPerformanceCounter(&n);
-    klfps_stat(n.QuadPart);                           /* frametime at PRESENTATION */
+    HRESULT r;
+    if (!klfps_pre("device (slot 17)")) return klfps_real_present(self, src, dst, wnd, dirty);
     r = klfps_real_present(self, src, dst, wnd, dirty);
-    if (!klfps_front) klfps_wait();                   /* back edge: the same wait after Present returned */
+    klfps_post();
+    return r;
+}
+
+/* IDirect3DSwapChain9::Present (slot 3) has one more argument (dwFlags). 2026-10-24 FINDING: the k29d log of a whole 8 minute session
+ * (15:59 .. 16:07) has the 'fps: on' and 'Present wrapped' lines but NOT ONE 'fps: limiter:' line (Log=1: every 10 s), and the hitch probe's
+ * stack scan shows KL2.exe -> gameoverlayrenderer -> ReShade32 with no DINPUT8 return address in between: the game never went through
+ * the device vtable slot that klfps wrapped. So the game presents on its implicit SWAP CHAIN (GUESS, to be read from the next log: the
+ * 'FIRST Present seen, via the ... route' line says which wrapper is real). Both are wrapped; the guard keeps a nested call from being counted twice. */
+static HRESULT WINAPI klfps_present_sc(void *self, const RECT *src, const RECT *dst, HWND wnd, const void *dirty, DWORD flags)
+{
+    HRESULT r;
+    if (!klfps_pre("swap chain (slot 3)")) return klfps_real_present_sc(self, src, dst, wnd, dirty, flags);
+    r = klfps_real_present_sc(self, src, dst, wnd, dirty, flags);
+    klfps_post();
     return r;
 }
 
@@ -174,24 +247,52 @@ static void klfps_wrap_slot(void *obj, int slot, void *mine, void **real, const 
     klog("fps: %s wrapped (vtable %p slot %d, was %p)", what, (void *)vt, slot, cur);
 }
 
+/* refresh rate + vsync from a D3DPRESENT_PARAMETERS (CreateDevice and Reset) and a new target */
+static void klfps_read_pp(const void *pp)
+{
+    DWORD hz = 0, interval = 0; DEVMODEA dm; const DWORD *p = (const DWORD *)pp;
+    if (p) { hz = p[0x30 / 4]; interval = p[0x34 / 4]; }      /* D3DPRESENT_PARAMETERS +0x30 FullScreen_RefreshRateInHz, +0x34 PresentationInterval (klsolo.c) */
+    if (!hz || hz > 1000) {
+        /* user32 is not on the build's link line: looked up (the game has it loaded) */
+        typedef BOOL (WINAPI *eds_fn)(LPCSTR, DWORD, DEVMODEA *);
+        HMODULE u = GetModuleHandleA("user32.dll"); eds_fn eds = u ? (eds_fn)GetProcAddress(u, "EnumDisplaySettingsA") : 0;
+        memset(&dm, 0, sizeof dm); dm.dmSize = sizeof dm;
+        hz = (eds && eds(0, ENUM_CURRENT_SETTINGS, &dm)) ? dm.dmDisplayFrequency : 0;
+    }
+    if (hz <= 1 || hz > 1000) hz = 60;                         /* 0 / 1 = 'hardware default' in DEVMODE */
+    klfps_auto_hz = (int)hz;
+    klfps_vsync = (interval != 0x80000000u);                   /* 0 DEFAULT = ONE, 1..4 = vblank multiples, 0x80000000 = IMMEDIATE */
+    klfps_set_target();
+    klfps_pace = 0; klfps_ret = 0; klfps_last_present = 0;
+}
+
+/* IDirect3DDevice9::Reset (slot 16): the options menu / alt-tab rebuilds the device, maybe at another refresh rate or vsync setting.
+ * The target is re-read from the new parameters and the pacing restarts (the deadline would be stale). The real Reset runs first. */
+static HRESULT WINAPI klfps_reset(void *self, void *pp)
+{
+    HRESULT r = klfps_real_reset(self, pp);
+    klfps_resets++;
+    if (r >= 0) { klfps_read_pp(pp); klog("fps: Reset ok: refresh %d Hz, game vsync %s, target %d fps", klfps_auto_hz, klfps_vsync ? "ON" : "off", klfps_target); }
+    else { klfps_deadline = 0; klfps_pace = 0; klfps_ret = 0; }
+    return r;
+}
+
 static HRESULT WINAPI klfps_createdev(void *self, UINT adapter, DWORD type, HWND focus, DWORD flags, void *pp, void **dev)
 {
     HRESULT r = klfps_real_createdev(self, adapter, type, focus, flags, pp, dev);
     if (r >= 0 && dev && *dev) {
-        DWORD hz = 0, interval = 0; DEVMODEA dm; const DWORD *p = (const DWORD *)pp;
-        if (p) { hz = p[0x30 / 4]; interval = p[0x34 / 4]; }      /* D3DPRESENT_PARAMETERS +0x30 FullScreen_RefreshRateInHz, +0x34 PresentationInterval (klsolo.c) */
-        if (!hz || hz > 1000) {
-            /* user32 is not on the build's link line: looked up (the game has it loaded) */
-            typedef BOOL (WINAPI *eds_fn)(LPCSTR, DWORD, DEVMODEA *);
-            HMODULE u = GetModuleHandleA("user32.dll"); eds_fn eds = u ? (eds_fn)GetProcAddress(u, "EnumDisplaySettingsA") : 0;
-            memset(&dm, 0, sizeof dm); dm.dmSize = sizeof dm;
-            hz = (eds && eds(0, ENUM_CURRENT_SETTINGS, &dm)) ? dm.dmDisplayFrequency : 0;
-        }
-        if (hz <= 1 || hz > 1000) hz = 60;                         /* 0 / 1 = 'hardware default' in DEVMODE */
-        klfps_auto_hz = (int)hz;
-        klfps_vsync = (interval != 0x80000000u);                   /* 0 DEFAULT = ONE, 1..4 = vblank multiples, 0x80000000 = IMMEDIATE */
-        klfps_set_target();
+        klfps_read_pp(pp);
+        klfps_wrap_slot(*dev, 16, (void *)klfps_reset, (void **)&klfps_real_reset, "Reset");
         klfps_wrap_slot(*dev, 17, (void *)klfps_present, (void **)&klfps_real_present, "Present");
+        {   /* the implicit swap chain: IDirect3DDevice9::GetSwapChain (slot 14), then its Release (slot 2) */
+            typedef HRESULT (WINAPI *gsc_fn)(void *, UINT, void **); typedef ULONG (WINAPI *rel_fn)(void *);
+            void **dvt = *(void ***)*dev, *sc = 0;
+            HRESULT hr = ((gsc_fn)dvt[14])(*dev, 0, &sc);
+            if (hr >= 0 && sc) {
+                klfps_wrap_slot(sc, 3, (void *)klfps_present_sc, (void **)&klfps_real_present_sc, "SwapChain Present");
+                ((rel_fn)(*(void ***)sc)[2])(sc);
+            } else klog("fps: GetSwapChain(0) failed (%08lx): swap chain Present not wrapped", (unsigned long)hr);
+        }
         klog("fps: device %p: refresh %d Hz, game vsync %s, target %d fps%s; %s edge, %s wait", *dev, klfps_auto_hz,
              klfps_vsync ? "ON" : "off", klfps_target, klfps_target ? "" : " (timing only: game vsync paces it, or set Fps=)",
              klfps_front ? "front" : "back", klfps_passive ? "passive+busy" : "busy");
@@ -218,6 +319,7 @@ static void klfps_init(void)
     klfps_front   = GetPrivateProfileIntA("FrameLimit", "FrontEdge", 1, klh_ini) != 0;
     klfps_passive = GetPrivateProfileIntA("FrameLimit", "PassiveWait", 0, klh_ini) != 0;
     klfps_log     = GetPrivateProfileIntA("FrameLimit", "Log", 0, klh_ini) != 0;
+    klfps_adaptive = GetPrivateProfileIntA("FrameLimit", "Adaptive", 0, klh_ini) != 0;
     QueryPerformanceFrequency(&f); klfps_freq = f.QuadPart;
     if (klfps_passive) {                                            /* Sleep(1) is only useful with a 1 ms timer */
         typedef DWORD (WINAPI *tbp_fn)(UINT); HMODULE m = LoadLibraryA("winmm.dll"); tbp_fn tbp = m ? (tbp_fn)GetProcAddress(m, "timeBeginPeriod") : 0;
@@ -225,8 +327,8 @@ static void klfps_init(void)
     }
     if (!klh_iat("d3d9.dll", "Direct3DCreate9", (void *)klfps_create9, (void **)&klfps_real_create9))
         klog("fps: d3d9.dll!Direct3DCreate9 import not wrapped - no frame limiter");
-    else klog("fps: on (Fps=%d%s, FrontEdge=%d, PassiveWait=%d, Log=%d); Direct3DCreate9 wrapped (was %p)", klfps_fps_ini, klfps_fps_ini ? "" : " = auto",
-              klfps_front, klfps_passive, klfps_log, (void *)klfps_real_create9);
+    else klog("fps: on (Fps=%d%s, FrontEdge=%d, PassiveWait=%d, Log=%d, Adaptive=%d); Direct3DCreate9 wrapped (was %p)", klfps_fps_ini, klfps_fps_ini ? "" : " = auto",
+              klfps_front, klfps_passive, klfps_log, klfps_adaptive, (void *)klfps_real_create9);
 }
 
 #endif /* KLFPS_C */

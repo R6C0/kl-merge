@@ -1,3 +1,12 @@
+2026-10-24 16:20 - FRAME FEEL + SKY (owner: 'framerate not smooth', 'sky so damn bright'). FOUND: the k29d limiter NEVER RAN. KLHook.log 15:59-16:07
+has 'fps: on' + 'Present wrapped (slot 17)' but zero 'fps: limiter:' lines (Log=1 = every 10 s), and the hitch-probe stacks go KL2 -> gameoverlayrenderer ->
+ReShade32 with no DINPUT8 frame: the game presents on the swap chain, not the device vtable slot. klfps.c now also wraps IDirect3DSwapChain9::Present
+(slot 3, via GetSwapChain(0)) + device Reset (re-reads Hz/vsync), 200 ms watchdog, reentrancy guard, 'FIRST Present seen, via the ... route' log line;
+Adaptive=1 (experimental, OFF) simulated in tools/sim_pace.py: -7 % spread for -7 % fps, not recommended. Built k30fps SHIP AEB50A38 / TEST 215649E4.
+SKY: KL_Camcorder bloom (curve 2.5, 0.55) on sky luma ~0.85 + contrast clip -> flat white. Shader got HighlightKnee/White shoulder + SkyBloomCut
+(neutral defaults); preset Bloom .45, Curve 3.0, Contrast 1.10, knee .60, white .88, cut .70 (sky ~1.0 -> ~0.80, fxc ps_3_0 compiles). Mod options: lookkl
+row (Look 1/2 exclusive), adaptive row. Staged <work>\build\fps_1024b (hook / sky / diag parts, rehearsed on a scratch copy, undo byte-identical).
+NOT installed, not run in the game (owner playing). The live KLHook.ini already has Neural=0.
 2026-10-24 17:30 - HUMAN SHIELD REWORK (owner: 'useless, you die as quick, an AI heister hostage is useless'): new klhook/klshield.c [Shield]. READ: the player's hold = 0x4d7b00
 ([player+0xad0] = victim, [player+0xad4] = player); no code shares damage with the victim; the soldier's down (0x70e0e0) has no 'held' refusal. Does: Absorb 65 % of every
 hit back to you (hostage pays x2 of his health, never killed by it), hostage floored at 35 % health, the man you let go is floored. Hold fields logged at each hold.

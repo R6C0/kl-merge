@@ -66,6 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 16:20 - FRAME LIMITER NEVER RAN (k29d log 15:59-16:07: no 'fps: limiter:' line, game presents on the swap chain). k30fps wraps swap chain
+Present + Reset (SHIP AEB50A38), sky retune in KL_Camcorder (shoulder + sky bloom cut). Staged <work>\build\fps_1024b (INSTALL k30fps hook / sky preset /
+hitch probe 25ms .bat, rehearsed on a copy). Not installed or run; next log should show 'fps: FIRST Present seen, via the ... route'.
+
 2026-10-24 18:10 - STUCK-IN-COVER + CLIMB, STAGED OFFLINE (not installed, not run): cause inferred = rev2 stripped hazard NoCoverBox + cover2 boxes in those zones.
 <work>\build\cover_1024b: cover3 (hazard markers back, doubtful boxes off), climb3 (.ANM climb clips for DD01-09, DM01B/05A/06B/11B), hook k30cov
 ([Unstick], F7). Order: cover3, then climb3, then hook. Details and GUESSes: re/open_work_log.md.
@@ -80,11 +84,6 @@ Dry=0) and [Voice] Announcer=0 (e8's untested change); + cover2_1024 extra cover
 unsolved). Not live-tested. Staged-only detail (15:30): rev_1024 = HC2 garage door goes with the blast + NoCoverBox
 stripped on 11 DM maps (INSTALL cover nocoverbox.bat, md5-checked) and hook k29b [CarDown] (car blast = revivable down; offsets
 guessed, test Dry=1 first). Wreck cover + more cover boxes running (-> build\cover2_1024). Hire tab: e8's re/shop_hire.md.
-
-2026-10-24 13:18 - RETOMOTO LIFT AS A HEISTER: the owner's log (12:28:39..12:29:06) shows 3 rides CANCELLED - with the car shut he walked
-the hall (z down to -1434) and left box 9 by more than Slack 150, so CarWait/CarFallback never carried him. INSTALLED DM09 KLJoin.ini
-Slack=1500 (md5 acdc8e12, backup KLJoin.ini.before-1024slack; generator 413a95394). NOT verified live: LIFT14 (= his walk,
-<work>\build\klhook\live\LIFT14.ini) skipped, owner active. Doors still shut for him: cause open (probe hook LIFT10/11 fired fine).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

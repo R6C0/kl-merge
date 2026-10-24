@@ -49,7 +49,8 @@ Note: the Recommended button would flip the owner's live Neural from 1 to 0 (the
 | voice | Dead Men voice lines for the Dead Men heisters | [Voice] Enable=1/0 | on (Enable=1) | on | next start | owner 2026-10-23; PlainData live-tested 2026-10-24 |
 | music | Payday 2 music jukebox (needs Payday 2) | [Music] Enable=1/0 | off (Enable=0) | off | next start | it made the game stutter (owner 2026-10-23: gone with it off); Retomoto keeps its own music either way |
 | | **Graphics and camera** | | | | | |
-| reshade | ReShade look (LiveLeak camcorder) | [Graphics] Look=2/0 | on (Look=2) | on | next start | the look the owner chose (Look=2); ReShade is on the stack at some hitches, so off = full frame rate |
+| reshade | ReShade look 2: LiveLeak camcorder (sky softened by the 1024b preset) | [Graphics] Look=2/0 | Look=2 exactly (the two look rows exclude each other; both unticked = Look=0, ReShade off) | on | next start | the look the owner chose (Look=2); ReShade is on the stack at some hitches, so off = full frame rate |
+| lookkl | ReShade look 1: the older KL look (adaptive sky, glare) | [Graphics] Look=1/0 | Look=1 exactly | off | next start | Look=1; has its own adaptive sky; untick both look rows = ReShade off (full frame rate) |
 | camerafx | Camera FX (distortion with shots and hits) | [Graphics] CameraFX=3/0 | on (CameraFX=3) | on | next start | also a live row in the game: Options > Mod settings (strong = 3) |
 | glare | Lens glare | [Graphics] Glare=1/0 | on (Glare=1) | on | next start | also a live row in Mod settings |
 | aa | Anti-aliasing (SMAA) | [Graphics] AA=1/0 | on (AA=1) | on | next start | also a live row in Mod settings |
@@ -62,6 +63,7 @@ Note: the Recommended button would flip the owner's live Neural from 1 to 0 (the
 | fps30 | Frame limiter 30 fps (RTSS-style, removes frame-time stutter) | [FrameLimit] Fps=30 + Enable=1 (unticking all four = Enable=0) | auto (Fps=0) = the highest preset <= the screen refresh | on if the screen shows it and no higher preset fits, else off | next start (k29d DLL) | owner 2026-10-24: four presets 240/120/60/30, one at a time; recommended = the highest the screen shows (NOT RUN IN THE GAME yet) |
 | frontedge | Limiter: front edge sync (wait just before Present) | [FrameLimit] FrontEdge=1/0 | on (FrontEdge=1, absent = DLL default) | on | next start (k29c DLL; before it is installed the key does nothing) | the RTSS setting the owner uses; off = back edge (older picture, not recommended) |
 | passivewait | Limiter: passive waiting (Sleep instead of a busy loop) | [FrameLimit] PassiveWait=1/0 | off (PassiveWait=0, absent = DLL default) | off | next start (k29c DLL; before it is installed the key does nothing) | the RTSS setting the owner uses (false): busy loop = no scheduler jitter, costs one core a few ms a frame |
+| adaptive | Limiter: adaptive pacing (follow the machine own frame time) - experimental | [FrameLimit] Adaptive=1/0 | off (Adaptive=0, absent = DLL default) | off | next start (k30fps DLL only) | simulated (tools/sim_pace.py): about -7 % frame spread for -7 % fps, so not recommended |
 | | **Stability and fixes** | | | | | |
 | flash | Flash the taskbar when a load or round ends | [QoL] FlashOnReady=1/0 | on (FlashOnReady=1) | on | next start | in the owner's live ini (he alt-tabs during the 60..120 s loads) |
 | releasecursor | Release the mouse when the game loses focus | [QoL] ReleaseCursor=1/0 | on (ReleaseCursor=1) | on | next start | in the owner's live ini |

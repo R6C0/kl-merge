@@ -105,8 +105,13 @@ feat('announcer', G_AV, 'Announcer first: a one-recording Dead Men line stays th
 feat('music', G_AV, 'Payday 2 music jukebox (needs Payday 2)', 'off', 'start',
      'it made the game stutter (owner 2026-10-23: gone with it off); Retomoto keeps its own music either way', [('Music', 'Enable', 1, 0, 0)])
 
-feat('reshade', G_GFX, 'ReShade look (LiveLeak camcorder)', 'on', 'start',
+# the look choice (k30fps, owner 2026-10-24): Off / KL look / LiveLeak are three values of ONE key, so two exclusive rows: untick both = Off.
+feat('reshade', G_GFX, 'ReShade look 2: LiveLeak camcorder (sky softened by the 1024b preset)', 'on', 'start',
      'the look the owner chose (Look=2); ReShade is on the stack at some hitches, so off = full frame rate', [('Graphics', 'Look', 2, 0, 1)])
+F[-1]['exact'] = True; F[-1]['excl'] = 'look'
+feat('lookkl', G_GFX, 'ReShade look 1: the older KL look (adaptive sky, glare)', 'off', 'start',
+     'Look=1; has its own adaptive sky; untick both look rows = ReShade off (full frame rate)', [('Graphics', 'Look', 1, 0, 1)])
+F[-1]['exact'] = True; F[-1]['excl'] = 'look'
 feat('camerafx', G_GFX, 'Camera FX (distortion with shots and hits)', 'on', 'start',
      'also a live row in the game: Options > Mod settings (strong = 3)', [('Graphics', 'CameraFX', 3, 0, 1)])
 feat('glare', G_GFX, 'Lens glare', 'on', 'start', 'also a live row in Mod settings', [('Graphics', 'Glare', 1, 0, 1)])
@@ -142,6 +147,8 @@ feat('frontedge', G_GFX, 'Limiter: front edge sync (wait just before Present)', 
      'the RTSS setting the owner uses; off = back edge (older picture, not recommended)', [('FrameLimit', 'FrontEdge', 1, 0, 1)])
 feat('passivewait', G_GFX, 'Limiter: passive waiting (Sleep instead of a busy loop)', 'off', 'start',
      'the RTSS setting the owner uses (false): busy loop = no scheduler jitter, costs one core a few ms a frame', [('FrameLimit', 'PassiveWait', 1, 0, 0)])
+feat('adaptive', G_GFX, 'Limiter: adaptive pacing (follow the machine own frame time) - experimental', 'off', 'dll',
+     'k30fps DLL only; simulated (tools/sim_pace.py): -7 % frame spread for -7 % fps, so not recommended; needs a limiter preset', [('FrameLimit', 'Adaptive', 1, 0, 0)])
 
 feat('flash', G_STAB, 'Flash the taskbar when a load or round ends', 'on', 'start',
      "in the owner's live ini (he alt-tabs during the 60..120 s loads)", [('QoL', 'FlashOnReady', 1, 0, 0)])
@@ -236,13 +243,18 @@ def state(lines, f):
         return on, None
     sec, key, onv, offv, dflt = f['keys'][0]
     v = get_int(lines, sec, key, dflt)
+    if f.get('exact'):                                      # one value of a multi-value key (the look): on only when it IS this value
+        return v == onv, None
     return v != offv, (v if v not in (onv, offv) else None)
 
 
 def preset_conflict(wants):
     """More than one frame-limiter preset wanted on -> error text, else None."""
     on = [fid for fid, w in wants.items() if w and 'preset' in BY_ID[fid]]
-    return 'pick one frame limiter preset, not %s' % ' + '.join(on) if len(on) > 1 else None
+    if len(on) > 1:
+        return 'pick one frame limiter preset, not %s' % ' + '.join(on)
+    lk = [fid for fid, w in wants.items() if w and BY_ID[fid].get('excl') == 'look']
+    return 'pick one ReShade look, not %s' % ' + '.join(lk) if len(lk) > 1 else None
 
 
 def plan(lines, wants):
@@ -254,6 +266,8 @@ def plan(lines, wants):
         on, _ = state(lines, f)
         if on == want:
             continue
+        if f.get('excl') and not want and any(wants.get(o['id'], state(lines, o)[0]) for o in F if o.get('excl') == f['excl'] and o['id'] != fid):
+            continue                                        # another look is being switched on: its write replaces this value
         if 'preset' in f and not want:                      # unticked: the limiter goes off only when no other preset is ticked
             if not any(final.values()):
                 out.append(('FrameLimit', 'Enable', 0))
@@ -410,6 +424,8 @@ def gui(path, force):
         cmd = None
         if 'preset' in f:                                   # the four presets exclude each other
             cmd = (lambda me: lambda: vars_[me].get() and [vars_[o['id']].set(False) for o in F if 'preset' in o and o['id'] != me])(f['id'])
+        elif f.get('excl'):                                 # the two look rows exclude each other
+            cmd = (lambda me, g: lambda: vars_[me].get() and [vars_[o['id']].set(False) for o in F if o.get('excl') == g and o['id'] != me])(f['id'], f['excl'])
         ttk.Checkbutton(row, text='%s %s' % (f['label'], rec_text(f)), variable=v, command=cmd).pack(anchor='w')
         ttk.Label(row, text='%s - %s' % (when_text(f), f['why']), foreground='#666666', wraplength=780).pack(anchor='w', padx=(24, 0))
     load()

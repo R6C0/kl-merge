@@ -6,6 +6,11 @@
  * Not a copy of any of those shaders.
  * 2026-10-15 (worker fx): fmod() is not a ReShade FX intrinsic - the 2026-10-14 file did not compile, so the LiveLeak
  * preset showed no camcorder effect at all. The grain line now uses the % operator (same result).
+ * 2026-10-24 (owner: 'the sky is so damn bright'): the sky (luma about 0.85) fed the bloom bright pass at full strength and the contrast
+ * stretch then clipped it to flat white. Three new sliders, all NEUTRAL by default (the old look is unchanged unless a preset sets them):
+ * HighlightKnee / HighlightWhite = a soft shoulder on the final luma (above the knee it rolls off toward the white point instead of
+ * clipping), SkyBloomCut = less bloom on bright pixels in the upper part of the screen. GUESS: the sky is found by 'bright and high on
+ * the screen' (no depth buffer here); indoors a bright ceiling lamp is also eased a little, which is the same wish.
  */
 #include "ReShade.fxh"
 
@@ -19,6 +24,9 @@ uniform float AmbientCrush< ui_type = "slider"; ui_min = 0.0; ui_max = 1.0; ui_s
 uniform float Saturation  < ui_type = "slider"; ui_min = 0.0; ui_max = 2.0; ui_step = 0.01; ui_label = "Saturation"; > = 1.08;
 uniform float Contrast    < ui_type = "slider"; ui_min = 0.5; ui_max = 2.0; ui_step = 0.01; ui_label = "Contrast"; > = 1.12;
 uniform float Vignette    < ui_type = "slider"; ui_min = 0.0; ui_max = 1.0; ui_step = 0.01; ui_label = "Vignette"; > = 0.40;
+uniform float HighlightKnee < ui_type = "slider"; ui_min = 0.3; ui_max = 1.0; ui_step = 0.01; ui_label = "Highlight shoulder: starts at (1 = off)"; > = 1.0;
+uniform float HighlightWhite< ui_type = "slider"; ui_min = 0.6; ui_max = 1.0; ui_step = 0.01; ui_label = "Highlight shoulder: brightest white"; > = 1.0;
+uniform float SkyBloomCut < ui_type = "slider"; ui_min = 0.0; ui_max = 1.0; ui_step = 0.01; ui_label = "Less bloom on the bright sky (0 = off)"; > = 0.0;
 uniform int   FrameCount  < source = "framecount"; >;
 
 #define KLC_VW 1280
@@ -92,7 +100,9 @@ float3 PS_Final(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
     c += clamp(detail * Sharpen, -0.12, 0.12);
 
     /* bloom */
-    c += tex2D(KLC_Blur2, uv).rgb * Bloom;
+    float3 bl = tex2D(KLC_Blur2, uv).rgb * Bloom;
+    float sky = smoothstep(0.55, 0.80, dot(c, KLC_LUMA)) * (1.0 - smoothstep(0.30, 0.75, uv.y));
+    c += bl * (1.0 - SkyBloomCut * sky);
 
     /* the teal ambient: pull the shadows' blue-green cast toward neutral */
     float l = dot(c, KLC_LUMA);
@@ -100,7 +110,15 @@ float3 PS_Final(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
     c = lerp(c, l.xxx + (c - l.xxx) * 0.6, shadow * AmbientCrush * smoothstep(0.0, 0.08, max(c.g, c.b) - c.r));
 
     /* contrast and saturation */
-    c = saturate((c - 0.5) * Contrast + 0.5);
+    c = max((c - 0.5) * Contrast + 0.5, 0.0);
+    l = dot(c, KLC_LUMA);
+    if (HighlightKnee < 0.999 || HighlightWhite < 0.999)
+    {   /* soft shoulder: above the knee the luma eases toward the white point, colour kept (scaled with it) */
+        float k = min(HighlightKnee, HighlightWhite - 0.01), room = HighlightWhite - k;
+        float lt = l > k ? k + room * (1.0 - exp(-(l - k) / room)) : l;
+        c *= lt / max(l, 0.0001);
+    }
+    c = saturate(c);
     l = dot(c, KLC_LUMA);
     c = saturate(lerp(l.xxx, c, Saturation));
 
