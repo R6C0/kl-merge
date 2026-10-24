@@ -1,3 +1,5 @@
+2026-10-24 21:00 - STAGED, NOT INSTALLED: vehicles can blow up (owner: 'always on fire, never explode'). CAUSE: FollowOutShield=3 keeps the van's Invulnerable byte set the whole wait, so health never hits 0; noblow (10-19) set the DM05A/DM06/Hasta chopper to BlowupChanceNone. FIX: hook [VanBlow] (klescort.c, default on): shield off while nobody is aboard (1.5 s), on again when someone boards; HealthMax optional. DATA: tools/kl_blowup.py -> <work>uildlowup_1024 (chopper Definite + health 5000 GUESS, INSTALL/UNDO blowup.bat, rehearsed byte-identical on copies). Hook builds klhook/out_3f_1024k33blow (+_test), no installer. Not run in the game. Look for 'vanblow:' lines.
+
 2026-10-24 19:50 - STAGED, NOT INSTALLED: hook k33 (SHIP e1bfca9a5ee0290d58a042eca85f8ab8, TEST 05e4e9453a09b920993e5ca20520c93f) = k32 + CamSmooth stance stage
 (87625b6a0, 1ffa99436): owner 'one second hes crouched, next frame hes just straight running'. klcamsmooth's pose detector watches eye-over-pivot,
 which does not change when the PIVOT pops 15-55 cm; the 60 ms pivot follower still moved 10-26 cm/frame. New last stage: feet-relative pivot step

@@ -420,7 +420,33 @@ static struct {
     int fo, fo_dry, fo_order, fo_spare, fo_shield, fo_crew_money; DWORD fo_after, fo_every, fo_money; float fo_hold;      /* FollowOut..: After / Every in ms, Hold in s; Shield 0 / 1 / 2 */
     int fo_unshielded;      /* FollowOutHoldUnshielded (default 1): hold a vehicle that has no health object to shield */
     int fo_hold_alone, fo_stop, fo_come_moved; float fo_hold_alone_m;      /* FollowOutHoldAlone (+ ..Range in m), FollowOutStopPlace (2026-10-18, Vault run N1018_L22) */
+    int vb, vb_dry, vb_log; DWORD vb_delay; float vb_hp;                   /* [VanBlow] Enable / Dry / Log / EmptyDelay (ms) / HealthMax (2026-10-24) */
 } kle;
+
+/* [VanBlow] (owner 2026-10-24: 'they never blow up, they are always on fire from when the cops shoot it but never see it explode').
+   WHY: with FollowOutShield=3 (live) the van's 'Invulnerable' byte (ZAnimatedVehicle +0x21) is set 0.5 s into EVERY wait until the
+   vehicle is gone, so neither the player's nor the police's hits count and its health (stock 3000..10000 by difficulty) can never reach 0:
+   the damage effects (fire at half / a quarter, 'Activate_DamageFX_01 / 02', from the scripted hits) show, the blow-up (health 0 ->
+   0x5aec7c -> rules slot 84 -> slot 94 grade 2 = state 6, 'DamageFX_03', Crash/Explode relays) never comes. Live log 24 Oct: 93 % -> 80 % -> gone,
+   'SHIELDED by this file'.
+   WHAT: the shield was there so that a van with PEOPLE ABOARD is not destroyed (state 6 kills every record with status 4 - the human by
+   slot 11, an AI member by slot 16; live 2026-10-11: held van shot to pieces, human dead). A van with NOBODY aboard has no one to lose,
+   so: while a wait (state 3 / 4) or the drive-out (5) has had NO record with status 4 for EmptyDelay ms, this file takes its own shield off
+   (kle_shield_off; only the byte it wrote) and does not set it again (kle_hold_guard says no); the moment somebody is aboard again it may
+   be shielded again (FollowOutShield=3: the next pass; 2: by the next hold). So a van that is shot while the crew is not in it can burn
+   and then EXPLODE; one with anybody aboard cannot be destroyed (the old protection). The cost, said plainly: an empty van shot to
+   0 by the police ends the escape for everybody who is not aboard (that is the stock game's rule too).
+   HealthMax (default 0 = leave): when the vehicle's health is above it at the start of a wait, health and the 'quarter' field are lowered to
+   it (ZAnimatedVehicle +0x14 health, +0x18 = max / 4, both read by kle_veh_read; the write is a GUESS that the damage-effect thresholds
+   - half / quarter / 0 of max, slot 87 - read +0x18 and not a cached copy). Dry=1: everything is only logged ('WOULD ...').
+   Stock levels: this file acts on no stock level (klb_level), so Dog Days' own FA maps keep the game's rule (nothing is shielded there). */
+static struct { DWORD rules, empty_at; int open, aboard, hp_done; } kle_vb;
+static int kle_vb_aboard(const struct klb_snap *s)
+{
+    int i, n = 0;
+    for (i = 0; i < s->n && i < KLB_NREC; i++) if (s->r[i].used && s->r[i].status == 4) n++;
+    return n;
+}
 
 /* THE HOLD'S SHIELD (section 3 c2). Not in kle_r: that is cleared at every new round, and a byte of the level's vehicle
    that this file set must be taken back whatever happens to the round. obj = the ZAnimatedVehicle whose 'Invulnerable'
@@ -922,6 +948,9 @@ static int kle_hold_guard(const struct klb_snap *s, DWORD now, int dry, char *wh
     struct kle_veh v; int k; BYTE kind = 0xff;
     why[0] = note[0] = 0;
     if (!kle.fo_shield) { strcpy(note, "NO SHIELD (FollowOutShield=0): a vehicle that stands longer than stock's 8 s can be destroyed with everybody aboard"); return 1; }
+    if (kle.vb && !kle.vb_dry && kle_vb.open && kle_vb.rules == s->rules && kle_vb_aboard(s) == 0) {      /* [VanBlow]: an EMPTY vehicle is left vulnerable so that it can blow up */
+        strcpy(why, "VanBlow: nobody is aboard, the vehicle is left vulnerable (it can be destroyed) and is not held or shielded until somebody boards"); return 0;
+    }
     k = kle_veh_read(s->rules, &v);
     if (k < 0) { _snprintf(why, 199, "the vehicle's health object cannot be read (%s), so it cannot be shielded - an unshielded hold got the vehicle destroyed with everybody aboard (FollowOutShield=0 holds all the same)", kle_veh_err); why[199] = 0; return 0; }
     if (!k) {
@@ -962,6 +991,37 @@ static int kle_hold_guard(const struct klb_snap *s, DWORD now, int dry, char *wh
     return 1;
 }
 
+/* [VanBlow], once per 0.5 s pass while the vehicle is in state 3..5 (see the block at kle_vb): the empty-vehicle test, the shield's
+   release, and HealthMax at the first pass of a wait. */
+static void kle_vb_pass(const struct klb_snap *s, DWORD now, int edge)
+{
+    int n = kle_vb_aboard(s); DWORD t = KLB_T(now); struct kle_veh v;
+    if (kle_vb.rules != s->rules) memset(&kle_vb, 0, sizeof kle_vb), kle_vb.rules = s->rules;
+    kle_vb.aboard = n;
+    if (edge && s->veh <= 4 && kle.vb_hp > 0 && !kle_vb.hp_done && kle_veh_read(s->rules, &v) > 0) {
+        kle_vb.hp_done = 1;
+        if (v.hp > kle.vb_hp) {
+            float hp = kle.vb_hp, q = kle.vb_hp / 4.0f;
+            if (kle.vb_dry) klog("vanblow: HealthMax=%.0f: the vehicle's health %.0f of %.0f WOULD be lowered to %.0f (dry run)", kle.vb_hp, v.hp, v.max, hp);
+            else if (klh_data((void *)(DWORD_PTR)(v.obj + 0x14), &hp, 4, "escape vehicle: health lowered (VanBlow HealthMax)") && klh_data((void *)(DWORD_PTR)(v.obj + 0x18), &q, 4, "escape vehicle: quarter-max lowered (VanBlow HealthMax)"))
+                klog("vanblow: HealthMax=%.0f: the vehicle's health %.0f of %.0f lowered to %.0f of %.0f ([%08lx+0x14] and +0x18; the +0x18 write is a GUESS - watch the 'follow: vehicle:' lines for the fire at half / a quarter)", kle.vb_hp, v.hp, v.max, hp, kle.vb_hp, v.obj);
+            else klog("vanblow: HealthMax=%.0f: the health of %08lx could NOT be written", kle.vb_hp, v.obj);
+        }
+    }
+    if (n) {
+        kle_vb.empty_at = 0;
+        if (kle_vb.open) { kle_vb.open = 0; if (kle.vb_log) klog("vanblow: %d aboard again (state %u): the vehicle may be shielded again", n, s->veh); }
+        return;
+    }
+    if (!kle_vb.empty_at) kle_vb.empty_at = t;
+    if (t - kle_vb.empty_at < kle.vb_delay) return;
+    if (!kle_vb.open) {
+        kle_vb.open = 1;
+        if (kle.vb_log) klog("vanblow: nobody aboard for %.1f s (state %u): the vehicle is left VULNERABLE%s - shot to 0 it blows up (fire, then the blast); it is shielded again when somebody boards", kle.vb_delay / 1000.0, s->veh, kle.vb_dry ? " (DRY RUN: the shield stays)" : "");
+    }
+    if (!kle.vb_dry && kle_sh.obj && kle_sh.rules == s->rules) kle_shield_off("VanBlow: nobody is aboard, so the vehicle may be destroyed", now);
+}
+
 /* every 0.5 s pass of a round, before FollowOut: the shield's upkeep and release, and (FollowOut on) the vehicle's
    health in the log - at the wait, at the drive-out, whenever it fell by a twentieth of the maximum (1 s apart at
    least), and when the vehicle is destroyed. The log is what tells steady fire from one step. */
@@ -975,6 +1035,12 @@ static void kle_veh_pass(const struct klb_snap *s, DWORD now)
     DWORD sh_was = kle_sh.obj && kle_sh.rules == s->rules ? kle_sh.obj : 0; BYTE sh_byte = 0xff; float sh_for = sh_was ? (now - kle_sh.at) / 1000.0f : 0; char tail[240];
     if (sh_was && (klh_rd32(sh_was) != KLE_VEH_VT || !klh_rd(sh_was + KLE_VEH_INV, &sh_byte, 1))) sh_byte = 0xff;
     kle_r.vh_prev = s->veh;
+    if (kle.vb) {
+        if (s->veh >= 3 && s->veh <= 5) kle_vb_pass(s, now, edge && (prev < 3 || prev > 5));
+        else if (edge && s->veh == 6 && prev >= 3 && prev <= 5 && kle.vb_log)
+            klog("vanblow: the vehicle BLEW UP (state 6; it was in state %u) with %d aboard at the last pass%s", prev, kle_vb.aboard, kle_vb.aboard ? " - they are killed by the rules (slot 94, grade 2); the shield should have prevented this: tell the track" : " - nobody was in it");
+        if (s->veh < 3 || s->veh > 5) kle_vb.open = 0;
+    }
     if (kle_sh.obj) {
         if (s->rules != kle_sh.rules) kle_shield_off("another round object", now);
         else if (!(s->veh == 3 || s->veh == 4 || (s->veh == 5 && kle.fo_shield != 1)))
@@ -991,7 +1057,7 @@ static void kle_veh_pass(const struct klb_snap *s, DWORD now)
     /* FollowOutShield=3 (owner 2026-10-11: 'all the police outside the vault shoot the van straight away'; the club's first full run
        lost its van, state 3 -> 6, with two AI heisters aboard and no hold): the shield goes on in the first pass of EVERY wait, held or
        not, human aboard or not, and stays until the vehicle is gone, as with 2. Less risk than stock on purpose. */
-    if (kle.fo_shield == 3 && (s->veh == 3 || s->veh == 4) && !kle_sh.obj) {
+    if (kle.fo_shield == 3 && (s->veh == 3 || s->veh == 4) && !kle_sh.obj && !(kle.vb && !kle.vb_dry && kle_vb.open)) {
         char why3[200], note3[200]; static DWORD said3; int ok3;
         ok3 = kle_hold_guard(s, now, kle.fo_dry, why3, note3);
         if (ok3 && (kle_sh.obj || now - said3 > 30000)) { said3 = now; klog("follow: shield: the vehicle waits (state %u) and FollowOutShield=3 shields every wait: %s", s->veh, note3); }
@@ -1464,6 +1530,12 @@ static void kle_init(void)
     kle_hold_step = klb_inif("HoldStep", "0"); if (!klb_finite(kle_hold_step) || kle_hold_step <= 0 || kle_hold_step > 60) kle_hold_step = 60.0f;      /* 0 = the whole hold at once */
     kle.fo_hold = klb_inif("FollowOutHold", "0"); if (!klb_finite(kle.fo_hold) || kle.fo_hold < 0) kle.fo_hold = 0; if (kle.fo_hold > 60) kle.fo_hold = 60;
     kle.fo_shield = klb_pos("FollowOutShield", 2, 3);                         /* also klmove.c's WaitForYouHold goes by it */
+    kle.vb = GetPrivateProfileIntA("VanBlow", "Enable", 1, klh_ini) != 0;     /* 2026-10-24: default ON - the owner wants the escape vehicle to blow up */
+    kle.vb_dry = GetPrivateProfileIntA("VanBlow", "Dry", 0, klh_ini) != 0;
+    kle.vb_log = GetPrivateProfileIntA("VanBlow", "Log", 1, klh_ini) != 0;
+    kle.vb_delay = (DWORD)GetPrivateProfileIntA("VanBlow", "EmptyDelay", 1500, klh_ini); if (kle.vb_delay > 60000) kle.vb_delay = 60000;
+    kle.vb_hp = (float)GetPrivateProfileIntA("VanBlow", "HealthMax", 0, klh_ini); if (kle.vb_hp < 0) kle.vb_hp = 0; if (kle.vb_hp > 100000) kle.vb_hp = 100000;
+    if (kle.vb && kle.fo_shield) klog("vanblow: Enable=1%s: the escape vehicle's shield (FollowOutShield=%d) is taken off while NOBODY is aboard (for %u ms), so the vehicle can be shot to 0 and blow up; with anybody aboard it stays shielded (state 6 would kill them). HealthMax=%.0f (0 = the file's own). Acts on non-stock levels only; Dog Days' own FA maps are never shielded", kle.vb_dry ? " (DRY RUN: only logged)" : "", kle.fo_shield, (unsigned)kle.vb_delay, kle.vb_hp);
     kle.fo_unshielded = GetPrivateProfileIntA("Bots", "FollowOutHoldUnshielded", 1, klh_ini) != 0;      /* DEFAULT 1 = the old behaviour: hold all the same; 0 = an unshieldable vehicle is not held (2026-10-19: Hasta loss still under investigation) */
     kle.fo_hold_alone = GetPrivateProfileIntA("Bots", "FollowOutHoldAlone", 0, klh_ini) != 0;
     kle.fo_hold_alone_m = klb_inif("FollowOutHoldAloneRange", "40"); if (!klb_finite(kle.fo_hold_alone_m) || kle.fo_hold_alone_m < 1) kle.fo_hold_alone_m = 40; if (kle.fo_hold_alone_m > 100) kle.fo_hold_alone_m = 100;      /* GUESS */
