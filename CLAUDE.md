@@ -66,6 +66,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 21:15 - STAGED, NOT INSTALLED: hook k34 (SHIP a22b642b, TEST 587e09ff) = k33 + [VanBlow] (FollowOutShield=3 kept the van
+invulnerable all wait, so it burned but never hit 0; now shielded only while somebody is aboard). C:/kl_build_1019/k34_1024e/INSTALL k34.bat
+supersedes k32/k33 (undo rehearsed byte-identical). Chopper data pass <work>/build/blowup_1024 (DM05A + DM06 Definite, 5000 hp; Hasta left
+out: bots died aboard there). Body crouch->run pop: research agent running (re/player_anim_blend.md).
+
 2026-10-24 19:50 - STAGED, NOT INSTALLED: hook k33 (SHIP e1bfca9a, TEST 05e4e945) = k32 + [CamSmooth] StanceMs=280 (crouch/stand/run
 camera-height pop eased; sim 50 cm pop -> 2.2 cm/frame at 240 fps). C:/kl_build_1019/k33_1024d/INSTALL k33.bat supersedes k32 (undo
 rehearsed byte-identical). Body pop NOT fixed: the player has no crouch->run transition clip, the clip swaps in one frame (0x7a43e0 ->
