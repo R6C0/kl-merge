@@ -668,6 +668,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klheliprobe.c"                                  /* klheliprobe.c: read-only chopper probe ([Heli] Probe, default 0); AFTER klescort.c */
 #include "klcensor.c"                                    /* klcensor.c: [Censor] a killing head shot blows the head off (heap data only); AFTER klheliprobe.c */
 #include "klcensus.c"                                    /* klcensus.c: [Census] read-only list of every ZFFActor (place, health); AFTER klcensor.c */
+#include "klclubcalm.c"                                  /* klclubcalm.c: [ClubCalm] read-only probe of the hand item / shots (off unless Enable=1); AFTER klshoulder.c */
 #include "klvis.c"
 #include "kltex.c"                                        /* kltex.c: [Graphics] Textures - anisotropic filtering (default on) */
 #include "klfps.c"                                        /* klfps.c: [FrameLimit] RTSS-style frame limiter on the device's Present (default on) */
@@ -862,6 +863,7 @@ static void klh_tick(int game_thread)
     klhp_tick(game_thread);                           /* klheliprobe.c: read-only chopper probe (returns at once unless [Heli] Probe) */
     klcn_tick(game_thread);                           /* klcensor.c: pre-arm the head-hit sum so a killing head shot censors */
     klcs_tick(game_thread);                           /* klcensus.c: read-only actor list (returns at once unless [Census] Enable) */
+    klcc_tick(game_thread);                           /* klclubcalm.c: read-only hand / shot log (returns at once unless [ClubCalm] Enable) */
     klvis_tick();                                  /* klvis.c: log only (the vision grid and its record 0xff) */
     klnet_tick(game_thread);                          /* klnet.c: multiplayer log / update numbers (off unless [Net]) */
     klq2_tick(game_thread);                           /* klqol.c: [QoL] (off unless set) */
@@ -1241,6 +1243,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klhp_init();                                      /* klheliprobe.c: reads [Heli] Probe, installs nothing */
     klcn_init();                                      /* klcensor.c: reads [Censor] */
     klcs_init();                                      /* klcensus.c: reads [Census] */
+    klcc_init();                                      /* klclubcalm.c: reads [ClubCalm] */
     klvis_init();
     klnet_init();
     kllb_init();
