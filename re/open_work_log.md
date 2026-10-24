@@ -1,3 +1,10 @@
+2026-10-24 18:10 - STUCK IN COVER + CLIMB (offline, nothing run in the game; owner 16:50 'put inside the object, stuck for the round / climb on all maps'):
+CAUSE (inferred, no direct log): rev2_1024 stripped NoCoverBox from EVERY box incl. DM hazard markers (NoCover_BugFix, Respawn_HallWay, Stairs, Escalator,
+garage) and cover2 then put KM boxes into those zones (audit: DM01 0/21, DM11B 0/31, DM03 5/40 markers found by name). FIX STAGED: cover3 = hazard markers
+back + 'doubtful' KM boxes renamed off (tools/kl_cover_restore.py, kl_cover_add2.py, kl_cover3_stage.py; vet numbers STAND 55/BODY 35 are GUESSes);
+hook k30cov = klunstick.c [Unstick] (F7 or auto after 4 s held still in cover -> back to last free place; offsets GUESSed). CLIMB: only maps with the
+.ANM slots /Movement/Climb/Up/* work; DD01..DD09, DM01B, DM05A, DM06B, DM11B lacked them -> tools/kl_climb_stage.py (players-only, DM01B/05A/06B/11B
+built on the cover3 zips). Staged in <work>\build\cover_1024b (INSTALL/UNDO cover3.bat, climb\INSTALL/UNDO climb3.bat, hook\INSTALL hook k30cov.bat), md5-checked, rehearsed on scratch.
 2026-10-24 17:50 - INSTALLED (owner 'install that version'): Dead Men shop restyle on DM01 only (tools/kl_shop_dm.py, c36f1112a):
 chalk focus bars, steel panels, red headline/name, DMG/ROF/MAG/RNG stat block in the hover text. DM01 F01_Main.zip dcb70db9 -> 011fc9bb,
 backup .before-1024shopdm, undo <work>\build\shop_dm_1024\UNDO shop DM DM01.bat. Texture 1202 = also the pause/end-round focus bar.

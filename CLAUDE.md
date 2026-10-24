@@ -66,6 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 18:10 - STUCK-IN-COVER + CLIMB, STAGED OFFLINE (not installed, not run): cause inferred = rev2 stripped hazard NoCoverBox + cover2 boxes in those zones.
+<work>\build\cover_1024b: cover3 (hazard markers back, doubtful boxes off), climb3 (.ANM climb clips for DD01-09, DM01B/05A/06B/11B), hook k30cov
+([Unstick], F7). Order: cover3, then climb3, then hook. Details and GUESSes: re/open_work_log.md.
 2026-10-24 16:40 - STAGED, NOT INSTALLED: hook k29d = k29b + [FrameLimit] (klfps.c, RTSS front edge / busy wait) with the owner's 4
 presets 240/120/60/30 (auto Fps=0 = the highest the screen shows; this PC reads 240 Hz). <work>\build\k29d_1024\INSTALL k29d.bat (refuses
 unless live dll = k29b aa912e09; adds a marked [FrameLimit] block, keeps Announcer=0 / CarDown Dry=1; UNDO rehearsed byte-identical).
