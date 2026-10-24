@@ -44,7 +44,8 @@ import kl_hud_menu as HM
 import kl_hud_shop as HS
 import kl_loc as L
 
-MARK = '<!-- kl_shop_dm 1024 -->'
+MARK = '<!-- kl_shop_dm 1024v2 -->'
+MARK_V1 = '<!-- kl_shop_dm 1024 -->'            # v1's marker line: replaced by MARK (the v1 colour sets stay, see restyle_xml)
 GAME = W.GAME
 WORK_FALLBACK = r'G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men\KL_PortTools'
 OUT_NAME = os.path.join('build', 'shop_dm_1024')
@@ -63,9 +64,31 @@ COLORSETS = (   # new <ColorSet>s, after DirtyMoneyColorSet. A bar = white (chal
 )
 
 # attribute edits (value changes only). Anything not listed here must be byte-equal in `check`.
-ALLOWED_CHANGES = {'ColorSet', 'Y', 'Font', 'TextWidth', 'AlphaMin', 'AlphaMax'}
-DESC_Y, NAME_Y, STAR_DY, PRICE_DY, DESC_W = 312, 272, 14, 8, 440
+ALLOWED_CHANGES = {'ColorSet', 'Y', 'Font', 'TextWidth', 'AlphaMin', 'AlphaMax', 'LineSpace',
+                   'FadeInTime', 'FadeInDelay', 'FadeOutTime', 'X', 'GeomSpace'}
 FAKE_ALPHA = ('36', '40')
+
+# ---- v2 GRID (g = the 768 x 576 base group; virtual 1280 x 720 = g + (256, 72); the panel texture pixel = (g.x + 127, g.y - 50)).
+# Every number below is ABSOLUTE (v2 sets values, it never adds to the old ones), so the pre-v1 archive, the v1 archive and a later archive
+# built on v1 all end at the same bytes. One spacing unit: 6 px (box inset), 34 px (row pitch, the code-bound FocusBarDeltaY).
+ROW_PITCH = 34
+BOX_IN = 6                                         # outline pixel = bar edge -/+ 6: the bar's painted rows are 2..30 of its 32, columns 0..238
+CAT_BAR_X, SLOT_BAR_X = 168, -110                  # code-bound bar columns (FocusBarBaseX = 168; page 1's slot bars sit at -110)
+TXT_DX, TXT_DY = 15, 7                             # text = bar origin + (15, 7): cell 19 high, bar centre row 16 -> text centre 16.5 (7 + 9.5)
+NAME_X, CAT_NAME_Y, LIST_NAME_Y = CAT_BAR_X + TXT_DX, 66 + TXT_DY, 216 + TXT_DY            # 183, 73, 223 (the two 'Name' groups)
+SLOT_LABEL_X, SLOT_LABEL_Y = -375, (66 + TXT_DY, 196 + TXT_DY)                              # Primary / Secondary: centre at 384 - 375 = 9 = the bar's centre
+GEOM_SPACE = 12                                    # GUESS (top live risk): pitch = glyph line 22 (Text font, READ: record field 11) + GeomSpace
+LOCK_X = 369                                       # 32 px lock, right edge 401, 5 px inside the bar's end (406)
+CARD_Y = 68                                        # card group (X 432, 445 x 210): 6 px inside the right box (outline y 62)
+RIGHT_BOX = (426, 62, 882, 490)                    # right column outline; bottom = the list box's bottom
+NAME_X2, NAME_Y2 = 442, 291                        # the gun's name (Header font, cell 24): x = box + 16
+STAR_X0, STAR_Y = 662, 287                         # six 32 px stars right-aligned on the name row: 662 + 34 k, last right edge 864
+RULE_Y = 321                                       # hairline under the name row
+DESC_X, DESC_Y2, DESC_W, DESC_LS = 442, 326, 424, 20   # description block: 7 lines of 20 = 326..466 (+19 cell)
+PRICE_X, PRICE_Y = -98, 470                        # right edge 768 + 98 = 866 (= DESC_X + DESC_W); in the strip under the block
+FAKE6_Y = 168                                      # stock fake bar #06 had 'Y="169 "'; the real bar is 168
+STAR_T = 0.15                                      # animation numbers (see ANIMATIONS in the docstring of restyle_xml)
+BAR_IN, BAR_OUT = 0.12, 0.18
 
 # the shop table's ammunition column (re/shop_plan.md:33-70, read from kl2.exe 0xbd1f68) and star tiers (same table; hashed, mock-up only)
 AMMO = (150, 150, 150, 150, 150, 150, 150, 150, 60, 60, 35, 40, 40, 40, 60, 60, 60, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300,
@@ -199,8 +222,10 @@ def stat_table(src, swaps=None):
 
 
 # ---------------------------------------------------------------- .LOC
-FLAV_MAX_EN = 90           # bytes of flavour text kept after the stat block: 2 wrapped lines (GUESS: ~46 characters per line at 440 px). Review 2026-10-24:
-FLAV_MAX_OTHER = 90        # 100/110 bytes could wrap to 3 lines = 8 lines in all: 312 + 8*22 = 488, under the stars (y 474) and the price (y 478)
+FLAV_MAX_EN = 72           # bytes of flavour text kept after the stat block. REVIEW 2026-10-24 (v2): measured with the game's own Text-font advances at
+FLAV_MAX_OTHER = 72        # TextWidth 424: 90 bytes wrapped to THREE lines on 5 English / 5 German / 11 Spanish ... rows, i.e. 8 lines (5 header + 3) =
+                           # 326..485, over the price strip (470) and the box (490). 72 gives <= 2 lines in all 7 languages (76 still gives 3 on some rows; 73..75 not tried)
+                           # (7 lines = 326..466). A v1 source (<= 90 bytes) is re-cut to the same bytes as a pre-v1 source: checked by building both.
 
 
 def _strip_stats(lines):
@@ -220,8 +245,12 @@ def _flavour(rest, english):
     lim = FLAV_MAX_EN if english else FLAV_MAX_OTHER
     if len(t) <= lim:
         return t
+    # unchanged from v1 on purpose: its output is <= FLAV_MAX bytes, so a v1 source passes through the first return above untouched and
+    # a pre-v1 source is cut to the very same bytes (the upgrade paths agree).
     cut = t[:lim]                       # cutting at an ASCII space / full stop is safe inside UTF-8 and the 1-byte code pages
-    k = max(cut.rfind(b'. '), cut.rfind(b'! '), cut.rfind(b'? '))
+    wide = t[:lim + 1]                  # REVIEW v2: the sentence's space may sit AT index lim (a sentence of exactly lim bytes); a v1 source passes such
+                                        # a sentence whole, so the pre-v1 path must keep it too (French row 33 differed by one word before)
+    k = max(wide.rfind(b'. '), wide.rfind(b'! '), wide.rfind(b'? '))
     if k >= 30:
         return cut[:k + 1]
     k = cut.rfind(b' ')
@@ -266,39 +295,99 @@ def _ints(v):
 
 
 def restyle_xml(xml, log=print):
-    """online.xml text -> (new text, {what: count}). See the module docstring, item 1."""
+    """online.xml text -> (new text, {what: count}). See the module docstring, item 1.
+
+    v2: EVERY edit sets an absolute value (never 'old + n'), so the result does not depend on whether the source is the pre-v1 archive, the
+    v1 archive, or a later archive built on v1: the same attribute set -> the same text. The attributes are set in a fixed order (the order v1
+    used first, the v2 ones after), so a v1 source (those attributes already in place) and a pre-v1 source (appended in that order) agree.
+    Sources: no marker (pre-v1: three colour sets + MARK are added); MARK_V1 (the marker line is replaced, the v1 colour sets are kept);
+    MARK (already v2: left as it is)."""
     cnt = {}
+    st = {'row': 0}
 
     def n(k):
         cnt[k] = cnt.get(k, 0) + 1
+
+    def S(text, **kv):                                   # set_attr in the given order (python keeps keyword order)
+        for k, v in kv.items():
+            text = HM.set_attr(text, k, str(v))
+        return text
 
     def fn(t, text):
         if t.window not in SHOP_WINDOWS or t.name != 'GuiElement':
             return None
         a = dict(t.attrs)
         tag, new = a.get('TagName'), text
-        if a.get('ColorSet') == 'White' and 'ButtonGraphic' not in a:
-            new = HM.set_attr(new, 'ColorSet', 'DMTab'); n('row ColorSet White -> DMTab')
+        if a.get('Type') == 'GUIGroup' and a.get('Name') == 'Name':       # the two row groups: first = categories (Y 75), second = the list (Y 225)
+            first = a.get('Y', '').strip() in ('75', str(CAT_NAME_Y))
+            new = S(new, X=NAME_X, Y=CAT_NAME_Y if first else LIST_NAME_Y, GeomSpace=GEOM_SPACE); n('row group: x/y + pitch'); st['row'] = 0
+            return new if new != text else None
+        if a.get('Type') == 'GUIGroup' and a.get('W') == '445' and a.get('H') == '210':
+            new = S(new, Y=CARD_Y); n('card group y')
+            return new if new != text else None
+        if a.get('Text') in ('Primary', 'Secondary') and a.get('AlignH') == 'Center':      # slot labels
+            k = 0 if a['Text'] == 'Primary' else 1
+            new = S(new, X=SLOT_LABEL_X, Y=SLOT_LABEL_Y[k])
+            if a.get('ColorSet') == 'White':
+                new = S(new, ColorSet='DMTab'); n('row ColorSet White -> DMTab')
+            if a.get('Type') == 'OpenWindow':                                                # the focusable ones fade in first
+                new = S(new, FadeInTime=0.12, FadeInDelay=round(0.02 + 0.04 * k, 3))
+            n('slot labels')
+            return new if new != text else None
+        if tag in ('OldPrimaryWeapon', 'OldSecondaryWeapon'):
+            new = S(new, X=SLOT_LABEL_X); n('slot gun names')
+        elif tag in ('PrimaryWeapon', 'SecondaryWeapon') and a.get('Type') == 'MercsGraphicFA':
+            new = S(new, X=-355); n('slot icons -5')                                         # GUESS (measured on SHOP5_280s): icon centre 14 -> 9
+        elif a.get('Template') == 'FAWeaponText' and 'ButtonGraphic' not in a:
+            row = st['row']; st['row'] += 1
+            if a.get('ColorSet') == 'White':
+                new = S(new, ColorSet='DMTab')
+            if a.get('ColorSet') in ('White', 'DMTab'):
+                n('row ColorSet White -> DMTab')
+            if a.get('Disabled') is None or a.get('Disabled') == 'False':      # live rows: cascade in (the engine fades an element in once, on show)
+                new = S(new, FadeInTime=0.12, FadeInDelay=round(0.03 + 0.035 * row, 3)); n('row cascade')
+        elif a.get('ColorSet') == 'White' and 'ButtonGraphic' not in a:
+            new = S(new, ColorSet='DMTab'); n('row ColorSet White -> DMTab')
         if tag == 'HeadlineText':
-            new = HM.set_attr(new, 'ColorSet', 'DMRed'); n('headline red')
+            new = S(new, ColorSet='DMRed'); n('headline red')
         elif a.get('Template') == 'FATotal':
-            new = HM.set_attr(new, 'ColorSet', 'DirtyMoneyColorSet'); n('money green')
+            new = S(new, ColorSet='DirtyMoneyColorSet'); n('money green')
         elif tag == 'NewWeapon':
-            new = HM.set_attr(HM.set_attr(HM.set_attr(new, 'Y', str(NAME_Y)), 'Font', 'Header'), 'ColorSet', 'DMRed'); n('name under the card')
+            new = S(new, Y=NAME_Y2, Font='Header', ColorSet='DMRed', X=NAME_X2, FadeInTime=0.18, FadeInDelay=0.06); n('name')
         elif tag == 'NewWeaponDescription':
-            new = HM.set_attr(HM.set_attr(HM.set_attr(new, 'Y', str(DESC_Y)), 'TextWidth', str(DESC_W)), 'ColorSet', 'DMSteel'); n('description block')
+            new = S(new, Y=DESC_Y2, TextWidth=DESC_W, ColorSet='DMSteel', X=DESC_X, LineSpace=DESC_LS, FadeInTime=0.25, FadeInDelay=0.14); n('description block')
         elif tag == 'WeaponShopStar':
-            new = HM.set_attr(new, 'Y', str(_ints(a['Y']) + STAR_DY)) if 'MARKSTAR' not in text else new; n('stars down')
+            k = int(a['Graphic'].split('#')[1]) - 1
+            new = S(new, Y=STAR_Y, X=STAR_X0 + ROW_PITCH * k, FadeInTime=STAR_T, FadeInDelay=round(0.12 + 0.06 * k, 3)); n('stars on the name row')
         elif tag in ('PackagePrice', 'IsWeaponAvailable'):
-            new = HM.set_attr(new, 'Y', str(_ints(a['Y']) + PRICE_DY)); n('price down')
+            new = S(new, Y=PRICE_Y, X=PRICE_X); n('price strip')
+        elif tag == 'WeaponShopLock':
+            new = S(new, X=LOCK_X); n('locks inside the bar')
         elif tag == 'WeaponShopFakeBar':
-            new = HM.set_attr(HM.set_attr(new, 'AlphaMin', FAKE_ALPHA[0]), 'AlphaMax', FAKE_ALPHA[1]); n('fake bars dimmer')
+            new = S(new, AlphaMin=FAKE_ALPHA[0], AlphaMax=FAKE_ALPHA[1])
+            if a.get('Graphic', '').endswith('#06'):
+                new = S(new, Y=FAKE6_Y)
+            n('fake bars dimmer')
+        elif a.get('Template') == 'FAWeaponGraphicBig':
+            new = S(new, FadeInTime=0.22, FadeInDelay=0.04); n('card fade')
+        elif a.get('Type') == 'Graphic' and (a.get('IsFocusGraphic') == 'True' or a.get('Name') == 'WeaponBuyFB'):                 # the shop's focus bars
+            new = S(new, FadeInTime=BAR_IN, FadeOutTime=BAR_OUT); n('focus bar timing')
+        elif a.get('Type') == 'Graphic' and a.get('Graphic') == 'BackgroundWeaponShop':
+            new = S(new, FadeInTime=0.15); n('panel fade')
         return new if new != text else None
 
-    if MARK in xml:                                   # applied before: the edits above are absolute for the colours / alphas but relative
-        log('  online.xml: marker found (already applied), left as it is')    # for stars / price (+14 / +8): never apply twice
+    if MARK in xml:
+        log('  online.xml: v2 marker found (already applied), left as it is')
         return xml, {'already applied': 1}
+    v1 = MARK_V1 in xml
     out, _ = HM.rewrite(xml, fn)
+    if v1:
+        # v1 source: its marker + three colour sets are in place; only the marker line changes (the table does not grow)
+        out = out.replace(MARK_V1, MARK, 1)
+        cnt['v1 marker replaced'] = 1
+        if len(HM.signature(out)) != len(HM.signature(xml)):
+            raise SystemExit('online.xml: the table signature changed on a v1 source')
+        return out, cnt
     anchor = re.search(r'[ \t]*<ColorSet\s+Name="DirtyMoneyColorSet"[^>]*/>[ \t]*\r?\n', out)
     if not anchor:
         raise SystemExit('online.xml: no DirtyMoneyColorSet line to put the new colour sets after')
@@ -307,7 +396,7 @@ def restyle_xml(xml, log=print):
                               for nm, a, b, c in COLORSETS)
     out = out[:anchor.end()] + add + out[anchor.end():]
     cnt['colour sets added'] = len(COLORSETS)
-    if HM.signature(out)[:0] != [] or len(HM.signature(out)) != len(HM.signature(xml)) + len(COLORSETS):
+    if len(HM.signature(out)) != len(HM.signature(xml)) + len(COLORSETS):
         raise SystemExit('online.xml: the table signature grew by other than the colour sets')
     return out, cnt
 
@@ -349,14 +438,31 @@ def _brackets(draw, x0, y0, x1, y1, col, ln=14, w=2):
         draw.line([(x, y), (x, y + dy * ln)], fill=col, width=w)
 
 
+def panel_px(x, y):
+    """g coordinate -> pixel of the panel texture (the Graphic sits at g (-127, 50))."""
+    return x + 127, y - 50
+
+
+def boxes():
+    """the five outline boxes in g coordinates (x0, y0, x1, y1 = outline pixels), each exactly 6 px outside the painted rows / columns of its bars"""
+    sb, cb = SLOT_BAR_X, CAT_BAR_X
+    return {
+        'slot1': (sb - BOX_IN, 62, sb + 238 + BOX_IN, 186),
+        'slot2': (sb - BOX_IN, 192, sb + 238 + BOX_IN, 316),
+        'cat': (cb - BOX_IN, 66 + 2 - BOX_IN, cb + 238 + BOX_IN, 66 + 3 * ROW_PITCH + 30 + BOX_IN),          # 162, 62, 412, 204
+        'list': (cb - BOX_IN, 216 + 2 - BOX_IN, cb + 238 + BOX_IN, 216 + 7 * ROW_PITCH + 30 + BOX_IN),      # 162, 212, 412, 490
+        'right': RIGHT_BOX,
+    }
+
+
 def paint_panel(seed=1024):
-    """-> RGBA uint8 (462, 1024, 4): the BackgroundWeaponShop picture (1024 x 462 drawn at screen (1, 50); tiles = left / right 512 columns).
-    Screen coordinates below; the panel's own = screen - (1, 50). The boxes sit where the stock panel's did (the bars and rows stay)."""
+    """-> RGBA uint8 (462, 1024, 4): the BackgroundWeaponShop picture, v2 'engineered' grid. All geometry is in g coordinates through
+    panel_px(); every frame is drawn ON the outline pixels of boxes() (no wobble, no gaps), the corner brackets sit on the same pixels,
+    ticks / separators / index marks are computed from the row pitch (34) and the bar origin, so frame, bars and text line up."""
     np = _np()
     from PIL import Image, ImageDraw
     W_, H_ = 1024, 462
     rng = np.random.RandomState(seed)
-    ox, oy = 1, 50
     t = np.linspace(0, 1, H_, dtype='float32')[:, None, None]
     top, bot = np.array(GROUND_TOP, 'float32'), np.array(GROUND_BOT, 'float32')
     rgb = top * (1 - t) + bot * t
@@ -373,99 +479,115 @@ def paint_panel(seed=1024):
     base = Image.fromarray(np.dstack([np.clip(rgb, 0, 255), np.clip(alpha, 0, 255)]).astype('uint8'), 'RGBA')
 
     ov = Image.new('RGBA', (W_, H_), (0, 0, 0, 0)); d = ImageDraw.Draw(ov)
-
-    def P(x, y):
-        return (x - ox, y - oy)
-
-    # long faint scratches
-    for _ in range(90):
+    for _ in range(60):                                                   # a few long faint scratches (fewer than v1: the grid is the star now)
         x, y = int(rng.randint(0, W_)), int(rng.randint(0, H_)); ln = int(rng.randint(30, 190)); ang = rng.uniform(-0.45, 0.45)
-        d.line([(x, y), (x + ln * np.cos(ang), y + ln * np.sin(ang))], fill=(205, 210, 222, int(rng.randint(7, 24))), width=1)
-    # dirt specks and a few darker blots
-    for _ in range(520):
-        x, y = int(rng.randint(0, W_)), int(rng.randint(0, H_)); d.point((x, y), fill=(CHALK[0], CHALK[1], CHALK[2], int(rng.randint(20, 70))))
-    for _ in range(26):
-        x, y = int(rng.randint(0, W_)), int(rng.randint(0, H_)); r = int(rng.randint(2, 6)); d.ellipse([x - r, y - r, x + r, y + r], fill=(0, 0, 0, int(rng.randint(30, 70))))
+        d.line([(x, y), (x + ln * np.cos(ang), y + ln * np.sin(ang))], fill=(205, 210, 222, int(rng.randint(6, 18))), width=1)
+    for _ in range(420):
+        x, y = int(rng.randint(0, W_)), int(rng.randint(0, H_)); d.point((x, y), fill=(CHALK[0], CHALK[1], CHALK[2], int(rng.randint(20, 60))))
+    for _ in range(18):
+        x, y = int(rng.randint(0, W_)), int(rng.randint(0, H_)); r = int(rng.randint(2, 6)); d.ellipse([x - r, y - r, x + r, y + r], fill=(0, 0, 0, int(rng.randint(30, 60))))
 
-    steel_a, steel_b = STEEL + (150,), STEEL + (80,)
-    # (1) the two weapon-slot boxes (page 1) and the category / list boxes (pages 2, 3): square, broken steel line, chalk brackets, red label tick
-    boxes = ((11, 60, 261, 182), (11, 190, 261, 313), (291, 58, 541, 200), (291, 210, 541, 487))
-    for (a, b, c, e) in boxes:
-        x0, y0 = P(a, b); x1, y1 = P(c, e)
-        _broken(d, x0, y0, x1, y1, steel_a, rng)
-        _brackets(d, x0, y0, x1, y1, CHALK + (205,))
-        d.rectangle([x0 + 14, y0 - 1, x0 + 54, y0 + 2], fill=RED_DIRTY + (225,))
-    # (2) row separators: 3 in the category box (rows y 66 + 34k), 7 in the list box (rows y 216 + 34k): broken steel
-    for k in range(3):
-        y = 95 + 34 * k; _broken(d, *P(296, y), *P(536, y + 1), steel_b, rng, gap=0.35) if False else None
-        x0, yy = P(296, y); x1, _ = P(536, y)
-        for xs in range(x0, x1, 40):
-            if rng.random_sample() > 0.25:
-                d.line([(xs, yy), (min(x1, xs + int(rng.randint(18, 40))), yy)], fill=steel_b, width=1)
-    for k in range(7):
-        y = 246 + 34 * k; x0, yy = P(296, y); x1, _ = P(536, y)
-        for xs in range(x0, x1, 40):
-            if rng.random_sample() > 0.25:
-                d.line([(xs, yy), (min(x1, xs + int(rng.randint(18, 40))), yy)], fill=steel_b, width=1)
-    # (3) the frame round the big card (445 x 210 at screen (560, 60)): corner brackets + a red tab, a strip of tape over the top-left corner
-    x0, y0 = P(555, 55); x1, y1 = P(1010, 275)
-    _brackets(d, x0, y0, x1, y1, CHALK + (215,), ln=22, w=2)
-    _broken(d, x0, y0, x1, y1, steel_b, rng, gap=0.45)
-    d.rectangle([x1 - 90, y1 - 1, x1 - 30, y1 + 3], fill=RED_DIRTY + (225,))
-    # (4) the name rule under the card and the stats block ('file' feel: dark, diagonal hatch, red edge strip)
-    a0, b0 = P(560, 306); a1, _ = P(1005, 306)
-    d.line([(a0, b0), (a1, b0)], fill=STEEL + (110,), width=1)
-    d.rectangle([a0, b0 - 1, a0 + 80, b0 + 2], fill=RED_HEAD + (235,))
-    sx0, sy0 = P(556, 310); sx1, sy1 = P(1010, 470)
-    d.rectangle([sx0, sy0, sx1, sy1], fill=(6, 7, 10, 105))
-    for k in range(-(sy1 - sy0), sx1 - sx0, 9):
-        d.line([(sx0 + k, sy1), (sx0 + k + (sy1 - sy0), sy0)], fill=STEEL + (11,), width=1)
-    d.rectangle([sx0, sy0, sx0 + 2, sy1], fill=RED_DIRTY + (215,))
-    d.line([(sx0, sy1), (sx1, sy1)], fill=STEEL + (90,), width=1)
-    # (5) the star row: a hairline above it
-    a0, b0 = P(560, 472); a1, _ = P(1005, 472)
-    d.line([(a0, b0), (a1, b0)], fill=STEEL + (70,), width=1)
-    # (6) a few red splashes at the bottom-right of the card frame (subtle)
+    def px(x, y):
+        return panel_px(x, y)
+
+    def rect(x0, y0, x1, y1, fill):                                     # g coordinates, inclusive pixels
+        a, b = px(x0, y0); c, e = px(x1, y1)
+        d.rectangle([a, b, c, e], fill=fill)
+
+    steel_a, steel_b, steel_c = STEEL + (150,), STEEL + (90,), STEEL + (60,)
+    # ruler down the left edge of the panel: ticks every 10 px (3 long), every 50 px (6 long), from the top of the boxes to their bottom
+    for y in range(62, 491, 10):
+        ln = 6 if (y - 62) % 50 == 0 else 3
+        rect(-122, y, -122 + ln, y, STEEL + (70,))
+    rect(-122, 62, -122, 490, STEEL + (40,))
+    for name, (x0, y0, x1, y1) in boxes().items():
+        ln = 22 if name == 'right' else 14
+        rect(x0, y0, x1, y0, steel_a); rect(x0, y1, x1, y1, steel_a); rect(x0, y0, x0, y1, steel_a); rect(x1, y0, x1, y1, steel_a)
+        for (cx, cy, dx, dy) in ((x0, y0, 1, 1), (x1, y0, -1, 1), (x0, y1, 1, -1), (x1, y1, -1, -1)):          # brackets: 2 px, flush on the outline
+            hx = (cx, cy, cx + dx * ln, cy + dy)
+            rect(min(hx[0], hx[2]), min(hx[1], hx[3]), max(hx[0], hx[2]), max(hx[1], hx[3]), CHALK + (205,))
+            vx = (cx, cy, cx + dx, cy + dy * ln)
+            rect(min(vx[0], vx[2]), min(vx[1], vx[3]), max(vx[0], vx[2]), max(vx[1], vx[3]), CHALK + (205,))
+        rect(x0 + 18, y0 - 1, x0 + 58, y0 + 1, RED_DIRTY + (230,))                                           # red label tab: 40 x 3 centred on the outline
+        for x in range(x0 + ln + 4, x1 - ln - 3, 10):                                                         # top ruler inside the box
+            long_ = (x - x0) % 50 < 10
+            rect(x, y0 + 2, x, y0 + (5 if long_ else 3), STEEL + (80 if long_ else 55,))
+    # rows: separators between rows (dotted 6 on / 2 off), index marks left of every bar
+    def rows(bar_x, y0, n):
+        for k in range(n):
+            y = y0 + ROW_PITCH * k
+            rect(bar_x - 5, y + 15, bar_x - 3, y + 17, CHALK + (170,))                                       # index mark: 3 x 3, centred on the bar's centre row 16
+            if k < n - 1:
+                for xs in range(bar_x, bar_x + 239, 8):
+                    rect(xs, y + 33, min(bar_x + 238, xs + 5), y + 33, steel_b)
+    rows(SLOT_BAR_X, 66, 1); rows(SLOT_BAR_X, 196, 1)
+    rows(CAT_BAR_X, 66, 4); rows(CAT_BAR_X, 216, 8)
+    # right column: card brackets 3 px outside the card, the name rule, the star sockets, the stats block, the price strip
+    cx0, cy0, cx1, cy1 = 432 - 3, CARD_Y - 3, 432 + 444 + 3, CARD_Y + 209 + 3
+    for (cx, cy, dx, dy) in ((cx0, cy0, 1, 1), (cx1, cy0, -1, 1), (cx0, cy1, 1, -1), (cx1, cy1, -1, -1)):
+        rect(min(cx, cx + dx * 12), min(cy, cy + dy), max(cx, cx + dx * 12), max(cy, cy + dy), CHALK + (200,))
+        rect(min(cx, cx + dx), min(cy, cy + dy * 12), max(cx, cx + dx), max(cy, cy + dy * 12), CHALK + (200,))
+    rect(NAME_X2, RULE_Y, DESC_X + DESC_W, RULE_Y, STEEL + (115,))
+    rect(NAME_X2, RULE_Y - 1, NAME_X2 + 80, RULE_Y + 1, RED_HEAD + (235,))
+    for k in range(6):                                                                                       # star sockets: 34 px pitch, 1 px gap
+        sx = STAR_X0 + ROW_PITCH * k
+        for (a, b, c, e) in ((sx - 1, STAR_Y - 1, sx + 32, STAR_Y - 1), (sx - 1, STAR_Y + 32, sx + 32, STAR_Y + 32), (sx - 1, STAR_Y - 1, sx - 1, STAR_Y + 32), (sx + 32, STAR_Y - 1, sx + 32, STAR_Y + 32)):
+            rect(a, b, c, e, STEEL + (46,))
+    bx0, by0, bx1, by1 = NAME_X2 - 6, DESC_Y2 - 2, DESC_X + DESC_W + 6, 466
+    a, b = px(bx0, by0); c, e = px(bx1, by1)
+    d.rectangle([a, b, c, e], fill=(6, 7, 10, 105))
+    for k in range(-(e - b), c - a, 9):
+        d.line([(a + k, e), (a + k + (e - b), b)], fill=STEEL + (11,), width=1)
+    rect(bx0, by0, bx0 + 2, by1, RED_DIRTY + (215,))
+    rect(bx0, by1 + 1, bx1, by1 + 1, steel_b)
+    rect(DESC_X + DESC_W - 60, RIGHT_BOX[3] - 1, DESC_X + DESC_W, RIGHT_BOX[3] + 1, RED_DIRTY + (225,))      # red tab on the box's bottom edge, flush right with the text
     for dx, dy, r in ((-14, -9, 3), (-3, -17, 2), (-24, -3, 2), (-9, -2, 1), (-31, -14, 1)):
-        d.ellipse([x1 + dx - r, y1 + dy - r, x1 + dx + r, y1 + dy + r], fill=RED_DIRTY + (70,))
+        a, b = px(RIGHT_BOX[2] + dx, RIGHT_BOX[3] + dy)
+        d.ellipse([a - r, b - r, a + r, b + r], fill=RED_DIRTY + (70,))
     out = Image.alpha_composite(base, ov)
-    # tape: translucent strip, rotated, over the card frame's top-left corner
     tape = Image.new('RGBA', (52, 15), CHALK + (78,)); td = ImageDraw.Draw(tape)
     for k in range(0, 52, 3):
         td.line([(k, 0), (k, 14)], fill=CHALK + (int(rng.randint(40, 100)),))
     tape = tape.rotate(8, expand=True, resample=Image.BICUBIC)
-    out.alpha_composite(tape, (x0 - 22, y0 - 10))
-    a = np.asarray(out, 'uint8').copy()
-    return a
+    a, b = px(RIGHT_BOX[0], RIGHT_BOX[1])
+    out.alpha_composite(tape, (a - 22, b - 10))
+    return np.asarray(out, 'uint8').copy()
+
+
+def bar_geometry():
+    """(first row, last row, first col, last col at the top, last col at the bottom): the painted part of the 32 x 512 bar tile"""
+    return 2, 30, 0, 238, 232
 
 
 def paint_bar(seed=77):
-    """-> RGBA uint8 (32, 512, 4): the focus bar stroke in the stock bar's place (x 0..238, y 1..30; the rest empty): a chalk dry-brush
-    with ragged ends, bristle gaps and the odd darker streak. Opaque enough for ink text; the same tile for all 20 shop bars."""
+    """-> RGBA uint8 (32, 512, 4): the focus bar: a chalk bar on rows 2..30 (centre row 16), cols 0..238 with a straight left end, a 3 px red
+    stripe at the left, a right end cut at a slant (6 px over the height), a dark bevel on the last two rows and a row of ink ticks near
+    the right end. Dry-brush streaks are kept faint so the ink text stays readable."""
     np = _np()
     h, w = 32, 512
     rng = np.random.RandomState(seed)
     rgb = np.zeros((h, w, 3), 'float32'); al = np.zeros((h, w), 'float32')
-    streak = np.clip(0.80 + 0.35 * _noise(rng, (h, 1), 1)[:, 0] + rng.normal(0, 0.07, h), 0.45, 1.05)     # per row strength
+    r0, r1, c0, c1, c2 = bar_geometry()
     fine = _noise(rng, (h, w), 5) * 0.5 + _noise(rng, (h, w), 14) * 0.5
-    for y in range(1, 31):
-        xl = int(rng.randint(0, 7)); xr = 232 + int(rng.randint(0, 7))
-        edge = 1.0 if 4 <= y <= 27 else 0.55
-        for x in range(xl, xr):
-            a = 246 * streak[y] * edge * (0.78 + 0.34 * fine[y, x])
-            if x < xl + 5:
-                a *= 0.55 + 0.09 * (x - xl)                                      # soft start
-            if x > xr - 34:                                                     # bristles run out: gaps get likelier
-                p = (x - (xr - 34)) / 34.0
-                if rng.random_sample() < 0.5 * p * p + 0.25 * p * (1 - fine[y, x]):
-                    a *= 0.15
-                a *= 1.0 - 0.45 * p
+    streak = np.clip(0.93 + 0.10 * _noise(rng, (h, 1), 1)[:, 0] + rng.normal(0, 0.025, h), 0.82, 1.03)
+    for y in range(r0, r1 + 1):
+        xr = c1 - int(round((c1 - c2) * (y - r0) / float(r1 - r0)))
+        for x in range(c0, xr + 1):
+            a = 248 * streak[y] * (0.90 + 0.12 * fine[y, x])
+            c = 240 - 16 * (1 - fine[y, x]) + rng.normal(0, 2)
+            col = (c + 5, c + 2, c - 5)
+            if y >= r1 - 1:
+                col = tuple(v * 0.80 for v in col)
+            if x <= c0 + 2:
+                col = RED_HEAD; a = 255
             al[y, x] = a
-            c = 238 - 22 * (1 - fine[y, x]) + rng.normal(0, 3)
-            rgb[y, x] = (c + 5, c + 2, c - 5)
-    for y in rng.randint(3, 28, 5):                                              # a few darker bristle lines
-        x0 = int(rng.randint(0, 120)); x1 = x0 + int(rng.randint(60, 150))
-        rgb[y, x0:x1] *= 0.80
+            rgb[y, x] = col
+    for k in range(7):                                                                  # ink ticks: 2 x 3 px, 6 px apart, rows 6..8, right of the text area
+        x = 206 + 6 * k
+        for y in range(6, 9):
+            xr = c1 - int(round((c1 - c2) * (y - r0) / float(r1 - r0)))
+            if x + 1 <= xr - 6:
+                rgb[y, x:x + 2] = (12, 12, 13); al[y, x:x + 2] = 210
     return np.dstack([np.clip(rgb, 0, 255), np.clip(al, 0, 255)]).astype('uint8')
 
 
@@ -562,6 +684,22 @@ def _shop_elements(xml):
     return out
 
 
+X_TAGS = ('WeaponShopStar', 'WeaponShopLock', 'NewWeapon', 'NewWeaponDescription', 'PackagePrice', 'IsWeaponAvailable', 'OldPrimaryWeapon',
+          'OldSecondaryWeapon', 'PrimaryWeapon', 'SecondaryWeapon')
+
+
+def _allowed(k, d):
+    """X and GeomSpace are code-bound for most elements; v2 moves them on the listed ones only (the row groups, text / icon / star / lock /
+    price elements, the slot labels). Everything else must keep its X / W / H / GeomSpace."""
+    if k == 'X':
+        return d.get('TagName') in X_TAGS or d.get('Name') == 'Name' or d.get('Text') in ('Primary', 'Secondary')
+    if k == 'GeomSpace':
+        return d.get('Name') == 'Name'
+    if k in ('Y', 'FadeInTime', 'FadeInDelay', 'FadeOutTime', 'LineSpace'):
+        return True
+    return True
+
+
 def check(src, out_dir, log=print):
     """-> list of failures ([] = PASS). Re-parses the produced archive and compares it with the source."""
     dst = os.path.join(out_dir, 'F01_Main.zip')
@@ -576,7 +714,7 @@ def check(src, out_dir, log=print):
         if not (n.lower().endswith(('.loc', '.tex')) or n.lower() == ONLINE.lower()):
             fails.append('unexpected member changed: %s' % n)
     xs, xd = zs.read(ONLINE).decode('latin-1'), zd.read(ONLINE).decode('latin-1')
-    marked_src = MARK in xs
+    marked_src = MARK in xs or MARK_V1 in xs
     if HM.anomalies(xd):
         fails.append('XML does not parse cleanly: %s' % HM.anomalies(xd)[:3])
     # element count and table signature
@@ -610,7 +748,7 @@ def check(src, out_dir, log=print):
             fails.append('element order differs near %s/%s' % (w1, n1)); break
         for k in set(d1) | set(d2):
             if d1.get(k) != d2.get(k):
-                if k in ALLOWED_CHANGES:
+                if k in ALLOWED_CHANGES and _allowed(k, d1):
                     key = '%s.%s' % (d1.get('TagName') or d1.get('Template') or n1, k) if k != 'ColorSet' else k
                     diff.setdefault(key, set()).add((d1.get(k), d2.get(k)))
                 else:
@@ -706,16 +844,20 @@ def _el(xml, window, **want):
 
 
 def mock_all(arc, out_dir, log=print):
-    """PNG mock-ups of the three pages + the dialog, drawn from the XML coordinates (x = 128 + X for AlignH Left: the 768 px screen
-    base group centred on 1024; AlignH Center: 512 + X) and the produced textures, with stock cards and icons. Fonts are stand-ins
-    (Impact / Arial): the real FOUNMB glyphs are narrower or wider, so wraps and the bar columns are APPROXIMATE."""
+    """PNG mock-ups, alignment-faithful (v2): a 1280 x 720 virtual screen, the 768 x 576 base group at (256, 72), every element placed from
+    the produced online.xml (bars, text, card, stars, locks) and drawn with the game's own baked Text / Header glyphs (record: cell
+    x0 y0 x1 y1, w, h, bearing, advance 10, line 11), so the columns, wraps and the bar-to-text fit are the real ones.
+    GUESS inside the mock: a glyph's top = the element's Y + font ascent + record[9] (small glyphs such as '.' and '-' sit low) (it matches the measured bar/text centring: bar centre 82, text
+    centre 82.5); the row pitch is read from the XML GeomSpace + the font line. Also writes frame strips of the three animations:
+    shop_dm_anim_focus.png, shop_dm_anim_info.png, shop_dm_anim_open.png (the engine's own fade attributes, drawn as linear alpha)."""
     np = _np()
     from PIL import Image, ImageDraw
-    import kl_texmat as T, kl_shop_cards as C
+    import kl_texmat as T, kl_shop_cards as C, kl_hud as H
     z = zipfile.ZipFile(arc)
     xml = z.read(ONLINE).decode('latin-1')
     tex = T.read_tex(z.read(STEM + '.TEX'))
     by, _u = C.scene_pics(z, STEM)
+    OX, OY = 256, 72
 
     def tile(tid):
         w, h, px = HM.tex_pixels(tex.tex[tid].entry)
@@ -724,16 +866,63 @@ def mock_all(arc, out_dir, log=print):
             return Image.fromarray(np.asarray(a, 'uint8'), 'RGBA')
         return Image.fromarray(np.frombuffer(bytes(px), np.uint8).reshape(h, w, 4).copy(), 'RGBA')
 
-    bg = Image.new('RGBA', (1024, 576), (22, 23, 27, 255))
-    rng = np.random.RandomState(5)
-    noise = (rng.normal(0, 3, (576, 1024)) + 24).clip(0, 255).astype('uint8')
-    bg = Image.fromarray(np.dstack([noise, noise, noise + 2, np.full_like(noise, 255)]), 'RGBA')
-    pl, pr = sorted(by['BackgroundWeaponShop'])
-    panel = Image.new('RGBA', (1024, 462)); panel.paste(tile(pl).crop((0, 0, 512, 462)), (0, 0)); panel.paste(tile(pr).crop((0, 0, 512, 462)), (512, 0))
+    # ---- the game's own fonts
+    _zp, _order, files, ext = H.open_level(arc)
+    fo = H.fonts_of(files, ext)
+    prm = H.G.read(files[ext['.prm']], 'dd')
+    gl, asc = {}, {}
+    for name in ('Text', 'Header'):
+        _h, recs, _t = H.parse(prm.chunks[fo[name]])
+        asc[name] = -_h[9]                              # the line's ascent (19 Text, 24 Header); a glyph's top = Y + ascent + record[9]
+        pages, d = {}, {}
+        for r in recs:
+            if r[1] not in pages:
+                _tid, tw, th, raw, _e = H.tex_page(tex, r[1])
+                pages[r[1]] = np.frombuffer(raw, np.uint8).reshape(th, tw, 4)
+            a = pages[r[1]][r[3]:r[5], r[2]:r[4], 3] if r[4] > r[2] else None
+            d[r[0]] = (a, r)
+        gl[name] = d
+
+    def advance(font, s):
+        return sum(gl[font].get(ord(c), gl[font][32])[1][10] for c in s)
+
+    def hexrgb(s):
+        v = int(s, 16)
+        return ((v >> 16) & 255, (v >> 8) & 255, v & 255)
+
+    CS = {nm: (hexrgb(a[4:]), hexrgb(b[4:])) for nm, a, b, _c in COLORSETS}
+    GREEN = (0x63, 0xa6, 0x5b)
+
+    def text(im, x, y, s, col, font='Text', align='l', alpha=1.0):
+        """x, y in g units; the glyph cell's top sits at y; align l / c / r on x."""
+        w = advance(font, s)
+        px = x - (w if align == 'r' else w / 2.0 if align == 'c' else 0) + OX
+        for ch in s:
+            a, r = gl[font].get(ord(ch), gl[font][32])
+            if a is not None and a.size:
+                lay = np.zeros(a.shape + (4,), 'uint8'); lay[..., 0], lay[..., 1], lay[..., 2] = col
+                lay[..., 3] = (a.astype('float32') * alpha).astype('uint8')
+                im.alpha_composite(Image.fromarray(lay, 'RGBA'), (int(round(px)) + r[8], int(round(y + OY)) + asc[font] + r[9]))
+            px += r[10]
+        return w
+
+    def wrap(s, width, font='Text'):
+        out, cur = [], ''
+        for wd in s.split(' '):
+            t = (cur + ' ' + wd).strip()
+            if advance(font, t) > width and cur:
+                out.append(cur); cur = wd
+            else:
+                cur = t
+        return out + [cur]
+
     bartile = tile(next(t for t, us in HM.picture_uses(z, STEM).items() if {f for f, _l, _r in us} == {'FocusBar_short'})).crop((0, 0, 240, 32))
     star = tile(next(iter(by['WeaponShopStar#01']))); lock = tile(next(iter(by['WeaponShopLock#01'])))
-    fonts = dict(h=_font('impact.ttf', 24), t=_font('impact.ttf', 17), s=_font('arialbd.ttf', 13), b=_font('arialbd.ttf', 12), hl=_font('impact.ttf', 25))
-    CS = {'DMTab': ((0xbd, 0xb8, 0xae), (0x0c, 0x0c, 0x0d)), 'DMRed': ((0xd7, 0x37, 0x3a),) * 2, 'DMSteel': ((0x9f, 0xb4, 0xd2),) * 2}
+    panel_l, panel_r = sorted(by['BackgroundWeaponShop'])
+    panel = Image.new('RGBA', (1024, 462)); panel.paste(tile(panel_l).crop((0, 0, 512, 462)), (0, 0)); panel.paste(tile(panel_r).crop((0, 0, 512, 462)), (512, 0))
+    rng = np.random.RandomState(5)
+    noise = (rng.normal(0, 3, (720, 1280)) + 24).clip(0, 255).astype('uint8')
+    bg = Image.fromarray(np.dstack([noise, noise, noise + 2, np.full_like(noise, 255)]), 'RGBA')
     en = None
     for n in z.namelist():
         if n.endswith('MainEnglish.LOC'):
@@ -741,93 +930,129 @@ def mock_all(arc, out_dir, log=print):
 
     def desc(row):
         t = L.fields(en[LOCKEY + '%dDesc' % row])[0] or b''
-        return t.decode('latin1').split('\n')
+        lines = t.decode('latin1').split('\n')
+        return lines[0], lines[1:]
 
-    def page(window, focus_row=None, focus_cat=None, slots=False, row0=0):
-        im = bg.copy(); im.alpha_composite(panel, (1, 50)); d = ImageDraw.Draw(im)
-        hl = _el(xml, window, TagName='HeadlineText')
-        d.text((128 - 90, 5), {'FABuyWeaponsNew': 'BUY WEAPONS', 'FABuyWeaponsNewCategory': 'BUY WEAPONS', 'FABuyWeaponsNewWeapon': 'BUY WEAPONS'}[window], font=fonts['hl'], fill=CS['DMRed'][0])
-        d.text((896 - 130, 15), '$ 142,500', font=fonts['t'], fill=(0x63, 0xa6, 0x5b), anchor='ra')
-        d.line([(0, 33), (1024, 33)], fill=(120, 130, 150, 70)); d.line([(0, 534), (1024, 534)], fill=(120, 130, 150, 70))
+    def A(t, delay, dur):                                # the engine's fade-in: linear 0 -> 1 from the delay over the time
+        if t is None:
+            return 1.0
+        return max(0.0, min(1.0, (t - delay) / dur)) if dur > 0 else float(t >= delay)
 
-        def row_text(x, y, text, focused, col='DMTab'):
-            if focused:
-                im.alpha_composite(bartile, (x - 17, y - 9))
-            d.text((x, y), text, font=fonts['t'], fill=CS[col][1] if focused else CS[col][0])
+    def put(im, spr, gx, gy, alpha=1.0):
+        if alpha <= 0:
+            return
+        if alpha < 1:
+            spr = spr.copy(); spr.putalpha(spr.getchannel('A').point(lambda v: int(v * alpha)))
+        im.alpha_composite(spr, (int(gx + OX), int(gy + OY)))
 
-        fake = int(re.search(r'TagName="WeaponShopFakeBar"[^>]*AlphaMax="(\d+)"', xml).group(1))
-        # slots (page 1 focus; pages 2, 3 dimmed fake bars)
+    def num(window, **want):
+        return _el(xml, window, **want)
+
+    CATS = ('PISTOLS', 'SHOTGUNS', 'SUBMACHINE GUNS', 'ASSAULT RIFLES')
+    LIVE = {'FABuyWeaponsNew': 'BUY WEAPONS', 'FABuyWeaponsNewCategory': 'BUY WEAPONS', 'FABuyWeaponsNewWeapon': 'BUY WEAPONS'}
+
+    def page(window, focus_row=None, focus_cat=None, slots=False, row0=0, t=None, bar_a=None):
+        """t = seconds since the page opened (None = fully shown); bar_a = {row: alpha} overrides for the list focus bars."""
+        im = bg.copy()
+        put(im, panel, -127, 50, A(t, 0, 0.15))
+        text(im, -90, 5, LIVE[window], CS['DMRed'][0], 'Header')
+        text(im, 768 - 130, 15, '$ 142,500', GREEN, 'Text', 'r')
+        d = ImageDraw.Draw(im)
+        fake = int(num('FABuyWeaponsNewWeapon', TagName='WeaponShopFakeBar')['AlphaMax']) / 255.0
+        # slots
         for k, (nm, gun) in enumerate((('PRIMARY', 'ZASTAVA M85'), ('SECONDARY', 'M9 BERETTA'))):
             y = 66 + 130 * k
             foc = slots and k == 0
-            tmp = bartile.copy()
             if not slots:
-                tmp.putalpha(tmp.getchannel('A').point(lambda v: v * fake // 255)); im.alpha_composite(tmp, (18, y))
+                put(im, bartile, SLOT_BAR_X, y, fake)
             elif foc:
-                im.alpha_composite(bartile, (18, y))
-            tw = d.textlength(nm, font=fonts['t']); d.text((132 - tw / 2, y + 9), nm, font=fonts['t'], fill=CS['DMTab'][1] if foc else CS['DMTab'][0])
-            d.text((132, y + 90), gun, font=fonts['s'], fill=CS['DMSteel'][0], anchor='ma')
-            ico = tile(next(iter(by['FAStatus_Weapon%02d#01' % W.pic_nn(28 if k == 0 else 2)])))
-            im.alpha_composite(ico.resize((64, 64), Image.LANCZOS), (162 - 32 + 0, y + 26 - 8)) if False else None
-        # categories
-        cats = ('PISTOLS', 'SHOTGUNS', 'SUBMACHINE GUNS', 'ASSAULT RIFLES')
-        for k, c in enumerate(cats):
+                put(im, bartile, SLOT_BAR_X, y, A(t, 0, BAR_IN))
+            text(im, SLOT_LABEL_X + 384, SLOT_LABEL_Y[k], nm, CS['DMTab'][1] if foc else CS['DMTab'][0], 'Text', 'c', A(t, 0.02 + 0.04 * k, 0.12))
+            text(im, SLOT_LABEL_X + 384, 155 + 130 * k, gun, CS['DMSteel'][0], 'Text', 'c')
+        # categories + list
+        gs = GEOM_SPACE + 22
+        for k, c in enumerate(CATS):
             foc = window == 'FABuyWeaponsNewCategory' and k == (focus_cat or 0)
+            if window == 'FABuyWeaponsNew':
+                continue
             if window == 'FABuyWeaponsNewWeapon':
-                tmp = bartile.copy(); tmp.putalpha(tmp.getchannel('A').point(lambda v: v * fake // 255)); im.alpha_composite(tmp, (296, 66 + 34 * k))
-            row_text(313, 75 + 34 * k - 8 + 8, c, foc)
-        names = [HS.ROWS[r][1] for r in range(row0, row0 + 8)]
-        for k, nm in enumerate(names):
-            foc = window == 'FABuyWeaponsNewWeapon' and (row0 + k) == focus_row
-            if window == 'FABuyWeaponsNewWeapon':
-                row_text(313, 225 + 34 * k - 2, nm, foc)
-                if row0 + k in (1, 3, 5):
-                    im.alpha_composite(lock, (505, 216 + 34 * k))
-            else:
-                d.text((313, 225 + 34 * k - 2), nm, font=fonts['t'], fill=CS['DMTab'][0] + (0,) if False else (0x6f, 0x6c, 0x66))
+                put(im, bartile, CAT_BAR_X, 66 + ROW_PITCH * k, fake)
+            elif foc:
+                put(im, bartile, CAT_BAR_X, 66 + ROW_PITCH * k, A(t, 0, BAR_IN))
+            text(im, NAME_X, CAT_NAME_Y + gs * k, c, CS['DMTab'][1] if foc else CS['DMTab'][0])
         if window != 'FABuyWeaponsNew':
+            for k in range(8):
+                r = row0 + k
+                foc = window == 'FABuyWeaponsNewWeapon' and r == focus_row
+                if window == 'FABuyWeaponsNewWeapon':
+                    ba = (bar_a or {}).get(r, 1.0 if foc else 0.0)
+                    put(im, bartile, CAT_BAR_X, 216 + ROW_PITCH * k, ba)
+                    ta = A(t, 0.03 + 0.035 * k, 0.12)
+                    text(im, NAME_X, LIST_NAME_Y + gs * k, HS.ROWS[r][1], CS['DMTab'][1] if (foc and ba > 0.5) else CS['DMTab'][0], 'Text', 'l', ta)
+                    if r in (1, 3, 5):
+                        put(im, lock, LOCK_X, 216 + ROW_PITCH * k)
+                else:
+                    text(im, NAME_X, LIST_NAME_Y + gs * k, HS.ROWS[r][1], (0x6f, 0x6c, 0x66))
             r = focus_row if focus_row is not None else row0
             card, _i = C.decode_tile(tex, next(iter(by['FAStatus_WeaponBig#%02d' % W.pic_nn(r)])))
-            im.alpha_composite(Image.fromarray(np.asarray(card, 'uint8'), 'RGBA').crop((0, 0, 445, 210)), (560, 60))
+            put(im, Image.fromarray(np.asarray(card, 'uint8'), 'RGBA').crop((0, 0, 445, 210)), 432, CARD_Y, A(t, 0.04, 0.22))
         if window == 'FABuyWeaponsNewWeapon':
             r = focus_row
-            nm = _el(xml, window, TagName='NewWeapon'); ds = _el(xml, window, TagName='NewWeaponDescription')
-            d.text((560, int(nm['Y'])), HS.ROWS[r][1], font=fonts['h'], fill=CS['DMRed'][0])
-            d.text((1005, int(nm['Y']) + 6), '$ %s' % '{:,}'.format((2, 4, 6, 8, 10, 13, 15, 18)[r % 8] * 1000), font=fonts['t'], fill=(0x63, 0xa6, 0x5b), anchor='ra')
-            y = int(ds['Y']); wid = int(ds['TextWidth'])
-            for ln in desc(r):
-                words, cur = ln.split(' '), ''
-                for wd in words:
-                    if d.textlength(cur + ' ' + wd, font=fonts['s']) > wid and cur:
-                        d.text((560, y), cur, font=fonts['s'], fill=CS['DMSteel'][0]); y += int(ds['LineSpace']); cur = wd
-                    else:
-                        cur = (cur + ' ' + wd).strip()
-                d.text((560, y), cur, font=fonts['s'], fill=CS['DMSteel'][0]); y += int(ds['LineSpace'])
-            sy = int(_el(xml, window, TagName='WeaponShopStar', PlayerIndex='0')['Y'])
+            text(im, NAME_X2, NAME_Y2, HS.ROWS[r][1], CS['DMRed'][0], 'Header', 'l', A(t, 0.06, 0.18))
+            first, rest = desc(r)
+            y = DESC_Y2
+            body = [first] + rest
+            for ln in body:
+                for w2 in wrap(ln, DESC_W):
+                    text(im, DESC_X, y, w2, CS['DMSteel'][0], 'Text', 'l', A(t, 0.14, 0.25)); y += DESC_LS
             for k in range(TIERS[r]):
-                im.alpha_composite(star, (551 + 34 * k, sy))
-        d.text((128 - 130, 534 - 28), 'NEXT ROUND 4', font=fonts['b'], fill=(0xbd, 0xb8, 0xae)); d.text((896, 534 - 28), 'BACK', font=fonts['b'], fill=(0xf3, 0xf0, 0xea), anchor='ra')
+                put(im, star, STAR_X0 + ROW_PITCH * k, STAR_Y, A(t, 0.12 + 0.06 * k, STAR_T))
+            text(im, 768 - PRICE_X, PRICE_Y, '$ {:,}'.format((2, 4, 6, 8, 10, 13, 15, 18)[r % 8] * 1000), GREEN, 'Text', 'r')
+        text(im, -2, 506, 'NEXT ROUND 4', (0xbd, 0xb8, 0xae)); text(im, 768, 506, 'BACK', (0xf3, 0xf0, 0xea), 'Text', 'r')
+        d.rectangle([OX, OY, OX + 767, OY + 575], outline=(60, 70, 90, 255))        # the 768 x 576 base group, for the eye
         return im.convert('RGB')
 
     pages = [('shop_dm_page1_slots.png', page('FABuyWeaponsNew', slots=True)),
-             ('shop_dm_page2_category.png', page('FABuyWeaponsNewCategory', focus_cat=2, focus_row=18)),
+             ('shop_dm_page2_category.png', page('FABuyWeaponsNewCategory', focus_cat=2, focus_row=18, row0=17)),
              ('shop_dm_page3_weapon.png', page('FABuyWeaponsNewWeapon', focus_row=6, row0=0)),
              ('shop_dm_page3_weapon_smg.png', page('FABuyWeaponsNewWeapon', focus_row=18, row0=17))]
-    # the dialog
     im = bg.copy(); d = ImageDraw.Draw(im)
     fr = tile(next(iter(by['InfoControllerFrame'])))
-    im.alpha_composite(fr.resize((700, 200), Image.NEAREST), (162, 190))
-    d.text((512, 240), 'Are you sure you want to purchase this weapon?', font=fonts['t'], fill=(0xf3, 0xf0, 0xea), anchor='ma')
-    im.alpha_composite(bartile, (300, 320)); d.text((330, 327), 'YES', font=fonts['t'], fill=CS['DMTab'][1]); d.text((600, 327), 'NO', font=fonts['t'], fill=CS['DMTab'][0])
+    im.alpha_composite(fr.resize((700, 200), Image.NEAREST), (290, 260))
+    text(im, 384, 215, 'Are you sure you want to purchase this weapon?', (0xf3, 0xf0, 0xea), 'Text', 'c')
+    put(im, bartile, 90, 300); text(im, 105, 307, 'YES', CS['DMTab'][1]); text(im, 480, 307, 'NO', CS['DMTab'][0])
     pages.append(('shop_dm_dialog.png', im.convert('RGB')))
     os.makedirs(out_dir, exist_ok=True)
-    for name, im in pages:
-        im.save(os.path.join(out_dir, name))
-    sheet = Image.new('RGB', (2048, 1152 + 0))
-    for k, (_n, im) in enumerate(pages[:4]):
-        sheet.paste(im, ((k % 2) * 1024, (k // 2) * 576))
+    for name, pim in pages:
+        pim.save(os.path.join(out_dir, name))
+    sheet = Image.new('RGB', (2560, 1440))
+    for k, (_n, pim) in enumerate(pages[:4]):
+        sheet.paste(pim, ((k % 2) * 1280, (k // 2) * 720))
     sheet.save(os.path.join(out_dir, 'shop_dm_mock.png'))
-    log('mock-ups: %s' % ', '.join(n for n, _ in pages) + ', shop_dm_mock.png')
+
+    # ---- frame strips (crop g x 150..890, y 56..500; scaled to 50 %)
+    def strip(name, frames):
+        crops = []
+        for lab, fim in frames:
+            c = fim.crop((150 + OX, 56 + OY, 890 + OX, 500 + OY)).resize((370, 222), Image.LANCZOS)
+            ImageDraw.Draw(c).text((6, 4), lab, fill=(255, 255, 90))
+            crops.append(c)
+        sh = Image.new('RGB', (370 * 3 + 8, 222 * ((len(crops) + 2) // 3) + 4 * ((len(crops) + 2) // 3 - 1)), (10, 10, 12))
+        for k, c in enumerate(crops):
+            sh.paste(c, ((k % 3) * 374, (k // 3) * 226))
+        sh.save(os.path.join(out_dir, name))
+
+    W_ = 'FABuyWeaponsNewWeapon'
+    # focus moving row 3 -> 4: the old bar fades out over FadeOutTime, the new bar fades in over FadeInTime (the text colour switches at once)
+    fr_focus = []
+    for tt in (0.0, 0.04, 0.08, 0.12, 0.18, 0.24):
+        fr_focus.append(('t=%.2fs' % tt, page(W_, focus_row=4, row0=0, bar_a={3: max(0.0, 1 - tt / BAR_OUT), 4: min(1.0, tt / BAR_IN)})))
+    strip('shop_dm_anim_focus.png', fr_focus)
+    # focus lands on another weapon: card / name / description / stars re-fade (the same FadeIn attributes, drawn as t after the move)
+    strip('shop_dm_anim_info.png', [('t=%.2fs' % tt, page(W_, focus_row=6, row0=0, t=tt, bar_a={6: 1.0})) for tt in (0.04, 0.10, 0.16, 0.24, 0.34, 0.5)])
+    # page open: panel, rows cascade, card, name, description, stars
+    strip('shop_dm_anim_open.png', [('t=%.2fs' % tt, page(W_, focus_row=2, row0=0, t=tt, bar_a={2: A(tt, 0.0, BAR_IN)})) for tt in (0.05, 0.10, 0.16, 0.24, 0.34, 0.5)])
+    log('mock-ups: %s, shop_dm_mock.png, shop_dm_anim_focus.png, shop_dm_anim_info.png, shop_dm_anim_open.png' % ', '.join(n for n, _ in pages))
 
 
 # ---------------------------------------------------------------- command line
