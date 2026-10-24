@@ -1,3 +1,17 @@
+2026-10-24 17:55 UTC - scheduled check-in (cloud). PC BUSY (build\shop_dm_1024v2\DM01 mockups written 17:45 UTC, KLHook.ini 17:03,
+dinput8.dll 16:41): nothing launched, installed or staged into the game. Log read: two FATAL c00000fd (stack overflow, ntdll+0x5c305)
+at 17:32:50 / 17:33:17 PC time right after 'FIRST Present seen, via the swap chain (slot 3) route' with the 16:52 build; the third
+start (17:35) had the limiter off and the live ini now says k36 SwapChain=0 - diagnosed and fixed locally, no dump written, nothing
+for me to triage. Offline piece (Hire tab stage 0 / menus.md q3+q4): `re/menu_count.md` + `tools/kl_menu_count.py` (self-test on
+the stock sets passes; the 2026-10-09 model's 5992 was the Platform rule). Read from kl2.exe: <Platform>/<BuildTag> share one rule
+(attr PC, or PC_KEYBOARD / PC_GC per [manager+0xaf68]; XENON/PS3 never read); ExcludeIn tests per key (FA IS a key); a <Template>'s
+children are made once and re-attached (0x403060, no clones), an element naming a template with children makes nothing; the
+tokenizer is not XML (stray text ends the file silently, first '-->' closes a comment, first duplicate attribute wins). ESTIMATES:
+stock frontend 4730 (gamepad 4927), live overlay frontend 4793 (gamepad 4990 = 10 under the 5000 line), level 2775 (DM01 2778),
+campaign 1193. NEW second cap: 512 <Template> definitions per load set (reader+0x1e8, 0x686270), frontend 500 stock / 502 live:
+a new frontend page may define at most 10 templates. Pulled XML copies sit in <work>\research\sched_1024_menu\ (no game file touched).
+Owner: nothing new this hour.
+
 2026-10-24 15:45 - INSTALLED WHITE SHOP (owner: 'put it into the main game'; game closed): build\shopwhite_1024\stage\shop1024white.ps1
 on all 27 maps (379ef8622, MARK_VERSION 3: model-rendered white silhouettes on a Dead Men dark card; review READY; backups
 .before-1024white). rev_1024 is now STALE (built on pre-shop zips, its installer refuses): RESTAGED as <work>\build\rev2_1024\ (door +

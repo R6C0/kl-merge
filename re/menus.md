@@ -89,7 +89,8 @@ Conditional blocks (established from 0x8ce850 and 0x87e930):
   How the two lookups combine is not established exactly (see 2.5).
 - `<ExcludeIn>` keys the exe tests: `Arcade Campaign Demo HiddenDemo Normal GameRelease GermanSKU
   NotGermanSKU JapaneseSKU NotJapaneseSKU Extreme Hard PreviewBuild LifePreviewBuild`. The XML also writes
-  `FA` and `Preview`, which are not in that list.
+  `FA` and `Preview`; 2026-10-24: `FA` IS tested (0xb6ca28, first in the chain: `0x863a60 && [session+0x5c]==4`),
+  only `Preview` is not. Each key's test: `re/menu_count.md` 2.
 - `<Locale>`, `<GameRegion>`: language and region name as attribute, e.g. `English="True"`.
 - `<BuildTag>`: attribute named after the ini value `BuildTag` (default `Default`), 0x87ea35.
 - **`<MainIniOption Name="Key" Value="n">`** (0x8ced39..0x8cee40): includes its children when
@@ -229,6 +230,11 @@ objects for the frontend (frontend.xml 3973 + online.xml 2019) and 3393 for a mu
 first exceeds the cap while the stock game runs, so the model over-counts (most likely the `<Platform>`
 rule). Before adding large pages, read `[[[0xdd265c]+0x824]+0x9f48]` in KLHook once in the main menu.
 A character page of about 40 elements is small either way.
+2026-10-24: re-read and rewritten as `tools/kl_menu_count.py` (rules in `re/menu_count.md`): the `<Platform>`
+rule is attribute `PC` OR attribute `PC_KEYBOARD` / `PC_GC` (XENON / PS3 never read), a `<Template>`'s children
+are made once at the definition and re-attached on use (no clones), an element naming a template with
+children makes nothing itself. ESTIMATES: stock frontend 4730 (gamepad 4927), live KLExpansion frontend
+4793 (gamepad 4990), a level 2775. Second cap: 512 `<Template>` definitions per load set, frontend uses 500.
 
 ### 2.6 Text keys and the .LOC
 
@@ -761,8 +767,10 @@ correct title.
 1. Is the options object written to the profile (do `Dummy` / `Dummy2` survive a restart)?
 2. Does `OptionValue` get written when a `ZNavigator` is activated, and before the window change? (Assumed
    from the stock main menu.)
-3. Real element count against the 5096 cap (read `[manager+0x9f48]` in the main menu).
-4. Exact `<Platform>` rule; whether switching keyboard / gamepad reparses the XML.
+3. Real element count against the 5096 cap (read `[manager+0x9f48]` in the main menu). Static ESTIMATE
+   2026-10-24 (`tools/kl_menu_count.py`): frontend 4730 stock / 4793 live, level 2775 - `re/menu_count.md`.
+4. Exact `<Platform>` rule: READ 2026-10-24 (`re/menu_count.md` 2: `PC` or `PC_KEYBOARD`/`PC_GC`, OR-ed). Whether
+   switching keyboard / gamepad reparses the XML is still open (`[manager+0xaf68]` is read at reader set-up).
 5. Does the `-o Key=Value` store feed `<MainIniOption>`?
 6. How keyboard Accept reaches `StartGame` on `HeistPlayMenu` (its button names `PlayLevel`).
 7. The rest of `ZGameRulesHeist` slot 137 after the hero is attached (crew swap, identity table).

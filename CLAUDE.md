@@ -66,6 +66,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 17:55 UTC - scheduled check-in (cloud; PC BUSY: build\shop_dm_1024v2 written 17:45 UTC, so nothing run, installed or
+staged into the game; no dump newer than KLHook_1.dmp; the two c00000fd stack overflows at 16:32/16:33 UTC in KLHook.log were the k34
+swap-chain Present route, already fixed locally by k36 [FrameLimit] SwapChain=0). Offline piece: `re/menu_count.md` +
+`tools/kl_menu_count.py` - the menu element table counted the way kl2.exe's own reader does it (Platform = PC or PC_KEYBOARD/PC_GC,
+templates made once, first `-->` closes a comment). ESTIMATES: a level set ~2775 of 5096 (room for an in-level Hire window), live
+frontend 4793 keyboard / 4990 gamepad, and a SECOND cap: 512 `<Template>` definitions per load set, frontend uses 500-502.
+Owner: nothing new; K0 (hud_menu.md 8) is still what proves the numbers.
+
 2026-10-24 15:45 - WHITE SHOP INSTALLED on all 27 maps (379ef8622; backups .before-1024white). Cover/door fixes RESTAGED on top
 as <work>\build\rev2_1024\ (rev_1024 stale). Earlier 15:30 note: <work>\build\rev_1024\ = HC2 garage door goes with the blast + NoCoverBox
 stripped on 11 DM maps (INSTALL cover nocoverbox.bat, md5-checked) and hook k29b [CarDown] (car blast = revivable down; offsets
@@ -81,11 +89,6 @@ human first). PROPOSAL, not built: field 10 = 10 on node 7857 so a human re-fire
 the hall (z down to -1434) and left box 9 by more than Slack 150, so CarWait/CarFallback never carried him. INSTALLED DM09 KLJoin.ini
 Slack=1500 (md5 acdc8e12, backup KLJoin.ini.before-1024slack; generator 413a95394). NOT verified live: LIFT14 (= his walk,
 <work>\build\klhook\live\LIFT14.ini) skipped, owner active. Doors still shut for him: cause open (probe hook LIFT10/11 fired fine).
-
-2026-10-24 12:49 - INSTALLED SHIP out_3f_1024k27c B5252D74 + ini 3B27E903 ([Rigid] Enable=0: the owner's 'camera awful / fps bad' was the
-filter's lag; his fps was 210 vs 184 yesterday). k27c: Alt+F4 key-watch thread (KW1 live PASS, 545 ms), MciPump default 0, lift CarStall,
-'coming to get you' only on a real kneel + REVIVE log lines. Undo: <work>\build\camoff_1024\UNDO k27c and camera off.bat. Open: lift doors
-shut for heisters (lead: TriggerBox_OpenExitElevator AllInside wants every merc inside, unproven); 'cant revive a bot until the popup'.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
