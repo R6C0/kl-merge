@@ -66,6 +66,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 22:30 - INSTALLED (owner 'install all'): hook k34 a22b642b; cover3 (all 11 maps, DM01 rebuilt C:/kl_build_1024/cover3_dm01);
+climb3 (13 maps); hc2hasta_1024d (DM01B badc0bee, DM11B ef53c079); club_1024d (DM05A, 40 civilians); blowup_1024d (DM05A 257c7445, DM06
+2faf4742); gun sounds (27 .WAV, .before-1024gunsnd); sky preset (.before-1024sky). Undo zips in reverse: blowup, club, hc2hasta, cover3.
+C: hit 0 bytes mid-climb3 (restored cleanly); deleted vgame, hc2_attic, old claude temp with OK. Not live-tested. k35 anim probe staged only.
+
 2026-10-24 21:15 - STAGED, NOT INSTALLED: hook k34 (SHIP a22b642b, TEST 587e09ff) = k33 + [VanBlow] (FollowOutShield=3 kept the van
 invulnerable all wait, so it burned but never hit 0; now shielded only while somebody is aboard). C:/kl_build_1019/k34_1024e/INSTALL k34.bat
 supersedes k32/k33 (undo rehearsed byte-identical). Chopper data pass <work>/build/blowup_1024 (DM05A + DM06 Definite, 5000 hp; Hasta left

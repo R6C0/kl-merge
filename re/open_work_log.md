@@ -1,3 +1,12 @@
+2026-10-24 22:30 - INSTALLED (owner 'install all'), not live-tested: hook k34 (a22b642b, over v30; backups .before-1024k34); cover3 on 11 maps
+(DM01 rebuilt on live 011fc9bb -> 5522ebcf, C:/kl_build_1024/cover3_dm01); climb3 on DD01..DD09, DM01B, DM05A, DM06B, DM11B; hc2hasta rebuilt on live
+(C:/kl_build_1024/hc2hasta_1024d: DM01B fdef9215 -> badc0bee, DM11B 34d11896 -> ef53c079); club rebuilt (C:/kl_build_1024/club_1024d, DM05A 40
+civilians, 107 actors: over the proven limit, watch for crashes there); blowup rebuilt (C:/kl_build_1024/blowup_1024d: DM05A -> 257c7445, DM06 ->
+2faf4742; Hasta untouched); gun sounds (27 .WAV in place, copies .before-1024gunsnd; UNDO via gunsnd_1024c .old); sky preset only from fps_1024b
+(.before-1024sky). Zip UNDO order: blowup, club, hc2hasta, cover3, climb3. C: ran out of space during climb3 (5 copies failed, each restored to its
+md5); freed vgame (rehearsal copy), hc2_attic (never installed) and Claude temp entries > 3 h old with the owner's OK, then finished climb3.
+k35 (klanimprobe.c, TEST dll only, log-only Play probe at 0x4da1d0, 48c2c858b) staged C:/kl_build_1019/k35_1024f, NOT installed.
+
 2026-10-24 22:00 - STAGED, NOT INSTALLED: hook k35 (SHIP 55c7f7ea4e5fbdacc23009b6a9903bad, TEST dc32fc0cd4d19d614f1dfeaa3078c4e9) = k34 + [AnimProbe] (klhook/klanimprobe.c, Enable=0 default, LOG ONLY).
 Detours Play 0x4da1d0 (8-byte prologue 83 ec 50 55 8b 6c 24 58 checked; not a hashed range) and logs the local player's Play calls (clip, flags bit0/bit1, rec+0x14, caller, channel +0x3c/+0x40 after return) in a Ms window around a gait change (signature [mover+0x58], [mover+0x1e5c], [P+0x6b4]). SHIP dll REFUSES code patches (logs it): use 'INSTALL k35 TEST dll.bat'. C:/kl_build_1019/k35_1024f; undo rehearsed on copies, byte-identical. Look for 'animprobe:' CHANGE / RING / PLAY / RET lines.
 
