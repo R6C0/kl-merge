@@ -19,6 +19,7 @@ def md5f(p):
 def ps_text():
     import kl_dm01b_gas_1025 as G
     s = G.PS1.replace('gas.json', 'dm01cars.json').replace('.before-1025dm01bgas', TAG).replace('gas.ps1', 'dm01cars.ps1')
+    s = s.replace('Maps\DM01B\F03_Main.zip', 'Maps\DM01\F01_Main.zip')
     first = s.index('\n')
     return ('# dm01cars.ps1 - DM01 Hot Coffee, 2026-10-25 (tools/kl_dm01cars_1025.py): three police cars (F03 MatPosAnim graft) drive in, six SWAT men get out.\n'
             '#   Chained: `old` in dm01cars.json is the dm01squads build (11c874cb...); install doors2 and dm01squads first.\n') + s[first + 1:]

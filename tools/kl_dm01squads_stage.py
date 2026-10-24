@@ -19,6 +19,7 @@ def md5f(p):
 def ps_text():
     import kl_dm01b_gas_1025 as G
     s = G.PS1.replace('gas.json', 'dm01squads.json').replace('.before-1025dm01bgas', TAG).replace('gas.ps1', 'dm01squads.ps1')
+    s = s.replace('Maps\DM01B\F03_Main.zip', 'Maps\DM01\F01_Main.zip')
     first = s.index('\n')
     return ('# dm01squads.ps1 - DM01 Hot Coffee, 2026-10-25 (tools/kl_dm01squads_1025.py): shop-room holding squad (4), warehouse floor squad (8), upper-level squad (4),\n'
             '#   and four warehouse kick doors (the hall door + three across the west bay) so the hall starts shut with men inside.\n'
