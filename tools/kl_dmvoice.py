@@ -313,15 +313,42 @@ class Plan:
         return {w: (len(L), len({(c.path, r) for c, r in L.values()})) for w, L in self.leaves.items()}
 
 
-def map_events(loc_tree):
-    """Dog Days event leaves of a map's English .LOC: Multiplayer/<Folder>/<Event>_C<n> -> 'Event' (radio twin '_R' kept)"""
+SINGLE_MAX = 200     # singles added per table kind (plain / radio twin): a .LOC table holds 255 leaves, the pools and pairs need about 30
+
+
+def _theme_known(name):
+    base = re.sub(r'_R$', '', name)
+    base = re.sub(r'_\d+$', '', base)
+    base = re.sub(r'^(FA_)?(1time_)?', '', base)
+    base = re.sub(r'\d+$', '', base)
+    for i, (rx, _th) in enumerate(EVENT_THEME):
+        if re.search(rx, base):
+            return i
+    return -1
+
+
+def map_events(loc_tree, singles=True):
+    """Dog Days event leaves of a map's English .LOC: Multiplayer/<Folder>/<Event>_C<n> -> 'Event' (radio twin '_R' kept).
+    singles (voiceplain 2026-10-24, klvoice.c PlainData=1): also the SINGLE-ENTRY events (flag-0 lines: the loader builds one
+    entry from the bare key, no _C<n> siblings, e.g. FA_YouEscaped01_R, FA_PoliceReward_01, Backstab_xx_R). The leaf is the whole last
+    path part, exactly what klvoice.c's kvo_cv_line derives from the entry's key text. Only events whose name an EVENT_THEME rule
+    knows are taken (the theme picks the Dead Men clip); the rest (police briefings, intros, team police lines, names with spaces)
+    stay stock - GUESS that nothing else needs a Dead Men voice. At most SINGLE_MAX per kind, in EVENT_THEME order."""
     ev = set()
+    base = set()
     for p, _n in kl_loc.leaves(loc_tree):
         parts = p.split('/')
         if parts[0].lower() == 'multiplayer' and len(parts) == 3:
             m = re.match(r'^(.+)_C\d$', parts[2])
             if m:
                 ev.add(m.group(1))
+            else:
+                base.add(parts[2])
+    if singles:
+        sing = sorted(b for b in base if b not in ev and ' ' not in b and not re.match(r'(?i)^(Police(Br|Mission)|TeamPolice|Intro)', b) and _theme_known(b) >= 0)
+        for radio in (False, True):
+            pick_ = sorted((b for b in sing if b.endswith('_R') == radio), key=lambda b: (_theme_known(b), b))
+            ev.update(pick_[:SINGLE_MAX])
     return sorted(ev)
 
 
