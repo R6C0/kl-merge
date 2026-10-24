@@ -66,6 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-25 - STAGED, NOT INSTALLED: Last Call lastcall3 C:/kl_build_1024/lastcall3_1025a (tools/kl_club_lastcall3.py; live DM05A 7ef0404f): main/ d639c20a (f3=1 on heli squad + all 56 civilians, HVK vehicle placement back to origin/identity, 3 roof squads x4 pre-placed, +34 civilians, 4 new dance routs 'KL_Dance2!'), alt/ 1b2f8233 (same, HVK kept). 145 actors / 90 squads (unproven; proven 99/55, stock 148/90). INSTALL/UNDO 'lastcall3.ps1' (backup .before-1025lastcall3), rehearsed on scratch. MUSIC NOT FIXED: live .WHD has 0 records of the 13 club clips (PC_Def.str has the blocks): needs a kl_snd.merge job. Live test needed.
+
+
 2026-10-25 03:30 - INSTALLED (owner 'install all'), not run in the game: hook k40 F2FE048F = k39 + reviewed shop page II (klshoppage.c 07e906bc2);
 C:/kl_build_1019/k40_1025a/stage INSTALL/UNDO k40.bat, backups .before-1025k40, ini block [StanceFix] + [ShopPage] Enable=1, KLShopPage.ini.
 k39 and shoppage_1024a stages are superseded. DM01 star fix waits on the peer's dm01fix_1025a. Test: Arcade -> Buy Weapons -> F6.

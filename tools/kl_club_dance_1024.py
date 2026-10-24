@@ -139,17 +139,22 @@ def dancers(B):
     return out
 
 
-def build(src, dst, clips=None, per=PER_ROUT, force=False, log=print):
+def build(src, dst, clips=None, per=PER_ROUT, force=False, log=print, group=None, only=None):
+    """group / only (lastcall3, 2026-10-25): a SECOND dance group for civilians added after the first pass: `group` = the new top's name
+    (default GROUP), `only` = a set of civilian group names to dance (default all); a second group does not merge the .ANM again."""
     clips = clips or DEFAULT_CLIPS
+    gname = group or GROUP
     have = md5(src)
     if have not in (MD5_LIVE, MD5_LC2) and not force:
         raise ValueError('%s: md5 %s is neither the live DM05A (%s) nor lastcall2 (%s); use --force' % (src, have, MD5_LIVE, MD5_LC2))
     B = F.Built(src)
     sc = B.sc
-    if any(sc.names[t] == GROUP for t in sc.tops()):
-        log('kl_club_dance_1024: %s already holds %s: nothing to do' % (src, GROUP))
+    if any(sc.names[t] == gname for t in sc.tops()):
+        log('kl_club_dance_1024: %s already holds %s: nothing to do' % (src, gname))
         return None
     dl = dancers(B)
+    if only is not None:
+        dl = [x for x in dl if x[2] in only]
     if not dl:
         raise ValueError('no civilians in the build')
     names = [n for _k, _g, n in dl]
@@ -158,7 +163,14 @@ def build(src, dst, clips=None, per=PER_ROUT, force=False, log=print):
     for _k, _g, n in dl:
         if B.values(_k).get('ZLNKOBJ[2]') != kl_anm.PREFIX + COLLECTION:
             raise ValueError('%s does not play the %s animation set' % (n, COLLECTION))
-    raw, arep = anm_pass(B['.ANM'], clips, log)
+    if group:
+        a0 = kl_anm.Anm(B['.ANM'], 'dd')
+        for c in clips:
+            if a0.lookup(COLLECTION, AMBIENT + c) is None:
+                raise ValueError('the .ANM has no %s clip for %s (a second group needs the first pass)' % (COLLECTION, c))
+        raw, arep = B['.ANM'], dict(bytes_before=len(B['.ANM']), bytes_after=len(B['.ANM']), note='clips already merged')
+    else:
+        raw, arep = anm_pass(B['.ANM'], clips, log)
     same = J.join(sc, [(sc, t) for t in sc.tops()], 'same')
     if J.fingerprints(same)[0] != J.fingerprints(sc)[0] or J.text(same, same.p.settings) != J.text(sc, sc.p.settings):
         raise ValueError('kl_prpjoin.join does not reproduce the build\'s .prp')
@@ -169,14 +181,14 @@ def build(src, dst, clips=None, per=PER_ROUT, force=False, log=print):
 
     M = F.Maker()
     gk = C.group_form(B)
-    grp = C._node(M, B, gk, GROUP)
+    grp = C._node(M, B, gk, gname)
     M.place(grp, (0.0, 0.0, 0.0))
-    base = F.R_ + GROUP + '\\'
+    base = F.R_ + gname + '\\'
     slots = [AMBIENT + c for c in clips]
     routs = []
     for r in range(0, len(dl), per):
         chunk = dl[r:r + per]
-        nm = 'KLDance_%02d' % (r // per)
+        nm = ('KLDance2_%02d' if group else 'KLDance_%02d') % (r // per)
         rn = M.clone(HOST, FORM + '\\20_RunToStreet', nm)
         M.place(rn, (0.0, 0.0, 0.0))
         delays = [round(((r + i) * STAGGER) % STAGGER_MOD, 2) for i in range(len(chunk))]
@@ -288,7 +300,7 @@ def verify(dst, clips):
     a = kl_anm.Anm(B['.ANM'], 'dd')
     civ = {n for _k, _g, n in dancers(B)}
     seen, fails = set(), []
-    routs = {sc.path[k]: x for k, _i, x in kl_fa.controllers(sc, 'MiniCutsceneRout') if sc.path[k] and ('\\' + GROUP) in sc.path[k]}
+    routs = {sc.path[k]: x for k, _i, x in kl_fa.controllers(sc, 'MiniCutsceneRout') if sc.path[k] and ('\\KL_Dance') in sc.path[k]}
     for p, x in routs.items():
         import re
         for nm in re.findall(r'\(Actor\| ([^|]*)\|', x[0]):
@@ -303,7 +315,7 @@ def verify(dst, clips):
     if seen != civ:
         fails.append('civilians not dancing: %s' % sorted(civ - seen)[:5])
     mon = [v for k, _i, v in kl_fa.controllers(sc, 'AIMonitor')]
-    named = [r for v in mon for r in v[2] if GROUP in r]
+    named = [r for v in mon for r in v[2] if 'KL_Dance' in r]
     if sorted(named) != sorted(routs):
         fails.append('AIMonitor names %s, routs are %s' % (sorted(named), sorted(routs)))
     return fails, len(routs), len(civ)

@@ -398,9 +398,11 @@ def make(B, civs, model, alert, log=print):
     module docstring."""
     M = F.Maker()
     tops, facts = [], []
-    n0 = 0
-    while B.sc.resolve(F.R_ + TOPS % n0):
-        n0 += 1
+    n0 = 0                                   # one above the highest number in use (a build that lost some, as lastcall2's, has gaps)
+    for t in B.sc.tops():
+        m_ = re.fullmatch(re.escape(TOPS).replace('%03d', r'(\d+)'), B.sc.names[t])
+        if m_:
+            n0 = max(n0, int(m_.group(1)) + 1)
     for i, c in enumerate(civs):
         name = TOPS % (n0 + i)
         path = F.R_ + name
