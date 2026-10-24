@@ -690,6 +690,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klsteam.c"
 #include "klmm.c"                                          /* klmm.c: [Net] PrivateLobby / BuildKey - an ISteamMatchmaking proxy, only when a key is set */
 #include "klslot.c"
+#include "kllocname.c"                                    /* kllocname.c: [Names] an expansion map shows its own name in the FA lobby / lists (off unless Enable=1); AFTER klslot.c / klpm.c */
 #include "klpm_gun.c"                                      /* klpm_gun.c: KLMGun equips the round-start gun (off unless [Match] Enable)  */
 #include "klpm_arc.c"                                      /* klpm_arc.c: the Arcade playlist (off unless [Match] Enable + Arcade); AFTER klslot.c */
 #include "klqol2.c"                                        /* klqol2.c: [QoL2] stuck-AI watchdog, Heister page key, mute when unfocused (off unless set); AFTER klslot.c / klpm_arc.c */
@@ -790,6 +791,7 @@ static void klh_tick(int game_thread)
     if (game_thread) klh_uia_tick();                  /* the game window refuses UI Automation (the hitch probe's finding, 2026-10-14) */
     klf_tick();
     kls_tick();
+    kllnm_tick(game_thread);                          /* kllocname.c: the LOC lookup wrapper (off unless [Names] Enable=1; game thread only) */
     kpm_gun_tick();                                   /* klpm_gun.c: starting gun (off unless [Match] Enable=1 and KLMGun > 0) */
     kpm_arc_tick();                                   /* klpm_arc.c: next Arcade map after a match (off unless [Match] Enable=1) */
     klx_tick();
@@ -1221,6 +1223,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klx_init();
     klmm_init();                                      /* klmm.c: installs nothing unless [Net] PrivateLobby or BuildKey is set */
     kls_init(inst);
+    kllnm_init();                                     /* kllocname.c: after kls_init (it reads the rule table) */
 #ifdef KLHOOK_TEST
     kla_init(inst);
     klpr_init_all();                              /* klprobe.c: reads [Probe] DoorProxy, installs nothing when 0 */

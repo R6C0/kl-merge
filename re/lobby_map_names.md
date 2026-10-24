@@ -76,3 +76,32 @@ only logs `(folder, key) -> result` for keys containing `Scenarios/Title`, open 
 -> Create -> lobby, step the map once. Expected: a log line per step with `Title01` then `Title02`,
 proving the slot, the key format and the call rate. Then return a literal for `Title01` and confirm
 the lobby shows it; then the Arcade list and the search filter without any XML.
+
+## 4. Route A implemented (2026-10-24, klhook/kllocname.c, prefix kllnm_)
+
+Static RE results (CERTAIN = read from kl2.exe code or the existing klhud_popup.c use):
+- CERTAIN: the lookup is `[[[0xdd2640]+0xac]+0x94]` -> vtable slot 0, thiscall `(this, folder, key, third)`,
+  callee pops 12, returns `const char*`. Seen at the call sites 0x47d8c0, 0x8c3790, 0x67efb2, 0x47c2a2.
+- CERTAIN: the FA lobby Title key is `Menu/Online/Scenarios/Title%02i` built from slot+1 (0x464b70). Slot 24 of
+  ZMercsShowInfoFAFocus (0x490730) resolves a '/'-prefixed key as folder `AllLevels`, key without the slash, via 0x47d8c0.
+- CORRECTION: "slot 37" in section 2 is the GUI element's slot 0x25. The LOC lookup is vtable slot 0 of the LOC object.
+- CERTAIN: the result is a dictionary pointer nobody frees; callers (0x83e2e0) copy it. A per-rule static buffer is safe.
+- NOT found statically: the concrete class and callee of the LOC object. So the hook pins it at run time
+  (kllnm_pin): vtable in .rdata, slot 0 is code, and the function holds `c2 0c 00` in its first 1 KB. If any test fails
+  the module logs and stays inert.
+
+Design: private copy of the vtable (the klchar.c trick, no code patch, nothing in 0x41e000..0x42a000), the object's
+vtable pointer is swapped, slot 0 is wrapped. For a (AllLevels, Title%02i) key whose slot has a [Redirect] rule active,
+the wrap returns the rule's name: [Names] <map folder>, else the [Page.N] entry title. Everything else passes through.
+
+ini: `[Names] Enable=0 (default), Log=0, Override=0, <folder>=<text>`. Override=0 is the log-only pass-through
+(first live check); Override=1 renames.
+
+GUESS: that the lobby, the Arcade list and the filter all go through this same lookup (the lobby and Arcade title key
+format is certain, the filter is not); that the object at the pinned address does not change after the menu is built
+(kllnm_tick re-checks the pointer each tick and re-wraps).
+
+Live test (TEST build, one process, no network): `[Expansion] Enable=1`, `[Redirect] F01=DM01`,
+`[Names] Enable=1 Log=1 Override=0`. Online -> System Link -> Create -> lobby, step the map. Expect in KLHook.log
+"names: LOC object ... now answers through the private vtable" and "names: lookup AllLevels / Menu/Online/Scenarios/Title01 -> 'Subway' (pass-through, Override=0)".
+Then Override=1, `DM01=Hot Coffee`: expect "-> 'Hot Coffee' (OVERRIDDEN)" and the name in the lobby, Arcade list and filter.
