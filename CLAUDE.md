@@ -66,15 +66,16 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-25 - INSTALLED by e8 (owner 'install all'), not run in the game: DM01 squads 11c874cb + cars c0e7b8ee (shop hold, warehouse
+floor/upper squads, warehouse shut by kick doors, F03 3-car SWAT arrival; undo cars then squads); DM05A lastcall4 pack_lite 858d3371
+(70 dancers, 140/96, backup .before-1025lastcall4). pack 2fbf401b (90) staged only. Caps: re/actor_caps.md (memory is the wall).
+
 2026-10-25 - k42 shop 'crash' = clean exit(0) after focus-loss ShowCursor stalls (0x41e8b0, overlay), not page II code. k43
 (PreMake at 0x16, made[] liveness guard, ExitTrace logging): k43 22E015B2 INSTALLED + CursorGuard=1 (backups .before-1025k43).
 
 2026-10-25 - INSTALLED (owner 'install all'), none live-tested: doors2 on DM01 10359141, DM06 f1f888c5, DM09 b76586a1; DM01B gas+doors2
 f2a70278; DM03A swat+doors2 02e90dfa; DM02 assault ae193d9c. Backups .before-1025doors2/-dm01bgas/-dm03aswat/-dm02assault; undo doors2 first.
 Then (10-25) DM01 squads+cars c0e7b8ee; DM05A lastcall4 lite 858d3371 (70 civs, 96 squads: crash = undo).
-
-2026-10-25 - Hook k42 8DFB5223 live (shop page II: list names + buy hand-over fix; backup .before-1025k42). Next: read KLHook.log for the
-'weapon list up, UI table' line and 'carries row R from set B'. Open: DM01 cops never drive/exit the Bentleys; door PathBlocker detours untested.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

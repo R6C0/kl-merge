@@ -1,3 +1,5 @@
+2026-10-25 - INSTALLED by e8 (owner 'install all', kl2 closed), md5s confirmed live: DM01 10359141 -> 11c874cb (dm01squads) -> c0e7b8ee (dm01cars), backups .before-1025dm01squads/-dm01cars; DM05A d5f8522b -> 858d3371 (lastcall4 pack_lite), backup .before-1025lastcall4. pack (90) not installed. Not run in the game.
+
 2026-10-25 - INSTALLED (owner 'install all', kl2 closed, md5s match kl-merge-27): DM01 10359141 -> 11c874cb (dm01squads) -> c0e7b8ee (dm01cars: 3 F03 police cars, 6 SWAT); DM05A d5f8522b -> 858d3371 (lastcall4 pack_lite: 70 civilians, 140/96, past any stock squad count; crash = int3 0x4a3060 -> undo). Backups .before-1025dm01squads/-dm01cars/-lastcall4; undo cars before squads. Full pack (2fbf401b) not installed. Not live-tested.
 
 2026-10-25 - READY sent to e8 (not installed): lastcall4 pack_lite 858d3371 first (70 civs, 140/96), pack 2fbf401b second (90, 147/110), both on live DM05A d5f8522b, my scratch rehearsal ok (undo byte-identical). Cap research (re/actor_caps.md): no exe cap found; memory (2 GB, int3 0x4a3060) is the wall; stock FA maps only 57/36, L07 148/90. Beyond ~150 actors needs the ZHFlow crowd (research-level).
