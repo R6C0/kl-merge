@@ -137,10 +137,10 @@ static int kvo_leaf(const char *text, char leaf[64])
  * PLAINDATA (2026-10-24, re/voiceplain_1023.md section 5): a SHIPPABLE way for the flag-0 lines, DATA ONLY (no code byte).
  *   0x421c70 reads, for a flag-1 line on the Arcade path (site 0x421e76), data[voice] = [[line+0x14] + 4*voice] and the flag byte [line+0x20];
  *   it never reads a flag-1 line's [line+0]. So a flag-0 line (one entry at [line+0]) is turned into a per-character line IN MEMORY:
- *   a 10-pointer vector (every slot = the stock entry, the slots of the Dead Men voice numbers = our KLVoice entries), count [line+8]=10,
- *   cap [line+0xc]=10, data [line+0x14]=vector, flag [line+0x20]=1. Restored (flag 0, old count/cap/data) when the generation ends,
+ *   a KVO_NV (256) pointer vector (every slot = the stock entry, the slots of the Dead Men voice numbers = our KLVoice entries), count [line+8]=KVO_NV,
+ *   cap [line+0xc]=KVO_NV, data [line+0x14]=vector, flag [line+0x20]=1. Restored (flag 0, old count/cap/data) when the generation ends,
  *   when the round is gone or when the level is not a Dead Men one. The vector is from MSVCR90's malloc because the line's destructor / grow
- *   path frees [line+0x14] with MSVCR90.free (GUESS from the 0x6b8710 listing: realloc/free are msvcr90 imports). Never freed by us (40 bytes).
+ *   path frees [line+0x14] with MSVCR90.free (GUESS from the 0x6b8710 listing: realloc/free are msvcr90 imports). Never freed by us (1 KB).
  *   GUESS: the flag-1 path of 0x421c70 needs no other field of a line built with flag 0 (+0x1c float, +0x24 priority are set for both flags).
  *   Sites 0x4220b3 / 0x42211b (non-Arcade modes) are not served (GUESS: they pick the vector slot by a mode switch) - Arcade only like the rest. */
 #define KVO_NCV 512
