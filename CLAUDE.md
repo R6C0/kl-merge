@@ -66,6 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 - STAGED, NOT INSTALLED: DM02 shops C:/kl_build_1024/dm02shops_1024r2: A = 3 co-op shutters (F04 CoopAirlock set, shutter opens
+via DeactivateGeom) + 2 timer-opened, B = 5 timer-opened fallback; 8 cashdrawer loot sets (+1.06M). Needs live test (re/dm02_shops_1024.md).
+
 2026-10-24 23:40 - INSTALLED (owner 'install all'), not live-tested: k36 hook (8dfa5665) + ini [FrameLimit] Enable=1 SwapChain=0
 (.before-1024k36on); gunsnd_1024n (21 banks F01-F09 + L00-L11, .before-1024gunsnd2); hasta_1024n (DM11B 323c13f3: wing opens at 2 squads/30 s,
 3 blocker nodes dropped, M11A_Postfilter grade neutral); lastcall_1024n (DM05A b5e45efa: escape cams moved to pad); spawns_1024n (DM01B
