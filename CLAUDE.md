@@ -66,57 +66,16 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-25 - STAGED, NOT INSTALLED: Last Call lastcall3 C:/kl_build_1024/lastcall3_1025a (tools/kl_club_lastcall3.py; live DM05A 7ef0404f): main/ d639c20a (f3=1 on heli squad + all 56 civilians, HVK vehicle placement back to origin/identity, 3 roof squads x4 pre-placed, +34 civilians, 4 new dance routs 'KL_Dance2!'), alt/ 1b2f8233 (same, HVK kept). 145 actors / 90 squads (unproven; proven 99/55, stock 148/90). INSTALL/UNDO 'lastcall3.ps1' (backup .before-1025lastcall3), rehearsed on scratch. MUSIC NOT FIXED: live .WHD has 0 records of the 13 club clips (PC_Def.str has the blocks): needs a kl_snd.merge job. Live test needed.
+2026-10-25 - Last Call: lastcall3_1025a (d639c20a/1b2f8233) verified NOT READY (no club music records in the .WHD; roof squads 73-125 u
+from pad/climb top; 145/90 actors unproven). Workflow wf_f3319b59 builds lastcall3b_1025a (roof >= 600 u, full 56 / lite ~40 dancers,
+main/alt heli) + clubmusic_1025a (M05_A music merge). e8 installs on READY under its owner's word. DM05A live 7ef0404f.
 
+2026-10-25 - Hook: k40 F2FE048F live ([StanceFix] Dry=0, [ShopPage] Enable=1); e8 staged k41 E715CD59 (page key in shop state 0x20, Key=80),
+installs when the owner closes the game. Leave dinput8.dll/KLHook.ini alone until e8 says done. DM01 3f503f58 (dm01fix + star fix) live.
 
-2026-10-25 03:30 - INSTALLED (owner 'install all'), not run in the game: hook k40 F2FE048F = k39 + reviewed shop page II (klshoppage.c 07e906bc2);
-C:/kl_build_1019/k40_1025a/stage INSTALL/UNDO k40.bat, backups .before-1025k40, ini block [StanceFix] + [ShopPage] Enable=1, KLShopPage.ini.
-k39 and shoppage_1024a stages are superseded. DM01 star fix waits on the peer's dm01fix_1025a. Test: Arcade -> Buy Weapons -> F6.
-
-2026-10-25 - STAGED, NOT INSTALLED: hook k39 (C:/kl_build_1019/k39_1025a/stage, SHIP 31d49594) = [StanceFix] crouch re-toggle mirrors the clip phase + CamSmooth outlier/ramp/merge + [ReShade] ReloadFx. INSTALL/UNDO k39.bat over k37, rehearsed. Live test: StanceFix Dry=1 first (lines 'stancefix:'), then Dry=0; reload in the game with Log>=2.
-
-2026-10-24 23:30 - STAGED, NOT INSTALLED: C:/kl_build_1024/dance_1024r3 = club civilians dance (Female_Stripper clip merged into DD Civilian ANM + 5 MiniCutsceneRout groups on AIMonitor list 2); live b5e45efa -> f12d103d, lastcall2 c563e6bc -> 7ef0404f; INSTALL/UNDO bats rehearsed on scratch only. Live test needed (re/club_crowd.md).
-
-2026-10-25 00:30 - INSTALLED (owner 'install all'), not live-tested: lastcall2 (DM05A c563e6bc: heli at far roof end, 6 yakuza/bodyguard waves,
-99/53 budget, 22 civs); DM02 shops variant A (30b3ddf0; B = fallback); interact kick doors + extinguishers on DM01B f0aaba92, DM03A 3d4ae43a,
-DM06 38b20312, DM09 99a4ff75 (DM01 skipped: e8 shop v2 02d2a481, rebase job running); arrivals plop DM11B f896a376. Camera bug: log shows
-CamSmooth causing jumps (STANCE fires on turns, takeover shows 60 cm vs raw 1 cm) -> live [CamSmooth] Dry=1 (.before-1024camdry); k37 fix job running.
-
-2026-10-24 - STAGED, NOT INSTALLED: kick doors + extinguishers C:/kl_build_1024/interact_1024r2/stage (tools/kl_interact_graft.py; INSTALL/UNDO interact.bat, backup
-.before-1024interact, rehearsed on scratch, undo byte-identical). DM01 5522ebcf->48cd4942, DM01B 0a34b035->653377d1, DM03A 89256d16->7a2dbdd3, DM06 2faf4742->91f2e93e,
-DM09 e2c7d5bd->451ceb91: 5 kick doors each on DM01/DM01B/DM03A (stock F03 leaf replaces a static DM leaf), 4 extinguishers on all five. Live test needed (kick, swing, can).
-
-2026-10-24 - STAGED, NOT INSTALLED: Last Call lastcall2_1024r2 (C:/kl_build_1024/lastcall2_1024r2, tools/kl_club_lastcall2.py; DM05A b5e45efa -> c563e6bc):
-escape set moved to the far roof pad (7300,1881,3500; route START->pad found on the mesh, 401 m), 6 Yakuza/bodyguard waves x5 (40-55 s apart via
-the old_waves chain from the AIMonitor START list, no alarm node exists), 4 AfterLoot squads + 28 civilians cut: 99 actors / 53 squads. check.py,
-check_passes, old_waves.check PASS; install/undo rehearsed on scratch. Needs a live test: chopper spline/landing after the rigid move, waves.
-
-2026-10-24 - STAGED, NOT INSTALLED: DM02 shops C:/kl_build_1024/dm02shops_1024r2: A = 3 co-op shutters (F04 CoopAirlock set, shutter opens
-via DeactivateGeom) + 2 timer-opened, B = 5 timer-opened fallback; 8 cashdrawer loot sets (+1.06M). Needs live test (re/dm02_shops_1024.md).
-
-2026-10-24 23:40 - INSTALLED (owner 'install all'), not live-tested: k36 hook (8dfa5665) + ini [FrameLimit] Enable=1 SwapChain=0
-(.before-1024k36on); gunsnd_1024n (21 banks F01-F09 + L00-L11, .before-1024gunsnd2); hasta_1024n (DM11B 323c13f3: wing opens at 2 squads/30 s,
-3 blocker nodes dropped, M11A_Postfilter grade neutral); lastcall_1024n (DM05A b5e45efa: escape cams moved to pad); spawns_1024n (DM01B
-0a34b035, DM09 e2c7d5bd). Round 2 running (wf_dd55429a): club roof/waves/holster/dance, DM02 shutters, kick doors, arrivals.
-
-2026-10-24 23:50 - STAGED, NOT INSTALLED: gunsnd_1024n = every gun-shot sample at the MP45 level on ALL banks (tools/kl_gunsnd_all.py): the 27 map
-banks were already on target, the 9 stock FA banks + L00..L11 were not (up to -5 dB, distant -11). 21 banks, WAV spans only, md5-chained
-INSTALL/UNDO (backups .WAV.before-1024gunsnd2, rehearsed). Writes stock Scenes\Locations files; not live-tested.
-
-2026-10-24 22:50 - GAME DID NOT LAUNCH on k34: stack overflow c00000fd ~60 ms after "fps: FIRST Present seen, via the swap chain
-(slot 3)". Device and swap chain are ReShade32 proxies; no recursion path found by reading. Live KLHook.ini [FrameLimit] Enable=0
-(.before-1024fpsoff) -> game runs. k36 (SHIP 8dfa5665, TEST 96743746, commit 956f1d383) = TLS depth guard + RECURSION CUT + SwapChain=/Reset=
-keys; staged C:/kl_build_1019/k36_1024g (ini untouched). Test: Enable=1 SwapChain=0 first. Fallback: limit from the ReShade present event.
-
-2026-10-24 22:30 - INSTALLED (owner 'install all'): hook k34 a22b642b; cover3 (all 11 maps, DM01 rebuilt C:/kl_build_1024/cover3_dm01);
-climb3 (13 maps); hc2hasta_1024d (DM01B badc0bee, DM11B ef53c079); club_1024d (DM05A, 40 civilians); blowup_1024d (DM05A 257c7445, DM06
-2faf4742); gun sounds (27 .WAV, .before-1024gunsnd); sky preset (.before-1024sky). Undo zips in reverse: blowup, club, hc2hasta, cover3.
-C: hit 0 bytes mid-climb3 (restored cleanly); deleted vgame, hc2_attic, old claude temp with OK. Not live-tested. k35 anim probe staged only.
-
-2026-10-24 21:15 - STAGED, NOT INSTALLED: hook k34 (SHIP a22b642b, TEST 587e09ff) = k33 + [VanBlow] (FollowOutShield=3 kept the van
-invulnerable all wait, so it burned but never hit 0; now shielded only while somebody is aboard). C:/kl_build_1019/k34_1024e/INSTALL k34.bat
-supersedes k32/k33 (undo rehearsed byte-identical). Chopper data pass <work>/build/blowup_1024 (DM05A + DM06 Definite, 5000 hp; Hasta left
-out: bots died aboard there). Body crouch->run pop: research agent running (re/player_anim_blend.md).
+2026-10-25 - STAGED, NOT INSTALLED (owner's word needed): dm02assault_1025a (DM02 30b3ddf0->ae193d9c, shutter assault, 2x6 SWAT),
+dm01bgas_1025a (DM01B f0aaba92->119c9cd2, fuel cans), dm03aswat_1025a (DM03A 3d4ae43a->7852abd9, SWAT door kick). Open: DM01 cops never
+drive/exit the Bentleys; door PathBlocker detours untested.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
