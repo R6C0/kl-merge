@@ -345,6 +345,30 @@ def _theme_known(name):
     return -1
 
 
+# voicefix 2026-10-24 (owner: announcements stay ORIGINAL, Dead Men voices only for in-match chatter): leaf-name prefixes of lines a
+# narrator / briefer / radio / police / round outcome says. map_events builds NO KLVoice leaf for them, so no hook setting can
+# ever swap them. SAME LIST as klvoice.c kvo_keep_default (keep both in step). Case-insensitive prefix, also with a leading 'FA_' removed.
+KEEP_STOCK = ["MissionBriefing", "MissionReminder", "FA_MissionBriefing", "FA_1time_MissionBriefing", "FA_MissionReminder", "FA_PoliceMissionBriefing",
+    "UCCMissionBriefing", "FA_HittingTheScore", "FA_ShopDisplay", "Exit_Diner", "FA_ExitMall", "FA_ExitBank", "YouEsc", "FA_YouEscaped", "AllEsc",
+    "FA_AllEscaped", "EscAndPlayerDead", "CriminalEsc", "FA_PlayerEscaped", "TimeOut", "FA_TimeOut", "FA_TimeOutPolice", "AllDead", "FA_AllDead",
+    "ThreeMinleft", "TwoMinleft", "OneMinLeft", "OneMinLeftPolice", "FA_TimeReminder", "FA_TimeReminderPolice", "FA_2minTimeReminder", "TeamWinGame",
+    "TeamloseGame", "TeamLeading", "TeamTrailing", "TeamDrawPolice", "TeamMoneyGoneQuit", "TeamAlliancePolice", "TeamAllianceReminder",
+    "TeamCashMajorityPolice", "TeamDeadPolice", "TeamDeadMoneyPolice", "TeamPoliceMission", "TeamLastMerc", "TeamOneMercLeft", "PoliceBriefing",
+    "PoliceReward", "FA_PoliceReward", "PoliceKillPolice", "FA_PoliceKillPolice", "CallEscPolice", "ShootEscPolice", "EscDestroyedPolice",
+    "EscHeavelyDamagedPolice", "LevelBoundsPolice", "FA_LevelBoundsPolice", "FA_CallExitVehiclePolice", "FA_ExitVehicleHeavelyDamagedPolice",
+    "FA_ExitVehicleDestroyedPolice", "FA_ExitVehicleAndDestroyedPolice", "FA_ShootExitVehiclePolice", "FA_OneLeft", "FA_TwoLeft", "OneCriminalLeft",
+    "TwoCriminalsLeft", "UCCOneLeft", "UCCFirstKill", "UCCWon", "UCCLost", "UCCDeadPolice", "UCCDirtyCop", "UCCCrimeComitted", "UCCCrimeNotComitted",
+    "UCC_PoliceShootingUCC", "UCCRogueCop", "Boarding", "FA_Boarding", "BoardingEnd", "FA_BoardingEnd", "CallEscResponse", "FA_CallExitResponse",
+    "LastEsc", "FA_LastPossibleTransport", "FA_AllEscapedPolice", "AllEscPolice", "All_Escaped_Police", "YouEscaped", "EscAndPlayerDeadPolice",
+    "TeamWinGamePolice", "TeamloseGamePolice", "Level_BoundsPolice", "FA_LevelBoundPolice", "PoliceMission", "TeamMoneyGoneQuitPolice"]
+_KEEP_LC = tuple(k.lower() for k in KEEP_STOCK)
+
+
+def is_announcement(name):
+    n = name.lower()
+    return n.startswith(_KEEP_LC) or (n.startswith('fa_') and n[3:].startswith(_KEEP_LC))
+
+
 def map_events(loc_tree, singles=True):
     """Dog Days event leaves of a map's English .LOC: Multiplayer/<Folder>/<Event>_C<n> -> 'Event' (radio twin '_R' kept).
     singles (voiceplain 2026-10-24, klvoice.c PlainData=1): also the SINGLE-ENTRY events (flag-0 lines: the loader builds one
@@ -365,6 +389,8 @@ def map_events(loc_tree, singles=True):
                 base.add(parts[2])
         elif parts[0].lower() == 'multiplayer' and len(parts) == 2:     # PD2: Multiplayer/HoldEscapeVehicle(_R) sits right under Multiplayer
             base.add(parts[1])
+    ev = set(e for e in ev if not is_announcement(e))        # announcements stay stock: no KLVoice leaf is built for them
+    base = set(b for b in base if not is_announcement(b))
     if singles:
         sing = sorted(b for b in base if b not in ev and ' ' not in b and not re.match(r'(?i)^(Police(Br|Mission)|TeamPolice|Intro)', b) and _theme_known(b) >= 0)
         for radio in (False, True):

@@ -143,6 +143,59 @@ static int kvo_leaf(const char *text, char leaf[64])
     return 1;
 }
 
+/* KEEPSTOCK (voicefix 2026-10-24, owner: 'announcers still arent back, they should only do the player voice lines in the match', 'when you
+ * escape it does the unique player one', 'cops dont get the all dead announcement'). The node-equality announcer test below never fired
+ * (LIVE LOG: Kane_R/FA_1time_MissionBriefingDiner_01 and FA_AllEscaped_01 still swapped): [entry+0] is the address of the LOC leaf record, and
+ * every _C<n> key is its own leaf record, so two slots never share it even when they share the sound id. And a sound-id test cannot split
+ * announcer from chatter anyway (DM01: every FA_ line has 9 keys on 1 sound id). So the primary test is the leaf NAME: a prefix list of
+ * what a narrator / briefer / radio / police voice / round outcome says. Matched case-insensitively against the leaf, also with a leading
+ * 'FA_' removed (both forms occur: YouEsc / FA_YouEscaped). [Voice] KeepStock=a,b,c replaces the list, KeepStock=none empties it.
+ * A kept line is never swapped (walk), never converted (PlainData kvo_cv_line), never redirected (Plain kvo_f0_note); ours already on it go back.
+ * Chatter (Backstab, Revenge, CashMajority, LevelBound, CallEsc, ShootEsc, TeamAlliance, TeamDeadCriminal, UCCDeadCriminal, JackPot ..) is NOT in
+ * the list. GUESS: ReachlootArea / ExitLootArea are per-heister hints in Dog Days, left as chatter. Same list: tools/kl_dmvoice.py KEEP_STOCK. */
+static const char *const kvo_keep_default[] = {
+    "MissionBriefing", "MissionReminder", "FA_MissionBriefing", "FA_1time_MissionBriefing", "FA_MissionReminder", "FA_PoliceMissionBriefing",
+    "UCCMissionBriefing", "FA_HittingTheScore", "FA_ShopDisplay", "Exit_Diner", "FA_ExitMall", "FA_ExitBank", "YouEsc", "FA_YouEscaped", "AllEsc",
+    "FA_AllEscaped", "EscAndPlayerDead", "CriminalEsc", "FA_PlayerEscaped", "TimeOut", "FA_TimeOut", "FA_TimeOutPolice", "AllDead", "FA_AllDead",
+    "ThreeMinleft", "TwoMinleft", "OneMinLeft", "OneMinLeftPolice", "FA_TimeReminder", "FA_TimeReminderPolice", "FA_2minTimeReminder", "TeamWinGame",
+    "TeamloseGame", "TeamLeading", "TeamTrailing", "TeamDrawPolice", "TeamMoneyGoneQuit", "TeamAlliancePolice", "TeamAllianceReminder",
+    "TeamCashMajorityPolice", "TeamDeadPolice", "TeamDeadMoneyPolice", "TeamPoliceMission", "TeamLastMerc", "TeamOneMercLeft", "PoliceBriefing",
+    "PoliceReward", "FA_PoliceReward", "PoliceKillPolice", "FA_PoliceKillPolice", "CallEscPolice", "ShootEscPolice", "EscDestroyedPolice",
+    "EscHeavelyDamagedPolice", "LevelBoundsPolice", "FA_LevelBoundsPolice", "FA_CallExitVehiclePolice", "FA_ExitVehicleHeavelyDamagedPolice",
+    "FA_ExitVehicleDestroyedPolice", "FA_ExitVehicleAndDestroyedPolice", "FA_ShootExitVehiclePolice", "FA_OneLeft", "FA_TwoLeft", "OneCriminalLeft",
+    "TwoCriminalsLeft", "UCCOneLeft", "UCCFirstKill", "UCCWon", "UCCLost", "UCCDeadPolice", "UCCDirtyCop", "UCCCrimeComitted", "UCCCrimeNotComitted",
+    "UCC_PoliceShootingUCC", "UCCRogueCop", "Boarding", "FA_Boarding", "BoardingEnd", "FA_BoardingEnd", "CallEscResponse", "FA_CallExitResponse",
+    "LastEsc", "FA_LastPossibleTransport", "FA_AllEscapedPolice", "AllEscPolice", "All_Escaped_Police", "YouEscaped", "EscAndPlayerDeadPolice",
+    "TeamWinGamePolice", "TeamloseGamePolice", "Level_BoundsPolice", "FA_LevelBoundPolice", "PoliceMission", "TeamMoneyGoneQuitPolice", 0 };
+#define KVO_NKEEP 192
+static char kvo_keepbuf[1024];                   /* [Voice] KeepStock text, split in place */
+static const char *kvo_keep[KVO_NKEEP]; static int kvo_nkeep;
+static char kvo_keptlog[512][64]; static int kvo_nkeptlog;    /* leaves already announced in the log (once each) */
+
+static int kvo_kept(const char *leaf)
+{
+    int i;
+    if (!kvo.announcer || !kvo_nkeep) return 0;
+    for (i = 0; i < kvo_nkeep; i++) {
+        size_t n = strlen(kvo_keep[i]);
+        if (!_strnicmp(leaf, kvo_keep[i], n)) return 1;
+        if (!_strnicmp(leaf, "FA_", 3) && !_strnicmp(leaf + 3, kvo_keep[i], n)) return 1;
+    }
+    return 0;
+}
+
+/* kvo_kept + the one log line per leaf */
+static int kvo_kept_log(const char *leaf)
+{
+    int i;
+    if (!kvo_kept(leaf)) return 0;
+    for (i = 0; i < kvo_nkeptlog; i++) if (!_stricmp(kvo_keptlog[i], leaf)) return 1;
+    if (kvo_nkeptlog >= 512) return 1;               /* review fix: table full = stop logging (a full 64-table re-logged every leaf each walk; the live log has ~130 kept leaves) */
+    snprintf(kvo_keptlog[kvo_nkeptlog++], 64, "%s", leaf);
+    if (kvo.log) klog("voice: %s is an announcement: left stock", leaf);
+    return 1;
+}
+
 /* ------------------------------------------------------------------------------------------------------------------
  * PLAINDATA (2026-10-24, re/voiceplain_1023.md section 5): a SHIPPABLE way for the flag-0 lines, DATA ONLY (no code byte).
  *   0x421c70 reads, for a flag-1 line on the Arcade path (site 0x421e76), data[voice] = [[line+0x14] + 4*voice] and the flag byte [line+0x20];
@@ -193,6 +246,7 @@ static void kvo_cv_line(DWORD ln, int isours, char who[8][32], DWORD rules, cons
         s = strrchr(text, '/'); s = s ? s + 1 : text; n = strlen(s);
         if (n < 2 || n >= sizeof leaf) return;
         memcpy(leaf, s, n + 1);                                  /* GUESS: the flag-0 event leaf is the whole last path part, as Plain assumed */
+        if (kvo_kept_log(leaf)) { if (kvo_cv_ntried < KVO_NCV) kvo_cv_tried[kvo_cv_ntried++] = ln; return; }     /* an announcement (KeepStock): stays the single stock entry */
     }
     for (slot = 0; slot < 8; slot++) {
         char path[128]; void *e; size_t l2 = strlen(leaf);
@@ -291,6 +345,7 @@ static void kvo_f0_note(DWORD ln, char who[8][32], DWORD rules, const char *scen
         if (n < 2 || n >= sizeof leaf) return;
         memcpy(leaf, s, n + 1);
     }
+    if (kvo_kept_log(leaf)) return;                /* an announcement (KeepStock): not noted, so the thunk never redirects it */
     for (k = 0; k < kvo_p.nf0; k++) if (kvo_p.f0[k].entry == entry) break;
     if (k == kvo_p.nf0) {
         if (k >= KVO_NF0) { if (!kvo_p.toldfull++ && kvo.log) klog("voice: plain: more than %d single-entry lines: the rest speak stock", KVO_NF0); return; }
@@ -521,7 +576,14 @@ static void kvo_tick(int game_thread)
                     else src = ent[j];
                 }
                 if (!src || !klh_rdstr((DWORD_PTR)src + 4, text, sizeof text) || !kvo_leaf(text, leaf)) continue;
-                if (kvo.announcer) {                             /* one recording in every voice = an announcer: stays stock (kvo_an) */
+                if (kvo_kept_log(leaf)) {                        /* KeepStock: an announcement by NAME - never swapped, ours from before go back */
+                    for (j = 0; j < (int)vcnt; j++) {
+                        int rj = kvo_find(vdata + (DWORD)j * 4, 0);
+                        if (rj >= 0 && kvo_rec[rj].active) { if (ent[j] == kvo_rec[rj].ours && klh_data((void *)(DWORD_PTR)(vdata + (DWORD)j * 4), &kvo_rec[rj].orig, 4, "voice entry restore")) nrs++; kvo_rec[rj].active = 0; }
+                    }
+                    continue;
+                }
+                if (kvo.announcer) {                             /* secondary: one recording in every voice = an announcer: stays stock (kvo_an). Rarely true (node = leaf record address), kept for the ThenMs follow */
                     DWORD n0 = 0, nj; int same = 1;
                     for (j = 0; j < (int)vcnt && same; j++) {
                         int rj = kvo_find(vdata + (DWORD)j * 4, 0); DWORD sj = ent[j];
@@ -595,11 +657,26 @@ static void klvo_init(void)
     kvo.plaindata = GetPrivateProfileIntA("Voice", "PlainData", 0, klh_ini) != 0;   /* default 0 = off: data-only flag-0 -> flag-1 conversion (SHIP-safe) */
     kvo.plain = GetPrivateProfileIntA("Voice", "Plain", 0, klh_ini) != 0;          /* default 0 = off: flag-0 lines speak the body's KLVoice leaf */
     kvo.announcer = GetPrivateProfileIntA("Voice", "Announcer", 1, klh_ini) != 0;   /* default 1: a one-recording line stays stock (owner 2026-10-24) */
-    kvo.then_ms = (int)GetPrivateProfileIntA("Voice", "ThenMs", 1000, klh_ini);     /* the speaker's own line this long after the announcer starts; 0 = none */
-    if (kvo.then_ms < 0 || kvo.then_ms > 30000) kvo.then_ms = 1000;
+    kvo.then_ms = (int)GetPrivateProfileIntA("Voice", "ThenMs", 0, klh_ini);     /* the speaker's own line this long after the announcer starts; 0 = none (default since 2026-10-24: player voices only in-match) */
+    if (kvo.then_ms < 0 || kvo.then_ms > 30000) kvo.then_ms = 0;
+    { char raw[1024];                         /* KeepStock: absent/empty = the compiled default list, 'none' = empty, else the comma list */
+      kvo_nkeep = 0; kvo_nkeptlog = 0;
+      GetPrivateProfileStringA("Voice", "KeepStock", "", raw, sizeof raw, klh_ini);
+      if (!raw[0]) { while (kvo_keep_default[kvo_nkeep] && kvo_nkeep < KVO_NKEEP) { kvo_keep[kvo_nkeep] = kvo_keep_default[kvo_nkeep]; kvo_nkeep++; } }
+      else if (_stricmp(raw, "none")) {
+          char *t; snprintf(kvo_keepbuf, sizeof kvo_keepbuf, "%s", raw);
+          for (t = kvo_keepbuf; *t && kvo_nkeep < KVO_NKEEP; ) {
+              char *e; while (*t == ' ' || *t == ',') t++;
+              if (!*t) break;
+              e = t; while (*e && *e != ',') e++;
+              { char *q = e; while (q > t && q[-1] == ' ') q--; if (*e) *e++ = 0; *q = 0; }
+              if (*t) kvo_keep[kvo_nkeep++] = t;
+              t = e;
+          }
+      } }
     memset(&kvo_p, 0, sizeof kvo_p); kvo_nan = 0; memset(&kvo_fw, 0, sizeof kvo_fw);
     if (kvo.period < 200 || kvo.period > 60000) kvo.period = 1500;
-    if (kvo.on) klog("voice: on; the Dead Men bodies' event lines come from KLVoice/<Name>/<Event> of the level's .LOC (StockLevels=%d Log=%d Period=%d ms RadioFallback=%d PlayedLog=%d PlayLog=%d Plain=%d PlainData=%d); needs [Wardrobe] DMVoice=1 / [Crew] Voice=1 so each body has its own voice number", kvo.stock, kvo.log, kvo.period, kvo.radiofb, kvo.played, kvo.playlog, kvo.plain, kvo.plaindata);
+    if (kvo.on) klog("voice: on; the Dead Men bodies' event lines come from KLVoice/<Name>/<Event> of the level's .LOC (StockLevels=%d Log=%d Period=%d ms RadioFallback=%d PlayedLog=%d PlayLog=%d Plain=%d PlainData=%d Announcer=%d KeepStock=%d prefixes ThenMs=%d); needs [Wardrobe] DMVoice=1 / [Crew] Voice=1 so each body has its own voice number", kvo.stock, kvo.log, kvo.period, kvo.radiofb, kvo.played, kvo.playlog, kvo.plain, kvo.plaindata, kvo.announcer, kvo_nkeep, kvo.then_ms);
 }
 
 #endif /* KLVOICE_C */
