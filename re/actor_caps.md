@@ -17,7 +17,7 @@ GUESS (inferred), NOT FOUND (searched, no answer).
 ## Evidence
 | Item | Value | Tag |
 |---|---|---|
-| Stock max actors / squads in one map | 148 / 90 | MEASURED (CLAUDE.md, kl_fa_bank) |
+| Stock max actors / squads in one map | 148 / 90 (L07, a campaign level); the nine stock FA maps F01-F09 reach only 57 / 36 | MEASURED (recounted 2026-10-25 with kl_club_lastcall2.census over every DD *_Main.zip) |
 | Live-proven (ran in game) | 99 / 55 | MEASURED |
 | Live DM05A now (d5f8522b) | 129 / 74, 40 civilians, 3 roof squads | MEASURED file counts, not proven in a run |
 | Staged lastcall3 | 145 / 90 | MEASURED file counts, unproven |
