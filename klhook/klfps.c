@@ -58,6 +58,7 @@
  * PRESETS (owner 2026-10-24 'have 4 different options: 240fps, 120fps, 60fps, 30fps'): auto takes the highest of 240 / 120 / 60 / 30
  * that is <= the refresh rate (klfps_preset); tools\kl_mod_options.py offers exactly those four. Fps=N by hand still takes any 10 .. 1000.
  * Keys ([FrameLimit]):  Enable=1 (recommended on; 0 = nothing is wrapped)   Fps=0 (0 = auto, see above; 10 .. 1000)
+ *   SwapChain=1 (k36; 0 = leave IDirect3DSwapChain9::Present alone)   Reset=1 (k36; 0 = leave IDirect3DDevice9::Reset alone)
  *   Adaptive=0 (k30fps; 1 = pacing follows the machine's own frame time, see klfps_pace; experimental, not recommended)
  *   FrontEdge=1 (recommended on)   PassiveWait=0 (recommended off = busy loop)   Log=0 (1 = a line every 10 s: presents, fps,
  *   frametime avg / min / max, count over 33 ms, share of the frame spent waiting)
@@ -89,7 +90,7 @@ static long klfps_n, klfps_over33;
  * recommended; the per-frame jitter of a free-running game cannot be pacing-corrected without queueing frames (latency). Kept as an experiment. GUESS:
  * the 0.05 / 0.01 gains and the 1.5x hitch clamp are chosen by an offline simulation (tools\sim_pace.py), not from a play test. */
 static int  klfps_adaptive;                     /* [FrameLimit] Adaptive (code default 0 = off, not recommended, see above) */
-static int  klfps_in;                           /* reentrancy guard: Present called from inside our own Present */
+#include <intrin.h>                               /* _ReturnAddress (k36 log of who calls the wrappers) */
 static LONGLONG klfps_pace, klfps_ret, klfps_pace_sum;
 static long klfps_pace_n, klfps_wd, klfps_resets;
 typedef HRESULT (WINAPI *klfps_reset_fn)(void *self, void *pp);
@@ -188,13 +189,76 @@ static void klfps_stat(LONGLONG now)
     }
 }
 
-/* the two halves of one Present, shared by the device route (slot 17) and the swap chain route (slot 3). klfps_pre returns 0 when this is a
- * nested call (the guard): then nothing is timed and the caller just forwards. */
-static int klfps_pre(const char *route)
+/* k36 (2026-10-24): k34 with [FrameLimit] Enable=1 died 60 ms after 'FIRST Present seen, via the swap chain route' with c00000fd (stack
+ * overflow, twice, 17:32:50 and 17:33:17); the same build with Enable=0 ran. No dump was written, so the exact cycle is NOT proven
+ * (no ReShade32 path was found that re-enters slot 3 or 17 by itself: ReShade's sc Present 507BCE00 and device Present 507A9A00 both
+ * only call their _orig object). What is certain: the only difference was our patches on ReShade's shared class vtables (device
+ * 509F9728 slots 16 / 17, swap chain 509F9D54 slot 3; ReShade's explicit swap chains share that vtable too), and the Steam overlay and
+ * other layers also work on these objects. So the wrappers are now self-limiting:
+ *   - a per-THREAD depth (TLS, not the old global flag): entering with depth >= 3 can only be a cycle (device -> swap chain is the one
+ *     legitimate nesting, depth 2). That call is CUT: logged once with the caller's module, every slot we patched is put back to what it
+ *     held, the limiter is dead for the run (klfps_dead) and the frame is dropped (S_OK) instead of recursing.
+ *   - depth 0 times and waits; a nested call (depth 1, 2) or a dead limiter just forwards.
+ *   - nothing is wrapped when the slot already holds one of OUR wrappers (a second device) ; a swap chain that shares the device's vtable is skipped.
+ *   - [FrameLimit] SwapChain=0 skips the swap chain wrap, Reset=0 the Reset wrap; the first 3 calls of each route log depth and caller module. */
+#define KLFPS_MAXDEPTH 3
+static DWORD klfps_tls = TLS_OUT_OF_INDEXES;
+static volatile LONG klfps_dead, klfps_cut_logged;
+static int klfps_use_sc = 1, klfps_use_reset = 1;
+static struct { void **slot; void *mine, *real; } klfps_wr[8];
+static int klfps_nwr;
+static HRESULT WINAPI klfps_reset(void *self, void *pp);
+static HRESULT WINAPI klfps_createdev(void *self, UINT adapter, DWORD type, HWND focus, DWORD flags, void *pp, void **dev);
+
+static const char *klfps_mod(const void *p, char *buf, size_t n)
+{   /* "name.dll+0xoff" of the module holding p, for the log */
+    HMODULE m = 0; char path[MAX_PATH], *b;
+    buf[0] = 0;
+    if (p && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)p, &m) && m
+        && GetModuleFileNameA(m, path, sizeof path)) {
+        b = strrchr(path, '\\'); b = b ? b + 1 : path;
+        _snprintf(buf, n, "%s+0x%x", b, (unsigned)((const char *)p - (const char *)m)); buf[n - 1] = 0;
+    } else { _snprintf(buf, n, "%p", p); buf[n - 1] = 0; }
+    return buf;
+}
+
+static void klfps_unwrap_all(void)
+{
+    int i;
+    for (i = 0; i < klfps_nwr; i++) {
+        void *cur = *klfps_wr[i].slot;
+        if (cur == klfps_wr[i].mine) klh_poke(klfps_wr[i].slot, &cur, sizeof cur, &klfps_wr[i].real, sizeof cur, "frame limiter unwrap");
+    }
+}
+
+static void klfps_cut(const char *route, void *ret)
+{
+    char m[MAX_PATH + 24];
+    InterlockedExchange(&klfps_dead, 1);
+    if (!InterlockedExchange(&klfps_cut_logged, 1)) {
+        klog("fps: RECURSION CUT at the %s wrapper (depth >= %d on this thread, caller %s): every patched slot restored, the frame limiter is dead for this run",
+             route, KLFPS_MAXDEPTH, klfps_mod(ret, m, sizeof m));
+        klfps_unwrap_all();
+    }
+}
+
+static int klfps_depth(void) { return klfps_tls == TLS_OUT_OF_INDEXES ? 0 : (int)(INT_PTR)TlsGetValue(klfps_tls); }
+static void klfps_depth_set(int d) { if (klfps_tls != TLS_OUT_OF_INDEXES) TlsSetValue(klfps_tls, (LPVOID)(INT_PTR)d); }
+
+static void klfps_first_calls(const char *route, int d, void *ret)
+{
+    static volatile LONG n[2]; char m[MAX_PATH + 24];
+    LONG k = InterlockedIncrement(&n[route[0] == 'd' ? 0 : 1]);
+    if (k <= 3) klog("fps: %s call %ld: depth %d, caller %s", route, (long)k, d, klfps_mod(ret, m, sizeof m));
+}
+
+/* the two halves of one Present, shared by the device route (slot 17) and the swap chain route (slot 3). Returns 1 = timed (the caller
+ * runs klfps_post), 0 = forward only (nested, or dead), -1 = cut (call nothing, return S_OK). */
+static int klfps_pre(const char *route, int d, void *ret)
 {
     LARGE_INTEGER n;
-    if (klfps_in) return 0;                                   /* reentrancy: someone below called back up a vtable */
-    klfps_in = 1;
+    if (d >= KLFPS_MAXDEPTH) { klfps_cut(route, ret); return -1; }
+    if (klfps_dead || d > 0) return 0;                        /* nested (device -> swap chain) or the limiter is dead: just forward */
     if (!klfps_seen) { klfps_seen = 1; klog("fps: FIRST Present seen, via the %s route", route); }
     QueryPerformanceCounter(&n);
     if (klfps_adaptive && klfps_target > 0 && klfps_ret) klfps_pace_feed(n.QuadPart - klfps_ret);
@@ -209,42 +273,52 @@ static void klfps_post(void)
     LARGE_INTEGER n;
     if (!klfps_front) klfps_wait();                           /* back edge: the same wait after Present returned */
     QueryPerformanceCounter(&n); klfps_ret = n.QuadPart;
-    klfps_in = 0;
 }
 
 static HRESULT WINAPI klfps_present(void *self, const RECT *src, const RECT *dst, HWND wnd, const void *dirty)
 {
-    HRESULT r;
-    if (!klfps_pre("device (slot 17)")) return klfps_real_present(self, src, dst, wnd, dirty);
+    HRESULT r; void *ret = _ReturnAddress(); int d = klfps_depth(), t;
+    klfps_first_calls("device (slot 17)", d, ret);
+    t = klfps_pre("device (slot 17)", d, ret);
+    if (t < 0) return 0;
+    klfps_depth_set(d + 1);
     r = klfps_real_present(self, src, dst, wnd, dirty);
-    klfps_post();
+    klfps_depth_set(d);
+    if (t) klfps_post();
     return r;
 }
 
 /* IDirect3DSwapChain9::Present (slot 3) has one more argument (dwFlags). 2026-10-24 FINDING: the k29d log of a whole 8 minute session
- * (15:59 .. 16:07) has the 'fps: on' and 'Present wrapped' lines but NOT ONE 'fps: limiter:' line (Log=1: every 10 s), and the hitch probe's
- * stack scan shows KL2.exe -> gameoverlayrenderer -> ReShade32 with no DINPUT8 return address in between: the game never went through
- * the device vtable slot that klfps wrapped. So the game presents on its implicit SWAP CHAIN (GUESS, to be read from the next log: the
- * 'FIRST Present seen, via the ... route' line says which wrapper is real). Both are wrapped; the guard keeps a nested call from being counted twice. */
+ * (15:59 .. 16:07) has the 'fps: on' and 'Present wrapped' lines but NOT ONE 'fps: limiter:' line (Log=1: every 10 s): the game never
+ * went through the device vtable slot that klfps wrapped. k34's log: the first Present arrived by this swap chain route. */
 static HRESULT WINAPI klfps_present_sc(void *self, const RECT *src, const RECT *dst, HWND wnd, const void *dirty, DWORD flags)
 {
-    HRESULT r;
-    if (!klfps_pre("swap chain (slot 3)")) return klfps_real_present_sc(self, src, dst, wnd, dirty, flags);
+    HRESULT r; void *ret = _ReturnAddress(); int d = klfps_depth(), t;
+    klfps_first_calls("swap chain (slot 3)", d, ret);
+    t = klfps_pre("swap chain (slot 3)", d, ret);
+    if (t < 0) return 0;
+    klfps_depth_set(d + 1);
     r = klfps_real_present_sc(self, src, dst, wnd, dirty, flags);
-    klfps_post();
+    klfps_depth_set(d);
+    if (t) klfps_post();
     return r;
 }
 
 static void klfps_wrap_slot(void *obj, int slot, void *mine, void **real, const char *what)
 {
-    void **vt = obj ? *(void ***)obj : 0, *cur;
+    void **vt = obj ? *(void ***)obj : 0, *cur; char m[MAX_PATH + 24];
     if (!vt) return;
     cur = vt[slot];
     if (cur == mine) return;                                         /* the same class twice: already wrapped */
+    if (cur == (void *)klfps_present || cur == (void *)klfps_present_sc || cur == (void *)klfps_reset || cur == (void *)klfps_createdev) {
+        klog("fps: %s: slot %d already holds another of our wrappers - left alone", what, slot); return;
+    }
     if (*real && *real != cur) { klog("fps: %s: a second class (%p, first %p) - left alone", what, cur, *real); return; }
+    if (klfps_nwr >= 8) return;
     *real = cur;
     if (!klh_poke(&vt[slot], &cur, sizeof cur, &mine, sizeof mine, what)) { klog("fps: %s: vtable slot %d not changed", what, slot); *real = 0; return; }
-    klog("fps: %s wrapped (vtable %p slot %d, was %p)", what, (void *)vt, slot, cur);
+    klfps_wr[klfps_nwr].slot = &vt[slot]; klfps_wr[klfps_nwr].mine = mine; klfps_wr[klfps_nwr].real = cur; klfps_nwr++;
+    klog("fps: %s wrapped (vtable %p slot %d, was %p = %s)", what, (void *)vt, slot, cur, klfps_mod(cur, m, sizeof m));
 }
 
 /* refresh rate + vsync from a D3DPRESENT_PARAMETERS (CreateDevice and Reset) and a new target */
@@ -282,14 +356,16 @@ static HRESULT WINAPI klfps_createdev(void *self, UINT adapter, DWORD type, HWND
     HRESULT r = klfps_real_createdev(self, adapter, type, focus, flags, pp, dev);
     if (r >= 0 && dev && *dev) {
         klfps_read_pp(pp);
-        klfps_wrap_slot(*dev, 16, (void *)klfps_reset, (void **)&klfps_real_reset, "Reset");
+        if (klfps_use_reset) klfps_wrap_slot(*dev, 16, (void *)klfps_reset, (void **)&klfps_real_reset, "Reset");
         klfps_wrap_slot(*dev, 17, (void *)klfps_present, (void **)&klfps_real_present, "Present");
         {   /* the implicit swap chain: IDirect3DDevice9::GetSwapChain (slot 14), then its Release (slot 2) */
             typedef HRESULT (WINAPI *gsc_fn)(void *, UINT, void **); typedef ULONG (WINAPI *rel_fn)(void *);
             void **dvt = *(void ***)*dev, *sc = 0;
             HRESULT hr = ((gsc_fn)dvt[14])(*dev, 0, &sc);
             if (hr >= 0 && sc) {
-                klfps_wrap_slot(sc, 3, (void *)klfps_present_sc, (void **)&klfps_real_present_sc, "SwapChain Present");
+                if (!klfps_use_sc) klog("fps: swap chain Present not wrapped ([FrameLimit] SwapChain=0)");
+                else if (*(void ***)sc == dvt) klog("fps: swap chain %p shares the device's vtable %p - swap chain Present not wrapped", sc, (void *)dvt);
+                else klfps_wrap_slot(sc, 3, (void *)klfps_present_sc, (void **)&klfps_real_present_sc, "SwapChain Present");
                 ((rel_fn)(*(void ***)sc)[2])(sc);
             } else klog("fps: GetSwapChain(0) failed (%08lx): swap chain Present not wrapped", (unsigned long)hr);
         }
@@ -320,6 +396,9 @@ static void klfps_init(void)
     klfps_passive = GetPrivateProfileIntA("FrameLimit", "PassiveWait", 0, klh_ini) != 0;
     klfps_log     = GetPrivateProfileIntA("FrameLimit", "Log", 0, klh_ini) != 0;
     klfps_adaptive = GetPrivateProfileIntA("FrameLimit", "Adaptive", 0, klh_ini) != 0;
+    klfps_use_sc    = GetPrivateProfileIntA("FrameLimit", "SwapChain", 1, klh_ini) != 0;   /* k36: 0 = do not wrap IDirect3DSwapChain9::Present */
+    klfps_use_reset = GetPrivateProfileIntA("FrameLimit", "Reset", 1, klh_ini) != 0;       /* k36: 0 = do not wrap IDirect3DDevice9::Reset */
+    klfps_tls = TlsAlloc();                                         /* per-thread nesting depth (k36 recursion guard); TLS_OUT_OF_INDEXES = depth always 0 */
     QueryPerformanceFrequency(&f); klfps_freq = f.QuadPart;
     if (klfps_passive) {                                            /* Sleep(1) is only useful with a 1 ms timer */
         typedef DWORD (WINAPI *tbp_fn)(UINT); HMODULE m = LoadLibraryA("winmm.dll"); tbp_fn tbp = m ? (tbp_fn)GetProcAddress(m, "timeBeginPeriod") : 0;
