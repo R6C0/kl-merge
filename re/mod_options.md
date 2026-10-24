@@ -42,6 +42,7 @@ Note: the Recommended button would flip the owner's live Neural from 1 to 0 (the
 | adrenaline | Help a downed AI heister (stand by him, hold E) | [Adrenaline] Enable=1/0 | on (Enable=1) | on | next start | the get-up help; the shot animation is in |
 | fed | Come back as a policeman after you die | [Fed] Enable=1/0, [Fed] Player=1/0 | on (Enable=1) | on | next start | seen live 2026-10-11 (Withdrawal); once a round |
 | cardown | A car blast floors people (revivable) instead of killing | [CarDown] Dry=0/1 | off (Dry=1) | off | next start | offsets are GUESSED: it is in LOG-ONLY mode (Dry=1) until the log is read; OFF here = log only |
+| dying | Almost dead = you drop into the revivable down; downed heisters hold fire | [Dying] Enable=1/0 | on (default, no key) | off until read | next start | k31dyn (2026-10-24): the human ask (trigger 0x8da3b0 from the tick) is a GUESS, staged with [Dying] Dry=1; also forces [BotDown] NoFire=1 (heisters stop shooting from the floor) |
 | shield | Human shield rework: the hostage covers you and goes down (revivable) | [Shield] Dry=0/1 (+ Enable=1) | on (Dry=0) | on | next start | klshield.c (k30shd): Absorb/HostageTakes/DownPct/ReleaseDown keys; hold fields partly GUESSED, logged at each hold; OFF here = log only (Dry=1) |
 | | **Sound and music** | | | | | |
 | ambience | Ambience bed and timed one-shot sounds | [Ambience] Enable=1/0 | on (Enable=1) | on | next start | MCI mp3 worker; the owner kept it when the stutter was found to be the Payday 2 jukebox |

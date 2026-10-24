@@ -689,6 +689,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klbotdown.c"                                    /* klbotdown.c: AI heisters down, not dead (off unless [BotDown] Enable) */
 #include "klcardown.c"                                   /* klcardown.c: a car blast floors the AI and you, revivable ([CarDown], on in Arcade on non-stock levels) */
 #include "klshield.c"                                    /* klshield.c: the human shield covers you and floors the hostage ([Shield], on in Arcade rounds) */
+#include "klcdying.c"                                   /* klcdying.c: almost dead = the revivable floor for you; heisters hold fire ([Dying]); AFTER klcardown.c */
 #include "kladren.c"                                      /* kladren.c: adrenaline (off unless [Adrenaline] Enable); its tick runs BEFORE kld_tick */
 #include "klstinger.c"                                  /* klstinger.c: [Stinger] event-driven one-shot cues over winmm MCI (off unless Enable=1); AFTER kladren.c / klbotdown.c / kldown.c */
 #include "klreshade.c"                                    /* klreshade.c: the ReShade bridge - live looks from the menu, KL_* uniforms (off unless [ReShade] Bridge=1) */
@@ -883,6 +884,7 @@ static void klh_tick(int game_thread)
     klbd_tick(game_thread);                           /* klbotdown.c: before kladren, which reads its down state */
     klcd_tick(game_thread);                           /* klcardown.c: a car blast floors the AI and you */
     klsh_tick(game_thread);                           /* klshield.c: the human shield covers you, the hostage goes down */
+    kldy_tick(game_thread);                           /* klcdying.c: almost dead = the game's revivable down (you) */
     kad_tick(game_thread);                            /* kladren.c: raises the mash meter first */
     kld_tick(game_thread);                            /* kldown.c: the mash get-up (off unless [Down] Enable) */
     klrs_tick(game_thread);                           /* klreshade.c: the numbers the shaders get (reads only; off unless [ReShade] Bridge=1) */
@@ -1266,6 +1268,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klbd_init();
     klcd_init();
     klsh_init();
+    kldy_init();                                      /* klcdying.c: reads [Dying]; after klbd_init (sets its NoFire) */
     kad_init();
     klg_init();
     klx_init();

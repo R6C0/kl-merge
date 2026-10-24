@@ -94,6 +94,9 @@ feat('cardown', G_DOWN, 'A car blast floors people (revivable) instead of killin
 feat('shield', G_DOWN, 'Human shield rework: the hostage covers you and goes down (revivable)', 'on', 'start',
      'offsets partly GUESSED (the hold fields are logged at each hold); OFF = log only (Dry=1). Tune: Absorb, HostageTakes, DownPct', [('Shield', 'Dry', 0, 1, 0), ('Shield', 'Enable', 1, None, 1)])
 
+feat('dying', G_DOWN, 'Almost dead = you drop into the revivable down; downed heisters hold fire', 'off', 'start',
+     'k31dyn: the human ask (trigger 0x8da3b0 from the tick) is a GUESS, shipped with [Dying] Dry=1 (log only) until the log is read; the NoFire half for heisters is data only', [('Dying', 'Enable', 1, 0, 1)])
+
 feat('ambience', G_AV, 'Ambience bed and timed one-shot sounds', 'on', 'start',
      'MCI mp3 worker; the owner kept it when the stutter was found to be the Payday 2 jukebox', [('Ambience', 'Enable', 1, 0, 0)])
 feat('stinger', G_AV, 'Event stingers (cues when the heist goes loud, a betrayal ...)', 'on', 'start',
