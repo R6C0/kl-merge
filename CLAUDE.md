@@ -80,9 +80,9 @@ Japanese clean, 1023 DM builds clean). New `python tools/kl_loc_fit.py --verify`
 KLVoice English subtitles instead). KLHook_1.dmp (01:10 PC) = FX2b: a 640x480 StretchRect from the render command list through ReShade32's proxy
 into nvd3dum (null read); one-off, but ReShade is in every D3D call's path - first A/B if it recurs.
 
-2026-10-24 02:17 - DEAD MEN VOICES ON ONE-LINE EVENTS (PlainData) INSTALLED on DD01-DD09: PD3 live 106 lines per-character, 0 faults,
-misses only the 2 police lines excluded on purpose. DM maps + T01 are built/grafted on G: but NOT installed: +4.5 GB on C: (9.5 GB free),
-owner to decide (or OK removing old *.before-* map backups). Needs [Voice] PlainData=1 (TEST ini only so far; SHIP default off).
+2026-10-24 02:31 - DEAD MEN VOICES ON ONE-LINE EVENTS NOW LIVE for the owner: SHIP 5ab09e1c + KLHook.ini [Voice] PlainData=1 (md5
+CBA52979, undo <work>\build\plaindata_1024\UNDO PlainData voices.bat); data on DD01-DD09. PD4 (TEST twin) PASS 108 lines, 0 faults.
+DM maps + T01 voice data built on G: but NOT installed (+4.5 GB on C:): owner's call. [Names] stays off.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
