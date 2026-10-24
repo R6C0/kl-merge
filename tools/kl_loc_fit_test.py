@@ -238,6 +238,123 @@ def main():
           'compare: a dropped, a blanked and a re-pointed stock sound leaf are each found and named')
     check(F.compare(b'\x01x\x00\x08\0\0\0\0', st_b)['stub'], 'compare: a stub is reported as such')
 
+    # 11. repair(): a file damaged the way the heuristic bug damaged DD01-DD09 (stock _C<n> subtitles blanked by step 4) gets the
+    # stock text back and is fitted again with the stock reference: our KLVoice subtitles go instead, no stock leaf is touched
+    en_b = L.build(en)
+    damaged = L.parse(L.build(tree))
+    f01 = damaged[1].kids[0].kids
+    blanked_keys = []
+    for n in f01:
+        if n.name.startswith(b'ExitLootArea_01_C'):
+            n.raw = b'\0' + n.raw[n.raw.index(b'\0') + 1:]
+            blanked_keys.append('Multiplayer/F01/' + n.name.decode())
+    dmg_b = L.build(damaged)
+    cap11 = len(dmg_b)                                                      # exactly what the damaged file needs: the repair must re-fit
+    before11 = F.compare(dmg_b, st_b)
+    check(before11['blanked'] == 9, 'repair setup: the damaged file shows 9 blanked stock subtitles')
+    rep = []
+    out = F.repair(dmg_b, st_b, en_b, cap11, rep)
+    o = info(out)
+    c = F.compare(out, st_b)
+    check(len(out) <= cap11 and L.build(L.parse(out)) == out, 'repair: output within the cap, round-trips')
+    check(c['blanked'] == 0 and c['missing'] == 0 and c['flags_changed'] == 0 and c['sid_changed'] == 0, 'repair: no stock sound leaf blanked, missing, re-flagged or re-pointed')
+    check(all(o[k][1] and o[k][2] == 0x1000 + i for i, k in enumerate(blanked_keys, 1)), 'repair: the 9 stock subtitles are back (shortened to English at most), sound ids kept')
+    check(rep and rep[0].startswith('repair: 9 stock subtitles restored') and any(r.startswith('4 our keys: text blanked') for r in rep),
+          'repair: report says 9 restored, then step 4 blanked OUR subtitles (%s)' % rep)
+    blank_now = [k for k in o if not o[k][1] and k != 'Menu/Empty']
+    check(blank_now and all(k.startswith(('KLVoice/', 'KLTalk/')) and o[k][2] for k in blank_now),
+          'repair: it is our KLVoice / KLTalk subtitles that went blank now, their voices kept (%s)' % blank_now)
+    check(F.repair(st_b, st_b, en_b, cap11) is st_b, 'repair: a file with nothing blanked comes back as it is')
+    check(F.repair(out, st_b, en_b, cap11) is out, 'repair: its own output has nothing left to repair')
+    # a blanked leaf whose sound id was re-pointed (a grafted Dead Men map) keeps ITS id, only the text comes back
+    d2 = L.parse(dmg_b)
+    for n in d2[1].kids[0].kids:
+        if n.name == b'ExitLootArea_01_C1':
+            n.raw = n.raw[:-4] + struct.pack('<I', 0x7777)
+    rep = []
+    out2 = F.repair(L.build(d2), st_b, en_b, 10 ** 6, rep)
+    o2 = info(out2)
+    check(o2['Multiplayer/F01/ExitLootArea_01_C1'][2] == 0x7777 and o2['Multiplayer/F01/ExitLootArea_01_C1'][1] and '1 with another tail kept' in rep[0],
+          'repair: a re-pointed sound id survives the repair, the text still comes back (%s)' % rep[0])
+    d3 = L.parse(dmg_b)
+    d3[1].kids[0].kids[:] = [n for n in d3[1].kids[0].kids if n.name != b'Backstab_01']      # a grafted map: a stock leaf already gone
+    rep = []
+    out3 = F.repair(L.build(d3), st_b, en_b, 10 ** 6, rep)
+    c3 = F.compare(out3, st_b)
+    check(c3['missing'] == 1 and c3['blanked'] == 0 and rep[0].startswith('repair: 9 stock'), 'repair: a stock leaf missing BEFORE the repair is tolerated (grafted maps), the blanks still come back')
+    try:
+        F.repair(dmg_b, st_b, en_b, 100)
+        check(False, 'repair under an impossible cap raises')
+    except ValueError as e:
+        check('cannot fit' in str(e), 'repair under an impossible cap raises ValueError (%s)' % str(e)[:40])
+
+    # 12. repair_installed() / install_repaired() on a fake game folder: KLExpansion\Maps\DDnn\F0n_Main.zip with a damaged Russian
+    # and a clean English member, the stock F02 zip in place and the stock F01 zip ONLY in KL_PortBackup (the test slot)
+    import tempfile, zipfile, shutil
+    with tempfile.TemporaryDirectory() as td:
+        dd = os.path.join(td, 'DD')
+        def put(path, members):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with zipfile.ZipFile(path, 'w') as z:
+                for name, data, ct in members:
+                    zi = zipfile.ZipInfo(name, (2026, 10, 24, 1, 2, 4)); zi.compress_type = ct
+                    z.writestr(zi, data)
+        for slot, where in (('F01', 'KL_PortBackup'), ('F02', '')):
+            put(os.path.join(dd, where, 'Scenes', 'Locations', slot, slot + '_Main.zip'),
+                [('Scenes/Locations/%s/%s_MainRussian.LOC' % (slot, slot), st_b, zipfile.ZIP_DEFLATED),
+                 ('Scenes/Locations/%s/%s_MainEnglish.LOC' % (slot, slot), L.build(mk(long=False)[2]), zipfile.ZIP_STORED),
+                 ('Scenes/Locations/%s/%s_MainDutch.LOC' % (slot, slot), b'\x01x\x00\x08\0\0\0\0', zipfile.ZIP_STORED)])
+        stock_f01_bytes = [open(os.path.join(dd, 'KL_PortBackup', 'Scenes', 'Locations', 'F01', 'F01_Main.zip'), 'rb').read()]
+        for folder, slot, ru in (('DD01', 'F01', dmg_b), ('DD02', 'F02', dmg_b), ('DD03', 'F02', L.build(tree))):
+            put(os.path.join(dd, 'KLExpansion', 'Maps', folder, slot + '_Main.zip'),
+                [('Scenes/Locations/%s/%s_MainRussian.LOC' % (slot, slot), ru, zipfile.ZIP_DEFLATED),
+                 ('Scenes/Locations/%s/%s_MainEnglish.LOC' % (slot, slot), en_b, zipfile.ZIP_STORED),
+                 ('Scenes/Locations/%s/%s_MainDutch.LOC' % (slot, slot), b'\x01x\x00\x08\0\0\0\0', zipfile.ZIP_STORED),
+                 ('Scenes/Locations/%s/%s_Main.gms' % (slot, slot), b'GMS!' * 100, zipfile.ZIP_STORED)])
+        check(F.stock_zip(dd, 'F01_Main.zip').endswith(os.path.join('KL_PortBackup', 'Scenes', 'Locations', 'F01', 'F01_Main.zip'))
+              and F.stock_zip(dd, 'F02_Main.zip').endswith(os.path.join('DD', 'Scenes', 'Locations', 'F02', 'F02_Main.zip'))
+              and F.stock_zip(dd, 'F09_Main.zip') is None, 'stock_zip: in place first, KL_PortBackup for the test slot, None otherwise')
+        quiet = lambda *a: None
+        v = F.verify(dd, ('Russian',), quiet)
+        check([(f, r['blanked']) for f, _z, _l, r in v] == [('DD01', 9), ('DD02', 9), ('DD03', 0)], 'verify: finds the 9 blanked lines on DD01 (via the backup stock) and DD02, DD03 clean')
+        outdir = os.path.join(td, 'repaired')
+        done = F.repair_installed(outdir, dd, quiet)
+        check([(f, l, a['blanked']) for f, _z, l, _c, a in done] == [('DD01', 'Russian', 0), ('DD02', 'Russian', 0)],
+              'repair_installed: repaired exactly the two damaged Russian members, both clean after')
+        written = sorted(os.path.relpath(os.path.join(r, f), outdir) for r, _d, fs in os.walk(outdir) for f in fs)
+        check(written == [os.path.join('DD01', 'Scenes', 'Locations', 'F01', 'F01_MainRussian.LOC'),
+                          os.path.join('DD02', 'Scenes', 'Locations', 'F02', 'F02_MainRussian.LOC'), 'repair_report.txt'],
+              'repair_installed: wrote only those two members at their zip paths, plus the report (%s)' % written)
+        report = open(os.path.join(outdir, 'repair_report.txt'), encoding='utf-8').read()
+        check('DD03\\F02_Main.zip: no blanked stock subtitle' in report and 'DD01\\F01_Main.zip: 1 member(s) repaired (stock KL_PortBackup' in report,
+              'repair_installed: report names the clean zip and the backup stock file')
+        before_bytes = {f: open(os.path.join(dd, 'KLExpansion', 'Maps', f, s + '_Main.zip'), 'rb').read() for f, s in (('DD01', 'F01'), ('DD02', 'F02'), ('DD03', 'F02'))}
+        n = F.install_repaired(outdir, dd, quiet)
+        check(n == 2, 'install_repaired: rewrote 2 zips')
+        z1 = os.path.join(dd, 'KLExpansion', 'Maps', 'DD01', 'F01_Main.zip')
+        check(open(z1 + '.before-locrepair', 'rb').read() == before_bytes['DD01'] and not os.path.exists(z1 + '.locrepair.tmp'),
+              'install_repaired: the original is kept as .before-locrepair, no .tmp left')
+        with zipfile.ZipFile(z1) as z:
+            names = z.namelist()
+            ru = z.read('Scenes/Locations/F01/F01_MainRussian.LOC')
+            gms = z.getinfo('Scenes/Locations/F01/F01_Main.gms')
+            check(len(names) == 4 and gms.compress_type == zipfile.ZIP_STORED and z.read(gms.filename) == b'GMS!' * 100
+                  and gms.date_time == (2026, 10, 24, 1, 2, 4) and z.getinfo('Scenes/Locations/F01/F01_MainRussian.LOC').compress_type == zipfile.ZIP_DEFLATED,
+                  'install_repaired: other members, their compression and dates kept')
+            check(ru == open(os.path.join(outdir, 'DD01', 'Scenes', 'Locations', 'F01', 'F01_MainRussian.LOC'), 'rb').read()
+                  and F.compare(ru, st_b)['blanked'] == 0, 'install_repaired: the repaired Russian member is in the zip, clean against stock')
+        check(open(os.path.join(dd, 'KLExpansion', 'Maps', 'DD03', 'F02_Main.zip'), 'rb').read() == before_bytes['DD03']
+              and not os.path.exists(os.path.join(dd, 'KLExpansion', 'Maps', 'DD03', 'F02_Main.zip.before-locrepair')),
+              'install_repaired: the clean zip was not touched')
+        check(not os.path.exists(os.path.join(dd, 'KL_PortBackup', 'Scenes', 'Locations', 'F01', 'F01_Main.zip.before-locrepair'))
+              and open(os.path.join(dd, 'KL_PortBackup', 'Scenes', 'Locations', 'F01', 'F01_Main.zip'), 'rb').read() == stock_f01_bytes[0],
+              'install_repaired: KL_PortBackup untouched')
+        check([(f, r['blanked']) for f, _z, _l, r in F.verify(dd, ('Russian',), quiet)] == [('DD01', 0), ('DD02', 0), ('DD03', 0)],
+              'verify after install: every zip clean')
+        # a second install run finds the backup already there, keeps it and does not fail
+        n2 = F.install_repaired(outdir, dd, quiet)
+        check(n2 == 2 and open(z1 + '.before-locrepair', 'rb').read() == before_bytes['DD01'], 'install_repaired again: the first backup is the one kept')
+
     print('RESULT: %s (%d checks failed)' % ('PASS' if not FAILS else 'FAIL', len(FAILS)))
     return 1 if FAILS else 0
 

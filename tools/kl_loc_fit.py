@@ -9,6 +9,16 @@ as possible and saying what was lost. Self-test on synthetic trees: `python tool
     python kl_loc_fit.py file.LOC [english.LOC] [stock.LOC]   fit one file, print the report (writes nothing)
     python kl_loc_fit.py --verify [DD]      read-only: every installed Russian / Japanese .LOC against the stock .LOC of its slot -
                                             missing / blanked / re-flagged stock sound leaves are FAULTs (verify(), compare())
+    python kl_loc_fit.py --repair OUTDIR [DD]   read-only on the game: every installed .LOC member whose stock SOUND subtitles were
+                                            blanked (the 2026-10-24 heuristic bug, 248 / 136 Russian lines on DD01-DD09) gets them
+                                            back from the slot's stock file and is fitted again WITH that stock file as reference
+                                            (so step 4 blanks our KLVoice subtitles instead); only the repaired members are written,
+                                            OUTDIR\\<MapFolder>\\<member path>, plus OUTDIR\\repair_report.txt (repair(), repair_installed())
+    python kl_loc_fit.py --install OUTDIR [DD]  put the members of a --repair OUTDIR into the installed zips: each zip is rewritten
+                                            beside itself and swapped in, the original kept as <zip>.before-locrepair; then
+                                            compare() on the result. CHANGES THE GAME FOLDER - the owner or a local session runs it.
+  The stock .LOC of a slot is read from <DD>\\Scenes\\Locations\\F0n\\F0n_Main.zip, and when that slot holds a test map (F01) from
+  <DD>\\KL_PortBackup\\Scenes\\Locations\\F0n\\ - READ ONLY, nothing there is ever written.
 
 Why files grow past the cap (found 2026-10-23): the KLVoice/ subtree (Dead Men voice leaves, ~93 KB, 1,850 leaves, text in
 English in EVERY language file, added by kl_dmvoice) plus KLTalk/ and extra Multiplayer lines. Stock Dog Days Russian is
@@ -270,32 +280,191 @@ def compare(built, stock):
     return r
 
 
-def verify(dd=DD, langs=('Russian', 'Japanese'), log=print):
-    """Read-only scan of <dd>\\KLExpansion\\Maps\\*\\*_Main.zip: compare() every .LOC member of the given languages with the stock
-    .LOC of its slot (<dd>\\Scenes\\Locations\\F0n\\F0n_Main.zip; the F01 test slot has no stock file in place and is skipped).
-    -> [(map folder, zip name, language, compare() dict)]; one line per member is logged."""
+def stock_zip(dd, zn):
+    """-> path of the stock Dog Days level zip of the slot that zn (e.g. F02_Main.zip) names, or None. In place first; a slot that
+    holds a test map (F01) has its original MOVED to <dd>\\KL_PortBackup (CLAUDE.md), which is only ever READ here."""
+    slot = zn.split('_')[0]
+    for root in (dd, os.path.join(dd, 'KL_PortBackup')):
+        p = os.path.join(root, 'Scenes', 'Locations', slot, zn)
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def repair(data, stock, english=None, cap=LOC_CAP, report=None):
+    """Undo the heuristic bug's damage in a built .LOC (2026-10-24): every stock SOUND leaf whose stock text is non-empty and whose
+    built text is empty gets the stock text back (its own tail - the dword after the text and the sound id - is kept, so a
+    re-pointed sound id survives). The file then usually overflows the cap again and goes through fit() WITH the stock file as
+    the ownership reference, which blanks our KLVoice subtitles instead (step 4) - never a stock one. -> bytes; data itself when
+    nothing was blanked. report: one line per thing done. Raises ValueError if the result still has a blanked, missing or
+    re-flagged stock sound leaf (it cannot, unless fit() misbehaves) or if fit() cannot reach the cap."""
+    rep = report if report is not None else []
+    bt, st = L.parse(data), L.parse(stock)
+    if bt is None or st is None:
+        return data
+    o = {k: n for k, n in L.leaves(bt)}
+    restored = added = tails = 0
+    for k, n in L.leaves(st):
+        m = o.get(k)
+        if m is None or not (n.flags & L.SOUND) or not (m.flags & L.TEXT) or not (n.flags & L.TEXT):
+            continue
+        a, b = _tails(n), _tails(m)
+        if a is None or b is None or not a[0] or b[0]:
+            continue
+        if a[1] != b[1]:
+            tails += 1                              # another sound id / dword: keep the built one, only the text comes back
+        m.raw = a[0] + b'\0' + b[1]
+        restored += 1; added += len(a[0])
+    if not restored:
+        return data
+    rep.append('repair: %d stock subtitles restored, +%d bytes%s' % (restored, added, (', %d with another tail kept' % tails) if tails else ''))
+    out = L.build(bt)
+    if len(out) > cap:
+        out = fit(out, cap, english, stock, rep)
+    else:
+        rep.append('result: %d -> %d bytes (cap %d)' % (len(data), len(out), cap))
+    b, c = compare(data, stock), compare(out, stock)
+    # a grafted Dead Men map lacks the slot map's own L04/Dialogue leaves (86 on DM01/DM02/DM06/DM11B, pre-existing, not ours
+    # to put back: their banks left with the replaced map), so missing / re-flagged counts may only not GROW; blanked must be 0
+    bad = [k for k in ('missing', 'flags_changed') if c[k] > b[k]] + (['blanked'] if c['blanked'] else [])
+    if bad:
+        raise ValueError('repair left stock faults: ' + ', '.join('%s %d %s' % (k, c[k], c[k + '_eg'][:2]) for k in bad))
+    return out
+
+
+def _installed_zips(dd):
     maps = os.path.join(dd, 'KLExpansion', 'Maps')
-    out = []
     for folder in sorted(os.listdir(maps)):
         for zn in sorted(os.listdir(os.path.join(maps, folder))):
-            if not zn.lower().endswith('_main.zip'):
-                continue
-            stp = os.path.join(dd, 'Scenes', 'Locations', zn.split('_')[0], zn)
-            if not os.path.isfile(stp) or zn.split('_')[0].upper() == 'F01':
-                log('%s\\%s: no stock %s in place, skipped' % (folder, zn, zn.split('_')[0])); continue
-            with zipfile.ZipFile(os.path.join(maps, folder, zn)) as zb, zipfile.ZipFile(stp) as zs:
-                bm, sm = _loc_members(zb), _loc_members(zs)
-                for lg in langs:
-                    if lg not in bm or lg not in sm:
-                        continue
-                    r = compare(zb.read(bm[lg]), zs.read(sm[lg]))
-                    out.append((folder, zn, lg, r))
-                    if r.get('stub'):
-                        log('%s\\%s %s: stub' % (folder, zn, lg)); continue
-                    faults = [k for k in ('missing', 'blanked', 'flags_changed') if r[k]]
-                    log('%s\\%s %-9s stock sound leaves %d: missing %d, blanked %d, flags changed %d, sound id changed %d, English text %d, ours %d%s' % (
-                        folder, zn, lg, r['stock_sound'], r['missing'], r['blanked'], r['flags_changed'], r['sid_changed'], r['swapped'], r['ours'],
-                        ('  FAULT ' + ', '.join('%s %s' % (k, r[k + '_eg'][:2]) for k in faults)) if faults else ''))
+            if zn.lower().endswith('_main.zip'):
+                yield folder, zn, os.path.join(maps, folder, zn)
+
+
+def repair_installed(outdir, dd=DD, log=print):
+    """Read-only on the game folder. Every .LOC member (all languages) of every installed zip is compare()d with the stock .LOC of
+    its slot; a member with blanked stock sound subtitles is repair()ed and written to OUTDIR\\<MapFolder>\\<member path as in the
+    zip>. OUTDIR\\repair_report.txt gets one line per zip and the fit() steps. -> [(folder, zip, language, before, after)] of the
+    repaired members. --install puts them into the zips."""
+    lines, done = [], []
+    for folder, zn, zp in _installed_zips(dd):
+        stp = stock_zip(dd, zn)
+        if stp is None:
+            lines.append('%s\\%s: no stock %s found (in place or in KL_PortBackup), skipped' % (folder, zn, zn.split('_')[0])); continue
+        with zipfile.ZipFile(zp) as zb, zipfile.ZipFile(stp) as zs:
+            bm, sm = _loc_members(zb), _loc_members(zs)
+            en = zb.read(bm['English']) if 'English' in bm else None
+            hit = []
+            for lg in sorted(bm):
+                if lg not in sm:
+                    continue
+                old, stock = zb.read(bm[lg]), zs.read(sm[lg])
+                c = compare(old, stock)
+                if c.get('stub') or not c['blanked']:
+                    continue
+                rep = []
+                new = repair(old, stock, en, LOC_CAP, rep)
+                after = compare(new, stock)
+                od = os.path.join(outdir, folder, os.path.dirname(bm[lg]))
+                os.makedirs(od, exist_ok=True)
+                with open(os.path.join(outdir, folder, bm[lg]), 'wb') as f:
+                    f.write(new)
+                hit.append((lg, c['blanked'], len(old), len(new), rep, after))
+                done.append((folder, zn, lg, c, after))
+            if not hit:
+                lines.append('%s\\%s: no blanked stock subtitle in any language, nothing to repair (stock %s)' % (folder, zn, os.path.relpath(stp, dd)))
+            else:
+                lines.append('%s\\%s: %d member(s) repaired (stock %s)' % (folder, zn, len(hit), os.path.relpath(stp, dd)))
+                for lg, blanked, a, b, rep, after in hit:
+                    lines.append('    %-9s %d stock subtitles were blank; %d -> %d bytes; now: blanked %d, missing %d, English subtitle %d, ours %d' % (
+                        lg, blanked, a, b, after['blanked'], after['missing'], after['swapped'], after['ours']))
+                    lines += ['        ' + r for r in rep]
+        log(lines[-1] if not hit else '%s: %s repaired' % (folder, ', '.join(h[0] for h in hit)))
+    os.makedirs(outdir, exist_ok=True)
+    with open(os.path.join(outdir, 'repair_report.txt'), 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines) + '\n')
+    return done
+
+
+def install_repaired(outdir, dd=DD, log=print):
+    """CHANGES THE GAME FOLDER (owner / local session only). For every OUTDIR\\<MapFolder>\\<member>.LOC written by --repair: the
+    installed zip is rewritten to <zip>.locrepair.tmp with those members replaced (every other member copied as it is, same
+    compression and dates), the original renamed <zip>.before-locrepair (an existing backup of that name is kept, the older
+    one wins) and the new file moved into place; then compare() against the stock file must show 0 blanked / missing. A zip
+    whose folder has no repaired member is not touched. -> number of zips rewritten."""
+    n = 0
+    for folder, zn, zp in _installed_zips(dd):
+        od = os.path.join(outdir, folder)
+        if not os.path.isdir(od):
+            continue
+        new = {}
+        for root, _dirs, files in os.walk(od):
+            for fn in files:
+                if fn.upper().endswith('.LOC'):
+                    full = os.path.join(root, fn)
+                    member = os.path.relpath(full, od).replace(os.sep, '/')
+                    new[member] = open(full, 'rb').read()
+        if not new:
+            continue
+        stp = stock_zip(dd, zn)
+        tmp, bak = zp + '.locrepair.tmp', zp + '.before-locrepair'
+        with zipfile.ZipFile(zp) as zin:
+            names = set(zin.namelist())
+            miss = [m for m in new if m not in names]
+            if miss:
+                raise ValueError('%s: repaired member(s) not in the zip: %s' % (zn, miss))
+            with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED, compresslevel=1) as zo:
+                for zi in zin.infolist():
+                    data = new.get(zi.filename)
+                    if data is None:
+                        data = zin.read(zi.filename)
+                    ni = zipfile.ZipInfo(zi.filename, zi.date_time)
+                    ni.compress_type, ni.external_attr, ni.create_system = zi.compress_type, zi.external_attr, zi.create_system
+                    zo.writestr(ni, data)
+        if os.path.exists(bak):
+            os.remove(zp)                          # the first backup is the one worth keeping
+        else:
+            os.rename(zp, bak)
+        os.rename(tmp, zp)
+        n += 1
+        zs = zipfile.ZipFile(stp) if stp else None
+        with zipfile.ZipFile(zp) as zb:
+            for m, data in new.items():
+                lg = m.rsplit('_Main', 1)[1][:-4]
+                if zb.read(m) != data:
+                    raise ValueError('%s: member %s differs after the rewrite' % (zn, m))
+                if zs is not None:
+                    c = compare(data, zs.read(_loc_members(zs)[lg]))
+                    log('%s\\%s %-9s installed: blanked %d, missing %d, flags changed %d%s' % (
+                        folder, zn, lg, c['blanked'], c['missing'], c['flags_changed'], '' if not (c['blanked'] or c['missing'] or c['flags_changed']) else '  FAULT'))
+                else:
+                    log('%s\\%s %-9s installed (no stock file to compare with)' % (folder, zn, lg))
+        if zs is not None:
+            zs.close()
+    return n
+
+
+def verify(dd=DD, langs=('Russian', 'Japanese'), log=print):
+    """Read-only scan of <dd>\\KLExpansion\\Maps\\*\\*_Main.zip: compare() every .LOC member of the given languages with the stock
+    .LOC of its slot (stock_zip(): <dd>\\Scenes\\Locations\\F0n\\F0n_Main.zip, or the moved original in KL_PortBackup for the F01
+    test slot). -> [(map folder, zip name, language, compare() dict)]; one line per member is logged."""
+    out = []
+    for folder, zn, zp in _installed_zips(dd):
+        stp = stock_zip(dd, zn)
+        if stp is None:
+            log('%s\\%s: no stock %s in place or in KL_PortBackup, skipped' % (folder, zn, zn.split('_')[0])); continue
+        with zipfile.ZipFile(zp) as zb, zipfile.ZipFile(stp) as zs:
+            bm, sm = _loc_members(zb), _loc_members(zs)
+            for lg in langs:
+                if lg not in bm or lg not in sm:
+                    continue
+                r = compare(zb.read(bm[lg]), zs.read(sm[lg]))
+                out.append((folder, zn, lg, r))
+                if r.get('stub'):
+                    log('%s\\%s %s: stub' % (folder, zn, lg)); continue
+                faults = [k for k in ('missing', 'blanked', 'flags_changed') if r[k]]
+                log('%s\\%s %-9s stock sound leaves %d: missing %d, blanked %d, flags changed %d, sound id changed %d, English text %d, ours %d%s' % (
+                    folder, zn, lg, r['stock_sound'], r['missing'], r['blanked'], r['flags_changed'], r['sid_changed'], r['swapped'], r['ours'],
+                    ('  FAULT ' + ', '.join('%s %s' % (k, r[k + '_eg'][:2]) for k in faults)) if faults else ''))
     return out
 
 
@@ -306,6 +475,12 @@ if __name__ == '__main__':
         print('\n'.join(stage(a[1])))
     elif a[:1] == ['--verify']:
         verify(*a[1:2])
+    elif a[:1] == ['--repair'] and len(a) in (2, 3):
+        os.makedirs(a[1], exist_ok=True)
+        repair_installed(*a[1:3])
+        print(open(os.path.join(a[1], 'repair_report.txt'), encoding='utf-8').read())
+    elif a[:1] == ['--install'] and len(a) in (2, 3):
+        print('%d zip(s) rewritten' % install_repaired(*a[1:3]))
     elif a and os.path.isfile(a[0]):
         rd = lambda i: open(a[i], 'rb').read() if len(a) > i else None
         rep = []

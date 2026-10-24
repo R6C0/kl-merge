@@ -75,3 +75,42 @@ English (step 2 already does this for 3,043 of them) - is the docstring's order 
 Owner: nothing to decide unless you want the other trade. The local sessions rebuild DD01-DD09 (Russian only
 differs) with HEAD when convenient; `python tools\kl_loc_fit.py --verify` afterwards must show `blanked 0` on every
 DD row.
+
+## 3. Second check-in of the day (09:48-10:10 UTC = 10:48 PC clock): the blanked subtitles REPAIRED into the work folder, not installed
+
+PC idle again (newest change: `build\locverify_1024` 05:57 UTC, the game files 01:26 UTC; KLHook.result still `state=PASS`,
+no new dump: KLHook_1.dmp 00:10 UTC is the one triaged above). Nothing launched or installed.
+
+The 06:00 note left the fix to "a rebuild with HEAD". A rebuild is not needed: the damage is local to the .LOC member, so
+`kl_loc_fit.repair()` (new) puts the stock text of every blanked stock SOUND leaf back from the slot's stock file (the leaf's own
+tail - dword after the text and sound id - is kept, so a re-pointed id of a grafted map survives) and runs `fit()` again WITH the
+stock file as the ownership reference; `--repair OUTDIR [DD]` does that for every installed zip, all languages, read-only on the
+game folder, and writes only the repaired members. Stock files are found by `stock_zip()`: in place, else the moved original in
+`KL_PortBackup` (read only) - which is how the F01 slot (DD01, DM01, DM05A, T01), skipped by every earlier `--verify`, got checked
+for the first time. Self-test: `kl_loc_fit_test.py` +24 checks (78 -> 102) (repair on the bug's damage, re-pointed ids, pre-existing missing
+leaves tolerated, impossible cap; repair_installed / install_repaired / verify on a fake game folder with the stock F01 only in
+KL_PortBackup). PASS here and on the PC (python 3.10 in the device shell).
+
+Run on the PC from `<work>\build\locrepair_1024\tools\`, output `<work>\build\locrepair_1024\<Map>\Scenes\Locations\F0n\
+F0n_Main<Language>.LOC` + `repair_report.txt` (29 zips x 9 languages compared in under a minute):
+
+| zip | language | stock subtitles blank | after repair + re-fit (stock reference) | size |
+|---|---|---|---|---|
+| DD01 DD02 DD04 DD05 | Russian | 248 | 0 blank, 0 missing; the 248 come back and step 2 turns them ENGLISH (longer than English, stock sound leaf, the docstring's order); step 4 blanks 623 of our 3,818 KLVoice subtitles instead (-22,664 bytes) | 612,593 -> 612,631 (cap 612,634) |
+| DD03 DD06 DD07 DD08 DD09 | Russian | 136 | same; 354 KLVoice subtitles blanked instead | 612,608 -> 612,601 |
+| **DM01** (F01 slot, 1023 build) | **Japanese** | **233** - NEW, unseen until now (F01 was never compared) | 0 blank; all 233 keep their re-pointed sound id ("233 with another tail kept" = the kl_snd graft), 231 turned English, 402 KLVoice subtitles blanked | 612,608 -> 612,627 |
+| every other member of the 29 zips (DD01-DD09 other languages, DM01B..DM11B, T01, DM05A) | all 9 | 0 | nothing written | |
+
+DM01's `missing 86` (L04/Dialogue, the F01 slot map's own one-liners) is pre-existing and stays: repair() only refuses a result
+with blanked stock subtitles or MORE missing / re-flagged leaves than its input (that distinction was the one bug found while
+running it: the first version refused DM01 for the 86).
+
+So the installed Russian files show the 248 / 136 lines as English subtitles after the repair, not Russian: step 2 ("stock keys
+with a sound -> English subtitle") runs before step 4 by design, and 3,043 of the 3,616 stock Russian subtitles in those files
+were English already. The other trade (keep them Russian, blank ~600 more Dead Men subtitles) needs the step order changed;
+not done (the 06:00 note described it, nobody asked for it).
+
+NOT installed (a game-folder change, owner / local session): `python tools\kl_loc_fit.py --install <work>\build\locrepair_1024`
+rewrites the 10 zips beside themselves (10 x ~250 MB, backups `<zip>.before-locrepair`, +2.5 GB on C:), re-checks each member
+against stock, then `python tools\kl_loc_fit.py --verify` must say `blanked 0` on every row (DM01 Japanese included now).
+Owner's call too: the ~41 GB of `*.before-*` backups under KLExpansion\Maps (850 files) are what makes C: tight.

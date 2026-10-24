@@ -66,6 +66,13 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 10:10 UTC - scheduled check-in (cloud, PC idle, nothing run): the blanked stock subtitles REPAIRED into the work folder, not
+installed: new `kl_loc_fit.repair()` / `--repair OUTDIR` (stock text back from the slot's stock file, own sound id kept, fit() again WITH
+the stock reference) + `--install OUTDIR` (zip rewritten beside itself, backup .before-locrepair); stock_zip() reads KL_PortBackup (read
+only) so the F01 slot is compared at last. All 29 zips x 9 languages: DD01-DD09 Russian 248/136 -> 0 blank (back as English subtitles,
+623/354 KLVoice subtitles blanked instead), NEW DM01 Japanese 233 -> 0; everything else clean. Output `<work>\build\locrepair_1024\`.
+Owner / local session: `python tools\kl_loc_fit.py --install <that folder>` (+2.5 GB backups on C:), then `--verify` -> blanked 0 everywhere.
+
 2026-10-24 06:00 UTC - scheduled check-in (cloud, PC idle, nothing run): the 01:50 kl_loc_fit heuristic bug DID land in the installed DD01-DD09
 PlainData builds: 248 (F02/F04/F05-type) / 136 (others) stock RUSSIAN per-character subtitles are blank (voice plays, leaf and sound id intact;
 Japanese clean, 1023 DM builds clean). New `python tools/kl_loc_fit.py --verify` (compare()/verify(), self-tested) found it; report
@@ -76,10 +83,6 @@ into nvd3dum (null read); one-off, but ReShade is in every D3D call's path - fir
 2026-10-24 02:17 - DEAD MEN VOICES ON ONE-LINE EVENTS (PlainData) INSTALLED on DD01-DD09: PD3 live 106 lines per-character, 0 faults,
 misses only the 2 police lines excluded on purpose. DM maps + T01 are built/grafted on G: but NOT installed: +4.5 GB on C: (9.5 GB free),
 owner to decide (or OK removing old *.before-* map backups). Needs [Voice] PlainData=1 (TEST ini only so far; SHIP default off).
-
-2026-10-24 02:11 - ROUND-START HITCH FIX PROVEN LIVE (SC4, TEST out_3f_1024k27_test 28ae5d69): klmove keeps the ZAllyEscapeBox scan per
-scene (b39e3ae4c): DM02 round 2 'found in 109 ms', round 3 'kept from the last scan, checked in 0 ms'; maps with no boxes keep it after a
-second empty scan (SC3, Retomoto). INSTALLED 02:23: baseline dll SHIP out_3f_1024k27 5AB09E1C + ini 41E998CF (backup dinput8.dll.before-1024k27).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
