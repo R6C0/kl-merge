@@ -195,7 +195,7 @@ def _intern(tokens, keys, table, order, rename=None):
     return out
 
 
-def join(base, picks, label='join', rename=None, take=None):
+def join(base, picks, label='join', rename=None, take=None, skip=()):
     """One Scene from `base`'s header, scene property block and ROOT node, and the top-level
     subtrees `picks` = [(scene, top-level node index), ...] in that order under it. Every key is
     re-interned into one table in order of first use (the order the games' own files have), the
@@ -204,6 +204,7 @@ def join(base, picks, label='join', rename=None, take=None):
     names) while interning: the way to re-point scene paths that cross the cut.
     `take` = {entry name: scene} replaces (or adds) entries of the scene property block by
     another level's, e.g. the map's fog and far plane.
+    `skip` = node indices of `base` (with their subtrees) left out of the copy (kl_interact_graft: a static door leaf that a kick door replaces).
     Returns the Scene; scene.origin[k] = (source scene, source node index) of node k - the order
     the joined .gms must list its entities in."""
     table, order = {}, []
@@ -231,8 +232,11 @@ def join(base, picks, label='join', rename=None, take=None):
     for sc, t in picks:
         if sc.parent[t] != 0:
             raise ValueError('%s node %d (%s) is not a top-level subtree' % (sc.label, t, sc.names[t]))
-        made = {}
+        made, dead = {}, set()
         for k in range(t, sc.end[t]):                     # preorder: a parent comes before its children
+            if sc is base and (k in skip or sc.parent[k] in dead):
+                dead.add(k)
+                continue
             made[k] = copy(sc, k)
             (new.root if k == t else made[sc.parent[k]])['children'].append(made[k])
             names.append(sc.names[k]); tids.append(sc.tids[k]); origin.append((sc, k))

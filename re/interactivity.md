@@ -117,3 +117,12 @@ which to do it with a live round between steps.
 5. Ambient vehicles and events: copy the heli set per map only where a heli already exists; no new work before step 1-2 pass.
 
 Excluded (rule of this job): DM05A and Hasta (DM11B) zips.
+
+## Result 2026-10-24 (round 2): steps 3 and 4 built, staged, not installed
+tools/kl_interact_graft.py grafts from F03 (doors) and F04 (cans) via kl_prpjoin/kl_prmgraph/kl_octree, three-leg donor chain with sequential dry-run append.
+- Door: F03 PC0800_ALL_KickableDoor_E_01 group (leaf 4189, model 13862, HVK shape 234 type 4 slab) placed at the host hinge with stored_rot(host R); leaf model
+  scaled (sx,sy,1) from host width/height (root box + vertex chunks 13857, 13852); KEYS tracks (raw+40) point at one copy of the F03 .buf region 0x47270..0x47800.
+  Host entity, its HVK placement/shape refs and .prp subtree are removed (kl_prpjoin.join skip=); hosts that other nodes reference are refused.
+- Can: F04 FX0900_ALL_FireExtinguisher_01 (rigid HVK + .hrd, GeomActivator, Emitter_Debris templates), 4 per map near fights.
+- Plan/hosts: DM01 [1330 961 841 842 493], DM01B [1373 7169 8844 7166 7167], DM03A [6521 3594 3647 3737 3790]; DM06 and DM09 have no separable door leaf.
+- Unknown until a live run: kick trigger fires, KEYS swing plays on a type-4 body, door side, door oct record unscaled (up to ~8%), DM cover/path controllers.

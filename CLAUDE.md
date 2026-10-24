@@ -66,6 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 - STAGED, NOT INSTALLED: kick doors + extinguishers C:/kl_build_1024/interact_1024r2/stage (tools/kl_interact_graft.py; INSTALL/UNDO interact.bat, backup
+.before-1024interact, rehearsed on scratch, undo byte-identical). DM01 5522ebcf->48cd4942, DM01B 0a34b035->653377d1, DM03A 89256d16->7a2dbdd3, DM06 2faf4742->91f2e93e,
+DM09 e2c7d5bd->451ceb91: 5 kick doors each on DM01/DM01B/DM03A (stock F03 leaf replaces a static DM leaf), 4 extinguishers on all five. Live test needed (kick, swing, can).
+
 2026-10-24 - STAGED, NOT INSTALLED: Last Call lastcall2_1024r2 (C:/kl_build_1024/lastcall2_1024r2, tools/kl_club_lastcall2.py; DM05A b5e45efa -> c563e6bc):
 escape set moved to the far roof pad (7300,1881,3500; route START->pad found on the mesh, 401 m), 6 Yakuza/bodyguard waves x5 (40-55 s apart via
 the old_waves chain from the AIMonitor START list, no alarm node exists), 4 AfterLoot squads + 28 civilians cut: 99 actors / 53 squads. check.py,
