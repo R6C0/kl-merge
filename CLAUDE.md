@@ -66,7 +66,7 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-24 02:10 - PLAINDATA LIVE (PD1, DD01 Arcade): flag-0 lines become per-character data, 74 converted, 0 faults, no refused writes.
+2026-10-24 01:49 - PLAINDATA LIVE (PD1, DD01 Arcade): flag-0 lines become per-character data, 74 converted, 0 faults, no refused writes.
 68 events still had no leaf -> new theme rules + .LOC tier 'no single-event subtitles' (7ba23c5f8); DD01 zip 280BDF05 to install, then PD2
 (misses gone? 'put back' on leaving; Names Override=1). DD01 backups *.before-1024plain. Only DD01 has PlainData data so far.
 
