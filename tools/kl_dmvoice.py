@@ -363,6 +363,8 @@ def map_events(loc_tree, singles=True):
                 ev.add(m.group(1))
             else:
                 base.add(parts[2])
+        elif parts[0].lower() == 'multiplayer' and len(parts) == 2:     # PD2: Multiplayer/HoldEscapeVehicle(_R) sits right under Multiplayer
+            base.add(parts[1])
     if singles:
         sing = sorted(b for b in base if b not in ev and ' ' not in b and not re.match(r'(?i)^(Police(Br|Mission)|TeamPolice|Intro)', b) and _theme_known(b) >= 0)
         for radio in (False, True):
