@@ -132,6 +132,8 @@ feat('rigid', G_GFX, 'Camera turn filter (heavier, smoother turn)', 'off', 'star
      "owner 2026-10-24: 'camera awful / fps bad' was this filter's lag; aim is exempt either way", [('Rigid', 'Enable', 1, 0, 0)])
 feat('camsmooth', G_GFX, 'Smooth camera in animations and when leaving aim (recommended on)', 'on', 'start',
      "klcamsmooth.c: dt-correct camera step, pivot low-pass, no snap on aim out; mouse turning is never filtered; not live-tested; set Dry=1 Log=1 first", [('CamSmooth', 'Enable', 1, 0, 1)])
+feat('camstance', G_GFX, 'Ease the camera when crouching / standing / starting to run (recommended on)', 'on', 'start',
+     "klcamsmooth.c StanceMs: a one-frame pivot-height step is eased over 280 ms, critically damped, relative to the feet; mouse turning is never filtered; not live-tested; needs CamSmooth Enable=1", [('CamSmooth', 'StanceMs', 280, 0, 280)])
 def screen_hz():
     """The primary screen's refresh rate (GetDeviceCaps VREFRESH), 60 when it cannot be read."""
     try:

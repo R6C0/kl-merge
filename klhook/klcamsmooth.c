@@ -41,8 +41,19 @@
  * line per frame: dt, raw eye step, DISPLAYED eye step (cm), raw and displayed FOV step, the open e; a summary when it ends with the
  * largest displayed step against the raw jump (the proof there was no snap: displayed step stays near the raw glide).
  *
+ * STANCE (added 2026-10-24, owner: "one second he's crouched, next frame he's straight running, no anim, no camera smoothing").
+ *  What the stages above MISSED: (a) the pose detector looks at the eye over the pivot (h, y). On a stance change the eye moves WITH the
+ *  pivot in the same frame (owner log: pivot offset from the feet 160 -> 145 / 130 / 110 cm, eye height follows 1:1, steps of 15 .. 55 cm
+ *  between 20 Hz log lines), so the eye-over-pivot residual stays ~0 and nothing triggers. (b) PivotMs=60 only low-passes the pivot: a
+ *  critically damped 60 ms settle moves 15 .. 55 cm in about 12 frames at 200 fps, peak speed ~ 0.37 * w * step = 550 .. 2000 cm/s;
+ *  it still reads as a snap. Fix: StanceMs, a last stage. A pivot-offset step above StanceCm in one frame (mouse never moves it) snaps
+ *  the pivot follower to the new pivot and opens a velocity-continuous critically damped takeover on the shown eye relative to the
+ *  FEET (so running does not lag), decaying over StanceMs. STANCE FLAG not found: the pivot-height step is the detector (GUESS).
+ *  Limit: the takeover offset is a world translation, so a mouse turn during its 280 ms is not filtered but is added to a decaying offset.
+ *  ini: StanceMs=280 (0 = off), StanceCm=6. Offline check: tools/sim_camsmooth.py.
+ *
  * WIRING (klhook.c): #include "klcamsmooth.c" after klcam.c; klcamsmooth_tick(game_thread); after klcam_tick; klcamsmooth_init();
- * after klcam_init(). ini: [CamSmooth] Enable=1 PivotMs=60 BlendMs=250 AimOutMs=320 AimInMs=90 DtFix=1 Log=0 Dry=0 JumpCm=12 JumpFov=0.05
+ * after klcam_init(). ini: [CamSmooth] Enable=1 PivotMs=60 BlendMs=250 AimOutMs=320 AimInMs=90 DtFix=1 Log=0 Dry=0 JumpCm=12 JumpFov=0.05 StanceMs=280 StanceCm=6
  */
 #ifndef KLCAMSMOOTH_C
 #define KLCAMSMOOTH_C
@@ -51,8 +62,13 @@
 #define KCS_EYEFN  0x007c9030u
 
 static struct {
-    int enable, pivotms, blendms, aimoutms, aiminms, dtfix, log, dry;
-    float jumpcm, jumpfov;
+    int enable, pivotms, blendms, aimoutms, aiminms, dtfix, log, dry, stancems;
+    float jumpcm, jumpfov, stancecm;
+    /* stance stage (StanceMs): last stage, works on the displayed eye relative to the FEET so running never lags */
+    float qprev[3], qpv[3]; int qprev_ok;            /* raw pivot offset from the feet, last frame, and its smooth velocity */
+    float S[3], Sv[3]; int sact;                      /* open stance takeover: S = shown eye - input eye (feet-relative), decays critically damped */
+    float Orel[3], Ov[3], Iprev[3], Iv[3]; int orel_ok; /* last shown eye rel feet and its velocity; last input eye rel feet and its pre-step velocity */
+    long nstance; float maxstep_s;
     /* per camera */
     DWORD cam; int have;                  /* have = previous frame state valid */
     long lastframe;
@@ -90,7 +106,8 @@ static void kcs_cd(float *x, float *v, float w, float dt)
 
 static void kcs_reset(void)
 {
-    kcs.have = 0; kcs.act = 0; kcs.qhave = 0; kcs.eprev_ok = 0;
+    kcs.have = 0; kcs.act = 0; kcs.qhave = 0; kcs.eprev_ok = 0; kcs.qprev_ok = 0; kcs.sact = 0; kcs.orel_ok = 0;
+    memset(kcs.S, 0, sizeof kcs.S); memset(kcs.Sv, 0, sizeof kcs.Sv); memset(kcs.Iv, 0, sizeof kcs.Iv); memset(kcs.Ov, 0, sizeof kcs.Ov); memset(kcs.qpv, 0, sizeof kcs.qpv);
     memset(kcs.e, 0, sizeof kcs.e); memset(kcs.ev, 0, sizeof kcs.ev); memset(kcs.Dv, 0, sizeof kcs.Dv); memset(kcs.Rv, 0, sizeof kcs.Rv);
 }
 
@@ -181,6 +198,24 @@ static void klcamsmooth_tick(int game_thread)
         kcs.have = 1;
     }
 
+    /* ---- stance pop detector (runs on the RAW pivot offset q from the feet, before the follower; mouse yaw / pitch never moves q) */
+    {
+        int pop = 0;
+        if (kcs.stancems >= 20 && kcs.qprev_ok) {
+            float qp[3], r = 0;
+            for (i = 0; i < 3; i++) { qp[i] = kcs.qprev[i] + kcs.qpv[i] * dt; r += (q[i] - qp[i]) * (q[i] - qp[i]); }
+            r = (float)sqrt(r);
+            if (r > kcs.stancecm) pop = 1;
+            if (pop && kcs.log) klog("camsm: STANCE pop: pivot offset from the feet stepped %.1f cm (limit %.1f) in one frame: q %.1f %.1f %.1f <- %.1f %.1f %.1f | f %ld dt %.4f", r, kcs.stancecm, q[0], q[1], q[2], kcs.qprev[0], kcs.qprev[1], kcs.qprev[2], frame, rawdt);
+        }
+        if (pop) {
+            memcpy(kcs.qs, q, 12); memset(kcs.qv, 0, 12); kcs.qhave = 1;      /* the stance stage eases it, not the 60 ms follower */
+            memset(kcs.qpv, 0, sizeof kcs.qpv);
+        } else if (kcs.qprev_ok) for (i = 0; i < 3; i++) kcs.qpv[i] += ((q[i] - kcs.qprev[i]) / dt - kcs.qpv[i]) * 0.5f;
+        memcpy(kcs.qprev, q, 12); kcs.qprev_ok = 1;
+        kcs.sact = kcs.sact | (pop << 1);                                     /* bit 1 = start a takeover below */
+    }
+
     /* ---- pivot offset follower (animation bob / snaps of the pivot's offset from the feet) */
     if (kcs.pivotms > 0) {
         float w = 6.0f / ((float)kcs.pivotms * 0.001f), x[3];
@@ -192,6 +227,35 @@ static void klcamsmooth_tick(int game_thread)
     /* ---- the displayed eye and FOV */
     E2[0] = Pv2[0] + o[0] / hv * kcs.D[0]; E2[1] = Pv2[1] + kcs.D[1]; E2[2] = Pv2[2] + o[2] / hv * kcs.D[0];
     f2 = kcs.D[2];
+
+    /* ---- stance stage: LAST stage, on whatever eye (E2) the stages above leave, relative to the feet. A stance pop of the pivot
+       moves the eye with it (same frame), so the pose detector above sees no jump (eye over pivot unchanged) and only the 60 ms
+       follower softened it. Here the velocity-continuous critically damped takeover (StanceMs) eases it, as the pose takeover does. */
+    if (kcs.stancems >= 20) {
+        float I[3], Ip[3], Oc[3];
+        for (i = 0; i < 3; i++) I[i] = E2[i] - feet[i];
+        if (kcs.sact & 2) {
+            kcs.sact &= 1;
+            if (kcs.orel_ok) {
+                for (i = 0; i < 3; i++) {
+                    Ip[i] = kcs.Orel[i] + kcs.Ov[i] * dt;                    /* where the shown eye would be by itself */
+                    kcs.S[i] = Ip[i] - I[i]; kcs.Sv[i] = kcs.Ov[i] - kcs.Iv[i];
+                }
+                if (kcs_len(kcs.S, 3) > 150.0f) { memset(kcs.S, 0, sizeof kcs.S); memset(kcs.Sv, 0, sizeof kcs.Sv); }
+                else { kcs.sact = 1; kcs.nstance++; if (kcs.log) klog("camsm: STANCE takeover: shown-vs-input step %.1f %.1f %.1f cm eased over %d ms", kcs.S[0], kcs.S[1], kcs.S[2], kcs.stancems); }
+            }
+            memset(kcs.Iv, 0, sizeof kcs.Iv);
+        } else if (kcs.orel_ok) for (i = 0; i < 3; i++) kcs.Iv[i] += ((I[i] - kcs.Iprev[i]) / dt - kcs.Iv[i]) * 0.5f;
+        if (kcs.sact & 1) {
+            float w = 6.0f / ((float)kcs.stancems * 0.001f);
+            for (i = 0; i < 3; i++) kcs_cd(&kcs.S[i], &kcs.Sv[i], w, dt);
+            if (kcs_len(kcs.S, 3) < 0.05f && kcs_len(kcs.Sv, 3) < 1.0f) { memset(kcs.S, 0, sizeof kcs.S); memset(kcs.Sv, 0, sizeof kcs.Sv); kcs.sact = 0; }
+        }
+        for (i = 0; i < 3; i++) Oc[i] = I[i] + ((kcs.sact & 1) ? kcs.S[i] : 0.0f);
+        if (kcs.orel_ok) for (i = 0; i < 3; i++) kcs.Ov[i] = (Oc[i] - kcs.Orel[i]) / dt;
+        memcpy(kcs.Orel, Oc, 12); memcpy(kcs.Iprev, I, 12); kcs.orel_ok = 1;
+        for (i = 0; i < 3; i++) E2[i] = feet[i] + Oc[i];
+    }
     {
         float d_raw = kcs.eprev_ok ? klcam_dist(E, kcs.Eprev) : 0, d_disp = kcs.eprev_ok ? klcam_dist(E2, kcs.Edisp) : 0;
         float fr = kcs.eprev_ok ? (float)fabs(fov - kcs.fovraw) : 0, fd = kcs.eprev_ok ? (float)fabs(f2 - kcs.fovdisp) : 0;
@@ -244,8 +308,10 @@ static void klcamsmooth_init(void)
     kcs.aiminms = (int)kcs_ini_f("AimInMs", 90.0f, 0.0f, 1500.0f);
     kcs.jumpcm = kcs_ini_f("JumpCm", 12.0f, 2.0f, 200.0f);
     kcs.jumpfov = kcs_ini_f("JumpFov", 0.05f, 0.005f, 1.0f);
+    kcs.stancems = (int)kcs_ini_f("StanceMs", 280.0f, 0.0f, 1500.0f);
+    kcs.stancecm = kcs_ini_f("StanceCm", 6.0f, 1.0f, 100.0f);   /* GUESS: crouch/stand pivot pops are 15 .. 55 cm (owner log), bob is < 1 cm per frame */
     kcs.dtavg = 0.016;
-    if (kcs.enable) klog("camsm: on: PivotMs %d BlendMs %d AimOutMs %d AimInMs %d DtFix %d JumpCm %.0f JumpFov %.3f Log %d%s", kcs.pivotms, kcs.blendms, kcs.aimoutms, kcs.aiminms, kcs.dtfix, kcs.jumpcm, kcs.jumpfov, kcs.log, kcs.dry ? " DRY" : "");
+    if (kcs.enable) klog("camsm: on: PivotMs %d BlendMs %d AimOutMs %d AimInMs %d DtFix %d JumpCm %.0f JumpFov %.3f StanceMs %d StanceCm %.1f Log %d%s", kcs.pivotms, kcs.blendms, kcs.aimoutms, kcs.aiminms, kcs.dtfix, kcs.jumpcm, kcs.jumpfov, kcs.stancems, kcs.stancecm, kcs.log, kcs.dry ? " DRY" : "");
 }
 
 #endif
