@@ -1,5 +1,10 @@
 2026-10-25 03:50 - STAGED, NOT INSTALLED (all verify READY): dm02assault_1025a (DM02 30b3ddf0 -> ae193d9c: 150 s timer, 2 unused atrium shutters vanish with shutter sound, 2x6 SWAT behind them; entries ~1 m off nav mesh = main risk); dm01bgas_1025a (DM01B f0aaba92 -> 119c9cd2: 3 F03 fuel cans on the garage cop cover line + 2 extinguishers); dm03aswat_1025a (DM03A 3d4ae43a -> 7852abd9: 3 SWAT kick KL_Door_1 at 75 s replacing Wave_D08, 3 gas canisters by garage cover). DM01 dm01fix 3f503f58 INSTALLED by e8 (owner 'install all' there). lastcall3 verify still running.
 
+2026-10-25 - READY (verified offline, sent to e8 for install under its owner's 'install all'): lastcall3b_1025a lite/main (DM05A 7ef0404f ->
+df39c459; 129/74, 40 dancing civs f3=1, 3 roof squads on the lower roof >= 922 u from climb top, heli f3=1 + HVK origin), then clubmusic_1025a
+(SND member db239c34->498cc81d, WHD 21a2b9a4->8cf764be, _LS 6a579c2b->3b21242c: the 12 club sounds had wave ptr 0). Fallback lite/alt 7cf75c95;
+full main 0e59f973 / alt b6308e61. Running: doors2_1025a (invisible/unkickable doors, wall extinguishers), dm01 squads/cars plan.
+
 2026-10-25 04:10 - INSTALLED (owner 'go install all'): hook k41 E715CD59 over k40 (backups .before-1025k41, UNDO k41.bat). The owner's F6 did nothing: live read showed session state 0x20 = the between-rounds shop, and kspg_gate took only < 0x19 (first shop 0x16), so the key was dropped silently. The gate now allows 0x20; [ShopPage] Key=80 (P, owner's wish). lastcall3 still held (peer: not READY).
 
 2026-10-25 03:45 - INSTALLED (owner 'install all', e8): dm01fix_1025a, DM01 d70cf4c9 -> 3f503f58 (backup .before-1025dm01fix), so the shop star fix is live on DM01. lastcall3_1025a HELD at the peer's request (adversarial verify still running); DM05A stays 7ef0404f. Not run in the game.
