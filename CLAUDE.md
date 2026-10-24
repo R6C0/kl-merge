@@ -66,6 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 01:42 - ALT+F4 / CLOSE VERIFIED LIVE (TEST 1023v): Alt+F4 ends kl2 in 551 ms, WM_CLOSE in 165 ms, no dumps. MciPump A/B (music on):
+5 vs 4 hitches, all at load/track open, none in level: 1024a NOT installed, baseline SHIP 1023v 2DCB0FBB stays. Camera preset APPLIED:
+live ini 41E998CF, [Rigid] 450/200/30/15/0.30 (backup KLHook.ini.before-rigid1023, undo <work>\build\rigid_1023\UNDO camera preset.bat).
+
 2026-10-24 01:28 - VOICES PROVEN: VP1b (TEST, DM01, Arcade) logged 'voice: PLAYING ... (ours KLVoice/Hutchison_R/...)': the game plays the
 swapped Dead Men lines. Flag-0 lines (134: cash drop, one/two left, police events) have NO KLVoice leaf in the data, so even the TEST
 probe speaks stock: kl_dmvoice must write those leaves (workflow wf_9e6ef4fc-bda, also the lobby map name). Full access until 14:00 today.
@@ -74,10 +78,6 @@ probe speaks stock: kl_dmvoice must write those leaves (workflow wf_9e6ef4fc-bda
 SHIP out_3f_1023v 2DCB0FBB, to be installed when the owner closes the game (backup dinput8.dll.before-1023v). Log was 562 MB, now archived + emptied.
 Stutter NOT solved: about 10 frames over 33 ms per 10 s this afternoon vs about 6 per 200 s this morning; hitches inside message-hook calls (PeekMessage/CallNextHookEx).
 PD2 music is off now (e8, 13:52). Close-message test FX2 still to run. re/open_work_log.md.
-
-2026-10-23 13:52 - PAYDAY 2 MUSIC IS OPT-IN (owner: it stutters). Live ini md5 E21883D4 = [Music] Enable=0, no pd2 stinger clips
-(backup KLHook.ini.before-pd2music-20261023-135155). ON/OFF: `<work>\build\pd2music_1023\Payday 2 music ON.bat` / `OFF.bat`.
-Never ship a kit or baseline with [Music] Enable=1. Retomoto keeps its engine music. Baseline now dll C7557D81 + ini E21883D4.
 
 
 ## Owner's end goal (2026-10-09)
