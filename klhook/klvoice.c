@@ -398,7 +398,8 @@ static void kvo_played(DWORD mgr, DWORD now)
             for (i = 0; i < kvo_gen.n; i++)
                 if (kvo_gen.e[i].found && (DWORD)(DWORD_PTR)kvo_gen.e[i].entry == rec[1]) {
                     if (now - kvo_gen.e[i].lastq > 1500 || !kvo_gen.e[i].lastq) {
-                        klog("voice: QUEUED %s for crew record %lu (queue %lu, priority %ld): the game is about to say our entry", kvo_gen.e[i].path, rec[2], cnt, (long)rec[0]);
+                        /* GUESS: the speaker is a byte like [queue+0xd4] (VP1b logged 28635904 = 0x01b4f300 as the whole dword) */
+                        klog("voice: QUEUED %s for speaker %lu (raw %08lx, queue %lu, priority %ld): the game is about to say our entry", kvo_gen.e[i].path, rec[2] & 0xff, rec[2], cnt, (long)rec[0]);
                         kvo_gen.told_q++;
                     }
                     kvo_gen.e[i].lastq = now ? now : 1;
