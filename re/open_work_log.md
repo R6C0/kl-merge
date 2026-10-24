@@ -1,3 +1,12 @@
+2026-10-25 - STAGED, NOT INSTALLED: C:/kl_build_1024/dm01chain_1024r3 = DM01 carexit (cops leave the Bentleys, prp de21e7d1) THEN kick doors x5 + 4 extinguishers
+(kl_interact_graft build --ext 4 --doors 1330,961,841,842,493), both run on the live shop-v2 zip 02d2a481 -> 528d34fb (installed md5 d70cf4c9 after the .NET re-zip).
+11 members change (prp buf HVK gms TEX MAT oct rmc rmi prm hrd); online.xml and all .LOC stay e8's; the merged .TEX = live .TEX (shop 1202/1233/1234 pixels
+byte-equal outside the header and the appended tail) + graft textures, so no shop re-run needed (re-running kl_shop_dm apply from a scratch dir differs in
+.LOC only because KLGuns.ini is not beside the archive: same on plain live). INSTALL/UNDO dm01chain.bat (old 02d2a481, backup .before-1024dm01chain), rehearsed
+on scratch: install, repeat, undo byte identical, wrong md5 refused. check.py 0 odd layouts (only the 2 expected VehicleExitBehaviourRout, UNPROVEN in game);
+check_passes 6 PASS. interact_1024r2 installer now skips DM01 (README_DM01.txt, old ps1 kept); carexit_1024r2 marked SUPERSEDED.txt. Needs a live test: cops exit
+the cars; doors kick; cans spawn; the shop screen still looks like v2.
+
 2026-10-25 00:30 - INSTALLED (owner 'install all'), not live-tested: lastcall2 (DM05A c563e6bc: heli at far roof end, 6 yakuza/bodyguard waves,
 99/53 budget, 22 civs); DM02 shops variant A (30b3ddf0; B = fallback); interact kick doors + extinguishers on DM01B f0aaba92, DM03A 3d4ae43a,
 DM06 38b20312, DM09 99a4ff75 (DM01 skipped: e8 shop v2 02d2a481, rebase job running); arrivals plop DM11B f896a376. Camera bug: log shows
