@@ -1,3 +1,9 @@
+2026-10-24 23:30 - Hasta pass STAGED, NOT INSTALLED: C:/kl_build_1024/hasta_1024n (DM11B ef53c079 -> 323c13f3), tools/kl_hasta_open.py (md5-guarded,
+idempotent; replaces kl_hasta_wing.py). (1) Wing: counter 3 -> 2, backstop 100 -> 30 s (the campaign blast show kept); kl_walk2d: shut = x <= 38100, 0 of 16
+loot spots; three nodes dropped = x 43220, 16 of 16. (2) Green: the only PostFilterBox is Dead Men's stray M11A_Postfilter box (x -3493..28507, z -5000..26905,
+1931 of 9804 nodes: the west half, police spawn, escape); its set 56696 (M11_A look) is overwritten with the identity set. Green itself NOT decoded, UNPROVEN.
+Rehearsal slip: the first undo rehearsal ran on the REAL DM11B zip (sed path did not apply): installed, skipped, restored; live is ef53c079 again, no backup left.
+
 2026-10-24 22:50 - GAME DID NOT LAUNCH on k34: stack overflow c00000fd ~60 ms after "fps: FIRST Present seen, via the swap chain
 (slot 3)". Device and swap chain are ReShade32 proxies; no recursion path found by reading. Live KLHook.ini [FrameLimit] Enable=0
 (.before-1024fpsoff) -> game runs. k36 (SHIP 8dfa5665, TEST 96743746, commit 956f1d383) = TLS depth guard + RECURSION CUT + SwapChain=/Reset=
