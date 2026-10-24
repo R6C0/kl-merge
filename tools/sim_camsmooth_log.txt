@@ -1,0 +1,214 @@
+# excerpts of the owner's KLHook.log 2026-10-24 (hook k36), input of tools/sim_camsmooth.py
+19:22:44.666 camsm: TRIGGER mode: raw jump h -0.1 y 12.3 fov 0.000 (predicted from last frame), takeover e h 0.1 y -12.3 fov -0.000 over 250 ms | f 17556 dt 0.0088
+19:22:44.666 camsm: mode f 17556 dt 0.0088 | eye step raw 0.72 disp 12.24 cm | fov step raw 0.0004 disp 0.0004 (fov 1.054 -> 1.054) | e h 0.1 y -12.3 fov -0.000 | pivot shift 0.0
+19:22:44.674 camsm: mode f 17563 dt 0.0068 | eye step raw 0.58 disp 0.62 cm | fov step raw 0.0002 disp 0.0002 (fov 1.054 -> 1.054) | e h 0.1 y -12.1 fov -0.000 | pivot shift 0.0
+19:22:44.681 camsm: mode f 17571 dt 0.0078 | eye step raw 0.65 disp 0.83 cm | fov step raw 0.0003 disp 0.0003 (fov 1.054 -> 1.054) | e h 0.1 y -11.7 fov -0.000 | pivot shift 0.0
+19:22:44.688 camsm: mode f 17579 dt 0.0078 | eye step raw 0.66 disp 0.98 cm | fov step raw 0.0003 disp 0.0003 (fov 1.053 -> 1.053) | e h 0.1 y -11.0 fov -0.000 | pivot shift 0.0
+19:22:44.696 camsm: mode f 17586 dt 0.0068 | eye step raw 0.58 disp 0.94 cm | fov step raw 0.0002 disp 0.0002 (fov 1.053 -> 1.053) | e h 0.1 y -10.3 fov -0.000 | pivot shift 0.0
+19:22:44.703 camsm: mode f 17594 dt 0.0078 | eye step raw 0.65 disp 1.10 cm | fov step raw 0.0003 disp 0.0003 (fov 1.053 -> 1.053) | e h 0.1 y -9.5 fov -0.000 | pivot shift 0.0
+19:22:44.710 camsm: mode f 17601 dt 0.0068 | eye step raw 0.58 disp 1.00 cm | fov step raw 0.0002 disp 0.0002 (fov 1.053 -> 1.053) | e h 0.1 y -8.8 fov -0.000 | pivot shift 0.0
+19:22:44.717 camsm: mode f 17609 dt 0.0078 | eye step raw 0.65 disp 1.11 cm | fov step raw 0.0003 disp 0.0003 (fov 1.052 -> 1.052) | e h 0.1 y -7.9 fov -0.000 | pivot shift 0.0
+19:22:44.724 camsm: mode f 17616 dt 0.0068 | eye step raw 0.57 disp 0.96 cm | fov step raw 0.0051 disp 0.0051 (fov 1.047 -> 1.047) | e h 0.0 y -7.2 fov -0.000 | pivot shift 0.0
+19:22:44.731 camsm: mode f 17623 dt 0.0068 | eye step raw 0.57 disp 0.92 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -6.6 fov -0.000 | pivot shift 0.0
+19:22:44.739 camsm: mode f 17631 dt 0.0078 | eye step raw 0.64 disp 1.00 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -5.8 fov -0.000 | pivot shift 0.0
+19:22:44.747 camsm: mode f 17638 dt 0.0068 | eye step raw 5.02 disp 4.44 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -5.2 fov -0.000 | pivot shift 0.0
+19:22:44.754 camsm: mode f 17647 dt 0.0088 | eye step raw 0.71 disp 1.03 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -4.6 fov -0.000 | pivot shift 0.0
+19:22:44.761 camsm: mode f 17653 dt 0.0059 | eye step raw 0.50 disp 0.71 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -4.1 fov -0.000 | pivot shift 0.0
+19:22:44.769 camsm: mode f 17661 dt 0.0078 | eye step raw 0.64 disp 0.84 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -3.6 fov -0.000 | pivot shift 0.0
+19:22:44.776 camsm: mode f 17670 dt 0.0088 | eye step raw 0.71 disp 0.90 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -3.1 fov -0.000 | pivot shift 0.0
+19:22:44.784 camsm: mode f 17677 dt 0.0068 | eye step raw 0.59 disp 0.72 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -2.8 fov -0.000 | pivot shift 0.0
+19:22:44.792 camsm: mode f 17684 dt 0.0068 | eye step raw 0.57 disp 0.67 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -2.4 fov -0.000 | pivot shift 0.0
+19:22:44.798 otrace: t=189292656 r=21.3 rec=5 by=GAME? BLOCK-CHANGED (1542, 0, 27659) was=(2023, 0, 29028) why=block now differs from the last traced order or poll: the game's chain or a tactic (or a module that bypasses kle_order2)
+19:22:44.799 camsm: mode f 17692 dt 0.0078 | eye step raw 0.64 disp 0.74 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -2.1 fov -0.000 | pivot shift 0.0
+19:22:44.806 camsm: mode f 17699 dt 0.0068 | eye step raw 0.57 disp 0.66 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -1.9 fov -0.000 | pivot shift 0.0
+19:22:44.813 camsm: mode f 17706 dt 0.0068 | eye step raw 0.56 disp 0.63 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -1.6 fov -0.000 | pivot shift 0.0
+19:22:44.820 camsm: mode f 17714 dt 0.0078 | eye step raw 0.64 disp 0.70 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -1.4 fov -0.000 | pivot shift 0.0
+19:22:44.827 camsm: mode f 17721 dt 0.0068 | eye step raw 4.88 disp 4.71 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -1.2 fov -0.000 | pivot shift 0.0
+19:22:44.835 camsm: mode f 17729 dt 0.0078 | eye step raw 0.64 disp 0.70 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -1.1 fov -0.000 | pivot shift 0.0
+19:22:44.843 camsm: mode f 17737 dt 0.0078 | eye step raw 0.65 disp 0.70 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -0.9 fov -0.000 | pivot shift 0.0
+19:22:44.850 camsm: mode f 17744 dt 0.0068 | eye step raw 0.58 disp 0.62 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -0.8 fov -0.000 | pivot shift 0.0
+19:22:44.858 camsm: mode f 17752 dt 0.0078 | eye step raw 0.65 disp 0.69 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -0.7 fov -0.000 | pivot shift 0.0
+19:22:44.866 camsm: mode f 17760 dt 0.0078 | eye step raw 0.66 disp 0.69 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -0.6 fov -0.000 | pivot shift 0.0
+19:22:44.873 camsm: mode f 17768 dt 0.0078 | eye step raw 0.66 disp 0.69 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -0.5 fov -0.000 | pivot shift 0.0
+19:22:44.880 camsm: mode f 17775 dt 0.0068 | eye step raw 0.59 disp 0.62 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -0.4 fov -0.000 | pivot shift 0.0
+19:22:44.887 camsm: mode f 17783 dt 0.0078 | eye step raw 0.66 disp 0.68 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -0.4 fov -0.000 | pivot shift 0.0
+19:22:44.894 camsm: mode f 17790 dt 0.0068 | eye step raw 0.59 disp 0.61 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -0.3 fov -0.000 | pivot shift 0.0
+19:22:44.902 camsm: mode f 17798 dt 0.0078 | eye step raw 0.66 disp 0.67 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y -0.3 fov -0.000 | pivot shift 0.0
+19:23:10.197 camsm: STANCE pop: pivot offset from the feet stepped 6.0 cm (limit 6.0) in one frame: q -1.8 146.5 -3.9 <- -1.8 150.6 2.1 | f 43702 dt 0.0146
+19:23:10.248 camsm: STANCE pop: pivot offset from the feet stepped 32.2 cm (limit 6.0) in one frame: q -21.2 141.1 1.9 <- -1.8 141.1 -19.9 | f 43750 dt 0.0098
+19:23:22.718 camsm: STANCE pop: pivot offset from the feet stepped 12.7 cm (limit 6.0) in one frame: q -0.0 163.6 8.4 <- 6.1 163.6 0.0 | f 56524 dt 0.0156
+19:23:22.763 camsm: STANCE pop: pivot offset from the feet stepped 8.4 cm (limit 6.0) in one frame: q 0.0 163.6 0.0 <- -0.0 163.6 8.4 | f 56569 dt 0.0439
+19:23:24.985 camsm: STANCE pop: pivot offset from the feet stepped 9.7 cm (limit 6.0) in one frame: q 6.0 164.9 0.2 <- 0.0 164.9 -5.7 | f 58846 dt 0.0049
+19:23:47.302 camsm: STANCE pop: pivot offset from the feet stepped 6.3 cm (limit 6.0) in one frame: q 0.0 159.0 0.0 <- 0.0 165.3 0.0 | f 81698 dt 0.0234
+19:24:05.252 camsm: STANCE pop: pivot offset from the feet stepped 9.7 cm (limit 6.0) in one frame: q 6.2 146.8 0.0 <- 0.0 146.8 -7.0 | f 100079 dt 0.0049
+19:24:43.972 camsm: STANCE pop: pivot offset from the feet stepped 12.3 cm (limit 6.0) in one frame: q 0.1 158.2 8.3 <- 8.6 158.2 -0.1 | f 139728 dt 0.0049
+19:25:01.689 camsm: STANCE pop: pivot offset from the feet stepped 6.9 cm (limit 6.0) in one frame: q 8.6 151.5 -3.1 <- 12.0 151.5 -7.6 | f 157870 dt 0.0059
+19:25:16.201 camsm: STANCE pop: pivot offset from the feet stepped 9.2 cm (limit 6.0) in one frame: q -4.2 165.0 1.3 <- 2.5 162.6 5.6 | f 172731 dt 0.0039
+19:27:47.806 camsm: STANCE pop: pivot offset from the feet stepped 102.4 cm (limit 6.0) in one frame: q -8.5 164.2 -102.3 <- -3.9 164.3 -0.0 | f 280867 dt 0.0176
+19:27:49.083 camsm: STANCE pop: pivot offset from the feet stepped 275.0 cm (limit 6.0) in one frame: q 0.0 247.7 0.0 <- -226.4 251.6 -149.8 | f 282174 dt 0.0068
+19:28:58.249 camsm: STANCE pop: pivot offset from the feet stepped 43.7 cm (limit 6.0) in one frame: q -30.7 146.4 -1.1 <- -1.1 146.4 30.4 | f 353003 dt 0.0088
+19:28:58.821 camsm: STANCE pop: pivot offset from the feet stepped 11.9 cm (limit 6.0) in one frame: q 0.0 148.9 -9.1 <- 0.0 148.8 -15.1 | f 353588 dt 0.0332
+19:29:10.140 camsm: STANCE pop: pivot offset from the feet stepped 85.9 cm (limit 6.0) in one frame: q 57.6 153.2 2.0 <- -2.1 153.2 61.0 | f 365176 dt 0.0078
+19:29:10.246 camsm: STANCE pop: pivot offset from the feet stepped 100.2 cm (limit 6.0) in one frame: q -3.5 153.6 100.0 <- 8.7 153.6 0.3 | f 365285 dt 0.0068
+19:29:10.302 camsm: STANCE pop: pivot offset from the feet stepped 132.8 cm (limit 6.0) in one frame: q 0.0 153.8 0.0 <- -4.5 153.8 128.2 | f 365342 dt 0.0078
+19:29:15.796 camsm: STANCE pop: pivot offset from the feet stepped 25.6 cm (limit 6.0) in one frame: q -0.6 159.8 17.3 <- 15.3 159.8 0.5 | f 370970 dt 0.0068
+19:29:35.904 camsm: STANCE pop: pivot offset from the feet stepped 14.5 cm (limit 6.0) in one frame: q -1.0 161.0 9.8 <- 8.3 161.0 0.9 | f 391561 dt 0.0059
+19:29:39.167 camsm: STANCE pop: pivot offset from the feet stepped 6.9 cm (limit 6.0) in one frame: q 0.0 159.2 -4.7 <- 3.9 159.3 0.0 | f 394904 dt 0.0059
+19:31:21.287 camsm: TRIGGER mode: raw jump h 2.7 y -69.9 fov 0.000 (predicted from last frame), takeover e h -2.7 y 69.9 fov 0.000 over 250 ms | f 467643 dt 0.0098
+19:31:21.287 camsm: mode f 467643 dt 0.0098 | eye step raw 69.72 disp 2.89 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -2.7 y 69.9 fov 0.000 | pivot shift 0.1
+19:31:21.295 camsm: TRIGGER mode: raw jump h -0.9 y 28.4 fov 0.000 (predicted from last frame), takeover e h -2.9 y 69.6 fov 0.000 over 250 ms | f 467647 dt 0.0039
+19:31:21.295 camsm: mode f 467647 dt 0.0039 | eye step raw 0.50 disp 0.55 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -2.9 y 69.6 fov 0.000 | pivot shift 0.5
+19:31:21.301 camsm: mode f 467659 dt 0.0117 | eye step raw 1.13 disp 60.86 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -5.2 y 130.6 fov 0.000 | pivot shift 1.2
+19:31:21.309 camsm: mode f 467664 dt 0.0049 | eye step raw 0.26 disp 15.04 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -5.7 y 145.1 fov 0.000 | pivot shift 1.7
+19:31:21.316 camsm: mode f 467671 dt 0.0068 | eye step raw 0.50 disp 12.20 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -6.2 y 157.6 fov 0.000 | pivot shift 1.1
+19:31:21.323 camsm: mode f 467678 dt 0.0068 | eye step raw 0.67 disp 5.52 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -6.4 y 162.9 fov 0.000 | pivot shift 0.7
+19:31:21.333 camsm: mode f 467685 dt 0.0068 | eye step raw 1.03 disp 0.89 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -6.4 y 163.0 fov 0.000 | pivot shift 0.4
+19:31:21.342 camsm: mode f 467699 dt 0.0137 | eye step raw 1.82 disp 9.02 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -6.0 y 153.1 fov 0.000 | pivot shift 0.2
+19:31:21.350 camsm: mode f 467705 dt 0.0059 | eye step raw 3.18 disp 9.61 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -5.7 y 146.3 fov 0.000 | pivot shift 0.1
+19:31:21.357 camsm: mode f 467713 dt 0.0078 | eye step raw 1.41 disp 9.32 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -5.3 y 136.0 fov 0.000 | pivot shift 0.0
+19:31:21.364 camsm: mode f 467720 dt 0.0068 | eye step raw 1.54 disp 8.32 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -4.9 y 126.3 fov 0.000 | pivot shift 0.0
+19:31:21.370 camsm: mode f 467728 dt 0.0078 | eye step raw 2.21 disp 9.25 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -4.5 y 115.1 fov 0.000 | pivot shift 0.0
+19:31:21.377 camsm: mode f 467736 dt 0.0078 | eye step raw 1.66 disp 9.55 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -4.0 y 104.0 fov 0.000 | pivot shift 0.0
+19:31:21.384 camsm: mode f 467742 dt 0.0059 | eye step raw 1.41 disp 6.70 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -3.7 y 95.9 fov 0.000 | pivot shift 0.0
+19:31:21.391 camsm: mode f 467748 dt 0.0059 | eye step raw 1.53 disp 6.29 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -3.4 y 88.2 fov 0.000 | pivot shift 0.0
+19:31:21.398 camsm: mode f 467755 dt 0.0068 | eye step raw 3.01 disp 5.69 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -3.1 y 79.6 fov 0.000 | pivot shift 0.0
+19:31:21.406 camsm: mode f 467764 dt 0.0088 | eye step raw 3.76 disp 6.60 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -2.7 y 69.5 fov 0.000 | pivot shift 0.0
+19:31:21.413 camsm: mode f 467771 dt 0.0068 | eye step raw 3.29 disp 4.07 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -2.4 y 62.3 fov 0.000 | pivot shift 0.0
+19:31:21.421 camsm: mode f 467779 dt 0.0078 | eye step raw 1.64 disp 8.13 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -2.1 y 54.8 fov 0.000 | pivot shift 0.0
+19:31:21.429 camsm: mode f 467789 dt 0.0098 | eye step raw 4.31 disp 4.31 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -1.8 y 46.4 fov 0.000 | pivot shift 0.0
+19:31:21.441 camsm: mode f 467800 dt 0.0107 | eye step raw 4.76 disp 3.51 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -1.5 y 38.5 fov 0.000 | pivot shift 0.0
+19:31:21.448 camsm: mode f 467806 dt 0.0059 | eye step raw 3.07 disp 1.12 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -1.3 y 34.7 fov 0.000 | pivot shift 0.0
+19:31:21.456 camsm: mode f 467815 dt 0.0088 | eye step raw 3.41 disp 2.15 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -1.1 y 29.6 fov 0.000 | pivot shift 0.0
+19:31:21.464 camsm: mode f 467823 dt 0.0078 | eye step raw 3.47 disp 1.19 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -1.0 y 25.7 fov 0.000 | pivot shift 0.0
+19:31:21.473 camsm: mode f 467833 dt 0.0098 | eye step raw 4.02 disp 1.38 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.8 y 21.4 fov 0.000 | pivot shift 0.0
+19:31:21.481 camsm: mode f 467841 dt 0.0078 | eye step raw 3.76 disp 1.30 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.7 y 18.5 fov 0.000 | pivot shift 0.0
+19:31:21.488 camsm: mode f 467850 dt 0.0088 | eye step raw 3.71 disp 1.41 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.6 y 15.6 fov 0.000 | pivot shift 0.0
+19:31:21.497 camsm: mode f 467854 dt 0.0039 | eye step raw 2.17 disp 1.11 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.6 y 14.5 fov 0.000 | pivot shift 0.0
+19:31:21.506 camsm: mode f 467868 dt 0.0137 | eye step raw 4.62 disp 1.88 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.4 y 11.1 fov 0.000 | pivot shift 0.0
+19:31:21.514 camsm: mode f 467874 dt 0.0059 | eye step raw 3.16 disp 2.04 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.4 y 9.9 fov 0.000 | pivot shift 0.0
+19:31:21.522 camsm: mode f 467881 dt 0.0068 | eye step raw 2.47 disp 1.38 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.3 y 8.7 fov 0.000 | pivot shift 0.0
+19:31:21.530 camsm: mode f 467892 dt 0.0107 | eye step raw 3.26 disp 1.89 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.3 y 7.0 fov 0.000 | pivot shift 0.0
+19:31:21.537 camsm: mode f 467897 dt 0.0049 | eye step raw 2.03 disp 1.43 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.2 y 6.3 fov 0.000 | pivot shift 0.0
+19:31:21.545 camsm: mode f 467904 dt 0.0068 | eye step raw 2.01 disp 1.32 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.2 y 5.5 fov 0.000 | pivot shift 0.0
+19:31:21.553 camsm: mode f 467915 dt 0.0107 | eye step raw 2.99 disp 2.07 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.2 y 4.5 fov 0.000 | pivot shift 0.0
+19:31:21.560 camsm: mode f 467921 dt 0.0059 | eye step raw 1.91 disp 1.46 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.2 y 4.0 fov 0.000 | pivot shift 0.0
+19:31:21.568 camsm: mode f 467929 dt 0.0078 | eye step raw 1.95 disp 1.49 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.1 y 3.4 fov 0.000 | pivot shift 0.0
+19:31:21.576 camsm: mode f 467936 dt 0.0068 | eye step raw 1.77 disp 1.41 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.1 y 2.9 fov 0.000 | pivot shift 0.0
+19:31:21.583 camsm: mode f 467944 dt 0.0078 | eye step raw 1.91 disp 1.56 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.1 y 2.5 fov 0.000 | pivot shift 0.0
+19:31:21.591 camsm: mode f 467954 dt 0.0098 | eye step raw 2.21 disp 1.84 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.1 y 2.0 fov 0.000 | pivot shift 0.0
+19:31:21.598 camsm: mode f 467960 dt 0.0059 | eye step raw 1.36 disp 1.16 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.1 y 1.8 fov 0.000 | pivot shift 0.0
+19:31:21.606 camsm: mode f 467968 dt 0.0078 | eye step raw 1.61 disp 1.39 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.1 y 1.5 fov 0.000 | pivot shift 0.0
+19:31:21.615 camsm: mode f 467976 dt 0.0078 | eye step raw 1.44 disp 1.27 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.1 y 1.3 fov 0.000 | pivot shift 0.0
+19:31:21.621 camsm: mode f 467983 dt 0.0068 | eye step raw 1.25 disp 1.12 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 1.1 fov 0.000 | pivot shift 0.0
+19:31:21.629 camsm: mode f 467991 dt 0.0078 | eye step raw 1.35 disp 1.23 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 1.0 fov 0.000 | pivot shift 0.0
+19:31:21.637 camsm: mode f 468002 dt 0.0107 | eye step raw 1.78 disp 1.65 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 0.8 fov 0.000 | pivot shift 0.0
+19:31:21.645 camsm: mode f 468007 dt 0.0049 | eye step raw 0.88 disp 0.83 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 0.7 fov 0.000 | pivot shift 0.0
+19:31:21.653 camsm: mode f 468016 dt 0.0088 | eye step raw 1.35 disp 1.29 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 0.6 fov 0.000 | pivot shift 0.0
+19:31:21.661 camsm: mode f 468023 dt 0.0068 | eye step raw 1.18 disp 1.13 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 0.5 fov 0.000 | pivot shift 0.0
+19:31:21.670 camsm: mode f 468035 dt 0.0117 | eye step raw 1.65 disp 1.59 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 0.4 fov 0.000 | pivot shift 0.0
+19:31:21.678 camsm: mode f 468041 dt 0.0059 | eye step raw 1.04 disp 1.00 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 0.3 fov 0.000 | pivot shift 0.0
+19:31:21.686 camsm: mode f 468049 dt 0.0078 | eye step raw 1.07 disp 1.04 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 0.3 fov 0.000 | pivot shift 0.0
+19:31:21.694 camsm: mode f 468057 dt 0.0078 | eye step raw 1.04 disp 1.01 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 0.2 fov 0.000 | pivot shift 0.0
+19:31:21.702 camsm: mode f 468067 dt 0.0098 | eye step raw 1.15 disp 1.13 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 0.2 fov 0.000 | pivot shift 0.0
+19:31:21.709 camsm: mode f 468072 dt 0.0049 | eye step raw 0.72 disp 0.71 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 0.2 fov 0.000 | pivot shift 0.0
+19:31:21.717 camsm: mode f 468082 dt 0.0098 | eye step raw 1.08 disp 1.07 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 0.1 fov 0.000 | pivot shift 0.0
+19:31:21.732 camsm: mode f 468097 dt 0.0146 | eye step raw 1.60 disp 1.59 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 0.1 fov 0.000 | pivot shift 0.0
+19:31:21.741 camsm: mode f 468105 dt 0.0078 | eye step raw 0.91 disp 0.90 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 0.1 fov 0.000 | pivot shift 0.0
+19:31:21.750 camsm: mode f 468112 dt 0.0068 | eye step raw 0.77 disp 0.77 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 0.1 fov 0.000 | pivot shift 0.0
+19:31:21.757 camsm: mode f 468122 dt 0.0098 | eye step raw 1.09 disp 1.09 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 0.1 fov 0.000 | pivot shift 0.0
+19:31:21.767 camsm: mode f 468132 dt 0.0098 | eye step raw 1.13 disp 1.13 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h -0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.775 camsm: mode f 468139 dt 0.0068 | eye step raw 0.80 disp 0.80 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.783 camsm: mode f 468148 dt 0.0088 | eye step raw 1.02 disp 1.02 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.790 camsm: mode f 468156 dt 0.0078 | eye step raw 0.91 disp 0.91 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.799 camsm: mode f 468167 dt 0.0107 | eye step raw 1.27 disp 1.27 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.807 camsm: mode f 468173 dt 0.0059 | eye step raw 0.70 disp 0.70 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.816 camsm: mode f 468182 dt 0.0088 | eye step raw 1.02 disp 1.02 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.826 camsm: mode f 468194 dt 0.0117 | eye step raw 1.34 disp 1.34 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.836 camsm: mode f 468200 dt 0.0059 | eye step raw 0.62 disp 0.62 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.843 camsm: mode f 468212 dt 0.0117 | eye step raw 1.28 disp 1.28 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.852 camsm: mode f 468221 dt 0.0088 | eye step raw 0.93 disp 0.93 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.860 camsm: mode f 468226 dt 0.0049 | eye step raw 0.52 disp 0.52 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.869 camsm: mode f 468238 dt 0.0117 | eye step raw 1.25 disp 1.25 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.876 camsm: mode f 468243 dt 0.0049 | eye step raw 0.44 disp 0.44 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.885 camsm: mode f 468252 dt 0.0088 | eye step raw 0.91 disp 0.91 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.892 camsm: mode f 468259 dt 0.0068 | eye step raw 0.69 disp 0.69 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.905 camsm: mode f 468274 dt 0.0146 | eye step raw 1.51 disp 1.51 cm | fov step raw 0.0000 disp 0.0000 (fov 1.047 -> 1.047) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.914 camsm: mode f 468281 dt 0.0068 | eye step raw 3.36 disp 3.36 cm | fov step raw 0.0041 disp 0.0041 (fov 1.051 -> 1.051) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.921 camsm: mode f 468292 dt 0.0107 | eye step raw 3.64 disp 3.64 cm | fov step raw 0.0065 disp 0.0065 (fov 1.058 -> 1.058) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.930 camsm: mode f 468296 dt 0.0039 | eye step raw 1.27 disp 1.27 cm | fov step raw 0.0023 disp 0.0023 (fov 1.060 -> 1.060) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.937 camsm: mode f 468308 dt 0.0117 | eye step raw 3.84 disp 3.84 cm | fov step raw 0.0070 disp 0.0070 (fov 1.067 -> 1.067) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.946 camsm: mode f 468315 dt 0.0068 | eye step raw 2.23 disp 2.23 cm | fov step raw 0.0041 disp 0.0041 (fov 1.071 -> 1.071) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.953 camsm: mode f 468323 dt 0.0078 | eye step raw 2.55 disp 2.55 cm | fov step raw 0.0047 disp 0.0047 (fov 1.076 -> 1.076) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.961 camsm: mode f 468331 dt 0.0078 | eye step raw 2.56 disp 2.56 cm | fov step raw 0.0047 disp 0.0047 (fov 1.081 -> 1.081) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.970 camsm: mode f 468339 dt 0.0078 | eye step raw 2.56 disp 2.56 cm | fov step raw 0.0041 disp 0.0041 (fov 1.085 -> 1.085) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.978 camsm: mode f 468349 dt 0.0098 | eye step raw 3.06 disp 3.06 cm | fov step raw 0.0041 disp 0.0041 (fov 1.089 -> 1.089) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.990 camsm: mode f 468363 dt 0.0137 | eye step raw 4.47 disp 4.47 cm | fov step raw 0.0058 disp 0.0058 (fov 1.095 -> 1.095) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:21.998 camsm: mode f 468368 dt 0.0049 | eye step raw 2.00 disp 2.00 cm | fov step raw 0.0021 disp 0.0021 (fov 1.097 -> 1.097) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.005 camsm: mode f 468378 dt 0.0098 | eye step raw 3.19 disp 3.19 cm | fov step raw 0.0041 disp 0.0041 (fov 1.101 -> 1.101) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.015 camsm: mode f 468385 dt 0.0068 | eye step raw 2.50 disp 2.50 cm | fov step raw 0.0029 disp 0.0029 (fov 1.104 -> 1.104) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.022 camsm: mode f 468393 dt 0.0078 | eye step raw 2.63 disp 2.63 cm | fov step raw 0.0033 disp 0.0033 (fov 1.107 -> 1.107) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.031 camsm: mode f 468402 dt 0.0088 | eye step raw 2.98 disp 2.98 cm | fov step raw 0.0031 disp 0.0031 (fov 1.110 -> 1.110) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.039 camsm: mode f 468413 dt 0.0107 | eye step raw 3.62 disp 3.62 cm | fov step raw 0.0032 disp 0.0032 (fov 1.113 -> 1.113) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.047 camsm: mode f 468419 dt 0.0059 | eye step raw 2.60 disp 2.60 cm | fov step raw 0.0017 disp 0.0017 (fov 1.115 -> 1.115) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.055 camsm: mode f 468428 dt 0.0088 | eye step raw 2.93 disp 2.93 cm | fov step raw 0.0026 disp 0.0026 (fov 1.118 -> 1.118) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.063 camsm: mode f 468435 dt 0.0068 | eye step raw 2.59 disp 2.59 cm | fov step raw 0.0020 disp 0.0020 (fov 1.120 -> 1.120) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.070 camsm: mode f 468444 dt 0.0088 | eye step raw 2.97 disp 2.97 cm | fov step raw 0.0026 disp 0.0026 (fov 1.122 -> 1.122) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.078 camsm: mode f 468451 dt 0.0068 | eye step raw 2.60 disp 2.60 cm | fov step raw 0.0020 disp 0.0020 (fov 1.124 -> 1.124) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.086 camsm: mode f 468460 dt 0.0088 | eye step raw 3.00 disp 3.00 cm | fov step raw 0.0025 disp 0.0025 (fov 1.127 -> 1.127) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.093 camsm: mode f 468467 dt 0.0068 | eye step raw 2.61 disp 2.61 cm | fov step raw 0.0014 disp 0.0014 (fov 1.128 -> 1.128) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.103 camsm: mode f 468478 dt 0.0107 | eye step raw 3.60 disp 3.60 cm | fov step raw 0.0023 disp 0.0023 (fov 1.131 -> 1.131) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.113 camsm: mode f 468488 dt 0.0098 | eye step raw 3.57 disp 3.57 cm | fov step raw 0.0021 disp 0.0021 (fov 1.133 -> 1.133) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.120 camsm: mode f 468496 dt 0.0078 | eye step raw 2.97 disp 2.97 cm | fov step raw 0.0016 disp 0.0016 (fov 1.134 -> 1.134) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.128 camsm: mode f 468501 dt 0.0049 | eye step raw 2.02 disp 2.02 cm | fov step raw 0.0010 disp 0.0010 (fov 1.135 -> 1.135) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.137 camsm: mode f 468513 dt 0.0117 | eye step raw 3.85 disp 3.85 cm | fov step raw 0.0025 disp 0.0025 (fov 1.138 -> 1.138) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.146 camsm: mode f 468522 dt 0.0088 | eye step raw 3.67 disp 3.67 cm | fov step raw 0.0017 disp 0.0017 (fov 1.140 -> 1.140) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.154 camsm: mode f 468529 dt 0.0068 | eye step raw 2.96 disp 2.96 cm | fov step raw 0.0010 disp 0.0010 (fov 1.141 -> 1.141) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.162 camsm: mode f 468537 dt 0.0078 | eye step raw 2.99 disp 2.99 cm | fov step raw 0.0012 disp 0.0012 (fov 1.142 -> 1.142) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.169 camsm: mode f 468545 dt 0.0078 | eye step raw 3.37 disp 3.37 cm | fov step raw 0.0012 disp 0.0012 (fov 1.143 -> 1.143) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.177 camsm: mode f 468554 dt 0.0088 | eye step raw 3.76 disp 3.76 cm | fov step raw 0.0013 disp 0.0013 (fov 1.144 -> 1.144) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.185 camsm: mode f 468561 dt 0.0068 | eye step raw 3.79 disp 3.79 cm | fov step raw 0.0010 disp 0.0010 (fov 1.145 -> 1.145) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.193 camsm: mode f 468570 dt 0.0088 | eye step raw 3.69 disp 3.69 cm | fov step raw 0.0013 disp 0.0013 (fov 1.146 -> 1.146) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.201 camsm: mode f 468577 dt 0.0068 | eye step raw 4.05 disp 4.05 cm | fov step raw 0.0010 disp 0.0010 (fov 1.147 -> 1.147) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.210 camsm: mode f 468586 dt 0.0088 | eye step raw 3.69 disp 3.69 cm | fov step raw 0.0011 disp 0.0011 (fov 1.149 -> 1.149) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.217 camsm: mode f 468593 dt 0.0068 | eye step raw 3.86 disp 3.86 cm | fov step raw 0.0007 disp 0.0007 (fov 1.149 -> 1.149) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.225 camsm: mode f 468603 dt 0.0098 | eye step raw 3.76 disp 3.76 cm | fov step raw 0.0010 disp 0.0010 (fov 1.150 -> 1.150) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.235 camsm: mode f 468610 dt 0.0068 | eye step raw 3.11 disp 3.11 cm | fov step raw 0.0007 disp 0.0007 (fov 1.151 -> 1.151) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.0
+19:31:22.244 camsm: mode f 468621 dt 0.0107 | eye step raw 1.34 disp 1.33 cm | fov step raw 0.0011 disp 0.0011 (fov 1.152 -> 1.152) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.1
+19:31:22.252 camsm: mode f 468628 dt 0.0068 | eye step raw 1.98 disp 1.97 cm | fov step raw 0.0007 disp 0.0007 (fov 1.153 -> 1.153) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.1
+19:31:22.260 camsm: mode f 468637 dt 0.0088 | eye step raw 1.25 disp 1.25 cm | fov step raw 0.0009 disp 0.0009 (fov 1.154 -> 1.154) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.1
+19:31:22.267 camsm: mode f 468645 dt 0.0078 | eye step raw 1.95 disp 1.94 cm | fov step raw 0.0007 disp 0.0007 (fov 1.155 -> 1.155) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.275 camsm: mode f 468653 dt 0.0078 | eye step raw 1.41 disp 1.41 cm | fov step raw 0.0006 disp 0.0006 (fov 1.155 -> 1.155) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.284 camsm: mode f 468661 dt 0.0078 | eye step raw 1.43 disp 1.43 cm | fov step raw 0.0006 disp 0.0006 (fov 1.156 -> 1.156) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.292 camsm: mode f 468669 dt 0.0078 | eye step raw 1.48 disp 1.48 cm | fov step raw 0.0006 disp 0.0006 (fov 1.156 -> 1.156) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.300 camsm: mode f 468677 dt 0.0078 | eye step raw 1.46 disp 1.46 cm | fov step raw 0.0006 disp 0.0006 (fov 1.157 -> 1.157) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.309 camsm: mode f 468687 dt 0.0098 | eye step raw 1.47 disp 1.47 cm | fov step raw 0.0007 disp 0.0007 (fov 1.158 -> 1.158) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.317 camsm: mode f 468695 dt 0.0078 | eye step raw 1.78 disp 1.78 cm | fov step raw 0.0006 disp 0.0006 (fov 1.158 -> 1.158) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.325 camsm: mode f 468703 dt 0.0078 | eye step raw 1.44 disp 1.44 cm | fov step raw 0.0006 disp 0.0006 (fov 1.159 -> 1.159) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.333 camsm: mode f 468712 dt 0.0088 | eye step raw 1.44 disp 1.44 cm | fov step raw 0.0005 disp 0.0005 (fov 1.159 -> 1.159) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.342 camsm: mode f 468721 dt 0.0088 | eye step raw 1.60 disp 1.60 cm | fov step raw 0.0005 disp 0.0005 (fov 1.160 -> 1.160) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.351 camsm: mode f 468730 dt 0.0088 | eye step raw 1.62 disp 1.62 cm | fov step raw 0.0005 disp 0.0005 (fov 1.160 -> 1.160) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.359 camsm: mode f 468738 dt 0.0078 | eye step raw 1.61 disp 1.61 cm | fov step raw 0.0004 disp 0.0004 (fov 1.161 -> 1.161) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.367 camsm: mode f 468747 dt 0.0088 | eye step raw 1.44 disp 1.44 cm | fov step raw 0.0005 disp 0.0005 (fov 1.161 -> 1.161) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.375 camsm: mode f 468756 dt 0.0088 | eye step raw 1.64 disp 1.64 cm | fov step raw 0.0005 disp 0.0005 (fov 1.161 -> 1.161) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.383 camsm: mode f 468763 dt 0.0068 | eye step raw 1.64 disp 1.63 cm | fov step raw 0.0004 disp 0.0004 (fov 1.162 -> 1.162) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.392 camsm: mode f 468773 dt 0.0098 | eye step raw 1.28 disp 1.29 cm | fov step raw 0.0004 disp 0.0004 (fov 1.162 -> 1.162) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.400 camsm: mode f 468780 dt 0.0068 | eye step raw 1.90 disp 1.89 cm | fov step raw 0.0003 disp 0.0003 (fov 1.162 -> 1.162) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.408 camsm: mode f 468789 dt 0.0088 | eye step raw 1.38 disp 1.38 cm | fov step raw 0.0003 disp 0.0003 (fov 1.163 -> 1.163) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.416 camsm: mode f 468797 dt 0.0078 | eye step raw 1.87 disp 1.87 cm | fov step raw 0.0003 disp 0.0003 (fov 1.163 -> 1.163) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.425 camsm: mode f 468805 dt 0.0078 | eye step raw 1.77 disp 1.77 cm | fov step raw 0.0003 disp 0.0003 (fov 1.163 -> 1.163) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.433 camsm: mode f 468814 dt 0.0088 | eye step raw 1.74 disp 1.74 cm | fov step raw 0.0003 disp 0.0003 (fov 1.164 -> 1.164) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.441 camsm: mode f 468822 dt 0.0078 | eye step raw 1.95 disp 1.95 cm | fov step raw 0.0003 disp 0.0003 (fov 1.164 -> 1.164) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.448 camsm: mode f 468831 dt 0.0088 | eye step raw 1.82 disp 1.82 cm | fov step raw 0.0003 disp 0.0003 (fov 1.164 -> 1.164) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.456 camsm: mode f 468838 dt 0.0068 | eye step raw 1.92 disp 1.92 cm | fov step raw 0.0002 disp 0.0002 (fov 1.164 -> 1.164) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.465 camsm: mode f 468847 dt 0.0088 | eye step raw 1.52 disp 1.53 cm | fov step raw 0.0002 disp 0.0002 (fov 1.165 -> 1.165) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.471 camsm: mode f 468855 dt 0.0078 | eye step raw 1.89 disp 1.89 cm | fov step raw 0.0002 disp 0.0002 (fov 1.165 -> 1.165) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.480 camsm: mode f 468862 dt 0.0068 | eye step raw 1.64 disp 1.64 cm | fov step raw 0.0002 disp 0.0002 (fov 1.165 -> 1.165) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.488 camsm: mode f 468871 dt 0.0088 | eye step raw 1.47 disp 1.47 cm | fov step raw 0.0002 disp 0.0002 (fov 1.165 -> 1.165) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.496 camsm: mode f 468878 dt 0.0068 | eye step raw 1.81 disp 1.80 cm | fov step raw 0.0002 disp 0.0002 (fov 1.165 -> 1.165) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.504 camsm: mode f 468887 dt 0.0088 | eye step raw 1.48 disp 1.48 cm | fov step raw 0.0002 disp 0.0002 (fov 1.166 -> 1.166) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.512 camsm: mode f 468894 dt 0.0068 | eye step raw 1.84 disp 1.84 cm | fov step raw 0.0037 disp 0.0037 (fov 1.169 -> 1.169) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.518 camsm: mode f 468903 dt 0.0088 | eye step raw 1.53 disp 1.54 cm | fov step raw 0.0000 disp 0.0000 (fov 1.169 -> 1.169) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.526 camsm: mode f 468910 dt 0.0068 | eye step raw 1.87 disp 1.87 cm | fov step raw 0.0000 disp 0.0000 (fov 1.169 -> 1.169) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.533 camsm: mode f 468918 dt 0.0078 | eye step raw 1.52 disp 1.52 cm | fov step raw 0.0000 disp 0.0000 (fov 1.169 -> 1.169) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.541 camsm: mode f 468925 dt 0.0068 | eye step raw 1.70 disp 1.70 cm | fov step raw 0.0000 disp 0.0000 (fov 1.169 -> 1.169) | e h 0.0 y 0.0 fov 0.000 | pivot shift 0.2
+19:31:22.541 camsm: mode takeover ended: largest eye step shown 60.86 cm (raw 4.76), largest FOV step shown 0.0070 (raw 0.0070), 154 frame lines
