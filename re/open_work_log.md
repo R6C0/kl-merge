@@ -1,3 +1,5 @@
+2026-10-24 - r2 arrivals: tools/kl_arrivals_1024r2.py. Two staged packs (md5-chained, rehearsed on scratch copies, undo byte-identical, check_passes 6 PASS): arrivals_1024r2 (DM11B 323c13f3 -> f896a376, 2 PLOP Hasta squads stand in the world) and carexit_1024r2 (DM01 5522ebcf -> 1b077e7c, VehicleExit routs put back: kl_convert drops them because kl_rtp has no kind for field 2 of ZVehicleExitBehaviourRout; UNPROVEN in game, no stock level stores it). Door-gated timer waves not buildable offline (no suitable door near wave spots). Not installed, not live-tested.
+
 2026-10-24 23:59 - r2: [ClubHolster] klclubholster.c (holster lever 0x5e7c60 found; Dry=1; panic = fire tbCivRunToGate boxes) built klhook/out_3f_1024club_r2; dancing blocked (no dance clips in DD or DM05A ANM, only M05_A/Ambient/* guest loops); re/club_crowd.md part 3. Not live-tested.
 
 2026-10-24 23:40 - INSTALLED (owner 'install all'), not live-tested: k36 hook (8dfa5665) + ini [FrameLimit] Enable=1 SwapChain=0
