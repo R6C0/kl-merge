@@ -32,8 +32,8 @@
  * shop is up (session state < 0x19, after the pool builder ran) and parked at once, so a page II buy in the 0x20 shop only flips byte+8 and never calls the
  * maker 0x710ad0 or reallocs the pool vector (the 10-24 21:30 exit followed such an in-0x20 buy; the log showed a clean exit(0) after focus-loss ShowCursor
  * stalls: the make is the one heavy thing a page II buy did). PreMake=0 or a failed premake keeps the old make-on-demand in kspg_enforce. Every made[][]
- * pointer is checked against the pool vector (kspg_sane) before kspg_ammo / kspg_check_pool / kspg_enforce read it, and dropped when the session enters
- * 0x23..0x25 or 0x16 (the pool is rebuilt there), so a freed object is never read.
+ * pointer is checked against the pool vector (kspg_sane) before kspg_ammo / kspg_check_pool / kspg_enforce read it and dropped once it is gone (a new
+ * map), so a freed object is never read. The pool survives the rounds, so made[] is kept across them and kspg_enforce re-parks ours in each shop.
  *
  * GUESSES (also marked in the code): the 5-arg update; the BuyWeapon message name layout; 0xff owned byte; that the shown row / carried
  * rows are bytes at 0x154d80c (dword) / 0xced638,9; that a purchase of the same row from the other set goes through the Voodoo trick.
@@ -298,21 +298,27 @@ static void kspg_sane(void)
     for (row = 0; row < KSPG_ROWS && !kspg.made[row][0]; row++) ;
     if (row == KSPG_ROWS) return;                                 /* nothing of ours made */
     if (!kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || !(ents = klh_rd32(a + 0x10)) || !klh_rd(ents, tab, 12 * (SIZE_T)n)) {
-        memset(kspg.made, 0, sizeof kspg.made); kspg.nparked = 0; kspg.preDone = 0; kspg.preTry = 0;      /* pool unreadable: trust nothing */
-        klog("shopPage: the pool vector is unreadable: every extra gun pointer dropped, made again when needed");
+        kspg.sane = 0;      /* k43 review: a failed read proves nothing: drop nothing (dropping orphaned the live set and re-made it), ask again next pass */
         return;
     }
     for (row = 0; row < KSPG_ROWS; row++) {
-        int dead = 0;
+        int nalive = 0, ndead = 0; DWORD keep[KSPG_PER];
         if (!kspg.made[row][0]) continue;
-        for (m = 0; m < KSPG_PER && kspg.made[row][m] && !dead; m++) {
+        memset(keep, 0, sizeof keep);
+        for (m = 0; m < KSPG_PER && kspg.made[row][m]; m++) {
             int alive = 0; for (i = 0; i < n && !alive; i++) alive = tab[3 * i] == kspg.made[row][m];
-            if (!alive) dead = 1;
+            if (alive) keep[nalive++] = kspg.made[row][m];
+            else {
+                ndead++;
+                for (j = 0; j < kspg.nparked; ) { if (kspg.parked[j] == kspg.made[row][m]) kspg.parked[j] = kspg.parked[--kspg.nparked]; else j++; }
+            }
         }
-        if (!dead) continue;
-        for (j = 0; j < kspg.nparked; ) { int isours = kspg_ours(row, kspg.parked[j]); if (isours) kspg.parked[j] = kspg.parked[--kspg.nparked]; else j++; }
-        memset(kspg.made[row], 0, sizeof kspg.made[row]); kspg.preDone = 0; kspg.preTry = 0;
-        klog("shopPage: row %d: an extra gun is no longer in the pool (rebuilt): pointers dropped, made again when needed", row);
+        if (!ndead) continue;
+        /* k43 review: only the vanished ones are forgotten; survivors stay ours (dropping them all orphaned them, free and unrecognised). A rebuild
+           (new map) takes every one, so the row is empty and premake / make on demand runs again. */
+        memcpy(kspg.made[row], keep, sizeof keep);
+        if (!nalive) { kspg.preDone = 0; kspg.preTry = 0; }
+        klog("shopPage: row %d: %d extra gun(s) no longer in the pool%s: pointers dropped", row, ndead, nalive ? "" : " (rebuilt; made again when needed)");
     }
 }
 
@@ -353,7 +359,12 @@ static void kspg_enforce(void)
 static int kspg_gate(void)
 {
     DWORD sm, st = 0, gs, rules;
-    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x70, &st, 4)) return 0;
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x70, &st, 4)) {
+        /* k43 review: no level running (map change / menu; GUESS that [session+0x5c] leaves 4 between maps, it is the pool builder's gate): the next
+           map's first shop premakes again, even when made[] was empty here (premake gave up), so kspg_sane had nothing to notice */
+        kspg.preDone = 0; kspg.preTry = 0;
+        return 0;
+    }
     if (kl_online()) return 0;
     /* k43 review: no drop on the 0x23..0x25 -> 0x16 edge. The pool SURVIVES the round (klshop.c re-park, shop_more_guns.md S6): the round end only
        frees every gun again, and kspg_enforce re-parks ours in the next shop. Dropping made[] here leaked a fresh set per pair per round and left the
@@ -393,6 +404,7 @@ static void kspg_premake(void)
 }
 
 /* reserve ammo of a handed-over extra gun: the recipe of kls_ammo (klshop.c), for our objects */
+static DWORD kspg_done[KSPG_ROWS * KSPG_PER];                 /* object whose reserve was set; cleared when it is free again */
 static void kspg_ammo(void)
 {
     DWORD a, n = 0, ents, i; int row, m;
@@ -402,10 +414,14 @@ static void kspg_ammo(void)
     if (kspg.clips <= 0 || !kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || !(ents = klh_rd32(a + 0x10))) return;
     for (i = 0; i < n; i++) {
         DWORD e[3];
-        if (!klh_rd(ents + 12 * i, e, 12) || !e[0] || (e[2] & 0xff)) continue;           /* only TAKEN objects */
+        if (!klh_rd(ents + 12 * i, e, 12) || !e[0]) continue;
+        if (e[2] & 0xff) {                                     /* free again (round end): k43 objects live on across rounds, so the next hand-out gets its */
+            for (row = 0; row < KSPG_ROWS; row++) for (m = 0; m < KSPG_PER; m++) if (kspg.made[row][m] == e[0]) kspg_done[row * KSPG_PER + m] = 0;   /* reserve again, as klshop.c clears fixed[] */
+            continue;                                          /* only TAKEN objects below */
+        }
         for (row = 0; row < KSPG_ROWS; row++) for (m = 0; m < KSPG_PER; m++) if (kspg.made[row][m] == e[0] && !kspg_isparked(e[0])) {
             DWORD rounds, res, ammo, r;
-            static DWORD done[KSPG_ROWS * KSPG_PER]; int d = row * KSPG_PER + m;
+            DWORD *done = kspg_done; int d = row * KSPG_PER + m;
             if (done[d] == e[0] || !klh_rd32(e[0] + 0xc4)) continue;
             done[d] = e[0];
             rounds = klh_rd32(e[0] + 0xdc) ^ KLS_AMMO_KEY; res = klh_rd32(e[0] + 0xe0) ^ KLS_AMMO_KEY;
