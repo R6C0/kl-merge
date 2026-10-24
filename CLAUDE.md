@@ -66,6 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 23:50 - STAGED, NOT INSTALLED: gunsnd_1024n = every gun-shot sample at the MP45 level on ALL banks (tools/kl_gunsnd_all.py): the 27 map
+banks were already on target, the 9 stock FA banks + L00..L11 were not (up to -5 dB, distant -11). 21 banks, WAV spans only, md5-chained
+INSTALL/UNDO (backups .WAV.before-1024gunsnd2, rehearsed). Writes stock Scenes\Locations files; not live-tested.
+
 2026-10-24 22:50 - GAME DID NOT LAUNCH on k34: stack overflow c00000fd ~60 ms after "fps: FIRST Present seen, via the swap chain
 (slot 3)". Device and swap chain are ReShade32 proxies; no recursion path found by reading. Live KLHook.ini [FrameLimit] Enable=0
 (.before-1024fpsoff) -> game runs. k36 (SHIP 8dfa5665, TEST 96743746, commit 956f1d383) = TLS depth guard + RECURSION CUT + SwapChain=/Reset=
