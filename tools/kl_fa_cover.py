@@ -1170,6 +1170,8 @@ def check(folder, log=print):
         n_high += c['kind'] == 'high'; n_low += c['kind'] == 'low'
         src = forms_.get(e.model)
         pl = planned.get(nm) or {}
+        if pl.get('form_node') in by and by[pl['form_node']]['cls'] == 'ZSTDOBJ' and B.ents[pl['form_node'] - 1].model == e.model:
+            src = by[pl['form_node']]       # the box this one was cloned from (several boxes share a model and differ in ZSTDOBJ[0])
         lent = False
         if src is None and pl.get('borrowed'):
             # a borrowed box primitive: the box is a clone of the cover box cover.json names, with the model of the
