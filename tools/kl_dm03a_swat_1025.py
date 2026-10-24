@@ -9,8 +9,8 @@ TWO JOBS, ONE ZIP (input = the live DM03A: kick doors + extinguishers installed,
     from them, a designer's 'shoot it when they hide behind it' place. The graft is kl_interact_graft.build driven with the canister donor
     (module globals swapped; the function body is the extinguisher's, make_gas below is make_extinguisher with the GeomActivator node 6140).
  2. THE DOOR SQUAD. KL_Door_1 (hinge -828,240,-6041; world frame: ArrowBack -943,-6043 on the corridor side, ArrowFront -784,-5938 on the
-    room side) is the one installed door whose BOTH sides are on the walkable mesh part the crew is on (the other four stand on a cut-off
-    island, part 1, asserted by the check). Wave_D08 of the bank's own police chain (3 men, a late street reinforcement at about 285 s) is
+    room side) is the door the squad kicks (1025 doors2: the other four doors were re-chosen onto the main mesh part, so the island
+    remark of the first version no longer applies). Wave_D08 of the bank's own police chain (3 men, a late street reinforcement at about 285 s) is
     REPLACED, so the budget stays 106 actors / 54 squads: 'KL_SWAT!Door_1' = three men of the same model, parked at the dead end of the
     corridor behind the door (250..330 cm from it, out of view of the room). At DOOR_AT seconds the squad is released: 10_Defend walks them to
     the door, KickDoorBehaviourRout (cloned from F03's squad 'Squad#08', its PosInfo names the first man and the door) kicks it, and
@@ -69,7 +69,7 @@ GAS_DROP = ('FX0900_ALL_GasCanister_A_02!ShatterTrigger',)
 
 
 # ------------------------------------------------------------------ job 1: the canisters
-def make_gas(M, B, don, n, at, tmpl_ok):
+def make_gas(M, B, don, n, at, tmpl_ok, zdir=None):
     """IG.make_extinguisher for the gas canister: the activator is node 6140 (F04's extinguisher: 5269), the group KL_Gas_n."""
     import kl_fa_cover as CV
     gk = CV.group_form(B)
@@ -545,7 +545,7 @@ def check(zp, log=print):
     say(R + SWAT_TOP + BS + 'T_Start' in KOW.values(sc, mon, 'AIMonitor')[KOW.START_LIST], 'AIMonitor round-start list names T_Start')
     say(len(sc.resolve(R + SWAT_TOP + BS + 'T_Start')) == 1, 'timer present')
     isl = [n for n in ('KL_Door_2', 'KL_Door_3', 'KL_Door_4', 'KL_Door_5') if sc.resolve(R + 'KL_Interact!1' + BS + n)]
-    say(len(isl) == 4, 'the four other doors are still there (unwired: cut-off island)')
+    say(len(isl) == 4, 'the four other doors are still there (1025 doors2: all five stand on the main mesh part, only KL_Door_1 is wired to the squad)')
     gas = sc.resolve(R + GAS_TOP)
     say(len(gas) == 1, 'gas top present')
     cans = [k for k in range(1, len(sc.nodes)) if GAS_TOP in sc.path[k] and sc.names[k].endswith('!Can_A')]

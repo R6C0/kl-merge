@@ -47,12 +47,15 @@ PLAN = {
     # and at the counter / east fight (spots_near targets, see DM01_SPOTS).
     'DM01':  dict(slot='F01', md5='02d2a481a921fb7a0b0cbd4c7f16485c', ext=5,
                   doors=[('snap', 2433, (1.0, 0.0, 0.0), 21909.5), ('at', (4700.0, 0.0, 22160.0), (0.0, 0.0, 1.0)), ('snap', 961, (1.0, 0.0, 0.0), 21914.0)],
-                  extra_drop=[1174, 942],
+                  extra_drop=[1174, 942], ext_doors=3,
                   spots_near=[(6300.0, 22930.0), (4235.0, 21960.0), (4645.0, 22230.0), (3035.0, 21965.0), (6620.0, 22420.0)]),
-    'DM01B': dict(slot='F03', md5='0a34b035c089c5e3b656a658398c5348', ext=4, doors=[1373, 7169, 8844, 7166, 7167]),
-    'DM03A': dict(slot='F07', md5='89256d16986513d06f81d7609abbf6aa', ext=4, doors=[6521, 3594, 3647, 3737, 3790]),
-    'DM06':  dict(slot='F04', md5='2faf474222bb71e22483cf9e116984f7', ext=4, doors=[]),
-    'DM09':  dict(slot='F06', md5='e2c7d5bda12d7d97651c04496bc8f05e', ext=4, doors=[]),
+    # 1025 doors2 (owner: "the doors are invisible and some u cant kick down ... put the fire extinguishers next to door exits on the wall"):
+    # doors only where a heister can walk up to one side on the MAIN mesh part (door_stand; DM03A's old doors 2..5 stood on a cut-off island),
+    # cans beside the doors (ext_doors) or beside mesh doorways (necks) on maps with no leaves. md5 = the PRE-graft zip (.before-1024interact).
+    'DM01B': dict(slot='F03', md5='0a34b035c089c5e3b656a658398c5348', ext=4, ext_doors=4, doors=[1373, 7169, 8844, 7166, 7167]),
+    'DM03A': dict(slot='F07', md5='89256d16986513d06f81d7609abbf6aa', ext=4, ext_doors=4, doors=[6521, 3570, 6519, 6518, 6520]),
+    'DM06':  dict(slot='F04', md5='2faf474222bb71e22483cf9e116984f7', ext=4, necks=4, doors=[]),
+    'DM09':  dict(slot='F06', md5='e2c7d5bda12d7d97651c04496bc8f05e', ext=4, necks=4, doors=[]),
 }
 
 
@@ -136,8 +139,15 @@ def shift(M, node, d):
 
 
 # ------------------------------------------------------------------ the extinguisher
-def make_extinguisher(M, B, don, n, at, tmpl_ok):
-    """One instance -> (group Node, can Node, [model-bearing nodes]). `at` = world place of the can's origin."""
+def can_axes(zdir):
+    """(X, Y, Z) world axes of a can whose local +Z points along the horizontal direction zdir = (zx, zz): stock cans stand with their +Z toward the
+    wall (read in F01 F03 F04 F07 F08, 2026-10-25), Y up, X = Y x Z = (zz, 0, -zx)."""
+    zx, zz = zdir
+    return (zz, 0.0, -zx), (0.0, 1.0, 0.0), (zx, 0.0, zz)
+
+
+def make_extinguisher(M, B, don, n, at, tmpl_ok, zdir=None):
+    """One instance -> (group Node, can Node, [model-bearing nodes]). `at` = world place of the can's origin. zdir: the can's +Z (toward its wall)."""
     import kl_fa_cover as CV, kl_fa_bots as F
     gk = CV.group_form(B)
     grp = CV._node(M, B, gk, 'KL_Ext_%d' % n)
@@ -157,6 +167,10 @@ def make_extinguisher(M, B, don, n, at, tmpl_ok):
             shift(M, nd, d)
     dropped = lambda s: any(x.lower() in s.lower() for x in EXT_DROP)
     can = byk[EXT_CAN]
+    if zdir is not None:                           # turn the can about its own vertical axis (its origin stays), the stock rotation is replaced
+        rot = stored_rot(*can_axes(zdir))
+        M.set(can, None, {'ZGEOM[1]': rot})
+        can.rot = struct.pack('<9f', *rot) + can.rot[36:]
     cuts = list_filter(M, can, None, 'ZHavokRigidBody[13]', lambda s: not dropped(s))
     cuts += list_filter(M, byk[5269], 'ActivateGeom', 1, lambda s: not dropped(s))
     # ASSUMPTION (guess): ZHavokRigidBody[14] (a u32, 0x00068690 in the stock can) is left as the stock value.
@@ -260,7 +274,7 @@ def wall_cands(B, nav, wall_dist=45.0, min_len=150.0):
                 nx, nz = -nx, -nz
             x, z = mx + nx * wall_dist, mz + nz * wall_dist
             if nav.inside(i, x, z):
-                out.append((round(x, 1), round(nav.height(i, x, z), 1), round(z, 1), L))
+                out.append((round(x, 1), round(nav.height(i, x, z), 1), round(z, 1), L, (-nx, -nz)))   # last: toward the wall = the can's +Z
     return out
 
 
@@ -283,6 +297,188 @@ def spot_near(B, nav, targets, keep_off=(), off=130.0, r=600.0, apart=300.0):
         if best is None:
             raise ValueError('no wall spot within %d cm of target (%d, %d)' % (r, tx, tz))
         out.append(best[1])
+    return out
+
+
+# ------------------------------------------------------------------ extinguishers beside doors (owner 2026-10-25: "next to door exits on the wall")
+ARROW_FRONT, ARROW_BACK = (-63.0, 0.0, 93.0), (-61.0, 0.0, -98.0)       # the stock door group's KickDoor_ArrowFront / ArrowBack (F03 4183 / 4182), group-local
+
+
+def main_part(nav):
+    return collections.Counter(nav.part[i] for i in range(len(nav.pv)) if nav.ok[i]).most_common(1)[0][0]
+
+
+def door_stand(nav, host, part=None):
+    """Where the player and the AI stand to kick this host (the group's ArrowFront / ArrowBack through the host frame) -> (front, back):
+    each None (off the mesh at the door's floor, +-120) or (polygon, part). A door nobody can walk up to cannot be kicked: the 2026-10-25
+    audit found DM03A's doors 2..5 on a cut-off island (part 9 of 566/149/112 polygons), which is why some doors 'cannot be kicked'."""
+    cx, cy, cz = host['R']
+    P = host['hinge']
+    out = []
+    for l in (ARROW_FRONT, ARROW_BACK):
+        x, z = (P[0] + cx[0] * l[0] + cz[0] * l[2], P[2] + cx[2] * l[0] + cz[2] * l[2])
+        a = nav.at(x, P[1], z, dy=120.0)
+        out.append(None if a is None else (a[0], nav.part[a[0]]))
+    return tuple(out)
+
+
+def door_ext_spots(B, nav, hosts, n, wall_dist=30.0, apart=150.0, reach=(100.0, 140.0, 190.0), fixed=()):
+    """n extinguisher spots BESIDE the doors, on the wall, the way stock puts them (F01 F03 F04 F07 F08, measured 2026-10-25: the can stands on
+    the floor 20..38 cm inside the walk mesh's wall edge, its +Z toward the wall). For each host, each side of the frame (hinge side: `reach`
+    past the hinge; free side: leaf width + reach past the free end), the free wall edge of the commonest walk-mesh part that runs along the
+    door's wall (within 90 cm of the door line) gives the spot: the foot of the door line on the edge, wall_dist inside. The spot needs 90 cm
+    of mesh in front of it (the can must not shut a passage) and `apart` from every other spot and from every hinge. First pass one spot per
+    door (the nearer side), then the second side of each door, until n. -> [(x, y, z, edge length, (zx, zz))]. `fixed`: spots already taken."""
+    big = main_part(nav)
+    edges = []
+    for i, vs in enumerate(nav.pv):
+        if not nav.ok[i] or nav.part[i] != big:
+            continue
+        cxm, czm = nav.mid[i][0], nav.mid[i][2]
+        for e, j in enumerate(nav.en[i]):
+            if j >= 0:
+                continue
+            a, b = vs[e], vs[(e + 1) % len(vs)]
+            L = math.hypot(b[0] - a[0], b[2] - a[2])
+            if L < 40.0:
+                continue
+            ux, uz = (b[0] - a[0]) / L, (b[2] - a[2]) / L
+            nx, nz = -uz, ux
+            if nx * (cxm - (a[0] + b[0]) / 2) + nz * (czm - (a[2] + b[2]) / 2) < 0:
+                nx, nz = -nx, -nz
+            edges.append((i, a, b, L, ux, uz, nx, nz))
+    taken = [(f[0], f[2]) for f in fixed]
+    hinges = [h['hinge'] for h in hosts]
+    ranked = []                                         # (pass, host index, distance of edge to door line, d, spot)
+    for hi, h in enumerate(hosts):
+        cx = h['R'][0]
+        ch = math.hypot(cx[0], cx[2])
+        cxh = (cx[0] / ch, cx[2] / ch)
+        P = h['hinge']
+        stand = door_stand(nav, h)
+        side_c = []
+        for sname, sgn in (('hinge', 1.0), ('free', -1.0)):
+            best = None
+            for d in reach:
+                t = d if sgn > 0 else -(h['width'] + d)
+                qx, qz = P[0] + cxh[0] * t, P[2] + cxh[1] * t
+                for (i, a, b, L, ux, uz, nx, nz) in edges:
+                    if abs(ux * cxh[0] + uz * cxh[1]) < 0.9:
+                        continue
+                    sd = (qx - a[0]) * nx + (qz - a[2]) * nz      # signed: + = the door line is on the mesh side of the edge, - = beyond it (in the wall)
+                    perp = abs(sd)
+                    if not (-90.0 <= sd <= 40.0):
+                        continue
+                    s_ = (qx - a[0]) * ux + (qz - a[2]) * uz
+                    if not (20.0 <= s_ <= L - 20.0):
+                        continue
+                    fx, fz = a[0] + ux * s_, a[2] + uz * s_
+                    x, z = fx + nx * wall_dist, fz + nz * wall_dist
+                    if not nav.inside(i, x, z):
+                        continue
+                    y = nav.height(i, x, z)
+                    if abs(y - P[1]) > 100.0:
+                        continue
+                    if not nav.at(x + nx * 90.0, y, z + nz * 90.0, dy=60.0, part=big):
+                        continue
+                    if any(math.hypot(x - k[0], z - k[2]) < 120.0 and abs(y - k[1]) < 250 for k in hinges):
+                        continue
+                    cand = (perp, d, x, y, z, L, (-nx, -nz))
+                    if best is None or cand[:2] < best[:2]:
+                        best = cand
+                if best is None:
+                    # no free mesh edge runs along the door's wall (a diagonal door in axis-aligned mesh edges): the door line itself, GAP cm off the
+                    # door plane on the walkable side, with no mesh a further GAP behind it (the wall) and 90 cm of mesh in front. GUESS: the DM
+                    # wall's half thickness is below GAP - can radius, as in F03 / F07 stock where the cans stand 20..38 cm off the mesh edge.
+                    cz = h['R'][2]
+                    czh = math.hypot(cz[0], cz[2])
+                    for sd_ in (1.0, -1.0):
+                        zx, zz = cz[0] / czh * sd_, cz[2] / czh * sd_
+                        x, z = qx + zx * wall_dist, qz + zz * wall_dist
+                        a_ = nav.at(x, P[1], z, dy=100.0, part=big)
+                        if not a_ or not nav.at(x + zx * 90.0, a_[1], z + zz * 90.0, dy=60.0, part=big) or nav.at(qx - zx * wall_dist, a_[1], qz - zz * wall_dist, dy=100.0):
+                            continue
+                        if any(math.hypot(x - k[0], z - k[2]) < 120.0 and abs(a_[1] - k[1]) < 250 for k in hinges):
+                            continue
+                        best = (wall_dist, d, x, a_[1], z, 0.0, (-zx, -zz))
+                        break
+                if best is not None:
+                    break
+            if best is not None:
+                side_c.append((best[0] + best[1], sname, best))
+        side_c.sort()
+        for rank, (_sc, sname, c) in enumerate(side_c):
+            ranked.append((rank, hi, c[0], sname, (round(c[2], 1), round(c[3], 1), round(c[4], 1), c[5], c[6])))
+    ranked.sort(key=lambda r: (r[0], r[1], r[2]))
+    out = []
+    for rank, hi, _perp, sname, sp in ranked:
+        if len(out) >= n:
+            break
+        if any(math.hypot(sp[0] - o[0], sp[2] - o[2]) < apart and abs(sp[1] - o[1]) < 250 for o in out + list(fixed)):
+            continue
+        out.append(sp + (hi, sname))
+    return out
+
+
+def neck_targets(B, nav, n, apart=1500.0, gap=(100.0, 220.0), depth=(15.0, 130.0)):
+    """Doorways of a map with no door leaves (DM06, DM09), found on the walk mesh: two free wall edges of the commonest part that face each
+    other (anti-parallel) across a gap of `gap` cm and overlap along the passage by only `depth` cm = a gap through a wall (a corridor
+    overlaps for metres). -> [(x, z, y)] centre of the gap, at most n, at least `apart` from each other, nearest the middle of all gaps first. GUESS: a mesh gap this narrow in a thin overlap is a doorway, not a pillar pair."""
+    big = main_part(nav)
+    E = []
+    for i, vs in enumerate(nav.pv):
+        if not nav.ok[i] or nav.part[i] != big:
+            continue
+        cxm, czm = nav.mid[i][0], nav.mid[i][2]
+        for e, j in enumerate(nav.en[i]):
+            if j >= 0:
+                continue
+            a, b = vs[e], vs[(e + 1) % len(vs)]
+            L = math.hypot(b[0] - a[0], b[2] - a[2])
+            if L < 15.0:
+                continue
+            ux, uz = (b[0] - a[0]) / L, (b[2] - a[2]) / L
+            nx, nz = -uz, ux
+            if nx * (cxm - (a[0] + b[0]) / 2) + nz * (czm - (a[2] + b[2]) / 2) < 0:
+                nx, nz = -nx, -nz
+            E.append((a, b, L, ux, uz, nx, nz))
+    cells = collections.defaultdict(list)
+    for idx, e in enumerate(E):
+        cells[(int((e[0][0] + e[1][0]) / 2 // 300), int((e[0][2] + e[1][2]) / 2 // 300))].append(idx)
+    found = []
+    for idx, (a, b, L, ux, uz, nx, nz) in enumerate(E):
+        mx, mz = (a[0] + b[0]) / 2, (a[2] + b[2]) / 2
+        cx0, cz0 = int(mx // 300), int(mz // 300)
+        for dx in (-1, 0, 1):
+            for dz in (-1, 0, 1):
+                for j in cells.get((cx0 + dx, cz0 + dz), ()):
+                    if j <= idx:
+                        continue
+                    a2, b2, L2, ux2, uz2, nx2, nz2 = E[j]
+                    if ux * ux2 + uz * uz2 > -0.95 or abs(a[1] - a2[1]) > 60.0:
+                        continue
+                    m2x, m2z = (a2[0] + b2[0]) / 2, (a2[2] + b2[2]) / 2
+                    g = (m2x - mx) * nx + (m2z - mz) * nz
+                    if not (gap[0] <= g <= gap[1]):
+                        continue
+                    s0, s1 = sorted(((a[0] - a2[0]) * ux + (a[2] - a2[2]) * uz, (b[0] - a2[0]) * ux + (b[2] - a2[2]) * uz))
+                    # overlap of edge 2 (param along u) with edge 1 (0..L)
+                    t0, t1 = sorted(((a2[0] - a[0]) * ux + (a2[2] - a[2]) * uz, (b2[0] - a[0]) * ux + (b2[2] - a[2]) * uz))
+                    ov = min(L, t1) - max(0.0, t0)
+                    if not (depth[0] <= ov <= depth[1]):
+                        continue
+                    found.append((round(ov, 1), round((mx + m2x) / 2, 1), round((a[1] + a2[1]) / 2, 1), round((mz + m2z) / 2, 1)))
+    if found:                                           # nearest the middle of all gaps first (where the fights are); GUESS, no spawn data read here
+        import statistics
+        mxm, mzm = statistics.median(f[1] for f in found), statistics.median(f[3] for f in found)
+        found.sort(key=lambda f: (math.hypot(f[1] - mxm, f[3] - mzm), f[1], f[3]))
+    out = []
+    for ov, x, y, z in found:
+        if any(math.hypot(x - o[0], z - o[1]) < apart and abs(y - o[2]) < 250 for o in out):
+            continue
+        out.append((x, z, y))
+        if len(out) >= n:
+            break
     return out
 
 
@@ -426,6 +622,8 @@ DOOR_KIDS = list(range(4168, 4190))
 DOOR_LEAF = 4189
 DOOR_SHAPE = 234                        # F03 .HVK shape of the leaf (type 4 key-framed, 8 vertices in metres: x -1.2 .. 0, y 0 .. 2.2, z +-0.02)
 DOOR_VTX = (13857, 13852)               # the leaf model's two vertex chunks (128 + 24 vertices of 40 bytes, position first)
+LEAF_G2 = True                          # the kick-door leaf is pool group 2 (see make_door)
+LEAF_G2_BITS = 0x44000
 KEYS_AT = 40                            # position of the six KEYS offsets in the leaf's 64-byte raw block (kl_graft.keys_tracks)
 
 
@@ -468,6 +666,20 @@ def make_door(M, B, don, n, host, tmpl_ok):
     import kl_fa_cover as CV
     gk = CV.group_form(B)
     grp = CV._node(M, B, gk, 'KL_Door_%d' % n)
+    # VISIBILITY (2026-10-25, owner: "the doors are invisible"): the leaf is a pool-group-0 ZSTDOBJ that no .oct tree lists (stock keyed
+    # leaves never are). The engine draws such an unlisted object only below a DYNAMIC group: in the stock levels all 392 group-0 models
+    # under a pool-group-2 ancestor are unlisted and every one of the 30 unlisted keyed group-0 models under an all-group-0 chain is a
+    # camera; the stock door group PC0800_ALL_KickableDoor_E_01 is pool group 2 (flags 0x3044000). A plain group-0 KL_Door_n (the form
+    # of the top group) left the leaf unlisted AND outside any dynamic group, so it was not drawn. Take the donor group's pool group and
+    # flags. GUESS (no live run yet): that group 2 + flags 0x3044000 under a listed group-0 parent in the root room draws it, as the
+    # group-2 can (T30 rope form) does; aux (451, a per-level index) stays 0.
+    dg = don.ent(DOOR_GRP)
+    grp.group, grp.flags = dg.group, dg.flags
+    # SECOND LAYER (same date): the only unlisted pool-group-0 leaf NOT proven by stock is ours, while the one form a game run DID show
+    # drawn is a pool-group-2 ZSTDOBJ in no tree under a plain group (kl_fa_ropevis T30, flags 0x264182 = base | 0x44000). So the leaf itself
+    # also becomes pool group 2 with its flags | 0x44000 (the two bits that separate the stock group-2 rope 0x264182 from the group-0 form
+    # 0x2201f2). GUESS: the engine reads the pool group, not the model, to decide the draw list; ZSTDOBJ + MatPosAnim + keyed HVK body
+    # do not care which pool the entity sits in. LEAF_G2 = False gives the stock-exact leaf (group 0) back.
     M.place(grp, host['hinge'], stored_rot(*host['R']))
     newp = TOP_PATH + BS + grp.name + BS
     old = DOOR_PARENT + BS
@@ -476,6 +688,8 @@ def make_door(M, B, don, n, host, tmpl_ok):
     for k in DOOR_KIDS:
         nd = clone(M, don, k, don.sc.names[k], rn)
         byk[k] = nd
+        if k == DOOR_LEAF and LEAF_G2:
+            nd.group, nd.flags = 2, nd.flags | LEAF_G2_BITS
         par = don.sc.parent[k]
         (byk[par] if par in byk else grp).add(nd)
     gone = []
@@ -511,7 +725,7 @@ def drop_names(M, grp, newp, dropped):
 
 
 # ------------------------------------------------------------------ build
-def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, extra_drop=(), spots_near=None):
+def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, extra_drop=(), spots_near=None, ext_doors=0, necks=0):
     import statistics
     import kl_fa_bots as F, kl_fa_cover as CV, kl_fa_climb2 as C2, kl_graft, kl_light, kl_escape
     data = open(src_zip, 'rb').read()
@@ -530,6 +744,22 @@ def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, ex
     say('kl_interact_graft: %s (%s) -> %s' % (src_zip, md5(data), dst_zip))
     nav = F.Nav(B.scene.nav)
     hosts = resolve_doors(B, nav, doors) if doors else []
+    if spots is None and (ext_doors or necks):
+        # owner 2026-10-25: cans "next to door exits on the wall". Beside the kick doors (door_ext_spots) or, on a map with no door leaves,
+        # beside the doorways the walk mesh shows (neck_targets -> nearest wall edge), then the rest from spots_near / ext_spots.
+        spots = []
+        if ext_doors and hosts:
+            spots = [s[:5] for s in door_ext_spots(B, nav, hosts, ext_doors)]
+        if necks:
+            for (tx, tz, ty) in neck_targets(B, nav, necks):
+                try:
+                    spots += [c for c in spot_near(B, nav, [(tx, tz)], keep_off=[(tx, ty, tz)] + [h['hinge'] for h in hosts], off=110.0, r=450.0)
+                              if all(math.hypot(c[0] - o[0], c[2] - o[2]) >= 150.0 for o in spots)]
+                except ValueError:
+                    pass
+        if len(spots) < ext:
+            rest = (spot_near(B, nav, spots_near, keep_off=[h['hinge'] for h in hosts]) if spots_near else ext_spots(B, nav, ext))
+            spots += [c for c in rest if all(math.hypot(c[0] - o[0], c[2] - o[2]) >= 300.0 for o in spots)][:ext - len(spots)]
     if spots is None and spots_near:
         spots = spot_near(B, nav, spots_near, keep_off=[h['hinge'] for h in hosts])
     spots = spots if spots is not None else ext_spots(B, nav, ext)
@@ -560,12 +790,14 @@ def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, ex
     insts = []
     can0 = don.ent(EXT_CAN)
     cbox = struct.unpack_from('<6f', don.prm.chunks[can0.model], 0x20)
-    for n, (x, y, z, _L) in enumerate(spots, 1):
+    for n, sp in enumerate(spots, 1):
+        x, y, z, _L = sp[:4]
+        zdir = sp[4] if len(sp) > 4 else None
         # the can's origin: its model box bottom (cbox[1]) on the floor, 1 cm up; ASSUMPTION: the model's own y axis is up
         at = (x, y - cbox[1] + 1.0, z)
-        grp, can, byk, gone, cuts = make_extinguisher(M, B, don, n, at, tmpl_ok)
+        grp, can, byk, gone, cuts = make_extinguisher(M, B, don, n, at, tmpl_ok, zdir)
         topg.add(grp)
-        insts.append(dict(group=grp, can=can, byk=byk, at=at))
+        insts.append(dict(group=grp, can=can, byk=byk, at=at, zdir=zdir))
         say('  KL_Ext_%d at %s: %d nodes, %d list entries dropped, emitters without template dropped: %s' % (n, tuple(round(v) for v in at), len(list(grp.walk())) - 1, cuts, gone))
     # ---- the kick doors
     dinsts, dd = [], None
@@ -723,6 +955,9 @@ def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, ex
         for it in insts:
             i = bytearray(dinst)
             struct.pack_into('<3f', i, 0, *(v / 100.0 for v in it['at']))
+            if it.get('zdir') is not None:             # columns = the can's axes (the donor's instance floats read back: X=(0,0,1) Y Z=(-1,0,0) for node rot Z,Y,X rows)
+                cx_, cy_, cz_ = can_axes(it['zdir'])
+                struct.pack_into('<9f', i, 12, *(col[r] for r in range(3) for col in (cx_, cy_, cz_)))
             struct.pack_into('<I', i, 0x30, made[id(it['can'])].ref)
             news.append(bytes(i))
             rec = bytearray(drec)
@@ -794,6 +1029,9 @@ def main():
             kw.setdefault('extra_drop', pl['extra_drop'])
         if pl.get('spots_near'):
             kw.setdefault('spots_near', pl['spots_near'])
+        for key_ in ('ext_doors', 'necks'):
+            if pl.get(key_):
+                kw.setdefault(key_, pl[key_])
         if not force:
             kw['pin'] = pl['md5']
     if '--md5' in a:
