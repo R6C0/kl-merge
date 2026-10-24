@@ -53,7 +53,7 @@
 #endif
 
 static struct {
-    int on, dry, log, human, bots, cops; float damage, inner, secs, radius;
+    int on, dry, log, human, bots, cops, counttrig; float damage, inner, secs, radius;
 } klcd;
 
 struct klcd_car { DWORD fx; float hp; DWORD cnt; float pos[3]; int havepos, tuned, how; };
@@ -152,7 +152,7 @@ static void klcd_tune(struct klcd_car *c, int idx)
     float inner = 0, dmg = 0, outer = 0, ni = 0, nd = 0; int ok = 1;
     inner = klbd_rdf(c->fx + 0xbec, &ok); outer = klbd_rdf(c->fx + 0xbe8, &ok); dmg = klbd_rdf(c->fx + 0xbf4, &ok);
     c->tuned = 1;
-    if (!ok || outer < 1 || outer > 100000) { if (klcd.log) klog("cardown: car %d (fx %08lx): the blast fields do not read as expected (outer %.1f inner %.1f damage %.1f): left alone", idx, (unsigned long)c->fx, outer, inner, dmg); return; }
+    if (!ok || outer < 1 || outer > 100000 || inner < 0 || inner > outer || dmg <= 0 || dmg > 100000) {   /* REVIEW 1024: the offsets are GUESSes, so a write only on a plausible triple (inner <= outer, damage > 0) */ if (klcd.log) klog("cardown: car %d (fx %08lx): the blast fields do not read as expected (outer %.1f inner %.1f damage %.1f): left alone", idx, (unsigned long)c->fx, outer, inner, dmg); return; }
     ni = klcd.inner >= 0 ? klcd.inner : inner; nd = (klcd.damage > 0 && dmg > klcd.damage) ? klcd.damage : dmg;
     if (klcd.log) klog("cardown: car %d (fx %08lx): blast outer %.0f inner %.0f damage %.0f (health %.0f) -> inner %.0f damage %.0f%s", idx, (unsigned long)c->fx, outer, inner, dmg, c->hp, ni, nd, klcd.dry ? " - Dry: nothing written" : "");
     if (klcd.dry) return;
@@ -263,7 +263,10 @@ static void klcd_tick(int game_thread)
         if (!c->tuned) klcd_tune(c, i);
         if (hp > 0) { float p[3]; if (klcd_place(c->fx, p, &c->how)) { memcpy(c->pos, p, 12); c->havepos = 1; } }
         if (c->hp > 0 && hp <= 0) dead = 1;
-        if (cnt != c->cnt && cnt > c->cnt && cnt < 1000) dead = 1;       /* the blow count rose (GUESS: +0x7d4 counts blows) */
+        if (cnt != c->cnt && cnt > c->cnt && cnt < 1000) {              /* REVIEW 1024: +0x7d4 is a GUESS; a count that is not a blow count would floor men beside a harmless car, so it only triggers with CountTrigger=1 */
+            if (klcd.log) klog("cardown: car %d: [+0x7d4] %lu -> %lu (hp %.0f)%s", i, (unsigned long)c->cnt, (unsigned long)cnt, hp, klcd.counttrig ? "" : " - not a trigger (CountTrigger=0)");
+            if (klcd.counttrig) dead = 1;
+        }
         c->hp = hp; c->cnt = cnt;
         if (dead) klcd_blow(c, i, tick);
     }
@@ -289,6 +292,7 @@ static void klcd_init(void)
     klcd.dry = GetPrivateProfileIntA("CarDown", "Dry", 0, klh_ini) != 0;
     klcd.log = GetPrivateProfileIntA("CarDown", "Log", 1, klh_ini);
     klcd.human = GetPrivateProfileIntA("CarDown", "Human", 1, klh_ini) != 0;
+    klcd.counttrig = GetPrivateProfileIntA("CarDown", "CountTrigger", 0, klh_ini) != 0;
     klcd.bots = GetPrivateProfileIntA("CarDown", "Bots", 1, klh_ini) != 0;
     klcd.cops = GetPrivateProfileIntA("CarDown", "Cops", 1, klh_ini) != 0;
     klcd.damage = klcd_inif("Damage", "60", 0.0f, 100000.0f);
