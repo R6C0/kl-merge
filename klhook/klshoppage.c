@@ -308,7 +308,9 @@ static int kspg_gate(void)
     if (kl_online()) return 0;
     gs = klh_rd32((DWORD_PTR)KLH_VA(KLS_SETTINGS)); rules = gs ? klh_rd32(gs + 0x54) : 0;
     if (!rules || klh_rd32(rules) != (DWORD)(DWORD_PTR)KLH_VA(KLS_RULES_VT)) return 0;
-    return st < 0x19 ? 1 : 2;                                              /* 1 = before the round, 2 = the round runs */
+    /* 1 = a shop can be open, 2 = otherwise. The session runs 0x16 (first shop) -> 0x18 -> 0x19 (play) -> 0x1f (score) -> 0x20 (the shop
+       between rounds) -> 0x23..0x25 -> 0x16; k40 took only st < 0x19, so the page key did nothing in the 0x20 shop (live log 10-25 20:32) */
+    return (st < 0x19 || st == 0x20) ? 1 : 2;
 }
 
 /* pool rebuilt (new map)? then forget our objects */
@@ -405,6 +407,11 @@ static void klshoppage_tick(int game_thread)
     /* the key is read on every tick (a short press is missed at 4 Hz); edge detection (up -> down); only in the weapon list (mode 2) before the round */
     if (gaks && fgw && wtp) {
         int down = (gaks(kspg.key) & 0x8000) != 0;
+        if (down && !kspg.keyDown && !kspg.pre && kspg.log && now - kspg.lastKey > 150 && klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)) == 2) {
+            DWORD sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION));   /* the weapon list is up but the gate says no shop: say so (k40 was silent here) */
+            kspg.lastKey = now;
+            klog("shopPage: key pressed in the weapon list, but session state 0x%lx is not a shop state: ignored", sm ? klh_rd32(sm + 0x70) : 0);
+        }
         if (down && !kspg.keyDown && kspg.pre && now - kspg.lastKey > 150) {
             DWORD pid = 0; HWND f = fgw(); if (f) wtp(f, &pid);
             if (pid == GetCurrentProcessId()) {
