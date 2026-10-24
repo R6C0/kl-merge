@@ -24,8 +24,14 @@ import kl_map_ai as MA
 DD = BL.DD
 TAG = '.before-1024spawns'
 # map -> (zip name, md5 of the live zip this pass was built and checked on 2026-10-24)
-MAPS = {'DM01B': ('F03_Main.zip', 'badc0bee911aed73f1ff3f7c9a16277f'),
+MAPS = {'DM01': ('F01_Main.zip', 'd70cf4c984baa2066b60a50a00dcd88a'),
+        'DM01B': ('F03_Main.zip', 'badc0bee911aed73f1ff3f7c9a16277f'),
         'DM09': ('F06_Main.zip', 'fa9ecf84e98e4ff28633d23cd5670a6d')}
+# DM01 (Hot Coffee), 2026-10-24: the OldWaves timer waves 1 and 2 SHOW their men at entry cells inside the owner's view when the Pace timers fire
+# (60 s / 130 s; ZSquadScript field 3 = 0 hides them until then) - the audit calls them 'by a timer', never PLOP, so auto does not touch them.
+# 'active' squads are pre-placed too (field 3 = 1). Wave_3 (warehouse, mostly out of sight) stays a timer wave. DM01's input is the output of
+# kl_arrivals_1024r2.carexit + kl_interact_graft (dm01fix_1025a), so its pin is checked by that build, not here.
+ACTIVE = {'DM01': ['OldWaves!Wave_1', 'OldWaves!Wave_2']}
 md5 = BL.md5
 # the blowup installer, re-labelled (same code path: one member replaced in a COPY, checked, swapped; backup = <zip><TAG>)
 PS1 = (BL.PS1.replace('blowup.json', 'spawns.json').replace('blowup.ps1', 'spawns.ps1').replace('.before-1024blowup', TAG)
@@ -39,7 +45,7 @@ def prp_name(zpath):
         return [n for n in z.namelist() if n.lower().endswith('_main.prp')][0]
 
 
-def fix_one(live, work, log=print):
+def fix_one(live, work, log=print, active=None):
     """-> (prp bytes, report) or (None, report) when no squad is PLOP. work: scratch folder."""
     src = os.path.join(work, 'src'); dst = os.path.join(work, 'dst')
     os.makedirs(src, exist_ok=True)
@@ -47,7 +53,7 @@ def fix_one(live, work, log=print):
     ini = os.path.join(os.path.dirname(live), 'KLJoin.ini')
     if os.path.isfile(ini):
         shutil.copy2(ini, src)
-    rep = MA.spawnfix(src, dst, {'auto': True, 'posts': False}, log=lambda *_a: None)
+    rep = MA.spawnfix(src, dst, {'auto': True, 'posts': False, 'active': active}, log=lambda *_a: None)
     if rep['problems']:
         raise ValueError('spawnfix read-back problems: %s' % rep['problems'])
     if not rep['active']:
@@ -71,7 +77,7 @@ def build(game, out, maps=None, force=False, log=print):
             continue
         work = tempfile.mkdtemp(prefix='spawns1024_')
         try:
-            prp, rep = fix_one(live, work, log)
+            prp, rep = fix_one(live, work, log, ACTIVE.get(m))
             gc.collect()
         finally:
             shutil.rmtree(work, ignore_errors=True)

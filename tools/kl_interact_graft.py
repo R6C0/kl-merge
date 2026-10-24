@@ -40,7 +40,15 @@ EXT_TREE0 = [5125, 5129]       # the template nodes the F04 .oct lists in tree 0
 
 # per map: the live md5 the plan was made against (CLAUDE.md chain), extinguishers, kick-door leaves (.prp node numbers)
 PLAN = {
-    'DM01':  dict(slot='F01', md5='5522ebcf5df8b5fe7cef99adef13fc7a', ext=4, doors=[1330, 961, 841, 842, 493]),
+    # DM01 (Hot Coffee), second pass 1025: built on the shop-v2 + carexit zip (the graft is idempotent, so it starts from the zip WITHOUT
+    # KL_Interact!1). Three doors where a Dog Days designer puts them: the diner's BACK EXIT to the alley (the FA authors' own leaf 2433, swung
+    # shut), the STAFF CORRIDOR door between the two diner halves (an empty 130 cm doorway: virtual host), the SHOP's back door (leaf 961,
+    # swung shut). The sunlight cards 1174 / 942 that painted light through the open leaves are dropped. Extinguishers: beside those doors
+    # and at the counter / east fight (spots_near targets, see DM01_SPOTS).
+    'DM01':  dict(slot='F01', md5='02d2a481a921fb7a0b0cbd4c7f16485c', ext=5,
+                  doors=[('snap', 2433, (1.0, 0.0, 0.0), 21909.5), ('at', (4700.0, 0.0, 22160.0), (0.0, 0.0, 1.0)), ('snap', 961, (1.0, 0.0, 0.0), 21914.0)],
+                  extra_drop=[1174, 942],
+                  spots_near=[(6300.0, 22930.0), (4235.0, 21960.0), (4645.0, 22230.0), (3035.0, 21965.0), (6620.0, 22420.0)]),
     'DM01B': dict(slot='F03', md5='0a34b035c089c5e3b656a658398c5348', ext=4, doors=[1373, 7169, 8844, 7166, 7167]),
     'DM03A': dict(slot='F07', md5='89256d16986513d06f81d7609abbf6aa', ext=4, doors=[6521, 3594, 3647, 3737, 3790]),
     'DM06':  dict(slot='F04', md5='2faf474222bb71e22483cf9e116984f7', ext=4, doors=[]),
@@ -230,6 +238,54 @@ def ext_spots(B, nav, n, apart=2500.0, near=800.0, wall_dist=45.0):
     return out
 
 
+def wall_cands(B, nav, wall_dist=45.0, min_len=150.0):
+    """Every free wall edge (no neighbour polygon) of the walk mesh that is >= min_len long -> [(x, y, z, length)], a point wall_dist inside
+    the mesh from the edge's middle (the same candidates ext_spots ranks by fights)."""
+    out = []
+    big = collections.Counter(nav.part[i] for i in range(len(nav.pv)) if nav.ok[i]).most_common(1)[0][0]
+    for i, vs in enumerate(nav.pv):
+        if not nav.ok[i] or nav.part[i] != big:
+            continue
+        cx, cz = nav.mid[i][0], nav.mid[i][2]
+        for e, j in enumerate(nav.en[i]):
+            if j >= 0:
+                continue
+            a, b = vs[e], vs[(e + 1) % len(vs)]
+            L = math.hypot(b[0] - a[0], b[2] - a[2])
+            if L < min_len:
+                continue
+            mx, mz = (a[0] + b[0]) / 2, (a[2] + b[2]) / 2
+            nx, nz = -(b[2] - a[2]) / L, (b[0] - a[0]) / L
+            if nx * (cx - mx) + nz * (cz - mz) < 0:
+                nx, nz = -nx, -nz
+            x, z = mx + nx * wall_dist, mz + nz * wall_dist
+            if nav.inside(i, x, z):
+                out.append((round(x, 1), round(nav.height(i, x, z), 1), round(z, 1), L))
+    return out
+
+
+def spot_near(B, nav, targets, keep_off=(), off=130.0, r=600.0, apart=300.0):
+    """One extinguisher spot per (x, z) target: the wall_cands point nearest the target within r that is at least `off` from every
+    keep_off point (the door hinges: the can must not stand in a door's swing) and `apart` from the spots already chosen. Deterministic.
+    A target with no candidate raises (the plan then needs another target rather than a silent drop)."""
+    cands = wall_cands(B, nav)
+    out = []
+    for tx, tz in targets:
+        best = None
+        for c in cands:
+            d = math.hypot(c[0] - tx, c[2] - tz)
+            if d > r or any(math.hypot(c[0] - k[0], c[2] - k[2]) < off for k in keep_off):
+                continue
+            if any(math.hypot(c[0] - o[0], c[2] - o[2]) < apart and abs(c[1] - o[1]) < 250 for o in out):
+                continue
+            if best is None or (d, c) < best[0]:
+                best = ((d, c), c)
+        if best is None:
+            raise ValueError('no wall spot within %d cm of target (%d, %d)' % (r, tx, tz))
+        out.append(best[1])
+    return out
+
+
 # ------------------------------------------------------------------ door hosts
 BS = chr(92)
 DOOR_H = 220.0                      # the donor leaf's height (F03 model 13862, box y 0..220) and width
@@ -322,6 +378,43 @@ def pick_doors(B, nav, n=5, apart=1300.0, near=1500.0, hosts=None):
             out.append(h)
         if len(out) >= n:
             break
+    return out
+
+
+def virtual_host(hinge, cx, width=DOOR_W, height=240.0):
+    """A kick door for an EMPTY doorway (no static leaf to replace): k = ref = None. hinge = the leaf's hinge point (the jamb end, base,
+    thickness middle), cx = world direction FROM the free end TO the hinge (the leaf lies along -cx from the hinge). The frame is y up."""
+    cx = tuple(float(v) for v in cx)
+    cy = (0.0, 1.0, 0.0)
+    return dict(k=None, name='(doorway)', ref=None, model=None, R=(cx, cy, _cross(cx, cy)), hinge=tuple(hinge), mid=tuple(hinge),
+                height=height, width=width, thick=5.0, bb=None, virtual=True)
+
+
+def snap_host(h, cx, hinge_z=None):
+    """The host leaf swung SHUT: the same hinge point (a swing does not move it), the frame turned so that the leaf lies along the
+    doorway (cx as given, y up). Dead Men's FA leaves 2433 / 961 stand open in the data (rotated about 120 / 180 degrees)."""
+    cx = tuple(float(v) for v in cx)
+    cy = (0.0, 1.0, 0.0)
+    hinge = h['hinge'] if hinge_z is None else (h['hinge'][0], h['hinge'][1], float(hinge_z))     # hinge_z: the wall's middle (read off the wall model's thin face), a guess of a few cm
+    return dict(h, R=(cx, cy, _cross(cx, cy)), hinge=hinge, snapped=True)
+
+
+def resolve_doors(B, nav, doors):
+    """The PLAN / --doors entries -> host dicts. An int = that static leaf as it stands; ('snap', k, cx) = that leaf swung shut along cx;
+    ('snap', k, cx, hinge_z) also sets the hinge's z; ('at', (x, y, z), cx) = a virtual host at that hinge point (an empty doorway)."""
+    allh = {h['k']: h for h in door_hosts(B, nav)}
+    out = []
+    for d in doors:
+        if isinstance(d, int):
+            d = ('leaf', d)
+        if d[0] in ('leaf', 'snap'):
+            if d[1] not in allh:
+                raise ValueError('not a door leaf of this map: %s' % (d[1],))
+            out.append(snap_host(allh[d[1]], d[2], d[3] if len(d) > 3 else None) if d[0] == 'snap' else allh[d[1]])
+        elif d[0] == 'at':
+            out.append(virtual_host(d[1], d[2]))
+        else:
+            raise ValueError('door spec %r' % (d,))
     return out
 
 
@@ -418,7 +511,7 @@ def drop_names(M, grp, newp, dropped):
 
 
 # ------------------------------------------------------------------ build
-def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None):
+def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, extra_drop=(), spots_near=None):
     import statistics
     import kl_fa_bots as F, kl_fa_cover as CV, kl_fa_climb2 as C2, kl_graft, kl_light, kl_escape
     data = open(src_zip, 'rb').read()
@@ -436,21 +529,28 @@ def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None):
         log(s); lines.append(s)
     say('kl_interact_graft: %s (%s) -> %s' % (src_zip, md5(data), dst_zip))
     nav = F.Nav(B.scene.nav)
+    hosts = resolve_doors(B, nav, doors) if doors else []
+    if spots is None and spots_near:
+        spots = spot_near(B, nav, spots_near, keep_off=[h['hinge'] for h in hosts])
     spots = spots if spots is not None else ext_spots(B, nav, ext)
     say('  extinguisher spots: %s' % [(round(s[0]), round(s[1]), round(s[2])) for s in spots])
-    hosts = []
-    if doors:
-        allh = {h['k']: h for h in door_hosts(B, nav)}
-        if [k for k in doors if k not in allh]:
-            raise ValueError('not door leaves of this map: %s' % [k for k in doors if k not in allh])
-        hosts = [allh[k] for k in doors]
-        tgt = {h['k'] for h in hosts}
+    real = [h for h in hosts if h['k']]                 # static leaves that are replaced (a virtual host has none)
+    gone_k = sorted({h['k'] for h in real} | set(extra_drop))
+    if extra_drop:
+        for k in extra_drop:
+            if not B.ents[k - 1].model or B.ents[k - 1].kids or B.ents[k - 1].raw:
+                raise ValueError('extra_drop %d is not a plain static model' % k)
+    if hosts or extra_drop:
+        tgt = set(gone_k)
         named = sorted({(B.sc.names[k], B.sc.names[x]) for k, _h, _f, _s, hit in J.references(B.sc) for x in (hit or []) if x in tgt and k != x})
         if named:
             raise ValueError('door leaves named by other nodes: %s' % named[:5])
+    if hosts:
         sx = round(statistics.median(h['width'] for h in hosts) / DOOR_W, 4)
         sy = round(statistics.median(h['height'] for h in hosts) / DOOR_H, 4)
         say('  kick doors on leaves %s; leaf model scaled x %.4f, y %.4f (stock 120 x 220)' % ([(h['k'], h['name'][-40:], round(h['width']), round(h['height'])) for h in hosts], sx, sy))
+        say('  doors swung shut (frame set, hinge kept): %s; virtual doorways: %s; extra nodes dropped: %s' % (
+            [h['k'] for h in hosts if h.get('snapped')], [tuple(round(v) for v in h['hinge']) for h in hosts if h.get('virtual')], list(extra_drop)))
     don = Donor.get(EXT_DONOR)
     tmpl_ok = {sc.names[k].lower() for k in range(1, len(sc.nodes)) if sc.cls(k) == 'ZParticleTemplate'}
     M = F.Maker()
@@ -476,7 +576,7 @@ def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None):
             cut = drop_names(M, grp, newp, gone)
             topg.add(grp)
             dinsts.append(dict(group=grp, byk=byk, at=h['hinge'], host=h, door=byk[DOOR_LEAF]))
-            say('  KL_Door_%d at %s on host leaf %d (%s): %d nodes, dropped %s, %d list entries cut' % (
+            say('  KL_Door_%d at %s on host leaf %s (%s): %d nodes, dropped %s, %d list entries cut' % (
                 n, tuple(round(v) for v in h['hinge']), h['k'], h['name'][-40:], len(list(grp.walk())) - 1, gone, cut))
     # ---- models: roots of every cloned node that has one; one leg per donor level, in order (the numbering of a leg
     # depends on the .prm the legs before it made: a dry run per leg here, the real appends below)
@@ -520,7 +620,7 @@ def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None):
                 nd.links = list(best.links)
     # ---- the scene
     q, order = M.scene([topg])
-    Jn = J.join(sc, [(sc, t) for t in sc.tops()] + [(q, t) for t in q.tops()], 'interact', skip={h['k'] for h in hosts})
+    Jn = J.join(sc, [(sc, t) for t in sc.tops()] + [(q, t) for t in q.tops()], 'interact', skip=set(gone_k))
     prp = Jn.p.serialize()
     back = F.Prp(prp)
     if back.serialize() != prp or len(back.nodes()) != len(Jn.nodes):
@@ -530,8 +630,8 @@ def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None):
     pre = F.room_sets_check(A, octx, rmi, rmc)
     slot0 = A.slots()
     nxt = max([A.ref_slots] + [e.ref + 1 for e in B.ents])
-    gone_ents = [B.ents[h['k'] - 1] for h in hosts]
-    for e in gone_ents:                                   # the static leaves the kick doors replace (no kids: door_hosts)
+    gone_ents = [B.ents[k - 1] for k in gone_k]
+    for e in gone_ents:                                   # the static leaves the kick doors replace (no kids: door_hosts) + extra_drop
         A.remove(e)
     made = {}
     nxt = C2._write_ent(A, topg, None, nxt, made)
@@ -610,8 +710,8 @@ def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None):
     mat.refs = T.material_refs(prm_bytes, mat.ninst)
     # ---- Havok: the cans: one type-2 shape record; the doors: one type-4 shape record (the stock leaf's slab scaled like the model)
     hvk = kl_hvk.Hvk(B['.HVK'])
-    if hosts:
-        kl_escape.cut_collision(hvk, {h['ref'] for h in hosts}, log=say)
+    if real:
+        kl_escape.cut_collision(hvk, {h['ref'] for h in real}, log=say)
     news, hrd_new = [], []
     if insts:
         dh = don.hvk
@@ -690,6 +790,10 @@ def main():
     if '--map' in a:                       # PLAN entry: ext count, doors and the md5 pin (unless --force)
         i = a.index('--map'); pl = PLAN[a[i + 1]]; del a[i:i + 2]
         kw.setdefault('ext', pl['ext']); kw.setdefault('doors', pl['doors'])
+        if pl.get('extra_drop'):
+            kw.setdefault('extra_drop', pl['extra_drop'])
+        if pl.get('spots_near'):
+            kw.setdefault('spots_near', pl['spots_near'])
         if not force:
             kw['pin'] = pl['md5']
     if '--md5' in a:
