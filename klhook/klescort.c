@@ -1057,7 +1057,8 @@ static void kle_veh_pass(const struct klb_snap *s, DWORD now)
     /* FollowOutShield=3 (owner 2026-10-11: 'all the police outside the vault shoot the van straight away'; the club's first full run
        lost its van, state 3 -> 6, with two AI heisters aboard and no hold): the shield goes on in the first pass of EVERY wait, held or
        not, human aboard or not, and stays until the vehicle is gone, as with 2. Less risk than stock on purpose. */
-    if (kle.fo_shield == 3 && (s->veh == 3 || s->veh == 4) && !kle_sh.obj && !(kle.vb && !kle.vb_dry && kle_vb.open)) {
+    /* VanBlow review fix: a van that was left vulnerable while empty and is boarded only in the drive-out (state 5) is shielded again there too (the old shield covered the drive-out) */
+    if (kle.fo_shield == 3 && (s->veh == 3 || s->veh == 4 || (s->veh == 5 && kle.vb && !kle.vb_dry && kle_vb.aboard > 0)) && !kle_sh.obj && !(kle.vb && !kle.vb_dry && kle_vb.open)) {
         char why3[200], note3[200]; static DWORD said3; int ok3;
         ok3 = kle_hold_guard(s, now, kle.fo_dry, why3, note3);
         if (ok3 && (kle_sh.obj || now - said3 > 30000)) { said3 = now; klog("follow: shield: the vehicle waits (state %u) and FollowOutShield=3 shields every wait: %s", s->veh, note3); }

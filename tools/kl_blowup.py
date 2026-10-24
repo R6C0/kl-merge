@@ -19,7 +19,9 @@ NOT TOUCHED: the key-framed escape van (no VehicleEffects, no BlowupChance field
 OUTPUT (small, drive G is nearly full): <out>\\<MAP>\\<Fxx>_Main.prp (only the changed member, ~MB), blowup.json (md5s),
   blowup.ps1 + INSTALL/UNDO .bat. The INSTALL patches a COPY of the live zip in place with .NET (the member is replaced), checks it,
   then swaps it in; the live zip is renamed .before-1024blowup. UNDO renames it back (byte identical).
-Usage (from tools/):  python kl_blowup.py [--game <DD folder>] [--out <folder>] [--health 5000] [--rehearse <scratch folder>]
+Usage (from tools/):  python kl_blowup.py [--game <DD folder>] [--out <folder>] [--health 5000] [--hasta] [--rehearse <scratch folder>]
+  --hasta: also DM11B (Hasta). OFF by default: Hasta is where 12 of 41 departures ended in state 6 with the bots aboard (they die), and that
+  chopper cannot be shielded; DM05A / DM06 had none. Reviewer's call, owner may add it.
   --rehearse: copies the live zips into <scratch>\\game, runs INSTALL and UNDO there with the generated ps1 and writes the
   resulting md5s into blowup.json (the installer then refuses anything else). Never touches the real game folder.
 """
@@ -30,7 +32,8 @@ import kl_fa, kl_map_ai as MA
 from kl_prp import units
 
 DD = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
-MAPS = [('DM11B', 'F04_Main.zip'), ('DM05A', 'F01_Main.zip'), ('DM06', 'F04_Main.zip')]
+MAPS = [('DM05A', 'F01_Main.zip'), ('DM06', 'F04_Main.zip')]
+HASTA = ('DM11B', 'F04_Main.zip')     # review 2026-10-24: NOT in the default set - all 12 logged state-6 departures with the bots aboard were here (re/hasta_chopper_1019.md); --hasta adds it
 BLOW_FIELD = 23                       # VehicleEffects: enum BlowupChance*
 HEALTH_FIELD = 3                      # GUESS: the health (2200 on Escape_Chopper; Dog Days helicopters 4000..8000)
 TAG = '.before-1024blowup'
@@ -163,10 +166,10 @@ if ($bad) { "done with $bad problem(s), see above."; exit 4 }
 BAT = '@echo off\r\ncd /d "%~dp0"\r\npowershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0blowup.ps1" {arg}\r\npause\r\n'
 
 
-def build(game, out, health, log=print):
+def build(game, out, health, log=print, hasta=False):
     os.makedirs(out, exist_ok=True)
     man = {'health': health, 'maps': []}
-    for m, f in MAPS:
+    for m, f in MAPS + ([HASTA] if hasta else []):
         live = os.path.join(game, 'KLExpansion', 'Maps', m, f)
         pn, prp, changes = patch_prp(live, health)
         if prp is None:
@@ -256,7 +259,7 @@ def main():
     if not out:
         import kl_port_check
         out = os.path.join(kl_port_check.workdir(), 'build', 'blowup_1024')
-    man = build(game, out, float(opt('--health', 5000)))
+    man = build(game, out, float(opt('--health', 5000)), hasta='--hasta' in a)
     print('kl_blowup: %d map(s) -> %s' % (len(man['maps']), out))
     if '--rehearse' in a:
         rehearse(out, game, opt('--rehearse'))
