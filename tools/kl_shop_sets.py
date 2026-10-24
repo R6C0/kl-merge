@@ -128,15 +128,17 @@ def md5(path):
 
 
 PS1 = r'''# shoppage_install.ps1 - install (or -Undo) shop page II: the hook dll + KLShopPage.ini + a [ShopPage] block in KLHook.ini.
-# Install: refuses while kl2.exe runs; needs the staged dll to match shoppage.md5; backs up dinput8.dll, KLHook.ini and (if present) KLShopPage.ini as
+# Install: refuses while kl2.exe runs; refuses unless the LIVE dinput8.dll is the build this was made on (LIVE_MD5); needs the staged dll to match shoppage.md5; backs up dinput8.dll, KLHook.ini and (if present) KLShopPage.ini as
 #   <name>.before-1024page (never overwritten); copies the dll and ini; adds the block (Enable=1) between markers; sets nothing else.
-# Undo: puts the dll back from its backup (md5 checked), removes the block, restores or deletes KLShopPage.ini.
+# Undo: puts the dll back from its backup (md5 checked; refuses, unless -Force, when the live dll is not the one INSTALL put there), removes the block,
+#   restores or deletes KLShopPage.ini, always deletes the KLHook.ini backup.
 param([switch]$Undo, [string]$Game = 'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days', [switch]$Force)
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $tag = '.before-1024page'
 $begin = '; --- shoppage installer block BEGIN (run UNDO shoppage.bat to take it out) ---'
 $end = '; --- shoppage installer block END ---'
+$liveExpect = '@LIVE@'   # the hook build in the game folder when this was staged (k37)
 function Md5($p) { (Get-FileHash -LiteralPath $p -Algorithm MD5).Hash.ToUpper() }
 function Die($m) { Write-Host "REFUSED: $m"; exit 1 }
 if (-not $Force -and (Get-Process -Name kl2 -ErrorAction SilentlyContinue)) { Die 'kl2.exe is running' }
@@ -144,8 +146,12 @@ $dll = Join-Path $Game 'dinput8.dll'; $ini = Join-Path $Game 'KLHook.ini'; $pg =
 if (-not (Test-Path -LiteralPath $dll)) { Die "no dinput8.dll in $Game" }
 if (-not (Test-Path -LiteralPath $ini)) { Die "no KLHook.ini in $Game" }
 $enc = [Text.Encoding]::GetEncoding(28591)
+$want = $null
+Get-Content -LiteralPath (Join-Path $here 'shoppage.md5') | ForEach-Object { if ($_ -match '^([0-9A-Fa-f]{32})\s+\*?dinput8\.dll\.page\s*$') { $want = $Matches[1].ToUpper() } }
+if (-not $want) { Die 'no md5 line for dinput8.dll.page in shoppage.md5' }
 if ($Undo) {
     $bd = $dll + $tag
+    if ((Test-Path -LiteralPath $bd) -and -not $Force -and (Md5 $dll) -ne $want -and (Md5 $dll) -ne (Md5 $bd)) { Die "the live dinput8.dll ($(Md5 $dll)) is not the page build this installed ($want): a later hook build is live. Undoing would downgrade it. Run with -Force to do it anyway." }
     if (Test-Path -LiteralPath $bd) {
         Copy-Item -LiteralPath $bd -Destination $dll -Force
         if ((Md5 $dll) -ne (Md5 $bd)) { Die 'restore of dinput8.dll failed the md5 check' }
@@ -163,14 +169,12 @@ if ($Undo) {
     } else { Write-Host 'no shoppage block in KLHook.ini' }
     if (Test-Path -LiteralPath ($pg + $tag)) { Copy-Item -LiteralPath ($pg + $tag) -Destination $pg -Force; Remove-Item -LiteralPath ($pg + $tag) }
     elseif (Test-Path -LiteralPath $pg) { Remove-Item -LiteralPath $pg }
-    if ((Test-Path -LiteralPath ($ini + $tag)) -and ((Md5 $ini) -eq (Md5 ($ini + $tag)))) { Remove-Item -LiteralPath ($ini + $tag) }
+    if (Test-Path -LiteralPath ($ini + $tag)) { Remove-Item -LiteralPath ($ini + $tag) }   # the block is out; a stale backup would only block the next INSTALL
     Write-Host "shoppage undone: dinput8.dll md5 $(Md5 $dll)"
     exit 0
 }
 $src = Join-Path $here 'dinput8.dll.page'; $srcini = Join-Path $here 'KLShopPage.ini'
-$want = $null
-Get-Content -LiteralPath (Join-Path $here 'shoppage.md5') | ForEach-Object { if ($_ -match '^([0-9A-Fa-f]{32})\s+\*?dinput8\.dll\.page\s*$') { $want = $Matches[1].ToUpper() } }
-if (-not $want) { Die 'no md5 line for dinput8.dll.page in shoppage.md5' }
+if ((Md5 $dll) -ne $liveExpect.ToUpper()) { Die "the live dinput8.dll is $(Md5 $dll), not the build this was made for ($liveExpect). Ask for a rebuild on top of the live hook." }
 if ((Md5 $src) -ne $want) { Die 'staged dinput8.dll.page does not match shoppage.md5' }
 foreach ($f in @($dll, $ini)) { if (Test-Path -LiteralPath ($f + $tag)) { Die ((Split-Path -Leaf $f) + "$tag already exists: run UNDO first") } }
 if (Test-Path -LiteralPath ($pg + $tag)) { Die "KLShopPage.ini$tag already exists: run UNDO first" }
@@ -191,6 +195,9 @@ exit 0
 '''
 
 
+LIVE_MD5 = 'A9414890C2204801FF6B3EB79E4DDF66'      # k37, live in the game folder on 2026-10-24 (re-read at stage time when the game folder exists)
+
+
 def stage(out, grenades, dll, game):
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, 'KLShopPage.ini'), 'w', newline='') as f:
@@ -201,7 +208,11 @@ def stage(out, grenades, dll, game):
         with open(os.path.join(out, 'shoppage.md5'), 'w') as f:
             f.write('%s *dinput8.dll.page\n' % md5(dll))
     with open(os.path.join(out, 'shoppage_install.ps1'), 'w', newline='') as f:
-        f.write(PS1)
+        live = LIVE_MD5
+        lp = os.path.join(game, 'dinput8.dll')
+        if os.path.exists(lp):
+            live = md5(lp).upper()
+        f.write(PS1.replace('@LIVE@', live))
     for name, arg in (('INSTALL shoppage.bat', ''), ('UNDO shoppage.bat', ' -Undo')):
         with open(os.path.join(out, name), 'w', newline='') as f:
             f.write('@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -File "%%~dp0shoppage_install.ps1"%s\r\npause\r\n' % arg)

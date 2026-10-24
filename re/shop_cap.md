@@ -329,7 +329,7 @@ I read `re/shop_more_guns.md`, `re/shop_plan.md`, `re/shop_hire.md`, `re/antitam
   4. availability, through 0x808220.
   5. only then it opens `BuyWeaponDialog`.
 - `BuyWeapon` runs 0x6ddd10:
-  - It writes the selected row into 0xced638, or into 0xced639 when 0xced63c == -6 is false.
+  - It writes the selected row into 0xced638, or into 0xced639 when 0xced63c == -6 (disassembled, corrected 2026-10-24).
   - It then sends the client call with the player index and all three bytes (0xced638, 0xced639, 0xced63a).
   - The server-side RMC is `RMCBuyWeaponPack`. I did not confirm that 0x6ddd10 is the final commit rather than one step before it (GUESS).
 
@@ -454,15 +454,38 @@ Scratch copy of the F02 online.xml (the only file written, outside the repo): `C
 
 ## Page II build (2026-10-24, STAGED, NOT INSTALLED, not run in the game)
 Owner: 'okay yes do a page 2'. `klhook/klshoppage.c` (+3 lines in klhook.c) and `tools/kl_shop_sets.py`; staged in `C:/kl_build_1024/shoppage_1024a/stage`
-(SHIP dll md5 699da84b, TEST 658a59eb; INSTALL/UNDO shoppage.bat rehearsed on a scratch folder, undo byte-identical). Key F6 flips set A / B.
+(SHIP dll md5 26393984, TEST 41b8ccf5 after the review fixes below, built on the k37 sources fb2dce1bf + page; INSTALL/UNDO shoppage.bat rehearsed on a scratch folder, undo byte-identical). Key F6 flips set A / B.
 - Text: per-ELEMENT private vtable of MercsShowInfoFAWeapons (0xbbd0ec) and MercsSendMessageWeapons (0xbbd18c), slot 24 (0x490730, key -> char*, ret 4)
   wrapped; keys '/Menu/Online/WeaponShop/Weapon<row>' and '...Desc' answered from KLShopPage.ini; BuyWeapons_Title / Headline* get ' II'. Roles from the TagName
   at [obj+0xc4]: OldPrimaryWeapon / OldSecondaryWeapon follow the set the carried gun was bought in. No clash with kllocname.c (it wraps the LOC object).
-- Picture: MercsGraphicFA (0xbbcc84) slot 8 (0x58bc50, tail-jumps to 0x832470 ret 0x14: GUESS 5 dword args) swaps the element's own PlayerIndex [obj+0xc4]
+- Picture: MercsGraphicFA (0xbbcc84) slot 8 (0x58bc50: NO stack args, see the review fixes) swaps the element's own PlayerIndex [obj+0xc4]
   between the selected row and the picture row for the call (WeaponBig in mode 2, Primary/SecondaryWeapon when carried from B). Global selection untouched.
 - Buy: selector (0xbbd494) slot 20 = 0x810b20 wrapped; 'BuyWeaponDialogVoodoo' (0x7f73d0 refuses an owned row) gets the carried byte blanked to 0xff for the call
   when the row was bought in the other set (OwnedTrick, GUESS); 'BuyWeapon' (0x6ddd10) records the set. Hand-over: own copy of klshop.c's relabel recipe, per pair,
   8 objects, ONLY for guns a slot carries from B; parked/unparked each tick before the round (st < 0x19); rows klshop.c swaps are skipped.
 - Pairs (20; `kl_shop_sets.py show`; `--grenades` adds 5 thrown items, untried in a gun slot): carriers by category, price, tier, dlc-free first.
-- Open: live test (text on both classes, picture swap, buy of a B row, buy of the other set's gun of the carried row, round hand-over); the 5-arg update;
+- Open: live test (text on both classes, picture swap, buy of a B row, buy of the other set's gun of the carried row, round hand-over); 
   rows without a pair show the stock gun in B; pad/mouse cannot toggle; the built dll comes from the working tree (live dll is a9414890, k37).
+
+### Review fixes (2026-10-24, same day, two reviews; still not run in the game)
+Fixed (SHIP 263939849cf195702d684dc10cdfb2f3, TEST 41b8ccf5d80eb608f94a3d3f1616b9cc; stage dll = SHIP):
+- Picture wrapper had the wrong signature (CONFIRMED by disassembly): 0x58bc50 takes no stack args (every path ends `add esp,0xc; jmp 0x832470`, which jumps to 0x48f8e0 = plain `ret`).
+  `ret 0x14` would have eaten 20 bytes of the caller's stack at the first update of any wrapped element. Now `(self, edx)`, `orig(self, 0)`.
+- Owned trick used the wrong byte (CONFIRMED): 0x6ddd10 writes 0xced639 when [0xced63c] == -6, else 0xced638 (the note above was backwards). Now slot = (edit == -6) ? 1 : 0.
+  The row is read from [selector+0x90] (what 0x7f73d0 and 0x6ddd10 use), not the global. The trick runs only when the EDITED slot's own byte holds the row (replacing that gun with the
+  other set's gun) and the other slot does not hold it; if both slots carry the row the stock refusal stands and the log says so ("carried in both slots"). So the same row is never
+  held twice (resolves the both-sets case; `kspg_wantB` can stay a per-row OR).
+- Role table is rebuilt on every full scan (elements already wrapped are matched by our vtable pointer), KR_NONE is not stored: no overflow, no stale roles.
+- Toggle: edge detection (up -> down, 150 ms guard), only before the round (gate 1) AND in shop mode 2 (weapon list); a press in another mode is logged and ignored. The page falls back to A when the
+  round runs or the gate closes. Log line on every toggle carries mode, highlighted row, category 0xced640, slot 0xced63c.
+- Key hint: BuyWeapons_Title gets "  [F6] page II" (set A) / "  II  [F6] stock page" (set B), `[ShopPage] Hint=1` (GUESS: that key is the shop caption; if it is never requested nothing shows).
+  The four category headlines get " II" in set B only.
+- Stale-text check: the first text request after each toggle is logged (key, row, role, set served); if none comes within 1.5 s a WARNING line says the game may cache the names.
+- A failed template / object-maker lookup disables the row only for 20 s (log 3 times at most), so the next map can have it. `kspg_ammo` returns at once while nothing of ours is made.
+- INSTALL refuses unless the LIVE dinput8.dll is a9414890 (k37; value read from the game folder at stage time). UNDO refuses (without -Force) when the live dll is neither the page build nor the
+  backup (a later hook is live), and always deletes the KLHook.ini backup after stripping the block (a stale one blocked the next INSTALL). Backup tag stays `.before-1024page`.
+  Rehearsed on a scratch copy: install, double install refused, wrong live dll refused, later-hook undo refused, plain undo byte-identical (dll and ini), ini edited between install and undo, reinstall.
+- The dlls are built on the k37 sources (fb2dce1bf) plus the page, NOT on the k39 head: installing changes only the page. The head tree has the page too, so the next hook build includes it
+  (then the INSTALL guard md5 must be re-staged: `kl_shop_sets.py stage` re-reads the live dll).
+Not fixed: carriers with a DLC lock (rows 12 15 19 27: dlc 0 3 2 0) still get set-B guns, unreachable without that DLC (shotguns have 5 guns for 4 free rows, SMGs 9 for 7);
+the picture swap of +0xc4 assumes 0x58bc50 uses it only for the selected test (GUESS, other branches read it too); pad/mouse cannot toggle.
