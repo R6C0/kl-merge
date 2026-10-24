@@ -7,6 +7,8 @@ as possible and saying what was lost. Self-test on synthetic trees: `python tool
                                             member over the cap write OUTDIR\\<MapFolder>\\<zipname>: the same zip with ONLY
                                             those .LOC members replaced by fit() output, plus OUTDIR\\fit_report.txt
     python kl_loc_fit.py file.LOC [english.LOC] [stock.LOC]   fit one file, print the report (writes nothing)
+    python kl_loc_fit.py --verify [DD]      read-only: every installed Russian / Japanese .LOC against the stock .LOC of its slot -
+                                            missing / blanked / re-flagged stock sound leaves are FAULTs (verify(), compare())
 
 Why files grow past the cap (found 2026-10-23): the KLVoice/ subtree (Dead Men voice leaves, ~93 KB, 1,850 leaves, text in
 English in EVERY language file, added by kl_dmvoice) plus KLTalk/ and extra Multiplayer lines. Stock Dog Days Russian is
@@ -228,11 +230,82 @@ def stage(outdir, dd=DD, log=print):
     return lines
 
 
+def compare(built, stock):
+    """What a built .LOC did to the stock leaves of its slot -> dict (2026-10-24, scheduled check-in; the check that found the
+    heuristic's damage in the installed DD01-DD09 Russian files):
+      stock_sound   stock leaves with a sound           missing      of those, gone from the built file (fit() must never do this)
+      sid_changed   kept, but another sound id          blanked      kept, had a text, now has none (step 4 on a stock key: the bug)
+      flags_changed kept, other flags                   swapped      kept, non-empty text that differs from stock (step 2 / 3:
+                                                                     English subtitle; by design)
+      ours          leaves the stock file does not have   plus the first few keys of each fault list (*_eg).
+    A grafted Dead Men map re-points EVERY stock sound id to the joined .SND (kl_snd), so for those zips sid_changed ==
+    stock_sound is the graft, not a fault; 'missing' there can be the slot map's own campaign one-liners whose sound the joined
+    .SND no longer holds (seen: 86 L04/Dialogue leaves on the F02 / F04 slots) - NOT verified to be by design, say so."""
+    bt, st = L.parse(built), L.parse(stock)
+    r = dict(stub=bt is None or st is None)
+    if r['stub']:
+        return r
+    o = {k: n for k, n in L.leaves(bt)}
+    s = {k: n for k, n in L.leaves(st)}
+    r['stock_sound'] = sum(1 for n in s.values() if n.flags & L.SOUND)
+    r['ours'] = sum(1 for k in o if k not in s)
+    missing, sid, flg, blank, swap = [], [], [], [], []
+    for k, n in s.items():
+        if not n.flags & L.SOUND:
+            continue
+        m = o.get(k)
+        if m is None:
+            missing.append(k); continue
+        if m.flags != n.flags:
+            flg.append(k)
+        a, b = L.fields(n), L.fields(m)
+        if a[2] != b[2]:
+            sid.append(k)
+        if a[0] and not b[0]:
+            blank.append(k)
+        elif a[0] and b[0] and a[0] != b[0]:
+            swap.append(k)
+    for name, lst in (('missing', missing), ('sid_changed', sid), ('flags_changed', flg), ('blanked', blank), ('swapped', swap)):
+        r[name] = len(lst); r[name + '_eg'] = lst[:4]
+    return r
+
+
+def verify(dd=DD, langs=('Russian', 'Japanese'), log=print):
+    """Read-only scan of <dd>\\KLExpansion\\Maps\\*\\*_Main.zip: compare() every .LOC member of the given languages with the stock
+    .LOC of its slot (<dd>\\Scenes\\Locations\\F0n\\F0n_Main.zip; the F01 test slot has no stock file in place and is skipped).
+    -> [(map folder, zip name, language, compare() dict)]; one line per member is logged."""
+    maps = os.path.join(dd, 'KLExpansion', 'Maps')
+    out = []
+    for folder in sorted(os.listdir(maps)):
+        for zn in sorted(os.listdir(os.path.join(maps, folder))):
+            if not zn.lower().endswith('_main.zip'):
+                continue
+            stp = os.path.join(dd, 'Scenes', 'Locations', zn.split('_')[0], zn)
+            if not os.path.isfile(stp) or zn.split('_')[0].upper() == 'F01':
+                log('%s\\%s: no stock %s in place, skipped' % (folder, zn, zn.split('_')[0])); continue
+            with zipfile.ZipFile(os.path.join(maps, folder, zn)) as zb, zipfile.ZipFile(stp) as zs:
+                bm, sm = _loc_members(zb), _loc_members(zs)
+                for lg in langs:
+                    if lg not in bm or lg not in sm:
+                        continue
+                    r = compare(zb.read(bm[lg]), zs.read(sm[lg]))
+                    out.append((folder, zn, lg, r))
+                    if r.get('stub'):
+                        log('%s\\%s %s: stub' % (folder, zn, lg)); continue
+                    faults = [k for k in ('missing', 'blanked', 'flags_changed') if r[k]]
+                    log('%s\\%s %-9s stock sound leaves %d: missing %d, blanked %d, flags changed %d, sound id changed %d, English text %d, ours %d%s' % (
+                        folder, zn, lg, r['stock_sound'], r['missing'], r['blanked'], r['flags_changed'], r['sid_changed'], r['swapped'], r['ours'],
+                        ('  FAULT ' + ', '.join('%s %s' % (k, r[k + '_eg'][:2]) for k in faults)) if faults else ''))
+    return out
+
+
 if __name__ == '__main__':
     a = sys.argv[1:]
     if a[:1] == ['--stage'] and len(a) == 2:
         os.makedirs(a[1], exist_ok=True)
         print('\n'.join(stage(a[1])))
+    elif a[:1] == ['--verify']:
+        verify(*a[1:2])
     elif a and os.path.isfile(a[0]):
         rd = lambda i: open(a[i], 'rb').read() if len(a) > i else None
         rep = []

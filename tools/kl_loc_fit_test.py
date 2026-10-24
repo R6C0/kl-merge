@@ -214,6 +214,30 @@ def main():
     invariants(out, len(full2) - 20, st_b, 'same-length language')
     check(rep and rep[0].startswith('4 '), 'same-length language: no text swap possible, blanking is the first step taken')
 
+    # 10. compare(): the read-only check of a built file against its slot's stock file (what --verify runs on the installed zips)
+    st_b = L.build(stock)
+    c = F.compare(st_b, st_b)
+    check(not c['stub'] and c['stock_sound'] == 10 and c['missing'] == c['blanked'] == c['sid_changed'] == c['flags_changed'] == c['swapped'] == 0
+          and c['ours'] == 0, 'compare: the stock file against itself is clean (10 sound leaves)')
+    data, out, rep, st_b = run(tree, en, stock, cap2, 'compare, step-2 output')
+    c = F.compare(out, st_b)
+    check(c['missing'] == c['blanked'] == c['sid_changed'] == c['flags_changed'] == 0 and c['swapped'] > 0 and c['ours'] > 0,
+          'compare: a fit() output shows only English subtitles (swapped %d) and our leaves (%d), no fault' % (c['swapped'], c['ours']))
+    bad = L.parse(st_b)
+    f01 = bad[1].kids[0].kids
+    for n in f01:
+        if n.name == b'ExitLootArea_01_C2':
+            n.raw = b'\0' + n.raw[n.raw.index(b'\0') + 1:]                  # the bug's step-4 damage: subtitle blanked, voice kept
+        if n.name == b'ExitLootArea_01_C3':
+            n.raw = n.raw[:-4] + struct.pack('<I', 0x9999)                 # another sound id
+    f01[:] = [n for n in f01 if n.name != b'ExitLootArea_01_C4']            # a dropped stock sound leaf
+    c = F.compare(L.build(bad), st_b)
+    check(c['missing'] == 1 and c['missing_eg'] == ['Multiplayer/F01/ExitLootArea_01_C4'] and c['blanked'] == 1
+          and c['blanked_eg'] == ['Multiplayer/F01/ExitLootArea_01_C2'] and c['sid_changed'] == 1
+          and c['sid_changed_eg'] == ['Multiplayer/F01/ExitLootArea_01_C3'] and c['swapped'] == 0,
+          'compare: a dropped, a blanked and a re-pointed stock sound leaf are each found and named')
+    check(F.compare(b'\x01x\x00\x08\0\0\0\0', st_b)['stub'], 'compare: a stub is reported as such')
+
     print('RESULT: %s (%d checks failed)' % ('PASS' if not FAILS else 'FAIL', len(FAILS)))
     return 1 if FAILS else 0
 

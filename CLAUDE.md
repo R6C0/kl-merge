@@ -66,9 +66,12 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-24 01:50 UTC - scheduled check-in (cloud, PC busy, nothing run): kl_loc_fit's ownership heuristic (the way kl_dmvoice calls it) took every
-stock per-character line `..._C<n>` for ours - step 4 / 6 could blank or drop STOCK Russian / Japanese voice lines. Fixed (K_C<n> is ours only beside its
-base key K) + `tools/kl_loc_fit_test.py` (74 checks). Unverified whether an installed RU/JA .LOC lost stock lines: read the fit reports (log note).
+2026-10-24 06:00 UTC - scheduled check-in (cloud, PC idle, nothing run): the 01:50 kl_loc_fit heuristic bug DID land in the installed DD01-DD09
+PlainData builds: 248 (F02/F04/F05-type) / 136 (others) stock RUSSIAN per-character subtitles are blank (voice plays, leaf and sound id intact;
+Japanese clean, 1023 DM builds clean). New `python tools/kl_loc_fit.py --verify` (compare()/verify(), self-tested) found it; report
+`<work>\build\locverify_1024\verify_report.txt`, write-up debug/notes/2026-10-24-scheduled-triage.md. A rebuild with HEAD fits (blanks 1222 / 638
+KLVoice English subtitles instead). KLHook_1.dmp (01:10 PC) = FX2b: a 640x480 StretchRect from the render command list through ReShade32's proxy
+into nvd3dum (null read); one-off, but ReShade is in every D3D call's path - first A/B if it recurs.
 
 2026-10-24 02:17 - DEAD MEN VOICES ON ONE-LINE EVENTS (PlainData) INSTALLED on DD01-DD09: PD3 live 106 lines per-character, 0 faults,
 misses only the 2 police lines excluded on purpose. DM maps + T01 are built/grafted on G: but NOT installed: +4.5 GB on C: (9.5 GB free),
