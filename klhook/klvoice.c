@@ -145,6 +145,9 @@ static int kvo_leaf(const char *text, char leaf[64])
  *   Sites 0x4220b3 / 0x42211b (non-Arcade modes) are not served (GUESS: they pick the vector slot by a mode switch) - Arcade only like the rest. */
 #define KVO_NCV 512
 static struct { DWORD ln, vec, ocnt, ocap, odata, entry; char leaf[64]; } kvo_cv[KVO_NCV];
+#define KVO_NV 256   /* vector length: 0x51ab20 (the vector index) executes int3 when index >= count, and a flag-0 line's callers may pass a speaker whose voice byte is > 9 (GUESS: not checked), so every byte value gets a slot */
+static DWORD kvo_cv_sigdone;                                    /* walk signature the converted lines were last refreshed for (review: no 4096-key scan per line every walk) */
+static DWORD kvo_cv_tried[KVO_NCV], kvo_cv_trysig; static int kvo_cv_ntried;     /* flag-0 lines with no leaf for anybody at kvo_cv_trysig: not asked again until the wearers change */
 static int kvo_ncv, kvo_cv_told;
 static void *(__cdecl *kvo_malloc)(size_t);
 
@@ -154,8 +157,9 @@ static void kvo_cv_restore(const char *why)
 {
     int i, n = 0;
     for (i = 0; i < kvo_ncv; i++) {
-        DWORD ln = kvo_cv[i].ln, data = 0; BYTE f0 = 0, fl = 0;
-        if (klh_rd(ln + 0x20, &fl, 1) && fl == 1 && klh_rd(ln + 0x14, &data, 4) && data == kvo_cv[i].vec) {
+        DWORD ln = kvo_cv[i].ln, data = 0, cc[2]; BYTE f0 = 0, fl = 0;
+        /* review: also count == cap == KVO_NV, so a line that was freed and whose block was reused is never written */
+        if (klh_rd(ln + 0x20, &fl, 1) && fl == 1 && klh_rd(ln + 0x14, &data, 4) && data == kvo_cv[i].vec && klh_rd(ln + 8, cc, 8) && cc[0] == KVO_NV && cc[1] == KVO_NV) {
             DWORD o[2]; o[0] = kvo_cv[i].ocnt; o[1] = kvo_cv[i].ocap;
             if (klh_data((void *)(DWORD_PTR)(ln + 0x20), &f0, 1, "voice plaindata restore") &&
                 klh_data((void *)(DWORD_PTR)(ln + 8), o, 8, "voice plaindata restore") &&
@@ -163,14 +167,14 @@ static void kvo_cv_restore(const char *why)
         }
     }
     if (kvo_ncv && kvo.log) klog("voice: plaindata: %s: %d of %d converted single-entry lines put back", why, n, kvo_ncv);
-    memset(kvo_cv, 0, sizeof kvo_cv); kvo_ncv = 0; kvo_cv_told = 0;
+    memset(kvo_cv, 0, sizeof kvo_cv); kvo_ncv = 0; kvo_cv_told = 0; kvo_cv_sigdone = 0; kvo_cv_ntried = 0; kvo_cv_trysig = 0;
 }
 
 /* ln is a flag-0 line the walk found (isours 0) or one of our converted lines (isours 1, flag 1, data == our vector): make / refresh the vector.
    who[v] = Dead Men name of voice number v, or "". */
 static void kvo_cv_line(DWORD ln, int isours, char who[8][32], DWORD rules, const char *scene)
 {
-    DWORD entry = 0, vec, hdr[2]; char text[130], leaf[64]; const char *s; int k = -1, slot, any = 0, c = 0; size_t n; DWORD ents[10];
+    DWORD entry = 0, vec, hdr[2]; char text[130], leaf[64]; const char *s; int k = -1, slot, any = 0, c = 0; size_t n; DWORD ents[KVO_NV]; int i;
     if (isours) { k = kvo_cv_find(ln); if (k < 0) return; snprintf(leaf, sizeof leaf, "%s", kvo_cv[k].leaf); entry = kvo_cv[k].entry; }
     else {
         entry = klh_rd32(ln);
@@ -191,24 +195,29 @@ static void kvo_cv_line(DWORD ln, int isours, char who[8][32], DWORD rules, cons
         if (!e) { if (kvo.log > 1 && kvo_first_miss(scene, path)) klog("voice: plaindata: %s: no leaf %s (logged once)", leaf, path); continue; }
         ents[slot] = (DWORD)(DWORD_PTR)e; any = 1; c++;
     }
-    ents[8] = ents[9] = entry;                                  /* the voice numbers are 0..7; slots 8, 9 stay stock */
+    for (i = 8; i < KVO_NV; i++) ents[i] = entry;               /* the voice numbers are 0..7; every other index stays stock (never null, never out of range) */
     if (isours) {                                               /* refresh the vector in place (the wearers changed) */
-        if (memcmp((void *)(DWORD_PTR)kvo_cv[k].vec, ents, 40) && klh_data((void *)(DWORD_PTR)kvo_cv[k].vec, ents, 40, "voice plaindata slots") && kvo.log > 1)
+        if (memcmp((void *)(DWORD_PTR)kvo_cv[k].vec, ents, sizeof ents) && klh_data((void *)(DWORD_PTR)kvo_cv[k].vec, ents, sizeof ents, "voice plaindata slots") && kvo.log > 1)
             klog("voice: plaindata: line %08lx refreshed, %d of 8 slots ours (%s)", ln, c, leaf);
         return;
     }
-    if (!any || kvo_ncv >= KVO_NCV) return;                     /* nothing of ours for this event: the line stays stock and single */
+    if (!any || kvo_ncv >= KVO_NCV) {                           /* nothing of ours for this event: the line stays stock and single; not asked again until the wearers change */
+        if (!any && kvo_cv_ntried < KVO_NCV) kvo_cv_tried[kvo_cv_ntried++] = ln;
+        return;
+    }
     if (!kvo_malloc) { HMODULE m = GetModuleHandleA("msvcr90.dll"); kvo_malloc = m ? (void *(__cdecl *)(size_t))GetProcAddress(m, "malloc") : 0; }
     if (!kvo_malloc) { if (!kvo_cv_told++) klog("voice: plaindata: msvcr90 malloc not found - off"); return; }
     if (!klh_rd(ln + 8, hdr, 8)) return;
-    if (!(vec = (DWORD)(DWORD_PTR)kvo_malloc(40))) return;
-    memcpy((void *)(DWORD_PTR)vec, ents, 40);
+    if (!(vec = (DWORD)(DWORD_PTR)kvo_malloc(sizeof ents))) return;
+    memcpy((void *)(DWORD_PTR)vec, ents, sizeof ents);
     kvo_cv[kvo_ncv].ln = ln; kvo_cv[kvo_ncv].vec = vec; kvo_cv[kvo_ncv].ocnt = hdr[0]; kvo_cv[kvo_ncv].ocap = hdr[1]; kvo_cv[kvo_ncv].odata = klh_rd32(ln + 0x14);
     kvo_cv[kvo_ncv].entry = entry; snprintf(kvo_cv[kvo_ncv].leaf, sizeof kvo_cv[kvo_ncv].leaf, "%s", leaf);
-    { DWORD nw[2] = { 10, 10 }; BYTE one = 1;                   /* data first, then count / cap, the flag last */
-      if (!klh_data((void *)(DWORD_PTR)(ln + 0x14), &vec, 4, "voice plaindata") ||
-          !klh_data((void *)(DWORD_PTR)(ln + 8), nw, 8, "voice plaindata") ||
-          !klh_data((void *)(DWORD_PTR)(ln + 0x20), &one, 1, "voice plaindata")) { if (!kvo_cv_told++) klog("voice: plaindata: a write was refused"); return; } }
+    { DWORD nw[2] = { KVO_NV, KVO_NV }, od = klh_rd32(ln + 0x14); BYTE one = 1, zero = 0;   /* data first, then count / cap, the flag last; any refusal undoes what was written (review) */
+      if (!klh_data((void *)(DWORD_PTR)(ln + 0x14), &vec, 4, "voice plaindata")) { if (!kvo_cv_told++) klog("voice: plaindata: a write was refused"); return; }
+      if (!klh_data((void *)(DWORD_PTR)(ln + 8), nw, 8, "voice plaindata") || !klh_data((void *)(DWORD_PTR)(ln + 0x20), &one, 1, "voice plaindata")) {
+          klh_data((void *)(DWORD_PTR)(ln + 0x20), &zero, 1, "voice plaindata undo"); klh_data((void *)(DWORD_PTR)(ln + 8), hdr, 8, "voice plaindata undo");
+          klh_data((void *)(DWORD_PTR)(ln + 0x14), &od, 4, "voice plaindata undo");
+          if (!kvo_cv_told++) klog("voice: plaindata: a write was refused"); return; } }
     kvo_ncv++;
     if (kvo.log > 1) klog("voice: plaindata: line %08lx (event %s, stock entry %08lx) now per-character: vector %08lx, %d of 8 voice slots ours", ln, leaf, entry, vec, c);
 }
@@ -407,18 +416,18 @@ static void kvo_tick(int game_thread)
     now = GetTickCount();
     if (!kvo_patched && (kvo.playlog || kvo.plain)) kvo_patch();           /* once; the guard refuses it in SHIP / SessionSafe=1 */
     kvo_p.valid = 0;                                                       /* set again below once this tick knows who wears which voice */
-    if (!klw_who_now(&w)) { if (kvo_nrec) kvo_restore_all("no Arcade round"); if (kvo_ncv) kvo_cv_restore("no Arcade round"); kvo_s.had = 0; return; }
+    if (!klw_who_now(&w)) { if (kvo_nrec) kvo_restore_all("no Arcade round"); if (kvo_ncv || kvo_cv_ntried) kvo_cv_restore("no Arcade round"); kvo_s.had = 0; return; }
     if (!klx_on || !klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) return;
     v = klx_level_verdict(scene, why);
     if (v == 1 && kvo.stock) v = 2;
-    if (v != 2) { if (kvo_nrec) kvo_restore_all("not a Dead Men level"); if (kvo_ncv) kvo_cv_restore("not a Dead Men level"); return; }
+    if (v != 2) { if (kvo_nrec) kvo_restore_all("not a Dead Men level"); if (kvo_ncv || kvo_cv_ntried) kvo_cv_restore("not a Dead Men level"); return; }
     if (!(mgr = klh_rd32((DWORD_PTR)KLH_VA(KLK_MANAGER)))) return;
     { DWORD sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF)), a = sys ? klh_rd32(sys + 0xac) : 0, lm = 0;
       if (a) klh_rd(a + 0x94, &lm, 4);
       /* generation = rules object, scene, speech manager and LOC lookup object: any change drops what we replaced (the lines are rebuilt) */
       if (kvo_gen.rules != w.rules || kvo_gen.mgr != mgr || kvo_gen.lm != lm || strcmp(kvo_gen.scene, scene)) {
           if (kvo_nrec) kvo_restore_all("a new level generation");
-          if (kvo_ncv) kvo_cv_restore("a new level generation");
+          if (kvo_ncv || kvo_cv_ntried) kvo_cv_restore("a new level generation");
           memset(&kvo_p, 0, sizeof kvo_p);                 /* the single-entry lines are rebuilt with the level too */
           memset(&kvo_gen, 0, sizeof kvo_gen); kvo_gen.rules = w.rules; kvo_gen.mgr = mgr; kvo_gen.lm = lm; snprintf(kvo_gen.scene, sizeof kvo_gen.scene, "%s", scene); memset(&kvo_s, 0, sizeof kvo_s); } }
     kvo_played(mgr, now);
@@ -445,6 +454,7 @@ static void kvo_tick(int game_thread)
     kvo_s.sig = sig; kvo_s.next = now + (DWORD)kvo.period;
 
     kvo_s.walks++;
+    if (kvo.plaindata && kvo_cv_trysig != sig) { kvo_cv_ntried = 0; kvo_cv_trysig = sig; }     /* the wearers changed: lines without a leaf are asked again */
     {
         int nl = 0, nsw = 0, nrs = 0, nmiss = 0;
         for (g = 0; g < KVO_GROUPS + 1; g++) {
@@ -460,8 +470,11 @@ static void kvo_tick(int game_thread)
                 ln = lines[lk];
                 if (ln && kvo.plaindata) {                       /* PlainData: our converted lines are refreshed, flag-0 lines converted */
                     BYTE f2 = 0; DWORD d2 = 0; int ci = kvo_cv_find(ln);
-                    if (ci >= 0 && klh_rd(ln + 0x20, &f2, 1) && f2 == 1 && klh_rd(ln + 0x14, &d2, 4) && d2 == kvo_cv[ci].vec) { kvo_cv_line(ln, 1, who, w.rules, scene); continue; }
-                    if (ci < 0 && klh_rd(ln + 0x20, &f2, 1) && f2 == 0) { kvo_cv_line(ln, 0, who, w.rules, scene); if (kvo_cv_find(ln) >= 0) continue; }
+                    if (ci >= 0 && klh_rd(ln + 0x20, &f2, 1) && f2 == 1 && klh_rd(ln + 0x14, &d2, 4) && d2 == kvo_cv[ci].vec) { if (kvo_cv_sigdone != sig) kvo_cv_line(ln, 1, who, w.rules, scene); continue; }
+                    if (ci < 0 && klh_rd(ln + 0x20, &f2, 1) && f2 == 0) {
+                        int ti, tried = 0; for (ti = 0; ti < kvo_cv_ntried; ti++) if (kvo_cv_tried[ti] == ln) tried = 1;
+                        if (!tried) kvo_cv_line(ln, 0, who, w.rules, scene);
+                        if (tried || kvo_cv_find(ln) >= 0) continue; }
                 }
                 if (ln && kvo.plain && klh_rd(ln + 0x20, &flag, 1) && flag == 0) { kvo_f0_note(ln, who, w.rules, scene); continue; }      /* Plain: a flag-0 line (the walk never touches it; the thunk does) */
                 if (!ln || !klh_rd(ln + 0x20, &flag, 1) || flag != 1 ||!klh_rd(ln + 8, &vcnt, 4) || vcnt < 8 || vcnt > 16 || !klh_rd(ln + 0x14, &vdata, 4) || !vdata) continue;
@@ -502,6 +515,7 @@ static void kvo_tick(int game_thread)
                 }
             }
         }
+        if (kvo.plaindata) kvo_cv_sigdone = sig;
         kvo_s.lines = nl; kvo_s.swapped += nsw; kvo_s.restored += nrs; kvo_s.missing += nmiss;
         if (kvo.log && (nsw || nrs || nmiss || !kvo_s.told_layout || (!nl && !kvo_s.told_none))) {
             klog("voice: walk %d (rules %08lx): %d per-character lines, %d entries replaced, %d put back, %d without a leaf; wanted voice numbers: %d%s",
