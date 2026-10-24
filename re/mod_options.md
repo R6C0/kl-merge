@@ -1,0 +1,77 @@
+﻿# Mod options (2026-10-24)
+
+Every owner-facing on/off feature of the Dog Days mod, with the KLHook.ini key, the live value, the recommendation and when a change applies.
+Tool: `tools/kl_mod_options.py` (run `KL Mod Options.bat`; installed by `INSTALL KL Mod Options.bat` into `<DD>\KLModOptions\`). It shows one checkbox per
+row, labelled "(recommended on)" or "(recommended off)", has a Recommended button, backs KLHook.ini up once (`KLHook.ini.before-modoptions`),
+refuses to save while kl2.exe runs, and only rewrites the lines of features whose state changed. CLI: `--list`, `--recommended`, `--set id=on|off`, `--apply`, `--restore`.
+
+Takes effect: keys are read by GetPrivateProfileInt at DLL init, so nearly every row applies at the next game start. Rows marked "needs newer DLL"
+are the three `[FrameLimit]` rows: the installed DLL (k29b, md5 aa912e09d2d5d6ca010899d505d70341) was built without klfps.c, so those keys do nothing until a DLL with it is installed (then change `when` to 'start' in the tool).
+
+Note: the Recommended button would flip the owner's live Neural from 1 to 0 (the ini notes 188 fps off against 106..178 on), CarDown Dry to off, and Music/Rigid are already off.
+
+## Inventory
+| id | feature (label in the tool) | ini key(s) | live now | recommended | takes effect | why |
+|---|---|---|---|---|---|---|
+| | **Core** | | | | | |
+| allmaps | Mod features on the nine stock Fragile Alliance maps | [KLHook] AllMaps=1/0 | on (AllMaps=1) | on | next start | owner: every feature also on the stock maps; their Steam stats stay blocked |
+| expansion | Dead Men maps in the Arcade menu | [Expansion] Enable=1/0 | on (Enable=1) | on | next start | the expansion itself: the Dead Men map pages and their redirects |
+| character | Heister, mask and outfit select | [Character] Enable=1/0 | on (Enable=1) | on | next start | the Heister page in Arcade (Dead Men and Payday 2 masks) |
+| guns | Dead Men gun looks and start rifle (Mod settings rows) | [Guns] Enable=1/0 | on (Enable=1) | on | next start | works with the maps built with the guns; harmless elsewhere |
+| shop | More guns in the weapon shop | [Shop] Enable=1/0 | on (Enable=1) | on | next start | run live 2026-10-20 (rows swapped for Minimi, HK69, Type 81, Rem 700) |
+| hud | Mod HUD (kill feed, scoreboard, trackers, names) | [HUD] Enable=1/0 | on (Enable=1) | on | next start | the owner plays with it |
+| balance | One damage scale for you, police and crew (Dead Men maps) | [Balance] Enable=1/0 | on (Enable=1) | on | next start | v71 balance: the owner found the stock numbers too tanky |
+| climb | Free climb (hold W + E at a ledge) | [Climb] Enable=1/0 | on (Enable=1) | on | next start | Dead Men's climb (luvsic's), only on maps with the climb clips |
+| censor | Head shots blow the head off (pixelated censor) | [Censor] Enable=1/0 | on (Enable=1) | on | next start | owner item 9; heap data only |
+| crewlook | Random looks for the AI heisters | [Crew] Random=1/0 | on (Random=1) | on | next start | no body twice, never the one you wear |
+| | **AI crew and traitors** | | | | | |
+| bots | AI heisters in Arcade | [Bots] Enable=1/0 | on (Enable=1) | on | next start | the whole crew system (bots); other crew rows need it |
+| escort | One AI heister stays beside you | [Bots] Escort=1/0 | on (Escort=1) | on | next start | seen live 2026-10-11 (standing player only) |
+| followout | The crew follows you out once the vehicle is called | [Bots] FollowOut=1/0 | on (FollowOut=1) | on | next start | seen live 2026-10-11 (run FO_J1) |
+| boardall | Idle AI heisters are sent to the escape vehicle | [Bots] BoardAll=1/0 | on (BoardAll=1) | on | next start | seen live 2026-10-11 (runs L12a / L12b) |
+| traitors | Traitors: an AI heister can turn on you (20 % of rounds) | [Bots] Backstab=20/0, [Bots] Tune=1/keep, [Bots] TraitorFoe=1/keep | on (Backstab=20) | on | next start | owner asked for backstabbing 2026-10-11; 35 -> 20 on 2026-10-23, max 1 a round |
+| crewhop | AI heisters cross places the navmesh cannot (Retomoto lobby) | [CrewHop] Enable=1/0 | on (Enable=1) | on | next start | the lobby car is down; without it they stand |
+| crewjoin | AI heisters follow the tower-to-lobby jump (Retomoto) | [CrewJoin] Enable=1/0 | on (Enable=1) | on | next start | two navmeshes joined only by kljoin.c |
+| traits | A small trait per Dead Men character | [Traits] Enable=1/0 | on (Enable=1) | on | next start | enabled in the live ini; the effect is small and logged |
+| talk | Kane and Lynch dialogue and chatter | [Talk] Enable=1/0 | on (Enable=1) | on | next start | Retomoto countdown and the idle chatter |
+| | **Down, revive, fed** | | | | | |
+| down | You go down and can be revived | [Down] Enable=1/0 | on (Enable=1) | on | next start | the Dead Men down; tuned with the owner 2026-10-12 |
+| botdown | AI heisters go down instead of dying | [BotDown] Enable=1/0 | on (Enable=1) | on | next start | live 2026-10-12 on Subway and Retomoto |
+| adrenaline | Help a downed AI heister (stand by him, hold E) | [Adrenaline] Enable=1/0 | on (Enable=1) | on | next start | the get-up help; the shot animation is in |
+| fed | Come back as a policeman after you die | [Fed] Enable=1/0, [Fed] Player=1/0 | on (Enable=1) | on | next start | seen live 2026-10-11 (Withdrawal); once a round |
+| cardown | A car blast floors people (revivable) instead of killing | [CarDown] Dry=0/1 | off (Dry=1) | off | next start | offsets are GUESSED: it is in LOG-ONLY mode (Dry=1) until the log is read; OFF here = log only |
+| | **Sound and music** | | | | | |
+| ambience | Ambience bed and timed one-shot sounds | [Ambience] Enable=1/0 | on (Enable=1) | on | next start | MCI mp3 worker; the owner kept it when the stutter was found to be the Payday 2 jukebox |
+| stinger | Event stingers (cues when the heist goes loud, a betrayal ...) | [Stinger] Enable=1/0 | on (Enable=1) | on | next start | short one-shots; the Payday 2 clips are out of the live lists |
+| voice | Dead Men voice lines for the Dead Men heisters | [Voice] Enable=1/0 | on (Enable=1) | on | next start | owner 2026-10-23; PlainData live-tested 2026-10-24 |
+| music | Payday 2 music jukebox (needs Payday 2) | [Music] Enable=1/0 | off (Enable=0) | off | next start | it made the game stutter (owner 2026-10-23: gone with it off); Retomoto keeps its own music either way |
+| | **Graphics and camera** | | | | | |
+| reshade | ReShade look (LiveLeak camcorder) | [Graphics] Look=2/0 | on (Look=2) | on | next start | the look the owner chose (Look=2); ReShade is on the stack at some hitches, so off = full frame rate |
+| camerafx | Camera FX (distortion with shots and hits) | [Graphics] CameraFX=3/0 | on (CameraFX=3) | on | next start | also a live row in the game: Options > Mod settings (strong = 3) |
+| glare | Lens glare | [Graphics] Glare=1/0 | on (Glare=1) | on | next start | also a live row in Mod settings |
+| aa | Anti-aliasing (SMAA) | [Graphics] AA=1/0 | on (AA=1) | on | next start | also a live row in Mod settings |
+| textures | Sharper textures (anisotropic x16) | [Graphics] Textures=1/0 | on (Textures=1) | on | next start | about 1 % fps |
+| neural | Neural rendering (GITC Uplift DLSS / DLAA, F10) | [Graphics] Neural=1/0 | on (Neural=1) | off | next start | ini note: 188 fps with it set aside against 106 .. 178 with it; needs the add-on files |
+| rigid | Camera turn filter (heavier, smoother turn) | [Rigid] Enable=1/0 | off (Enable=0) | off | next start | owner 2026-10-24: 'camera awful / fps bad' was this filter's lag; aim is exempt either way |
+| framelimit | Frame limiter (RTSS-style, removes frame-time stutter) | [FrameLimit] Enable=1/0 | on (Enable=1, absent = DLL default) | on | needs the newer DLL (not installed yet) | owner 2026-10-24: RTSS does the same; klfps.c caps at the refresh rate, timed at presentation (NOT RUN IN THE GAME yet) |
+| frontedge | Limiter: front edge sync (wait just before Present) | [FrameLimit] FrontEdge=1/0 | on (FrontEdge=1, absent = DLL default) | on | needs the newer DLL (not installed yet) | the RTSS setting the owner uses; off = back edge (older picture, not recommended) |
+| passivewait | Limiter: passive waiting (Sleep instead of a busy loop) | [FrameLimit] PassiveWait=1/0 | off (PassiveWait=0, absent = DLL default) | off | needs the newer DLL (not installed yet) | the RTSS setting the owner uses (false): busy loop = no scheduler jitter, costs one core a few ms a frame |
+| | **Stability and fixes** | | | | | |
+| flash | Flash the taskbar when a load or round ends | [QoL] FlashOnReady=1/0 | on (FlashOnReady=1) | on | next start | in the owner's live ini (he alt-tabs during the 60..120 s loads) |
+| releasecursor | Release the mouse when the game loses focus | [QoL] ReleaseCursor=1/0 | on (ReleaseCursor=1) | on | next start | in the owner's live ini |
+| fastexit | Alt+F4 / close ends the game at once | [KLHook] FastExit=1/0 | on (FastExit=1, absent = DLL default) | on | next start | fixed the hang on close (verified live 2026-10-24, 545 ms) |
+| continue | Keep playing after a game assert | [KLHook] ContinueAsserts=1/0 | on (ContinueAsserts=1) | on | next start | the hook logs the assert and goes on instead of ending the game |
+| memory | Room for the big Dead Men maps (address space) | [Memory] Enable=1/0 | on (Enable=1) | on | next start | avoids the 2 GB heap NULL crash on large .prm files |
+| steamblock | Block Steam stats / leaderboards on modded rounds | [Steam] Block=1/0 | on (Block=1) | on | next start | keeps modded rounds out of your Steam stats and achievements |
+| | **Experimental / not tried in play** | | | | | |
+| match | Private-match options (gun, vote, playlist) | [Match] Enable=1/0 | off (Enable=0, absent = DLL default) | off | next start | built, never run live |
+| netsmooth | Smooth remote players' turning (online) | [NetSmooth] Enable=1/0 | off (Enable=0, absent = DLL default) | off | next start | offline-proven only, no online run yet |
+| watchdog | Watchdog for a stuck AI heister | [QoL2] Watchdog=1/0 | off (Watchdog=0, absent = DLL default) | off | next start | not run in the game |
+| names | Dead Men map names in the Arcade lists | [Names] Enable=1/0 | off (Enable=0, absent = DLL default) | off | next start | live-tested once (PD1); off until the owner OKs the renaming |
+| inv | Gun shelf: carry more than two guns (F8) | [Inv] Enable=1/0 | off (Enable=0, absent = DLL default) | off | next start | research feature, off by default |
+
+## Data-side features (no ini switch; each has its own undo script)
+White shop, cover boxes, Dead Men voice .LOC graft, Hot Coffee II door fix, and the existing in-game "Mod settings" page rows (window KLGuns, rows KLS*). Undo with the matching script beside each install in tools/ and the work folder.
+
+## Why no in-game page
+The menu manager table has 5096 slots with a 5000 hazard (re/hud_menu.md 1.1); every new window tag costs slots and the Mod settings window already holds the guard maximum of 9 rows (mkoverlay.py). The Match page was never seen live and no live test is allowed in this task. A Tk tool is safe and testable offline. Future work: a two-row selector (feature name row + On/Off row) using the klchar.c private-vtable name pattern, `<Text>` values cost no slots.
