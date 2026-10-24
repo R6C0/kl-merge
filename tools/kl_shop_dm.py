@@ -44,7 +44,8 @@ import kl_hud_menu as HM
 import kl_hud_shop as HS
 import kl_loc as L
 
-MARK = '<!-- kl_shop_dm 1024v2 -->'
+MARK = '<!-- kl_shop_dm 1024v3 -->'
+MARK_V2 = '<!-- kl_shop_dm 1024v2 -->'            # v2's marker line: only the star fix is applied (v3), see restyle_xml
 MARK_V1 = '<!-- kl_shop_dm 1024 -->'            # v1's marker line: replaced by MARK (the v1 colour sets stay, see restyle_xml)
 GAME = W.GAME
 WORK_FALLBACK = r'G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men\KL_PortTools'
@@ -358,7 +359,11 @@ def restyle_xml(xml, log=print):
             new = S(new, Y=DESC_Y2, TextWidth=DESC_W, ColorSet='DMSteel', X=DESC_X, LineSpace=DESC_LS, FadeInTime=0.25, FadeInDelay=0.14); n('description block')
         elif tag == 'WeaponShopStar':
             k = int(a['Graphic'].split('#')[1]) - 1
-            new = S(new, Y=STAR_Y, X=STAR_X0 + ROW_PITCH * k, FadeInTime=STAR_T, FadeInDelay=round(0.12 + 0.06 * k, 3)); n('stars on the name row')
+            # v3: NO FadeIn on the stars. ZMercsGraphicFA::Update (0x58bc50) dims stars above the weapon's tier with SetAlpha(0x22) every frame, then the
+            # base ZGraphic::Update runs the element's effect (0x637d50), whose slot 0 (0x53bdf0) calls SetAlpha(AlphaMax=255): the effect overwrote the dim
+            # and every star looked lit (v2 bug). GUESS from static reading of kl2.exe, not run in the game.
+            new = S(new, Y=STAR_Y, X=STAR_X0 + ROW_PITCH * k)
+            new = re.sub(r'\s+(FadeInTime|FadeInDelay)\s*=\s*"[^"]*"', '', new); n('stars on the name row')
         elif tag in ('PackagePrice', 'IsWeaponAvailable'):
             new = S(new, Y=PRICE_Y, X=PRICE_X); n('price strip')
         elif tag == 'WeaponShopLock':
@@ -376,6 +381,14 @@ def restyle_xml(xml, log=print):
             new = S(new, FadeInTime=0.15); n('panel fade')
         return new if new != text else None
 
+    if MARK_V2 in xml and MARK not in xml:
+        # v2 source (live): only the stars change (fade attributes removed) and the marker line becomes v3
+        def fn_star(t, text):
+            if t.window in SHOP_WINDOWS and t.name == 'GuiElement' and dict(t.attrs).get('TagName') == 'WeaponShopStar':
+                return re.sub(r'\s+(FadeInTime|FadeInDelay)\s*=\s*"[^"]*"', '', text)
+            return None
+        out, k = HM.rewrite(xml, fn_star)
+        return out.replace(MARK_V2, MARK, 1), {'v2 -> v3 star fade removed': k}
     if MARK in xml:
         log('  online.xml: v2 marker found (already applied), left as it is')
         return xml, {'already applied': 1}
@@ -646,6 +659,15 @@ def apply(src, out_dir, log=print, mock=True):
     xml, cnt = restyle_xml(z.read(xml_name).decode('latin-1'), log)
     new[xml_name] = xml.encode('latin-1'); man['xml'] = cnt
     log('online.xml: %s' % cnt)
+    if MARK_V2 in z.read(xml_name).decode('latin-1') and MARK not in z.read(xml_name).decode('latin-1'):
+        # v2 -> v3: XML only. Texture and .LOC of a v2 source stay byte-for-byte (the LOC pass is not byte-stable on a source carrying other tools' edits).
+        os.makedirs(out_dir, exist_ok=True)
+        dst = os.path.join(out_dir, 'F01_Main.zip')
+        W.rezip_raw_multi(src, dst, new)
+        man['out'] = dst; man['out_md5'] = md5(open(dst, 'rb').read()); man['out_bytes'] = os.path.getsize(dst)
+        json.dump(man, open(os.path.join(out_dir, 'manifest.json'), 'w'), indent=1)
+        log('v2 source: XML only; wrote %s (md5 %s)' % (dst, man['out_md5'][:8]))
+        return man
     tex_name = next(n for n in z.namelist() if n.lower() == (STEM + '.tex').lower())
     new[tex_name], man['tex'] = bake_tex(z.read(tex_name), z, log)
     table = stat_table(src)
@@ -714,7 +736,7 @@ def check(src, out_dir, log=print):
         if not (n.lower().endswith(('.loc', '.tex')) or n.lower() == ONLINE.lower()):
             fails.append('unexpected member changed: %s' % n)
     xs, xd = zs.read(ONLINE).decode('latin-1'), zd.read(ONLINE).decode('latin-1')
-    marked_src = MARK in xs or MARK_V1 in xs
+    marked_src = MARK in xs or MARK_V2 in xs or MARK_V1 in xs
     if HM.anomalies(xd):
         fails.append('XML does not parse cleanly: %s' % HM.anomalies(xd)[:3])
     # element count and table signature
@@ -1006,7 +1028,7 @@ def mock_all(arc, out_dir, log=print):
                 for w2 in wrap(ln, DESC_W):
                     text(im, DESC_X, y, w2, CS['DMSteel'][0], 'Text', 'l', A(t, 0.14, 0.25)); y += DESC_LS
             for k in range(TIERS[r]):
-                put(im, star, STAR_X0 + ROW_PITCH * k, STAR_Y, A(t, 0.12 + 0.06 * k, STAR_T))
+                put(im, star, STAR_X0 + ROW_PITCH * k, STAR_Y)
             text(im, 768 - PRICE_X, PRICE_Y, '$ {:,}'.format((2, 4, 6, 8, 10, 13, 15, 18)[r % 8] * 1000), GREEN, 'Text', 'r')
         text(im, -2, 506, 'NEXT ROUND 4', (0xbd, 0xb8, 0xae)); text(im, 768, 506, 'BACK', (0xf3, 0xf0, 0xea), 'Text', 'r')
         d.rectangle([OX, OY, OX + 767, OY + 575], outline=(60, 70, 90, 255))        # the 768 x 576 base group, for the eye
