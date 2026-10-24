@@ -66,6 +66,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-25 00:30 - INSTALLED (owner 'install all'), not live-tested: lastcall2 (DM05A c563e6bc: heli at far roof end, 6 yakuza/bodyguard waves,
+99/53 budget, 22 civs); DM02 shops variant A (30b3ddf0; B = fallback); interact kick doors + extinguishers on DM01B f0aaba92, DM03A 3d4ae43a,
+DM06 38b20312, DM09 99a4ff75 (DM01 skipped: e8 shop v2 02d2a481, rebase job running); arrivals plop DM11B f896a376. Camera bug: log shows
+CamSmooth causing jumps (STANCE fires on turns, takeover shows 60 cm vs raw 1 cm) -> live [CamSmooth] Dry=1 (.before-1024camdry); k37 fix job running.
+
 2026-10-24 - STAGED, NOT INSTALLED: kick doors + extinguishers C:/kl_build_1024/interact_1024r2/stage (tools/kl_interact_graft.py; INSTALL/UNDO interact.bat, backup
 .before-1024interact, rehearsed on scratch, undo byte-identical). DM01 5522ebcf->48cd4942, DM01B 0a34b035->653377d1, DM03A 89256d16->7a2dbdd3, DM06 2faf4742->91f2e93e,
 DM09 e2c7d5bd->451ceb91: 5 kick doors each on DM01/DM01B/DM03A (stock F03 leaf replaces a static DM leaf), 4 extinguishers on all five. Live test needed (kick, swing, can).
