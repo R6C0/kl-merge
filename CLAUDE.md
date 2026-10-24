@@ -66,19 +66,17 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 12:49 - INSTALLED SHIP out_3f_1024k27c B5252D74 + ini 3B27E903 ([Rigid] Enable=0: the owner's 'camera awful / fps bad' was the
+filter's lag; his fps was 210 vs 184 yesterday). k27c: Alt+F4 key-watch thread (KW1 live PASS, 545 ms), MciPump default 0, lift CarStall,
+'coming to get you' only on a real kneel + REVIVE log lines. Undo: <work>\build\camoff_1024\UNDO k27c and camera off.bat. Open: lift doors
+shut for heisters (lead: TriggerBox_OpenExitElevator AllInside wants every merc inside, unproven); 'cant revive a bot until the popup'.
+
 2026-10-24 10:10 UTC - scheduled check-in (cloud, PC idle, nothing run): the blanked stock subtitles REPAIRED into the work folder, not
 installed: new `kl_loc_fit.repair()` / `--repair OUTDIR` (stock text back from the slot's stock file, own sound id kept, fit() again WITH
 the stock reference) + `--install OUTDIR` (zip rewritten beside itself, backup .before-locrepair); stock_zip() reads KL_PortBackup (read
 only) so the F01 slot is compared at last. All 29 zips x 9 languages: DD01-DD09 Russian 248/136 -> 0 blank (back as English subtitles,
 623/354 KLVoice subtitles blanked instead), NEW DM01 Japanese 233 -> 0; everything else clean. Output `<work>\build\locrepair_1024\`.
 Owner / local session: `python tools\kl_loc_fit.py --install <that folder>` (+2.5 GB backups on C:), then `--verify` -> blanked 0 everywhere.
-
-2026-10-24 06:00 UTC - scheduled check-in (cloud, PC idle, nothing run): the 01:50 kl_loc_fit heuristic bug DID land in the installed DD01-DD09
-PlainData builds: 248 (F02/F04/F05-type) / 136 (others) stock RUSSIAN per-character subtitles are blank (voice plays, leaf and sound id intact;
-Japanese clean, 1023 DM builds clean). New `python tools/kl_loc_fit.py --verify` (compare()/verify(), self-tested) found it; report
-`<work>\build\locverify_1024\verify_report.txt`, write-up debug/notes/2026-10-24-scheduled-triage.md. A rebuild with HEAD fits (blanks 1222 / 638
-KLVoice English subtitles instead). KLHook_1.dmp (01:10 PC) = FX2b: a 640x480 StretchRect from the render command list through ReShade32's proxy
-into nvd3dum (null read); one-off, but ReShade is in every D3D call's path - first A/B if it recurs.
 
 2026-10-24 02:31 - DEAD MEN VOICES ON ONE-LINE EVENTS NOW LIVE for the owner: SHIP 5ab09e1c + KLHook.ini [Voice] PlainData=1 (md5
 CBA52979, undo <work>\build\plaindata_1024\UNDO PlainData voices.bat); data on DD01-DD09. PD4 (TEST twin) PASS 108 lines, 0 faults.
