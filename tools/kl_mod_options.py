@@ -114,9 +114,28 @@ feat('neural', G_GFX, 'Neural rendering (GITC Uplift DLSS / DLAA, F10)', 'off', 
      'ini note: 188 fps with it set aside against 106 .. 178 with it; needs the add-on files', [('Graphics', 'Neural', 1, 0, 0)])
 feat('rigid', G_GFX, 'Camera turn filter (heavier, smoother turn)', 'off', 'start',
      "owner 2026-10-24: 'camera awful / fps bad' was this filter's lag; aim is exempt either way", [('Rigid', 'Enable', 1, 0, 0)])
-feat('framelimit', G_GFX, 'Frame limiter (RTSS-style, removes frame-time stutter)', 'on', 'start',
-     'owner 2026-10-24: RTSS does the same; klfps.c caps at the refresh rate, timed at presentation (NOT RUN IN THE GAME yet)',
-     [('FrameLimit', 'Enable', 1, 0, 1)])
+def screen_hz():
+    """The primary screen's refresh rate (GetDeviceCaps VREFRESH), 60 when it cannot be read."""
+    try:
+        import ctypes
+        u, g = ctypes.windll.user32, ctypes.windll.gdi32
+        dc = u.GetDC(0); hz = g.GetDeviceCaps(dc, 116); u.ReleaseDC(0, dc)
+        return hz if 1 < hz <= 1000 else 60
+    except Exception:
+        return 60
+
+
+# owner 2026-10-24: 'have 4 different options: 240fps, 120fps, 60fps, 30fps'. One row each, they exclude each other (ticking one unticks
+# the others); none ticked = limiter off. Recommended = the highest preset <= the screen's refresh rate, the same one klfps.c's
+# auto (Fps=0) picks, so an ini with Fps=0 shows that row ticked.
+FPS_PRESETS = (240, 120, 60, 30)
+HZ = screen_hz()
+FPS_REC = next((p for p in FPS_PRESETS if HZ >= p), 30)
+for _p in FPS_PRESETS:
+    feat('fps%d' % _p, G_GFX, 'Frame limiter %d fps (RTSS-style, removes frame-time stutter)' % _p, 'on' if _p == FPS_REC else 'off', 'start',
+         'your screen: %d Hz; one of the four presets (ticking one unticks the others, none = no limiter); timed at presentation '
+         '(klfps.c, NOT RUN IN THE GAME yet)' % HZ, [('FrameLimit', 'Fps', _p, None, 0), ('FrameLimit', 'Enable', 1, None, 1)])
+    F[-1]['preset'] = _p
 feat('frontedge', G_GFX, 'Limiter: front edge sync (wait just before Present)', 'on', 'start',
      'the RTSS setting the owner uses; off = back edge (older picture, not recommended)', [('FrameLimit', 'FrontEdge', 1, 0, 1)])
 feat('passivewait', G_GFX, 'Limiter: passive waiting (Sleep instead of a busy loop)', 'off', 'start',
@@ -207,25 +226,40 @@ def set_key(lines, sec, key, val):
 
 def state(lines, f):
     """-> (on: bool, custom: the master value when it is neither the on nor the off value, else None)"""
+    if 'preset' in f:                                       # frame limiter preset: on = limiter on and Fps is this preset (0 = auto)
+        fps = get_int(lines, 'FrameLimit', 'Fps', 0)
+        on = get_int(lines, 'FrameLimit', 'Enable', 1) != 0 and (fps or FPS_REC) == f['preset']
+        return on, None
     sec, key, onv, offv, dflt = f['keys'][0]
     v = get_int(lines, sec, key, dflt)
     return v != offv, (v if v not in (onv, offv) else None)
 
 
+def preset_conflict(wants):
+    """More than one frame-limiter preset wanted on -> error text, else None."""
+    on = [fid for fid, w in wants.items() if w and 'preset' in BY_ID[fid]]
+    return 'pick one frame limiter preset, not %s' % ' + '.join(on) if len(on) > 1 else None
+
+
 def plan(lines, wants):
     """wants: {id: bool}. -> list of (section, key, value) writes for the features whose state differs."""
     out = []
+    final = {f['id']: wants.get(f['id'], state(lines, f)[0]) for f in F if 'preset' in f}
     for fid, want in wants.items():
         f = BY_ID[fid]
         on, _ = state(lines, f)
         if on == want:
+            continue
+        if 'preset' in f and not want:                      # unticked: the limiter goes off only when no other preset is ticked
+            if not any(final.values()):
+                out.append(('FrameLimit', 'Enable', 0))
             continue
         for sec, key, onv, offv, dflt in f['keys']:
             if want:
                 out.append((sec, key, onv))
             elif offv is not None:
                 out.append((sec, key, offv))
-    return out
+    return list(dict.fromkeys(out))
 
 
 # ---------------------------------------------------------------- file + safety
@@ -369,7 +403,10 @@ def gui(path, force):
             ttk.Label(body, text=grp, font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(12, 2))
         v = tk.BooleanVar(); vars_[f['id']] = v
         row = ttk.Frame(body); row.pack(fill='x', anchor='w')
-        ttk.Checkbutton(row, text='%s %s' % (f['label'], rec_text(f)), variable=v).pack(anchor='w')
+        cmd = None
+        if 'preset' in f:                                   # the four presets exclude each other
+            cmd = (lambda me: lambda: vars_[me].get() and [vars_[o['id']].set(False) for o in F if 'preset' in o and o['id'] != me])(f['id'])
+        ttk.Checkbutton(row, text='%s %s' % (f['label'], rec_text(f)), variable=v, command=cmd).pack(anchor='w')
         ttk.Label(row, text='%s - %s' % (when_text(f), f['why']), foreground='#666666', wraplength=780).pack(anchor='w', padx=(24, 0))
     load()
 
@@ -446,6 +483,8 @@ def main():
         if k not in BY_ID or v not in ('on', 'off'):
             raise SystemExit('bad --set %r (id=on|off; ids: %s)' % (s, ' '.join(BY_ID)))
         wants[k] = v == 'on'
+    if preset_conflict(wants):
+        raise SystemExit(preset_conflict(wants))
     if wants:
         w = plan(lines, wants)
         for sec, key, val in w:

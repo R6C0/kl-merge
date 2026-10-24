@@ -55,6 +55,8 @@
  * (game thread, SteamAPI_RunCallbacks). Those cannot fight this one in normal play ([Solo] is TEST and off; [QoL] only when
  * unfocused, and a limiter that finds the render thread late simply does not wait). This file NEVER touches the game's vsync.
  *
+ * PRESETS (owner 2026-10-24 'have 4 different options: 240fps, 120fps, 60fps, 30fps'): auto takes the highest of 240 / 120 / 60 / 30
+ * that is <= the refresh rate (klfps_preset); tools\kl_mod_options.py offers exactly those four. Fps=N by hand still takes any 10 .. 1000.
  * Keys ([FrameLimit]):  Enable=1 (recommended on; 0 = nothing is wrapped)   Fps=0 (0 = auto, see above; 10 .. 1000)
  *   FrontEdge=1 (recommended on)   PassiveWait=0 (recommended off = busy loop)   Log=0 (1 = a line every 10 s: presents, fps,
  *   frametime avg / min / max, count over 33 ms, share of the frame spent waiting)
@@ -77,10 +79,19 @@ static LONGLONG klfps_freq, klfps_period, klfps_rem, klfps_acc, klfps_deadline;
 static LONGLONG klfps_last_present, klfps_t0, klfps_sum, klfps_min, klfps_max, klfps_wait_sum;
 static long klfps_n, klfps_over33;
 
+/* owner 2026-10-24: four presets 240 / 120 / 60 / 30; auto = the highest one the screen shows (144 Hz -> 120, 75 Hz -> 60) */
+static int klfps_preset(int hz)
+{
+    static const int p[] = { 240, 120, 60, 30 };
+    int i;
+    for (i = 0; i < 3; i++) if (hz >= p[i]) return p[i];
+    return 30;
+}
+
 static void klfps_set_target(void)
 {
     int fps = klfps_fps_ini;
-    if (!fps) fps = klfps_vsync ? 0 : klfps_auto_hz;       /* auto: not on top of the game's own vsync */
+    if (!fps) fps = klfps_vsync ? 0 : klfps_preset(klfps_auto_hz);   /* auto: not on top of the game's own vsync */
     klfps_target = fps;
     if (fps > 0 && klfps_freq) { klfps_period = klfps_freq / fps; klfps_rem = klfps_freq % fps; }
     klfps_acc = 0; klfps_deadline = 0;

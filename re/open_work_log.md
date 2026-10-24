@@ -1,3 +1,11 @@
+2026-10-24 16:40 - FRAME LIMITER PRESETS (owner: 'have 4 different options: 240fps, 120fps, 60fps, 30fps'): klfps.c klfps_preset():
+auto Fps=0 = the highest of 240/120/60/30 <= the device refresh (144 Hz -> 120); explicit Fps=N still 10..1000. kl_mod_options.py: the
+framelimit row became four exclusive rows fps240/120/60/30 (ticking one unticks the others, none = Enable=0, recommended on = the
+preset auto picks; GetDeviceCaps VREFRESH reads 240 Hz here), --set conflict check; CLI-tested on a scratch ini. Built k29d SHIP
+E02300DF / TEST 4A8A0805, staged <work>uild\k29d_1024 (k29c installer renamed; install+undo rehearsed on a fake folder: dll back to
+k29b, ini byte-identical). modopts_1024 tool refreshed (D6442583). NOT installed, not run in the game. Note: the live KLHook.ini is
+now b1e7ff44, not the 0fc342a6 installed at 15:55 (owner or e8 edited it; the installer only appends, so harmless).
+
 2026-10-24 15:55 - OWNER 'install all': INSTALLED rev2_1024 (11 DM maps: NoCoverBox strip, DM01B garage door; backups .before-1024cover)
 + hook k29b (aa912e09, backup dinput8.dll.before-1024k29b) + KLHook.ini 0fc342a6 (backup .before-1024k29b): [CarDown] Enable=1 Dry=1
 Log=1 (LOG ONLY: read the cardown: lines after his next car blast, then Dry=0) and [Voice] Announcer=0 (e8's announcer change rides in

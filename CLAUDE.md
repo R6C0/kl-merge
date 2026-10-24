@@ -66,6 +66,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 16:40 - STAGED, NOT INSTALLED: hook k29d = k29b + [FrameLimit] (klfps.c, RTSS front edge / busy wait) with the owner's 4
+presets 240/120/60/30 (auto Fps=0 = the highest the screen shows; this PC reads 240 Hz). <work>\build\k29d_1024\INSTALL k29d.bat (refuses
+unless live dll = k29b aa912e09; adds a marked [FrameLimit] block, keeps Announcer=0 / CarDown Dry=1; UNDO rehearsed byte-identical).
+KL Mod Options tool (build\modopts_1024): one row per preset, exclusive, '(recommended on/off)'. k29c superseded. Not run in the game.
+
 2026-10-24 15:55 - INSTALLED (owner 'install all'): white shop on all 27 maps (379ef8622, .before-1024white); rev2_1024 = HC2 garage
 door + NoCoverBox strip on 11 DM maps (.before-1024cover); hook k29b aa912e09 + ini 0fc342a6 with [CarDown] Dry=1 (log only, then
 Dry=0) and [Voice] Announcer=0 (e8's untested change); + cover2_1024 extra cover boxes (.before-1024cover2; wreck cover still
@@ -77,11 +82,6 @@ guessed, test Dry=1 first). Wreck cover + more cover boxes running (-> build\cov
 the hall (z down to -1434) and left box 9 by more than Slack 150, so CarWait/CarFallback never carried him. INSTALLED DM09 KLJoin.ini
 Slack=1500 (md5 acdc8e12, backup KLJoin.ini.before-1024slack; generator 413a95394). NOT verified live: LIFT14 (= his walk,
 <work>\build\klhook\live\LIFT14.ini) skipped, owner active. Doors still shut for him: cause open (probe hook LIFT10/11 fired fine).
-
-2026-10-24 12:49 - INSTALLED SHIP out_3f_1024k27c B5252D74 + ini 3B27E903 ([Rigid] Enable=0: the owner's 'camera awful / fps bad' was the
-filter's lag; his fps was 210 vs 184 yesterday). k27c: Alt+F4 key-watch thread (KW1 live PASS, 545 ms), MciPump default 0, lift CarStall,
-'coming to get you' only on a real kneel + REVIVE log lines. Undo: <work>\build\camoff_1024\UNDO k27c and camera off.bat. Open: lift doors
-shut for heisters (lead: TriggerBox_OpenExitElevator AllInside wants every merc inside, unproven); 'cant revive a bot until the popup'.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
