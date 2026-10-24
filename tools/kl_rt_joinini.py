@@ -93,6 +93,9 @@ def add_ride(data, delay, car, fallback):
            'Delay=%g' % delay]
     if car:
         add += ['CarMin=' + CAR_MIN, 'CarMax=' + CAR_MAX, 'CarWait=6']
+        # 2026-10-24 (owner: 'the lift doesnt work as a heister'; his log 12:28:39..12:29:06): with the car shut he walked the hall
+        # (2233..2786, z -1434..1028) and Slack 150 CANCELLED each ride before CarWait could carry him. 1500 covers the hall.
+        add += ['; Slack 1500: a heister walking the lift hall (z down to -1500) keeps the ride (owner 2026-10-24)', 'Slack=1500']
         if not fallback:
             add.append('CarFallback=0')
     cr = b'\r' if lines[last].endswith(b'\r') else b''
