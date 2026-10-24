@@ -58,6 +58,10 @@ feat('climb', G_CORE, 'Free climb (hold W + E at a ledge)', 'on', 'start',
      "Dead Men's climb (luvsic's), only on maps with the climb clips", [('Climb', 'Enable', 1, 0, 0)])
 feat('censor', G_CORE, 'Head shots blow the head off (pixelated censor)', 'on', 'start',
      'owner item 9; heap data only', [('Censor', 'Enable', 1, 0, 1)])
+feat('censorlate', G_CORE, 'Censor also corpses, AI heisters and you (late head blow)', 'on', 'start',
+     'k31cen: calls the game BlowHeadOff 350 ms after death; not live-tested', [('Censor', 'Late', 1, 0, 1), ('Censor', 'Player', 1, 0, 1)])
+feat('clubcalm', G_EXP, 'Last Call probe: log the hand item and shots (read-only)', 'off', 'start',
+     'klclubcalm.c: data for the calm-until-the-gun-is-drawn switch', [('ClubCalm', 'Enable', 1, 0, 0)])
 feat('crewlook', G_CORE, 'Random looks for the AI heisters', 'on', 'start',
      'no body twice, never the one you wear', [('Crew', 'Random', 1, 0, 0)])
 
@@ -124,6 +128,8 @@ feat('neural', G_GFX, 'Neural rendering (GITC Uplift DLSS / DLAA, F10)', 'off', 
      'ini note: 188 fps with it set aside against 106 .. 178 with it; needs the add-on files', [('Graphics', 'Neural', 1, 0, 0)])
 feat('rigid', G_GFX, 'Camera turn filter (heavier, smoother turn)', 'off', 'start',
      "owner 2026-10-24: 'camera awful / fps bad' was this filter's lag; aim is exempt either way", [('Rigid', 'Enable', 1, 0, 0)])
+feat('camsmooth', G_GFX, 'Smooth camera in animations and when leaving aim (recommended on)', 'on', 'start',
+     "klcamsmooth.c: dt-correct camera step, pivot low-pass, no snap on aim out; mouse turning is never filtered; not live-tested; set Dry=1 Log=1 first", [('CamSmooth', 'Enable', 1, 0, 1)])
 def screen_hz():
     """The primary screen's refresh rate (GetDeviceCaps VREFRESH), 60 when it cannot be read."""
     try:
