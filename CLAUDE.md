@@ -66,8 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-24 15:45 - WHITE SHOP INSTALLED on all 27 maps (379ef8622; backups .before-1024white). Cover/door fixes RESTAGED on top
-as <work>\build\rev2_1024\ (rev_1024 stale). Earlier 15:30 note: <work>\build\rev_1024\ = HC2 garage door goes with the blast + NoCoverBox
+2026-10-24 15:55 - INSTALLED (owner 'install all'): white shop on all 27 maps (379ef8622, .before-1024white); rev2_1024 = HC2 garage
+door + NoCoverBox strip on 11 DM maps (.before-1024cover); hook k29b aa912e09 + ini 0fc342a6 with [CarDown] Dry=1 (log only, then
+Dry=0) and [Voice] Announcer=0 (e8's untested change); + cover2_1024 extra cover boxes (.before-1024cover2; wreck cover still
+unsolved). Not live-tested. Staged-only detail (15:30): rev_1024 = HC2 garage door goes with the blast + NoCoverBox
 stripped on 11 DM maps (INSTALL cover nocoverbox.bat, md5-checked) and hook k29b [CarDown] (car blast = revivable down; offsets
 guessed, test Dry=1 first). Wreck cover + more cover boxes running (-> build\cover2_1024). Hire tab: e8's re/shop_hire.md.
 

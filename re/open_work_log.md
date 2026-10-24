@@ -1,3 +1,11 @@
+2026-10-24 15:55 - OWNER 'install all': INSTALLED rev2_1024 (11 DM maps: NoCoverBox strip, DM01B garage door; backups .before-1024cover)
++ hook k29b (aa912e09, backup dinput8.dll.before-1024k29b) + KLHook.ini 0fc342a6 (backup .before-1024k29b): [CarDown] Enable=1 Dry=1
+Log=1 (LOG ONLY: read the cardown: lines after his next car blast, then Dry=0) and [Voice] Announcer=0 (e8's announcer change rides in
+k29b untested; e8 told). Not live-tested. THEN INSTALLED cover2_1024 on the same 11 maps (tools/kl_cover_add.py 9ee1ee7, review
+b23248bd9; backups .before-1024cover2): sparse cover boxes on walls/planters/counters (DM03 +70, DM09 702 boxes total: watch fps) +
+car cover copies (review: very probably a NO-OP, the wreck-cover cause is still unknown; next: cover record byte +8 'coverboxcar',
+ZVehicleEffects). e8's VP5 armed on k29b_test: hold live runs until 'VP5 done'.
+
 2026-10-24 15:45 - INSTALLED WHITE SHOP (owner: 'put it into the main game'; game closed): build\shopwhite_1024\stage\shop1024white.ps1
 on all 27 maps (379ef8622, MARK_VERSION 3: model-rendered white silhouettes on a Dead Men dark card; review READY; backups
 .before-1024white). rev_1024 is now STALE (built on pre-shop zips, its installer refuses): RESTAGED as <work>\build\rev2_1024\ (door +
