@@ -1,3 +1,8 @@
+2026-10-24 15:45 - INSTALLED WHITE SHOP (owner: 'put it into the main game'; game closed): build\shopwhite_1024\stage\shop1024white.ps1
+on all 27 maps (379ef8622, MARK_VERSION 3: model-rendered white silhouettes on a Dead Men dark card; review READY; backups
+.before-1024white). rev_1024 is now STALE (built on pre-shop zips, its installer refuses): RESTAGED as <work>\build\rev2_1024\ (door +
+NoCoverBox strip on the white-shop zips; only .prp/.HVK differ; check_passes 0 failed on DM01B/DM03). cover2 must chain on rev2.
+
 2026-10-24 15:30 - OWNER 14:40 LIST STAGED, NOTHING INSTALLED (owner in game). <work>\build\rev_1024\ (reviewed): (A) Hot Coffee II
 garage door was in no blast DeactivateGeom list -> added + HVK collision sunk (87f2dbc5d); (B) Dead Men maps carry NoCoverBox volumes
 (stock DD never), stripped on 11 maps (a66ad1d47) - GUESS that this is what blocks C; DM01B zip combines A+B, md5 37e2a90f; INSTALL
