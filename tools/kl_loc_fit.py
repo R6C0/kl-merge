@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Fit a level .LOC under the game's buffer cap (kl_loc.LOC_CAP = 612,634 for EVERY language, see kl_loc), losing as little
-as possible and saying what was lost.
+as possible and saying what was lost. Self-test on synthetic trees: `python tools/kl_loc_fit_test.py`.
 
     python kl_loc_fit.py --stage OUTDIR     scan <DD>\\KLExpansion\\Maps\\*\\*_Main.zip (read-only); for every zip with a .LOC
                                             member over the cap write OUTDIR\\<MapFolder>\\<zipname>: the same zip with ONLY
@@ -14,7 +14,8 @@ already 612,634 = the cap, Japanese 530,319, so any addition overflows those two
 
 fit() priority (each step runs only while the file is still over the cap; inside a step the biggest saving goes first, so the
 fewest leaves are touched). "Ours" = a key the stock Dog Days .LOC of the same slot does not have (stock= given), else a key
-under KLVoice/ or KLTalk/ or ending _C1.._C9 (heuristic):
+under KLVoice/ or KLTalk/, or an alias K_C1..K_C9 whose base key K is in the file (heuristic; a stock per-character line has
+no base key and is NOT ours - kl_dmvoice runs fit() this way, without a stock file):
   1. ours, text longer than the English leaf's text -> take the English text (sound and ids kept).
   2. STOCK leaves WITH a sound (subtitles of a line the player hears anyway), text longer than English -> English text.
      Subtitles in English beat a crash; this is what saves Russian/Japanese, whose stock text is 20-40% longer than English.
@@ -56,11 +57,19 @@ def _walk(kids, path=()):
     return out
 
 
-def _is_ours(key, stock_keys):
+def _is_ours(key, stock_keys, keys=None):
+    """keys: lower-case set of every key in the file being fitted (the heuristic needs it, see below); None = the old, looser rule"""
     if stock_keys is not None:
         return key.lower() not in stock_keys
     low = key.lower()
-    return low.startswith('klvoice/') or low.startswith('kltalk/') or re.search(r'_c[1-9]$', low) is not None
+    if low.startswith('klvoice/') or low.startswith('kltalk/'):
+        return True
+    m = re.match(r'^(.*)_c[1-9]$', low)
+    # 2026-10-24 (kl_loc_fit_test): an alias K_C<n> of ours (kl_voice.loc_aliases) always stands beside its base key K, while a
+    # STOCK per-character line ships as K_C1..K_C9 with no K (kl2 looks a key up either as K or as K_C<n>, never both). Without
+    # this test every stock FA line of a Russian / Japanese file counted as ours and could lose its subtitle (step 4) or the
+    # whole leaf (step 6) - kl_dmvoice calls fit() without a stock file, so it always ran on this heuristic.
+    return m is not None and (keys is None or m.group(1) in keys)
 
 
 def _prune(kids):
@@ -90,6 +99,7 @@ def fit(data, cap=LOC_CAP, english=None, stock=None, report=None):
         stock_keys = {k.lower() for k, _n in L.leaves(L.parse(stock))}
     size = len(L.build(tree))
     start = size
+    allkeys = {k.lower() for k, _n in L.leaves(tree)}         # for the ownership heuristic (the base key of an alias)
 
     def swap(sel, label):
         """text -> English text for the leaves sel(key, node) accepts, biggest saving first, until under the cap"""
@@ -113,7 +123,7 @@ def fit(data, cap=LOC_CAP, english=None, stock=None, report=None):
             rep.append('%s: %d leaves, -%d bytes' % (label, done, saved))
 
     def ours(key, n):
-        return _is_ours(key, stock_keys)
+        return _is_ours(key, stock_keys, allkeys)
 
     swap(ours, '1 our keys: English text')
     swap(lambda k, n: not ours(k, n) and bool(n.flags & L.SOUND), '2 stock keys with a sound: English subtitle')

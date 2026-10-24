@@ -66,6 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 01:50 UTC - scheduled check-in (cloud, PC busy, nothing run): kl_loc_fit's ownership heuristic (the way kl_dmvoice calls it) took every
+stock per-character line `..._C<n>` for ours - step 4 / 6 could blank or drop STOCK Russian / Japanese voice lines. Fixed (K_C<n> is ours only beside its
+base key K) + `tools/kl_loc_fit_test.py` (74 checks). Unverified whether an installed RU/JA .LOC lost stock lines: read the fit reports (log note).
+
 2026-10-24 02:17 - DEAD MEN VOICES ON ONE-LINE EVENTS (PlainData) INSTALLED on DD01-DD09: PD3 live 106 lines per-character, 0 faults,
 misses only the 2 police lines excluded on purpose. DM maps + T01 are built/grafted on G: but NOT installed: +4.5 GB on C: (9.5 GB free),
 owner to decide (or OK removing old *.before-* map backups). Needs [Voice] PlainData=1 (TEST ini only so far; SHIP default off).
@@ -73,11 +77,6 @@ owner to decide (or OK removing old *.before-* map backups). Needs [Voice] Plain
 2026-10-24 02:11 - ROUND-START HITCH FIX PROVEN LIVE (SC4, TEST out_3f_1024k27_test 28ae5d69): klmove keeps the ZAllyEscapeBox scan per
 scene (b39e3ae4c): DM02 round 2 'found in 109 ms', round 3 'kept from the last scan, checked in 0 ms'; maps with no boxes keep it after a
 second empty scan (SC3, Retomoto). INSTALLED 02:23: baseline dll SHIP out_3f_1024k27 5AB09E1C + ini 41E998CF (backup dinput8.dll.before-1024k27).
-
-2026-10-24 01:42 - ALT+F4 / CLOSE VERIFIED LIVE (TEST 1023v): Alt+F4 ends kl2 in 551 ms, WM_CLOSE in 165 ms, no dumps. MciPump A/B (music on):
-5 vs 4 hitches, all at load/track open, none in level: 1024a NOT installed, baseline SHIP 1023v 2DCB0FBB stays. Camera preset APPLIED:
-live ini 41E998CF, [Rigid] 450/200/30/15/0.30 (backup KLHook.ini.before-rigid1023, undo <work>\build\rigid_1023\UNDO camera preset.bat).
-
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
