@@ -1,3 +1,5 @@
+2026-10-25 00:50 - INSTALLED (owner 'install'): dm01chain_1024r3 (DM01 02d2a481 -> d70cf4c9: carexit + kick doors/extinguishers on e8 shop v2, .before-1024dm01chain); dance_1024r3/lastcall2 (DM05A c563e6bc -> 7ef0404f: Female_Stripper loop on 22 civs, .before-1024dance). Not live-tested.
+
 2026-10-24 23:30 - STAGED, NOT INSTALLED: C:/kl_build_1024/dance_1024r3 = club civilians dance (Female_Stripper clip merged into DD Civilian ANM + 5 MiniCutsceneRout groups on AIMonitor list 2); live b5e45efa -> f12d103d, lastcall2 c563e6bc -> 7ef0404f; INSTALL/UNDO bats rehearsed on scratch only. Live test needed (re/club_crowd.md).
 
 2026-10-25 - STAGED, NOT INSTALLED: C:/kl_build_1024/dm01chain_1024r3 = DM01 carexit (cops leave the Bentleys, prp de21e7d1) THEN kick doors x5 + 4 extinguishers
