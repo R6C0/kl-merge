@@ -1,3 +1,11 @@
+2026-10-24 15:20 - HIRE TAB RESEARCH (owner put this session in charge; read only, nothing built): re/shop_hire.md (5-agent workflow +
+critic). Recommended: option B = a separate Hire window in the level's Menu/online.xml bound to a hook-served option (SHIP-safe, no hashed
+code), text-only, Arcade first; a 5th category bar is rejected (hashed code, table 0xbd1f68 cannot grow). Money = [[rules+0x5f8]+0x38].
+Gates before any build: element-table headroom, whether a button on FABuyWeaponsNew can open a window, no revert path in klc_level_tick,
+klc_tries cap 3. Owner questions in section 8. ANNOUNCER FIRST: klvoice.c [Voice] Announcer=1 / ThenMs=1000 (a line whose 8+ stock
+entries share one recording is left stock; the speaker's own KLVoice leaf follows via klk_say, GUESS that it queues behind). Built SHIP
+klhook\out_3f_1024k28 + TEST _test, NOT installed: VP5 (scratchpad run_vp5.ps1, live\VP5_DM01.ini) not launched, owner active.
+
 2026-10-24 13:18 - RETOMOTO LIFT AS A HEISTER (owner: 'the lift doesnt work when youre a crew / heister'). His session log (own.log,
 F06=DM09, 12:28:39..12:29:06): he reached the hall at (2727, 19601, 912), the car stayed shut, he walked it (x 2233..2786, z -1434..1028);
 kljoin CANCELLED rides at 12:28:46 / 12:28:57 / 12:29:06 'the player left the box (more than Slack outside)' - Slack 150, box 9 z 0..1100 -

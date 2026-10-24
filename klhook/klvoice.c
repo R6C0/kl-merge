@@ -46,7 +46,17 @@
 
 static const char *const kvo_names[8] = { "Kane", "Lynch", "Ashkanan", "Meldal", "Red", "Parker", "Standen", "Hutchison" };
 
-static struct { int on, stock, log, period, radiofb, played, playlog, plain, plaindata; } kvo;     /* radiofb/played: [Voice] RadioFallback / PlayedLog (2026-10-23 voiceheard); playlog/plain: PlayLog / Plain (voiceplain) */
+static struct { int on, stock, log, period, radiofb, played, playlog, plain, plaindata, announcer, then_ms; } kvo;
+/* Announcer (owner 2026-10-24 'my character lines play first, needs to be the announcer first'): a per-character line whose
+ * stock entries all lead to ONE node is one recording copied into every voice (Dead Men's briefer: FA_1time_MissionBriefing<Map>,
+ * FA_MissionBriefing<Map>_0N, FA_MissionReminder<Map>_0N - the .LOC of DM01 gives the nine _C<n> keys one sound id; read by the
+ * announcer-first workflow, not heard). Such a line is left stock (the announcer speaks), and when the game STARTS it
+ * ([queue+0xd8], the probe-A read) the speaker's own KLVoice leaf of the same event is said ThenMs later through kltalk.c's
+ * klk_say - GUESS: the channel is busy then, so 0x578840 queues it behind the announcer instead of over it. */
+#define KVO_NAN 64
+static struct { DWORD node; char leaf[64]; } kvo_an[KVO_NAN];
+static int kvo_nan;
+static struct { DWORD last, due; int primed, rec; char path[128]; } kvo_fw;     /* radiofb/played: [Voice] RadioFallback / PlayedLog (2026-10-23 voiceheard); playlog/plain: PlayLog / Plain (voiceplain) */
 static struct {                                  /* the entries made for this level generation (never freed: the game may hold them) */
     DWORD rules, mgr, lm; char scene[160]; int n, toldfull;
     int told_q;                                   /* PlayedLog state: zeroed with the generation (review 1) */
@@ -430,6 +440,7 @@ static void kvo_tick(int game_thread)
           if (kvo_nrec) kvo_restore_all("a new level generation");
           if (kvo_ncv || kvo_cv_ntried) kvo_cv_restore("a new level generation");
           memset(&kvo_p, 0, sizeof kvo_p);                 /* the single-entry lines are rebuilt with the level too */
+          kvo_nan = 0; memset(&kvo_fw, 0, sizeof kvo_fw);   /* announcer lines are found again on the new level */
           memset(&kvo_gen, 0, sizeof kvo_gen); kvo_gen.rules = w.rules; kvo_gen.mgr = mgr; kvo_gen.lm = lm; snprintf(kvo_gen.scene, sizeof kvo_gen.scene, "%s", scene); memset(&kvo_s, 0, sizeof kvo_s); } }
     kvo_played(mgr, now);
     if (!klh_rd(w.rules + 0x33e, tab, sizeof tab)) return;
@@ -451,6 +462,29 @@ static void kvo_tick(int game_thread)
     for (i = 0; i < 8; i++) { if (who[i][0]) nwant++; sig = sig * 31 + (DWORD)(who[i][0] ? kvo_name_of(who[i]) : 0) + 1; }
     sig = sig * 31 + w.rules;
     memcpy(kvo_p.tab, tab, sizeof tab); kvo_p.valid = 1;     /* the thunks (Plain) read this snapshot: crew record -> voice number; the reps below say who wears it */
+    if (kvo.announcer && kvo.then_ms > 0) {                  /* the announcer started: its speaker's own line follows (see kvo_an) */
+        DWORD queue = klh_rd32(mgr + 0x974), cur = queue ? klh_rd32(queue + 0xd8) : 0;
+        if (kvo_fw.primed && cur && cur != kvo_fw.last && kvo_nan) {
+            DWORD node = klh_rd32(cur); BYTE spk = 0xff; int k;
+            klh_rd(queue + 0xd4, &spk, 1);                   /* the speaker byte = the crew record (VP4: speaker 3 said ..._C3 of record 3) */
+            for (k = 0; k < kvo_nan && node; k++) if (kvo_an[k].node == node) {
+                size_t l2 = strlen(kvo_an[k].leaf); int idx = spk < 8 ? tab[spk] : 99;
+                if (idx > 7 || !who[idx][0]) { if (kvo.log) klog("voice: announcer line %s started (speaker %d): no Dead Men voice of ours for that speaker, nothing follows", kvo_an[k].leaf, (int)spk); break; }
+                if (l2 > 2 && !strcmp(kvo_an[k].leaf + l2 - 2, "_R")) snprintf(kvo_fw.path, sizeof kvo_fw.path, "KLVoice/%s_R/%.*s", who[idx], (int)(l2 - 2), kvo_an[k].leaf);
+                else snprintf(kvo_fw.path, sizeof kvo_fw.path, "KLVoice/%s/%s", who[idx], kvo_an[k].leaf);
+                if (!kvo_entry(kvo_fw.path, w.rules, scene)) { if (kvo.log) klog("voice: announcer line %s started (speaker %d): no leaf %s, nothing follows", kvo_an[k].leaf, (int)spk, kvo_fw.path); break; }
+                kvo_fw.rec = spk; kvo_fw.due = now + (DWORD)kvo.then_ms; if (!kvo_fw.due) kvo_fw.due = 1;
+                if (kvo.log) klog("voice: announcer line %s started (speaker %d): %s follows in %d ms", kvo_an[k].leaf, (int)spk, kvo_fw.path, kvo.then_ms);
+                break;
+            }
+        }
+        kvo_fw.last = cur; kvo_fw.primed = 1;                /* the first sample after a reset only records (a stale entry is not a start) */
+        if (kvo_fw.due && (LONG)(now - kvo_fw.due) >= 0) {
+            char what[160]; kvo_fw.due = 0;
+            snprintf(what, sizeof what, "voice: after the announcer, record %d", kvo_fw.rec);
+            klk_say(kvo_fw.path, kvo_fw.rec, (float)kvo.then_ms / 1000.0f, what, w.rules, scene);
+        }
+    }
     if (sig == kvo_s.sig && now < kvo_s.next) return;
     kvo_s.sig = sig; kvo_s.next = now + (DWORD)kvo.period;
 
@@ -487,6 +521,28 @@ static void kvo_tick(int game_thread)
                     else src = ent[j];
                 }
                 if (!src || !klh_rdstr((DWORD_PTR)src + 4, text, sizeof text) || !kvo_leaf(text, leaf)) continue;
+                if (kvo.announcer) {                             /* one recording in every voice = an announcer: stays stock (kvo_an) */
+                    DWORD n0 = 0, nj; int same = 1;
+                    for (j = 0; j < (int)vcnt && same; j++) {
+                        int rj = kvo_find(vdata + (DWORD)j * 4, 0); DWORD sj = ent[j];
+                        if (rj >= 0 && kvo_rec[rj].active && ent[j] == kvo_rec[rj].ours) sj = kvo_rec[rj].orig;
+                        nj = sj ? klh_rd32(sj) : 0;
+                        if (!nj) same = 0; else if (!j) n0 = nj; else if (nj != n0) same = 0;
+                    }
+                    if (same) {
+                        int k, known = 0;
+                        for (j = 0; j < (int)vcnt; j++) {               /* ours from before (an older walk) go back */
+                            int rj = kvo_find(vdata + (DWORD)j * 4, 0);
+                            if (rj >= 0 && kvo_rec[rj].active) { if (ent[j] == kvo_rec[rj].ours && klh_data((void *)(DWORD_PTR)(vdata + (DWORD)j * 4), &kvo_rec[rj].orig, 4, "voice entry restore")) nrs++; kvo_rec[rj].active = 0; }
+                        }
+                        for (k = 0; k < kvo_nan; k++) if (kvo_an[k].node == n0) known = 1;
+                        if (!known && kvo_nan < KVO_NAN) {
+                            kvo_an[kvo_nan].node = n0; snprintf(kvo_an[kvo_nan].leaf, sizeof kvo_an[kvo_nan].leaf, "%s", leaf); kvo_nan++;
+                            if (kvo.log) klog("voice: line %08lx (%s) is one recording for all %lu voices (node %08lx): an announcer, left stock", ln, leaf, vcnt, n0);
+                        }
+                        continue;
+                    }
+                }
                 nl++;
                 for (slot = 0; slot < 8; slot++) {
                     DWORD addr = vdata + (DWORD)slot * 4, cur = ent[slot]; int ri = kvo_find(addr, 0);
@@ -538,7 +594,10 @@ static void klvo_init(void)
     kvo.playlog = GetPrivateProfileIntA("Voice", "PlayLog", 0, klh_ini) != 0;       /* default 0 = off: retargets the 5 play calls (TEST + SessionSafe=0 only) */
     kvo.plaindata = GetPrivateProfileIntA("Voice", "PlainData", 0, klh_ini) != 0;   /* default 0 = off: data-only flag-0 -> flag-1 conversion (SHIP-safe) */
     kvo.plain = GetPrivateProfileIntA("Voice", "Plain", 0, klh_ini) != 0;          /* default 0 = off: flag-0 lines speak the body's KLVoice leaf */
-    memset(&kvo_p, 0, sizeof kvo_p);
+    kvo.announcer = GetPrivateProfileIntA("Voice", "Announcer", 1, klh_ini) != 0;   /* default 1: a one-recording line stays stock (owner 2026-10-24) */
+    kvo.then_ms = (int)GetPrivateProfileIntA("Voice", "ThenMs", 1000, klh_ini);     /* the speaker's own line this long after the announcer starts; 0 = none */
+    if (kvo.then_ms < 0 || kvo.then_ms > 30000) kvo.then_ms = 1000;
+    memset(&kvo_p, 0, sizeof kvo_p); kvo_nan = 0; memset(&kvo_fw, 0, sizeof kvo_fw);
     if (kvo.period < 200 || kvo.period > 60000) kvo.period = 1500;
     if (kvo.on) klog("voice: on; the Dead Men bodies' event lines come from KLVoice/<Name>/<Event> of the level's .LOC (StockLevels=%d Log=%d Period=%d ms RadioFallback=%d PlayedLog=%d PlayLog=%d Plain=%d PlainData=%d); needs [Wardrobe] DMVoice=1 / [Crew] Voice=1 so each body has its own voice number", kvo.stock, kvo.log, kvo.period, kvo.radiofb, kvo.played, kvo.playlog, kvo.plain, kvo.plaindata);
 }
