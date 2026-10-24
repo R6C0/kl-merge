@@ -35,6 +35,7 @@ GAME = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
 OUT = r'G:\kl_build_1023\voice_1023'
 SRC_LEVEL = 'M01_FA_A'
 LOC_CAP = kl_loc.LOC_CAP                             # the game's .LOC buffer limit and why: see kl_loc
+FIT_SMALL = 4096                                     # tier-0 overflow up to this many bytes goes to kl_loc_fit (2026-10-24: English DD01 was 116 over)
 O = 'AllLevels/Oneliners/'
 
 # wardrobe name -> (campaign speaker suffix in the Dead Men key, why). GUESS (re/voice_1023.md 2).
@@ -563,6 +564,13 @@ def build_map(game, m, out, trees, clips, log=print, write=True):
             first = first or files[lang]
             if len(files[lang]) <= cap:
                 break
+            if tier == 0 and len(files[lang]) - cap <= FIT_SMALL:   # a few bytes over: kl_loc_fit blanks the fewest subtitles, not all of them
+                try:
+                    files[lang] = kl_loc_fit.fit(files[lang], cap, locs.get('English'))
+                    log('%s: %s .LOC %d bytes over at tier 0: kl_loc_fit -> %d' % (m, lang, len(first) - cap, len(files[lang])))
+                    break
+                except ValueError:
+                    files[lang] = first
             log('%s: %s .LOC %d bytes > %d at tier %d (%s): trying the next' % (m, lang, len(files[lang]), cap, tier,
                                                                              ('full', 'no subtitles', 'no subtitles, no radio')[tier]))
         if len(files[lang]) > cap:                         # no tier fits: keep the full build and shorten other text (kl_loc_fit: English subtitles, ...)
