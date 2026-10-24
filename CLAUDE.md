@@ -71,6 +71,12 @@ as <work>\build\rev2_1024\ (rev_1024 stale). Earlier 15:30 note: <work>\build\re
 stripped on 11 DM maps (INSTALL cover nocoverbox.bat, md5-checked) and hook k29b [CarDown] (car blast = revivable down; offsets
 guessed, test Dry=1 first). Wreck cover + more cover boxes running (-> build\cover2_1024). Hire tab: e8's re/shop_hire.md.
 
+2026-10-24 13:55 UTC - scheduled check-in (cloud, PC busy, nothing run or installed): `re/triggerbox.md` = ZTriggerBox from
+kl2.exe. Field 10: -1 one-shot (disabled after the fire), 0 every edge, n > 0 re-arms n s later (stock van box: 10). Field 15 = 1 =
+the LOCAL human only. Arcade: an AI heister counts as a player (field 15 = 0, ECPS BOTH / FA_MERCONLY). Owner's 12:28 log: bots
+crossed the one-shot TriggerBox_OpenExitElevator 6-8 s before him, so it was spent and disabled when he arrived (LIFT10/13 had the
+human first). PROPOSAL, not built: field 10 = 10 on node 7857 so a human re-fires the door proxies after a bot; costs in the doc.
+
 2026-10-24 13:18 - RETOMOTO LIFT AS A HEISTER: the owner's log (12:28:39..12:29:06) shows 3 rides CANCELLED - with the car shut he walked
 the hall (z down to -1434) and left box 9 by more than Slack 150, so CarWait/CarFallback never carried him. INSTALLED DM09 KLJoin.ini
 Slack=1500 (md5 acdc8e12, backup KLJoin.ini.before-1024slack; generator 413a95394). NOT verified live: LIFT14 (= his walk,
