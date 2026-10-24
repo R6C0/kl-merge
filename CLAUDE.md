@@ -74,10 +74,14 @@ live ini 41E998CF, [Rigid] 450/200/30/15/0.30 (backup KLHook.ini.before-rigid102
 swapped Dead Men lines. Flag-0 lines (134: cash drop, one/two left, police events) have NO KLVoice leaf in the data, so even the TEST
 probe speaks stock: kl_dmvoice must write those leaves (workflow wf_9e6ef4fc-bda, also the lobby map name). Full access until 14:00 today.
 
-2026-10-23 14:05 - ALT+F4 / STUTTER: hook 43a17d57e: FastExit (Alt+F4 / close = TerminateProcess), NoInject, LogMaxMB=64 (log rotation).
-SHIP out_3f_1023v 2DCB0FBB, to be installed when the owner closes the game (backup dinput8.dll.before-1023v). Log was 562 MB, now archived + emptied.
-Stutter NOT solved: about 10 frames over 33 ms per 10 s this afternoon vs about 6 per 200 s this morning; hitches inside message-hook calls (PeekMessage/CallNextHookEx).
-PD2 music is off now (e8, 13:52). Close-message test FX2 still to run. re/open_work_log.md.
+2026-10-23 23:00 (PC clock; 22:00 UTC) - scheduled check-in (cloud; PC idle since 14:16, read-only: no new dump, KLHook.result = the
+known FX1 script FAIL, nothing launched or installed). OFFLINE PIECE (stutter item 3): klmove.c keeps the ZAllyEscapeBox scan per scene
+(klmv_box_gen) instead of walking all private memory at every round's start (the hook's own 125-140 ms hitch per round): kept while the
+scene name stays (sampled once a second), no level archive is opened (klsteam.c -> klmv_level_open) and every object still carries the
+private vtable; none found is kept only after a second empty scan; [Bots] BoardScanEveryRound=1 = the old behaviour. Type-checked (SHIP +
+TEST), NOT run. Proof wanted from the local sessions: a 3-round Arcade log with `near: N ... kept from the last scan` from round 2 on and
+`found in .. ms` again after a map change. Owner: nothing.
+
 
 
 ## Owner's end goal (2026-10-09)

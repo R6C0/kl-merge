@@ -1,5 +1,12 @@
 # voiceplain (2026-10-23): flag-0 speech lines and a play-path log
 
+**CORRECTION (2026-10-23 scheduled check-in, re/voiceplain_fields.md):** the flag-0 lines are NOT
+FA_YouEscaped*_R (those are flag-1 fields g47/g48, swapped by klvoice). Read off the exe and the .LOC
+files, the flag-0 fields are the radio contact (Glazer), the getaway driver, the police radio, the UCC
+mode, and three heister events recorded once for everybody in Dog Days too (PersonalRevenge, DirtyMoney,
+DropCash). A flag-0 line is one recording per speaker by CODE; no data-side swap can make it
+per-character. `Plain=1` would change 15 lines of 3 events: stays a TEST probe, the item is closed.
+
 Branch `feat/1023-voiceplain` (from rtp-schemas). Code: `klhook/klvoice.c` only (+ the [Voice] block of `klhook/KLHook.ini`). Nothing was run in the game.
 
 ## 1. RE result (static, kl2.exe 0490; listings 0x421c70, 0x578840, 0x7d0e80, 0x6ae750)

@@ -144,11 +144,16 @@ sound of the level starts). Not tried on purpose yet.
   of extensions (.zgf .prp .sup .buf .HVK .gms .TEX .MAT .ANM [.LOC ..] .SND .oct .sgp .rmc .rmi .prm
   .sgd .hrd .fxc); kl_graft writes S's order, i.e. the same.
 - ESTABLISHED: stock archives are deflate throughout; method 0 (stored) occurs 153 times, never for
-  more than 32 bytes (.zgf 17, .sup 24, an empty .LOC 5). Whether the reader takes a LARGE stored member
-  is therefore not shown by any stock file. The two functions with the local-header signature
-  (0x54b610, 0x726630) are the archive WRITER (save games); the reading side was not found by signature
-  and not followed further. NOT ESTABLISHED: buffer sizes, whether a member is inflated whole or in
-  pieces, on which thread.
+  more than 32 bytes (.zgf 17, .sup 24, an empty .LOC 5). The two functions with the local-header signature
+  (0x54b610, 0x726630) are the archive WRITER (save games).
+- ESTABLISHED by code (2026-10-23 check-in, debug/notes/2026-10-23-residual-stutter.md 3; not run): the
+  member extractor is kl2 0x593010 (callers 0x4a57a2, 0x79c869). Method 0 = ONE stream read of the whole
+  member into the destination, no size test - so a LARGE stored member IS taken. Method 8 = zlib 1.1.3
+  (the exe's second zlib; "1.1.3" at 0xb7940c), inflateInit2_(-15, raw deflate), inflated on the CALLING
+  thread in 128 KB compressed chunks from a 128 KB stack buffer, inflate() per chunk, and the keep-alive
+  0x48a1e0 (section 2: the foreground pump) after EVERY chunk - about 1300 pumps for a 164 MB archive.
+  Any other method: the member fails (returns 0). Today's hitch-probe stacks at the DM01 / DM01B round
+  starts stood in its inflate_fast (0x90e020) on the main thread.
 - ESTABLISHED: a read thread exists (0x458750, started from 0x6a5440): waits on two events, then
   `SetFilePointer(file, offset)` + `ReadFile(file, buffer, size)` synchronously and resets the event -
   a buffered stream with a reader thread; whose stream (archive, .WAV, stream file) was not followed.
@@ -181,7 +186,7 @@ sound of the level starts). Not tried on purpose yet.
 | `slim` | textures that only dead map materials name -> their own mip levels of 4 x 4 and below; ids, names, formats, material file unchanged | 464 of 1,864 textures, 192 MB; .TEX 387 -> 197 MB | 447 of 2,195, 180 MB; .TEX 406 -> 227 MB | NOT LOADED LIVE |
 | `trim,slim` | both | zip 321.1 -> 164.0 MB, unpacked 531 -> 298 MB | zip 312.4 -> 183.0 MB, unpacked 529 -> 351 MB | candidates built: `<work>/build/m_load/bank_trim_slim`, `retomoto_trim_slim` |
 | `level=6` | deflate level (1 before) | 164.0 -> 137.8 MB, packing 1.5 -> 4.4 s | 183.0 -> 152.1 MB, 2.3 -> 7.6 s | safe (stock is deflate); level 9: 134.9 / 148.6 MB for 15 - 18 s |
-| `stored` | no compression | 298 MB (with trim,slim), inflate time gone | 351 MB | ASSUMPTION about the reader (section 4): try it once before use |
+| `stored` | no compression | 298 MB (with trim,slim), inflate time gone | 351 MB | the reader takes it by code (section 4, 2026-10-23); not yet run: try it once before use |
 
 - Renumbering S was NOT done, on purpose: stubs keep every chunk index, texture id and material slot,
   so no reference anywhere (also the ones nobody has found yet) can dangle; the price is 135 bytes per
@@ -226,7 +231,7 @@ and the log line must agree. 'Cold' = after a reboot; anything installed or load
 | E3 | `m_load/bank_trim_slim` against the installed bank, E1's hook | front | 1 - 2 s less; shots: HUD, muzzle flash, blood, glass, police and civilians unchanged |
 | E4 | `m_load/retomoto_trim_slim` | front | the same on Retomoto; walk both parts |
 | E5 | E4 repacked `--load level=6` | front | no change in time, 31 MB less on disk |
-| E6 | E4 repacked `--load stored` | front | loads at all (the reader takes a large stored member)? then up to 1 s less |
+| E6 | E4 repacked `--load stored` | front | the reader takes a large stored member BY CODE (section 4, 2026-10-23): expect the inflate time and ~1300 keep-alive pumps gone, up to 1 - 2.5 s less; the one open point is the 300 MB read |
 | E7 | E1 on stock F02 (plain) and from the menu | front | stock levels faster too; the menu scene 2 s instead of 19 |
 | C1, C2 | E0a and E4 after a reboot, first load | front | the cold read: expected under 2 s more on this SSD |
 

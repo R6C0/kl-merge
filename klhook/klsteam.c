@@ -283,6 +283,7 @@ static void klh_level_open(const char *asked, const char *opened)
     else if (!strcmp(klx_pend, key)) klx_pend[0] = 0;                    /* the same archive, opened again as the stock one */
     LeaveCriticalSection(&klx_cs);
     if (fresh) klog("steam: level archive %s opened from %s: %s (%s)", key, opened, v == 1 ? "STOCK" : v == 3 ? "NOT KNOWN" : "NOT stock", line);
+    klmv_level_open();                                        /* klmove.c: the ZAllyEscapeBox scan's cache ends with a level archive open */
     klj_level_open(key, opened, v);
     klc_level_open(key, opened);
     klg_level_open(key, opened);
