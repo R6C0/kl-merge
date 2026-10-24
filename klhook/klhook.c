@@ -775,6 +775,40 @@ static void klh_uia_tick(void)
     }
 }
 
+/* ---------------------------------------------------------------- Alt+F4 key watch (FastExit's second road)
+
+   WHY (2026-10-24, the owner's 12:15 - 12:29 session): Alt+F4 did not end the game. The log's last line is 'qol: game left the foreground'
+   at 12:29:12 with no 'exit:' line: the WM_SYSKEYDOWN never reached the subclassed window (the window lost focus when Alt went down, or the
+   main thread stood in a 721 ms scene-load hitch and never pumped it). WHAT: a thread of its own, every 15 ms, reads the keyboard's state
+   (GetAsyncKeyState) and ends the process when Alt and F4 are both down and either the game owns the foreground window or Alt went down
+   while it did. It does not wait for the game's message pump, so a stalled main thread still dies. GUESS: GetAsyncKeyState sees the keys
+   while the game holds DirectInput's keyboard exclusively (it reads the system's key state, not the window's queue). Off with FastExit=0. */
+static DWORD WINAPI klh_keywatch(LPVOID unused)
+{
+    HMODULE u = GetModuleHandleA("user32.dll"); int alt_game = 0;
+    SHORT (WINAPI *gaks)(int); HWND (WINAPI *fg)(void); DWORD (WINAPI *wtp)(HWND, LPDWORD);
+    (void)unused;
+    if (!u) u = LoadLibraryA("user32.dll");
+    gaks = u ? (SHORT (WINAPI *)(int))GetProcAddress(u, "GetAsyncKeyState") : 0;
+    fg = u ? (HWND (WINAPI *)(void))GetProcAddress(u, "GetForegroundWindow") : 0;
+    wtp = u ? (DWORD (WINAPI *)(HWND, LPDWORD))GetProcAddress(u, "GetWindowThreadProcessId") : 0;
+    if (!gaks || !fg || !wtp) { klog("exit: key watch off: user32's key functions not found"); return 0; }
+    klog("exit: key watch on: Alt+F4 ends the process even when the window misses the key");
+    for (;;) {
+        DWORD pid = 0; HWND f; int alt, front;
+        Sleep(15);
+        alt = (gaks(0x12 /* VK_MENU */) & 0x8000) != 0;
+        if (!alt) { alt_game = 0; continue; }
+        f = fg(); if (f) wtp(f, &pid);
+        front = f && pid == GetCurrentProcessId();
+        if (front) alt_game = 1;
+        if ((front || alt_game) && (gaks(0x73 /* VK_F4 */) & 0x8000)) {
+            klog("exit: Alt+F4 seen by the key watch (game in front: %d): the process is ended at once", front);
+            TerminateProcess(GetCurrentProcess(), 0);
+        }
+    }
+}
+
 static void klh_tick(int game_thread)
 {
     DWORD now = GetTickCount(); static DWORD armed;
@@ -1233,6 +1267,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
 #endif
     klh_uef_arm();
     CloseHandle(CreateThread(0, 0, klh_ticker, 0, 0, 0));
+    if (klh_fastexit) CloseHandle(CreateThread(0, 0, klh_keywatch, 0, 0, 0));
     if (GetPrivateProfileIntA("KLHook", "HitchProbe", 1, klh_ini)) CloseHandle(CreateThread(0, 0, klh_hitch_probe, 0, 0, 0));
     return TRUE;
 }

@@ -402,7 +402,7 @@ static void klam_init(void)
     InitializeCriticalSection(&klam_cs);
     klam_ev = CreateEventA(0, FALSE, FALSE, 0);
     klam_seed ^= GetTickCount();
-    klam_pump = GetPrivateProfileIntA("KLHook", "MciPump", 1, klh_ini) != 0;
+    klam_pump = GetPrivateProfileIntA("KLHook", "MciPump", 0, klh_ini) != 0;
     CloseHandle(CreateThread(0, 0, klam_thread, 0, 0, 0));
     klog("ambience: on (winmm MCI on a worker thread; a bed + timed one-shots from the round state; silent online / with [Solo] unless SoloPlay)");
 }

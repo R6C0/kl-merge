@@ -390,7 +390,7 @@ static void klst_init(void)
     InitializeCriticalSection(&klst_cs);
     klst_ev = CreateEventA(0, FALSE, FALSE, 0);
     klst_seed ^= GetTickCount();
-    klst_pump = GetPrivateProfileIntA("KLHook", "MciPump", 1, klh_ini) != 0;
+    klst_pump = GetPrivateProfileIntA("KLHook", "MciPump", 0, klh_ini) != 0;
     CloseHandle(CreateThread(0, 0, klst_thread, 0, 0, 0));
     klog("stinger: on (winmm MCI on a worker thread; one-shot cues from round events; silent online / with [Solo] unless SoloPlay)");
 }

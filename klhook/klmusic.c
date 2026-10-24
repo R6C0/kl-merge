@@ -204,7 +204,7 @@ static void klmu_follow(DWORD now)
     klmu_next(stopped ? 0 : klmu_fade);
 }
 
-/* [KLHook] MciPump=1 (default 1; 2026-10-24, stutter): the worker waits with MsgWaitForMultipleObjects and empties its own message
+/* [KLHook] MciPump=1 (default 0 since the A/B of 2026-10-24 01:36 showed no in-level gain; 2026-10-24, stutter): the worker waits with MsgWaitForMultipleObjects and empties its own message
    queue. MCI's mpegvideo driver makes hidden windows on the thread that opens a file; a thread that owns windows and never pumps
    makes every broadcast SendMessage and global-hook call wait for it. GUESS that this is the hitch seen on the game thread inside
    PeekMessage / CallNextHookEx with music on (re/open_work_log.md 2026-10-23 14:05); not proven. MciPump=0 = the old plain wait. */
@@ -478,7 +478,7 @@ static void klmu_init(void)
     InitializeCriticalSection(&klmu_cs);
     klmu_ev = CreateEventA(0, FALSE, FALSE, 0);
     klmu_seed ^= GetTickCount();
-    klmu_pump = GetPrivateProfileIntA("KLHook", "MciPump", 1, klh_ini) != 0;
+    klmu_pump = GetPrivateProfileIntA("KLHook", "MciPump", 0, klh_ini) != 0;
     CloseHandle(CreateThread(0, 0, klmu_thread, 0, 0, 0));
     klmu_started = 1;
     klog("music: on (winmm MCI on a worker thread; cues from the round state; silent online / on engine-music maps / with [Solo] unless SoloPlay)");
