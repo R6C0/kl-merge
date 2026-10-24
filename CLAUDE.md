@@ -66,6 +66,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 - STAGED, NOT INSTALLED: Last Call lastcall2_1024r2 (C:/kl_build_1024/lastcall2_1024r2, tools/kl_club_lastcall2.py; DM05A b5e45efa -> c563e6bc):
+escape set moved to the far roof pad (7300,1881,3500; route START->pad found on the mesh, 401 m), 6 Yakuza/bodyguard waves x5 (40-55 s apart via
+the old_waves chain from the AIMonitor START list, no alarm node exists), 4 AfterLoot squads + 28 civilians cut: 99 actors / 53 squads. check.py,
+check_passes, old_waves.check PASS; install/undo rehearsed on scratch. Needs a live test: chopper spline/landing after the rigid move, waves.
+
 2026-10-24 - STAGED, NOT INSTALLED: DM02 shops C:/kl_build_1024/dm02shops_1024r2: A = 3 co-op shutters (F04 CoopAirlock set, shutter opens
 via DeactivateGeom) + 2 timer-opened, B = 5 timer-opened fallback; 8 cashdrawer loot sets (+1.06M). Needs live test (re/dm02_shops_1024.md).
 
