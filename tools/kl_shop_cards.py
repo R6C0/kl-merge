@@ -428,7 +428,9 @@ BACK_TOP, BACK_BOT = (54, 57, 63), (27, 29, 33)
 BIG_BOX = (24, 20, 421, 172)             # where the gun sits on the 445x210 shown part: same frame on every card
 SMALL_BOX = (2, 38, 126, 86)             # the band the stock small icons use (x 0..127, y 37..86 measured on the 36 stock icons)
 UP_BIG, UP_SMALL = 1.2, 1.5
-MARK_VERSION = 2          # 2 = the v2 cut-out (table_model segmentation); a v1 card counts as stale but is never re-cut from its own restyled art
+MARK_VERSION = 3          # 3 = 'white' (2026-10-24: white model silhouettes on the Dead Men ground); 2 = the v2 photo cut-out, 1 = v1: both count as stale and are
+                          # simply repainted (the white style needs no art from the old card)
+STYLE = 'white'           # 'white' or 'photo' (the v2 cut-out path, kept for reference)
 
 
 def lift(rgb, alpha, target):
@@ -621,17 +623,242 @@ def _glyph(im, size, ss):
     return px
 
 
+# ---------------------------------------------------------------- the WHITE style (MARK_VERSION 3, 2026-10-24)
+# Owner: the shop must be white like the old M4 / USP cards, all rows alike, with the Dead Men feel. Source of every gun = a render of its own
+# weapon model (side view, kl_view.View, as tools/kl_guns does for its previews), cached as sil/<template>.png (RGBA: grey = flat shade, alpha =
+# anti-aliased coverage). A row without a model png falls back to the 128 px HUD silhouette (UI_Weapon_01#<name>, soft when enlarged).
+# Dead Men FA look (re/shop_ui_1023.md, research of 2026-10-24): near-black blue-grey smudged ground, ONE hairline frame in steel blue, a thin
+# ring behind the gun (the WeaponSelect ring), a dirty-red corner bracket (the header splat), white flat guns with no outline.
+SIL_ENV = 'KL_SHOP_SIL'
+try:
+    import kl_port_check as _pc
+    SIL_DEFAULT = os.path.join(_pc.workdir(), 'build', 'shopwhite_1024', 'sil')
+except Exception:
+    SIL_DEFAULT = os.path.join(os.path.dirname(HERE), 'build', 'shopwhite_1024', 'sil')
+GROUND_TOP, GROUND_BOT = (27, 31, 40), (12, 14, 19)
+STEEL = (130, 158, 193)
+RED = (190, 36, 34)
+WHITE_FILL = (255, 253, 248)
+HUD_NAME = {0: 'HG_M-77B', 1: 'HG_M-77B_Silenced', 2: 'HG_M9Beretta', 3: 'HG_M9Beretta_Silenced', 4: 'HG_Revolver_Police', 5: 'HG_TT-33',
+            6: 'HG_SigSauer226', 7: 'HG_SW_MP45', 8: 'HG_DesertEagle', 9: 'HG_ColtCobra', 10: 'HG_TaurusJudge', 11: 'Shotgun_Hawk_SawnOff',
+            12: 'Shotgun_Remington_870', 13: 'Shotgun_Hawk_Police', 14: 'Shotgun_Spas_12', 15: 'Shotgun_TPS', 16: 'Shotgun_Hawk_Bullpup',
+            17: 'SMG_HK_SP89_Silenced', 18: 'SMG_MAC_10', 19: 'SMG_MAC_10_Silenced', 20: 'SMG_MPI69', 21: 'SMG_SA61', 22: 'SMG_Type05',
+            23: 'SMG_Type05_Silenced', 24: 'SMG_Type79', 25: 'SMG_UMP', 26: 'SMG_UMP_Silenced', 27: 'SMG_UMP_SBR', 28: 'Rifle_zastavam85',
+            29: 'Rifle_AK47', 30: 'Rifle_AK74', 31: 'Rifle_Type88', 32: 'Rifle_Type88_Scoped', 33: 'Rifle_FN_SCAR', 34: 'Rifle_Type95',
+            35: 'Rifle_Type95_Scoped'}
+# model template where it differs from the HUD name (read off the F01 scene 2026-10-24)
+MODEL_TPL = {1: 'HG_M-77B_S', 3: 'HG_M9Beretta_S', 14: 'Shotgun_Spas12', 17: 'SMG_HK_sp89', 20: 'SMG_MPi69', 23: 'SMG_Type05_S', 32: 'Rifle_Type88_S',
+             34: 'Rifle_Type95_C', 35: 'Rifle_Type95_S'}
+ITEM_TPL = {33: 'Rifle_Type81', 47: 'Mg_Minimi_SPW', 49: 'Sn_Rem700', 52: 'Launcher_HK69A1_01'}      # swapped-in guns (PIC_OF_ITEM)
+
+
+# look label (KLGuns.ini LookN) -> (game, template of the model that is shown). Same table as kl_guns.LOOKS.
+LOOK_MODEL = {'MP5': ('dm', 'Smg_MP5-A3_01'), 'AK-74': ('dd', 'Rifle_AK74'), 'SG 552': ('dm', 'Rifle_SG552_01'), 'M4A1': ('dm', 'Rifle_M4A1_01'),
+              'P90': ('dm', 'Smg_FN_P90_01'), 'Steyr TMP': ('dm', 'Smg_SteyrTMP_01'), 'USP': ('dm', 'HG_HK_USP_01')}
+
+
+def read_shown(ini_path):
+    """a map's KLGuns.ini -> {Dog Days template (lower case): model png name of the look the map SHOWS} (the gun you buy and hold)"""
+    import kl_gunpics as P
+    out = {}
+    if not ini_path or not os.path.isfile(ini_path):
+        return out
+    for tpl, _item, shown, label in P.read_looks(open(ini_path, encoding='latin1').read()):
+        if shown and label in LOOK_MODEL:
+            game, t = LOOK_MODEL[label]
+            out[tpl.lower()] = ('dm_' + t) if game == 'dm' else t
+    return out
+
+
+def sil_dir():
+    return os.environ.get(SIL_ENV) or SIL_DEFAULT
+
+
+def row_template(row, item=0, looks=None):
+    """model png name of a row: the swapped-in gun, else the look the map shows (looks = read_shown), else the row's own gun"""
+    if item:
+        return ITEM_TPL.get(item)
+    if looks and HUD_NAME[row].lower() in looks:
+        return looks[HUD_NAME[row].lower()]
+    return MODEL_TPL.get(row, HUD_NAME[row])
+
+
+def render_models(outdir=None, log=print, level='F01', width=1200, out_w=640):
+    """render every shop row's weapon model (and the swapped-in guns) as a white-on-black side view, 2x supersampled -> outdir/<template>.png
+    RGBA (grey = flat shade, alpha = coverage). Reads the stock Dog Days level only (kl_prpjoin.level_zip prefers KL_PortBackup)."""
+    import kl_chars as C, kl_prmgraph as G, kl_prpjoin as J, kl_guns as K, kl_view as V
+    from PIL import Image
+    np = _np()
+    outdir = outdir or sil_dir()
+    os.makedirs(outdir, exist_ok=True)
+    sc = J.Scene.load(level, 'dd')
+    z = zipfile.ZipFile(J.level_zip(level, 'dd'))
+    stem = [n for n in z.namelist() if n.endswith('.prm')][0]
+    p = G.read(z.read(stem), 'dd')
+    tpls = sorted({row_template(r) for r in WEAPON_ROWS} | set(ITEM_TPL.values()) | {'dm_' + t for g, t in LOOK_MODEL.values() if g == 'dm'})
+    bad = []
+    src = None
+    for tpl in tpls:
+        try:
+            sc_, p_ = sc, p
+            name = tpl
+            if tpl.startswith('dm_'):                              # a Dead Men gun: its own level's models, converted to Dog Days form
+                if src is None:
+                    src = C.Source.get('M01_FA_A', log)
+                sc_, p_, tpl = src.sc, src.prm, tpl[3:]
+            try:
+                k = K.gun_node(sc_, tpl)
+            except ValueError:                                     # the two revolvers' template has no gun node: use its ground model
+                tail = '\\Weapon\\' + tpl + '\\Ground01'
+                k = [i for i in range(1, len(sc.nodes)) if sc.path[i].endswith(tail)][0]
+            root = C.person(sc_, k)[0]
+            items = K._items(p_, C.objects(p_, root), (255, 255, 255))
+            xs = [q[0] for it in items for q in it[0]]; ys = [q[1] for it in items for q in it[0]]
+            ax, ay = max(xs) - min(xs), max(ys) - min(ys)
+            h = int(width * ay / ax) + 4
+            v = V.View(width, h, (min(xs), max(xs), min(ys) - 0.5 * ax / width * 2, max(ys) + 0.5 * ax / width * 2), bg=(0, 0, 0))
+            for pos, tris, col in items:
+                v.draw(pos, tris, (255, 255, 255))
+            a = np.frombuffer(bytes(v.rgb), np.uint8).reshape(h, width, 3).astype(np.float32)
+            cov = (a.max(2) > 0).astype(np.float32)
+            shade = a[:, :, 0] / 255.0
+            oh = max(1, round(out_w * h / width))
+            cov_s = np.asarray(Image.fromarray((cov * 255).astype(np.uint8)).resize((out_w, oh), Image.LANCZOS), np.float32) / 255.0
+            sh_s = np.asarray(Image.fromarray((shade * cov * 255).astype(np.uint8)).resize((out_w, oh), Image.LANCZOS), np.float32) / 255.0 / np.maximum(cov_s, 1e-3)
+            px = np.zeros((oh, out_w, 4), np.uint8)
+            px[:, :, :3] = (np.clip(sh_s, 0, 1) * 255 + 0.5).astype(np.uint8)[:, :, None]; px[:, :, 3] = (np.clip(cov_s, 0, 1) * 255 + 0.5).astype(np.uint8)
+            Image.fromarray(px, 'RGBA').save(os.path.join(outdir, name + '.png'))
+            log('  rendered %s %dx%d' % (name, out_w, oh))
+        except Exception as e:
+            bad.append((name, str(e)[:80])); log('  FAILED %s: %s' % (name, e))
+    return bad
+
+
+def load_model(tpl):
+    """-> (shade float (H, W), alpha float (H, W)) of a rendered silhouette, or None"""
+    from PIL import Image
+    np = _np()
+    f = os.path.join(sil_dir(), tpl + '.png')
+    if not os.path.isfile(f):
+        return None
+    a = np.asarray(Image.open(f).convert('RGBA'), np.float32) / 255.0
+    if (a[:, :, 3] > 0.5).mean() < 0.05:
+        return None
+    return a[:, :, 0], a[:, :, 3]
+
+
+def white_source(tex, row, item, looks=None):
+    """-> (shade or None, alpha, how) for a row: the model render, else the HUD silhouette (shade None), else None"""
+    np = _np()
+    m = load_model(row_template(row, item, looks))
+    if m is not None:
+        return m[0], m[1], 'model ' + row_template(row, item, looks)
+    import kl_gunpics as P
+    pics = P.pictures(tex)
+    name = W.PIC_OF_ITEM.get(item) if item else HUD_NAME[row]
+    hit = next((n for n in pics if name and n.lower() == name.lower()), None)
+    if hit is None:
+        return None
+    e = pics[hit][1].entry
+    al = np.asarray(P.decode(P.tex_info(e), e)[:, :, 3], np.float32) / 255.0
+    return None, al, 'hud ' + hit
+
+
+def _noise(seed, shape, cell):
+    """smooth value noise 0..1 (cell = size in px of the features)"""
+    np = _np()
+    from PIL import Image
+    rng = np.random.RandomState(seed)
+    g = rng.rand(max(2, shape[0] // cell + 2), max(2, shape[1] // cell + 2)).astype(np.float32)
+    im = Image.fromarray((g * 255).astype(np.uint8)).resize((shape[1], shape[0]), Image.BICUBIC)
+    return np.asarray(im, np.float32) / 255.0
+
+
+def ground_white(size, vis, seed):
+    """the Dead Men ground: near-black blue-grey vertical gradient, low-frequency smudges, dark dirty edges, a few paper specks, a thin ring"""
+    np = _np()
+    W_, H_ = size
+    t = np.clip(np.arange(H_, dtype=np.float32) / (vis[1] - 1), 0, 1)[:, None, None]
+    out = np.broadcast_to(np.array(GROUND_TOP, np.float32) * (1 - t) + np.array(GROUND_BOT, np.float32) * t, (H_, W_, 3)).copy()
+    sm = _noise(seed, (H_, W_), 48) * 0.6 + _noise(seed + 7, (H_, W_), 14) * 0.4
+    out *= (0.80 + 0.40 * sm)[:, :, None]                                          # smudges: +-20 % in broad patches
+    yy, xx = np.mgrid[0:H_, 0:W_].astype(np.float32)
+    ex = np.minimum(np.minimum(xx, vis[0] - 1 - xx), np.minimum(yy, vis[1] - 1 - yy))
+    edge = np.clip(1 - ex / 34.0, 0, 1) * (0.35 + 0.65 * _noise(seed + 3, (H_, W_), 9))   # dirty, uneven dark edges
+    out *= (1 - 0.55 * edge)[:, :, None]
+    rng = np.random.RandomState(seed + 11)
+    for _ in range(26):                                                             # specks of paper dust
+        x, y = rng.randint(8, vis[0] - 8), rng.randint(8, vis[1] - 8)
+        out[y:y + rng.randint(1, 3), x:x + rng.randint(1, 4)] += rng.randint(14, 34)
+    return out
+
+
+def paint_white(shade, alpha, size, vis, seed):
+    """white gun on the Dead Men ground -> RGB float (H, W, 3) 0..255"""
+    np = _np()
+    W_, H_ = size
+    out = ground_white(size, vis, seed)
+    steel = np.array(STEEL, np.float32)
+    ys, xs = np.nonzero(alpha > 0.5)
+    cx, cy = (xs.min() + xs.max()) / 2.0, (ys.min() + ys.max()) / 2.0
+    yy, xx = np.mgrid[0:H_, 0:W_].astype(np.float32)
+    rr = np.sqrt(((xx - cx) * 0.62) ** 2 + (yy - cy) ** 2)                          # the thin weapon-select ring, behind the gun (wider than tall)
+    for R, a in ((92.0, 0.26), (118.0, 0.10)):
+        ring = np.clip(1.15 - np.abs(rr - R), 0, 1)
+        gap = (np.sin(np.arctan2(yy - cy, (xx - cx) * 0.62) * 3 + seed) > -0.55) if R > 100 else 1
+        out = out * (1 - ring * a)[:, :, None] + steel * (ring * a * gap)[:, :, None]
+    glow = _blur(alpha, 7) * 0.16                                                    # a faint bloom round the white
+    out = out * (1 - glow)[:, :, None] + steel * glow[:, :, None] * 0.9
+    fill = np.array(WHITE_FILL, np.float32)[None, None, :] * (0.80 + 0.20 * np.clip(shade, 0, 1))[:, :, None] if shade is not None else \
+        np.broadcast_to(np.array(WHITE_FILL, np.float32), (H_, W_, 3))
+    out = out * (1 - alpha[:, :, None]) + fill * alpha[:, :, None]
+    x0, y0, x1, y1 = 4, 4, vis[0] - 5, vis[1] - 5                                    # ONE hairline frame, steel blue ~50 %
+    for (ys_, xs_) in ((slice(y0, y0 + 1), slice(x0, x1 + 1)), (slice(y1, y1 + 1), slice(x0, x1 + 1)),
+                       (slice(y0, y1 + 1), slice(x0, x0 + 1)), (slice(y0, y1 + 1), slice(x1, x1 + 1))):
+        out[ys_, xs_] = out[ys_, xs_] * 0.5 + steel * 0.5
+    red = np.array(RED, np.float32)                                                  # the header splat: a dirty red bracket, top-left corner
+    out[y0:y0 + 3, x0:x0 + 26] = out[y0:y0 + 3, x0:x0 + 26] * 0.12 + red * 0.88
+    out[y0:y0 + 22, x0:x0 + 3] = out[y0:y0 + 22, x0:x0 + 3] * 0.12 + red * 0.88
+    return out
+
+
+def card_big_white(shade, alpha, item, row):
+    """-> RGBA (256, 512, 4) uint8"""
+    size, vis = (512, 256), (VIS_W, VIS_H)
+    C, A = place(None if shade is None else np_stack3(shade), alpha, BIG_BOX, size, 4.0)
+    return to_rgba_big(paint_white(None if C is None else C[:, :, 0], A, size, vis, 100 + row), size, vis, marks(item))
+
+
+def np_stack3(a):
+    np = _np()
+    return np.repeat(a[:, :, None], 3, axis=2)
+
+
+def card_small_white(shade, alpha):
+    """-> RGBA (128, 128, 4): the same white shape, transparent ground, a 1 px dark halo so it reads on light bars (HUD style, tinted by the game)"""
+    np = _np()
+    C, A = place(None if shade is None else np_stack3(shade), alpha, SMALL_BOX, (128, 128), 4.0, left=True)
+    halo = np.clip(_dil(A, 1) - A, 0, 1) * 0.55
+    a_out = np.clip(A + halo * (1 - A), 0, 1)
+    sh = np.ones_like(A) if C is None else C[:, :, 0]
+    fill = np.array(WHITE_FILL, np.float32)[None, None, :] * (0.80 + 0.20 * sh)[:, :, None]
+    col = (fill * A[:, :, None] + 22.0 * (halo * (1 - A))[:, :, None]) / np.maximum(a_out, 1e-3)[:, :, None]
+    px = np.zeros((128, 128, 4), np.uint8)
+    px[:, :, :3] = np.clip(col + 0.5, 0, 255).astype(np.uint8); px[:, :, 3] = (a_out * 255 + 0.5).astype(np.uint8)
+    return px
+
+
 # ---------------------------------------------------------------- restyle one archive
-def restyle_tex(tex_bytes, tiles, swaps, texobj=None, log=print):
+def restyle_tex(tex_bytes, tiles, swaps, texobj=None, log=print, looks=None):
     """-> (new .TEX bytes or the old ones, report dict). tiles = shop_tiles(); swaps = {row: item}. Idempotent: a big card carrying this tool's
     signature for the same item is left as it is."""
-    data, expect, rep = bake_tiles(tex_bytes, tiles, swaps, texobj, log)
+    data, expect, rep = bake_tiles(tex_bytes, tiles, swaps, texobj, log, looks=looks)
     if not data:
         return tex_bytes, rep
     return W.patch_pixels(tex_bytes, data, expect), rep
 
 
-def bake_tiles(tex_bytes, tiles, swaps, texobj=None, log=print, glyphs=True):
+def bake_tiles(tex_bytes, tiles, swaps, texobj=None, log=print, glyphs=True, looks=None):
     """-> (data {texture id: encoded pixels}, expect {id: (fourcc, w, h)}, report). The pixel work of restyle_tex, without patching anything."""
     import kl_texmat as T
     np = _np()
@@ -642,6 +869,18 @@ def bake_tiles(tex_bytes, tiles, swaps, texobj=None, log=print, glyphs=True):
         bigid, smallid = tiles['big'][r], tiles['small'][r]
         big, _ = decode_tile(tex, bigid)
         ma = marked_any(big)
+        if STYLE == 'white':
+            if ma is not None and ma == (MARK_VERSION, item):
+                rep['kept'].append(r); continue
+            src = white_source(tex, r, item, looks)
+            if src is None:
+                rep['failed'].append((r, 'no model render and no HUD silhouette for row %d item %d: card left as it was' % (r, item))); continue
+            shade, A, how = src
+            import kl_gunpics as P
+            data[bigid] = W.encode_dxt1(card_big_white(shade, A, item, r).tobytes(), 512, 256); expect[bigid] = ('DXT1', 512, 256)
+            data[smallid] = P.encode_dxt5(card_small_white(shade, A)); expect[smallid] = ('DXT5', 128, 128)
+            rep['rows'][r] = how
+            continue
         if ma is not None:
             ver, mk = ma
             if mk == item and ver == MARK_VERSION:
@@ -738,7 +977,8 @@ def bake_map(mapdir, outdir, swap_text, log=print):
     tiles = shop_tiles(z, stem)
     for what, why in tiles['skipped']:
         log('  skipped %s: %s' % (what, why))
-    new_tex, rep = restyle_tex(old, tiles, swaps, log=log)
+    looks = read_shown(ini)
+    new_tex, rep = restyle_tex(old, tiles, swaps, log=log, looks=looks)
     new = {}
     if new_tex != old:
         new[texm] = new_tex
@@ -761,7 +1001,7 @@ def bake_map(mapdir, outdir, swap_text, log=print):
     assert all(d.lower().endswith(('.tex', '.loc')) for d in diff), diff
     # a second pass changes nothing
     t2 = shop_tiles(b, stem)
-    again, rep2 = restyle_tex(b.read(texm), t2, swaps, log=lambda s: None)
+    again, rep2 = restyle_tex(b.read(texm), t2, swaps, log=lambda s: None, looks=looks)
     assert again == b.read(texm), 'second restyle pass changed %d bytes (rows %s)' % (sum(x != y for x, y in zip(again, b.read(texm))), sorted(rep2['rows'], key=str)[:6])
     assert not [r for r in rep2['rows'] if isinstance(r, int)], 'second pass repainted cards %s' % sorted(r for r in rep2['rows'] if isinstance(r, int))
     f2 = {n: b.read(n) for n in files}
@@ -793,7 +1033,7 @@ def recut(mapdir, outdir, swap_text=None, source_suffix='.before-1023shop', log=
     assert ti['big'] == ts['big'] and ti['small'] == ts['small'], 'tile ids differ between installed and source'
     if rows is not None:
         ts = dict(ts, big={r: t for r, t in ts['big'].items() if r in rows}, small={r: t for r, t in ts['small'].items() if r in rows})
-    data, expect, rep = bake_tiles(zs.read(texm), ts, swaps, log=log, glyphs=False)
+    data, expect, rep = bake_tiles(zs.read(texm), ts, swaps, log=log, glyphs=False, looks=read_shown(ini))
     assert not rep['failed'], rep['failed']
     inst_tex = zi.read(texm)
     new_tex = W.patch_pixels(inst_tex, data, expect)
@@ -865,21 +1105,25 @@ def write_scripts(out, manifest, rows=None, table=None):
                 rows.append("  @{ m = '%s'; f = '%s'; old = '%s'; new = '%s' }" % (res['map'], res['archive'], res['old_md5'], res['new_md5']))
                 table.append('#     %s\\%s  %s -> %s  (%d -> %d bytes)' % (res['map'], res['archive'], res['old_md5'][:8], res['new_md5'][:8], res['old_size'], res['new_size']))
     ps = W.PS1.replace('__FILES__', ',\r\n'.join(rows)).replace('__TABLE__', '\r\n'.join(table)).replace('__SWAP__', swap_text) \
-        .replace('__DATE__', datetime.date.today().isoformat()).replace('.before-shopswap', '.before-1023shop') \
-        .replace('shopswap.ps1', 'shop1023.ps1').replace('(tools/kl_shop_swap.py,', '(tools/kl_shop_cards.py,') \
+        .replace('__DATE__', datetime.date.today().isoformat()).replace('.before-shopswap', '.before-1024white') \
+        .replace('shopswap.ps1', 'shop1024white.ps1').replace('(tools/kl_shop_swap.py,', '(tools/kl_shop_cards.py,') \
         .replace('re/shop_swap_names.md', 're/shop_ui_1023.md') \
         .replace("and\n#   KLGuns.ini (gains a [Shop] Swap= line, which is what the hook reads for that map). Swap line:", "(all 36 shop cards + star / lock restyled).\n#   KLGuns.ini is NOT touched: merge KLHook.shop.patch.ini into KLHook.ini by hand. Swap line:") \
         .replace('the .TEX pixels of the swapped rows\' shop pictures', 'the .TEX pixels of the shop pictures')
-    open(os.path.join(out, 'shop1023.ps1'), 'w', encoding='latin1', newline='').write(ps.replace('\r\n', '\n').replace('\n', '\r\n'))
-    bat = W.BAT.replace('shopswap.ps1', 'shop1023.ps1').replace('tools\\kl_shop_swap.py', 'tools\\kl_shop_cards.py')
-    open(os.path.join(out, 'INSTALL shop 1023.bat'), 'w', newline='').write(bat.format(what='INSTALL shop 1023', arg=''))
-    open(os.path.join(out, 'UNDO shop 1023.bat'), 'w', newline='').write(bat.format(what='UNDO shop 1023', arg='-Undo'))
+    open(os.path.join(out, 'shop1024white.ps1'), 'w', encoding='latin1', newline='').write(ps.replace('\r\n', '\n').replace('\n', '\r\n'))
+    bat = W.BAT.replace('shopswap.ps1', 'shop1024white.ps1').replace('tools\\kl_shop_swap.py', 'tools\\kl_shop_cards.py')
+    open(os.path.join(out, 'INSTALL shop 1024 white.bat'), 'w', newline='').write(bat.format(what='INSTALL shop 1024 white', arg=''))
+    open(os.path.join(out, 'UNDO shop 1024 white.bat'), 'w', newline='').write(bat.format(what='UNDO shop 1024 white', arg='-Undo'))
     open(os.path.join(out, 'KLHook.shop.patch.ini'), 'w', newline='').write(PATCH_INI % swap_text)
 
 
 def main(a):
     pos = [k for k in a if not k.startswith('--')]
     opts = {k[2:].split('=')[0]: (k.split('=', 1)[1] if '=' in k else True) for k in a if k.startswith('--')}
+    if 'sil' in opts:
+        os.environ[SIL_ENV] = opts['sil']
+    if pos and pos[0] == 'render':
+        bad = render_models(pos[1] if len(pos) > 1 else None); print('render failures: %s' % (bad or 'none')); return 1 if bad else 0
     if len(pos) == 3 and pos[0] == 'sheet':
         sheet(pos[1], pos[2]); return 0
     if len(pos) == 3 and pos[0] == 'bake':

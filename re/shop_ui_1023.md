@@ -57,3 +57,27 @@ cylinder (as bright as the table), row 33 loses a rail sliver, rows 15, 19, 21, 
 the installed DD01), swapped rows are re-baked from the HUD silhouette. `python tools/kl_shop_cards.py recut <installed map dir> <outdir>` re-cuts
 from `<zip>.before-1023shop` and replaces ONLY the big card and small icon tiles of the INSTALLED .TEX (everything else byte identical, asserted per
 member and per texture). Staged and previewed for DD01 and DM01 under `<work>\build\shopcut2_1023`; not installed.
+
+## 2026-10-24: WHITE style (MARK_VERSION 3, `STYLE='white'`), staged not installed
+Owner: "shop looks decent, just needs to be white like the M4 and the USP were originally, they dont all match up now ... redesign it with the Dead
+Men feel". The v2 photo cut-outs are gone from the default path; every row is now ONE style:
+- Gun = a white flat silhouette rendered from the gun's own weapon MODEL (side view, `kl_view.View`, 1200 px, 2x supersampled, cached as
+  `<work>\build\shopwhite_1024\sil\<template>.png`, RGBA: grey = flat shade 80..100 %, alpha = anti-aliased coverage). `python tools/kl_shop_cards.py
+  render [outdir]` makes them (about 1 min; reads the stock DD F01 level and M01_FA_A only). Fallback when a png is missing: the 128 px HUD
+  silhouette (`UI_Weapon_01#<name>`, soft when enlarged, reported as `hud ...` in the row report).
+- The picture follows the gun you actually hold: the map's `KLGuns.ini` Shown look decides (`read_shown`): DM01 and DD01 both show MP5 (Zastava row 28),
+  SG 552 (SCAR 33), M4A1 (AK-47 29), P90 (Type05 22), Steyr TMP (MAC-10 18), USP (M9 2); rows 13/16/32/35 show the swapped-in HK69, Type81, Rem700, Minimi.
+  The Dead Men look models are rendered via `kl_chars.Source.get('M01_FA_A')` (png names `dm_<template>`).
+- Ground = Dead Men menu look from the research: near-black blue-grey gradient, low-frequency smudges, dirty dark edges, a few paper specks, ONE 1 px
+  steel-blue hairline frame (130,158,193 at 50 %), a thin broken ring behind the gun (the WeaponSelect ring), a small dirty-red corner bracket (the header
+  splat), a faint steel bloom round the white. No outline, no photo, no chalk hatching, no underline. Same box (BIG_BOX) on every card.
+- Small icons: the same white shape, transparent ground, 1 px dark halo (reads on light bars), left anchored in the stock band. Star / lock unchanged
+  (already crisp white with a halo).
+- Idempotent: the v3 mark (version + item) in the unseen corner; v1/v2 cards count as stale and are simply repainted (the white style needs NO art from the
+  old card, so the "cannot re-bake a restyled card" guard no longer applies to it). Same texture ids, sizes, formats. `bake_map` still asserts second pass = 0 bytes.
+  The mark does not include the map's look, so after changing a map's KLGuns.ini Shown line, restage from an archive that is not v3.
+- Install scripts: backup suffix `.before-1024white`, `shop1024white.ps1`, `INSTALL shop 1024 white.bat`, `UNDO shop 1024 white.bat` (written by `stage`).
+Known imperfections: the model renders carry a few stray model parts (DM01/DD01 row 20 MPi69 keeps its sling cable loop, row 11 sawn-off a thin dangling
+line, row 2 USP a ragged lower edge of the grip); the shade only hints at detail (trigger guard, magazine well) since the silhouette is flat white; rows 11,
+15, 21 etc. look fine but pistols fill the box by height so they are smaller than rifles (same box, not same scale: the models have no common unit here).
+The Dead Men red/orange accents are minimal on purpose (the game draws text/price on top, position of those not measured).
