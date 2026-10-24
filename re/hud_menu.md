@@ -54,7 +54,9 @@ The review is `re/hud_menu_review.md`; what was done about each finding: section
   made for it. The 14:24 package had grown the table past 5000 with a `<Window>` on 5000.
 - **THE RULE: per load set, live count <= 5000, or entry 5000 is an element. The budget is 5000, not 5096.**
   The live counts are NOT KNOWN (the tag counts of the files, 4342 + 1889 for the menu, are over 5096: `<Platform>`
-  blocks and uninstanced templates drop out; re/menus.md open question 3). K0 reads them.
+  blocks and uninstanced templates drop out; re/menus.md open question 3). K0 reads them. Static ESTIMATE
+  2026-10-24 (`tools/kl_menu_count.py`, rules read from the reader, `re/menu_count.md`): stock frontend 4730, the
+  LIVE overlay frontend 4793 on a keyboard and 4990 on a gamepad (10 under the line), a level 2775.
 - THE GUARD IN THE TOOL: `apply` keeps the table as it is (sufficient: count and every index unchanged), and
   `check <overlay> <reference>` proves it per file (the sequence of Window / GuiElement / ColorSet / ButtonGraphic /
   Template tags with Name, Type, Template, the conditional blocks, Text / Graphic children). A table that grew is a

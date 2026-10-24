@@ -150,6 +150,19 @@ k29b untested; e8 told). Not live-tested. THEN INSTALLED cover2_1024 on the same
 b23248bd9; backups .before-1024cover2): sparse cover boxes on walls/planters/counters (DM03 +70, DM09 702 boxes total: watch fps) +
 car cover copies (review: very probably a NO-OP, the wreck-cover cause is still unknown; next: cover record byte +8 'coverboxcar',
 ZVehicleEffects). e8's VP5 armed on k29b_test: hold live runs until 'VP5 done'.
+2026-10-24 17:55 UTC - scheduled check-in (cloud). PC BUSY (build\shop_dm_1024v2\DM01 mockups written 17:45 UTC, KLHook.ini 17:03,
+dinput8.dll 16:41): nothing launched, installed or staged into the game. Log read: two FATAL c00000fd (stack overflow, ntdll+0x5c305)
+at 17:32:50 / 17:33:17 PC time right after 'FIRST Present seen, via the swap chain (slot 3) route' with the 16:52 build; the third
+start (17:35) had the limiter off and the live ini now says k36 SwapChain=0 - diagnosed and fixed locally, no dump written, nothing
+for me to triage. Offline piece (Hire tab stage 0 / menus.md q3+q4): `re/menu_count.md` + `tools/kl_menu_count.py` (self-test on
+the stock sets passes; the 2026-10-09 model's 5992 was the Platform rule). Read from kl2.exe: <Platform>/<BuildTag> share one rule
+(attr PC, or PC_KEYBOARD / PC_GC per [manager+0xaf68]; XENON/PS3 never read); ExcludeIn tests per key (FA IS a key); a <Template>'s
+children are made once and re-attached (0x403060, no clones), an element naming a template with children makes nothing; the
+tokenizer is not XML (stray text ends the file silently, first '-->' closes a comment, first duplicate attribute wins). ESTIMATES:
+stock frontend 4730 (gamepad 4927), live overlay frontend 4793 (gamepad 4990 = 10 under the 5000 line), level 2775 (DM01 2778),
+campaign 1193. NEW second cap: 512 <Template> definitions per load set (reader+0x1e8, 0x686270), frontend 500 stock / 502 live:
+a new frontend page may define at most 10 templates. Pulled XML copies sit in <work>\research\sched_1024_menu\ (no game file touched).
+Owner: nothing new this hour.
 
 2026-10-24 15:45 - INSTALLED WHITE SHOP (owner: 'put it into the main game'; game closed): build\shopwhite_1024\stage\shop1024white.ps1
 on all 27 maps (379ef8622, MARK_VERSION 3: model-rendered white silhouettes on a Dead Men dark card; review READY; backups
@@ -170,6 +183,7 @@ klc_tries cap 3. Owner questions in section 8. ANNOUNCER FIRST: klvoice.c [Voice
 entries share one recording is left stock; the speaker's own KLVoice leaf follows via klk_say, GUESS that it queues behind). Built SHIP
 klhook\out_3f_1024k28 + TEST _test, NOT installed: VP5 (scratchpad run_vp5.ps1, live\VP5_DM01.ini) not launched, owner active.
 
+2026-10-24 13:55 UTC (14:55 PC clock) - scheduled check-in (cloud). PC BUSY (build\cover_1024, cardown_1024, hc2door_1024, shopwhite_1024, amb_1024 written 13:25-13:47 UTC; KLHook.ini 13:24): nothing launched, installed or staged into the game; no dump newer than KLHook_1.dmp (triaged 06:00). Offline piece: `re/triggerbox.md` - ZTriggerBox read from kl2.exe (update 0x42afd0, fire 0x45f5d0): field 10 = -1 ONE-SHOT (the fire clears field 0 and leaves the update list), 0 = every edge, n > 0 = re-arm n s later (last-pass flags cleared; stock van box TriggerBox_RearDoors_Open uses 10); field 15 = 1 means the LOCAL human only (bit 2 of [player+0x2720]; bank_campaign's 'once' / 'per criminal' readings were wrong); in Arcade with ECPS BOTH / FA_MERCONLY and field 15 = 0 an AI heister counts as a player (why LIFT11's bot fired the lift box). Owner's 12:28 DM09 log: bots 4 / 1 / 7 crossed the one-shot TriggerBox_OpenExitElevator (x 1949..2149) at 12:28:29-31, the human 6-8 s behind (box 9 at 12:28:37): the box was spent by a bot and disabled before he arrived - LIFT10/13 had the human first. PROPOSAL (not built): field 10 = 10 on node 7857 (one int) so his own crossing re-fires the door proxies; costs listed in the doc. Owner / local: a LIFT14-style run with bots leading and [Probe] DoorProxy=1 says whether the bot-fired play reaches the leaves.
 2026-10-24 13:18 - RETOMOTO LIFT AS A HEISTER (owner: 'the lift doesnt work when youre a crew / heister'). His session log (own.log,
 F06=DM09, 12:28:39..12:29:06): he reached the hall at (2727, 19601, 912), the car stayed shut, he walked it (x 2233..2786, z -1434..1028);
 kljoin CANCELLED rides at 12:28:46 / 12:28:57 / 12:29:06 'the player left the box (more than Slack outside)' - Slack 150, box 9 z 0..1100 -

@@ -79,6 +79,11 @@ rows, and has a revert race. Works online for money. Effort medium, risk medium;
 ## 4. Recommendation and staged plan
 Recommend **B** (separate Hire window), with C as the fallback if the live gate fails, D only if online money is wanted early.
 - **Stage 0 (offline, free):** read the element-table usage statically for a stock level; decide the window's element count.
+  DONE 2026-10-24 (scheduled check-in, `re/menu_count.md`, `tools/kl_menu_count.py`): a level set (Patch01 ingame.xml +
+  the level's online.xml, Arcade or FA) is ~2775 of 5096 entries, so an in-level Hire window has ~2200 entries of room;
+  templates 319 of 512. The FRONTEND is the tight one (live 4793 keyboard / 4990 gamepad, 502 of 512 templates): keep
+  Hire out of frontend.xml. ESTIMATE until K0 reads the live count. Also: the tokenizer is not XML - no text between tags,
+  no `<?xml`, first `-->` closes a comment, first duplicate attribute wins (`re/menu_count.md` 3).
 - **Stage 1 (solo, host-only, Arcade, kl_online()==0):** smallest live proof, three steps, one human menu visit:
   (a) put ONE test window "Hire" in F01's online.xml with a single ToggleText on Option KLChar (exists already, so no new hook code),
   reached through the repurposed ZW_TAB element; check it opens from the Buy page and the value changes; (b) read
@@ -117,7 +122,7 @@ in-memory word still rises; owner's current rank unread). Fallback: price only, 
 - Online: body, mask, outfit not replicated; Steam id -> session number unknown (blueprint 7.4 q2); needs host permutation. Later.
 
 ## 7. Risks
-1. Element-table overflow = hard int3 (0x7fad8d); headroom unknown. 2. Input focus of a repurposed ZW_TAB unproven. 3. Slot 137 timing
+1. Element-table overflow = hard int3 (0x7fad8d); headroom in a level ~2200 entries by the static model (`re/menu_count.md`, ESTIMATE). 2. Input focus of a repurposed ZW_TAB unproven. 3. Slot 137 timing
 at state 0x24 with the player transiently gone (GUESS: tick waits; re/antitamper.md 5.4 unresolved); klc_tries cap 3 silently drops the
 4th hire. 4. Hook write to `[score+0x38]` may not refresh FATotal until a redraw; double-purchase guard is ours; the total can go
 negative, and the stats commit (0x68b930) records the lower total locally. 5. Patch01 precedence unproven, so bake per zip and keep
