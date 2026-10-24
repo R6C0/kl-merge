@@ -71,7 +71,7 @@ Full dated log: `re/open_work_log.md` (newest first).
 
 2026-10-25 - INSTALLED (owner 'install all'), none live-tested: doors2 on DM01 10359141, DM06 f1f888c5, DM09 b76586a1; DM01B gas+doors2
 f2a70278; DM03A swat+doors2 02e90dfa; DM02 assault ae193d9c. Backups .before-1025doors2/-dm01bgas/-dm03aswat/-dm02assault; undo doors2 first.
-DM05A lastcall3b lite + clubmusic live (df39c459 -> zip d5f8522b).
+Then (10-25) DM01 squads+cars c0e7b8ee; DM05A lastcall4 lite 858d3371 (70 civs, 96 squads: crash = undo).
 
 2026-10-25 - Hook k42 8DFB5223 live (shop page II: list names + buy hand-over fix; backup .before-1025k42). Next: read KLHook.log for the
 'weapon list up, UI table' line and 'carries row R from set B'. Open: DM01 cops never drive/exit the Bentleys; door PathBlocker detours untested.
