@@ -139,9 +139,13 @@ def dancers(B):
     return out
 
 
-def build(src, dst, clips=None, per=PER_ROUT, force=False, log=print, group=None, only=None):
+def build(src, dst, clips=None, per=PER_ROUT, force=False, log=print, group=None, only=None, prefix=None, offset=0, stagger=None):
     """group / only (lastcall3, 2026-10-25): a SECOND dance group for civilians added after the first pass: `group` = the new top's name
-    (default GROUP), `only` = a set of civilian group names to dance (default all); a second group does not merge the .ANM again."""
+    (default GROUP), `only` = a set of civilian group names to dance (default all); a second group does not merge the .ANM again.
+    lastcall4 (2026-10-25): a THIRD group needs its own rout names and its own delays so the crowd does not move in step with the
+    first two: `prefix` = the rout name format (default 'KLDance2_%02d' with group, 'KLDance_%02d' without), `offset` = added to every
+    civilian's index in the delay formula, `stagger` = seconds between neighbours (default STAGGER)."""
+    stagger = STAGGER if stagger is None else stagger
     clips = clips or DEFAULT_CLIPS
     gname = group or GROUP
     have = md5(src)
@@ -188,10 +192,10 @@ def build(src, dst, clips=None, per=PER_ROUT, force=False, log=print, group=None
     routs = []
     for r in range(0, len(dl), per):
         chunk = dl[r:r + per]
-        nm = ('KLDance2_%02d' if group else 'KLDance_%02d') % (r // per)
+        nm = (prefix or ('KLDance2_%02d' if group else 'KLDance_%02d')) % (r // per)
         rn = M.clone(HOST, FORM + '\\20_RunToStreet', nm)
         M.place(rn, (0.0, 0.0, 0.0))
-        delays = [round(((r + i) * STAGGER) % STAGGER_MOD, 2) for i in range(len(chunk))]
+        delays = [round(((r + i + offset) * stagger) % STAGGER_MOD, 2) for i in range(len(chunk))]
         # field 0 = the script, field 1 = the rout's NEXT list (stock's points at the civilian's Deactivate modifier: here nothing)
         M.set(rn, 'MiniCutsceneRout', {0: script_for([n for _k, _g, n in chunk], slots, delays), 1: []})
         grp.add(rn)

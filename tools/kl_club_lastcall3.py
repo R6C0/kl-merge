@@ -56,6 +56,7 @@ from kl_prp import Prp
 BS = chr(92)
 R = 'ROOT' + BS
 MD5_LIVE = '7ef0404f95c51f8755dba25174f130d7'
+MD5_BASE4 = 'd5f8522bb45c1757e136e999e35d53f5'      # the live zip after lastcall3b lite + clubmusic (lastcall4 builds on it)
 TAG = '.before-1025lastcall3'
 CROWD, UPPER, ALERT, SEED = 34, 10, 450.0, 11
 ROOF_SQUADS, ROOF_MEN, ROOF_Y = 3, 4, 1800.0
@@ -78,6 +79,14 @@ VARIANTS = {
     'v3':   dict(crowd=34, sep=100.0, roof='stretch', far=0.0, spread=0.0, tag='.before-1025lastcall3', stem='lastcall3'),
     'full': dict(crowd=34, sep=130.0, roof='lower', far=600.0, spread=120.0, tag='.before-1025lastcall3b', stem='lastcall3b'),
     'lite': dict(crowd=18, sep=130.0, roof='lower', far=600.0, spread=120.0, tag='.before-1025lastcall3b', stem='lastcall3b'),
+    # lastcall4 (2026-10-25): 'pack' / 'pack_lite' build on the LIVE zip d5f8522b (40 civilians, 129 actors / 74 squads). `add` new civilians
+    # (`upper` of them on the upper floor), the parked campaign men in `remove` go (see PACK_REMOVE). Only a 'main' build per variant.
+    'pack':      dict(mode='pack', base=MD5_BASE4, add=50, upper=24, sep=115.0, spread=110.0, roof='keep', far=600.0, civ_only=True,
+                      remove=None, per=8, dgroup='KL_Dance3!', rout='KLDance3_%02d', doff=17, stagger=0.53, crowd=50,
+                      tag='.before-1025lastcall4', stem='lastcall4', want=90, want_upper=30),
+    'pack_lite': dict(mode='pack', base=MD5_BASE4, add=30, upper=12, sep=115.0, spread=110.0, roof='keep', far=600.0, civ_only=True,
+                      remove=None, per=8, dgroup='KL_Dance3!', rout='KLDance3_%02d', doff=17, stagger=0.53, crowd=30,
+                      tag='.before-1025lastcall4', stem='lastcall4', want=70, want_upper=24),
 }
 CFG = dict(VARIANTS['v3'])
 
@@ -281,7 +290,8 @@ def squads_f3(Jn, want, log):
 def roof_pass(src, dst, hvk_origin, log=print):
     B = KB.Built(src)
     sc = B.sc
-    if sc.resolve(R + 'OldWaves!RoofClock'):
+    fresh = not sc.resolve(R + 'OldWaves!RoofClock')
+    if not fresh and not CFG.get('civ_only'):
         shutil.copyfile(src, dst)
         log('already holds the roof clock: copied unchanged')
         return dict(unchanged=True)
@@ -301,28 +311,33 @@ def roof_pass(src, dst, hvk_origin, log=print):
         raise ValueError('kl_hvk does not reproduce the .HVK')
     a0, s0 = L2.census(sc)
     nav = KB.Nav(A.nav, links=True)
-    st = KB.stations(B, nav)
-    home, start = st['home'], st['start_mid']
-    route = L2.Route(B, nav, home, start)
-    log('route START -> pad: %s' % route.facts())
-    plan = plan_roof(B, nav, home, route, log)
-    M, tops, rrep = make_roof(B, plan)
-    q, order = M.scene(tops)
-    Jn = J.join(sc, [(sc, t) for t in sc.tops()] + [(q, t) for t in q.tops()], 'lastcall3')
+    if fresh:
+        st = KB.stations(B, nav)
+        home, start = st['home'], st['start_mid']
+        route = L2.Route(B, nav, home, start)
+        log('route START -> pad: %s' % route.facts())
+        plan = plan_roof(B, nav, home, route, log)
+        M, tops, rrep = make_roof(B, plan)
+        q, order = M.scene(tops)
+        Jn = J.join(sc, [(sc, t) for t in sc.tops()] + [(q, t) for t in q.tops()], 'lastcall3')
+    else:                                   # lastcall4 (civ_only): the roof squads are already in; only f3 / spread of the new civilians
+        route, tops, order, rrep = None, [], [], dict(squads=[], go=[])
+        Jn = J.join(sc, [(sc, t) for t in sc.tops()], 'lastcall4')
     # ---- f3
     f3 = squads_f3(Jn, lambda t, p: t.startswith(CIV_PREFIX) or t == L2.HELI_TOP, log)
     ncivs = sum(1 for p, _b in f3 if CIV_PREFIX in p)
     nheli = sum(1 for p, _b in f3 if p.endswith(L2.HELI_TOP))
-    if nheli != 1:
+    if fresh and nheli != 1:
         raise ValueError('the heli squad: %d nodes changed (wanted 1; already f3 = 1?)' % nheli)
     log('  f3 = 1: %d civilian squads, %d heli squad' % (ncivs, nheli))
     # ---- civilians nearer than CFG['spread']
     smoves = spread_civs(B, Jn, nav, CFG['spread'], log) if CFG['spread'] else []
     # ---- AIMonitor START list
-    km = Jn.resolve(KOW.MONITOR)[0]
-    ci = AU.ctrl_of(Jn, km, 'AIMonitor')
-    have = list(KOW.values(Jn, km, 'AIMonitor')[KOW.START_LIST])
-    kl_fa.edit(Jn, km, ci, lambda us: AU.setv(Jn, us, KOW.START_LIST, have + [g for g in rrep['go'] if g not in have]))
+    if rrep['go']:
+        km = Jn.resolve(KOW.MONITOR)[0]
+        ci = AU.ctrl_of(Jn, km, 'AIMonitor')
+        have = list(KOW.values(Jn, km, 'AIMonitor')[KOW.START_LIST])
+        kl_fa.edit(Jn, km, ci, lambda us: AU.setv(Jn, us, KOW.START_LIST, have + [g for g in rrep['go'] if g not in have]))
     dang0, dang1 = J.dangling(sc), J.dangling(Jn)
     if len(dang1[0]) > len(dang0[0]) or len(dang1[1]) > len(dang0[1]):
         raise ValueError('new dangling references: %s' % (sorted(set(dang1[0]) - set(dang0[0]))[:5],))
@@ -333,7 +348,7 @@ def roof_pass(src, dst, hvk_origin, log=print):
     fa, fs = L2.census(Jn)
     # ---- .HVK
     hrep = []
-    if hvk_origin:
+    if hvk_origin and fresh:
         hits = [(s, j) for s in hv.shapes if s.type == kl_hvk.VEHICLE for j in range(len(s.inst))]
         if len(hits) != 1:
             raise ValueError('expected exactly one vehicle placement in the .HVK, found %d' % len(hits))
@@ -383,8 +398,9 @@ def roof_pass(src, dst, hvk_origin, log=print):
         hi = tuple(max(p[a] for p in pts) + (190.0 if a == 1 else 10.0) for a in range(3)) if pts else (10.0, 10.0, 10.0)
         items.append((slot1[made[id(t)]] + 2, lo, hi))
     r3 = octn.rooms[0][3]
-    octn.rooms[0][3] = O.join_trees(r3, O.build_tree(items, r3.origin, r3.scale))
-    octn.rooms[0][3].check()
+    if items:
+        octn.rooms[0][3] = O.join_trees(r3, O.build_tree(items, r3.origin, r3.scale))
+        octn.rooms[0][3].check()
     move = {a: b for a, b in zip(octx.record_refs(), octn.record_refs()) if a != b}
     repointed, new_prm = 0, None
     if move:
@@ -415,7 +431,244 @@ def roof_pass(src, dst, hvk_origin, log=print):
     changed = sorted(e for e, n in B.ext.items() if new[n] != B.files[n])
     kl_graft.write_zip(dst, [(n, new[n]) for n in B.order])
     return dict(census_before=[a0, s0], census_after=[fa, fs], f3_civs=ncivs, f3_heli=nheli, roof=rrep, hvk=hrep, members_changed=changed,
-                slot_ids_moved=moved, entities_added=len(order), route=route.facts(), spread=smoves)
+                slot_ids_moved=moved, entities_added=len(order), route=route.facts() if route else None, spread=smoves)
+
+
+# ------------------------------------------------------------------ lastcall4 (2026-10-25): the packed club
+# WHY: the owner (2026-10-25): "40 people bruh theres two floors needs way more than 40 people". The live lastcall3b-lite build holds 129 actors /
+# 74 squads (40 civilians). Civilians share the actor pool with the enemies (re/actor_caps.md: no fixed cap found in kl2.exe; stock Last Call
+# runs 148 / 90; 99 / 55 was the largest build proven before lastcall3b; the live lastcall3b-lite 129 / 74 has been played). To add 30 or 50
+# civilians the PARKED campaign men (Dead Men's own guards, not part of the Fragile Alliance flow: the bots' TriggerActorsDead gates wake
+# them) go first; the 6 OldWaves (30 men), the bots (7), the roof squads (12) and the helicopter stay.
+SECOND = 'AI_Players!Enemies!SecondRun!'
+FIRST = 'AI_Players!Enemies!FirstRun!'
+PACK_REMOVE = [SECOND + n for n in ('Rave#02', 'Rave#01', 'Lounge#02', 'Lounge#01', 'YokoGuards', 'Dance#02')] + [
+    FIRST + n for n in ('SurpriseStairs', 'Backroom!WaitingRoom', 'Bodyguards_First_Floor!Entrance', 'DanceFloor01!On_Dancefloor#02',
+                        'DanceFloor02!Dancefloor02a#03', 'DanceFloor02!Dancefloor02a#01', 'DanceFloor02!Dancefloor02a#02',
+                        'DanceFloor02!FatBounceronWalkway')]                      # 32 men / 14 squads; kept: Dance#01, Surprise2, HunterKillers (8 men)
+LITE_REMOVE = [SECOND + n for n in ('Rave#02', 'Rave#01', 'Lounge#02', 'Lounge#01', 'YokoGuards')] + [
+    FIRST + n for n in ('SurpriseStairs', 'Backroom!WaitingRoom', 'Bodyguards_First_Floor!Entrance')]      # 19 men / 8 squads
+REFILL_FROM = [FIRST + 'Surprise2', FIRST + 'Hunters!HunterKillers', SECOND + 'Dance#01', FIRST + 'DanceFloor01!On_Dancefloor#02',
+               FIRST + 'DanceFloor02!Dancefloor02a#02', FIRST + 'DanceFloor02!Dancefloor02a#01']
+
+
+def trim_pass(src, dst, remove, log=print):
+    """Take the top groups named in `remove` out of the build `src` -> `dst` (a folder-free zip): .prp (J.join without them), .gms / .buf
+    (A.remove), .oct / .rmi / .rmc (O.remap_ids with the dead slot ids dropped), .prm (model roots repointed). References INTO the removed
+    groups (the bots' TriggerActorsDead gates, their wake lists) are cut. A gate whose 'these men dead' list (field 0) was non-empty and
+    is now empty would never fire (re/bots_squad.md: an empty list does nothing), so it names a living guard of REFILL_FROM instead (GUESS:
+    the gates are the bots' stage clock; which man opens which stage was never tuned). -> report."""
+    B = KB.Built(src)
+    sc = B.sc
+    same = J.join(sc, [(sc, t) for t in sc.tops()], 'same')
+    if J.fingerprints(same)[0] != J.fingerprints(sc)[0] or J.text(same, same.p.settings) != J.text(sc, sc.p.settings):
+        raise ValueError('kl_prpjoin.join does not reproduce the build\'s .prp')
+    A = B.scene
+    g0, b0 = A.write()
+    if kl_gms.pack(g0) != B['.gms'] or b0 != B['.buf']:
+        raise ValueError('kl_scene does not reproduce the build\'s .gms / .buf')
+    octx, rmi, rmc = O.Oct.parse(B['.oct']), O.RoomIndex.parse(B['.rmi']), O.RoomIndex.parse(B['.rmc'])
+    if octx.pack() != B['.oct'] or rmi.pack() != B['.rmi'] or rmc.pack() != B['.rmc']:
+        raise ValueError('kl_octree does not reproduce the build\'s .oct / .rmi / .rmc')
+    pre = KB.room_sets_check(A, octx, rmi, rmc)
+    a0, s0 = L2.census(sc)
+    byname = {sc.names[t]: t for t in sc.tops()}
+    missing = [n for n in remove if n not in byname]
+    if missing:
+        raise ValueError('not in the build (already trimmed?): %s' % missing[:3])
+    removed = [byname[n] for n in remove]
+    gone_nodes = set()
+    for t in removed:
+        gone_nodes.update(range(t, sc.end[t]))
+    ra, rs = sum(1 for k in gone_nodes if sc.cls(k) == 'ZFFActor'), L2.census(sc)[1] - L2.census(sc, removed)[1]
+    # the living guards that may stand in for an emptied gate list
+    pool = []
+    for n in REFILL_FROM:
+        t = byname.get(n)
+        if t is not None and t not in removed:
+            pool += [sc.path[k] for k in range(t + 1, sc.end[t]) if sc.parent[k] == t and sc.names[k].startswith('Guard#')]
+    Jn = J.join(sc, [(sc, t) for t in sc.tops() if t not in set(removed)], 'lastcall4')
+    # ---- references into the removed groups: cut the dead entries
+    dead = []
+    for k, holder, field, s, hit in J.references(sc):
+        if not hit or k < 0 or k in gone_nodes:
+            continue
+        tgt = sc.resolve(s)
+        if tgt and tgt[0] in gone_nodes:
+            dead.append(k)
+    dead = sorted(set(dead))
+    cut = 0
+    for k in dead:
+        kj = Jn.resolve(sc.path[k])
+        if len(kj) != 1:
+            raise ValueError('%s: %d nodes in the joined tree' % (sc.path[k], len(kj)))
+        kj = kj[0]
+        for i in [None] + list(range(len(Jn.nodes[kj]['ctrls']))):
+            def fn(us):
+                nonlocal cut
+                for j, u in enumerate(us):
+                    if u[0][0] == 0x04 and len(u) > 1 and u[1][0] == 0x0c:
+                        live = [x for x in u[1:] if Jn.p.key(x)[:5].upper() != 'ROOT' + BS or Jn.resolve(Jn.p.key(x))]
+                        cut += len(u) - 1 - len(live)
+                        us[j] = [(0x04, struct.pack('<I', len(live)))] + live
+                    elif u[0][0] == 0x0c and Jn.p.key(u[0])[:5].upper() == 'ROOT' + BS and not Jn.resolve(Jn.p.key(u[0])):
+                        us[j] = [kl_fa._str(Jn, '')]
+                        cut += 1
+            kl_fa.edit(Jn, kj, i, fn)
+    log('  references into the %d removed groups: %d holders, %d entries cut' % (len(removed), len(dead), cut))
+    # ---- gates left with an empty "dead" list: name a living guard
+    before = {sc.path[k]: v for k, _i, v in kl_fa.controllers(sc, 'TriggerActorsDead')}
+    refilled, used, stage_pick = [], 0, {}
+    for k, i, v in list(kl_fa.controllers(Jn, 'TriggerActorsDead')):
+        p0 = before.get(Jn.path[k])
+        if p0 is None or not p0[0] or v[0]:
+            continue
+        key = Jn.path[k].split(BS)[-1]                       # one man per STAGE (035_..., 036_...) for all seven bots, not one per bot
+        if key not in stage_pick and pool:
+            stage_pick[key] = pool[min(used, len(pool) - 1)]
+            used += 1
+        pick = [stage_pick[key]] if key in stage_pick else []
+        if not pick:
+            raise ValueError('%s: its list of men is empty and no living guard is left to name' % Jn.path[k])
+        kl_fa.edit(Jn, k, i, lambda us, pick=pick: AU.setv(Jn, us, 0, pick))
+        refilled.append([Jn.path[k].split(BS)[-2] + BS + Jn.path[k].split(BS)[-1], pick[0].split('!')[-1]])
+    log('  gates whose men list went empty and now name a living guard: %d %s' % (len(refilled), refilled))
+    dang0, dang1 = J.dangling(sc), J.dangling(Jn)
+    if len(dang1[0]) > len(dang0[0]) or len(dang1[1]) > len(dang0[1]):
+        raise ValueError('new dangling references: %s' % (sorted(set(dang1[0]) - set(dang0[0]))[:5],))
+    prp = Jn.p.serialize()
+    back = Prp(prp)
+    if back.serialize() != prp or len(back.nodes()) != len(Jn.nodes):
+        raise ValueError('the new .prp does not round-trip')
+    fa, fs = L2.census(Jn)
+    log('  trimmed: %d actors / %d squads -> %d / %d' % (a0, s0, fa, fs))
+    # ---- .gms / .buf
+    slot0 = A.slots()
+    gone_ents = set()
+    for t in removed:
+        gone_ents.update(B.ents[t - 1].walk())
+    cuts = collections.Counter()
+    for t in removed:
+        r = A.remove(B.ents[t - 1])
+        cuts['links'] += r['links']
+        cuts['pairs'] += r['pairs']
+    faults = A.check()
+    if faults:
+        raise ValueError('kl_scene.check: %s' % faults[:3])
+    allents = list(A.entities())
+    if [e.name.decode('latin1') for e in allents] != Jn.names[1:] or [e.tid for e in allents] != Jn.tids[1:]:
+        raise ValueError('the new .gms and .prp disagree on the entities')
+    gms, buf = A.write()
+    slot1 = A.slots()
+    elsewhere = sum(1 for r, room in enumerate(octx.rooms) for ti, t in enumerate(room) if t is not None and (r, ti) != (0, 3)
+                    for it in t.items if it[0] in {slot0[e] + 2 for e in gone_ents})
+    if elsewhere:
+        raise ValueError('%d room-tree items outside the root group tree name a removed entity' % elsewhere)
+    ids = {slot0[e] + 2: slot1[e] + 2 for e in slot0 if e in slot1}
+    ids[1] = 1
+    drop = {slot0[e] + 2 for e in gone_ents}
+    octn, rmin, rmcn = O.remap_ids(octx, ids, drop), O.remap_ids(rmi, ids, drop), O.remap_ids(rmc, ids, drop)
+    moved = sum(1 for a, b in ids.items() if a != b)
+    octn.rooms[0][3].check()
+    move = {a: b for a, b in zip(octx.record_refs(), octn.record_refs()) if a != b}
+    repointed, new_prm = 0, None
+    if move:
+        prm = bytearray(B['.prm'])
+        tt, nn = struct.unpack_from('<II', prm, 0)
+        old = set(octx.record_refs())
+        for i in range(1, nn):
+            off, size = struct.unpack_from('<II', prm, tt + 16 * i)
+            if size == 64 and prm[off:off + 4] == b'\0\1\7\0':
+                v = struct.unpack_from('<I', prm, off + 0x1c)[0]
+                if v in move:
+                    struct.pack_into('<I', prm, off + 0x1c, move[v])
+                    repointed += 1
+                elif v and v not in old:
+                    raise ValueError('.prm chunk %d names an .oct record that is not there (%#x)' % (i, v))
+        if not repointed:
+            raise ValueError('%d .oct records moved and no model root names one' % len(move))
+        new_prm = bytes(prm)
+    post = KB.room_sets_check(A, octn, rmin, rmcn)
+    if post != pre:
+        raise ValueError('slot ids after the renumbering: %s (before: %s)' % (post, pre))
+    new = dict(B.files)
+    new[B.ext['.prp']], new[B.ext['.gms']], new[B.ext['.buf']] = prp, kl_gms.pack(gms), buf
+    new[B.ext['.oct']], new[B.ext['.rmi']], new[B.ext['.rmc']] = octn.pack(), rmin.pack(), rmcn.pack()
+    if new_prm is not None:
+        new[B.ext['.prm']] = new_prm
+    changed = sorted(e for e, n in B.ext.items() if new[n] != B.files[n])
+    kl_graft.write_zip(dst, [(n, new[n]) for n in B.order])
+    log('  scene: %d entities out (%d list entries, %d room pairs dropped), %d slot ids renumbered, %d model roots repointed' % (
+        len(gone_ents), cuts['links'], cuts['pairs'], moved, repointed))
+    return dict(removed=[sc.names[t] for t in removed], men_removed=ra, squads_removed=rs, census_before=[a0, s0], census_after=[fa, fs],
+                refs_cut=cut, holders=len(dead), refilled=refilled, members_changed=changed, slot_ids_moved=moved)
+
+
+def seal_verify(zp, log=print):
+    """kl_fa_bank.seal + reverify on a scratch folder holding the zip; the zip is replaced by the sealed one."""
+    import kl_fa_bank
+    work = os.path.join(os.path.dirname(os.path.abspath(zp)), '_seal_' + os.path.basename(zp))
+    shutil.rmtree(work, ignore_errors=True)
+    os.makedirs(work)
+    shutil.copyfile(zp, os.path.join(work, 'F01_Main.zip'))
+    n = kl_fa_bank.seal(work, log=lambda *_: None)
+    problems = kl_fa_bank.reverify(work, log=lambda *_: None)
+    if problems:
+        raise ValueError('reverify: %s' % problems[:5])
+    shutil.copyfile(os.path.join(work, 'F01_Main.zip'), zp)
+    shutil.rmtree(work)
+    log('  sealed %d room list entries, reverify: no problems' % n)
+    return n
+
+
+def build_pack(src, dst, force, log, variant):
+    h = md5(src)
+    if h != CFG['base'] and not force:
+        raise SystemExit('refusing: %s md5 %s is not the live DM05A %s (use --force)' % (src, h, CFG['base']))
+    if os.path.abspath(src) == os.path.abspath(dst):
+        raise SystemExit('the output is the input')
+    W = os.path.join(os.path.dirname(os.path.abspath(dst)), '_lc4_work_' + variant)
+    shutil.rmtree(W, ignore_errors=True)
+    os.makedirs(os.path.join(W, 'src'))
+    for f in os.listdir(SIBLINGS):                      # the .WAV / .WHD beside the zip (kl_fa_civs.add measures them); read only
+        p_ = os.path.join(SIBLINGS, f)
+        if os.path.isfile(p_) and '.before-' not in f and not f.startswith(('audit.', 'civs.')) and not f.endswith(('.bak', '.old', '.zip')):
+            shutil.copyfile(p_, os.path.join(W, 'src', f))
+    rep = collections.OrderedDict(source=src, source_md5=h, variant=variant, cfg=dict(CFG))
+    # 0. trim
+    rep['trim'] = trim_pass(src, os.path.join(W, 'src', 'F01_Main.zip'), CFG['remove'], log)
+    # 1. crowd
+    B0 = KB.Built(os.path.join(W, 'src'), 'F01')
+    before = {n for _k, _g, n in DN.dancers(B0)}
+    c0 = CV.census(B0)
+    CR.GROUND_SEP = CR.UPPER_SEP = CFG['sep']
+    civs, _play = CR.plan(B0, CFG['add'], CFG['upper'], ALERT, SEED)
+    log('crowd: %d of %d new places found; census before %d actors / %d squads / %d civilians' % (len(civs), CFG['add'], c0['actors'], c0['squads'], c0['civilians']))
+    if len(civs) < CFG['add']:
+        raise ValueError('only %d of %d civilian places' % (len(civs), CFG['add']))
+    CV.add(os.path.join(W, 'src'), os.path.join(W, 'civ'), civs, 'F01', 'auto', ALERT, True, play=None, log=lambda *_: None)
+    fails, _ = CV.check(os.path.join(W, 'civ'), 'F01', play=False)
+    if fails:
+        raise ValueError('kl_fa_civs.check: %s' % fails[:5])
+    # 2. f3 = 1 on the new civilian squads, spacing
+    mid = os.path.join(W, 'mid.zip')
+    rep['civ_pass'] = roof_pass(os.path.join(W, 'civ', 'F01_Main.zip'), mid, False, log)
+    # 3. a third dance group (own rout names, other delays) for the new civilians
+    Bm = KB.Built(mid)
+    new_names = {n for _k, _g, n in DN.dancers(Bm)} - before
+    log('dance: %d new civilians' % len(new_names))
+    drep = DN.build(mid, dst, per=CFG['per'], force=True, log=log, group=CFG['dgroup'], only=new_names, prefix=CFG['rout'],
+                    offset=CFG['doff'], stagger=CFG['stagger'])
+    if drep is None:
+        raise ValueError('the dance pass wrote nothing')
+    rep['dance'] = dict(new_civilians=len(new_names), routs=drep['routs'])
+    seal_verify(dst, log)
+    rep['out_md5'] = md5(dst)
+    shutil.rmtree(W, ignore_errors=True)
+    with open(os.path.splitext(dst)[0] + '.' + CFG['stem'] + '.json', 'w') as f:
+        json.dump(rep, f, indent=1, default=str)
+    log('written %s md5 %s' % (dst, rep['out_md5']))
+    return 0
 
 
 # ------------------------------------------------------------------ the chain
@@ -424,11 +677,17 @@ def configure(variant):
         raise SystemExit('variant %r: one of %s' % (variant, sorted(VARIANTS)))
     CFG.clear()
     CFG.update(VARIANTS[variant])
+    if CFG.get('mode') == 'pack':
+        CFG['remove'] = PACK_REMOVE if variant == 'pack' else LITE_REMOVE
     CFG['variant'] = variant
 
 
 def build(src, dst, alt=False, crowd=None, force=False, log=print, variant='v3'):
     configure(variant)
+    if CFG.get('mode') == 'pack':
+        if alt:
+            raise SystemExit('the pack variants have a main build only')
+        return build_pack(src, dst, force, log, variant)
     crowd = CFG['crowd'] if crowd is None else crowd
     h = md5(src)
     if h != MD5_LIVE and not force:
@@ -500,6 +759,22 @@ def check(zp, log=print, variant='v3'):
     log('civilians: %d; closest pair (xz) %.0f: %s / %s' % (len(cv), mind[0], mind[1], mind[2]))
     if CFG['spread'] and mind[0] < CFG['spread'] - 0.5:
         fails.append('two civilians %.0f apart (< %g)' % (mind[0], CFG['spread']))
+    if CFG.get('mode') == 'pack':
+        up = sum(1 for _n, p in cv if p[1] >= 250.0)
+        log('civilians per floor: %d ground, %d upper (%d total)' % (len(cv) - up, up, len(cv)))
+        if len(cv) < CFG['want'] or up < CFG['want_upper'] or up < len(cv) / 3.0 or len(cv) - up < up * 0.5:
+            fails.append('civilians: %d total / %d upper (wanted >= %d / >= %d)' % (len(cv), up, CFG['want'], CFG['want_upper']))
+        if a > 147 or a < 100:
+            fails.append('%d actors (cap 147)' % a)
+        # no civilian within 150 of a START spawn or the escape pad (stairs / doors / route are the mesh's own narrow cells; plan_places keeps clear of walls)
+        import zipfile
+        with zipfile.ZipFile(zp) as z:
+            snd = [n for n in z.namelist() if n.lower().endswith('.snd') and not n.lower().endswith('_ls.snd')]
+            for n in snd:
+                m = hashlib.md5(z.read(n)).hexdigest()
+                log('  %s md5 %s' % (n, m))
+                if not m.startswith('498cc81d'):
+                    fails.append('the SND member %s changed (md5 %s, wanted 498cc81d...)' % (n, m))
     f3 = collections.Counter()
     for k, i, v in kl_fa.controllers(sc, 'ZSquadScript'):
         t = sc.names[sc.top[k]]
@@ -536,7 +811,7 @@ def _ps1():
     st = CFG['stem']
     s = DN.PS1.replace('dance.json', st + '.json').replace(DN.TAG, CFG['tag']).replace('dance.ps1', st + '.ps1')
     s = s.replace('# %s.ps1 - Last Call (DM05A): the club civilians dance until the panic (tools/kl_club_dance_1024.py, 2026-10-24).' % st,
-                  '# %s.ps1 - Last Call (DM05A): heli fix, roof guards, a full club (tools/kl_club_lastcall3.py, 2026-10-25).' % st)
+                  '# %s.ps1 - Last Call (DM05A): %s (tools/kl_club_lastcall3.py, 2026-10-25).' % (st, 'a PACKED club on both floors, parked campaign men trimmed' if CFG.get('mode') == 'pack' else 'heli fix, roof guards, a full club'))
     return s
 
 
@@ -574,7 +849,7 @@ def stage(live, out, scratch=None, log=print, variants=('v3',)):
         tag, stem = CFG['tag'], CFG['stem']
         base = out if variant == 'v3' else os.path.join(out, variant)
         vd = {}
-        for v, alt in (('main', False), ('alt', True)):
+        for v, alt in ((('main', False),) if CFG.get('mode') == 'pack' else (('main', False), ('alt', True))):
             d = os.path.join(base, v)
             os.makedirs(d, exist_ok=True)
             z = os.path.join(d, 'F01_Main.zip')
