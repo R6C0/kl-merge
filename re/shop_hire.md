@@ -171,3 +171,72 @@ FABuyWeaponsNew opening a new window while MercsFASelectorWeaponsPC owns input; 
 (options object present, vtable installed by klc_options_tick); `[score+0x38]` write visible in FATotal and not overwritten by the
 server's own sync (fed_kit.md:9 says the write itself is not proven live); body swap at the score page (state 0x20) with the player
 type/busy flags; Patch01 precedence for online.xml; gamepad route; private-match rules-object route; owner's real FA rank.
+
+## Stage 0 research (2026-10-24, read only)
+Nothing built or run. Addresses are quoted from repo notes unless marked. Inferences are labelled GUESS.
+
+### Element-table headroom
+- Capacity 0x13e8 = 5096 entries (kl2.exe): add at 0x7fad4f..0x7fad8d (`cmp ecx,0x13e8; jge` to `int3` 0x7fad8d). Same guard for windows
+  (0x667e46), colour sets (0x47d62f), button graphics (0x53c76f). Entries are 8 bytes from +8, so the count field sits at 0x9f48.
+- Real budget is 5000, not 5096 (hud_menu.md 1.1): the cursor over `DefaultFocus` asks for entry 5000 via 0x861720.
+- Live `[Menu] TableLog` (build\klhook\live logs of 2026-10-15): a level load reads `table 2921 of 5096 (2781 elements, 93 windows,
+  24 colour sets, 23 button graphics); 2079 free below 5000`. The main menu reads 5065 of 5096 (31 free). The table is rebuilt per scene
+  (GUESS: new manager or reset per load). So a Hire window in a level's `Menu/online.xml` costs nothing in the frontend.
+- Mapping: each GuiElement/Window/ColorSet/ButtonGraphic is one entry, in file order (ingame.xml, then online.xml). Template definitions,
+  toggle children and Platform/ExcludeIn/Locale wrappers make none. Raw tags overcount (3331 GuiElement tags vs 2781 live; Platform pairs).
+- All 36 installed zips have identical tag counts. online.xml: 1826 GuiElement / 40 Window / 12 ColorSet / 11 ButtonGraphic. ingame.xml:
+  1505 / 55 / 12 / 12. Three online.xml byte variants exist (e20b2764, 7c8828ec, 9aa3e4b6). Patch01 ingame.xml has 9 more GuiElement
+  (GUESS: add 9 if it overrides; precedence unproven).
+- Size of a Hire window (GUESS from existing patterns): about 6-7 entries per row, 17 rows about 120, frame about 25, so about 150
+  entries, roughly 7% of the headroom. A 4x4 card grid is similar. Suggested hard budget: at most 300 added per level, keep 1500+ free.
+  Bot hiring adds no elements (hook logic only).
+- To do: set `[Menu] TableLog=1` (not set in the live KLHook.ini), load one DM map, read the `menu: table` line before and after baking.
+  Do NOT add a Hire window or button to frontend.xml or the overlay (31 free); put the entry button in the level's online.xml only.
+
+### Bots hiring
+- The banked total is ONE session number `[[rules+0x5f8]+0x38]`; 0x8ea990 subtracts the price from it. A bot has no banked total and no
+  rank. Per-member columns: `+0x150+4i` carried cash (klbot.c:283), `+0x184+4i` rewards, `+0x1d4+4i` flags. Bots earn only into +0x150.
+  The rank path (0x5103e0) reads the LOCAL profile only.
+- No bot shop routine found: 0x8ea990 and 0x55d3e0 have no direct caller (RMC dispatch). All bots carry `Rifle_zastavam85`
+  (bots_dynamic.md:189). Conclusion: bots do not spend money in stock DD, so a bot hire needs a hook-side wallet.
+- Body switch uses existing paths: `klcrew.c` calls 0x783fb0(actor, root) on `[record+4]` for AI records with status 0, only ZFFActor,
+  and NOT on the stock slot level (`klx_level_verdict==2`), which fits "DM maps first". `[Crew] Tries=3` is separate from the player's
+  `klc_tries`. `[Crew] Random=1` draws without replacement from the 16 and never takes the player's body.
+- One round comes free: the draw is re-made each round, so last round's hire drops with no revert (unlike the human, see above).
+- Proposed rule (GUESS): wallet = hook-kept `bank[i]` (carried cash plus an equal share of the pool); rank = the human's; pick the dearest
+  affordable heister nobody wears (`taken[]`); else the free random default, never Kane/Lynch; charge the hook wallet, never `+0x38`.
+  Human resolves first, then bots in record order. "Once per match" needs a new host table (kl_cast), which does not exist.
+- Unknown: any reader of `rec[3..5]` for AI; whether `+0x150` resets at round start; whether a DM root works on 7 actors at once
+  (klcrew.c:27-33 "NOT SEEN"); HUD/voice following a bot hire (`Names=1` unestablished); must be inert online (other rules classes).
+
+### Are the prices reachable
+- Money is `[score+0x38]`; at round end `[score+0x38] += [score+0x30]` (0x5e001b). A dead player banks $0; the loot carried is not banked
+  without an escape. Round 1 starts at $0, so only the default heister is possible in round 1 (fa_round.md:355).
+- Measured escapes: $723,625 (50k escape + 650k loot + 23,625 time), $707,778 (Retomoto), $585,791 (DM03). Bots loot $255k-$840k each,
+  so seven bots compete for the same loot; how the split works with seven bots is not read. Evidence is solo-human runs.
+- Table (GUESS beyond the measured escapes): escaping every round banks about 0.6-0.7M after round 1, 1.2-1.4M after 2. Hire bought on
+  the score page is spendable for round N+1.
+- 45k to 270k rows are affordable after any escaped round. 450k (Kane) is affordable after one good escape; 540k (Lynch) is borderline
+  ($585k clears it, a thin escape does not) and leaves little for guns, since a hire lasts one round. Rank gates (6/7, XP 25/100/400/
+  700/1500/2100/2800) are the stricter lock; the owner's rank is unread.
+- Bots start at $0 as well, so they also hire only from round 2 (GUESS). Round cap and life cost of an escape are unread.
+- Verify: run one DM round with seven bots and read KLHook.log for the real per-round payout.
+
+### Black-and-white portraits
+- No stock heister pictures exist in any DD or DM archive checked (frontend scene, DM KaneAndLynch.zip, DD02 F02_Main.zip). Online.xml
+  uses MercsGraphicFA only for status tiles and weapon cards.
+- Renders exist: `tools/kl_portraits.py render` made `<work>\build\portraits\char_01..16.png` (RGBA, 256x304, flat light, software).
+  1-8 Dog Days, 9-16 Dead Men (Kane 9, Lynch 10). Grey via PIL `convert('L')`, card palette from `tools/kl_shop_cards.py`.
+- A picture is a scene entity (ZWINGROUP + ZWINPIC -> picture chunk -> .TEX id), not a file; XML alone cannot add one (menus.md:467).
+  The Heister page used `ToggleImages Option="KLChar"` over `KLPic_*` entities, which live in the FRONTEND overlay scene only; a level's
+  online.xml resolves against its own scene, so they do not exist in-level. That is unsolved.
+- Route 1: overwrite pixels of existing gun-card tiles via `kl_shop_swap.patch_pixels` (DXT1, big 512x256). Cheap, but a gun row then
+  shows a face; unsafe unless Hire uses tiles no shop row shows. Route 2: add about 14 new entities per level scene
+  (GUESS: possible with kl_scene/kl_prp/kl_prmgraph/kl_texmat; unproven in any level; costs about 14 table entries). Route 3: text only.
+- Bake first on DM01; check the ToggleImages binding on KLChar. The Heister page pictures were switched off after the menu table overflowed.
+
+### Next decisions for the owner
+1. Portraits: accept a text-only Hire list first, with pictures added later by Route 2 after a DM01 bake?
+2. Bot wallet: draw on the human's pool, or an invented per-bot budget (hook-kept)?
+3. Rank: keep the rank gate as the real lock (needs your FA rank read) with price-only as fallback?
+4. Allow `[Menu] TableLog=1` and one DM map load to confirm the 2921 / 2079-free numbers?
