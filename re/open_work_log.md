@@ -3,7 +3,7 @@ F06=DM09, 12:28:39..12:29:06): he reached the hall at (2727, 19601, 912), the ca
 kljoin CANCELLED rides at 12:28:46 / 12:28:57 / 12:29:06 'the player left the box (more than Slack outside)' - Slack 150, box 9 z 0..1100 -
 so CarWait 6 + CarFallback never got its 8.5 s. FIX INSTALLED: DM09 KLJoin.ini Slack=1500 (md5 acdc8e12, backup KLJoin.ini.before-1024slack),
 kl_rt_joinini.py --car now writes it (413a95394). Side effect: a heister who touches box 9 and runs back upstairs within 8.5 s is jumped too.
-NOT verified live: LIFT14.ini (LIFT13 route + his walk) ready in <work>build\klhook\live, skipped 13:02-13:17 (owner active).
+NOT verified live: LIFT14.ini (LIFT13 route + his walk) ready in <work>\build\klhook\live, skipped 13:02-13:17 (owner active).
 Still open: why the doors stay shut for him (LIFT10/11 probe: the box fires once, by human or bot, and both proxies accept).
 His session ran the pre-k27c hook: no REVIVE lines yet for 'cant revive a bot until the popup'.
 
