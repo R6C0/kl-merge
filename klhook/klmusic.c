@@ -204,6 +204,25 @@ static void klmu_follow(DWORD now)
     klmu_next(stopped ? 0 : klmu_fade);
 }
 
+/* [KLHook] MciPump=1 (default 1; 2026-10-24, stutter): the worker waits with MsgWaitForMultipleObjects and empties its own message
+   queue. MCI's mpegvideo driver makes hidden windows on the thread that opens a file; a thread that owns windows and never pumps
+   makes every broadcast SendMessage and global-hook call wait for it. GUESS that this is the hitch seen on the game thread inside
+   PeekMessage / CallNextHookEx with music on (re/open_work_log.md 2026-10-23 14:05); not proven. MciPump=0 = the old plain wait. */
+static int klmu_pump = 1;
+static void klmu_wait(HANDLE ev, DWORD ms)
+{
+    static DWORD (WINAPI *mw)(DWORD, const HANDLE *, BOOL, DWORD, DWORD); static BOOL (WINAPI *pk)(LPMSG, HWND, UINT, UINT, UINT);
+    static LRESULT (WINAPI *ds)(const MSG *); MSG msg;
+    if (klmu_pump && !mw) {                              /* user32 is looked up, not linked (as in klhook.c) */
+        HMODULE u = GetModuleHandleA("user32.dll");
+        if (u) { mw = (void *)GetProcAddress(u, "MsgWaitForMultipleObjects"); pk = (void *)GetProcAddress(u, "PeekMessageA"); ds = (void *)GetProcAddress(u, "DispatchMessageA"); }
+        if (!mw || !pk || !ds) { klmu_pump = 0; mw = 0; }
+    }
+    if (!klmu_pump) { WaitForSingleObject(ev, ms); return; }
+    if (mw(1, &ev, FALSE, ms, QS_ALLINPUT) == WAIT_OBJECT_0 + 1)
+        while (pk(&msg, 0, 0, 0, PM_REMOVE)) ds(&msg);
+}
+
 static DWORD WINAPI klmu_thread(void *u)
 {
     int seen = 0; DWORD last = GetTickCount(), lastf = 0; HMODULE m = LoadLibraryA("winmm.dll"); (void)u;
@@ -211,7 +230,7 @@ static DWORD WINAPI klmu_thread(void *u)
     if (!klmu_send) { klog("music: winmm.dll / mciSendStringA not found - the jukebox stays silent"); return 0; }
     for (;;) {
         DWORD now; struct klmu_cmd_t *c = 0; static struct klmu_cmd_t copy;
-        WaitForSingleObject(klmu_ev, 40);
+        klmu_wait(klmu_ev, 40);
         now = GetTickCount();
         EnterCriticalSection(&klmu_cs);
         if (klmu_cmd.seq != seen) { copy = klmu_cmd; seen = klmu_cmd.seq; c = &copy; }
@@ -459,6 +478,7 @@ static void klmu_init(void)
     InitializeCriticalSection(&klmu_cs);
     klmu_ev = CreateEventA(0, FALSE, FALSE, 0);
     klmu_seed ^= GetTickCount();
+    klmu_pump = GetPrivateProfileIntA("KLHook", "MciPump", 1, klh_ini) != 0;
     CloseHandle(CreateThread(0, 0, klmu_thread, 0, 0, 0));
     klmu_started = 1;
     klog("music: on (winmm MCI on a worker thread; cues from the round state; silent online / on engine-music maps / with [Solo] unless SoloPlay)");

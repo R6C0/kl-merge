@@ -157,6 +157,22 @@ static void klam_stepfade(DWORD dt)
     klam_setvol(p, klam_bedvol);
 }
 
+/* [KLHook] MciPump (2026-10-24): the same pumped wait as klmusic.c's klmu_wait, see there (the reason is a GUESS). */
+static int klam_pump = 1;
+static void klam_wait(HANDLE ev, DWORD ms)
+{
+    static DWORD (WINAPI *mw)(DWORD, const HANDLE *, BOOL, DWORD, DWORD); static BOOL (WINAPI *pk)(LPMSG, HWND, UINT, UINT, UINT);
+    static LRESULT (WINAPI *ds)(const MSG *); MSG msg;
+    if (klam_pump && !mw) {                              /* user32 is looked up, not linked (as in klhook.c) */
+        HMODULE u = GetModuleHandleA("user32.dll");
+        if (u) { mw = (void *)GetProcAddress(u, "MsgWaitForMultipleObjects"); pk = (void *)GetProcAddress(u, "PeekMessageA"); ds = (void *)GetProcAddress(u, "DispatchMessageA"); }
+        if (!mw || !pk || !ds) { klam_pump = 0; mw = 0; }
+    }
+    if (!klam_pump) { WaitForSingleObject(ev, ms); return; }
+    if (mw(1, &ev, FALSE, ms, QS_ALLINPUT) == WAIT_OBJECT_0 + 1)
+        while (pk(&msg, 0, 0, 0, PM_REMOVE)) ds(&msg);
+}
+
 static DWORD WINAPI klam_thread(void *u)
 {
     int seen = 0; DWORD last = GetTickCount(), lastp = 0; HMODULE m = LoadLibraryA("winmm.dll"); (void)u;
@@ -164,7 +180,7 @@ static DWORD WINAPI klam_thread(void *u)
     if (!klam_send) { klog("ambience: winmm.dll / mciSendStringA not found - the ambience stays silent"); return 0; }
     for (;;) {
         DWORD now; static struct klam_cmd_t copy; int gotcmd = 0, gotshot = 0; static char sf[KLAM_PATH]; int sv = 0;
-        WaitForSingleObject(klam_ev, 40);
+        klam_wait(klam_ev, 40);
         now = GetTickCount();
         EnterCriticalSection(&klam_cs);
         if (klam_cmd.seq != seen) { copy = klam_cmd; seen = klam_cmd.seq; gotcmd = 1; }
@@ -386,6 +402,7 @@ static void klam_init(void)
     InitializeCriticalSection(&klam_cs);
     klam_ev = CreateEventA(0, FALSE, FALSE, 0);
     klam_seed ^= GetTickCount();
+    klam_pump = GetPrivateProfileIntA("KLHook", "MciPump", 1, klh_ini) != 0;
     CloseHandle(CreateThread(0, 0, klam_thread, 0, 0, 0));
     klog("ambience: on (winmm MCI on a worker thread; a bed + timed one-shots from the round state; silent online / with [Solo] unless SoloPlay)");
 }

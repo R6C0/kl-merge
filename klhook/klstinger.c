@@ -122,6 +122,22 @@ static void klst_poll(DWORD now)
     }
 }
 
+/* [KLHook] MciPump (2026-10-24): the same pumped wait as klmusic.c's klmu_wait, see there (the reason is a GUESS). */
+static int klst_pump = 1;
+static void klst_wait(HANDLE ev, DWORD ms)
+{
+    static DWORD (WINAPI *mw)(DWORD, const HANDLE *, BOOL, DWORD, DWORD); static BOOL (WINAPI *pk)(LPMSG, HWND, UINT, UINT, UINT);
+    static LRESULT (WINAPI *ds)(const MSG *); MSG msg;
+    if (klst_pump && !mw) {                              /* user32 is looked up, not linked (as in klhook.c) */
+        HMODULE u = GetModuleHandleA("user32.dll");
+        if (u) { mw = (void *)GetProcAddress(u, "MsgWaitForMultipleObjects"); pk = (void *)GetProcAddress(u, "PeekMessageA"); ds = (void *)GetProcAddress(u, "DispatchMessageA"); }
+        if (!mw || !pk || !ds) { klst_pump = 0; mw = 0; }
+    }
+    if (!klst_pump) { WaitForSingleObject(ev, ms); return; }
+    if (mw(1, &ev, FALSE, ms, QS_ALLINPUT) == WAIT_OBJECT_0 + 1)
+        while (pk(&msg, 0, 0, 0, PM_REMOVE)) ds(&msg);
+}
+
 static DWORD WINAPI klst_thread(void *u)
 {
     int seen = 0, k; DWORD lastp = 0; HMODULE m = LoadLibraryA("winmm.dll"); (void)u;
@@ -129,7 +145,7 @@ static DWORD WINAPI klst_thread(void *u)
     if (!klst_send) { klog("stinger: winmm.dll / mciSendStringA not found - the stingers stay silent"); return 0; }
     for (;;) {
         DWORD now; int stop = 0, got = 0, vol = 0; static char sf[KLST_PATH];
-        WaitForSingleObject(klst_ev, 40);
+        klst_wait(klst_ev, 40);
         now = GetTickCount();
         EnterCriticalSection(&klst_cs);
         if (klst_stopseq != seen) { seen = klst_stopseq; stop = 1; }
@@ -374,6 +390,7 @@ static void klst_init(void)
     InitializeCriticalSection(&klst_cs);
     klst_ev = CreateEventA(0, FALSE, FALSE, 0);
     klst_seed ^= GetTickCount();
+    klst_pump = GetPrivateProfileIntA("KLHook", "MciPump", 1, klh_ini) != 0;
     CloseHandle(CreateThread(0, 0, klst_thread, 0, 0, 0));
     klog("stinger: on (winmm MCI on a worker thread; one-shot cues from round events; silent online / with [Solo] unless SoloPlay)");
 }
