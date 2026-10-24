@@ -97,7 +97,7 @@
 static struct {
     int on, entry, has_target, said, wasactive;
     float lo[3], hi[3], target[3], tol;
-    int delay_ms, has_car, carwait_ms, carfall; float slack, clo[3], chi[3];       /* Delay= / Slack= / CarMin= CarMax= CarWait= (the ride, see klj_ride_step) */
+    int delay_ms, has_car, carwait_ms, carfall, carstall_ms; float carnear, slack, clo[3], chi[3];       /* Delay= / Slack= / CarMin= CarMax= CarWait= (the ride, see klj_ride_step) */
     char name[48], scene[48];
     char inside[2];
 } klj_box[KLJ_NBOX];
@@ -105,7 +105,7 @@ static int klj_any, klj_tick_on = 1;
 static char klj_map_key[64], klj_map_file[MAX_PATH]; static FILETIME klj_map_ft;
 static CRITICAL_SECTION klj_cs;
 static struct { DWORD at; int player, armed; } klj_after;
-static struct { int on, player, box, entry, told; DWORD at, retry_at; } klj_ride;      /* retry_at: a cancelled ride may restart from inside the box after 2 s */      /* the one ride in progress (Delay > 0): see klj_ride_step */
+static struct { int on, player, box, entry, told, sset; float sx, sz; DWORD at, retry_at, sat; } klj_ride;      /* retry_at: a cancelled ride may restart from inside the box after 2 s */      /* the one ride in progress (Delay > 0): see klj_ride_step */
 static int klj_settle_ms = 1500;              /* the jump list is filled entry by entry while the level loads: it is judged once its length has stood still this long */
 
 static int klj_vec(const char *sec, const char *key, const char *file, float v[3])
@@ -139,6 +139,12 @@ static int klj_read(const char *file, int base, int from_map)
         GetPrivateProfileStringA(sec, "Delay", "0", t, sizeof t, file); { double d = atof(t); klj_box[base + i].delay_ms = d > 0 && d <= 30 ? (int)(d * 1000.0 + 0.5) : 0; }
         GetPrivateProfileStringA(sec, "Slack", "150", t, sizeof t, file); { double d = atof(t); klj_box[base + i].slack = d >= 0 && d <= 5000 ? (float)d : 150.0f; }
         GetPrivateProfileStringA(sec, "CarWait", "6", t, sizeof t, file); { double d = atof(t); klj_box[base + i].carwait_ms = d >= 0 && d <= 60 ? (int)(d * 1000.0 + 0.5) : 6000; }
+        /* 2026-10-24 CarStall / CarNear (the owner, as a HEISTER: 'the retomoto lift doesnt work'; his 12:28-12:29 log: three rides, all CANCELLED by
+           him walking out of the hall, 8437 / 4406 / 5328 ms in, the first 63 ms before CarFallback would have jumped him; he never got past
+           x 2727 = the shut door leaves, car box starts at x 2802). Nobody waits 8.5 s at a shut door, so the ride now also jumps when the feet
+           have stood still (CarStall s, default 1.5, 0 = off) within CarNear units (default 400) of the car box after Delay. */
+        GetPrivateProfileStringA(sec, "CarStall", "1.5", t, sizeof t, file); { double d = atof(t); klj_box[base + i].carstall_ms = d >= 0 && d <= 30 ? (int)(d * 1000.0 + 0.5) : 1500; }
+        GetPrivateProfileStringA(sec, "CarNear", "400", t, sizeof t, file); { double d = atof(t); klj_box[base + i].carnear = d >= 0 && d <= 5000 ? (float)d : 400.0f; }
         klj_box[base + i].carfall = GetPrivateProfileIntA(sec, "CarFallback", 1, file) != 0;      /* 1 (default): after CarWait the jump comes anyway, so a shut door cannot strand the player */
         { float ca[3], cb[3];
           if (klj_vec(sec, "CarMin", file, ca) && klj_vec(sec, "CarMax", file, cb)) {
@@ -275,9 +281,17 @@ static void klj_ride_step(DWORD gd, DWORD lo, int count, const BYTE sel[2], DWOR
         klj_ride_end("the player left the box (more than Slack outside)", 0); return; }
     if (el < (DWORD)klj_box[b].delay_ms) return;
     if (klj_box[b].has_car && !klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, 0)) {
-        if (el < (DWORD)(klj_box[b].delay_ms + klj_box[b].carwait_ms)) return;
-        if (!klj_box[b].carfall) { klj_ride_end("the player did not reach the car box in CarWait", 0); return; }
-        klog("join: ride of player %d in box %d: the car box was not reached in CarWait (%d ms after Delay): jumping from where he stands (CarFallback=1)", i, b + 1, klj_box[b].carwait_ms);
+        int stalled = 0;
+        if (klj_box[b].carstall_ms > 0 && klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, klj_box[b].carnear)) {      /* 2026-10-24: see CarStall in klj_read */
+            if (!klj_ride.sset || fabs(feet[0] - klj_ride.sx) > 60.0f || fabs(feet[2] - klj_ride.sz) > 60.0f) { klj_ride.sset = 1; klj_ride.sx = feet[0]; klj_ride.sz = feet[2]; klj_ride.sat = now; }
+            else if (now - klj_ride.sat >= (DWORD)klj_box[b].carstall_ms) stalled = 1;
+        } else klj_ride.sset = 0;
+        if (stalled) klog("join: ride of player %d in box %d: he has stood %d ms at (%.0f, %.0f, %.0f), within %g units of the car box and not in it (shut doors?): jumping (CarStall)", i, b + 1, klj_box[b].carstall_ms, feet[0], feet[1], feet[2], klj_box[b].carnear);
+        else {
+            if (el < (DWORD)(klj_box[b].delay_ms + klj_box[b].carwait_ms)) return;
+            if (!klj_box[b].carfall) { klj_ride_end("the player did not reach the car box in CarWait", 0); return; }
+            klog("join: ride of player %d in box %d: the car box was not reached in CarWait (%d ms after Delay): jumping from where he stands (CarFallback=1)", i, b + 1, klj_box[b].carwait_ms);
+        }
     }
     if (!klh_rd((DWORD_PTR)KLH_VA(KLJ_REQUEST), &req, 4) || !klh_rd(gd + 0x8d4, &pend, 4) || req || pend != -1) {      /* a request is pending: next tick, but not for ever */
         if (el >= (DWORD)klj_box[b].delay_ms + 2000) klj_ride_end("another jump request stayed pending for 2 s", 0);
@@ -354,7 +368,7 @@ static void klj_tick(void)
             if ((e = klj_resolve(b, lo, count, why, name, pos)) < 0) { klog("join: player %d entered box %d at (%.0f, %.0f, %.0f) but NO jump: %s", i, b + 1, feet[0], feet[1], feet[2], why); continue; }
             if (klj_box[b].delay_ms) {                         /* the ride: one at a time; the request itself is written by klj_ride_step */
                 if (klj_ride.on) { klog("join: player %d entered box %d while a ride is in progress: ignored", i, b + 1); continue; }
-                klj_ride.on = 1; klj_ride.told = 0; klj_ride.player = i; klj_ride.box = b; klj_ride.entry = e; klj_ride.at = now;
+                klj_ride.on = 1; klj_ride.told = 0; klj_ride.sset = 0; klj_ride.player = i; klj_ride.box = b; klj_ride.entry = e; klj_ride.at = now;
                 klog("join: player %d entered box %d at (%.0f, %.0f, %.0f): ride starts, jump to entry %d '%s' in %d ms", i, b + 1, feet[0], feet[1], feet[2], e, name, klj_box[b].delay_ms);
                 continue;
             }
