@@ -1,3 +1,8 @@
+2026-10-24 23:50 - Gun loudness for ALL banks STAGED, NOT INSTALLED: C:/kl_build_1024/gunsnd_1024n (tools/kl_gunsnd_all.py, pins in kl_gunsnd_all.pins.json).
+Audit: the 27 map banks were on target already; the 9 stock FA banks (F01..F09) and L00..L11 were never processed (54/61 records off, up to -5.2 dB guns,
+-11.2 dB distant). 21 banks, 777 records driven to the bank's Deagle head (-3.15; silenced/distant -3.7); WHD/SND/zip byte-identical. INSTALL/UNDO
+gun sounds all maps.bat (md5-chained, all-or-nothing, backups .WAV.before-1024gunsnd2); rehearsed on copies: install, re-install, undo byte-identical, refusal on a changed bank.
+Writes STOCK Scenes\Locations files (owner asked 'all maps'); -Groups maps,stock,story limits it. Not live-tested.
 2026-10-24 23:30 - Hasta pass STAGED, NOT INSTALLED: C:/kl_build_1024/hasta_1024n (DM11B ef53c079 -> 323c13f3), tools/kl_hasta_open.py (md5-guarded,
 idempotent; replaces kl_hasta_wing.py). (1) Wing: counter 3 -> 2, backstop 100 -> 30 s (the campaign blast show kept); kl_walk2d: shut = x <= 38100, 0 of 16
 loot spots; three nodes dropped = x 43220, 16 of 16. (2) Green: the only PostFilterBox is Dead Men's stray M11A_Postfilter box (x -3493..28507, z -5000..26905,

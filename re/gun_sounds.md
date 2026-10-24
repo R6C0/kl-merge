@@ -195,3 +195,13 @@ frees 10 MB on these banks.
 * Not changed: the `.SND` group volumes (`sfx_weapons_shot_player` 0.70 / `_npc` 0.35) - the NPC half-level stays. Not listened to in game.
 * Risk: harder-driven clips (MAC-10 +16 dB, MPi69 +13..15 dB, Type79 +9 dB, AK74 +6..8 dB) also lift their decay tails and ADPCM noise by the
   same gain; full-auto guns will sound denser. If one is too harsh, lower `MAXGAIN` in the tool and rebuild.
+
+## 8. One loudness on EVERY bank (2026-10-24 night; owner: "some guns arent at the same loudness ... applied to all maps")
+Audit (tools/kl_gunsnd_all.py audit, head RMS 250 ms vs the bank's own Desert Eagle = MP45): the section-7 pass only touched the 27
+KLExpansion\Maps banks. Dog Days' 9 stock FA slots (Scenes\Locations\F01..F09) and the story levels L00..L11 were never processed: 54 of 61
+shot records per stock bank are off by up to -5.2 dB (guns), -4.7 (silenced), -11.2 (Distant_Shot_AssualtRiffle, head -18). The 27 map banks
+are on target (0 records beyond 0.35 dB; the DM maps' own Deagle sits at -2.87, the others at -3.15, a 0.28 dB bank-to-bank difference left as is).
+Pass staged: C:/kl_build_1024/gunsnd_1024n (21 banks, 777 records, 10.5 MB of spans, WHD/SND/zip/hti untouched, sizes identical).
+Left alone on purpose: RPG7 launch (-5), Rpg_Loop, explosions, reload/cock/dry-fire, npc 0.35 / player 0.70 group volumes (+0x24/+0x30 in the
+.SND; design choice), the first 70 ms of some guns (M9, Type88/95, silenced are 1.5-2.7 dB softer in the attack than the Deagle's).
+Sound-object +0x20 (int16) looks like pitch in cents, not volume (about 85 %, data-based); not touched.
