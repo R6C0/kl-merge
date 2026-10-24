@@ -26,6 +26,7 @@ Note: the Recommended button would flip the owner's live Neural from 1 to 0 (the
 | climb | Free climb (hold W + E at a ledge) | [Climb] Enable=1/0 | on (Enable=1) | on | next start | Dead Men's climb (luvsic's), only on maps with the climb clips |
 | censor | Head shots blow the head off (pixelated censor) | [Censor] Enable=1/0 | on (Enable=1) | on | next start | owner item 9; heap data only |
 | censorlate | Censor also corpses, AI heisters and you (late head blow) (recommended on) | [Censor] Late=1/0, Player=1/0 | on | on | next start | k31cen: calls the game's BlowHeadOff 350 ms after death; not live-tested |
+| hidevan | Hide the van escape timer until the van is there (recommended on) | [HUD] HideIdleEscape=1/0 (HideIdleEscapeDry) | on | on | next start | klhud.c van card; needs [HUD] Enable=1 |
 | clubcalm | Last Call probe: log the hand item and shots (recommended off) | [ClubCalm] Enable=1/0 | off | off | next start | read-only; data for the calm-until-the-gun-is-drawn switch |
 | gunsound | Gun fire as loud / driven as the S&W MP45 (recommended on) | no ini key: build\gunsnd_1024c INSTALL / UNDO gun sounds.bat | - | - | install | kl_gunsnd_match.py; patches each map .WAV in place |
 | crewlook | Random looks for the AI heisters | [Crew] Random=1/0 | on (Random=1) | on | next start | no body twice, never the one you wear |

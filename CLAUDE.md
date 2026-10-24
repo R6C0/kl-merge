@@ -66,11 +66,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-24 18:45 - STAGED, NOT INSTALLED: combined hook k31x (SHIP c8c3c6bd, TEST 1b9739e6) = v30 (e8 KeepStock, LIVE since ~18:30) + [Unstick]
+2026-10-24 19:05 - STAGED, NOT INSTALLED: combined hook k32 (SHIP 8a99179b, TEST 0a03f965; k31x superseded) = [HUD] HideIdleEscape (van card hidden at 00:00 with no vehicle) + v30 (e8 KeepStock, LIVE since ~18:30) + [Unstick]
 + [Shield] + klfps swap-chain Present fix + [Censor] Late/Player + [Dying] (you: Dry=1 log only; heisters hold fire) + [CamSmooth] (aim-out
-ease, DtFix) + [ClubCalm] probe (off). C:/kl_build_1019/k31x_1024c/INSTALL k31x.bat (live must be k29d or v30; undo rehearsed byte-identical).
+ease, DtFix) + [ClubCalm] probe (off). C:/kl_build_1019/k32_1024c/INSTALL k32.bat (live must be k29d or v30; undo rehearsed byte-identical).
 Map passes staged separately, md5-chained: cover_1024b (cover3, climb3), C:/kl_build_1024/hc2hasta_1024b (west garage door, Hasta wing 3 squads /
-100 s; collides with cover3 on DM01B/DM11B), club_1024b (50 civilians), gunsnd_1024c (all guns at S&W MP45 loudness). Van escape HUD box: agent running.
+100 s; collides with cover3 on DM01B/DM11B), club_1024b (50 civilians), gunsnd_1024c (all guns at S&W MP45 loudness). 
 
 2026-10-24 15:55 - INSTALLED (owner 'install all'): white shop on all 27 maps (379ef8622, .before-1024white); rev2_1024 = HC2 garage
 door + NoCoverBox strip on 11 DM maps (.before-1024cover); hook k29b aa912e09 + ini 0fc342a6 with [CarDown] Dry=1 (log only, then

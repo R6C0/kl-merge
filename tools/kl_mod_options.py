@@ -60,6 +60,8 @@ feat('censor', G_CORE, 'Head shots blow the head off (pixelated censor)', 'on', 
      'owner item 9; heap data only', [('Censor', 'Enable', 1, 0, 1)])
 feat('censorlate', G_CORE, 'Censor also corpses, AI heisters and you (late head blow)', 'on', 'start',
      'k31cen: calls the game BlowHeadOff 350 ms after death; not live-tested', [('Censor', 'Late', 1, 0, 1), ('Censor', 'Player', 1, 0, 1)])
+feat('hidevan', G_EXP, 'Hide the van escape timer until the van is there', 'on', 'start',
+     'klhud.c van card; needs [HUD] Enable=1', [('HUD', 'HideIdleEscape', 1, 0, 1)])
 feat('clubcalm', G_EXP, 'Last Call probe: log the hand item and shots (read-only)', 'off', 'start',
      'klclubcalm.c: data for the calm-until-the-gun-is-drawn switch', [('ClubCalm', 'Enable', 1, 0, 0)])
 feat('crewlook', G_CORE, 'Random looks for the AI heisters', 'on', 'start',

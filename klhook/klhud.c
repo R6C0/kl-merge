@@ -1183,9 +1183,9 @@ static int klu_compose(int *state_ok)
                (the owner's picture); an unreadable text never counts as idle. HideIdleEscapeDry=1 only logs the verdict. */
             idle = 0;
             if (klu_hideidle && tobj && klh_rd32(tobj) == KLU_TEXT_VT && (str = klh_rd32(tobj + 0xa4)) != 0) {
-                char t3[32] = ""; int k, nz = 0, rd = klh_rdstr(str + 0xc, t3, sizeof t3);
-                (void)rd; for (k = 0; t3[k] && k < 31; k++) if (t3[k] >= '1' && t3[k] <= '9') nz = 1;
-                if (!nz && s.veh != 3 && s.veh != 4 && s.veh != 5) idle = 1;
+                char t3[32] = ""; int k, nz = 0, z = 0, rd = klh_rdstr(str + 0xc, t3, sizeof t3);
+                for (k = 0; t3[k] && k < 31; k++) { if (t3[k] >= '1' && t3[k] <= '9') nz = 1; if (t3[k] == '0') z = 1; }
+                if (rd > 0 && z && !nz && s.veh != 3 && s.veh != 4 && s.veh != 5) idle = 1;   /* read, and all zeros (an empty / unread text is not idle) */
             }
             if (idle != idle_was) { idle_was = idle; if (klu.log) klog("hud: van card: %s (time text, vehicle state %d)%s", idle ? "IDLE, no vehicle" : "vehicle there", (int)s.veh, klu_hideidle_dry ? " [Dry=1: not hidden]" : ""); }
             if (idle && !klu_hideidle_dry) seen = 0;
