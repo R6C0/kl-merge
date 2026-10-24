@@ -244,8 +244,8 @@ static void klcamsmooth_tick(int game_thread)
                 if (kcs_len(kcs.S, 3) > 150.0f) { memset(kcs.S, 0, sizeof kcs.S); memset(kcs.Sv, 0, sizeof kcs.Sv); }
                 else { kcs.sact = 1; kcs.nstance++; if (kcs.log) klog("camsm: STANCE takeover: shown-vs-input step %.1f %.1f %.1f cm eased over %d ms", kcs.S[0], kcs.S[1], kcs.S[2], kcs.stancems); }
             }
-            memset(kcs.Iv, 0, sizeof kcs.Iv);
-        } else if (kcs.orel_ok) for (i = 0; i < 3; i++) kcs.Iv[i] += ((I[i] - kcs.Iprev[i]) / dt - kcs.Iv[i]) * 0.5f;
+            /* Iv kept (pre-step input velocity): the pop frame has no clean velocity of its own, and zeroing it made a second pop a frame later inherit Sv = Ov */
+        } else if (kcs.orel_ok) for (i = 0; i < 3; i++) kcs.Iv[i] = (I[i] - kcs.Iprev[i]) / dt;   /* unsmoothed, same one-frame estimate as Ov: with no takeover open Sv is exactly 0 (a lagging average gave a bogus Sv during a fast mouse turn) */
         if (kcs.sact & 1) {
             float w = 6.0f / ((float)kcs.stancems * 0.001f);
             for (i = 0; i < 3; i++) kcs_cd(&kcs.S[i], &kcs.Sv[i], w, dt);

@@ -29,8 +29,8 @@ def run(fps, step, stancems=280.0, pivotms=60.0, stancecm=6.0, jitter=True, seed
         I = eye_rel + (qs - q)
         if stancems >= 20:
             if pop and O is not None:
-                S = O + Ov * dt - I; Sv = Ov - Iv; sact = True; Iv = 0.0
-            elif Iprev is not None and not pop: Iv += ((I - Iprev) / dt - Iv) * 0.5
+                S = O + Ov * dt - I; Sv = Ov - Iv; sact = True
+            elif Iprev is not None and not pop: Iv = (I - Iprev) / dt
             if sact:
                 S, Sv = cd(S, Sv, 6.0 / (stancems * 1e-3), dt)
                 if abs(S) < 0.05 and abs(Sv) < 1.0: S = Sv = 0.0; sact = False
