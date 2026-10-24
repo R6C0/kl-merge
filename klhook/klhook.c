@@ -684,6 +684,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klfedkit.c"
 #include "kldown.c"
 #include "klbotdown.c"                                    /* klbotdown.c: AI heisters down, not dead (off unless [BotDown] Enable) */
+#include "klcardown.c"                                   /* klcardown.c: a car blast floors the AI and you, revivable ([CarDown], on in Arcade on non-stock levels) */
 #include "kladren.c"                                      /* kladren.c: adrenaline (off unless [Adrenaline] Enable); its tick runs BEFORE kld_tick */
 #include "klstinger.c"                                  /* klstinger.c: [Stinger] event-driven one-shot cues over winmm MCI (off unless Enable=1); AFTER kladren.c / klbotdown.c / kldown.c */
 #include "klreshade.c"                                    /* klreshade.c: the ReShade bridge - live looks from the menu, KL_* uniforms (off unless [ReShade] Bridge=1) */
@@ -874,6 +875,7 @@ static void klh_tick(int game_thread)
     klp_tick(game_thread);                            /* klfed.c: come back as a fed (data writes only) */
     klfk_tick(game_thread);                           /* klfedkit.c: the fed can hunt, body, AK (with [Fed] Player=1; Kit=0 = off) */
     klbd_tick(game_thread);                           /* klbotdown.c: before kladren, which reads its down state */
+    klcd_tick(game_thread);                           /* klcardown.c: a car blast floors the AI and you */
     kad_tick(game_thread);                            /* kladren.c: raises the mash meter first */
     kld_tick(game_thread);                            /* kldown.c: the mash get-up (off unless [Down] Enable) */
     klrs_tick(game_thread);                           /* klreshade.c: the numbers the shaders get (reads only; off unless [ReShade] Bridge=1) */
@@ -1252,6 +1254,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klfk_init();
     kld_init();
     klbd_init();
+    klcd_init();
     kad_init();
     klg_init();
     klx_init();
