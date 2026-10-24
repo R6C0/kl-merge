@@ -339,6 +339,7 @@ def map_events(loc_tree, singles=True):
     path part, exactly what klvoice.c's kvo_cv_line derives from the entry's key text. Only events whose name an EVENT_THEME rule
     knows are taken (the theme picks the Dead Men clip); the rest (police briefings, intros, team police lines, names with spaces)
     stay stock - GUESS that nothing else needs a Dead Men voice. At most SINGLE_MAX per kind, in EVENT_THEME order."""
+    SINGLES.clear()                                # per map: a single of map A must not blank map B's subtitles
     ev = set()
     base = set()
     for p, _n in kl_loc.leaves(loc_tree):
@@ -557,6 +558,8 @@ def build_map(game, m, out, trees, clips, log=print, write=True):
         TIERS = ('full', 'no single-event subtitles', 'no subtitles', 'no subtitles, no radio')
         for tier in (0, 1, 2, 3):
             subs, radios = tier <= 1, tier < 3
+            if lang == 'English':
+                silent.clear()                             # count the tier that ships only (tiers 0 and 1 both have subtitles)
             t = kl_loc.parse(d)
             for who in present:
                 for leaf, (c, radio) in plan.leaves[who].items():
