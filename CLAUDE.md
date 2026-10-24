@@ -66,6 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 02:11 - ROUND-START HITCH FIX PROVEN LIVE (SC4, TEST out_3f_1024k27_test 28ae5d69): klmove keeps the ZAllyEscapeBox scan per
+scene (b39e3ae4c): DM02 round 2 'found in 109 ms', round 3 'kept from the last scan, checked in 0 ms'; maps with no boxes keep it after a
+second empty scan (SC3, Retomoto). Not in a SHIP build yet (live SHIP is still 1023v 2DCB0FBB).
+
 2026-10-24 01:49 - PLAINDATA LIVE (PD1, DD01 Arcade): flag-0 lines become per-character data, 74 converted, 0 faults, no refused writes.
 68 events still had no leaf -> new theme rules + .LOC tier 'no single-event subtitles' (7ba23c5f8); DD01 zip 280BDF05 to install, then PD2
 (misses gone? 'put back' on leaving; Names Override=1). DD01 backups *.before-1024plain. Only DD01 has PlainData data so far.
@@ -73,10 +77,6 @@ Full dated log: `re/open_work_log.md` (newest first).
 2026-10-24 01:42 - ALT+F4 / CLOSE VERIFIED LIVE (TEST 1023v): Alt+F4 ends kl2 in 551 ms, WM_CLOSE in 165 ms, no dumps. MciPump A/B (music on):
 5 vs 4 hitches, all at load/track open, none in level: 1024a NOT installed, baseline SHIP 1023v 2DCB0FBB stays. Camera preset APPLIED:
 live ini 41E998CF, [Rigid] 450/200/30/15/0.30 (backup KLHook.ini.before-rigid1023, undo <work>\build\rigid_1023\UNDO camera preset.bat).
-
-2026-10-24 01:28 - VOICES PROVEN: VP1b (TEST, DM01, Arcade) logged 'voice: PLAYING ... (ours KLVoice/Hutchison_R/...)': the game plays the
-swapped Dead Men lines. Flag-0 lines (134: cash drop, one/two left, police events) have NO KLVoice leaf in the data, so even the TEST
-probe speaks stock: kl_dmvoice must write those leaves (workflow wf_9e6ef4fc-bda, also the lobby map name). Full access until 14:00 today.
 
 
 ## Owner's end goal (2026-10-09)
