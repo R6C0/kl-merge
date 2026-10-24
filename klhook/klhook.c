@@ -669,6 +669,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klcensus.c"                                    /* klcensus.c: [Census] read-only list of every ZFFActor (place, health); AFTER klcensor.c */
 #include "klvis.c"
 #include "kltex.c"                                        /* kltex.c: [Graphics] Textures - anisotropic filtering (default on) */
+#include "klfps.c"                                        /* klfps.c: [FrameLimit] RTSS-style frame limiter on the device's Present (default on) */
 #include "klnet.c"
 #include "klnetfix.c"
 #include "kllobby.c"                                      /* kllobby.c: [Lobby] MinPlayers - a hosted FA lobby may start below 4 (off unless set) */
@@ -1202,6 +1203,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
 #ifdef KLHOOK_TEST
     klso_init();                                   /* klsolo.c: AFTER kltx_init, so its Direct3DCreate9 wrapper is the outer one */
 #endif
+    klfps_init();                                  /* klfps.c: LAST of the Direct3DCreate9 wrappers (outermost); [FrameLimit] */
     klm_init();
     klxp_init();                                   /* klextpt.c: extension points off (hook DLLs of other programs), watcher of foreign modules */
     kln_init();
