@@ -92,6 +92,11 @@ back + 'doubtful' KM boxes renamed off (tools/kl_cover_restore.py, kl_cover_add2
 hook k30cov = klunstick.c [Unstick] (F7 or auto after 4 s held still in cover -> back to last free place; offsets GUESSed). CLIMB: only maps with the
 .ANM slots /Movement/Climb/Up/* work; DD01..DD09, DM01B, DM05A, DM06B, DM11B lacked them -> tools/kl_climb_stage.py (players-only, DM01B/05A/06B/11B
 built on the cover3 zips). Staged in <work>\build\cover_1024b (INSTALL/UNDO cover3.bat, climb\INSTALL/UNDO climb3.bat, hook\INSTALL hook k30cov.bat), md5-checked, rehearsed on scratch.
+2026-10-24 19:00 - INSTALLED (owner 'install v2'): shop v2 on DM01 (kl_shop_dm.py 30a34b567: one 34 px grid for tabs/rows/bars,
+rulers/index marks, focus-bar comet fade + row cascade + card/name/stats/star fade-ins). DM01 5522ebcf (v1 + peer cover) -> 02d2a481,
+backup .before-1024shopdm2, undo C:\kl_build_1024\shop_dm_1024v2\UNDO shop v2 DM01.bat. GUESS GeomSpace=12 = 34 px pitch; whether the
+fades re-run per focus move is unproven. G: is full (78 MB): build output now on C:\kl_build_1024.
+
 2026-10-24 18:05 - INSTALLED (owner 'install the fix'): hook v30 SHIP e90d42c0 (k29d + klvoice KeepStock, 9f8d8ac69) over k29d e02300df,
 backup <DD>\dinput8.dll.before-v30. Ini unchanged (dd063022, Announcer=1). Expect 'voice: <leaf> is an announcement: left stock' lines;
 briefing/escape/AllDead no longer '-> KLVoice/..'. Open: whether a human cop hears FA_AllDead when the crew dies (unverified);
