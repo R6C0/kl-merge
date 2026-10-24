@@ -1,3 +1,7 @@
+2026-10-24 17:30 - HUMAN SHIELD REWORK (owner: 'useless, you die as quick, an AI heister hostage is useless'): new klhook/klshield.c [Shield]. READ: the player's hold = 0x4d7b00
+([player+0xad0] = victim, [player+0xad4] = player); no code shares damage with the victim; the soldier's down (0x70e0e0) has no 'held' refusal. Does: Absorb 65 % of every
+hit back to you (hostage pays x2 of his health, never killed by it), hostage floored at 35 % health, the man you let go is floored. Hold fields logged at each hold.
+Built k30shd SHIP 1C5B1A67 / TEST 07A144E5; staged <work>uild\shield_1024b (needs live k29d E02300DF). Not run live; arc not read (flat); release routine not called.
 2026-10-24 17:10 - HC2 WEST GARAGE DOOR + HASTA WING (owner: 'you opened the wrong garage' / 'lighting issues on hasta and the loot area isnt blown up').
 HC2: k29 opened the EAST roller door (Junkyard GarageDor_A_01, x 170); the garage the heisters start by is the WEST Havok shatter door (SI0120_M01_GarageDorHavok_A_01
 !While_01 + 60 !Shards pieces + Out_Garage GarageDor_A_STATIC_HEADS_01/_02, x -1970, z 4200..6564). kl_walk2d: west of it unreachable, reachable with those dropped

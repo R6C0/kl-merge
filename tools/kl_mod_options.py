@@ -91,6 +91,8 @@ feat('fed', G_DOWN, 'Come back as a policeman after you die', 'on', 'start',
      'seen live 2026-10-11 (Withdrawal); once a round', [('Fed', 'Enable', 1, 0, 0), ('Fed', 'Player', 1, 0, 0)])
 feat('cardown', G_DOWN, 'A car blast floors people (revivable) instead of killing', 'off', 'start',
      'offsets are GUESSED: it is in LOG-ONLY mode (Dry=1) until the log is read; OFF here = log only', [('CarDown', 'Dry', 0, 1, 0), ('CarDown', 'Enable', 1, None, 1)])
+feat('shield', G_DOWN, 'Human shield rework: the hostage covers you and goes down (revivable)', 'on', 'start',
+     'offsets partly GUESSED (the hold fields are logged at each hold); OFF = log only (Dry=1). Tune: Absorb, HostageTakes, DownPct', [('Shield', 'Dry', 0, 1, 0), ('Shield', 'Enable', 1, None, 1)])
 
 feat('ambience', G_AV, 'Ambience bed and timed one-shot sounds', 'on', 'start',
      'MCI mp3 worker; the owner kept it when the stutter was found to be the Payday 2 jukebox', [('Ambience', 'Enable', 1, 0, 0)])
