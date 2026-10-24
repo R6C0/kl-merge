@@ -779,6 +779,7 @@ static void klh_fgname(HWND f, DWORD *pid, char *title, int cap)
     *pid = 0; title[0] = 0;
     if (!f) return;
     if (wtp) wtp(f, pid);
+    if (*pid == GetCurrentProcessId()) return;               /* our own window: GetWindowText would SEND WM_GETTEXT, which blocks if the game thread hangs */
     if (gwt) { gwt(f, title, cap); title[cap - 1] = 0; }    /* another process's window: read from the window's own record, no message sent */
 }
 static void klh_exit_trace(const char *what, int code, void *ra)
@@ -797,9 +798,11 @@ static void klh_fg_watch(void)
     if (!klh_exittrace || lines >= 20 || now - last < 5000) return;
     if (!looked) { HMODULE u = GetModuleHandleA("user32.dll"); looked = 1; if (u) fgw = (HWND (WINAPI *)(void))GetProcAddress(u, "GetForegroundWindow"); }
     if (!fgw) return;
-    f = fgw(); klh_fgname(f, &pid, title, sizeof title);
-    if (f && pid == GetCurrentProcessId()) return;           /* the game has the focus: nothing to say */
-    last = now; lines++;
+    last = now;                                               /* the 5 s throttle holds while the game is in front too (one query per 5 s, not per tick) */
+    if (!(f = fgw())) return;                                 /* no foreground window (switching): not worth one of the 20 lines */
+    klh_fgname(f, &pid, title, sizeof title);
+    if (pid == GetCurrentProcessId()) return;                 /* the game has the focus: nothing to say */
+    lines++;
     klog("exit trace: the game is not in the foreground: window %p pid %lu title '%s'%s", (void *)f, pid, title, lines == 20 ? " (last such line)" : "");
 }
 static void klh_uia_tick(void)

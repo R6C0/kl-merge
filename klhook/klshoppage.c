@@ -329,7 +329,8 @@ static void kspg_enforce(void)
         wantB = kspg_wantB(row);
         if (!wantB && !kspg.made[row][0]) continue;
         if (wantB && !kspg.made[row][0]) {                                           /* fallback: PreMake=0, or the premake did not get this pair */
-            if (kspg.log) klog("shopPage: row %d was not premade: the extra guns are made now (fallback)", row);
+            static BYTE told[KSPG_ROWS];                                          /* once per row: a failing make retries every pass */
+            if (kspg.log && !told[row]) { told[row] = 1; klog("shopPage: row %d was not premade: the extra guns are made now (fallback)", row); }
             if (!kspg_make(row)) continue;
         }
         if (!klh_rd(a + 4, &n, 4) || !(ents = klh_rd32(a + 0x10))) return;     /* the make may have grown it */
@@ -354,16 +355,10 @@ static int kspg_gate(void)
     DWORD sm, st = 0, gs, rules;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x70, &st, 4)) return 0;
     if (kl_online()) return 0;
-    /* k43: the pool is rebuilt when the session enters 0x23..0x25 or 0x16: our object pointers are stale from then on, drop them (kspg_sane would find
-       them too, but only once the new pool is readable and a pointer happens to be gone; this is the explicit edge) */
-    if ((int)st != kspg.st) {
-        kspg.st = (int)st;
-        if (st == 0x16 || (st >= 0x23 && st <= 0x25)) {
-            int row, any = 0; for (row = 0; row < KSPG_ROWS; row++) if (kspg.made[row][0]) { any++; memset(kspg.made[row], 0, sizeof kspg.made[row]); }
-            kspg.nparked = 0; kspg.preDone = 0; kspg.preTry = 0;
-            if (any && kspg.log) klog("shopPage: session state 0x%lx: the pool is rebuilt, %d pair(s) of extra guns dropped (made again when needed)", st, any);
-        }
-    }
+    /* k43 review: no drop on the 0x23..0x25 -> 0x16 edge. The pool SURVIVES the round (klshop.c re-park, shop_more_guns.md S6): the round end only
+       frees every gun again, and kspg_enforce re-parks ours in the next shop. Dropping made[] here leaked a fresh set per pair per round and left the
+       old set unrecognised and free. A real rebuild (new map) is caught by kspg_sane, which checks every pointer against the pool. */
+    if ((int)st != kspg.st) kspg.st = (int)st;
     gs = klh_rd32((DWORD_PTR)KLH_VA(KLS_SETTINGS)); rules = gs ? klh_rd32(gs + 0x54) : 0;
     if (!rules || klh_rd32(rules) != (DWORD)(DWORD_PTR)KLH_VA(KLS_RULES_VT)) return 0;
     /* 1 = a shop can be open, 2 = otherwise. The session runs 0x16 (first shop) -> 0x18 -> 0x19 (play) -> 0x1f (score) -> 0x20 (the shop
