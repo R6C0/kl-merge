@@ -95,11 +95,14 @@ Recommend **B** (separate Hire window), with C as the fallback if the live gate 
 Rank is the FA rank 0..7 above; money is the banked total (stock gun prices 2,000-245,000, suits up to 160,000).
 | Heister | Price | Rank |
 |---|---|---|
-| Default (your current Char) | 0 | 0 |
-| Dog Days J.C., Tommy, Pierre, Liam | 10,000 | 0-1 |
-| Dog Days Jean, Elwood, Bud, Mitchel | 20,000 | 2-3 |
-| Dead Men Ashkanan, Meldal, Red, Parker, Standen, Hutchison | 40,000-60,000 | 4-5 |
-| Kane, Lynch | 100,000 / 120,000 | 6 / 7 |
+OWNER 2026-10-24: x4.5 the proposal; the default is a random heister, never Kane or Lynch (see Owner decisions below).
+| Heister | Price | Rank |
+|---|---|---|
+| Default (random, not Kane/Lynch) | 0 | 0 |
+| Dog Days J.C., Tommy, Pierre, Liam | 45,000 | 0-1 |
+| Dog Days Jean, Elwood, Bud, Mitchel | 90,000 | 2-3 |
+| Dead Men Ashkanan, Meldal, Red, Parker, Standen, Hutchison | 180,000-270,000 | 4-5 |
+| Kane, Lynch | 450,000 / 540,000 | 6 / 7 |
 CRITIC: klsteam.c:31-53,63 forwards GetStat and fails only SetStat/StoreStats, so the rank READ (0x5103e0 on the profile word) works
 on every map; only the RISE is blocked on non-stock levels in SHIP builds (and always in TEST builds).
 Rank gates need the rank to actually rise on expansion maps: klsteam.c blocks SetStat/StoreStats off the stock slot level (GUESS: the
@@ -127,6 +130,18 @@ Dog Days bodies may be hireable until proven. 8. Greying out a taken/locked entr
 3. Prices and rank gates: is section 5 close? 4. Text-only list first, or wait for portraits? 5. May bots take a hired heister's body
 after the round? 6. Should Hire work on the 9 stock maps from the start, or Retomoto/expansion maps first? 7. Is it acceptable that
 the stage 1 live test needs one human menu visit (the autotest cannot reach the shop)?
+
+## Owner decisions (2026-10-24, answers to 8)
+1. Default heister: random from the pool, NEVER Kane or Lynch (they are hire-only).
+2. A hire lasts ONE round: next round you are back on a random default unless you pay again.
+3. Prices = section 5 x 4.5 (45k / 90k / 180-270k / 450k / 540k). Open check: is 540k reachable in one match's banked total?
+   If not, the top rows are unreachable; ask the owner before rescaling.
+4. Portraits, black and white like the gun cards (the peer's white shop, tools/kl_shop_cards.py): needs heister renders baked into
+   the level .TEX the same way; text-only only as a temporary stage-1 step.
+5. Bots hire too, by the same rules: price, rank, one round. Each bot needs its own money and rank (open: where a bot's banked total
+   lives) and a pick rule (GUESS: the best affordable heister not already worn).
+6. Dead Men maps first (the KLExpansion online.xml variants: 289299 B md5 7c8828ec, 292873 B md5 9aa3e4b6); stock maps later.
+7. (one human menu visit for stage 1): not answered yet.
 
 ## Critic pass (2026-10-24)
 Checked read-only against kl2.exe, the repo and the 9 stock F0x_Main.zip plus the installed KLExpansion zips.
