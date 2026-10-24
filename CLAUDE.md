@@ -66,6 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-25 - k42 shop 'crash' = clean exit(0) after focus-loss ShowCursor stalls (0x41e8b0, overlay), not page II code. k43 staging
+(PreMake at 0x16, made[] liveness guard, ExitTrace logging); install needs the owner's word + kl2 closed. Propose CursorGuard=1.
+
 2026-10-25 - INSTALLED (owner 'install all'), none live-tested: doors2 on DM01 10359141, DM06 f1f888c5, DM09 b76586a1; DM01B gas+doors2
 f2a70278; DM03A swat+doors2 02e90dfa; DM02 assault ae193d9c. Backups .before-1025doors2/-dm01bgas/-dm03aswat/-dm02assault; undo doors2 first.
 DM05A lastcall3b lite + clubmusic live (df39c459 -> zip d5f8522b).
