@@ -97,7 +97,12 @@ static struct kad_rec {
     DWORD rush_at, rush_soldier;              /* when the last order went; that bot's soldier (the order is checked against it) */
     float rush_back[3]; int rush_have_back;   /* where that bot's defend block was before: he is sent back there when the man is up */
     int an_n, an_logged; DWORD an_tried;     /* Anim: shots played on him this down, refusals logged, the last try (GetTickCount) */
+    DWORD nodnd_at; BYTE nodnd_logged, rv_logged;   /* 2026-10-24 Revive: since when he is down with no goal object to pull; the 'no goal' line / the first-pull line were logged this down */
 } kad_r[KLB_NREC];
+
+/* 2026-10-24 (owner: 'cant revive them until the pop up'): how near a rushing bot must come to a downed HUMAN before the rush stops asking.
+   0 = BotRange (as before). kad_ba_init sets it to BotAnimNear when BotAnim is on: the bot has to stand where the kneeling animation can start. */
+static float kad_stop_near;
 
 static struct kad_mark {
     int on;                                   /* this part's mark stands on this human record */
@@ -313,12 +318,15 @@ static void kad_rush(const struct klb_snap *s, int i, float pos[][3], const int 
 {
     struct kad_rec *k = &kad_r[i]; struct kle_e e; float bp[3], want[3], got[3], d; char why[100]; DWORD actor, soldier; int h, best = -1, r; float bd = 0;
     float range = kad_vanlive(s) && kad.rushvanrange < kad.rushrange ? kad.rushvanrange : kad.rushrange;
-    if (!kad.rush || !havepos[i] || now - k->t_down < 600) return;
+    /* 2026-10-24: 'by him' for a downed human = where BotAnim can start (BotAnimNear, 2 m); the old 0.9 x BotRange (3.6 m) left the rusher standing
+       beside him with no kneel (own.log 12:18:56 / 12:27:36: 'coming to get you' popup, helped 0.8 - 1.2 s, no 'BotAnim START' ever for a human) */
+    float stop_m = (i == s->human && kad_stop_near > 0.0f ? kad_stop_near : kad.brange) * KAD_M * 0.9f;
+    if (!kad.rush || !havepos[i] || (i != s->human && now - k->t_down < 600)) return;      /* 2026-10-24: a downed HUMAN is rushed at once (was 600 ms for everyone) */
     if (k->rusher) {                                                       /* already sent: again every 2.5 s while he is not there yet */
         h = k->rusher - 1;
         if (now - k->rush_at < 2500 || !havepos[h] || dn[h]) return;
         if (!kle_bot(s, h, &actor, &soldier, bp, why) || soldier != k->rush_soldier) { klog("adren: RUSH - record %d no longer runs to record %d (%s)", h, i, why[0] ? why : "another soldier"); k->rusher = 0; k->rush_have_back = 0; return; }
-        if ((d = kad_dist(bp, pos[i])) <= kad.brange * KAD_M * 0.9f) { k->rush_at = now; return; }
+        if ((d = kad_dist(bp, pos[i])) <= stop_m) { k->rush_at = now; return; }
         memset(&e, 0, sizeof e); e.rec = h; e.actor = actor; e.soldier = soldier;
         kad_beside(pos[i], bp, want);
         kltr_set("adren", "RUSH: ordered again beside the downed heister", -1);
@@ -337,7 +345,7 @@ static void kad_rush(const struct klb_snap *s, int i, float pos[][3], const int 
         if (best < 0 || d < bd) { best = h; bd = d; }
     }
     if (best < 0) return;
-    if (bd <= kad.brange * KAD_M * 0.9f) return;                          /* somebody is by him already */
+    if (bd <= stop_m) return;                          /* somebody is by him already */
     if (!kle_bot(s, best, &actor, &soldier, bp, why)) { if (kad.log >= 2) klog("adren: RUSH - record %d cannot be sent to record %d: %s", best, i, why); return; }
     memset(&e, 0, sizeof e); e.rec = best; e.actor = actor; e.soldier = soldier;
     k->rush_have_back = kle_block(soldier, k->rush_back) && (k->rush_back[0] || k->rush_back[1] || k->rush_back[2]);
@@ -348,7 +356,9 @@ static void kad_rush(const struct klb_snap *s, int i, float pos[][3], const int 
     k->rusher = best + 1; k->rush_at = now; k->rush_soldier = soldier;
     klog("adren: RUSH - record %d (%s) runs to record %d (%s), %.1f m away, to (%.0f, %.0f, %.0f)%s", best, kle_r.used[best] ? "your escort" : "bot", i, i == s->human ? "you" : "bot", bd / KAD_M,
          want[0], want[1], want[2], r == 2 ? " - DRY: not called" : "");
-    if (kad.prompt && i == s->human && r == 1) { char nm[48], msg[160]; kad_name(best, nm, sizeof nm); snprintf(msg, sizeof msg, "%s is coming to get you up - adrenaline (%.0f m)", nm, bd / KAD_M); kad_say(310 + best, 0, msg, 3.0f); }      /* 2026-10-15, the owner: 'where's the adrenaline, i havent seen it' */
+    /* 2026-10-24 (owner: 'dont show a message saying theyre coming to get you unless theyre actually doing the animation'): the 'X is coming to get you up'
+       line used to be said HERE, the moment the run was ordered - whether or not he ever got there (path blocked, shot, sent elsewhere). It is said now from
+       kad_ba_try() when the kneel really STARTS (log 'BotAnim START ... by record 0 (you)'), never from the order. */
 }
 
 /* the man is up (or gone): the bot that ran to him goes back to where his own orders had him */
@@ -857,7 +867,10 @@ static void kad_ba_try(const struct klb_snap *s, int i, int h, const float hp[3]
     memset(&g, 0, sizeof g); g.s = s; g.i = i; g.h = h; g.pl = pl; memcpy(g.man, man, 12);
     r = kad_an_guard("BotAnim start", kad_ba_go_body, &g);
     if (r < 0) { kad_ba_dead = 1; memset(&kad_ba[h], 0, sizeof kad_ba[h]); klog("adren: BotAnim DISABLED for this session (fault at the start); the help without the animation goes on"); return; }
-    if (r == 1) w->n++;
+    if (r == 1) {
+        w->n++;
+        if (i == s->human && kad.prompt) { char nm[48], msg[160]; kad_name(h, nm, sizeof nm); snprintf(msg, sizeof msg, "%s is giving you adrenaline - mash GET UP", nm); kad_say(310 + h, 0, msg, 3.0f); }      /* 2026-10-24: only now, with the kneel playing */
+    }
     else if (kad_ba_logs++ < 12 || kad_bo.log >= 2) klog("adren: BotAnim not started for record %d by record %d: %s", i, h, g.why ? g.why : "?");
 }
 
@@ -1003,6 +1016,7 @@ static void kad_ba_init(void)
     if (kad_bo.alignf > 60) kad_bo.alignf = 60;
     kad_bo.dist = kad_inif("BotAnimDist", "60", 0.0f, 250.0f);
     kad_bo.near_ = kad_inif("BotAnimNear", "2.0", 0.5f, 6.0f);
+    kad_stop_near = kad_bo.near_;      /* 2026-10-24: the rush brings a bot to a downed human this close (kad_rush) */
     kad_bo.test = GetPrivateProfileIntA("Adrenaline", "BotAnimTest", 0, klh_ini);
     kad_bo.sticky = GetPrivateProfileIntA("Adrenaline", "BotAnimSticky", 400, klh_ini);
     if (kad_bo.sticky < 0) kad_bo.sticky = 0;
@@ -1110,7 +1124,7 @@ static void kad_tick(int game_thread)
         if (dn[i] && !k->down) {
             /* ---- he goes down */
             int by = -1, h;
-            k->down = 1; k->t_down = now; k->tick_down = tick; k->by = -1; memset(k->hm, 0, sizeof k->hm); k->sped = 0; k->mkn = 0; k->an_n = 0; k->an_logged = 0; k->an_tried = 0;
+            k->down = 1; k->t_down = now; k->tick_down = tick; k->by = -1; memset(k->hm, 0, sizeof k->hm); k->sped = 0; k->mkn = 0; k->an_n = 0; k->an_logged = 0; k->an_tried = 0; k->nodnd_at = 0; k->nodnd_logged = 0; k->rv_logged = 0;
             KAD_BA_DOWN(i);
             if (i != sn.human) for (h = 0; h < sn.n; h++) {       /* a human whose word rose in this pass put him down (ASSUMED reading of re\player_down.md 11.1) */
                 WORD w = 0;
@@ -1168,6 +1182,13 @@ static void kad_tick(int game_thread)
                 dist[h] = kad_dist(pos[h], pos[i]);
             }
             hp = kad_pick(dist, lim, sn.n);
+            /* 2026-10-24 Revive log: a downed AI heister with no goal object (soldier+0x4b8) cannot be pulled up - the help would silently do nothing. Said once a down,
+               after 700 ms (the goal is written a frame or so after the byte); GUESS: that is the 'cannot revive until later' of the owner if it ever shows. */
+            if (i != sn.human) {
+                if (dnd[i]) { k->nodnd_at = 0; }
+                else if (!k->nodnd_at) k->nodnd_at = now ? now : 1;
+                else if (!k->nodnd_logged && now - k->nodnd_at > 700) { k->nodnd_logged = 1; klog("adren: REVIVE record %d is down %lu ms and has NO goal object (soldier+0x4b8): the lie tick cannot be pulled, hold-E does nothing until it exists", i, (unsigned long)(now - k->t_down)); }
+            }
             kad_rush(&sn, i, pos, havepos, dn, now);
             if (kad.prompt) {
                 char nm[48], msg[160]; int hu = sn.human;
@@ -1175,8 +1196,10 @@ static void kad_tick(int game_thread)
                     fabs(pos[hu][1] - pos[i][1]) <= 2.0f * KAD_M) {
                     float d = kad_dist(pos[hu], pos[i]);
                     kad_name(i, nm, sizeof nm);
-                    if (hp == hu) { snprintf(msg, sizeof msg, "ADRENALINE: getting %s up - keep holding", nm); kad_say(100 + i, 2500, msg, 2.4f); }
-                    else if (d <= kad.range * KAD_M && kset_v[3]) { snprintf(msg, sizeof msg, "Hold %s - adrenaline for %s", kad.usekey == 0x45 ? "E" : "Use", nm); kad_say(150 + i, 2500, msg, 2.4f); }
+                    /* 2026-10-24 (owner: 'sometimes you cant revive them until the pop up'): a line that promises the pull only while the pull can really act
+                       (dnd[i] = his goal object; without it the tick cannot be written and nothing happens) - else the plain 'is down' line */
+                    if (hp == hu && dnd[i]) { snprintf(msg, sizeof msg, "ADRENALINE: getting %s up - keep holding", nm); kad_say(100 + i, 2500, msg, 2.4f); }
+                    else if (d <= kad.range * KAD_M && kset_v[3] && dnd[i]) { snprintf(msg, sizeof msg, "Hold %s - adrenaline for %s", kad.usekey == 0x45 ? "E" : "Use", nm); kad_say(150 + i, 2500, msg, 2.4f); }
                     else if (d <= kad.prange * KAD_M) { snprintf(msg, sizeof msg, "%s IS DOWN - get to him (%.0f m) for adrenaline and a cut", nm, d / KAD_M); kad_say(200 + i, 4000, msg, 3.0f); }
                 }
                 /* nothing is said while YOU are down (2026-10-14, the owner: 'it says someone is gonna help me but they arent'): the AI
@@ -1185,6 +1208,7 @@ static void kad_tick(int game_thread)
             if (pl && klh_rd(pl + 0xa54, &usedw, 4)) { use = (BYTE)((usedw & 2) != 0); if (kad.log >= 2 && (usedw != kad_g.use_dw)) { klog("adren: [player+0xa54] %08lx -> %08lx (bit 2, the GUESSED 'use key held': %d)", (unsigned long)kad_g.use_dw, (unsigned long)usedw, use); kad_g.use_dw = usedw; } }
             if (hp < 0) { if (k->fast && pl && i == sn.human) { BYTE z = 0; klh_data((void *)(DWORD_PTR)(D + 0x29), &z, 1, "player: the fast get-up byte back (adrenaline)"); k->fast = 0; } continue; }
             k->hm[hp] += dt * 1000u / 1024u;
+            if (!k->rv_logged) { k->rv_logged = 1; klog("adren: REVIVE record %d helped by record %d (%s) %lu ms after he went down, %.1f m away, goal object %s", i, hp, hp == sn.human ? "you" : "a bot", (unsigned long)(now - k->t_down), dist[hp] / KAD_M, dnd[i] ? "present" : "MISSING (human head start only)"); }
             if (hp == sn.human && i != sn.human && dnd[i]) KAD_AN_TRY(i, k, pl, pos[i], dnd[i], klh_rd32(dnd[i] + 4));     /* Anim: the human kneels and gives the shot */
             if (hp != sn.human && (sn.r[hp].flags & 1)) KAD_BA_TRY(&sn, i, hp, pos[hp], pos[i], pl);                   /* BotAnim: an AI heister kneels and gives it */
             if (kad.log >= 2 && now >= kad_g.nextlog) { kad_g.nextlog = now + 1000; klog("adren: record %d is helped by record %d (%s), %.1f m away, %lu ms so far", i, hp, hp == sn.human ? "you" : "a bot", dist[hp] / KAD_M, (unsigned long)k->hm[hp]); }
