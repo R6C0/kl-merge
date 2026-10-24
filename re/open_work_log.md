@@ -1,3 +1,8 @@
+2026-10-24 23:40 - INSTALLED (owner 'install all'), not live-tested: k36 hook (8dfa5665) + ini [FrameLimit] Enable=1 SwapChain=0
+(.before-1024k36on); gunsnd_1024n (21 banks F01-F09 + L00-L11, .before-1024gunsnd2); hasta_1024n (DM11B 323c13f3: wing opens at 2 squads/30 s,
+3 blocker nodes dropped, M11A_Postfilter grade neutral); lastcall_1024n (DM05A b5e45efa: escape cams moved to pad); spawns_1024n (DM01B
+0a34b035, DM09 e2c7d5bd). Round 2 running (wf_dd55429a): club roof/waves/holster/dance, DM02 shutters, kick doors, arrivals.
+
 2026-10-24 23:50 - Gun loudness for ALL banks STAGED, NOT INSTALLED: C:/kl_build_1024/gunsnd_1024n (tools/kl_gunsnd_all.py, pins in kl_gunsnd_all.pins.json).
 Audit: the 27 map banks were on target already; the 9 stock FA banks (F01..F09) and L00..L11 were never processed (54/61 records off, up to -5.2 dB guns,
 -11.2 dB distant). 21 banks, 777 records driven to the bank's Deagle head (-3.15; silenced/distant -3.7); WHD/SND/zip byte-identical. INSTALL/UNDO
