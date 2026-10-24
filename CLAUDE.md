@@ -66,6 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 15:30 - OWNER 14:40 LIST STAGED, not installed: <work>\build\rev_1024\ = HC2 garage door goes with the blast + NoCoverBox
+stripped on 11 DM maps (INSTALL cover nocoverbox.bat, md5-checked) and hook k29b [CarDown] (car blast = revivable down; offsets
+guessed, test Dry=1 first). Wreck cover + more cover boxes running (-> build\cover2_1024). Hire tab: e8's re/shop_hire.md.
+
 2026-10-24 13:18 - RETOMOTO LIFT AS A HEISTER: the owner's log (12:28:39..12:29:06) shows 3 rides CANCELLED - with the car shut he walked
 the hall (z down to -1434) and left box 9 by more than Slack 150, so CarWait/CarFallback never carried him. INSTALLED DM09 KLJoin.ini
 Slack=1500 (md5 acdc8e12, backup KLJoin.ini.before-1024slack; generator 413a95394). NOT verified live: LIFT14 (= his walk,
@@ -75,13 +79,6 @@ Slack=1500 (md5 acdc8e12, backup KLJoin.ini.before-1024slack; generator 413a9539
 filter's lag; his fps was 210 vs 184 yesterday). k27c: Alt+F4 key-watch thread (KW1 live PASS, 545 ms), MciPump default 0, lift CarStall,
 'coming to get you' only on a real kneel + REVIVE log lines. Undo: <work>\build\camoff_1024\UNDO k27c and camera off.bat. Open: lift doors
 shut for heisters (lead: TriggerBox_OpenExitElevator AllInside wants every merc inside, unproven); 'cant revive a bot until the popup'.
-
-2026-10-24 10:10 UTC - scheduled check-in (cloud, PC idle, nothing run): the blanked stock subtitles REPAIRED into the work folder, not
-installed: new `kl_loc_fit.repair()` / `--repair OUTDIR` (stock text back from the slot's stock file, own sound id kept, fit() again WITH
-the stock reference) + `--install OUTDIR` (zip rewritten beside itself, backup .before-locrepair); stock_zip() reads KL_PortBackup (read
-only) so the F01 slot is compared at last. All 29 zips x 9 languages: DD01-DD09 Russian 248/136 -> 0 blank (back as English subtitles,
-623/354 KLVoice subtitles blanked instead), NEW DM01 Japanese 233 -> 0; everything else clean. Output `<work>\build\locrepair_1024\`.
-Owner / local session: `python tools\kl_loc_fit.py --install <that folder>` (+2.5 GB backups on C:), then `--verify` -> blanked 0 everywhere.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

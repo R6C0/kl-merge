@@ -1,3 +1,9 @@
+2026-10-24 15:30 - OWNER 14:40 LIST STAGED, NOTHING INSTALLED (owner in game). <work>\build\rev_1024\ (reviewed): (A) Hot Coffee II
+garage door was in no blast DeactivateGeom list -> added + HVK collision sunk (87f2dbc5d); (B) Dead Men maps carry NoCoverBox volumes
+(stock DD never), stripped on 11 maps (a66ad1d47) - GUESS that this is what blocks C; DM01B zip combines A+B, md5 37e2a90f; INSTALL
+cover nocoverbox.bat md5-checks each map. (C) car blast -> revivable down for bots/cops/human: hook k29b [CarDown] (207ec6c34,
+61ccfdc1a), offsets GUESSED: first run with Dry=1. Running: wreck cover + added cover boxes (Withdrawal) -> build\cover2_1024.
+
 2026-10-24 15:20 - HIRE TAB RESEARCH (owner put this session in charge; read only, nothing built): re/shop_hire.md (5-agent workflow +
 critic). Recommended: option B = a separate Hire window in the level's Menu/online.xml bound to a hook-served option (SHIP-safe, no hashed
 code), text-only, Arcade first; a 5th category bar is rejected (hashed code, table 0xbd1f68 cannot grow). Money = [[rules+0x5f8]+0x38].
