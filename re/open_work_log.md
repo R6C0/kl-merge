@@ -1,3 +1,12 @@
+2026-10-24 13:18 - RETOMOTO LIFT AS A HEISTER (owner: 'the lift doesnt work when youre a crew / heister'). His session log (own.log,
+F06=DM09, 12:28:39..12:29:06): he reached the hall at (2727, 19601, 912), the car stayed shut, he walked it (x 2233..2786, z -1434..1028);
+kljoin CANCELLED rides at 12:28:46 / 12:28:57 / 12:29:06 'the player left the box (more than Slack outside)' - Slack 150, box 9 z 0..1100 -
+so CarWait 6 + CarFallback never got its 8.5 s. FIX INSTALLED: DM09 KLJoin.ini Slack=1500 (md5 acdc8e12, backup KLJoin.ini.before-1024slack),
+kl_rt_joinini.py --car now writes it (413a95394). Side effect: a heister who touches box 9 and runs back upstairs within 8.5 s is jumped too.
+NOT verified live: LIFT14.ini (LIFT13 route + his walk) ready in <work>uild\klhook\live, skipped 13:02-13:17 (owner active).
+Still open: why the doors stay shut for him (LIFT10/11 probe: the box fires once, by human or bot, and both proxies accept).
+His session ran the pre-k27c hook: no REVIVE lines yet for 'cant revive a bot until the popup'.
+
 2026-10-24 12:49 - INSTALLED SHIP out_3f_1024k27c B5252D74 (TEST twin 60001D0B) + ini md5 3B27E903 = BBDFDFE4 with [Rigid] Enable=0
 (backups dinput8.dll.before-1024k27c, KLHook.ini.before-camoff1024; undo <work>\build\camoff_1024\UNDO k27c and camera off.bat).
 Owner 12:30: Alt+F4 still fails, camera/fps feel terrible, lift fails as heister, revive popups wrong. Found: his 12:29 log ends 'game left
@@ -7,15 +16,6 @@ feel -> filter off. MciPump had come back on with k27 (default 1, no ini key) ->
 shut doors (x 2727, car box x 2802+) -> CarStall jump 94b8222c6; why doors stay shut for heisters is open (lead: STEP_LOBBY TriggerBox
 AllInside needs every merc, unproven; agent's HVK read: no static blocker). Revive: 'coming to get you' said at the RUSH order, rusher
 stopped at 3.6 m (BotAnimNear 2 m), so it never knelt -> popup only at BotAnim START, rush to 2 m, REVIVE log lines 1abcefb40.
-
-2026-10-24 13:18 - RETOMOTO LIFT AS A HEISTER (owner: 'the lift doesnt work when youre a crew / heister'). His session log (own.log,
-F06=DM09, 12:28:39..12:29:06): he reached the hall at (2727, 19601, 912), the car stayed shut, he walked it (x 2233..2786, z -1434..1028);
-kljoin CANCELLED rides at 12:28:46 / 12:28:57 / 12:29:06 'the player left the box (more than Slack outside)' - Slack 150, box 9 z 0..1100 -
-so CarWait 6 + CarFallback never got its 8.5 s. FIX INSTALLED: DM09 KLJoin.ini Slack=1500 (md5 acdc8e12, backup KLJoin.ini.before-1024slack),
-kl_rt_joinini.py --car now writes it (413a95394). Side effect: a heister who touches box 9 and runs back upstairs within 8.5 s is jumped too.
-NOT verified live: LIFT14.ini (LIFT13 route + his walk) ready in <work>uild\klhook\live, skipped 13:02-13:17 (owner active).
-Still open: why the doors stay shut for him (LIFT10/11 probe: the box fires once, by human or bot, and both proxies accept).
-His session ran the pre-k27c hook: no REVIVE lines yet for 'cant revive a bot until the popup'.
 
 2026-10-24 12:55 - OWNER: 'the start of the match announcers are missing now?? the dead men ones'. Checked: the 12:15 session played DM01/02/03.. with PlainData=1, which converted 0 lines there (old DM data has no single leaves); no DM map file changed overnight; KLTalk 'start' (Kane/Lynch campaign lines) needs a Kane or Lynch body and was skipped the same way yesterday. VP4 (TEST k27 28ae5d69 + the owner's ini + PlayLog=1, DM01 Hot Coffee) PASS: 'PLAYING ... ours KLVoice/Ashkanan_R/FA_1time_MissionBriefingDiner_01' 0.7 s after the round clock. So the DM round-start briefing still plays; open: which line the owner means (or masked by the ambience bed that starts in the same second). Russian locrepair (<work>uild\locrepair_1024) NOT installed: Russian/Japanese players only, +2.5 GB backups on C: - owner's call.
 
