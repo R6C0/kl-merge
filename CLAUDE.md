@@ -66,16 +66,12 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-25 - Last Call: lastcall3_1025a (d639c20a/1b2f8233) verified NOT READY (no club music records in the .WHD; roof squads 73-125 u
-from pad/climb top; 145/90 actors unproven). Workflow wf_f3319b59 builds lastcall3b_1025a (roof >= 600 u, full 56 / lite ~40 dancers,
-main/alt heli) + clubmusic_1025a (M05_A music merge). e8 installs on READY under its owner's word. DM05A live 7ef0404f.
+2026-10-25 - INSTALLED (owner 'install all'), none live-tested: doors2 on DM01 10359141, DM06 f1f888c5, DM09 b76586a1; DM01B gas+doors2
+f2a70278; DM03A swat+doors2 02e90dfa; DM02 assault ae193d9c. Backups .before-1025doors2/-dm01bgas/-dm03aswat/-dm02assault; undo doors2 first.
+DM05A lastcall3b lite + clubmusic live (df39c459 -> zip d5f8522b).
 
-2026-10-25 - Hook: k40 F2FE048F live ([StanceFix] Dry=0, [ShopPage] Enable=1); e8 staged k41 E715CD59 (page key in shop state 0x20, Key=80),
-installs when the owner closes the game. Leave dinput8.dll/KLHook.ini alone until e8 says done. DM01 3f503f58 (dm01fix + star fix) live.
-
-2026-10-25 - STAGED, NOT INSTALLED (owner's word needed): dm02assault_1025a (DM02 30b3ddf0->ae193d9c, shutter assault, 2x6 SWAT),
-dm01bgas_1025a (DM01B f0aaba92->119c9cd2, fuel cans), dm03aswat_1025a (DM03A 3d4ae43a->7852abd9, SWAT door kick). Open: DM01 cops never
-drive/exit the Bentleys; door PathBlocker detours untested.
+2026-10-25 - Hook k42 8DFB5223 live (shop page II: list names + buy hand-over fix; backup .before-1025k42). Next: read KLHook.log for the
+'weapon list up, UI table' line and 'carries row R from set B'. Open: DM01 cops never drive/exit the Bentleys; door PathBlocker detours untested.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
