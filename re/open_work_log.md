@@ -1,3 +1,9 @@
+2026-10-24 18:45 - STAGED, NOT INSTALLED: combined hook k31x (SHIP c8c3c6bd, TEST 1b9739e6) = v30 (e8 KeepStock, LIVE since ~18:30) + [Unstick]
++ [Shield] + klfps swap-chain Present fix + [Censor] Late/Player + [Dying] (you: Dry=1 log only; heisters hold fire) + [CamSmooth] (aim-out
+ease, DtFix) + [ClubCalm] probe (off). C:/kl_build_1019/k31x_1024c/INSTALL k31x.bat (live must be k29d or v30; undo rehearsed byte-identical).
+Map passes staged separately, md5-chained: cover_1024b (cover3, climb3), C:/kl_build_1024/hc2hasta_1024b (west garage door, Hasta wing 3 squads /
+100 s; collides with cover3 on DM01B/DM11B), club_1024b (50 civilians), gunsnd_1024c (all guns at S&W MP45 loudness). Van escape HUD box: agent running.
+
 2026-10-24 16:30 - k31dyn (klhook/klcdying.c, [Dying]): owner 'almost dead but dont shoot should happen to the player and ai heisters'. FOUND: the game has ONE near-death state, the ZDownNotDeadNPC down (the cop's, 0x70e0e0); the Wounded clips are death animations. Heisters already enter it ([BotDown], 33 downs in the 15:3x run) but shot from the floor (NoFire=0); you enter it only on a burst (kldown). NEW: Bots=1 forces klbd.nofire=1 (data, B3 still open); Human=1 asks the game's trigger 0x8da3b0 (kind 9, GUESS as klcardown) at HumanPct=30 of max, Chance per episode. Staged build\dying_1024c (md5 30A40869 ship), INSTALL needs live k29d E02300DF, adds [Dying] Dry=1. Head shots still kill. Not run in the game.
 2026-10-24 16:20 - FRAME FEEL + SKY (owner: 'framerate not smooth', 'sky so damn bright'). FOUND: the k29d limiter NEVER RAN. KLHook.log 15:59-16:07
 has 'fps: on' + 'Present wrapped (slot 17)' but zero 'fps: limiter:' lines (Log=1 = every 10 s), and the hitch-probe stacks go KL2 -> gameoverlayrenderer ->

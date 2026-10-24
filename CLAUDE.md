@@ -66,17 +66,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-24 16:20 - FRAME LIMITER NEVER RAN (k29d log 15:59-16:07: no 'fps: limiter:' line, game presents on the swap chain). k30fps wraps swap chain
-Present + Reset (SHIP AEB50A38), sky retune in KL_Camcorder (shoulder + sky bloom cut). Staged <work>\build\fps_1024b (INSTALL k30fps hook / sky preset /
-hitch probe 25ms .bat, rehearsed on a copy). Not installed or run; next log should show 'fps: FIRST Present seen, via the ... route'.
-
-2026-10-24 18:10 - STUCK-IN-COVER + CLIMB, STAGED OFFLINE (not installed, not run): cause inferred = rev2 stripped hazard NoCoverBox + cover2 boxes in those zones.
-<work>\build\cover_1024b: cover3 (hazard markers back, doubtful boxes off), climb3 (.ANM climb clips for DD01-09, DM01B/05A/06B/11B), hook k30cov
-([Unstick], F7). Order: cover3, then climb3, then hook. Details and GUESSes: re/open_work_log.md.
-2026-10-24 16:40 - STAGED, NOT INSTALLED: hook k29d = k29b + [FrameLimit] (klfps.c, RTSS front edge / busy wait) with the owner's 4
-presets 240/120/60/30 (auto Fps=0 = the highest the screen shows; this PC reads 240 Hz). <work>\build\k29d_1024\INSTALL k29d.bat (refuses
-unless live dll = k29b aa912e09; adds a marked [FrameLimit] block, keeps Announcer=0 / CarDown Dry=1; UNDO rehearsed byte-identical).
-KL Mod Options tool (build\modopts_1024): one row per preset, exclusive, '(recommended on/off)'. k29c superseded. Not run in the game.
+2026-10-24 18:45 - STAGED, NOT INSTALLED: combined hook k31x (SHIP c8c3c6bd, TEST 1b9739e6) = v30 (e8 KeepStock, LIVE since ~18:30) + [Unstick]
++ [Shield] + klfps swap-chain Present fix + [Censor] Late/Player + [Dying] (you: Dry=1 log only; heisters hold fire) + [CamSmooth] (aim-out
+ease, DtFix) + [ClubCalm] probe (off). C:/kl_build_1019/k31x_1024c/INSTALL k31x.bat (live must be k29d or v30; undo rehearsed byte-identical).
+Map passes staged separately, md5-chained: cover_1024b (cover3, climb3), C:/kl_build_1024/hc2hasta_1024b (west garage door, Hasta wing 3 squads /
+100 s; collides with cover3 on DM01B/DM11B), club_1024b (50 civilians), gunsnd_1024c (all guns at S&W MP45 loudness). Van escape HUD box: agent running.
 
 2026-10-24 15:55 - INSTALLED (owner 'install all'): white shop on all 27 maps (379ef8622, .before-1024white); rev2_1024 = HC2 garage
 door + NoCoverBox strip on 11 DM maps (.before-1024cover); hook k29b aa912e09 + ini 0fc342a6 with [CarDown] Dry=1 (log only, then
