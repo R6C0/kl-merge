@@ -71,7 +71,7 @@ EVENT_THEME = [
     (r'^(PoliceReward|HittingTheScore)', 'greed'), (r'^(AllDead|TeamloseGame|TeamOneMercLeft)', 'down'),
     (r'^(TeamLeading|TeamWinGame)', 'win'), (r'^(TeamTrailing|TeamDraw)', 'watch'), (r'^Exit', 'go'),
     # plaindata 2026-10-24: single-entry (flag-0) events PD1 found with no leaf (GUESS by name; Human_Shield_Grunts stay stock grunts)
-    (r'^(Boarding|Chopper_response|CriminalEsc|LastEsc)', 'esc'), (r'^(DirtyMoney|TeamMoneyGoneQuit)', 'greed'),
+    (r'^(Boarding|Chopper_response|CriminalEsc|LastEsc|HoldEscape)', 'esc'), (r'^(DirtyMoney|TeamMoneyGoneQuit)', 'greed'),
     (r'^(OneCriminalLeft|TwoCriminalsLeft|TeamLastMerc)', 'down'), (r'^(?i:(One|Two|Three)Min_?left)', 'go'),
     (r'^PoliceKillPolice', 'payback'),
 ]
@@ -306,6 +306,19 @@ class Plan:
             self.pair[pid] = (a, b)
             self.review.append((a, 'Pair_KL%s_Call' % pid, 'kane+lynch', ca.path, ca.text))
             self.review.append((b, 'Pair_KL%s_Reply' % pid, 'kane+lynch', cb.path, cb.text))
+        # 2026-10-24: Dead Men maps have more flag-1 events than Dog Days' (DM01: kl_loc.build 'bytes must be in range(0, 256)'), so the
+        # singles can push KLVoice/<Name> or KLVoice/<Name>_R past TABLE_MAX: drop the worst ranked singles there (those lines stay stock)
+        self.dropped = 0
+        for who, L in self.leaves.items():
+            for radio in (False, True):
+                keys = [k for k in L if k.endswith('_R') == radio]
+                over = len(keys) - TABLE_MAX
+                if over > 0:
+                    for k in sorted((k for k in keys if k in SINGLES), key=SINGLES.get, reverse=True)[:over]:
+                        del L[k]
+                        self.dropped += 1
+        if self.dropped:
+            self.review = [r for r in self.review if r[1] in self.leaves[r[0]]]
 
     def roots(self):
         out = set()
@@ -355,11 +368,13 @@ def map_events(loc_tree, singles=True):
         for radio in (False, True):
             pick_ = sorted((b for b in sing if b.endswith('_R') == radio), key=lambda b: (_theme_known(b), b))
             ev.update(pick_[:SINGLE_MAX])
-            SINGLES.update(pick_[:SINGLE_MAX])
+            SINGLES.update((b, i) for i, b in enumerate(pick_[:SINGLE_MAX]))
     return sorted(ev)
 
 
-SINGLES = set()      # the single-entry events map_events added (leaf name = event name): build_map's tier 1 drops only their subtitles
+SINGLES = {}         # the single-entry events map_events added (leaf name = event name) -> rank (0 = best theme): build_map's tier 1 drops only
+                     # their subtitles; Plan drops the worst ranked first when a KLVoice table would pass TABLE_MAX
+TABLE_MAX = 255      # a .LOC table holds at most 255 entries (one count byte, kl_loc.build)
 
 
 def add_leaf(tree, path, text, sid):
@@ -527,6 +542,9 @@ def build_map(game, m, out, trees, clips, log=print, write=True):
     names = {c.get('Name', '').lower(): n for n, c in ward.items()}
     present = [w for w in SPEAKERS if w.lower() in names]
     info = {'map': m, 'events': len(events), 'characters': present, 'counts': plan.counts()}
+    if plan.dropped:
+        info['dropped_singles'] = plan.dropped
+        log('%s: %d single-event leaves dropped: a KLVoice table would pass %d entries' % (m, plan.dropped, TABLE_MAX))
     if not present:
         log('%s: the wardrobe has none of the eight: nothing to do' % m)
         return info, plan
