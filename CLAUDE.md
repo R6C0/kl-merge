@@ -75,7 +75,6 @@ floor/upper squads, warehouse shut by kick doors, F03 3-car SWAT arrival; undo c
 
 2026-10-25 - INSTALLED (owner 'install all'), none live-tested: doors2 on DM01 10359141, DM06 f1f888c5, DM09 b76586a1; DM01B gas+doors2
 f2a70278; DM03A swat+doors2 02e90dfa; DM02 assault ae193d9c. Backups .before-1025doors2/-dm01bgas/-dm03aswat/-dm02assault; undo doors2 first.
-Then (10-25) DM01 squads+cars c0e7b8ee; DM05A lastcall4 lite 858d3371 (70 civs, 96 squads: crash = undo).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
