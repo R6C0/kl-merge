@@ -66,6 +66,8 @@ feat('vanblow', G_EXP, 'Escape vehicle can blow up when nobody is aboard', 'on',
      'klescort.c [VanBlow] (k33): the van shield stays only while somebody is aboard; an empty van shot to 0 burns, then explodes. Dry=1 = log only; HealthMax lowers a big health (GUESS)', [('VanBlow', 'Enable', 1, 0, 1)])
 feat('clubcalm', G_EXP, 'Last Call probe: log the hand item and shots (read-only)', 'off', 'start',
      'klclubcalm.c: data for the calm-until-the-gun-is-drawn switch', [('ClubCalm', 'Enable', 1, 0, 0)])
+feat('animprobe', G_EXP, 'Animation probe: log the player Play calls around gait changes (diagnostic) (recommended off)', 'off', 'start',
+     "klanimprobe.c: LOG ONLY, changes nothing; patches the top of Play 0x4da1d0, so only a TEST dll does it (a SHIP dll refuses and logs it); not live-tested", [('AnimProbe', 'Enable', 1, 0, 0)])
 feat('crewlook', G_CORE, 'Random looks for the AI heisters', 'on', 'start',
      'no body twice, never the one you wear', [('Crew', 'Random', 1, 0, 0)])
 

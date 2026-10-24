@@ -1,3 +1,6 @@
+2026-10-24 22:00 - STAGED, NOT INSTALLED: hook k35 (SHIP 55c7f7ea4e5fbdacc23009b6a9903bad, TEST dc32fc0cd4d19d614f1dfeaa3078c4e9) = k34 + [AnimProbe] (klhook/klanimprobe.c, Enable=0 default, LOG ONLY).
+Detours Play 0x4da1d0 (8-byte prologue 83 ec 50 55 8b 6c 24 58 checked; not a hashed range) and logs the local player's Play calls (clip, flags bit0/bit1, rec+0x14, caller, channel +0x3c/+0x40 after return) in a Ms window around a gait change (signature [mover+0x58], [mover+0x1e5c], [P+0x6b4]). SHIP dll REFUSES code patches (logs it): use 'INSTALL k35 TEST dll.bat'. C:/kl_build_1019/k35_1024f; undo rehearsed on copies, byte-identical. Look for 'animprobe:' CHANGE / RING / PLAY / RET lines.
+
 2026-10-24 21:15 - STAGED, NOT INSTALLED: hook k34 (SHIP a22b642b88b13a522155755f34ca6c91, TEST 587e09ff5fc133eaa8f6d0d7c6a910c1) = k33 + [VanBlow]
 (b97ffe103, e518113f6). C:/kl_build_1019/k34_1024e/INSTALL k34.bat (live k29d or v30; appends [Unstick] [Shield] [Dying] [CamSmooth] incl. StanceMs,
 [VanBlow] Enable=1 Dry=0 Log=1 EmptyDelay=1500; undo rehearsed on copies of the live dll/ini, byte-identical). Supersedes k32 and k33.
