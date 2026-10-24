@@ -49,11 +49,12 @@ nothing fired' and the crowd stays calm; (3) 0x45f5d0 may re-check AllInside and
 LIMIT: the club's guards and bouncers are map-data squads; holstering does not make them unaware, only the civilians react to the
 draw. Harmless elsewhere: wrong slot or start far from the loot area = off for the round, no write, no call.
 
-DANCING: BLOCKED, with proof. Searched DD's F01 ANM (2444 slot names, 3342 clips, collections Civilian/Police/...): no slot or member
-name contains dance / party / disco / sway / drunk / club / clap / cheer. DD's civilians have no idle-dance clip. DM05A's own ANM
-(1794 clips) has none either, but its Civilian / Female / FatMale collections hold '/Level_Specific/M05_A/Ambient/' MaleGuest01-03,
-FemaleGuest01-02, Female_Stripper, MaleBartender, MaleSofa01-02, FemaleSofa01-02, MaleBalcony01-02, Kissing_* and Talk_On_Phone:
-the club's ambient loops (names only; whether any is a dance is unseen, it needs the animsheet picture). Nearest path: kl_anm.py
-merge those clips into the slot's .ANM (convert handles the header; never copy raw) and play them with a MiniCutscene
-'(anim| <slot>)' loop per civilian (as the 20_RunToStreet rout does). Not built: unproven offline that a loop clip plays on DD's
-civilian skeleton, and the slot ids must be renumbered. Next step: render these clips with tools/kl_animsheet.py and pick.
+DANCING (2026-10-24): BUILT, staged, not live-tested (tools/kl_club_dance_1024.py). DD has no dance clip; DM05A's ambient clips were rendered
+with kl_animsheet: only Female_Stripper (341 frames, 13.6 s) is a dance; MaleGuest01/02 + FemaleGuest02 are standing sway/drink idles,
+MaleGuest03 / Bartender / FemaleGuest01 are 11-frame stills, Sofa/Balcony are sitting poses. Skeleton: all 84 tracked bones exist by NAME in
+DD's Civilian clips (0 missing), so kl_anm.convert + merge (never a raw copy) suffices; +0x2C zeroed on added clips. Scene: group 'KL_Dance!'
+with one MiniCutsceneRout per 10 civilians (clone of F07 20_RunToStreet, script anim+idlemode anim+idle SLOT then delayforever, mode
+breakable, start staggered 0.37 s steps mod 6 s), appended to AIMonitor field 2 (round-start list). Panic (20_RunToStreet) unchanged.
+Staged C:/kl_build_1024/dance_1024r3/{live,lastcall2}: b5e45efa -> f12d103d, c563e6bc -> 7ef0404f; INSTALL/UNDO bats rehearsed on scratch.
+NEEDS LIVE TEST: clip plays/loops on the DD civilian (male civilians play a female clip), panic rout takes over from the dance, tree-3 listing
+(guess, as the shops pass), loop pop at clip end, AIMonitor list accepting 5 more entries.

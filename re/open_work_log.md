@@ -1,3 +1,5 @@
+2026-10-24 23:30 - STAGED, NOT INSTALLED: C:/kl_build_1024/dance_1024r3 = club civilians dance (Female_Stripper clip merged into DD Civilian ANM + 5 MiniCutsceneRout groups on AIMonitor list 2); live b5e45efa -> f12d103d, lastcall2 c563e6bc -> 7ef0404f; INSTALL/UNDO bats rehearsed on scratch only. Live test needed (re/club_crowd.md).
+
 2026-10-25 - STAGED, NOT INSTALLED: C:/kl_build_1024/dm01chain_1024r3 = DM01 carexit (cops leave the Bentleys, prp de21e7d1) THEN kick doors x5 + 4 extinguishers
 (kl_interact_graft build --ext 4 --doors 1330,961,841,842,493), both run on the live shop-v2 zip 02d2a481 -> 528d34fb (installed md5 d70cf4c9 after the .NET re-zip).
 11 members change (prp buf HVK gms TEX MAT oct rmc rmi prm hrd); online.xml and all .LOC stay e8's; the merged .TEX = live .TEX (shop 1202/1233/1234 pixels

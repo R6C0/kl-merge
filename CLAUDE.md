@@ -66,6 +66,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-24 23:30 - STAGED, NOT INSTALLED: C:/kl_build_1024/dance_1024r3 = club civilians dance (Female_Stripper clip merged into DD Civilian ANM + 5 MiniCutsceneRout groups on AIMonitor list 2); live b5e45efa -> f12d103d, lastcall2 c563e6bc -> 7ef0404f; INSTALL/UNDO bats rehearsed on scratch only. Live test needed (re/club_crowd.md).
+
 2026-10-25 00:30 - INSTALLED (owner 'install all'), not live-tested: lastcall2 (DM05A c563e6bc: heli at far roof end, 6 yakuza/bodyguard waves,
 99/53 budget, 22 civs); DM02 shops variant A (30b3ddf0; B = fallback); interact kick doors + extinguishers on DM01B f0aaba92, DM03A 3d4ae43a,
 DM06 38b20312, DM09 99a4ff75 (DM01 skipped: e8 shop v2 02d2a481, rebase job running); arrivals plop DM11B f896a376. Camera bug: log shows
