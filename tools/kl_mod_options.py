@@ -73,6 +73,8 @@ F[-1]['exact'] = True; F[-1]['excl'] = 'onlineset'
 feat('onlinerandom', G_EXP, 'Private match / System Link: random map (Dead Men and Dog Days mixed) (not for Quick Match; every player needs the same setting)', 'off', 'start',
      'klslot.c OnlineSet=9: per slot the stock map or any Dead Men map page that has one for that slot, drawn from the lobby id so all players get the same; NOT run live; ticking it unticks the other online map rows', [('Expansion', 'OnlineSet', 9, 0, 0)])
 F[-1]['exact'] = True; F[-1]['excl'] = 'onlineset'
+feat('onlinerandround', G_EXP, 'Random online map: a new draw every round (only with the random map row; everyone must be in the lobby from the start)', 'off', 'start',
+     "klslot.c OnlineRandomRound=1: the round number (loads more than 60 s apart, counted by each machine) joins the seed; a player who joins after a round was played counts differently and gets another map; NOT run live", [('Expansion', 'OnlineRandomRound', 1, 0, 0)])
 feat('keeppage', G_EXP, 'Private match / System Link: keep the last Arcade expansion page for the next online session', 'off', 'start',
      'klslot.c KeepPageOnline; NOT run live; ignored while OnlineSet is set', [('Expansion', 'KeepPageOnline', 1, 0, 0)])
 feat('hidevan', G_EXP, 'Hide the van escape timer until the van is there', 'on', 'start',

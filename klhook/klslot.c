@@ -294,23 +294,36 @@ static int kls_find_rule(int slot, int page)
  * all peers (same ini, same map folders), otherwise they diverge - exactly as for OnlineSet=2. An old DLL reads OnlineSet=9 as a page without
  * rules and falls back to the stock [Redirect] maps. DATA reads only. */
 #define KLS_RANDOM     9
-#define KLS_SVC_VT     0x00bd597c
-static char kls_rnd_txt[200];                        /* the last draw, for the LOAD line */
+#define KLS_SVC_VT     0x00bd597c                    /* ZOnlineServiceSteam */
+#define KLS_SVC_VT2    0x00bd5ad4                    /* ZOnlineServiceWintel: the subclass System Link runs on (re
+etsmooth_solo.md H3); its CreateSession / JoinSession
+                                                        slots are thunks into the Steam ones (rentitamper.md:109) so the lobby id sits at the same +0x35e: GUESS (onlrand_1025b;
+                                                        1025a refused this vtable and read seed 0 on System Link, SL3) */
+static char kls_rnd_txt[300];                        /* the last draw, for the LOAD line */
+static int kls_rnd_round_on;                         /* [Expansion] OnlineRandomRound=1: the round number joins the seed */
+static DWORD kls_rnd_round, kls_rnd_last, kls_rnd_lobby[2];
 
 static int kls_rand_pick(int s)
 {   /* -> the page (0 = stock) chosen for slot index s */
     int cand[KLS_PAGES], n = 0, p, k, num = atoi(kls_slot[s].name + 1), src = 0, len = 0;
-    DWORD sm, svc, lob[2] = { 0, 0 }; BYTE ex = 0; unsigned __int64 x;
+    DWORD sm = 0, svc = 0, svt = 0, lob[2] = { 0, 0 }, now = GetTickCount(); BYTE ex = 0; unsigned __int64 x;
     cand[n++] = 0;
     for (p = 2; p < KLS_RANDOM; p++) if (kls_find_rule(s, p) >= 0) cand[n++] = p;
     if (klh_exe_ok && (sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) != 0 && (svc = klh_rd32(sm + 0x17c)) != 0 &&
-        klh_rd32(svc) == KLS_SVC_VT && klh_rd(svc + 0x35c, &ex, 1) && ex && klh_rd(svc + 0x35e, lob, 8) && (lob[0] || lob[1])) src = 1;
+        ((svt = klh_rd32(svc)) == KLS_SVC_VT || svt == KLS_SVC_VT2) && klh_rd(svc + 0x35c, &ex, 1) && ex && klh_rd(svc + 0x35e, lob, 8) && (lob[0] || lob[1])) src = 1;
+    else { if (svc) { klh_rd(svc + 0x35c, &ex, 1); klh_rd(svc + 0x35e, lob, 8); } else lob[0] = lob[1] = 0; }   /* kept only for the log line */
+    if (src) { if (lob[0] != kls_rnd_lobby[0] || lob[1] != kls_rnd_lobby[1]) { kls_rnd_lobby[0] = lob[0]; kls_rnd_lobby[1] = lob[1]; kls_rnd_round = 0; kls_rnd_last = 0; } }
     else lob[0] = lob[1] = 0;
+    /* the round: a load is the first open of any slot archive more than 60 s after the previous one (the probes of one load come within seconds; rounds
+       are further apart). Peers present from the lobby on count the same; a late joiner would not (hence default off). */
+    if (!kls_rnd_last || now - kls_rnd_last > 60000) kls_rnd_round++;
+    kls_rnd_last = now ? now : 1;
     x = ((unsigned __int64)lob[1] << 32 | lob[0]) ^ ((unsigned __int64)(num + 1) * 0x9E3779B97F4A7C15ULL);
+    if (kls_rnd_round_on) x ^= (unsigned __int64)kls_rnd_round * 0xD6E8FEB86659FD93ULL;
     x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ULL; x ^= x >> 27; x *= 0x94D049BB133111EBULL; x ^= x >> 31;
     k = (int)(x % (unsigned)n);
-    len = snprintf(kls_rnd_txt, sizeof kls_rnd_txt, "random: seed lobby %08lx%08lx (%s) slot %d, %d choices [stock", (unsigned long)lob[1], (unsigned long)lob[0],
-                   src ? "Steam lobby id" : "NOT readable: fixed pick", num, n);
+    len = snprintf(kls_rnd_txt, sizeof kls_rnd_txt, "random: seed lobby %08lx%08lx (%s; service %08lx vt %08lx exists %u) round %lu%s slot %d, %d choices [stock", (unsigned long)lob[1], (unsigned long)lob[0],
+                   src ? "lobby id" : "NOT readable: fixed pick", (unsigned long)svc, (unsigned long)svt, (unsigned)ex, (unsigned long)kls_rnd_round, kls_rnd_round_on ? " (in the seed)" : " (not in the seed)", num, n);
     for (p = 1; p < n && len < (int)sizeof kls_rnd_txt - 40; p++) len += snprintf(kls_rnd_txt + len, sizeof kls_rnd_txt - len, " p%d=%s", cand[p], kls_rule[kls_find_rule(s, cand[p])].map);
     snprintf(kls_rnd_txt + len, sizeof kls_rnd_txt - len, "] -> choice %d (page %d)", k, cand[k]);
     return cand[k];
@@ -745,6 +758,7 @@ static void kls_init(HINSTANCE inst)
     if (kls_page_force >= KLS_PAGES) kls_page_force = -1;
     kls_online_set = (int)GetPrivateProfileIntA("Expansion", "OnlineSet", 0, klh_ini);
     if (kls_online_set < 0 || kls_online_set >= KLS_PAGES) { klog("expansion: OnlineSet=%d is not a page (0, 2..8, 9 = random): ignored", kls_online_set); kls_online_set = 0; }
+    kls_rnd_round_on = GetPrivateProfileIntA("Expansion", "OnlineRandomRound", 0, klh_ini) != 0;
     if (kls_online_set == KLS_RANDOM) klog("expansion: OnlineSet=9: RANDOM map per slot in a network session (stock + every page with a rule for the slot), seeded from the lobby id; page 9 itself cannot hold rules; NOT run live");
     if (kls_online_set == 1) { klog("expansion: OnlineSet=1 is the stock page: ignored"); kls_online_set = 0; }
     kls_keep_online = GetPrivateProfileIntA("Expansion", "KeepPageOnline", 0, klh_ini) != 0;
