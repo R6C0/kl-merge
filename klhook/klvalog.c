@@ -149,8 +149,25 @@ static void klva_hsite(LONG at, SIZE_T size);
    alloc of such a row scans up to 256 stack slots for the first kl2 code address (-> that site) or other followed module (-> its row);
    none = the call came on a thread without either (the driver's own worker). A GUESS like the CRT rebill: stale stack values can be picked */
 #define KLVA_VIA 2048
-static struct { volatile LONG key; LONG m, who, via; volatile LONG cnt; volatile LONG64 bytes; LONG64 last; LONG lastcnt; } klva_via[KLVA_VIA];
+static struct { volatile LONG key; LONG m, who, via, ts; volatile LONG cnt; volatile LONG64 bytes; LONG64 last; LONG lastcnt; } klva_via[KLVA_VIA];
 static volatile LONG klva_via_tick, klva_via_full;
+static DWORD klva_tls = TLS_OUT_OF_INDEXES, klva_main_tid;
+typedef LONG (NTAPI *klva_qit_fn)(HANDLE, int, void *, ULONG, ULONG *);
+static klva_qit_fn klva_qit;
+
+static LONG klva_tstart(void)
+{   /* the start address of this thread (ThreadQuerySetWin32StartAddress), once per thread in a TLS slot; 1 = the thread klva_init ran on */
+    void *s; DWORD le;
+    if (klva_tls == TLS_OUT_OF_INDEXES) return 0;
+    le = GetLastError();   /* TlsGetValue clears it; the hooked caller's must survive */
+    if ((s = TlsGetValue(klva_tls)) == 0) {
+        if (GetCurrentThreadId() == klva_main_tid) s = (void *)1;
+        else if (!klva_qit || klva_qit(GetCurrentThread(), 9, &s, sizeof s, 0) < 0 || !s) s = (void *)2;
+        TlsSetValue(klva_tls, s);
+    }
+    SetLastError(le);
+    return (LONG)(DWORD_PTR)s;
+}
 
 static int klva_isret(DWORD_PTR v)
 {   /* v is a return address: the bytes before it are a call (E8 rel32; FF /2 as reg, [reg], [reg+d8], [d32] or [reg+d32], with or without SIB) */
@@ -166,26 +183,29 @@ static int klva_isret(DWORD_PTR v)
 
 static void klva_vianote(void **ra, int m, LONG64 add)
 {   /* crt == 3 rows (xinput*) are passed through: the pair is (module <- caller of xinput, via that xinput) */
-    DWORD_PTR top = __readfsdword(4); LONG who = 0, via = 0, key, h, i, n; int j, k;
-    __try {
-        for (j = 1; j < 256 && (DWORD_PTR)(ra + j + 1) <= top; j++) {
-            DWORD_PTR v = (DWORD_PTR)ra[j];
-            if (v >= 0x401007 && v < 0xb0fe30) { if (klva_isret(v)) { who = (LONG)v; break; } continue; }   /* kl2.exe .text */
-            if (v < 0x10000000) continue;   /* below every DLL here: skip the row lookup */
-            k = klva_hmod((void *)v);
-            if (!k || k == m || v < klva_hm[k].base + 0x1000 || !klva_isret(v)) continue;
-            if (klva_hm[k].crt == 3) { if (!via) via = k; continue; }
-            if (!klva_hm[k].crt) { who = (LONG)(0x80000000u | (DWORD)k); break; }
-        }
-    } __except (EXCEPTION_EXECUTE_HANDLER) { who = 0; }
-    if (!who) who = (LONG)0xC0000000u;
-    key = who ^ (m << 20) ^ (via << 12); if (!key) key = 1;
+    DWORD_PTR top = __readfsdword(4); LONG who = 0, via = 0, ts = 0, key, h, i, n; int j, k;
+    for (j = 1; j < 2048 && (DWORD_PTR)(ra + j + 1) <= top; j++) {   /* 8 KB: the driver's frames on the render thread are deeper than 1 KB (K49F) */
+        DWORD_PTR v = (DWORD_PTR)ra[j]; int r = 0;
+        if (v < 0x401007 || (v >= 0xb0fe30 && v < 0x10000000)) continue;   /* below every DLL here and not kl2.exe .text */
+        __try {   /* per value: a stale value into unmapped room only skips that value */
+            if (v < 0xb0fe30) r = klva_isret(v) ? 1 : 0;
+            else {
+                k = klva_hmod((void *)v);
+                if (k && k != m && v >= klva_hm[k].base + 0x1000 && klva_isret(v)) r = klva_hm[k].crt == 3 ? 3 : !klva_hm[k].crt ? 2 : 0;
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) { r = 0; }
+        if (r == 1) { who = (LONG)v; break; }
+        if (r == 3) { if (!via) via = k; continue; }
+        if (r == 2) { who = (LONG)(0x80000000u | (DWORD)k); break; }
+    }
+    if (!who) { who = (LONG)0xC0000000u; ts = klva_tstart(); }   /* no frame: tell the threads apart by where they started */
+    key = who ^ (m << 20) ^ (via << 12) ^ (LONG)((DWORD)ts * 40503u); if (!key) key = 1;
     h = (LONG)(((DWORD)key * 2654435761u) >> 21);
     for (n = 0; n < 32; n++) {
         LONG cur;
         i = (h + n) & (KLVA_VIA - 1);
         cur = klva_via[i].key;
-        if (!cur && (cur = InterlockedCompareExchange(&klva_via[i].key, key, 0)) == 0) { klva_via[i].m = m; klva_via[i].who = who; klva_via[i].via = via; cur = key; }
+        if (!cur && (cur = InterlockedCompareExchange(&klva_via[i].key, key, 0)) == 0) { klva_via[i].m = m; klva_via[i].who = who; klva_via[i].via = via; klva_via[i].ts = ts; cur = key; }
         if (cur != key) continue;
         InterlockedIncrement(&klva_via[i].cnt); InterlockedExchangeAdd64(&klva_via[i].bytes, add);
         return;
@@ -448,7 +468,12 @@ static void klva_vias(void)
     n = _snprintf(line, sizeof line, "va: driver/devenum process-heap allocs by caller, sampled 1 in 16 (x16 = real), last 10 s (%ld pairs not tracked); module <- caller MB/calls:", klva_via_full);
     for (i = 0; i < no && n > 0 && n < (int)sizeof line; i++) {
         int e = ord[i]; LONG w = klva_via[e].who; char who[64]; DWORD off;
-        if (w == (LONG)0xC0000000u) snprintf(who, sizeof who, "(no kl2/module frame)");
+        if (w == (LONG)0xC0000000u) {
+            LONG ts = klva_via[e].ts; char sm[48];
+            if (ts == 1) snprintf(who, sizeof who, "(no frame, init thread)");
+            else if (ts == 0 || ts == 2) snprintf(who, sizeof who, "(no frame, thread ?)");
+            else { klh_module((DWORD_PTR)ts, sm, sizeof sm, &off); snprintf(who, sizeof who, "(no frame, thread %s+%lx)", sm, off); }
+        }
         else if (w & 0x80000000) snprintf(who, sizeof who, "%s", klva_hm[w & 0xffff].name);
         else { klh_module((DWORD_PTR)w, who, sizeof who, &off); snprintf(who + strlen(who), sizeof who - strlen(who), "+%lx", off); }
         k = _snprintf(line + n, sizeof line - n, " %s <- %s%s%s %.1f/%ld;", klva_hm[klva_via[e].m].name, klva_via[e].via ? klva_hm[klva_via[e].via].name : "", klva_via[e].via ? " <- " : "", who, d[e] / 1048576.0, dc[e]);
@@ -509,6 +534,8 @@ static void klva_init(void)
     if (!klva_real_lalloc || !klva_real_lfree || !klva_real_lrealloc || !klva_real_lsize || !klva_real_galloc || !klva_real_gfree || !klva_real_grealloc || !klva_real_gsize)
         { klva_on = 0; klog("va: a Local/Global function is not exported: VaLog off"); return; }
     klva_pheap = GetProcessHeap(); lstrcpyA(klva_hm[0].name, "(outside)");
+    klva_tls = TlsAlloc(); klva_main_tid = GetCurrentThreadId();
+    klva_qit = (klva_qit_fn)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtQueryInformationThread");
     InitializeCriticalSection(&klva_cs);
     CloseHandle(CreateThread(0, 64 << 10, klva_watch, 0, STACK_SIZE_PARAM_IS_A_RESERVATION, 0));
     klog("va: VaLog on: VirtualAlloc / VirtualFree / VirtualAllocEx / HeapCreate of every other module are followed (calls of 512 KB+ one line each, the first 400)");
