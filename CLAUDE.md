@@ -67,7 +67,7 @@ a launch goes straight into the F01 slot and quits after 120 s.
 Full dated log: `re/open_work_log.md` (newest first).
 
 2026-10-25 ~02:40 - INSTALLED batch (owner grant), NOT yet proven live (e8 runs them): DM01B overhaul+vans b68d255f, DM02 dog+vans b0252fde,
-DM05A lc5 SAFE (CRASHED K47A 0x8e5bbd: private game heap full, 11 KB HeapAlloc NULL at 0x7bb336; UNDONE -> d5f8522b), stock F01 PD2 AKM zip 26cd7ebe, DM01 dm01fb fix2+vans 4d520614, DM06B park2+vans
+DM05A lc5 SAFE (CRASHED K47A 0x8e5bbd: private game heap full, 11 KB HeapAlloc NULL at 0x7bb336; UNDONE -> d5f8522b), stock F01 PD2 AKM (CRASHED K47B 0x6d2107 null sound Lock after the bank merge; UNDONE -> stock 644fe120), DM01 dm01fb fix2+vans 4d520614, DM06B park2+vans
 7cab1235, vans on DM03/03A/09/09R*, fed KLJoin.ini on 14 maps (e8 sets [Fed] Body=1). Backups .before-1025{overhaul,dog,lc5safe,pd2gun,
 dm01fb,park2,vans,fedoutfit}; UNDO bats beside each stage. DM05A fed graft 08b9d7cc NOT installed (built on SAFE); e8 finding the heap's HeapCreate cap.
 
