@@ -426,7 +426,10 @@ static HRESULT WINAPI klfps_reset(void *self, void *pp)
     r = klfps_real_reset(self, pp);
     klfps_resets++;
     if (r >= 0) { klfps_read_pp(pp); klog("fps: Reset ok: refresh %d Hz, game vsync %s, target %d fps", klfps_auto_hz, klfps_vsync ? "ON" : "off", klfps_target); }
-    else { klfps_deadline = 0; klfps_pace = 0; klfps_ret = 0; }
+    else {   /* D3DERR_DEVICELOST 88760868 = still lost, the game retries; D3DERR_INVALIDCALL 8876086c = a DEFAULT-pool resource still alive */
+        if (klfps_resets <= 20) klog("fps: Reset FAILED %08lx (call %ld)", (unsigned long)r, klfps_resets);
+        klfps_deadline = 0; klfps_pace = 0; klfps_ret = 0;
+    }
     return r;
 }
 

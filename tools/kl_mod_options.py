@@ -191,6 +191,9 @@ feat('continue', G_STAB, 'Keep playing after a game assert', 'on', 'start',
      'the hook logs the assert and goes on instead of ending the game', [('KLHook', 'ContinueAsserts', 1, 0, 1)])
 feat('memory', G_STAB, 'Room for the big Dead Men maps (address space)', 'on', 'start',
      'avoids the 2 GB heap NULL crash on large .prm files', [('Memory', 'Enable', 1, 0, 1)])
+feat('quadring', G_STAB, 'Memory: buffer ring for the screen effects (Last Call runs out of memory without it)', 'on', 'start',
+     'klquad.c: the 4 post-process quad buffers get 128 buffers each; the NVIDIA driver no longer piles a block per frame pass (K50H: 1696 -> 18 MB '
+     'in 70 s; K50F2/I: flat at 120 fps, same picture); needs the frame limiter (its Reset wrapper)', [('Memory', 'QuadRing', 128, 0, 128)])
 feat('steamblock', G_STAB, 'Block Steam stats / leaderboards on modded rounds', 'on', 'start',
      'keeps modded rounds out of your Steam stats and achievements', [('Steam', 'Block', 1, 0, 1)])
 
