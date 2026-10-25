@@ -456,6 +456,7 @@ def check(zp, log=print):
 def ps_text():
     s = GS.PS1
     s = s.replace('gas.json', 'dog.json').replace('.before-1025dm01bgas', TAG).replace('gas.ps1', 'dog.ps1')
+    s = s.replace('Maps' + chr(92) + 'DM01B' + chr(92) + 'F03_Main.zip', 'Maps' + chr(92) + 'DM02' + chr(92) + 'F02_Main.zip').replace('renamed F03_Main.zip', 'renamed F02_Main.zip')
     first = s.index('\n')
     return ('# dog.ps1 - DM02 Late Night Opening, 2026-10-25 (tools/kl_dog_1025.py): ONE police dog released with the arriving SWAT (~32 s).\n'
             '#   Chained on the live DM02 zip a8216b38 (mall pass): `old` in dog.json is that md5; the install refuses any other.\n'
