@@ -1,3 +1,5 @@
+2026-10-25 - vans audit (read-only, nothing built/installed): census in C:/kl_build_1024/vans_1025a (summ.txt). Stock DD has no shootable parked cars (only helis carry VehicleEffects); escape van is destructible (grade 2 = state 6, crew killed). DM van shot did nothing: FollowOutShield Invulnerable while aboard, 9600 hp, FakeTarget removed on DM01B/DM03A/DM06B. Plan: restore FakeTarget, hook FX-only damage toggle, Definite cars; hook part = proposal for e8.
+
 2026-10-25 ~02:30 - DM02 mall INSTALLED (owner grant): F02_Main.zip a8216b38 over ae193d9c, backup .before-1025dm02mall, undo C:/kl_build_1024/dm02mall_1025a/stage2. 6 kick doors, 6 wall extinguishers (ext_lift 100), 4 fuel cans, 3 police cars + SWAT (Backstop 25 s guessed). Not yet run in game; e8 does a DM02 run. New jobs: dig map, fed outfits, DD mechanics + PD2 page II study, DM06B redesign, shootable vans, DM overhaul (DM01B first), DD-campaign FA research, DM grenades research.
 
 2026-10-25 - lastcall5 (full 653a4f4c 90 civs 150/111; lite 7d7f80c7 71 civs 138/95) STAGED, rehearsed, NOT installed (pinned on live 858d3371,
