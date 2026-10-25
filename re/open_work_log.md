@@ -1,3 +1,9 @@
+2026-10-25 ~16:15 - GRENADE: step 1 is DEAD (verified wvnb1pun0: nothing in kl2.exe reads [P+0x818] bit 0x800; DM's player throw 0x5f4c10 was dropped; 0x898a50/0x432440 are
+ZFFActor methods, never call them on the player). Step 1b [Grenade] Probe=2 (c578ad428, e8 installed SHIP 76879729) logs the player ZFFActionThrow inputs ([P+0xa1c] must be a pointer,
+word [P+0x239c]); owner to press G with a grenade on DM01. CAMERA/STUTTER (wq90ehimo): the good night (log 00:41-06:00) ran [CamSmooth] Dry=0; my Dry=1 felt worse -> Dry=0 again; real cause
+= fps ~185 -> ~103 in DM01 play (stock chasers lose speed below ~165 fps), hook tick 0.65 -> 1.15 ms. +[Memory] Log=0 (10 s VirtualQuery walk), [Bots] OrderTrace=0 (.before-1025camback).
+Doors: no AI kicks grafted doors (needs a KickDoorBehaviourRout step or a TriggerBox opener; owner to pick).
+
 2026-10-25 ~15:35 - GRENADE THROW step 1 INSTALLED (kl-merge-27's klgrenade e2e0332de + my fix 34f199479: release fired on tick 2 while G held): SHIP dinput8 B5BFCCE0 -> 721C2D70,
 KLHook.ini +[Grenade] Throw=1 (ad1e13a4; backups *.before-1025grenade). Not run. Stutter 14:58-15:05: my 7z size run + e8's ffmpeg on the CPU (both stopped); [CamSmooth] Log=0
 (.before-1025camlog). Owner asked: Fps=120 at 240 Hz (open). Moved unused Maps DM09RB/RB2/RB3/RB4/RD/RV/RV2 + T01 (6.8 GB) to D:/KL_DD_archive_1025/Maps. re/release_size.md: solid 7z 4.84 GB, delta release ~0.6 GB.
