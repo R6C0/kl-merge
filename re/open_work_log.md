@@ -1,3 +1,7 @@
+2026-10-25 ~15:35 - GRENADE THROW step 1 INSTALLED (kl-merge-27's klgrenade e2e0332de + my fix 34f199479: release fired on tick 2 while G held): SHIP dinput8 B5BFCCE0 -> 721C2D70,
+KLHook.ini +[Grenade] Throw=1 (ad1e13a4; backups *.before-1025grenade). Not run. Stutter 14:58-15:05: my 7z size run + e8's ffmpeg on the CPU (both stopped); [CamSmooth] Log=0
+(.before-1025camlog). Owner asked: Fps=120 at 240 Hz (open). Moved unused Maps DM09RB/RB2/RB3/RB4/RD/RV/RV2 + T01 (6.8 GB) to D:/KL_DD_archive_1025/Maps. re/release_size.md: solid 7z 4.84 GB, delta release ~0.6 GB.
+
 2026-10-25 ~15:25 - OWNER "use the dead men looks fix all of that": DEAD MEN GUN LOOKS INSTALLED on the 3 maps without them (C:/kl_build_1024/dmguns_1025/<MAP>/install.py,
 backups *.before-1025dmguns, --undo). kl_map_guns build --start=1 --set=1 (6 looks: USP, TMP, P90, SG 552, M4A1, MP5) + new KLGuns.ini Version 2; fed bodies regenerated (AkItem 31->32).
 DM01B F03 b68d255f -> 186cf3f8 (+KLJoin 165d6be9, 68731 chunks); DM06B F02 7cab1235 -> 02458756 (52898); DM07 F06 3c7636d3 -> 6f9f8e62 (+KLJoin f4cb2ded, 44650).
