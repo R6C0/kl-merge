@@ -23,6 +23,9 @@ TAG = '.before-1025overhaul'                # default; a map's SPECS entry may c
 BS = chr(92)
 IG_TOP, GS_TOP = 'KL_Interact!2', 'KL_Gas!2'
 
+# DM06 car lanes (x, z, y): every 125 cm on the collision terrain, ground y smoothed 1-2-1 (verifier scan 2026-10-25, car column free of collision, step <= 16 per 125)
+LANES06 = {'A': [(3125.0, -8000.0, 143.0), (3000.0, -8000.0, 159.0), (2875.0, -8000.0, 172.0), (2750.0, -8000.0, 178.0), (2625.0, -8000.0, 180.0), (2500.0, -8000.0, 181.0), (2375.0, -8000.0, 180.0), (2250.0, -8000.0, 180.0), (2125.0, -8000.0, 180.0), (2000.0, -8000.0, 180.0), (1875.0, -8000.0, 179.0), (1750.0, -8000.0, 179.0), (1625.0, -8000.0, 179.0), (1500.0, -8000.0, 180.0), (1375.0, -8000.0, 180.0), (1250.0, -8000.0, 180.0), (1125.0, -8000.0, 179.0), (1000.0, -8000.0, 179.0), (875.0, -8000.0, 179.0)], 'B': [(-2875.0, -7875.0, 180.0), (-2750.0, -7875.0, 186.0), (-2625.0, -7875.0, 191.0), (-2500.0, -7875.0, 192.0), (-2375.0, -7875.0, 190.0), (-2250.0, -7875.0, 186.0), (-2125.0, -7875.0, 182.0), (-2000.0, -7875.0, 183.0), (-1875.0, -7875.0, 182.0), (-1750.0, -7875.0, 173.0), (-1625.0, -7875.0, 166.0)], 'C': [(-2375.0, -1125.0, 167.0), (-2250.0, -1250.0, 165.0), (-2125.0, -1375.0, 165.0), (-2000.0, -1500.0, 169.0), (-1875.0, -1625.0, 174.0), (-1750.0, -1750.0, 172.0), (-1625.0, -1875.0, 166.0), (-1500.0, -2000.0, 159.0)]}
+
 # Per map.  doors: kl_interact_graft door specs (int = a leaf node of the build; every one measured with nav on BOTH sides of the leaf, main part).
 # ext: spots_near targets (x, z, floor y) for wall extinguishers (snapped to the nearest wall edge).  fuel: anchors (x, z, floor y).
 SPECS = {
@@ -61,34 +64,25 @@ SPECS = {
     # The floor here is ~220..290, not 0: the car lanes carry y (plan 'y', kl_dm02_mall_1025._lane_y).  Measured with C:/kl_build_1024/overhaul_1025a/lanes06.py.
     'DM06': dict(
         slot='F04', file='F04_Main.zip', title='A Walk in the Park', tag='.before-1025overhaul2',
+        # 2026-10-25 independent check (collision .HVK via kl_route) refuted the first build's guesses: the walk mesh floats 20..60 above the collision terrain, the first
+        # extinguisher spots (nav wall edges) were open air or bushes/trees, and the south-field lanes at constant y crossed a 150 cm hill.  So here: ext = explicit spots (x, FLOOR y, z, 0, zdir)
+        # found on real wall collision (pavilion, tea house, scaffold: SO0100 refs, a wall >= 160 cm long 20..40 cm from the spot, free floor before it); fuel cans stand on the collision floor
+        # (fuel_ground); the car lanes carry the terrain height per point and were scanned for collision in the car column.  The park has no roads and no door leaves -> no kick doors.
         doors=[],
-        # ext: nav wall edges (spot_near snaps to the nearest): the bridge deck y 500 (rails at x 500 / 1000), the pavilion level y 600, and three stretches of the south
-        # route.  Existing KL_Ext_1..4 stand at (46,-1500) (1202,-2690) (-1237,-94) (90,-4029).  GUESS: a nav wall edge is a wall or a rail.
-        ext=[(500.0, 4500.0, 500.0), (1000.0, 4000.0, 500.0), (1000.0, 2500.0, 600.0), (-2500.0, -2000.0, 200.0), (1000.0, -3500.0, 200.0), (-1000.0, -5500.0, 200.0)],
-        fuel=[(750.0, -8750.0, 220.0), (-1000.0, -4500.0, 220.0), (2500.0, -3500.0, 220.0)],
-        # cars: two on the south field (open ground ~30 m east of the escape point (-1040,-6721)) coming from the south, stops at z -7750 / -7625; a third mid-route
-        # on the flat west of the central bridge (z -1250, from the west).  Measured clear runs: x 2000 z -10125..-7750 (clearance >= 250), x 1625 z -10000..-7625
-        # (>= 200), z -1250 x -3000..-1375 (>= 200).  Posts (cells06.py): >= 330 from the stops, >= 260 from the lanes, main part, clearance >= 100.
+        ext_spots=[(880.0, 625.0, 2152.0, 0.0, (1.0, 0.0)), (880.0, 625.0, 2552.0, 0.0, (1.0, 0.0)), (-2500.0, 175.0, -1880.0, 0.0, (1.0, 0.0)),
+                   (-2260.0, 173.0, -2080.0, 0.0, (0.0, 1.0)), (1040.0, 166.0, 3720.0, 0.0, (1.0, 0.0)), (1160.0, 181.0, 3440.0, 0.0, (0.0, 1.0))],
+        ext=[],
+        fuel=[(750.0, -8750.0, 220.0), (-1000.0, -4500.0, 220.0), (2500.0, -3500.0, 220.0)], fuel_ground=True,
+        # cars: two on the south field, east and west of the escape point (-1040,-6721), and one mid-route; lanes follow the collision terrain (path points (x, z, y)).
         cars=dict(
-            y={12579: 280.0, 12754: 262.0, 12929: 220.0},
-            paths={12579: [(2000.0, -10125.0), (2000.0, -7750.0)], 12754: [(1625.0, -10000.0), (1625.0, -7625.0)], 12929: [(-3000.0, -1250.0), (-1375.0, -1250.0)]},
-            cells={1: [(1250.0, 244.0, -7750.0), (2375.0, 271.0, -8375.0)], 2: [(1250.0, 242.0, -8125.0), (1000.0, 222.0, -7250.0)],
-                   3: [(-1625.0, 220.0, -1625.0), (-1625.0, 219.0, -875.0)]},
-            wave3='AI_Enemies!JPN_DrugSquad_Island_01',   # 2 Mercenary_04 actors in 2 groups + a ZSquadScript: the clone template
+            nav_dy=125.0,
+            paths={12579: LANES06['A'], 12754: LANES06['B'], 12929: LANES06['C']},
+            cells={1: [(1125.0, 236.0, -8375.0), (750.0, 225.0, -8500.0)], 2: [(-1875.0, 220.0, -8250.0), (-1875.0, 220.0, -7500.0)],
+                   3: [(-1750.0, 220.0, -2375.0), (-1000.0, 220.0, -2000.0)]},
+            wave3='AI_Enemies!JPN_DrugSquad_Island_01',   # 2 Mercenary_04 actors in 2 groups + a ZSquadScript: the clone template (GUESS: the map's own drug-gang squad can be the SWAT)
             backstop=60.0,            # GUESS: the crew needs ~60 s from the bridge end to the south; the lanes take ~10 s
             anm_col='Mercenary_04',
             caps=(99, 64)),           # census 21 / 18 + 6 / 3 = 27 / 21, far below the proven 99 / 55
-    ),
-    # ---- DM07 The Dig (F06 slot, page 3), 2026-10-25: the Gravel Pit M07_A on F07's systems (tools/kl_dig_layer.py, re/dig_fa_design_1025.md).
-    # An open pit: door_hosts is not asked (no kick doors). Cans on the nav wall edges nearest the crew's start, the mid pit and the plateau foot (spot_near snaps
-    # to the nearest wall edge within its radius; GUESS: a nav wall edge is a container / pipe / cabin wall). The cans stand at pit floor y -463..-482, mid y -182.
-    # Fuel cans in the two fights the crew meets first. NO cars / SWAT: the layer has its own 4 waves + 5 extra squads (28 actors of the proven 99).
-    'DM07': dict(
-        slot='F06', file='F06_Main.zip', title='The Dig', tag='.before-1025dig',
-        doors=[],
-        ext=[(-2300.0, 4000.0, -463.0), (-3900.0, 2600.0, -482.0), (-1000.0, 5600.0, -182.0), (-700.0, 2700.0, -482.0)],
-        fuel=[(-1300.0, 2500.0, -482.0), (-4100.0, 3300.0, -470.0)],
-        cars=None,
     ),
 }
 
@@ -101,6 +95,21 @@ def md5(b):
     return hashlib.md5(b).hexdigest()
 
 
+def _ground_fuel(orig, log):
+    """Wrap kl_dm01b_gas_1025.fuel_spots: the walk mesh floats above the collision terrain on open ground (DM06: 20..60 cm), so each can's floor y is the collision floor
+    nearest below the mesh height (kl_route grid, floors within 110 under .. 30 over the mesh), else the mesh height stays."""
+    def fn(B, nav):
+        import kl_route as RT
+        g = RT.load(B.zp).grid('all')
+        out = []
+        for (x, y, z) in orig(B, nav):
+            fl = [q for q, _r in g.floors(int(x // RT.CELL), int(z // RT.CELL)) if y - 110.0 <= q <= y + 30.0]
+            out.append((x, float(fl[-1]) if fl else y, z))
+            log('  fuel can floor: mesh %d -> collision %s at (%d, %d)' % (y, fl[-1] if fl else 'none', x, z))
+        return out
+    return fn
+
+
 def build(mapname, src, dst, log=print, keep=None):
     sp = SPECS[mapname]
     pin = md5(open(src, 'rb').read())
@@ -111,12 +120,14 @@ def build(mapname, src, dst, log=print, keep=None):
         s1, s2, s3 = [os.path.join(work, 's%d.zip' % i) for i in (1, 2, 3)]
         IG.TOP, IG.TOP_PATH = IG_TOP, 'ROOT' + BS + IG_TOP
         log('step 1: doors + extinguishers (kl_interact_graft.build, top %s)' % IG_TOP)
-        IG.build(src, s1, ext=len(sp['ext']), doors=sp['doors'], ext_doors=0, spots_near=sp['ext'], pin=pin, log=log, ext_lift=MALL.EXT_LIFT)
+        IG.build(src, s1, ext=len(sp.get('ext_spots') or sp['ext']), doors=sp['doors'], ext_doors=0, spots=sp.get('ext_spots'), spots_near=sp['ext'], pin=pin, log=log, ext_lift=MALL.EXT_LIFT)
         m1 = md5(open(s1, 'rb').read())
         log('step 2: fuel cans (kl_dm01b_gas_1025.build, top %s)' % GS_TOP)
         GS.TOP = GS_TOP
         GS.FUEL_ANCHORS, GS.EXT_WALL = sp['fuel'], []
         GS.ext_spots_wall = lambda B, nav: []
+        if sp.get('fuel_ground'):
+            GS.fuel_spots = _ground_fuel(GS.fuel_spots, log)
         GS.build(s1, s2, pin=m1, log=log)
         last = s2
         if sp.get('cars'):

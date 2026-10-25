@@ -131,7 +131,7 @@ def plan_lane(d, tracks, plan):
         if K.npos != len(pts) or K.pos[0] != pts[0]:
             raise ValueError('car %d: the key table is not the lane' % k)
         old = ME.Poly(pts)
-        new = ME.Poly([(x, _lane_y(plan, k), z) for x, z in plan['paths'][k]])      # y: the plan's floor height (DM06 park floor is ~270, not 0)
+        new = ME.Poly([(q[0], q[2] if len(q) > 2 else _lane_y(plan, k), q[1]) for q in plan['paths'][k]])      # y: a path point (x, z, y) carries its own ground height (DM06: the collision terrain, 2026-10-25 verifier), else the plan's floor height
         lane[k] = [new.at(old.cum[i] / old.len * new.len) for i in range(len(pts))]
         first = {}
         for f in range(K.frames - 1, -1, -1):
@@ -205,15 +205,16 @@ def cars(src, dst, log=print, plan=None):
     if plan is not None:
         lane, rotnew = plan_lane(d, tracks, plan)
     stops = [lane[k][-1] for k in C.BODIES]
+    nav_dy = 60.0 if plan is None else float(plan.get('nav_dy', 60.0))      # DM06: the walk mesh floats 20..60 above the collision terrain the lane follows
     for st in stops:
-        a = nav.at(st[0], st[1], st[2], dy=60.0)
+        a = nav.at(st[0], st[1], st[2], dy=nav_dy)
         if a is None or nav.part[a[0]] != main:
             raise ValueError('stop %s is not on the main nav part' % (st,))
     off = []
     for k in C.BODIES:
         for p in lane[k][::6] + [lane[k][-1]]:
-            a = nav.at(p[0], p[1], p[2], dy=60.0)
-            if a is None or nav.part[a[0]] != main or nav.clearance(p[0], p[1], p[2], limit=200.0) < 100.0:
+            a = nav.at(p[0], p[1], p[2], dy=nav_dy)
+            if a is None or nav.part[a[0]] != main or nav.clearance(p[0], a[1], p[2], limit=200.0) < 100.0:
                 off.append((round(p[0]), round(p[2])))
     if off:
         raise ValueError('lane points off the open street (main part, clearance 100): %s' % off[:6])
