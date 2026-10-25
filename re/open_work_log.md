@@ -1,3 +1,7 @@
+2026-10-25 ~20:10 - GUNS RAW LIKE THE MP45 INSTALLED (owner: 'all quiet again', 'distortion to match like the mp45'): no data regression (every shot at the MP45 head level), but the knee
+clipper left 0.1-11 % flat tops vs the Deagle's ~20 %. kl_gunsnd_all build --raw (hard clip + rail-aware IMA encode, <= +0.6 dB over head), 42 banks, 1686 records, median 21.9 % flat;
+MP45 clips untouched. C:/kl_build_1024/gunraw_1025, backups *.WAV.before-1025gunraw, UNDO bat there (ac0dc323f). Grenade TEST install ready, not run: C:/kl_build_1024/grenspawn_1025/install.py.
+
 2026-10-25 ~19:25 - STUTTER GONE in the owner's 19:04-19:18 run (hook 2FF289F3, ini 44e51cff, Medal still loaded but restarted 18:26): 31 frames over 33 ms in 80 x 10 s
 (2.3/min vs 53-128 earlier today), 0 of 11 hitch reports in PeekMessage; Peek by result: a returned WM_MOUSEMOVE costs 0.04-0.09 ms (was ~0.4 ms a call). Owner: 250+ fps, 400 on DD10/DM07.
 Cause not pinned (the hook change was logging only): most likely the earlier Medal instance (restarted 15:15) or another app since closed. MouseMoveMs stays off. Owner: DD10 escape still not found (relayed to the DD10 lane).
