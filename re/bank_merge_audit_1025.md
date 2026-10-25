@@ -50,7 +50,13 @@ these properties. No count/total/stream-region/second-file pointer in the WHD he
 (parse() consumes every byte; the merge tools update T and size).
 
 ## What this means for the crash
-The Lock wrapper is `_ZSoundBufferDS::LockBuffer` (0x6d67c0): mode != 3 calls IDirectSoundBuffer::Lock(0, 0, ..., flags 2 =
+CORRECTION (2026-10-25, e8's RE, 4 agents): the live Lock is NOT the DirectSound one. DD runs the OpenAL backend:
+`ZSoundBufferOpenAL` vtable slot 29 at 0x75db50 calls `_aligned_malloc(size+0x10, 16)` (MSVCR90 import 0xb10398) and
+returns true WITHOUT testing the result; a NULL there makes the decoder 0x6d2020 write to 0 at 0x6d2107. So 0x6d2107 is
+the same failure class as 0x8e5bbd: the CRT/process heap refuses a small block (about 400 MB address space free, 20-30 s
+into round 1; also hit on DM05A d5f8522b, which has no bank edit, run K48A). Bank data and voice lines are not the cause;
+the conclusion below (destination null, records innocent) stands. hook k48b wraps _aligned_malloc/_aligned_free too.
+The DirectSound reading kept for reference: the wrapper is `_ZSoundBufferDS::LockBuffer` (0x6d67c0): mode != 3 calls IDirectSoundBuffer::Lock(0, 0, ..., flags 2 =
 DSBLOCK_ENTIREBUFFER) and the caller (0x79ff50..0x7a00a2, mode 1 = whole clip in one buffer, size [this+8] = record pcm)
 only tests the HRESULT. A null ptr1 with S_OK means the DirectSound buffer/voice itself was not backed (buffer-creation
 or driver/memory failure), not that the record or its data is wrong: the decoder gets src from the loaded WAV (vtbl+0xa4
