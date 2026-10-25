@@ -233,9 +233,16 @@ static LPVOID klm_small_failed(const char *fn, HANDLE heap, DWORD flags, SIZE_T 
     return p;
 }
 
+#ifdef KLHOOK_TEST
+static int klva_on;                                   /* klvalog.c (included later): [Memory] VaLog, the callers' table */
+static void klva_hnote(void **ra, HANDLE heap, SIZE_T size);
+#endif
 static LPVOID WINAPI klm_HeapAlloc(HANDLE heap, DWORD flags, SIZE_T size)
 {
     LPVOID p; SIZE_T largest = 0, total = 0; DWORD err; int first = 0;
+#ifdef KLHOOK_TEST
+    if (klva_on) klva_hnote((void **)_AddressOfReturnAddress(), heap, size);
+#endif
     if (size < (1u << 20)) { p = klm_real_HeapAlloc(heap, flags, size); return (p || !size) ? p : klm_small_failed("HeapAlloc", heap, flags, size, _ReturnAddress(), 1); }
     if (size >= ((SIZE_T)klm_mid_mb << 20) || size >= (16u << 20)) {
         err = GetLastError(); klm_free_space(&largest, &total); SetLastError(err);
