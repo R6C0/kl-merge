@@ -40,3 +40,13 @@ expect `charonline: on`, `network session (role 2)`, `my body: entity K of N (ty
 `applied to body: my body on entity K: model A -> B ... now B`, then `variant ...`. With TestPeer: `heard peer on entity T chose ...` and `applied to body: peer on entity T`.
 Press F9 in the lobby/match: `I chose heister X`, then the re-announce + apply lines.
 Two PCs (needed for the real proof): each logs `heard peer on entity J chose X via UDP` (System Link) or `via Steam lobby` (Quick/Private), then `applied to body: peer on entity J`; look at the other player's model on screen.
+
+## 7. Update 2026-10-26 (out_charonl_1026a SHIP 63e0ec07 / _test cfb4fffb; NOT run live)
+- Own body online: L3/L4 showed Arcade's slot method ([gd+0x828+4*[gd+0x898]]) finds nothing in the table on a client for most of the round. Now: slot method first,
+  else the MASTER SCAN: table entity P with R=[P+0x274c], [R+0x540]==P and the game's own ownership test 0x9425a0(R) true (GUESS offsets; log 'my body ... found by').
+  Not found -> every 8 s 'own body NOT found ... table: [i tT pP R.. o.. bk|nb]' (type, police byte, DDL object, its owner, back pointer ok).
+- Peers' looks are kept for the round (no 7 s forget; [CharOnline] ForgetMs=N to re-enable); cleared only when the table's entity pointers change (new round) or the session ends.
+- [ent+0x2723] is the POLICE byte (0 for a living heister): it does not block applying during play.
+- Selection = Arcade's own: Arcade page > Heister tab and Options > Match options rows write the same KLChar/KLMask/KLOutfit; F9/F11/Ctrl+F11 in lobby and match.
+- Once per match: Arcade has no arbiter (one hero per object, the AI that wore it swaps). Online [CharOnline] Unique=1: every peer resolves duplicates identically
+  (table order, lower entity keeps it, the other gets the next free wardrobe character; announcements stay the raw choice). Log 'unique: entity N asked for X ... shown as Y'.

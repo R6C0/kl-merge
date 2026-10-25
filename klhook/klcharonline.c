@@ -38,7 +38,7 @@
  *
  * KLHook.ini
  *   [CharOnline]
- *   Enable=0   (recommended on after the live test)   Steam=1   Udp=1   Keys=1   KeyChar=0x78 (F9)   KeyMask=0x7A (F11, Ctrl = outfit)
+ *   Enable=0   (recommended on after the live test)   Unique=1 (recommended on: a character is worn once, lower entity wins)   ForgetMs=0 (0 = keep a peer's last look)   OwnDiag=1   Steam=1   Udp=1   Keys=1   KeyChar=0x78 (F9)   KeyMask=0x7A (F11, Ctrl = outfit)
  *   Settle=1500  ms the table must have stood still before a body is changed        Tries=3  calls per entity per 10 s     Log=1
  *   TEST build only: TestPeer=<idx>  TestChar=<c> TestMask=<m> TestOutfit=<o>   pretends peer <idx> announced that (proves the apply on another body)
  */
@@ -51,10 +51,10 @@
 
 struct klco_peer { int used, src; int c, m, o; DWORD at; };
 static struct {
-    int on, steam, udp, keys, log, settle, tries, keyChar, keyMask;
+    int on, steam, udp, keys, log, settle, tries, keyChar, keyMask, unique, forgetMs, ownDiag;
     int testPeer, testChar, testMask, testOutfit;
     struct klco_peer p[KLCO_N];
-    DWORD tick, steamSet, steamGet, udpSend, since, tbl, ownEnt;
+    DWORD tick, steamSet, steamGet, udpSend, since, tbl, ownEnt, entSig, diagAt; int ownHow, toldEff[KLCO_N];
     int ownIdx, pubIdx, pubC, pubM, pubO, pubWas;
     char pubStr[40];
     unsigned __int64 lobby;
@@ -134,10 +134,84 @@ static int klco_table(DWORD sm, DWORD *ents, int *n)
 
 static DWORD klco_ent(DWORD ents, int n, int i) { return i >= 0 && i < n ? klh_rd32(ents + 12 * i + 4) : 0; }
 
+
+/* ---- who is the LOCAL player's entity? (2026-10-26) ----
+ * Live bench L3/L4 (2 PCs, LAN): on the CLIENT [gamedata+0x828+4*[gamedata+0x898]] (what Arcade uses) gave no entity of the session table for the whole round
+ * (L4: found only after the round was over, L3: after 20 s), so the client neither announced nor applied its own look. The game's own test for 'this object
+ * is mine' is 0x9425a0 (thiscall on a DDL net object R: [R+0x14] owner station == local station 0x94bc10, owner 0 = false; re/private_match.md): every
+ * ZFFPlayer P has its DDL object at [P+0x274c] and R points back at [R+0x540] (re/netsmooth_solo.md). So a player entity of the table whose R passes
+ * 0x9425a0 is ours. GUESS (probe log 'charonline: my body ... found by'): the offsets hold for the table's entities on a client too; the master test is
+ * read-only (no write, no state). Order: the slot method (Arcade's) when it finds a table entry, else the master scan (a heister first). */
+static int klco_is_master(DWORD ent)
+{
+    DWORD r = klh_rd32(ent + 0x274c);
+    if (!r || klh_rd32(r + 0x540) != ent) return 0;
+    return (((unsigned (__fastcall *)(void *, void *))(DWORD_PTR)KLH_VA(0x9425a0))((void *)(DWORD_PTR)r, 0) & 0xff) != 0;
+}
+
+static int klco_find_own(DWORD ents, int n, DWORD now, DWORD *plOut, int *how)
+{
+    DWORD gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA)), pl = 0; BYTE sel = 0xff; int i, idx = -1, firstMaster = -1, heisterMaster = -1;
+    if (gd && klh_rd(gd + 0x898, &sel, 1) && sel < 28) pl = klh_rd32(gd + 0x828 + 4 * sel);
+    for (i = 0; pl && i < n; i++) if (klco_ent(ents, n, i) == pl) idx = i;
+    *plOut = pl; *how = 0;
+    if (idx >= 0) { *how = 1; return idx; }
+    for (i = 0; i < n; i++) {
+        DWORD e = klco_ent(ents, n, i); BYTE type = 0, pol = 0;
+        if (!e || !klco_is_master(e)) continue;
+        if (firstMaster < 0) firstMaster = i;
+        klh_rd(e + 0x273c, &type, 1); klh_rd(e + 0x2723, &pol, 1);
+        if (heisterMaster < 0 && type == 2 && !pol) heisterMaster = i;
+    }
+    idx = heisterMaster >= 0 ? heisterMaster : firstMaster;
+    if (idx >= 0) { *how = 2; *plOut = klco_ent(ents, n, idx); return idx; }
+    if (klco.ownDiag && now - klco.diagAt >= 8000) {          /* not found: say what the methods saw (every 8 s) */
+        char b[512]; int k, o = 0;
+        klco.diagAt = now;
+        for (k = 0; k < n && o < (int)sizeof b - 48; k++) {
+            DWORD e = klco_ent(ents, n, k), r = e ? klh_rd32(e + 0x274c) : 0, ow = r ? klh_rd32(r + 0x14) : 0, back = r ? klh_rd32(r + 0x540) : 0; BYTE t = 0, u = 0;
+            if (e) { klh_rd(e + 0x273c, &t, 1); klh_rd(e + 0x2723, &u, 1); }
+            o += snprintf(b + o, sizeof b - o, " [%d t%u p%u R%lx o%lx %s]", k, t, u, r, ow, back == e ? "bk" : "nb");
+        }
+        klog("charonline: own body NOT found (gamedata sel %u -> pl %08lx, no table entry; no entity passes the master test 0x9425a0). table:%s", sel, pl, b);
+    }
+    return -1;
+}
+
 static int klco_heister(DWORD ent)
-{   /* type 2 and not busy: the conditions slot 137 and klchar.c use */
+{   /* type 2 and the POLICE byte [ent+0x2723] clear (re/balance.md: 0x2723 = police; 0 for a living heister, so this does not block play); the conditions slot 137 and klchar.c use */
     BYTE type = 0, busy = 1;
     return ent && klh_rd(ent + 0x273c, &type, 1) && type == 2 && klh_rd(ent + 0x2723, &busy, 1) && !busy && klh_rd32(ent + 4);
+}
+
+
+/* ---- 'each character once per match' (Arcade: one player per Hero_0N, the AI that wore the chosen hero swaps - klchar.c) ----
+ * Online two humans can announce the same character. EVERY peer runs the same function on the same raw announcements: entities are served in table order;
+ * a character already taken by a lower entity goes to the next free one (c+1 .. wrap) that the level's wardrobe has. The loser's own machine shows the
+ * fallback too, so all screens agree (no host message is needed; announcements stay the RAW choice). Off with Unique=0. GUESS: all peers hold the same wardrobe. */
+static int klco_avail(int ch)
+{
+    return klc_w.on && ch >= 1 && ch <= klc_w.n && klc_w.c[ch - 1].root && (ch <= 8 || !klc_w.c[ch - 1].stock);
+}
+
+static int klco_effective(int idx, int raw)
+{
+    BYTE taken[KLC_NCHAR + 2]; int j, ch, t;
+    if (!klco.unique || raw < 1 || raw > KLC_NCHAR || !klco_avail(raw)) return raw;
+    memset(taken, 0, sizeof taken);
+    for (j = 0; j < KLCO_N; j++) {
+        int r = j == klco.ownIdx ? (int)klc_char : (klco.p[j].used ? klco.p[j].c : 0);
+        if (r < 1 || r > KLC_NCHAR || !klco_avail(r)) continue;
+        ch = r;
+        for (t = 0; t < KLC_NCHAR && taken[ch]; t++) { do ch = ch % KLC_NCHAR + 1; while (!klco_avail(ch)); }
+        if (taken[ch]) ch = r;                                     /* all taken: nothing better to give */
+        taken[ch] = 1;
+        if (j == idx) {
+            if (ch != r && klco.toldEff[idx] != ch + 100 * r) { klco.toldEff[idx] = ch + 100 * r; klog("charonline: unique: entity %d asked for %s but a lower entity wears it: shown as %s", idx, klco_nm(r), klco_nm(ch)); }
+            return ch;
+        }
+    }
+    return raw;
 }
 
 /* ---- one body: model, then variant (klchar.c's formula) ---- */
@@ -228,7 +302,7 @@ static void klco_tick(int game_thread)
     if (now - klco.tick < 250) return;
     klco.tick = now;
     if (!online) {
-        if (klco.toldOnline) { klco.toldOnline = 0; memset(klco.p, 0, sizeof klco.p); klco.ownIdx = -1; klco.pubStr[0] = 0; klco.lobby = 0; klog("charonline: session over: peer looks forgotten"); }
+        if (klco.toldOnline) { klco.toldOnline = 0; memset(klco.p, 0, sizeof klco.p); klco.ownIdx = -1; klco.pubStr[0] = 0; klco.lobby = 0; klco.entSig = 0; klog("charonline: session over: peer looks forgotten"); }
         return;
     }
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION)))) return;
@@ -240,15 +314,18 @@ static void klco_tick(int game_thread)
     }
     if (klco.udp) klco_open();
     if (!klco_table(sm, &ents, &n)) { klco.since = 0; return; }
-    {   /* the own body: the local player's entity, found in the table */
-        DWORD gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA)), pl = 0; BYTE sel = 0xff; int idx = -1;
-        if (gd && klh_rd(gd + 0x898, &sel, 1) && sel < 28) pl = klh_rd32(gd + 0x828 + 4 * sel);
-        for (i = 0; pl && i < n; i++) if (klco_ent(ents, n, i) == pl) idx = i;
-        if (idx != klco.ownIdx || pl != klco.ownEnt) {
+    {   /* the own body: the local player's entity, found in the table (slot method, else the master scan) */
+        DWORD pl = 0, sig = 0; int idx, how = 0;
+        for (i = 0; i < n; i++) sig = sig * 31 + klco_ent(ents, n, i);
+        if (sig != klco.entSig) {                                  /* a new level / round built new player objects: what peers said before is about other bodies */
+            if (klco.entSig) { memset(klco.p, 0, sizeof klco.p); klog("charonline: the player table changed (new round): peer looks forgotten, they re-announce every 2 s"); }
+            klco.entSig = sig; klco.since = now; klco.pubStr[0] = 0; klco.diagAt = 0;
+        }
+        idx = klco_find_own(ents, n, now, &pl, &how);
+        if (idx != klco.ownIdx || (idx >= 0 && pl != klco.ownEnt)) {
             BYTE type = 0; if (pl) klh_rd(pl + 0x273c, &type, 1);
-            klog("charonline: my body: entity %d of %d (%08lx, type %u)%s", idx, n, pl, type, idx < 0 ? " - NOT in the player table: nothing is sent or applied for me" : "");
-            klco.ownIdx = idx; klco.ownEnt = pl; klco.since = now; klco.pubStr[0] = 0;
-            memset(klco.p, 0, sizeof klco.p);                         /* a new body = a new round: what peers said before may be about other seats */
+            klog("charonline: my body: entity %d of %d (%08lx, type %u) found by %s%s", idx, n, pl, type, how == 1 ? "gamedata slot (Arcade's way)" : how == 2 ? "master scan 0x9425a0" : "nothing", idx < 0 ? " - NOT in the player table: nothing is sent or applied for me" : "");
+            klco.ownIdx = idx; klco.ownEnt = idx >= 0 ? pl : 0; klco.ownHow = how; klco.pubStr[0] = 0;     /* the peers' looks are KEPT (they belong to the round, not to my body) */
         }
     }
     if (!klco.since) klco.since = now;
@@ -291,18 +368,18 @@ static void klco_tick(int game_thread)
             char b[40]; int a, c, m, o;
             if (v && klh_rdstr((DWORD_PTR)v, b, sizeof b) && klco_parse(b, &a, &c, &m, &o)) { klco_heard(a, c, m, o, 1, now); seen[a] = 1; }
         }
-        for (i = 0; i < KLCO_N; i++) if (klco.p[i].used && klco.p[i].src == 1 && !seen[i]) { klco.p[i].used = 0; klog("charonline: peer on entity %d is gone from the lobby data", i); }
+        (void)seen;                                    /* a member gone from the lobby data keeps his last look for the round (his body stays) */
     }
-    for (i = 0; i < KLCO_N; i++) if (klco.p[i].used && klco.p[i].src == 2 && now - klco.p[i].at > 7000) { klco.p[i].used = 0; klog("charonline: peer on entity %d has been silent for 7 s: forgotten", i); }
+    if (klco.forgetMs > 0) for (i = 0; i < KLCO_N; i++) if (klco.p[i].used && now - klco.p[i].at > (DWORD)klco.forgetMs) { klco.p[i].used = 0; klog("charonline: peer on entity %d has been silent for %d ms: forgotten (ForgetMs)", i, klco.forgetMs); }
 #ifdef KLHOOK_TEST
     if (klco.testPeer >= 0 && klco.testPeer < n && klco.testPeer != klco.ownIdx) klco_heard(klco.testPeer, klco.testChar, klco.testMask, klco.testOutfit, 1, now), klco.p[klco.testPeer].src = 3;
 #endif
     /* ---- apply: after the table has stood still for Settle ms */
     if ((LONG)(now - klco.since) < klco.settle) return;
-    if (klco.ownIdx >= 0 && klco_heister(klco.ownEnt)) klco_look(klco.ownEnt, klco.ownIdx, (int)klc_char, (int)klc_mask, (int)klc_outfit, game_thread, "my body", now);
+    if (klco.ownIdx >= 0 && klco_heister(klco.ownEnt)) klco_look(klco.ownEnt, klco.ownIdx, klco_effective(klco.ownIdx, (int)klc_char), (int)klc_mask, (int)klc_outfit, game_thread, "my body", now);
     for (i = 0; i < n; i++) if (klco.p[i].used && i != klco.ownIdx) {
         DWORD ent = klco_ent(ents, n, i);
-        if (klco_heister(ent)) klco_look(ent, i, klco.p[i].c, klco.p[i].m, klco.p[i].o, game_thread, "peer", now);
+        if (klco_heister(ent)) klco_look(ent, i, klco_effective(i, klco.p[i].c), klco.p[i].m, klco.p[i].o, game_thread, "peer", now);
     }
 }
 
@@ -315,6 +392,9 @@ static void klco_init(void)
     klco.udp = GetPrivateProfileIntA("CharOnline", "Udp", 1, klh_ini) != 0;
     klco.keys = GetPrivateProfileIntA("CharOnline", "Keys", 1, klh_ini) != 0;
     klco.log = GetPrivateProfileIntA("CharOnline", "Log", 1, klh_ini) != 0;
+    klco.unique = GetPrivateProfileIntA("CharOnline", "Unique", 1, klh_ini) != 0;
+    klco.forgetMs = (int)GetPrivateProfileIntA("CharOnline", "ForgetMs", 0, klh_ini);
+    klco.ownDiag = GetPrivateProfileIntA("CharOnline", "OwnDiag", 1, klh_ini) != 0;
     klco.settle = GetPrivateProfileIntA("CharOnline", "Settle", 1500, klh_ini);
     klco.tries = GetPrivateProfileIntA("CharOnline", "Tries", 3, klh_ini);
     klco.keyChar = (int)GetPrivateProfileIntA("CharOnline", "KeyChar", 0x78, klh_ini) & 0xff;
@@ -327,7 +407,7 @@ static void klco_init(void)
     klco.testMask = (int)GetPrivateProfileIntA("CharOnline", "TestMask", 0, klh_ini);
     klco.testOutfit = (int)GetPrivateProfileIntA("CharOnline", "TestOutfit", 0, klh_ini);
 #endif
-    klog("charonline: on; Steam=%d Udp=%d Keys=%d (F9 char, F11 mask, Ctrl+F11 outfit) Settle=%d Tries=%d; own choice Char=%ld Mask=%ld Outfit=%ld; every peer announces its entity-table index + look", klco.steam, klco.udp, klco.keys, klco.settle, klco.tries, klc_char, klc_mask, klc_outfit);
+    klog("charonline: on; Steam=%d Udp=%d Keys=%d (F9 char, F11 mask, Ctrl+F11 outfit) Unique=%d ForgetMs=%d Settle=%d Tries=%d; own choice Char=%ld Mask=%ld Outfit=%ld; every peer announces its entity-table index + look", klco.steam, klco.udp, klco.keys, klco.unique, klco.forgetMs, klco.settle, klco.tries, klc_char, klc_mask, klc_outfit);
 }
 
 #endif /* KLCHARONLINE_C */
