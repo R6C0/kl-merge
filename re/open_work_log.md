@@ -1,3 +1,10 @@
+2026-10-25 ~14:30 - MEMORY / DD10: e8 K49D/E (DM05A, hung): the nvd3dum growth is ~132k small blocks (~2.8 KB, +366 MB/10 s, no kl2 frame, likely the driver
+worker queue); the NT process heap keeps the peak (1015 MB reserved vs 544 in use) = the wall. devobj/CFGMGR32 churn = xinput1_4 polled by gameoverlayrenderer + ReShade
+(alloc == free). nvd3dum imports KERNEL32 Heap* directly -> e8 plans a chunk arena behind nvd3dum's Heap* import slots (after K49F). Static wswg81sj9: all .TEX MANAGED,
+mip-skip byte 0xcdadec (lever, e8 after K49F; wtooejuiz confirms read-at-load). Owner A/B pending (e8 morning note): NVIDIA Threaded optimization OFF, Steam Input/overlay off.
+DD10 1025b (9d41b92e): airlocks fixed, walk proof FAILS (street dumpster 26889 + doorway pieces, corridor blockers), .tex 406 MiB; NOT installed; round 2 + build-side
+texture mip-drop tool in workflow we8yu64k3. Note: a89f82466 went out with a Sonnet trailer (pushed before I saw it; no force-push).
+
 2026-10-25 ~12:45 - MEMORY / lc7: K49_VA (e8, DM05A, hung 420 s, free VA 17 MB): VaLog saw NO VirtualAlloc >= 512 KB through any module IAT (nvd3dum 47 calls, 0.1 MB),
 all 29 refusals were kl2 HeapAlloc 0x7bb33c on process heap 01D90000 -> the 16 x 15.81 MB + halving blocks are NT heap segments of kl2's own heap, not the driver.
 lc7 rebuilt per the two NOT READY verdicts (Bottles_A pool shared with 7 dance-floor bottles; 21 panes would keep '' shard/particle pools): default now KEEPS
