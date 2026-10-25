@@ -8,6 +8,8 @@
  *   3. an explicit address, a plain commit inside a carved block, a decommit, odd flags and a release of a non-start
  *      address are answered as Windows answers them;
  *   4. High=1 (measure) counts and places nothing above 2 GB.
+ *   5. (review 2026-10-25) MEM_COMMIT alone is a new block and goes high; a size-0 MEM_DECOMMIT of the block at a
+ *      chunk's start decommits THAT block only (its neighbour stays committed); nothing above 2 GB is free afterwards.
  * It proves the arena's bookkeeping, NOT that the game or the driver are content with where their blocks live.
  *
  *   call "...\vcvarsall.bat" x86
@@ -83,6 +85,17 @@ int main(void)
     CHECK(p && (DWORD_PTR)p < KLVH_BASE, "a write-watch reservation passes to the low half (%p)", p);
     if (p) via_slot_free(p, 0, MEM_RELEASE);
     CHECK(klvh_passed >= 1, "and is counted as passed (%ld)", klvh_passed);
+    /* 3b. review fixes of 2026-10-25: MEM_COMMIT alone is a new block too; a size-0 decommit means the carved block, not the chunk */
+    p = (BYTE *)via_slot_alloc(0, 2 << 20, MEM_COMMIT, PAGE_READWRITE);
+    CHECK(p && (DWORD_PTR)p >= KLVH_BASE, "MEM_COMMIT alone (the reserve+commit shortcut) through the slot -> high half (%p)", p);
+    if (p) { memset(p, 0x3c, 2 << 20); CHECK(p[(2 << 20) - 1] == 0x3c, "and its 2 MB are writable"); }
+    CHECK(!via_slot_free(q + 0x10000, 0, MEM_DECOMMIT) && GetLastError() == ERROR_INVALID_ADDRESS, "a size-0 decommit of a non-start address is refused like Windows' (error %lu)", GetLastError());
+    /* q was the first carve, i.e. it sits at the FIRST CHUNK's start: the case where the real call with size 0 would have decommitted the whole chunk */
+    CHECK(via_slot_free(q, 0, MEM_DECOMMIT), "a size-0 decommit of the block at the chunk's start decommits that block");
+    CHECK(VirtualQuery(q, &mbi, sizeof mbi) && mbi.State == MEM_RESERVE && mbi.RegionSize >= (3 << 20), "its pages are reserved again (%lu KB region)", (unsigned long)(mbi.RegionSize >> 10));
+    CHECK(p && VirtualQuery(p, &mbi, sizeof mbi) && mbi.State == MEM_COMMIT && p[0] == 0x3c, "and the neighbour p in the same chunk is still committed (the chunk was not decommitted)");
+    if (p) CHECK(via_slot_free(p, 0, MEM_RELEASE), "the commit-only block releases through the slot");
+    CHECK(klvh_high_left() == 0, "nothing above 2 GB is free after the takeover");
     /* release both, re-carve: the hole is reused */
     CHECK(via_slot_free(q, 0, MEM_RELEASE) && via_slot_free(r, 0, MEM_RELEASE), "both blocks released through the slot");
     CHECK(klvh_carved == carved0 && me->held_n == 0 && me->high == 0, "bookkeeping back to zero (carved %.1f MB, held %ld)", klvh_carved / 1048576.0, me->held_n);

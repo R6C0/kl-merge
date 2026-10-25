@@ -59,3 +59,39 @@ play live, so `.hrd` is optional by evidence and the tool says so. Notes it leav
 build .txt files in map folders, and nine folders no redirect names right now (DD10, DM09RB*, DM09RD, DM09RV*, T01).
 Suggested use: `python tools/kl_slotcheck.py <stage dir>` before any INSTALL bat, and `python tools/kl_slotcheck.py`
 on the live game after one.
+
+# 2026-10-25 scheduled check-in, third run (cloud, 10:47-11:10 UTC): PC idle, nothing new; klhigh.c reviewed, 4 fixes
+
+The folders were again not connected to the scheduled session; one access request was granted (read-only use). The PC
+was IDLE: the newest files in the game folder are KLHook.ini / dinput8.dll / KLHook.log / KLHook.result from 06:07 UTC
+(4 h 40 min before), KLHook.result still the DD10B `state=PASS scene=F07_Main.gms loads=2 frames=65077 asserts=0
+faults=0`, and the newest build folder in KL_PortTools\build is 10-24 17:29. No dump is newer than `KLHook_1..4.dmp`
+(05:52, the DD10A member-name crash, triaged above and fixed). Nothing launched, installed, or touched on screen.
+
+## Offline piece: adversarial review of klhook/klhigh.c (the high half), written by the 03:20 check-in and never reviewed
+
+Read against the documented VirtualAlloc / VirtualFree contract. Four real defects, all fixed in place
+(`klhigh.c`, header note "Review 2026-10-25"); the carving bit maps were correct (20-check `klhigh_bits_test.c`, gcc, PASS):
+
+1. **`VirtualAlloc(0, n, MEM_COMMIT, prot)` was passed through uncounted.** MEM_COMMIT alone with a null address is the
+   documented reserve+commit shortcut and allocators use it constantly. The wrapper only treated `MEM_RESERVE` as a new
+   block, so in High=1 the measure line would have MISSED every such block (the number the whole idea hinges on) and in
+   High=2 those blocks would have stayed in the low half. Now `addr == 0 && (type & (MEM_RESERVE|MEM_COMMIT))` is a new block.
+2. **`VirtualFree(p, 0, MEM_DECOMMIT)` inside the high half** went to the real call. Size 0 means "the whole block" and
+   Windows then requires the region's own base - which is OUR CHUNK. For a block not at a chunk's start the call fails
+   (ERROR_INVALID_ADDRESS, the module sees a failed decommit); for the block AT a chunk's start it decommits the whole
+   64 MB chunk - every neighbouring carved block's pages with it, i.e. the driver's live data gone. Now answered for the
+   carved block (its size from the bit maps: new `klvh_block_pages`), refused for a non-start address as Windows would.
+3. **A listed module reloaded at its old base was never re-wrapped** (`klvh_seen` saw "same base" and left the fresh
+   IAT alone; the 10 s rescan had the same blind spot). The Ldr notification's UNLOADED reason now forgets the module.
+4. **A chunk-limit shortfall was silent.** 48 chunks with 9 size classes can run out when the high half has images in
+   it (the census will say); a free piece left above 2 GB is where the game's heap or a stack lands once the low half
+   is full - the LAA tag crash, delayed. KLVH_CHUNKS 48 -> 96 and `klvh_high_left()` walks the high half after the
+   takeover and logs a WARNING line naming any free piece (0 expected).
+
+Also tightened: an explicit address inside a carved block with MEM_RESET / other flags now reaches the real call (only a
+pure re-reserve is answered locally). Not changed, still documented risks: VirtualQuery by a module on its own carved block
+sees the chunk, and a release through another module's slot leaks high. `klhigh_test.c` (Windows, LAA, not run) gained the
+checks for 1, 2 and 4 (commit-only block goes high; size-0 decommit of the block at the chunk's start leaves its
+neighbour committed; nothing free above 2 GB). klhigh.c syntax-checked with gcc against a stub windows.h (no MinGW in
+this sandbox), warnings only from the stub's LONG. MSVC build and the measure run remain the Owner's.

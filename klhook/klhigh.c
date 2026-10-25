@@ -21,12 +21,19 @@
  *  2. The IMPORT SLOTS of the listed foreign modules (nvd3dum.dll ...; their own IATs, found by function name, so an
  *     api-ms-win-core-memory-* import counts too) for VirtualAlloc / VirtualAllocEx / VirtualFree / VirtualFreeEx point
  *     at the wrappers below. A module that loads later (the driver loads with the D3D device) is caught by
- *     LdrRegisterDllNotification. A new reservation (address 0, MEM_RESERVE, no write-watch / large-page / physical
+ *     LdrRegisterDllNotification (an unload forgets the module, so a reload is wrapped again). A new block (address 0
+ *     with MEM_RESERVE, or with MEM_COMMIT alone - that shortcut reserves too; no write-watch / large-page / physical
  *     flag) asked by one of them is carved out of the chunks (first fit, 64 KB granularity as VirtualAlloc's own) and
- *     committed there if asked; its MEM_RELEASE decommits the carved block and frees the bits; MEM_COMMIT / MEM_DECOMMIT
- *     at an address inside the chunks pass straight through (the pages are reserved: Windows accepts them). Everything
+ *     committed there if asked; its MEM_RELEASE decommits the carved block and frees the bits; MEM_COMMIT / a sized
+ *     MEM_DECOMMIT at an address inside the chunks pass straight through (the pages are reserved: Windows accepts them);
+ *     MEM_DECOMMIT with size 0 ("the whole block") is answered for the carved block, never for the chunk. Everything
  *     else (an explicit address, the odd flags, the chunks being full) passes through to the real call, i.e. into the
- *     low half as today, and is counted as 'passed' / 'spilled'.
+ *     low half as today, and is counted as 'passed' / 'spilled'. After the takeover a walk of the high half must find
+ *     NOTHING free; a WARNING line names any piece that is (the game could land there once the low half is full).
+ *  Review 2026-10-25 (second scheduled check-in, static): MEM_COMMIT-alone blocks were passed through uncounted (the
+ *     measure line would have missed every allocator using the shortcut, High=2 would have left them low), a size-0
+ *     MEM_DECOMMIT of a block at a chunk's start would have decommitted the whole chunk under its neighbours, a module
+ *     reloaded at its old base was never re-wrapped, and a chunk-limit shortfall was silent. All four fixed here.
  *  3. MEASURE first. [Memory] High=1 wraps and counts only: every 10 s a line says how many MB each listed module holds
  *     through VirtualAlloc. That needs no flag and changes nothing in placement; it says what High=2 would buy. The
  *     driver's small objects live in ITS heaps (HeapAlloc; grown by ntdll, not wrapped here) and stay low either way;
@@ -74,7 +81,7 @@
 #define KLVH_GRAN   0x10000u                                    /* VirtualAlloc's own allocation granularity */
 #define KLVH_BASE   0x80000000u                                 /* the high half */
 #define KLVH_PAGES  32768                                       /* 2 GB / 64 KB: one bit each in the maps below */
-#define KLVH_CHUNKS 48
+#define KLVH_CHUNKS 96                                          /* 32 x 64 MB fill an empty high half; the rest is for holes around what was already there (the takeover WARNS if it runs out) */
 
 typedef struct {
     char name[48];                                              /* leaf name, as [Memory] HighModules spells it */
@@ -119,13 +126,22 @@ static long klvh_carve_pages(DWORD n)
     return -1;
 }
 
+/* the carved block starting at page i -> its page count (0 = not a block start); nothing changes */
+static DWORD klvh_block_pages(DWORD i)
+{
+    DWORD n = 0;
+    if (i >= KLVH_PAGES || !klvh_bit(klvh_start, i) || !klvh_bit(klvh_used, i)) return 0;
+    for (; i < KLVH_PAGES && klvh_bit(klvh_used, i) && (n == 0 || !klvh_bit(klvh_start, i)); i++, n++) ;
+    return n;
+}
+
 /* the carved block starting at page i -> its page count (0 = not a block start) and clears it */
 static DWORD klvh_release_pages(DWORD i)
 {
-    DWORD n = 0;
-    if (!klvh_bit(klvh_start, i) || !klvh_bit(klvh_used, i)) return 0;
+    DWORD n = klvh_block_pages(i), k;
+    if (!n) return 0;
     klvh_set(klvh_start, i, 0);
-    for (; i < KLVH_PAGES && klvh_bit(klvh_used, i) && (n == 0 || !klvh_bit(klvh_start, i)); i++, n++) klvh_set(klvh_used, i, 0);
+    for (k = 0; k < n; k++) klvh_set(klvh_used, i + k, 0);
     return n;
 }
 
@@ -149,13 +165,18 @@ static LPVOID klvh_alloc(klvh_mod *m, LPVOID addr, SIZE_T size, DWORD type, DWOR
     LPVOID p;
     if (!m) return klvh_real_VirtualAlloc(addr, size, type, prot);          /* not one of ours after all: as it was */
     if (addr && klvh_in_high(addr)) {
-        /* inside a carved block: commit / re-commit is Windows' business (the pages are reserved); a re-reserve of
-           reserved pages is answered yes */
-        if (type & MEM_COMMIT) return klvh_real_VirtualAlloc(addr, size, type & ~MEM_RESERVE, prot);
+        /* inside a carved block: commit / re-commit / reset is Windows' business (the pages are reserved: it accepts
+           them); a re-reserve of reserved pages is answered yes (Windows would say ERROR_INVALID_ADDRESS, but the
+           reservation is ours, not the caller's, and the caller's view - "my pages are reserved" - is true) */
+        DWORD t = type & ~(MEM_RESERVE | MEM_TOP_DOWN);
+        if (t) return klvh_real_VirtualAlloc(addr, size, t, prot);
         return addr;
     }
     if (addr) { InterlockedIncrement(&klvh_passed); return klvh_real_VirtualAlloc(addr, size, type, prot); }   /* an explicit address in the low half */
-    if (!(type & MEM_RESERVE) || !size) return klvh_real_VirtualAlloc(addr, size, type, prot);           /* not a reservation (Windows answers it) */
+    /* a NEW block: address 0 with MEM_RESERVE, or with MEM_COMMIT alone - VirtualAlloc(0, n, MEM_COMMIT, p) reserves
+       AND commits (the documented shortcut, common in allocators), so it is a reservation too (review fix 2026-10-25:
+       it was passed through uncounted, so the measure line missed every such block and High=2 left them low) */
+    if (!(type & (MEM_RESERVE | MEM_COMMIT)) || !size) return klvh_real_VirtualAlloc(addr, size, type, prot);   /* nothing to place (Windows answers it) */
     EnterCriticalSection(&klvh_cs);
     m->asked_n++; m->asked_mb_x16 += (size + 0xffff) >> 16;
     if (type & KLVH_ODD) klvh_passed++;                         /* write watch, large pages ...: only the real call can give those (low half) */
@@ -199,7 +220,17 @@ static BOOL klvh_free(klvh_mod *m, LPVOID addr, SIZE_T size, DWORD type)
             if (!ok) klog("high: decommit of %lu pages at %p failed (error %lu)", n, addr, err);
             return TRUE;                                        /* the pages are ours again whatever the decommit said */
         }
-        return klvh_real_VirtualFree(addr, size, type);         /* a decommit inside a carved block: Windows' business */
+        if ((type & MEM_DECOMMIT) && !size) {
+            /* MEM_DECOMMIT with size 0 means "the whole block" and Windows then wants the block's own base. The base of
+               the Windows region is OUR CHUNK, so passing it on would either fail (ERROR_INVALID_ADDRESS, block not at
+               the chunk's start) or decommit the WHOLE CHUNK - every neighbour's pages with it (block at the chunk's
+               start). Review fix 2026-10-25: answer it for the carved block, as Windows would for a block of its own. */
+            DWORD n;
+            EnterCriticalSection(&klvh_cs); n = klvh_block_pages((DWORD)(((DWORD_PTR)addr - KLVH_BASE) >> 16)); LeaveCriticalSection(&klvh_cs);
+            if (!n) { SetLastError(ERROR_INVALID_ADDRESS); return FALSE; }
+            return klvh_real_VirtualFree(addr, (SIZE_T)n << 16, MEM_DECOMMIT);
+        }
+        return klvh_real_VirtualFree(addr, size, type);         /* a sized decommit inside a carved block: Windows' business */
     }
     if (m && (type & MEM_RELEASE) && addr) {
         /* a low-half block of this module going away: the size is not given to us; VirtualQuery it (reservation = allocation base) */
@@ -297,11 +328,24 @@ typedef VOID (CALLBACK *klvh_ldr_cb)(ULONG, const klvh_ldr_data *, PVOID);
 typedef LONG (NTAPI *klvh_ldr_reg)(ULONG, klvh_ldr_cb, PVOID, PVOID *);
 static PVOID klvh_ldr_cookie;
 
+static void klvh_gone(HMODULE h)
+{   /* a listed module is unloading: forget its base, so a reload at the SAME address is wrapped again (klvh_seen would
+       otherwise see 'already this base' and leave the fresh, unwrapped IAT alone) and its old range stops attributing
+       whoever lands there next. Its blocks in the high half stay carved (a release through a slot that is gone cannot
+       reach us; counted nowhere - a leak above 2 GB costs the game nothing). Review fix 2026-10-25. */
+    int i;
+    EnterCriticalSection(&klvh_cs);
+    for (i = 0; i < klvh_nmods; i++) if (klvh_mods[i].base == h) { klvh_mods[i].base = 0; klvh_mods[i].size = 0; klvh_mods[i].slots = 0; }
+    LeaveCriticalSection(&klvh_cs);
+}
+
 static VOID CALLBACK klvh_on_dll(ULONG reason, const klvh_ldr_data *d, PVOID ctx)
 {
     char leaf[64]; int i, n;
     (void)ctx;
-    if (reason != 1 /* LDR_DLL_NOTIFICATION_REASON_LOADED */ || !d || !d->BaseDllName || !d->BaseDllName->Buffer) return;
+    if (!d) return;
+    if (reason == 2 /* LDR_DLL_NOTIFICATION_REASON_UNLOADED */) { klvh_gone((HMODULE)d->DllBase); return; }
+    if (reason != 1 /* LDR_DLL_NOTIFICATION_REASON_LOADED */ || !d->BaseDllName || !d->BaseDllName->Buffer) return;
     n = d->BaseDllName->Length / 2; if (n >= (int)sizeof leaf) n = sizeof leaf - 1;
     for (i = 0; i < n; i++) leaf[i] = d->BaseDllName->Buffer[i] < 128 ? (char)d->BaseDllName->Buffer[i] : '?';
     leaf[n] = 0;
@@ -330,22 +374,39 @@ static int klvh_flag_on(void)
     return (nt->FileHeader.Characteristics & IMAGE_FILE_LARGE_ADDRESS_AWARE) != 0;
 }
 
-static void klvh_high_census(void)
-{   /* what is above 2 GB before we take it: expected nothing (a 32-bit image's DLLs and the first heap sit low) */
-    MEMORY_BASIC_INFORMATION mbi; BYTE *p = (BYTE *)(DWORD_PTR)KLVH_BASE; SIZE_T used = 0; int n = 0; char who[400] = ""; int at = 0;
+static SIZE_T klvh_high_walk(int want_free, int *count, char *who, int cap)
+{   /* the regions above 2 GB that are (want_free) free / (else) in use: total bytes, count, and the first few named */
+    MEMORY_BASIC_INFORMATION mbi; BYTE *p = (BYTE *)(DWORD_PTR)KLVH_BASE; SIZE_T total = 0; int n = 0, at = 0;
+    who[0] = 0;
     while (p >= (BYTE *)(DWORD_PTR)KLVH_BASE && VirtualQuery(p, &mbi, sizeof mbi)) {
-        if (mbi.State != MEM_FREE) {
-            used += mbi.RegionSize; n++;
-            if (at < (int)sizeof who - 60) {
+        if ((mbi.State == MEM_FREE) == (want_free != 0)) {
+            total += mbi.RegionSize; n++;
+            if (at < cap - 60) {
                 char name[MAX_PATH] = "", *leaf = name;
-                if (mbi.Type == MEM_IMAGE && GetModuleFileNameA((HMODULE)mbi.AllocationBase, name, sizeof name)) { leaf = strrchr(name, '\\'); leaf = leaf ? leaf + 1 : name; }
-                at += snprintf(who + at, sizeof who - at, " %p+%luK%s%s", mbi.BaseAddress, (unsigned long)(mbi.RegionSize >> 10), *leaf ? " " : "", leaf);
+                if (!want_free && mbi.Type == MEM_IMAGE && GetModuleFileNameA((HMODULE)mbi.AllocationBase, name, sizeof name)) { leaf = strrchr(name, '\\'); leaf = leaf ? leaf + 1 : name; }
+                at += snprintf(who + at, cap - at, " %p+%luK%s%s", mbi.BaseAddress, (unsigned long)(mbi.RegionSize >> 10), *leaf ? " " : "", leaf);
             }
         }
         if ((BYTE *)mbi.BaseAddress + mbi.RegionSize <= p) break;          /* wrapped around the top */
         p = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
     }
+    *count = n;
+    return total;
+}
+
+static void klvh_high_census(void)
+{   /* what is above 2 GB before we take it: expected nothing (a 32-bit image's DLLs and the first heap sit low) */
+    char who[400]; int n; SIZE_T used = klvh_high_walk(0, &n, who, sizeof who);
     klog("high: before the reservation %d region(s) already above 2 GB, %.1f MB%s%s", n, used / 1048576.0, n ? ":" : "", who);
+}
+
+static SIZE_T klvh_high_left(void)
+{   /* what is STILL FREE above 2 GB after the takeover: must be 0, else the game can land there once the low half is
+       full (the chunk limit, or a hole smaller than 64 KB cannot exist - so any number here means the limit was hit) */
+    char who[400]; int n; SIZE_T left = klvh_high_walk(1, &n, who, sizeof who);
+    if (left) klog("high: WARNING %d piece(s) above 2 GB are still free after the takeover, %.1f MB%s - the game's heap or a stack can land there once the low half is full (the LAA tag crash); raise KLVH_CHUNKS:%s",
+                   n, left / 1048576.0, klvh_nchunk >= KLVH_CHUNKS ? " (the chunk limit was hit)" : "", who);
+    return left;
 }
 
 static int klvh_take_high(void)
@@ -369,6 +430,7 @@ static int klvh_take_high(void)
     if (!klvh_nchunk) return 0;
     klog("high: the high half is OURS: %d chunk(s), %.0f MB reserved (nothing committed) from %p to %p; the game, its heap, the stacks and the DLLs cannot land there now",
          klvh_nchunk, klvh_high_total / 1048576.0, (void *)lo, (void *)hi);
+    klvh_high_left();                                           /* 0 expected; a WARNING line otherwise */
     return 1;
 }
 

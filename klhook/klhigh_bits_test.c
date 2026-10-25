@@ -1,8 +1,8 @@
 /*
  * klhigh_bits_test.c - klhigh.c's carving bit maps on their own, any C compiler (no Windows needed): the section between
  * "bit maps" and "who called" of klhigh.c is cut out with sed and driven over two fake chunks (addresses only, nothing
- * is dereferenced). 18 checks: bounds, first fit inside one chunk, exact release by block, no double release, hole
- * reuse, fill and drain. Written and PASSED 2026-10-25 (gcc 13, Linux).
+ * is dereferenced). 20 checks: bounds, first fit inside one chunk, exact release by block, no double release, hole
+ * reuse, fill and drain. Written and PASSED 2026-10-25 (gcc 13, Linux); block_pages checks added and PASSED the same day (20).
  *   sed -n '/^\/\* -\+ bit maps \*\//,/^\/\* -\+ who called \*\//p' klhigh.c | sed '$d' > bits.inc && gcc -O2 -o bits_test klhigh_bits_test.c && ./bits_test
  */
 #include <stdio.h>
@@ -36,6 +36,9 @@ int main(void){
   CHECK(c4==b+16, "4 MB goes after b in chunk 0, first fit (%ld)", c4);
   CHECK(klvh_carve_pages(1)!=-1, "1 page still fits chunk 0");
   CHECK(used_count()==48+16+64+1, "used pages %d", used_count());
+  /* block_pages measures without changing anything: a = 48, b = 16, a non-start = 0, out of range = 0 */
+  CHECK(klvh_block_pages((DWORD)a)==48 && klvh_block_pages((DWORD)b)==16 && klvh_block_pages((DWORD)a+1)==0 && klvh_block_pages(KLVH_PAGES)==0 && klvh_block_pages(KLVH_PAGES+5)==0, "block_pages a=%u b=%u a+1=%u", klvh_block_pages((DWORD)a), klvh_block_pages((DWORD)b), klvh_block_pages((DWORD)a+1));
+  CHECK(used_count()==48+16+64+1 && klvh_bit(klvh_start,(DWORD)a), "block_pages changed nothing (%d used)", used_count());
   /* release a: exactly 48 pages, not b's */
   DWORD n=klvh_release_pages((DWORD)a); CHECK(n==48, "release a -> %u pages", n);
   CHECK(klvh_bit(klvh_used,(DWORD)b) && klvh_bit(klvh_start,(DWORD)b), "b untouched");

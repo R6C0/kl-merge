@@ -92,6 +92,18 @@ the measure run's single output number. If it is under ~150 MB the idea is cheap
 4. If the A/B holds: the flag becomes part of the install (one byte of kl2.exe; the restore .bat must know it), and
    `High=2` the shipped default WITH the flag check that it already has.
 
+## Review (2026-10-25, third scheduled check-in; static, fixed in klhigh.c)
+
+Four defects found by reading the wrappers against VirtualAlloc's documented contract, all fixed: (1) `VirtualAlloc(0, n,
+MEM_COMMIT)` - the reserve+commit shortcut - was not a "reservation" to the wrapper, so it was neither counted (the
+measure run would have under-reported every allocator using it) nor placed; (2) `VirtualFree(p, 0, MEM_DECOMMIT)` on a
+carved block went to Windows with size 0 = "the whole region", whose base is OUR CHUNK: a block at a chunk's start would
+have decommitted the whole chunk under its neighbours (now answered for the block, from the bit maps); (3) a listed
+module reloaded at the same base kept an unwrapped IAT (the UNLOADED notification now forgets it); (4) the 48-chunk
+limit could leave free pieces above 2 GB without a word (now 96 chunks and a post-takeover walk that WARNS on any free
+piece). `klhigh_bits_test.c` 20 checks PASS (gcc); `klhigh_test.c` gained the three new cases, still NOT run on
+Windows; the MSVC build and the measure run are the owner's step 1-2 above, unchanged.
+
 ## Alternatives considered and not built
 
 - An inline hook on `ntdll!NtAllocateVirtualMemory` forcing ZeroBits=1 for everyone but our own wrappers: catches heap
