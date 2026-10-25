@@ -457,7 +457,7 @@ REFILL_FROM = [FIRST + 'Surprise2', FIRST + 'Hunters!HunterKillers', SECOND + 'D
                FIRST + 'DanceFloor02!Dancefloor02a#02', FIRST + 'DanceFloor02!Dancefloor02a#01']
 
 
-def trim_pass(src, dst, remove, log=print):
+def trim_pass(src, dst, remove, log=print, post=None, room_items=False):
     """Take the top groups named in `remove` out of the build `src` -> `dst` (a folder-free zip): .prp (J.join without them), .gms / .buf
     (A.remove), .oct / .rmi / .rmc (O.remap_ids with the dead slot ids dropped), .prm (model roots repointed). References INTO the removed
     groups (the bots' TriggerActorsDead gates, their wake lists) are cut. A gate whose 'these men dead' list (field 0) was non-empty and
@@ -478,10 +478,11 @@ def trim_pass(src, dst, remove, log=print):
     pre = KB.room_sets_check(A, octx, rmi, rmc)
     a0, s0 = L2.census(sc)
     byname = {sc.names[t]: t for t in sc.tops()}
-    missing = [n for n in remove if n not in byname]
+    missing = [n for n in remove if not isinstance(n, int) and n not in byname]
     if missing:
         raise ValueError('not in the build (already trimmed?): %s' % missing[:3])
-    removed = [byname[n] for n in remove]
+    removed = [n if isinstance(n, int) else byname[n] for n in remove]      # a name = a top group; an int = any node of the build (lastcall6: nested effect templates)
+    nested = {t for t in removed if sc.parent[t] != 0}
     gone_nodes = set()
     for t in removed:
         gone_nodes.update(range(t, sc.end[t]))
@@ -492,7 +493,9 @@ def trim_pass(src, dst, remove, log=print):
         t = byname.get(n)
         if t is not None and t not in removed:
             pool += [sc.path[k] for k in range(t + 1, sc.end[t]) if sc.parent[k] == t and sc.names[k].startswith('Guard#')]
-    Jn = J.join(sc, [(sc, t) for t in sc.tops() if t not in set(removed)], 'lastcall4')
+    Jn = J.join(sc, [(sc, t) for t in sc.tops() if t not in set(removed)], 'lastcall4', skip=nested)
+    if post:
+        post(Jn)                                           # lastcall6: field edits on the joined scene (paths of `sc` resolve in it)
     # ---- references into the removed groups: cut the dead entries
     dead = []
     for k, holder, field, s, hit in J.references(sc):
@@ -567,7 +570,9 @@ def trim_pass(src, dst, remove, log=print):
     slot1 = A.slots()
     elsewhere = sum(1 for r, room in enumerate(octx.rooms) for ti, t in enumerate(room) if t is not None and (r, ti) != (0, 3)
                     for it in t.items if it[0] in {slot0[e] + 2 for e in gone_ents})
-    if elsewhere:
+    if elsewhere and room_items:
+        log('  %d room-tree items outside the root group tree (shard objects in room 0) are dropped with their entities' % elsewhere)
+    elif elsewhere:
         raise ValueError('%d room-tree items outside the root group tree name a removed entity' % elsewhere)
     ids = {slot0[e] + 2: slot1[e] + 2 for e in slot0 if e in slot1}
     ids[1] = 1
