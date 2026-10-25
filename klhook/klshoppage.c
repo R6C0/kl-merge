@@ -34,6 +34,8 @@
  * stalls: the make is the one heavy thing a page II buy did). PreMake=0 or a failed premake keeps the old make-on-demand in kspg_enforce. Every made[][]
  * pointer is checked against the pool vector (kspg_sane) before kspg_ammo / kspg_check_pool / kspg_enforce read it and dropped once it is gone (a new
  * map), so a freed object is never read. The pool survives the rounds, so made[] is kept across them and kspg_enforce re-parks ours in each shop.
+ * k44 (2026-10-25) ROUND START: the reset frees the parked guns and the game hands one over 45 ms later, before the 250 ms pass (a page II buy got
+ * the stock gun, live log 10-25 00:53): kspg_repark parks them again on every tick in 0x16 / 0x18, like klshop.c.
  *
  * GUESSES (also marked in the code): the 5-arg update; the BuyWeapon message name layout; 0xff owned byte; that the shown row / carried
  * rows are bytes at 0x154d80c (dword) / 0xced638,9; that a purchase of the same row from the other set goes through the Voodoo trick.
@@ -356,6 +358,34 @@ static void kspg_enforce(void)
     }
 }
 
+/* k44 round-start re-park: the park half of kspg_enforce on one copy of the entry array (one read per call, it runs on every tick in 0x16/0x18).
+ * Parks what the reset freed: stock entries of a carrier whose gun a slot carries from set B, ours of every other made pair. Never unparks, never
+ * makes, never touches parked[] beyond adding (kspg_enforce's next pass sorts that out). Returns the number of park writes. */
+static int kspg_repark(void)
+{
+    static DWORD tab[4096 * 3]; DWORD a, n = 0, ents, i, carrier[KSPG_ROWS]; int row, k = 0, wantB[KSPG_ROWS], any = 0;
+    for (row = 0; row < KSPG_ROWS; row++) {
+        wantB[row] = kspg.p[row].ok && kspg.made[row][0] && kspg_wantB(row);   /* no made[] = nothing of ours to hand over: leave the row alone */
+        carrier[row] = kspg.p[row].ok && kspg.made[row][0] ? klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * row) : 0;
+        any |= carrier[row] != 0;
+    }
+    if (!any) return 0;
+    if (!kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || !(ents = klh_rd32(a + 0x10)) || !klh_rd(ents, tab, 12 * (SIZE_T)n)) return 0;
+    for (i = 0; i < n; i++) {
+        DWORD *e = tab + 3 * i; BYTE v = 0;
+        if (!e[0] || !(e[2] & 0xff)) continue;                                   /* taken or parked already */
+        for (row = 0; row < KSPG_ROWS; row++) {
+            if (!carrier[row] || e[1] != carrier[row]) continue;
+            if (kspg_ours(row, e[0]) ? wantB[row] : !wantB[row]) continue;        /* this one is wanted free */
+            if (klh_data((void *)(DWORD_PTR)(ents + 12 * i + 8), &v, 1, "KLShopPage: re-park at round start")) {
+                k++; if (!kspg_isparked(e[0]) && kspg.nparked < KSPG_PARK) kspg.parked[kspg.nparked++] = e[0];
+            }
+            break;
+        }
+    }
+    return k;
+}
+
 static int kspg_gate(void)
 {
     DWORD sm, st = 0, gs, rules;
@@ -513,6 +543,21 @@ static void klshoppage_tick(int game_thread)
     if (kspg.togglePend && now - kspg.toggleAt > 1500) {
         kspg.togglePend = 0;
         if (!kspg.txtSeen && kspg.log) klog("shopPage: WARNING no shop text was requested in 1.5 s after the toggle: the names may stay as they were until the cursor moves (the game may cache them)");
+    }
+    /* k44 ROUND START: the round reset frees every pool entry, the stock ones we parked for a set-B gun too, and 0x16 -> 0x18 -> 0x19 took 45 ms
+     * (live log 10-25 00:53:33.322 -> .367): the 250 ms pass below missed it, the first free carrier entry was stock, and the set-A gun was handed
+     * over. klshop.c re-parks on every tick while st < 0x19 and its swap holds (S6), so kspg_repark runs on every tick in 0x16 and 0x18 (the
+     * states klshop.c proved; not in 0x23..0x25, which it never writes in), the whole stay, not a time window (review: a long first shop at 0x16
+     * would outlast one). own[] / carried[] are the 250 ms pass's (the reset left the carried bytes as they were: no 'without a purchase' line).
+     * One log line per stay with the summed count. */
+    {
+        static int lastSt = -1, sum; int g0 = kspg_gate(), st0 = kspg.st, win = g0 && (st0 == 0x16 || st0 == 0x18);
+        if (st0 != lastSt || !g0) {
+            if (sum && kspg.log) klog("shopPage: round start (state 0x%x -> 0x%x): %d gun(s) the reset freed parked again before the hand-over", lastSt, g0 ? st0 : -1, sum);
+            sum = 0; lastSt = g0 ? st0 : -1;
+            if (win) { kspg.sane = 0; kspg_sane(); }                             /* a new map's first shop: drop dead pointers before trusting made[] */
+        }
+        if (win && kls_code_ok()) sum += kspg_repark();
     }
     if (now - kspg.lastScan < 250) return;
     kspg.lastScan = now; kspg.sane = 0;
