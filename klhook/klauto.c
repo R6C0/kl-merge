@@ -1035,7 +1035,7 @@ static int kla_install(void)
 /* ---------------------------------------------------------------- script */
 
 typedef struct { char op; BYTE key; DWORD n, n2; char text[80]; float f[4]; DWORD off[6]; BYTE noff; } KCMD;
-enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH, C_MOUSE, C_MDOWN, C_MUP, C_POS, C_GOTO, C_FACE, C_ONWIN, C_LABEL, C_REWRITE, C_WAITSTATE, C_WAITVAN, C_SETTLE, C_TAPUNTIL, C_JUMP };
+enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH, C_MOUSE, C_MDOWN, C_MUP, C_POS, C_GOTO, C_FACE, C_ONWIN, C_LABEL, C_REWRITE, C_WAITSTATE, C_WAITVAN, C_SETTLE, C_TAPUNTIL, C_JUMP, C_POKE };
 static KCMD kla_cmd[640]; static int kla_ncmd, kla_pc; static DWORD kla_cmd_t, kla_cmd_f, kla_seq;
 static BYTE kla_held[256]; static DWORD kla_rel_t[256], kla_rel_f[256]; static int kla_taps, kla_started;
 static DWORD kla_tap_polls = 2;                   /* [Auto] TapPolls: a tap's key stays down for at least this many polls */
@@ -1265,6 +1265,16 @@ static void kla_script_load(void)
             for (; plus && c->noff < 6; plus = strchr(plus + 1, '+')) c->off[c->noff++] = strtoul(plus + 1, 0, 16);
             if (plus) { kla_out(1, "script line %d: peek follows at most six pointers - script not loaded", i); kla_ncmd = 0; return; }
             snprintf(c->text, sizeof c->text, "%s", rest + strlen(a));
+        }
+        else if (!_stricmp(op, "poke")) {              /* poke <addr>[+off...] <dword hex> <label>: peek's pointer path, then ONE dword written (TEST rig only) */
+            char *plus = strchr(a, '+'); char *v = rest + strlen(a), *end = 0;
+            c->op = C_POKE; c->n = strtoul(a, 0, 16);
+            for (; plus && c->noff < 6; plus = strchr(plus + 1, '+')) c->off[c->noff++] = strtoul(plus + 1, 0, 16);
+            if (plus) { kla_out(1, "script line %d: poke follows at most six pointers - script not loaded", i); kla_ncmd = 0; return; }
+            while (*v == ' ' || *v == '\t') v++;
+            c->n2 = strtoul(v, &end, 16);
+            if (end == v) { kla_out(1, "script line %d: poke needs a value - script not loaded", i); kla_ncmd = 0; return; }
+            snprintf(c->text, sizeof c->text, "%s", end);
         }
         else if (!_stricmp(op, "rewrite")) {           /* rewrite <addr>[+off] <bytes> <label> */
             char *plus = strchr(a, '+'); char m[60]; m[0] = 0;
@@ -1532,6 +1542,12 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
                 if (ok) { ok = v > 0xffff; at = v + c->off[j]; v = 0; ok = ok && kla_rd(at, &v, 4); }
             }
             kla_out(1, "script %d: peek %s = %s%08lx%s (at %08lx) %s", kla_pc + 1, ch, ok ? "" : "unreadable ", v, ok ? "" : " (a null or bad pointer on the way)", at, c->text); next = 1; break; }
+        case C_POKE: { DWORD v = 0, old = 0, at = (DWORD)(DWORD_PTR)VA(c->n); int ok = 1, j; MEMORY_BASIC_INFORMATION mbi;
+            for (j = 0; j < c->noff && ok; j++) { ok = kla_rd(at, &v, 4) && v > 0xffff; at = v + c->off[j]; }
+            ok = ok && kla_rd(at, &old, 4) && VirtualQuery((void *)(DWORD_PTR)at, &mbi, sizeof mbi) && (mbi.Protect & (PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READWRITE));
+            if (ok) memcpy((void *)(DWORD_PTR)at, &c->n2, 4);
+            kla_out(1, "script %d: poke %08lx (%d pointer(s)) -> %08lx: %08lx -> %08lx %s%s", kla_pc + 1, c->n, c->noff, at, old, c->n2,
+                    ok ? "" : "NOT WRITTEN (null pointer on the way or not writable) ", c->text); next = 1; break; }
         case C_REWRITE: {                               /* the same bytes written back: a data write that changes nothing */
             BYTE b[64]; DWORD v = 0, at = (DWORD)(DWORD_PTR)VA(c->n); int n = (int)c->f[0], ok = 1, j; char hex[3 * 16 + 1], txt[17];
             MEMORY_BASIC_INFORMATION mbi;

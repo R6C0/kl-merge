@@ -147,6 +147,42 @@ static void __fastcall kspg_gfx(void *self, void *edx)
 }
 
 /* the selector's messages */
+/* BuyWeapon (0x6ddd10, disassembled) writes the row into 0xced638/9 FIRST and only then asks the rules to commit (rules vtbl+0x120 = 0x8ea990):
+ * the commit prices every slot whose row differs from the rules' own (vtbl+0x104/+0x108; slots 0/1 via 0x6a5260: [[0x168e96c]+0xbc] != 0 -> the
+ * dword at 0xbd1f70 + 24 * row; slot 2 uses 0x8736f0, a float table, not touched here) and, when the sum is above the balance [[rules+0x5f8]+0x38]
+ * (one pointer, not indexed by player: likely a shared pool), stores NOTHING and subtracts nothing (jg 0x8eaa83). The UI byte then shows a gun the
+ * player does not own until the selector's init (0x534530) reloads it. K44P2e: $0 player, row 0 ($2000) "bought" from set B, reverted 0 -> 28 on ESC.
+ * The trick path (same row, other set) is never refused: the row equals the rules' row, so the commit charges $0 (review 1025 asked; checked). */
+static DWORD kspg_money(void)
+{
+    DWORD gs, rules, w;
+    if (klh_rd32((DWORD_PTR)klh_rd32((DWORD_PTR)KLH_VA(0x0168e598u)) + 0x5c) != 4) return 0xffffffffu;   /* 0x7bb2a0's own test: no FA session, no rules */
+    if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(0x0168e9e4u))) || !(rules = klh_rd32(gs + 0x54)) || !(w = klh_rd32(rules + 0x5f8))) return 0xffffffffu;
+    return klh_rd32(w + 0x38);
+}
+
+static int kspg_price(int row)
+{
+    DWORD ps = klh_rd32((DWORD_PTR)KLH_VA(0x0168e96cu)); BYTE on = 0;
+    if (row < 0 || row >= KSPG_ROWS || !ps || !klh_rd(ps + 0xbc, &on, 1) || !on) return 0;
+    return (int)klh_rd32((DWORD_PTR)KLH_VA(0x00bd1f70u + 24 * (DWORD)row));
+}
+
+static void kspg_refused(int before0, int before1, DWORD m0, DWORD m1)
+{
+    DWORD w = klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY)); int s, cost = 0, now[2];
+    now[0] = (int)(signed char)(BYTE)w; now[1] = (int)(signed char)(BYTE)(w >> 8);
+    if (m0 == 0xffffffffu || m1 != m0) return;                                /* money moved (or unknown): the commit went through */
+    for (s = 0; s < 2; s++) if (now[s] != (s ? before1 : before0)) cost += kspg_price(now[s]);
+    if (cost <= 0 || (DWORD)cost <= m0) return;                               /* free or affordable: stored without a charge */
+    for (s = 0; s < 2; s++) {
+        BYTE back = (BYTE)(s ? before1 : before0);
+        if (now[s] == (s ? before1 : before0)) continue;
+        if (klh_data((void *)((DWORD_PTR)KLH_VA(KSPG_CARRY) + s), &back, 1, "KLShopPage: carried row back to what the rules hold (buy refused)") && kspg.log)
+            klog("shopPage: the game refused the buy of row %d into slot %d (price $%d, money $%lu): the slot stays row %d", now[s], s, cost, m0, (int)(signed char)back);
+    }
+}
+
 static void kspg_note_buy(int before0, int before1)
 {
     int now[2], s; now[0] = (int)(signed char)(BYTE)klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY)); now[1] = (int)(signed char)(BYTE)(klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY)) >> 8);
@@ -189,8 +225,15 @@ static void __fastcall kspg_sel(void *self, void *edx, DWORD *msg)
             }
         }
     }
+    if (!strcmp(nm, "BuyWeapon")) {
+        DWORD m0 = kspg_money(), m1;
+        ((kspg_msg_t)(DWORD_PTR)kspg_tab[3].orig)(self, 0, msg);
+        m1 = kspg_money();
+        kspg_refused(b0, b1, m0, m1);
+        kspg_note_buy(b0, b1);
+        return;
+    }
     ((kspg_msg_t)(DWORD_PTR)kspg_tab[3].orig)(self, 0, msg);
-    if (!strcmp(nm, "BuyWeapon")) kspg_note_buy(b0, b1);
 }
 
 /* ---- private vtables ---- */
