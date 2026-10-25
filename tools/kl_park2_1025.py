@@ -438,6 +438,8 @@ def build(src, dst, log=print, keep=None):
 def ps_text():
     s = GS.PS1
     s = s.replace('gas.json', 'park2.json').replace('.before-1025dm01bgas', TAG).replace('gas.ps1', 'park2.ps1')
+    s = s.replace('Maps\\DM01B\\F03_Main.zip', 'Maps\\DM06B\\F02_Main.zip').replace('renamed F03_Main.zip', 'renamed F02_Main.zip')
+    s = s.replace('.MAT .TEX .HVK .hrd change', '.MAT .TEX .HVK change; DM06B has no .hrd')
     first = s.index('\n')
     return ('# park2.ps1 - DM06B A Walk in the Park II redesign, 2026-10-25 (tools/kl_park2_1025.py): highway start, plaza ambush, pagoda snipers, extinguishers, fuel cans.\n'
             '#   Chained on the live DM06B zip 64bb5dc9: `old` in park2.json is that md5; the install refuses any other.\n') + s[first + 1:]
