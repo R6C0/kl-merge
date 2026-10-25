@@ -68,6 +68,9 @@
  *   MidMB=16         requests of this size or more go into it too when the largest free piece is under RoomMB
  *   RoomMB=0         0 = never (only when the heap fails). 128 needs ReserveMB=176 for Retomoto: see above
  *   StackMB=0        0 = leave the game's threads their 4 MB; 1 or 2 = reserve that much for its new threads
+ *   SmallRescue=1    a request under 1 MB that the heap refuses (HeapAlloc, or the sound buffers' _aligned_malloc) is logged
+ *                    and answered from the reserve (recommended on; 0 = logged only, the game then faults at 0x8e5bbd or
+ *                    0x6d2107 as before)
  *   Log=1
  *   Maps=1           KLHook_map_0..7.txt beside the log: the whole address space at each level's largest block
  *                    (and KLHook_map_refused_0/1.txt at the first two refused requests after it)
@@ -75,8 +78,11 @@
 #ifndef KLMEM_C
 #define KLMEM_C
 
-#define KLM_BLOCKS 64
-static int klm_on = 1, klm_log = 1, klm_reserve_mb = 128, klm_big_mb = 48, klm_mid_mb = 16, klm_room_mb, klm_stack_mb, klm_maps = 1;
+#define KLM_BLOCKS 2048                                 /* 64 large blocks were enough; small rescues (SmallRescue) take one 64 KB entry each */
+static int klm_on = 1, klm_log = 1, klm_reserve_mb = 128, klm_big_mb = 48, klm_mid_mb = 16, klm_room_mb, klm_stack_mb, klm_maps = 1, klm_small = 1;
+static int klm_ok;                                      /* HeapFree and HeapSize are wrapped: the reserve may hand out blocks */
+static int klm_aligned;                                 /* _aligned_malloc and _aligned_free are wrapped too */
+static volatile LONG klm_nulls, klm_full_told;          /* small requests the heap refused; the table-full line was written */
 static void *klm_reserve;                               /* set once in klm_init, never released */
 static volatile LONG klm_served, klm_threads;
 static struct { SIZE_T off, len, asked; } klm_blk[KLM_BLOCKS];   /* the blocks in the reserve, by offset; len = asked rounded up to 64 KB */
@@ -86,8 +92,11 @@ static CRITICAL_SECTION klm_cs;                         /* the three above */
 static LPVOID (WINAPI *klm_real_HeapAlloc)(HANDLE, DWORD, SIZE_T);
 static BOOL (WINAPI *klm_real_HeapFree)(HANDLE, DWORD, LPVOID);
 static SIZE_T (WINAPI *klm_real_HeapSize)(HANDLE, DWORD, LPCVOID);
+static BOOL (WINAPI *klm_real_HeapValidate)(HANDLE, DWORD, LPCVOID);   /* kl2 imports it too: a reserve block is valid while it is in the table */
 static HANDLE (WINAPI *klm_real_CreateThread)(LPSECURITY_ATTRIBUTES, SIZE_T, LPTHREAD_START_ROUTINE, LPVOID, DWORD, LPDWORD);
 static uintptr_t (__cdecl *klm_real_beginthreadex)(void *, unsigned, unsigned (__stdcall *)(void *), void *, unsigned, unsigned *);
+static void *(__cdecl *klm_real_aligned_malloc)(size_t, size_t);
+static void (__cdecl *klm_real_aligned_free)(void *);
 
 static void klm_free_space(SIZE_T *largest, SIZE_T *total)
 {   /* a walk over the user half of the address space */
@@ -160,7 +169,7 @@ static int klm_inside(LPCVOID p)
 static void *klm_from_reserve(SIZE_T size)
 {   /* a block in the first gap of the reserve that fits, or 0: no reserve, no gap, the table is full, or the commit failed */
     SIZE_T room = (SIZE_T)klm_reserve_mb << 20, len = (size + 0xffff) & ~(SIZE_T)0xffff, at = 0; int i, k; void *p = 0;
-    if (!klm_reserve || !klm_real_HeapFree || !size || len < size || len > room) return 0;
+    if (!klm_reserve || !klm_ok || !size || len < size || len > room) return 0;
     EnterCriticalSection(&klm_cs);
     if (klm_n < KLM_BLOCKS) {
         for (i = 0; i <= klm_n; i++) {                /* the gap before block i; i == klm_n: the one after the last */
@@ -174,13 +183,52 @@ static void *klm_from_reserve(SIZE_T size)
         }
     }
     LeaveCriticalSection(&klm_cs);
+    if (!p && klm_n >= KLM_BLOCKS && !InterlockedExchange(&klm_full_told, 1)) klog("memory: the reserve's table is full (%d blocks): no more blocks from it", KLM_BLOCKS);
+    return p;
+}
+
+static int klm_release(LPVOID p, SIZE_T *asked, int *left, double *used_mb)
+{   /* p is inside the reserve: decommit its block and drop it from the table; 0 = no block starts at p */
+    SIZE_T off = (SIZE_T)((BYTE *)p - (BYTE *)klm_reserve); int i, found = 0;
+    EnterCriticalSection(&klm_cs);
+    for (i = 0; i < klm_n && klm_blk[i].off != off; i++) ;
+    if (i < klm_n) {
+        VirtualFree(p, klm_blk[i].len, MEM_DECOMMIT);  /* this block's pages only; they come back zeroed at the next commit */
+        *asked = klm_blk[i].asked; klm_used -= klm_blk[i].len; klm_n--; found = 1;
+        for (; i < klm_n; i++) klm_blk[i] = klm_blk[i + 1];
+    }
+    *left = klm_n; *used_mb = klm_used / 1048576.0;
+    LeaveCriticalSection(&klm_cs);
+    return found;
+}
+
+static LPVOID klm_small_failed(const char *fn, HANDLE heap, DWORD flags, SIZE_T size, void *ret, int can)
+{   /* K47A (DM05A, 2026-10-25): the process heap refused 0x2ba0 bytes for the game allocator 0x7bb2c0 (its heap is GetProcessHeap(), kl2 has no
+       HeapCreate), which does not test the result: 0x8e5bbd writes its 0x12345678 header to 0. Free address space was 385 MB, largest piece 64 MB at
+       the last line before, and this path did not log. Now it logs what ran out (commit or address space) and, with SmallRescue=1, answers from the
+       reserve (64 KB a block, committed zeroed; klm_HeapFree / klm_HeapSize already know reserve blocks). If commit is what ran out, that fails too.
+       fn = "HeapAlloc" or "_aligned_malloc" (then flags = the alignment); can = 0: the caller's free path would not see a reserve block. */
+    MEMORYSTATUSEX ms; SIZE_T largest = 0, total = 0; DWORD err = GetLastError(); LONG n = InterlockedIncrement(&klm_nulls); LPVOID p = 0;
+    if (klm_small && can && klm_reserve) p = klm_from_reserve(size);
+    if (n <= 32) {                                      /* a runaway must not fill the disk */
+        ms.dwLength = sizeof ms; if (!GlobalMemoryStatusEx(&ms)) ms.ullAvailPageFile = ms.ullTotalPageFile = ms.ullAvailVirtual = 0;
+        klm_free_space(&largest, &total);
+        klog("memory: %s(heap %p, flags/align %lx, %lu bytes) from %p returned NULL (#%ld, error %lu); free address space %.0f MB, largest piece %.1f MB; "
+             "commit left %.0f of %.0f MB; %s (the reserve holds %d block(s), %.1f of %d MB)",
+             fn, heap, flags, (unsigned long)size, ret, n, err, total / 1048576.0, largest / 1048576.0, ms.ullAvailPageFile / 1048576.0, ms.ullTotalPageFile / 1048576.0,
+             p ? "answered from the reserve" : !klm_small ? "SmallRescue=0: the caller gets NULL" : !can ? "not rescuable here: the caller gets NULL" :
+             !klm_reserve ? "no reserve: the caller gets NULL" : "the reserve could not answer it either: the caller gets NULL",
+             klm_n, klm_used / 1048576.0, klm_reserve ? klm_reserve_mb : 0);
+        if (n <= 2) klm_map_line(p ? "at a refused small request" : "at a refused small request (not answered)", 1);
+    }
+    SetLastError(err);
     return p;
 }
 
 static LPVOID WINAPI klm_HeapAlloc(HANDLE heap, DWORD flags, SIZE_T size)
 {
     LPVOID p; SIZE_T largest = 0, total = 0; DWORD err; int first = 0;
-    if (size < (1u << 20)) return klm_real_HeapAlloc(heap, flags, size);
+    if (size < (1u << 20)) { p = klm_real_HeapAlloc(heap, flags, size); return (p || !size) ? p : klm_small_failed("HeapAlloc", heap, flags, size, _ReturnAddress(), 1); }
     if (size >= ((SIZE_T)klm_mid_mb << 20) || size >= (16u << 20)) {
         err = GetLastError(); klm_free_space(&largest, &total); SetLastError(err);
         if (klm_log) klog("memory: a block of %.1f MB is asked for; free address space %.0f MB, largest piece %.1f MB (the reserve holds %d block(s), %.1f of %d MB)",
@@ -206,21 +254,22 @@ static LPVOID WINAPI klm_HeapAlloc(HANDLE heap, DWORD flags, SIZE_T size)
 
 static BOOL WINAPI klm_HeapFree(HANDLE heap, DWORD flags, LPVOID p)
 {
-    SIZE_T off, asked = 0; int i, n = 0, found = 0; double used = 0;
+    SIZE_T asked = 0; int n = 0; double used = 0;
     if (!p || !klm_inside(p)) return klm_real_HeapFree(heap, flags, p);
-    off = (SIZE_T)((BYTE *)p - (BYTE *)klm_reserve);
-    EnterCriticalSection(&klm_cs);
-    for (i = 0; i < klm_n && klm_blk[i].off != off; i++) ;
-    if (i < klm_n) {
-        VirtualFree(p, klm_blk[i].len, MEM_DECOMMIT);  /* this block's pages only; they come back zeroed at the next commit */
-        asked = klm_blk[i].asked; klm_used -= klm_blk[i].len; klm_n--; found = 1;
-        for (; i < klm_n; i++) klm_blk[i] = klm_blk[i + 1];
-    }
-    n = klm_n; used = klm_used / 1048576.0;
-    LeaveCriticalSection(&klm_cs);
-    if (!found) { klog("memory: HeapFree of %p, which is inside the reserve but no block of it - refused", p); SetLastError(ERROR_INVALID_PARAMETER); return FALSE; }
-    if (klm_log) klog("memory: the block of %.1f MB in the reserve was freed by the game (it holds %d block(s), %.1f MB now)", asked / 1048576.0, n, used);
+    if (!klm_release(p, &asked, &n, &used)) { klog("memory: HeapFree of %p, which is inside the reserve but no block of it - refused", p); SetLastError(ERROR_INVALID_PARAMETER); return FALSE; }
+    if (klm_log && asked >= (1u << 20)) klog("memory: the block of %.1f MB in the reserve was freed by the game (it holds %d block(s), %.1f MB now)", asked / 1048576.0, n, used);
     return TRUE;
+}
+
+static BOOL WINAPI klm_HeapValidate(HANDLE heap, DWORD flags, LPCVOID p)
+{
+    SIZE_T off; int i, found = 0;
+    if (!p || !klm_inside(p)) return klm_real_HeapValidate(heap, flags, p);
+    off = (SIZE_T)((const BYTE *)p - (const BYTE *)klm_reserve);
+    EnterCriticalSection(&klm_cs);
+    for (i = 0; i < klm_n; i++) if (klm_blk[i].off == off) found = 1;
+    LeaveCriticalSection(&klm_cs);
+    return found;
 }
 
 static SIZE_T WINAPI klm_HeapSize(HANDLE heap, DWORD flags, LPCVOID p)
@@ -232,6 +281,21 @@ static SIZE_T WINAPI klm_HeapSize(HANDLE heap, DWORD flags, LPCVOID p)
     for (i = 0; i < klm_n; i++) if (klm_blk[i].off == off) asked = klm_blk[i].asked;
     LeaveCriticalSection(&klm_cs);
     return asked;
+}
+
+static void *__cdecl klm_aligned_malloc(size_t size, size_t align)
+{   /* K44P2b, K47B, K48A (2026-10-25): 0x6d2107 = the ADPCM decoder writing to 0. The sound buffer's Lock (ZSoundBufferOpenAL slot 29, 0x75db50) takes
+       _aligned_malloc(size + 0x10, 0x10) through the import 0xb10398 and returns true without testing it. A reserve block is 64 KB aligned, so it
+       answers any alignment up to that; its free comes back through _aligned_free (0xb1039c), wrapped below. */
+    void *p = klm_real_aligned_malloc(size, align);
+    return (p || !size) ? p : klm_small_failed("_aligned_malloc", 0, (DWORD)align, size, _ReturnAddress(), klm_aligned && align <= 0x10000);
+}
+
+static void __cdecl klm_aligned_free(void *p)
+{
+    SIZE_T asked = 0; int n = 0; double used = 0;
+    if (!p || !klm_inside(p)) { klm_real_aligned_free(p); return; }
+    if (!klm_release(p, &asked, &n, &used)) klog("memory: _aligned_free of %p, which is inside the reserve but no block of it - ignored", p);
 }
 
 static HANDLE WINAPI klm_CreateThread(LPSECURITY_ATTRIBUTES sa, SIZE_T stack, LPTHREAD_START_ROUTINE fn, LPVOID arg, DWORD flags, LPDWORD id)
@@ -248,9 +312,15 @@ static uintptr_t __cdecl klm_beginthreadex(void *sec, unsigned stack, unsigned (
 
 static void klm_tick(void)
 {
-    static DWORD calls; static LONG told;
+    static DWORD calls, last; static LONG told; DWORD now; SIZE_T largest, total;
     if (!klm_on || (calls++ & 63)) return;
     if (klm_stack_mb > 0 && klm_threads != told) { told = klm_threads; if (klm_log) klog("memory: %ld game thread(s) so far started with a %d MB stack instead of 4 MB", told, klm_stack_mb); }
+    now = GetTickCount();
+    if (klm_log && now - last >= 10000) {             /* K48B: free space fell from 419 MB after the load to 16 MB in round 1; this shows the slope */
+        last = now; klm_free_space(&largest, &total);
+        klog("memory: every 10 s: free address space %.0f MB, largest piece %.1f MB; the reserve holds %d block(s), %.1f of %d MB; refused small requests so far %ld",
+             total / 1048576.0, largest / 1048576.0, klm_n, klm_used / 1048576.0, klm_reserve ? klm_reserve_mb : 0, klm_nulls);
+    }
 }
 
 static void klm_init(void)
@@ -265,13 +335,21 @@ static void klm_init(void)
     klm_big_mb = (int)GetPrivateProfileIntA("Memory", "BigMB", 48, klh_ini); if (klm_big_mb < 1 || klm_big_mb > 512) klm_big_mb = 48;
     klm_mid_mb = (int)GetPrivateProfileIntA("Memory", "MidMB", 16, klh_ini); if (klm_mid_mb < 1 || klm_mid_mb > 512) klm_mid_mb = 16;
     klm_room_mb = (int)GetPrivateProfileIntA("Memory", "RoomMB", 0, klh_ini); if (klm_room_mb < 0 || klm_room_mb > 2048) klm_room_mb = 0;
+    klm_small = GetPrivateProfileIntA("Memory", "SmallRescue", 1, klh_ini) != 0;
     InitializeCriticalSection(&klm_cs);
     klm_free_space(&largest, &total);
     if (klm_reserve_mb > 0) klm_reserve = VirtualAlloc(0, (SIZE_T)klm_reserve_mb << 20, MEM_RESERVE, PAGE_NOACCESS);
     /* HeapFree and HeapSize first: a block is only handed out of the reserve when its free can be seen */
     n += klh_iat("KERNEL32.dll", "HeapFree", (void *)klm_HeapFree, (void **)&klm_real_HeapFree);
     n += klh_iat("KERNEL32.dll", "HeapSize", (void *)klm_HeapSize, (void **)&klm_real_HeapSize);
-    if (!klm_real_HeapSize) { klm_real_HeapFree = 0; klog("memory: HeapSize NOT wrapped: the reserve is not used"); }
+    n += klh_iat("KERNEL32.dll", "HeapValidate", (void *)klm_HeapValidate, (void **)&klm_real_HeapValidate);
+    if (!klm_real_HeapValidate) klm_small = 0;      /* rescue only small blocks the game cannot tell from heap blocks */
+    klm_ok = klm_real_HeapFree && klm_real_HeapSize;   /* a wrapper that is in place keeps its real pointer: it is still called */
+    if (!klm_ok) klog("memory: HeapFree or HeapSize NOT wrapped: the reserve is not used");
+    /* the free first, as above; the sound buffers' allocation (see klm_aligned_malloc) */
+    n += klh_iat("MSVCR90.dll", "_aligned_free", (void *)klm_aligned_free, (void **)&klm_real_aligned_free);
+    if (klm_real_aligned_free) n += klh_iat("MSVCR90.dll", "_aligned_malloc", (void *)klm_aligned_malloc, (void **)&klm_real_aligned_malloc);
+    klm_aligned = klm_real_aligned_free && klm_real_aligned_malloc;
     n += klh_iat("KERNEL32.dll", "HeapAlloc", (void *)klm_HeapAlloc, (void **)&klm_real_HeapAlloc);
     if (klm_stack_mb) {
         n += klh_iat("KERNEL32.dll", "CreateThread", (void *)klm_CreateThread, (void **)&klm_real_CreateThread);
@@ -280,7 +358,8 @@ static void klm_init(void)
     klog("memory: at start %.0f MB of address space free, largest piece %.1f MB; reserve of %d MB %s (blocks of %d MB or more go into it, any of 1 MB or more that the heap refuses, and - RoomMB - of %d MB or more while the largest free piece is under %d MB); HeapAlloc %s, HeapFree %s; game thread stacks %s (%d import slot(s))",
          total / 1048576.0, largest / 1048576.0, klm_reserve_mb, klm_reserve ? "held for the whole run" : klm_reserve_mb ? "NOT available" : "off", klm_big_mb, klm_mid_mb, klm_room_mb,
          klm_real_HeapAlloc ? "wrapped" : "NOT wrapped", klm_real_HeapFree ? "wrapped" : "NOT wrapped", klm_stack_mb ? "reduced" : "left at 4 MB", n);
-    if ((!klm_real_HeapAlloc || !klm_real_HeapFree) && klm_reserve) { VirtualFree(klm_reserve, 0, MEM_RELEASE); klm_reserve = 0; }   /* nobody could use it */
+    if (klm_log) klog("memory: _aligned_malloc %s; SmallRescue %s", klm_aligned ? "wrapped" : "NOT wrapped", klm_small ? "on" : "off");
+    if ((!klm_real_HeapAlloc || !klm_ok) && klm_reserve) { VirtualFree(klm_reserve, 0, MEM_RELEASE); klm_reserve = 0; }   /* nobody could use it */
 }
 
 #endif /* KLMEM_C */
