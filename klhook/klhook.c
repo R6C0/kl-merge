@@ -652,6 +652,9 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klvalog.c"                                     /* klvalog.c: [Memory] VaLog - other modules' VirtualAlloc by caller (TEST only, default 0); AFTER klextpt.c (klxp_enum_fn) */
 #endif
 #include "klarena.c"                                     /* klarena.c: [Memory] DriverArena - nvd3dum's small process-heap blocks from 1 MB chunks released when empty (default 0); AFTER klvalog.c */
+#ifdef KLHOOK_TEST
+#include "kld3.c"                                       /* kld3.c: [Memory] D3dCount / D3dFlushEvery - Direct3D 9 call counts per vtable slot + a GPU flush experiment (TEST only, default 0); AFTER klarena.c, BEFORE klfps.c */
+#endif
 #include "klnudge.c"
 #include "klfix.c"
 #include "kljoin.c"
@@ -977,6 +980,9 @@ static void klh_tick(int game_thread)
     klva_tick();                                      /* klvalog.c: the per-caller table every 10 s (off unless [Memory] VaLog=1) */
 #endif
     klarena_tick();                                   /* klarena.c: its 10 s line (off unless [Memory] DriverArena=1) */
+#ifdef KLHOOK_TEST
+    kld3_tick();                                      /* kld3.c: its 10 s lines (off unless [Memory] D3dCount=1) */
+#endif
     InterlockedExchange(&klh_tick_busy, 0);
 }
 
@@ -1303,6 +1309,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klva_init();                                   /* klvalog.c: AFTER klm_init (its reserve is not counted); off unless [Memory] VaLog=1 */
 #endif
     klarena_init();                                /* klarena.c: AFTER klva_init; off unless [Memory] DriverArena=1 */
+#ifdef KLHOOK_TEST
+    kld3_init();                                   /* kld3.c: AFTER klarena_init (reads its counters); off unless [Memory] D3dCount=1 */
+#endif
     klxp_init();                                   /* klextpt.c: extension points off (hook DLLs of other programs), watcher of foreign modules */
     kln_init();
     klf_init();

@@ -76,6 +76,9 @@ static klfps_createdev_fn klfps_real_createdev;
 static klfps_present_fn   klfps_real_present;
 typedef HRESULT (WINAPI *klfps_present_sc_fn)(void *self, const RECT *src, const RECT *dst, HWND wnd, const void *dirty, DWORD flags);
 static klfps_present_sc_fn klfps_real_present_sc;
+#ifdef KLHOOK_TEST
+static void *kld3_dev;                         /* the device klfps_createdev saw (kld3.c) */
+#endif
 static int klfps_seen;                          /* the first Present was logged */
 static int  klfps_enable = 1, klfps_fps_ini, klfps_front = 1, klfps_passive, klfps_log;
 static int  klfps_target;                       /* frames per second now enforced; 0 = timing only */
@@ -335,6 +338,9 @@ static void klfps_post(void)
 static HRESULT WINAPI klfps_present(void *self, const RECT *src, const RECT *dst, HWND wnd, const void *dirty)
 {
     HRESULT r; void *ret = _ReturnAddress(); int d = klfps_depth(), t;
+#ifdef KLHOOK_TEST
+    if (!d) kld3_present(self);                                      /* kld3.c: frame count, flush experiment */
+#endif
     klfps_first_calls("device (slot 17)", d, ret);
     t = klfps_pre("device (slot 17)", d, ret);
     if (t < 0) return 0;
@@ -351,6 +357,9 @@ static HRESULT WINAPI klfps_present(void *self, const RECT *src, const RECT *dst
 static HRESULT WINAPI klfps_present_sc(void *self, const RECT *src, const RECT *dst, HWND wnd, const void *dirty, DWORD flags)
 {
     HRESULT r; void *ret = _ReturnAddress(); int d = klfps_depth(), t;
+#ifdef KLHOOK_TEST
+    if (!d) kld3_present(kld3_dev);                                  /* kld3.c: frame count, flush experiment (the swap chain route needs the device) */
+#endif
     klfps_first_calls("swap chain (slot 3)", d, ret);
     t = klfps_pre("swap chain (slot 3)", d, ret);
     if (t < 0) return 0;
@@ -401,7 +410,11 @@ static void klfps_read_pp(const void *pp)
  * The target is re-read from the new parameters and the pacing restarts (the deadline would be stale). The real Reset runs first. */
 static HRESULT WINAPI klfps_reset(void *self, void *pp)
 {
-    HRESULT r = klfps_real_reset(self, pp);
+    HRESULT r;
+#ifdef KLHOOK_TEST
+    kld3_prereset();                                                 /* kld3.c: [Memory] D3dRing's DEFAULT-pool buffers must not outlive Reset */
+#endif
+    r = klfps_real_reset(self, pp);
     klfps_resets++;
     if (r >= 0) { klfps_read_pp(pp); klog("fps: Reset ok: refresh %d Hz, game vsync %s, target %d fps", klfps_auto_hz, klfps_vsync ? "ON" : "off", klfps_target); }
     else { klfps_deadline = 0; klfps_pace = 0; klfps_ret = 0; }
@@ -415,6 +428,13 @@ static HRESULT WINAPI klfps_createdev(void *self, UINT adapter, DWORD type, HWND
         klfps_read_pp(pp);
         if (klfps_use_reset) klfps_wrap_slot(*dev, 16, (void *)klfps_reset, (void **)&klfps_real_reset, "Reset");
         klfps_wrap_slot(*dev, 17, (void *)klfps_present, (void **)&klfps_real_present, "Present");
+#ifdef KLHOOK_TEST
+        kld3_device(*dev);                                           /* kld3.c: [Memory] D3dCount, the other slots (after Reset / Present, which stay ours) */
+        kld3_dev = *dev;
+        if (kld3_rg_ok && (*(void ***)*dev)[16] != (void *)klfps_reset) {   /* the ring's buffers are dropped only in klfps_reset: without it Reset would fail */
+            kld3_rg_ok = 0; klog("d3count: ring OFF: IDirect3DDevice9::Reset is not wrapped ([FrameLimit] Reset=0 or the wrap was refused)");
+        }
+#endif
         {   /* the implicit swap chain: IDirect3DDevice9::GetSwapChain (slot 14), then its Release (slot 2) */
             typedef HRESULT (WINAPI *gsc_fn)(void *, UINT, void **); typedef ULONG (WINAPI *rel_fn)(void *);
             void **dvt = *(void ***)*dev, *sc = 0;
