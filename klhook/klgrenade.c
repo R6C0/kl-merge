@@ -38,8 +38,9 @@
 #define KLGR_O_ACT   0x818                   /* action word; bit 0x800 = grenade (READ 0x5447f9) */
 
 static struct {
-    int on, probe, thr, key, actbit, logn;
+    int on, probe, thr, key, actbit, logn, spawn;
     DWORD hold_ms, press_at, last_sample, watch_until, last_btn, last_act, after_at, after_p;
+    DWORD sp_at, sp_p, sp_obj; int sp_n;
     int samples, was, fgwarned, presses, nonade, ticks0x40, actwarned, holding, faults;
 } klgr;
 
@@ -146,6 +147,69 @@ static void klgr_hold(DWORD p, DWORD now, int edge)
     }
 }
 
+/* SPAWN PROTOTYPE ([Grenade] Spawn, TEST build only, default 0). re\grenade_spawn_plan.md steps 2a / 2b.
+ * READ 2026-10-25: CreateAction case 0x11 (0x839807) calls ctor 0x6757b0 with (0x11, P, [P+0xa1c], clip), so action+0xc = [P+0xa1c],
+ *   action+0x10 = the clip 0x59d550(P, word [P+0x239c]) gives. The tick 0x65ce70 reads word [[action+0xc]+2] (frame count) at 0x65cea5 AND
+ *   at 0x65cf79 plays [action+0xc] as a clip (P vt+0x210), at 0x65cfc3 reads [[action+0x10]+2]: BOTH are clip records of the kind 0x59d550
+ *   returns (the same kind kladren.c / klclimb.c use), not a separate descriptor. [P+0xa1c] is dead in Dog Days (never written), so the
+ *   guess is that any valid clip there lets the tick run.  GUESS: the same clip for both fields (the first-phase clip is unknown).
+ * Spawn=1: on G press (game window in front, a kind-0 inventory entry) log the clip 0x59d550 gives for the throw index, its first 16 bytes,
+ *   and the item's +0xc8..0xd0 floats. Reads plus the game's own clip lookup (it draws one number from the game's generator). No action.
+ * Spawn=2: also write that clip into [P+0xa1c] (data write), Abort (vt+0x374), CreateAction(0x11) (vt+0x384), StartAction (vt+0x370), inside
+ *   klfc_guard, restore [P+0xa1c]=old, then log the player's action and the item's +0xc8..0xd0 floats at once, +0.5 s and +1.5 s.
+ *   Fires only when the player has NO action (klfc_cur_act == 0) and at most once per 3 s. A velocity appearing in the item = the release worked. */
+#ifdef KLHOOK_TEST
+#define KLGR_CLIP 0x0059d550u
+static void klgr_itemvel(DWORD obj, const char *when)
+{
+    float f[3] = {0, 0, 0};
+    if (obj && klfc_ok(obj, 0xe0) && klh_rd(obj + 0xc8, f, 12)) klog("grenade spawn: item %08lx vel(+c8..d0) %g %g %g (%s)", obj, f[0], f[1], f[2], when);
+    else klog("grenade spawn: item %08lx unreadable (%s)", obj, when);
+}
+struct klgr_sp { DWORD P, obj, clip, old; int ok; };
+static int klgr_sp_body(void *arg)
+{
+    struct klgr_sp *g = (struct klgr_sp *)arg; DWORD P = g->P, act, zero = 0, cur;
+    cur = klfc_cur_act(P);
+    if (cur != 0) { klog("grenade spawn: player has an action (%08lx): not starting", cur); return 0; }
+    g->old = klh_rd32(P + 0xa1c);
+    klfc_put(P + 0xa1c, &g->clip, 4, "grenade spawn: [P+a1c]");
+    act = KLFC_PTR(DWORD (__fastcall *)(DWORD, DWORD, int), klfc_vf(P, 0x384))(P, 0, 0x11);
+    if (!klfc_ok(act, 0x28) || klh_rd32(act) != 0x00bb4d24u || klh_rd32(act + 8) != P) { klog("grenade spawn: CreateAction(0x11) gave %08lx (not a ZFFActionThrow)", act); klfc_put(P + 0xa1c, &g->old, 4, "grenade spawn: restore"); return 0; }
+    klog("grenade spawn: action %08lx made: +c %08lx +10 %08lx; starting", act, klh_rd32(act + 0xc), klh_rd32(act + 0x10));
+    KLFC_PTR(void (__fastcall *)(DWORD, DWORD), klfc_vf(P, 0x374))(P, 0);
+    KLFC_PTR(void (__fastcall *)(DWORD, DWORD, DWORD), klfc_vf(P, 0x370))(P, 0, act);
+    klfc_put(P + 0xa1c, &g->old, 4, "grenade spawn: restore");
+    (void)zero;
+    klog("grenade spawn: started; player action now %08lx (ours %08lx)", klfc_cur_act(P), act);
+    g->ok = 1; return 1;
+}
+static void klgr_spawn(DWORD P)
+{
+    struct klgr_sp g; DWORD word = 0, rec[4] = {0, 0, 0, 0}; int idx = klgr_find(P); WORD w2 = 0; DWORD inv, arr, cnt, obj = 0, bind, item, kind; DWORD now = GetTickCount();
+    if (now - klgr.sp_at < 3000 && klgr.sp_at) return;
+    klgr.sp_at = now;
+    if (idx < 0) { if (klgr.sp_n++ < 3) klog("grenade spawn: no grenade in the inventory"); return; }
+    if (klh_rcb_ra != (DWORD_PTR)KLH_VA(KLFC_RCB_RA)) { klog("grenade spawn: not the main loop's gameplay call: skipped"); return; }
+    memset(&g, 0, sizeof g); g.P = P;
+    if (klinv_inv(P, &inv, &arr, &cnt) && klinv_entry(arr, (DWORD)idx, &obj, &bind, &item, &kind)) {}
+    klh_rd(P + 0x239c, &word, 2); word &= 0xffff;
+    __try { g.clip = ((DWORD (__fastcall *)(void *, void *, DWORD))(DWORD_PTR)KLH_VA(KLGR_CLIP))((void *)(DWORD_PTR)P, 0, word); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { klog("grenade spawn: fault in 0x59d550"); klgr.spawn = 0; return; }
+    if (g.clip > 0x10000 && klfc_ok(g.clip, 0x10)) { klh_rd(g.clip, rec, 16); klh_rd(g.clip + 2, &w2, 2); }
+    klog("grenade spawn: step 2a: index %lu -> clip %08lx (frames word +2 = %d) bytes %08lx %08lx %08lx %08lx; inventory entry %d item obj %08lx",
+         word, g.clip, (int)(short)w2, rec[0], rec[1], rec[2], rec[3], idx, obj);
+    klgr.sp_obj = obj; klgr.sp_p = P;
+    klgr_itemvel(obj, "before");
+    if (klgr.spawn >= 2) {
+        if (!klfc_ok(g.clip, 0x68)) { klog("grenade spawn: step 2b skipped: no usable clip (index %lu)", word); return; }
+        if (!klfc_guard("grenade spawn", klgr_sp_body, &g)) klog("grenade spawn: step 2b faulted or refused (a1c restored)");
+        klgr_itemvel(obj, "at once");
+        klgr.sp_at = now; klgr.after_at = 0; klgr.sp_n = 0;
+    }
+}
+#endif
+
 static void klgrenade_tick(int game_thread)
 {
     DWORD now, p, pid = 0; int down, edge;
@@ -156,6 +220,13 @@ static void klgrenade_tick(int game_thread)
         klgr.after_at = 0;
         if ((p = klinv_player()) && p == klgr.after_p) __try { klgr_dump(p, "1.5 s after release"); } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
+#ifdef KLHOOK_TEST
+    if (klgr.spawn >= 2 && klgr.sp_obj && klgr.sp_p) {                      /* +0.5 s / +1.5 s after a started throw: did the item get a velocity? */
+        static DWORD t0; static int stage;
+        if (klgr.sp_at != t0) { t0 = klgr.sp_at; stage = 0; }
+        if (stage < 2 && now - t0 >= (stage ? 1500u : 500u)) { stage++; __try { klgr_itemvel(klgr.sp_obj, stage == 1 ? "+0.5 s" : "+1.5 s"); } __except (EXCEPTION_EXECUTE_HANDLER) {} }
+    }
+#endif
     if (!down && !klgr.was && !(klgr.watch_until && (int)(klgr.watch_until - now) > 0)) return;   /* idle: no player reads */
     if (!(p = klinv_player())) { klgr.was = down; klgr.holding = 0; return; }   /* a held key never re-edges after a player gap */
     if (klgr.watch_until && (int)(klgr.watch_until - now) > 0 && (klgr.probe || klgr.presses <= klgr.logn)) {   /* bit changes after a press */
@@ -174,6 +245,9 @@ static void klgrenade_tick(int game_thread)
         }
     }
     edge = down && !klgr.was;
+#ifdef KLHOOK_TEST
+    if (edge && klgr.spawn) __try { klgr_spawn(p); } __except (EXCEPTION_EXECUTE_HANDLER) { klog("grenade spawn: fault: spawn off"); klgr.spawn = 0; }
+#endif
     __try {
         if (edge) { klgr.press_at = klgr.last_sample = now; klgr.samples = 0; if (klgr.probe && !klgr.thr) klgr.watch_until = now + 3000; }
         if (klgr.thr) {
@@ -197,7 +271,10 @@ static void klgrenade_init(void)
     int v;
     v = (int)GetPrivateProfileIntA("Grenade", "Probe", 0, klh_ini); klgr.probe = v < 0 ? 0 : v > 2 ? 2 : v;
     klgr.thr = GetPrivateProfileIntA("Grenade", "Throw", 0, klh_ini) != 0;
-    if (!klgr.probe && !klgr.thr) return;
+#ifdef KLHOOK_TEST
+    v = (int)GetPrivateProfileIntA("Grenade", "Spawn", 0, klh_ini); klgr.spawn = v < 0 ? 0 : v > 2 ? 2 : v;
+#endif
+    if (!klgr.probe && !klgr.thr && !klgr.spawn) return;
     v = (int)GetPrivateProfileIntA("Grenade", "Key", 0x47, klh_ini); klgr.key = v < 1 || v > 0xfe ? 0x47 : v;
     v = (int)GetPrivateProfileIntA("Grenade", "HoldMs", 3000, klh_ini); klgr.hold_ms = v < 100 ? 100 : v > 10000 ? 10000 : v;
     klgr.actbit = GetPrivateProfileIntA("Grenade", "ActBit", 1, klh_ini) != 0;
@@ -216,6 +293,7 @@ static void klgrenade_init(void)
         klog("grenade throw: on; Key=0x%02x HoldMs=%lu ActBit=%d Log=%d; offline Arcade, local player, only with a grenade in the inventory. re\\grenades_1025.md step 1",
              klgr.key, klgr.hold_ms, klgr.actbit, klgr.logn);
     else klog("grenade probe: on (log only, no writes); Key=0x%02x; offline Arcade, local player. re\\grenades_1025.md step 0", klgr.key);
+    if (klgr.spawn) klog("grenade spawn: on (Spawn=%d, TEST build): G press logs the clip lookup%s", klgr.spawn, klgr.spawn >= 2 ? " and starts a ZFFActionThrow with that clip in [P+a1c]" : "");
     if (klgr.probe >= 2) klog("grenade probe2: on (also the throw-action fields on press / release; reads only)");
 }
 

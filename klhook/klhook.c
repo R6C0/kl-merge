@@ -790,7 +790,10 @@ static double klh_st_freq;                                    /* ticks per ms */
 static BOOL (WINAPI *klh_st_ismex)(LONG);                    /* user32 InSendMessageEx(NULL) -> ISMEX_* flags (looked up, not linked) */
 typedef struct { UINT msg; LONG n, nsent; double ms, max; } klh_st_msg_t;
 static klh_st_msg_t klh_st_w[KLH_ST_N];
-typedef struct { LONG n, over10; double ms, wp_ms, max; } klh_st_pk_t;
+/* n_mm / ms_mm = calls that returned WM_MOUSEMOVE, n_no / ms_no = calls that returned FALSE (queue empty), the rest returned another message */
+typedef struct { LONG n, over10, n_mm, n_no, throttled; double ms, wp_ms, max, ms_mm, ms_no; } klh_st_pk_t;
+/* [Input] MouseMoveMs (2026-10-25, PEEK lane; default 0 = off, nothing changes): see klh_st_real. */
+static int klh_mm_ms; static double klh_mm_last;
 static klh_st_pk_t klh_st_pk[2];                              /* 0 = PeekMessageA, 1 = PeekMessageW */
 static double klh_st_wp_acc;                                  /* ms in top-level (depth 0) window procedures, running total */
 static volatile LONG klh_st_depth;
@@ -858,16 +861,45 @@ static LRESULT klh_st_pass(HWND h, UINT m, WPARAM w, LPARAM l)
     return r;
 }
 
+/* MouseMoveMs=N (N>0): a pump call "any message, remove" (hwnd 0, filter 0..0, PM_REMOVE) hands out WM_MOUSEMOVE at most once every N ms.
+   WHY (2026-10-25 17:25 - 17:39 log, DM01): ~0.3 ms of USER32 PeekMessage time for every mouse move the pump retrieves (1.1 s of the main thread per
+   10 s at ~190 moves/s; the window procedures take 5 ms of it, the rest is the hook chain run inside the Peek: gameoverlayrenderer.dll+0x992bc,
+   ReShade32.dll+0x5fd99 / +0x5ff67 are on the stack of 25 of 26 samples). A WH_GETMESSAGE-type hook runs once per message that Peek RETURNS, so a
+   move that is not returned costs the hooks nothing. Inside the window the call is split in two filtered calls (0..0x1FF, then 0x201..0xFFFF) so the
+   queued move stays where it is (the kernel keeps one coalesced move; the latest position is delivered after the window). Every other message,
+   WM_PAINT / WM_QUIT / WM_TIMER / buttons / wheel / keys, still comes out in the same call. GUESS (not run live): that the hook cost is per returned
+   message and not per hit-test inside the kernel; the 10 s line's 'mm' and 'no' columns say what a returned move costs. Unknown: whether the game
+   reads WM_MOUSEMOVE at all (it imports GetCursorPos / SetCursorPos; mouse look is probably not message driven); 8 .. 16 ms keeps 60 .. 125 moves/s. */
+static BOOL klh_st_real(int which, LPMSG msg, HWND h, UINT a, UINT b, UINT f, int *thr)
+{
+    BOOL (WINAPI *real)(LPMSG, HWND, UINT, UINT, UINT) = which ? klh_real_pkw : klh_real_pka; BOOL r;
+    if (klh_mm_ms > 0 && a == 0 && b == 0 && (f & 1 /* PM_REMOVE */)) {
+        double now = klh_st_now();
+        if (now - klh_mm_last < (double)klh_mm_ms) {
+            *thr = 1;
+            r = real(msg, h, 0, 0x1FF, f);
+            if (!r) r = real(msg, h, 0x201, 0xFFFF, f);
+            return r;
+        }
+        r = real(msg, h, a, b, f);
+        if (r && msg->message == 0x0200) klh_mm_last = now;
+        return r;
+    }
+    return real(msg, h, a, b, f);
+}
+
 static BOOL klh_st_peek(int which, LPMSG msg, HWND h, UINT a, UINT b, UINT f)
 {
-    BOOL r; double t0, dt, wp0; klh_st_pk_t *k = &klh_st_pk[which];
-    if (!klh_st_on) return (which ? klh_real_pkw : klh_real_pka)(msg, h, a, b, f);
+    BOOL r; double t0, dt, wp0; klh_st_pk_t *k = &klh_st_pk[which]; int thr = 0;
+    if (!klh_st_on) return klh_st_real(which, msg, h, a, b, f, &thr);
     t0 = klh_st_now(); wp0 = klh_st_wp_acc;
     if (klh_st_peek_n++ == 0) klh_st_peek_t0 = t0;
-    r = (which ? klh_real_pkw : klh_real_pka)(msg, h, a, b, f);
+    r = klh_st_real(which, msg, h, a, b, f, &thr);
     if (--klh_st_peek_n < 0) klh_st_peek_n = 0;
     dt = klh_st_now() - t0;
     k->n++; k->ms += dt; k->wp_ms += klh_st_wp_acc - wp0; if (dt > k->max) k->max = dt; if (dt >= 10) k->over10++;
+    if (thr) k->throttled++;
+    if (!r) { k->n_no++; k->ms_no += dt; } else if (msg->message == 0x0200) { k->n_mm++; k->ms_mm += dt; }
     return r;
 }
 static BOOL WINAPI klh_w_pka(LPMSG msg, HWND h, UINT a, UINT b, UINT f) { return klh_st_peek(0, msg, h, a, b, f); }
@@ -878,10 +910,15 @@ static void klh_st_init(void)
     klh_st_on = GetPrivateProfileIntA("Stall", "Trace", 1, klh_ini) != 0;
     klh_st_msgms = GetPrivateProfileIntA("Stall", "StallMsgMs", 20, klh_ini);
     if (klh_st_msgms < 1) klh_st_msgms = 1;
-    if (!klh_st_on) { klog("stall: trace off ([Stall] Trace=0)"); return; }
+    klh_mm_ms = GetPrivateProfileIntA("Input", "MouseMoveMs", 0, klh_ini);
+    if (klh_mm_ms < 0) klh_mm_ms = 0; if (klh_mm_ms > 100) klh_mm_ms = 100;
+    if (!klh_st_on) klog("stall: trace off ([Stall] Trace=0)");
+    if (!klh_st_on && !klh_mm_ms) return;
     {
         int a = klh_iat("USER32.dll", "PeekMessageA", (void *)klh_w_pka, (void **)&klh_real_pka);
         int w = klh_iat("USER32.dll", "PeekMessageW", (void *)klh_w_pkw, (void **)&klh_real_pkw);
+        if (klh_mm_ms) klog("input: MouseMoveMs=%d: the game's pump gets WM_MOUSEMOVE at most once every %d ms (PeekMessageA %s, W %s wrapped); 0 = off", klh_mm_ms, klh_mm_ms, a ? "yes" : "no", w ? "yes" : "no");
+        if (!klh_st_on) return;
         HMODULE u = GetModuleHandleA("user32.dll");
         if (u) klh_st_ismex = (BOOL (WINAPI *)(LONG))GetProcAddress(u, "InSendMessageEx");
         klh_st_now();
@@ -932,11 +969,14 @@ static void klh_st_say(void)
     {
         klh_st_pk_t a = pk[0], w = pk[1];
         a.n -= pprev[0].n; a.ms -= pprev[0].ms; a.wp_ms -= pprev[0].wp_ms; a.over10 -= pprev[0].over10;
+        a.n_mm -= pprev[0].n_mm; a.ms_mm -= pprev[0].ms_mm; a.n_no -= pprev[0].n_no; a.ms_no -= pprev[0].ms_no; a.throttled -= pprev[0].throttled;
         w.n -= pprev[1].n; w.ms -= pprev[1].ms; w.wp_ms -= pprev[1].wp_ms; w.over10 -= pprev[1].over10;
         if (a.n || w.n || shown) {
             klog("%s", line);
             klog("stall: 10 s PeekMessage: A %ld calls %.1f ms (in window procs %.1f, own %.1f; %ld over 10 ms; longest ever %.1f) | W %ld calls %.1f ms (in window procs %.1f, own %.1f; %ld over 10 ms; longest ever %.1f)",
                  (long)a.n, a.ms, a.wp_ms, a.ms - a.wp_ms, (long)a.over10, pk[0].max, (long)w.n, w.ms, w.wp_ms, w.ms - w.wp_ms, (long)w.over10, pk[1].max);
+            if (a.n) klog("stall: 10 s PeekMessageA by result: WM_MOUSEMOVE %ld calls %.1f ms (%.3f ms each) | empty %ld calls %.1f ms | other messages %ld calls %.1f ms | MouseMoveMs=%d throttled %ld calls",
+                 (long)a.n_mm, a.ms_mm, a.n_mm ? a.ms_mm / a.n_mm : 0.0, (long)a.n_no, a.ms_no, (long)(a.n - a.n_mm - a.n_no), a.ms - a.ms_mm - a.ms_no, klh_mm_ms, (long)a.throttled);
         }
         pprev[0] = pk[0]; pprev[1] = pk[1];
     }
