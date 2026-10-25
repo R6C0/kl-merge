@@ -55,6 +55,30 @@ SPECS = {
         # NO cars / SWAT: census 106 actors / 54 squads already past the proven 99 / 55 (re/dm_overhaul_1025.md 1.2), a police car's cell costs actors.
         cars=None,
     ),
+    # ---- DM06 A Walk in the Park (F04 slot), 2026-10-25.  The park is open ground: no roads, and kl_interact_graft.door_hosts finds 0 leaves -> no kick doors.
+    # Cars drive on the open grass fields the walk mesh shows (GUESS: the ground is drivable; the cars are animated bodies, no real driving).  The SWAT are
+    # the map's own JPN_DrugSquad actors (DM06 has no police: the FA 'police' are the drug gangs; anmcol Mercenary_04, read from ZLNKOBJ[2] 2026-10-25).
+    # The floor here is ~220..290, not 0: the car lanes carry y (plan 'y', kl_dm02_mall_1025._lane_y).  Measured with C:/kl_build_1024/overhaul_1025a/lanes06.py.
+    'DM06': dict(
+        slot='F04', file='F04_Main.zip', title='A Walk in the Park', tag='.before-1025overhaul2',
+        doors=[],
+        # ext: nav wall edges (spot_near snaps to the nearest): the bridge deck y 500 (rails at x 500 / 1000), the pavilion level y 600, and three stretches of the south
+        # route.  Existing KL_Ext_1..4 stand at (46,-1500) (1202,-2690) (-1237,-94) (90,-4029).  GUESS: a nav wall edge is a wall or a rail.
+        ext=[(500.0, 4500.0, 500.0), (1000.0, 4000.0, 500.0), (1000.0, 2500.0, 600.0), (-2500.0, -2000.0, 200.0), (1000.0, -3500.0, 200.0), (-1000.0, -5500.0, 200.0)],
+        fuel=[(750.0, -8750.0, 220.0), (-1000.0, -4500.0, 220.0), (2500.0, -3500.0, 220.0)],
+        # cars: two on the south field (open ground ~30 m east of the escape point (-1040,-6721)) coming from the south, stops at z -7750 / -7625; a third mid-route
+        # on the flat west of the central bridge (z -1250, from the west).  Measured clear runs: x 2000 z -10125..-7750 (clearance >= 250), x 1625 z -10000..-7625
+        # (>= 200), z -1250 x -3000..-1375 (>= 200).  Posts (cells06.py): >= 330 from the stops, >= 260 from the lanes, main part, clearance >= 100.
+        cars=dict(
+            y={12579: 280.0, 12754: 262.0, 12929: 220.0},
+            paths={12579: [(2000.0, -10125.0), (2000.0, -7750.0)], 12754: [(1625.0, -10000.0), (1625.0, -7625.0)], 12929: [(-3000.0, -1250.0), (-1375.0, -1250.0)]},
+            cells={1: [(1250.0, 244.0, -7750.0), (2375.0, 271.0, -8375.0)], 2: [(1250.0, 242.0, -8125.0), (1000.0, 222.0, -7250.0)],
+                   3: [(-1625.0, 220.0, -1625.0), (-1625.0, 219.0, -875.0)]},
+            wave3='AI_Enemies!JPN_DrugSquad_Island_01',   # 2 Mercenary_04 actors in 2 groups + a ZSquadScript: the clone template
+            backstop=60.0,            # GUESS: the crew needs ~60 s from the bridge end to the south; the lanes take ~10 s
+            anm_col='Mercenary_04',
+            caps=(99, 64)),           # census 21 / 18 + 6 / 3 = 27 / 21, far below the proven 99 / 55
+    ),
 }
 
 

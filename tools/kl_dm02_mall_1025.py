@@ -112,6 +112,12 @@ def heading(q):
     return 2.0 * math.atan2(q[1], q[3])
 
 
+def _lane_y(plan, k):
+    """Floor height of car body k's lane: plan['y'] (a number or {body: number}), default 0.0 (the DM01/DM01B/DM02 street level)."""
+    y = plan.get('y', 0.0)
+    return float(y[k] if isinstance(y, dict) else y)
+
+
 def plan_lane(d, tracks, plan):
     """The lane of a plan (see cars): each car's donor position keys laid by arc fraction on its own polyline [(x, z), ...] (y 0), and its rotation
     rows turned to follow the polyline's tangent (kl_map_escape.van_prepare's rule, as kl_dm01cars_1025.cars(plan=)).  -> ({body: [(x, y, z)]}, {rotation
@@ -125,7 +131,7 @@ def plan_lane(d, tracks, plan):
         if K.npos != len(pts) or K.pos[0] != pts[0]:
             raise ValueError('car %d: the key table is not the lane' % k)
         old = ME.Poly(pts)
-        new = ME.Poly([(x, 0.0, z) for x, z in plan['paths'][k]])
+        new = ME.Poly([(x, _lane_y(plan, k), z) for x, z in plan['paths'][k]])      # y: the plan's floor height (DM06 park floor is ~270, not 0)
         lane[k] = [new.at(old.cum[i] / old.len * new.len) for i in range(len(pts))]
         first = {}
         for f in range(K.frames - 1, -1, -1):
@@ -200,14 +206,14 @@ def cars(src, dst, log=print, plan=None):
         lane, rotnew = plan_lane(d, tracks, plan)
     stops = [lane[k][-1] for k in C.BODIES]
     for st in stops:
-        a = nav.at(st[0], 0.0, st[2], dy=60.0)
+        a = nav.at(st[0], st[1], st[2], dy=60.0)
         if a is None or nav.part[a[0]] != main:
             raise ValueError('stop %s is not on the main nav part' % (st,))
     off = []
     for k in C.BODIES:
         for p in lane[k][::6] + [lane[k][-1]]:
-            a = nav.at(p[0], 0.0, p[2], dy=60.0)
-            if a is None or nav.part[a[0]] != main or nav.clearance(p[0], 0.0, p[2], limit=200.0) < 100.0:
+            a = nav.at(p[0], p[1], p[2], dy=60.0)
+            if a is None or nav.part[a[0]] != main or nav.clearance(p[0], p[1], p[2], limit=200.0) < 100.0:
                 off.append((round(p[0]), round(p[2])))
     if off:
         raise ValueError('lane points off the open street (main part, clearance 100): %s' % off[:6])
@@ -418,7 +424,7 @@ def cars(src, dst, log=print, plan=None):
         raise ValueError('.prm does not round-trip')
     # ---- the ANM
     anm_raw, nclip, c0, c1 = C.anm_pass(B['.ANM'], kl_anm.Anm(AJ.stock_anm(C.DON), 'dd'), tgt_col=anm_col)
-    say('  .ANM: %d F03_Police slots merged into %s (%d -> %d clips)' % (nclip, ANM_COL, c0, c1))
+    say('  .ANM: %d F03_Police slots merged into %s (%d -> %d clips)' % (nclip, anm_col, c0, c1))
     new = dict(B.files)
     new[B.ext['.prp']], new[B.ext['.gms']], new[B.ext['.buf']] = prp, kl_gms.pack(gms), buf
     new[B.ext['.oct']], new[B.ext['.rmi']], new[B.ext['.rmc']] = octk.pack(), rmin.pack(), rmcn.pack()
