@@ -9,6 +9,8 @@ sqdump.py + dm01_squads.txt, pos2.py, dpos.py, r2c.py, nav.py, props.py, dens.py
 Owner (2026-10-25): "the hot coffee how the enemies flow are almost perfect, they need a bit more pathways and smarter to hide and get
 into cover n stuff theyre almost perfect maybe take notes from the campaign in dog days on the harder difficulties?"
 
+> CRITIC REVIEW 2026-10-25 (adversarial re-check against the live zip): section 11 lists what was wrong and the corrected build list. Where sections 4, 5.4, 6 and 9 disagree with section 11, section 11 wins.
+
 ## 0. Result in six lines
 1. The campaign's "smart" AI is NOT a difficulty table. It is structure: RunToCover (45-141 routs per level) + RandomTrigger branches +
    DefendPlayerPos + many cover boxes. Level-side difficulty switching exists in only 4 levels (L01/L02/L03/L08) and only changes
@@ -16,7 +18,7 @@ into cover n stuff theyre almost perfect maybe take notes from the campaign in d
 2. DM01 has the opposite shape: 0 RunToCover, 0 DefendPlayerPos, 0 RandomTrigger on the enemy side, 156 cover boxes, and
    the three OldWaves squads are a bare Defend rout (no modifier, no Hunt, no Flank, no event lists).
 3. Cover is missing exactly where the enemies stand: of 54 enemy Defend posts, 15 (28 %) have NO cover box within 5 m and 25 (46 %) have at most 1.
-   The campaign (L07) has 0 of 57 with none. The shop room (x1900-3900, z21900-23600) holds 0-3 boxes per 10 m cell.
+   The campaign (L07) has 0 of 57 with none (best case: L05 8/36 = 22 %, L10 4/58, stock FA F01 27/201 = 13 %, F07 22/308 = 7 % have none, so DM01's 28 % is the worst, not a wild outlier). The shop room (x1900-3900, z21900-23600) holds 0-3 boxes per 10 m cell.
 4. The nav mesh has exactly TWO approach lanes into the heister corridor and one hard choke (section 3). "More pathways" = use the east loop
    and the west alley that the mesh already has; do not touch the mesh.
 5. Build = 14 new cover boxes on real props (section 4), RunToCover entries + a RandomTrigger on 5 squads (section 5), 4 squad-modifier
@@ -43,7 +45,7 @@ into cover n stuff theyre almost perfect maybe take notes from the campaign in d
 | ZDefendBehaviourRout | 0 s, 1 refs Pos#nn, 2 b, 3 b, 4 EDefendMoveSet, 5 EDestinationFormation, 6 s, 7 refs (fires on arrival), 8 b, 9 b | hold posts | DM01 235, the only enemy rout besides Hunt/Flank |
 | ZDefendPlayerPosBehaviourRout | 0 refs, 1 b, 2 b | go to the nearest player's position (the push) | campaign 11-65 per level, DM01 0 |
 | ZFlankingBehaviourRout | 0 s LeftFlank#1, 1 s RightFlank#1, 2 refs, 3 b, 4 b | two child points; the squad splits to them | campaign L07 10, L08 17; DM01 9 (all fixed world points) |
-| ZHuntBehaviourRout | 0 s SearchBox, 1 b, 2 refs, 3 b, 4 b | search a box (field 1 = 1 on CornerShop) | DM01 5; boxes 4600x4700 centred (4207-4399, 21916-21980) = the shop/lot, NOT toward the heisters |
+| ZHuntBehaviourRout | 0 s SearchBox, 1 b, 2 refs, 3 b, 4 b | search a box (field 1 = 1 on CornerShop) | DM01 5; boxes 4600x4700 centred (4207-4399, 21916-21980) = the shop/lot, NOT toward the heisters. CORRECTION: CheckFront's box is not identical, see 11 |
 | ZRandomTrigger | 3-4 outcome lists | picks one list | stock FA 22-70 per level, campaign up to 11, DM01 47 (all in the heister bot squads, none on the enemy side) |
 | ZSquadModifierBehaviour | 29 fields, see 6 | squad knobs | DM01 45 modifiers, 20 loose / 22 tight, 7 vision x2 |
 
@@ -164,7 +166,7 @@ No difficulty row to copy (1.4). Copy what the campaign/stock FA set on enemy sq
 | field | name | value to set on the squads of 5.x | evidence |
 |---|---|---|---|
 | 9 | defend distance | `eDM_Tight` for the holders (KL_Hold!Shop, hall Floor/Top), `eDM_Loose` for the movers (Wave_1 rest, KL_East, KL_West) | stock FA F04 30 Tight / 7 Loose; the heister bots use both |
-| 14 | vision factor | `eVIM_Factor_2_0` on movers (DM01 has it on 7 already), `Factor_3_0` on KL_East (flank sees across the lot) | campaign L04 3.0 x2, L11 3.0 x2 |
+| 14 | vision factor | `eVIM_Factor_2_0` on movers (DM01 has it on 7 already). NOT 3.0 (see 11) | stock FA sets 2.0 on 13 squads and 4.0 on 10; the campaign sets 3.0 on only 4 modifiers |
 | 15 | cover use | `eCOM_UseCovers` explicitly on every squad that has RunToCover (default NotSet; the stock FA sets it on 1-3 squads per map) | F02 2, F03 3, L04 7, L11 10 |
 | 19 | blind fire | leave NotSet (campaign sets `DisableBlindfire` on 25 squads = the default allows blind fire) | L01 9, L10 4, L11 10 |
 | 0 | leash | `eLM_Unleash` once the squad starts to move (as the L07 Randomspawn) | L07 |
@@ -206,3 +208,42 @@ OPEN: the three squads' real alarm behaviour (which Flank wins when two chains n
 ## 10. Next step for the builder
 1. Wait for dm01fb to finish and read its output md5. 2. Build `tools/kl_dm01ai_1025.py` (new) on that zip: cover (4), points + routs (5), modifiers (6).
 3. `check`, `diff`, `kl_cover_vet`; hand to the autotest only after the owner clears the queue. Do not install in this task.
+
+## 11. Critic review (2026-10-25, scripts `crit_*.py` in `C:/kl_build_1024/dm01ai_research_1025a/`)
+Checked against the live zip c0e7b8ee and the exes' schemas. Verdict: the diagnosis (no RunToCover, bare Defend waves, about 28 % of posts without cover) and the nav lanes hold. The cover list, one Hunt claim, the flank plan and the vision value did not.
+
+### 11.1 Confirmed
+- All classes and field numbers in 1.2 and 6 exist in `kl_prpjoin.schema('dd')` (RunToCover 3 fields, PosInfo 6, DefendPlayerPos 3, Flanking 5, Hunt 5, Defend 10, SquadModifier 29, RandomTrigger 9 = 1 b + 4 h + 4 ref lists). Modifier fields 0, 9, 14, 15, 19 and enums eLM_Unleash, eDM_Tight/Loose, eVIM_Factor_2_0/3_0, eCOM_UseCovers exist.
+- DM01 has 0 RunToCover, 0 DefendPlayerPos, 9 Flank, 5 Hunt, 235 Defend (census.json). Campaign RunToCover is 41-141 per level (L09 only 2), DefendPlayerPos 11-65 (L09 0).
+- Weak posts: 15 of 54 enemy posts with no box in 500, 25 with <=1 (dpos.py reproduced). Small drifts: Wave_2 #04 is 607 from a box (not 741), KL_Hold #02 774 (not 796).
+- Lanes: centre 9402 from the Bentleys, east loop 10731 (x1.14); the south part of the two routes shares only 2 of 8 polygons, so they are distinct. West alley 18342 vs 16756 (x1.09) from W3. The two chokes (1384,27006) and (1518,27699) lie on the SAME route one after the other (path index 14 and 15 of 18); both lanes run through them, nothing is parallel.
+- L08 SM_EasyNorm/Hard/Extreme differ only in eHealthMod 30/40/50 %.
+
+### 11.2 Wrong or overstated
+1. Section 4 cover list. Measured collision extents (x/y/z, cm): pillars 41 x 415 x 20 (a slim post, not cover; a fitted box would be far larger than the prop). Pallet_01 24 high, Pallet_02 64 high (not cover). Box_B_02/_03 have NO collision (bullets pass, so a cover box there is a lie). BoxBrown_E_03 50 x 157 x 100 (small). Flower boxes 407 x 55 x 35 (only 55 high; existing low boxes are about 110 high, so the AI would crouch behind something that does not hide it). Only the ShopDesk (210 x 120 x 540) is a clean cover prop. Alternatives found by a collision scan (no box within 150): `woodgroupa_01` (2894,23081) 345 x 203 x 14 (thin screen, H), `ColiObj_bloacker_01` (3822,22836) 146 x 184 x 139, `PC0300_USA_BoxBrown_E_02` (5109,21846) and `_01` (5114,21870) 99 x 160 x 61 (use ONE, they are 25 apart), `BoxBrown_E_03` (5549,21840). The shop room (x1900-3900) has essentially no other cover prop: the honest fix there is to MOVE posts to the existing boxes (Dumpsters 341-507 away) or add the desk, not to invent boxes.
+2. "12 static car copies already exist": there are 17 `_KM_` boxes (12 `CoverBoxM_KM` + 5 `CoverBoxH_KM`).
+3. 5.4 / 1.2 "the three Hunt boxes are identical": KitchenBoy (4207,2,21916), CornerShop and FrontMall_01/02 (4399,25,21980) are; CheckFront's SearchBox is stored at local (4399,25,21980) under a HuntBehaviour whose own position is (6263,4,23424), so `B.at` gives (10662,29,45404), 18 km from any cover or nav. CheckFront's Hunt searches empty space (or the engine ignores the parent; unresolved, but either way the plan "move the centre to (3800,26000)" must set the box so its WORLD centre is the target, and the builder must check by `B.at`). This is a probable existing defect worth fixing on its own.
+4. Section 1.3 "campaign idiom RunToCover -> RandomTrigger -> Flank/Defend": the RandomTrigger shape is STOCK FA (F04 35, F07 70, F09 60); the campaign has 0-11 RandomTriggers (none in L01, L03, L05, L10) and its pattern is RunToCover + DefendPlayerPos. Flank is campaign-only in 6 levels and no stock FA map uses it (bots_dynamic.md); the 9 in DM01 are ours/Dead Men's and their behaviour was never read from code. So new Flank points (5.1, 5.4b, 5.5) rest on a guess; use Defend chains with `eDMS_Run`/Sprint and RunToCover (both proven in F04/F07) for the lane splits.
+5. Section 6 vision 3.0: the campaign leaves vision NotSet on 884 modifiers and sets 30 x 1.0, 16 x 0.1 and only 4 x 3.0; stock FA sets 2.0 (13) and 4.0 (10). Use 2.0 only. `eCOM_UseCovers` is set on just 22 campaign squads against 87 DontUseCovers; the default NotSet already uses covers, so adding it changes nothing proven (harmless, low value).
+6. Section 1.4 "level difficulty only gates health/gates/vans": also L02 gates 12 `Way##` waypoints on Easy-only filters (enemy routes differ by difficulty), L01 gates geometry/throwables, L03 vans. Still no cover or aggression change, so the conclusion (copy structure, not a table) stands. The "Filter exists in 49/23/38/7" counts include SinglePlayer/Coop filters; difficulty filters are L01 4, L02 10, L03 12, L08 4.
+7. Nav clearance of proposed points: the west alley start (1891,20193) has clearance 34 and Wave_1 Pos#08/#09 (1810,22570/22930) 55, under CLEAR 60; a post moved "100-150 beside a box" lands in mesh-edge zones (prop footprints are holes in the mesh; the mesh edge beside them has clearance 2-18). East-loop narrowest polygons: clearance 31 (62 wide) and 115, so "4 men in a line" is NOT shown. Run `Nav.clearance` on every point.
+8. DefendPlayerPos is not a pure guess: bots_dynamic.md read 0x7263d0 = nearest active player slot (no range limit), 266 uses, all on campaign enemies, none in FA. The unknown is only its behaviour with FA's 16 ZFFPlayer slots (assumes only the human is active).
+
+### 11.3 Corrected build list with confidence
+| # | item | confidence | note |
+|---|---|---|---|
+| 1 | Cover: ShopDesk H (2950,0,22886) | high | collision 210x120x540, nothing within 635 |
+| 2 | Cover: `woodgroupa_01` H, `ColiObj_bloacker_01` M/H, `BoxBrown_E_03` + ONE of `_E_02/_E_01` M | medium | real collision, sizes small; vet with `kl_cover_vet` |
+| 3 | Cover: 4 flower boxes M | low | 55 cm high; only if a look in game shows a crouch hides, otherwise skip |
+| 4 | DROP pillars (4), pallets (2), Box_B_02/_03 | high | measured above |
+| 5 | Move the 15 no-cover posts onto existing boxes where one lies within about 600 (Dumpsters, KM boxes); every point on-mesh with clearance >= 60 | medium | cheaper and surer than new boxes; posts with nothing near (Wave_2 #04, KitchenBoy #06) stay |
+| 6 | RunToCover (PosInfo field 5 = the actor group path of that squad; one per actor) before the existing Defend on Wave_1, Wave_2 and the shop holders | medium-high | stock F04/F07 and Retomoto run exactly this |
+| 7 | RandomTrigger (4 lists, fill 2 or 3) choosing between lanes, built by cloning F07's `10_/20_RunToCover` pattern | medium-high | stock-proven shape |
+| 8 | Lane split with Defend chains: KL_East (4 of Wave_2) through (6793,25190), (6139,26263), (4368,26662) with `eDMS_Run`; KL_West (4 of Wave_3) through (1614,21530), (1532,22524), start point moved to clearance >= 60 | medium | route lengths proven; whether bots keep the lane and arrive staggered is not |
+| 9 | Fix CheckFront Hunt box (world centre check) and move Kitchen/Corner/FrontMall boxes to (3800,26000) | medium | 4600x4700 arithmetic checked; effect on alarm behaviour untested |
+| 10 | New Flank points (5.1, 5.4b, 5.5) | low | no stock FA map uses Flank; replace by item 8 style Defend chains |
+| 11 | Modifiers: eDM_Tight holders, eDM_Loose movers, vision 2.0 on movers | low-medium | effect of defend distance on leaving posts is a guess; vision 3.0 dropped |
+| 12 | DefendPlayerPos push on one remainder squad after 60 s | medium-low | code read, never run in FA |
+| 13 | Budget (68 actors, 33 squads) | high | counts reproduced (68 ZFFActor) |
+
+Order stays: dm01fb base zip, posts/points first (on-mesh check), cover, routs, modifiers; `kl_cover_vet scan` and `kl_old_waves check` after each. Nothing built or installed by this review.
