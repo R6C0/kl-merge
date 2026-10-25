@@ -17,6 +17,7 @@ import os
 import shutil
 import sys
 import tempfile
+import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -67,6 +68,12 @@ def build(src, dst, pin=None, log=print):
     try:
         os.makedirs(os.path.join(W, 'src'))
         shutil.copyfile(src, os.path.join(W, 'src', 'F01_Main.zip'))
+        # The ini files beside the zip name models NO entity names (KLWardrobe.ini Root=, KLGuns.ini Root=). kl_chars.put reuses every chunk the
+        # scene does not reach, and only knows these roots when the ini sits beside the zip it edits (Lv.side, wardrobe_roots). Without them the
+        # 16 wardrobe models of Last Call were turned into 16-byte stubs (found by the 1025 adversarial review, 17130 chunks).
+        for ini in ('KLWardrobe.ini', 'KLGuns.ini'):
+            if os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(src)), ini)):
+                shutil.copyfile(os.path.join(os.path.dirname(os.path.abspath(src)), ini), os.path.join(W, 'src', ini))
         model, aset, paths = FB.Level(os.path.join(W, 'src')).police()
         paths = [p.replace('ROOT' + chr(92), '', 1) for p in paths]
         log('police player objects: %d on model %s, set %s' % (len(paths), model, aset))
@@ -77,6 +84,19 @@ def build(src, dst, pin=None, log=print):
         frep = rep['fxc']
         n1 = len(C.G.read(lv['.prm'], 'dd').chunks) - 1
         log('.prm chunks %d -> %d, .TEX %.1f -> %.1f MB, fxc slim: %s' % (n0, n1, t0 / 1e6, len(lv['.TEX']) / 1e6, frep))
+        # guard: every chunk reachable from a KLWardrobe.ini / KLGuns.ini root must be byte identical to the live zip's
+        import re
+        live_prm = C.G.read(zipfile.ZipFile(src).read('Scenes/Locations/F01/F01_Main.prm'), 'dd')
+        for ini in ('KLWardrobe.ini', 'KLGuns.ini'):
+            ip = os.path.join(os.path.dirname(os.path.abspath(src)), ini)
+            if not os.path.isfile(ip):
+                continue
+            roots = [int(x) for x in re.findall(r'^Root=(\d+)', open(ip).read(), re.M)]
+            kinds, _a = C.G.walk(live_prm, roots)
+            new_prm = C.G.read(lv['.prm'], 'dd')
+            bad = [i for i in kinds if live_prm.chunks[i] != new_prm.chunks[i]]
+            if bad:
+                raise SystemExit('%s: %d chunks under its roots changed by the graft (first %s)' % (ini, len(bad), bad[:5]))
         out = os.path.join(W, 'out')
         lv.write(out, 'F01')
         zp = os.path.join(out, 'F01_Main.zip')
