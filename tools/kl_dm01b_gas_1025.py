@@ -89,8 +89,9 @@ def fuel_spots(B, nav):
     import kl_fa_bots as F
     starts = [B.at(k) for k in range(1, len(B.sc.nodes)) if B.sc.cls(k) == 'ZSpawnPoint' and 'Start' in B.sc.names[k]]
     out = []
-    for ax, az in FUEL_ANCHORS:
-        s = snap(nav, ax, az)
+    for anc in FUEL_ANCHORS:
+        ax, az = anc[0], anc[1]
+        s = snap(nav, ax, az, y=anc[2] if len(anc) > 2 else 0.0)      # optional 3rd value = floor level (DM02 has three floors)
         near = min(math.hypot(s[0] - p[0], s[2] - p[2]) for p in starts)
         if near < FUEL_MIN_START:
             raise ValueError('fuel can at %s is only %.0f cm from a start spawn' % (s, near))
@@ -193,6 +194,8 @@ def build(src_zip, dst_zip, pin=SRC_MD5, log=print):
     pS, matS, texS = G.read(B['.prm'], 'dd'), T.read_mat(B['.MAT']), T.read_tex(B['.TEX'])
     legs = []
     for dn, its in ((fdon, finsts), (edon, einsts)):
+        if not its:                                       # no extinguishers asked (EXT_WALL = []): nothing of that donor is appended
+            continue
         dprm = dn.prm
         roots = sorted({nd.model for it in its for nd in it['group'].walk() if nd.model and getattr(nd, 'donor', None)})
         kinds, args = G.walk(dprm, roots)
@@ -260,7 +263,7 @@ def build(src_zip, dst_zip, pin=SRC_MD5, log=print):
     octn.rooms[0][3] = O.join_trees(root3, O.build_tree([(slot1[made[id(topg)]] + 2, lo, hi)], root3.origin, root3.scale))
     octn.rooms[0][3].check()
     t0 = octn.rooms[0][0]
-    if t0 is not None:
+    if t0 is not None and einsts:
         # GUESS (cosmetic, as kl_interact_graft): the extinguisher explosion's two group-0 meshes are listed in tree 0 with a 3 m box.
         # The F03 donor lists NO fuel-can mesh in any tree 0 (only the group 1279 in room 19 tree 3), so none is added for them.
         items = []
@@ -308,6 +311,8 @@ def build(src_zip, dst_zip, pin=SRC_MD5, log=print):
         raise ValueError('.hrd has %d bytes, %d rigid instances need %d' % (len(hrd_old), n_rigid, 28 * n_rigid))
     hrd_new = []
     for dn, can_id, insts in ((fdon, FUEL_CAN, finsts), (edon, IG.EXT_CAN, einsts)):
+        if not insts:
+            continue
         dh = dn.hvk
         dc = dn.ent(can_id)
         dshape = next(s for s in dh.shapes if any(kl_hvk.ref(i) == dc.ref for i in s.inst))

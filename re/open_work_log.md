@@ -1,4 +1,6 @@
 2026-10-25 - lastcall5 (full 653a4f4c 90 civs 150/111; lite 7d7f80c7 71 civs 138/95) STAGED, rehearsed, NOT installed (pinned on live 858d3371,
+
+2026-10-25 - DM02 mall extras staged (doors, extinguishers, fuel cans, police cars): see re/dm02_mall_1025.md, zip 3cb6fca6, not installed.
 backup .before-1025lastcall5): 14 civilian looks (DD 41803/41556 variants + M05_A 6854/7265/6993/7115 grafted), bodyguards, bartender.
 Files: C:/kl_build_1024/lastcall5_1025a/stage/lc5_{full,lite}/main; tool tools/kl_club_lastcall5.py. Women under DD Civilian clips unproven.
 

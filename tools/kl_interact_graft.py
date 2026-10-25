@@ -284,11 +284,13 @@ def spot_near(B, nav, targets, keep_off=(), off=130.0, r=600.0, apart=300.0):
     A target with no candidate raises (the plan then needs another target rather than a silent drop)."""
     cands = wall_cands(B, nav)
     out = []
-    for tx, tz in targets:
+    for t_ in targets:
+        tx, tz = t_[0], t_[1]
+        ty = t_[2] if len(t_) > 2 else None             # optional third value: the floor height (a target (x, z) alone takes any floor)
         best = None
         for c in cands:
             d = math.hypot(c[0] - tx, c[2] - tz)
-            if d > r or any(math.hypot(c[0] - k[0], c[2] - k[2]) < off for k in keep_off):
+            if (ty is not None and abs(c[1] - ty) > 120.0) or d > r or any(math.hypot(c[0] - k[0], c[2] - k[2]) < off for k in keep_off):
                 continue
             if any(math.hypot(c[0] - o[0], c[2] - o[2]) < apart and abs(c[1] - o[1]) < 250 for o in out):
                 continue
@@ -420,7 +422,7 @@ def door_ext_spots(B, nav, hosts, n, wall_dist=30.0, apart=150.0, reach=(100.0, 
     return out
 
 
-def neck_targets(B, nav, n, apart=1500.0, gap=(100.0, 220.0), depth=(15.0, 130.0)):
+def neck_targets(B, nav, n, apart=1500.0, gap=(100.0, 220.0), depth=(15.0, 130.0), detail=False):
     """Doorways of a map with no door leaves (DM06, DM09), found on the walk mesh: two free wall edges of the commonest part that face each
     other (anti-parallel) across a gap of `gap` cm and overlap along the passage by only `depth` cm = a gap through a wall (a corridor
     overlaps for metres). -> [(x, z, y)] centre of the gap, at most n, at least `apart` from each other, nearest the middle of all gaps first. GUESS: a mesh gap this narrow in a thin overlap is a doorway, not a pillar pair."""
@@ -467,16 +469,16 @@ def neck_targets(B, nav, n, apart=1500.0, gap=(100.0, 220.0), depth=(15.0, 130.0
                     ov = min(L, t1) - max(0.0, t0)
                     if not (depth[0] <= ov <= depth[1]):
                         continue
-                    found.append((round(ov, 1), round((mx + m2x) / 2, 1), round((a[1] + a2[1]) / 2, 1), round((mz + m2z) / 2, 1)))
+                    found.append((round(ov, 1), round((mx + m2x) / 2, 1), round((a[1] + a2[1]) / 2, 1), round((mz + m2z) / 2, 1), round(g, 1), (round(ux, 3), round(uz, 3))))
     if found:                                           # nearest the middle of all gaps first (where the fights are); GUESS, no spawn data read here
         import statistics
         mxm, mzm = statistics.median(f[1] for f in found), statistics.median(f[3] for f in found)
         found.sort(key=lambda f: (math.hypot(f[1] - mxm, f[3] - mzm), f[1], f[3]))
     out = []
-    for ov, x, y, z in found:
+    for ov, x, y, z, g_, u_ in found:
         if any(math.hypot(x - o[0], z - o[1]) < apart and abs(y - o[2]) < 250 for o in out):
             continue
-        out.append((x, z, y))
+        out.append((x, z, y, g_, u_) if detail else (x, z, y))
         if len(out) >= n:
             break
     return out
