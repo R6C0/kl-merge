@@ -261,7 +261,11 @@ CLEAR_NAMES = ['PC1201_L05_Dustbinbasket_03', 'PC1201_L05_Dustbinbasket_02', 'PC
                'PC0302_L05_BlackGarbageBag_A_02', 'SO0700_ALL_FenceBlock_A_10', 'SO0700_ALL_FenceBlock_A_11', 'PC0900_ALL_Scaffold_A_01']
 # REF ids of those objects' entities (MEASURED on the base build; one name can have several entities). The layer takes them out of the van's way:
 # collision cut (kl_escape.cut_collision) and hidden (.gms flag 0x400 + ZGEOM[3]); check() proves both.
-CLEAR_REFS = {22080, 31792, 22078, 31801, 21538, 31817, 21529, 31818, 22167, 23197, 23718, 27315, 24645, 24649, 24659}
+CLEAR_REFS = {22080, 31792, 22078, 31801, 21538, 31817, 21529, 31818, 22167, 23197, 23718, 27315, 24645, 24649, 24659,
+              26690, 26689, 22442, 22441}
+# 26690/26689 (13200,-8,880) and 22442/22441 (9600,1192,1120): the four doors of the two CoopAirlock pairs, TWO-PLAYER ONLY and shut: they gate the only
+# routes to the tower and the flats, so a lone FA player (and every bot) is walled in. Hidden + collision cut like the street props. MEASURED positions
+# (verification 2026-10-25, v5/v9/v10); the airlock controllers stay (their clips move nothing once the doors are gone). GUESS: that the controller tolerates it.
 ROAD = dict(arrive=[(5300.0, 0.0, 1100.0), (6300.0, 0.0, 1100.0), (7300.0, 0.0, 1100.0)], stop=STOP,
             leave=[(9300.0, 0.0, 1100.0), (10300.0, 0.0, 1100.0), (12400.0, 0.0, 1100.0)], at='box', heading=90.0, cam=[10450.0, 350.0, 1100.0], clear=list(CLEAR_NAMES))
 PLAN = None
