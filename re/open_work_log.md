@@ -1,3 +1,8 @@
+2026-10-25 ~14:35 - OWNER "put the akm on dm01": PD2 AKM INSTALLED on DM01 Hot Coffee (C:/kl_build_1024/pd2gun_dm01_1025c/install.py, backups *.before-1025pd2gun, --undo):
+F01_Main.zip 1bcac96b -> 8278d213 (grenade build + AKM on Rifle_Type81 item 33), WAV 7072f089 -> f6f511dd, KLGuns.ini 907ffabf -> e450d165. FOUND: DM01's KLGuns.ini said Entries=49973
+but the live .prm had 50572 (stale since the vans/fb/grenade rebuilds), so the hook ignored it and the Dead Men gun looks were off; now Entries=50579, kl_map_guns check 0 problems.
+Buy: Hawk Bullpup row (Swap 16:33) or the Type 81 on page II. pd2_gun verify, check_passes, check.py PASS. Not run live (owner playing).
+
 2026-10-25 ~13:22 - INSTALLED klquad SHIP + DD10 menu (C:/kl_build_1019/k50_1025quad_ship2/install.py, backups *.before-1025quad, --undo): dinput8 4e2eed68 -> B5BFCCE0,
 KLHook.ini bc3e466d -> 57DAC49E (+[Memory] QuadRing=128, +[Redirect.3] F07=DD10, +[Page.3] F07=Flat Raid; kl-merge-27's DD10B PASS 150 s with k50_1025quad2 + QuadRing).
 Live [FrameLimit] Enable=1 Fps=0: the ring needs the Reset wrapper - check the next KLHook.log for 'quad: ring of 128 on' (not run: user input at 13:20, owner likely back).
