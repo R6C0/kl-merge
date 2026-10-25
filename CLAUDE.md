@@ -68,7 +68,7 @@ Full dated log: `re/open_work_log.md` (newest first).
 
 2026-10-25 ~06:05 - MEMORY SHIP FIX: klquad.c [Memory] QuadRing=128 (815c55e1d, 52466f929; KLHook.ini + mod-options row): ring for the 4 post-process quad VBs,
 Lock wrapped via a vtable slot (SHIP-safe), rings dropped before every Reset (klfps keeps its Reset wrapper). K50K DM05A + 2x Alt+Tab: both Resets ok, VA flat ~555 MB,
-0 refusals, 119 fps, picture intact. SHIP build C:/kl_build_1019/k50_1025quad_ship2 (B5BFCCE0) NOT installed yet (peer DD10A run holds the slot). Owner A/B ideas
+0 refusals, 119 fps, picture intact. SHIP B5BFCCE0 INSTALLED 13:21 with ini 57DAC49E (+QuadRing, +DD10 Flat Raid page 3 entry 5); undo k50_1025quad_ship2/install.py --undo. Not yet run live. Owner A/B ideas
 (not done): NVIDIA Threaded optimization OFF, Steam Input/overlay off. C: has 8 GB free (kl_build_1024 = 57 GB): owner decides, nothing deleted.
 
 2026-10-25 ~18:40 - MEMORY: the DM05A wall (nvd3dum keeping one block per tiny-VB DISCARD, ~60/frame, from post-chain screen quads of the render interpreter 0x7c1c30)
