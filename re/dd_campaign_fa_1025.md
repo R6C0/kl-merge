@@ -118,3 +118,71 @@ rather than adding nodes (GUESS, untested).
 5. Do campaign kick doors and airlock-style doors still work without campaign scripting?
 6. Recommended order: L05 flat raid, then L06, then L03, then L09. Do not start before the owner
    approves the stage; nothing here touches the game.
+
+## 7. Critic corrections and first build job (2026-10-25, second agent, still research only)
+
+Re-measured with `kl_prpjoin.Scene.from_zip` on all twelve `Lxx_Main.zip` (read-only; scratch scripts in the
+session scratchpad, not in the repo).
+
+CONFIRMED (MEASURED): all 12 node counts of section 1 are exact. No level has any `FASpecials*`, `OnlineMoney*`
+or `OnlineEsc*` node (0 of 12). The "money 1 / spawn 2" hits in L05 are false friends: `Debris_Money_01` (a
+particle template inside `mainsceneincludes.zip`) and `Gate_Xiu_Spawn` / `Timer_Xiu_Balcony_Spawn` (a civilian
+script). F07 for comparison: 17,305 nodes, 9,137 of them systems, 8,167 map, and 19 `FASpecials!SpawnPoint` nodes.
+Each L level carries `AllLevels/mainsceneincludes.zip` as one top-level subtree of 3.0k-4.0k nodes (L05 3,987).
+
+CORRECTED:
+1. The node counts overstate what the graft takes. The map proper is the `Locations/Lxx/Lxx_Locations.zip`
+   subtree: L05 10,880, L09 11,060, L07 9,199, L06 16,052, L03 16,901, L02 19,782, L01 21,272, L04 18,605,
+   L08 22,822, L11 25,619, L10 29,399. Add the Lxx_Audio, situations and AI groups. L05 and L09 are the light
+   ones, L06 comes third; the order of section 6 (L05, L06, L03, L09) stands for design value, but L09 is
+   cheaper than L03 on size.
+2. `kl_prpjoin.sides()` on an L level gives systems = 2 nodes, map = 22,781: `mainsceneincludes.zip` is not in
+   `SYSTEMS['dd']` (only the `_multiplayer` zip is), so it lands on the map side. The "one code change" is therefore
+   only needed to make it automatic. For the FIRST trial no code change is needed: `kl_graft.py build` already has
+   `--m-drop` (top-level names, fnmatch), so `--m-drop "AllLevels/mainsceneincludes.zip"` removes it. UNVERIFIED
+   that nothing in the map points into that subtree (REF paths into `ROOT\AllLevels/mainsceneincludes.zip\...`
+   would dangle; `kl_prpjoin.references()` finds them).
+3. `kl_maps.campaign_drop` is NOT generic: it does `Scene.load(level, 'dm')` and keeps names by Dead Men geometry
+   rules, so it cannot take an L level as is. The L pre-pass is a new small function (drop list = the groups
+   of section 3 strip list), or hand-written `--m-drop` names for the first trial.
+4. ANM: section 5 says the join is untested. There is a tool for it: `kl_anmjoin.join(S.ANM, M.ANM, ...)`
+   (re/anmjoin.md), written for DD to DD first, and `kl_graft.build` calls it by default (`anim=True`). Its
+   `test` command covers F levels x F levels and Dead Men maps, not L levels, so L-as-M is still untried but is
+   the normal path, not a new one. The "never copy .ANM" rule in CLAUDE.md is about the DM header size and does
+   not apply DD to DD.
+5. Sound: the section 4 wording is DM-shaped. A slot's `Fxx_Main.zip` finds its sound through `Fxx_Main.SND`
+   in the zip plus `.WHD/.WAV/.hti` BESIDE the zip (kl_graft `BESIDE`, kl_snd docstring). The campaign
+   level's own bank is `Lxx_Main.WAV/.WHD` beside its zip (L05 7.97 MB, L06 22.1 MB, L03 14.1 MB, L09 5.97 MB;
+   F07 18.3 MB). `kl_snd.graft_audio` (called by `build`, `sound=True`) appends what M's map nodes name into S's
+   bank for M of either game, so campaign effects ride the normal path. Streamed music/dialog clips live in
+   `PC_Def.str`; whether the L levels' clips are in DD's stream file is UNVERIFIED (kl_graft reports
+   "N stream clips are not in the merged stream file" if not). Side fact: every `Lxx_Main.WAV` carries our own
+   Oct 24 gun-sound patch (`.WAV.before-1024gunsnd2` beside each); reading them is fine, never write them.
+6. Slots and folders: the exe loads only `Locations/Fxx/Fxx_Main.zip` (engine_facts.md line 10). A "map in its own
+   folder" means a `KLExpansion\Maps\<id>` folder whose archive is named for a stock slot and which the hook's
+   `[Redirect.N] F0x=<folder>` points a menu-page entry at (kl_expansion.py, campaign_fa_tooling.md section 4).
+   Page 2 has one free entry (F07), further maps need page 3. A DD campaign map therefore competes for the same
+   few slots as the DM maps; the build still goes through an F-slot name (F01 for tests), never a new
+   `Locations/Lxx` name. Dropping the L zip itself into an F slot is not what the note means and would not work.
+7. "Simpler than a DM graft": true for formats (no kl_convert, no texture/material port, same .prm/.TEX/.MAT, same
+   .ANM header, no voice-line .LOC conversion), not true for content: the L levels are story levels with the
+   same scripting weight as the Dead Men chapters (checkpoints, objectives, cutscenes, friendly squads, 72
+   squads in L05). The strip list, the FA layer (spawns, money, escape, bounds, AI waves) and the actor/squad caps
+   are the same work as for M05_A. Saved effort: conversion only.
+
+FIRST BUILD JOB (L05 flat raid, offline, nothing installed; est. the same minutes as the F07+F09 baseline):
+1. Baseline: `python tools/kl_graft.py build F07 F09` must still pass (proves the DD to DD join on this tree).
+2. Survey what dangles: with `kl_prpjoin.Scene.load('L05')` list `references()` whose holder sits outside
+   `Locations/L05/L05_Locations.zip` and target inside `AllLevels/mainsceneincludes.zip`, and the same for each
+   campaign-only top group (`Checkpoints!*`, `Dialog*`, `MenuResources`, `Animation/L05/Cutscenes`,
+   `AI!Friendly!*`). Output is the drop list.
+3. Trial graft into the test slot with output kept out of the game: set `KL_GRAFT_OUT=<scratch>` then
+   `python tools/kl_graft.py build F07 L05 F01 --m-drop "AllLevels/mainsceneincludes.zip,<campaign groups>" --no-fa`
+   (add `--silent` first if the sound merge trips). Read `result.json` / `log.txt` for chunk count (gate 69,632),
+   actors and squads, sound, ANM, "stream clips".
+4. `python debug/check.py` on the output, then `kl_prpjoin` `references()` on the joined scene (0 dangling).
+5. Only after steps 3-4 are clean and the owner's stage allows: author the FA layer (kl_fa_author style spawns on the
+   stairwell landing, briefcases in B5 rooms and on the roof, van on the street), then install into F01 and run
+   `python tools/kl_autotest.py` (needs the owner away from the machine and Steam signed in).
+Decision rule: if step 3 shows chunks over 69,632 or more than ~10 dangling references to the dropped subtree,
+switch to L09 (11k map proper) before spending time on L05's FA layer.
