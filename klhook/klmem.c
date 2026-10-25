@@ -69,7 +69,10 @@
  *   RoomMB=0         0 = never (only when the heap fails). 128 needs ReserveMB=176 for Retomoto: see above
  *   StackMB=0        0 = leave the game's threads their 4 MB; 1 or 2 = reserve that much for its new threads
  *   OtherStackKB=0   every OTHER thread asking for the default stack (driver, sound, overlays, thread pool) reserves this
- *                    many KB instead of the exe header's 4 MB; kl2.exe's own threads keep 4 MB (0 = off; 1024 being tested)
+ *                    many KB instead of the exe header's 4 MB; kl2.exe's own threads keep 4 MB (0 = off; 2048 kept DM05A alive, K48F_A)
+ *                    It also starts the census: every 60 s a line "game threads by routine" with the deepest commit per routine
+ *   GameStackKB=0    with OtherStackKB: kl2.exe's own threads reserve this many KB (2048 at least) instead of 4 MB, except
+ *   GameStackKeep=   these routines (kl2.exe offsets in hex, comma-separated, from the census line) which keep 4 MB
  *   SmallRescue=1    a request under 1 MB that the heap refuses (HeapAlloc, or the sound buffers' _aligned_malloc) is logged
  *                    and answered from the reserve (recommended on; 0 = logged only, the game then faults at 0x8e5bbd or
  *                    0x6d2107 as before)
@@ -301,28 +304,115 @@ static void __cdecl klm_aligned_free(void *p)
     if (!klm_release(p, &asked, &n, &used)) klog("memory: _aligned_free of %p, which is inside the reserve but no block of it - ignored", p);
 }
 
-static SIZE_T klm_game_stack(SIZE_T stack, DWORD *flags)
+/* THE GAME'S THREADS BY ROUTINE (k48g). K48F_A: with OtherStackKB=2048, 70 of the 4 MB stacks left were kl2.exe's own threads (280 MB), the
+   deepest of all of them 1280 KB committed. Which routine needs how much is what GameStackKB needs: every thread made through the two wrapped
+   imports starts in klm_thread_start, which notes its routine and its stack, and the 60 s line gives the deepest commit seen per routine. */
+#define KLM_THREADS 512
+static struct klm_thr { void *fn, *arg; BYTE *lo, *top; SIZE_T res, deep; volatile LONG live; } klm_thr[KLM_THREADS];
+static volatile LONG klm_nthr, klm_thr_full;
+static int klm_game_kb;                                 /* GameStackKB: 0 = kl2's threads keep 4 MB */
+static DWORD klm_keep[16]; static int klm_nkeep;        /* GameStackKeep: routines (kl2.exe offsets) that keep 4 MB anyway */
+
+static SIZE_T klm_depth(struct klm_thr *t)
+{   /* the committed part of a stack noted in klm_thread_start: every committed region of its allocation summed (the top page is a region
+       of its own - K48G_A read 4 KB for every thread from the top region alone). 0 once it is gone */
+    MEMORY_BASIC_INFORMATION mbi; BYTE *p = t->lo; SIZE_T c = 0;
+    if (!t->top || !p) return 0;
+    while (p < t->top && VirtualQuery(p, &mbi, sizeof mbi) && mbi.AllocationBase == t->lo) {
+        if (mbi.State == MEM_COMMIT) c += mbi.RegionSize;
+        p = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
+    }
+    return c;
+}
+
+static void klm_note_depth(struct klm_thr *t)
+{
+    SIZE_T d = t->live ? klm_depth(t) : 0;
+    if (d > t->deep) t->deep = d;
+}
+
+static DWORD WINAPI klm_thread_start(LPVOID p)
+{   /* one frame above the game's routine: where its stack is, then the routine itself (same ABI for CreateThread and _beginthreadex) */
+    struct klm_thr *t = (struct klm_thr *)p; MEMORY_BASIC_INFORMATION mbi; DWORD r;
+    t->top = (BYTE *)((NT_TIB *)NtCurrentTeb())->StackBase;
+    if (VirtualQuery(&mbi, &mbi, sizeof mbi)) { t->lo = (BYTE *)mbi.AllocationBase; t->res = (SIZE_T)(t->top - t->lo); }
+    t->live = 1;
+    r = ((DWORD (WINAPI *)(LPVOID))t->fn)(t->arg);     /* a routine ending in ExitThread / _endthreadex skips the rest: 'live' stays 1 (census only) */
+    klm_note_depth(t); t->live = 0;
+    return r;
+}
+
+static struct klm_thr *klm_thr_new(void *fn, void *arg)
+{   /* a slot for a new thread; 0 = table full (the thread then starts as it would without the hook) */
+    LONG i = InterlockedIncrement(&klm_nthr) - 1;
+    if (i >= KLM_THREADS) { InterlockedIncrement(&klm_thr_full); return 0; }
+    klm_thr[i].fn = fn; klm_thr[i].arg = arg;
+    return &klm_thr[i];
+}
+
+static int klm_kept_routine(void *fn)
+{
+    DWORD off = (DWORD)((BYTE *)fn - (BYTE *)GetModuleHandleA(0)); int i;
+    for (i = 0; i < klm_nkeep; i++) if (klm_keep[i] == off) return 1;
+    return 0;
+}
+
+static SIZE_T klm_game_stack(SIZE_T stack, DWORD *flags, void *fn)
 {   /* the stack a thread of kl2.exe's own gets. StackMB: the default is shrunk (the old, WRONG set: the game's deep threads are among them).
        OtherStackKB: the exe header's default is lowered for everyone else, so the game's own threads are given the header's old 4 MB
-       explicitly. A size passed without the flag is a commit size, reserved from the (now lower) header default: it becomes a 4 MB
-       reservation too (the commit then grows on demand, as for the default). */
+       explicitly, or GameStackKB unless their routine is in GameStackKeep. A size passed without the flag is a commit size, reserved from
+       the (now lower) header default: it becomes a reservation too (the commit then grows on demand, as for the default). */
     if (klm_stack_mb > 0 && !stack) { *flags |= STACK_SIZE_PARAM_IS_A_RESERVATION; InterlockedIncrement(&klm_threads); return (SIZE_T)klm_stack_mb << 20; }
     if (klm_exe_reserve && (!stack || (!(*flags & STACK_SIZE_PARAM_IS_A_RESERVATION) && stack < klm_exe_reserve))) {
-        *flags |= STACK_SIZE_PARAM_IS_A_RESERVATION; InterlockedIncrement(&klm_kept); return klm_exe_reserve;
+        SIZE_T want = klm_game_kb && !klm_kept_routine(fn) ? (SIZE_T)klm_game_kb << 10 : klm_exe_reserve;
+        if (stack > want) { InterlockedIncrement(&klm_threads); return stack; }   /* a commit bigger than the shrunk reserve: as asked (reserve = that commit) */
+        *flags |= STACK_SIZE_PARAM_IS_A_RESERVATION;
+        if (want == klm_exe_reserve) InterlockedIncrement(&klm_kept); else InterlockedIncrement(&klm_threads);
+        return want;
     }
     return stack;
 }
 
 static HANDLE WINAPI klm_CreateThread(LPSECURITY_ATTRIBUTES sa, SIZE_T stack, LPTHREAD_START_ROUTINE fn, LPVOID arg, DWORD flags, LPDWORD id)
 {
-    stack = klm_game_stack(stack, &flags);
-    return klm_real_CreateThread(sa, stack, fn, arg, flags, id);
+    struct klm_thr *t = klm_thr_new((void *)fn, arg);
+    stack = klm_game_stack(stack, &flags, (void *)fn);
+    return t ? klm_real_CreateThread(sa, stack, klm_thread_start, t, flags, id) : klm_real_CreateThread(sa, stack, fn, arg, flags, id);
 }
 
 static uintptr_t __cdecl klm_beginthreadex(void *sec, unsigned stack, unsigned (__stdcall *fn)(void *), void *arg, unsigned flags, unsigned *id)
 {   /* the C runtime hands stack and flags to CreateThread as they are */
-    DWORD f = flags; stack = (unsigned)klm_game_stack(stack, &f);
-    return klm_real_beginthreadex(sec, stack, fn, arg, (unsigned)f, id);
+    struct klm_thr *t = klm_thr_new((void *)fn, arg); DWORD f = flags;
+    stack = (unsigned)klm_game_stack(stack, &f, (void *)fn);
+    return t ? klm_real_beginthreadex(sec, stack, (unsigned (__stdcall *)(void *))klm_thread_start, t, (unsigned)f, id)
+             : klm_real_beginthreadex(sec, stack, fn, arg, (unsigned)f, id);
+}
+
+static void klm_routines(void)
+{   /* the 60 s line: per routine (kl2.exe offset, or an address outside it) how many threads, how many alive, reserve, deepest commit */
+    struct { void *fn; int n, alive; SIZE_T res, deep; } r[48]; int nr = 0, i, j, n; LONG cnt = klm_nthr; char line[1400];
+    if (cnt > KLM_THREADS) cnt = KLM_THREADS;
+    for (i = 0; i < cnt; i++) {
+        struct klm_thr *t = &klm_thr[i];
+        if (!t->fn) continue;
+        klm_note_depth(t);
+        for (j = 0; j < nr && r[j].fn != t->fn; j++) ;
+        if (j == nr) { if (nr == 48) continue; r[nr].fn = t->fn; r[nr].n = r[nr].alive = 0; r[nr].res = r[nr].deep = 0; nr++; }
+        r[j].n++; if (t->live) r[j].alive++;
+        if (t->res > r[j].res) r[j].res = t->res;
+        if (t->deep > r[j].deep) r[j].deep = t->deep;
+    }
+    n = _snprintf(line, sizeof line, "memory: game threads by routine (%ld made, %ld not followed): ", klm_nthr, klm_thr_full);
+    for (i = 0; i < nr && n > 0 && n < (int)sizeof line; i++) {
+        BYTE *exe = (BYTE *)GetModuleHandleA(0); int k;
+        DWORD off = (DWORD)((BYTE *)r[i].fn - exe);
+        k = off < 0x1000000 ? _snprintf(line + n, sizeof line - n, "%s+%lx x%d (%d alive) %lu/%lu KB", i ? "; " : "", off, r[i].n, r[i].alive, (DWORD)(r[i].deep >> 10), (DWORD)(r[i].res >> 10))
+                            : _snprintf(line + n, sizeof line - n, "%s%p x%d (%d alive) %lu/%lu KB", i ? "; " : "", r[i].fn, r[i].n, r[i].alive, (DWORD)(r[i].deep >> 10), (DWORD)(r[i].res >> 10));
+        if (k < 0) break;
+        n += k;
+    }
+    line[sizeof line - 1] = 0;
+    klog("%s", line);
 }
 
 static void klm_other_stacks(void)
@@ -394,7 +484,7 @@ static void klm_owners(char *out, int cap)
 
 static void klm_tick(void)
 {
-    static DWORD calls, last; static LONG told; DWORD now; SIZE_T largest, total; char who[600];
+    static DWORD calls, last, routines; static LONG told; DWORD now; SIZE_T largest, total; char who[600];
     if (!klm_on || (calls++ & 63)) return;
     if (klm_stack_mb > 0 && klm_threads != told) { told = klm_threads; if (klm_log) klog("memory: %ld game thread(s) so far started with a %d MB stack instead of 4 MB", told, klm_stack_mb); }
     now = GetTickCount();
@@ -402,6 +492,7 @@ static void klm_tick(void)
         last = now; klm_free_space(&largest, &total); klm_owners(who, sizeof who);
         klog("memory: every 10 s: free address space %.0f MB, largest piece %.1f MB; the reserve holds %d block(s), %.1f of %d MB; refused small requests so far %ld; %s",
              total / 1048576.0, largest / 1048576.0, klm_n, klm_used / 1048576.0, klm_reserve ? klm_reserve_mb : 0, klm_nulls, who);
+        if (klm_nthr && ++routines % 6 == 1) klm_routines();   /* every 60 s, the first at 10 s */
     }
 }
 
@@ -420,6 +511,16 @@ static void klm_init(void)
     klm_small = GetPrivateProfileIntA("Memory", "SmallRescue", 1, klh_ini) != 0;
     klm_other_kb = (int)GetPrivateProfileIntA("Memory", "OtherStackKB", 0, klh_ini); if (klm_other_kb < 0 || klm_other_kb > 4096) klm_other_kb = 0;
     if (klm_other_kb && klm_other_kb < 256) klm_other_kb = 256;      /* a floor: the shallow threads in K48D_A used up to 72 KB */
+    klm_game_kb = (int)GetPrivateProfileIntA("Memory", "GameStackKB", 0, klh_ini); if (klm_game_kb < 0 || klm_game_kb >= 4096) klm_game_kb = 0;
+    if (klm_game_kb && klm_game_kb < 2048) klm_game_kb = 2048;       /* a floor: K48F_A's deepest game thread committed 1280 KB (one run, one map); deeper routines go in GameStackKeep */
+    {   char keep[256], *q, *e; DWORD v;
+        GetPrivateProfileStringA("Memory", "GameStackKeep", "", keep, sizeof keep, klh_ini);
+        for (q = keep; *q && klm_nkeep < 16; ) {
+            v = strtoul(q, &e, 16);
+            if (e == q) { q++; continue; }             /* not a hex digit (comma, space, '+'): step over it */
+            klm_keep[klm_nkeep++] = v; q = e;
+        }
+    }
     InitializeCriticalSection(&klm_cs);
     klm_free_space(&largest, &total);
     if (klm_reserve_mb > 0) klm_reserve = VirtualAlloc(0, (SIZE_T)klm_reserve_mb << 20, MEM_RESERVE, PAGE_NOACCESS);
@@ -440,7 +541,10 @@ static void klm_init(void)
         int b = klh_iat("MSVCR90.dll", "_beginthreadex", (void *)klm_beginthreadex, (void **)&klm_real_beginthreadex);
         n += a + b;
         /* the header is lowered only once both of the game's thread imports hand its threads the old 4 MB */
-        if (klm_other_kb && a && b) klm_other_stacks();
+        if (klm_other_kb && a && b) {
+            klm_other_stacks();
+            if (klm_game_kb && klm_exe_reserve) klog("memory: GameStackKB: kl2.exe's own new threads reserve %d KB; %d routine(s) in GameStackKeep keep %lu KB", klm_game_kb, klm_nkeep, (DWORD)(klm_exe_reserve >> 10));
+        }
         else if (klm_other_kb) klog("memory: OtherStackKB not applied: CreateThread %s, _beginthreadex %s", a ? "wrapped" : "NOT wrapped", b ? "wrapped" : "NOT wrapped");
     }
     klog("memory: at start %.0f MB of address space free, largest piece %.1f MB; reserve of %d MB %s (blocks of %d MB or more go into it, any of 1 MB or more that the heap refuses, and - RoomMB - of %d MB or more while the largest free piece is under %d MB); HeapAlloc %s, HeapFree %s; game thread stacks %s (%d import slot(s))",
