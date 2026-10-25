@@ -5,7 +5,7 @@ Self-contained (standard library only): the installer of a build that touches on
 
     python kl_zip_member.py replace <in.zip> <member> <new file> <out.zip>
     python kl_zip_member.py md5 <zip> <member>        md5 of one member (decompressed)
-    python kl_zip_member.py same <a.zip> <b.zip> <member to ignore>   exit 0 if all other members are identical
+    python kl_zip_member.py same <a.zip> <b.zip> <member to ignore> [more members]   exit 0 if all other members are identical
 """
 import hashlib, sys, zipfile
 
@@ -43,7 +43,7 @@ def same(a, b, ignore):
             print('member lists differ'); return False
         bad = 0
         for n in na:
-            if n == ignore:
+            if n in ignore:
                 continue
             ia, ib = za.getinfo(n), zb.getinfo(n)
             if (ia.CRC, ia.file_size, ia.compress_type) != (ib.CRC, ib.file_size, ib.compress_type):
@@ -57,7 +57,7 @@ if __name__ == '__main__':
         replace(a[1], a[2], a[3], a[4])
     elif a[:1] == ['md5'] and len(a) == 3:
         print(md5(a[1], a[2]))
-    elif a[:1] == ['same'] and len(a) == 4:
-        sys.exit(0 if same(a[1], a[2], a[3]) else 1)
+    elif a[:1] == ['same'] and len(a) >= 4:
+        sys.exit(0 if same(a[1], a[2], set(a[3:])) else 1)
     else:
         print(__doc__)
