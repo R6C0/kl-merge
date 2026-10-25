@@ -162,6 +162,10 @@ feat('botfill', G_EXP, 'Online lobby: log the AI-heister plan for empty seats (r
      'klbotfill.c [Bots] OnlineFill; Ready may start below the lobby target (MinPlayers 1); read-only census; re/bots_online_fill.md; NOT run live', [('Bots', 'OnlineFill', 1, 0, 0)])
 feat('botfillsquads', G_EXP, 'Online lobby: keep the first N map heister squads for the empty seats (walkers only; recommended off)', 'off', 'start',
      'klbotfill.c [Bots] OnlineFillSquads; heap byte per squad (mask 8 -> 9) before the round; needs OnlineFill=1; may be too late for the collect (probe); NOT run live', [('Bots', 'OnlineFillSquads', 1, 0, 0)])
+feat('hostopts', G_EXP, 'Host-controlled match options: F7 map set, F8 AI heisters; the host map set reaches clients (recommended on after the live test)', 'off', 'start',
+     'klhostopt.c [HostOpts] Enable; Steam lobby key klx_opts + UDP 27413; re/host_options.md; NOT run live', [('HostOpts', 'Enable', 1, 0, 0)])
+feat('hostoptsmenu', G_EXP, 'Host options rows in Mod settings (needs the overlay rebuilt; recommended on after the live test)', 'off', 'start',
+     'mkoverlay.py [HostOpts] Menu=1: Host map set + Host options rows, Textures/Neural merged; +4 table entries (est. 4994 of 5000)', [('HostOpts', 'Menu', 1, 0, 0)])
 
 # the look choice (k30fps, owner 2026-10-24): Off / KL look / LiveLeak are three values of ONE key, so two exclusive rows: untick both = Off.
 feat('reshade', G_GFX, 'ReShade look 2: LiveLeak camcorder (sky softened by the 1024b preset)', 'on', 'start',

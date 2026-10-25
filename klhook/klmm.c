@@ -229,7 +229,8 @@ static void klmm_init(void)
     if (klmm_buildkey != 0 && klmm_buildkey != 1) { klog("mm: [Net] BuildKey=%d is not 0 or 1: ignored", klmm_buildkey); klmm_buildkey = 0; }
     i = (int)GetPrivateProfileIntA("Expansion", "OnlineSet", 0, klh_ini);
     snprintf(klmm_set, sizeof klmm_set, "set%d", i < 0 || i > 9 ? 0 : i);
-    if (!klmm_private && !klmm_buildkey) return;               /* default: nothing installed, v82f behaviour */
+    /* 1025 [HostOpts] Enable=1 + Steam=1: the proxy is also needed for the host's options (klhostopt.c reads/writes the lobby key klx_opts through klmm_real) */
+    if (!klmm_private && !klmm_buildkey && !(GetPrivateProfileIntA("HostOpts", "Enable", 0, klh_ini) && GetPrivateProfileIntA("HostOpts", "Steam", 1, klh_ini))) return;               /* default: nothing installed, v82f behaviour */
     InitializeCriticalSection(&klmm_cs);
     for (i = 0; i < KLMM_NSLOT; i++) klmm_vt[i] = 0;
     klmm_vt[0] = (void *)klmm_fwd0; klmm_vt[1] = (void *)klmm_fwd1; klmm_vt[2] = (void *)klmm_fwd2; klmm_vt[3] = (void *)klmm_fwd3;

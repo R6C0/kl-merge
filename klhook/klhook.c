@@ -737,6 +737,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klpm_gun.c"                                      /* klpm_gun.c: KLMGun equips the round-start gun (off unless [Match] Enable)  */
 #include "klpm_arc.c"                                      /* klpm_arc.c: the Arcade playlist (off unless [Match] Enable + Arcade); AFTER klslot.c */
 #include "klqol2.c"                                        /* klqol2.c: [QoL2] stuck-AI watchdog, Heister page key, mute when unfocused (off unless set); AFTER klslot.c / klpm_arc.c */
+#include "klhostopt.c"                                    /* klhostopt.c: [HostOpts] host-controlled match options (off unless Enable=1); AFTER klslot.c / klbotfill.c / kllobby.c / klmm.c */
 #ifdef KLHOOK_TEST
 #include "klauto.c"
 #include "klsolo.c"                                       /* klsolo.c: [Solo] two kl2.exe on one PC (mutex, windowed, focus); TEST only, off unless Enable=1 */
@@ -1177,6 +1178,7 @@ static void klh_tick(int game_thread)
     kqb_tick(game_thread);                            /* klqol2.c: [QoL2] (off unless set) */
     klsv_tick(game_thread);                           /* klserver.c: [Server] (off unless Enable=1; game thread only) */
     kllb_tick();                                      /* kllobby.c: [Lobby] MinPlayers (off unless set) */
+    klho_tick(game_thread);                           /* klhostopt.c: [HostOpts] (off unless Enable=1) */
     kllo_tick();                                      /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax (off unless set) */
     klbf_tick(game_thread);                           /* klbotfill.c: [Bots] OnlineFill plan + probe (off unless set) */
     klnetfix_tick(game_thread);                       /* klnetfix.c: [Net] Hold* receiver hold times (off unless set) */
@@ -1615,6 +1617,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klsv_init();                                      /* klserver.c: [Server] (default off) */
     klmm_init();                                      /* klmm.c: installs nothing unless [Net] PrivateLobby or BuildKey is set */
     kls_init(inst);
+    klho_init();                                      /* klhostopt.c: after kls_init (kls_online_set) and klbf_init / kllb_init */
     kllnm_init();                                     /* kllocname.c: after kls_init (it reads the rule table) */
 #ifdef KLHOOK_TEST
     kla_init(inst);

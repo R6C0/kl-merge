@@ -1,3 +1,7 @@
+2026-10-25 ~23:30 - HOST OPTIONS (re/host_options.md; out_hostopts_1025a SHIP c3f32a80 / _test fc18e73a; overlay C:/kl_build_1024/hostopts_1025, none installed, none run):
+klhostopt.c [HostOpts] Enable=0: F7 map set, F8 AI heisters, rows KLSHMap/KLSHOpt (Menu=1 overlay, +4 tags), host map set -> clients via Steam klx_opts + UDP 27413 (in memory only).
+kllobbyopt.c: max/min edge fixed (SL7 time stuck at 5), NaN float read dropped, TEST logs the 25->31 round length.
+
 2026-10-25 ~23:00 - ARCADE->ONLINE PARITY AUDIT (re/arcade_online_parity.md): why Arcade parts are silent online (Heist-only readers, replication, no bot seat), ranked table.
 Built out_parity_1025a SHIP a70f4122 / _test 573a99fe (not installed, not run): klonline.c klon_read/klon_money; [Music]/[Ambience]/[Stinger] Online=1 (read-only online snapshot), [Bots] OnlineFillSquads=1
 (squad mask 8 -> 9 heap byte before the round, keeps the first fill heister squads online as WALKERS; may be late for the collect: probe), option rows added. All default 0. Recipe in the doc, section 4.

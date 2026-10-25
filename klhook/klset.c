@@ -40,6 +40,11 @@ static const char *const kset_sec[KLS_N] = { "Graphics", "Graphics", "Adrenaline
 static const char *const kset_key[KLS_N] = { "Look", "Textures", "Prompt", "NeedUse", "CameraFX", "Glare", "AA", "Neural" };
 static const int kset_def[KLS_N] = { 1, 1, 1, 1, 1, 1, 1, 0 };
 static volatile LONG kset_v[KLS_N] = { 1, 1, 1, 1, 1, 1, 1, 0 };
+#define KLS_NEXT (KLS_N + 1)                              /* 1025: 'Textures / Neural (next start)' in ONE row (value = Textures | Neural << 1): pays for the host rows' table entries */
+#define KLS_HMAP (KLS_N + 2)                              /* 1025 klhostopt.c: host map set (0 Dog Days / 1 Dead Men / 2 mixed random) */
+#define KLS_HOPT (KLS_N + 3)                              /* 1025 klhostopt.c: bit 0 AI heisters, bit 1 Solo start, bit 2 PD2 guns (next start) */
+static int klho_get(int which);                          /* klhostopt.c */
+static void klho_put(int which, int value);
 #define KLS_ADREN KLS_N                                  /* the one row 'Adrenaline' = rows 2 (Prompt, bit 0) and 3 (NeedUse, bit 1) */
 static int kset_table_log;                              /* [Menu] TableLog */
 static const char *klrs_setting(int i);                  /* klreshade.c: what a change of row i does now (and it tells the bridge) */
@@ -51,11 +56,17 @@ static int kset_which(const char *name)
     if (!klh_rdstr((DWORD_PTR)name, n, sizeof n)) return -1;
     for (i = 0; i < KLS_N; i++) if (!strcmp(n, kset_names[i])) return i;
     if (!strcmp(n, "KLSAdren")) return KLS_ADREN;
+    if (!strcmp(n, "KLSNext")) return KLS_NEXT;
+    if (!strcmp(n, "KLSHMap")) return KLS_HMAP;
+    if (!strcmp(n, "KLSHOpt")) return KLS_HOPT;
     return -1;
 }
 
 static int kset_get(int i)
 {
+    if (i == KLS_NEXT) return (kset_v[1] ? 1 : 0) | (kset_v[7] ? 2 : 0);
+    if (i == KLS_HMAP) return klho_get(0);
+    if (i == KLS_HOPT) return klho_get(1);
     if (i == KLS_ADREN) return (kset_v[2] ? 1 : 0) | (kset_v[3] ? 2 : 0);
     return (int)kset_v[i];
 }
@@ -63,6 +74,9 @@ static int kset_get(int i)
 static void kset_put(int i, int value)
 {
     char v[16];
+    if (i == KLS_NEXT) { if (value < 0) value = 0; if (value > 3) value = 3; kset_put(1, value & 1); kset_put(7, (value >> 1) & 1); return; }
+    if (i == KLS_HMAP) { klho_put(0, value); return; }
+    if (i == KLS_HOPT) { klho_put(1, value); return; }
     if (i == KLS_ADREN) {                               /* the combined row: each half through its own row (its own ini key and log line) */
         if (value < 0) value = 0;
         if (value > 3) value = 3;

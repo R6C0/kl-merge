@@ -66,6 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-25 ~23:30 - HOST OPTIONS (re/host_options.md; out_hostopts_1025a SHIP c3f32a80 / _test fc18e73a; overlay C:/kl_build_1024/hostopts_1025, none installed, none run):
+klhostopt.c [HostOpts] Enable=0: F7 map set, F8 AI heisters, rows KLSHMap/KLSHOpt (Menu=1 overlay, +4 tags), host map set -> clients via Steam klx_opts + UDP 27413 (in memory only).
+kllobbyopt.c: max/min edge fixed (SL7 time stuck at 5), NaN float read dropped, TEST logs the 25->31 round length.
+
 2026-10-25 ~22:10 - HUD ONLINE / OLD HUD (out_hudonline_1025a, not installed, not run): [HUD] HideSrc=1 wraps ZFAPlayerListDisplay Render (slot 2 0x5e60f0, private heap vtable) and skips it while our HUD stands, so Tab/Alt+Tab cannot restore the old list; HideOnline=1 skips it online too (no online crew list exists: Sv/Cl rules records not decoded, re/hud_online.md). Rows hidestock/hidestockonl.
 
 2026-10-25 ~22:10 - SOLO ONLINE HOST WORKS + INSTALLED: SOLO2 live (System Link, host alone, out_solo_1025b_test, SL5.ini) round 1 -> FAStatus/StatusMoney -> round 2, 0 faults.

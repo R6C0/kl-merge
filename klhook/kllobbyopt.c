@@ -70,7 +70,9 @@ static DWORD kllo_store(void)
 
 /* the real stores of the two values, each read its own way: time = [sm+0x4b] / so float / menu store; rounds = so byte / menu store */
 typedef float (__fastcall *kllo_gf)(void *self, void *edx);
-static float kllo_fget(DWORD so) { DWORD fn = klh_rd32(klh_rd32(so) + 0x94); return fn ? ((kllo_gf)(DWORD_PTR)fn)((void *)(DWORD_PTR)so, 0) : -1.0f; }
+/* 2026-10-25 live SL7: vtbl+0x94 read NaN in every state = NOT a float getter (GUESS: it is the setter's neighbour with another signature); the read is dropped,
+   time is proven by sm byte + menu store and, in TEST, by the measured span of the round (kllo_roundlog) */
+static float kllo_fget(DWORD so) { (void)so; return -1.0f; }
 static int kllo_sget(DWORD st, DWORD key)
 {
     DWORD sv, fn;
@@ -97,9 +99,9 @@ static void kllo_rset(DWORD sm, DWORD so, DWORD st, DWORD es, int n)
 /* every real store of time + rounds on one log line (first 120 calls) */
 static void kllo_state(const char *what, DWORD sm, DWORD so, DWORD st)
 {
-    static LONG n; float tf = kllo_fget(so);
+    static LONG n;
     if (InterlockedIncrement(&n) <= 120)
-        klog("lobbyopt: %s: TIME sm=%d so=%.0fs(%.1f min) store=%d | ROUNDS so=%d store=%d", what, kllo_tsm(sm), tf, tf / 60.0f, kllo_sget(st, 0xb29c74), kllo_rso(so), kllo_sget(st, 0xb68cc8) + 1);
+        klog("lobbyopt: %s: TIME sm=%d store=%d | ROUNDS so=%d store=%d", what, kllo_tsm(sm), kllo_sget(st, 0xb29c74), kllo_rso(so), kllo_sget(st, 0xb68cc8) + 1);
 }
 
 static DWORD __fastcall kllo_slot10(void *self, void *edx, DWORD a, DWORD b, DWORD c)
@@ -121,8 +123,10 @@ static DWORD __fastcall kllo_slot10(void *self, void *edx, DWORD a, DWORD b, DWO
     cur = tmode ? t0 : r0;
     if (a == 0x7e) {
         int mx = tmode ? kllo_tmax : kllo_rmax;
-        if (mx && cur >= 5 && cur < mx) { want = cur + 1; pre = 4; }
-    } else if (tmode && kllo_tmin && cur <= 3 && cur > kllo_tmin) { want = cur - 1; pre = 4; }
+        /* live SL7: at the max one more press let the stock clamp reset the value to 5. Above the stock range the press is ALWAYS taken over:
+           cur+1 below the max, cur itself at the max (re-applied after the stock call) */
+        if (mx && cur >= 5) { want = cur < mx ? cur + 1 : cur; pre = 4; }
+    } else if (tmode && kllo_tmin && cur <= 3) { want = cur > kllo_tmin ? cur - 1 : cur; pre = 4; }
     kllo_state("before press", sm, so, st);
     if (want) {
         /* 1. lower the stored value so the stock handler's own clamp lets the press through (it then writes cur+1 / cur-1 itself) */
@@ -148,9 +152,8 @@ static DWORD __fastcall kllo_slot10(void *self, void *edx, DWORD a, DWORD b, DWO
             kllo_rset(sm, so, st, es, r0);
         }
     } else if (es) {
-        float tf = kllo_fget(so);
-        if (kllo_tsm(sm) != t0 || kllo_sget(st, 0xb29c74) != t0 || (int)(tf + 0.5f) != t0 * 60) {
-            klog("lobbyopt: TIME moved by a rounds press (was %d min / %.0fs; now sm=%d so=%.0fs store=%d): restored", t0, f0, kllo_tsm(sm), tf, kllo_sget(st, 0xb29c74));
+        if (kllo_tsm(sm) != t0 || kllo_sget(st, 0xb29c74) != t0) {
+            klog("lobbyopt: TIME moved by a rounds press (was %d min; now sm=%d store=%d): restored", t0, kllo_tsm(sm), kllo_sget(st, 0xb29c74));
             kllo_tset(sm, so, st, es, t0);
         }
     }
@@ -166,7 +169,7 @@ stock:
 /* TEST: the replicated m_fRoundTime (seconds, so vtbl+0x94) at every session state change; leaving the lobby state 0xd = the round starting */
 static void kllo_roundlog(void)
 {
-    static DWORD last; static int ls = -1; DWORD now = GetTickCount(), sm, so, holder; int stt;
+    static DWORD last, t25; static int ls = -1; DWORD now = GetTickCount(), sm, so, holder; int stt;
     if (now - last < 250) return;
     last = now;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || (klh_rd32(sm) != 0xbd1ebc && !KLH_SM_VT_OK(klh_rd32(sm)))) return;
@@ -174,7 +177,9 @@ static void kllo_roundlog(void)
     if (stt == ls) return;
     holder = klh_rd32((DWORD_PTR)KLH_VA(0x168e9e4));
     so = holder ? ((kllo_f0)KLH_VA(0x7bb2a0))((void *)(DWORD_PTR)holder, 0) : 0;
-    klog("lobbyopt-test: session state %d -> %d: m_fRoundTime=%.1f s, time sm=%d min, rounds so=%d", ls, stt, so ? kllo_fget(so) : -1.0f, kllo_tsm(sm), so ? kllo_rso(so) : -1);
+    klog("lobbyopt-test: session state %d -> %d: time sm=%d min, rounds so=%d", ls, stt, kllo_tsm(sm), so ? kllo_rso(so) : -1);
+    if (stt == 25) t25 = now ? now : 1;
+    if (stt == 31 && t25) { klog("lobbyopt-test: ROUND LENGTH: state 25 -> 31 took %.1f s (set heist time %d min = %d s; polled every 250 ms)", (now - t25) / 1000.0, kllo_tsm(sm), kllo_tsm(sm) * 60); t25 = 0; }
     ls = stt;
 }
 #endif

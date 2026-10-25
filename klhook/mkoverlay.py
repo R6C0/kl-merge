@@ -300,6 +300,12 @@ SET_ROWS = (('KLS_Look', 'Look', 'KLSLook', ['Off', 'KL', 'LiveLeak']),
             ('KLS_Tex', 'Sharper textures (next start)', 'KLSTex', ['Off', 'On']),
             ('KLS_Neural', 'Neural (Uplift, next start)', 'KLSNeural', ['Off', 'On']),
             ('KLS_Adren', 'Adrenaline', 'KLSAdren', ['Stand by him', 'Stand by him + messages', 'Hold E', 'Hold E + messages']))
+# 2026-10-25 [HostOpts] Menu=1 (klhostopt.c): two host rows 'Host map set' (KLSHMap) and 'Host options' (KLSHOpt) are added, and 'Sharper textures'
+# + 'Neural' become ONE row 'Textures / Neural (next start)' (KLSNext, 4 entries): net +4 table entries (+8 -4), 10 rows at 30 apart. Default off.
+HOSTOPTS = False
+HOST_ROWS = (('KLS_HMap', 'Host: map set', 'KLSHMap', ['Dog Days', 'Dead Men', 'Mixed random']),
+             ('KLS_HOpt', 'Host: AI / solo / PD2 guns', 'KLSHOpt', ['AI off, solo off, PD2 off', 'AI on, solo off, PD2 off', 'AI off, solo on, PD2 off', 'AI on, solo on, PD2 off',
+                                                                    'AI off, solo off, PD2 on', 'AI on, solo off, PD2 on', 'AI off, solo on, PD2 on', 'AI on, solo on, PD2 on']))
 SET_NOTE = None                                       # v26c had a note text block on the right: dropped for room (see above)
 GUNS_NOTE = ('Looks only: price, rank, stats and sound stay those of the Dog Days gun. Dead Men looks: SG 552 on the FN SCAR, '
              'M4A1 on the AK-47, P90 on the UMP, Steyr TMP on the MAC-10, USP on the M9 Beretta. Everyone who carries that gun shows it. '
@@ -310,7 +316,7 @@ def guns_window(nl):
     """The window KLGuns ('Mod settings'): the heister page's row pattern, rows 34 apart, the last one where v26c's last one was (493)."""
     rows = (SET_ROWS + GUN_ROWS) if SETTINGS else GUN_ROWS
     last = 493 if SETTINGS else 425
-    step = ROW
+    step = 30 if HOSTOPTS else ROW                      # 10 rows (HostOpts): 30 apart, first row at 493 - 9 x 30 = 223
     ys = tuple(last - step * (len(rows) - 1 - k) for k in range(len(rows)))
     if ys[0] < 220:
         raise SystemExit('%d rows do not fit the Mod settings window' % len(rows))
@@ -851,6 +857,12 @@ def main():
     heister = not cp.has_section('Character') or (cp.get('Character', 'Enable', fallback='1').strip() != '0' and cp.get('Character', 'Menu', fallback='1').strip() != '0')
     global GUNS
     GUNS = not cp.has_section('Guns') or (cp.get('Guns', 'Enable', fallback='1').strip() != '0' and cp.get('Guns', 'Menu', fallback='1').strip() != '0')
+    global HOSTOPTS, SET_ROWS
+    HOSTOPTS = cp.has_section('HostOpts') and cp.get('HostOpts', 'Enable', fallback='0').strip() != '0' and cp.get('HostOpts', 'Menu', fallback='0').strip() != '0'
+    if HOSTOPTS:
+        SET_ROWS = tuple(r for r in SET_ROWS if r[2] not in ('KLSTex', 'KLSNeural'))
+        SET_ROWS = SET_ROWS[:4] + (('KLS_Next', 'Textures / Neural (next start)', 'KLSNext', ['Off', 'Sharper textures', 'Neural', 'Both']),) + SET_ROWS[4:] + HOST_ROWS
+        print('HostOpts rows: ON (%d Mod settings rows)' % len(SET_ROWS))
     global MATCH, MATCH_MAPS
     MATCH = cp.has_section('Match') and cp.get('Match', 'Enable', fallback='0').strip() != '0' and cp.get('Match', 'Menu', fallback='1').strip() != '0'
     if MATCH:
