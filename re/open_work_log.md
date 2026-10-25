@@ -1,3 +1,9 @@
+2026-10-25 ~17:40 - DD10 round 3 (bc2ee74d8, l05fa_1025d f4 0d4f8ef4): stove/laundry/vents = real clutter (cleared), street entrance = mesh gap (2-quad EXTRA_CHAIN,
+AI never run), apartment door/drawers cleared; check PASS but the verifier says NOT READY: Wall_Break 30708 seals loots 096-098 (check downgrades it to a NOTE), knee 50 vs
+step 35 gap, bots_dyn 49 FAIL in the van lane. Round 4 = workflow wkrhxtbed (open the wall or move loots, sealed loot = FAIL, build 1025e). bc2ee74d8 went out with a Sonnet
+trailer (pushed with my log commit before I saw it; no force-push). Disk: removed superseded never-installed l05fa_1025b/c (3.4 GB), C: 9.5 GB free. lc7+texmip staged
+for e8: C:/kl_build_1024/dm05a_lc7texmip_1025a (9cdd6dee, install.py over texmip 4bd278cf, --undo).
+
 2026-10-25 ~17:10 - GRENADE DM01 INSTALLED + PASS: KLExpansion/Maps/DM01/F01_Main.zip 4d520614 -> 1bcac96b (grenade_1025a: Grenade_Fragmentation chain + 3 pickups
 near spawn), backup .before-1025grenade, undo C:/kl_build_1024/grenade_1025a/UNDO DM01 grenade.bat. Scripted run (hook k49_1025fps2/test, ini grenade_1025a/test_scripted.ini:
 page 2 = 6 DOWNs, HeistLevel_P2 entry 0): 0 asserts, 0 faults, 30806 frames, clean exit; a pickup is visible near spawn. Grabbing/throwing NOT tested yet.
