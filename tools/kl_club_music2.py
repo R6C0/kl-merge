@@ -273,6 +273,7 @@ foreach ($f in $files) { if (-not (Test-Path -LiteralPath (Join-Path $dir $f.nam
 if ($Undo) {
   if (-not (Test-Path -LiteralPath $state)) { 'SKIP, no state file: nothing installed by this package (or already undone).'; exit 0 }
   $s = Get-Content -LiteralPath $state -Raw | ConvertFrom-Json
+  foreach ($ub in @($man.undoBlockedBy)) { if ($ub -and (Test-Path -LiteralPath (Join-Path $dir $ub))) { "SKIP, $ub exists: undo that package first (it needs what this one installed). Nothing changed."; exit 4 } }
   foreach ($f in $files) {
     if (-not (Test-Path -LiteralPath (Join-Path $dir ($f.name + $tag)))) { "SKIP, backup $($f.name)$tag missing. Nothing changed."; exit 4 }
     if ((md5 (Join-Path $dir $f.name)) -ne $s.after.($f.name)) { "SKIP, live $($f.name) changed since the install. Backups left in place."; exit 4 }
@@ -381,11 +382,11 @@ if (-not $ok) { 'FAILED read-back, run UNDO'; exit 4 }
 BAT = '@echo off\r\ncd /d "%~dp0"\r\npowershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0lcmusic.ps1" {arg}\r\npause\r\n'
 
 
-def stage(out, name, label, tag, state, members, files, require_members=(), pcdef=None, log=print):
+def stage(out, name, label, tag, state, members, files, require_members=(), pcdef=None, undo_blocked_by=(), log=print):
     """members: [(zip member, old bytes, new bytes, file name)], files: [(live name, old, new)]"""
     d = os.path.join(out, name)
     os.makedirs(os.path.join(d, 'orig'), exist_ok=True)
-    man = dict(label=label, tag=tag, state=state, pcdef=pcdef, members=[], files=[],
+    man = dict(label=label, tag=tag, state=state, pcdef=pcdef, members=[], files=[], undoBlockedBy=list(undo_blocked_by),
                requireMembers=[dict(member=m, md5=h) for m, h in require_members],
                requireFiles=[dict(name='F01_Main.WAV', md5=PIN['wav'])])
     for mem, old, new, fn in members:
@@ -415,7 +416,8 @@ def build(out, folder=MAP, log=print):
     bad += check_prp_readback(live, prp, info['bed'], out, log)
     mA = stage(out, 'stageA', 'Club music boost (recommended on)', TAG_A, 'lcmusic.state.json',
                [(M_SND, live['snd'], snd, 'F01_Main.SND')],
-               [('F01_Main.WHD', live['whd'], whd), ('F01_Main_LS.SND', live['ls'], ls)], pcdef=STREAM_MD5, log=log)
+               [('F01_Main.WHD', live['whd'], whd), ('F01_Main_LS.SND', live['ls'], ls)], pcdef=STREAM_MD5,
+               undo_blocked_by=['lcbed.state.json'], log=log)   # B's bed sound lives in A's SND: B must be undone first
     mB = stage(out, 'stageB', 'Dead Men OST bed (recommended on)', TAG_B, 'lcbed.state.json',
                [(M_PRP, live['prp'], prp, 'F01_Main.prp')], [],
                require_members=[(M_SND, md5(snd)[:8])], log=log)
