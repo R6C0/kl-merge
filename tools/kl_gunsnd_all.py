@@ -241,7 +241,7 @@ def cmd_verify(a):
     print('verify: %d banks PASS (worst residual %.2f dB, excluding clips at the gain cap)' % (n, worst)); return 0
 
 
-def write_installer(out):
+def write_installer(out, tag=None, what='gun sounds', blurb=None):
     ps = r'''# Gun sounds at ONE loudness on every map (tools/kl_gunsnd_all.py), staged 2026-10-24. Every gun-shot / distant record in the banks
 # listed in manifest.json is re-driven to the S&W MP45 (= Desert Eagle clip) loudness. Only those records' data spans inside each
 # .WAV change; .WHD / .SND / zips / .hti are NOT touched, file sizes are identical. Patched IN PLACE from Banks\<group>\<id>.new,
@@ -293,13 +293,18 @@ foreach ($x in $todo) {
 }
 if ($Undo) { "banks restored: $($todo.Count)" } else { "banks updated: $($todo.Count). Backups: *.WAV.before-1024gunsnd2. Undo: UNDO gun sounds all maps.bat" }
 '''
-    ps = ps.replace('before-1024gunsnd2', 'before-' + TAG)        # --raw builds back up under their own tag
+    tag = tag or TAG
+    ps = ps.replace('before-1024gunsnd2', 'before-' + tag)        # --raw / kl_fxsnd builds back up under their own tag
+    if what != 'gun sounds':                                       # kl_fxsnd.py: same installer, other wording
+        ps = ps.replace('the new gun sounds', 'the new ' + what).replace('UNDO gun sounds all maps.bat', 'UNDO %s all maps.bat' % what)
+        ps = ps.replace('# Gun sounds at ONE loudness on every map (tools/kl_gunsnd_all.py)', '# %s (tools/kl_fxsnd.py on kl_gunsnd_all)' % what)
+    blurb = blurb or ('Every gun-shot sample at the S&W MP45 loudness%s: KLExpansion maps, the 9 stock FA maps, the story levels' % (' and hard clip' if RAW else ''))
     open(os.path.join(out, 'install_gunsnd2.ps1'), 'w', newline='\r\n').write(ps)
-    open(os.path.join(out, 'INSTALL gun sounds all maps.bat'), 'w', newline='\r\n').write(
-        '@echo off\r\nrem Every gun-shot sample at the S&W MP45 loudness%s: KLExpansion maps, the 9 stock FA maps, the story levels (md5-checked; copies kept as .before-%s).\r\n' % (' and hard clip' if RAW else '', TAG) +
+    open(os.path.join(out, 'INSTALL %s all maps.bat' % what), 'w', newline='\r\n').write(
+        '@echo off\r\nrem %s (md5-checked; copies kept as .before-%s).\r\n' % (blurb, tag) +
         'powershell -ExecutionPolicy Bypass -File "%~dp0install_gunsnd2.ps1"\r\npause\r\n')
-    open(os.path.join(out, 'UNDO gun sounds all maps.bat'), 'w', newline='\r\n').write(
-        '@echo off\r\nrem Puts the previous gun-shot samples back (md5-checked).\r\npowershell -ExecutionPolicy Bypass -File "%~dp0install_gunsnd2.ps1" -Undo\r\npause\r\n')
+    open(os.path.join(out, 'UNDO %s all maps.bat' % what), 'w', newline='\r\n').write(
+        '@echo off\r\nrem Puts the previous %s back (md5-checked).\r\npowershell -ExecutionPolicy Bypass -File "%%~dp0install_gunsnd2.ps1" -Undo\r\npause\r\n' % what)
 
 
 def main(a):
