@@ -91,8 +91,9 @@ SPECS = {
     'DM11B': dict(
         slot='F04', file='F04_Main.zip', title='Hasta la Vista', tag='.before-1025overhaul3',
         doors=[],
-        ext_spots=[(26201.0, 20.0, 27298.0, 0.0, (1.0, 0.0)), (27601.0, 20.0, 27298.0, 0.0, (1.0, 0.0)), (20980.0, 22.0, 27934.0, 0.0, (-1.0, 0.0)),
-                   (34824.0, 813.0, 29764.0, 0.0, (0.0, -1.0)), (33184.0, 800.0, 28150.0, 0.0, (0.0, -1.0))],
+        # 2026-10-25 independent check by wall NAME (kl_route grid): of the 11 scanned spots only these two stand before a visible building wall (SO1003_M11_FacB_10M_01 facade, SI0100_M11_Wall_A_01).
+        # Dropped: (26201|27601, 27298) face the SO0202 GrassArea_High embankment (grass, 55 cm off; the DM06 lesson: bushes), (33184, 28150) faces the invisible ColiObj_Plane_65467 (flags 0x220) before rubble.
+        ext_spots=[(20980.0, 22.0, 27934.0, 0.0, (-1.0, 0.0)), (34824.0, 813.0, 29764.0, 0.0, (0.0, -1.0))],
         ext=[],
         fuel=[(25000.0, 26000.0, 20.0), (23500.0, 25400.0, 20.0), (30000.0, 27500.0, 20.0), (36500.0, 30500.0, 800.0)], fuel_ground=True,
         # cars: A and B drive east along the south road of the plaza (z 21800 / 22400), C comes down the west edge (x 21600); stops stay >= 1100 from the pad (27500, 22800).
