@@ -304,7 +304,7 @@ static struct {
     int draft;                                /* Draft: the defaults of every part of the draft are 1 */
     int lives, roundof;                       /* Lives, RoundOf (klhud_values.c) */
     int on, log, stock, crew, money, round, hide, shadow, tags, cashshort, totalfont, draw, plates, anchor, pictest, grid, probe, layer, rows, dials;
-    int wstyle, wini, wseconds, wwear, wlast, labelbar, labelslash, mfill, vanicon, tablist, tabcard, hidesrc, hideonl;   /* wini = [HUD] WatchStyle as set; wstyle = the look THIS level gets (klu_choose_look) */
+    int wstyle, wini, wseconds, wwear, wlast, labelbar, labelslash, mfill, vanicon, tablist, tabcard, hidesrc, hideonl, oprobe;   /* wini = [HUD] WatchStyle as set; wstyle = the look THIS level gets (klu_choose_look) */
       /* the watch look (section 14 of re\hud_hook.md): WatchStyle (1 = new, 0 = the old textures and sizes), WatchSeconds, WatchWear, WatchLast, LabelBar (0 text only, 1 painted bar, 2 plain), LabelSlash */
     float inset, crew_x, crew_y, crew_w, row, money_x, money_y, money_w, round_y;
     float yoff, blockup, blockh, padx;        /* the rows: the text's y under the head, the block's rise above it, its height, the text's side margin (the draft: 34 / 5 / 28 / 8) */
@@ -1640,6 +1640,9 @@ static void klu_tick(int game_thread)
     /* the stock list's Render: skipped offline exactly when the byte is wanted (Tab card or not), and ONLINE whenever HideOnline=1 and the HUD
        stands (the owner wants the old HUD gone from online matches too; the new online crew list is not built yet: re\hud_online.md) */
     InterlockedExchange(&klu_skip_list, klu.hidesrc && (pre.online ? klu.hideonl : (show && klu.hide && klu.crew && (!tab || klu_r.card))));
+#ifdef KLHOOK_TEST
+    if (klu.oprobe && have) klb_online_probe(&pre, osd, KLU_PLIST_VT);
+#endif
     klht_tick(osd, have ? &pre : 0, show);                    /* klhud_tags.c: after the hide (it acts only while klu_r.hid says the stock element is hidden by us) */
     if (klu.probe && klu_probe_ready) {
         const float *a = klu_pr.stock, *b = klu_pr.ours, *p = klu_pr.pic; int same = klu_pr.nours > 0 && b[0] == a[0] && b[2] == a[2] && b[4] == a[4] && b[9] == a[9] && a[0] != 0;
@@ -1690,7 +1693,7 @@ static void klu_init(void)
     kluv_early = klu_inii("TraitorEarly", 0, 0, 1);       /* 2026-10-13: 0 = no row / fate shows a bot's planned betrayal (klhud_values.c) */
     klu.tags = klu_inii("Tags", 1, 0, 1); klu.cashshort = klu_inii("CashShort", 1, 0, 1); klu.totalfont = klu_inii("TotalFont", 0, 0, 1);
     klu.draft = klu_inii("Draft", 0, 0, 1);              /* the whole draft: the defaults of Plates, Dials, Weapon, RoundOf (and klhud_popup.c's Popups, LootRing) become 1; a key that is set still wins */
-    klu.wini = klu.wstyle = klu_inii("WatchStyle", 0, 0, 1);       /* review MUST 2: default 0 (old extras on the installed maps); set 1 ONLY with maps baked by kl_hud.py --watch 1 */ klu.wseconds = klu_inii("WatchSeconds", 0, 0, 1); klu.wwear = klu_inii("WatchWear", 1, 0, 1); klu.wlast = klu_inii("WatchLast", 1, 0, 1); klu.mfill = klu_inii("MoneyFill", 1, 0, 1); klu.vanicon = klu_inii("VanIcon", 1, 0, 1); klu.tablist = klu_inii("TabList", 1, 0, 1); klu.tabcard = klu_inii("TabCard", 0, 0, 1); klu.hidesrc = klu_inii("HideSrc", 1, 0, 1); klu.hideonl = klu_inii("HideOnline", 1, 0, 1);       /* 2026-10-13: slot 117 is 256 x 32 in BOTH watch bakes (the old 'frame' before 652db0c, 'mfill' after), so the hook cannot tell them apart - MoneyFill=0 keeps the old flat bar on maps baked before 652db0c (the owner's hud_tab_wm set), where 117 would draw an empty outline */       /* review SHOULD 3: blank the stock red digits in the last minute (they would sit on the hands) */
+    klu.wini = klu.wstyle = klu_inii("WatchStyle", 0, 0, 1);       /* review MUST 2: default 0 (old extras on the installed maps); set 1 ONLY with maps baked by kl_hud.py --watch 1 */ klu.wseconds = klu_inii("WatchSeconds", 0, 0, 1); klu.wwear = klu_inii("WatchWear", 1, 0, 1); klu.wlast = klu_inii("WatchLast", 1, 0, 1); klu.mfill = klu_inii("MoneyFill", 1, 0, 1); klu.vanicon = klu_inii("VanIcon", 1, 0, 1); klu.tablist = klu_inii("TabList", 1, 0, 1); klu.tabcard = klu_inii("TabCard", 0, 0, 1); klu.hidesrc = klu_inii("HideSrc", 1, 0, 1); klu.hideonl = klu_inii("HideOnline", 1, 0, 1); klu.oprobe = klu_inii("OnlineProbe", 0, 0, 1); klb_hud_crew = klu_inii("OnlineCrew", 0, 0, 1);       /* 2026-10-13: slot 117 is 256 x 32 in BOTH watch bakes (the old 'frame' before 652db0c, 'mfill' after), so the hook cannot tell them apart - MoneyFill=0 keeps the old flat bar on maps baked before 652db0c (the owner's hud_tab_wm set), where 117 would draw an empty outline */       /* review SHOULD 3: blank the stock red digits in the last minute (they would sit on the hands) */
     klu.labelbar = klu_inii("LabelBar", 1, 0, 2); klu.labelslash = klu_inii("LabelSlash", 1, 0, 1);      /* the watch look (re\hud_hook.md 14): the level must be baked with kl_hud.py --watch <the same 0 / 1> */
     klu.dials = klu_inii("Dials", klu.draft, 0, 1);      /* the round watch + the escape dial (needs the level's extra pictures 113 / 114) */
     klu.weapon = klu_inii("Weapon", klu.draft, 0, 1); klwd_init();      /* the weapon dial (klhud_weapon.c; needs 113 / 114 too) */

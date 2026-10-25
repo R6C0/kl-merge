@@ -334,6 +334,7 @@ struct klb_rec { int used; DWORD at, actor, money; BYTE status, stage, flags; fl
 struct klb_snap {
     DWORD rules, score, state, vehicle; int n, level, human; BYTE veh; float timer;
     struct klb_rec r[KLB_NREC];
+    DWORD on_recs, on_free, on_score; int on_n;   /* OnlineCrew=1, online only: [rules+8] records (0x74 bytes), their free bytes [rules+0xc], count [rules+0x14], DDL score [rules+0x2c]; layout of the records is NOT decoded yet */
     int online;                               /* 1 = filled by klb_read_hud() from an ONLINE rules object (host/client): rules + state only, n = 0, score = 0 */
 };
 
@@ -387,7 +388,7 @@ static int klb_read(struct klb_snap *s)
    ...FragileAllianceSv / Cl. It carries ONLY what the base class ZGameRulesFragileAlliance holds (offsets < 0x334: Sv adds its own from 0x334, Cl
    adds none - ctors 0x79acc0 / 0x6fe090): rules, the session state and the vehicle bytes. n = 0, score = 0: every Heist-only reader (records
    at rules+0x348, ZHeistScore at +0x5f8) then answers 'nothing' by its own vtable test. Reads only. klb_hud_online is set from [HUD] Online by klhud.c. */
-static int klb_hud_online;
+static int klb_hud_online, klb_hud_crew;
 static int klb_online_session(void)
 {
     DWORD sm, role = 0;
@@ -405,9 +406,69 @@ static int klb_read_hud(struct klb_snap *s)
     if (!klh_rd(sm + 0x70, &s->state, 4)) return 0;       /* GUESS: the multiplayer session manager keeps its state at +0x70 like the single-player one (0x6c53db pushes state 0x12 for the load) */
     if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLB_SETTINGS))) || !(s->rules = klh_rd32(gs + 0x54)) || !klh_rd(s->rules, &vt, 4)) { s->rules = 0; return 0; }
     if (vt != KLB_RULES_SV && vt != KLB_RULES_CL) { s->rules = 0; return 0; }
+    if (klb_hud_crew) {                                   /* [HUD] OnlineCrew: sv/cl siblings keep 0x74-byte records at [rules+8] (re/hud_online.md); only handles, no field meaning */
+        DWORD n = 0;
+        if (klh_rd(s->rules + 0x14, &n, 4) && n >= 1 && n <= 16) { s->on_n = (int)n; s->on_recs = klh_rd32(s->rules + 8); s->on_free = klh_rd32(s->rules + 0xc); s->on_score = klh_rd32(s->rules + 0x2c); }
+    }
     s->level = 1; s->online = 1;                          /* veh 0, timer 0, n 0, score 0: the escape dial and every record reader stay silent */
     return 1;
 }
+
+
+#ifdef KLHOOK_TEST
+/* 2026-10-25 coordinator: [HUD] OnlineProbe=1 (TEST build only, default 0). Read-only dump of the ONLINE FA rules records for the owner's SL5 run.
+   Lines start "hudprobe:". Every 10 s and once on the first sight of a rules object / state change. */
+static void klb_pdump(const char *tag, DWORD at, DWORD len)
+{
+    BYTE b[0x200]; DWORD i, j; char line[260], t[24];
+    if (len > sizeof b) len = sizeof b;
+    if (!at || !klh_rd(at, b, len)) { klog("hudprobe: %s @%08lx unreadable", tag, at); return; }
+    for (i = 0; i < len; i += 16) {
+        line[0] = 0;
+        for (j = i; j < i + 16 && j < len; j += 4) { DWORD d = *(DWORD *)(b + j); float f = *(float *)(b + j); snprintf(t, sizeof t, " %08lx", d); strcat(line, t);
+            if (f == f && ((f > 1e-3f && f < 1e7f) || (f < -1e-3f && f > -1e7f))) { snprintf(t, sizeof t, "(f%.2f)", f); strcat(line, t); } }
+        klog("hudprobe: %s +%03lx:%s", tag, i, line);
+    }
+    for (i = 0; i + 3 < len; i++) {                     /* ascii / utf16 string guesses */
+        DWORD k = 0; while (i + k < len && b[i + k] >= 32 && b[i + k] < 127) k++;
+        if (k >= 3) { char sbuf[80]; snprintf(sbuf, sizeof sbuf, "%.*s", (int)(k > 60 ? 60 : k), (char *)b + i); klog("hudprobe: %s +%03lx ascii \"%s\"", tag, i, sbuf); i += k; continue; }
+        k = 0; while (i + 2 * k + 1 < len && b[i + 2 * k] >= 32 && b[i + 2 * k] < 127 && !b[i + 2 * k + 1]) k++;
+        if (k >= 3) { char sbuf[80]; DWORD m; for (m = 0; m < k && m < 60; m++) sbuf[m] = (char)b[i + 2 * m]; sbuf[m] = 0; klog("hudprobe: %s +%03lx utf16 \"%s\"", tag, i, sbuf); i += 2 * k; }
+    }
+}
+
+static void klb_online_probe(const struct klb_snap *s, DWORD osd, DWORD plist_vt)
+{
+    static DWORD last, lrules, lstate; DWORD now = GetTickCount(), el, i, n = 0, recs, freeb, sc, sm, role = 0; BYTE fb[16];
+    if (!s->online) return;
+    if (now - last < 10000 && s->rules == lrules && s->state == lstate) return;
+    last = now; lrules = s->rules; lstate = s->state;
+    sm = klh_rd32((DWORD_PTR)KLH_VA(KLB_SESSION)); klh_rd(sm + 0x54, &role, 4);
+    klh_rd(s->rules + 0x14, &n, 4); recs = klh_rd32(s->rules + 8); freeb = klh_rd32(s->rules + 0xc); sc = klh_rd32(s->rules + 0x2c);
+    klog("hudprobe: ===== role %lu (2 host, 3 client) state 0x%lx rules %08lx vt %08lx count[+0x14]=%lu recs[+8]=%08lx free[+0xc]=%08lx score[+0x2c]=%08lx tick %lu", role, s->state, s->rules, klh_rd32(s->rules), n, recs, freeb, sc, now);
+    if (n > 16) n = 16;
+    if (freeb && klh_rd(freeb, fb, n < 16 ? n : 16)) { char t[80] = ""; for (i = 0; i < n; i++) { char u[8]; snprintf(u, sizeof u, "%u ", fb[i]); strcat(t, u); } klog("hudprobe: free bytes (0 = used?): %s", t); }
+    for (i = 0; i < n; i++) { char tag[24]; snprintf(tag, sizeof tag, "rec%lu", i); klb_pdump(tag, recs + 0x74 * i, 0x74); }
+    klb_pdump("score", sc, 0x100);
+    klb_pdump("rules0", s->rules, 0x60);
+    if (osd && (el = klh_rd32(osd + 0x10c4)) && klh_rd32(el) != 0) {
+        DWORD loc = 0, k, shown = 0; klh_rd(el + 0xefc, &loc, 4);
+        klog("hudprobe: stock list element %08lx vt %08lx (%s) local entry index [+0xefc] = %ld, [+0xed8]=%lu [+0xedc]=%08lx", el, klh_rd32(el), klh_rd32(el) == plist_vt ? "ZFAPlayerListDisplay" : "OTHER", (long)loc, klh_rd32(el + 0xed8), klh_rd32(el + 0xedc));
+        klb_pdump("plist", el + 0x30, 0x40);
+        for (k = 0x30; k < 0x1100 && shown < 40; k += 4) {          /* text objects (ZCHAROBJ vt 0xbbe4xx family is unknown here: any heap object that holds a readable ascii string) */
+            DWORD p = klh_rd32(el + k), q; BYTE tb[0x60]; DWORD m;
+            if (p < 0x10000 || (p >= 0x400000 && p < 0xe00000) || !klh_rd(p, tb, sizeof tb)) continue;
+            for (q = 0; q + 4 < sizeof tb; q += 4) {
+                DWORD sp = *(DWORD *)(tb + q); char sb[48]; BYTE c[48];
+                if (sp < 0x10000 || (sp >= 0x400000 && sp < 0xe00000) || !klh_rd(sp, c, sizeof c)) continue;
+                for (m = 0; m < 40 && c[m] >= 32 && c[m] < 127; m++) sb[m] = (char)c[m];
+                if (m >= 3 && m < 40 && !c[m]) { sb[m] = 0; klog("hudprobe: plist +%04lx -> %08lx +%02lx -> \"%s\"", k, p, q, sb); shown++; break; }
+            }
+        }
+    }
+    klog("hudprobe: per-player fields should differ between records (name, team/status, money, kills, local flag); a solo host has ONE record: compare against a bot-filled round or a second client. Ground truth: compare plist strings with what the stock list shows on screen (Tab).");
+}
+#endif
 
 /* Section 0: may the gameplay parts act on the level that runs now? -> 1 only when its archive was seen and is NOT
    the stock one (the verdict under which klsteam.c blocks every Steam write of the round); why[200] says which. */
