@@ -137,18 +137,18 @@ def plan_roof(B, nav, home, route, log):
     return plan
 
 
-def make_roof(B, plan):
+def make_roof(B, plan, clock_name='OldWaves!RoofClock', pre='Roof_', tmpl_path='AI_Players!Enemies!SecondRun!YokoGuards'):
     """-> (maker, tops, report). Pre-placed squads (f3 = 1) with a Defend rout each, a Go timer each (named in the START list)."""
     import kl_fa_fed as FED
     sc = B.sc
     M = KB.Maker()
     node = lambda path: sc.resolve(path)[0]
-    clock = FED.clone_built(M, B, node(R + KB.SQUAD + 'Squad#02'), 'OldWaves!RoofClock')
+    clock = FED.clone_built(M, B, node(R + KB.SQUAD + 'Squad#02'), clock_name)
     clock.ctrls = []
     M.place(clock, (0.0, 0.0, 0.0))
     tops = [clock]
     rep = collections.OrderedDict(squads=[], go=[])
-    tmpl = node(R + 'AI_Players!Enemies!SecondRun!YokoGuards')
+    tmpl = node(R + tmpl_path)
     pools = {'yakuza': [], 'bodyguard': []}
     for k in range(1, len(sc.nodes)):
         if sc.cls(k) != 'ZFFActor' or B.values(k).get('ZFFActor[0]') != 'Enemy':
@@ -167,11 +167,11 @@ def make_roof(B, plan):
         pool = pools[w['kind']]
         if not pool:
             raise ValueError('no %s actors to clone' % w['kind'])
-        top = FED.clone_built(M, B, tmpl, 'OldWaves!Roof_' + w['name'])
+        top = FED.clone_built(M, B, tmpl, 'OldWaves!' + pre + w['name'])
         top.ctrls = [c for c in top.ctrls if M.p.key(c[0]) == 'ZSquadScript']
         M.place(top, (0.0, 0.0, 0.0))
         M.set(top, 'ZSquadScript', {3: 1, **{j: [] for j in range(4, 19)}})          # in the world from load
-        me = R + 'OldWaves!Roof_' + w['name']
+        me = R + 'OldWaves!' + pre + w['name']
         d = top.add(M.clone('F07', sq2(KOW.FORM), '10_Defend'))
         M.place(d, (0.0, 0.0, 0.0))
         refs = []
@@ -182,7 +182,7 @@ def make_roof(B, plan):
         M.set(d, 'DefendBehaviourRout', {0: '', 1: refs, 2: 1, 3: 0, 4: 'eDMS_NotSet', 5: 'eDF_NotSet', 6: '', 7: [], 8: 1, 9: 0})
         for j, c in enumerate(w['men']):
             a = pool[(i * ROOF_MEN + j) % len(pool)]
-            grp = top.add(FED.clone_built(M, B, sc.parent[a], 'Roof_%s_%02d' % (w['name'], j + 1)))
+            grp = top.add(FED.clone_built(M, B, sc.parent[a], pre + '%s_%02d' % (w['name'], j + 1)))
             dx, dz = w['target'][0] - c[0], w['target'][2] - c[2]
             if math.hypot(dx, dz) < 50.0:
                 dx, dz = 1.0, 0.0
@@ -192,7 +192,7 @@ def make_roof(B, plan):
         go = clock.add(FED.clone_built(M, B, node(KOW.TIMER_FORM), 'Go_' + w['name']))
         M.place(go, (0.0, 0.0, 0.0))
         M.set(go, 'TriggerDelay2', {0: 0.1 + 0.4 * i, 4: [me + BS + '10_Defend']})
-        rep['go'].append(R + 'OldWaves!RoofClock' + BS + 'Go_' + w['name'])
+        rep['go'].append(R + clock_name + BS + 'Go_' + w['name'])
         rep['squads'].append(dict(name=w['name'], kind=w['kind'], squad=me, men=[[round(v) for v in c[:3]] for c in w['men']]))
         tops.append(top)
     return M, tops, rep
@@ -320,6 +320,11 @@ def roof_pass(src, dst, hvk_origin, log=print):
         M, tops, rrep = make_roof(B, plan)
         q, order = M.scene(tops)
         Jn = J.join(sc, [(sc, t) for t in sc.tops()] + [(q, t) for t in q.tops()], 'lastcall3')
+    elif CFG.get('guards'):                 # lastcall5: bodyguard squads inside (same maker as the roof squads, own clock and names)
+        route = None
+        M, tops, rrep = make_roof(B, CFG['guards'], 'OldWaves!GuardClock', 'Guard_', 'OldWaves!Roof_R1')
+        q, order = M.scene(tops)
+        Jn = J.join(sc, [(sc, t) for t in sc.tops()] + [(q, t) for t in q.tops()], 'lastcall5')
     else:                                   # lastcall4 (civ_only): the roof squads are already in; only f3 / spread of the new civilians
         route, tops, order, rrep = None, [], [], dict(squads=[], go=[])
         Jn = J.join(sc, [(sc, t) for t in sc.tops()], 'lastcall4')

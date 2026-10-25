@@ -1,3 +1,7 @@
+2026-10-25 - lastcall5 (full 653a4f4c 90 civs 150/111; lite 7d7f80c7 71 civs 138/95) STAGED, rehearsed, NOT installed (pinned on live 858d3371,
+backup .before-1025lastcall5): 14 civilian looks (DD 41803/41556 variants + M05_A 6854/7265/6993/7115 grafted), bodyguards, bartender.
+Files: C:/kl_build_1024/lastcall5_1025a/stage/lc5_{full,lite}/main; tool tools/kl_club_lastcall5.py. Women under DD Civilian clips unproven.
+
 2026-10-25 - READY sent to e8: Last Call club music boost stage A C:/kl_build_1024/lastcallmusic_1025a/pkg/stageA (tools/kl_club_music2.py; member-pinned: SND 498cc81d->987d5e65, WHD 8cf764be->73e32be8, _LS 3b21242c->09a53d2b; zip 858d3371->9638943a; Ambient group 0.5->1.0, layer volume bytes up, 3D radius x1.5, adds Retomoto_Ambient_V2_Loop bed sound). Stage B (bed via settings fields 157/158, .prp) must be rebuilt after lastcall5; field 157 in an FA round unproven. Cause found: club music routed to the Ambient group at 0.5 and zone-gated by SoundLimiterFade.
 
 2026-10-25 - RESEARCH+SPEC re/dm01_ai_cover_1025.md (DM01 enemy cover/flank/routes; nothing built or installed). Campaign 'smart' = structure (RunToCover 45-141/level, RandomTrigger, DefendPlayerPos), not a difficulty table; DM01 has 0 RunToCover, 28% of enemy posts with no cover in 5 m, nav has 2 lanes (centre, east loop) + west alley into one choke. Plan: 14 boxes on real props, RunToCover+RandomTrigger on 5 squads, +2 squads, 0 actors. Build on top of dm01fb. Scratch: C:/kl_build_1024/dm01ai_research_1025a.

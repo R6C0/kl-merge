@@ -66,6 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-25 - lastcall5 (full 653a4f4c 90 civs 150/111; lite 7d7f80c7 71 civs 138/95) STAGED, rehearsed, NOT installed (pinned on live 858d3371,
+backup .before-1025lastcall5): 14 civilian looks (DD 41803/41556 variants + M05_A 6854/7265/6993/7115 grafted), bodyguards, bartender.
+Files: C:/kl_build_1024/lastcall5_1025a/stage/lc5_{full,lite}/main; tool tools/kl_club_lastcall5.py. Women under DD Civilian clips unproven.
+
 2026-10-25 - STAGED k44 71A1E808 (C:\kl_build_1019\k44_1025a\stage, over k43): page II buy got the stock gun = round reset freed the parked
 stock guns and handed one over in 45 ms, under the 250 ms pass; kspg_repark re-parks per tick in 0x16/0x18. Reviewed twice. Awaits 'install'.
 
