@@ -105,3 +105,18 @@ Live test (TEST build, one process, no network): `[Expansion] Enable=1`, `[Redir
 `[Names] Enable=1 Log=1 Override=0`. Online -> System Link -> Create -> lobby, step the map. Expect in KLHook.log
 "names: LOC object ... now answers through the private vtable" and "names: lookup AllLevels / Menu/Online/Scenarios/Title01 -> 'Subway' (pass-through, Override=0)".
 Then Override=1, `DM01=Hot Coffee`: expect "-> 'Hot Coffee' (OVERRIDDEN)" and the name in the lobby, Arcade list and filter.
+
+## 5. Data route built (2026-10-25, tools/kl_lobbynames.py + kl_lobbynames_install.py; offline, NOT installed, NOT run live)
+Owner: lobby says "Subway" and shows the Subway picture; random mode should show 4 pictures in one square.
+- Name: LOC leaf `AllLevels/Menu/Online/Scenarios/Title0k` (k = slot) of every language's `Scenes/kaneandlynch<Lang>.LOC`
+  (CERTAIN by the lobby tag reading, section 1; UNSEEN live). Picture: frontend entity `LevelPicture_F0k` 325x183 via
+  `LobbyPictureF0k` in Patch01 `menu/frontend.xml` (CERTAIN by the XML). Same as the Arcade page's? NO: Arcade uses
+  `LevelPicture_H0k` 540x304 (DXT5, six tiles) and its own literal titles; only the LOC key is shared.
+- Built into C:\kl_build_1024\lobbynames_1025\{set2,set3,rand}: the live overlay scene + 18 entities (LobbyMap_<folder> x12,
+  LobbyRand_F0k x6; 325x183, ABGR single tile, pictures = the live Arcade pictures scaled down, cards for The Dig / Flat Raid)
+  + rewritten Title leaves; Patch01 re-pointed + the 3 Arcade lists (HeistLevel, two leaderboards) made literal so Arcade page 1
+  keeps "Subway". Random: 2x2 = stock slot picture + the slot's maps of pages 2/3 (+ a RANDOM card). `install.py --set 2|3|rand | --undo`.
+- LIMIT: static data. A set stays installed for Quick Match too (a Quick Match lobby would show Dead Men names for stock maps).
+  Cure (needs klslot.c, not done): look for `<overlay path>.set<N>` first when OnlineSet=N, only in a network session.
+- Loading screen: no map-name text key (generic LOC); whether the Loader_Sequence pictures bake a name is NOT checked.
+- Other languages get the English names; the three literal Arcade lists are English only.
