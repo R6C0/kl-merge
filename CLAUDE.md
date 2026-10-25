@@ -70,9 +70,9 @@ Full dated log: `re/open_work_log.md` (newest first).
 .before-1025fedoutfit2). Earlier batch (02:40, log): DM01B/DM02/DM01/DM06B + vans + fed on 14 maps; lc5 SAFE and F01 AKM crashed and were UNDONE.
 C: disk was full (50 MB, install aborted cleanly; freed to ~16 GB): check free space before builds. Obsolete stages moved to G:/kl_build_offload.
 
-2026-10-25 ~08:30 - DIG FIX 1025b STAGED, NOT installed: C:/kl_build_1024/dig_build_1025b/install, F06_Main.zip 3c7636d3, PC_Def.str b6346345 (optional).
-Police respawn inside the Truckland bounds, 0 police in START sight, TEAM_MERC off the Hero island; check() proves it (re/dig_fa_design_1025.md s13).
-Install = dig.ps1 + `kl_expansion.py install` (rewrites e8's KLHook.ini block) + EngineMaps ,DM07 in the live ini: proposed to e8, waiting for a window.
+2026-10-25 ~09:30 - DIG 1025b INSTALLED (e8 window), not yet run: Maps/DM07 F06_Main.zip 3c7636d3 (dig.ps1, no PC_Def.str: C: too tight), menu = Dead Men campaign
+entry 5: KLHook.ini +F06=DM07/+F06=The Dig/EngineMaps ,DM07 (f8de2a9d -> 5bb667be), overlay patched in place a6594c09 -> e34c69d2 (stock H05 picture).
+NOT kl_expansion install (whole tree, would reset live maps); mkoverlay regen does not reproduce the live overlay. Undo: C:/kl_build_1024/dig_build_1025b/menu/dig_menu.py --undo + UNDO bat.
 
 2026-10-25 ~08:30 - MEMORY: DM05A crashes = 32-bit ADDRESS SPACE full (free VA 1728 MB before load -> 13-17 MB in round 1; ReShade irrelevant;
 DM05A has the LEAST texture data of any map, so it is runtime growth). k48f OtherStackKB=2048 (foreign threads' stacks) kept DM05A alive 360 s,
