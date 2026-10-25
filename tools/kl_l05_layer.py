@@ -223,7 +223,10 @@ BOUND_GROUPS = collections.OrderedDict([
     ('040_LevelBound_AlleyLeft', dict(c=(9300.0, 700.0, 4400.0), h=(4800.0, 1300.0, 116.0), w=(4277.0, 240.0, 'z')))])     # south: Warn z 4037 .. 4517
 PARKED = ['Specials!LevelBound!%s!%s' % (g, b) for g in ('040_LevelBound_AlleyRight', '030_LevelBound_StreetRight') for b in ('Bound', 'Warn01', 'Warn02')]
 ENTER_AT, ENTER_HALF = (11000.0, 800.0, 1500.0), (2700.0, 950.0, 2200.0)          # the whole tower volume: the bots' first stage (START and every loot place inside). GUESS
-EXIT_AT, EXIT_HALF = (9300.0, 100.0, 1100.0), (150.0, 200.0, 500.0)               # a plane on the street between the tower and the van, after the last loot. GUESS
+# round 4: the exit-loot plane moved OFF the van's line. It was centred ON it (9300, 1100; z 600 .. 1600) in the street's 320-wide strip (mesh z 840 .. 1160 for x 8231 .. 9600,
+# the van drives along z 1100), so every bot that went there stood 20 .. 102 from the line = IN the van's lane (kl_fa_bots_dyn: 49 FAIL). From x 9700 the mesh opens into the
+# plaza (z 0 .. 1990, MEASURED on 1025d), so the plane is there, 300 .. 500 south of the line. GUESS: the plane's position is free (the AI heisters only need to reach it).
+EXIT_AT, EXIT_HALF = (9900.0, 100.0, 600.0), (150.0, 200.0, 200.0)               # a plane on the plaza between the tower and the van's street, after the last loot. GUESS
 WALK_BOX = ((11394.0, 400.0, 150.0), (700.0, 100.0, 500.0))                        # the 1st floor, the tower's room (wave 2). GUESS
 FLOOR_BOX = ((12295.0, 1600.0, 1566.0), (500.0, 100.0, 400.0))                     # the flats' corridor (wave 3, the alarm). GUESS
 SPAWN_EYE = START[3]
@@ -325,11 +328,24 @@ CLEAR_WHAT = collections.OrderedDict([
     # the drawers are furniture: cleared. GUESS: that the campaign door / drawer controllers tolerate the missing node (nothing here references them).
     (30989, ('SI0100_L05_Apartment_wooddoor_C_01', (13001, 1597, 2813))), (30966, ('PC0100_L05_ApartmentWoodDoor_D_State_02', (13005, 1600, 2788))),
     (29844, ('PC0200_L05_Drawers_B_Geom_01', (13076, 1662, 2868))),
+    # round 4: the wall break (see below): the intact slab and the hidden-but-solid frame of the middle state
+    (30708, ('SI0100_L05_Wall_Break_State1', (11800, 1600, 3600))), (30809, ('SI0100_L05_Wall_Break_PrePost_Frame_00', (11800, 1600, 3600))),
 ])
-# NOT cleared on purpose: REF 30708 SI0100_L05_Wall_Break_State1 (11800, 1600, 3600), the apartment A wall the campaign breaks open by script. It is a STRUCTURAL wall
-# (the intact state of a two-state wall: State_A visible, State_B hidden with shards / splinters emitters and a ShatterStart trigger) and it walls in loots 4-6
-# (24 legs). The alternative is to swap the states (hide State_A + cut its collision, show State_B's frame 30809), which needs the emitters of State_B left off: not done
-# without seeing it (a map defect report; check() keeps it a NOTE).
+# SHOW_WHAT: REF -> (the last part of the object's scene path, its world position): hidden by the campaign, SHOWN by the layer (flag 0x400 off, ZGEOM[3] 0). Proven by name
+# and place like CLEAR_WHAT. The kept MainFrame01 (REF 30781) must still have its collision (check()).
+SHOW_WHAT = collections.OrderedDict([
+    (30709, ('Wall_StateC', (0, 0, 0))), (30710, ('SI0100_L05_Wall_Break_Post_00', (11800, 1600, 3600))),
+])
+WALL_FRAME = 30781                      # SI0100_L05_Wall_Break_Post_00\MainFrame01: the broken wall, its collision stays
+# round 4 (DD10): the apartment A WALL BREAK, opened STATICALLY to the campaign's own end state. The campaign's controllers (Special!Geom_Controllers!B3 / B4, MEASURED
+# on 1025d) go: State3 = ActivateGeom Wall_StateB + DeactivateGeom Wall_StateA; State4 = ActivateGeom Wall_StateC + DeactivateGeom Wall_StateB\PrePost_Frame_00. NOTHING in
+# the FA build sends those messages, so State_A (a SOLID slab, x 11794 .. 11819, z 3398 .. 3800, MEASURED with exact casts) stayed shut all round and walled in the
+# loots of apartment B (MoneyStack_096/097/098: 27 + 3 legs). So the layer applies the END state: State_A (REF 30708) and the PrePost frame (REF 30809, a hidden but
+# live-collision frame whose hole is only a window, MEASURED) are hidden and their collision cut (CLEAR_WHAT); State_C (REFs 30709 group, 30710 Post_00 group) is shown
+# (SHOW_WHAT). Its MainFrame01 (REF 30781, STATIC collision kept) is the wall WITH the breach: exact casts find it open at z ~3530 .. 3680 over its whole height
+# (>= 150 wide, a body of 50 fits). The shards, shard-TV, explosion and splinter groups under Post_00 carry their own hidden flag and stay hidden (the break itself never
+# fires: no ShatterStart is triggered), so the crew meets a finished breach, a hole the raid made. GUESS: that showing the two groups does not show their hidden children
+# (the children have their own 0x400 flag, MEASURED), and that MainFrame01's MESH has the hole its collision has (not seen; only the collision was measured).
 CLEAR_REFS = set(CLEAR_WHAT)
 COOP_BLOCKERS = 3                       # the CoopAirLock_Pathblocker_00 nodes of the campaign map (MEASURED on 1025a: eBlocking, empty list, named by no controller)
 ROAD = dict(arrive=[(5300.0, 0.0, 1100.0), (6300.0, 0.0, 1100.0), (7300.0, 0.0, 1100.0)], stop=STOP,
@@ -681,13 +697,13 @@ def complete(sc):
 
 
 # ------------------------------------------------------------------ on the written level
-def clear_proof(sc, ents, where):
-    """Does every REF of CLEAR_WHAT name the object it was measured for (the last part of its scene path, its place within 5 units)? -> [problems]. where(i, e) = the
+def clear_proof(sc, ents, where, table=None):
+    """Does every REF of CLEAR_WHAT (or `table`) name the object it was measured for (the last part of its scene path, its place within 5 units)? -> [problems]. where(i, e) = the
     world position of entity e (index i)."""
     bad, byref = [], {}
     for i, e in enumerate(ents):
         byref.setdefault(e.ref, []).append(i)
-    for ref, (name, at) in CLEAR_WHAT.items():
+    for ref, (name, at) in (CLEAR_WHAT if table is None else table).items():
         ix = byref.get(ref, [])
         if len(ix) != 1:
             bad.append('CLEAR_WHAT REF %d (%s): %d entities carry it, wanted 1' % (ref, name, len(ix)))
@@ -708,6 +724,7 @@ def finish(folder, log=print):
     # the van's way: the props named in CLEAR_NAMES hidden (their collision was cut in the join: build())
     hid = []
     bad += clear_proof(sc, E.ents, lambda i, e: E.at(i + 1))
+    bad += clear_proof(sc, E.ents, lambda i, e: E.at(i + 1), SHOW_WHAT)
     if bad:
         for b in bad:
             log('  PROBLEM: ' + b)
@@ -724,6 +741,19 @@ def finish(folder, log=print):
     if len(hid) != len(CLEAR_REFS):
         bad.append('the van\'s way: %d of the %d props to clear are in the level' % (len(hid), len(CLEAR_REFS)))
     log('  kl_l05_layer: %d street props hidden (the van\'s way)' % len(hid))
+    # round 4: the broken state of the apartment A wall is SHOWN (SHOW_WHAT): .gms flag 0x400 off and ZGEOM[3] 0, the reverse of the hiding above
+    import kl_prpjoin as J2
+    shown = []
+    for i, e in enumerate(E.ents):
+        if e.ref in SHOW_WHAT:
+            k = i + 1
+            lab = J2.labels('dd', sc.cls(k))
+            kl_graft.edit(sc.nodes[k], 'props', lambda us, lab=lab: A.setv(sc, us, lab.index('ZGEOM[3]'), 0))
+            e.flags = e.flags & ~HIDDEN
+            shown.append(k)
+    if len(shown) != len(SHOW_WHAT):
+        bad.append('the wall break: %d of the %d groups to show are in the level' % (len(shown), len(SHOW_WHAT)))
+    log('  kl_l05_layer: %d wall-break groups shown (State_C: the breach)' % len(shown))
     loot = [k for k, _i, v in kl_fa.controllers(sc, 'OnlineMoneyCtrl') if 'DROP' not in v[2] and sc.parent[k] == 0]
     pool = {E.ents[k - 1].model for k, _i, v in kl_fa.controllers(sc, 'OnlineMoneyCtrl') if 'DROP' in v[2]}
     dressed = not {E.ents[k - 1].model for k in loot} <= pool
@@ -946,8 +976,12 @@ def seen_from(C, rows, p):
     return None
 
 CAST_MASK = 0x28                        # characters (0x20) or heroes only (0x8): what a player or a bot is stopped by (kl_route's reading of the sub-part flags)
-CAST_HEIGHTS = (50.0, 110.0, 170.0)     # a knee, a chest and a HEAD line over the way's floor (round 2: 170 added, so lintels, door frames and ducts are met). GUESS: the same column
+CAST_HEIGHTS = (40.0, 110.0, 170.0)     # a knee, a chest and a HEAD line over the way's floor (round 2: 170 added, so lintels, door frames and ducts are met). GUESS: the same column
                                         # as kl_route (55 .. 165), a little lower to meet low rails; a Glacier character is about 180 tall, the 170 line leaves 10 for the skull
+# round 4: the knee line was 50 over a STEP_UP of 35: a thin obstacle 35 .. 50 tall (a low rail, a kerb-high wall, a crate) passed under the knee line yet is too high to
+                                        # step over. The knee line is now 40 (STEP_UP + 5): the only thin obstacles that still pass are those whose top lies 35 .. 40 over the floor, a
+                                        # 5 cm band that is below what the floor probe resolves (it is cast from STEP_UP and is exact only to the collision hull's own tolerance). GUESS: that 5 cm is
+                                        # irrelevant; a line AT 35 would meet floor decals and a stair's nosing (18 per tread, up to 9 over the interpolated floor line) as false alarms.
 STEP_UP, STEP_DOWN = 35.0, 20.0         # round 2: the floor under a piece's two ends is looked for from STEP_UP over the mesh to STEP_DOWN under it (exact cast, mask CAST_MASK) and the three
                                         # lines are cast over THAT floor: a stair's treads or a kerb stand above or below the mesh's plane, and a line cast over the mesh plane would meet a step
                                         # edge that a body steps over. GUESS: 35 up is what a character climbs without a stair animation (Dog Days' own stairs are 18 per tread)
@@ -957,7 +991,7 @@ PB_BOX_DY = 100.0                       # kl_route.PB_DY: a path blocker's box c
 
 
 SHIFTS = tuple(range(-120, 121, 20))    # the sideways offsets (units) a body may take from the AI's centre line inside the mesh. GUESS: 1.2 m each side
-SCRIPTED_NAMES = ('WoodDoor', 'wooddoor', 'Wall_Break', 'Drawers')
+SCRIPTED_NAMES = ('WoodDoor', 'wooddoor', 'Wall_Break', 'Drawers')   # round 4: only NAMES them in a walk-proof FAIL (they no longer turn it into a NOTE)
 WAY_RETRIES = 12                        # see walk_proof
 SHIFT_EDGE = 60.0                       # see cast_way
 SHIFT_STEP = 40.0                       # ... and how far the offset may change from one piece of the way to the next (a body turns; 2 steps)
@@ -1206,6 +1240,16 @@ def check(folder, log=print, problems=None):
     if cut:
         fail('the street props to clear still have collision: REF %s' % cut)
     log('  van\'s way: %d props hidden, collision cut (%d REF still in the .HVK)' % (len(CLEAR_REFS) - len(shown) - len(miss), len(cut)))
+    # round 4: the wall break shows its broken state (SHOW_WHAT), the breach keeps its collision (MainFrame01), no other state of the wall is solid
+    for x in clear_proof(sc, ents, lambda i, e: pos[e], SHOW_WHAT):
+        fail(x)
+    hid_show = sorted(r for r in SHOW_WHAT if r in refs and refs[r].flags & HIDDEN)
+    if hid_show or sorted(set(SHOW_WHAT) - set(refs)):
+        fail('the wall break: State_C groups %s are still hidden / missing' % (hid_show or sorted(set(SHOW_WHAT) - set(refs))))
+    solid = {kl_hvk.ref(i) for s_ in hvk.shapes for i in s_.inst}
+    if WALL_FRAME not in solid:
+        fail('the wall break: the breach (REF %d, MainFrame01) lost its collision: the flats\' wall is gone' % WALL_FRAME)
+    log('  wall break: State_A and the middle frame hidden + collision cut, State_C shown (%d groups), the breach frame REF %d solid' % (len(SHOW_WHAT) - len(hid_show), WALL_FRAME))
     # ---- the loot: the values, each on the mesh and reachable from START
     loot = [(k, v) for k, _i, v in kl_fa.controllers(sc, 'OnlineMoneyCtrl') if 'DROP' not in v[2] and sc.parent[k] == 0]
     if len(loot) != len(LOOT) or sorted(v[1] for _k, v in loot) != sorted(w for _p, _y, w, _x in LOOT):
@@ -1340,12 +1384,11 @@ def check(folder, log=print, problems=None):
     else:
         wbad, _nlegs = walk_proof(folder, sc, ents, pos, mesh, C, boxes, log)
         for x in wbad:
-            if any(k in x for k in SCRIPTED_NAMES):
-                # GUESS (by name only): a door a player opens, a wall the level breaks, a drawer chest that is keyframed (moves when pushed). The cast
-                # meets the closed/intact form; whether the player passes it is NOT proven offline -> a NOTE, not a FAIL.
-                log('  NOTE: walk proof (openable / breakable / movable by name, unproven): ' + x)
-                continue
-            fail('walk proof: ' + x)
+            # round 4: EVERY blocked leg is a FAIL. The legs of the walk proof are START -> loot, loot / START -> van and police -> START: each ends in a loot, a spawn or
+            # the escape, and a leg is only reported when ALL its ways (after the detour search) are blocked, so the blocker seals it, whatever its name. It used to be a
+            # NOTE that still printed RESULT: PASS (the wall break walled in three loots on 1025a .. 1025d). A scripted object (SCRIPTED_NAMES: a door, a breakable wall,
+            # a drawer chest) is only named in the message: nothing in the FA build opens it, so it must be cleared (CLEAR_WHAT) or the loot moved.
+            fail('walk proof%s: %s' % (' (a scripted-by-name object, nothing in the FA build opens it)' if any(k in x for k in SCRIPTED_NAMES) else '', x))
     return bad
 
 
@@ -1353,7 +1396,10 @@ def flags_of():
     return collections.OrderedDict(SQUADS_AWAKE=SQUADS_AWAKE, NO_AI=NO_AI, POLICE_ARRIVE=POLICE_ARRIVE, START_AT=START_AT, BACKSTOP_AT=BACKSTOP_AT, VAN_DELAY=VAN_DELAY)
 
 
-BOT_OPT = {'stops': 4, 'cases': 'off', 'lane': True, 'window': True, 'loot_seconds': 20, 'park': (8414.0, 0.0, 969.0)}   # GUESS: the street mesh near the van is a strip; 131 off its line is the widest place
+BOT_OPT = {'stops': 4, 'cases': 'off', 'lane': True, 'window': True, 'loot_seconds': 20, 'park': (8414.0, 0.0, 900.0)}
+# round 4: park was (8414, 0, 969), 131 off the van's line ('the widest place': measured on a mesh that is not this one). MEASURED on 1025d: the strip's south edge is z 840
+# (line z 1100), so z 900 keeps CLEAR (60) from the edge and is 200 from the line. GUESS: the park box (AllyEscapeBox) built round it still holds 7 places >= BOT_LANE_CLEAR off.
+BOT_LANE_CLEAR = 200.0                  # round 4: kl_fa_bots.LANE_CLEAR (250) while the bots are built: the strip south of the van's line is only 260 wide, 200 is the most it gives (FAIL is below 160)
 # GUESS (the dig's): briefcases only, up to 4 stops, a loot wait of 20 s; the plan puts the van's AllyEscapeBox PARK_SIDE from the key-framed van line.
 
 
@@ -1364,6 +1410,7 @@ def bots_step(folder, log=print):
     import kl_fa_bots as F, kl_fa_bots_dyn as D
     probs = []
     cur = folder
+    F.LANE_CLEAR = BOT_LANE_CLEAR                       # module constants of the bot builders (kl_fa_bots_dyn reads them as F.LANE_CLEAR); the process ends after one build
     for name, run in (('bots', lambda s, d: F.build(s, d, dict(BOT_OPT), log)), ('dyn', lambda s, d: D.build(s, d, None, log))):
         tmp = folder.rstrip('/' + chr(92)) + '_' + name + '_tmp'
         shutil.rmtree(tmp, ignore_errors=True)
