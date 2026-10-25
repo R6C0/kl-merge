@@ -2805,6 +2805,26 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
                 state_at += [frozenset(opened | broken)] * (len(places) - len(state_at))
             elif cn == 'SquadModifierBehaviour':
                 tight = v[9] == 'eDM_Tight'
+            elif cn == 'KickDoorBehaviourRout':
+                # a door kick (kl_bots_kick_1025): no place and no wait of its own; one KickDoorBehaviour_PosInfo kid, its field 0 this
+                # squad's own actor group, its field 1 a door group (as the stock F03 PosInfo: the group holding a KickDoor controller), standing on the home part
+                pis = [j for j in range(k + 1, sc.end[k]) if sc.parent[j] == k and kl_fa.has(sc, j, 'KickDoorBehaviour_PosInfo')]
+                if len(pis) != 1:
+                    fail('%s: %d KickDoorBehaviour_PosInfo kids (exactly 1)' % (name(k), len(pis)))
+                for j in pis:
+                    pv = next((u for k2, _i2, u in kl_fa.controllers(sc, 'KickDoorBehaviour_PosInfo') if k2 == j), None)
+                    own = sc.parent[squads[top]]
+                    if pv is None or not isinstance(pv[0], str) or res(pv[0]) != [own]:
+                        fail('%s: PosInfo field 0 is %r, not the actor group of this squad (%s)' % (name(j), pv and pv[0], name(own)))
+                    doors_ = res(pv[1]) if pv and isinstance(pv[1], str) else []
+                    if len(doors_) != 1 or not any(kl_fa.has(sc, d_, 'KickDoor') for d_ in range(doors_[0], sc.end[doors_[0]])):
+                        fail('%s: PosInfo field 1 %r is not one node with a KickDoor controller' % (name(j), pv and pv[1]))
+                    pp = B.at(j)
+                    hit = nav.at(pp[0], pp[1], pp[2], dy=60.0)
+                    if hit is None or nav.part[hit[0]] != home:
+                        fail('%s at (%d, %d, %d) is not on the mesh part of the START row' % (name(j), *pp))
+                if not v[0]:
+                    fail('%s: KickDoorBehaviourRout without a NEXT' % name(k))
             else:
                 # the places walked before the LAST loot wait: up to there a bot must stay out of the level exit
                 # boxes. (A timer that only fans out to the cases' relays is no loot wait.)

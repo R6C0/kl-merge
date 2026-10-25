@@ -66,10 +66,12 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-25 ~17:05 - GRENADE PROBE RESULT (owner's G presses 16:43): [P+0xa1c]=0 on every press and release, so ZFFActionThrow / action 0x11 is DEAD for the player
-(vtable 0xbb45f4 as expected, [P+0x84]=0, [P+0x239c] word0 0x179). Live ini [Grenade] Probe=0 (44e51cff, .before-1025probeoff). Remaining route: hook-side projectile spawn (e8, research).
-DOORS option A (owner): heister KickDoorBehaviourRout post-pass tools/kl_bots_kick_1025.py building in wf wpcwu2uyp -> staged C:/kl_build_1024/hkick_1025a (DM01/DM02/DM03A, DM01B maybe).
-DM01 overlaps e8's AKM sound fix: whoever installs second rebases; message before installing.
+2026-10-25 ~17:45 - HEISTER DOOR KICKS INSTALLED (owner option A; tools/kl_bots_kick_1025.py, wf wpcwu2uyp + my rebase/byte check): DM01 3858b441 (e8 AKM sound) -> fbffea91
+(30 kick nodes, Door_1/2, 25 NEXT redirected), DM02 b0252fde -> 7ebc7e46 (60 nodes, doors 1,2,3,5, 81 redirected). DM03A/DM01B: no heister leg crosses a doorway, unchanged.
+Members .prp .gms .buf .oct .prm (.prm only .oct record numbers at +0x1c, as kl_fa_bots.apply); bot checks identical to the input; entries stale 0. No arming needed (ctor sets state 1).
+Undo: C:/kl_build_1024/hkick_1025a/<MAP>/stage/install.py --undo (.before-1025hkick). Not run live. Risk: a kick order rejected before the goal runs would hold that squad (no timeout).
+
+2026-10-25 ~17:05 - GRENADE PROBE: [P+0xa1c]=0 on every G press: player action 0x11 is dead; ini [Grenade] Probe=0 (44e51cff). Next: hook-side projectile spawn (e8, research).
 
 2026-10-25 ~06:05 - MEMORY SHIP FIX: klquad.c [Memory] QuadRing=128 (815c55e1d, 52466f929; KLHook.ini + mod-options row): ring for the 4 post-process quad VBs,
 Lock wrapped via a vtable slot (SHIP-safe), rings dropped before every Reset (klfps keeps its Reset wrapper). K50K DM05A + 2x Alt+Tab: both Resets ok, VA flat ~555 MB,

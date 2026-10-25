@@ -195,7 +195,7 @@ def _intern(tokens, keys, table, order, rename=None):
     return out
 
 
-def join(base, picks, label='join', rename=None, take=None, skip=()):
+def join(base, picks, label='join', rename=None, take=None, skip=(), adopt=None):
     """One Scene from `base`'s header, scene property block and ROOT node, and the top-level
     subtrees `picks` = [(scene, top-level node index), ...] in that order under it. Every key is
     re-interned into one table in order of first use (the order the games' own files have), the
@@ -205,6 +205,8 @@ def join(base, picks, label='join', rename=None, take=None, skip=()):
     `take` = {entry name: scene} replaces (or adds) entries of the scene property block by
     another level's, e.g. the map's fog and far plane.
     `skip` = node indices of `base` (with their subtrees) left out of the copy (kl_interact_graft: a static door leaf that a kick door replaces).
+    `adopt` = {top-level node index of `base`: [(scene, top-level node index), ..]}: subtrees of other scenes added as the LAST children of that
+    picked top (kl_bots_kick_1025: a kick step under a squad top, which stays the same node so every reference to it keeps working).
     Returns the Scene; scene.origin[k] = (source scene, source node index) of node k - the order
     the joined .gms must list its entities in."""
     table, order = {}, []
@@ -240,6 +242,14 @@ def join(base, picks, label='join', rename=None, take=None, skip=()):
             made[k] = copy(sc, k)
             (new.root if k == t else made[sc.parent[k]])['children'].append(made[k])
             names.append(sc.names[k]); tids.append(sc.tids[k]); origin.append((sc, k))
+        for sc2, t2 in ((adopt or {}).get(t, ()) if sc is base else ()):
+            if sc2.parent[t2] != 0:
+                raise ValueError('%s node %d (%s) is not a top-level subtree' % (sc2.label, t2, sc2.names[t2]))
+            made2 = {}
+            for k in range(t2, sc2.end[t2]):
+                made2[k] = copy(sc2, k)
+                (made[t] if k == t2 else made2[sc2.parent[k]])['children'].append(made2[k])
+                names.append(sc2.names[k]); tids.append(sc2.tids[k]); origin.append((sc2, k))
     new.tail = [(0x7f, b'')]
     if '' not in table:
         raise ValueError('no empty key: the header count of such a file is not established')

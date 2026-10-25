@@ -1,3 +1,8 @@
+2026-10-25 ~17:45 - HEISTER DOOR KICKS INSTALLED (owner option A; tools/kl_bots_kick_1025.py, wf wpcwu2uyp + my rebase/byte check): DM01 3858b441 (e8 AKM sound) -> fbffea91
+(30 kick nodes, Door_1/2, 25 NEXT redirected), DM02 b0252fde -> 7ebc7e46 (60 nodes, doors 1,2,3,5, 81 redirected). DM03A/DM01B: no heister leg crosses a doorway, unchanged.
+Members .prp .gms .buf .oct .prm (.prm only .oct record numbers at +0x1c, as kl_fa_bots.apply); bot checks identical to the input; entries stale 0. No arming needed (ctor sets state 1).
+Undo: C:/kl_build_1024/hkick_1025a/<MAP>/stage/install.py --undo (.before-1025hkick). Not run live. Risk: a kick order rejected before the goal runs would hold that squad (no timeout).
+
 2026-10-25 ~17:05 - GRENADE PROBE RESULT (owner's G presses 16:43): [P+0xa1c]=0 on every press and release, so ZFFActionThrow / action 0x11 is DEAD for the player
 (vtable 0xbb45f4 as expected, [P+0x84]=0, [P+0x239c] word0 0x179). Live ini [Grenade] Probe=0 (44e51cff, .before-1025probeoff). Remaining route: hook-side projectile spawn (e8, research).
 DOORS option A (owner): heister KickDoorBehaviourRout post-pass tools/kl_bots_kick_1025.py building in wf wpcwu2uyp -> staged C:/kl_build_1024/hkick_1025a (DM01/DM02/DM03A, DM01B maybe).

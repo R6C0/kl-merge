@@ -2588,7 +2588,7 @@ def check(folder, log=print):
         if tv and [s.lower() for s in tv[0][4]] != [(R_ + GATE_NAME).lower()]:
             fail('Timer_start_bots does not name the gate alone: %s' % tv[0][4])
     # 2. the chains
-    NEXT = {'DefendBehaviourRout': 7, 'SquadModifierBehaviour': 26, 'TriggerDelay2': 4, 'TriggerLootDepleted': 4, 'TriggerActorsDead': 2}
+    NEXT = {'DefendBehaviourRout': 7, 'SquadModifierBehaviour': 26, 'TriggerDelay2': 4, 'TriggerLootDepleted': 4, 'TriggerActorsDead': 2, 'KickDoorBehaviourRout': 0}
     mine = {k for t in sc.tops() if sc.names[t].startswith(F.SQUAD) for k in range(t, sc.end[t])}
     ctrl_of = {}
     for cn in NEXT:
@@ -3370,7 +3370,7 @@ def lanes_of(folder):
     name, [place], seconds of the timer behind it or None)]}]} - one entry a branch set (a squad without a draw: one)."""
     B = F.Built(folder)
     sc, res = B.sc, B.sc.resolve
-    NEXT = {'DefendBehaviourRout': 7, 'SquadModifierBehaviour': 26, 'TriggerDelay2': 4, 'TriggerLootDepleted': 4, 'TriggerActorsDead': 2}
+    NEXT = {'DefendBehaviourRout': 7, 'SquadModifierBehaviour': 26, 'TriggerDelay2': 4, 'TriggerLootDepleted': 4, 'TriggerActorsDead': 2, 'KickDoorBehaviourRout': 0}
     mine = {k for t in sc.tops() if sc.names[t].startswith(F.SQUAD) for k in range(t, sc.end[t])}
     ctrl_of = {k: (cn, v) for cn in NEXT for k, _i, v in kl_fa.controllers(sc, cn) if k in mine}
     rand_of = F.fork_branches(sc, mine)

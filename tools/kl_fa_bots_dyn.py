@@ -227,7 +227,7 @@ DEFAULTS = {'random': True, 'vision': True, 'sixth': 0.0, 'rusher': True, 'stagg
             'routes': True, 'ways': None, 'fork_gap': FORK_GAP, 'fake': True, 'react': None}
 
 REACT = {'veteran': {5: 60.0, 13: 20.0, 14: 55.0}, 'elite': {5: 90.0, 13: 0.0, 14: 60.0}}      # ZSoldier fields, from kl2 0x46e410's table (re/map_ai.md 1)
-NEXT = {'DefendBehaviourRout': 7, 'SquadModifierBehaviour': 26, 'TriggerDelay2': 4, 'TriggerLootDepleted': 4, 'TriggerActorsDead': 2}
+NEXT = {'DefendBehaviourRout': 7, 'SquadModifierBehaviour': 26, 'TriggerDelay2': 4, 'TriggerLootDepleted': 4, 'TriggerActorsDead': 2, 'KickDoorBehaviourRout': 0}
 BS = '\\'
 
 
@@ -2307,6 +2307,17 @@ def graph(ctx_or_B):
         if not actors:
             continue
         g = {'top': t, 'actor': actors[0], 'chains': [], 'sets': [], 'forks': collections.OrderedDict(), 'reached': set(), 'faults': []}
+
+        def through(j, g=g):
+            """A KickDoorBehaviourRout in front of a hold (kl_bots_kick_1025: the bot kicks the door on its way to the hold) -> the hold behind it; the kick nodes count as started."""
+            while ctrl.get(j, (None,))[0] == 'KickDoorBehaviourRout':
+                g['reached'].add(j)
+                nk = [x for s in ctrl[j][1][NEXT['KickDoorBehaviourRout']] for x in sc.resolve(s)]
+                if len(nk) != 1:
+                    g['faults'].append('%s: %d next steps (1)' % (sc.names[j], len(nk))); break
+                j = nk[0]
+            return j
+
         # A chain that FORKS (a RandomTrigger as the next link) is walked once per BRANCH SET v = 0, 1, ..: at every
         # fork branch v mod (its number of ways). g['chains'][c] is branch set 0 (every fork's first way = the
         # build's), g['sets'][c] all of them; every way of every fork is in at least one. An item that is the first
@@ -2344,6 +2355,8 @@ def graph(ctx_or_B):
                     it['places'] = [j for s in ([v[0]] if v[0] else []) + list(v[1]) for j in sc.resolve(s)]
                 for j in nx[1:]:                        # what is started beside the next link
                     g['reached'].add(j)
+                    j = through(j)
+                    g['reached'].add(j)
                     cj, vj = ctrl.get(j, (None, None))
                     if cj == 'TriggerDelay2' and sc.names[j].endswith('_gap'):     # a '--fork-gap' timer: look through it
                         tg = [x for s in vj[4] for x in sc.resolve(s)]
@@ -2357,7 +2370,7 @@ def graph(ctx_or_B):
                             tg = [x for s in lst for x in sc.resolve(s)]
                             if bool(w) != bool(tg) or len(tg) > 1:
                                 g['faults'].append('%s: weight %s with %d targets' % (sc.names[j], w, len(tg)))
-                            alts += tg
+                            alts += [through(x) for x in tg]
                         if vj[0] != 1:
                             g['faults'].append('%s: field 0 is %s (stock: 1)' % (sc.names[j], vj[0]))
                         it['side'].append(('random', j, alts))
@@ -2590,7 +2603,7 @@ def check(folder, log=print, base=True):
                         fail('%s: the ways of fork %s never meet again' % (sq, fk['name']))
                     else:
                         fk['own'] = [lst[:lst.index(fk['meet'])] for lst in lists]
-                        flat_own = [x for o in fk['own'] for x in o]
+                        flat_own = [x for o in fk['own'] for x in o if g['ctrl'].get(x, (None,))[0] != 'KickDoorBehaviourRout']     # one door kick (kl_bots_kick_1025) may serve several ways, as the step behind it does
                         if len(flat_own) != len(set(flat_own)):
                             fail('%s: two ways of fork %s share a step before they meet' % (sq, fk['name']))
                         if sum(1 for o in fk['own'] if not o) > 1:
