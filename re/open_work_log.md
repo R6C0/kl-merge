@@ -1,3 +1,8 @@
+2026-10-25 ~18:10 - MEMORY K50A-D (e8): nvd3dum blocks per frame == whole-buffer VB DISCARD locks per frame (55/55, 71/71); a GPU flush every frame does not shrink
+the pile -> per-DISCARD rename records. All from KL2+0x47bdbf (inside Lock wrapper 0x87bda0) on 3-4 tiny DYNAMIC|WRITEONLY DEFAULT VBs (144/176 B), ~55-65/frame;
+10 wrapper callers, e8 finding the DISCARD one, TEST lever [Memory] D3dNoDiscard planned (my caution: NOOVERWRITE on a rewrite-from-0 buffer races the GPU -> check visuals).
+LC7+TEXMIP INSTALLED on DM05A at e8's GO: 4bd278cf -> 9cdd6dee, backup .before-1025lc7tm, undo dm05a_lc7texmip_1025a/install.py --undo. K50E/F follow on it.
+
 2026-10-25 ~17:40 - DD10 round 3 (bc2ee74d8, l05fa_1025d f4 0d4f8ef4): stove/laundry/vents = real clutter (cleared), street entrance = mesh gap (2-quad EXTRA_CHAIN,
 AI never run), apartment door/drawers cleared; check PASS but the verifier says NOT READY: Wall_Break 30708 seals loots 096-098 (check downgrades it to a NOTE), knee 50 vs
 step 35 gap, bots_dyn 49 FAIL in the van lane. Round 4 = workflow wkrhxtbed (open the wall or move loots, sealed loot = FAIL, build 1025e). bc2ee74d8 went out with a Sonnet

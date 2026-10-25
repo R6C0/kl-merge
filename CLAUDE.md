@@ -67,8 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 Full dated log: `re/open_work_log.md` (newest first).
 
 2026-10-25 ~16:00 - MEMORY: the DM05A wall is the nvd3dum small-block pile (render thread). Fix so far is [Memory] DriverArena=1 plus a working frame cap (limiter dead
-since k36, the overlay re-entered Present; e8d4d03ff GameThread=1). K49H2 Fps=60: 0 refusals, free VA flat. TEXMIP INSTALLED on DM05A (4bd278cf, backup
-.before-1025texmip 701d082f, undo dm05a_texmip_1025a/install.py --undo). Waiting on K49I/J (Fps 240/120). DD10 1025c FAILS (11 blockers), round 3 wupp9h1t5.
+since k36, the overlay re-entered Present; e8d4d03ff GameThread=1; MapCap DM05A:60 c774e73bd). Pile = one driver block per tiny-VB DISCARD lock (KL2+0x47bdbf, ~60/frame).
+DM05A live = lc7+texmip 9cdd6dee (backups .before-1025lc7tm 4bd278cf -> .before-1025texmip 701d082f; undo each install.py --undo). DM01 grenade 1bcac96b installed,
+scripted PASS (throw untested). DD10 1025d not ready (Wall_Break seals 3 loots), round 4 wkrhxtbed.
 
 2026-10-25 ~09:30 - DIG 1025b INSTALLED (e8 window), not yet run: Maps/DM07 F06_Main.zip 3c7636d3 (dig.ps1, no PC_Def.str: C: too tight), menu = Dead Men campaign
 entry 5: KLHook.ini +F06=DM07/+F06=The Dig/EngineMaps ,DM07 (f8de2a9d -> 5bb667be), overlay patched in place a6594c09 -> e34c69d2 (stock H05 picture).
