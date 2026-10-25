@@ -65,7 +65,7 @@ static void klho_put(int which, int value)
     if (which == 0) {
         int m = klho_maps[value < 0 ? 0 : value > 2 ? 2 : value];
         if (m == klho.map) return;
-        klho.map = m; snprintf(v, sizeof v, "%d", m); WritePrivateProfileStringA("Expansion", "OnlineSet", v, klh_ini);
+        klho.map = m; kls_online_set = m; klho.applied = -1; snprintf(v, sizeof v, "%d", m); WritePrivateProfileStringA("Expansion", "OnlineSet", v, klh_ini);
         klog("hostopts: set map set = %d (%s) - [Expansion] OnlineSet=%d", value, value == 0 ? "Dog Days" : value == 1 ? "Dead Men" : "mixed random", m);
     } else {
         int ai = value & 1, so = (value >> 1) & 1, pd = (value >> 2) & 1;

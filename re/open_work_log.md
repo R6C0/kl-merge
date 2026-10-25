@@ -1,3 +1,5 @@
+2026-10-25 ~23:55 - HOSTOPTS 1025b (out_hostopts_1025b SHIP 2f771cba / _test 004e2409, not run): host's F7/row now sets kls_online_set (LOAD follows); TEST logs the round clock ([rules+0x4c] etc.) at state 25/31 to find why a 10 min round lasts 83 s; [Lobby] RoundClockFix=1 optional GUESS write.
+
 2026-10-25 ~23:30 - BOTS ONLINE, DATA ROUTE (not installed, not run): tools/kl_botsonline.py + kl_fa_bots --squad-game; C:/kl_build_1024/botsonline_1025 (install.py/--undo). 7 Ally actors = most likely the map's squads (re/bots_online_fill.md).
 
 2026-10-25 ~23:55 - MAX PLAYERS + COPS AND ROBBERS (re/max_players.md, re/cops_and_robbers.md; out_netmax_1025a SHIP 75579781 / _test 6d1ead2c, not installed, not run):

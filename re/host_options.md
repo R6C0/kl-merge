@@ -27,3 +27,12 @@ Not testable alone: the client side. Heist time proof (TEST): `lobbyopt-test: RO
 ## Related fix in the same build (kllobbyopt.c)
 SL7: an extra RIGHT at the max let the stock clamp reset the value to 5. Now a press above the stock range is always taken over (at the max the same value is re-applied;
 same for time LEFT at the min). m_fRoundTime read (vtbl+0x94, NaN) dropped; TEST logs the measured state 25 -> 31 span instead.
+
+## 1025b (after the first live run on out_hostopts_1025a_test)
+- BUG fixed: klho_put changed klho.map and the ini but not kls_online_set, so the host's own LOAD kept OnlineSet=2. It now sets kls_online_set at once (F7 and the row); proof: `LOAD F01: ... OnlineSet=9` after F7 to mixed random.
+- Round length (10 min set, 83 s / 83.5 s / 39.8 s measured between session state 25 and 31): CAUSE NOT YET KNOWN. State 0x19 = round runs, 0x1f = round over (klbot.c).
+  The round clock is float [rules+0x4c] (left) with [rules+0x50] played, [rules+0x200] end timer, [score+0x3c] length = 0x6d3130() (constant 360.0 in Arcade); an online round's source of the
+  length was never read. Not proven that the lobby minutes reach it, and a lone host's round can also end by itself (all heisters dead / escaped). TEST now logs
+  `lobbyopt: round clock at state 25 / 1.5 s into the round / running (every 10 s) / at state 31` with left, played, end timer, score len/cut/m and the lobby minutes: the first run decides
+  (left starts at 600 and ends > 0 = another cause ended the round; left starts at 360/other = the length does not come from the lobby).
+- [Lobby] RoundClockFix=1 (default 0, GUESS): once per round, 1..5 s into state 0x19, writes [rules+0x4c] = lobby minutes * 60 when it is lower. Only try it after the log shows [rules+0x4c] is the counting clock.

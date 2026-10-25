@@ -66,6 +66,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-25 ~23:55 - HOSTOPTS 1025b (out_hostopts_1025b SHIP 2f771cba / _test 004e2409, not run): host's F7/row now sets kls_online_set (LOAD follows); TEST logs the round clock ([rules+0x4c] etc.) at state 25/31 to find why a 10 min round lasts 83 s; [Lobby] RoundClockFix=1 optional GUESS write.
+
 2026-10-25 ~23:30 - HOST OPTIONS (re/host_options.md; out_hostopts_1025a SHIP c3f32a80 / _test fc18e73a; overlay C:/kl_build_1024/hostopts_1025, none installed, none run):
 klhostopt.c [HostOpts] Enable=0: F7 map set, F8 AI heisters, rows KLSHMap/KLSHOpt (Menu=1 overlay, +4 tags), host map set -> clients via Steam klx_opts + UDP 27413 (in memory only).
 kllobbyopt.c: max/min edge fixed (SL7 time stuck at 5), NaN float read dropped, TEST logs the 25->31 round length.

@@ -37,7 +37,7 @@
 #ifndef KLLOBBYOPT_C
 #define KLLOBBYOPT_C
 
-static int kllo_tmax, kllo_tmin, kllo_rmax;
+static int kllo_tmax, kllo_tmin, kllo_rmax, kllo_clockfix;
 static DWORD kllo_vt[1 + 36];                                         /* [0] = RTTI locator, [1..36] = slots 0..35 of 0xbbd364 */
 static DWORD (__fastcall *kllo_real10)(void *, void *, DWORD, DWORD, DWORD);
 static LONG kllo_told, kllo_n;
@@ -53,6 +53,8 @@ static void kllo_init(void)
     kllo_tmax = GetPrivateProfileIntA("Lobby", "TimeMax", 0, klh_ini);
     kllo_tmin = GetPrivateProfileIntA("Lobby", "TimeMin", 0, klh_ini);
     kllo_rmax = GetPrivateProfileIntA("Lobby", "RoundsMax", 0, klh_ini);
+    kllo_clockfix = GetPrivateProfileIntA("Lobby", "RoundClockFix", 0, klh_ini) != 0;
+    if (kllo_clockfix) klog("lobbyopt: RoundClockFix=1 (GUESS): [rules+0x4c] is set to the lobby heist time at the round start when it holds less");
     if (kllo_tmax < 6 || kllo_tmax > 20) kllo_tmax = 0;
     if (kllo_tmin < 1 || kllo_tmin > 2) kllo_tmin = 0;
     if (kllo_rmax < 6 || kllo_rmax > 20) kllo_rmax = 0;
@@ -165,6 +167,54 @@ stock:
     return kllo_real10(self, edx, a, b, c);
 }
 
+/* ---- the round clock (live SL7/SL9: a 10-minute setting gave rounds of 83 s / 83 s / 40 s between state 25 and 31) ----
+ * hud_values.md: time left = float [rules+0x4c], played = [rules+0x50], END timer [rules+0x200] (600.0 at the reset), round length [score+0x3c] =
+ * 0x6d3130() (the constant 360.0 in Arcade; where an online round gets it is NOT READ - GUESS: not from [sm+0x4b]). rules = [[0x168e9e4]+0x54],
+ * score = [rules+0x5f8] (klbot.c). klo_clock_line() logs all of it (TEST: at the round start, every 10 s and at the end).
+ * [Lobby] RoundClockFix=1 (default 0, GUESS, off until the log shows [rules+0x4c] is the clock): once per round, in the first 5 s of state 0x19,
+ * if [rules+0x4c] holds less than the lobby's heist time, it is set to minutes * 60 (data write). */
+static DWORD kllo_rules(DWORD *score)
+{
+    DWORD gs = klh_rd32((DWORD_PTR)KLH_VA(0x168e9e4)), r = gs ? klh_rd32(gs + 0x54) : 0;
+    *score = r ? klh_rd32(r + 0x5f8) : 0;
+    return r;
+}
+static float kllo_rf(DWORD a) { float f = -1.0f; if (a) klh_rd(a, &f, 4); return f; }
+static void kllo_clock_line(const char *what, DWORD sm)
+{
+    DWORD sc, r = kllo_rules(&sc);
+    klog("lobbyopt: round clock %s: rules %08lx left[+4c]=%.1f played[+50]=%.1f endtimer[+200]=%.1f | score %08lx len[+3c]=%.1f cut[+40]=%.1f m[+44]=%d | lobby heist time sm=%d min",
+         what, (unsigned long)r, kllo_rf(r ? r + 0x4c : 0), kllo_rf(r ? r + 0x50 : 0), kllo_rf(r ? r + 0x200 : 0), (unsigned long)sc,
+         kllo_rf(sc ? sc + 0x3c : 0), kllo_rf(sc ? sc + 0x40 : 0), sc ? (int)(signed char)klh_rd32(sc + 0x44) : -1, kllo_tsm(sm));
+}
+static void kllo_clock_tick(int stt, DWORD sm)
+{
+    static DWORD t25, lastlog; static int did, fixed; DWORD now = GetTickCount(), sc, r; float left, want;
+    if (stt != 25) { t25 = 0; did = 0; fixed = 0; return; }
+    if (!t25) { t25 = now ? now : 1; did = 0; fixed = 0; }
+#ifdef KLHOOK_TEST
+    if (!did && now - t25 >= 1500) { did = 1; kllo_clock_line("1.5 s into the round", sm); lastlog = now; }
+    if (did && now - lastlog >= 10000) { lastlog = now; kllo_clock_line("running", sm); }
+#endif
+    if (kllo_clockfix && !fixed && now - t25 >= 1000 && now - t25 < 5000 && (r = kllo_rules(&sc)) != 0) {
+        want = (float)(kllo_tsm(sm) * 60); left = kllo_rf(r + 0x4c); fixed = 1;
+        if (left > 0.0f && left < want - 5.0f && klh_data((void *)(DWORD_PTR)(r + 0x4c), &want, 4, "lobby options: round clock [rules+0x4c]"))
+            klog("lobbyopt: RoundClockFix: [rules+0x4c] %.1f -> %.1f s (lobby heist time %d min)", left, want, kllo_tsm(sm));
+    }
+}
+
+static void kllo_clockpoll(void)
+{   /* SHIP and TEST: the state poll behind kllo_clock_tick (TEST: the clock log lines; [Lobby] RoundClockFix: the write) */
+    static DWORD last; DWORD now = GetTickCount(), sm;
+#ifndef KLHOOK_TEST
+    if (!kllo_clockfix) return;
+#endif
+    if (now - last < 250 || !klh_exe_ok) return;
+    last = now;
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || (klh_rd32(sm) != 0xbd1ebc && !KLH_SM_VT_OK(klh_rd32(sm)))) return;
+    kllo_clock_tick((int)((kllo_f0)KLH_VA(0x8e6a20))((void *)(DWORD_PTR)sm, 0), sm);
+}
+
 #ifdef KLHOOK_TEST
 /* TEST: the replicated m_fRoundTime (seconds, so vtbl+0x94) at every session state change; leaving the lobby state 0xd = the round starting */
 static void kllo_roundlog(void)
@@ -175,6 +225,7 @@ static void kllo_roundlog(void)
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || (klh_rd32(sm) != 0xbd1ebc && !KLH_SM_VT_OK(klh_rd32(sm)))) return;
     stt = (int)((kllo_f0)KLH_VA(0x8e6a20))((void *)(DWORD_PTR)sm, 0);
     if (stt == ls) return;
+    if (stt == 25 || stt == 31) kllo_clock_line(stt == 25 ? "at state 25" : "at state 31 (round over)", sm);
     holder = klh_rd32((DWORD_PTR)KLH_VA(0x168e9e4));
     so = holder ? ((kllo_f0)KLH_VA(0x7bb2a0))((void *)(DWORD_PTR)holder, 0) : 0;
     klog("lobbyopt-test: session state %d -> %d: time sm=%d min, rounds so=%d", ls, stt, kllo_tsm(sm), so ? kllo_rso(so) : -1);
@@ -191,6 +242,7 @@ static void kllo_tick(void)
 #ifdef KLHOOK_TEST
     kllo_roundlog();
 #endif
+    kllo_clockpoll();
     if (!(kllo_tmax || kllo_tmin || kllo_rmax) || !klh_exe_ok || now - last < 300) return;
     last = now;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !(mgr = klh_rd32(gd + 0x824)) || klh_rd32(mgr) != (DWORD)(DWORD_PTR)KLH_VA(0xbb7dc8)) return;
