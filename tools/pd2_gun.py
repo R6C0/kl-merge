@@ -329,12 +329,15 @@ BANK = 'weapon_akm'
 # sound; the other seven fall in an 'A' family of 5 (these three + 210564 + 2888844) and a sharper 'B' family of 5 (peak 2-4 ms).
 SHOT_IDS = (5554408, 9533249, 9912342)
 # The Type 81 plays the AK-74's definition, shared with the AK-74 itself, and the AK-74 / AK47 / Zastava sound objects share ONE set
-# of three wave objects, so replacing those clips would change all three guns. Instead: the Type 81 template is re-pointed at the
-# AK47's definition (it keeps the dry fire, shell drop, pick-up and change sounds), the AK47's three shot sound objects get the wave
-# objects of the Minimi helicopter gun (a campaign-only gun; 1.6 s records, used by nothing in a Fragile Alliance round), and the
-# three helicopter records are overwritten with the PD2 clips. Side effect: Rifle_AK47 (item 31) plays the PD2 shot too.
+# of three wave objects, so replacing those clips would change all three guns. Instead (1025e): the Type 81 template is re-pointed at
+# the campaign-only heli Minimi definition (NEW_DEF; rifle dry fire / shell drop / change slots copied in), that definition's three shot sound
+# objects get the wave objects of the Minimi helicopter gun (a campaign-only gun; 1.6 s records, used by nothing in a Fragile Alliance
+# round), and the three helicopter records are overwritten with the PD2 clips. (1025d did this on the AK47 definition, which item 31
+# - the Dead Men M4A1 look - also uses: the M4 played the AKM. Fixed; the AK47 shots go back to the AK-74 waves.)
 GAIN_CAP_DB = 30.0
-DONOR_DEF = 'rifle_ak47'
+DONOR_DEF = 'rifle_ak47'          # 1025e: only the SLOT donor now (dry fire, shell drop, weapon change); item 31 keeps this definition untouched
+NEW_DEF = 'mg_minimi_spw_heli'    # the Type 81's own definition. NOT hg_coltcobra: HG_ColtCobra (a stock pistol) uses it (verified 1025e). Only the campaign Mg_Minimi_SPW_Heli template uses this one; its shots already are the PD2 clip waves
+RESTORE_FROM = 'rifle_ak74'       # the wave objects rifle_ak47's shots had before 1025d, and the distant shot the new definition takes
 HELI_GUN = 'mg_minimi_spw_heli'
 HELI_RECORDS = ['SFX/Weapons_KL2_Final/MG_MiniMi_SPW_Heli/MG_MiniMi_SPW_Heli_Shot_0%d.wav' % n for n in (1, 2, 3)]
 
@@ -365,6 +368,32 @@ def pd2_shots(log=print):
     return out
 
 
+def _rifle_slots(snd):
+    """NEW_DEF's dry fire (0), shell drop (5) and weapon change (8) slot pointers <- DONOR_DEF's; the shot sound objects of NEW_DEF get
+    DONOR_DEF's u16 at +0x20 (500 vs 0 on the pistol: GUESS, a per-gun range / gain value as the AK47 had it with these clips).
+    Same size, no layout change."""
+    import kl_snd as S
+    b = bytearray(snd); ss = S.Snd('dd', bytes(snd))
+
+    def d(name):
+        return next(o for o, k in ss.kind.items() if k == 5 and ss.name(o).decode('latin1').endswith('/%s/%s#def' % (name, name)))
+    lists = {}
+    for nm in (NEW_DEF, DONOR_DEF):
+        lst, n = struct.unpack_from('<IH', b, d(nm) + 0x14)
+        assert n == 13, (nm, n)
+        lists[nm] = lst
+    for i in (0, 5, 8):
+        v = struct.unpack_from('<I', b, lists[DONOR_DEF] + 4 * i)[0]
+        struct.pack_into('<I', b, lists[NEW_DEF] + 4 * i, v)
+    import kl_gunsnd as K
+    so = K.snd_sound_objects(bytes(snd))
+    for n in (1, 2, 3):
+        a = so[next(x for x in so if x.endswith('/%s/%s_shot_0%d#sound' % (NEW_DEF, NEW_DEF, n)))]
+        r = so[next(x for x in so if x.endswith('/%s/%s_shot_0%d#sound' % (DONOR_DEF, DONOR_DEF, n)))]
+        struct.pack_into('<H', b, a + 0x20, struct.unpack_from('<H', b, r + 0x20)[0])
+    return bytes(b)
+
+
 def build_sound(lv, whd, wav, log=print):
     """-> (whd, wav, report). lv's .SND and .prp are edited in place. whd / wav: the F01 bank bytes."""
     import numpy as np, struct as st
@@ -388,13 +417,25 @@ def build_sound(lv, whd, wav, log=print):
         rows.append(dict(wem=wid, record=w.name, seconds=round(ns / float(w.get('rate')), 3), gain_db=round(float(gain), 2), head_db=round(float(head), 2), bytes=len(data)))
         log('  %-72s <- weapon_akm %d: %.3f s, gain %+.1f dB, head %.2f dBFS (reference %.2f, %s)' % (w.name[-72:], wid, ns / 32000.0, gain, head, ref, how))
     snd = lv['.SND']
-    snd2, moved = K.repoint_snd(snd, DONOR_DEF, HELI_GUN)
+    # 1025e: the AK47 definition (item 31, the Dead Men M4A1 look) must keep ITS OWN shot. 1025d re-pointed its three shot sound objects
+    # at the PD2 clips, so the M4 played the AKM (owner, 2026-10-25). Put them back on the AK-74 waves they had in the stock slot (checked
+    # against the pre-AKM zip: rifle_ak47_shot_0N -> the Rifle_AK74_Shot_0N wave objects). A no-op on a slot that never had 1025d.
+    snd, _restored = K.repoint_snd(snd, 'rifle_ak47', RESTORE_FROM)
+    # The Type 81 gets a definition of its own: the unused Colt Cobra one (no template of F01 uses it). Its three shot sound objects
+    # take the heli wave objects (PD2 clips), its distant shot the AK-74's, and its pistol dry fire / shell drop / weapon change slots
+    # are rewritten to the rifle ones (the same three slot pointers the AK47 definition holds).
+    snd2, moved = K.repoint_snd(snd, NEW_DEF, HELI_GUN)
+    try:
+        snd2, _dist = K.repoint_snd(snd2, NEW_DEF, RESTORE_FROM, parts=('distant_shot_01',))
+    except ValueError:
+        pass   # the heli definition has no distant shot object (the Cobra one had)
+    snd2 = _rifle_slots(snd2)
     whd2, wav2, snd3 = K.rebuild(whd, wav, repl, snd2, log=lambda *_: None, keep_geometry=True)
     lv['.SND'] = snd3
-    # the Type 81 template -> the AK47's definition
+    # the Type 81 template -> the Cobra definition
     sc, _raw = lv.scene()
     ss = S.Snd('dd', snd3)
-    off = next(o for o, k in ss.kind.items() if k == 5 and ss.name(o).decode('latin1').endswith('/%s/%s#def' % (DONOR_DEF, DONOR_DEF)))
+    off = next(o for o, k in ss.kind.items() if k == 5 and ss.name(o).decode('latin1').endswith('/%s/%s#def' % (NEW_DEF, NEW_DEF)))
     kt = MG.template_node(sc, TEMPLATE)
     fld = MG.sound_field(); own = MG.sound_of(sc, kt, fld)
     node = sc.nodes[kt]
@@ -403,12 +444,12 @@ def build_sound(lv, whd, wav, log=print):
     node['props'] = [node['props'][0]] + [t for u in us for t in u] + [node['props'][-1]]
     lv['.prp'] = sc.p.serialize()
     log('  %s sound definition %s (%#x) -> %s (%#x); %d AK47 shot sound objects re-pointed at the %s wave objects' % (
-        TEMPLATE, MG.sound_name(ss, own), own, DONOR_DEF, off, len(moved), HELI_GUN))
+        TEMPLATE, MG.sound_name(ss, own), own, NEW_DEF, off, len(moved), HELI_GUN))
     return whd2, wav2, dict(clips=rows, reference_head_db=round(ref, 2), reference=how, definition_before=own, definition_after=off,
                             repointed=[(n, hex(a), hex(b)) for n, a, b in moved])
 
 
-def build(outdir, with_sound=True, log=print):
+def build(outdir, with_sound=True, log=print, with_model=True):
     """The staged F01 slot: <outdir>/F01_Main.zip (+ .WHD / .WAV with sound) and report.json. Reads the LIVE slot's copy in
     <outdir>/../live (the caller copies it; this tool never touches the game folder)."""
     import kl_chars as C
@@ -416,7 +457,7 @@ def build(outdir, with_sound=True, log=print):
     lv = C.Lv(live)
     lv.beside, lv.side = {}, {}
     whd, wav = open(os.path.join(live, 'F01_Main.WHD'), 'rb').read(), open(os.path.join(live, 'F01_Main.WAV'), 'rb').read()
-    rep = dict(model=build_model(lv, log))
+    rep = dict(model=build_model(lv, log)) if with_model else {}
     if with_sound:
         whd, wav, rep['sound'] = build_sound(lv, whd, wav, log)
     os.makedirs(outdir, exist_ok=True)
@@ -568,8 +609,9 @@ if __name__ == '__main__':
         sys.exit(0 if selftest() else 1)
     if a and a[0] == 'verify' and len(a) > 1:
         sys.exit(0 if verify(a[1]) else 1)
-    if a and a[0] in ('build', 'model') and len(a) > 1:
-        r = build(a[1], with_sound=a[0] == 'build')
+    if a and a[0] in ('build', 'model', 'soundonly') and len(a) > 1:
+        # soundonly (1025e): the .SND / .prp / bank half on a slot that already holds the AKM model (<outdir>/../live)
+        r = build(a[1], with_sound=a[0] != 'model', with_model=a[0] != 'soundonly')
         print(json.dumps(r['md5'], indent=1))
         sys.exit(0)
     print(__doc__)

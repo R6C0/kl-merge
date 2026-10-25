@@ -764,6 +764,184 @@ static int klh_nouia = 1;                              /* [KLHook] NoUIA; the su
 static LRESULT (WINAPI *klh_cwp)(WNDPROC, HWND, UINT, WPARAM, LPARAM);
 static LONG_PTR (WINAPI *klh_gwl)(HWND, int); static LONG_PTR (WINAPI *klh_swl)(HWND, int, LONG_PTR);
 static BOOL (WINAPI *klh_uni)(HWND); static HMODULE klh_u;
+/* ---------------------------------------------------------------- [Stall] Trace: where the main thread's message time goes (SHIP and TEST)
+
+   WHY (2026-10-25, owner: 'stutters are there occasionally', DM01 16:43 - 16:48): in that log 22 hitch-probe lines, 10 to 25 of 28 samples a line at
+   win32u.dll+0x101c = inside NtUserPeekMessage, return addresses USER32 PeekMessageW/A, USER32+0x43bb0, ntdll KiUserCallbackDispatcher and
+   DINPUT8.dll+0x54050. That last one is THIS dll's klh_uia_proc (map of the f8271b2fd build: _klh_uia_proc@16 = 10054050, the outermost window
+   procedure we put on the game window). Read: the main thread was inside a Peek that was running a window procedure (a SENT message, delivered to
+   the thread from inside PeekMessage through the kernel's user-mode callback), and the procedure chain then stood in another PeekMessage (PeekMessageW
+   appears twice per sample). The probe could not say WHICH message, from whom (another thread / process: Medal's medal-hook32.dll is loaded in the game,
+   as are the Steam overlay and ReShade) or whether the time is in our procedure, the game's, or a foreign one under it.
+   WHAT (diagnostic, no behaviour change; data/import-slot writes only):
+     1. klh_uia_proc times every message it passes on (inclusive of everything under it) per message id: count, how many were SENT from another
+        thread (InSendMessageEx), total and longest ms; a message of StallMsgMs (default 20) or more is logged at once (40 lines per run) with its
+        id, wparam, lparam, nesting depth and whether it was sent.
+     2. The game's USER32 PeekMessageA / PeekMessageW import slots are wrapped: calls, total ms, longest ms, calls over 10 ms, and how much of that
+        time was spent in top-level window procedures (the rest is the kernel / a hook chain / a foreign in-process hook: 'own').
+     3. The hitch probe adds, for each sample, the message stack in flight (id, ms so far) and whether a Peek was running (ms so far): one line per
+        sample, 60 lines per run.
+     4. Every 10 s with any such time: 'stall: ...' lines (top message ids by total ms, Peek totals).
+   [Stall] Trace=1 (0 = nothing wrapped, nothing timed, the game window is not subclassed for this reason), StallMsgMs=20.
+   The costs: two QueryPerformanceCounter reads per message and per Peek call (a few per frame). */
+#define KLH_ST_N 40
+static int klh_st_on = 1, klh_st_msgms = 20, klh_st_lines, klh_st_slines;
+static double klh_st_freq;                                    /* ticks per ms */
+static BOOL (WINAPI *klh_st_ismex)(LONG);                    /* user32 InSendMessageEx(NULL) -> ISMEX_* flags (looked up, not linked) */
+typedef struct { UINT msg; LONG n, nsent; double ms, max; } klh_st_msg_t;
+static klh_st_msg_t klh_st_w[KLH_ST_N];
+typedef struct { LONG n, over10; double ms, wp_ms, max; } klh_st_pk_t;
+static klh_st_pk_t klh_st_pk[2];                              /* 0 = PeekMessageA, 1 = PeekMessageW */
+static double klh_st_wp_acc;                                  /* ms in top-level (depth 0) window procedures, running total */
+static volatile LONG klh_st_depth;
+static volatile struct { UINT msg; WPARAM w; LPARAM l; double t0; LONG sent; } klh_st_stk[8];   /* messages in flight, [depth] */
+static volatile double klh_st_peek_t0; static volatile LONG klh_st_peek_n;                       /* a Peek is running since (ms); nesting count */
+static BOOL (WINAPI *klh_real_pka)(LPMSG, HWND, UINT, UINT, UINT);
+static BOOL (WINAPI *klh_real_pkw)(LPMSG, HWND, UINT, UINT, UINT);
+
+static double klh_st_now(void)
+{   /* ms from QueryPerformanceCounter (the frequency is read on first use) */
+    LARGE_INTEGER c;
+    if (klh_st_freq == 0) { LARGE_INTEGER f; QueryPerformanceFrequency(&f); klh_st_freq = f.QuadPart / 1000.0; if (klh_st_freq <= 0) klh_st_freq = 1; }
+    QueryPerformanceCounter(&c);
+    return c.QuadPart / klh_st_freq;
+}
+
+static const char *klh_st_name(UINT m)
+{
+    switch (m) {
+    case 0x0001: return "CREATE"; case 0x0003: return "MOVE"; case 0x0005: return "SIZE"; case 0x0006: return "ACTIVATE"; case 0x0007: return "SETFOCUS";
+    case 0x0008: return "KILLFOCUS"; case 0x000F: return "PAINT"; case 0x0014: return "ERASEBKGND"; case 0x001C: return "ACTIVATEAPP";
+    case 0x0020: return "SETCURSOR"; case 0x0024: return "GETMINMAXINFO"; case 0x0046: return "WINDOWPOSCHANGING"; case 0x0047: return "WINDOWPOSCHANGED";
+    case 0x0081: return "NCCREATE"; case 0x0083: return "NCCALCSIZE"; case 0x0084: return "NCHITTEST"; case 0x0085: return "NCPAINT"; case 0x0086: return "NCACTIVATE";
+    case 0x00FF: return "INPUT"; case 0x0100: return "KEYDOWN"; case 0x0101: return "KEYUP"; case 0x0104: return "SYSKEYDOWN"; case 0x0112: return "SYSCOMMAND";
+    case 0x0113: return "TIMER"; case 0x0200: return "MOUSEMOVE"; case 0x0281: return "IME_SETCONTEXT"; case 0x0282: return "IME_NOTIFY";
+    case 0x0286: return "IME_CHAR"; case 0x0288: return "IME_REQUEST"; case 0x003D: return "GETOBJECT"; case 0x0219: return "DEVICECHANGE";
+    case 0x031A: return "THEMECHANGED"; case 0x031E: return "DWMCOMPOSITIONCHANGED"; case 0x02E0: return "DPICHANGED"; case 0x0018: return "SHOWWINDOW";
+    case 0x0021: return "MOUSEACTIVATE"; case 0x0214: return "SIZING"; case 0x0231: return "ENTERSIZEMOVE"; case 0x0232: return "EXITSIZEMOVE";
+    case 0x0000: return "NULL"; case 0x004E: return "NOTIFY"; case 0x0319: return "APPCOMMAND";
+    default: return m >= 0xC000 ? "registered" : (m >= 0x8000 ? "app" : (m >= 0x400 ? "user" : "-"));
+    }
+}
+
+static void klh_st_account(UINT m, double ms, int sent)
+{
+    int i;
+    for (i = 0; i < KLH_ST_N; i++) {
+        if (klh_st_w[i].n && klh_st_w[i].msg != m) continue;
+        if (!klh_st_w[i].n) klh_st_w[i].msg = m;
+        klh_st_w[i].n++; if (sent) klh_st_w[i].nsent++;
+        klh_st_w[i].ms += ms; if (ms > klh_st_w[i].max) klh_st_w[i].max = ms;
+        return;
+    }
+}
+
+/* the final hop of klh_uia_proc: the window procedure under ours, timed */
+static LRESULT klh_st_pass(HWND h, UINT m, WPARAM w, LPARAM l)
+{
+    LRESULT r; LONG d; double t0, dt; int sent = 0;
+    if (!klh_st_on) return klh_cwp((WNDPROC)klh_uia_old, h, m, w, l);
+    if (klh_st_ismex) sent = (klh_st_ismex(0) & 1 /* ISMEX_SEND: sent from another thread, its sender waits */) != 0;
+    d = klh_st_depth; t0 = klh_st_now();
+    if (d >= 0 && d < 8) { klh_st_stk[d].msg = m; klh_st_stk[d].w = w; klh_st_stk[d].l = l; klh_st_stk[d].t0 = t0; klh_st_stk[d].sent = sent; }
+    klh_st_depth = d + 1;
+    r = klh_cwp((WNDPROC)klh_uia_old, h, m, w, l);
+    klh_st_depth = d;
+    dt = klh_st_now() - t0;
+    if (d == 0) klh_st_wp_acc += dt;
+    klh_st_account(m, dt, sent);
+    if (dt >= klh_st_msgms && klh_st_lines < 40) {
+        klh_st_lines++;
+        klog("stall: window message %04x (%s) wparam %08lx lparam %08lx took %.1f ms%s, nesting depth %ld%s", (unsigned)m, klh_st_name(m), (DWORD)w, (DWORD)l, dt,
+             sent ? " (SENT from another thread: its sender waited that long)" : "", (long)d, klh_st_lines == 40 ? " (last such line)" : "");
+    }
+    return r;
+}
+
+static BOOL klh_st_peek(int which, LPMSG msg, HWND h, UINT a, UINT b, UINT f)
+{
+    BOOL r; double t0, dt, wp0; klh_st_pk_t *k = &klh_st_pk[which];
+    if (!klh_st_on) return (which ? klh_real_pkw : klh_real_pka)(msg, h, a, b, f);
+    t0 = klh_st_now(); wp0 = klh_st_wp_acc;
+    if (klh_st_peek_n++ == 0) klh_st_peek_t0 = t0;
+    r = (which ? klh_real_pkw : klh_real_pka)(msg, h, a, b, f);
+    if (--klh_st_peek_n < 0) klh_st_peek_n = 0;
+    dt = klh_st_now() - t0;
+    k->n++; k->ms += dt; k->wp_ms += klh_st_wp_acc - wp0; if (dt > k->max) k->max = dt; if (dt >= 10) k->over10++;
+    return r;
+}
+static BOOL WINAPI klh_w_pka(LPMSG msg, HWND h, UINT a, UINT b, UINT f) { return klh_st_peek(0, msg, h, a, b, f); }
+static BOOL WINAPI klh_w_pkw(LPMSG msg, HWND h, UINT a, UINT b, UINT f) { return klh_st_peek(1, msg, h, a, b, f); }
+
+static void klh_st_init(void)
+{   /* DllMain: read the switch, wrap the game's Peek imports */
+    klh_st_on = GetPrivateProfileIntA("Stall", "Trace", 1, klh_ini) != 0;
+    klh_st_msgms = GetPrivateProfileIntA("Stall", "StallMsgMs", 20, klh_ini);
+    if (klh_st_msgms < 1) klh_st_msgms = 1;
+    if (!klh_st_on) { klog("stall: trace off ([Stall] Trace=0)"); return; }
+    {
+        int a = klh_iat("USER32.dll", "PeekMessageA", (void *)klh_w_pka, (void **)&klh_real_pka);
+        int w = klh_iat("USER32.dll", "PeekMessageW", (void *)klh_w_pkw, (void **)&klh_real_pkw);
+        HMODULE u = GetModuleHandleA("user32.dll");
+        if (u) klh_st_ismex = (BOOL (WINAPI *)(LONG))GetProcAddress(u, "InSendMessageEx");
+        klh_st_now();
+        klog("stall: trace on: PeekMessageA %s, PeekMessageW %s wrapped; InSendMessageEx %s; messages of %d ms or more are logged ([Stall] Trace=0 = off)",
+             a ? "yes" : "no", w ? "yes" : "no", klh_st_ismex ? "found" : "missing", klh_st_msgms);
+    }
+}
+
+/* the hitch probe calls this after a sample (the main thread has been resumed); one line, 60 per run */
+static void klh_st_sample(void)
+{
+    char line[600]; size_t at; int i; double now;
+    if (!klh_st_on || klh_st_slines >= 60) return;
+    klh_st_slines++; now = klh_st_now();
+    at = (size_t)snprintf(line, sizeof line, "stall sample: PeekMessage %s", klh_st_peek_n > 0 ? "RUNNING" : "not running");
+    if (klh_st_peek_n > 0) at += (size_t)snprintf(line + at, sizeof line - at, " for %.0f ms (nest %ld)", now - klh_st_peek_t0, (long)klh_st_peek_n);
+    at += (size_t)snprintf(line + at, sizeof line - at, "; window procedure depth %ld", (long)klh_st_depth);
+    for (i = 0; i < klh_st_depth && i < 8 && at < sizeof line - 120; i++)
+        at += (size_t)snprintf(line + at, sizeof line - at, " [%d: %04x %s%s for %.0f ms]", i, (unsigned)klh_st_stk[i].msg, klh_st_name(klh_st_stk[i].msg),
+                               klh_st_stk[i].sent ? " SENT" : "", now - klh_st_stk[i].t0);
+    if (klh_st_slines == 60) snprintf(line + at, sizeof line - at, " (last such line)");
+    klog("%s", line);
+}
+
+/* every 10 s (called from the probe thread's loop): the deltas since the last call, top message ids by total ms, Peek totals */
+static void klh_st_say(void)
+{
+    static klh_st_msg_t prev[KLH_ST_N]; static klh_st_pk_t pprev[2];
+    klh_st_msg_t cur[KLH_ST_N], d[KLH_ST_N]; klh_st_pk_t pk[2]; int i, j, k, shown = 0; char line[900]; size_t at; double tot = 0;
+    if (!klh_st_on) return;
+    memcpy(cur, klh_st_w, sizeof cur); memcpy(pk, klh_st_pk, sizeof pk);
+    for (i = 0; i < KLH_ST_N; i++) {
+        d[i] = cur[i];
+        for (j = 0; j < KLH_ST_N; j++) if (prev[j].n && prev[j].msg == cur[i].msg) { d[i].n -= prev[j].n; d[i].nsent -= prev[j].nsent; d[i].ms -= prev[j].ms; break; }
+        if (d[i].n > 0) tot += d[i].ms;
+    }
+    at = (size_t)snprintf(line, sizeof line, "stall: 10 s window procedures: %.1f ms in all;", tot);
+    for (k = 0; k < 6; k++) {
+        int best = -1;
+        for (i = 0; i < KLH_ST_N; i++) if (d[i].n > 0 && (best < 0 || d[i].ms > d[best].ms)) best = i;
+        if (best < 0) break;
+        if (d[best].ms < 0.05 && k) break;
+        at += (size_t)snprintf(line + at, sizeof line - at, " %04x %s x%ld (sent %ld) %.1f ms (longest ever %.1f);", (unsigned)d[best].msg, klh_st_name(d[best].msg),
+                               (long)d[best].n, (long)d[best].nsent, d[best].ms, cur[best].max);
+        d[best].n = 0; shown++;
+    }
+    memcpy(prev, cur, sizeof prev);
+    {
+        klh_st_pk_t a = pk[0], w = pk[1];
+        a.n -= pprev[0].n; a.ms -= pprev[0].ms; a.wp_ms -= pprev[0].wp_ms; a.over10 -= pprev[0].over10;
+        w.n -= pprev[1].n; w.ms -= pprev[1].ms; w.wp_ms -= pprev[1].wp_ms; w.over10 -= pprev[1].over10;
+        if (a.n || w.n || shown) {
+            klog("%s", line);
+            klog("stall: 10 s PeekMessage: A %ld calls %.1f ms (in window procs %.1f, own %.1f; %ld over 10 ms; longest ever %.1f) | W %ld calls %.1f ms (in window procs %.1f, own %.1f; %ld over 10 ms; longest ever %.1f)",
+                 (long)a.n, a.ms, a.wp_ms, a.ms - a.wp_ms, (long)a.over10, pk[0].max, (long)w.n, w.ms, w.wp_ms, w.ms - w.wp_ms, (long)w.over10, pk[1].max);
+        }
+        pprev[0] = pk[0]; pprev[1] = pk[1];
+    }
+}
+
 static void klh_msg_trace(UINT m, WPARAM w)
 {   /* k43 ExitTrace: each close-type message once per run, with a timestamp. WM_QUIT is posted to the thread queue and never reaches a window procedure,
        so it cannot be seen here (GUESS: the exit() caller line of klh_exit_trace is the next best); SC_CLOSE is WM_SYSCOMMAND with 0xF060. */
@@ -784,7 +962,7 @@ static LRESULT CALLBACK klh_uia_proc(HWND h, UINT m, WPARAM w, LPARAM l)
         klog("exit: Alt+F4 / close (msg %04x): the process is ended at once", (unsigned)m);
         TerminateProcess(GetCurrentProcess(), 0);
     }
-    return klh_cwp((WNDPROC)klh_uia_old, h, m, w, l);
+    return klh_st_pass(h, m, w, l);                    /* [Stall] Trace: the same CallWindowProc, timed */
 }
 static BOOL CALLBACK klh_uia_pick(HWND h, LPARAM best)
 {
@@ -834,7 +1012,7 @@ static void klh_uia_tick(void)
         HMODULE u = GetModuleHandleA("user32.dll");
         klh_nouia = GetPrivateProfileIntA("KLHook", "NoUIA", 1, klh_ini) != 0;
         klh_exittrace = GetPrivateProfileIntA("Log", "ExitTrace", 1, klh_ini) != 0;
-        on = klh_nouia || klh_fastexit || klh_exittrace;
+        on = klh_nouia || klh_fastexit || klh_exittrace || klh_st_on;
         if (u) { etw = (BOOL (WINAPI *)(DWORD, WNDENUMPROC, LPARAM))GetProcAddress(u, "EnumThreadWindows"); klh_uni = (BOOL (WINAPI *)(HWND))GetProcAddress(u, "IsWindowUnicode"); klh_u = u; }
         if (on && (!etw || !klh_uni)) { on = 0; klog("noUIA: user32's window functions not found: the game window answers UI Automation as before"); }
     }
@@ -1178,8 +1356,9 @@ static DWORD WINAPI klh_hitch_probe(LPVOID unused)
             klh_hp_samples++;
             klh_hp_count(c.Eip, 0);
             for (i = 0; i < (int)got && n < 6; i++) if (klh_hp_in_code(st[i])) { klh_hp_count(st[i], 1); n++; }
+            klh_st_sample();                                    /* [Stall] Trace: the window message / Peek in flight (the thread runs again) */
         }
-        if (now - said >= 10000) { said = now; klh_hp_say(); }
+        if (now - said >= 10000) { said = now; klh_hp_say(); klh_st_say(); }
     }
 }
 
@@ -1263,6 +1442,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
         if (m) klog("core: %d more import slot(s) wrapped for the exit line (MSVCR90 exit %s, _exit %s)", m, klh_real_exit ? "yes" : "no", klh_real__exit ? "yes" : "no");
     }
     if (GetPrivateProfileIntA("KLHook", "Tick", 1, klh_ini)) n += klh_iat("steam_api.dll", "SteamAPI_RunCallbacks", (void *)klh_w_runcallbacks, (void **)&klh_real_runcallbacks);
+    klh_st_init();                                    /* [Stall] Trace: PeekMessageA / W import slots (timing only) */
     klog("core: %d import slot(s) wrapped (ExitProcess %s, SteamAPI_RunCallbacks %s); EndOnFatal=%d", n, klh_real_exitprocess ? "yes" : "no", klh_real_runcallbacks ? "yes" : "no", klh_end_on_fatal);
     kset_init();                                      /* klset.c: the menu rows first - klreshade.c reads them for the live preset */
     {   /* [Graphics] Look (2026-10-14, the owner: 'have these as different setting options so people can choose how they want their game to
