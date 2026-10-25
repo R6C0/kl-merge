@@ -66,9 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-25 ~08:30 - INSTALLED, not yet run: DM03A a869705b, DM06 a9fc32eb, DM09 24e9c878, DM11B e6ab5347 overhauls (+ fed KLJoin re-staged,
-.before-1025fedoutfit2). Earlier batch (02:40, log): DM01B/DM02/DM01/DM06B + vans + fed on 14 maps; lc5 SAFE and F01 AKM crashed and were UNDONE.
-C: disk was full (50 MB, install aborted cleanly; freed to ~16 GB): check free space before builds. Obsolete stages moved to G:/kl_build_offload.
+2026-10-25 ~10:30 - scheduled check-in: klhook/klhigh.c WRITTEN, not built with MSVC, not run: the 4 GB flag made safe (hook reserves the upper 2 GB at DllMain,
+only listed foreign modules - nvd3dum/ReShade32/overlay, via their own import slots - get carved blocks there; the game stays below 2 GB). [Memory] High=1 measures
+(no flag), High=2 places (kl2.exe.laa-test). re/high_half_1025.md. It is the next lever after the stack shrinkers (MEMORY note below).
+Owner: build hook, run klhigh_test.exe, High=1 measure run on DM05A, then the A/B.
 
 2026-10-25 ~09:30 - DIG 1025b INSTALLED (e8 window), not yet run: Maps/DM07 F06_Main.zip 3c7636d3 (dig.ps1, no PC_Def.str: C: too tight), menu = Dead Men campaign
 entry 5: KLHook.ini +F06=DM07/+F06=The Dig/EngineMaps ,DM07 (f8de2a9d -> 5bb667be), overlay patched in place a6594c09 -> e34c69d2 (stock H05 picture).

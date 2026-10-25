@@ -49,6 +49,8 @@
  *                             wraps the option object); calls 0x8ccde0, 0x598460, 0x817810 and ZCHAROBJ slots on the
  *                             main thread; one data byte hides the stock top-left block. OFF by default, NOT RUN
  *   klmem.c klnudge.c x  x    address space reserve ([Memory]); the loader's cursor nudge ([Load])
+ *   klhigh.c       x     x    [Memory] High: the 4 GB flag made safe - the upper 2 GB reserved at DllMain, the listed foreign modules'
+ *                             own import slots of VirtualAlloc/Free carve theirs out of it; kl2.exe untouched. OFF by default; NOT RUN LIVE
  *   klauto.c             x    scripted input, breadcrumb detours, [Auto] options, result file, watchdog
  *   mkoverlay.py              builds KLExpansion\Overlay\Patch01.zip (the menu page of the expansion maps)
  *   build.bat build_auto.bat  SHIP / TEST; with --work into <work>\build\klhook\ship | test (DLL, sha1, ini): the
@@ -644,6 +646,7 @@ static void __cdecl klh_w__exit(int code) { klh_exit_trace("_exit", code, _Retur
 static void klh_tick(int game_thread);
 static DWORD_PTR klh_rcb_ra;                          /* the return address of the SteamAPI_RunCallbacks call that runs this tick (klfreeclimb.c acts only at the gameplay one) */
 #include "klmem.c"
+#include "klhigh.c"                                      /* klhigh.c: [Memory] High - the 4 GB flag made safe: the listed foreign modules' VirtualAlloc goes above 2 GB, the game stays below (off unless High=1/2); AFTER klmem.c */
 #include "klextpt.c"                                     /* klextpt.c: [KLHook] NoInject - no foreign hook DLLs in the game (stutter fix 2026-10-23); AFTER klog / klh_ini */
 #include "klnudge.c"
 #include "klfix.c"
@@ -965,6 +968,7 @@ static void klh_tick(int game_thread)
 #endif
     klg_tick();
     klm_tick();
+    klvh_tick();                                      /* klhigh.c: the 10 s census of the listed modules' reservations (off unless [Memory] High) */
     InterlockedExchange(&klh_tick_busy, 0);
 }
 
@@ -1284,6 +1288,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
 #endif
     klfps_init();                                  /* klfps.c: LAST of the Direct3DCreate9 wrappers (outermost); [FrameLimit] */
     klm_init();
+    klvh_init();                                   /* klhigh.c: AFTER klm_init (the reserve is taken first, low); wraps the listed modules' import slots, with High=2 takes the high half */
     klxp_init();                                   /* klextpt.c: extension points off (hook DLLs of other programs), watcher of foreign modules */
     kln_init();
     klf_init();
