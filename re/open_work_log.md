@@ -1,8 +1,11 @@
+2026-10-25 ~02:30 - DM02 mall INSTALLED (owner grant): F02_Main.zip a8216b38 over ae193d9c, backup .before-1025dm02mall, undo C:/kl_build_1024/dm02mall_1025a/stage2. 6 kick doors, 6 wall extinguishers (ext_lift 100), 4 fuel cans, 3 police cars + SWAT (Backstop 25 s guessed). Not yet run in game; e8 does a DM02 run. New jobs: dig map, fed outfits, DD mechanics + PD2 page II study, DM06B redesign, shootable vans, DM overhaul (DM01B first), DD-campaign FA research, DM grenades research.
+
 2026-10-25 - lastcall5 (full 653a4f4c 90 civs 150/111; lite 7d7f80c7 71 civs 138/95) STAGED, rehearsed, NOT installed (pinned on live 858d3371,
 
-2026-10-25 - DM02 mall extras staged (doors, extinguishers, fuel cans, police cars): see re/dm02_mall_1025.md, zip 3cb6fca6, not installed.
 backup .before-1025lastcall5): 14 civilian looks (DD 41803/41556 variants + M05_A 6854/7265/6993/7115 grafted), bodyguards, bartender.
 Files: C:/kl_build_1024/lastcall5_1025a/stage/lc5_{full,lite}/main; tool tools/kl_club_lastcall5.py. Women under DD Civilian clips unproven.
+
+2026-10-25 - DM02 mall extras staged (doors, extinguishers, fuel cans, police cars): see re/dm02_mall_1025.md, zip 3cb6fca6, not installed.
 
 2026-10-25 - READY sent to e8: Last Call club music boost stage A C:/kl_build_1024/lastcallmusic_1025a/pkg/stageA (tools/kl_club_music2.py; member-pinned: SND 498cc81d->987d5e65, WHD 8cf764be->73e32be8, _LS 3b21242c->09a53d2b; zip 858d3371->9638943a; Ambient group 0.5->1.0, layer volume bytes up, 3D radius x1.5, adds Retomoto_Ambient_V2_Loop bed sound). Stage B (bed via settings fields 157/158, .prp) must be rebuilt after lastcall5; field 157 in an FA round unproven. Cause found: club music routed to the Ambient group at 0.5 and zone-gated by SoundLimiterFade.
 
