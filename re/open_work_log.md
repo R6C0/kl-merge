@@ -1,3 +1,10 @@
+2026-10-25 ~06:05 - QUADRING VERIFIED WITH RESET (K50K, hook k50_1025quad2 CC6FAB5F, QuadRing=128, alttab.py --mark 'level loaded:' --delay 40 --away 6 --back 20
+--cycles 2): 'fps: Reset ok' x2 (06:00:53, 06:01:20), quad stats 2299628 swaps / 1143 buffers made / 0 create failures / 5 ring drops / 2 Resets; free VA 554-563 MB
+(dip to 492 during the Alt+Tab), 0 refusals, 118-119 fps; hook JPG KLShot_K50K_12 after the 2nd Reset = normal picture (bloom, HUD). K50J's failed Reset was in the
+menu, unlogged; klfps_reset now logs the HRESULT (52466f929). K50L control (no ring) skipped. klquad.c SHIP (815c55e1d): Lock = VB vtable slot 11, buffers made via
+the buffer's own device (ReShade proxy safe), klfps_unwrap_all keeps the Reset wrapper while a ring is on (review finding). SHIP build k50_1025quad_ship2 B5BFCCE0,
+not installed (peer DD10A run). MapCap DM05A:60 may be unnecessary now: test without it.
+
 2026-10-25 ~20:00 - DD10 FIRST LIVE LOAD CRASHED (DD10A, k50_1025shot + D3dRing=128, menu page 3 entry 5 = F07; entry 6 is clamped: kls_menu_slot): asserts
 0x7f5892 (GetFileSize of Locations/F07/F07_Main.sup = -1), 0x4a2fe9, 0x820423, 0x5d20cb, then c0000005 kl2+0x1d20d2 reading 0. Cause: the install tree renamed only the
 FILE F01_Main.zip -> F07_Main.zip; its members still said Scenes/Locations/F01/F01_Main.*. Fix: kl_l05_build_1025.py rewrites the members (kl_graft.member_name/write_zip,

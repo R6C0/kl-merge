@@ -66,6 +66,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-25 ~06:05 - MEMORY SHIP FIX: klquad.c [Memory] QuadRing=128 (815c55e1d, 52466f929; KLHook.ini + mod-options row): ring for the 4 post-process quad VBs,
+Lock wrapped via a vtable slot (SHIP-safe), rings dropped before every Reset (klfps keeps its Reset wrapper). K50K DM05A + 2x Alt+Tab: both Resets ok, VA flat ~555 MB,
+0 refusals, 119 fps, picture intact. SHIP build C:/kl_build_1019/k50_1025quad_ship2 (B5BFCCE0) NOT installed yet (peer DD10A run holds the slot). Owner A/B ideas
+(not done): NVIDIA Threaded optimization OFF, Steam Input/overlay off. C: has 8 GB free (kl_build_1024 = 57 GB): owner decides, nothing deleted.
+
 2026-10-25 ~18:40 - MEMORY: the DM05A wall (nvd3dum keeping one block per tiny-VB DISCARD, ~60/frame, from post-chain screen quads of the render interpreter 0x7c1c30)
 is FIXED in test by e8's [Memory] D3dRing=128 (ring3 e4f912a8): K50F2 at 119 fps, arena flat, 0 refusals, free VA ~560 MB. Next: K50G visuals, Alt+Tab/Reset, ship decision (e8).
 DM05A live = lc7+texmip 9cdd6dee (backups .before-1025lc7tm 4bd278cf -> .before-1025texmip 701d082f; undo with each install.py --undo). DM01 grenade 1bcac96b installed,
@@ -74,11 +79,6 @@ scripted PASS (throw untested). DD10 1025d not ready (Wall_Break seals 3 loots),
 2026-10-25 ~09:30 - DIG 1025b INSTALLED (e8 window), not yet run: Maps/DM07 F06_Main.zip 3c7636d3 (dig.ps1, no PC_Def.str: C: too tight), menu = Dead Men campaign
 entry 5: KLHook.ini +F06=DM07/+F06=The Dig/EngineMaps ,DM07 (f8de2a9d -> 5bb667be), overlay patched in place a6594c09 -> e34c69d2 (stock H05 picture).
 NOT kl_expansion install (whole tree, would reset live maps); mkoverlay regen does not reproduce the live overlay. Undo: C:/kl_build_1024/dig_build_1025b/menu/dig_menu.py --undo + UNDO bat.
-
-2026-10-25 ~12:00 - MEMORY: DM05A dies with 32-bit ADDRESS SPACE full in round 1. K49_VA (e8): no module VirtualAlloc >= 512 KB (driver innocent); all 29
-refusals = kl2 HeapAlloc 0x7bb33c on the process heap 01D90000 -> the 15.81 MB + halving blocks are NT heap segments. OtherStackKB=2048 kept (k48h SHIP live).
-lc7 1025b staged, NOT installed (C:/kl_build_1024/lastcall7_1025b, lc6 701d082f -> cbbbc872, -760 static glass emitters, campaign pools kept per verifiers).
-Next: e8 heap census (HeapSummary); my static workflow wo0qcwz51 (who feeds 0x7bb33c, ship-hook options). Staged: grenade_1025a, pd2gun_1025b.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
