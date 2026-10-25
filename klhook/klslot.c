@@ -316,14 +316,16 @@ static int kls_rand_pick(int s)
     else lob[0] = lob[1] = 0;
     /* the round: a load is the first open of any slot archive more than 60 s after the previous one (the probes of one load come within seconds; rounds
        are further apart). Peers present from the lobby on count the same; a late joiner would not (hence default off). */
+    if (!src && kls_rnd_last && now - kls_rnd_last > 1800000) kls_rnd_round = 0;      /* 30 min without a load: a new session (backstop to the reset in kls_tick) */
     if (!kls_rnd_last || now - kls_rnd_last > 60000) kls_rnd_round++;
     kls_rnd_last = now ? now : 1;
     x = ((unsigned __int64)lob[1] << 32 | lob[0]) ^ ((unsigned __int64)(num + 1) * 0x9E3779B97F4A7C15ULL);
-    if (kls_rnd_round_on) x ^= (unsigned __int64)kls_rnd_round * 0xD6E8FEB86659FD93ULL;
+    /* System Link has no Steam lobby (SL3b: exists 0): the round number is then the only thing that varies, so it joins the seed whatever the key says */
+    if (kls_rnd_round_on || !src) x ^= (unsigned __int64)kls_rnd_round * 0xD6E8FEB86659FD93ULL;
     x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ULL; x ^= x >> 27; x *= 0x94D049BB133111EBULL; x ^= x >> 31;
     k = (int)(x % (unsigned)n);
     len = snprintf(kls_rnd_txt, sizeof kls_rnd_txt, "random: seed lobby %08lx%08lx (%s; service %08lx vt %08lx exists %u) round %lu%s slot %d, %d choices [stock", (unsigned long)lob[1], (unsigned long)lob[0],
-                   src ? "lobby id" : "NOT readable: fixed pick", (unsigned long)svc, (unsigned long)svt, (unsigned)ex, (unsigned long)kls_rnd_round, kls_rnd_round_on ? " (in the seed)" : " (not in the seed)", num, n);
+                   src ? "lobby id" : "NOT readable: fixed pick", (unsigned long)svc, (unsigned long)svt, (unsigned)ex, (unsigned long)kls_rnd_round, (kls_rnd_round_on || !src) ? (src ? " (in the seed)" : " (in the seed: no lobby id, System Link)") : " (not in the seed)", num, n);
     for (p = 1; p < n && len < (int)sizeof kls_rnd_txt - 40; p++) len += snprintf(kls_rnd_txt + len, sizeof kls_rnd_txt - len, " p%d=%s", cand[p], kls_rule[kls_find_rule(s, cand[p])].map);
     snprintf(kls_rnd_txt + len, sizeof kls_rnd_txt - len, "] -> choice %d (page %d)", k, cand[k]);
     return cand[k];
@@ -640,6 +642,7 @@ static void kls_tick(void)
     BYTE now[sizeof last], m[0x260]; DWORD mgr; int i, opt;
     if (!kls_on || !klh_exe_ok) return;
     kls_menu_watch();                             /* every tick: a page may be open for a few frames only */
+    if (kls_online_set == KLS_RANDOM && kls_rnd_round && !kls_online_cached()) { kls_rnd_round = 0; kls_rnd_last = 0; }      /* the network session is over: the next one counts rounds from 1 */
     kls_page_clamp();
     if (calls++ & 7) return;
     if (kls_page_force >= 0 && !toldforce) { toldforce = 1; klog("expansion: menu page %d forced by [Expansion] Page: the menu is not looked at", kls_page_force); }
