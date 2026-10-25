@@ -1,3 +1,7 @@
+2026-10-25 ~23:55 - MAX PLAYERS + COPS AND ROBBERS (re/max_players.md, re/cops_and_robbers.md; out_netmax_1025a SHIP 75579781 / _test 6d1ead2c, not installed, not run):
+Engine cap is 12 (setters 0x739f20/0x6f7fb0, MP_NumberOfPlayers 4..12, [12] DDL arrays); FA shows 8 only at the selector RIGHT clamp 0x7dcb78/0x7dcb7d; a level has 8 type-2 seats (9th = pick -1). C&R = FA sub-mode 2 ([0x168e59c]), lobby 6..12.
+New: [Lobby] MaxPlayers (klmm.c, Steam member limit floor), [NetLoad] Probe / ScaleSend (klnetload.c), all default off.
+
 2026-10-25 ~23:30 - HOST OPTIONS (re/host_options.md; out_hostopts_1025a SHIP c3f32a80 / _test fc18e73a; overlay C:/kl_build_1024/hostopts_1025, none installed, none run):
 klhostopt.c [HostOpts] Enable=0: F7 map set, F8 AI heisters, rows KLSHMap/KLSHOpt (Menu=1 overlay, +4 tags), host map set -> clients via Steam klx_opts + UDP 27413 (in memory only).
 kllobbyopt.c: max/min edge fixed (SL7 time stuck at 5), NaN float read dropped, TEST logs the 25->31 round length.

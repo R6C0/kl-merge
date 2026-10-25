@@ -74,6 +74,8 @@ static struct { void **vt; } klmm_proxy = { klmm_vt };
 static int klmm_private, klmm_buildkey;               /* [Net] PrivateLobby (0/1/2), BuildKey (0/1) */
 static char klmm_id[16];                              /* the build id, "" until computed */
 static char klmm_set[16];                             /* "set<N>": [Expansion] OnlineSet (0 = stock page), the second lobby key klx_set (1025: Quick Match / Ranked) */
+static int klmm_maxp;                                  /* [Lobby] MaxPlayers (0 = stock): Steam lobby member limit floor, 1025 re\max_players.md */
+static volatile LONG klmm_nlimit;                      /* SetLobbyMemberLimit calls raised */
 static CRITICAL_SECTION klmm_cs;
 static volatile LONG klmm_nlog;
 
@@ -151,6 +153,24 @@ KLMM_FWD(13) KLMM_FWD(14) KLMM_FWD(15) KLMM_FWD(16) KLMM_FWD(17) KLMM_FWD(18) KL
 KLMM_FWD(24) KLMM_FWD(25) KLMM_FWD(26) KLMM_FWD(27) KLMM_FWD(28) KLMM_FWD(29) KLMM_FWD(30) KLMM_FWD(31) KLMM_FWD(32) KLMM_FWD(33)
 KLMM_FWD(34) KLMM_FWD(35)
 
+/* slot 30 SetLobbyMemberLimit(CSteamID lobby, int cMax): thiscall, stack [esp+4]/[esp+8] = the 64-bit id, [esp+0xc] = cMax (SDK 008; the game
+   calls it from 0x869430 with the property byte +5). A naked stub that raises cMax IN PLACE to [Lobby] MaxPlayers and tail-jumps, so the argument
+   size is not needed (GUESS that this call site pushes the SDK layout: the slot index 0x78/4 = 30 is the SDK's and 0x869430 calls vtable +0x78). */
+static __declspec(naked) void klmm_fwd30_limit(void)
+{
+    __asm {
+        mov eax, dword ptr [klmm_maxp]
+        cmp eax, dword ptr [esp + 0xc]
+        jle done
+        mov dword ptr [esp + 0xc], eax
+        lock inc dword ptr [klmm_nlimit]
+    done:
+        mov ecx, dword ptr [klmm_real]
+        mov eax, dword ptr [ecx]
+        jmp dword ptr [eax + 4 * 30]
+    }
+}
+
 static unsigned __int64 __fastcall klmm_RequestLobbyList(void *self, void *edx)
 {   /* slot 4, 0 bytes; SteamAPICall_t in edx:eax */
     (void)self; (void)edx;
@@ -167,9 +187,11 @@ static unsigned __int64 __fastcall klmm_RequestLobbyList(void *self, void *edx)
 static unsigned __int64 __fastcall klmm_CreateLobby(void *self, void *edx, int type, int maxmembers)
 {   /* slot 12, 8 bytes; SteamAPICall_t */
     int t = type; (void)self; (void)edx;
+    int m = maxmembers;
     if (klmm_private) t = klmm_private == 1 ? 1 : 0;           /* 1 -> FriendsOnly (1), 2 -> Private (0) */
-    klmm_say("CreateLobby(type %d%s, max %d) -> type %d (PrivateLobby=%d) online=%d", type, type == 3 ? " = Ranked" : type == 2 ? " = public (Quick Match / Player Match)" : "", maxmembers, t, klmm_private, kl_online());
-    return ((unsigned __int64 (__fastcall *)(void *, void *, int, int))KLMM_REAL(12))(klmm_real, 0, t, maxmembers);
+    if (klmm_maxp && m < klmm_maxp) m = klmm_maxp;             /* the limit is the lobby's target at create time (0x6c9ce4 reads sm+0xb9): raise it to the floor */
+    klmm_say("CreateLobby(type %d%s, max %d -> %d [Lobby] MaxPlayers=%d) -> type %d (PrivateLobby=%d) online=%d", type, type == 3 ? " = Ranked" : type == 2 ? " = public (Quick Match / Player Match)" : "", maxmembers, m, klmm_maxp, t, klmm_private, kl_online());
+    return ((unsigned __int64 (__fastcall *)(void *, void *, int, int))KLMM_REAL(12))(klmm_real, 0, t, m);
 }
 
 static char __fastcall klmm_SetLobbyData(void *self, void *edx, unsigned __int64 lobby, const char *key, const char *value)
@@ -230,7 +252,9 @@ static void klmm_init(void)
     i = (int)GetPrivateProfileIntA("Expansion", "OnlineSet", 0, klh_ini);
     snprintf(klmm_set, sizeof klmm_set, "set%d", i < 0 || i > 9 ? 0 : i);
     /* 1025 [HostOpts] Enable=1 + Steam=1: the proxy is also needed for the host's options (klhostopt.c reads/writes the lobby key klx_opts through klmm_real) */
-    if (!klmm_private && !klmm_buildkey && !(GetPrivateProfileIntA("HostOpts", "Enable", 0, klh_ini) && GetPrivateProfileIntA("HostOpts", "Steam", 1, klh_ini))) return;               /* default: nothing installed, v82f behaviour */
+    klmm_maxp = (int)GetPrivateProfileIntA("Lobby", "MaxPlayers", 0, klh_ini);
+    if (klmm_maxp != 0 && (klmm_maxp < 9 || klmm_maxp > 16)) { klog("mm: [Lobby] MaxPlayers=%d is not 0 or 9..16: ignored (8 is the stock size)", klmm_maxp); klmm_maxp = 0; }
+    if (!klmm_private && !klmm_buildkey && !klmm_maxp && !(GetPrivateProfileIntA("HostOpts", "Enable", 0, klh_ini) && GetPrivateProfileIntA("HostOpts", "Steam", 1, klh_ini))) return;               /* default: nothing installed, v82f behaviour */
     InitializeCriticalSection(&klmm_cs);
     for (i = 0; i < KLMM_NSLOT; i++) klmm_vt[i] = 0;
     klmm_vt[0] = (void *)klmm_fwd0; klmm_vt[1] = (void *)klmm_fwd1; klmm_vt[2] = (void *)klmm_fwd2; klmm_vt[3] = (void *)klmm_fwd3;
@@ -243,7 +267,7 @@ static void klmm_init(void)
     klmm_vt[19] = (void *)klmm_SetLobbyData;
     klmm_vt[20] = (void *)klmm_fwd20; klmm_vt[21] = (void *)klmm_fwd21; klmm_vt[22] = (void *)klmm_fwd22; klmm_vt[23] = (void *)klmm_fwd23; klmm_vt[24] = (void *)klmm_fwd24;
     klmm_vt[25] = (void *)klmm_fwd25; klmm_vt[26] = (void *)klmm_fwd26; klmm_vt[27] = (void *)klmm_fwd27; klmm_vt[28] = (void *)klmm_fwd28; klmm_vt[29] = (void *)klmm_fwd29;
-    klmm_vt[30] = (void *)klmm_fwd30; klmm_vt[31] = (void *)klmm_fwd31; klmm_vt[32] = (void *)klmm_fwd32; klmm_vt[33] = (void *)klmm_fwd33; klmm_vt[34] = (void *)klmm_fwd34;
+    klmm_vt[30] = (void *)(klmm_maxp ? (void *)klmm_fwd30_limit : (void *)klmm_fwd30); klmm_vt[31] = (void *)klmm_fwd31; klmm_vt[32] = (void *)klmm_fwd32; klmm_vt[33] = (void *)klmm_fwd33; klmm_vt[34] = (void *)klmm_fwd34;
     klmm_vt[35] = (void *)klmm_fwd35;
     for (i = 0; i < KLMM_NSLOT; i++) if (!klmm_vt[i]) { klog("mm: NOT PROXIED - proxy slot %d has no function (a build error)", i); return; }
     if (!klmm_has_008()) {

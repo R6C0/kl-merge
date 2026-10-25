@@ -706,6 +706,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klfps.c"                                        /* klfps.c: [FrameLimit] RTSS-style frame limiter on the device's Present (default on) */
 #include "klnet.c"
 #include "klnetfix.c"
+#include "klnetload.c"                                   /* klnetload.c: [NetLoad] Probe / ScaleSend - load probe and sender-rate scaling for bigger lobbies (off unless set); AFTER klnet.c */
 #include "kllobby.c"                                      /* kllobby.c: [Lobby] MinPlayers - a hosted FA lobby may start below 4 (off unless set) */
 #include "kllobbyopt.c"                                   /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax - more choices on the FA lobby rows (off unless set); AFTER kllobby.c */
 #include "klbotfill.c"                                    /* klbotfill.c: [Bots] OnlineFill plan + probe, read-only (off unless set); AFTER kllobby.c */
@@ -1182,6 +1183,7 @@ static void klh_tick(int game_thread)
     kllo_tick();                                      /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax (off unless set) */
     klbf_tick(game_thread);                           /* klbotfill.c: [Bots] OnlineFill plan + probe (off unless set) */
     klnetfix_tick(game_thread);                       /* klnetfix.c: [Net] Hold* receiver hold times (off unless set) */
+    knl_tick(game_thread);                            /* klnetload.c: [NetLoad] (off unless set) */
     klinv_tick(game_thread);                          /* klinv.c: [Inv] gun shelf, Arcade only (off unless Enable=1) */
     klgrenade_tick(game_thread);                      /* klgrenade.c: [Grenade] Probe, log only (off unless Probe=1) */
     klmu_tick(game_thread);                           /* klmusic.c: the jukebox cue (reads only; off unless [Music] Enable=1) */
@@ -1594,6 +1596,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klq2_init();                                      /* klqol.c: [QoL] (default off) */
     kqb_init();                                       /* klqol2.c: [QoL2] (default off) */
     klnetfix_init();
+    knl_init();                                       /* klnetload.c: reads [NetLoad] */
     klinv_init();
     klgrenade_init();                                 /* klgrenade.c: after klinv_init (shares its user32 pointers) */
     klnetsmooth_init();
