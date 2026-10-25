@@ -281,6 +281,41 @@ static int kls_find_rule(int slot, int page)
     return -1;
 }
 
+/* RANDOM ONLINE MAP (2026-10-25, onlrand_1025a; owner: 'an option for it to play randomised maps too'). [Expansion] OnlineSet=9.
+ * The host picks the SLOT (stock map) in the lobby and the game syncs that; this picks WHICH map of that slot loads, from every page that has
+ * a rule for the slot, plus the stock map as one choice. Every peer must pick the same one with NO message between them, so the choice is a pure
+ * function of (lobby id, slot number, candidate list):
+ *   lobby id = the 8 bytes at [[[0x168e598]+0x17c]+0x35e] when that service is the Steam one (vtable 0xbd597c) and its 'session exists' byte
+ *   [+0x35c] is set. The host's create task writes it, a joiner's JoinSession copies it from the search result (re\netcode_fa.md 8: SETTLED,
+ *   klnet.c logs it as 'net: lobby ...'); Steam gives host and joiner the same id (CERTAIN for Steam lobbies; that the field is already
+ *   filled when the first slot archive is opened is a GUESS: the lobby exists long before the start). If it cannot be read (System Link may
+ *   use another service class: GUESS, not looked at) the seed is 0 -> a FIXED map per slot, identical on every peer too.
+ * Same lobby + same slot = same map every round (no round counter is shared); a new lobby = a new draw. The candidate list must be identical on
+ * all peers (same ini, same map folders), otherwise they diverge - exactly as for OnlineSet=2. An old DLL reads OnlineSet=9 as a page without
+ * rules and falls back to the stock [Redirect] maps. DATA reads only. */
+#define KLS_RANDOM     9
+#define KLS_SVC_VT     0x00bd597c
+static char kls_rnd_txt[200];                        /* the last draw, for the LOAD line */
+
+static int kls_rand_pick(int s)
+{   /* -> the page (0 = stock) chosen for slot index s */
+    int cand[KLS_PAGES], n = 0, p, k, num = atoi(kls_slot[s].name + 1), src = 0, len = 0;
+    DWORD sm, svc, lob[2] = { 0, 0 }; BYTE ex = 0; unsigned __int64 x;
+    cand[n++] = 0;
+    for (p = 2; p < KLS_RANDOM; p++) if (kls_find_rule(s, p) >= 0) cand[n++] = p;
+    if (klh_exe_ok && (sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) != 0 && (svc = klh_rd32(sm + 0x17c)) != 0 &&
+        klh_rd32(svc) == KLS_SVC_VT && klh_rd(svc + 0x35c, &ex, 1) && ex && klh_rd(svc + 0x35e, lob, 8) && (lob[0] || lob[1])) src = 1;
+    else lob[0] = lob[1] = 0;
+    x = ((unsigned __int64)lob[1] << 32 | lob[0]) ^ ((unsigned __int64)(num + 1) * 0x9E3779B97F4A7C15ULL);
+    x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ULL; x ^= x >> 27; x *= 0x94D049BB133111EBULL; x ^= x >> 31;
+    k = (int)(x % (unsigned)n);
+    len = snprintf(kls_rnd_txt, sizeof kls_rnd_txt, "random: seed lobby %08lx%08lx (%s) slot %d, %d choices [stock", (unsigned long)lob[1], (unsigned long)lob[0],
+                   src ? "Steam lobby id" : "NOT readable: fixed pick", num, n);
+    for (p = 1; p < n && len < (int)sizeof kls_rnd_txt - 40; p++) len += snprintf(kls_rnd_txt + len, sizeof kls_rnd_txt - len, " p%d=%s", cand[p], kls_rule[kls_find_rule(s, cand[p])].map);
+    snprintf(kls_rnd_txt + len, sizeof kls_rnd_txt - len, "] -> choice %d (page %d)", k, cand[k]);
+    return cand[k];
+}
+
 /* -> 1 and the new path in out[MAX_PATH] when the open must go somewhere else, 0 when it stays.
    Keeps GetLastError() as it found it when it returns 0. */
 static int kls_map(const char *in, char *out, const char *api)
@@ -303,10 +338,13 @@ static int kls_map(const char *in, char *out, const char *api)
         const char *rest = full + (hit - low) + kls_slot[s].keylen; int page;
         if (!_stricmp(rest, kls_slot[s].zip)) {           /* the level's archive: a load of this slot begins (or the game probes for it) */
             page = kls_page_now();
+            kls_rnd_txt[0] = 0;
+            if (page == KLS_RANDOM) page = kls_rand_pick(s);      /* OnlineSet=9 */
             { static LONG nd; if (InterlockedIncrement(&nd) <= 96) {      /* DIAGNOSTIC: which page decided this load, and why */
                 int on = kl_online(); r = kls_find_rule(s, page); if (r < 0 && page) r = kls_find_rule(s, 0);
-                klog("expansion: LOAD %s: latch=%ld force=%d online=%d OnlineSet=%d keep=%d -> page %d, rule %s; stack [%s]%s", kls_slot[s].name, (long)kls_menu_page, kls_page_force,
+                klog("expansion: LOAD %s: latch=%ld force=%d online=%d OnlineSet=%d keep=%d -> page %d, rule %s; stack [%s]%s%s%s", kls_slot[s].name, (long)kls_menu_page, kls_page_force,
                      on, kls_online_set, kls_keep, page, r < 0 ? "none (stock level)" : kls_rule[r].map, kls_stack_txt[0] ? kls_stack_txt : "not read yet",
+                     kls_rnd_txt[0] ? "; " : "", kls_rnd_txt,
                      on && page ? " - WARNING: online, every peer needs the SAME map set (the host's choice is not sent; see re/private_match_mapsync.md)" : ""); } }
             if (!kl_online() && (r = kpm_override(kls_slot[s].name)) >= 0) page = r;      /* klpm.c: the Arcade playlist names the page of the map it chose for this slot */
             if (InterlockedExchange(&kls_slot[s].page, page) != page) {
@@ -706,7 +744,8 @@ static void kls_init(HINSTANCE inst)
     kls_page_force = (int)GetPrivateProfileIntA("Expansion", "Page", -1, klh_ini);
     if (kls_page_force >= KLS_PAGES) kls_page_force = -1;
     kls_online_set = (int)GetPrivateProfileIntA("Expansion", "OnlineSet", 0, klh_ini);
-    if (kls_online_set < 0 || kls_online_set >= KLS_PAGES) { klog("expansion: OnlineSet=%d is not a page (0, 2..9): ignored", kls_online_set); kls_online_set = 0; }
+    if (kls_online_set < 0 || kls_online_set >= KLS_PAGES) { klog("expansion: OnlineSet=%d is not a page (0, 2..8, 9 = random): ignored", kls_online_set); kls_online_set = 0; }
+    if (kls_online_set == KLS_RANDOM) klog("expansion: OnlineSet=9: RANDOM map per slot in a network session (stock + every page with a rule for the slot), seeded from the lobby id; page 9 itself cannot hold rules; NOT run live");
     if (kls_online_set == 1) { klog("expansion: OnlineSet=1 is the stock page: ignored"); kls_online_set = 0; }
     kls_keep_online = GetPrivateProfileIntA("Expansion", "KeepPageOnline", 0, klh_ini) != 0;
     kls_keep_clear = GetPrivateProfileIntA("Expansion", "KeepClear", 1, klh_ini) != 0;

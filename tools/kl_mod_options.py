@@ -65,9 +65,14 @@ feat('censor', G_CORE, 'Head shots blow the head off (pixelated censor)', 'on', 
 feat('censorlate', G_CORE, 'Censor also corpses, AI heisters and you (late head blow)', 'on', 'start',
      'k31cen: calls the game BlowHeadOff 350 ms after death; not live-tested', [('Censor', 'Late', 1, 0, 1), ('Censor', 'Player', 1, 0, 1)])
 feat('onlinedm', G_EXP, 'Private match / System Link: use the Dead Men maps page (not for Quick Match; every player needs the same setting)', 'off', 'start',
-     'klslot.c OnlineSet=2 (page 2, "Dead Men maps"); NOT run live; host choice is not sent to joiners; excludes the next row', [('Expansion', 'OnlineSet', 2, 0, 0)])
+     'klslot.c OnlineSet=2 (page 2, "Dead Men maps"); run live 2026-10-25 (SL2: System Link host loaded DM01); host choice is not sent to joiners; untick every online map row = Dog Days maps', [('Expansion', 'OnlineSet', 2, 0, 0)])
+F[-1]['exact'] = True; F[-1]['excl'] = 'onlineset'
 feat('onlinecamp', G_EXP, 'Private match / System Link: use the Dead Men campaign page (not for Quick Match; every player needs the same setting)', 'off', 'start',
-     'klslot.c OnlineSet=3 (page 3, "Dead Men campaign"); NOT run live; turn off the row above (one key, last click wins)', [('Expansion', 'OnlineSet', 3, 0, 0)])
+     'klslot.c OnlineSet=3 (page 3, "Dead Men campaign"); not run live (same code path as page 2); ticking it unticks the row above', [('Expansion', 'OnlineSet', 3, 0, 0)])
+F[-1]['exact'] = True; F[-1]['excl'] = 'onlineset'
+feat('onlinerandom', G_EXP, 'Private match / System Link: random map (Dead Men and Dog Days mixed) (not for Quick Match; every player needs the same setting)', 'off', 'start',
+     'klslot.c OnlineSet=9: per slot the stock map or any Dead Men map page that has one for that slot, drawn from the lobby id so all players get the same; NOT run live; ticking it unticks the other online map rows', [('Expansion', 'OnlineSet', 9, 0, 0)])
+F[-1]['exact'] = True; F[-1]['excl'] = 'onlineset'
 feat('keeppage', G_EXP, 'Private match / System Link: keep the last Arcade expansion page for the next online session', 'off', 'start',
      'klslot.c KeepPageOnline; NOT run live; ignored while OnlineSet is set', [('Expansion', 'KeepPageOnline', 1, 0, 0)])
 feat('hidevan', G_EXP, 'Hide the van escape timer until the van is there', 'on', 'start',
@@ -303,8 +308,11 @@ def preset_conflict(wants):
     on = [fid for fid, w in wants.items() if w and 'preset' in BY_ID[fid]]
     if len(on) > 1:
         return 'pick one frame limiter preset, not %s' % ' + '.join(on)
-    lk = [fid for fid, w in wants.items() if w and BY_ID[fid].get('excl') == 'look']
-    return 'pick one ReShade look, not %s' % ' + '.join(lk) if len(lk) > 1 else None
+    for g, what in (('look', 'ReShade look'), ('onlineset', 'online map set')):
+        lk = [fid for fid, w in wants.items() if w and BY_ID[fid].get('excl') == g]
+        if len(lk) > 1:
+            return 'pick one %s, not %s' % (what, ' + '.join(lk))
+    return None
 
 
 def plan(lines, wants):

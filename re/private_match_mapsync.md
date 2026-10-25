@@ -351,3 +351,8 @@ Live test (two machines, same KLHook.ini on both, `[Expansion] Log=1`; SHIP dll 
 3. System Link: same as 1 on both machines; both logs must show the same folder.
 4. Refutation of the latch drop: with OnlineSet=0 and Page=-1, open HeistPlayMenu2 then go to Private Match; the drop line names the stack.
 5. Quick Match with all keys 0: LOAD lines show page 0 (unchanged behaviour).
+
+## 11. Random online map (onlrand_1025a, 2026-10-25): [Expansion] OnlineSet=9
+
+Shared value: the Steam lobby id, 8 bytes at `[[[0x168e598]+0x17c]+0x35e]` (service vtable 0xbd597c, exists byte `+0x35c`). Host: written by the create task; joiner: copied by JoinSession 0x6d8639 from the search result. Same on all peers: CERTAIN for Steam lobbies by Steam's design, CERTAIN that the code writes it (re/netcode_fa.md 8); filled before the first slot archive open: GUESS. System Link may use another service class (GUESS): then the seed is 0 and the pick is a fixed function of the slot (still identical on all peers). No round counter or nonce was found that is shared (not looked for beyond the session fields in klnet.c), so the pick is per (lobby, slot), not per round; a new lobby redraws.
+Pick = splitmix64(lobby id ^ slot*golden) % n over [stock, every page 2..8 with a rule for the slot]. Logged in the `expansion: LOAD` line (`random: seed lobby .. slot .. choices [..] -> choice k`). Old DLL: page 9 has no rules, falls back to [Redirect] stock. NOT run live.
