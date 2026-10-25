@@ -1,3 +1,8 @@
+2026-10-25 ~21:00 - LOOT MOVES INSTALLED (owner: 'fix where loot spawns ... period correct'), map zips only, tag .before-1025loot, undo C:/kl_build_1024/owner1025_build/<MAP>/stage/install.py --undo:
+DM09 F06 24e9c878 -> 5c31e901, DM01B F03 186cf3f8 -> fbbb7216, DM03A F07 a869705b -> 1acb434a, DM06B F02 -> 835457e1; each 4,000,000, Floors.stand checked, entries stale 0, WAVs untouched.
+Held: DM05A (needs a K50 memory run). DD10 / DM07 / LANES (DM01-03) failed adversarial verify (deactivators blanket-emptied + 57>55 actors; DM07 TEX change, node loss; DM01 fence/cars, DM02 drawers):
+round 2 running. c9 built [HUD] TrackerEscapeFar (8bb053657, not installed) for the DD10 escape marker; depends on whether DD10's van makes a kind 8/9/10 entry.
+
 2026-10-25 ~20:10 - GUNS RAW LIKE THE MP45 INSTALLED (owner: 'all quiet again', 'distortion to match like the mp45'): no data regression (every shot at the MP45 head level), but the knee
 clipper left 0.1-11 % flat tops vs the Deagle's ~20 %. kl_gunsnd_all build --raw (hard clip + rail-aware IMA encode, <= +0.6 dB over head), 42 banks, 1686 records, median 21.9 % flat;
 MP45 clips untouched. C:/kl_build_1024/gunraw_1025, backups *.WAV.before-1025gunraw, UNDO bat there (ac0dc323f). Grenade TEST install ready, not run: C:/kl_build_1024/grenspawn_1025/install.py.
