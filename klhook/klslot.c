@@ -209,9 +209,35 @@ static int kls_option_now(void)
     return v < KLS_PAGES ? (int)v : 0;
 }
 
+/* ONLINE MAP SET (2026-10-25, mapset_1025a; owner: the Dead Men maps selectable in Private Match / System Link too). WHY: online the Arcade
+ * page is not on screen, so the latch is 0 (or dropped after 1 s) and every slot loads its stock / [Redirect] map. HOW: while kl_online() says
+ * this machine is in a network session, kls_page_now() answers
+ *   [Expansion] OnlineSet=N (2 or 3; 0 = off, the default)   that page, whatever the menu latch says;
+ *   [Expansion] KeepPageOnline=1 (default 0)                 else the last expansion page seen in the OFFLINE menu (kls_keep), if the latch is 0.
+ * [Expansion] KeepClear=1 (default 1) forgets kls_keep when a window whose name contains 'MainMenu' is topmost in the frontend (GUESS: that
+ * name; the stack is logged at Log>=2 and at every drop). Offline nothing changes. DATA ONLY: no code byte is written.
+ * LIMITS: Quick Match / public lobbies cannot be told apart by this machine (the lobby type is only seen when klmm.c's proxy is installed,
+ * [Net] PrivateLobby/BuildKey): the key is therefore OFF by default, and a Quick Match with it on loads a Dead Men map against a stock one.
+ * The host's set is NOT sent to joiners (stage 4, re\private_match_mapsync.md): every peer needs the same ini. A line says so at every load. */
+static int kls_online_set, kls_keep_online, kls_keep_clear = 1, kls_keep;
+static char kls_stack_txt[240];                      /* the last window stack read, for the logs */
+
+static int kls_online_cached(void)
+{   /* kl_online() reads memory three times: not more than every 250 ms (kls_page_now is called per file open and per LOC lookup) */
+    static DWORD at; static int v;
+    DWORD now = GetTickCount();
+    if (!at || now - at > 250) { v = kl_online(); at = now ? now : 1; }
+    return v;
+}
+
 static int kls_page_now(void)
 {   /* the page a load that starts now belongs to */
-    return kls_page_force >= 0 ? kls_page_force : (int)kls_menu_page;
+    if (kls_page_force >= 0) return kls_page_force;
+    if ((kls_online_set || kls_keep_online) && kls_online_cached()) {
+        if (kls_online_set) return kls_online_set;
+        if (!kls_menu_page && kls_keep) return kls_keep;
+    }
+    return (int)kls_menu_page;
 }
 
 static int kls_in_image(DWORD va) { return va >= KL2_BASE && va < KL2_BASE + KL2_IMAGESIZE - 16; }
@@ -277,6 +303,11 @@ static int kls_map(const char *in, char *out, const char *api)
         const char *rest = full + (hit - low) + kls_slot[s].keylen; int page;
         if (!_stricmp(rest, kls_slot[s].zip)) {           /* the level's archive: a load of this slot begins (or the game probes for it) */
             page = kls_page_now();
+            { static LONG nd; if (InterlockedIncrement(&nd) <= 96) {      /* DIAGNOSTIC: which page decided this load, and why */
+                int on = kl_online(); r = kls_find_rule(s, page); if (r < 0 && page) r = kls_find_rule(s, 0);
+                klog("expansion: LOAD %s: latch=%ld force=%d online=%d OnlineSet=%d keep=%d -> page %d, rule %s; stack [%s]%s", kls_slot[s].name, (long)kls_menu_page, kls_page_force,
+                     on, kls_online_set, kls_keep, page, r < 0 ? "none (stock level)" : kls_rule[r].map, kls_stack_txt[0] ? kls_stack_txt : "not read yet",
+                     on && page ? " - WARNING: online, every peer needs the SAME map set (the host's choice is not sent; see re/private_match_mapsync.md)" : ""); } }
             if (!kl_online() && (r = kpm_override(kls_slot[s].name)) >= 0) page = r;      /* klpm.c: the Arcade playlist names the page of the map it chose for this slot */
             if (InterlockedExchange(&kls_slot[s].page, page) != page) {
                 r = kls_find_rule(s, page); if (r < 0) r = kls_find_rule(s, 0);
@@ -379,7 +410,8 @@ static void *__cdecl kls_fopen(const char *name, const char *mode)
    gives a name that matches nothing, and a drop needs the same reading for a whole second). */
 static void kls_menu_watch(void)
 {
-    static DWORD sig0, since, state0 = 0xffffffff, stateat; static int found0, have0, stateseen; static char stack0[240]; static LONG told;
+    static DWORD sig0, since, state0 = 0xffffffff, stateat; static int found0, have0, stateseen; static LONG told;
+#define stack0 kls_stack_txt
     DWORD gd, mgr, w, n, win[24], sig, sm, st = 0, now = GetTickCount(), i; int found = 0, len = 0; char nm[64], scene[160], key[64]; BYTE pend = 0;
     if (kls_page_force >= 0 || !kls_npaged || !klh_exe_ok) return;
     if ((sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) != 0 && klh_rd(sm + 0x70, &st, 4) && st != state0) {
@@ -403,12 +435,14 @@ static void kls_menu_watch(void)
             if (len < (int)sizeof stack0 - 70) len += snprintf(stack0 + len, sizeof stack0 - len, "%s%s", i ? " > " : "", nm[0] ? nm : "?");
         }
         have0 = 1; sig0 = sig; found0 = found; since = now;
+        if (kls_keep_clear && kls_keep && !found && strstr(stack0, "MainMenu")) { klog("expansion: kept page %d forgotten: the frontend shows [%s]", kls_keep, stack0); kls_keep = 0; }
         if (kls_log >= 2) klog("expansion: menu windows [%s]%s", stack0, found ? "" : " - no map page");
     }
     /* StartGame: the byte is set for one frame only (0x502cb6 sets it, the selector's next update 0x459ef3 -> 0x7e01be
        clears it; the tick comes once a frame in between). Seeing it counts like a change of the session state. */
     if ((found0 || kls_menu_page) && klh_rd((DWORD_PTR)KLH_VA(KLS_STARTPEND), &pend, 1) && pend) { stateat = now; stateseen = 1; since = now; }
     if (found0) {
+        if (found0 >= 2 && kls_keep_online && !kl_online() && kls_keep != found0) { kls_keep = found0; klog("expansion: page %d kept for the next online session (KeepPageOnline=1)", found0); }
         if (InterlockedExchange(&kls_menu_page, found0) != found0) {
             int r, nr = 0, ml = 0; char maps[200] = "";
             for (r = 0; r < kls_nrules; r++) if (kls_rule[r].page == found0 && ml < (int)sizeof maps - 90) ml += snprintf(maps + ml, sizeof maps - ml, "%s%s=%s", nr++ ? ", " : "", kls_slot[kls_rule[r].slot].name, kls_rule[r].map);
@@ -426,8 +460,11 @@ static void kls_menu_watch(void)
     if (pend) return;
     if (stateseen && (LONG)(now - stateat) < kls_quiet_ms) return;
     if ((LONG)(now - since) < kls_drop_ms) return;
-    klog("expansion: menu page %ld dropped: the frontend shows [%s] - from now on a load uses [Redirect] only", InterlockedExchange(&kls_menu_page, 0), stack0);
+    klog("expansion: menu page %ld dropped: the frontend shows [%s] (online=%d OnlineSet=%d kept=%d) - from now on a load uses [Redirect] only%s", InterlockedExchange(&kls_menu_page, 0), stack0,
+         kl_online(), kls_online_set, kls_keep, (kls_online_set || (kls_keep_online && kls_keep)) ? " unless the online set applies" : "");
 }
+
+#undef stack0
 
 /* ---------------------------------------------------------------- [Slots]: names by data write, from the tick */
 
@@ -668,6 +705,13 @@ static void kls_init(HINSTANCE inst)
     kls_fallback = GetPrivateProfileIntA("Expansion", "Fallback", 1, klh_ini);
     kls_page_force = (int)GetPrivateProfileIntA("Expansion", "Page", -1, klh_ini);
     if (kls_page_force >= KLS_PAGES) kls_page_force = -1;
+    kls_online_set = (int)GetPrivateProfileIntA("Expansion", "OnlineSet", 0, klh_ini);
+    if (kls_online_set < 0 || kls_online_set >= KLS_PAGES) { klog("expansion: OnlineSet=%d is not a page (0, 2..9): ignored", kls_online_set); kls_online_set = 0; }
+    if (kls_online_set == 1) { klog("expansion: OnlineSet=1 is the stock page: ignored"); kls_online_set = 0; }
+    kls_keep_online = GetPrivateProfileIntA("Expansion", "KeepPageOnline", 0, klh_ini) != 0;
+    kls_keep_clear = GetPrivateProfileIntA("Expansion", "KeepClear", 1, klh_ini) != 0;
+    if (kls_online_set || kls_keep_online)
+        klog("expansion: online map set: OnlineSet=%d KeepPageOnline=%d KeepClear=%d - in a network session the Dead Men page is used for the level load; NOT sent to peers, all peers need the same ini; do not use in Quick Match", kls_online_set, kls_keep_online, kls_keep_clear);
     GetPrivateProfileStringA("Expansion", "Root", "KLExpansion", root, sizeof root, klh_ini);
     if (!kls_plain(root)) { klog("expansion: Root=%s refused: a plain folder name next to kl2.exe is needed", root); return; }
     kls_lower(kls_game_low, dir); kls_game_len = (int)strlen(kls_game_low);

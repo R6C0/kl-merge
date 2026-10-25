@@ -321,3 +321,33 @@ virtual addresses (base 0x400000).
 * That the client always reaches the archive open after the table is final (the ack gate is the defence; the load order is not traced).
 * That a stock peer ignores unknown lobby/member keys (Steam stores them; the game has no LobbyDataUpdate_t handler, buildcheck 2).
 * That the module cannot disturb a stock game: with `Enable=0` it must be one ini read and a return (the pattern of klbuild.c:21-22, 858-863).
+
+## 10. Implemented 2026-10-25 (mapset_1025a): the cheap route, host-local, no sync
+
+Built (TEST `klhook/out_mapset_1025a_test`, SHIP `klhook/out_mapset_1025a`). NOT run live. Data-only: no code byte of kl2.exe changes.
+Only klslot.c changed (no klhook.c / klgrenade.c edit, no new include).
+
+* (a) Diagnostics. Every open of a slot's `<slot>_Main.zip` (first 96) logs
+  `expansion: LOAD F0n: latch=.. force=.. online=.. OnlineSet=.. keep=.. -> page P, rule <dir|none (stock level)>; stack [..]`
+  plus a WARNING when online with a non-zero page. The stack text is the last window stack read (full names, `A > B > C`). The existing drop line
+  now also prints online / OnlineSet / kept. Log=2 adds `menu windows [...]` for every stack change.
+* (b) `[Expansion] OnlineSet=0|2|3` (default 0): while `kl_online()` is true (cached 250 ms), `kls_page_now()` answers that page whatever the latch says.
+  `[Expansion] KeepPageOnline=1` (default 0, only with OnlineSet=0): the last expansion page latched in the OFFLINE menu (`kls_keep`) is used when
+  the latch is 0 online. `KeepClear=1` (default 1) forgets it when a window name containing `MainMenu` is in the frontend stack (GUESS: that name;
+  read it off the log). Offline nothing changes. Rows in tools/kl_mod_options.py: onlinedm (OnlineSet=2), onlinecamp (=3), keeppage; all rec off.
+  Quick Match / public lobbies are NOT detectable here (lobby type is only seen by klmm.c's proxy, installed only with [Net] PrivateLobby/BuildKey),
+  so the exclusion is the default-off key plus the label; a stricter guard is planned: have klmm_CreateLobby record the type and skip type 2.
+* (c) Lobby titles: kllocname.c already asks `kls_page_now()`, so with `[Names] Enable=1 Override=1` the titles follow OnlineSet / the kept page for
+  free. Not enabled by default (unproven, unchanged).
+* (d) Both peers: the LOAD line warns. Lobby data key NOT implemented (klbuild.c is not included in klhook.c); plan stays sections 2-3: host writes
+  `klx_maps`, joiner `klx_ack` via klbuild.c once it is included and run. Menu overlay toggler: plan only (element cap 5096, ~4793 used): one
+  extra FA-lobby toggler text cycling OnlineSet 0/2/3 needs ~3 elements; do after klbuild is live.
+
+Live test (two machines, same KLHook.ini on both, `[Expansion] Log=1`; SHIP dll + ini copies, game folder write by the owner):
+1. Solo first: `[Expansion] OnlineSet=2`, Private Match with the stock lobby, pick any slot, Start. Read KLHook.log: the `LOAD F0n` line must show
+   `online=1 ... page 2, rule DM..`. If `online=0` the detection did not fire in the lobby (section 9 first bullet): record it.
+2. Same with `OnlineSet=0 KeepPageOnline=1`: open Arcade > Dead Men maps (log `page 2 kept`), back out to the main menu (log `kept page 2 forgotten` if
+   MainMenu matched), then Private Match: kept=2 only if not forgotten; repeat without visiting the main menu.
+3. System Link: same as 1 on both machines; both logs must show the same folder.
+4. Refutation of the latch drop: with OnlineSet=0 and Page=-1, open HeistPlayMenu2 then go to Private Match; the drop line names the stack.
+5. Quick Match with all keys 0: LOAD lines show page 0 (unchanged behaviour).

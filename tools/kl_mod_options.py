@@ -64,6 +64,12 @@ feat('censor', G_CORE, 'Head shots blow the head off (pixelated censor)', 'on', 
      'owner item 9; heap data only', [('Censor', 'Enable', 1, 0, 1)])
 feat('censorlate', G_CORE, 'Censor also corpses, AI heisters and you (late head blow)', 'on', 'start',
      'k31cen: calls the game BlowHeadOff 350 ms after death; not live-tested', [('Censor', 'Late', 1, 0, 1), ('Censor', 'Player', 1, 0, 1)])
+feat('onlinedm', G_EXP, 'Private match / System Link: use the Dead Men maps page (not for Quick Match; every player needs the same setting)', 'off', 'start',
+     'klslot.c OnlineSet=2 (page 2, "Dead Men maps"); NOT run live; host choice is not sent to joiners; excludes the next row', [('Expansion', 'OnlineSet', 2, 0, 0)])
+feat('onlinecamp', G_EXP, 'Private match / System Link: use the Dead Men campaign page (not for Quick Match; every player needs the same setting)', 'off', 'start',
+     'klslot.c OnlineSet=3 (page 3, "Dead Men campaign"); NOT run live; turn off the row above (one key, last click wins)', [('Expansion', 'OnlineSet', 3, 0, 0)])
+feat('keeppage', G_EXP, 'Private match / System Link: keep the last Arcade expansion page for the next online session', 'off', 'start',
+     'klslot.c KeepPageOnline; NOT run live; ignored while OnlineSet is set', [('Expansion', 'KeepPageOnline', 1, 0, 0)])
 feat('hidevan', G_EXP, 'Hide the van escape timer until the van is there', 'on', 'start',
      'klhud.c van card; needs [HUD] Enable=1', [('HUD', 'HideIdleEscape', 1, 0, 1)])
 feat('vanblow', G_EXP, 'Escape vehicle can blow up when nobody is aboard', 'on', 'start',
