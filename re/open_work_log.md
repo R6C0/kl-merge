@@ -1,3 +1,9 @@
+2026-10-25 ~21:26 - SYSTEM LINK + DEAD MEN MAPS: PASS (SL2, TEST out_escfar_1025a_test, script C:/kl_build_1024/online_1025/live/SL2.ini, [Lobby] MinPlayers=1 test-only).
+Installed online_1025 (SHIP 05a47b0e, ini 4b2bcf1a: [Expansion] OnlineSet=2, [HUD] TrackerEscapeFar=1; .before-1025online, undo C:/kl_build_1024/online_1025/install.py --undo).
+Route MainMenu DOWN DOWN RETURN > OnlineMenu DOWN RETURN > SystemLink DOWN DOWN RETURN (Create; SL1 pressed Join = SysUIErrorScreen) > SystemLinkCreate RETURN > FALobby;
+host Ready alone -> 'LOAD F01: online=1 OnlineSet=2 -> page 2, rule DM01', level loaded, 0 asserts 0 faults. Grenade GSP1: PASS but no grenade carried (needs a pickup). QoL2 WatchDry sane.
+Destruction-sound loudness (vehicle explosions, extinguishers, glass) as MP45: agent building C:/kl_build_1024/fxraw_1025 (not installed).
+
 2026-10-25 ~21:00 - LOOT MOVES INSTALLED (owner: 'fix where loot spawns ... period correct'), map zips only, tag .before-1025loot, undo C:/kl_build_1024/owner1025_build/<MAP>/stage/install.py --undo:
 DM09 F06 24e9c878 -> 5c31e901, DM01B F03 186cf3f8 -> fbbb7216, DM03A F07 a869705b -> 1acb434a, DM06B F02 -> 835457e1; each 4,000,000, Floors.stand checked, entries stale 0, WAVs untouched.
 Held: DM05A (needs a K50 memory run). DD10 / DM07 / LANES (DM01-03) failed adversarial verify (deactivators blanket-emptied + 57>55 actors; DM07 TEX change, node loss; DM01 fence/cars, DM02 drawers):

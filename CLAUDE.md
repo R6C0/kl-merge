@@ -66,6 +66,12 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-25 ~21:26 - SYSTEM LINK + DEAD MEN MAPS: PASS (SL2, TEST out_escfar_1025a_test, script C:/kl_build_1024/online_1025/live/SL2.ini, [Lobby] MinPlayers=1 test-only).
+Installed online_1025 (SHIP 05a47b0e, ini 4b2bcf1a: [Expansion] OnlineSet=2, [HUD] TrackerEscapeFar=1; .before-1025online, undo C:/kl_build_1024/online_1025/install.py --undo).
+Route MainMenu DOWN DOWN RETURN > OnlineMenu DOWN RETURN > SystemLink DOWN DOWN RETURN (Create; SL1 pressed Join = SysUIErrorScreen) > SystemLinkCreate RETURN > FALobby;
+host Ready alone -> 'LOAD F01: online=1 OnlineSet=2 -> page 2, rule DM01', level loaded, 0 asserts 0 faults. Grenade GSP1: PASS but no grenade carried (needs a pickup). QoL2 WatchDry sane.
+Destruction-sound loudness (vehicle explosions, extinguishers, glass) as MP45: agent building C:/kl_build_1024/fxraw_1025 (not installed).
+
 2026-10-25 ~20:30 - GUNS RAW LIKE THE MP45 INSTALLED (owner: 'distortion to match like the mp45'): kl_gunsnd_all build --raw (hard clip + rail-aware IMA
 encode), 42 banks, median 21.9 % flat (Deagle ~20 %), MP45 untouched; C:/kl_build_1024/gunraw_1025, *.WAV.before-1025gunraw, UNDO bat there. Not ear-tested.
 Grenade TEST ready, not run: C:/kl_build_1024/grenspawn_1025/install.py (Spawn=2; --undo after). DD10 escape: [HUD] TrackerEscapeFar (8bb053657, default 0),
@@ -75,11 +81,6 @@ built out_escfar_1025a, not installed; unknown whether DD10 has a van tracker en
 Today 70-80% of hitch-probe reports stand in NtUserPeekMessage (win32u+0x101c; ReShade32+0x5ff67 + gameoverlayrenderer on the stack) vs 18/32 at 17:35. 10-24 17:35 had NO medal-hook32
 loaded (19:21 did); Medal + MedalEncoder were restarted 15:15 today. INSTALLED hook out_mapset_1025a SHIP 2FF289F3 (on FA8A38A5, .before-1025mapset; ini untouched, Trace=1):
 Peek 'by result' line, [Input] MouseMoveMs, [Expansion] OnlineSet/KeepPageOnline (d2f92b656), [Grenade] Spawn TEST-only; all default off. Next: owner round with Medal quit; then MouseMoveMs=16.
-
-2026-10-25 ~17:45 - HEISTER DOOR KICKS INSTALLED (owner option A; tools/kl_bots_kick_1025.py, wf wpcwu2uyp + my rebase/byte check): DM01 3858b441 (e8 AKM sound) -> fbffea91
-(30 kick nodes, Door_1/2, 25 NEXT redirected), DM02 b0252fde -> 7ebc7e46 (60 nodes, doors 1,2,3,5, 81 redirected). DM03A/DM01B: no heister leg crosses a doorway, unchanged.
-Members .prp .gms .buf .oct .prm (.prm only .oct record numbers at +0x1c, as kl_fa_bots.apply); bot checks identical to the input; entries stale 0. No arming needed (ctor sets state 1).
-Undo: C:/kl_build_1024/hkick_1025a/<MAP>/stage/install.py --undo (.before-1025hkick). Not run live. Risk: a kick order rejected before the goal runs would hold that squad (no timeout).
 
 
 ## Owner's end goal (2026-10-09)
