@@ -162,3 +162,62 @@ What still blocks an FA layer (UNVERIFIED, nothing was run in the game):
 5. Memory: 468 MB archive vs 370 MB for F09; load time and RAM are the risk, not chunks.
 
 Review 2026-10-25 (independent re-check of s7): zip integrity OK; dangling 0/0; check.py 0/0; census 78 actors / 55 squads / 22,269 nodes / 519 tops / AI!Triggers 138; the 201 list entries and strings removed vs t4 (186+15) all pointed at nodes dropped from s7 (0 still resolve, 0 pointed at kept nodes; 20 sampled all in Dialogue / Friendly / Coop / Cutscenes / Checkpoints / trimmed squads). Caveat: s7 was built twice into the same folder (s7.log shows two exits); rebuild into a fresh folder before relying on byte-identity.
+
+## 7. FA layer design 1025a (measured on the s7 base; OFFLINE, nothing run in the game)
+
+Base rebuilt fresh by the 1025a audit: `kl_graft build F07 L05 F01 --no-fa --prune-dangling --m-drop <s7 list>` into
+`C:\kl_build_1024\l05fa_1025a\base`; F01_Main.zip md5 **25f7dc5d39bd5bba49e31e601a477637** (byte-identical to s7), verify 0, dangling 0, check.py 0/0.
+Coordinates are slot-frame (x, y = height, z) polygon midpoints of the L05 nav mesh (kl_route Mesh, `ok` polygons); tool probes in the work folder
+(n5..n9.py, lib.py, actors.json, p9.out), not committed.
+
+### 7.1 Blocker 4 resolved: what can end, fail or change the scene
+The campaign ends through `Special!EndOfLevel` (SceneChangerExitPoint) fed by `AI!Triggers!C2!TC_EndOfLevel_COOP/_SP` (counters) <- `C2!TB_EndKane`,
+`C2!TB_EndLynch` (boxes, `_FA` mode, around (9920,1187,11547) / (9522,1182,11544), roof, far outside the FA scope) and `C2!Timer_EncounerDone` (Delay4).
+`B6!TB_FailMission` + `GeomDeact_TB_FailMission` fail the round when the players leave the flat. `B2!PlayersForcedDown(#01)` are ForcePlayerMechanics.
+`C3!Init` starts `FusionSquad_Cutscene` (MiniCutsceneRout) and deactivates the B6_part2 roof squads.
+Neutralise for FA (add to the drop list `--m-drop`, then re-run the dangling prune): `Special!EndOfLevel!*`, `AI!Triggers!C2!TB_EndKane`, `TB_EndLynch`,
+`Timer_EncounerDone`, `TC_EndOfLevel_COOP`, `TC_EndOfLevel_SP`, `CoopOnly`, `SingleOnly`, `TC_RoundOneDone`, `AI!Triggers!C3!*` incl. `FusionSquad_Cutscene`,
+`B6!TB_FailMission`, `GeomDeact_TB_FailMission`, `B2!PlayersForcedDown`, `#01`. Round end is owned by the FA layer (escape van, timer). Kept untouched: the
+other `AI!Triggers` tops (they only wake squads / doors). Not tested in the game: whether any kept trigger still holds a SceneChanger reference (grep of the
+built node tree found none outside EndOfLevel).
+
+### 7.2 Scope decision (measured)
+The campaign path is long and vertical. The nav mesh is split into parts (kl_route): 38 ground floor (y 0, x 8080..13105, z -355..2341, 154 polys, street + lobby),
+26 stair tower (y 42..1229, 413 polys), 17/16 third floor (y 1200..1600), 23 fifth floor (y 2040), 18/19 fourth floor corridor (y 1600), 10 flats (y 1600,
+x 6842..13059, z 2280..3962), plus the roof/flat B parts at z > 5000 and z > 9900 (parts 0, 6, 4). Only 9 drop links exist, so parts are NOT connected:
+the collision walker never reached the tower from the street. FA scope = street (38) + tower (26/17/16/23) + fourth floor (18/19/10). Everything at z > 4000
+(B2, B6, B6_part2, C2 roof; 29 + actors) is out of OnlineBounds and its squads are dropped from the FA build (they would never meet a player and cost memory).
+
+### 7.3 Measured points (replace section 3 GUESS)
+| role | n | polygon midpoints (x, y, z) | proof |
+|---|---|---|---|
+| START (crew, lobby east, ground) | 8 | 838 (12321,0,-334); 895 (12409,0,-242); 844 (12569,0,-321); 845 (12750,0,-226); 901 (12879,0,-191); 847 (12976,0,-274); 908 (12964,0,3); 904 (13021,0,-45) | part 38; hvk_ray seen_from (masks 0x10/0x20/0x28, eye +160, targets +120/+175) from all 11 street polys (8080..8414, 941..1163): NOT seen (sanity: same ray sees a man 190 units away). Distance proof only for ranges; no sight test from interior police rows |
+| TEAM_MERC / traitor | 2+2 | poly 450 (9504,1200,720); poly 448 (9518,1200,956); neighbours 437 (9761,1200,802), 436 (9756,1200,962) | third floor, part 17 / 16 |
+| after-death (police respawn viewpoint) | 2 | poly 373 (13000,2040,-53); poly 288 (12956,1600,1171) | fifth / fourth floor |
+| police spawns (street, west) | 6 | 1226 (8080,0,1010); 1229 (8103,0,1045); 1230 (8141,0,1082); 1228 (8149,0,1163); 1218 (8232,0,1059); 1227 (8182,0,941) | part 38, same part as START (a walk exists; the long x 8450..9300 stretch has sparse polygons, check with the walker) |
+| ESCAPE van + OnlineEscVehicleMonitor (ONE) | 1 | poly 1220 (8414,0,969), street east end | part 38; keep the only monitor; plus escape zone radius 250 |
+| LOOT briefcases (reachable parts) | 8 | flat F: 1152 (10938,1600,2410) vase; 1135 (10652,1600,2393) shop bag; 1139 (10863,1600,2322); 1183 (12547,1600,3108) TV drawers; 1174 (13059,1600,3287) cabinet. corridor: 307 (12295,1600,1566) broken TV. tower: 624 (11394,400,150) old TV; 465 (10964,1200,223) monitor | each within 93..183 of its prop (fitting prop name), on part 10/19/26 |
+| OnlineBounds | 2 boxes | main x 8000..13600, y -50..2250, z -450..2450; flats x 6700..13500, y 1500..1800, z 2250..4050 | from part extents + 100 margin; GUESS margins |
+
+### 7.4 Nav bridges (kl_nav_bridge gap list; smart police AI needs a connected mesh)
+38-26 858<->997 (291); 26-17 437<->450 (270); 26-16 436<->448 (237); 26-18 507<->295 (387, vertical 387: stair step); 26-19 525<->319 (400 vertical);
+26-10 402<->1139 (574); 16-19 332<->314 (195); 16-10 335<->1138 (456); 18-19 339<->307 (212); 18-10 1204<->1173 (328); 17-18 273<->288 (451).
+The vertical ones (26-18, 26-19) are the stair flights the walker cannot climb; GUESS: bridge polygons with ramp edges, step rule unproven.
+
+### 7.5 Squads and waves
+In scope (about 41 actors): A1 car 1 squad (4, no position, spawns by script), A6 7 squads (12), A7 6 (8), A9 10 (12, 5th floor x13000 z913 and 4th floor
+x13000 z2200..2580), B3 WallCrashers (3, z 3000..3200), B5 kitchen (2, z 2630..2820). Drop B2, B6, B6_part2, C2 (30+ actors, 14 squads).
+Waves (kl_old_waves timers, GUESS seconds): W0 t=0 A7 Lynch/Kane side (8) as ground-floor guards unaware until a shot; W1 t=90 A6 (12) tower flights; W2 t=180
+A9 4th floor (5) + B5 (2); W3 t=270 A9 5th floor (6) + B3 wall crashers (3); A1 car (4) at t=120 on the street as the police-side threat. Live actor target: 41 campaign
+actors never all awake (at most 2 waves = 20) + 8 FA cops + dog + 6 civ extras <= 55. Dog squad: DD template `Gameplay!PoliceDogs#01` (F01) / F07 `021_FinancialAlley_Dog`,
+one squad of 1 at the street spawn (not placed; template availability in F07 systems UNVERIFIED).
+Police cars / SWAT: 2 cars at 1215 (8229,0,1163) and 1222 (8232,0,1152) facing east, SWAT van at 1228. Extinguisher / fuel spots (kl_dm_overhaul_1025 format, to be
+collision-checked against walls, not grass or ColiObj planes): candidates near the lobby columns, NOT measured yet.
+
+### 7.6 Memory
+Archive 468 MB vs 370 MB (F09) and ~330 MB (F07) stock; dropping the z > 4000 stuff saves chunks but the zip only shrinks if the prm/tex of the roof are cut too
+(est. -60 MB, not built). Address space was the K47A/K48 crash cause on DM05A, so this map should not be installed until the roof half is gone and a build is measured.
+
+### 7.7 Open
+(a) vertical stair bridges unproven; (b) sight proof only street->START, not interior cop rows; (c) wave timers, bounds margins, extinguisher spots GUESS;
+(d) no FA build was made (budget: free C: 15.7 GB, no new build folder beyond base); (e) dog template availability; (f) fed outfit stage after the last .prm change.
