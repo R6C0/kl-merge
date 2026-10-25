@@ -228,3 +228,26 @@ on DM03A / DM09, the rest as budget allows.
 - Actor budget: proven 99 actors / 55 squads, stock 148 / 90; each dog and each rappel cell costs one actor and one squad.
 - Everything in section 3 is "installed, not live-tested"; the next live round decides which of these stay.
 - PD2 guns (owner point 3) are untouched here; shop page II and the hook shop code belong to kl-merge-e8.
+
+## 6. Critic corrections (2026-10-25, adversarial check against the data)
+
+Checked: dog groups, ZFFActor `Ground` children, ZGrenadeAttackBehaviourRout count, sniper hits, alarm/megaphone/RadioCom nodes, tool and note names.
+
+- CONFIRMED (re-read with `kl_prpjoin.Scene`): F01, F03, F04, F06, F07 each hold a dog group whose `Ground` is a `ZFFActor`; F07
+  `021_FinancialAlley_Dog` + `tbReleaseDog` is real. ZGrenadeAttackBehaviourRout is 0 in F01/F03/F04/F06/F07 (the rest were not re-run here).
+  Alarm lamp (F01 `PC0400_DL10_LampAlarm_01`), `PoliceMegaPhone_Street`, F06 `RadioCom`, F03 megaphone props exist. Tools named all exist.
+- NOT VERIFIED by this check: soldier style 6 = dog (taken from map_ai.md only; the scene scan only lists names), the "115 Dog strings"
+  in the DM .ANM files, and the F04 `smLeash` meaning (already marked GUESS).
+- CORRECTION, sniper row: the "sniper 1" hits in F01-F05/F07/F09 are `Projectile_Sniper_01` (a bullet template in the systems side), NOT
+  sniper posts. Real sniper groups are only F06 `030_swat_guarding_snipers` and F08 `Gameplay!40_SWAT_Roof_Snipers`.
+- CORRECTION, riot shield: row 2.1 says "not available". map_ai.md counts soldier style 5 as shield and the code branches on it, so a
+  shield cop type exists in the engine but no FA map ships an actor with it (data, not code, is missing). Still L.
+- CORRECTION, dog effort: "M" is too low. A dog is a skinned character, not a prop like the cans: it needs the kl_chars skeleton / anim-set
+  path (`C.person`, skeleton, bone names), not just `kl_prmgraph` + `kl_texmat`, plus the soldier block with style 6 and the nav behaviour.
+  Honest effort is L for the first dog on any DM map, then S for each further dog. The one-dog DM03A test stays the right first step, but
+  expect 2 to 3 iterations (T-pose / invisible / crash at load are the likely first results). Rank 3 stays; do not expect it overnight.
+- CORRECTION, rank 1: hook music/stinger/ambience "Enable=1" is config only, but the same note says the PD2 jukebox stutters, the owner
+  made `[Music] Enable=0` the default, and sound3/stinger add-ons were NOT installed as of 10-23. So it is "check what is installed, then
+  flip", and music must stay opt-in (owner rule, memory pd2-music-opt-in). Not zero-risk and not unattended: it changes what the owner hears.
+- Rank 6 (cover/flank) is called "data only"; it is data but needs live play to judge, since no reaction can be asserted offline. Effort M per map holds.
+- Nothing in this note ran in the game; every "done" is "installed, not live-tested".

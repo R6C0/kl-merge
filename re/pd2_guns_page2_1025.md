@@ -191,3 +191,25 @@ Hook side (kl-merge-e8, klshoppage.c / klshop.c):
 2. Write `pd2_gun.py` with the 40-byte vertex builder and a selftest that round-trips a stock Type 81 body part (decode the stock
    40-byte chunk to Plates and rebuild it byte for byte, as kl_pd2mask.selftest does for the mask), THEN feed it the PD2 AK.
 3. `pd2_audio.py bank weapon_akm` to dump 45 wavs for an ear check by the owner.
+
+## 10. Critic corrections (2026-10-25, checked against code and stock data)
+
+- CONFIRMED (read the stock data again): Rifle_Type81 in F01 has 5 rigid parts (subtype 2, +0x38 = 1), vertex chunks of exactly 40 bytes
+  per vertex (body 1,467 verts / 58,688 bytes incl. padding; others 50/60/53/52 verts), body material slot 589, box part slot 550 lod 16.
+  The mask-drawn-in-game claim is in open_work_log.md (2026-10-10, "WOLF plate ... drawn and textured").
+- CORRECTION, section 2 headline: "Can pd2_model.py export a mesh to the Glacier .prm / .MAT / .TEX? Mostly yes" is misleading.
+  `pd2_model.py` only READS Diesel models (and writes .obj and PNG previews); it has no Glacier writer. The export is `tools/kl_pd2mask.py`
+  (52-byte skinned vertex, mask material), and it has no gun path. `tools/pd2_gun.py` does not exist. It was already proposed in
+  re/pd2_guns.md line 307, so it is not a new finding either.
+- ANSWERED, risk 2 and "unknown" in section 2.3: the stock gun material (slot 589, `Weapons/W_Rifle_Type81_01`) has stages mapDiffuse 997,
+  mapNormal 998, mapSpecularMask 999, mapEnvironment (none), mapReflectionMask 999, mapReflectionFallOff 176, mapLightMap 0. So it HAS a
+  normal map and specular/reflection masks. A clone that swaps only the diffuse leaves the stock normal (998) and masks on the PD2 UVs,
+  which will shade wrongly (visible bumps of the old gun). Test 1 must also point mapNormal and the masks at something neutral (a flat
+  normal TEX; the PD2 `ak_nm` is V8U8 and needs conversion), or accept the visual error. `clone_material` still needs a `source` argument.
+- Effort: "one session if the 40-byte path draws first time" is optimistic. The mask path needed several live iterations (log 10-10), the
+  material has 7 stages, the vertex pad and the bound floats are unproven, the shot clip is picked by ear without HIRC, and the live proof
+  needs e8. Plan 2 to 3 blocks of work plus 2 live runs. The risk list order is right.
+- Alternative worth considering: `kl_guns.py` already adds foreign rigid parts as variant-gated looks on a gun root, so the PD2 AK can ride
+  that machinery (a look) instead of a second replacement root; it needs `klgun.c` to switch the variant (hook) and it changes the gun for
+  everyone who carries that item. The replacement route in section 5 avoids the hook but has the same everyone-changes property.
+- Not checked: "reachable only through page II" for item 33 (taken from shop_more_guns.md), the grip shift, and the 74,437-stream count.
