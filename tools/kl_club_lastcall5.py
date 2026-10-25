@@ -48,6 +48,7 @@ from kl_prp import units
 
 BS = chr(92)
 MD5_LIVE = '858d3371a2f31169dc3b71c08ac4acf2'
+MD5_D5F = 'd5f8522bb45c1757e136e999e35d53f5'          # live DM05A after lastcall3b lite + clubmusic: 129 actors / 74 squads, 40 civilians (safe / mid build on it)
 SND_MD5 = '498cc81d'
 FIRST, SECOND = L3.FIRST, L3.SECOND
 REMOVE_LITE = [SECOND + 'Dance#02', FIRST + 'DanceFloor01!On_Dancefloor#02', FIRST + 'DanceFloor02!Dancefloor02a#03', FIRST + 'DanceFloor02!Dancefloor02a#01',
@@ -65,6 +66,12 @@ LOOKS = [('dd', 41803, 1, 0.08), ('dd', 41803, 2, 0.06), ('dd', 41803, 3, 0.06),
          ('dd', 41556, 2, 0.06), ('dd', 41556, 3, 0.06), ('dd', 41556, 4, 0.06), ('dd', 41556, 6, 0.06),
          ('dm', 6854, 1, 0.07), ('dm', 6854, 2, 0.07), ('dm', 6854, 3, 0.07), ('dm', 7265, 1, 0.16), ('dm', 6993, 1, 0.09), ('dm', 7115, 1, 0.04)]
 SEED = 25
+# lastcall5safe (2026-10-25): looks sets for the variants pinned on d5f8522b. Cost of the grafted looks measured on d5f8522b with kl_chars.put
+# (.TEX growth, MiB; .prm per extra look about +0.5..1.0 MiB, but put also drops ~17 MiB of dead chunks once per build): 6854 men 0.67 for all
+# three looks together, 7115 fat man 1.83, 6993 woman 3.58, 7265 woman 6.25. SAFE keeps the cheap ones (6854 x3, bartender 6993), drops 7265 + 7115.
+LOOKS_SAFE = [('dd', 41803, 1, 0.09), ('dd', 41803, 2, 0.08), ('dd', 41803, 3, 0.08), ('dd', 41803, 4, 0.08),
+              ('dd', 41556, 2, 0.08), ('dd', 41556, 3, 0.08), ('dd', 41556, 4, 0.08), ('dd', 41556, 6, 0.08),
+              ('dm', 6854, 1, 0.06), ('dm', 6854, 2, 0.06), ('dm', 6854, 3, 0.06), ('dm', 6993, 1, 0.17)]
 
 VARIANTS = {
     'full': dict(mode='pack', base=MD5_LIVE, tag='.before-1025lastcall5', stem='lastcall5', guards=['G1', 'G3', 'G4'], remove=REMOVE_FULL, add=19, upper=8,
@@ -74,8 +81,13 @@ VARIANTS = {
                  idle=0, sep=115.0, spread=0.0, roof='keep', far=600.0, civ_only=True, per=8, dgroup='KL_Dance4!', rout='KLDance4_%02d', doff=23,
                  stagger=0.47, crowd=1, want=71, want_upper=None, men=10, squads=4),
 }
+SAFE_BASE = dict(mode='pack', base=MD5_D5F, tag='.before-1025lc5safe', stem='lc5safe', guards=['G1', 'G2', 'G3', 'G4'], remove=REMOVE_LITE, civ_only=True,
+                 sep=115.0, spread=0.0, roof='keep', far=600.0, per=8, dgroup='KL_Dance3!', rout='KLDance3_%02d', doff=17, stagger=0.53,
+                 men=10, squads=4, min_looks=8)
+VARIANTS['safe'] = dict(SAFE_BASE, add=0, upper=0, idle=0, crowd=1, want=41, want_upper=None, looks=LOOKS_SAFE, max_actors=129, max_squads=74)
+VARIANTS['mid'] = dict(SAFE_BASE, remove=REMOVE_FULL, add=13, upper=5, idle=3, crowd=14, want=54, want_upper=None, looks=None, max_actors=135, max_squads=85)
 for _k, _v in VARIANTS.items():
-    L3.VARIANTS['lc5_' + _k] = _v
+    L3.VARIANTS[_k if _k in ('safe', 'mid') else 'lc5_' + _k] = _v
 
 
 def md5(p):
@@ -114,18 +126,19 @@ def civ_actors(sc):
     return [k for k in range(1, len(sc.nodes)) if sc.cls(k) == 'ZFFActor' and sc.names[sc.top[k]].startswith(L3.CIV_PREFIX)]
 
 
-def assign(paths, n_bar, seed=SEED):
+def assign(paths, n_bar, seed=SEED, looks=None):
     """{actor path: look} - the shares of LOOKS over the non-bartender civilians (largest remainder), shuffled over the crowd."""
+    looks = looks or LOOKS
     rng = random.Random(seed)
     rest = list(paths)
     rng.shuffle(rest)
     n = len(rest)
-    raw = [s * n for _k, _m, _v, s in LOOKS]
+    raw = [s * n for _k, _m, _v, s in looks]
     cnt = [int(x) for x in raw]
     for i in sorted(range(len(raw)), key=lambda i: raw[i] - cnt[i], reverse=True)[:n - sum(cnt)]:
         cnt[i] += 1
     out, i = {}, 0
-    for look, c in zip(LOOKS, cnt):
+    for look, c in zip(looks, cnt):
         for _ in range(c):
             out[rest[i]] = look[:3]
             i += 1
@@ -141,14 +154,14 @@ def set_prop(sc, k, name, value):
     node['props'] = [node['props'][0]] + [t for u in us for t in u] + [node['props'][-1]]
 
 
-def looks_pass(lv, bartender, log):
+def looks_pass(lv, bartender, log, looks=None):
     """lv: the C.Lv of the finished scene. Returns the report."""
     sc, _raw = lv.scene()
     acts = civ_actors(sc)
     path = {k: sc.path[k].replace('ROOT' + BS, '', 1) for k in acts}
     bar = [k for k in acts if bartender and sc.names[sc.top[k]] == bartender]
     rest = [path[k] for k in acts if k not in bar]
-    plan = assign(rest, len(bar))
+    plan = assign(rest, len(bar), looks=looks)
     for k in bar:
         plan[path[k]] = ('dm', 6993, 1)
     # Dead Men's cast: one pick per (model, variant)
@@ -193,8 +206,8 @@ def build_lc5(src, dst, force, log, variant):
     cfg = VARIANTS[variant.replace('lc5_', '')]
     L3.CFG.clear(); L3.CFG.update(cfg)
     h = md5(src)
-    if h != MD5_LIVE and not force:
-        raise SystemExit('refusing: %s md5 %s is not the live DM05A %s (use --force)' % (src, h, MD5_LIVE))
+    if h != cfg['base'] and not force:
+        raise SystemExit('refusing: %s md5 %s is not the live DM05A %s (use --force)' % (src, h, cfg['base']))
     W = os.path.join(os.path.dirname(os.path.abspath(dst)), '_lc5_work_' + variant)
     shutil.rmtree(W, ignore_errors=True)
     os.makedirs(os.path.join(W, 'src'))
@@ -269,7 +282,7 @@ def build_lc5(src, dst, force, log, variant):
     lv = C.Lv(os.path.join(W, 'lv'))
     sc0, _ = lv.scene()
     bt = [sc0.names[sc0.top[k]] for k in civ_actors(sc0) if sc0.path[k].split(BS)[-2] == barname]
-    rep['looks'] = looks_pass(lv, bt[0] if bt else None, log)
+    rep['looks'] = looks_pass(lv, bt[0] if bt else None, log, cfg.get('looks'))
     out = lv.write(os.path.join(W, 'out'))
     shutil.copyfile(out, dst)
     rep['out_md5'] = md5(dst)
@@ -303,8 +316,10 @@ def check_lc5(zp, log=print, variant='full'):
         m, v, _s = C.person(sc, k)
         cnt[(m, v)] += 1
     log('looks (model, variant): %s' % dict(cnt))
-    if len(cnt) < 8:
-        fails.append('fewer than 8 distinct looks')
+    if len(cnt) < cfg.get('min_looks', 8):
+        fails.append('fewer than %d distinct looks' % cfg.get('min_looks', 8))
+    if cfg.get('max_actors') and (a > cfg['max_actors'] or s > cfg['max_squads']):
+        fails.append('census %d/%d over the cap %d/%d' % (a, s, cfg['max_actors'], cfg['max_squads']))
     # the sound member is untouched
     import zipfile, hashlib
     with zipfile.ZipFile(zp) as z:
@@ -357,7 +372,7 @@ def main():
     _patch()
     variant = opt('--variant', 'full')
     L3.NOPROC[0] = '--no-proc-check' in a
-    vs = tuple('lc5_' + v for v in variant.split(','))
+    vs = tuple(v if v in ('safe', 'mid') else 'lc5_' + v for v in variant.split(','))
     if a[0] == 'check':
         return 1 if check_lc5(a[1], variant=vs[0]) else 0
     if a[0] == 'build':
