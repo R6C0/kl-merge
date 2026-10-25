@@ -2,6 +2,8 @@
 """kl_fedoutfit_stage.py - the player's fed outfit on the Dead Men maps, staged pinned on the CURRENT live zips. OFFLINE, installs nothing.
 
   python tools/kl_fedoutfit_stage.py [--out C:/kl_build_1024/fedoutfit_1025a] [--only DM01,DM09] [--no-graft] [--no-rehearse]
+                                     [--tag .before-1025fedoutfit2]
+  --tag: backup suffix; a RE-stage after an install needs a new one (the installer refuses when <name><tag> already exists).
 
 Owner 2026-10-25: 'it still makes me the chinese fed' (the fed of a Dead Men Fragile Alliance map is a DD police body: model 1919 = Shanghai SWAT).
 Cause (klhook/klfedkit.c): [Fed] Body defaults to 0 and the installed KLHook.ini has no Body= line, so the body routine never runs; and the
@@ -69,7 +71,13 @@ def manifest(folder, m, pins, files, extra):
     d = dict(m=m, tag=TAG, pins=pins, files=files, **extra)
     with open(os.path.join(folder, 'fedoutfit.json'), 'w') as f:
         json.dump(d, f, indent=1)
-    shutil.copyfile(os.path.join(HERE, 'kl_fedoutfit.ps1'), os.path.join(folder, 'fedoutfit.ps1'))
+    ps1 = open(os.path.join(HERE, 'kl_fedoutfit.ps1'), encoding='utf-8').read()
+    if TAG != '.before-1025fedoutfit':
+        ps1 = ps1.replace("$tag = '.before-1025fedoutfit'", "$tag = '%s'" % TAG).replace('<name>.before-1025fedoutfit ', '<name>%s ' % TAG)
+    with open(os.path.join(folder, 'fedoutfit.ps1'), 'w', encoding='utf-8', newline='') as f:
+        f.write(ps1)
+    if os.path.exists(os.path.join(MAPS_DIR, m, 'KLJoin.ini' + TAG)):
+        print('WARNING %s: the live folder already has KLJoin.ini%s, the install will SKIP; re-stage with --tag <new suffix>' % (m, TAG))
     bats(folder, 'fedoutfit.ps1', 'fedoutfit')
 
 
@@ -214,7 +222,12 @@ def verify(out, log=print):
 
 
 def main():
+    global TAG
     a = sys.argv[1:]
+    if '-h' in a or '--help' in a:
+        print(__doc__); return 0
+    if '--tag' in a:
+        TAG = a[a.index('--tag') + 1]
     if a[:1] == ['verify']:
         return 1 if verify(a[a.index('--out') + 1] if '--out' in a else DEFAULT_OUT) else 0
     out = a[a.index('--out') + 1] if '--out' in a else DEFAULT_OUT
