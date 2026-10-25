@@ -58,8 +58,11 @@ DOORS = [('at', (-1000.0, 500.0, 2560.0), (0.0, 0.0, 1.0)),
          ('at', (-998.0, 0.0, -3440.0), (0.0, 0.0, 1.0)),
          ('at', (-1440.0, 0.0, -2700.0), (1.0, 0.0, 0.0))]
 # ---- 2. extinguishers: target (x, z, floor y); spot_near snaps each to the nearest wall edge of the right floor
-EXT_NEAR = [(-1000.0, -3250.0, 0.0), (0.0, -4600.0, 0.0), (2000.0, -400.0, 0.0), (-2000.0, -400.0, 0.0),
+# verifier 2026-10-25: the first target (-1000, -3250) snapped to (-1185, -3080), the middle of an 83 cm walk-mesh passage (walls 38 and 45 cm on both sides);
+# (-640, -3230) snaps to a 461 cm wall with the next wall 127 cm away
+EXT_NEAR = [(-640.0, -3230.0, 0.0), (0.0, -4600.0, 0.0), (2000.0, -400.0, 0.0), (-2000.0, -400.0, 0.0),
             (-1000.0, 2400.0, 500.0), (1000.0, 2600.0, 500.0)]
+EXT_LIFT = 100.0      # cm above the floor: stock extinguishers hang on the wall ~100 cm up (stock survey, verifier 2026-10-25; the first build left them on the floor)
 # ---- 3. fuel cans: anchors at the foot of police lines (Wave_1 atrium centre, Wave_W corridor, Wave_E shops, Wave_3 first-floor line)
 FUEL = [(-300.0, -700.0, 0.0), (-1000.0, -1950.0, 0.0), (1100.0, 1450.0, 0.0), (100.0, 3500.0, 500.0)]
 # ---- 4. cars.  The F03 lane runs 135 m towards -z; here it is turned 180 degrees (R(x, z) = (-x, -z)) so the cars come from the south
@@ -449,7 +452,7 @@ def build(src, dst, log=print, keep=None):
     try:
         s1, s2, s3 = [os.path.join(work, 's%d.zip' % i) for i in (1, 2, 3)]
         log('step 1: doors + extinguishers (kl_interact_graft.build)')
-        IG.build(src, s1, ext=len(EXT_NEAR), doors=DOORS, ext_doors=0, spots_near=EXT_NEAR, pin=SRC_MD5, log=log)
+        IG.build(src, s1, ext=len(EXT_NEAR), doors=DOORS, ext_doors=0, spots_near=EXT_NEAR, pin=SRC_MD5, log=log, ext_lift=EXT_LIFT)
         m1 = md5(open(s1, 'rb').read())
         log('step 2: fuel cans (kl_dm01b_gas_1025.build)')
         GS.FUEL_ANCHORS, GS.EXT_WALL = FUEL, []

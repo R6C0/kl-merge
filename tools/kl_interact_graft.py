@@ -727,7 +727,7 @@ def drop_names(M, grp, newp, dropped):
 
 
 # ------------------------------------------------------------------ build
-def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, extra_drop=(), spots_near=None, ext_doors=0, necks=0):
+def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, extra_drop=(), spots_near=None, ext_doors=0, necks=0, ext_lift=0.0):
     import statistics
     import kl_fa_bots as F, kl_fa_cover as CV, kl_fa_climb2 as C2, kl_graft, kl_light, kl_escape
     data = open(src_zip, 'rb').read()
@@ -796,7 +796,9 @@ def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, ex
         x, y, z, _L = sp[:4]
         zdir = sp[4] if len(sp) > 4 else None
         # the can's origin: its model box bottom (cbox[1]) on the floor, 1 cm up; ASSUMPTION: the model's own y axis is up
-        at = (x, y - cbox[1] + 1.0, z)
+        # ext_lift: cm above the floor. Stock cans hang on the wall about 100 cm up (verifier 2026-10-25: origin 70..122 above the nearest walk-mesh
+        # floor in F01 F03 F04 F07 F08); 0 keeps the old floor placement of the other maps.
+        at = (x, y - cbox[1] + 1.0 + ext_lift, z)
         grp, can, byk, gone, cuts = make_extinguisher(M, B, don, n, at, tmpl_ok, zdir)
         topg.add(grp)
         insts.append(dict(group=grp, can=can, byk=byk, at=at, zdir=zdir))
