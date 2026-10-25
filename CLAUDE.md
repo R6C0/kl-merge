@@ -70,8 +70,9 @@ Full dated log: `re/open_work_log.md` (newest first).
 backup .before-1025lastcall5): 14 civilian looks (DD 41803/41556 variants + M05_A 6854/7265/6993/7115 grafted), bodyguards, bartender.
 Files: C:/kl_build_1024/lastcall5_1025a/stage/lc5_{full,lite}/main; tool tools/kl_club_lastcall5.py. Women under DD Civilian clips unproven.
 
-2026-10-25 - STAGED k44 71A1E808 (C:\kl_build_1019\k44_1025a\stage, over k43): page II buy got the stock gun = round reset freed the parked
-stock guns and handed one over in 45 ms, under the 250 ms pass; kspg_repark re-parks per tick in 0x16/0x18. Reviewed twice. Awaits 'install'.
+2026-10-25 - k44 71A1E808 INSTALLED (page II re-park), not yet proven live. DM05A MEMORY WALL: lastcall4 lite (70 dancers) crashed twice in
+play (0x6d2107 null sound Lock; 0x8e5bbd large block refused, 435 MB free after load): lastcall4 UNDONE -> d5f8522b, lcmusic stageA not the
+cause (undone with it). lastcall5 (71/90 civs) must be lighter before install. k45 07011f71 staged only. Details: re/open_work_log.md.
 
 2026-10-25 - INSTALLED by e8 (owner 'install all'), not run in the game: DM01 squads 11c874cb + cars c0e7b8ee (shop hold, warehouse
 floor/upper squads, warehouse shut by kick doors, F03 3-car SWAT arrival; undo cars then squads); DM05A lastcall4 pack_lite 858d3371
