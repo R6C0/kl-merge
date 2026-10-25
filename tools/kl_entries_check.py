@@ -8,6 +8,8 @@ silently stay off. Any install that changes a map's .prm (vans, grenades, overha
 Found 2026-10-25: DM02, DM03A, DM06, DM09, DM11B gun looks and DM01 fed outfits stale.
 
     python kl_entries_check.py [<KLExpansion\\Maps folder>]      exit 1 when any map is stale
+
+Since 2026-10-25 tools/kl_slotcheck.py runs the same test (check_entries) on a STAGE tree before INSTALL, as a FAIL.
 """
 import os, re, sys, zipfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

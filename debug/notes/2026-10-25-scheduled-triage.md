@@ -95,3 +95,26 @@ sees the chunk, and a release through another module's slot leaks high. `klhigh_
 checks for 1, 2 and 4 (commit-only block goes high; size-0 decommit of the block at the chunk's start leaves its
 neighbour committed; nothing free above 2 GB). klhigh.c syntax-checked with gcc against a stub windows.h (no MinGW in
 this sandbox), warnings only from the stub's LONG. MSVC build and the measure run remain the Owner's.
+
+# 2026-10-25 scheduled check-in, fourth run (cloud, 14:48-15:05 UTC): PC busy, no PC access this run; Entries= check folded into kl_slotcheck
+
+## State
+- origin/rtp-schemas had a commit 5 minutes before the fetch (866fd42, 14:43 UTC: the stale-Entries fix on 6 maps) and the log's newest
+  note says the owner is at the PC ("install all", "owner playing"): the VS Code sessions are live. Nothing launched, installed or staged.
+- The DD and DM folders were NOT connected to this scheduled session (device_list_dir returned a names-only skeleton), so KLHook.result,
+  the log tail and any new dump could not be read. No folder-access prompt was raised (the owner is busy; a prompt would only interrupt).
+  Earlier scheduled runs today had them: if the next one lacks them too, the task's folder list needs re-attaching in the desktop app.
+
+## Dumps
+- Not checked this run (no PC access). The last triaged set is KLHook_1-4.dmp 05:52 (DD10A), fixed in f3e0cb8e6.
+
+## Offline piece: tools/kl_slotcheck.py now checks Entries= (the 14:55 find, as a pre-install rule)
+The 14:55 note set a RULE: any .prm rebuild must re-run kl_entries_check before install. kl_entries_check reads the LIVE Maps folder only
+and parses the whole .prm graph; kl_slotcheck is the tool the notes already say to run on a stage tree before an INSTALL bat. So the same
+test now lives there: for every Maps\<id>\<slot>_Main.zip, the .prm member's dword +4 (the chunk count the hook compares with [0xeac7a4];
+read with z.open().read(8), no inflate of the 50 MB member) against KLGuns.ini [Guns] Entries and KLJoin.ini [FedBody] Entries beside it -
+exactly the two keys klgun.c / klfedkit.c read. Mismatch = FAIL (the hook silently leaves the file alone: gun looks / fed outfits off);
+KLGuns.ini without Entries = FAIL (klgun.c refuses the file); KLJoin.ini without [FedBody] = note; no ini = nothing. Self-test 15 -> 21
+checks (stale guns, exact FedBody, missing key, missing section, a clean tree with an exact ini stays clean, a .prm rebuild under an
+unchanged ini is one FAIL). pyflakes clean. Not run against the live tree (no PC access): `python tools/kl_slotcheck.py` on the PC should
+now print `ok ... Entries=N = the .prm chunk count` for the 6 maps fixed at 14:55 and 0 FAIL.

@@ -29,8 +29,15 @@ WHAT IT KNOWS (from the files, kl_expansion.py's LAYOUT and the hook's log lines
   languages of kl_package.LANGS. Default is the one the owner's game loads; the others: GUESS that a missing
   one is a NOTE (the hook may or may not fall through to the stock file - not read in klslot.c), so NOTE.
 - Backups (*.before-*, *.absent) and the ini files (KLJoin, KLGuns, KLTalk, KLWardrobe) are not slot files.
+- Entries= (added 2026-10-25 after the stale-Entries find): KLGuns.ini [Guns] Entries and KLJoin.ini [FedBody]
+  Entries must equal the chunk count of the .prm in the archive beside them (dword +4 of the .prm; klgun.c and
+  klfedkit.c compare it with [0xeac7a4], the loaded .prm's count, and silently leave the file alone when it
+  differs: Dead Men gun looks / fed outfits off with no log line). DM02, DM03A, DM06, DM09, DM11B (guns) and DM01
+  (FedBody) were stale that way after .prm rebuilds. A mismatch is a FAIL; a KLGuns.ini with no Entries= is a
+  FAIL too (klgun.c refuses the whole file); no ini = nothing to check. tools/kl_entries_check.py is the same
+  test for the live Maps folder alone; this one runs it on a stage tree before INSTALL.
 """
-import os, re, sys, zipfile, tempfile, shutil
+import os, re, struct, sys, zipfile, tempfile, shutil
 
 SLOT_RE = re.compile(r'^(F0[1-9])_Main\.zip$')
 ANY_SLOT = re.compile(r'(?<![A-Za-z0-9])(F0[1-9])(?=_Main|/)')          # a slot name inside a member or file name
@@ -46,6 +53,9 @@ UI_MEMBERS = ('guielems.xml', 'menu/ingame.xml', 'windows.xml', 'Menu/online.xml
 BESIDE_MUST = ('.WHD', '.WAV', '.hti', '_LS.SND', '_LS_Default.WHD', '_LS_Default.WAV')
 BESIDE_MAY = tuple('_LS_%s%s' % (l, e) for l in LANGS if l != 'Default' for e in ('.WHD', '.WAV'))
 INI_FILES = ('KLJoin.ini', 'KLGuns.ini', 'KLTalk.ini', 'KLWardrobe.ini')
+# (ini, section, what goes silently off when Entries= is not the .prm's chunk count); the hook reads exactly these two
+# (klgun.c GetPrivateProfileIntA("Guns","Entries"), klfedkit.c ("FedBody","Entries"))
+ENTRIES = (('KLGuns.ini', 'Guns', 'the Dead Men gun looks', True), ('KLJoin.ini', 'FedBody', 'the fed outfits', False))
 DD_GUESSES = (r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days',)
 
 
@@ -116,6 +126,64 @@ def check_archive(path, rep, slot=None):
     return slot
 
 
+def prm_chunk_count(zpath):
+    """Chunk count of the .prm member of a slot archive (its dword +4; kl_prmgraph: [table ofs][count][table ofs][0]),
+    read without inflating the rest of the member. -> count, or None (no / short .prm, unreadable archive)."""
+    try:
+        with zipfile.ZipFile(zpath) as z:
+            prm = [n for n in z.namelist() if n.lower().endswith('.prm')]
+            if len(prm) != 1:
+                return None
+            with z.open(prm[0]) as f:
+                head = f.read(8)
+    except (zipfile.BadZipFile, OSError):
+        return None
+    return struct.unpack_from('<I', head, 4)[0] if len(head) == 8 else None
+
+
+def ini_key(path, section, key):
+    """The LAST value of key in [section] of a Windows ini (GetPrivateProfileInt reads the first; the files here carry
+    one), or None when the section or key is absent. Comments ; and # skipped, latin-1 is enough for digits."""
+    sect, val = None, None
+    with open(path, 'r', encoding='latin-1') as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line[0] in ';#':
+                continue
+            if line[0] == '[' and line.endswith(']'):
+                sect = line[1:-1].strip()
+                continue
+            if sect == section and '=' in line:
+                k, v = (x.strip() for x in line.split('=', 1))
+                if k == key:
+                    val = v
+    return val
+
+
+def check_entries(d, zpath, rep):
+    """KLGuns.ini [Guns] Entries and KLJoin.ini [FedBody] Entries beside the archive against its .prm chunk count."""
+    inis = [(ini, sec, what, must) for ini, sec, what, must in ENTRIES if os.path.isfile(os.path.join(d, ini))]
+    if not inis:
+        return
+    n = prm_chunk_count(zpath)
+    if n is None:
+        rep.note(d, 'cannot read the .prm chunk count from %s: Entries= of %s not checked' % (os.path.basename(zpath), ' '.join(i for i, _, _, _ in inis)))
+        return
+    for ini, sec, what, must in inis:
+        val = ini_key(os.path.join(d, ini), sec, 'Entries')
+        where = '%s [%s]' % (os.path.join(d, ini), sec)
+        if val is None:
+            if must:
+                rep.fail(where, 'no Entries= : klgun.c refuses the whole file and the level shows what was built in (want Entries=%d)' % n)
+            else:
+                rep.note(where, 'no [%s] Entries= (no %s section to check)' % (sec, sec))
+        elif not val.isdigit() or int(val) != n:
+            rep.fail(where, 'Entries=%s but the .prm in %s has %d chunks: the hook silently leaves the file alone and %s stay off (STALE after a .prm rebuild; regenerate the ini)'
+                     % (val, os.path.basename(zpath), n, what))
+        else:
+            rep.ok(where, 'Entries=%d = the .prm chunk count' % n)
+
+
 def check_map_dir(d, rep):
     """One Maps\\<id> folder -> {slot: archive path} it serves (normally one)."""
     files = [f for f in os.listdir(d) if os.path.isfile(os.path.join(d, f)) and not is_backup(f)]
@@ -137,6 +205,7 @@ def check_map_dir(d, rep):
         may = [stem + s for s in BESIDE_MAY if stem + s not in have]
         if may:
             rep.note(d, 'other-language loading banks missing (GUESS: the hook may not fall back to stock): %s' % ' '.join(may))
+        check_entries(d, os.path.join(d, zname), rep)
     slots = set(served)
     other = []
     for f in sorted(files):
@@ -219,10 +288,13 @@ def check_tree(root, rep, ini=None):
 
 # ---------------------------------------------------------------- self-test
 
-def _zip(path, names):
+PRM_CHUNKS = 50579                                       # the self-test .prm's chunk count (DM01's live one)
+
+
+def _zip(path, names, chunks=PRM_CHUNKS):
     with zipfile.ZipFile(path, 'w') as z:
         for n in names:
-            z.writestr(n, b'x')
+            z.writestr(n, struct.pack('<IIII', 16, chunks, 16, 0) if n.lower().endswith('.prm') else b'x')
 
 
 def _members(slot, drop=()):
@@ -256,7 +328,16 @@ def selftest():
         open(os.path.join(d3, 'F01_Main.WHD'), 'wb').write(b'stray')                # a beside file of another slot
         open(os.path.join(d3, 'F07_Main.zip.before-1025x'), 'wb').write(b'bak')     # a backup: ignored
         _map(root, 'DM09', 'F06', beside=BESIDE_MUST[:-1])                         # _LS_Default.WAV missing
-        _map(root, 'DM11B', 'F04')
+        d11 = _map(root, 'DM11B', 'F04')
+        # Entries=: DM11B guns stale (the 2026-10-25 class), fed body exact; DM03A KLGuns.ini without Entries, KLJoin without [FedBody]
+        with open(os.path.join(d11, 'KLGuns.ini'), 'w') as f:
+            f.write('; Entries = chunk count\n[Guns]\nVersion=2\nCount=5\nEntries=49973\n[Gun.1]\nRoot=12\n')
+        with open(os.path.join(d11, 'KLJoin.ini'), 'w') as f:
+            f.write('[FedBody]\nEntries=%d\nRoot=36028\n' % PRM_CHUNKS)
+        with open(os.path.join(d3, 'KLGuns.ini'), 'w') as f:
+            f.write('[Guns]\nVersion=2\nCount=5\n')
+        with open(os.path.join(d3, 'KLJoin.ini'), 'w') as f:
+            f.write('[Fed]\nEnable=1\n')
         with open(os.path.join(root, 'KLHook.ini'), 'w') as f:
             f.write('[Expansion]\nEnable=1\nEngineMaps=DM09,DMXX\n[Redirect]\nF01=DD01\n[Redirect.2]\nF07=DM03A\nF06=DM09\n'
                     '[Redirect.3]\nF07=DD10\nF06=DM07\nF04=DM11B\nF02=NOPE\nF03=DM09\n[Page.3]\nF07=The Flat Raid\nF01=Last Call\n')
@@ -274,7 +355,11 @@ def selftest():
         ok('a good redirect is ok', 'ok    KLHook.ini [Redirect.3] F04=DM11B: served by' in text)
         ok('a page title without a redirect is a note', 'F01=Last Call: a title without [Redirect.3] F01=' in text)
         ok('EngineMaps naming no folder is a note', 'DMXX has no Maps folder' in text)
-        ok('exactly the expected FAIL count (DD10 twice: wrong slot AND no F07 members)', rep.fails == 7)
+        ok('a stale KLGuns.ini Entries= is a FAIL naming the .prm count', 'KLGuns.ini [Guns]: Entries=49973 but the .prm in F04_Main.zip has %d chunks' % PRM_CHUNKS in text and 'gun looks stay off' in text)
+        ok('an exact KLJoin.ini [FedBody] Entries= is ok', 'KLJoin.ini [FedBody]: Entries=%d = the .prm chunk count' % PRM_CHUNKS in text)
+        ok('a KLGuns.ini without Entries= is a FAIL (klgun.c refuses the file)', 'KLGuns.ini [Guns]: no Entries= : klgun.c refuses' in text)
+        ok('a KLJoin.ini without [FedBody] is a note', 'KLJoin.ini [FedBody]: no [FedBody] Entries=' in text)
+        ok('exactly the expected FAIL count (DD10 twice: wrong slot AND no F07 members; DM11B stale guns; DM03A guns without Entries)', rep.fails == 9)
         clean = os.path.join(tmp, 'clean')
         _map(clean, 'DD01', 'F01')
         with open(os.path.join(clean, 'KLHook.ini'), 'w') as f:
@@ -282,6 +367,15 @@ def selftest():
         rep = Report()
         check_tree(clean, rep)
         ok('a clean tree has no FAIL and no note', rep.fails == 0 and rep.notes == 0)
+        with open(os.path.join(clean, 'KLExpansion', 'Maps', 'DD01', 'KLGuns.ini'), 'w') as f:
+            f.write('[Guns]\nVersion=2\nEntries=%d\n' % PRM_CHUNKS)
+        rep = Report()
+        check_tree(clean, rep)
+        ok('a clean tree with an exact KLGuns.ini stays clean', rep.fails == 0 and rep.notes == 0)
+        _zip(os.path.join(clean, 'KLExpansion', 'Maps', 'DD01', 'F01_Main.zip'), _members('F01'), chunks=PRM_CHUNKS + 7)   # a .prm rebuild
+        rep = Report()
+        check_tree(clean, rep)
+        ok('a .prm rebuild without regenerating the ini is one FAIL', rep.fails == 1 and sum('STALE after a .prm rebuild' in l for l in rep.lines) == 1)
         loose = os.path.join(tmp, 'F03_Main.zip')
         _zip(loose, _members('F03') + ['Scenes/Locations/F03/F03_Main.extra'])
         rep = Report()
