@@ -19,7 +19,7 @@ import kl_interact_graft as IG
 import kl_dm01b_gas_1025 as GS
 import kl_dm02_mall_1025 as MALL
 
-TAG = '.before-1025overhaul'
+TAG = '.before-1025overhaul'                # default; a map's SPECS entry may carry its own 'tag' (DM03A: .before-1025overhaul2)
 BS = chr(92)
 IG_TOP, GS_TOP = 'KL_Interact!2', 'KL_Gas!2'
 
@@ -43,7 +43,23 @@ SPECS = {
             anm_col='Army',           # the police actors of the map hold the 'Army' collection token (the prp lists no Mercenary_04)
             caps=(99, 64)),           # GUESS: DM01B is already at 58 squads (past the engine-proven 55); only 3 more, actors 91 + 6 = 97 <= 99
     ),
+    'DM03A': dict(
+        slot='F07', file='F07_Main.zip', title='The vault', tag='.before-1025overhaul2',
+        # NO new kick doors: door_hosts finds 18 leaves, 16 of them on nav part 1 (the upper-floor island, no spawn on it = dead door) and the 2 on the
+        # main part (6516 at -828,-6259 / 6770 at -701,-5426) stand beside the 5 doors KL_Interact!1 already holds (151..218 cm: the other leaf of the same double door).
+        doors=[],
+        # ext: three wall spots on the main part (spot_near snapped, measured 2026-10-25): west lobby (-1036, 240, -4710), start side (-236, 200, -3387), far south (329, 240, -7859).
+        ext=[(-1000.0, -4300.0, 200.0), (-500.0, -3500.0, 200.0), (0.0, -8000.0, 240.0)],
+        # fuel: anchors snapped to open floor by snap() (measured: -350,-7010 and -960,-4900; GUESS that these are good fights spots); the 3 stock cans of KL_Gas!1 stand at (301,-5420) (800,-5390) (700,-5090).
+        fuel=[(-350.0, -6950.0, 240.0), (-1000.0, -4900.0, 240.0)],
+        # NO cars / SWAT: census 106 actors / 54 squads already past the proven 99 / 55 (re/dm_overhaul_1025.md 1.2), a police car's cell costs actors.
+        cars=None,
+    ),
 }
+
+
+def tag_of(mapname):
+    return SPECS[mapname].get('tag', TAG)
 
 
 def md5(b):
@@ -86,11 +102,11 @@ def build(mapname, src, dst, log=print, keep=None):
 def ps_text(mapname):
     sp = SPECS[mapname]
     s = GS.PS1
-    s = s.replace('gas.json', 'overhaul.json').replace('.before-1025dm01bgas', TAG).replace('gas.ps1', 'overhaul.ps1')
+    s = s.replace('gas.json', 'overhaul.json').replace('.before-1025dm01bgas', tag_of(mapname)).replace('gas.ps1', 'overhaul.ps1')
     first = s.index('\n')
-    return ('# overhaul.ps1 - %s (%s), 2026-10-25 (tools/kl_dm_overhaul_1025.py): kick doors, extinguishers, fuel cans%s.\n'
+    return ('# overhaul.ps1 - %s (%s), 2026-10-25 (tools/kl_dm_overhaul_1025.py): %s extinguishers, fuel cans%s.\n'
             '#   Chained on the live zip named in overhaul.json "old"; the install refuses any other md5, refuses while kl2.exe runs.\n') % (
-        mapname, sp['title'], ', police cars + SWAT' if sp.get('cars') else '') + s[first + 1:]
+        mapname, sp['title'], 'kick doors,' if sp['doors'] else '', ', police cars + SWAT' if sp.get('cars') else '') + s[first + 1:]
 
 
 BAT = '@echo off\r\ncd /d "%~dp0"\r\npowershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0overhaul.ps1" {arg}\r\npause\r\n'
@@ -113,7 +129,7 @@ def stage(mapname, src, out, scratch=None, log=print):
     z = os.path.join(out, sp['file'])
     rep = build(mapname, src, z, log=log)
     new = md5(open(z, 'rb').read())
-    man = dict(m=mapname, f=sp['file'], old=old, new=new, tag=TAG, chain='live %s zip %s' % (mapname, old[:8]))
+    man = dict(m=mapname, f=sp['file'], old=old, new=new, tag=tag_of(mapname), chain='live %s zip %s' % (mapname, old[:8]))
     with open(os.path.join(out, 'overhaul.json'), 'w') as fh:
         json.dump(man, fh, indent=1)
     with open(os.path.join(out, 'build_report.json'), 'w') as fh:
@@ -140,16 +156,16 @@ def rehearse(mapname, src, d, man, scratch, log=print):
     shutil.copy2(src, live)
     t = run_ps(d, g, dry=True); log(t.strip()); assert 'would install' in t and md5(open(live, 'rb').read()) == man['old'], t
     t = run_ps(d, g); log(t.strip()); assert 'installed' in t and md5(open(live, 'rb').read()) == man['new'], t
-    assert md5(open(live + TAG, 'rb').read()) == man['old']
+    assert md5(open(live + tag_of(mapname), 'rb').read()) == man['old']
     assert 'already installed' in run_ps(d, g)
     t = run_ps(d, g, undo=True); log(t.strip())
-    assert md5(open(live, 'rb').read()) == man['old'] and not os.path.exists(live + TAG), 'undo not byte identical'
+    assert md5(open(live, 'rb').read()) == man['old'] and not os.path.exists(live + tag_of(mapname)), 'undo not byte identical'
     assert 'already undone' in run_ps(d, g, undo=True)
     run_ps(d, g); assert md5(open(live, 'rb').read()) == man['new']
-    run_ps(d, g, undo=True); assert md5(open(live, 'rb').read()) == man['old'] and not os.path.exists(live + TAG)
+    run_ps(d, g, undo=True); assert md5(open(live, 'rb').read()) == man['old'] and not os.path.exists(live + tag_of(mapname))
     with open(live, 'ab') as fh:
         fh.write(b'x')
-    t = run_ps(d, g); log(t.strip()); assert 'SKIP, live md5' in t and not os.path.exists(live + TAG), t
+    t = run_ps(d, g); log(t.strip()); assert 'SKIP, live md5' in t and not os.path.exists(live + tag_of(mapname)), t
     shutil.rmtree(g, ignore_errors=True)
     log('rehearsal ok (dry run, install, idempotent, undo byte-identical, undo twice, reinstall, wrong md5 refused)')
 
