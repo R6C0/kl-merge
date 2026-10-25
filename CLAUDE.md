@@ -75,9 +75,10 @@ Owner: build hook, run klhigh_test.exe, High=1 measure run on DM05A, then the A/
 entry 5: KLHook.ini +F06=DM07/+F06=The Dig/EngineMaps ,DM07 (f8de2a9d -> 5bb667be), overlay patched in place a6594c09 -> e34c69d2 (stock H05 picture).
 NOT kl_expansion install (whole tree, would reset live maps); mkoverlay regen does not reproduce the live overlay. Undo: C:/kl_build_1024/dig_build_1025b/menu/dig_menu.py --undo + UNDO bat.
 
-2026-10-25 ~10:30 - MEMORY: DM05A crashes = 32-bit ADDRESS SPACE full in round 1 (growth varies ~230 MB per run). OtherStackKB=2048 (foreign threads) survived
-K48F/G/H_A 360-420 s (free VA min 14..123 MB); GameStackKB REJECTED (K48I_A: +5a7010 fills any stack it gets, VA still 14 MB). Next: k48h SHIP 847C8646 over k43
-+ OtherStackKB=2048 after review wr49kepkv; e8's leaner lastcall6 DM05A. Staged, not installed: grenade_1025a, pd2gun_1025b.
+2026-10-25 ~12:00 - MEMORY: DM05A dies with 32-bit ADDRESS SPACE full in round 1. K49_VA (e8): no module VirtualAlloc >= 512 KB (driver innocent); all 29
+refusals = kl2 HeapAlloc 0x7bb33c on the process heap 01D90000 -> the 15.81 MB + halving blocks are NT heap segments. OtherStackKB=2048 kept (k48h SHIP live).
+lc7 1025b staged, NOT installed (C:/kl_build_1024/lastcall7_1025b, lc6 701d082f -> cbbbc872, -760 static glass emitters, campaign pools kept per verifiers).
+Next: e8 heap census (HeapSummary); my static workflow wo0qcwz51 (who feeds 0x7bb33c, ship-hook options). Staged: grenade_1025a, pd2gun_1025b.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
